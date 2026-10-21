@@ -206,15 +206,39 @@ function sameDeep(a, b) {
 const nul = s => (s == null ? null : String(s).split('\u0000').join('<NUL>'));
 const js = v => (v === undefined ? 'undefined' : v === null ? 'null' : typeof v === 'object' ? JSON.stringify(v) : String(v));
 const rect4 = r => [hex(r.x), hex(r.y), hex(r.width), hex(r.height)];
+// [R2-I4] a scenario that asks for the pens' dashes (def.pen): the pattern
+// normalizeLineDash makes and the phase, too
+let PEN = false;
+// zrender canvas/dashStyle.ts normalizeLineDash, transcribed
+function normalizeLineDash(lineType, lineWidth) {
+  if (!lineType || lineType === 'solid' || !(lineWidth > 0)) return null;
+  lineWidth = lineWidth || 1;
+  return lineType === 'dashed' ? [4 * lineWidth, 2 * lineWidth]
+    : lineType === 'dotted' ? [lineWidth]
+    : typeof lineType === 'number' ? [lineType]
+    : Array.isArray(lineType) ? lineType : null;
+}
 function styleRec(st) {
   if (!st) return null;
   const col = c => (c == null ? null : typeof c === 'string' ? c : JSON.stringify(c));
-  return {
+  const o = {
     fill: col(st.fill), stroke: col(st.stroke),
     lineWidth: st.lineWidth == null ? null : hex(st.lineWidth),
     opacity: st.opacity == null ? null : hex(st.opacity),
     lineDash: st.lineDash == null ? null : js(st.lineDash),
   };
+  if (PEN) {
+    const pat = normalizeLineDash(st.lineDash, st.lineWidth);
+    o.pattern = pat == null ? null : pat.map(hex);
+    o.lineDashOffset = st.lineDashOffset == null ? null : hex(st.lineDashOffset);
+    // [R2-I5] a pen that is a gradient, as the clone holds it
+    const s = st.stroke;
+    if (s && typeof s === 'object' && s.colorStops) {
+      o.strokeGrad = { type: s.type, x: s.x, y: s.y, x2: s.x2 == null ? null : s.x2, y2: s.y2 == null ? null : s.y2,
+        r: s.r == null ? null : s.r, global: !!s.global, stops: s.colorStops.map(c => [c.offset, c.color]) };
+    }
+  }
+  return o;
 }
 
 // the inner store of a View (makeInner): the object holding mtOverall
@@ -420,6 +444,7 @@ function snapshot(chart, error) {
 }
 
 function runScenario(def) {
+  PEN = !!def.pen;
   NOW = CLOCK0;
   TIMERS = [];
   rngState = SEED;
@@ -750,6 +775,57 @@ const SCENARIOS = [
       [{ type: 'action', payload: { type: 'axisAreaSelect', parallelAxisIndex: 7, intervals: [[10, 60]] } }],
       click(90, 200), click(340, 200)),
   },
+  // [R2-I4]
+  {
+    id: 'TH-PEN', family: 'thumbnail', pen: true,
+    note: "[R2-I4] the nodes' pens the copy clones from the Symbol paths: a node with only a borderColor (zrender's 1 px), one dashed at 2 with its own phase, one in a category by name (its border [3, 1] at 2 and its opacity), an emptyCircle (its colour at 2), a rect of no border; a dashed edge with its phase",
+    option: {
+      animation: false,
+      series: [{ type: 'graph', layout: 'none', roam: true, symbolSize: 20,
+        categories: [{ name: 'k', itemStyle: { borderColor: '#0000ff', borderType: [3, 1], borderDashOffset: 2, opacity: 0.6 } }],
+        data: [{ name: 'a', x: 0, y: 0, itemStyle: { borderColor: '#ff0000' } },
+          { name: 'b', x: 100, y: 0, itemStyle: { borderColor: '#00aa00', borderWidth: 2, borderType: 'dashed', borderDashOffset: 5 } },
+          { name: 'c', x: 50, y: 80, category: 'k' },
+          { name: 'd', x: 150, y: 80, symbol: 'emptyCircle' },
+          { name: 'e', x: 200, y: 40, symbol: 'rect' }],
+        links: [{ source: 'a', target: 'b', lineStyle: { type: 'dashed', dashOffset: 3 } }, { source: 'c', target: 'd' }] }],
+      thumbnail: {},
+    },
+    steps: [{ type: 'action', payload: { type: 'graphRoam', dx: 10, dy: 5 } }],
+  },
+  // [R2-I5]
+  {
+    id: 'TH-GRAD', family: 'thumbnail', pen: true,
+    note: "[R2-I5] nodes whose pens are gradients, cloned as they are: a linear borderColor at 2, a radial one at 3 dashed, a category's (by name) linear one; a solid pen beside them",
+    option: {
+      animation: false,
+      series: [{ type: 'graph', layout: 'none', roam: true, symbolSize: 24,
+        categories: [{ name: 'g', itemStyle: { borderWidth: 2, borderColor: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [{ offset: 0, color: '#00ff00' }, { offset: 1, color: '#0000ff' }] } } }],
+        data: [{ name: 'a', x: 0, y: 0, itemStyle: { borderWidth: 2, borderColor: { type: 'linear', x: 0, y: 0, x2: 1, y2: 0,
+            colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 0.5, color: '#ffff00' }, { offset: 1, color: '#0000ff' }] } } },
+          { name: 'b', x: 100, y: 0, itemStyle: { borderWidth: 3, borderType: 'dashed', borderColor: { type: 'radial', x: 0.5, y: 0.5,
+            r: 0.5, colorStops: [{ offset: 0, color: '#000000' }, { offset: 1, color: '#ff00ff' }] } } },
+          { name: 'c', x: 50, y: 80, category: 'g' },
+          { name: 'd', x: 150, y: 80, itemStyle: { borderColor: '#333333', borderWidth: 2 } }],
+        links: [{ source: 'a', target: 'b' }, { source: 'c', target: 'd' }] }],
+      thumbnail: {},
+    },
+    steps: [{ type: 'action', payload: { type: 'graphRoam', dx: 10, dy: 5 } }],
+  },
+  // [R2-V]
+  {
+    id: 'TH-PEN0', family: 'thumbnail', pen: true,
+    note: "[R2-V] an edge of no length (a and b at one place) dashed at 2 with its own phase 4: the copy clones its line's style like any other",
+    option: {
+      animation: false,
+      series: [{ type: 'graph', layout: 'none', roam: true, symbolSize: 20,
+        data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 0, y: 0 }, { name: 'c', x: 120, y: 60 }],
+        links: [{ source: 'a', target: 'b', lineStyle: { type: 'dashed', width: 2, dashOffset: 4 } }, { source: 'b', target: 'c' }] }],
+      thumbnail: {},
+    },
+    steps: [{ type: 'action', payload: { type: 'graphRoam', dx: 10, dy: 5 } }],
+  },
 ];
 
 const NOTES = [
@@ -866,9 +942,12 @@ function itemRect(it) {
     }
     r = { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
   }
-  const hasStroke = st.stroke != null && st.stroke !== 'none' && st.lineWidth > 0;
+  // [R2-I4] the copy's own style has no lineWidth where the visual wrote
+  // none (zrender's clone takes own keys): the path's default, 1
+  const lw = st.lineWidth == null ? 1 : st.lineWidth;
+  const hasStroke = st.stroke != null && st.stroke !== 'none' && lw > 0;
   if (hasStroke) {
-    let w = st.lineWidth;
+    let w = lw;
     if (!hasFill) w = Math.max(w, mut.threshold4 ? 4 : 5);
     r = { x: r.x - w / 2, y: r.y - w / 2, width: r.width + w, height: r.height + w };
   }
@@ -1230,6 +1309,16 @@ function generate() {
     && !sameDeep(p.optWindow, s.step.payload.axisExpandWindow.map(hex)))), 'AE-ACTION: the window was never rewritten');
   const an = byId('AE-NARROW');
   must(an.initial.pars[0].collapseWidth === hex(0), 'AE-NARROW: not narrow');
+  // [R2-I4] every node of TH-PEN but the rect is stroked; a's at 1
+  const tp = byId('TH-PEN').initial.thumbs[0].items;
+  must(tp.filter(it => it.kind === 'symbol' && it.style.stroke != null && it.style.stroke !== 'none').length === 4
+    && tp[0].style.lineWidth === hex(1) && tp[1].style.lineDashOffset === hex(5) && tp[2].style.lineDashOffset === hex(2),
+    'TH-PEN: the pens are not as cloned: ' + JSON.stringify(tp.map(it => it.style)));
+  // [R2-I5] three of TH-GRAD's pens are gradients
+  const tg = byId('TH-GRAD').initial.thumbs[0].items;
+  must(tg.filter(it => it.kind === 'symbol' && it.style.strokeGrad).length === 3
+    && tg[0].style.strokeGrad.type === 'linear' && tg[1].style.strokeGrad.type === 'radial',
+    'TH-GRAD: the gradient pens are not as cloned: ' + JSON.stringify(tg.map(it => it.style)));
   // strip the private fields
   for (const sc of scenarios) {
     for (const s of sc.steps) delete s._before;

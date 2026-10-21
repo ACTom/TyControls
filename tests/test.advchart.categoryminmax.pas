@@ -27,10 +27,10 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.FontUnits,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Paint, tyControls.AdvChart.Scale,
-     tyControls.AdvChart.Coord, tyControls.AdvChart.Builder,
-     tyControls.AdvChart.BarLayout, tyControls.AdvChart.Layout,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Scale,
+     tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Builder,
+     tyControls.AdvanceChart.BarLayout, tyControls.AdvanceChart.Layout,
      tyControls.AdvanceChart, test.advchart.gridbounds;
 type
   TCatProbe = class(TTyAdvanceChart)
@@ -715,7 +715,9 @@ begin
   end;
   AssertEquals(IntToStr(FBad) + ' of ' + IntToStr(FCompared)
     + ' disagree with upstream:' + FReport, 0, FBad);
-  AssertEquals('the deferred cases', 3, deferred);
+  { [R2-G] the two `data: []` cases are compared now; the window past the
+    cap stays deferred }
+  AssertEquals('the deferred cases', 1, deferred);
   AssertTrue(Format('enough compared (%d)', [FCompared]), FCompared > 3000);
   AssertTrue(Format('enough windows narrowed (%d)', [FNarrowed]), FNarrowed > 40);
   AssertTrue(Format('enough blank axes (%d)', [FBlanks]), FBlanks >= 8);

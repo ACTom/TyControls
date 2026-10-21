@@ -15,7 +15,7 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, Controls, Forms, fpcunit, testregistry, base64,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Controller, tyControls.Painter, tyControls.AdvChart.Paint, tyControls.AdvChart.Render,
+  tyControls.Controller, tyControls.Painter, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Render,
   tyControls.AdvanceChart, test.devicescale.support;
 
 type
@@ -382,10 +382,10 @@ begin
   { CheckScale paints it twice, once at each scale: both on the fast path }
   AssertTrue(Format('the large batch took the fast path at both scales (%d)',
     [TyAdvChartLargeFastPathsForTest - before]), TyAdvChartLargeFastPathsForTest - before >= 2);
-  { A GRADIENT does not go through the flat layers: the tiles. Rects: circles traced into one
-    path join up (BGRA's circle is an arc with no move to it -- a defect of its own, outside
-    #83, reported), and the joins follow the tile edges, which differ with S }
-  FOption := Scatter(400, ',"symbol":"rect","large":true,"largeThreshold":100,"itemStyle":{"color":'
+  { A GRADIENT does not go through the flat layers: the tiles, circles and all: each circle
+    traced into a tile's path starts a sub-path of its own [R2-F] -- they used to join up into
+    one polygon whose joins followed the tile edges, which differ with S }
+  FOption := Scatter(400, ',"large":true,"largeThreshold":100,"itemStyle":{"color":'
     + '{"type":"linear","x":0,"y":0,"x2":1,"y2":0,"colorStops":[{"offset":0,"color":"#ff0000"},'
     + '{"offset":1,"color":"#0000ff"}]}}');
   before := TyAdvChartLargeFastPathsForTest;

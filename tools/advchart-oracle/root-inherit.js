@@ -27,6 +27,14 @@ script records, on the real ECharts 6.1 dist in node's SSR mode:
            get('progressiveChunkMode') of a series with the root's
            progressive keys under it.
   diag     no record: the option texts the port's diagnostics must accept.
+  climb    [R2-G, appended] the root's keys further down the chain: `stack`
+           and the bar sizes (each bar's shape; a polar bar's layout; a
+           candlestick's brushRect), `selectedMode` (the selection after a
+           select action), a treemap's and the graphic component's `z`,
+           `legendHoverLink` (get() per series), `symbol` / `symbolRotate`
+           (a scatter's and a line's first symbol). The pie and funnel boxes
+           with 'auto' and a word that is no position are in `box`, after
+           the F4c cases.
 
 Numbers are 16 lowercase hex digits of the IEEE double (big-endian) with a
 readable twin. Runs twice; the two outputs must be byte-identical. Ends with
@@ -177,6 +185,59 @@ progCase('p-candle', "a candlestick's own threshold 1e4 and chunk mode 'mod'", {
 progCase('p-scatter-chunk', "a scatter's chunk mode is the root's", { progressiveChunkMode: 'mod' }, [{ type: 'scatter', data: [[1, 2]] }]);
 progCase('p-root-null', "a root progressive written null: getShallow's end, null", { progressive: null }, [{ type: 'scatter', data: [[1, 2]] }]);
 
+// ---------- [R2-G] further down the chain (appended: the cases above are unchanged) ----------
+add('box', 'b-pie-auto', "a pie's left 'auto' with a width: not a number to getLayoutRect, so the pie hangs on its right",
+  { animation: false, left: 100, series: [{ type: 'pie', left: 'auto', width: 200, data: [1, 2] }] }, ['pie']);
+add('box', 'b-pie-word', "a pie's left 'abc' with a right: parseFloat's NaN, the box from the right",
+  { animation: false, series: [{ type: 'pie', left: 'abc', right: 100, data: [1, 2] }] }, ['pie']);
+add('box', 'b-funnel-auto', "a funnel's left 'auto' with a width and the root's width under it: 'auto' is its own, no climb",
+  { animation: false, width: 300, series: [{ type: 'funnel', left: 'auto', width: 150, data: [{ value: 3 }, { value: 2 }] }] },
+  ['funnel']);
+const CAT2 = { grid: { outerBoundsMode: 'none' }, xAxis: { type: 'category', data: ['a', 'b', 'c'] }, yAxis: { type: 'value' } };
+add('climb', 'c-stack-bar', "a root stack: every bar stacks on the one before",
+  Object.assign({ animation: false, stack: 'all' }, CAT2, { series: [{ type: 'bar', data: [1, 2, 3] },
+    { type: 'bar', data: [3, 2, 1] }] }), ['bars']);
+add('climb', 'c-stack-line', "a root stack: the second line's points stand on the first's",
+  Object.assign({ animation: false, stack: 'all' }, CAT2, { series: [{ type: 'line', data: [1, 2, 3] },
+    { type: 'line', data: [3, 2, 1] }] }), ['points']);
+add('climb', 'c-bar-sizes', "the root's barWidth and barGap: a 10 px bar, a bar's width apart",
+  Object.assign({ animation: false, barWidth: 10, barGap: '100%' }, CAT2, { series: [{ type: 'bar', data: [1, 2, 3] },
+    { type: 'bar', data: [3, 2, 1] }] }), ['bars']);
+add('climb', 'c-bar-gaps', "the root's barCategoryGap and barMaxWidth",
+  Object.assign({ animation: false, barCategoryGap: '60%', barMaxWidth: 15 }, CAT2,
+    { series: [{ type: 'bar', data: [1, 2, 3] }, { type: 'bar', barMaxWidth: 30, data: [3, 2, 1] }] }), ['bars']);
+add('climb', 'c-polar-bar', "a polar bar with the root's stack and barWidth",
+  { animation: false, stack: 's', barWidth: 8, polar: {}, angleAxis: { type: 'category', data: ['a', 'b', 'c'] },
+    radiusAxis: { type: 'value' }, series: [{ type: 'bar', coordinateSystem: 'polar', data: [1, 2, 3] },
+      { type: 'bar', coordinateSystem: 'polar', data: [2, 2, 2] }] }, ['polar']);
+add('climb', 'c-candle', "a candlestick with the root's barMaxWidth",
+  Object.assign({ animation: false, barMaxWidth: 6 }, CAT2,
+    { series: [{ type: 'candlestick', data: [[2, 4, 1, 5], [4, 3, 2, 6], [3, 5, 2, 6]] }] }), ['candle']);
+// the select action reads `option.selectedMode` (Series._innerSelect), not get():
+// the root's reaches get() and selects nothing
+add('climb', 'c-select', "the root's selectedMode reaches get() but not the selection: nothing is selected",
+  Object.assign({ animation: false, selectedMode: 'single' }, CAT2, { series: [{ type: 'bar', data: [1, 2, 3] }] }), ['select']);
+add('climb', 'c-select-own', "a series' own selectedMode false: nothing either",
+  Object.assign({ animation: false, selectedMode: 'single' }, CAT2, { series: [{ type: 'bar', selectedMode: false, data: [1, 2, 3] }] }),
+  ['select']);
+add('climb', 'c-treemap-z', "a treemap has no z of its own: the root's",
+  { animation: false, z: 5, series: [{ type: 'treemap', breadcrumb: { show: false }, data: [{ name: 'a', value: 3 }, { name: 'b', value: 1 }] }] },
+  ['treemapZ']);
+// GraphicView's globalZ stands in only for an element whose own z is written
+// (updateCommonAttrs: hasOwn, then retrieve2): null takes the root's
+add('climb', 'c-graphic-z', "the graphic component has no z of its own: an element's z written null takes the root's",
+  { animation: false, z: 7, graphic: [{ type: 'rect', z: null, shape: { x: 10, y: 10, width: 50, height: 30 }, style: { fill: '#ff0000' } },
+    { type: 'rect', shape: { x: 80, y: 10, width: 50, height: 30 }, style: { fill: '#00ff00' } }] },
+  ['graphicZ']);
+add('climb', 'c-hoverlink', "legendHoverLink: a type with no default reads the root's",
+  { animation: false, legendHoverLink: false, legend: {}, xAxis: { type: 'category', data: ['a', 'b'] },
+    yAxis: { type: 'category', data: ['c', 'd'] }, visualMap: { show: false, min: 0, max: 5 },
+    series: [{ type: 'heatmap', name: 'H', data: [[0, 0, 1], [1, 1, 3]] }, { type: 'bar', name: 'B', data: [1, 2] }] },
+  ['hoverLink']);
+add('climb', 'c-symbol', "a root symbol reaches a scatter (no default) but not a line; symbolRotate reaches both",
+  Object.assign({ animation: false, symbol: 'rect', symbolRotate: 30 }, CAT2,
+    { series: [{ type: 'scatter', data: [1, 2, 3] }, { type: 'line', data: [3, 2, 1] }] }), ['symbols']);
+
 // ---------- reading ----------
 function boxOf(model) {
   const p = model.getBoxLayoutParams();
@@ -226,6 +287,11 @@ function readCase(c) {
         const sm = ec.getSeriesByType(what)[0];
         rec[what + 'Box'] = boxOf(sm);
         if (sm.layoutInfo) rec[what] = rectRec(sm.layoutInfo);
+        if (what === 'funnel' && c.group === 'box' && c.id === 'b-funnel-auto') {
+          // [R2-G] the first trapezium's points: where getLayoutRect put the funnel
+          const l = sm.getData().getItemLayout(0);
+          rec.funnelPoints = l.points.map(pt => [hex(pt[0]), hex(pt[1])]);
+        }
         if (what === 'pie') {
           const l = sm.getData().getItemLayout(0);
           rec.pie = { cx: hex(l.cx), cy: hex(l.cy), r: hex(l.r), text: [l.cx, l.cy, l.r].map(text).join(',') };
@@ -250,6 +316,79 @@ function readCase(c) {
           rec.markLine = { x1: hex(s.x1), y1: hex(s.y1), x2: hex(s.x2), y2: hex(s.y2),
             text: [s.x1, s.y1, s.x2, s.y2].map(text).join(',') };
         }
+      } else if (what === 'bars') {
+        rec.bars = ec.getSeries().map(sm => {
+          const d = sm.getData();
+          const out = [];
+          for (let i = 0; i < d.count(); i++) {
+            const el = d.getItemGraphicEl(i);
+            out.push(el ? rectRec(el.shape) : null);
+          }
+          return out;
+        });
+      } else if (what === 'points') {
+        rec.points = ec.getSeries().map(sm => {
+          const d = sm.getData();
+          const out = [];
+          // a line's symbols stand on its points
+          for (let i = 0; i < d.count(); i++) {
+            const el = d.getItemGraphicEl(i);
+            out.push(el ? { x: hex(el.x), y: hex(el.y), text: text(el.x) + ',' + text(el.y) } : null);
+          }
+          return out;
+        });
+      } else if (what === 'polar') {
+        rec.polar = ec.getSeries().map(sm => {
+          const d = sm.getData();
+          const out = [];
+          for (let i = 0; i < d.count(); i++) {
+            const l = d.getItemLayout(i);
+            out.push({ r0: hex(l.r0), r: hex(l.r), startAngle: hex(l.startAngle), endAngle: hex(l.endAngle),
+              text: [l.r0, l.r, l.startAngle, l.endAngle].map(text).join(',') });
+          }
+          return out;
+        });
+      } else if (what === 'candle') {
+        const d = ec.getSeriesByIndex(0).getData();
+        rec.candles = [];
+        for (let i = 0; i < d.count(); i++) {
+          // the brushRect (a candle wide), and the body's ends as drawn --
+          // each side snapped to the half pixel (addBodyEnd's subPixelOptimize)
+          const l = d.getItemLayout(i);
+          const xs = l.ends.map(pt => pt[0]);
+          const r = rectRec(l.brushRect);
+          r.bodyWidth = hex(Math.max(...xs) - Math.min(...xs));
+          rec.candles.push(r);
+        }
+      } else if (what === 'select') {
+        chart.dispatchAction({ type: 'select', seriesIndex: 0, dataIndex: 1 });
+        rec.selectedMode = rawRec(ec.getSeriesByIndex(0).get('selectedMode'));
+        rec.selected = ec.getSeriesByIndex(0).getSelectedDataIndices();
+      } else if (what === 'treemapZ') {
+        const sm = ec.getSeriesByIndex(0);
+        let el = null;
+        chart.getViewOfSeriesModel(sm).group.traverse(e => { if (!el && e.type === 'rect') el = e; });
+        must(el, c.id + ': no treemap rect');
+        rec.z = el.z;
+        rec.zModel = rawRec(sm.get('z'));
+      } else if (what === 'graphicZ') {
+        const gm = ec.getComponent('graphic', 0);
+        const view = chart.getViewOfComponentModel(gm);
+        const els = [];
+        view.group.traverse(e => { if (e.type === 'rect') els.push(e); });
+        must(els.length === 2, c.id + ': two graphic rects');
+        rec.z = els[0].z;
+        rec.zs = els.map(e => e.z);
+      } else if (what === 'hoverLink') {
+        rec.hoverLink = ec.getSeries().map(sm => ({ type: sm.subType, get: rawRec(sm.get('legendHoverLink')) }));
+      } else if (what === 'symbols') {
+        rec.symbols = ec.getSeries().map(sm => {
+          const el = sm.getData().getItemGraphicEl(0);
+          const sym = el && el.childAt ? el.childAt(0) : null;
+          must(sym, c.id + ': no symbol on ' + sm.subType);
+          return { type: sm.subType, symbolType: sm.getData().getItemVisual(0, 'symbol'), rotation: hex(sym.rotation || 0),
+            rotationText: text(sym.rotation || 0), getSymbol: rawRec(sm.get('symbol')) };
+        });
       } else if (what === 'prog') {
         rec.prog = ec.getSeries().map(sm => {
           const p = sm.getProgressive();
@@ -289,6 +428,17 @@ function guards(recs) {
   check("p-line: the line's own 0", num(by('p-line').prog[0].progressive) === 0);
   check("p-line-null: a null climbs", num(by('p-line-null').prog[0].progressive) === 1000);
   check("p-candle: the candlestick's own chunk mode", by('p-candle').prog[0].chunkMode === 'mod');
+  check("b-pie-auto: 'auto' is not the root's left: the pie hangs right (cx 500)", by('b-pie-auto').pie.text.split(',')[0] === '500');
+  check('c-stack-bar: the second series stands on the first', by('c-stack-bar').bars[1][0].text.split(',')[3] !== by('c-stack-bar').bars[0][0].text.split(',')[3]);
+  check("c-bar-sizes: the root's barWidth 10", Number(by('c-bar-sizes').bars[0][0].text.split(',')[2]) === 10);
+  check("c-select: the root's selectedMode reaches get()", by('c-select').selectedMode === 'single');
+  check("c-select: and selects nothing", by('c-select').selected.length === 0);
+  check("c-select-own: nothing", by('c-select-own').selected.length === 0);
+  check("c-treemap-z: the root's z", by('c-treemap-z').z === 5);
+  check("c-graphic-z: the null z takes the root's, the unwritten one 0", by('c-graphic-z').zs.join() === '7,0');
+  check("c-hoverlink: the heatmap reads the root's false", by('c-hoverlink').hoverLink[0].get === false);
+  check("c-symbol: the scatter's symbol is the root's rect, the line's its own", by('c-symbol').symbols[0].symbolType === 'rect'
+    && by('c-symbol').symbols[1].symbolType === 'emptyCircle');
   return g;
 }
 

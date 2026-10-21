@@ -1,6 +1,6 @@
 unit tyControls.AdvanceChart;
 {$mode objfpc}{$H+}
-{ TTyAdvanceChart -- the control the whole AdvChart layer exists under.
+{ TTyAdvanceChart -- the control the whole AdvanceChart layer exists under.
 
   WINDOWED, not graphic, and that decision was made on day one: focus, keyboard,
   an in-chart scrollbar, a dataZoom slider and a toolbox all need a handle, and
@@ -28,56 +28,57 @@ uses
   Classes, SysUtils, Math, Types, Controls, Graphics, LCLType, ExtCtrls,
   BGRABitmap,
   tyControls.Types, tyControls.Base, tyControls.Painter, tyControls.StyleModel,
-  tyControls.AdvChart.Types, tyControls.AdvChart.Option, tyControls.AdvChart.OptionMerge,
-  tyControls.AdvChart.Media,
-  tyControls.AdvChart.Data, tyControls.AdvChart.Scale,
-  tyControls.AdvChart.Time,
-  tyControls.AdvChart.Coord, tyControls.AdvChart.Layout,
-  tyControls.AdvChart.Builder, tyControls.AdvChart.Series,
-  tyControls.AdvChart.Measure, tyControls.AdvChart.Handlers, tyControls.FontUnits,
-  tyControls.AdvChart.Events, tyControls.AdvChart.States,
-  tyControls.AdvChart.Paint, tyControls.AdvChart.Render,
-  tyControls.AdvChart.Shape, tyControls.AdvChart.Style,
-  tyControls.AdvChart.Marks, tyControls.AdvChart.BarLayout,
-  tyControls.AdvChart.Stack, tyControls.AdvChart.Sampling, tyControls.AdvChart.Symbol,
-  tyControls.AdvChart.Pictorial,
-  tyControls.AdvChart.Color, tyControls.AdvChart.VisualMap,
-  tyControls.AdvChart.VisualMapView, tyControls.AdvChart.Decal,
-  tyControls.AdvChart.DataZoom, tyControls.AdvChart.DataZoomView,
-  tyControls.AdvChart.DataZoomAct, tyControls.AdvChart.ZrPath,
-  tyControls.AdvChart.Marker, tyControls.AdvChart.MarkerView,
-  tyControls.AdvChart.Pie, tyControls.AdvChart.Funnel,
-  tyControls.AdvChart.Gauge, tyControls.AdvChart.Radar,
-  tyControls.AdvChart.Calendar, tyControls.AdvChart.Matrix, tyControls.AdvChart.Tree,
-  tyControls.AdvChart.Geo, tyControls.AdvChart.GeoSvg, tyControls.AdvChart.HeatLayer,
-  tyControls.AdvChart.Sunburst, tyControls.AdvChart.Treemap,
-  tyControls.AdvChart.Sankey,
-  tyControls.AdvChart.Graph,
-  tyControls.AdvChart.Title,
-  tyControls.AdvChart.Labels, tyControls.AdvChart.LabelOpt,
-  tyControls.AdvChart.PieLabel, tyControls.AdvChart.Legend,
-  tyControls.AdvChart.Tooltip, tyControls.AdvChart.AxisPointer,
-  tyControls.AdvChart.Dataset, tyControls.AdvChart.WhiskerBox,
-  tyControls.AdvChart.Anim, tyControls.AdvChart.AnimOpt,
-  tyControls.AdvChart.AnimView, tyControls.AdvChart.AnimAxis,
-  tyControls.AdvChart.AxisLabels, tyControls.AdvChart.LabelLayout,
-  tyControls.AdvChart.Export, tyControls.AdvChart.Loading,
-  tyControls.AdvChart.Convert, tyControls.AdvChart.Jitter,
-  tyControls.AdvChart.Large, tyControls.AdvChart.Progressive,
-  tyControls.AdvChart.Polar, tyControls.AdvChart.PolarBar,
-  tyControls.AdvChart.Single, tyControls.AdvChart.ThemeRiver,
-  tyControls.AdvChart.Chord,
-  tyControls.AdvChart.GfxEl, tyControls.AdvChart.Graphic,
-  tyControls.AdvChart.Lines, tyControls.AdvChart.Custom,
-  tyControls.AdvChart.Toolbox, tyControls.AdvChart.Brush,
-  tyControls.AdvChart.Timeline,
-  tyControls.AdvChart.Parallel, tyControls.AdvChart.Thumbnail,
+  tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option, tyControls.AdvanceChart.OptionMerge,
+  tyControls.AdvanceChart.Media,
+  tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Scale,
+  tyControls.AdvanceChart.Time,
+  tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Layout,
+  tyControls.AdvanceChart.Builder, tyControls.AdvanceChart.Series,
+  tyControls.AdvanceChart.Measure, tyControls.AdvanceChart.Handlers, tyControls.FontUnits,
+  tyControls.AdvanceChart.Events, tyControls.AdvanceChart.States,
+  tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Render,
+  tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Style,
+  tyControls.AdvanceChart.Marks, tyControls.AdvanceChart.BarLayout,
+  tyControls.AdvanceChart.Stack, tyControls.AdvanceChart.Sampling, tyControls.AdvanceChart.Symbol,
+  tyControls.AdvanceChart.Pictorial,
+  tyControls.AdvanceChart.Color, tyControls.AdvanceChart.VisualMap,
+  tyControls.AdvanceChart.VisualMapView, tyControls.AdvanceChart.Decal,
+  tyControls.AdvanceChart.DataZoom, tyControls.AdvanceChart.DataZoomView,
+  tyControls.AdvanceChart.DataZoomAct, tyControls.AdvanceChart.ZrPath,
+  tyControls.AdvanceChart.Marker, tyControls.AdvanceChart.MarkerView,
+  tyControls.AdvanceChart.Pie, tyControls.AdvanceChart.Funnel,
+  tyControls.AdvanceChart.Gauge, tyControls.AdvanceChart.Radar,
+  tyControls.AdvanceChart.Calendar, tyControls.AdvanceChart.Matrix, tyControls.AdvanceChart.Tree,
+  tyControls.AdvanceChart.Geo, tyControls.AdvanceChart.GeoSvg, tyControls.AdvanceChart.HeatLayer,
+  tyControls.AdvanceChart.Sunburst, tyControls.AdvanceChart.Treemap,
+  tyControls.AdvanceChart.Sankey,
+  tyControls.AdvanceChart.Graph,
+  tyControls.AdvanceChart.Title,
+  tyControls.AdvanceChart.Labels, tyControls.AdvanceChart.LabelOpt,
+  tyControls.AdvanceChart.PieLabel, tyControls.AdvanceChart.Legend,
+  tyControls.AdvanceChart.Tooltip, tyControls.AdvanceChart.TipHtml,
+  tyControls.AdvanceChart.AxisPointer,
+  tyControls.AdvanceChart.Dataset, tyControls.AdvanceChart.WhiskerBox,
+  tyControls.AdvanceChart.Anim, tyControls.AdvanceChart.AnimOpt,
+  tyControls.AdvanceChart.AnimView, tyControls.AdvanceChart.AnimAxis,
+  tyControls.AdvanceChart.AxisLabels, tyControls.AdvanceChart.LabelLayout,
+  tyControls.AdvanceChart.Export, tyControls.AdvanceChart.Loading,
+  tyControls.AdvanceChart.Convert, tyControls.AdvanceChart.Jitter,
+  tyControls.AdvanceChart.Large, tyControls.AdvanceChart.Progressive,
+  tyControls.AdvanceChart.Polar, tyControls.AdvanceChart.PolarBar,
+  tyControls.AdvanceChart.Single, tyControls.AdvanceChart.ThemeRiver,
+  tyControls.AdvanceChart.Chord,
+  tyControls.AdvanceChart.GfxEl, tyControls.AdvanceChart.Graphic,
+  tyControls.AdvanceChart.Lines, tyControls.AdvanceChart.Custom,
+  tyControls.AdvanceChart.Toolbox, tyControls.AdvanceChart.Brush,
+  tyControls.AdvanceChart.Timeline,
+  tyControls.AdvanceChart.Parallel, tyControls.AdvanceChart.Thumbnail,
   { echarts.connect's revert map and the combined export [Batch 141] }
-  tyControls.AdvChart.Connect,
+  tyControls.AdvanceChart.Connect,
   { the coarse pointer and the dirty rectangles [Batch 142] }
-  tyControls.AdvChart.DirtyRect,
+  tyControls.AdvanceChart.DirtyRect,
   { the keyboard and the accessible tree [Batch 144] }
-  tyControls.AdvChart.Aria, tyControls.AdvChart.KeyNav, tyControls.Accessible,
+  tyControls.AdvanceChart.Aria, tyControls.AdvanceChart.KeyNav, tyControls.Accessible,
   fpjson, contnrs, tyControls.SubPixel;
 
 const
@@ -165,8 +166,39 @@ type
       value (through the group's mapper), and the pointer stands on it --
       processOnAxis' noSnap -- while the tooltip still describes SnapValue }
     Linked: Boolean;
+    { [R2-I7] THE AXIS DOES NOT TRIGGER THE TOOLTIP (axisInfo.triggerTooltip
+      false): a cross' other arm, the base axis of a cross under a trigger
+      that is not 'axis', an axis collected for its own `show` whose
+      `triggerTooltip` says false. Its rows (when it has any) are no part of
+      dataByCoordSys. False -- the zero value -- triggers. }
+    NoTip: Boolean;
   end;
   TTyAxisHitArray = array of TTyAxisHit;
+
+  { [R2-I7] ONE axisInfo OF THE axisPointer MODEL, as
+    modelHelper.collectAxesInfo builds it: per coordinate system (the grids,
+    the polars, the single axes, in that order) first every axis whose own
+    pointer model -- its block over the root component -- says `show`
+    (saveTooltipAxisInfo(false, null)), then the tooltip's axes (its base
+    axes, and under a cross the other ones), which take the place of an axis
+    already there. }
+  TTyPtrAxisInfo = record
+    Axis: TTyAxis;
+    Plot: TTyRectF;
+    Polar: TTyPolar;
+    Single: TTySingle;
+    { the coordinate system: 'g<n>', 'p<n>', 's<n>' }
+    CsKey: string;
+    { fromTooltip true or 'cross' }
+    FromTooltip: Boolean;
+    { fromTooltip 'cross' and not triggering: the cross' other arm }
+    CrossArm: Boolean;
+    TriggerTooltip: Boolean;
+    { triggerTooltip || snap || a category axis: the series are searched }
+    InvolveSeries: Boolean;
+    Spec: TTyAxisPointerSpec;
+  end;
+  TTyPtrAxisInfoArray = array of TTyPtrAxisInfo;
 
   { WHAT A SINGLE AXIS' POINTER DRAWS [Batch 118]: its line or shadow rect,
     and its label's text and padded box (top-left, after the align and the
@@ -358,6 +390,14 @@ type
     Marks: array of TTyStElement;
     MarkIdx: TTyIntegerArray;
     MarkPart: TTyStringArray;
+    { [R2-B] THE MARKER ITEMS' hoverStates (the Symbol / Line / polygon
+      flags), by item key (mp0, ml0, ma0) -- kept across renders, as the
+      updated elements keep theirs; an item at normal has no entry }
+    MarkFlagKey: TTyStringArray;
+    MarkFlagHover: TTyIntegerArray;
+    { [R2-I9] the hover-layer flag the rows were last given (HlOn) and
+      whether they were since the sync (HlSet) }
+    HlOn, HlSet: Boolean;
   end;
 
   { WHAT A notMerge OPTION CARRIES OVER of a series' state records
@@ -392,6 +432,30 @@ type
     True: the host saved (or declined) -- no dialog, no file. }
   TTyToolboxSaveEvent = procedure(Sender: TObject; var AFileName: string;
     const AOptsJson: string; var AHandled: Boolean) of object;
+  { [R2-J2] AN IMAGE THE CHART CANNOT LOAD ITSELF: an option's picture given
+    as a URL (an http address, a file path -- anything but a `data:` URL
+    and an image list's `image://list/index`), written without the
+    `image://` in front. Set AImage to the picture -- the chart owns it from
+    then on -- or leave it nil; the answer is kept (ForgetResolvedImages
+    asks again). Upstream loads the URL; this control never fetches. }
+  TTyChartResolveImageEvent = procedure(Sender: TObject; const AUrl: string;
+    var AImage: TBGRABitmap) of object;
+  { [R2-I8] one axis' BaseAxisPointer, as far as its label goes: the memo
+    render() keeps (PointerDrawLabelText) }
+  TTyPtrMemoEntry = record
+    Key: string;
+    { _lastValue / _lastStatus: HasLast False is their null (never
+      rendered, or cleared); LastShown the status 'show' }
+    HasLast, LastShown: Boolean;
+    LastValue: Double;
+    { _lastGraphicKey (the pointer's type); none before the first show }
+    HasGraphicKey: Boolean;
+    GraphicKey: TTyAxisPointerType;
+    { the full update (FStGen) the memo was rendered under, and the
+      updateAxisPointer action (FPtrUpdGen) it last rendered for }
+    Gen, UpdGen: Integer;
+    Text: string;
+  end;
   { the skin's inks for the toolbox [Batch 125] }
   TTyTbInk = record
     Stroke, StrokeHover, Background, Border, Brush, Title: TTyChartColor;
@@ -488,6 +552,25 @@ type
     Stale: Boolean;
     Frozen: Boolean;
     FrozenX, FrozenY: Double;
+    { [R2-I7] THE DEFAULT MARKUP, built when the show is TRIED -- upstream's
+      _showAxisTooltip / _showSeriesItemTooltip build it (a valueFormatter
+      runs there) before _showOrMove, whatever the delay, a formatter or an
+      unchanged content then does with it }
+    MarkupHas: Boolean;
+    Markup: TTyTooltipLineArray;
+  end;
+
+  { [R2-I7] WHAT A SHOW PUT IN THE BOX: _showTooltipContent's setContent --
+    the spec it was shown under, the ink, the lines, whether it is an axis
+    tooltip, the formatter's text. Has False: the show drew nothing. Built
+    once per show; a paint only draws it. }
+  TTyTipContent = record
+    Has: Boolean;
+    Spec: TTyTooltipSpec;
+    Ink: TTyTooltipInk;
+    Lines: TTyTooltipLineArray;
+    OnAxis: Boolean;
+    Fmt: string;
   end;
 
   { [F4b] an axis pointer kept across a re-render: the axisPointer model's
@@ -496,7 +579,7 @@ type
   TTyPtrKeep = record
     Dim: string;
     Index: Integer;
-    Cross, Linked: Boolean;
+    Cross, Linked, NoTip: Boolean;
     Value, SnapValue: Double;
     Series, Rows: TTyIntegerArray;
   end;
@@ -571,6 +654,13 @@ type
     Ghosts: array of TTyTmGhost;
     Old: TTyTreemapSolved;
     OldHave: TTyTreemapHave;
+    { [R2-C] A MERGE'S TRANSITION, from the OLD tree to a new one: the new
+      rows' old rows (Map) and back (O2N) -- nil for the same tree; the
+      deleted node groups by their OLD row (OldGroups: Groups is by the new
+      row). Old's borrowed option pieces are the replaced option's -- never
+      read through them }
+    Map, O2N: TTyIntegerArray;
+    OldGroups: array of TTyChartAnimProxy;
     { a frame has been stepped since the arming: until then a leaving
       element is not dirty and its words stand where they were (setToFinal
       copies the values without marking it) }
@@ -589,6 +679,25 @@ type
     Parent: Integer;
   end;
   TTyAccPlan = array of TTyAccPlanNode;
+
+  { [R2-I6] A SERIES' STORE AS ITS FILL LEFT IT, kept for the next build of
+    the same tree (StoreKeepTake): the option's Generation, the recipe it was
+    filled by (dimensions, encode, the table it read), its own copy, and per
+    column borrowing an axis' category list what that list was -- collecting
+    or fixed, deduplicating or not, how many categories it held before this
+    fill (Pre) and all it held after (List) }
+  TTyStoreKeep = record
+    Valid: Boolean;
+    Used: Boolean;
+    Gen: Int64;
+    Sig: string;
+    Store: TTyDataStore;
+    MetaDim: TTyIntegerArray;
+    MetaCollect, MetaDedup: array of Boolean;
+    MetaPre: TTyIntegerArray;
+    MetaList: array of TTyStringArray;
+  end;
+  TTyStoreKeepArray = array of TTyStoreKeep;
 
   TTyAdvanceChart = class(TTyCustomControl, ITyAccessibleHost)
   private
@@ -655,6 +764,8 @@ type
     FThumbDragX, FThumbDragY: Integer;
     FBindings: TTySeriesBindingArray;
     FStores: array of TTyDataStore;
+    { [R2-I6] the parsed stores kept between builds of one tree, per slot }
+    FStoreKeep: TTyStoreKeepArray;
     { Every bar's width and offset, index-parallel to FBindings. Solved in
       Relayout rather than Rebuild because it needs the FINAL pixel extents:
       the plot rect is shrunk to fit the labels in phase C, and a band measured
@@ -685,6 +796,10 @@ type
     FJitter: TTyJitterPass;
     { LARGE MODE, by binding slot, as the last build decided it [Batch 117] }
     FLargeKinds: array of TTyLargeKind;
+    { [R2-J3] per slot, what the series' visual callbacks answered on the
+      last rebuild (nil: none is a callback) -- upstream's visual stage runs
+      them once per update }
+    FItemCbs: array of TTyItemCallbacks;
     { PROGRESSIVE RENDERING AND appendData [Batch 119]: every slot's
       pipeline (its context, its chunks, the args its tasks ran with); a
       chunk still to draw; the next update is a setOption's (a pipeline with
@@ -697,6 +812,10 @@ type
     FProgUnfinished: Boolean;
     FProgFresh: Boolean;
     FProgReuse: Boolean;
+    { [R2-I9] THE LIST AN UPDATE BUILT (FullUpdateWith, DropStaticKeepList)
+      and nothing has touched since: the paint draws it as it stands instead
+      of building the same list a second time }
+    FListFresh: Boolean;
     FProgStepCost: Double;
     FStreamPending: Boolean;
     FStreamRelayout: Boolean;
@@ -715,6 +834,28 @@ type
     FProgLayerPPI: Integer;
     FProgLayerScale: Integer;   { the device scale it holds, its pixels per device px (#83) }
     FProgPainted: TTyIntegerArray;
+    { [R2-L] A PROGRESS FRAME'S STATIC LAYER IN PLACE: the last full static
+      paint's own bitmap (FProgWork), the same bitmap as it stood when the
+      incremental layer was blitted (FProgUnder), and the layer as blitted
+      then (FProgSeen). A frame that only drew chunks onto the layer
+      changes the static bitmap only where the layer changed: there it
+      starts from FProgUnder, takes the layer, and has what comes after it
+      drawn again inside those pixels -- what the full paint would put there
+      (see ProgFastPaint). FProgCap: the full paint is capturing;
+      FProgFastFrame: since the capture the static layer was dropped by
+      progress frames alone. }
+    FProgCap, FProgCapUnder, FProgCapOk, FProgFastFrame: Boolean;
+    { [R2-L] THE LAYER DRAWN AGAIN WHERE A STATE CHANGED IT: whether the layer
+      is what a whole drawing in paint order gives (FProgLayerInOrder; the
+      last position drawn on it, FProgLayerLastPos), and the box, in device
+      px, a state patch changed on it (FProgLayerRegion when
+      FProgLayerRegionOn) -- see ProgLayerRegionRedraw }
+    FProgLayerInOrder, FProgLayerRegionOn: Boolean;
+    FProgLayerLastPos: Integer;
+    FProgLayerRegion: TTyXYWH;
+    FListTailAt: Integer;
+    FProgUnder, FProgWork, FProgSeen: TBGRABitmap;
+    FProgBlitAt, FProgCapW, FProgCapH, FProgCapPPI, FProgCapScale: Integer;
     { Which series accumulate onto which, and into which columns. Solved in
       Rebuild, between filling the stores and sizing the axes: the totals have
       to exist before the value axis is asked how far it must reach. }
@@ -807,6 +948,15 @@ type
     FTmPrev: array of TTyTreemapSolved;
     FTmHave: array of TTyTreemapHave;
     FTmAnim: array of TTyTmAnim;
+    { [R2-C] THE LAST SOLVE AND STORAGE a setOption's new tree takes over
+      (TreemapView keeps _oldTree and _storage across it), by series index,
+      with the view keys of the render they were drawn in; consumed by the
+      next solve }
+    FTmOld: array of TTyTreemapSolved;
+    FTmOldHave: array of TTyTreemapHave;
+    FTmOldKeys: TTyStringArray;
+    { the series' view keys when the treemaps were last solved }
+    FTmViewKeys: TTyStringArray;
     { a press on a breadcrumb item: its series, its index, where }
     FCrumbPressSeries, FCrumbPressIndex, FCrumbPressX, FCrumbPressY: Integer;
     { a press that started on a breadcrumb item is not a treemap click }
@@ -841,6 +991,11 @@ type
       the slot, its handler, its params and its api }
     FCustomViews: array of TTyCustomView;
     FCustomPaintEls: TTyGfxElArray;
+    { [R2-D] the device scale the custom paths were tagged at, and whether a
+      universal transition stopped a custom item's own animations (the list
+      is laid out again) }
+    FCustomUtScale: Double;
+    FCustomUtStopped: Boolean;
     FCustomAction: string;
     FCustomClipOn: TTyBoolArray;
     FCustomClip: array of TTyXYWH;
@@ -952,6 +1107,14 @@ type
     FStCarryHoverSeries, FStCarryHoverRaw: Integer;
     FStGen, FStBuiltGen: Integer;
     FStRerender, FStDirty: Boolean;
+    { [R2-I9] THE HOVER LAYER: the copies it brushes (the paths on it in
+      their hover style, in list order) and whether they are to be found
+      again; the storage count the threshold reads (FHlCount, counted again
+      when not FHlCountOk) }
+    FHoverList: TTyPaintList;
+    FHoverDirty: Boolean;
+    FHlCount: Integer;
+    FHlCountOk: Boolean;
     { [P2] the last StApplyChanged changed a geo's flags }
     FStGeoApplied: Boolean;
     { StPrimaryInk held through a sync's declarations [P2] }
@@ -1203,6 +1366,13 @@ type
     FTbBfSnapType: TTyBrushType;
     FTbError: string;
     FOnToolboxSaveAsImage: TTyToolboxSaveEvent;
+    { [R2-J2] OnResolveImage and the answers it gave, by URL (owned; a nil
+      answer kept too) }
+    FOnResolveImage: TTyChartResolveImageEvent;
+    { [R2-I8] see OnTooltipHtml and TooltipAutoRichText }
+    FOnTooltipHtml: TTyChartTooltipHtmlEvent;
+    FTooltipAutoRichText: Boolean;
+    FResolvedImages: TStringList;
     { THE TIMELINE [Batch 129] -- see its section }
     FTlView: TTyTimelineView;
     FTlAnim: TTyAnimation;
@@ -1275,6 +1445,9 @@ type
       again on every pointer move. Dropped where FDatumPicks is rebuilt. }
     FRowObjFills: array of TTyRowFillArray;
     FRowObjDone: array of Boolean;
+    { the raw count FRowObjFills was read for -- the fills themselves are nil
+      where no row has an object colour [R2-L] }
+    FRowObjN: array of Integer;
     { DECALS [Batch 131]. The series scope of the aria decal palette lives as
       long as upstream's GlobalModel: a merge keeps it (a renamed series picks
       on), a notMerge makes a new one. Per binding slot: the series' decal,
@@ -1288,9 +1461,6 @@ type
       the option's, or the built-in palette's) }
     FSeriesDecalRaws: array of TTyDecalRaw;
     FRowDecalRaws: array of array of TTyDecalRaw;
-    { aria.enabled as the setOptions left it: initBase turns an aria object
-      on, the preprocessor copies the legacy `show` [Batch 131] }
-    FAriaEnabled: Boolean;
     { THE KEYBOARD FOCUS ITEM [Batch 144]: its series index and view row
       (-1 none), and whether the keyboard holds it now -- the ring is
       drawn, the item is highlighted and its tooltip shown. Leaving the
@@ -1416,6 +1586,26 @@ type
       than keeping it correct across a rebuild -- which is the mistake the
       static layer's own history is a record of. }
     FTipHits: TTyAxisHitArray;
+    { [R2-I7] the content the last show set (FTipCurDue: a show whose build
+      was not standing, built at the next paint), the shows counted (a
+      position function runs once per show: FTipPosGen the show its cached
+      answer FTipPosAns belongs to), and _cbParamsList's data, one per row
+      of the last axis show, for _updateContentNotChangedOnAxis }
+    FTipCur: TTyTipContent;
+    FTipCurDue: Boolean;
+    FTipShowGen, FTipPosGen: Integer;
+    { the show the last paint drew (a re-render freezing a show not drawn
+      yet lays its box out first), and the colour it gave the box's border }
+    FTipPaintGen: Integer;
+    FTipBorderPainted: TTyColor;
+    { [R2-I8] each axis' BaseAxisPointer memo: see PointerDrawLabelText }
+    FPtrMemo: array of TTyPtrMemoEntry;
+    { [R2-I8] one per updateAxisPointer action: render() runs on an action,
+      not on a paint }
+    FPtrUpdGen: Integer;
+    FTipPosAns: TTyChartTooltipPos;
+    FTipLastSigs: TTyStringArray;
+    FTipLastSigSeries: TTyIntegerArray;
     { The element the hit came from, kept because it carries the colour of the
       thing the pointer is over. Asking the series for its colour instead would
       be a second answer to a question the ink has already answered, and would
@@ -1440,10 +1630,26 @@ type
     FTipBox, FTipRect: TTyRectF;
     { [Batch 104] what the last paint's string or handler formatter said }
     FTipFormatterText: string;
+    { [R2-E] what the box last painted said, and what a frozen box says:
+      TooltipView.render leaves the content element as it was until a show
+      sets it again }
+    FTipLastHas, FTipFrozenHas: Boolean;
+    FTipLastSpec, FTipFrozenSpec: TTyTooltipSpec;
+    FTipLastInk, FTipFrozenInk: TTyTooltipInk;
+    FTipLastLines, FTipFrozenLines: TTyTooltipLineArray;
+    FTipLastOnAxis, FTipFrozenOnAxis: Boolean;
+    FTipLastFmt, FTipFrozenFmt: string;
+    FTipLastBorder, FTipFrozenBorder: TTyColor;
     { [Batch 100] the option's own `status: 'show'` pointers are gone: the
       first pointer event rewrites every status, and an option set brings
       them back }
     FOptPtrGone: Boolean;
+    { [R2-E] the over EventMove found, for EventOver }
+    FEvOverDue: Boolean;
+    FEvOverT: TTyChartEventTarget;
+    FEvOverX, FEvOverY: Integer;
+    { [R2-E] the axes ('mainType#index') a merge wrote a status on since }
+    FOptPtrBack: TTyStringArray;
     { [Batch 153] THE ACTIONS THAT DRIVE THE TOOLTIP AND THE POINTER.
       FActCycle is upstream's IN_EC_CYCLE for them: an action dispatched
       while one of them runs waits in FActPending and is flushed after it,
@@ -1489,6 +1695,9 @@ type
       (the update runs once); and whether the update after them gave one }
     FBatchBrushJson: string;
     FBatchBrushHas, FBatchBrushQueued: Boolean;
+    { [R2-E] an item's timeline merge (TlMerge): the render it would have
+      run now waits for the batch's end, once }
+    FBatchConvertDue: Boolean;
     { [F4b] a view action (graphRoam, sankeyRoam, dragNode) running as an
       action: the roam helpers leave the event and `updated` to it }
     FViewActionDepth: Integer;
@@ -1581,6 +1790,10 @@ type
       maps onto are the old ones, so are their views -- a series kept as a
       full update keeps it, the axes groupTransition, the markers update }
     FAnimMerge: Boolean;
+    { [R2-C] a setOption since the render the waiting update starts from
+      visited the series (notMerge, or a merge with `series` -- every
+      option, through backwardCompat): their data, a tree's Tree, is new }
+    FAnimDataFresh: Boolean;
     { THE AXIS VIEWS the update starts from, 'xAxis0=' + model id + #1 +
       subtype (prepareView's '_ec_' + id + '_' + type), read before the
       option changes; and the axes a replaceMerge made brand new since --
@@ -1719,6 +1932,9 @@ type
       before setOption's flush) [Batch 94] }
     procedure AnimFlushArmed;
     function AnimSeriesInfo: TTyChartAnimSeriesArray;
+    { [R2-C] the map views the last build drew, and (ANew) the model each
+      one's transform group tweens on }
+    function AnimGeoViews(ANew: Boolean): TTyChartGeoViewArray;
     { ---- the states on the proxies [Batch 94, AN3b] ---- }
     { after the build and its arming: every state element's proxy found or
       made, seeded with the rest values, given the series' stateTransition,
@@ -1727,7 +1943,7 @@ type
     procedure StAnimSync;
     procedure StAnimEl(var AEl: TTyStElement; AListIdx, ASeries, ARaw: Integer;
       const AName: string; AKind: Integer; const ACfg: TTyAnimCfg;
-      AHasCfg, AOver: Boolean);
+      AHasCfg: Boolean);
     { the series' stateAnimation as updateStates reads it (series, root,
       300 / cubicOut), when the series animates and the duration is above 0 }
     function StAnimCfg(ASeriesIndex: Integer; out ACfg: TTyAnimCfg): Boolean;
@@ -1818,12 +2034,32 @@ type
     function GetErrorText: string;
     procedure FreeStores;
     procedure DropBuild;
+    { [R2-I6] THE PARSED STORE KEPT between builds of one tree. A series'
+      store is a function of the tree (FOption.Generation), the recipe its
+      branch fills it by (StoreKeepSig) and the category lists of the axes
+      it borrows -- their content now, and, for a collecting one, what it
+      held before this series' fill. Take: all of it as when the store was
+      kept -- the collecting lists get the categories the fill appended, in
+      its order, and FStores[ASlot] becomes a copy of the kept store on the
+      new axes' lists (True); else nothing changes (False). Put: keep a copy
+      of the store just filled (APre: each borrowed list's count before the
+      fill). Begin / End: the build's bracket (an entry no slot used goes). }
+    function StoreKeepSig(ASlot, ABranch, ADs: Integer; const ADims: TTySeriesDimArray;
+      const AEnc: TTySeriesEncode): string;
+    procedure StoreKeepPre(const ADims: TTySeriesDimArray; out APre: TTyIntegerArray);
+    function StoreKeepTake(ASlot: Integer; const ASig: string;
+      const ADims: TTySeriesDimArray): Boolean;
+    procedure StoreKeepPut(ASlot: Integer; const ASig: string;
+      const ADims: TTySeriesDimArray; const APre: TTyIntegerArray);
+    procedure StoreKeepBegin;
+    procedure StoreKeepEnd;
+    procedure StoreKeepDrop;
     { Option to axes, series and stores. Cheap enough to redo on a resize; the
       expensive half is the label measuring in Relayout. }
     procedure Rebuild;
     { [F6a] the bodies of Rebuild, Paint, RenderTo and RenderToBitmap: each
       public entry opens the image scope -- an `image://name/i` looks for
-      `name` on this chart's Owner (AdvChart.Images) -- around its body }
+      `name` on this chart's Owner (AdvanceChart.Images) -- around its body }
     procedure RebuildBody;
     procedure PaintBody;
     procedure RenderToBody(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -1904,6 +2140,16 @@ type
     function VisualMapInk(const AView: TTyVmViewSpec): TTyVisualMapInk;
     function VisualMapContent(const AView: TTyVmViewSpec): TTyVisualColor;
     function BuildVisualMaps(AList: TTyPaintList): Integer;
+    { [R2-L] the components a list ends with, from the visual maps on --
+      what a build adds after the legends -- and where they start in it
+      (-1: a list with none built) }
+    function BuildListTail(AList: TTyPaintList; const AMeasurer: ITyTextMeasurer): Integer;
+    { [R2-L] those components built again in the list as it stands -- a
+      visual map's indicator moved, which nothing before them reads --
+      instead of the whole list; False where it cannot be (then the list
+      is built whole) }
+    function ListTailRebuild: Boolean;
+    procedure ListTailRefresh;
     { ---- visualMap interaction [Batch 116] ---- }
     procedure VmEnsure(ACount: Integer);
     function VmKeepNow(AIndex: Integer): Boolean;
@@ -1999,6 +2245,9 @@ type
     function DzGrabAt(AX, AY: Integer): Boolean;
     function AnyPanRoam: Boolean;
     function RoamGrabAt(AX, AY: Integer): Boolean;
+    { [R2-E] the RoamController that has the last word on a release: -1
+      none that pans, 0 the point outside its area, 1 inside }
+    function RoamReleaseArea(AX, AY: Integer): Integer;
     procedure CursorAfterMove(AX, AY: Integer);
     procedure CursorAfterUp(AX, AY: Integer);
     procedure ApplyCursorName(const AName: string);
@@ -2076,6 +2325,8 @@ type
     procedure TbBrushClick(const AIcon: string);
     procedure TbApplyCursor(AX, AY: Integer);
     procedure TbFrame;
+    { [R2-E] the icons' pending emphasis entered or left: True when any }
+    function TbFrameApply: Boolean;
     { the brush components [Batch 126] }
     function BrushViewOf: TTyBrushView;
     procedure BrushCss(AX, AY: Double; out X, Y: Double);
@@ -2232,6 +2483,9 @@ type
     function RowDecalJson(ASlot, ARaw: Integer): TJSONData;
     { [F4a] every raw row's decal, by raw index }
     function RawRowDecals(ASlot: Integer): TTyChartDecalArray;
+    { [R2-F] the ground of a decal's `empty*` symbols: the skin's
+      TyAdvChartDecal background (upstream's neutral00) }
+    function DecalGround: TTyChartColor;
     { [F4a] aria.decal on: the palette, else False }
     function AriaDecalPalette(out APal: TJSONData; out APalN: Integer): Boolean;
     { [F4a] a treemap's or a sunburst's node decals by row: the node's own
@@ -2243,8 +2497,9 @@ type
     { a legend item's decal: the legend's itemStyle.decal over the series' }
     function LegendDecalOf(ALegend: Integer; const AName: string;
       const ASeries: TTyChartDecal): TTyChartDecal;
-    { the aria preprocessor and initBase on a setOption's root [Batch 131] }
-    procedure AriaTakeEnabled(ARoot: TJSONData; AInit: Boolean);
+    { ariaVisual's `ariaModel.get('enabled')`: the merged option's -- every
+      option preprocessed, initBase's switch in the base [231b] }
+    function AriaEnabled: Boolean;
     function GetAriaDescription: string;
     { the facts the description is made of, from the last layout: AAria's
       maxCount and excludeDimensionId (the defaults when it is nil), the
@@ -2283,7 +2538,11 @@ type
     function KbActivate: Boolean;
     procedure PaintKbRing(APainter: TTyPainter);
     { ==== [F5] THE COMPONENT KEYBOARD ==== }
-    { a graph's edges that survive the legend (Graph.update's filterSelf) }
+    { [R2-G] whose edges the data-item keys walk: 1 a graph's, 2 a sankey's,
+      3 a chord's; 0 none }
+    function KbEdgeKind(ASlot: Integer): Integer;
+    { a graph's edges that survive the legend (Graph.update's filterSelf);
+      [R2-G] a sankey's links, a chord's kept ribbons }
     function KbEdgeCount(ASlot: Integer): Integer;
     { an edge row's place in the solved edge list; -1 for none }
     function KbEdgeOf(ASeries, ARow: Integer): Integer;
@@ -2345,6 +2604,9 @@ type
     { the JSON item of a series' own `data` at a raw row, nil when the data
       came from elsewhere or the item is no object }
     function RawItemNode(ASlot, ARaw: Integer): TJSONObject;
+    { the array RawItemNode reads its items from, nil where it reads none:
+      a loop over every row asks for it once [R2-L] }
+    function RawItemArray(ASlot: Integer): TJSONArray;
     { a row's own colour object -- a gradient or a pattern in the item's
       itemStyle.color -- for the row fills a renderer reads [Batch 105] }
     function RowObjectFill(ASlot, ARaw: Integer; out AColor: TTyOptColor): Boolean;
@@ -2391,6 +2653,20 @@ type
     procedure ProgLayerBuild(AW, AH, APPI, AScale: Integer);
     procedure ProgLayerDelta;
     procedure ProgRenderList(APainter: TTyPainter; AList: TTyPaintList; APPI: Integer);
+    { [R2-L] the paint-order position the incremental layer is blitted at:
+      the first shown element of a run, -1 for none }
+    function ProgBlitPos: Integer;
+    { [R2-L] a progress frame's static layer from the last full paint's, on
+      FStatic's canvas; False where it cannot be (then the full paint runs) }
+    function ProgFastPaint(const R: TRect; APPI: Integer; const AScale: TTyCanvasScale): Boolean;
+    procedure ProgFastDrop;
+    { [R2-L] the layer drawn again inside the box a state patch changed }
+    procedure ProgLayerRegionRedraw;
+    { [R2-L] after a state patch: the box its writes changed on the layer,
+      against what the last patch had written (AIdx / AEls) -- False where
+      the layer must be drawn whole }
+    function ProgPatchRegion(const AIdx: TTyIntegerArray;
+      const AEls: array of TTyChartElement): Boolean;
     { the row a large element's own handler gives the pointer: the batch's
       scan, -1 for none (a candle's path has no data) }
     function LargeRowAt(AElement, AX, AY: Integer): Integer;
@@ -2571,6 +2847,8 @@ type
       flags moved takes its states again, its elements in place }
     procedure MapRepatch(APPI: Integer; AForce: Boolean = False);
     function MapApplyChanged: Boolean;
+    { [R2-B] a map series' SVG element under the pointer (list index; -1 none) }
+    procedure MapSvgPointer(ASeriesIndex, AIdx: Integer);
     { MapSeries.formatTooltip }
     function MapTooltip(const ADatum: TTyChartDatumRef; out ABlock: TTyTooltipBlock): Boolean;
     { createLegacyDataSelectAction: pieToggleSelect, mapSelect ... as the
@@ -2605,7 +2883,8 @@ type
     procedure SolveParallels(APPI: Integer);
     procedure PaintParallels(APainter: TTyPainter; APPI: Integer;
       const AMeasurer: ITyTextMeasurer);
-    function ParallelAreaSelect(APayload: TJSONObject; out AFirst: Integer): Boolean;
+    function ParallelAreaSelect(APayload: TJSONObject; out AFirst: Integer;
+      AWrite: Boolean = True): Boolean;
     function ParallelOfAxis(AComponent: Integer): Integer;
     { both axis views of every polar: the grid layer (split areas and lines)
       with ABelow, the axis lines, ticks, labels and names without }
@@ -2638,6 +2917,7 @@ type
       row for a custom item; whether a paint element sits under an element
       with tooltipDisabled }
     function CuLive: Boolean;
+    procedure AnimUtStopCustom(ASeries, ARow: Integer);
     function CustomOnNone(ASlot: Integer): Boolean;
     function CustomRootInfo(ASeriesIndex, AInside: Integer): TTyCustomElInfo;
     function CustomVisualRow(ASlot, ARow: Integer; out AVisual: TTyVisualRow): Boolean;
@@ -2708,8 +2988,29 @@ type
     procedure PlaceBoxedCoordSys;
     function CalendarGraphPoints(ASeriesIndex: Integer;
       ACal: TTyCalendar): TTyPointFArray;
+    { [R2-J2] the image scope's URL resolver: OnResolveImage, once a URL }
+    function ResolveImageUrl(const AUrl: string): TBGRABitmap;
     procedure SymbolItems(ASeriesIndex: Integer; const ABase: TTySymbolSpec;
       out ASpecs: TTySymbolSpecArray; out AHas: TTyBoolArray);
+    { [R2-J2] a series' per-item visual callbacks ('@Name' handlers): the
+      symbol options of a scatter or an effectScatter, and the
+      itemStyle.color of a series that colours by itemStyle's fill; every
+      row, or AOnlyRow alone }
+    procedure VisualCallbacks(ASlot: Integer; var AVisual: TTySeriesVisual;
+      AOnlyRow: Integer = -1);
+    { [R2-J3] every series' per-item visual callbacks run (the caller frees
+      the answers): the four symbol keys of a series with symbols, the
+      colour key of its style path. ASymColour is the series style's colour
+      a symbol callback's params carry where no colour callback answered.
+      Every row, or AOnlyRow alone; nil when nothing is a callback. }
+    function ItemCallbacks(ASlot: Integer; AOnlyRow: Integer;
+      ASymColour: TTyChartColor): TTyItemCallbacks;
+    { [R2-J3] the rebuild's callbacks: run for every slot (SolveItemCallbacks),
+      read (ItemCbOf: nil when none), freed with the build }
+    procedure SolveItemCallbacks;
+    procedure RadarSymbolCallbacks(ASlot: Integer; var AVisual: TTyRadarVisual);
+    function ItemCbOf(ASlot: Integer): TTyItemCallbacks;
+    procedure FreeItemCbs;
     procedure HeatmapItemRadii(ASeriesIndex, APPI: Integer;
       out ARadii: TTyCornerRadiiArray; out AHas: TTyBoolArray);
     procedure ItemLabelSpecs(ASeriesIndex: Integer; const ABase: TTyLabelSpec;
@@ -2789,14 +3090,14 @@ type
     function BuildSeriesList(const AMeasurer: ITyTextMeasurer;
       APPI: Integer): Integer;
     { SERIES LABEL LAYOUT -- LabelManager over every series that writes a
-      labelLayout (AdvChart.LabelLayout): the layout applied to each label,
+      labelLayout (AdvanceChart.LabelLayout): the layout applied to each label,
       then moveOverlap and hideOverlap across all of them. Runs on the
       finished list, after the expansion. [Batch 103] }
     procedure LayoutSeriesLabels(AList: TTyPaintList;
       const ASpecs: TTyLabelSpecArray; const AItemSpecs: TTyLabelSpecTable;
       const AMeasurer: ITyTextMeasurer; APPI: Integer);
     { LABEL LINES ROUTED AFTER THE LAYOUT -- LabelManager.processLabelsOverall's
-      _updateLabelLine (AdvChart.LabelGuide): a pie's line again where its
+      _updateLabelLine (AdvanceChart.LabelGuide): a pie's line again where its
       labelLayout gave an x or a y, and a line for every label of a symbol or
       a bar whose labelLine shows in some state. [Batch 112] }
     procedure RouteLabelLines(AList: TTyPaintList;
@@ -2885,16 +3186,23 @@ type
     procedure HierUpdate(const AEventType, APayloadJson: string);
     procedure SunburstClick(ASeries, ARow: Integer);
     procedure TreemapClick(ASeries, AX, AY: Integer);
-    function CrumbAt(AX, AY: Integer; out ASeries, AIndex: Integer): Boolean;
     procedure TreemapCrumbSelect(ASeries, AIndex: Integer);
+    { [R2-B] the payload the treemap view dispatches itself }
+    function TreemapRoamPayload(const AType: string; ASeries: Integer;
+      AX, AY, AW, AH: Double; out AJs: string): TJSONObject;
+    function TreemapViewPayload(const AType: string; ASeries: Integer;
+      const AId: string): TJSONObject;
     function TreemapPan(ASeries, ADX, ADY: Integer): Boolean;
     function TreemapWheel(ASeries: Integer; AScale: Double; AX, AY: Integer): Boolean;
     function TreemapRoamOk(ASlot: Integer; AZoom: Boolean): Boolean;
     function TmRowsOf(ASeries: Integer; out ASlot: Integer): Boolean;
     { the drill-down's animation: armed by a render, a frame of it, its end }
     procedure TmAnimArm(ASlot: Integer; const AView: TTyTreemapView;
-      const AOld: TTyTreemapSolved; const AOldHave: TTyTreemapHave; ADirection: Integer);
+      const AOld: TTyTreemapSolved; const AOldHave: TTyTreemapHave; ADirection: Integer;
+      const AMap: TTyIntegerArray);
     procedure TmAnimDrop(ASeries: Integer);
+    procedure TmStrandLabelFades(ASlot: Integer; const AOld: TTyTreemapSolved;
+      const AOldHave, AHave: TTyTreemapHave; const AMap: TTyIntegerArray);
     procedure TmAnimDropAll;
     function TmAnimAny: Boolean;
     procedure TmWrapCheck;
@@ -2928,6 +3236,18 @@ type
     function TipSpecOf(const ASnap: TTyTipSnap): TTyTooltipSpec;
     procedure TipTryShow(const ASnap: TTyTipSnap; const ASpec: TTyTooltipSpec);
     procedure TipApplyShow(const ASnap: TTyTipSnap);
+    { [R2-I7] the default markup of a show being tried; the content a show
+      sets (the formatter runs here); a row's data as the unchanged-content
+      test compares it }
+    procedure TipMarkup(var ASnap: TTyTipSnap);
+    procedure TipBuildContent(const ASnap: TTyTipSnap; out AContent: TTyTipContent);
+    { [R2-I8] the box reads its text as html: the tooltip component's
+      renderMode is not 'richText' ('auto' as TooltipAutoRichText says) }
+    function TipHtmlMode: Boolean;
+    { [R2-I8] a component item's content in the box's language: encodeHTML'd
+      in html mode, as setTooltipConfig's encodeHTMLContent has it }
+    function TipContentName(const AName: string): string;
+    function TipRowSig(ASlot, ARow: Integer): string;
     procedure TipHide(const AGlobal: TTyTooltipSpec);
     { the timers due by ANow, in the order they would have fired; True
       when the box changed }
@@ -2998,6 +3318,9 @@ type
     { a re-render: the hover goes; the box stays, frozen, and _keepShow
       arms its timer [F4b] }
     procedure TipReset;
+    { [R2-E] a rebuild where upstream renders no tooltip view (a roam, a
+      node drag, a dataZoom slider's hover): the box frozen, nothing kept }
+    procedure TipResetQuiet;
     procedure TipDropDisplay;
     { [F4b] a new tooltip view (notMerge): the box, the last point and the
       kept pointer all go }
@@ -3005,6 +3328,8 @@ type
     { [F4b] the snapshots' axes into JSON before their build goes, the box
       held where it was painted }
     procedure TipFreeze;
+    { the box of a show not painted yet, laid out on the build standing }
+    procedure TipLayoutNow;
     { [F4b] TooltipView.render's _keepShow }
     procedure TipRendered;
     { [F4b] a frozen snapshot's axes and element read back from the build
@@ -3041,6 +3366,11 @@ type
     function IsGraphDatum(const ADatum: TTyChartDatumRef): Boolean;
     { The chart's ground for label halos, and whether it counts as dark. }
     procedure LabelGround(out AGround: TTyChartColor; out ADark: Boolean);
+    { [R2-I1] A PIE'S OR A FUNNEL'S LABELS, built by their own passes after
+      the marks at [ALo, AHi) of AList: each at createTextStyle's opacity --
+      its own label.opacity up the item's chain, the global textStyle's, else
+      its mark's style.opacity (setLabelStyle's defaultOpacity) [was: 1] }
+    procedure OwnLabelOpacity(ASlot: Integer; AList: TTyPaintList; ALo, AHi: Integer);
     function EmphasiseElement(AIndex: Integer; APPI: Integer;
       out AElement: TTyChartElement): Boolean;
     { Every value of one datum as one string, for a store that kept no raw
@@ -3118,7 +3448,7 @@ type
     { THE TOOLBOX'S DIALOGS [Batch 125]: dataView's table (True when Refresh
       closed it, the text in AText) and saveAsImage's file name. Virtual so
       a host -- or a test -- answers without a modal; the defaults are the
-      library's dialogs (tyControls.AdvChart.ToolboxDlg). }
+      library's dialogs (tyControls.AdvanceChart.ToolboxDlg). }
     function ToolboxShowDataView(const ATitle: string; var AText: string;
       AReadOnly: Boolean; const ACloseCaption, ARefreshCaption: string): Boolean; virtual;
     function ToolboxAskFileName(var AFileName: string; const AType: string): Boolean; virtual;
@@ -3201,6 +3531,9 @@ type
       fractional; AInput, when given, is the payload's axesInfo -- only the
       axes it names are processed, each at its own value when it writes one }
     function ResolveAxisPointers(AX, AY: Double; AInput: TJSONArray = nil): TTyAxisHitArray;
+    { [R2-I7] the axisPointer model's axes, as collectAxesInfo collects them }
+    function PtrCollect: TTyPtrAxisInfoArray;
+    function PtrInfoOf(const AInfos: TTyPtrAxisInfoArray; AAxis: TTyAxis): Integer;
     { The three-layer tree an axis tooltip is: a headerless root, one section
       per axis headed by its value, one row per series. nil when nothing
       survived the filters. }
@@ -3212,6 +3545,19 @@ type
       unless written: the step's decimals plus two, padded, so 3.00), with
       the label's string formatter over it. }
     function PointerLabelText(const AHit: TTyAxisHit; AValue: Double): string;
+    { [R2-I8] THE LABEL A POINTER DRAWS, run as BaseAxisPointer.render runs
+      it: a function formatter is called when the value or the status
+      changed since the axis' last render, on a full update (forceRender),
+      and once more after the first show -- whose graphicKey change clears
+      the memo --; otherwise the text it gave stands. A template is cheap
+      and has no side effects: it is just formatted. }
+    function PointerDrawLabelText(const AHit: TTyAxisHit; AValue: Double): string;
+    { [R2-I8] the pointers this paint does not draw are hidden: their
+      memo's status is 'hide' (the value kept, as the model keeps it) }
+    procedure PointerMemoHideOthers(const AHits: TTyAxisHitArray);
+    { [R2-I8] the label text a pointer last drew through the memo ('' when
+      it has none) -- for a probe that must not run the formatter }
+    function PointerLabelDrawn(const AHit: TTyAxisHit): string;
     function AuthorBackground(out AColour: TTyChartColor): Boolean;
     procedure GlobalInk(var AName: string; var ASize, AWeight: Integer;
       var AColour: TTyChartColor; APick: TTyTextPick);
@@ -3296,18 +3642,35 @@ type
       const ASpec: TTyTooltipSpec): TTyTooltipBlock;
     { hit -> the record a formatter is given. }
     function TooltipParams(const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
+    { a sunburst's, a treemap's and a sankey's own getDataParams [R2-E] }
+    function HierTipParams(const ADatum: TTyChartDatumRef; ASlot: Integer;
+      var AParams: TTyChartCallbackParams): Boolean;
     { [Batch 104] THE TEXT THE LAST PAINT'S FORMATTER GAVE THE BOX -- a
       template after the time format and formatTpl, or a handler's answer --
       '' when the box was not drawn or had no formatter. }
     function TooltipFormatterText: string;
+    { THE COLOUR THE LAST PAINT GAVE THE BOX'S BORDER; 0 when no box was
+      drawn }
+    function TooltipBorderColour: TTyColor;
+    { [R2-I8] THE LINES THE LAST PAINT DREW THE BOX WITH, measured (device
+      px); nil when no box was drawn }
+    function TooltipLines: TTyTooltipLineArray;
     { [Batch 100] THE BOX'S SIZE AS MEASURED, device px, just before it is
       placed. Nothing here; a test that compares a placement against
       upstream's -- whose sizes come from another measurer -- answers the
       size the fixture gave. }
     procedure TooltipContentSize(var AW, AH: Double); virtual;
+    { [R2-I8] AN HTML TOOLTIP'S LINES: what a formatter (or a component's
+      content) answered, read as html in the tooltip's inks. OnTooltipHtml
+      first; unhandled, the built-in subset (TyTooltipHtmlLines). Override
+      to read more of it -- call inherited for the rest. }
+    function TooltipHtmlLines(const AHtml: string;
+      const AInk: TTyTooltipInk): TTyTooltipLineArray; virtual;
     { [Batch 100] THE POINTERS THE OPTION SHOWS BY ITSELF: an axis'
       `axisPointer: {status: 'show', value}` before any pointer event }
     function OptionPointerHits: TTyAxisHitArray;
+    function OptPtrIsBack(const AMainType: string; AIndex: Integer): Boolean;
+    procedure OptPtrTakePiece(APiece: TJSONData);
     procedure PointerStateChanged; override;
     { WHERE THE POINTER IS, every pixel of the way. The tooltip's anchor is the
       cursor, so this repaints on movement and not only when the datum under it
@@ -3336,6 +3699,11 @@ type
     procedure DoContextPopup(MousePos: TPoint; var Handled: Boolean); override;
     { the chart's mouse events [Batch 84] }
     function EventTargetAt(AX, AY: Integer): TTyChartEventTarget;
+    { [R2-B] the breadcrumb item a list element is, and its target }
+    function CrumbOfElement(AIdx: Integer; out ASeries, AIndex: Integer): Boolean;
+    function CrumbTarget(ASeries, AIndex: Integer): TTyChartEventTarget;
+    { [R2-B] the target of the marker element at AIdx in the list }
+    function MarkerEventTarget(AIdx: Integer): TTyChartEventTarget;
     function SeriesEventTarget(const ADatum: TTyChartDatumRef;
       AElement: Integer): TTyChartEventTarget;
     function SeriesEventModel(ASeriesIndex: Integer): TTyEventModel;
@@ -3348,6 +3716,11 @@ type
     procedure EmitChartEvent(const AType: string; const ATarget: TTyChartEventTarget;
       AX, AY: Integer; AHasOffset: Boolean = True);
     procedure EventMove(AX, AY: Integer);
+    { [R2-E] EventMove in its two halves: the out and the move, then
+      zrender's mouseover after every zr-level mousemove listener
+      (MouseMove runs the pointer's, the brush's, the parallel's between) }
+    procedure EventMoveOnly(AX, AY: Integer);
+    procedure EventOver;
     procedure EventDown(AButton: TMouseButton; AX, AY: Integer);
     procedure EventUp(AButton: TMouseButton; AX, AY: Integer);
     procedure EventDblClick(AX, AY: Integer);
@@ -3379,6 +3752,10 @@ type
     function StKindOf(ASlot: Integer): TTyStKind;
     function StSeriesNode(ASeriesIndex: Integer): TJSONObject;
     function StItemNode(ASeriesIndex, ARaw: Integer): TJSONObject;
+    { True where StItemNode reads the series' own `data` items: AArr is
+      that array (nil when there is none) -- a loop over every row asks
+      once [R2-L] }
+    function StItemPlainArray(ASeriesIndex: Integer; out AArr: TJSONArray): Boolean;
     { after every build: the records follow the new elements (a re-layout
       re-applies the previous lists, upstream's full update), the selection
       flags are synced, the flags applied and the values written back }
@@ -3397,9 +3774,22 @@ type
     { [F2b] the series' marker elements: their blur state, their flag the
       series' isBlured (MarkerView.toggleBlurSeries) }
     procedure StDeclareMarks(ASeriesIndex: Integer; AList: TTyPaintList);
-    function StMarkNode(ASeriesIndex: Integer; AKind: TTyChartTargetKind): TJSONObject;
-    { the marks' flags from the series' isBlured, then their lists: True
-      when a list changed }
+    { [R2-B] a marker item's model chain, nearest first }
+    function StMarkItemNodes(ASeriesIndex: Integer; AKind: TTyChartTargetKind;
+      ADataIndex: Integer): TTyStNodeArray;
+    { [R2-B] a marker item's hoverState, and setting it }
+    function StMarkFlag(ASeriesIndex: Integer; const AKey: string): Integer;
+    procedure StSetMarkFlag(ASeriesIndex: Integer; const AKey: string; AHover: Integer);
+    { [R2-B] toggleBlurSeries on a series' markers: in, or out of blur }
+    procedure StMarksBlur(ASeriesIndex: Integer; AEnter: Boolean);
+    { [R2-B] the marker item a target is: False for none or no dispatcher }
+    function StMarkTarget(const ATarget: TTyChartEventTarget; out AKey: string;
+      out AFirst: Integer): Boolean;
+    { [R2-B] a marker item's hover in and out }
+    procedure StMarkHoverOver(const ATarget: TTyChartEventTarget);
+    procedure StMarkHoverOut(const ATarget: TTyChartEventTarget);
+    { the marks' flags from their items' (StMarkFlag), then their lists:
+      True when a list changed }
     function StApplyMarks(ASeriesIndex: Integer): Boolean;
     { after the markers are built: every marker element by its host series,
       its state declared, applied and written into the list }
@@ -3410,6 +3800,19 @@ type
       state list. True when an element changed. }
     function StApplyChanged: Boolean;
     function StPatchList: Boolean;
+    { [R2-I9] THE HOVER LAYER (zrender's hover layer, ECharts'
+      updateHoverLayerStatus): the root hoverLayerThreshold as `elCount >
+      value` reads it; whether a series' rendered paths carry the flag (the
+      threshold, or an incremental render's own); the flags given to every
+      row -- AEnter (a build) gives them to every row whether the series'
+      changed or not; the copies the layer brushes, found again; whether
+      there are any; and drawing them over everything the canvas holds }
+    function StHoverThreshold: Double;
+    function StSeriesHoverOn(ASlot: Integer; AThl: Boolean): Boolean;
+    procedure StHoverStamp(AEnter: Boolean);
+    procedure StHoverCollect;
+    function StHoverAny: Boolean;
+    procedure PaintHoverLayer(APainter: TTyPainter);
     function StItemAt(ASeriesIndex, AInnerRow: Integer): PTyStItem;
     { [F2b] the row's second dispatcher (a gauge's arc), nil for none }
     function StPeerAt(ASeriesIndex, AInnerRow: Integer): PTyStItem;
@@ -3582,6 +3985,15 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure Invalidate; override;
+    { [R2-I8] WHAT A TOOLTIP'S renderMode 'auto' (the default) MEANS:
+      upstream answers 'html' where there is a DOM -- every browser page,
+      the gallery's -- and 'richText' where there is none (node). False (the
+      default) reads 'auto' as a browser does: a formatter's text is html.
+      True reads it as node does: the text is drawn as written, markup and
+      all, and params.marker is richText's token. A written 'html' or
+      'richText' is obeyed either way. }
+    property TooltipAutoRichText: Boolean read FTooltipAutoRichText
+      write FTooltipAutoRichText;
     { REPAINT WITHOUT REBUILDING. Invalidate means "the model may have moved":
       it rebuilds, re-measures and re-renders the static layer, because a theme
       change arrives as a bare Invalidate and there is no StyleChanged hook to
@@ -3608,7 +4020,7 @@ type
     procedure SaveToPng(const AFileName: string);
     { EXPORT, as getDataURL does it [Batch 106]. AOptsJson is upstream's
       options object -- `type`, `pixelRatio`, `backgroundColor`,
-      `excludeComponents` -- '' for none; see tyControls.AdvChart.Export for
+      `excludeComponents` -- '' for none; see tyControls.AdvanceChart.Export for
       what each one does. The picture is the FINISHED chart: an animation
       running in the window is drawn where it will rest, and the pointer's
       own state -- the tooltip box, a hovered axis pointer, a hover's
@@ -3630,6 +4042,9 @@ type
     { renderToCanvas: the picture, unencoded. The caller frees it; nil for an
       image with no pixels. }
     function RenderToBitmap(const AOptsJson: string = ''): TBGRABitmap;
+    { [R2-J2] drop every picture OnResolveImage answered (and every URL it
+      left unanswered): the next draw asks again }
+    procedure ForgetResolvedImages;
     { THE LOADING EFFECT, showLoading's `default` [Batch 106]: a mask over
       the chart, the text and a turning arc. ACfgJson is upstream's cfg
       (`text`, `textColor`, `color`, `maskColor`, `fontSize`, `fontWeight`,
@@ -3822,7 +4237,7 @@ type
     property AriaDescription: string read GetAriaDescription;
     { ==== THE KEYBOARD AND THE ACCESSIBLE TREE [Batch 144] ====
       Upstream has no keyboard; this is the port's (see
-      tyControls.AdvChart.KeyNav for the keys). The chart is no tab stop
+      tyControls.AdvanceChart.KeyNav for the keys). The chart is no tab stop
       unless the host makes it one (TabStop := True): then a click or Tab
       gives it focus and the keys walk the data items.
 
@@ -3988,6 +4403,19 @@ type
     { [F2b] a gauge's progress arc, by inner row }
     function PeerStates(ASeriesIndex, ADataIndex: Integer;
       out AItem: TTyStItem): Boolean;
+    { [R2-B] FOR TESTS: the keyboard's markers stop taken up at its part
+      APart (False: no such part), and let go again }
+    function KbTakeMarkerForTest(APart: Integer): Boolean;
+    procedure KbLeaveForTest;
+    { [R2-L] FOR TESTS: how many row state records series ASeriesIndex
+      keeps (none where no element hosts a row, -1 for no such series) }
+    function StRowRecordsForTest(ASeriesIndex: Integer): Integer;
+    { [R2-I9] FOR TESTS: the hover layer as the next frame brushes it (the
+      copies in list order; nil for none) }
+    function HoverLayerForTest: TTyPaintList;
+    { [R2-I9] FOR TESTS: how many rows of series ASeriesIndex have a state
+      list or are on the hover layer }
+    function StRowsInStatesForTest(ASeriesIndex: Integer): Integer;
     { [F2b] a marker element of series ASeriesIndex by its name (mp0,
       ml0.from, ma0#label ...): its state record and its index in the list }
     function MarkerStates(ASeriesIndex: Integer; const APart: string;
@@ -4085,6 +4513,9 @@ type
     function AnimFindGhost(ASeries, AIndex: Integer;
       const ARole: string): TTyChartAnimProxy;
     function AnimGhostCount: Integer;
+    { [R2-I7] the AIndex-th ghost still leaving (0 .. AnimGhostCount - 1),
+      its old element at Ghost }
+    function AnimGhostAt(AIndex: Integer): TTyChartAnimProxy;
     { THE PROXY AN ELEMENT'S STATES RUN ON [Batch 94]: of series ASeries,
       inner row ARow, the part 'host', 'label', 'guide' (the row's), 'poly'
       or 'area' (a line's, ARow ignored); nil when none is bound }
@@ -4215,6 +4646,9 @@ type
       'bg', 'ct', 'label' (the content's words), 'upper'; nil for none }
     function TreemapAnimProxy(ASeriesIndex, ARow: Integer; const AKind: string): TTyChartAnimProxy;
     function TreemapGhostCount(ASeriesIndex: Integer): Integer;
+    { [R2-C] the AIndex-th deleted rect still leaving: its old row and kind
+      (0 the background, 1 the content); nil past the end }
+    function TreemapGhost(ASeriesIndex, AIndex: Integer; out ARow, AKind: Integer): TTyChartAnimProxy;
     { whether the row is expanded now, the toggles applied }
     function TreeExpanded(ASeriesIndex, ADataIndex: Integer): Boolean;
     { The centre and zoom as the OPTION now says them -- the series' own
@@ -4317,7 +4751,7 @@ type
     function SeriesOldViewKey(ASeries: Integer): string;
     { A MERGE setOption: components and series mapped onto the models there
       by id, then name, then index, and merged into them (see
-      tyControls.AdvChart.OptionMerge). What upstream keeps in the models
+      tyControls.AdvanceChart.OptionMerge). What upstream keeps in the models
       survives: the legend's selection unless the option writes `selected`,
       a roam's centre and zoom, an action's dataZoom window, the series'
       selection. It renders as an update. The Option property reads the
@@ -4350,7 +4784,7 @@ type
       <mainType>Index / Id / Name keys, as util/model.ts parseFinder reads
       them. The value is any JSON: a pair for a coordinate system, one
       value for one axis, read with upstream's JavaScript rules (see
-      tyControls.AdvChart.Convert). The coordinate systems are asked in
+      tyControls.AdvanceChart.Convert). The coordinate systems are asked in
       upstream's order -- the grids, the graphs' views, the calendars --
       and the first that answers is the answer.
 
@@ -4497,6 +4931,13 @@ type
       SaveToFile }
     property OnToolboxSaveAsImage: TTyToolboxSaveEvent read FOnToolboxSaveAsImage
       write FOnToolboxSaveAsImage;
+    { [R2-J2] a picture the option names by URL: see TTyChartResolveImageEvent }
+    property OnResolveImage: TTyChartResolveImageEvent read FOnResolveImage
+      write FOnResolveImage;
+    { [R2-I8] an html tooltip's text, read your way: see
+      TTyChartTooltipHtmlEvent. Unhandled, the built-in reading runs. }
+    property OnTooltipHtml: TTyChartTooltipHtmlEvent read FOnTooltipHtml
+      write FOnTooltipHtml;
     { when the enter animations play -- see TTyChartAnimationMode [Batch 89] }
     property AnimationMode: TTyChartAnimationMode read FAnimMode
       write SetAnimMode default camAuto;
@@ -4552,6 +4993,34 @@ function TyChartCssCursor(const ACss: string; out ACursor: TCursor): Boolean;
 procedure TyAdvChartStPatchForTest(AOn: Boolean);
 function TyAdvChartStPatchesForTest: Integer;
 
+{ [R2-L] A progress frame's static layer kept in place (ProgFastPaint): a
+  switch that turns it off -- every progress frame paints the static layer
+  whole, the reference it must match -- and how many frames it has served. }
+procedure TyAdvChartProgFastForTest(AOn: Boolean);
+function TyAdvChartProgFastFramesForTest: Integer;
+{ [R2-L] The list's components built again on their own (ListTailRebuild):
+  a switch that turns it off -- the list is built whole, the reference --
+  and how many times it has. }
+procedure TyAdvChartListTailForTest(AOn: Boolean);
+function TyAdvChartListTailsForTest: Integer;
+{ [R2-I9] The list an update built drawn by the next paint as it stands
+  (FListFresh): a switch that turns it off -- the paint builds it again, the
+  reference it must match -- and how many paints have drawn one. }
+procedure TyAdvChartListFreshForTest(AOn: Boolean);
+function TyAdvChartListFreshesForTest: Integer;
+{ [R2-I9] how many times any chart has built its series list (BuildSeriesList) }
+function TyAdvChartListBuildsForTest: Integer;
+{ [R2-L] The incremental layer drawn again only where a state changed it
+  (ProgLayerRegionRedraw): a switch -- off, the layer is drawn whole, the
+  reference -- and how many times it has been. }
+procedure TyAdvChartLayerRegionForTest(AOn: Boolean);
+function TyAdvChartLayerRegionsForTest: Integer;
+{ [R2-I6] The parsed store kept between builds (StoreKeepTake): the fewest
+  rows a store has to have to be kept (-1: none is, the reference; the
+  default 4096), and how many builds have taken one. }
+procedure TyAdvChartStoreKeepForTest(AMinRows: Integer);
+function TyAdvChartStoreKeepsForTest: Integer;
+
 implementation
 
 uses
@@ -4560,17 +5029,17 @@ uses
     rects it invalidates [Batch 142] }
   Forms, LCLIntf,
   { Only for the diagnostic resourcestrings -- the same one-way dependency the
-    rest of the AdvChart family keeps, invisible to a host. }
+    rest of the AdvanceChart family keeps, invisible to a host. }
   tyControls.StrConsts,
-  tyControls.AdvChart.RichStyle, tyControls.AdvChart.JsMath,
-  tyControls.AdvChart.LinePath, tyControls.AdvChart.LabelGuide,
+  tyControls.AdvanceChart.RichStyle, tyControls.AdvanceChart.JsMath,
+  tyControls.AdvanceChart.LinePath, tyControls.AdvanceChart.LabelGuide,
   BGRABitmapTypes, FPImage, FPWriteJPEG, base64,
-  tyControls.AdvChart.ToolboxDlg,
-  tyControls.AdvChart.AxisBreak, tyControls.AdvChart.DataTransform,
+  tyControls.AdvanceChart.ToolboxDlg,
+  tyControls.AdvanceChart.AxisBreak, tyControls.AdvanceChart.DataTransform,
   { ecStat's three transforms, registered by its initialization [Batch 134] }
-  tyControls.AdvChart.StatTransform,
+  tyControls.AdvanceChart.StatTransform,
   { `image://` pictures and their image lists [F6a] }
-  tyControls.AdvChart.Images;
+  tyControls.AdvanceChart.Images;
 
 var
   GStPatchOff: Boolean = False;
@@ -4581,9 +5050,90 @@ begin
   GStPatchOff := not AOn;
 end;
 
+var
+  GProgFastOff: Boolean = False;
+  GProgFastFrames: Integer = 0;
+
+procedure TyAdvChartProgFastForTest(AOn: Boolean);
+begin
+  GProgFastOff := not AOn;
+end;
+
+function TyAdvChartProgFastFramesForTest: Integer;
+begin
+  Result := GProgFastFrames;
+end;
+
+var
+  GListTailOff: Boolean = False;
+  GListTails: Integer = 0;
+  GListFreshOff: Boolean = False;
+  GListFreshes: Integer = 0;
+  GListBuilds: Integer = 0;
+
+function TyAdvChartListBuildsForTest: Integer;
+begin
+  Result := GListBuilds;
+end;
+
+procedure TyAdvChartListFreshForTest(AOn: Boolean);
+begin
+  GListFreshOff := not AOn;
+end;
+
+function TyAdvChartListFreshesForTest: Integer;
+begin
+  Result := GListFreshes;
+end;
+
+procedure TyAdvChartListTailForTest(AOn: Boolean);
+begin
+  GListTailOff := not AOn;
+end;
+
+function TyAdvChartListTailsForTest: Integer;
+begin
+  Result := GListTails;
+end;
+
+var
+  GLayerRegionOff: Boolean = False;
+  GLayerRegions: Integer = 0;
+
+procedure TyAdvChartLayerRegionForTest(AOn: Boolean);
+begin
+  GLayerRegionOff := not AOn;
+end;
+
+function TyAdvChartLayerRegionsForTest: Integer;
+begin
+  Result := GLayerRegions;
+end;
+
 function TyAdvChartStPatchesForTest: Integer;
 begin
   Result := GStPatches;
+end;
+
+const
+  { [R2-I6] a store is kept from this many rows on -- below it the parse
+    costs less than the copy is worth keeping -- and no more rows in all
+    are kept than this (a second copy of each) }
+  cStoreKeepMinRows = 4096;
+  cStoreKeepMaxRows = 4000000;
+
+var
+  GStoreKeepMinRows: Integer = cStoreKeepMinRows;
+  GStoreKeeps: Integer = 0;
+
+procedure TyAdvChartStoreKeepForTest(AMinRows: Integer);
+begin
+  GStoreKeepMinRows := AMinRows;
+end;
+
+function TyAdvChartStoreKeepsForTest: Integer;
+begin
+  Result := GStoreKeeps;
 end;
 
 { ==================== echarts.connect [Batch 141] ==================== }
@@ -4731,35 +5281,25 @@ function BatchEventHead(APayload: TJSONObject; const AType: string): string; for
 procedure DrawRotatedNameLines(APainter: TTyPainter; const AText, AFontName: string;
   AFontSize, AWeight: Integer; AColor: TTyColor; AX, AY, ARot: Double;
   AHAlign: TAlignment; AVAlign: TTextLayout; ABlockH: Double);
-var
-  lines: TStringArray;
-  i, n: Integer;
-  lineH, top, dy, sa, ca: Double;
 begin
-  if Pos(#10, AText) = 0 then
-  begin
-    APainter.DrawTextRotated(AText, AFontName, AFontSize, AWeight, AColor,
-      AX, AY, ARot, AHAlign, AVAlign);
-    Exit;
-  end;
-  lines := AText.Split([#10]);
-  n := Length(lines);
-  lineH := ABlockH / n;
-  case AVAlign of
-    tlCenter: top := -ABlockH / 2;
-    tlBottom: top := -ABlockH;
-  else
-    top := 0;
-  end;
-  sa := Sin(ARot);
-  ca := Cos(ARot);
-  for i := 0 to n - 1 do
-  begin
-    { (0, dy) in the text's frame, turned the way DrawTextRotated turns its
-      own offsets }
-    dy := top + i * lineH;
-    APainter.DrawTextRotated(lines[i], AFontName, AFontSize, AWeight, AColor,
-      AX + dy * sa, AY + dy * ca, ARot, AHAlign, tlTop);
+  { [R2-A] the one routine the turned axis labels and the captions draw
+    through too: each line centred on its line box, as zrender's
+    textBaseline 'middle' (it was hung from its top) }
+  TyDrawTextRotatedLines(APainter, AText, AFontName, AFontSize, AWeight, AColor,
+    AX, AY, ARot, AHAlign, AVAlign, ABlockH);
+end;
+
+{ [R2-I2] A LEVEL AXIS LABEL'S LINES: each one at the block's alignment
+  (zrender's TSpans share the text's textAlign) -- a line shorter than the
+  block is not centred in it. One line keeps its centre in its own measured
+  box, as it always did. }
+function LevelLinesAlign(const AText: string; AH: TTyTextAnchorH): TAlignment;
+begin
+  if Pos(#10, AText) = 0 then Exit(taCenter);
+  case AH of
+    tahLeft: Result := taLeftJustify;
+    tahRight: Result := taRightJustify;
+  else Result := taCenter;
   end;
 end;
 
@@ -4870,6 +5410,8 @@ begin
   else TyStSetNum(Result, stkR, 0);
   TyStSetNum(Result, stkScale, 1);
   TyStSetNum(Result, stkIgnore, Ord(AEl.Ignore));
+  { [R2-I3] the pen's phase at rest, which a state's dashOffset tweens from }
+  TyStSetNum(Result, stkDashOffset, AEl.Style.DashOffsetLogical);
 end;
 
 { the edge data after Graph.update's filterSelf: an edge whose two ends both
@@ -5094,29 +5636,29 @@ end;
 { THE METHODS, BY FEATURE: one include file each; inside a file they keep the order
   they had in this unit. What stays above is the unit's own routines and the helpers
   more than one feature shares. }
-{$I tyControls.AdvanceChart.Option.inc}
-{$I tyControls.AdvanceChart.Build.inc}
-{$I tyControls.AdvanceChart.Paint.inc}
-{$I tyControls.AdvanceChart.DataZoom.inc}
-{$I tyControls.AdvanceChart.VisualMap.inc}
-{$I tyControls.AdvanceChart.Geo.inc}
-{$I tyControls.AdvanceChart.Hierarchy.inc}
-{$I tyControls.AdvanceChart.Series.inc}
-{$I tyControls.AdvanceChart.Legend.inc}
-{$I tyControls.AdvanceChart.Labels.inc}
-{$I tyControls.AdvanceChart.Progressive.inc}
-{$I tyControls.AdvanceChart.Tooltip.inc}
-{$I tyControls.AdvanceChart.Events.inc}
-{$I tyControls.AdvanceChart.States.inc}
-{$I tyControls.AdvanceChart.Actions.inc}
-{$I tyControls.AdvanceChart.Anim.inc}
-{$I tyControls.AdvanceChart.Keyboard.inc}
-{$I tyControls.AdvanceChart.Graphic.inc}
-{$I tyControls.AdvanceChart.Export.inc}
-{$I tyControls.AdvanceChart.Timeline.inc}
-{$I tyControls.AdvanceChart.Toolbox.inc}
-{$I tyControls.AdvanceChart.Brush.inc}
-{$I tyControls.AdvanceChart.Thumbnail.inc}
+{$I tyControls.AdvanceChart.Control.Option.inc}
+{$I tyControls.AdvanceChart.Control.Build.inc}
+{$I tyControls.AdvanceChart.Control.Paint.inc}
+{$I tyControls.AdvanceChart.Control.DataZoom.inc}
+{$I tyControls.AdvanceChart.Control.VisualMap.inc}
+{$I tyControls.AdvanceChart.Control.Geo.inc}
+{$I tyControls.AdvanceChart.Control.Hierarchy.inc}
+{$I tyControls.AdvanceChart.Control.Series.inc}
+{$I tyControls.AdvanceChart.Control.Legend.inc}
+{$I tyControls.AdvanceChart.Control.Labels.inc}
+{$I tyControls.AdvanceChart.Control.Progressive.inc}
+{$I tyControls.AdvanceChart.Control.Tooltip.inc}
+{$I tyControls.AdvanceChart.Control.Events.inc}
+{$I tyControls.AdvanceChart.Control.States.inc}
+{$I tyControls.AdvanceChart.Control.Actions.inc}
+{$I tyControls.AdvanceChart.Control.Anim.inc}
+{$I tyControls.AdvanceChart.Control.Keyboard.inc}
+{$I tyControls.AdvanceChart.Control.Graphic.inc}
+{$I tyControls.AdvanceChart.Control.Export.inc}
+{$I tyControls.AdvanceChart.Control.Timeline.inc}
+{$I tyControls.AdvanceChart.Control.Toolbox.inc}
+{$I tyControls.AdvanceChart.Control.Brush.inc}
+{$I tyControls.AdvanceChart.Control.Thumbnail.inc}
 
 finalization
   FreeAndNil(GTyCharts);

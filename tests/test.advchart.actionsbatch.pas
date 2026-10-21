@@ -19,13 +19,22 @@ unit test.advchart.actionsbatch;
   every event of the fixture's listen list in the order the handlers heard
   it, payloads compared key by key (numbers exactly); where upstream's two
   charts agree, the port's batch chart and its twin are compared pixel for
-  pixel. }
+  pixel.
+
+  [R2-E] More of the same oracle: a timeline batch, animated (the bars at
+  the clock's steps: the update renders once, after every item); an
+  axisAreaSelect batch's covers (the update skips the first axis the OUTER
+  payload finds); a batch of no items (the update still runs, unless it is
+  none or a component's own); the flushes a legend item, a toolbox icon and
+  a dataZoom handle ask for (their over and out, not a move inside); and a
+  setOption's rendered before its updated. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Types, tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Events,
-     tyControls.AdvChart.Geo,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Events,
+     tyControls.AdvanceChart.Geo, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Brush,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax, test.advchart.tooltipactions;
 type
@@ -44,10 +53,13 @@ type
     FHandDispatch: string;
     FHandFlush: Boolean;
     FListen: TStringList;
+    FAnim: Boolean;
     procedure Bad(const AWhat: string);
     procedure Finish(const AWhat: string);
     function Ssr: ITyTextMeasurer;
-    function NewProbe(const AOptionJson: string): TTaProbe;
+    function NewProbe(const AOptionJson: string; AAnim: Boolean = False): TTaProbe;
+    procedure CompareBars(ABars: TJSONArray);
+    procedure CompareCovers(ACovers: TJSONArray);
     procedure OnEvent(Sender: TObject; const AEvent: TTyChartEvent);
     procedure OnHandler(Sender: TObject; const AEvent: TTyChartEvent);
     procedure CompareEvents(AWant: TJSONArray);
@@ -88,6 +100,15 @@ type
     procedure TestRenderedOnEveryFlushAsUpstream;
     procedure TestRenderedWithoutATooltipAsUpstream;
     procedure TestNoFinishedWhileAnActionWaitsAsUpstream;
+    { [R2-E] }
+    procedure TestATimelineBatchRendersOnceAsUpstream;
+    procedure TestAnAxisAreaSelectBatchsCoversAsUpstream;
+    procedure TestTheOuterPayloadNamesTheSkippedAxisAsUpstream;
+    procedure TestABatchOfNoItemsUpdatesAsUpstream;
+    procedure TestALegendItemsHoverFlushesAsUpstream;
+    procedure TestAToolboxIconsHoverFlushesAsUpstream;
+    procedure TestADataZoomHandlesHoverFlushesAsUpstream;
+    procedure TestSetOptionRendersBeforeUpdatedAsUpstream;
   end;
 
 implementation
@@ -96,6 +117,19 @@ const
   cW = 600;
   cH = 400;
   cNulMark = #$E2#$90#$80;
+
+type
+  { the animation's frame list, for the bars [R2-E] }
+  TAbProbe = class(TTaProbe)
+  end;
+
+function FromHex(const AHex: string): Double;
+var q: QWord;
+begin
+  Result := 0;
+  q := StrToQWord('$' + AHex);
+  Move(q, Result, SizeOf(Result));
+end;
 
 function FixturePath(const AName: string): string;
 begin
@@ -234,14 +268,17 @@ begin
     [AWhat, FBad, FCompared, FReport]), 0, FBad);
 end;
 
-function TAdvChartActionsBatchOracleTest.NewProbe(const AOptionJson: string): TTaProbe;
+function TAdvChartActionsBatchOracleTest.NewProbe(const AOptionJson: string;
+  AAnim: Boolean): TTaProbe;
 begin
-  Result := TTaProbe.Create(FForm);
+  Result := TAbProbe.Create(FForm);
   Result.Parent := FForm;
   Result.Controller := FCtl;
   Result.Measurer := Ssr;
   Result.TooltipNow := 0;
   Result.AnimNow := 0;
+  { [R2-E] an animated case: the chart's clock is the oracle's }
+  if AAnim then Result.AnimationMode := camAlways;
   Result.SetBounds(0, 0, cW, cH);
   Result.Option := AOptionJson;
   Result.Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
@@ -312,6 +349,117 @@ begin
   end;
 end;
 
+{ the bars by series and row, from the frame drawn last: x0 x1 y0 y1 as
+  the rect spans them (timeline.pas' CheckBars) [R2-E] }
+procedure TAdvChartActionsBatchOracleTest.CompareBars(ABars: TJSONArray);
+var
+  s, i, k: Integer;
+  lst: TTyPaintList;
+  arr, b: TJSONArray;
+  el: TTyChartElement;
+  found: Boolean;
+  bx, by, bw, bh: Double;
+
+  procedure Near(const AWhat: string; AWant, AGot: Double);
+  begin
+    Inc(FCompared);
+    if not (Abs(AWant - AGot) <= 1e-9) then
+      Bad(Format('%s: upstream %.17g, here %.17g', [AWhat, AWant, AGot]));
+  end;
+
+begin
+  lst := TAbProbe(FChart).AnimFrame;
+  Inc(FCompared);
+  if lst = nil then
+  begin
+    Bad('no frame');
+    Exit;
+  end;
+  for s := 0 to ABars.Count - 1 do
+  begin
+    if ABars.Items[s].JSONType = jtNull then Continue;
+    arr := TJSONArray(ABars.Items[s]);
+    for i := 0 to arr.Count - 1 do
+    begin
+      found := False;
+      el := Default(TTyChartElement);
+      for k := 0 to lst.Count - 1 do
+      begin
+        el := lst.Element(k);
+        if (el.Datum.SeriesIndex <> s) or (el.Datum.DataIndex <> i) or el.Ignore then Continue;
+        if not (el.Shape.Kind in [cskRect, cskRoundRect]) then Continue;
+        found := True;
+        Break;
+      end;
+      Inc(FCompared);
+      if arr.Items[i].JSONType = jtNull then
+      begin
+        if found then Bad(Format('bars[%d][%d]: no bar upstream, one here', [s, i]));
+        Continue;
+      end;
+      if not found then
+      begin
+        Bad(Format('bars[%d][%d]: no bar here', [s, i]));
+        Continue;
+      end;
+      b := TJSONArray(arr.Items[i]);
+      bx := FromHex(b.Strings[0]);
+      by := FromHex(b.Strings[1]);
+      bw := FromHex(b.Strings[2]);
+      bh := FromHex(b.Strings[3]);
+      Near(Format('bars[%d][%d].left', [s, i]), Min(bx, bx + bw), el.Shape.Bounds.Left);
+      Near(Format('bars[%d][%d].right', [s, i]), Max(bx, bx + bw), el.Shape.Bounds.Right);
+      Near(Format('bars[%d][%d].top', [s, i]), Min(by, by + bh), el.Shape.Bounds.Top);
+      Near(Format('bars[%d][%d].bottom', [s, i]), Max(by, by + bh), el.Shape.Bounds.Bottom);
+    end;
+  end;
+end;
+
+{ every parallelAxis view's covers: how many, and each one's range
+  [R2-E] }
+procedure TAdvChartActionsBatchOracleTest.CompareCovers(ACovers: TJSONArray);
+var
+  a, c, k: Integer;
+  ctl: TTyBrushController;
+  want, rng: TJSONArray;
+  n: Integer;
+begin
+  for a := 0 to ACovers.Count - 1 do
+  begin
+    ctl := FChart.ParallelBrushOf(a);
+    if ctl = nil then n := 0 else n := Length(ctl.Covers);
+    Inc(FCompared);
+    if ACovers.Items[a].JSONType = jtNull then
+    begin
+      if n > 0 then Bad(Format('axis %d: no controller upstream, %d covers here', [a, n]));
+      Continue;
+    end;
+    want := TJSONArray(ACovers.Items[a]);
+    if n <> want.Count then
+    begin
+      Bad(Format('axis %d: %d covers, upstream %d', [a, n, want.Count]));
+      Continue;
+    end;
+    for c := 0 to want.Count - 1 do
+    begin
+      rng := TJSONArray(want.Items[c]);
+      Inc(FCompared);
+      if (Length(ctl.Covers[c].Opt.Range) <> 1) or (rng.Count <> 2) then
+      begin
+        Bad(Format('axis %d cover %d: not a line range', [a, c]));
+        Continue;
+      end;
+      for k := 0 to 1 do
+      begin
+        Inc(FCompared);
+        if ctl.Covers[c].Opt.Range[0][k] <> FromHex(rng.Strings[k]) then
+          Bad(Format('axis %d cover %d end %d: %.17g, upstream %.17g', [a, c, k,
+            ctl.Covers[c].Opt.Range[0][k], FromHex(rng.Strings[k])]));
+      end;
+    end;
+  end;
+end;
+
 procedure TAdvChartActionsBatchOracleTest.RunStep(AChart: TTaProbe;
   AStep: TJSONObject; ABmp: TBGRABitmap; var ANow: Double);
 var
@@ -323,10 +471,16 @@ begin
     ANow := ANow + TJSONObject(FRoot).Objects['clock'].Floats['stepDt']
   else if op = 'idle' then
     ANow := ANow + AStep.Floats['ms'];
-  if op <> 'action' then
+  if (op <> 'action') and (op <> 'setOption') then
   begin
     AChart.TooltipNow := ANow;
     AChart.TooltipTick(ANow);
+  end;
+  { [R2-E] the clips step on the oracle's clock }
+  if FAnim then
+  begin
+    AChart.AnimNow := ANow;
+    TAbProbe(AChart).AnimTick(ANow);
   end;
   if op = 'move' then
     AChart.Move(AStep.Arrays['at'].Integers[0], AStep.Arrays['at'].Integers[1])
@@ -339,7 +493,9 @@ begin
     js := StringReplace(AStep.Objects['payload'].AsJSON, cNulMark, '\u0000', [rfReplaceAll]);
     silent := (AStep.Find('silent') <> nil) and AStep.Booleans['silent'];
     AChart.DispatchAction(js, silent);
-  end;
+  end
+  else if op = 'setOption' then
+    AChart.SetOption(AStep.Objects['option'].AsJSON, False);
   AChart.Render(ABmp.Canvas, Rect(0, 0, cW, cH), 96);
 end;
 
@@ -360,10 +516,11 @@ begin
     if cases.Objects[i].Strings['id'] = AId then cs := cases.Objects[i];
   AssertTrue('no case ' + AId, cs <> nil);
   flush := cs.Booleans['flush'];
+  FAnim := (cs.Find('anim') <> nil) and cs.Booleans['anim'];
   FChart := nil;
   twin := nil;
   try
-    FChart := NewProbe(cs.Objects['option'].AsJSON);
+    FChart := NewProbe(cs.Objects['option'].AsJSON, FAnim);
     if cs.Booleans['twin'] then
     begin
       twin := NewProbe(cs.Objects['option'].AsJSON);
@@ -420,6 +577,8 @@ begin
       FLog.Clear;
       RunStep(FChart, st, FBmp, now_);
       CompareEvents(st.Arrays['events']);
+      if st.Find('bars') <> nil then CompareBars(st.Arrays['bars']);
+      if st.Find('covers') <> nil then CompareCovers(st.Arrays['covers']);
       if (twin = nil) or (st.Find('items') = nil) then Continue;
       items := st.Arrays['items'];
       for k := 0 to items.Count - 1 do
@@ -609,6 +768,49 @@ end;
 procedure TAdvChartActionsBatchOracleTest.TestNoFinishedWhileAnActionWaitsAsUpstream;
 begin
   RunCase('r-pending');
+end;
+
+procedure TAdvChartActionsBatchOracleTest.TestATimelineBatchRendersOnceAsUpstream;
+begin
+  RunCase('b-timeline-anim');
+end;
+
+procedure TAdvChartActionsBatchOracleTest.TestAnAxisAreaSelectBatchsCoversAsUpstream;
+begin
+  RunCase('b-axisareaselect-covers');
+  { a timelineChange after it (alone, or a batch) renders every view }
+  RunCase('tl-after-aas');
+  RunCase('b-tl-after-aas');
+end;
+
+procedure TAdvChartActionsBatchOracleTest.TestTheOuterPayloadNamesTheSkippedAxisAsUpstream;
+begin
+  RunCase('b-axisareaselect-outer');
+end;
+
+procedure TAdvChartActionsBatchOracleTest.TestABatchOfNoItemsUpdatesAsUpstream;
+begin
+  RunCase('r-zero-batch');
+end;
+
+procedure TAdvChartActionsBatchOracleTest.TestALegendItemsHoverFlushesAsUpstream;
+begin
+  RunCase('r-legend-hover');
+end;
+
+procedure TAdvChartActionsBatchOracleTest.TestAToolboxIconsHoverFlushesAsUpstream;
+begin
+  RunCase('r-toolbox-hover');
+end;
+
+procedure TAdvChartActionsBatchOracleTest.TestADataZoomHandlesHoverFlushesAsUpstream;
+begin
+  RunCase('r-dz-hover');
+end;
+
+procedure TAdvChartActionsBatchOracleTest.TestSetOptionRendersBeforeUpdatedAsUpstream;
+begin
+  RunCase('r-setoption');
 end;
 
 initialization

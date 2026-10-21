@@ -22,9 +22,9 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Types, tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-     tyControls.AdvChart.Data, tyControls.AdvChart.Builder,
-     tyControls.AdvChart.Paint, tyControls.AdvChart.Graph,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+     tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Builder,
+     tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Graph,
      tyControls.AdvanceChart, test.advancechart;
 type
   TAdvChartGraphOracleTest = class(TTestCase)

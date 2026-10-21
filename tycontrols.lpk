@@ -834,440 +834,444 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.SubPixel"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Types.pas"/>
-        <UnitName Value="tyControls.AdvChart.Types"/>
+        <Filename Value="source/tyControls.AdvanceChart.Types.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Types"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Scale.pas"/>
-        <UnitName Value="tyControls.AdvChart.Scale"/>
+        <Filename Value="source/tyControls.AdvanceChart.Scale.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Scale"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Data.pas"/>
-        <UnitName Value="tyControls.AdvChart.Data"/>
+        <Filename Value="source/tyControls.AdvanceChart.Data.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Data"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Time.pas"/>
-        <UnitName Value="tyControls.AdvChart.Time"/>
+        <Filename Value="source/tyControls.AdvanceChart.Time.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Time"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Coord.pas"/>
-        <UnitName Value="tyControls.AdvChart.Coord"/>
+        <Filename Value="source/tyControls.AdvanceChart.Coord.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Coord"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Layout.pas"/>
-        <UnitName Value="tyControls.AdvChart.Layout"/>
+        <Filename Value="source/tyControls.AdvanceChart.Layout.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Layout"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.AxisName.pas"/>
-        <UnitName Value="tyControls.AdvChart.AxisName"/>
+        <Filename Value="source/tyControls.AdvanceChart.AxisName.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.AxisName"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.JsMath.pas"/>
-        <UnitName Value="tyControls.AdvChart.JsMath"/>
+        <Filename Value="source/tyControls.AdvanceChart.JsMath.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.JsMath"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.AxisLabels.pas"/>
-        <UnitName Value="tyControls.AdvChart.AxisLabels"/>
+        <Filename Value="source/tyControls.AdvanceChart.AxisLabels.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.AxisLabels"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Shape.pas"/>
-        <UnitName Value="tyControls.AdvChart.Shape"/>
+        <Filename Value="source/tyControls.AdvanceChart.Shape.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Shape"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Paint.pas"/>
-        <UnitName Value="tyControls.AdvChart.Paint"/>
+        <Filename Value="source/tyControls.AdvanceChart.Paint.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Paint"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Marks.pas"/>
-        <UnitName Value="tyControls.AdvChart.Marks"/>
+        <Filename Value="source/tyControls.AdvanceChart.Marks.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Marks"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.BarLayout.pas"/>
-        <UnitName Value="tyControls.AdvChart.BarLayout"/>
+        <Filename Value="source/tyControls.AdvanceChart.BarLayout.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.BarLayout"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Stack.pas"/>
-        <UnitName Value="tyControls.AdvChart.Stack"/>
+        <Filename Value="source/tyControls.AdvanceChart.Stack.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Stack"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Sampling.pas"/>
-        <UnitName Value="tyControls.AdvChart.Sampling"/>
+        <Filename Value="source/tyControls.AdvanceChart.Sampling.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Sampling"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.LabelLayout.pas"/>
-        <UnitName Value="tyControls.AdvChart.LabelLayout"/>
+        <Filename Value="source/tyControls.AdvanceChart.LabelLayout.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.LabelLayout"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.LabelGuide.pas"/>
-        <UnitName Value="tyControls.AdvChart.LabelGuide"/>
+        <Filename Value="source/tyControls.AdvanceChart.LabelGuide.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.LabelGuide"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Export.pas"/>
-        <UnitName Value="tyControls.AdvChart.Export"/>
+        <Filename Value="source/tyControls.AdvanceChart.Export.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Export"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Loading.pas"/>
-        <UnitName Value="tyControls.AdvChart.Loading"/>
+        <Filename Value="source/tyControls.AdvanceChart.Loading.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Loading"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Connect.pas"/>
-        <UnitName Value="tyControls.AdvChart.Connect"/>
+        <Filename Value="source/tyControls.AdvanceChart.Connect.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Connect"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.DirtyRect.pas"/>
-        <UnitName Value="tyControls.AdvChart.DirtyRect"/>
+        <Filename Value="source/tyControls.AdvanceChart.DirtyRect.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.DirtyRect"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.GeoFix.pas"/>
-        <UnitName Value="tyControls.AdvChart.GeoFix"/>
+        <Filename Value="source/tyControls.AdvanceChart.GeoFix.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.GeoFix"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Geo.pas"/>
-        <UnitName Value="tyControls.AdvChart.Geo"/>
+        <Filename Value="source/tyControls.AdvanceChart.Geo.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Geo"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.GeoSvg.pas"/>
-        <UnitName Value="tyControls.AdvChart.GeoSvg"/>
+        <Filename Value="source/tyControls.AdvanceChart.GeoSvg.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.GeoSvg"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.HeatLayer.pas"/>
-        <UnitName Value="tyControls.AdvChart.HeatLayer"/>
+        <Filename Value="source/tyControls.AdvanceChart.HeatLayer.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.HeatLayer"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Images.pas"/>
-        <UnitName Value="tyControls.AdvChart.Images"/>
+        <Filename Value="source/tyControls.AdvanceChart.Images.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Images"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.KeyNav.pas"/>
-        <UnitName Value="tyControls.AdvChart.KeyNav"/>
+        <Filename Value="source/tyControls.AdvanceChart.KeyNav.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.KeyNav"/>
       </Item>
       <Item>
         <Filename Value="source/tyControls.Accessible.pas"/>
         <UnitName Value="tyControls.Accessible"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Media.pas"/>
-        <UnitName Value="tyControls.AdvChart.Media"/>
+        <Filename Value="source/tyControls.AdvanceChart.Media.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Media"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.WhiskerBox.pas"/>
-        <UnitName Value="tyControls.AdvChart.WhiskerBox"/>
+        <Filename Value="source/tyControls.AdvanceChart.WhiskerBox.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.WhiskerBox"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Convert.pas"/>
-        <UnitName Value="tyControls.AdvChart.Convert"/>
+        <Filename Value="source/tyControls.AdvanceChart.Convert.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Convert"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Jitter.pas"/>
-        <UnitName Value="tyControls.AdvChart.Jitter"/>
+        <Filename Value="source/tyControls.AdvanceChart.Jitter.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Jitter"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Large.pas"/>
-        <UnitName Value="tyControls.AdvChart.Large"/>
+        <Filename Value="source/tyControls.AdvanceChart.Large.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Large"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Progressive.pas"/>
-        <UnitName Value="tyControls.AdvChart.Progressive"/>
+        <Filename Value="source/tyControls.AdvanceChart.Progressive.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Progressive"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Lines.pas"/>
-        <UnitName Value="tyControls.AdvChart.Lines"/>
+        <Filename Value="source/tyControls.AdvanceChart.Lines.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Lines"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Toolbox.pas"/>
-        <UnitName Value="tyControls.AdvChart.Toolbox"/>
+        <Filename Value="source/tyControls.AdvanceChart.Toolbox.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Toolbox"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.ToolboxDlg.pas"/>
-        <UnitName Value="tyControls.AdvChart.ToolboxDlg"/>
+        <Filename Value="source/tyControls.AdvanceChart.ToolboxDlg.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.ToolboxDlg"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Brush.pas"/>
-        <UnitName Value="tyControls.AdvChart.Brush"/>
+        <Filename Value="source/tyControls.AdvanceChart.Brush.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Brush"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Timeline.pas"/>
-        <UnitName Value="tyControls.AdvChart.Timeline"/>
+        <Filename Value="source/tyControls.AdvanceChart.Timeline.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Timeline"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Decal.pas"/>
-        <UnitName Value="tyControls.AdvChart.Decal"/>
+        <Filename Value="source/tyControls.AdvanceChart.Decal.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Decal"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.AxisBreak.pas"/>
-        <UnitName Value="tyControls.AdvChart.AxisBreak"/>
+        <Filename Value="source/tyControls.AdvanceChart.AxisBreak.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.AxisBreak"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Aria.pas"/>
-        <UnitName Value="tyControls.AdvChart.Aria"/>
+        <Filename Value="source/tyControls.AdvanceChart.Aria.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Aria"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Polar.pas"/>
-        <UnitName Value="tyControls.AdvChart.Polar"/>
+        <Filename Value="source/tyControls.AdvanceChart.Polar.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Polar"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Parallel.pas"/>
-        <UnitName Value="tyControls.AdvChart.Parallel"/>
+        <Filename Value="source/tyControls.AdvanceChart.Parallel.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Parallel"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Thumbnail.pas"/>
-        <UnitName Value="tyControls.AdvChart.Thumbnail"/>
+        <Filename Value="source/tyControls.AdvanceChart.Thumbnail.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Thumbnail"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.PolarBar.pas"/>
-        <UnitName Value="tyControls.AdvChart.PolarBar"/>
+        <Filename Value="source/tyControls.AdvanceChart.PolarBar.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.PolarBar"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Single.pas"/>
-        <UnitName Value="tyControls.AdvChart.Single"/>
+        <Filename Value="source/tyControls.AdvanceChart.Single.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Single"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.ThemeRiver.pas"/>
-        <UnitName Value="tyControls.AdvChart.ThemeRiver"/>
+        <Filename Value="source/tyControls.AdvanceChart.ThemeRiver.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.ThemeRiver"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Chord.pas"/>
-        <UnitName Value="tyControls.AdvChart.Chord"/>
+        <Filename Value="source/tyControls.AdvanceChart.Chord.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Chord"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.GfxEl.pas"/>
-        <UnitName Value="tyControls.AdvChart.GfxEl"/>
+        <Filename Value="source/tyControls.AdvanceChart.GfxEl.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.GfxEl"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Graphic.pas"/>
-        <UnitName Value="tyControls.AdvChart.Graphic"/>
+        <Filename Value="source/tyControls.AdvanceChart.Graphic.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Graphic"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Custom.pas"/>
-        <UnitName Value="tyControls.AdvChart.Custom"/>
+        <Filename Value="source/tyControls.AdvanceChart.Custom.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Custom"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Symbol.pas"/>
-        <UnitName Value="tyControls.AdvChart.Symbol"/>
+        <Filename Value="source/tyControls.AdvanceChart.Symbol.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Symbol"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Pie.pas"/>
-        <UnitName Value="tyControls.AdvChart.Pie"/>
+        <Filename Value="source/tyControls.AdvanceChart.Pie.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Pie"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Funnel.pas"/>
-        <UnitName Value="tyControls.AdvChart.Funnel"/>
+        <Filename Value="source/tyControls.AdvanceChart.Funnel.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Funnel"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Gauge.pas"/>
-        <UnitName Value="tyControls.AdvChart.Gauge"/>
+        <Filename Value="source/tyControls.AdvanceChart.Gauge.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Gauge"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Radar.pas"/>
-        <UnitName Value="tyControls.AdvChart.Radar"/>
+        <Filename Value="source/tyControls.AdvanceChart.Radar.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Radar"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Pictorial.pas"/>
-        <UnitName Value="tyControls.AdvChart.Pictorial"/>
+        <Filename Value="source/tyControls.AdvanceChart.Pictorial.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Pictorial"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Graph.pas"/>
-        <UnitName Value="tyControls.AdvChart.Graph"/>
+        <Filename Value="source/tyControls.AdvanceChart.Graph.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Graph"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Title.pas"/>
-        <UnitName Value="tyControls.AdvChart.Title"/>
+        <Filename Value="source/tyControls.AdvanceChart.Title.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Title"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Labels.pas"/>
-        <UnitName Value="tyControls.AdvChart.Labels"/>
+        <Filename Value="source/tyControls.AdvanceChart.Labels.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Labels"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.LabelOpt.pas"/>
-        <UnitName Value="tyControls.AdvChart.LabelOpt"/>
+        <Filename Value="source/tyControls.AdvanceChart.LabelOpt.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.LabelOpt"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.PieLabel.pas"/>
-        <UnitName Value="tyControls.AdvChart.PieLabel"/>
+        <Filename Value="source/tyControls.AdvanceChart.PieLabel.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.PieLabel"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Legend.pas"/>
-        <UnitName Value="tyControls.AdvChart.Legend"/>
+        <Filename Value="source/tyControls.AdvanceChart.Legend.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Legend"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Tooltip.pas"/>
-        <UnitName Value="tyControls.AdvChart.Tooltip"/>
+        <Filename Value="source/tyControls.AdvanceChart.Tooltip.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Tooltip"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.AxisPointer.pas"/>
-        <UnitName Value="tyControls.AdvChart.AxisPointer"/>
+        <Filename Value="source/tyControls.AdvanceChart.TipHtml.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.TipHtml"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Dataset.pas"/>
-        <UnitName Value="tyControls.AdvChart.Dataset"/>
+        <Filename Value="source/tyControls.AdvanceChart.AxisPointer.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.AxisPointer"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.DataTransform.pas"/>
-        <UnitName Value="tyControls.AdvChart.DataTransform"/>
+        <Filename Value="source/tyControls.AdvanceChart.Dataset.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Dataset"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.StatTransform.pas"/>
-        <UnitName Value="tyControls.AdvChart.StatTransform"/>
+        <Filename Value="source/tyControls.AdvanceChart.DataTransform.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.DataTransform"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Morph.pas"/>
-        <UnitName Value="tyControls.AdvChart.Morph"/>
+        <Filename Value="source/tyControls.AdvanceChart.StatTransform.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.StatTransform"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Color.pas"/>
-        <UnitName Value="tyControls.AdvChart.Color"/>
+        <Filename Value="source/tyControls.AdvanceChart.Morph.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Morph"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.VisualMap.pas"/>
-        <UnitName Value="tyControls.AdvChart.VisualMap"/>
+        <Filename Value="source/tyControls.AdvanceChart.Color.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Color"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.VisualMapView.pas"/>
-        <UnitName Value="tyControls.AdvChart.VisualMapView"/>
+        <Filename Value="source/tyControls.AdvanceChart.VisualMap.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.VisualMap"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.DataZoom.pas"/>
-        <UnitName Value="tyControls.AdvChart.DataZoom"/>
+        <Filename Value="source/tyControls.AdvanceChart.VisualMapView.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.VisualMapView"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.ZrPath.pas"/>
-        <UnitName Value="tyControls.AdvChart.ZrPath"/>
+        <Filename Value="source/tyControls.AdvanceChart.DataZoom.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.DataZoom"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.DataZoomView.pas"/>
-        <UnitName Value="tyControls.AdvChart.DataZoomView"/>
+        <Filename Value="source/tyControls.AdvanceChart.ZrPath.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.ZrPath"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.DataZoomAct.pas"/>
-        <UnitName Value="tyControls.AdvChart.DataZoomAct"/>
+        <Filename Value="source/tyControls.AdvanceChart.DataZoomView.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.DataZoomView"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.LinePath.pas"/>
-        <UnitName Value="tyControls.AdvChart.LinePath"/>
+        <Filename Value="source/tyControls.AdvanceChart.DataZoomAct.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.DataZoomAct"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Marker.pas"/>
-        <UnitName Value="tyControls.AdvChart.Marker"/>
+        <Filename Value="source/tyControls.AdvanceChart.LinePath.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.LinePath"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.MarkerView.pas"/>
-        <UnitName Value="tyControls.AdvChart.MarkerView"/>
+        <Filename Value="source/tyControls.AdvanceChart.Marker.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Marker"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Calendar.pas"/>
-        <UnitName Value="tyControls.AdvChart.Calendar"/>
+        <Filename Value="source/tyControls.AdvanceChart.MarkerView.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.MarkerView"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Matrix.pas"/>
-        <UnitName Value="tyControls.AdvChart.Matrix"/>
+        <Filename Value="source/tyControls.AdvanceChart.Calendar.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Calendar"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Tree.pas"/>
-        <UnitName Value="tyControls.AdvChart.Tree"/>
+        <Filename Value="source/tyControls.AdvanceChart.Matrix.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Matrix"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Sunburst.pas"/>
-        <UnitName Value="tyControls.AdvChart.Sunburst"/>
+        <Filename Value="source/tyControls.AdvanceChart.Tree.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Tree"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Treemap.pas"/>
-        <UnitName Value="tyControls.AdvChart.Treemap"/>
+        <Filename Value="source/tyControls.AdvanceChart.Sunburst.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Sunburst"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Sankey.pas"/>
-        <UnitName Value="tyControls.AdvChart.Sankey"/>
+        <Filename Value="source/tyControls.AdvanceChart.Treemap.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Treemap"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Render.pas"/>
-        <UnitName Value="tyControls.AdvChart.Render"/>
+        <Filename Value="source/tyControls.AdvanceChart.Sankey.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Sankey"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Measure.pas"/>
-        <UnitName Value="tyControls.AdvChart.Measure"/>
+        <Filename Value="source/tyControls.AdvanceChart.Render.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Render"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Option.pas"/>
-        <UnitName Value="tyControls.AdvChart.Option"/>
+        <Filename Value="source/tyControls.AdvanceChart.Measure.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Measure"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.OptionMerge.pas"/>
-        <UnitName Value="tyControls.AdvChart.OptionMerge"/>
+        <Filename Value="source/tyControls.AdvanceChart.Option.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Option"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Catalog.pas"/>
-        <UnitName Value="tyControls.AdvChart.Catalog"/>
+        <Filename Value="source/tyControls.AdvanceChart.OptionMerge.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.OptionMerge"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Complete.pas"/>
-        <UnitName Value="tyControls.AdvChart.Complete"/>
+        <Filename Value="source/tyControls.AdvanceChart.Catalog.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Catalog"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Handlers.pas"/>
-        <UnitName Value="tyControls.AdvChart.Handlers"/>
+        <Filename Value="source/tyControls.AdvanceChart.Complete.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Complete"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Events.pas"/>
-        <UnitName Value="tyControls.AdvChart.Events"/>
+        <Filename Value="source/tyControls.AdvanceChart.Handlers.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Handlers"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.States.pas"/>
-        <UnitName Value="tyControls.AdvChart.States"/>
+        <Filename Value="source/tyControls.AdvanceChart.Events.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Events"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.RichText.pas"/>
-        <UnitName Value="tyControls.AdvChart.RichText"/>
+        <Filename Value="source/tyControls.AdvanceChart.States.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.States"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.RichStyle.pas"/>
-        <UnitName Value="tyControls.AdvChart.RichStyle"/>
+        <Filename Value="source/tyControls.AdvanceChart.RichText.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.RichText"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Easing.pas"/>
-        <UnitName Value="tyControls.AdvChart.Easing"/>
+        <Filename Value="source/tyControls.AdvanceChart.RichStyle.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.RichStyle"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Anim.pas"/>
-        <UnitName Value="tyControls.AdvChart.Anim"/>
+        <Filename Value="source/tyControls.AdvanceChart.Easing.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Easing"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.AnimOpt.pas"/>
-        <UnitName Value="tyControls.AdvChart.AnimOpt"/>
+        <Filename Value="source/tyControls.AdvanceChart.Anim.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Anim"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.AnimView.pas"/>
-        <UnitName Value="tyControls.AdvChart.AnimView"/>
+        <Filename Value="source/tyControls.AdvanceChart.AnimOpt.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.AnimOpt"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.AnimAxis.pas"/>
-        <UnitName Value="tyControls.AdvChart.AnimAxis"/>
+        <Filename Value="source/tyControls.AdvanceChart.AnimView.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.AnimView"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Diagnose.pas"/>
-        <UnitName Value="tyControls.AdvChart.Diagnose"/>
+        <Filename Value="source/tyControls.AdvanceChart.AnimAxis.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.AnimAxis"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Locate.pas"/>
-        <UnitName Value="tyControls.AdvChart.Locate"/>
+        <Filename Value="source/tyControls.AdvanceChart.Diagnose.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Diagnose"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.TextPatch.pas"/>
-        <UnitName Value="tyControls.AdvChart.TextPatch"/>
+        <Filename Value="source/tyControls.AdvanceChart.Locate.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Locate"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.SeriesEdit.pas"/>
-        <UnitName Value="tyControls.AdvChart.SeriesEdit"/>
+        <Filename Value="source/tyControls.AdvanceChart.TextPatch.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.TextPatch"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Builder.pas"/>
-        <UnitName Value="tyControls.AdvChart.Builder"/>
+        <Filename Value="source/tyControls.AdvanceChart.SeriesEdit.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.SeriesEdit"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Series.pas"/>
-        <UnitName Value="tyControls.AdvChart.Series"/>
+        <Filename Value="source/tyControls.AdvanceChart.Builder.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Builder"/>
       </Item>
       <Item>
-        <Filename Value="source/tyControls.AdvChart.Style.pas"/>
-        <UnitName Value="tyControls.AdvChart.Style"/>
+        <Filename Value="source/tyControls.AdvanceChart.Series.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Series"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.AdvanceChart.Style.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.Style"/>
       </Item>
       <Item>
         <Filename Value="source/tyControls.AdvanceChart.pas"/>

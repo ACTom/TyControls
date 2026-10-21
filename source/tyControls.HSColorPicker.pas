@@ -337,7 +337,7 @@ begin
     ctx.strokeStyle(TyColorToBGRA(bodyS.TextColor));
     ctx.beginPath;
     ctx.arc(mx, my, mr, 0, 2 * Pi, False);
-    ctx.stroke;
+    TyCtxStroke(ctx);
 
     P.EndPaint;
   finally

@@ -1175,6 +1175,173 @@
     {"x":200,"y":162,"aim":"both, 12 below: the coarse walk","hit":{"s":0,"d":0},"direct":null,"top":false},
     {"x":212,"y":150,"aim":"both, 12 right","hit":{"s":0,"d":0},"direct":null,"top":false}
    ]
+  },
+  {
+   "id": "graph-nodes-off",
+   "note": "[R2-I1] graph nodes of 20 with a fill and no stroke, a mouse: the shape alone",
+   "W": 400,
+   "H": 300,
+   "init": {"useCoarsePointer":false},
+   "resolvedPointerSize": null,
+   "option": {
+    "animation": false,
+    "series": [{"type":"graph","layout":"none","left":100,"top":100,"width":200,"height":100,"symbolSize":20,"label":{"show":false},"data":[{"name":"a","x":0,"y":0},{"name":"b","x":200,"y":100},{"name":"c","x":100,"y":50}],"links":[]}]
+   },
+   "probes": [
+    {"x":100,"y":100,"aim":"on a","hit":{"s":0,"d":0},"direct":{"s":0,"d":0},"top":false},
+    {"x":107,"y":100,"aim":"a, 7 right: inside","hit":{"s":0,"d":0},"direct":{"s":0,"d":0},"top":false},
+    {"x":113,"y":100,"aim":"a, 13 right: 3 off its edge","hit":null,"direct":null,"top":false},
+    {"x":200,"y":137,"aim":"c, 13 above","hit":null,"direct":null,"top":false},
+    {"x":188,"y":150,"aim":"c, 12 left","hit":null,"direct":null,"top":false},
+    {"x":300,"y":230,"aim":"b, 30 below","hit":null,"direct":null,"top":false}
+   ]
+  },
+  {
+   "id": "graph-nodes",
+   "note": "[R2-I1] the same, pointer 44",
+   "W": 400,
+   "H": 300,
+   "init": {"useCoarsePointer":true},
+   "resolvedPointerSize": 44,
+   "option": {
+    "animation": false,
+    "series": [{"type":"graph","layout":"none","left":100,"top":100,"width":200,"height":100,"symbolSize":20,"label":{"show":false},"data":[{"name":"a","x":0,"y":0},{"name":"b","x":200,"y":100},{"name":"c","x":100,"y":50}],"links":[]}]
+   },
+   "probes": [
+    {"x":100,"y":100,"aim":"on a","hit":{"s":0,"d":0},"direct":{"s":0,"d":0},"top":false},
+    {"x":107,"y":100,"aim":"a, 7 right: inside","hit":{"s":0,"d":0},"direct":{"s":0,"d":0},"top":false},
+    {"x":113,"y":100,"aim":"a, 13 right: 3 off its edge","hit":{"s":0,"d":0},"direct":null,"top":false},
+    {"x":200,"y":137,"aim":"c, 13 above","hit":{"s":0,"d":2},"direct":null,"top":false},
+    {"x":188,"y":150,"aim":"c, 12 left","hit":{"s":0,"d":2},"direct":null,"top":false},
+    {"x":300,"y":230,"aim":"b, 30 below","hit":{"s":0,"d":1},"direct":null,"top":false}
+   ]
+  },
+  {
+   "id": "tree-nodes-off",
+   "note": "[R2-I1] tree nodes of 20 (empty circles: a 2 px ring), one a circle with a 6 px border, a mouse",
+   "W": 400,
+   "H": 300,
+   "init": {"useCoarsePointer":false},
+   "resolvedPointerSize": null,
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "tree",
+      "top": 60,
+      "bottom": 60,
+      "left": 80,
+      "right": 120,
+      "symbolSize": 20,
+      "expandAndCollapse": false,
+      "label": {"show":false},
+      "data": [{"name":"root","children":[{"name":"x"},{"name":"y","symbol":"circle","itemStyle":{"borderColor":"#333333","borderWidth":6}}]}]
+     }
+    ]
+   },
+   "probes": [
+    {"x":80,"y":143,"aim":"root, 7 above: inside","hit":{"s":0,"d":1},"direct":{"s":0,"d":1},"top":false},
+    {"x":80,"y":137,"aim":"root, 13 above: off its ring","hit":null,"direct":null,"top":false},
+    {"x":280,"y":118,"aim":"x, 13 below: off its ring","hit":null,"direct":null,"top":false},
+    {"x":280,"y":183,"aim":"y, 12 above: on its 6 px border","hit":{"s":0,"d":3},"direct":{"s":0,"d":3},"top":false},
+    {"x":280,"y":179,"aim":"y, 16 above: off its border","hit":null,"direct":null,"top":false}
+   ]
+  },
+  {
+   "id": "radar-off",
+   "note": "[R2-I3] radar rings 1 and 8 wide, symbols of 10, a mouse",
+   "W": 400,
+   "H": 300,
+   "init": {"useCoarsePointer":false},
+   "resolvedPointerSize": null,
+   "option": {
+    "animation": false,
+    "radar": {"center":[300,200],"radius":120,"indicator":[{"name":"a","max":10},{"name":"b","max":10},{"name":"c","max":10},{"name":"d","max":10}]},
+    "series": [{"type":"radar","symbolSize":10,"data":[{"value":[8,8,8,8],"lineStyle":{"width":1}},{"value":[4,4,4,4],"lineStyle":{"width":8},"symbol":"emptyCircle"}]}]
+   },
+   "probes": [
+    {"x":252,"y":152,"aim":"ring 0 (1 wide), on it","hit":{"s":0,"d":0},"direct":{"s":0,"d":0},"top":false},
+    {"x":251,"y":151,"aim":"ring 0, 2 off: within 2.5","hit":{"s":0,"d":0},"direct":{"s":0,"d":0},"top":false},
+    {"x":249,"y":149,"aim":"ring 0, 4 off: past 2.5","hit":null,"direct":null,"top":true},
+    {"x":254,"y":246,"aim":"ring 0, 3 in: past 2.5","hit":null,"direct":null,"top":true},
+    {"x":274,"y":174,"aim":"ring 1 (8 wide), 3 off: within 4","hit":{"s":0,"d":1},"direct":{"s":0,"d":1},"top":false},
+    {"x":320,"y":220,"aim":"ring 1, 5 in: past 4","hit":null,"direct":null,"top":true},
+    {"x":208,"y":200,"aim":"symbol 1 of item 0, 4 right: inside its 5","hit":{"s":0,"d":0},"direct":{"s":0,"d":0},"top":false},
+    {"x":204,"y":193,"aim":"symbol 1 of item 0, 7 above: 2 off","hit":null,"direct":null,"top":true}
+   ]
+  },
+  {
+   "id": "radar",
+   "note": "[R2-I3] the same, pointer 44",
+   "W": 400,
+   "H": 300,
+   "init": {"useCoarsePointer":true},
+   "resolvedPointerSize": 44,
+   "option": {
+    "animation": false,
+    "radar": {"center":[300,200],"radius":120,"indicator":[{"name":"a","max":10},{"name":"b","max":10},{"name":"c","max":10},{"name":"d","max":10}]},
+    "series": [{"type":"radar","symbolSize":10,"data":[{"value":[8,8,8,8],"lineStyle":{"width":1}},{"value":[4,4,4,4],"lineStyle":{"width":8},"symbol":"emptyCircle"}]}]
+   },
+   "probes": [
+    {"x":252,"y":152,"aim":"ring 0 (1 wide), on it","hit":{"s":0,"d":0},"direct":{"s":0,"d":0},"top":false},
+    {"x":251,"y":151,"aim":"ring 0, 2 off: within 2.5","hit":{"s":0,"d":0},"direct":{"s":0,"d":0},"top":false},
+    {"x":249,"y":149,"aim":"ring 0, 4 off: past 2.5","hit":{"s":0,"d":0},"direct":null,"top":false},
+    {"x":254,"y":246,"aim":"ring 0, 3 in: past 2.5","hit":{"s":0,"d":0},"direct":null,"top":false},
+    {"x":274,"y":174,"aim":"ring 1 (8 wide), 3 off: within 4","hit":{"s":0,"d":1},"direct":{"s":0,"d":1},"top":false},
+    {"x":320,"y":220,"aim":"ring 1, 5 in: past 4","hit":{"s":0,"d":1},"direct":null,"top":false},
+    {"x":208,"y":200,"aim":"symbol 1 of item 0, 4 right: inside its 5","hit":{"s":0,"d":0},"direct":{"s":0,"d":0},"top":false},
+    {"x":204,"y":193,"aim":"symbol 1 of item 0, 7 above: 2 off","hit":{"s":0,"d":0},"direct":null,"top":false}
+   ]
+  },
+  {
+   "id": "graph-border-off",
+   "note": "[R2-I3] graph nodes of 20 with a 6 px border (one with borderWidth 0), a mouse",
+   "W": 400,
+   "H": 300,
+   "init": {"useCoarsePointer":false},
+   "resolvedPointerSize": null,
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "left": 100,
+      "top": 100,
+      "width": 200,
+      "height": 100,
+      "symbolSize": 20,
+      "label": {"show":false},
+      "itemStyle": {"borderColor":"#333333","borderWidth":6},
+      "data": [{"name":"a","x":0,"y":0},{"name":"b","x":200,"y":100,"itemStyle":{"borderWidth":0}}],
+      "links": []
+     }
+    ]
+   },
+   "probes": [
+    {"x":112,"y":100,"aim":"a, 12 right: on its border","hit":{"s":0,"d":0},"direct":{"s":0,"d":0},"top":false},
+    {"x":100,"y":86,"aim":"a, 14 above: off its border","hit":null,"direct":null,"top":false},
+    {"x":312,"y":200,"aim":"b (no border), 12 right: off","hit":null,"direct":null,"top":false}
+   ]
+  },
+  {
+   "id": "graph-thin-border-off",
+   "note": "[r2v] graph nodes of 20 with a 1 px border, a mouse: the stroke adds half its width, no threshold",
+   "W": 400,
+   "H": 300,
+   "init": {"useCoarsePointer":false},
+   "resolvedPointerSize": null,
+   "option": {
+    "animation": false,
+    "series": [
+     {"type":"graph","layout":"none","left":100,"top":100,"width":200,"height":100,"symbolSize":20,"label":{"show":false},"itemStyle":{"borderColor":"#333333","borderWidth":1},"data":[{"name":"a","x":0,"y":0},{"name":"b","x":200,"y":100}],"links":[]}
+    ]
+   },
+   "probes": [
+    {"x":110,"y":100,"aim":"a, 10 right: on its 1 px border","hit":{"s":0,"d":0},"direct":{"s":0,"d":0},"top":false},
+    {"x":112,"y":100,"aim":"a, 12 right: 1.5 off its 1 px border","hit":null,"direct":null,"top":false},
+    {"x":300,"y":188,"aim":"b, 12 above: 1.5 off its 1 px border","hit":null,"direct":null,"top":false}
+   ]
   }
  ],
  "dirty": [
@@ -6583,6 +6750,13 @@
   {"id":"five-five","ok":true,"note":"five disjoint: five"},
   {"id":"six-five","ok":true,"note":"six disjoint: still five"},
   {"id":"twelve-le-five","ok":true,"note":"twelve: at most five"},
-  {"id":"chain-joined","ok":true,"note":"the final pass joins what merging made meet"}
+  {"id":"chain-joined","ok":true,"note":"the final pass joins what merging made meet"},
+  {"id":"graph-node-shape-alone","ok":true,"note":"a filled node with no stroke: hit on its shape, not 3 px off it"},
+  {"id":"graph-node-coarse","ok":true,"note":"3 px off a node: the fallback finds it"},
+  {"id":"tree-ring-border","ok":true,"note":"a tree node: its ring and border by half their width"},
+  {"id":"radar-ring-reach","ok":true,"note":"a radar ring: max(lineWidth, 5) / 2 either side"},
+  {"id":"radar-symbol-shape","ok":true,"note":"a radar symbol: its shape; the fallback finds it 2 px off"},
+  {"id":"graph-border-reach","ok":true,"note":"a graph node: its border by half its width"},
+  {"id":"graph-thin-border","ok":true,"note":"a filled node with a 1 px border: half its width, not the threshold"}
  ]
 }

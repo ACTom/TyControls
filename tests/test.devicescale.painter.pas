@@ -315,7 +315,7 @@ end;
 
 procedure TDeviceScalePainterTest.DrawAfterResetTransform(P: TTyPainter; K: Integer);
 begin
-  { the halo stroke's pattern in AdvChart.Render: a transform, a reset, then a path }
+  { the halo stroke's pattern in AdvanceChart.Render: a transform, a reset, then a path }
   P.Translate(10 * K, 5 * K);
   P.ResetTransform;
   P.BeginPath;

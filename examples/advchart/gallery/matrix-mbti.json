@@ -16,6 +16,7 @@
   "itemGap": 5
  },
  "tooltip": {
+  "formatter": "@matrix-mbti.formatter",
   "borderColor": "#eee",
   "padding": [
    2,
@@ -411,9 +412,9 @@
     "fontFamily": "Ubuntu Condensed, sans-serif"
    }
   },
-  "width": null,
-  "height": null,
-  "left": null,
+  "width": 360,
+  "height": 360,
+  "left": 120,
   "top": 50,
   "backgroundStyle": {
    "color": "transparent",
@@ -11734,6 +11735,7 @@
    "color": "#fff",
    "label": {
     "show": true,
+    "formatter": "@matrix-mbti.formatter#2",
     "fontWeight": "bold",
     "color": "inherit"
    },

@@ -1,0 +1,125 @@
+{
+ "xAxis": {
+  "name": 2019
+ },
+ "series": [
+  {
+   "data": [
+    {
+     "value": 198,
+     "symbolOffset": null
+    },
+    {
+     "value": 234,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    },
+    {
+     "value": 300,
+     "symbolOffset": null
+    },
+    {
+     "value": 306,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    },
+    {
+     "value": 342,
+     "symbolOffset": null
+    },
+    {
+     "value": 380,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    },
+    {
+     "value": 306,
+     "symbolOffset": null
+    },
+    {
+     "value": 270,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    },
+    {
+     "value": 260,
+     "symbolOffset": null
+    },
+    {
+     "value": 198,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    }
+   ]
+  },
+  {
+   "data": [
+    {
+     "value": -220,
+     "symbolOffset": null
+    },
+    {
+     "value": -234,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    },
+    {
+     "value": -270,
+     "symbolOffset": null
+    },
+    {
+     "value": -340,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    },
+    {
+     "value": -342,
+     "symbolOffset": null
+    },
+    {
+     "value": -342,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    },
+    {
+     "value": -340,
+     "symbolOffset": null
+    },
+    {
+     "value": -270,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    },
+    {
+     "value": -234,
+     "symbolOffset": null
+    },
+    {
+     "value": -220,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    }
+   ]
+  }
+ ]
+}

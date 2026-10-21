@@ -22,8 +22,8 @@ interface
 uses Classes, SysUtils, Controls, Graphics, Forms, fpcunit, testregistry,
      BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Coord,
-     tyControls.AdvChart.Paint, tyControls.AdvChart.Builder,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Coord,
+     tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Builder,
      tyControls.AdvanceChart;
 type
   { The chart's own probe. Not test.advancechart's: this one also needs the

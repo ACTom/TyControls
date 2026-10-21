@@ -26,7 +26,8 @@
     "seriesKey": [
      "female",
      "male"
-    ]
+    ],
+    "delay": "@scatter-aggregate-bar.delay#3"
    }
   }
  ]

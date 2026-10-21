@@ -29,13 +29,13 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Paint, tyControls.AdvChart.Measure,
-     tyControls.AdvChart.Color, tyControls.AdvChart.Style,
-     tyControls.AdvChart.JsMath, tyControls.AdvChart.Easing,
-     tyControls.AdvChart.Scale,
-     tyControls.AdvChart.Anim, tyControls.AdvChart.AnimOpt,
-     tyControls.AdvChart.AnimView, tyControls.AdvanceChart,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Measure,
+     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Style,
+     tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Easing,
+     tyControls.AdvanceChart.Scale,
+     tyControls.AdvanceChart.Anim, tyControls.AdvanceChart.AnimOpt,
+     tyControls.AdvanceChart.AnimView, tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TAsProbe = class(TTyAdvanceChart)
@@ -97,6 +97,7 @@ type
     procedure TestASelectedSliceIsHitWhereItIsDrawn;
     procedure TestHeadlessSwitchesAtOnce;
     procedure TestPastTheHoverLayerThresholdNothingTransitions;
+    procedure TestAnOwnLayerStuckUnderTheHoverLayerStaysStuck;
   end;
 
 implementation
@@ -1083,13 +1084,51 @@ begin
   Draw;
   p := FChart.AnimStateProxy(0, 2, 'host');
   AssertNotNull(p);
-  AssertEquals('emphasis applied', 'emphasis', p.CurrentStates);
+  { [R2-I9] THE ELEMENT ITSELF IS LEFT ALONE (zrender's ONLY_STYLE_CHANGE):
+    its proxy -- the own layer -- takes no state and no value; the lift is
+    the hover layer's copy [was: emphasis applied on the proxy at once] }
+  AssertEquals('the own layer takes no state', '', p.CurrentStates);
   AssertEquals('no clip: the hover layer does not transition', 0, FChart.AnimClipCount);
-  AssertEquals('the lift at once', 'rgba(92,123,217,1)', p.GetAnimProp('style.fill').Str);
-  { select alone is not hovered: it transitions }
+  AssertEquals('the own layer keeps its fill', '#5470c6', p.GetAnimProp('style.fill').Str);
+  AssertNotNull('the copy', FChart.HoverLayerForTest);
+  AssertEquals('one copy', 1, FChart.HoverLayerForTest.Count);
+  AssertEquals('lifted on the copy', IntToHex(TyChartLiftColor(TTyChartColor($FF5470C6)), 8),
+    IntToHex(FChart.HoverLayerForTest.Element(0).Style.FillColor, 8));
   FChart.DispatchAction('{"type":"downplay","seriesIndex":0,"dataIndex":2}');
   Draw;
-  AssertEquals('leaving the hover layer: at once too', 0, FChart.AnimClipCount);
+  AssertEquals('leaving the hover layer: no transition either', 0, FChart.AnimClipCount);
+  AssertEquals('nor a state', '', p.CurrentStates);
+  AssertNull('the copy goes', FChart.HoverLayerForTest);
+end;
+
+{ [r2v] THE OWN LAYER STAYS WHAT IT WAS WHEN THE ELEMENT FIRST WENT ON THE
+  HOVER LAYER: selected while held, it leaves the hover layer still
+  unselected below; hovered again, the own layer (the proxy) is that one
+  still -- not the selected one the state list now says }
+procedure TAdvChartAnimStateTest.TestAnOwnLayerStuckUnderTheHoverLayerStaysStuck;
+var p: TTyChartAnimProxy;
+begin
+  NewChart(camAlways);
+  Load(StringReplace(StringReplace(cBar, '{"color"', '{"hoverLayerThreshold":3,"color"', []),
+    '"type":"bar","data"', '"type":"bar","selectedMode":"multiple","data"', []));
+  Settle(T0);
+  FChart.AnimNow := T1;
+  FChart.DispatchAction('{"type":"highlight","seriesIndex":0,"dataIndex":2}');
+  Draw;
+  FChart.DispatchAction('{"type":"select","seriesIndex":0,"dataIndex":2}');
+  Draw;
+  FChart.DispatchAction('{"type":"downplay","seriesIndex":0,"dataIndex":2}');
+  Draw;
+  p := FChart.AnimStateProxy(0, 2, 'host');
+  AssertNotNull(p);
+  AssertEquals('left the hover layer selected: the own layer as it entered', '', p.CurrentStates);
+  FChart.DispatchAction('{"type":"highlight","seriesIndex":0,"dataIndex":2}');
+  Draw;
+  AssertEquals('on the hover layer again: the own layer as it first entered', '', p.CurrentStates);
+  AssertEquals('its fill unselected', '#5470c6', p.GetAnimProp('style.fill').Str);
+  FChart.DispatchAction('{"type":"downplay","seriesIndex":0,"dataIndex":2}');
+  Draw;
+  AssertEquals('and off it again', '', p.CurrentStates);
 end;
 
 initialization

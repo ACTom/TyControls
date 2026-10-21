@@ -19,10 +19,10 @@ interface
 uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      BGRABitmap, BGRABitmapTypes,
      tyControls.Controller, tyControls.Painter,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Coord,
-     tyControls.AdvChart.Paint, tyControls.AdvChart.Option,
-     tyControls.AdvChart.Handlers, tyControls.AdvChart.Builder,
-     tyControls.AdvChart.Measure, tyControls.AdvChart.Tooltip,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Coord,
+     tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Option,
+     tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.Builder,
+     tyControls.AdvanceChart.Measure, tyControls.AdvanceChart.Tooltip,
      tyControls.AdvanceChart;
 type
   TAdvChartTooltipRuleTest = class(TTestCase)

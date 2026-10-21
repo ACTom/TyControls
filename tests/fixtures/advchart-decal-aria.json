@@ -23205,6 +23205,2713 @@
      }
     }
    ]
+  },
+  {
+   "id": "pre-frames",
+   "note": "aria.show is aria.enabled in every frame: the base's show true, then a frame's enabled false turns aria off; the base's enabled false, then a frame's show true turns it on; the first frame's show at the init",
+   "steps": [
+    {
+     "i": 0,
+     "merge": false,
+     "option": {
+      "baseOption": {
+       "animation": false,
+       "timeline": {
+        "show": false,
+        "axisType": "category",
+        "data": [
+         "t0",
+         "t1"
+        ]
+       },
+       "aria": {
+        "show": true,
+        "decal": {
+         "show": true
+        }
+       },
+       "xAxis": {
+        "data": [
+         "a",
+         "b",
+         "c"
+        ]
+       },
+       "yAxis": {},
+       "series": [
+        {
+         "type": "bar",
+         "data": [
+          1,
+          2,
+          3
+         ]
+        },
+        {
+         "type": "bar",
+         "data": [
+          2,
+          2,
+          3
+         ]
+        }
+       ]
+      },
+      "options": [
+       {},
+       {
+        "aria": {
+         "enabled": false
+        }
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "aria": {
+       "role": "img",
+       "label": "This is a chart. It consists of 2 series count. The 0 series is a Bar chart.The data is as follows: the data for a is 0, 1, the data for b is 1, 2, the data for c is 2, 3.  The 1 series is a Bar chart.The data is as follows: the data for a is 0, 2, the data for b is 1, 2, the data for c is 2, 3. "
+      },
+      "patterns": [
+       {
+        "resolved": {
+         "symbol": "rect",
+         "symbolSize": "x:3ff0000000000000",
+         "symbolKeepAspect": true,
+         "color": "rgba(0, 0, 0, 0.2)",
+         "backgroundColor": null,
+         "dashArrayX": [
+          "x:3ff0000000000000",
+          "x:0000000000000000"
+         ],
+         "dashArrayY": [
+          "x:4000000000000000",
+          "x:4014000000000000"
+         ],
+         "rotation": "x:3fe0c152382d7365",
+         "maxTileWidth": "x:4080000000000000",
+         "maxTileHeight": "x:4080000000000000"
+        },
+        "tile": {
+         "w": 1,
+         "h": 7,
+         "rotation": "3fe0c152382d7365",
+         "scaleX": 1,
+         "scaleY": 1,
+         "repeat": "repeat",
+         "symbols": [
+          {
+           "type": "rect",
+           "x": "0000000000000000",
+           "y": "c01c000000000000",
+           "w": "3ff0000000000000",
+           "h": "4000000000000000",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "rect",
+           "x": "3ff0000000000000",
+           "y": "c01c000000000000",
+           "w": "3ff0000000000000",
+           "h": "4000000000000000",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "rect",
+           "x": "0000000000000000",
+           "y": "0000000000000000",
+           "w": "3ff0000000000000",
+           "h": "4000000000000000",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "rect",
+           "x": "3ff0000000000000",
+           "y": "0000000000000000",
+           "w": "3ff0000000000000",
+           "h": "4000000000000000",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          }
+         ]
+        }
+       },
+       {
+        "resolved": {
+         "symbol": "circle",
+         "symbolSize": "x:3fe999999999999a",
+         "symbolKeepAspect": true,
+         "color": "rgba(0, 0, 0, 0.2)",
+         "backgroundColor": null,
+         "dashArrayX": [
+          [
+           "x:4020000000000000",
+           "x:4020000000000000"
+          ],
+          [
+           "x:0000000000000000",
+           "x:4020000000000000",
+           "x:4020000000000000",
+           "x:0000000000000000"
+          ]
+         ],
+         "dashArrayY": [
+          "x:4018000000000000",
+          "x:0000000000000000"
+         ],
+         "rotation": "x:0000000000000000",
+         "maxTileWidth": "x:4080000000000000",
+         "maxTileHeight": "x:4080000000000000"
+        },
+        "tile": {
+         "w": 16,
+         "h": 12,
+         "rotation": "0000000000000000",
+         "scaleX": 1,
+         "scaleY": 1,
+         "repeat": "repeat",
+         "symbols": [
+          {
+           "type": "circle",
+           "x": "3fe9999999999998",
+           "y": "c01599999999999a",
+           "w": "401999999999999a",
+           "h": "4013333333333334",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "circle",
+           "x": "4030cccccccccccd",
+           "y": "c01599999999999a",
+           "w": "401999999999999a",
+           "h": "4013333333333334",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "circle",
+           "x": "0000000000000000",
+           "y": "3fe3333333333332",
+           "w": "0000000000000000",
+           "h": "4013333333333334",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "circle",
+           "x": "402199999999999a",
+           "y": "3fe3333333333332",
+           "w": "401999999999999a",
+           "h": "4013333333333334",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "circle",
+           "x": "4030000000000000",
+           "y": "3fe3333333333332",
+           "w": "0000000000000000",
+           "h": "4013333333333334",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "circle",
+           "x": "4038cccccccccccd",
+           "y": "3fe3333333333332",
+           "w": "401999999999999a",
+           "h": "4013333333333334",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "circle",
+           "x": "3fe9999999999998",
+           "y": "401a666666666666",
+           "w": "401999999999999a",
+           "h": "4013333333333334",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "circle",
+           "x": "4030cccccccccccd",
+           "y": "401a666666666666",
+           "w": "401999999999999a",
+           "h": "4013333333333334",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          }
+         ]
+        }
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "bar",
+        "name": "series<NUL>0",
+        "filtered": false,
+        "decal": 0,
+        "raws": [
+         0,
+         1,
+         2
+        ],
+        "items": [
+         0,
+         0,
+         0
+        ],
+        "drawn": [
+         0,
+         0,
+         0
+        ],
+        "area": "-"
+       },
+       {
+        "index": 1,
+        "type": "bar",
+        "name": "series<NUL>1",
+        "filtered": false,
+        "decal": 1,
+        "raws": [
+         0,
+         1,
+         2
+        ],
+        "items": [
+         1,
+         1,
+         1
+        ],
+        "drawn": [
+         1,
+         1,
+         1
+        ],
+        "area": "-"
+       }
+      ],
+      "legend": [],
+      "facts": {
+       "seriesCount": 2,
+       "title": null,
+       "series": [
+        {
+         "index": 0,
+         "type": "bar",
+         "name": null,
+         "rows": [
+          {
+           "name": "a",
+           "values": [
+            "0000000000000000",
+            "3ff0000000000000"
+           ]
+          },
+          {
+           "name": "b",
+           "values": [
+            "3ff0000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "c",
+           "values": [
+            "4000000000000000",
+            "4008000000000000"
+           ]
+          }
+         ]
+        },
+        {
+         "index": 1,
+         "type": "bar",
+         "name": null,
+         "rows": [
+          {
+           "name": "a",
+           "values": [
+            "0000000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "b",
+           "values": [
+            "3ff0000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "c",
+           "values": [
+            "4000000000000000",
+            "4008000000000000"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "i": 1,
+     "merge": false,
+     "option": null,
+     "action": {
+      "type": "timelineChange",
+      "currentIndex": 1
+     },
+     "record": {
+      "error": null,
+      "aria": {
+       "role": null,
+       "label": null
+      },
+      "patterns": [],
+      "series": [
+       {
+        "index": 0,
+        "type": "bar",
+        "name": "series<NUL>0",
+        "filtered": false,
+        "decal": null,
+        "raws": [
+         0,
+         1,
+         2
+        ],
+        "items": [
+         null,
+         null,
+         null
+        ],
+        "drawn": [
+         null,
+         null,
+         null
+        ],
+        "area": "-"
+       },
+       {
+        "index": 1,
+        "type": "bar",
+        "name": "series<NUL>1",
+        "filtered": false,
+        "decal": null,
+        "raws": [
+         0,
+         1,
+         2
+        ],
+        "items": [
+         null,
+         null,
+         null
+        ],
+        "drawn": [
+         null,
+         null,
+         null
+        ],
+        "area": "-"
+       }
+      ],
+      "legend": [],
+      "facts": {
+       "seriesCount": 2,
+       "title": null,
+       "series": [
+        {
+         "index": 0,
+         "type": "bar",
+         "name": null,
+         "rows": [
+          {
+           "name": "a",
+           "values": [
+            "0000000000000000",
+            "3ff0000000000000"
+           ]
+          },
+          {
+           "name": "b",
+           "values": [
+            "3ff0000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "c",
+           "values": [
+            "4000000000000000",
+            "4008000000000000"
+           ]
+          }
+         ]
+        },
+        {
+         "index": 1,
+         "type": "bar",
+         "name": null,
+         "rows": [
+          {
+           "name": "a",
+           "values": [
+            "0000000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "b",
+           "values": [
+            "3ff0000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "c",
+           "values": [
+            "4000000000000000",
+            "4008000000000000"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "i": 2,
+     "merge": false,
+     "option": {
+      "baseOption": {
+       "animation": false,
+       "timeline": {
+        "show": false,
+        "axisType": "category",
+        "data": [
+         "t0",
+         "t1"
+        ]
+       },
+       "aria": {
+        "enabled": false,
+        "decal": {
+         "show": true
+        }
+       },
+       "xAxis": {
+        "data": [
+         "a",
+         "b",
+         "c"
+        ]
+       },
+       "yAxis": {},
+       "series": [
+        {
+         "type": "bar",
+         "data": [
+          1,
+          2,
+          3
+         ]
+        },
+        {
+         "type": "bar",
+         "data": [
+          2,
+          2,
+          3
+         ]
+        }
+       ]
+      },
+      "options": [
+       {},
+       {
+        "aria": {
+         "show": true
+        }
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "aria": {
+       "role": null,
+       "label": null
+      },
+      "patterns": [],
+      "series": [
+       {
+        "index": 0,
+        "type": "bar",
+        "name": "series<NUL>0",
+        "filtered": false,
+        "decal": null,
+        "raws": [
+         0,
+         1,
+         2
+        ],
+        "items": [
+         null,
+         null,
+         null
+        ],
+        "drawn": [
+         null,
+         null,
+         null
+        ],
+        "area": "-"
+       },
+       {
+        "index": 1,
+        "type": "bar",
+        "name": "series<NUL>1",
+        "filtered": false,
+        "decal": null,
+        "raws": [
+         0,
+         1,
+         2
+        ],
+        "items": [
+         null,
+         null,
+         null
+        ],
+        "drawn": [
+         null,
+         null,
+         null
+        ],
+        "area": "-"
+       }
+      ],
+      "legend": [],
+      "facts": {
+       "seriesCount": 2,
+       "title": null,
+       "series": [
+        {
+         "index": 0,
+         "type": "bar",
+         "name": null,
+         "rows": [
+          {
+           "name": "a",
+           "values": [
+            "0000000000000000",
+            "3ff0000000000000"
+           ]
+          },
+          {
+           "name": "b",
+           "values": [
+            "3ff0000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "c",
+           "values": [
+            "4000000000000000",
+            "4008000000000000"
+           ]
+          }
+         ]
+        },
+        {
+         "index": 1,
+         "type": "bar",
+         "name": null,
+         "rows": [
+          {
+           "name": "a",
+           "values": [
+            "0000000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "b",
+           "values": [
+            "3ff0000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "c",
+           "values": [
+            "4000000000000000",
+            "4008000000000000"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "i": 3,
+     "merge": false,
+     "option": null,
+     "action": {
+      "type": "timelineChange",
+      "currentIndex": 1
+     },
+     "record": {
+      "error": null,
+      "aria": {
+       "role": "img",
+       "label": "This is a chart. It consists of 2 series count. The 0 series is a Bar chart.The data is as follows: the data for a is 0, 1, the data for b is 1, 2, the data for c is 2, 3.  The 1 series is a Bar chart.The data is as follows: the data for a is 0, 2, the data for b is 1, 2, the data for c is 2, 3. "
+      },
+      "patterns": [
+       {
+        "resolved": {
+         "symbol": "rect",
+         "symbolSize": "x:3ff0000000000000",
+         "symbolKeepAspect": true,
+         "color": "rgba(0, 0, 0, 0.2)",
+         "backgroundColor": null,
+         "dashArrayX": [
+          "x:3ff0000000000000",
+          "x:0000000000000000"
+         ],
+         "dashArrayY": [
+          "x:4000000000000000",
+          "x:4014000000000000"
+         ],
+         "rotation": "x:3fe0c152382d7365",
+         "maxTileWidth": "x:4080000000000000",
+         "maxTileHeight": "x:4080000000000000"
+        },
+        "tile": {
+         "w": 1,
+         "h": 7,
+         "rotation": "3fe0c152382d7365",
+         "scaleX": 1,
+         "scaleY": 1,
+         "repeat": "repeat",
+         "symbols": [
+          {
+           "type": "rect",
+           "x": "0000000000000000",
+           "y": "c01c000000000000",
+           "w": "3ff0000000000000",
+           "h": "4000000000000000",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "rect",
+           "x": "3ff0000000000000",
+           "y": "c01c000000000000",
+           "w": "3ff0000000000000",
+           "h": "4000000000000000",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "rect",
+           "x": "0000000000000000",
+           "y": "0000000000000000",
+           "w": "3ff0000000000000",
+           "h": "4000000000000000",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "rect",
+           "x": "3ff0000000000000",
+           "y": "0000000000000000",
+           "w": "3ff0000000000000",
+           "h": "4000000000000000",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          }
+         ]
+        }
+       },
+       {
+        "resolved": {
+         "symbol": "circle",
+         "symbolSize": "x:3fe999999999999a",
+         "symbolKeepAspect": true,
+         "color": "rgba(0, 0, 0, 0.2)",
+         "backgroundColor": null,
+         "dashArrayX": [
+          [
+           "x:4020000000000000",
+           "x:4020000000000000"
+          ],
+          [
+           "x:0000000000000000",
+           "x:4020000000000000",
+           "x:4020000000000000",
+           "x:0000000000000000"
+          ]
+         ],
+         "dashArrayY": [
+          "x:4018000000000000",
+          "x:0000000000000000"
+         ],
+         "rotation": "x:0000000000000000",
+         "maxTileWidth": "x:4080000000000000",
+         "maxTileHeight": "x:4080000000000000"
+        },
+        "tile": {
+         "w": 16,
+         "h": 12,
+         "rotation": "0000000000000000",
+         "scaleX": 1,
+         "scaleY": 1,
+         "repeat": "repeat",
+         "symbols": [
+          {
+           "type": "circle",
+           "x": "3fe9999999999998",
+           "y": "c01599999999999a",
+           "w": "401999999999999a",
+           "h": "4013333333333334",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "circle",
+           "x": "4030cccccccccccd",
+           "y": "c01599999999999a",
+           "w": "401999999999999a",
+           "h": "4013333333333334",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "circle",
+           "x": "0000000000000000",
+           "y": "3fe3333333333332",
+           "w": "0000000000000000",
+           "h": "4013333333333334",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "circle",
+           "x": "402199999999999a",
+           "y": "3fe3333333333332",
+           "w": "401999999999999a",
+           "h": "4013333333333334",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "circle",
+           "x": "4030000000000000",
+           "y": "3fe3333333333332",
+           "w": "0000000000000000",
+           "h": "4013333333333334",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "circle",
+           "x": "4038cccccccccccd",
+           "y": "3fe3333333333332",
+           "w": "401999999999999a",
+           "h": "4013333333333334",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "circle",
+           "x": "3fe9999999999998",
+           "y": "401a666666666666",
+           "w": "401999999999999a",
+           "h": "4013333333333334",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "circle",
+           "x": "4030cccccccccccd",
+           "y": "401a666666666666",
+           "w": "401999999999999a",
+           "h": "4013333333333334",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          }
+         ]
+        }
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "bar",
+        "name": "series<NUL>0",
+        "filtered": false,
+        "decal": 0,
+        "raws": [
+         0,
+         1,
+         2
+        ],
+        "items": [
+         0,
+         0,
+         0
+        ],
+        "drawn": [
+         0,
+         0,
+         0
+        ],
+        "area": "-"
+       },
+       {
+        "index": 1,
+        "type": "bar",
+        "name": "series<NUL>1",
+        "filtered": false,
+        "decal": 1,
+        "raws": [
+         0,
+         1,
+         2
+        ],
+        "items": [
+         1,
+         1,
+         1
+        ],
+        "drawn": [
+         1,
+         1,
+         1
+        ],
+        "area": "-"
+       }
+      ],
+      "legend": [],
+      "facts": {
+       "seriesCount": 2,
+       "title": null,
+       "series": [
+        {
+         "index": 0,
+         "type": "bar",
+         "name": null,
+         "rows": [
+          {
+           "name": "a",
+           "values": [
+            "0000000000000000",
+            "3ff0000000000000"
+           ]
+          },
+          {
+           "name": "b",
+           "values": [
+            "3ff0000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "c",
+           "values": [
+            "4000000000000000",
+            "4008000000000000"
+           ]
+          }
+         ]
+        },
+        {
+         "index": 1,
+         "type": "bar",
+         "name": null,
+         "rows": [
+          {
+           "name": "a",
+           "values": [
+            "0000000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "b",
+           "values": [
+            "3ff0000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "c",
+           "values": [
+            "4000000000000000",
+            "4008000000000000"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "i": 4,
+     "merge": false,
+     "option": {
+      "baseOption": {
+       "animation": false,
+       "timeline": {
+        "show": false,
+        "axisType": "category",
+        "data": [
+         "t0",
+         "t1"
+        ]
+       },
+       "aria": {
+        "enabled": false
+       },
+       "xAxis": {
+        "data": [
+         "a",
+         "b",
+         "c"
+        ]
+       },
+       "yAxis": {},
+       "series": [
+        {
+         "type": "bar",
+         "data": [
+          1,
+          2,
+          3
+         ]
+        }
+       ]
+      },
+      "options": [
+       {
+        "aria": {
+         "show": true
+        }
+       },
+       {}
+      ]
+     },
+     "record": {
+      "error": null,
+      "aria": {
+       "role": "img",
+       "label": "This is a chart with type Bar chart.The data is as follows: the data for a is 0, 1, the data for b is 1, 2, the data for c is 2, 3. "
+      },
+      "patterns": [],
+      "series": [
+       {
+        "index": 0,
+        "type": "bar",
+        "name": "series<NUL>0",
+        "filtered": false,
+        "decal": null,
+        "raws": [
+         0,
+         1,
+         2
+        ],
+        "items": [
+         null,
+         null,
+         null
+        ],
+        "drawn": [
+         null,
+         null,
+         null
+        ],
+        "area": "-"
+       }
+      ],
+      "legend": [],
+      "facts": {
+       "seriesCount": 1,
+       "title": null,
+       "series": [
+        {
+         "index": 0,
+         "type": "bar",
+         "name": null,
+         "rows": [
+          {
+           "name": "a",
+           "values": [
+            "0000000000000000",
+            "3ff0000000000000"
+           ]
+          },
+          {
+           "name": "b",
+           "values": [
+            "3ff0000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "c",
+           "values": [
+            "4000000000000000",
+            "4008000000000000"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "pre-media",
+   "note": "a media unit with a query is preprocessed (its show turns aria on); the media default is not (its show does nothing)",
+   "steps": [
+    {
+     "i": 0,
+     "merge": false,
+     "option": {
+      "baseOption": {
+       "animation": false,
+       "aria": {
+        "enabled": false,
+        "decal": {
+         "show": true
+        }
+       },
+       "xAxis": {
+        "data": [
+         "a",
+         "b",
+         "c"
+        ]
+       },
+       "yAxis": {},
+       "series": [
+        {
+         "type": "bar",
+         "data": [
+          1,
+          2,
+          3
+         ]
+        },
+        {
+         "type": "bar",
+         "data": [
+          2,
+          2,
+          3
+         ]
+        }
+       ]
+      },
+      "media": [
+       {
+        "query": {
+         "minWidth": 1
+        },
+        "option": {
+         "aria": {
+          "show": true
+         }
+        }
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "aria": {
+       "role": "img",
+       "label": "This is a chart. It consists of 2 series count. The 0 series is a Bar chart.The data is as follows: the data for a is 0, 1, the data for b is 1, 2, the data for c is 2, 3.  The 1 series is a Bar chart.The data is as follows: the data for a is 0, 2, the data for b is 1, 2, the data for c is 2, 3. "
+      },
+      "patterns": [
+       {
+        "resolved": {
+         "symbol": "rect",
+         "symbolSize": "x:3ff0000000000000",
+         "symbolKeepAspect": true,
+         "color": "rgba(0, 0, 0, 0.2)",
+         "backgroundColor": null,
+         "dashArrayX": [
+          "x:3ff0000000000000",
+          "x:0000000000000000"
+         ],
+         "dashArrayY": [
+          "x:4000000000000000",
+          "x:4014000000000000"
+         ],
+         "rotation": "x:3fe0c152382d7365",
+         "maxTileWidth": "x:4080000000000000",
+         "maxTileHeight": "x:4080000000000000"
+        },
+        "tile": {
+         "w": 1,
+         "h": 7,
+         "rotation": "3fe0c152382d7365",
+         "scaleX": 1,
+         "scaleY": 1,
+         "repeat": "repeat",
+         "symbols": [
+          {
+           "type": "rect",
+           "x": "0000000000000000",
+           "y": "c01c000000000000",
+           "w": "3ff0000000000000",
+           "h": "4000000000000000",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "rect",
+           "x": "3ff0000000000000",
+           "y": "c01c000000000000",
+           "w": "3ff0000000000000",
+           "h": "4000000000000000",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "rect",
+           "x": "0000000000000000",
+           "y": "0000000000000000",
+           "w": "3ff0000000000000",
+           "h": "4000000000000000",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "rect",
+           "x": "3ff0000000000000",
+           "y": "0000000000000000",
+           "w": "3ff0000000000000",
+           "h": "4000000000000000",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          }
+         ]
+        }
+       },
+       {
+        "resolved": {
+         "symbol": "circle",
+         "symbolSize": "x:3fe999999999999a",
+         "symbolKeepAspect": true,
+         "color": "rgba(0, 0, 0, 0.2)",
+         "backgroundColor": null,
+         "dashArrayX": [
+          [
+           "x:4020000000000000",
+           "x:4020000000000000"
+          ],
+          [
+           "x:0000000000000000",
+           "x:4020000000000000",
+           "x:4020000000000000",
+           "x:0000000000000000"
+          ]
+         ],
+         "dashArrayY": [
+          "x:4018000000000000",
+          "x:0000000000000000"
+         ],
+         "rotation": "x:0000000000000000",
+         "maxTileWidth": "x:4080000000000000",
+         "maxTileHeight": "x:4080000000000000"
+        },
+        "tile": {
+         "w": 16,
+         "h": 12,
+         "rotation": "0000000000000000",
+         "scaleX": 1,
+         "scaleY": 1,
+         "repeat": "repeat",
+         "symbols": [
+          {
+           "type": "circle",
+           "x": "3fe9999999999998",
+           "y": "c01599999999999a",
+           "w": "401999999999999a",
+           "h": "4013333333333334",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "circle",
+           "x": "4030cccccccccccd",
+           "y": "c01599999999999a",
+           "w": "401999999999999a",
+           "h": "4013333333333334",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "circle",
+           "x": "0000000000000000",
+           "y": "3fe3333333333332",
+           "w": "0000000000000000",
+           "h": "4013333333333334",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "circle",
+           "x": "402199999999999a",
+           "y": "3fe3333333333332",
+           "w": "401999999999999a",
+           "h": "4013333333333334",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "circle",
+           "x": "4030000000000000",
+           "y": "3fe3333333333332",
+           "w": "0000000000000000",
+           "h": "4013333333333334",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "circle",
+           "x": "4038cccccccccccd",
+           "y": "3fe3333333333332",
+           "w": "401999999999999a",
+           "h": "4013333333333334",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "circle",
+           "x": "3fe9999999999998",
+           "y": "401a666666666666",
+           "w": "401999999999999a",
+           "h": "4013333333333334",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          },
+          {
+           "type": "circle",
+           "x": "4030cccccccccccd",
+           "y": "401a666666666666",
+           "w": "401999999999999a",
+           "h": "4013333333333334",
+           "fill": "rgba(0, 0, 0, 0.2)"
+          }
+         ]
+        }
+       }
+      ],
+      "series": [
+       {
+        "index": 0,
+        "type": "bar",
+        "name": "series<NUL>0",
+        "filtered": false,
+        "decal": 0,
+        "raws": [
+         0,
+         1,
+         2
+        ],
+        "items": [
+         0,
+         0,
+         0
+        ],
+        "drawn": [
+         0,
+         0,
+         0
+        ],
+        "area": "-"
+       },
+       {
+        "index": 1,
+        "type": "bar",
+        "name": "series<NUL>1",
+        "filtered": false,
+        "decal": 1,
+        "raws": [
+         0,
+         1,
+         2
+        ],
+        "items": [
+         1,
+         1,
+         1
+        ],
+        "drawn": [
+         1,
+         1,
+         1
+        ],
+        "area": "-"
+       }
+      ],
+      "legend": [],
+      "facts": {
+       "seriesCount": 2,
+       "title": null,
+       "series": [
+        {
+         "index": 0,
+         "type": "bar",
+         "name": null,
+         "rows": [
+          {
+           "name": "a",
+           "values": [
+            "0000000000000000",
+            "3ff0000000000000"
+           ]
+          },
+          {
+           "name": "b",
+           "values": [
+            "3ff0000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "c",
+           "values": [
+            "4000000000000000",
+            "4008000000000000"
+           ]
+          }
+         ]
+        },
+        {
+         "index": 1,
+         "type": "bar",
+         "name": null,
+         "rows": [
+          {
+           "name": "a",
+           "values": [
+            "0000000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "b",
+           "values": [
+            "3ff0000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "c",
+           "values": [
+            "4000000000000000",
+            "4008000000000000"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "i": 1,
+     "merge": false,
+     "option": {
+      "baseOption": {
+       "animation": false,
+       "aria": {
+        "enabled": false,
+        "decal": {
+         "show": true
+        }
+       },
+       "xAxis": {
+        "data": [
+         "a",
+         "b",
+         "c"
+        ]
+       },
+       "yAxis": {},
+       "series": [
+        {
+         "type": "bar",
+         "data": [
+          1,
+          2,
+          3
+         ]
+        },
+        {
+         "type": "bar",
+         "data": [
+          2,
+          2,
+          3
+         ]
+        }
+       ]
+      },
+      "media": [
+       {
+        "option": {
+         "aria": {
+          "show": true
+         }
+        }
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "aria": {
+       "role": null,
+       "label": null
+      },
+      "patterns": [],
+      "series": [
+       {
+        "index": 0,
+        "type": "bar",
+        "name": "series<NUL>0",
+        "filtered": false,
+        "decal": null,
+        "raws": [
+         0,
+         1,
+         2
+        ],
+        "items": [
+         null,
+         null,
+         null
+        ],
+        "drawn": [
+         null,
+         null,
+         null
+        ],
+        "area": "-"
+       },
+       {
+        "index": 1,
+        "type": "bar",
+        "name": "series<NUL>1",
+        "filtered": false,
+        "decal": null,
+        "raws": [
+         0,
+         1,
+         2
+        ],
+        "items": [
+         null,
+         null,
+         null
+        ],
+        "drawn": [
+         null,
+         null,
+         null
+        ],
+        "area": "-"
+       }
+      ],
+      "legend": [],
+      "facts": {
+       "seriesCount": 2,
+       "title": null,
+       "series": [
+        {
+         "index": 0,
+         "type": "bar",
+         "name": null,
+         "rows": [
+          {
+           "name": "a",
+           "values": [
+            "0000000000000000",
+            "3ff0000000000000"
+           ]
+          },
+          {
+           "name": "b",
+           "values": [
+            "3ff0000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "c",
+           "values": [
+            "4000000000000000",
+            "4008000000000000"
+           ]
+          }
+         ]
+        },
+        {
+         "index": 1,
+         "type": "bar",
+         "name": null,
+         "rows": [
+          {
+           "name": "a",
+           "values": [
+            "0000000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "b",
+           "values": [
+            "3ff0000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "c",
+           "values": [
+            "4000000000000000",
+            "4008000000000000"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "pre-label",
+   "note": "the description moved under label in every option: a frame's and a merge's label.description win over the base's top-level one; the media default's top-level one is not moved (the template); label.enabled false under enabled true writes nothing",
+   "steps": [
+    {
+     "i": 0,
+     "merge": false,
+     "option": {
+      "baseOption": {
+       "animation": false,
+       "timeline": {
+        "show": false,
+        "axisType": "category",
+        "data": [
+         "t0",
+         "t1"
+        ]
+       },
+       "aria": {
+        "description": "Base."
+       },
+       "xAxis": {
+        "data": [
+         "a",
+         "b",
+         "c"
+        ]
+       },
+       "yAxis": {},
+       "series": [
+        {
+         "type": "bar",
+         "data": [
+          1,
+          2,
+          3
+         ]
+        }
+       ]
+      },
+      "options": [
+       {},
+       {
+        "aria": {
+         "label": {
+          "description": "Frame."
+         }
+        }
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "aria": {
+       "role": "img",
+       "label": "Base."
+      },
+      "patterns": [],
+      "series": [
+       {
+        "index": 0,
+        "type": "bar",
+        "name": "series<NUL>0",
+        "filtered": false,
+        "decal": null,
+        "raws": [
+         0,
+         1,
+         2
+        ],
+        "items": [
+         null,
+         null,
+         null
+        ],
+        "drawn": [
+         null,
+         null,
+         null
+        ],
+        "area": "-"
+       }
+      ],
+      "legend": [],
+      "facts": {
+       "seriesCount": 1,
+       "title": null,
+       "series": [
+        {
+         "index": 0,
+         "type": "bar",
+         "name": null,
+         "rows": [
+          {
+           "name": "a",
+           "values": [
+            "0000000000000000",
+            "3ff0000000000000"
+           ]
+          },
+          {
+           "name": "b",
+           "values": [
+            "3ff0000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "c",
+           "values": [
+            "4000000000000000",
+            "4008000000000000"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "i": 1,
+     "merge": false,
+     "option": null,
+     "action": {
+      "type": "timelineChange",
+      "currentIndex": 1
+     },
+     "record": {
+      "error": null,
+      "aria": {
+       "role": "img",
+       "label": "Frame."
+      },
+      "patterns": [],
+      "series": [
+       {
+        "index": 0,
+        "type": "bar",
+        "name": "series<NUL>0",
+        "filtered": false,
+        "decal": null,
+        "raws": [
+         0,
+         1,
+         2
+        ],
+        "items": [
+         null,
+         null,
+         null
+        ],
+        "drawn": [
+         null,
+         null,
+         null
+        ],
+        "area": "-"
+       }
+      ],
+      "legend": [],
+      "facts": {
+       "seriesCount": 1,
+       "title": null,
+       "series": [
+        {
+         "index": 0,
+         "type": "bar",
+         "name": null,
+         "rows": [
+          {
+           "name": "a",
+           "values": [
+            "0000000000000000",
+            "3ff0000000000000"
+           ]
+          },
+          {
+           "name": "b",
+           "values": [
+            "3ff0000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "c",
+           "values": [
+            "4000000000000000",
+            "4008000000000000"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "i": 2,
+     "merge": false,
+     "option": {
+      "aria": {
+       "description": "First."
+      },
+      "xAxis": {
+       "data": [
+        "a",
+        "b",
+        "c"
+       ]
+      },
+      "yAxis": {},
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         1,
+         2,
+         3
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "aria": {
+       "role": "img",
+       "label": "First."
+      },
+      "patterns": [],
+      "series": [
+       {
+        "index": 0,
+        "type": "bar",
+        "name": "series<NUL>0",
+        "filtered": false,
+        "decal": null,
+        "raws": [
+         0,
+         1,
+         2
+        ],
+        "items": [
+         null,
+         null,
+         null
+        ],
+        "drawn": [
+         null,
+         null,
+         null
+        ],
+        "area": "-"
+       }
+      ],
+      "legend": [],
+      "facts": {
+       "seriesCount": 1,
+       "title": null,
+       "series": [
+        {
+         "index": 0,
+         "type": "bar",
+         "name": null,
+         "rows": [
+          {
+           "name": "a",
+           "values": [
+            "0000000000000000",
+            "3ff0000000000000"
+           ]
+          },
+          {
+           "name": "b",
+           "values": [
+            "3ff0000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "c",
+           "values": [
+            "4000000000000000",
+            "4008000000000000"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "i": 3,
+     "merge": true,
+     "option": {
+      "aria": {
+       "label": {
+        "description": "Merged."
+       }
+      }
+     },
+     "record": {
+      "error": null,
+      "aria": {
+       "role": "img",
+       "label": "Merged."
+      },
+      "patterns": [],
+      "series": [
+       {
+        "index": 0,
+        "type": "bar",
+        "name": "series<NUL>0",
+        "filtered": false,
+        "decal": null,
+        "raws": [
+         0,
+         1,
+         2
+        ],
+        "items": [
+         null,
+         null,
+         null
+        ],
+        "drawn": [
+         null,
+         null,
+         null
+        ],
+        "area": "-"
+       }
+      ],
+      "legend": [],
+      "facts": {
+       "seriesCount": 1,
+       "title": null,
+       "series": [
+        {
+         "index": 0,
+         "type": "bar",
+         "name": null,
+         "rows": [
+          {
+           "name": "a",
+           "values": [
+            "0000000000000000",
+            "3ff0000000000000"
+           ]
+          },
+          {
+           "name": "b",
+           "values": [
+            "3ff0000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "c",
+           "values": [
+            "4000000000000000",
+            "4008000000000000"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "i": 4,
+     "merge": false,
+     "option": {
+      "baseOption": {
+       "animation": false,
+       "aria": {},
+       "xAxis": {
+        "data": [
+         "a",
+         "b",
+         "c"
+        ]
+       },
+       "yAxis": {},
+       "series": [
+        {
+         "type": "bar",
+         "data": [
+          1,
+          2,
+          3
+         ]
+        }
+       ]
+      },
+      "media": [
+       {
+        "option": {
+         "aria": {
+          "description": "Default."
+         }
+        }
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "aria": {
+       "role": "img",
+       "label": "This is a chart with type Bar chart.The data is as follows: the data for a is 0, 1, the data for b is 1, 2, the data for c is 2, 3. "
+      },
+      "patterns": [],
+      "series": [
+       {
+        "index": 0,
+        "type": "bar",
+        "name": "series<NUL>0",
+        "filtered": false,
+        "decal": null,
+        "raws": [
+         0,
+         1,
+         2
+        ],
+        "items": [
+         null,
+         null,
+         null
+        ],
+        "drawn": [
+         null,
+         null,
+         null
+        ],
+        "area": "-"
+       }
+      ],
+      "legend": [],
+      "facts": {
+       "seriesCount": 1,
+       "title": null,
+       "series": [
+        {
+         "index": 0,
+         "type": "bar",
+         "name": null,
+         "rows": [
+          {
+           "name": "a",
+           "values": [
+            "0000000000000000",
+            "3ff0000000000000"
+           ]
+          },
+          {
+           "name": "b",
+           "values": [
+            "3ff0000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "c",
+           "values": [
+            "4000000000000000",
+            "4008000000000000"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "i": 5,
+     "merge": false,
+     "option": {
+      "aria": {
+       "enabled": true,
+       "label": {
+        "enabled": false
+       }
+      },
+      "xAxis": {
+       "data": [
+        "a",
+        "b",
+        "c"
+       ]
+      },
+      "yAxis": {},
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         1,
+         2,
+         3
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "aria": {
+       "role": null,
+       "label": null
+      },
+      "patterns": [],
+      "series": [
+       {
+        "index": 0,
+        "type": "bar",
+        "name": "series<NUL>0",
+        "filtered": false,
+        "decal": null,
+        "raws": [
+         0,
+         1,
+         2
+        ],
+        "items": [
+         null,
+         null,
+         null
+        ],
+        "drawn": [
+         null,
+         null,
+         null
+        ],
+        "area": "-"
+       }
+      ],
+      "legend": [],
+      "facts": {
+       "seriesCount": 1,
+       "title": null,
+       "series": [
+        {
+         "index": 0,
+         "type": "bar",
+         "name": null,
+         "rows": [
+          {
+           "name": "a",
+           "values": [
+            "0000000000000000",
+            "3ff0000000000000"
+           ]
+          },
+          {
+           "name": "b",
+           "values": [
+            "3ff0000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "c",
+           "values": [
+            "4000000000000000",
+            "4008000000000000"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "pre-edges",
+   "note": "the preprocessor's edges: show over enabled in one option; a merge's null show leaves enabled; initBase turns a null enabled on; a null label is made an object the description moves into; a null top-level description is not moved",
+   "steps": [
+    {
+     "i": 0,
+     "merge": false,
+     "option": {
+      "aria": {
+       "enabled": true,
+       "show": false
+      },
+      "xAxis": {
+       "data": [
+        "a",
+        "b",
+        "c"
+       ]
+      },
+      "yAxis": {},
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         1,
+         2,
+         3
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "aria": {
+       "role": null,
+       "label": null
+      },
+      "patterns": [],
+      "series": [
+       {
+        "index": 0,
+        "type": "bar",
+        "name": "series<NUL>0",
+        "filtered": false,
+        "decal": null,
+        "raws": [
+         0,
+         1,
+         2
+        ],
+        "items": [
+         null,
+         null,
+         null
+        ],
+        "drawn": [
+         null,
+         null,
+         null
+        ],
+        "area": "-"
+       }
+      ],
+      "legend": [],
+      "facts": {
+       "seriesCount": 1,
+       "title": null,
+       "series": [
+        {
+         "index": 0,
+         "type": "bar",
+         "name": null,
+         "rows": [
+          {
+           "name": "a",
+           "values": [
+            "0000000000000000",
+            "3ff0000000000000"
+           ]
+          },
+          {
+           "name": "b",
+           "values": [
+            "3ff0000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "c",
+           "values": [
+            "4000000000000000",
+            "4008000000000000"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "i": 1,
+     "merge": false,
+     "option": {
+      "aria": {},
+      "xAxis": {
+       "data": [
+        "a",
+        "b",
+        "c"
+       ]
+      },
+      "yAxis": {},
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         1,
+         2,
+         3
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "aria": {
+       "role": "img",
+       "label": "This is a chart with type Bar chart.The data is as follows: the data for a is 0, 1, the data for b is 1, 2, the data for c is 2, 3. "
+      },
+      "patterns": [],
+      "series": [
+       {
+        "index": 0,
+        "type": "bar",
+        "name": "series<NUL>0",
+        "filtered": false,
+        "decal": null,
+        "raws": [
+         0,
+         1,
+         2
+        ],
+        "items": [
+         null,
+         null,
+         null
+        ],
+        "drawn": [
+         null,
+         null,
+         null
+        ],
+        "area": "-"
+       }
+      ],
+      "legend": [],
+      "facts": {
+       "seriesCount": 1,
+       "title": null,
+       "series": [
+        {
+         "index": 0,
+         "type": "bar",
+         "name": null,
+         "rows": [
+          {
+           "name": "a",
+           "values": [
+            "0000000000000000",
+            "3ff0000000000000"
+           ]
+          },
+          {
+           "name": "b",
+           "values": [
+            "3ff0000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "c",
+           "values": [
+            "4000000000000000",
+            "4008000000000000"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "i": 2,
+     "merge": true,
+     "option": {
+      "aria": {
+       "show": null
+      }
+     },
+     "record": {
+      "error": null,
+      "aria": {
+       "role": "img",
+       "label": "This is a chart with type Bar chart.The data is as follows: the data for a is 0, 1, the data for b is 1, 2, the data for c is 2, 3. "
+      },
+      "patterns": [],
+      "series": [
+       {
+        "index": 0,
+        "type": "bar",
+        "name": "series<NUL>0",
+        "filtered": false,
+        "decal": null,
+        "raws": [
+         0,
+         1,
+         2
+        ],
+        "items": [
+         null,
+         null,
+         null
+        ],
+        "drawn": [
+         null,
+         null,
+         null
+        ],
+        "area": "-"
+       }
+      ],
+      "legend": [],
+      "facts": {
+       "seriesCount": 1,
+       "title": null,
+       "series": [
+        {
+         "index": 0,
+         "type": "bar",
+         "name": null,
+         "rows": [
+          {
+           "name": "a",
+           "values": [
+            "0000000000000000",
+            "3ff0000000000000"
+           ]
+          },
+          {
+           "name": "b",
+           "values": [
+            "3ff0000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "c",
+           "values": [
+            "4000000000000000",
+            "4008000000000000"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "i": 3,
+     "merge": false,
+     "option": {
+      "aria": {
+       "enabled": null
+      },
+      "xAxis": {
+       "data": [
+        "a",
+        "b",
+        "c"
+       ]
+      },
+      "yAxis": {},
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         1,
+         2,
+         3
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "aria": {
+       "role": "img",
+       "label": "This is a chart with type Bar chart.The data is as follows: the data for a is 0, 1, the data for b is 1, 2, the data for c is 2, 3. "
+      },
+      "patterns": [],
+      "series": [
+       {
+        "index": 0,
+        "type": "bar",
+        "name": "series<NUL>0",
+        "filtered": false,
+        "decal": null,
+        "raws": [
+         0,
+         1,
+         2
+        ],
+        "items": [
+         null,
+         null,
+         null
+        ],
+        "drawn": [
+         null,
+         null,
+         null
+        ],
+        "area": "-"
+       }
+      ],
+      "legend": [],
+      "facts": {
+       "seriesCount": 1,
+       "title": null,
+       "series": [
+        {
+         "index": 0,
+         "type": "bar",
+         "name": null,
+         "rows": [
+          {
+           "name": "a",
+           "values": [
+            "0000000000000000",
+            "3ff0000000000000"
+           ]
+          },
+          {
+           "name": "b",
+           "values": [
+            "3ff0000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "c",
+           "values": [
+            "4000000000000000",
+            "4008000000000000"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "i": 4,
+     "merge": false,
+     "option": {
+      "aria": {
+       "label": null,
+       "description": "Moved."
+      },
+      "xAxis": {
+       "data": [
+        "a",
+        "b",
+        "c"
+       ]
+      },
+      "yAxis": {},
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         1,
+         2,
+         3
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "aria": {
+       "role": "img",
+       "label": "Moved."
+      },
+      "patterns": [],
+      "series": [
+       {
+        "index": 0,
+        "type": "bar",
+        "name": "series<NUL>0",
+        "filtered": false,
+        "decal": null,
+        "raws": [
+         0,
+         1,
+         2
+        ],
+        "items": [
+         null,
+         null,
+         null
+        ],
+        "drawn": [
+         null,
+         null,
+         null
+        ],
+        "area": "-"
+       }
+      ],
+      "legend": [],
+      "facts": {
+       "seriesCount": 1,
+       "title": null,
+       "series": [
+        {
+         "index": 0,
+         "type": "bar",
+         "name": null,
+         "rows": [
+          {
+           "name": "a",
+           "values": [
+            "0000000000000000",
+            "3ff0000000000000"
+           ]
+          },
+          {
+           "name": "b",
+           "values": [
+            "3ff0000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "c",
+           "values": [
+            "4000000000000000",
+            "4008000000000000"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "i": 5,
+     "merge": false,
+     "option": {
+      "aria": {
+       "description": null,
+       "label": {
+        "description": "Kept."
+       }
+      },
+      "xAxis": {
+       "data": [
+        "a",
+        "b",
+        "c"
+       ]
+      },
+      "yAxis": {},
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         1,
+         2,
+         3
+        ]
+       }
+      ]
+     },
+     "record": {
+      "error": null,
+      "aria": {
+       "role": "img",
+       "label": "Kept."
+      },
+      "patterns": [],
+      "series": [
+       {
+        "index": 0,
+        "type": "bar",
+        "name": "series<NUL>0",
+        "filtered": false,
+        "decal": null,
+        "raws": [
+         0,
+         1,
+         2
+        ],
+        "items": [
+         null,
+         null,
+         null
+        ],
+        "drawn": [
+         null,
+         null,
+         null
+        ],
+        "area": "-"
+       }
+      ],
+      "legend": [],
+      "facts": {
+       "seriesCount": 1,
+       "title": null,
+       "series": [
+        {
+         "index": 0,
+         "type": "bar",
+         "name": null,
+         "rows": [
+          {
+           "name": "a",
+           "values": [
+            "0000000000000000",
+            "3ff0000000000000"
+           ]
+          },
+          {
+           "name": "b",
+           "values": [
+            "3ff0000000000000",
+            "4000000000000000"
+           ]
+          },
+          {
+           "name": "c",
+           "values": [
+            "4000000000000000",
+            "4008000000000000"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    }
+   ]
   }
  ],
  "guards": [
@@ -23298,6 +26005,26 @@
   },
   {
    "name": "scope: the renamed series picks on, the old name keeps its decal",
+   "ok": true
+  },
+  {
+   "name": "pre-frames: a frame's enabled false outweighs the base's show",
+   "ok": true
+  },
+  {
+   "name": "pre-frames: a frame's show turns it on",
+   "ok": true
+  },
+  {
+   "name": "pre-media: a unit's show is read, the default's is not",
+   "ok": true
+  },
+  {
+   "name": "pre-label: the frame's, the merge's, not the default's, not under label.enabled false",
+   "ok": true
+  },
+  {
+   "name": "pre-edges: show over enabled, a null show kept out, a null enabled on, the null label filled, the null description not moved",
    "ok": true
   }
  ]

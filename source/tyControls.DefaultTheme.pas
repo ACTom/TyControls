@@ -1568,8 +1568,11 @@ begin
     '/* A decal''s symbols, where the decal names no colour of its own -- the aria' + LineEnding +
     '   decals that tell the series apart without their colours. Upstream draws' + LineEnding +
     '   them rgba(0, 0, 0, 0.2): the readable ink of the surface at 20%, which on' + LineEnding +
-    '   the light skin''s white is exactly that, and white at 20% on a dark one. */' + LineEnding +
-    'TyAdvChartDecal { color: alpha(on(var(--surface)), 0.2); }' + LineEnding +
+    '   the light skin''s white is exactly that, and white at 20% on a dark one.' + LineEnding +
+    '   An `empty*` symbol in the pattern is a hollow over the background:' + LineEnding +
+    '   upstream''s neutral00 (#fff), the surface here -- exactly that on the' + LineEnding +
+    '   light skin, and no white hole on a dark one. */' + LineEnding +
+    'TyAdvChartDecal { color: alpha(on(var(--surface)), 0.2); background: var(--surface); }' + LineEnding +
     '/* The item the keyboard holds. Upstream has no keyboard, so this is the' + LineEnding +
     '   library''s own focus ring, drawn around the mark: the skin''s focus ring, at' + LineEnding +
     '   the width the other controls draw theirs. The offset follows the library''s' + LineEnding +

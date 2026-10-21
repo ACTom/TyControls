@@ -224,6 +224,85 @@ const P_STACK = [
   [212, 150, 'both, 12 right'],
 ];
 
+// [R2-I1] a graph's and a tree's nodes: Symbol paths with a fill, which
+// Path.contain takes on the shape alone -- a stroke adds half its width, no
+// threshold. A probe ['node', series, dataIndex, dx, dy, aim] stands dx / dy
+// from the node's centre rounded (the Symbol group's place on the canvas).
+const OPT_GRAPH = {
+  animation: false,
+  series: [{ type: 'graph', layout: 'none', left: 100, top: 100, width: 200, height: 100, symbolSize: 20, label: { show: false },
+    data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 200, y: 100 }, { name: 'c', x: 100, y: 50 }], links: [] }],
+};
+const P_GRAPH = [
+  ['node', 0, 0, 0, 0, 'on a'],
+  ['node', 0, 0, 7, 0, 'a, 7 right: inside'],
+  ['node', 0, 0, 13, 0, 'a, 13 right: 3 off its edge'],
+  ['node', 0, 2, 0, -13, 'c, 13 above'],
+  ['node', 0, 2, -12, 0, 'c, 12 left'],
+  ['node', 0, 1, 0, 30, 'b, 30 below'],
+];
+const OPT_TREE = {
+  animation: false,
+  series: [{ type: 'tree', top: 60, bottom: 60, left: 80, right: 120, symbolSize: 20, expandAndCollapse: false, label: { show: false },
+    data: [{ name: 'root', children: [{ name: 'x' }, { name: 'y', symbol: 'circle', itemStyle: { borderColor: '#333333', borderWidth: 6 } }] }] }],
+};
+const P_TREE = [
+  ['node', 0, 1, 0, -7, 'root, 7 above: inside'],
+  ['node', 0, 1, 0, -13, 'root, 13 above: off its ring'],
+  ['node', 0, 2, 0, 13, 'x, 13 below: off its ring'],
+  ['node', 0, 3, 0, -12, 'y, 12 above: on its 6 px border'],
+  ['node', 0, 3, 0, -16, 'y, 16 above: off its border'],
+];
+
+// [R2-I3] a radar's rings: Polylines with no fill, which Path.contain takes
+// on the stroke at max(lineWidth, strokeContainThreshold 5), half each side;
+// its symbols are Symbol paths with a fill (the shape alone). A probe
+// ['redge', series, item, j, d, aim] stands d px off the middle of the ring's
+// segment j -> j + 1, along its normal away from the centre, rounded; a probe
+// ['rsym', series, item, j, dx, dy, aim] dx / dy from the centre of the item's
+// symbol j, rounded.
+const OPT_RADAR = {
+  animation: false,
+  radar: { center: [300, 200], radius: 120, indicator: [{ name: 'a', max: 10 }, { name: 'b', max: 10 }, { name: 'c', max: 10 }, { name: 'd', max: 10 }] },
+  series: [{ type: 'radar', symbolSize: 10, data: [{ value: [8, 8, 8, 8], lineStyle: { width: 1 } }, { value: [4, 4, 4, 4], lineStyle: { width: 8 }, symbol: 'emptyCircle' }] }],
+};
+const P_RADAR = [
+  ['redge', 0, 0, 0, 0, 'ring 0 (1 wide), on it'],
+  ['redge', 0, 0, 0, 2, 'ring 0, 2 off: within 2.5'],
+  ['redge', 0, 0, 0, 4, 'ring 0, 4 off: past 2.5'],
+  ['redge', 0, 0, 1, -3, 'ring 0, 3 in: past 2.5'],
+  ['redge', 0, 1, 0, 3, 'ring 1 (8 wide), 3 off: within 4'],
+  ['redge', 0, 1, 2, -5, 'ring 1, 5 in: past 4'],
+  ['rsym', 0, 0, 1, 4, 0, 'symbol 1 of item 0, 4 right: inside its 5'],
+  ['rsym', 0, 0, 1, 0, -7, 'symbol 1 of item 0, 7 above: 2 off'],
+];
+// [R2-I3] a graph node with a 6 px border: a filled Symbol path, its stroke
+// adding half its width (strokeNoScale)
+const OPT_GRAPH_BORDER = {
+  animation: false,
+  series: [{ type: 'graph', layout: 'none', left: 100, top: 100, width: 200, height: 100, symbolSize: 20, label: { show: false },
+    itemStyle: { borderColor: '#333333', borderWidth: 6 },
+    data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 200, y: 100, itemStyle: { borderWidth: 0 } }], links: [] }],
+};
+const P_GRAPH_BORDER = [
+  ['node', 0, 0, 12, 0, 'a, 12 right: on its border'],
+  ['node', 0, 0, 0, -14, 'a, 14 above: off its border'],
+  ['node', 0, 1, 12, 0, 'b (no border), 12 right: off'],
+];
+// [r2v] a graph node with a 1 px border: the filled Symbol path's reach is
+// half its width (0.5), not the threshold 5 an unfilled path takes
+const OPT_GRAPH_THIN = {
+  animation: false,
+  series: [{ type: 'graph', layout: 'none', left: 100, top: 100, width: 200, height: 100, symbolSize: 20, label: { show: false },
+    itemStyle: { borderColor: '#333333', borderWidth: 1 },
+    data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 200, y: 100 }], links: [] }],
+};
+const P_GRAPH_THIN = [
+  ['node', 0, 0, 10, 0, 'a, 10 right: on its 1 px border'],
+  ['node', 0, 0, 12, 0, 'a, 12 right: 1.5 off its 1 px border'],
+  ['node', 0, 1, 0, -12, 'b, 12 above: 1.5 off its 1 px border'],
+];
+
 const COARSE_CASES = [
   { id: 'scatter-small', note: 'four 4 px scatter symbols, pointer 44', init: { useCoarsePointer: true }, option: OPT_SCATTER, probes: P_SCATTER },
   { id: 'scatter-20', note: 'the same at pointerSize 20', init: { useCoarsePointer: true, pointerSize: 20 }, option: OPT_SCATTER, probes: P_SCATTER },
@@ -235,6 +314,13 @@ const COARSE_CASES = [
   { id: 'thin-bars', note: 'bars 2 px wide, pointer 44', init: { useCoarsePointer: true }, option: OPT_BARS, probes: P_BARS },
   { id: 'thin-bars-30', note: 'bars 2 px wide, pointer 30', init: { useCoarsePointer: true, pointerSize: 30 }, option: OPT_BARS, probes: P_BARS },
   { id: 'stack', note: 'two series on one spot: direct is the top, coarse the bottom', init: { useCoarsePointer: true }, option: OPT_STACK, probes: P_STACK },
+  { id: 'graph-nodes-off', note: '[R2-I1] graph nodes of 20 with a fill and no stroke, a mouse: the shape alone', init: { useCoarsePointer: false }, option: OPT_GRAPH, probes: P_GRAPH },
+  { id: 'graph-nodes', note: '[R2-I1] the same, pointer 44', init: { useCoarsePointer: true }, option: OPT_GRAPH, probes: P_GRAPH },
+  { id: 'tree-nodes-off', note: '[R2-I1] tree nodes of 20 (empty circles: a 2 px ring), one a circle with a 6 px border, a mouse', init: { useCoarsePointer: false }, option: OPT_TREE, probes: P_TREE },
+  { id: 'radar-off', note: '[R2-I3] radar rings 1 and 8 wide, symbols of 10, a mouse', init: { useCoarsePointer: false }, option: OPT_RADAR, probes: P_RADAR },
+  { id: 'radar', note: '[R2-I3] the same, pointer 44', init: { useCoarsePointer: true }, option: OPT_RADAR, probes: P_RADAR },
+  { id: 'graph-border-off', note: '[R2-I3] graph nodes of 20 with a 6 px border (one with borderWidth 0), a mouse', init: { useCoarsePointer: false }, option: OPT_GRAPH_BORDER, probes: P_GRAPH_BORDER },
+  { id: 'graph-thin-border-off', note: '[r2v] graph nodes of 20 with a 1 px border, a mouse: the stroke adds half its width, no threshold', init: { useCoarsePointer: false }, option: OPT_GRAPH_THIN, probes: P_GRAPH_THIN },
 ];
 
 let ecKey = null;
@@ -270,13 +356,50 @@ function newChart(init) {
   return chart;
 }
 
+// [R2-I1] a probe at a node: its Symbol group's place on the canvas, rounded,
+// plus the probe's offset
+function resolveProbe(chart, p) {
+  if (typeof p[0] !== 'string') return p;
+  // [R2-I3] a radar ring's segment, a radar symbol
+  if (p[0] === 'redge' || p[0] === 'rsym') {
+    const g = chart.getModel().getSeriesByIndex(p[1]).getData().getItemGraphicEl(p[2]);
+    must(g, 'no radar item ' + p[2]);
+    if (p[0] === 'rsym') {
+      const sym = g.childAt(2).childAt(p[3]);
+      must(sym, 'no radar symbol ' + p[3]);
+      return [Math.round(sym.x) + p[4], Math.round(sym.y) + p[5], p[6]];
+    }
+    const pts = g.childAt(0).shape.points;
+    const a = pts[p[3]];
+    const b = pts[(p[3] + 1) % pts.length];
+    const mx = (a[0] + b[0]) / 2;
+    const my = (a[1] + b[1]) / 2;
+    let nx = -(b[1] - a[1]);
+    let ny = b[0] - a[0];
+    const len = Math.sqrt(nx * nx + ny * ny);
+    nx /= len;
+    ny /= len;
+    const c = chart.getModel().getComponent('radar').coordinateSystem;
+    if (nx * (mx - c.cx) + ny * (my - c.cy) < 0) { nx = -nx; ny = -ny; }
+    return [Math.round(mx + nx * p[4]), Math.round(my + ny * p[4]), p[5]];
+  }
+  const el = chart.getModel().getSeriesByIndex(p[1]).getData().getItemGraphicEl(p[2]);
+  must(el, 'no node ' + p[2]);
+  el.updateTransform();
+  const m = el.getComputedTransform();
+  const cx = m ? m[4] : el.x;
+  const cy = m ? m[5] : el.y;
+  return [Math.round(cx) + p[3], Math.round(cy) + p[4], p[5]];
+}
+
 function runCoarse(c) {
   const probes = [];
   let resolved;
-  for (const p of c.probes) {
+  for (const p0 of c.probes) {
     const chart = newChart(c.init);
     chart.setOption(c.option);
     chart.renderToSVGString();
+    const p = resolveProbe(chart, p0);
     const handler = chart.getZr().handler;
     resolved = handler._pointerSize;
     const h = handler.findHover(p[0], p[1]);
@@ -552,6 +675,27 @@ function guards(g) {
   add('six-five', D('six').frames[1].rects.length === 5, 'six disjoint: still five');
   add('twelve-le-five', D('twelve').frames[1].rects.length <= 5, 'twelve: at most five');
   add('chain-joined', D('chain').frames[1].rects.length < 7, 'the final pass joins what merging made meet');
+  // [R2-I1]
+  const at = (c, aim) => Cc(c).probes.find(p => p.aim === aim);
+  add('graph-node-shape-alone', at('graph-nodes-off', 'a, 7 right: inside').direct && !at('graph-nodes-off', 'a, 13 right: 3 off its edge').direct,
+    'a filled node with no stroke: hit on its shape, not 3 px off it');
+  add('graph-node-coarse', at('graph-nodes', 'a, 13 right: 3 off its edge').hit && !at('graph-nodes', 'a, 13 right: 3 off its edge').direct,
+    '3 px off a node: the fallback finds it');
+  add('tree-ring-border', !at('tree-nodes-off', 'root, 13 above: off its ring').direct && at('tree-nodes-off', 'y, 12 above: on its 6 px border').direct
+    && !at('tree-nodes-off', 'y, 16 above: off its border').direct, 'a tree node: its ring and border by half their width');
+  // [R2-I3]
+  add('radar-ring-reach', at('radar-off', 'ring 0, 2 off: within 2.5').direct && !at('radar-off', 'ring 0, 4 off: past 2.5').direct
+    && at('radar-off', 'ring 1 (8 wide), 3 off: within 4').direct && !at('radar-off', 'ring 1, 5 in: past 4').direct,
+    'a radar ring: max(lineWidth, 5) / 2 either side');
+  add('radar-symbol-shape', at('radar-off', 'symbol 1 of item 0, 4 right: inside its 5').direct
+    && !at('radar-off', 'symbol 1 of item 0, 7 above: 2 off').direct && at('radar', 'symbol 1 of item 0, 7 above: 2 off').hit,
+    'a radar symbol: its shape; the fallback finds it 2 px off');
+  add('graph-border-reach', at('graph-border-off', 'a, 12 right: on its border').direct && !at('graph-border-off', 'a, 14 above: off its border').direct
+    && !at('graph-border-off', 'b (no border), 12 right: off').direct, 'a graph node: its border by half its width');
+  // [r2v]
+  add('graph-thin-border', at('graph-thin-border-off', 'a, 10 right: on its 1 px border').direct
+    && !at('graph-thin-border-off', 'a, 12 right: 1.5 off its 1 px border').direct
+    && !at('graph-thin-border-off', 'b, 12 above: 1.5 off its 1 px border').direct, 'a filled node with a 1 px border: half its width, not the threshold');
   return out;
 }
 

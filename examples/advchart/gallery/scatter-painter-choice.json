@@ -12,7 +12,9 @@
   "scale": true,
   "splitNumber": 5,
   "max": "dataMax",
-  "axisLabel": {}
+  "axisLabel": {
+   "formatter": "@scatter-painter-choice.formatter"
+  }
  },
  "yAxis": {
   "type": "value",
@@ -28,7 +30,10 @@
   {
    "name": "scatter",
    "type": "scatter",
-   "itemStyle": {},
+   "symbolSize": "@scatter-painter-choice.symbolSize",
+   "itemStyle": {
+    "color": "@scatter-painter-choice.color"
+   },
    "data": [
     [
      1007,

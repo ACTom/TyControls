@@ -38,7 +38,8 @@
   "textStyle": {
    "fontSize": 12,
    "color": "#333"
-  }
+  },
+  "position": "@candlestick-touch.position"
  },
  "axisPointer": {
   "link": [
@@ -149,7 +150,9 @@
      "color": "#777"
     }
    },
-   "axisLabel": {},
+   "axisLabel": {
+    "formatter": "@candlestick-touch.formatter"
+   },
    "min": "dataMin",
    "max": "dataMax",
    "axisPointer": {

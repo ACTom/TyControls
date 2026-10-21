@@ -16,10 +16,11 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.ZrPath, tyControls.AdvChart.Color,
-     tyControls.AdvChart.Marker, tyControls.AdvChart.MarkerView,
-     tyControls.AdvanceChart;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.Color,
+     tyControls.AdvanceChart.Marker, tyControls.AdvanceChart.MarkerView,
+     tyControls.AdvanceChart,
+     test.advchart.gallerytext;
 type
   TMPointProbe = class(TTyAdvanceChart)
   public
@@ -479,7 +480,8 @@ begin
       sl := TStringList.Create;
       try
         sl.LoadFromFile(GalleryPath(cs.Strings['gallery']));
-        opt := TJSONObject(GetJSON(sl.Text));
+        { [R2-J2] the file as the fixture's upstream read it }
+        opt := TJSONObject(GalleryWithoutFunctions(GetJSON(sl.Text)));
       finally
         sl.Free;
       end;

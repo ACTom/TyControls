@@ -1,0 +1,9 @@
+{
+  "name": "advchart-oracle",
+  "private": true,
+  "description": "Packages the oracle scripts need beside the ECharts dist: d3-geo for map-usa-projection's geoAlbersUsa (the version the gallery page loads). Install with npm install here; node_modules is not committed.",
+  "dependencies": {
+    "d3-array": "2.8.0",
+    "d3-geo": "2.0.1"
+  }
+}

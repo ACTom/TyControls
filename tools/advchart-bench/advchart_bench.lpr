@@ -17,7 +17,7 @@ uses
   Interfaces, Forms, Controls, Classes, SysUtils, Graphics,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Controller, tyControls.Painter, tyControls.AdvanceChart,
-  tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.DirtyRect;
+  tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.DirtyRect;
 
 type
   TChartProbe = class(TTyAdvanceChart)

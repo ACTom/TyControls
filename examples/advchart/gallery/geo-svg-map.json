@@ -1,5 +1,7 @@
 {
- "tooltip": {},
+ "tooltip": {
+  "formatter": "@geo-svg-map.formatter"
+ },
  "geo": [
   {
    "map": "sicily",
@@ -12,7 +14,8 @@
    "selectedMode": "single",
    "tooltip": {
     "show": true,
-    "confine": true
+    "confine": true,
+    "formatter": "@geo-svg-map.formatter#2"
    },
    "itemStyle": {
     "color": null

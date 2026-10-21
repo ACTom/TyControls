@@ -5,7 +5,8 @@
   "left": "center"
  },
  "tooltip": {
-  "trigger": "axis"
+  "trigger": "axis",
+  "formatter": "@wind-barb.formatter"
  },
  "grid": {
   "top": 160,
@@ -867,6 +868,7 @@
   },
   {
    "type": "custom",
+   "renderItem": "@wind-barb",
    "encode": {
     "x": 0,
     "y": 1
@@ -2320,6 +2322,7 @@
   },
   {
    "type": "custom",
+   "renderItem": "@wind-barb#2",
    "data": [
     [
      "2017-06-28",
@@ -2372,7 +2375,8 @@
     ]
    ],
    "tooltip": {
-    "trigger": "item"
+    "trigger": "item",
+    "formatter": "@wind-barb.formatter#2"
    },
    "yAxisIndex": 2,
    "z": 11

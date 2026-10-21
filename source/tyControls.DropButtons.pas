@@ -535,7 +535,7 @@ begin
   ctx.lineTo(divX + 0.5, arrowRect.Bottom - APainter.Scale(3));
   ctx.lineWidth := 1;
   ctx.strokeStyle(TyColorToBGRA(AStyle.BorderColor));
-  ctx.stroke;
+  TyCtxStroke(ctx);
 
   { Centre the chevron in the FULL clickable arrow zone — [divider, control right edge] — not
     in [divider, content edge]. IsInArrowZone runs the hit test to the CONTROL edge (the right

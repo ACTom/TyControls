@@ -19,6 +19,22 @@
 //      isLabelShown): built, laid out and ignored at rest
 //   F. a pictorialBar's hit target: the glyphs (the bar rect is silent,
 //      PictorialBarView.ts:692-696), clipped as drawn
+//   G. [R2-B] a radar item's paint order (polyline, polygon, symbols in its
+//      group), a radar item held by an action under another's focus self
+//      hover, and a label riding its hovered symbol through the state
+//      transition (a scatter's, a graph's, a tree's): a case with `order`
+//      records each element's place in the display list (zi), one with
+//      `labelPlace` a label's computed transform (tx / ty); a radar's
+//      lineStyle.type (a case with `dash` records a path's dash as
+//      canvas/dashStyle.ts normalizeLineDash draws it)
+//   H. [R2-I1] a label's rest opacity: setLabelStyle's defaultOpacity, the
+//      host's style.opacity (a scatter's 0.8 by its series default, a bar's
+//      and a line's written itemStyle.opacity, an item's own; a written
+//      label.opacity over it), through a hover; a radar point label's label
+//      line on the item's states (setLabelLineStyle from LabelManager's
+//      _updateLabelLine: hidden where its label is, or where the state's
+//      labelLine.show -- the normal one by default -- is false; the state's
+//      lineStyle)
 //
 // The harness is state-anim.js' own, copied (that script generates and exits
 // on load): the replaced Date before the dist, chart._ssr = false,
@@ -106,7 +122,17 @@ function enc(v) {
   }
   return undefined;
 }
-function snap(el) {
+let CUR_CASE = null;
+// zrender canvas/dashStyle.ts normalizeLineDash, transcribed
+function normalizeLineDash(lineType, lineWidth) {
+  if (!lineType || lineType === 'solid' || !(lineWidth > 0)) return null;
+  lineWidth = lineWidth || 1;
+  return lineType === 'dashed' ? [4 * lineWidth, 2 * lineWidth]
+    : lineType === 'dotted' ? [lineWidth]
+    : typeof lineType === 'number' ? [lineType]
+    : Array.isArray(lineType) ? lineType : null;
+}
+function snap(el, zi) {
   const o = {};
   const put = (k, v) => {
     const e = enc(v);
@@ -114,6 +140,15 @@ function snap(el) {
   };
   for (const k of TRANSFORM_KEYS) if (typeof el[k] === 'number') put(k, el[k]);
   put('ignore', !!el.ignore);
+  // [R2-B] the case's own extra records
+  if (CUR_CASE && CUR_CASE.labelPlace && el.type === 'text' && el.transform) {
+    put('tx', el.transform[4]);
+    put('ty', el.transform[5]);
+  }
+  if (CUR_CASE && CUR_CASE.order && zi != null) put('zi', zi);
+  if (CUR_CASE && CUR_CASE.dash && el.style && el.type !== 'text') put('dash', JSON.stringify(normalizeLineDash(el.style.lineDash, el.style.lineWidth)));
+  // [R2-I3] the pen's phase as drawn (a state's dashOffset tweens)
+  if (CUR_CASE && CUR_CASE.dashOff && el.style && el.type !== 'text' && el.style.lineDash) put('dashOff', el.style.lineDashOffset == null ? 0 : el.style.lineDashOffset);
   if (el.invisible != null) put('invisible', !!el.invisible);
   if (typeof el.z2 === 'number') put('z2', el.z2);
   put('states', (el.currentStates || []).join(','));
@@ -185,6 +220,33 @@ function seriesParts(chart) {
         put(g.childAt(0), s, i, 'host');
         put(g.childAt(1), s, i, 'rarea');
         g.childAt(2).eachChild(sym => put(sym, s, i, 'rsym' + sym.__dimIdx));
+      });
+      return;
+    }
+    // [R2-I3] a line's polyline, in a case that asks for the pens' phases
+    if (type === 'line' && CUR_CASE && CUR_CASE.dashOff && view._polyline) put(view._polyline, s, 0, 'poly');
+    // [R2-I5] a tree's edge (symbolEl.__edge, the node's row), in a case
+    // that asks for the pens' dashes
+    if (type === 'tree' && CUR_CASE && CUR_CASE.dash) {
+      data.each(i => {
+        const g = data.getItemGraphicEl(i);
+        if (!g) return;
+        put(g.childAt(0), s, i, 'host');
+        if (g.__edge) put(g.__edge, s, i, 'edge');
+      });
+      return;
+    }
+    // [R2-V] a graph's edge (its Line group's line, the edge's row), in a
+    // case that asks for the pens' dashes
+    if (type === 'graph' && CUR_CASE && CUR_CASE.dash) {
+      data.each(i => {
+        const g = data.getItemGraphicEl(i);
+        if (g) put(g.childAt(0), s, i, 'host');
+      });
+      const ed = sm.getEdgeData();
+      ed.each(e => {
+        const g = ed.getItemGraphicEl(e);
+        if (g && g.childOfName('line')) put(g.childOfName('line'), s, e, 'edge');
       });
       return;
     }
@@ -354,6 +416,8 @@ function aimOf(chart, pick) {
   if (k === 'gq') return aimAt(chart, view._progressEls[i]);
   if (k === 'rsym') return aimAt(chart, itemEl(chart, s, i).childAt(2).childAt(pick[3]));
   if (k === 'rline') return aimAt(chart, itemEl(chart, s, i).childAt(0));
+  // [R2-V] a graph's edge: its Line group's line
+  if (k === 'gedge') return aimAt(chart, sm.getEdgeData().getItemGraphicEl(i).childOfName('line'));
   if (k === 'rarea') return aimAt(chart, itemEl(chart, s, i).childAt(1));
   if (k === 'item') {
     const el = itemEl(chart, s, i);
@@ -539,7 +603,9 @@ function loopOn(chart, c, t1) {
       else must(false, 'unknown event ' + e.type);
     }
     zr.animation.update();
-    zr.storage.getDisplayList(true);
+    const zList = zr.storage.getDisplayList(true);
+    const zIndex = new Map();
+    zList.forEach((el, i) => zIndex.set(el, i));
     clips.push(clipCount(zr));
     selection.push(selectionOf(chart));
     const parts = seriesParts(chart);
@@ -572,7 +638,7 @@ function loopOn(chart, c, t1) {
           ids.set(it.el, rec);
           recs.push(rec);
         }
-        rec.snaps[si] = snap(it.el);
+        rec.snaps[si] = snap(it.el, zIndex.get(it.el));
         rec.anim[si] = it.el.animators ? it.el.animators.length : 0;
         rec.stateAnim[si] = stateAnims(it.el).join(' ');
         const st = it.el.stateTransition;
@@ -598,6 +664,7 @@ function loopOn(chart, c, t1) {
 // waiting on a timer that never runs
 let caseBase = T_BASE;
 function runCase(c) {
+  CUR_CASE = c;
   caseBase += CASE_STRIDE;
   NOW = caseBase;
   rngState = SEED;
@@ -804,6 +871,255 @@ const PICTORIAL = [
     events: [over(0, ['pclip', 0, 1, 0]), over(400, ['glyph', 0, 1, 0, 4]), out(800)] },
 ];
 
+// G. [R2-B]
+const R2B = [
+  { id: 'radar-order', order: true, note: 'a radar item\'s group is polyline, polygon, symbols: at one z2 the polygon (areaStyle, '
+    + 'opaque) is painted over the polyline -- at rest and lifted together under the hover of item 1 at 0; out at 500',
+    option: radar({ areaStyle: { opacity: 1 }, lineStyle: { width: 4 } }), events: [over(0, ['rsym', 0, 1, 2]), out(500)] },
+  { id: 'radar-held-self', note: 'emphasis.focus self: item 0 highlighted by action at 0 (the others blur, its group holds the '
+    + 'bit); hovering item 1 at 300 runs blurSeries again -- it spares only an element that holds the bit itself, so item 0\'s '
+    + 'polyline, polygon and symbols enter blur under the held group; out at 700 (allLeaveBlur: they go to normal, the group '
+    + 'still held); downplay at 1100',
+    option: radar({ emphasis: { focus: 'self' }, areaStyle: {},
+      data: [{ value: [6, 8, 4, 7, 5], name: 'p' }, { value: [3, 4, 9, 2, 8], name: 'q' }, { value: [8, 2, 6, 5, 3], name: 'r' }] }),
+    events: [act(0, { type: 'highlight', seriesIndex: 0, dataIndex: 0 }), over(300, ['rsym', 0, 1, 0]), out(700),
+      act(1100, { type: 'downplay', seriesIndex: 0, dataIndex: 0 })] },
+  { id: 'scatter-label-follows', labelPlace: true, note: 'a scatter\'s top label rides its symbol as the hover scales it '
+    + '(updateInnerText every frame on the path as drawn): over point 1 at 0, out at 500',
+    option: { color: [C0], xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
+      series: [{ type: 'scatter', symbolSize: 20, itemStyle: { opacity: 1 }, label: { show: true, position: 'top', formatter: 'p{c}' },
+        data: [[2, 3], [5, 6], [8, 4]] }] },
+    events: [over(0, ['item', 0, 1]), out(500)] },
+  { id: 'graph-label-follows', labelPlace: true, note: 'a graph node\'s right label rides the node\'s emphasis scale (the '
+    + 'state runs on the symbol\'s own proxy) through the transition and at rest: over node 1 at 0, out at 500',
+    option: { color: [C0], series: [{ type: 'graph', layout: 'none', symbolSize: 30, label: { show: true, position: 'right' },
+      left: 60, top: 60, width: 280, height: 180,
+      data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 50 }, { name: 'c', x: 200, y: 0 }],
+      links: [{ source: 'a', target: 'b' }] }] },
+    events: [over(0, ['item', 0, 1]), out(500)] },
+  { id: 'radial-label-follows', labelPlace: true, note: 'a radial tree\'s turned label rides its hovered node (the box '
+    + 'scaled about its centre, the turn kept): over A at 0, out at 500',
+    option: { series: [{ type: 'tree', layout: 'radial', left: 60, top: 40, bottom: 40, right: 60, symbolSize: 14,
+      expandAndCollapse: false, label: { show: true },
+      data: [{ name: 'root', children: [{ name: 'A', children: [{ name: 'A1' }, { name: 'A2' }] }, { name: 'B' }, { name: 'C' }] }] }] },
+    events: [over(0, ['item', 0, 2]), out(500)] },
+  { id: 'radar-dash', dash: true, note: 'lineStyle.type: the series\' dashed, an item\'s own dotted at width 3, an item\'s '
+    + 'own [6, 3] array; hovering the dotted one keeps its dash (the emphasis states write no type)',
+    option: radar({ lineStyle: { type: 'dashed', width: 2 },
+      data: [{ value: [6, 8, 4, 7, 5], name: 'p' }, { value: [3, 4, 9, 2, 8], name: 'q', lineStyle: { type: 'dotted', width: 3 } },
+        { value: [8, 2, 6, 5, 3], name: 'r', lineStyle: { type: [6, 3] } }] }),
+    events: [over(0, ['rline', 0, 1]), out(500)] },
+  { id: 'tree-label-follows', labelPlace: true, note: 'a tree node\'s label rides its scaled symbol (its own label box): '
+    + 'over A at 0, out at 500',
+    option: { series: [{ type: 'tree', left: 40, top: 30, bottom: 30, right: 120, symbolSize: 16, expandAndCollapse: false,
+      label: { show: true, position: 'left' }, leaves: { label: { position: 'right' } },
+      data: [{ name: 'root', children: [{ name: 'A', children: [{ name: 'A1' }] }, { name: 'B' }] }] }] },
+    events: [over(0, ['item', 0, 2]), out(500)] },
+];
+
+// H. [R2-I1]
+const R2I1 = [
+  { id: 'scatter-label-opacity', note: 'a scatter\'s label at its symbol\'s 0.8 (ScatterSeries itemStyle.opacity, handed '
+    + 'over as defaultOpacity): at rest, through a hover of point 1 at 0 and out at 500 (the emphasis style has no opacity)',
+    option: { color: [C0], xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
+      series: [{ type: 'scatter', symbolSize: 20, label: { show: true, position: 'top', formatter: 'p{c}' },
+        data: [[2, 3], [5, 6], [8, 4]] }] },
+    events: [over(0, ['item', 0, 1]), out(500)] },
+  { id: 'bar-label-opacity', note: 'a bar series\' itemStyle.opacity 0.5, item 1 its own 0.3, item 2 a label.opacity 0.9 of '
+    + 'its own: the labels at 0.5, 0.3, 0.9; hover item 1 at 0, out at 500',
+    option: { color: [C0], xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'bar', itemStyle: { opacity: 0.5 }, label: { show: true, position: 'top' },
+        data: [10, { value: 20, itemStyle: { opacity: 0.3 } }, { value: 30, label: { opacity: 0.9 } }] }] },
+    events: [over(0, ['item', 0, 1]), out(500)] },
+  { id: 'line-label-opacity', note: 'a line\'s symbols at itemStyle.opacity 0.6: their labels at 0.6; hover point 2 at 0, '
+    + 'out at 500',
+    option: { color: [C0], xAxis: { type: 'category', data: ['A', 'B', 'C', 'D'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'line', symbolSize: 10, itemStyle: { opacity: 0.6 }, label: { show: true },
+        data: [10, 25, 18, 30] }] },
+    events: [over(0, ['item', 0, 2]), out(500)] },
+  { id: 'pie-label-opacity', note: 'a pie\'s itemStyle.opacity 0.5, slice b its own 0.3, slice c a label.opacity 0.9 of its '
+    + 'own (PieView: defaultOpacity the visual opacity); the label lines go with the slices\' style; hover b at 0, out at 500',
+    option: pie({ itemStyle: { opacity: 0.5 }, data: [{ name: 'a', value: 10 }, { name: 'b', value: 20, itemStyle: { opacity: 0.3 } },
+      { name: 'c', value: 30, label: { opacity: 0.9 } }, { name: 'd', value: 15 }] }),
+    events: [over(0, ['item', 0, 1]), out(500)] },
+  { id: 'funnel-label-opacity', note: 'a funnel\'s itemStyle.opacity 0.6, item c a label.opacity 0.25 (FunnelView: '
+    + 'defaultOpacity the polygon\'s style.opacity); hover b at 0, out at 500',
+    option: funnel({ itemStyle: { opacity: 0.6 }, data: [{ name: 'a', value: 60 }, { name: 'b', value: 40 },
+      { name: 'c', value: 20, label: { opacity: 0.25 } }, { name: 'd', value: 80 }] }),
+    events: [over(0, ['item', 0, 1]), out(500)] },
+  { id: 'global-text-opacity', note: 'the root textStyle.opacity 0.7 under every label without one of its own (createTextStyle\'s '
+    + 'globalTextStyle, before defaultOpacity): a bar series at itemStyle.opacity 0.5, item 1 a label.opacity 0.2; hover bar 0 '
+    + 'at 0, out at 500',
+    option: { color: [C0, C1, C2, C3], textStyle: { opacity: 0.7 },
+      xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'bar', itemStyle: { opacity: 0.5 }, label: { show: true, position: 'top' },
+        data: [10, { value: 20, label: { opacity: 0.2 } }, 30] }] },
+    events: [over(0, ['item', 0, 0]), out(500)] },
+  { id: 'pie-global-text-opacity', note: 'a pie under the root textStyle.opacity 0.7, slice b a label.opacity 0.2 of its own; '
+    + 'hover a at 0, out at 500',
+    option: Object.assign(pie({ data: [{ name: 'a', value: 10 }, { name: 'b', value: 20, label: { opacity: 0.2 } },
+      { name: 'c', value: 30 }] }), { textStyle: { opacity: 0.7 } }),
+    events: [over(0, ['item', 0, 0]), out(500)] },
+  { id: 'radar-label-line-states', note: 'radar point labels with label lines (labelLine.show, labelLayout dy -14 so the '
+    + 'line has a length), focus self: emphasis.labelLine a colour and width 3, blur.labelLine.show false; item q\'s '
+    + 'emphasis.label.show false (its lines go with its labels). Hover p at 0 (p emphasis, q blur), out at 500; hover q at '
+    + '800, out at 1200',
+    option: radar({ emphasis: { focus: 'self', labelLine: { lineStyle: { color: C3, width: 3 } } },
+      blur: { labelLine: { show: false } },
+      label: { show: true, position: 'right', distance: 12 }, labelLine: { show: true, lineStyle: { width: 1 } },
+      labelLayout: { dy: -14 },
+      data: [{ value: [6, 8, 4, 7, 5], name: 'p' }, { value: [3, 4, 9, 2, 8], name: 'q', emphasis: { label: { show: false } } }] }),
+    events: [over(0, ['rsym', 0, 0, 1]), out(500), over(800, ['rsym', 0, 1, 2]), out(1200)] },
+];
+
+// [R2-I3] the leftovers: a pie beside a bar (its squeezed label), states' dashes
+const R2I3 = [
+  { id: 'bar-pie-label', note: '[R2-I3] a bar and a pie in one chart (R2-I1 split them): the pie at 30% beside the bars, '
+    + 'itemStyle.opacity 0.5, slice b a label.opacity 0.2 of its own -- avoidOverlap leaves b\'s label a width of 3, so its '
+    + 'truncated text is empty and the Text is there all the same; hover slice b at 0, out at 500',
+    option: { color: [C0, C1, C2, C3], xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      grid: { left: 40, width: 150 },
+      series: [{ type: 'bar', label: { show: true, position: 'top' }, data: [10, 20, 30] },
+        { type: 'pie', radius: '30%', center: ['75%', '50%'], itemStyle: { opacity: 0.5 },
+          data: [{ name: 'a', value: 10 }, { name: 'b', value: 20, label: { opacity: 0.2 } }, { name: 'c', value: 30 }] }] },
+    events: [over(0, ['item', 1, 1]), out(500)] },
+  { id: 'bar-state-dash', dash: true, dashOff: true, note: '[R2-I3] a state\'s borderType (lineDash: no animation prop, set '
+    + 'at once) and borderDashOffset (lineDashOffset: tweened): bars bordered #000 at 2, emphasis [6, 3] at 4, bar 1 its own '
+    + 'emphasis borderDashOffset 9; select dotted in #000 (selectedMode single; no theme colour). Hover bar 0 at 0, out at 500, click bar 1 at 800, out '
+    + 'at 1200',
+    option: { color: [C0], xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'bar', selectedMode: 'single', itemStyle: { borderColor: '#000', borderWidth: 2 },
+        emphasis: { itemStyle: { borderType: [6, 3], borderDashOffset: 4 } }, select: { itemStyle: { borderType: 'dotted', borderColor: '#000' } },
+        data: [10, { value: 20, emphasis: { itemStyle: { borderDashOffset: 9 } } }, 30] }] },
+    events: [over(0, ['item', 0, 0]), out(500), click(800, ['item', 0, 1]), out(1200)] },
+  { id: 'line-state-dash', dash: true, dashOff: true, note: '[R2-I3] a line\'s emphasis lineStyle: type [3, 3] and dashOffset '
+    + '6 over its dashed at 2 (emphasis width bolder); highlight the series by action at 0, downplay at 500',
+    option: { color: [C0], xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'line', lineStyle: { type: 'dashed', width: 2 }, emphasis: { lineStyle: { type: [3, 3], dashOffset: 6 } },
+        data: [10, 20, 30] }] },
+    events: [act(0, { type: 'highlight', seriesIndex: 0 }), act(500, { type: 'downplay', seriesIndex: 0 })] },
+  { id: 'radar-state-dash', dash: true, dashOff: true, note: '[R2-I3] a radar ring\'s emphasis lineStyle: type dotted and '
+    + 'dashOffset 2 (R2-B: the states\' type was not read); hover a symbol of p at 0, out at 500',
+    option: radar({ lineStyle: { width: 2 }, emphasis: { lineStyle: { type: 'dotted', dashOffset: 2 } } }),
+    events: [over(0, ['rsym', 0, 0, 1]), out(500)] },
+];
+
+// [R2-I4] a dash written as a word is normalised against the width the
+// frame draws (canvas getLineDash per brush): where a state tweens the width
+// the dash follows it, the state's word and the rest's alike
+const R2I4 = [
+  { id: 'bar-dash-word-tween', dash: true, note: '[R2-I4] series 0: bars bordered #000 at 1, emphasis borderWidth 5 and '
+    + 'borderType dashed (the state\'s word against the tweening width); series 1: bars bordered #000 at 1 dotted, emphasis '
+    + 'borderWidth 6 alone (the rest\'s word against it). Hover bar 0 of series 0 at 0, out at 500, bar 1 of series 1 at '
+    + '800, out at 1200',
+    option: { color: [C0, C1], xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 1 },
+        emphasis: { itemStyle: { borderWidth: 5, borderType: 'dashed' } }, data: [10, 20, 30] },
+      { type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 1, borderType: 'dotted' },
+        emphasis: { itemStyle: { borderWidth: 6 } }, data: [12, 22, 32] }] },
+    events: [over(0, ['item', 0, 0]), out(500), over(800, ['item', 1, 1]), out(1200)] },
+  { id: 'bar-dash-word-still', dash: true, note: '[R2-I4] the same with animation false (no state transition): the '
+    + 'rest\'s dotted at 1 under emphasis borderWidth 6 is [6] at once; the state\'s dashed at 5 is [20, 10]. Hover bar 1 '
+    + 'of series 1 at 0, out at 300, bar 0 of series 0 at 500, out at 800',
+    option: { animation: false, color: [C0, C1], xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 1 },
+        emphasis: { itemStyle: { borderWidth: 5, borderType: 'dashed' } }, data: [10, 20, 30] },
+      { type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 1, borderType: 'dotted' },
+        emphasis: { itemStyle: { borderWidth: 6 } }, data: [12, 22, 32] }] },
+    events: [over(0, ['item', 1, 1]), out(300), over(500, ['item', 0, 0]), out(800)] },
+];
+
+// [R2-I5] the same for the other pens a state's transition tweens: a tree's
+// edge, a lines series' line, a parallel series' line -- each brushed with
+// its word normalised against the width the frame draws
+const R2I5 = [
+  { id: 'tree-dash-word-tween', dash: true, note: '[R2-I5] a tree\'s edges dashed at 1, emphasis lineStyle width 5: '
+    + 'hovering A puts its edge (root to A) in emphasis, the width tweens and the dash follows it. Over A at 0, out at 500',
+    option: { series: [{ type: 'tree', left: 40, top: 30, bottom: 30, right: 120, symbolSize: 16, expandAndCollapse: false,
+      lineStyle: { type: 'dashed', width: 1, color: '#000' }, emphasis: { lineStyle: { width: 5 } },
+      data: [{ name: 'root', children: [{ name: 'A', children: [{ name: 'A1' }] }, { name: 'B' }] }] }] },
+    events: [over(0, ['item', 0, 2]), out(500)] },
+  { id: 'lines-dash-word-tween', dash: true, note: '[R2-I5] a lines series dotted at 1, emphasis lineStyle width 6: '
+    + 'hovering line 0, the width tweens and the dash follows it. Over line 0 at 0, out at 500',
+    option: { xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
+      series: [{ type: 'lines', coordinateSystem: 'cartesian2d', lineStyle: { type: 'dotted', width: 1, opacity: 1, color: '#000' },
+        emphasis: { lineStyle: { width: 6 } }, data: [{ coords: [[1, 2], [8, 2]] }, { coords: [[1, 7], [8, 7]] }] }] },
+    events: [over(0, ['item', 0, 0]), out(500)] },
+  { id: 'parallel-dash-word-tween', dash: true, note: '[R2-I5] a parallel series dashed at 1, emphasis lineStyle width 4: '
+    + 'hovering row 0, the width tweens and the dash follows it. Over row 0 at 0, out at 500',
+    option: { parallelAxis: [{ dim: 0, min: 0, max: 10 }, { dim: 1, min: 0, max: 10 }, { dim: 2, min: 0, max: 10 }],
+      series: [{ type: 'parallel', lineStyle: { type: 'dashed', width: 1, opacity: 1, color: '#000' },
+        emphasis: { lineStyle: { width: 4 } }, data: [[2, 3, 2], [8, 7, 8]] }] },
+    events: [over(0, ['item', 0, 0]), out(500)] },
+];
+
+// [R2-I6] a label's own opacity under a state's: the state's text style
+// replaces it (zrender merges the state's style over the normal one), and
+// blur without one of its own takes the label's current opacity times 0.1
+// (createBlurDefaultState on the Text) -- nothing multiplies
+const R2I6 = [
+  { id: 'label-opacity-states', note: '[R2-I6] bar series 0 labels at label.opacity 0.5, emphasis.label.opacity 0.8, '
+    + 'blur.label.opacity 0.3, focus series; series 1 labels at 0.6 with no state opacity (blur: 0.06), focus series; a '
+    + 'line series at itemStyle.opacity 0.5 (the defaultOpacity of its labels) and emphasis.label.opacity 0.9. Hover bar 1 of '
+    + 'series 0 at 0, out at 300, bar 2 of series 1 at 500, out at 800, line point 3 at 900, out at 1100',
+    option: { color: [C0, C1, C2], xAxis: { type: 'category', data: CATS }, yAxis: { type: 'value', max: 40 },
+      series: [
+        { type: 'bar', label: { show: true, position: 'top', opacity: 0.5 },
+          emphasis: { focus: 'series', label: { opacity: 0.8 } }, blur: { label: { opacity: 0.3 } }, data: [5, 20, 36, 10, 18] },
+        { type: 'bar', label: { show: true, position: 'top', opacity: 0.6 }, emphasis: { focus: 'series' },
+          data: [8, 12, 6, 30, 4] },
+        { type: 'line', symbolSize: 10, itemStyle: { opacity: 0.5 }, label: { show: true },
+          emphasis: { label: { opacity: 0.9 } }, data: [3, 9, 14, 22, 27] }] },
+    events: [over(0, ['item', 0, 1]), out(300), over(500, ['item', 1, 2]), out(800), over(900, ['item', 2, 3]), out(1100)] },
+];
+
+// [r2v] a state's borderType 'solid' (and a word normalizeLineDash does not
+// know) is written all the same: the state draws solid over a dashed rest
+const R2V = [
+  { id: 'bar-state-solid', dash: true, note: "[r2v] bars bordered #000 at 2 dashed; emphasis borderType 'solid'; bar 1 "
+    + "its own emphasis borderType 'wavy' (a word normalizeLineDash does not know: no dash). Hover bar 0 at 0, out at 500, "
+    + 'bar 1 at 800, out at 1200',
+    option: { color: [C0], xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 2, borderType: 'dashed' },
+        emphasis: { itemStyle: { borderType: 'solid' } },
+        data: [10, { value: 20, emphasis: { itemStyle: { borderType: 'wavy' } } }, 30] }] },
+    events: [over(0, ['item', 0, 0]), out(500), over(800, ['item', 0, 1]), out(1200)] },
+  { id: 'bar-state-dash-from-none', dash: true, note: '[r2v] bars with no border at rest; emphasis borderColor #000, '
+    + 'borderWidth 3 and borderType [6, 3]: the lengths go against the width the state draws, not the rest\'s nought. Hover '
+    + 'bar 0 at 0, out at 500',
+    option: { color: [C0], xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'bar', emphasis: { itemStyle: { borderColor: '#000', borderWidth: 3, borderType: [6, 3] } },
+        data: [10, 20, 30] }] },
+    events: [over(0, ['item', 0, 0]), out(500)] },
+  { id: 'radar-dash-word-tween', dash: true, note: '[R2-V] a radar\'s rings dashed at 1 (the series\' lineStyle), emphasis '
+    + 'lineStyle width 5: hovering a symbol of p, its ring\'s width tweens and the dash follows it. Over at 0, out at 500',
+    option: radar({ lineStyle: { type: 'dashed', width: 1 }, emphasis: { lineStyle: { width: 5 } } }),
+    events: [over(0, ['rsym', 0, 0, 1]), out(500)] },
+  { id: 'graph-dash-word-tween', dash: true, note: '[R2-V] a graph\'s nodes bordered #000 at 1 dashed, emphasis borderWidth '
+    + '5; its edges dotted at 1, emphasis lineStyle width 4 (focus adjacency): hovering node a, its width tweens and the '
+    + 'dash follows it; hovering the edge a-b, the same for the edge. Over a at 0, out at 500, over the edge at 800, out at 1200',
+    option: { color: [C0], series: [{ type: 'graph', layout: 'none', symbolSize: 30, left: 60, top: 60, width: 280, height: 180,
+      itemStyle: { borderColor: '#000', borderWidth: 1, borderType: 'dashed' },
+      lineStyle: { type: 'dotted', width: 1, color: '#000', opacity: 1 },
+      emphasis: { focus: 'adjacency', itemStyle: { borderWidth: 5 }, lineStyle: { width: 4 } },
+      data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 50 }, { name: 'c', x: 200, y: 0 }],
+      links: [{ source: 'a', target: 'b' }] }] },
+    events: [over(0, ['item', 0, 0]), out(500), over(800, ['gedge', 0, 0]), out(1200)] },
+  { id: 'tree-polyline-dash-word-tween', dash: true, note: '[R2-V] tree-dash-word-tween with edgeShape polyline: A\'s '
+    + 'edge is the polyline to its children (TreePath, the node\'s own __edge), its width tweens and the dash follows it. '
+    + 'Over A at 0, out at 500',
+    option: { series: [{ type: 'tree', left: 40, top: 30, bottom: 30, right: 120, symbolSize: 16, expandAndCollapse: false,
+      edgeShape: 'polyline', lineStyle: { type: 'dashed', width: 1, color: '#000' }, emphasis: { lineStyle: { width: 5 } },
+      data: [{ name: 'root', children: [{ name: 'A', children: [{ name: 'A1' }] }, { name: 'B' }] }] }] },
+    events: [over(0, ['item', 0, 2]), out(500)] },
+  { id: 'bar-dash-word-to-zero', dash: true, note: '[R2-V] bars bordered #000 at 2 dashed, emphasis borderWidth 0: the dash '
+    + 'follows the width down and is none at 0 (normalizeLineDash wants a width above 0). Hover bar 1 at 0, out at 500',
+    option: { color: [C0], xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 2, borderType: 'dashed' },
+        emphasis: { itemStyle: { borderWidth: 0 } }, data: [10, 20, 30] }] },
+    events: [over(0, ['item', 0, 1]), out(500)] },
+];
+
 // ---------- the compact writer of animation.js ----------
 const LINE = 250;
 function oneLine(v) {
@@ -966,6 +1282,122 @@ function guards(cases) {
     const ev = c.published.filter(e => e.type === 'mouseover').map(e => e.at).join(',');
     g('pictorial-clip-target', ev === '400', ev);
   }
+  // G. [R2-B]
+  {
+    const c = byId(cases, 'radar-order');
+    const zi = (row, part, ms) => numAt(elRow(c, 0, row, part), 'zi', ms);
+    g('radar-polygon-over-line', Number(zi(0, 'rarea', 1600)) > Number(zi(0, 'host', 1600))
+      && Number(zi(1, 'rarea', 450)) > Number(zi(1, 'host', 450)), [zi(0, 'host', 1600), zi(0, 'rarea', 1600)].join(' '));
+  }
+  {
+    const c = byId(cases, 'radar-held-self');
+    g('radar-held-children-blur', statesAt(elRow(c, 0, 0, 'host'), 650) === 'blur', statesAt(elRow(c, 0, 0, 'host'), 650));
+  }
+  {
+    const c = byId(cases, 'scatter-label-follows');
+    const l = elRow(c, 0, 1, 'label');
+    g('scatter-label-rides', l && numAt(l, 'ty', 450) !== numAt(l, 'ty', 1600) && numAt(l, 'ty', 16) !== numAt(l, 'ty', 450),
+      'scatter-label-follows');
+  }
+  // H. [R2-I1]
+  {
+    const c = byId(cases, 'scatter-label-opacity');
+    const l = elRow(c, 0, 1, 'label');
+    g('scatter-label-at-0.8', l && numAt(l, 'style.opacity', 1600) === '0.8' && numAt(l, 'style.opacity', 450) === '0.8'
+      && statesAt(l, 450) === 'emphasis', l && numAt(l, 'style.opacity', 1600));
+  }
+  {
+    const c = byId(cases, 'bar-label-opacity');
+    const op = row => numAt(elRow(c, 0, row, 'label'), 'style.opacity', 1600);
+    g('bar-label-opacities', op(0) === '0.5' && op(1) === '0.3' && op(2) === '0.9', [op(0), op(1), op(2)].join(' '));
+  }
+  {
+    const c = byId(cases, 'radar-label-line-states');
+    const gl = (row, j) => elRow(c, 0, row, 'rsym' + j + '#guide');
+    const p = gl(0, 1);
+    const q = gl(1, 1);
+    g('radar-guide-states', p && q && numAt(p, 'ignore', 1600) === false && numAt(p, 'style.lineWidth', 450) === '3'
+      && numAt(q, 'ignore', 450) === true && numAt(q, 'ignore', 1000) === true && numAt(q, 'ignore', 1600) === false,
+      p && q && [numAt(p, 'style.lineWidth', 450), numAt(q, 'ignore', 450), numAt(q, 'ignore', 1000)].join(' '));
+  }
+  // [R2-I3]
+  {
+    const c = byId(cases, 'bar-pie-label');
+    const l = elRow(c, 1, 1, 'label');
+    g('pie-squeezed-label-present', l && numAt(l, 'ignore', 1600) === false && statesAt(l, 450) === 'emphasis', 'bar-pie-label');
+  }
+  {
+    const c = byId(cases, 'bar-state-dash');
+    const b0 = elRow(c, 0, 0, 'host');
+    const b1 = elRow(c, 0, 1, 'host');
+    g('state-dash-set-at-once', b0 && numAt(b0, 'dash', 1) === '[6,3]' && numAt(b0, 'dash', 1600) === 'null', 'bar-state-dash');
+    g('state-dash-offset-tweens', b0 && Number(numAt(b0, 'dashOff', 100)) > 0 && Number(numAt(b0, 'dashOff', 100)) < 4
+      && Number(numAt(b0, 'dashOff', 450)) === 4 && b1 && Number(numAt(b1, 'dashOff', 1200)) === 9, 'bar-state-dash phases');
+  }
+  // [R2-I4]
+  {
+    const c = byId(cases, 'bar-dash-word-tween');
+    const b0 = elRow(c, 0, 0, 'host');
+    const b1 = elRow(c, 1, 1, 'host');
+    const d = (el, ms) => numAt(el, 'dash', ms);
+    g('state-dash-word-follows-width', b0 && d(b0, 450) === '[20,10]' && d(b0, 50) !== '[20,10]' && d(b0, 50) !== 'null'
+      && b1 && JSON.parse(d(b1, 1100))[0] > 5.99 && JSON.parse(d(b1, 850))[0] > 1 && JSON.parse(d(b1, 850))[0] < 5,
+      b0 && b1 && [d(b0, 50), d(b0, 450), d(b1, 850), d(b1, 1100)].join(' '));
+  }
+  {
+    const c = byId(cases, 'bar-dash-word-still');
+    const b0 = elRow(c, 0, 0, 'host');
+    const b1 = elRow(c, 1, 1, 'host');
+    g('still-dash-word-at-state-width', b1 && numAt(b1, 'dash', 1) === '[6]' && numAt(b1, 'dash', 400) === '[1]'
+      && b0 && numAt(b0, 'dash', 501) === '[20,10]', b0 && b1 && [numAt(b1, 'dash', 1), numAt(b0, 'dash', 501)].join(' '));
+  }
+  // [R2-I5] mid-transition the dash is neither the rest's nor the state's
+  {
+    const mid = (c, el, a, b) => {
+      const v = numAt(el, 'dash', 50);
+      return el && v !== a && v !== b && v !== 'null' && numAt(el, 'dash', 450) === b && numAt(el, 'dash', 1600) === a;
+    };
+    const t = byId(cases, 'tree-dash-word-tween');
+    const te = elRow(t, 0, 2, 'edge');
+    g('tree-edge-dash-word-follows-width', mid(t, te, '[4,2]', '[20,10]'), te && [numAt(te, 'dash', 50), numAt(te, 'dash', 450)].join(' '));
+    const l = byId(cases, 'lines-dash-word-tween');
+    const le = elRow(l, 0, 0, 'host');
+    g('lines-dash-word-follows-width', mid(l, le, '[1]', '[6]'), le && [numAt(le, 'dash', 50), numAt(le, 'dash', 450)].join(' '));
+    const p = byId(cases, 'parallel-dash-word-tween');
+    const pe = elRow(p, 0, 0, 'host');
+    g('parallel-dash-word-follows-width', mid(p, pe, '[4,2]', '[16,8]'), pe && [numAt(pe, 'dash', 50), numAt(pe, 'dash', 450)].join(' '));
+    // [R2-V]
+    const r = byId(cases, 'radar-dash-word-tween');
+    const re = elRow(r, 0, 0, 'host');
+    g('radar-dash-word-follows-width', mid(r, re, '[4,2]', '[20,10]'), re && [numAt(re, 'dash', 50), numAt(re, 'dash', 450)].join(' '));
+    const gr = byId(cases, 'graph-dash-word-tween');
+    const gn = elRow(gr, 0, 0, 'host');
+    const ge = elRow(gr, 0, 0, 'edge');
+    g('graph-dash-words-follow-width', mid(gr, gn, '[4,2]', '[20,10]') && ge && numAt(ge, 'dash', 850) !== '[1]'
+      && numAt(ge, 'dash', 850) !== '[4]' && JSON.parse(numAt(ge, 'dash', 1100))[0] > 3.99 && numAt(ge, 'dash', 1600) === '[1]',
+      gn && ge && [numAt(gn, 'dash', 50), numAt(gn, 'dash', 450), numAt(ge, 'dash', 850), numAt(ge, 'dash', 1100)].join(' '));
+    const tp = byId(cases, 'tree-polyline-dash-word-tween');
+    const tpe = elRow(tp, 0, 2, 'edge');
+    g('tree-polyline-dash-word-follows-width', mid(tp, tpe, '[4,2]', '[20,10]'),
+      tpe && [numAt(tpe, 'dash', 50), numAt(tpe, 'dash', 450)].join(' '));
+    const z = byId(cases, 'bar-dash-word-to-zero');
+    const ze = elRow(z, 0, 1, 'host');
+    g('dash-word-none-at-width-0', ze && numAt(ze, 'dash', 450) === 'null' && numAt(ze, 'dash', 1600) === '[8,4]'
+      && numAt(ze, 'dash', 50) !== 'null' && numAt(ze, 'dash', 50) !== '[8,4]',
+      ze && [numAt(ze, 'dash', 50), numAt(ze, 'dash', 450)].join(' '));
+  }
+  // [r2v]
+  {
+    const c = byId(cases, 'bar-state-solid');
+    const b0 = elRow(c, 0, 0, 'host');
+    const b1 = elRow(c, 0, 1, 'host');
+    g('state-solid-word-draws-solid', b0 && numAt(b0, 'dash', 450) === 'null' && numAt(b0, 'dash', 1600) === '[8,4]'
+      && b1 && numAt(b1, 'dash', 1000) === 'null', b0 && b1 && [numAt(b0, 'dash', 450), numAt(b0, 'dash', 1600), numAt(b1, 'dash', 1000)].join(' '));
+    const n = byId(cases, 'bar-state-dash-from-none');
+    const n0 = elRow(n, 0, 0, 'host');
+    g('state-dash-from-no-border', n0 && numAt(n0, 'dash', 1) === '[6,3]' && numAt(n0, 'dash', 450) === '[6,3]'
+      && numAt(n0, 'dash', 1600) === 'null', n0 && [numAt(n0, 'dash', 1), numAt(n0, 'dash', 450), numAt(n0, 'dash', 1600)].join(' '));
+  }
   // every case comes to rest
   for (const c of cases) g('settled-' + c.id, c.clips[c.clips.length - 1] === 0, c.id + ' ' + c.clips.join(','));
   return out;
@@ -973,7 +1405,7 @@ function guards(cases) {
 
 function generate() {
   const cases = [];
-  for (const c of GAUGE.concat(RADAR, MARKERS, LARGE, LABELS, PICTORIAL)) {
+  for (const c of GAUGE.concat(RADAR, MARKERS, LARGE, LABELS, PICTORIAL, R2B, R2I1, R2I3, R2I4, R2I5, R2I6, R2V)) {
     if (process.env.ORACLE_CASE && !process.env.ORACLE_CASE.split('|').some(p => c.id.startsWith(p))) continue;
     const r = runCase(c);
     cases.push({ id: c.id, note: c.note, option: c.option, events: r.events, published: r.published,

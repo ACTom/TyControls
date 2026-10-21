@@ -235,7 +235,14 @@ const TEXT = {
 // ============================================================================
 // the projections (the port registers the same arithmetic)
 // ============================================================================
+// [R2-J2] d3-geo 2.0.1's geoAlbersUsa, the gallery's map-usa-projection's
+// (tools/advchart-oracle/node_modules: `npm install` there; D3_GEO overrides);
+// the port's is examples/advchart/ualbersusa.pas
+const D3_GEO = process.env.D3_GEO || path.join(__dirname, 'node_modules', 'd3-geo');
+const ALBERS_USA = require(D3_GEO).geoAlbersUsa();
 const PROJ = {
+  albersUsa: p => ALBERS_USA(p),
+  albersUsaInv: p => ALBERS_USA.invert(p),
   // sinusoidal, y flipped (with a projection the view does not invert y)
   sinu: p => [p[0] * Math.cos(p[1] * Math.PI / 180), -p[1]],
   sinuInv: p => [p[0] / Math.cos(-p[1] * Math.PI / 180), -p[1]],
@@ -244,6 +251,8 @@ const PROJ = {
   // no point north of 45
   cut: p => (p[1] > 45 ? null : [p[0], -p[1]]),
   cutInv: p => [p[0], -p[1]],
+  // [r2v] no point north of 40
+  cut40: p => (p[1] > 40 ? null : [p[0], -p[1]]),
 };
 function withProjections(option) {
   const o = JSON.parse(JSON.stringify(option));
@@ -316,6 +325,14 @@ const CASES = [
       { map: 'world', projection: { project: '@cut', unproject: '@cutInv' }, left: 0, top: 300, width: 400, height: 300 },
       { map: 'world', projection: { project: '@sinu' }, left: 400, top: 300, width: 400, height: 300 },
     ] } },
+  { id: 'albers-usa', note: '[R2-J2] d3-geo geoAlbersUsa through the handles (map-usa-projection): the lower 48, Alaska and Hawaii in their insets, Puerto Rico in none (null: its points dropped)', maps: [M('usaplain', 'usa')],
+    option: { geo: { map: 'usaplain', projection: { project: '@albersUsa', unproject: '@albersUsaInv' } } } },
+  { id: 'albers-usa-label', note: '[R2-J3] the same with the labels shown: Puerto Rico has no centre, so its label stays at textConfig.position inside -- the middle of its (empty) path box through the group transform', maps: [M('usaplain', 'usa')],
+    option: { geo: { map: 'usaplain', label: { show: true }, left: 100, top: 50, width: 400, height: 250, zoom: 1.5,
+      projection: { project: '@albersUsa', unproject: '@albersUsaInv' } } } },
+  { id: 'cut-label', note: '[r2v] labels under a projection that drops every point north of 40 (the centre of Kyrgyzstan is at 41.5, its south edge at 39.2): a region whose centre is north of it and part of whose outline is south has no centre but a drawn box -- its inside label the middle of that box, both ways', maps: [M('world', 'world')],
+    option: { geo: { map: 'world', label: { show: true }, left: 0, top: 0, width: 600, height: 400,
+      projection: { project: '@cut40', unproject: '@cutInv' } } } },
   { id: 'center-zoom', note: 'center and zoom from the option; percentages of the data rect; scaleLimit clamping the zoom', maps: [M('usa', 'usa', USA_SPECIAL)],
     option: { geo: [
       { map: 'usa', center: [-100, 40], zoom: 2, left: 0, top: 0, width: 400, height: 300 },

@@ -28,8 +28,8 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Anim,
-     tyControls.AdvChart.AnimView, tyControls.AdvChart.Shape, tyControls.AdvChart.AnimOpt,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Anim,
+     tyControls.AdvanceChart.AnimView, tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.AnimOpt,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax,
      test.advchart.graphic;
@@ -70,8 +70,10 @@ type
     procedure ProbeGraph(ARec: TJSONObject);
     procedure ProbeTree(ARec: TJSONObject);
     procedure DrawnCentre(const AWhat: string; ASeries, AIndex: Integer; ALeaf: TJSONObject);
+    procedure DrawnOutline(const AWhat: string; const AEl: TTyChartElement; ALeaf: TJSONObject);
     procedure ProbePictorial(ARec: TJSONObject);
     procedure ProbeState(ARec: TJSONObject);
+    procedure ProbeLabels(ARec: TJSONObject);
     procedure CheckSample(const AProbes: TJSONArray; ARec: TJSONObject);
     procedure RunCase(ACase: TJSONObject);
     procedure RunGroup(const AGroup: string; AMin: Integer);
@@ -86,6 +88,7 @@ type
     procedure TestAnItemsArraySymbolSizeAsUpstream;
     procedure TestAStatesGradientTweensAsUpstream;
     procedure TestATreeToggleIsTheAction;
+    procedure TestARenderEndsTheLabelsFadesAsUpstream;
   end;
 
 implementation
@@ -395,6 +398,54 @@ begin
   end;
 end;
 
+{ [R2-H] AN EDGE'S END SYMBOL AS DRAWN, point by point: upstream's outline
+  (its built path through its global transform -- the vertices of an arrow,
+  a circle's centre and radius) against the frame's element (a polygon's
+  points from the first, a circle's centre and radius) }
+procedure TAdvChartAnimUpdate3OracleTest.DrawnOutline(const AWhat: string;
+  const AEl: TTyChartElement; ALeaf: TJSONObject);
+var
+  pts, arcs: TJSONArray;
+  n, k: Integer;
+  bx: TTyRectF;
+begin
+  pts := nil;
+  arcs := nil;
+  if ALeaf.Find('pts') is TJSONArray then pts := TJSONArray(ALeaf.Find('pts'));
+  if ALeaf.Find('arcs') is TJSONArray then arcs := TJSONArray(ALeaf.Find('arcs'));
+  if arcs <> nil then
+  begin
+    { a circle: the moveTo before its arc is the arc's start, not a vertex }
+    Inc(FCompared);
+    if AEl.Shape.Kind <> cskCircle then
+    begin
+      Bad(AWhat + ': upstream draws a circle, the port another shape');
+      Exit;
+    end;
+    bx := TyShapeBounds(AEl.Shape);
+    NearNum(AWhat + ' drawn cx', (bx.Left + bx.Right) / 2, arcs.Items[0], 1e-6);
+    NearNum(AWhat + ' drawn cy', (bx.Top + bx.Bottom) / 2, arcs.Items[1], 1e-6);
+    NearNum(AWhat + ' drawn r', (bx.Right - bx.Left) / 2, arcs.Items[2], 1e-6);
+    Exit;
+  end;
+  if pts = nil then Exit;
+  { the closing lineTo back to the first point is not a vertex of its own }
+  n := pts.Count div 2;
+  if (n > 1) and (pts.Items[0].AsString = pts.Items[2 * n - 2].AsString)
+    and (pts.Items[1].AsString = pts.Items[2 * n - 1].AsString) then Dec(n);
+  Inc(FCompared);
+  if Length(AEl.Shape.Points) <> n then
+  begin
+    Bad(Format('%s: %d points drawn, upstream %d', [AWhat, Length(AEl.Shape.Points), n]));
+    Exit;
+  end;
+  for k := 0 to n - 1 do
+  begin
+    NearNum(Format('%s drawn x%d', [AWhat, k]), AEl.Shape.Points[k].X, pts.Items[2 * k], 1e-6);
+    NearNum(Format('%s drawn y%d', [AWhat, k]), AEl.Shape.Points[k].Y, pts.Items[2 * k + 1], 1e-6);
+  end;
+end;
+
 { ---- a graph: the view group, the nodes, the ghosts, the edges ---- }
 procedure TAdvChartAnimUpdate3OracleTest.ProbeGraph(ARec: TJSONObject);
 var
@@ -545,6 +596,25 @@ begin
       begin
         NearNum(name + ' drawn x', el.Caption.X, leaf.Find('wx'), 1e-6);
         NearNum(name + ' drawn y', el.Caption.Y, leaf.Find('wy'), 1e-6);
+      end
+      { [R2-H] THE FRAME: an end symbol point by point, where the line has
+        drawn out (at percent 0 its scale is 0: nothing to draw) }
+      else if ((sub = 'from') or (sub = 'to')) and (leaf.Find('hidden') = nil)
+        and (ARec.Find('g' + IntToStr(s) + '/edge' + IntToStr(idx)) is TJSONObject)
+        and (WantNum(TJSONObject(ARec.Find('g' + IntToStr(s) + '/edge' + IntToStr(idx))).Find('percent')) > 0) then
+      begin
+        Inc(FCompared);
+        if sub = 'to' then
+        begin
+          if not FrameEl(s, idx, carGraphEdgeTo, el) then
+            Bad(name + ': upstream draws the end symbol, the frame has none')
+          else
+            DrawnOutline(name, el, leaf);
+        end
+        else if not FrameEl(s, idx, carGraphEdgeFrom, el) then
+          Bad(name + ': upstream draws the end symbol, the frame has none')
+        else
+          DrawnOutline(name, el, leaf);
       end;
     end;
   end;
@@ -891,6 +961,48 @@ begin
   end;
 end;
 
+{ [R2-H] every shown label of a data item: its opacity as the frame draws
+  it, against upstream's (the text's style.opacity) }
+procedure TAdvChartAnimUpdate3OracleTest.ProbeLabels(ARec: TJSONObject);
+var
+  i, k, s, idx, slash: Integer;
+  name: string;
+  leaf: TJSONObject;
+  l: TTyPaintList;
+  e: PTyChartElement;
+  found: Boolean;
+begin
+  l := FChart.Frame;
+  if (l = nil) or (l.Count = 0) then l := FChart.List;
+  for i := 0 to ARec.Count - 1 do
+  begin
+    name := ARec.Names[i];
+    if Copy(name, 1, 2) <> 'lb' then Continue;
+    slash := Pos('/', name);
+    s := StrToInt(Copy(name, 3, slash - 3));
+    idx := StrToInt(Copy(name, slash + 1, MaxInt));
+    leaf := TJSONObject(ARec.Items[i]);
+    found := False;
+    if l <> nil then
+      for k := 0 to l.Count - 1 do
+      begin
+        e := l.Ref(k);
+        if (e^.Anim.Role <> carLabel) or (e^.Caption.FontSizeLogical <= 0) or e^.Ignore
+          or (e^.Datum.SeriesIndex <> s) or (e^.Datum.DataIndex <> idx) then Continue;
+        found := True;
+        { at opacity 0 the frame keeps the label inkless (no text): drawn
+          at nothing }
+        if (e^.Caption.Text = '') and (Length(e^.Caption.RtPieces) = 0) then
+          NearNum(name + ' opacity', 0, leaf.Find('op'), 1e-9)
+        else
+          NearNum(name + ' opacity', e^.Style.Alpha, leaf.Find('op'), 1e-9);
+        Break;
+      end;
+    Inc(FCompared);
+    if not found then Bad(name + ': upstream draws the label, the frame has none');
+  end;
+end;
+
 procedure TAdvChartAnimUpdate3OracleTest.CheckSample(const AProbes: TJSONArray;
   ARec: TJSONObject);
 var i: Integer;
@@ -900,6 +1012,7 @@ begin
     else if AProbes.Strings[i] = 'tree' then ProbeTree(ARec)
     else if AProbes.Strings[i] = 'pictorial' then ProbePictorial(ARec)
     else if AProbes.Strings[i] = 'state' then ProbeState(ARec)
+    else if AProbes.Strings[i] = 'labels' then ProbeLabels(ARec)
     else Bad('a probe the test does not know: ' + AProbes.Strings[i]);
 end;
 
@@ -1026,6 +1139,13 @@ end;
 procedure TAdvChartAnimUpdate3OracleTest.TestAStatesGradientTweensAsUpstream;
 begin
   RunGroup('stateGrad', 300);
+end;
+
+{ [R2-H] a render while the enter's label fades run: a kept label is at
+  its rest at once (useStyle strands the fade), a new one fades in }
+procedure TAdvChartAnimUpdate3OracleTest.TestARenderEndsTheLabelsFadesAsUpstream;
+begin
+  RunGroup('labelFade', 60);
 end;
 
 { [fin] TreeToggle -- the public method, and a node's click -- is the

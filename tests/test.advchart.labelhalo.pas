@@ -17,8 +17,8 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Render, tyControls.AdvanceChart;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Render, tyControls.AdvanceChart;
 type
   THaloProbe = class(TTyAdvanceChart)
   public
@@ -44,6 +44,7 @@ type
     procedure TestATranslucentHaloDoesNotDarken;
     procedure TestADashedHaloLeavesGaps;
     procedure TestTheHaloReachesHalfItsWidthOut;
+    procedure TestThePhaseMovesTheDashes;
   end;
 
 implementation
@@ -206,7 +207,7 @@ var
   want: TJSONData;
   ok: Boolean;
   report, dash: string;
-  w: Double;
+  w, off, wantOff: Double;
 begin
   root := LoadJson(FixturePath);
   try
@@ -225,6 +226,7 @@ begin
         want := t.Find('pattern');
         dash := '';
         w := 0;
+        off := 0;
         if texts.Count = 1 then
         begin
           if not LabelEl('5', el) then
@@ -235,6 +237,7 @@ begin
           end;
           dash := el.Caption.StrokeType;
           w := el.Caption.StrokeWidthLogical;
+          off := el.Caption.StrokeDashOffset;
         end
         else
         begin
@@ -251,7 +254,20 @@ begin
             begin
               dash := el.Caption.RtPieces[q].LineDash;
               w := el.Caption.RtPieces[q].LineWidth;
+              off := el.Caption.RtPieces[q].LineDashOffset;
             end;
+        end;
+        { [R2-F] the phase: textBorderDashOffset as upstream hands it on
+          (none written is nought) }
+        wantOff := 0;
+        if (t.Find('lineDashOffset') <> nil) and (t.Find('lineDashOffset').JSONType = jtString) then
+          wantOff := FromHex(t.Strings['lineDashOffset']);
+        Inc(compared);
+        if off <> wantOff then
+        begin
+          Inc(bad);
+          report := report + LineEnding + Format('  %s "%s": phase %g here, upstream %g',
+            [cs.Strings['id'], t.Strings['text'], off, wantOff]);
         end;
         ok := TyNormalizeLineDash(dash, w, pat);
         Inc(compared);
@@ -281,7 +297,7 @@ begin
             end;
       end;
     end;
-    AssertTrue(Format('enough was compared (%d)', [compared]), compared >= 10);
+    AssertTrue(Format('enough was compared (%d)', [compared]), compared >= 30);
     AssertEquals(IntToStr(bad) + ' of ' + IntToStr(compared) + ' differ:' + report, 0, bad);
   finally
     root.Free;
@@ -335,6 +351,50 @@ begin
   wide := RedPixels(0, darkest);
   AssertTrue(Format('a wider stroke reaches further: %d px against %d', [wide, narrow]),
     wide > narrow * 1.5);
+end;
+
+{ [R2-F] textBorderDashOffset: the dashes start that far along every
+  contour. A whole period is the pattern unmoved, to the pixel; half of one
+  puts the dashes where the gaps were. }
+procedure TAdvChartLabelHaloTest.TestThePhaseMovesTheDashes;
+var
+  base: TBGRABitmap;
+  x, y, diff, same, darkest, n: Integer;
+  el: TTyChartElement;
+
+  function Differ: Integer;
+  var xx, yy: Integer;
+  begin
+    Result := 0;
+    for yy := 0 to cH - 1 do
+      for xx := 0 to cW - 1 do
+        if FBmp.GetPixel(xx, yy) <> base.GetPixel(xx, yy) then Inc(Result);
+  end;
+
+begin
+  { dashed against 4: [16, 8], a period of 24 }
+  Show(Format(cHaloBar, ['"textBorderColor": "#ff0000", "textBorderWidth": 4, "textBorderType": "dashed"']));
+  base := FBmp.Duplicate as TBGRABitmap;
+  try
+    n := RedPixels(0, darkest);
+    AssertTrue(Format('a dashed halo (%d px)', [n]), n > 20);
+    Show(Format(cHaloBar, ['"textBorderColor": "#ff0000", "textBorderWidth": 4, "textBorderType": "dashed",'
+      + ' "textBorderDashOffset": 24']));
+    AssertTrue('the label holds its phase', LabelEl('W8', el));
+    AssertEquals('the phase', 24.0, el.Caption.StrokeDashOffset);
+    same := Differ;
+    AssertEquals('a whole period draws the pattern unmoved', 0, same);
+    Show(Format(cHaloBar, ['"textBorderColor": "#ff0000", "textBorderWidth": 4, "textBorderType": "dashed",'
+      + ' "textBorderDashOffset": 12']));
+    diff := Differ;
+    AssertTrue(Format('half a period moves the dashes (%d px changed)', [diff]), diff > n div 2);
+    { and the ink is about the same: the dashes moved, not dropped }
+    x := RedPixels(0, darkest);
+    y := n;
+    AssertTrue(Format('as much ink: %d px against %d', [x, y]), Abs(x - y) < y div 3);
+  finally
+    base.Free;
+  end;
 end;
 
 initialization

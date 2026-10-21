@@ -16,10 +16,10 @@ interface
 uses tyControls.FontUnits, Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller, tyControls.AdvanceChart,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-     tyControls.AdvChart.Data, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Shape, tyControls.AdvChart.Color,
-     tyControls.AdvChart.Coord, tyControls.AdvChart.Calendar,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+     tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Color,
+     tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Calendar,
      tyControls.StrConsts;
 type
   TFixedMeasurer = class(TInterfacedObject, ITyTextMeasurer)

@@ -11,19 +11,19 @@ unit test.advchart.pictorial;
   answer: did the ink reach the canvas, and did the clip really cut it.
 
   THE ARITHMETIC IS TESTED WITHOUT A CHART because it is available without
-  one: AdvChart.Pictorial is a reader and three functions, and a glyph count
+  one: AdvanceChart.Pictorial is a reader and three functions, and a glyph count
   that has to be inferred from a bitmap is a count nobody can debug. }
 interface
 uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Scale,
-     tyControls.AdvChart.Coord, tyControls.AdvChart.Data,
-     tyControls.AdvChart.Shape, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Series, tyControls.AdvChart.Marks,
-     tyControls.AdvChart.Option, tyControls.AdvChart.Layout,
-     tyControls.AdvChart.BarLayout,
-     tyControls.AdvChart.Symbol, tyControls.AdvChart.Pictorial,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Scale,
+     tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Data,
+     tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Series, tyControls.AdvanceChart.Marks,
+     tyControls.AdvanceChart.Option, tyControls.AdvanceChart.Layout,
+     tyControls.AdvanceChart.BarLayout,
+     tyControls.AdvanceChart.Symbol, tyControls.AdvanceChart.Pictorial,
      tyControls.AdvanceChart, test.advancechart;
 type
   TAdvChartPictorialRuleTest = class(TTestCase)

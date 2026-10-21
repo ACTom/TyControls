@@ -1,7 +1,7 @@
 {
  "source": "apache/echarts-examples",
  "total": 273,
- "converted": 253,
+ "converted": 270,
  "entries": [
   {
    "id": "area-basic",
@@ -83,8 +83,11 @@
     "dataZoom",
     "toolbox"
    ],
-   "callbacks": 1,
-   "bytes": 499717
+   "callbacks": 0,
+   "handlers": [
+    "area-simple.position"
+   ],
+   "bytes": 499756
   },
   {
    "id": "area-stack-gradient",
@@ -149,8 +152,11 @@
     "dataZoom",
     "toolbox"
    ],
-   "callbacks": 1,
-   "bytes": 847545
+   "callbacks": 0,
+   "handlers": [
+    "area-time-axis.position"
+   ],
+   "bytes": 847587
   },
   {
    "id": "bar-animation-delay",
@@ -171,8 +177,13 @@
     "yAxis",
     "toolbox"
    ],
-   "callbacks": 3,
-   "bytes": 6273
+   "callbacks": 0,
+   "handlers": [
+    "bar-animation-delay.animationDelay",
+    "bar-animation-delay.animationDelay#2",
+    "bar-animation-delay.animationDelayUpdate"
+   ],
+   "bytes": 6465
   },
   {
    "id": "bar-background",
@@ -367,8 +378,8 @@
    "titleCN": "大数据量柱图",
    "category": "bar",
    "difficulty": 5,
-   "ok": false,
-   "reason": "converted, but 10.5 MB is too large to bundle",
+   "ok": true,
+   "reason": "",
    "seriesTypes": [
     "bar"
    ],
@@ -382,8 +393,22 @@
     "toolbox"
    ],
    "callbacks": 0,
-   "bytes": 11000676,
-   "tooBig": true
+   "bytes": 629,
+   "generated": {
+    "bytes": 20999304,
+    "fill": [
+     {
+      "path": "xAxis.data",
+      "count": 500000,
+      "hash": "a50eb8d1"
+     },
+     {
+      "path": "series.0.data",
+      "count": 500000,
+      "hash": "d3c266d9"
+     }
+    ]
+   }
   },
   {
    "id": "bar-multi-drilldown",
@@ -401,8 +426,11 @@
     "yAxis",
     "graphic"
    ],
-   "callbacks": 1,
-   "bytes": 761
+   "callbacks": 0,
+   "handlers": [
+    "bar-multi-drilldown.onclick"
+   ],
+   "bytes": 807
   },
   {
    "id": "bar-negative",
@@ -507,8 +535,11 @@
     "angleAxis",
     "radiusAxis"
    ],
-   "callbacks": 1,
-   "bytes": 1961
+   "callbacks": 0,
+   "handlers": [
+    "bar-polar-real-estate.formatter"
+   ],
+   "bytes": 2012
   },
   {
    "id": "bar-polar-stack-radial",
@@ -556,11 +587,125 @@
    "titleCN": "动态排序柱状图 - 人均收入",
    "category": "bar",
    "difficulty": 6,
-   "ok": false,
-   "reason": "CDN_PATH is not defined",
-   "seriesTypes": [],
-   "components": [],
-   "callbacks": 0
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar"
+   ],
+   "components": [
+    "grid",
+    "xAxis",
+    "yAxis",
+    "graphic",
+    "dataset"
+   ],
+   "callbacks": 0,
+   "handlers": [
+    "bar-race-country.formatter",
+    "bar-race-country.formatter#2",
+    "bar-race-country.color"
+   ],
+   "stubbedRemote": [
+    "emoji-flags@1.3.0/data.json"
+   ],
+   "bytes": 121907,
+   "sequence": {
+    "interval": 2000,
+    "loopTo": null,
+    "steps": [
+     {
+      "file": "bar-race-country.json"
+     },
+     {
+      "file": "bar-race-country.2.json"
+     },
+     {
+      "file": "bar-race-country.3.json"
+     },
+     {
+      "file": "bar-race-country.4.json"
+     },
+     {
+      "file": "bar-race-country.5.json"
+     },
+     {
+      "file": "bar-race-country.6.json"
+     },
+     {
+      "file": "bar-race-country.7.json"
+     },
+     {
+      "file": "bar-race-country.8.json"
+     },
+     {
+      "file": "bar-race-country.9.json"
+     },
+     {
+      "file": "bar-race-country.10.json"
+     },
+     {
+      "file": "bar-race-country.11.json"
+     },
+     {
+      "file": "bar-race-country.12.json"
+     },
+     {
+      "file": "bar-race-country.13.json"
+     },
+     {
+      "file": "bar-race-country.14.json"
+     },
+     {
+      "file": "bar-race-country.15.json"
+     },
+     {
+      "file": "bar-race-country.16.json"
+     },
+     {
+      "file": "bar-race-country.17.json"
+     },
+     {
+      "file": "bar-race-country.18.json"
+     },
+     {
+      "file": "bar-race-country.19.json"
+     },
+     {
+      "file": "bar-race-country.20.json"
+     },
+     {
+      "file": "bar-race-country.21.json"
+     },
+     {
+      "file": "bar-race-country.22.json"
+     },
+     {
+      "file": "bar-race-country.23.json"
+     },
+     {
+      "file": "bar-race-country.24.json"
+     },
+     {
+      "file": "bar-race-country.25.json"
+     },
+     {
+      "file": "bar-race-country.26.json"
+     },
+     {
+      "file": "bar-race-country.27.json"
+     },
+     {
+      "file": "bar-race-country.28.json"
+     },
+     {
+      "file": "bar-race-country.29.json"
+     },
+     {
+      "file": "bar-race-country.30.json"
+     }
+    ],
+    "live": true
+   }
   },
   {
    "id": "bar-race",
@@ -579,7 +724,104 @@
     "yAxis"
    ],
    "callbacks": 0,
-   "bytes": 616
+   "bytes": 3827,
+   "sequence": {
+    "interval": 3000,
+    "loopTo": null,
+    "steps": [
+     {
+      "file": "bar-race.json"
+     },
+     {
+      "file": "bar-race.2.json"
+     },
+     {
+      "file": "bar-race.3.json"
+     },
+     {
+      "file": "bar-race.4.json"
+     },
+     {
+      "file": "bar-race.5.json"
+     },
+     {
+      "file": "bar-race.6.json"
+     },
+     {
+      "file": "bar-race.7.json"
+     },
+     {
+      "file": "bar-race.8.json"
+     },
+     {
+      "file": "bar-race.9.json"
+     },
+     {
+      "file": "bar-race.10.json"
+     },
+     {
+      "file": "bar-race.11.json"
+     },
+     {
+      "file": "bar-race.12.json"
+     },
+     {
+      "file": "bar-race.13.json"
+     },
+     {
+      "file": "bar-race.14.json"
+     },
+     {
+      "file": "bar-race.15.json"
+     },
+     {
+      "file": "bar-race.16.json"
+     },
+     {
+      "file": "bar-race.17.json"
+     },
+     {
+      "file": "bar-race.18.json"
+     },
+     {
+      "file": "bar-race.19.json"
+     },
+     {
+      "file": "bar-race.20.json"
+     },
+     {
+      "file": "bar-race.21.json"
+     },
+     {
+      "file": "bar-race.22.json"
+     },
+     {
+      "file": "bar-race.23.json"
+     },
+     {
+      "file": "bar-race.24.json"
+     },
+     {
+      "file": "bar-race.25.json"
+     },
+     {
+      "file": "bar-race.26.json"
+     },
+     {
+      "file": "bar-race.27.json"
+     },
+     {
+      "file": "bar-race.28.json"
+     },
+     {
+      "file": "bar-race.29.json"
+     },
+     {
+      "file": "bar-race.30.json"
+     }
+    ],
+    "live": true
+   }
   },
   {
    "id": "bar-rich-text",
@@ -601,8 +843,11 @@
     "yAxis",
     "toolbox"
    ],
-   "callbacks": 1,
-   "bytes": 2571
+   "callbacks": 0,
+   "handlers": [
+    "bar-rich-text.formatter"
+   ],
+   "bytes": 2615
   },
   {
    "id": "bar-simple",
@@ -658,8 +903,15 @@
     "yAxis",
     "graphic"
    ],
-   "callbacks": 5,
-   "bytes": 15909
+   "callbacks": 0,
+   "handlers": [
+    "bar-stack-normalization-and-variation.formatter",
+    "bar-stack-normalization-and-variation.formatter#2",
+    "bar-stack-normalization-and-variation.formatter#3",
+    "bar-stack-normalization-and-variation.formatter#4",
+    "bar-stack-normalization-and-variation.formatter#5"
+   ],
+   "bytes": 16262
   },
   {
    "id": "bar-stack-normalization",
@@ -677,8 +929,15 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 5,
-   "bytes": 1807
+   "callbacks": 0,
+   "handlers": [
+    "bar-stack-normalization.formatter",
+    "bar-stack-normalization.formatter#2",
+    "bar-stack-normalization.formatter#3",
+    "bar-stack-normalization.formatter#4",
+    "bar-stack-normalization.formatter#5"
+   ],
+   "bytes": 2090
   },
   {
    "id": "bar-stack",
@@ -738,8 +997,11 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 1,
-   "bytes": 1035
+   "callbacks": 0,
+   "handlers": [
+    "bar-waterfall.formatter"
+   ],
+   "bytes": 1078
   },
   {
    "id": "bar-waterfall2",
@@ -760,8 +1022,11 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 1,
-   "bytes": 1433
+   "callbacks": 0,
+   "handlers": [
+    "bar-waterfall2.formatter"
+   ],
+   "bytes": 1477
   },
   {
    "id": "bar-y-category-stack",
@@ -869,8 +1134,11 @@
     "yAxis",
     "dataset"
    ],
-   "callbacks": 1,
-   "bytes": 2142
+   "callbacks": 0,
+   "handlers": [
+    "boxplot-light-velocity2.itemNameFormatter"
+   ],
+   "bytes": 2218
   },
   {
    "id": "boxplot-multi",
@@ -914,8 +1182,14 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 4,
-   "bytes": 4674
+   "callbacks": 0,
+   "handlers": [
+    "bubble-gradient.symbolSize",
+    "bubble-gradient.formatter",
+    "bubble-gradient.symbolSize#2",
+    "bubble-gradient.formatter#2"
+   ],
+   "bytes": 4870
   },
   {
    "id": "bump-chart",
@@ -958,8 +1232,12 @@
     "visualMap",
     "calendar"
    ],
-   "callbacks": 2,
-   "bytes": 62426
+   "callbacks": 0,
+   "handlers": [
+    "calendar-charts.symbolSize",
+    "calendar-charts.symbolSize#2"
+   ],
+   "bytes": 62524
   },
   {
    "id": "calendar-effectscatter",
@@ -979,8 +1257,14 @@
     "tooltip",
     "calendar"
    ],
-   "callbacks": 4,
-   "bytes": 33970
+   "callbacks": 0,
+   "handlers": [
+    "calendar-effectscatter.symbolSize",
+    "calendar-effectscatter.symbolSize#2",
+    "calendar-effectscatter.symbolSize#3",
+    "calendar-effectscatter.symbolSize#4"
+   ],
+   "bytes": 34196
   },
   {
    "id": "calendar-graph",
@@ -1058,8 +1342,13 @@
     "visualMap",
     "calendar"
    ],
-   "callbacks": 3,
-   "bytes": 64781
+   "callbacks": 0,
+   "handlers": [
+    "calendar-lunar.formatter",
+    "calendar-lunar.formatter#2",
+    "calendar-lunar.formatter#3"
+   ],
+   "bytes": 64922
   },
   {
    "id": "calendar-pie",
@@ -1078,8 +1367,11 @@
     "tooltip",
     "calendar"
    ],
-   "callbacks": 1,
-   "bytes": 12350
+   "callbacks": 0,
+   "handlers": [
+    "calendar-pie.formatter"
+   ],
+   "bytes": 12394
   },
   {
    "id": "calendar-simple",
@@ -1115,8 +1407,11 @@
     "visualMap",
     "calendar"
    ],
-   "callbacks": 1,
-   "bytes": 45616
+   "callbacks": 0,
+   "handlers": [
+    "calendar-vertical.formatter"
+   ],
+   "bytes": 45663
   },
   {
    "id": "candlestick-brush",
@@ -1143,8 +1438,11 @@
     "axisPointer",
     "brush"
    ],
-   "callbacks": 1,
-   "bytes": 722157
+   "callbacks": 0,
+   "handlers": [
+    "candlestick-brush.position"
+   ],
+   "bytes": 722202
   },
   {
    "id": "candlestick-large",
@@ -1152,8 +1450,8 @@
    "titleCN": "大数据量K线图",
    "category": "candlestick",
    "difficulty": 3,
-   "ok": false,
-   "reason": "converted, but 17.3 MB is too large to bundle",
+   "ok": true,
+   "reason": "",
    "seriesTypes": [
     "bar",
     "candlestick"
@@ -1170,8 +1468,17 @@
     "dataset"
    ],
    "callbacks": 0,
-   "bytes": 18089738,
-   "tooBig": true
+   "bytes": 2101,
+   "generated": {
+    "bytes": 21892043,
+    "fill": [
+     {
+      "path": "dataset.source",
+      "count": 200000,
+      "hash": "dd4686b3"
+     }
+    ]
+   }
   },
   {
    "id": "candlestick-sh-2015",
@@ -1217,8 +1524,12 @@
     "yAxis",
     "dataZoom"
    ],
-   "callbacks": 2,
-   "bytes": 16151
+   "callbacks": 0,
+   "handlers": [
+    "candlestick-sh.formatter",
+    "candlestick-sh.formatter#2"
+   ],
+   "bytes": 16255
   },
   {
    "id": "candlestick-simple",
@@ -1262,8 +1573,12 @@
     "graphic",
     "axisPointer"
    ],
-   "callbacks": 2,
-   "bytes": 15375
+   "callbacks": 0,
+   "handlers": [
+    "candlestick-touch.position",
+    "candlestick-touch.formatter"
+   ],
+   "bytes": 15472
   },
   {
    "id": "chord-lineStyle-color",
@@ -1356,8 +1671,14 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 4,
-   "bytes": 7798
+   "callbacks": 0,
+   "handlers": [
+    "confidence-band.formatter",
+    "confidence-band.formatter#2",
+    "confidence-band.formatter#3",
+    "confidence-band.formatter#4"
+   ],
+   "bytes": 7995
   },
   {
    "id": "custom-bar-trend",
@@ -1378,8 +1699,11 @@
     "yAxis",
     "dataZoom"
    ],
-   "callbacks": 1,
-   "bytes": 7660
+   "callbacks": 0,
+   "handlers": [
+    "custom-bar-trend"
+   ],
+   "bytes": 7808
   },
   {
    "id": "custom-calendar-icon",
@@ -1396,8 +1720,11 @@
     "tooltip",
     "calendar"
    ],
-   "callbacks": 1,
-   "bytes": 16210
+   "callbacks": 0,
+   "handlers": [
+    "custom-calendar-icon"
+   ],
+   "bytes": 16252
   },
   {
    "id": "custom-cartesian-polygon",
@@ -1417,8 +1744,11 @@
     "yAxis",
     "dataZoom"
    ],
-   "callbacks": 1,
-   "bytes": 695
+   "callbacks": 0,
+   "handlers": [
+    "custom-cartesian-polygon"
+   ],
+   "bytes": 742
   },
   {
    "id": "custom-error-bar",
@@ -1440,8 +1770,11 @@
     "yAxis",
     "dataZoom"
    ],
-   "callbacks": 1,
-   "bytes": 9833
+   "callbacks": 0,
+   "handlers": [
+    "custom-error-bar"
+   ],
+   "bytes": 9774
   },
   {
    "id": "custom-error-scatter",
@@ -1463,8 +1796,11 @@
     "yAxis",
     "dataZoom"
    ],
-   "callbacks": 1,
-   "bytes": 5157
+   "callbacks": 0,
+   "handlers": [
+    "custom-error-scatter"
+   ],
+   "bytes": 5199
   },
   {
    "id": "custom-ohlc",
@@ -1487,8 +1823,12 @@
     "toolbox",
     "axisPointer"
    ],
-   "callbacks": 2,
-   "bytes": 364505
+   "callbacks": 0,
+   "handlers": [
+    "custom-ohlc.position",
+    "custom-ohlc"
+   ],
+   "bytes": 364577
   },
   {
    "id": "custom-polar-heatmap",
@@ -1509,8 +1849,11 @@
     "angleAxis",
     "radiusAxis"
    ],
-   "callbacks": 1,
-   "bytes": 7099
+   "callbacks": 0,
+   "handlers": [
+    "custom-polar-heatmap"
+   ],
+   "bytes": 7141
   },
   {
    "id": "custom-profit",
@@ -1529,8 +1872,11 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 1,
-   "bytes": 1205
+   "callbacks": 0,
+   "handlers": [
+    "custom-profit"
+   ],
+   "bytes": 1240
   },
   {
    "id": "custom-wind",
@@ -1538,11 +1884,30 @@
    "titleCN": "使用自定义系列绘制风场",
    "category": "custom",
    "difficulty": 7,
-   "ok": false,
-   "reason": "loads its data at runtime (__ROOT__/data-gl/asset/data/winds.json)",
-   "seriesTypes": [],
-   "components": [],
-   "callbacks": 0
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "custom"
+   ],
+   "components": [
+    "geo",
+    "visualMap"
+   ],
+   "callbacks": 0,
+   "handlers": [
+    "custom-wind"
+   ],
+   "bytes": 784,
+   "generated": {
+    "bytes": 5564972,
+    "fill": [
+     {
+      "path": "series.data",
+      "count": 65160,
+      "hash": "27920122"
+     }
+    ]
+   }
   },
   {
    "id": "data-transform-filter",
@@ -1773,7 +2138,104 @@
     "toolbox"
    ],
    "callbacks": 0,
-   "bytes": 1449
+   "bytes": 17583,
+   "sequence": {
+    "interval": 2100,
+    "loopTo": null,
+    "steps": [
+     {
+      "file": "dynamic-data.json"
+     },
+     {
+      "file": "dynamic-data.2.json"
+     },
+     {
+      "file": "dynamic-data.3.json"
+     },
+     {
+      "file": "dynamic-data.4.json"
+     },
+     {
+      "file": "dynamic-data.5.json"
+     },
+     {
+      "file": "dynamic-data.6.json"
+     },
+     {
+      "file": "dynamic-data.7.json"
+     },
+     {
+      "file": "dynamic-data.8.json"
+     },
+     {
+      "file": "dynamic-data.9.json"
+     },
+     {
+      "file": "dynamic-data.10.json"
+     },
+     {
+      "file": "dynamic-data.11.json"
+     },
+     {
+      "file": "dynamic-data.12.json"
+     },
+     {
+      "file": "dynamic-data.13.json"
+     },
+     {
+      "file": "dynamic-data.14.json"
+     },
+     {
+      "file": "dynamic-data.15.json"
+     },
+     {
+      "file": "dynamic-data.16.json"
+     },
+     {
+      "file": "dynamic-data.17.json"
+     },
+     {
+      "file": "dynamic-data.18.json"
+     },
+     {
+      "file": "dynamic-data.19.json"
+     },
+     {
+      "file": "dynamic-data.20.json"
+     },
+     {
+      "file": "dynamic-data.21.json"
+     },
+     {
+      "file": "dynamic-data.22.json"
+     },
+     {
+      "file": "dynamic-data.23.json"
+     },
+     {
+      "file": "dynamic-data.24.json"
+     },
+     {
+      "file": "dynamic-data.25.json"
+     },
+     {
+      "file": "dynamic-data.26.json"
+     },
+     {
+      "file": "dynamic-data.27.json"
+     },
+     {
+      "file": "dynamic-data.28.json"
+     },
+     {
+      "file": "dynamic-data.29.json"
+     },
+     {
+      "file": "dynamic-data.30.json"
+     }
+    ],
+    "live": true
+   }
   },
   {
    "id": "dynamic-data2",
@@ -1792,8 +2254,36 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 1,
-   "bytes": 125185
+   "callbacks": 0,
+   "handlers": [
+    "dynamic-data2.formatter"
+   ],
+   "bytes": 738484,
+   "sequence": {
+    "interval": 1000,
+    "loopTo": null,
+    "steps": [
+     {
+      "file": "dynamic-data2.json"
+     },
+     {
+      "file": "dynamic-data2.2.json"
+     },
+     {
+      "file": "dynamic-data2.3.json"
+     },
+     {
+      "file": "dynamic-data2.4.json"
+     },
+     {
+      "file": "dynamic-data2.5.json"
+     },
+     {
+      "file": "dynamic-data2.6.json"
+     }
+    ],
+    "live": true
+   }
   },
   {
    "id": "effectScatter-bmap",
@@ -1811,8 +2301,12 @@
     "title",
     "tooltip"
    ],
-   "callbacks": 2,
-   "bytes": 21064
+   "callbacks": 0,
+   "handlers": [
+    "effectScatter-bmap.symbolSize",
+    "effectScatter-bmap.symbolSize#2"
+   ],
+   "bytes": 21168
   },
   {
    "id": "effectScatter-map",
@@ -1832,8 +2326,12 @@
     "tooltip",
     "geo"
    ],
-   "callbacks": 2,
-   "bytes": 19439
+   "callbacks": 0,
+   "handlers": [
+    "effectScatter-map.symbolSize",
+    "effectScatter-map.symbolSize#2"
+   ],
+   "bytes": 19541
   },
   {
    "id": "flame-graph",
@@ -1841,11 +2339,24 @@
    "titleCN": "火焰图",
    "category": "custom",
    "difficulty": 4,
-   "ok": false,
-   "reason": "structuredClone is not defined",
-   "seriesTypes": [],
-   "components": [],
-   "callbacks": 0
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "custom"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "xAxis",
+    "yAxis",
+    "toolbox"
+   ],
+   "callbacks": 0,
+   "handlers": [
+    "flame-graph.formatter",
+    "flame-graph"
+   ],
+   "bytes": 124226
   },
   {
    "id": "funnel-align",
@@ -1940,7 +2451,104 @@
    ],
    "components": [],
    "callbacks": 0,
-   "bytes": 2233
+   "bytes": 5615,
+   "sequence": {
+    "interval": 2000,
+    "loopTo": null,
+    "steps": [
+     {
+      "file": "gauge-barometer.json"
+     },
+     {
+      "file": "gauge-barometer.2.json"
+     },
+     {
+      "file": "gauge-barometer.3.json"
+     },
+     {
+      "file": "gauge-barometer.4.json"
+     },
+     {
+      "file": "gauge-barometer.5.json"
+     },
+     {
+      "file": "gauge-barometer.6.json"
+     },
+     {
+      "file": "gauge-barometer.7.json"
+     },
+     {
+      "file": "gauge-barometer.8.json"
+     },
+     {
+      "file": "gauge-barometer.9.json"
+     },
+     {
+      "file": "gauge-barometer.10.json"
+     },
+     {
+      "file": "gauge-barometer.11.json"
+     },
+     {
+      "file": "gauge-barometer.12.json"
+     },
+     {
+      "file": "gauge-barometer.13.json"
+     },
+     {
+      "file": "gauge-barometer.14.json"
+     },
+     {
+      "file": "gauge-barometer.15.json"
+     },
+     {
+      "file": "gauge-barometer.16.json"
+     },
+     {
+      "file": "gauge-barometer.17.json"
+     },
+     {
+      "file": "gauge-barometer.18.json"
+     },
+     {
+      "file": "gauge-barometer.19.json"
+     },
+     {
+      "file": "gauge-barometer.20.json"
+     },
+     {
+      "file": "gauge-barometer.21.json"
+     },
+     {
+      "file": "gauge-barometer.22.json"
+     },
+     {
+      "file": "gauge-barometer.23.json"
+     },
+     {
+      "file": "gauge-barometer.24.json"
+     },
+     {
+      "file": "gauge-barometer.25.json"
+     },
+     {
+      "file": "gauge-barometer.26.json"
+     },
+     {
+      "file": "gauge-barometer.27.json"
+     },
+     {
+      "file": "gauge-barometer.28.json"
+     },
+     {
+      "file": "gauge-barometer.29.json"
+     },
+     {
+      "file": "gauge-barometer.30.json"
+     }
+    ],
+    "live": true
+   }
   },
   {
    "id": "gauge-car",
@@ -1957,8 +2565,12 @@
     "tooltip",
     "toolbox"
    ],
-   "callbacks": 2,
-   "bytes": 12524
+   "callbacks": 0,
+   "handlers": [
+    "gauge-car.formatter",
+    "gauge-car.formatter#2"
+   ],
+   "bytes": 12608
   },
   {
    "id": "gauge-clock",
@@ -1972,8 +2584,11 @@
     "gauge"
    ],
    "components": [],
-   "callbacks": 1,
-   "bytes": 5375
+   "callbacks": 0,
+   "handlers": [
+    "gauge-clock.formatter"
+   ],
+   "bytes": 5418
   },
   {
    "id": "gauge-grade",
@@ -1987,8 +2602,12 @@
     "gauge"
    ],
    "components": [],
-   "callbacks": 2,
-   "bytes": 1307
+   "callbacks": 0,
+   "handlers": [
+    "gauge-grade.formatter",
+    "gauge-grade.formatter#2"
+   ],
+   "bytes": 1395
   },
   {
    "id": "gauge-multi-title",
@@ -2003,7 +2622,104 @@
    ],
    "components": [],
    "callbacks": 0,
-   "bytes": 1446
+   "bytes": 22071,
+   "sequence": {
+    "interval": 2000,
+    "loopTo": null,
+    "steps": [
+     {
+      "file": "gauge-multi-title.json"
+     },
+     {
+      "file": "gauge-multi-title.2.json"
+     },
+     {
+      "file": "gauge-multi-title.3.json"
+     },
+     {
+      "file": "gauge-multi-title.4.json"
+     },
+     {
+      "file": "gauge-multi-title.5.json"
+     },
+     {
+      "file": "gauge-multi-title.6.json"
+     },
+     {
+      "file": "gauge-multi-title.7.json"
+     },
+     {
+      "file": "gauge-multi-title.8.json"
+     },
+     {
+      "file": "gauge-multi-title.9.json"
+     },
+     {
+      "file": "gauge-multi-title.10.json"
+     },
+     {
+      "file": "gauge-multi-title.11.json"
+     },
+     {
+      "file": "gauge-multi-title.12.json"
+     },
+     {
+      "file": "gauge-multi-title.13.json"
+     },
+     {
+      "file": "gauge-multi-title.14.json"
+     },
+     {
+      "file": "gauge-multi-title.15.json"
+     },
+     {
+      "file": "gauge-multi-title.16.json"
+     },
+     {
+      "file": "gauge-multi-title.17.json"
+     },
+     {
+      "file": "gauge-multi-title.18.json"
+     },
+     {
+      "file": "gauge-multi-title.19.json"
+     },
+     {
+      "file": "gauge-multi-title.20.json"
+     },
+     {
+      "file": "gauge-multi-title.21.json"
+     },
+     {
+      "file": "gauge-multi-title.22.json"
+     },
+     {
+      "file": "gauge-multi-title.23.json"
+     },
+     {
+      "file": "gauge-multi-title.24.json"
+     },
+     {
+      "file": "gauge-multi-title.25.json"
+     },
+     {
+      "file": "gauge-multi-title.26.json"
+     },
+     {
+      "file": "gauge-multi-title.27.json"
+     },
+     {
+      "file": "gauge-multi-title.28.json"
+     },
+     {
+      "file": "gauge-multi-title.29.json"
+     },
+     {
+      "file": "gauge-multi-title.30.json"
+     }
+    ],
+    "live": true
+   }
   },
   {
    "id": "gauge-progress",
@@ -2033,7 +2749,104 @@
    ],
    "components": [],
    "callbacks": 0,
-   "bytes": 1564
+   "bytes": 25872,
+   "sequence": {
+    "interval": 2000,
+    "loopTo": null,
+    "steps": [
+     {
+      "file": "gauge-ring.json"
+     },
+     {
+      "file": "gauge-ring.2.json"
+     },
+     {
+      "file": "gauge-ring.3.json"
+     },
+     {
+      "file": "gauge-ring.4.json"
+     },
+     {
+      "file": "gauge-ring.5.json"
+     },
+     {
+      "file": "gauge-ring.6.json"
+     },
+     {
+      "file": "gauge-ring.7.json"
+     },
+     {
+      "file": "gauge-ring.8.json"
+     },
+     {
+      "file": "gauge-ring.9.json"
+     },
+     {
+      "file": "gauge-ring.10.json"
+     },
+     {
+      "file": "gauge-ring.11.json"
+     },
+     {
+      "file": "gauge-ring.12.json"
+     },
+     {
+      "file": "gauge-ring.13.json"
+     },
+     {
+      "file": "gauge-ring.14.json"
+     },
+     {
+      "file": "gauge-ring.15.json"
+     },
+     {
+      "file": "gauge-ring.16.json"
+     },
+     {
+      "file": "gauge-ring.17.json"
+     },
+     {
+      "file": "gauge-ring.18.json"
+     },
+     {
+      "file": "gauge-ring.19.json"
+     },
+     {
+      "file": "gauge-ring.20.json"
+     },
+     {
+      "file": "gauge-ring.21.json"
+     },
+     {
+      "file": "gauge-ring.22.json"
+     },
+     {
+      "file": "gauge-ring.23.json"
+     },
+     {
+      "file": "gauge-ring.24.json"
+     },
+     {
+      "file": "gauge-ring.25.json"
+     },
+     {
+      "file": "gauge-ring.26.json"
+     },
+     {
+      "file": "gauge-ring.27.json"
+     },
+     {
+      "file": "gauge-ring.28.json"
+     },
+     {
+      "file": "gauge-ring.29.json"
+     },
+     {
+      "file": "gauge-ring.30.json"
+     }
+    ],
+    "live": true
+   }
   },
   {
    "id": "gauge-simple",
@@ -2064,8 +2877,11 @@
     "gauge"
    ],
    "components": [],
-   "callbacks": 1,
-   "bytes": 1997
+   "callbacks": 0,
+   "handlers": [
+    "gauge-speed.formatter"
+   ],
+   "bytes": 2040
   },
   {
    "id": "gauge-stage",
@@ -2080,7 +2896,104 @@
    ],
    "components": [],
    "callbacks": 0,
-   "bytes": 828
+   "bytes": 3050,
+   "sequence": {
+    "interval": 2000,
+    "loopTo": null,
+    "steps": [
+     {
+      "file": "gauge-stage.json"
+     },
+     {
+      "file": "gauge-stage.2.json"
+     },
+     {
+      "file": "gauge-stage.3.json"
+     },
+     {
+      "file": "gauge-stage.4.json"
+     },
+     {
+      "file": "gauge-stage.5.json"
+     },
+     {
+      "file": "gauge-stage.6.json"
+     },
+     {
+      "file": "gauge-stage.7.json"
+     },
+     {
+      "file": "gauge-stage.8.json"
+     },
+     {
+      "file": "gauge-stage.9.json"
+     },
+     {
+      "file": "gauge-stage.10.json"
+     },
+     {
+      "file": "gauge-stage.11.json"
+     },
+     {
+      "file": "gauge-stage.12.json"
+     },
+     {
+      "file": "gauge-stage.13.json"
+     },
+     {
+      "file": "gauge-stage.14.json"
+     },
+     {
+      "file": "gauge-stage.15.json"
+     },
+     {
+      "file": "gauge-stage.16.json"
+     },
+     {
+      "file": "gauge-stage.17.json"
+     },
+     {
+      "file": "gauge-stage.18.json"
+     },
+     {
+      "file": "gauge-stage.19.json"
+     },
+     {
+      "file": "gauge-stage.20.json"
+     },
+     {
+      "file": "gauge-stage.21.json"
+     },
+     {
+      "file": "gauge-stage.22.json"
+     },
+     {
+      "file": "gauge-stage.23.json"
+     },
+     {
+      "file": "gauge-stage.24.json"
+     },
+     {
+      "file": "gauge-stage.25.json"
+     },
+     {
+      "file": "gauge-stage.26.json"
+     },
+     {
+      "file": "gauge-stage.27.json"
+     },
+     {
+      "file": "gauge-stage.28.json"
+     },
+     {
+      "file": "gauge-stage.29.json"
+     },
+     {
+      "file": "gauge-stage.30.json"
+     }
+    ],
+    "live": true
+   }
   },
   {
    "id": "gauge-temperature",
@@ -2095,7 +3008,104 @@
    ],
    "components": [],
    "callbacks": 0,
-   "bytes": 1653
+   "bytes": 5577,
+   "sequence": {
+    "interval": 2000,
+    "loopTo": null,
+    "steps": [
+     {
+      "file": "gauge-temperature.json"
+     },
+     {
+      "file": "gauge-temperature.2.json"
+     },
+     {
+      "file": "gauge-temperature.3.json"
+     },
+     {
+      "file": "gauge-temperature.4.json"
+     },
+     {
+      "file": "gauge-temperature.5.json"
+     },
+     {
+      "file": "gauge-temperature.6.json"
+     },
+     {
+      "file": "gauge-temperature.7.json"
+     },
+     {
+      "file": "gauge-temperature.8.json"
+     },
+     {
+      "file": "gauge-temperature.9.json"
+     },
+     {
+      "file": "gauge-temperature.10.json"
+     },
+     {
+      "file": "gauge-temperature.11.json"
+     },
+     {
+      "file": "gauge-temperature.12.json"
+     },
+     {
+      "file": "gauge-temperature.13.json"
+     },
+     {
+      "file": "gauge-temperature.14.json"
+     },
+     {
+      "file": "gauge-temperature.15.json"
+     },
+     {
+      "file": "gauge-temperature.16.json"
+     },
+     {
+      "file": "gauge-temperature.17.json"
+     },
+     {
+      "file": "gauge-temperature.18.json"
+     },
+     {
+      "file": "gauge-temperature.19.json"
+     },
+     {
+      "file": "gauge-temperature.20.json"
+     },
+     {
+      "file": "gauge-temperature.21.json"
+     },
+     {
+      "file": "gauge-temperature.22.json"
+     },
+     {
+      "file": "gauge-temperature.23.json"
+     },
+     {
+      "file": "gauge-temperature.24.json"
+     },
+     {
+      "file": "gauge-temperature.25.json"
+     },
+     {
+      "file": "gauge-temperature.26.json"
+     },
+     {
+      "file": "gauge-temperature.27.json"
+     },
+     {
+      "file": "gauge-temperature.28.json"
+     },
+     {
+      "file": "gauge-temperature.29.json"
+     },
+     {
+      "file": "gauge-temperature.30.json"
+     }
+    ],
+    "live": true
+   }
   },
   {
    "id": "gauge",
@@ -2202,8 +3212,11 @@
     "tooltip",
     "geo"
    ],
-   "callbacks": 1,
-   "bytes": 604
+   "callbacks": 0,
+   "handlers": [
+    "geo-svg-custom-effect"
+   ],
+   "bytes": 646
   },
   {
    "id": "geo-svg-lines",
@@ -2242,8 +3255,12 @@
     "yAxis",
     "geo"
    ],
-   "callbacks": 2,
-   "bytes": 2544
+   "callbacks": 0,
+   "handlers": [
+    "geo-svg-map.formatter",
+    "geo-svg-map.formatter#2"
+   ],
+   "bytes": 2631
   },
   {
    "id": "geo-svg-scatter-simple",
@@ -2260,8 +3277,11 @@
     "tooltip",
     "geo"
    ],
-   "callbacks": 1,
-   "bytes": 675
+   "callbacks": 0,
+   "handlers": [
+    "geo-svg-scatter-simple.symbolSize"
+   ],
+   "bytes": 729
   },
   {
    "id": "geo-svg-traffic",
@@ -2313,7 +3333,104 @@
    ],
    "components": [],
    "callbacks": 0,
-   "bytes": 289
+   "bytes": 33522,
+   "sequence": {
+    "interval": 200,
+    "loopTo": null,
+    "steps": [
+     {
+      "file": "graph-force-dynamic.json"
+     },
+     {
+      "file": "graph-force-dynamic.2.json"
+     },
+     {
+      "file": "graph-force-dynamic.3.json"
+     },
+     {
+      "file": "graph-force-dynamic.4.json"
+     },
+     {
+      "file": "graph-force-dynamic.5.json"
+     },
+     {
+      "file": "graph-force-dynamic.6.json"
+     },
+     {
+      "file": "graph-force-dynamic.7.json"
+     },
+     {
+      "file": "graph-force-dynamic.8.json"
+     },
+     {
+      "file": "graph-force-dynamic.9.json"
+     },
+     {
+      "file": "graph-force-dynamic.10.json"
+     },
+     {
+      "file": "graph-force-dynamic.11.json"
+     },
+     {
+      "file": "graph-force-dynamic.12.json"
+     },
+     {
+      "file": "graph-force-dynamic.13.json"
+     },
+     {
+      "file": "graph-force-dynamic.14.json"
+     },
+     {
+      "file": "graph-force-dynamic.15.json"
+     },
+     {
+      "file": "graph-force-dynamic.16.json"
+     },
+     {
+      "file": "graph-force-dynamic.17.json"
+     },
+     {
+      "file": "graph-force-dynamic.18.json"
+     },
+     {
+      "file": "graph-force-dynamic.19.json"
+     },
+     {
+      "file": "graph-force-dynamic.20.json"
+     },
+     {
+      "file": "graph-force-dynamic.21.json"
+     },
+     {
+      "file": "graph-force-dynamic.22.json"
+     },
+     {
+      "file": "graph-force-dynamic.23.json"
+     },
+     {
+      "file": "graph-force-dynamic.24.json"
+     },
+     {
+      "file": "graph-force-dynamic.25.json"
+     },
+     {
+      "file": "graph-force-dynamic.26.json"
+     },
+     {
+      "file": "graph-force-dynamic.27.json"
+     },
+     {
+      "file": "graph-force-dynamic.28.json"
+     },
+     {
+      "file": "graph-force-dynamic.29.json"
+     },
+     {
+      "file": "graph-force-dynamic.30.json"
+     }
+    ],
+    "live": true
+   }
   },
   {
    "id": "graph-force",
@@ -2407,8 +3524,29 @@
     "visualMap",
     "toolbox"
    ],
-   "callbacks": 19,
-   "bytes": 494092
+   "callbacks": 0,
+   "handlers": [
+    "graph-life-expectancy.animationDelay",
+    "graph-life-expectancy.animationDelay#2",
+    "graph-life-expectancy.animationDelay#3",
+    "graph-life-expectancy.animationDelay#4",
+    "graph-life-expectancy.animationDelay#5",
+    "graph-life-expectancy.animationDelay#6",
+    "graph-life-expectancy.animationDelay#7",
+    "graph-life-expectancy.animationDelay#8",
+    "graph-life-expectancy.animationDelay#9",
+    "graph-life-expectancy.animationDelay#10",
+    "graph-life-expectancy.animationDelay#11",
+    "graph-life-expectancy.animationDelay#12",
+    "graph-life-expectancy.animationDelay#13",
+    "graph-life-expectancy.animationDelay#14",
+    "graph-life-expectancy.animationDelay#15",
+    "graph-life-expectancy.animationDelay#16",
+    "graph-life-expectancy.animationDelay#17",
+    "graph-life-expectancy.animationDelay#18",
+    "graph-life-expectancy.animationDelay#19"
+   ],
+   "bytes": 495316
   },
   {
    "id": "graph-npm",
@@ -2563,8 +3701,8 @@
    "titleCN": "热力图 - 颜色的离散映射",
    "category": "heatmap",
    "difficulty": 2,
-   "ok": false,
-   "reason": "converted, but 1.1 MB is too large to bundle",
+   "ok": true,
+   "reason": "",
    "seriesTypes": [
     "heatmap"
    ],
@@ -2576,8 +3714,27 @@
     "visualMap"
    ],
    "callbacks": 0,
-   "bytes": 1121097,
-   "tooBig": true
+   "bytes": 763,
+   "generated": {
+    "bytes": 1117637,
+    "fill": [
+     {
+      "path": "xAxis.data",
+      "count": 201,
+      "hash": "6aa3f8c4"
+     },
+     {
+      "path": "yAxis.data",
+      "count": 100,
+      "hash": "5ec80ddb"
+     },
+     {
+      "path": "series.0.data",
+      "count": 20301,
+      "hash": "c79561d7"
+     }
+    ]
+   }
   },
   {
    "id": "heatmap-large",
@@ -2585,8 +3742,8 @@
    "titleCN": "热力图 - 2w 数据",
    "category": "heatmap",
    "difficulty": 2,
-   "ok": false,
-   "reason": "converted, but 1.1 MB is too large to bundle",
+   "ok": true,
+   "reason": "",
    "seriesTypes": [
     "heatmap"
    ],
@@ -2597,8 +3754,27 @@
     "visualMap"
    ],
    "callbacks": 0,
-   "bytes": 1119214,
-   "tooBig": true
+   "bytes": 638,
+   "generated": {
+    "bytes": 1117512,
+    "fill": [
+     {
+      "path": "xAxis.data",
+      "count": 201,
+      "hash": "6aa3f8c4"
+     },
+     {
+      "path": "yAxis.data",
+      "count": 100,
+      "hash": "5ec80ddb"
+     },
+     {
+      "path": "series.0.data",
+      "count": 20301,
+      "hash": "c79561d7"
+     }
+    ]
+   }
   },
   {
    "id": "intraday-breaks-1",
@@ -2619,8 +3795,11 @@
     "yAxis",
     "dataZoom"
    ],
-   "callbacks": 1,
-   "bytes": 73229
+   "callbacks": 0,
+   "handlers": [
+    "intraday-breaks-1.formatter"
+   ],
+   "bytes": 73278
   },
   {
    "id": "intraday-breaks-2",
@@ -2640,8 +3819,11 @@
     "yAxis",
     "dataZoom"
    ],
-   "callbacks": 1,
-   "bytes": 11909
+   "callbacks": 0,
+   "handlers": [
+    "intraday-breaks-2.formatter"
+   ],
+   "bytes": 11958
   },
   {
    "id": "line-aqi",
@@ -2686,8 +3868,11 @@
     "yAxis",
     "dataZoom"
    ],
-   "callbacks": 1,
-   "bytes": 957
+   "callbacks": 0,
+   "handlers": [
+    "line-draggable.formatter"
+   ],
+   "bytes": 1001
   },
   {
    "id": "line-easing",
@@ -2894,8 +4079,11 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 1,
-   "bytes": 629
+   "callbacks": 0,
+   "handlers": [
+    "line-pen.formatter"
+   ],
+   "bytes": 668
   },
   {
    "id": "line-polar",
@@ -2947,11 +4135,31 @@
    "titleCN": "动态排序折线图",
    "category": "line",
    "difficulty": 5,
-   "ok": false,
-   "reason": "echarts.util.each is not a function",
-   "seriesTypes": [],
-   "components": [],
-   "callbacks": 0
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "line"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataset"
+   ],
+   "callbacks": 0,
+   "handlers": [
+    "line-race.formatter",
+    "line-race.formatter#2",
+    "line-race.formatter#3",
+    "line-race.formatter#4",
+    "line-race.formatter#5",
+    "line-race.formatter#6",
+    "line-race.formatter#7",
+    "line-race.formatter#8"
+   ],
+   "bytes": 126815
   },
   {
    "id": "line-sections",
@@ -3096,8 +4304,12 @@
     "dataZoom",
     "toolbox"
    ],
-   "callbacks": 2,
-   "bytes": 2778
+   "callbacks": 0,
+   "handlers": [
+    "line-tooltip-touch.position",
+    "line-tooltip-touch.formatter"
+   ],
+   "bytes": 2874
   },
   {
    "id": "line-y-category",
@@ -3126,8 +4338,8 @@
    "titleCN": "65k+ 飞机航线",
    "category": "'map, lines'",
    "difficulty": 0,
-   "ok": false,
-   "reason": "converted, but 6.8 MB is too large to bundle",
+   "ok": true,
+   "reason": "",
    "seriesTypes": [
     "lines"
    ],
@@ -3136,9 +4348,16 @@
     "tooltip",
     "geo"
    ],
-   "callbacks": 1,
-   "bytes": 7087381,
-   "tooBig": true
+   "callbacks": 0,
+   "handlers": [
+    "lines-airline.formatter"
+   ],
+   "carried": [
+    "lines-airline-tables.json.gz"
+   ],
+   "bytes": 7087425,
+   "file": "lines-airline.json.gz",
+   "gzBytes": 483423
   },
   {
    "id": "lines-bmap-bus",
@@ -3147,7 +4366,7 @@
    "category": "'map, lines'",
    "difficulty": 0,
    "ok": false,
-   "reason": "converted, but 4.5 MB is too large to bundle",
+   "reason": "converted, but 4.5 MB is too large to bundle; it also draws on Baidu Map (bmap), which needs the online Baidu Maps API",
    "seriesTypes": [
     "lines"
    ],
@@ -3163,13 +4382,13 @@
    "category": "'map, lines'",
    "difficulty": 0,
    "ok": false,
-   "reason": "converted, but 9.2 MB is too large to bundle",
+   "reason": "converted, but 9.3 MB is too large to bundle; it also draws on Baidu Map (bmap), which needs the online Baidu Maps API",
    "seriesTypes": [
     "lines"
    ],
    "components": [],
    "callbacks": 0,
-   "bytes": 9699016,
+   "bytes": 9732730,
    "tooBig": true
   },
   {
@@ -3271,11 +4490,18 @@
    "titleCN": "在地图上显示饼图",
    "category": "map, pie",
    "difficulty": 5,
-   "ok": false,
-   "reason": "Cannot read properties of undefined (reading 'split')",
-   "seriesTypes": [],
-   "components": [],
-   "callbacks": 0
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "pie"
+   ],
+   "components": [
+    "legend",
+    "tooltip",
+    "geo"
+   ],
+   "callbacks": 0,
+   "bytes": 2402
   },
   {
    "id": "map-usa-projection",
@@ -3283,11 +4509,27 @@
    "titleCN": "自定义地图投影",
    "category": "map",
    "difficulty": 0,
-   "ok": false,
-   "reason": "CDN_PATH is not defined",
-   "seriesTypes": [],
-   "components": [],
-   "callbacks": 0
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "map"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "visualMap",
+    "toolbox"
+   ],
+   "callbacks": 0,
+   "handlers": [
+    "map-usa-projection.project",
+    "map-usa-projection.unproject"
+   ],
+   "stubbedRemote": [
+    "d3-array@2.8.0/dist/d3-array.js",
+    "d3-geo@2.0.1/dist/d3-geo.js"
+   ],
+   "bytes": 4225
   },
   {
    "id": "map-usa",
@@ -3324,8 +4566,12 @@
     "graphic",
     "matrix"
    ],
-   "callbacks": 2,
-   "bytes": 1379
+   "callbacks": 0,
+   "handlers": [
+    "matrix-confusion.formatter",
+    "matrix-confusion"
+   ],
+   "bytes": 1461
   },
   {
    "id": "matrix-correlation-heatmap",
@@ -3342,8 +4588,11 @@
     "visualMap",
     "matrix"
    ],
-   "callbacks": 1,
-   "bytes": 2719
+   "callbacks": 0,
+   "handlers": [
+    "matrix-correlation-heatmap.formatter"
+   ],
+   "bytes": 2776
   },
   {
    "id": "matrix-correlation-scatter",
@@ -3360,8 +4609,11 @@
     "visualMap",
     "matrix"
    ],
-   "callbacks": 1,
-   "bytes": 4466
+   "callbacks": 0,
+   "handlers": [
+    "matrix-correlation-scatter.formatter"
+   ],
+   "bytes": 4523
   },
   {
    "id": "matrix-covariance",
@@ -3379,8 +4631,11 @@
     "visualMap",
     "matrix"
    ],
-   "callbacks": 1,
-   "bytes": 34716
+   "callbacks": 0,
+   "handlers": [
+    "matrix-covariance.valueFormatter"
+   ],
+   "bytes": 34727
   },
   {
    "id": "matrix-graph",
@@ -3398,8 +4653,11 @@
     "graphic",
     "matrix"
    ],
-   "callbacks": 1,
-   "bytes": 2299
+   "callbacks": 0,
+   "handlers": [
+    "matrix-graph.formatter"
+   ],
+   "bytes": 2343
   },
   {
    "id": "matrix-mbti",
@@ -3419,8 +4677,12 @@
     "visualMap",
     "matrix"
    ],
-   "callbacks": 2,
-   "bytes": 171448
+   "callbacks": 0,
+   "handlers": [
+    "matrix-mbti.formatter",
+    "matrix-mbti.formatter#2"
+   ],
+   "bytes": 171531
   },
   {
    "id": "matrix-mini-bar-data-collection",
@@ -3437,8 +4699,13 @@
     "dataset",
     "matrix"
    ],
-   "callbacks": 3,
-   "bytes": 1442
+   "callbacks": 0,
+   "handlers": [
+    "matrix-mini-bar-data-collection",
+    "matrix-mini-bar-data-collection#2",
+    "matrix-mini-bar-data-collection#3"
+   ],
+   "bytes": 1605
   },
   {
    "id": "matrix-mini-bar-geo",
@@ -3477,8 +4744,12 @@
    "components": [
     "matrix"
    ],
-   "callbacks": 2,
-   "bytes": 8327
+   "callbacks": 0,
+   "handlers": [
+    "matrix-periodic-table.formatter",
+    "matrix-periodic-table"
+   ],
+   "bytes": 8421
   },
   {
    "id": "matrix-pie",
@@ -3559,8 +4830,13 @@
     "yAxis",
     "toolbox"
    ],
-   "callbacks": 3,
-   "bytes": 1631
+   "callbacks": 0,
+   "handlers": [
+    "mix-line-bar.valueFormatter",
+    "mix-line-bar.valueFormatter#2",
+    "mix-line-bar.valueFormatter#3"
+   ],
+   "bytes": 1806
   },
   {
    "id": "mix-zoom-on-value",
@@ -3582,8 +4858,11 @@
     "dataZoom",
     "toolbox"
    ],
-   "callbacks": 1,
-   "bytes": 34715
+   "callbacks": 0,
+   "handlers": [
+    "mix-zoom-on-value.formatter"
+   ],
+   "bytes": 34767
   },
   {
    "id": "multiple-x-axis",
@@ -3603,8 +4882,12 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 2,
-   "bytes": 1603
+   "callbacks": 0,
+   "handlers": [
+    "multiple-x-axis.formatter",
+    "multiple-x-axis.formatter#2"
+   ],
+   "bytes": 1709
   },
   {
    "id": "multiple-y-axis",
@@ -3655,8 +4938,8 @@
    "titleCN": "营养结构（平行坐标）",
    "category": "parallel",
    "difficulty": 4,
-   "ok": false,
-   "reason": "converted, but 1.9 MB is too large to bundle",
+   "ok": true,
+   "reason": "",
    "seriesTypes": [
     "parallel"
    ],
@@ -3667,8 +4950,9 @@
     "parallel"
    ],
    "callbacks": 0,
-   "bytes": 2032593,
-   "tooBig": true
+   "bytes": 2032866,
+   "file": "parallel-nutrients.json.gz",
+   "gzBytes": 309483
   },
   {
    "id": "parallel-simple",
@@ -3705,8 +4989,16 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 6,
-   "bytes": 48229,
+   "callbacks": 0,
+   "handlers": [
+    "pictorialBar-bar-transition.delay",
+    "pictorialBar-bar-transition.delay#2",
+    "pictorialBar-bar-transition.delay#3",
+    "pictorialBar-bar-transition.delay#4",
+    "pictorialBar-bar-transition.delay#5",
+    "pictorialBar-bar-transition.delay#6"
+   ],
+   "bytes": 48545,
    "sequence": {
     "interval": 2500,
     "loopTo": 0,
@@ -3741,8 +5033,11 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 1,
-   "bytes": 33740
+   "callbacks": 0,
+   "handlers": [
+    "pictorialBar-body-fill.formatter"
+   ],
+   "bytes": 33848
   },
   {
    "id": "pictorialBar-dotted",
@@ -3764,7 +5059,7 @@
     "yAxis"
    ],
    "callbacks": 0,
-   "bytes": 3915
+   "bytes": 3909
   },
   {
    "id": "pictorialBar-forest",
@@ -3783,7 +5078,104 @@
     "yAxis"
    ],
    "callbacks": 0,
-   "bytes": 5178
+   "bytes": 49927,
+   "sequence": {
+    "interval": 800,
+    "loopTo": null,
+    "steps": [
+     {
+      "file": "pictorialBar-forest.json"
+     },
+     {
+      "file": "pictorialBar-forest.2.json"
+     },
+     {
+      "file": "pictorialBar-forest.3.json"
+     },
+     {
+      "file": "pictorialBar-forest.4.json"
+     },
+     {
+      "file": "pictorialBar-forest.5.json"
+     },
+     {
+      "file": "pictorialBar-forest.6.json"
+     },
+     {
+      "file": "pictorialBar-forest.7.json"
+     },
+     {
+      "file": "pictorialBar-forest.8.json"
+     },
+     {
+      "file": "pictorialBar-forest.9.json"
+     },
+     {
+      "file": "pictorialBar-forest.10.json"
+     },
+     {
+      "file": "pictorialBar-forest.11.json"
+     },
+     {
+      "file": "pictorialBar-forest.12.json"
+     },
+     {
+      "file": "pictorialBar-forest.13.json"
+     },
+     {
+      "file": "pictorialBar-forest.14.json"
+     },
+     {
+      "file": "pictorialBar-forest.15.json"
+     },
+     {
+      "file": "pictorialBar-forest.16.json"
+     },
+     {
+      "file": "pictorialBar-forest.17.json"
+     },
+     {
+      "file": "pictorialBar-forest.18.json"
+     },
+     {
+      "file": "pictorialBar-forest.19.json"
+     },
+     {
+      "file": "pictorialBar-forest.20.json"
+     },
+     {
+      "file": "pictorialBar-forest.21.json"
+     },
+     {
+      "file": "pictorialBar-forest.22.json"
+     },
+     {
+      "file": "pictorialBar-forest.23.json"
+     },
+     {
+      "file": "pictorialBar-forest.24.json"
+     },
+     {
+      "file": "pictorialBar-forest.25.json"
+     },
+     {
+      "file": "pictorialBar-forest.26.json"
+     },
+     {
+      "file": "pictorialBar-forest.27.json"
+     },
+     {
+      "file": "pictorialBar-forest.28.json"
+     },
+     {
+      "file": "pictorialBar-forest.29.json"
+     },
+     {
+      "file": "pictorialBar-forest.30.json"
+     }
+    ],
+    "live": true
+   }
   },
   {
    "id": "pictorialBar-hill",
@@ -3802,8 +5194,11 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 1,
-   "bytes": 5066
+   "callbacks": 0,
+   "handlers": [
+    "pictorialBar-hill.animationDelay"
+   ],
+   "bytes": 5126
   },
   {
    "id": "pictorialBar-spirit",
@@ -3822,8 +5217,108 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 1,
-   "bytes": 28002
+   "callbacks": 0,
+   "handlers": [
+    "pictorialBar-spirit.formatter"
+   ],
+   "bytes": 32665,
+   "sequence": {
+    "interval": 3000,
+    "loopTo": null,
+    "steps": [
+     {
+      "file": "pictorialBar-spirit.json"
+     },
+     {
+      "file": "pictorialBar-spirit.2.json"
+     },
+     {
+      "file": "pictorialBar-spirit.3.json"
+     },
+     {
+      "file": "pictorialBar-spirit.4.json"
+     },
+     {
+      "file": "pictorialBar-spirit.5.json"
+     },
+     {
+      "file": "pictorialBar-spirit.6.json"
+     },
+     {
+      "file": "pictorialBar-spirit.7.json"
+     },
+     {
+      "file": "pictorialBar-spirit.8.json"
+     },
+     {
+      "file": "pictorialBar-spirit.9.json"
+     },
+     {
+      "file": "pictorialBar-spirit.10.json"
+     },
+     {
+      "file": "pictorialBar-spirit.11.json"
+     },
+     {
+      "file": "pictorialBar-spirit.12.json"
+     },
+     {
+      "file": "pictorialBar-spirit.13.json"
+     },
+     {
+      "file": "pictorialBar-spirit.14.json"
+     },
+     {
+      "file": "pictorialBar-spirit.15.json"
+     },
+     {
+      "file": "pictorialBar-spirit.16.json"
+     },
+     {
+      "file": "pictorialBar-spirit.17.json"
+     },
+     {
+      "file": "pictorialBar-spirit.18.json"
+     },
+     {
+      "file": "pictorialBar-spirit.19.json"
+     },
+     {
+      "file": "pictorialBar-spirit.20.json"
+     },
+     {
+      "file": "pictorialBar-spirit.21.json"
+     },
+     {
+      "file": "pictorialBar-spirit.22.json"
+     },
+     {
+      "file": "pictorialBar-spirit.23.json"
+     },
+     {
+      "file": "pictorialBar-spirit.24.json"
+     },
+     {
+      "file": "pictorialBar-spirit.25.json"
+     },
+     {
+      "file": "pictorialBar-spirit.26.json"
+     },
+     {
+      "file": "pictorialBar-spirit.27.json"
+     },
+     {
+      "file": "pictorialBar-spirit.28.json"
+     },
+     {
+      "file": "pictorialBar-spirit.29.json"
+     },
+     {
+      "file": "pictorialBar-spirit.30.json"
+     }
+    ],
+    "live": true
+   }
   },
   {
    "id": "pictorialBar-vehicle",
@@ -3863,8 +5358,11 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 1,
-   "bytes": 16233
+   "callbacks": 0,
+   "handlers": [
+    "pictorialBar-velocity.formatter"
+   ],
+   "bytes": 16284
   },
   {
    "id": "pie-alignTo",
@@ -3917,8 +5415,11 @@
     "tooltip",
     "visualMap"
    ],
-   "callbacks": 1,
-   "bytes": 1149
+   "callbacks": 0,
+   "handlers": [
+    "pie-custom.animationDelay"
+   ],
+   "bytes": 1200
   },
   {
    "id": "pie-doughnut",
@@ -3970,8 +5471,13 @@
    "components": [
     "title"
    ],
-   "callbacks": 3,
-   "bytes": 2815
+   "callbacks": 0,
+   "handlers": [
+    "pie-labelLine-adjust.labelLayout",
+    "pie-labelLine-adjust.labelLayout#2",
+    "pie-labelLine-adjust.labelLayout#3"
+   ],
+   "bytes": 2984
   },
   {
    "id": "pie-legend",
@@ -4041,8 +5547,11 @@
     "pie"
    ],
    "components": [],
-   "callbacks": 1,
-   "bytes": 971,
+   "callbacks": 0,
+   "handlers": [
+    "pie-parliament-transition"
+   ],
+   "bytes": 1017,
    "sequence": {
     "interval": 2000,
     "loopTo": 0,
@@ -4225,8 +5734,11 @@
     "legend",
     "radar"
    ],
-   "callbacks": 1,
-   "bytes": 2721
+   "callbacks": 0,
+   "handlers": [
+    "radar-custom.formatter"
+   ],
+   "bytes": 2767
   },
   {
    "id": "radar-multiple",
@@ -4426,8 +5938,13 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 3,
-   "bytes": 18189,
+   "callbacks": 0,
+   "handlers": [
+    "scatter-aggregate-bar.delay",
+    "scatter-aggregate-bar.delay#2",
+    "scatter-aggregate-bar.delay#3"
+   ],
+   "bytes": 18328,
    "sequence": {
     "interval": 2000,
     "loopTo": 1,
@@ -4490,8 +6007,11 @@
     "yAxis",
     "visualMap"
    ],
-   "callbacks": 1,
-   "bytes": 10597
+   "callbacks": 0,
+   "handlers": [
+    "scatter-aqi-color.formatter"
+   ],
+   "bytes": 10644
   },
   {
    "id": "scatter-clustering",
@@ -4598,8 +6118,13 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 3,
-   "bytes": 1950
+   "callbacks": 0,
+   "handlers": [
+    "scatter-label-align-right.symbolSize",
+    "scatter-label-align-right.labelLayout",
+    "scatter-label-align-right.formatter"
+   ],
+   "bytes": 2125
   },
   {
    "id": "scatter-label-align-top",
@@ -4616,8 +6141,12 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 2,
-   "bytes": 1941
+   "callbacks": 0,
+   "handlers": [
+    "scatter-label-align-top.symbolSize",
+    "scatter-label-align-top.formatter"
+   ],
+   "bytes": 2052
   },
   {
    "id": "scatter-large",
@@ -4625,8 +6154,8 @@
    "titleCN": "大规模散点图",
    "category": "scatter",
    "difficulty": 5,
-   "ok": false,
-   "reason": "converted, but 64.0 MB is too large to bundle",
+   "ok": true,
+   "reason": "",
    "seriesTypes": [
     "scatter"
    ],
@@ -4640,8 +6169,22 @@
     "toolbox"
    ],
    "callbacks": 0,
-   "bytes": 67146100,
-   "tooBig": true
+   "bytes": 716,
+   "generated": {
+    "bytes": 61367759,
+    "fill": [
+     {
+      "path": "series.0.data",
+      "count": 500000,
+      "hash": "af70688f"
+     },
+     {
+      "path": "series.1.data",
+      "count": 500000,
+      "hash": "4226a377"
+     }
+    ]
+   }
   },
   {
    "id": "scatter-linear-regression",
@@ -4719,8 +6262,12 @@
     "toolbox",
     "brush"
    ],
-   "callbacks": 2,
-   "bytes": 20841
+   "callbacks": 0,
+   "handlers": [
+    "scatter-map-brush.symbolSize",
+    "scatter-map-brush.symbolSize#2"
+   ],
+   "bytes": 20943
   },
   {
    "id": "scatter-matrix",
@@ -4753,7 +6300,7 @@
    "category": "scatter",
    "difficulty": 5,
    "ok": false,
-   "reason": "converted, but 63.8 MB is too large to bundle",
+   "reason": "converted, but 57.2 MB is too large to bundle",
    "seriesTypes": [
     "scatter"
    ],
@@ -4767,7 +6314,7 @@
     "toolbox"
    ],
    "callbacks": 0,
-   "bytes": 66906517,
+   "bytes": 60017629,
    "tooBig": true
   },
   {
@@ -4776,11 +6323,26 @@
    "titleCN": "营养分布散点矩阵",
    "category": "scatter",
    "difficulty": 7,
-   "ok": false,
-   "reason": "myChart.getZr(...).configLayer is not a function",
-   "seriesTypes": [],
-   "components": [],
-   "callbacks": 0
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "scatter"
+   ],
+   "components": [
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis",
+    "dataZoom",
+    "visualMap",
+    "axisPointer"
+   ],
+   "callbacks": 0,
+   "handlers": [
+    "scatter-nutrients-matrix.position",
+    "scatter-nutrients-matrix.formatter"
+   ],
+   "bytes": 647955
   },
   {
    "id": "scatter-nutrients",
@@ -4788,11 +6350,18 @@
    "titleCN": "营养分布散点图",
    "category": "scatter",
    "difficulty": 7,
-   "ok": false,
-   "reason": "myChart.getZr(...).configLayer is not a function",
-   "seriesTypes": [],
-   "components": [],
-   "callbacks": 0
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "scatter"
+   ],
+   "components": [
+    "xAxis",
+    "yAxis",
+    "visualMap"
+   ],
+   "callbacks": 0,
+   "bytes": 69863
   },
   {
    "id": "scatter-painter-choice",
@@ -4810,8 +6379,13 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 3,
-   "bytes": 132153
+   "callbacks": 0,
+   "handlers": [
+    "scatter-painter-choice.formatter",
+    "scatter-painter-choice.symbolSize",
+    "scatter-painter-choice.color"
+   ],
+   "bytes": 132312
   },
   {
    "id": "scatter-polar-punchCard",
@@ -4832,8 +6406,13 @@
     "angleAxis",
     "radiusAxis"
    ],
-   "callbacks": 3,
-   "bytes": 7039
+   "callbacks": 0,
+   "handlers": [
+    "scatter-polar-punchCard.formatter",
+    "scatter-polar-punchCard.symbolSize",
+    "scatter-polar-punchCard.animationDelay"
+   ],
+   "bytes": 7213
   },
   {
    "id": "scatter-polynomial-regression",
@@ -4879,8 +6458,13 @@
     "xAxis",
     "yAxis"
    ],
-   "callbacks": 3,
-   "bytes": 7050
+   "callbacks": 0,
+   "handlers": [
+    "scatter-punchCard.formatter",
+    "scatter-punchCard.symbolSize",
+    "scatter-punchCard.animationDelay"
+   ],
+   "bytes": 7205
   },
   {
    "id": "scatter-simple",
@@ -4916,8 +6500,17 @@
     "tooltip",
     "singleAxis"
    ],
-   "callbacks": 7,
-   "bytes": 9408
+   "callbacks": 0,
+   "handlers": [
+    "scatter-single-axis.symbolSize",
+    "scatter-single-axis.symbolSize#2",
+    "scatter-single-axis.symbolSize#3",
+    "scatter-single-axis.symbolSize#4",
+    "scatter-single-axis.symbolSize#5",
+    "scatter-single-axis.symbolSize#6",
+    "scatter-single-axis.symbolSize#7"
+   ],
+   "bytes": 9784
   },
   {
    "id": "scatter-stream-visual",
@@ -5004,8 +6597,8 @@
    "titleCN": "微博签到数据点亮中国",
    "category": "scatter",
    "difficulty": 0,
-   "ok": false,
-   "reason": "converted, but 5.1 MB is too large to bundle",
+   "ok": true,
+   "reason": "",
    "seriesTypes": [
     "scatter"
    ],
@@ -5017,7 +6610,8 @@
    ],
    "callbacks": 0,
    "bytes": 5299919,
-   "tooBig": true
+   "file": "scatter-weibo.json.gz",
+   "gzBytes": 357607
   },
   {
    "id": "scatter-weight",
@@ -5040,8 +6634,11 @@
     "toolbox",
     "brush"
    ],
-   "callbacks": 1,
-   "bytes": 19915
+   "callbacks": 0,
+   "handlers": [
+    "scatter-weight.formatter"
+   ],
+   "bytes": 19959
   },
   {
    "id": "sunburst-borderRadius",
@@ -5087,8 +6684,11 @@
     "sunburst"
    ],
    "components": [],
-   "callbacks": 1,
-   "bytes": 1401
+   "callbacks": 0,
+   "handlers": [
+    "sunburst-label-rotate.formatter"
+   ],
+   "bytes": 1454
   },
   {
    "id": "sunburst-monochrome",
@@ -5308,8 +6908,11 @@
     "title",
     "tooltip"
    ],
-   "callbacks": 1,
-   "bytes": 522049
+   "callbacks": 0,
+   "handlers": [
+    "treemap-disk.formatter"
+   ],
+   "bytes": 522092
   },
   {
    "id": "treemap-drill-down",
@@ -5345,8 +6948,16 @@
     "legend",
     "tooltip"
    ],
-   "callbacks": 6,
-   "bytes": 276278
+   "callbacks": 0,
+   "handlers": [
+    "treemap-obama.formatter",
+    "treemap-obama.formatter#2",
+    "treemap-obama.formatter#3",
+    "treemap-obama.formatter#4",
+    "treemap-obama.formatter#5",
+    "treemap-obama.formatter#6"
+   ],
+   "bytes": 276567
   },
   {
    "id": "treemap-show-parent",
@@ -5363,8 +6974,11 @@
     "title",
     "tooltip"
    ],
-   "callbacks": 1,
-   "bytes": 522349
+   "callbacks": 0,
+   "handlers": [
+    "treemap-show-parent.formatter"
+   ],
+   "bytes": 522399
   },
   {
    "id": "treemap-simple",
@@ -5424,8 +7038,11 @@
     "title",
     "tooltip"
    ],
-   "callbacks": 1,
-   "bytes": 103579
+   "callbacks": 0,
+   "handlers": [
+    "treemap-visual.formatter"
+   ],
+   "bytes": 103624
   },
   {
    "id": "watermark",
@@ -5433,11 +7050,24 @@
    "titleCN": "水印 - ECharts 下载统计",
    "category": "bar",
    "difficulty": 6,
-   "ok": false,
-   "reason": "ctx.translate is not a function",
-   "seriesTypes": [],
-   "components": [],
-   "callbacks": 0
+   "ok": true,
+   "reason": "",
+   "seriesTypes": [
+    "bar",
+    "pie"
+   ],
+   "components": [
+    "title",
+    "tooltip",
+    "grid",
+    "xAxis",
+    "yAxis"
+   ],
+   "callbacks": 3,
+   "lost": [
+    "canvas"
+   ],
+   "bytes": 3607
   },
   {
    "id": "wind-barb",
@@ -5460,8 +7090,14 @@
     "dataZoom",
     "visualMap"
    ],
-   "callbacks": 4,
-   "bytes": 30501
+   "callbacks": 0,
+   "handlers": [
+    "wind-barb.formatter",
+    "wind-barb",
+    "wind-barb#2",
+    "wind-barb.formatter#2"
+   ],
+   "bytes": 30647
   }
  ]
 }

@@ -47828,6 +47828,830 @@
     }
    ],
    "fails": []
+  },
+  {
+   "id": "bar-border-gradient",
+   "group": "bar",
+   "note": "[R2-V] a transparent radial series, every bar bordered 6 in a gradient of its own, labels top and insideBottom: the stroked rect as with a colour",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "polar": {},
+    "angleAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "radiusAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "coordinateSystem": "polar",
+      "data": [
+       {
+        "value": 3,
+        "itemStyle": {
+         "borderWidth": 6,
+         "borderColor": {
+          "type": "linear",
+          "x": 0,
+          "y": 0,
+          "x2": 0,
+          "y2": 1,
+          "colorStops": [
+           {
+            "offset": 0,
+            "color": "#ff0000"
+           },
+           {
+            "offset": 1,
+            "color": "#0000ff"
+           }
+          ]
+         }
+        }
+       },
+       {
+        "value": 5,
+        "itemStyle": {
+         "borderWidth": 6,
+         "borderColor": {
+          "type": "linear",
+          "x": 0,
+          "y": 0,
+          "x2": 0,
+          "y2": 1,
+          "colorStops": [
+           {
+            "offset": 0,
+            "color": "#ff0000"
+           },
+           {
+            "offset": 1,
+            "color": "#0000ff"
+           }
+          ]
+         }
+        }
+       },
+       {
+        "value": 2,
+        "itemStyle": {
+         "borderWidth": 6,
+         "borderColor": {
+          "type": "linear",
+          "x": 0,
+          "y": 0,
+          "x2": 0,
+          "y2": 1,
+          "colorStops": [
+           {
+            "offset": 0,
+            "color": "#ff0000"
+           },
+           {
+            "offset": 1,
+            "color": "#0000ff"
+           }
+          ]
+         }
+        }
+       },
+       {
+        "value": 8,
+        "itemStyle": {
+         "borderWidth": 6,
+         "borderColor": {
+          "type": "linear",
+          "x": 0,
+          "y": 0,
+          "x2": 0,
+          "y2": 1,
+          "colorStops": [
+           {
+            "offset": 0,
+            "color": "#ff0000"
+           },
+           {
+            "offset": 1,
+            "color": "#0000ff"
+           }
+          ]
+         }
+        }
+       },
+       {
+        "value": 6,
+        "itemStyle": {
+         "borderWidth": 6,
+         "borderColor": {
+          "type": "linear",
+          "x": 0,
+          "y": 0,
+          "x2": 0,
+          "y2": 1,
+          "colorStops": [
+           {
+            "offset": 0,
+            "color": "#ff0000"
+           },
+           {
+            "offset": 1,
+            "color": "#0000ff"
+           }
+          ]
+         }
+        }
+       }
+      ],
+      "itemStyle": {
+       "color": "transparent"
+      },
+      "label": {
+       "show": true,
+       "position": "top"
+      }
+     },
+     {
+      "type": "bar",
+      "coordinateSystem": "polar",
+      "data": [
+       {
+        "value": 3,
+        "itemStyle": {
+         "borderWidth": 6,
+         "borderColor": {
+          "type": "linear",
+          "x": 0,
+          "y": 0,
+          "x2": 0,
+          "y2": 1,
+          "colorStops": [
+           {
+            "offset": 0,
+            "color": "#ff0000"
+           },
+           {
+            "offset": 1,
+            "color": "#0000ff"
+           }
+          ]
+         }
+        }
+       },
+       {
+        "value": 5,
+        "itemStyle": {
+         "borderWidth": 6,
+         "borderColor": {
+          "type": "linear",
+          "x": 0,
+          "y": 0,
+          "x2": 0,
+          "y2": 1,
+          "colorStops": [
+           {
+            "offset": 0,
+            "color": "#ff0000"
+           },
+           {
+            "offset": 1,
+            "color": "#0000ff"
+           }
+          ]
+         }
+        }
+       },
+       {
+        "value": 2,
+        "itemStyle": {
+         "borderWidth": 6,
+         "borderColor": {
+          "type": "linear",
+          "x": 0,
+          "y": 0,
+          "x2": 0,
+          "y2": 1,
+          "colorStops": [
+           {
+            "offset": 0,
+            "color": "#ff0000"
+           },
+           {
+            "offset": 1,
+            "color": "#0000ff"
+           }
+          ]
+         }
+        }
+       },
+       {
+        "value": 8,
+        "itemStyle": {
+         "borderWidth": 6,
+         "borderColor": {
+          "type": "linear",
+          "x": 0,
+          "y": 0,
+          "x2": 0,
+          "y2": 1,
+          "colorStops": [
+           {
+            "offset": 0,
+            "color": "#ff0000"
+           },
+           {
+            "offset": 1,
+            "color": "#0000ff"
+           }
+          ]
+         }
+        }
+       },
+       {
+        "value": 6,
+        "itemStyle": {
+         "borderWidth": 6,
+         "borderColor": {
+          "type": "linear",
+          "x": 0,
+          "y": 0,
+          "x2": 0,
+          "y2": 1,
+          "colorStops": [
+           {
+            "offset": 0,
+            "color": "#ff0000"
+           },
+           {
+            "offset": 1,
+            "color": "#0000ff"
+           }
+          ]
+         }
+        }
+       }
+      ],
+      "itemStyle": {
+       "color": "transparent"
+      },
+      "label": {
+       "show": true,
+       "position": "insideBottom"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "polars": [
+    {
+     "index": 0,
+     "cx": "4072c00000000000",
+     "cy": "4069000000000000",
+     "rExtent": [
+      "0000000000000000",
+      "4064000000000000"
+     ],
+     "aExtent": [
+      "4056800000000000",
+      "c070e00000000000"
+     ],
+     "rInverse": false,
+     "aInverse": true,
+     "rScale": [
+      "0000000000000000",
+      "4020000000000000"
+     ],
+     "aScale": [
+      "0000000000000000",
+      "4010000000000000"
+     ]
+    }
+   ],
+   "series": [
+    {
+     "index": 0,
+     "type": "bar",
+     "polar": 0,
+     "base": "angle",
+     "count": 5,
+     "raw": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "items": [
+      {
+       "i": 0,
+       "raw": 0,
+       "cls": "drawn",
+       "layout": [
+        "4072c00000000000",
+        "4069000000000000",
+        "0000000000000000",
+        "404e000000000000",
+        "bff71f4362014836",
+        "bff020f0175b63bc"
+       ],
+       "layoutCw": true,
+       "type": "sector",
+       "shape": [
+        "4072c00000000000",
+        "4069000000000000",
+        "0000000000000000",
+        "404e000000000000",
+        "bff71f4362014836",
+        "bff020f0175b63bc"
+       ],
+       "cw": true,
+       "corner": "0000000000000000",
+       "zero": false,
+       "z2": 1,
+       "rect": [
+        "4072c00000000000",
+        "40618f23c831cd23",
+        "4040016b8dfe2e10",
+        "404dc370df38cb74"
+       ],
+       "label": {
+        "text": "3",
+        "drawn": true,
+        "word": "top",
+        "inside": false,
+        "x": "4073c016b8dfe2e1",
+        "y": "40608f23c831cd23",
+        "rot": "0000000000000000",
+        "ox": "0000000000000000",
+        "oy": "0000000000000000",
+        "dAlign": "center",
+        "dVa": "bottom",
+        "align": null,
+        "va": null
+       }
+      },
+      {
+       "i": 1,
+       "raw": 1,
+       "cls": "drawn",
+       "layout": [
+        "4072c00000000000",
+        "4069000000000000",
+        "0000000000000000",
+        "4059000000000000",
+        "bfc8209f5b22baa9",
+        "3fcfd1fafa0c692b"
+       ],
+       "layoutCw": true,
+       "type": "sector",
+       "shape": [
+        "4072c00000000000",
+        "4069000000000000",
+        "0000000000000000",
+        "4059000000000000",
+        "bfc8209f5b22baa9",
+        "3fcfd1fafa0c692b"
+       ],
+       "cw": true,
+       "corner": "0000000000000000",
+       "zero": false,
+       "z2": 1,
+       "rect": [
+        "4072c00000000000",
+        "4066a8613a22a90a",
+        "4059000000000000",
+        "4045abd4b05f08a8"
+       ],
+       "label": {
+        "text": "5",
+        "drawn": true,
+        "word": "top",
+        "inside": false,
+        "x": "4075e00000000000",
+        "y": "4065a8613a22a90a",
+        "rot": "0000000000000000",
+        "ox": "0000000000000000",
+        "oy": "0000000000000000",
+        "dAlign": "center",
+        "dVa": "bottom",
+        "align": null,
+        "va": null
+       }
+      },
+      {
+       "i": 2,
+       "raw": 2,
+       "cls": "drawn",
+       "layout": [
+        "4072c00000000000",
+        "4069000000000000",
+        "0000000000000000",
+        "4044000000000000",
+        "3ff1171b8b38998b",
+        "3ff8156ed5de7e06"
+       ],
+       "layoutCw": true,
+       "type": "sector",
+       "shape": [
+        "4072c00000000000",
+        "4069000000000000",
+        "0000000000000000",
+        "4044000000000000",
+        "3ff1171b8b38998b",
+        "3ff8156ed5de7e06"
+       ],
+       "cw": true,
+       "corner": "0000000000000000",
+       "zero": false,
+       "z2": 1,
+       "rect": [
+        "4072c00000000000",
+        "4069000000000000",
+        "4033452859f7c9d0",
+        "4043f4ffe1b41a20"
+       ],
+       "label": {
+        "text": "2",
+        "drawn": true,
+        "word": "top",
+        "inside": false,
+        "x": "40735a2942cfbe4e",
+        "y": "4068000000000000",
+        "rot": "0000000000000000",
+        "ox": "0000000000000000",
+        "oy": "0000000000000000",
+        "dAlign": "center",
+        "dVa": "bottom",
+        "align": null,
+        "va": null
+       }
+      },
+      {
+       "i": 3,
+       "raw": 3,
+       "cls": "drawn",
+       "layout": [
+        "4072c00000000000",
+        "4069000000000000",
+        "0000000000000000",
+        "4064000000000000",
+        "4002992580eac535",
+        "4006184f263db772"
+       ],
+       "layoutCw": true,
+       "type": "sector",
+       "shape": [
+        "4072c00000000000",
+        "4069000000000000",
+        "0000000000000000",
+        "4064000000000000",
+        "4002992580eac535",
+        "4006184f263db772"
+       ],
+       "cw": true,
+       "corner": "0000000000000000",
+       "zero": false,
+       "z2": 1,
+       "rect": [
+        "4062ecb6091dcbd1",
+        "4069000000000000",
+        "40629349f6e2342f",
+        "405d28a384c76620"
+       ],
+       "label": {
+        "text": "8",
+        "drawn": true,
+        "word": "top",
+        "inside": false,
+        "x": "406c365b048ee5e8",
+        "y": "4068000000000000",
+        "rot": "0000000000000000",
+        "ox": "0000000000000000",
+        "oy": "0000000000000000",
+        "dAlign": "center",
+        "dVa": "bottom",
+        "align": null,
+        "va": null
+       }
+      },
+      {
+       "i": 4,
+       "raw": 4,
+       "cls": "drawn",
+       "layout": [
+        "4072c00000000000",
+        "4069000000000000",
+        "0000000000000000",
+        "405e000000000000",
+        "400ca6bd3c393da5",
+        "401012f370c617f1"
+       ],
+       "layoutCw": true,
+       "type": "sector",
+       "shape": [
+        "4072c00000000000",
+        "4069000000000000",
+        "0000000000000000",
+        "405e000000000000",
+        "400ca6bd3c393da5",
+        "401012f370c617f1"
+       ],
+       "cw": true,
+       "corner": "0000000000000000",
+       "zero": false,
+       "z2": 1,
+       "rect": [
+        "4067ed76d078d5e6",
+        "405aefda8fa263be",
+        "405b25125f0e5434",
+        "40571025705d9c42"
+       ],
+       "label": {
+        "text": "6",
+        "drawn": true,
+        "word": "top",
+        "inside": false,
+        "x": "406eb6bb683c6af3",
+        "y": "4058efda8fa263be",
+        "rot": "0000000000000000",
+        "ox": "0000000000000000",
+        "oy": "0000000000000000",
+        "dAlign": "center",
+        "dVa": "bottom",
+        "align": null,
+        "va": null
+       }
+      }
+     ],
+     "bg": null
+    },
+    {
+     "index": 1,
+     "type": "bar",
+     "polar": 0,
+     "base": "angle",
+     "count": 5,
+     "raw": [
+      0,
+      1,
+      2,
+      3,
+      4
+     ],
+     "items": [
+      {
+       "i": 0,
+       "raw": 0,
+       "cls": "drawn",
+       "layout": [
+        "4072c00000000000",
+        "4069000000000000",
+        "0000000000000000",
+        "404e000000000000",
+        "bfec0fae35200b2b",
+        "bfdc260f3fa8846c"
+       ],
+       "layoutCw": true,
+       "type": "sector",
+       "shape": [
+        "4072c00000000000",
+        "4069000000000000",
+        "0000000000000000",
+        "404e000000000000",
+        "bfec0fae35200b2b",
+        "bfdc260f3fa8846c"
+       ],
+       "cw": true,
+       "corner": "0000000000000000",
+       "zero": false,
+       "z2": 1,
+       "rect": [
+        "4072c00000000000",
+        "40633bf6a3e898ef",
+        "404b251262469e98",
+        "40471025705d9c44"
+       ],
+       "label": {
+        "text": "3",
+        "drawn": true,
+        "word": "insideBottom",
+        "inside": true,
+        "x": "40747251262469ea",
+        "y": "4068c00000000000",
+        "rot": "0000000000000000",
+        "ox": "0000000000000000",
+        "oy": "0000000000000000",
+        "dAlign": "center",
+        "dVa": "bottom",
+        "align": null,
+        "va": null
+       }
+      },
+      {
+       "i": 1,
+       "raw": 1,
+       "cls": "drawn",
+       "layout": [
+        "4072c00000000000",
+        "4069000000000000",
+        "0000000000000000",
+        "4059000000000000",
+        "3fd84d617033ad29",
+        "3fea23574d659f89"
+       ],
+       "layoutCw": true,
+       "type": "sector",
+       "shape": [
+        "4072c00000000000",
+        "4069000000000000",
+        "0000000000000000",
+        "4059000000000000",
+        "3fd84d617033ad29",
+        "3fea23574d659f89"
+       ],
+       "cw": true,
+       "corner": "0000000000000000",
+       "zero": false,
+       "z2": 1,
+       "rect": [
+        "4072c00000000000",
+        "4069000000000000",
+        "4057381c749ac138",
+        "40523966374d00b4"
+       ],
+       "label": {
+        "text": "5",
+        "drawn": true,
+        "word": "insideBottom",
+        "inside": true,
+        "x": "4075a7038e935827",
+        "y": "4070ee598dd3402d",
+        "rot": "0000000000000000",
+        "ox": "0000000000000000",
+        "oy": "0000000000000000",
+        "dAlign": "center",
+        "dVa": "bottom",
+        "align": null,
+        "va": null
+       }
+      },
+      {
+       "i": 2,
+       "raw": 2,
+       "cls": "drawn",
+       "layout": [
+        "4072c00000000000",
+        "4069000000000000",
+        "0000000000000000",
+        "4044000000000000",
+        "3ffa2e87d2a9dc2b",
+        "4000966d8ea7e052"
+       ],
+       "layoutCw": true,
+       "type": "sector",
+       "shape": [
+        "4072c00000000000",
+        "4069000000000000",
+        "0000000000000000",
+        "4044000000000000",
+        "3ffa2e87d2a9dc2b",
+        "4000966d8ea7e052"
+       ],
+       "cw": true,
+       "corner": "0000000000000000",
+       "zero": false,
+       "z2": 1,
+       "rect": [
+        "40718bad79d3238c",
+        "4069000000000000",
+        "4033452862cdc740",
+        "4043f4ffe1b41a20"
+       ],
+       "label": {
+        "text": "2",
+        "drawn": true,
+        "word": "insideBottom",
+        "inside": true,
+        "x": "407225d6bce991c6",
+        "y": "406dbd3ff86d0688",
+        "rot": "0000000000000000",
+        "ox": "0000000000000000",
+        "oy": "0000000000000000",
+        "dAlign": "center",
+        "dVa": "bottom",
+        "align": null,
+        "va": null
+       }
+      },
+      {
+       "i": 3,
+       "raw": 3,
+       "cls": "drawn",
+       "layout": [
+        "4072c00000000000",
+        "4069000000000000",
+        "0000000000000000",
+        "4064000000000000",
+        "400724dba4a36686",
+        "400aa40549f658c3"
+       ],
+       "layoutCw": true,
+       "type": "sector",
+       "shape": [
+        "4072c00000000000",
+        "4069000000000000",
+        "0000000000000000",
+        "4064000000000000",
+        "400724dba4a36686",
+        "400aa40549f658c3"
+       ],
+       "cw": true,
+       "corner": "0000000000000000",
+       "zero": false,
+       "z2": 1,
+       "rect": [
+        "4061800000000000",
+        "4065409b8b43adcc",
+        "4064000000000000",
+        "40515643ca339514"
+       ],
+       "label": {
+        "text": "8",
+        "drawn": true,
+        "word": "insideBottom",
+        "inside": true,
+        "x": "406b800000000000",
+        "y": "406dabbd705d7856",
+        "rot": "0000000000000000",
+        "ox": "0000000000000000",
+        "oy": "0000000000000000",
+        "dAlign": "center",
+        "dVa": "bottom",
+        "align": null,
+        "va": null
+       }
+      },
+      {
+       "i": 4,
+       "raw": 4,
+       "cls": "drawn",
+       "layout": [
+        "4072c00000000000",
+        "4069000000000000",
+        "0000000000000000",
+        "405e000000000000",
+        "40109939aff8ef7b",
+        "401258ce82a2689a"
+       ],
+       "layoutCw": true,
+       "type": "sector",
+       "shape": [
+        "4072c00000000000",
+        "4069000000000000",
+        "0000000000000000",
+        "405e000000000000",
+        "40109939aff8ef7b",
+        "401258ce82a2689a"
+       ],
+       "cw": true,
+       "corner": "0000000000000000",
+       "zero": false,
+       "z2": 1,
+       "rect": [
+        "406d7f4a3900e8f8",
+        "40543c8f1fd490c3",
+        "4050016b8dfe2e10",
+        "405dc370e02b6f3d"
+       ],
+       "label": {
+        "text": "6",
+        "drawn": true,
+        "word": "insideBottom",
+        "inside": true,
+        "x": "4070bfd28e403a3e",
+        "y": "4068c00000000000",
+        "rot": "0000000000000000",
+        "ox": "0000000000000000",
+        "oy": "0000000000000000",
+        "dAlign": "center",
+        "dVa": "bottom",
+        "align": null,
+        "va": null
+       }
+      }
+     ],
+     "bg": null
+    }
+   ],
+   "markers": [],
+   "zoom": [],
+   "fails": []
   }
  ],
  "anim": {
@@ -57527,6 +58351,10 @@
   },
   {
    "name": "state-tangential: every record matches its recipe",
+   "ok": true
+  },
+  {
+   "name": "bar-border-gradient: every record matches its recipe",
    "ok": true
   },
   {

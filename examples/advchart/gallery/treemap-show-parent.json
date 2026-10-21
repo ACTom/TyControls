@@ -3,7 +3,9 @@
   "text": "Disk Usage",
   "left": "center"
  },
- "tooltip": {},
+ "tooltip": {
+  "formatter": "@treemap-show-parent.formatter"
+ },
  "series": [
   {
    "name": "Disk Usage",

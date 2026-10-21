@@ -18,7 +18,8 @@
     "shadowOffsetY": 0,
     "color": "#222"
    }
-  }
+  },
+  "formatter": "@confidence-band.formatter"
  },
  "grid": {
   "left": "3%",
@@ -121,13 +122,19 @@
    "2012-12-27",
    "2012-12-31"
   ],
-  "axisLabel": {},
+  "axisLabel": {
+   "formatter": "@confidence-band.formatter#2"
+  },
   "boundaryGap": false
  },
  "yAxis": {
-  "axisLabel": {},
+  "axisLabel": {
+   "formatter": "@confidence-band.formatter#3"
+  },
   "axisPointer": {
-   "label": {}
+   "label": {
+    "formatter": "@confidence-band.formatter#4"
+   }
   },
   "splitNumber": 3
  },

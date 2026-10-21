@@ -614,6 +614,94 @@
       ]
     },
     {
+      "id": "graph-cartesian",
+      "note": "a graph on a cartesian2d: a draggable node with no cursor option is \"move\" (setDraggable whatever the coordinate system), an item cursor wins, draggable false keeps pointer; a drag moves the node (the pointer outruns it on the move of the drag: default there), \"move\" again over it; no roam here",
+      "option": {"animation":false,"xAxis":{"type":"value","min":0,"max":10},"yAxis":{"type":"value","min":0,"max":10},"series":[{"type":"graph","coordinateSystem":"cartesian2d","draggable":true,"symbolSize":20,"data":[{"name":"a","value":[2,2]},{"name":"b","value":[5,8],"cursor":"help"},{"name":"c","value":[8,3],"draggable":false}],"links":[{"source":"a","target":"b"}],"lineStyle":{"width":4}}]},
+      "steps": [
+        {
+          "type": "move",
+          "x": 180,
+          "y": 269,
+          "aim": "item s0 d0",
+          "hover": "path:move",
+          "calls": ["move"],
+          "cursor": "move"
+        },
+        {
+          "type": "move",
+          "x": 315,
+          "y": 116,
+          "aim": "item s0 d1",
+          "hover": "path:help",
+          "calls": ["help"],
+          "cursor": "help"
+        },
+        {
+          "type": "move",
+          "x": 450,
+          "y": 244,
+          "aim": "item s0 d2",
+          "hover": "path:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 180,
+          "y": 269,
+          "aim": "item s0 d0",
+          "hover": "path:move",
+          "calls": ["move"],
+          "cursor": "move"
+        },
+        {
+          "type": "down",
+          "x": 180,
+          "y": 269,
+          "aim": "item s0 d0",
+          "hover": "tspan:pointer",
+          "calls": [],
+          "cursor": "move"
+        },
+        {
+          "type": "move",
+          "x": 210,
+          "y": 249,
+          "aim": "dragging a",
+          "hover": null,
+          "calls": ["default"],
+          "cursor": "default"
+        },
+        {
+          "type": "up",
+          "x": 210,
+          "y": 249,
+          "aim": "released a where it went",
+          "hover": "path:move",
+          "calls": [],
+          "cursor": "default"
+        },
+        {
+          "type": "move",
+          "x": 210,
+          "y": 249,
+          "aim": "a where it went",
+          "hover": "path:move",
+          "calls": ["move"],
+          "cursor": "move"
+        },
+        {
+          "type": "move",
+          "x": 300,
+          "y": 200,
+          "aim": "the grid, nothing",
+          "hover": null,
+          "calls": ["default"],
+          "cursor": "default"
+        }
+      ]
+    },
+    {
       "id": "tree",
       "note": "a tree node is pointer (its item cursor where it has one); roam grabs where nothing is hovered",
       "option": {"animation":false,"series":[{"type":"tree","roam":true,"expandAndCollapse":false,"top":40,"bottom":40,"left":80,"right":120,"symbolSize":12,"label":{"show":false},"data":[{"name":"root","children":[{"name":"x","cursor":"help"},{"name":"y"}]}]}]},
@@ -1112,6 +1200,386 @@
           "cursor": "default"
         }
       ]
+    },
+    {
+      "id": "roam-overlap",
+      "note": "two graphs whose roam areas overlap, equal z: the second (enabled later) runs first; a release is for the first to decide -- grab inside its area where nothing is hovered, default outside it",
+      "option": {"animation":false,"series":[{"type":"graph","layout":"none","roam":true,"left":50,"width":300,"top":50,"height":300,"symbolSize":10,"data":[{"name":"a","x":0,"y":0},{"name":"b","x":100,"y":100}]},{"type":"graph","layout":"none","roam":true,"left":250,"width":300,"top":50,"height":300,"symbolSize":10,"data":[{"name":"c","x":0,"y":0},{"name":"d","x":100,"y":100}]}]},
+      "steps": [
+        {
+          "type": "move",
+          "x": 300,
+          "y": 200,
+          "aim": "in both areas",
+          "hover": null,
+          "calls": ["default","grab","grab"],
+          "cursor": "grab"
+        },
+        {
+          "type": "down",
+          "x": 300,
+          "y": 200,
+          "aim": "press in both",
+          "hover": null,
+          "calls": [],
+          "cursor": "grab"
+        },
+        {
+          "type": "move",
+          "x": 320,
+          "y": 205,
+          "aim": "panning",
+          "hover": null,
+          "calls": ["default","grabbing"],
+          "cursor": "grabbing"
+        },
+        {
+          "type": "up",
+          "x": 320,
+          "y": 205,
+          "aim": "release in both",
+          "hover": null,
+          "calls": ["grab","grab"],
+          "cursor": "grab"
+        },
+        {
+          "type": "move",
+          "x": 300,
+          "y": 200,
+          "aim": "in both again",
+          "hover": null,
+          "calls": ["default","grab","grab"],
+          "cursor": "grab"
+        },
+        {
+          "type": "down",
+          "x": 300,
+          "y": 200,
+          "aim": "press in both",
+          "hover": null,
+          "calls": [],
+          "cursor": "grab"
+        },
+        {
+          "type": "move",
+          "x": 450,
+          "y": 210,
+          "aim": "panning into the second only",
+          "hover": null,
+          "calls": ["default","grabbing"],
+          "cursor": "grabbing"
+        },
+        {
+          "type": "up",
+          "x": 450,
+          "y": 210,
+          "aim": "release in the second only",
+          "hover": null,
+          "calls": ["grab","grab"],
+          "cursor": "grab"
+        },
+        {
+          "type": "move",
+          "x": 470,
+          "y": 230,
+          "aim": "the second only",
+          "hover": null,
+          "calls": ["default","grab","grab"],
+          "cursor": "grab"
+        },
+        {
+          "type": "move",
+          "x": 100,
+          "y": 200,
+          "aim": "the first only",
+          "hover": null,
+          "calls": ["default"],
+          "cursor": "default"
+        },
+        {
+          "type": "down",
+          "x": 100,
+          "y": 200,
+          "aim": "press",
+          "hover": null,
+          "calls": [],
+          "cursor": "default"
+        },
+        {
+          "type": "move",
+          "x": 110,
+          "y": 205,
+          "aim": "panning",
+          "hover": null,
+          "calls": ["default"],
+          "cursor": "default"
+        },
+        {
+          "type": "up",
+          "x": 110,
+          "y": 205,
+          "aim": "release in the first only",
+          "hover": null,
+          "calls": ["default","default"],
+          "cursor": "default"
+        },
+        {
+          "type": "move",
+          "x": 535,
+          "y": 200,
+          "aim": "the second only, past the first",
+          "hover": null,
+          "calls": ["default","grab"],
+          "cursor": "grab"
+        },
+        {
+          "type": "down",
+          "x": 535,
+          "y": 200,
+          "aim": "press in the second only",
+          "hover": null,
+          "calls": [],
+          "cursor": "grab"
+        },
+        {
+          "type": "move",
+          "x": 540,
+          "y": 205,
+          "aim": "the second pans",
+          "hover": null,
+          "calls": ["default","grabbing"],
+          "cursor": "grabbing"
+        },
+        {
+          "type": "up",
+          "x": 540,
+          "y": 205,
+          "aim": "release in the second only: its word",
+          "hover": null,
+          "calls": ["default","grab"],
+          "cursor": "grab"
+        }
+      ]
+    },
+    {
+      "id": "roam-overlap-z",
+      "note": "the same with the first graph above (z 3): it runs first; a release is for the second to decide",
+      "option": {"animation":false,"series":[{"type":"graph","layout":"none","roam":true,"z":3,"left":50,"width":300,"top":50,"height":300,"symbolSize":10,"data":[{"name":"a","x":0,"y":0},{"name":"b","x":100,"y":100}]},{"type":"graph","layout":"none","roam":true,"left":250,"width":300,"top":50,"height":300,"symbolSize":10,"data":[{"name":"c","x":0,"y":0},{"name":"d","x":100,"y":100}]}]},
+      "steps": [
+        {
+          "type": "move",
+          "x": 300,
+          "y": 200,
+          "aim": "in both areas",
+          "hover": null,
+          "calls": ["default","grab","grab"],
+          "cursor": "grab"
+        },
+        {
+          "type": "down",
+          "x": 300,
+          "y": 200,
+          "aim": "press in both",
+          "hover": null,
+          "calls": [],
+          "cursor": "grab"
+        },
+        {
+          "type": "move",
+          "x": 150,
+          "y": 205,
+          "aim": "panning into the first only",
+          "hover": null,
+          "calls": ["default","grabbing"],
+          "cursor": "grabbing"
+        },
+        {
+          "type": "up",
+          "x": 150,
+          "y": 205,
+          "aim": "release in the first only",
+          "hover": null,
+          "calls": ["grab","default"],
+          "cursor": "default"
+        },
+        {
+          "type": "move",
+          "x": 300,
+          "y": 200,
+          "aim": "in both again",
+          "hover": null,
+          "calls": ["default","grab"],
+          "cursor": "grab"
+        },
+        {
+          "type": "down",
+          "x": 300,
+          "y": 200,
+          "aim": "press in both",
+          "hover": null,
+          "calls": [],
+          "cursor": "grab"
+        },
+        {
+          "type": "move",
+          "x": 450,
+          "y": 210,
+          "aim": "panning into the second only",
+          "hover": null,
+          "calls": ["default","grabbing"],
+          "cursor": "grabbing"
+        },
+        {
+          "type": "up",
+          "x": 450,
+          "y": 210,
+          "aim": "release in the second only",
+          "hover": null,
+          "calls": ["default","grab"],
+          "cursor": "grab"
+        }
+      ]
+    },
+    {
+      "id": "roam-globalpan",
+      "note": "a graph roam with the brush holding globalPan: a move leaves the brush crosshair; the RoamController mouseup does not look at globalPan",
+      "option": {"animation":false,"brush":{},"series":[{"type":"graph","layout":"none","roam":true,"left":100,"width":400,"top":50,"height":300,"symbolSize":10,"data":[{"name":"a","x":0,"y":0},{"name":"b","x":100,"y":100}]}]},
+      "steps": [
+        {
+          "type": "move",
+          "x": 300,
+          "y": 200,
+          "aim": "the area",
+          "hover": null,
+          "calls": ["default","grab"],
+          "cursor": "grab"
+        },
+        {
+          "type": "action",
+          "payload": {
+            "type": "takeGlobalCursor",
+            "key": "brush",
+            "brushOption": {"brushType":"rect","brushMode":"single"}
+          },
+          "calls": [],
+          "cursor": "grab"
+        },
+        {
+          "type": "move",
+          "x": 300,
+          "y": 200,
+          "aim": "the area, the brush on",
+          "hover": null,
+          "calls": ["default","crosshair"],
+          "cursor": "crosshair"
+        },
+        {
+          "type": "down",
+          "x": 300,
+          "y": 200,
+          "aim": "press",
+          "hover": null,
+          "calls": [],
+          "cursor": "crosshair"
+        },
+        {
+          "type": "up",
+          "x": 300,
+          "y": 200,
+          "aim": "release under the brush",
+          "hover": null,
+          "calls": ["grab"],
+          "cursor": "grab"
+        },
+        {
+          "type": "move",
+          "x": 305,
+          "y": 200,
+          "aim": "a move after",
+          "hover": null,
+          "calls": ["default","crosshair"],
+          "cursor": "crosshair"
+        }
+      ]
+    },
+    {
+      "id": "tree-edges",
+      "note": "[R2-I1] a tree edge is a target of no data: pointer on it (the prototype's -- not the cursor of the node it leads to), within max(lineWidth, 5) / 2 of its curve; off it the roam grabs. The edge into x is 1.5 wide (reach 2.5), the one into y 8 (reach 4); a press on an edge still pans",
+      "option": {"animation":false,"series":[{"type":"tree","roam":true,"expandAndCollapse":false,"top":60,"bottom":60,"left":80,"right":120,"symbolSize":12,"label":{"show":false},"data":[{"name":"root","children":[{"name":"x","cursor":"help"},{"name":"y","lineStyle":{"width":8}}]}]}]},
+      "steps": [
+        {
+          "type": "move",
+          "x": 199,
+          "y": 189,
+          "aim": "on the edge into x",
+          "hover": "bezier-curve:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 199,
+          "y": 190,
+          "aim": "1 px off the edge into x",
+          "hover": "bezier-curve:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 200,
+          "y": 194,
+          "aim": "5 px off the edge into x",
+          "hover": null,
+          "calls": ["default","grab"],
+          "cursor": "grab"
+        },
+        {
+          "type": "move",
+          "x": 198,
+          "y": 213,
+          "aim": "2 px off the edge into y",
+          "hover": "bezier-curve:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        },
+        {
+          "type": "move",
+          "x": 197,
+          "y": 218,
+          "aim": "7 px off the edge into y",
+          "hover": null,
+          "calls": ["default","grab"],
+          "cursor": "grab"
+        },
+        {
+          "type": "down",
+          "x": 199,
+          "y": 189,
+          "aim": "press on the edge into x",
+          "hover": "bezier-curve:pointer",
+          "calls": [],
+          "cursor": "grab"
+        },
+        {
+          "type": "move",
+          "x": 219,
+          "y": 199,
+          "aim": "panning",
+          "hover": null,
+          "calls": ["default","grabbing"],
+          "cursor": "grabbing"
+        },
+        {
+          "type": "up",
+          "x": 219,
+          "y": 199,
+          "aim": "release on the edge where it went",
+          "hover": "bezier-curve:pointer",
+          "calls": ["pointer"],
+          "cursor": "pointer"
+        }
+      ]
     }
   ],
   "pictures": [
@@ -1354,5 +1822,5 @@
       ]
     }
   ],
-  "checks": {"expectations":80}
+  "checks": {"expectations":104}
 }

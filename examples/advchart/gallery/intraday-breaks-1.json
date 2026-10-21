@@ -21,6 +21,7 @@
    "axisLabel": {
     "showMinLabel": true,
     "showMaxLabel": true,
+    "formatter": "@intraday-breaks-1.formatter",
     "rich": {
      "weak": {
       "color": "#999"

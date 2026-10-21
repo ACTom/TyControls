@@ -16,9 +16,9 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.ZrPath, tyControls.AdvChart.Color,
-     tyControls.AdvChart.Marker, tyControls.AdvChart.MarkerView,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.Color,
+     tyControls.AdvanceChart.Marker, tyControls.AdvanceChart.MarkerView,
      tyControls.AdvanceChart;
 type
   TMLineProbe = class(TTyAdvanceChart)
@@ -343,12 +343,14 @@ procedure TAdvChartMarkLineOracleTest.CheckLabel(const AWhat: string;
 var o, st, ink, inner: TJSONObject;
 begin
   Inc(FCompared);
+  { [R2-I1] upstream records an ignored text as none: a label built for a
+    state only (hidden at rest) is none here too }
   if IsNull(AFx) then
   begin
-    if B.Present then Miss(AWhat + ': none upstream, one here');
+    if B.Present and not B.Hidden then Miss(AWhat + ': none upstream, one here');
     Exit;
   end;
-  if not B.Present then
+  if not B.Present or B.Hidden then
   begin
     Miss(AWhat + ': one upstream, none here');
     Exit;

@@ -1,0 +1,164 @@
+{
+ "source": "tools/advchart-oracle/tooltip-html.js",
+ "version": "6.1.0",
+ "markers": [
+  {
+   "color": "#5470c6",
+   "type": "item",
+   "html": "<span style=\"display:inline-block;margin-right:4px;border-radius:10px;width:10px;height:10px;background-color:#5470c6;\"></span>"
+  },
+  {
+   "color": "#5470c6",
+   "type": "subItem",
+   "html": "<span style=\"display:inline-block;vertical-align:middle;margin-right:8px;margin-left:3px;border-radius:4px;width:4px;height:4px;background-color:#5470c6;\"></span>"
+  },
+  {
+   "color": "#91cc75",
+   "type": "item",
+   "html": "<span style=\"display:inline-block;margin-right:4px;border-radius:10px;width:10px;height:10px;background-color:#91cc75;\"></span>"
+  },
+  {
+   "color": "#91cc75",
+   "type": "subItem",
+   "html": "<span style=\"display:inline-block;vertical-align:middle;margin-right:8px;margin-left:3px;border-radius:4px;width:4px;height:4px;background-color:#91cc75;\"></span>"
+  },
+  {
+   "color": "#ee6666",
+   "type": "item",
+   "html": "<span style=\"display:inline-block;margin-right:4px;border-radius:10px;width:10px;height:10px;background-color:#ee6666;\"></span>"
+  },
+  {
+   "color": "#ee6666",
+   "type": "subItem",
+   "html": "<span style=\"display:inline-block;vertical-align:middle;margin-right:8px;margin-left:3px;border-radius:4px;width:4px;height:4px;background-color:#ee6666;\"></span>"
+  },
+  {
+   "color": "rgba(84,112,198,0.5)",
+   "type": "item",
+   "html": "<span style=\"display:inline-block;margin-right:4px;border-radius:10px;width:10px;height:10px;background-color:rgba(84,112,198,0.5);\"></span>"
+  },
+  {
+   "color": "rgba(84,112,198,0.5)",
+   "type": "subItem",
+   "html": "<span style=\"display:inline-block;vertical-align:middle;margin-right:8px;margin-left:3px;border-radius:4px;width:4px;height:4px;background-color:rgba(84,112,198,0.5);\"></span>"
+  },
+  {
+   "color": "rgba(0,0,0,0.25)",
+   "type": "item",
+   "html": "<span style=\"display:inline-block;margin-right:4px;border-radius:10px;width:10px;height:10px;background-color:rgba(0,0,0,0.25);\"></span>"
+  },
+  {
+   "color": "rgba(0,0,0,0.25)",
+   "type": "subItem",
+   "html": "<span style=\"display:inline-block;vertical-align:middle;margin-right:8px;margin-left:3px;border-radius:4px;width:4px;height:4px;background-color:rgba(0,0,0,0.25);\"></span>"
+  }
+ ],
+ "encode": [
+  {
+   "in": "plain",
+   "out": "plain"
+  },
+  {
+   "in": "a<b>&c",
+   "out": "a&lt;b&gt;&amp;c"
+  },
+  {
+   "in": "\"quoted\" & 'single'",
+   "out": "&quot;quoted&quot; &amp; &#39;single&#39;"
+  },
+  {
+   "in": "<span style=\"color:red\">x</span>",
+   "out": "&lt;span style=&quot;color:red&quot;&gt;x&lt;/span&gt;"
+  },
+  {
+   "in": "&nbsp;",
+   "out": "&amp;nbsp;"
+  },
+  {
+   "in": "",
+   "out": ""
+  }
+ ],
+ "tpl": [
+  {
+   "id": "item",
+   "tpl": "{a}<br/>{b}: {c}",
+   "params": [
+    {
+     "seriesName": "s<1>",
+     "name": "A&B",
+     "value": 5
+    }
+   ],
+   "out": "s&lt;1&gt;<br/>A&amp;B: 5"
+  },
+  {
+   "id": "item-quotes",
+   "tpl": "<b>{b}</b> {c} ({a})",
+   "params": [
+    {
+     "seriesName": "it's \"q\"",
+     "name": "<i>n</i>",
+     "value": "x<y"
+    }
+   ],
+   "out": "<b>&lt;i&gt;n&lt;/i&gt;</b> x&lt;y (it&#39;s &quot;q&quot;)"
+  },
+  {
+   "id": "axis",
+   "tpl": "{b0}<br/>{a0}: {c0}<br/>{a1}: {c1}",
+   "params": [
+    {
+     "seriesName": "p&q",
+     "name": "cat<1>",
+     "value": 3
+    },
+    {
+     "seriesName": "r>s",
+     "name": "cat<1>",
+     "value": 4
+    }
+   ],
+   "out": "cat&lt;1&gt;<br/>p&amp;q: 3<br/>r&gt;s: 4"
+  },
+  {
+   "id": "axis-short",
+   "tpl": "{a}: {c} / {a1}: {c1}",
+   "params": [
+    {
+     "seriesName": "one",
+     "name": "c",
+     "value": 1
+    },
+    {
+     "seriesName": "<two>",
+     "name": "c",
+     "value": 2
+    }
+   ],
+   "out": "one: 1 / &lt;two&gt;: 2"
+  }
+ ],
+ "guards": [
+  {
+   "id": "mk-span",
+   "ok": true,
+   "what": "an item marker is the inline-block span"
+  },
+  {
+   "id": "mk-sub",
+   "ok": true,
+   "what": "a sub-item marker is 4 x 4"
+  },
+  {
+   "id": "enc-lt",
+   "ok": true,
+   "what": "encodeHTML escapes < > &"
+  },
+  {
+   "id": "tpl-enc",
+   "ok": true,
+   "what": "formatTpl(.., true) encodes the values, not the template"
+  }
+ ]
+}

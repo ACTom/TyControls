@@ -22,8 +22,8 @@ interface
 uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      BGRABitmap, BGRABitmapTypes,
      tyControls.Types, tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Layout,
-     tyControls.AdvChart.Builder, tyControls.AdvChart.Coord,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Layout,
+     tyControls.AdvanceChart.Builder, tyControls.AdvanceChart.Coord,
      tyControls.AdvanceChart,
      test.advancechart;
 type

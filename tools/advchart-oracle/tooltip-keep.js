@@ -190,7 +190,7 @@ const visible = c => !!(c && c.el && !c.el.ignore && !c.el.invisible);
 function axisKeyOf(ai) {
   return ai.axis.dim + ai.axis.model.componentIndex;
 }
-function stateOf(chart, w) {
+function stateOf(chart, w, def) {
   const ap = chart.getModel().getComponent('axisPointer');
   const info = ap && ap.coordSysAxesInfo;
   const axes = [];
@@ -204,6 +204,9 @@ function stateOf(chart, w) {
         value: shown && typeof o.value === 'number' ? hex(o.value) : null, valueText: shown && o.value != null ? text(o.value) : null,
         sdi: shown ? (o.seriesDataIndices || []).map(b => [b.seriesIndex, b.dataIndex, b.dataIndexInside]) : [],
       });
+      // [R2-E] where the pointer is drawn: the value through the axis'
+      // scale (a category's name its ordinal, a date string its time)
+      if (def && def.ptr) axes[axes.length - 1].parsed = shown && o.value != null ? hex(ai.axis.scale.parse(o.value)) : null;
     }
   }
   let tip = null;
@@ -219,6 +222,11 @@ function stateOf(chart, w) {
       box: vis && w.box ? w.box.map(hex) : null,
       boxText: vis && w.box ? w.box.map(text) : null,
     };
+    // [R2-E] the content's text (a template formatter's: plain)
+    if (def && def.text) tip.text = vis && c.el ? c.el.style.text : null;
+    // [r2v] its border (setContent's: a written borderColor, else the
+    // item's colour)
+    if (def && def.border) tip.border = vis && c.el ? c.el.style.borderColor : null;
   }
   return { axes, tip };
 }
@@ -262,6 +270,41 @@ function pointOn(chart, seriesIndex, dataIndex, where) {
     }
   }
   throw new OracleError(where + ': no point over ' + seriesIndex + '/' + dataIndex);
+}
+
+// [R2-E] a point over a component's element (actions-batch.js), and over a
+// series item of a given dataType
+function within(t, el) {
+  for (let e = t; e; e = e.__hostTarget || e.parent) if (e === el) return true;
+  return false;
+}
+function pointOnEl(chart, el, where) {
+  const h = chart.getZr().handler;
+  const r = el.getBoundingRect().clone();
+  const m = el.getComputedTransform();
+  if (m) r.applyTransform(m);
+  const cx = Math.round(r.x + r.width / 2);
+  const cy = Math.round(r.y + r.height / 2);
+  const R = Math.ceil(Math.max(r.width, r.height) / 2) + 1;
+  for (let rad = 0; rad <= R; rad++) {
+    for (let dx = -rad; dx <= rad; dx++) {
+      for (let dy = -rad; dy <= rad; dy++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== rad) continue;
+        const hv = h.findHover(cx + dx, cy + dy);
+        if (hv && hv.target && within(hv.target, el)) return [cx + dx, cy + dy];
+      }
+    }
+  }
+  throw new OracleError(where + ': no point over the element');
+}
+function pointOnTyped(chart, seriesIndex, dataIndex, dataType, where) {
+  const els = chart.getZr().storage.getDisplayList(true);
+  for (const el of els) {
+    const d = dispatcherOf(el);
+    if (!d || d.seriesIndex !== seriesIndex || d.dataIndex !== dataIndex || (d.dataType || '') !== dataType) continue;
+    return pointOnEl(chart, el, where);
+  }
+  throw new OracleError(where + ': no ' + dataType + ' ' + seriesIndex + '/' + dataIndex);
 }
 
 // =====================================================================
@@ -463,6 +506,137 @@ const CASES = [
       { op: 'idle', ms: 150 },
     ],
   },
+  // ---------------- [R2-E] the frozen box's text ----------------
+  {
+    id: 'keep-frozen-text', text: true, note: 'an item tooltip and a setOption: until the keep timer shows it again the box says '
+      + 'what it said (TooltipView.render does not touch the content), then the new value',
+    charts: [barLine({ trigger: 'item', formatter: '{b}: {c}' })],
+    steps: [
+      { op: 'move', chart: 0, on: [0, 1] },
+      { op: 'setOption', chart: 0, option: newData },
+      { op: 'idle', ms: 0 },
+    ],
+  },
+  {
+    id: 'keep-frozen-unpainted', text: true, note: 'a showTip on another bar and, before any frame, a setOption: the content '
+      + 'element took the new show\'s text at once (setContent), so the frozen box says that one -- not the last one drawn',
+    charts: [barLine({ trigger: 'item', formatter: '{b}: {c}' })],
+    steps: [
+      { op: 'move', chart: 0, on: [0, 1] },
+      { op: 'action', chart: 0, payload: { type: 'showTip', seriesIndex: 0, dataIndex: 2 }, noFrame: true },
+      { op: 'setOption', chart: 0, option: newData },
+      { op: 'idle', ms: 0 },
+    ],
+  },
+  {
+    id: 'keep-frozen-border', text: true, border: true, note: 'an item tooltip and a setOption that colours the series anew: the '
+      + 'frozen box keeps the border its show set (the item\'s old colour) until the keep timer shows it with the new one',
+    charts: [barLine({ trigger: 'item', formatter: '{b}: {c}' }, { series: [{ type: 'bar', data: [3, 5, 2, 6], itemStyle: { color: '#00aa00' } },
+      { type: 'line', data: [1, 4, 3, 2] }] })],
+    steps: [
+      { op: 'move', chart: 0, on: [0, 1] },
+      { op: 'setOption', chart: 0, option: { series: [{ itemStyle: { color: '#ff0000' } }, {}] } },
+      { op: 'idle', ms: 0 },
+    ],
+  },
+  {
+    id: 'keep-frozen-axis-text', text: true, note: 'the same under an axis trigger',
+    charts: [barLine({ trigger: 'axis', formatter: '{b}: {c0} / {c1}' })],
+    steps: [
+      { op: 'move', chart: 0, at: [250, 200] },
+      { op: 'setOption', chart: 0, option: newData },
+      { op: 'idle', ms: 0 },
+    ],
+  },
+  {
+    id: 'keep-frozen-gone', text: true, note: 'the row the box spoke of is gone: the box still says it until the keep timer finds '
+      + 'nothing at the point and hides it',
+    charts: [barLine({ trigger: 'item', formatter: '{b}: {c}' })],
+    steps: [
+      { op: 'move', chart: 0, on: [0, 3] },
+      { op: 'setOption', chart: 0, option: { series: [{ data: [3, 5] }, {}] } },
+      { op: 'idle', ms: 0 },
+      { op: 'idle', ms: 150 },
+    ],
+  },
+  // ---------------- [R2-E] the paths that render no tooltip view ----------------
+  {
+    id: 'keep-roam', note: 'a graph\'s roam (update none): the tooltip view does not render, nothing is kept',
+    charts: [{ animation: false, tooltip: { trigger: 'item' },
+      series: [{ type: 'graph', layout: 'none', roam: true, symbolSize: 30,
+        data: [{ name: 'u', x: 0, y: 0 }, { name: 'v', x: 10, y: 10 }], links: [{ source: 'u', target: 'v' }] }] }],
+    steps: [
+      { op: 'move', chart: 0, on: [0, 0], dataType: 'node' },
+      { op: 'action', chart: 0, payload: { type: 'graphRoam', seriesIndex: 0, dx: 5, dy: 0 } },
+      { op: 'idle', ms: 0 },
+      { op: 'idle', ms: 150 },
+    ],
+  },
+  {
+    id: 'keep-legend-scroll', note: 'a legendScroll\'s update (the default, update) renders the tooltip view: kept',
+    charts: [barLine({ trigger: 'item' }, { legend: { type: 'scroll', width: 150 },
+      series: [{ type: 'bar', name: 'B', data: [3, 5, 2, 6] }, { type: 'line', name: 'L1', data: [1, 1, 1, 1] },
+        { type: 'line', name: 'L2', data: [1, 1, 1, 1] }, { type: 'line', name: 'L3', data: [1, 1, 1, 1] },
+        { type: 'line', name: 'L4', data: [1, 1, 1, 1] }, { type: 'line', name: 'L5', data: [1, 1, 1, 1] }] })],
+    steps: [
+      { op: 'move', chart: 0, on: [0, 1] },
+      { op: 'action', chart: 0, payload: { type: 'legendScroll', scrollDataIndex: 3 } },
+      { op: 'idle', ms: 0 },
+      { op: 'idle', ms: 150 },
+    ],
+  },
+  {
+    id: 'keep-dz-hover', note: 'an axis tooltip, then the pointer over a slider dataZoom\'s handle (its labels shown, no render of '
+      + 'the tooltip view): nothing kept',
+    charts: [barLine({ trigger: 'axis' }, { dataZoom: [{ type: 'slider', start: 20, end: 80 }] })],
+    steps: [
+      { op: 'move', chart: 0, at: [250, 200] },
+      { op: 'move', chart: 0, dzHandle: 0 },
+      { op: 'idle', ms: 0 },
+      { op: 'idle', ms: 150 },
+    ],
+  },
+  // ---------------- [R2-E] an axis' own status 'show' ----------------
+  {
+    id: 'ptr-cartesian', ptr: true, initial: true, note: 'a category axis\' status show: drawn before anything moves; a move off the '
+      + 'grid rewrites every status; a setOption that does not write one leaves it so; one that writes it brings it back',
+    charts: [barLine(undefined, { xAxis: { type: 'category', data: cats, axisPointer: { show: true, status: 'show', value: 'c' } } })],
+    steps: [
+      { op: 'move', chart: 0, at: [5, 5] },
+      { op: 'setOption', chart: 0, option: newData },
+      { op: 'setOption', chart: 0, option: { xAxis: { axisPointer: { status: 'show', value: 'b' } } } },
+      { op: 'move', chart: 0, at: [6, 5] },
+      { op: 'setOption', chart: 0, option: barLine(undefined, { xAxis: { type: 'category', data: cats, axisPointer: { show: true, status: 'show', value: 'd' } } }), notMerge: true },
+    ],
+  },
+  {
+    id: 'ptr-polar', ptr: true, initial: true, note: 'a polar angle axis\' status show',
+    charts: [{ animation: false, polar: {}, angleAxis: { type: 'category', data: cats, axisPointer: { show: true, status: 'show', value: 'c' } },
+      radiusAxis: { min: 0, max: 10 }, series: [{ type: 'bar', coordinateSystem: 'polar', data: [3, 5, 2, 6] }] }],
+    steps: [
+      { op: 'move', chart: 0, at: [5, 5] },
+      { op: 'setOption', chart: 0, option: { angleAxis: { axisPointer: { status: 'show', value: 'a' } } } },
+    ],
+  },
+  {
+    id: 'ptr-radius', ptr: true, initial: true, note: 'a polar radius axis\' status show with a number',
+    charts: [{ animation: false, polar: {}, angleAxis: { type: 'category', data: cats },
+      radiusAxis: { min: 0, max: 10, axisPointer: { show: true, status: 'show', value: 4 } },
+      series: [{ type: 'bar', coordinateSystem: 'polar', data: [3, 5, 2, 6] }] }],
+    steps: [],
+  },
+  {
+    id: 'ptr-single', ptr: true, initial: true, note: 'a single axis\' status show',
+    charts: [{ animation: false, singleAxis: { type: 'value', min: 0, max: 100, axisPointer: { show: true, status: 'show', value: 30 } },
+      series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [10, 40, 70] }] }],
+    steps: [{ op: 'move', chart: 0, at: [5, 5] }],
+  },
+  {
+    id: 'ptr-time', ptr: true, initial: true, note: 'a time axis\' status show with a date string: parsed (an explicit zone)',
+    charts: [{ animation: false, xAxis: { type: 'time', axisPointer: { show: true, status: 'show', value: '2024-01-03T06:00:00Z' } },
+      yAxis: { min: 0, max: 10 }, series: [{ type: 'line', data: [['2024-01-01T00:00:00Z', 1], ['2024-01-05T00:00:00Z', 3]] }] }],
+    steps: [],
+  },
 ];
 // =====================================================================
 const TYPES = ['updateaxispointer', 'showtip', 'hidetip', 'updated'];
@@ -481,6 +655,8 @@ function runCase(def) {
       if (def.group) c.group = def.group;
     });
     if (def.group) echarts.connect(def.group);
+    // [R2-E] the state before any step: an axis' own status 'show'
+    const initial = def.initial ? stateOf(charts[0], watch[0], def) : null;
     const steps = [];
     for (const st of def.steps) {
       log.length = 0;
@@ -488,7 +664,12 @@ function runCase(def) {
       if (st.chart !== undefined) rec.chart = st.chart;
       const ch = st.chart !== undefined ? charts[st.chart] : null;
       let at = st.at;
-      if (st.on) at = pointOn(ch, st.on[0], st.on[1], def.id);
+      if (st.on && st.dataType) at = pointOnTyped(ch, st.on[0], st.on[1], st.dataType, def.id);
+      else if (st.on) at = pointOn(ch, st.on[0], st.on[1], def.id);
+      if (st.dzHandle !== undefined) {
+        const dz = ch.getModel().getComponent('dataZoom', 0);
+        at = pointOnEl(ch, ch.getViewOfComponentModel(dz)._displayables.handles[st.dzHandle], def.id);
+      }
       if (st.inBox) {
         const w = watch[st.chart];
         must(w.box && visible(w.view._tooltipContent), def.id + ': no box to move into');
@@ -529,12 +710,21 @@ function runCase(def) {
         rec.ms = st.ms;
         advanceClock(NOW + st.ms);
       } else throw new OracleError('op ' + st.op);
-      charts.forEach(frame);
+      // [r2v] a step the next one follows before any frame: nothing drawn
+      // between them (the port compares its events only)
+      if (st.noFrame) rec.noFrame = true;
+      else charts.forEach(frame);
       rec.events = log.slice();
-      rec.state = charts.map((c, i) => stateOf(c, watch[i]));
+      rec.state = charts.map((c, i) => stateOf(c, watch[i], def));
       steps.push(rec);
     }
-    return { id: def.id, note: def.note, charts: def.charts.map(o => ({ option: plain(o, 0) })), group: def.group, steps };
+    const out = { id: def.id, note: def.note, charts: def.charts.map(o => ({ option: plain(o, 0) })), group: def.group, steps };
+    // [R2-E] only the cases that have them
+    if (def.ptr) out.ptr = true;
+    if (def.text) out.text = true;
+    if (def.border) out.border = true;
+    if (initial) out.initial = initial;
+    return out;
   } finally {
     if (def.group) echarts.disconnect(def.group);
     charts.forEach(c => c.dispose());
@@ -593,6 +783,36 @@ function anchors(cases) {
     && tip(kti.steps[3]).which === 'item:0:1', 'trigger now item: the last dataByCoordSys is dropped, the bar at the point is shown as an item');
   guard('ka-notmerge-drops', ka.steps[4].newView && !tip(ka.steps[4]).visible && ka.steps[5].events.length === 0,
     'a notMerge setOption: a new view, the box gone, nothing kept');
+  // [R2-E]
+  const unhex = s => { const b = new DataView(new ArrayBuffer(8)); b.setUint32(0, parseInt(s.slice(0, 8), 16)); b.setUint32(4, parseInt(s.slice(8), 16)); return b.getFloat64(0); };
+  const kft = cs('keep-frozen-text');
+  guard('kft-frozen', tip(kft.steps[1]).text === 'b: 5' && tip(kft.steps[2]).text === 'b: 6', 'frozen: the old text until the keep timer');
+  const kfu = cs('keep-frozen-unpainted');
+  guard('kfu-new-show', tip(kfu.steps[0]).text === 'b: 5' && tip(kfu.steps[2]).text === 'c: 2' && tip(kfu.steps[3]).text === 'c: 3',
+    'the frozen box says the last show\'s text, drawn or not, until the keep timer');
+  const kfb = cs('keep-frozen-border');
+  guard('kfb-kept', tip(kfb.steps[1]).border === tip(kfb.steps[0]).border && tip(kfb.steps[0]).border === '#00aa00'
+    && tip(kfb.steps[2]).border === '#ff0000', 'frozen: the old border until the keep timer');
+  const kfa = cs('keep-frozen-axis-text');
+  guard('kfa-frozen', tip(kfa.steps[1]).text === 'b: 5 / 4' && tip(kfa.steps[2]).text === 'b: 6 / 5', 'the axis box the same');
+  const kfg = cs('keep-frozen-gone');
+  guard('kfg-old', tip(kfg.steps[1]).text === 'd: 6' && tip(kfg.steps[2]).visible && tip(kfg.steps[2]).text === 'd: 6'
+    && !tip(kfg.steps[3]).visible, 'the row gone: the old text until hideDelay');
+  const kr = cs('keep-roam');
+  guard('kr-none', kr.steps[2].events.length === 0, 'a roam renders no tooltip view: nothing kept');
+  const kls = cs('keep-legend-scroll');
+  guard('kls-kept', ev(kls.steps[2], 'showtip').length === 1, 'a legendScroll updates: kept');
+  const kdz = cs('keep-dz-hover');
+  guard('kdz-none', kdz.steps[2].events.length === 0, 'a dataZoom handle\'s hover renders no tooltip view: nothing kept');
+  const pc = cs('ptr-cartesian');
+  const ax0 = st => st.axes[0];
+  guard('pc-back', ax0(pc.initial).status === 'show' && unhex(ax0(pc.initial).parsed) === 2 && ax0(pc.steps[1].state[0]).status === 'hide'
+    && unhex(ax0(pc.steps[2].state[0]).parsed) === 1 && unhex(ax0(pc.steps[4].state[0]).parsed) === 3,
+    'a status the pointer rewrote stays through a setOption that writes none; one that writes it, or a notMerge, brings it back');
+  const pp = cs('ptr-polar');
+  guard('pp-angle', ax0(pp.initial).key === 'angle0' && unhex(ax0(pp.initial).parsed) === 2, 'a polar angle axis\' own status show');
+  const ptt = cs('ptr-time');
+  guard('ptt-parsed', unhex(ax0(ptt.initial).parsed) === Date.UTC(2024, 0, 3, 6), 'a date string through the time scale');
   return guards;
 }
 

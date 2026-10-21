@@ -4,7 +4,8 @@
   "left": "center"
  },
  "tooltip": {
-  "triggerOn": "none"
+  "triggerOn": "none",
+  "formatter": "@line-draggable.formatter"
  },
  "grid": {
   "top": "8%",

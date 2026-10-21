@@ -16,9 +16,10 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller, tyControls.Types, tyControls.StyleModel,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Color, tyControls.AdvChart.Render, tyControls.AdvChart.Custom,
-     tyControls.AdvChart.Legend, tyControls.AdvChart.Decal,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Render, tyControls.AdvanceChart.Custom,
+     tyControls.AdvanceChart.Legend, tyControls.AdvanceChart.Decal,
+     tyControls.AdvanceChart.Geo, tyControls.AdvanceChart.Images, ImgList,
      tyControls.AdvanceChart;
 type
   TDsProbe = class(TTyAdvanceChart)
@@ -75,6 +76,10 @@ type
     procedure TestALargeBarPaintsItsDecal;
     procedure TestAnImageSymbolPaintsTheImage;
     procedure TestTheApiVisualIsTheItemsDecal;
+    procedure TestAHollowsGroundIsTheSkins;
+    procedure TestAMapRegionPaintsItsDecal;
+    procedure TestAListPictureInATileFollowsTheList;
+    procedure TestAReplacedListPictureIsFollowed;
   end;
 
 implementation
@@ -82,6 +87,11 @@ implementation
 const
   cUpstreamDefault = 'rgba(0, 0, 0, 0.2)';
   { a 2 x 1 PNG: red then blue -- decal-series.js' PNG }
+  { [R2-F] the map of decal-series.js' 'map' scenario: three squares }
+  cDecalMap = '{"type":"FeatureCollection","features":['
+    + '{"type":"Feature","properties":{"name":"A"},"geometry":{"type":"Polygon","coordinates":[[[0,0],[8,0],[8,8],[0,8],[0,0]]]}},'
+    + '{"type":"Feature","properties":{"name":"B"},"geometry":{"type":"Polygon","coordinates":[[[10,0],[18,0],[18,8],[10,8],[10,0]]]}},'
+    + '{"type":"Feature","properties":{"name":"C"},"geometry":{"type":"Polygon","coordinates":[[[20,0],[28,0],[28,8],[20,8],[20,0]]]}}]}';
   cPng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAADklEQVR4nGP4z8AAQv8BD/kD/YURmXYAAAAASUVORK5CYII=';
 
 var
@@ -210,6 +220,7 @@ begin
   if GRenders = nil then GRenders := TDsRenders.Create;
   TyChartRegisterRenderItem('decalBar', @GRenders.DecalBar);
   TyChartRegisterRenderItem('decalLit', @GRenders.DecalLit);
+  AssertTrue('the map registers', TyChartRegisterMap('decalSquares', cDecalMap));
   FBad := 0;
   FCompared := 0;
   FReport := '';
@@ -503,7 +514,10 @@ begin
     FName := 'tile ' + t.Strings['id'];
     { the option as written, read by the port: an unwritten colour is the
       light skin's, which is upstream's }
-    dec := TyDecalResolve(TyDecalRawOf(t.Objects['decal']), FSkin);
+    { [R2-F] through the skin's ground, as the chart resolves one: on the
+      light skin it is upstream's neutral00 }
+    dec := TyDecalResolve(TyDecalRawOf(t.Objects['decal']), FSkin,
+      TTyChartColor(FCtl.Model.ResolveStyle(TyDecalSkin, '', []).Background.Color));
     SameTile(dec, t.Objects['tile'], True, 'tile');
   end;
   Done('tiles');
@@ -696,6 +710,243 @@ begin
   AssertTrue(Format('blue on the right (%d, %d, %d, %d)', [r.red, r.green, r.blue, r.alpha]),
     (r.blue > 200) and (r.red < 60) and (r.alpha > 200));
   AssertTrue('and nothing in the gap', tile.GetPixel(12, 4).alpha = 0);
+end;
+
+{ [R2-F] AN empty* SYMBOL'S GROUND IS THE SKIN'S: the TyAdvChartDecal
+  background -- upstream's neutral00 white on the light skin, the dark
+  surface on a dark one, where it was a literal white everywhere }
+procedure TAdvChartDecalSeriesTest.TestAHollowsGroundIsTheSkins;
+var
+  m: TTyStyleModel;
+  ink, ground: TTyChartColor;
+  d: TJSONData;
+  dec: TTyChartDecal;
+  tile: TBGRABitmap;
+  p: TBGRAPixel;
+  k, i: Integer;
+  e: TTyChartElement;
+begin
+  AssertEquals('light: upstream''s white', Int64($FFFFFFFF),
+    Int64(TTyChartColor(FCtl.Model.ResolveStyle(TyDecalSkin, '', []).Background.Color)));
+  { the chart hands it to the decals it resolves }
+  Load('{"animation":false,"xAxis":{"data":["a"]},"yAxis":{},"series":[{"type":"bar",'
+    + '"itemStyle":{"decal":{"symbol":"emptyCircle"}},"data":[1]}]}', 300, 200, 96);
+  k := 0;
+  for i := 0 to FChart.List.Count - 1 do
+  begin
+    e := FChart.List.Element(i);
+    if not e.Style.Decal.Present then Continue;
+    Inc(k);
+    AssertEquals('the chart''s decal takes the skin''s ground', Int64($FFFFFFFF),
+      Int64(e.Style.Decal.EmptyFill));
+  end;
+  AssertTrue('a decal', k > 0);
+  m := TTyStyleModel.Create;
+  try
+    m.LoadFromFile(ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'themes'
+      + PathDelim + 'auto.tycss');
+    m.SetMode('dark');
+    ink := TTyChartColor(m.ResolveStyle(TyDecalSkin, '', []).TextColor);
+    ground := TTyChartColor(m.ResolveStyle(TyDecalSkin, '', []).Background.Color);
+    AssertTrue(Format('dark: no white hole ($%.8x)', [ground]), ground <> $FFFFFFFF);
+    AssertTrue(Format('dark: a dark ground ($%.8x)', [ground]),
+      ((ground shr 16) and $FF) + ((ground shr 8) and $FF) + (ground and $FF) < 3 * 100);
+  finally
+    m.Free;
+  end;
+  d := GetJSON('{"symbol":"emptyCircle","symbolSize":1,"dashArrayX":[20,0],"dashArrayY":[20,0]}');
+  try
+    { the same decal on white first: a tile of its own, not the dark one's }
+    dec := TyDecalResolve(TyDecalRawOf(d), ink, TTyChartColor($FFFFFFFF));
+    tile := TyDecalTileImage(dec, 1);
+    AssertTrue('a white-ground tile', tile <> nil);
+    p := tile.GetPixel(tile.Width div 2, tile.Height div 2);
+    AssertTrue('its hollow white', (p.red > 250) and (p.green > 250) and (p.blue > 250));
+    dec := TyDecalResolve(TyDecalRawOf(d), ink, ground);
+  finally
+    d.Free;
+  end;
+  tile := TyDecalTileImage(dec, 1);
+  AssertTrue('a tile', tile <> nil);
+  { the hollow's middle: the ground, not white }
+  p := tile.GetPixel(tile.Width div 2, tile.Height div 2);
+  AssertTrue(Format('the hollow is the ground: (%d, %d, %d) against $%.8x',
+    [p.red, p.green, p.blue, ground]),
+    (Abs(p.red - Integer((ground shr 16) and $FF)) <= 2)
+    and (Abs(p.green - Integer((ground shr 8) and $FF)) <= 2)
+    and (Abs(p.blue - Integer(ground and $FF)) <= 2));
+end;
+
+{ [R2-F] A MAP REGION WEARS ITS DECAL (MapDraw's applyOptionStyleForRegion):
+  black 4 x 4 squares over red regions -- black inside, and none without it }
+procedure TAdvChartDecalSeriesTest.TestAMapRegionPaintsItsDecal;
+const
+  cOpt = '{"animation":false,"series":[{"type":"map","map":"decalSquares","left":0,"right":0,'
+    + '"top":0,"bottom":0,"itemStyle":{"areaColor":"#ff0000","borderWidth":0%s},'
+    + '"data":[{"name":"A","value":1},{"name":"B","value":2}]}]}';
+var
+  x, y, black, red: Integer;
+  px: TBGRAPixel;
+begin
+  AssertTrue('the map registers', TyChartRegisterMap('decalSquares', cDecalMap));
+  Load(Format(cOpt, [',"decal":{"color":"#000","dashArrayX":[4,4],"dashArrayY":[4,4]}']),
+    300, 100, 96);
+  black := 0;
+  red := 0;
+  for y := 0 to 99 do
+    for x := 0 to 299 do
+    begin
+      px := FBmp.GetPixel(x, y);
+      if (px.red < 40) and (px.green < 40) and (px.blue < 40) then Inc(black)
+      else if (px.red > 200) and (px.green < 60) then Inc(red);
+    end;
+  AssertTrue(Format('black squares over the regions (%d black, %d red)', [black, red]),
+    (black > 500) and (red > 500));
+  Load(Format(cOpt, ['']), 300, 100, 96);
+  black := 0;
+  for y := 0 to 99 do
+    for x := 0 to 299 do
+    begin
+      px := FBmp.GetPixel(x, y);
+      if (px.red < 40) and (px.green < 40) and (px.blue < 40) then Inc(black);
+    end;
+  AssertEquals('none without a decal', 0, black);
+end;
+
+{ [R2-F] A TILE WITH AN IMAGE LIST'S PICTURE is the list's picture now: the
+  tile used to be kept by the decal alone and stayed what the list held
+  when it was first drawn, until 64 other tiles cleared the cache }
+procedure TAdvChartDecalSeriesTest.TestAListPictureInATileFollowsTheList;
+var
+  lst: TImageList;
+  bmp: TBitmap;
+  d: TJSONData;
+  dec: TTyChartDecal;
+  tile: TBGRABitmap;
+  p: TBGRAPixel;
+
+  procedure Paint(AColor: TColor);
+  begin
+    bmp.Canvas.Brush.Color := AColor;
+    bmp.Canvas.FillRect(0, 0, 4, 4);
+  end;
+
+begin
+  lst := TImageList.Create(nil);
+  bmp := TBitmap.Create;
+  try
+    lst.Width := 4;
+    lst.Height := 4;
+    bmp.PixelFormat := pf24bit;
+    bmp.SetSize(4, 4);
+    Paint(clRed);
+    lst.Add(bmp, nil);
+    TyChartRegisterImageList('decalTileList', lst);
+    d := GetJSON('{"symbol":"image://decalTileList/0","symbolKeepAspect":false,'
+      + '"dashArrayX":[8,8],"dashArrayY":[8,8]}');
+    try
+      dec := TyDecalResolve(TyDecalRawOf(d), 0);
+    finally
+      d.Free;
+    end;
+    tile := TyDecalTileImage(dec, 1);
+    AssertTrue('a tile', tile <> nil);
+    p := tile.GetPixel(3, 4);
+    AssertTrue(Format('red first (%d, %d, %d)', [p.red, p.green, p.blue]), (p.red > 200) and (p.blue < 60));
+    { a change the list announces (LCL's Replace announces none) }
+    Paint(clBlue);
+    lst.Clear;
+    lst.Add(bmp, nil);
+    tile := TyDecalTileImage(dec, 1);
+    AssertTrue('a tile again', tile <> nil);
+    p := tile.GetPixel(3, 4);
+    AssertTrue(Format('blue once the list holds blue (%d, %d, %d)', [p.red, p.green, p.blue]),
+      (p.blue > 200) and (p.red < 60));
+  finally
+    TyChartUnregisterImageList('decalTileList');
+    bmp.Free;
+    lst.Free;
+  end;
+end;
+
+{ [R2-I2] LCL'S Replace ANNOUNCES NOTHING (InternalReplace calls no Change):
+  the list's picture and a decal's tile over it follow it all the same, by
+  the picture's content }
+procedure TAdvChartDecalSeriesTest.TestAReplacedListPictureIsFollowed;
+var
+  lst: TImageList;
+  bmp: TBitmap;
+  d: TJSONData;
+  dec: TTyChartDecal;
+  tile, pic: TBGRABitmap;
+  p: TBGRAPixel;
+  nw, nh: Double;
+  s0, s1: string;
+  held: Integer;
+
+  procedure Paint(AColor: TColor);
+  begin
+    bmp.Canvas.Brush.Color := AColor;
+    bmp.Canvas.FillRect(0, 0, 4, 4);
+  end;
+
+begin
+  lst := TImageList.Create(nil);
+  bmp := TBitmap.Create;
+  try
+    lst.Width := 4;
+    lst.Height := 4;
+    bmp.PixelFormat := pf24bit;
+    bmp.SetSize(4, 4);
+    Paint(clRed);
+    lst.Add(bmp, nil);
+    Paint(clLime);
+    lst.Add(bmp, nil);
+    TyChartRegisterImageList('replacedList', lst);
+    d := GetJSON('{"symbol":"image://replacedList/0","symbolKeepAspect":false,'
+      + '"dashArrayX":[8,8],"dashArrayY":[8,8]}');
+    try
+      dec := TyDecalResolve(TyDecalRawOf(d), 0);
+    finally
+      d.Free;
+    end;
+    tile := TyDecalTileImage(dec, 1);
+    AssertTrue('a tile', tile <> nil);
+    p := tile.GetPixel(3, 4);
+    AssertTrue(Format('red first (%d, %d, %d)', [p.red, p.green, p.blue]), (p.red > 200) and (p.blue < 60));
+    pic := TyChartImage('image://replacedList/0', 4, nw, nh);
+    AssertTrue('the picture', pic <> nil);
+    p := pic.GetPixel(1, 1);
+    AssertTrue(Format('the picture red (%d, %d, %d)', [p.red, p.green, p.blue]), (p.red > 200) and (p.blue < 60));
+    s0 := TyChartImageStamp('replacedList/0');
+    AssertEquals('the stamp holds while nothing changes', s0, TyChartImageStamp('replacedList/0'));
+    held := TyChartImageListCachedCount(lst);
+    AssertTrue('the picture of the slot is cached', held > 0);
+    { Replace: no change announced }
+    Paint(clBlue);
+    lst.Replace(0, bmp, nil);
+    s1 := TyChartImageStamp('replacedList/0');
+    AssertTrue('the stamp moves with the content', s0 <> s1);
+    pic := TyChartImage('image://replacedList/0', 4, nw, nh);
+    AssertTrue('the picture again', pic <> nil);
+    p := pic.GetPixel(1, 1);
+    AssertTrue(Format('the picture blue (%d, %d, %d)', [p.red, p.green, p.blue]), (p.blue > 200) and (p.red < 60));
+    tile := TyDecalTileImage(dec, 1);
+    AssertTrue('a tile again', tile <> nil);
+    p := tile.GetPixel(3, 4);
+    AssertTrue(Format('the tile blue (%d, %d, %d)', [p.red, p.green, p.blue]), (p.blue > 200) and (p.red < 60));
+    { [r2v] the replaced slot's old picture went with it: as many held as
+      before [the old one was kept beside the new] }
+    AssertEquals('the old picture of the slot let go', held, TyChartImageListCachedCount(lst));
+    { the other slot's picture is its own }
+    pic := TyChartImage('image://replacedList/1', 4, nw, nh);
+    p := pic.GetPixel(1, 1);
+    AssertTrue(Format('the other still green (%d, %d, %d)', [p.red, p.green, p.blue]), (p.green > 200) and (p.blue < 60));
+  finally
+    TyChartUnregisterImageList('replacedList');
+    bmp.Free;
+    lst.Free;
+  end;
 end;
 
 { api.visual('decal') is the item's decal visual -- its own over the

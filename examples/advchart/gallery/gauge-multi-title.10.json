@@ -1,0 +1,56 @@
+{
+ "series": [
+  {
+   "data": [
+    {
+     "value": 70.23,
+     "name": "Good",
+     "title": {
+      "offsetCenter": [
+       "-40%",
+       "80%"
+      ]
+     },
+     "detail": {
+      "offsetCenter": [
+       "-40%",
+       "95%"
+      ]
+     }
+    },
+    {
+     "value": 27.7,
+     "name": "Better",
+     "title": {
+      "offsetCenter": [
+       "0%",
+       "80%"
+      ]
+     },
+     "detail": {
+      "offsetCenter": [
+       "0%",
+       "95%"
+      ]
+     }
+    },
+    {
+     "value": 57.1,
+     "name": "Perfect",
+     "title": {
+      "offsetCenter": [
+       "40%",
+       "80%"
+      ]
+     },
+     "detail": {
+      "offsetCenter": [
+       "40%",
+       "95%"
+      ]
+     }
+    }
+   ]
+  }
+ ]
+}

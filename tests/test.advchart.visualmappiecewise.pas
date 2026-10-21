@@ -21,10 +21,10 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-     tyControls.AdvChart.Shape, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Scale,
-     tyControls.AdvChart.VisualMap, tyControls.AdvanceChart;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+     tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Scale,
+     tyControls.AdvanceChart.VisualMap, tyControls.AdvanceChart;
 type
   TVmpProbe = class(TTyAdvanceChart)
   public
@@ -58,10 +58,15 @@ type
     procedure TestSplitNumberAsUpstream;
     procedure TestPiecesAsUpstream;
     procedure TestCategoriesAsUpstream;
+    procedure TestTheSizesAsDrawnAreUpstreams;
     procedure TestViewCasesEncodeAsUpstream;
     procedure TestLineMetasAsUpstream;
     procedure TestGalleryAsUpstream;
     procedure TestTheNoteIsGone;
+    { [231b] visualMap's preprocessor per option: a timeline frame's and a
+      media unit's splitList (start / end) are their pieces (min / max); the
+      media default's are not }
+    procedure TestPreprocessPerOptionAsUpstream;
   end;
 
 implementation
@@ -524,9 +529,29 @@ begin
       Miss(Format('%s.%s: %d values upstream, %d here', [AWhat, mp.Kind, vis.Count, Length(mp.Nums)]))
     else
       for j := 0 to vis.Count - 1 do
-        if (vis.Items[j].JSONType <> jtNumber) or (Bits(mp.Nums[j]) <> Bits(vis.Items[j].AsFloat)) then
-          Miss(Format('%s.%s %d: %s upstream, %s here', [AWhat, mp.Kind, j,
-            vis.Items[j].AsJSON, Fmt(mp.Nums[j])]));
+        case vis.Items[j].JSONType of
+          jtNumber:
+            if Bits(mp.Nums[j]) <> Bits(vis.Items[j].AsFloat) then
+              Miss(Format('%s.%s %d: %s upstream, %s here', [AWhat, mp.Kind, j,
+                vis.Items[j].AsJSON, Fmt(mp.Nums[j])]));
+          { [R2-F] no number: a NaN (JSON's null), a word, a pair -- NaN
+            among the numbers, the word or the pair kept as written }
+          jtNull:
+            if not IsNan(mp.Nums[j]) then
+              Miss(Format('%s.%s %d: NaN upstream, %s here', [AWhat, mp.Kind, j, Fmt(mp.Nums[j])]));
+          jtString:
+            if not IsNan(mp.Nums[j]) or (j > High(mp.NumVals))
+              or (mp.NumVals[j].Str <> vis.Items[j].AsString) then
+              Miss(Format('%s.%s %d: %s upstream (a word)', [AWhat, mp.Kind, j, vis.Items[j].AsJSON]));
+          jtArray:
+            if not IsNan(mp.Nums[j]) or (j > High(mp.NumVals)) or not mp.NumVals[j].IsPair
+              or (vis.Items[j].Count <> 2)
+              or (Bits(mp.NumVals[j].Num) <> Bits(TJSONArray(vis.Items[j]).Floats[0]))
+              or (Bits(mp.NumVals[j].Num2) <> Bits(TJSONArray(vis.Items[j]).Floats[1])) then
+              Miss(Format('%s.%s %d: %s upstream (a pair)', [AWhat, mp.Kind, j, vis.Items[j].AsJSON]));
+        else
+          Miss(Format('%s.%s %d: %s upstream', [AWhat, mp.Kind, j, vis.Items[j].AsJSON]));
+        end;
   end;
   Inc(FCompared);
   if own <> Length(AMaps) then
@@ -613,7 +638,8 @@ var
   lst: TTyPaintList;
   e, el: TTyChartElement;
   want: TTyChartColor;
-  wantAlpha: Double;
+  wantAlpha, wordNum: Double;
+  fsz: TFormatSettings;
 begin
   si := ASeries.Integers['index'];
   typ := ASeries.Strings['type'];
@@ -712,9 +738,53 @@ begin
     else if (r.Find('symbolSize') <> nil) and (r.Find('symbolSize').JSONType = jtString) then
     begin
       Inc(FCompared);
-      if not (row.SizeSet and IsNan(row.Size)) then
+      { [R2-F] a word is its number where it reads as one ('5'), else NaN }
+      fsz := DefaultFormatSettings;
+      fsz.DecimalSeparator := '.';
+      if not TryStrToFloat(r.Strings['symbolSize'], wordNum, fsz) then wordNum := NaN;
+      if not (row.SizeSet and ((IsNan(wordNum) and IsNan(row.Size))
+        or (not IsNan(wordNum) and (row.Size = wordNum)))) then
         Miss(Format('s%d row %d: size %s upstream (no number), %s here', [si, raw,
           r.Find('symbolSize').AsJSON, Fmt(row.Size)]));
+    end;
+
+    { [R2-F] THE SYMBOL AS DRAWN, where the case records it: Symbol.ts'
+      scale, half of normalizeSymbolSize's `|| 0` -- a size that is no
+      number draws at nought (no element, or one of no size) }
+    if (typ = 'scatter') and (lst <> nil) and (r.Find('drawn') is TJSONArray) then
+    begin
+      found := 0;
+      el := Default(TTyChartElement);
+      for k := 0 to lst.Count - 1 do
+      begin
+        e := lst.Element(k);
+        if e.Datum.IsEdge or (e.Datum.SeriesIndex <> si)
+          or (e.Datum.RawDataIndex <> raw) then Continue;
+        if e.Caption.FontSizeLogical > 0 then Continue;
+        Inc(found);
+        el := e;
+      end;
+      sw := 0;
+      sh := 0;
+      if found = 1 then
+        case el.Shape.Kind of
+          cskCircle: begin sw := 2 * el.Shape.R1; sh := sw; end;
+          cskEllipse: begin sw := 2 * el.Shape.R0; sh := 2 * el.Shape.R1; end;
+        else
+          if TyRectFIsValid(el.Shape.Bounds) then
+          begin
+            sw := TyRectFWidth(el.Shape.Bounds);
+            sh := TyRectFHeight(el.Shape.Bounds);
+          end;
+        end;
+      if IsNan(sw) then sw := 0;
+      if IsNan(sh) then sh := 0;
+      Inc(FCompared);
+      if (found > 1) or (Abs(sw - FromHex(TJSONArray(r.Find('drawn')).Strings[0])) > 1e-6)
+        or (Abs(sh - FromHex(TJSONArray(r.Find('drawn')).Strings[1])) > 1e-6) then
+        Miss(Format('s%d row %d: drawn %s x %s (%d elements), upstream %s x %s', [si, raw,
+          Fmt(sw), Fmt(sh), found, Fmt(FromHex(TJSONArray(r.Find('drawn')).Strings[0])),
+          Fmt(FromHex(TJSONArray(r.Find('drawn')).Strings[1]))]));
     end;
 
     { THE SAME ROW AS DRAWN: a bar's or a scatter's element }
@@ -904,7 +974,7 @@ procedure TAdvChartVisualMapPiecewiseOracleTest.RunCases(const AIds: array of st
 var
   cases, vms, ser: TJSONArray;
   cs: TJSONObject;
-  opt: TJSONObject;
+  opt, base: TJSONObject;
   sl: TStringList;
   d: TJSONData;
   c, k, j, ran: Integer;
@@ -942,11 +1012,16 @@ begin
       end;
     end;
     try
+      { a root form: a key beside baseOption is not read, the base is where
+        the palette goes [231b] }
+      base := opt;
+      if opt.Find('baseOption') is TJSONObject then
+        base := TJSONObject(opt.Find('baseOption'));
       { upstream's palette and ramp, so the theme is out of the comparison }
-      if opt.Find('color') = nil then opt.Add('color', GetJSON(cPalette));
-      if opt.Find('gradientColor') = nil then
-        opt.Add('gradientColor', GetJSON('["rgba(212,220,247,1)","#5070dd"]'));
-      d := opt.Find('visualMap');
+      if base.Find('color') = nil then base.Add('color', GetJSON(cPalette));
+      if base.Find('gradientColor') = nil then
+        base.Add('gradientColor', GetJSON('["rgba(212,220,247,1)","#5070dd"]'));
+      d := base.Find('visualMap');
       if (d <> nil) and (d.JSONType = jtObject) then Upstream(TJSONObject(d))
       else if (d <> nil) and (d.JSONType = jtArray) then
         for k := 0 to TJSONArray(d).Count - 1 do
@@ -975,7 +1050,7 @@ begin
       begin
         ser := cs.Arrays['series'];
         for k := 0 to ser.Count - 1 do
-          CheckSeries(opt, ser.Objects[k]);
+          CheckSeries(base, ser.Objects[k]);
       end;
     finally
       opt.Free;
@@ -996,12 +1071,19 @@ end;
 procedure TAdvChartVisualMapPiecewiseOracleTest.TestPiecesAsUpstream;
 begin
   RunCases(['P4', 'P5', 'P6', 'P7', 'P11', 'P12', 'P13', 'P14', 'P15', 'P16', 'P17',
-    'P18', 'P19', 'P20', 'P21']);
+    'P18', 'P19', 'P20', 'P21', 'P22', 'P23']);
 end;
 
 procedure TAdvChartVisualMapPiecewiseOracleTest.TestCategoriesAsUpstream;
 begin
   RunCases(['C1', 'C2', 'C3', 'C4', 'C5']);
+end;
+
+{ [R2-F] symbolSize in inRange / outOfRange -- words, pairs, a category no
+  visual names -- and the symbol as drawn }
+procedure TAdvChartVisualMapPiecewiseOracleTest.TestTheSizesAsDrawnAreUpstreams;
+begin
+  RunCases(['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'D9']);
 end;
 
 procedure TAdvChartVisualMapPiecewiseOracleTest.TestViewCasesEncodeAsUpstream;
@@ -1012,6 +1094,11 @@ end;
 procedure TAdvChartVisualMapPiecewiseOracleTest.TestLineMetasAsUpstream;
 begin
   RunCases(['L1', 'L2']);
+end;
+
+procedure TAdvChartVisualMapPiecewiseOracleTest.TestPreprocessPerOptionAsUpstream;
+begin
+  RunCases(['PP1', 'PP2', 'PP3', 'PP4']);
 end;
 
 procedure TAdvChartVisualMapPiecewiseOracleTest.TestGalleryAsUpstream;

@@ -318,7 +318,7 @@ begin
             // Fully filled star in the star colour.
             StarPath(cx, cy, radiusOuter, radiusInner);
             ctx.fillStyle(TyColorToBGRA(starS.Background.Color));
-            ctx.fill;
+            TyCtxFill(ctx);
           end
           else if fillTo >= i + 0.5 then
           begin
@@ -327,15 +327,15 @@ begin
             ctx.save;
             ctx.beginPath;
             ctx.rect(cx - radiusOuter, cy - radiusOuter, radiusOuter, 2 * radiusOuter);
-            ctx.clip;
+            TyCtxClip(ctx);
             StarPath(cx, cy, radiusOuter, radiusInner);
             ctx.fillStyle(TyColorToBGRA(starS.Background.Color));
-            ctx.fill;
+            TyCtxFill(ctx);
             ctx.restore;
             StarPath(cx, cy, radiusOuter, radiusInner);
             ctx.lineWidth := bw;
             ctx.strokeStyle(TyColorToBGRA(faceS.TextColor));
-            ctx.stroke;
+            TyCtxStroke(ctx);
           end
           else
           begin
@@ -343,7 +343,7 @@ begin
             StarPath(cx, cy, radiusOuter, radiusInner);
             ctx.lineWidth := bw;
             ctx.strokeStyle(TyColorToBGRA(faceS.TextColor));
-            ctx.stroke;
+            TyCtxStroke(ctx);
           end;
         end;
       end;

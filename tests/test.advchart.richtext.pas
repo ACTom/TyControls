@@ -7,15 +7,15 @@ unit test.advchart.richtext;
   block's and each rich name's, after ECharts resolved the option), the
   host's defaults, the anchor, and every piece zrender painted in order --
   the block's rect, each token's rect and text -- in the text's own frame.
-  This hands AdvChart.RichText exactly those styles and compares the pieces
+  This hands AdvanceChart.RichText exactly those styles and compares the pieces
   it answers, one by one: kind, place and size, words, alignment, font,
   fill, stroke and its width, the border painted first, the corner radii.
   Resolving an ECharts option into these styles is the wiring's; it is held
   by the chart-level test. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Color, tyControls.AdvChart.RichText,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.RichText,
      test.advchart.gridbounds;
 type
   TAdvChartRichTextEngineOracleTest = class(TTestCase)

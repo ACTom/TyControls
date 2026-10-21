@@ -282,11 +282,25 @@ function itemPaths(el) {
   });
   return out;
 }
+// [R2-I5] a case that asks for the pens' dashes (c.dash): the lengths the
+// canvas brushes (normalizeLineDash against the width now) as JSON
+let DASH = false;
+// zrender canvas/dashStyle.ts normalizeLineDash, transcribed
+function normalizeLineDash(lineType, lineWidth) {
+  if (!lineType || lineType === 'solid' || !(lineWidth > 0)) return null;
+  lineWidth = lineWidth || 1;
+  return lineType === 'dashed' ? [4 * lineWidth, 2 * lineWidth]
+    : lineType === 'dotted' ? [lineWidth]
+    : typeof lineType === 'number' ? [lineType]
+    : Array.isArray(lineType) ? lineType : null;
+}
 function styleOf(el) {
   const s = el.style;
   const col = v => (v == null ? null : String(v));
-  return { fill: col(s.fill), stroke: col(s.stroke), lineWidth: s.lineWidth == null ? null : hex(s.lineWidth),
+  const o = { fill: col(s.fill), stroke: col(s.stroke), lineWidth: s.lineWidth == null ? null : hex(s.lineWidth),
     opacity: s.opacity == null ? null : hex(s.opacity) };
+  if (DASH) o.dash = JSON.stringify(normalizeLineDash(s.lineDash, s.lineWidth));
+  return o;
 }
 const SNAP_KEYS = ['x', 'y', 'scaleX', 'scaleY', 'rotation'];
 function snapOf(el) {
@@ -448,6 +462,7 @@ const T_GAP = 10000;
 function runCase(c) {
   NOW = T_BASE;
   rngState = SEED;
+  DASH = !!c.dash;
   const chart = newChart();
   try {
     const zr = chart.getZr();
@@ -609,6 +624,13 @@ function chartCases() {
   const tm = (pal, data) => ({ color: pal, series: [{ type: 'treemap', id: 'pk', animationDurationUpdate: 1000, roam: false,
     nodeClick: false, universalTransition: true, label: { show: false }, breadcrumb: { show: false }, data }] });
   const REV = PALETTE.slice().reverse();
+  // [R2-I5] the same bars with a wider dashed border: animateElementStyles
+  // tweens the width from the old style saved, the word stays a word and the
+  // canvas measures it against the width each frame draws
+  const DB = w => ({ itemStyle: { borderColor: '#000000', borderWidth: w, borderType: 'dashed' } });
+  add('bar-bar.dashtween', '[R2-I5] the same bar series with its dashed border widened from 1 to 6: one view keeps its '
+    + 'rects, each tweens its style from the old one saved (animateElementStyles) -- the dash, written as a word, follows '
+    + 'the width', [s(cart([barS(DB(1))])), s(cart([barS(DB(6))]))], { dash: true });
   add('sb-sb.recolor', 'the same sunburst with a new palette: one view keeps its pieces -- each fades its style from the '
     + 'old one saved (animateElementStyles)', [s(sb(PALETTE, small())), s(sb(REV, small()))]);
   add('sb-sb.data', 'the same sunburst with other data (c and c1 gone, d new): the kept pieces restyle, d enters',
@@ -748,6 +770,17 @@ function chartCases() {
     [s(parlPie), s(parl, null, true)], { samples: SAMPLES_BIG, digest: true });
   add('gal.parl-pie', 'and the seats combine into the slices', [s(parlPie), s(parl, null, true), s(parlPie, null, true)],
     { samples: SAMPLES_BIG, digest: true });
+  // [R2-H] a graph on a cartesian2d has no view: GraphView.dispose -> SymbolDraw.remove takes its nodes off a
+  // group with no transform, so a node's own transform is already on the canvas
+  const grC = (vals, dx) => ({ type: 'graph', id: 'k', coordinateSystem: 'cartesian2d', universalTransition: true,
+    symbolSize: 20, data: NAMES.map((n, i) => ({ name: n, value: [i + 0.5 + dx, vals[i]] })),
+    links: [{ source: 'A', target: 'B' }, { source: 'C', target: 'D' }] });
+  add('graphc-bar', 'a graph on a cartesian2d into bars: the nodes off the disposed view morph from the canvas',
+    [s(vcart([grC(VALS, 0)])), s(cart([barS()]))]);
+  add('graphc-bar.inflight', '200 ms into an update of a graph on a cartesian2d (its nodes move across and up), bars: '
+    + 'the nodes morph from where they are', [s(vcart([grC(VALS, 0)])), s(vcart([grC([2, 9, 6, 1], 0.3)])),
+    s(cart([barS()]), 200)]);
+  add('bar-graphc', 'and bars into the graph on a cartesian2d', [s(cart([barS()])), s(vcart([grC(VALS, 0)]))]);
   return list;
 }
 
@@ -781,6 +814,11 @@ function guards(charts) {
   must(byId('sb-sb.recolor').elements.some(e => e.item && Array.isArray(e.style.fill)), 'sb-sb.recolor: no style moves');
   none('sb-sb.recolor');
   none('tm-tm.data');
+  // [R2-I5] the dash written as a word follows the tweening width
+  must(byId('bar-bar.dashtween').elements.some(e => e.item && Array.isArray(e.style.dash)
+    && e.style.dash.some(d => d !== '[4,2]' && d !== '[24,12]') && e.style.dash.includes('[24,12]')),
+    'bar-bar.dashtween: the dash does not follow the width');
+  none('bar-bar.dashtween');
   must(byId('label.pie-bar').elements.some(e => e.text && new Set(e.text.x).size > 2), 'label.pie-bar: no text moves');
   must(morphs(byId('gal.map-bar')).length > 40, 'gal.map-bar: few morphs');
   must(morphs(byId('gal.bar-map')).length > 40, 'gal.bar-map: few morphs');
@@ -790,6 +828,14 @@ function guards(charts) {
   must(byId('pie-polar.sausage').newRest.every(r => r.type === 'sausage'), 'pie-polar.sausage: not sausages');
   must(byId('polar.sausage-bar').oldRest.every(r => r.type === 'sausage'), 'polar.sausage-bar: not sausages');
   // the other types: bars into each morph, each into bars morphs or combines
+  // [R2-H] a graph on a cartesian2d: its nodes morph from the canvas (x 40 .. 360 here), both ways
+  {
+    const fr = byId('graphc-bar').elements.filter(e => e.item && e.morph).map(e => e.d[0]);
+    const xs = fr.map(d => { bits.setUint32(0, parseInt(d[1].slice(0, 8), 16)); bits.setUint32(4, parseInt(d[1].slice(8), 16)); return bits.getFloat64(0); });
+    must(xs.length === 4 && xs.every(x => x > 35), 'graphc-bar: the nodes do not morph from the canvas ' + xs);
+    atLeast('graphc-bar.inflight', 4, morphs);
+    atLeast('bar-graphc', 4, morphs);
+  }
   for (const tid of ['heatmap', 'boxplot', 'candle', 'gauge', 'graph', 'tree', 'parallel', 'sankey', 'chord']) {
     atLeast('bar-' + tid, 4, morphs);
     atLeast(tid + '-bar', 4, morphs);

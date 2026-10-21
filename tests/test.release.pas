@@ -460,7 +460,7 @@ begin
   sl := TStringList.Create;
   try
     sl.LoadFromFile(RepoRoot + 'designtime' + PathDelim
-      + 'tyControls.Design.AdvChart.Editor.pas');
+      + 'tyControls.Design.AdvanceChart.Editor.pas');
     bad := '';
     for i := 0 to sl.Count - 1 do
     begin

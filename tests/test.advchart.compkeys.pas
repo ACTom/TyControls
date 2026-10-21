@@ -3,7 +3,7 @@ unit test.advchart.compkeys;
 { THE COMPONENT KEYBOARD [F5].
 
   ECharts has no keyboard for its components either, so the keys are the
-  port's design (tyControls.AdvChart.KeyNav: the focus stops and the parts
+  port's design (tyControls.AdvanceChart.KeyNav: the focus stops and the parts
   of a component). What can be held to upstream is what every key does:
   the pointer's own handler on that component, with its payload. So the
   oracles here replay the fixtures the pointer suites replay, with the
@@ -34,11 +34,11 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, LCLType, LMessages, BGRABitmap, BGRABitmapTypes,
      {$IFDEF WINDOWS} Windows, {$ENDIF} Types,
      tyControls.Controller, tyControls.Types,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Events, tyControls.AdvChart.KeyNav, tyControls.AdvChart.Legend,
-     tyControls.AdvChart.DataZoom, tyControls.AdvChart.DataZoomAct, tyControls.AdvChart.DataZoomView,
-     tyControls.AdvChart.VisualMapView, tyControls.AdvChart.Geo, tyControls.AdvChart.Toolbox,
-     tyControls.AdvChart.Brush, tyControls.AdvChart.Handlers,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Events, tyControls.AdvanceChart.KeyNav, tyControls.AdvanceChart.Legend,
+     tyControls.AdvanceChart.DataZoom, tyControls.AdvanceChart.DataZoomAct, tyControls.AdvanceChart.DataZoomView,
+     tyControls.AdvanceChart.VisualMapView, tyControls.AdvanceChart.Geo, tyControls.AdvanceChart.Toolbox,
+     tyControls.AdvanceChart.Brush, tyControls.AdvanceChart.Handlers,
      tyControls.Accessible, tyControls.AdvanceChart,
      test.advchart.select, test.advchart.keyboard, test.advchart.legendscroll,
      test.advchart.timeline, test.advchart.datazoominteract,
@@ -99,6 +99,11 @@ type
     procedure TestAHandleNodeReadsAPointerDrag;
     procedure TestTheMarkersAreItems;
     procedure TestTheGraphEdgesAreItems;
+    procedure TestTheSankeyLinksAreItems;
+    procedure TestTheChordRibbonsAreItems;
+    procedure TestAMarkerSelectsItsHostsItem;
+    procedure TestTheInsideGrowsToTheEnds;
+    procedure TestAnInverseTimelinesHomeIsItsFirstTick;
     procedure TestTheGeoRegionsAreItems;
     procedure TestTheRingIsOnThePart;
     procedure TestAComponentKeepsItsKeysInTheChart;
@@ -907,6 +912,171 @@ begin
   AssertEquals('the row kept', 1, FChart.KeyboardItem.DataIndex);
   AssertTrue('an edge by its raw index', FChart.SetKeyboardItem(0, 0, True));
   AssertTrue(FChart.KeyboardItem.IsEdge);
+end;
+
+{ [R2-G] a sankey's links: a list after its nodes, as a graph's edges }
+procedure TAdvChartComponentKeysTest.TestTheSankeyLinksAreItems;
+var d: TTyChartDatumRef;
+begin
+  Load('{"animation":false,"series":[{"type":"sankey","selectedMode":"single",'
+    + '"data":[{"name":"A"},{"name":"B"},{"name":"C"}],'
+    + '"links":[{"source":"A","target":"B","value":2},{"source":"B","target":"C","value":1}]}]}',
+    ['highlight', 'downplay', 'selectchanged']);
+  FChart.Key(VK_RIGHT);
+  AssertEquals('highlight {"type":"highlight","seriesIndex":0,"dataIndex":0}', FLog.Text);
+  Logged;
+  AssertEquals('Down: the links', 0, FChart.Key(VK_DOWN));
+  AssertEquals('downplay {"type":"downplay","seriesIndex":0,"dataIndex":0} | '
+    + 'highlight {"type":"highlight","seriesIndex":0,"dataType":"edge","dataIndex":0}', FLog.Text);
+  d := FChart.KeyboardItem;
+  AssertTrue('a link', d.IsEdge);
+  AssertEquals(0, d.RawDataIndex);
+  Logged;
+  FChart.Key(VK_RIGHT);
+  AssertEquals('downplay {"type":"downplay","seriesIndex":0,"dataType":"edge","dataIndex":0} | '
+    + 'highlight {"type":"highlight","seriesIndex":0,"dataType":"edge","dataIndex":1}', FLog.Text);
+  Logged;
+  AssertEquals('Enter is the link''s click', 0, FChart.Key(VK_RETURN));
+  AssertTrue(FLog.Text, Pos('selectchanged', FLog.Text) = 1);
+  AssertTrue(FLog.Text, Pos('"dataType":"edge"', FLog.Text) > 0);
+  FChart.AccessibleSync;
+  AssertTrue('the link''s item in the tree', FChart.AccessibleFocusedChild <> nil);
+  AssertEquals('B > C', FChart.AccessibleFocusedChild.AccessibleName);
+  AssertTrue('selected', FChart.AccessibleSelected(FChart.AccessibleFocusedChild));
+  FChart.Key(VK_UP);
+  AssertFalse('back on the nodes', FChart.KeyboardItem.IsEdge);
+  AssertTrue('a link by its index', FChart.SetKeyboardItem(0, 1, True));
+  AssertEquals(1, FChart.KeyboardItem.RawDataIndex);
+end;
+
+{ [R2-G] a chord's ribbons: a list after its nodes; the click's select
+  names the edge data, as ChordEdge's ECData does }
+procedure TAdvChartComponentKeysTest.TestTheChordRibbonsAreItems;
+begin
+  Load('{"animation":false,"series":[{"type":"chord","selectedMode":"multiple",'
+    + '"data":[{"name":"a"},{"name":"b"},{"name":"c"}],'
+    + '"links":[{"source":"a","target":"b","value":1},{"source":"b","target":"c","value":2}]}]}',
+    ['highlight', 'downplay', 'selectchanged']);
+  FChart.Key(VK_RIGHT);
+  Logged;
+  AssertEquals('Down: the ribbons', 0, FChart.Key(VK_DOWN));
+  AssertEquals('downplay {"type":"downplay","seriesIndex":0,"dataIndex":0} | '
+    + 'highlight {"type":"highlight","seriesIndex":0,"dataType":"edge","dataIndex":0}', FLog.Text);
+  FChart.Key(VK_RIGHT);
+  Logged;
+  AssertEquals('Enter is the ribbon''s click', 0, FChart.Key(VK_RETURN));
+  AssertTrue(FLog.Text, Pos('selectchanged', FLog.Text) = 1);
+  AssertTrue(FLog.Text, Pos('"dataType":"edge"', FLog.Text) > 0);
+  AssertTrue(FLog.Text, Pos('"dataIndexInside":1', FLog.Text) > 0);
+  FChart.AccessibleSync;
+  AssertEquals('b > c', FChart.AccessibleFocusedChild.AccessibleName);
+  AssertTrue('selected', FChart.AccessibleSelected(FChart.AccessibleFocusedChild));
+  { a second Enter: the ribbon is selected now, the click unselects }
+  Logged;
+  FChart.Key(VK_RETURN);
+  AssertTrue(FLog.Text, Pos('"type":"unselect"', FLog.Text) > 0);
+end;
+
+{ [R2-G] a marker's click is its HOST's select at the marker's own data
+  index (echarts' click handler on the marker's ECData) -- when the host
+  selects at all }
+procedure TAdvChartComponentKeysTest.TestAMarkerSelectsItsHostsItem;
+var sel: TTyIntegerArray;
+begin
+  Load('{"animation":false,"xAxis":{"type":"category","data":["a","b","c"]},'
+    + '"yAxis":{},"series":[{"type":"bar","selectedMode":"single","data":[3,9,1],'
+    + '"markPoint":{"data":[{"type":"max","name":"Top"},{"type":"min","name":"Low"}]}}]}',
+    ['selectchanged']);
+  FChart.Key(VK_TAB);
+  AssertEquals('markers0/0:0', Stop);
+  FChart.Key(VK_RIGHT);
+  AssertEquals('markers0/0:1', Stop);
+  Logged;
+  AssertEquals('Enter is the marker''s click', 0, FChart.Key(VK_RETURN));
+  AssertTrue(FLog.Text, Pos('selectchanged', FLog.Text) = 1);
+  AssertTrue(FLog.Text, Pos('"dataIndexInside":1', FLog.Text) > 0);
+  sel := FChart.SelectedDataIndices(0);
+  AssertEquals('the host''s item at the marker''s index', 1, Length(sel));
+  AssertEquals(1, sel[0]);
+  { a marker's element is never flagged selected: always select }
+  Logged;
+  FChart.Key(VK_SPACE);
+  AssertTrue(FLog.Text, Pos('"type":"select"', FLog.Text) > 0);
+end;
+
+{ [R2-G] Shift+Home / Shift+End on an inside dataZoom: the start out to the
+  data's start, the end out to its end -- within maxSpan, and not under
+  zoomLock }
+procedure TAdvChartComponentKeysTest.TestTheInsideGrowsToTheEnds;
+var
+  lo, hi: Double;
+
+  procedure Range(const AWhat: string; ALo, AHi: Double);
+  begin
+    FChart.DataZoomInsideRange(0, lo, hi);
+    AssertEquals(AWhat + ' start', ALo, lo, 1e-9);
+    AssertEquals(AWhat + ' end', AHi, hi, 1e-9);
+  end;
+
+const
+  cData = '"xAxis":{"type":"category","data":["a","b","c","d","e","f","g","h"]},"yAxis":{},'
+    + '"series":[{"type":"bar","data":[1,2,3,4,5,6,7,8]}]';
+begin
+  Load('{"animation":false,"dataZoom":[{"type":"inside","start":20,"end":60}],' + cData + '}', [], 800, 600);
+  FChart.Key(VK_TAB);
+  AssertEquals('dataZoom0/0:0', Stop);
+  AssertEquals(0, FChart.Key(VK_HOME, [ssShift]));
+  Range('Shift+Home', 0, 60);
+  AssertEquals(1, Length(FZoom.Actions));
+  AssertTrue('the roam''s batch', FZoom.Actions[0].Batch);
+  FChart.Key(VK_END, [ssShift]);
+  Range('Shift+End', 0, 100);
+  { maxSpan: the far end follows }
+  Load('{"animation":false,"dataZoom":[{"type":"inside","start":40,"end":60,"maxSpan":30}],'
+    + cData + '}', [], 800, 600);
+  FChart.Key(VK_TAB);
+  FChart.Key(VK_HOME, [ssShift]);
+  Range('Shift+Home under maxSpan 30', 0, 30);
+  Load('{"animation":false,"dataZoom":[{"type":"inside","start":20,"end":60,"zoomLock":true}],'
+    + cData + '}', [], 800, 600);
+  FChart.Key(VK_TAB);
+  FZoom.Actions := nil;
+  AssertEquals('zoomLock: still taken', 0, FChart.Key(VK_END, [ssShift]));
+  AssertEquals('no zoom', 0, Length(FZoom.Actions));
+  Range('zoomLock', 20, 60);
+end;
+
+{ [R2-G] Home is the first tick on the axis and End the last, the page keys
+  go the arrows' way: an inverse timeline's first tick is its last item }
+procedure TAdvChartComponentKeysTest.TestAnInverseTimelinesHomeIsItsFirstTick;
+const
+  cOpt = '{"baseOption":{"animation":false,"timeline":{"axisType":"category","inverse":true,'
+    + '"data":["2002","2003","2004","2005"]},'
+    + '"xAxis":{"type":"category","data":["A"]},"yAxis":{},"series":[{"type":"bar"}]},'
+    + '"options":[{"series":[{"data":[1]}]},{"series":[{"data":[2]}]},'
+    + '{"series":[{"data":[3]}]},{"series":[{"data":[4]}]}]}';
+begin
+  Load(cOpt, ['timelinechanged']);
+  FChart.TimelineNow := 1000;
+  FChart.Key(VK_TAB);
+  AssertEquals('timeline0/0:0', Stop);
+  FChart.Key(VK_HOME);
+  Frame;
+  AssertEquals('Home: the first tick, the last item', 3, FChart.TimelineView.CurrentIndex, 0);
+  FChart.Key(VK_END);
+  Frame;
+  AssertEquals('End: the last tick, the first item', 0, FChart.TimelineView.CurrentIndex, 0);
+  { Left from there is the prev button's: inverse, it goes up the items }
+  FChart.Key(VK_LEFT);
+  Frame;
+  AssertEquals('the prev button''s', 1, FChart.TimelineView.CurrentIndex, 0);
+  { PageUp the arrows' way back: up the items too }
+  FChart.Key(VK_PRIOR);
+  Frame;
+  AssertEquals('PageUp', 2, FChart.TimelineView.CurrentIndex, 0);
+  FChart.Key(VK_NEXT);
+  Frame;
+  AssertEquals('PageDown', 1, FChart.TimelineView.CurrentIndex, 0);
 end;
 
 procedure TAdvChartComponentKeysTest.TestTheGeoRegionsAreItems;

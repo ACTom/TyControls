@@ -28,14 +28,14 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Shape, tyControls.AdvChart.ZrPath,
-     tyControls.AdvChart.States, tyControls.AdvChart.Events,
-     tyControls.AdvChart.Tooltip, tyControls.AdvChart.Legend,
-     tyControls.AdvChart.Anim, tyControls.AdvChart.RichText,
-     tyControls.AdvChart.Color, tyControls.AdvChart.JsMath,
-     tyControls.AdvChart.Scale,
-     tyControls.AdvChart.GfxEl, tyControls.AdvChart.Custom,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.ZrPath,
+     tyControls.AdvanceChart.States, tyControls.AdvanceChart.Events,
+     tyControls.AdvanceChart.Tooltip, tyControls.AdvanceChart.Legend,
+     tyControls.AdvanceChart.Anim, tyControls.AdvanceChart.RichText,
+     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.JsMath,
+     tyControls.AdvanceChart.Scale,
+     tyControls.AdvanceChart.GfxEl, tyControls.AdvanceChart.Custom,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
@@ -136,7 +136,7 @@ type
     procedure CheckPieces(const AWhat: string; const APieces: TTyRtPieceArray;
       AWant: TJSONArray);
     procedure CheckTextStyle(const AWhat: string; AEl: TTyGfxEl; AWant: TJSONObject);
-    procedure CheckEl(AEl: TTyGfxEl; AWant: TJSONObject);
+    procedure CheckEl(AEl: TTyGfxEl; AWant: TJSONObject); virtual;
     procedure CheckCalls(AWant: TJSONArray);
     procedure CheckEls(AWant: TJSONArray);
     procedure CheckOrder(AWant: TJSONArray);
@@ -183,6 +183,7 @@ type
     function Deep(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
     function Unknown(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
     function WithInfo(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+    function PathByValue(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
     procedure OnEv(Sender: TObject; const AEvent: TTyChartEvent);
   published
     procedure TestTheRegistryFindsANameEitherWay;
@@ -195,6 +196,8 @@ type
     procedure TestTheInfoRidesTheEvent;
     procedure TestAGeoCustomSaysItIsNotDrawn;
     procedure TestItPaintsWithTheAnimationOn;
+    { [R2-V] a path whose path data changes is made anew }
+    procedure TestAPathOfNewPathDataIsMadeAnew;
   end;
 
 { ---- the fixture helpers, a second fixture's too [Batch 124] ---- }
@@ -2223,6 +2226,43 @@ function TAdvChartCustomSeriesTest.WithInfo(const AParams: TTyCustomParams;
 begin
   Result := Plain(AParams, AApi);
   TJSONObject(Result).Add('info', TJSONObject.Create(['row', AParams.DataIndex]));
+end;
+
+{ [R2-V] a path at the item's point: across under 5, down above it }
+function TAdvChartCustomSeriesTest.PathByValue(const AParams: TTyCustomParams;
+  AApi: TTyCustomApi): TJSONData;
+var
+  c: TTyDoubleArray;
+  pd: string;
+begin
+  c := AApi.Coord([AApi.Value(0), AApi.Value(1)]);
+  if AApi.Value(1) > 5 then pd := 'M0 0L0 20' else pd := 'M0 0L20 0';
+  Result := TJSONObject.Create(['type', 'path', 'x', c[0], 'y', c[1],
+    'shape', TJSONObject.Create(['pathData', pd]),
+    'style', TJSONObject.Create(['fill', 'none', 'stroke', '#ff0000'])]);
+end;
+
+{ [R2-V] doesElNeedRecreate: a path whose own pathData differs from the one
+  it was made of is made anew (the path element keeps no pathData of its
+  own to update -- makePath built it once) }
+procedure TAdvChartCustomSeriesTest.TestAPathOfNewPathDataIsMadeAnew;
+var
+  el: TTyGfxEl;
+  bb: TTyXYWH;
+begin
+  TyChartRegisterRenderItem('PathByValue', @PathByValue);
+  Show(Format(cPlainOption, ['@PathByValue']));
+  el := FChart.CustomView(0).ElOf(0);
+  AssertTrue('drawn', el <> nil);
+  bb := TyZrBBox(el.PathData);
+  AssertTrue(Format('across at 3 (%g x %g)', [bb.W, bb.H]), (bb.W > 19) and (bb.H < 1e-9));
+  FChart.SetOption('{"series":[{"data":[[2,9],[5,5],[8,7]]}]}', False);
+  RenderNow;
+  el := FChart.CustomView(0).ElOf(0);
+  AssertTrue('drawn again', el <> nil);
+  bb := TyZrBBox(el.PathData);
+  AssertTrue(Format('down at 9: the new path data (%g x %g)', [bb.W, bb.H]),
+    (bb.H > 19) and (bb.W < 1e-9));
 end;
 
 procedure TAdvChartCustomSeriesTest.OnEv(Sender: TObject; const AEvent: TTyChartEvent);

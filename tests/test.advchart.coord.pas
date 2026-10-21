@@ -7,7 +7,7 @@ unit test.advchart.coord;
   the TTySegmented discipline exists to enforce. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Scale, tyControls.AdvChart.Coord;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Coord;
 type
   TAdvChartCartesianTest = class(TTestCase)
   private

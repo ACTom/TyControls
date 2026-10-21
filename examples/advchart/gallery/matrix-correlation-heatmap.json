@@ -254,7 +254,8 @@
    ]
   ],
   "label": {
-   "show": true
+   "show": true,
+   "formatter": "@matrix-correlation-heatmap.formatter"
   }
  }
 }

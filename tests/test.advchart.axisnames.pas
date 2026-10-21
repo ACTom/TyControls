@@ -23,12 +23,12 @@ unit test.advchart.axisnames;
      its rounding. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-     tyControls.AdvChart.Coord, tyControls.AdvChart.Data,
-     tyControls.AdvChart.Builder, tyControls.AdvChart.Series,
-     tyControls.AdvChart.Layout, tyControls.AdvChart.AxisName,
-     tyControls.AdvChart.AxisLabels,
-     tyControls.AdvChart.JsMath,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+     tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Data,
+     tyControls.AdvanceChart.Builder, tyControls.AdvanceChart.Series,
+     tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.AxisName,
+     tyControls.AdvanceChart.AxisLabels,
+     tyControls.AdvanceChart.JsMath,
      test.advchart.gridbounds;
 type
   TAdvChartAxisNamesOracleTest = class(TTestCase)

@@ -11,10 +11,10 @@ interface
 uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Data,
-     tyControls.AdvChart.Option, tyControls.AdvChart.Layout,
-     tyControls.AdvChart.Shape, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Graph,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Data,
+     tyControls.AdvanceChart.Option, tyControls.AdvanceChart.Layout,
+     tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Graph,
      tyControls.AdvanceChart, test.advancechart;
 type
   TAdvChartGraphRuleTest = class(TTestCase)

@@ -251,6 +251,10 @@ function batchCase(id, note, option, payload, extra) {
   return Object.assign({ id, note, option, twin: true, steps: [{ op: 'action', payload }] }, extra || {});
 }
 
+const TL_PAR = { baseOption: { animation: false, timeline: { data: ['t0', 't1'] }, parallel: {},
+  parallelAxis: [{ dim: 0, name: 'p' }, { dim: 1, name: 'q' }, { dim: 2, name: 'r' }] },
+  options: [{ series: [{ type: 'parallel', data: [[1, 5, 2], [2, 4, 3], [3, 3, 4], [4, 2, 5]] }] },
+    { series: [{ type: 'parallel', data: [[4, 2, 5], [3, 3, 4], [2, 4, 3], [1, 5, 2]] }] }] };
 const CASES = [
   // ---------------- batches ----------------
   batchCase('b-legendscroll', 'legendScroll: one event, each item a copy; escapeConnect in the head',
@@ -374,6 +378,93 @@ const CASES = [
       { op: 'move', at: [6, 6] },
       { op: 'action', payload: { type: 'downplay', seriesIndex: 0, dataIndex: 1 } },
     ] },
+  // ---------------- [R2-E] the batches' leftovers ----------------
+  { id: 'b-timeline-anim', note: 'timelineChange as a batch, animated: every item resets the timeline option, the update renders '
+      + 'once -- the second series enters from the frame before the batch (animationDuration), not updated from a render '
+      + 'of the first item (animationDurationUpdate)', anim: true, bars: true,
+    option: { baseOption: { animation: true, animationDuration: 1000, animationDurationUpdate: 300, animationEasing: 'linear',
+      animationEasingUpdate: 'linear', animationDelay: 0, animationDelayUpdate: 0, timeline: { data: ['t0', 't1', 't2'] },
+      xAxis: { type: 'category', data: cats }, yAxis: { min: 0, max: 10 } },
+      options: [{ series: [{ type: 'bar', data: [1, 2, 3, 4] }] },
+        { series: [{ type: 'bar', data: [4, 3, 2, 1] }, { type: 'bar', data: [2, 2, 2, 2] }] },
+        { series: [{ type: 'bar', data: [2, 2, 2, 2] }, { type: 'bar', data: [5, 5, 5, 5] }] }] },
+    pre: [{ op: 'idle', ms: 3000 }],
+    steps: [
+      { op: 'action', payload: { type: 'timelineChange', batch: [{ currentIndex: 2 }, { currentIndex: 1 }] } },
+      { op: 'idle', ms: 150 },
+      { op: 'idle', ms: 1000 },
+    ] },
+  { id: 'tl-after-aas', note: 'an axisAreaSelect, then a timelineChange: the select\'s update skips the axis it names (no covers '
+      + 'there); the timeline\'s update (prepareAndUpdate, its own payload) renders every parallelAxis view -- the covers come back',
+    covers: true, option: TL_PAR,
+    steps: [{ op: 'action', payload: { type: 'axisAreaSelect', parallelAxisIndex: 0, intervals: [[1, 2]] } },
+      { op: 'action', payload: { type: 'timelineChange', currentIndex: 1 } }] },
+  { id: 'b-tl-after-aas', note: 'the same with the timelineChange as a batch: its one update renders every parallelAxis view',
+    covers: true, option: TL_PAR,
+    steps: [{ op: 'action', payload: { type: 'axisAreaSelect', parallelAxisIndex: 0, intervals: [[1, 2]] } },
+      { op: 'action', payload: { type: 'timelineChange', batch: [{ currentIndex: 1 }, { currentIndex: 0 }] } }] },
+  { id: 'b-axisareaselect-covers', note: 'axisAreaSelect as a batch: the one update after it renders every parallelAxis view but the '
+      + 'first the OUTER payload finds (no query: the first axis) -- that one keeps the covers it had (none)', covers: true,
+    option: { animation: false, parallelAxis: [{ dim: 0, name: 'p' }, { dim: 1, name: 'q' }, { dim: 2, name: 'r' }],
+      series: [{ type: 'parallel', data: [[1, 5, 2], [2, 4, 3], [3, 3, 4], [4, 2, 5]] }] },
+    steps: [{ op: 'action', payload: { type: 'axisAreaSelect', batch: [{ parallelAxisIndex: 0, intervals: [[1, 2]] },
+      { parallelAxisIndex: 1, intervals: [[3, 5]] }, { parallelAxisIndex: 2, intervals: [[2, 4]] }] } }] },
+  { id: 'b-axisareaselect-outer', note: 'axisAreaSelect as a batch whose outer payload names the second axis: the update skips that '
+      + 'one, the first takes its covers', covers: true,
+    option: { animation: false, parallelAxis: [{ dim: 0, name: 'p' }, { dim: 1, name: 'q' }, { dim: 2, name: 'r' }],
+      series: [{ type: 'parallel', data: [[1, 5, 2], [2, 4, 3], [3, 3, 4], [4, 2, 5]] }] },
+    steps: [{ op: 'action', payload: { type: 'axisAreaSelect', parallelAxisIndex: 1, intervals: [[4, 5]],
+      batch: [{ parallelAxisIndex: 0, intervals: [[1, 2]] }, { intervals: [[3, 5]] }] } }] },
+  { id: 'r-zero-batch', note: 'a batch of no items: the update still runs once (with the payload) unless the action\'s update is none '
+      + 'or a component\'s own -- whatever its visual stage dispatches', flush: true,
+    option: barLine(undefined),
+    steps: [
+      { op: 'action', payload: { type: 'takeGlobalCursor', key: 'brush', batch: [] } },
+      { op: 'action', payload: { type: 'graphRoam', batch: [] } },
+      { op: 'action', payload: { type: 'parallelAxisExpand', batch: [] } },
+      { op: 'action', payload: { type: 'focusNodeAdjacency', batch: [] } },
+      { op: 'action', payload: { type: 'geoToggleSelect', batch: [] } },
+    ] },
+  // ---------------- [R2-E] rendered, precisely ----------------
+  { id: 'r-legend-hover', note: 'a legend item: its mouseover dispatches highlight (a flush), a move inside it marks nothing, its '
+      + 'mouseout downplay; a move over nothing nothing', flush: true,
+    option: barLine(undefined, { legend: {}, series: [{ type: 'bar', name: 'B', data: [3, 5, 2, 6] }, { type: 'line', name: 'L', data: [1, 4, 3, 2] }] }),
+    steps: [
+      { op: 'move', legend: 0 },
+      { op: 'move', legend: 0, nudge: [1, 0] },
+      { op: 'move', legend: 1 },
+      { op: 'move', at: [5, 380] },
+      { op: 'move', at: [6, 380] },
+      { op: 'leave' },
+    ] },
+  { id: 'r-toolbox-hover', note: 'a toolbox icon: its emphasis and title (a flush), a move inside it nothing, off it a flush',
+    flush: true,
+    option: barLine(undefined, { toolbox: { feature: { restore: {}, saveAsImage: {} } } }),
+    steps: [
+      { op: 'move', toolbox: 0 },
+      { op: 'move', toolbox: 0, nudge: [1, 0] },
+      { op: 'move', toolbox: 1 },
+      { op: 'move', at: [5, 380] },
+      { op: 'move', at: [6, 380] },
+    ] },
+  { id: 'r-dz-hover', note: 'a slider dataZoom handle: its emphasis and the data labels (a flush), a move inside it nothing, off it '
+      + 'a flush', flush: true,
+    option: barLine(undefined, { dataZoom: [{ type: 'slider', start: 20, end: 80 }] }),
+    steps: [
+      { op: 'move', dzHandle: 0 },
+      { op: 'move', dzHandle: 0, nudge: [0, 1] },
+      { op: 'move', at: [300, 20] },
+      { op: 'move', at: [301, 20] },
+      { op: 'move', dzHandle: 1 },
+      { op: 'leave' },
+    ] },
+  { id: 'r-setoption', note: 'setOption flushes zrender before its updated: rendered (and finished) first', flush: true,
+    option: barLine(undefined),
+    steps: [
+      { op: 'setOption', option: { series: [{ data: [4, 6, 3, 7] }] } },
+      { op: 'idle', ms: 10 },
+      { op: 'setOption', option: { series: [{ data: [4, 6, 3, 7] }] } },
+    ] },
 ];
 
 // ---------- an integer point over an item ----------
@@ -421,12 +512,82 @@ function itemsOf(payload) {
   return list.map(it => Object.assign({}, outer, it));
 }
 
-function runStep(chart, st, log, flush, rec) {
-  let at = st.at;
-  if (st.on) {
-    at = pointOn(chart, st.on[0], st.on[1], 'step');
-    if (st.nudge) at = [at[0] + st.nudge[0], at[1] + st.nudge[1]];
+// [R2-E] an integer point over a component's element: a legend item's
+// group, a toolbox icon, a dataZoom slider handle -- the centre of its
+// global box, walked out until findHover answers that element (or one of its
+// children)
+function globalBox(el) {
+  const r = el.getBoundingRect().clone();
+  const m = el.getComputedTransform ? el.getComputedTransform() : el.transform;
+  if (m) r.applyTransform(m);
+  return r;
+}
+function within(t, el) {
+  for (let e = t; e; e = e.__hostTarget || e.parent) if (e === el) return true;
+  return false;
+}
+function pointOnEl(chart, el, where) {
+  const h = chart.getZr().handler;
+  const r = globalBox(el);
+  const cx = Math.round(r.x + r.width / 2);
+  const cy = Math.round(r.y + r.height / 2);
+  const R = Math.ceil(Math.max(r.width, r.height) / 2) + 1;
+  for (let rad = 0; rad <= R; rad++) {
+    for (let dx = -rad; dx <= rad; dx++) {
+      for (let dy = -rad; dy <= rad; dy++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== rad) continue;
+        const hv = h.findHover(cx + dx, cy + dy);
+        if (hv && hv.target && within(hv.target, el)) return [cx + dx, cy + dy];
+      }
+    }
   }
+  throw new OracleError(where + ': no point over the element');
+}
+function componentView(chart, mainType, index) {
+  const m = chart.getModel().getComponent(mainType, index || 0);
+  must(m, 'no ' + mainType);
+  return chart.getViewOfComponentModel(m);
+}
+function stepPoint(chart, st) {
+  if (st.on) return pointOn(chart, st.on[0], st.on[1], 'step');
+  if (st.legend !== undefined) return pointOnEl(chart, componentView(chart, 'legend').getContentGroup().childAt(st.legend), 'legend');
+  if (st.toolbox !== undefined) return pointOnEl(chart, componentView(chart, 'toolbox').group.childAt(st.toolbox), 'toolbox');
+  if (st.dzHandle !== undefined) return pointOnEl(chart, componentView(chart, 'dataZoom')._displayables.handles[st.dzHandle], 'dataZoom handle');
+  return st.at;
+}
+// the bars by seriesIndex (timeline.js' record)
+function barsOf(chart) {
+  const all = [];
+  chart.getModel().getSeries().forEach(s => {
+    while (all.length < s.seriesIndex) all.push(null);
+    if (s.subType !== 'bar') {
+      all[s.seriesIndex] = null;
+      return;
+    }
+    const d = s.getData();
+    const out = [];
+    for (let i = 0; i < d.count(); i++) {
+      const el = d.getItemGraphicEl(i);
+      out.push(el && el.shape ? [el.shape.x, el.shape.y, el.shape.width, el.shape.height].map(hex) : null);
+    }
+    all[s.seriesIndex] = out;
+  });
+  return all;
+}
+// every parallelAxis view's covers: its BrushController's, each range
+function coversOf(chart) {
+  const out = [];
+  chart.getModel().eachComponent('parallelAxis', m => {
+    const v = chart.getViewOfComponentModel(m);
+    const bc = v && v._brushController;
+    out.push(bc ? bc._covers.map(c => c.__brushOption.range.map(hex)) : null);
+  });
+  return out;
+}
+
+function runStep(chart, st, log, flush, rec, anim) {
+  let at = stepPoint(chart, st);
+  if (at && st.nudge && !st.at) at = [at[0] + st.nudge[0], at[1] + st.nudge[1]];
   if (at) rec.at = at;
   if (st.op === 'move' || st.op === 'click' || st.op === 'leave') advanceClock(NOW + STEP_DT);
   const hd = chart.getZr().handler;
@@ -443,7 +604,13 @@ function runStep(chart, st, log, flush, rec) {
   } else if (st.op === 'idle') {
     rec.ms = st.ms;
     advanceClock(NOW + st.ms);
+  } else if (st.op === 'setOption') {
+    rec.option = plain(st.option, 0);
+    chart.setOption(clone(st.option));
   } else throw new OracleError('op ' + st.op);
+  // [R2-E] an animated case steps zrender's clips on the clock (no frame
+  // event, no flush), then the frame as before
+  if (anim) chart.getZr().animation.update(true);
   frame(chart, flush);
 }
 
@@ -455,6 +622,8 @@ function runCase(def) {
   const log = [];
   try {
     chart.setOption(clone(def.option));
+    // [R2-E] an animated case: the first render's clips start now
+    if (def.anim) chart.getZr().animation.update(true);
     frame(chart, def.flush);
     sizeTooltip(chart);
     if (twin) {
@@ -480,7 +649,7 @@ function runCase(def) {
       });
     }
     for (const st of def.pre || []) {
-      runStep(chart, st, [], def.flush, {});
+      runStep(chart, st, [], def.flush, {}, def.anim);
       if (twin) runStep(twin, st, [], false, {});
     }
     log.length = 0;
@@ -488,8 +657,10 @@ function runCase(def) {
     for (const st of def.steps) {
       log.length = 0;
       const rec = { op: st.op };
-      runStep(chart, st, log, def.flush, rec);
+      runStep(chart, st, log, def.flush, rec, def.anim);
       rec.events = log.slice();
+      if (def.bars) rec.bars = barsOf(chart);
+      if (def.covers) rec.covers = coversOf(chart);
       if (twin && st.op === 'action') {
         for (const it of itemsOf(st.payload)) {
           twin.dispatchAction(clone(it), st.silent ? true : undefined);
@@ -500,8 +671,11 @@ function runCase(def) {
       }
       steps.push(rec);
     }
-    return { id: def.id, note: def.note, option: plain(def.option, 0), twin: !!def.twin, flush: !!def.flush,
+    const rec = { id: def.id, note: def.note, option: plain(def.option, 0), twin: !!def.twin, flush: !!def.flush,
       handlers: (def.handlers || []).map(h => plain(h, 0)), pre: (def.pre || []).map(p => plain(p, 0)), steps };
+    // [R2-E] only the cases that have them (the older records stay as they were)
+    if (def.anim) rec.anim = true;
+    return rec;
   } finally {
     chart.dispose();
     if (twin) twin.dispose();
@@ -566,6 +740,36 @@ function anchors(cases) {
   guard('rpe-order', types(rpe, 0) === 'pietoggleselect,rendered,toggleselect,selectchanged,brushselected,updated,rendered,finished',
     'a flush while an action waits: rendered without finished; finished once the queue is empty');
   guard('rp-elapsed', evs(rp, 0, 'rendered').every(e => e[2].elapsedTime === 0), 'elapsedTime on the frozen clock');
+  // [R2-E]
+  const unhex = s => { const b = new DataView(new ArrayBuffer(8)); b.setUint32(0, parseInt(s.slice(0, 8), 16)); b.setUint32(4, parseInt(s.slice(8), 16)); return b.getFloat64(0); };
+  const ta = cs('b-timeline-anim');
+  guard('ta-enters', Math.abs(unhex(ta.steps[0].bars[1][0][3])) === 0 && Math.abs(unhex(ta.steps[1].bars[1][0][3]) + 51 * 0.15) < 1e-9,
+    'the batch renders once: the second series enters over animationDuration from the frame before the batch');
+  const taa = cs('tl-after-aas');
+  const btaa = cs('b-tl-after-aas');
+  guard('taa-covers-back', taa.steps[0].covers[0].length === 0 && taa.steps[1].covers[0].length === 1
+    && btaa.steps[0].covers[0].length === 0 && btaa.steps[1].covers[0].length === 1,
+    'a timelineChange after an axisAreaSelect: every parallelAxis view renders, the named one\'s covers come back');
+  const ac = cs('b-axisareaselect-covers');
+  guard('ac-first-skipped', ac.steps[0].covers[0].length === 0 && ac.steps[0].covers[1].length === 1 && ac.steps[0].covers[2].length === 1,
+    'the update after the batch skips the first axis the outer payload finds');
+  const ao = cs('b-axisareaselect-outer');
+  guard('ao-named-skipped', ao.steps[0].covers[0].length === 1 && ao.steps[0].covers[1].length === 0,
+    'the outer payload names the second axis: that one is skipped');
+  const zb = cs('r-zero-batch');
+  guard('zb-update', types(zb, 0) === 'globalcursortaken,brushselected,updated,rendered,finished' && types(zb, 1) === 'graphroam,updated',
+    'a batch of no items: the update runs once, not for an update of none');
+  const lh = cs('r-legend-hover');
+  guard('lh-flush', evs(lh, 0, 'rendered').length === 1 && evs(lh, 1, 'rendered').length === 0 && evs(lh, 3, 'rendered').length === 1
+    && evs(lh, 4, 'rendered').length === 0, 'a legend item: its over and out flush, a move inside it nothing');
+  const th = cs('r-toolbox-hover');
+  guard('th-flush', evs(th, 0, 'rendered').length === 1 && evs(th, 1, 'rendered').length === 0 && evs(th, 4, 'rendered').length === 0,
+    'a toolbox icon: its over flushes, a move inside it nothing');
+  const dh = cs('r-dz-hover');
+  guard('dh-flush', evs(dh, 0, 'rendered').length === 1 && evs(dh, 1, 'rendered').length === 0 && evs(dh, 3, 'rendered').length === 0,
+    'a dataZoom handle: its over flushes, a move inside it nothing');
+  const so = cs('r-setoption');
+  guard('so-rendered-first', types(so, 0) === 'rendered,finished,updated', 'setOption: rendered before updated');
   return guards;
 }
 

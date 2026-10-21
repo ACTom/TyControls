@@ -20,12 +20,12 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller, tyControls.FontUnits, tyControls.Types, tyControls.StyleModel,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-     tyControls.AdvChart.Shape, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Coord, tyControls.AdvChart.Convert,
-     tyControls.AdvChart.Data, tyControls.AdvChart.JsMath,
-     tyControls.AdvChart.GeoFix, tyControls.AdvChart.Geo,
-     tyControls.AdvanceChart;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+     tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Convert,
+     tyControls.AdvanceChart.Data, tyControls.AdvanceChart.JsMath,
+     tyControls.AdvanceChart.GeoFix, tyControls.AdvanceChart.Geo,
+     tyControls.AdvanceChart, ualbersusa;
 type
   TGeoProbe = class(TTyAdvanceChart)
   public
@@ -42,6 +42,8 @@ type
     function LinInv(AX, AY: Double; out ARX, ARY: Double): Boolean;
     function Cut(AX, AY: Double; out ARX, ARY: Double): Boolean;
     function CutInv(AX, AY: Double; out ARX, ARY: Double): Boolean;
+    { [r2v] no point north of 40 (case 'cut-label') }
+    function Cut40(AX, AY: Double; out ARX, ARY: Double): Boolean;
   end;
 
   TAdvChartGeoOracleTest = class(TTestCase)
@@ -164,6 +166,13 @@ begin
   Result := True;
 end;
 
+function TGeoProjections.Cut40(AX, AY: Double; out ARX, ARY: Double): Boolean;
+begin
+  ARX := AX;
+  ARY := -AY;
+  Result := not (AY > 40);
+end;
+
 { ==================== helpers ==================== }
 
 function FixturePath(const AName: string): string;
@@ -222,6 +231,11 @@ begin
   TyChartRegisterGeoProjection('linInv', @FProj.LinInv);
   TyChartRegisterGeoProjection('cut', @FProj.Cut);
   TyChartRegisterGeoProjection('cutInv', @FProj.CutInv);
+  TyChartRegisterGeoProjection('cut40', @FProj.Cut40);
+  { [R2-J2] d3-geo's geoAlbersUsa, the demo's transcription (case
+    'albers-usa') }
+  TyChartRegisterGeoProjection('albersUsa', @AlbersUsa.Project);
+  TyChartRegisterGeoProjection('albersUsaInv', @AlbersUsa.Unproject);
   FBad := 0;
   FCompared := 0;
   FReport := '';
@@ -596,6 +610,28 @@ begin
           HexOf(lw.Floats['fontSize']))
       else
         SameInt(dr.Groups[g].Name + ' label size (default)', 12, lw.Integers['fontSize']);
+      { [R2-J2] A REGION WITH NO CENTRE -- one a projection answers null for
+        (Puerto Rico under albersUsa): no labelXY, so upstream keeps
+        textConfig.position 'inside' with no layout rect and no align;
+        [R2-J3] the port places it there too -- the middle of the path's
+        drawn box through the group's transform }
+      if not (lw.Find('pos') is TJSONArray) then
+      begin
+        Inc(FCompared);
+        if (lw.Find('pos') <> nil) and (lw.Find('pos').JSONType = jtString)
+          and (lw.Strings['pos'] = 'inside') then
+        begin
+          if not (p.Lbl.HasPos and p.Lbl.Inside) then
+            Bad(dr.Groups[g].Name + ' label not placed inside, upstream''s is')
+          else if not lw.Booleans['ignore'] then
+          begin
+            Same(dr.Groups[g].Name + ' inside label x', p.Lbl.AnchorX, lw.Strings['x']);
+            Same(dr.Groups[g].Name + ' inside label y', p.Lbl.AnchorY, lw.Strings['y']);
+          end;
+        end
+        else if p.Lbl.HasPos then Bad(dr.Groups[g].Name + ' label placed, upstream has no position');
+        Continue;
+      end;
       SameStr(dr.Groups[g].Name + ' label align', 'center', lw.Strings['align']);
       SameStr(dr.Groups[g].Name + ' label valign', 'middle', lw.Strings['verticalAlign']);
       SameInt(dr.Groups[g].Name + ' label z2', 2, lw.Integers['z2']);

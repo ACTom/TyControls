@@ -1,0 +1,95 @@
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8"
+
+#: tycontrols.design.advancechart.seriesdialog.rsserdlgadd
+msgid "Add"
+msgstr ""
+
+#: tycontrols.design.advancechart.seriesdialog.rsserdlgaddcolumn
+msgid "Add column"
+msgstr ""
+
+#: tycontrols.design.advancechart.seriesdialog.rsserdlgaddrow
+msgid "Add row"
+msgstr ""
+
+#: tycontrols.design.advancechart.seriesdialog.rsserdlgcannotopen
+#, object-pascal-format
+msgid "The option does not parse yet, so it cannot be edited as a structure: %s"
+msgstr ""
+
+#: tycontrols.design.advancechart.seriesdialog.rsserdlgdata
+msgid "Data"
+msgstr ""
+
+#: tycontrols.design.advancechart.seriesdialog.rsserdlgdataset
+msgid "Dataset"
+msgstr ""
+
+#: tycontrols.design.advancechart.seriesdialog.rsserdlgdelete
+msgid "Delete"
+msgstr ""
+
+#: tycontrols.design.advancechart.seriesdialog.rsserdlgdeletecolumn
+msgid "Delete column"
+msgstr ""
+
+#: tycontrols.design.advancechart.seriesdialog.rsserdlgdeleterow
+msgid "Delete row"
+msgstr ""
+
+#: tycontrols.design.advancechart.seriesdialog.rsserdlgdown
+msgid "Down"
+msgstr ""
+
+#: tycontrols.design.advancechart.seriesdialog.rsserdlgheaderrow
+msgid "header"
+msgstr ""
+
+#: tycontrols.design.advancechart.seriesdialog.rsserdlglosescomments
+#, object-pascal-format
+msgid "Writing these changes back drops %d comment(s) that sat inside the parts being rewritten. Write them back anyway?"
+msgstr ""
+
+#: tycontrols.design.advancechart.seriesdialog.rsserdlgnodataset
+msgid "This option has no dataset."
+msgstr ""
+
+#: tycontrols.design.advancechart.seriesdialog.rsserdlgnoseries
+msgid "Select a series to edit it."
+msgstr ""
+
+#: tycontrols.design.advancechart.seriesdialog.rsserdlgpreview
+msgid "Preview"
+msgstr ""
+
+#: tycontrols.design.advancechart.seriesdialog.rsserdlgrewriteswhole
+#, object-pascal-format
+msgid "This option text cannot be patched piece by piece, so writing these changes back rewrites all of it: the layout goes, and %d comment(s) with it. Write it anyway?"
+msgstr ""
+
+#: tycontrols.design.advancechart.seriesdialog.rsserdlgseries
+msgid "Series"
+msgstr ""
+
+#: tycontrols.design.advancechart.seriesdialog.rsserdlgtitle
+msgid "Chart series and data"
+msgstr ""
+
+#: tycontrols.design.advancechart.seriesdialog.rsserdlgtype
+msgid "Type"
+msgstr ""
+
+#: tycontrols.design.advancechart.seriesdialog.rsserdlgup
+msgid "Up"
+msgstr ""
+
+#: tycontrols.design.advancechart.seriesdialog.rsserdlgwarnlost
+#, object-pascal-format
+msgid "Writing back will drop %d comment(s)."
+msgstr ""
+
+#: tycontrols.design.advancechart.seriesdialog.rsserdlgwarnwhole
+msgid "Writing back will rewrite the whole text."
+msgstr ""
+

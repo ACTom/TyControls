@@ -222,12 +222,12 @@ begin
       ctx.beginPath;
       ctx.arc(cx, cy, radius, 0, 2 * Pi, False);
       ctx.strokeStyle(TyColorToBGRA(trackS.Background.Color));
-      ctx.stroke;
+      TyCtxStroke(ctx);
       // rotating accent arc
       ctx.beginPath;
       ctx.arc(cx, cy, radius, DegToRad(FAngle), DegToRad(FAngle + FSweep), False);
       ctx.strokeStyle(TyColorToBGRA(fillS.Background.Color));
-      ctx.stroke;
+      TyCtxStroke(ctx);
     end;
     P.EndPaint;
   finally

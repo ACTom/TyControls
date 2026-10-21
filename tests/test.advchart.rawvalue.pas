@@ -15,8 +15,8 @@ unit test.advchart.rawvalue;
   its first character. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Scale,
-     tyControls.AdvChart.Data;
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Scale,
+     tyControls.AdvanceChart.Data;
 type
   TAdvChartRawValueOracleTest = class(TTestCase)
   private

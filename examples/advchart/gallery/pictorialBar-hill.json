@@ -72,7 +72,8 @@
       0,
       10
      ],
-     "symbolMargin": "-30%"
+     "symbolMargin": "-30%",
+     "animationDelay": "@pictorialBar-hill.animationDelay"
     },
     {
      "value": "-",

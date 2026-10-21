@@ -142,6 +142,7 @@
     ]
    ],
    "type": "scatter",
+   "symbolSize": "@scatter-label-align-top.symbolSize",
    "emphasis": {
     "focus": "self"
    },
@@ -160,6 +161,7 @@
    },
    "label": {
     "show": true,
+    "formatter": "@scatter-label-align-top.formatter",
     "minMargin": 10,
     "position": "top"
    }

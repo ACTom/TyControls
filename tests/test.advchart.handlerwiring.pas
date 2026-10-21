@@ -14,13 +14,13 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller, tyControls.StrConsts,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-     tyControls.AdvChart.Scale, tyControls.AdvChart.Coord,
-     tyControls.AdvChart.Builder, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Layout,
-     tyControls.AdvChart.Handlers, tyControls.AdvChart.Tooltip,
-     tyControls.AdvChart.Legend, tyControls.AdvChart.VisualMapView,
-     tyControls.AdvChart.DataZoomView, tyControls.AdvChart.JsMath,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+     tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Coord,
+     tyControls.AdvanceChart.Builder, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Layout,
+     tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.Tooltip,
+     tyControls.AdvanceChart.Legend, tyControls.AdvanceChart.VisualMapView,
+     tyControls.AdvanceChart.DataZoomView, tyControls.AdvanceChart.JsMath,
      tyControls.AdvanceChart;
 type
   THwProbe = class(TTyAdvanceChart)
@@ -89,8 +89,10 @@ implementation
 { Cases whose sites the port does not draw yet; the upstream answer stays in
   the fixture for the batch that does. }
 const
-  cDeferred: array[0..1] of string = (
-    'label radar: one call per indicator',  // radar series labels: not ported (batch 35)
+  cDeferred: array[0..0] of string = (
+    { [R2-A] 'label radar: one call per indicator' is no longer deferred: a
+      radar's point labels are drawn, one call per point, params.value its
+      spoke's }
     { a treemap truncates its words to the box by their measured width, and
       this harness measures with the real font where upstream's node run
       estimates -- test.advchart.treemap holds the words with zrender's own

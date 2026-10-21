@@ -20,12 +20,12 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller, tyControls.StrConsts,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Scale, tyControls.AdvChart.Coord, tyControls.AdvChart.Time,
-     tyControls.AdvChart.Builder, tyControls.AdvChart.Layout, tyControls.AdvChart.Single,
-     tyControls.AdvChart.Render, tyControls.AdvChart.AxisBreak, tyControls.AdvChart.Anim,
-     tyControls.AdvChart.Jitter, tyControls.AdvChart.Events, tyControls.AdvChart.Color,
-     tyControls.AdvChart.Handlers, tyControls.AdvChart.AnimAxis, tyControls.AdvChart.AnimView,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Time,
+     tyControls.AdvanceChart.Builder, tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.Single,
+     tyControls.AdvanceChart.Render, tyControls.AdvanceChart.AxisBreak, tyControls.AdvanceChart.Anim,
+     tyControls.AdvanceChart.Jitter, tyControls.AdvanceChart.Events, tyControls.AdvanceChart.Color,
+     tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.AnimAxis, tyControls.AdvanceChart.AnimView,
      tyControls.AdvanceChart, test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TBreak2Probe = class(TTyAdvanceChart)
@@ -278,6 +278,9 @@ begin
       + JsNum(AEvent.Params.BreakEnd) + '}'
   else
     s := s + 'null';
+  { [R2-F] a singleAxis' click: its index and a category's dataIndex }
+  if AEvent.Params.ComponentType = 'singleAxis' then
+    s := s + '|' + IntToStr(AEvent.Params.AxisIndex) + '|' + IntToStr(AEvent.Params.DataIndex);
   FClickLog.Add(s);
 end;
 
@@ -444,6 +447,12 @@ begin
     if o.Find('break').JSONType = jtNull then want := want + 'null'
     else want := want + '{"start":' + JsNum(o.Objects['break'].Floats['start'])
       + ',"end":' + JsNum(o.Objects['break'].Floats['end']) + '}';
+    if o.Find('singleAxisIndex') <> nil then
+    begin
+      want := want + '|' + IntToStr(o.Integers['singleAxisIndex']) + '|';
+      if o.Find('dataIndex').JSONType = jtNull then want := want + '-1'
+      else want := want + IntToStr(o.Integers['dataIndex']);
+    end;
     SameStr(Format('%s click %d', [ATag, i]), FClickLog[i], want);
   end;
 end;
@@ -888,7 +897,23 @@ begin
       Same(Format('%s s%d[%d] y', [ATag, si, k]), e.Shape.CY, TJSONArray(items.Items[k]).Items[1]);
       Inc(n);
     end;
-    SameInt(ATag + ' scatter points', n, items.Count);
+    { [R2-H] a symbol the grid clips is not drawn (SymbolDraw's clipShape is
+      the grid's area, its edges inside): upstream records every item's
+      point, drawn or not -- count those inside (a single axis' scatter has
+      no grid: every one) }
+    i := items.Count;
+    if FChart.Build.GridCount > 0 then
+    begin
+      g := FChart.Build.Grid(0).PlotXYWH;
+      i := 0;
+      for k := 0 to items.Count - 1 do
+      begin
+        x := NumOf(TJSONArray(items.Items[k]).Items[0]);
+        y := NumOf(TJSONArray(items.Items[k]).Items[1]);
+        if (x >= g.X) and (x <= g.X + g.W) and (y >= g.Y) and (y <= g.Y + g.H) then Inc(i);
+      end;
+    end;
+    SameInt(ATag + ' scatter points', n, i);
     Exit;
   end;
   { a line: its polyline, vertex by vertex, as singles }
@@ -1056,7 +1081,16 @@ var
   v: TTyAnimValue;
   akey, anid: string;
   t1: Double;
-  act2: TJSONObject;
+  act2, act3: TJSONObject;
+
+  procedure DoAct(A: TJSONObject);
+  begin
+    if A.Strings['type'] = 'dataZoom' then
+      AssertTrue(FName + ' zooms again', FChart.DispatchDataZoom(0, A.Floats['start'], A.Floats['end']))
+    else
+      AssertTrue(FName + ' acts again', FChart.DispatchAction(A.AsJSON));
+  end;
+
 begin
   FFrames := 0;
   anims := TJSONObject(FRoot).Arrays['anim'];
@@ -1090,6 +1124,7 @@ begin
     else
       AssertTrue(FName + ' acts', FChart.DispatchAction(act.AsJSON));
     act2 := an.Find('action2') as TJSONObject;
+    act3 := an.Find('action3') as TJSONObject;
     akey := an.Strings['axis'];
     if akey[1] = 'y' then akey := 'yAxis' + Copy(akey, 2, MaxInt)
     else akey := 'xAxis' + Copy(akey, 2, MaxInt);
@@ -1130,11 +1165,12 @@ begin
             v.Arr[2 * q + 1], TJSONArray(pts.Items[q]).Items[1]);
         end;
       end;
-      { the second action right after the sample at at2: a transition that
-        starts while the first one moves }
+      { the second action right after the sample at at2 (and [R2-H] a third
+        at at3): a transition that starts while the one before moves }
       if (act2 <> nil) and (fr.Floats['t'] = an.Floats['at2']) then
-        AssertTrue(FName + ' zooms again', FChart.DispatchDataZoom(0, act2.Floats['start'],
-          act2.Floats['end']));
+        DoAct(act2);
+      if (act3 <> nil) and (fr.Floats['t'] = an.Floats['at3']) then
+        DoAct(act3);
     end;
   end;
   Report;

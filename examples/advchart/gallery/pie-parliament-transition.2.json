@@ -30,6 +30,7 @@
   ],
   "coordinateSystem": null,
   "universalTransition": true,
-  "animationDurationUpdate": 1000
+  "animationDurationUpdate": 1000,
+  "renderItem": "@pie-parliament-transition"
  }
 }

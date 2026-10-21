@@ -767,6 +767,32 @@ C('visualmap-pieces', 'layout', 'a piecewise visualMap on the default dimension 
   base({ visualMap: { type: 'piecewise', seriesIndex: 0, pieces: [{ min: 0, max: 3, color: '#00aa00' }, { min: 3, max: 6, color: '#aa0000' }], outOfRange: { color: '#999999' }, show: false },
     parallelAxis: [{ dim: 0 }, { dim: 1 }],
     series: [PS({ data: [[1, 2, 1], [2, 3, 4], [3, 1, 9]] }), PS({ data: [[2, 2, 2]] })] }));
+C('visualmap-categories', 'layout', "[R2-I6] a piecewise visualMap's categories on dimension 1, a string column no axis reads (guessOrdinal types it ordinal and the store keeps the text), with another string column before it; a category the list lacks is out of range; a second, continuous visualMap on a numeric column no axis reads (a numeric string is a number)",
+  base({ visualMap: [
+      { type: 'piecewise', seriesIndex: 0, categories: ['x', 'y', 'z'], dimension: 1, inRange: { color: ['#aa0000', '#00aa00', '#0000aa'] }, outOfRange: { color: '#cccccc' }, show: false },
+      { type: 'continuous', seriesIndex: 1, dimension: 0, min: 0, max: 10, inRange: { color: ['#0000ff', '#ff0000'] }, show: false },
+    ],
+    parallelAxis: [{ dim: 2 }, { dim: 3 }],
+    series: [
+      PS({ lineStyle: { opacity: 0.05 }, inactiveOpacity: 0, activeOpacity: 0.01, data: [['n0', 'x', 1, 2], ['n1', 'z', 3, 1], ['n2', 'w', 2, 2], ['n3', 'y', 1, 3]] }),
+      PS({ data: [[2, 'x', 1, 2], [8, 'y', 2, 1], ['5', 'z', 3, 3]] }),
+    ] }));
+C('visualmap-dash-first', 'layout', "[r2v] a continuous visualMap on a column no axis reads whose first value is '-': guessOrdinal learns nothing from a dash and goes on to the number after it, so the column is a number and the visualMap colours the rows after it by their numbers (the dash row opted out with visualMap: false)",
+  base({ visualMap: [
+      { type: 'continuous', seriesIndex: 0, dimension: 0, min: 0, max: 10, inRange: { color: ['#0000ff', '#ff0000'] }, outOfRange: { color: '#cccccc' }, show: false },
+    ],
+    parallelAxis: [{ dim: 1 }, { dim: 2 }],
+    series: [
+      PS({ data: [{ value: ['-', 1, 2], visualMap: false }, [3, 2, 1], [8, 3, 3], ['6', 1, 1]] }),
+    ] }));
+C('visualmap-dash-first-text', 'layout', "[r2v] the same column written as text after the dash: a number to guessOrdinal (a numeric string is only a might), so '3.10' is the number 3.1 and '8.0' the number 8 -- the categories '3.1' and '8' take them as String(value) (an ordinal column would keep the text, which neither category equals)",
+  base({ visualMap: [
+      { type: 'piecewise', seriesIndex: 0, dimension: 0, categories: ['3.1', '8'], inRange: { color: ['#aa0000', '#00aa00'] }, outOfRange: { color: '#cccccc' }, show: false },
+    ],
+    parallelAxis: [{ dim: 1 }, { dim: 2 }],
+    series: [
+      PS({ data: [{ value: ['-', 1, 2], visualMap: false }, ['3.10', 2, 1], ['8.0', 3, 3]] }),
+    ] }));
 C('legend', 'layout', 'two named series and a legend: the icons; toggling one off rescales the axes',
   base({ legend: {}, parallelAxis: [{ dim: 0 }, { dim: 1 }, { dim: 2 }],
     series: [PS({ name: 'alpha', data: [[1, 2, 3], [2, 3, 1]] }), PS({ name: 'beta', data: [[10, 20, 30]] })] }),
@@ -851,6 +877,30 @@ C('convert-vertical', 'convert', 'containPixel on a vertical parallel with a box
     });
     return out;
   } });
+
+// ---- E. the preprocessor over every option the manager reads ----
+// parseRawOption runs parallelPreprocessor over the base, over every timeline
+// frame and over every media unit with a query (not over the media default);
+// a merge's option is preprocessed the same way. A frame or a unit that
+// brings a parallel series and no `parallel` therefore brings `parallel: [{}]`.
+const TL2 = { axisType: 'category', data: ['one', 'two'] };
+C('pre-timeline', 'interact', "parallelAxis in the baseOption, the parallel series only in the timeline's frames: every frame is preprocessed, so the first one brings the parallel; an axisAreaSelect, then the second frame",
+  { baseOption: IX({ timeline: TL2, parallelAxis: [{ dim: 0, id: 'p0' }, { dim: 1 }, { dim: 2 }] }),
+    options: [{ series: [PS({ data: [[1, 10, 5], [3, 30, 2], [2, 20, 8]] })] }, { series: [{ data: [[2, 15, 1], [3, 25, 9], [1, 12, 4]] }] }] },
+  { steps: [
+    ['action', { type: 'axisAreaSelect', parallelAxisId: 'p0', intervals: [[1.5, 3]] }],
+    ['action', { type: 'timelineChange', currentIndex: 1 }],
+  ] });
+C('pre-media', 'interact', 'the parallel series only in a media unit with a query: the unit is preprocessed and brings the parallel',
+  { baseOption: IX({ parallelAxis: [{ dim: 0 }, { dim: 1 }] }),
+    media: [{ query: { minWidth: 100 }, option: { series: [PS({ data: [[1, 2], [3, 4], [2, 1]] })] } }] },
+  { steps: [['action', { type: 'axisAreaSelect', parallelAxisIndex: 1, intervals: [[0, 2.5]] }]] });
+C('pre-merge', 'interact', 'a merge that brings the parallelAxis and the parallel series beside a grid: the merged option is preprocessed and brings the parallel',
+  IX({ grid: { left: 20, right: 420, top: 20, bottom: 20 }, xAxis: { type: 'value' }, yAxis: { type: 'value' }, series: [{ type: 'scatter', data: [[1, 1]] }] }),
+  { steps: [
+    ['merge', { parallel: null, parallelAxis: [{ dim: 0 }, { dim: 1 }], series: [{}, PS({ data: [[1, 2], [3, 4]] })] }],
+    ['action', { type: 'axisAreaSelect', parallelAxisIndex: 0, intervals: [[2, 4]] }],
+  ] });
 
 // =====================================================================
 // the conversions
@@ -1092,6 +1142,14 @@ function guards(cases) {
   G('the visualMap colours the stroke', JSON.stringify(item('visualmap', 0, 0).stroke) !== JSON.stringify(item('visualmap', 0, 4).stroke));
   G("the visualMap's opacity is overwritten", get('visualmap').record.series[0].items.every(i => num(i.opacity) === 0.45));
   G('outOfRange greys a row', JSON.stringify(item('visualmap-pieces', 0, 2).stroke) === '[153,153,153,1]');
+  G('a category on a string column no axis reads colours its line', JSON.stringify(item('visualmap-categories', 0, 0).stroke) === '[170,0,0,1]'
+    && JSON.stringify(item('visualmap-categories', 0, 1).stroke) === '[0,0,170,1]' && JSON.stringify(item('visualmap-categories', 0, 2).stroke) === '[204,204,204,1]'
+    && num(item('visualmap-categories', 0, 0).opacity) === 0.05);
+  G('a numeric column no axis reads is a number to a continuous visualMap', JSON.stringify(item('visualmap-categories', 1, 0).stroke) !== JSON.stringify(item('visualmap-categories', 1, 1).stroke));
+  G('a numeric text after a dash is a number: the category 3.1 takes 3.10, 8 takes 8.0', JSON.stringify(item('visualmap-dash-first-text', 0, 1).stroke) === '[170,0,0,1]'
+    && JSON.stringify(item('visualmap-dash-first-text', 0, 2).stroke) === '[0,170,0,1]');
+  G('a dash first tells guessOrdinal nothing: the numbers after it colour', JSON.stringify(item('visualmap-dash-first', 0, 1).stroke) !== JSON.stringify(item('visualmap-dash-first', 0, 2).stroke)
+    && JSON.stringify(item('visualmap-dash-first', 0, 1).stroke) !== JSON.stringify(item('visualmap-dash-first', 0, 0).stroke));
   G('the legend toggle rescales an axis', num(get('legend').steps[0].record.parallels[0].axes[0].scale[1]) < num(get('legend').record.parallels[0].axes[0].scale[1]));
   G('a hover lifts the stroke and z2', (() => { const s = get('hover').steps[0].states.find(r => r.dataIndex === 0); return s.states.indexOf('emphasis') >= 0 && s.z2 === 20; })());
   G('the item tooltip names the row by its first category and shows the last numeric coordinate', (() => { const t = get('hover').steps[0].tooltip;
@@ -1111,6 +1169,14 @@ function guards(cases) {
   G('the parallel coordinate system converts nothing', get('convert').convert.filter(p => p.op !== 'contain').every(p => p.out.k === 'none'));
   G('containPixel answers on an axis finder', get('convert').convert.some(p => p.op === 'contain' && p.finder.text === '{"parallelAxisIndex":1}' && p.out.v === true));
   G('containPixel answers on a series finder', get('convert').convert.some(p => p.op === 'contain' && p.finder.text === '{"seriesIndex":0}' && p.out.v === true));
+  G('a timeline frame with the parallel series brings the parallel', get('pre-timeline').record.parallels.length === 1);
+  G("the frame's parallel takes the selection", get('pre-timeline').steps[0].record.parallels[0].axes[0].intervals.length === 1);
+  G('the selection survives the next frame', get('pre-timeline').steps[1].record.parallels[0].axes[0].intervals.length === 1
+    && get('pre-timeline').steps[1].record.series[0].count === 3);
+  G('a media unit with the parallel series brings the parallel', get('pre-media').record.parallels.length === 1
+    && get('pre-media').steps[0].record.parallels[0].axes[1].intervals.length === 1);
+  G('a merge with the parallel series brings the parallel', get('pre-merge').record.parallels.length === 0
+    && get('pre-merge').steps[0].record.parallels.length === 1 && get('pre-merge').steps[1].record.parallels[0].axes[0].intervals.length === 1);
   return g;
 }
 

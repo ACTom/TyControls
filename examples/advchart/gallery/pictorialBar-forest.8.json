@@ -1,0 +1,125 @@
+{
+ "xAxis": {
+  "name": 2023
+ },
+ "series": [
+  {
+   "data": [
+    {
+     "value": 396,
+     "symbolOffset": null
+    },
+    {
+     "value": 468,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    },
+    {
+     "value": 600,
+     "symbolOffset": null
+    },
+    {
+     "value": 612,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    },
+    {
+     "value": 684,
+     "symbolOffset": null
+    },
+    {
+     "value": 760,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    },
+    {
+     "value": 612,
+     "symbolOffset": null
+    },
+    {
+     "value": 540,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    },
+    {
+     "value": 520,
+     "symbolOffset": null
+    },
+    {
+     "value": 396,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    }
+   ]
+  },
+  {
+   "data": [
+    {
+     "value": -440,
+     "symbolOffset": null
+    },
+    {
+     "value": -468,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    },
+    {
+     "value": -540,
+     "symbolOffset": null
+    },
+    {
+     "value": -680,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    },
+    {
+     "value": -684,
+     "symbolOffset": null
+    },
+    {
+     "value": -684,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    },
+    {
+     "value": -680,
+     "symbolOffset": null
+    },
+    {
+     "value": -540,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    },
+    {
+     "value": -468,
+     "symbolOffset": null
+    },
+    {
+     "value": -440,
+     "symbolOffset": [
+      "50%",
+      0
+     ]
+    }
+   ]
+  }
+ ]
+}

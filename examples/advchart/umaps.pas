@@ -14,6 +14,9 @@ unit umaps;
   (THIRD-PARTY-NOTICES.md) and are picked up from maps/ as <name>.svg when a
   user puts them there.
 
+  THE SVG MAPS WITH NO RECORDED LICENCE are not shipped either (the
+  "unlicensed" list of maps.json); the demo says so over the chart.
+
   MAPS THAT DRAW NATIONAL BORDERS ARE NOT SHIPPED (china, world, HK; the
   "notShipped" list of maps.json). Borders are disputed, and some places
   require published maps to be reviewed -- mainland China, for one, under its
@@ -32,11 +35,21 @@ procedure RegisterGalleryMapsFor(const AOptionText, AMapsDir: string);
   "notShipped" list of AMapsDir's maps.json, comma-separated; '' for none. }
 function BorderMapsMissing(const AOptionText, AMapsDir: string): string;
 
+{ The same for the "unlicensed" list: the gallery's SVG maps with no recorded
+  licence (flight-seats, MacOdrum-LV5-floorplan-web, ksia-ext-plan). }
+function UnlicensedMapsMissing(const AOptionText, AMapsDir: string): string;
+
+{ The geo projection handlers AOptionText names ('@name') that nobody has
+  registered, comma-separated; '' for none. The harvest names a page's
+  projection.project / unproject functions this way (map-usa-projection's
+  d3.geoAlbersUsa); without them the map is drawn unprojected. }
+function ProjectionsMissing(const AOptionText: string): string;
+
 implementation
 
 uses
   Classes, SysUtils, fpjson, jsonparser,
-  tyControls.AdvChart.Option, tyControls.AdvChart.Geo;
+  tyControls.AdvanceChart.Option, tyControls.AdvanceChart.Geo;
 
 var
   GIndex: TJSONObject = nil;
@@ -132,7 +145,7 @@ begin
   end;
 end;
 
-function BorderMapsMissing(const AOptionText, AMapsDir: string): string;
+function ListedMapsMissing(const AOptionText, AMapsDir, AList: string): string;
 var
   missing: TTyGeoMissingMapArray;
   idx: TJSONObject;
@@ -148,7 +161,7 @@ begin
     Exit;
   end;
   if idx = nil then Exit;
-  d := idx.Find('notShipped');
+  d := idx.Find(AList);
   if not (d is TJSONArray) then Exit;
   list := TJSONArray(d);
   missing := MissingMaps(AOptionText);
@@ -163,6 +176,67 @@ begin
         Result := Result + '"' + missing[i].MapName + '"';
         Break;
       end;
+  end;
+end;
+
+function BorderMapsMissing(const AOptionText, AMapsDir: string): string;
+begin
+  Result := ListedMapsMissing(AOptionText, AMapsDir, 'notShipped');
+end;
+
+function UnlicensedMapsMissing(const AOptionText, AMapsDir: string): string;
+begin
+  Result := ListedMapsMissing(AOptionText, AMapsDir, 'unlicensed');
+end;
+
+function ProjectionsMissing(const AOptionText: string): string;
+var
+  root, d: TJSONData;
+  h: TTyGeoProjectHandler;
+
+  procedure Check(AProj: TJSONObject; const AName: string);
+  begin
+    d := AProj.Find(AName);
+    if (d is TJSONString) and (Copy(d.AsString, 1, 1) = '@')
+      and not TyChartFindGeoProjection(d.AsString, h)
+      and (Pos('"' + d.AsString + '"', Result) = 0) then
+    begin
+      if Result <> '' then Result := Result + ', ';
+      Result := Result + '"' + d.AsString + '"';
+    end;
+  end;
+
+  procedure Visit(AData: TJSONData);
+  var
+    i: Integer;
+    p: TJSONData;
+  begin
+    if AData is TJSONArray then
+      for i := 0 to AData.Count - 1 do Visit(TJSONArray(AData).Items[i])
+    else if AData is TJSONObject then
+    begin
+      p := TJSONObject(AData).Find('projection');
+      if p is TJSONObject then
+      begin
+        Check(TJSONObject(p), 'project');
+        Check(TJSONObject(p), 'unproject');
+      end;
+      for i := 0 to AData.Count - 1 do Visit(TJSONObject(AData).Items[i]);
+    end;
+  end;
+
+begin
+  Result := '';
+  if Pos('"projection"', AOptionText) = 0 then Exit;
+  try
+    root := GetJSON(AOptionText);
+  except
+    Exit;
+  end;
+  try
+    Visit(root);
+  finally
+    root.Free;
   end;
 end;
 

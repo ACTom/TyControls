@@ -115,6 +115,8 @@ const ZRENDER_SRC = process.env.ZRENDER_SRC || 'D:/Projects/zrender/src/core/pla
 const ROOT = path.resolve(__dirname, '..', '..');
 const OUT = process.env.ORACLE_OUT || path.join(ROOT, 'tests', 'fixtures', 'advchart-matrix.json');
 const GALLERY = path.join(ROOT, 'examples', 'advchart', 'gallery');
+// [R2-J2] the gallery as it was before every function got a name
+const { withoutFunctions } = require('./gallery-functions.js');
 const W = 800;
 const H = 600;
 
@@ -614,7 +616,7 @@ gal('matrix-confusion', 'the gallery: a confusion matrix (custom, MX2; the matri
 gal('matrix-graph', 'the gallery: a graph on a matrix (MX2; the matrix is compared)');
 
 function runCase(c) {
-  const option = c.gallery ? JSON.parse(fs.readFileSync(path.join(GALLERY, c.gallery + '.json'), 'utf8')) : c.option;
+  const option = c.gallery ? withoutFunctions(JSON.parse(fs.readFileSync(path.join(GALLERY, c.gallery + '.json'), 'utf8'))) : c.option;
   const chart = run(option, !!c.gallery);
   try {
     const dl = chart.getZr().storage.getDisplayList(true);

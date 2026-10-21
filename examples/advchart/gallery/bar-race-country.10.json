@@ -1,0 +1,344 @@
+{
+ "grid": {
+  "top": 10,
+  "bottom": 30,
+  "left": 150,
+  "right": 80
+ },
+ "xAxis": {
+  "max": "dataMax",
+  "axisLabel": {
+   "formatter": "@bar-race-country.formatter"
+  }
+ },
+ "dataset": {
+  "source": [
+   [
+    7418,
+    44.63431373,
+    3088808,
+    "Australia",
+    1890
+   ],
+   [
+    3963,
+    45.12972,
+    4908078,
+    "Canada",
+    1890
+   ],
+   [
+    918,
+    32,
+    377135349,
+    "China",
+    1890
+   ],
+   [
+    2454,
+    39.54,
+    1658274,
+    "Cuba",
+    1890
+   ],
+   [
+    2305,
+    44.61,
+    2358344,
+    "Finland",
+    1890
+   ],
+   [
+    3639,
+    43.36,
+    40015501,
+    "France",
+    1890
+   ],
+   [
+    3733,
+    40.91,
+    48211294,
+    "Germany",
+    1890
+   ],
+   [
+    2009,
+    36.58,
+    96517,
+    "Iceland",
+    1890
+   ],
+   [
+    1163,
+    24.384,
+    232819584,
+    "India",
+    1890
+   ],
+   [
+    1606,
+    37.67568,
+    39878734,
+    "Japan",
+    1890
+   ],
+   [
+    528,
+    26,
+    4959044,
+    "North Korea",
+    1890
+   ],
+   [
+    526,
+    25.8,
+    9856047,
+    "South Korea",
+    1890
+   ],
+   [
+    6265,
+    42.97564103,
+    669985,
+    "New Zealand",
+    1890
+   ],
+   [
+    3251,
+    48.6,
+    2003954,
+    "Norway",
+    1890
+   ],
+   [
+    2156,
+    37.41086957,
+    22618933,
+    "Poland",
+    1890
+   ],
+   [
+    2233,
+    29.93047652,
+    59151534,
+    "Russia",
+    1890
+   ],
+   [
+    1838,
+    35,
+    13188522,
+    "Turkey",
+    1890
+   ],
+   [
+    7169,
+    44.75,
+    34215580,
+    "United Kingdom",
+    1890
+   ],
+   [
+    5646,
+    45.21,
+    63810074,
+    "United States",
+    1890
+   ]
+  ]
+ },
+ "yAxis": {
+  "type": "category",
+  "inverse": true,
+  "max": 10,
+  "axisLabel": {
+   "show": true,
+   "fontSize": 14,
+   "formatter": "@bar-race-country.formatter#2",
+   "rich": {
+    "flag": {
+     "fontSize": 25,
+     "padding": 5
+    }
+   }
+  },
+  "animationDuration": 300,
+  "animationDurationUpdate": 300
+ },
+ "series": [
+  {
+   "realtimeSort": true,
+   "seriesLayoutBy": "column",
+   "type": "bar",
+   "itemStyle": {
+    "color": "@bar-race-country.color"
+   },
+   "encode": {
+    "x": 0,
+    "y": 3
+   },
+   "label": {
+    "show": true,
+    "precision": 1,
+    "position": "right",
+    "valueAnimation": true,
+    "fontFamily": "monospace"
+   },
+   "data": [
+    [
+     12228,
+     69.8254,
+     8821938,
+     "Australia",
+     1953
+    ],
+    [
+     13158,
+     69.097,
+     14882050,
+     "Canada",
+     1953
+    ],
+    [
+     692,
+     42.809992,
+     580886559,
+     "China",
+     1953
+    ],
+    [
+     8192,
+     61.46974,
+     6304524,
+     "Cuba",
+     1953
+    ],
+    [
+     7877,
+     66.5044,
+     4142353,
+     "Finland",
+     1953
+    ],
+    [
+     8622,
+     67.5644,
+     42724452,
+     "France",
+     1953
+    ],
+    [
+     9252,
+     67.82125638,
+     70720721,
+     "Germany",
+     1953
+    ],
+    [
+     9169,
+     72.3034,
+     150779,
+     "Iceland",
+     1953
+    ],
+    [
+     947,
+     36.30024,
+     395137696,
+     "India",
+     1953
+    ],
+    [
+     3168,
+     63.4558,
+     86378004,
+     "Japan",
+     1953
+    ],
+    [
+     1018,
+     27.87104,
+     9957244,
+     "North Korea",
+     1953
+    ],
+    [
+     1051,
+     45.41514,
+     19979069,
+     "South Korea",
+     1953
+    ],
+    [
+     13388,
+     70.3522,
+     2040015,
+     "New Zealand",
+     1953
+    ],
+    [
+     12707,
+     73.0312,
+     3366281,
+     "Norway",
+     1953
+    ],
+    [
+     5027,
+     62.0038,
+     26236679,
+     "Poland",
+     1953
+    ],
+    [
+     7981,
+     58.7624,
+     107729541,
+     "Russia",
+     1953
+    ],
+    [
+     4361,
+     43.77694,
+     22999018,
+     "Turkey",
+     1953
+    ],
+    [
+     11751,
+     69.738,
+     50792671,
+     "United Kingdom",
+     1953
+    ],
+    [
+     16974,
+     68.6448,
+     164941716,
+     "United States",
+     1953
+    ]
+   ]
+  }
+ ],
+ "animationDuration": 0,
+ "animationDurationUpdate": 2000,
+ "animationEasing": "linear",
+ "animationEasingUpdate": "linear",
+ "graphic": {
+  "elements": [
+   {
+    "type": "text",
+    "right": 160,
+    "bottom": 60,
+    "style": {
+     "text": 1953,
+     "font": "bolder 80px monospace",
+     "fill": "rgba(100, 100, 100, 0.25)"
+    },
+    "z": 100
+   }
+  ]
+ }
+}

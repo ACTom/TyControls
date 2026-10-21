@@ -332,14 +332,14 @@ begin
         ctx.lineTo(cx + tipR * Cos(tAng + halfW * 0.6), cy + tipR * Sin(tAng + halfW * 0.6));
         ctx.lineTo(cx + rimR * Cos(tAng + halfW), cy + rimR * Sin(tAng + halfW));
         ctx.closePath;
-        ctx.fill;
+        TyCtxFill(ctx);
       end;
 
       // Gear body: filled circle in the face background.
       ctx.beginPath;
       ctx.arc(cx, cy, radius, 0, 2 * Pi, False);
       ctx.fillStyle(TyColorToBGRA(bodyS.Background.Color));
-      ctx.fill;
+      TyCtxFill(ctx);
       // Body rim border: theme border WIDTH but the text colour, so the rim is chained to the
       // label colour and TyGearDial's own border-color is unreachable. Left as-is here because
       // this pass is a pure key split and must not move a pixel; switching the stroke to
@@ -349,14 +349,14 @@ begin
       ctx.strokeStyle(TyColorToBGRA(bodyS.TextColor));
       ctx.beginPath;
       ctx.arc(cx, cy, radius - bw / 2, 0, 2 * Pi, False);
-      ctx.stroke;
+      TyCtxStroke(ctx);
 
       // Inner circle (a concentric ring in the body/text colour for a machined look).
       ctx.lineWidth := Math.Max(1, P.Scale(1));
       ctx.strokeStyle(TyColorToBGRA(bodyS.TextColor));
       ctx.beginPath;
       ctx.arc(cx, cy, radius * 0.62, 0, 2 * Pi, False);
-      ctx.stroke;
+      TyCtxStroke(ctx);
 
       // Accent pointer/notch from an inner radius out to the rim at the value angle.
       frac := TyGaugeFraction(FValue, FMin, FMax);
@@ -369,13 +369,13 @@ begin
       ctx.beginPath;
       ctx.moveTo(cx + r0 * ca, cy + r0 * sa);
       ctx.lineTo(cx + r1 * ca, cy + r1 * sa);
-      ctx.stroke;
+      TyCtxStroke(ctx);
 
       // Hub: solid accent dot at the centre.
       ctx.fillStyle(TyColorToBGRA(pointerS.Background.Color));
       ctx.beginPath;
       ctx.arc(cx, cy, Math.Max(2, P.Scale(4)), 0, 2 * Pi, False);
-      ctx.fill;
+      TyCtxFill(ctx);
     end;
 
     if FShowValue then

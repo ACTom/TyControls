@@ -3,7 +3,8 @@
   "trigger": "axis",
   "axisPointer": {
    "type": "none"
-  }
+  },
+  "formatter": "@pictorialBar-velocity.formatter"
  },
  "xAxis": {
   "data": [

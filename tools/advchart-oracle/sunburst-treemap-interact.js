@@ -506,7 +506,7 @@ function seriesIndexOfId(chart, id) {
   chart.getModel().eachSeries(s => { if (s.id === id) out = s.seriesIndex; });
   return out;
 }
-function eventRec(chart, p) {
+function eventRec(chart, p, c) {
   const o = { type: p.type };
   o.seriesIndex = p.seriesId != null ? seriesIndexOfId(chart, p.seriesId) : null;
   let target = null;
@@ -522,6 +522,12 @@ function eventRec(chart, p) {
   o.direction = p.direction == null ? null : p.direction;
   if (p.rootRect) put(o, 'rootRect', [p.rootRect.x, p.rootRect.y, p.rootRect.width, p.rootRect.height]);
   else { o.rootRect = null; o.rootRectText = null; }
+  // [R2-I1] a case with `keys`: the payload's own keys in order, and whether
+  // `from` is the view's uid (a string)
+  if (c && c.keys) {
+    o.keys = Object.keys(p).join(',');
+    o.fromView = typeof p.from === 'string';
+  }
   return o;
 }
 
@@ -531,7 +537,7 @@ function runCase(c) {
   let H = c.H;
   const chart = mk(W, H);
   const events = [];
-  for (const t of ACTION_EVENTS) chart.on(t, p => events.push(eventRec(chart, p)));
+  for (const t of ACTION_EVENTS) chart.on(t, p => events.push(eventRec(chart, p, c)));
   const tipRec = { which: null };
   const states = [];
   const steps = [];
@@ -754,10 +760,31 @@ const CASES = [
     W: 600, H: 400, option: tm({ animation: true, leafDepth: 1 }, { animation: true }),
     steps: [{ tick: 5000 }, { click: { tm: 1 } }, { tick: 16 }, { tick: 150 }, { click: { tm: 2 } }, { tick: 300 }, { tick: 450 },
       { click: { crumb: 0 } }, { tick: 16 }, { tick: 250 }, { tick: 300 }, { tick: 400 }] },
+  // [R2-H] a drill while the first render's labels still fade in (LabelManager, enter timing): the treemap is not
+  // 'animating' (its own transition is the update's), so the click drills
+  { id: 'tm-anim-early', group: 'tm-anim', note: 'zoomToNode 100 ms into the first render, its labels still fading in: the click drills; the kept labels\' fade and the transition',
+    W: 600, H: 400, option: tm({ animation: true }, { animation: true }),
+    steps: [{ tick: 16 }, { tick: 84 }, { click: { tm: 3 } }, { tick: 16 }, { tick: 84 }, { tick: 200 }, { tick: 300 }, { tick: 400 },
+      { tick: 1000 }] },
+  { id: 'tm-anim-early-drill', group: 'tm-anim', note: 'leafDepth 1: a rootToNode drill 300 ms into the first render, the labels still fading in',
+    W: 600, H: 400, option: tm({ animation: true, leafDepth: 1 }, { animation: true }),
+    steps: [{ tick: 16 }, { tick: 284 }, { click: { tm: 1 } }, { tick: 16 }, { tick: 150 }, { tick: 300 }, { tick: 450 }, { tick: 1000 }] },
+  { id: 'tm-anim-early-pan', group: 'tm-anim', note: 'a pan 100 ms into the first render, its labels still fading in: treemapMove renders again, the kept words at their rest at once',
+    W: 600, H: 400, option: tm({ animation: true }, { animation: true }),
+    steps: [{ tick: 16 }, { tick: 84 }, { drag: [[300, 200], [320, 210]] }, { tick: 16 }, { tick: 300 }, { tick: 1000 }] },
+  // [r2v] a drill's own label fades (the words of the nodes it brought in) still running when a pan renders again:
+  // the words still in view are at their rest at once, the ones the pan moves out of the view fade on
+  { id: 'tm-anim-drill-pan', group: 'tm-anim', note: 'leafDepth 1, a short update and a long enter: a rootToNode drill, its new words still fading in when a pan (one move: one render) takes a2 out of the view -- the words of a1 at their rest at once, those of a2 fade on',
+    W: 600, H: 400, option: tm({ animation: true, leafDepth: 1, animationDurationUpdate: 300, animationDuration: 3000 }, { animation: true }),
+    steps: [{ tick: 5000 }, { click: { tm: 1 } }, { tick: 16 }, { tick: 400 }, { drag: [[300, 200], [595, 230]] }, { tick: 16 },
+      { tick: 300 }, { tick: 3000 }] },
   { id: 'tm-anim-opts', group: 'tm-anim', note: "animationDurationUpdate 400, animationEasing 'linear' (the treemap animates with animationEasing); a pan while it runs does nothing, after it pans and does not animate (the pointer leaves the canvas: no hover, whose state transition is not ported)",
     W: 600, H: 400, option: tm({ animation: true, animationDurationUpdate: 400, animationEasing: 'linear' }, { animation: true }),
     steps: [{ tick: 5000 }, { action: { type: 'treemapZoomToNode', targetNode: 'b1' } }, { tick: 16 }, { tick: 100 }, { tick: 200 }, { tick: 200 },
       { drag: [[300, 30], [320, -5]] }, { tick: 600 }, { drag: [[300, 30], [340, -5]] }, { tick: 16 }] },
+  { id: 'tm-roam-payload', group: 'tm-roam', keys: true, note: '[R2-I1] the view\'s own roam dispatches (TreemapView._onPan / _onZoom): {type, from (its uid), seriesId, rootRect}, the drag\'s and the wheel\'s',
+    W: 600, H: 400, option: tm(),
+    steps: [{ drag: [[300, 200], [340, 230]] }, { wheel: [200, 150, 120] }] },
 ];
 
 // ---------- the guards ----------

@@ -22,8 +22,8 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, ImgList, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Measure, tyControls.AdvChart.Geo, tyControls.AdvChart.Images,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Measure, tyControls.AdvanceChart.Geo, tyControls.AdvanceChart.Images,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 
@@ -235,17 +235,25 @@ begin
     begin
       st := steps.Objects[s];
       kind := st.Strings['type'];
-      x := st.Integers['x'];
-      y := st.Integers['y'];
-      if kind = 'move' then FChart.Move(x, y)
-      else if kind = 'down' then FChart.Down(x, y)
-      else FChart.Up(x, y);
+      x := -1;
+      y := -1;
+      { [R2-E] an action between the pointer steps }
+      if kind = 'action' then
+        FChart.DispatchAction(st.Objects['payload'].AsJSON)
+      else
+      begin
+        x := st.Integers['x'];
+        y := st.Integers['y'];
+        if kind = 'move' then FChart.Move(x, y)
+        else if kind = 'down' then FChart.Down(x, y)
+        else FChart.Up(x, y);
+      end;
       FChart.Render(FBmp.Canvas, Rect(0, 0, 600, 400), 96);
       want := st.Strings['cursor'];
       Inc(FCompared);
       if FChart.CursorName <> want then
         Miss(Format('%s step %d (%s %d,%d, %s): cursor %s upstream, %s here', [cs.Strings['id'], s,
-          kind, x, y, st.Strings['aim'], want, FChart.CursorName]));
+          kind, x, y, st.Get('aim', ''), want, FChart.CursorName]));
       { the control's own: the table's, the host's for 'default' }
       if not TyChartCssCursor(want, lcl) then lcl := crDefault;
       Inc(FCompared);

@@ -26,12 +26,12 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Paint, tyControls.AdvChart.Color,
-     tyControls.AdvChart.Events, tyControls.AdvChart.ZrPath,
-     tyControls.AdvChart.Anim, tyControls.AdvChart.RichText,
-     tyControls.AdvChart.RichStyle,
-     tyControls.AdvChart.GfxEl, tyControls.AdvChart.Graphic,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Color,
+     tyControls.AdvanceChart.Events, tyControls.AdvanceChart.ZrPath,
+     tyControls.AdvanceChart.Anim, tyControls.AdvanceChart.RichText,
+     tyControls.AdvanceChart.RichStyle,
+     tyControls.AdvanceChart.GfxEl, tyControls.AdvanceChart.Graphic,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
@@ -48,6 +48,8 @@ type
     Log: array of TGfxLogEntry;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     function List: TTyPaintList;
+    { the measurer the chart lays its texts out with [R2-F] }
+    function NewTextMeasurerForTest: ITyTextMeasurer;
     procedure Down(AX, AY: Integer);
     procedure Move(AX, AY: Integer);
     procedure Up(AX, AY: Integer);
@@ -133,6 +135,11 @@ end;
 function TGfxProbe.List: TTyPaintList;
 begin
   Result := SeriesList;
+end;
+
+function TGfxProbe.NewTextMeasurerForTest: ITyTextMeasurer;
+begin
+  Result := NewTextMeasurer(96);
 end;
 
 procedure TGfxProbe.Down(AX, AY: Integer);
@@ -1124,7 +1131,7 @@ end;
 procedure TAdvChartGraphicTest.TestTheOrderAndTheFlagsAreUpstreams;
 var c: TJSONObject;
 begin
-  RunStatic(['z-order', 'flags', 'forms'], True);
+  RunStatic(['z-order', 'flags', 'forms', 'forms-frame'], True);
   { the compound path: the update stopped at it, as the throw does }
   c := CaseById('compound');
   FWhere := 'compound';

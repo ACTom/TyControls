@@ -24,8 +24,8 @@ unit test.advchart.animengine;
   strings, discrete jumps. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
-     tyControls.AdvChart.JsMath, tyControls.AdvChart.Easing,
-     tyControls.AdvChart.Anim, tyControls.AdvChart.AnimOpt;
+     tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Easing,
+     tyControls.AdvanceChart.Anim, tyControls.AdvanceChart.AnimOpt;
 type
   TAdvChartAnimEngineTest = class(TTestCase)
   private

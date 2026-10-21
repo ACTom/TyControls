@@ -20,7 +20,7 @@ uses
   tyControls.FilterComboBox, tyControls.CharImage, tyControls.GlyphButtons,
   tyControls.AdvanceChart, tyControls.ToolWindows, tyControls.DB.Lists, DBPropEdits,
   { The SynEdit-backed tycss editor for StyleOverride (design-time only). }
-  tyControls.Design.Css.Editor, tyControls.Design.AdvChart.Editor;
+  tyControls.Design.Css.Editor, tyControls.Design.AdvanceChart.Editor;
 
 type
   TTyStyleClassPropertyEditor = class(TStringPropertyEditor)

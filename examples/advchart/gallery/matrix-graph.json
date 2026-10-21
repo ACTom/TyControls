@@ -108,6 +108,7 @@
    ],
    "label": {
     "show": true,
+    "formatter": "@matrix-graph.formatter",
     "color": "#555",
     "borderWidth": 0,
     "fontSize": 15,

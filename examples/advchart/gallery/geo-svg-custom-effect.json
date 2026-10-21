@@ -43,6 +43,7 @@
     935.6708486282843,
     81
    ]
-  ]
+  ],
+  "renderItem": "@geo-svg-custom-effect"
  }
 }

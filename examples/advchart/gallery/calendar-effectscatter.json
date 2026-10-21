@@ -1558,6 +1558,7 @@
      7
     ]
    ],
+   "symbolSize": "@calendar-effectscatter.symbolSize",
    "itemStyle": {
     "color": "#ddb926"
    }
@@ -3033,6 +3034,7 @@
      7
     ]
    ],
+   "symbolSize": "@calendar-effectscatter.symbolSize#2",
    "itemStyle": {
     "color": "#ddb926"
    }
@@ -3092,6 +3094,7 @@
      9613
     ]
    ],
+   "symbolSize": "@calendar-effectscatter.symbolSize#3",
    "showEffectOn": "render",
    "rippleEffect": {
     "brushType": "stroke"
@@ -3157,6 +3160,7 @@
      9613
     ]
    ],
+   "symbolSize": "@calendar-effectscatter.symbolSize#4",
    "showEffectOn": "render",
    "rippleEffect": {
     "brushType": "stroke"

@@ -410,7 +410,25 @@ const SCENARIOS = [
         { type: 'scatter', name: 'S', symbol: 'emptyRect', data: [1, 3, 2, 1] },
         { type: 'bar', name: 'B', data: [1, 1, 2, 2] }] }) },
     ] },
+  // [R2-F] MapDraw's applyOptionStyleForRegion: a region drawn with a map series' data wears
+  // data.getItemVisual(dataIdx, 'decal') -- the item's own, else the series' (a name with no
+  // data item too: indexOfName's -1 reads the data's visual); a geo the series draws on takes
+  // the same; a geo with no map series none
+  { id: 'map', note: "map series regions: an item's own decal, the series' on the rest (a region with no data item too); aria; a geo drawn with a map series' data; a geo alone",
+    steps: [
+      { option: { series: [{ type: 'map', map: 'decalSquares', itemStyle: { decal: { symbol: 'triangle', dashArrayX: 6 } },
+        data: [{ name: 'A', value: 1, itemStyle: { decal: { symbol: 'circle' } } }, { name: 'B', value: 2 }] }] } },
+      { option: { aria: ARIA, series: [{ type: 'map', map: 'decalSquares', data: [{ name: 'A', value: 1 }, { name: 'C', value: 3 }] }] } },
+      { option: { geo: { map: 'decalSquares' }, series: [{ type: 'map', geoIndex: 0, itemStyle: { decal: { symbol: 'diamond' } },
+        data: [{ name: 'B', value: 2, itemStyle: { decal: { symbol: 'rect', dashArrayX: 4 } } }] }] } },
+      { option: { geo: { map: 'decalSquares', itemStyle: { decal: { symbol: 'circle' } } } } },
+    ] },
 ];
+// [R2-F] the map the 'map' scenario draws: three squares side by side, mirrored in
+// tests/test.advchart.decalseries.pas
+const DECAL_MAP = { type: 'FeatureCollection', features: ['A', 'B', 'C'].map((n, k) => ({ type: 'Feature', properties: { name: n },
+  geometry: { type: 'Polygon', coordinates: [[[k * 10, 0], [k * 10 + 8, 0], [k * 10 + 8, 8], [k * 10, 8], [k * 10, 0]]] } })) };
+echarts.registerMap('decalSquares', JSON.stringify(DECAL_MAP));
 
 function runScenario(sc) {
   let chart = makeChart();

@@ -22,8 +22,8 @@ interface
 uses Classes, SysUtils, Math, Types, Controls, Graphics, Forms, fpcunit, testregistry,
      BGRABitmap, BGRABitmapTypes,
      tyControls.Types, tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.DirtyRect, tyControls.AdvChart.Geo,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.DirtyRect, tyControls.AdvanceChart.Geo,
      tyControls.AdvanceChart;
 
 type
@@ -66,6 +66,7 @@ type
     procedure TestAWriteAfterTheSessionTaintsIt;
     procedure TestClearForgetsTheJournal;
     procedure TestAnElementAddedInTheSessionIsJournaledToo;
+    procedure TestARepeatedWriteIsJournaledOnce;
     procedure TestARecordedWriteAfterTheSessionTaintsItToo;
     procedure TestARefPastTheEndIsTheSharedEmptyElement;
   end;
@@ -300,7 +301,9 @@ begin
   { THE INCREMENTAL LAYER holds the chunks as they were drawn: a patch
     draws it again, as a build does -- left alone, a hovered point's
     emphasis stayed out of the picture (scatter-jitter, scatter-painter-
-    choice) }
+    choice). [R2-I9] The hovered point itself is the hover layer's now
+    (HOVER_LAYER_FOR_INCREMENTAL); the blur its focus puts on the rest is
+    the layer's own, and patched }
   s := '';
   st := 5;
   for i := 0 to 1199 do
@@ -313,7 +316,7 @@ begin
   end;
   n := Sweep('{ ' + cNoTip + 'xAxis: {}, yAxis: {}, series: [{ type: ''scatter'','
     + ' progressive: 200, progressiveThreshold: 500, symbolSize: 8,'
-    + ' emphasis: { itemStyle: { color: ''#f00'', borderColor: ''#000'', borderWidth: 2 } },'
+    + ' emphasis: { focus: ''self'', itemStyle: { color: ''#f00'', borderColor: ''#000'', borderWidth: 2 } },'
     + ' data: [' + s + '] }] }', False, False, 21);
   AssertTrue('frames were patched', n > 0);
 end;
@@ -531,6 +534,45 @@ begin
     l.JournalClose;
     l.JournalRewind;
     AssertEquals('nothing of the old session comes back', 'm', l.Element(0).Caption.Text);
+  finally
+    l.Free;
+  end;
+end;
+
+{ [R2-P] a state written over the same element again and again (a hover
+  that blurs, then emphasises, then selects it) copies it once: the journal
+  keeps each index the first time it is written in a session }
+procedure TAdvChartPaintJournalTest.TestARepeatedWriteIsJournaledOnce;
+var
+  l: TTyPaintList;
+  k: Integer;
+begin
+  l := TTyPaintList.Create;
+  try
+    l.Add(El(1, 'a'));
+    l.Add(El(2, 'b'));
+    l.Add(El(3, 'c'));
+    l.JournalOpen;
+    l.Add(El(4, 'added'));
+    l.JournalRecord(True);
+    for k := 1 to 5 do l.SetElement(1, El(20 + k, 'B' + IntToStr(k)));
+    for k := 1 to 3 do l.SetElement(2, El(30 + k, 'C' + IntToStr(k)));
+    for k := 1 to 4 do l.SetElement(3, El(40 + k, 'D' + IntToStr(k)));
+    AssertEquals('three indices written twelve times: three copies', 3, l.JournalCount);
+    l.JournalRecord(False);
+    l.SetElement(0, El(9, 'A'));
+    AssertEquals('the build''s own write is not kept', 3, l.JournalCount);
+    l.JournalClose;
+    AssertEquals('the last write stands', 'B5', l.Element(1).Caption.Text);
+    l.JournalRewind;
+    AssertEquals('b back', 'b', l.Element(1).Caption.Text);
+    AssertEquals('c back', 'c', l.Element(2).Caption.Text);
+    AssertEquals('the added one back', 'added', l.Element(3).Caption.Text);
+    AssertEquals('a new session keeps nothing yet', 0, l.JournalCount);
+    l.JournalRecord(True);
+    l.SetElement(1, El(50, 'X'));
+    l.SetElement(1, El(51, 'Y'));
+    AssertEquals('and counts afresh', 1, l.JournalCount);
   finally
     l.Free;
   end;

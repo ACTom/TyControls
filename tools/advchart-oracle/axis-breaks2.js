@@ -137,6 +137,9 @@ function walk(e, f) {
 // keeps them only as a Float32 path proxy: the lines are caught as mergePath
 // reads them (getUpdatedPathProxy(true) on a Line no group holds).
 let MERGED = [];
+// [R2-F] the lines the single's view last merged: a step that does not render it again (a click
+// on a label that only makes an event) keeps them
+let LAST_MERGED = [];
 {
   const L = echarts.graphic.Line.prototype;
   const orig = L.getUpdatedPathProxy;
@@ -254,7 +257,10 @@ function recordAxis(chart, key) {
     });
   });
   rec.splitLines = splitLines;
-  if (key[0] === 's') rec.singleSplit = MERGED.map(l => [hex(l.shape.x1), hex(l.shape.y1), hex(l.shape.x2), hex(l.shape.y2)]);
+  if (key[0] === 's') {
+    if (MERGED.length) LAST_MERGED = MERGED;
+    rec.singleSplit = LAST_MERGED.map(l => [hex(l.shape.x1), hex(l.shape.y1), hex(l.shape.x2), hex(l.shape.y2)]);
+  }
   rec.axisTicks = axisTicks;
   rec.axisLine = axisLine;
   rec.breakAreas = breakAreas;
@@ -328,6 +334,36 @@ add('log', 'l-x', 'a log x axis under a scatter', { xAxis: { type: 'log', breaks
 add('log', 'l-click', 'a click on the log axis\' break area expands it',
   logY({ breaks: [{ start: 50, end: 900, gap: '8%' }] }),
   { steps: [{ type: 'click', at: { kind: 'break', axis: 'y0', index: 0, frac: 0.5 } }] });
+// [R2-H] the lookup after a dataZoom changes the extent (setExtent2 writes its first two entries again), and the
+// break ends that equal the nice extent's ends (the lookup brings them back, as it does any break end)
+add('log', 'l-zoom', 'a log y axis with a break under an inside dataZoom: two zooms change the extent, the lookup\'s '
+  + 'first two entries follow it, the break ends come back through it',
+  logY({ breaks: [{ start: 50, end: 900, gap: '5%' }] }, null,
+    { dataZoom: [{ type: 'inside', yAxisIndex: 0, filterMode: 'none' }] }),
+  { steps: [{ type: 'action', payload: { type: 'dataZoom', start: 0, end: 60 } },
+    { type: 'action', payload: { type: 'dataZoom', start: 30, end: 90 } },
+    { type: 'action', payload: { type: 'dataZoom', start: 0, end: 100 } }] });
+add('log', 'l-zoom-x', 'a log x axis with two breaks under an inside dataZoom (start / end values): the second start '
+  + 'overwrites the first end in the lookup, the zoom rewrites only the extent\'s two',
+  { xAxis: { type: 'log', breaks: [{ start: 20, end: 60, gap: '3%' }, { start: 200, end: 3000, gap: 10 }] },
+    yAxis: { type: 'value' }, dataZoom: [{ type: 'inside', xAxisIndex: 0, filterMode: 'none' }],
+    series: [{ type: 'scatter', data: [[2, 1], [30, 2], [400, 3], [5000, 4], [9000, 5]] }] },
+  { axes: ['x0'], steps: [{ type: 'action', payload: { type: 'dataZoom', startValue: 5, endValue: 4000 } },
+    { type: 'action', payload: { type: 'dataZoom', startValue: 25, endValue: 9000 } }] });
+add('log', 'l-nice-end', 'a break whose end is the nice extent\'s max (3000..10000, the data to 9000): the end tick '
+  + 'and the extent\'s end are the one value through the lookup',
+  logY({ breaks: [{ start: 3000, end: 10000, gap: '5%' }] }, [1, 30, 950, 2000, 9000]));
+add('log', 'l-nice-start', 'a break whose start is the nice extent\'s min (1..20, the data from 2): the start '
+  + 'and the extent\'s start are the one value',
+  logY({ breaks: [{ start: 1, end: 20, gap: '5%' }] }, [2, 30, 950, 2000, 9000]));
+add('log', 'l-nice-both', 'min and max written onto two breaks\' outer ends (10..30 and 300..1000, min 10, max 1000)',
+  logY({ min: 10, max: 1000, breaks: [{ start: 10, end: 30, gap: '5%' }, { start: 300, end: 1000, gap: '5%' }] },
+    [20, 40, 95, 200, 900]));
+add('log', 'l-nice-zoom', 'the nice-end break under a dataZoom that brings the extent back onto it',
+  logY({ breaks: [{ start: 3000, end: 10000, gap: '5%' }] }, [1, 30, 950, 2000, 9000],
+    { dataZoom: [{ type: 'inside', yAxisIndex: 0, filterMode: 'none' }] }),
+  { steps: [{ type: 'action', payload: { type: 'dataZoom', start: 50, end: 100 } },
+    { type: 'action', payload: { type: 'dataZoom', start: 0, end: 100 } }] });
 
 // ---- single axes
 const RIVER = [];
@@ -398,6 +434,23 @@ add('params', 'p-event', 'triggerEvent: a click on a break label: params.break {
   { steps: [{ type: 'click', at: { kind: 'label', axis: 'y0', value: 50 } },
     { type: 'click', at: { kind: 'label', axis: 'y0', value: 1000 } }] });
 
+// ---- [R2-F] a singleAxis' labels that trigger events: a click on a label is a click event of
+// componentType 'singleAxis' (singleAxisIndex, the label's value, its tickIndex, a category's
+// dataIndex); a break label's carries the break and expands it (addBreakEventHandler)
+add('single', 's-label-event', 'triggerEvent on a value singleAxis: a plain label, then a break label (the break, and the break expands)',
+  { singleAxis: { type: 'value', triggerEvent: true, breaks: [{ start: 20, end: 80, gap: '10%' }] },
+    series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [1, 10, 90, 95, 100] }] },
+  { axes: ['s0'], steps: [{ type: 'click', at: { kind: 'label', axis: 's0', value: 0 } },
+    { type: 'click', at: { kind: 'label', axis: 's0', value: 80 } }] });
+add('single', 's-label-cat', 'triggerEvent on a category singleAxis: the label of b (dataIndex 1)',
+  { singleAxis: { type: 'category', triggerEvent: true, data: ['a', 'b', 'c'] },
+    series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [1, 2, 0] }] },
+  { axes: ['s0'], steps: [{ type: 'click', at: { kind: 'label', axis: 's0', value: 1 } }] });
+add('single', 's-label-silent', 'no triggerEvent: a click on a break label is no event and expands nothing',
+  { singleAxis: { type: 'value', breaks: [{ start: 20, end: 80, gap: '10%' }] },
+    series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [1, 10, 90, 95, 100] }] },
+  { axes: ['s0'], steps: [{ type: 'click', at: { kind: 'label', axis: 's0', value: 80 } }] });
+
 // ---- the break areas in a transition
 const ANIM = [];
 function addAnim(id, note, option, action, axis, more) {
@@ -418,6 +471,30 @@ addAnim('t-zoom-twice', 'a second dataZoom while the first transition moves: the
   barY({ breaks: [{ start: 50, end: 900, gap: '8%' }] }, null, { dataZoom: [{ type: 'inside', yAxisIndex: 0, filterMode: 'none' }] }),
   { type: 'dataZoom', start: 0, end: 70 }, 'y0',
   { action2: { type: 'dataZoom', start: 0, end: 40 }, at2: 250, samples: [0, 16, 100, 250, 266, 400, 500, 600, 749, 750, 751, 1000] });
+// [R2-H] the other combinations of a second trigger while the first transition moves
+const S2 = [0, 16, 100, 250, 266, 400, 500, 600, 749, 750, 751, 1000];
+addAnim('t-zoom-x-twice', 'a second dataZoom on the broken x axis while the first moves: from the leaves as they are',
+  { yAxis: { type: 'category', data: C5 }, xAxis: { type: 'value', breaks: [{ start: 50, end: 900, gap: '8%' }] },
+    dataZoom: [{ type: 'inside', xAxisIndex: 0, filterMode: 'none' }], series: [{ type: 'bar', data: [10, 30, 950, 40, 1000] }] },
+  { type: 'dataZoom', start: 10, end: 100 }, 'x0', { action2: { type: 'dataZoom', start: 30, end: 90 }, at2: 250, samples: S2 });
+addAnim('t-zoom-back', 'a dataZoom back to the whole while the first one moves (100 ms in): back from where the leaves are',
+  barY({ breaks: [{ start: 50, end: 900, gap: '8%' }] }, null, { dataZoom: [{ type: 'inside', yAxisIndex: 0, filterMode: 'none' }] }),
+  { type: 'dataZoom', start: 0, end: 70 }, 'y0',
+  { action2: { type: 'dataZoom', start: 0, end: 100 }, at2: 100, samples: [0, 16, 100, 116, 250, 400, 599, 600, 601, 1000] });
+addAnim('t-zoom-legend', 'a legend toggle while a dataZoom moves: the render again keeps the leaves going from where they are',
+  barY({ breaks: [{ start: 50, end: 900, gap: '8%' }] }, null, { legend: {},
+    dataZoom: [{ type: 'inside', yAxisIndex: 0, filterMode: 'none' }],
+    series: [{ type: 'bar', name: 'A', data: [10, 30, 950, 40, 1000] }, { type: 'bar', name: 'B', data: [5, 40, 920, 30, 990] }] }),
+  { type: 'dataZoom', start: 0, end: 70 }, 'y0', { action2: { type: 'legendToggleSelect', name: 'B' }, at2: 250, samples: S2 });
+addAnim('t-zoom-expand', 'expandAxisBreak while a dataZoom moves: the area goes, the axis transition goes on',
+  barY({ breaks: [{ start: 50, end: 900, gap: '8%' }] }, null, { dataZoom: [{ type: 'inside', yAxisIndex: 0, filterMode: 'none' }] }),
+  { type: 'dataZoom', start: 0, end: 70 }, 'y0',
+  { action2: { type: 'expandAxisBreak', yAxisIndex: 0, breaks: [{ start: 50, end: 900 }] }, at2: 250, samples: S2 });
+addAnim('t-zoom-thrice', 'a third dataZoom while the second moves (each 150 ms after the last)',
+  barY({ breaks: [{ start: 50, end: 900, gap: '8%' }] }, null, { dataZoom: [{ type: 'inside', yAxisIndex: 0, filterMode: 'none' }] }),
+  { type: 'dataZoom', start: 0, end: 70 }, 'y0',
+  { action2: { type: 'dataZoom', start: 0, end: 40 }, at2: 150, action3: { type: 'dataZoom', start: 10, end: 80 }, at3: 300,
+    samples: [0, 16, 150, 166, 300, 316, 500, 799, 800, 801, 1000] });
 
 // =====================================================================
 // Running a case
@@ -465,13 +542,21 @@ function runCase(c) {
       payload: payloadRec(e.fromActionPayload) });
   });
   chart.on('click', p => {
-    clicks.push({ componentType: p.componentType, targetType: p.targetType == null ? null : p.targetType,
+    const ck = { componentType: p.componentType, targetType: p.targetType == null ? null : p.targetType,
       value: p.value == null ? null : J(p.value), tickIndex: p.tickIndex == null ? null : p.tickIndex,
-      break: p.break == null ? null : J(p.break) });
+      break: p.break == null ? null : J(p.break) };
+    // [R2-F] a singleAxis' click: its index and a category's dataIndex (only there, so the
+    // records of the other axes stay as they were)
+    if (p.componentType === 'singleAxis') {
+      ck.singleAxisIndex = p.singleAxisIndex == null ? null : p.singleAxisIndex;
+      ck.dataIndex = p.dataIndex == null ? null : p.dataIndex;
+    }
+    clicks.push(ck);
   });
   try {
     CALLS = [];
     MERGED = [];
+    LAST_MERGED = [];
     chart.setOption(materialize(c.option));
     chart.renderToSVGString();
     const renders = [recordRender(chart, c, DRAWS, [], [], CALLS.slice(), null)];
@@ -539,6 +624,7 @@ function runAnim(c) {
       zr.storage.getDisplayList(true);
       frames.push({ t, leaves: breakLeaves(chart, c.axis) });
       if (c.action2 && t === c.at2) chart.dispatchAction(JSON.parse(JSON.stringify(c.action2)));
+      if (c.action3 && t === c.at3) chart.dispatchAction(JSON.parse(JSON.stringify(c.action3)));
     }
     return { before, draws: DRAWS, frames };
   } finally {
@@ -568,6 +654,7 @@ function generate() {
     const r = runAnim(c);
     out.anim.push({ id: c.id, group: c.group, note: c.note, option: J(c.option), action: J(c.action), axis: c.axis,
       action2: c.action2 ? J(c.action2) : undefined, at2: c.action2 ? c.at2 : undefined,
+      action3: c.action3 ? J(c.action3) : undefined, at3: c.action3 ? c.at3 : undefined,
       before: r.before, draws: r.draws, frames: r.frames });
   }
   return out;

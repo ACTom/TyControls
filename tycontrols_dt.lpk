@@ -22,16 +22,16 @@
         <UnitName Value="tyControls.Design"/>
       </Item>
       <Item>
-        <Filename Value="designtime/tyControls.Design.AdvChart.Descs.pas"/>
-        <UnitName Value="tyControls.Design.AdvChart.Descs"/>
+        <Filename Value="designtime/tyControls.Design.AdvanceChart.Descs.pas"/>
+        <UnitName Value="tyControls.Design.AdvanceChart.Descs"/>
       </Item>
       <Item>
-        <Filename Value="designtime/tyControls.Design.AdvChart.Editor.pas"/>
-        <UnitName Value="tyControls.Design.AdvChart.Editor"/>
+        <Filename Value="designtime/tyControls.Design.AdvanceChart.Editor.pas"/>
+        <UnitName Value="tyControls.Design.AdvanceChart.Editor"/>
       </Item>
       <Item>
-        <Filename Value="designtime/tyControls.Design.AdvChart.SeriesDialog.pas"/>
-        <UnitName Value="tyControls.Design.AdvChart.SeriesDialog"/>
+        <Filename Value="designtime/tyControls.Design.AdvanceChart.SeriesDialog.pas"/>
+        <UnitName Value="tyControls.Design.AdvanceChart.SeriesDialog"/>
       </Item>
       <Item>
         <Filename Value="designtime/tyControls.Design.CssEditKit.pas"/>

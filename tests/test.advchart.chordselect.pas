@@ -13,7 +13,7 @@ interface
 uses Classes, SysUtils, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms,
      tyControls.Controller,
-     tyControls.AdvChart.Events,
+     tyControls.AdvanceChart.Events,
      tyControls.AdvanceChart;
 type
   TCsProbe = class(TTyAdvanceChart)

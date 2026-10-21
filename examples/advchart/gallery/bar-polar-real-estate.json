@@ -39,7 +39,8 @@
   ]
  },
  "tooltip": {
-  "show": true
+  "show": true,
+  "formatter": "@bar-polar-real-estate.formatter"
  },
  "radiusAxis": {},
  "polar": {},

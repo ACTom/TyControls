@@ -140,10 +140,10 @@
 //   prod: the production build writes the same record.
 //
 // Deferred by declaration (and checked by nature; a mismatch is reported as
-// "deferral not as declared" and fails the run):
-//   declared-empty category list (xAxis.data: []) whose extent comes from the
-//   series data (upstream's backward-compatibility path); a count past
-//   CAP = 2^20 categories in the window (the port guards it).
+// "deferral not as declared" and fails the run): a count past CAP = 2^20
+// categories in the window (the port guards it). [R2-G: a declared-empty
+// category list (xAxis.data: []), its extent from the series data, was
+// deferred too; the port follows it now and the two cases are compared.]
 //
 // Doubles are written as the 16 hex digits of their IEEE-754 bits (big-endian,
 // lowercase) with a readable twin beside the case- and axis-level ones; item
@@ -604,9 +604,7 @@ function run(c, lib) {
       if (!same(t.count, g.count)) fail(1, axis.dim + ': count ' + g.count + ', transcribed ' + t.count);
       if (t.blank !== r.blank) fail(1, axis.dim + ': blank ' + r.blank + ', transcribed ' + t.blank);
       if (t.inverse !== r.inverse) fail(1, axis.dim + ': inverse ' + r.inverse + ', transcribed ' + t.inverse);
-      if (declaredEmpty && isFiniteNum(info.noZoomEffMM[0]) && isFiniteNum(info.noZoomEffMM[1])) {
-        nature.push('declared-empty category list: extent from the series data');
-      }
+      // [R2-G] a declared-empty category list is the port's too now: no nature
       if (g.count > CAP) nature.push('category count ' + g.count + ' past the cap ' + CAP);
 
       // check 2: the mapping
@@ -1150,6 +1148,28 @@ add('A', 'collected categories (no data), min 1', { xAxis: { type: 'category', m
   series: [bar(T.map((t, i) => [t, V10[i]]))] });
 add('A', 'y category min 2 max 5', cy({ min: 2, max: 5 }));
 add('A', 'y category min 2 max 5 inverse', cy({ min: 2, max: 5, inverse: true }));
+// [R2-I6] a category written twice in the axis data: createHashMap(categories)
+// sets every one in order, so the LATER ordinal is the one a value and a
+// string min / max find (the bar of 'a' stands on ordinal 2, not 0)
+add('A', 'duplicate categories', cx({ data: ['a', 'b', 'a', 'c', 'd'] },
+  [bar([['a', 5], ['b', 20], ['c', 8], ['d', 3]])]));
+add('A', "duplicate categories min 'a'", cx({ data: ['a', 'b', 'a', 'c', 'd'], min: 'a' },
+  [bar([['a', 5], ['b', 20], ['c', 8], ['d', 3]])]));
+// [R2-I9] OrdinalMeta.createByAxisModel reads `option.dedplication !== false`
+// (the key misspelt): only a literal false under that name collects blindly --
+// every row a new category, a repeated name too; `deduplication: false` has
+// no effect, and neither has a falsy value that is not false
+const REP = [['a', 5], ['b', 20], ['a', 8], ['c', 3], ['b', 12]];
+add('A', 'collected, dedplication false: a blind append', { xAxis: { type: 'category', dedplication: false },
+  yAxis: { type: 'value' }, series: [bar(REP)] });
+add('A', 'collected, deduplication false: no effect upstream', { xAxis: { type: 'category', deduplication: false },
+  yAxis: { type: 'value' }, series: [bar(REP)] });
+add('A', 'collected, dedplication 0: only false switches it', { xAxis: { type: 'category', dedplication: 0 },
+  yAxis: { type: 'value' }, series: [bar(REP)] });
+add('A', 'collected, dedplication false, two series share the axis', { xAxis: { type: 'category', dedplication: false },
+  yAxis: { type: 'value' }, series: [bar(REP), line([['c', 7], ['a', 9]])] });
+add('A', 'fixed data, dedplication false: the list as written', cx({ data: ['a', 'b', 'a', 'c', 'd'], dedplication: false },
+  [bar([['a', 5], ['b', 20], ['c', 8], ['d', 3]])]));
 
 // B. blank
 add('B', "min 'zz'", cx({ min: 'zz' }));
@@ -1164,12 +1184,14 @@ add('B', 'no categories at all, min 1 max 3: blank by the count alone', { xAxis:
   yAxis: { type: 'value' }, series: [] });
 add('B', 'data [] with name pairs', cx({ data: [] }, [bar([['a', 1], ['b', 2], ['c', 3]])]));
 
+// [R2-G] a declared-empty category list: the extent from the series data
+// (upstream's backward-compatibility path), the axis blank -- compared now
+add('B', 'data [] with plain values', cx({ data: [] }));
+add('B', 'data [] with plain values, min 1', cx({ data: [], min: 1 }));
 // deferred by declaration
-const D9 = deferred('declared-empty category list: extent from the series data (upstream\'s backward-compatibility path; '
-  + 'the port draws nothing)');
-add('B', 'data [] with plain values', cx({ data: [] }), D9);
-add('B', 'data [] with plain values, min 1', cx({ data: [], min: 1 }), D9);
-add('B', 'min 1e300', cx({ min: 1e300 }), deferred('category count past the port\'s cap: guarded, a documented divergence'));
+add('B', 'min 1e300', cx({ min: 1e300 }), deferred('category count past the port\'s cap (2^20): upstream steps through '
+  + 'the window by the label interval and never walks it, the port builds a label per category before it thins '
+  + 'them -- a guard the port needs and upstream does not, a documented divergence'));
 
 // C. bars
 add('C', 'min 2 max 6 boundaryGap false: the mapping', cx({ min: 2, max: 6, boundaryGap: false }));

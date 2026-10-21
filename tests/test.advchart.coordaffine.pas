@@ -31,11 +31,11 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Paint, tyControls.AdvChart.Scale,
-     tyControls.AdvChart.Coord, tyControls.AdvChart.Builder,
-     tyControls.AdvChart.BarLayout, tyControls.AdvChart.Layout,
-     tyControls.AdvChart.AxisName,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Scale,
+     tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Builder,
+     tyControls.AdvanceChart.BarLayout, tyControls.AdvanceChart.Layout,
+     tyControls.AdvanceChart.AxisName,
      tyControls.AdvanceChart;
 type
   TCoordAffineProbe = class(TTyAdvanceChart)

@@ -55,7 +55,8 @@
     "text": "Back",
     "fontSize": 18,
     "fill": "grey"
-   }
+   },
+   "onclick": "@bar-multi-drilldown.onclick"
   }
  ]
 }

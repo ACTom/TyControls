@@ -24,9 +24,9 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Types, tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Data, tyControls.AdvChart.Events,
-     tyControls.AdvChart.Connect, tyControls.AdvChart.Geo,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Events,
+     tyControls.AdvanceChart.Connect, tyControls.AdvanceChart.Geo,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
@@ -302,7 +302,8 @@ begin
     first := True;
     for i := 0 to High(snap.Hits) do
     begin
-      if snap.Hits[i].Cross or (snap.Hits[i].Axis = nil) then Continue;
+      { [R2-I7] the axes that trigger the tooltip }
+      if snap.Hits[i].NoTip or (snap.Hits[i].Axis = nil) then Continue;
       for k := 0 to High(snap.Hits[i].Slots) do
       begin
         s := SlotSeriesIndex(snap.Hits[i].Slots[k]);
@@ -325,8 +326,13 @@ begin
     Result := 'item:' + IntToStr(snap.Datum.SeriesIndex) + ':'
       + IntToStr(snap.Datum.RawDataIndex) + ':edge'
   else
+  begin
     Result := 'item:' + IntToStr(snap.Datum.SeriesIndex) + ':'
       + IntToStr(snap.Datum.RawDataIndex);
+    { a graph's node is params.dataType 'node' [R2-E] }
+    if TooltipParams(snap.Datum).DataType <> '' then
+      Result := Result + ':' + TooltipParams(snap.Datum).DataType;
+  end;
 end;
 
 { ==================== the oracle test ==================== }

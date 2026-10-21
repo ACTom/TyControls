@@ -52,6 +52,7 @@
      0,
      -20
     ],
+    "formatter": "@pictorialBar-body-fill.formatter",
     "fontSize": 18,
     "fontFamily": "Arial"
    },
@@ -111,6 +112,7 @@
      0,
      -20
     ],
+    "formatter": "@pictorialBar-body-fill.formatter",
     "fontSize": 18,
     "fontFamily": "Arial"
    },

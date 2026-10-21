@@ -28,11 +28,11 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Scale, tyControls.AdvChart.Data,
-     tyControls.AdvChart.Paint, tyControls.AdvChart.Measure,
-     tyControls.AdvChart.Anim, tyControls.AdvChart.AnimView,
-     tyControls.AdvChart.AnimAxis,
-     tyControls.AdvanceChart, tyControls.AdvChart.Events,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Data,
+     tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Measure,
+     tyControls.AdvanceChart.Anim, tyControls.AdvanceChart.AnimView,
+     tyControls.AdvanceChart.AnimAxis,
+     tyControls.AdvanceChart, tyControls.AdvanceChart.Events,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TRsProbe = class(TTyAdvanceChart)

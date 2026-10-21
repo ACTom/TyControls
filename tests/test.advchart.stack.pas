@@ -19,10 +19,10 @@ unit test.advchart.stack;
 interface
 uses
   Classes, SysUtils, Math, fpcunit, testregistry,
-  tyControls.AdvChart.Types, tyControls.AdvChart.Option,
-  tyControls.AdvChart.Coord, tyControls.AdvChart.Data,
-  tyControls.AdvChart.Builder, tyControls.AdvChart.Series,
-  tyControls.AdvChart.Stack;
+  tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+  tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Data,
+  tyControls.AdvanceChart.Builder, tyControls.AdvanceChart.Series,
+  tyControls.AdvanceChart.Stack;
 
 type
   TAdvChartStackTest = class(TTestCase)

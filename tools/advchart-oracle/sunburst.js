@@ -185,6 +185,8 @@ const PROD = require(PROD_PATH);
 const ROOT = path.resolve(__dirname, '..', '..');
 const OUT = process.env.ORACLE_OUT || path.join(ROOT, 'tests', 'fixtures', 'advchart-sunburst.json');
 const GALLERY = path.join(ROOT, 'examples', 'advchart', 'gallery');
+// [R2-J2] the gallery as it was before every function got a name
+const { withoutFunctions } = require('./gallery-functions.js');
 
 const W = 800;
 const H = 600;
@@ -1034,7 +1036,7 @@ function runChart(E, option, fn, w, h) {
   }
 }
 
-const gallery = name => JSON.parse(fs.readFileSync(path.join(GALLERY, name + '.json'), 'utf8'));
+const gallery = name => withoutFunctions(JSON.parse(fs.readFileSync(path.join(GALLERY, name + '.json'), 'utf8')));
 
 function recordWith(E, def, optionText, side) {
   const input = JSON.parse(optionText);

@@ -1,0 +1,2491 @@
+{
+ "source": "ECharts 6.1.0, zrender 6.1.0",
+ "W": 600,
+ "H": 400,
+ "cases": [
+  {
+   "id": "item.basics",
+   "note": "one item its own formatter and colour, one hidden, one inside, one with no line",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "radius": "50%",
+      "data": [
+       {
+        "value": 1548,
+        "name": "CityE",
+        "label": {
+         "formatter": "{b}: {c} ({d}%)",
+         "color": "#ff0000"
+        }
+       },
+       {
+        "value": 735,
+        "name": "CityC",
+        "label": {
+         "show": false
+        }
+       },
+       {
+        "value": 510,
+        "name": "CityD",
+        "label": {
+         "position": "inside"
+        }
+       },
+       {
+        "value": 434,
+        "name": "CityB",
+        "labelLine": {
+         "show": false
+        }
+       },
+       {
+        "value": 335,
+        "name": "CityA"
+       }
+      ]
+     }
+    ]
+   },
+   "labels": [
+    {
+     "d": 0,
+     "text": "CityE: 1548 (43.46%)",
+     "ignore": false,
+     "x": "407bf948e1c9a4c8",
+     "y": "406611124634cf18",
+     "rotation": "8000000000000000",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "407bf948e1c9a4c8",
+      "406551124634cf18",
+      "405c9eb851eb851d",
+      "4028000000000000"
+     ],
+     "fill": "#ff0000",
+     "stroke": null,
+     "lineWidth": null,
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "4078de55a2f21ffc",
+        "40667304c29d39a6"
+       ],
+       [
+        "4079c948e1c9a4c8",
+        "406611124634cf18"
+       ],
+       [
+        "407ba948e1c9a4c8",
+        "406611124634cf18"
+       ]
+      ]
+     }
+    },
+    {
+     "d": 1,
+     "text": "",
+     "ignore": true,
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "rotation": "0000000000000000",
+     "align": "left",
+     "verticalAlign": "top",
+     "rect": [
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000"
+     ],
+     "fill": null,
+     "stroke": null,
+     "lineWidth": null,
+     "guide": {
+      "ignore": true,
+      "points": []
+     }
+    },
+    {
+     "d": 2,
+     "text": "CityD",
+     "ignore": false,
+     "x": "406f0ecee97dea88",
+     "y": "406a8bb4854a2639",
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "406d3a5408363c74",
+      "4069cbb4854a2639",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fill": "#eee",
+     "stroke": "#505372",
+     "lineWidth": "4000000000000000",
+     "guide": null
+    },
+    {
+     "d": 3,
+     "text": "CityB",
+     "ignore": false,
+     "x": "40653cbeb19be0f2",
+     "y": "4060eaf1507ec000",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "4061a6fc223fb7fc",
+      "40602af1507ec000",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": true,
+      "points": [
+       [
+        "406b29b0f37c6a90",
+        "4061f8d1d6b10000"
+       ],
+       [
+        "40699cbeb19be0f2",
+        "4060eaf1507ec000"
+       ],
+       [
+        "4065dcbeb19be0f2",
+        "4060eaf1507ec000"
+       ]
+      ]
+     }
+    },
+    {
+     "d": 4,
+     "text": "CityA",
+     "ignore": false,
+     "x": "406cf073eca40734",
+     "y": "40567eeca0a19df4",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "40695ab15d47de3e",
+      "4054feeca0a19df4",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "4070ee1c241acb7b",
+        "405a15535406f8a8"
+       ],
+       [
+        "4070a839f652039a",
+        "40567eeca0a19df4"
+       ],
+       [
+        "406d9073eca40734",
+        "40567eeca0a19df4"
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "item.line",
+   "note": "an item's labelLine length, length2 and smooth; another's distanceToLabelLine",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "radius": "50%",
+      "data": [
+       {
+        "value": 1548,
+        "name": "CityE",
+        "labelLine": {
+         "length": 30,
+         "length2": 5,
+         "smooth": 0.5
+        }
+       },
+       {
+        "value": 735,
+        "name": "CityC"
+       },
+       {
+        "value": 510,
+        "name": "CityD",
+        "label": {
+         "distanceToLabelLine": 15
+        }
+       },
+       {
+        "value": 434,
+        "name": "CityB"
+       },
+       {
+        "value": 335,
+        "name": "CityA"
+       }
+      ]
+     }
+    ]
+   },
+   "labels": [
+    {
+     "d": 0,
+     "text": "CityE",
+     "ignore": false,
+     "x": "407b543c20a12994",
+     "y": "4065af1fc9cc648b",
+     "rotation": "8000000000000000",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "407b543c20a12994",
+      "4064ef1fc9cc648b",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "4078de55a2f21ffc",
+        "40667304c29d39a6"
+       ],
+       [
+        "407ab43c20a12994",
+        "4065af1fc9cc648b"
+       ],
+       [
+        "407b043c20a12994",
+        "4065af1fc9cc648b"
+       ]
+      ]
+     }
+    },
+    {
+     "d": 1,
+     "text": "CityC",
+     "ignore": false,
+     "x": "406dbf1568c7603e",
+     "y": "40737c75190552e4",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "406a161fa6380415",
+      "40731c75190552e4",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "407147f30c2a29d8",
+        "4072932e2c04a11f"
+       ],
+       [
+        "40710f8ab463b01f",
+        "40737c75190552e4"
+       ],
+       [
+        "406e5f1568c7603e",
+        "40737c75190552e4"
+       ]
+      ]
+     }
+    },
+    {
+     "d": 2,
+     "text": "CityD",
+     "ignore": false,
+     "x": "4061e590a8852387",
+     "y": "406c5a9b043b74c0",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "405c7935cbeb8ebc",
+      "406b9a9b043b74c0",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "4069585144a04b6a",
+        "406bea9d0ecf86ea"
+       ],
+       [
+        "40678590a8852387",
+        "406c5a9b043b74c0"
+       ],
+       [
+        "4063c590a8852387",
+        "406c5a9b043b74c0"
+       ]
+      ]
+     }
+    },
+    {
+     "d": 3,
+     "text": "CityB",
+     "ignore": false,
+     "x": "40653cbeb19be0f2",
+     "y": "4060eaf1507ec000",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "4061a6fc223fb7fc",
+      "40602af1507ec000",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "406b29b0f37c6a90",
+        "4061f8d1d6b10000"
+       ],
+       [
+        "40699cbeb19be0f2",
+        "4060eaf1507ec000"
+       ],
+       [
+        "4065dcbeb19be0f2",
+        "4060eaf1507ec000"
+       ]
+      ]
+     }
+    },
+    {
+     "d": 4,
+     "text": "CityA",
+     "ignore": false,
+     "x": "406cf073eca40734",
+     "y": "40567eeca0a19df4",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "40695ab15d47de3e",
+      "4054feeca0a19df4",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "4070ee1c241acb7b",
+        "405a15535406f8a8"
+       ],
+       [
+        "4070a839f652039a",
+        "40567eeca0a19df4"
+       ],
+       [
+        "406d9073eca40734",
+        "40567eeca0a19df4"
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "item.edge",
+   "note": "one item aligned to the edge, one turned radially (the solver off for all)",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "radius": "50%",
+      "data": [
+       {
+        "value": 1548,
+        "name": "CityE"
+       },
+       {
+        "value": 735,
+        "name": "CityC",
+        "label": {
+         "alignTo": "edge",
+         "edgeDistance": "10%"
+        }
+       },
+       {
+        "value": 510,
+        "name": "CityD"
+       },
+       {
+        "value": 434,
+        "name": "CityB",
+        "label": {
+         "rotate": "radial"
+        }
+       },
+       {
+        "value": 335,
+        "name": "CityA"
+       }
+      ]
+     }
+    ]
+   },
+   "labels": [
+    {
+     "d": 0,
+     "text": "CityE",
+     "ignore": false,
+     "x": "407bf948e1c9a4c8",
+     "y": "406611124634cf18",
+     "rotation": "8000000000000000",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "407bf948e1c9a4c8",
+      "406551124634cf18",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "4078de55a2f21ffc",
+        "40667304c29d39a6"
+       ],
+       [
+        "4079c948e1c9a4c8",
+        "406611124634cf18"
+       ],
+       [
+        "407ba948e1c9a4c8",
+        "406611124634cf18"
+       ]
+      ]
+     }
+    },
+    {
+     "d": 1,
+     "text": "CityC",
+     "ignore": false,
+     "x": "404e000000000000",
+     "y": "40737c75190552e4",
+     "rotation": "8000000000000000",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "404e000000000000",
+      "40731c75190552e4",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "407147f30c2a29d8",
+        "4072932e2c04a11f"
+       ],
+       [
+        "40710f8ab463b01f",
+        "40737c75190552e4"
+       ],
+       [
+        "405791eb851eb852",
+        "40737c75190552e4"
+       ]
+      ]
+     }
+    },
+    {
+     "d": 2,
+     "text": "CityD",
+     "ignore": false,
+     "x": "40632590a8852387",
+     "y": "406c5a9b043b74c0",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "405ef935cbeb8ebc",
+      "406b9a9b043b74c0",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "4069585144a04b6a",
+        "406bea9d0ecf86ea"
+       ],
+       [
+        "40678590a8852387",
+        "406c5a9b043b74c0"
+       ],
+       [
+        "4063c590a8852387",
+        "406c5a9b043b74c0"
+       ]
+      ]
+     }
+    },
+    {
+     "d": 3,
+     "text": "CityB",
+     "ignore": false,
+     "x": "40653cbeb19be0f2",
+     "y": "4060eaf1507ec000",
+     "rotation": "4016be8e0727d950",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "4061d9d52d13ce90",
+      "405c905181a662cd",
+      "403e76e76b47c640",
+      "403a0c7ee9c49394"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "406b29b0f37c6a90",
+        "4061f8d1d6b10000"
+       ],
+       [
+        "40699cbeb19be0f2",
+        "4060eaf1507ec000"
+       ],
+       [
+        "4065dcbeb19be0f2",
+        "4060eaf1507ec000"
+       ]
+      ]
+     }
+    },
+    {
+     "d": 4,
+     "text": "CityA",
+     "ignore": false,
+     "x": "406cf073eca40734",
+     "y": "40567eeca0a19df4",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "40695ab15d47de3e",
+      "4054feeca0a19df4",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "4070ee1c241acb7b",
+        "405a15535406f8a8"
+       ],
+       [
+        "4070a839f652039a",
+        "40567eeca0a19df4"
+       ],
+       [
+        "406d9073eca40734",
+        "40567eeca0a19df4"
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "item.rich",
+   "note": "the gallery's pie-rich-text: one item's rich block",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "radius": "65%",
+      "center": [
+       "50%",
+       "50%"
+      ],
+      "selectedMode": "single",
+      "data": [
+       {
+        "value": 1548,
+        "name": "CityE",
+        "label": {
+         "formatter": "{title|{b}}{abg|}\n  {weatherHead|Weather}{valueHead|Days}{rateHead|Percent}\n{hr|}\n  {Sunny|}{value|202}{rate|55.3%}\n  {Cloudy|}{value|142}{rate|38.9%}\n  {Showers|}{value|21}{rate|5.8%}",
+         "backgroundColor": "#eee",
+         "borderColor": "#777",
+         "borderWidth": 1,
+         "borderRadius": 4,
+         "rich": {
+          "title": {
+           "color": "#eee",
+           "align": "center"
+          },
+          "abg": {
+           "backgroundColor": "#333",
+           "width": "100%",
+           "align": "right",
+           "height": 25,
+           "borderRadius": [
+            4,
+            4,
+            0,
+            0
+           ]
+          },
+          "Sunny": {
+           "height": 30,
+           "align": "left",
+           "backgroundColor": "#fc0"
+          },
+          "Cloudy": {
+           "height": 30,
+           "align": "left",
+           "backgroundColor": "#999"
+          },
+          "Showers": {
+           "height": 30,
+           "align": "left",
+           "backgroundColor": "#39f"
+          },
+          "weatherHead": {
+           "color": "#333",
+           "height": 24,
+           "align": "left"
+          },
+          "hr": {
+           "borderColor": "#777",
+           "width": "100%",
+           "borderWidth": 0.5,
+           "height": 0
+          },
+          "value": {
+           "width": 20,
+           "padding": [
+            0,
+            20,
+            0,
+            30
+           ],
+           "align": "left"
+          },
+          "valueHead": {
+           "color": "#333",
+           "width": 20,
+           "padding": [
+            0,
+            20,
+            0,
+            30
+           ],
+           "align": "center"
+          },
+          "rate": {
+           "width": 40,
+           "align": "right",
+           "padding": [
+            0,
+            10,
+            0,
+            0
+           ]
+          },
+          "rateHead": {
+           "color": "#333",
+           "width": 40,
+           "align": "center",
+           "padding": [
+            0,
+            10,
+            0,
+            0
+           ]
+          }
+         }
+        }
+       },
+       {
+        "value": 735,
+        "name": "CityC"
+       },
+       {
+        "value": 510,
+        "name": "CityD"
+       },
+       {
+        "value": 434,
+        "name": "CityB"
+       },
+       {
+        "value": 335,
+        "name": "CityA"
+       }
+      ]
+     }
+    ]
+   },
+   "labels": [
+    {
+     "d": 0,
+     "text": "{title|CityE}{abg|}\n  {weatherHead|Weather}{valueHead|Days}{rateHead|Percent}\n{hr|}\n  {Sunny|}{value|202}{rate|55.3%}\n  {Cloudy|}{value|142}{rate|38.9%}\n  {Showers|}{value|21}{rate|5.8%}",
+     "ignore": false,
+     "x": "407dcf2f5f78ae60",
+     "y": "40654d2d4d63f9fc",
+     "rotation": "8000000000000000",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "407dbf2f5f78ae60",
+      "4058fa5a9ac7f3f8",
+      "405cc342821d4680",
+      "4061a00000000000"
+     ],
+     "fill": "#333",
+     "stroke": null,
+     "lineWidth": null,
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "407ab43c20a12994",
+        "4065af1fc9cc648a"
+       ],
+       [
+        "407b9f2f5f78ae60",
+        "40654d2d4d63f9fc"
+       ],
+       [
+        "407d7f2f5f78ae60",
+        "40654d2d4d63f9fc"
+       ]
+      ]
+     }
+    },
+    {
+     "d": 1,
+     "text": "CityC",
+     "ignore": false,
+     "x": "406cdd7409ad7958",
+     "y": "40754f02f306b66d",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "4069347e471e1d2f",
+      "4074ef02f306b66d",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "4070d7225c9d3665",
+        "407465bc060604a8"
+       ],
+       [
+        "40709eba04d6bcac",
+        "40754f02f306b66d"
+       ],
+       [
+        "406d7d7409ad7958",
+        "40754f02f306b66d"
+       ]
+      ]
+     }
+    },
+    {
+     "d": 2,
+     "text": "CityD",
+     "ignore": false,
+     "x": "405f001ee09da782",
+     "y": "406d3a96ef13506c",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "4057ae335b7eef30",
+      "406c7a96ef13506c",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "4065b2d00c69fba4",
+        "406cca98f9a76296"
+       ],
+       [
+        "4063e00f704ed3c1",
+        "406d3a96ef13506c"
+       ],
+       [
+        "4060200f704ed3c1",
+        "406d3a96ef13506c"
+       ]
+      ]
+     }
+    },
+    {
+     "d": 3,
+     "text": "CityB",
+     "ignore": false,
+     "x": "406222da2ddacdb7",
+     "y": "405d9e6088348001",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "405d1a2f3cfd4982",
+      "405c1e6088348001",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "40680fcc6fbb5755",
+        "405fba2194990001"
+       ],
+       [
+        "406682da2ddacdb7",
+        "405d9e6088348001"
+       ],
+       [
+        "4062c2da2ddacdb7",
+        "405d9e6088348001"
+       ]
+      ]
+     }
+    },
+    {
+     "d": 4,
+     "text": "CityA",
+     "ignore": false,
+     "x": "406bd8eb3580e7b0",
+     "y": "404ea43e73add11b",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "40684328a624beba",
+      "404ba43e73add11b",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "40706257c8893bb9",
+        "4052e885ed3c4341"
+       ],
+       [
+        "40701c759ac073d8",
+        "404ea43e73add11b"
+       ],
+       [
+        "406c78eb3580e7b0",
+        "404ea43e73add11b"
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "item.state.only",
+   "note": "the series hides the labels, an item's emphasis shows its own",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "radius": "50%",
+      "label": {
+       "show": false
+      },
+      "data": [
+       {
+        "value": 1548,
+        "name": "CityE"
+       },
+       {
+        "value": 735,
+        "name": "CityC"
+       },
+       {
+        "value": 510,
+        "name": "CityD",
+        "emphasis": {
+         "label": {
+          "show": true
+         }
+        }
+       },
+       {
+        "value": 434,
+        "name": "CityB"
+       },
+       {
+        "value": 335,
+        "name": "CityA"
+       }
+      ]
+     }
+    ]
+   },
+   "labels": [
+    {
+     "d": 0,
+     "text": "",
+     "ignore": true,
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "rotation": "0000000000000000",
+     "align": "left",
+     "verticalAlign": "top",
+     "rect": [
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000"
+     ],
+     "fill": null,
+     "stroke": null,
+     "lineWidth": null,
+     "guide": {
+      "ignore": true,
+      "points": []
+     }
+    },
+    {
+     "d": 1,
+     "text": "",
+     "ignore": true,
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "rotation": "0000000000000000",
+     "align": "left",
+     "verticalAlign": "top",
+     "rect": [
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000"
+     ],
+     "fill": null,
+     "stroke": null,
+     "lineWidth": null,
+     "guide": {
+      "ignore": true,
+      "points": []
+     }
+    },
+    {
+     "d": 2,
+     "text": "CityD",
+     "ignore": true,
+     "x": "40632590a8852387",
+     "y": "406c5a9b043b74c0",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "405ef935cbeb8ebc",
+      "406b9a9b043b74c0",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": true,
+      "points": [
+       [
+        "4069585144a04b6a",
+        "406bea9d0ecf86ea"
+       ],
+       [
+        "40678590a8852387",
+        "406c5a9b043b74c0"
+       ],
+       [
+        "4063c590a8852387",
+        "406c5a9b043b74c0"
+       ]
+      ]
+     }
+    },
+    {
+     "d": 3,
+     "text": "",
+     "ignore": true,
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "rotation": "0000000000000000",
+     "align": "left",
+     "verticalAlign": "top",
+     "rect": [
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000"
+     ],
+     "fill": null,
+     "stroke": null,
+     "lineWidth": null,
+     "guide": {
+      "ignore": true,
+      "points": []
+     }
+    },
+    {
+     "d": 4,
+     "text": "",
+     "ignore": true,
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "rotation": "0000000000000000",
+     "align": "left",
+     "verticalAlign": "top",
+     "rect": [
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "0000000000000000"
+     ],
+     "fill": null,
+     "stroke": null,
+     "lineWidth": null,
+     "guide": {
+      "ignore": true,
+      "points": []
+     }
+    }
+   ]
+  },
+  {
+   "id": "position.null.emphasis",
+   "note": "series label.position null: the emphasis position (center) for all, no guide lines",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "radius": [
+       "40%",
+       "70%"
+      ],
+      "label": {
+       "position": null
+      },
+      "emphasis": {
+       "label": {
+        "position": "center"
+       }
+      },
+      "data": [
+       {
+        "value": 1548,
+        "name": "CityE"
+       },
+       {
+        "value": 735,
+        "name": "CityC"
+       },
+       {
+        "value": 510,
+        "name": "CityD"
+       },
+       {
+        "value": 434,
+        "name": "CityB"
+       },
+       {
+        "value": 335,
+        "name": "CityA"
+       }
+      ]
+     }
+    ]
+   },
+   "labels": [
+    {
+     "d": 0,
+     "text": "CityE",
+     "ignore": false,
+     "x": "4072c00000000000",
+     "y": "4069000000000000",
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "4071da8f5c28f5c3",
+      "4068400000000000",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": null
+    },
+    {
+     "d": 1,
+     "text": "CityC",
+     "ignore": true,
+     "x": "4072c00000000000",
+     "y": "4069000000000000",
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "4071d5c28f5c28f6",
+      "4068400000000000",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": null
+    },
+    {
+     "d": 2,
+     "text": "CityD",
+     "ignore": true,
+     "x": "4072c00000000000",
+     "y": "4069000000000000",
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "4071d5c28f5c28f6",
+      "4068400000000000",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": null
+    },
+    {
+     "d": 3,
+     "text": "CityB",
+     "ignore": true,
+     "x": "4072c00000000000",
+     "y": "4069000000000000",
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "4071da8f5c28f5c3",
+      "4068400000000000",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": null
+    },
+    {
+     "d": 4,
+     "text": "CityA",
+     "ignore": true,
+     "x": "4072c00000000000",
+     "y": "4069000000000000",
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "4071da8f5c28f5c3",
+      "4068400000000000",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": null
+    }
+   ]
+  },
+  {
+   "id": "position.null.emphasis.outside",
+   "note": "series label.position null, emphasis outside: placed outer, yet no guide lines (PieView reads the null)",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "radius": "50%",
+      "label": {
+       "position": null
+      },
+      "emphasis": {
+       "label": {
+        "position": "outside"
+       }
+      },
+      "data": [
+       {
+        "value": 1548,
+        "name": "CityE"
+       },
+       {
+        "value": 735,
+        "name": "CityC"
+       },
+       {
+        "value": 510,
+        "name": "CityD"
+       },
+       {
+        "value": 434,
+        "name": "CityB"
+       },
+       {
+        "value": 335,
+        "name": "CityA"
+       }
+      ]
+     }
+    ]
+   },
+   "labels": [
+    {
+     "d": 0,
+     "text": "CityE",
+     "ignore": false,
+     "x": "407bf948e1c9a4c8",
+     "y": "406611124634cf18",
+     "rotation": "8000000000000000",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "407bf948e1c9a4c8",
+      "406551124634cf18",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": null
+    },
+    {
+     "d": 1,
+     "text": "CityC",
+     "ignore": false,
+     "x": "406dbf1568c7603e",
+     "y": "40737c75190552e4",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "406a161fa6380415",
+      "40731c75190552e4",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": null
+    },
+    {
+     "d": 2,
+     "text": "CityD",
+     "ignore": false,
+     "x": "40632590a8852387",
+     "y": "406c5a9b043b74c0",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "405ef935cbeb8ebc",
+      "406b9a9b043b74c0",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": null
+    },
+    {
+     "d": 3,
+     "text": "CityB",
+     "ignore": false,
+     "x": "40653cbeb19be0f2",
+     "y": "4060eaf1507ec000",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "4061a6fc223fb7fc",
+      "40602af1507ec000",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": null
+    },
+    {
+     "d": 4,
+     "text": "CityA",
+     "ignore": false,
+     "x": "406cf073eca40734",
+     "y": "40567eeca0a19df4",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "40695ab15d47de3e",
+      "4054feeca0a19df4",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": null
+    }
+   ]
+  },
+  {
+   "id": "position.null",
+   "note": "series label.position null and no emphasis one: placed outer, no guide lines",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "radius": "50%",
+      "label": {
+       "position": null
+      },
+      "data": [
+       {
+        "value": 1548,
+        "name": "CityE"
+       },
+       {
+        "value": 735,
+        "name": "CityC"
+       },
+       {
+        "value": 510,
+        "name": "CityD"
+       },
+       {
+        "value": 434,
+        "name": "CityB"
+       },
+       {
+        "value": 335,
+        "name": "CityA"
+       }
+      ]
+     }
+    ]
+   },
+   "labels": [
+    {
+     "d": 0,
+     "text": "CityE",
+     "ignore": false,
+     "x": "407bf948e1c9a4c8",
+     "y": "406611124634cf18",
+     "rotation": "8000000000000000",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "407bf948e1c9a4c8",
+      "406551124634cf18",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": null
+    },
+    {
+     "d": 1,
+     "text": "CityC",
+     "ignore": false,
+     "x": "406dbf1568c7603e",
+     "y": "40737c75190552e4",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "406a161fa6380415",
+      "40731c75190552e4",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": null
+    },
+    {
+     "d": 2,
+     "text": "CityD",
+     "ignore": false,
+     "x": "40632590a8852387",
+     "y": "406c5a9b043b74c0",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "405ef935cbeb8ebc",
+      "406b9a9b043b74c0",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": null
+    },
+    {
+     "d": 3,
+     "text": "CityB",
+     "ignore": false,
+     "x": "40653cbeb19be0f2",
+     "y": "4060eaf1507ec000",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "4061a6fc223fb7fc",
+      "40602af1507ec000",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": null
+    },
+    {
+     "d": 4,
+     "text": "CityA",
+     "ignore": false,
+     "x": "406cf073eca40734",
+     "y": "40567eeca0a19df4",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "40695ab15d47de3e",
+      "4054feeca0a19df4",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": null
+    }
+   ]
+  },
+  {
+   "id": "position.empty.item",
+   "note": "an item's position '' falls to its emphasis position (inside)",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "radius": "50%",
+      "data": [
+       {
+        "value": 1548,
+        "name": "CityE",
+        "label": {
+         "position": ""
+        },
+        "emphasis": {
+         "label": {
+          "position": "inside"
+         }
+        }
+       },
+       {
+        "value": 735,
+        "name": "CityC"
+       },
+       {
+        "value": 510,
+        "name": "CityD"
+       },
+       {
+        "value": 434,
+        "name": "CityB"
+       },
+       {
+        "value": 335,
+        "name": "CityA"
+       }
+      ]
+     }
+    ]
+   },
+   "labels": [
+    {
+     "d": 0,
+     "text": "CityE",
+     "ignore": false,
+     "x": "4075fe284470f75a",
+     "y": "4067a5eb7ba0211d",
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "407518b7a099ed1d",
+      "4066e5eb7ba0211d",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#eee",
+     "stroke": "#5070dd",
+     "lineWidth": "4000000000000000",
+     "guide": null
+    },
+    {
+     "d": 1,
+     "text": "CityC",
+     "ignore": false,
+     "x": "406dbf1568c7603e",
+     "y": "40737c75190552e4",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "406a161fa6380415",
+      "40731c75190552e4",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "407147f30c2a29d8",
+        "4072932e2c04a11f"
+       ],
+       [
+        "40710f8ab463b01f",
+        "40737c75190552e4"
+       ],
+       [
+        "406e5f1568c7603e",
+        "40737c75190552e4"
+       ]
+      ]
+     }
+    },
+    {
+     "d": 2,
+     "text": "CityD",
+     "ignore": false,
+     "x": "40632590a8852387",
+     "y": "406c5a9b043b74c0",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "405ef935cbeb8ebc",
+      "406b9a9b043b74c0",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "4069585144a04b6a",
+        "406bea9d0ecf86ea"
+       ],
+       [
+        "40678590a8852387",
+        "406c5a9b043b74c0"
+       ],
+       [
+        "4063c590a8852387",
+        "406c5a9b043b74c0"
+       ]
+      ]
+     }
+    },
+    {
+     "d": 3,
+     "text": "CityB",
+     "ignore": false,
+     "x": "40653cbeb19be0f2",
+     "y": "4060eaf1507ec000",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "4061a6fc223fb7fc",
+      "40602af1507ec000",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "406b29b0f37c6a90",
+        "4061f8d1d6b10000"
+       ],
+       [
+        "40699cbeb19be0f2",
+        "4060eaf1507ec000"
+       ],
+       [
+        "4065dcbeb19be0f2",
+        "4060eaf1507ec000"
+       ]
+      ]
+     }
+    },
+    {
+     "d": 4,
+     "text": "CityA",
+     "ignore": false,
+     "x": "406cf073eca40734",
+     "y": "40567eeca0a19df4",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "40695ab15d47de3e",
+      "4054feeca0a19df4",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "4070ee1c241acb7b",
+        "405a15535406f8a8"
+       ],
+       [
+        "4070a839f652039a",
+        "40567eeca0a19df4"
+       ],
+       [
+        "406d9073eca40734",
+        "40567eeca0a19df4"
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "position.null.item",
+   "note": "an item's position null is unwritten: the series' inner",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "radius": "50%",
+      "label": {
+       "position": "inner"
+      },
+      "data": [
+       {
+        "value": 1548,
+        "name": "CityE"
+       },
+       {
+        "value": 735,
+        "name": "CityC",
+        "label": {
+         "position": null
+        }
+       },
+       {
+        "value": 510,
+        "name": "CityD"
+       },
+       {
+        "value": 434,
+        "name": "CityB"
+       },
+       {
+        "value": 335,
+        "name": "CityA"
+       }
+      ]
+     }
+    ]
+   },
+   "labels": [
+    {
+     "d": 0,
+     "text": "CityE",
+     "ignore": false,
+     "x": "4075fe284470f75a",
+     "y": "4067a5eb7ba0211d",
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "407518b7a099ed1d",
+      "4066e5eb7ba0211d",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#eee",
+     "stroke": "#5070dd",
+     "lineWidth": "4000000000000000",
+     "guide": null
+    },
+    {
+     "d": 1,
+     "text": "CityC",
+     "ignore": false,
+     "x": "4071f8b17486fc94",
+     "y": "406f707dbe04e83a",
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "40710e7403e3258a",
+      "406eb07dbe04e83a",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": null,
+     "lineWidth": null,
+     "guide": null
+    },
+    {
+     "d": 2,
+     "text": "CityD",
+     "ignore": false,
+     "x": "406f0ecee97dea88",
+     "y": "406a8bb4854a2639",
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "406d3a5408363c74",
+      "4069cbb4854a2639",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fill": "#eee",
+     "stroke": "#505372",
+     "lineWidth": "4000000000000000",
+     "guide": null
+    },
+    {
+     "d": 3,
+     "text": "CityB",
+     "ignore": false,
+     "x": "407002ba697bd9ae",
+     "y": "4065466f36e80ccd",
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "406e3a938b499ee1",
+      "4064866f36e80ccd",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": null,
+     "lineWidth": null,
+     "guide": null
+    },
+    {
+     "d": 4,
+     "text": "CityA",
+     "ignore": false,
+     "x": "4071c91408e53dc3",
+     "y": "4062a97dc3113518",
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "4070e3a3650e3386",
+      "4061e97dc3113518",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": null,
+     "lineWidth": null,
+     "guide": null
+    }
+   ]
+  },
+  {
+   "id": "item.inside.series",
+   "note": "the series inside, an item outer with its line",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "radius": "50%",
+      "label": {
+       "position": "inside"
+      },
+      "data": [
+       {
+        "value": 1548,
+        "name": "CityE"
+       },
+       {
+        "value": 735,
+        "name": "CityC"
+       },
+       {
+        "value": 510,
+        "name": "CityD"
+       },
+       {
+        "value": 434,
+        "name": "CityB"
+       },
+       {
+        "value": 335,
+        "name": "CityA",
+        "label": {
+         "position": "outer"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "labels": [
+    {
+     "d": 0,
+     "text": "CityE",
+     "ignore": false,
+     "x": "4075fe284470f75a",
+     "y": "4067a5eb7ba0211d",
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "407518b7a099ed1d",
+      "4066e5eb7ba0211d",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#eee",
+     "stroke": "#5070dd",
+     "lineWidth": "4000000000000000",
+     "guide": null
+    },
+    {
+     "d": 1,
+     "text": "CityC",
+     "ignore": false,
+     "x": "4071f8b17486fc94",
+     "y": "406f707dbe04e83a",
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "40710e7403e3258a",
+      "406eb07dbe04e83a",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": null,
+     "lineWidth": null,
+     "guide": null
+    },
+    {
+     "d": 2,
+     "text": "CityD",
+     "ignore": false,
+     "x": "406f0ecee97dea88",
+     "y": "406a8bb4854a2639",
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "406d3a5408363c74",
+      "4069cbb4854a2639",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fill": "#eee",
+     "stroke": "#505372",
+     "lineWidth": "4000000000000000",
+     "guide": null
+    },
+    {
+     "d": 3,
+     "text": "CityB",
+     "ignore": false,
+     "x": "407002ba697bd9ae",
+     "y": "4065466f36e80ccd",
+     "rotation": "8000000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "406e3a938b499ee1",
+      "4064866f36e80ccd",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": null,
+     "lineWidth": null,
+     "guide": null
+    },
+    {
+     "d": 4,
+     "text": "CityA",
+     "ignore": false,
+     "x": "406cf073eca40734",
+     "y": "40567eeca0a19df4",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "40695ab15d47de3e",
+      "4054feeca0a19df4",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "4070ee1c241acb7b",
+        "405a15535406f8a8"
+       ],
+       [
+        "4070a839f652039a",
+        "40567eeca0a19df4"
+       ],
+       [
+        "406d9073eca40734",
+        "40567eeca0a19df4"
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "item.minTurnAngle",
+   "note": "an item's labelLine.minTurnAngle 170: its line nearly straight",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "radius": "50%",
+      "data": [
+       {
+        "value": 1548,
+        "name": "CityE"
+       },
+       {
+        "value": 735,
+        "name": "CityC",
+        "labelLine": {
+         "minTurnAngle": 170
+        }
+       },
+       {
+        "value": 510,
+        "name": "CityD"
+       },
+       {
+        "value": 434,
+        "name": "CityB"
+       },
+       {
+        "value": 335,
+        "name": "CityA"
+       }
+      ]
+     }
+    ]
+   },
+   "labels": [
+    {
+     "d": 0,
+     "text": "CityE",
+     "ignore": false,
+     "x": "407bf948e1c9a4c8",
+     "y": "406611124634cf18",
+     "rotation": "8000000000000000",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "407bf948e1c9a4c8",
+      "406551124634cf18",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "4078de55a2f21ffc",
+        "40667304c29d39a6"
+       ],
+       [
+        "4079c948e1c9a4c8",
+        "406611124634cf18"
+       ],
+       [
+        "407ba948e1c9a4c8",
+        "406611124634cf18"
+       ]
+      ]
+     }
+    },
+    {
+     "d": 1,
+     "text": "CityC",
+     "ignore": false,
+     "x": "406dbf1568c7603e",
+     "y": "40737c75190552e4",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "406a161fa6380415",
+      "40731c75190552e4",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "407147f30c2a29d8",
+        "4072932e2c04a11f"
+       ],
+       [
+        "406e5f1568c7603e",
+        "40737c75190552e4"
+       ],
+       [
+        "406e5f1568c7603e",
+        "40737c75190552e4"
+       ]
+      ]
+     }
+    },
+    {
+     "d": 2,
+     "text": "CityD",
+     "ignore": false,
+     "x": "40632590a8852387",
+     "y": "406c5a9b043b74c0",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "405ef935cbeb8ebc",
+      "406b9a9b043b74c0",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "4069585144a04b6a",
+        "406bea9d0ecf86ea"
+       ],
+       [
+        "40678590a8852387",
+        "406c5a9b043b74c0"
+       ],
+       [
+        "4063c590a8852387",
+        "406c5a9b043b74c0"
+       ]
+      ]
+     }
+    },
+    {
+     "d": 3,
+     "text": "CityB",
+     "ignore": false,
+     "x": "40653cbeb19be0f2",
+     "y": "4060eaf1507ec000",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "4061a6fc223fb7fc",
+      "40602af1507ec000",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "406b29b0f37c6a90",
+        "4061f8d1d6b10000"
+       ],
+       [
+        "40699cbeb19be0f2",
+        "4060eaf1507ec000"
+       ],
+       [
+        "4065dcbeb19be0f2",
+        "4060eaf1507ec000"
+       ]
+      ]
+     }
+    },
+    {
+     "d": 4,
+     "text": "CityA",
+     "ignore": false,
+     "x": "406cf073eca40734",
+     "y": "40567eeca0a19df4",
+     "rotation": "8000000000000000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "40695ab15d47de3e",
+      "4054feeca0a19df4",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fill": "#333",
+     "stroke": "rgba(255,255,255,1)",
+     "lineWidth": "4000000000000000",
+     "guide": {
+      "ignore": false,
+      "points": [
+       [
+        "4070ee1c241acb7b",
+        "405a15535406f8a8"
+       ],
+       [
+        "4070a839f652039a",
+        "40567eeca0a19df4"
+       ],
+       [
+        "406d9073eca40734",
+        "40567eeca0a19df4"
+       ]
+      ]
+     }
+    }
+   ]
+  }
+ ],
+ "guards": [
+  {
+   "name": "item.basics: the item formatter",
+   "ok": true
+  },
+  {
+   "name": "item.basics: item 1 hidden, no line shown",
+   "ok": true
+  },
+  {
+   "name": "item.basics: item 2 inside, no line",
+   "ok": true
+  },
+  {
+   "name": "item.basics: item 3 line hidden",
+   "ok": true
+  },
+  {
+   "name": "position.null.emphasis: every label at the centre, no lines",
+   "ok": true
+  },
+  {
+   "name": "position.null.emphasis.outside: outer, no lines",
+   "ok": true
+  },
+  {
+   "name": "position.null: no lines",
+   "ok": true
+  },
+  {
+   "name": "position.empty.item: item 0 inside",
+   "ok": true
+  },
+  {
+   "name": "position.null.item: item 1 inner",
+   "ok": true
+  },
+  {
+   "name": "item.inside.series: item 4 outer with its line (the item's word)",
+   "ok": true
+  },
+  {
+   "name": "item.state.only: item 2 built, ignored",
+   "ok": true
+  },
+  {
+   "name": "item.minTurnAngle: item 1's line other than the series' default draws it",
+   "ok": true
+  }
+ ]
+}

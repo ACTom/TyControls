@@ -469,7 +469,7 @@ begin
     if (S.Background.Kind = tfkSolid) and (TyAlphaOf(S.Background.Color) > 0) then
     begin
       ctx.fillStyle(TyColorToBGRA(S.Background.Color));
-      ctx.fill;
+      TyCtxFill(ctx);
     end;
 
     // BORDER: the resolved border colour at (scaled) border width, when visible.
@@ -478,7 +478,7 @@ begin
       ctx.lineWidth := bw;
       ctx.lineJoin := 'miter';
       ctx.strokeStyle(TyColorToBGRA(S.BorderColor));
-      ctx.stroke;
+      TyCtxStroke(ctx);
     end;
 
     P.EndPaint;

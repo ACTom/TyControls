@@ -28,12 +28,12 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Shape, tyControls.AdvChart.Large,
-     tyControls.AdvChart.States, tyControls.AdvChart.Events,
-     tyControls.AdvChart.Symbol, tyControls.AdvChart.Data,
-     tyControls.AdvChart.Tooltip, tyControls.AdvChart.Legend,
-     tyControls.AdvChart.AnimView, tyControls.AdvChart.Lines,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Large,
+     tyControls.AdvanceChart.States, tyControls.AdvanceChart.Events,
+     tyControls.AdvanceChart.Symbol, tyControls.AdvanceChart.Data,
+     tyControls.AdvanceChart.Tooltip, tyControls.AdvanceChart.Legend,
+     tyControls.AdvanceChart.AnimView, tyControls.AdvanceChart.Lines,
      tyControls.AdvanceChart;
 type
   TLnProbe = class(TTyAdvanceChart)

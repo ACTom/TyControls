@@ -919,6 +919,38 @@ const CASES = [
     probes: [[300, 200], [200, 250]],
     steps: [{ action: { type: 'geoSelect', geoIndex: 0, name: 'route1' } }, { move: [300, 200] }, { leave: true }],
   },
+  // ---- [R2-B] ----
+  {
+    id: 'map-series-same-name',
+    note: "a map series on the SVG map: each of the two rects named B is a highDownDispatcher of the item (resetEventTriggerForRegion; no component high-down by name on a series) -- hovering one lifts it alone, then the other; highlight by name reaches getItemGraphicEl, the last one registered (the second B), alone; the pointer on the first B while the second is held lifts it too, leaving takes it down (it holds nothing); downplay",
+    maps: [{ map: 'svHit', svg: 'svHit' }],
+    option: { animation: false, series: [{ type: 'map', map: 'svHit', data: [{ name: 'A', value: 1 }, { name: 'B', value: 2 }] }] },
+    steps: [{ move: S(150, 50) }, { move: S(230, 50) }, { leave: true }, { action: { type: 'highlight', seriesIndex: 0, name: 'B' } },
+      { move: S(150, 50) }, { leave: true }, { action: { type: 'downplay', seriesIndex: 0, name: 'B' } }],
+  },
+  // ---- [R2-I1] ----
+  {
+    id: 'map-series-held-move-off',
+    note: "[R2-I1] the second B held by highlight; the pointer on the first B lifts it, and MOVING OFF it -- onto the unnamed background, onto A, onto the held B -- takes it down again (it holds no bits; the held one stays); downplay, the pointer still on the background; then the first B hovered BEFORE the highlight and left (the held one stays), the held one hovered and left, a downplay under the pointer on the first B (it stays lifted: its own hover); a highlight and a downplay under the pointer on the held B (the downplay takes it down, the pointer still on it), and a downplay of the hovered last B with no highlight (leaveEmphasis there too)",
+    maps: [{ map: 'svHit', svg: 'svHit' }],
+    option: { animation: false, series: [{ type: 'map', map: 'svHit', data: [{ name: 'A', value: 1 }, { name: 'B', value: 2 }] }] },
+    steps: [{ action: { type: 'highlight', seriesIndex: 0, name: 'B' } }, { move: S(150, 50) }, { move: S(300, 250) },
+      { move: S(150, 50) }, { move: S(60, 50) }, { move: S(150, 50) }, { move: S(230, 50) }, { move: S(300, 250) },
+      { action: { type: 'downplay', seriesIndex: 0, name: 'B' } }, { leave: true },
+      { move: S(150, 50) }, { action: { type: 'highlight', seriesIndex: 0, name: 'B' } }, { leave: true },
+      { move: S(230, 50) }, { leave: true }, { move: S(150, 50) }, { action: { type: 'downplay', seriesIndex: 0, name: 'B' } },
+      { move: S(300, 250) }, { move: S(230, 50) }, { action: { type: 'highlight', seriesIndex: 0, name: 'B' } },
+      { action: { type: 'downplay', seriesIndex: 0, name: 'B' } }, { move: S(300, 250) }, { move: S(230, 50) },
+      { action: { type: 'downplay', seriesIndex: 0, name: 'B' } }, { leave: true }],
+  },
+  // ---- [r2v] ----
+  {
+    id: 'map-series-nested',
+    note: "[r2v] a map series with data for H and for N, the self-named rect inside the self-named group H: the pointer on N's rect finds the OUTERMOST dispatcher (findEventDispatcher without returnFirstMatch), H -- H lifts, its other rect with it; leave",
+    maps: [{ map: 'svHit', svg: 'svHit' }],
+    option: { animation: false, series: [{ type: 'map', map: 'svHit', data: [{ name: 'H', value: 1 }, { name: 'N', value: 2 }] }] },
+    steps: [{ move: S(305, 165) }, { leave: true }],
+  },
 ];
 
 // ============================================================================
@@ -982,6 +1014,27 @@ function guards(out) {
   add('custom-calls', c.states[0].series[3].calls.length === 2, 'the custom series ran');
   c = C('gallery-beef');
   add('beef-regions', c.trees[0].regions.length === 29, 'Beef cuts: 29 regions');
+  // [R2-B] a map series: the element under the pointer alone, the action's the last one
+  c = C('map-series-same-name');
+  const bs2 = c.trees[0].named.filter(x => x.name === 'B').map(x => x.el);
+  const st2 = (k, i) => c.states[k].draws[0].items.find(x => x.i === i).states;
+  add('map-dup-hover', st2(1, bs2[0]) === 'emphasis' && st2(1, bs2[1]) === '' && st2(2, bs2[1]) === 'emphasis' && st2(2, bs2[0]) === '',
+    'a map series lifts the element under the pointer alone');
+  add('map-dup-action', st2(4, bs2[1]) === 'emphasis' && st2(4, bs2[0]) === '', 'highlight by name: the last element registered alone');
+  // [R2-I1] moving off the unheld one of the name takes it down
+  c = C('map-series-held-move-off');
+  const bs3 = c.trees[0].named.filter(x => x.name === 'B').map(x => x.el);
+  const st3 = (k, i) => c.states[k].draws[0].items.find(x => x.i === i).states;
+  add('map-held-move-off', st3(2, bs3[0]) === 'emphasis' && st3(3, bs3[0]) === '' && st3(3, bs3[1]) === 'emphasis'
+    && st3(5, bs3[0]) === '' && st3(7, bs3[0]) === '' && st3(7, bs3[1]) === 'emphasis'
+    && st3(17, bs3[0]) === 'emphasis' && st3(21, bs3[1]) === '' && st3(24, bs3[1]) === '',
+    'the unheld B leaves emphasis when the pointer moves off; a downplay reaches the last one alone');
+  // [r2v] the outermost dispatcher over the pointer
+  c = C('map-series-nested');
+  const hs = c.trees[0].named.filter(x => x.name === 'H').map(x => x.el);
+  const st4 = (k, i) => c.states[k].draws[0].items.find(x => x.i === i).states;
+  add('map-nested-outermost', hs.length === 2 && hs.every(i => st4(1, i) === 'emphasis') && hs.every(i => st4(2, i) === ''),
+    'the pointer on N inside H lifts H, its other rect with it');
   return g;
 }
 

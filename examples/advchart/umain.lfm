@@ -103,6 +103,7 @@ object MainForm: TMainForm
       Top = 78
       Width = 556
       Anchors = [akTop, akLeft, akRight, akBottom]
+      OnResolveImage = ChartResolveImage
     end
     object LblStatus: TTyLabel
       Left = 612

@@ -11,7 +11,8 @@
   "trigger": "axis",
   "axisPointer": {
    "type": "cross"
-  }
+  },
+  "position": "@custom-ohlc.position"
  },
  "axisPointer": {
   "link": [
@@ -3228,6 +3229,7 @@
   {
    "name": "Dow-Jones index",
    "type": "custom",
+   "renderItem": "@custom-ohlc",
    "dimensions": [
     "-",
     "open",

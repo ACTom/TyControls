@@ -9,7 +9,8 @@
   "left": "right"
  },
  "tooltip": {
-  "position": "top"
+  "position": "top",
+  "formatter": "@scatter-punchCard.formatter"
  },
  "grid": {
   "left": 2,
@@ -72,6 +73,7 @@
   {
    "name": "Punch Card",
    "type": "scatter",
+   "symbolSize": "@scatter-punchCard.symbolSize",
    "data": [
     [
      0,
@@ -913,7 +915,8 @@
      6,
      6
     ]
-   ]
+   ],
+   "animationDelay": "@scatter-punchCard.animationDelay"
   }
  ]
 }

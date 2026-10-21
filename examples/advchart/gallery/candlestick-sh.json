@@ -687,7 +687,9 @@
     "borderColor0": "#008F28"
    },
    "markPoint": {
-    "label": {},
+    "label": {
+     "formatter": "@candlestick-sh.formatter"
+    },
     "data": [
      {
       "name": "Mark",
@@ -716,7 +718,9 @@
       "valueDim": "close"
      }
     ],
-    "tooltip": {}
+    "tooltip": {
+     "formatter": "@candlestick-sh.formatter#2"
+    }
    },
    "markLine": {
     "symbol": [

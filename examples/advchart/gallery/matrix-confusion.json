@@ -51,6 +51,7 @@
   ],
   "label": {
    "show": true,
+   "formatter": "@matrix-confusion.formatter",
    "rich": {
     "name": {
      "color": "#fff",
@@ -67,7 +68,8 @@
      "align": "center"
     }
    }
-  }
+  },
+  "renderItem": "@matrix-confusion"
  },
  "graphic": {
   "elements": [
@@ -79,7 +81,7 @@
      "font": "bold 24px serif",
      "textAlign": "center"
     },
-    "x": null,
+    "x": 400,
     "y": 40
    },
    {
@@ -90,7 +92,7 @@
      "font": "bold 24px serif",
      "textAlign": "center"
     },
-    "x": null,
+    "x": -50,
     "y": 270,
     "rotation": 1.5707963267948966
    }

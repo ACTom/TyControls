@@ -27,10 +27,10 @@ interface
 uses Classes, SysUtils, Math, Types, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Events, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Brush, tyControls.AdvChart.Parallel, tyControls.AdvChart.Graph,
-     tyControls.AdvChart.Thumbnail, tyControls.AdvChart.Color, tyControls.AdvChart.Scale,
-     tyControls.AdvChart.Layout,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Events, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Brush, tyControls.AdvanceChart.Parallel, tyControls.AdvanceChart.Graph,
+     tyControls.AdvanceChart.Thumbnail, tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Scale,
+     tyControls.AdvanceChart.Layout,
      tyControls.AdvanceChart;
 type
   TTaProbe = class(TTyAdvanceChart)
@@ -40,6 +40,7 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    function List: TTyPaintList;
     procedure Down(AX, AY: Integer);
     procedure Move(AX, AY: Integer);
     procedure Up(AX, AY: Integer);
@@ -67,6 +68,8 @@ type
     procedure NewChart;
     procedure RenderNow;
     procedure CheckThumbs(ARec: TJSONObject);
+    procedure CheckPenGradient(const AWhat: string; const AGot: TTyChartGradient;
+      AWant: TJSONObject);
     procedure CheckGraphs(ARec: TJSONObject);
     procedure CheckPars(ARec: TJSONObject);
     procedure CheckAxes(ARec: TJSONObject);
@@ -85,6 +88,12 @@ type
     procedure TestTheThumbnailBoxesAsUpstream;
     procedure TestTheThumbnailOfForceAndCircularAsUpstream;
     procedure TestTheThumbnailTargetsAsUpstream;
+    { [R2-I4] the nodes' pens, their dashes and phases }
+    procedure TestTheThumbnailPensAsUpstream;
+    { [R2-I5] the nodes' pens that are gradients }
+    procedure TestTheThumbnailGradientPensAsUpstream;
+    { [R2-V] an edge the list draws nothing of: its pen as the line's }
+    procedure TestTheThumbnailPenOfAnEdgeOfNoLengthAsUpstream;
     procedure TestTheExpandedLayoutsAsUpstream;
     procedure TestTheClickTriggerAsUpstream;
     procedure TestTheMoveTriggerAsUpstream;
@@ -104,6 +113,8 @@ type
     procedure TearDown; override;
   published
     procedure TestTheThumbnailIsDrawnOverTheGraph;
+    { [R2-V] the elements the copy draws carry its items' pens }
+    procedure TestTheCopyIsDrawnInItsItemsPens;
     procedure TestTheBoxHidesWhatIsUnderIt;
     procedure TestTheExpansionEventCanBeSubscribed;
     procedure TestTheThrottleRunsOnItsOwnClock;
@@ -135,6 +146,11 @@ end;
 procedure TTaProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   RenderTo(ACanvas, ARect, APPI);
+end;
+
+function TTaProbe.List: TTyPaintList;
+begin
+  Result := SeriesList;
 end;
 
 procedure TTaProbe.Down(AX, AY: Integer);
@@ -395,6 +411,56 @@ begin
   Result := AHas and (c = AGot);
 end;
 
+{ [R2-I5] a pen that is a gradient: its kind, its numbers, its stops }
+procedure TAdvChartThumbnailAxisExpandOracleTest.CheckPenGradient(const AWhat: string;
+  const AGot: TTyChartGradient; AWant: TJSONObject);
+var
+  stops, st: TJSONArray;
+  q: Integer;
+  c: TTyChartColor;
+begin
+  Inc(FCompared);
+  if AWant.Strings['type'] = 'radial' then
+  begin
+    if AGot.Kind <> cgkRadial then
+    begin
+      Miss(AWhat + ': not a radial pen');
+      Exit;
+    end;
+    if (AGot.X <> AWant.Floats['x']) or (AGot.Y <> AWant.Floats['y'])
+      or (AGot.R <> AWant.Floats['r']) then
+      Miss(Format('%s: radial (%g, %g, %g), upstream %s', [AWhat, AGot.X, AGot.Y, AGot.R,
+        AWant.AsJSON]));
+  end
+  else
+  begin
+    if AGot.Kind <> cgkLinear then
+    begin
+      Miss(AWhat + ': not a linear pen');
+      Exit;
+    end;
+    if (AGot.X <> AWant.Floats['x']) or (AGot.Y <> AWant.Floats['y'])
+      or (AGot.X2 <> AWant.Floats['x2']) or (AGot.Y2 <> AWant.Floats['y2']) then
+      Miss(Format('%s: linear (%g, %g, %g, %g), upstream %s', [AWhat, AGot.X, AGot.Y,
+        AGot.X2, AGot.Y2, AWant.AsJSON]));
+  end;
+  if AGot.Global <> AWant.Booleans['global'] then Miss(AWhat + ': global differs');
+  stops := AWant.Arrays['stops'];
+  if Length(AGot.Stops) <> stops.Count then
+  begin
+    Miss(Format('%s: %d stops, upstream %d', [AWhat, Length(AGot.Stops), stops.Count]));
+    Exit;
+  end;
+  for q := 0 to stops.Count - 1 do
+  begin
+    st := TJSONArray(stops.Items[q]);
+    if not TyTryParseChartColor(st.Strings[1], c) or (AGot.Stops[q].Color <> c)
+      or (AGot.Stops[q].Offset <> st.Floats[0]) then
+      Miss(Format('%s: stop %d (%g, %s), upstream %s', [AWhat, q, AGot.Stops[q].Offset,
+        IntToHex(AGot.Stops[q].Color, 8), st.AsJSON]));
+  end;
+end;
+
 procedure TAdvChartThumbnailAxisExpandOracleTest.CheckThumbs(ARec: TJSONObject);
 var
   ths, its: TJSONArray;
@@ -507,6 +573,24 @@ begin
         and (sty.Strings['stroke'] <> 'none') and (HexNum(sty.Find('lineWidth')) > 0));
       if item.HasStroke then
         SameHex(Format('%s item %d line width', [what, i]), item.LineWidth, sty.Find('lineWidth'));
+      { [R2-I4] a pen scenario: the dash the clone draws (normalizeLineDash's
+        lengths) and its phase }
+      if item.HasStroke and (sty.Find('pattern') <> nil) then
+      begin
+        if sty.Find('pattern').JSONType = jtNull then
+          SameStr(Format('%s item %d dash', [what, i]), IntToStr(Length(item.Dash)), '0')
+        else
+        begin
+          SameStr(Format('%s item %d dash length', [what, i]), IntToStr(Length(item.Dash)),
+            IntToStr(sty.Arrays['pattern'].Count));
+          for j := 0 to Min(Length(item.Dash), sty.Arrays['pattern'].Count) - 1 do
+            SameHex(Format('%s item %d dash[%d]', [what, i, j]), item.Dash[j],
+              sty.Arrays['pattern'].Items[j]);
+        end;
+        if sty.Find('lineDashOffset').JSONType <> jtNull then
+          SameHex(Format('%s item %d dash phase', [what, i]), item.DashOffset,
+            sty.Find('lineDashOffset'));
+      end;
       SameHex(Format('%s item %d opacity', [what, i]), item.Opacity, sty.Find('opacity'));
       { the colours, where the port's colour can be compared }
       ink := JStr(sty.Find('fill'));
@@ -521,6 +605,13 @@ begin
         if not SameInk(ink, True, item.Stroke) then
           Miss(Format('%s item %d stroke is %s upstream, %s here', [what, i, ink,
             IntToHex(item.Stroke, 8)]));
+        { [R2-I5] a gradient pen as the clone holds it -- and a plain one is
+          no gradient }
+        if (sty.Find('strokeGrad') <> nil) and (sty.Find('strokeGrad').JSONType = jtObject) then
+          CheckPenGradient(Format('%s item %d pen', [what, i]), item.StrokeGradient,
+            sty.Objects['strokeGrad'])
+        else if (sty.Find('pattern') <> nil) and (item.StrokeGradient.Kind <> cgkNone) then
+          Miss(Format('%s item %d pen is a gradient here, a colour upstream', [what, i]));
       end;
     end;
   end;
@@ -954,6 +1045,21 @@ begin
   RunGroup(['TH-TARGET']);
 end;
 
+procedure TAdvChartThumbnailAxisExpandOracleTest.TestTheThumbnailPensAsUpstream;
+begin
+  RunGroup(['TH-PEN']);
+end;
+
+procedure TAdvChartThumbnailAxisExpandOracleTest.TestTheThumbnailGradientPensAsUpstream;
+begin
+  RunGroup(['TH-GRAD']);
+end;
+
+procedure TAdvChartThumbnailAxisExpandOracleTest.TestTheThumbnailPenOfAnEdgeOfNoLengthAsUpstream;
+begin
+  RunGroup(['TH-PEN0']);
+end;
+
 procedure TAdvChartThumbnailAxisExpandOracleTest.TestTheExpandedLayoutsAsUpstream;
 begin
   RunGroup(['AE-LAYOUT']);
@@ -1063,6 +1169,65 @@ begin
   FChart.GraphRoam(0, 100, 0);
   st := FChart.ThumbnailState(0);
   AssertTrue('the window moved left', st.Window.X < FChart.ThumbnailState(0).Content.X + 1);
+end;
+
+{ [R2-V] THE COPY AS DRAWN: each item a path element at the copy's paint
+  order, in the item's pen -- its dash phase and its gradient as the item
+  has them (the oracle compares the items; this, what is painted of them) }
+procedure TAdvChartThumbnailAxisExpandTest.TestTheCopyIsDrawnInItsItemsPens;
+const
+  cPens = '{"animation":false,'
+    + '"series":[{"type":"graph","layout":"none","roam":true,"symbolSize":24,'
+    + '"data":[{"name":"a","x":0,"y":0,"itemStyle":{"borderWidth":2,"borderColor":'
+    + '{"type":"linear","x":0,"y":0,"x2":1,"y2":0,"colorStops":[{"offset":0,"color":"#ff0000"},'
+    + '{"offset":1,"color":"#0000ff"}]}}},'
+    + '{"name":"b","x":100,"y":0,"itemStyle":{"borderColor":"#00aa00","borderWidth":2,'
+    + '"borderType":"dashed","borderDashOffset":5}},'
+    + '{"name":"c","x":50,"y":80}],'
+    + '"links":[{"source":"a","target":"b","lineStyle":{"type":"dashed","dashOffset":3}},'
+    + '{"source":"b","target":"c"}]}],'
+    + '"thumbnail":{}}';
+var
+  st: TTyThumbState;
+  els: array of TTyChartElement;
+  i, k, phased, graded: Integer;
+  el: TTyChartElement;
+begin
+  Show(cPens);
+  st := FChart.ThumbnailState(0);
+  AssertTrue('it has a view', st.View.Valid);
+  els := nil;
+  for i := 0 to FChart.List.Count - 1 do
+  begin
+    el := FChart.List.Element(i);
+    if el.Z2 = TyThumbItemZ2 then
+    begin
+      SetLength(els, Length(els) + 1);
+      els[High(els)] := el;
+    end;
+  end;
+  k := 0;
+  phased := 0;
+  graded := 0;
+  for i := 0 to High(st.Items) do
+  begin
+    if Length(TyThumbItemPath(st.Items[i])) = 0 then Continue;
+    AssertTrue(Format('item %d is drawn', [i]), k <= High(els));
+    el := els[k];
+    Inc(k);
+    if not st.Items[i].HasStroke then Continue;
+    AssertEquals(Format('item %d: the phase drawn', [i]), st.Items[i].DashOffset,
+      el.Style.DashOffsetLogical, 0);
+    AssertEquals(Format('item %d: the gradient drawn', [i]), Ord(st.Items[i].StrokeGradient.Kind),
+      Ord(el.Style.StrokeGradient.Kind));
+    AssertEquals(Format('item %d: its stops', [i]), Length(st.Items[i].StrokeGradient.Stops),
+      Length(el.Style.StrokeGradient.Stops));
+    if st.Items[i].DashOffset <> 0 then Inc(phased);
+    if st.Items[i].StrokeGradient.Kind <> cgkNone then Inc(graded);
+  end;
+  AssertEquals('every item drawn once', Length(els), k);
+  AssertEquals('b and the edge a-b dash with a phase of their own', 2, phased);
+  AssertEquals('a draws a gradient pen', 1, graded);
 end;
 
 procedure TAdvChartThumbnailAxisExpandTest.TestTheBoxHidesWhatIsUnderIt;

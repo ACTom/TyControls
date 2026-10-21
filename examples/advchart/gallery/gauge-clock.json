@@ -32,7 +32,8 @@
    },
    "axisLabel": {
     "fontSize": 50,
-    "distance": 25
+    "distance": 25,
+    "formatter": "@gauge-clock.formatter"
    },
    "anchor": {
     "show": true,

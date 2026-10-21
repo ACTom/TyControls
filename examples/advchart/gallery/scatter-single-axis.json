@@ -395,7 +395,8 @@
      23,
      5
     ]
-   ]
+   ],
+   "symbolSize": "@scatter-single-axis.symbolSize"
   },
   {
    "singleAxisIndex": 1,
@@ -498,7 +499,8 @@
      23,
      2
     ]
-   ]
+   ],
+   "symbolSize": "@scatter-single-axis.symbolSize#2"
   },
   {
    "singleAxisIndex": 2,
@@ -601,7 +603,8 @@
      23,
      4
     ]
-   ]
+   ],
+   "symbolSize": "@scatter-single-axis.symbolSize#3"
   },
   {
    "singleAxisIndex": 3,
@@ -704,7 +707,8 @@
      23,
      1
     ]
-   ]
+   ],
+   "symbolSize": "@scatter-single-axis.symbolSize#4"
   },
   {
    "singleAxisIndex": 4,
@@ -807,7 +811,8 @@
      23,
      0
     ]
-   ]
+   ],
+   "symbolSize": "@scatter-single-axis.symbolSize#5"
   },
   {
    "singleAxisIndex": 5,
@@ -910,7 +915,8 @@
      23,
      0
     ]
-   ]
+   ],
+   "symbolSize": "@scatter-single-axis.symbolSize#6"
   },
   {
    "singleAxisIndex": 6,
@@ -1013,7 +1019,8 @@
      23,
      6
     ]
-   ]
+   ],
+   "symbolSize": "@scatter-single-axis.symbolSize#7"
   }
  ]
 }

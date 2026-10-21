@@ -374,7 +374,7 @@ begin
     ctx.moveTo(pos, ATrack.Top);
     ctx.lineTo(pos, ATrack.Bottom);
   end;
-  ctx.stroke;
+  TyCtxStroke(ctx);
 end;
 
 procedure TTyCustomLevelMeter.Paint;

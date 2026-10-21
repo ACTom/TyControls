@@ -19,7 +19,7 @@ unit test.advchart.data;
   round-trip is checked through a filter. }
 interface
 uses Classes, SysUtils, Math, DateUtils, fpcunit, testregistry,
-     tyControls.AdvChart.Data;
+     tyControls.AdvanceChart.Data;
 type
   TAdvChartDataTest = class(TTestCase)
   private
@@ -67,6 +67,9 @@ type
     procedure TestAbsentIsStillAGapOnAnOrdinal;
     procedure TestNaNIsNotACategoryCalledNan;
     procedure TestDeduplicationOffAppendsBlind;
+    { [R2-I6] }
+    procedure TestARepeatedCategoryIsItsLaterOrdinal;
+    procedure TestABlindAppendLeavesTheMapAlone;
     procedure TestCategoriesMustBeSetBeforeFilling;
     procedure TestCategoriesNeedAnOrdinalDimension;
     { ---- a borrowed category list ---- }
@@ -160,7 +163,9 @@ begin
   { The whole no-data contract in one line: a missing value must not be a
     number, on any of the four dimension types. }
   AssertTrue('float', IsNan(TyParseDataValue(TyDataNone, ddtFloat)));
-  AssertTrue('int', IsNan(TyParseDataValue(TyDataNone, ddtInt)));
+  { [R2-G: an 'int' column is an Int32Array upstream -- its gap is the
+    nought ToInt32 makes of NaN] }
+  AssertEquals('int', 0, TyParseDataValue(TyDataNone, ddtInt), 0);
   AssertTrue('time', IsNan(TyParseDataValue(TyDataNone, ddtTime)));
 end;
 
@@ -210,7 +215,9 @@ begin
   AssertEquals('positive', 3, TyParseDataValue(TyDataNum(3.7), ddtInt), 0);
   AssertEquals('negative', -3, TyParseDataValue(TyDataNum(-3.7), ddtInt), 0);
   AssertEquals('from text', 3, TyParseDataValue(TyDataText('3.7'), ddtInt), 0);
-  AssertTrue('a gap survives truncation', IsNan(TyParseDataValue(TyDataNone, ddtInt)));
+  { [R2-G: an Int32Array holds no gap: NaN is nought] }
+  AssertEquals('a gap is nought', 0, TyParseDataValue(TyDataNone, ddtInt), 0);
+  AssertEquals('2^32 + 3 wraps', 3, TyParseDataValue(TyDataNum(4294967299.0), ddtInt), 0);
 end;
 
 procedure TAdvChartDataTest.TestBooleanCountsAsOneOrZero;
@@ -546,6 +553,60 @@ begin
   FS.AppendRow([TyDataText('Mon')]);
   AssertEquals(2, FS.CategoryCount(0));
   AssertEquals(1, FS.Get(0, 1), 0);
+end;
+
+{ [R2-I6] createHashMap(categories) SETS every category in order, so one the
+  list holds twice answers its LATER ordinal -- a value of it, and a string
+  min or max looking it up (category-minmax.js 'A duplicate categories':
+  the bar of 'a' over ['a', 'b', 'a', 'c', 'd'] on ordinal 2). [Was: the
+  first.] }
+procedure TAdvChartDataTest.TestARepeatedCategoryIsItsLaterOrdinal;
+begin
+  FS.AddDimension('c', ddtOrdinal);
+  FS.SetCategories(0, ['a', 'b', 'a', 'c']);
+  FS.AppendRow([TyDataText('a')]);
+  FS.AppendRow([TyDataText('b')]);
+  FS.AppendRow([TyDataText('c')]);
+  AssertEquals('a', 2, FS.Get(0, 0), 0);
+  AssertEquals('b', 1, FS.Get(0, 1), 0);
+  AssertEquals('c', 3, FS.Get(0, 2), 0);
+  AssertEquals('the lookup', 2, FS.OrdinalMeta(0).GetOrdinal('a'));
+  AssertEquals('the list keeps both', 4, FS.CategoryCount(0));
+end;
+
+{ [R2-I6] parseAndCollect without deduplication appends and returns before
+  the map: a map built earlier keeps what it had -- the first 'a', and no
+  category appended after it (map.get answers undefined, the port -1); a
+  map built later reads the whole list, the later 'a' winning. [Was: the
+  append put a new category into a map already built.] }
+procedure TAdvChartDataTest.TestABlindAppendLeavesTheMapAlone;
+var m: TTyOrdinalMeta;
+begin
+  m := TTyOrdinalMeta.Create;
+  try
+    m.Deduplication := False;
+    AssertEquals(0, m.ParseAndCollect('a'));
+    AssertEquals(1, m.ParseAndCollect('b'));
+    { the map, built now from [a, b] }
+    AssertEquals('a before', 0, m.GetOrdinal('a'));
+    AssertEquals('a again, blind', 2, m.ParseAndCollect('a'));
+    AssertEquals('c, blind', 3, m.ParseAndCollect('c'));
+    AssertEquals('a after: the map as it was', 0, m.GetOrdinal('a'));
+    AssertEquals('c: never put into the map', -1, m.GetOrdinal('c'));
+  finally
+    m.Free;
+  end;
+  m := TTyOrdinalMeta.Create;
+  try
+    m.Deduplication := False;
+    m.ParseAndCollect('a');
+    m.ParseAndCollect('b');
+    m.ParseAndCollect('a');
+    AssertEquals('a map built after: the later a', 2, m.GetOrdinal('a'));
+    AssertEquals('b', 1, m.GetOrdinal('b'));
+  finally
+    m.Free;
+  end;
 end;
 
 procedure TAdvChartDataTest.TestCategoriesMustBeSetBeforeFilling;
@@ -1208,8 +1269,10 @@ begin
     option text, because every JSON number becomes a TyDataNum. }
   AssertTrue('a NaN is a gap, not an exception',
     IsNan(TyParseDataValue(TyDataNum(NaN), ddtTime)));
-  AssertTrue('so is an infinity',
-    IsNan(TyParseDataValue(TyDataNum(Infinity), ddtTime)));
+  { [R2-G: upstream keeps an infinity -- a number is not parsed -- and the
+    time axis' extent then has no finite end and goes blank] }
+  AssertTrue('an infinity is kept',
+    IsInfinite(TyParseDataValue(TyDataNum(Infinity), ddtTime)));
   { A number past what an Int64 can hold is still a number: nothing rounds
     it on the way in any more, so there is nothing for it to overflow.
     [Revised in batch 42: this was a gap, when the branch still rounded.] }

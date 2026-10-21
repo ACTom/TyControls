@@ -239,6 +239,31 @@ const disp = (pred, nth, aim, dx, dy) => chart => {
   const p = centre(displayFind(chart, pred, nth, aim), dx, dy);
   return { x: p[0], y: p[1], aim };
 };
+// [R2-I1] a point OFF px off the tree edge into node D (the node's __edge,
+// from its parent) a quarter of the way along it (where the curve is not its
+// chord), along the curve's normal: the edge is no
+// silent element (TreeView.drawEdge), Path.contain takes its stroke within
+// max(lineWidth, 5) / 2
+const treeEdge = (s, d, off, aim) => chart => {
+  const sym = chart.getModel().getSeriesByIndex(s).getData().getItemGraphicEl(d);
+  must(sym && sym.__edge, 'no tree edge into ' + d);
+  const e = sym.__edge;
+  e.updateTransform();
+  const m = e.getComputedTransform();
+  const pt = t => {
+    const p = e.pointAt(t);
+    return m ? [m[0] * p[0] + m[2] * p[1] + m[4], m[1] * p[0] + m[3] * p[1] + m[5]] : p;
+  };
+  const a = pt(0.24);
+  const b = pt(0.26);
+  const c = pt(0.25);
+  let tx = b[0] - a[0];
+  let ty = b[1] - a[1];
+  const len = Math.hypot(tx, ty);
+  tx /= len;
+  ty /= len;
+  return { x: Math.round(c[0] - ty * off), y: Math.round(c[1] + tx * off), aim };
+};
 const mv = a => ({ type: 'move', at: a });
 const down = a => ({ type: 'down', at: a });
 const up = a => ({ type: 'up', at: a });
@@ -315,6 +340,19 @@ const CASES = [
       mv(chart => { const g = chart.getModel().getSeriesByIndex(0).getGraph(); const e = g.getEdgeByIndex(0).getGraphicEl(); const p = centre(e); return { x: p[0], y: p[1], aim: 'edge a-b middle' }; }),
       mv(at(300, 120, 'inside the view, nothing')), down(at(300, 120, 'press')), mv(at(310, 125, 'panning')), mv(at(320, 130, 'panning')), up(at(320, 130, 'release')),
       mv(at(5, 5, 'outside the view'))] },
+  // [R2-H] a graph on a cartesian2d has no view, but GraphView.render still calls setDraggable: its
+  // draggable nodes are 'move' too, while one drags and after
+  { id: 'graph-cartesian',
+    note: 'a graph on a cartesian2d: a draggable node with no cursor option is "move" (setDraggable whatever the coordinate system), an item cursor wins, draggable false keeps pointer; a drag moves the node (the pointer outruns it on the move of the drag: default there), "move" again over it; no roam here',
+    option: { animation: false, xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
+      series: [{ type: 'graph', coordinateSystem: 'cartesian2d', draggable: true, symbolSize: 20,
+        data: [{ name: 'a', value: [2, 2] }, { name: 'b', value: [5, 8], cursor: 'help' }, { name: 'c', value: [8, 3], draggable: false }],
+        links: [{ source: 'a', target: 'b' }], lineStyle: { width: 4 } }] },
+    steps: [mv(item(0, 0)), mv(item(0, 1)), mv(item(0, 2)), mv(item(0, 0)), down(item(0, 0)),
+      mv(chart => { const p = item(0, 0)(chart); return { x: p.x + 30, y: p.y - 20, aim: 'dragging a' }; }),
+      up(chart => { const p = item(0, 0)(chart); return { x: p.x, y: p.y, aim: 'released a where it went' }; }),
+      mv(chart => { const p = item(0, 0)(chart); return { x: p.x, y: p.y, aim: 'a where it went' }; }),
+      mv(at(300, 200, 'the grid, nothing'))] },
   { id: 'tree',
     note: 'a tree node is pointer (its item cursor where it has one); roam grabs where nothing is hovered',
     option: { animation: false, series: [{ type: 'tree', roam: true, expandAndCollapse: false, top: 40, bottom: 40, left: 80, right: 120, symbolSize: 12, label: { show: false },
@@ -393,6 +431,38 @@ const CASES = [
     note: 'a toolbox icon: pointer',
     option: { animation: false, toolbox: { feature: { restore: {}, saveAsImage: {} } }, xAxis: { type: 'category', data: CAT }, yAxis: {}, series: [{ type: 'bar', data: [1, 2, 3, 4] }] },
     steps: [mv(comp('toolbox', 0, e => e.type === 'path', 0, 'restore icon')), mv(at(300, 10, 'nothing'))] },
+  // [R2-E] RoamControllers that overlap: their zr listeners run in z order, the highest first (a tie: the one enabled later
+  // first); a pan consumes the move (the ones after it do nothing); a release is decided by the last (the lowest)
+  { id: 'roam-overlap',
+    note: 'two graphs whose roam areas overlap, equal z: the second (enabled later) runs first; a release is for the first to decide -- grab inside its area where nothing is hovered, default outside it',
+    option: { animation: false, series: [
+      { type: 'graph', layout: 'none', roam: true, left: 50, width: 300, top: 50, height: 300, symbolSize: 10, data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }] },
+      { type: 'graph', layout: 'none', roam: true, left: 250, width: 300, top: 50, height: 300, symbolSize: 10, data: [{ name: 'c', x: 0, y: 0 }, { name: 'd', x: 100, y: 100 }] }] },
+    steps: [mv(at(300, 200, 'in both areas')), down(at(300, 200, 'press in both')), mv(at(320, 205, 'panning')), up(at(320, 205, 'release in both')),
+      mv(at(300, 200, 'in both again')), down(at(300, 200, 'press in both')), mv(at(450, 210, 'panning into the second only')), up(at(450, 210, 'release in the second only')),
+      mv(at(470, 230, 'the second only')), mv(at(100, 200, 'the first only')), down(at(100, 200, 'press')), mv(at(110, 205, 'panning')), up(at(110, 205, 'release in the first only')),
+      mv(at(535, 200, 'the second only, past the first')), down(at(535, 200, 'press in the second only')), mv(at(540, 205, 'the second pans')), up(at(540, 205, 'release in the second only: its word'))] },
+  { id: 'roam-overlap-z',
+    note: 'the same with the first graph above (z 3): it runs first; a release is for the second to decide',
+    option: { animation: false, series: [
+      { type: 'graph', layout: 'none', roam: true, z: 3, left: 50, width: 300, top: 50, height: 300, symbolSize: 10, data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }] },
+      { type: 'graph', layout: 'none', roam: true, left: 250, width: 300, top: 50, height: 300, symbolSize: 10, data: [{ name: 'c', x: 0, y: 0 }, { name: 'd', x: 100, y: 100 }] }] },
+    steps: [mv(at(300, 200, 'in both areas')), down(at(300, 200, 'press in both')), mv(at(150, 205, 'panning into the first only')), up(at(150, 205, 'release in the first only')),
+      mv(at(300, 200, 'in both again')), down(at(300, 200, 'press in both')), mv(at(450, 210, 'panning into the second only')), up(at(450, 210, 'release in the second only'))] },
+  { id: 'roam-globalpan',
+    note: 'a graph roam with the brush holding globalPan: a move leaves the brush crosshair; the RoamController mouseup does not look at globalPan',
+    option: { animation: false, brush: {}, series: [{ type: 'graph', layout: 'none', roam: true, left: 100, width: 400, top: 50, height: 300, symbolSize: 10,
+      data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }] }] },
+    steps: [mv(at(300, 200, 'the area')), { type: 'action', payload: { type: 'takeGlobalCursor', key: 'brush', brushOption: { brushType: 'rect', brushMode: 'single' } } },
+      mv(at(300, 200, 'the area, the brush on')), down(at(300, 200, 'press')), up(at(300, 200, 'release under the brush')), mv(at(305, 200, 'a move after'))] },
+  { id: 'tree-edges',
+    note: '[R2-I1] a tree edge is a target of no data: pointer on it (the prototype\'s -- not the cursor of the node it leads to), within max(lineWidth, 5) / 2 of its curve; off it the roam grabs. The edge into x is 1.5 wide (reach 2.5), the one into y 8 (reach 4); a press on an edge still pans',
+    option: { animation: false, series: [{ type: 'tree', roam: true, expandAndCollapse: false, top: 60, bottom: 60, left: 80, right: 120, symbolSize: 12, label: { show: false },
+      data: [{ name: 'root', children: [{ name: 'x', cursor: 'help' }, { name: 'y', lineStyle: { width: 8 } }] }] }] },
+    steps: [mv(treeEdge(0, 2, 0, 'on the edge into x')), mv(treeEdge(0, 2, 1, '1 px off the edge into x')), mv(treeEdge(0, 2, 5, '5 px off the edge into x')),
+      mv(treeEdge(0, 3, 2, '2 px off the edge into y')), mv(treeEdge(0, 3, 7, '7 px off the edge into y')),
+      down(treeEdge(0, 2, 0, 'press on the edge into x')), mv(chart => { const p = treeEdge(0, 2, 0, '')(chart); return { x: p.x + 20, y: p.y + 10, aim: 'panning' }; }),
+      up(chart => { const p = treeEdge(0, 2, 0, '')(chart); return { x: p.x, y: p.y, aim: 'release on the edge where it went' }; })] },
 ];
 
 // ---------- the picture cases ----------
@@ -465,6 +535,15 @@ function runCase(def) {
     };
     const steps = [];
     for (const st of def.steps) {
+      // [R2-E] an action between the pointer steps
+      if (st.type === 'action') {
+        calls = [];
+        chart.dispatchAction(JSON.parse(JSON.stringify(st.payload)));
+        frame(chart);
+        steps.push({ type: 'action', payload: st.payload, calls: calls.slice(), cursor: current });
+        calls = null;
+        continue;
+      }
       let p;
       try {
         p = st.at(chart);
@@ -536,6 +615,10 @@ function check(g) {
     ['large', 0, 'default', 'path'],
     ['pie', 0, 'help', 'sector'], ['pie', 1, 'pointer', 'sector'], ['pie', 2, 'pointer', 'tspan'],
     ['graph', 0, 'move', 'path'], ['graph', 1, 'help', 'path'], ['graph', 2, 'pointer', 'path'], ['graph', 4, 'grab', null], ['graph', 6, 'grabbing', null], ['graph', 8, 'grab', null],
+    ['graph-cartesian', 0, 'move', 'path'], ['graph-cartesian', 1, 'help', 'path'], ['graph-cartesian', 2, 'pointer', 'path'],
+    // (a drag's move: zrender's Handler finds the hover before Draggable drifts the node, and the pointer has outrun it)
+    ['graph-cartesian', 3, 'move', 'path'], ['graph-cartesian', 5, 'default', null], ['graph-cartesian', 7, 'move', 'path'],
+    ['graph-cartesian', 8, 'default', null],
     ['sankey', 0, 'move', 'rect'], ['sankey', 1, 'pointer', 'rect'], ['sankey', 2, 'move', 'rect'],
     ['geo', 0, 'pointer', 'compound'], ['geo', 1, 'grab', null], ['geo', 3, 'grabbing', null],
     ['graphic', 0, 'help', 'rect'], ['graphic', 1, 'pointer', 'circle'], ['graphic', 2, 'default', null],
@@ -550,6 +633,14 @@ function check(g) {
     ['datazoom-inside', 0, 'grab', null], ['datazoom-inside', 1, 'pointer', 'rect'], ['datazoom-inside', 4, 'grabbing', null], ['datazoom-inside', 5, 'grab', null],
     ['toolbox', 0, 'pointer', 'path'],
     ['thumbnail', 0, 'grab', 'rect'], ['thumbnail', 1, 'grab', 'rect'],
+    // [R2-E] the first graph (enabled first, equal z) runs first and pans; the last decides a release
+    ['roam-overlap', 2, 'grabbing', null], ['roam-overlap', 7, 'grab', null], ['roam-overlap', 9, 'default', null], ['roam-overlap', 12, 'default', null],
+    ['roam-overlap', 15, 'grabbing', null], ['roam-overlap', 16, 'grab', null],
+    ['roam-overlap-z', 3, 'default', null], ['roam-overlap-z', 7, 'grab', null],
+    ['roam-globalpan', 2, 'crosshair', null], ['roam-globalpan', 4, 'grab', null], ['roam-globalpan', 5, 'crosshair', null],
+    // [R2-I1] a tree edge
+    ['tree-edges', 0, 'pointer', 'bezier-curve'], ['tree-edges', 1, 'pointer', 'bezier-curve'], ['tree-edges', 2, 'grab', null],
+    ['tree-edges', 3, 'pointer', 'bezier-curve'], ['tree-edges', 4, 'grab', null], ['tree-edges', 6, 'grabbing', null],
   ];
   let n = 0;
   for (const [id, i, c, h] of expect) {

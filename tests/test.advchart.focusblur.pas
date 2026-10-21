@@ -24,10 +24,10 @@ interface
 uses Classes, SysUtils, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Shape,
-     tyControls.AdvChart.Style, tyControls.AdvChart.Color,
-     tyControls.AdvChart.States,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Style, tyControls.AdvanceChart.Color,
+     tyControls.AdvanceChart.States,
      tyControls.AdvanceChart,
      test.advchart.select;
 type

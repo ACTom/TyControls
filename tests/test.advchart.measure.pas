@@ -12,7 +12,7 @@ unit test.advchart.measure;
   test.advchart.axis, where exact numbers are meaningful. }
 interface
 uses Classes, SysUtils, Math, Graphics, fpcunit, testregistry,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Measure, tyControls.Painter,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Measure, tyControls.Painter,
      BGRABitmap, BGRABitmapTypes;
 type
   TAdvChartMeasureTest = class(TTestCase)

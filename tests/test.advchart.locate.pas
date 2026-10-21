@@ -9,7 +9,7 @@ unit test.advchart.locate;
   of state the backward scanner next door deliberately does NOT keep. }
 interface
 uses Classes, SysUtils, fpcunit, testregistry,
-     tyControls.AdvChart.Locate;
+     tyControls.AdvanceChart.Locate;
 type
   TAdvChartLocateTest = class(TTestCase)
   private

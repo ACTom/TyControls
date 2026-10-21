@@ -83,6 +83,16 @@ type
       ctx.save/restore cannot carry it, hence the parallel stack. }
     FVecDash: TTyDashPattern;
     FVecDashStack: array of TTyDashPattern;
+    { [R2-F] the dash's phase (a canvas' lineDashOffset), LOGICAL px, and its
+      save/restore stack beside the pattern's }
+    FVecDashOffset: Double;
+    FVecDashOffsetStack: array of Double;
+    { [R2-F] whether the current path holds anything since BeginPath: a circle
+      or an ellipse added to it starts a sub-path of its own (zrender's
+      Circle.buildPath moves to (cx + r, cy) first); BGRA's arc has no move,
+      and joined every circle traced into one path to the one before. An
+      empty path takes none, so a lone circle draws as it always did. }
+    FPathOpen: Boolean;
     { #83: the layer holds FScale device pixels per layout pixel. FLayoutPPI is the PPI callers
       paint at; FPPI is the PPI the drawing code scales by, which is the layout PPI except
       inside a raster scope (RasterEnter), where it is FLayoutPPI * FScale. FDeviceUnits: the
@@ -442,6 +452,17 @@ type
     { A width <= 0 draws NOTHING. Falling back to a default width would put a
       hairline everywhere a theme meant to switch a border off. }
     procedure StrokePath(AColor: TTyColor; AWidthLogical: Double);
+    { [R2-P] StrokePath, its coverage KEPT. What BGRA fills for a stroke is the polygon its
+      pen makes of the path, and what the antialiased fill does with it -- the brush calls,
+      position by position, before any colour -- depends on that polygon and the bitmap's
+      clip rect alone. A polygon met again (a chart label's halo on the next hover frame)
+      replays those calls through this stroke's own brush instead of filling again: the same
+      calls on the same brush, so the same pixels, and the global Random left as the fill
+      would have left it. Kept per process, main thread only, and dropped whole past a cap.
+      Whatever the replay does not model -- a clip mask, a stroke texture, a shadow, no
+      antialiasing, an ink that draws nothing, another thread -- strokes as StrokePath. Worth
+      it only where the same path comes back; every miss records as it fills. }
+    procedure StrokePathKept(AColor: TTyColor; AWidthLogical: Double);
     { Stroke the current path with the same ramp FillPathGradient fills with.
       Its own entry point rather than a flag on the fill: a stroke needs a
       width and a fill does not, and one procedure taking both would have a
@@ -462,8 +483,16 @@ type
       ARule: TTyFillRule = tfrNonZero): Boolean;
 
     { ---- stroke state ---- }
-    { On/off lengths in LOGICAL px; an empty array restores a solid line. }
-    procedure SetLineDash(const APatternLogical: array of Double);
+    { On/off lengths in LOGICAL px; an empty array restores a solid line. The
+      phase starts again at nought. }
+    procedure SetLineDash(const APatternLogical: array of Double); overload;
+    { The same with a phase: a canvas' lineDashOffset, LOGICAL px -- each
+      sub-path's pattern starts AOffsetLogical along it (negative: before
+      it). A phase of nought (or of whole periods) strokes exactly as the
+      pattern alone; any other lays the dashes along each sub-path itself,
+      each dash a sub-path of its own with its caps, as a canvas does. }
+    procedure SetLineDash(const APatternLogical: array of Double;
+      AOffsetLogical: Double); overload;
     procedure SetLineCap(ACap: TTyLineCap);
     procedure SetLineJoin(AJoin: TTyLineJoin; AMiterLimit: Double = 10);
 
@@ -493,6 +522,10 @@ type
       exactly where the unrotated path would. Goes through TextOutAngle rather
       than the canvas' own text so it keeps TyConfigureTextFont's font cascade
       and fallback (empty-fontname-gotcha). }
+    { [R2-F] Where a run's ALPHABETIC BASELINE lies under the top of the box
+      DrawTextRotated and DrawText hang it by: the renderer's baseline for
+      the font, LOGICAL px. }
+    function TextBaseline(const AFontName: string; AFontSizeLogical, AWeight: Integer): Double;
     procedure DrawTextRotated(const AText, AFontName: string;
       AFontSizeLogical, AWeight: Integer; AColor: TTyColor;
       AX, AY, AAngleRad: Double; AHAlign: TAlignment; AVAlign: TTextLayout);
@@ -617,6 +650,17 @@ function TyGdiTextRunsKeptForTest: Integer;
   does not count), and a switch that turns the reuse off -- the reference it must match. }
 function TyPainterClipMasksBuiltForTest: Integer;
 procedure TyPainterClipReuseForTest(AOn: Boolean);
+{ [R2-P] StrokePathKept's kept fills: a switch (off: every stroke goes through Canvas2D,
+  and what is kept is dropped), how many fills were recorded and how many replayed. }
+procedure TyPainterKeptStrokesForTest(AOn: Boolean);
+function TyPainterKeptStrokeFillsForTest: Integer;
+function TyPainterKeptStrokeReplaysForTest: Integer;
+{ [R2-L] ... and the pen's polygons it keeps beside them: how many were computed (a
+  kept one met again does not count). }
+function TyPainterKeptStrokeContoursForTest: Integer;
+{ Every kept fill hashed alike, so that a lookup is decided by its polygon and
+  clip compare alone (the kept fills dropped either way). }
+procedure TyPainterKeptFillHashesCollideForTest(AOn: Boolean);
 
 { BGRA'S POLYGON FILLER TAKES ITS PIVOTS FROM THE GLOBAL Random. The one-pass
   filler behind FillPolyAntialias and the Canvas2D fill, stroke and clip
@@ -638,6 +682,12 @@ procedure TyPainterClipReuseForTest(AOn: Boolean);
   was. Main thread only, like everything else that paints. }
 function TyPinBgraRandom: LongWord;
 procedure TyUnpinBgraRandom(ASaved: LongWord);
+{ [R2-H] A Canvas2D's own fill, stroke and clip with the generator pinned, as
+  the painter's are: for a control that draws its path straight on the
+  bitmap's Canvas2D (an arc, a long line) }
+procedure TyCtxFill(ACtx: TBGRACanvas2D);
+procedure TyCtxStroke(ACtx: TBGRACanvas2D);
+procedure TyCtxClip(ACtx: TBGRACanvas2D);
 
 // Resolves the concrete font name to use: the style's font-family if set,
 // otherwise the TyFallbackFontName (when non-empty). Both BGRA config and the
@@ -801,6 +851,10 @@ procedure TyInvalidateTextMeasureCache;
   AEntries is both caches' live entries; ResetStats zeroes the counters, not the caches. }
 procedure TyTextMeasureCacheStats(out AHits, AMisses: Int64; out AEntries: Integer);
 procedure TyResetTextMeasureCacheStats;
+{ How many times TyInvalidateTextMeasureCache has run. A cache kept outside this unit
+  whose entries come out of drawn or measured text (a chart's traced label outlines)
+  drops them when this moves -- the same staleness rule, without a hook list. }
+function TyTextMeasureGeneration: Cardinal;
 
 { The prefix the ellipsis fitter uses when it has narrowed the text to ACharCount CHARACTERS.
   A named function purely so the invariant is testable: the version this replaced shortened by
@@ -893,8 +947,8 @@ var
 implementation
 
 uses
-  LCLIntf, BGRAText, BGRAGrayscaleMask, Generics.Collections, tyControls.CanvasText,
-  tyControls.PlatformWS;
+  LCLIntf, BGRAText, BGRAGrayscaleMask, Generics.Collections, BGRAPolygon, BGRABlend,
+  tyControls.CanvasText, tyControls.PlatformWS;
 
 { Canvas2D's own fill, stroke and clip with the generator pinned. }
 procedure CtxFill(ACtx: TBGRACanvas2D);
@@ -1043,6 +1097,7 @@ var
   GBlockCache: TStringList = nil;    // sorted; Objects[] OWN TTyTextBlockMeasure
   GRenderCache: TStringList = nil;   // sorted; Objects[] hold a plain Integer width
   GMeasHits: Int64 = 0;
+  GMeasGeneration: Cardinal = 0;
   GMeasMisses: Int64 = 0;
 
 function TyTextMeasureCacheList(var AList: TStringList): TStringList;
@@ -1078,6 +1133,7 @@ procedure TyInvalidateTextMeasureCache;
 var
   i: Integer;
 begin
+  Inc(GMeasGeneration);
   if GBlockCache <> nil then
   begin
     for i := 0 to GBlockCache.Count - 1 do
@@ -1104,6 +1160,11 @@ begin
   AEntries := 0;
   if GBlockCache <> nil then Inc(AEntries, GBlockCache.Count);
   if GRenderCache <> nil then Inc(AEntries, GRenderCache.Count);
+end;
+
+function TyTextMeasureGeneration: Cardinal;
+begin
+  Result := GMeasGeneration;
 end;
 
 procedure TyResetTextMeasureCacheStats;
@@ -2538,6 +2599,9 @@ begin
     not survive from the previous paint. }
   FVecDash := nil;
   FVecDashStack := nil;
+  FVecDashOffset := 0;
+  FVecDashOffsetStack := nil;
+  FPathOpen := False;
   FCanvas := ACanvas;
   FRect := ARect;
   FRightToLeft := ARightToLeft;
@@ -2575,6 +2639,9 @@ begin
     not survive from the previous paint. }
   FVecDash := nil;
   FVecDashStack := nil;
+  FVecDashOffset := 0;
+  FVecDashOffsetStack := nil;
+  FPathOpen := False;
   FCanvas := ACanvas;
   FRect := ARect;
   FRightToLeft := ARightToLeft;
@@ -3333,6 +3400,7 @@ begin
   if FBmp = nil then Exit;
   ctx := FBmp.Canvas2D;
   ctx.beginPath;
+  FPathOpen := True;
   for k := 0 to 9 do
   begin
     if (k mod 2) = 0 then rr := AOuter else rr := AInner;
@@ -4613,6 +4681,7 @@ procedure TTyPainter.BeginPath;
 begin
   if FBmp = nil then Exit;
   FBmp.Canvas2D.beginPath;
+  FPathOpen := False;
 end;
 
 procedure TTyPainter.ClosePath;
@@ -4625,24 +4694,28 @@ procedure TTyPainter.MoveTo(AX, AY: Double);
 begin
   if FBmp = nil then Exit;
   FBmp.Canvas2D.moveTo(AX, AY);
+  FPathOpen := True;
 end;
 
 procedure TTyPainter.LineTo(AX, AY: Double);
 begin
   if FBmp = nil then Exit;
   FBmp.Canvas2D.lineTo(AX, AY);
+  FPathOpen := True;
 end;
 
 procedure TTyPainter.CurveTo(AC1X, AC1Y, AC2X, AC2Y, AX, AY: Double);
 begin
   if FBmp = nil then Exit;
   FBmp.Canvas2D.bezierCurveTo(AC1X, AC1Y, AC2X, AC2Y, AX, AY);
+  FPathOpen := True;
 end;
 
 procedure TTyPainter.QuadTo(ACX, ACY, AX, AY: Double);
 begin
   if FBmp = nil then Exit;
   FBmp.Canvas2D.quadraticCurveTo(ACX, ACY, AX, AY);
+  FPathOpen := True;
 end;
 
 procedure TTyPainter.ArcTo(ACX, ACY, ARadius, AStartRad, AEndRad: Double;
@@ -4650,6 +4723,7 @@ procedure TTyPainter.ArcTo(ACX, ACY, ARadius, AStartRad, AEndRad: Double;
 begin
   if FBmp = nil then Exit;
   FBmp.Canvas2D.arc(ACX, ACY, ARadius, AStartRad, AEndRad, AAnticlockwise);
+  FPathOpen := True;
 end;
 
 procedure TTyPainter.PolylineTo(const APoints: array of TTyVecPoint);
@@ -4659,12 +4733,14 @@ begin
   if (FBmp = nil) or (Length(APoints) = 0) then Exit;
   for i := 0 to High(APoints) do
     FBmp.Canvas2D.lineTo(APoints[i].X, APoints[i].Y);
+  FPathOpen := True;
 end;
 
 procedure TTyPainter.RectPath(AL, AT, AR, AB: Double);
 begin
   if FBmp = nil then Exit;
   FBmp.Canvas2D.rect(AL, AT, AR - AL, AB - AT);
+  FPathOpen := True;
 end;
 
 procedure TTyPainter.RoundRectPath(AL, AT, AR, AB, ARadiusLogical: Double);
@@ -4677,24 +4753,34 @@ begin
     removing a clamp here changed nothing. NOTE this is not the same entry point
     as FillRoundRectAntialias, which is the one TyClampRadiusPx exists for. }
   FBmp.Canvas2D.roundRect(AL, AT, AR - AL, AB - AT, ScaleF(ARadiusLogical));
+  FPathOpen := True;
 end;
 
 procedure TTyPainter.EllipsePath(ACX, ACY, ARX, ARY: Double);
 begin
   if FBmp = nil then Exit;
+  { a sub-path of its own after anything else in the path [R2-F] }
+  if FPathOpen then FBmp.Canvas2D.moveTo(ACX + ARX, ACY);
   FBmp.Canvas2D.ellipse(ACX, ACY, ARX, ARY);
+  FPathOpen := True;
 end;
 
 procedure TTyPainter.CirclePath(ACX, ACY, AR: Double);
 begin
   if FBmp = nil then Exit;
+  { a sub-path of its own after anything else in the path: zrender's
+    Circle.buildPath moves to (cx + r, cy) before its arc, where BGRA's
+    circle is an arc from the current point [R2-F] }
+  if FPathOpen then FBmp.Canvas2D.moveTo(ACX + AR, ACY);
   FBmp.Canvas2D.circle(ACX, ACY, AR);
+  FPathOpen := True;
 end;
 
 procedure TTyPainter.SvgPath(const APathData: string);
 begin
   if (FBmp = nil) or (APathData = '') then Exit;
   FBmp.Canvas2D.addPath(APathData);
+  FPathOpen := True;
 end;
 
 procedure TTyPainter.SvgPathIn(const APathData: string; const ARect: TRect;
@@ -4737,6 +4823,7 @@ begin
     FBmp.Canvas2D.translate(ox, oy);
     FBmp.Canvas2D.scale(sx, sy);
     FBmp.Canvas2D.addPath(APathData);
+    FPathOpen := True;
   finally
     { The path keeps the points the transform produced; restoring here leaves
       the CTM as the caller left it, so a later fill is not scaled twice. }
@@ -4988,6 +5075,230 @@ begin
   end;
 end;
 
+const
+  { [R2-V] the thinnest dashed pen laid, in device px: 1/512 of a pixel's
+    coverage rounds to nothing in 8 bits }
+  cThinDashPx = 1 / 512;
+
+{ [R2-F] A DASH WITH A PHASE. BGRA's pen starts every pattern at its head
+  (bgrapen.pas, ComputeWidePolylinePoints' FlushLine: posstyle := 0) and has
+  no way in for a phase, and it refuses a pattern with a zero entry (it
+  raises). Those are laid here: each sub-path of the current path walked by
+  its length in the pen's space (where BGRA measures a pattern, in widths),
+  the pattern starting APhase widths along it -- a canvas starts every
+  sub-path's pattern at the offset -- each dash an open sub-path of its own,
+  its caps on it as a canvas draws a dash (a dash of no length shows only
+  where the cap has a size), and the lot stroked solid; then the path is put
+  back as it was. False, with nothing done, where there is nothing to lay:
+  no pattern, an entry negative or not a number, a pattern of no length, or
+  -- no zero entry and -- a phase of whole periods: the pen's own dashing
+  then, as ever, to the pixel. }
+function StrokeDashPhased(ACtx: TBGRACanvas2D; const ADash: array of Single;
+  APhase: Double): Boolean;
+var
+  pat: array of Double;
+  n, i, j, s, e, di, nd: Integer;
+  period, pos, left, segLen, zoom, unitLen, ox, oy: Double;
+  pts, pen, dash: ArrayOfTPointF;
+  sm, m, mi: TAffineMatrix;
+  hasZero, on, open, flat: Boolean;
+  dir: TPointF;
+  dashes: array of ArrayOfTPointF;
+
+  procedure Put(const AP: TPointF);
+  begin
+    if nd >= Length(dash) then SetLength(dash, nd * 2 + 8);
+    dash[nd] := AP;
+    Inc(nd);
+  end;
+
+  procedure Emit;
+  var q: Integer;
+  begin
+    if nd = 0 then Exit;
+    { a dash of no length: nothing under a butt cap; under a square or a
+      round one, a stub along the way it was going }
+    q := 1;
+    while (q < nd) and (dash[q] = dash[0]) do Inc(q);
+    if q = nd then
+    begin
+      if flat then
+      begin
+        nd := 0;
+        Exit;
+      end;
+      Put(dash[0] + dir * Single(unitLen * 1e-3));
+    end;
+    SetLength(dashes, Length(dashes) + 1);
+    dashes[High(dashes)] := Copy(dash, 0, nd);
+    nd := 0;
+  end;
+
+  function Along(const A, B: TPointF; AFrac: Double): TPointF;
+  begin
+    Result := PointF(A.x + (B.x - A.x) * AFrac, A.y + (B.y - A.y) * AFrac);
+  end;
+
+begin
+  Result := False;
+  n := Length(ADash);
+  if n = 0 then Exit;
+  hasZero := False;
+  for i := 0 to n - 1 do
+  begin
+    if IsNan(ADash[i]) or IsInfinite(ADash[i]) or (ADash[i] < 0) then Exit;
+    if ADash[i] = 0 then hasZero := True;
+  end;
+  { an odd pattern said twice, as the canvas' lineStyle does }
+  if Odd(n) then
+  begin
+    SetLength(pat, 2 * n);
+    for i := 0 to n - 1 do
+    begin
+      pat[i] := ADash[i];
+      pat[n + i] := ADash[i];
+    end;
+  end
+  else
+  begin
+    SetLength(pat, n);
+    for i := 0 to n - 1 do pat[i] := ADash[i];
+  end;
+  period := 0;
+  for i := 0 to High(pat) do period := period + pat[i];
+  if not (period > 0) then Exit;
+  if IsNan(APhase) or IsInfinite(APhase) then APhase := 0;
+  pos := APhase - Floor(APhase / period) * period;
+  if (pos >= period) or (pos < 0) then pos := 0;
+  if (pos = 0) and not hasZero then Exit;
+  pts := ACtx.currentPath;
+  Result := True;
+  if Length(pts) = 0 then Exit;
+  { the pen's space: the stroke matrix without its move, its zoom taken out
+    (TBGRAPenStroker.SetStrokeMatrix); a pattern's unit is the width there }
+  sm := ACtx.strokeMatrix;
+  sm[1, 3] := 0;
+  sm[2, 3] := 0;
+  zoom := Max(Sqrt(Sqr(sm[1, 1]) + Sqr(sm[2, 1])), Sqrt(Sqr(sm[1, 2]) + Sqr(sm[2, 2])));
+  m := AffineMatrixIdentity;
+  if zoom > 0 then m := sm * AffineMatrixScale(1 / zoom, 1 / zoom);
+  if IsAffineMatrixInversible(m) then mi := AffineMatrixInverse(m)
+  else
+  begin
+    m := AffineMatrixIdentity;
+    mi := AffineMatrixIdentity;
+  end;
+  if zoom <= 0 then zoom := 1;
+  unitLen := ACtx.lineWidth * zoom;
+  if not (unitLen > 0) then
+  begin
+    Result := False;
+    Exit;
+  end;
+  pen := mi * pts;
+  flat := ACtx.lineCapLCL = pecFlat;
+  dashes := nil;
+  dash := nil;
+  nd := 0;
+  dir := PointF(1, 0);
+  s := 0;
+  while s <= High(pen) do
+  begin
+    if isEmptyPointF(pen[s]) then
+    begin
+      Inc(s);
+      Continue;
+    end;
+    e := s;
+    while (e < High(pen)) and not isEmptyPointF(pen[e + 1]) do Inc(e);
+    { the sub-path's pattern from the phase }
+    di := 0;
+    left := pat[0] * unitLen;
+    ox := pos * unitLen;
+    while ox > 0 do
+    begin
+      if ox < left then
+      begin
+        left := left - ox;
+        ox := 0;
+      end
+      else
+      begin
+        ox := ox - left;
+        di := (di + 1) mod Length(pat);
+        left := pat[di] * unitLen;
+      end;
+    end;
+    on := not Odd(di);
+    open := False;
+    nd := 0;
+    for j := s to e - 1 do
+    begin
+      segLen := Sqrt(Sqr(Double(pen[j + 1].x) - pen[j].x) + Sqr(Double(pen[j + 1].y) - pen[j].y));
+      if not (segLen > 0) then Continue;
+      dir := PointF((pen[j + 1].x - pen[j].x) / segLen, (pen[j + 1].y - pen[j].y) / segLen);
+      ox := 0;
+      while ox < segLen do
+      begin
+        if on and not open then
+        begin
+          Put(Along(pen[j], pen[j + 1], ox / segLen));
+          open := True;
+        end;
+        if segLen - ox <= left then
+        begin
+          left := left - (segLen - ox);
+          ox := segLen;
+          if on then Put(pen[j + 1]);
+        end
+        else
+        begin
+          ox := ox + left;
+          if on then
+          begin
+            Put(Along(pen[j], pen[j + 1], ox / segLen));
+            Emit;
+            open := False;
+          end;
+          di := (di + 1) mod Length(pat);
+          left := pat[di] * unitLen;
+          on := not Odd(di);
+        end;
+      end;
+    end;
+    if open then Emit;
+    nd := 0;
+    s := e + 1;
+  end;
+  ACtx.save;
+  try
+    ACtx.resetTransform;
+    ACtx.beginPath;
+    for i := 0 to High(dashes) do
+    begin
+      dash := m * dashes[i];
+      ACtx.moveTo(dash[0]);
+      for j := 1 to High(dash) do ACtx.lineTo(dash[j]);
+    end;
+    ACtx.lineStyle(psSolid);
+    if Length(dashes) > 0 then CtxStroke(ACtx);
+    { the path as the caller left it }
+    ACtx.beginPath;
+    open := False;
+    for i := 0 to High(pts) do
+      if isEmptyPointF(pts[i]) then open := False
+      else if not open then
+      begin
+        ACtx.moveTo(pts[i]);
+        open := True;
+      end
+      else
+        ACtx.lineTo(pts[i]);
+  finally
+    ACtx.restore;
+  end;
+end;
+
 procedure TTyPainter.StrokePath(AColor: TTyColor; AWidthLogical: Double);
 var
   ctx: TBGRACanvas2D;
@@ -5000,6 +5311,12 @@ begin
   { A theme that set a border width of 0 means "no border". Falling back to
     BGRA's default width would draw a hairline everywhere it was switched off. }
   if w <= 0 then Exit;
+  { A DASHED PEN TOO THIN TO LEAVE A MARK is not laid [R2-V]: a dash written
+    as a word scales with the width, and a width tweening to 0 (a state's
+    borderWidth 0) passes 1e-7 px on its way -- hundreds of millions of
+    dashes round one bar, a stroke that never finished. Under 1/512 px no
+    pixel takes any of it in 8 bits. }
+  if (Length(FVecDash) > 0) and (w < cThinDashPx) then Exit;
   ctx := FBmp.Canvas2D;
   ctx.lineWidth := w;
   { Logical px -> multiples of the device line width, which is what BGRA's pen
@@ -5009,8 +5326,10 @@ begin
   SetLength(devDash, Length(FVecDash));
   for i := 0 to High(FVecDash) do
     devDash[i] := ScaleF(FVecDash[i]) / w;
-  ctx.lineStyle(devDash);
   ctx.strokeStyle(TyColorToBGRA(AColor));
+  { [R2-F] a phase: the dashes laid here, stroked solid }
+  if StrokeDashPhased(ctx, devDash, ScaleF(FVecDashOffset) / w) then Exit;
+  ctx.lineStyle(devDash);
   CtxStroke(ctx);
 end;
 
@@ -5050,6 +5369,15 @@ begin
   SetLength(FVecDash, Length(APatternLogical));
   for i := 0 to High(APatternLogical) do
     FVecDash[i] := APatternLogical[i];
+  FVecDashOffset := 0;
+end;
+
+procedure TTyPainter.SetLineDash(const APatternLogical: array of Double;
+  AOffsetLogical: Double);
+begin
+  SetLineDash(APatternLogical);
+  if not (IsNan(AOffsetLogical) or IsInfinite(AOffsetLogical)) then
+    FVecDashOffset := AOffsetLogical;
 end;
 
 procedure TTyPainter.SetLineCap(ACap: TTyLineCap);
@@ -5091,6 +5419,8 @@ begin
   SetLength(FVecDashStack[n], Length(FVecDash));
   for i := 0 to High(FVecDash) do
     FVecDashStack[n][i] := FVecDash[i];
+  SetLength(FVecDashOffsetStack, n + 1);
+  FVecDashOffsetStack[n] := FVecDashOffset;
 end;
 
 procedure TTyPainter.RestoreState;
@@ -5105,6 +5435,11 @@ begin
   for i := 0 to High(FVecDash) do
     FVecDash[i] := FVecDashStack[n - 1][i];
   SetLength(FVecDashStack, n - 1);
+  if n <= Length(FVecDashOffsetStack) then
+  begin
+    FVecDashOffset := FVecDashOffsetStack[n - 1];
+    SetLength(FVecDashOffsetStack, n - 1);
+  end;
 end;
 
 procedure TTyPainter.Translate(ADX, ADY: Double);
@@ -5245,6 +5580,21 @@ begin
   {$pop}
 end;
 
+procedure TyCtxFill(ACtx: TBGRACanvas2D);
+begin
+  CtxFill(ACtx);
+end;
+
+procedure TyCtxStroke(ACtx: TBGRACanvas2D);
+begin
+  CtxStroke(ACtx);
+end;
+
+procedure TyCtxClip(ACtx: TBGRACanvas2D);
+begin
+  CtxClip(ACtx);
+end;
+
 procedure TyPainterClipReuseForTest(AOn: Boolean);
 begin
   GClipReuseOff := not AOn;
@@ -5288,6 +5638,406 @@ begin
   p := PPointer(ACtx)[slot];
   if (p <> nil) and (PPointer(p)^ = Pointer(TBGRACanvasState2D)) then
     Result := TBGRACanvasState2D(p);
+end;
+
+{ [R2-P] THE KEPT FILLS (StrokePathKept). One per stroke polygon and clip rect met: the
+  polygon, the clip rect, and the brush calls the antialiased fill made -- -1, x, y for a
+  MoveTo at (x, y); alpha, count for a PutNextPixels -- and whether the fill drew from the
+  pinned Random. Found by a hash of the polygon and the rect, then compared whole. }
+type
+  TTyKeptFill = class
+    Pts: array of TPointF;
+    Clip: TRect;
+    Ops: array of LongInt;
+    NOps: Integer;
+    UsedRandom: Boolean;
+    Next: TTyKeptFill;      // another polygon with the same hash
+    procedure Add(A: LongInt);
+  end;
+
+procedure TTyKeptFill.Add(A: LongInt);
+begin
+  if NOps >= Length(Ops) then SetLength(Ops, Length(Ops) * 2 + 64);
+  Ops[NOps] := A;
+  Inc(NOps);
+end;
+
+const
+  KeptFillsMaxCount = 8192;
+  KeptFillsMaxBytes = 48 * 1024 * 1024;
+
+var
+  GKeptFills: specialize TDictionary<QWord, TTyKeptFill> = nil;
+  GKeptFillCount: Integer = 0;
+  GKeptFillBytes: Int64 = 0;
+  GKeptFillsOff: Boolean = False;
+  GKeptFillHashCollide: Boolean = False;
+  GKeptFillsMade: Integer = 0;
+  GKeptFillsReplayed: Integer = 0;
+
+{ [R2-L] THE KEPT PENS. What the pen makes of a path -- the polygon the fill is given -- is
+  a function of the path's points, the width, and the stroker's join, cap, miter limit,
+  stroke matrix and dash pattern (TBGRAPenStroker.ComputePolylineAutocycle, no arrow, no
+  random draw): kept by those, found by a hash of them and compared whole. A path met
+  again (a progressive layer drawn again on a hover) skips the pen as the kept fill skips
+  the filler. }
+type
+  TTyKeptContour = class
+    Pts: array of TPointF;
+    Width, Miter: Single;
+    Join: TPenJoinStyle;
+    Cap: TPenEndCap;
+    Mat: TAffineMatrix;
+    Style: TBGRAPenStyle;
+    Contour: ArrayOfTPointF;
+    Next: TTyKeptContour;
+  end;
+
+const
+  KeptContoursMaxCount = 8192;
+  KeptContoursMaxBytes = 48 * 1024 * 1024;
+
+var
+  GKeptContours: specialize TDictionary<QWord, TTyKeptContour> = nil;
+  GKeptContourCount: Integer = 0;
+  GKeptContourBytes: Int64 = 0;
+  GKeptContoursMade: Integer = 0;
+
+procedure DropKeptContours;
+var
+  c, n, nx: TTyKeptContour;
+begin
+  if GKeptContours <> nil then
+  begin
+    for c in GKeptContours.Values do
+    begin
+      n := c;
+      while n <> nil do
+      begin
+        nx := n.Next;
+        n.Free;
+        n := nx;
+      end;
+    end;
+    GKeptContours.Clear;
+  end;
+  GKeptContourCount := 0;
+  GKeptContourBytes := 0;
+end;
+
+function TyPainterKeptStrokeContoursForTest: Integer;
+begin
+  Result := GKeptContoursMade;
+end;
+
+function KeptContourOf(AStroker: TBGRACustomPenStroker; const APts: ArrayOfTPointF;
+  AWidth: Single): ArrayOfTPointF;
+var
+  h: QWord;
+  q: PQWord;
+  i: Integer;
+  join: TPenJoinStyle;
+  cap: TPenEndCap;
+  miter: Single;
+  mat: TAffineMatrix;
+  style: TBGRAPenStyle;
+  c, first: TTyKeptContour;
+
+  procedure Mix(AValue: QWord);
+  begin
+    {$push}{$R-}{$Q-}
+    h := (h xor AValue) * QWord($100000001B3);
+    {$pop}
+  end;
+
+begin
+  join := AStroker.JoinStyle;
+  cap := AStroker.LineCap;
+  miter := AStroker.MiterLimit;
+  mat := AStroker.StrokeMatrix;
+  style := AStroker.CustomPenStyle;
+  h := QWord($CBF29CE484222325);
+  Mix(QWord(PLongWord(@AWidth)^) or (QWord(Ord(join)) shl 32) or (QWord(Ord(cap)) shl 40));
+  Mix(QWord(PLongWord(@miter)^) or (QWord(Length(style)) shl 32));
+  for i := 0 to High(style) do Mix(QWord(PLongWord(@style[i])^));
+  q := PQWord(@mat);
+  for i := 0 to (SizeOf(mat) div 8) - 1 do Mix(q[i]);
+  if Length(APts) > 0 then
+  begin
+    q := PQWord(@APts[0]);
+    for i := 0 to High(APts) do Mix(q[i]);
+  end;
+  first := nil;
+  if GKeptContours <> nil then GKeptContours.TryGetValue(h, first);
+  c := first;
+  while c <> nil do
+  begin
+    if (Length(c.Pts) = Length(APts)) and (c.Width = AWidth) and (c.Miter = miter)
+      and (c.Join = join) and (c.Cap = cap) and (Length(c.Style) = Length(style))
+      and CompareMem(@c.Mat, @mat, SizeOf(mat))
+      and ((Length(style) = 0) or CompareMem(@c.Style[0], @style[0], Length(style) * SizeOf(Single)))
+      and ((Length(APts) = 0) or CompareMem(@c.Pts[0], @APts[0], Length(APts) * SizeOf(TPointF))) then
+      Exit(c.Contour);
+    c := c.Next;
+  end;
+  Result := AStroker.ComputePolylineAutocycle(APts, AWidth);
+  Inc(GKeptContoursMade);
+  c := TTyKeptContour.Create;
+  c.Pts := APts;
+  c.Width := AWidth;
+  c.Miter := miter;
+  c.Join := join;
+  c.Cap := cap;
+  c.Mat := mat;
+  c.Style := Copy(style);
+  c.Contour := Result;
+  if GKeptContours = nil then
+    GKeptContours := specialize TDictionary<QWord, TTyKeptContour>.Create;
+  if (GKeptContourCount >= KeptContoursMaxCount) or (GKeptContourBytes
+    + Int64(Length(APts) + Length(Result)) * SizeOf(TPointF) > KeptContoursMaxBytes) then
+  begin
+    DropKeptContours;
+    first := nil;
+  end;
+  c.Next := first;
+  GKeptContours.AddOrSetValue(h, c);
+  Inc(GKeptContourCount);
+  Inc(GKeptContourBytes, Int64(Length(APts) + Length(Result)) * SizeOf(TPointF));
+end;
+
+procedure DropKeptFills;
+var
+  f, n, nx: TTyKeptFill;
+begin
+  if GKeptFills <> nil then
+  begin
+    for f in GKeptFills.Values do
+    begin
+      n := f;
+      while n <> nil do
+      begin
+        nx := n.Next;
+        n.Free;
+        n := nx;
+      end;
+    end;
+    GKeptFills.Clear;
+  end;
+  GKeptFillCount := 0;
+  GKeptFillBytes := 0;
+end;
+
+procedure TyPainterKeptStrokesForTest(AOn: Boolean);
+begin
+  DropKeptFills;
+  DropKeptContours;
+  GKeptFillsOff := not AOn;
+end;
+
+procedure TyPainterKeptFillHashesCollideForTest(AOn: Boolean);
+begin
+  DropKeptFills;
+  GKeptFillHashCollide := AOn;
+end;
+
+function TyPainterKeptStrokeFillsForTest: Integer;
+begin
+  Result := GKeptFillsMade;
+end;
+
+function TyPainterKeptStrokeReplaysForTest: Integer;
+begin
+  Result := GKeptFillsReplayed;
+end;
+
+{ FNV-1a over the rect and the points, a point (two Singles) at a time }
+function KeptFillHash(const APts: ArrayOfTPointF; const AClip: TRect): QWord;
+var
+  q: PQWord;
+  i: Integer;
+begin
+  if GKeptFillHashCollide then Exit(0);
+  {$push}{$R-}{$Q-}
+  Result := QWord($CBF29CE484222325);
+  Result := (Result xor QWord(LongWord(AClip.Left)) xor (QWord(LongWord(AClip.Top)) shl 32))
+    * QWord($100000001B3);
+  Result := (Result xor QWord(LongWord(AClip.Right)) xor (QWord(LongWord(AClip.Bottom)) shl 32))
+    * QWord($100000001B3);
+  if Length(APts) > 0 then
+  begin
+    q := PQWord(@APts[0]);
+    for i := 0 to High(APts) do
+      Result := (Result xor q[i]) * QWord($100000001B3);
+  end;
+  {$pop}
+end;
+
+{ the recording brush: its fixed data holds the fill it records into }
+procedure KeptFillRecMove(AFixedData: Pointer; AContextData: PUniBrushContext);
+var f: TTyKeptFill;
+begin
+  f := TTyKeptFill(PPointer(AFixedData)^);
+  f.Add(-1);
+  f.Add(AContextData^.Ofs.X);
+  f.Add(AContextData^.Ofs.Y);
+end;
+
+procedure KeptFillRecPut(AFixedData: Pointer; AContextData: PUniBrushContext;
+  AAlpha: Word; ACount: Integer);
+var f: TTyKeptFill;
+begin
+  f := TTyKeptFill(PPointer(AFixedData)^);
+  f.Add(AAlpha);
+  f.Add(ACount);
+end;
+
+procedure TTyPainter.StrokePathKept(AColor: TTyColor; AWidthLogical: Double);
+var
+  ctx: TBGRACanvas2D;
+  st: TBGRACanvasState2D;
+  w: Double;
+  devDash: array of Single;
+  i, k: Integer;
+  pts, contour: ArrayOfTPointF;
+  h: QWord;
+  f, first: TTyKeptFill;
+  clip: TRect;
+  saved, before: LongWord;
+  rb, b: TUniversalBrush;
+  c: TBGRAPixel;
+  uctx: TUniBrushContext;
+  mode: TDrawMode;
+  maskScan: TBGRACustomScanner;
+begin
+  if FBmp = nil then Exit;
+  w := ScaleF(AWidthLogical);
+  if w <= 0 then Exit;
+  { A DASHED PEN TOO THIN TO LEAVE A MARK is not laid [R2-V]: a dash written
+    as a word scales with the width, and a width tweening to 0 (a state's
+    borderWidth 0) passes 1e-7 px on its way -- hundreds of millions of
+    dashes round one bar, a stroke that never finished. Under 1/512 px no
+    pixel takes any of it in 8 bits. }
+  if (Length(FVecDash) > 0) and (w < cThinDashPx) then Exit;
+  ctx := FBmp.Canvas2D;
+  { the state StrokePath sets, set the same way }
+  ctx.lineWidth := w;
+  SetLength(devDash, Length(FVecDash));
+  for i := 0 to High(FVecDash) do
+    devDash[i] := ScaleF(FVecDash[i]) / w;
+  ctx.strokeStyle(TyColorToBGRA(AColor));
+  { [R2-F] a phase: the dashes laid here, stroked solid, not kept }
+  if StrokeDashPhased(ctx, devDash, ScaleF(FVecDashOffset) / w) then Exit;
+  ctx.lineStyle(devDash);
+  st := nil;
+  if not GKeptFillsOff and (GetCurrentThreadId = MainThreadID) then
+    st := CanvasStateOf(ctx);
+  if (st = nil) or (st.strokeTextureProvider <> nil)
+    or ctx.hasShadow or not ctx.antialiasing or (st.lineWidth = 0)
+    or (ctx.surface <> FBmp) or (st.penStroker.Arrow <> nil) then
+  begin
+    CtxStroke(ctx);
+    Exit;
+  end;
+  { the brush StrokePoly's fill makes (AnyBrush): the stroke colour at the global alpha --
+    [R2-L] or, under a clip mask, its scanner of that colour through the mask
+    (FillPolyAntialiasWithTexture: the same fill, nonzero, pixel-centred, a scanner brush) }
+  c := st.strokeColor;
+  c.alpha := ApplyOpacity(c.alpha, st.globalAlpha);
+  if ctx.linearBlend then mode := dmLinearBlend else mode := dmDrawWithTransparency;
+  maskScan := nil;
+  if st.clipMaskReadOnly <> nil then
+  begin
+    maskScan := TBGRASolidColorMaskScanner.Create(st.clipMaskReadOnly, Point(0, 0), c);
+    FBmp.ScannerBrush(b, maskScan, mode);
+  end
+  else
+    FBmp.SolidBrush(b, c, mode);
+  try
+  { [R2-L] A SOLID INK THAT DRAWS NOTHING draws nothing: StrokePoly's fill
+    leaves at once (FillPolyAntialias: brush.DoesNothing), before any random
+    draw -- the pen's polygon it makes first goes nowhere. Not made. }
+  if b.DoesNothing then Exit;
+  pts := ctx.currentPath;
+  if Length(pts) = 0 then Exit;
+  saved := TyPinBgraRandom;
+  try
+    { the pen's polygon, kept by everything it is made from [R2-L] }
+    contour := KeptContourOf(st.penStroker, pts, st.lineWidth);
+    if Length(contour) < 3 then Exit;   // FillPolyAntialias draws nothing
+    clip := FBmp.ClipRect;
+    h := KeptFillHash(contour, clip);
+    first := nil;
+    if GKeptFills <> nil then GKeptFills.TryGetValue(h, first);
+    f := first;
+    while f <> nil do
+    begin
+      if (Length(f.Pts) = Length(contour)) and EqualRect(f.Clip, clip)
+        and CompareMem(@f.Pts[0], @contour[0], Length(contour) * SizeOf(TPointF)) then
+        Break;
+      f := f.Next;
+    end;
+    if f = nil then
+    begin
+      { RECORDED: the fill StrokePoly would run, through a brush that writes down its calls }
+      f := TTyKeptFill.Create;
+      f.Pts := contour;
+      f.Clip := clip;
+      rb := Default(TUniversalBrush);
+      rb.Colorspace := FBmp.Colorspace;
+      rb.InternalInitContext := @KeptFillRecMove;
+      rb.InternalPutNextPixels := @KeptFillRecPut;
+      PPointer(@rb.FixedData[0])^ := Pointer(f);
+      before := RandSeed;
+      BGRAPolygon.FillPolyAntialias(FBmp, contour, rb, True, True);
+      f.UsedRandom := RandSeed <> before;
+      SetLength(f.Ops, f.NOps);
+      Inc(GKeptFillsMade);
+      if GKeptFills = nil then
+        GKeptFills := specialize TDictionary<QWord, TTyKeptFill>.Create;
+      if (GKeptFillCount >= KeptFillsMaxCount)
+        or (GKeptFillBytes + Int64(Length(f.Pts)) * SizeOf(TPointF) + f.NOps * 4 > KeptFillsMaxBytes) then
+      begin
+        DropKeptFills;
+        first := nil;
+      end;
+      f.Next := first;
+      GKeptFills.AddOrSetValue(h, f);
+      Inc(GKeptFillCount);
+      Inc(GKeptFillBytes, Int64(Length(f.Pts)) * SizeOf(TPointF) + f.NOps * 4);
+    end
+    else
+    begin
+      Inc(GKeptFillsReplayed);
+      { the fill drew from the pinned generator: say so, so that unpinning reseeds the
+        application's as after a fill }
+      if f.UsedRandom and (RandSeed = CBgraPinnedSeed) then
+        RandSeed := CBgraPinnedSeed xor 1;
+    end;
+  finally
+    TyUnpinBgraRandom(saved);
+  end;
+  { REPLAYED through the real brush: FillShapeAntialias's own calls, its own LoadFromBitmap
+    and InvalidateBitmap around them }
+  if f.NOps = 0 then Exit;
+  FBmp.LoadFromBitmapIfNeeded;
+  uctx := Default(TUniBrushContext);
+  k := 0;
+  while k < f.NOps do
+    if f.Ops[k] = -1 then
+    begin
+      b.MoveTo(@uctx, FBmp.GetPixelAddress(f.Ops[k + 1], f.Ops[k + 2]), f.Ops[k + 1],
+        f.Ops[k + 2]);
+      Inc(k, 3);
+    end
+    else
+    begin
+      b.PutNextPixels(@uctx, Word(f.Ops[k]), f.Ops[k + 1]);
+      Inc(k, 2);
+    end;
+  FBmp.InvalidateBitmap;
+  finally
+    maskScan.Free;
+  end;
 end;
 
 { Every state on ACtx (the current one and the saved ones) that shares AMask gets a copy
@@ -5364,6 +6114,7 @@ begin
           { what the clip below leaves behind besides the mask }
           ctx.fillMode := fmWinding;
           ctx.beginPath;
+          FPathOpen := False;
           st.SetClipMask(TGrayscaleMask(Mask), False);
           Exit;
         end;
@@ -5375,6 +6126,7 @@ begin
   ctx.fillMode := fmWinding;
   CtxClip(ctx);
   ctx.beginPath;   // leave no half-built path behind for the caller to trip on
+  FPathOpen := False;
   if not (fresh and (st.clipMaskReadOnly <> nil)) then Exit;
   Inc(GClipMasksBuilt);
   { a slot that is spare or this painter's own, round the pool from where the last
@@ -5420,6 +6172,33 @@ begin
 end;
 
 { ---- rotated text ---- }
+
+function TTyPainter.TextBaseline(const AFontName: string;
+  AFontSizeLogical, AWeight: Integer): Double;
+var
+  m: TFontPixelMetric;
+  raster: Boolean;
+  sz: TSize;
+begin
+  Result := 0;
+  if FBmp = nil then Exit;
+  raster := RasterEnter;
+  try
+    TyConfigureTextFont(FBmp, AFontName, AFontSizeLogical, AWeight, FPPI);
+    m := FBmp.FontPixelMetric;
+    if m.Defined then Result := m.Baseline
+    else
+    begin
+      { no metric from the renderer: the box's height less a fifth, the
+        usual descent }
+      sz := FBmp.TextSize('Hg');
+      Result := sz.cy * 0.8;
+    end;
+    if raster then Result := Result / FScale;
+  finally
+    RasterLeave;
+  end;
+end;
 
 procedure TTyPainter.DrawTextRotated(const AText, AFontName: string;
   AFontSizeLogical, AWeight: Integer; AColor: TTyColor;
@@ -5498,5 +6277,9 @@ finalization
     pool's masks are no state's now }
   ClipPoolFreeAll;
   GRasterCanvases := nil;
+  DropKeptFills;
+  FreeAndNil(GKeptFills);
+  DropKeptContours;
+  FreeAndNil(GKeptContours);
 
 end.

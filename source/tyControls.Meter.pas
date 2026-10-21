@@ -282,7 +282,7 @@ begin
         ctx.moveTo(cx + radius * Cos(ang), cy + radius * Sin(ang));
         rr := radius - P.Scale(8);
         ctx.lineTo(cx + rr * Cos(ang), cy + rr * Sin(ang));
-        ctx.stroke;
+        TyCtxStroke(ctx);
       end;
 
       // Needle from the hub to the value angle, in the needle colour.
@@ -292,12 +292,12 @@ begin
       ctx.beginPath;
       ctx.moveTo(cx, cy);
       ctx.lineTo(cx + (radius - P.Scale(10)) * Cos(ang), cy + (radius - P.Scale(10)) * Sin(ang));
-      ctx.stroke;
+      TyCtxStroke(ctx);
       // Hub.
       ctx.fillStyle(TyColorToBGRA(needleS.Background.Color));
       ctx.beginPath;
       ctx.arc(cx, cy, Math.Max(2, P.Scale(4)), 0, 2 * Pi, False);
-      ctx.fill;
+      TyCtxFill(ctx);
     end;
 
     if FShowValue then

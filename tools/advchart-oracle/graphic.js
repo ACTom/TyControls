@@ -847,6 +847,11 @@ add('anim', 'leave', "leave: a remove with leaveTo (the update timing and update
     { wait: 2000 },
     { merge: { graphic: [{ id: 'l1', $action: 'remove' }, { id: 'l2', $action: 'remove' }, { id: 'lg', $action: 'remove' }] } }] });
 
+add('order', 'forms-frame', "the preprocessor on a timeline frame: the first frame writes its graphic as an array of elements, preprocessed into one component with those elements (parseRawOption's doPreprocess over every frame) and merged at the init",
+  { baseOption: { animation: false, timeline: { show: false, axisType: 'category', data: ['a', 'b'] } },
+    options: [{ graphic: [{ type: 'rect', id: 'fa', left: 10, top: 10, shape: { width: 30, height: 30 }, style: { fill: '#5070dd' } },
+      { type: 'circle', id: 'fb', left: 60, top: 10, shape: { r: 15 }, style: { fill: '#b6d634' } }] }, {}] });
+
 // ---------------------------------------------------------------------------
 // running
 // ---------------------------------------------------------------------------
@@ -1029,6 +1034,8 @@ function guards(out) {
   guard('a remove without leaveTo is gone at once', !lv[0].els.l2);
   guard('leave runs on the update timing (400 ms, not 2000)', lv[6] && !lv[6].els.l1);
   guard('the animations settle', ['enter', 'update', 'relocate', 'leave'].every(id => cs(id).states.every(s => s.samples[s.samples.length - 1].clips === 0)));
+  guard("forms-frame: the first frame's element array is drawn, both elements in one component",
+    el('forms-frame', 'fa') && el('forms-frame', 'fb') && cs('forms-frame').states[0].model.length === 2);
   return g;
 }
 

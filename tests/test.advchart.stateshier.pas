@@ -35,11 +35,11 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller, tyControls.Types,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Handlers, tyControls.AdvChart.Events,
-     tyControls.AdvChart.Style, tyControls.AdvChart.Color,
-     tyControls.AdvChart.States, tyControls.AdvChart.Measure,
-     tyControls.AdvChart.Anim, tyControls.AdvChart.AnimView,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.Events,
+     tyControls.AdvanceChart.Style, tyControls.AdvanceChart.Color,
+     tyControls.AdvanceChart.States, tyControls.AdvanceChart.Measure,
+     tyControls.AdvanceChart.Anim, tyControls.AdvanceChart.AnimView,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
@@ -76,6 +76,7 @@ type
       const AObj, ARest: TTyStObject; AKey: TTyStKey);
     procedure CompareCrumbs(ASeries: Integer; ACrumbs: TJSONArray);
     procedure CompareEdgeLabel(const AWhat: string; ASeries, AEdge: Integer; AWant: TJSONObject);
+    procedure CompareNodeLabel(const AWhat: string; ASeries, ARow: Integer; AWant: TJSONObject);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -104,6 +105,7 @@ type
     procedure TestATreemapLeafsBackgroundAndContentTransitionTogether;
     procedure TestATreeNodesEdgeTransitionsWhenItFollows;
     procedure TestWithoutAProxyTheListTakesTheStatesAtOnce;
+    procedure TestABreadcrumbNamesNoDatum;
   end;
 
 implementation
@@ -383,11 +385,10 @@ begin
       Bad(Format('event %d is %s upstream, %s here', [i, want.Strings['type'], Copy(line, 1, t - 1)]));
       Continue;
     end;
-    { A VIEW'S OWN DISPATCH (a breadcrumb item's click): upstream's payload
-      is {from, seriesId, targetNode: the TreeNode}, the port's names the
-      series by index and the node by its id -- the type is compared }
-    if (want.Find('payload') is TJSONObject)
-      and (want.Objects['payload'].IndexOfName('from') >= 0) then Continue;
+    { A VIEW'S OWN DISPATCH (a node's or a breadcrumb item's click): its
+      payload {type, from, seriesId, targetNode} key for key -- the view uid
+      and the TreeNode (the port's its id) stand for themselves [R2-B: only
+      the type was compared, the port named the series by index] }
     got := GetJSON(Copy(line, t + 1, MaxInt));
     try
       if not SameJson(want.Find('payload'), got) then
@@ -614,6 +615,33 @@ begin
   end;
 end;
 
+{ [R2-B] A NODE'S LABEL WHERE IT IS DRAWN: its transform's translation (the
+  anchor) -- on its symbol scaled under emphasis, as updateInnerText puts
+  it; to 1e-9 (the port moves the rest anchor by the scaled box's) }
+procedure TAdvChartStatesHierOracleTest.CompareNodeLabel(const AWhat: string; ASeries,
+  ARow: Integer; AWant: TJSONObject);
+var
+  idx: Integer;
+  el: TTyChartElement;
+  m: TJSONArray;
+  m4, m5: Double;
+begin
+  m := AWant.Arrays['m'];
+  HexNum(m.Items[4], m4);
+  HexNum(m.Items[5], m5);
+  idx := FChart.StatePartIndex(ASeries, ARow, 'label');
+  Inc(FCompared);
+  if idx < 0 then
+  begin
+    if not AWant.Booleans['ignore'] then Bad(AWhat + ': no label element here');
+    Exit;
+  end;
+  el := FChart.List.Element(idx);
+  if (Abs(el.Caption.X - m4) > 1e-9) or (Abs(el.Caption.Y - m5) > 1e-9) then
+    Bad(Format('%s: at (%s, %s) upstream, (%s, %s) here', [AWhat, Fmt(m4), Fmt(m5),
+      Fmt(el.Caption.X), Fmt(el.Caption.Y)]));
+end;
+
 procedure TAdvChartStatesHierOracleTest.CompareSeries(ASer: TJSONObject);
 var
   s, i, k: Integer;
@@ -676,6 +704,8 @@ begin
         if not SameBits(rsx, v) then Bad(Format('%s: scale %s upstream, %s here', [w, Fmt(v), Fmt(rsx)]));
       end;
       CompareText(w + ' label', o.Find('label'), item.Label_);
+      if (o.Find('label') is TJSONObject) and (o.Objects['label'].Find('m') <> nil) then
+        CompareNodeLabel(w + ' label', s, i, o.Objects['label']);
     end;
     arr := ASer.Arrays['edges'];
     for i := 0 to arr.Count - 1 do
@@ -737,6 +767,8 @@ begin
         if not SameBits(rsx, v) then Bad(Format('%s: scale %s upstream, %s here', [w, Fmt(v), Fmt(rsx)]));
       end;
       CompareText(w + ' label', o.Find('label'), item.Label_);
+      if (o.Find('label') is TJSONObject) and (o.Objects['label'].Find('m') <> nil) then
+        CompareNodeLabel(w + ' label', s, i, o.Objects['label']);
       { the edge it draws }
       if o.Find('edge') is TJSONObject then
       begin
@@ -882,6 +914,13 @@ const
     + '"bottom":40,"right":160,"symbol":"circle","itemStyle":{"color":"#5070dd"},'
     + '"lineStyle":{"color":"#999999","width":2},'
     + '"data":[{"name":"root","children":[{"name":"A","children":[{"name":"A1"}]}]}]}]}';
+
+{ the treemap of cTreemap with its breadcrumb shown }
+const
+  cTreemapCrumb = '{"series":[{"type":"treemap","roam":false,"nodeClick":false,'
+    + '"breadcrumb":{"show":true},'
+    + '"data":[{"name":"A","children":[{"name":"a1","value":6},{"name":"a2","value":4}]},'
+    + '{"name":"B","value":8}]}]}';
 
 procedure TAdvChartStatesHierTest.SetUp;
 var sl: TStringList;
@@ -1049,6 +1088,36 @@ begin
     AssertEquals('grown by max(1.1, 3/15) about its centre', rest * 1.1, el.Shape.R1, 1e-9);
   end;
   AssertTrue('the node is drawn', found);
+end;
+
+{ A BREADCRUMB ITEM NAMES NO DATUM: its ecData has no dataIndex, so a pointer
+  on it has nothing to show in a tooltip nor to select -- though the item
+  carries its node's datum in the list (for its own handlers), and nothing
+  under it shows through }
+procedure TAdvChartStatesHierTest.TestABreadcrumbNamesNoDatum;
+var
+  i, n, hit: Integer;
+  el: TTyChartElement;
+  d: TTyChartDatumRef;
+  b: TTyRectF;
+begin
+  NewChart(cTreemapCrumb, camOff);
+  n := 0;
+  for i := 0 to FChart.List.Count - 1 do
+  begin
+    el := FChart.List.Element(i);
+    if el.Anim.Role <> carTmCrumb then Continue;
+    Inc(n);
+    AssertTrue('the crumb carries its node''s datum in the list', el.Datum.SeriesIndex = 0);
+    AssertTrue('the crumb is hit as a polygon', el.PathHit.Active);
+    b := el.PathHit.Box;
+    d := FChart.HitTestAt(Round((b.Left + b.Right) / 2), Round((b.Top + b.Bottom) / 2), hit);
+    AssertTrue('the pointer is on the crumb or its words', (hit >= 0)
+      and (FChart.List.Element(hit).Anim.Role in [carTmCrumb, carLabel]));
+    AssertTrue(Format('a pointer on crumb %d names no datum (series %d, row %d)',
+      [n, d.SeriesIndex, d.DataIndex]), d.SeriesIndex < 0);
+  end;
+  AssertTrue('a crumb drawn', n >= 1);
 end;
 
 initialization

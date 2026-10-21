@@ -16,12 +16,12 @@ interface
 uses Classes, SysUtils, Math, Controls, Graphics, Forms, fpcunit, testregistry,
      BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvChart.Types, tyControls.AdvChart.Data,
-     tyControls.AdvChart.Option, tyControls.AdvChart.Layout,
-     tyControls.AdvChart.Shape, tyControls.AdvChart.Coord,
-     tyControls.AdvChart.Radar, tyControls.AdvChart.Paint,
-     tyControls.AdvChart.Series, tyControls.AdvChart.Measure,
-     tyControls.AdvChart.Color, tyControls.AdvChart.Scale,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Data,
+     tyControls.AdvanceChart.Option, tyControls.AdvanceChart.Layout,
+     tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Coord,
+     tyControls.AdvanceChart.Radar, tyControls.AdvanceChart.Paint,
+     tyControls.AdvanceChart.Series, tyControls.AdvanceChart.Measure,
+     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Scale,
      tyControls.AdvanceChart, test.advancechart;
 type
   TAdvChartRadarRuleTest = class(TTestCase)
@@ -62,8 +62,8 @@ type
     procedure TestTheGridDrawsItsPartsAndNoneOfThemIsHittable;
     procedure TestANameIsPinnedByTheEdgeFacingTheCentre;
     procedure TestACircleRadarUsesRoundBandsAndRoundRings;
-    procedure TestAMissingValueLeavesTheRingRatherThanCollapsingIt;
-    procedure TestARingOfOnePointIsNotDrawn;
+    procedure TestAMissingValueIsAPointAtTheCentre;
+    procedure TestARingOfOneValueRunsThroughTheCentre;
     procedure TestTheRingClosesBackToItsFirstPoint;
     procedure TestEachRowTakesItsOwnColourAndTheRingIsHittable;
     procedure TestOnlyTheseTypesLetTheirRowsIntoTheLegend;
@@ -798,19 +798,21 @@ begin
   for i := 0 to ACount - 1 do Result[i] := i;
 end;
 
-procedure TAdvChartRadarRuleTest.
-  TestAMissingValueLeavesTheRingRatherThanCollapsingIt;
+procedure TAdvChartRadarRuleTest.TestAMissingValueIsAPointAtTheCentre;
 var
   r: TTyRadar;
   st: TTyDataStore;
-  i, j: Integer;
+  i, syms: Integer;
   e: TTyChartElement;
   found: Boolean;
 begin
-  { A SPOKE WITH NOTHING ON IT IS SKIPPED and its neighbours join -- which is
-    what a canvas does with a vertex it cannot place, and what upstream
-    therefore draws. Collapsing it to the centre instead draws a ring with a
-    spike into the middle, and any test that only counted ink would pass. }
+  { A SPOKE WITH NOTHING ON IT IS A POINT AT THE CENTRE: radarLayout swaps a
+    point it cannot place for getValueMissingPoint, [cx, cy] -- the ring
+    runs into the middle and back, and the spoke keeps its symbol there.
+    [R2-A: this test held the port to skipping the spoke and joining its
+    neighbours, on the belief that upstream pushed a NaN point the canvas
+    skipped; tests/fixtures/advchart-radar-label.json's `missing` case is
+    upstream's own answer.] }
   r := RadarOf('{"radar":{"indicator":[{"name":"a","max":100},'
     + '{"name":"b","max":100},{"name":"c","max":100},'
     + '{"name":"d","max":100}]}}');
@@ -822,42 +824,62 @@ begin
     TyBuildRadarMarks(RadarBinding, r, TyRadarVisual($FF3366CC), st,
       AllDims(4), 96, FList);
     found := False;
+    syms := 0;
     for i := 0 to FList.Count - 1 do
     begin
       e := FList.Element(i);
-      if e.Shape.Kind <> cskPolyline then Continue;
+      if e.Shape.Kind <> cskPolyline then
+      begin
+        if e.Z2 >= 100 then Inc(syms);
+        Continue;
+      end;
       found := True;
-      AssertEquals('three spokes and the closing point', 4,
+      AssertEquals('four spokes and the closing point', 5,
                    Length(e.Shape.Points));
-      for j := 0 to High(e.Shape.Points) do
-        AssertTrue('and none of them is the centre',
-          Abs(e.Shape.Points[j].X - r.CX) + Abs(e.Shape.Points[j].Y - r.CY)
-            > 1);
-      Break;
+      AssertEquals('the third is the centre', r.CX, e.Shape.Points[2].X, 0);
+      AssertEquals(r.CY, e.Shape.Points[2].Y, 0);
+      AssertTrue('the others are not',
+        Abs(e.Shape.Points[1].X - r.CX) + Abs(e.Shape.Points[1].Y - r.CY) > 1);
     end;
     AssertTrue('a ring was drawn', found);
+    AssertEquals('a symbol on every spoke, the centre one too', 4, syms);
   finally
     st.Free;
   end;
 end;
 
-procedure TAdvChartRadarRuleTest.TestARingOfOnePointIsNotDrawn;
+procedure TAdvChartRadarRuleTest.TestARingOfOneValueRunsThroughTheCentre;
 var
   r: TTyRadar;
   st: TTyDataStore;
+  i: Integer;
+  e: TTyChartElement;
+  found: Boolean;
 begin
-  { ONE SURVIVING SPOKE IS NOT A RING. A two-point polyline from a point to
-    itself is a dot with a hit corridor round it, and a row that said nothing
-    would answer a hover. }
+  { ONE VALUE AND TWO GAPS is still a ring: the value's point and the centre
+    twice, closed back to the first -- what upstream draws [R2-A: nothing
+    was drawn] }
   r := RadarOf('{"radar":{"indicator":[{"name":"a","max":100},'
     + '{"name":"b","max":100},{"name":"c","max":100}]}}');
+  for i := 0 to 2 do r.SetAxisExtent(i, 0, 100);
   st := nil;
   try
     RowStore(st, 3, [80, NaN, NaN]);
     FList.Clear;
-    AssertEquals('nothing at all', 0,
-      TyBuildRadarMarks(RadarBinding, r, TyRadarVisual($FF3366CC), st,
-        AllDims(3), 96, FList));
+    TyBuildRadarMarks(RadarBinding, r, TyRadarVisual($FF3366CC), st,
+      AllDims(3), 96, FList);
+    found := False;
+    for i := 0 to FList.Count - 1 do
+    begin
+      e := FList.Element(i);
+      if e.Shape.Kind <> cskPolyline then Continue;
+      found := True;
+      AssertEquals('three spokes and the closing point', 4, Length(e.Shape.Points));
+      AssertEquals('two at the centre', r.CX, e.Shape.Points[1].X, 0);
+      AssertEquals(r.CX, e.Shape.Points[2].X, 0);
+      AssertEquals('closed on the value', e.Shape.Points[0].Y, e.Shape.Points[3].Y, 0);
+    end;
+    AssertTrue('a ring was drawn', found);
   finally
     st.Free;
   end;

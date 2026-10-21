@@ -1,0 +1,725 @@
+{
+ "source": "ECharts 6.1.0, zrender 6.1.0",
+ "measure": {
+  "firstCode": 32,
+  "ratio": [
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fd6666666666666",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fec7ae147ae147b",
+   "3fe570a3d70a3d71",
+   "3fc851eb851eb852",
+   "3fd51eb851eb851f",
+   "3fd51eb851eb851f",
+   "3fd8f5c28f5c28f6",
+   "3fe28f5c28f5c28f",
+   "3fd1eb851eb851ec",
+   "3fd51eb851eb851f",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fe28f5c28f5c28f",
+   "3fe28f5c28f5c28f",
+   "3fe28f5c28f5c28f",
+   "3fe1eb851eb851ec",
+   "3ff051eb851eb852",
+   "3fe570a3d70a3d71",
+   "3fe570a3d70a3d71",
+   "3fe70a3d70a3d70a",
+   "3fe70a3d70a3d70a",
+   "3fe570a3d70a3d71",
+   "3fe3851eb851eb85",
+   "3fe8f5c28f5c28f6",
+   "3fe70a3d70a3d70a",
+   "3fd1eb851eb851ec",
+   "3fe0000000000000",
+   "3fe570a3d70a3d71",
+   "3fe1eb851eb851ec",
+   "3fea8f5c28f5c28f",
+   "3fe70a3d70a3d70a",
+   "3fe8f5c28f5c28f6",
+   "3fe570a3d70a3d71",
+   "3fe8f5c28f5c28f6",
+   "3fe70a3d70a3d70a",
+   "3fe570a3d70a3d71",
+   "3fe3851eb851eb85",
+   "3fe70a3d70a3d70a",
+   "3fe570a3d70a3d71",
+   "3fee147ae147ae14",
+   "3fe570a3d70a3d71",
+   "3fe570a3d70a3d71",
+   "3fe3851eb851eb85",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fde147ae147ae14",
+   "3fe1eb851eb851ec",
+   "3fd51eb851eb851f",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe0000000000000",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fcc28f5c28f5c29",
+   "3fcc28f5c28f5c29",
+   "3fe0000000000000",
+   "3fcc28f5c28f5c29",
+   "3fea8f5c28f5c28f",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fd51eb851eb851f",
+   "3fe0000000000000",
+   "3fd1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe0000000000000",
+   "3fe70a3d70a3d70a",
+   "3fe0000000000000",
+   "3fe0000000000000",
+   "3fe0000000000000",
+   "3fd51eb851eb851f",
+   "3fd0a3d70a3d70a4",
+   "3fd51eb851eb851f",
+   "3fe28f5c28f5c28f"
+  ]
+ },
+ "images": {
+  "wide": {
+   "width": 20,
+   "height": 10,
+   "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAKCAYAAAC0VX7mAAAAG0lEQVR42mP4z8DwnxhMpLL/DKMGjho4HA0EALf9joBZWYHWAAAAAElFTkSuQmCC"
+  },
+  "tall": {
+   "width": 8,
+   "height": 16,
+   "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAQCAYAAAArij59AAAAGUlEQVR42mNgWMDwHy8eKQoYwAQ+PBIUAAC+EKeBe1vtOQAAAABJRU5ErkJggg=="
+  }
+ },
+ "cases": [
+  {
+   "id": "token",
+   "note": "a token of no width, a picture 20 x 10 at height 20: 40 wide, the picture over its box; no Rect",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "formatter": "{img|}{t|Txt}",
+       "rich": {
+        "img": {
+         "height": 20,
+         "backgroundColor": {
+          "image": "@wide"
+         }
+        },
+        "t": {}
+       }
+      }
+     }
+    ]
+   },
+   "tokens": [
+    {
+     "text": "",
+     "styleName": "img",
+     "width": "4044000000000000",
+     "height": "4034000000000000"
+    },
+    {
+     "text": "Txt",
+     "styleName": "t",
+     "width": "4030ae147ae147ae",
+     "height": "4028000000000000"
+    }
+   ],
+   "pieces": [
+    {
+     "kind": "image",
+     "opacity": "3ff0000000000000",
+     "x": "c03c570a3d70a3d7",
+     "y": "c034000000000000",
+     "width": "4044000000000000",
+     "height": "4034000000000000"
+    },
+    {
+     "kind": "text",
+     "text": "",
+     "x": "c020ae147ae147ae",
+     "y": "c024000000000000"
+    },
+    {
+     "kind": "text",
+     "text": "Txt",
+     "x": "4034000000000000",
+     "y": "c024000000000000"
+    }
+   ]
+  },
+  {
+   "id": "token-text",
+   "note": "a token with words: the wider of the words and the picture",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "formatter": "{img|Words that are long}",
+       "rich": {
+        "img": {
+         "height": 10,
+         "backgroundColor": {
+          "image": "@wide"
+         }
+        }
+       }
+      }
+     }
+    ]
+   },
+   "tokens": [
+    {
+     "text": "Words that are long",
+     "styleName": "img",
+     "width": "405a47ae147ae147",
+     "height": "4024000000000000"
+    }
+   ],
+   "pieces": [
+    {
+     "kind": "image",
+     "opacity": "3ff0000000000000",
+     "x": "c04a47ae147ae147",
+     "y": "c024000000000000",
+     "width": "405a47ae147ae147",
+     "height": "4024000000000000"
+    },
+    {
+     "kind": "text",
+     "text": "Words that are long",
+     "x": "0000000000000000",
+     "y": "c014000000000000"
+    }
+   ]
+  },
+  {
+   "id": "token-width",
+   "note": "a written width is kept (15)",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "formatter": "{img|}",
+       "rich": {
+        "img": {
+         "width": 15,
+         "height": 20,
+         "backgroundColor": {
+          "image": "@wide"
+         }
+        }
+       }
+      }
+     }
+    ]
+   },
+   "tokens": [
+    {
+     "text": "",
+     "styleName": "img",
+     "width": "402e000000000000",
+     "height": "4034000000000000"
+    }
+   ],
+   "pieces": [
+    {
+     "kind": "image",
+     "opacity": "3ff0000000000000",
+     "x": "c01e000000000000",
+     "y": "c034000000000000",
+     "width": "402e000000000000",
+     "height": "4034000000000000"
+    },
+    {
+     "kind": "text",
+     "text": "",
+     "x": "0000000000000000",
+     "y": "c024000000000000"
+    }
+   ]
+  },
+  {
+   "id": "token-auto",
+   "note": "width 'auto' widens as none does: the tall picture 8 x 16 at 32 is 16",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "formatter": "{img|}",
+       "rich": {
+        "img": {
+         "width": "auto",
+         "height": 32,
+         "backgroundColor": {
+          "image": "@tall"
+         }
+        }
+       }
+      }
+     }
+    ]
+   },
+   "tokens": [
+    {
+     "text": "",
+     "styleName": "img",
+     "width": "4030000000000000",
+     "height": "4040000000000000"
+    }
+   ],
+   "pieces": [
+    {
+     "kind": "image",
+     "opacity": "3ff0000000000000",
+     "x": "c020000000000000",
+     "y": "c040000000000000",
+     "width": "4030000000000000",
+     "height": "4040000000000000"
+    },
+    {
+     "kind": "text",
+     "text": "",
+     "x": "0000000000000000",
+     "y": "c030000000000000"
+    }
+   ]
+  },
+  {
+   "id": "token-padding",
+   "note": "padding [2, 4]: the height the picture is fitted to holds the padding",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "formatter": "{img|}",
+       "rich": {
+        "img": {
+         "height": 10,
+         "padding": [
+          2,
+          4
+         ],
+         "backgroundColor": {
+          "image": "@wide"
+         }
+        }
+       }
+      }
+     }
+    ]
+   },
+   "tokens": [
+    {
+     "text": "",
+     "styleName": "img",
+     "width": "4042000000000000",
+     "height": "402c000000000000"
+    }
+   ],
+   "pieces": [
+    {
+     "kind": "image",
+     "opacity": "3ff0000000000000",
+     "x": "c032000000000000",
+     "y": "c02c000000000000",
+     "width": "4042000000000000",
+     "height": "402c000000000000"
+    },
+    {
+     "kind": "text",
+     "text": "",
+     "x": "0000000000000000",
+     "y": "c01c000000000000"
+    }
+   ]
+  },
+  {
+   "id": "token-border",
+   "note": "a border and a lineHeight: the Rect (stroked, unfilled) then the picture; the opacity on the Rect, the picture 1",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "formatter": "{img|}",
+       "rich": {
+        "img": {
+         "height": 20,
+         "lineHeight": 30,
+         "borderColor": "#ff0000",
+         "borderWidth": 2,
+         "opacity": 0.5,
+         "backgroundColor": {
+          "image": "@wide"
+         }
+        }
+       }
+      }
+     }
+    ]
+   },
+   "tokens": [
+    {
+     "text": "",
+     "styleName": "img",
+     "width": "4044000000000000",
+     "height": "4034000000000000"
+    }
+   ],
+   "pieces": [
+    {
+     "kind": "rect",
+     "stroke": "#ff0000",
+     "fill": null,
+     "opacity": "3fe0000000000000",
+     "x": "c034000000000000",
+     "y": "c039000000000000",
+     "width": "4044000000000000",
+     "height": "4034000000000000"
+    },
+    {
+     "kind": "image",
+     "opacity": "3ff0000000000000",
+     "x": "c034000000000000",
+     "y": "c039000000000000",
+     "width": "4044000000000000",
+     "height": "4034000000000000"
+    },
+    {
+     "kind": "text",
+     "text": "",
+     "x": "0000000000000000",
+     "y": "c02e000000000000"
+    }
+   ]
+  },
+  {
+   "id": "token-opacity",
+   "note": "no Rect: the picture takes the opacity",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "formatter": "{img|}",
+       "rich": {
+        "img": {
+         "height": 20,
+         "opacity": 0.5,
+         "backgroundColor": {
+          "image": "@wide"
+         }
+        }
+       }
+      }
+     }
+    ]
+   },
+   "tokens": [
+    {
+     "text": "",
+     "styleName": "img",
+     "width": "4044000000000000",
+     "height": "4034000000000000"
+    }
+   ],
+   "pieces": [
+    {
+     "kind": "image",
+     "opacity": "3fe0000000000000",
+     "x": "c034000000000000",
+     "y": "c034000000000000",
+     "width": "4044000000000000",
+     "height": "4034000000000000"
+    },
+    {
+     "kind": "text",
+     "text": "",
+     "x": "0000000000000000",
+     "y": "c024000000000000"
+    }
+   ]
+  },
+  {
+   "id": "block",
+   "note": "the box of a plain label: the picture over it, padding 4; the words do not widen it",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "padding": 4,
+       "backgroundColor": {
+        "image": "@tall"
+       }
+      }
+     }
+    ]
+   },
+   "tokens": [],
+   "pieces": [
+    {
+     "kind": "image",
+     "opacity": "3ff0000000000000",
+     "x": "c01d70a3d70a3d71",
+     "y": "c034000000000000",
+     "width": "402d70a3d70a3d71",
+     "height": "4034000000000000"
+    },
+    {
+     "kind": "text",
+     "text": "5",
+     "x": "0000000000000000",
+     "y": "c024000000000000"
+    }
+   ]
+  },
+  {
+   "id": "block-rich",
+   "note": "the box of a rich label, a token beside: the box picture, then the token",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "formatter": "{a|Aa}",
+       "padding": [
+        2,
+        6
+       ],
+       "backgroundColor": {
+        "image": "@wide"
+       },
+       "rich": {
+        "a": {}
+       }
+      }
+     }
+    ]
+   },
+   "tokens": [
+    {
+     "text": "Aa",
+     "styleName": "a",
+     "width": "402d851eb851eb86",
+     "height": "4028000000000000"
+    }
+   ],
+   "pieces": [
+    {
+     "kind": "image",
+     "opacity": "3ff0000000000000",
+     "x": "c02ac28f5c28f5c3",
+     "y": "c030000000000000",
+     "width": "403ac28f5c28f5c3",
+     "height": "4030000000000000"
+    },
+    {
+     "kind": "text",
+     "text": "Aa",
+     "x": "0000000000000000",
+     "y": "c020000000000000"
+    }
+   ]
+  }
+ ],
+ "guards": [
+  {
+   "name": "token: 40 wide",
+   "ok": true
+  },
+  {
+   "name": "token-width: 15 kept",
+   "ok": true
+  },
+  {
+   "name": "token-auto: 16",
+   "ok": true
+  },
+  {
+   "name": "token-border: a Rect, then the picture at 1, the Rect at 0.5",
+   "ok": true
+  },
+  {
+   "name": "token-opacity: the picture at 0.5",
+   "ok": true
+  },
+  {
+   "name": "block: a picture",
+   "ok": true
+  }
+ ]
+}
