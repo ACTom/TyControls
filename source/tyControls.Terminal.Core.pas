@@ -120,7 +120,7 @@ uses
 const
   { = TyVersion (tyControls.Types, which uses LCL and cannot be used here): change
     both together when releasing -- TTyTerminalCoreTests.TestXtVersionConstant. }
-  TyTermLibraryVersion = '3.1.0';
+  TyTermLibraryVersion = '3.99.0';
   TyTermDiscardWatermark = 50000000;      { WriteBuffer.ts:20 }
   TyTermWriteTimeoutMs = 12;              { WriteBuffer.ts:27 }
   { ours: the piece of a chunk a slice parses between two looks at the clock (unit

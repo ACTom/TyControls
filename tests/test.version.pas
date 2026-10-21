@@ -190,7 +190,7 @@ end;
 
 procedure TVersionTest.TestVersionConstantPinned;
 begin
-  AssertEquals('TyVersion pinned for this release', '3.1.0', TyVersion);
+  AssertEquals('TyVersion pinned for this release', '3.99.0', TyVersion);
 end;
 
 { The drift guard. Two directions:
