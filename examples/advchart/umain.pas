@@ -67,7 +67,7 @@ uses
   zstream,
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
   tyControls.Button, tyControls.ComboBox, tyControls.ToggleSwitch,
-  tyControls.TyLabel, tyControls.ListBox, SynEdit, SynEditTypes, SynHighlighterJScript,
+  tyControls.TyLabel, tyControls.ListBox, SynEdit, SynHighlighterJScript,
   tyControls.TabSet, tyControls.AdvanceChart, tyControls.AdvanceChart.Diagnose,
   BGRABitmap, BGRABitmapTypes,
   umaps, urenderitems, ugenerated, ucallbacks, ualbersusa, ujsonedit;
@@ -844,9 +844,8 @@ begin
   RegisterGalleryRenderItems;
   RegisterGalleryCallbacks;
   RegisterAlbersUsa;
-  { a click past a line's end puts the caret at the end, not in the empty
-    space beyond it }
-  OptionEdit.Options := OptionEdit.Options - [eoScrollPastEol];
+  { its key commands, caret, gutter and right-click menu (ujsonedit) }
+  SetupJsonEditor(OptionEdit);
   TyRegisterBuiltinThemes;
   names := TyBuiltinThemeNames;
   for i := 0 to High(names) do

@@ -33,10 +33,151 @@ uses
 procedure ApplyJsonEditorLook(AEdit: TSynEdit; AHighlighter: TSynJScriptSyn;
   AController: TTyCustomStyleController);
 
+{ The editor's behaviour, once, when the form is made:
+  - its key commands: a TSynEdit read from an .lfm gets none unless the .lfm
+    lists them (the constructor skips the defaults while its owner loads), so
+    Ctrl+A, Ctrl+C, Ctrl+V and the rest are put back here;
+  - a click past a line's end puts the caret at the end, not in the empty
+    space beyond it;
+  - no marks column (no bookmarks or breakpoints here) left of the numbers;
+  - the library's own themed text menu on a right click, as TTyMemo has
+    (tyControls.TextMenu), unless the form gives the editor a PopupMenu. }
+procedure SetupJsonEditor(AEdit: TSynEdit);
+
 implementation
 
 uses
-  Forms, SynGutterBase, tyControls.Types, tyControls.Css.Values, tyControls.Painter;
+  Forms, Controls, Types, Clipbrd, SynEditTypes, SynGutterBase, SynGutterMarks,
+  tyControls.Types, tyControls.Css.Values, tyControls.Painter, tyControls.TextMenu;
+
+type
+  { the shared text menu's seam over a TSynEdit; owned by the editor }
+  TJsonEditMenu = class(TComponent, ITyTextEditActions)
+  private
+    FEdit: TSynEdit;
+    FMenu: TTyTextEditMenu;
+    procedure ContextPopup(Sender: TObject; MousePos: TPoint; var Handled: Boolean);
+  public
+    constructor Create(AEdit: TSynEdit); reintroduce;
+    destructor Destroy; override;
+    function TeControl: TControl;
+    function TeController: TTyCustomStyleController;
+    procedure TeUndo;
+    procedure TeRedo;
+    procedure TeCut;
+    procedure TeCopy;
+    procedure TePaste;
+    procedure TeSelectAll;
+    function TeCanUndo: Boolean;
+    function TeCanRedo: Boolean;
+    function TeHasSelection: Boolean;
+    function TeCanPaste: Boolean;
+    function TeHasText: Boolean;
+    function TeIsReadOnly: Boolean;
+  end;
+
+constructor TJsonEditMenu.Create(AEdit: TSynEdit);
+begin
+  inherited Create(AEdit);
+  FEdit := AEdit;
+  FEdit.OnContextPopup := @ContextPopup;
+end;
+
+destructor TJsonEditMenu.Destroy;
+begin
+  FreeAndNil(FMenu);
+  inherited Destroy;
+end;
+
+procedure TJsonEditMenu.ContextPopup(Sender: TObject; MousePos: TPoint;
+  var Handled: Boolean);
+begin
+  if FEdit.PopupMenu <> nil then Exit;
+  if FMenu = nil then FMenu := TTyTextEditMenu.Create(Self);
+  FMenu.Popup(MousePos);
+  Handled := True;
+end;
+
+function TJsonEditMenu.TeControl: TControl;
+begin
+  Result := FEdit;
+end;
+
+function TJsonEditMenu.TeController: TTyCustomStyleController;
+begin
+  Result := TyDefaultController;
+end;
+
+procedure TJsonEditMenu.TeUndo;
+begin
+  FEdit.Undo;
+end;
+
+procedure TJsonEditMenu.TeRedo;
+begin
+  FEdit.Redo;
+end;
+
+procedure TJsonEditMenu.TeCut;
+begin
+  FEdit.CutToClipboard;
+end;
+
+procedure TJsonEditMenu.TeCopy;
+begin
+  FEdit.CopyToClipboard;
+end;
+
+procedure TJsonEditMenu.TePaste;
+begin
+  FEdit.PasteFromClipboard;
+end;
+
+procedure TJsonEditMenu.TeSelectAll;
+begin
+  FEdit.SelectAll;
+end;
+
+function TJsonEditMenu.TeCanUndo: Boolean;
+begin
+  Result := FEdit.CanUndo;
+end;
+
+function TJsonEditMenu.TeCanRedo: Boolean;
+begin
+  Result := FEdit.CanRedo;
+end;
+
+function TJsonEditMenu.TeHasSelection: Boolean;
+begin
+  Result := FEdit.SelAvail;
+end;
+
+function TJsonEditMenu.TeCanPaste: Boolean;
+begin
+  Result := TyClipboardHasText;
+end;
+
+function TJsonEditMenu.TeHasText: Boolean;
+begin
+  Result := FEdit.Lines.Count > 0;
+end;
+
+function TJsonEditMenu.TeIsReadOnly: Boolean;
+begin
+  Result := FEdit.ReadOnly;
+end;
+
+procedure SetupJsonEditor(AEdit: TSynEdit);
+begin
+  if AEdit = nil then Exit;
+  if AEdit.Keystrokes.Count = 0 then
+    AEdit.Keystrokes.ResetDefaults;
+  AEdit.Options := AEdit.Options - [eoScrollPastEol];
+  if AEdit.Gutter.Parts.ByClassCount[TSynGutterMarks] > 0 then
+    AEdit.Gutter.Parts.ByClass[TSynGutterMarks, 0].Visible := False;
+  TJsonEditMenu.Create(AEdit);
+end;
 
 function PlatformMonospace: string;
 begin
