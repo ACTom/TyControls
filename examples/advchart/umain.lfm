@@ -60,14 +60,17 @@ object MainForm: TMainForm
       Anchors = [akTop, akLeft, akBottom]
       OnChange = ExampleListChange
     end
-    object OptionMemo: TTyMemo
+    object OptionEdit: TSynEdit
       Left = 272
       Height = 460
       Top = 78
       Width = 330
       Anchors = [akTop, akLeft, akBottom]
       ScrollBars = ssAutoBoth
-      WordWrap = False
+      Highlighter = JsonHighlighter
+      TabWidth = 2
+    end
+    object JsonHighlighter: TSynJScriptSyn
     end
     object BtnApply: TTyButton
       Left = 272

@@ -67,10 +67,10 @@ uses
   zstream,
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes,
   tyControls.Button, tyControls.ComboBox, tyControls.ToggleSwitch,
-  tyControls.TyLabel, tyControls.Memo, tyControls.ListBox,
+  tyControls.TyLabel, tyControls.ListBox, SynEdit, SynEditTypes, SynHighlighterJScript,
   tyControls.TabSet, tyControls.AdvanceChart, tyControls.AdvanceChart.Diagnose,
   BGRABitmap, BGRABitmapTypes,
-  umaps, urenderitems, ugenerated, ucallbacks, ualbersusa;
+  umaps, urenderitems, ugenerated, ucallbacks, ualbersusa, ujsonedit;
 
 type
   { One row of gallery/index.json. `Ok` false means the harvester could not
@@ -109,7 +109,8 @@ type
     ThemeCombo: TTyComboBox;
     CatTabs: TTyTabSet;
     ExampleList: TTyListBox;
-    OptionMemo: TTyMemo;
+    OptionEdit: TSynEdit;
+    JsonHighlighter: TSynJScriptSyn;
     Chart: TTyAdvanceChart;
     BtnApply: TTyButton;
     BtnShot: TTyButton;
@@ -148,6 +149,9 @@ type
       the memo still shows what it was given }
     FFullText, FShownText: string;
     procedure SetMemoOption(const AText: string);
+    { the chrome and the option editor after a theme or light/dark change:
+      SynEdit is not a Ty control, so its colours are pushed in (ujsonedit) }
+    procedure ApplyTheme;
     function MemoOption: string;
     { The reason the shown example draws nothing (or only part), '' for
       none: shown over the chart. }
@@ -530,14 +534,20 @@ begin
     FShownText := Copy(AText, 1, cShown) + LineEnding + '...'
   else
     FShownText := AText;
-  OptionMemo.Text := FShownText;
+  OptionEdit.Text := FShownText;
   { the memo gives its text back with its own line ends: compare with that }
-  FShownText := OptionMemo.Text;
+  FShownText := OptionEdit.Text;
+end;
+
+procedure TMainForm.ApplyTheme;
+begin
+  ApplyChromeTheme(TyDefaultController);
+  ApplyJsonEditorLook(OptionEdit, JsonHighlighter, TyDefaultController);
 end;
 
 function TMainForm.MemoOption: string;
 begin
-  Result := OptionMemo.Text;
+  Result := OptionEdit.Text;
   if (FFullText <> '') and (Result = FShownText) then Result := FFullText;
 end;
 
@@ -834,13 +844,16 @@ begin
   RegisterGalleryRenderItems;
   RegisterGalleryCallbacks;
   RegisterAlbersUsa;
+  { a click past a line's end puts the caret at the end, not in the empty
+    space beyond it }
+  OptionEdit.Options := OptionEdit.Options - [eoScrollPastEol];
   TyRegisterBuiltinThemes;
   names := TyBuiltinThemeNames;
   for i := 0 to High(names) do
     ThemeCombo.Items.Add(names[i]);
   ThemeCombo.ItemIndex := ThemeCombo.Items.IndexOf('default');
   TyDefaultController.ThemeName := 'default';
-  ApplyChromeTheme(TyDefaultController);
+  ApplyTheme;
 
   FGalleryDir := FindGalleryDir;
   if FGalleryDir = '' then
@@ -881,7 +894,7 @@ begin
       TyDefaultController.ThemeName := ParamStr(3);
       if (ParamCount >= 4) and (ParamStr(4) <> '--example') then
         TyDefaultController.Mode := ParamStr(4);
-      ApplyChromeTheme(TyDefaultController);
+      ApplyTheme;
     end;
     Chart.SaveToPng(ParamStr(2));
     Application.Terminate;
@@ -933,7 +946,7 @@ procedure TMainForm.ThemeComboChange(Sender: TObject);
 begin
   if ThemeCombo.ItemIndex < 0 then Exit;
   TyDefaultController.ThemeName := ThemeCombo.Items[ThemeCombo.ItemIndex];
-  ApplyChromeTheme(TyDefaultController);
+  ApplyTheme;
 end;
 
 procedure TMainForm.DarkSwitchChange(Sender: TObject);
@@ -942,7 +955,7 @@ begin
     TyDefaultController.Mode := 'dark'
   else
     TyDefaultController.Mode := 'light';
-  ApplyChromeTheme(TyDefaultController);
+  ApplyTheme;
 end;
 
 end.

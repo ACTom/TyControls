@@ -22,11 +22,12 @@
     <BuildModes Count="1">
       <Item1 Name="Default" Default="True"/>
     </BuildModes>
-    <RequiredPackages Count="2">
+    <RequiredPackages Count="3">
       <Item1><PackageName Value="LCL"/></Item1>
       <Item2><PackageName Value="tycontrols"/></Item2>
+      <Item3><PackageName Value="SynEdit"/></Item3>
     </RequiredPackages>
-    <Units Count="7">
+    <Units Count="8">
       <Unit0>
         <Filename Value="advchart_example.lpr"/>
         <IsPartOfProject Value="True"/>
@@ -59,6 +60,10 @@
         <Filename Value="ualbersusa.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit6>
+      <Unit7>
+        <Filename Value="ujsonedit.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit7>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
