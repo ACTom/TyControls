@@ -205,6 +205,37 @@ and text controls to reference. They are ordinary `--` variables and theme autho
 > family at its own edit's values gets those controls looking like that edit.
 > Like `--accent` and `--on-surface` above they are evaluated lazily at use sites and may reference other variables.
 
+### 3.4 Length tokens: for the whole application, or for one control
+
+`:root` also carries **length tokens** that controls read for their insets, gaps and slot sizes,
+such as `--listview-text-margin` and `--treeview-margin`. A value may be `6px`, `6` or `var(--x)`.
+
+**For the whole application**, set them in the theme or in the controller's `StyleOverride`:
+
+```css
+:root {
+  --listview-text-margin: 6px;
+  --treeview-margin: 6px;
+}
+```
+
+**For one control**, set them in that control's own `StyleOverride`; they apply to it alone and
+win over the theme:
+
+```text
+--treeview-margin: 10px; --treeview-icon-gap: 6px;
+```
+
+The `--` declarations in a control's `StyleOverride` are also variables for the block's other
+declarations, e.g. `--w: 2px; border-width: var(--w);`. A value that does not evaluate (a wrong
+unit, an undefined variable) has no effect and the theme's value stands.
+
+Controls that read their tokens this way so far: `TTyListView` (and `TTyShellListView`), for every
+length token it reads -- `--listview-*`, `--row-height` and `--scrollbar-size`; `TTyTreeView` (and
+`TTyShellTreeView`), for `--treeview-margin` and `--treeview-icon-gap`. Other controls take the
+theme's values only, for now. Versions before 3.0.4 ignore `--` declarations in a control's
+`StyleOverride`, so a form saved with them still loads there.
+
 ---
 
 ## 4. Selectors and Style Resolution

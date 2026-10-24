@@ -204,6 +204,35 @@ typeKey 与文本类控件引用。它们都是普通 `--变量`,可被主题作
 > 这些控件就会和皮肤自己的编辑框一致。这些令牌与上面的 `--accent`、`--on-surface` 一样
 > 在使用处惰性求值,可引用其他变量。
 
+### 3.4 尺寸令牌:整个应用改,还是只改一个控件
+
+`:root` 里还有一批**尺寸令牌**,控件读它们来定内边距、间距和槽位大小,比如
+`--listview-text-margin`、`--treeview-margin`。值可以写 `6px`、`6` 或 `var(--x)`。
+
+**整个应用**:写在主题里,或写进控制器的 `StyleOverride`:
+
+```css
+:root {
+  --listview-text-margin: 6px;
+  --treeview-margin: 6px;
+}
+```
+
+**只改一个控件**:写进这个控件自己的 `StyleOverride`,只对它生效,优先于主题:
+
+```text
+--treeview-margin: 10px; --treeview-icon-gap: 6px;
+```
+
+控件 `StyleOverride` 里的 `--` 声明也是同一块里其他声明的变量,比如
+`--w: 2px; border-width: var(--w);`。值算不出来(写错了单位、引用了没定义的变量)时,
+这一条不起作用,沿用主题的值。
+
+目前按控件读令牌的是:`TTyListView`(含 `TTyShellListView`)读的全部尺寸令牌,即
+`--listview-*`、`--row-height` 和 `--scrollbar-size`;`TTyTreeView`(含 `TTyShellTreeView`)的
+`--treeview-margin` 和 `--treeview-icon-gap`。其他控件暂时只认主题里的值。3.0.4 以前的版本会
+忽略控件 `StyleOverride` 里的 `--` 声明,用新版本保存的窗体在旧版本里照样能打开。
+
 ---
 
 ## 4. 选择器与样式解析
