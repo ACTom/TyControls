@@ -155,11 +155,18 @@ const
   // duplicated hard-coded literals so they cannot silently drift; each call site
   // still scales them via MulDiv(..., APPI, 96) / TTyPainter.Scale().
   TyFieldButtonWidth = 18;   // SpinEdit up/down button width; ComboBox dropdown button width
-  TyDropChevronSize  = 9;    // the drop-down chevron's WIDTH. It was a literal default on
-                             // TTyPainter.DrawDropChevron that no caller ever overrode, i.e.
-                             // the one visual value in the drop-field path a theme could not
-                             // reach -- and the reason the chevron stays 9px while the button
-                             // zone grows to 25 on the modern density axis
+  TyDropChevronSize  = 7;    // the LONG side of a disclosure chevron's centre line -- a drop
+                             // field's V and a tree's > alike (--glyph-chevron-size). 7 puts
+                             // the ink at ~0.9x the cap height of the 9pt body text, where
+                             // Windows 11, macOS and GNOME all sit (0.6-0.93x); the old 9 was
+                             // 1.22x, and the tree's slot-filling > was 1.33x
+  TyChevronAlpha     = 200;  // a chevron's ink over its text colour's own alpha, 0..255
+                             // (--glyph-chevron-alpha). Windows 11 draws drop and submenu
+                             // marks in its secondary text colour (62%), GNOME dims trees and
+                             // expanders to 70%, macOS greys its outline marks -- but they
+                             // blend in sRGB and BGRA blends in linear light, which pales a
+                             // partial alpha: black at 180 here peaks at 126, at 200 at 106,
+                             // where the Windows 11 chevron's darkest pixel is (about 111)
   TyTrackThickness   = 4;    // TrackBar GROOVE thickness -- the recessed band the thumb rides,
                              // not the control height (the bar used to fill its whole client
                              // rect, which is why it read as a slab and swallowed its ticks)

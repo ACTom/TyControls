@@ -3451,9 +3451,9 @@ begin
   triSz := band.Bottom - band.Top;
   tri := Rect(band.Left, band.Top, band.Left + triSz, band.Bottom);
   if grp.Collapsed then
-    P.DrawGlyph(tri, tgChevronRight, tc, 1, 7)
+    TyDrawChevron(P, ActiveController, tri, tgChevronRight, tc)
   else
-    P.DrawGlyph(tri, tgChevronDown, tc, 1, 7);
+    TyDrawChevron(P, ActiveController, tri, tgChevronDown, tc);
 
   tr := Rect(band.Left + triSz, band.Top, band.Right - ScaleI(StyleMetric('--listview-text-margin', TyLvTextMargin)), band.Bottom);
   if tr.Left < tr.Right then

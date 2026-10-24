@@ -652,9 +652,21 @@ function TySquareGlyphBox(const ARect: TRect): TRect;
 { The drop chevron, sized from the theme. Every drop field draws the same mark, so the size is
   read from --glyph-chevron-size in ONE place rather than at nine call sites; it was a literal
   default on TTyPainter.DrawDropChevron that no caller overrode, which made it the only visual
-  value in this path a skin or a density axis could not reach. }
+  value in this path a skin or a density axis could not reach. The theme's '--glyph-dropdown'
+  replaces it HERE as well: only three of the nine drop fields used to ask for it themselves,
+  so a skin that swapped the mark changed a combo box and left a date picker beside it alone. }
 procedure TyDrawDropChevron(APainter: TTyPainter; AController: TTyStyleController;
   const AZoneRect: TRect; AColor: TTyColor);
+{ Every OTHER disclosure chevron -- a tree node's, a submenu's, a list group's, an expander's,
+  a cascader branch's -- through one routine, so they are one mark: TTyPainter.DrawChevron at
+  --glyph-chevron-size, centred in AZoneRect (the slot places it, it does not size it), in the
+  same ink as the drop chevron. AKind = tgChevronDown / Right / Left / Up. The theme's
+  --glyph-chevron-<direction> replaces it, as it does wherever that kind is drawn. }
+procedure TyDrawChevron(APainter: TTyPainter; AController: TTyStyleController;
+  const AZoneRect: TRect; AKind: TTyGlyphKind; AColor: TTyColor);
+{ A chevron's ink: AColor with its alpha scaled by --glyph-chevron-alpha (0..255, default
+  TyChevronAlpha). Every desktop draws these marks lighter than the text beside them. Pure. }
+function TyChevronInk(AController: TTyStyleController; AColor: TTyColor): TTyColor;
 
 { Contextual styling for a control hosted ON a title bar. A title bar is a container, and
   several skins paint it in a strong colour -- xp and classic use a blue gradient, office the
@@ -1644,18 +1656,48 @@ begin
     tgSuccess:            Result := '--glyph-success';
     tgWarning:            Result := '--glyph-warning';
     tgError:              Result := '--glyph-error';
+    tgChevronUp:          Result := '--glyph-chevron-up';
   else
     Result := '';
   end;
+end;
+
+function TyChevronInk(AController: TTyStyleController; AColor: TTyColor): TTyColor;
+var
+  ctrl: TTyStyleController;
+  a: Integer;
+begin
+  if AController <> nil then ctrl := AController else ctrl := TyDefaultController;
+  a := ctrl.Metric('--glyph-chevron-alpha', TyChevronAlpha);
+  if a < 0 then a := 0;
+  if a > 255 then a := 255;
+  a := ((AColor shr 24) and $FF) * a div 255;
+  Result := (AColor and $00FFFFFF) or (TTyColor(a) shl 24);
 end;
 
 procedure TyDrawDropChevron(APainter: TTyPainter; AController: TTyStyleController;
   const AZoneRect: TRect; AColor: TTyColor);
 var
   ctrl: TTyStyleController;
+  ink: TTyColor;
 begin
   if AController <> nil then ctrl := AController else ctrl := TyDefaultController;
-  APainter.DrawDropChevron(AZoneRect, AColor,
+  ink := TyChevronInk(ctrl, AColor);
+  if TyTryDrawGlyphOverride(APainter, AController, AZoneRect, '--glyph-dropdown', ink) then Exit;
+  APainter.DrawChevron(AZoneRect, tgChevronDown, ink,
+    ctrl.Metric('--glyph-chevron-size', TyDropChevronSize));
+end;
+
+procedure TyDrawChevron(APainter: TTyPainter; AController: TTyStyleController;
+  const AZoneRect: TRect; AKind: TTyGlyphKind; AColor: TTyColor);
+var
+  ctrl: TTyStyleController;
+  ink: TTyColor;
+begin
+  if AController <> nil then ctrl := AController else ctrl := TyDefaultController;
+  ink := TyChevronInk(ctrl, AColor);
+  if TyTryDrawGlyphOverride(APainter, AController, AZoneRect, TyGlyphKindToken(AKind), ink) then Exit;
+  APainter.DrawChevron(AZoneRect, AKind, ink,
     ctrl.Metric('--glyph-chevron-size', TyDropChevronSize));
 end;
 

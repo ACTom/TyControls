@@ -761,11 +761,9 @@ begin
 
     if Lay.ButtonRect.Right > Lay.ButtonRect.Left then
       // v3/C5: the drop indicator is theme-overridable (--glyph-dropdown); else the built-in
-      // chevron. The same two lines TTyComboBox draws, so the two fields' chevrons cannot
-      // drift apart. Always the FIELD's ink — the chevron belongs to the field, not the hint.
-      if not TyTryDrawGlyphOverride(P, ActiveController, Lay.ButtonRect, '--glyph-dropdown',
-        S.TextColor) then
-        TyDrawDropChevron(P, ActiveController, Lay.ButtonRect, S.TextColor);
+      // chevron. The same call TTyComboBox makes, so the two fields' chevrons cannot drift
+      // apart. Always the FIELD's ink — the chevron belongs to the field, not the hint.
+      TyDrawDropChevron(P, ActiveController, Lay.ButtonRect, S.TextColor);
 
     P.EndPaint;
   finally

@@ -42,7 +42,7 @@ uses tyControls.ListGroupPanel;
 
 **图标**:`AddGroup(caption, AImageIndex)` / `AddItem(gi, caption, AImageIndex)` 带图标索引,`Images: TTyVirtualImageList` 供图(同 `TTyComboBoxEx`)。索引 < 0 或未设 `Images` = 纯文字。
 
-**尺寸令牌**(均可选,未设走兜底常量/已发布属性):`--listgroup-header-height`、`--listgroup-item-height`、`--listgroup-chevron-size`(14)、`--listgroup-icon-size`(16)、`--listgroup-icon-gap`(6)、`--listgroup-item-inset`(4)。高度令牌**优先于**已发布的 `HeaderHeight`/`ItemHeight`——"行距留白"是皮肤的决定,单实例仍可覆盖。
+**尺寸令牌**(均可选,未设走兜底常量/已发布属性):`--listgroup-header-height`、`--listgroup-item-height`、`--listgroup-chevron-size`(14,chevron 所在方槽的边长;chevron 本身是全库统一的展开标记,大小取 `--glyph-chevron-size`)、`--listgroup-icon-size`(16)、`--listgroup-icon-gap`(6)、`--listgroup-item-inset`(4)。高度令牌**优先于**已发布的 `HeaderHeight`/`ItemHeight`——"行距留白"是皮肤的决定,单实例仍可覆盖。
 
 **没有更细的子部件键**:chevron 三角、图标槽、药丸的内缩都由上表三个键 + `--listgroup-*` 尺寸令牌控制,不存在第四个键。外框键 `TyListGroupPanel` 在内置主题里与 `TyPanel` 等键写在同一条规则中(取值相同、名字独立),所以默认观感不变;第三方主题若只覆盖了 `TyPanel`,需要补上 `TyListGroupPanel`(主题层按 typeKey 全有全无地回落)。要让侧边栏贴边平铺,写 `TyListGroupPanel { border-radius: 0px; border-width: 0px; }`,**不要**去改 `TyPanel`。
 

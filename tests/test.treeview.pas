@@ -10827,8 +10827,12 @@ begin
       AssertTrue('the caption is highlighted', AccentInBox(Bgra, 32, 40, 30, 30));
       AssertFalse('the indent and the expander are not', AccentInBox(Bgra, 0, 31, 21, 38));
       AssertFalse('nor the row past the caption', AccentInBox(Bgra, 150, 195, 21, 38));
+      { InkInBox, not BlackInkInBox: the expander is a chevron in the tree's own colour at
+        --glyph-chevron-alpha (lighter than the text, as every desktop draws it), so 'its own
+        ink' is grey -- what #71 is about is that it is not the selection's white, and the
+        AccentInBox check above already rules out the highlight. }
       AssertTrue('the expander keeps its own ink on the plain ground',
-        BlackInkInBox(Bgra, 16, 31, 21, 38));
+        InkInBox(Bgra, 16, 31, 21, 38));
     finally
       Bgra.Free;
       Bmp.Free;
@@ -10840,7 +10844,7 @@ begin
     try
       AssertTrue('setup: row 0 is selected', AccentInBox(Bgra, 16, 24, 10, 10));
       AssertTrue('an expanded node''s expander keeps its ink too',
-        BlackInkInBox(Bgra, 0, 15, 1, 18));
+        InkInBox(Bgra, 0, 15, 1, 18));
     finally
       Bgra.Free;
       Bmp.Free;
@@ -10902,7 +10906,7 @@ begin
     try
       AssertTrue('the main caption is highlighted', AccentInBox(Bgra, 16, 22, 33, 33));
       AssertFalse('the expander is not', AccentInBox(Bgra, 0, 15, 23, 42));
-      AssertTrue('and keeps its own ink', BlackInkInBox(Bgra, 0, 15, 23, 42));
+      AssertTrue('and keeps its own ink', InkInBox(Bgra, 0, 15, 23, 42));   // a chevron at --glyph-chevron-alpha, see above
       AssertFalse('nor column 1', AccentInBox(Bgra, COL1_LEFT, COL2_LEFT - 1, 23, 42));
       AssertFalse('nor column 2', AccentInBox(Bgra, COL2_LEFT, COL2_LEFT + COL2_W - 1, 23, 42));
       AssertTrue('column 1''s text is drawn in its own colour',
@@ -10917,7 +10921,7 @@ begin
     Bgra := RenderColumnTree(Tree, Bmp);
     try
       AssertTrue('a collapsed node''s expander keeps its ink too',
-        BlackInkInBox(Bgra, 0, 15, 23, 42));
+        InkInBox(Bgra, 0, 15, 23, 42));
     finally
       Bgra.Free;
       Bmp.Free;

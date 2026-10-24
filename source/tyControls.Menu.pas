@@ -1511,13 +1511,18 @@ begin
       begin
         { The arrow POINTS the way the cascade opens, so mirroring has to turn the glyph
           round as well as move it -- a left-hand slot with a right-pointing chevron in it is
-          the classic half-mirrored menu, and it points away from where the submenu appears. }
+          the classic half-mirrored menu, and it points away from where the submenu appears.
+          A chevron, as Windows, macOS and GNOME all draw it: this used to be tgArrowRight, a
+          shafted arrow at 2px that carried 2.6x the ink of the platforms' mark, painted
+          straight through the painter so no theme could replace it either. }
         if rtl then
-          P.DrawGlyph(Mir(Types.Rect(RowRect.Right - rightSlot, RowRect.Top, RowRect.Right, RowRect.Bottom), RowRect),
-            tgArrowLeft, RowStyle.TextColor, 2)
+          TyDrawChevron(P, ActiveController,
+            Mir(Types.Rect(RowRect.Right - rightSlot, RowRect.Top, RowRect.Right, RowRect.Bottom), RowRect),
+            tgChevronLeft, RowStyle.TextColor)
         else
-          P.DrawGlyph(Types.Rect(RowRect.Right - rightSlot, RowRect.Top, RowRect.Right, RowRect.Bottom),
-            tgArrowRight, RowStyle.TextColor, 2);
+          TyDrawChevron(P, ActiveController,
+            Types.Rect(RowRect.Right - rightSlot, RowRect.Top, RowRect.Right, RowRect.Bottom),
+            tgChevronRight, RowStyle.TextColor);
       end
       else if FRows[i].ShortcutText <> '' then
         P.DrawText(Mir(Types.Rect(RowRect.Left, RowRect.Top, RowRect.Right - padR, RowRect.Bottom), RowRect),

@@ -5910,7 +5910,10 @@ begin
   Form := TForm.CreateNew(nil);
   host := NewHost(160, 26);
   try
-    Ctl.LoadThemeCss('TyButton { background: #FFFFFF; color: #00FF00; border-width: 0px; padding: 0px; }');
+    { Full chevron ink: this pins WHERE the arrow is, and the channel test reads a mark drawn at
+      --glyph-chevron-alpha's default as too pale to be green. }
+    Ctl.LoadThemeCss(':root { --glyph-chevron-alpha: 255; } ' +
+      'TyButton { background: #FFFFFF; color: #00FF00; border-width: 0px; padding: 0px; }');
     B := TDropBtnAccess.Create(Form);
     B.Parent := Form;
     B.Controller := Ctl;

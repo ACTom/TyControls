@@ -7189,9 +7189,9 @@ begin
       cx := HeaderFunnelCenterX(i);
       cy := bandTop + AHeaderH div 2;
       if ColumnFilterActive(i) then funnelInk := accentInk else funnelInk := ink;
-      TyDrawGlyph(P, ActiveController,
+      TyDrawChevron(P, ActiveController,
         Rect(cx - ScaleI(5), cy - ScaleI(4), cx + ScaleI(5), cy + ScaleI(4)),
-        tgChevronDown, funnelInk, 1, 1);
+        tgChevronDown, funnelInk);
     end;
 
     { 多列排序徽标:第几顺位。做完多列排序不配套它,
@@ -7419,16 +7419,16 @@ end;
 procedure TTyCustomGrid.DrawToggleGlyph(P: TTyPainter; const ARect: TRect;
   ACollapsed: Boolean; AColor: TTyColor);
 begin
-  { pad=1:小槽里 DrawGlyph 默认每边内缩 4 逻辑像素会只剩个糊点。 }
+  { 全库同一个展开标记:大小取 --glyph-chevron-size,槽位只管放在哪。 }
   if not ACollapsed then
-    TyDrawGlyph(P, ActiveController, ARect, tgChevronDown, AColor, 1, 1)
+    TyDrawChevron(P, ActiveController, ARect, tgChevronDown, AColor)
   else if RtlLayout then
     { 令牌显式写出 —— 与 CheckBox/CheckComboBox 的勾选框同一种写法。皮肤要能替换
       这一向,和它能替换其余每一个 glyph 一样;而 tyControls.Base 里那张
       kind→token 派生表还没有收录它,这里就不去赌它收录了没有。 }
-    TyDrawGlyph(P, ActiveController, ARect, '--glyph-chevron-left', tgChevronLeft, AColor, 1, 1)
+    TyDrawChevron(P, ActiveController, ARect, tgChevronLeft, AColor)
   else
-    TyDrawGlyph(P, ActiveController, ARect, tgChevronRight, AColor, 1, 1);
+    TyDrawChevron(P, ActiveController, ARect, tgChevronRight, AColor);
 end;
 
 procedure TTyCustomGrid.SetTreeColumn(AValue: Integer);
@@ -10631,8 +10631,8 @@ begin
   rr := ToReadingRect(r);
   tg := ToScreenRect(Rect(rr.Right - sz - ScaleI(3), (r.Top + r.Bottom - sz) div 2,
              rr.Right - ScaleI(3), (r.Top + r.Bottom + sz) div 2));
-  { pad=1:小槽里 DrawGlyph 默认每边内缩 4 逻辑像素会只剩个糊点。 }
-  TyDrawGlyph(P, ActiveController, tg, tgChevronDown, AFrame.TextColor, 1, 1);
+  { 这是下拉标记:和下拉字段同一个 V(大小、墨色、--glyph-dropdown 覆盖都一样)。 }
+  TyDrawDropChevron(P, ActiveController, tg, AFrame.TextColor);
 end;
 
 procedure TTyStringGrid.RenderColorCell(P: TTyPainter; ACol, ARow: Integer;

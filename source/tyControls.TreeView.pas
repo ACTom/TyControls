@@ -5604,9 +5604,9 @@ begin
                 reaches the tree too. Calling the painter straight bypassed an override
                 this library already supports everywhere else. }
               if nsExpanded in node^.States then
-                TyDrawGlyph(P, ActiveController, btnRect, tgChevronDown, ChromeStyle.TextColor, 1, 2)
+                TyDrawChevron(P, ActiveController, btnRect, tgChevronDown, ChromeStyle.TextColor)
               else
-                TyDrawGlyph(P, ActiveController, btnRect, tgChevronRight, ChromeStyle.TextColor, 1, 2);
+                TyDrawChevron(P, ActiveController, btnRect, tgChevronRight, ChromeStyle.TextColor);
             end;
 
             { B2: Checkbox slot (main column, after expand button, before image) }
@@ -5894,9 +5894,9 @@ begin
             the tree too. Calling the painter straight bypassed an override this library
             already supports everywhere else. }
           if nsExpanded in node^.States then
-            TyDrawGlyph(P, ActiveController, btnRect, tgChevronDown, ChromeStyle.TextColor, 1, 2)
+            TyDrawChevron(P, ActiveController, btnRect, tgChevronDown, ChromeStyle.TextColor)
           else
-            TyDrawGlyph(P, ActiveController, btnRect, tgChevronRight, ChromeStyle.TextColor, 1, 2);
+            TyDrawChevron(P, ActiveController, btnRect, tgChevronRight, ChromeStyle.TextColor);
         end;
 
         { ── B2: Checkbox slot (after expand button, before image) ──────── }

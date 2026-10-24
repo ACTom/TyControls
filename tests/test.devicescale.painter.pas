@@ -50,6 +50,7 @@ type
     procedure DrawShadow(P: TTyPainter; K: Integer);
     procedure DrawGlyphs(P: TTyPainter; K: Integer);
     procedure DrawChevron(P: TTyPainter; K: Integer);
+    procedure DrawChevrons(P: TTyPainter; K: Integer);
     procedure DrawCornerGaps(P: TTyPainter; K: Integer);
     procedure DrawErase(P: TTyPainter; K: Integer);
     procedure DrawDegenerate(P: TTyPainter; K: Integer);
@@ -97,6 +98,7 @@ type
     procedure TestDropShadow;
     procedure TestDrawGlyphKinds;
     procedure TestDrawDropChevron;
+    procedure TestDrawChevron;
     procedure TestFillCornerGaps;
     procedure TestEraseRect;
     procedure TestDegenerateRectsInScope;
@@ -700,6 +702,21 @@ end;
 procedure TDeviceScalePainterTest.TestDrawGlyphKinds;
 begin
   CheckSame('vector glyphs', @DrawGlyphs);
+end;
+
+{ The disclosure chevron rounds its apex onto a DEVICE pixel, so the rounding has to see the
+  same device rect whether the scale came from the PPI or from the raster scope. }
+procedure TDeviceScalePainterTest.DrawChevrons(P: TTyPainter; K: Integer);
+begin
+  P.DrawChevron(Rect(1 * K, 1 * K, 15 * K, 15 * K), tgChevronDown, TyRGBA(20, 20, 20, 255), 7);
+  P.DrawChevron(Rect(16 * K, 2 * K, 28 * K, 16 * K), tgChevronRight, TyRGBA(20, 20, 120, 255), 7);
+  P.DrawChevron(Rect(30 * K, 1 * K, 43 * K, 14 * K), tgChevronLeft, TyRGBA(120, 20, 20, 255), 9);
+  P.DrawChevron(Rect(45 * K, 20 * K, 59 * K, 37 * K), tgChevronUp, TyRGBA(20, 120, 20, 255), 8);
+end;
+
+procedure TDeviceScalePainterTest.TestDrawChevron;
+begin
+  CheckSame('disclosure chevrons', @DrawChevrons);
 end;
 
 procedure TDeviceScalePainterTest.TestDrawDropChevron;

@@ -753,7 +753,8 @@ begin
 end;
 
 { Draw the collapse/expand chevron at the right of the tab strip: an up chevron when the
-  ribbon is expanded (click to collapse), a down chevron when minimized (click to expand). }
+  ribbon is expanded (click to collapse), a down chevron when minimized (click to expand).
+  It was a shafted arrow (tgArrowUp / Down) for want of an upward chevron in the glyph set. }
 procedure TTyRibbon.DrawCollapseButton;
 var
   P: TTyPainter;
@@ -764,11 +765,11 @@ begin
   R := CollapseRectPx;
   if R.Right <= R.Left then Exit;
   S := ActiveController.Model.ResolveStyle('TyTab', '', []);
-  if FMinimized then g := tgArrowDown else g := tgArrowUp;
+  if FMinimized then g := tgChevronDown else g := tgChevronUp;
   P := TTyPainter.Create;
   try
     P.BeginPaint(Canvas, R, Font.PixelsPerInch);
-    P.DrawGlyph(Rect(0, 0, R.Right - R.Left, R.Bottom - R.Top), g, S.TextColor, 1, 9);
+    TyDrawChevron(P, ActiveController, Rect(0, 0, R.Right - R.Left, R.Bottom - R.Top), g, S.TextColor);
     P.EndPaint;
   finally
     P.Free;

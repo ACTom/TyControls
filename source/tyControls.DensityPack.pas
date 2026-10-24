@@ -80,6 +80,7 @@ begin
     '  --gallery-glyph-pad: 6px;' + LineEnding +
     '  --gallery-grid-cell-height: 62px;' + LineEnding +
     '  --glyph-button-gap: 8px;' + LineEnding +
+    '  --glyph-chevron-size: 8px;' + LineEnding +
     '  --grid-comment-mark-size: 9px;' + LineEnding +
     '  --header-control-height: 36px;' + LineEnding +
     '  --header-section-width: 120px;' + LineEnding +

@@ -2065,10 +2065,10 @@ begin
       R.Right - BtnW, R.Bottom - P.Scale(S.Padding.Bottom));
     if not FieldOwnerDraw then
       PaintFieldContent(P, TextR, S);
-    // v3/C5: the dropdown indicator is theme-overridable (--glyph-dropdown); else the built-in chevron.
+    // v3/C5: the dropdown indicator is theme-overridable (--glyph-dropdown, which TyDrawDropChevron
+    // asks for itself); else the built-in fixed-size chevron (not stretched to height).
     if FStyle <> csSimple then
-      if not TyTryDrawGlyphOverride(P, ActiveController, BtnR, '--glyph-dropdown', S.TextColor) then
-        TyDrawDropChevron(P, ActiveController, BtnR, S.TextColor);   // fixed small chevron (not stretched to height)
+      TyDrawDropChevron(P, ActiveController, BtnR, S.TextColor);
     P.EndPaint;
 
     { The host's field pass, on the COMPOSITED canvas. It cannot run above: the painter

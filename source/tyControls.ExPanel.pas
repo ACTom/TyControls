@@ -112,8 +112,13 @@ function TyExPanelHeaderRect(const AClient: TRect; AHeaderHeight: Integer): TRec
 
 { The three points of the expand/collapse chevron triangle, centered in a small square
   zone at the LEFT of AHeaderRect. When AExpanded the triangle points DOWN (body shown);
-  when collapsed it points RIGHT (body hidden). Device pixels. }
+  when collapsed it points RIGHT (body hidden). Device pixels. The panel no longer paints
+  this filled triangle (it draws TyExPanelChevronKind's chevron in the same gutter); the
+  function stays for callers that used it. }
 function TyExPanelChevronPoints(const AHeaderRect: TRect; AExpanded: Boolean): TTyTriangle;
+
+{ The chevron the header draws: down while the body shows, right while it is hidden. }
+function TyExPanelChevronKind(AExpanded: Boolean): TTyGlyphKind;
 
 { Interpolated height at ease parameter t in 0..1, from ACollapsedH toward AExpandedH.
   t=0 -> ACollapsedH, t=1 -> AExpandedH (linear in t; the CALLER passes an eased t). }
@@ -164,6 +169,11 @@ begin
     Result[1] := Point(cx - half, cy + half);
     Result[2] := Point(cx + half, cy);
   end;
+end;
+
+function TyExPanelChevronKind(AExpanded: Boolean): TTyGlyphKind;
+begin
+  if AExpanded then Result := tgChevronDown else Result := tgChevronRight;
 end;
 
 function TyExPanelHeightAt(ACollapsedH, AExpandedH: Integer; t: Single): Integer;
@@ -393,8 +403,6 @@ var
   R, hdr, textRect, bandRect: TRect;
   hdrH, chevW, bw, bwLogical: Integer;
   corners, bandCorners: TTyCorners;
-  tri: TTyTriangle;
-  ctx: TBGRACanvas2D;
 begin
   P := TTyPainter.Create;
   try
@@ -445,18 +453,14 @@ begin
         P.FillBackground(bandRect, HD.Background, bandCorners);
     end;
 
-    // Chevron: a filled triangle in the HEADER's color (caret and caption tint together —
-    // that is how a real collapse header behaves), pointing down when expanded and right
-    // when collapsed. Uses the pure point math so paint == hit geometry.
-    tri := TyExPanelChevronPoints(hdr, not FCollapsed);
-    ctx := P.Bitmap.Canvas2D;
-    ctx.beginPath;
-    ctx.moveTo(tri[0].X + 0.5, tri[0].Y + 0.5);
-    ctx.lineTo(tri[1].X + 0.5, tri[1].Y + 0.5);
-    ctx.lineTo(tri[2].X + 0.5, tri[2].Y + 0.5);
-    ctx.closePath;
-    ctx.fillStyle(TyColorToBGRA(HS.TextColor));
-    ctx.fill;
+    // Chevron in the HEADER's color (caret and caption tint together — that is how a real
+    // collapse header behaves), pointing down when expanded and right when collapsed, in the
+    // band-high gutter the caption starts after. The library's disclosure chevron, not the
+    // filled triangle this used to paint: a solid triangle is the shape the library keeps for
+    // STEPPING a value (spin, scroll), and every desktop now draws an expander as an open
+    // mark. Through TyDrawChevron, so --glyph-chevron-down / -right replace it as well.
+    TyDrawChevron(P, ActiveController, Rect(hdr.Left, hdr.Top, hdr.Left + (hdr.Bottom - hdr.Top),
+      hdr.Bottom), TyExPanelChevronKind(not FCollapsed), HS.TextColor);
 
     // Caption text to the right of the chevron gutter, vertically centered in the band.
     if Caption <> '' then

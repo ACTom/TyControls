@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-`TTyExPanel` 是 TyControls 库中的**可折叠/展开面板容器**，继承自 `TTyPanel`（后者继承自 `TTyCustomControl`）。它在控件顶部绘制一段**标题栏（header band）**：内含一个展开/折叠的三角形箭头（chevron）和 `Caption` 文字；点击标题栏即切换 `Collapsed` 状态。标题栏下方是**主体区（body）**，用于放置用户的子控件。
+`TTyExPanel` 是 TyControls 库中的**可折叠/展开面板容器**，继承自 `TTyPanel`（后者继承自 `TTyCustomControl`）。它在控件顶部绘制一段**标题栏（header band）**：内含一个展开/折叠的 chevron（展开时 V、折叠时 >）和 `Caption` 文字；点击标题栏即切换 `Collapsed` 状态。标题栏下方是**主体区（body）**，用于放置用户的子控件。
 
 - **折叠时**：控件的 `Height` 收缩到只剩标题栏高度；`ExpandedHeight` 记住折叠前的完整高度。
 - **展开时**：`Height` 恢复到 `ExpandedHeight`。
@@ -36,13 +36,13 @@ uses tyControls.ExPanel;
 | 键 | 画什么 | 读哪些属性 |
 |----|--------|-----------|
 | `TyExPanel` | 整个控件的框（`DrawFrame`：背景 + 边框 + 圆角），标题栏与主体共用这一张表面；标题文字的**右内缩**也取它的 `padding.right` | `background` / `border-color` / `border-width` / `border-radius` / `padding` / `color` / `font-*` |
-| `TyExPanelHeader` | 标题栏band 的**墨色与字体**（chevron 三角与 `Caption` 一起上色），以及**可选的**band 底色 | `color` / `font-name` / `font-size` / `font-weight`；`background` 是**opt-in**：声明了才填底（band 会自动从边框内缩、外圆角跟随面板），不声明则完全不填，面板那一张表面原样透出。支持 `:hover`——band 是唯一可点区域，因此悬停只作用于它，而不是整个客户区 |
+| `TyExPanelHeader` | 标题栏band 的**墨色与字体**（chevron 与 `Caption` 一起上色），以及**可选的**band 底色 | `color` / `font-name` / `font-size` / `font-weight`；`background` 是**opt-in**：声明了才填底（band 会自动从边框内缩、外圆角跟随面板），不声明则完全不填，面板那一张表面原样透出。支持 `:hover`——band 是唯一可点区域，因此悬停只作用于它，而不是整个客户区 |
 
 > **早期版本返回 `'TyPanel'`，那份文档还写着"不应为 `TTyExPanel` 新增 `.tycss` 规则；调整外观请修改主题中的 `TyPanel` 规则"——照做会重涂全应用的每一个面板。`TTyExPanel` 之所以存在自己的键，正是为了不必那样做。** 现在：改折叠面板的框写 `TyExPanel { … }`，改标题栏的字色 / band 底 / 悬停写 `TyExPanelHeader { … }`，两者都不会波及普通面板。
 >
 > `TyExPanel` 已作为附加选择器并入主题里 `TyPanel` 的规则块，解析值与从前逐字节相同，**开钩子而不动像素**；第三方主题若只覆盖了 `TyPanel`，需要补上 `TyExPanel`（主题层按 typeKey 全有全无地回落，否则会掉回内置 light 取值）。内置主题只给 `TyExPanelHeader` 声明了 `color`，故意不给 `background` / `font-size` / `font-weight`——band 保持无底色带、字体跟随面板，正是今天的观感。
 >
-> 除这两个键外**没有更细的子部件键**：chevron 三角与 `Caption` 共用 `TyExPanelHeader` 的墨色（真实折叠头就是这么联动的），三角形的顶点是纯几何函数算出来的，不单独可着色。
+> 除这两个键外**没有更细的子部件键**：chevron 与 `Caption` 共用 `TyExPanelHeader` 的墨色（真实折叠头就是这么联动的），不单独可着色。chevron 是全库统一的展开标记：大小取 `--glyph-chevron-size`、墨色再乘 `--glyph-chevron-alpha`，`--glyph-chevron-down` / `--glyph-chevron-right` 可以把它换成图标字体字形（见 [tycss 参考](../tycss-reference.md) 第 16 条）。
 
 ---
 
@@ -83,8 +83,12 @@ uses tyControls.ExPanel;
 function TyExPanelHeaderRect(const AClient: TRect; AHeaderHeight: Integer): TRect;
 
 { 展开/折叠箭头三角形的三个顶点，位于标题栏左侧的一个小方形区域内。
-  AExpanded=True → 向下（主体展开）；False → 向右（主体隐藏）。 }
+  AExpanded=True → 向下（主体展开）；False → 向右（主体隐藏）。
+  面板已不再画这个实心三角（改画下面那个 chevron），函数为兼容保留。 }
 function TyExPanelChevronPoints(const AHeaderRect: TRect; AExpanded: Boolean): TTyTriangle;
+
+{ 标题栏画的 chevron：展开时 tgChevronDown，折叠时 tgChevronRight。 }
+function TyExPanelChevronKind(AExpanded: Boolean): TTyGlyphKind;
 
 { 缓动参数 t（0..1）下的插值高度：t=0 → ACollapsedH，t=1 → AExpandedH。
   在 t 上线性（调用方传入已缓动的 t）。 }
@@ -151,7 +155,7 @@ TyExPanelHeader:hover  { background: var(--selection); color: var(--accent); }
 
 1. **整体框架**：`DrawFrame` 以 `TyExPanel` 样式绘制整个控件的背景 + 边框（标题栏与主体共用同一主题化表面，标题栏即其顶部一段）；
 2. **band 底色（opt-in）**：仅当 `TyExPanelHeader` 声明了 `background` 才填——band 会从边框内缩、上方两角跟随面板圆角，避免二次填充糊掉抗锯齿的角弧；不声明则一笔不画；
-3. **箭头三角形**：用 `TyExPanelHeader` 叠加在面板样式之上后的 `TextColor` 填充（主题两边都没声明时，落回面板的墨色，与从前一致），展开时向下、折叠时向右（顶点由纯函数 `TyExPanelChevronPoints` 计算，与命中测试同源）；
+3. **chevron**：在标题栏左侧、与标题栏等高的方格里画全库统一的展开标记（`TyDrawChevron`），墨色是 `TyExPanelHeader` 叠加在面板样式之上后的 `TextColor`（主题两边都没声明时落回面板的墨色），展开时向下、折叠时向右（`TyExPanelChevronKind`）。以前这里填的是实心三角，那是库里留给“步进”的形状（微调、滚动条）；点击区域一直是整条标题栏，没有变；
 4. **标题文字**：`Caption` 非空时以同一墨色 / 字体绘制在箭头右侧、标题栏内垂直居中（右内缩仍取**面板**的 `padding.right`——band 的盒子就是面板的盒子，标题栏键只管墨色与字体）。
 
 ---
