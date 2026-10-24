@@ -98,6 +98,12 @@ type
     FOvrCacheText: string;
     FOvrCacheVer: Cardinal;
     FOvrCacheValid: Boolean;
+    { #98/#99: what StyleMetric read -- 'name|default' -> px in Objects -- for this override
+      text, model and theme version }
+    FOvrMetrics: TStringList;
+    FOvrMetricText: string;
+    FOvrMetricModel: TObject;
+    FOvrMetricVer: Cardinal;
     procedure SetStyleClass(const AValue: string);
     procedure SetStyleOverride(const AValue: string);
     procedure SetController(AValue: TTyStyleController);
@@ -261,6 +267,13 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function GetVersion: string;
+    { #98/#99. A theme length token, in logical px, as this control reads it: a '--'
+      declaration in its own StyleOverride wins (e.g. '--listview-text-margin: 8px'), then
+      the theme's value, then ADefault. A control that reads its layout tokens through this
+      can be adjusted on its own in CSS, without a property and without touching the
+      theme; see docs/tycss-reference.md 3.4. Without a StyleOverride it is exactly
+      ActiveController.Metric. }
+    function StyleMetric(const AName: string; ADefault: Integer): Integer;
   published
     { Read-only library version (TyVersion); the design-time editor for this property opens
       the About dialog. }
@@ -357,6 +370,12 @@ type
     FOvrCacheText: string;
     FOvrCacheVer: Cardinal;
     FOvrCacheValid: Boolean;
+    { #98/#99: what StyleMetric read -- 'name|default' -> px in Objects -- for this override
+      text, model and theme version }
+    FOvrMetrics: TStringList;
+    FOvrMetricText: string;
+    FOvrMetricModel: TObject;
+    FOvrMetricVer: Cardinal;
     procedure SetStyleClass(const AValue: string);
     procedure SetStyleOverride(const AValue: string);
   protected
@@ -418,6 +437,13 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function GetVersion: string;
+    { #98/#99. A theme length token, in logical px, as this control reads it: a '--'
+      declaration in its own StyleOverride wins (e.g. '--listview-text-margin: 8px'), then
+      the theme's value, then ADefault. A control that reads its layout tokens through this
+      can be adjusted on its own in CSS, without a property and without touching the
+      theme; see docs/tycss-reference.md 3.4. Without a StyleOverride it is exactly
+      ActiveController.Metric. }
+    function StyleMetric(const AName: string; ADefault: Integer): Integer;
   published
     { Read-only library version (TyVersion); the design-time editor for this property opens
       the About dialog. }
@@ -762,6 +788,7 @@ begin
   end
   else
     TyDefaultController.UnregisterStyleable(Self);
+  FreeAndNil(FOvrMetrics);
   inherited Destroy;
 end;
 
@@ -905,6 +932,35 @@ begin
   if FPressed then Include(Result, tysActive);
   if Result = [] then
     Include(Result, tysNormal);
+end;
+
+function TTyGraphicControl.StyleMetric(const AName: string; ADefault: Integer): Integer;
+var
+  model: TTyStyleModel;
+  key: string;
+  idx: Integer;
+  found: Boolean;
+begin
+  if FStyleOverride = '' then
+    Exit(ActiveController.Metric(AName, ADefault));
+  model := ActiveController.Model;
+  { what was read, for this text, under this theme version of this model }
+  if (FOvrMetrics = nil) or (FOvrMetricText <> FStyleOverride)
+     or (FOvrMetricModel <> model) or (FOvrMetricVer <> model.ThemeVersion) then
+  begin
+    if FOvrMetrics = nil then FOvrMetrics := TStringList.Create else FOvrMetrics.Clear;
+    FOvrMetricText := FStyleOverride;
+    FOvrMetricModel := model;
+    FOvrMetricVer := model.ThemeVersion;
+  end;
+  key := AName + '|' + IntToStr(ADefault);
+  idx := FOvrMetrics.IndexOf(key);
+  if idx >= 0 then
+    Exit(Integer(PtrInt(FOvrMetrics.Objects[idx])));
+  Result := model.ResolveOverrideMetric(FStyleOverride, AName, ADefault, found);
+  if not found then
+    Result := ActiveController.Metric(AName, ADefault);
+  FOvrMetrics.AddObject(key, TObject(PtrInt(Result)));
 end;
 
 function TTyGraphicControl.CurrentStyle: TTyStyleSet;
@@ -1858,6 +1914,7 @@ begin
   end
   else
     TyDefaultController.UnregisterStyleable(Self);
+  FreeAndNil(FOvrMetrics);
   inherited Destroy;
 end;
 
@@ -2022,6 +2079,35 @@ begin
   if Focused then Include(Result, tysFocused);
   if Result = [] then
     Include(Result, tysNormal);
+end;
+
+function TTyCustomControl.StyleMetric(const AName: string; ADefault: Integer): Integer;
+var
+  model: TTyStyleModel;
+  key: string;
+  idx: Integer;
+  found: Boolean;
+begin
+  if FStyleOverride = '' then
+    Exit(ActiveController.Metric(AName, ADefault));
+  model := ActiveController.Model;
+  { what was read, for this text, under this theme version of this model }
+  if (FOvrMetrics = nil) or (FOvrMetricText <> FStyleOverride)
+     or (FOvrMetricModel <> model) or (FOvrMetricVer <> model.ThemeVersion) then
+  begin
+    if FOvrMetrics = nil then FOvrMetrics := TStringList.Create else FOvrMetrics.Clear;
+    FOvrMetricText := FStyleOverride;
+    FOvrMetricModel := model;
+    FOvrMetricVer := model.ThemeVersion;
+  end;
+  key := AName + '|' + IntToStr(ADefault);
+  idx := FOvrMetrics.IndexOf(key);
+  if idx >= 0 then
+    Exit(Integer(PtrInt(FOvrMetrics.Objects[idx])));
+  Result := model.ResolveOverrideMetric(FStyleOverride, AName, ADefault, found);
+  if not found then
+    Result := ActiveController.Metric(AName, ADefault);
+  FOvrMetrics.AddObject(key, TObject(PtrInt(Result)));
 end;
 
 function TTyCustomControl.CurrentStyle: TTyStyleSet;
