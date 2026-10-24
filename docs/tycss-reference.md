@@ -204,10 +204,11 @@ typeKey 与文本类控件引用。它们都是普通 `--变量`,可被主题作
 > 这些控件就会和皮肤自己的编辑框一致。这些令牌与上面的 `--accent`、`--on-surface` 一样
 > 在使用处惰性求值,可引用其他变量。
 
-### 3.4 尺寸令牌:整个应用改,还是只改一个控件
+### 3.4 控件读的令牌:整个应用改,还是只改一个控件
 
-`:root` 里还有一批**尺寸令牌**,控件读它们来定内边距、间距和槽位大小,比如
-`--listview-text-margin`、`--treeview-margin`。值可以写 `6px`、`6` 或 `var(--x)`。
+`:root` 里还有一批令牌是给控件读的。大多是**尺寸**,定内边距、间距和槽位大小,比如
+`--listview-text-margin`、`--treeview-margin`,值可以写 `6px`、`6` 或 `var(--x)`;也有取值是
+词或颜色的,比如树线的 `--treeview-lines: classic`、`--treeview-lines-color: #a0a0a0`(§3.5)。
 
 **整个应用**:写在主题里,或写进控制器的 `StyleOverride`:
 
@@ -226,12 +227,50 @@ typeKey 与文本类控件引用。它们都是普通 `--变量`,可被主题作
 
 控件 `StyleOverride` 里的 `--` 声明也是同一块里其他声明的变量,比如
 `--w: 2px; border-width: var(--w);`。值算不出来(写错了单位、引用了没定义的变量)时,
-这一条不起作用,沿用主题的值。
+这一条不起作用,沿用主题的值。取值是词的令牌,值如果只是一个引用(`var(--x)` 或 `--x`),
+读到的是它指向的值;指不到东西时同样沿用主题的值。
 
 目前按控件读令牌的是:`TTyListView`(含 `TTyShellListView`)读的全部尺寸令牌,即
 `--listview-*`、`--row-height` 和 `--scrollbar-size`;`TTyTreeView`(含 `TTyShellTreeView`)的
-`--treeview-margin` 和 `--treeview-icon-gap`。其他控件暂时只认主题里的值。3.0.4 以前的版本会
-忽略控件 `StyleOverride` 里的 `--` 声明,用新版本保存的窗体在旧版本里照样能打开。
+`--treeview-margin`、`--treeview-icon-gap` 和 §3.5 的四个树线令牌。其他控件暂时只认主题里的值。
+3.0.4 以前的版本会忽略控件 `StyleOverride` 里的 `--` 声明,用新版本保存的窗体在旧版本里照样能打开。
+
+### 3.5 树线与展开符号
+
+树线和展开符号怎么画,由下面四个令牌决定。和 §3.4 的令牌一样,可以写在主题里,也可以只写进
+某一棵树的 `StyleOverride`。
+
+| 令牌 | 取值 | 默认 | 含义 |
+|---|---|---|---|
+| `--treeview-lines` | `guides` / `classic` / `none` | `guides` | `guides`:在每个祖先节点的展开符号下面画一条竖线,贯穿它后代的各行;节点自己这一层不画,所以线碰不到展开符号。`classic`:完整连线,包括节点自己那段从上一行下来、再拐向内容的线。`none`:不画。 |
+| `--treeview-lines-style` | `solid` / `dotted` / `dashed` / 一到两个长度 | `solid` | 线型。`dotted` 就是 `1px 1px`,`dashed` 就是 `3px 3px`。写长度时同 SVG 的 `stroke-dasharray`:先实后空,只写一个就是实空等长,比如长虚线写 `6px 3px`。单位是逻辑像素,随 DPI 缩放。 |
+| `--treeview-lines-color` | 颜色 | 树的边框色 | 线的颜色,可以用 `var()` 和颜色函数。 |
+| `--treeview-expander` | `chevron` / `plus-minus` | `chevron` | `plus-minus` 是带方框的 +/-,画在连线交汇的地方,`classic` 连线到框边为止。点击区域和 `chevron` 一样。 |
+
+内置主题里,`classic` 和 `xp` 两个皮肤用 `plus-minus`、`classic`、`dotted`,其余都用默认值。
+
+点线和虚线的图案以树的内容区原点为准,不是每一段线各自从头开始:相邻几行的竖线连成一条,
+拐角处横竖两条线落在同一套图案上,滚动时图案跟着内容走。
+
+属性 `ShowTreeLines` 仍是总开关:设成 `False` 就不画线,令牌怎么写都一样。有没有展开符号
+仍由 `ShowButtons` 决定。
+
+```css
+/* 整个应用都用经典的树 */
+:root {
+  --treeview-expander: plus-minus;
+  --treeview-lines: classic;
+  --treeview-lines-style: dotted;
+}
+```
+
+只让某一棵树不画线,在它的 `StyleOverride` 里写:
+
+```text
+--treeview-lines: none;
+```
+
+3.0.4 以前没有这些令牌,树画的是实线的完整连线加 `chevron`。
 
 ---
 
@@ -425,7 +464,8 @@ border-style: none | solid | outset | inset ;
   `outset` 凸起、`inset` 凹陷。亮/暗两色从 `border-color` **自动派生**(lighten 上左 / darken 下右)。
   斜角天然是**方角**(不套用圆角半径),适合经典风格控件(配 `border-radius: 0`)。
 
-不支持 `dashed`、`dotted`、`groove`、`ridge` 等其它样式。
+不支持 `dashed`、`dotted`、`groove`、`ridge` 等其它样式。树线的点线、虚线另有令牌
+`--treeview-lines-style`,见 §3.5。
 
 ```css
 TyEdit       { border-color: var(--border); border-width: 1px; }
@@ -1296,6 +1336,10 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
     - `--checkbox-size` / `--checkbox-gap` — 复选框指示框边长 / 与标题的间距(默认 16 / 6);
     - `--radio-size` / `--radio-gap` — 单选钮同上(圆点随框尺寸等比缩放);
     - `--groupbox-caption-height` — GroupBox 顶部标题带高度(默认 16)。
+    - `--listview-text-margin` / `--listview-icon-gap` — 列表视图报表行内容的起点 / 图标与文字的
+      间距(默认 4 / 2);
+    - `--treeview-margin` / `--treeview-icon-gap` — 树主列的前导留白 / 文字前的间距(默认 4 / 2)。
+      这两组还可以只给一个控件设,见 §3.4。
     - `--line-height` — **多行**标题的行框高度(logical px)。**没有内置常数**:未设时用字体
       自己的行框,所以加上这个令牌之前一切不动;设了就是 `行数 × 该值`,多出来的部分作为行距
       平分到每行上下。控件由此派生的**高度下限**(文字块高 + 上下 padding)也跟着走——
