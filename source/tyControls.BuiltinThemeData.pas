@@ -2982,6 +2982,10 @@ begin
     '  --caption-button-gap:       4;   /* gap between adjacent buttons */' + LineEnding +
     '  --card-header-height:      24;   /* the card''s caption band, sized like a Win9x caption */' + LineEnding +
     '  --on-titlebar: var(--title-ink);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '  /* #101. The Windows tree of this era: a boxed +/- over dotted connectors. */' + LineEnding +
+    '  --treeview-expander:    plus-minus;' + LineEnding +
+    '  --treeview-lines:       classic;' + LineEnding +
+    '  --treeview-lines-style: dotted;' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* --accent is the brand seed; the runtime accent-picker recolours the skin through it. */' + LineEnding +
@@ -5658,6 +5662,10 @@ begin
     '  --caption-button-margin-y:  6;' + LineEnding +
     '  --caption-button-gap:       3;' + LineEnding +
     '  --on-titlebar: var(--title-ink);   /* ink for controls hosted on the title bar */' + LineEnding +
+    '  /* #101. The Windows tree of this era: a boxed +/- over dotted connectors. */' + LineEnding +
+    '  --treeview-expander:    plus-minus;' + LineEnding +
+    '  --treeview-lines:       classic;' + LineEnding +
+    '  --treeview-lines-style: dotted;' + LineEnding +
     '}' + LineEnding +
     '' + LineEnding +
     '/* Light palette = the authentic XP Luna look. */' + LineEnding +

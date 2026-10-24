@@ -26,6 +26,10 @@
   --caption-button-gap:       4;   /* gap between adjacent buttons */
   --card-header-height:      24;   /* the card's caption band, sized like a Win9x caption */
   --on-titlebar: var(--title-ink);   /* ink for controls hosted on the title bar */
+  /* #101. The Windows tree of this era: a boxed +/- over dotted connectors. */
+  --treeview-expander:    plus-minus;
+  --treeview-lines:       classic;
+  --treeview-lines-style: dotted;
 }
 
 /* --accent is the brand seed; the runtime accent-picker recolours the skin through it. */

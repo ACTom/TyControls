@@ -1435,6 +1435,74 @@ function TyTreeCaptionSlots(ACellLeft, ACellRight, APPI, AIndent, ALevel, AMargi
 
 implementation
 
+uses
+  tyControls.Css.Values;
+
+type
+  { #101. --treeview-lines }
+  TTyTreeLinesKind = (tlkGuides, tlkClassic, tlkNone);
+
+{ #101. --treeview-lines as a kind; anything else is the default, guides. }
+function TyTreeLinesKind(const AText: string): TTyTreeLinesKind;
+begin
+  if SameText(AText, 'classic') then
+    Result := tlkClassic
+  else if SameText(AText, 'none') then
+    Result := tlkNone
+  else
+    Result := tlkGuides;
+end;
+
+{ #101. --treeview-lines-style as a dash and a gap in logical px, both 0 for a solid line:
+  solid, dotted (1px 1px), dashed (3px 3px), or one or two lengths as in SVG's
+  stroke-dasharray -- one length is a gap as long as the dash. Anything else, or a dash or
+  gap under 1 px, is solid. }
+procedure TyTreeLineDash(const AText: string; out AOn, AOff: Integer);
+var
+  s, a, b: string;
+  sp: Integer;
+begin
+  AOn := 0;
+  AOff := 0;
+  s := Trim(StringReplace(AText, ',', ' ', [rfReplaceAll]));
+  if SameText(s, 'dotted') then
+  begin
+    AOn := 1;
+    AOff := 1;
+    Exit;
+  end;
+  if SameText(s, 'dashed') then
+  begin
+    AOn := 3;
+    AOff := 3;
+    Exit;
+  end;
+  if (s = '') or SameText(s, 'solid') then Exit;
+  sp := Pos(' ', s);
+  if sp > 0 then
+  begin
+    a := Trim(Copy(s, 1, sp - 1));
+    b := Trim(Copy(s, sp + 1, MaxInt));
+  end
+  else
+  begin
+    a := s;
+    b := s;
+  end;
+  try
+    AOn := TyEvalLength(a, nil);
+    AOff := TyEvalLength(b, nil);
+  except
+    AOn := 0;
+    AOff := 0;
+  end;
+  if (AOn < 1) or (AOff < 1) then
+  begin
+    AOn := 0;
+    AOff := 0;
+  end;
+end;
+
 { ===========================================================================
   TTyTreeNodeItem —— 一个条目
 
@@ -5181,9 +5249,15 @@ var
   rangeXNew: Integer;
   inset, insetLogical: Integer;
   savedClip, nodeClip: TRect;
-  anc: PTyTreeNode;
-  ancLevel, ancMidX, ancMidY, ancSlotX: Integer;
   measW: Integer;
+  { #101. How the lines and the expanders look, read once for the paint: the kind of line,
+    its dash and gap (0 = solid), its colour, the content origin a dash takes its phase
+    from, and whether an expander is a boxed +/- rather than a chevron. }
+  linesKind: TTyTreeLinesKind;
+  dashOn, dashOff: Integer;
+  linePx: TBGRAPixel;
+  lineOX, lineOY: Integer;
+  plusMinus: Boolean;
   contentLeft: Integer;
   gSz, slotBaseX: Integer;
   { ── C (columns) variables ───────────────────────────────────────────────── }
@@ -5231,6 +5305,145 @@ var
     end;
     if box.Right > box.Left then
       P.FillBackground(box, NodeStyle.Background, 0);
+  end;
+
+  { #101. One tree line, the far end exclusive as DrawRule takes it, solid or dashed. A dash
+    takes its phase from the content origin through x + y, not from where the segment
+    starts: segments in consecutive rows run on as one line, a stub meets its vertical on
+    the same pattern (a dotted line is one checkerboard), and the pattern scrolls with the
+    content. }
+  procedure TreeRule(AX1, AY1, AX2, AY2: Integer);
+  var
+    lo, hi, c, ph, e, period: Integer;
+    vert: Boolean;
+  begin
+    if dashOn <= 0 then
+    begin
+      P.DrawRule(AX1, AY1, AX2, AY2, linePx);
+      Exit;
+    end;
+    vert := AX1 = AX2;
+    { the pixels DrawRule would fill, as [lo, hi) along the line }
+    if vert then
+    begin
+      if AY2 > AY1 then begin lo := AY1; hi := AY2; end
+      else begin lo := AY2 + 1; hi := AY1 + 1; end;
+    end
+    else
+    begin
+      if AX2 > AX1 then begin lo := AX1; hi := AX2; end
+      else begin lo := AX2 + 1; hi := AX1 + 1; end;
+    end;
+    period := dashOn + dashOff;
+    c := lo;
+    while c < hi do
+    begin
+      if vert then
+        ph := (AX1 - lineOX) + (c - lineOY)
+      else
+        ph := (c - lineOX) + (AY1 - lineOY);
+      ph := ph mod period;
+      if ph < 0 then Inc(ph, period);
+      if ph < dashOn then
+      begin
+        e := Math.Min(hi, c + dashOn - ph);
+        if vert then
+          P.DrawRule(AX1, c, AX1, e, linePx)
+        else
+          P.DrawRule(c, AY1, e, AY1, linePx);
+        c := e;
+      end
+      else
+        c := c + period - ph;
+    end;
+  end;
+
+  { #101. The x of the current node's own line: the centre of its expander slot, in a main
+    column whose cell runs from ABase to ARight (TreeLineX mirrors in it). }
+  function OwnLineX(ABase, ARight: Integer): Integer;
+  begin
+    Result := TreeLineX(ABase, ARight,
+                ABase
+                  + P.Scale(MainColumnMargin + (level - 1 + Ord(FShowRoot)) * FIndent + FIndent)
+                  - (slots.ButtonSlotW shr 1));
+  end;
+
+  { #101. Half the boxed +/-: its side is 2 * BoxHalf + 1, odd so that its sign has a
+    centre -- 9 px at 96 dpi, smaller only when a row is too low for it. }
+  function BoxHalf: Integer;
+  begin
+    Result := P.Scale(9) div 2;
+    if Result * 2 + 1 > rowH - 2 then Result := Math.Max(2, (rowH - 3) div 2);
+  end;
+
+  { #101. The tree lines through the current row. guides: a vertical under every ancestor's
+    expander and nothing at the node's own level, so no line meets its expander. classic: an
+    ancestor's vertical only while it has a sibling below, and the node's own elbow through
+    the centre of its expander slot -- the junction a boxed +/- sits on, where the elbow
+    stops at the box's edges. }
+  procedure PaintTreeLines(ABase, ARight: Integer);
+  var
+    a: PTyTreeNode;
+    x, midX, midY, stubEnd, half: Integer;
+  begin
+    if (linesKind = tlkNone) or not FShowTreeLines or (level = 0) then Exit;
+    a := node^.Parent;
+    while (a <> nil) and (a <> FRoot) and (a <> PTyTreeNode(Self)) do
+    begin
+      x := TreeLineX(ABase, ARight,
+             ABase + P.Scale(MainColumnMargin + (GetNodeLevel(a) + Ord(FShowRoot)) * FIndent)
+                   - (slots.ButtonSlotW shr 1));
+      if (linesKind = tlkGuides) or (a^.NextSibling <> nil) then
+        TreeRule(x, rowTop, x, rowTop + rowH);
+      a := a^.Parent;
+    end;
+    if linesKind <> tlkClassic then Exit;
+    midX := OwnLineX(ABase, ARight);
+    midY := rowTop + rowH div 2;
+    stubEnd := TreeLineX(ABase, ARight, ABase + slots.IndentPx);
+    if plusMinus and FShowButtons and (nsHasChildren in node^.States) then
+    begin
+      half := BoxHalf;
+      TreeRule(midX, rowTop, midX, midY - half);
+      if stubEnd > midX + half + 1 then
+        TreeRule(midX + half + 1, midY, stubEnd, midY)
+      else if stubEnd < midX - half - 1 then
+        TreeRule(midX - half - 1, midY, stubEnd, midY);   // mirrored: the stub runs left
+      if node^.NextSibling <> nil then
+        TreeRule(midX, midY + half + 1, midX, rowTop + rowH);
+    end
+    else
+    begin
+      TreeRule(midX, rowTop, midX, midY);
+      TreeRule(midX, midY, stubEnd, midY);
+      if node^.NextSibling <> nil then
+        TreeRule(midX, midY, midX, rowTop + rowH);
+    end;
+  end;
+
+  { #101. The boxed +/- (--treeview-expander: plus-minus), centred on the node's own line,
+    outlined in the line colour, the sign in AInk; inside it is the row's own ground, the
+    elbow stopping at its edges (PaintTreeLines). It sits in the expander slot the hit test
+    answers for, so hitting it is unchanged. }
+  procedure PaintExpanderBox(ABase, ARight: Integer; AInk: TTyColor);
+  var
+    cx, cy, half, inner: Integer;
+    box: TRect;
+    ink: TBGRAPixel;
+  begin
+    cx := OwnLineX(ABase, ARight);
+    cy := rowTop + rowH div 2;
+    half := BoxHalf;
+    box := Rect(cx - half, cy - half, cx + half + 1, cy + half + 1);
+    P.DrawRule(box.Left, box.Top, box.Right, box.Top, linePx);
+    P.DrawRule(box.Left, box.Bottom - 1, box.Right, box.Bottom - 1, linePx);
+    P.DrawRule(box.Left, box.Top, box.Left, box.Bottom, linePx);
+    P.DrawRule(box.Right - 1, box.Top, box.Right - 1, box.Bottom, linePx);
+    inner := Math.Max(2, P.Scale(2));
+    ink := TyColorToBGRA(AInk);
+    P.DrawRule(box.Left + inner, cy, box.Right - inner, cy, ink);
+    if not (nsExpanded in node^.States) then
+      P.DrawRule(cx, box.Top + inner, cx, box.Bottom - inner, ink);
   end;
 
 var
@@ -5554,6 +5767,19 @@ begin
     if hasHeader and (nodeClip.Top < CR.Top) then nodeClip.Top := CR.Top;
     P.Bitmap.ClipRect := P.Dev(nodeClip);
 
+    { #101. How the lines and the expanders look: the theme's choice, or this tree's own
+      (StyleToken / StyleColor), read once for the paint. }
+    linesKind := TyTreeLinesKind(StyleToken('--treeview-lines', 'guides'));
+    TyTreeLineDash(StyleToken('--treeview-lines-style', 'solid'), dashOn, dashOff);
+    if dashOn > 0 then
+    begin
+      dashOn := Math.Max(1, P.Scale(dashOn));
+      dashOff := Math.Max(1, P.Scale(dashOff));
+    end;
+    linePx := TyColorToBGRA(StyleColor('--treeview-lines-color', S.BorderColor));
+    plusMinus := SameText(StyleToken('--treeview-expander', 'chevron'), 'plus-minus');
+    lineOX := contentLeft;
+
     { ── First on-screen node ─────────────────────────────────────────────── }
     firstNodeY := -FOffsetY;
     if firstNodeY < 0 then firstNodeY := 0;
@@ -5578,6 +5804,7 @@ begin
       remainder (firstNodeY - firstTop) must be scaled to device pixels before
       subtracting from the device-pixel CR.Top. }
     rowTop := CR.Top - P.Scale(firstNodeY - firstTop);
+    lineOY := rowTop - P.Scale(firstTop);   // #101: where content y 0 is, for a dash's phase
 
     rangeXNew := FRangeX;
 
@@ -5702,37 +5929,12 @@ begin
             slots := NodeCaptionSlots(node, mainColBase, colCellRight, APPI, True);
 
             { Tree lines (anchored at mainColBase) }
-            if FShowTreeLines and (level > 0) then
-            begin
-              anc := node^.Parent;
-              while (anc <> nil) and (anc <> FRoot) and (anc <> PTyTreeNode(Self)) do
-              begin
-                ancLevel := GetNodeLevel(anc);
-                ancSlotX := TreeLineX(mainColBase, colCellRight,
-                              mainColBase + P.Scale(MainColumnMargin + (ancLevel + Ord(FShowRoot)) * FIndent)
-                                          - (slots.ButtonSlotW shr 1));
-                if anc^.NextSibling <> nil then
-                  P.DrawRule(ancSlotX, rowTop, ancSlotX, rowTop + rowH,
-                    TyColorToBGRA(S.BorderColor));
-                anc := anc^.Parent;
-              end;
-              ancMidX := TreeLineX(mainColBase, colCellRight,
-                           mainColBase
-                             + P.Scale(MainColumnMargin + (level - 1 + Ord(FShowRoot)) * FIndent + FIndent)
-                             - (slots.ButtonSlotW shr 1));
-              ancMidY := rowTop + rowH div 2;
-              P.DrawRule(ancMidX, rowTop,    ancMidX, ancMidY,
-                TyColorToBGRA(S.BorderColor));
-              P.DrawRule(ancMidX, ancMidY,
-                TreeLineX(mainColBase, colCellRight, mainColBase + slots.IndentPx), ancMidY,
-                TyColorToBGRA(S.BorderColor));
-              if node^.NextSibling <> nil then
-                P.DrawRule(ancMidX, ancMidY, ancMidX, rowTop + rowH,
-                  TyColorToBGRA(S.BorderColor));
-            end;
+            PaintTreeLines(mainColBase, colCellRight);
 
             { Expand button (anchored at mainColBase) }
-            if FShowButtons and (nsHasChildren in node^.States) then
+            if FShowButtons and (nsHasChildren in node^.States) and plusMinus then
+              PaintExpanderBox(mainColBase, colCellRight, ChromeStyle.TextColor)
+            else if FShowButtons and (nsHasChildren in node^.States) then
             begin
               gSz := slots.ButtonSlotW;
               if rowH < gSz then gSz := rowH;
@@ -5984,42 +6186,13 @@ begin
           Inc(pendingAfterCount);
         end;
 
-        { ── Tree lines (simplified: guide + elbow) ──────────────────────────── }
-        if FShowTreeLines and (level > 0) then
-        begin
-          { Draw a vertical guide in each ancestor's column if that ancestor has
-            a NextSibling (i.e. the guide continues past this row). }
-          anc := node^.Parent;
-          while (anc <> nil) and (anc <> FRoot) and (anc <> PTyTreeNode(Self)) do
-          begin
-            ancLevel := GetNodeLevel(anc);
-            ancSlotX := TreeLineX(contentLeft, CR.Right,
-                          contentLeft + P.Scale(MainColumnMargin + (ancLevel + Ord(FShowRoot)) * FIndent)
-                                      - (slots.ButtonSlotW shr 1));
-            if anc^.NextSibling <> nil then
-              P.DrawRule(ancSlotX, rowTop, ancSlotX, rowTop + rowH,
-                TyColorToBGRA(S.BorderColor));
-            anc := anc^.Parent;
-          end;
-
-          { Elbow at this node's level: vertical half + horizontal stub. }
-          ancMidX := TreeLineX(contentLeft, CR.Right,
-                       contentLeft
-                         + P.Scale(MainColumnMargin + (level - 1 + Ord(FShowRoot)) * FIndent + FIndent)
-                         - (slots.ButtonSlotW shr 1));
-          ancMidY := rowTop + rowH div 2;
-          P.DrawRule(ancMidX, rowTop,    ancMidX, ancMidY,
-            TyColorToBGRA(S.BorderColor));
-          P.DrawRule(ancMidX, ancMidY,
-            TreeLineX(contentLeft, CR.Right, contentLeft + slots.IndentPx), ancMidY,
-            TyColorToBGRA(S.BorderColor));
-          if node^.NextSibling <> nil then
-            P.DrawRule(ancMidX, ancMidY, ancMidX, rowTop + rowH,
-              TyColorToBGRA(S.BorderColor));
-        end;
+        { ── Tree lines ───────────────────────────────────────────────────────── }
+        PaintTreeLines(contentLeft, CR.Right);
 
         { ── Expand button ────────────────────────────────────────────────── }
-        if FShowButtons and (nsHasChildren in node^.States) then
+        if FShowButtons and (nsHasChildren in node^.States) and plusMinus then
+          PaintExpanderBox(contentLeft, CR.Right, ChromeStyle.TextColor)
+        else if FShowButtons and (nsHasChildren in node^.States) then
         begin
           { The button occupies the slot just before indentPx. Use a CENTRED
             SQUARE filling the slot (side = min(slot, rowH)) so the chevron is

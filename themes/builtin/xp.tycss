@@ -15,6 +15,10 @@
   --caption-button-margin-y:  6;
   --caption-button-gap:       3;
   --on-titlebar: var(--title-ink);   /* ink for controls hosted on the title bar */
+  /* #101. The Windows tree of this era: a boxed +/- over dotted connectors. */
+  --treeview-expander:    plus-minus;
+  --treeview-lines:       classic;
+  --treeview-lines-style: dotted;
 }
 
 /* Light palette = the authentic XP Luna look. */
