@@ -274,6 +274,15 @@ type
       theme; see docs/tycss-reference.md 3.4. Without a StyleOverride it is exactly
       ActiveController.Metric. }
     function StyleMetric(const AName: string; ADefault: Integer): Integer;
+    { #101. A theme token's TEXT as this control reads it, for a token chosen by a word or a
+      list ('--treeview-lines: classic', '--treeview-lines-style: 6px 3px'): a '--'
+      declaration in its own StyleOverride wins, then the theme's value, then ADefault. A
+      value that is nothing but a reference -- var(--x) or a bare --x -- is followed; one that
+      leads nowhere is no answer. Not memoised: read it once per paint, not once per row. }
+    function StyleToken(const AName: string; const ADefault: string = ''): string;
+    { #101. A colour token as this control reads it, the same way round; a value that is not
+      a colour is no answer. }
+    function StyleColor(const AName: string; ADefault: TTyColor): TTyColor;
   published
     { Read-only library version (TyVersion); the design-time editor for this property opens
       the About dialog. }
@@ -444,6 +453,15 @@ type
       theme; see docs/tycss-reference.md 3.4. Without a StyleOverride it is exactly
       ActiveController.Metric. }
     function StyleMetric(const AName: string; ADefault: Integer): Integer;
+    { #101. A theme token's TEXT as this control reads it, for a token chosen by a word or a
+      list ('--treeview-lines: classic', '--treeview-lines-style: 6px 3px'): a '--'
+      declaration in its own StyleOverride wins, then the theme's value, then ADefault. A
+      value that is nothing but a reference -- var(--x) or a bare --x -- is followed; one that
+      leads nowhere is no answer. Not memoised: read it once per paint, not once per row. }
+    function StyleToken(const AName: string; const ADefault: string = ''): string;
+    { #101. A colour token as this control reads it, the same way round; a value that is not
+      a colour is no answer. }
+    function StyleColor(const AName: string; ADefault: TTyColor): TTyColor;
   published
     { Read-only library version (TyVersion); the design-time editor for this property opens
       the About dialog. }
@@ -944,6 +962,32 @@ begin
   if FPressed then Include(Result, tysActive);
   if Result = [] then
     Include(Result, tysNormal);
+end;
+
+function TTyGraphicControl.StyleToken(const AName: string; const ADefault: string): string;
+var
+  found: Boolean;
+begin
+  found := False;
+  Result := '';
+  if FStyleOverride <> '' then
+    Result := ActiveController.Model.ResolveOverrideToken(FStyleOverride, AName, found);
+  if not found then
+    Result := ActiveController.Model.ResolveToken(AName);
+  if Result = '' then
+    Result := ADefault;
+end;
+
+function TTyGraphicControl.StyleColor(const AName: string; ADefault: TTyColor): TTyColor;
+var
+  found: Boolean;
+begin
+  found := False;
+  Result := ADefault;
+  if FStyleOverride <> '' then
+    Result := ActiveController.Model.ResolveOverrideColor(FStyleOverride, AName, ADefault, found);
+  if not found then
+    Result := ActiveController.Model.ResolveColorToken(AName, ADefault);
 end;
 
 function TTyGraphicControl.StyleMetric(const AName: string; ADefault: Integer): Integer;
@@ -2121,6 +2165,32 @@ begin
   if Focused then Include(Result, tysFocused);
   if Result = [] then
     Include(Result, tysNormal);
+end;
+
+function TTyCustomControl.StyleToken(const AName: string; const ADefault: string): string;
+var
+  found: Boolean;
+begin
+  found := False;
+  Result := '';
+  if FStyleOverride <> '' then
+    Result := ActiveController.Model.ResolveOverrideToken(FStyleOverride, AName, found);
+  if not found then
+    Result := ActiveController.Model.ResolveToken(AName);
+  if Result = '' then
+    Result := ADefault;
+end;
+
+function TTyCustomControl.StyleColor(const AName: string; ADefault: TTyColor): TTyColor;
+var
+  found: Boolean;
+begin
+  found := False;
+  Result := ADefault;
+  if FStyleOverride <> '' then
+    Result := ActiveController.Model.ResolveOverrideColor(FStyleOverride, AName, ADefault, found);
+  if not found then
+    Result := ActiveController.Model.ResolveColorToken(AName, ADefault);
 end;
 
 function TTyCustomControl.StyleMetric(const AName: string; ADefault: Integer): Integer;
