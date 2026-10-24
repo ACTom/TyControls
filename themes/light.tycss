@@ -198,6 +198,7 @@
   --listview-check-size: 14px;
   --listview-group-header-height: 22px;
   --listview-hgap: 10px;
+  --listview-icon-gap: 2px;
   --listview-icon-label-width: 88px;
   --listview-label-height: 16px;
   --listview-large-icon-size: 48px;

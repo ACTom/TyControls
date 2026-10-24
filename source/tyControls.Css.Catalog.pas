@@ -5,7 +5,7 @@ unit tyControls.Css.Catalog;
   Change the theme and re-run the script. test.css.catalog guards the two against drift.
 
   The machine-readable tycss vocabulary for the design-time StyleOverride editor:
-    - TyCatalogTokens   : the --custom-property names a theme defines (188 of them).
+    - TyCatalogTokens   : the --custom-property names a theme defines (191 of them).
                           OPEN axis -- a theme may invent more, so the editor SUGGESTS these but
                           must not reject an unknown one.
     - TyCatalogTypeKeys : the control selector heads (197 of them), for the
@@ -18,7 +18,7 @@ unit tyControls.Css.Catalog;
 interface
 
 const
-  TyCatalogTokens: array[0..187] of string = (
+  TyCatalogTokens: array[0..190] of string = (
     '--accent',
     '--accent-active',
     '--accent-hover',
@@ -79,6 +79,7 @@ const
     '--gallery-glyph-pad',
     '--gallery-grid-cell-height',
     '--glyph-button-gap',
+    '--grid-bg',
     '--grid-comment-mark-size',
     '--header-control-height',
     '--header-height',
@@ -86,6 +87,7 @@ const
     '--icon-size',
     '--info',
     '--input-bg',
+    '--input-border',
     '--input-border-hover',
     '--input-border-width',
     '--item-height',
@@ -100,6 +102,7 @@ const
     '--listview-check-size',
     '--listview-group-header-height',
     '--listview-hgap',
+    '--listview-icon-gap',
     '--listview-icon-label-width',
     '--listview-label-height',
     '--listview-large-icon-size',
