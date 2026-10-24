@@ -18,7 +18,7 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, Controls, ImgList, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Controller, tyControls.TreeView;
+  tyControls.Types, tyControls.Controller, tyControls.Columns, tyControls.TreeView;
 
 type
   TTvInsetAccess = class(TTyTreeView)
@@ -41,6 +41,10 @@ type
     { the leftmost pixel on row ARow, one pixel below its top, that is not the background:
       with root lines on, the elbow line of a child row }
     function LineX(ABmp: TBGRABitmap; ARow: Integer): Integer;
+    { every x left of AMaxX on row ARow, one pixel below its top, that is drawn and is not the
+      red icon: the tree lines crossing that row -- the ancestors' and the node's own elbow }
+    function LineXs(ABmp: TBGRABitmap; ARow, AMaxX: Integer): TIntegerDynArray;
+    procedure CheckLinesMove(AColumns: Boolean);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -50,8 +54,11 @@ type
     procedure TestTheThemeSetsTheMargin;
     procedure TestTheGapSitsInFrontOfTheCaption;
     procedure TestTheExpanderAndTheLinesMoveWithIt;
+    procedure TestTheLinesMoveInAColumnTreeToo;
+    procedure TestTheWidthCountsTheMarginAndTheGap;
     procedure TestRightToLeftMirrorsIt;
     procedure TestTreeAndListMarginsAgreeAtBothDensities;
+    procedure TestTheOldSignatureKeepsItsGeometry;
   end;
 
 implementation
@@ -204,6 +211,70 @@ begin
   Result := -1;
 end;
 
+function TTreeViewInsetTest.LineXs(ABmp: TBGRABitmap; ARow, AMaxX: Integer): TIntegerDynArray;
+var
+  x, y, n: Integer;
+  bg, p: TBGRAPixel;
+begin
+  Result := nil;
+  n := 0;
+  y := RowY(ARow) - 3;
+  bg := ABmp.GetPixel(ABmp.Width - 3, y);
+  for x := 0 to AMaxX - 1 do
+  begin
+    p := ABmp.GetPixel(x, y);
+    if (p.red > 200) and (p.green < 60) then Continue;   { the icon }
+    if (Abs(p.red - bg.red) > 24) or (Abs(p.green - bg.green) > 24) or (Abs(p.blue - bg.blue) > 24) then
+    begin
+      Inc(n);
+      SetLength(Result, n);
+      Result[n - 1] := x;
+    end;
+  end;
+end;
+
+procedure TTreeViewInsetTest.CheckLinesMove(AColumns: Boolean);
+var
+  btn0, img0, i: Integer;
+  lines0, lines: TIntegerDynArray;
+  bmp: TBGRABitmap;
+  c: TTyColumn;
+begin
+  if AColumns then
+  begin
+    c := FTree.Header.Columns.Add as TTyColumn;
+    c.Text := 'Name';
+    c.Width := 250;
+  end;
+  FTree.ShowRoot := True;
+  FTree.ShowTreeLines := True;
+  FTree.FullExpand;
+  FTree.StyleOverride := '--treeview-margin: 0px';
+  btn0 := FirstX(hpButton, 0);
+  img0 := FirstX(hpImage, 1);
+  bmp := Render;
+  try
+    lines0 := LineXs(bmp, 1, img0);
+  finally
+    bmp.Free;
+  end;
+  { Alpha has a sibling below it, so its line runs down through its child's row; the child's
+    own elbow is the other }
+  AssertTrue('precondition: the ancestor''s line and the elbow cross the child''s row',
+    Length(lines0) >= 2);
+  FTree.StyleOverride := '--treeview-margin: 10px';
+  AssertEquals('the expander', btn0 + 10, FirstX(hpButton, 0));
+  bmp := Render;
+  try
+    lines := LineXs(bmp, 1, img0 + 10);
+  finally
+    bmp.Free;
+  end;
+  AssertEquals('as many line pixels', Length(lines0), Length(lines));
+  for i := 0 to High(lines0) do
+    AssertEquals('every tree line on the child''s row moves with the margin', lines0[i] + 10, lines[i]);
+end;
+
 procedure TTreeViewInsetTest.TestLevelZeroHasTheMargin;
 var
   img0, lbl0: Integer;
@@ -275,29 +346,30 @@ begin
 end;
 
 procedure TTreeViewInsetTest.TestTheExpanderAndTheLinesMoveWithIt;
-var
-  btn0, line0: Integer;
-  bmp: TBGRABitmap;
 begin
-  FTree.ShowRoot := True;
-  FTree.ShowTreeLines := True;
-  FTree.FullExpand;
+  CheckLinesMove(False);
+end;
+
+procedure TTreeViewInsetTest.TestTheLinesMoveInAColumnTreeToo;
+begin
+  { a tree with columns paints its rows through the other path }
+  CheckLinesMove(True);
+end;
+
+procedure TTreeViewInsetTest.TestTheWidthCountsTheMarginAndTheGap;
+var
+  r0: Integer;
+begin
   FTree.StyleOverride := '--treeview-margin: 0px';
-  btn0 := FirstX(hpButton, 0);
-  bmp := Render;
-  try
-    line0 := LineX(bmp, 1);
-  finally
-    bmp.Free;
-  end;
+  Render.Free;
+  r0 := FTree.RangeX;
+  AssertTrue('precondition: the paint measured the rows', r0 > 0);
   FTree.StyleOverride := '--treeview-margin: 10px';
-  AssertEquals('the expander', btn0 + 10, FirstX(hpButton, 0));
-  bmp := Render;
-  try
-    AssertEquals('the child''s tree line', line0 + 10, LineX(bmp, 1));
-  finally
-    bmp.Free;
-  end;
+  Render.Free;
+  AssertEquals('the scroll width counts the margin', r0 + 10, FTree.RangeX);
+  FTree.StyleOverride := '--treeview-margin: 10px; --treeview-icon-gap: 8px';
+  Render.Free;
+  AssertEquals('and the extra gap', r0 + 10 + 6, FTree.RangeX);
 end;
 
 procedure TTreeViewInsetTest.TestRightToLeftMirrorsIt;
@@ -319,6 +391,21 @@ begin
   AssertEquals('modern: so it is with the density pack too',
     FCtl.Metric('--listview-text-margin', 0), FTree.StyleMetric('--treeview-margin', -1));
   AssertTrue('precondition: the pack changes it', FTree.StyleMetric('--treeview-margin', -1) <> 4);
+end;
+
+procedure TTreeViewInsetTest.TestTheOldSignatureKeepsItsGeometry;
+var
+  s: TTyTreeCaptionSlots;
+begin
+  { a caller of the public helper from before #99 gets what it always got: no inset, the
+    2 px pad and no extra gap }
+  s := TyTreeCaptionSlots(10, 210, 96, 16, 0, False, True, True, True, False);
+  AssertEquals('the check box at the cell''s edge', 10, s.CheckX);
+  AssertEquals('then the image', 10 + 16, s.ImageX);
+  AssertEquals('then the caption', 10 + 16 + 16, s.CaptionX);
+  AssertEquals('with no extra gap', 0, s.GapW);
+  s := TyTreeCaptionSlots(10, 210, 96, 16, 1, True, False, True, True, False);
+  AssertEquals('a level-1 node with root lines: two indent steps', 10 + 32, s.ImageX);
 end;
 
 initialization
