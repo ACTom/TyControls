@@ -39,6 +39,8 @@ type
     function RowIconLeft: Integer;
     { where the first row's caption starts: the inline editor's left edge }
     function CaptionLeft: Integer;
+    { the leftmost dark (caption) pixel on the first row, right of its icon }
+    function CaptionInkLeft: Integer;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -46,6 +48,7 @@ type
     procedure TestRowIconLinesUpWithTheHeaderIcon;
     procedure TestRowIconFollowsTheTextMargin;
     procedure TestCaptionFollowsTheIconGap;
+    procedure TestThePaintedCaptionFollowsTheGapToo;
     procedure TestAutoFitCountsTheGap;
     procedure TestTheThemeSetsItForEveryList;
   end;
@@ -191,6 +194,59 @@ begin
   AssertTrue('precondition: the inline editor opened', FLV.Editing);
   Result := FLV.XEditor.Left;
   FLV.EndEdit(False);
+end;
+
+function TListViewInsetTest.CaptionInkLeft: Integer;
+var
+  bmp: TBitmap;
+  bg: TBGRABitmap;
+  x, y, top, from: Integer;
+  p: TBGRAPixel;
+begin
+  from := RowIconLeft + ICON;
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(FLV.Width, FLV.Height);
+    bmp.Canvas.Brush.Color := clWhite;
+    bmp.Canvas.FillRect(0, 0, bmp.Width, bmp.Height);
+    FLV.XRender(bmp);
+    bg := TBGRABitmap.Create(bmp);
+  finally
+    bmp.Free;
+  end;
+  try
+    { the first row's band: from the row icon's top down 16 px }
+    top := -1;
+    for y := 0 to bg.Height - 1 do
+      if (bg.GetPixel(RowIconLeft, y).red > 200) and (bg.GetPixel(RowIconLeft, y).green < 60)
+         and (y > 0) and not ((bg.GetPixel(RowIconLeft, y - 1).red > 200)
+                              and (bg.GetPixel(RowIconLeft, y - 1).green < 60)) then
+      begin
+        if top < 0 then top := y   { the header icon }
+        else begin top := y; Break; end;
+      end;
+    for x := from to bg.Width - 1 do
+      for y := top to top + ICON - 1 do
+      begin
+        p := bg.GetPixel(x, y);
+        if (p.red < 110) and (p.green < 110) and (p.blue < 110) then Exit(x);
+      end;
+  finally
+    bg.Free;
+  end;
+  Fail('precondition: the first row''s caption is drawn');
+  Result := -1;
+end;
+
+procedure TListViewInsetTest.TestThePaintedCaptionFollowsTheGapToo;
+var
+  ink: Integer;
+begin
+  ink := CaptionInkLeft;
+  FLV.StyleOverride := '--listview-icon-gap: 9px';
+  AssertEquals('the painted caption moves with the gap, as the editor does', ink + 7,
+    CaptionInkLeft);
 end;
 
 procedure TListViewInsetTest.TestRowIconLinesUpWithTheHeaderIcon;
