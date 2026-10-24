@@ -4513,7 +4513,9 @@ begin
           gr.Top := gr.Top + (gr.Bottom - gr.Top - glyphPx) div 2;
           gr.Bottom := gr.Top + glyphPx;
         end;
-        TyDrawGlyph(P, ActiveController, gr, tgChevronDown, ink, 1);
+        { 溢出按钮打开一个列表:用全库统一的下拉标记(和下拉字段同一个 V,--glyph-chevron-size
+          定大小),不是撑满字形框的 V。 }
+        TyDrawChevron(P, ActiveController, gr, tgChevronDown, ink);
       end;
     end;
 
@@ -5110,7 +5112,12 @@ var
     { 字形框、线宽 1、默认内距都同图标条的溢出按钮(RenderTo):两处是同一族按钮,
       没有单独的 token。 }
     if glyphPx > 0 then
-      TyDrawGlyph(APainter, ActiveController, GlyphBox(cell), AGlyph, bs.TextColor, 1);
+      if AGlyph = tgChevronDown then
+        { 溢出按钮打开一个列表:用全库统一的下拉标记(和图标条的溢出按钮、下拉字段同一个 V),
+          不是撑满字形框的 V。 }
+        TyDrawChevron(APainter, ActiveController, GlyphBox(cell), tgChevronDown, bs.TextColor)
+      else
+        TyDrawGlyph(APainter, ActiveController, GlyphBox(cell), AGlyph, bs.TextColor, 1);
   end;
 
 begin
