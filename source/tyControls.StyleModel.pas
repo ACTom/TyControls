@@ -179,6 +179,21 @@ type
       ThemeVersion. }
     function ResolveOverrideMetric(const ASource, AName: string; ADefault: Integer;
       out AFound: Boolean): Integer;
+    { #101. A token's TEXT as a control's own StyleOverride sets it: the block's '--'
+      declarations laid over the merged vars, and a value that is nothing but a reference
+      (var(--x), --x) followed through them. AFound is False when the block does not declare
+      AName or its value leads nowhere: the caller then asks the theme (ResolveToken). }
+    function ResolveOverrideToken(const ASource, AName: string; out AFound: Boolean): string;
+    { #101. A colour token as a control's own StyleOverride sets it, evaluated against the
+      block's vars over the theme's. AFound is False when the block does not declare it or it
+      is not a colour. }
+    function ResolveOverrideColor(const ASource, AName: string; ADefault: TTyColor;
+      out AFound: Boolean): TTyColor;
+    { #101. A token's text in the theme, a value that is only a reference followed; '' when
+      it is unset or leads nowhere. }
+    function ResolveToken(const AName: string): string;
+    { #101. A colour token in the theme, evaluated; ADefault when unset or not a colour. }
+    function ResolveColorToken(const AName: string; ADefault: TTyColor): TTyColor;
     function MaxGlassBlur: Integer;   // largest glass-blur any active rule requests (0 = none)
     { P3 (D7) single-file dual-mode. Select which loaded '@mode NAME' (its inner :root)
       block's vars overlay the user :root in the merged var set. SetMode re-runs the merge
@@ -2289,6 +2304,113 @@ begin
   end;
 end;
 
+{ #101. A value that is nothing but a reference -- var(--x) or a bare --x -- is the value it
+  names in AVars, followed as far as it goes; '' when one names nothing or the chain runs in a
+  circle. Any other value comes back as written, trimmed: 'var(--x) 2px' is a list, not a
+  reference. }
+function TyFollowVarRef(const AValue: string; AVars: TStrings): string;
+var
+  step: Integer;
+  key: string;
+begin
+  Result := Trim(AValue);
+  for step := 0 to 16 do
+  begin
+    if (Length(Result) > 5) and SameText(Copy(Result, 1, 4), 'var(')
+       and (Result[Length(Result)] = ')') then
+      key := Trim(Copy(Result, 5, Length(Result) - 5))
+    else if Copy(Result, 1, 2) = '--' then
+      key := Result
+    else
+      Exit;
+    if (Pos(' ', key) > 0) or (Pos('(', key) > 0) or (Pos(')', key) > 0) then
+      Exit;   // not one reference but an expression or a list
+    if step = 16 then Exit('');
+    key := TyNormVarName(key);
+    if (AVars = nil) or (AVars.IndexOfName(key) < 0) then Exit('');
+    Result := Trim(AVars.Values[key]);
+  end;
+end;
+
+{ #98/#99/#101. Whether an override block declares the custom property AWant (a name
+  without its '--'). Only a token the block declares is the block's answer. }
+function TyDeclaresVar(const ADecls: TTyCssDeclarationArray; const AWant: string): Boolean;
+var
+  i: Integer;
+begin
+  for i := 0 to High(ADecls) do
+    if (Copy(Trim(ADecls[i].Prop), 1, 2) = '--')
+       and SameText(TyNormVarName(ADecls[i].Prop), AWant) then
+      Exit(True);
+  Result := False;
+end;
+
+function TTyStyleModel.ResolveOverrideToken(const ASource, AName: string;
+  out AFound: Boolean): string;
+var
+  decls: TTyCssDeclarationArray;
+  vars: TStringList;
+  want: string;
+begin
+  Result := '';
+  AFound := False;
+  if (Trim(ASource) = '') or not TyParseOverride(ASource, decls) then Exit;
+  want := TyNormVarName(AName);
+  if not TyDeclaresVar(decls, want) then Exit;
+  vars := OverrideVarsOver(decls);
+  try
+    Result := TyFollowVarRef(vars.Values[want], vars);
+    AFound := Result <> '';
+  finally
+    vars.Free;
+  end;
+end;
+
+function TTyStyleModel.ResolveOverrideColor(const ASource, AName: string; ADefault: TTyColor;
+  out AFound: Boolean): TTyColor;
+var
+  decls: TTyCssDeclarationArray;
+  vars: TStringList;
+  want, v: string;
+begin
+  Result := ADefault;
+  AFound := False;
+  if (Trim(ASource) = '') or not TyParseOverride(ASource, decls) then Exit;
+  want := TyNormVarName(AName);
+  if not TyDeclaresVar(decls, want) then Exit;
+  vars := OverrideVarsOver(decls);
+  try
+    v := Trim(vars.Values[want]);
+    if v = '' then Exit;
+    try
+      Result := TyEvalColor(v, vars);
+      AFound := True;
+    except
+      Result := ADefault;   // not a colour: the theme answers instead
+    end;
+  finally
+    vars.Free;
+  end;
+end;
+
+function TTyStyleModel.ResolveToken(const AName: string): string;
+begin
+  Result := TyFollowVarRef(FMergedVars.Values[TyNormVarName(AName)], FMergedVars);
+end;
+
+function TTyStyleModel.ResolveColorToken(const AName: string; ADefault: TTyColor): TTyColor;
+var
+  v: string;
+begin
+  v := Trim(FMergedVars.Values[TyNormVarName(AName)]);
+  if v = '' then Exit(ADefault);
+  try
+    Result := TyEvalColor(v, FMergedVars);
+  except
+    Result := ADefault;
+  end;
+end;
+
 function TTyStyleModel.OverrideVarsOver(const ADecls: TTyCssDeclarationArray): TStringList;
 var
   i: Integer;
@@ -2313,21 +2435,14 @@ function TTyStyleModel.ResolveOverrideMetric(const ASource, AName: string; ADefa
 var
   decls: TTyCssDeclarationArray;
   vars: TStringList;
-  i: Integer;
   want, v: string;
-  declared: Boolean;
 begin
   Result := ADefault;
   AFound := False;
   if (Trim(ASource) = '') or not TyParseOverride(ASource, decls) then Exit;
   { only a token the BLOCK declares is the block's answer; a theme-only name is the theme's }
   want := TyNormVarName(AName);
-  declared := False;
-  for i := 0 to High(decls) do
-    if (Copy(Trim(decls[i].Prop), 1, 2) = '--')
-       and SameText(TyNormVarName(decls[i].Prop), want) then
-      declared := True;
-  if not declared then Exit;
+  if not TyDeclaresVar(decls, want) then Exit;
   vars := OverrideVarsOver(decls);
   try
     v := Trim(vars.Values[want]);
