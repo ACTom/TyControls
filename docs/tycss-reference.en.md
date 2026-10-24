@@ -1434,13 +1434,24 @@ Engine-level limitations (each expanded in the sections above):
     - `--glyph-radio` — radio button dot;
     - `--glyph-close` / `--glyph-minimize` / `--glyph-maximize` / `--glyph-restore` — title bar button icons;
     - `--glyph-arrow-up` / `--glyph-arrow-down` / `--glyph-arrow-left` / `--glyph-arrow-right` — SpinEdit / scroll bar arrows;
-    - `--glyph-chevron-down` / `--glyph-chevron-right` / `--glyph-chevron-left` — expand/collapse chevrons.
+    - `--glyph-chevron-down` / `--glyph-chevron-right` / `--glyph-chevron-left` / `--glyph-chevron-up` — expand/collapse
+      chevrons: tree view, grid tree column, list view groups, ListGroupPanel, ExPanel, the inspector (ValueListEditor /
+      PropertyGrid), a menu's submenu mark, a cascader's branch rows, the ribbon's collapse button (`-up` / `-down`).
       `-left` is the **mirror partner** of `-right`: in an RTL grid the collapse chevron points along the reading
       direction and takes this slot (see `docs/controls/grid.md`);
-    - `--glyph-dropdown` — the ComboBox dropdown indicator arrow.
+    - `--glyph-dropdown` — a drop field's indicator V: the combo box family, cascader, tree select, date picker,
+      drop-down / split buttons, tool bar drop buttons, ribbon gallery, grid drop-down cells (all through
+      `TyDrawDropChevron`, so one rule reaches every one of them).
+
+    **Size and ink of the expand marks**: both groups above are one mark -- an open 90° chevron with round ends and
+    a round join, a stroke of 5/28 of its size, its apex on a whole pixel. `--glyph-chevron-size` is the long side of
+    its centre line (default 7, 8 at modern density; it used to size the drop V alone, default 9), and the slot a
+    control reserves places the mark without sizing it. `--glyph-chevron-alpha` (0..255, default 200) draws it a
+    little lighter than the text beside it; 255 gives the text colour. The values sit where Windows 11, macOS and
+    GNOME draw the same marks (ink about 0.9x the cap height of the body text beside it).
 
     Token names follow the `--glyph-<kind>` convention, and internal glyph drawing funnels through one overridable entry
-    point, so the remaining glyph slots (menus / ribbon / tree / list / calendar and so on) can each be wired up with one
+    point, so the remaining glyph slots (calendar paging and so on) can each be wired up with one
     line if ever needed; nobody skins those internal glyphs in practice, so they are not wired yet.
     Example: `--glyph-check: "Segoe MDL2 Assets" "\e73e";`. Unset slots use the built-in vector glyphs. **Note**: once a
     valid override is set, the glyph always renders through the icon font (even if that font/code point renders blank);

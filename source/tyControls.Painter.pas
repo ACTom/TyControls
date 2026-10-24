@@ -37,7 +37,12 @@ type
     // Semantic status marks (TTyAlert / TTyNotification). Drawn in ONE ink like every glyph
     // here, so they are outlines (ring + mark), not AntD's filled discs — a filled disc needs
     // two colours and would not tint with the caller's single AColor.
-    tgInfo, tgSuccess, tgWarning, tgError);
+    tgInfo, tgSuccess, tgWarning, tgError,
+    // The fourth chevron. Appended rather than placed beside its siblings so every existing
+    // ordinal stays where it was; a GlyphKind in an .lfm streams by name either way. The
+    // ribbon's collapse button points up while the ribbon is open, and without this kind it
+    // drew a shafted arrow instead.
+    tgChevronUp);
 
   { Which side of a body a speech-balloon pointer leaves from. Named for the BODY's edge, so
     tpsTop means the wedge stands above the body -- which is what a balloon ANCHORED BELOW its
@@ -129,6 +134,7 @@ type
     procedure DropShadowAt(const ARect: TRect; ARadiusLogical: Integer; AColor: TTyColor; ABlurLogical: Integer; const AOffsetLogical: TPoint);
     procedure DrawGlyphAt(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer; APadLogical: Integer);
     procedure DrawDropChevronAt(const AZoneRect: TRect; AColor: TTyColor; ASizeLogical: Integer);
+    procedure DrawChevronAt(const AZoneRect: TRect; AKind: TTyGlyphKind; AColor: TTyColor; ASizeLogical: Integer);
     procedure FillCornerGapsAt(const ARect: TRect; const ACorners: TTyCorners; AColor: TTyColor);
     procedure EraseRectAt(const ARect: TRect);
     procedure DrawRuleAt(const ARect: TRect; const AColor: TBGRAPixel);
@@ -319,8 +325,19 @@ type
     procedure DrawGlyph(const ARect: TRect; AGlyph: TTyGlyphKind; AColor: TTyColor; AThicknessLogical: Integer; APadLogical: Integer = 4);
     { A FIXED-SIZE dropdown chevron (a shallow wide "v"), centered in AZoneRect and NOT
       stretched to the zone height — so a tall combo/button keeps a small clean chevron
-      instead of a big ugly V. ASizeLogical is the chevron width (height ≈ 0.55x). }
-    procedure DrawDropChevron(const AZoneRect: TRect; AColor: TTyColor; ASizeLogical: Integer = 9);
+      instead of a big ugly V. ASizeLogical is the chevron width (height 0.5x). The same mark
+      DrawChevron draws pointing down. }
+    procedure DrawDropChevron(const AZoneRect: TRect; AColor: TTyColor; ASizeLogical: Integer = TyDropChevronSize);
+    { THE disclosure chevron: a drop field's V, a tree node's >, a submenu's >, an expander's V
+      or ^ (AKind = tgChevronDown / Right / Left / Up; anything else draws Down). It has a FIXED
+      size, centred in AZoneRect, so every caller draws one mark whatever its slot -- the slot
+      decides where the mark goes, never how big it is. ASizeLogical is the long side of the
+      centre line; the arms meet at 90 degrees, the stroke is 5/28 of the size (1.25 at 7, the
+      weight BGRA's linear-light blending needs to match a 1px chevron drawn by Direct2D), and
+      the ends and the join are round, as all three desktop platforms draw them. The apex lands
+      on a whole device pixel, so the 45-degree arms cross a pixel centre on every row instead
+      of smearing over two half-covered pixels. }
+    procedure DrawChevron(const AZoneRect: TRect; AKind: TTyGlyphKind; AColor: TTyColor; ASizeLogical: Integer = TyDropChevronSize);
     procedure NineSlice(const ARect: TRect; const AImagePath: string; const AInsets: TRect; ATile: Boolean = False);
     procedure DrawImageFill(const ARect: TRect; const AImagePath: string; AMode: TTyImageMode; ABlurLogical: Integer);
     procedure FillImageSlice(const ARect: TRect; ASrc: TBGRABitmap; const ASrcOffset: TPoint);
@@ -3920,6 +3937,10 @@ begin
         set of hand-picked coefficients is a second thing to drift. }
       FBmp.DrawPolyLineAntialias([PointF(r - w * 0.3, t),
         PointF(l + w * 0.2, cy), PointF(r - w * 0.3, b)], px, th);
+    tgChevronUp:
+      { tgChevronDown reflected about the box's horizontal centre line (y -> t + b - y). }
+      FBmp.DrawPolyLineAntialias([PointF(l, b - h * 0.3),
+        PointF(cx, t + h * 0.2), PointF(r, b - h * 0.3)], px, th);
     tgArrowUp:
       begin
         FBmp.DrawLineAntialias(cx, b, cx, t, px, th, True);
@@ -4011,24 +4032,71 @@ begin
 end;
 
 procedure TTyPainter.DrawDropChevronAt(const AZoneRect: TRect; AColor: TTyColor; ASizeLogical: Integer);
+begin
+  DrawChevronAt(AZoneRect, tgChevronDown, AColor, ASizeLogical);
+end;
+
+procedure TTyPainter.DrawChevron(const AZoneRect: TRect; AKind: TTyGlyphKind; AColor: TTyColor; ASizeLogical: Integer);
 var
-  w, h, cx, cy, l, r, top, bot, th: Single;
+  R: TRect;
+begin
+  if RasterEnter then R := Dev(AZoneRect) else R := AZoneRect;
+  try
+    DrawChevronAt(R, AKind, AColor, ASizeLogical);
+  finally
+    RasterLeave;
+  end;
+end;
+
+procedure TTyPainter.DrawChevronAt(const AZoneRect: TRect; AKind: TTyGlyphKind; AColor: TTyColor; ASizeLogical: Integer);
+var
+  len, half, th, zx, zy, ax, ay: Single;
   px: TBGRAPixel;
+  pts: array[0..2] of TPointF;
+  oldJoin: TPenJoinStyle;
 begin
   if FBmp = nil then Exit;
   px := TyColorToBGRA(AColor);
-  w := Scale(ASizeLogical);
-  if w < 4 then w := 4;
-  h := w * 0.5;                 // a clean, not-too-flat V
-  // A THIN stroke (~w/6.5) — the old fixed 2px looked chubby on a small chevron.
-  th := w / 6.5;
-  if th < 1.1 then th := 1.1;
-  cx := (AZoneRect.Left + AZoneRect.Right) / 2;
-  cy := (AZoneRect.Top + AZoneRect.Bottom) / 2;
-  l := cx - w / 2; r := cx + w / 2;
-  top := cy - h / 2; bot := cy + h / 2;
-  // Drawn directly (not via DrawGlyph) so the stroke width is fractional, not a chunky int.
-  FBmp.DrawPolyLineAntialias([PointF(l, top), PointF(cx, bot), PointF(r, top)], px, th, False);
+  len := Scale(ASizeLogical);
+  if len < 4 then len := 4;
+  half := len / 2;
+  th := len * 5 / 28;
+  if th < 1 then th := 1;
+  { The zone's centre in BGRA's coordinates, where a pixel's CENTRE is the whole number: a
+    zone [0, 18) covers pixels 0..17, so its centre is 8.5, not 9. }
+  zx := (AZoneRect.Left + AZoneRect.Right - 1) / 2;
+  zy := (AZoneRect.Top + AZoneRect.Bottom - 1) / 2;
+  { The ink box is centred on the zone; the apex is then rounded onto a pixel centre, the
+    same way on both sides of a .5 (Floor(x + 0.5), not banker's Round). }
+  case AKind of
+    tgChevronUp:
+      begin
+        ax := Floor(zx + 0.5); ay := Floor(zy - half / 2 + 0.5);
+        pts[0] := PointF(ax - half, ay + half); pts[1] := PointF(ax, ay); pts[2] := PointF(ax + half, ay + half);
+      end;
+    tgChevronRight:
+      begin
+        ax := Floor(zx + half / 2 + 0.5); ay := Floor(zy + 0.5);
+        pts[0] := PointF(ax - half, ay - half); pts[1] := PointF(ax, ay); pts[2] := PointF(ax - half, ay + half);
+      end;
+    tgChevronLeft:
+      begin
+        ax := Floor(zx - half / 2 + 0.5); ay := Floor(zy + 0.5);
+        pts[0] := PointF(ax + half, ay - half); pts[1] := PointF(ax, ay); pts[2] := PointF(ax + half, ay + half);
+      end;
+  else
+    begin
+      ax := Floor(zx + 0.5); ay := Floor(zy + half / 2 + 0.5);
+      pts[0] := PointF(ax - half, ay - half); pts[1] := PointF(ax, ay); pts[2] := PointF(ax + half, ay - half);
+    end;
+  end;
+  oldJoin := FBmp.JoinStyle;
+  FBmp.JoinStyle := pjsRound;
+  try
+    FBmp.DrawPolyLineAntialias(pts, px, th, False);
+  finally
+    FBmp.JoinStyle := oldJoin;
+  end;
 end;
 
 procedure TTyPainter.BlitRegion(ASrc: TBGRABitmap; const ASrcR, ADstR: TRect; ATile: Boolean = False);

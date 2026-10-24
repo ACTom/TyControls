@@ -1730,10 +1730,10 @@ begin
         // three typeKeys the mark is part of the option's text colour, so a disabled row's
         // mark greys with its words. v3/C5: theme-overridable (--glyph-chevron-right).
         if Lay.ExpandRect.Right > Lay.ExpandRect.Left then
-          // Pad 1, not the default 4: ExpandRect is a slot already measured from
-          // --cascader-expand-size, so that token must mean the CHEVRON's size (the
-          // default pad would eat 9 logical px and leave a 3px smudge).
-          TyDrawGlyph(P, ActiveController, Lay.ExpandRect, tgChevronRight, txtS.TextColor, 1, 1);
+          // ExpandRect is the slot --cascader-expand-size reserves; the mark in it is the
+          // library's one disclosure chevron (--glyph-chevron-size), the same > a menu row
+          // draws for its submenu.
+          TyDrawChevron(P, ActiveController, Lay.ExpandRect, tgChevronRight, txtS.TextColor);
       end;
     end;
 
@@ -2157,13 +2157,11 @@ begin
       P.DrawText(Lay.TextRect, shown, S.FontName, ResolveFontSize(S), S.FontWeight,
         S.TextColor, taLeftJustify, tlCenter, True);
 
-    // v3/C5: the dropdown indicator is theme-overridable (--glyph-dropdown, the token
-    // TTyComboBox already uses — one theme rule retunes every field's chevron); else the
+    // v3/C5: the dropdown indicator is theme-overridable (--glyph-dropdown, the token every
+    // drop field shares through TyDrawDropChevron — one theme rule retunes them all); else the
     // built-in chevron.
     if Lay.ButtonRect.Right > Lay.ButtonRect.Left then
-      if not TyTryDrawGlyphOverride(P, ActiveController, Lay.ButtonRect, '--glyph-dropdown',
-        S.TextColor) then
-        TyDrawDropChevron(P, ActiveController, Lay.ButtonRect, S.TextColor);
+      TyDrawDropChevron(P, ActiveController, Lay.ButtonRect, S.TextColor);
 
     P.EndPaint;
   finally

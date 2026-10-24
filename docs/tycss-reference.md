@@ -1407,13 +1407,22 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
     - `--glyph-radio` — 单选钮圆点;
     - `--glyph-close` / `--glyph-minimize` / `--glyph-maximize` / `--glyph-restore` — 标题栏按钮图标;
     - `--glyph-arrow-up` / `--glyph-arrow-down` / `--glyph-arrow-left` / `--glyph-arrow-right` — SpinEdit / 滚动条箭头;
-    - `--glyph-chevron-down` / `--glyph-chevron-right` / `--glyph-chevron-left` — 展开/折叠三角。
+    - `--glyph-chevron-down` / `--glyph-chevron-right` / `--glyph-chevron-left` / `--glyph-chevron-up` — 展开/折叠
+      chevron:树、Grid 树列、列表视图分组、ListGroupPanel、ExPanel、属性检查器(ValueListEditor /
+      PropertyGrid)、菜单的子菜单标记、级联选择的分支行、Ribbon 折叠钮(`-up` / `-down`)。
       `-left` 是 `-right` 的**镜像伙伴**:RTL 网格里折叠三角朝阅读前进的方向,
       走的就是这个槽(见 `docs/controls/grid.md`);
-    - `--glyph-dropdown` — ComboBox 下拉指示箭头。
+    - `--glyph-dropdown` — 下拉字段的指示 V:组合框族、级联、树选择、日期选择、下拉 / 拆分按钮、
+      工具条下拉按钮、Ribbon 画廊、Grid 下拉单元格(都经 `TyDrawDropChevron`,一条规则全部生效)。
 
-    令牌名遵循 `--glyph-<kind>` 约定,内部字形绘制统一走一个可覆盖入口,所以其余字形槽(菜单/
-    Ribbon/树/列表/日历等)如需也能一行接入——只是这些内部字形一般无人换肤,暂未接。
+    **展开标记的大小与墨色**:上面两组 chevron 是同一个标记——90° 开口、圆头圆角、线宽为大小的 5/28、
+    顶点对齐整像素。`--glyph-chevron-size` 是它中心线的长边(默认 7,现代密度 8;以前只管下拉 V、
+    默认 9),槽位只决定位置、不决定大小;`--glyph-chevron-alpha`(0..255,默认 200)把它画得比
+    旁边的文字浅一些,设 255 即与文字同色。这组取值是对照 Windows 11、macOS、GNOME 同角色标记取的
+    共同区间(墨迹约为旁边正文大写字母高度的 0.9 倍)。
+
+    令牌名遵循 `--glyph-<kind>` 约定,内部字形绘制统一走一个可覆盖入口,所以其余字形槽(日历翻页等)
+    如需也能一行接入——只是这些内部字形一般无人换肤,暂未接。
     例:`--glyph-check: "Segoe MDL2 Assets" "\e73e";`。未设时用内置矢量字形。**注意**:设了有效覆盖
     就一定用图标字体渲染(即便该字体/码点渲染为空);只有未设或格式错误才回退矢量。
 17. **`render-style` 家族预设(v3)**:控件属性 `render-style: flat | bevel3d | inset3d;`——

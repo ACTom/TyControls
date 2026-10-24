@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-TTyValueListEditor 是**属性检查器级的名/值两列编辑器**:左列是**键**(可展开的多级树,带三角),右列是**可编辑的值**,中间是**可拖动的分隔条**。每行是一个 `TTyValueRow` 对象——`Key`/`DisplayKey`、`Value`/`DisplayValue`、值类型 `EditorKind`、`ReadOnly`、逐行样式(`Bold`/`TextColor`/`ImageIndex`)以及**子行**(嵌套)。用 `AddRow`(返回行对象,便于嵌套 / 定类型 / 设样式)构建,或用简单的 `InsertRow(key, value)`。行布局、选择、滚动的**代码**来自 [TTyListBox](listbox.md)(但主题令牌自成一套,见 §2);值单元用主题化 [TTyEdit](edit.md) 覆盖层就地编辑。
+TTyValueListEditor 是**属性检查器级的名/值两列编辑器**:左列是**键**(可展开的多级树,带 chevron),右列是**可编辑的值**,中间是**可拖动的分隔条**。每行是一个 `TTyValueRow` 对象——`Key`/`DisplayKey`、`Value`/`DisplayValue`、值类型 `EditorKind`、`ReadOnly`、逐行样式(`Bold`/`TextColor`/`ImageIndex`)以及**子行**(嵌套)。用 `AddRow`(返回行对象,便于嵌套 / 定类型 / 设样式)构建,或用简单的 `InsertRow(key, value)`。行布局、选择、滚动的**代码**来自 [TTyListBox](listbox.md)(但主题令牌自成一套,见 §2);值单元用主题化 [TTyEdit](edit.md) 覆盖层就地编辑。
 
 **按 `EditorKind` 分派的值编辑器:**
 
@@ -32,8 +32,8 @@ TTyValueListEditor 是**属性检查器级的名/值两列编辑器**:左列是*
 | `GetStyleTypeKey` 返回值 | `'TyValueListEditor'`(自己的键,不是祖先 `TTyListBox` 的) |
 
 它**只是复用**了 `TTyListBox` 的虚拟化行循环,并不是一个列表框:它画的两列 + 可拖分隔条、带缩进的键列、
-逐行展开三角、带色块和"…"按钮的值列,列表框一样都没有。挂在 `TyListBox`/`TyListItem` 上时,皮肤既没法
-给键列单独上色、没法给分隔条定色、没法改三角样式,也没法让检查器的选中行读起来与普通列表的选中行不同。
+逐行展开标记、带色块和"…"按钮的值列,列表框一样都没有。挂在 `TyListBox`/`TyListItem` 上时,皮肤既没法
+给键列单独上色、没法给分隔条定色、没法改展开标记的颜色,也没法让检查器的选中行读起来与普通列表的选中行不同。
 现在的部件表:
 
 | typeKey | 画什么 |
@@ -43,7 +43,7 @@ TTyValueListEditor 是**属性检查器级的名/值两列编辑器**:左列是*
 | `TyValueListEditorKey` | 键列文字色 |
 | `TyValueListEditorValue` | 值列**默认**文字色(逐行的 `TextColor` 覆盖仍然优先) |
 | `TyValueListEditorDivider` | 键/值分隔线(读 `background`) |
-| `TyValueListEditorExpander` | 展开/收起三角的填充色 |
+| `TyValueListEditorExpander` | 展开/收起 chevron 的墨色(chevron 本身是全库统一的展开标记:大小 `--glyph-chevron-size`,`--glyph-chevron-down` / `-right` 可换成图标字体字形) |
 | `TyValueListEditorGroup` | 标题行(`TTyValueRow.Heading`)**平时**的底色、文字色、字重;挂在 `TyValueListEditorRow` 下面。悬停、选中时标题行照普通行的 `:hover` / `:active` 画 |
 
 > `Key`/`Value`/`Divider`/`Expander` 四个是**可选钩子**:`themes/light.tycss` 有意不定义它们,因为它们的后备值**随行状态而变**——
@@ -98,7 +98,7 @@ uses tyControls.ValueListEditor;
 
 - **点值列** → 按该行 `EditorKind` 编辑:文本(可选中/复制,数字类型限数字)/ 布尔·枚举·颜色下拉 / 字体·自定义先进入可编辑文本、**点尾部"…"** 才弹对话框;**点键列** → 选中该行(开了 `keyEdit` 则**同时进入改名**)。选中行按 **F2 / Enter** 也进入编辑。
 - **`KeyOptions` 开出来的手势**(默认全关,见 §7):**点键列 / Shift+F2** 改键名(`keyEdit`)、**Insert** 在当前位置插空行(`keyAdd`)、**Ctrl+Delete** 删当前根行(`keyDelete`)。
-- **点键列前的三角** → 展开/收起子行。**层级无上限**(如 `Font → Style → Bold`)。
+- **点键列前的 chevron** → 展开/收起子行。**层级无上限**(如 `Font → Style → Bold`)。
 - **拖分隔条**(光标变 ↔)→ 调整键/值列宽。
 - 编辑中:**Enter** / 点别处 / 失焦 → 提交;**Esc** → 取消。`ReadOnly` 行 / 全局 `ReadOnly` 不可编辑。
 - **颜色 / 字体 / 自定义对话框全部用控件库自带的**(`TySelectColor` / `TTyFontDialog` / 你在 `OnEditRow` 里调 `TySelectDirectory` 等),不弹原生对话框。
@@ -143,7 +143,7 @@ VLE.OnValueChanged := @HandleChange;   // (Sender; ARow: TTyValueRow)
 - **字体子行同步按键名匹配:** `vekFont` 行的直接子行里键名为 `Name`/`Size`/`Color` 或四个样式位 `Bold`/`Italic`/`Underline`/`StrikeOut`(也可放在嵌套 `Style` 节点下)会在选字体后被回写。**显示哪些子属性由你决定**——只 `AddChild` 你要暴露的那些即可(控件不设 `Options` 之类的隐藏开关,因为结构本就由你搭)。其它结构请自己在 `OnValueChanged` 里处理。
 - **复合父行双向联动(Font / Style):** 改子行(如 `Bold`)会**向上**重算 `Style` 与 `Font` 的显示值(`Style`→`Regular`/`Bold, Italic`;`Font`→`Name, Size` + 尾随样式词);点 `Font` 的"…"选字体则**向下**回写全部子行并重算 `Style`/`Font`。编程改值用 `SetRowValue`(会触发同样的向上联动),别直接写 `ARow.Value`。仅 `style` 键名 + `Bold`/`Italic` 子行、及 `vekFont` 行被识别为复合;其它复合语义自理。
 - **颜色"更多…"对话框是延迟弹的:** 走 `Application.QueueAsyncCall`,让弹出列表的鼠标事件先退栈(析构里 `RemoveAsyncCalls` 取消未决调用)。
-- **交互是真机验证项:** 数据 / 嵌套 / 展开 / 显示覆盖 / 只读 / 列宽钳制 / 数字过滤已 headless 单测;分隔拖动、三角点击、下拉圆角、"…"按钮、颜色/字体对话框、字体子行回写需真机验证。
+- **交互是真机验证项:** 数据 / 嵌套 / 展开 / 显示覆盖 / 只读 / 列宽钳制 / 数字过滤已 headless 单测;分隔拖动、chevron 点击、下拉圆角、"…"按钮、颜色/字体对话框、字体子行回写需真机验证。
 
 ---
 
@@ -181,6 +181,6 @@ VLE.KeyOptions := [keyEdit, keyAdd, keyDelete, keyUnique];
 
 本控件覆写了 `TTyCustomListBox.RtlRowLayout` 返回 `False`，所以在 `BiDiMode = bdRightToLeft` 的窗体上它保持从左往右——基类的行矩形、行文字、滚动条边都不跟着翻。
 
-理由不是"来不及"，而是这个控件把 x 算了两遍：分隔条拖动（`OverSplit`）、点在哪一列上开编辑器、以及展开三角，都是从 `ContentLeftDp` / `SplitXDp` / `ContentRightDp` 算的（`:536`、`:576`、`:1542`），而 `PaintItemContent` 画的时候是从传进来的 `ARowRect` 切的（`:1426`）；`ContentRightDp` 甚至自己把滚动条从右边减掉了一次。基类一翻行矩形而这三处不动，分隔条就会画在一处、抓在另一处——正是这一轮一直在清的那类 bug。
+理由不是"来不及"，而是这个控件把 x 算了两遍：分隔条拖动（`OverSplit`）、点在哪一列上开编辑器、以及展开 chevron，都是从 `ContentLeftDp` / `SplitXDp` / `ContentRightDp` 算的（`:536`、`:576`、`:1542`），而 `PaintItemContent` 画的时候是从传进来的 `ARowRect` 切的（`:1426`）；`ContentRightDp` 甚至自己把滚动条从右边减掉了一次。基类一翻行矩形而这三处不动，分隔条就会画在一处、抓在另一处——正是这一轮一直在清的那类 bug。
 
 **要拿掉这个覆写，先把两份算术并成一份**：让单元格矩形和命中都从 `CellRect` 来，然后镜像 `CellRect`。守卫在 `tests/test.rtl.pas` 的 `TRtlExclusionTest.ValueListEditorIsNotMirroredWhileItsSplitterIsHitTestedTwice`——先并再翻，覆写去掉的那一刻它会告诉你。

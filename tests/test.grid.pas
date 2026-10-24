@@ -1423,6 +1423,8 @@ type
     { 把网格画一遍,数某个矩形里的墨 / 找某一行第一个墨像素的横坐标。
       "算出来的缩进"和"画出来的缩进"是两件事,这两个是用来断言后者的。 }
     function  InkInRect(const R: TRect): Integer;
+    { 同一次渲染、同一个墨阈值,返回 R 里墨的外接框(没有墨时为空矩形)。 }
+    function  InkBoxInRect(const R: TRect): TRect;
     { 把当前这一帧整幅画出来交给调用方(调用方负责 Free)。
       InkInRect 只数**暗**像素 —— 浅色的东西(琥珀色标记)它看不见,
       于是"画没画出来"这种断言用它会假绿。要问"变了没有"就用
@@ -1567,6 +1569,48 @@ begin
   finally
     bmp.Free;
   end;
+end;
+
+function TStrGridAccess.InkBoxInRect(const R: TRect): TRect;
+var
+  bmp: TBitmap;
+  x, y: Integer;
+  px: TBGRAPixel;
+  re: TBGRABitmap;
+begin
+  Result := Rect(MaxInt, MaxInt, -1, -1);
+  if not IsRectEmpty(R) then
+  begin
+    bmp := TBitmap.Create;
+    try
+      bmp.PixelFormat := pf32bit;
+      bmp.SetSize(Width, Height);
+      bmp.Canvas.Brush.Color := clWhite;
+      bmp.Canvas.FillRect(0, 0, bmp.Width, bmp.Height);
+      DoRender(bmp.Canvas, Rect(0, 0, Width, Height), 96);
+      re := TBGRABitmap.Create(bmp);
+      try
+        for y := R.Top to R.Bottom - 1 do
+          for x := R.Left to R.Right - 1 do
+          begin
+            if (y < 0) or (y >= re.Height) or (x < 0) or (x >= re.Width) then Continue;
+            px := re.GetPixel(x, y);
+            if px.red + px.green + px.blue < 400 then
+            begin
+              if x < Result.Left then Result.Left := x;
+              if y < Result.Top then Result.Top := y;
+              if x + 1 > Result.Right then Result.Right := x + 1;
+              if y + 1 > Result.Bottom then Result.Bottom := y + 1;
+            end;
+          end;
+      finally
+        re.Free;
+      end;
+    finally
+      bmp.Free;
+    end;
+  end;
+  if Result.Right < 0 then Result := Rect(0, 0, 0, 0);
 end;
 
 function TStrGridAccess.InkColumnOfFirstGlyph(ARow: Integer): Integer;
@@ -10711,7 +10755,7 @@ procedure TTyStringGridTest.TestTreeColumnIndentsAndCollapses;
 var
   G: TStrGridAccess;
   r, x0, x1, inkUpExpanded, inkUpCollapsed: Integer;
-  tri: TRect;
+  tri, box: TRect;
 begin
   G := MakeStrGrid(FForm, FCtl);
   G.RowCount := 6;
@@ -10736,19 +10780,20 @@ begin
 
   { 三角的**朝向**也要跟着状态变 —— 只断言"有墨"的话,
     把"折叠画朝右"改成"一律画朝下"照样通过(变异证明过)。
-    数上半格的墨:∨ 与 > 的墨在上半格的分布不同,这是"朝向变了"的最小证据。 }
-  inkUpExpanded := G.InkInRect(Rect(tri.Left, tri.Top, tri.Right,
-    tri.Top + (tri.Bottom - tri.Top) div 2));
+    看墨的外接框:∨ 宽而矮,> 窄而高,这是"朝向变了"的最小证据。(以前数上半格的墨;
+    展开标记改成居中、固定大小的 chevron 以后,∨ 和 > 在上半格的墨一样多,数不出来。) }
+  box := G.InkBoxInRect(tri);
+  inkUpExpanded := (box.Right - box.Left) - (box.Bottom - box.Top);
 
   { --- 折叠:子行从显示序里消失 --- }
   AssertEquals('前置:6 行全显示', 6, G.DisplayRowCount);
   G.ClickAt(tri.Left + (tri.Right - tri.Left) div 2,
             tri.Top + (tri.Bottom - tri.Top) div 2);
   AssertEquals('折叠第一个根 —— 它的两个孩子不显示了', 4, G.DisplayRowCount);
-  inkUpCollapsed := G.InkInRect(Rect(tri.Left, tri.Top, tri.Right,
-    tri.Top + (tri.Bottom - tri.Top) div 2));
-  AssertTrue(Format('三角要换朝向(展开时上半墨 %d,折叠时 %d)',
-    [inkUpExpanded, inkUpCollapsed]), inkUpExpanded <> inkUpCollapsed);
+  box := G.InkBoxInRect(tri);
+  inkUpCollapsed := (box.Right - box.Left) - (box.Bottom - box.Top);
+  AssertTrue(Format('展开时是 ∨:墨比高宽(宽减高 = %d)', [inkUpExpanded]), inkUpExpanded > 0);
+  AssertTrue(Format('折叠时是 >:墨比宽高(宽减高 = %d)', [inkUpCollapsed]), inkUpCollapsed < 0);
   AssertEquals('根本身还在', 0, G.DisplayRow(0));
   AssertEquals('紧跟着的是下一个根', 3, G.DisplayRow(1));
 

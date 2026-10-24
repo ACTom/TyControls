@@ -276,7 +276,7 @@ TyCascaderItem:disabled { color: var(--muted); }
 |------|------|------|
 | `--cascader-column-width` | `120`（= `TyCascaderColumnWidth`） | 一列的宽度 |
 | `--cascader-row-height` | `24`（= `TyCascaderRowHeight`） | 一个选项行的高度。**钳到至少 1**——零高的行会让命中检测除零 |
-| `--cascader-expand-size` | `12`（= `TyCascaderExpandSize`） | 分支行上 `>` 的方形槽边长 |
+| `--cascader-expand-size` | `12`（= `TyCascaderExpandSize`） | 分支行上 `>` 的方形槽边长（`>` 本身是全库统一的展开标记，大小取 `--glyph-chevron-size`，与菜单的子菜单标记同一个） |
 | `--cascader-expand-gap` | `4`（= `TyCascaderExpandGap`） | 文字与 `>` 槽位之间的间隙 |
 | `--cascader-button-width` | `18`（= `TyCascaderButtonWidth` = `TyFieldButtonWidth`） | 字段的 chevron 区宽度。**刻意就是 `TyFieldButtonWidth`**：级联器的 chevron 区和下拉框的一样宽，两个字段在表单里才对得齐 |
 

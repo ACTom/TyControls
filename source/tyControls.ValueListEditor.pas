@@ -1880,8 +1880,6 @@ var
   expSty, keySty, divSty, valSty, grpSty: TTyStyleSet;
   divider, keyCol, valCol, valDef, triCol: TTyColor;
   keyWeight: Integer;
-  ctx: TBGRACanvas2D;
-  cy: Single;
 begin
   if (AIndex < 0) or (AIndex > High(FFlatRow)) then Exit;
   r := FFlatRow[AIndex];
@@ -1930,31 +1928,20 @@ begin
   indent := TyDensityIconSlot(ActiveController, FIndent);
   indentX := ARowRect.Left + level * P.Scale(indent);
 
-  // Expand / collapse triangle for rows with children.
+  // Expand / collapse chevron for rows with children, in the 9px box at the row's indent.
+  // The library's disclosure chevron, not the filled triangle this used to fill: a solid
+  // triangle is the shape kept for STEPPING a value, and it was the one expander no theme
+  // could reach. Through TyDrawChevron, so --glyph-chevron-down / -right replace it too.
   if r.HasChildren then
   begin
-    ctx := P.Bitmap.Canvas2D;
     sz := P.Scale(9);
     tri := Rect(indentX + P.Scale(2), ARowRect.Top + ((ARowRect.Bottom - ARowRect.Top) - sz) div 2,
       indentX + P.Scale(2) + sz, 0);
     tri.Bottom := tri.Top + sz;
-    cy := (tri.Top + tri.Bottom) / 2;
-    ctx.fillStyle(TyColorToBGRA(triCol));
-    ctx.beginPath;
     if r.Expanded then
-    begin
-      ctx.moveTo(tri.Left, tri.Top + sz * 0.15);
-      ctx.lineTo(tri.Right, tri.Top + sz * 0.15);
-      ctx.lineTo((tri.Left + tri.Right) / 2, tri.Top + sz * 0.7);
-    end
+      TyDrawChevron(P, ActiveController, tri, tgChevronDown, triCol)
     else
-    begin
-      ctx.moveTo(tri.Left, tri.Top);
-      ctx.lineTo(tri.Left, tri.Bottom);
-      ctx.lineTo(tri.Left + sz * 0.7, cy);
-    end;
-    ctx.closePath;
-    TyCtxFill(ctx);
+      TyDrawChevron(P, ActiveController, tri, tgChevronRight, triCol);
   end;
 
   { A heading's key runs across both columns; there is no divider and no value. }

@@ -1358,7 +1358,7 @@ const
     TyMenuItem:active is the fill the decorative banner strip borrows; no row is highlighted in
     any of these fixtures, so red on the bitmap means the banner and nothing else. }
   cMenuCss =
-    ':root { --menu-check-slot: 16px; --menu-arrow-slot: 40px; }' +
+    ':root { --menu-check-slot: 16px; --menu-arrow-slot: 40px; --glyph-chevron-alpha: 255; }' +
     'TyMenuView { background: #FFFFFF; border-width: 0px; padding: 0px; }' +
     'TyMenuItem { background: #FFFFFF; color: #00FF00; padding: 4px 24px 4px 6px; ' +
       'font-size: 12px; }' +
@@ -1474,9 +1474,34 @@ begin
 end;
 
 { A left-hand slot with a right-pointing chevron in it is the classic half-mirrored menu: it
-  points away from where the submenu actually appears. The arrow is a shaft plus a head, and
-  the head is all the ink in the last third -- so which half of the slot carries more ink says
-  which way it points, whatever the glyph's exact strokes are. }
+  points away from where the submenu actually appears. The mark is a chevron, so its APEX is
+  the point: on the mark's middle row the ink reaches further toward the side it points to than
+  on its top row, where the two arms' open ends are. (This used to compare the ink in the two
+  halves of the slot, which only works for a shafted arrow: a chevron centred in its slot
+  crosses both halves with two strokes each.) }
+function GreenTipBeyondEnds(A: TBGRABitmap; AX0, AX1: Integer; APointsRight: Boolean): Boolean;
+var
+  x, y, top, bot, mid, tip, edge: Integer;
+begin
+  top := -1; bot := -1;
+  for y := 0 to A.Height - 1 do
+    for x := AX0 to AX1 - 1 do
+      if Dominant(A.GetPixel(x, y), chGreen) then
+      begin
+        if top < 0 then top := y;
+        bot := y;
+      end;
+  if top < 0 then Exit(False);
+  mid := (top + bot) div 2;
+  tip := -1; edge := -1;
+  for x := AX0 to AX1 - 1 do
+  begin
+    if Dominant(A.GetPixel(x, mid), chGreen) and ((tip < 0) or (APointsRight = (x > tip))) then tip := x;
+    if Dominant(A.GetPixel(x, top), chGreen) and ((edge < 0) or (APointsRight = (x > edge))) then edge := x;
+  end;
+  if APointsRight then Result := tip > edge else Result := tip < edge;
+end;
+
 procedure TRtlPopupMenuTest.SubmenuArrowMovesAndTurnsRound;
 var
   ltr, rtl: TBGRABitmap;
@@ -1492,12 +1517,10 @@ begin
       ChannelCount(rtl, chGreen, 0, slot) > 0);
     AssertEquals('and left nothing behind in the old one', 0,
       ChannelCount(rtl, chGreen, 200 - slot, 200));
-    AssertTrue('the unmirrored arrow head is at the RIGHT of its slot',
-      ChannelCount(ltr, chGreen, 200 - slot div 2, 200)
-        > ChannelCount(ltr, chGreen, 200 - slot, 200 - slot div 2));
-    AssertTrue('the mirrored arrow head is at the LEFT of its slot -- it turned round',
-      ChannelCount(rtl, chGreen, 0, slot div 2)
-        > ChannelCount(rtl, chGreen, slot div 2, slot));
+    AssertTrue('the unmirrored chevron points RIGHT, toward where the submenu opens',
+      GreenTipBeyondEnds(ltr, 200 - slot, 200, True));
+    AssertTrue('the mirrored chevron points LEFT -- it turned round',
+      GreenTipBeyondEnds(rtl, 0, slot, False));
   finally
     ltr.Free;
     rtl.Free;

@@ -1242,14 +1242,15 @@ begin
         end;
 
         // Chevron on the RIGHT (Ant's placement), in a themed square slot. Down = expanded,
-        // right = collapsed. Pad 1: chevRect is a slot already sized from a token, so the token
-        // IS the mark's size — TyDrawGlyph's default 4px/side would leave an unreadable smudge.
+        // right = collapsed. chevRect is the slot --listgroup-chevron-size reserves; the mark
+        // in it is the library's one disclosure chevron (--glyph-chevron-size), so a group
+        // header's V matches a tree's and a combo box's instead of filling its own slot.
         chevRect := Rect(partR.Right - P.Scale(HdrStyle.Padding.Right) - chevSize,
           partR.Top + (partR.Bottom - partR.Top - chevSize) div 2,
           partR.Right - P.Scale(HdrStyle.Padding.Right),
           partR.Top + (partR.Bottom - partR.Top - chevSize) div 2 + chevSize);
         if GroupExpanded(parts[i].GroupIndex) then kind := tgChevronDown else kind := tgChevronRight;
-        TyDrawGlyph(P, ActiveController, chevRect, kind, HdrStyle.TextColor, 1, 1);
+        TyDrawChevron(P, ActiveController, chevRect, kind, HdrStyle.TextColor);
 
         // Optional group icon on the left, then the caption between icon and chevron.
         contentL := partR.Left + P.Scale(HdrStyle.Padding.Left);
@@ -1340,7 +1341,7 @@ begin
         (trigR.Top + trigR.Bottom - chevSize) div 2,
         (trigR.Left + trigR.Right + chevSize) div 2,
         (trigR.Top + trigR.Bottom + chevSize) div 2);
-      TyDrawGlyph(P, ActiveController, chevRect, kind, HdrStyle.TextColor, 1, 1);
+      TyDrawChevron(P, ActiveController, chevRect, kind, HdrStyle.TextColor);
     end;
 
     P.Bitmap.ClipRect := savedClip;
