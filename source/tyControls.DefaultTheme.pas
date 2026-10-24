@@ -303,6 +303,7 @@ begin
     '  --listview-check-size: 14px;' + LineEnding +
     '  --listview-group-header-height: 22px;' + LineEnding +
     '  --listview-hgap: 10px;' + LineEnding +
+    '  --listview-icon-gap: 2px;' + LineEnding +
     '  --listview-icon-label-width: 88px;' + LineEnding +
     '  --listview-label-height: 16px;' + LineEnding +
     '  --listview-large-icon-size: 48px;' + LineEnding +

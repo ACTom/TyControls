@@ -854,7 +854,13 @@ const
   { lvsTile: two lines right of a large icon. 150 keeps three tiles across a ~700px pane
     while still fitting a '2026-07-10 08:30' second line; 180 dropped it to two. }
   TyLvTileLabelW  = 150;
-  TyLvTextMargin = 4;   { text inset inside a report cell / header cell }
+  { The inset of a report or header cell's content: the icon when there is one, else the
+    text, from the cell's reading start (--listview-text-margin). #98: the rows put their
+    icon 2 px from the edge whatever this was, so they never lined up with the header's. }
+  TyLvTextMargin = 4;
+  { The gap between a report row's icon and its caption (--listview-icon-gap). 2 px is where
+    the caption has always started, so making it a token moved no text (#98). }
+  TyLvIconGap = 2;
   { Column-header icon slot, in logical px. Both are theme tokens first
     ('--listview-header-icon-size' / '--listview-header-icon-gap'); these are only the
     values a theme that says nothing about them falls back to, and they are deliberately
@@ -1437,7 +1443,7 @@ end;
 
 function TTyCustomListView.GroupHeaderHeightPx: Integer;
 begin
-  Result := ScaleI(ActiveController.Metric('--listview-group-header-height', TyLvGroupHeaderH));
+  Result := ScaleI(StyleMetric('--listview-group-header-height', TyLvGroupHeaderH));
 end;
 
 { Stable merge sort of a sub-array by the SAME comparator Sort uses (ties by item index, so
@@ -1841,17 +1847,17 @@ begin
     hit tests and the navigation all read the same answer -- they take the metrics, not
     the control, and a second question could be answered differently mid-frame. }
   AMetrics.RightToLeft := RtlLayout;
-  AMetrics.HGap := ScaleI(ActiveController.Metric('--listview-hgap', TyLvHGap));
-  AMetrics.VGap := ScaleI(ActiveController.Metric('--listview-vgap', TyLvVGap));
-  AMetrics.Pad  := ScaleI(ActiveController.Metric('--listview-cell-padding', TyLvPad));
-  if FViewStyle in [lvsIcon, lvsTile] then icon := ActiveController.Metric('--listview-large-icon-size', TyLvLargeIcon) else icon := ActiveController.Metric('--listview-small-icon-size', TyLvSmallIcon);
+  AMetrics.HGap := ScaleI(StyleMetric('--listview-hgap', TyLvHGap));
+  AMetrics.VGap := ScaleI(StyleMetric('--listview-vgap', TyLvVGap));
+  AMetrics.Pad  := ScaleI(StyleMetric('--listview-cell-padding', TyLvPad));
+  if FViewStyle in [lvsIcon, lvsTile] then icon := StyleMetric('--listview-large-icon-size', TyLvLargeIcon) else icon := StyleMetric('--listview-small-icon-size', TyLvSmallIcon);
   AMetrics.IconPx := ScaleI(icon);
-  AMetrics.LabelH := ScaleI(ActiveController.Metric('--listview-label-height', TyLvLabelH));
+  AMetrics.LabelH := ScaleI(StyleMetric('--listview-label-height', TyLvLabelH));
   case FViewStyle of
-    lvsIcon: AMetrics.LabelW := ScaleI(ActiveController.Metric('--listview-icon-label-width', TyLvIconLabelW));
-    lvsTile: AMetrics.LabelW := ScaleI(ActiveController.Metric('--listview-tile-label-width', TyLvTileLabelW));
+    lvsIcon: AMetrics.LabelW := ScaleI(StyleMetric('--listview-icon-label-width', TyLvIconLabelW));
+    lvsTile: AMetrics.LabelW := ScaleI(StyleMetric('--listview-tile-label-width', TyLvTileLabelW));
   else
-    AMetrics.LabelW := ScaleI(ActiveController.Metric('--listview-small-label-width', TyLvSmallLabelW));
+    AMetrics.LabelW := ScaleI(StyleMetric('--listview-small-label-width', TyLvSmallLabelW));
   end;
   AMetrics.RowH   := ScaleI(GetRowHeight);
   if (FViewStyle = lvsReport) and FShowColumnHeaders and (hoVisible in FHeader.Options) then
@@ -1868,7 +1874,7 @@ function TTyCustomListView.CurrentMetrics: TTyListMetrics;
 var
   vw, vh, sb: Integer;
 begin
-  sb := ScaleI(ActiveController.Metric('--scrollbar-size', TyScrollbarSize));
+  sb := ScaleI(StyleMetric('--scrollbar-size', TyScrollbarSize));
   vw := ClientWidth;
   vh := ClientHeight;
   if (FVScroll <> nil) and FVScroll.Visible then Dec(vw, sb);
@@ -1897,7 +1903,7 @@ var
 begin
   if csDestroying in ComponentState then Exit;
   cnt := GetItemCount;
-  sb  := ScaleI(ActiveController.Metric('--scrollbar-size', TyScrollbarSize));
+  sb  := ScaleI(StyleMetric('--scrollbar-size', TyScrollbarSize));
   { Which axis can scroll at all (see the flow table in the Layout unit). }
   vertCap := FViewStyle in [lvsReport, lvsIcon, lvsSmallIcon, lvsTile];
   horzCap := FViewStyle in [lvsReport, lvsList];
@@ -2574,22 +2580,23 @@ begin
     if FCheckboxes then
     begin
       chk := CheckRectForCell(cell);
-      if chk.Right > chk.Left then cbShift := ScaleI(ActiveController.Metric('--listview-check-size', TyLvCheckPx)) + ScaleI(ActiveController.Metric('--listview-cell-padding', TyLvPad));
+      if chk.Right > chk.Left then cbShift := ScaleI(StyleMetric('--listview-check-size', TyLvCheckPx)) + ScaleI(StyleMetric('--listview-cell-padding', TyLvPad));
     end;
-    imgPx := ScaleI(ActiveController.Metric('--listview-small-icon-size', TyLvSmallIcon));
+    imgPx := ScaleI(StyleMetric('--listview-small-icon-size', TyLvSmallIcon));
     ii := GetItemImageIndex(AIndex, mainIdx);
     if (FSmallImages <> nil) and (ii >= 0) then
-      Result := Rect(colLeft + cbShift + ScaleI(ActiveController.Metric('--listview-text-margin', TyLvTextMargin)) + imgPx + ScaleI(2),
-                     cell.Top, colRight - ScaleI(ActiveController.Metric('--listview-text-margin', TyLvTextMargin)), cell.Bottom)
+      Result := Rect(colLeft + cbShift + ScaleI(StyleMetric('--listview-text-margin', TyLvTextMargin)) + imgPx
+                       + ScaleI(StyleMetric('--listview-icon-gap', TyLvIconGap)),
+                     cell.Top, colRight - ScaleI(StyleMetric('--listview-text-margin', TyLvTextMargin)), cell.Bottom)
     else
-      Result := Rect(colLeft + cbShift + ScaleI(ActiveController.Metric('--listview-text-margin', TyLvTextMargin)),
-                     cell.Top, colRight - ScaleI(ActiveController.Metric('--listview-text-margin', TyLvTextMargin)), cell.Bottom);
+      Result := Rect(colLeft + cbShift + ScaleI(StyleMetric('--listview-text-margin', TyLvTextMargin)),
+                     cell.Top, colRight - ScaleI(StyleMetric('--listview-text-margin', TyLvTextMargin)), cell.Bottom);
   end
   else
   begin
-    pad := ScaleI(ActiveController.Metric('--listview-cell-padding', TyLvPad));
-    if FViewStyle in [lvsIcon, lvsTile] then imgPx := ScaleI(ActiveController.Metric('--listview-large-icon-size', TyLvLargeIcon))
-    else imgPx := ScaleI(ActiveController.Metric('--listview-small-icon-size', TyLvSmallIcon));
+    pad := ScaleI(StyleMetric('--listview-cell-padding', TyLvPad));
+    if FViewStyle in [lvsIcon, lvsTile] then imgPx := ScaleI(StyleMetric('--listview-large-icon-size', TyLvLargeIcon))
+    else imgPx := ScaleI(StyleMetric('--listview-small-icon-size', TyLvSmallIcon));
     case FViewStyle of
       lvsIcon:
         { icon on top, label below (mirrors RenderFlowCell: one top pad, label to cell bottom) }
@@ -2600,7 +2607,7 @@ begin
           { first text line, right of the icon (past the checkbox, if any) }
           ix := cell.Left + pad + FlowCheckShift(cell) + imgPx + 2 * pad;
           Result := Rect(ix, cell.Top + pad, cell.Right - pad,
-                         cell.Top + pad + ScaleI(ActiveController.Metric('--listview-label-height', TyLvLabelH)));
+                         cell.Top + pad + ScaleI(StyleMetric('--listview-label-height', TyLvLabelH)));
         end;
     else
       begin
@@ -2746,7 +2753,7 @@ begin
   if FRowHeightExplicit then
     Result := FRowHeight
   else
-    Result := ActiveController.Metric('--row-height', TyLvRowHeight);
+    Result := StyleMetric('--row-height', TyLvRowHeight);
 end;
 
 procedure TTyCustomListView.SetRowHeight(AValue: Integer);
@@ -3009,8 +3016,8 @@ begin
   else
     sub := ACell;   { flow: the whole cell }
   Result := TyListCheckRect(sub, FViewStyle,
-    ScaleI(ActiveController.Metric('--listview-check-size', TyLvCheckPx)),
-    ScaleI(ActiveController.Metric('--listview-cell-padding', TyLvPad)),
+    ScaleI(StyleMetric('--listview-check-size', TyLvCheckPx)),
+    ScaleI(StyleMetric('--listview-cell-padding', TyLvPad)),
     RtlLayout);
 end;
 
@@ -3022,7 +3029,7 @@ begin
   if (not FCheckboxes) or (FViewStyle = lvsIcon) then Exit;
   chk := CheckRectForCell(ACell);
   if chk.Right > chk.Left then
-    Result := ScaleI(ActiveController.Metric('--listview-check-size', TyLvCheckPx)) + ScaleI(ActiveController.Metric('--listview-cell-padding', TyLvPad));
+    Result := ScaleI(StyleMetric('--listview-check-size', TyLvCheckPx)) + ScaleI(StyleMetric('--listview-cell-padding', TyLvPad));
 end;
 
 function TTyCustomListView.FlowIconLeft(const ACell: TRect;
@@ -3080,7 +3087,7 @@ procedure TTyCustomListView.RenderReportRow(P: TTyPainter; AIndex: Integer; cons
   const AStyle: TTyStyleSet);
 var
   posIdx, colIdx, colLeft, colRight, mainCol, imgPx, ii, cbShift: Integer;
-  lead, trail, sign, margin, textLead, imgLead: Integer;
+  lead, trail, sign, margin, textLead, imgLead, gap: Integer;
   col: TTyColumn;
   span: TTyColumnSpan;
   txt: string;
@@ -3090,7 +3097,7 @@ begin
   mainCol := FHeader.MainColumn;
   if tpTextColor in AStyle.Present then tc := AStyle.TextColor
   else tc := CurrentStyle.TextColor;
-  imgPx := ScaleI(ActiveController.Metric('--listview-small-icon-size', TyLvSmallIcon));
+  imgPx := ScaleI(StyleMetric('--listview-small-icon-size', TyLvSmallIcon));
   for posIdx := 0 to FHeader.Columns.Count - 1 do
   begin
     col := FHeader.Columns.ColumnByPosition(posIdx);
@@ -3104,7 +3111,7 @@ begin
     span     := col.Span(ColumnAxis);
     colLeft  := span.Left;
     colRight := span.Right;
-    margin   := ScaleI(ActiveController.Metric('--listview-text-margin', TyLvTextMargin));
+    margin   := ScaleI(StyleMetric('--listview-text-margin', TyLvTextMargin));
     { The chrome (box, icon) sits at the cell's READING START and the text steps aside from
       it; lead/trail name the two ends so the arithmetic below is written once. }
     if RtlLayout then begin lead := colRight; trail := colLeft; sign := -1; end
@@ -3122,18 +3129,20 @@ begin
         if chk.Right > chk.Left then
         begin
           RenderCheckBox(P, chk, GetChecked(AIndex));   { AIndex is an item index }
-          cbShift := ScaleI(ActiveController.Metric('--listview-check-size', TyLvCheckPx)) + ScaleI(ActiveController.Metric('--listview-cell-padding', TyLvPad));
+          cbShift := ScaleI(StyleMetric('--listview-check-size', TyLvCheckPx)) + ScaleI(StyleMetric('--listview-cell-padding', TyLvPad));
         end;
       end;
       textLead := lead + sign * (cbShift + margin);
       ii := GetItemImageIndex(AIndex, colIdx);
       if (FSmallImages <> nil) and (ii >= 0) then
       begin
-        imgLead := lead + sign * (cbShift + ScaleI(2));
+        { the icon at the margin, as the header puts its column icon (#98) }
+        imgLead := lead + sign * (cbShift + margin);
         if RtlLayout then Dec(imgLead, imgPx);
         DrawImage(P, FSmallImages, ii, imgLead,
           ACell.Top + (ACell.Bottom - ACell.Top - imgPx) div 2, imgPx);
-        textLead := lead + sign * (cbShift + margin + imgPx + ScaleI(2));
+        gap := ScaleI(StyleMetric('--listview-icon-gap', TyLvIconGap));
+        textLead := lead + sign * (cbShift + margin + imgPx + gap);
       end;
     end;
     txt := GetItemText(AIndex, colIdx);
@@ -3158,18 +3167,18 @@ var
 begin
   if tpTextColor in AStyle.Present then tc := AStyle.TextColor
   else tc := CurrentStyle.TextColor;
-  pad := ScaleI(ActiveController.Metric('--listview-cell-padding', TyLvPad));
+  pad := ScaleI(StyleMetric('--listview-cell-padding', TyLvPad));
   { The icon+label of every flow mode but lvsIcon shift right to make room for the box. }
   cbShift := FlowCheckShift(ACell);
   { Must agree with FillMetrics, which sizes the cell from the LARGE icon for both lvsIcon
     and lvsTile. Testing only lvsIcon here drew a 16px glyph inside a cell laid out for 48. }
   if FViewStyle in [lvsIcon, lvsTile] then
   begin
-    imgList := FLargeImages; imgPx := ScaleI(ActiveController.Metric('--listview-large-icon-size', TyLvLargeIcon));
+    imgList := FLargeImages; imgPx := ScaleI(StyleMetric('--listview-large-icon-size', TyLvLargeIcon));
   end
   else
   begin
-    imgList := FSmallImages; imgPx := ScaleI(ActiveController.Metric('--listview-small-icon-size', TyLvSmallIcon));
+    imgList := FSmallImages; imgPx := ScaleI(StyleMetric('--listview-small-icon-size', TyLvSmallIcon));
   end;
   ii  := GetItemImageIndex(AIndex, 0);
   lbl := GetItemText(AIndex, 0);
@@ -3198,7 +3207,7 @@ begin
         sub := GetItemText(AIndex, 1);
         tr := FlowLabelRect(ACell, ix, imgPx, pad,
                 ACell.Top + pad,
-                ACell.Top + pad + ScaleI(ActiveController.Metric('--listview-label-height', TyLvLabelH)));
+                ACell.Top + pad + ScaleI(StyleMetric('--listview-label-height', TyLvLabelH)));
         if tr.Left < tr.Right then
           P.DrawText(tr, lbl, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
             tc, taLeftJustify, tlCenter, True);
@@ -3290,8 +3299,8 @@ begin
   { The icon slot. Sized and spaced by theme tokens, not by the caption's margin: a skin
     that wants 20px header icons must not have to widen every caption inset to get them. }
   icoList := HeaderImageList;
-  icoPx  := ScaleI(ActiveController.Metric('--listview-header-icon-size', TyLvHeaderIcon));
-  icoGap := ScaleI(ActiveController.Metric('--listview-header-icon-gap', TyLvHeaderIconGap));
+  icoPx  := ScaleI(StyleMetric('--listview-header-icon-size', TyLvHeaderIcon));
+  icoGap := ScaleI(StyleMetric('--listview-header-icon-gap', TyLvHeaderIconGap));
 
   for posIdx := 0 to FHeader.Columns.Count - 1 do
   begin
@@ -3319,7 +3328,7 @@ begin
     { The icon leads the caption, so it sits at the cell's READING START and the caption
       box gives up that end. Written as lead/sign once rather than as two mirrored
       expressions per piece. }
-    margin := ScaleI(ActiveController.Metric('--listview-text-margin', TyLvTextMargin));
+    margin := ScaleI(StyleMetric('--listview-text-margin', TyLvTextMargin));
     if IsRightToLeft then begin lead := cellR.Right; sign := -1; end
     else begin lead := cellR.Left; sign := 1; end;
     textLead := lead + sign * margin;
@@ -3580,7 +3589,7 @@ begin
   else
     P.DrawGlyph(tri, tgChevronDown, tc, 1, 7);
 
-  tr := Rect(band.Left + triSz, band.Top, band.Right - ScaleI(ActiveController.Metric('--listview-text-margin', TyLvTextMargin)), band.Bottom);
+  tr := Rect(band.Left + triSz, band.Top, band.Right - ScaleI(StyleMetric('--listview-text-margin', TyLvTextMargin)), band.Bottom);
   if tr.Left < tr.Right then
   begin
     if tpTextColor in hb.Present then
@@ -4014,7 +4023,8 @@ begin
 
   iconDev := 0;
   if (AColumn = FHeader.MainColumn) and (FSmallImages <> nil) then
-    iconDev := ScaleI(ActiveController.Metric('--listview-small-icon-size', TyLvSmallIcon)) + ScaleI(2);
+    iconDev := ScaleI(StyleMetric('--listview-small-icon-size', TyLvSmallIcon))
+      + ScaleI(StyleMetric('--listview-icon-gap', TyLvIconGap));
 
   bmp := TBGRABitmap.Create(1, 1);
   try
@@ -4036,7 +4046,7 @@ begin
   end;
 
   { Width is LOGICAL; the setter clamps to the column's Min/MaxWidth. }
-  col.Width := UnscaleI(bestDev) + 2 * ActiveController.Metric('--listview-text-margin', TyLvTextMargin);
+  col.Width := UnscaleI(bestDev) + 2 * StyleMetric('--listview-text-margin', TyLvTextMargin);
   UpdateScrollBars;
   Invalidate;
 end;
