@@ -110,6 +110,9 @@ type
       the process-wide type key chain registry. ReanchorCache drops it and records both. }
     function CacheCurrent: Boolean; inline;
     procedure ReanchorCache;
+    { #98/#99. The merged vars with an override block's '--' declarations laid over them,
+      or nil when the block declares none (the caller then uses FMergedVars). }
+    function OverrideVarsOver(const ADecls: TTyCssDeclarationArray): TStringList;
     function ResolveCacheKey(const ATypeKey, AStyleClass: string; AStates: TTyStateSet): string;
     procedure SetPropertyCascade(AValue: Boolean);
     procedure ClearList(ARules: TFPList);
@@ -168,6 +171,14 @@ type
       Bad-value tolerant: a parse failure yields EmptyStyleSet; a single bad declaration
       (e.g. var(--undefined)) is skipped (try/except) so an override never crashes paint. }
     function ResolveOverride(const ASource: string): TTyStyleSet;
+    { #98/#99. A theme length token as a control's own StyleOverride sets it. The block's
+      '--' declarations are laid over the merged vars, so one may name another or a theme
+      var, and AName is evaluated there. AFound is False when the block does not declare
+      AName or its value does not evaluate: the caller then asks the theme (ResolveMetric).
+      Not memoised here -- the control caches what it read, keyed on its text and on
+      ThemeVersion. }
+    function ResolveOverrideMetric(const ASource, AName: string; ADefault: Integer;
+      out AFound: Boolean): Integer;
     function MaxGlassBlur: Integer;   // largest glass-blur any active rule requests (0 = none)
     { P3 (D7) single-file dual-mode. Select which loaded '@mode NAME' (its inner :root)
       block's vars overlay the user :root in the merged var set. SetMode re-runs the merge
@@ -2249,17 +2260,24 @@ var
   decls: TTyCssDeclarationArray;
   i: Integer;
   savedBaseDir: string;
+  local: TStringList;
+  vars: TStrings;
 begin
   Result := EmptyStyleSet;
   if not TyParseOverride(ASource, decls) then
     Exit;   // malformed fragment -> empty override (no Present flags -> overlays nothing)
+  { #98/#99: the block's own '--' declarations are variables for the rest of it, as custom
+    properties on an element are in CSS -- and they are not style properties themselves. }
+  local := OverrideVarsOver(decls);
+  if local <> nil then vars := local else vars := FMergedVars;
   savedBaseDir := GThemeBaseDir;   // an override may set a background-image; resolve its url() vs the theme dir too
   GThemeBaseDir := FThemeBaseDir;
   try
     for i := 0 to High(decls) do
     begin
+      if Copy(Trim(decls[i].Prop), 1, 2) = '--' then Continue;
       try
-        TyApplyDeclaration(Result, decls[i].Prop, decls[i].RawValue, FMergedVars);
+        TyApplyDeclaration(Result, decls[i].Prop, decls[i].RawValue, vars);
       except
         on E: Exception do
           ; // skip a bad declaration; keep the other (good) override props
@@ -2267,6 +2285,61 @@ begin
     end;
   finally
     GThemeBaseDir := savedBaseDir;
+    local.Free;
+  end;
+end;
+
+function TTyStyleModel.OverrideVarsOver(const ADecls: TTyCssDeclarationArray): TStringList;
+var
+  i: Integer;
+  p: string;
+begin
+  Result := nil;
+  for i := 0 to High(ADecls) do
+  begin
+    p := Trim(ADecls[i].Prop);
+    if Copy(p, 1, 2) <> '--' then Continue;
+    if Result = nil then
+    begin
+      Result := TStringList.Create;
+      Result.Assign(FMergedVars);
+    end;
+    Result.Values[TyNormVarName(p)] := Trim(ADecls[i].RawValue);
+  end;
+end;
+
+function TTyStyleModel.ResolveOverrideMetric(const ASource, AName: string; ADefault: Integer;
+  out AFound: Boolean): Integer;
+var
+  decls: TTyCssDeclarationArray;
+  vars: TStringList;
+  i: Integer;
+  want, v: string;
+  declared: Boolean;
+begin
+  Result := ADefault;
+  AFound := False;
+  if (Trim(ASource) = '') or not TyParseOverride(ASource, decls) then Exit;
+  { only a token the BLOCK declares is the block's answer; a theme-only name is the theme's }
+  want := TyNormVarName(AName);
+  declared := False;
+  for i := 0 to High(decls) do
+    if (Copy(Trim(decls[i].Prop), 1, 2) = '--')
+       and SameText(TyNormVarName(decls[i].Prop), want) then
+      declared := True;
+  if not declared then Exit;
+  vars := OverrideVarsOver(decls);
+  try
+    v := Trim(vars.Values[want]);
+    if v = '' then Exit;
+    try
+      Result := TyEvalLength(v, vars);
+      AFound := True;
+    except
+      Result := ADefault;   // a value that does not evaluate: the theme answers instead
+    end;
+  finally
+    vars.Free;
   end;
 end;
 

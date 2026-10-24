@@ -183,6 +183,9 @@ begin
   for i := 0 to High(decls) do
   begin
     if Trim(decls[i].Prop) = '' then Continue;
+    { a custom property is a variable, open by definition; a control's StyleOverride uses them
+      to set the theme tokens it reads (#98/#99) }
+    if Copy(Trim(decls[i].Prop), 1, 2) = '--' then Continue;
     known := SameText(decls[i].Prop, 'background-color');   { the accepted alias }
     if not known then
       for j := 0 to High(TyKnownStyleProps) do
