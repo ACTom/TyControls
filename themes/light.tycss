@@ -350,6 +350,8 @@
   --transfer-rail-width: 56px;
   --transfer-title-height: 26px;
   --treeselect-drop-height: 220px;
+  --treeview-icon-gap: 2px;
+  --treeview-margin: 4px;
   --font-weight-normal: 400; --font-weight-bold: 700;
   --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */
 }

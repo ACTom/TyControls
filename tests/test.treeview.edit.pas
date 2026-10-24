@@ -1200,8 +1200,8 @@ begin
   AssertEquals('editor left == painted caption text-left (CellTextRect)',
     want.Left, edR.Left);
 
-  { Independent lower bound: indent(level1: (1+1)*16=32) + image(16) = 48 px @96. }
-  indentPx := (1 + 1) * 16;   { (level + Ord(ShowRoot)) * Indent, PPI=96 → 1:1 }
+  { Independent lower bound: margin 4 (#99) + indent(level1: (1+1)*16=32) + image(16) = 52 px @96. }
+  indentPx := TyTvMargin + (1 + 1) * 16;   { margin + (level + Ord(ShowRoot)) * Indent, PPI=96 → 1:1 }
   imgSlot  := 16;             { Indent-wide image slot }
   minClear := cell.Left + indentPx + imgSlot;
   AssertTrue('editor left clears indent + icon chrome',
@@ -1229,8 +1229,10 @@ begin
   want := TEditTreeAccess(FTree).CellTextRectPub(child, 0, cell);
   AssertEquals('editor left == CellTextRect @144', want.Left, edR.Left);
 
-  { indent (32 logical) + image (16 logical) + 2 logical, each scaled by 144/96. }
-  expectLeft := cell.Left + MulDiv(32, 144, 96) + MulDiv(16, 144, 96) + MulDiv(2, 144, 96);
+  { margin + indent (4 + 32 logical, scaled together as the slot walk does, #99) + image (16
+    logical) + 2 logical, each scaled by 144/96. }
+  expectLeft := cell.Left + MulDiv(TyTvMargin + 32, 144, 96) + MulDiv(16, 144, 96)
+    + MulDiv(2, 144, 96);
   AssertEquals('caption text-left scaled correctly @144', expectLeft, edR.Left);
 end;
 
@@ -1371,13 +1373,13 @@ begin
   Layout(96);
   AssertTrue('main cell resolves', FTree.GetCellRect(FChecked, 0, cell));
   AssertTrue('checked caption left', FTree.DisplayTextLeft(FChecked, left));
-  { indent (level 1 + ShowRoot = 2 steps of 24) + check 16 + image 24 + pad 2 }
-  AssertEquals('checked caption = cell + indent48 + check16 + image24 + pad2',
-    cell.Left + 48 + 16 + 24 + 2, left);
+  { margin 4 (#99) + indent (level 1 + ShowRoot = 2 steps of 24) + check 16 + image 24 + pad 2 }
+  AssertEquals('checked caption = cell + margin + indent48 + check16 + image24 + pad2',
+    cell.Left + TyTvMargin + 48 + 16 + 24 + 2, left);
 
   AssertTrue('plain caption left', FTree.DisplayTextLeft(FPlain, left));
-  AssertEquals('plain caption = cell + indent48 + image24 + pad2 (no check slot)',
-    cell.Left + 48 + 24 + 2, left);
+  AssertEquals('plain caption = cell + margin + indent48 + image24 + pad2 (no check slot)',
+    cell.Left + TyTvMargin + 48 + 24 + 2, left);
 end;
 
 procedure TTreeCheckCaptionXTest.TestEditorSitsOnTheCheckedNodesCaption;
@@ -1394,46 +1396,47 @@ begin
   AssertTrue('checked caption left', FTree.DisplayTextLeft(FChecked, left));
   AssertEquals('the editor opens on the caption, not one check slot left of it',
     left, edR.Left);
-  AssertEquals('which is the full slot walk', cell.Left + 48 + 16 + 24 + 2, edR.Left);
+  AssertEquals('which is the full slot walk', cell.Left + TyTvMargin + 48 + 16 + 24 + 2, edR.Left);
 end;
 
 procedure TTreeCheckCaptionXTest.TestCheckSlotComesBeforeTheImageSlot;
 var
   cell: TRect;
-  midY: Integer;
+  midY, m: Integer;
   part: TTyTreeHitPart;
 begin
   { The two slots are 16 and 24 px wide, so swapping them leaves the caption x
     unchanged and only this test would notice. }
   Build(96);
   Layout(96);
+  m := TyTvMargin;   { #99: every slot starts past the main column's leading inset }
   AssertTrue('main cell resolves', FTree.GetCellRect(FChecked, 0, cell));
   midY := (cell.Top + cell.Bottom) div 2;
 
   { Slot EDGES, not slot centres: a 16 and a 24 px slot both contain their own
     midpoint under most of the ways the walk could be wrong. }
-  FTree.GetNodeAtPoint(cell.Left + 48, midY, part);
+  FTree.GetNodeAtPoint(cell.Left + m + 48, midY, part);
   AssertEquals('the first pixel past the indent is the check box',
     Ord(hpCheckBox), Ord(part));
-  FTree.GetNodeAtPoint(cell.Left + 63, midY, part);
+  FTree.GetNodeAtPoint(cell.Left + m + 63, midY, part);
   AssertEquals('the check slot is 16 px wide', Ord(hpCheckBox), Ord(part));
-  FTree.GetNodeAtPoint(cell.Left + 64, midY, part);
+  FTree.GetNodeAtPoint(cell.Left + m + 64, midY, part);
   AssertEquals('the image slot starts one check slot in', Ord(hpImage), Ord(part));
-  FTree.GetNodeAtPoint(cell.Left + 87, midY, part);
+  FTree.GetNodeAtPoint(cell.Left + m + 87, midY, part);
   AssertEquals('and is 24 px wide', Ord(hpImage), Ord(part));
-  FTree.GetNodeAtPoint(cell.Left + 88, midY, part);
+  FTree.GetNodeAtPoint(cell.Left + m + 88, midY, part);
   AssertEquals('after which the caption begins', Ord(hpLabel), Ord(part));
 
   { The sibling without a box: its image slot starts where the checked node's BOX
     starts, so the two nodes' zones differ by exactly the missing slot. }
   AssertTrue('plain main cell resolves', FTree.GetCellRect(FPlain, 0, cell));
   midY := (cell.Top + cell.Bottom) div 2;
-  FTree.GetNodeAtPoint(cell.Left + 48, midY, part);
+  FTree.GetNodeAtPoint(cell.Left + m + 48, midY, part);
   AssertEquals('a node with no box starts its image slot at the indent',
     Ord(hpImage), Ord(part));
-  FTree.GetNodeAtPoint(cell.Left + 71, midY, part);
+  FTree.GetNodeAtPoint(cell.Left + m + 71, midY, part);
   AssertEquals('24 px of it', Ord(hpImage), Ord(part));
-  FTree.GetNodeAtPoint(cell.Left + 72, midY, part);
+  FTree.GetNodeAtPoint(cell.Left + m + 72, midY, part);
   AssertEquals('and its caption begins one check slot earlier',
     Ord(hpLabel), Ord(part));
 end;
@@ -1448,7 +1451,7 @@ begin
   AssertTrue('main cell resolves @144', FTree.GetCellRect(FChecked, 0, cell));
   AssertTrue('checked caption left @144', FTree.DisplayTextLeft(FChecked, left));
   AssertEquals('every slot scales, the check box included',
-    cell.Left + MulDiv(48, 144, 96) + MulDiv(16, 144, 96)
+    cell.Left + MulDiv(TyTvMargin + 48, 144, 96) + MulDiv(16, 144, 96)
              + MulDiv(24, 144, 96) + MulDiv(2, 144, 96), left);
 end;
 

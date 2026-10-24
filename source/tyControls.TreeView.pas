@@ -55,7 +55,7 @@ type
     is where the icon slot begins. A consumer that kept using the cell's own right edge
     would draw the caption straight through the chrome. }
   TTyTreeCaptionSlots = record
-    IndentPx:    Integer;   { Scale((level + Ord(ShowRoot)) * Indent) }
+    IndentPx:    Integer;   { Scale(margin + (level + Ord(ShowRoot)) * Indent); margin #99 }
     ButtonSlotX: Integer;   { LEFT of the expander slot, in either direction }
     ButtonSlotW: Integer;   { Scale(Indent) }
     CheckX:      Integer;   { LEFT of the checkbox slot; valid iff CheckW > 0 }
@@ -65,6 +65,10 @@ type
     CaptionX:    Integer;   { LEFT of the caption region, BEFORE TextPad }
     CaptionRight:Integer;   { RIGHT of the caption region, before the same pad }
     TextPad:     Integer;   { Scale(2) in the main column, Scale(4) elsewhere }
+    { #99: the gap in front of the caption beyond TextPad -- Scale(gap) - TextPad when a
+      check box or an image precedes it, else 0; negative for a gap under 2 px. Already
+      counted in CaptionX; a consumer that adds the slots up (the width measure) adds it. }
+    GapW:        Integer;
     RightToLeft: Boolean;   { the direction the walk ran in; read by the hit-test ladder }
   end;
 
@@ -250,6 +254,11 @@ type
     Node: PTyTreeNode; Column: Integer; const ACellRect: TRect) of object;
 
 const
+  { #99. The main column's leading inset and the gap in front of a caption, in logical px:
+    what --treeview-margin and --treeview-icon-gap fall back to. 4 is --listview-text-margin's
+    default, so a tree lines up with list rows; 2 is the gap a caption always had. }
+  TyTvMargin  = 4;
+  TyTvIconGap = 2;
   TreeNodeSize = (SizeOf(TTyTreeNode) + 7) and not 7;  // pointer-aligned struct stride
   { B3: one cache mark per TREE_CACHE_STEP visible nodes.
     A flat 200k-node list will have ~100 marks; a GetNodeAt near the end
@@ -772,6 +781,9 @@ type
       Every caller now names the same cell. }
     function  NodeCaptionSlots(Node: PTyTreeNode; ACellLeft, ACellRight, APPI: Integer;
                 AIsMainColumn: Boolean): TTyTreeCaptionSlots;
+    { #99. The main column's leading inset, logical px (--treeview-margin, per control):
+      the slots take it, and so do the tree lines, the one x not drawn from the slots. }
+    function  MainColumnMargin: Integer;
     { The main column's cell left, expressed in GetNodeAtPoint's CONTENT space
       (x 0 = logical x 0, i.e. CR.Left + FOffsetX). That is Scale(MainColumn.Left)
       in multi-column mode and 0 in the 0-column tree, whose single cell is anchored
@@ -1411,7 +1423,15 @@ type
   It is also the only version under which a mirrored cell provably has no gap the
   unmirrored one lacked. LTR leaves every field byte-identical to before. }
 function TyTreeCaptionSlots(ACellLeft, ACellRight, APPI, AIndent, ALevel: Integer;
-  AShowRoot, AHasCheckBox, AHasImage, AIsMainColumn, ARightToLeft: Boolean): TTyTreeCaptionSlots;
+  AShowRoot, AHasCheckBox, AHasImage, AIsMainColumn, ARightToLeft: Boolean): TTyTreeCaptionSlots; overload;
+{ #99. The same walk with the main column's leading inset, AMarginLogical (before the indent
+  at every level, so the expander, the tree lines, the image and the caption all move with
+  it), and the gap in front of the caption, ACaptionGapLogical (when a check box or an image
+  precedes it). The overload above is this one with a margin of 0 and a gap of 2: the
+  geometry it always had. }
+function TyTreeCaptionSlots(ACellLeft, ACellRight, APPI, AIndent, ALevel, AMarginLogical,
+  ACaptionGapLogical: Integer; AShowRoot, AHasCheckBox, AHasImage, AIsMainColumn,
+  ARightToLeft: Boolean): TTyTreeCaptionSlots; overload;
 
 implementation
 
@@ -1915,6 +1935,14 @@ end;
 
 function TyTreeCaptionSlots(ACellLeft, ACellRight, APPI, AIndent, ALevel: Integer;
   AShowRoot, AHasCheckBox, AHasImage, AIsMainColumn, ARightToLeft: Boolean): TTyTreeCaptionSlots;
+begin
+  Result := TyTreeCaptionSlots(ACellLeft, ACellRight, APPI, AIndent, ALevel, 0, 2,
+    AShowRoot, AHasCheckBox, AHasImage, AIsMainColumn, ARightToLeft);
+end;
+
+function TyTreeCaptionSlots(ACellLeft, ACellRight, APPI, AIndent, ALevel, AMarginLogical,
+  ACaptionGapLogical: Integer; AShowRoot, AHasCheckBox, AHasImage, AIsMainColumn,
+  ARightToLeft: Boolean): TTyTreeCaptionSlots;
 
   { Reflect a [X, X+W) slot about the cell and return its new LEFT. Width is invariant,
     which is exactly why the fields can stay physical-left and every consumer's [X, X+W)
@@ -1940,7 +1968,7 @@ begin
     Exit;
   end;
 
-  Result.IndentPx    := MulDiv((ALevel + Ord(AShowRoot)) * AIndent, APPI, 96);
+  Result.IndentPx    := MulDiv(AMarginLogical + (ALevel + Ord(AShowRoot)) * AIndent, APPI, 96);
   { The expander occupies the Indent-wide slot that ENDS at IndentPx, so it is
     drawn inside the indent the node has already earned rather than pushing the
     caption further along at every level. }
@@ -1966,6 +1994,14 @@ begin
   end;
   Result.CaptionRight := ACellRight;
   Result.TextPad      := MulDiv(2, APPI, 96);
+  { #99: in front of a caption that follows a check box or an image, the gap is
+    ACaptionGapLogical; TextPad is 2 px of it and GapW the rest. Taken here, before the
+    reflection, so a mirrored caption keeps the gap on the image's side. }
+  if AHasCheckBox or AHasImage then
+  begin
+    Result.GapW := MulDiv(Max(0, ACaptionGapLogical), APPI, 96) - Result.TextPad;
+    Inc(Result.CaptionX, Result.GapW);
+  end;
 
   if not ARightToLeft then Exit;
   { One reflection, applied to every slot including the caption remainder. Reflecting the
@@ -4925,6 +4961,11 @@ end;
 
   Returns False only when a REAL column index does not resolve to a visible
   column (out of range / coVisible off); the main/0-column cases always succeed. }
+function TTyCustomTreeView.MainColumnMargin: Integer;
+begin
+  Result := StyleMetric('--treeview-margin', TyTvMargin);
+end;
+
 function TTyCustomTreeView.NodeCaptionSlots(Node: PTyTreeNode; ACellLeft, ACellRight, APPI: Integer;
   AIsMainColumn: Boolean): TTyTreeCaptionSlots;
 var
@@ -4932,6 +4973,7 @@ var
 begin
   if Node <> nil then level := GetNodeLevel(Node) else level := 0;
   Result := TyTreeCaptionSlots(ACellLeft, ACellRight, APPI, FIndent, level,
+    MainColumnMargin, StyleMetric('--treeview-icon-gap', TyTvIconGap),
     FShowRoot,
     { A checkbox slot is reserved only when the tree supports check marks AND this
       node actually asked for one -- the paint, the hit test and the editor all
@@ -5667,7 +5709,7 @@ begin
               begin
                 ancLevel := GetNodeLevel(anc);
                 ancSlotX := TreeLineX(mainColBase, colCellRight,
-                              mainColBase + P.Scale((ancLevel + Ord(FShowRoot)) * FIndent)
+                              mainColBase + P.Scale(MainColumnMargin + (ancLevel + Ord(FShowRoot)) * FIndent)
                                           - (slots.ButtonSlotW shr 1));
                 if anc^.NextSibling <> nil then
                   P.DrawRule(ancSlotX, rowTop, ancSlotX, rowTop + rowH,
@@ -5676,7 +5718,7 @@ begin
               end;
               ancMidX := TreeLineX(mainColBase, colCellRight,
                            mainColBase
-                             + P.Scale((level - 1 + Ord(FShowRoot)) * FIndent + FIndent)
+                             + P.Scale(MainColumnMargin + (level - 1 + Ord(FShowRoot)) * FIndent + FIndent)
                              - (slots.ButtonSlotW shr 1));
               ancMidY := rowTop + rowH div 2;
               P.DrawRule(ancMidX, rowTop,    ancMidX, ancMidY,
@@ -5952,7 +5994,7 @@ begin
           begin
             ancLevel := GetNodeLevel(anc);
             ancSlotX := TreeLineX(contentLeft, CR.Right,
-                          contentLeft + P.Scale((ancLevel + Ord(FShowRoot)) * FIndent)
+                          contentLeft + P.Scale(MainColumnMargin + (ancLevel + Ord(FShowRoot)) * FIndent)
                                       - (slots.ButtonSlotW shr 1));
             if anc^.NextSibling <> nil then
               P.DrawRule(ancSlotX, rowTop, ancSlotX, rowTop + rowH,
@@ -5963,7 +6005,7 @@ begin
           { Elbow at this node's level: vertical half + horizontal stub. }
           ancMidX := TreeLineX(contentLeft, CR.Right,
                        contentLeft
-                         + P.Scale((level - 1 + Ord(FShowRoot)) * FIndent + FIndent)
+                         + P.Scale(MainColumnMargin + (level - 1 + Ord(FShowRoot)) * FIndent + FIndent)
                          - (slots.ButtonSlotW shr 1));
           ancMidY := rowTop + rowH div 2;
           P.DrawRule(ancMidX, rowTop,    ancMidX, ancMidY,
@@ -6170,7 +6212,7 @@ begin
         begin
           { What the row shows: a multi-line text is drawn as its first line and '...', so that
             is what the range is measured for, not every line glued together (#18). }
-          measW := slots.IndentPx + slots.CheckW + slots.ImageW + slots.TextPad +
+          measW := slots.IndentPx + slots.CheckW + slots.ImageW + slots.GapW + slots.TextPad +
             P.MeasureText(TySingleLineText(txt), NodeStyle.FontName, ResolveFontSize(NodeStyle),
                           NodeStyle.FontWeight).cx + P.Scale(4);
           if measW > rangeXNew then

@@ -4848,30 +4848,31 @@ end;
 procedure TRtlTreeViewTest.TheChromeSlotsRunFromTheCellsRightEdgeInwards;
 var
   cell: TRect;
-  y: Integer;
+  y, m: Integer;
   part: TTyTreeHitPart;
 begin
   Build(True);
+  m := TyTvMargin;   { #99: the main column's leading inset, at the reading start }
   cell := MainCell;
   y := RowMidY(FBoxed);
-  { level 1 + ShowRoot = 2 indent steps of 24 = 48; check 16; image 24.
+  { the inset m, then level 1 + ShowRoot = 2 indent steps of 24 = 48; check 16; image 24.
     FBoxed is a LEAF, so its expander slot classifies as indent -- which is the existing
     rule (hpButton needs ShowButtons AND children) and is asserted on a node that has
     children by TheExpanderIsPaintedWhereTheHitTestOpensIt. }
   FT.GetNodeAtPoint(cell.Right - 1, y, part);
   AssertEquals('the cell''s last pixel is indent', Ord(hpIndent), Ord(part));
-  FT.GetNodeAtPoint(cell.Right - 48, y, part);
-  AssertEquals('and so is the last pixel of the indent, 48 in', Ord(hpIndent), Ord(part));
-  FT.GetNodeAtPoint(cell.Right - 48 - 1, y, part);
+  FT.GetNodeAtPoint(cell.Right - m - 48, y, part);
+  AssertEquals('and so is the last pixel of the indent, m + 48 in', Ord(hpIndent), Ord(part));
+  FT.GetNodeAtPoint(cell.Right - m - 48 - 1, y, part);
   AssertEquals('and the check slot begins immediately past the indent',
     Ord(hpCheckBox), Ord(part));
-  FT.GetNodeAtPoint(cell.Right - 48 - 16, y, part);
+  FT.GetNodeAtPoint(cell.Right - m - 48 - 16, y, part);
   AssertEquals('the check slot is 16 px wide', Ord(hpCheckBox), Ord(part));
-  FT.GetNodeAtPoint(cell.Right - 48 - 16 - 1, y, part);
+  FT.GetNodeAtPoint(cell.Right - m - 48 - 16 - 1, y, part);
   AssertEquals('after which the icon slot starts', Ord(hpImage), Ord(part));
-  FT.GetNodeAtPoint(cell.Right - 48 - 16 - 24, y, part);
+  FT.GetNodeAtPoint(cell.Right - m - 48 - 16 - 24, y, part);
   AssertEquals('and is 24 px wide', Ord(hpImage), Ord(part));
-  FT.GetNodeAtPoint(cell.Right - 48 - 16 - 24 - 1, y, part);
+  FT.GetNodeAtPoint(cell.Right - m - 48 - 16 - 24 - 1, y, part);
   AssertEquals('everything further in is the caption', Ord(hpLabel), Ord(part));
 end;
 
@@ -4989,7 +4990,7 @@ begin
   AssertEquals('the caption box starts at the cell''s far end plus its pad',
     cell.Left + 2, tr.Left);
   AssertEquals('and ends where the icon slot begins, less the same pad',
-    cell.Right - 48 - 16 - 24 - 2, tr.Right);
+    cell.Right - TyTvMargin - 48 - 16 - 24 - 2, tr.Right);
   bmp := Shot;
   try
     { The ROW band only: the header captions resolve the same colour, and scanning the
@@ -4997,7 +4998,7 @@ begin
     AssertTrue('some caption ink was drawn in the row',
       ChannelInkCountRows(bmp, chBlue, cell.Left, cell.Right, cell.Top, cell.Bottom) > 0);
     AssertEquals('and none of it strays into the chrome slots',
-      0, ChannelInkCountRows(bmp, chBlue, cell.Right - 48 - 16 - 24, cell.Right,
+      0, ChannelInkCountRows(bmp, chBlue, cell.Right - TyTvMargin - 48 - 16 - 24, cell.Right,
                              cell.Top, cell.Bottom));
     AssertTrue('precondition: the ink probe is looking at a real row',
       (l <= 0) or (r >= 0));
@@ -5050,9 +5051,12 @@ begin
     (btn.Left >= cell.Left) and (btn.Right <= cell.Right));
   y := RowMidY(FRoot);
   { The root is one indent step deep and HAS children, so that single step is entirely
-    its expander slot -- the middle cell's last pixel is the button, not bare indent. }
+    its expander slot -- after the main column's leading inset (#99), which is indent. }
   FT.GetNodeAtPoint(cell.Right - 1, y, part);
-  AssertEquals('the middle cell''s last pixel is the root''s expander',
+  AssertEquals('the middle cell''s last pixel is its leading inset',
+    Ord(hpIndent), Ord(part));
+  FT.GetNodeAtPoint(cell.Right - 1 - TyTvMargin, y, part);
+  AssertEquals('and the pixel past the inset is the root''s expander',
     Ord(hpButton), Ord(part));
   FT.GetNodeAtPoint(cell.Left + 1, y, part);
   AssertEquals('and its far end is the caption', Ord(hpLabel), Ord(part));

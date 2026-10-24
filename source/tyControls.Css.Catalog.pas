@@ -5,7 +5,7 @@ unit tyControls.Css.Catalog;
   Change the theme and re-run the script. test.css.catalog guards the two against drift.
 
   The machine-readable tycss vocabulary for the design-time StyleOverride editor:
-    - TyCatalogTokens   : the --custom-property names a theme defines (268 of them).
+    - TyCatalogTokens   : the --custom-property names a theme defines (270 of them).
                           OPEN axis -- a theme may invent more, so the editor SUGGESTS these but
                           must not reject an unknown one.
     - TyCatalogTypeKeys : the control selector heads (325 of them), for the
@@ -18,7 +18,7 @@ unit tyControls.Css.Catalog;
 interface
 
 const
-  TyCatalogTokens: array[0..267] of string = (
+  TyCatalogTokens: array[0..269] of string = (
     '--accent',
     '--accent-active',
     '--accent-hover',
@@ -286,6 +286,8 @@ const
     '--transfer-rail-width',
     '--transfer-title-height',
     '--treeselect-drop-height',
+    '--treeview-icon-gap',
+    '--treeview-margin',
     '--warning');
 
   TyCatalogTypeKeys: array[0..324] of string = (

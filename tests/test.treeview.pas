@@ -4446,10 +4446,10 @@ begin
     try
       rowY := 33;  // row 0 centre
 
-      { Check blue fill at x=50 (col 0, well past the expand button + image slots at x=[0..32)).
-        The caption 'Root' starts around x=36, so x=50 may have text — but text on a blue
-        background is still blue-dominant (composite). We use blue>150 as a loose bar. }
-      px0 := Bgra.GetPixel(50, rowY);
+      { Check blue fill at x=90 (col 0, past the caption 'Root' and before column 1 at
+        x=120). It used to sample x=50, inside the caption, and leaned on text being blue-
+        dominant; the leading inset (#99) moved a glyph stroke onto that pixel. }
+      px0 := Bgra.GetPixel(90, rowY);
 
       { Check blue fill at x=205 (5px into col 2, before right-aligned text starts).
         'C2Right' is right-aligned; in a 100px cell with 4px margin the text ends at
@@ -4457,10 +4457,10 @@ begin
       px2 := Bgra.GetPixel(205, rowY);
 
       AssertTrue(
-        'C1d: selection fill blue channel > 150 at col0 x=50 y=' + IntToStr(rowY),
+        'C1d: selection fill blue channel > 150 at col0 x=90 y=' + IntToStr(rowY),
         px0.blue > 150);
       AssertTrue(
-        'C1d: selection fill red channel < 200 at col0 x=50 y=' + IntToStr(rowY),
+        'C1d: selection fill red channel < 200 at col0 x=90 y=' + IntToStr(rowY),
         px0.red < 200);
       AssertTrue(
         'C1d: selection fill blue channel > 150 at col2 x=205 y=' + IntToStr(rowY),
@@ -7864,9 +7864,10 @@ begin
     t.InternalSetSelected(nodes[1], True);
     t.InternalSetSelected(nodes[2], True);
     AssertEquals('D1 cb: pre-sel count=2', 2, t.SelectedCount);
-    { Click the checkbox slot of nodes[0]: x=20 (indentPx=16, cbSlot=[16..31]) }
+    { Click the middle of nodes[0]'s checkbox slot: the leading inset (#99) and one indent
+      step (ShowRoot) come first, then the 16 px box. }
     {$PUSH}{$HINTS OFF}
-    TTyTreeViewAccess(t).MouseDown(mbLeft, [], 20, 10);
+    TTyTreeViewAccess(t).MouseDown(mbLeft, [], TyTvMargin + 16 + 8, 10);
     {$POP}
     AssertEquals('D1 cb: count still=2 after checkbox click', 2, t.SelectedCount);
     AssertTrue('D1 cb: node[1] still selected', nsSelected in nodes[1]^.States);

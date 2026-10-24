@@ -1124,8 +1124,8 @@ begin
   Build(1);
   AssertTrue('fixture: main cell resolves', FTree.GetCellRect(FRoot, 1, cell));
   AssertTrue('fixture: the node has an expander', FTree.DisplayExpandSignRect(FRoot, exp));
-  AssertEquals('the expander is painted at the main column cell left',
-    cell.Left, exp.Left);
+  AssertEquals('the expander is painted the leading inset into the main column cell (#99)',
+    cell.Left + TyTvMargin, exp.Left);
 
   midX := (exp.Left + exp.Right) div 2;
   midY := RowMidY;
@@ -1144,7 +1144,10 @@ begin
   AssertEquals('the chevron''s FIRST painted pixel is the button',
     Ord(hpButton), Ord(part));
   FTree.GetNodeAtPoint(exp.Left - 1, midY, part);
-  AssertEquals('the pixel before it is the previous column''s body',
+  AssertEquals('the pixel before it is the main cell''s leading inset, not the button (#99)',
+    Ord(hpIndent), Ord(part));
+  FTree.GetNodeAtPoint(cell.Left - 1, midY, part);
+  AssertEquals('and the pixel before the main cell is the previous column''s body',
     Ord(hpLabel), Ord(part));
   FTree.GetNodeAtPoint(exp.Right - 1, midY, part);
   AssertEquals('the chevron''s LAST painted pixel is still the button',
@@ -1163,8 +1166,8 @@ begin
   Build(2);
   AssertTrue('fixture: main cell resolves', FTree.GetCellRect(FRoot, 2, cell));
   AssertTrue('fixture: the node has an expander', FTree.DisplayExpandSignRect(FRoot, exp));
-  AssertEquals('the expander is painted at the main column cell left',
-    cell.Left, exp.Left);
+  AssertEquals('the expander is painted the leading inset into the main column cell (#99)',
+    cell.Left + TyTvMargin, exp.Left);
 
   midX := (exp.Left + exp.Right) div 2;
   midY := RowMidY;
@@ -1205,10 +1208,10 @@ begin
   Build(1);
   AssertTrue('fixture: main cell resolves', FTree.GetCellRect(FRoot, 1, cell));
   AssertTrue('caption left available', FTree.DisplayTextLeft(FRoot, left));
-  { indent 16 (level 0 + ShowRoot) + the main column's 2px text pad. Spelled out
-    rather than compared to a sibling: a shifted anchor moves both. }
-  AssertEquals('the caption starts one indent + one text pad into the MAIN cell',
-    cell.Left + 16 + 2, left);
+  { the leading inset (#99) + indent 16 (level 0 + ShowRoot) + the main column's 2px text pad.
+    Spelled out rather than compared to a sibling: a shifted anchor moves both. }
+  AssertEquals('the caption starts the inset + one indent + one text pad into the MAIN cell',
+    cell.Left + TyTvMargin + 16 + 2, left);
   AssertTrue('which is inside that cell', (left >= cell.Left) and (left < cell.Right));
 end;
 
@@ -1221,8 +1224,8 @@ begin
   Build(0);
   AssertTrue('fixture: main cell resolves', FTree.GetCellRect(FRoot, 0, cell));
   AssertTrue('fixture: the node has an expander', FTree.DisplayExpandSignRect(FRoot, exp));
-  AssertEquals('unchanged: the leftmost main column anchors at its own cell left',
-    cell.Left, exp.Left);
+  AssertEquals('unchanged: the leftmost main column anchors at its own cell left, plus the inset',
+    cell.Left + TyTvMargin, exp.Left);
   midY := RowMidY;
   FTree.GetNodeAtPoint((exp.Left + exp.Right) div 2, midY, part);
   AssertEquals('and still answers hpButton', Ord(hpButton), Ord(part));
