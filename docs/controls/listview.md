@@ -31,6 +31,8 @@
 
 > `TyListViewLine` 与 `TyListViewMarquee` 是**可选钩子**:`themes/light.tycss` 有意不定义它们,绘制侧各有一条后备链 —— 格线回落到外框的 `border-color`,橡皮筋回落到 `TyListViewItem:selected` 的背景、再回落到外框边框色。皮肤想改就写一条 `background:`,不写则维持原样。橡皮筋的**色相**来自主题,只有半透明度是固定常数。
 
+**尺寸令牌。** 报表视图的一格里,内容从 `--listview-text-margin`(默认 4px)开始:有图标就是图标,没有就是文字,和列头一样;图标和文字之间隔 `--listview-icon-gap`(默认 2px)。列表读的所有尺寸令牌都可以只给这一个控件改,写进它的 `StyleOverride`,比如 `--listview-text-margin: 8px; --listview-icon-gap: 6px;`;整个应用统一改,就写在主题或控制器的 `StyleOverride` 里,见 [tycss 参考](../tycss-reference.md) §3.4。
+
 ```pascal
 uses tyControls.ListView, tyControls.ListView.Layout, tyControls.Columns;
 ```

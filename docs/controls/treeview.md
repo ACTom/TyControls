@@ -18,6 +18,8 @@
 
 在 `.tycss` 文件中，控件外框对应选择器前缀 `TyTreeView`。此外控件在绘制时还会解析若干**子部件 typeKey**（均不是独立控件，只是主题查找键）：`TyTreeNode`（行）、`TyTreeHeader`（表头带）、`TyTreeHeaderSection`（表头分区）、`TyTreeCheckBox`（复选 / 单选框槽）。详见第 5 节。
 
+**主列的留白与间距。** 主列的内容从 `--treeview-margin`（默认 4px，与列表的 `--listview-text-margin` 相同）开始，每一层的缩进都加在它后面，展开按钮、树线、复选框、图标和文字一起移动；文字前面的间距是 `--treeview-icon-gap`（默认 2px，前面有图标或复选框时生效）。这两个令牌可以只给这一棵树改，写进它的 `StyleOverride`，比如 `--treeview-margin: 10px;`；整个应用统一改，就写在主题或控制器的 `StyleOverride` 里，见 [tycss 参考](../tycss-reference.md) §3.4。
+
 ```pascal
 uses tyControls.TreeView, tyControls.Columns;
 ```
