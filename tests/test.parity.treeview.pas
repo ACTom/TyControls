@@ -907,7 +907,8 @@ begin
   Include(FN[1]^.States, nsHasChildren);
   AssertTrue('an expandable node does', FT.DisplayExpandSignRect(FN[1], r));
   AssertTrue('non-empty', (r.Right > r.Left) and (r.Bottom > r.Top));
-  AssertTrue('and it sits left of the caption', r.Right <= cr.Left + 16);
+  AssertTrue('and it sits left of the caption, past the leading inset (#99)',
+    r.Right <= cr.Left + TyTvMargin + 16);
   AssertTrue('inside row 1 vertically',
     (r.Top >= cr.Top + 18) and (r.Bottom <= cr.Top + 36));
 end;

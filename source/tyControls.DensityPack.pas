@@ -177,6 +177,7 @@ begin
     '  --transfer-rail-width: 78px;' + LineEnding +
     '  --transfer-title-height: 36px;' + LineEnding +
     '  --treeselect-drop-height: 308px;' + LineEnding +
+    '  --treeview-margin: 6px;' + LineEnding +
     '}';
 end;
 
