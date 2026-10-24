@@ -20,6 +20,8 @@
 
 **主列的留白与间距。** 主列的内容从 `--treeview-margin`（默认 4px，与列表的 `--listview-text-margin` 相同）开始，每一层的缩进都加在它后面，展开按钮、树线、复选框、图标和文字一起移动；文字前面的间距是 `--treeview-icon-gap`（默认 2px，前面有图标或复选框时生效）。这两个令牌可以只给这一棵树改，写进它的 `StyleOverride`，比如 `--treeview-margin: 10px;`；整个应用统一改，就写在主题或控制器的 `StyleOverride` 里，见 [tycss 参考](../tycss-reference.md) §3.4。
 
+**树线与展开符号。** 默认只在每个祖先的展开符号下面画一条竖线（`--treeview-lines: guides`），节点自己这一层不画，所以线不会穿过展开符号；要完整连线写 `classic`，不要线写 `none`。线型用 `--treeview-lines-style`（`solid`、`dotted`、`dashed`，或 `6px 3px` 这样的长度），颜色用 `--treeview-lines-color`（默认是树的边框色）。`--treeview-expander: plus-minus` 把展开符号换成带方框的 +/-，画在连线交汇的地方。内置皮肤 `classic`、`xp` 用的就是方框 +/- 加点线。这几个令牌同样可以只写进这棵树的 `StyleOverride`；`ShowTreeLines := False` 时一律不画线。详见 [tycss 参考](../tycss-reference.md) §3.5。
+
 ```pascal
 uses tyControls.TreeView, tyControls.Columns;
 ```
@@ -42,7 +44,7 @@ uses tyControls.TreeView, tyControls.Columns;
 | `Images` | `TCustomImageList` | `nil` | 主列节点图标的图像列表，配合 `OnGetImageIndex` 使用。类型是 `TCustomImageList`（对齐 LCL），任何派生自它的列表都能赋值 |
 | `EmptyListMessage` | `TCaption` | `''` | 树为空时在内容区居中显示的提示文字 |
 | `ShowButtons` | `Boolean` | `True` | 是否绘制展开 / 折叠按钮（±方块） |
-| `ShowTreeLines` | `Boolean` | `True` | 是否绘制连接父子节点的树状连线 |
+| `ShowTreeLines` | `Boolean` | `True` | 是否绘制树线（总开关）；画成什么样由主题令牌决定，见上文「树线与展开符号」 |
 | `ShowRoot` | `Boolean` | `True` | 根节点是否显示展开按钮 / 缩进（`False` 时根节点平铺无缩进） |
 | `ToggleOnDblClick` | `Boolean` | `True` | 双击一行是否展开 / 折叠该节点 |
 | `HotTrack` | `Boolean` | `False` | 是否高亮鼠标悬停行（`:hover` 状态） |

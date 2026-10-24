@@ -205,10 +205,12 @@ and text controls to reference. They are ordinary `--` variables and theme autho
 > family at its own edit's values gets those controls looking like that edit.
 > Like `--accent` and `--on-surface` above they are evaluated lazily at use sites and may reference other variables.
 
-### 3.4 Length tokens: for the whole application, or for one control
+### 3.4 Tokens controls read: for the whole application, or for one control
 
-`:root` also carries **length tokens** that controls read for their insets, gaps and slot sizes,
-such as `--listview-text-margin` and `--treeview-margin`. A value may be `6px`, `6` or `var(--x)`.
+`:root` also carries tokens that controls read. Most are **lengths**, for insets, gaps and slot
+sizes, such as `--listview-text-margin` and `--treeview-margin`; a value may be `6px`, `6` or
+`var(--x)`. Some take a word or a colour, such as the tree's `--treeview-lines: classic` and
+`--treeview-lines-color: #a0a0a0` (§3.5).
 
 **For the whole application**, set them in the theme or in the controller's `StyleOverride`:
 
@@ -228,13 +230,54 @@ win over the theme:
 
 The `--` declarations in a control's `StyleOverride` are also variables for the block's other
 declarations, e.g. `--w: 2px; border-width: var(--w);`. A value that does not evaluate (a wrong
-unit, an undefined variable) has no effect and the theme's value stands.
+unit, an undefined variable) has no effect and the theme's value stands. For a token that takes a
+word, a value that is only a reference (`var(--x)` or `--x`) reads as what it refers to; one that
+refers to nothing leaves the theme's value standing too.
 
 Controls that read their tokens this way so far: `TTyListView` (and `TTyShellListView`), for every
 length token it reads -- `--listview-*`, `--row-height` and `--scrollbar-size`; `TTyTreeView` (and
-`TTyShellTreeView`), for `--treeview-margin` and `--treeview-icon-gap`. Other controls take the
-theme's values only, for now. Versions before 3.0.4 ignore `--` declarations in a control's
-`StyleOverride`, so a form saved with them still loads there.
+`TTyShellTreeView`), for `--treeview-margin`, `--treeview-icon-gap` and the four tree-line tokens of
+§3.5. Other controls take the theme's values only, for now. Versions before 3.0.4 ignore `--`
+declarations in a control's `StyleOverride`, so a form saved with them still loads there.
+
+### 3.5 Tree lines and expanders
+
+Four tokens decide how a tree draws its lines and its expanders. Like those of §3.4, they can go
+in the theme or in one tree's own `StyleOverride`.
+
+| Token | Values | Default | Meaning |
+|---|---|---|---|
+| `--treeview-lines` | `guides` / `classic` / `none` | `guides` | `guides`: a vertical line under each ancestor's expander, through the rows of its descendants, and nothing at the node's own level, so no line meets an expander. `classic`: the full connectors, including the node's own line down from the row above and across to its content. `none`: no lines. |
+| `--treeview-lines-style` | `solid` / `dotted` / `dashed` / one or two lengths | `solid` | The dash. `dotted` is `1px 1px` and `dashed` is `3px 3px`. Lengths work as in SVG's `stroke-dasharray`, dash first, then gap; one length gives a gap as long as the dash, e.g. `6px 3px` for a long dash. Logical pixels, scaled with the DPI. |
+| `--treeview-lines-color` | a colour | the tree's border colour | The lines' colour; `var()` and the colour functions work. |
+| `--treeview-expander` | `chevron` / `plus-minus` | `chevron` | `plus-minus` is a boxed +/- drawn where the connectors meet; `classic` lines stop at its edges. It is hit exactly like the chevron. |
+
+Of the built-in themes, the `classic` and `xp` skins use `plus-minus`, `classic` and `dotted`; the
+others keep the defaults.
+
+A dotted or dashed pattern is anchored to the tree's content origin, not restarted for every
+segment: the verticals of consecutive rows run on as one line, a corner joins on the same pattern,
+and the pattern moves with the content when it scrolls.
+
+The `ShowTreeLines` property is still the master switch: `False` draws no lines whatever the
+tokens say. Whether there is an expander at all is still up to `ShowButtons`.
+
+```css
+/* a classic tree throughout the application */
+:root {
+  --treeview-expander: plus-minus;
+  --treeview-lines: classic;
+  --treeview-lines-style: dotted;
+}
+```
+
+To leave the lines off one tree only, put this in its `StyleOverride`:
+
+```text
+--treeview-lines: none;
+```
+
+Before 3.0.4 there were no such tokens, and a tree drew solid full connectors with a chevron.
 
 ---
 
@@ -533,7 +576,8 @@ A `solid` border is stroked along the inside of the rounded rectangle.
   (lighten for top/left, darken for bottom/right). Bevels are inherently **square-cornered** (the corner radius is not
   applied), suiting classic-style controls (pair with `border-radius: 0`).
 
-`dashed`, `dotted`, `groove`, `ridge`, and other styles are not supported.
+`dashed`, `dotted`, `groove`, `ridge`, and other styles are not supported. A tree's dotted or
+dashed lines have a token of their own, `--treeview-lines-style` (§3.5).
 
 ```css
 TyEdit       { border-color: var(--border); border-width: 1px; }
@@ -1420,6 +1464,10 @@ Engine-level limitations (each expanded in the sections above):
     - `--radio-size` / `--radio-gap` — the same for radio buttons (the dot scales proportionally with the box);
     - `--groupbox-caption-height` — the GroupBox top caption band height (default 16).
     - `--track-remove-distance` — how far past the control's edge, across the track, a thumb of a multi-thumb slider has to be dragged to go on release (default 24).
+    - `--listview-text-margin` / `--listview-icon-gap` — where a list view's report row starts its
+      content / the gap between its icon and its caption (defaults 4 / 2);
+    - `--treeview-margin` / `--treeview-icon-gap` — a tree's main-column inset / the gap in front of
+      the caption (defaults 4 / 2). These two pairs can also be set for one control alone (§3.4).
     - `--line-height` — the line box height (logical px) of **multi-line** captions. **No built-in constant**: when unset,
       the font's own line box is used, so nothing moves until you add the token; once set, the text block is
       `line count × value`, with the extra height split evenly above and below each line. The control's derived
