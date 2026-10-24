@@ -283,7 +283,10 @@ begin
     '  --transfer-rail-width: 56px;' + LineEnding +
     '  --transfer-title-height: 26px;' + LineEnding +
     '  --treeselect-drop-height: 220px;' + LineEnding +
+    '  --treeview-expander: chevron;' + LineEnding +
     '  --treeview-icon-gap: 2px;' + LineEnding +
+    '  --treeview-lines: guides;' + LineEnding +
+    '  --treeview-lines-style: solid;' + LineEnding +
     '  --treeview-margin: 4px;' + LineEnding +
     '  --font-weight-normal: 400; --font-weight-bold: 700;' + LineEnding +
     '  --on-titlebar: var(--on-surface);   /* ink for controls hosted on the title bar */' + LineEnding +

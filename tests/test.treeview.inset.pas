@@ -249,7 +249,8 @@ begin
   FTree.ShowRoot := True;
   FTree.ShowTreeLines := True;
   FTree.FullExpand;
-  FTree.StyleOverride := '--treeview-margin: 0px';
+  { #101: the classic connectors, which draw the node's own elbow as well as its ancestors' }
+  FTree.StyleOverride := '--treeview-margin: 0px; --treeview-lines: classic';
   btn0 := FirstX(hpButton, 0);
   img0 := FirstX(hpImage, 1);
   bmp := Render;
@@ -262,7 +263,7 @@ begin
     own elbow is the other }
   AssertTrue('precondition: the ancestor''s line and the elbow cross the child''s row',
     Length(lines0) >= 2);
-  FTree.StyleOverride := '--treeview-margin: 10px';
+  FTree.StyleOverride := '--treeview-margin: 10px; --treeview-lines: classic';
   AssertEquals('the expander', btn0 + 10, FirstX(hpButton, 0));
   bmp := Render;
   try
