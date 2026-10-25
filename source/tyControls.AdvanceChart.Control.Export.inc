@@ -72,7 +72,7 @@ begin
   Result := TBGRABitmap.Create(w, h, BGRAPixelTransparent);
   R := Rect(0, 0, w, h);
   measurer := NewTextMeasurer(ppi);
-  P := TTyPainter.Create;
+  P := NewPainter;
   FExporting := True;
   FExportBare := bg.Kind <> ebkTheme;
   FExportExclude := AOpts.Exclude;
@@ -112,7 +112,7 @@ begin
       begin
         FExportBare := True;
         scratch := TBGRABitmap.Create(Width, Height);
-        P := TTyPainter.Create;
+        P := NewPainter;
         try
           measurer := NewTextMeasurer(ppi0);
           P.BeginPaintOn(nil, Rect(0, 0, Width, Height), ppi0, scratch);

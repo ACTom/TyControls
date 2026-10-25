@@ -1848,7 +1848,16 @@ end;
 
 { the stroke along the mask's contours, under the glyphs: one path, so
   where two strokes meet the ink is laid once and a translucent halo does
-  not darken; dashed as the type says }
+  not darken; dashed as the type says.
+
+  [R4-P] ON A PAINTER WITH FastStrokes (a chart not asked for ExactRendering)
+  a solid halo is the band round the outline instead: every pixel within half
+  the width of the glyphs' half-coverage contour, its coverage by its
+  distance to it (StrokePathByDistance) -- the glyphs' mask grown and shrunk
+  by half the width, an antialiased edge on both sides, the union laid once.
+  The same ink as the stroke, round where the stroke's joins are mitred, and
+  a fraction of the cost: no pen polygon of a few thousand points and no
+  scanline fill of it per label. A dashed halo strokes as before. }
 procedure StrokeMaskHalo(P: TTyPainter; AOutline: TTyHaloOutline; AOX, AOY: Integer;
   AColour: TTyColor; AWidthLogical: Double; const ADashType: string;
   ADashOffsetLogical: Double = 0);
@@ -1870,8 +1879,11 @@ begin
     P.BeginPath;
     TraceHaloOutline(P, AOutline, AOX, AOY, pat, ADashOffsetLogical * P.PPI / 96);
     { [R2-P] kept: the next frame's halo of the same label at the same place
-      replays this one's coverage }
-    P.StrokePathKept(AColour, AWidthLogical);
+      replays this one's coverage -- the band's too [R4-P] }
+    if P.FastStrokes and (pat = nil) then
+      P.StrokePathByDistance(AColour, AWidthLogical)
+    else
+      P.StrokePathKept(AColour, AWidthLogical);
     P.BeginPath;
   finally
     P.RestoreState;
@@ -2407,11 +2419,15 @@ begin
     + IntToHex(AElement.Caption.Colour, 8) + ',' + IntToHex(AElement.Caption.StrokeColour, 8) + ','
     + KeyBits(AElement.Caption.StrokeWidthLogical) + IntToStr(Length(AElement.Caption.FontName)) + ','
     + AElement.Caption.FontName + AElement.Caption.Text;
+  { [R4-P] its halo drawn the fast way is another picture, named apart
+    before the words }
+  if P.FastStrokes then key := 'data:tyaffinetextfast,' + Copy(key, 19, MaxInt);
   if TyChartImage(key, 0, nw, nh) = nil then
   begin
     bmp := TBGRABitmap.Create(bw, bh, BGRAPixelTransparent);
     mp := TTyPainter.Create;
     try
+      mp.FastStrokes := P.FastStrokes;
       mp.BeginPaintOn(nil, Rect(0, 0, bw, bh), ppi, bmp);
       e := AElement;
       e.Caption.HasAffine := False;

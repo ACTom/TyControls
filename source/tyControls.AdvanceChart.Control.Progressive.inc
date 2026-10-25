@@ -353,7 +353,7 @@ begin
   FProgLayerScale := Max(1, AScale);
   FProgPainted := nil;
   SetLength(FProgPainted, FPaintList.Count);
-  P := TTyPainter.Create;
+  P := NewPainter;
   { a run's paths come back every time the layer is drawn again: their pens
     and coverage kept [R2-L] }
   kept := TyRenderKeptStrokes;
@@ -419,7 +419,7 @@ begin
       if have >= rows then Continue;
       if not started then
       begin
-        P := TTyPainter.Create;
+        P := NewPainter;
         sc.Scale := FProgLayerScale;
         sc.DeviceUnits := False;
         P.BeginPaintOnScaled(nil, Rect(0, 0, FProgLayer.Width div FProgLayerScale,
@@ -616,7 +616,7 @@ begin
     Min(FProgLayer.Height, Ceil((zr.Y + zr.H) * s)));
   if (R.Right <= R.Left) or (R.Bottom <= R.Top) then Exit;
   saved := TBGRABitmap.Create(FProgLayer.Width, FProgLayer.Height);
-  P := TTyPainter.Create;
+  P := NewPainter;
   kept := TyRenderKeptStrokes;
   TyRenderKeptStrokes := True;
   try
@@ -784,7 +784,7 @@ begin
       zr.W := Ceil(box.Right / s) + 2 - zr.X;
       zr.H := Ceil(box.Bottom / s) + 2 - zr.Y;
       measurer := NewTextMeasurer(APPI);
-      P := TTyPainter.Create;
+      P := NewPainter;
       try
         sc.Scale := s;
         sc.DeviceUnits := False;
@@ -825,7 +825,7 @@ begin
     end;
   end;
   { blended onto the static canvas as the full paint's EndPaint blends }
-  P := TTyPainter.Create;
+  P := NewPainter;
   try
     P.BeginPaintOn(FStatic.Canvas, R, APPI, FProgWork);
     P.EndPaint;

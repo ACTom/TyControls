@@ -766,7 +766,7 @@ begin
   { [F4b] the flush's start, for `rendered`'s elapsedTime }
   FPaintT0 := AnimClock;
   measurer := NewTextMeasurer(APPI);
-  P := TTyPainter.Create;
+  P := NewPainter;
   try
     { LOCAL space. EndPaint blits at ARect's origin, so everything below is
       measured from zero. }
@@ -1317,7 +1317,7 @@ begin
   if FStatic.NeedsRender(w, h, sc) and not ProgFastPaint(R, APPI, sc) then
   begin
     measurer := NewTextMeasurer(APPI);
-    P := TTyPainter.Create;
+    P := NewPainter;
     try
       P.BeginPaint(FStatic.Canvas, R, APPI);
       { [R2-L] the bitmap kept for the progress frames to come, where a run
@@ -1357,7 +1357,7 @@ begin
   if HasDynamicContent then
   begin
     measurer := NewTextMeasurer(APPI);
-    P := TTyPainter.Create;
+    P := NewPainter;
     try
       P.BeginPaint(ACanvas, ARect, APPI);
       PaintDynamic(P, R, APPI, measurer);
@@ -1511,6 +1511,28 @@ begin
   inherited Invalidate;
 end;
 
+procedure TTyAdvanceChart.SetExactRendering(AValue: Boolean);
+begin
+  if FExactRendering = AValue then Exit;
+  FExactRendering := AValue;
+  { everything drawn the other way: the static cache, the progressive
+    layer and its fast frames, the dynamic layer }
+  StaticDrop;
+  FProgLayerOk := False;
+  ProgFastDrop;
+  FDrDynTiles := nil;
+  FreeAndNil(FDrDyn);
+  FDrPending := True;
+  FZrDirty := True;
+  inherited Invalidate;
+end;
+
+function TTyAdvanceChart.NewPainter: TTyPainter;
+begin
+  Result := TTyPainter.Create;
+  Result.FastStrokes := not FExactRendering;
+end;
+
 function TTyAdvanceChart.CoarseSize: Integer;
 begin
   Result := TyCoarsePointerSize(FCoarsePointer, FPointerSize, TyTouchPlatform);
@@ -1584,7 +1606,7 @@ begin
   FDrSnapOk := False;
   FDrSnap := nil;
   measurer := NewTextMeasurer(APPI);
-  P := TTyPainter.Create;
+  P := NewPainter;
   try
     P.BeginPaintOn(FStatic.Canvas, R, APPI, FDrWork);
     FDrCapture := True;
@@ -1662,7 +1684,7 @@ begin
     box.H := px[i].Bottom - px[i].Top;
     TyRepaintPoolAdd(APool, box);
   end;
-  P := TTyPainter.Create;
+  P := NewPainter;
   oldClip := FDrWork.ClipRect;
   try
     sc.Scale := FDrScale;
@@ -1795,7 +1817,7 @@ begin
   if HasDynamicContent then
   begin
     measurer := NewTextMeasurer(APPI);
-    P := TTyPainter.Create;
+    P := NewPainter;
     try
       sc.Scale := FDrScale;
       sc.DeviceUnits := False;
