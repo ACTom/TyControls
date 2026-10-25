@@ -112,6 +112,12 @@ procedure TyClearPopupWindowMask(AForm: TCustomForm; AContentCtl: TWinControl);
 { Win32: toggle WS_EX_NOACTIVATE so a passive popup (autocomplete dropdown) never steals focus. No-op
   elsewhere. Call before Show. }
 procedure TySetPopupNoActivate(AForm: TCustomForm; ANoActivate: Boolean);
+{ macOS: give AForm, a popup about to be shown, a window level above the application's other
+  windows on screen. fsStayOnTop puts it at the floating level, and a modal dialog sits above
+  that, so a drop-down, menu or popover opened in one showed behind it (#104). The popup keeps
+  the floating level unless one of those windows is at or above it, then goes one above the
+  highest. No-op elsewhere. Call right before Show. }
+procedure TyRaisePopupWindow(AForm: TCustomForm);
 
 { ---- the system's window frame (macOS frame spec 2026-10-14, #80) --------------------------- }
 
@@ -161,11 +167,14 @@ procedure TyApplyWindowAppearance(AForm: TCustomForm; AShadow, ADark: Boolean);
 function TyControlDeviceScale(AControl: TControl): Double;
 
 type
-  { TEST SEAM. While Active, the functions in the section above (and TyStartSystemMove) answer
-    from here instead of the widgetset, and the ones that act record what they were asked. It
-    sits on the platform boundary only: the title bar, the chrome engine and the form run their
-    own code against it, which is how the macOS behaviour is tested on Windows. Library code must
-    never read it. }
+  { A form's window level, when it has a window on screen (TTyTestPlatform.LevelOf). }
+  TTyWindowLevelQuery = function(AForm: TCustomForm; out ALevel: PtrInt): Boolean;
+
+  { TEST SEAM. While Active, the functions in the section above (and TyStartSystemMove and
+    TyRaisePopupWindow) answer from here instead of the widgetset, and the ones that act record
+    what they were asked. It sits on the platform boundary only: the title bar, the chrome engine
+    and the form run their own code against it, which is how the macOS behaviour is tested on
+    Windows. Library code must never read it. }
   TTyTestPlatform = record
     Active: Boolean;
     Traits: TTyFrameTraits;
@@ -185,6 +194,13 @@ type
     AppearanceApplies: Integer;
     LastShadow, LastDark: Boolean;
     DeviceScale: Double;        // TyControlDeviceScale answers it when > 0
+    { TyRaisePopupWindow starts from FloatingLevel, asks LevelOf (unset = no window on screen)
+      and records the level it gives. }
+    FloatingLevel: PtrInt;
+    LevelOf: TTyWindowLevelQuery;
+    LevelSets: Integer;
+    LastLevel: PtrInt;
+    LastLevelForm: TCustomForm;
   end;
 
 var
@@ -388,6 +404,51 @@ end;
 procedure TySetPopupNoActivate(AForm: TCustomForm; ANoActivate: Boolean);
 begin
   {$IFDEF LCLWin32} TyWin32SetNoActivate(AForm, ANoActivate); {$ENDIF}
+end;
+
+function WindowLevelOf(AForm: TCustomForm; out ALevel: PtrInt): Boolean;
+begin
+  ALevel := 0;
+  if TyTestPlatform.Active then
+    Exit(Assigned(TyTestPlatform.LevelOf) and TyTestPlatform.LevelOf(AForm, ALevel));
+  {$IFDEF LCLCocoa}
+  Result := TyCocoaWindowLevel(AForm, ALevel);
+  {$ELSE}
+  Result := False;
+  {$ENDIF}
+end;
+
+procedure TyRaisePopupWindow(AForm: TCustomForm);
+var
+  i: Integer;
+  own, top, lvl: PtrInt;
+begin
+  if TyTestPlatform.Active then
+    own := TyTestPlatform.FloatingLevel
+  else
+  {$IFDEF LCLCocoa}
+    own := TyCocoaFloatingLevel;
+  {$ELSE}
+    Exit;
+  {$ENDIF}
+  { Every time, even when nothing is above: that also drops a level an earlier show raised. }
+  top := own - 1;
+  for i := 0 to Screen.CustomFormCount - 1 do
+    if (Screen.CustomForms[i] <> AForm) and WindowLevelOf(Screen.CustomForms[i], lvl)
+       and (lvl > top) then
+      top := lvl;
+  if top >= own then
+    own := top + 1;
+  if TyTestPlatform.Active then
+  begin
+    Inc(TyTestPlatform.LevelSets);
+    TyTestPlatform.LastLevel := own;
+    TyTestPlatform.LastLevelForm := AForm;
+    Exit;
+  end;
+  {$IFDEF LCLCocoa}
+  TyCocoaSetWindowLevel(AForm, own);
+  {$ENDIF}
 end;
 
 function TyImeInstall(AControl: TWinControl; AOnCommit: TTyImeCommitEvent;

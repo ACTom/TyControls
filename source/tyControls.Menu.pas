@@ -1801,6 +1801,7 @@ begin
     TyAnchorPopupRect(FForm, FWlParent, FWlRect, FWlMode);
     FWlParent := nil;   // consume: a later screen-anchored reopen must not reuse a stale rect
   end;
+  TyRaisePopupWindow(FForm);   // macOS: above a modal dialog it opens in (#104)
   FForm.Show;
   // Qt/X11 may still RE-PLACE + un-mask a frameless window at MAP time; re-assert now AND again next
   // event-loop turn (DeferredReapplyGeometry), once the native window settles. No-op on Win32/GTK2.

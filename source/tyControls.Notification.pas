@@ -992,6 +992,7 @@ begin
   if (tpBackground in S.Present) and (S.Background.Kind = tfkSolid) then
     FWin.Color := TyColorToLCL(S.Background.Color);
   PlaceWindow;
+  TyRaisePopupWindow(FWin);   // macOS: above a modal dialog on screen (#104)
   FWin.Show;
   FWin.BringToFront;
   PlaceWindow;   // a bsNone form can be re-placed by the WM on show (TTyBalloonHint re-sets too)
