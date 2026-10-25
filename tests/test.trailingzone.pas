@@ -156,8 +156,8 @@ begin
   e := TTyComboEdit.Create(FForm);
   z := ZoneOf(e, 200, 26);
   AssertEquals('zone width is RightReserve', TEditAccess(e).Reserve(96), z.Right - z.Left);
-  AssertEquals('and RightReserve is the field-button token', TyFieldButtonWidth,
-    TEditAccess(e).Reserve(96));
+  AssertEquals('and RightReserve is the drop zone: the field-button token plus a drop pad either side',
+    TyFieldButtonWidth + 2 * TyFieldDropPad, TEditAccess(e).Reserve(96));
 end;
 
 initialization

@@ -468,6 +468,7 @@ type
     procedure SetSeparator(const AValue: string);
     procedure SetDropDownRows(AValue: Integer);
     function GetPathText: TCaption;
+    function ButtonZoneLogical: Integer;
     function ButtonWidthPx(APPI: Integer): Integer;
     procedure EnsurePopup;
     { Push the current tree / value / controller into the panel. Split from EnsurePopup so
@@ -1888,12 +1889,21 @@ end;
 
 { --- geometry ------------------------------------------------------------------------- }
 
+function TTyCustomCascader.ButtonZoneLogical: Integer;
+begin
+  { --cascader-button-width, defaulting to the FIELD's button column so a cascader lines up
+    with a combo box in a form (it used to default to a fixed 18, so the modern density's
+    wider column passed it by), plus the drop pad either side of the V. }
+  Result := ActiveController.Metric(TyCascaderButtonWidthVar,
+    ActiveController.Metric('--field-button-width', TyCascaderButtonWidth));
+  if Result < 0 then Result := 0;
+  Result := Result + 2 * TyDropZonePad(ActiveController);
+end;
+
 function TTyCustomCascader.ButtonWidthPx(APPI: Integer): Integer;
 begin
   if APPI <= 0 then APPI := 96;
-  Result := ActiveController.Metric(TyCascaderButtonWidthVar, TyCascaderButtonWidth);
-  if Result < 0 then Result := 0;
-  Result := MulDiv(Result, APPI, 96);
+  Result := MulDiv(ButtonZoneLogical, APPI, 96);
 end;
 
 function TTyCustomCascader.LayoutFor(AWidth, AHeight, APPI: Integer): TTyCascaderFieldLayout;
@@ -2148,7 +2158,7 @@ begin
     Lay := TyCascaderFieldLayout(R.Right, R.Bottom,
       P.Scale(S.Padding.Left), P.Scale(S.Padding.Top),
       P.Scale(S.Padding.Right), P.Scale(S.Padding.Bottom),
-      P.Scale(ActiveController.Metric(TyCascaderButtonWidthVar, TyCascaderButtonWidth)));
+      P.Scale(ButtonZoneLogical));
 
     shown := GetPathText;
     if (shown <> '') and (Lay.TextRect.Right > Lay.TextRect.Left) then

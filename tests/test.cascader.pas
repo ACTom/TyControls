@@ -1050,7 +1050,8 @@ begin
   try
     C.SetBounds(0, 0, 145, 26);
     R := C.TyCascaderButtonRect;
-    AssertEquals('the zone takes the themed width', 30, R.Right - R.Left);
+    AssertEquals('the zone takes the themed width, plus the drop pad either side of the V',
+      30 + 2 * TyFieldDropPad, R.Right - R.Left);
     AssertEquals('and still hugs the right edge', 145, R.Right);
     AssertEquals('spanning the full height', 26, R.Bottom - R.Top);
   finally
@@ -1072,7 +1073,8 @@ begin
     C.SetBounds(0, 0, 145, 26);
     R := C.TyCascaderTextRect;
     AssertEquals('left = themed left padding', 7, R.Left);
-    AssertEquals('right = the chevron zone', 127, R.Right);
+    AssertEquals('right = the chevron zone (the themed 18 plus the drop pad either side)',
+      145 - (18 + 2 * TyFieldDropPad), R.Right);
     AssertEquals('top = themed top padding', 5, R.Top);
     AssertEquals('bottom = height - themed bottom padding', 21, R.Bottom);
   finally

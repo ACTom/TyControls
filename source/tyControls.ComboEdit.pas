@@ -109,7 +109,7 @@ begin
   { Read the drop-button width live (like TTyComboBox.ButtonWidthLogical), so the
     trailing chevron zone tracks the theme's density and lines up with a combo box's.
     No constructor cache. }
-  Result := MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth), APPI, 96);
+  Result := MulDiv(TyDropZoneWidth(ActiveController), APPI, 96);
 end;
 
 procedure TTyCustomComboEdit.PaintTrailing(APainter: TTyPainter; const AZone: TRect; const AStyle: TTyStyleSet);

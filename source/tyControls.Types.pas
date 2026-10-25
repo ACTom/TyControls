@@ -154,7 +154,12 @@ const
   // Shared logical-px spacing/size constants (96-PPI baseline). Promoted from
   // duplicated hard-coded literals so they cannot silently drift; each call site
   // still scales them via MulDiv(..., APPI, 96) / TTyPainter.Scale().
-  TyFieldButtonWidth = 18;   // SpinEdit up/down button width; ComboBox dropdown button width
+  TyFieldButtonWidth = 18;   // SpinEdit up/down button width; a drop field's zone adds
+                             // TyFieldDropPad on each side of it
+  TyFieldDropPad     = 5;    // the extra room a drop field's V gets on EACH side of the 18px
+                             // button column (--field-drop-pad): the V then sits 10px from the
+                             // border where Windows 11 leaves 16, GNOME 13 and macOS 6.5-12;
+                             // in the bare 18 it sat 5px from it. Spin buttons keep the 18
   TyDropChevronSize  = 7;    // the LONG side of a disclosure chevron's centre line -- a drop
                              // field's V and a tree's > alike (--glyph-chevron-size). 7 puts
                              // the ink at ~0.9x the cap height of the 9pt body text, where

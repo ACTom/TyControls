@@ -1787,7 +1787,8 @@ end;
 
 function TTyCustomComboBox.ButtonWidthLogical: Integer;
 begin
-  Result := ActiveController.Metric('--field-button-width', TyFieldButtonWidth);
+  { The drop zone: the field's button column plus --field-drop-pad either side of the V. }
+  Result := TyDropZoneWidth(ActiveController);
 end;
 
 procedure TTyCustomComboBox.SelectItem(AIndex: Integer);

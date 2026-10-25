@@ -23,7 +23,8 @@ uses
   tyControls.ComboBox, tyControls.DateTimePicker, tyControls.TreeView, tyControls.Menu,
   tyControls.ExPanel, tyControls.ListGroupPanel, tyControls.ListView, tyControls.ListView.Layout,
   tyControls.ValueListEditor,
-  tyControls.Ribbon;
+  tyControls.Ribbon, tyControls.TreeSelect, tyControls.Cascader, tyControls.ComboEdit,
+  tyControls.SpinEdit;
 
 type
   TChevronMenuProbe = class(TTyMenuView)
@@ -50,6 +51,7 @@ type
     procedure TestOneSizeWhateverTheZone;
     procedure TestEveryDirectionHasASolidPixel;
     procedure TestTheMarkIsCentredAndPointsItsWay;
+    procedure TestBothArmsAreTheSameLength;
     procedure TestInkIsTheTextColourAtTheThemesAlpha;
     procedure TestDropChevronAsksForGlyphDropdownItself;
     procedure TestExPanelChevronKind;
@@ -63,13 +65,18 @@ type
     procedure TestListGroupHeaderMarkIsTheChevron;
     procedure TestComboBoxDropMarkIsTheChevron;
     procedure TestDateTimePickerHonoursGlyphDropdown;
+    { the drop zone }
+    procedure TestDropZoneIsTheButtonColumnPlusTwoPads;
+    procedure TestEveryDropFieldLeavesItsVRoom;
+    procedure TestSpinButtonsKeepTheBareColumn;
   end;
 
 implementation
 
 const
   KMenu = 0; KRibbon = 1; KExPanel = 2; KInspector = 3; KListView = 4; KTree = 5;
-  KListGroup = 6; KCombo = 7; KPicker = 8;
+  KListGroup = 6; KCombo = 7; KPicker = 8; KTreeSelect = 9; KCascader = 10; KComboEdit = 11;
+  KSpin = 12;
   { A blank replacement: valid token, no ink in any font. }
   CBlank = '"Arial" "\20"';
   { The 7px chevron at 96 PPI: centre line 3.5 x 7 plus a 1.25 stroke, so ink of about 5 x 9
@@ -195,6 +202,10 @@ var
   gi: Integer;
   cb: TTyComboBox;
   dt: TTyDateTimePicker;
+  tsel: TTyTreeSelect;
+  cas: TTyCascader;
+  ce: TTyComboEdit;
+  sp: TTySpinEdit;
 begin
   ctl := TTyStyleController.Create(nil);
   host := TTyForm.CreateNew(nil);
@@ -299,6 +310,38 @@ begin
           cb.ItemIndex := 0;
           h := 28;
           c := cb;
+        end;
+      KTreeSelect:
+        begin
+          tsel := TTyTreeSelect.Create(host);
+          tsel.Font.PixelsPerInch := 96;
+          tsel.Controller := ctl;
+          h := 28;
+          c := tsel;
+        end;
+      KCascader:
+        begin
+          cas := TTyCascader.Create(host);
+          cas.Font.PixelsPerInch := 96;
+          cas.Controller := ctl;
+          h := 28;
+          c := cas;
+        end;
+      KComboEdit:
+        begin
+          ce := TTyComboEdit.Create(host);
+          ce.Font.PixelsPerInch := 96;
+          ce.Controller := ctl;
+          h := 28;
+          c := ce;
+        end;
+      KSpin:
+        begin
+          sp := TTySpinEdit.Create(host);
+          sp.Font.PixelsPerInch := 96;
+          sp.Controller := ctl;
+          h := 28;
+          c := sp;
         end;
     else
       begin
@@ -490,6 +533,59 @@ begin
   end;
 end;
 
+{ A chevron is symmetric about its own axis: a V or ^ left to right, a > or < top to bottom.
+  BGRA's DrawPolyLineAntialias(..., AClosedCap = False) leaves the LAST point open for a next
+  segment to join -- no cap and a gap -- so the second arm came out visibly shorter (the V's
+  right arm), which the ink box and the centring checks above were too coarse to see. }
+procedure TChevronTest.TestBothArmsAreTheSameLength;
+const
+  CKinds: array[0..3] of TTyGlyphKind = (tgChevronDown, tgChevronUp, tgChevronRight, tgChevronLeft);
+var
+  k, s, n, x, y, mx, my: Integer;
+  P: TTyPainter;
+  b: TBGRABitmap;
+  r: TRect;
+  peak, diff, ink, c: Double;
+begin
+  for s := 1 to 2 do
+    for k := 0 to High(CKinds) do
+    begin
+      n := 24 * s;
+      b := TBGRABitmap.Create(n, n, BGRAWhite);
+      P := TTyPainter.Create;
+      try
+        P.BeginPaintOn(nil, Rect(0, 0, n, n), 96 * s, b);
+        P.DrawChevron(Rect(0, 0, n, n), CKinds[k], TyRGBA(0, 0, 0, 255), 7);
+        P.EndPaint;
+        r := PaintedBox(b, peak);
+        diff := 0;
+        ink := 0;
+        for y := r.Top to r.Bottom - 1 do
+          for x := r.Left to r.Right - 1 do
+          begin
+            c := Coverage(b.GetPixel(x, y));
+            ink := ink + c;
+            if CKinds[k] in [tgChevronDown, tgChevronUp] then
+            begin
+              mx := r.Left + r.Right - 1 - x;
+              my := y;
+            end
+            else
+            begin
+              mx := x;
+              my := r.Top + r.Bottom - 1 - y;
+            end;
+            diff := diff + Abs(c - Coverage(b.GetPixel(mx, my)));
+          end;
+        AssertTrue(Format('kind %d at %d PPI: the two arms differ by %.0f%% of the ink',
+          [Ord(CKinds[k]), 96 * s, 100 * diff / ink]), diff / ink < 0.05);
+      finally
+        P.Free;
+        b.Free;
+      end;
+    end;
+end;
+
 procedure TChevronTest.TestInkIsTheTextColourAtTheThemesAlpha;
 var
   ctl: TTyStyleController;
@@ -604,6 +700,68 @@ procedure TChevronTest.TestDateTimePickerHonoursGlyphDropdown;
 begin
   { The picker drew its drop V without asking for --glyph-dropdown. }
   CheckMark('date picker', KPicker, '--glyph-dropdown', False);
+end;
+
+{ ---- the drop zone ------------------------------------------------------------------------ }
+
+procedure TChevronTest.TestDropZoneIsTheButtonColumnPlusTwoPads;
+var
+  ctl: TTyStyleController;
+begin
+  AssertEquals('default: the 18px column and 5px either side', TyFieldButtonWidth + 2 * TyFieldDropPad,
+    TyDropZoneWidth(nil));
+  ctl := TTyStyleController.Create(nil);
+  try
+    ctl.LoadThemeCss(':root { --field-button-width: 25px; --field-drop-pad: 3px; }');
+    AssertEquals('both tokens are read', 31, TyDropZoneWidth(ctl));
+    ctl.LoadThemeCss(':root { --field-drop-pad: 0px; }');
+    AssertEquals('pad 0 is the bare column', TyFieldButtonWidth, TyDropZoneWidth(ctl));
+  finally
+    ctl.Free;
+  end;
+end;
+
+{ Every drop field's V sits the drop zone's pad further in than the bare 18px column put it:
+  10px from the border by default (Windows 11 16, GNOME 13, macOS 6.5-12; it was 5), and
+  centred in the zone, so the paint, the hit test and the inline editor that all read the
+  zone agree on where it is. }
+procedure TChevronTest.TestEveryDropFieldLeavesItsVRoom;
+const
+  CKinds: array[0..4] of Integer = (KCombo, KPicker, KTreeSelect, KCascader, KComboEdit);
+  CNames: array[0..4] of string = ('combo box', 'date picker', 'tree select', 'cascader', 'combo edit');
+var
+  i, gap: Integer;
+  e: TInkBox;
+  mid: Double;
+begin
+  for i := 0 to High(CKinds) do
+  begin
+    e := Erased(CKinds[i], '--glyph-dropdown');
+    AssertTrue(CNames[i] + ': the drop V drew', e.N > 0);
+    gap := 220 - e.R.Right;
+    AssertTrue(Format('%s: the V ends %d px from the border, at least 9', [CNames[i], gap]), gap >= 9);
+    mid := (e.R.Left + e.R.Right) / 2;
+    AssertTrue(Format('%s: the V is centred in the %d px zone (ink centre %.1f, zone centre %d)',
+      [CNames[i], TyDropZoneWidth(nil), mid, 220 - TyDropZoneWidth(nil) div 2]),
+      Abs(mid - (220 - TyDropZoneWidth(nil) / 2)) <= 1.5);
+  end;
+end;
+
+procedure TChevronTest.TestSpinButtonsKeepTheBareColumn;
+var
+  a, b: TBitmap;
+begin
+  { The pad is the drop V's; a spin edit shares --field-button-width with the drop fields and
+    must not widen with it. }
+  a := PaintShot(KSpin, ':root { --chevron-test-baseline: 1px; }');
+  b := nil;
+  try
+    b := PaintShot(KSpin, ':root { --field-drop-pad: 20px; }');
+    AssertEquals('a spin edit paints the same whatever --field-drop-pad says', 0, DiffBox(a, b).N);
+  finally
+    a.Free;
+    b.Free;
+  end;
 end;
 
 initialization

@@ -858,7 +858,7 @@ begin
     D.DateTime := EncodeDate(2026, 7, 5);
     Txt := TyRenderDateTime(D.DateTime, 'dd/mm/yyyy', DefaultFormatSettings, True, Spans);
     { Left-justified, this X is past the end of the text and hits nothing. }
-    X := 260 - MulDiv(TyFieldButtonWidth, D.Font.PixelsPerInch, 96) - 4;
+    X := 260 - MulDiv(TyDropZoneWidth(nil), D.Font.PixelsPerInch, 96) - 4;   // just left of the drop zone
     D.ProbeKey(VK_HOME);
     D.ProbeMouseDown(X, 12);
     AssertEquals('left-justified, a click at the right edge is past the text',
