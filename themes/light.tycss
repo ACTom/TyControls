@@ -279,6 +279,7 @@
   --listview-text-margin: 4px;
   --listview-tile-label-width: 150px;
   --listview-vgap: 8px;
+  --memo-tab-size: 8;
   --menu-arrow-slot: 16px;
   --menu-check-slot: 18px;
   --menu-separator-height: 7px;
