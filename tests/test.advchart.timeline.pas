@@ -29,7 +29,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Color,
      tyControls.AdvanceChart.Export,
      tyControls.AdvanceChart,
-     test.advchart.gridbounds, test.advchart.categoryminmax;
+     test.advchart.gridbounds, test.advchart.categoryminmax, test.advchart.mergevis;
 type
   TTlProbe = class(TTyAdvanceChart)
   protected
@@ -67,6 +67,7 @@ type
     FBmp: TBGRABitmap;
     FSavedSource: TTyDateTimeNameSource;
     procedure Miss(const AWhat: string);
+    procedure MissAt(const AWhere, AWhat: string);
     procedure SameHex(const AWhat: string; AGot: Double; AWant: TJSONData);
     procedure SameStr(const AWhat, AGot, AWant: string);
     procedure NewChart(AW, AH: Integer);
@@ -439,6 +440,11 @@ begin
   FChart.Render(FBmp.Canvas, Rect(0, 0, FBmp.Width, FBmp.Height), 96);
 end;
 
+procedure TAdvChartTimelineOracleTest.MissAt(const AWhere, AWhat: string);
+begin
+  Miss(AWhere + ': ' + AWhat);
+end;
+
 procedure TAdvChartTimelineOracleTest.SetClock(AMs: Double);
 begin
   FChart.AnimNow := AMs;
@@ -782,6 +788,11 @@ begin
   CheckTree(AState.Find('tree'));
   CheckView(AState.Find('view'));
   if AState.Find('bars') is TJSONArray then CheckBars(TJSONArray(AState.Find('bars')));
+  { [R3-B] the visualMap models' visuals and the items; the graphic view }
+  if AState.Find('vis') is TJSONObject then
+    Inc(FCompared, TyMvCheckVis(FChart, FChart.Frame, TJSONObject(AState.Find('vis')), 'vis', @MissAt));
+  if AState.Find('gfx') is TJSONArray then
+    Inc(FCompared, TyMvCheckGfx(FChart, TJSONArray(AState.Find('gfx')), True, 'gfx', @MissAt));
 end;
 
 procedure TAdvChartTimelineOracleTest.RunCase(ACase: TJSONObject);

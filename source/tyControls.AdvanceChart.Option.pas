@@ -171,6 +171,9 @@ type
     function ComponentId(const AMainType: string; AIndex: Integer): string;
     function ComponentModelName(const AMainType: string; AIndex: Integer): string;
     function ComponentSubType(const AMainType: string; AIndex: Integer): string;
+    { a mergeOption has reached the model at that index since it was made
+      (TTyOptionKey.Merged) [r3v] }
+    function ComponentMerged(const AMainType: string; AIndex: Integer): Boolean;
     { the merged option, shaped as upstream's getOption shapes it }
     function OptionJson: string;
     property Keys: TTyOptionKeys read FKeys;
@@ -277,13 +280,6 @@ procedure TyJsonFixNumbers(const AText: string; ARoot: TJSONData);
 function TyJsonFastParse(const AText: string; out AData: TJSONData): Boolean;
 procedure TyJsonFastForTest(AOn: Boolean);
 
-{ [R2-J] backwardCompat's text-style compatibility (preprocessor/helper/
-  compatStyle.ts, every compatTextStyle it calls): a label written the ec2
-  way, its text style under `textStyle`, has each text-style key of it
-  copied up into the label. AOption is changed in place, as upstream changes
-  the option it is given. }
-procedure TyCompatTextStyle(AOption: TJSONObject);
-
 implementation
 
 uses
@@ -291,7 +287,8 @@ uses
     the dependency stays one-way and invisible to hosts. LazUTF8 is here for
     UnicodeToUTF8, used by the escape decoder below. }
   tyControls.StrConsts, LazUTF8, Math, tyControls.FontUnits,
-  tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Data;
+  tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Data,
+  tyControls.AdvanceChart.BackwardCompat;
 
 function TyGetShallowRoot(ANode: TJSONData; ARoot: TJSONData;
   const AKey: string): TJSONData;
@@ -1769,173 +1766,6 @@ begin
   end;
 end;
 
-const
-  { util/model.ts TEXT_STYLE_OPTIONS, in its order }
-  cTextStyleOptions: array[0..27] of string = (
-    'fontStyle', 'fontWeight', 'fontSize', 'fontFamily',
-    'rich', 'tag', 'color', 'textBorderColor', 'textBorderWidth',
-    'width', 'height', 'lineHeight', 'align', 'verticalAlign', 'baseline',
-    'shadowColor', 'shadowBlur', 'shadowOffsetX', 'shadowOffsetY',
-    'textShadowColor', 'textShadowBlur', 'textShadowOffsetX', 'textShadowOffsetY',
-    'backgroundColor', 'borderColor', 'borderWidth', 'borderRadius', 'padding');
-
-{ compatTextStyle(opt, propName) }
-procedure CompatTextStyleOf(AOpt: TJSONData; const AProp: string);
-var
-  lab, ts: TJSONData;
-  i, j, k: Integer;
-begin
-  if not (AOpt is TJSONObject) then Exit;
-  lab := TJSONObject(AOpt).Find(AProp);
-  if not (lab is TJSONObject) then Exit;
-  ts := TJSONObject(lab).Find('textStyle');
-  if not (ts is TJSONObject) then Exit;
-  for i := 0 to High(cTextStyleOptions) do
-  begin
-    k := TJSONObject(ts).IndexOfName(cTextStyleOptions[i]);
-    if k < 0 then Continue;
-    { an assignment: a key already there keeps its place }
-    j := TJSONObject(lab).IndexOfName(cTextStyleOptions[i]);
-    if j >= 0 then TJSONObject(lab).Items[j] := TJSONObject(ts).Items[k].Clone
-    else TJSONObject(lab).Add(cTextStyleOptions[i], TJSONObject(ts).Items[k].Clone);
-  end;
-end;
-
-function CompatChild(AOpt: TJSONData; const AKey: string): TJSONData;
-begin
-  Result := nil;
-  if AOpt is TJSONObject then Result := TJSONObject(AOpt).Find(AKey);
-end;
-
-{ compatEC3CommonStyles' text part: the label and the emphasis label }
-procedure CompatCommon(AOpt: TJSONData);
-begin
-  if not (AOpt is TJSONObject) then Exit;
-  CompatTextStyleOf(AOpt, 'label');
-  CompatTextStyleOf(CompatChild(AOpt, 'emphasis'), 'label');
-end;
-
-procedure CompatEach(AList: TJSONData);
-var i: Integer;
-begin
-  if not (AList is TJSONArray) then Exit;
-  for i := 0 to AList.Count - 1 do CompatCommon(TJSONArray(AList).Items[i]);
-end;
-
-procedure CompatSeries(ASeries: TJSONObject);
-var
-  em, d, mk, it: TJSONData;
-  i: Integer;
-begin
-  CompatTextStyleOf(ASeries, 'label');
-  CompatTextStyleOf(ASeries, 'upperLabel');
-  CompatTextStyleOf(ASeries, 'edgeLabel');
-  em := ASeries.Find('emphasis');
-  if PreTruthy(em) then
-  begin
-    CompatTextStyleOf(em, 'label');
-    CompatTextStyleOf(em, 'upperLabel');
-    CompatTextStyleOf(em, 'edgeLabel');
-  end;
-  if PreTruthy(ASeries.Find('markPoint')) then CompatCommon(ASeries.Find('markPoint'));
-  if PreTruthy(ASeries.Find('markLine')) then CompatCommon(ASeries.Find('markLine'));
-  if PreTruthy(ASeries.Find('markArea')) then CompatCommon(ASeries.Find('markArea'));
-  d := ASeries.Find('data');
-  if (ASeries.Get('type', '') = 'graph') then
-  begin
-    if not PreTruthy(d) then d := ASeries.Find('nodes');
-    it := ASeries.Find('links');
-    if not PreTruthy(it) then it := ASeries.Find('edges');
-    CompatEach(it);
-  end;
-  CompatEach(d);
-  mk := ASeries.Find('markPoint');
-  if PreTruthy(mk) then CompatEach(CompatChild(mk, 'data'));
-  mk := ASeries.Find('markLine');
-  if PreTruthy(mk) and (CompatChild(mk, 'data') is TJSONArray) then
-  begin
-    d := CompatChild(mk, 'data');
-    for i := 0 to d.Count - 1 do
-    begin
-      it := TJSONArray(d).Items[i];
-      if it is TJSONArray then
-      begin
-        CompatCommon(PreItem(it, 0));
-        CompatCommon(PreItem(it, 1));
-      end
-      else
-        CompatCommon(it);
-    end;
-  end;
-  if ASeries.Get('type', '') = 'gauge' then
-  begin
-    CompatTextStyleOf(ASeries, 'axisLabel');
-    CompatTextStyleOf(ASeries, 'title');
-    CompatTextStyleOf(ASeries, 'detail');
-  end;
-end;
-
-procedure TyCompatTextStyle(AOption: TJSONObject);
-const
-  cAxes: array[0..6] of string = ('xAxis', 'yAxis', 'radiusAxis', 'angleAxis',
-    'singleAxis', 'parallelAxis', 'radar');
-var
-  list, it, def: TJSONData;
-  i, k: Integer;
-begin
-  if AOption = nil then Exit;
-  list := AOption.Find('series');
-  for i := 0 to PreCount(list) - 1 do
-  begin
-    it := PreItem(list, i);
-    if it is TJSONObject then CompatSeries(TJSONObject(it));
-  end;
-  for k := 0 to High(cAxes) do
-  begin
-    list := AOption.Find(cAxes[k]);
-    for i := 0 to PreCount(list) - 1 do
-    begin
-      it := PreItem(list, i);
-      if not PreTruthy(it) then Continue;
-      CompatTextStyleOf(it, 'axisLabel');
-      CompatTextStyleOf(CompatChild(it, 'axisPointer'), 'label');
-    end;
-  end;
-  list := AOption.Find('parallel');
-  for i := 0 to PreCount(list) - 1 do
-  begin
-    def := CompatChild(PreItem(list, i), 'parallelAxisDefault');
-    CompatTextStyleOf(def, 'axisLabel');
-    CompatTextStyleOf(CompatChild(def, 'axisPointer'), 'label');
-  end;
-  list := AOption.Find('calendar');
-  for i := 0 to PreCount(list) - 1 do
-  begin
-    it := PreItem(list, i);
-    CompatTextStyleOf(it, 'dayLabel');
-    CompatTextStyleOf(it, 'monthLabel');
-    CompatTextStyleOf(it, 'yearLabel');
-  end;
-  list := AOption.Find('radar');
-  for i := 0 to PreCount(list) - 1 do
-    CompatTextStyleOf(PreItem(list, i), 'name');
-  list := AOption.Find('geo');
-  for i := 0 to PreCount(list) - 1 do
-  begin
-    it := PreItem(list, i);
-    if not (it is TJSONObject) then Continue;
-    CompatCommon(it);
-    def := CompatChild(it, 'regions');
-    if def is TJSONArray then CompatEach(def)
-    else CompatCommon(def);
-  end;
-  list := AOption.Find('timeline');
-  for i := 0 to PreCount(list) - 1 do CompatCommon(PreItem(list, i));
-  { toObj: the first of an array, else the object }
-  CompatTextStyleOf(PreItem(AOption.Find('axisPointer'), 0), 'label');
-  CompatTextStyleOf(CompatChild(PreItem(AOption.Find('tooltip'), 0), 'axisPointer'), 'label');
-end;
-
 { visualMapPreprocessor [231b]: every truthy visualMap (the object, or each
   of the list) with an own `splitList` and no own `pieces` has its splitList
   renamed `pieces` (the key goes last); every piece object of an array
@@ -2026,16 +1856,18 @@ begin
 end;
 
 { the preprocessors over one option unit, in the order upstream registers
-  them: backwardCompat first [R2-J], parallel (an installed chart's), brush,
-  visualMap, aria [231b] }
+  them, after the ones TyParseRawOption has run (backwardCompat, the radar's
+  and the candlestick's [R3-A], the graphic's, the timeline's): parallel
+  (an installed chart's), brush, visualMap, aria [231b]; then `dataRange`
+  made the visualMap object again [R3-A] }
 procedure PreprocessOne(AOption: TJSONObject; AIsNew: Boolean);
 begin
   if AOption = nil then Exit;
-  TyCompatTextStyle(AOption);
   TyParallelPreprocess(AOption);
   TyBrushPreprocess(AOption, AIsNew);
   TyVisualMapPreprocess(AOption);
   TyAriaPreprocess(AOption);
+  TyBackwardCompatSettle(AOption);
 end;
 
 { parseRawOption's doPreprocess: over the base, every timeline frame and
@@ -2063,6 +1895,7 @@ var
   base: TJSONObject;
   mset: TTyMediaSet;
   i: Integer;
+  baseRep: TTyMergeReport;
 begin
   Result := False;
   Touch;
@@ -2118,6 +1951,14 @@ begin
   TyOptionKeysOfTree(FRoot, FKeys);
   for i := 0 to ComponentCount('legend') - 1 do LegendInitSelected(i);
   ClearError;
+  { [R3-B] the base's models made: reported before anything merges over
+    them }
+  if Assigned(AAfter) then
+  begin
+    baseRep := Default(TTyMergeReport);
+    baseRep.AtBase := True;
+    AAfter(baseRep);
+  end;
   { the timeline's frame, then the media that apply, merged over the fresh
     models: nothing kept outside the tree to write back [Batch 129] }
   MergeFrame(AReplaceMerge, nil, AAfter);
@@ -2221,6 +2062,12 @@ function TTyChartOption.ComponentId(const AMainType: string; AIndex: Integer): s
 var k: TTyOptionKey;
 begin
   if KeyOf(AMainType, AIndex, k) then Result := k.Id else Result := '';
+end;
+
+function TTyChartOption.ComponentMerged(const AMainType: string; AIndex: Integer): Boolean;
+var k: TTyOptionKey;
+begin
+  Result := KeyOf(AMainType, AIndex, k) and k.Merged;
 end;
 
 function TTyChartOption.ComponentModelName(const AMainType: string; AIndex: Integer): string;

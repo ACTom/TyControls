@@ -53,6 +53,12 @@ Per step (after it, the chart rendered):
            content = the items' extent [x, y, w, h], absolute
   views    [view number per series]: the same number across steps is the
            same series view
+  vis      [R3-B] a case marked `vis`: {vm, items} (option-merge.js's record)
+  gfx      [R3-B] a case marked `gfx`: the graphic view's elements by id,
+           [id, x, y, fill]
+[R3-B] The raw layer follows option-merge.js's rules: the box only where the
+model's mergeOption runs mergeLayoutParam, a grid's outerBounds, a
+calendar's cell size, replaceVisualOption.
 Also: queries[] -- applyMediaQuery's answer for a table of queries at sizes,
 read by calling the manager's getMediaOption on a one-unit list.
 
@@ -102,6 +108,8 @@ function wrap(proto, name) {
         if (this.mainType === 'dataset' && option && Object.prototype.hasOwnProperty.call(option, 'transform')) {
           this.__raw.transform = zr.clone(option.transform);
         }
+        // [R3-B] optionUpdated's replaceVisualOption, on the raw layer too
+        replaceVisual(this.__raw, option, VISUAL_KEYS[this.mainType]);
       }
       if (HOOK_LOG) HOOK_LOG.push({ model: this, kind: name, option });
     }
@@ -134,6 +142,87 @@ for (const p of PROTOS) {
 const HV = [['width', 'left', 'right'], ['height', 'top', 'bottom']];
 function layoutModeOf(model) {
   return model.layoutMode || model.constructor.layoutMode;
+}
+
+// ---------- [R3-B] the raw layer's merge rules (as option-merge.js) ----------
+// optionUpdated's replaceVisualOption (visual/visualSolution.ts), per main type
+const VISUAL_KEYS = {
+  visualMap: ['inRange', 'outOfRange', 'target', 'controller', 'color'],
+  brush: ['inBrush', 'outOfBrush'],
+};
+function hasKeys(obj) {
+  if (obj) for (const name in obj) if (obj.hasOwnProperty(name)) return true;
+  return false;
+}
+function replaceVisual(thisOption, newOption, keys) {
+  if (!keys || !newOption) return;
+  let has = false;
+  for (const key of keys) {
+    if (newOption.hasOwnProperty(key) && hasKeys(newOption[key])) has = true;
+  }
+  if (!has) return;
+  for (const key of keys) {
+    if (newOption.hasOwnProperty(key) && hasKeys(newOption[key])) thisOption[key] = zr.clone(newOption[key]);
+    else delete thisOption[key];
+  }
+}
+// the main types whose mergeOption never reaches mergeLayoutParam
+// (DataZoomModel's and ParallelModel's own; option-merge.js checks the dist)
+const NO_BOX_MERGE = new Set(['dataZoom', 'parallel']);
+function writeBox(raw, full, opt) {
+  for (const names of HV) {
+    if (!names.some(k => Object.prototype.hasOwnProperty.call(opt, k))) continue;
+    for (const k of names) {
+      const v = full[k];
+      raw[k] = v === undefined ? null : zr.clone(v);
+    }
+  }
+}
+// one mergeOption the hooks saw: the box mergeLayoutParam wrote, a grid's
+// outerBounds, a calendar's normalised cell size
+function mergeRules(e) {
+  if (layoutModeOf(e.model) && !NO_BOX_MERGE.has(e.model.mainType)) writeBox(e.model.__raw, e.model.option, e.option);
+  if (e.model.mainType === 'grid' && zr.isObject(e.option.outerBounds)
+    && zr.isObject(e.model.option.outerBounds) && zr.isObject(e.model.__raw.outerBounds)) {
+    writeBox(e.model.__raw.outerBounds, e.model.option.outerBounds, e.option.outerBounds);
+  }
+  if (e.model.mainType === 'calendar') e.model.__raw.cellSize = zr.clone(e.model.option.cellSize);
+}
+// a case marked `vis`: the visualMap models' completed visuals and each
+// item's [fill, opacity]
+function visOf(chart) {
+  const pick = (o) => {
+    const r = {};
+    for (const k of ['inRange', 'outOfRange', 'target', 'controller']) {
+      if (Object.prototype.hasOwnProperty.call(o, k)) r[k] = o[k] === undefined ? null : zr.clone(o[k]);
+    }
+    return r;
+  };
+  const vm = (chart.getModel()._componentsMap.get('visualMap') || []).map(m => (m ? pick(m.option) : null));
+  const items = (chart.getModel()._componentsMap.get('series') || []).map(m => {
+    if (!m) return null;
+    const d = m.getData();
+    const out = [];
+    for (let i = 0; i < d.count(); i++) {
+      const el = d.getItemGraphicEl(i);
+      out.push(el && el.style ? [typeof el.style.fill === 'string' ? el.style.fill : null,
+        el.style.opacity == null ? 1 : el.style.opacity] : null);
+    }
+    return out;
+  });
+  return { vm, items };
+}
+// a case marked `gfx`: every graphic element the view keeps, by id:
+// [id, x, y, fill]
+function gfxOf(chart) {
+  const view = (chart._componentsViews || []).find(v => v && v.type === 'graphic');
+  const out = [];
+  if (view && view._elMap) {
+    view._elMap.each((el, id) => out.push([id, (el.x), (el.y),
+      el.style && typeof el.style.fill === 'string' ? el.style.fill : null]));
+  }
+  out.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  return out;
 }
 
 // ---------- the option manager's prototype, hooked once ----------
@@ -421,15 +510,7 @@ function runCase(c) {
       HOOK_LOG = null;
       for (const e of log) {
         if (e.kind !== 'mergeOption' || !e.option) continue;
-        const lm = layoutModeOf(e.model);
-        if (!lm) continue;
-        for (const names of HV) {
-          if (!names.some(n => Object.prototype.hasOwnProperty.call(e.option, n))) continue;
-          for (const n of names) {
-            const v = e.model.option[n];
-            e.model.__raw[n] = v === undefined ? null : zr.clone(v);
-          }
-        }
+        mergeRules(e);
       }
       // which units merged in the series this step (the default visits none)
       rec.seriesMerged = log.filter(e => e.kind === 'mergeOption' && e.model.mainType === 'series').length;
@@ -446,6 +527,8 @@ function runCase(c) {
         if (!viewIds.has(v)) viewIds.set(v, viewNext++);
         return viewIds.get(v);
       });
+      if (c.vis) rec.vis = visOf(chart);
+      if (c.gfx) rec.gfx = gfxOf(chart);
       checkSubset(rec.tree, chart.getOption(), c.id + ' step ' + steps.length);
       steps.push(rec);
     }
@@ -752,6 +835,34 @@ const CASES = [
     set(Object.assign({}, LEGEND_BASE, { media: LEGEND_MEDIA })),
     rs(1024, 480),
   ] },
+  // ---- [R3-B] merge details through the media ----
+  { id: 'r3b-toolbox-box', steps: [
+    set(bars({ toolbox: { left: 10, feature: { saveAsImage: {} } },
+      media: [{ query: { minWidth: 500 }, option: { toolbox: { right: 30 } } },
+        { query: { maxWidth: 499 }, option: { toolbox: { top: 40, width: 80 } } }] })),
+    rs(400, 400),
+    rs(600, 400),
+  ], expect: (r) => {
+    const t = r.steps[0].tree.toolbox[0];
+    must(t.left === null && t.width === null && t.right === 30, 'r3b-toolbox-box: the unit nulls the other side');
+  } },
+  { id: 'r3b-graphic-media', gfx: true, steps: [
+    set(bars({ graphic: [{ type: 'rect', id: 'r', left: 10, top: 10, shape: { width: 20, height: 20 }, style: { fill: '#000000' } },
+      { type: 'rect', id: 's', right: 10, bottom: 10, shape: { width: 30, height: 10 }, style: { fill: '#333333' } }],
+      media: [{ query: { maxWidth: 500 }, option: { graphic: [{ id: 'r', right: 50 }, { id: 's', style: { fill: '#ff0000' } }] } }] })),
+    rs(400, 400),
+    rs(600, 400),
+    set({ graphic: { elements: [{ id: 'r', top: 100 }, { id: 's' }] } }),
+  ], expect: (r) => must(!('hv' in r.steps[1].tree.graphic[0].elements[0]) && r.steps[1].gfx.length === 2, 'r3b-graphic-media: the raw layer has no hv') },
+  { id: 'r3b-vm-media', vis: true, steps: [
+    set(bars({ gradientColor: ['#123456', '#abcdef'],
+      visualMap: { type: 'piecewise', show: false, dimension: 1, inactiveColor: '#cccccc', pieces: [{ min: 0, max: 2 }, { min: 3, max: 3 }] },
+      media: [{ query: { maxWidth: 500 }, option: { visualMap: { pieces: [{ min: 0, max: 2, color: '#ff0000' }, { min: 3, max: 3, color: '#00ff00' }] } } },
+        { query: { maxWidth: 300 }, option: { visualMap: { inRange: { color: ['#0000ff', '#00ffff'] } } } }] })),
+    rs(400, 400),
+    rs(250, 400),
+    rs(600, 400),
+  ], expect: (r) => must(JSON.stringify(r.steps[1].vis.vm[0].target.inRange.color) === '["#123456","#abcdef"]', 'r3b-vm-media: the unit\'s colours complete nothing') },
 ];
 
 // guard 3: the query table, the manager's own answer
@@ -803,7 +914,7 @@ function generate() {
     recs.push({ id: c.id, w: c.w || 600, h: c.h || 400, steps: r.steps.map(s => ({
       kind: s.step.kind, notMerge: s.step.notMerge, opts: s.step.opts, text: s.step.text,
       payload: s.step.payload, w: s.w, h: s.h, indices: s.indices, merged: s.merged,
-      tree: s.tree, models: s.models, out: s.out, views: s.views })) });
+      tree: s.tree, models: s.models, out: s.out, views: s.views, vis: s.vis, gfx: s.gfx })) });
   }
   const ids = new Set(CASES.map(c => c.id));
   for (const need of ['minWidth', 'maxWidth', 'minHeight', 'maxHeight', 'minAspectRatio', 'maxAspectRatio',

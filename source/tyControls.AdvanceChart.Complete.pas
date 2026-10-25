@@ -908,6 +908,8 @@ type
   TIssueCollector = record
     Items: TTyOptIssueArray;
     Count: Integer;
+    { the tree walked: the legacy keys ask it a series' type [R3-A] }
+    Root: TJSONData;
   end;
 
 procedure AddIssue(var C: TIssueCollector; AKind: TTyOptIssueKind;
@@ -1403,6 +1405,267 @@ begin
       Exit(True);
 end;
 
+{ ---- the old spellings [R3-A] ----
+
+  backwardCompat (tyControls.AdvanceChart.BackwardCompat) rewrites the old
+  spellings in the tree and leaves them there, as upstream does: the
+  validator walks the rewritten tree, so what it meets are the keys
+  upstream read and left behind -- a label's `textStyle`, the `normal` /
+  `emphasis` of a style that had no normal (or a falsy one), ec2's null
+  itemStyle.normal.label, the series' old keys, the components' x / y /
+  x2 / y2, the root `dataRange`. Each is accepted exactly where upstream
+  reads it -- by the runtime path, since the series' type decides some --
+  and not walked. The same key anywhere else is still reported: upstream
+  never reads it there. }
+
+const
+  cLgStyles: array[0..6] of string = ('itemStyle', 'lineStyle', 'areaStyle',
+    'label', 'labelLine', 'upperLabel', 'edgeLabel');
+  cLgPossible: array[0..6] of string = ('areaStyle', 'lineStyle', 'nodeStyle',
+    'linkStyle', 'chordStyle', 'label', 'labelLine');
+  cLgLayout: array[0..3] of string = ('x', 'y', 'x2', 'y2');
+  cLgLayoutComponents: array[0..8] of string = ('grid', 'geo', 'parallel',
+    'legend', 'toolbox', 'title', 'visualMap', 'dataZoom', 'timeline');
+  cLgBarOld: array[0..2] of string = ('barBorderRadius', 'barBorderColor',
+    'barBorderWidth');
+  cLgAxes: array[0..6] of string = ('xAxis', 'yAxis', 'radiusAxis', 'angleAxis',
+    'singleAxis', 'parallelAxis', 'radar');
+
+function LgIn(const S: string; const AList: array of string): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := 0 to High(AList) do
+    if AList[i] = S then Exit(True);
+end;
+
+function LgJoin(const A, B: string): string;
+begin
+  if A = '' then Result := B else Result := A + '.' + B;
+end;
+
+{ a runtime path's names, the indices dropped: 'series[0].data[3].label'
+  is 'series.data.label' }
+function LgNames(const APath: string): string;
+var
+  i, depth: Integer;
+begin
+  Result := '';
+  depth := 0;
+  for i := 1 to Length(APath) do
+    if APath[i] = '[' then Inc(depth)
+    else if APath[i] = ']' then Dec(depth)
+    else if depth = 0 then Result := Result + APath[i];
+end;
+
+{ the value at a runtime path of the tree, or nil }
+function LgResolve(ARoot: TJSONData; const APath: string): TJSONData;
+var
+  i, n: Integer;
+  name: string;
+begin
+  Result := ARoot;
+  i := 1;
+  while (Result <> nil) and (i <= Length(APath)) do
+  begin
+    if APath[i] = '.' then
+      Inc(i)
+    else if APath[i] = '[' then
+    begin
+      n := 0;
+      Inc(i);
+      while (i <= Length(APath)) and (APath[i] in ['0'..'9']) do
+      begin
+        n := n * 10 + Ord(APath[i]) - Ord('0');
+        Inc(i);
+      end;
+      Inc(i);
+      if (Result is TJSONArray) and (n < Result.Count) then Result := TJSONArray(Result).Items[n]
+      else Result := nil;
+    end
+    else
+    begin
+      name := '';
+      while (i <= Length(APath)) and not (APath[i] in ['.', '[']) do
+      begin
+        name := name + APath[i];
+        Inc(i);
+      end;
+      if Result is TJSONObject then Result := TJSONObject(Result).Find(name)
+      else Result := nil;
+    end;
+  end;
+end;
+
+{ a series' legacy key: ARest is the path under the series' own object }
+function LgSeriesKnows(ASeries: TJSONData; const ARest, AKey: string;
+  ARoot: TJSONData; const APath: string): Boolean;
+var
+  t: string;
+  d: TJSONData;
+  hosts: array of string;
+  h, s: Integer;
+
+  procedure Host(const AName: string);
+  begin
+    SetLength(hosts, Length(hosts) + 1);
+    hosts[High(hosts)] := AName;
+  end;
+
+begin
+  Result := False;
+  t := '';
+  if ASeries is TJSONObject then
+  begin
+    d := TJSONObject(ASeries).Find('type');
+    if (d <> nil) and (d.JSONType = jtString) then t := d.AsString;
+  end;
+
+  { the series' own keys }
+  if ARest = '' then
+  begin
+    if (AKey = 'hoverAnimation') or LgIn(AKey, cLgLayout) then Exit(True);
+    if (t = 'line') and (AKey = 'clipOverflow') then Exit(True);
+    if ((t = 'pie') or (t = 'gauge')) and ((AKey = 'clockWise') or (AKey = 'hoverOffset')) then Exit(True);
+    if (t = 'sunburst') and ((AKey = 'highlightPolicy') or (AKey = 'downplay')) then Exit(True);
+    if ((t = 'graph') or (t = 'sankey')) and (AKey = 'focusNodeAdjacency') then Exit(True);
+    if (t = 'map') and ((AKey = 'mapType') or (AKey = 'mapLocation')) then Exit(True);
+    if (t = 'radar') and (AKey = 'polarIndex') then Exit(True);
+  end;
+  { a sunburst node's downplay, at any depth }
+  if (t = 'sunburst') and (AKey = 'downplay')
+    and ((ARest = 'data') or (Copy(ARest, 1, 13) = 'data.children')) then
+  begin
+    s := 5;
+    while s + 8 <= Length(ARest) do
+    begin
+      if Copy(ARest, s, 9) <> '.children' then Exit(False);
+      Inc(s, 9);
+    end;
+    Exit(s = Length(ARest) + 1);
+  end;
+  { a bar's border, where compatBarItemStyle looks }
+  if (t = 'bar') and LgIn(AKey, cLgBarOld)
+    and LgIn(ARest, ['itemStyle', 'emphasis.itemStyle', 'data.itemStyle',
+      'data.emphasis.itemStyle']) then Exit(True);
+  { a pie label's margin, read as its edgeDistance when it aligns to the edge }
+  if ((t = 'pie') or (t = 'gauge')) and (ARest = 'label') and (AKey = 'margin') then
+  begin
+    d := LgResolve(ARoot, APath);
+    if d is TJSONObject then
+    begin
+      d := TJSONObject(d).Find('alignTo');
+      Exit((d <> nil) and (d.JSONType = jtString) and (d.AsString = 'edge'));
+    end;
+  end;
+
+  { where removeEC3NormalStatus runs }
+  hosts := nil;
+  Host('');
+  Host('markPoint');
+  Host('markLine');
+  Host('markArea');
+  Host('data');
+  Host('markPoint.data');
+  Host('markLine.data');
+  { a graph's: its links and categories (its `nodes` and `edges` have no
+    schema in the catalog, so the walk never goes into them) }
+  if t = 'graph' then
+  begin
+    Host('links');
+    Host('categories');
+  end;
+  if t = 'treemap' then Host('levels');
+  if t = 'tree' then Host('leaves');
+  if (AKey = 'normal') or (AKey = 'emphasis') then
+  begin
+    for h := 0 to High(hosts) do
+      for s := 0 to High(cLgStyles) do
+        if ARest = LgJoin(hosts[h], cLgStyles[s]) then Exit(True);
+    if (t = 'treemap') and (ARest = 'breadcrumb.itemStyle') then Exit(True);
+  end;
+  { ec2's leftovers on the series and its markPoint / markLine }
+  for h := 0 to 2 do
+  begin
+    if ((ARest = LgJoin(hosts[h], 'itemStyle')) or (ARest = LgJoin(hosts[h], 'emphasis.itemStyle')))
+      and LgIn(AKey, cLgPossible) then Exit(True);
+    if (ARest = hosts[h]) and ((AKey = 'nodeStyle') or (AKey = 'linkStyle') or (AKey = 'chordStyle')) then
+      Exit(True);
+  end;
+  { a label's textStyle }
+  if AKey = 'textStyle' then
+  begin
+    if LgIn(ARest, ['label', 'upperLabel', 'edgeLabel', 'emphasis.label',
+      'emphasis.upperLabel', 'emphasis.edgeLabel']) then Exit(True);
+    for h := 1 to High(hosts) do
+    begin
+      if (hosts[h] = 'categories') or (hosts[h] = 'levels') or (hosts[h] = 'leaves') then Continue;
+      if (ARest = LgJoin(hosts[h], 'label')) or (ARest = LgJoin(hosts[h], 'emphasis.label')) then
+        Exit(True);
+    end;
+    if (t = 'gauge') and LgIn(ARest, ['axisLabel', 'title', 'detail']) then Exit(True);
+  end;
+end;
+
+function LegacyKnows(ARoot: TJSONData; const APath, AKey: string): Boolean;
+var
+  np, rest, head: string;
+  ser: TJSONData;
+  k, p: Integer;
+begin
+  Result := False;
+  np := LgNames(APath);
+  { the root's }
+  if np = '' then Exit(AKey = 'dataRange');
+  if LgIn(np, cLgLayoutComponents) and LgIn(AKey, cLgLayout) then Exit(True);
+  { a polar with an indicator, its type the radar's shape }
+  if (np = 'radar') and (AKey = 'type') then Exit(True);
+
+  p := Pos('.', np);
+  if p > 0 then head := Copy(np, 1, p - 1) else head := np;
+  if head = 'series' then
+  begin
+    { the series element: 'series[i]' or the bare object }
+    k := Pos('.', APath);
+    if k > 0 then ser := LgResolve(ARoot, Copy(APath, 1, k - 1))
+    else ser := LgResolve(ARoot, APath);
+    if ser is TJSONArray then ser := nil;
+    if p > 0 then rest := Copy(np, p + 1, MaxInt) else rest := '';
+    Exit(LgSeriesKnows(ser, rest, AKey, ARoot, APath));
+  end;
+
+  if AKey = 'textStyle' then
+  begin
+    for k := 0 to High(cLgAxes) do
+      if (np = cLgAxes[k] + '.axisLabel') or (np = cLgAxes[k] + '.axisPointer.label') then Exit(True);
+    if LgIn(np, ['parallel.parallelAxisDefault.axisLabel',
+      'parallel.parallelAxisDefault.axisPointer.label',
+      'calendar.dayLabel', 'calendar.monthLabel', 'calendar.yearLabel',
+      'radar.axisName', 'geo.label', 'geo.emphasis.label', 'geo.regions.label',
+      'geo.regions.emphasis.label', 'timeline.label', 'timeline.emphasis.label']) then Exit(True);
+    { toObj: the first only }
+    if (np = 'axisPointer.label') and ((Copy(APath, 1, 12) = 'axisPointer.')
+      or (Copy(APath, 1, 15) = 'axisPointer[0].')) then Exit(True);
+    if (np = 'tooltip.axisPointer.label') and ((Copy(APath, 1, 8) = 'tooltip.')
+      or (Copy(APath, 1, 11) = 'tooltip[0].')) then Exit(True);
+  end;
+
+  if (AKey = 'normal') or (AKey = 'emphasis') then
+  begin
+    for k := 0 to High(cLgStyles) do
+      if LgIn(np, ['geo.' + cLgStyles[k], 'geo.regions.' + cLgStyles[k],
+        'timeline.' + cLgStyles[k]]) then Exit(True);
+    if LgIn(np, ['timeline.data.label', 'timeline.data.itemStyle', 'calendar.itemStyle',
+      'timeline.controlStyle', 'toolbox.iconStyle']) then Exit(True);
+    { a feature's, whatever its name }
+    if (Copy(np, 1, 16) = 'toolbox.feature.') and (Copy(np, Length(np) - 9, 10) = '.iconStyle') then
+    begin
+      rest := Copy(np, 17, Length(np) - 26);
+      Exit((rest <> '') and (Pos('.', rest) = 0));
+    end;
+  end;
+end;
+
 procedure WalkObject(AObj: TJSONObject; ANode: Integer; const APath: string;
   var C: TIssueCollector);
 var
@@ -1423,6 +1686,8 @@ begin
       { known to the runtime though not to the documentation: accepted, and
         not walked -- there is no schema for what is inside }
       if RuntimeKnows(ANode, key) then Continue;
+      { an old spelling ECharts rewrites, left where it was written [R3-A] }
+      if LegacyKnows(C.Root, APath, key) then Continue;
       { the author's own field on a tree's node [R2-J] }
       if IsTreeNodeRecord(ANode) and not LooksLikeTypo(ANode, key) then Continue;
       AddIssue(C, oikUnknownOption, sub, '', '');
@@ -2051,8 +2316,12 @@ var
 begin
   c.Items := nil;
   c.Count := 0;
+  c.Root := nil;
   if (AOption <> nil) and (AOption.Root <> nil) then
+  begin
+    c.Root := AOption.Root;
     WalkValidate(AOption.Root, TyOptRoot, '', c);
+  end;
   SetLength(c.Items, c.Count);
   Result := c.Items;
 end;

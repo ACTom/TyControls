@@ -16,7 +16,9 @@ unit tyControls.AdvanceChart.Media;
   a `media` ARRAY, each with a truthy `option`; with a truthy `query` it is
   listed, else the first such is the default. The preprocessors run over
   the base, the timeline's frames and the listed units -- never over the
-  default. (The graphic and timeline ones here; the rest in
+  default. (Here the ones upstream registers first -- backwardCompat, the
+  radar's and the candlestick's, tyControls.AdvanceChart.BackwardCompat
+  [R3-A] -- then the graphic's and the timeline's; the rest in
   tyControls.AdvanceChart.Option's PreprocessUnits, over the same three
   [231a].)
 
@@ -128,7 +130,8 @@ function TyMediaJsNumber(AData: TJSONData): Double;
 implementation
 
 uses tyControls.AdvanceChart.Data, tyControls.AdvanceChart.OptionMerge,
-  tyControls.AdvanceChart.Graphic, tyControls.AdvanceChart.Timeline;
+  tyControls.AdvanceChart.Graphic, tyControls.AdvanceChart.Timeline,
+  tyControls.AdvanceChart.BackwardCompat;
 
 function JsTruthy(AData: TJSONData): Boolean;
 var v: Double;
@@ -203,7 +206,8 @@ begin
       begin
         opt := OptionObject(o);
         { the preprocessors run over a unit with a query [Batch 122] -- the
-          timeline's too [Batch 129] }
+          timeline's too [Batch 129], the old spellings' first [R3-A] }
+        TyLegacyPreprocess(opt);
         TyGraphicPreprocess(opt);
         TyTimelinePreprocess(opt);
         if TyOptionHasDuplicateId(opt) then
@@ -237,6 +241,7 @@ begin
       begin
         ASet.Frames[i] := TJSONObject(d.Items[i].Clone);
         { doPreprocess over each frame }
+        TyLegacyPreprocess(ASet.Frames[i]);
         TyGraphicPreprocess(ASet.Frames[i]);
         TyTimelinePreprocess(ASet.Frames[i]);
       end
@@ -269,8 +274,9 @@ begin
     if ARaw.Find('options') <> nil then ARaw.Delete('options');
     if ARaw.Find('media') <> nil then ARaw.Delete('media');
   end;
-  { THE PREPROCESSORS over the base: the graphic component's [Batch 122],
-    the timeline's [Batch 129] }
+  { THE PREPROCESSORS over the base: the old spellings' [R3-A], the graphic
+    component's [Batch 122], the timeline's [Batch 129] }
+  TyLegacyPreprocess(ARaw);
   TyGraphicPreprocess(ARaw);
   TyTimelinePreprocess(ARaw);
 end;

@@ -2,20 +2,15 @@
   custom series. Moved out of the unit only to keep it readable; what the control is and
   why it is built the way it is, see the unit header. }
 
-{ ==================== the graphic component [Batch 122] ==================== }
+{ ==================== the graphic component [Batch 122] ====================
 
-procedure TTyAdvanceChart.GfxWriteBack;
-var
-  node: TJSONData;
-  i: Integer;
-begin
-  if (FGfxModel = nil) or (FOption = nil) then Exit;
-  node := FOption.ComponentAt('graphic', 0);
-  if not (node is TJSONObject) then Exit;
-  i := TJSONObject(node).IndexOfName('elements');
-  if i >= 0 then TJSONObject(node).Items[i] := FGfxModel.Elements.Clone
-  else TJSONObject(node).Add('elements', FGfxModel.Elements.Clone);
-end;
+  [R3-B] THE LIST STAYS IN THE MODEL. GraphicModel keeps its flattened,
+  id'd, merged-by-id list -- with the `hv` setLayoutInfoToExist writes, a
+  group's 0 size, the layout keys mergeLayoutParam nulls -- in its option,
+  which getOption shows; the tree is the raw merge (what the author wrote,
+  `elements` replaced whole by each merge, as zrUtil.merge does), the layer
+  the merge oracles record for every component. The list used to be
+  written back into the tree; it lives in FGfxModel only now. }
 
 procedure TTyAdvanceChart.GfxInitFromTree;
 var node: TJSONData;
@@ -31,7 +26,6 @@ begin
   if not (node is TJSONObject) then Exit;
   FGfxModel := TTyGfxModel.Create;
   FGfxModel.OptionUpdated(TJSONObject(node).Find('elements'), True);
-  GfxWriteBack;
 end;
 
 procedure TTyAdvanceChart.GfxPass(const AReport: TTyMergeReport);
@@ -62,7 +56,6 @@ begin
           FGfxModel.OptionUpdated(newOpt.Find('elements'), False)
         else
           FGfxModel.OptionUpdated(nil, False);
-        GfxWriteBack;
         FGfxPending := True;
       end;
     mfRemoved, mfHole:

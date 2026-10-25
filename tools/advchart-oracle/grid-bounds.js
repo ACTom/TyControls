@@ -595,6 +595,12 @@ add('Z12 value x labels overflow right, grid right 0', {
   xAxis: { type: 'value', min: 0, max: 1e9 }, yAxis: { type: 'category', data: DAYS },
   series: [{ type: 'bar', data: VALS.map(v => v * 1e6) }],
 });
+// [r3v] outerBounds with both sides: merged as a box (both kept), not ignoreSize
+add('Z13 value x labels overflow right, grid right 0, outerBounds left 0 right 40', {
+  grid: { right: 0, outerBounds: { left: 0, right: 40 } },
+  xAxis: { type: 'value', min: 0, max: 1e9 }, yAxis: { type: 'category', data: DAYS },
+  series: [{ type: 'bar', data: VALS.map(v => v * 1e6) }],
+});
 // The audit's discriminating inverse case, JSON-only: every label is long, the
 // end labels are hidden, so 80 (normalize .8, near the LEFT end when inverse)
 // and 20 overflow. Unflipped p divides by .2 on both sides, flipped by .8.

@@ -73,7 +73,14 @@ A state:
            the view's uid written "@view"
   tree     the raw merge layer (what the port's GetOptionJson must give;
            media.js's recording, plus the timeline model's setCurrentIndex /
-           setPlayState written into it)
+           setPlayState written into it; [R3-B] with option-merge.js's rules:
+           the box only where mergeOption runs mergeLayoutParam, a grid's
+           outerBounds, a calendar's cell size, replaceVisualOption)
+  vis      [R3-B] a case marked `vis`: {vm, items} -- per visualMap slot the
+           model's inRange / outOfRange / target / controller, per series
+           slot each item's [fill, opacity] (option-merge.js's record)
+  gfx      [R3-B] a case marked `gfx`: the graphic view's elements by id,
+           [id, x (hex), y (hex), fill]
   view     null (no timeline view, or it shows nothing) or
            {main, label: the two groups' {x, y, rotation, originX, originY}
            (hex), els[]}
@@ -217,7 +224,11 @@ function wrap(proto, name) {
     const outer = !this.__rawDepth;
     if (outer) {
       if (name === 'init') this.__raw = zrUtil.clone(option);
-      else this.__raw = zrUtil.merge(this.__raw, zrUtil.clone(option), true);
+      else {
+        this.__raw = zrUtil.merge(this.__raw, zrUtil.clone(option), true);
+        // [R3-B] optionUpdated's replaceVisualOption, on the raw layer too
+        replaceVisual(this.__raw, option, VISUAL_KEYS[this.mainType]);
+      }
       if (HOOK_LOG) HOOK_LOG.push({ model: this, kind: name, option });
     }
     this.__rawDepth = (this.__rawDepth || 0) + 1;
@@ -272,6 +283,87 @@ must(TL_PROTO, 'no TimelineModel.setCurrentIndex');
 const HV = [['width', 'left', 'right'], ['height', 'top', 'bottom']];
 function layoutModeOf(model) {
   return model.layoutMode || model.constructor.layoutMode;
+}
+
+// ---------- [R3-B] the raw layer's merge rules (as option-merge.js) ----------
+// optionUpdated's replaceVisualOption (visual/visualSolution.ts), per main type
+const VISUAL_KEYS = {
+  visualMap: ['inRange', 'outOfRange', 'target', 'controller', 'color'],
+  brush: ['inBrush', 'outOfBrush'],
+};
+function hasKeys(obj) {
+  if (obj) for (const name in obj) if (obj.hasOwnProperty(name)) return true;
+  return false;
+}
+function replaceVisual(thisOption, newOption, keys) {
+  if (!keys || !newOption) return;
+  let has = false;
+  for (const key of keys) {
+    if (newOption.hasOwnProperty(key) && hasKeys(newOption[key])) has = true;
+  }
+  if (!has) return;
+  for (const key of keys) {
+    if (newOption.hasOwnProperty(key) && hasKeys(newOption[key])) thisOption[key] = zrUtil.clone(newOption[key]);
+    else delete thisOption[key];
+  }
+}
+// the main types whose mergeOption never reaches mergeLayoutParam
+// (DataZoomModel's and ParallelModel's own; option-merge.js checks the dist)
+const NO_BOX_MERGE = new Set(['dataZoom', 'parallel']);
+function writeBox(raw, full, opt) {
+  for (const names of HV) {
+    if (!names.some(k => Object.prototype.hasOwnProperty.call(opt, k))) continue;
+    for (const k of names) {
+      const v = full[k];
+      raw[k] = v === undefined ? null : zrUtil.clone(v);
+    }
+  }
+}
+// one mergeOption the hooks saw: the box mergeLayoutParam wrote, a grid's
+// outerBounds, a calendar's normalised cell size
+function mergeRules(e) {
+  if (layoutModeOf(e.model) && !NO_BOX_MERGE.has(e.model.mainType)) writeBox(e.model.__raw, e.model.option, e.option);
+  if (e.model.mainType === 'grid' && zrUtil.isObject(e.option.outerBounds)
+    && zrUtil.isObject(e.model.option.outerBounds) && zrUtil.isObject(e.model.__raw.outerBounds)) {
+    writeBox(e.model.__raw.outerBounds, e.model.option.outerBounds, e.option.outerBounds);
+  }
+  if (e.model.mainType === 'calendar') e.model.__raw.cellSize = zrUtil.clone(e.model.option.cellSize);
+}
+// a case marked `vis`: the visualMap models' completed visuals and each
+// item's [fill, opacity]
+function visOf(chart) {
+  const pick = (o) => {
+    const r = {};
+    for (const k of ['inRange', 'outOfRange', 'target', 'controller']) {
+      if (Object.prototype.hasOwnProperty.call(o, k)) r[k] = o[k] === undefined ? null : zrUtil.clone(o[k]);
+    }
+    return r;
+  };
+  const vm = (chart.getModel()._componentsMap.get('visualMap') || []).map(m => (m ? pick(m.option) : null));
+  const items = (chart.getModel()._componentsMap.get('series') || []).map(m => {
+    if (!m) return null;
+    const d = m.getData();
+    const out = [];
+    for (let i = 0; i < d.count(); i++) {
+      const el = d.getItemGraphicEl(i);
+      out.push(el && el.style ? [typeof el.style.fill === 'string' ? el.style.fill : null,
+        el.style.opacity == null ? 1 : el.style.opacity] : null);
+    }
+    return out;
+  });
+  return { vm, items };
+}
+// a case marked `gfx`: every graphic element the view keeps, by id:
+// [id, x, y, fill]
+function gfxOf(chart) {
+  const view = (chart._componentsViews || []).find(v => v && v.type === 'graphic');
+  const out = [];
+  if (view && view._elMap) {
+    view._elMap.each((el, id) => out.push([id, hex(el.x), hex(el.y),
+      el.style && typeof el.style.fill === 'string' ? el.style.fill : null]));
+  }
+  out.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  return out;
 }
 
 // ---------- the option manager, hooked once ----------
@@ -568,14 +660,7 @@ function runCase(c) {
     HOOK_LOG = null;
     for (const e of hl) {
       if (e.kind !== 'mergeOption' || !e.option) continue;
-      if (!layoutModeOf(e.model)) continue;
-      for (const names of HV) {
-        if (!names.some(n => has(e.option, n))) continue;
-        for (const n of names) {
-          const v = e.model.option[n];
-          e.model.__raw[n] = v === undefined ? null : zrUtil.clone(v);
-        }
-      }
+      mergeRules(e);
     }
   };
   const doSet = (option, opts) => {
@@ -638,6 +723,8 @@ function runCase(c) {
       })(),
       titles: (chart.getModel()._componentsMap.get('title') || []).map(t => (t ? t.option.text : null)),
     };
+    if (c.vis) st.vis = visOf(chart);
+    if (c.gfx) st.gfx = gfxOf(chart);
     EVENTS = [];
     try {
       checkSubset(st.tree, chart.getOption(), c.id + ' state ' + states.length);
@@ -995,6 +1082,40 @@ const CASES = [
       { kind: 'set', option: { options: [barFrame(0), Object.assign(barFrame(1), { brush: {}, toolbox: {} }), barFrame(2), barFrame(3)] } },
       { kind: 'set', option: { media: [{ query: { minWidth: 1 }, option: { brush: { xAxisIndex: 0 }, toolbox: {} } }] } },
     ] },
+  // ---------------- [R3-B] merge details ----------------
+  { id: 'r3b-toolbox-box', group: 'option', note: "a frame merged into the toolbox writes the box mergeLayoutParam makes (ignoreSize: the other side null, the size undefined), as a merge does",
+    option: bars(tlCat({}), { options: [Object.assign(barFrame(0), { toolbox: { right: 30 } }),
+      Object.assign(barFrame(1), { toolbox: { top: 50, width: 80 } }), barFrame(2), barFrame(3)] },
+      { toolbox: { left: 10, feature: { saveAsImage: {} } } }),
+    steps: [
+      { kind: 'action', payload: { type: 'timelineChange', currentIndex: 1 } },
+      { kind: 'set', option: { toolbox: { left: 20 } } },
+    ] },
+  { id: 'r3b-graphic-frames', group: 'option', gfx: true, note: "graphic in the base and the frames: the raw layer's elements are each option's as written (replaced whole), the model's list merges them by id onto the base's -- the first frame updates the base's rect, the second moves it and recolours the other",
+    option: bars(tlCat({}), { options: [
+      Object.assign(barFrame(0), { graphic: [{ id: 'r', style: { fill: '#ff0000' } }, { id: 't' }] }),
+      Object.assign(barFrame(1), { graphic: [{ id: 'r', left: 50 }, { id: 't', style: { fill: '#00ff00' } }] }),
+      barFrame(2), barFrame(3)] },
+      { graphic: [{ type: 'rect', id: 'r', left: 10, top: 10, shape: { width: 20, height: 20 }, style: { fill: '#000000' } },
+        { type: 'rect', id: 't', right: 10, top: 10, shape: { width: 30, height: 10 }, style: { fill: '#333333' } }] }),
+    steps: [
+      { kind: 'action', payload: { type: 'timelineChange', currentIndex: 1 } },
+      { kind: 'action', payload: { type: 'timelineChange', currentIndex: 2 } },
+      { kind: 'set', option: { graphic: { elements: [{ id: 'r' }, { id: 't', bottom: 20 }] } } },
+    ] },
+  { id: 'r3b-vm-frames', group: 'option', vis: true, note: "the visualMap model completes its visuals when the base makes it; a frame whose pieces write colours is not completed again by them; a frame writing inRange replaces the visuals",
+    option: bars(tlCat({}), { options: [
+      Object.assign(barFrame(0), { visualMap: { pieces: [{ min: 0, max: 2, color: '#ff0000' }, { min: 3, max: 4, color: '#00ff00' }] } }),
+      Object.assign(barFrame(1), { visualMap: { inRange: { color: ['#0000ff', '#00ffff'] } } }),
+      Object.assign(barFrame(2), { visualMap: { pieces: [{ min: 0, max: 1, colorAlpha: 0.5 }, { min: 2, max: 8 }] } }),
+      barFrame(3)] },
+      { gradientColor: ['#123456', '#abcdef'], visualMap: { type: 'piecewise', show: false, dimension: 1, inactiveColor: '#cccccc',
+        pieces: [{ min: 0, max: 2 }, { min: 3, max: 4 }] } }),
+    steps: [
+      { kind: 'action', payload: { type: 'timelineChange', currentIndex: 1 } },
+      { kind: 'action', payload: { type: 'timelineChange', currentIndex: 2 } },
+      { kind: 'action', payload: { type: 'timelineChange', currentIndex: 3 } },
+    ] },
 ];
 
 // ---------------------------------------------------------------------------
@@ -1117,6 +1238,16 @@ function guards(out) {
     && !('controlPosition' in pc[1].tree.timeline[0]));
   guard('preprocess-frame-components: a merge\'s frame brush names no buttons', JSON.stringify(pc[2].tree.toolbox[0].feature.brush.type) === '[]');
   guard('preprocess-frame-components: a merge\'s media unit brush names no buttons', JSON.stringify(pc[3].tree.toolbox[0].feature.brush.type) === '[]');
+  // [R3-B]
+  const rt = cs('r3b-toolbox-box').states;
+  guard('r3b-toolbox-box: the first frame nulls the left and the width', rt[0].tree.toolbox[0].left === null && rt[0].tree.toolbox[0].width === null && rt[0].tree.toolbox[0].right === 30);
+  const rg = cs('r3b-graphic-frames').states;
+  guard('r3b-graphic-frames: the raw layer is the frame\'s elements, the model keeps the base\'s', JSON.stringify(rg[0].tree.graphic[0].elements[1]) === '{"id":"t"}'
+    && rg[0].gfx.length === 2 && rg[0].gfx[0][3] === '#ff0000');
+  guard('r3b-graphic-frames: no hv in the raw layer', !('hv' in rg[1].tree.graphic[0].elements[0]));
+  const rv = cs('r3b-vm-frames').states;
+  guard('r3b-vm-frames: the base completes the target, the frame\'s colours do not', JSON.stringify(rv[0].vis.vm[0].target.inRange.color) === '["#123456","#abcdef"]');
+  guard('r3b-vm-frames: a frame writing inRange replaces it', JSON.stringify(rv[1].vis.vm[0].target.inRange.color) === '["#0000ff","#00ffff"]');
   return g;
 }
 
