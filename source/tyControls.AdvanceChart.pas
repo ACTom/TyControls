@@ -3172,9 +3172,9 @@ type
       the element is not one that can be lifted. }
     { ONE GRAPH ELEMENT'S emphasis AND blur, down its model chain: a node's
       data item, then its category, then the series; an edge's link, then the
-      series. `focusNodeAdjacency`, the old spelling, counts at the series
-      when `emphasis.focus` says nothing. AIndex is into FGraphNodes /
-      FGraphEdges of ASlot. }
+      series (`focusNodeAdjacency`, the old spelling, is the series'
+      emphasis.focus by then: backwardCompat [R3-A]). AIndex is into
+      FGraphNodes / FGraphEdges of ASlot. }
     procedure GraphEdgeLabels(ASlot: Integer; var AInk: TTyGraphInk);
     function DoViewAction(const AType: string; APayload: TJSONObject): Boolean;
     { ---- the drill-downs [Batch 115] ---- }

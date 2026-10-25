@@ -536,6 +536,7 @@ var
   txt: string;
   c: TTyChartColor;
   k: Integer;
+  emo: TJSONData;
   { [R2-A] ONE LABEL'S STATES, from its element at AIdx: the item's
     (labelStyle.ts:255-273) -- the datum's one label, or each of a radar
     item's point labels }
@@ -832,7 +833,19 @@ begin
         if doScale then
         begin
           ss := TyStReadNumber(nodes, ['emphasis', 'scaleSize'], has);
-          if not has then ss := 5
+          if not has then
+          begin
+            { the series' default 5 is merged under the option, never over a
+              key it writes: one written null (backwardCompat writes it for a
+              hoverOffset) reads null, and `|| 0` [R3-A] }
+            ss := 5;
+            if (Length(nodes) > 0) and (nodes[High(nodes)] <> nil) then
+            begin
+              emo := nodes[High(nodes)].Find('emphasis');
+              if (emo is TJSONObject) and (TJSONObject(emo).IndexOfName('scaleSize') >= 0) then
+                ss := 0;
+            end;
+          end
           else if IsNan(ss) then ss := 0;
           TyStSetNum(item^.Host.Decl[stnEmphasis], stkR, ph^.Shape.R1 + ss * scale);
         end;
@@ -4268,7 +4281,7 @@ function TTyAdvanceChart.StItemFocus(ASeriesIndex, ARaw: Integer;
   out AScope: TTyStScope): TTyStFocus;
 var
   nodes: TTyStNodeArray;
-  d, legacy: TJSONData;
+  d: TJSONData;
   w: string;
   slot, i, p: Integer;
   anc, ns, es: TTyIntegerArray;
@@ -4344,21 +4357,14 @@ begin
     end;
     Exit(TyStFocusOf(d));
   end;
-  { [F2a] A GRAPH NODE'S 'adjacency' (the legacy focusNodeAdjacency where no
-    focus is written, any value but null): getAdjacentDataIndices -- its
-    edges and both ends of each -- in two index sets }
+  { [F2a] A GRAPH NODE'S 'adjacency': getAdjacentDataIndices -- its edges
+    and both ends of each -- in two index sets. The legacy focusNodeAdjacency
+    is emphasis.focus 'adjacency' by now, written into the option that has
+    it by backwardCompat [R3-A]: a later merge's focus is the one read }
   if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSt))
     and (FSt[ASeriesIndex].Kind = sskGraph) then
   begin
-    adj := False;
-    if d = nil then
-    begin
-      legacy := nil;
-      if nodes[2] <> nil then legacy := nodes[2].Find('focusNodeAdjacency');
-      adj := (legacy <> nil) and (legacy.JSONType <> jtNull);
-    end
-    else
-      adj := (d.JSONType = jtString) and (d.AsString = 'adjacency');
+    adj := (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'adjacency');
     if not adj then Exit(TyStFocusOf(d));
     Result := Default(TTyStFocus);
     Result.Kind := sfkIndices;
@@ -4452,7 +4458,7 @@ function TTyAdvanceChart.StEdgeFocus(ASeriesIndex, AEdge: Integer;
   out AScope: TTyStScope): TTyStFocus;
 var
   nodes: TTyStNodeArray;
-  d, legacy: TJSONData;
+  d: TJSONData;
   slot: Integer;
   adj: Boolean;
 begin
@@ -4460,16 +4466,12 @@ begin
   d := TyStFind(nodes, ['emphasis', 'focus']);
   AScope := TyStScopeOf(TyStFind(nodes, ['emphasis', 'blurScope']));
   slot := SlotOfSeries(ASeriesIndex);
-  { [F2a] A GRAPH EDGE'S 'adjacency': itself and its two ends (GraphView) }
+  { [F2a] A GRAPH EDGE'S 'adjacency': itself and its two ends (GraphView);
+    focusNodeAdjacency was rewritten before the merge [R3-A] }
   if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSt))
     and (FSt[ASeriesIndex].Kind = sskGraph) then
   begin
     adj := (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'adjacency');
-    if (d = nil) and (nodes[2] <> nil) then
-    begin
-      legacy := nodes[2].Find('focusNodeAdjacency');
-      adj := (legacy <> nil) and (legacy.JSONType <> jtNull);
-    end;
     if not adj or (AEdge < 0) or (AEdge > High(FGraphEdges[slot])) then Exit(TyStFocusOf(d));
     Result := Default(TTyStFocus);
     Result.Kind := sfkIndices;
@@ -5967,7 +5969,7 @@ end;
 function TTyAdvanceChart.GraphEmphasisOf(ASlot: Integer; AIsEdge: Boolean;
   AIndex: Integer): TTyChartEmphasisSpec;
 var
-  ser, d: TJSONData;
+  ser: TJSONData;
   arr: TJSONArray;
   sobj: TJSONObject;
   cat, raw: Integer;
@@ -5988,17 +5990,8 @@ begin
   if not (ser is TJSONObject) then Exit;
   sobj := TJSONObject(ser);
   Result := TyChartReadEmphasis(ser);
-  { THE OLD SPELLING, only where the new one is silent. Any value but null
-    turns it on -- even `false`. }
-  if not Result.HasFocus then
-  begin
-    d := sobj.Find('focusNodeAdjacency');
-    if (d <> nil) and (d.JSONType <> jtNull) then
-    begin
-      Result.Focus := cfAdjacency;
-      Result.HasFocus := True;
-    end;
-  end;
+  { the old focusNodeAdjacency is emphasis.focus by now, rewritten in the
+    option that wrote it [R3-A] }
   if AIsEdge then
   begin
     if (AIndex < 0) or (AIndex > High(FGraphEdges[ASlot])) then Exit;

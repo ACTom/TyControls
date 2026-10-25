@@ -950,6 +950,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvanceChart.Media"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvanceChart.BackwardCompat.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.BackwardCompat"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvanceChart.WhiskerBox.pas"/>
         <UnitName Value="tyControls.AdvanceChart.WhiskerBox"/>
       </Item>

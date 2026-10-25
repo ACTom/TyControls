@@ -880,7 +880,7 @@ const
     of `children[].` is folded to one, so a key reported at every depth of a
     tree is one entry. Every one of these is a key ECharts 6.1 does not read
     where it is written, so saying nothing would be the lie. }
-  cKnown: array[0..24] of string = (
+  cKnown: array[0..23] of string = (
     'toolbox.feature.mark',            // no such feature since ECharts 3
     'calculable',                      // ECharts 2
     'bmap',                            // the Baidu-map extension, not core
@@ -892,7 +892,8 @@ const
     'parallel.parallelAxisDefault.splitLine', // parallel axes draw no split lines
     'parallelAxis[].splitLine',
     'series.layout',                   // sankey: the pre-5 spelling, unread
-    'series[].label.margin',           // pie: edgeDistance since 5
+    { [R3-A] 'series[].label.margin' left the list: with alignTo 'edge'
+      backwardCompat reads it as the edgeDistance (pie-alignTo) }
     'series[].emphasis.label.position',// FunnelView.ts:116, position is not used
     'title[].width', 'title.textStyle.align', // title: unread / textAlign wins
     { [R2-J: a treemap's own `path`, `discretion` and `size` left the list --
