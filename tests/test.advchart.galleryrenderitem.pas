@@ -176,7 +176,7 @@ type
 
 implementation
 
-uses DateUtils, tyControls.AdvanceChart.Data;
+uses DateUtils, tyControls.AdvanceChart.Data, tyControls.AdvanceChart.BackwardCompat;
 
 function FindUp(const ARel: string): string;
 var d: string; i: Integer;
@@ -1485,7 +1485,7 @@ end;
 function Compat(const AText: string): TJSONObject;
 begin
   Result := TJSONObject(GetJSON(AText));
-  TyCompatTextStyle(Result);
+  TyBackwardCompat(Result);
 end;
 
 procedure TAdvChartCompatTextStyleTest.TestTheTextStyleKeysMoveUpIntoTheLabel;
@@ -1544,7 +1544,8 @@ begin
       .Objects['label'].Integers['fontSize']);
     AssertEquals('a calendar day label', 33, o.Arrays['calendar'].Objects[0]
       .Objects['dayLabel'].Integers['fontSize']);
-    AssertEquals('a radar name', 34, o.Objects['radar'].Objects['name'].Integers['fontSize']);
+    { [R3-A] and then the radar's name is its axisName }
+    AssertEquals('a radar name', 34, o.Objects['radar'].Objects['axisName'].Integers['fontSize']);
     AssertEquals('the tooltip axis pointer label', 35, o.Objects['tooltip'].Objects['axisPointer']
       .Objects['label'].Integers['fontSize']);
   finally
