@@ -77,6 +77,18 @@ type
     ChkRoot:     TTyCheckBox;
     LblIndent:   TTyLabel;
     TrkIndent:   TTyTrackBar;
+    LinesBar:      TTyPanel;
+    LblLines:      TTyLabel;
+    CmbLines:      TTyComboBox;
+    LblDash:       TTyLabel;
+    CmbDash:       TTyComboBox;
+    LblExpander:   TTyLabel;
+    CmbExpander:   TTyComboBox;
+    ChevronBar:    TTyPanel;
+    LblChevron:    TTyLabel;
+    TrkChevron:    TTyTrackBar;
+    LblChevronInk: TTyLabel;
+    TrkChevronInk: TTyTrackBar;
     MultiTree:   TTyTreeView;   // Tab 4: Multi-select
     PgDrag:      TTyTabSheet;
     LblDrag:     TTyLabel;
@@ -100,6 +112,8 @@ type
     procedure BtnCollapseAllClick(Sender: TObject);
     procedure MultiLookChange    (Sender: TObject);
     procedure TrkIndentChange    (Sender: TObject);
+    procedure LinesLookChange    (Sender: TObject);
+    procedure ChevronLookChange  (Sender: TObject);
     procedure BtnDragDeleteClick (Sender: TObject);
     procedure BtnDragClearClick  (Sender: TObject);
     procedure BtnDragRebuildClick(Sender: TObject);
@@ -124,6 +138,9 @@ type
     FFileIcons:   TImageList;
     { Running total of nodes released through DragTree.OnFreeNode. }
     FFreedNodes:  Integer;
+    { True while FormCreate fills the look strips, so their OnChange does not write a
+      StyleOverride the user never asked for. }
+    FFillingLook: Boolean;
 
     { Per-tab tree configuration (kept in code — columns / options / images /
       node-data population are not simple published properties). }
@@ -292,6 +309,25 @@ resourcestring
   rsStageFmt = 'Stage %d';
   rsPillFmt   = '%s - %d%% (owner-drawn pill), OnChange';
   rsChangeFmt = '%s - OnChange';
+  rsFromTheme    = 'From theme';
+  rsLinesGuides  = 'Guides';
+  rsLinesClassic = 'Classic';
+  rsLinesNone    = 'None';
+  rsDashSolid    = 'Solid';
+  rsDashDotted   = 'Dotted';
+  rsDashDashed   = 'Dashed';
+  rsDashLong     = 'Long dash';
+  rsExpChevron   = 'Chevron';
+  rsExpPlusMinus = 'Boxed +/-';
+  rsLinesFromTheme   = 'Lines and expanders: as the theme draws them';
+  rsStyleOverrideFmt = 'MultiTree.StyleOverride = ''%s''';
+  rsChevronFmt       = 'Every chevron: --glyph-chevron-size %d px, --glyph-chevron-alpha %d';
+
+const
+  { The token values behind the look strip's choices; item 0 of each box is From theme. }
+  LineKinds:  array[1..3] of string = ('guides', 'classic', 'none');
+  LineDashes: array[1..4] of string = ('solid', 'dotted', 'dashed', '6px 3px');
+  Expanders:  array[1..2] of string = ('chevron', 'plus-minus');
 
 { Display names for the data tables below. The TABLES keep English keys (a
   typed const cannot hold a resourcestring, and ColGetImageIndex matches kinds
@@ -406,6 +442,42 @@ procedure TShowcaseForm.TrkIndentChange(Sender: TObject);
 begin
   MultiTree.Indent := TrkIndent.Position;
   SetStatus(Format(rsIndentFmt, [TrkIndent.Position]));
+end;
+
+{ #101. How a tree draws its lines and expanders is the theme's choice, and one tree can
+  make its own in its StyleOverride -- here, whatever is not left on From theme. With all
+  three on From theme, switch to the classic or xp skin: they draw a boxed +/- over dotted
+  connectors. ShowTreeLines (the first strip) is still the master switch. }
+procedure TShowcaseForm.LinesLookChange(Sender: TObject);
+var
+  css: string;
+begin
+  if FFillingLook then Exit;
+  css := '';
+  if CmbLines.ItemIndex > 0 then
+    css := css + '--treeview-lines: ' + LineKinds[CmbLines.ItemIndex] + '; ';
+  if CmbDash.ItemIndex > 0 then
+    css := css + '--treeview-lines-style: ' + LineDashes[CmbDash.ItemIndex] + '; ';
+  if CmbExpander.ItemIndex > 0 then
+    css := css + '--treeview-expander: ' + Expanders[CmbExpander.ItemIndex] + '; ';
+  css := Trim(css);
+  MultiTree.StyleOverride := css;
+  if css = '' then
+    SetStatus(rsLinesFromTheme)
+  else
+    SetStatus(Format(rsStyleOverrideFmt, [css]));
+end;
+
+{ #100. Every disclosure chevron -- the trees', the combo boxes', the menus' -- is the same
+  mark, sized and inked by two theme tokens, so one :root block in the controller's
+  StyleOverride changes all of them at once. }
+procedure TShowcaseForm.ChevronLookChange(Sender: TObject);
+begin
+  if FFillingLook then Exit;
+  TyDefaultController.StyleOverride := Format(
+    ':root { --glyph-chevron-size: %dpx; --glyph-chevron-alpha: %d; }',
+    [TrkChevron.Position, TrkChevronInk.Position]);
+  SetStatus(Format(rsChevronFmt, [TrkChevron.Position, TrkChevronInk.Position]));
 end;
 
 { =======================================================================
@@ -1205,6 +1277,32 @@ begin
   MultiTree.OnIncrementalSearch := @MultiIncrementalSearch;
 
   MultiTree.RootNodeCount := 200;
+
+  { The look strips: the boxes' words are display text, so they are filled here; the
+    chevron tracks start at what the theme says. Nothing is written to a StyleOverride
+    until the user picks something. }
+  FFillingLook := True;
+  try
+    CmbLines.Items.Add(rsFromTheme);
+    CmbLines.Items.Add(rsLinesGuides);
+    CmbLines.Items.Add(rsLinesClassic);
+    CmbLines.Items.Add(rsLinesNone);
+    CmbLines.ItemIndex := 0;
+    CmbDash.Items.Add(rsFromTheme);
+    CmbDash.Items.Add(rsDashSolid);
+    CmbDash.Items.Add(rsDashDotted);
+    CmbDash.Items.Add(rsDashDashed);
+    CmbDash.Items.Add(rsDashLong);
+    CmbDash.ItemIndex := 0;
+    CmbExpander.Items.Add(rsFromTheme);
+    CmbExpander.Items.Add(rsExpChevron);
+    CmbExpander.Items.Add(rsExpPlusMinus);
+    CmbExpander.ItemIndex := 0;
+    TrkChevron.Position := TyDefaultController.Metric('--glyph-chevron-size', TyDropChevronSize);
+    TrkChevronInk.Position := TyDefaultController.Metric('--glyph-chevron-alpha', TyChevronAlpha);
+  finally
+    FFillingLook := False;
+  end;
 end;
 
 procedure TShowcaseForm.MultiInitNode(Sender: TTyCustomTreeView;
