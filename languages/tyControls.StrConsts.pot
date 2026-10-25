@@ -1077,6 +1077,14 @@ msgstr ""
 msgid "Refresh"
 msgstr ""
 
+#: tycontrols.strconsts.rstycharttoolboxdataviewtable
+msgid "Table"
+msgstr ""
+
+#: tycontrols.strconsts.rstycharttoolboxdataviewtext
+msgid "Text"
+msgstr ""
+
 #: tycontrols.strconsts.rstycharttoolboximagefilter
 msgid "PNG image (*.png)|*.png|JPEG image (*.jpeg;*.jpg)|*.jpeg;*.jpg|All files (*.*)|*.*"
 msgstr ""
