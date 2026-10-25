@@ -150,11 +150,13 @@ type
     property Density: TTyDensity read FDensity write SetDensity default tdClassic;
     { A tycss PATCH composed on top of the active theme -- the "I just want to tweak the system
       theme a little" door, without authoring a whole theme. Full tycss WITH selectors
-      (e.g. 'TyButton { --radius: 12px; } TyEdit:focus { border-color: #f00; }'), applied as the
-      LAST (highest-priority) layer, so it wins over the theme and the density pack. It PERSISTS
-      across theme switches and density changes: whenever layer-1 is (re)loaded, this patch is
-      re-composed on top. The design-time editor is the SynEdit tycss editor (same as a control's
-      StyleOverride); the default controller takes it in code. '' = no patch. }
+      (e.g. 'TyButton { border-radius: 12px; } TyEdit:focus { border-color: #f00; }'), applied as
+      the LAST (highest-priority) layer, so it wins over the theme and the density pack. A rule
+      changes only what it declares, on a key the theme dresses and on one it leaves to the
+      built-in layer alike (#106). It PERSISTS across theme switches and density changes: whenever
+      layer-1 is (re)loaded, this patch is re-composed on top. The design-time editor is the
+      SynEdit tycss editor (same as a control's StyleOverride); the default controller takes it in
+      code. '' = no patch. }
     property StyleOverride: string read FStyleOverride write SetStyleOverride;
     { E23 (DX) hot-reload. False (default). When True AND ThemeFile is set, the controller
       watches that file's content (last-modified stamp + size) and, on change, reloads the

@@ -10,13 +10,21 @@ Loading entry points: `TTyStyleModel.LoadFromFile(filename)` / `LoadFromCss(sour
 Syntax errors raise `ETyCssError` (with line/column numbers); invalid property values (such as an unparseable color) raise at load time;
 **unknown property names are silently ignored** and never reported.
 
-## Built-in Default Skin and Override Semantics
+## Built-in Base Layer and Override Semantics
 
-The library ships a built-in default skin (identical to `themes/light.tycss`) that is always present as the base layer. `ResolveStyle`
-behaves as follows: a typeKey falls back to the built-in defaults **if and only if** the loaded theme has no rules at all for that
-typeKey. As soon as the theme writes any rule for a typeKey, the built-in layer is disabled for that key entirely; the theme alone
-decides everything, and properties the theme leaves blank do not leak through from the built-in layer. A complete theme therefore
-renders exactly as it did before this feature existed, while a partial theme never leaves uncovered controls invisible.
+The library carries a built-in base layer, generated from `themes/light.tycss`, that is always present under the loaded theme. It
+is not the theme named `default`: that one is `themes/auto.tycss`, which, like every built-in skin, dresses some keys itself and
+leaves the rest to the base layer.
+
+How `ResolveStyle` combines the two depends on where a rule comes from:
+
+- **A theme** (`ThemeName`, `ThemeFile`, `LoadTheme`, `LoadThemeCss`) takes over every typeKey it writes a plain rule for (no
+  class, no state). The built-in layer is then disabled for that key entirely: the theme alone decides everything, and properties
+  it leaves blank do not leak through. A key the theme writes no plain rule for falls back to the built-in layer whole. A complete
+  theme therefore renders exactly as it did before this feature existed, while a partial theme never leaves uncovered controls
+  invisible.
+- **An additive patch** (`LoadThemeCssAdditive`, the controller's `StyleOverride`) takes over no key. It changes only the
+  properties it declares, whether the key comes from the theme or from the built-in layer (§8.1).
 
 > **Upgrading an existing theme? Read §8.1 first.** v3 split the 51 controls that borrowed another control's typeKey into keys of
 > their own. Because override semantics are **all-or-nothing per typeKey**, any new key your theme never mentions falls back to the
@@ -811,13 +819,20 @@ Current scale:
 
 ### 8.1 The rule that matters most: the base layer is whole-key replacement, not a per-property cascade
 
-The default `ResolveStyle` behavior (with `PropertyCascade` off) is **all-or-nothing per typeKey**:
+For a theme, the default `ResolveStyle` behavior (with `PropertyCascade` off) is **all-or-nothing per typeKey**:
 
-- The theme has **no rule whatsoever** for a typeKey → the whole key falls back to the built-in light base layer;
-- The theme has **any single rule** for that typeKey (base, variant, or state, any one is enough) → the built-in layer is
-  disabled for the key **entirely**; properties the theme did not write do **not** leak through.
+- The theme has **no plain rule** for a typeKey → the whole key falls back to the built-in light base layer. Rules the theme
+  writes for the key's classes or states (`TyFoo.x`, `TyFoo:hover`) apply on top of the built-in ones;
+- The theme writes a **plain rule** for the typeKey (no class, no state) → the built-in layer is disabled for the key
+  **entirely**; properties the theme did not write do **not** leak through.
 
-The test is `TTyStyleModel.UserHasTypeKey`, which looks only at the **key name**, never at which properties you covered.
+The test is `TTyStyleModel.UserHasTypeKey`, which only asks whether such a rule exists, never which properties you covered.
+
+**An additive patch is not a theme.** `LoadThemeCssAdditive` and the controller's `StyleOverride` take over no key. For a key the
+theme leaves to the built-in layer, the built-in rules for it are copied in first and the patch goes on top, so
+`TyCascader { padding: 6px 13px; }` on the `default` theme changes only the padding. The key's `:hover` and `:focus` rules still
+apply over the patch, as a theme's own do. Before 3.0.4 such a patch disabled the built-in layer for the key, and the control
+lost every property the patch did not write.
 
 This rule is the top upgrade trap and the single most important thing this section has to say:
 
