@@ -1,0 +1,92 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-chromeoverlay_example 3.99\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (msgid=English source) ---
+
+#: tmainform.caption
+msgid "Chrome on top (pilot)"
+msgstr "外框保持在最上面(样板)"
+
+#: tmainform.bar.caption
+msgid "Chrome on top  ·  TyControls (pilot)"
+msgstr "外框保持在最上面  ·  TyControls(样板)"
+
+#: tmainform.darkswitch.caption
+msgid "Dark"
+msgstr "暗色"
+
+#: tmainform.overlayswitch.caption
+msgid "Keep the frame on top"
+msgstr "外框保持在最上面"
+
+#: tmainform.btnmeasure.caption
+msgid "Measure"
+msgstr "测量"
+
+#: tmainform.cardedges.title
+msgid "Children on the frame"
+msgstr "压在外框上的子控件"
+
+#: tmainform.btnleftedge.caption
+msgid "On the left edge"
+msgstr "压着左边框"
+
+#: tmainform.pnlheaderline.caption
+msgid "Across the title line"
+msgstr "跨过标题下的线"
+
+#: tmainform.lblrightedge.caption
+msgid "Label"
+msgstr "标签"
+
+#: tmainform.edtcorner.text
+msgid "In the corner"
+msgstr "在角上"
+
+#: tmainform.btnoptedout.caption
+msgid "Opted out: stays on top"
+msgstr "已退出：留在最上面"
+
+#: tmainform.cardnested.title
+msgid "A panel inside, a button inside that"
+msgstr "卡片里一个面板，面板里一个按钮"
+
+#: tmainform.btninneredge.caption
+msgid "Two levels down"
+msgstr "隔了两层"
+
+#: tmainform.cardactions.title
+msgid "Over the actions line"
+msgstr "压着底部操作栏的线"
+
+#: tmainform.btnacrossactions.caption
+msgid "Across the actions line"
+msgstr "跨过操作栏的线"
+
+#: tmainform.btnactionscorner.caption
+msgid "In the corner"
+msgstr "在角上"
+
+#: tmainform.lblhint.caption
+msgid "Each card keeps its frame, its rounded corners and the hairlines under its title and over its actions whole, whatever its children cover. Hover a card: its frame changes colour, and so does the part drawn over the children. Turn the switch off to see the cut lines as before."
+msgstr "每张卡片的外框、圆角，以及标题下和操作栏上的分隔线，不管被子控件压住多少都保持完整。把鼠标移到卡片上，边框会变色，画在子控件上的那一段也跟着变。关掉开关，可以看到原来线被截断的样子。"
+
+# --- resourcestrings ---
+
+#: umain.rsmeasurefmt
+#, object-pascal-format
+msgid "One redraw of this window: %.1f ms with the frame on top, %.1f ms without"
+msgstr "整个窗口重画一次：外框保持在最上面时 %.1f ms，关掉时 %.1f ms"
+
+#: umain.rsitem
+#, object-pascal-format
+msgid "Item %d"
+msgstr "第 %d 项"
