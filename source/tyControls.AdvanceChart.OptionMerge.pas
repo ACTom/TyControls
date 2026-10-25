@@ -89,6 +89,10 @@ type
     { a model sits at this index; False is a hole }
     Exists: Boolean;
     Id, Name, SubType: string;
+    { a mergeOption has reached the model since it was made: what it keeps
+      of its own (a calendar's normalised cell size) is in the tree now,
+      written back by that merge [r3v] }
+    Merged: Boolean;
   end;
   TTyOptionKeyArray = array of TTyOptionKey;
 
@@ -1405,9 +1409,9 @@ end;
 { merge ANew into the existing model's node: zrender's merge, then the
   model's own mergeOption rules }
 procedure MergeComponent(const AMainType, ASubType: string; ANode, ANew: TJSONObject;
-  APool: TBoxPool);
+  APool: TBoxPool; AMergedBefore: Boolean);
 var
-  ignW, ignH, touched, cal, cw, ch, outer, newCell: Boolean;
+  ignW, ignH, touched, cal, cw, ch, outer, ownCell: Boolean;
   defs, own, f, g, nk, obOwn, obF, obG, obNk: TBoxKeys;
   k, dir: Integer;
   nul: TJSONData;
@@ -1418,8 +1422,11 @@ begin
     node's own keys over the defaults -- every key owned after it }
   touched := False;
   cal := AMainType = 'calendar';
-  { a merge that writes the cell size replaces the model's }
-  newCell := ANew.Find('cellSize') <> nil;
+  { a merge that writes the cell size replaces the model's; a model merged
+    before holds its 'auto' in the tree's cell size already, and only the
+    one made from the tree (whose init 'auto' the tree cannot hold) reads
+    it from the tree's box keys [r3v] }
+  ownCell := (ANew.Find('cellSize') = nil) and not AMergedBefore;
   nul := APool.Keep(TJSONNull.Create);
   own := OwnBox(ANode, APool, True);
   for k := 0 to 5 do nk[k] := Default(TBoxKey);
@@ -1489,7 +1496,7 @@ begin
       merge leaves, 'auto' where the new option can size the cell }
     if cal then
     begin
-      cell := CalendarCell(ANode, own, not newCell, nk, True, cw, ch);
+      cell := CalendarCell(ANode, own, ownCell, nk, True, cw, ch);
       cell.Free;
       MergeBoxDirection(g, nk, 0, cw, nul);
       MergeBoxDirection(g, nk, 3, ch, nul);
@@ -1504,7 +1511,7 @@ begin
   end;
   { [R3-B] the calendar's cell size, as every merge leaves it in the model }
   if cal then
-    ANode.Elements['cellSize'] := CalendarCell(ANode, own, not newCell, nk, True, cw, ch);
+    ANode.Elements['cellSize'] := CalendarCell(ANode, own, ownCell, nk, True, cw, ch);
   { [R3-B] GridModel.mergeOption: the outerBounds merged as a box (no
     layout mode), the directions the new one touches written whole }
   if outer and PlainObject(ANode.Find('outerBounds')) then
@@ -1741,10 +1748,11 @@ begin
           if Assigned(ABefore) then
             ABefore(mt, j, TJSONObject(slots[j].ExNode), slots[j].NewOpt);
           MergeComponent(mt, slots[j].Existing.SubType, TJSONObject(slots[j].ExNode),
-            slots[j].NewOpt, pool);
+            slots[j].NewOpt, pool, slots[j].Existing.Merged);
           fates[j] := mfMerged;
           items[j] := slots[j].Existing;
           items[j].Name := slots[j].Info.Name;
+          items[j].Merged := True;
           reused[j] := True;
         end
         else

@@ -103,6 +103,9 @@ Per step (after it):
           controller (what completeVisualOption made of them, kept across
           merges; null in a hole); items = per series slot, per data
           index, [fill, opacity] of the item's element (null where none)
+  cal     [r3v] only in a case marked `cal`: per calendar slot [x, y,
+          width, height, cellWidth, cellHeight] of its coordinate system
+          (getRect, getCellWidth, getCellHeight; null in a hole)
 Also: maps -- the GeoJSON maps registered before every case ([R3-B]: the
 geo and the map series box cases), {name, text}.
 A main type named in a merge's replaceMerge is written (as `[]` when the
@@ -363,6 +366,8 @@ function runCase(c) {
       rec.models = modelsOf(chart, written);
       rec.out = outOf(chart);
       if (c.vis) rec.vis = visOf(chart);
+      // [r3v] each calendar's rect and cell size, where the case asks
+      if (c.cal) rec.cal = calOf(chart);
       rec.views = (chart.getModel().getSeries ? seriesSlots(chart) : []).map(m => {
         if (!m) return null;
         const v = chart.getViewOfSeriesModel(m);
@@ -497,6 +502,16 @@ function outOf(chart) {
     ? l.getData().map(d => d.get('name')).filter(n => l._availableNames.indexOf(n) >= 0)
     : null);
   return { series, grids, titles, dz, legend };
+}
+
+// [r3v] the calendars as laid out: [x, y, width, height, cellWidth, cellHeight]
+function calOf(chart) {
+  return (slotsOf(chart, 'calendar') || []).map(m => {
+    const cs = m && m.coordinateSystem;
+    if (!cs) return null;
+    const r = cs.getRect();
+    return [r.x, r.y, r.width, r.height, cs.getCellWidth(), cs.getCellHeight()];
+  });
 }
 
 // ---------- guard 1: the raw layer is a subset of getOption ----------
@@ -1188,6 +1203,28 @@ const CASES = [
     const o = r.steps[1].tree.grid[0].outerBounds;
     must(o.width === 300 && o.left === null && o.right === 20, 'grid-outer-bounds: the bounds merged as a box');
   } },
+  // ---- [r3v] the box defaults and the cell size the cases above leave out ----
+  { id: 'calendar-cell-default', cal: true, steps: [
+    set({ animation: false, calendar: { range: '2017-01', left: 30 } }),
+    set({ calendar: { right: 20 } }),
+  ], expect: (r) => {
+    must(JSON.stringify(r.steps[1].tree.calendar[0].cellSize) === '[20,20]', 'calendar-cell-default: the default cell size is a pair');
+  } },
+  { id: 'calendar-box-right', cal: true, steps: [
+    set({ animation: false, calendar: { range: '2017-01', right: 20, cellSize: [15, 15] } }),
+    set({ calendar: { width: 300 } }),
+  ], expect: (r) => {
+    const c = r.steps[1].tree.calendar[0];
+    must(c.width === 300 && c.left === null && c.right === 20, 'calendar-box-right: the init nulled the default left');
+  } },
+  { id: 'calendar-cell-replaced', cal: true, steps: [
+    set({ animation: false, calendar: { range: '2017-01', left: 30, right: 30, cellSize: ['auto', 15] } }),
+    set({ calendar: { cellSize: [16, 16] } }),
+    set({ calendar: { top: 5 } }),
+  ], expect: (r) => {
+    must(JSON.stringify(r.steps[1].tree.calendar[0].cellSize) === '[16,16]', 'calendar-cell-replaced: a cell size written drops the init auto');
+    must(JSON.stringify(r.steps[2].tree.calendar[0].cellSize) === '[16,16]', 'calendar-cell-replaced: and a later merge does not bring it back');
+  } },
   // ---- [R3-B] the visualMap's completed visuals: fixed by the model ----
   { id: 'vm-pieces-coloured-later', vis: true, steps: [
     set(bars({ gradientColor: ['#123456', '#abcdef'], visualMap: { type: 'piecewise', dimension: 1, inactiveColor: '#cccccc',
@@ -1243,7 +1280,7 @@ function generate() {
       kind: s.step.kind, notMerge: s.step.notMerge, opts: s.step.opts, noFrame: !!s.step.noFrame,
       text: s.step.text, payload: s.step.payload,
       tree: s.tree, models: s.models, out: s.out, views: s.views,
-      updNow: s.updNow, upd: s.upd, sel: s.sel, vis: s.vis })) });
+      updNow: s.updNow, upd: s.upd, sel: s.sel, vis: s.vis, cal: s.cal })) });
   }
   // distinctness, coarse: each mechanism appears in at least one case
   const ids = new Set(CASES.map(c => c.id));

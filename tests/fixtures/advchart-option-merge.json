@@ -39875,6 +39875,373 @@
    ]
   },
   {
+   "id": "calendar-cell-default",
+   "compare": [],
+   "steps": [
+    {
+     "kind": "set",
+     "notMerge": false,
+     "noFrame": false,
+     "text": "{\"animation\":false,\"calendar\":{\"range\":\"2017-01\",\"left\":30}}",
+     "tree": {
+      "animation": false,
+      "calendar": [
+       {
+        "range": "2017-01",
+        "left": 30
+       }
+      ]
+     },
+     "models": {
+      "series": [],
+      "calendar": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": ""
+       }
+      ]
+     },
+     "out": {
+      "series": [],
+      "grids": [],
+      "titles": [],
+      "dz": [],
+      "legend": []
+     },
+     "views": [],
+     "updNow": 1,
+     "upd": 1,
+     "cal": [
+      [
+       30,
+       60,
+       100,
+       140,
+       20,
+       20
+      ]
+     ]
+    },
+    {
+     "kind": "set",
+     "notMerge": false,
+     "noFrame": false,
+     "text": "{\"calendar\":{\"right\":20}}",
+     "tree": {
+      "animation": false,
+      "calendar": [
+       {
+        "range": "2017-01",
+        "left": null,
+        "right": 20,
+        "width": null,
+        "cellSize": [
+         20,
+         20
+        ]
+       }
+      ]
+     },
+     "models": {
+      "series": [],
+      "calendar": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": ""
+       }
+      ]
+     },
+     "out": {
+      "series": [],
+      "grids": [],
+      "titles": [],
+      "dz": [],
+      "legend": []
+     },
+     "views": [],
+     "updNow": 1,
+     "upd": 1,
+     "cal": [
+      [
+       480,
+       60,
+       100,
+       140,
+       20,
+       20
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "calendar-box-right",
+   "compare": [],
+   "steps": [
+    {
+     "kind": "set",
+     "notMerge": false,
+     "noFrame": false,
+     "text": "{\"animation\":false,\"calendar\":{\"range\":\"2017-01\",\"right\":20,\"cellSize\":[15,15]}}",
+     "tree": {
+      "animation": false,
+      "calendar": [
+       {
+        "range": "2017-01",
+        "right": 20,
+        "cellSize": [
+         15,
+         15
+        ]
+       }
+      ]
+     },
+     "models": {
+      "series": [],
+      "calendar": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": ""
+       }
+      ]
+     },
+     "out": {
+      "series": [],
+      "grids": [],
+      "titles": [],
+      "dz": [],
+      "legend": []
+     },
+     "views": [],
+     "updNow": 1,
+     "upd": 1,
+     "cal": [
+      [
+       505,
+       60,
+       75,
+       105,
+       15,
+       15
+      ]
+     ]
+    },
+    {
+     "kind": "set",
+     "notMerge": false,
+     "noFrame": false,
+     "text": "{\"calendar\":{\"width\":300}}",
+     "tree": {
+      "animation": false,
+      "calendar": [
+       {
+        "range": "2017-01",
+        "right": 20,
+        "cellSize": [
+         "auto",
+         15
+        ],
+        "width": 300,
+        "left": null
+       }
+      ]
+     },
+     "models": {
+      "series": [],
+      "calendar": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": ""
+       }
+      ]
+     },
+     "out": {
+      "series": [],
+      "grids": [],
+      "titles": [],
+      "dz": [],
+      "legend": []
+     },
+     "views": [],
+     "updNow": 1,
+     "upd": 1,
+     "cal": [
+      [
+       280,
+       60,
+       300,
+       105,
+       60,
+       15
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "calendar-cell-replaced",
+   "compare": [],
+   "steps": [
+    {
+     "kind": "set",
+     "notMerge": false,
+     "noFrame": false,
+     "text": "{\"animation\":false,\"calendar\":{\"range\":\"2017-01\",\"left\":30,\"right\":30,\"cellSize\":[\"auto\",15]}}",
+     "tree": {
+      "animation": false,
+      "calendar": [
+       {
+        "range": "2017-01",
+        "left": 30,
+        "right": 30,
+        "cellSize": [
+         "auto",
+         15
+        ]
+       }
+      ]
+     },
+     "models": {
+      "series": [],
+      "calendar": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": ""
+       }
+      ]
+     },
+     "out": {
+      "series": [],
+      "grids": [],
+      "titles": [],
+      "dz": [],
+      "legend": []
+     },
+     "views": [],
+     "updNow": 1,
+     "upd": 1,
+     "cal": [
+      [
+       30,
+       60,
+       540,
+       105,
+       108,
+       15
+      ]
+     ]
+    },
+    {
+     "kind": "set",
+     "notMerge": false,
+     "noFrame": false,
+     "text": "{\"calendar\":{\"cellSize\":[16,16]}}",
+     "tree": {
+      "animation": false,
+      "calendar": [
+       {
+        "range": "2017-01",
+        "left": 30,
+        "right": 30,
+        "cellSize": [
+         16,
+         16
+        ]
+       }
+      ]
+     },
+     "models": {
+      "series": [],
+      "calendar": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": ""
+       }
+      ]
+     },
+     "out": {
+      "series": [],
+      "grids": [],
+      "titles": [],
+      "dz": [],
+      "legend": []
+     },
+     "views": [],
+     "updNow": 1,
+     "upd": 1,
+     "cal": [
+      [
+       30,
+       60,
+       80,
+       112,
+       16,
+       16
+      ]
+     ]
+    },
+    {
+     "kind": "set",
+     "notMerge": false,
+     "noFrame": false,
+     "text": "{\"calendar\":{\"top\":5}}",
+     "tree": {
+      "animation": false,
+      "calendar": [
+       {
+        "range": "2017-01",
+        "left": 30,
+        "right": 30,
+        "cellSize": [
+         16,
+         16
+        ],
+        "top": 5,
+        "height": null,
+        "bottom": null
+       }
+      ]
+     },
+     "models": {
+      "series": [],
+      "calendar": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": ""
+       }
+      ]
+     },
+     "out": {
+      "series": [],
+      "grids": [],
+      "titles": [],
+      "dz": [],
+      "legend": []
+     },
+     "views": [],
+     "updNow": 1,
+     "upd": 1,
+     "cal": [
+      [
+       30,
+       5,
+       80,
+       112,
+       16,
+       16
+      ]
+     ]
+    }
+   ]
+  },
+  {
    "id": "vm-pieces-coloured-later",
    "compare": [
     "fill"

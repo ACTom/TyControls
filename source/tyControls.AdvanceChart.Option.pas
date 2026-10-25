@@ -171,6 +171,9 @@ type
     function ComponentId(const AMainType: string; AIndex: Integer): string;
     function ComponentModelName(const AMainType: string; AIndex: Integer): string;
     function ComponentSubType(const AMainType: string; AIndex: Integer): string;
+    { a mergeOption has reached the model at that index since it was made
+      (TTyOptionKey.Merged) [r3v] }
+    function ComponentMerged(const AMainType: string; AIndex: Integer): Boolean;
     { the merged option, shaped as upstream's getOption shapes it }
     function OptionJson: string;
     property Keys: TTyOptionKeys read FKeys;
@@ -2059,6 +2062,12 @@ function TTyChartOption.ComponentId(const AMainType: string; AIndex: Integer): s
 var k: TTyOptionKey;
 begin
   if KeyOf(AMainType, AIndex, k) then Result := k.Id else Result := '';
+end;
+
+function TTyChartOption.ComponentMerged(const AMainType: string; AIndex: Integer): Boolean;
+var k: TTyOptionKey;
+begin
+  Result := KeyOf(AMainType, AIndex, k) and k.Merged;
 end;
 
 function TTyChartOption.ComponentModelName(const AMainType: string; AIndex: Integer): string;
