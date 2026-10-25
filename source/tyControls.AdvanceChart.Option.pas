@@ -2063,6 +2063,7 @@ var
   base: TJSONObject;
   mset: TTyMediaSet;
   i: Integer;
+  baseRep: TTyMergeReport;
 begin
   Result := False;
   Touch;
@@ -2118,6 +2119,14 @@ begin
   TyOptionKeysOfTree(FRoot, FKeys);
   for i := 0 to ComponentCount('legend') - 1 do LegendInitSelected(i);
   ClearError;
+  { [R3-B] the base's models made: reported before anything merges over
+    them }
+  if Assigned(AAfter) then
+  begin
+    baseRep := Default(TTyMergeReport);
+    baseRep.AtBase := True;
+    AAfter(baseRep);
+  end;
   { the timeline's frame, then the media that apply, merged over the fresh
     models: nothing kept outside the tree to write back [Batch 129] }
   MergeFrame(AReplaceMerge, nil, AAfter);

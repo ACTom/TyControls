@@ -33,7 +33,19 @@ the port also keeps in its tree are laid over it, read from the model:
   - a legend's `selected` (always: the port makes it when it loads);
   - a box-layout model's left/right/width or top/bottom/height when a merge
     wrote any key of that direction (mergeLayoutParam writes all three;
-    `undefined` is recorded as null);
+    `undefined` is recorded as null) -- [R3-B] only where the model's
+    mergeOption runs mergeLayoutParam: not a dataZoom's (DataZoomModel's
+    own mergeOption merges and re-inits, no super) nor a parallel's
+    (ParallelModel's merges and _initDimensions); and a grid's
+    `outerBounds` the same way when the merge writes one (GridModel's
+    mergeOption runs mergeLayoutParam on the two outerBounds, no layout
+    mode); a calendar's `cellSize` as the model holds it after every merge
+    (CalendarModel.mergeOption's mergeAndNormalizeLayoutParams: a pair,
+    'auto' where a merge's box can size the cell -- it stays so);
+  - [R3-B] replaceVisualOption (visual/visualSolution.ts): a visualMap
+    merge that writes any of inRange / outOfRange / target / controller /
+    color with a key REPLACES those it writes and drops the others; a
+    brush's inBrush / outOfBrush likewise (optionUpdated, not at init);
 (dataset `transform` is merged the way disableTransformOptionMerge makes
 zrUtil.merge do it: replaced whole), and a dataZoom's start / end /
 startValue / endValue are NOT compared (the
@@ -86,6 +98,13 @@ Per step (after it):
   sel     an action step: the `selected` of every selectchanged it fired
   (out.legend: per legend slot the names it lists -- getData() over the
           available names; null in a hole)
+  vis     [R3-B] only in a case marked `vis`: {vm, items}. vm = per
+          visualMap slot the model's own inRange / outOfRange / target /
+          controller (what completeVisualOption made of them, kept across
+          merges; null in a hole); items = per series slot, per data
+          index, [fill, opacity] of the item's element (null where none)
+Also: maps -- the GeoJSON maps registered before every case ([R3-B]: the
+geo and the map series box cases), {name, text}.
 A main type named in a merge's replaceMerge is written (as `[]` when the
 option leaves it out); a notMerge or the first setOption ignores
 replaceMerge, as initBase does.
@@ -144,6 +163,8 @@ function wrap(proto, name) {
         if (this.mainType === 'dataset' && option && Object.prototype.hasOwnProperty.call(option, 'transform')) {
           this.__raw.transform = zr.clone(option.transform);
         }
+        // [R3-B] optionUpdated's replaceVisualOption, on the raw layer too
+        replaceVisual(this.__raw, option, VISUAL_KEYS[this.mainType]);
       }
       if (HOOK_LOG) HOOK_LOG.push({ model: this, kind: name, option });
     }
@@ -161,7 +182,29 @@ function wrap(proto, name) {
     }
   };
   f.__mergeHook = true;
+  f.__orig = orig;
   proto[name] = f;
+}
+// [R3-B] replaceVisualOption's keys per main type, and the rule itself
+const VISUAL_KEYS = {
+  visualMap: ['inRange', 'outOfRange', 'target', 'controller', 'color'],
+  brush: ['inBrush', 'outOfBrush'],
+};
+function hasKeys(obj) {
+  if (obj) for (const name in obj) if (obj.hasOwnProperty(name)) return true;
+  return false;
+}
+function replaceVisual(thisOption, newOption, keys) {
+  if (!keys || !newOption) return;
+  let has = false;
+  for (const key of keys) {
+    if (newOption.hasOwnProperty(key) && hasKeys(newOption[key])) has = true;
+  }
+  if (!has) return;
+  for (const key of keys) {
+    if (newOption.hasOwnProperty(key) && hasKeys(newOption[key])) thisOption[key] = zr.clone(newOption[key]);
+    else delete thisOption[key];
+  }
 }
 const PROTOS = [echarts.ComponentModel.prototype, echarts.SeriesModel.prototype];
 // every prototype on the chain of every registered class: an abstract base
@@ -178,6 +221,13 @@ for (const p of PROTOS) {
   wrap(p, 'mergeOption');
 }
 
+// [R3-B] the maps the geo / map cases draw on
+const MAPS = [{ name: 'r3b-sq', text: JSON.stringify({ type: 'FeatureCollection', features: [
+  { type: 'Feature', properties: { name: 'A' }, geometry: { type: 'Polygon', coordinates: [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]] } },
+  { type: 'Feature', properties: { name: 'B' }, geometry: { type: 'Polygon', coordinates: [[[20, 0], [30, 0], [30, 10], [20, 10], [20, 0]]] } },
+] }) }];
+for (const m of MAPS) echarts.registerMap(m.name, m.text);
+
 const DEPS = {};
 const SUBTYPES = {};
 for (const mt of MAIN_TYPES) {
@@ -192,6 +242,36 @@ for (const mt of MAIN_TYPES) {
 const HV = [['width', 'left', 'right'], ['height', 'top', 'bottom']];
 function layoutModeOf(model) {
   return model.layoutMode || model.constructor.layoutMode;
+}
+// [R3-B] the main types whose mergeOption never reaches mergeLayoutParam
+const NO_BOX_MERGE = new Set(['dataZoom', 'parallel']);
+function boxMerges(model) {
+  return !!layoutModeOf(model) && !NO_BOX_MERGE.has(model.mainType);
+}
+// the classes' own mergeOption, read off the dist: neither calls
+// mergeLayoutParam nor the base class' mergeOption
+for (const mt of NO_BOX_MERGE) {
+  for (const C of CM.getClassesByMainType(mt)) {
+    for (let p = C.prototype; p && p !== CM.prototype; p = Object.getPrototypeOf(p)) {
+      if (!Object.prototype.hasOwnProperty.call(p, 'mergeOption')) continue;
+      const src = String(p.mergeOption.__mergeHook ? p.mergeOption.__orig : p.mergeOption);
+      must(!/mergeLayoutParam|_super\.prototype\.mergeOption/.test(src), mt + ': its mergeOption reaches mergeLayoutParam');
+      break;
+    }
+  }
+}
+// a merge that wrote a direction: mergeLayoutParam wrote all three keys
+function writeBox(raw, full, opt) {
+  let n = 0;
+  for (const names of HV) {
+    if (!names.some(k => Object.prototype.hasOwnProperty.call(opt, k))) continue;
+    for (const k of names) {
+      const v = full[k];
+      raw[k] = v === undefined ? null : zr.clone(v);
+    }
+    n++;
+  }
+  return n;
 }
 
 // ---------- one case ----------
@@ -252,16 +332,14 @@ function runCase(c) {
         // a box merge: mergeLayoutParam wrote all three keys of a direction
         for (const e of log) {
           if (e.kind !== 'mergeOption' || !e.option) continue;
-          const lm = layoutModeOf(e.model);
-          if (!lm) continue;
-          for (const names of HV) {
-            if (!names.some(n => Object.prototype.hasOwnProperty.call(e.option, n))) continue;
-            for (const n of names) {
-              const v = e.model.option[n];
-              e.model.__raw[n] = v === undefined ? null : zr.clone(v);
-            }
-            caseStats.box++;
+          if (boxMerges(e.model)) caseStats.box += writeBox(e.model.__raw, e.model.option, e.option);
+          // [R3-B] GridModel.mergeOption: the outerBounds, when both are there
+          if (e.model.mainType === 'grid' && zr.isObject(e.option.outerBounds)
+            && zr.isObject(e.model.option.outerBounds) && zr.isObject(e.model.__raw.outerBounds)) {
+            caseStats.box += writeBox(e.model.__raw.outerBounds, e.model.option.outerBounds, e.option.outerBounds);
           }
+          // [R3-B] CalendarModel.mergeOption normalises the cell size
+          if (e.model.mainType === 'calendar') e.model.__raw.cellSize = zr.clone(e.model.option.cellSize);
         }
       } else {
         chart.dispatchAction(st.payload);
@@ -284,6 +362,7 @@ function runCase(c) {
       rec.tree = treeOf(chart, rootRaw, written);
       rec.models = modelsOf(chart, written);
       rec.out = outOf(chart);
+      if (c.vis) rec.vis = visOf(chart);
       rec.views = (chart.getModel().getSeries ? seriesSlots(chart) : []).map(m => {
         if (!m) return null;
         const v = chart.getViewOfSeriesModel(m);
@@ -297,6 +376,30 @@ function runCase(c) {
     chart.dispose();
   }
   return { steps, stats: caseStats };
+}
+
+// [R3-B] the visualMap models' completed visuals, and what the items show
+function visOf(chart) {
+  const pick = (o) => {
+    const r = {};
+    for (const k of ['inRange', 'outOfRange', 'target', 'controller']) {
+      if (Object.prototype.hasOwnProperty.call(o, k)) r[k] = o[k] === undefined ? null : zr.clone(o[k]);
+    }
+    return r;
+  };
+  const vm = (slotsOf(chart, 'visualMap') || []).map(m => (m ? pick(m.option) : null));
+  const items = seriesSlots(chart).map(m => {
+    if (!m) return null;
+    const d = m.getData();
+    const out = [];
+    for (let i = 0; i < d.count(); i++) {
+      const el = d.getItemGraphicEl(i);
+      out.push(el && el.style ? [typeof el.style.fill === 'string' ? el.style.fill : null,
+        el.style.opacity == null ? 1 : el.style.opacity] : null);
+    }
+    return out;
+  });
+  return { vm, items };
 }
 
 function seriesSlots(chart) {
@@ -1001,6 +1104,132 @@ const CASES = [
     act({ type: 'legendToggleSelect', name: 'A' }),
     act({ type: 'highlight', seriesIndex: 0, dataIndex: 1 }),
   ], expect: (r) => must(r.steps[1].upd === 1 && r.steps[2].upd === 1, 'opts-actions-update: every dispatch') },
+  // ---- [R3-B] every box-layout model's merge (mergeLayoutParam where the
+  // model's mergeOption runs it) ----
+  { id: 'toolbox-box', steps: [
+    set(bars({ toolbox: { left: 10, feature: { saveAsImage: {} } }, series: [{ type: 'bar', data: [1, 2, 3, 4] }] })),
+    set({ toolbox: { right: 30 } }),
+    set({ toolbox: { top: 40, width: 100 } }),
+  ], expect: (r) => {
+    const t1 = r.steps[1].tree.toolbox[0];
+    must(t1.width === null && t1.left === null && t1.right === 30, 'toolbox-box: ignoreSize nulls the other side');
+    const t2 = r.steps[2].tree.toolbox[0];
+    must(t2.width === 100 && t2.left === null && t2.right === 30 && t2.height === null && t2.bottom === null, 'toolbox-box: a size alone keeps the side');
+  } },
+  { id: 'calendar-box', steps: [
+    set({ animation: false, calendar: { range: '2017-01', left: 30, cellSize: [15, 15] } }),
+    set({ calendar: { right: 20 } }),
+    set({ calendar: { width: 300 } }),
+    set({ calendar: { top: 10, bottom: 10 } }),
+  ], expect: (r) => {
+    const c1 = r.steps[1].tree.calendar[0];
+    must(c1.left === null && c1.right === 20 && c1.width === null, 'calendar-box: a cell size ignores the size, one side stays');
+    const c2 = r.steps[2].tree.calendar[0];
+    must(c2.width === 300 && c2.right === 20, 'calendar-box: a width makes the cell auto');
+  } },
+  { id: 'calendar-box-auto', steps: [
+    set({ animation: false, calendar: { range: '2017-01', cellSize: ['auto', 20], left: 30, right: 30 } }),
+    set({ calendar: { width: 200 } }),
+    set({ calendar: { bottom: 20 } }),
+  ] },
+  { id: 'calendar-cell-one', steps: [
+    set({ animation: false, calendar: { range: '2017-01', cellSize: [15, 15], left: 30 } }),
+    set({ calendar: { cellSize: [16], right: 20 } }),
+    set({ calendar: { cellSize: 18, top: 10, bottom: 40 } }),
+    set({ calendar: { top: 5 } }),
+  ], expect: (r) => {
+    must(JSON.stringify(r.steps[1].tree.calendar[0].cellSize) === '[16,16]', 'calendar-cell-one: a one-array is a pair');
+    must(JSON.stringify(r.steps[2].tree.calendar[0].cellSize) === '[18,"auto"]', 'calendar-cell-one: a number is a pair, the sides size the cell');
+  } },
+  { id: 'geo-box', steps: [
+    set({ animation: false, geo: { map: 'r3b-sq', left: 10, top: 10 } }),
+    set({ geo: { right: 10 } }),
+    set({ geo: { width: 100, bottom: 5 } }),
+  ], expect: (r) => {
+    const g = r.steps[2].tree.geo[0];
+    must(g.width === 100 && g.left === 10 && g.right === null, 'geo-box: two of three, by priority');
+  } },
+  { id: 'single-axis-box', steps: [
+    set({ animation: false, singleAxis: { type: 'category', data: ['a', 'b', 'c'], left: 50 },
+      series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [1, 2, 0] }] }),
+    set({ singleAxis: { width: 200 } }),
+    set({ singleAxis: { height: 40, top: 'auto' } }),
+  ] },
+  { id: 'thumbnail-box', steps: [
+    set(Object.assign({}, GRAPH, { thumbnail: { left: 10 } })),
+    set({ thumbnail: { right: 20 } }),
+    set({ thumbnail: { top: 5, height: 50 } }),
+  ] },
+  { id: 'map-series-box', steps: [
+    set({ animation: false, series: [{ type: 'map', map: 'r3b-sq', left: 10, data: [{ name: 'A', value: 1 }, { name: 'B', value: 2 }] }] }),
+    set({ series: [{ right: 10 }] }),
+    set({ series: [{ top: 20 }] }),
+  ] },
+  { id: 'slider-dz-box', steps: [
+    set(Object.assign({}, JSON.parse(S(DZ)), { dataZoom: [{ type: 'slider', left: 40 }] })),
+    set({ dataZoom: [{ right: 30 }] }),
+  ], expect: (r) => {
+    const z = r.steps[1].tree.dataZoom[0];
+    must(!('width' in z) && z.left === 40 && z.right === 30, 'slider-dz-box: DataZoomModel.mergeOption writes no box');
+  } },
+  { id: 'parallel-box', steps: [
+    set({ animation: false, parallel: { left: 50 }, parallelAxis: [{ dim: 0 }, { dim: 1 }],
+      series: [{ type: 'parallel', data: [[1, 2], [3, 4]] }] }),
+    set({ parallel: { right: 30 } }),
+  ], expect: (r) => {
+    const p = r.steps[1].tree.parallel[0];
+    must(!('width' in p) && p.left === 50 && p.right === 30, 'parallel-box: ParallelModel.mergeOption writes no box');
+  } },
+  { id: 'grid-outer-bounds', steps: [
+    set(bars({ grid: { outerBounds: { left: 10, width: 300 } }, series: [{ type: 'bar', data: [1, 2, 3, 4] }] })),
+    set({ grid: { outerBounds: { right: 20 } } }),
+    set({ grid: { outerBounds: { top: 30 } } }),
+  ], expect: (r) => {
+    const o = r.steps[1].tree.grid[0].outerBounds;
+    must(o.width === 300 && o.left === null && o.right === 20, 'grid-outer-bounds: the bounds merged as a box');
+  } },
+  // ---- [R3-B] the visualMap's completed visuals: fixed by the model ----
+  { id: 'vm-pieces-coloured-later', vis: true, steps: [
+    set(bars({ gradientColor: ['#123456', '#abcdef'], visualMap: { type: 'piecewise', dimension: 1, inactiveColor: '#cccccc',
+      pieces: [{ min: 0, max: 2 }, { min: 3, max: 3 }] }, series: [{ type: 'bar', data: [1, 2, 3, 4] }] })),
+    set({ visualMap: { pieces: [{ min: 0, max: 2, color: '#ff0000' }, { min: 3, max: 3, color: '#00ff00' }] } }),
+    set({ visualMap: { min: 0, max: 10 } }),
+    set({ visualMap: { inRange: { color: ['#0000ff', '#00ffff'] } } }),
+  ], compare: ['fill'], expect: (r) => {
+    must(JSON.stringify(r.steps[1].vis.vm[0].target.inRange.color) === '["#123456","#abcdef"]', 'vm-pieces-coloured-later: the target is the first one');
+    must(r.steps[1].vis.items[0][3][1] === 0, 'vm-pieces-coloured-later: the out-of-range item is see-through');
+  } },
+  { id: 'vm-pieces-coloured-first', vis: true, steps: [
+    set(bars({ gradientColor: ['#123456', '#abcdef'], visualMap: { type: 'piecewise', dimension: 1, inactiveColor: '#cccccc',
+      pieces: [{ min: 0, max: 2, color: '#ff0000' }, { min: 3, max: 3, symbol: 'circle' }] }, series: [{ type: 'bar', data: [1, 2, 3, 4] }] })),
+    set({ visualMap: { pieces: [{ min: 0, max: 2 }, { min: 3, max: 3 }] } }),
+    set({ visualMap: { pieces: [{ min: 0, max: 2, colorAlpha: 0.5 }, { min: 3, max: 4 }] } }),
+  ], compare: ['fill'] },
+  { id: 'vm-replace-drops', vis: true, steps: [
+    set(bars({ gradientColor: ['#123456', '#abcdef'], visualMap: { type: 'continuous', dimension: 1, min: 0, max: 4, inactiveColor: '#cccccc',
+      inRange: { color: ['#ff0000', '#0000ff'] }, outOfRange: { color: ['#999999'] } }, series: [{ type: 'bar', data: [1, 2, 3, 4] }] })),
+    set({ visualMap: { outOfRange: { color: ['#888888'] } } }),
+    set({ visualMap: { inRange: { color: ['#00ff00', '#ffff00'] }, outOfRange: {} } }),
+    set({ visualMap: { color: ['#ff00ff', '#00ffff'] } }),
+    set({ visualMap: { max: 8, itemWidth: 30 } }),
+  ], compare: ['fill'], expect: (r) => {
+    const t = r.steps[1].tree.visualMap[0];
+    must(!('inRange' in t) && t.outOfRange.color[0] === '#888888', 'vm-replace-drops: a visual key written drops the others');
+    must(!('outOfRange' in r.steps[2].tree.visualMap[0]), 'vm-replace-drops: an empty one is dropped too');
+  } },
+  { id: 'vm-gradient-alias', vis: true, steps: [
+    set(bars({ gradientColor: ['#123456', '#abcdef'], visualMap: { type: 'continuous', dimension: 1, min: 0, max: 4, inactiveColor: '#cccccc' },
+      series: [{ type: 'bar', data: [1, 2, 3, 4] }] })),
+    set({ gradientColor: ['#000000'] }),
+    set({ visualMap: { max: 5 } }),
+  ], compare: ['fill'] },
+  { id: 'vm-controller-kept', vis: true, steps: [
+    set(bars({ color: ['#aa0000', '#00aa00'], gradientColor: ['#123456', '#abcdef'], visualMap: { type: 'continuous', dimension: 1, min: 0, max: 4, inactiveColor: '#cccccc',
+      inRange: { symbolSize: [10, 30] } }, series: [{ type: 'bar', data: [1, 2, 3, 4] }] })),
+    set({ visualMap: { itemWidth: 40 } }),
+    set({ visualMap: { inactiveColor: '#ff0000' } }),
+    set({ visualMap: { controller: { inRange: { color: ['#ff0000'] } } } }),
+  ], compare: ['fill'] },
 ];
 
 function generate() {
@@ -1014,18 +1243,20 @@ function generate() {
       kind: s.step.kind, notMerge: s.step.notMerge, opts: s.step.opts, noFrame: !!s.step.noFrame,
       text: s.step.text, payload: s.step.payload,
       tree: s.tree, models: s.models, out: s.out, views: s.views,
-      updNow: s.updNow, upd: s.upd, sel: s.sel })) });
+      updNow: s.updNow, upd: s.upd, sel: s.sel, vis: s.vis })) });
   }
   // distinctness, coarse: each mechanism appears in at least one case
   const ids = new Set(CASES.map(c => c.id));
   for (const need of ['series-by-id', 'series-by-name', 'series-by-index', 'series-append', 'series-type-change',
     'title-first-seen-holes', 'rm-series-by-id', 'rm-series-fill-hole', 'rm-series-brand-new', 'rm-grid',
     'rm-event-index', 'rm-notmerge-compacts', 'opts-silent', 'opts-lazy', 'rm-lazy-fill', 'rm-title-absent',
-    'opts-lazy-action']) must(ids.has(need), 'missing case ' + need);
+    'opts-lazy-action', 'toolbox-box', 'calendar-box', 'geo-box', 'single-axis-box', 'thumbnail-box',
+    'map-series-box', 'slider-dz-box', 'parallel-box', 'grid-outer-bounds', 'vm-pieces-coloured-later',
+    'vm-replace-drops']) must(ids.has(need), 'missing case ' + need);
   must(tally.box > 0, 'no box merge was materialised');
   return JSON.stringify({
     source: 'ECharts 6.1.0 dist (' + DIST.replace(/\\/g, '/') + '), node SSR (svg), ' + W + ' x ' + H,
-    mainTypes: MAIN_TYPES, deps: DEPS, subTypes: SUBTYPES,
+    mainTypes: MAIN_TYPES, deps: DEPS, subTypes: SUBTYPES, maps: MAPS,
     cases: recs,
   }, null, 1);
 }

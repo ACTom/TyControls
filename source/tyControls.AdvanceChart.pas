@@ -1280,6 +1280,9 @@ type
     FVmRangeHas: array of Boolean;
     FVmRange0, FVmRange1: TTyDoubleArray;
     FVmSel: TTyStringArray;
+    { [R3-B] each visualMap model's own visuals, as completeVisualOption
+      left them (TyVisualMapModelNew); nil where none is kept }
+    FVmModels: array of TJSONObject;
     FVmDragVm, FVmDragIdx, FVmDragX, FVmDragY: Integer;
     FVmUidSeq: Integer;
     FEvHoverX, FEvHoverY: Integer;
@@ -2150,6 +2153,17 @@ type
       is built whole) }
     function ListTailRebuild: Boolean;
     procedure ListTailRefresh;
+    { ---- the visualMap models' visuals [R3-B] ---- }
+    procedure VmModelsClear;
+    { a fresh option's base: every model made and completed }
+    procedure VmModelsInitAll;
+    { a merge's report: new models made, merged ones merged into, every
+      visited one completed again (optionUpdated) }
+    procedure VmModelsPass(const AReport: TTyMergeReport);
+    function VmModel(AIndex: Integer): TJSONObject;
+    { the ramp and the inactive colour SolveVisualMaps reads them with }
+    procedure VmThemeDefaults(AIndex: Integer; out ARamp: TTyVisualColorArray;
+      out AInactive: TTyVisualColor);
     { ---- visualMap interaction [Batch 116] ---- }
     procedure VmEnsure(ACount: Integer);
     function VmKeepNow(AIndex: Integer): Boolean;
@@ -3731,8 +3745,6 @@ type
     procedure GfxPass(const AReport: TTyMergeReport);
     { a fresh option: a new model from the tree }
     procedure GfxInitFromTree;
-    { the model's list into the option tree, as getOption shows it }
-    procedure GfxWriteBack;
     function GfxAnimSettings: TTyGfxAnimSettings;
     { the view rendered (an update pending) or placed (a new size), made
       ready, and turned into paint elements }
@@ -4210,6 +4222,10 @@ type
       the last render. False / empty where there is none. }
     function VisualMapCount: Integer;
     function VisualMapSpec(AIndex: Integer): TTyVisualMapSpec;
+    { [R3-B] visualMap AIndex's model's own inRange / outOfRange / target /
+      controller as JSON -- what completeVisualOption made of them and the
+      merges kept, the theme's defaults filled in; '{}' for none }
+    function VisualMapVisualsJson(AIndex: Integer): string;
     function VisualRow(ASeriesIndex, ARawIndex: Integer;
       out ARow: TTyVisualRow): Boolean;
     function VisualMetas(ASeriesIndex: Integer): TTyVisualMetaArray;

@@ -36,12 +36,22 @@ unit tyControls.AdvanceChart.OptionMerge;
     and nothing the author wrote, so they are in the keys and not in the
     tree; a later option that writes one merges into it -- the node made
     then, empty, as the model's raw option was.
-  - mergeLayoutParam for the box-layout models the port lays out (grid,
+  - mergeLayoutParam for every model whose mergeOption runs it (grid,
     title, legend, visualMap, the tree / sankey / treemap series, the
-    timeline, the matrix [Batch 149]): the three
+    timeline, the matrix [Batch 149]; [R3-B] the toolbox, the calendar, geo,
+    singleAxis, the thumbnail and the map series): the three
     keys of a direction the new option touches are WRITTEN, null where
     upstream leaves undefined, so the reader's init merge gives back exactly
-    what upstream holds.
+    what upstream holds. Not the slider dataZoom nor parallel: their own
+    mergeOption merges and re-inits without it. [R3-B] The calendar runs it
+    twice (CalendarModel.mergeOption: the box, then
+    mergeAndNormalizeLayoutParams with ignoreSize by the cell size) and
+    writes back the cell size as the model holds it -- a pair, 'auto' where
+    a merge's box could size the cell, which then stays; a grid's
+    `outerBounds` merges as a box of its own (GridModel.mergeOption).
+  - [R3-B] replaceVisualOption: a visualMap merge that writes inRange,
+    outOfRange, target, controller or color with a key replaces those it
+    writes and drops the rest; a brush's inBrush / outOfBrush likewise.
   - dataZoom: a pair written in value mode nulls its percent (_doInit);
     dataset: transform is replaced, never merged.
 
@@ -66,9 +76,8 @@ unit tyControls.AdvanceChart.OptionMerge;
 
   WHAT IT DOES NOT DO: timeline (and with it the replaceAll of a whole
   option, which without it is the notMerge; media and baseOption are
-  tyControls.AdvanceChart.Media's [Batch 107]); the box merge of calendar, singleAxis, geo, parallel, matrix, timeline,
-  thumbnail, the slider dataZoom and the map series; upstream's
-  preprocessors otherwise.
+  tyControls.AdvanceChart.Media's [Batch 107]); upstream's preprocessors
+  otherwise.
 
   LCL-free: SysUtils, Math, fcl-json and the scale's number printer. }
 interface
@@ -119,6 +128,10 @@ type
   TTyMergeReport = record
     Visited: TStringArray;
     Slots: array of TTyMergeSlots;
+    { [R3-B] no merge: a fresh option's base was just made into models
+      (initBase), before its timeline frame and media are merged over it --
+      what is built from the base alone is built now }
+    AtBase: Boolean;
   end;
 
   { Called for an existing model of the same class just before the new
@@ -169,6 +182,15 @@ function TyOptionMerge(ARoot: TJSONObject; var AKeys: TTyOptionKeys;
 { whether two of ANew's components of one main type carry the same id --
   the merge upstream asserts on [Batch 107] }
 function TyOptionHasDuplicateId(ANew: TJSONObject): Boolean;
+
+{ zrender's merge(target, source, true) of two objects: a plain object on
+  both sides recurses, anything else is written as a clone [R3-B] }
+procedure TyOptionZrMerge(ATarget, ASource: TJSONObject);
+{ visualSolution.replaceVisualOption: when ANew writes any of AKeys with a
+  key (hasKeys: an object or array with an entry, a non-empty string),
+  each of AKeys ANew writes so is replaced by its clone -- in place -- and
+  the others are deleted [R3-B] }
+procedure TyOptionReplaceVisual(AThis, ANew: TJSONObject; const AKeys: array of string);
 
 { '' when every name is a component main type, else the first that is not }
 function TyOptionBadReplaceType(const AReplaceMerge: array of string): string;
@@ -574,6 +596,42 @@ begin
   end;
 end;
 
+procedure TyOptionZrMerge(ATarget, ASource: TJSONObject);
+begin
+  if (ATarget = nil) or (ASource = nil) then Exit;
+  MergeObject(ATarget, ASource, '');
+end;
+
+{ visualSolution's hasKeys: `for (name in obj) if (obj.hasOwnProperty(name))`
+  -- an object's or array's entries, a string's characters; a number, a
+  boolean or null has none }
+function VisualHasKeys(AData: TJSONData): Boolean;
+begin
+  Result := False;
+  if AData = nil then Exit;
+  case AData.JSONType of
+    jtObject, jtArray: Result := AData.Count > 0;
+    jtString: Result := AData.AsString <> '';
+  end;
+end;
+
+procedure TyOptionReplaceVisual(AThis, ANew: TJSONObject; const AKeys: array of string);
+var
+  k: Integer;
+  has: Boolean;
+begin
+  if (AThis = nil) or (ANew = nil) then Exit;
+  has := False;
+  for k := 0 to High(AKeys) do
+    if VisualHasKeys(ANew.Find(AKeys[k])) then has := True;
+  if not has then Exit;
+  for k := 0 to High(AKeys) do
+    if VisualHasKeys(ANew.Find(AKeys[k])) then
+      AThis.Elements[AKeys[k]] := ANew.Find(AKeys[k]).Clone
+    else if AThis.IndexOfName(AKeys[k]) >= 0 then
+      AThis.Delete(AKeys[k]);
+end;
+
 { one index of an array target, as `target[i] = ...` or a recursion }
 procedure MergeArrayAt(ATarget: TJSONArray; AIndex: Integer; ASource: TJSONData);
 var tp: TJSONData;
@@ -766,8 +824,104 @@ begin
     Def(4, TJSONNull.Create);
     Def(5, TJSONIntegerNumber.Create(0));
   end
+  { [R3-B] the rest of the models with a layoutMode whose mergeOption runs
+    mergeLayoutParam, their defaultOption's box keys }
+  else if AMainType = 'toolbox' then
+  begin
+    { ToolboxModel: {type: 'box', ignoreSize: true} }
+    AIgnoreW := True;
+    AIgnoreH := True;
+    Def(1, TJSONString.Create('right'));
+    Def(4, TJSONString.Create('top'));
+  end
+  else if AMainType = 'calendar' then
+  begin
+    { CalendarModel: 'box'; the second pass is the merge's (cell size) }
+    Def(1, TJSONIntegerNumber.Create(80));
+    Def(4, TJSONIntegerNumber.Create(60));
+  end
+  else if AMainType = 'geo' then
+  begin
+    Def(1, TJSONString.Create('center'));
+    Def(4, TJSONString.Create('center'));
+  end
+  else if AMainType = 'singleAxis' then
+  begin
+    Def(1, TJSONString.Create('5%'));
+    Def(2, TJSONString.Create('5%'));
+    Def(4, TJSONString.Create('5%'));
+    Def(5, TJSONString.Create('5%'));
+  end
+  else if AMainType = 'thumbnail' then
+  begin
+    Def(0, TJSONString.Create('25%'));
+    Def(2, TJSONIntegerNumber.Create(1));
+    Def(3, TJSONString.Create('25%'));
+    Def(5, TJSONIntegerNumber.Create(1));
+  end
+  else if (AMainType = 'series') and (ASubType = 'map') then
+  begin
+    Def(1, TJSONString.Create('center'));
+    Def(4, TJSONString.Create('center'));
+  end
   else
     Result := False;
+end;
+
+{ sizeCalculable(raw, hv): the size, or both sides, have a value }
+function SizeCalculable(const ABox: TBoxKeys; ABase: Integer): Boolean;
+begin
+  Result := BoxHasValue(ABox[ABase])
+    or (BoxHasValue(ABox[ABase + 1]) and BoxHasValue(ABox[ABase + 2]));
+end;
+
+{ CalendarModel's mergeAndNormalizeLayoutParams, the cell size half: the
+  node's cellSize as the model holds it -- a pair ([n, n] for one value,
+  the first twice for a one-array, the default 20 where none is written) --
+  with 'auto' where a raw option's box can size the cell (ARawA where
+  AUseA: the keys the model was made or last merged from, whose 'auto' the
+  tree does not hold yet; ARawB: this merge's); AIgnoreW / AIgnoreH, the
+  pass's ignoreSize (a cell size that is given and no 'auto') }
+function CalendarCell(ANode: TJSONObject; const ARawA: TBoxKeys; AUseA: Boolean;
+  const ARawB: TBoxKeys; AUseB: Boolean; out AIgnoreW, AIgnoreH: Boolean): TJSONArray;
+var
+  d: TJSONData;
+  k: Integer;
+  ign: array[0..1] of Boolean;
+begin
+  d := ANode.Find('cellSize');
+  if d = nil then
+    Result := TJSONArray.Create([20, 20])
+  else if d.JSONType = jtArray then
+  begin
+    Result := TJSONArray(d.Clone);
+    if Result.Count = 1 then Result.Add(Result.Items[0].Clone);
+  end
+  else
+  begin
+    Result := TJSONArray.Create;
+    Result.Add(d.Clone);
+    Result.Add(d.Clone);
+  end;
+  for k := 0 to 1 do
+  begin
+    if (AUseA and SizeCalculable(ARawA, k * 3)) or (AUseB and SizeCalculable(ARawB, k * 3)) then
+    begin
+      { cellSizeArr[hvIdx] = 'auto', past the end too }
+      while Result.Count < k do Result.Add(TJSONNull.Create);
+      if k < Result.Count then
+      begin
+        Result.Delete(k);
+        Result.Insert(k, TJSONString.Create('auto'));
+      end
+      else
+        Result.Add(TJSONString.Create('auto'));
+    end;
+    ign[k] := (k < Result.Count) and Given(Result.Items[k])
+      and not ((Result.Items[k].JSONType = jtString) and (Result.Items[k].AsString = 'auto'));
+  end;
+  AIgnoreW := ign[0];
+  AIgnoreH := ign[1];
 end;
 
 { layout.ts mergeLayoutParam, one direction (ABase 0: width left right, 3:
@@ -1253,14 +1407,22 @@ end;
 procedure MergeComponent(const AMainType, ASubType: string; ANode, ANew: TJSONObject;
   APool: TBoxPool);
 var
-  ignW, ignH, touched: Boolean;
-  defs, own, f, g, nk: TBoxKeys;
+  ignW, ignH, touched, cal, cw, ch, outer, newCell: Boolean;
+  defs, own, f, g, nk, obOwn, obF, obG, obNk: TBoxKeys;
   k, dir: Integer;
   nul: TJSONData;
+  cell: TJSONArray;
+  ob: TJSONObject;
 begin
   { the box, as upstream's full option holds it now: the init merge of the
     node's own keys over the defaults -- every key owned after it }
   touched := False;
+  cal := AMainType = 'calendar';
+  { a merge that writes the cell size replaces the model's }
+  newCell := ANew.Find('cellSize') <> nil;
+  nul := APool.Keep(TJSONNull.Create);
+  own := OwnBox(ANode, APool, True);
+  for k := 0 to 5 do nk[k] := Default(TBoxKey);
   if BoxOf(AMainType, ASubType, APool, ignW, ignH, defs) then
   begin
     nk := OwnBox(ANew, APool, False);
@@ -1268,12 +1430,40 @@ begin
   end;
   if touched then
   begin
-    nul := APool.Keep(TJSONNull.Create);
-    own := OwnBox(ANode, APool, True);
     f := defs;
     for k := 0 to 5 do if own[k].Own then f[k] := own[k];
     MergeBoxDirection(f, own, 0, ignW, nul);
     MergeBoxDirection(f, own, 3, ignH, nul);
+    { [R3-B] the calendar's init: mergeAndNormalizeLayoutParams after the
+      box, ignoreSize by the cell size it holds }
+    if cal then
+    begin
+      cell := CalendarCell(ANode, own, True, own, False, cw, ch);
+      cell.Free;
+      MergeBoxDirection(f, own, 0, cw, nul);
+      MergeBoxDirection(f, own, 3, ch, nul);
+    end;
+  end;
+  { [R3-B] a grid's outerBounds, as the model holds it: OUTER_BOUNDS_DEFAULT
+    under the node's own keys, merged as a box at init }
+  outer := (AMainType = 'grid') and PlainObject(ANew.Find('outerBounds'));
+  if outer then
+  begin
+    ob := nil;
+    if PlainObject(ANode.Find('outerBounds')) then ob := TJSONObject(ANode.Find('outerBounds'));
+    for k := 0 to 5 do obOwn[k] := Default(TBoxKey);
+    if ob <> nil then obOwn := OwnBox(ob, APool, True);
+    for k := 0 to 5 do obF[k] := Default(TBoxKey);
+    for k := 1 to 2 do
+    begin
+      obF[k].Own := True;
+      obF[k].V := APool.Keep(TJSONIntegerNumber.Create(0));
+      obF[k + 3].Own := True;
+      obF[k + 3].V := APool.Keep(TJSONIntegerNumber.Create(0));
+    end;
+    for k := 0 to 5 do if obOwn[k].Own then obF[k] := obOwn[k];
+    MergeBoxDirection(obF, obOwn, 0, False, nul);
+    MergeBoxDirection(obF, obOwn, 3, False, nul);
   end;
 
   if AMainType = 'dataset' then MergeObject(ANode, ANew, 'transform')
@@ -1295,6 +1485,15 @@ begin
       MergeBoxDirection(g, nk, 0, ignW, nul);
       MergeBoxDirection(g, nk, 3, ignH, nul);
     end;
+    { [R3-B] the calendar's second pass: ignoreSize by the cell size the
+      merge leaves, 'auto' where the new option can size the cell }
+    if cal then
+    begin
+      cell := CalendarCell(ANode, own, not newCell, nk, True, cw, ch);
+      cell.Free;
+      MergeBoxDirection(g, nk, 0, cw, nul);
+      MergeBoxDirection(g, nk, 3, ch, nul);
+    end;
     for dir := 0 to 1 do
     begin
       if not (nk[dir * 3].Own or nk[dir * 3 + 1].Own or nk[dir * 3 + 2].Own) then Continue;
@@ -1303,6 +1502,32 @@ begin
         else ANode.Elements[cBoxNames[k]] := g[k].V.Clone;
     end;
   end;
+  { [R3-B] the calendar's cell size, as every merge leaves it in the model }
+  if cal then
+    ANode.Elements['cellSize'] := CalendarCell(ANode, own, not newCell, nk, True, cw, ch);
+  { [R3-B] GridModel.mergeOption: the outerBounds merged as a box (no
+    layout mode), the directions the new one touches written whole }
+  if outer and PlainObject(ANode.Find('outerBounds')) then
+  begin
+    ob := TJSONObject(ANode.Find('outerBounds'));
+    obNk := OwnBox(TJSONObject(ANew.Find('outerBounds')), APool, False);
+    obG := obF;
+    for k := 0 to 5 do if obNk[k].Own then obG[k] := obNk[k];
+    MergeBoxDirection(obG, obNk, 0, False, nul);
+    MergeBoxDirection(obG, obNk, 3, False, nul);
+    for dir := 0 to 1 do
+    begin
+      if not (obNk[dir * 3].Own or obNk[dir * 3 + 1].Own or obNk[dir * 3 + 2].Own) then Continue;
+      for k := dir * 3 to dir * 3 + 2 do
+        if obG[k].V = nil then ob.Elements[cBoxNames[k]] := TJSONNull.Create
+        else ob.Elements[cBoxNames[k]] := obG[k].V.Clone;
+    end;
+  end;
+  { [R3-B] optionUpdated's replaceVisualOption }
+  if AMainType = 'visualMap' then
+    TyOptionReplaceVisual(ANode, ANew, ['inRange', 'outOfRange', 'target', 'controller', 'color'])
+  else if AMainType = 'brush' then
+    TyOptionReplaceVisual(ANode, ANew, ['inBrush', 'outOfBrush']);
 
   if AMainType = 'dataZoom' then DataZoomRangeModes(ANode, ANew);
 end;
