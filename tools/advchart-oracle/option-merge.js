@@ -103,6 +103,9 @@ Per step (after it):
           controller (what completeVisualOption made of them, kept across
           merges; null in a hole); items = per series slot, per data
           index, [fill, opacity] of the item's element (null where none)
+  cal     [r3v] only in a case marked `cal`: per calendar slot [x, y,
+          width, height, cellWidth, cellHeight] of its coordinate system
+          (getRect, getCellWidth, getCellHeight; null in a hole)
 Also: maps -- the GeoJSON maps registered before every case ([R3-B]: the
 geo and the map series box cases), {name, text}.
 A main type named in a merge's replaceMerge is written (as `[]` when the
@@ -363,6 +366,8 @@ function runCase(c) {
       rec.models = modelsOf(chart, written);
       rec.out = outOf(chart);
       if (c.vis) rec.vis = visOf(chart);
+      // [r3v] each calendar's rect and cell size, where the case asks
+      if (c.cal) rec.cal = calOf(chart);
       rec.views = (chart.getModel().getSeries ? seriesSlots(chart) : []).map(m => {
         if (!m) return null;
         const v = chart.getViewOfSeriesModel(m);
@@ -497,6 +502,16 @@ function outOf(chart) {
     ? l.getData().map(d => d.get('name')).filter(n => l._availableNames.indexOf(n) >= 0)
     : null);
   return { series, grids, titles, dz, legend };
+}
+
+// [r3v] the calendars as laid out: [x, y, width, height, cellWidth, cellHeight]
+function calOf(chart) {
+  return (slotsOf(chart, 'calendar') || []).map(m => {
+    const cs = m && m.coordinateSystem;
+    if (!cs) return null;
+    const r = cs.getRect();
+    return [r.x, r.y, r.width, r.height, cs.getCellWidth(), cs.getCellHeight()];
+  });
 }
 
 // ---------- guard 1: the raw layer is a subset of getOption ----------
@@ -1188,6 +1203,51 @@ const CASES = [
     const o = r.steps[1].tree.grid[0].outerBounds;
     must(o.width === 300 && o.left === null && o.right === 20, 'grid-outer-bounds: the bounds merged as a box');
   } },
+  // ---- [r3v] the box defaults and the cell size the cases above leave out ----
+  { id: 'toolbox-box-height', steps: [
+    set(bars({ toolbox: { feature: { saveAsImage: {} } }, series: [{ type: 'bar', data: [1, 2, 3, 4] }] })),
+    set({ toolbox: { height: 30 } }),
+    set({ toolbox: { bottom: 10 } }),
+  ], expect: (r) => {
+    const t = r.steps[1].tree.toolbox[0];
+    must(t.height === 30 && t.top === 'top' && t.bottom === null, 'toolbox-box-height: a size alone keeps the default top');
+  } },
+  { id: 'geo-box-default', steps: [
+    set({ animation: false, geo: { map: 'r3b-sq', top: 10 } }),
+    set({ geo: { width: 100 } }),
+  ], expect: (r) => {
+    const g = r.steps[1].tree.geo[0];
+    must(g.width === 100 && g.left === 'center' && g.right === null, 'geo-box-default: the default left is one of the two');
+  } },
+  { id: 'single-axis-box-left', steps: [
+    set({ animation: false, singleAxis: { type: 'category', data: ['a', 'b', 'c'] },
+      series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [1, 2, 0] }] }),
+    set({ singleAxis: { left: 30 } }),
+  ], expect: (r) => {
+    const a = r.steps[1].tree.singleAxis[0];
+    must(a.left === 30 && a.right === '5%' && a.width === null, 'single-axis-box-left: the default right is the second');
+  } },
+  { id: 'calendar-cell-default', cal: true, steps: [
+    set({ animation: false, calendar: { range: '2017-01', left: 30 } }),
+    set({ calendar: { right: 20 } }),
+  ], expect: (r) => {
+    must(JSON.stringify(r.steps[1].tree.calendar[0].cellSize) === '[20,20]', 'calendar-cell-default: the default cell size is a pair');
+  } },
+  { id: 'calendar-box-right', cal: true, steps: [
+    set({ animation: false, calendar: { range: '2017-01', right: 20, cellSize: [15, 15] } }),
+    set({ calendar: { width: 300 } }),
+  ], expect: (r) => {
+    const c = r.steps[1].tree.calendar[0];
+    must(c.width === 300 && c.left === null && c.right === 20, 'calendar-box-right: the init nulled the default left');
+  } },
+  { id: 'calendar-cell-replaced', cal: true, steps: [
+    set({ animation: false, calendar: { range: '2017-01', left: 30, right: 30, cellSize: ['auto', 15] } }),
+    set({ calendar: { cellSize: [16, 16] } }),
+    set({ calendar: { top: 5 } }),
+  ], expect: (r) => {
+    must(JSON.stringify(r.steps[1].tree.calendar[0].cellSize) === '[16,16]', 'calendar-cell-replaced: a cell size written drops the init auto');
+    must(JSON.stringify(r.steps[2].tree.calendar[0].cellSize) === '[16,16]', 'calendar-cell-replaced: and a later merge does not bring it back');
+  } },
   // ---- [R3-B] the visualMap's completed visuals: fixed by the model ----
   { id: 'vm-pieces-coloured-later', vis: true, steps: [
     set(bars({ gradientColor: ['#123456', '#abcdef'], visualMap: { type: 'piecewise', dimension: 1, inactiveColor: '#cccccc',
@@ -1217,6 +1277,20 @@ const CASES = [
     must(!('inRange' in t) && t.outOfRange.color[0] === '#888888', 'vm-replace-drops: a visual key written drops the others');
     must(!('outOfRange' in r.steps[2].tree.visualMap[0]), 'vm-replace-drops: an empty one is dropped too');
   } },
+  { id: 'vm-replace-string', vis: true, steps: [
+    set(bars({ gradientColor: ['#123456', '#abcdef'], visualMap: { type: 'continuous', dimension: 1, min: 0, max: 4, inactiveColor: '#cccccc',
+      inRange: { color: ['#ff0000', '#0000ff'] }, outOfRange: { color: ['#999999'] } }, series: [{ type: 'bar', data: [1, 2, 3, 4] }] })),
+    set({ visualMap: { color: 'ab' } }),
+  ], compare: ['fill'], expect: (r) => {
+    const t = r.steps[1].tree.visualMap[0];
+    must(!('inRange' in t) && !('outOfRange' in t) && t.color === 'ab', 'vm-replace-string: a word has keys, it drops the others');
+  } },
+  { id: 'vm-added-later', vis: true, steps: [
+    set(bars({ color: ['#aa0000', '#00aa00'], gradientColor: ['#123456', '#abcdef'], series: [{ type: 'bar', data: [1, 2, 3, 4] }] })),
+    set({ visualMap: { type: 'continuous', dimension: 1, min: 0, max: 4, inactiveColor: '#cccccc' } }),
+    set({ visualMap: [{}, { type: 'piecewise', dimension: 1, inactiveColor: '#cccccc', seriesIndex: 0,
+      pieces: [{ min: 0, max: 2 }, { min: 3, max: 3, color: '#00ff00' }] }] }),
+  ], compare: ['fill'] },
   { id: 'vm-gradient-alias', vis: true, steps: [
     set(bars({ gradientColor: ['#123456', '#abcdef'], visualMap: { type: 'continuous', dimension: 1, min: 0, max: 4, inactiveColor: '#cccccc' },
       series: [{ type: 'bar', data: [1, 2, 3, 4] }] })),
@@ -1243,7 +1317,7 @@ function generate() {
       kind: s.step.kind, notMerge: s.step.notMerge, opts: s.step.opts, noFrame: !!s.step.noFrame,
       text: s.step.text, payload: s.step.payload,
       tree: s.tree, models: s.models, out: s.out, views: s.views,
-      updNow: s.updNow, upd: s.upd, sel: s.sel, vis: s.vis })) });
+      updNow: s.updNow, upd: s.upd, sel: s.sel, vis: s.vis, cal: s.cal })) });
   }
   // distinctness, coarse: each mechanism appears in at least one case
   const ids = new Set(CASES.map(c => c.id));

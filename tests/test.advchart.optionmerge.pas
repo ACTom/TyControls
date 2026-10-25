@@ -44,7 +44,7 @@ unit test.advchart.optionmerge;
   nor parallel), on the maps the fixture registers; and in the cases
   marked `vis` the visualMap models' completed visuals (kept across merges,
   replaced where a merge writes a visual key) and each item's fill and
-  opacity. }
+  opacity; in the cases marked `cal` every calendar's rect and cell size. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -55,7 +55,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.DataZoom, tyControls.AdvanceChart.Title, tyControls.AdvanceChart.Series,
      tyControls.AdvanceChart.Anim, tyControls.AdvanceChart.AnimView,
      tyControls.AdvanceChart.Events, tyControls.AdvanceChart.Legend, tyControls.AdvanceChart.Color,
-     tyControls.AdvanceChart.Geo,
+     tyControls.AdvanceChart.Geo, tyControls.AdvanceChart.Calendar,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax, test.advchart.mergevis;
 type
@@ -94,6 +94,7 @@ type
     procedure CmpModels(const AWhere: string; AExp: TJSONObject);
     procedure CmpOut(const AWhere: string; AExp: TJSONObject; ACompareFill: Boolean);
     procedure CmpVis(const AWhere: string; AExp: TJSONObject);
+    procedure CmpCal(const AWhere: string; AExp: TJSONArray);
     procedure RunStep(AStep: TJSONObject);
     function SeriesElements(ASeries: Integer): Integer;
   protected
@@ -715,6 +716,34 @@ begin
   Inc(FCompared, TyMvCheckVis(FChart, FChart.List, AExp, AWhere, @Bad));
 end;
 
+{ [r3v] each calendar as laid out: x, y, width, height, the cell's width and
+  height -- the cell size a merge leaves, 'auto' or not, is what draws }
+procedure TAdvChartOptionMergeTest.CmpCal(const AWhere: string; AExp: TJSONArray);
+var
+  i: Integer;
+  b: TJSONArray;
+  cal: TTyCalendar;
+begin
+  for i := 0 to AExp.Count - 1 do
+  begin
+    if AExp.Items[i].JSONType = jtNull then Continue;
+    b := TJSONArray(AExp.Items[i]);
+    cal := FChart.CalendarLayout(i);
+    Inc(FCompared);
+    if (cal = nil) or not cal.Valid then
+    begin
+      Bad(Format('%s[%d]', [AWhere, i]), 'no calendar here');
+      Continue;
+    end;
+    Same(Format('%s[%d].x', [AWhere, i]), b.Floats[0], cal.Rect.X, 1e-9);
+    Same(Format('%s[%d].y', [AWhere, i]), b.Floats[1], cal.Rect.Y, 1e-9);
+    Same(Format('%s[%d].w', [AWhere, i]), b.Floats[2], cal.Rect.W, 1e-9);
+    Same(Format('%s[%d].h', [AWhere, i]), b.Floats[3], cal.Rect.H, 1e-9);
+    Same(Format('%s[%d].cellW', [AWhere, i]), b.Floats[4], cal.CellW, 1e-9);
+    Same(Format('%s[%d].cellH', [AWhere, i]), b.Floats[5], cal.CellH, 1e-9);
+  end;
+end;
+
 procedure TAdvChartOptionMergeTest.RunStep(AStep: TJSONObject);
 var
   p: TJSONObject;
@@ -880,6 +909,7 @@ begin
       if st.Get('noFrame', False) then Continue;
       CmpOut(w + ' out', st.Objects['out'], fill);
       if st.Find('vis') is TJSONObject then CmpVis(w + ' vis', st.Objects['vis']);
+      if st.Find('cal') is TJSONArray then CmpCal(w + ' cal', st.Arrays['cal']);
       { ---- the views: upstream kept one exactly where the port's
         (id, type) pairs the series to an old one ---- }
       cv := st.Arrays['views'];

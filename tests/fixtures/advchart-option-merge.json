@@ -39875,6 +39875,996 @@
    ]
   },
   {
+   "id": "toolbox-box-height",
+   "compare": [],
+   "steps": [
+    {
+     "kind": "set",
+     "notMerge": false,
+     "noFrame": false,
+     "text": "{\"animation\":false,\"xAxis\":{\"type\":\"category\",\"data\":[\"Mon\",\"Tue\",\"Wed\",\"Thu\"]},\"yAxis\":{\"type\":\"value\"},\"toolbox\":{\"feature\":{\"saveAsImage\":{}}},\"series\":[{\"type\":\"bar\",\"data\":[1,2,3,4]}]}",
+     "tree": {
+      "animation": false,
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         1,
+         2,
+         3,
+         4
+        ]
+       }
+      ],
+      "xAxis": [
+       {
+        "type": "category",
+        "data": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu"
+        ]
+       }
+      ],
+      "yAxis": [
+       {
+        "type": "value"
+       }
+      ],
+      "toolbox": [
+       {
+        "feature": {
+         "saveAsImage": {}
+        }
+       }
+      ]
+     },
+     "models": {
+      "series": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "bar"
+       }
+      ],
+      "xAxis": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "category"
+       }
+      ],
+      "yAxis": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "value"
+       }
+      ],
+      "toolbox": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": ""
+       }
+      ]
+     },
+     "out": {
+      "series": [
+       {
+        "count": 4,
+        "shown": true,
+        "fill": "#5070dd",
+        "bars": [
+         [
+          107.4375,
+          320,
+          77.625,
+          -63.75
+         ],
+         [
+          219.9375,
+          320,
+          77.625,
+          -127.5
+         ],
+         [
+          332.4375,
+          320,
+          77.625,
+          -191.25
+         ],
+         [
+          444.9375,
+          320,
+          77.625,
+          -255
+         ]
+        ],
+        "barFills": [
+         "#5070dd",
+         "#5070dd",
+         "#5070dd",
+         "#5070dd"
+        ],
+        "sel": []
+       }
+      ],
+      "grids": [
+       [
+        90,
+        65,
+        450,
+        255
+       ]
+      ],
+      "titles": [],
+      "dz": [],
+      "legend": []
+     },
+     "views": [
+      0
+     ],
+     "updNow": 1,
+     "upd": 1
+    },
+    {
+     "kind": "set",
+     "notMerge": false,
+     "noFrame": false,
+     "text": "{\"toolbox\":{\"height\":30}}",
+     "tree": {
+      "animation": false,
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         1,
+         2,
+         3,
+         4
+        ]
+       }
+      ],
+      "xAxis": [
+       {
+        "type": "category",
+        "data": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu"
+        ]
+       }
+      ],
+      "yAxis": [
+       {
+        "type": "value"
+       }
+      ],
+      "toolbox": [
+       {
+        "feature": {
+         "saveAsImage": {}
+        },
+        "height": 30,
+        "top": "top",
+        "bottom": null
+       }
+      ]
+     },
+     "models": {
+      "series": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "bar"
+       }
+      ],
+      "xAxis": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "category"
+       }
+      ],
+      "yAxis": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "value"
+       }
+      ],
+      "toolbox": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": ""
+       }
+      ]
+     },
+     "out": {
+      "series": [
+       {
+        "count": 4,
+        "shown": true,
+        "fill": "#5070dd",
+        "bars": [
+         [
+          107.4375,
+          320,
+          77.625,
+          -63.75
+         ],
+         [
+          219.9375,
+          320,
+          77.625,
+          -127.5
+         ],
+         [
+          332.4375,
+          320,
+          77.625,
+          -191.25
+         ],
+         [
+          444.9375,
+          320,
+          77.625,
+          -255
+         ]
+        ],
+        "barFills": [
+         "#5070dd",
+         "#5070dd",
+         "#5070dd",
+         "#5070dd"
+        ],
+        "sel": []
+       }
+      ],
+      "grids": [
+       [
+        90,
+        65,
+        450,
+        255
+       ]
+      ],
+      "titles": [],
+      "dz": [],
+      "legend": []
+     },
+     "views": [
+      0
+     ],
+     "updNow": 1,
+     "upd": 1
+    },
+    {
+     "kind": "set",
+     "notMerge": false,
+     "noFrame": false,
+     "text": "{\"toolbox\":{\"bottom\":10}}",
+     "tree": {
+      "animation": false,
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         1,
+         2,
+         3,
+         4
+        ]
+       }
+      ],
+      "xAxis": [
+       {
+        "type": "category",
+        "data": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu"
+        ]
+       }
+      ],
+      "yAxis": [
+       {
+        "type": "value"
+       }
+      ],
+      "toolbox": [
+       {
+        "feature": {
+         "saveAsImage": {}
+        },
+        "height": 30,
+        "top": null,
+        "bottom": 10
+       }
+      ]
+     },
+     "models": {
+      "series": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "bar"
+       }
+      ],
+      "xAxis": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "category"
+       }
+      ],
+      "yAxis": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "value"
+       }
+      ],
+      "toolbox": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": ""
+       }
+      ]
+     },
+     "out": {
+      "series": [
+       {
+        "count": 4,
+        "shown": true,
+        "fill": "#5070dd",
+        "bars": [
+         [
+          107.4375,
+          320,
+          77.625,
+          -63.75
+         ],
+         [
+          219.9375,
+          320,
+          77.625,
+          -127.5
+         ],
+         [
+          332.4375,
+          320,
+          77.625,
+          -191.25
+         ],
+         [
+          444.9375,
+          320,
+          77.625,
+          -255
+         ]
+        ],
+        "barFills": [
+         "#5070dd",
+         "#5070dd",
+         "#5070dd",
+         "#5070dd"
+        ],
+        "sel": []
+       }
+      ],
+      "grids": [
+       [
+        90,
+        65,
+        450,
+        255
+       ]
+      ],
+      "titles": [],
+      "dz": [],
+      "legend": []
+     },
+     "views": [
+      0
+     ],
+     "updNow": 1,
+     "upd": 1
+    }
+   ]
+  },
+  {
+   "id": "geo-box-default",
+   "compare": [],
+   "steps": [
+    {
+     "kind": "set",
+     "notMerge": false,
+     "noFrame": false,
+     "text": "{\"animation\":false,\"geo\":{\"map\":\"r3b-sq\",\"top\":10}}",
+     "tree": {
+      "animation": false,
+      "geo": [
+       {
+        "map": "r3b-sq",
+        "top": 10
+       }
+      ]
+     },
+     "models": {
+      "series": [],
+      "geo": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": ""
+       }
+      ]
+     },
+     "out": {
+      "series": [],
+      "grids": [],
+      "titles": [],
+      "dz": [],
+      "legend": []
+     },
+     "views": [],
+     "updNow": 1,
+     "upd": 1
+    },
+    {
+     "kind": "set",
+     "notMerge": false,
+     "noFrame": false,
+     "text": "{\"geo\":{\"width\":100}}",
+     "tree": {
+      "animation": false,
+      "geo": [
+       {
+        "map": "r3b-sq",
+        "top": 10,
+        "width": 100,
+        "left": "center",
+        "right": null
+       }
+      ]
+     },
+     "models": {
+      "series": [],
+      "geo": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": ""
+       }
+      ]
+     },
+     "out": {
+      "series": [],
+      "grids": [],
+      "titles": [],
+      "dz": [],
+      "legend": []
+     },
+     "views": [],
+     "updNow": 1,
+     "upd": 1
+    }
+   ]
+  },
+  {
+   "id": "single-axis-box-left",
+   "compare": [],
+   "steps": [
+    {
+     "kind": "set",
+     "notMerge": false,
+     "noFrame": false,
+     "text": "{\"animation\":false,\"singleAxis\":{\"type\":\"category\",\"data\":[\"a\",\"b\",\"c\"]},\"series\":[{\"type\":\"scatter\",\"coordinateSystem\":\"singleAxis\",\"data\":[1,2,0]}]}",
+     "tree": {
+      "animation": false,
+      "series": [
+       {
+        "type": "scatter",
+        "coordinateSystem": "singleAxis",
+        "data": [
+         1,
+         2,
+         0
+        ]
+       }
+      ],
+      "singleAxis": [
+       {
+        "type": "category",
+        "data": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      ]
+     },
+     "models": {
+      "series": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "scatter"
+       }
+      ],
+      "singleAxis": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "category"
+       }
+      ]
+     },
+     "out": {
+      "series": [
+       {
+        "count": 3,
+        "shown": true,
+        "fill": "#5070dd",
+        "sel": []
+       }
+      ],
+      "grids": [],
+      "titles": [],
+      "dz": [],
+      "legend": []
+     },
+     "views": [
+      0
+     ],
+     "updNow": 1,
+     "upd": 1
+    },
+    {
+     "kind": "set",
+     "notMerge": false,
+     "noFrame": false,
+     "text": "{\"singleAxis\":{\"left\":30}}",
+     "tree": {
+      "animation": false,
+      "series": [
+       {
+        "type": "scatter",
+        "coordinateSystem": "singleAxis",
+        "data": [
+         1,
+         2,
+         0
+        ]
+       }
+      ],
+      "singleAxis": [
+       {
+        "type": "category",
+        "data": [
+         "a",
+         "b",
+         "c"
+        ],
+        "left": 30,
+        "width": null,
+        "right": "5%"
+       }
+      ]
+     },
+     "models": {
+      "series": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "scatter"
+       }
+      ],
+      "singleAxis": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "category"
+       }
+      ]
+     },
+     "out": {
+      "series": [
+       {
+        "count": 3,
+        "shown": true,
+        "fill": "#5070dd",
+        "sel": []
+       }
+      ],
+      "grids": [],
+      "titles": [],
+      "dz": [],
+      "legend": []
+     },
+     "views": [
+      0
+     ],
+     "updNow": 1,
+     "upd": 1
+    }
+   ]
+  },
+  {
+   "id": "calendar-cell-default",
+   "compare": [],
+   "steps": [
+    {
+     "kind": "set",
+     "notMerge": false,
+     "noFrame": false,
+     "text": "{\"animation\":false,\"calendar\":{\"range\":\"2017-01\",\"left\":30}}",
+     "tree": {
+      "animation": false,
+      "calendar": [
+       {
+        "range": "2017-01",
+        "left": 30
+       }
+      ]
+     },
+     "models": {
+      "series": [],
+      "calendar": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": ""
+       }
+      ]
+     },
+     "out": {
+      "series": [],
+      "grids": [],
+      "titles": [],
+      "dz": [],
+      "legend": []
+     },
+     "views": [],
+     "updNow": 1,
+     "upd": 1,
+     "cal": [
+      [
+       30,
+       60,
+       100,
+       140,
+       20,
+       20
+      ]
+     ]
+    },
+    {
+     "kind": "set",
+     "notMerge": false,
+     "noFrame": false,
+     "text": "{\"calendar\":{\"right\":20}}",
+     "tree": {
+      "animation": false,
+      "calendar": [
+       {
+        "range": "2017-01",
+        "left": null,
+        "right": 20,
+        "width": null,
+        "cellSize": [
+         20,
+         20
+        ]
+       }
+      ]
+     },
+     "models": {
+      "series": [],
+      "calendar": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": ""
+       }
+      ]
+     },
+     "out": {
+      "series": [],
+      "grids": [],
+      "titles": [],
+      "dz": [],
+      "legend": []
+     },
+     "views": [],
+     "updNow": 1,
+     "upd": 1,
+     "cal": [
+      [
+       480,
+       60,
+       100,
+       140,
+       20,
+       20
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "calendar-box-right",
+   "compare": [],
+   "steps": [
+    {
+     "kind": "set",
+     "notMerge": false,
+     "noFrame": false,
+     "text": "{\"animation\":false,\"calendar\":{\"range\":\"2017-01\",\"right\":20,\"cellSize\":[15,15]}}",
+     "tree": {
+      "animation": false,
+      "calendar": [
+       {
+        "range": "2017-01",
+        "right": 20,
+        "cellSize": [
+         15,
+         15
+        ]
+       }
+      ]
+     },
+     "models": {
+      "series": [],
+      "calendar": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": ""
+       }
+      ]
+     },
+     "out": {
+      "series": [],
+      "grids": [],
+      "titles": [],
+      "dz": [],
+      "legend": []
+     },
+     "views": [],
+     "updNow": 1,
+     "upd": 1,
+     "cal": [
+      [
+       505,
+       60,
+       75,
+       105,
+       15,
+       15
+      ]
+     ]
+    },
+    {
+     "kind": "set",
+     "notMerge": false,
+     "noFrame": false,
+     "text": "{\"calendar\":{\"width\":300}}",
+     "tree": {
+      "animation": false,
+      "calendar": [
+       {
+        "range": "2017-01",
+        "right": 20,
+        "cellSize": [
+         "auto",
+         15
+        ],
+        "width": 300,
+        "left": null
+       }
+      ]
+     },
+     "models": {
+      "series": [],
+      "calendar": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": ""
+       }
+      ]
+     },
+     "out": {
+      "series": [],
+      "grids": [],
+      "titles": [],
+      "dz": [],
+      "legend": []
+     },
+     "views": [],
+     "updNow": 1,
+     "upd": 1,
+     "cal": [
+      [
+       280,
+       60,
+       300,
+       105,
+       60,
+       15
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "calendar-cell-replaced",
+   "compare": [],
+   "steps": [
+    {
+     "kind": "set",
+     "notMerge": false,
+     "noFrame": false,
+     "text": "{\"animation\":false,\"calendar\":{\"range\":\"2017-01\",\"left\":30,\"right\":30,\"cellSize\":[\"auto\",15]}}",
+     "tree": {
+      "animation": false,
+      "calendar": [
+       {
+        "range": "2017-01",
+        "left": 30,
+        "right": 30,
+        "cellSize": [
+         "auto",
+         15
+        ]
+       }
+      ]
+     },
+     "models": {
+      "series": [],
+      "calendar": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": ""
+       }
+      ]
+     },
+     "out": {
+      "series": [],
+      "grids": [],
+      "titles": [],
+      "dz": [],
+      "legend": []
+     },
+     "views": [],
+     "updNow": 1,
+     "upd": 1,
+     "cal": [
+      [
+       30,
+       60,
+       540,
+       105,
+       108,
+       15
+      ]
+     ]
+    },
+    {
+     "kind": "set",
+     "notMerge": false,
+     "noFrame": false,
+     "text": "{\"calendar\":{\"cellSize\":[16,16]}}",
+     "tree": {
+      "animation": false,
+      "calendar": [
+       {
+        "range": "2017-01",
+        "left": 30,
+        "right": 30,
+        "cellSize": [
+         16,
+         16
+        ]
+       }
+      ]
+     },
+     "models": {
+      "series": [],
+      "calendar": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": ""
+       }
+      ]
+     },
+     "out": {
+      "series": [],
+      "grids": [],
+      "titles": [],
+      "dz": [],
+      "legend": []
+     },
+     "views": [],
+     "updNow": 1,
+     "upd": 1,
+     "cal": [
+      [
+       30,
+       60,
+       80,
+       112,
+       16,
+       16
+      ]
+     ]
+    },
+    {
+     "kind": "set",
+     "notMerge": false,
+     "noFrame": false,
+     "text": "{\"calendar\":{\"top\":5}}",
+     "tree": {
+      "animation": false,
+      "calendar": [
+       {
+        "range": "2017-01",
+        "left": 30,
+        "right": 30,
+        "cellSize": [
+         16,
+         16
+        ],
+        "top": 5,
+        "height": null,
+        "bottom": null
+       }
+      ]
+     },
+     "models": {
+      "series": [],
+      "calendar": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": ""
+       }
+      ]
+     },
+     "out": {
+      "series": [],
+      "grids": [],
+      "titles": [],
+      "dz": [],
+      "legend": []
+     },
+     "views": [],
+     "updNow": 1,
+     "upd": 1,
+     "cal": [
+      [
+       30,
+       5,
+       80,
+       112,
+       16,
+       16
+      ]
+     ]
+    }
+   ]
+  },
+  {
    "id": "vm-pieces-coloured-later",
    "compare": [
     "fill"
@@ -42599,6 +43589,1100 @@
         ],
         [
          "rgba(128,128,255,1)",
+         1
+        ]
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "vm-replace-string",
+   "compare": [
+    "fill"
+   ],
+   "steps": [
+    {
+     "kind": "set",
+     "notMerge": false,
+     "noFrame": false,
+     "text": "{\"animation\":false,\"xAxis\":{\"type\":\"category\",\"data\":[\"Mon\",\"Tue\",\"Wed\",\"Thu\"]},\"yAxis\":{\"type\":\"value\"},\"gradientColor\":[\"#123456\",\"#abcdef\"],\"visualMap\":{\"type\":\"continuous\",\"dimension\":1,\"min\":0,\"max\":4,\"inactiveColor\":\"#cccccc\",\"inRange\":{\"color\":[\"#ff0000\",\"#0000ff\"]},\"outOfRange\":{\"color\":[\"#999999\"]}},\"series\":[{\"type\":\"bar\",\"data\":[1,2,3,4]}]}",
+     "tree": {
+      "animation": false,
+      "gradientColor": [
+       "#123456",
+       "#abcdef"
+      ],
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         1,
+         2,
+         3,
+         4
+        ]
+       }
+      ],
+      "xAxis": [
+       {
+        "type": "category",
+        "data": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu"
+        ]
+       }
+      ],
+      "yAxis": [
+       {
+        "type": "value"
+       }
+      ],
+      "visualMap": [
+       {
+        "type": "continuous",
+        "dimension": 1,
+        "min": 0,
+        "max": 4,
+        "inactiveColor": "#cccccc",
+        "inRange": {
+         "color": [
+          "#ff0000",
+          "#0000ff"
+         ]
+        },
+        "outOfRange": {
+         "color": [
+          "#999999"
+         ]
+        }
+       }
+      ]
+     },
+     "models": {
+      "series": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "bar"
+       }
+      ],
+      "xAxis": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "category"
+       }
+      ],
+      "yAxis": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "value"
+       }
+      ],
+      "visualMap": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "continuous"
+       }
+      ]
+     },
+     "out": {
+      "series": [
+       {
+        "count": 4,
+        "shown": true,
+        "fill": "#5070dd",
+        "bars": [
+         [
+          107.4375,
+          320,
+          77.625,
+          -63.75
+         ],
+         [
+          219.9375,
+          320,
+          77.625,
+          -127.5
+         ],
+         [
+          332.4375,
+          320,
+          77.625,
+          -191.25
+         ],
+         [
+          444.9375,
+          320,
+          77.625,
+          -255
+         ]
+        ],
+        "barFills": [
+         "rgba(191,0,64,1)",
+         "rgba(128,0,128,1)",
+         "rgba(64,0,191,1)",
+         "rgba(0,0,255,1)"
+        ],
+        "sel": []
+       }
+      ],
+      "grids": [
+       [
+        90,
+        65,
+        450,
+        255
+       ]
+      ],
+      "titles": [],
+      "dz": [],
+      "legend": []
+     },
+     "views": [
+      0
+     ],
+     "updNow": 1,
+     "upd": 1,
+     "vis": {
+      "vm": [
+       {
+        "inRange": {
+         "color": [
+          "#ff0000",
+          "#0000ff"
+         ]
+        },
+        "outOfRange": {
+         "color": [
+          "#999999"
+         ]
+        },
+        "target": {
+         "inRange": {
+          "color": [
+           "#ff0000",
+           "#0000ff"
+          ]
+         },
+         "outOfRange": {
+          "color": [
+           "#999999"
+          ]
+         }
+        },
+        "controller": {
+         "inRange": {
+          "color": [
+           "#ff0000",
+           "#0000ff"
+          ],
+          "symbol": [
+           "roundRect"
+          ],
+          "symbolSize": [
+           20,
+           20
+          ]
+         },
+         "outOfRange": {
+          "color": [
+           "#999999"
+          ],
+          "symbol": [
+           "roundRect"
+          ],
+          "symbolSize": [
+           20,
+           20
+          ]
+         }
+        }
+       }
+      ],
+      "items": [
+       [
+        [
+         "rgba(191,0,64,1)",
+         1
+        ],
+        [
+         "rgba(128,0,128,1)",
+         1
+        ],
+        [
+         "rgba(64,0,191,1)",
+         1
+        ],
+        [
+         "rgba(0,0,255,1)",
+         1
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "kind": "set",
+     "notMerge": false,
+     "noFrame": false,
+     "text": "{\"visualMap\":{\"color\":\"ab\"}}",
+     "tree": {
+      "animation": false,
+      "gradientColor": [
+       "#123456",
+       "#abcdef"
+      ],
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         1,
+         2,
+         3,
+         4
+        ]
+       }
+      ],
+      "xAxis": [
+       {
+        "type": "category",
+        "data": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu"
+        ]
+       }
+      ],
+      "yAxis": [
+       {
+        "type": "value"
+       }
+      ],
+      "visualMap": [
+       {
+        "type": "continuous",
+        "dimension": 1,
+        "min": 0,
+        "max": 4,
+        "inactiveColor": "#cccccc",
+        "color": "ab"
+       }
+      ]
+     },
+     "models": {
+      "series": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "bar"
+       }
+      ],
+      "xAxis": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "category"
+       }
+      ],
+      "yAxis": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "value"
+       }
+      ],
+      "visualMap": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "continuous"
+       }
+      ]
+     },
+     "out": {
+      "series": [
+       {
+        "count": 4,
+        "shown": true,
+        "fill": "#5070dd",
+        "bars": [
+         [
+          107.4375,
+          320,
+          77.625,
+          -63.75
+         ],
+         [
+          219.9375,
+          320,
+          77.625,
+          -127.5
+         ],
+         [
+          332.4375,
+          320,
+          77.625,
+          -191.25
+         ],
+         [
+          444.9375,
+          320,
+          77.625,
+          -255
+         ]
+        ],
+        "barFills": [
+         "rgba(56,90,124,1)",
+         "rgba(95,129,163,1)",
+         "rgba(133,167,201,1)",
+         "rgba(171,205,239,1)"
+        ],
+        "sel": []
+       }
+      ],
+      "grids": [
+       [
+        90,
+        65,
+        450,
+        255
+       ]
+      ],
+      "titles": [],
+      "dz": [],
+      "legend": []
+     },
+     "views": [
+      0
+     ],
+     "updNow": 1,
+     "upd": 1,
+     "vis": {
+      "vm": [
+       {
+        "target": {
+         "inRange": {
+          "color": [
+           "#123456",
+           "#abcdef"
+          ]
+         },
+         "outOfRange": {
+          "color": [
+           "rgba(0,0,0,0)"
+          ],
+          "opacity": [
+           0,
+           0
+          ]
+         }
+        },
+        "controller": {
+         "inRange": {
+          "color": [
+           "#123456",
+           "#abcdef"
+          ],
+          "symbol": [
+           "roundRect"
+          ],
+          "symbolSize": [
+           20,
+           20
+          ]
+         },
+         "outOfRange": {
+          "color": [
+           "#cccccc"
+          ],
+          "symbol": [
+           "roundRect"
+          ],
+          "symbolSize": [
+           20,
+           20
+          ]
+         }
+        }
+       }
+      ],
+      "items": [
+       [
+        [
+         "rgba(56,90,124,1)",
+         1
+        ],
+        [
+         "rgba(95,129,163,1)",
+         1
+        ],
+        [
+         "rgba(133,167,201,1)",
+         1
+        ],
+        [
+         "rgba(171,205,239,1)",
+         1
+        ]
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "vm-added-later",
+   "compare": [
+    "fill"
+   ],
+   "steps": [
+    {
+     "kind": "set",
+     "notMerge": false,
+     "noFrame": false,
+     "text": "{\"animation\":false,\"xAxis\":{\"type\":\"category\",\"data\":[\"Mon\",\"Tue\",\"Wed\",\"Thu\"]},\"yAxis\":{\"type\":\"value\"},\"color\":[\"#aa0000\",\"#00aa00\"],\"gradientColor\":[\"#123456\",\"#abcdef\"],\"series\":[{\"type\":\"bar\",\"data\":[1,2,3,4]}]}",
+     "tree": {
+      "animation": false,
+      "color": [
+       "#aa0000",
+       "#00aa00"
+      ],
+      "gradientColor": [
+       "#123456",
+       "#abcdef"
+      ],
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         1,
+         2,
+         3,
+         4
+        ]
+       }
+      ],
+      "xAxis": [
+       {
+        "type": "category",
+        "data": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu"
+        ]
+       }
+      ],
+      "yAxis": [
+       {
+        "type": "value"
+       }
+      ]
+     },
+     "models": {
+      "series": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "bar"
+       }
+      ],
+      "xAxis": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "category"
+       }
+      ],
+      "yAxis": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "value"
+       }
+      ]
+     },
+     "out": {
+      "series": [
+       {
+        "count": 4,
+        "shown": true,
+        "fill": "#aa0000",
+        "bars": [
+         [
+          107.4375,
+          320,
+          77.625,
+          -63.75
+         ],
+         [
+          219.9375,
+          320,
+          77.625,
+          -127.5
+         ],
+         [
+          332.4375,
+          320,
+          77.625,
+          -191.25
+         ],
+         [
+          444.9375,
+          320,
+          77.625,
+          -255
+         ]
+        ],
+        "barFills": [
+         "#aa0000",
+         "#aa0000",
+         "#aa0000",
+         "#aa0000"
+        ],
+        "sel": []
+       }
+      ],
+      "grids": [
+       [
+        90,
+        65,
+        450,
+        255
+       ]
+      ],
+      "titles": [],
+      "dz": [],
+      "legend": []
+     },
+     "views": [
+      0
+     ],
+     "updNow": 1,
+     "upd": 1,
+     "vis": {
+      "vm": [],
+      "items": [
+       [
+        [
+         "#aa0000",
+         1
+        ],
+        [
+         "#aa0000",
+         1
+        ],
+        [
+         "#aa0000",
+         1
+        ],
+        [
+         "#aa0000",
+         1
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "kind": "set",
+     "notMerge": false,
+     "noFrame": false,
+     "text": "{\"visualMap\":{\"type\":\"continuous\",\"dimension\":1,\"min\":0,\"max\":4,\"inactiveColor\":\"#cccccc\"}}",
+     "tree": {
+      "animation": false,
+      "color": [
+       "#aa0000",
+       "#00aa00"
+      ],
+      "gradientColor": [
+       "#123456",
+       "#abcdef"
+      ],
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         1,
+         2,
+         3,
+         4
+        ]
+       }
+      ],
+      "xAxis": [
+       {
+        "type": "category",
+        "data": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu"
+        ]
+       }
+      ],
+      "yAxis": [
+       {
+        "type": "value"
+       }
+      ],
+      "visualMap": [
+       {
+        "type": "continuous",
+        "dimension": 1,
+        "min": 0,
+        "max": 4,
+        "inactiveColor": "#cccccc"
+       }
+      ]
+     },
+     "models": {
+      "series": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "bar"
+       }
+      ],
+      "xAxis": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "category"
+       }
+      ],
+      "yAxis": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "value"
+       }
+      ],
+      "visualMap": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "continuous"
+       }
+      ]
+     },
+     "out": {
+      "series": [
+       {
+        "count": 4,
+        "shown": true,
+        "fill": "#aa0000",
+        "bars": [
+         [
+          107.4375,
+          320,
+          77.625,
+          -63.75
+         ],
+         [
+          219.9375,
+          320,
+          77.625,
+          -127.5
+         ],
+         [
+          332.4375,
+          320,
+          77.625,
+          -191.25
+         ],
+         [
+          444.9375,
+          320,
+          77.625,
+          -255
+         ]
+        ],
+        "barFills": [
+         "rgba(56,90,124,1)",
+         "rgba(95,129,163,1)",
+         "rgba(133,167,201,1)",
+         "rgba(171,205,239,1)"
+        ],
+        "sel": []
+       }
+      ],
+      "grids": [
+       [
+        90,
+        65,
+        450,
+        255
+       ]
+      ],
+      "titles": [],
+      "dz": [],
+      "legend": []
+     },
+     "views": [
+      0
+     ],
+     "updNow": 1,
+     "upd": 1,
+     "vis": {
+      "vm": [
+       {
+        "target": {
+         "inRange": {
+          "color": [
+           "#123456",
+           "#abcdef"
+          ]
+         },
+         "outOfRange": {
+          "color": [
+           "rgba(0,0,0,0)"
+          ],
+          "opacity": [
+           0,
+           0
+          ]
+         }
+        },
+        "controller": {
+         "inRange": {
+          "color": [
+           "#123456",
+           "#abcdef"
+          ],
+          "symbol": [
+           "roundRect"
+          ],
+          "symbolSize": [
+           20,
+           20
+          ]
+         },
+         "outOfRange": {
+          "color": [
+           "#cccccc"
+          ],
+          "symbol": [
+           "roundRect"
+          ],
+          "symbolSize": [
+           20,
+           20
+          ]
+         }
+        }
+       }
+      ],
+      "items": [
+       [
+        [
+         "rgba(56,90,124,1)",
+         1
+        ],
+        [
+         "rgba(95,129,163,1)",
+         1
+        ],
+        [
+         "rgba(133,167,201,1)",
+         1
+        ],
+        [
+         "rgba(171,205,239,1)",
+         1
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "kind": "set",
+     "notMerge": false,
+     "noFrame": false,
+     "text": "{\"visualMap\":[{},{\"type\":\"piecewise\",\"dimension\":1,\"inactiveColor\":\"#cccccc\",\"seriesIndex\":0,\"pieces\":[{\"min\":0,\"max\":2},{\"min\":3,\"max\":3,\"color\":\"#00ff00\"}]}]}",
+     "tree": {
+      "animation": false,
+      "color": [
+       "#aa0000",
+       "#00aa00"
+      ],
+      "gradientColor": [
+       "#123456",
+       "#abcdef"
+      ],
+      "series": [
+       {
+        "type": "bar",
+        "data": [
+         1,
+         2,
+         3,
+         4
+        ]
+       }
+      ],
+      "xAxis": [
+       {
+        "type": "category",
+        "data": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu"
+        ]
+       }
+      ],
+      "yAxis": [
+       {
+        "type": "value"
+       }
+      ],
+      "visualMap": [
+       {
+        "type": "continuous",
+        "dimension": 1,
+        "min": 0,
+        "max": 4,
+        "inactiveColor": "#cccccc"
+       },
+       {
+        "type": "piecewise",
+        "dimension": 1,
+        "inactiveColor": "#cccccc",
+        "seriesIndex": 0,
+        "pieces": [
+         {
+          "min": 0,
+          "max": 2
+         },
+         {
+          "min": 3,
+          "max": 3,
+          "color": "#00ff00"
+         }
+        ]
+       }
+      ]
+     },
+     "models": {
+      "series": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "bar"
+       }
+      ],
+      "xAxis": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "category"
+       }
+      ],
+      "yAxis": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "value"
+       }
+      ],
+      "visualMap": [
+       {
+        "id": "\u0000series\u00000\u00000",
+        "name": "series\u00000",
+        "sub": "continuous"
+       },
+       {
+        "id": "\u0000series\u00001\u00000",
+        "name": "series\u00001",
+        "sub": "piecewise"
+       }
+      ]
+     },
+     "out": {
+      "series": [
+       {
+        "count": 4,
+        "shown": true,
+        "fill": "#aa0000",
+        "bars": [
+         [
+          107.4375,
+          320,
+          77.625,
+          -63.75
+         ],
+         [
+          219.9375,
+          320,
+          77.625,
+          -127.5
+         ],
+         [
+          332.4375,
+          320,
+          77.625,
+          -191.25
+         ],
+         [
+          444.9375,
+          320,
+          77.625,
+          -255
+         ]
+        ],
+        "barFills": [
+         "rgba(0,110,221,1)",
+         "rgba(0,110,221,1)",
+         "#00ff00",
+         "rgba(0,0,0,0)"
+        ],
+        "sel": []
+       }
+      ],
+      "grids": [
+       [
+        90,
+        65,
+        450,
+        255
+       ]
+      ],
+      "titles": [],
+      "dz": [],
+      "legend": []
+     },
+     "views": [
+      0
+     ],
+     "updNow": 1,
+     "upd": 1,
+     "vis": {
+      "vm": [
+       {
+        "target": {
+         "inRange": {
+          "color": [
+           "#123456",
+           "#abcdef"
+          ]
+         },
+         "outOfRange": {
+          "color": [
+           "rgba(0,0,0,0)"
+          ],
+          "opacity": [
+           0,
+           0
+          ]
+         }
+        },
+        "controller": {
+         "inRange": {
+          "color": [
+           "#123456",
+           "#abcdef"
+          ],
+          "symbol": [
+           "roundRect"
+          ],
+          "symbolSize": [
+           20,
+           20
+          ]
+         },
+         "outOfRange": {
+          "color": [
+           "#cccccc"
+          ],
+          "symbol": [
+           "roundRect"
+          ],
+          "symbolSize": [
+           20,
+           20
+          ]
+         }
+        }
+       },
+       {
+        "inRange": {
+         "color": [
+          "#006edd",
+          "#e0ffff"
+         ]
+        },
+        "outOfRange": {
+         "color": [
+          "rgba(0,0,0,0)"
+         ]
+        },
+        "target": {
+         "inRange": {
+          "color": [
+           "#006edd",
+           "#e0ffff"
+          ]
+         },
+         "outOfRange": {
+          "color": [
+           "rgba(0,0,0,0)"
+          ]
+         }
+        },
+        "controller": {
+         "inRange": {
+          "color": [
+           "#006edd",
+           "#e0ffff"
+          ],
+          "symbol": [
+           "roundRect"
+          ],
+          "symbolSize": [
+           20,
+           20
+          ]
+         },
+         "outOfRange": {
+          "color": [
+           "rgba(0,0,0,0)"
+          ],
+          "symbol": [
+           "roundRect"
+          ],
+          "symbolSize": [
+           20,
+           20
+          ]
+         }
+        }
+       }
+      ],
+      "items": [
+       [
+        [
+         "rgba(0,110,221,1)",
+         1
+        ],
+        [
+         "rgba(0,110,221,1)",
+         1
+        ],
+        [
+         "#00ff00",
+         1
+        ],
+        [
+         "rgba(0,0,0,0)",
          1
         ]
        ]

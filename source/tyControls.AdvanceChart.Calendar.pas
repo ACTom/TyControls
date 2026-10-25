@@ -635,10 +635,14 @@ begin
       if not Result.CellAuto[k] then Result.Cell[k] := NumOf(cellArr[k], NaN);
     end;
   end;
-  { sizeCalculable forces 'auto' }
-  for k := 0 to 1 do
-    if NotNull(raw[cHV[k, 0]]) or (NotNull(raw[cHV[k, 1]]) and NotNull(raw[cHV[k, 2]])) then
-      Result.CellAuto[k] := True;
+  { sizeCalculable forces 'auto' -- of the option the model was made from;
+    once a merge has reached it the tree's cell size is the model's, every
+    'auto' it keeps written back, and a cell size merged in since replaced
+    the init's [r3v] }
+  if not AOption.ComponentMerged('calendar', ASlot) then
+    for k := 0 to 1 do
+      if NotNull(raw[cHV[k, 0]]) or (NotNull(raw[cHV[k, 1]]) and NotNull(raw[cHV[k, 2]])) then
+        Result.CellAuto[k] := True;
   ignW := not Result.CellAuto[0];
   ignH := not Result.CellAuto[1];
   TyCalMergeLayoutParam(target, raw, ignW, ignH);
