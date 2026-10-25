@@ -53,6 +53,9 @@ type
     procedure TestATabOnAStopGoesToTheNextOne;
     procedure TestColumnsLineUp;
     procedure TestTheTokenSetsTheStop;
+    procedure TestTabWidthWinsOverTheToken;
+    procedure TestTabWidthRewrapsTheRows;
+    procedure TestAZeroStopTakesNoRoom;
     procedure TestTheStopScalesWithTheDpi;
     procedure TestTheDrawnTextFollows;
     procedure TestAWrappedRowDrawsItsTabWhereItsCaretIs;
@@ -267,6 +270,61 @@ begin
   AssertEquals('back to the default', 8 * sp, FMemo.Widths(#9'x')[1]);
   FCtl.StyleOverride := ':root { --memo-tab-size: 2; }';
   AssertEquals('the theme sets it for every memo', 2 * sp, FMemo.Widths(#9'x')[1]);
+end;
+
+{ TabWidth, the property (4.0): 0 and above is the number of spaces, over whatever the
+  token says -- the theme's or the memo's own; -1 hands the stop back to the token. }
+procedure TTyMemoTabTest.TestTabWidthWinsOverTheToken;
+var
+  sp: Integer;
+begin
+  sp := SpaceW;
+  AssertEquals('the default property follows the token', -1, FMemo.TabWidth);
+  FMemo.TabWidth := 4;
+  AssertEquals('four spaces', 4 * sp, FMemo.Widths(#9'x')[1]);
+  FMemo.StyleOverride := '--memo-tab-size: 40px';
+  AssertEquals('over the memo''s own token', 4 * sp, FMemo.Widths(#9'x')[1]);
+  FCtl.StyleOverride := ':root { --memo-tab-size: 2; }';
+  FMemo.StyleOverride := '';
+  FMemo.TabWidth := 3;
+  AssertEquals('over the theme''s', 3 * sp, FMemo.Widths(#9'x')[1]);
+  FMemo.TabWidth := -1;
+  AssertEquals('-1: the token again', 2 * sp, FMemo.Widths(#9'x')[1]);
+  FMemo.TabWidth := -5;
+  AssertEquals('below -1 is -1', -1, FMemo.TabWidth);
+end;
+
+{ 0 is a tab that takes no room, as CSS tab-size: 0 -- from the property or the token. }
+procedure TTyMemoTabTest.TestAZeroStopTakesNoRoom;
+var
+  wd: TTyIntArray;
+begin
+  FMemo.TabWidth := 0;
+  wd := FMemo.Widths('a'#9'b');
+  AssertEquals('the tab adds nothing', wd[1], wd[2]);
+  AssertEquals('b right after a', W('ab'), wd[3]);
+  FMemo.TabWidth := -1;
+  FMemo.StyleOverride := '--memo-tab-size: 0';
+  wd := FMemo.Widths('a'#9'b');
+  AssertEquals('the token says so too', wd[1], wd[2]);
+  FMemo.StyleOverride := '--memo-tab-size: 0px';
+  wd := FMemo.Widths('a'#9'b');
+  AssertEquals('and as a length', wd[1], wd[2]);
+  FMemo.StyleOverride := '';
+  wd := FMemo.Widths('a'#9'b');
+  AssertTrue('the default stop is back', wd[2] > wd[1]);
+end;
+
+procedure TTyMemoTabTest.TestTabWidthRewrapsTheRows;
+begin
+  Load(['a'#9'b']);
+  FMemo.WordWrap := True;
+  AssertEquals('precondition: one row at the default stop', 1, FMemo.Total);
+  FMemo.TabWidth := 400;
+  { the tab alone is wider than the row, so it gets one of its own: a, the tab, b }
+  AssertEquals('a stop past the edge wraps the line', 3, FMemo.Total);
+  FMemo.TabWidth := -1;
+  AssertEquals('and back', 1, FMemo.Total);
 end;
 
 procedure TTyMemoTabTest.TestTheStopScalesWithTheDpi;

@@ -401,6 +401,7 @@ type
     property ScrollBars;
     property ScrollBarAutoHide;
     property WordWrap;
+    property TabWidth;
     property ReadOnly;
     property HideSelection;
     property Alignment;

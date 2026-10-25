@@ -149,6 +149,7 @@ type
     // scroll lands in a later task). True = soft wrap at word boundaries into
     // multiple visual rows. Affects BuildVisualRows and (later) render/nav/click.
     FWordWrap: Boolean;
+    FTabWidth: Integer;
     // Cached visual-row layout for the current content width + wrap mode, rebuilt
     // lazily by EnsureVisualRows. FVisualRowsValid is cleared whenever something
     // that affects layout changes (WordWrap toggle, edits, resize, Lines assign).
@@ -355,6 +356,7 @@ type
     procedure SetLines(AValue: TStrings);
     // WordWrap published setter (no-op if unchanged; repaints when toggled).
     procedure SetWordWrap(AValue: Boolean);
+    procedure SetTabWidth(AValue: Integer);
     // Fire OnChange (after a model mutation).
     procedure DoChange;
     // Fire OnSelectionChange iff the caret OR the selection anchor moved since the
@@ -932,6 +934,11 @@ type
     // Soft word-wrap toggle. Default False (no wrap; long lines scroll horizontally instead).
     // True wraps long logical lines into multiple visual rows at word boundaries.
     property WordWrap: Boolean read FWordWrap write SetWordWrap default False;
+    { Spaces between tab stops. -1 (the default) leaves it to --memo-tab-size -- the theme's
+      (eight spaces) or the control's StyleOverride's, which can also give a length in px;
+      0 and above win over the token, 0 being a tab that takes no room (CSS tab-size: 0).
+      Anything below -1 is -1. }
+    property TabWidth: Integer read FTabWidth write SetTabWidth default -1;
     // When True, the memo ignores all user edits but still allows caret/selection
     // navigation, Copy and SelectAll; programmatic Lines := still mutates. Cut
     // acts as Copy. Default False.
@@ -1018,6 +1025,7 @@ type
     property ScrollBars;
     property ScrollBarAutoHide;
     property WordWrap;
+    property TabWidth;
     property ReadOnly;
     property HideSelection;
     property Alignment;
@@ -1116,6 +1124,7 @@ begin
     otherwise write a fresh memo's Name into it the first time it is named. }
   ControlStyle := ControlStyle - [csSetCaption];
   TabStop := True;
+  FTabWidth := -1;   // the theme's --memo-tab-size
   Cursor := crIBeam;
   FLines := TTyMemoLines.Create;
   { The one line TTyComboBox already had and this control did not. }
@@ -3926,6 +3935,18 @@ begin
   Result := MulDiv(S.Padding.Left, APPI, 96);
 end;
 
+procedure TTyCustomMemo.SetTabWidth(AValue: Integer);
+begin
+  if AValue < -1 then AValue := -1;
+  if FTabWidth = AValue then Exit;
+  FTabWidth := AValue;
+  FTabStopKey := '';   // TabStopFor works the stop out again; the width caches and the
+                       // visual rows carry it in their signatures and follow
+  InvalidateVisualRows;
+  ClampScrollX(Font.PixelsPerInch);
+  Invalidate;
+end;
+
 procedure TTyCustomMemo.SetWordWrap(AValue: Boolean);
 begin
   if FWordWrap = AValue then Exit;
@@ -4115,20 +4136,25 @@ var
   n, sp: Integer;
 begin
   key := AFontSig + '|' + IntToHex(PtrUInt(ActiveController.Model), 16) + '|'
-    + IntToStr(ActiveController.Model.ThemeVersion) + '|' + StyleOverride;
+    + IntToStr(ActiveController.Model.ThemeVersion) + '|' + StyleOverride + '|'
+    + IntToStr(FTabWidth);
   if key = FTabStopKey then Exit(FTabStopPx);
-  Result := 0;
-  tok := LowerCase(Trim(StyleToken('--memo-tab-size', '')));
+  { TabWidth set (0 or more): that many spaces, whatever the token says. }
+  if FTabWidth >= 0 then tok := IntToStr(FTabWidth)
+  else tok := LowerCase(Trim(StyleToken('--memo-tab-size', '')));
+  { -1: not worked out yet. 0 is a real answer, a tab that takes no room (tab-size: 0). }
+  Result := -1;
   if (Length(tok) > 2) and (Copy(tok, Length(tok) - 1, 2) = 'px') then
     try
       Result := MulDiv(TyEvalLength(tok, nil), APPI, 96);
+      if Result < 0 then Result := -1;
     except
-      Result := 0;   // not a length: the default below
+      Result := -1;   // not a length: the default below
     end;
-  if Result < 1 then
+  if Result < 0 then
   begin
-    n := StrToIntDef(tok, TyMemoTabSize);
-    if n < 1 then n := TyMemoTabSize;
+    n := StrToIntDef(tok, -1);
+    if n < 0 then n := TyMemoTabSize;
     if FMeasureBmp = nil then
       FMeasureBmp := TBGRABitmap.Create(1, 1);
     TyConfigureTextFont(FMeasureBmp, S.FontName, EffectiveFontSize(S), S.FontWeight, APPI);
@@ -4144,8 +4170,7 @@ procedure TTyCustomMemo.MeasureTabbedWidths(const ALine: string; var AWidths: TT
 var
   i, bp, cpLen, runByte, runX, t: Integer;
 begin
-  t := FTabStopPx;
-  if t < 1 then t := 1;
+  t := FTabStopPx;   // 0: a tab takes no room
   runX := 0;
   runByte := 1;
   bp := 1;
@@ -4156,7 +4181,8 @@ begin
     if cpLen < 1 then cpLen := 1;
     if ALine[bp] = #9 then
     begin
-      runX := (AWidths[i - 1] div t + 1) * t;
+      if t < 1 then runX := AWidths[i - 1]
+      else runX := (AWidths[i - 1] div t + 1) * t;
       AWidths[i] := runX;
       runByte := bp + 1;
     end

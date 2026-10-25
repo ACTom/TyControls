@@ -36,6 +36,7 @@ uses tyControls.Memo;
 | `ScrollBars` | `TScrollStyle` | `ssAutoVertical` | 滚动条策略，与 `TMemo` 同义：`ssNone` 两条都不要；`ssVertical` / `ssBoth` 强制显示竖条，`ssAutoVertical` / `ssAutoBoth` 溢出才出现；`ssHorizontal` / `ssBoth` 强制显示横条，`ssAutoHorizontal` / `ssAutoBoth` 溢出才出现。横条只在 `WordWrap = False` 时有意义（回绕模式不会横向滚动）。 |
 | `ScrollBarAutoHide` | `TTyScrollBarAutoHide` | `sbahDefault` | 内嵌滚动条闲下来之后要不要淡出，转发给它们。默认跟主题走，三个值的含义与主题令牌见 [scrollbar.md](scrollbar.md) §7。 |
 | `WordWrap` | `Boolean` | `False` | 软回绕开关。`True` 时长逻辑行按词边界折成多条可见行；`False`（默认）时长行改为横向滚动。 |
+| `TabWidth` | `Integer` | `-1` | 制表位间距，单位是空格。`-1` 跟主题的 `--memo-tab-size`（默认 8 个空格）；`0` 让制表符不占宽度；`1` 及以上就是这么多个空格，优先于令牌。小于 `-1` 的值按 `-1` 处理。 |
 | `HideSelection` | `Boolean` | `True` | 失去焦点时是否隐藏选区高亮。 |
 | `Alignment` | `TAlignment` | `taLeftJustify` | **（API parity 新增）** **每一条可见行**的水平对齐（`TMemo` 在 `stdctrls.pp:1023` 转发同名属性）。这是一个真正缺失的**能力**：从前渲染器永远从内容区左缘起画，居中的多行文字块**用任何办法都做不出来**，主题也不行。比视口**更宽**的行不参与对齐——没有可居中的余量，此时横向滚动拥有原点（与 `TTyEdit.AlignOffset` 同一条口径）。绘制、选区带、光标和**点击命中**共用同一个偏移量，不会彼此错位。 |
 | `CharCase` | `TEditCharCase` | `ecNormal` | **（API parity 新增）** 打字与赋值都强制大小写（`stdctrls.pp:1028`），复用 `TTyEdit` 的折叠规则，两个控件表现一致；设置它会像 LCL 一样**重折已有文本**（否则切到 `ecUpperCase` 的字段还在显示原来的小写值）。 |
@@ -112,7 +113,7 @@ TTyMemo 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态机制
 - 垂直移动（↑/↓）会记忆“期望列”（desired column），跨越短行后仍尽量回到原列；行内编辑/水平移动会刷新期望列。
 - 度量统一使用 `TyConfigureTextFont` 在 BGRA 位图上完成，使列宽（光标定位）与绘制结果一致（与 `TTyEdit` 的光标漂移修复同源）。
 - **制表符**前进到下一个制表位。制表位从这一行的开头算起，默认每 8 个空格宽一个；正好落在制表位上的制表符跳到下一个。绘制、光标、鼠标点击、选区、自动换行和横向滚动范围用的是同一套位置，所以用制表符分隔的列能对齐。
-- 制表位间距由令牌 `--memo-tab-size` 决定，写法同 CSS 的 `tab-size`：写数字是几个空格宽（`4`），写长度是像素（`32px`）。整个应用统一改，写在主题或控制器 `StyleOverride` 的 `:root` 里；只改一个 Memo，写进它自己的 `StyleOverride`，比如 `--memo-tab-size: 4;`。见 [tycss 参考](../tycss-reference.md) §3.4。`WantTabs` 的含义不变，仍然只决定 Tab 键是否插入制表符。
+- 制表位间距默认由令牌 `--memo-tab-size` 决定（`TabWidth` 设成 `0` 或更大的数时，以属性为准），写法同 CSS 的 `tab-size`：写数字是几个空格宽（`4`），写长度是像素（`32px`），写 `0` 则制表符不占宽度。整个应用统一改，写在主题或控制器 `StyleOverride` 的 `:root` 里；只改一个 Memo，写进它自己的 `StyleOverride`，比如 `--memo-tab-size: 4;`。见 [tycss 参考](../tycss-reference.md) §3.4。`WantTabs` 的含义不变，仍然只决定 Tab 键是否插入制表符。
 - 两点限制：含从右到左文字（阿拉伯文、希伯来文等）的行由双向布局排版，那里的制表符仍然不占宽度；自动换行时，续行里的制表位也按整行的开头算，不一定和上一行对齐。
 
 ---
