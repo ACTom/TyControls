@@ -98,6 +98,8 @@ type
       and joined every circle traced into one path to the one before. An
       empty path takes none, so a lone circle draws as it always did. }
     FPathOpen: Boolean;
+    { [R4-P] FastStrokes: see the property }
+    FFastStrokes: Boolean;
     { #83: the layer holds FScale device pixels per layout pixel. FLayoutPPI is the PPI callers
       paint at; FPPI is the PPI the drawing code scales by, which is the layout PPI except
       inside a raster scope (RasterEnter), where it is FLayoutPPI * FScale. FDeviceUnits: the
@@ -113,6 +115,9 @@ type
     { The rect clip masks it holds in the kept pool (GClipPool) are the entries that
       name it as their owner: see ClipRect. }
     procedure ReleaseClipMasks;
+    { [R4-P] the current path stroked by the hairline rasteriser when FastStrokes is on and
+      the pen is one it draws: True when it took the stroke }
+    function StrokeHairline(ACtx: TBGRACanvas2D): Boolean;
     function GetRasterPPI: Integer;
     { The canvas2D of a scaled layer works in layout pixels: BeginPaint presets scale(S, S). }
     procedure PresetCanvas2D;
@@ -480,6 +485,36 @@ type
       antialiasing, an ink that draws nothing, another thread -- strokes as StrokePath. Worth
       it only where the same path comes back; every miss records as it fills. }
     procedure StrokePathKept(AColor: TTyColor; AWidthLogical: Double);
+    { [R4-P] THE FAST WAYS TO STROKE, off by default: no control but the one that asks for
+      them draws any differently. On, two things change:
+      - StrokePath and StrokePathKept lay a solid pen narrower than one RASTER pixel (its
+        width times the canvas' uniform scale) with a hairline rasteriser instead of BGRA's
+        antialiased fill of the pen's polygon: along each segment of the flattened path,
+        column by column (row by row where it runs steeper than 45 degrees), the segment's
+        share of the column spread over the rows the line's thickness crosses, the coverage
+        of every pixel summed over the segments that reach it and capped at full, then laid
+        once with the brush the fill would use -- the same colour, global alpha, blending and
+        clip mask. The ink is the pen's area (the width times the length, a square or round
+        cap's share at the ends of an open path); joins are not drawn, so two segments
+        meeting at a shallow angle share the column at the joint and do not darken it.
+        Ten times and more cheaper on a long thin curve; the pixels differ from BGRA's fill
+        in the last steps of coverage. A dashed pen, a texture, a shadow, no antialiasing, an
+        arrow, a skewed or unequally scaled pen, or another thread strokes as before.
+      - StrokePathByDistance is open to the caller (it does not look at the switch). }
+    property FastStrokes: Boolean read FFastStrokes write FFastStrokes;
+    { [R4-P] THE CURRENT PATH STROKED BY DISTANCE: every pixel whose centre lies within half
+      the width (plus half a pixel) of the path takes the coverage a straight band that wide
+      would give it -- the overlap of [d - w/2, d + w/2] with the pixel, d its centre's
+      distance to the nearest point of the path -- laid once, so where the path comes back
+      near itself the ink is the union's, as a canvas stroke's. The pen's joins (a miter
+      within its limit, else round) and caps. Made
+      for strokes along many short segments that a polygon fill makes slow (a chart label's
+      halo round its glyphs' outline); the coverage is kept by the path, the width and the
+      clip rect, as StrokePathKept keeps its fill's, and a path met again is replayed
+      through this stroke's brush. What it does not model -- a dash, a texture, a shadow, no
+      antialiasing, a skewed or unequally scaled canvas, another thread -- strokes as
+      StrokePathKept. }
+    procedure StrokePathByDistance(AColor: TTyColor; AWidthLogical: Double);
     { Stroke the current path with the same ramp FillPathGradient fills with.
       Its own entry point rather than a flag on the fill: a stroke needs a
       width and a fill does not, and one procedure taking both would have a
@@ -678,6 +713,11 @@ function TyPainterKeptStrokeContoursForTest: Integer;
 { Every kept fill hashed alike, so that a lookup is decided by its polygon and
   clip compare alone (the kept fills dropped either way). }
 procedure TyPainterKeptFillHashesCollideForTest(AOn: Boolean);
+{ [R4-P] how many strokes the hairline rasteriser took, how many distance strokes were
+  computed (a kept one met again does not count) and how many replayed }
+function TyPainterHairlinesForTest: Integer;
+function TyPainterDistanceStrokesForTest: Integer;
+function TyPainterDistanceReplaysForTest: Integer;
 
 { BGRA'S POLYGON FILLER TAKES ITS PIVOTS FROM THE GLOBAL Random. The one-pass
   filler behind FillPolyAntialias and the Canvas2D fill, stroke and clip
@@ -5401,6 +5441,8 @@ begin
   { [R2-F] a phase: the dashes laid here, stroked solid }
   if StrokeDashPhased(ctx, devDash, ScaleF(FVecDashOffset) / w) then Exit;
   ctx.lineStyle(devDash);
+  { [R4-P] a pen under one raster pixel, when asked for }
+  if FFastStrokes and StrokeHairline(ctx) then Exit;
   CtxStroke(ctx);
 end;
 
@@ -5722,6 +5764,10 @@ type
     Ops: array of LongInt;
     NOps: Integer;
     UsedRandom: Boolean;
+    Width: Single;          // [R4-P] a distance stroke's width (raster px); 0 for a fill
+    Join: TPenJoinStyle;    // [R4-P] and its pen's join, miter limit and cap
+    Miter: Single;
+    Cap: TPenEndCap;
     Next: TTyKeptFill;      // another polygon with the same hash
     procedure Add(A: LongInt);
   end;
@@ -5898,10 +5944,13 @@ begin
   GKeptFillBytes := 0;
 end;
 
+procedure DropKeptBands; forward;
+
 procedure TyPainterKeptStrokesForTest(AOn: Boolean);
 begin
   DropKeptFills;
   DropKeptContours;
+  DropKeptBands;
   GKeptFillsOff := not AOn;
 end;
 
@@ -5999,6 +6048,8 @@ begin
   { [R2-F] a phase: the dashes laid here, stroked solid, not kept }
   if StrokeDashPhased(ctx, devDash, ScaleF(FVecDashOffset) / w) then Exit;
   ctx.lineStyle(devDash);
+  { [R4-P] a pen under one raster pixel, when asked for: nothing to keep }
+  if FFastStrokes and StrokeHairline(ctx) then Exit;
   st := nil;
   if not GKeptFillsOff and (GetCurrentThreadId = MainThreadID) then
     st := CanvasStateOf(ctx);
@@ -6106,6 +6157,936 @@ begin
       Inc(k, 2);
     end;
   FBmp.InvalidateBitmap;
+  finally
+    maskScan.Free;
+  end;
+end;
+
+{ ===== [R4-P] THE FAST STROKES ===========================================================
+
+  Both lay coverage through the brush the canvas' stroke would fill with (StrokePoly ->
+  AnyBrush): the stroke colour at the global alpha, the blending the canvas says, through
+  the clip mask's scanner where there is one. }
+function FastStrokeBrush(ABmp: TBGRABitmap; ACtx: TBGRACanvas2D; ASt: TBGRACanvasState2D;
+  out ABrush: TUniversalBrush; out AMaskScan: TBGRACustomScanner): Boolean;
+var
+  c: TBGRAPixel;
+  mode: TDrawMode;
+begin
+  c := ASt.strokeColor;
+  c.alpha := ApplyOpacity(c.alpha, ASt.globalAlpha);
+  if ACtx.linearBlend then mode := dmLinearBlend else mode := dmDrawWithTransparency;
+  AMaskScan := nil;
+  if ASt.clipMaskReadOnly <> nil then
+  begin
+    AMaskScan := TBGRASolidColorMaskScanner.Create(ASt.clipMaskReadOnly, Point(0, 0), c);
+    ABmp.ScannerBrush(ABrush, AMaskScan, mode);
+  end
+  else
+    ABmp.SolidBrush(ABrush, c, mode);
+  Result := not ABrush.DoesNothing;
+end;
+
+{ the canvas' pen as one the fast strokes draw, and its width in raster px: a solid pen,
+  no texture, no shadow, no arrow, antialiased, on this bitmap, its stroke matrix a uniform
+  scale (and a turn) }
+function FastStrokePen(ABmp: TBGRABitmap; ACtx: TBGRACanvas2D; out ASt: TBGRACanvasState2D;
+  out AWidth: Double): Boolean;
+var
+  m: TAffineMatrix;
+  a, b, c, d, zx, zy: Double;
+begin
+  Result := False;
+  ASt := nil;
+  AWidth := 0;
+  if GetCurrentThreadId <> MainThreadID then Exit;
+  ASt := CanvasStateOf(ACtx);
+  if (ASt = nil) or (ASt.strokeTextureProvider <> nil) or ACtx.hasShadow
+    or not ACtx.antialiasing or (ACtx.surface <> ABmp) or (ASt.penStroker.Arrow <> nil)
+    or (Length(ASt.penStroker.CustomPenStyle) > 0) then Exit;
+  m := ASt.penStroker.StrokeMatrix;
+  a := m[1, 1];
+  b := m[2, 1];
+  c := m[1, 2];
+  d := m[2, 2];
+  zx := Sqrt(a * a + b * b);
+  zy := Sqrt(c * c + d * d);
+  if not (zx > 0) or (Abs(zx - zy) > 1e-6 * zx) or (Abs(a * c + b * d) > 1e-6 * zx * zx) then
+    Exit;
+  AWidth := ASt.lineWidth * zx;
+  Result := (AWidth > 0) and not IsInfinite(AWidth);
+end;
+
+{ the recorded brush calls (TTyKeptFill.Ops) through ABrush on ABmp }
+procedure ReplayKeptOps(ABmp: TBGRABitmap; AFill: TTyKeptFill; var ABrush: TUniversalBrush);
+var
+  k: Integer;
+  uctx: TUniBrushContext;
+begin
+  if AFill.NOps = 0 then Exit;
+  ABmp.LoadFromBitmapIfNeeded;
+  uctx := Default(TUniBrushContext);
+  k := 0;
+  while k < AFill.NOps do
+    if AFill.Ops[k] = -1 then
+    begin
+      ABrush.MoveTo(@uctx, ABmp.GetPixelAddress(AFill.Ops[k + 1], AFill.Ops[k + 2]),
+        AFill.Ops[k + 1], AFill.Ops[k + 2]);
+      Inc(k, 3);
+    end
+    else
+    begin
+      ABrush.PutNextPixels(@uctx, Word(AFill.Ops[k]), AFill.Ops[k + 1]);
+      Inc(k, 2);
+    end;
+  ABmp.InvalidateBitmap;
+end;
+
+{ THE HAIRLINE RASTERISER's scratch: a coverage per raster pixel (0 between strokes) and
+  the pixels a stroke touched, kept on the main thread and grown to the largest bitmap met }
+var
+  GHairCov: array of Word = nil;
+  GHairTouched: array of Integer = nil;
+  GHairStrokes: Integer = 0;
+
+const
+  { a flattened path's points within this many raster px of a chord walk as the chord,
+    up to this many at a time }
+  HairChordTol = 0.05;
+  HairChordRun = 8;
+
+function TyPainterHairlinesForTest: Integer;
+begin
+  Result := GHairStrokes;
+end;
+
+{ ONE SEGMENT of a hairline: along its major axis, pixel by pixel, the part of the pixel it
+  spans (f) and the band its thickness covers across the minor axis at the middle of that
+  part, each pixel of the band taking f times its share of the band, summed into the
+  coverage (65535 full) and capped there; a pixel's first touch is written down.
+
+  REGISTER VARIABLES here, as in the graph's force step: at the default level every Double
+  local of the column loop lives on the stack. A 64-bit register holds a Double exactly as
+  memory does; x86-64 only, where Doubles are SSE values. }
+type
+  THairCtx = record
+    W: Double;               // the width, raster px
+    Bw: Integer;             // the bitmap's width: a pixel's index is y * Bw + x
+    Clip: TRect;
+    NTouched: Integer;
+  end;
+
+{$push}
+{$IFDEF CPUX86_64}{$OPTIMIZATION REGVAR}{$ENDIF}
+procedure HairSegment(var C: THairCtx; AX0, AY0, AX1, AY1: Double);
+var
+  dx, dy, len, u0, u1, v0, v1, t, slope, lo, hi, cc, ht, vlo, vhi, f, a, z: Double;
+  i0, i1, ii, j, j0, j1, uMin, uMax, vMin, vMax, kk, v, stepU, stepV: Integer;
+  cov: PWord;
+begin
+  if not ((Abs(AX0) < 1e9) and (Abs(AY0) < 1e9) and (Abs(AX1) < 1e9) and (Abs(AY1) < 1e9)) then
+    Exit;
+  dx := AX1 - AX0;
+  dy := AY1 - AY0;
+  len := Sqrt(dx * dx + dy * dy);
+  if len = 0 then Exit;
+  if Abs(dx) >= Abs(dy) then
+  begin
+    u0 := AX0; u1 := AX1; v0 := AY0; v1 := AY1;
+    uMin := C.Clip.Left; uMax := C.Clip.Right - 1; vMin := C.Clip.Top; vMax := C.Clip.Bottom - 1;
+    stepU := 1;
+    stepV := C.Bw;
+  end
+  else
+  begin
+    u0 := AY0; u1 := AY1; v0 := AX0; v1 := AX1;
+    uMin := C.Clip.Top; uMax := C.Clip.Bottom - 1; vMin := C.Clip.Left; vMax := C.Clip.Right - 1;
+    stepU := C.Bw;
+    stepV := 1;
+  end;
+  if u1 < u0 then
+  begin
+    t := u0; u0 := u1; u1 := t;
+    t := v0; v0 := v1; v1 := t;
+  end;
+  slope := (v1 - v0) / (u1 - u0);
+  { the thickness across the minor axis: the width over the cosine }
+  ht := C.W * len / (u1 - u0) / 2;
+  { only the pixels inside the clip along the major axis }
+  if u0 < uMin - 0.5 then
+  begin
+    v0 := v0 + (uMin - 0.5 - u0) * slope;
+    u0 := uMin - 0.5;
+  end;
+  if u1 > uMax + 0.5 then u1 := uMax + 0.5;
+  if u1 <= u0 then Exit;
+  cov := @GHairCov[0];
+  { floors of numbers above -4 }
+  i0 := Trunc(u0 + 4.5) - 4;
+  i1 := Trunc(u1 + 4.5) - 4;
+  if i1 > uMax then i1 := uMax;
+  for ii := i0 to i1 do
+  begin
+    lo := ii - 0.5;
+    if u0 > lo then lo := u0;
+    hi := ii + 0.5;
+    if u1 < hi then hi := u1;
+    f := hi - lo;
+    if f <= 0 then Continue;
+    cc := v0 + ((lo + hi) * 0.5 - u0) * slope;
+    vlo := cc - ht;
+    vhi := cc + ht;
+    if (vhi <= vMin - 0.5) or (vlo >= vMax + 0.5) then Continue;
+    { vlo and vhi lie within 2 of the clip here: a thickness under 1.5 }
+    j0 := Trunc(vlo + 4.5) - 4;
+    j1 := Trunc(vhi + 4.5) - 4;
+    if j0 < vMin then j0 := vMin;
+    if j1 > vMax then j1 := vMax;
+    f := f * 65535;
+    kk := ii * stepU + j0 * stepV;
+    for j := j0 to j1 do
+    begin
+      a := j - 0.5;
+      if vlo > a then a := vlo;
+      z := j + 0.5;
+      if vhi < z then z := vhi;
+      if z > a then
+      begin
+        v := Trunc(f * (z - a) + 0.5);
+        if v > 0 then
+        begin
+          if cov[kk] = 0 then
+          begin
+            if C.NTouched >= Length(GHairTouched) then
+              SetLength(GHairTouched, 2 * C.NTouched + 4096);
+            GHairTouched[C.NTouched] := kk;
+            Inc(C.NTouched);
+          end
+          else
+            v := v + cov[kk];
+          if v > 65535 then v := 65535;
+          cov[kk] := v;
+        end;
+      end;
+      Inc(kk, stepV);
+    end;
+  end;
+end;
+{$pop}
+
+function TTyPainter.StrokeHairline(ACtx: TBGRACanvas2D): Boolean;
+var
+  st: TBGRACanvasState2D;
+  w, ext: Double;
+  b: TUniversalBrush;
+  maskScan: TBGRACustomScanner;
+  pts: ArrayOfTPointF;
+  clip: TRect;
+  bw, nTouched, i, s, e, k, n, m, a, x, y, idx: Integer;
+  hc: THairCtx;
+  cap: TPenEndCap;
+  closed: Boolean;
+  uctx: TUniBrushContext;
+  q, qs: array of TPointF;
+
+  { whether every point of q strictly between AA and AK lies within HairChordTol of the
+    chord from q[AA] to q[AK], and along it }
+  function Covers(AA, AK: Integer): Boolean;
+  var
+    dx, dy, l2, lim, ex, ey, cr, dt: Double;
+    ii: Integer;
+  begin
+    Result := False;
+    dx := q[AK].x - q[AA].x;
+    dy := q[AK].y - q[AA].y;
+    l2 := dx * dx + dy * dy;
+    if l2 = 0 then Exit;
+    lim := HairChordTol * HairChordTol * l2;
+    for ii := AA + 1 to AK - 1 do
+    begin
+      ex := q[ii].x - q[AA].x;
+      ey := q[ii].y - q[AA].y;
+      cr := ex * dy - ey * dx;
+      if cr * cr > lim then Exit;
+      dt := ex * dx + ey * dy;
+      if (dt < 0) or (dt > l2) then Exit;
+    end;
+    Result := True;
+  end;
+
+  { AV of a pixel's area to raster pixel (AX, AY), inside the clip }
+  procedure Cell(AX, AY: Integer; AV: Double);
+  var
+    kk, v: Integer;
+  begin
+    if (AX < clip.Left) or (AX >= clip.Right) or (AY < clip.Top) or (AY >= clip.Bottom) then
+      Exit;
+    v := Round(AV * 65535);
+    if v <= 0 then Exit;
+    kk := AY * bw + AX;
+    if GHairCov[kk] = 0 then
+    begin
+      if nTouched >= Length(GHairTouched) then
+        SetLength(GHairTouched, 2 * nTouched + 4096);
+      GHairTouched[nTouched] := kk;
+      Inc(nTouched);
+    end
+    else
+      v := v + GHairCov[kk];
+    if v > 65535 then v := 65535;
+    GHairCov[kk] := v;
+  end;
+
+  { an open path's end pushed out by ext along its first or last segment }
+  function Pushed(const AEnd, AFrom: TPointF): TPointF;
+  var
+    ddx, ddy, l: Double;
+  begin
+    Result := AEnd;
+    ddx := AEnd.x - AFrom.x;
+    ddy := AEnd.y - AFrom.y;
+    l := Sqrt(ddx * ddx + ddy * ddy);
+    if l > 0 then
+    begin
+      Result.x := AEnd.x + ddx / l * ext;
+      Result.y := AEnd.y + ddy / l * ext;
+    end;
+  end;
+
+begin
+  Result := False;
+  if not FastStrokePen(FBmp, ACtx, st, w) or not (w < 1) then Exit;
+  Result := True;
+  pts := ACtx.currentPath;
+  if Length(pts) = 0 then Exit;
+  if not FastStrokeBrush(FBmp, ACtx, st, b, maskScan) then
+  begin
+    maskScan.Free;
+    Exit;
+  end;
+  Inc(GHairStrokes);
+  bw := FBmp.Width;
+  clip := FBmp.ClipRect;
+  if Length(GHairCov) < bw * FBmp.Height then SetLength(GHairCov, bw * FBmp.Height);
+  nTouched := 0;
+  hc.W := w;
+  hc.Bw := bw;
+  hc.Clip := clip;
+  hc.NTouched := 0;
+  cap := st.penStroker.LineCap;
+  case cap of
+    pecSquare: ext := w / 2;
+    pecRound: ext := w * Pi / 8;   // a half disc's area as a length of the line
+  else
+    ext := 0;
+  end;
+  try
+    try
+      s := 0;
+      while s <= High(pts) do
+      begin
+        { a subpath: s .. e - 1, its repeated points dropped }
+        e := s;
+        while (e <= High(pts)) and not isEmptyPointF(pts[e]) do Inc(e);
+        if Length(q) < e - s then
+        begin
+          SetLength(q, e - s);
+          SetLength(qs, e - s);
+        end;
+        n := 0;
+        for i := s to e - 1 do
+          if (n = 0) or (pts[i].x <> q[n - 1].x) or (pts[i].y <> q[n - 1].y) then
+          begin
+            q[n] := pts[i];
+            Inc(n);
+          end;
+        { THE CHORDS: BGRA flattens a curve to a twentieth of a pixel, far finer than a
+          hairline needs, and a column met by three short segments is walked three times. A
+          run of up to HairChordRun points that all lie within HairChordTol of the chord from
+          its first to its last is walked as the chord. }
+        if n > 2 then
+        begin
+          qs[0] := q[0];
+          m := 1;
+          a := 0;
+          for i := 2 to n - 1 do
+            if (i - a > HairChordRun) or not Covers(a, i) then
+            begin
+              qs[m] := q[i - 1];
+              Inc(m);
+              a := i - 1;
+            end;
+          qs[m] := q[n - 1];
+          Inc(m);
+          for i := 0 to m - 1 do q[i] := qs[i];
+          n := m;
+        end;
+        if n = 1 then
+        begin
+          { a point: a square or round cap's dot, its area on the nearest pixel }
+          if cap = pecSquare then Cell(Floor(q[0].x + 0.5), Floor(q[0].y + 0.5), w * w)
+          else if cap = pecRound then Cell(Floor(q[0].x + 0.5), Floor(q[0].y + 0.5), Pi * w * w / 4);
+        end
+        else if n > 1 then
+        begin
+          closed := (n > 2) and (q[0] = q[n - 1]);
+          if not closed and (ext > 0) then
+          begin
+            q[0] := Pushed(q[0], q[1]);
+            q[n - 1] := Pushed(q[n - 1], q[n - 2]);
+          end;
+          hc.NTouched := nTouched;
+          for i := 0 to n - 2 do
+            HairSegment(hc, q[i].x, q[i].y, q[i + 1].x, q[i + 1].y);
+          nTouched := hc.NTouched;
+        end;
+        s := e + 1;
+      end;
+      { laid once, through the stroke's brush }
+      if nTouched > 0 then
+      begin
+        FBmp.LoadFromBitmapIfNeeded;
+        uctx := Default(TUniBrushContext);
+        for k := 0 to nTouched - 1 do
+        begin
+          idx := GHairTouched[k];
+          y := idx div bw;
+          x := idx - y * bw;
+          b.MoveTo(@uctx, FBmp.GetPixelAddress(x, y), x, y);
+          b.PutNextPixels(@uctx, GHairCov[idx], 1);
+        end;
+        FBmp.InvalidateBitmap;
+      end;
+    finally
+      for k := 0 to nTouched - 1 do GHairCov[GHairTouched[k]] := 0;
+    end;
+  finally
+    maskScan.Free;
+  end;
+end;
+
+{ THE DISTANCE STROKES, KEPT: as the kept fills, by the path, the width and the clip rect }
+var
+  GKeptBands: specialize TDictionary<QWord, TTyKeptFill> = nil;
+  GKeptBandCount: Integer = 0;
+  GKeptBandBytes: Int64 = 0;
+  GBandsMade: Integer = 0;
+  GBandsReplayed: Integer = 0;
+  GBandDist: array of Single = nil;
+
+function TyPainterDistanceStrokesForTest: Integer;
+begin
+  Result := GBandsMade;
+end;
+
+function TyPainterDistanceReplaysForTest: Integer;
+begin
+  Result := GBandsReplayed;
+end;
+
+procedure DropKeptBands;
+var
+  f, n, nx: TTyKeptFill;
+begin
+  if GKeptBands <> nil then
+  begin
+    for f in GKeptBands.Values do
+    begin
+      n := f;
+      while n <> nil do
+      begin
+        nx := n.Next;
+        n.Free;
+        n := nx;
+      end;
+    end;
+    GKeptBands.Clear;
+  end;
+  GKeptBandCount := 0;
+  GKeptBandBytes := 0;
+end;
+
+{ the band's coverage as brush calls into AFill: APts the path (raster px, pixel centred),
+  AW the width in raster px, AClip the bitmap's clip rect, the pen's join, miter limit and
+  cap. False: too large a box to walk.
+
+  THE PEN'S CORNERS. Each segment is a strip AW wide. At a joint the miter is the polygon
+  vertex, the two outer corners, the tip, which the line from the vertex to the tip splits
+  into two triangles, one carried on past the end of each strip on its outer side: past the
+  vertex by s (up to e = r tan(turn / 2), r half the width) the strip keeps the points of
+  its outer half that lie beyond r s / e from its centre line. A miter whose tip would lie
+  further from the vertex than the limit times r is cut there across the bisector, as BGRA
+  cuts it (TBGRAPenStroker: the 'little border'); a bevel is BGRA's cut at r. A round join,
+  and a turn straight back, takes the disc round the vertex. An open end takes the cap: none
+  past a butt, the whole strip carried on by r for a square one, the disc for a round one.
+  Every point inside the box then takes its distance to the nearest of them. }
+function MakeDistanceBand(AFill: TTyKeptFill; const APts: ArrayOfTPointF; AW: Double;
+  const AClip: TRect; AJoin: TPenJoinStyle; AMiter: Single; ACap: TPenEndCap): Boolean;
+var
+  r, reach, reach2, xmin, xmax, ymin, ymax, d2, d, cov, ext: Double;
+  bx0, bx1, by0, by1, bwid, bht, i, j, k, n, s, x, y, a, runA, runN: Integer;
+  moved, closed: Boolean;
+  row: PSingle;
+  q: array of TPointF;
+  { per segment and end (0 its start, 1 its end): e how far the strip goes on past the
+    vertex (< 0: the disc there instead), t the miter triangle's run (r tan(turn / 2)), o
+    the outer side (the sign of ex dy - ey dx; 0: the whole strip), and a cut across the
+    bisector (cx, cy) at cm from the vertex (cm < 0: none) }
+  ux, uy, len, e0, e1, t0, t1, cx0, cy0, cm0, cx1, cy1, cm1: array of Double;
+  o0, o1: array of Integer;
+  jz, jt, jbx, jby, jm: Double;
+  segs: Integer;
+
+  { a joint between the unit directions (AU) in and (AV) out, on the side ASide:
+    jz how far each strip goes on past the vertex (-1: the disc), jt the triangle's run,
+    (jbx, jby) the outer bisector and jm the cut's distance (-1: none) }
+  procedure Joint(AUX, AUY, AVX, AVY: Double; ASide: Integer);
+  var cs, sn, half, lim, nax, nay, nbx, nby, bl, sc: Double;
+  begin
+    jz := -1;
+    jt := 0;
+    jm := -1;
+    jbx := 0;
+    jby := 0;
+    cs := AUX * AVX + AUY * AVY;
+    if (AJoin = pjsRound) or (cs <= -1 + 1e-9) then Exit;
+    sn := Abs(AUX * AVY - AUY * AVX);
+    jt := r * sn / (1 + cs);
+    jz := jt;
+    { the tip lies r / cos(turn / 2) from the vertex; BGRA cuts it at r times the limit
+      (at r for a bevel) }
+    half := Sqrt(Max(0.0, (1 + cs) / 2));
+    if (AJoin = pjsMiter) and (AMiter >= 1.001) then lim := r * AMiter else lim := r * 1.001;
+    if r <= lim * half then Exit;
+    nax := ASide * AUY;
+    nay := -ASide * AUX;
+    nbx := ASide * AVY;
+    nby := -ASide * AVX;
+    bl := Sqrt(Sqr(nax + nbx) + Sqr(nay + nby));
+    if bl <= 0 then
+    begin
+      jz := -1;
+      Exit;
+    end;
+    jbx := (nax + nbx) / bl;
+    jby := (nay + nby) / bl;
+    jm := lim;
+    { where the cut meets the strip's outer edge }
+    sc := AUX * jbx + AUY * jby;
+    if sc > 0 then
+      jz := Min(jt, (lim - r * (nax * jbx + nay * jby)) / sc);
+    if jz < 0 then jz := 0;
+  end;
+
+  procedure Seg(AK: Integer);
+  var
+    xx, yy, sx0, sx1, sy0, sy1: Integer;
+    pd: PSingle;
+    x0, y0, x1, y1, dx, dy, ex, ey, al, pp, lo, hi, dd: Double;
+  begin
+    x0 := q[AK].x;
+    y0 := q[AK].y;
+    x1 := q[AK + 1].x;
+    y1 := q[AK + 1].y;
+    dx := ux[AK];
+    dy := uy[AK];
+    lo := -Max(0.0, e0[AK]);
+    hi := len[AK] + Max(0.0, e1[AK]);
+    { the box of the carried-on strip }
+    sx0 := Ceil(Min(x0 + dx * lo, x0 + dx * hi) - reach);
+    sx1 := Floor(Max(x0 + dx * lo, x0 + dx * hi) + reach);
+    sy0 := Ceil(Min(y0 + dy * lo, y0 + dy * hi) - reach);
+    sy1 := Floor(Max(y0 + dy * lo, y0 + dy * hi) + reach);
+    if sx0 < bx0 then sx0 := bx0;
+    if sx1 > bx1 then sx1 := bx1;
+    if sy0 < by0 then sy0 := by0;
+    if sy1 > by1 then sy1 := by1;
+    for yy := sy0 to sy1 do
+    begin
+      pd := @GBandDist[(yy - by0) * bwid + (sx0 - bx0)];
+      ey := yy - y0;
+      for xx := sx0 to sx1 do
+      begin
+        ex := xx - x0;
+        al := ex * dx + ey * dy;
+        pp := ex * dy - ey * dx;
+        if al < lo then
+        begin
+          if e0[AK] >= 0 then
+          begin
+            Inc(pd);
+            Continue;
+          end;
+          dd := ex * ex + ey * ey;
+        end
+        else if al > hi then
+        begin
+          if e1[AK] >= 0 then
+          begin
+            Inc(pd);
+            Continue;
+          end;
+          dd := (xx - x1) * (xx - x1) + (yy - y1) * (yy - y1);
+        end
+        else if (al < 0) and (o0[AK] <> 0) and ((o0[AK] * pp * t0[AK] < r * -al)
+          or ((cm0[AK] >= 0) and (ex * cx0[AK] + ey * cy0[AK] > cm0[AK]))) then
+        begin
+          { before the start, inside the miter (its triangle, short of its cut) only }
+          Inc(pd);
+          Continue;
+        end
+        else if (al > len[AK]) and (o1[AK] <> 0) and ((o1[AK] * pp * t1[AK] < r * (al - len[AK]))
+          or ((cm1[AK] >= 0) and ((xx - x1) * cx1[AK] + (yy - y1) * cy1[AK] > cm1[AK]))) then
+        begin
+          Inc(pd);
+          Continue;
+        end
+        else
+          dd := pp * pp;
+        if dd < pd^ then pd^ := dd;
+        Inc(pd);
+      end;
+    end;
+  end;
+
+  { a lone point: a round cap's disc, a square cap's square }
+  procedure Dot(const AP: TPointF);
+  var
+    xx, yy: Integer;
+    pd: PSingle;
+    dd, ax, ay: Double;
+  begin
+    if ACap = pecFlat then Exit;
+    for yy := Max(by0, Ceil(AP.y - reach)) to Min(by1, Floor(AP.y + reach)) do
+    begin
+      pd := @GBandDist[(yy - by0) * bwid + (Max(bx0, Ceil(AP.x - reach)) - bx0)];
+      for xx := Max(bx0, Ceil(AP.x - reach)) to Min(bx1, Floor(AP.x + reach)) do
+      begin
+        ax := Abs(xx - AP.x);
+        ay := Abs(yy - AP.y);
+        if ACap = pecSquare then dd := Sqr(Max(ax, ay)) else dd := ax * ax + ay * ay;
+        if dd < pd^ then pd^ := dd;
+        Inc(pd);
+      end;
+    end;
+  end;
+
+begin
+  Result := True;
+  r := AW / 2;
+  reach := r + 0.5;
+  reach2 := reach * reach;
+  for i := 0 to High(APts) do
+    if not isEmptyPointF(APts[i])
+      and not ((Abs(APts[i].x) < 1e7) and (Abs(APts[i].y) < 1e7)) then Exit(False);
+  { two passes over the subpaths: the box (the strips carried on included), then the walk }
+  xmin := 0; xmax := 0; ymin := 0; ymax := 0;
+  bx0 := 0; bx1 := -1; by0 := 0; by1 := -1;
+  bwid := 0;
+  for k := 0 to 1 do
+  begin
+    if k = 1 then
+    begin
+      if bx1 < bx0 then Exit;
+      bx0 := Max(AClip.Left, Ceil(xmin - reach));
+      bx1 := Min(AClip.Right - 1, Floor(xmax + reach));
+      by0 := Max(AClip.Top, Ceil(ymin - reach));
+      by1 := Min(AClip.Bottom - 1, Floor(ymax + reach));
+      if (bx0 > bx1) or (by0 > by1) then Exit;
+      bwid := bx1 - bx0 + 1;
+      bht := by1 - by0 + 1;
+      if Int64(bwid) * bht > 16 * 1024 * 1024 then Exit(False);
+      if Length(GBandDist) < bwid * bht then SetLength(GBandDist, bwid * bht);
+      for i := 0 to bwid * bht - 1 do GBandDist[i] := reach2;
+    end;
+    s := 0;
+    while s <= High(APts) do
+    begin
+      if isEmptyPointF(APts[s]) then
+      begin
+        Inc(s);
+        Continue;
+      end;
+      { the subpath, its repeated points dropped; closed when it comes back to its start }
+      j := s;
+      while (j < High(APts)) and not isEmptyPointF(APts[j + 1]) do Inc(j);
+      SetLength(q, j - s + 1);
+      n := 0;
+      for i := s to j do
+        if (n = 0) or (APts[i].x <> q[n - 1].x) or (APts[i].y <> q[n - 1].y) then
+        begin
+          q[n] := APts[i];
+          Inc(n);
+        end;
+      s := j + 1;
+      closed := (n > 2) and (q[0].x = q[n - 1].x) and (q[0].y = q[n - 1].y);
+      if closed then Dec(n);   // q[n] (= q[0]) closes it
+      if n = 1 then
+      begin
+        if k = 0 then
+        begin
+          if bx1 < bx0 then
+          begin
+            xmin := q[0].x; xmax := xmin; ymin := q[0].y; ymax := ymin;
+            bx0 := 0; bx1 := 0;
+          end;
+          xmin := Min(xmin, q[0].x); xmax := Max(xmax, q[0].x);
+          ymin := Min(ymin, q[0].y); ymax := Max(ymax, q[0].y);
+        end
+        else
+          Dot(q[0]);
+        Continue;
+      end;
+      if closed then
+      begin
+        SetLength(q, n + 1);
+        q[n] := q[0];
+        segs := n;
+      end
+      else
+        segs := n - 1;
+      SetLength(ux, segs);
+      SetLength(uy, segs);
+      SetLength(len, segs);
+      SetLength(e0, segs);
+      SetLength(e1, segs);
+      SetLength(o0, segs);
+      SetLength(o1, segs);
+      SetLength(t0, segs);
+      SetLength(t1, segs);
+      SetLength(cx0, segs);
+      SetLength(cy0, segs);
+      SetLength(cm0, segs);
+      SetLength(cx1, segs);
+      SetLength(cy1, segs);
+      SetLength(cm1, segs);
+      for i := 0 to segs - 1 do
+      begin
+        len[i] := Sqrt(Sqr(q[i + 1].x - q[i].x) + Sqr(q[i + 1].y - q[i].y));
+        ux[i] := (q[i + 1].x - q[i].x) / len[i];
+        uy[i] := (q[i + 1].y - q[i].y) / len[i];
+      end;
+      for i := 0 to segs - 1 do
+      begin
+        { the joint at the segment's end, and so the next one's start }
+        if (i < segs - 1) or closed then
+        begin
+          j := (i + 1) mod segs;
+          if ux[i] * uy[j] - uy[i] * ux[j] >= 0 then a := 1 else a := -1;
+          Joint(ux[i], uy[i], ux[j], uy[j], a);
+          e1[i] := jz;
+          e0[j] := jz;
+          t1[i] := jt;
+          t0[j] := jt;
+          o1[i] := a;
+          o0[j] := a;
+          cx1[i] := jbx;
+          cy1[i] := jby;
+          cm1[i] := jm;
+          cx0[j] := jbx;
+          cy0[j] := jby;
+          cm0[j] := jm;
+        end;
+      end;
+      if not closed then
+      begin
+        case ACap of
+          pecFlat: ext := 0;
+          pecSquare: ext := r;
+        else
+          ext := -1;
+        end;
+        e0[0] := ext;
+        e1[segs - 1] := ext;
+        o0[0] := 0;
+        o1[segs - 1] := 0;
+        cm0[0] := -1;
+        cm1[segs - 1] := -1;
+      end;
+      for i := 0 to segs - 1 do
+        if k = 0 then
+        begin
+          if bx1 < bx0 then
+          begin
+            xmin := q[i].x; xmax := xmin; ymin := q[i].y; ymax := ymin;
+            bx0 := 0; bx1 := 0;
+          end;
+          for a := 0 to 1 do
+          begin
+            if a = 0 then d := -Max(0.0, e0[i]) else d := len[i] + Max(0.0, e1[i]);
+            xmin := Min(xmin, q[i].x + ux[i] * d);
+            xmax := Max(xmax, q[i].x + ux[i] * d);
+            ymin := Min(ymin, q[i].y + uy[i] * d);
+            ymax := Max(ymax, q[i].y + uy[i] * d);
+          end;
+        end
+        else
+          Seg(i);
+    end;
+  end;
+  { the coverage, row by row: a move at a run's first pixel, a put per run of one alpha }
+  for y := by0 to by1 do
+  begin
+    row := @GBandDist[(y - by0) * bwid];
+    moved := False;
+    runA := 0;
+    runN := 0;
+    for x := bx0 to bx1 do
+    begin
+      d2 := row^;
+      Inc(row);
+      a := 0;
+      if d2 < reach2 then
+      begin
+        d := Sqrt(d2);
+        cov := Min(d + r, 0.5) - Max(d - r, -0.5);
+        if cov >= 1 then a := 65535
+        else if cov > 0 then a := Round(cov * 65535);
+      end;
+      if a = 0 then
+      begin
+        if runN > 0 then
+        begin
+          AFill.Add(runA);
+          AFill.Add(runN);
+          runN := 0;
+        end;
+        moved := False;
+        Continue;
+      end;
+      if not moved then
+      begin
+        AFill.Add(-1);
+        AFill.Add(x);
+        AFill.Add(y);
+        moved := True;
+        runA := a;
+        runN := 1;
+      end
+      else if a = runA then
+        Inc(runN)
+      else
+      begin
+        AFill.Add(runA);
+        AFill.Add(runN);
+        runA := a;
+        runN := 1;
+      end;
+    end;
+    if runN > 0 then
+    begin
+      AFill.Add(runA);
+      AFill.Add(runN);
+    end;
+  end;
+end;
+
+procedure TTyPainter.StrokePathByDistance(AColor: TTyColor; AWidthLogical: Double);
+var
+  ctx: TBGRACanvas2D;
+  st: TBGRACanvasState2D;
+  w, wr: Double;
+  pts: ArrayOfTPointF;
+  b: TUniversalBrush;
+  maskScan: TBGRACustomScanner;
+  clip: TRect;
+  h: QWord;
+  f, first: TTyKeptFill;
+  keep, made: Boolean;
+  ws: Single;
+begin
+  if FBmp = nil then Exit;
+  w := ScaleF(AWidthLogical);
+  if w <= 0 then Exit;
+  ctx := FBmp.Canvas2D;
+  ctx.lineWidth := w;
+  ctx.strokeStyle(TyColorToBGRA(AColor));
+  if (Length(FVecDash) > 0) then
+  begin
+    StrokePathKept(AColor, AWidthLogical);
+    Exit;
+  end;
+  ctx.lineStyle([]);
+  if not FastStrokePen(FBmp, ctx, st, wr) then
+  begin
+    StrokePathKept(AColor, AWidthLogical);
+    Exit;
+  end;
+  pts := ctx.currentPath;
+  if Length(pts) = 0 then Exit;
+  if not FastStrokeBrush(FBmp, ctx, st, b, maskScan) then
+  begin
+    maskScan.Free;
+    Exit;
+  end;
+  try
+    clip := FBmp.ClipRect;
+    ws := wr;
+    keep := not GKeptFillsOff;
+    { found by the path, the width and the clip }
+    h := KeptFillHash(pts, clip);
+    {$push}{$R-}{$Q-}
+    h := (h xor QWord(PLongWord(@ws)^)) * QWord($100000001B3);
+    {$pop}
+    first := nil;
+    f := nil;
+    if keep and (GKeptBands <> nil) and GKeptBands.TryGetValue(h, first) then
+    begin
+      f := first;
+      while f <> nil do
+      begin
+        if (Length(f.Pts) = Length(pts)) and EqualRect(f.Clip, clip) and (f.Width = ws)
+          and (f.Join = st.penStroker.JoinStyle) and (f.Miter = st.penStroker.MiterLimit)
+          and (f.Cap = st.penStroker.LineCap)
+          and CompareMem(@f.Pts[0], @pts[0], Length(pts) * SizeOf(TPointF)) then
+          Break;
+        f := f.Next;
+      end;
+    end;
+    made := f = nil;
+    if made then
+    begin
+      f := TTyKeptFill.Create;
+      f.Pts := pts;
+      f.Clip := clip;
+      f.Width := ws;
+      f.Join := st.penStroker.JoinStyle;
+      f.Miter := st.penStroker.MiterLimit;
+      f.Cap := st.penStroker.LineCap;
+      if not MakeDistanceBand(f, pts, wr, clip, f.Join, f.Miter, f.Cap) then
+      begin
+        f.Free;
+        maskScan.Free;
+        maskScan := nil;
+        StrokePathKept(AColor, AWidthLogical);
+        Exit;
+      end;
+      SetLength(f.Ops, f.NOps);
+      Inc(GBandsMade);
+    end
+    else
+      Inc(GBandsReplayed);
+    ReplayKeptOps(FBmp, f, b);
+    if made then
+    begin
+      if keep then
+      begin
+        if GKeptBands = nil then
+          GKeptBands := specialize TDictionary<QWord, TTyKeptFill>.Create;
+        if (GKeptBandCount >= KeptFillsMaxCount)
+          or (GKeptBandBytes + Int64(Length(f.Pts)) * SizeOf(TPointF) + f.NOps * 4 > KeptFillsMaxBytes) then
+        begin
+          DropKeptBands;
+          first := nil;
+        end;
+        f.Next := first;
+        GKeptBands.AddOrSetValue(h, f);
+        Inc(GKeptBandCount);
+        Inc(GKeptBandBytes, Int64(Length(f.Pts)) * SizeOf(TPointF) + f.NOps * 4);
+      end
+      else
+        f.Free;
+    end;
   finally
     maskScan.Free;
   end;
