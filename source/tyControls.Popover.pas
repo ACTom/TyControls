@@ -1100,6 +1100,7 @@ begin
   ppi := Screen.PixelsPerInch;
   if ppi <= 0 then ppi := 96;
   geo := BeginShowing(AAnchorScreen, Screen.WorkAreaRect, ppi);
+  TyRaisePopupWindow(FWin);   // macOS: above a modal dialog it opens in (#104)
   FWin.Show;
   FWin.BringToFront;
   // A bsNone form can be re-placed by the WM on show (TTyBalloonHint / TTyNotification re-set

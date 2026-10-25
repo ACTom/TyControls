@@ -262,6 +262,7 @@ begin
     trigger control (no-op off GTK3-Wayland). Fixes every TTyPopup consumer -- combobox, calc,
     cascader, datetime picker, gallery, tree-select, value-list -- in one place. }
   TyAnchorPopupBelow(FForm, AAnchor);
+  TyRaisePopupWindow(FForm);   // macOS: above a modal dialog it opens in (#104)
   FForm.Show;
 
   // Qt/X11 may re-place + un-mask a frameless window at MAP time; re-assert

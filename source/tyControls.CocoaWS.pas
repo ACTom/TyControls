@@ -56,6 +56,11 @@ function TyCocoaIsZoomed(AForm: TCustomForm): Boolean;
 procedure TyCocoaSetZoomed(AForm: TCustomForm; AZoomed: Boolean);
 function TyCocoaMinimize(AForm: TCustomForm): Boolean;
 procedure TyCocoaApplyAppearance(AForm: TCustomForm; AShadow, ADark: Boolean);
+{ Window levels for TyRaisePopupWindow (#104): the one fsStayOnTop gives, a form's when its
+  window is on screen, and setting one (the window is made first if need be). }
+function TyCocoaFloatingLevel: PtrInt;
+function TyCocoaWindowLevel(AForm: TCustomForm; out ALevel: PtrInt): Boolean;
+procedure TyCocoaSetWindowLevel(AForm: TCustomForm; ALevel: PtrInt);
 
 { ---- drawing: tyControls.PlatformWS calls this, nothing else does ---------------------------- }
 function TyCocoaDrawOpaquePart(ACanvas: TCanvas; ABitmap: TBGRACustomBitmap; const ASrc, ADst: TRect): Boolean;
@@ -72,6 +77,7 @@ uses
     and without it (a project with source/ on its search path, #88). }
   {$IF lcl_fullversion >= 4000000}CocoaFullControlEdit{$ELSE}CocoaPrivate{$ENDIF},
   CocoaScrollers,   // TCocoaScrollView, the scroll view a press under the title bar stops at (#89)
+  cocoa_extra,      // NSFloatingWindowLevel: the level LCL-Cocoa gives an fsStayOnTop form
   CocoaGDIObjects,  // TCocoaContext, a canvas's Handle
   GraphType;        // riloTopToBottom
 
@@ -451,6 +457,32 @@ begin
     name := NSAppearanceNameAqua;
   win.setAppearance(NSAppearance.appearanceNamed(name));
   win.invalidateShadow;
+end;
+
+function TyCocoaFloatingLevel: PtrInt;
+begin
+  Result := NSFloatingWindowLevel;
+end;
+
+function TyCocoaWindowLevel(AForm: TCustomForm; out ALevel: PtrInt): Boolean;
+var
+  win: NSWindow;
+begin
+  ALevel := 0;
+  win := FormWindow(AForm);
+  Result := (win <> nil) and win.isVisible;
+  if Result then
+    ALevel := win.level;
+end;
+
+procedure TyCocoaSetWindowLevel(AForm: TCustomForm; ALevel: PtrInt);
+var
+  win: NSWindow;
+begin
+  AForm.HandleNeeded;
+  win := FormWindow(AForm);
+  if win <> nil then
+    win.setLevel(ALevel);
 end;
 
 { ---- drawing ----------------------------------------------------------------------------------- }

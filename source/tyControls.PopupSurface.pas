@@ -148,6 +148,7 @@ begin
   // GTK3/Wayland: a top-level can't be placed by screen coords, so anchor the popup to the
   // control it drops from (no-op off GTK3, and off GTK3-Wayland; harmless when AAnchor is nil).
   TyAnchorPopupBelow(Self, AAnchor);
+  TyRaisePopupWindow(Self);   // macOS: above a modal dialog it opens in (#104)
   Show;
   BringToFront;
 end;
