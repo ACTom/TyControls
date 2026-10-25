@@ -178,7 +178,7 @@ uses
   test.advchart.labelhalo,
   test.advchart.textdash,
   test.advchart.richimage,
-  test.advchart.halokeep, test.advchart.largespeed, test.advchart.parsekeep,
+  test.advchart.halokeep, test.advchart.faststrokes, test.advchart.largespeed, test.advchart.parsekeep,
   test.advchart.hoverlayer,
   test.advchart.radarlabel,
   test.advchart.pieitemlabel,

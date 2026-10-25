@@ -953,6 +953,9 @@ begin
     chart.Parent := form;
     chart.Controller := ctl;
     chart.AnimationMode := camOff;
+    { [R4-P] the halos stroked as the canvas strokes them: the kept fills are
+      that way's (the fast way's bands: TAdvChartFastStrokesTest) }
+    chart.ExactRendering := True;
     chart.SetBounds(0, 0, cW, cH);
     chart.Option := cTree;
     t0 := TyAdvChartHaloTracesForTest;
