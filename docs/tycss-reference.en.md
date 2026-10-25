@@ -1401,6 +1401,14 @@ Engine-level limitations (each expanded in the sections above):
     18 + 10 = 28). The drop V is centred in it, about 10 px from the right border (Windows 11 about 16, GNOME 13,
     macOS 6.5-12; centred in the bare 18 it was 5). A spin edit's buttons use `--field-button-width` alone.
 
+    **The text fields' side padding**: in the bundled themes (light, auto, dark, system, green) the edit (and what is
+    built on it: the combo edit, the mask edit, the numeric, currency and float spin edits and so on), the combo box
+    family, the spin edit, the cascader and the date picker all take `padding: var(--pad-field)`, default `4px 9px`
+    (`8px 12px` at modern density). With the 1 px border the text starts 10 px from the outer edge, as far as the drop
+    V keeps from the right one (they used `--pad-control`'s 4 px, so the text started at 5 px; the date picker used
+    `--pad-datetime` and started at 7). One token in `:root` adjusts every field; check boxes, tabs and menus still
+    read `--pad-control` and don't move. The built-in skins keep their own field padding.
+
     Token names follow the `--glyph-<kind>` convention, and internal glyph drawing funnels through one overridable entry
     point, so the remaining glyph slots (calendar paging and so on) can each be wired up with one
     line if ever needed; nobody skins those internal glyphs in practice, so they are not wired yet.

@@ -53,7 +53,7 @@ TyEdit {
   border-color: var(--border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
-  padding: 4px;
+  padding: var(--pad-field);
   font-size: var(--font-size-base);
 }
 TyEdit:hover    { border-color: var(--input-border-hover); }
@@ -109,7 +109,7 @@ TyComboBox {
   border-color: var(--border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
-  padding: 4px;
+  padding: var(--pad-field);
   font-size: var(--font-size-base);
 }
 TyComboBox:hover    { border-color: var(--input-border-hover); }
@@ -307,7 +307,7 @@ TySpinEdit {
   border-color: var(--border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
-  padding: 4px;
+  padding: var(--pad-field);
   font-size: var(--font-size-base);
 }
 TySpinEdit:hover    { border-color: var(--input-border-hover); }
@@ -382,7 +382,7 @@ TyCalendarCell { background: none; color: var(--on-surface); border-radius: var(
 TyCalendarCell:hover { background: var(--surface-hover); }
 TyCalendarCell:selected { background: var(--accent); color: var(--on-accent); }
 TyCalendarCell:disabled { color: var(--muted); }
-TyDateTimePicker { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: 4px 6px; font-size: var(--font-size-base); }
+TyDateTimePicker { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: var(--pad-field); font-size: var(--font-size-base); }
 TyDateTimePicker:hover { border-color: var(--input-border-hover); }
 TyDateTimePicker:focus { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyDateTimePicker:disabled { opacity: var(--disabled-opacity); }

@@ -1374,6 +1374,13 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
     居中、离右框约 10 px(Windows 11 约 16、GNOME 13、macOS 6.5–12;以前在 18 宽的区里居中,只有
     5)。微调框的上下按钮只用 `--field-button-width`,不加这个余量。
 
+    **文本字段的左右内距**:内置主题(light、auto、dark、system、green)里编辑框(及基于它的组合编辑框、
+    掩码编辑框、数字 / 货币 / 浮点微调框等)、组合框族、微调框、级联、日期选择的 `padding` 都是
+    `var(--pad-field)`,默认 `4px 9px`(现代密度 `8px 12px`)。加上 1 px 边框,文字离外框 10 px,和下拉 V
+    离右框一样(以前用 `--pad-control` 的 4 px,文字只离 5 px;日期选择用 `--pad-datetime`,离 7 px)。
+    在 `:root` 里改这一个令牌就能统一调所有字段;复选框、标签页、菜单仍读 `--pad-control`,不跟着动。
+    内置皮肤保留各自的字段内距。
+
     令牌名遵循 `--glyph-<kind>` 约定,内部字形绘制统一走一个可覆盖入口,所以其余字形槽(日历翻页等)
     如需也能一行接入——只是这些内部字形一般无人换肤,暂未接。
     例:`--glyph-check: "Segoe MDL2 Assets" "\e73e";`。未设时用内置矢量字形。**注意**:设了有效覆盖

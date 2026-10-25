@@ -126,6 +126,7 @@ begin
     '  --pad-control: 8px;' + LineEnding +
     '  --pad-datetime: 8px 12px;' + LineEnding +
     '  --pad-empty: 32px;' + LineEnding +
+    '  --pad-field: 8px 12px;' + LineEnding +
     '  --pad-group-header: 4px 20px;' + LineEnding +
     '  --pad-groupbox: 12px 20px;' + LineEnding +
     '  --pad-none: 0px;' + LineEnding +
