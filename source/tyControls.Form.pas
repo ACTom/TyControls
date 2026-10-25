@@ -1458,13 +1458,19 @@ begin
   FIcon.OnChange := @IconChanged;
   FMacTrafficLights := True;
   SetBounds(0, 0, 200, TyTitleBarHeightFor(ActiveController));
+  { csNoDesignVisible on each: the designer still draws a control whose Visible is False unless
+    it opts out, and a switched-off button left on screen covers the one that moved into its
+    slot (#105). Set before any Visible change -- the designer re-reads it only on one. }
   FMinButton := TTyCaptionButton.Create(Self);
+  FMinButton.ControlStyle := FMinButton.ControlStyle + [csNoDesignVisible];
   FMinButton.Kind := cbkMin;
   FMinButton.Parent := Self;
   FMaxButton := TTyCaptionButton.Create(Self);
+  FMaxButton.ControlStyle := FMaxButton.ControlStyle + [csNoDesignVisible];
   FMaxButton.Kind := cbkMax;
   FMaxButton.Parent := Self;
   FCloseButton := TTyCaptionButton.Create(Self);
+  FCloseButton.ControlStyle := FCloseButton.ControlStyle + [csNoDesignVisible];
   FCloseButton.Kind := cbkClose;
   FCloseButton.Parent := Self;
   LayoutButtons;
