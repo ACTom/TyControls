@@ -479,24 +479,30 @@ end;
 procedure TChromeOverlayTest.TestTheCachedLayerDrawsTheSamePixels;
 var
   kids: array[0..2] of TOvlButton;
-  i: Integer;
+  i, pass: Integer;
   a, b: TBGRABitmap;
 begin
   kids[0] := AddButton(FCard, 0, 70, 60, 24);                          { the frame }
   kids[1] := AddButton(FCard, 0, 0, 40, 30);                           { a corner }
   kids[2] := AddButton(FCard, 40, FCard.HeaderRect.Bottom - 10, 60, 20); { the separator }
-  for i := 0 to High(kids) do
+  for pass := 0 to 1 do
   begin
-    TyChromeMode := 0;
-    a := kids[i].Render;
-    TyChromeMode := 2;
-    b := kids[i].Render;
-    try
-      AssertTrue(Format('child %d: the kept layer gives what drawing it afresh gives', [i]),
-        Same(a, b));
-    finally
-      a.Free;
-      b.Free;
+    if pass = 1 then   { a see-through card: its layer is kept with the opacity in it }
+      FCard.StyleOverride := 'border-color: #ff0000; border-width: 2px; border-radius: 8px;'
+        + ' opacity: 0.5;';
+    for i := 0 to High(kids) do
+    begin
+      TyChromeMode := 0;
+      a := kids[i].Render;
+      TyChromeMode := 2;
+      b := kids[i].Render;
+      try
+        AssertTrue(Format('pass %d, child %d: the kept layer gives what drawing it afresh gives',
+          [pass, i]), Same(a, b));
+      finally
+        a.Free;
+        b.Free;
+      end;
     end;
   end;
 end;
