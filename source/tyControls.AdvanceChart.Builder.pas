@@ -4080,49 +4080,6 @@ var
       ASpec.ForcedLabelStep := Trunc(used) + 1;
   end;
 
-  { ONE BOUND OF grid.outerBounds on the canvas: upstream merges it into
-    {left: 0, right: 0} keeping at most two of left, right and width -- the
-    author's own when they wrote two, else theirs and the first default --
-    and then getLayoutRect solves it. }
-  procedure OuterDim(ANode: TJSONObject; const ALo, AHi, ASize: string;
-    AExtent: Double; out APos, ALen: Double);
-  var
-    lo, hi, sz: TTyBoxValue;
-    hasLo, hasHi, hasSz: Boolean;
-    n: Integer;
-  begin
-    hasLo := (ANode <> nil) and (ANode.Find(ALo) <> nil);
-    hasHi := (ANode <> nil) and (ANode.Find(AHi) <> nil);
-    hasSz := (ANode <> nil) and (ANode.Find(ASize) <> nil);
-    n := Ord(hasLo) + Ord(hasHi) + Ord(hasSz);
-    lo := TyBoxPx(0);
-    hi := TyBoxPx(0);
-    sz := TyBoxAuto;
-    if hasLo then lo := TyBoxDataOf(ANode.Find(ALo), TyBoxPx(0));
-    if hasHi then hi := TyBoxDataOf(ANode.Find(AHi), TyBoxPx(0));
-    if hasSz then sz := TyBoxDataOf(ANode.Find(ASize), TyBoxAuto);
-    { TWO WRITTEN: only those two, the defaults dropped. One written keeps
-      a default beside it, and whichever it keeps comes to the same rect:
-      a lone width stands at left 0, a lone left or right runs to the other
-      side's 0. }
-    if n >= 2 then
-    begin
-      if not hasLo then lo := TyBoxAuto;
-      if not hasHi then hi := TyBoxAuto;
-    end;
-    if sz.Kind <> buAuto then
-    begin
-      ALen := TyBoxResolve(sz, AExtent);
-      if lo.Kind <> buAuto then APos := TyBoxResolve(lo, AExtent)
-      else APos := AExtent - TyBoxResolve(hi, AExtent) - ALen;
-    end
-    else
-    begin
-      APos := TyBoxResolve(lo, AExtent);
-      ALen := AExtent - TyBoxResolve(hi, AExtent) - APos;
-    end;
-  end;
-
   { The grid's plot rect: upstream's resize, after the raw rect. }
   function SolveGridRect(AGrid: TTyGridBuild; AGridNode: TJSONObject;
     const ASpecs: TTyAxisLayoutSpecArray): TTyXYWH;
@@ -4135,6 +4092,7 @@ var
     ob: TJSONObject;
     cw, ch: Double;
     vp: TTyXYWH;
+    obBox: TTyRawBox;
   begin
     rawR := AGrid.FOuterRect;
     raw := AGrid.FOuterXYWH;
@@ -4157,16 +4115,22 @@ var
       outer := raw
     else if (s = '') or (s = 'auto') then
     begin
-      { the bounds on the canvas: {left, right, top, bottom: 0} unless
-        grid.outerBounds says otherwise }
+      { the bounds on the canvas: OUTER_BOUNDS_DEFAULT {left, right, top,
+        bottom: 0} under grid.outerBounds, merged as a box at init
+        (GridModel.mergeDefaultAndTheme) -- a merge wrote back what its own
+        mergeLayoutParam made, a null where it dropped a key [R3-B] -- then
+        getLayoutRect, a null or a missing key NaN, `containerRect.x || 0`
+        included (a calendar day off its range has a size and no place
+        [Batch 151]) }
       ob := nil;
       if AGridNode <> nil then ob := ObjOf(AGridNode.Find('outerBounds'));
-      OuterDim(ob, 'left', 'right', 'width', vp.W, outer.X, outer.W);
-      OuterDim(ob, 'top', 'bottom', 'height', vp.H, outer.Y, outer.H);
-      { getLayoutRect's `containerRect.x || 0`: a calendar day off its range
-        has a size and no place [Batch 151] }
-      if IsNan(vp.X) then outer.X := 0 + outer.X else outer.X := vp.X + outer.X;
-      if IsNan(vp.Y) then outer.Y := 0 + outer.Y else outer.Y := vp.Y + outer.Y;
+      obBox := Default(TTyRawBox);
+      obBox.Left := TyBoxRawNum(0);
+      obBox.Right := TyBoxRawNum(0);
+      obBox.Top := TyBoxRawNum(0);
+      obBox.Bottom := TyBoxRawNum(0);
+      obBox := TyMergeBoxLayout(ob, obBox);
+      outer := TyGetLayoutRect(obBox, vp.X, vp.Y, vp.W, vp.H, [0]);
     end
     else
       { 'none' -- and anything upstream does not know, which it ignores too }
