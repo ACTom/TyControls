@@ -357,6 +357,9 @@ type
     FOvrMetricVer: Cardinal;
     // pilot (ITyChromeHost): the ChromeSignature the windowed children were last repainted for
     FChromeSig: string;
+    // pilot (ITyChromeHost, TyChromeMode 2): this host's chrome layer, and what it was drawn for
+    FChromeCache: TBGRABitmap;
+    FChromeCacheKey: string;
     procedure SetStyleClass(const AValue: string);
     procedure SetStyleOverride(const AValue: string);
   protected
@@ -620,6 +623,26 @@ var
   { Pilot switch for ITyChromeHost: True by default. False draws every control without the
     overlay, for an A/B look and a cost measurement. }
   TyChromeOverlayEnabled: Boolean = True;
+  { Pilot only, to go before this merges: how the overlay is drawn, so the three can be
+    measured side by side. 0: every band draws the host's chrome afresh; 1: the same, but a
+    band that touches none of the host's corners skips their parent background; 2: the host
+    keeps its chrome layer (rebuilt when ChromeSignature changes) and a band copies its part. }
+  TyChromeMode: Integer = 2;
+
+type
+  { Pilot only: where the overlay's time goes, in microseconds, summed until reset. }
+  TTyChromeStats = record
+    Passes, Bands, CacheBuilds: Int64;
+    SetupUs, LayerUs, CornerUs, FrameUs, SeparatorUs: Int64;
+    FetchUs, CacheBuildUs, CopyUs, BlitUs: Int64;
+    CacheBytes: Int64;   // what the hosts' chrome caches hold now
+  end;
+
+var
+  TyChromeStats: TTyChromeStats;
+
+{ Pilot only: a microsecond clock for TyChromeStats (QueryPerformanceCounter on Windows). }
+function TyChromeClockUs: Int64;
 
 { Pilot. Paint, over AControl's own surface on ACanvas (AControl's (0,0) at the canvas's
   (0,0)), every ancestor ITyChromeHost's chrome that passes over it. }
@@ -1909,14 +1932,49 @@ var
   pc: TTyColor;
   gHost: ITyGlassHost;
   gOff: TPoint;
+  vis: TRect;
+  r, s: Integer;
+  touches: Boolean;
+  t0: Int64;
+
+  function Meet(const A, B: TRect): Boolean;
+  begin
+    Result := (A.Left < B.Right) and (B.Left < A.Right) and (A.Top < B.Bottom)
+      and (B.Top < A.Bottom);
+  end;
+
 begin
   corners := TyEffectiveCorners(AStyle);
   effStyle := AStyle;
   TyApplyRenderStyle(effStyle, corners);   // the shape the host's own fill has
+  t0 := TyChromeClockUs;
   if ((corners.TL > 0) or (corners.TR > 0) or (corners.BR > 0) or (corners.BL > 0))
      and not TyResolveGlassHost(AOwner, gHost, gOff) and TyResolveParentBg(AOwner, pc) then
-    APainter.FillCornerGaps(ARect, corners, pc);
+  begin
+    touches := True;
+    if (TyChromeMode = 1) and (APainter.Bitmap <> nil) then
+    begin
+      { a band on a straight edge, clear of every corner, has no corner gap to fill }
+      r := corners.TL;
+      if corners.TR > r then r := corners.TR;
+      if corners.BR > r then r := corners.BR;
+      if corners.BL > r then r := corners.BL;
+      r := APainter.Scale(r) + 1;
+      s := APainter.DeviceScale;
+      if s < 1 then s := 1;
+      vis := Rect(0, 0, APainter.Bitmap.Width div s, APainter.Bitmap.Height div s);
+      touches := Meet(vis, Rect(ARect.Left, ARect.Top, ARect.Left + r, ARect.Top + r))
+        or Meet(vis, Rect(ARect.Right - r, ARect.Top, ARect.Right, ARect.Top + r))
+        or Meet(vis, Rect(ARect.Left, ARect.Bottom - r, ARect.Left + r, ARect.Bottom))
+        or Meet(vis, Rect(ARect.Right - r, ARect.Bottom - r, ARect.Right, ARect.Bottom));
+    end;
+    if touches then
+      APainter.FillCornerGaps(ARect, corners, pc);
+  end;
+  Inc(TyChromeStats.CornerUs, TyChromeClockUs - t0);
+  t0 := TyChromeClockUs;
   TyDrawFrameChrome(AOwner, APainter, ARect, AStyle);
+  Inc(TyChromeStats.FrameUs, TyChromeClockUs - t0);
 end;
 
 procedure TTyGraphicControl.DrawFrame(APainter: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet);
@@ -2101,6 +2159,11 @@ begin
   else
     TyDefaultController.UnregisterStyleable(Self);
   FreeAndNil(FOvrMetrics);
+  if FChromeCache <> nil then
+  begin
+    Dec(TyChromeStats.CacheBytes, Int64(FChromeCache.Width) * FChromeCache.Height * 4);
+    FreeAndNil(FChromeCache);
+  end;
   inherited Destroy;
 end;
 
@@ -2622,23 +2685,117 @@ end;
   AHostOrigin there): one transparent layer per band that reaches into the chrome, composited
   over what ACanvas already holds. Bands, not the whole area: a large child that touches the
   frame along one edge pays for that edge only. }
+{$IFDEF MSWINDOWS}
+function TyQpcCounter(out ACount: Int64): LongBool; stdcall;
+  external 'kernel32' name 'QueryPerformanceCounter';
+function TyQpcFrequency(out AFreq: Int64): LongBool; stdcall;
+  external 'kernel32' name 'QueryPerformanceFrequency';
+{$ENDIF}
+
+function TyChromeClockUs: Int64;
+{$IFDEF MSWINDOWS}
+var
+  c, f: Int64;
+begin
+  if TyQpcCounter(c) and TyQpcFrequency(f) and (f > 0) then
+    Result := (c div f) * 1000000 + ((c mod f) * 1000000) div f
+  else
+    Result := Int64(GetTickCount64) * 1000;
+end;
+{$ELSE}
+begin
+  Result := Int64(GetTickCount64) * 1000;
+end;
+{$ENDIF}
+
+{ TyChromeMode 2: AHostCtl's chrome layer at AScale device px per layout px, drawn once and
+  kept until what it shows changes (ChromeSignature) or the PPI or the scale does. The whole
+  host, transparent where there is no chrome: a band copies its part. Built only for a host
+  that has a child on its chrome, so a host without one holds nothing. }
+function TyChromeCacheFor(AHostCtl: TTyCustomControl; const AHost: ITyChromeHost;
+  APPI, AScale: Integer): TBGRABitmap;
+var
+  key: string;
+  P: TTyPainter;
+  sc: TTyCanvasScale;
+  op: Single;
+  t0: Int64;
+begin
+  key := AHost.ChromeSignature + '|' + IntToStr(APPI) + '|' + IntToStr(AScale);
+  if (AHostCtl.FChromeCache <> nil) and (AHostCtl.FChromeCacheKey = key) then
+    Exit(AHostCtl.FChromeCache);
+  t0 := TyChromeClockUs;
+  if AHostCtl.FChromeCache <> nil then
+  begin
+    Dec(TyChromeStats.CacheBytes,
+      Int64(AHostCtl.FChromeCache.Width) * AHostCtl.FChromeCache.Height * 4);
+    FreeAndNil(AHostCtl.FChromeCache);
+  end;
+  Result := TBGRABitmap.Create(AHostCtl.Width * AScale, AHostCtl.Height * AScale,
+    BGRAPixelTransparent);
+  sc.Scale := AScale;
+  sc.DeviceUnits := False;
+  op := 1.0;
+  P := TTyPainter.Create;
+  try
+    P.BeginPaintOnScaled(nil, Rect(0, 0, AHostCtl.Width, AHostCtl.Height), APPI, Result, sc);
+    AHost.PaintChromeLayer(P, Point(0, 0));
+    op := P.Opacity;   // a painter with no canvas leaves its opacity to the caller
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+  if op < 1.0 then
+    Result.ApplyGlobalOpacity(Round(op * 255));
+  AHostCtl.FChromeCache := Result;
+  AHostCtl.FChromeCacheKey := key;
+  Inc(TyChromeStats.CacheBytes, Int64(Result.Width) * Result.Height * 4);
+  Inc(TyChromeStats.CacheBuilds);
+  Inc(TyChromeStats.CacheBuildUs, TyChromeClockUs - t0);
+end;
+
 procedure TyPaintHostChrome(const AHost: ITyChromeHost; AHostCtl: TControl; ACanvas: TCanvas;
   APPI: Integer; const AHostOrigin: TPoint; const AArea: TRect);
 var
   bands: TTyChromeBands;
-  i, n: Integer;
+  i, n, s: Integer;
   P: TTyPainter;
+  cache: TBGRABitmap;
+  t0, t1, t2: Int64;
 begin
   n := TyChromeBands(AArea, AHostOrigin, AHostCtl.Width, AHostCtl.Height,
     AHost.ChromeFreeRect, bands);
+  if n = 0 then Exit;
+  Inc(TyChromeStats.Passes);
   for i := 0 to n - 1 do
   begin
+    Inc(TyChromeStats.Bands);
     P := TTyPainter.Create;
     try
+      t0 := TyChromeClockUs;
       P.BeginPaint(ACanvas, bands[i], APPI);
-      AHost.PaintChromeLayer(P, Point(AHostOrigin.X - bands[i].Left,
-        AHostOrigin.Y - bands[i].Top));
+      t1 := TyChromeClockUs;
+      Inc(TyChromeStats.SetupUs, t1 - t0);
+      if (TyChromeMode = 2) and (AHostCtl is TTyCustomControl) then
+      begin
+        s := P.DeviceScale;
+        if s < 1 then s := 1;
+        cache := TyChromeCacheFor(TTyCustomControl(AHostCtl), AHost, APPI, s);
+        t2 := TyChromeClockUs;
+        Inc(TyChromeStats.FetchUs, t2 - t1);
+        P.Bitmap.PutImage((AHostOrigin.X - bands[i].Left) * s,
+          (AHostOrigin.Y - bands[i].Top) * s, cache, dmSet);
+        Inc(TyChromeStats.CopyUs, TyChromeClockUs - t2);
+      end
+      else
+      begin
+        AHost.PaintChromeLayer(P, Point(AHostOrigin.X - bands[i].Left,
+          AHostOrigin.Y - bands[i].Top));
+        Inc(TyChromeStats.LayerUs, TyChromeClockUs - t1);
+      end;
+      t2 := TyChromeClockUs;
       P.EndPaint;
+      Inc(TyChromeStats.BlitUs, TyChromeClockUs - t2);
     finally
       P.Free;
     end;
