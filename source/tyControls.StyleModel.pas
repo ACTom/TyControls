@@ -143,6 +143,7 @@ type
     procedure LayerChainChildren(const AChain: TStringArray; const AStyleClass: string;
       AStates: TTyStateSet; var AResult: TTyStyleSet);
     function UserHasTypeKey(const ATypeKey: string): Boolean;
+    procedure AdoptBaseRules(ANewRules: TFPList);
   public
     constructor Create;
     destructor Destroy; override;
@@ -1551,7 +1552,10 @@ function TTyStyleModel.UserHasTypeKey(const ATypeKey: string): Boolean;
   erased their toggle switches everywhere, which rendered as a blank white patch on the
   Ant Design title bar. Every repo theme ships a base rule for the typeKeys it actually
   dresses, so this narrowing is a no-op for them and only restores the base layer for the
-  add-on-only case. }
+  add-on-only case.
+
+  Only a THEME takes a key over this way. An additive load copies the base rules for a key in
+  ahead of its own plain rule for it (AdoptBaseRules), so a patch never does. }
 var
   i: Integer;
   e: TTyStyleRuleEntry;
@@ -1562,6 +1566,48 @@ begin
     e := TTyStyleRuleEntry(FRules[i]);
     if SameText(e.TypeName, ATypeKey) and (e.Variant = '') and (not e.HasState) then
       Exit(True);
+  end;
+end;
+
+procedure TTyStyleModel.AdoptBaseRules(ANewRules: TFPList);
+{ #106. An additive load calls this just before it appends ANewRules to the user layer. A plain
+  rule there makes UserHasTypeKey true for its key, and ResolveStyle then drops every base rule
+  for that key. That is right for a theme, which dresses the control itself, and wrong for a patch
+  on a key the theme leaves to the base layer: on the default theme a padding-only TyCascader rule
+  erased the cascader's fill, border and ink, while the same rule on TyEdit, which the theme does
+  dress, only moved the padding.
+
+  So for every key the new rules give a plain rule and the user layer does not own yet, copy the
+  base rules for it to the FRONT of the user layer, in base order. The key then resolves as if
+  the theme had written those rules: the patch, appended after them, changes only what it
+  declares, and the :hover/:focus rules still apply over it, as a theme's own do on TyEdit. }
+var
+  keys: TStringList;
+  i, ins: Integer;
+  e: TTyStyleRuleEntry;
+begin
+  keys := TStringList.Create;   // case-insensitive, like UserHasTypeKey's SameText
+  try
+    keys.Sorted := True;
+    keys.Duplicates := dupIgnore;
+    for i := 0 to ANewRules.Count - 1 do
+    begin
+      e := TTyStyleRuleEntry(ANewRules[i]);
+      if (e.Variant = '') and (not e.HasState) and (not UserHasTypeKey(e.TypeName)) then
+        keys.Add(e.TypeName);
+    end;
+    if keys.Count = 0 then Exit;
+    ins := 0;
+    for i := 0 to FBaseRules.Count - 1 do
+    begin
+      e := TTyStyleRuleEntry(FBaseRules[i]);
+      if keys.IndexOf(e.TypeName) < 0 then Continue;
+      AddEntryTo(FRules, e.TypeName, e.Variant, e.HasState, e.State, e.Decls);
+      FRules.Move(FRules.Count - 1, ins);
+      Inc(ins);
+    end;
+  finally
+    keys.Free;
   end;
 end;
 
@@ -1740,6 +1786,9 @@ begin
     ValidateRules(tmpRules, tmpMerged);
     // Commit. Replace clears first; additive appends rules + merges vars (new wins) so
     // the appended entries sort LAST (importer/override wins via ApplyAllMatching order).
+    // An additive load first brings in the base rules for a key it would take over (#106).
+    if (not AReplace) and (ARules = FRules) then
+      AdoptBaseRules(tmpRules);
     if AReplace then
     begin
       ClearList(ARules);
