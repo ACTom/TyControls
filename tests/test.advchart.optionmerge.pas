@@ -36,7 +36,15 @@ unit test.advchart.optionmerge;
   control will do it -- the keys taken right after the setOption, a brand
   new model's never an old one's. By hand: a replaced series enters while
   the one kept by id updates; a bad replaceMerge or options text is
-  refused; a series on a hole axis is unresolved, not a crash. }
+  refused; a series on a hole axis is unresolved, not a crash.
+
+  [R3-B] The box merge of every model whose mergeOption runs
+  mergeLayoutParam (toolbox, calendar with its cell size, geo, singleAxis,
+  thumbnail, the map series, a grid's outerBounds; not the slider dataZoom
+  nor parallel), on the maps the fixture registers; and in the cases
+  marked `vis` the visualMap models' completed visuals (kept across merges,
+  replaced where a merge writes a visual key) and each item's fill and
+  opacity. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -47,8 +55,9 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.DataZoom, tyControls.AdvanceChart.Title, tyControls.AdvanceChart.Series,
      tyControls.AdvanceChart.Anim, tyControls.AdvanceChart.AnimView,
      tyControls.AdvanceChart.Events, tyControls.AdvanceChart.Legend, tyControls.AdvanceChart.Color,
+     tyControls.AdvanceChart.Geo,
      tyControls.AdvanceChart,
-     test.advchart.gridbounds, test.advchart.categoryminmax;
+     test.advchart.gridbounds, test.advchart.categoryminmax, test.advchart.mergevis;
 type
   TOmProbe = class(TTyAdvanceChart)
   protected
@@ -84,6 +93,7 @@ type
     procedure CmpTree(const AWhere: string; AExp: TJSONObject);
     procedure CmpModels(const AWhere: string; AExp: TJSONObject);
     procedure CmpOut(const AWhere: string; AExp: TJSONObject; ACompareFill: Boolean);
+    procedure CmpVis(const AWhere: string; AExp: TJSONObject);
     procedure RunStep(AStep: TJSONObject);
     function SeriesElements(ASeries: Integer): Integer;
   protected
@@ -699,6 +709,12 @@ begin
   end;
 end;
 
+{ [R3-B] the visualMap models' completed visuals and what each item shows }
+procedure TAdvChartOptionMergeTest.CmpVis(const AWhere: string; AExp: TJSONObject);
+begin
+  Inc(FCompared, TyMvCheckVis(FChart, FChart.List, AExp, AWhere, @Bad));
+end;
+
 procedure TAdvChartOptionMergeTest.RunStep(AStep: TJSONObject);
 var
   p: TJSONObject;
@@ -834,6 +850,12 @@ var
   prevIds, prevSubs: array of string;
   k: Integer;
 begin
+  { [R3-B] the maps the geo and map cases draw on }
+  if TJSONObject(FRoot).Find('maps') is TJSONArray then
+    for k := 0 to TJSONObject(FRoot).Arrays['maps'].Count - 1 do
+      AssertTrue('the map registers', TyChartRegisterMap(
+        TJSONObject(TJSONObject(FRoot).Arrays['maps'].Items[k]).Strings['name'],
+        TJSONObject(TJSONObject(FRoot).Arrays['maps'].Items[k]).Strings['text']));
   cases := TJSONObject(FRoot).Arrays['cases'];
   for ci := 0 to cases.Count - 1 do
   begin
@@ -857,6 +879,7 @@ begin
         before [Batch 97] }
       if st.Get('noFrame', False) then Continue;
       CmpOut(w + ' out', st.Objects['out'], fill);
+      if st.Find('vis') is TJSONObject then CmpVis(w + ' vis', st.Objects['vis']);
       { ---- the views: upstream kept one exactly where the port's
         (id, type) pairs the series to an old one ---- }
       cv := st.Arrays['views'];

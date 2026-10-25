@@ -31,7 +31,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.OptionMerge, tyControls.AdvanceChart.Media,
      tyControls.AdvanceChart.Title, tyControls.AdvanceChart.Legend,
      tyControls.AdvanceChart,
-     test.advchart.gridbounds, test.advchart.categoryminmax;
+     test.advchart.gridbounds, test.advchart.categoryminmax, test.advchart.mergevis;
 type
   TMdProbe = class(TTyAdvanceChart)
   protected
@@ -655,6 +655,13 @@ begin
       CmpTree(where + ' tree', TJSONObject(st.Find('tree')));
       CmpModels(where + ' models', TJSONObject(st.Find('models')));
       CmpOut(where + ' out', TJSONObject(st.Find('out')));
+      { [R3-B] the visualMap models' visuals, the items, the graphic view }
+      if st.Find('vis') is TJSONObject then
+        Inc(FCompared, TyMvCheckVis(FChart, FChart.List, TJSONObject(st.Find('vis')),
+          where + ' vis', @Bad));
+      if st.Find('gfx') is TJSONArray then
+        Inc(FCompared, TyMvCheckGfx(FChart, TJSONArray(st.Find('gfx')), False,
+          where + ' gfx', @Bad));
       { THE VIEWS: upstream kept a series' view across the step exactly
         where the port's pairing key -- model id and type -- stayed }
       views := st.Arrays['views'];
