@@ -186,6 +186,7 @@ protected 的属性照样能在自己的 published 段里发布。只是想让�
 | 级联选择 / 树形选择的节点编辑器 | `TTyCascader`、`TTyTreeSelect` | 双击编辑选项树 |
 | 列表分组编辑器 | `TTyListGroupPanel` | 编辑分组 |
 | 终端编辑器 | `TTyTerminalView` | 导入 / 导出配色方案 |
+| 图表编辑器 | `TTyAdvanceChart` | 编辑 `Option`（ECharts 配置）、编辑系列和数据 |
 | 图像集合编辑器 | `TTyImageCollection` | 管理图片 |
 | 对话框预览 | 各对话框 | 预览 |
 | 图标浏览器 | `TTyIconFont`、`TTyLucideIconFont`、`TTyVirtualImageList`、`TTyLucideImageList` | 浏览图标 |
@@ -271,7 +272,6 @@ end;
 | 对话框：`TTySelectPathDialog`、`TTyColorDialog`、`TTyFontDialog`、`TTyFindDialog`、`TTyReplaceDialog`、`TTyOpenDialog`、`TTySaveDialog`、`TTyOpenPictureDialog`、`TTySavePictureDialog`、`TTyOpenPreviewDialog`、`TTySavePreviewDialog` | LCL 的 `TCommonDialog` 一系（`TOpenDialog`、`TColorDialog`……）每层都直接发布 | 直接派生 | 跟 LCL，不拆 |
 | `TTyForm`、`TTyDialog` | 它们扮演的是 `TForm` 的角色：你的窗体本来就从它们派生 | 照常「新建窗体」，或者 `class(TTyForm)` | 不拆 |
 | `TTyToolWindowManager` | 已经有 `TTyCustomToolWindowManager`（什么都不发布），但跨栏移动、排队、布局保存这些实现为了单元依赖放在最终类里 | 从 `TTyToolWindowManager` 派生，别从 `TTyCustomToolWindowManager` 派生——后者挂得上栏的 `Manager`，却不会移动窗口、存不了布局 | 等实现能挪进 Custom 类再拆，目前没排期 |
-| `TTyAdvanceChart` | 图表还在大量开发中，类声明常改 | 直接派生 | 等它稳定下来再拆 |
 
 另外 8 个 Ty 自己的对话框（`TTyMessage`、`TTyInputDialog`、`TTyPasswordDialog`、`TTyTextDialog`、`TTySelectValueDialog`、`TTyProgressDialog`、`TTyAboutDialog`、`TTyIconBrowserDialog`）是拆了的，LCL 的 `TCustomTaskDialog` / `TTaskDialog` 也是这么拆。
 

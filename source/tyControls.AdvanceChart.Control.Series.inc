@@ -3,7 +3,7 @@
   visuals. Moved out of the unit only to keep it readable; what the control is and why it
   is built the way it is, see the unit header. }
 
-procedure TTyAdvanceChart.SolvePies;
+procedure TTyCustomAdvanceChart.SolvePies;
 var
   i, dim, k: Integer;
   cell: TTyXYWH;
@@ -64,7 +64,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.SolveFunnels;
+procedure TTyCustomAdvanceChart.SolveFunnels;
 var
   i, dim: Integer;
   cell: TTyXYWH;
@@ -102,14 +102,14 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.FreeRadars;
+procedure TTyCustomAdvanceChart.FreeRadars;
 var i: Integer;
 begin
   for i := 0 to High(FRadars) do FreeAndNil(FRadars[i]);
   FRadars := nil;
 end;
 
-function TTyAdvanceChart.RadarLayout(AIndex: Integer): TTyRadar;
+function TTyCustomAdvanceChart.RadarLayout(AIndex: Integer): TTyRadar;
 begin
   Result := nil;
   if (AIndex >= 0) and (AIndex <= High(FRadars)) then Result := FRadars[AIndex];
@@ -117,7 +117,7 @@ end;
 
 { ==================== the polars [Batch 111] ==================== }
 
-procedure TTyAdvanceChart.FreePolars;
+procedure TTyCustomAdvanceChart.FreePolars;
 var i: Integer;
 begin
   for i := 0 to High(FPolars) do
@@ -125,12 +125,12 @@ begin
   FPolars := nil;
 end;
 
-function TTyAdvanceChart.PolarCount: Integer;
+function TTyCustomAdvanceChart.PolarCount: Integer;
 begin
   Result := Length(FPolars);
 end;
 
-function TTyAdvanceChart.PolarLayout(AIndex: Integer): TTyPolar;
+function TTyCustomAdvanceChart.PolarLayout(AIndex: Integer): TTyPolar;
 begin
   if (AIndex < 0) or (AIndex > High(FPolars)) then Exit(nil);
   Result := FPolars[AIndex];
@@ -138,7 +138,7 @@ end;
 
 { ==================== the single axes [Batch 118] ==================== }
 
-procedure TTyAdvanceChart.FreeSingles;
+procedure TTyCustomAdvanceChart.FreeSingles;
 var i: Integer;
 begin
   for i := 0 to High(FSingles) do
@@ -146,12 +146,12 @@ begin
   FSingles := nil;
 end;
 
-function TTyAdvanceChart.SingleCount: Integer;
+function TTyCustomAdvanceChart.SingleCount: Integer;
 begin
   Result := Length(FSingles);
 end;
 
-function TTyAdvanceChart.SingleLayout(AIndex: Integer): TTySingle;
+function TTyCustomAdvanceChart.SingleLayout(AIndex: Integer): TTySingle;
 begin
   if (AIndex < 0) or (AIndex > High(FSingles)) then Exit(nil);
   Result := FSingles[AIndex];
@@ -160,7 +160,7 @@ end;
 { WHAT A SINGLE AXIS VIEW DRAWS, in the skin's axis styles -- the same keys
   the grid's and the polar's axes are drawn in: upstream's single axis takes
   axisDefault like every other }
-procedure TTyAdvanceChart.PaintSingles(APainter: TTyPainter; APPI: Integer;
+procedure TTyCustomAdvanceChart.PaintSingles(APainter: TTyPainter; APPI: Integer;
   const AMeasurer: ITyTextMeasurer; ABelow: Boolean);
 var
   i, q, ink: Integer;
@@ -444,7 +444,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.SinglePointerGeometry(const AHit: TTyAxisHit;
+function TTyCustomAdvanceChart.SinglePointerGeometry(const AHit: TTyAxisHit;
   const ARect: TRect; const AMeasurer: ITyTextMeasurer; APPI: Integer;
   out ADraw: TTySinglePointerDraw): Boolean;
 var
@@ -514,7 +514,7 @@ begin
   ADraw.HasLabel := True;
 end;
 
-procedure TTyAdvanceChart.PaintSinglePointer(APainter: TTyPainter;
+procedure TTyCustomAdvanceChart.PaintSinglePointer(APainter: TTyPainter;
   const ARect: TRect; APPI: Integer; const AMeasurer: ITyTextMeasurer;
   const AHit: TTyAxisHit);
 var
@@ -608,7 +608,7 @@ end;
 
 { ==================== the themeRivers [Batch 118] ==================== }
 
-procedure TTyAdvanceChart.SolveRivers(APPI: Integer);
+procedure TTyCustomAdvanceChart.SolveRivers(APPI: Integer);
 var
   i: Integer;
   scale, margin: Double;
@@ -641,7 +641,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.RiverLayoutOf(ASeriesIndex: Integer): TTyThemeRiverLayout;
+function TTyCustomAdvanceChart.RiverLayoutOf(ASeriesIndex: Integer): TTyThemeRiverLayout;
 var slot: Integer;
 begin
   Result := Default(TTyThemeRiverLayout);
@@ -650,7 +650,7 @@ begin
 end;
 
 { emphasis.label.show written false on a themeRiver }
-function TTyAdvanceChart.RiverEmphasisLabelOff(ASlot: Integer): Boolean;
+function TTyCustomAdvanceChart.RiverEmphasisLabelOff(ASlot: Integer): Boolean;
 var d: TJSONData;
 begin
   Result := False;
@@ -665,7 +665,7 @@ begin
   Result := (d <> nil) and (d.JSONType = jtBoolean) and not d.AsBoolean;
 end;
 
-function TTyAdvanceChart.RiverLabelSpec(ASlot: Integer): TTyLabelSpec;
+function TTyCustomAdvanceChart.RiverLabelSpec(ASlot: Integer): TTyLabelSpec;
 var
   base: TTyLabelSpec;
   outS, lightS, midS, darkS: TTyStyleSet;
@@ -700,7 +700,7 @@ begin
   Result := TyLabelSpecOf(FOption, FBindings[ASlot].SeriesIndex, base);
 end;
 
-function TTyAdvanceChart.BuildRiverMarks(ASlot: Integer; AList: TTyPaintList;
+function TTyCustomAdvanceChart.BuildRiverMarks(ASlot: Integer; AList: TTyPaintList;
   APPI: Integer): Integer;
 var
   L: TTyThemeRiverLayout;
@@ -847,7 +847,7 @@ end;
   grid's axes draw in, because upstream's polar axes share axisDefault with
   every other axis. The geometry is the layout's, already on the pixel grid
   where upstream puts it there (the radius line and ticks). }
-procedure TTyAdvanceChart.PaintPolars(APainter: TTyPainter; APPI: Integer;
+procedure TTyCustomAdvanceChart.PaintPolars(APainter: TTyPainter; APPI: Integer;
   const AMeasurer: ITyTextMeasurer; ABelow: Boolean);
 var
   i, k, ink: Integer;
@@ -1261,7 +1261,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.PolarShadowBand(const AHit: TTyAxisHit): Double;
+function TTyCustomAdvanceChart.PolarShadowBand(const AHit: TTyAxisHit): Double;
 var
   ax, base: TTyAxis;
   k, s: Integer;
@@ -1305,7 +1305,7 @@ begin
   else Result := Math.Max(Double(1), bw);
 end;
 
-function TTyAdvanceChart.PolarPointerGeometry(const AHit: TTyAxisHit;
+function TTyCustomAdvanceChart.PolarPointerGeometry(const AHit: TTyAxisHit;
   const ARect: TRect; const AMeasurer: ITyTextMeasurer; APPI: Integer;
   out ADraw: TTyPolarPointerDraw): Boolean;
 var
@@ -1374,7 +1374,7 @@ begin
   ADraw.HasLabel := True;
 end;
 
-procedure TTyAdvanceChart.PaintPolarPointer(APainter: TTyPainter;
+procedure TTyCustomAdvanceChart.PaintPolarPointer(APainter: TTyPainter;
   const ARect: TRect; APPI: Integer; const AMeasurer: ITyTextMeasurer;
   const AHit: TTyAxisHit);
 var
@@ -1549,7 +1549,7 @@ begin
   AH := AH * AScale;
 end;
 
-function TTyAdvanceChart.LinesProject(const AX, AY: TTyLinesValue;
+function TTyCustomAdvanceChart.LinesProject(const AX, AY: TTyLinesValue;
   AClamp: Boolean): TTyPointF;
 var
   b: TTySeriesBinding;
@@ -1622,7 +1622,7 @@ begin
     Result := GeoLinesPoint(AX, AY);
 end;
 
-function TTyAdvanceChart.LinesTrailAlpha(ASeriesIndex: Integer): Double;
+function TTyCustomAdvanceChart.LinesTrailAlpha(ASeriesIndex: Integer): Double;
 var slot: Integer;
 begin
   Result := 0;
@@ -1631,7 +1631,7 @@ begin
   Result := FLines[slot].TrailAlpha;
 end;
 
-function TTyAdvanceChart.LinesSolvedOf(ASeriesIndex: Integer): TTyLinesSolved;
+function TTyCustomAdvanceChart.LinesSolvedOf(ASeriesIndex: Integer): TTyLinesSolved;
 var slot: Integer;
 begin
   Result := Default(TTyLinesSolved);
@@ -1640,7 +1640,7 @@ begin
   Result := FLines[slot];
 end;
 
-function TTyAdvanceChart.LinesInk(ASlot: Integer; ANode: TJSONObject;
+function TTyCustomAdvanceChart.LinesInk(ASlot: Integer; ANode: TJSONObject;
   const ASolved: TTyLinesSolved; ARow: Integer; AStroke: TTyChartColor;
   AScale: Double; out ASpec: TTyLabelSpec): TTyLinesInk;
 var
@@ -1852,7 +1852,7 @@ begin
   else Result.EffDelay := ARow / cnt * Result.EffPeriod / 3;
 end;
 
-procedure TTyAdvanceChart.SolveLines(APPI: Integer);
+procedure TTyCustomAdvanceChart.SolveLines(APPI: Integer);
 var
   i, k, si, n: Integer;
   node: TJSONObject;
@@ -1987,7 +1987,7 @@ end;
 
 { ==================== the parallels [Batch 128] ==================== }
 
-procedure TTyAdvanceChart.FreeParallels;
+procedure TTyCustomAdvanceChart.FreeParallels;
 var i: Integer;
 begin
   for i := 0 to High(FParallels) do
@@ -1995,18 +1995,18 @@ begin
   FParallels := nil;
 end;
 
-function TTyAdvanceChart.ParallelCount: Integer;
+function TTyCustomAdvanceChart.ParallelCount: Integer;
 begin
   Result := Length(FParallels);
 end;
 
-function TTyAdvanceChart.ParallelLayout(AIndex: Integer): TTyParallel;
+function TTyCustomAdvanceChart.ParallelLayout(AIndex: Integer): TTyParallel;
 begin
   if (AIndex < 0) or (AIndex > High(FParallels)) then Exit(nil);
   Result := FParallels[AIndex];
 end;
 
-function TTyAdvanceChart.ParallelSolvedOf(ASeriesIndex: Integer): TTyParallelSolved;
+function TTyCustomAdvanceChart.ParallelSolvedOf(ASeriesIndex: Integer): TTyParallelSolved;
 var slot: Integer;
 begin
   Result := Default(TTyParallelSolved);
@@ -2015,14 +2015,14 @@ begin
   Result := FParSolved[slot];
 end;
 
-function TTyAdvanceChart.ParallelIntervals(AAxisIndex: Integer): TTyParallelIntervalArray;
+function TTyCustomAdvanceChart.ParallelIntervals(AAxisIndex: Integer): TTyParallelIntervalArray;
 begin
   Result := nil;
   if (AAxisIndex >= 0) and (AAxisIndex <= High(FParIntervals)) then
     Result := Copy(FParIntervals[AAxisIndex]);
 end;
 
-function TTyAdvanceChart.ParallelOfAxis(AComponent: Integer): Integer;
+function TTyCustomAdvanceChart.ParallelOfAxis(AComponent: Integer): Integer;
 var i: Integer;
 begin
   Result := -1;
@@ -2037,7 +2037,7 @@ end;
   and the tooltip read the LAST coordinate a label suits -- not a category,
   not a time (summarizeDimensions' defaultedLabel, which is also its
   defaultedTooltip) -- or, with none, every element }
-procedure TTyAdvanceChart.ParallelStore(ASlot: Integer; AStore: TTyDataStore);
+procedure TTyCustomAdvanceChart.ParallelStore(ASlot: Integer; AStore: TTyDataStore);
 var
   par: TTyParallel;
   node: TJSONObject;
@@ -2096,7 +2096,7 @@ end;
   own lineStyle (4500); the width and the dash the same way; the opacity
   parallelVisual's (5000): lineStyle.opacity, or the item's own, while no
   axis is brushed, else activeOpacity / inactiveOpacity }
-procedure TTyAdvanceChart.SolveParallels(APPI: Integer);
+procedure TTyCustomAdvanceChart.SolveParallels(APPI: Integer);
 var
   i, a, r, raw, si: Integer;
   b: TTySeriesBinding;
@@ -2285,7 +2285,7 @@ end;
 { ParallelAxisView's AxisBuilder, in the skin's axis styles: the line and
   its arrows, the ticks and minor ticks, the name, the labels -- the keys
   every other axis draws in (a parallelAxis shares axisDefault) }
-procedure TTyAdvanceChart.PaintParallels(APainter: TTyPainter; APPI: Integer;
+procedure TTyCustomAdvanceChart.PaintParallels(APainter: TTyPainter; APPI: Integer;
   const AMeasurer: ITyTextMeasurer);
 var
   i, a, q: Integer;
@@ -2508,7 +2508,7 @@ end;
   (parallelAxisIndex, else parallelAxisId, else parallelAxisName; none is
   all) whose parallel was built takes `intervals` (setActiveIntervals: a
   clone, each pair ascending) }
-function TTyAdvanceChart.ParallelAreaSelect(APayload: TJSONObject;
+function TTyCustomAdvanceChart.ParallelAreaSelect(APayload: TJSONObject;
   out AFirst: Integer; AWrite: Boolean): Boolean;
 var
   n, k, j, q: Integer;
@@ -2636,7 +2636,7 @@ end;
   then the layer's elements over it -- here an alpha multiply of the kept
   layer before the series is drawn on it again. The rest of the part draws
   as it does without a trail, over it. [Batch 121] }
-procedure TTyAdvanceChart.PaintTrail(APainter: TTyPainter; AList: TTyPaintList);
+procedure TTyCustomAdvanceChart.PaintTrail(APainter: TTyPainter; AList: TTyPaintList);
 var
   bmp: TBGRABitmap;
   P: TTyPainter;
@@ -2708,7 +2708,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.SolveRadars(APPI: Integer);
+procedure TTyCustomAdvanceChart.SolveRadars(APPI: Integer);
 var
   i, j, k, n, dim, slot: Integer;
   ref: TTyXYWH;
@@ -2801,7 +2801,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.RadarInk: TTyRadarInk;
+function TTyCustomAdvanceChart.RadarInk: TTyRadarInk;
 var
   model: TTyStyleModel;
   st: TTyStyleSet;
@@ -2842,7 +2842,7 @@ end;
 
 { [R2-J3] a radar item's symbol: the series' callbacks' answers under the
   item's own keys (seriesSymbolTask, then dataSymbolTask) }
-procedure TTyAdvanceChart.RadarSymbolCallbacks(ASlot: Integer;
+procedure TTyCustomAdvanceChart.RadarSymbolCallbacks(ASlot: Integer;
   var AVisual: TTyRadarVisual);
 var
   cb: TTyItemCallbacks;
@@ -2872,7 +2872,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.RadarVisual(ASlot: Integer): TTyRadarVisual;
+function TTyCustomAdvanceChart.RadarVisual(ASlot: Integer): TTyRadarVisual;
 var
   k: Integer;
   node: TJSONObject;
@@ -3021,7 +3021,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.SolveGauges(APPI: Integer);
+procedure TTyCustomAdvanceChart.SolveGauges(APPI: Integer);
 var
   i: Integer;
 begin
@@ -3047,7 +3047,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.GaugeVisual(ASlot: Integer): TTyGaugeVisual;
+function TTyCustomAdvanceChart.GaugeVisual(ASlot: Integer): TTyGaugeVisual;
 var
   dummyCol: TTyChartColor;
   model: TTyStyleModel;
@@ -3104,7 +3104,7 @@ begin
   Result.AnchorBorder := TTyChartColor(ThemeRampColor(0));
 end;
 
-function TTyAdvanceChart.FunnelVisual(ASlot: Integer): TTyFunnelVisual;
+function TTyCustomAdvanceChart.FunnelVisual(ASlot: Integer): TTyFunnelVisual;
 var
   st: TTyStyleSet;
   k: Integer;
@@ -3147,7 +3147,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.FunnelLabelInk: TTyFunnelLabelInk;
+function TTyCustomAdvanceChart.FunnelLabelInk: TTyFunnelLabelInk;
 var
   dummyCol: TTyChartColor;
   model: TTyStyleModel;
@@ -3172,7 +3172,7 @@ begin
   LabelGround(Result.Ground, Result.GroundDark);
 end;
 
-function TTyAdvanceChart.PerDatumColours(ASlot: Integer): TTyChartColorArray;
+function TTyCustomAdvanceChart.PerDatumColours(ASlot: Integer): TTyChartColorArray;
 var
   k, rawN, si: Integer;
   c, base: TTyChartColor;
@@ -3218,7 +3218,7 @@ begin
     end;
 end;
 
-function TTyAdvanceChart.PieVisual(ASlot: Integer): TTyPieVisual;
+function TTyCustomAdvanceChart.PieVisual(ASlot: Integer): TTyPieVisual;
 var
   k, n, raw: Integer;
   perRaw: TTyChartColorArray;
@@ -3323,7 +3323,7 @@ begin
       []).Background.Color);
 end;
 
-procedure TTyAdvanceChart.BoxplotStyle(ASlot: Integer; var AVisual: TTySeriesVisual);
+procedure TTyCustomAdvanceChart.BoxplotStyle(ASlot: Integer; var AVisual: TTySeriesVisual);
 var
   d, cd: TJSONData;
   st: TTyOptStyle;
@@ -3361,7 +3361,7 @@ begin
     AVisual.Whisker.BoxLineWidthLogical := st.BorderWidthLogical;
 end;
 
-function TTyAdvanceChart.CandleVisual(ASlot: Integer): TTyCandleSpec;
+function TTyCustomAdvanceChart.CandleVisual(ASlot: Integer): TTyCandleSpec;
 var
   model: TTyStyleModel;
   up, down: TTyStyleSet;
@@ -3388,7 +3388,7 @@ begin
   Result := TyCandleSpecOf(FOption, ASlot, d);
 end;
 
-function TTyAdvanceChart.PolarBarOf(ASeriesIndex: Integer): TTyPolarBarLayout;
+function TTyCustomAdvanceChart.PolarBarOf(ASeriesIndex: Integer): TTyPolarBarLayout;
 var slot: Integer;
 begin
   Result := Default(TTyPolarBarLayout);
@@ -3396,7 +3396,7 @@ begin
   if (slot >= 0) and (slot <= High(FPolarBars)) then Result := FPolarBars[slot];
 end;
 
-function TTyAdvanceChart.BarColumnOf(ASeriesIndex: Integer): TTyBarColumn;
+function TTyCustomAdvanceChart.BarColumnOf(ASeriesIndex: Integer): TTyBarColumn;
 begin
   Result := Default(TTyBarColumn);
   if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FBarCols)) then

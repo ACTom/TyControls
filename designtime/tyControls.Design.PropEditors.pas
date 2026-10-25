@@ -719,7 +719,8 @@ begin
     TTyStyleOverrideProperty);
   // The chart's whole API is this one string, so it gets the biggest editor in the
   // package: SynEdit, catalog completion, a browsable reference and live diagnostics.
-  RegisterPropertyEditor(TypeInfo(string), TTyAdvanceChart, 'Option',
+  // On the custom class (plan D2), so a third-party chart that publishes Option gets it too.
+  RegisterPropertyEditor(TypeInfo(string), TTyCustomAdvanceChart, 'Option',
     TTyChartOptionProperty);
   // Both bundled Lucide components carry their attribution: '...' pops the full ISC + MIT text.
   // On the custom classes (plan D2), so a third-party Lucide list or font that publishes

@@ -4,7 +4,7 @@
 
 { A dataZoom target's axis: the grid's x / y, or a polar's radius / angle
   -- the polar whose axis that component is [Batch 113] }
-function TTyAdvanceChart.DzAxis(const ADim: string; AIndex: Integer): TTyAxis;
+function TTyCustomAdvanceChart.DzAxis(const ADim: string; AIndex: Integer): TTyAxis;
 var
   p: Integer;
   ax: TTyAxis;
@@ -58,7 +58,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.SolveDataZooms;
+procedure TTyCustomAdvanceChart.SolveDataZooms;
 var
   n, i, t, k, c, si, first: Integer;
   spec: TTyDataZoomSpec;
@@ -240,7 +240,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.DataZoomInk(const ASpec: TTyDzSliderSpec): TTyDzInk;
+function TTyCustomAdvanceChart.DataZoomInk(const ASpec: TTyDzSliderSpec): TTyDzInk;
 var
   model: TTyStyleModel;
   st: TTyStyleSet;
@@ -281,7 +281,7 @@ begin
     model.ResolveStyle('TyAdvChartDataZoomBrush', '', []).Background.Color);
 end;
 
-function TTyAdvanceChart.DataZoomInput(AIndex: Integer;
+function TTyCustomAdvanceChart.DataZoomInput(AIndex: Integer;
   out AIn: TTyDzSliderInput): Boolean;
 var
   spec, hostSpec: TTyDataZoomSpec;
@@ -480,7 +480,7 @@ begin
   Result := True;
 end;
 
-procedure TTyAdvanceChart.SolveDataZoomViews(const AMeasurer: ITyTextMeasurer;
+procedure TTyCustomAdvanceChart.SolveDataZoomViews(const AMeasurer: ITyTextMeasurer;
   APPI: Integer);
 var
   n, k: Integer;
@@ -511,7 +511,7 @@ begin
     end;
 end;
 
-function TTyAdvanceChart.BuildDataZooms(AList: TTyPaintList): Integer;
+function TTyCustomAdvanceChart.BuildDataZooms(AList: TTyPaintList): Integer;
 var
   k: Integer;
   scale: Double;
@@ -528,7 +528,7 @@ end;
 
 { findRepresentativeAxisProxy: the first target this dataZoom hosts, else
   the first target at all -- as an index into the hosted axes }
-function TTyAdvanceChart.DzRepresentative(AIndex: Integer): Integer;
+function TTyCustomAdvanceChart.DzRepresentative(AIndex: Integer): Integer;
 var
   spec: TTyDataZoomSpec;
   t, k, firstRec: Integer;
@@ -556,7 +556,7 @@ end;
   its ends from the window again, the brush gone, the labels back to
   handleLabel.show, no emphasis; the drag and the pointer's place survive --
   and every inside takes its range from the window. }
-procedure TTyAdvanceChart.DzRenderStates;
+procedure TTyCustomAdvanceChart.DzRenderStates;
 var
   n, i, rep: Integer;
   keepDrag, keepOver: Boolean;
@@ -600,17 +600,17 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.DzScale: Double;
+function TTyCustomAdvanceChart.DzScale: Double;
 begin
   if FLastPPI > 0 then Result := FLastPPI / 96 else Result := 1;
 end;
 
-function TTyAdvanceChart.DzClock: Double;
+function TTyCustomAdvanceChart.DzClock: Double;
 begin
   if IsNan(FDzNow) then Result := GetTickCount64 else Result := FDzNow;
 end;
 
-function TTyAdvanceChart.DzGridRect(AGrid: Integer): TTyXYWH;
+function TTyCustomAdvanceChart.DzGridRect(AGrid: Integer): TTyXYWH;
 var g: TTyGridBuild; s: Double;
 begin
   g := FBuild.Grid(AGrid);
@@ -623,7 +623,7 @@ end;
 
 { Cartesian2D.containPoint: each axis' closed extent, the y one measured
   from the bottom }
-function TTyAdvanceChart.DzGridContains(AGrid: Integer; AX, AY: Double): Boolean;
+function TTyCustomAdvanceChart.DzGridContains(AGrid: Integer; AX, AY: Double): Boolean;
 var r: TTyXYWH; lx, ly: Double;
 begin
   r := DzGridRect(AGrid);
@@ -633,7 +633,7 @@ begin
 end;
 
 { the inside dataZooms with an axis on this grid, in component order }
-function TTyAdvanceChart.DzGridInsides(AGrid: Integer): TTyIntegerArray;
+function TTyCustomAdvanceChart.DzGridInsides(AGrid: Integer): TTyIntegerArray;
 var
   i, t: Integer;
   ax: TTyAxis;
@@ -660,7 +660,7 @@ end;
 
 { mergeControllerParams: the strongest of the insides -- 2 zooms and moves,
   1 moves only (zoomLock), 0 disabled -- or -1 for no controller }
-function TTyAdvanceChart.DzControlType(AGrid: Integer): Integer;
+function TTyCustomAdvanceChart.DzControlType(AGrid: Integer): Integer;
 var ins: TTyIntegerArray; k, v: Integer;
 begin
   Result := -1;
@@ -676,7 +676,7 @@ end;
 
 { a point on the canvas (CSS px) into the slider group's own coordinates:
   transformCoordToLocal, the inverse of its global matrix }
-procedure TTyAdvanceChart.DzToSlider(ASlider: Integer; AX, AY: Double;
+procedure TTyCustomAdvanceChart.DzToSlider(ASlider: Integer; AX, AY: Double;
   out LX, LY: Double);
 var
   L: TTyDzSliderLayout;
@@ -694,7 +694,7 @@ begin
   LY := inv[1] * AX + inv[3] * AY + inv[5];
 end;
 
-function TTyAdvanceChart.DzHits(ASlider: Integer; ARole: TTyDzRole; AX, AY: Double): Boolean;
+function TTyCustomAdvanceChart.DzHits(ASlider: Integer; ARole: TTyDzRole; AX, AY: Double): Boolean;
 var
   L: TTyDzSliderLayout;
   e: TTyDzElement;
@@ -728,7 +728,7 @@ end;
   handles (a hovered one raised above the other), the move zone, the filler
   when it is the move zone, the click panel; then any other element of the
   chart }
-function TTyAdvanceChart.DzFindTarget(AX, AY: Double): TTyDzTarget;
+function TTyCustomAdvanceChart.DzFindTarget(AX, AY: Double): TTyDzTarget;
 var
   res: TTyDzTarget;
   i, el: Integer;
@@ -798,7 +798,7 @@ begin
 end;
 
 { the axis proxy's spans: the HOST dataZoom's options, in percent }
-function TTyAdvanceChart.DzSpans(AIndex: Integer; out AMin, AMax: Double): Boolean;
+function TTyCustomAdvanceChart.DzSpans(AIndex: Integer; out AMin, AMax: Double): Boolean;
 var
   rep, host: Integer;
   sp: TTyDzSpans;
@@ -818,7 +818,7 @@ end;
 
 { _showDataInfo: on a hover or while dragging the emphasis label setting,
   else the normal one; the move bar is highlighted with them }
-procedure TTyAdvanceChart.DzShowDataInfo(AIndex: Integer; AEmphasis: Boolean);
+procedure TTyCustomAdvanceChart.DzShowDataInfo(AIndex: Integer; AEmphasis: Boolean);
 var toShow: Boolean;
 begin
   if AEmphasis or FDzState[AIndex].Dragging then
@@ -831,7 +831,7 @@ begin
     else FDzState[AIndex].MoveBits := FDzState[AIndex].MoveBits and not 2;
 end;
 
-procedure TTyAdvanceChart.DzMouseOut(const ATarget: TTyDzTarget);
+procedure TTyCustomAdvanceChart.DzMouseOut(const ATarget: TTyDzTarget);
 var i: Integer;
 begin
   if ATarget.Kind <> dtkSlider then Exit;
@@ -854,7 +854,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.DzMouseOver(const ATarget: TTyDzTarget);
+procedure TTyCustomAdvanceChart.DzMouseOver(const ATarget: TTyDzTarget);
 var i: Integer;
 begin
   if ATarget.Kind <> dtkSlider then Exit;
@@ -879,7 +879,7 @@ end;
 
 { _onDragMove: the screen delta through the INVERSE of the slider group's
   local matrix, then _updateInterval; realtime dispatches }
-procedure TTyAdvanceChart.DzDragMove(AIndex, AHandle: Integer; ADX, ADY: Double);
+procedure TTyCustomAdvanceChart.DzDragMove(AIndex, AHandle: Integer; ADX, ADY: Double);
 var
   inv: TTyMat2D;
   v, mn, mx: Double;
@@ -897,7 +897,7 @@ begin
 end;
 
 { _onDragEnd }
-procedure TTyAdvanceChart.DzDragEnd(AIndex: Integer);
+procedure TTyCustomAdvanceChart.DzDragEnd(AIndex: Integer);
 begin
   FDzState[AIndex].Dragging := False;
   if not FDzState[AIndex].OverArea then DzShowDataInfo(AIndex, False);
@@ -905,7 +905,7 @@ begin
 end;
 
 { _onClickPanel: the window's centre to the click, keeping the span }
-procedure TTyAdvanceChart.DzClickPanel(AIndex: Integer; AX, AY: Double);
+procedure TTyCustomAdvanceChart.DzClickPanel(AIndex: Integer; AX, AY: Double);
 var
   lx, ly, centre, mn, mx: Double;
   moved: Boolean;
@@ -921,7 +921,7 @@ begin
 end;
 
 { _updateBrushRect }
-procedure TTyAdvanceChart.DzBrushMove(AIndex: Integer; AX, AY: Double);
+procedure TTyCustomAdvanceChart.DzBrushMove(AIndex: Integer; AX, AY: Double);
 var ex, ey, sx, sy: Double;
 begin
   FDzState[AIndex].HasBrush := True;
@@ -938,7 +938,7 @@ end;
 
 { _onBrushEnd: a short quick brush is a click; else the brush is the new
   window -- from the LAST brush rect, which a new press never cleared }
-procedure TTyAdvanceChart.DzBrushEnd(AIndex: Integer);
+procedure TTyCustomAdvanceChart.DzBrushEnd(AIndex: Integer);
 var
   mn, mx, mnPx, mxPx, L: Double;
 begin
@@ -964,7 +964,7 @@ begin
 end;
 
 { _dispatchZoomAction, through the view's throttle }
-procedure TTyAdvanceChart.DzSliderDispatch(AIndex: Integer; ARealtime: Boolean);
+procedure TTyCustomAdvanceChart.DzSliderDispatch(AIndex: Integer; ARealtime: Boolean);
 begin
   if TyDzThrottleCall(FDzState[AIndex].Throttle, DzClock, FDzInteract[AIndex].Throttle) then
     DzRunSliderAction(AIndex, False, ARealtime)
@@ -975,7 +975,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.DzRunSliderAction(AIndex: Integer; ADeferred, ARealtime: Boolean);
+procedure TTyCustomAdvanceChart.DzRunSliderAction(AIndex: Integer; ADeferred, ARealtime: Boolean);
 var a: TTyDzAction;
 begin
   a := Default(TTyDzAction);
@@ -993,7 +993,7 @@ end;
 { One roam event on a grid: every inside of it that the behaviour allows
   works out its range from its own view range; the ones not disabled that
   moved go in the batch. AKind 'zoom', 'pan' or 'scrollMove'. }
-function TTyAdvanceChart.DzRoam(AGrid: Integer; const AKind: string;
+function TTyCustomAdvanceChart.DzRoam(AGrid: Integer; const AKind: string;
   AShift: TShiftState; AOldX, AOldY, ANewX, ANewY, AScale, AScroll: Double): Boolean;
 var
   ins: TTyIntegerArray;
@@ -1064,7 +1064,7 @@ end;
 
 { the roam's dispatch, through the grid's throttle at the first inside's
   rate; a deferred one sends the latest batch }
-procedure TTyAdvanceChart.DzRoamDispatch(AGrid: Integer; const AItems: TTyDzActionItemArray);
+procedure TTyCustomAdvanceChart.DzRoamDispatch(AGrid: Integer; const AItems: TTyDzActionItemArray);
 var
   ins: TTyIntegerArray;
   rate: Double;
@@ -1089,7 +1089,7 @@ end;
 { THE ACTION: setRawRange on the named dataZooms and every one linked to
   them through a shared axis, then one update, the views rendered with the
   payload -- the source slider keeps its view }
-procedure TTyAdvanceChart.DzDispatch(const AAction: TTyDzAction; AJson: TJSONObject);
+procedure TTyCustomAdvanceChart.DzDispatch(const AAction: TTyDzAction; AJson: TJSONObject);
 var
   savedAction: string;
   n, it, i, j, t, u: Integer;
@@ -1270,7 +1270,7 @@ end;
 
 { what the views draw from the slider states: a pointer event that leaves
   it unchanged repaints nothing }
-function TTyAdvanceChart.DzStateKey: string;
+function TTyCustomAdvanceChart.DzStateKey: string;
 var
   i: Integer;
   s: TTyDzSliderState;
@@ -1287,7 +1287,7 @@ begin
 end;
 
 { the views again, from the state and the window as they are }
-procedure TTyAdvanceChart.DzViewUpdate;
+procedure TTyCustomAdvanceChart.DzViewUpdate;
 begin
   if (FBuild = nil) or (FLastPPI <= 0) then Exit;
   SolveDataZoomViews(NewTextMeasurer(FLastPPI), FLastPPI);
@@ -1304,7 +1304,7 @@ end;
 { AN ACTION IS SYNCHRONOUS upstream: the model, the axes and every view are
   new before dispatchAction returns -- so the click that follows a brush
   finds the handles where the brush put them }
-procedure TTyAdvanceChart.DzSyncLayout(const APayload: TTyAnimOverride;
+procedure TTyCustomAdvanceChart.DzSyncLayout(const APayload: TTyAnimOverride;
   AHasPayload: Boolean);
 begin
   if FLastPPI <= 0 then
@@ -1324,7 +1324,7 @@ begin
     element a second time] }
 end;
 
-procedure TTyAdvanceChart.DzArmTimer;
+procedure TTyCustomAdvanceChart.DzArmTimer;
 var
   due, now_: Double;
   i: Integer;
@@ -1362,13 +1362,13 @@ begin
   FDzTimer.Enabled := True;
 end;
 
-procedure TTyAdvanceChart.DzTimerFired(Sender: TObject);
+procedure TTyCustomAdvanceChart.DzTimerFired(Sender: TObject);
 begin
   FDzTimer.Enabled := False;
   DataZoomTick(DzClock);
 end;
 
-procedure TTyAdvanceChart.DataZoomTick(ANow: Double);
+procedure TTyCustomAdvanceChart.DataZoomTick(ANow: Double);
 var
   i, best, kind: Integer;
   due: Double;
@@ -1415,7 +1415,7 @@ begin
   DzArmTimer;
 end;
 
-function TTyAdvanceChart.DispatchDataZoom(AIndex: Integer; AStart, AEnd: Double): Boolean;
+function TTyCustomAdvanceChart.DispatchDataZoom(AIndex: Integer; AStart, AEnd: Double): Boolean;
 var a: TTyDzAction;
 begin
   Result := (AIndex >= 0) and (AIndex < Length(FDzRawHas)) and not IsNan(AStart)
@@ -1430,7 +1430,7 @@ begin
   DzDispatch(a);
 end;
 
-function TTyAdvanceChart.DataZoomPointer(AKind: TTyDzPointer; AX, AY: Double;
+function TTyCustomAdvanceChart.DataZoomPointer(AKind: TTyDzPointer; AX, AY: Double;
   AShift: TShiftState; AZrDelta: Double): Boolean;
 var
   x, y, s, dx, dy: Double;
@@ -1614,13 +1614,13 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.DataZoomSliderState(AIndex: Integer): TTyDzSliderState;
+function TTyCustomAdvanceChart.DataZoomSliderState(AIndex: Integer): TTyDzSliderState;
 begin
   Result := Default(TTyDzSliderState);
   if (AIndex >= 0) and (AIndex <= High(FDzState)) then Result := FDzState[AIndex];
 end;
 
-function TTyAdvanceChart.DataZoomInsideRange(AIndex: Integer; out ALo, AHi: Double): Boolean;
+function TTyCustomAdvanceChart.DataZoomInsideRange(AIndex: Integer; out ALo, AHi: Double): Boolean;
 begin
   ALo := NaN;
   AHi := NaN;
@@ -1630,7 +1630,7 @@ begin
   AHi := FDzInHi[AIndex];
 end;
 
-function TTyAdvanceChart.DataZoomHoverName: string;
+function TTyCustomAdvanceChart.DataZoomHoverName: string;
 const
   cNames: array[TTyDzRole] of string = ('background', 'clickPanel', 'filler',
     'frame', 'handle0', 'handle1', 'moveHandle', 'moveHandleIcon', 'moveZone',
@@ -1647,25 +1647,25 @@ begin
 end;
 
 
-function TTyAdvanceChart.DataZoomSliderLayout(AIndex: Integer): TTyDzSliderLayout;
+function TTyCustomAdvanceChart.DataZoomSliderLayout(AIndex: Integer): TTyDzSliderLayout;
 begin
   Result := Default(TTyDzSliderLayout);
   if (AIndex >= 0) and (AIndex <= High(FDzLayouts)) then
     Result := FDzLayouts[AIndex];
 end;
 
-function TTyAdvanceChart.DataZoomCount: Integer;
+function TTyCustomAdvanceChart.DataZoomCount: Integer;
 begin
   Result := Length(FZoomSpecs);
 end;
 
-function TTyAdvanceChart.DataZoomSpec(AIndex: Integer): TTyDataZoomSpec;
+function TTyCustomAdvanceChart.DataZoomSpec(AIndex: Integer): TTyDataZoomSpec;
 begin
   Result := Default(TTyDataZoomSpec);
   if (AIndex >= 0) and (AIndex <= High(FZoomSpecs)) then Result := FZoomSpecs[AIndex];
 end;
 
-function TTyAdvanceChart.AxisZoom(const AMainType: string; AAxisIndex: Integer;
+function TTyCustomAdvanceChart.AxisZoom(const AMainType: string; AAxisIndex: Integer;
   out AZoom: TTyAxisZoom; out AWindow: TTyDzWindow; out AHost: Integer): Boolean;
 var
   ax: TTyAxis;
@@ -1688,7 +1688,7 @@ begin
     end;
 end;
 
-function TTyAdvanceChart.DzModelId(AIndex: Integer): string;
+function TTyCustomAdvanceChart.DzModelId(AIndex: Integer): string;
 var n: Integer;
 begin
   Result := '';
@@ -1702,7 +1702,7 @@ begin
     + 'Axis' + IntToStr(FZoomSpecs[AIndex].Targets[0].AxisIndex);
 end;
 
-function TTyAdvanceChart.DzQuery(APayload: TJSONObject): TTyIntegerArray;
+function TTyCustomAdvanceChart.DzQuery(APayload: TJSONObject): TTyIntegerArray;
 var
   n, k, j: Integer;
   d: TJSONData;
@@ -1770,7 +1770,7 @@ begin
   for j := 0 to n - 1 do Add(j);
 end;
 
-procedure TTyAdvanceChart.DzItemsOf(AItem: TJSONObject; var AAction: TTyDzAction);
+procedure TTyCustomAdvanceChart.DzItemsOf(AItem: TJSONObject; var AAction: TTyDzAction);
 var
   idx: TTyIntegerArray;
   k, n, host: Integer;
@@ -1841,7 +1841,7 @@ end;
   the inside roams' batch {dataZoomId, start, end} with the animation; the
   toolbox's batch with its `from`; a slider's own {from, dataZoomId,
   animation, start, end}; the API's {dataZoomIndex, start, end} }
-function TTyAdvanceChart.DzPayloadOf(const AAction: TTyDzAction): TJSONObject;
+function TTyCustomAdvanceChart.DzPayloadOf(const AAction: TTyDzAction): TJSONObject;
 var
   arr: TJSONArray;
   o, an: TJSONObject;
@@ -1908,7 +1908,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.DoDataZoomAction(APayload: TJSONObject): Boolean;
+function TTyCustomAdvanceChart.DoDataZoomAction(APayload: TJSONObject): Boolean;
 var
   a: TTyDzAction;
   items: TJSONArray;
@@ -1933,7 +1933,7 @@ end;
 
 { an inside dataZoom's RoamController would grab here: a grid one controls
   holds the point }
-function TTyAdvanceChart.DzGrabAt(AX, AY: Integer): Boolean;
+function TTyCustomAdvanceChart.DzGrabAt(AX, AY: Integer): Boolean;
 var
   s, x, y: Double;
   g: Integer;

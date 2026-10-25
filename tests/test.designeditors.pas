@@ -618,13 +618,10 @@ initialization
       TTyImageItem so it applies inside the stock collection editor for
       TTyImageCollection.Images. GetClass needs it registered to resolve the name. }
     TTyImageItem,
-    { The chart's Option property gets its own editor. Registered here BEFORE
-      that registration exists, because TestEveryRegistrationTargetsARealProperty
-      resolves a registration's base class by NAME through GetClass -- so the
-      registration landing first would turn the suite red for a reason that has
-      nothing to do with the editor, and the next person would go looking in the
-      wrong place. }
-    TTyAdvanceChart]);
+    { The chart's Option property gets its own editor, on the custom class since the
+      split. Registered here because TestEveryRegistrationTargetsARealProperty
+      resolves a registration's base class by NAME through GetClass. }
+    TTyCustomAdvanceChart]);
   RegisterTest(TDesignEditorsTest);
 
 end.

@@ -5,7 +5,7 @@
 
 { ==================== createBoxLayoutReference [Batch 151] ==================== }
 
-function TTyAdvanceChart.CanvasXYWH: TTyXYWH;
+function TTyCustomAdvanceChart.CanvasXYWH: TTyXYWH;
 begin
   Result := TyXYWHOfRect(FLastRect);
 end;
@@ -36,7 +36,7 @@ end;
   default clamps): a matrix's rect -- it has no contentRect, so its cell's
   border is inside the reference -- or a calendar day's content rect;
   `contentRect || rect` }
-function TTyAdvanceChart.HostRefAt(const ASys: string; AIndex: Integer;
+function TTyCustomAdvanceChart.HostRefAt(const ASys: string; AIndex: Integer;
   ACoord: TJSONData; out ARef: TTyXYWH): Boolean;
 var
   loc: TTyMatrixLocRange;
@@ -64,7 +64,7 @@ end;
   (SINGLE_REFERRING: neither written is the first; one not there leaves the
   component on the canvas, as injectCoordSysByOption leaves it), and the
   host's dataToLayout of `coord` }
-function TTyAdvanceChart.ComponentBoxRef(const AMain: string; AIndex: Integer;
+function TTyCustomAdvanceChart.ComponentBoxRef(const AMain: string; AIndex: Integer;
   out ARef: TTyXYWH): Boolean;
 var
   node, coord: TJSONData;
@@ -91,7 +91,7 @@ begin
   if not Result then ARef := CanvasXYWH;
 end;
 
-function TTyAdvanceChart.ComponentRefLocal(const AMain: string; AIndex: Integer;
+function TTyCustomAdvanceChart.ComponentRefLocal(const AMain: string; AIndex: Integer;
   out ARef: TTyXYWH): Boolean;
 begin
   Result := ComponentBoxRef(AMain, AIndex, ARef);
@@ -99,7 +99,7 @@ begin
   ARef.Y := ARef.Y - FLastRect.Top;
 end;
 
-function TTyAdvanceChart.ComponentRefCss(const AMain: string; AIndex: Integer;
+function TTyCustomAdvanceChart.ComponentRefCss(const AMain: string; AIndex: Integer;
   out ARef: TTyXYWH): Boolean;
 var s: Double;
 begin
@@ -114,7 +114,7 @@ end;
 { A SERIES' REFERENCE: getCoordForCoordSysUsageKindBox -- `coord` when
   written (not null), else (a pie's getCoord2) `center` -- in the host the
   binding found [Batch 147: a pie and a funnel in a matrix cell] }
-function TTyAdvanceChart.SeriesBoxRef(ASlot: Integer; ACentre: Boolean;
+function TTyCustomAdvanceChart.SeriesBoxRef(ASlot: Integer; ACentre: Boolean;
   out ARef: TTyXYWH; out AFromCentre: Boolean): Boolean;
 var
   node, d: TJSONData;
@@ -157,7 +157,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.MapSeriesBoxRef(ASeriesIndex: Integer;
+function TTyCustomAdvanceChart.MapSeriesBoxRef(ASeriesIndex: Integer;
   out ARef: TTyXYWH): Boolean;
 var
   node, d, coord: TJSONData;
@@ -189,7 +189,7 @@ begin
   if not Result then ARef := CanvasXYWH;
 end;
 
-procedure TTyAdvanceChart.PlaceBoxedCoordSys;
+procedure TTyCustomAdvanceChart.PlaceBoxedCoordSys;
 var
   g, p: Integer;
   ref: TTyXYWH;
@@ -217,7 +217,7 @@ begin
       TyParallelResizeIn(FOption, FParallels[p], ref);
 end;
 
-procedure TTyAdvanceChart.FreeCalendars;
+procedure TTyCustomAdvanceChart.FreeCalendars;
 var i: Integer;
 begin
   for i := 0 to High(FCalendars) do FreeAndNil(FCalendars[i]);
@@ -227,7 +227,7 @@ end;
 { THE CALENDARS: each laid out on the whole canvas, as upstream's is -- its
   box is getLayoutRect against the chart's width and height, with no margin
   and nothing else shrinking it. [Batch 69] }
-procedure TTyAdvanceChart.FreeGeos;
+procedure TTyCustomAdvanceChart.FreeGeos;
 var i: Integer;
 begin
   { [F6b] an SVG map's elements live on through a render (MapDraw keeps its
@@ -246,7 +246,7 @@ begin
   FMapSyms := nil;
 end;
 
-procedure TTyAdvanceChart.SolveGeos(APPI: Integer);
+procedure TTyCustomAdvanceChart.SolveGeos(APPI: Integer);
 var
   i, n: Integer;
   ref: TTyXYWH;
@@ -292,7 +292,7 @@ end;
 { THE GEO'S INK: the area and its rim from the skin's geo keys, the labels
   from the geo label key. Upstream's tokens are backgroundTint (a pale tint at
   half), border and tertiary. }
-function TTyAdvanceChart.GeoInk: TTyGeoInk;
+function TTyCustomAdvanceChart.GeoInk: TTyGeoInk;
 var
   model: TTyStyleModel;
   st: TTyStyleSet;
@@ -346,7 +346,7 @@ end;
 { onIrrelevantElement: the topmost element under the pointer, a silent one
   too, belongs to another component with a coordinate system that stands
   above the geo -- its zlevel, then its z, higher }
-function TTyAdvanceChart.GeoIrrelevant(AGeo, AX, AY: Integer): Boolean;
+function TTyCustomAdvanceChart.GeoIrrelevant(AGeo, AX, AY: Integer): Boolean;
 var
   idx, oi, si, slot, oz, ozl, diff: Integer;
   el: TTyChartElement;
@@ -396,7 +396,7 @@ end;
 
 { [Batch 152] the geo a roam host index names: a geo component's, or past
   cMapRoamBase a map series group's own }
-function TTyAdvanceChart.RoamGeoOf(AIndex: Integer): TTyGeo;
+function TTyCustomAdvanceChart.RoamGeoOf(AIndex: Integer): TTyGeo;
 begin
   Result := nil;
   if AIndex >= cMapRoamBase then
@@ -406,7 +406,7 @@ begin
   else if (AIndex >= 0) and (AIndex <= High(FGeos)) then Result := FGeos[AIndex];
 end;
 
-function TTyAdvanceChart.GeoRoamPick(AX, AY: Integer; AZoom: Boolean): Integer;
+function TTyCustomAdvanceChart.GeoRoamPick(AX, AY: Integer; AZoom: Boolean): Integer;
 var
   i: Integer;
   g: TTyGeo;
@@ -443,7 +443,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.RoamTargetAt(AX, AY: Integer; AZoom: Boolean;
+function TTyCustomAdvanceChart.RoamTargetAt(AX, AY: Integer; AZoom: Boolean;
   out AGeo: Integer): Integer;
 var gi, sz, szl: Integer;
 begin
@@ -465,7 +465,7 @@ end;
   pan's dx and dy or the zoom's zoom, originX and originY,
   payloadDisableAnimation's animation, componentType 'geo'
   (geoBackwardCompat) and the geo's id }
-procedure TTyAdvanceChart.GeoGesture(AGeo: Integer; AHasPan: Boolean; ADX, ADY: Double;
+procedure TTyCustomAdvanceChart.GeoGesture(AGeo: Integer; AHasPan: Boolean; ADX, ADY: Double;
   AHasZoom: Boolean; AScale, AOriginX, AOriginY: Double);
 var p, anim: TJSONObject; g: Integer;
 begin
@@ -523,7 +523,7 @@ end;
 { RoamController._mousemoveHandler while a left press holds it: nothing
   while globalPan is taken (the last point stays where it was), else the
   delta from the last point }
-procedure TTyAdvanceChart.GeoRoamMove(AX, AY: Integer);
+procedure TTyCustomAdvanceChart.GeoRoamMove(AX, AY: Integer);
 var dx, dy: Double;
 begin
   if FRoamGeo < 0 then Exit;
@@ -543,7 +543,7 @@ end;
   rebuild (ownRoamViewUpdateDirectlyInAction, which also gives the
   payload its animation); the event is the payload as it then stands,
   'georoam' }
-function TTyAdvanceChart.DoGeoRoamAction(APayload: TJSONObject): Boolean;
+function TTyCustomAdvanceChart.DoGeoRoamAction(APayload: TJSONObject): Boolean;
 var
   ct, d: TJSONData;
   mainType: string;
@@ -658,7 +658,7 @@ end;
 { the geo's elements of the standing list built again on its kept picture
   (no states applied: the frame does that) and put back where they stand;
   a list that cannot take them is dropped }
-procedure TTyAdvanceChart.DoMapRoamAction(APayload: TJSONObject; var AReached: Boolean);
+procedure TTyCustomAdvanceChart.DoMapRoamAction(APayload: TJSONObject; var AReached: Boolean);
 var
   idx: TTyIntegerArray;
   k, slot, g, r, si, raw: Integer;
@@ -738,7 +738,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.GeoPatchList(AGeo: Integer);
+procedure TTyCustomAdvanceChart.GeoPatchList(AGeo: Integer);
 var
   tmp: TTyPaintList;
   idx: TTyIntegerArray;
@@ -800,7 +800,7 @@ end;
   geo's view feeds run again and the list is built anew, the state records
   kept (renderSeries' clearStates and the prevStates it restores). }
 
-function TTyAdvanceChart.GeoOfSlot(ASlot: Integer): TTyGeo;
+function TTyCustomAdvanceChart.GeoOfSlot(ASlot: Integer): TTyGeo;
 var gi: Integer;
 begin
   Result := nil;
@@ -810,7 +810,7 @@ begin
   if (Result <> nil) and not Result.Valid then Result := nil;
 end;
 
-function TTyAdvanceChart.GeoSeriesPoints(ASlot: Integer): TTyPointFArray;
+function TTyCustomAdvanceChart.GeoSeriesPoints(ASlot: Integer): TTyPointFArray;
 var
   geo: TTyGeo;
   st: TTyDataStore;
@@ -861,7 +861,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.BuildGeoHeatmap(ASlot: Integer; AList: TTyPaintList): Integer;
+function TTyCustomAdvanceChart.BuildGeoHeatmap(ASlot: Integer; AList: TTyPaintList): Integer;
 var
   geo: TTyGeo;
   st: TTyDataStore;
@@ -1060,7 +1060,7 @@ begin
   Result := 1;
 end;
 
-function TTyAdvanceChart.GeoHeatLayer(ASeriesIndex: Integer; out ALayer: TTyHeatLayer): Boolean;
+function TTyCustomAdvanceChart.GeoHeatLayer(ASeriesIndex: Integer; out ALayer: TTyHeatLayer): Boolean;
 var slot: Integer;
 begin
   ALayer := Default(TTyHeatLayer);
@@ -1069,7 +1069,7 @@ begin
   if Result then ALayer := FHeatLayers[slot];
 end;
 
-function TTyAdvanceChart.GeoBrushLayouts(ASlot: Integer): TTyBrushItemLayoutArray;
+function TTyCustomAdvanceChart.GeoBrushLayouts(ASlot: Integer): TTyBrushItemLayoutArray;
 var
   geo: TTyGeo;
   st: TTyDataStore;
@@ -1099,7 +1099,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.GeoPointOfJson(AGeo: TTyGeo; AValue: TJSONData;
+function TTyCustomAdvanceChart.GeoPointOfJson(AGeo: TTyGeo; AValue: TJSONData;
   out APt: TTyPointF): Boolean;
 var x, y: Double;
 begin
@@ -1114,7 +1114,7 @@ begin
   Result := AGeo.PointOf(x, y, APt);
 end;
 
-function TTyAdvanceChart.BoxPointOf(ASlot: Integer; out APt: TTyPointF): Boolean;
+function TTyCustomAdvanceChart.BoxPointOf(ASlot: Integer; out APt: TTyPointF): Boolean;
 var
   node, d: TJSONData;
   cv: TTyConvertResult;
@@ -1144,7 +1144,7 @@ begin
   Result := not (IsNan(APt.X) or IsNan(APt.Y));
 end;
 
-function TTyAdvanceChart.GeoPieLayout(ASlot, ADim: Integer): TTyPieLayout;
+function TTyCustomAdvanceChart.GeoPieLayout(ASlot, ADim: Integer): TTyPieLayout;
 var
   p: TTyPointF;
   k: Integer;
@@ -1167,7 +1167,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.GeoRoamHasDependents(AGeo: TTyGeo): Boolean;
+function TTyCustomAdvanceChart.GeoRoamHasDependents(AGeo: TTyGeo): Boolean;
 var i: Integer;
 begin
   Result := False;
@@ -1179,7 +1179,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.GeoDependentsRelayout;
+procedure TTyCustomAdvanceChart.GeoDependentsRelayout;
 var ppi, i: Integer;
 begin
   ppi := FLastPPI;
@@ -1200,7 +1200,7 @@ begin
     end;
 end;
 
-function TTyAdvanceChart.GeoGraphPoints(ASeriesIndex: Integer; AGeo: TTyGeo): TTyPointFArray;
+function TTyCustomAdvanceChart.GeoGraphPoints(ASeriesIndex: Integer; AGeo: TTyGeo): TTyPointFArray;
 var
   node, d, it, v: TJSONData;
   k: Integer;
@@ -1244,7 +1244,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.SolveGeoGraph(ASlot: Integer);
+procedure TTyCustomAdvanceChart.SolveGeoGraph(ASlot: Integer);
 var
   solved: TTyGraphSolved;
   geo: TTyGeo;
@@ -1282,7 +1282,7 @@ end;
   graphic element: its events, its tooltip and its states are the series'
   (sskMap rows), and the geo takes the rows' flags for its paths. }
 
-function TTyAdvanceChart.MapTypeOf(ASlot: Integer): string;
+function TTyCustomAdvanceChart.MapTypeOf(ASlot: Integer): string;
 var node, d: TJSONData;
 begin
   Result := '';
@@ -1296,7 +1296,7 @@ begin
   if (d <> nil) and (d.JSONType <> jtNull) then Result := TyJsonJsString(d);
 end;
 
-procedure TTyAdvanceChart.MapFillStore(ASlot: Integer; AStore: TTyDataStore);
+procedure TTyCustomAdvanceChart.MapFillStore(ASlot: Integer; AStore: TTyDataStore);
 var
   dims: TTySeriesDimArray;
   node, d: TJSONData;
@@ -1344,14 +1344,14 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.MapOrigStore(ASlot: Integer): TTyDataStore;
+function TTyCustomAdvanceChart.MapOrigStore(ASlot: Integer): TTyDataStore;
 begin
   Result := nil;
   if (ASlot >= 0) and (ASlot <= High(FMapOrig)) then Result := FMapOrig[ASlot];
   if (Result = nil) and (ASlot >= 0) and (ASlot <= High(FStores)) then Result := FStores[ASlot];
 end;
 
-procedure TTyAdvanceChart.SolveMapSeries;
+procedure TTyCustomAdvanceChart.SolveMapSeries;
 var
   i, g, k, raw, dimV, idx, li, n: Integer;
   key, calc, nm: string;
@@ -1491,7 +1491,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.MapGeoOfSlot(ASlot: Integer): TTyGeo;
+function TTyCustomAdvanceChart.MapGeoOfSlot(ASlot: Integer): TTyGeo;
 var g: Integer;
 begin
   Result := nil;
@@ -1506,7 +1506,7 @@ begin
     Result := FGeos[FMapGroups[g].HostGeo];
 end;
 
-function TTyAdvanceChart.GeoDataOf(AGeo: TTyGeo; ASlot: Integer; AMap: Boolean): TTyGeoData;
+function TTyCustomAdvanceChart.GeoDataOf(AGeo: TTyGeo; ASlot: Integer; AMap: Boolean): TTyGeoData;
 var
   st: TTyDataStore;
   dimV, g, row, raw, k, fi, gi, cnt: Integer;
@@ -1618,7 +1618,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.SolveMapGeos(APPI: Integer);
+procedure TTyCustomAdvanceChart.SolveMapGeos(APPI: Integer);
 var
   gi, i, g, k, fi, raw, idx: Integer;
   ref: TTyXYWH;
@@ -1749,7 +1749,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.GeoSyncFromRows(AGeo: TTyGeo): Boolean;
+function TTyCustomAdvanceChart.GeoSyncFromRows(AGeo: TTyGeo): Boolean;
 var
   data: TTyGeoData;
   g, row, raw, si, slot, hover: Integer;
@@ -1783,7 +1783,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.MapRepatch(APPI: Integer; AForce: Boolean);
+procedure TTyCustomAdvanceChart.MapRepatch(APPI: Integer; AForce: Boolean);
 var
   k, i, n: Integer;
   geo: TTyGeo;
@@ -1821,7 +1821,7 @@ end;
 { [R2-B] the element of a map series' SVG picture the pointer is over: the
   list element AIdx's node (-1, or no SVG element: none) on the geo that
   draws the series }
-procedure TTyAdvanceChart.MapSvgPointer(ASeriesIndex, AIdx: Integer);
+procedure TTyCustomAdvanceChart.MapSvgPointer(ASeriesIndex, AIdx: Integer);
 var k, node: Integer; geo: TTyGeo;
 begin
   node := -1;
@@ -1835,7 +1835,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.MapApplyChanged: Boolean;
+function TTyCustomAdvanceChart.MapApplyChanged: Boolean;
 var k, ppi: Integer; geo: TTyGeo; ink: TTyGeoInk;
 begin
   Result := False;
@@ -1852,7 +1852,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.BuildMapSeries(ASlot: Integer; const AMeasurer: ITyTextMeasurer;
+function TTyCustomAdvanceChart.BuildMapSeries(ASlot: Integer; const AMeasurer: ITyTextMeasurer;
   APPI: Integer; AList: TTyPaintList): Integer;
 var g, n: Integer; geo: TTyGeo;
 begin
@@ -1884,7 +1884,7 @@ end;
   (position bottom, its text the main series' getFormattedLabel of the
   name, its show and look the series' own item's, its state the region
   group's: onHoverStateChange) }
-function TTyAdvanceChart.BuildMapSymbols(ASlot: Integer; const AMeasurer: ITyTextMeasurer;
+function TTyCustomAdvanceChart.BuildMapSymbols(ASlot: Integer; const AMeasurer: ITyTextMeasurer;
   APPI: Integer; AList: TTyPaintList): Integer;
 var
   g, fi, k, raw, off, gr, si, hover, start: Integer;
@@ -2054,7 +2054,7 @@ begin
   FMapSyms[High(FMapSyms)].Count := AList.Count - start;
 end;
 
-function TTyAdvanceChart.MapTooltip(const ADatum: TTyChartDatumRef;
+function TTyCustomAdvanceChart.MapTooltip(const ADatum: TTyChartDatumRef;
   out ABlock: TTyTooltipBlock): Boolean;
 var
   slot, g, k, f, raw, dimV, dimO: Integer;
@@ -2100,7 +2100,7 @@ begin
   Result := True;
 end;
 
-procedure TTyAdvanceChart.DoLegacySelect(APayload: TJSONObject;
+procedure TTyCustomAdvanceChart.DoLegacySelect(APayload: TJSONObject;
   const ASeriesType, AType: string);
 var
   q: TJSONObject;
@@ -2133,12 +2133,12 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.MapGeoOf(ASeriesIndex: Integer): TTyGeo;
+function TTyCustomAdvanceChart.MapGeoOf(ASeriesIndex: Integer): TTyGeo;
 begin
   Result := MapGeoOfSlot(SlotOfSeries(ASeriesIndex));
 end;
 
-function TTyAdvanceChart.GeoDrawRange(AGeo: TTyGeo; out AStart, ACount: Integer): Boolean;
+function TTyCustomAdvanceChart.GeoDrawRange(AGeo: TTyGeo; out AStart, ACount: Integer): Boolean;
 var k: Integer;
 begin
   AStart := -1;
@@ -2153,7 +2153,7 @@ begin
   Result := False;
 end;
 
-function TTyAdvanceChart.MapSymbolRange(ASeriesIndex: Integer; out AStart, ACount: Integer): Boolean;
+function TTyCustomAdvanceChart.MapSymbolRange(ASeriesIndex: Integer; out AStart, ACount: Integer): Boolean;
 var k: Integer;
 begin
   AStart := -1;
@@ -2168,7 +2168,7 @@ begin
   Result := False;
 end;
 
-procedure TTyAdvanceChart.MergeGeoRoam(var AState: TTyGraphRoamState; AIndex: Integer;
+procedure TTyCustomAdvanceChart.MergeGeoRoam(var AState: TTyGraphRoamState; AIndex: Integer;
   ANew: TJSONObject);
 var spec: TTyGeoSpec;
 begin
@@ -2181,7 +2181,7 @@ begin
   if ANew.Find('zoom') <> nil then AState.Zoom := spec.Zoom;
 end;
 
-function TTyAdvanceChart.GeoRoam(AIndex: Integer; ADX, ADY: Double): Boolean;
+function TTyCustomAdvanceChart.GeoRoam(AIndex: Integer; ADX, ADY: Double): Boolean;
 var p: TJSONObject;
 begin
   p := TJSONObject.Create;
@@ -2193,7 +2193,7 @@ begin
   Result := FGeoRoamHits > 0;
 end;
 
-function TTyAdvanceChart.GeoZoom(AIndex: Integer; AScale, AOriginX, AOriginY: Double): Boolean;
+function TTyCustomAdvanceChart.GeoZoom(AIndex: Integer; AScale, AOriginX, AOriginY: Double): Boolean;
 var p: TJSONObject;
 begin
   p := TJSONObject.Create;
@@ -2206,7 +2206,7 @@ begin
   Result := FGeoRoamHits > 0;
 end;
 
-function TTyAdvanceChart.GeoRoamState(AIndex: Integer; out ACentre: TTyGraphCentre;
+function TTyCustomAdvanceChart.GeoRoamState(AIndex: Integer; out ACentre: TTyGraphCentre;
   out AZoom: Double): Boolean;
 var spec: TTyGeoSpec;
 begin
@@ -2225,7 +2225,7 @@ begin
   AZoom := spec.Zoom;
 end;
 
-procedure TTyAdvanceChart.FreeGeoSel;
+procedure TTyCustomAdvanceChart.FreeGeoSel;
 var i: Integer;
 begin
   for i := 0 to High(FGeoSel) do FreeAndNil(FGeoSel[i]);
@@ -2235,7 +2235,7 @@ end;
 { GeoModel.optionUpdated: `if (!option.selectedMap) option.selectedMap =
   selectedMap` -- the regions (entries with their echartsStyle) whose name
   is truthy and that say `selected` -- made once, the model's after }
-function TTyAdvanceChart.GeoSelMap(AIndex: Integer): TJSONObject;
+function TTyCustomAdvanceChart.GeoSelMap(AIndex: Integer): TJSONObject;
 var
   node, d, regions, nm: TJSONData;
   i, n: Integer;
@@ -2288,20 +2288,20 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.GeoIsSelected(AIndex: Integer; const AName: string): Boolean;
+function TTyCustomAdvanceChart.GeoIsSelected(AIndex: Integer; const AName: string): Boolean;
 var m: TJSONObject;
 begin
   m := GeoSelMap(AIndex);
   Result := (m <> nil) and JsTruthy(m.Find(AName));
 end;
 
-function TTyAdvanceChart.GeoSelected(AIndex: Integer; const AName: string): Boolean;
+function TTyCustomAdvanceChart.GeoSelected(AIndex: Integer; const AName: string): Boolean;
 begin
   Result := GeoIsSelected(AIndex, AName);
 end;
 
 { updateSelectStatus: enterSelect / leaveSelect on every region group }
-procedure TTyAdvanceChart.GeoSyncSelected(AIndex: Integer);
+procedure TTyCustomAdvanceChart.GeoSyncSelected(AIndex: Integer);
 var g: Integer; geo: TTyGeo;
 begin
   if (AIndex < 0) or (AIndex > High(FGeos)) or (FGeos[AIndex] = nil) then Exit;
@@ -2312,7 +2312,7 @@ end;
 
 { eachComponent of mainType 'geo' with the payload as the query: the geos the payload's
   geoIndex / geoId / geoName names, every geo when it names none }
-function TTyAdvanceChart.GeoMatch(APayload: TJSONObject): TTyIntegerArray;
+function TTyCustomAdvanceChart.GeoMatch(APayload: TJSONObject): TTyIntegerArray;
 var
   pf: TTyParsedFinder;
   i, n: Integer;
@@ -2329,7 +2329,7 @@ end;
 
 { preParseFinder: the first key of the payload that is <mainType>Index /
   Id / Name names the highlight's main type }
-function TTyAdvanceChart.GeoFinderFirst(APayload: TJSONObject): Boolean;
+function TTyCustomAdvanceChart.GeoFinderFirst(APayload: TJSONObject): Boolean;
 var pf: TTyParsedFinder;
 begin
   Result := False;
@@ -2339,7 +2339,7 @@ begin
 end;
 
 { the geo a target was found on, when its render is still the current one }
-function TTyAdvanceChart.GeoOfTarget(const ATarget: TTyChartEventTarget): TTyGeo;
+function TTyCustomAdvanceChart.GeoOfTarget(const ATarget: TTyChartEventTarget): TTyGeo;
 begin
   Result := nil;
   if ATarget.HdKind <> 14 then Exit;
@@ -2348,7 +2348,7 @@ begin
   Result := FGeos[ATarget.HdSeries];
 end;
 
-function TTyAdvanceChart.IsGeoDatum(const ADatum: TTyChartDatumRef): Boolean;
+function TTyCustomAdvanceChart.IsGeoDatum(const ADatum: TTyChartDatumRef): Boolean;
 begin
   Result := (ADatum.Kind = ctkGeo) and (ADatum.ComponentIndex >= 0)
     and (ADatum.ComponentIndex <= High(FGeos)) and (FGeos[ADatum.ComponentIndex] <> nil)
@@ -2359,7 +2359,7 @@ end;
 { handleGlobalMouseOverForHighDown: a group whose emphasis is disabled is
   no dispatcher at all; else a 'self' focus blurs the component, and the
   group enters emphasis unless an action holds it }
-procedure TTyAdvanceChart.GeoHoverOver(const ATarget: TTyChartEventTarget);
+procedure TTyCustomAdvanceChart.GeoHoverOver(const ATarget: TTyChartEventTarget);
 var geo: TTyGeo; g: Integer;
 begin
   geo := GeoOfTarget(ATarget);
@@ -2375,7 +2375,7 @@ end;
 
 { handleGlobalMouseOutForHighDown: allLeaveBlur, then the group leaves
   emphasis unless an action holds it }
-procedure TTyAdvanceChart.GeoHoverOut(const ATarget: TTyChartEventTarget);
+procedure TTyCustomAdvanceChart.GeoHoverOut(const ATarget: TTyChartEventTarget);
 var geo: TTyGeo; g: Integer;
 begin
   geo := GeoOfTarget(ATarget);
@@ -2390,7 +2390,7 @@ end;
 
 { GeoView._handleRegionClick: geoToggleSelect for the clicked region's
   name, by the geo's id }
-procedure TTyAdvanceChart.GeoRegionClick(const ATarget: TTyChartEventTarget);
+procedure TTyCustomAdvanceChart.GeoRegionClick(const ATarget: TTyChartEventTarget);
 var geo: TTyGeo; p: TJSONObject;
 begin
   geo := GeoOfTarget(ATarget);
@@ -2404,7 +2404,7 @@ end;
 { makeAction (geo/install.ts): the method on every geo the query names,
   `selected` over every region of each -- one object across the geos --
   and allSelected per geo; the event: selected, allSelected, name, type }
-procedure TTyAdvanceChart.DoGeoSelectAction(APayload: TJSONObject; const AType: string);
+procedure TTyCustomAdvanceChart.DoGeoSelectAction(APayload: TJSONObject; const AType: string);
 var
   geos: TTyIntegerArray;
   i, k, gi, j: Integer;
@@ -2535,7 +2535,7 @@ end;
   a highlight's 'self' focus blurring the component unless notBlur, then
   enterEmphasis / leaveEmphasis with bit 0 (a component's highlight takes
   no highlightKey); the event a copy of the payload }
-procedure TTyAdvanceChart.DoGeoHighDown(APayload: TJSONObject);
+procedure TTyCustomAdvanceChart.DoGeoHighDown(APayload: TJSONObject);
 var
   geos: TTyIntegerArray;
   i, g: Integer;
@@ -2576,7 +2576,7 @@ begin
 end;
 
 { the frame's applyChangedStates over the geos' elements }
-function TTyAdvanceChart.GeoApplyChanged: Boolean;
+function TTyCustomAdvanceChart.GeoApplyChanged: Boolean;
 var i, ppi: Integer; ink: TTyGeoInk;
 begin
   Result := False;
@@ -2590,7 +2590,7 @@ begin
     if (FGeos[i] <> nil) and FGeos[i].ApplyStates(ink, ppi) then Result := True;
 end;
 
-function TTyAdvanceChart.GeoTipSpec(const ADatum: TTyChartDatumRef): TTyTooltipSpec;
+function TTyCustomAdvanceChart.GeoTipSpec(const ADatum: TTyChartDatumRef): TTyTooltipSpec;
 var geo: TTyGeo; opt: TJSONObject; tip: TJSONData;
 begin
   geo := FGeos[ADatum.ComponentIndex];
@@ -2603,7 +2603,7 @@ begin
 end;
 
 { setTooltipConfig's formatterParams: componentType, name, geoIndex }
-function TTyAdvanceChart.GeoTipParams(const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
+function TTyCustomAdvanceChart.GeoTipParams(const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
 begin
   Result := TyChartBlankParams;
   Result.ComponentType := 'geo';
@@ -2615,7 +2615,7 @@ end;
   through formatTpl -- $vars ['name']: the first a-placeholder becomes a0,
   the first a0 the name, encoded -- or the content (the name) where no formatter
   is in force }
-function TTyAdvanceChart.GeoTipText(const ADatum: TTyChartDatumRef;
+function TTyCustomAdvanceChart.GeoTipText(const ADatum: TTyChartDatumRef;
   const ASpec: TTyTooltipSpec): string;
 var
   nm, tpl: string;
@@ -2634,7 +2634,7 @@ begin
   Result := TyJsReplaceFirst(tpl, '{a0}', GeoEncodeHtml(nm));
 end;
 
-procedure TTyAdvanceChart.SolveCalendars(APPI: Integer);
+procedure TTyCustomAdvanceChart.SolveCalendars(APPI: Integer);
 var i, n: Integer;
 begin
   FreeCalendars;
@@ -2654,7 +2654,7 @@ end;
   month lines are an axis line, the day and month names axis labels, and the
   year the subtitle's quieter ink. Upstream's own tokens for them are the
   same neutrals those keys default to. }
-function TTyAdvanceChart.CalendarInk: TTyCalendarInk;
+function TTyCustomAdvanceChart.CalendarInk: TTyCalendarInk;
 var
   model: TTyStyleModel;
   st: TTyStyleSet;
@@ -2677,7 +2677,7 @@ begin
   Result.YearFontName := st.FontName;
 end;
 
-procedure TTyAdvanceChart.FreeMatrices;
+procedure TTyCustomAdvanceChart.FreeMatrices;
 var i: Integer;
 begin
   for i := 0 to High(FMatrices) do FreeAndNil(FMatrices[i]);
@@ -2685,7 +2685,7 @@ begin
 end;
 
 { THE MATRICES, one per component, from the option [Batch 145] }
-procedure TTyAdvanceChart.BuildMatrices;
+procedure TTyCustomAdvanceChart.BuildMatrices;
 var i, n: Integer;
 begin
   FreeMatrices;
@@ -2698,7 +2698,7 @@ end;
 
 { each laid out on the whole canvas, as upstream's is: getLayoutRect
   against the chart's width and height [Batch 145] }
-procedure TTyAdvanceChart.SolveMatrices(APPI: Integer);
+procedure TTyCustomAdvanceChart.SolveMatrices(APPI: Integer);
 var i: Integer;
 begin
   for i := 0 to High(FMatrices) do
@@ -2709,7 +2709,7 @@ end;
   axis split line, a divider and the outer border an axis line, a label an
   axis label's ink. Upstream's tokens for them (borderTint, border,
   axisLine, secondary) are the same neutrals. [Batch 145] }
-function TTyAdvanceChart.MatrixInk: TTyMatrixInk;
+function TTyCustomAdvanceChart.MatrixInk: TTyMatrixInk;
 var model: TTyStyleModel;
 begin
   Result := Default(TTyMatrixInk);
@@ -2723,33 +2723,33 @@ begin
     model.ResolveStyle('TyAdvChartAxisLabel', '', []).TextColor);
 end;
 
-function TTyAdvanceChart.CalendarLayout(AIndex: Integer): TTyCalendar;
+function TTyCustomAdvanceChart.CalendarLayout(AIndex: Integer): TTyCalendar;
 begin
   Result := nil;
   if (AIndex >= 0) and (AIndex <= High(FCalendars)) then
     Result := FCalendars[AIndex];
 end;
 
-function TTyAdvanceChart.MatrixLayout(AIndex: Integer): TTyMatrix;
+function TTyCustomAdvanceChart.MatrixLayout(AIndex: Integer): TTyMatrix;
 begin
   Result := nil;
   if (AIndex >= 0) and (AIndex <= High(FMatrices)) then
     Result := FMatrices[AIndex];
 end;
 
-function TTyAdvanceChart.GeoCount: Integer;
+function TTyCustomAdvanceChart.GeoCount: Integer;
 begin
   Result := Length(FGeos);
 end;
 
-function TTyAdvanceChart.GeoLayout(AIndex: Integer): TTyGeo;
+function TTyCustomAdvanceChart.GeoLayout(AIndex: Integer): TTyGeo;
 begin
   Result := nil;
   if (AIndex >= 0) and (AIndex <= High(FGeos)) then
     Result := FGeos[AIndex];
 end;
 
-function TTyAdvanceChart.GeoLinesPoint(const AX, AY: TTyLinesValue): TTyPointF;
+function TTyCustomAdvanceChart.GeoLinesPoint(const AX, AY: TTyLinesValue): TTyPointF;
 var
   geo: TTyGeo;
   x, y: Double;
@@ -2787,7 +2787,7 @@ end;
   string-dated node with no numeric value is not placed at all, and after
   a first node dated by a timestamp every string-dated node is lost.
   [Batch 72] }
-function TTyAdvanceChart.CalendarGraphPoints(ASeriesIndex: Integer;
+function TTyCustomAdvanceChart.CalendarGraphPoints(ASeriesIndex: Integer;
   ACal: TTyCalendar): TTyPointFArray;
 var
   node, d, it, arr, t0, v0: TJSONData;
@@ -2888,7 +2888,7 @@ end;
   ordinal or nothing, a number as it is), the value a number -- and
   graphSimpleLayout: a node with any of the three a number is placed at
   dataToPoint([x, y]), the others nowhere. }
-function TTyAdvanceChart.MatrixGraphPoints(ASeriesIndex: Integer;
+function TTyCustomAdvanceChart.MatrixGraphPoints(ASeriesIndex: Integer;
   AMatrix: TTyMatrix): TTyPointFArray;
 var
   node, d, it, arr: TJSONData;
@@ -2951,7 +2951,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.GeoSvgMeasure(const AText: string; const AFont: TTyGsFont): Double;
+function TTyCustomAdvanceChart.GeoSvgMeasure(const AText: string; const AFont: TTyGsFont): Double;
 var fam: string; p, wt: Integer; w, h, v: Double;
 begin
   if FGeoSvgMeas = nil then FGeoSvgMeas := NewTextMeasurer(96);

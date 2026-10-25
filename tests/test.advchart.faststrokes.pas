@@ -1101,7 +1101,7 @@ begin
         begin
           Inc(n);
           AssertTrue(sr.Name + ': only NewPainter creates a painter',
-            Pos('function TTyAdvanceChart.NewPainter', Copy(text, Max(1, p - 200), 200)) > 0);
+            Pos('function TTyCustomAdvanceChart.NewPainter', Copy(text, Max(1, p - 200), 200)) > 0);
           p := Pos('TTyPainter.Create', text, p + 1);
         end;
       until FindNext(sr) <> 0;

@@ -2,7 +2,7 @@
   hit testing and the cursor. Moved out of the unit only to keep it readable; what the
   control is and why it is built the way it is, see the unit header. }
 
-procedure TTyAdvanceChart.MouseDown(Button: TMouseButton; Shift: TShiftState;
+procedure TTyCustomAdvanceChart.MouseDown(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 var
   d: TTyChartDatumRef;
@@ -101,7 +101,7 @@ begin
   FRoamY := Y;
 end;
 
-procedure TTyAdvanceChart.MouseUp(Button: TMouseButton; Shift: TShiftState;
+procedure TTyCustomAdvanceChart.MouseUp(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 var
   d: TTyChartDatumRef;
@@ -191,7 +191,7 @@ begin
   inherited MouseUp(Button, Shift, X, Y);
 end;
 
-procedure TTyAdvanceChart.CaptureChanged;
+procedure TTyCustomAdvanceChart.CaptureChanged;
 begin
   { THE BUTTON CAME UP SOMEWHERE THIS CONTROL WILL NOT HEAR OF, or another
     window took the mouse. Either way the drag is over. A dataZoom's ends as
@@ -217,7 +217,7 @@ begin
   inherited CaptureChanged;
 end;
 
-function TTyAdvanceChart.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+function TTyCustomAdvanceChart.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 var
   wd: TTyChartDatumRef;
@@ -237,7 +237,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.WheelRoam(Shift: TShiftState; WheelDelta: Integer;
+function TTyCustomAdvanceChart.WheelRoam(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 var
   s: Double;
@@ -268,7 +268,7 @@ begin
   else Result := GraphZoom(si, s, MousePos.X, MousePos.Y);
 end;
 
-function TTyAdvanceChart.SlotOfSeries(ASeriesIndex: Integer): Integer;
+function TTyCustomAdvanceChart.SlotOfSeries(ASeriesIndex: Integer): Integer;
 var i: Integer;
 begin
   for i := 0 to High(FBindings) do
@@ -276,7 +276,7 @@ begin
   Result := -1;
 end;
 
-function TTyAdvanceChart.NearestRowOn(ASlot: Integer; AX, AY: Double): Integer;
+function TTyCustomAdvanceChart.NearestRowOn(ASlot: Integer; AX, AY: Double): Integer;
 var
   axis: TTyAxis;
   st: TTyDataStore;
@@ -313,13 +313,13 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.HitTestAt(AX, AY: Integer): TTyChartDatumRef;
+function TTyCustomAdvanceChart.HitTestAt(AX, AY: Integer): TTyChartDatumRef;
 var ignored: Integer;
 begin
   Result := HitTestAt(AX, AY, ignored);
 end;
 
-function TTyAdvanceChart.HitTestAt(AX, AY: Integer;
+function TTyCustomAdvanceChart.HitTestAt(AX, AY: Integer;
   out AElement: Integer): TTyChartDatumRef;
 var
   idx, slot, row, bb, bi: Integer;
@@ -378,7 +378,7 @@ end;
 
 { ==================== the chart's mouse events [Batch 84] ==================== }
 
-function TTyAdvanceChart.ChartOn(const AType: string;
+function TTyCustomAdvanceChart.ChartOn(const AType: string;
   AHandler: TTyChartEventHandler; const AQuery: string): Integer;
 var
   t: string;
@@ -403,7 +403,7 @@ begin
   Result := FEventNextId;
 end;
 
-procedure TTyAdvanceChart.ChartOff(AId: Integer);
+procedure TTyCustomAdvanceChart.ChartOff(AId: Integer);
 var i, k: Integer;
 begin
   for i := 0 to High(FEventRegs) do
@@ -415,7 +415,7 @@ begin
     end;
 end;
 
-procedure TTyAdvanceChart.SilenceSeries(AList: TTyPaintList);
+procedure TTyCustomAdvanceChart.SilenceSeries(AList: TTyPaintList);
 var
   silent: array of Boolean;
   i, k: Integer;
@@ -447,7 +447,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.StampCursors(AList: TTyPaintList);
+procedure TTyCustomAdvanceChart.StampCursors(AList: TTyPaintList);
 var
   k, si, slot, raw, depth: Integer;
   pe: PTyChartElement;
@@ -603,7 +603,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.SeriesEventModel(ASeriesIndex: Integer): TTyEventModel;
+function TTyCustomAdvanceChart.SeriesEventModel(ASeriesIndex: Integer): TTyEventModel;
 var slot: Integer;
 begin
   Result := Default(TTyEventModel);
@@ -622,7 +622,7 @@ end;
   data type -- or, for the one element that stands for a whole line, the
   series' own params with selfType 'line', and then only when the series
   says triggerEvent. }
-function TTyAdvanceChart.SeriesEventTarget(const ADatum: TTyChartDatumRef;
+function TTyCustomAdvanceChart.SeriesEventTarget(const ADatum: TTyChartDatumRef;
   AElement: Integer): TTyChartEventTarget;
 var
   gel: TTyGfxEl;
@@ -717,7 +717,7 @@ end;
 { [R2-B] THE TARGET A MARKER ELEMENT IS (EventTargetAt's marker branch, by
   list index): the marker model's own index among its kind and its HOST's
   series fields; HdKind 3 }
-function TTyAdvanceChart.MarkerEventTarget(AIdx: Integer): TTyChartEventTarget;
+function TTyCustomAdvanceChart.MarkerEventTarget(AIdx: Integer): TTyChartEventTarget;
 const
   cKindWord: array[TTyChartTargetKind] of string = ('series', 'markPoint',
     'markLine', 'markArea', 'legend', 'legend', 'legend', 'graphic', 'matrix', 'geo',
@@ -790,7 +790,7 @@ end;
 
 { [R2-B] the breadcrumb item the list element at AIdx is (its polygon, or its
   words hung off it) }
-function TTyAdvanceChart.CrumbOfElement(AIdx: Integer; out ASeries, AIndex: Integer): Boolean;
+function TTyCustomAdvanceChart.CrumbOfElement(AIdx: Integer; out ASeries, AIndex: Integer): Boolean;
 var el: PTyChartElement; h: Integer;
 begin
   Result := False;
@@ -814,7 +814,7 @@ end;
   only eventData -- componentType 'series', selfType 'breadcrumb', nodeData
   (Breadcrumb.ts packEventData) -- no dataIndex, so no select and no
   tooltip; HdGen the solve that drew it }
-function TTyAdvanceChart.CrumbTarget(ASeries, AIndex: Integer): TTyChartEventTarget;
+function TTyCustomAdvanceChart.CrumbTarget(ASeries, AIndex: Integer): TTyChartEventTarget;
 var slot, i: Integer; nm: string;
 begin
   Result := Default(TTyChartEventTarget);
@@ -845,7 +845,7 @@ begin
   Result.Model := SeriesEventModel(ASeries);
 end;
 
-function TTyAdvanceChart.EventTargetAt(AX, AY: Integer): TTyChartEventTarget;
+function TTyCustomAdvanceChart.EventTargetAt(AX, AY: Integer): TTyChartEventTarget;
 var
   i, k, g, a, q, idx, slot: Integer;
   lay: TTyTitleLayout;
@@ -1375,7 +1375,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.EmitChartEvent(const AType: string;
+procedure TTyCustomAdvanceChart.EmitChartEvent(const AType: string;
   const ATarget: TTyChartEventTarget; AX, AY: Integer; AHasOffset: Boolean);
 var
   ev: TTyChartEvent;
@@ -1407,13 +1407,13 @@ end;
 { zrender's mousemove: an out to what was hovered when the target changes,
   a move to the new one, an over when it changed -- each only where the
   target carries data }
-procedure TTyAdvanceChart.EventMove(AX, AY: Integer);
+procedure TTyCustomAdvanceChart.EventMove(AX, AY: Integer);
 begin
   EventMoveOnly(AX, AY);
   EventOver;
 end;
 
-procedure TTyAdvanceChart.EventMoveOnly(AX, AY: Integer);
+procedure TTyCustomAdvanceChart.EventMoveOnly(AX, AY: Integer);
 var
   t: TTyChartEventTarget;
   cancel: Boolean;
@@ -1491,7 +1491,7 @@ begin
   FEvHoverY := AY;
 end;
 
-procedure TTyAdvanceChart.EventOver;
+procedure TTyCustomAdvanceChart.EventOver;
 var
   t: TTyChartEventTarget;
   cancel: Boolean;
@@ -1516,7 +1516,7 @@ begin
   TlApplyStates;
 end;
 
-procedure TTyAdvanceChart.EventDown(AButton: TMouseButton; AX, AY: Integer);
+procedure TTyCustomAdvanceChart.EventDown(AButton: TMouseButton; AX, AY: Integer);
 var t: TTyChartEventTarget;
 begin
   FEvLastX := AX;
@@ -1539,7 +1539,7 @@ end;
   the click: the same target pressed and released, a press point to judge
   it against, within 4 px of it. A click that passes clears the point; one
   that fails does not. }
-procedure TTyAdvanceChart.EventUp(AButton: TMouseButton; AX, AY: Integer);
+procedure TTyCustomAdvanceChart.EventUp(AButton: TMouseButton; AX, AY: Integer);
 var t: TTyChartEventTarget;
 begin
   t := EventTargetAt(AX, AY);
@@ -1607,7 +1607,7 @@ begin
   TlApplyStates;
 end;
 
-procedure TTyAdvanceChart.EventDblClick(AX, AY: Integer);
+procedure TTyCustomAdvanceChart.EventDblClick(AX, AY: Integer);
 var t: TTyChartEventTarget;
 begin
   t := EventTargetAt(AX, AY);
@@ -1615,7 +1615,7 @@ begin
   if t.HasData then EmitChartEvent('dblclick', t, AX, AY);
 end;
 
-procedure TTyAdvanceChart.EventContextMenu(AX, AY: Integer);
+procedure TTyCustomAdvanceChart.EventContextMenu(AX, AY: Integer);
 var t: TTyChartEventTarget;
 begin
   t := EventTargetAt(AX, AY);
@@ -1626,7 +1626,7 @@ end;
 { THE POINTER LEFT THE CANVAS: an out to what it was over, at the last point
   it was seen, then globalout with nothing -- and what was hovered is
   remembered, so coming back onto it is no over }
-procedure TTyAdvanceChart.EventLeave(AX, AY: Integer);
+procedure TTyCustomAdvanceChart.EventLeave(AX, AY: Integer);
 var
   none: TTyChartEventTarget;
   cancel: Boolean;
@@ -1651,20 +1651,20 @@ begin
   EmitChartEvent('globalout', none, 0, 0, False);
 end;
 
-procedure TTyAdvanceChart.DblClick;
+procedure TTyCustomAdvanceChart.DblClick;
 begin
   inherited DblClick;
   if not (csDesigning in ComponentState) then EventDblClick(FEvLastX, FEvLastY);
 end;
 
-procedure TTyAdvanceChart.DoContextPopup(MousePos: TPoint; var Handled: Boolean);
+procedure TTyCustomAdvanceChart.DoContextPopup(MousePos: TPoint; var Handled: Boolean);
 begin
   if not (csDesigning in ComponentState) then
     EventContextMenu(MousePos.X, MousePos.Y);
   inherited DoContextPopup(MousePos, Handled);
 end;
 
-procedure TTyAdvanceChart.MouseMove(Shift: TShiftState; X, Y: Integer);
+procedure TTyCustomAdvanceChart.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   d, preD: TTyChartDatumRef;
   spec: TTyTooltipSpec;
@@ -1800,7 +1800,7 @@ begin
     HoverInvalidate;
 end;
 
-procedure TTyAdvanceChart.MouseLeave;
+procedure TTyCustomAdvanceChart.MouseLeave;
 var wasOn: Boolean;
 begin
   TbFrame;
@@ -1839,7 +1839,7 @@ end;
 { THE ELEMENT'S OWN cursor (Displayable.cursor, 'pointer' unless something
   set another): what zrender's Handler.mousemove hands setCursor for the
   hovered target; 'default' for no target }
-function TTyAdvanceChart.TargetCursor(const ATarget: TTyChartEventTarget): string;
+function TTyCustomAdvanceChart.TargetCursor(const ATarget: TTyChartEventTarget): string;
 var idx: Integer;
 begin
   Result := 'default';
@@ -1874,7 +1874,7 @@ end;
 
 { a graph's, a tree's, a sankey's, a treemap's, a geo's or a map's
   RoamController would grab here (its _checkPointer) }
-function TTyAdvanceChart.RoamGrabAt(AX, AY: Integer): Boolean;
+function TTyCustomAdvanceChart.RoamGrabAt(AX, AY: Integer): Boolean;
 var g: Integer;
 begin
   Result := RoamTargetAt(AX, AY, False, g) >= 0;
@@ -1891,7 +1891,7 @@ end;
   dataZoom's (coordsys:aftercreate, its grid's z), then the components'
   (a geo's), then the series' (a graph's, a tree's, a sankey's, a
   treemap's, a map's), each in its index order. }
-function TTyAdvanceChart.RoamReleaseArea(AX, AY: Integer): Integer;
+function TTyCustomAdvanceChart.RoamReleaseArea(AX, AY: Integer): Integer;
 var
   found, bestIn: Boolean;
   bestZL, bestZ, bestSeq: Integer;
@@ -2008,7 +2008,7 @@ begin
 end;
 
 { some RoamController listens to the release: one that pans }
-function TTyAdvanceChart.AnyPanRoam: Boolean;
+function TTyCustomAdvanceChart.AnyPanRoam: Boolean;
 var
   i: Integer;
   gg: TTyGeo;
@@ -2043,7 +2043,7 @@ end;
   of one where nothing is hovered (the lowest precedence:
   _decideCursorStyle) -- none of it while the brush holds globalPan; then
   the brush's own (its crosshair, TbApplyCursor) }
-procedure TTyAdvanceChart.CursorAfterMove(AX, AY: Integer);
+procedure TTyCustomAdvanceChart.CursorAfterMove(AX, AY: Integer);
 var
   c: string;
   none: Boolean;
@@ -2074,7 +2074,7 @@ end;
   element's own cursor -- the pan's 'grabbing' given back.
   [R2-E] The last controller's word (RoamReleaseArea), and whatever holds
   globalPan: the mouseup handler does not ask. }
-procedure TTyAdvanceChart.CursorAfterUp(AX, AY: Integer);
+procedure TTyCustomAdvanceChart.CursorAfterUp(AX, AY: Integer);
 var
   t: TTyChartEventTarget;
   d: TTyDzTarget;
@@ -2116,7 +2116,7 @@ end;
   the control's Cursor, the host's own kept; 'default' (or a name with no
   counterpart) gives it back. A Cursor the host set while the chart showed
   its own is the host's new one. }
-procedure TTyAdvanceChart.ApplyCursorName(const AName: string);
+procedure TTyCustomAdvanceChart.ApplyCursorName(const AName: string);
 var c: TCursor;
 begin
   FCursorName := AName;

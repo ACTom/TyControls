@@ -2,7 +2,7 @@
   tree. Moved out of the unit only to keep it readable; what the control is and why it is
   built the way it is, see the unit header. }
 
-function TTyAdvanceChart.AccessibleSummary: string;
+function TTyCustomAdvanceChart.AccessibleSummary: string;
 var
   facts: TTyAriaFacts;
 begin
@@ -70,7 +70,7 @@ begin
   Result := Result + ',"dataIndex":' + IntToStr(ARaw) + '}';
 end;
 
-function TTyAdvanceChart.KbSeriesList: TTyKbSeriesArray;
+function TTyCustomAdvanceChart.KbSeriesList: TTyKbSeriesArray;
 var
   si, slot, n, e: Integer;
 begin
@@ -102,7 +102,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.KbRawOf(ASeries, ARow: Integer; AEdge: Boolean): Integer;
+function TTyCustomAdvanceChart.KbRawOf(ASeries, ARow: Integer; AEdge: Boolean): Integer;
 var slot, j: Integer;
 begin
   Result := -1;
@@ -123,7 +123,7 @@ begin
   Result := FStores[slot].GetRawIndex(ARow);
 end;
 
-function TTyAdvanceChart.KbValid: Boolean;
+function TTyCustomAdvanceChart.KbValid: Boolean;
 var slot: Integer;
 begin
   Result := False;
@@ -135,13 +135,13 @@ begin
   Result := FKbRow < FStores[slot].Count;
 end;
 
-function TTyAdvanceChart.KbList: TTyPaintList;
+function TTyCustomAdvanceChart.KbList: TTyPaintList;
 begin
   if FAnimLive or (Length(FAnimStBind) > 0) then Result := AnimFrame
   else Result := FPaintList;
 end;
 
-function TTyAdvanceChart.KbElementOf(ASeries, ARow: Integer; AEdge: Boolean): Integer;
+function TTyCustomAdvanceChart.KbElementOf(ASeries, ARow: Integer; AEdge: Boolean): Integer;
 var
   raw, i, h, j, row: Integer;
   el: TTyChartElement;
@@ -195,7 +195,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.KbShowTip;
+procedure TTyCustomAdvanceChart.KbShowTip;
 var raw, el: Integer;
 begin
   { [F5] AN EDGE: showTip finds its point in the series' data (the nodes) and
@@ -221,7 +221,7 @@ begin
     [FKbSeries, raw]));
 end;
 
-procedure TTyAdvanceChart.KbHideTip;
+procedure TTyCustomAdvanceChart.KbHideTip;
 begin
   { the pointer and the box: updateAxisPointer with currTrigger 'leave' hides
     the pointers and dispatches the hideTip; with no pointer up, the hideTip
@@ -232,7 +232,7 @@ begin
     DispatchAction('{"type":"hideTip"}');
 end;
 
-procedure TTyAdvanceChart.KbGo(ASeries, ARow: Integer; AEdge: Boolean);
+procedure TTyCustomAdvanceChart.KbGo(ASeries, ARow: Integer; AEdge: Boolean);
 var raw: Integer;
 begin
   raw := KbRawOf(ASeries, ARow, AEdge);
@@ -262,7 +262,7 @@ begin
   InvalidateFrame;
 end;
 
-procedure TTyAdvanceChart.KbRelease(ADownplay: Boolean);
+procedure TTyCustomAdvanceChart.KbRelease(ADownplay: Boolean);
 begin
   if not FKbActive then Exit;
   if ADownplay and KbValid then
@@ -273,7 +273,7 @@ begin
   InvalidateFrame;
 end;
 
-function TTyAdvanceChart.KbActivate: Boolean;
+function TTyCustomAdvanceChart.KbActivate: Boolean;
 var
   slot, j: Integer;
   t: TTyChartEventTarget;
@@ -303,7 +303,7 @@ begin
   Result := True;
 end;
 
-procedure TTyAdvanceChart.PaintKbRing(APainter: TTyPainter);
+procedure TTyCustomAdvanceChart.PaintKbRing(APainter: TTyPainter);
 var
   idx, off: Integer;
   b: TTyRectF;
@@ -333,7 +333,7 @@ begin
   APainter.StrokeBorder(r, TyEffectiveCorners(st), st.OutlineWidth, st.OutlineColor);
 end;
 
-procedure TTyAdvanceChart.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TTyCustomAdvanceChart.KeyDown(var Key: Word; Shift: TShiftState);
 var
   cmd: TTyKbCommand;
   list: TTyKbSeriesArray;
@@ -404,7 +404,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.DoExit;
+procedure TTyCustomAdvanceChart.DoExit;
 begin
   KbRelease(True);
   { [F5] a component's part too; the stop and the part are kept }
@@ -412,19 +412,19 @@ begin
   inherited DoExit;
 end;
 
-procedure TTyAdvanceChart.CreateWnd;
+procedure TTyCustomAdvanceChart.CreateWnd;
 begin
   inherited CreateWnd;
   if FAccLink <> nil then FAccLink.Attach;
 end;
 
-procedure TTyAdvanceChart.DestroyWnd;
+procedure TTyCustomAdvanceChart.DestroyWnd;
 begin
   if FAccLink <> nil then FAccLink.Detach;
   inherited DestroyWnd;
 end;
 
-function TTyAdvanceChart.KeyboardItem: TTyChartDatumRef;
+function TTyCustomAdvanceChart.KeyboardItem: TTyChartDatumRef;
 begin
   if FKbActive and KbValid then
   begin
@@ -435,7 +435,7 @@ begin
     Result := TyChartNoDatum;
 end;
 
-function TTyAdvanceChart.SetKeyboardItem(ASeriesIndex, ADataIndex: Integer;
+function TTyCustomAdvanceChart.SetKeyboardItem(ASeriesIndex, ADataIndex: Integer;
   AEdge: Boolean): Boolean;
 var
   slot, r: Integer;
@@ -463,7 +463,7 @@ begin
     end;
 end;
 
-procedure TTyAdvanceChart.ClearKeyboardItem;
+procedure TTyCustomAdvanceChart.ClearKeyboardItem;
 begin
   KbRelease(True);
   FKbSeries := -1;
@@ -475,7 +475,7 @@ begin
   FKbPart := -1;
 end;
 
-function TTyAdvanceChart.AccItemIndexOf(AObj: TLazAccessibleObject): Integer;
+function TTyCustomAdvanceChart.AccItemIndexOf(AObj: TLazAccessibleObject): Integer;
 var i: Integer;
 begin
   for i := 0 to High(FAccItemObjs) do
@@ -566,7 +566,7 @@ begin
   Result := '"' + StringToJSONString(AName) + '"';
 end;
 
-function TTyAdvanceChart.KbEdgeKind(ASlot: Integer): Integer;
+function TTyCustomAdvanceChart.KbEdgeKind(ASlot: Integer): Integer;
 begin
   Result := 0;
   if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
@@ -575,7 +575,7 @@ begin
   else if StChordSlot(ASlot) then Result := 3;
 end;
 
-function TTyAdvanceChart.KbEdgeCount(ASlot: Integer): Integer;
+function TTyCustomAdvanceChart.KbEdgeCount(ASlot: Integer): Integer;
 var j: Integer;
 begin
   Result := 0;
@@ -594,7 +594,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.KbEdgeOf(ASeries, ARow: Integer): Integer;
+function TTyCustomAdvanceChart.KbEdgeOf(ASeries, ARow: Integer): Integer;
 var slot, j, n: Integer;
 begin
   Result := -1;
@@ -620,7 +620,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.KbIsSlider(AIndex: Integer): Boolean;
+function TTyCustomAdvanceChart.KbIsSlider(AIndex: Integer): Boolean;
 begin
   Result := (AIndex >= 0) and (AIndex <= High(FZoomSpecs))
     and (FZoomSpecs[AIndex].SubType = 'slider')
@@ -629,7 +629,7 @@ begin
     and (AIndex <= High(FDzViews));
 end;
 
-function TTyAdvanceChart.KbIsInside(AIndex: Integer): Boolean;
+function TTyCustomAdvanceChart.KbIsInside(AIndex: Integer): Boolean;
 begin
   Result := (AIndex >= 0) and (AIndex <= High(FZoomSpecs))
     and (FZoomSpecs[AIndex].SubType = 'inside') and not FZoomSpecs[AIndex].NoTarget
@@ -640,7 +640,7 @@ end;
 
 { a continuous visualMap a pointer can drag: calculable, laid out with its
   two handles }
-function TTyAdvanceChart.KbVmHandles(AIndex: Integer): Boolean;
+function TTyCustomAdvanceChart.KbVmHandles(AIndex: Integer): Boolean;
 begin
   Result := (AIndex >= 0) and (AIndex <= High(FVisualLayouts))
     and (AIndex <= High(FVisualViews)) and (AIndex <= High(FVmLive))
@@ -649,7 +649,7 @@ begin
     and (Length(FVisualLayouts[AIndex].Handles) >= 2);
 end;
 
-function TTyAdvanceChart.KbListReady: Boolean;
+function TTyCustomAdvanceChart.KbListReady: Boolean;
 begin
   ConvertReady;
   if ((FPaintList = nil) or not FPaintListValid) and (FLastPPI > 0) and (FOption <> nil) then
@@ -657,7 +657,7 @@ begin
   Result := (FPaintList <> nil) and FPaintListValid;
 end;
 
-function TTyAdvanceChart.KbMarkerList(out ASeries, AKinds, AIndex,
+function TTyCustomAdvanceChart.KbMarkerList(out ASeries, AKinds, AIndex,
   AEls: TTyIntegerArray): Integer;
 var
   i, j, n, t: Integer;
@@ -718,7 +718,7 @@ begin
   Result := t;
 end;
 
-function TTyAdvanceChart.KbGeoRegions(AGeo: Integer): TTyIntegerArray;
+function TTyCustomAdvanceChart.KbGeoRegions(AGeo: Integer): TTyIntegerArray;
 var g: Integer;
 begin
   Result := nil;
@@ -731,7 +731,7 @@ begin
     end;
 end;
 
-function TTyAdvanceChart.KbVmPieces(AIndex: Integer): TTyIntegerArray;
+function TTyCustomAdvanceChart.KbVmPieces(AIndex: Integer): TTyIntegerArray;
 var j: Integer;
 begin
   Result := nil;
@@ -745,7 +745,7 @@ begin
     end;
 end;
 
-function TTyAdvanceChart.KbStops: TTyKbStopArray;
+function TTyCustomAdvanceChart.KbStops: TTyKbStopArray;
 var
   list: TTyKbSeriesArray;
   i, k: Integer;
@@ -808,7 +808,7 @@ begin
     if FBrushCtls[k] <> nil then Add(ksBrush, k, 0);
 end;
 
-function TTyAdvanceChart.KbCurPos(const AStops: TTyKbStopArray): Integer;
+function TTyCustomAdvanceChart.KbCurPos(const AStops: TTyKbStopArray): Integer;
 begin
   Result := TyKbStopPos(AStops, FKbStop);
   if Result >= 0 then Exit;
@@ -817,7 +817,7 @@ begin
   if Length(AStops) > 0 then Result := 0 else Result := -1;
 end;
 
-function TTyAdvanceChart.KbPartCount(const AStop: TTyKbStop): Integer;
+function TTyCustomAdvanceChart.KbPartCount(const AStop: TTyKbStop): Integer;
 var s, kd, ix, els: TTyIntegerArray;
 begin
   Result := 1;
@@ -841,7 +841,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.KbLegendTarget(ALegend, APart: Integer): TTyChartEventTarget;
+function TTyCustomAdvanceChart.KbLegendTarget(ALegend, APart: Integer): TTyChartEventTarget;
 var n, k: Integer;
 begin
   Result := Default(TTyChartEventTarget);
@@ -871,7 +871,7 @@ begin
 end;
 
 { a scroll legend's item on the page shown: its centre inside the clip }
-function TTyAdvanceChart.KbLegendVisible(ALegend, AItem: Integer): Boolean;
+function TTyCustomAdvanceChart.KbLegendVisible(ALegend, AItem: Integer): Boolean;
 var b, c: TTyRectF; cx, cy: Double;
 begin
   Result := True;
@@ -885,7 +885,7 @@ begin
   Result := (cx >= c.Left) and (cx <= c.Right) and (cy >= c.Top) and (cy <= c.Bottom);
 end;
 
-procedure TTyAdvanceChart.KbTipAtElement(AEl: Integer);
+procedure TTyCustomAdvanceChart.KbTipAtElement(AEl: Integer);
 var
   ev: TTyTipEvent;
   b: TTyRectF;
@@ -906,7 +906,7 @@ begin
   TipArmTimer;
 end;
 
-procedure TTyAdvanceChart.KbNotifyFocus;
+procedure TTyCustomAdvanceChart.KbNotifyFocus;
 begin
   if (FAccLink <> nil) and FAccLink.InUse then
   begin
@@ -915,7 +915,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.KbStopTake(APart: Integer);
+procedure TTyCustomAdvanceChart.KbStopTake(APart: Integer);
 var
   t: TTyChartEventTarget;
   s, kd, ix, els, regs, pcs: TTyIntegerArray;
@@ -1024,7 +1024,7 @@ begin
   InvalidateFrame;
 end;
 
-procedure TTyAdvanceChart.KbStopLeave;
+procedure TTyCustomAdvanceChart.KbStopLeave;
 var
   t: TTyChartEventTarget;
   dzt: TTyDzTarget;
@@ -1086,7 +1086,7 @@ begin
   InvalidateFrame;
 end;
 
-function TTyAdvanceChart.KbTakeMarkerForTest(APart: Integer): Boolean;
+function TTyCustomAdvanceChart.KbTakeMarkerForTest(APart: Integer): Boolean;
 var st: TTyKbStop;
 begin
   st := Default(TTyKbStop);
@@ -1095,12 +1095,12 @@ begin
   if Result then KbSwitchStop(st, APart);
 end;
 
-procedure TTyAdvanceChart.KbLeaveForTest;
+procedure TTyCustomAdvanceChart.KbLeaveForTest;
 begin
   KbStopLeave;
 end;
 
-procedure TTyAdvanceChart.KbSwitchStop(const AStop: TTyKbStop; APart: Integer);
+procedure TTyCustomAdvanceChart.KbSwitchStop(const AStop: TTyKbStop; APart: Integer);
 var i, n: Integer;
 begin
   { what holds the keyboard now lets go -- an item keeps its place, as an
@@ -1131,7 +1131,7 @@ begin
   KbStopTake(APart);
 end;
 
-procedure TTyAdvanceChart.KbDataZoomKey(AIndex: Integer; ACmd: TTyKbCommand);
+procedure TTyCustomAdvanceChart.KbDataZoomKey(AIndex: Integer; ACmd: TTyKbCommand);
 var
   key: string;
   L, spanPx, step, page, d, mn, mx, span, sc: Double;
@@ -1279,7 +1279,7 @@ begin
   if DzStateKey <> key then DzViewUpdate;
 end;
 
-procedure TTyAdvanceChart.KbVisualMapKey(AIndex, AHandle: Integer; ACmd: TTyKbCommand);
+procedure TTyCustomAdvanceChart.KbVisualMapKey(AIndex, AHandle: Integer; ACmd: TTyKbCommand);
 var i1, d, sgn: Double;
 begin
   if not KbVmHandles(AIndex) then Exit;
@@ -1302,7 +1302,7 @@ begin
   VmDragHandleBar(AIndex, AHandle, True, 0);
 end;
 
-procedure TTyAdvanceChart.KbTimelineKey(ACmd: TTyKbCommand);
+procedure TTyCustomAdvanceChart.KbTimelineKey(ACmd: TTyKbCommand);
 var cur, target: Double; n, step: Integer;
 begin
   if FTlView = nil then Exit;
@@ -1335,7 +1335,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.KbComponentKey(AKey: Word; AShift: TShiftState): Boolean;
+function TTyCustomAdvanceChart.KbComponentKey(AKey: Word; AShift: TShiftState): Boolean;
 var
   cmd: TTyKbCommand;
   i, n, p, k, firstVis, pages: Integer;
@@ -1546,7 +1546,7 @@ begin
   InvalidateFrame;
 end;
 
-function TTyAdvanceChart.KbPartRect(const AStop: TTyKbStop; APart: Integer;
+function TTyCustomAdvanceChart.KbPartRect(const AStop: TTyKbStop; APart: Integer;
   out R: TTyRectF): Boolean;
 var
   s, kd, ix, els, regs, pcs: TTyIntegerArray;
@@ -1720,7 +1720,7 @@ end;
 
 { ---- the accessible tree's components ---- }
 
-function TTyAdvanceChart.AccValueOf(const AStop: TTyKbStop; APart: Integer): string;
+function TTyCustomAdvanceChart.AccValueOf(const AStop: TTyKbStop; APart: Integer): string;
 var
   i, cur, n: Integer;
   lo, hi: Double;
@@ -1775,7 +1775,7 @@ end;
 
 { the component nodes' values, every sync: a window, a time, a handle's
   value or a brush's areas change without a new layout's tree }
-procedure TTyAdvanceChart.AccRefreshValues;
+procedure TTyCustomAdvanceChart.AccRefreshValues;
 var k: Integer;
 begin
   for k := 0 to High(FAccCompObjs) do
@@ -1783,7 +1783,7 @@ begin
       FAccCompObjs[k].AccessibleValue := AccValueOf(FAccCompStops[k], FAccCompParts[k]);
 end;
 
-function TTyAdvanceChart.AccCompIndexOf(AObj: TLazAccessibleObject): Integer;
+function TTyCustomAdvanceChart.AccCompIndexOf(AObj: TLazAccessibleObject): Integer;
 var k: Integer;
 begin
   for k := 0 to High(FAccCompObjs) do
@@ -1793,7 +1793,7 @@ end;
 
 { [F5] a graph edge's words: its data name (the link's name), else the two
   node names as upstream's edge name is made, 'source > target' }
-function TTyAdvanceChart.KbEdgeName(ASlot, AEdge: Integer): string;
+function TTyCustomAdvanceChart.KbEdgeName(ASlot, AEdge: Integer): string;
 var e: TTyGraphEdge;
 begin
   Result := '';
@@ -1822,7 +1822,7 @@ end;
 
 { [F5] a marker's words: its kind, and a mark point's name or value when it
   has one, else its place }
-function TTyAdvanceChart.KbMarkerName(ASeries, AKind, AIndex: Integer): string;
+function TTyCustomAdvanceChart.KbMarkerName(ASeries, AKind, AIndex: Integer): string;
 var
   m, q: Integer;
   kind: TTyMarkerKind;
@@ -1869,7 +1869,7 @@ end;
 { [F5] the component part of the accessible tree: the stops in Tab order,
   each a node (a list, a group or a toolbar of its parts, or a slider of
   its own) }
-function TTyAdvanceChart.AccPlan: TTyAccPlan;
+function TTyCustomAdvanceChart.AccPlan: TTyAccPlan;
 var
   stops: TTyKbStopArray;
   k, j, n, tp: Integer;
@@ -1972,7 +1972,7 @@ begin
   Result := buf;
 end;
 
-procedure TTyAdvanceChart.AccessibleSync;
+procedure TTyCustomAdvanceChart.AccessibleSync;
 var
   root, obj: TLazAccessibleObject;
   aria, d: TJSONData;
@@ -2152,7 +2152,7 @@ begin
   if (FAccLink <> nil) and FAccLink.InUse then FAccLink.NotifyReorder;
 end;
 
-function TTyAdvanceChart.AccessibleItem(ASeriesIndex, ARow: Integer): TLazAccessibleObject;
+function TTyCustomAdvanceChart.AccessibleItem(ASeriesIndex, ARow: Integer): TLazAccessibleObject;
 var i: Integer;
 begin
   Result := nil;
@@ -2161,7 +2161,7 @@ begin
       Exit(FAccItemObjs[i]);
 end;
 
-function TTyAdvanceChart.AccessibleEdgeItem(ASeriesIndex, ARow: Integer): TLazAccessibleObject;
+function TTyCustomAdvanceChart.AccessibleEdgeItem(ASeriesIndex, ARow: Integer): TLazAccessibleObject;
 var i: Integer;
 begin
   Result := nil;
@@ -2170,7 +2170,7 @@ begin
       Exit(FAccItemObjs[i]);
 end;
 
-function TTyAdvanceChart.AccessibleFocusedChild: TLazAccessibleObject;
+function TTyCustomAdvanceChart.AccessibleFocusedChild: TLazAccessibleObject;
 var k: Integer;
 begin
   Result := nil;
@@ -2186,7 +2186,7 @@ begin
     else Result := AccessibleItem(FKbSeries, FKbRow);
 end;
 
-function TTyAdvanceChart.AccessibleSelected(AObj: TLazAccessibleObject): Boolean;
+function TTyCustomAdvanceChart.AccessibleSelected(AObj: TLazAccessibleObject): Boolean;
 var
   i, k, s, slot, part, inner: Integer;
   st: TTyKbStop;
@@ -2245,7 +2245,7 @@ begin
     Result := TySelIsSelected(FSel[s], SelData(slot), FAccItemRows[i]);
 end;
 
-function TTyAdvanceChart.AccessibleTakeFocus(AObj: TLazAccessibleObject): Boolean;
+function TTyCustomAdvanceChart.AccessibleTakeFocus(AObj: TLazAccessibleObject): Boolean;
 var i, k: Integer;
 begin
   Result := False;
@@ -2262,12 +2262,12 @@ begin
   Result := FKbActive;
 end;
 
-function TTyAdvanceChart.AccessibleSeriesCount: Integer;
+function TTyCustomAdvanceChart.AccessibleSeriesCount: Integer;
 begin
   Result := FAccSeriesCount;
 end;
 
-function TTyAdvanceChart.AccessibleStopNode(const AStop: TTyKbStop;
+function TTyCustomAdvanceChart.AccessibleStopNode(const AStop: TTyKbStop;
   APart: Integer): TLazAccessibleObject;
 var k: Integer;
 begin
@@ -2279,12 +2279,12 @@ end;
 
 { ---- [F5] the stops, publicly ---- }
 
-function TTyAdvanceChart.KeyboardStops: TTyKbStopArray;
+function TTyCustomAdvanceChart.KeyboardStops: TTyKbStopArray;
 begin
   Result := KbStops;
 end;
 
-function TTyAdvanceChart.KeyboardStop: TTyKbStop;
+function TTyCustomAdvanceChart.KeyboardStop: TTyKbStop;
 var stops: TTyKbStopArray; p: Integer;
 begin
   stops := KbStops;
@@ -2292,12 +2292,12 @@ begin
   if p >= 0 then Result := stops[p] else Result := TyKbStop(ksItems, 0, 0);
 end;
 
-function TTyAdvanceChart.KeyboardPart: Integer;
+function TTyCustomAdvanceChart.KeyboardPart: Integer;
 begin
   if FKbStopOn then Result := FKbPart else Result := -1;
 end;
 
-function TTyAdvanceChart.SetKeyboardStop(const AStop: TTyKbStop; APart: Integer): Boolean;
+function TTyCustomAdvanceChart.SetKeyboardStop(const AStop: TTyKbStop; APart: Integer): Boolean;
 var stops: TTyKbStopArray;
 begin
   Result := False;
@@ -2308,7 +2308,7 @@ begin
   Result := True;
 end;
 
-procedure TTyAdvanceChart.DoEnter;
+procedure TTyCustomAdvanceChart.DoEnter;
 begin
   inherited DoEnter;
   if csDesigning in ComponentState then Exit;
@@ -2317,7 +2317,7 @@ begin
   if LCLIntf.GetKeyState(VK_TAB) < 0 then KbEnter(LCLIntf.GetKeyState(VK_SHIFT) < 0);
 end;
 
-procedure TTyAdvanceChart.KbEnter(ABackward: Boolean);
+procedure TTyCustomAdvanceChart.KbEnter(ABackward: Boolean);
 var stops: TTyKbStopArray;
 begin
   stops := KbStops;

@@ -699,7 +699,7 @@ type
   end;
   TTyStoreKeepArray = array of TTyStoreKeep;
 
-  TTyAdvanceChart = class(TTyCustomControl, ITyAccessibleHost)
+  TTyCustomAdvanceChart = class(TTyCustomControl, ITyAccessibleHost)
   private
     FOption: TTyChartOption;
     FBuild: TTyChartBuild;
@@ -4846,15 +4846,7 @@ type
     function ContainPixel(const AFinderJson, APointJson: string): Boolean; overload;
     function ContainPixel(const AFinderJson: string; AX, AY: Double): Boolean; overload;
     function ContainPixelData(AFinder, APoint: TJSONData): Boolean;
-  published
-    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
-      RTTI order is the 3.0 order. }
-    property Version;
-    property Enabled;
-    property Visible;
-    property Font;
-    property ShowHint;
-    property TabOrder;
+  public
     { NOT a tab stop today, and the declaration has to say so or a .lfm cannot
       stream the choice: the streamer omits a value that equals the declared
       default, so a mismatched pair silently loses whatever the host wrote.
@@ -4875,49 +4867,6 @@ type
       click and Tab give the chart focus, and the keys work whenever it has
       focus. The declaration and the constructor stay False together.] }
     property TabStop default False;
-    property OnClick;
-    property OnDblClick;
-    property OnMouseDown;
-    property OnMouseUp;
-    property OnMouseMove;
-    property OnMouseEnter;
-    property OnMouseLeave;
-    property OnMouseWheel;
-    property OnMouseWheelUp;
-    property OnMouseWheelDown;
-    property OnContextPopup;
-    property OnResize;
-    property OnChangeBounds;
-    property AutoSize;
-    property BorderWidth;
-    property ChildSizing;
-    property DragMode;
-    property DragKind;
-    property DragCursor;
-    property OnDragOver;
-    property OnDragDrop;
-    property OnStartDrag;
-    property OnEndDrag;
-    property OnMouseWheelHorz;
-    property OnMouseWheelLeft;
-    property OnMouseWheelRight;
-    property OnShowHint;
-    property PopupMenu;
-    property Constraints;
-    property BorderSpacing;
-    property ParentShowHint;
-    property Action;
-    property OnPaint;
-    property OnKeyDown;
-    property OnKeyUp;
-    property OnKeyPress;
-    property OnUTF8KeyPress;
-    property OnEnter;
-    property OnExit;
-    property OnEditingDone;
-    property StyleClass;
-    property StyleOverride;
-    property Controller;
     { THE API. Relaxed JSON: unquoted keys, single quotes, trailing commas and
       comments all parse, because that is what an ECharts config in the wild
       looks like.
@@ -4937,10 +4886,6 @@ type
     property Option: string read GetOptionText write SetOptionText;
     { Empty when the last option parsed. }
     property OptionError: string read GetErrorText;
-    property Align;
-    property Anchors;
-    property Color;
-    property ParentFont;
     property OnGraphRoam: TTyGraphRoamEvent read FOnGraphRoam write FOnGraphRoam;
     property OnTreeExpandAndCollapse: TTyTreeToggleEvent read FOnTreeToggle write FOnTreeToggle;
     { EVERY chart mouse event, unfiltered -- the published face of ChartOn
@@ -5003,8 +4948,87 @@ type
       write SetExactRendering default False;
   end;
 
+  { TTyAdvanceChart publishes TTyCustomAdvanceChart's properties; everything lives in
+    TTyCustomAdvanceChart. }
+  TTyAdvanceChart = class(TTyCustomAdvanceChart)
+  published
+    { The universal properties the base classes stopped publishing in 4.0 (LCL visibility);
+      RTTI order is the 3.0 order. }
+    property Version;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property TabOrder;
+    property TabStop;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property AutoSize;
+    property BorderWidth;
+    property ChildSizing;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnShowHint;
+    property PopupMenu;
+    property Constraints;
+    property BorderSpacing;
+    property ParentShowHint;
+    property Action;
+    property OnPaint;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnEnter;
+    property OnExit;
+    property OnEditingDone;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property Option;
+    property OptionError;
+    property Align;
+    property Anchors;
+    property Color;
+    property ParentFont;
+    property OnGraphRoam;
+    property OnTreeExpandAndCollapse;
+    property OnChartEvent;
+    property OnTreeRoam;
+    property OnSankeyRoam;
+    property OnDataZoom;
+    property OnToolboxSaveAsImage;
+    property OnResolveImage;
+    property OnTooltipHtml;
+    property AnimationMode;
+    property Group;
+    property CoarsePointer;
+    property PointerSize;
+    property UseDirtyRect;
+    property ExactRendering;
+  end;
+
 { ==== echarts.connect [Batch 141] ====
-  Every TTyAdvanceChart is an instance from its creation to its
+  Every TTyCustomAdvanceChart is an instance from its creation to its
   destruction. A connected group's charts dispatch, as an action, every
   action event another chart of the group publishes (see ConnectBroadcast).
   TyChartConnect(AGroup) connects a group by name; the array form gives the
@@ -5012,7 +5036,7 @@ type
   connects it; both answer the group. TyChartDisconnect keeps the charts'
   groups and only stops the broadcast. }
 function TyChartConnect(const AGroup: string): string; overload;
-function TyChartConnect(const ACharts: array of TTyAdvanceChart): string; overload;
+function TyChartConnect(const ACharts: array of TTyCustomAdvanceChart): string; overload;
 procedure TyChartDisconnect(const AGroup: string);
 function TyChartGroupConnected(const AGroup: string): Boolean;
 
@@ -5282,7 +5306,7 @@ begin
   Result := AGroup;
 end;
 
-function TyChartConnect(const ACharts: array of TTyAdvanceChart): string;
+function TyChartConnect(const ACharts: array of TTyCustomAdvanceChart): string;
 var i: Integer;
 begin
   Result := '';

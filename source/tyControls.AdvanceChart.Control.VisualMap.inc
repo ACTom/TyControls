@@ -5,7 +5,7 @@
 { [Batch 116] below, by the visualMap interaction }
 procedure VmApplySel(var ASpec: TTyVisualMapSpec; const AJson: string); forward;
 
-procedure TTyAdvanceChart.SolveVisualMaps;
+procedure TTyCustomAdvanceChart.SolveVisualMaps;
 var
   i, k, n, raw, col, dimIndex: Integer;
   spec: TTyVisualMapSpec;
@@ -143,7 +143,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.ApplyVisualMaps(var AVisual: TTySeriesVisual;
+procedure TTyCustomAdvanceChart.ApplyVisualMaps(var AVisual: TTySeriesVisual;
   ASlot, APPI: Integer);
 var
   k: Integer;
@@ -212,7 +212,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.VisualMapContent(const AView: TTyVmViewSpec): TTyVisualColor;
+function TTyCustomAdvanceChart.VisualMapContent(const AView: TTyVmViewSpec): TTyVisualColor;
 begin
   { `contentColor` as written; upstream's default is its first theme colour,
     which here is the skin's accent -- series slot one }
@@ -220,7 +220,7 @@ begin
   Result := TyVisualFromChart(TTyChartColor(ThemeRampColor(0)));
 end;
 
-function TTyAdvanceChart.VisualMapInk(const AView: TTyVmViewSpec): TTyVisualMapInk;
+function TTyCustomAdvanceChart.VisualMapInk(const AView: TTyVmViewSpec): TTyVisualMapInk;
 var
   model: TTyStyleModel;
   st: TTyStyleSet;
@@ -246,7 +246,7 @@ begin
     model.ResolveStyle('TyAdvChartVisualMapHandle', '', []).BorderColor);
 end;
 
-procedure TTyAdvanceChart.SolveVisualMapViews(const AMeasurer: ITyTextMeasurer;
+procedure TTyCustomAdvanceChart.SolveVisualMapViews(const AMeasurer: ITyTextMeasurer;
   APPI: Integer);
 var
   k: Integer;
@@ -273,7 +273,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.BuildVisualMaps(AList: TTyPaintList): Integer;
+function TTyCustomAdvanceChart.BuildVisualMaps(AList: TTyPaintList): Integer;
 var k: Integer;
 begin
   Result := 0;
@@ -284,28 +284,28 @@ begin
         VmLiveDraw(k)));
 end;
 
-function TTyAdvanceChart.VisualMapLayout(AIndex: Integer): TTyVisualMapLayout;
+function TTyCustomAdvanceChart.VisualMapLayout(AIndex: Integer): TTyVisualMapLayout;
 begin
   Result := Default(TTyVisualMapLayout);
   if (AIndex >= 0) and (AIndex <= High(FVisualLayouts)) then
     Result := FVisualLayouts[AIndex];
 end;
 
-function TTyAdvanceChart.VisualMapCount: Integer;
+function TTyCustomAdvanceChart.VisualMapCount: Integer;
 begin
   Result := Length(FVisualSpecs);
 end;
 
 { ---- the models' own visuals [R3-B] ---- }
 
-procedure TTyAdvanceChart.VmModelsClear;
+procedure TTyCustomAdvanceChart.VmModelsClear;
 var k: Integer;
 begin
   for k := 0 to High(FVmModels) do FreeAndNil(FVmModels[k]);
   FVmModels := nil;
 end;
 
-procedure TTyAdvanceChart.VmModelsInitAll;
+procedure TTyCustomAdvanceChart.VmModelsInitAll;
 var k: Integer;
 begin
   VmModelsClear;
@@ -319,7 +319,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.VmModelsPass(const AReport: TTyMergeReport);
+procedure TTyCustomAdvanceChart.VmModelsPass(const AReport: TTyMergeReport);
 var
   si, s, n, old: Integer;
   newOpt: TJSONObject;
@@ -364,13 +364,13 @@ begin
   SetLength(FVmModels, n);
 end;
 
-function TTyAdvanceChart.VmModel(AIndex: Integer): TJSONObject;
+function TTyCustomAdvanceChart.VmModel(AIndex: Integer): TJSONObject;
 begin
   Result := nil;
   if (AIndex >= 0) and (AIndex <= High(FVmModels)) then Result := FVmModels[AIndex];
 end;
 
-procedure TTyAdvanceChart.VmThemeDefaults(AIndex: Integer; out ARamp: TTyVisualColorArray;
+procedure TTyCustomAdvanceChart.VmThemeDefaults(AIndex: Integer; out ARamp: TTyVisualColorArray;
   out AInactive: TTyVisualColor);
 var view: TTyVmViewSpec;
 begin
@@ -382,7 +382,7 @@ begin
       'TyAdvChartVisualMapInactive', '', []).TextColor));
 end;
 
-function TTyAdvanceChart.VisualMapVisualsJson(AIndex: Integer): string;
+function TTyCustomAdvanceChart.VisualMapVisualsJson(AIndex: Integer): string;
 var
   ramp: TTyVisualColorArray;
   inact: TTyVisualColor;
@@ -409,14 +409,14 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.VisualMapSpec(AIndex: Integer): TTyVisualMapSpec;
+function TTyCustomAdvanceChart.VisualMapSpec(AIndex: Integer): TTyVisualMapSpec;
 begin
   Result := Default(TTyVisualMapSpec);
   if (AIndex >= 0) and (AIndex <= High(FVisualSpecs)) then
     Result := FVisualSpecs[AIndex];
 end;
 
-function TTyAdvanceChart.VisualRow(ASeriesIndex, ARawIndex: Integer;
+function TTyCustomAdvanceChart.VisualRow(ASeriesIndex, ARawIndex: Integer;
   out ARow: TTyVisualRow): Boolean;
 var slot: Integer;
 begin
@@ -429,7 +429,7 @@ begin
   Result := True;
 end;
 
-function TTyAdvanceChart.VisualMetas(ASeriesIndex: Integer): TTyVisualMetaArray;
+function TTyCustomAdvanceChart.VisualMetas(ASeriesIndex: Integer): TTyVisualMetaArray;
 var slot: Integer;
 begin
   Result := nil;
@@ -438,7 +438,7 @@ begin
     Result := FVisualMetas[slot];
 end;
 
-function TTyAdvanceChart.VisualLineFill(ASeriesIndex: Integer): TTyVisualLineFill;
+function TTyCustomAdvanceChart.VisualLineFill(ASeriesIndex: Integer): TTyVisualLineFill;
 var slot: Integer;
 begin
   Result := Default(TTyVisualLineFill);
@@ -517,7 +517,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.VmEnsure(ACount: Integer);
+procedure TTyCustomAdvanceChart.VmEnsure(ACount: Integer);
 var i, old: Integer;
 begin
   old := Length(FVmLive);
@@ -544,14 +544,14 @@ begin
   if (FVmDragVm >= ACount) then FVmDragVm := -1;
 end;
 
-function TTyAdvanceChart.VmKeepNow(AIndex: Integer): Boolean;
+function TTyCustomAdvanceChart.VmKeepNow(AIndex: Integer): Boolean;
 begin
   Result := (AIndex >= 0) and (AIndex <= High(FVmLive)) and FVmLive[AIndex].Keep
     and FVmLive[AIndex].Alive and (AIndex <= High(FVisualLayouts))
     and FVisualLayouts[AIndex].Valid and not FVisualLayouts[AIndex].Piecewise;
 end;
 
-function TTyAdvanceChart.VmContinuous(AIndex: Integer): Boolean;
+function TTyCustomAdvanceChart.VmContinuous(AIndex: Integer): Boolean;
 begin
   Result := (AIndex >= 0) and (AIndex <= High(FVisualLayouts))
     and (AIndex <= High(FVisualViews)) and (AIndex <= High(FVisualSpecs))
@@ -559,23 +559,23 @@ begin
     and FVisualLayouts[AIndex].Valid and not FVisualLayouts[AIndex].Piecewise;
 end;
 
-function TTyAdvanceChart.VmScale: Double;
+function TTyCustomAdvanceChart.VmScale: Double;
 begin
   if FLastPPI > 0 then Result := FLastPPI / 96 else Result := 1;
 end;
 
-function TTyAdvanceChart.VmGroupX(AIndex: Integer): Double;
+function TTyCustomAdvanceChart.VmGroupX(AIndex: Integer): Double;
 begin
   Result := FVisualLayouts[AIndex].GroupX + FLastRect.Left;
 end;
 
-function TTyAdvanceChart.VmGroupY(AIndex: Integer): Double;
+function TTyCustomAdvanceChart.VmGroupY(AIndex: Integer): Double;
 begin
   Result := FVisualLayouts[AIndex].GroupY + FLastRect.Top;
 end;
 
 { _buildView: new elements, the interval from the model }
-procedure TTyAdvanceChart.VmBuilt(AIndex: Integer);
+procedure TTyCustomAdvanceChart.VmBuilt(AIndex: Integer);
 var
   L: TTyVisualMapLayout;
   h: Integer;
@@ -641,7 +641,7 @@ end;
   with the very array it then empties -- dispatched inside the update that
   removes the view, the action waits, and runs with nothing in it: an event
   with an empty batch, and every highlight it held stays }
-procedure TTyAdvanceChart.VmDispose(AIndex: Integer);
+procedure TTyCustomAdvanceChart.VmDispose(AIndex: Integer);
 var hadLinks: Boolean;
 begin
   if (AIndex < 0) or (AIndex > High(FVmLive)) then Exit;
@@ -660,7 +660,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.VmDisposeAll;
+procedure TTyCustomAdvanceChart.VmDisposeAll;
 var k: Integer;
 begin
   for k := 0 to High(FVmLive) do VmDispose(k);
@@ -674,7 +674,7 @@ end;
   piecewise one each child from the last, a label over its symbol. Silent
   things -- the indicator, the background, a piece when nothing selects --
   are not hit. }
-function TTyAdvanceChart.VmHitAt(AX, AY: Integer; out AIndex, APart: Integer): Boolean;
+function TTyCustomAdvanceChart.VmHitAt(AX, AY: Integer; out AIndex, APart: Integer): Boolean;
 var
   k, h, j, part: Integer;
   L: TTyVisualMapLayout;
@@ -768,7 +768,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.VmRoleOf(AIndex, APart: Integer): string;
+function TTyCustomAdvanceChart.VmRoleOf(AIndex, APart: Integer): string;
 var p: Integer;
 begin
   Result := 'vm' + IntToStr(AIndex) + '.';
@@ -793,7 +793,7 @@ end;
 
 { getTargetSeriesIndices: seriesTargets in their order, else every series,
   else seriesIndex then seriesId }
-function TTyAdvanceChart.VmTargetSeries(AIndex: Integer): TTyIntegerArray;
+function TTyCustomAdvanceChart.VmTargetSeries(AIndex: Integer): TTyIntegerArray;
 var
   spec: TTyVisualMapSpec;
   i, j, n: Integer;
@@ -830,7 +830,7 @@ begin
       if SeriesModelId(j) = spec.SeriesIds[i] then Add(j);
 end;
 
-function TTyAdvanceChart.VmSeriesValues(AIndex, ASeries: Integer;
+function TTyCustomAdvanceChart.VmSeriesValues(AIndex, ASeries: Integer;
   out AStore: TTyDataStore; out AValues: TTyDoubleArray;
   out ATexts: TTyStringArray): Boolean;
 var
@@ -859,7 +859,7 @@ end;
 
 { ContinuousModel.findTargetDataIndices: per target series, the inner
   indices whose value is in [ALo, AHi] }
-function TTyAdvanceChart.VmFindRange(AIndex: Integer; ALo, AHi: Double): TTyVmHoverBatches;
+function TTyCustomAdvanceChart.VmFindRange(AIndex: Integer; ALo, AHi: Double): TTyVmHoverBatches;
 var
   targets: TTyIntegerArray;
   t, i, raw, n: Integer;
@@ -893,7 +893,7 @@ end;
 
 { PiecewiseModel.findTargetDataIndices: the inner indices whose value's
   piece (no closest) is APiece }
-function TTyAdvanceChart.VmFindPiece(AIndex, APiece: Integer): TTyVmHoverBatches;
+function TTyCustomAdvanceChart.VmFindPiece(AIndex, APiece: Integer): TTyVmHoverBatches;
 var
   targets: TTyIntegerArray;
   t, i, raw, n: Integer;
@@ -1037,7 +1037,7 @@ end;
 { _dispatchHighDown / onHoverLink: the batch through makeHighDownBatch --
   dataIndex null, dataIndexInside the indices, highlightKey 'visualMap' +
   the component's index; nothing when the batch is empty }
-procedure TTyAdvanceChart.VmDispatchHighDown(const AType: string; AIndex: Integer;
+procedure TTyCustomAdvanceChart.VmDispatchHighDown(const AType: string; AIndex: Integer;
   const ABatches: TTyVmHoverBatches);
 var
   s: string;
@@ -1061,7 +1061,7 @@ begin
   DispatchAction(s);
 end;
 
-procedure TTyAdvanceChart.VmShowIndicator(AIndex: Integer; ACursor, AText: Double;
+procedure TTyCustomAdvanceChart.VmShowIndicator(AIndex: Integer; ACursor, AText: Double;
   const APrefix: string);
 var
   ind: TTyVmIndicator;
@@ -1111,7 +1111,7 @@ begin
 end;
 
 { _hideIndicator: both invisible, the handle labels out of the blur }
-procedure TTyAdvanceChart.VmHideIndicator(AIndex: Integer);
+procedure TTyCustomAdvanceChart.VmHideIndicator(AIndex: Integer);
 var h: Integer;
 begin
   if not VmContinuous(AIndex) then Exit;
@@ -1123,7 +1123,7 @@ begin
   inherited Invalidate;
 end;
 
-procedure TTyAdvanceChart.VmClearHoverLink(AIndex: Integer);
+procedure TTyCustomAdvanceChart.VmClearHoverLink(AIndex: Integer);
 var idx: TTyVmHoverBatches;
 begin
   VmHideIndicator(AIndex);
@@ -1134,7 +1134,7 @@ begin
 end;
 
 { _doHoverLinkToSeries: ACursor along the bar (device px) }
-procedure TTyAdvanceChart.VmDoHoverLink(AIndex: Integer; ACursor: Double; AOnBar: Boolean);
+procedure TTyCustomAdvanceChart.VmDoHoverLink(AIndex: Integer; ACursor: Double; AOnBar: Boolean);
 var
   L: TTyVisualMapLayout;
   spec: TTyVisualMapSpec;
@@ -1183,7 +1183,7 @@ end;
 
 { _updateView on the live interval: the in-range bar and the handles; the
   thumbs' fills and the labels are written onto what the elements show }
-procedure TTyAdvanceChart.VmUpdateView(AIndex: Integer);
+procedure TTyCustomAdvanceChart.VmUpdateView(AIndex: Integer);
 var h: Integer;
 begin
   if not VmContinuous(AIndex) then Exit;
@@ -1204,7 +1204,7 @@ begin
 end;
 
 { _dragHandle (the 6.1 build's: the handle index bound in, 2 is 'all') }
-procedure TTyAdvanceChart.VmDragHandle(AIndex, AHandle: Integer; AIsEnd: Boolean;
+procedure TTyCustomAdvanceChart.VmDragHandle(AIndex, AHandle: Integer; AIsEnd: Boolean;
   ADX, ADY: Double);
 var vx, vy: Double;
 begin
@@ -1215,7 +1215,7 @@ begin
   VmDragHandleBar(AIndex, AHandle, AIsEnd, vy);
 end;
 
-procedure TTyAdvanceChart.VmDragHandleBar(AIndex, AHandle: Integer; AIsEnd: Boolean;
+procedure TTyCustomAdvanceChart.VmDragHandleBar(AIndex, AHandle: Integer; AIsEnd: Boolean;
   AVy: Double);
 var
   vy, pos: Double;
@@ -1289,7 +1289,7 @@ end;
 { zrender's Draggable on mousedown: the target or the first ancestor that is
   draggable -- a thumb, a handle label, the in-range bar (always draggable
   in the 6.1 build; its drift does nothing without calculable) }
-function TTyAdvanceChart.VmDragStart(AX, AY: Integer): Boolean;
+function TTyCustomAdvanceChart.VmDragStart(AX, AY: Integer): Boolean;
 var t: TTyChartEventTarget;
 begin
   Result := False;
@@ -1309,7 +1309,7 @@ begin
   Result := True;
 end;
 
-procedure TTyAdvanceChart.VmDragMove(AX, AY: Integer);
+procedure TTyCustomAdvanceChart.VmDragMove(AX, AY: Integer);
 var dx, dy: Integer;
 begin
   if FVmDragVm < 0 then Exit;
@@ -1320,7 +1320,7 @@ begin
   VmDragHandle(FVmDragVm, FVmDragIdx, False, dx, dy);
 end;
 
-procedure TTyAdvanceChart.VmDragEnd;
+procedure TTyCustomAdvanceChart.VmDragEnd;
 var k: Integer;
 begin
   if FVmDragVm < 0 then Exit;
@@ -1332,7 +1332,7 @@ end;
 { the element's own handlers, bubbled: the bar group's mousemove and
   mouseout (a continuous view), an item group's mouseover and mouseout (a
   piecewise one) }
-procedure TTyAdvanceChart.VmElementEvent(const AType: string;
+procedure TTyCustomAdvanceChart.VmElementEvent(const AType: string;
   const ATarget: TTyChartEventTarget; AX, AY: Integer);
 var
   k, part, piece: Integer;
@@ -1374,7 +1374,7 @@ begin
 end;
 
 { zr.on('mouseout', _hideIndicator) of every continuous view with hoverLink }
-procedure TTyAdvanceChart.VmZrMouseOut;
+procedure TTyCustomAdvanceChart.VmZrMouseOut;
 var k: Integer;
 begin
   for k := 0 to High(FVisualLayouts) do
@@ -1384,7 +1384,7 @@ end;
 { zr.on('mouseover', _hoverLinkFromSeriesMouseOver): the hovered element's
   datum -- a series item or a marker (whose index reads its HOST's data) --
   when its series is a target: the indicator at its value }
-procedure TTyAdvanceChart.VmZrMouseOver(const ATarget: TTyChartEventTarget);
+procedure TTyCustomAdvanceChart.VmZrMouseOver(const ATarget: TTyChartEventTarget);
 var
   k, t, raw, slot: Integer;
   targets: TTyIntegerArray;
@@ -1427,7 +1427,7 @@ end;
 { the frame: a flag that changed becomes a state -- a thumb's emphasis, a
   label's blur. Entering one saves the style it has; leaving it puts that
   style back. }
-procedure TTyAdvanceChart.VmApplyStates;
+procedure TTyCustomAdvanceChart.VmApplyStates;
 var
   k, h: Integer;
   want, anyChange: Boolean;
@@ -1471,7 +1471,7 @@ end;
 { option.selected as the model holds it: what an action wrote, else the
   option's own completed as _resetSelected completes it -- a piece it does
   not name is selected, and 'single' keeps only the first }
-function TTyAdvanceChart.VmSelectedMap(AIndex: Integer): TJSONObject;
+function TTyCustomAdvanceChart.VmSelectedMap(AIndex: Integer): TJSONObject;
 var
   d, node, x: TJSONData;
   i: Integer;
@@ -1522,7 +1522,7 @@ end;
 
 { _onItemClick: the map cloned, the piece's key set (single: only it), the
   action from the view }
-procedure TTyAdvanceChart.VmPieceClick(AIndex, APiece: Integer);
+procedure TTyCustomAdvanceChart.VmPieceClick(AIndex, APiece: Integer);
 var
   map: TJSONObject;
   key: string;
@@ -1560,7 +1560,7 @@ end;
 { setSelected on one model: a continuous one's range (reversed when
   descending, clamped into the extent -- Math.max / min, a NaN wins), a
   piecewise one's map as given; the view that sent it is not rebuilt }
-procedure TTyAdvanceChart.VmSelectRange(AIndex: Integer; const APayloadFrom: string;
+procedure TTyCustomAdvanceChart.VmSelectRange(AIndex: Integer; const APayloadFrom: string;
   ASel: TJSONData);
 var
   r0, r1, t: Double;
@@ -1596,7 +1596,7 @@ end;
 { visualMapAction: every visualMap the query names (visualMapIndex, then
   visualMapId, then visualMapName; none is all) takes `selected`, the chart
   updates, then the event }
-procedure TTyAdvanceChart.DoSelectDataRange(APayload: TJSONObject);
+procedure TTyCustomAdvanceChart.DoSelectDataRange(APayload: TJSONObject);
 var
   d: TJSONData;
   n, k, i: Integer;
@@ -1666,7 +1666,7 @@ end;
 { doDispatchAction's batch: allLeaveBlur once, each item as its own payload
   over the outer one's keys (defaults: where the item has none or null),
   `batch` null; one event: its type, and the items as its batch }
-procedure TTyAdvanceChart.DoHighDownBatch(APayload: TJSONObject);
+procedure TTyCustomAdvanceChart.DoHighDownBatch(APayload: TJSONObject);
 var
   t, nm, js: string;
   arr: TJSONArray;
@@ -1720,12 +1720,12 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.VmLive_: Boolean;
+function TTyCustomAdvanceChart.VmLive_: Boolean;
 begin
   Result := (FVmAnim <> nil) and (FVmAnim.ClipCount > 0);
 end;
 
-function TTyAdvanceChart.VmLiveDraw(AIndex: Integer): TTyVmLiveDraw;
+function TTyCustomAdvanceChart.VmLiveDraw(AIndex: Integer): TTyVmLiveDraw;
 var
   h: Integer;
   c: TTyChartColor;
@@ -1765,7 +1765,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.VisualMapLive(AIndex: Integer): TTyVmLive;
+function TTyCustomAdvanceChart.VisualMapLive(AIndex: Integer): TTyVmLive;
 var v: TTyAnimValue;
 begin
   Result := Default(TTyVmLive);
@@ -1785,14 +1785,14 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.VisualMapRoleAt(AX, AY: Integer): string;
+function TTyCustomAdvanceChart.VisualMapRoleAt(AX, AY: Integer): string;
 var k, part: Integer;
 begin
   Result := '';
   if VmHitAt(AX, AY, k, part) then Result := VmRoleOf(k, part);
 end;
 
-function TTyAdvanceChart.VisualMapSelectedText(AIndex: Integer): string;
+function TTyCustomAdvanceChart.VisualMapSelectedText(AIndex: Integer): string;
 var m: TJSONObject;
 begin
   Result := '';
@@ -1810,7 +1810,7 @@ end;
   getCursor(orient) -- ns-resize standing, ew-resize lying; its in-range bar
   the same when calculable and none ('default') otherwise, its out-of-range
   bar none; the end texts and a piecewise one's items keep 'pointer' }
-function TTyAdvanceChart.VmCursor(AIndex, APart: Integer): string;
+function TTyCustomAdvanceChart.VmCursor(AIndex, APart: Integer): string;
 var orient: string;
 begin
   Result := 'pointer';

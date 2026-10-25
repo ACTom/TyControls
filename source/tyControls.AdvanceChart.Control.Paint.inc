@@ -5,7 +5,7 @@
 
 { ==================== paint ==================== }
 
-procedure TTyAdvanceChart.PaintAxis(APainter: TTyPainter; AAxis: TTyAxis;
+procedure TTyCustomAdvanceChart.PaintAxis(APainter: TTyPainter; AAxis: TTyAxis;
   const APlot: TTyRectF; APPI: Integer; AGrid: TTyGridBuild;
   const AMeasurer: ITyTextMeasurer; ABelow: Boolean; AProxied: Boolean);
 var
@@ -728,7 +728,7 @@ begin
     is the one place a label's text comes from. }
 end;
 
-procedure TTyAdvanceChart.RenderTo(ACanvas: TCanvas; const ARect: TRect;
+procedure TTyCustomAdvanceChart.RenderTo(ACanvas: TCanvas; const ARect: TRect;
   APPI: Integer);
 var prev: TComponent; prevRes: TTyChartImageUrlResolver;
 begin
@@ -742,7 +742,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.RenderToBody(ACanvas: TCanvas; const ARect: TRect;
+procedure TTyCustomAdvanceChart.RenderToBody(ACanvas: TCanvas; const ARect: TRect;
   APPI: Integer);
 var
   P: TTyPainter;
@@ -794,7 +794,7 @@ begin
   RtFlushQueue;
 end;
 
-procedure TTyAdvanceChart.PaintStatic(APainter: TTyPainter; const ARect: TRect;
+procedure TTyCustomAdvanceChart.PaintStatic(APainter: TTyPainter; const ARect: TRect;
   APPI: Integer; const AMeasurer: ITyTextMeasurer);
 var
   boxStyle: TTyStyleSet;
@@ -869,7 +869,7 @@ begin
   if FExporting or not FAnimLive or FAnimContinuous then PaintTitles(APainter);
 end;
 
-procedure TTyAdvanceChart.PaintAxes(APainter: TTyPainter; APPI: Integer;
+procedure TTyCustomAdvanceChart.PaintAxes(APainter: TTyPainter; APPI: Integer;
   const AMeasurer: ITyTextMeasurer; AProxied: Boolean);
 var
   g, a: Integer;
@@ -903,7 +903,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.StackFor(ASlot: Integer): TTySeriesStack;
+function TTyCustomAdvanceChart.StackFor(ASlot: Integer): TTySeriesStack;
 begin
   if (ASlot >= 0) and (ASlot <= High(FStacks)) then
     Result := FStacks[ASlot]
@@ -915,7 +915,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.LabelStepFor(AAxis: TTyAxis): Integer;
+function TTyCustomAdvanceChart.LabelStepFor(AAxis: TTyAxis): Integer;
 var
   g: Integer;
   spec: PTyAxisLayoutSpec;
@@ -937,7 +937,7 @@ end;
   number. Rounded rather than truncated: `z: 1.5` is somebody's mistake, and
   the two neighbouring answers are both defensible -- the nearer one is the
   one the author was closer to meaning. }
-function TTyAdvanceChart.SeriesIntIn(ASeriesIndex: Integer;
+function TTyCustomAdvanceChart.SeriesIntIn(ASeriesIndex: Integer;
   const AKey: string; ADefault: Integer): Integer;
 var
   d: TJSONData;
@@ -959,7 +959,7 @@ begin
   Result := Round(v);
 end;
 
-function TTyAdvanceChart.SymbolFor(ASlot: Integer): TTySymbolSpec;
+function TTyCustomAdvanceChart.SymbolFor(ASlot: Integer): TTySymbolSpec;
 const
   cRootKeys: array[0..3] of string = ('symbol', 'symbolRotate', 'symbolKeepAspect',
     'symbolOffset');
@@ -1026,7 +1026,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.PaintSeries(APainter: TTyPainter;
+procedure TTyCustomAdvanceChart.PaintSeries(APainter: TTyPainter;
   const AMeasurer: ITyTextMeasurer; APPI: Integer);
 var
   drawn, i: Integer;
@@ -1118,7 +1118,7 @@ end;
 
 { THE ROOT textStyle OVER A THEME FONT: always its font, and its colour where
   the text stands free rather than on a mark [Batch 83] }
-procedure TTyAdvanceChart.GlobalInk(var AName: string; var ASize,
+procedure TTyCustomAdvanceChart.GlobalInk(var AName: string; var ASize,
   AWeight: Integer; var AColour: TTyChartColor; APick: TTyTextPick);
 var
   has: Boolean;
@@ -1132,7 +1132,7 @@ end;
 
 { backgroundColor as the option writes it, when it is a colour that paints:
   not 'transparent', not 'none', not unreadable, not fully clear }
-function TTyAdvanceChart.AuthorBackground(out AColour: TTyChartColor): Boolean;
+function TTyCustomAdvanceChart.AuthorBackground(out AColour: TTyChartColor): Boolean;
 var d: TJSONData;
 begin
   Result := False;
@@ -1144,7 +1144,7 @@ begin
   Result := (AColour shr 24) > 0;
 end;
 
-procedure TTyAdvanceChart.PaintDynamic(APainter: TTyPainter; const ARect: TRect;
+procedure TTyCustomAdvanceChart.PaintDynamic(APainter: TTyPainter; const ARect: TRect;
   APPI: Integer; const AMeasurer: ITyTextMeasurer);
 begin
   { AN EXPORT'S: the finished picture has no frame of an animation and no
@@ -1211,7 +1211,7 @@ begin
   PaintLoading(APainter, ARect, APPI, AMeasurer);
 end;
 
-function TTyAdvanceChart.HasDynamicContent: Boolean;
+function TTyCustomAdvanceChart.HasDynamicContent: Boolean;
 begin
   { A REAL QUESTION NOW: is anything hovered. A second painter means allocating
     a BGRA bitmap the size of the control, filling it, blending it and freeing
@@ -1230,7 +1230,7 @@ begin
     or StHoverAny;
 end;
 
-procedure TTyAdvanceChart.DropStatic;
+procedure TTyCustomAdvanceChart.DropStatic;
 begin
   StaticDrop;
   FProgReuse := False;
@@ -1244,7 +1244,7 @@ begin
   FHoverDirty := True;
 end;
 
-procedure TTyAdvanceChart.DropStaticKeepList;
+procedure TTyCustomAdvanceChart.DropStaticKeepList;
 var had: Boolean;
 begin
   had := (FPaintList <> nil) and FPaintListValid;
@@ -1258,13 +1258,13 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.PointerStateChanged;
+procedure TTyCustomAdvanceChart.PointerStateChanged;
 begin
   { [F4b] the base class' pointer bookkeeping: a repaint, nothing marked }
   InvalidateFrameQuiet;
 end;
 
-procedure TTyAdvanceChart.RenderCached(ACanvas: TCanvas; const ARect: TRect;
+procedure TTyCustomAdvanceChart.RenderCached(ACanvas: TCanvas; const ARect: TRect;
   APPI: Integer);
 var
   P: TTyPainter;
@@ -1379,7 +1379,7 @@ begin
 end;
 
 { [R2-J2] the scope's URL resolver: OnResolveImage, asked once a URL }
-function TTyAdvanceChart.ResolveImageUrl(const AUrl: string): TBGRABitmap;
+function TTyCustomAdvanceChart.ResolveImageUrl(const AUrl: string): TBGRABitmap;
 var i: Integer;
 begin
   Result := nil;
@@ -1402,13 +1402,13 @@ begin
   FResolvedImages.AddObject(AUrl, Result);
 end;
 
-procedure TTyAdvanceChart.ForgetResolvedImages;
+procedure TTyCustomAdvanceChart.ForgetResolvedImages;
 begin
   FreeAndNil(FResolvedImages);
   Invalidate;
 end;
 
-procedure TTyAdvanceChart.Paint;
+procedure TTyCustomAdvanceChart.Paint;
 var prev: TComponent; prevRes: TTyChartImageUrlResolver;
 begin
   prev := TyChartImageScopeEnter(Owner);
@@ -1421,7 +1421,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.PaintBody;
+procedure TTyCustomAdvanceChart.PaintBody;
 begin
   { a paint is a frame: the toolbox's hover states land [Batch 125] -- a
     dirty-rect window's frame is its flush, and a paint that only
@@ -1490,7 +1490,7 @@ end;
     composites the clip it was given. A paint nobody flushed for (an
     Invalidate, a window uncovered) prepares the frame itself. }
 
-procedure TTyAdvanceChart.StaticDrop;
+procedure TTyCustomAdvanceChart.StaticDrop;
 begin
   if FStatic <> nil then FStatic.Drop;
   { not a progress frame's own drop (ProgFrame says so after it) [R2-L] }
@@ -1499,7 +1499,7 @@ begin
   FDrSnapOk := False;
 end;
 
-procedure TTyAdvanceChart.SetUseDirtyRect(AValue: Boolean);
+procedure TTyCustomAdvanceChart.SetUseDirtyRect(AValue: Boolean);
 begin
   if FUseDirtyRect = AValue then Exit;
   FUseDirtyRect := AValue;
@@ -1511,7 +1511,7 @@ begin
   inherited Invalidate;
 end;
 
-procedure TTyAdvanceChart.SetExactRendering(AValue: Boolean);
+procedure TTyCustomAdvanceChart.SetExactRendering(AValue: Boolean);
 begin
   if FExactRendering = AValue then Exit;
   FExactRendering := AValue;
@@ -1527,18 +1527,18 @@ begin
   inherited Invalidate;
 end;
 
-function TTyAdvanceChart.NewPainter: TTyPainter;
+function TTyCustomAdvanceChart.NewPainter: TTyPainter;
 begin
   Result := TTyPainter.Create;
   Result.FastStrokes := not FExactRendering;
 end;
 
-function TTyAdvanceChart.CoarseSize: Integer;
+function TTyCustomAdvanceChart.CoarseSize: Integer;
 begin
   Result := TyCoarsePointerSize(FCoarsePointer, FPointerSize, TyTouchPlatform);
 end;
 
-function TTyAdvanceChart.ListHitAt(AX, AY: Double): Integer;
+function TTyCustomAdvanceChart.ListHitAt(AX, AY: Double): Integer;
 var
   L: TTyPaintList;
   sz: Integer;
@@ -1554,17 +1554,17 @@ begin
   if Result < 0 then Result := TyCoarseHitTest(L, AX, AY, FPaintListPPI, sz);
 end;
 
-function TTyAdvanceChart.LastRepaintFull: Boolean;
+function TTyCustomAdvanceChart.LastRepaintFull: Boolean;
 begin
   Result := FDrLastFull;
 end;
 
-function TTyAdvanceChart.LastRepaintRects: TTyZrRectArray;
+function TTyCustomAdvanceChart.LastRepaintRects: TTyZrRectArray;
 begin
   Result := Copy(FDrLastRects);
 end;
 
-procedure TTyAdvanceChart.DrCaptureBase(ABmp: TBGRABitmap);
+procedure TTyCustomAdvanceChart.DrCaptureBase(ABmp: TBGRABitmap);
 begin
   if ABmp = nil then Exit;
   if (FDrBase = nil) or (FDrBase.Width <> ABmp.Width) or (FDrBase.Height <> ABmp.Height) then
@@ -1576,7 +1576,7 @@ begin
   FDrBaseOk := True;
 end;
 
-function TTyAdvanceChart.DrCanPartial(AW, AH: Integer): Boolean;
+function TTyCustomAdvanceChart.DrCanPartial(AW, AH: Integer): Boolean;
 begin
   { the cache holds the snapshot's list over the captured ground, at this
     size, with nothing to lay out again and the series at rest in it }
@@ -1587,7 +1587,7 @@ begin
     and not FExporting and not FAnimLive and not FAnimContinuous;
 end;
 
-procedure TTyAdvanceChart.DrStaticFull(const R: TRect; APPI: Integer);
+procedure TTyCustomAdvanceChart.DrStaticFull(const R: TRect; APPI: Integer);
 var
   P: TTyPainter;
   measurer: ITyTextMeasurer;
@@ -1626,7 +1626,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.DrStaticPartial(const R: TRect; APPI: Integer;
+function TTyCustomAdvanceChart.DrStaticPartial(const R: TRect; APPI: Integer;
   var APool: TTyRepaintPool): Boolean;
 var
   measurer: ITyTextMeasurer;
@@ -1743,7 +1743,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.DrRaster(const R: TRect): TRect;
+function TTyCustomAdvanceChart.DrRaster(const R: TRect): TRect;
 var
   s: Integer;
 begin
@@ -1751,14 +1751,14 @@ begin
   Result := Rect(R.Left * s, R.Top * s, R.Right * s, R.Bottom * s);
 end;
 
-procedure TTyAdvanceChart.DrCopyStatic(ACanvas: TCanvas; const APx: TRect);
+procedure TTyCustomAdvanceChart.DrCopyStatic(ACanvas: TCanvas; const APx: TRect);
 begin
   { the static layer at the canvas origin, as Blit puts it: its pixels from
     the cache, into the canvas's own units }
   ACanvas.CopyRect(TyCanvasRect(ACanvas, APx), FStatic.Canvas, DrRaster(APx));
 end;
 
-procedure TTyAdvanceChart.DrDrawDynamic(ACanvas: TCanvas; const APx: TRect;
+procedure TTyCustomAdvanceChart.DrDrawDynamic(ACanvas: TCanvas; const APx: TRect;
   ADstX, ADstY: Integer);
 var
   src, dst: TRect;
@@ -1786,7 +1786,7 @@ const
   { the dynamic layer's ink is found in tiles this many px square }
   cDrInkTile = 32;
 
-procedure TTyAdvanceChart.DrDynamic(const R: TRect; APPI: Integer;
+procedure TTyCustomAdvanceChart.DrDynamic(const R: TRect; APPI: Integer;
   var APool: TTyRepaintPool; var AFull: Boolean);
 var
   i: Integer;
@@ -1842,7 +1842,7 @@ begin
   FDrDynTiles := cur;
 end;
 
-procedure TTyAdvanceChart.DrPrepare(const ARect: TRect; APPI: Integer;
+procedure TTyCustomAdvanceChart.DrPrepare(const ARect: TRect; APPI: Integer;
   const AScale: TTyCanvasScale);
 var
   w, h: Integer;
@@ -1898,7 +1898,7 @@ begin
   RtFlushQueue;
 end;
 
-procedure TTyAdvanceChart.DrComposite(ACanvas: TCanvas; const ARect: TRect);
+procedure TTyCustomAdvanceChart.DrComposite(ACanvas: TCanvas; const ARect: TRect);
 var
   i, k, w, h: Integer;
   px: TRect;
@@ -1932,7 +1932,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.DrPaintWindow;
+procedure TTyCustomAdvanceChart.DrPaintWindow;
 var
   clip, px, client, ink: TRect;
   i: Integer;
@@ -1999,7 +1999,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.DrFlushAsync(AData: PtrInt);
+procedure TTyCustomAdvanceChart.DrFlushAsync(AData: PtrInt);
 var
   i: Integer;
   px: TRect;

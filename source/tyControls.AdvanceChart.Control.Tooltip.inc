@@ -5,7 +5,7 @@
 
 { ==================== an axis' texts as tooltip targets [F4c] ==================== }
 
-function TTyAdvanceChart.IsAxisTextDatum(const ADatum: TTyChartDatumRef): Boolean;
+function TTyCustomAdvanceChart.IsAxisTextDatum(const ADatum: TTyChartDatumRef): Boolean;
 begin
   Result := (ADatum.Kind = ctkAxisText) and (FBuild <> nil)
     and (ADatum.ComponentIndex >= 0);
@@ -25,7 +25,7 @@ begin
   Result := not ((tip is TJSONObject) and TyOptTruthy(TJSONObject(tip).Find('show')));
 end;
 
-function TTyAdvanceChart.AxisTextAt(AX, AY: Integer;
+function TTyCustomAdvanceChart.AxisTextAt(AX, AY: Integer;
   out ADatum: TTyChartDatumRef): Boolean;
 var
   g, a, q: Integer;
@@ -127,7 +127,7 @@ end;
 { the axis of the datum: its main type and index, the text (the name, or
   the label as drawn -- the formattedLabel) and the label's rawLabel
   (scale.getLabel of its tick) }
-function TTyAdvanceChart.AxisTextOf(const ADatum: TTyChartDatumRef; out AMainType,
+function TTyCustomAdvanceChart.AxisTextOf(const ADatum: TTyChartDatumRef; out AMainType,
   AName, AValue: string; out AIndex: Integer): Boolean;
 var
   g, a: Integer;
@@ -171,7 +171,7 @@ begin
   Result := True;
 end;
 
-function TTyAdvanceChart.AxisTipSpec(const ADatum: TTyChartDatumRef): TTyTooltipSpec;
+function TTyCustomAdvanceChart.AxisTipSpec(const ADatum: TTyChartDatumRef): TTyTooltipSpec;
 var
   mainT, nm, v: string;
   idx: Integer;
@@ -193,7 +193,7 @@ end;
 
 { setTooltipConfig's formatterParams: componentType, name, <mainType>Index;
   a label's value (rawLabel) and tickIndex besides }
-function TTyAdvanceChart.AxisTipParams(const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
+function TTyCustomAdvanceChart.AxisTipParams(const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
 var
   mainT, nm, v: string;
   idx: Integer;
@@ -217,7 +217,7 @@ end;
 { the formatter through formatTpl with the item's $vars -- the name's
   ['name'], a label's ['name', 'isTruncated', 'value', 'tickIndex'],
   HTML-encoded -- else the content (the text) }
-function TTyAdvanceChart.AxisTipText(const ADatum: TTyChartDatumRef;
+function TTyCustomAdvanceChart.AxisTipText(const ADatum: TTyChartDatumRef;
   const ASpec: TTyTooltipSpec): string;
 var
   mainT, nm, v, tpl: string;
@@ -256,7 +256,7 @@ end;
 { LinesSeries.formatTooltip: one bare row, the item's name -- `name` read
   through the item model, so a named series lends its name to an unnamed
   item -- else 'from > to', and the raw value unless it is not a number }
-function TTyAdvanceChart.LinesTooltip(const ADatum: TTyChartDatumRef;
+function TTyCustomAdvanceChart.LinesTooltip(const ADatum: TTyChartDatumRef;
   out ABlock: TTyTooltipBlock): Boolean;
 var
   slot: Integer;
@@ -320,7 +320,7 @@ begin
   ABlock.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, nm, False, vt, noValue));
 end;
 
-procedure TTyAdvanceChart.HeatmapTipDims(ASlot: Integer;
+procedure TTyCustomAdvanceChart.HeatmapTipDims(ASlot: Integer;
   const AEnc: TTySeriesEncode; AStore: TTyDataStore);
 var tip: TTyIntegerArray;
 begin
@@ -340,7 +340,7 @@ begin
   AStore.SetTooltipPositions(tip);
 end;
 
-function TTyAdvanceChart.TipStateKey: string;
+function TTyCustomAdvanceChart.TipStateKey: string;
 var
   i, k: Integer;
 
@@ -372,7 +372,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.TipInvalidate;
+procedure TTyCustomAdvanceChart.TipInvalidate;
 begin
   { zrender marks what changed: a box or a pointer that is where it was
     marks nothing (the frame is asked for as before) }
@@ -382,7 +382,7 @@ end;
 
 { ==================== the tooltip ==================== }
 
-function TTyAdvanceChart.TooltipSpecFor(
+function TTyCustomAdvanceChart.TooltipSpecFor(
   const ADatum: TTyChartDatumRef): TTyTooltipSpec;
 var
   kind: TTyMarkerKind;
@@ -436,7 +436,7 @@ begin
     Result := TyTooltipSpecOf(FOption, ADatum.SeriesIndex, ADatum.RawDataIndex);
 end;
 
-function TTyAdvanceChart.TooltipInk(
+function TTyCustomAdvanceChart.TooltipInk(
   const ASpec: TTyTooltipSpec): TTyTooltipInk;
 var
   nameS, valueS: TTyStyleSet;
@@ -498,7 +498,7 @@ begin
   if Result.GutterLogical < 0 then Result.GutterLogical := 0;
 end;
 
-function TTyAdvanceChart.DatumColour(
+function TTyCustomAdvanceChart.DatumColour(
   const ADatum: TTyChartDatumRef): TTyChartColor;
 var
   slot, idx: Integer;
@@ -649,7 +649,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.TooltipParams(
+function TTyCustomAdvanceChart.TooltipParams(
   const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
 var
   mx: TTyMatrix;
@@ -950,7 +950,7 @@ begin
   Result := TyReadableCell(TyDataText(AName), ddtOrdinal);
 end;
 
-function TTyAdvanceChart.RadarTooltip(ASlot, ARow: Integer;
+function TTyCustomAdvanceChart.RadarTooltip(ASlot, ARow: Integer;
   const AColor: TTyChartColor; const ASpec: TTyTooltipSpec): TTyTooltipBlock;
 var
   st: TTyDataStore;
@@ -982,7 +982,7 @@ end;
 
 { a tree row's name as upstream converts it: a string, a number's text, or
   nothing }
-function TTyAdvanceChart.TreeRowName(ASlot, ARow: Integer): string;
+function TTyCustomAdvanceChart.TreeRowName(ASlot, ARow: Integer): string;
 var it, d: TJSONData;
 begin
   Result := '';
@@ -995,7 +995,7 @@ begin
 end;
 
 { its value: the first of an array; NaN unless a number }
-function TTyAdvanceChart.TreeRowValue(ASlot, ARow: Integer): Double;
+function TTyCustomAdvanceChart.TreeRowValue(ASlot, ARow: Integer): Double;
 var it, d: TJSONData;
 begin
   Result := NaN;
@@ -1010,7 +1010,7 @@ begin
   if (d <> nil) and (d.JSONType = jtNumber) then Result := d.AsFloat;
 end;
 
-function TTyAdvanceChart.TooltipContent(const ADatum: TTyChartDatumRef;
+function TTyCustomAdvanceChart.TooltipContent(const ADatum: TTyChartDatumRef;
   const ASpec: TTyTooltipSpec): TTyTooltipBlock;
 var
   p: TTyChartCallbackParams;
@@ -1151,7 +1151,7 @@ end;
 { valueFormatter's (value, dataIndex): the value as String() prints the
   row's tooltip dimensions -- one scalar, or several joined -- and the RAW
   index, which is what 6.1 passes. }
-function TTyAdvanceChart.TipValueFormatted(const AHandler: string;
+function TTyCustomAdvanceChart.TipValueFormatted(const AHandler: string;
   const AParams: TTyChartCallbackParams): string;
 var
   prm: TTyChartCallbackParams;
@@ -1177,7 +1177,7 @@ end;
 { the same with the value text given -- a sub-row's own cell, or the empty
   list an item row with sub-rows gets -- and the index only where upstream
   passes one }
-function TTyAdvanceChart.TipValueFormatted(const AHandler: string;
+function TTyCustomAdvanceChart.TipValueFormatted(const AHandler: string;
   const AParams: TTyChartCallbackParams; const AValueText: string;
   AWithIndex: Boolean): string;
 var prm: TTyChartCallbackParams;
@@ -1194,7 +1194,7 @@ end;
 
 { The root textStyle over a font the theme resolved: family, size (CSS px),
   weight, and the colour free-standing text takes -- each where written. }
-procedure TTyAdvanceChart.GlobalTextOver(var AName: string; var ASize,
+procedure TTyCustomAdvanceChart.GlobalTextOver(var AName: string; var ASize,
   AWeight: Integer; var AHasColour: Boolean; var AColour: Cardinal;
   APick: TTyTextPick);
 var
@@ -1221,7 +1221,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.RtGlobal: TTyRtGlobal;
+function TTyCustomAdvanceChart.RtGlobal: TTyRtGlobal;
 var
   st: TTyStyleSet;
   fname: string;
@@ -1246,7 +1246,7 @@ end;
 { An axis text style made what the layout measured: its family and size, its
   weight (an emphasised label keeps the theme's heavier one), and the
   author's colour where one was written. }
-procedure TTyAdvanceChart.AxisTextOver(var AStyle: TTyStyleSet;
+procedure TTyCustomAdvanceChart.AxisTextOver(var AStyle: TTyStyleSet;
   const AName: string; ASize, AWeight: Integer; AHasColour: Boolean;
   AColour: Cardinal; AKeepWeight: Boolean);
 begin
@@ -1257,7 +1257,7 @@ begin
   if AHasColour then AStyle.TextColor := TTyColor(AColour);
 end;
 
-procedure TTyAdvanceChart.AxisTextStyles(ASpec: PTyAxisLayoutSpec;
+procedure TTyCustomAdvanceChart.AxisTextStyles(ASpec: PTyAxisLayoutSpec;
   out ALabel, AName: TTyStyleSet);
 var model: TTyStyleModel;
 begin
@@ -1271,7 +1271,7 @@ begin
     ASpec^.NameFontWeight, ASpec^.HasNameColour, ASpec^.NameColour, False);
 end;
 
-function TTyAdvanceChart.PointerAt(AAxis: TTyAxis; AValue: Double): Double;
+function TTyCustomAdvanceChart.PointerAt(AAxis: TTyAxis; AValue: Double): Double;
 var ext: TTyRange;
 begin
   Result := AValue;
@@ -1282,13 +1282,13 @@ begin
   if Result < ext.Start then Result := ext.Start;
 end;
 
-function TTyAdvanceChart.SlotSeriesIndex(ASlot: Integer): Integer;
+function TTyCustomAdvanceChart.SlotSeriesIndex(ASlot: Integer): Integer;
 begin
   if (ASlot < 0) or (ASlot > High(FBindings)) then Result := -1
   else Result := FBindings[ASlot].SeriesIndex;
 end;
 
-function TTyAdvanceChart.PointerValue(const AHit: TTyAxisHit): Double;
+function TTyCustomAdvanceChart.PointerValue(const AHit: TTyAxisHit): Double;
 begin
   { a linked axis never snaps [Batch 141]; nor onto a value off the axis:
     processOnAxis snaps only when axis.containData(snapToValue) -- the
@@ -1301,7 +1301,7 @@ begin
   Result := PointerAt(AHit.Axis, Result);
 end;
 
-function TTyAdvanceChart.PointerShadowShape(const AHit: TTyAxisHit;
+function TTyCustomAdvanceChart.PointerShadowShape(const AHit: TTyAxisHit;
   out AShape: TTyXYWH): Boolean;
 begin
   AShape := Default(TTyXYWH);
@@ -1311,7 +1311,7 @@ begin
     AHit.Axis.DataToCoord(PointerValue(AHit), True), AShape);
 end;
 
-function TTyAdvanceChart.PointerShadowShapeAt(const AHit: TTyAxisHit;
+function TTyCustomAdvanceChart.PointerShadowShapeAt(const AHit: TTyAxisHit;
   AAt: Double; out AShape: TTyXYWH): Boolean;
 var
   ax, other, base: TTyAxis;
@@ -1421,7 +1421,7 @@ end;
   given upstream's getValueLabel params: first the axis itself (its dimension,
   index and the value), then one entry per series the pointer collected --
   params.seriesData, in the order the hit holds them. }
-function TTyAdvanceChart.PointerLabelText(const AHit: TTyAxisHit;
+function TTyCustomAdvanceChart.PointerLabelText(const AHit: TTyAxisHit;
   AValue: Double): string;
 var
   prm: TTyChartParams;
@@ -1466,7 +1466,7 @@ begin
   Result := AAxis.Dim + '/' + IntToStr(AAxis.ComponentIndex);
 end;
 
-function TTyAdvanceChart.PointerDrawLabelText(const AHit: TTyAxisHit;
+function TTyCustomAdvanceChart.PointerDrawLabelText(const AHit: TTyAxisHit;
   AValue: Double): string;
 var
   i, k: Integer;
@@ -1523,7 +1523,7 @@ begin
   Result := FPtrMemo[k].Text;
 end;
 
-procedure TTyAdvanceChart.PointerMemoHideOthers(const AHits: TTyAxisHitArray);
+procedure TTyCustomAdvanceChart.PointerMemoHideOthers(const AHits: TTyAxisHitArray);
 var
   i, j: Integer;
   seen: Boolean;
@@ -1543,7 +1543,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.PointerLabelDrawn(const AHit: TTyAxisHit): string;
+function TTyCustomAdvanceChart.PointerLabelDrawn(const AHit: TTyAxisHit): string;
 var i: Integer; key: string;
 begin
   Result := '';
@@ -1556,7 +1556,7 @@ begin
     if FPtrMemo[i].Key = key then Exit(FPtrMemo[i].Text);
 end;
 
-function TTyAdvanceChart.AxisValueText(AAxis: TTyAxis; AValue: Double;
+function TTyCustomAdvanceChart.AxisValueText(AAxis: TTyAxis; AValue: Double;
   const ALabel: TTyAxisPointerLabelSpec): string;
 begin
   Result := '';
@@ -1585,7 +1585,7 @@ begin
     Result := StringReplace(ALabel.Formatter, '{value}', Result, []);
 end;
 
-function TTyAdvanceChart.NearestOnAxis(ASlot: Integer; AAxis: TTyAxis;
+function TTyCustomAdvanceChart.NearestOnAxis(ASlot: Integer; AAxis: TTyAxis;
   AValue: Double; AMaxDistPx: Double; out ARows: TTyIntegerArray): Boolean;
 var
   st: TTyDataStore;
@@ -1619,7 +1619,7 @@ begin
   Result := Length(ARows) > 0;
 end;
 
-function TTyAdvanceChart.PtrInfoOf(const AInfos: TTyPtrAxisInfoArray;
+function TTyCustomAdvanceChart.PtrInfoOf(const AInfos: TTyPtrAxisInfoArray;
   AAxis: TTyAxis): Integer;
 var k: Integer;
 begin
@@ -1628,7 +1628,7 @@ begin
   Result := -1;
 end;
 
-function TTyAdvanceChart.PtrCollect: TTyPtrAxisInfoArray;
+function TTyCustomAdvanceChart.PtrCollect: TTyPtrAxisInfoArray;
 var
   tipSpec: TTyTooltipSpec;
   tipOn, crossType, triggerAxis: Boolean;
@@ -1787,7 +1787,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.ResolveAxisPointers(AX, AY: Double;
+function TTyCustomAdvanceChart.ResolveAxisPointers(AX, AY: Double;
   AInput: TJSONArray): TTyAxisHitArray;
 var
   infos: TTyPtrAxisInfoArray;
@@ -2230,7 +2230,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.PaintAxisPointers(APainter: TTyPainter;
+procedure TTyCustomAdvanceChart.PaintAxisPointers(APainter: TTyPainter;
   const ARect: TRect; APPI: Integer; const AMeasurer: ITyTextMeasurer;
   const AHits: TTyAxisHitArray);
 var
@@ -2426,7 +2426,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.ValuesText(
+function TTyCustomAdvanceChart.ValuesText(
   const AParams: TTyChartCallbackParams): string;
 var i: Integer;
 begin
@@ -2445,7 +2445,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.AxisTooltipParams(
+function TTyCustomAdvanceChart.AxisTooltipParams(
   const AHits: TTyAxisHitArray): TTyChartParams;
 var
   i, k, n, slot, row: Integer;
@@ -2479,7 +2479,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.AxisTooltipContent(const AHits: TTyAxisHitArray;
+function TTyCustomAdvanceChart.AxisTooltipContent(const AHits: TTyAxisHitArray;
   const ASpec: TTyTooltipSpec): TTyTooltipBlock;
 var
   i, k, slot, row: Integer;
@@ -2586,12 +2586,12 @@ end;
   pointer's hideTip, which upstream dispatches on every move that finds no
   axis data. }
 
-function TTyAdvanceChart.TipClock: Double;
+function TTyCustomAdvanceChart.TipClock: Double;
 begin
   if IsNan(FTipNow) then Result := TyAnimClockMs else Result := FTipNow;
 end;
 
-function TTyAdvanceChart.TipSnapNow: TTyTipSnap;
+function TTyCustomAdvanceChart.TipSnapNow: TTyTipSnap;
 begin
   Result := Default(TTyTipSnap);
   Result.Datum := FTipDatum;
@@ -2601,19 +2601,19 @@ begin
   Result.Y := FTipY;
 end;
 
-function TTyAdvanceChart.TipIsMarker(const ADatum: TTyChartDatumRef): Boolean;
+function TTyCustomAdvanceChart.TipIsMarker(const ADatum: TTyChartDatumRef): Boolean;
 begin
   Result := (ADatum.Kind in [ctkMarkPoint, ctkMarkLine, ctkMarkArea])
     and (ADatum.ComponentIndex >= 0) and (ADatum.DataIndex >= 0);
 end;
 
-function TTyAdvanceChart.TipTargetValid(const ADatum: TTyChartDatumRef): Boolean;
+function TTyCustomAdvanceChart.TipTargetValid(const ADatum: TTyChartDatumRef): Boolean;
 begin
   Result := TyChartDatumValid(ADatum) or TipIsMarker(ADatum) or TipIsMatrix(ADatum)
     or IsGeoDatum(ADatum) or IsAxisTextDatum(ADatum);
 end;
 
-function TTyAdvanceChart.MatrixCellOf(const ADatum: TTyChartDatumRef;
+function TTyCustomAdvanceChart.MatrixCellOf(const ADatum: TTyChartDatumRef;
   out AMatrix: TTyMatrix; out AInfo: TTyMatrixCellInfo): Boolean;
 begin
   AMatrix := nil;
@@ -2629,7 +2629,7 @@ begin
 end;
 
 { setTooltipConfig is called for a cell with a textValue only }
-function TTyAdvanceChart.TipIsMatrix(const ADatum: TTyChartDatumRef): Boolean;
+function TTyCustomAdvanceChart.TipIsMatrix(const ADatum: TTyChartDatumRef): Boolean;
 var
   m: TTyMatrix;
   info: TTyMatrixCellInfo;
@@ -2641,7 +2641,7 @@ end;
   the placeholders a / a0 are the cell's name and b / b0 its locator pair as
   String() prints it -- each replaced at its first occurrence, as a string
   pattern is (values are not HTML-encoded: the port draws text, not markup) }
-function TTyAdvanceChart.MatrixTipText(const AFormatter: string;
+function TTyCustomAdvanceChart.MatrixTipText(const AFormatter: string;
   const ADatum: TTyChartDatumRef): string;
 var
   m: TTyMatrix;
@@ -2665,7 +2665,7 @@ begin
   First('{b0}', IntToStr(info.Loc[0]) + ',' + IntToStr(info.Loc[1]));
 end;
 
-function TTyAdvanceChart.TipSpecOf(const ASnap: TTyTipSnap): TTyTooltipSpec;
+function TTyCustomAdvanceChart.TipSpecOf(const ASnap: TTyTipSnap): TTyTooltipSpec;
 var
   d: TJSONData;
   nLine, nCol: Integer;
@@ -2700,7 +2700,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.TipTryShow(const ASnap: TTyTipSnap;
+procedure TTyCustomAdvanceChart.TipTryShow(const ASnap: TTyTipSnap;
   const ASpec: TTyTooltipSpec);
 var snap: TTyTipSnap;
 begin
@@ -2722,7 +2722,7 @@ begin
     TipApplyShow(snap);
 end;
 
-procedure TTyAdvanceChart.TipMarkup(var ASnap: TTyTipSnap);
+procedure TTyCustomAdvanceChart.TipMarkup(var ASnap: TTyTipSnap);
 var
   spec: TTyTooltipSpec;
   block: TTyTooltipBlock;
@@ -2750,7 +2750,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.TipRowSig(ASlot, ARow: Integer): string;
+function TTyCustomAdvanceChart.TipRowSig(ASlot, ARow: Integer): string;
 var
   prm: TTyChartCallbackParams;
   k: Integer;
@@ -2777,7 +2777,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.TipApplyShow(const ASnap: TTyTipSnap);
+procedure TTyCustomAdvanceChart.TipApplyShow(const ASnap: TTyTipSnap);
 var
   spec: TTyTooltipSpec;
   arr: TJSONArray;
@@ -2859,7 +2859,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.TipHide(const AGlobal: TTyTooltipSpec);
+procedure TTyCustomAdvanceChart.TipHide(const AGlobal: TTyTooltipSpec);
 begin
   { hideLater(hideDelay), the GLOBAL model's: nothing unless `_show` is
     still set, nothing under alwaysShowContent; a delay arms a timer and
@@ -2876,7 +2876,7 @@ begin
     FTipShown := False;
 end;
 
-function TTyAdvanceChart.TipAdvance(ANow: Double): Boolean;
+function TTyCustomAdvanceChart.TipAdvance(ANow: Double): Boolean;
 var
   showDue, hideDue, keepDue, showFirst: Boolean;
   bestAt: Double;
@@ -2943,7 +2943,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.TipArmTimer;
+procedure TTyCustomAdvanceChart.TipArmTimer;
 var due, ms: Double;
 begin
   due := NaN;
@@ -2973,14 +2973,14 @@ begin
   FTipTimer.Enabled := True;
 end;
 
-procedure TTyAdvanceChart.TipTimerFired(Sender: TObject);
+procedure TTyCustomAdvanceChart.TipTimerFired(Sender: TObject);
 begin
   if FTipTimer <> nil then FTipTimer.Enabled := False;
   if TipAdvance(TipClock) then TipInvalidate;
   TipArmTimer;
 end;
 
-procedure TTyAdvanceChart.TooltipTick(ANowMs: Double);
+procedure TTyCustomAdvanceChart.TooltipTick(ANowMs: Double);
 begin
   if TipAdvance(ANowMs) then TipInvalidate;
   TipArmTimer;
@@ -3007,12 +3007,12 @@ end;
   axisTrigger dispatches says escapeConnect, so a chart in the group follows
   through updateAxisPointer and finds its own point (findPointFromSeries). }
 
-function TTyAdvanceChart.TipUid: string;
+function TTyCustomAdvanceChart.TipUid: string;
 begin
   Result := 'ec_' + IntToStr(FInstanceNo) + '_tooltip';
 end;
 
-function TTyAdvanceChart.ApTriggerOn(const AGlobal: TTyTooltipSpec): string;
+function TTyCustomAdvanceChart.ApTriggerOn(const AGlobal: TTyTooltipSpec): string;
 var ap, d: TJSONData;
 begin
   Result := '';
@@ -3029,7 +3029,7 @@ begin
   if Result = '' then Result := 'mousemove|click|mousewheel';
 end;
 
-function TTyAdvanceChart.TipSeriesOnAxis(ASeriesIndex: Integer): Boolean;
+function TTyCustomAdvanceChart.TipSeriesOnAxis(ASeriesIndex: Integer): Boolean;
 var n, t, d: TJSONData;
 begin
   Result := True;
@@ -3088,7 +3088,7 @@ begin
   if JsTruthy(d) then Result := d.AsJSON;
 end;
 
-procedure TTyAdvanceChart.TipDispatch(APayload: TJSONObject;
+procedure TTyCustomAdvanceChart.TipDispatch(APayload: TJSONObject;
   const AHits: TTyAxisHitArray; AHasHits, AViaListener: Boolean);
 var
   t: string;
@@ -3130,7 +3130,7 @@ begin
   DispatchActionObject(APayload);
 end;
 
-procedure TTyAdvanceChart.ActFlushPending;
+procedure TTyCustomAdvanceChart.ActFlushPending;
 var
   a: TTyTipAct;
   i: Integer;
@@ -3156,7 +3156,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.ActForgetHits;
+procedure TTyCustomAdvanceChart.ActForgetHits;
 var i: Integer;
 begin
   for i := 0 to High(FActPending) do
@@ -3170,7 +3170,7 @@ begin
   FActHits.HasHits := False;
 end;
 
-procedure TTyAdvanceChart.ActDropPending;
+procedure TTyCustomAdvanceChart.ActDropPending;
 var i: Integer;
 begin
   for i := 0 to High(FActPending) do FActPending[i].Payload.Free;
@@ -3183,7 +3183,7 @@ begin
   FActHits.HasHits := False;
 end;
 
-procedure TTyAdvanceChart.PtrListener(const ATrigger: string; AX, AY: Integer;
+procedure TTyCustomAdvanceChart.PtrListener(const ATrigger: string; AX, AY: Integer;
   const ADatum: TTyChartDatumRef; AElement: Integer);
 var
   g: TTyTooltipSpec;
@@ -3279,7 +3279,7 @@ begin
   TipArmTimer;
 end;
 
-function TTyAdvanceChart.TipElementRect(AIndex, APPI: Integer): TTyRectF;
+function TTyCustomAdvanceChart.TipElementRect(AIndex, APPI: Integer): TTyRectF;
 var
   el: TTyChartElement;
   w: Double;
@@ -3298,7 +3298,7 @@ begin
   Result.Bottom := Result.Bottom + w / 2;
 end;
 
-function TTyAdvanceChart.TipAxesHits(const AHits: TTyAxisHitArray): TTyAxisHitArray;
+function TTyCustomAdvanceChart.TipAxesHits(const AHits: TTyAxisHitArray): TTyAxisHitArray;
 var i, n: Integer;
 begin
   Result := nil;
@@ -3328,7 +3328,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.TipDbcJson(const AHits: TTyAxisHitArray): TJSONArray;
+function TTyCustomAdvanceChart.TipDbcJson(const AHits: TTyAxisHitArray): TJSONArray;
 var
   i, k, n, gi, s, raw: Integer;
   keys: array of string;
@@ -3412,7 +3412,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.TipAxisAt(const ADim: string; AIndex: Integer;
+function TTyCustomAdvanceChart.TipAxisAt(const ADim: string; AIndex: Integer;
   out APlot: TTyRectF; out APolar: TTyPolar; out ASingle: TTySingle): TTyAxis;
 var
   g, c: Integer;
@@ -3469,7 +3469,7 @@ begin
   Result := ax;
 end;
 
-function TTyAdvanceChart.TipHitsOfDbc(ADbc: TJSONArray; AByRaw: Boolean): TTyAxisHitArray;
+function TTyCustomAdvanceChart.TipHitsOfDbc(ADbc: TJSONArray; AByRaw: Boolean): TTyAxisHitArray;
 var
   i, j, k, n, slot, row, m: Integer;
   cs, ai, it: TJSONObject;
@@ -3574,7 +3574,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.TipCollectionOrder: TTyAxisArray;
+function TTyCustomAdvanceChart.TipCollectionOrder: TTyAxisArray;
 var
   infos: TTyPtrAxisInfoArray;
   k: Integer;
@@ -3585,7 +3585,7 @@ begin
   for k := 0 to High(infos) do Result[k] := infos[k].Axis;
 end;
 
-function TTyAdvanceChart.TipSeriesPoint(APayload: TJSONObject; AFull: Boolean;
+function TTyCustomAdvanceChart.TipSeriesPoint(APayload: TJSONObject; AFull: Boolean;
   out AX, AY: Double; out ADatum: TTyChartDatumRef;
   out AElement: Integer): Boolean;
 var
@@ -3703,7 +3703,7 @@ begin
     Result := False;
 end;
 
-function TTyAdvanceChart.TipComponentRef(APayload: TJSONObject;
+function TTyCustomAdvanceChart.TipComponentRef(APayload: TJSONObject;
   out ADatum: TTyChartDatumRef; out AElement: Integer; out AX, AY: Double): Boolean;
 const
   cSuffixes: array[0..2] of string = ('Index', 'Id', 'Name');
@@ -3833,7 +3833,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.TipHideVia(AViaListener: Boolean);
+procedure TTyCustomAdvanceChart.TipHideVia(AViaListener: Boolean);
 begin
   { [F4b] _hide forgets the axis tooltip it kept }
   FTipLastDbc := '';
@@ -3842,7 +3842,7 @@ begin
     False, AViaListener);
 end;
 
-procedure TTyAdvanceChart.TipTryShowEvent(const AEv: TTyTipEvent;
+procedure TTyCustomAdvanceChart.TipTryShowEvent(const AEv: TTyTipEvent;
   AViaListener: Boolean);
 var
   g, spec: TTyTooltipSpec;
@@ -3918,7 +3918,7 @@ begin
   TipHideVia(AViaListener);
 end;
 
-procedure TTyAdvanceChart.DoUpdateAxisPointer(APayload: TJSONObject);
+procedure TTyCustomAdvanceChart.DoUpdateAxisPointer(APayload: TJSONObject);
 var
   via, ok: Boolean;
   trig: string;
@@ -4058,7 +4058,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.DoShowTip(APayload: TJSONObject);
+procedure TTyCustomAdvanceChart.DoShowTip(APayload: TJSONObject);
 var
   hits: TTyAxisHitArray;
   hasHits: Boolean;
@@ -4080,7 +4080,7 @@ begin
   TipArmTimer;
 end;
 
-procedure TTyAdvanceChart.TipManualShow(APayload: TJSONObject;
+procedure TTyCustomAdvanceChart.TipManualShow(APayload: TJSONObject;
   const AHits: TTyAxisHitArray; AHasHits: Boolean);
 var
   g: TTyTooltipSpec;
@@ -4194,7 +4194,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.DoHideTip(APayload: TJSONObject);
+procedure TTyCustomAdvanceChart.DoHideTip(APayload: TJSONObject);
 var g: TTyTooltipSpec;
 begin
   Inc(FActCycle);
@@ -4220,7 +4220,7 @@ begin
   TipArmTimer;
 end;
 
-procedure TTyAdvanceChart.TipDropDisplay;
+procedure TTyCustomAdvanceChart.TipDropDisplay;
 begin
   FTipFrozenHas := False;
   FTipShown := False;
@@ -4235,7 +4235,7 @@ begin
   if FTipTimer <> nil then FTipTimer.Enabled := False;
 end;
 
-procedure TTyAdvanceChart.TipReset;
+procedure TTyCustomAdvanceChart.TipReset;
 begin
   FTipDatum := TyChartNoDatum;
   FTipElement := -1;
@@ -4248,7 +4248,7 @@ begin
   TipRendered;
 end;
 
-procedure TTyAdvanceChart.TipResetQuiet;
+procedure TTyCustomAdvanceChart.TipResetQuiet;
 begin
   FTipDatum := TyChartNoDatum;
   FTipElement := -1;
@@ -4258,7 +4258,7 @@ begin
   TipFreeze;
 end;
 
-procedure TTyAdvanceChart.TipForget;
+procedure TTyCustomAdvanceChart.TipForget;
 begin
   TipDropDisplay;
   FTipLastX := NaN;
@@ -4270,7 +4270,7 @@ begin
   FTipHits := nil;
 end;
 
-procedure TTyAdvanceChart.TipFreeze;
+procedure TTyCustomAdvanceChart.TipFreeze;
 
   procedure Freeze(var ASnap: TTyTipSnap; AShown: Boolean);
   var
@@ -4326,7 +4326,7 @@ begin
   Freeze(FTipPend, False);
 end;
 
-procedure TTyAdvanceChart.TipLayoutNow;
+procedure TTyCustomAdvanceChart.TipLayoutNow;
 var
   P: TTyPainter;
   bmp: TBGRABitmap;
@@ -4351,7 +4351,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.TipRendered;
+procedure TTyCustomAdvanceChart.TipRendered;
 var g: TTyTooltipSpec;
 begin
   if (FOption = nil) or (csDesigning in ComponentState) then Exit;
@@ -4380,7 +4380,7 @@ begin
   TipArmTimer;
 end;
 
-procedure TTyAdvanceChart.TipSnapRefresh;
+procedure TTyCustomAdvanceChart.TipSnapRefresh;
 
   procedure Refresh(var ASnap: TTyTipSnap);
   var
@@ -4432,13 +4432,13 @@ begin
   Refresh(FTipPend);
 end;
 
-function TTyAdvanceChart.GetTipSnapShown: TTyTipSnap;
+function TTyCustomAdvanceChart.GetTipSnapShown: TTyTipSnap;
 begin
   TipSnapRefresh;
   Result := FTipSnap;
 end;
 
-procedure TTyAdvanceChart.TipKeepPointer;
+procedure TTyCustomAdvanceChart.TipKeepPointer;
 var
   i, k, n: Integer;
   kp: TTyPtrKeep;
@@ -4470,7 +4470,7 @@ begin
   FTipKeepPtrDue := Length(FTipKeepPtr) > 0;
 end;
 
-procedure TTyAdvanceChart.TipKeepRestore;
+procedure TTyCustomAdvanceChart.TipKeepRestore;
 var
   i, k, n, slot: Integer;
   hit: TTyAxisHit;
@@ -4533,7 +4533,7 @@ begin
   FTipKeepPtr := nil;
 end;
 
-procedure TTyAdvanceChart.TipKeepFire;
+procedure TTyCustomAdvanceChart.TipKeepFire;
 var
   p: TJSONObject;
   d: TJSONData;
@@ -4566,11 +4566,11 @@ begin
   TipInvalidate;
 end;
 
-procedure TTyAdvanceChart.TooltipContentSize(var AW, AH: Double);
+procedure TTyCustomAdvanceChart.TooltipContentSize(var AW, AH: Double);
 begin
 end;
 
-function TTyAdvanceChart.OptionPointerHits: TTyAxisHitArray;
+function TTyCustomAdvanceChart.OptionPointerHits: TTyAxisHitArray;
 var
   g, c, k: Integer;
   gb: TTyGridBuild;
@@ -4690,7 +4690,7 @@ end;
 
 { [R2-E] an axis a merged setOption wrote `axisPointer.status` on since a
   pointer event rewrote every status }
-function TTyAdvanceChart.OptPtrIsBack(const AMainType: string; AIndex: Integer): Boolean;
+function TTyCustomAdvanceChart.OptPtrIsBack(const AMainType: string; AIndex: Integer): Boolean;
 var i: Integer;
 begin
   Result := False;
@@ -4701,7 +4701,7 @@ end;
 { [R2-E] the merge's piece: every axis component it writes a status on
   (an object is index 0, a list each its own) takes the option's status
   again -- the rest keep what the pointer wrote }
-procedure TTyAdvanceChart.OptPtrTakePiece(APiece: TJSONData);
+procedure TTyCustomAdvanceChart.OptPtrTakePiece(APiece: TJSONData);
 const
   cMain: array[0..4] of string = ('xAxis', 'yAxis', 'angleAxis', 'radiusAxis', 'singleAxis');
 var
@@ -4735,27 +4735,27 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.TooltipShown: Boolean;
+function TTyCustomAdvanceChart.TooltipShown: Boolean;
 begin
   Result := FTipShown;
 end;
 
-function TTyAdvanceChart.TooltipLines: TTyTooltipLineArray;
+function TTyCustomAdvanceChart.TooltipLines: TTyTooltipLineArray;
 begin
   if TyRectFIsValid(FTipBox) then Result := FTipLastLines else Result := nil;
 end;
 
-function TTyAdvanceChart.TooltipFormatterText: string;
+function TTyCustomAdvanceChart.TooltipFormatterText: string;
 begin
   Result := FTipFormatterText;
 end;
 
-function TTyAdvanceChart.TooltipBorderColour: TTyColor;
+function TTyCustomAdvanceChart.TooltipBorderColour: TTyColor;
 begin
   Result := FTipBorderPainted;
 end;
 
-function TTyAdvanceChart.TooltipShownWhich: string;
+function TTyCustomAdvanceChart.TooltipShownWhich: string;
 const
   cMk: array[TTyChartTargetKind] of string = ('item', 'markPoint', 'markLine',
     'markArea', 'legend', 'legend', 'legend', 'graphic', 'matrix', 'geo', 'axis');
@@ -4793,41 +4793,41 @@ begin
       + IntToStr(FTipSnap.Datum.DataIndex);
 end;
 
-function TTyAdvanceChart.TooltipShownDatum: TTyChartDatumRef;
+function TTyCustomAdvanceChart.TooltipShownDatum: TTyChartDatumRef;
 begin
   if FTipShown and (Length(FTipSnap.Hits) = 0) then Result := FTipSnap.Datum
   else Result := TyChartNoDatum;
 end;
 
-function TTyAdvanceChart.TooltipAnchor: TPoint;
+function TTyCustomAdvanceChart.TooltipAnchor: TPoint;
 begin
   if IsNan(FTipSnap.X) or IsNan(FTipSnap.Y) then Result := Point(0, 0)
   else Result := Point(Round(FTipSnap.X), Round(FTipSnap.Y));
 end;
 
-function TTyAdvanceChart.TooltipAnchorF: TTyPointF;
+function TTyCustomAdvanceChart.TooltipAnchorF: TTyPointF;
 begin
   Result := TyPointF(FTipSnap.X, FTipSnap.Y);
 end;
 
-function TTyAdvanceChart.TooltipShowFlag: Boolean;
+function TTyCustomAdvanceChart.TooltipShowFlag: Boolean;
 begin
   Result := FTipShowFlag;
 end;
 
-function TTyAdvanceChart.TooltipBox: TTyRectF;
+function TTyCustomAdvanceChart.TooltipBox: TTyRectF;
 begin
   Result := FTipBox;
 end;
 
-function TTyAdvanceChart.TooltipTargetRect: TTyRectF;
+function TTyCustomAdvanceChart.TooltipTargetRect: TTyRectF;
 begin
   Result := FTipRect;
 end;
 
 { ---- the markers' own tooltip [Batch 100] ---- }
 
-function TTyAdvanceChart.MarkerItemOf(const ADatum: TTyChartDatumRef;
+function TTyCustomAdvanceChart.MarkerItemOf(const ADatum: TTyChartDatumRef;
   out AKind: TTyMarkerKind; out ABlock: TTyMkBlock; out AItem: Integer): Boolean;
 var k, q: Integer;
 begin
@@ -4883,7 +4883,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.MarkerNameValue(const ADatum: TTyChartDatumRef;
+procedure TTyCustomAdvanceChart.MarkerNameValue(const ADatum: TTyChartDatumRef;
   out AName: string; out AValue: TTyMkVal);
 var
   kind: TTyMarkerKind;
@@ -4942,7 +4942,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.MarkerTooltipContent(
+function TTyCustomAdvanceChart.MarkerTooltipContent(
   const ADatum: TTyChartDatumRef): TTyTooltipBlock;
 var
   nm, header, valueText: string;
@@ -4969,7 +4969,7 @@ begin
     valueText, noValue));
 end;
 
-function TTyAdvanceChart.MarkerTooltipParams(
+function TTyCustomAdvanceChart.MarkerTooltipParams(
   const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
 var
   nm: string;
@@ -5018,7 +5018,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.MarkerColour(const ADatum: TTyChartDatumRef): TTyChartColor;
+function TTyCustomAdvanceChart.MarkerColour(const ADatum: TTyChartDatumRef): TTyChartColor;
 var
   kind: TTyMarkerKind;
   blk: TTyMkBlock;
@@ -5101,7 +5101,7 @@ end;
   getRawValue, the value completeTreeValue settled), a sankey node's
   value its layout value when it wrote none, an edge's name `source >
   target` (the edge data's) and its value. False: not one of them. }
-function TTyAdvanceChart.HierTipParams(const ADatum: TTyChartDatumRef;
+function TTyCustomAdvanceChart.HierTipParams(const ADatum: TTyChartDatumRef;
   ASlot: Integer; var AParams: TTyChartCallbackParams): Boolean;
 var
   st: string;
@@ -5184,7 +5184,7 @@ begin
   AParams.ValueText := TyChartValueText(v);
 end;
 
-function TTyAdvanceChart.HierTooltipContent(const ADatum: TTyChartDatumRef;
+function TTyCustomAdvanceChart.HierTooltipContent(const ADatum: TTyChartDatumRef;
   const AColour: TTyChartColor; out ABlock: TTyTooltipBlock): Boolean;
 var
   slot, row, k: Integer;
@@ -5310,17 +5310,17 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.TipHtmlMode: Boolean;
+function TTyCustomAdvanceChart.TipHtmlMode: Boolean;
 begin
   Result := TyTooltipRenderModeIsHtml(FOption, FTooltipAutoRichText);
 end;
 
-function TTyAdvanceChart.TipContentName(const AName: string): string;
+function TTyCustomAdvanceChart.TipContentName(const AName: string): string;
 begin
   if TipHtmlMode then Result := TyChartEncodeHtml(AName) else Result := AName;
 end;
 
-function TTyAdvanceChart.TooltipHtmlLines(const AHtml: string;
+function TTyCustomAdvanceChart.TooltipHtmlLines(const AHtml: string;
   const AInk: TTyTooltipInk): TTyTooltipLineArray;
 var handled: Boolean;
 begin
@@ -5333,7 +5333,7 @@ begin
   if not handled then Result := TyTooltipHtmlLines(AHtml, AInk);
 end;
 
-procedure TTyAdvanceChart.TipBuildContent(const ASnap: TTyTipSnap;
+procedure TTyCustomAdvanceChart.TipBuildContent(const ASnap: TTyTipSnap;
   out AContent: TTyTipContent);
 var
   onAxis: Boolean;
@@ -5554,7 +5554,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.PaintTooltip(APainter: TTyPainter; const ARect: TRect;
+procedure TTyCustomAdvanceChart.PaintTooltip(APainter: TTyPainter; const ARect: TRect;
   APPI: Integer; const AMeasurer: ITyTextMeasurer);
 var
   onAxis: Boolean;

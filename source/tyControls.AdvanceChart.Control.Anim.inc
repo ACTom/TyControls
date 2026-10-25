@@ -5,12 +5,12 @@
 
 { ==================== the enter animation [Batch 89] ==================== }
 
-function TTyAdvanceChart.AnimClock: Double;
+function TTyCustomAdvanceChart.AnimClock: Double;
 begin
   if IsNan(FAnimNow) then Result := TyAnimClockMs else Result := FAnimNow;
 end;
 
-function TTyAdvanceChart.AnimAllowed: Boolean;
+function TTyCustomAdvanceChart.AnimAllowed: Boolean;
 begin
   { the designer streams and repaints at will and runs no timer: never }
   if csDesigning in ComponentState then Exit(False);
@@ -22,7 +22,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.SetAnimMode(AValue: TTyChartAnimationMode);
+procedure TTyCustomAdvanceChart.SetAnimMode(AValue: TTyChartAnimationMode);
 begin
   if FAnimMode = AValue then Exit;
   FAnimMode := AValue;
@@ -39,7 +39,7 @@ begin
   if FLoadShown then AnimArmTimer;
 end;
 
-procedure TTyAdvanceChart.AnimDropAll;
+procedure TTyCustomAdvanceChart.AnimDropAll;
 var i: Integer;
 begin
   if FAnimSet <> nil then FAnimSet.Clear;
@@ -62,7 +62,7 @@ end;
 
 { ==================== the axes' groupTransition [Batch 96] ==================== }
 
-procedure TTyAdvanceChart.AxisAnimDrop;
+procedure TTyCustomAdvanceChart.AxisAnimDrop;
 var i: Integer;
 begin
   if FAxisList = nil then Exit;
@@ -72,23 +72,23 @@ begin
   FAxisProxies.Clear;
 end;
 
-function TTyAdvanceChart.AxisProxyOf(const AKey: string): TTyChartAnimProxy;
+function TTyCustomAdvanceChart.AxisProxyOf(const AKey: string): TTyChartAnimProxy;
 begin
   if FAxisProxies = nil then Exit(nil);
   Result := TTyChartAnimProxy(FAxisProxies.Find(AKey));
 end;
 
-function TTyAdvanceChart.AnimAxisProxyCount: Integer;
+function TTyCustomAdvanceChart.AnimAxisProxyCount: Integer;
 begin
   if FAxisList = nil then Result := 0 else Result := FAxisList.Count;
 end;
 
-function TTyAdvanceChart.AnimAxisProxy(const AAxisKey, AAnid: string): TTyChartAnimProxy;
+function TTyCustomAdvanceChart.AnimAxisProxy(const AAxisKey, AAnid: string): TTyChartAnimProxy;
 begin
   Result := AxisProxyOf(TyAxisAnimKey(AAxisKey, AAnid));
 end;
 
-function TTyAdvanceChart.AxesDynamic: Boolean;
+function TTyCustomAdvanceChart.AxesDynamic: Boolean;
 begin
   Result := FAnimLive and not FAnimContinuous and (AnimAxisProxyCount > 0);
 end;
@@ -122,7 +122,7 @@ begin
   SetLength(Result, n);
 end;
 
-function TTyAdvanceChart.AxisAnimElementsOf(ABuild: TTyChartBuild; APPI: Integer;
+function TTyCustomAdvanceChart.AxisAnimElementsOf(ABuild: TTyChartBuild; APPI: Integer;
   out AKeys: TTyStringArray; out AAxisKeys: TTyStringArray): TTyAxisAnimElArray;
 var
   g, a, k, n: Integer;
@@ -220,7 +220,7 @@ begin
   AAxisKeys := axKeys;
 end;
 
-procedure TTyAdvanceChart.AxisAnimArm(AOldBuild, ANewBuild: TTyChartBuild);
+procedure TTyCustomAdvanceChart.AxisAnimArm(AOldBuild, ANewBuild: TTyChartBuild);
 var
   oldEls, newEls: TTyAxisAnimElArray;
   oldKeys, newKeys, oldAx, newAx, nowAxes: TTyStringArray;
@@ -314,7 +314,7 @@ end;
 
 { a render's sunburst pieces (not the return circle, which no item is
   morphed from), each replacing the one its row had [milestone D5-D8] }
-procedure TTyAdvanceChart.UtStaleHarvest;
+procedure TTyCustomAdvanceChart.UtStaleHarvest;
 var
   i, k: Integer;
   pe: PTyChartElement;
@@ -352,14 +352,14 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.AnimDropPrev;
+procedure TTyCustomAdvanceChart.AnimDropPrev;
 begin
   FAnimPrev := Default(TTyChartAnimPrev);
   FreeAndNil(FAnimOldBuild);
   FAnimOldBindings := nil;
 end;
 
-function TTyAdvanceChart.AnimViewKeys: TTyStringArray;
+function TTyCustomAdvanceChart.AnimViewKeys: TTyStringArray;
 var
   i, n: Integer;
   id: string;
@@ -378,7 +378,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.AnimUtKeys: TTyUtSeriesKeysArray;
+function TTyCustomAdvanceChart.AnimUtKeys: TTyUtSeriesKeysArray;
 var
   i, n: Integer;
   own, t: TJSONData;
@@ -401,7 +401,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.AnimUtNamed(ASeries: Integer): Boolean;
+function TTyCustomAdvanceChart.AnimUtNamed(ASeries: Integer): Boolean;
 var
   i, k: Integer;
   id: string;
@@ -414,7 +414,7 @@ begin
       if TyUtFinderMatches(FAnimUtTrans[i].To_[k], ASeries, id) then Exit(True);
 end;
 
-function TTyAdvanceChart.AxisViewKeys: TTyStringArray;
+function TTyCustomAdvanceChart.AxisViewKeys: TTyStringArray;
 var
   t, i, n: Integer;
   mt: string;
@@ -433,7 +433,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.AnimAliveKeys: TTyStringArray;
+function TTyCustomAdvanceChart.AnimAliveKeys: TTyStringArray;
 var
   slot, si: Integer;
   vk: TTyStringArray;
@@ -456,7 +456,7 @@ end;
   order, past the legend's filter): createGraphFromNodeEdge names an edge by
   the link's id, else `source + ' > ' + target` as written; getId takes the
   name, '__ec__' and its count from the second time on (as AnimRowKeys) }
-function TTyAdvanceChart.AnimGraphEdgeKeys(ASlot: Integer): TTyStringArray;
+function TTyCustomAdvanceChart.AnimGraphEdgeKeys(ASlot: Integer): TTyStringArray;
 var
   ser, links, item, d: TJSONData;
   k, c, j: Integer;
@@ -495,7 +495,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.AnimRowKeys(AStore: TTyDataStore; out AKeys: TTyStringArray;
+procedure TTyCustomAdvanceChart.AnimRowKeys(AStore: TTyDataStore; out AKeys: TTyStringArray;
   out ARaws: TTyIntegerArray);
 var
   rawKeys: TTyStringArray;
@@ -578,7 +578,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.AnimFullBegin(const APayload: TTyAnimOverride;
+procedure TTyCustomAdvanceChart.AnimFullBegin(const APayload: TTyAnimOverride;
   AHasPayload: Boolean);
 begin
   { off, or the designer: the layout snaps (Relayout drops every proxy) }
@@ -622,7 +622,7 @@ begin
   FAnimRtChange := FRtChange;
 end;
 
-procedure TTyAdvanceChart.AnimFullEnd;
+procedure TTyCustomAdvanceChart.AnimFullEnd;
 var lazyTaken: Boolean;
 begin
   lazyTaken := FAnimLazyTaken;
@@ -640,7 +640,7 @@ begin
   AnimArmTimer;
 end;
 
-procedure TTyAdvanceChart.AnimSnapshot;
+procedure TTyCustomAdvanceChart.AnimSnapshot;
 var
   slot, si, i, n, k: Integer;
   r: TTyChartAnimSeries;
@@ -742,7 +742,7 @@ begin
   FAnimOldBindings := Copy(FBindings, 0, Length(FBindings));
 end;
 
-function TTyAdvanceChart.AnimGeoViews(ANew: Boolean): TTyChartGeoViewArray;
+function TTyCustomAdvanceChart.AnimGeoViews(ANew: Boolean): TTyChartGeoViewArray;
 var
   k, n, slot: Integer;
   geo: TTyGeo;
@@ -789,7 +789,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.AnimToOldPoint(AOldSeries: Integer; AX, AY: Double): TTyPointF;
+function TTyCustomAdvanceChart.AnimToOldPoint(AOldSeries: Integer; AX, AY: Double): TTyPointF;
 var i: Integer;
 begin
   Result := TyPointF(NaN, NaN);
@@ -799,7 +799,7 @@ begin
       Exit(FAnimOldBindings[i].Cart.DataToPoint([AX, AY]));
 end;
 
-function TTyAdvanceChart.AnimSeriesInfo: TTyChartAnimSeriesArray;
+function TTyCustomAdvanceChart.AnimSeriesInfo: TTyChartAnimSeriesArray;
 var
   slot, si, n, k: Integer;
   r: TTyChartAnimSeries;
@@ -945,7 +945,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.AnimAfterBuild;
+procedure TTyCustomAdvanceChart.AnimAfterBuild;
 begin
   if FAnimPending then
   begin
@@ -1039,7 +1039,7 @@ begin
     FAnimBind := nil;
 end;
 
-procedure TTyAdvanceChart.AnimFlushArmed;
+procedure TTyCustomAdvanceChart.AnimFlushArmed;
 begin
   if not FAnimFlush then Exit;
   FAnimFlush := False;
@@ -1051,7 +1051,7 @@ begin
   AnimArmTimer;
 end;
 
-procedure TTyAdvanceChart.AnimArmTimer;
+procedure TTyCustomAdvanceChart.AnimArmTimer;
 begin
   if (((FAnimLive or PtrLive or LegLive or LoadLive or VmLive_ or ProgLive or GfxLive
     or CuLive or TlLive) and not AnimPaused)
@@ -1073,7 +1073,7 @@ begin
     FAnimTimer.Enabled := False;
 end;
 
-procedure TTyAdvanceChart.AnimTimerFired(Sender: TObject);
+procedure TTyCustomAdvanceChart.AnimTimerFired(Sender: TObject);
 begin
   { [F3b] the force iterations' 16 ms step }
   if GraphForceLive then
@@ -1092,13 +1092,13 @@ end;
   chart has one driver upstream; here each part has its own, so they pause
   together and a flush while paused steps them all. }
 
-function TTyAdvanceChart.NewAnimDriver: TTyAnimation;
+function TTyCustomAdvanceChart.NewAnimDriver: TTyAnimation;
 begin
   Result := TTyAnimation.Create;
   Result.AdoptPause(FPauseClock);
 end;
 
-function TTyAdvanceChart.AnimDrivers: TFPList;
+function TTyCustomAdvanceChart.AnimDrivers: TFPList;
 
   procedure Put(A: TTyAnimation);
   begin
@@ -1117,7 +1117,7 @@ begin
   Put(FVmAnim);
 end;
 
-procedure TTyAdvanceChart.AnimFlushOthers(AOwn: TTyAnimation);
+procedure TTyCustomAdvanceChart.AnimFlushOthers(AOwn: TTyAnimation);
 var
   list: TFPList;
   i: Integer;
@@ -1135,7 +1135,7 @@ begin
   InvalidateFrame;
 end;
 
-procedure TTyAdvanceChart.AnimPause;
+procedure TTyCustomAdvanceChart.AnimPause;
 var
   list: TFPList;
   i: Integer;
@@ -1153,7 +1153,7 @@ begin
   AnimArmTimer;
 end;
 
-procedure TTyAdvanceChart.AnimResume;
+procedure TTyCustomAdvanceChart.AnimResume;
 var
   list: TFPList;
   i: Integer;
@@ -1171,7 +1171,7 @@ begin
   AnimArmTimer;
 end;
 
-function TTyAdvanceChart.AnimPaused: Boolean;
+function TTyCustomAdvanceChart.AnimPaused: Boolean;
 begin
   Result := (FPauseClock <> nil) and FPauseClock.Paused;
 end;
@@ -1184,7 +1184,7 @@ end;
   turns its local points into steps before it saves them as _points and
   _stackedOnPoints. The next update reads those. }
 
-procedure TTyAdvanceChart.LineHistRoll;
+procedure TTyCustomAdvanceChart.LineHistRoll;
 var
   hist: TStringList;
   i, k: Integer;
@@ -1215,7 +1215,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.LineHistInit(const AViewKey: string): Boolean;
+function TTyCustomAdvanceChart.LineHistInit(const AViewKey: string): Boolean;
 var k: Integer; v: string;
 begin
   Result := False;
@@ -1228,7 +1228,7 @@ end;
 
 { ==================== the bar race (realtimeSort) [Batch 135] ==================== }
 
-function TTyAdvanceChart.RtSortOf(ASlot: Integer): Boolean;
+function TTyCustomAdvanceChart.RtSortOf(ASlot: Integer): Boolean;
 var s: TJSONObject;
 begin
   Result := False;
@@ -1245,7 +1245,7 @@ begin
   Result := (s <> nil) and JsTruthy(s.Find('realtimeSort'));
 end;
 
-function TTyAdvanceChart.RtKeyOf(ASlot: Integer; const AViewKeys: TTyStringArray): string;
+function TTyCustomAdvanceChart.RtKeyOf(ASlot: Integer; const AViewKeys: TTyStringArray): string;
 var si: Integer;
 begin
   si := FBindings[ASlot].SeriesIndex;
@@ -1254,7 +1254,7 @@ begin
   Result := Result + #1 + FBindings[ASlot].SeriesType;
 end;
 
-function TTyAdvanceChart.AxisByTick(AAxis: TTyAxis): TTyIntegerArray;
+function TTyCustomAdvanceChart.AxisByTick(AAxis: TTyAxis): TTyIntegerArray;
 begin
   Result := nil;
   if (AAxis <> nil) and (AAxis.Scale is TTyOrdinalScale)
@@ -1262,7 +1262,7 @@ begin
     Result := TTyOrdinalScale(AAxis.Scale).ByTick;
 end;
 
-procedure TTyAdvanceChart.RtApplySortInfos;
+procedure TTyCustomAdvanceChart.RtApplySortInfos;
 var
   g, a: Integer;
   gb: TTyGridBuild;
@@ -1308,7 +1308,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.CategorySortInfoText(const AMainType: string;
+function TTyCustomAdvanceChart.CategorySortInfoText(const AMainType: string;
   AIndex: Integer): string;
 var node, si, arr: TJSONData;
 begin
@@ -1322,7 +1322,7 @@ begin
   if arr <> nil then Result := arr.AsJSON;
 end;
 
-function TTyAdvanceChart.RtCompare(A, B: Integer): Integer;
+function TTyCustomAdvanceChart.RtCompare(A, B: Integer): Integer;
 var d: Double;
 begin
   { b.mappedValue - a.mappedValue: not a number is 0 to V8's sort }
@@ -1346,7 +1346,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.RtRenderPass;
+procedure TTyCustomAdvanceChart.RtRenderPass;
 var
   slot, k, n, baseCol, valCol: Integer;
   keys, live: TTyStringArray;
@@ -1419,7 +1419,7 @@ begin
   SetLength(FRtInit, n);
 end;
 
-procedure TTyAdvanceChart.RtRendered;
+procedure TTyCustomAdvanceChart.RtRendered;
 var
   slot, k, n, i, cats, baseCol, rawIdx, row, si: Integer;
   keys: TTyStringArray;
@@ -1560,7 +1560,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.RtFlushQueue;
+procedure TTyCustomAdvanceChart.RtFlushQueue;
 var
   payload, key: string;
 begin
@@ -1586,7 +1586,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.DoChangeAxisOrder(APayload: TJSONObject);
+procedure TTyCustomAdvanceChart.DoChangeAxisOrder(APayload: TJSONObject);
 var
   main: string;
   d, si: TJSONData;
@@ -1694,7 +1694,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.AnimTick(ANowMs: Double);
+procedure TTyCustomAdvanceChart.AnimTick(ANowMs: Double);
 var ran, was: Boolean;
 begin
   { THE LOOP OF A PAUSED ANIMATION steps nothing (`!self._paused &&
@@ -1720,7 +1720,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.AnimTickBody(ANowMs: Double);
+procedure TTyCustomAdvanceChart.AnimTickBody(ANowMs: Double);
 var ptrWas: Boolean;
 begin
   { the pointer's own driver first [Batch 92] }
@@ -1817,17 +1817,17 @@ end;
   keeps its place: the next show slides from it. The label goes with the
   pointer (upstream tweens its x / y with the same timing). }
 
-function TTyAdvanceChart.PtrLive: Boolean;
+function TTyCustomAdvanceChart.PtrLive: Boolean;
 begin
   Result := (FPtrAnim <> nil) and (FPtrAnim.ClipCount > 0);
 end;
 
-function TTyAdvanceChart.PtrKeyOf(AAxis: TTyAxis): string;
+function TTyCustomAdvanceChart.PtrKeyOf(AAxis: TTyAxis): string;
 begin
   Result := AAxis.MainType + IntToStr(AAxis.ComponentIndex);
 end;
 
-procedure TTyAdvanceChart.PtrAnimDrop;
+procedure TTyCustomAdvanceChart.PtrAnimDrop;
 var i: Integer;
 begin
   if FPtrProxies <> nil then
@@ -1857,7 +1857,7 @@ begin
   Result := True;
 end;
 
-function TTyAdvanceChart.PtrModelOf(const AHit: TTyAxisHit; out AOwn: TJSONObject): TTyAnimModel;
+function TTyCustomAdvanceChart.PtrModelOf(const AHit: TTyAxisHit; out AOwn: TJSONObject): TTyAnimModel;
 const
   cKeys: array[0..3] of string = ('animation', 'animationDurationUpdate',
     'animationEasingUpdate', 'animationDelayUpdate');
@@ -1888,7 +1888,7 @@ begin
   Result := TyAnimComponentModel(AOwn, FOption.Root, 'tooltip.axisPointer');
 end;
 
-function TTyAdvanceChart.PtrMoves(const AHit: TTyAxisHit; const AModel: TTyAnimModel): Boolean;
+function TTyCustomAdvanceChart.PtrMoves(const AHit: TTyAxisHit; const AModel: TTyAnimModel): Boolean;
 var
   v: TTyAnimOptValue;
   isCat: Boolean;
@@ -1916,7 +1916,7 @@ begin
   Result := (v.Kind = aokBool) and (v.Num <> 0);
 end;
 
-function TTyAdvanceChart.PtrProps(const AHit: TTyAxisHit; AAt: Double): TTyAnimProps;
+function TTyCustomAdvanceChart.PtrProps(const AHit: TTyAxisHit; AAt: Double): TTyAnimProps;
 var sh: TTyXYWH;
 begin
   { CartesianAxisPointer's shapes: a line across the other axis' extent, or
@@ -1944,7 +1944,7 @@ begin
       TyAnimProp('shape.y2', TyAnimNum(AAt))]);
 end;
 
-procedure TTyAdvanceChart.PtrAnimSync;
+procedure TTyCustomAdvanceChart.PtrAnimSync;
 var
   i, k: Integer;
   hit: TTyAxisHit;
@@ -2006,7 +2006,7 @@ begin
   AnimArmTimer;
 end;
 
-function TTyAdvanceChart.PtrShadowNow(const AHit: TTyAxisHit;
+function TTyCustomAdvanceChart.PtrShadowNow(const AHit: TTyAxisHit;
   out AShape: TTyXYWH): Boolean;
 var
   k: Integer;
@@ -2034,7 +2034,7 @@ begin
   Result := PointerShadowShape(AHit, AShape);
 end;
 
-function TTyAdvanceChart.PtrAt(const AHit: TTyAxisHit; AAt: Double): Double;
+function TTyCustomAdvanceChart.PtrAt(const AHit: TTyAxisHit; AAt: Double): Double;
 var
   k: Integer;
   p: TTyChartAnimProxy;
@@ -2060,12 +2060,12 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.AnimPointerClipCount: Integer;
+function TTyCustomAdvanceChart.AnimPointerClipCount: Integer;
 begin
   if FPtrAnim = nil then Result := 0 else Result := FPtrAnim.ClipCount;
 end;
 
-function TTyAdvanceChart.AnimPointerProxy(const AKey: string): TTyChartAnimProxy;
+function TTyCustomAdvanceChart.AnimPointerProxy(const AKey: string): TTyChartAnimProxy;
 var k: Integer;
 begin
   Result := nil;
@@ -2075,7 +2075,7 @@ begin
       Exit(TTyChartAnimProxy(FPtrProxies[k]));
 end;
 
-function TTyAdvanceChart.AnimLoopOnly: Boolean;
+function TTyCustomAdvanceChart.AnimLoopOnly: Boolean;
 var i: Integer;
 begin
   Result := (FAnim <> nil) and (FAnim.ClipCount > 0);
@@ -2084,7 +2084,7 @@ begin
     if not FAnim.ClipAt(i).Loop then Exit(False);
 end;
 
-function TTyAdvanceChart.AnimPart(AContinuous: Boolean): TTyPaintList;
+function TTyCustomAdvanceChart.AnimPart(AContinuous: Boolean): TTyPaintList;
 var
   frame: TTyPaintList;
   i, h: Integer;
@@ -2116,12 +2116,12 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.AnimClipCount: Integer;
+function TTyCustomAdvanceChart.AnimClipCount: Integer;
 begin
   if FAnim = nil then Result := 0 else Result := FAnim.ClipCount;
 end;
 
-function TTyAdvanceChart.AnimLoopClipCount: Integer;
+function TTyCustomAdvanceChart.AnimLoopClipCount: Integer;
 var i: Integer;
 begin
   Result := 0;
@@ -2136,7 +2136,7 @@ begin
   Result := Copy(P.Role, 1, 3) = 'st:';
 end;
 
-function TTyAdvanceChart.AnimProxyCount: Integer;
+function TTyCustomAdvanceChart.AnimProxyCount: Integer;
 var i: Integer;
 begin
   Result := 0;
@@ -2145,7 +2145,7 @@ begin
     if not IsStateOnlyProxy(FAnimSet.Item(i)) then Inc(Result);
 end;
 
-function TTyAdvanceChart.AnimProxy(AIndex: Integer): TTyChartAnimProxy;
+function TTyCustomAdvanceChart.AnimProxy(AIndex: Integer): TTyChartAnimProxy;
 var i, n: Integer;
 begin
   Result := nil;
@@ -2159,21 +2159,21 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.AnimFindProxy(ASeries, AIndex: Integer;
+function TTyCustomAdvanceChart.AnimFindProxy(ASeries, AIndex: Integer;
   const ARole: string): TTyChartAnimProxy;
 begin
   if FAnimSet = nil then Exit(nil);
   Result := FAnimSet.Find(ASeries, AIndex, ARole);
 end;
 
-function TTyAdvanceChart.AnimFindGhost(ASeries, AIndex: Integer;
+function TTyCustomAdvanceChart.AnimFindGhost(ASeries, AIndex: Integer;
   const ARole: string): TTyChartAnimProxy;
 begin
   if FAnimSet = nil then Exit(nil);
   Result := FAnimSet.FindGhost(ASeries, AIndex, ARole);
 end;
 
-function TTyAdvanceChart.AnimStateProxy(ASeries, ARow: Integer;
+function TTyCustomAdvanceChart.AnimStateProxy(ASeries, ARow: Integer;
   const APart: string): TTyChartAnimProxy;
 var idx: Integer;
 begin
@@ -2182,7 +2182,7 @@ begin
   if (idx >= 0) and (idx <= High(FAnimStBind)) then Result := FAnimStBind[idx];
 end;
 
-function TTyAdvanceChart.StatePartRecord(ASeries, ARow: Integer;
+function TTyCustomAdvanceChart.StatePartRecord(ASeries, ARow: Integer;
   const APart: string; out AEl: TTyStElement): Boolean;
 var
   item, area: TTyStItem;
@@ -2239,7 +2239,7 @@ begin
   Result := AEl.Exists;
 end;
 
-function TTyAdvanceChart.StatePartIndex(ASeries, ARow: Integer;
+function TTyCustomAdvanceChart.StatePartIndex(ASeries, ARow: Integer;
   const APart: string): Integer;
 var slot, raw, idx, k, j, n: Integer;
 begin
@@ -2328,12 +2328,12 @@ begin
   Result := idx;
 end;
 
-function TTyAdvanceChart.AnimGhostCount: Integer;
+function TTyCustomAdvanceChart.AnimGhostCount: Integer;
 begin
   if FAnimSet = nil then Result := 0 else Result := FAnimSet.LiveGhostCount;
 end;
 
-function TTyAdvanceChart.AnimGhostAt(AIndex: Integer): TTyChartAnimProxy;
+function TTyCustomAdvanceChart.AnimGhostAt(AIndex: Integer): TTyChartAnimProxy;
 var i, n: Integer;
 begin
   Result := nil;
@@ -2347,7 +2347,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.AnimFrame: TTyPaintList;
+function TTyCustomAdvanceChart.AnimFrame: TTyPaintList;
 begin
   if (FPaintList = nil) or ((Length(FAnimBind) = 0) and (Length(FAnimStBind) = 0)
     and ((FAnimSet = nil) or (FAnimSet.GhostCount = 0)) and not TmAnimAny) then

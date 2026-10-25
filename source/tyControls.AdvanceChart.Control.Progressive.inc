@@ -4,7 +4,7 @@
 
 { ==================== large mode [Batch 117] ==================== }
 
-function TTyAdvanceChart.LargeKindOf(ASlot: Integer): TTyLargeKind;
+function TTyCustomAdvanceChart.LargeKindOf(ASlot: Integer): TTyLargeKind;
 var
   d: TJSONData;
   node: TJSONObject;
@@ -34,7 +34,7 @@ begin
   Result := TyLargeKindOfType(st);
 end;
 
-function TTyAdvanceChart.LargeRowAt(AElement, AX, AY: Integer): Integer;
+function TTyCustomAdvanceChart.LargeRowAt(AElement, AX, AY: Integer): Integer;
 var el: TTyChartElement;
 begin
   Result := -1;
@@ -48,7 +48,7 @@ begin
   Result := TyLargeIndexAt(el.Shape.Large, AX, AY);
 end;
 
-function TTyAdvanceChart.SeriesLargeKind(ASeriesIndex: Integer): TTyLargeKind;
+function TTyCustomAdvanceChart.SeriesLargeKind(ASeriesIndex: Integer): TTyLargeKind;
 var slot: Integer;
 begin
   Result := lgkNone;
@@ -77,13 +77,13 @@ end;
   come -- neither drawn nor hit. A progress frame changes nothing else, so
   the list it leaves is painted as it stands (FProgReuse). }
 
-function TTyAdvanceChart.ProgOnOf(ASlot: Integer): Boolean;
+function TTyCustomAdvanceChart.ProgOnOf(ASlot: Integer): Boolean;
 begin
   Result := (ASlot >= 0) and (ASlot <= High(FProg)) and (ASlot <= High(FBindings))
     and FProg[ASlot].On and (FProg[ASlot].Series = FBindings[ASlot].SeriesIndex);
 end;
 
-function TTyAdvanceChart.ProgCtxOf(ASlot: Integer): TTyProgRun;
+function TTyCustomAdvanceChart.ProgCtxOf(ASlot: Integer): TTyProgRun;
 var
   d: TJSONData;
   node: TJSONObject;
@@ -121,7 +121,7 @@ begin
   if Result.Spec.ModMode then Result.ModCount := n;
 end;
 
-procedure TTyAdvanceChart.ProgUpdate;
+procedure TTyCustomAdvanceChart.ProgUpdate;
 var
   i: Integer;
   old: TTyProgRunArray;
@@ -201,7 +201,7 @@ end;
 { A frame's later iteration: the blocked data stage with the context as it
   stands. Where its args moved -- the first frame after a setOption, the
   frame after appendData moved a 'mod' count -- the run starts over. }
-procedure TTyAdvanceChart.ProgStage;
+procedure TTyCustomAdvanceChart.ProgStage;
 var
   i: Integer;
   a: TTyProgArgs;
@@ -220,14 +220,14 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.ProgStep;
+procedure TTyCustomAdvanceChart.ProgStep;
 var i: Integer;
 begin
   for i := 0 to High(FProg) do
     if TyProgUnfinished(FProg[i]) then Inc(FProg[i].Done);
 end;
 
-function TTyAdvanceChart.ProgAnyUnfinished: Boolean;
+function TTyCustomAdvanceChart.ProgAnyUnfinished: Boolean;
 var i: Integer;
 begin
   for i := 0 to High(FProg) do
@@ -235,7 +235,7 @@ begin
   Result := False;
 end;
 
-procedure TTyAdvanceChart.ProgTag(AList: TTyPaintList);
+procedure TTyCustomAdvanceChart.ProgTag(AList: TTyPaintList);
 var
   k, slot, r: Integer;
   el: TTyChartElement;
@@ -280,7 +280,7 @@ begin
   ProgApplyVisibility(AList);
 end;
 
-procedure TTyAdvanceChart.ProgApplyVisibility(AList: TTyPaintList);
+procedure TTyCustomAdvanceChart.ProgApplyVisibility(AList: TTyPaintList);
 var
   k, done, j, shown: Integer;
   el: TTyChartElement;
@@ -326,18 +326,18 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.ProgClock: Double;
+function TTyCustomAdvanceChart.ProgClock: Double;
 begin
   if IsNan(FAnimNow) then Result := TyProgNowMs else Result := FAnimNow;
 end;
 
 { drawn through the incremental layer: an element a chunk of a run draws }
-function TTyAdvanceChart.ProgIsLayered(const AEl: TTyChartElement): Boolean;
+function TTyCustomAdvanceChart.ProgIsLayered(const AEl: TTyChartElement): Boolean;
 begin
   Result := (AEl.ProgChunk > 0) and not AEl.ProgHidden and not AEl.Ignore;
 end;
 
-procedure TTyAdvanceChart.ProgLayerBuild(AW, AH, APPI, AScale: Integer);
+procedure TTyCustomAdvanceChart.ProgLayerBuild(AW, AH, APPI, AScale: Integer);
 var
   P: TTyPainter;
   i, idx: Integer;
@@ -393,7 +393,7 @@ end;
 { A FRAME'S CHUNK onto the layer: what was not on it, in paint order, and
   the rows a growing scatter batch took on since -- on top of everything
   already there, as the canvas' incremental layer adds it }
-procedure TTyAdvanceChart.ProgLayerDelta;
+procedure TTyCustomAdvanceChart.ProgLayerDelta;
 var
   P: TTyPainter;
   i, idx, have, rows: Integer;
@@ -464,7 +464,7 @@ end;
 { The series in paint order, a run's chunks as the incremental layer where
   the first of them stands: what comes before it below, what comes after it
   above (zrender's EL_AFTER_INCREMENTAL_INC) }
-procedure TTyAdvanceChart.ProgRenderList(APainter: TTyPainter; AList: TTyPaintList;
+procedure TTyCustomAdvanceChart.ProgRenderList(APainter: TTyPainter; AList: TTyPaintList;
   APPI: Integer);
 var
   i, idx: Integer;
@@ -531,7 +531,7 @@ end;
   run that is not what it was puts its old and its new paint rect in the
   box. False where one has no paint rect (a large batch, a rich caption):
   the layer is drawn whole. }
-function TTyAdvanceChart.ProgPatchRegion(const AIdx: TTyIntegerArray;
+function TTyCustomAdvanceChart.ProgPatchRegion(const AIdx: TTyIntegerArray;
   const AEls: array of TTyChartElement): Boolean;
 var
   k, idx: Integer;
@@ -592,7 +592,7 @@ end;
   it puts nothing there. Each is drawn whole (an antialiased fill is not
   the same under a clip) and the pixels outside the box are the layer's
   as it was. }
-procedure TTyAdvanceChart.ProgLayerRegionRedraw;
+procedure TTyCustomAdvanceChart.ProgLayerRegionRedraw;
 var
   saved: TBGRABitmap;
   P: TTyPainter;
@@ -659,7 +659,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.ProgBlitPos: Integer;
+function TTyCustomAdvanceChart.ProgBlitPos: Integer;
 var
   i: Integer;
   pe: PTyChartElement;
@@ -674,7 +674,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.ProgFastDrop;
+procedure TTyCustomAdvanceChart.ProgFastDrop;
 begin
   FProgCapOk := False;
   FProgFastFrame := False;
@@ -703,7 +703,7 @@ end;
   animation, another size, PPI or device scale, a layer built again, the
   run's first element elsewhere in the order, a switched-off fast path --
   leaves it to the full paint. }
-function TTyAdvanceChart.ProgFastPaint(const R: TRect; APPI: Integer;
+function TTyCustomAdvanceChart.ProgFastPaint(const R: TRect; APPI: Integer;
   const AScale: TTyCanvasScale): Boolean;
 var
   w, h, x, y, i, idx, s: Integer;
@@ -844,21 +844,21 @@ begin
   Result := True;
 end;
 
-function TTyAdvanceChart.ProgLive: Boolean;
+function TTyCustomAdvanceChart.ProgLive: Boolean;
 begin
   Result := FProgUnfinished or FStreamPending;
 end;
 
 { the `finished` test: the animation finished, no update pending, the
   scheduler finished }
-function TTyAdvanceChart.ProgIdle: Boolean;
+function TTyCustomAdvanceChart.ProgIdle: Boolean;
 begin
   { [F4b] and no action pending (bindRenderedEvent's _pendingActions) }
   Result := not ProgLive and not FAnimLive and not FLazyPending
     and (Length(FActPending) = 0);
 end;
 
-function TTyAdvanceChart.ProgFrame(AEmit: Boolean): Boolean;
+function TTyCustomAdvanceChart.ProgFrame(AEmit: Boolean): Boolean;
 var
   remain, t0: Double;
   relaid: Boolean;
@@ -926,17 +926,17 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.ProgressTick;
+procedure TTyCustomAdvanceChart.ProgressTick;
 begin
   ProgFrame(True);
 end;
 
-function TTyAdvanceChart.ProgressiveUnfinished: Boolean;
+function TTyCustomAdvanceChart.ProgressiveUnfinished: Boolean;
 begin
   Result := ProgLive;
 end;
 
-function TTyAdvanceChart.SeriesProgress(ASeriesIndex: Integer): TTyProgRun;
+function TTyCustomAdvanceChart.SeriesProgress(ASeriesIndex: Integer): TTyProgRun;
 var slot: Integer;
 begin
   slot := SlotOfSeries(ASeriesIndex);
@@ -952,7 +952,7 @@ end;
 { THE AXES AS THE LAST UPDATE MEASURED THEM: every grid axis' raw extent
   (a dataZoom's hold where it has one), keyed by main type and index -- the
   build's axes are new objects every relayout }
-procedure TTyAdvanceChart.FrozenCapture;
+procedure TTyCustomAdvanceChart.FrozenCapture;
 var
   g, a: Integer;
   gb: TTyGridBuild;
@@ -994,7 +994,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.FrozenZooms: TTyAxisZoomArray;
+function TTyCustomAdvanceChart.FrozenZooms: TTyAxisZoomArray;
 var
   j, g, a, k, hit: Integer;
   gb: TTyGridBuild;
@@ -1033,7 +1033,7 @@ end;
 { An event with no params and no payload, to the handlers registered for
   it -- the catch-all OnChartEvent does not count as asking, as with
   `updated` }
-procedure TTyAdvanceChart.EmitPlain(const AType: string);
+procedure TTyCustomAdvanceChart.EmitPlain(const AType: string);
 var
   ev: TTyChartEvent;
   regs: array of TTyChartEventReg;
@@ -1061,7 +1061,7 @@ end;
   _needsRefresh: an update's (FFlushDue) or any repaint asked for since the
   last (FZrDirty: a hover, the tooltip, the pointer...), not only an
   update's -- with the paint's elapsedTime on the chart's clock. }
-procedure TTyAdvanceChart.EmitFlush;
+procedure TTyCustomAdvanceChart.EmitFlush;
 var elapsed: Double;
 begin
   if not FFlushDue and not FZrDirty then Exit;
@@ -1074,7 +1074,7 @@ begin
   if ProgIdle then EmitPlain('finished');
 end;
 
-procedure TTyAdvanceChart.EmitRendered(AElapsed: Double);
+procedure TTyCustomAdvanceChart.EmitRendered(AElapsed: Double);
 var
   ev: TTyChartEvent;
   regs: array of TTyChartEventReg;
@@ -1099,7 +1099,7 @@ end;
 
 { ==================== appendData [Batch 119] ==================== }
 
-function TTyAdvanceChart.AppendData(ASeriesIndex: Integer;
+function TTyCustomAdvanceChart.AppendData(ASeriesIndex: Integer;
   const ADataJson: string): Boolean;
 var
   d, node, arr: TJSONData;

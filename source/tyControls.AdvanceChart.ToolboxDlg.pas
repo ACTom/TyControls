@@ -29,7 +29,7 @@ unit tyControls.AdvanceChart.ToolboxDlg;
 
   TyBuildDataViewDialog makes the dialog without showing it, so a test can
   look at it; the Show calls are the thin layer the chart calls through its
-  virtual seams (TTyAdvanceChart.ToolboxShowDataView /
+  virtual seams (TTyCustomAdvanceChart.ToolboxShowDataView /
   ToolboxAskFileName). }
 interface
 uses

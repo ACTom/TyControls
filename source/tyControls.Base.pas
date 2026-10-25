@@ -260,7 +260,7 @@ type
       the same full Invalidate they used to call directly. It is a separate
       method so a control that CACHES what it drew can tell the two apart:
       Invalidate is "everything you knew may be wrong", and a pointer crossing
-      the border is not that. TTyAdvanceChart overrides it to keep a static
+      the border is not that. TTyCustomAdvanceChart overrides it to keep a static
       layer that costs a rebuild and a relayout to redraw.
 
       Overriding it does not make a control interactive; it only chooses which

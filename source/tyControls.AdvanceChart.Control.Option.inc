@@ -5,7 +5,7 @@
 
 { ==================== construction ==================== }
 
-constructor TTyAdvanceChart.Create(AOwner: TComponent);
+constructor TTyCustomAdvanceChart.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   FOption := TTyChartOption.Create;
@@ -28,7 +28,7 @@ begin
   FCursorName := 'default';
   Width := 320;
   Height := 200;
-  TabStop := False;   { see the published declaration }
+  TabStop := False;   { see the TabStop declaration }
   { the keyboard and the accessible tree [Batch 144] }
   FKbSeries := -1;
   FKbRow := -1;
@@ -85,7 +85,7 @@ begin
   GTyCharts.Add(Self);
 end;
 
-destructor TTyAdvanceChart.Destroy;
+destructor TTyCustomAdvanceChart.Destroy;
 var i: Integer;
 begin
   { dispose: no longer an instance [Batch 141] }
@@ -173,7 +173,7 @@ begin
   inherited Destroy;
 end;
 
-procedure TTyAdvanceChart.FreeStores;
+procedure TTyCustomAdvanceChart.FreeStores;
 var i: Integer;
 begin
   for i := 0 to High(FStores) do
@@ -189,7 +189,7 @@ begin
   FStacks := nil;
 end;
 
-procedure TTyAdvanceChart.DropBuild;
+procedure TTyCustomAdvanceChart.DropBuild;
 begin
   { THE AXIS HOVER GOES FIRST, because it holds TTyAxis POINTERS into the build
     about to be freed. Invalidate clears it too, but Resize sets FDirty without
@@ -249,7 +249,7 @@ end;
   The TREE is emptied when the text does not parse -- there is no last-good-one
   kept, deliberately: a control whose property says A while the picture shows B
   has no way to tell anyone which is which. OptionError says what went wrong. }
-function TTyAdvanceChart.GetOptionText: string;
+function TTyCustomAdvanceChart.GetOptionText: string;
 begin
   Result := FOptionText;
 end;
@@ -328,7 +328,7 @@ begin
   Result := True;
 end;
 
-procedure TTyAdvanceChart.SetOptionText(const AValue: string);
+procedure TTyCustomAdvanceChart.SetOptionText(const AValue: string);
 begin
   if FOptionText = AValue then Exit;
   { [F3c] a setOption with no transition option }
@@ -338,12 +338,12 @@ begin
   AfterSetOption(False, False);
 end;
 
-procedure TTyAdvanceChart.ApplyNotMerge(const AValue: string);
+procedure TTyCustomAdvanceChart.ApplyNotMerge(const AValue: string);
 begin
   ApplyNotMerge(AValue, []);
 end;
 
-procedure TTyAdvanceChart.ApplyNotMerge(const AValue: string;
+procedure TTyCustomAdvanceChart.ApplyNotMerge(const AValue: string;
   const AReplace: array of string);
 var i: Integer;
 begin
@@ -499,12 +499,12 @@ begin
   Invalidate;
 end;
 
-function TTyAdvanceChart.GetErrorText: string;
+function TTyCustomAdvanceChart.GetErrorText: string;
 begin
   Result := FOption.Error.Message;
 end;
 
-procedure TTyAdvanceChart.SetOption(const AJson: string; ANotMerge: Boolean);
+procedure TTyCustomAdvanceChart.SetOption(const AJson: string; ANotMerge: Boolean);
 var o: TTySetOptionOpts;
 begin
   o := Default(TTySetOptionOpts);
@@ -512,7 +512,7 @@ begin
   SetOption(AJson, o);
 end;
 
-function TTyAdvanceChart.SetOption(const AJson: string;
+function TTyCustomAdvanceChart.SetOption(const AJson: string;
   const AOpts: TTySetOptionOpts): Boolean;
 begin
   TbFrame;
@@ -536,7 +536,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.SetOption(const AJson, AOptsJson: string): Boolean;
+function TTyCustomAdvanceChart.SetOption(const AJson, AOptsJson: string): Boolean;
 var
   o: TTySetOptionOpts;
   nLine, nCol: Integer;
@@ -554,12 +554,12 @@ begin
   Result := SetOption(AJson, o);
 end;
 
-function TTyAdvanceChart.MergeOption(const AJson: string): Boolean;
+function TTyCustomAdvanceChart.MergeOption(const AJson: string): Boolean;
 begin
   Result := SetOption(AJson, Default(TTySetOptionOpts));
 end;
 
-function TTyAdvanceChart.DoMerge(const AJson: string;
+function TTyCustomAdvanceChart.DoMerge(const AJson: string;
   const AReplace: array of string): Boolean;
 var
   rep: TTyMergeReport;
@@ -591,7 +591,7 @@ begin
   Result := True;
 end;
 
-procedure TTyAdvanceChart.MergePass(const AReport: TTyMergeReport);
+procedure TTyCustomAdvanceChart.MergePass(const AReport: TTyMergeReport);
 var si, s, t: Integer;
 begin
   { [R3-B] a fresh option's base, no merge }
@@ -679,7 +679,7 @@ begin
   MergeKeepStates(AReport);
 end;
 
-procedure TTyAdvanceChart.NotMergePass(const AReport: TTyMergeReport);
+procedure TTyCustomAdvanceChart.NotMergePass(const AReport: TTyMergeReport);
 var si, s, n, k: Integer;
 begin
   { [R3-B] THE BASE'S MODELS, before a frame or a media unit merges over
@@ -727,7 +727,7 @@ begin
       end;
 end;
 
-procedure TTyAdvanceChart.MediaViewSize;
+procedure TTyCustomAdvanceChart.MediaViewSize;
 var ppi: Integer;
 begin
   ppi := Font.PixelsPerInch;
@@ -735,7 +735,7 @@ begin
   FOption.SetViewSize(ClientWidth * 96 / ppi, ClientHeight * 96 / ppi);
 end;
 
-function TTyAdvanceChart.MediaRecheck: Boolean;
+function TTyCustomAdvanceChart.MediaRecheck: Boolean;
 begin
   Result := False;
   if (FOption = nil) or (csDestroying in ComponentState) then Exit;
@@ -760,12 +760,12 @@ begin
   Invalidate;
 end;
 
-function TTyAdvanceChart.MediaIndices: TTyMediaIndices;
+function TTyCustomAdvanceChart.MediaIndices: TTyMediaIndices;
 begin
   Result := Copy(FOption.Media.Current);
 end;
 
-procedure TTyAdvanceChart.AfterSetOption(ALazy, ASilent: Boolean);
+procedure TTyCustomAdvanceChart.AfterSetOption(ALazy, ASilent: Boolean);
 begin
   { the update renders every parallelAxis view [Batch 130] }
   FParBrushSkip := -1;
@@ -804,7 +804,7 @@ begin
   if not ASilent then EmitUpdated;
 end;
 
-procedure TTyAdvanceChart.LazyUpdateDone;
+procedure TTyCustomAdvanceChart.LazyUpdateDone;
 begin
   if not FLazyPending then Exit;
   FLazyPending := False;
@@ -814,7 +814,7 @@ end;
 { `updated`: triggerUpdatedEvent, no params. Only to a handler registered
   for it -- the catch-all OnChartEvent does not count as asking, as with
   the legacy select events [Batch 97] }
-procedure TTyAdvanceChart.EmitUpdated;
+procedure TTyCustomAdvanceChart.EmitUpdated;
 var
   ev: TTyChartEvent;
   regs: array of TTyChartEventReg;
@@ -837,7 +837,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.SeriesViewKey(ASeries: Integer): string;
+function TTyCustomAdvanceChart.SeriesViewKey(ASeries: Integer): string;
 var keys: TTyStringArray;
 begin
   keys := AnimViewKeys;
@@ -847,34 +847,34 @@ begin
   if (ASeries <= High(FAnimFresh)) and FAnimFresh[ASeries] then Result := 'n:' + Result;
 end;
 
-function TTyAdvanceChart.SeriesOldViewKey(ASeries: Integer): string;
+function TTyCustomAdvanceChart.SeriesOldViewKey(ASeries: Integer): string;
 begin
   Result := '';
   if (ASeries >= 0) and (ASeries <= High(FAnimOldViewKeys)) then
     Result := FAnimOldViewKeys[ASeries];
 end;
 
-function TTyAdvanceChart.GetOptionJson: string;
+function TTyCustomAdvanceChart.GetOptionJson: string;
 begin
   Result := FOption.OptionJson;
 end;
 
-function TTyAdvanceChart.ComponentModelId(const AMainType: string; AIndex: Integer): string;
+function TTyCustomAdvanceChart.ComponentModelId(const AMainType: string; AIndex: Integer): string;
 begin
   Result := FOption.ComponentId(AMainType, AIndex);
 end;
 
-function TTyAdvanceChart.ComponentModelName(const AMainType: string; AIndex: Integer): string;
+function TTyCustomAdvanceChart.ComponentModelName(const AMainType: string; AIndex: Integer): string;
 begin
   Result := FOption.ComponentModelName(AMainType, AIndex);
 end;
 
-function TTyAdvanceChart.ComponentModelSubType(const AMainType: string; AIndex: Integer): string;
+function TTyCustomAdvanceChart.ComponentModelSubType(const AMainType: string; AIndex: Integer): string;
 begin
   Result := FOption.ComponentSubType(AMainType, AIndex);
 end;
 
-procedure TTyAdvanceChart.MergeBefore(const AMainType: string; AIndex: Integer;
+procedure TTyCustomAdvanceChart.MergeBefore(const AMainType: string; AIndex: Integer;
   ANode, ANew: TJSONObject);
 begin
   { [R3-B] a brush's replaceVisualOption [Batch 127] is the merge's own now
@@ -923,7 +923,7 @@ begin
   FDzRawHas[AIndex] := False;
 end;
 
-procedure TTyAdvanceChart.MergeRoamOverride(var AState: TTyGraphRoamState;
+procedure TTyCustomAdvanceChart.MergeRoamOverride(var AState: TTyGraphRoamState;
   ASeries: Integer; ANew: TJSONObject);
 var
   spec: TTyGraphSpec;
@@ -943,7 +943,7 @@ begin
   if ANew.Find('zoom') <> nil then AState.Zoom := spec.Zoom;
 end;
 
-procedure TTyAdvanceChart.MergeKeepStates(const AReport: TTyMergeReport);
+procedure TTyCustomAdvanceChart.MergeKeepStates(const AReport: TTyMergeReport);
 var
   si, s, n, i: Integer;
   fate: TTyMergeFate;
@@ -1121,13 +1121,13 @@ begin
     end;
 end;
 
-function TTyAdvanceChart.DiagnosticCount: Integer;
+function TTyCustomAdvanceChart.DiagnosticCount: Integer;
 begin
   if FBuild = nil then Exit(0);
   Result := FBuild.DiagnosticCount;
 end;
 
-function TTyAdvanceChart.Diagnostic(AIndex: Integer): string;
+function TTyCustomAdvanceChart.Diagnostic(AIndex: Integer): string;
 begin
   if FBuild = nil then Exit('');
   Result := FBuild.Diagnostic(AIndex);
@@ -1135,14 +1135,14 @@ end;
 
 { ==================== style ==================== }
 
-function TTyAdvanceChart.GetStyleTypeKey: string;
+function TTyCustomAdvanceChart.GetStyleTypeKey: string;
 begin
   { Its own key, never borrowed. A control that answers another control's key
     can never be reached by a theme that wants to restyle only this one. }
   Result := 'TyAdvChart';
 end;
 
-procedure TTyAdvanceChart.Invalidate;
+procedure TTyCustomAdvanceChart.Invalidate;
 begin
   { A theme change arrives as a plain Invalidate broadcast and nothing else --
     the controller says so in as many words, and there is no StyleChanged hook
@@ -1181,14 +1181,14 @@ begin
   inherited Invalidate;
 end;
 
-procedure TTyAdvanceChart.InvalidateFrame;
+procedure TTyCustomAdvanceChart.InvalidateFrame;
 begin
   { [F4b] zrender is dirty: the next flush says `rendered` }
   FZrDirty := True;
   InvalidateFrameQuiet;
 end;
 
-procedure TTyAdvanceChart.HoverInvalidate;
+procedure TTyCustomAdvanceChart.HoverInvalidate;
 begin
   { zrender marks what changed: a state the hover moved, a box or a
     pointer that is somewhere else; the frame is asked for regardless }
@@ -1196,7 +1196,7 @@ begin
   InvalidateFrameQuiet;
 end;
 
-procedure TTyAdvanceChart.InvalidateFrameQuiet;
+procedure TTyCustomAdvanceChart.InvalidateFrameQuiet;
 begin
   { A DIRTY-RECT WINDOW FLUSHES FIRST [Batch 142]: the frame is prepared
     when the queue next runs -- once, however many asked -- and only the
@@ -1218,7 +1218,7 @@ begin
   inherited Invalidate;
 end;
 
-procedure TTyAdvanceChart.Resize;
+procedure TTyCustomAdvanceChart.Resize;
 begin
   inherited Resize;
   FDirty := True;
@@ -1226,7 +1226,7 @@ begin
   MediaRecheck;
 end;
 
-procedure TTyAdvanceChart.Loaded;
+procedure TTyCustomAdvanceChart.Loaded;
 begin
   inherited Loaded;
   { the option streamed in before the size may have: asked again at the
@@ -1234,7 +1234,7 @@ begin
   MediaRecheck;
 end;
 
-function TTyAdvanceChart.OptionComponent(const AMainType: string;
+function TTyCustomAdvanceChart.OptionComponent(const AMainType: string;
   AIndex: Integer): TJSONData;
 begin
   Result := nil;
