@@ -1516,6 +1516,8 @@ type
     FCoarsePointer: TTyChartCoarsePointer;
     FPointerSize: Integer;
     FUseDirtyRect: Boolean;
+    { [R4-P] ExactRendering: see the property }
+    FExactRendering: Boolean;
     { ==== THE DIRTY-RECT PATH [Batch 142] ====
       FDrWork: the static painter's surface, kept, and the scratch a partial
       repaint draws on. FDrBase: the static picture before the series (the
@@ -3507,6 +3509,10 @@ type
     procedure DrCaptureBase(ABmp: TBGRABitmap);
     procedure StaticDrop;
     procedure SetUseDirtyRect(AValue: Boolean);
+    procedure SetExactRendering(AValue: Boolean);
+    { [R4-P] every painter the chart draws with: FastStrokes unless
+      ExactRendering }
+    function NewPainter: TTyPainter;
     { the coarse pointer's size, logical px: 0 when it is off }
     function CoarseSize: Integer;
     { the display list's hit at a point: the direct test, then the coarse
@@ -4977,6 +4983,24 @@ type
       ink -- and a window invalidates only those. }
     property UseDirtyRect: Boolean read FUseDirtyRect write SetUseDirtyRect
       default False;
+    { [R4-P] UPSTREAM'S CANVAS PIXELS, off by default. Two things are drawn
+      a faster way that reads the same but does not match a canvas pixel for
+      pixel:
+      - a solid line narrower than one device pixel (parallel coordinates'
+        0.5 px lines, a 0.5 px border) goes through a hairline rasteriser --
+        the same colour, opacity and ink, the coverage laid along the line
+        instead of BGRA's antialiased fill of the pen's polygon
+        (TTyPainter.FastStrokes); a dashed one does not;
+      - a label's halo (textBorderColor / textBorderWidth) is the band round
+        the glyphs' outline, each pixel's coverage by its distance to it,
+        instead of a stroke of that outline (TTyPainter.StrokePathByDistance);
+        a dashed halo (textBorderType) does not.
+      Long thin curves draw ten times and more faster, a chart full of halo'd
+      labels about twice as fast. True draws both the way the canvas does:
+      for comparing with upstream's pixels, or with pictures recorded before
+      the fast ways. Changing it repaints everything. }
+    property ExactRendering: Boolean read FExactRendering
+      write SetExactRendering default False;
   end;
 
 { ==== echarts.connect [Batch 141] ====

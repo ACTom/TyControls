@@ -2676,7 +2676,7 @@ begin
   else
     FTrailLayer.ApplyGlobalOpacity(Round(Max(0.0, Min(1.0, a)) * 255));
   rest := TTyPaintList.Create;
-  P := TTyPainter.Create;
+  P := NewPainter;
   try
     { the layer the size of the painter's bitmap, drawn at its device scale
       over the device-px rect (#83) }

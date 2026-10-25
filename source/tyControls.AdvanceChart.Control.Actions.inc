@@ -1771,7 +1771,7 @@ begin
       if TyJsTruthy(cb) and not ((cb.JSONType = jtString) and (cb.AsString = 'none')) then
       begin
         bg := TyExportBackgroundOf(cb);
-        P := TTyPainter.Create;
+        P := NewPainter;
         try
           P.BeginPaintOn(nil, Rect(0, 0, w, h), 96, Result);
           case bg.Kind of

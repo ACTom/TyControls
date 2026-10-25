@@ -284,17 +284,22 @@ procedure TTyAdvanceChart.ProgApplyVisibility(AList: TTyPaintList);
 var
   k, done, j, shown: Integer;
   el: TTyChartElement;
+  pe: PTyChartElement;
   hid, moved: Boolean;
 begin
   if AList = nil then Exit;
   for k := 0 to AList.Count - 1 do
   begin
-    el := AList.Element(k);
-    if el.ProgChunk <= 0 then Continue;
-    if (el.ProgSlot >= 0) and (el.ProgSlot <= High(FProg)) then done := FProg[el.ProgSlot].Done
+    { [R4-P] read in place; copied only where it is written }
+    pe := AList.Ref(k);
+    if pe^.ProgChunk <= 0 then Continue;
+    if (pe^.ProgSlot >= 0) and (pe^.ProgSlot <= High(FProg)) then done := FProg[pe^.ProgSlot].Done
     else done := MaxInt;
-    hid := el.ProgChunk > done;
-    moved := hid <> el.ProgHidden;
+    hid := pe^.ProgChunk > done;
+    moved := hid <> pe^.ProgHidden;
+    if not moved and not ((pe^.Shape.Kind = cskLarge) and (pe^.Shape.Large.Kind = lgkSymbol)
+      and (Length(pe^.Shape.Large.ChunkEnds) > 0)) then Continue;
+    el := pe^;
     { A GROWING SCATTER BATCH holds the rows of its chunks drawn so far }
     if (el.Shape.Kind = cskLarge) and (el.Shape.Large.Kind = lgkSymbol)
       and (Length(el.Shape.Large.ChunkEnds) > 0) then
@@ -353,7 +358,7 @@ begin
   FProgLayerScale := Max(1, AScale);
   FProgPainted := nil;
   SetLength(FProgPainted, FPaintList.Count);
-  P := TTyPainter.Create;
+  P := NewPainter;
   { a run's paths come back every time the layer is drawn again: their pens
     and coverage kept [R2-L] }
   kept := TyRenderKeptStrokes;
@@ -393,6 +398,7 @@ var
   P: TTyPainter;
   i, idx, have, rows: Integer;
   el, part: TTyChartElement;
+  pe: PTyChartElement;
   started, kept: Boolean;
   sc: TTyCanvasScale;
 begin
@@ -411,15 +417,17 @@ begin
     for i := 0 to FPaintList.Count - 1 do
     begin
       idx := FPaintList.PaintOrder(i);
-      el := FPaintList.Element(idx);
-      if not ProgIsLayered(el) then Continue;
+      { [R4-P] read in place: copied only when it is drawn }
+      pe := FPaintList.Ref(idx);
+      if not ProgIsLayered(pe^) then Continue;
       have := FProgPainted[idx];
-      if el.Shape.Kind = cskLarge then rows := Max(1, TyLargeRows(el.Shape.Large))
+      if pe^.Shape.Kind = cskLarge then rows := Max(1, TyLargeRows(pe^.Shape.Large))
       else rows := 1;
       if have >= rows then Continue;
+      el := pe^;
       if not started then
       begin
-        P := TTyPainter.Create;
+        P := NewPainter;
         sc.Scale := FProgLayerScale;
         sc.DeviceUnits := False;
         P.BeginPaintOnScaled(nil, Rect(0, 0, FProgLayer.Width div FProgLayerScale,
@@ -616,7 +624,7 @@ begin
     Min(FProgLayer.Height, Ceil((zr.Y + zr.H) * s)));
   if (R.Right <= R.Left) or (R.Bottom <= R.Top) then Exit;
   saved := TBGRABitmap.Create(FProgLayer.Width, FProgLayer.Height);
-  P := TTyPainter.Create;
+  P := NewPainter;
   kept := TyRenderKeptStrokes;
   TyRenderKeptStrokes := True;
   try
@@ -784,7 +792,7 @@ begin
       zr.W := Ceil(box.Right / s) + 2 - zr.X;
       zr.H := Ceil(box.Bottom / s) + 2 - zr.Y;
       measurer := NewTextMeasurer(APPI);
-      P := TTyPainter.Create;
+      P := NewPainter;
       try
         sc.Scale := s;
         sc.DeviceUnits := False;
@@ -825,7 +833,7 @@ begin
     end;
   end;
   { blended onto the static canvas as the full paint's EndPaint blends }
-  P := TTyPainter.Create;
+  P := NewPainter;
   try
     P.BeginPaintOn(FStatic.Canvas, R, APPI, FProgWork);
     P.EndPaint;

@@ -4340,7 +4340,7 @@ begin
   if (R.Right <= 0) or (R.Bottom <= 0) then Exit;
   m := NewTextMeasurer(FLastPPI);
   bmp := TBGRABitmap.Create(R.Right, R.Bottom);
-  P := TTyPainter.Create;
+  P := NewPainter;
   try
     P.BeginPaintOn(nil, R, FLastPPI, bmp);
     PaintTooltip(P, R, FLastPPI, m);
