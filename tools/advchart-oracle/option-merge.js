@@ -1204,6 +1204,29 @@ const CASES = [
     must(o.width === 300 && o.left === null && o.right === 20, 'grid-outer-bounds: the bounds merged as a box');
   } },
   // ---- [r3v] the box defaults and the cell size the cases above leave out ----
+  { id: 'toolbox-box-height', steps: [
+    set(bars({ toolbox: { feature: { saveAsImage: {} } }, series: [{ type: 'bar', data: [1, 2, 3, 4] }] })),
+    set({ toolbox: { height: 30 } }),
+    set({ toolbox: { bottom: 10 } }),
+  ], expect: (r) => {
+    const t = r.steps[1].tree.toolbox[0];
+    must(t.height === 30 && t.top === 'top' && t.bottom === null, 'toolbox-box-height: a size alone keeps the default top');
+  } },
+  { id: 'geo-box-default', steps: [
+    set({ animation: false, geo: { map: 'r3b-sq', top: 10 } }),
+    set({ geo: { width: 100 } }),
+  ], expect: (r) => {
+    const g = r.steps[1].tree.geo[0];
+    must(g.width === 100 && g.left === 'center' && g.right === null, 'geo-box-default: the default left is one of the two');
+  } },
+  { id: 'single-axis-box-left', steps: [
+    set({ animation: false, singleAxis: { type: 'category', data: ['a', 'b', 'c'] },
+      series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [1, 2, 0] }] }),
+    set({ singleAxis: { left: 30 } }),
+  ], expect: (r) => {
+    const a = r.steps[1].tree.singleAxis[0];
+    must(a.left === 30 && a.right === '5%' && a.width === null, 'single-axis-box-left: the default right is the second');
+  } },
   { id: 'calendar-cell-default', cal: true, steps: [
     set({ animation: false, calendar: { range: '2017-01', left: 30 } }),
     set({ calendar: { right: 20 } }),
@@ -1254,6 +1277,20 @@ const CASES = [
     must(!('inRange' in t) && t.outOfRange.color[0] === '#888888', 'vm-replace-drops: a visual key written drops the others');
     must(!('outOfRange' in r.steps[2].tree.visualMap[0]), 'vm-replace-drops: an empty one is dropped too');
   } },
+  { id: 'vm-replace-string', vis: true, steps: [
+    set(bars({ gradientColor: ['#123456', '#abcdef'], visualMap: { type: 'continuous', dimension: 1, min: 0, max: 4, inactiveColor: '#cccccc',
+      inRange: { color: ['#ff0000', '#0000ff'] }, outOfRange: { color: ['#999999'] } }, series: [{ type: 'bar', data: [1, 2, 3, 4] }] })),
+    set({ visualMap: { color: 'ab' } }),
+  ], compare: ['fill'], expect: (r) => {
+    const t = r.steps[1].tree.visualMap[0];
+    must(!('inRange' in t) && !('outOfRange' in t) && t.color === 'ab', 'vm-replace-string: a word has keys, it drops the others');
+  } },
+  { id: 'vm-added-later', vis: true, steps: [
+    set(bars({ color: ['#aa0000', '#00aa00'], gradientColor: ['#123456', '#abcdef'], series: [{ type: 'bar', data: [1, 2, 3, 4] }] })),
+    set({ visualMap: { type: 'continuous', dimension: 1, min: 0, max: 4, inactiveColor: '#cccccc' } }),
+    set({ visualMap: [{}, { type: 'piecewise', dimension: 1, inactiveColor: '#cccccc', seriesIndex: 0,
+      pieces: [{ min: 0, max: 2 }, { min: 3, max: 3, color: '#00ff00' }] }] }),
+  ], compare: ['fill'] },
   { id: 'vm-gradient-alias', vis: true, steps: [
     set(bars({ gradientColor: ['#123456', '#abcdef'], visualMap: { type: 'continuous', dimension: 1, min: 0, max: 4, inactiveColor: '#cccccc' },
       series: [{ type: 'bar', data: [1, 2, 3, 4] }] })),
