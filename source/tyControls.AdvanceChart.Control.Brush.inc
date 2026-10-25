@@ -7,7 +7,7 @@
   its range in data (pointToData clamped, or the affine inverse), restricted
   to the hosting dataZoom's value spans, rounded to the precision the
   grid's pixels allow; pushed to the history; dispatched }
-procedure TTyAdvanceChart.TbBrushEnd;
+procedure TTyCustomAdvanceChart.TbBrushEnd;
 var
   snap: TTyTbSnapshot;
   keys: TTyStringArray;
@@ -189,7 +189,7 @@ end;
   throttle the first component asks for; what it carries (the selected
   data) is the next batch's, so it is only logged here. }
 
-function TTyAdvanceChart.BrushViewOf: TTyBrushView;
+function TTyCustomAdvanceChart.BrushViewOf: TTyBrushView;
 begin
   Result.S := DzScale;
   if FBuild <> nil then
@@ -204,7 +204,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.BrushCss(AX, AY: Double; out X, Y: Double);
+procedure TTyCustomAdvanceChart.BrushCss(AX, AY: Double; out X, Y: Double);
 var v: TTyBrushView;
 begin
   v := BrushViewOf;
@@ -214,7 +214,7 @@ end;
 
 { the components the option has: each one's model from its option; the
   areas, the painting option and the view kept by index }
-procedure TTyAdvanceChart.BrushSync;
+procedure TTyCustomAdvanceChart.BrushSync;
 var n, i, old: Integer;
 begin
   n := FOption.ComponentCount('brush');
@@ -238,7 +238,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.BrushReset;
+procedure TTyCustomAdvanceChart.BrushReset;
 var i: Integer;
 begin
   { a view disposed: its controller off (globalPan released) [Batch 127] }
@@ -257,7 +257,7 @@ end;
   whose x or y axis the finder names. A grid none of whose cartesians is
   named has no representative one -- upstream throws on its panel; here
   it is no target. }
-function TTyAdvanceChart.BrushTargets(ABrush: Integer): TTyBrushTargetArray;
+function TTyCustomAdvanceChart.BrushTargets(ABrush: Integer): TTyBrushTargetArray;
 var
   fd: TJSONData;
   pf: TTyParsedFinder;
@@ -373,7 +373,7 @@ end;
 { findTargetInfo: by the area's panelId when it has one, else by the grid
   its finder reaches (its grid, its x axis' grid, its y axis'); -1 is
   `true`, the global panel }
-function TTyAdvanceChart.BrushFindTarget(const ATargets: TTyBrushTargetArray;
+function TTyCustomAdvanceChart.BrushFindTarget(const ATargets: TTyBrushTargetArray;
   const AArea: TTyBrushArea): Integer;
 var
   i, gm, x: Integer;
@@ -432,7 +432,7 @@ end;
 { coordConvert on a target: a grid's cartesian AIndex, or [Batch 152] a
   geo's dataToPoint / pointToData -- a rect by its two corners, a polygon
   by its points (a geo has no axis: no lineX, no lineY) }
-function TTyAdvanceChart.BrushConvertOn(const ATarget: TTyBrushTarget; AIndex: Integer;
+function TTyCustomAdvanceChart.BrushConvertOn(const ATarget: TTyBrushTarget; AIndex: Integer;
   AType: TTyBrushType; AToData: Boolean; const AView: TTyBrushView;
   const ARange: TTyBrushRange; AClamp: Boolean; out AValues, AXYMinMax: TTyBrushRange): Boolean;
 var
@@ -526,7 +526,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.BrushLayout(ABrush: Integer);
+procedure TTyCustomAdvanceChart.BrushLayout(ABrush: Integer);
 var
   tg: TTyBrushTargetArray;
   i, t: Integer;
@@ -569,7 +569,7 @@ end;
 
 { BrushView._updateController: the panels, the painting option, the covers
   from the model's areas }
-procedure TTyAdvanceChart.BrushRender(ABrush: Integer; ARepaint: Boolean);
+procedure TTyCustomAdvanceChart.BrushRender(ABrush: Integer; ARepaint: Boolean);
 var
   tg: TTyBrushTargetArray;
   pn: array of TTyBrushPanel;
@@ -610,7 +610,7 @@ begin
   if ARepaint then BrushChanged;
 end;
 
-procedure TTyAdvanceChart.BrushPass;
+procedure TTyCustomAdvanceChart.BrushPass;
 var b: Integer;
 begin
   BrushSync;
@@ -621,7 +621,7 @@ end;
 { setOutputRanges: an area on a target gets coordRanges (one per cartesian
   of the target), coordRange the first of them, and __rangeOffset -- the
   first's way back to pixels less the range }
-function TTyAdvanceChart.BrushOutput(ABrush: Integer;
+function TTyCustomAdvanceChart.BrushOutput(ABrush: Integer;
   const AAreas: TTyBrushAreaArray): TTyBrushAreaArray;
 var
   tg: TTyBrushTargetArray;
@@ -664,7 +664,7 @@ end;
 { BrushView._onBrush: the areas in data too; the `brush` action unless it
   is a drag's end (a removeOnClick clearing is dispatched), then brushEnd
   at an end }
-procedure TTyAdvanceChart.BrushOnTrigger(ABrush: Integer; const ATrig: TTyBrushTrigger);
+procedure TTyCustomAdvanceChart.BrushOnTrigger(ABrush: Integer; const ATrig: TTyBrushTrigger);
 var
   areas: TTyBrushAreaArray;
   id, js: string;
@@ -687,7 +687,7 @@ end;
 
 { the `brush` action from a brush's own view: setAreas on it, the update
   (updateVisual: layoutCovers, every other view's covers), the event }
-procedure TTyAdvanceChart.BrushApplyOwn(ABrush: Integer; const AAreas: TTyBrushAreaArray);
+procedure TTyCustomAdvanceChart.BrushApplyOwn(ABrush: Integer; const AAreas: TTyBrushAreaArray);
 var
   i, b: Integer;
   id, js: string;
@@ -719,7 +719,7 @@ end;
 
 { the brush components an action's payload names (brushIndex, else
   brushId, else brushName); none named: all of them }
-function TTyAdvanceChart.BrushQuery(APayload: TJSONObject): TTyIntegerArray;
+function TTyCustomAdvanceChart.BrushQuery(APayload: TJSONObject): TTyIntegerArray;
 var
   d: TJSONData;
   i, k, n: Integer;
@@ -788,7 +788,7 @@ end;
 
 { the `brush` action from the API: setAreas on the components it names
   (areas absent: the areas stay), the update, the event with the payload }
-procedure TTyAdvanceChart.BrushDoAction(APayload: TJSONObject);
+procedure TTyCustomAdvanceChart.BrushDoAction(APayload: TJSONObject);
 var
   sel: TTyIntegerArray;
   node, fromN: TJSONData;
@@ -835,7 +835,7 @@ begin
   BrushChanged;
 end;
 
-procedure TTyAdvanceChart.BrushDoEnd(APayload: TJSONObject);
+procedure TTyCustomAdvanceChart.BrushDoEnd(APayload: TJSONObject);
 var js: string;
 begin
   js := TbEventJson(APayload, 'brushend');
@@ -846,7 +846,7 @@ end;
 { brushVisual's setBrushOption on takeGlobalCursor: the payload's
   brushOption for the key 'brush', brushType false for any other; then the
   update renders every view }
-procedure TTyAdvanceChart.BrushTakeCursor(APayload: TJSONObject);
+procedure TTyCustomAdvanceChart.BrushTakeCursor(APayload: TJSONObject);
 var
   d, bo: TJSONData;
   isBrush: Boolean;
@@ -883,7 +883,7 @@ begin
   { brushSelect: TbDoTakeCursor's, with or without a brush [Batch 127] }
 end;
 
-procedure TTyAdvanceChart.BrushLogEvent(const AType: string; ABrush: Integer;
+procedure TTyCustomAdvanceChart.BrushLogEvent(const AType: string; ABrush: Integer;
   AFromSelf: Boolean; const AAreas: TTyBrushAreaArray; const APayload: string);
 var n: Integer;
 begin
@@ -896,7 +896,7 @@ begin
   FBrushEvLog[n].Payload := APayload;
 end;
 
-function TTyAdvanceChart.BrushClock: Double;
+function TTyCustomAdvanceChart.BrushClock: Double;
 begin
   if IsNan(FBrushNow) then Result := GetTickCount64 else Result := FBrushNow;
 end;
@@ -904,7 +904,7 @@ end;
 { brushVisual's dispatch of brushSelect: through the throttle the first
   component asks for (createOrUpdate), with every component's areas. Not
   during a brushSelect of its own. }
-procedure TTyAdvanceChart.BrushVisual(const ABatch: TTyBrushSelectBatch);
+procedure TTyCustomAdvanceChart.BrushVisual(const ABatch: TTyBrushSelectBatch);
 var
   batch: TTyBrushSelectBatch;
   n: Integer;
@@ -947,7 +947,7 @@ begin
   BrushArmTimer;
 end;
 
-procedure TTyAdvanceChart.BrushExecSelect(const ABatch: TTyBrushSelectBatch; ATime: Double);
+procedure TTyCustomAdvanceChart.BrushExecSelect(const ABatch: TTyBrushSelectBatch; ATime: Double);
 var n: Integer;
 begin
   FBrushInSelect := True;
@@ -985,7 +985,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.BrushDropPending(AId: Integer);
+procedure TTyCustomAdvanceChart.BrushDropPending(AId: Integer);
 var i, k: Integer;
 begin
   if AId = 0 then Exit;
@@ -998,7 +998,7 @@ begin
     end;
 end;
 
-procedure TTyAdvanceChart.BrushTick(ANow: Double);
+procedure TTyCustomAdvanceChart.BrushTick(ANow: Double);
 var
   best, i, k: Integer;
   t: Double;
@@ -1031,7 +1031,7 @@ begin
   if FBrushActDepth = 0 then BrushFlush;
 end;
 
-procedure TTyAdvanceChart.BrushArmTimer;
+procedure TTyCustomAdvanceChart.BrushArmTimer;
 var
   i: Integer;
   due: Double;
@@ -1055,7 +1055,7 @@ begin
   FBrushTimer.Enabled := True;
 end;
 
-procedure TTyAdvanceChart.BrushTimerFired(Sender: TObject);
+procedure TTyCustomAdvanceChart.BrushTimerFired(Sender: TObject);
 begin
   FBrushTimer.Enabled := False;
   BrushTick(BrushClock);
@@ -1064,7 +1064,7 @@ end;
 { the topmost cover piece the pointer finds (device px): the brush views'
   groups in component order, the later over the earlier; nothing outside
   the canvas }
-function TTyAdvanceChart.BrushPieceAt(AX, AY: Integer; out ABrush, AIndex: Integer;
+function TTyCustomAdvanceChart.BrushPieceAt(AX, AY: Integer; out ABrush, AIndex: Integer;
   out APiece: TTyBrushPiece): Boolean;
 var
   b: Integer;
@@ -1098,7 +1098,7 @@ end;
 { zrender's Draggable takes a press on a piece (dragstart); the
   controllers' own mousedown still runs -- on a draggable target it only
   ends a track a lost release left }
-function TTyAdvanceChart.BrushDragStart(AX, AY: Integer): Boolean;
+function TTyCustomAdvanceChart.BrushDragStart(AX, AY: Integer): Boolean;
 var
   b, i: Integer;
   pc: TTyBrushPiece;
@@ -1116,7 +1116,7 @@ begin
   BrushCtlDown(AX, AY, True);
 end;
 
-procedure TTyAdvanceChart.BrushCtlDown(AX, AY: Integer; ADraggable: Boolean);
+procedure TTyCustomAdvanceChart.BrushCtlDown(AX, AY: Integer; ADraggable: Boolean);
 var
   b: Integer;
   x, y: Double;
@@ -1131,7 +1131,7 @@ begin
       ParBrushOnTrigger(b, FParBrushCtls[b].MouseDown(x, y, ADraggable));
 end;
 
-procedure TTyAdvanceChart.BrushPointerMove(AX, AY: Integer);
+procedure TTyCustomAdvanceChart.BrushPointerMove(AX, AY: Integer);
 var
   b: Integer;
   x, y: Double;
@@ -1171,7 +1171,7 @@ begin
 end;
 
 { Draggable's dragend: the cover's ondragend triggers with isEnd }
-procedure TTyAdvanceChart.BrushDragEnd;
+procedure TTyCustomAdvanceChart.BrushDragEnd;
 var b: Integer;
 begin
   if not FBrushDragOn then Exit;
@@ -1181,7 +1181,7 @@ begin
   BrushTriggerTo(b, BrushCtlOf(b).DragEnd(FBrushDragSerial));
 end;
 
-procedure TTyAdvanceChart.BrushCtlUp(AX, AY: Integer);
+procedure TTyCustomAdvanceChart.BrushCtlUp(AX, AY: Integer);
 var
   b: Integer;
   x, y: Double;
@@ -1206,7 +1206,7 @@ begin
     end;
 end;
 
-function TTyAdvanceChart.BrushCrosshair(AX, AY: Integer): Boolean;
+function TTyCustomAdvanceChart.BrushCrosshair(AX, AY: Integer): Boolean;
 var
   b: Integer;
   x, y: Double;
@@ -1221,7 +1221,7 @@ begin
     if (FParBrushCtls[b] <> nil) and FParBrushCtls[b].Crosshair(x, y) then Result := True;
 end;
 
-procedure TTyAdvanceChart.BrushChanged;
+procedure TTyCustomAdvanceChart.BrushChanged;
 begin
   DropStatic;
   FZrDirty := True;
@@ -1231,7 +1231,7 @@ end;
 { the covers: each brush view's group in component order, a group's covers
   in the order they were added; the main shape filled and stroked in the
   cover's style (the skin's where it wrote none), the handles invisible }
-function TTyAdvanceChart.BuildBrushes(AList: TTyPaintList): Integer;
+function TTyCustomAdvanceChart.BuildBrushes(AList: TTyPaintList): Integer;
 var
   b, q, i: Integer;
   ord_: TTyIntegerArray;
@@ -1327,7 +1327,7 @@ end;
   another coordinate system above the panel's grid -- its zlevel, then its
   z, higher. }
 
-procedure TTyAdvanceChart.BrushEnableCtl(ACtl: TTyBrushController; const AOpt: TTyBrushOpt;
+procedure TTyCustomAdvanceChart.BrushEnableCtl(ACtl: TTyBrushController; const AOpt: TTyBrushOpt;
   AAuto: Boolean);
 var was: Boolean;
 begin
@@ -1340,7 +1340,7 @@ begin
   if ACtl.Enabled then FPanHolder := ACtl.Uid;
 end;
 
-procedure TTyAdvanceChart.BrushFreeCtl(var ACtl: TTyBrushController);
+procedure TTyCustomAdvanceChart.BrushFreeCtl(var ACtl: TTyBrushController);
 begin
   if ACtl = nil then Exit;
   { dispose: enableBrush(false) }
@@ -1348,17 +1348,17 @@ begin
   FreeAndNil(ACtl);
 end;
 
-function TTyAdvanceChart.PanTaken: Boolean;
+function TTyCustomAdvanceChart.PanTaken: Boolean;
 begin
   Result := FPanHolder <> 0;
 end;
 
-function TTyAdvanceChart.BrushGlobalPanTaken: Boolean;
+function TTyCustomAdvanceChart.BrushGlobalPanTaken: Boolean;
 begin
   Result := PanTaken;
 end;
 
-function TTyAdvanceChart.BrushIrrelevant(const APanel: TTyBrushPanel; AX, AY: Double): Boolean;
+function TTyCustomAdvanceChart.BrushIrrelevant(const APanel: TTyBrushPanel; AX, AY: Double): Boolean;
 var
   v: TTyBrushView;
   idx, slot, si, sz, szl: Integer;
@@ -1413,7 +1413,7 @@ begin
   Result := diff > 0;
 end;
 
-procedure TTyAdvanceChart.BrushVisCapture;
+procedure TTyCustomAdvanceChart.BrushVisCapture;
 var i: Integer;
 begin
   FBrushVisBase := nil;
@@ -1423,7 +1423,7 @@ begin
   for i := 0 to High(FVisualRows) do FBrushVisBase[i] := Copy(FVisualRows[i]);
 end;
 
-function TTyAdvanceChart.BrushSelectCompute: TTyBrushSelectBatch;
+function TTyCustomAdvanceChart.BrushSelectCompute: TTyBrushSelectBatch;
 var
   b, i, k, r, raw, n, si, t: Integer;
   reach: TTyBrushReach;
@@ -1630,7 +1630,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.BrushSelectRun(ADispatch: Boolean; ARepaint: Boolean);
+procedure TTyCustomAdvanceChart.BrushSelectRun(ADispatch: Boolean; ARepaint: Boolean);
 var batch: TTyBrushSelectBatch;
 begin
   if ADispatch then FBrushPayload := False;
@@ -1641,7 +1641,7 @@ begin
   if ADispatch then BrushVisual(batch);
 end;
 
-procedure TTyAdvanceChart.BrushFlush;
+procedure TTyCustomAdvanceChart.BrushFlush;
 var
   q: TTyStringArray;
   i: Integer;
@@ -1656,7 +1656,7 @@ end;
 
 { the brushSelect action's event: the batch, each item as the action
   handled it (its type the event's, its batch null) }
-function TTyAdvanceChart.BrushSelectedJson(const ABatch: TTyBrushSelectBatch): string;
+function TTyCustomAdvanceChart.BrushSelectedJson(const ABatch: TTyBrushSelectBatch): string;
 var
   b, s, k: Integer;
   st: TTyStyleSet;
@@ -1697,7 +1697,7 @@ end;
 { axisAreaSelect: the queried parallelAxis models take the intervals and
   the chart updates (parallelVisual's opacities) [Batch 128]; the update's
   visual stage (brushSelect), the toolbox's render and the event }
-procedure TTyAdvanceChart.BrushDoAxisAreaSelect(APayload: TJSONObject);
+procedure TTyCustomAdvanceChart.BrushDoAxisAreaSelect(APayload: TJSONObject);
 var
   hit: Boolean;
   first: Integer;
@@ -1730,7 +1730,7 @@ end;
 { what BrushFeature.render reads off the brush models: the last one's
   brushType and brushOption.brushMode (|| 'single'), and whether any keeps
   an area }
-procedure TTyAdvanceChart.TbBrushModelState(out AHas, AMulti, ABrushed: Boolean;
+procedure TTyCustomAdvanceChart.TbBrushModelState(out AHas, AMulti, ABrushed: Boolean;
   out AType: TTyBrushType);
 var b: Integer;
 begin
@@ -1757,7 +1757,7 @@ end;
 
 { an update the port renders later: the feature renders with what the
   models hold now }
-procedure TTyAdvanceChart.TbBrushSnap;
+procedure TTyCustomAdvanceChart.TbBrushSnap;
 begin
   TbBrushModelState(FTbBfSnapHas, FTbBfSnapMulti, FTbBfSnapBrushed, FTbBfSnapType);
   FTbBfSnap := True;
@@ -1766,7 +1766,7 @@ end;
 { BrushFeature.render: every listed type's status -- keep by the mode,
   clear by any area, a type by the brush type -- and the type and mode its
   clicks read }
-procedure TTyAdvanceChart.TbBrushRender(ATb: Integer);
+procedure TTyCustomAdvanceChart.TbBrushRender(ATb: Integer);
 var
   fm: TJSONObject;
   d: TJSONData;
@@ -1810,7 +1810,7 @@ end;
 { BrushFeature.onclick: clear dispatches axisAreaSelect, then the brush
   action with no areas; any other takes the global cursor -- keep flips the
   mode and keeps the type, a type flips itself on or off }
-procedure TTyAdvanceChart.TbBrushClick(const AIcon: string);
+procedure TTyCustomAdvanceChart.TbBrushClick(const AIcon: string);
 var bt, bm: string;
 begin
   if AIcon = 'clear' then
@@ -1840,52 +1840,52 @@ end;
 
 { ---- what the tests read ---- }
 
-function TTyAdvanceChart.BrushCount: Integer;
+function TTyCustomAdvanceChart.BrushCount: Integer;
 begin
   Result := Length(FBrushCtls);
 end;
 
-function TTyAdvanceChart.BrushControllerOf(AIndex: Integer): TTyBrushController;
+function TTyCustomAdvanceChart.BrushControllerOf(AIndex: Integer): TTyBrushController;
 begin
   Result := nil;
   if (AIndex >= 0) and (AIndex <= High(FBrushCtls)) then Result := FBrushCtls[AIndex];
 end;
 
-function TTyAdvanceChart.BrushModelAreas(AIndex: Integer): TTyBrushAreaArray;
+function TTyCustomAdvanceChart.BrushModelAreas(AIndex: Integer): TTyBrushAreaArray;
 begin
   Result := nil;
   if (AIndex >= 0) and (AIndex <= High(FBrushAreas)) then Result := Copy(FBrushAreas[AIndex]);
 end;
 
-function TTyAdvanceChart.BrushHitTest(AX, AY: Integer; out ABrush, AIndex: Integer;
+function TTyCustomAdvanceChart.BrushHitTest(AX, AY: Integer; out ABrush, AIndex: Integer;
   out APiece: TTyBrushPiece): Boolean;
 begin
   Result := BrushPieceAt(AX, AY, ABrush, AIndex, APiece);
 end;
 
-function TTyAdvanceChart.BrushSelectCount: Integer;
+function TTyCustomAdvanceChart.BrushSelectCount: Integer;
 begin
   Result := Length(FBrushSelLog);
 end;
 
-function TTyAdvanceChart.BrushSelectAt(AIndex: Integer): TTyBrushSelectRec;
+function TTyCustomAdvanceChart.BrushSelectAt(AIndex: Integer): TTyBrushSelectRec;
 begin
   Result := Default(TTyBrushSelectRec);
   if (AIndex >= 0) and (AIndex <= High(FBrushSelLog)) then Result := FBrushSelLog[AIndex];
 end;
 
-function TTyAdvanceChart.BrushEventCount: Integer;
+function TTyCustomAdvanceChart.BrushEventCount: Integer;
 begin
   Result := Length(FBrushEvLog);
 end;
 
-function TTyAdvanceChart.BrushEventAt(AIndex: Integer): TTyBrushEventRec;
+function TTyCustomAdvanceChart.BrushEventAt(AIndex: Integer): TTyBrushEventRec;
 begin
   Result := Default(TTyBrushEventRec);
   if (AIndex >= 0) and (AIndex <= High(FBrushEvLog)) then Result := FBrushEvLog[AIndex];
 end;
 
-procedure TTyAdvanceChart.BrushClearLogs;
+procedure TTyCustomAdvanceChart.BrushClearLogs;
 begin
   FBrushSelLog := nil;
   FBrushEvLog := nil;
@@ -1905,7 +1905,7 @@ end;
   when the axis is realtime, at its end when it is not, and always for the
   tiny drag that clears. }
 
-function TTyAdvanceChart.BrushCtlOf(AIndex: Integer): TTyBrushController;
+function TTyCustomAdvanceChart.BrushCtlOf(AIndex: Integer): TTyBrushController;
 var k: Integer;
 begin
   Result := nil;
@@ -1919,13 +1919,13 @@ begin
   if k <= High(FParBrushCtls) then Result := FParBrushCtls[k];
 end;
 
-procedure TTyAdvanceChart.BrushTriggerTo(AIndex: Integer; const ATrig: TTyBrushTrigger);
+procedure TTyCustomAdvanceChart.BrushTriggerTo(AIndex: Integer; const ATrig: TTyBrushTrigger);
 begin
   if AIndex < TyParallelBrushBase then BrushOnTrigger(AIndex, ATrig)
   else ParBrushOnTrigger(AIndex - TyParallelBrushBase, ATrig);
 end;
 
-procedure TTyAdvanceChart.ParBrushFree;
+procedure TTyCustomAdvanceChart.ParBrushFree;
 var k: Integer;
 begin
   for k := 0 to High(FParBrushCtls) do FreeAndNil(FParBrushCtls[k]);
@@ -1940,7 +1940,7 @@ end;
   CSS px: the axis' own coordinates over the view's scale. A view not
   shown (`show: false`) returns before it -- its controller stays as it
   was. }
-procedure TTyAdvanceChart.ParBrushPass;
+procedure TTyCustomAdvanceChart.ParBrushPass;
 var
   n, old, k, p, a, i: Integer;
   par: TTyParallel;
@@ -2023,7 +2023,7 @@ begin
 end;
 
 { ParallelAxisView._onBrush }
-procedure TTyAdvanceChart.ParBrushOnTrigger(AAxis: Integer; const ATrig: TTyBrushTrigger);
+procedure TTyCustomAdvanceChart.ParBrushOnTrigger(AAxis: Integer; const ATrig: TTyBrushTrigger);
 var
   p, a, i: Integer;
   ax: TTyAxis;
@@ -2091,7 +2091,7 @@ end;
   transform, filled and stroked in its style (the skin's colours where the
   areaSelectStyle wrote none; a cover laid from the intervals has the
   brush's default style, and the brush's skin colours) }
-function TTyAdvanceChart.BuildParallelBrushes(AList: TTyPaintList): Integer;
+function TTyCustomAdvanceChart.BuildParallelBrushes(AList: TTyPaintList): Integer;
 var
   k, q, i: Integer;
   ord_: TTyIntegerArray;
@@ -2172,24 +2172,24 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.ParallelBrushOf(AAxis: Integer): TTyBrushController;
+function TTyCustomAdvanceChart.ParallelBrushOf(AAxis: Integer): TTyBrushController;
 begin
   Result := nil;
   if (AAxis >= 0) and (AAxis <= High(FParBrushCtls)) then Result := FParBrushCtls[AAxis];
 end;
 
-function TTyAdvanceChart.ParallelBrushActionCount: Integer;
+function TTyCustomAdvanceChart.ParallelBrushActionCount: Integer;
 begin
   Result := Length(FParBrushLog);
 end;
 
-function TTyAdvanceChart.ParallelBrushActionAt(AIndex: Integer): TTyParallelBrushAction;
+function TTyCustomAdvanceChart.ParallelBrushActionAt(AIndex: Integer): TTyParallelBrushAction;
 begin
   Result := Default(TTyParallelBrushAction);
   if (AIndex >= 0) and (AIndex <= High(FParBrushLog)) then Result := FParBrushLog[AIndex];
 end;
 
-procedure TTyAdvanceChart.ParallelBrushClearLog;
+procedure TTyCustomAdvanceChart.ParallelBrushClearLog;
 begin
   FParBrushLog := nil;
 end;
@@ -2212,7 +2212,7 @@ end;
   shared). The update renders (_makeLayoutInfo rewrites that array), its
   visual stage dispatches brushSelect, and the event carries the payload,
   its window as the layout left it. }
-procedure TTyAdvanceChart.DoParallelAxisExpand(APayload: TJSONObject);
+procedure TTyCustomAdvanceChart.DoParallelAxisExpand(APayload: TJSONObject);
 const
   cKeys: array[0..4] of string = ('axisExpandable', 'axisExpandCenter',
     'axisExpandCount', 'axisExpandWidth', 'axisExpandWindow');
@@ -2324,7 +2324,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.ParExpEnsure;
+procedure TTyCustomAdvanceChart.ParExpEnsure;
 var k, n, was: Integer;
 begin
   n := Length(FParallels);
@@ -2342,7 +2342,7 @@ end;
 { createOrUpdate(this, '_throttledDispatchExpand', axisExpandRate, 'fixRate'):
   a new throttle -- its clock from the epoch -- when the rate changes; the
   function itself when the rate is null }
-procedure TTyAdvanceChart.ParExpConfigure(AIndex: Integer);
+procedure TTyCustomAdvanceChart.ParExpConfigure(AIndex: Integer);
 var rate: Double; rateMoved: Boolean;
 begin
   if (AIndex < 0) or (AIndex > High(FParallels)) or (FParallels[AIndex] = nil) then Exit;
@@ -2371,7 +2371,7 @@ end;
 { getSlidedAxisExpandWindow: _makeLayoutInfo (the option's window
   rewritten), its window copied, containPoint's own _makeLayoutInfo (the
   window rewritten again), then the slide }
-function TTyAdvanceChart.ParExpSlideAt(AIndex: Integer; AX, AY: Double;
+function TTyCustomAdvanceChart.ParExpSlideAt(AIndex: Integer; AX, AY: Double;
   out AW0, AW1: Double): TTyParallelSlide;
 var
   par: TTyParallel;
@@ -2393,7 +2393,7 @@ begin
   Result := TyParallelSlide(par, AX, AY, AW0, AW1);
 end;
 
-procedure TTyAdvanceChart.ParExpDown(AX, AY: Integer);
+procedure TTyCustomAdvanceChart.ParExpDown(AX, AY: Integer);
 var i: Integer; par: TTyParallel;
 begin
   ParExpEnsure;
@@ -2410,7 +2410,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.ParExpUp(AX, AY: Integer);
+procedure TTyCustomAdvanceChart.ParExpUp(AX, AY: Integer);
 var
   i: Integer;
   par: TTyParallel;
@@ -2441,7 +2441,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.ParExpMove(AX, AY: Integer);
+procedure TTyCustomAdvanceChart.ParExpMove(AX, AY: Integer);
 var
   i: Integer;
   par: TTyParallel;
@@ -2469,7 +2469,7 @@ begin
 end;
 
 { the throttled function's call (util/throttle.ts cb) }
-procedure TTyAdvanceChart.ParExpCall(AIndex: Integer; AHasArgs: Boolean;
+procedure TTyCustomAdvanceChart.ParExpCall(AIndex: Integer; AHasArgs: Boolean;
   AW0, AW1: Double; AJump: Boolean);
 var
   now_, delay, base, diff, deb: Double;
@@ -2509,7 +2509,7 @@ end;
 { _dispatchExpand: parallelAxisExpand with the window -- and the animation
   a move adds: null for a jump, a duration of nought for a slide (AAnim 1,
   2; 0 none) }
-procedure TTyAdvanceChart.ParExpDispatch(AIndex: Integer; AW0, AW1: Double;
+procedure TTyCustomAdvanceChart.ParExpDispatch(AIndex: Integer; AW0, AW1: Double;
   AAnim: Integer; ATime: Double);
 var
   p: TJSONObject;
@@ -2536,7 +2536,7 @@ begin
   DispatchActionObject(p);
 end;
 
-procedure TTyAdvanceChart.ParExpSchedule(AIndex: Integer; ADue: Double;
+procedure TTyCustomAdvanceChart.ParExpSchedule(AIndex: Integer; ADue: Double;
   AHasArgs: Boolean; AW0, AW1: Double; AJump: Boolean);
 var n: Integer;
 begin
@@ -2555,7 +2555,7 @@ begin
   ParExpArmTimer;
 end;
 
-procedure TTyAdvanceChart.ParExpDropPending(AId: Integer);
+procedure TTyCustomAdvanceChart.ParExpDropPending(AId: Integer);
 var i, k: Integer;
 begin
   if AId = 0 then Exit;
@@ -2568,12 +2568,12 @@ begin
     end;
 end;
 
-function TTyAdvanceChart.ParExpClock: Double;
+function TTyCustomAdvanceChart.ParExpClock: Double;
 begin
   if IsNan(FParExpNow) then Result := GetTickCount64 else Result := FParExpNow;
 end;
 
-procedure TTyAdvanceChart.ParallelExpandTick(ANow: Double);
+procedure TTyCustomAdvanceChart.ParallelExpandTick(ANow: Double);
 var
   best, i, k: Integer;
   p: TTyParallelExpandPending;
@@ -2606,7 +2606,7 @@ begin
   ParExpArmTimer;
 end;
 
-procedure TTyAdvanceChart.ParExpArmTimer;
+procedure TTyCustomAdvanceChart.ParExpArmTimer;
 var
   i: Integer;
   due: Double;
@@ -2630,24 +2630,24 @@ begin
   FParExpTimer.Enabled := True;
 end;
 
-procedure TTyAdvanceChart.ParExpTimerFired(Sender: TObject);
+procedure TTyCustomAdvanceChart.ParExpTimerFired(Sender: TObject);
 begin
   FParExpTimer.Enabled := False;
   ParallelExpandTick(ParExpClock);
 end;
 
-function TTyAdvanceChart.ParallelExpandActionCount: Integer;
+function TTyCustomAdvanceChart.ParallelExpandActionCount: Integer;
 begin
   Result := Length(FParExpLog);
 end;
 
-function TTyAdvanceChart.ParallelExpandActionAt(AIndex: Integer): TTyParallelExpandAction;
+function TTyCustomAdvanceChart.ParallelExpandActionAt(AIndex: Integer): TTyParallelExpandAction;
 begin
   Result := Default(TTyParallelExpandAction);
   if (AIndex >= 0) and (AIndex <= High(FParExpLog)) then Result := FParExpLog[AIndex];
 end;
 
-procedure TTyAdvanceChart.ParallelExpandClearLog;
+procedure TTyCustomAdvanceChart.ParallelExpandClearLog;
 begin
   FParExpLog := nil;
 end;

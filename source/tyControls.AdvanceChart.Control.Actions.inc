@@ -2,7 +2,7 @@
   dispatchAction, and echarts.connect's batch actions. Moved out of the unit only to keep
   it readable; what the control is and why it is built the way it is, see the unit header. }
 
-function TTyAdvanceChart.ConvertOnSingle(ASingle: TTySingle; AValue: TJSONData;
+function TTyCustomAdvanceChart.ConvertOnSingle(ASingle: TTySingle; AValue: TJSONData;
   AFrom: Boolean): TTyConvertResult;
 begin
   if AFrom then Result := TySingleFromPixel(ASingle, AValue)
@@ -14,7 +14,7 @@ end;
 { jitterLayout's gate: a scatter on a cartesian whose base axis is a
   category one with `jitter > 0` -- `jitterOverlap` true unless written
   falsy, `jitterMargin` 2 unless written (`|| 0` after that) }
-procedure TTyAdvanceChart.JitterFor(ASlot, APPI: Integer; var AVisual: TTySeriesVisual);
+procedure TTyCustomAdvanceChart.JitterFor(ASlot, APPI: Integer; var AVisual: TTySeriesVisual);
 var
   base: TTyAxis;
   node: TJSONData;
@@ -91,7 +91,7 @@ end;
 
 { ==================== the coordinate conversions [Batch 110] ==================== }
 
-procedure TTyAdvanceChart.ConvertReady;
+procedure TTyCustomAdvanceChart.ConvertReady;
 var m: ITyTextMeasurer;
 begin
   { upstream's setOption lays the chart out before it returns: a layout
@@ -112,7 +112,7 @@ end;
   grid's), else the cartesian of the x and y axes named, else the one axis
   named, else -- lowest -- the grid's first cartesian when the grid named is
   this one }
-function TTyAdvanceChart.ConvertOnGrid(AGrid: TTyGridBuild; const AF: TTyParsedFinder;
+function TTyCustomAdvanceChart.ConvertOnGrid(AGrid: TTyGridBuild; const AF: TTyParsedFinder;
   AValue: TJSONData; AFrom: Boolean): TTyConvertResult;
 var
   s, xm, ym, gm, slot, k: Integer;
@@ -175,7 +175,7 @@ end;
 { Geo.convertToPixel / convertFromPixel: dataToPoint of a region's name or
   a [lng, lat] pair, pointToData of a pixel; upstream's undefined (a name no
   region has, a projection's null point) answers nothing [Batch 146] }
-function TTyAdvanceChart.ConvertOnGeo(AGeo: TTyGeo; AValue: TJSONData;
+function TTyCustomAdvanceChart.ConvertOnGeo(AGeo: TTyGeo; AValue: TJSONData;
   AFrom: Boolean): TTyConvertResult;
 var
   p: TTyPointF;
@@ -191,7 +191,7 @@ begin
   if AGeo.ToPixelJson(AValue, p) then Result := TyConvertXY(p.X, p.Y);
 end;
 
-function TTyAdvanceChart.ConvertOnCalendar(ACal: TTyCalendar; AValue: TJSONData;
+function TTyCustomAdvanceChart.ConvertOnCalendar(ACal: TTyCalendar; AValue: TJSONData;
   AFrom: Boolean): TTyConvertResult;
 var
   v, own: TJSONData;
@@ -234,7 +234,7 @@ end;
 { View.convertToPixel / convertFromPixel: the overall matrix -- whose zero
   terms carry a not-a-number or an infinity across, as zrender's
   applyTransform does -- or its inverse }
-function TTyAdvanceChart.ConvertOnView(AView: TTyGraphView; AValue: TJSONData;
+function TTyCustomAdvanceChart.ConvertOnView(AView: TTyGraphView; AValue: TJSONData;
   AFrom: Boolean): TTyConvertResult;
 var
   pt, p: TTyPointF;
@@ -267,7 +267,7 @@ end;
   parallels (which have no convertToPixel / convertFromPixel at all
   [Batch 128]), the polars and (were it here) singleAxis, then the
   calendars -- and the first answer that is not null/undefined }
-function TTyAdvanceChart.ConvertDispatch(AFinder, AValue: TJSONData;
+function TTyCustomAdvanceChart.ConvertDispatch(AFinder, AValue: TJSONData;
   AFrom: Boolean; AOpt: TJSONData): TTyConvertResult;
 var
   pf: TTyParsedFinder;
@@ -387,14 +387,14 @@ end;
   its first item }
 { Polar.convertToPixel / convertFromPixel: dataToPoint of [radius, angle],
   or pointToData of a pixel [Batch 111] }
-function TTyAdvanceChart.ConvertOnPolar(APolar: TTyPolar; AValue: TJSONData;
+function TTyCustomAdvanceChart.ConvertOnPolar(APolar: TTyPolar; AValue: TJSONData;
   AFrom: Boolean): TTyConvertResult;
 begin
   if AFrom then Result := TyPolarFromPixel(APolar, AValue)
   else Result := TyPolarToPixel(APolar, AValue);
 end;
 
-function TTyAdvanceChart.ContainSeries(ASeriesIndex: Integer; APoint: TJSONData): Boolean;
+function TTyCustomAdvanceChart.ContainSeries(ASeriesIndex: Integer; APoint: TJSONData): Boolean;
 var
   slot, k: Integer;
   b: TTySeriesBinding;
@@ -468,7 +468,7 @@ begin
       end;
 end;
 
-function TTyAdvanceChart.ContainPixelData(AFinder, APoint: TJSONData): Boolean;
+function TTyCustomAdvanceChart.ContainPixelData(AFinder, APoint: TJSONData): Boolean;
 var
   pf: TTyParsedFinder;
   t, k, g: Integer;
@@ -559,19 +559,19 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.ConvertToPixelData(AFinder, AValue: TJSONData;
+function TTyCustomAdvanceChart.ConvertToPixelData(AFinder, AValue: TJSONData;
   AOpt: TJSONData): TTyConvertResult;
 begin
   Result := ConvertDispatch(AFinder, AValue, False, AOpt);
 end;
 
-function TTyAdvanceChart.ConvertFromPixelData(AFinder, AValue: TJSONData;
+function TTyCustomAdvanceChart.ConvertFromPixelData(AFinder, AValue: TJSONData;
   AOpt: TJSONData): TTyConvertResult;
 begin
   Result := ConvertDispatch(AFinder, AValue, True, AOpt);
 end;
 
-function TTyAdvanceChart.FinderMatrix(const AF: TTyParsedFinder): Integer;
+function TTyCustomAdvanceChart.FinderMatrix(const AF: TTyParsedFinder): Integer;
 var s, slot: Integer;
 begin
   Result := TyFinderModel(AF, TyMatrixCoordSysName);
@@ -587,7 +587,7 @@ begin
     Result := FBindings[slot].DataMatrix;
 end;
 
-function TTyAdvanceChart.ConvertOnMatrix(AMatrix: TTyMatrix; AValue, AOpt: TJSONData;
+function TTyCustomAdvanceChart.ConvertOnMatrix(AMatrix: TTyMatrix; AValue, AOpt: TJSONData;
   AFrom: Boolean): TTyConvertResult;
 var
   clamp: TTyMatrixClamp;
@@ -619,7 +619,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.ConvertToLayoutData(AFinder, AValue: TJSONData;
+function TTyCustomAdvanceChart.ConvertToLayoutData(AFinder, AValue: TJSONData;
   AOpt: TJSONData): TTyConvertLayout;
 var
   pf: TTyParsedFinder;
@@ -739,7 +739,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.ConvertToPixel(const AFinderJson, AValueJson: string): string;
+function TTyCustomAdvanceChart.ConvertToPixel(const AFinderJson, AValueJson: string): string;
 var f, v: TJSONData;
 begin
   Result := '';
@@ -754,7 +754,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.ConvertToPixel(const AFinderJson, AValueJson,
+function TTyCustomAdvanceChart.ConvertToPixel(const AFinderJson, AValueJson,
   AOptJson: string): string;
 var f, v, o: TJSONData;
 begin
@@ -772,7 +772,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.ConvertFromPixel(const AFinderJson, APixelJson,
+function TTyCustomAdvanceChart.ConvertFromPixel(const AFinderJson, APixelJson,
   AOptJson: string): string;
 var f, v, o: TJSONData;
 begin
@@ -790,7 +790,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.ConvertToLayout(const AFinderJson, AValueJson: string;
+function TTyCustomAdvanceChart.ConvertToLayout(const AFinderJson, AValueJson: string;
   const AOptJson: string): string;
 var
   f, v, o: TJSONData;
@@ -825,7 +825,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.ConvertToPixel(const AFinderJson: string;
+function TTyCustomAdvanceChart.ConvertToPixel(const AFinderJson: string;
   const AValue: array of Double): TTyConvertResult;
 var
   f: TJSONData;
@@ -845,7 +845,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.ConvertToPixel(const AFinderJson: string;
+function TTyCustomAdvanceChart.ConvertToPixel(const AFinderJson: string;
   AValue: Double): TTyConvertResult;
 var f, v: TJSONData;
 begin
@@ -861,7 +861,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.ConvertFromPixel(const AFinderJson, APixelJson: string): string;
+function TTyCustomAdvanceChart.ConvertFromPixel(const AFinderJson, APixelJson: string): string;
 var f, v: TJSONData;
 begin
   Result := '';
@@ -876,7 +876,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.ConvertFromPixel(const AFinderJson: string;
+function TTyCustomAdvanceChart.ConvertFromPixel(const AFinderJson: string;
   AX, AY: Double): TTyConvertResult;
 var
   f: TJSONData;
@@ -896,7 +896,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.ConvertFromPixel(const AFinderJson: string;
+function TTyCustomAdvanceChart.ConvertFromPixel(const AFinderJson: string;
   AValue: Double): TTyConvertResult;
 var f, v: TJSONData;
 begin
@@ -912,7 +912,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.ContainPixel(const AFinderJson, APointJson: string): Boolean;
+function TTyCustomAdvanceChart.ContainPixel(const AFinderJson, APointJson: string): Boolean;
 var f, v: TJSONData;
 begin
   Result := False;
@@ -927,7 +927,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.ContainPixel(const AFinderJson: string; AX, AY: Double): Boolean;
+function TTyCustomAdvanceChart.ContainPixel(const AFinderJson: string; AX, AY: Double): Boolean;
 var
   f: TJSONData;
   v: TJSONArray;
@@ -949,7 +949,7 @@ end;
 { dragNode, sankeyRoam, graphRoam [Batch 114]: the series the payload's
   query names (seriesIndex / seriesId / seriesName; none: every series of the
   type), each the action's own handler }
-function TTyAdvanceChart.DoViewAction(const AType: string; APayload: TJSONObject): Boolean;
+function TTyCustomAdvanceChart.DoViewAction(const AType: string; APayload: TJSONObject): Boolean;
 var
   series: TTyIntegerArray;
   ev, anim: TJSONObject;
@@ -1040,7 +1040,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.DispatchAction(const APayloadJson: string;
+function TTyCustomAdvanceChart.DispatchAction(const APayloadJson: string;
   ASilent: Boolean): Boolean;
 begin
   if not ASilent then Exit(DispatchAction(APayloadJson));
@@ -1052,7 +1052,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.DispatchAction(const APayloadJson: string): Boolean;
+function TTyCustomAdvanceChart.DispatchAction(const APayloadJson: string): Boolean;
 var
   d: TJSONData;
   nLine, nCol: Integer;
@@ -1078,7 +1078,7 @@ end;
 { the dispatch itself, of a payload parsed or built (a view's own action
   keeps its numbers as they are -- no text in between) [Batch 130]; the
   actions dispatched while it ran, then `updated` [Batch 153] }
-function TTyAdvanceChart.DispatchActionObject(APayload: TJSONObject): Boolean;
+function TTyCustomAdvanceChart.DispatchActionObject(APayload: TJSONObject): Boolean;
 var n: Integer;
   tp: TJSONData;
 begin
@@ -1111,7 +1111,7 @@ begin
   RtFlushQueue;
 end;
 
-function TTyAdvanceChart.DispatchActionCore(APayload: TJSONObject): Boolean;
+function TTyCustomAdvanceChart.DispatchActionCore(APayload: TJSONObject): Boolean;
 var
   tp: TJSONData;
   p: TJSONObject;
@@ -1338,14 +1338,14 @@ end;
 
 { ==================== echarts.connect, batch actions [Batch 141] ==================== }
 
-procedure TTyAdvanceChart.ConnectBroadcast(const AEventType, APayloadJson: string;
+procedure TTyCustomAdvanceChart.ConnectBroadcast(const AEventType, APayloadJson: string;
   AObj: TJSONObject);
 var
   act: string;
   d: TJSONData;
   ev: TJSONObject;
-  others: array of TTyAdvanceChart;
-  ch: TTyAdvanceChart;
+  others: array of TTyCustomAdvanceChart;
+  ch: TTyCustomAdvanceChart;
   i, n, nLine, nCol: Integer;
 begin
   { connectedGroups[chart.group] and not pending }
@@ -1378,7 +1378,7 @@ begin
     others := nil;
     for i := 0 to GTyCharts.Count - 1 do
     begin
-      ch := TTyAdvanceChart(GTyCharts[i]);
+      ch := TTyCustomAdvanceChart(GTyCharts[i]);
       if (ch = Self) or (ch.FGroup <> FGroup) then Continue;
       n := Length(others);
       SetLength(others, n + 1);
@@ -1398,7 +1398,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.DoBatchAction(APayload: TJSONObject): Boolean;
+function TTyCustomAdvanceChart.DoBatchAction(APayload: TJSONObject): Boolean;
 var
   t, lt, ev, js, one: string;
   items: TJSONArray;
@@ -1497,7 +1497,7 @@ begin
     or (AType = 'geoToggleSelect') or (AType = 'geoSelect') or (AType = 'geoUnSelect');
 end;
 
-function TTyAdvanceChart.DoBatchGeneric(APayload: TJSONObject;
+function TTyCustomAdvanceChart.DoBatchGeneric(APayload: TJSONObject;
   const AType: string): Boolean;
 var
   ev, act, js, first: string;
@@ -1687,7 +1687,7 @@ begin
     + '","fromActionPayload":' + APayload.AsJSON + ',"escapeConnect":true}');
 end;
 
-function TTyAdvanceChart.ConnectedRect: TTyConnectedRect;
+function TTyCustomAdvanceChart.ConnectedRect: TTyConnectedRect;
 var
   o: TPoint;
   s: Double;
@@ -1705,10 +1705,10 @@ begin
   Result.Height := Height * s;
 end;
 
-function TTyAdvanceChart.RenderConnectedToBitmap(const AOptsJson: string): TBGRABitmap;
+function TTyCustomAdvanceChart.RenderConnectedToBitmap(const AOptsJson: string): TBGRABitmap;
 var
   o: TTyChartExportOpts;
-  charts: array of TTyAdvanceChart;
+  charts: array of TTyCustomAdvanceChart;
   rects: TTyConnectedRectArray;
   bmps: array of TBGRABitmap;
   lay: TTyConnectedLayout;
@@ -1725,11 +1725,11 @@ begin
   Result := nil;
   charts := nil;
   for i := 0 to GTyCharts.Count - 1 do
-    if TTyAdvanceChart(GTyCharts[i]).FGroup = FGroup then
+    if TTyCustomAdvanceChart(GTyCharts[i]).FGroup = FGroup then
     begin
       n := Length(charts);
       SetLength(charts, n + 1);
-      charts[n] := TTyAdvanceChart(GTyCharts[i]);
+      charts[n] := TTyCustomAdvanceChart(GTyCharts[i]);
     end;
   n := Length(charts);
   { `opts.pixelRatio || this.getDevicePixelRatio()` }
@@ -1810,7 +1810,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.SaveConnectedToStream(AStream: TStream; const AOptsJson: string);
+procedure TTyCustomAdvanceChart.SaveConnectedToStream(AStream: TStream; const AOptsJson: string);
 var
   o: TTyChartExportOpts;
   bmp: TBGRABitmap;
@@ -1825,7 +1825,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.SaveConnectedToFile(const AFileName: string;
+procedure TTyCustomAdvanceChart.SaveConnectedToFile(const AFileName: string;
   const AOptsJson: string);
 var
   o: TTyChartExportOpts;
@@ -1853,7 +1853,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.GetConnectedDataURL(const AOptsJson: string): string;
+function TTyCustomAdvanceChart.GetConnectedDataURL(const AOptsJson: string): string;
 var
   o: TTyChartExportOpts;
   bmp: TBGRABitmap;

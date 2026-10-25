@@ -12,7 +12,7 @@
   the merge oracles record for every component. The list used to be
   written back into the tree; it lives in FGfxModel only now. }
 
-procedure TTyAdvanceChart.GfxInitFromTree;
+procedure TTyCustomAdvanceChart.GfxInitFromTree;
 var node: TJSONData;
 begin
   FGfxFresh := False;
@@ -28,7 +28,7 @@ begin
   FGfxModel.OptionUpdated(TJSONObject(node).Find('elements'), True);
 end;
 
-procedure TTyAdvanceChart.GfxPass(const AReport: TTyMergeReport);
+procedure TTyCustomAdvanceChart.GfxPass(const AReport: TTyMergeReport);
 var
   si: Integer;
   newOpt: TJSONObject;
@@ -69,7 +69,7 @@ end;
 
 { isAnimationEnabled and getShallow over the graphic model: its own option,
   else the root's, else globalDefault }
-function TTyAdvanceChart.GfxAnimSettings: TTyGfxAnimSettings;
+function TTyCustomAdvanceChart.GfxAnimSettings: TTyGfxAnimSettings;
 var
   node, root: TJSONObject;
   d: TJSONData;
@@ -134,7 +134,7 @@ begin
   Result.DelayUpdate := Num('animationDelayUpdate', 0);
 end;
 
-function TTyAdvanceChart.GfxLive: Boolean;
+function TTyCustomAdvanceChart.GfxLive: Boolean;
 begin
   Result := (FGfxAnim <> nil) and (FGfxAnim.ClipCount > 0);
 end;
@@ -150,7 +150,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.GfxBuild(APPI: Integer);
+procedure TTyCustomAdvanceChart.GfxBuild(APPI: Integer);
 var
   scale, w, h, z, zl: Double;
   meas: ITyTextMeasurer;
@@ -248,7 +248,7 @@ begin
   Walk(FGfxView.Root, False);
 end;
 
-procedure TTyAdvanceChart.GfxPaintUnder(APainter: TTyPainter);
+procedure TTyCustomAdvanceChart.GfxPaintUnder(APainter: TTyPainter);
 var
   i: Integer;
   el: TTyChartElement;
@@ -263,7 +263,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.GfxElementEvent(const AType: string;
+function TTyCustomAdvanceChart.GfxElementEvent(const AType: string;
   const ATarget: TTyChartEventTarget; AX, AY: Integer): Boolean;
 var
   el: TTyGfxEl;
@@ -296,7 +296,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.GfxDragStart(const ATarget: TTyChartEventTarget;
+procedure TTyCustomAdvanceChart.GfxDragStart(const ATarget: TTyChartEventTarget;
   AX, AY: Integer);
 var el: TTyGfxEl;
 begin
@@ -311,7 +311,7 @@ begin
   FGfxDragY := AY;
 end;
 
-procedure TTyAdvanceChart.GfxDragMove(AX, AY: Integer);
+procedure TTyCustomAdvanceChart.GfxDragMove(AX, AY: Integer);
 var
   el: TTyGfxEl;
   dx, dy, scale, vx, vy: Double;
@@ -348,46 +348,46 @@ begin
   InvalidateFrame;
 end;
 
-function TTyAdvanceChart.GraphicView: TTyGfxView;
+function TTyCustomAdvanceChart.GraphicView: TTyGfxView;
 begin
   Result := FGfxView;
 end;
 
-function TTyAdvanceChart.GraphicModel: TTyGfxModel;
+function TTyCustomAdvanceChart.GraphicModel: TTyGfxModel;
 begin
   Result := FGfxModel;
 end;
 
-function TTyAdvanceChart.GraphicPaintCount: Integer;
+function TTyCustomAdvanceChart.GraphicPaintCount: Integer;
 begin
   Result := Length(FGfxPaint);
 end;
 
-function TTyAdvanceChart.GraphicPaintElement(AIndex: Integer): TTyChartElement;
+function TTyCustomAdvanceChart.GraphicPaintElement(AIndex: Integer): TTyChartElement;
 begin
   Result := FGfxPaint[AIndex];
 end;
 
-function TTyAdvanceChart.GraphicPaintSource(AIndex: Integer): TTyGfxEl;
+function TTyCustomAdvanceChart.GraphicPaintSource(AIndex: Integer): TTyGfxEl;
 begin
   Result := FGfxPaintEl[AIndex];
 end;
 
-function TTyAdvanceChart.CustomView(ASeriesIndex: Integer): TTyCustomView;
+function TTyCustomAdvanceChart.CustomView(ASeriesIndex: Integer): TTyCustomView;
 begin
   Result := nil;
   if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FCustomViews)) then
     Result := FCustomViews[ASeriesIndex];
 end;
 
-function TTyAdvanceChart.CustomPaintSource(AIndex: Integer): TTyGfxEl;
+function TTyCustomAdvanceChart.CustomPaintSource(AIndex: Integer): TTyGfxEl;
 begin
   Result := nil;
   if (AIndex >= 0) and (AIndex <= High(FCustomPaintEls)) then
     Result := FCustomPaintEls[AIndex];
 end;
 
-function TTyAdvanceChart.CustomClip(ASeriesIndex: Integer; out ARect: TTyXYWH): Boolean;
+function TTyCustomAdvanceChart.CustomClip(ASeriesIndex: Integer; out ARect: TTyXYWH): Boolean;
 var slot: Integer;
 begin
   ARect := Default(TTyXYWH);
@@ -396,7 +396,7 @@ begin
   if Result then ARect := FCustomClip[slot];
 end;
 
-function TTyAdvanceChart.CuLive: Boolean;
+function TTyCustomAdvanceChart.CuLive: Boolean;
 begin
   Result := (FCuAnim <> nil) and (FCuAnim.ClipCount > 0);
 end;
@@ -411,7 +411,7 @@ procedure CustomUtPath(var APe: TTyChartElement; AEl: TTyGfxEl; ASeries, ARow: I
   flush already stepped it). The item's paths in the list are laid out
   again from there for the transition to read; the list is built again at
   the next paint. }
-procedure TTyAdvanceChart.AnimUtStopCustom(ASeries, ARow: Integer);
+procedure TTyCustomAdvanceChart.AnimUtStopCustom(ASeries, ARow: Integer);
 var
   view: TTyCustomView;
   root, gel: TTyGfxEl;
@@ -489,7 +489,7 @@ end;
 
 { `coordinateSystem: 'none'` (or ''): resolved on nothing, its dimensions
   getCoordSysDimDefs' x and y }
-function TTyAdvanceChart.CustomOnNone(ASlot: Integer): Boolean;
+function TTyCustomAdvanceChart.CustomOnNone(ASlot: Integer): Boolean;
 begin
   Result := (ASlot >= 0) and (ASlot <= High(FBindings))
     and (FBindings[ASlot].SeriesType = TyCustomSeriesType)
@@ -499,7 +499,7 @@ begin
     and ((FBindings[ASlot].CoordSysName = 'none') or (FBindings[ASlot].CoordSysName = ''));
 end;
 
-function TTyAdvanceChart.CustomRootInfo(ASeriesIndex, AInside: Integer): TTyCustomElInfo;
+function TTyCustomAdvanceChart.CustomRootInfo(ASeriesIndex, AInside: Integer): TTyCustomElInfo;
 var
   view: TTyCustomView;
   el: TTyGfxEl;
@@ -513,7 +513,7 @@ begin
 end;
 
 { the visualMap's row of a custom item (its dataIndexInside); False none }
-function TTyAdvanceChart.CustomVisualRow(ASlot, ARow: Integer;
+function TTyCustomAdvanceChart.CustomVisualRow(ASlot, ARow: Integer;
   out AVisual: TTyVisualRow): Boolean;
 var raw: Integer;
 begin
@@ -529,7 +529,7 @@ end;
 
 { findEventDispatcher from the element up -- a textContent's host, then the
   parents: any with tooltipDisabled }
-function TTyAdvanceChart.CustomTipDisabled(AElement: Integer): Boolean;
+function TTyCustomAdvanceChart.CustomTipDisabled(AElement: Integer): Boolean;
 var el: TTyGfxEl;
 begin
   Result := False;
@@ -579,7 +579,7 @@ type
     function DoMatrix(const AX, AY: TTyCustomCellArray; AClamp: Integer;
       AIgnoreMerge: Boolean; out ALayout: TTyCustomLayout): TTyDoubleArray; override;
   public
-    Chart: TTyAdvanceChart;
+    Chart: TTyCustomAdvanceChart;
     Slot, Series: Integer;
     { the coordinate system, and its object [Batch 124] }
     Sys: TTyCuSys;
@@ -1732,7 +1732,7 @@ end;
 
 { the style visual's fill of a row: the item's own itemStyle colour, the
   series', else its palette colour -- as written where it was written }
-function TTyAdvanceChart.CustomVisualFill(ASlot, ARow: Integer): TJSONData;
+function TTyCustomAdvanceChart.CustomVisualFill(ASlot, ARow: Integer): TJSONData;
 var
   node, item: TJSONObject;
   d: TJSONData;
@@ -1781,7 +1781,7 @@ begin
   Result := TJSONString.Create(TyCustomColorText(Cardinal(SeriesColor(si))));
 end;
 
-procedure TTyAdvanceChart.CustomDims(ASlot: Integer; var ADims: TTySeriesDimArray);
+procedure TTyCustomAdvanceChart.CustomDims(ASlot: Integer; var ADims: TTySeriesDimArray);
 var
   node, enc: TJSONObject;
   d, names: TJSONData;
@@ -1880,7 +1880,7 @@ begin
   ADims := outDims;
 end;
 
-procedure TTyAdvanceChart.SolveCustom(APPI: Integer);
+procedure TTyCustomAdvanceChart.SolveCustom(APPI: Integer);
 var
   i, si, n, p, c, k: Integer;
   view: TTyCustomView;
@@ -2229,7 +2229,7 @@ begin
 end;
 
 { renderItem for one item of the series being rendered }
-function TTyAdvanceChart.CustomCall(AIndexInside: Integer): TJSONData;
+function TTyCustomAdvanceChart.CustomCall(AIndexInside: Integer): TJSONData;
 var
   api: TTyChartCustomApi;
   nLine, nCol: Integer;
@@ -2312,7 +2312,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.CustomBuild(ASlot: Integer; AList: TTyPaintList;
+function TTyCustomAdvanceChart.CustomBuild(ASlot: Integer; AList: TTyPaintList;
   APPI: Integer): Integer;
 var
   si, i, inside, raw, upath: Integer;
@@ -2508,7 +2508,7 @@ end;
 
 { a custom item's elements: every path of its tree has the three states
   updateElOnState gives it, the default proxy and the lift of 1 }
-procedure TTyAdvanceChart.StDeclareCustom(ASlot, ARaw: Integer; AList: TTyPaintList);
+procedure TTyCustomAdvanceChart.StDeclareCustom(ASlot, ARaw: Integer; AList: TTyPaintList);
 var
   s, k: Integer;
   item: PTyStItem;

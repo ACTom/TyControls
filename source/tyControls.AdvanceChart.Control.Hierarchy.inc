@@ -3,7 +3,7 @@
   unit only to keep it readable; what the control is and why it is built the way it is,
   see the unit header. }
 
-function TTyAdvanceChart.GraphLayout(ASeriesIndex: Integer;
+function TTyCustomAdvanceChart.GraphLayout(ASeriesIndex: Integer;
   out ANodes: TTyGraphNodeArray; out AEdges: TTyGraphEdgeArray;
   out AFills: TTyChartColorArray): Boolean;
 var slot: Integer;
@@ -21,7 +21,7 @@ begin
   Result := True;
 end;
 
-function TTyAdvanceChart.GraphInkOf(ASeriesIndex: Integer;
+function TTyCustomAdvanceChart.GraphInkOf(ASeriesIndex: Integer;
   out AInk: TTyGraphInk; out ASpec: TTyGraphSpec): Boolean;
 var slot: Integer;
 begin
@@ -36,7 +36,7 @@ begin
   Result := True;
 end;
 
-function TTyAdvanceChart.GraphView(ASeriesIndex: Integer): TTyGraphView;
+function TTyCustomAdvanceChart.GraphView(ASeriesIndex: Integer): TTyGraphView;
 var slot: Integer;
 begin
   Result := nil;
@@ -45,7 +45,7 @@ begin
   Result := FGraphs[slot];
 end;
 
-function TTyAdvanceChart.GraphNodeScale(ASeriesIndex: Integer): Double;
+function TTyCustomAdvanceChart.GraphNodeScale(ASeriesIndex: Integer): Double;
 var slot: Integer;
 begin
   Result := NaN;
@@ -54,7 +54,7 @@ begin
   Result := FGraphNodeScale[slot];
 end;
 
-function TTyAdvanceChart.GraphRoamState(ASeriesIndex: Integer;
+function TTyCustomAdvanceChart.GraphRoamState(ASeriesIndex: Integer;
   out ACentre: TTyGraphCentre; out AZoom: Double): Boolean;
 var slot: Integer;
 begin
@@ -75,7 +75,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.GraphRoam(ASeriesIndex: Integer;
+function TTyCustomAdvanceChart.GraphRoam(ASeriesIndex: Integer;
   ADX, ADY: Double): Boolean;
 var p: TTyGraphRoamPayload;
 begin
@@ -87,7 +87,7 @@ begin
   Result := GraphDispatchRoam(p);
 end;
 
-function TTyAdvanceChart.GraphZoom(ASeriesIndex: Integer; AScale, AOriginX,
+function TTyCustomAdvanceChart.GraphZoom(ASeriesIndex: Integer; AScale, AOriginX,
   AOriginY: Double): Boolean;
 var p: TTyGraphRoamPayload;
 begin
@@ -100,7 +100,7 @@ begin
   Result := GraphDispatchRoam(p);
 end;
 
-function TTyAdvanceChart.GraphDispatchRoam(
+function TTyCustomAdvanceChart.GraphDispatchRoam(
   const APayload: TTyGraphRoamPayload): Boolean;
 var
   i, si: Integer;
@@ -150,13 +150,13 @@ begin
   if FViewActionDepth = 0 then EmitUpdated;
 end;
 
-function TTyAdvanceChart.RoamSeriesAt(AX, AY: Integer; AZoom: Boolean): Integer;
+function TTyCustomAdvanceChart.RoamSeriesAt(AX, AY: Integer; AZoom: Boolean): Integer;
 var z, zl: Integer;
 begin
   Result := RoamSeriesAtZ(AX, AY, AZoom, z, zl);
 end;
 
-function TTyAdvanceChart.RoamSeriesAtZ(AX, AY: Integer; AZoom: Boolean;
+function TTyCustomAdvanceChart.RoamSeriesAtZ(AX, AY: Integer; AZoom: Boolean;
   out AZ, AZLevel: Integer): Integer;
 var
   i, best: Integer;
@@ -264,21 +264,21 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.IsTreeSeries(ASeriesIndex: Integer): Boolean;
+function TTyCustomAdvanceChart.IsTreeSeries(ASeriesIndex: Integer): Boolean;
 var slot: Integer;
 begin
   slot := SlotOfSeries(ASeriesIndex);
   Result := (slot >= 0) and (FBindings[slot].SeriesType = TyTreeSeriesTypeName);
 end;
 
-function TTyAdvanceChart.IsTreemapSeries(ASeriesIndex: Integer): Boolean;
+function TTyCustomAdvanceChart.IsTreemapSeries(ASeriesIndex: Integer): Boolean;
 var slot: Integer;
 begin
   slot := SlotOfSeries(ASeriesIndex);
   Result := (slot >= 0) and (FBindings[slot].SeriesType = TyTreemapSeriesTypeName);
 end;
 
-function TTyAdvanceChart.IsSankeySeries(ASeriesIndex: Integer): Boolean;
+function TTyCustomAdvanceChart.IsSankeySeries(ASeriesIndex: Integer): Boolean;
 var slot: Integer;
 begin
   slot := SlotOfSeries(ASeriesIndex);
@@ -287,7 +287,7 @@ end;
 
 { ==================== node drags [Batch 114] ==================== }
 
-procedure TTyAdvanceChart.GraphDragMove(AX, AY: Integer);
+procedure TTyCustomAdvanceChart.GraphDragMove(AX, AY: Integer);
 var
   st: TTyGraphDragStep;
   slot, si: Integer;
@@ -336,7 +336,7 @@ begin
   inherited Invalidate;
 end;
 
-function TTyAdvanceChart.GraphForceLive: Boolean;
+function TTyCustomAdvanceChart.GraphForceLive: Boolean;
 var slot, si: Integer;
 begin
   Result := False;
@@ -349,7 +349,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.GraphForceFrame: Boolean;
+function TTyCustomAdvanceChart.GraphForceFrame: Boolean;
 var slot, si: Integer;
 begin
   Result := False;
@@ -373,7 +373,7 @@ begin
   inherited Invalidate;
 end;
 
-procedure TTyAdvanceChart.GraphDragEnd;
+procedure TTyCustomAdvanceChart.GraphDragEnd;
 var slot, si: Integer;
 begin
   slot := FGraphDragSlot;
@@ -386,7 +386,7 @@ begin
     TyGraphDragEnd(FGraphForce[si], FGraphDragNode);
 end;
 
-function TTyAdvanceChart.SankeyDragStart(ASlot, ANode, AX, AY: Integer): Boolean;
+function TTyCustomAdvanceChart.SankeyDragStart(ASlot, ANode, AX, AY: Integer): Boolean;
 var x, y, w, h: Double;
 begin
   Result := False;
@@ -407,7 +407,7 @@ begin
   Result := True;
 end;
 
-procedure TTyAdvanceChart.SankeyDragMove(AX, AY: Integer);
+procedure TTyCustomAdvanceChart.SankeyDragMove(AX, AY: Integer);
 var si: Integer; mask: TFPUExceptionMask;
 begin
   if (FSankeyDragSlot < 0) or (FSankeyDragSlot > High(FBindings)) then
@@ -434,7 +434,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.SankeyDragNode(ASeriesIndex, ADataIndex: Integer;
+function TTyCustomAdvanceChart.SankeyDragNode(ASeriesIndex, ADataIndex: Integer;
   AHasX: Boolean; ALocalX: Double; AHasY: Boolean; ALocalY: Double): Boolean;
 var
   i, si, n: Integer;
@@ -478,7 +478,7 @@ begin
   if FViewActionDepth = 0 then EmitUpdated;
 end;
 
-function TTyAdvanceChart.SankeySolved(ASeriesIndex: Integer): TTySankeySolved;
+function TTyCustomAdvanceChart.SankeySolved(ASeriesIndex: Integer): TTySankeySolved;
 var slot: Integer;
 begin
   Result := Default(TTySankeySolved);
@@ -487,7 +487,7 @@ begin
   Result := FSankeys[slot];
 end;
 
-function TTyAdvanceChart.TreeSolved(ASeriesIndex: Integer): TTyTreeSolved;
+function TTyCustomAdvanceChart.TreeSolved(ASeriesIndex: Integer): TTyTreeSolved;
 var slot: Integer;
 begin
   Result := Default(TTyTreeSolved);
@@ -496,7 +496,7 @@ begin
   Result := FTrees[slot];
 end;
 
-function TTyAdvanceChart.ChordSolved(ASeriesIndex: Integer): TTyChordSolved;
+function TTyCustomAdvanceChart.ChordSolved(ASeriesIndex: Integer): TTyChordSolved;
 var slot: Integer;
 begin
   Result := Default(TTyChordSolved);
@@ -505,7 +505,7 @@ begin
   Result := FChords[slot];
 end;
 
-function TTyAdvanceChart.SankeyView(ASeriesIndex: Integer): TTyGraphView;
+function TTyCustomAdvanceChart.SankeyView(ASeriesIndex: Integer): TTyGraphView;
 var slot: Integer;
 begin
   Result := nil;
@@ -514,7 +514,7 @@ begin
   Result := FSankeyViews[slot];
 end;
 
-procedure TTyAdvanceChart.FreeSankeyViews;
+procedure TTyCustomAdvanceChart.FreeSankeyViews;
 var i: Integer;
 begin
   for i := 0 to High(FSankeyViews) do FreeAndNil(FSankeyViews[i]);
@@ -526,7 +526,7 @@ end;
   rect both the box, the roam options read as a graph's -- `roam` false and
   `roamTrigger` 'global' by default -- the roam's write-back over the
   option's centre and zoom; and the main group's frame from it. }
-procedure TTyAdvanceChart.SankeyViewOf(ASlot: Integer);
+procedure TTyCustomAdvanceChart.SankeyViewOf(ASlot: Integer);
 var
   si: Integer;
   node: TJSONData;
@@ -565,7 +565,7 @@ begin
     v.OverallY);
 end;
 
-function TTyAdvanceChart.SankeyDispatchRoam(const APayload: TTyGraphRoamPayload): Boolean;
+function TTyCustomAdvanceChart.SankeyDispatchRoam(const APayload: TTyGraphRoamPayload): Boolean;
 var
   i, si: Integer;
   p: TTyGraphRoamPayload;
@@ -596,7 +596,7 @@ begin
   if FViewActionDepth = 0 then EmitUpdated;
 end;
 
-function TTyAdvanceChart.SankeyRoam(ASeriesIndex: Integer; ADX, ADY: Double): Boolean;
+function TTyCustomAdvanceChart.SankeyRoam(ASeriesIndex: Integer; ADX, ADY: Double): Boolean;
 var p: TTyGraphRoamPayload;
 begin
   p := Default(TTyGraphRoamPayload);
@@ -607,7 +607,7 @@ begin
   Result := SankeyDispatchRoam(p);
 end;
 
-function TTyAdvanceChart.SankeyZoom(ASeriesIndex: Integer; AScale, AOriginX,
+function TTyCustomAdvanceChart.SankeyZoom(ASeriesIndex: Integer; AScale, AOriginX,
   AOriginY: Double): Boolean;
 var p: TTyGraphRoamPayload;
 begin
@@ -639,7 +639,7 @@ begin
   if Pending <= 0 then Live := False;
 end;
 
-procedure TTyAdvanceChart.HierDrillReset;
+procedure TTyCustomAdvanceChart.HierDrillReset;
 begin
   { [R2-C] the treemaps as last drawn, for the merge's transition from the
     old tree (the first reset since a render keeps them) }
@@ -659,7 +659,7 @@ begin
   TmAnimDropAll;
 end;
 
-function TTyAdvanceChart.HierIdOfRow(ASlot, ARow: Integer): string;
+function TTyCustomAdvanceChart.HierIdOfRow(ASlot, ARow: Integer): string;
 var
   ids: TTyStringArray;
   ser: TJSONData;
@@ -676,7 +676,7 @@ begin
   if (ARow >= 0) and (ARow <= High(ids)) then Result := ids[ARow];
 end;
 
-function TTyAdvanceChart.HierRowOfId(ASlot: Integer; const AId: string): Integer;
+function TTyCustomAdvanceChart.HierRowOfId(ASlot: Integer; const AId: string): Integer;
 var
   ids: TTyStringArray;
   ser: TJSONData;
@@ -699,7 +699,7 @@ end;
 { treeHelper.retrieveTargetInfo: a targetNode string by getNodeById (the
   tree holds every node it finds), else a targetNodeId -- getNodeById
   compares with ===, so only a string ever matches }
-function TTyAdvanceChart.HierTarget(ASlot: Integer; APayload: TJSONObject): Integer;
+function TTyCustomAdvanceChart.HierTarget(ASlot: Integer; APayload: TJSONObject): Integer;
 var d: TJSONData;
 begin
   Result := -1;
@@ -714,7 +714,7 @@ begin
     Result := HierRowOfId(ASlot, d.AsString);
 end;
 
-function TTyAdvanceChart.HierQuery(APayload: TJSONObject; const AType: string): TTyIntegerArray;
+function TTyCustomAdvanceChart.HierQuery(APayload: TJSONObject; const AType: string): TTyIntegerArray;
 var
   ser: TTyIntegerArray;
   k, slot: Integer;
@@ -759,7 +759,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.HierUpdate(const AEventType, APayloadJson: string);
+procedure TTyCustomAdvanceChart.HierUpdate(const AEventType, APayloadJson: string);
 var
   txt: string;
   p, a, b: Integer;
@@ -783,7 +783,7 @@ begin
   EmitPayloadEvent(AEventType, txt);
 end;
 
-function TTyAdvanceChart.DoSunAction(APayload: TJSONObject): Boolean;
+function TTyCustomAdvanceChart.DoSunAction(APayload: TJSONObject): Boolean;
 var
   slots: TTyIntegerArray;
   k, slot, si, row, old: Integer;
@@ -816,7 +816,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.DoTreemapAction(const AType: string; APayload: TJSONObject;
+function TTyCustomAdvanceChart.DoTreemapAction(const AType: string; APayload: TJSONObject;
   const AEventJson: string): Boolean;
 var
   slots: TTyIntegerArray;
@@ -933,7 +933,7 @@ begin
   else HierUpdate(LowerCase(AType), APayload.AsJSON);
 end;
 
-function TTyAdvanceChart.SunburstRootToNode(ASeriesIndex, ARow: Integer): Boolean;
+function TTyCustomAdvanceChart.SunburstRootToNode(ASeriesIndex, ARow: Integer): Boolean;
 var
   p: TJSONObject;
   slot: Integer;
@@ -953,7 +953,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.SunburstViewRoot(ASeriesIndex: Integer): Integer;
+function TTyCustomAdvanceChart.SunburstViewRoot(ASeriesIndex: Integer): Integer;
 var slot: Integer;
 begin
   Result := 0;
@@ -962,7 +962,7 @@ begin
     Result := FSunbursts[slot].ViewRoot;
 end;
 
-function TTyAdvanceChart.SunburstSolved(ASeriesIndex: Integer): TTySunburstSolved;
+function TTyCustomAdvanceChart.SunburstSolved(ASeriesIndex: Integer): TTySunburstSolved;
 var slot: Integer;
 begin
   Result := Default(TTySunburstSolved);
@@ -970,7 +970,7 @@ begin
   if (slot >= 0) and (slot <= High(FSunbursts)) then Result := FSunbursts[slot];
 end;
 
-function TTyAdvanceChart.TreemapSolved(ASeriesIndex: Integer): TTyTreemapSolved;
+function TTyCustomAdvanceChart.TreemapSolved(ASeriesIndex: Integer): TTyTreemapSolved;
 var slot: Integer;
 begin
   Result := Default(TTyTreemapSolved);
@@ -978,7 +978,7 @@ begin
   if (slot >= 0) and (slot <= High(FTreemaps)) then Result := FTreemaps[slot];
 end;
 
-function TTyAdvanceChart.TreemapHave(ASeriesIndex: Integer): TTyTreemapHave;
+function TTyCustomAdvanceChart.TreemapHave(ASeriesIndex: Integer): TTyTreemapHave;
 begin
   Result := Default(TTyTreemapHave);
   if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FTmHave)) then Result := FTmHave[ASeriesIndex];
@@ -998,7 +998,7 @@ end;
   as its id, which the action resolves the same way (retrieveTargetInfo
   takes a string targetNode to getNodeById) [was: seriesIndex and
   targetNode, the public methods' payload] }
-function TTyAdvanceChart.TreemapViewPayload(const AType: string; ASeries: Integer;
+function TTyCustomAdvanceChart.TreemapViewPayload(const AType: string; ASeries: Integer;
   const AId: string): TJSONObject;
 begin
   Result := TJSONObject.Create;
@@ -1012,7 +1012,7 @@ end;
   _onZoom's treemapRender): {type, from: the view's uid, seriesId, rootRect}
   -- and AJs, the same as the event prints it (JavaScript's numbers) [was:
   {type, seriesIndex, rootRect}, the public method's] }
-function TTyAdvanceChart.TreemapRoamPayload(const AType: string; ASeries: Integer;
+function TTyCustomAdvanceChart.TreemapRoamPayload(const AType: string; ASeries: Integer;
   AX, AY, AW, AH: Double; out AJs: string): TJSONObject;
 var r: TJSONObject; from: string;
 begin
@@ -1033,7 +1033,7 @@ begin
     + ',"width":' + TyJsNumberToString(AW) + ',"height":' + TyJsNumberToString(AH) + '}}';
 end;
 
-function TTyAdvanceChart.TreemapZoomToNode(ASeriesIndex, ARow: Integer): Boolean;
+function TTyCustomAdvanceChart.TreemapZoomToNode(ASeriesIndex, ARow: Integer): Boolean;
 var p: TJSONObject; slot: Integer;
 begin
   Result := False;
@@ -1048,7 +1048,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.TreemapRootToNode(ASeriesIndex, ARow: Integer): Boolean;
+function TTyCustomAdvanceChart.TreemapRootToNode(ASeriesIndex, ARow: Integer): Boolean;
 var p: TJSONObject; slot: Integer;
 begin
   Result := False;
@@ -1063,7 +1063,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.TreemapMoveTo(ASeriesIndex: Integer; AX, AY, AW, AH: Double;
+function TTyCustomAdvanceChart.TreemapMoveTo(ASeriesIndex: Integer; AX, AY, AW, AH: Double;
   AZoom: Boolean): Boolean;
 var
   p, r: TJSONObject;
@@ -1087,19 +1087,19 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.TmRowsOf(ASeries: Integer; out ASlot: Integer): Boolean;
+function TTyCustomAdvanceChart.TmRowsOf(ASeries: Integer; out ASlot: Integer): Boolean;
 begin
   ASlot := SlotOfSeries(ASeries);
   Result := (ASlot >= 0) and (ASlot <= High(FTreemaps)) and FTreemaps[ASlot].Valid;
 end;
 
-function TTyAdvanceChart.TreemapAnimating(ASeriesIndex: Integer): Boolean;
+function TTyCustomAdvanceChart.TreemapAnimating(ASeriesIndex: Integer): Boolean;
 begin
   Result := (ASeriesIndex >= 0) and (ASeriesIndex <= High(FTmAnim))
     and (FTmAnim[ASeriesIndex].Wrap <> nil) and FTmAnim[ASeriesIndex].Wrap.Live;
 end;
 
-function TTyAdvanceChart.TreemapAnimProxy(ASeriesIndex, ARow: Integer;
+function TTyCustomAdvanceChart.TreemapAnimProxy(ASeriesIndex, ARow: Integer;
   const AKind: string): TTyChartAnimProxy;
 begin
   Result := nil;
@@ -1129,14 +1129,14 @@ begin
     Result := FTmAnim[ASeriesIndex].Labels[ARow][1];
 end;
 
-function TTyAdvanceChart.TreemapGhostCount(ASeriesIndex: Integer): Integer;
+function TTyCustomAdvanceChart.TreemapGhostCount(ASeriesIndex: Integer): Integer;
 begin
   Result := 0;
   if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FTmAnim)) then
     Result := Length(FTmAnim[ASeriesIndex].Ghosts);
 end;
 
-function TTyAdvanceChart.TreemapGhost(ASeriesIndex, AIndex: Integer;
+function TTyCustomAdvanceChart.TreemapGhost(ASeriesIndex, AIndex: Integer;
   out ARow, AKind: Integer): TTyChartAnimProxy;
 begin
   Result := nil;
@@ -1151,7 +1151,7 @@ end;
 
 { ---- the gestures ---- }
 
-procedure TTyAdvanceChart.SunburstClick(ASeries, ARow: Integer);
+procedure TTyCustomAdvanceChart.SunburstClick(ASeries, ARow: Integer);
 var
   slot, vr, target, k: Integer;
   p: TJSONObject;
@@ -1210,7 +1210,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.TreemapClick(ASeries, AX, AY: Integer);
+procedure TTyCustomAdvanceChart.TreemapClick(ASeries, AX, AY: Integer);
 var
   slot, target: Integer;
   d: TJSONData;
@@ -1251,7 +1251,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.TreemapCrumbSelect(ASeries, AIndex: Integer);
+procedure TTyCustomAdvanceChart.TreemapCrumbSelect(ASeries, AIndex: Integer);
 var
   slot, row: Integer;
   p: TJSONObject;
@@ -1272,7 +1272,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.TreemapRoamOk(ASlot: Integer; AZoom: Boolean): Boolean;
+function TTyCustomAdvanceChart.TreemapRoamOk(ASlot: Integer; AZoom: Boolean): Boolean;
 var d: TJSONData; s: string;
 begin
   Result := False;
@@ -1290,7 +1290,7 @@ end;
 
 { RoamController's pan: dx, dy since the last move; past 3 px the root moves
   by them (treemapMove), else they are lost }
-function TTyAdvanceChart.TreemapPan(ASeries, ADX, ADY: Integer): Boolean;
+function TTyCustomAdvanceChart.TreemapPan(ASeries, ADX, ADY: Integer): Boolean;
 var
   slot: Integer;
   nd: TTyTreemapNode;
@@ -1316,7 +1316,7 @@ end;
 { RoamController's zoom: the root rect scaled about the pointer, in the
   container's coordinates, by the clamped zoom over the current one
   (treemapRender) }
-function TTyAdvanceChart.TreemapWheel(ASeries: Integer; AScale: Double; AX, AY: Integer): Boolean;
+function TTyCustomAdvanceChart.TreemapWheel(ASeries: Integer; AScale: Double; AX, AY: Integer): Boolean;
 var
   slot: Integer;
   nd: TTyTreemapNode;
@@ -1382,7 +1382,7 @@ begin
   if IsNan(AValue) then Result := 0 else Result := AValue;
 end;
 
-procedure TTyAdvanceChart.TmAnimDrop(ASeries: Integer);
+procedure TTyCustomAdvanceChart.TmAnimDrop(ASeries: Integer);
 var k, j: Integer;
 begin
   if (ASeries < 0) or (ASeries > High(FTmAnim)) then Exit;
@@ -1403,14 +1403,14 @@ begin
   FTmAnim[ASeries] := Default(TTyTmAnim);
 end;
 
-procedure TTyAdvanceChart.TmAnimDropAll;
+procedure TTyCustomAdvanceChart.TmAnimDropAll;
 var k: Integer;
 begin
   for k := 0 to High(FTmAnim) do TmAnimDrop(k);
   FTmAnim := nil;
 end;
 
-function TTyAdvanceChart.TmAnimAny: Boolean;
+function TTyCustomAdvanceChart.TmAnimAny: Boolean;
 var k: Integer;
 begin
   Result := False;
@@ -1421,7 +1421,7 @@ end;
 { THE WRAP'S END: renderFinally -- the deleted elements leave, the ones
   moved out of the canvas become invisible -- and _state is 'ready' again.
   The proxies stay: an element rests where its last step put it. }
-procedure TTyAdvanceChart.TmWrapCheck;
+procedure TTyCustomAdvanceChart.TmWrapCheck;
 var si, slot, row: Integer; anyChange: Boolean;
 begin
   anyChange := False;
@@ -1481,7 +1481,7 @@ end;
   row alone: a content's words where the old render had them and the
   content is kept, a header's where it had one and the background is kept.
   AMap: a new tree's old row of each new row (nil: the same rows). }
-procedure TTyAdvanceChart.TmStrandLabelFades(ASlot: Integer; const AOld: TTyTreemapSolved;
+procedure TTyCustomAdvanceChart.TmStrandLabelFades(ASlot: Integer; const AOld: TTyTreemapSolved;
   const AOldHave, AHave: TTyTreemapHave; const AMap: TTyIntegerArray);
 var
   si, row, o: Integer;
@@ -1509,7 +1509,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.TmAnimArm(ASlot: Integer; const AView: TTyTreemapView;
+procedure TTyCustomAdvanceChart.TmAnimArm(ASlot: Integer; const AView: TTyTreemapView;
   const AOld: TTyTreemapSolved; const AOldHave: TTyTreemapHave; ADirection: Integer;
   const AMap: TTyIntegerArray);
 type
@@ -1986,7 +1986,7 @@ end;
   under 5e-5 is none); every rect's shape and opacity on its group; a
   content's words placed and cut again on the rect it has now, an upper
   label carried by its group; and the deleted elements drawn after the rest }
-procedure TTyAdvanceChart.TreemapFrame(AFrame: TTyPaintList);
+procedure TTyCustomAdvanceChart.TreemapFrame(AFrame: TTyPaintList);
 type
   TTmT = record
     Done, HasT: Boolean;
@@ -2334,7 +2334,7 @@ end;
 
 { ---- a treemap's hover: in place, in the static list ---- }
 
-function TTyAdvanceChart.IsTreemapDatum(const ADatum: TTyChartDatumRef): Boolean;
+function TTyCustomAdvanceChart.IsTreemapDatum(const ADatum: TTyChartDatumRef): Boolean;
 var slot: Integer;
 begin
   Result := False;
@@ -2347,7 +2347,7 @@ end;
   fill (Breadcrumb.ts:189, the skin's hover tone by default), its words'
   declared ink, both up by ten (the default proxy's z2 lift); a solve draws
   new items, and the hover of an older one is gone }
-procedure TTyAdvanceChart.TmCrumbStates(AList: TTyPaintList);
+procedure TTyCustomAdvanceChart.TmCrumbStates(AList: TTyPaintList);
 begin
   FTmCrumbDirty := False;
   if AList = nil then Exit;
@@ -2360,7 +2360,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.TmCrumbWrite(AList: TTyPaintList);
+procedure TTyCustomAdvanceChart.TmCrumbWrite(AList: TTyPaintList);
 var
   i, k, hi, slot: Integer;
   el, cap: TTyChartElement;
@@ -2393,7 +2393,7 @@ begin
 end;
 
 { [F2a, old deferral #36] the labels' opacity, the node's style.opacity }
-procedure TTyAdvanceChart.TmLabelOpacity(AList: TTyPaintList);
+procedure TTyCustomAdvanceChart.TmLabelOpacity(AList: TTyPaintList);
 var
   i, hi, slot, s, row: Integer;
   el: TTyChartElement;
@@ -2429,7 +2429,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.SolveGraphCategoryColours;
+procedure TTyCustomAdvanceChart.SolveGraphCategoryColours;
 var
   shown: array of Boolean;
   fallback: TTyChartColorArray;
@@ -2452,7 +2452,7 @@ end;
 
 { THE TREES: each laid out in its box on the whole canvas, as a pie is.
   [Batch 73] }
-procedure TTyAdvanceChart.SolveTrees(APPI: Integer);
+procedure TTyCustomAdvanceChart.SolveTrees(APPI: Integer);
 var
   i: Integer;
   ref: TTyXYWH;
@@ -2485,7 +2485,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.SolveTreeView(ASlot, APPI: Integer);
+procedure TTyCustomAdvanceChart.SolveTreeView(ASlot, APPI: Integer);
 var
   si, row: Integer;
   node: TJSONData;
@@ -2586,7 +2586,7 @@ begin
     FTreeViews[ASlot].NodeScale(spec.NodeScaleRatio));
 end;
 
-function TTyAdvanceChart.TreeDispatchRoam(const APayload: TTyGraphRoamPayload): Boolean;
+function TTyCustomAdvanceChart.TreeDispatchRoam(const APayload: TTyGraphRoamPayload): Boolean;
 var
   i, si: Integer;
   p: TTyGraphRoamPayload;
@@ -2634,7 +2634,7 @@ begin
   EmitUpdated;
 end;
 
-function TTyAdvanceChart.TreeRoam(ASeriesIndex: Integer; ADX, ADY: Double): Boolean;
+function TTyCustomAdvanceChart.TreeRoam(ASeriesIndex: Integer; ADX, ADY: Double): Boolean;
 var p: TTyGraphRoamPayload;
 begin
   p := Default(TTyGraphRoamPayload);
@@ -2645,7 +2645,7 @@ begin
   Result := TreeDispatchRoam(p);
 end;
 
-function TTyAdvanceChart.TreeZoom(ASeriesIndex: Integer; AScale, AOriginX,
+function TTyCustomAdvanceChart.TreeZoom(ASeriesIndex: Integer; AScale, AOriginX,
   AOriginY: Double): Boolean;
 var p: TTyGraphRoamPayload;
 begin
@@ -2658,7 +2658,7 @@ begin
   Result := TreeDispatchRoam(p);
 end;
 
-function TTyAdvanceChart.TreeFlip(ASlot, ADataIndex: Integer): Boolean;
+function TTyCustomAdvanceChart.TreeFlip(ASlot, ADataIndex: Integer): Boolean;
 var s: Integer;
 begin
   Result := False;
@@ -2678,7 +2678,7 @@ begin
   if Assigned(FOnTreeToggle) then FOnTreeToggle(Self, s, ADataIndex);
 end;
 
-function TTyAdvanceChart.TreeToggle(ASeriesIndex, ADataIndex: Integer): Boolean;
+function TTyCustomAdvanceChart.TreeToggle(ASeriesIndex, ADataIndex: Integer): Boolean;
 var i: Integer;
 begin
   Result := False;
@@ -2698,7 +2698,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.DoTreeToggleAction(APayload: TJSONObject): Boolean;
+function TTyCustomAdvanceChart.DoTreeToggleAction(APayload: TJSONObject): Boolean;
 var
   slots: TTyIntegerArray;
   k: Integer;
@@ -2716,7 +2716,7 @@ begin
   EmitUpdated;
 end;
 
-function TTyAdvanceChart.TreeExpanded(ASeriesIndex, ADataIndex: Integer): Boolean;
+function TTyCustomAdvanceChart.TreeExpanded(ASeriesIndex, ADataIndex: Integer): Boolean;
 var slot: Integer;
 begin
   Result := False;
@@ -2729,7 +2729,7 @@ end;
 { THE SUNBURSTS: laid out on the whole canvas, then coloured in one pass
   whose palette cursor every sunburst in the chart shares -- a second
   sunburst's first root takes the palette's NEXT colour. [Batch 75] }
-procedure TTyAdvanceChart.SolveSunbursts(APPI: Integer);
+procedure TTyCustomAdvanceChart.SolveSunbursts(APPI: Integer);
 var
   i, k: Integer;
   cur: TTyPaletteCursor;
@@ -2796,7 +2796,7 @@ end;
   the CHART's palette (a treemap's own `color` is a list its levels map by,
   not a palette), its labels cut to their cells and its breadcrumb found --
   all of which needs the measurer. [Batch 76] }
-procedure TTyAdvanceChart.SolveTreemaps(const AMeasurer: ITyTextMeasurer;
+procedure TTyCustomAdvanceChart.SolveTreemaps(const AMeasurer: ITyTextMeasurer;
   APPI: Integer);
 var
   i, k, dim, si, target: Integer;
@@ -2941,7 +2941,7 @@ end;
   coloured by value over the palette -- the series' `color`, else the
   chart's, else the theme's -- read as zrender parses them, so an alpha
   survives; then the labels placed. [Batch 79] }
-procedure TTyAdvanceChart.SolveSankeys(APPI: Integer);
+procedure TTyCustomAdvanceChart.SolveSankeys(APPI: Integer);
 var
   i, k, q: Integer;
   stops: TTyVisualColorArray;
@@ -3033,7 +3033,7 @@ end;
 { THE CHORDS [Batch 120]: each laid out on the whole canvas over the nodes
   the legend kept (the store's view), its nodes coloured by the per-datum
   palette -- an object fill where the datum wrote one -- and labelled. }
-procedure TTyAdvanceChart.SolveChords(APPI: Integer);
+procedure TTyCustomAdvanceChart.SolveChords(APPI: Integer);
 var
   i, k: Integer;
   kept: TTyBoolArray;
@@ -3119,7 +3119,7 @@ end;
 { A TREEMAP'S INK: its labels in their own key's ink -- white over the
   palette in every mode, never the auto bands -- read item -> level ->
   series; after the rows, the breadcrumb's words, and its chip. }
-function TTyAdvanceChart.TreemapInk(ASlot: Integer): TTyTreemapInk;
+function TTyCustomAdvanceChart.TreemapInk(ASlot: Integer): TTyTreemapInk;
 var
   dummyCol, col: TTyChartColor;
   sNode: TJSONObject;
@@ -3182,7 +3182,7 @@ end;
 { A SUNBURST'S INK: the ring separator is the chart's own ground (upstream's
   white), and the labels are shown by default with the node's name, read
   item -> level -> series. }
-function TTyAdvanceChart.SunburstInk(ASlot: Integer): TTySunburstInk;
+function TTyCustomAdvanceChart.SunburstInk(ASlot: Integer): TTySunburstInk;
 var
   base: TTyLabelSpec;
   muted: TTyStyleSet;
@@ -3224,7 +3224,7 @@ end;
   the series' own), the edge colour from its key, a ring's hole from the
   chart's own ground, and the labels -- shown by default, the node's name
   their words, read item -> leaves -> series. }
-function TTyAdvanceChart.TreeInk(ASlot: Integer): TTyTreeInk;
+function TTyCustomAdvanceChart.TreeInk(ASlot: Integer): TTyTreeInk;
 var
   base: TTyLabelSpec;
 begin
@@ -3248,7 +3248,7 @@ begin
   Result.ItemCb := ItemCbOf(ASlot);
 end;
 
-procedure TTyAdvanceChart.FreeTreeViews;
+procedure TTyCustomAdvanceChart.FreeTreeViews;
 var i: Integer;
 begin
   for i := 0 to High(FTreeViews) do FreeAndNil(FTreeViews[i]);
@@ -3257,7 +3257,7 @@ begin
   FTreeSpecs := nil;
 end;
 
-procedure TTyAdvanceChart.FreeGraphs;
+procedure TTyCustomAdvanceChart.FreeGraphs;
 var i: Integer;
 begin
   for i := 0 to High(FGraphs) do FreeAndNil(FGraphs[i]);
@@ -3270,7 +3270,7 @@ begin
   FGraphNodeScale := nil;
 end;
 
-procedure TTyAdvanceChart.SolveGraphs(APPI: Integer);
+procedure TTyCustomAdvanceChart.SolveGraphs(APPI: Integer);
 var
   i, si, colX, colY: Integer;
   solved: TTyGraphSolved;
@@ -3409,7 +3409,7 @@ begin
   if APPI < 0 then ;
 end;
 
-function TTyAdvanceChart.GraphNodeName(ASlot, ANode: Integer): string;
+function TTyCustomAdvanceChart.GraphNodeName(ASlot, ANode: Integer): string;
 begin
   Result := '';
   if (ASlot < 0) or (ASlot > High(FGraphNodes)) or (ASlot > High(FStores))
@@ -3419,7 +3419,7 @@ begin
   Result := FStores[ASlot].GetItemName(FGraphNodes[ASlot][ANode].Row);
 end;
 
-function TTyAdvanceChart.GraphInk(ASlot: Integer): TTyGraphInk;
+function TTyCustomAdvanceChart.GraphInk(ASlot: Integer): TTyGraphInk;
 var
   i, si, raw: Integer;
   base, cbBase: TTyChartColor;
@@ -3504,7 +3504,7 @@ end;
   category's over the series' (the wrapped getItemModel), built hidden when
   only a state shows it (GraphSeries' emphasis.label.show is true unless
   told) }
-procedure TTyAdvanceChart.GraphNodeLooks(ASlot: Integer; var AInk: TTyGraphInk);
+procedure TTyCustomAdvanceChart.GraphNodeLooks(ASlot: Integer; var AInk: TTyGraphInk);
 var
   i, raw, j: Integer;
   sNode, item, cat, styleCat: TJSONObject;
@@ -3594,7 +3594,7 @@ end;
   `edgeLabel` under the edge's own `label` -- an edge item's `label` resolves
   to the series' `edgeLabel`, GraphSeries' resolveParentPath), whether it
   shows, its words, its position and distance; and the line's frame. }
-procedure TTyAdvanceChart.GraphEdgeLabels(ASlot: Integer; var AInk: TTyGraphInk);
+procedure TTyCustomAdvanceChart.GraphEdgeLabels(ASlot: Integer; var AInk: TTyGraphInk);
 var
   i, n, raw: Integer;
   sNode, item, lab, own: TJSONObject;
@@ -3800,7 +3800,7 @@ begin
 end;
 
 { the category model a graph node names by index (nil: none) }
-function TTyAdvanceChart.GraphCategoryNode(ASlot, ACategory: Integer): TJSONObject;
+function TTyCustomAdvanceChart.GraphCategoryNode(ASlot, ACategory: Integer): TJSONObject;
 var sNode: TJSONObject; d: TJSONData;
 begin
   Result := nil;
@@ -3812,7 +3812,7 @@ begin
     Result := TJSONObject(TJSONArray(d).Items[ACategory]);
 end;
 
-function TTyAdvanceChart.IsGraphDatum(const ADatum: TTyChartDatumRef): Boolean;
+function TTyCustomAdvanceChart.IsGraphDatum(const ADatum: TTyChartDatumRef): Boolean;
 var slot: Integer;
 begin
   Result := False;
@@ -3821,7 +3821,7 @@ begin
   Result := (slot >= 0) and (slot <= High(FGraphLaidOut)) and FGraphLaidOut[slot];
 end;
 
-function TTyAdvanceChart.IsTreeDatum(const ADatum: TTyChartDatumRef): Boolean;
+function TTyCustomAdvanceChart.IsTreeDatum(const ADatum: TTyChartDatumRef): Boolean;
 var slot: Integer;
 begin
   Result := False;

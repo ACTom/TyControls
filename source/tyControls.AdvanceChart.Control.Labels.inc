@@ -2,7 +2,7 @@
   specs, text measurement and the label layout. Moved out of the unit only to keep it
   readable; what the control is and why it is built the way it is, see the unit header. }
 
-procedure TTyAdvanceChart.ResolveTextDims(const AEnc: TTySeriesEncode;
+procedure TTyCustomAdvanceChart.ResolveTextDims(const AEnc: TTySeriesEncode;
   AStore: TTyDataStore; const ASource: TTyChartSource);
 var
   k, p, best: Integer;
@@ -78,7 +78,7 @@ end;
   NOT HERE: a state's endLabel.show, a rich end label (one run), a step
   line's path (the unstepped one is walked), a line of one point (no run).
   [Batch 92, AN4] }
-function TTyAdvanceChart.BuildEndLabel(ASlot: Integer; const AVisual: TTySeriesVisual;
+function TTyCustomAdvanceChart.BuildEndLabel(ASlot: Integer; const AVisual: TTySeriesVisual;
   const AMeasurer: ITyTextMeasurer; APPI: Integer; AList: TTyPaintList): Integer;
 var
   node, en, d: TJSONData;
@@ -243,7 +243,7 @@ begin
 end;
 
 { each data item's own `label`, read over its series' spec, by raw row }
-procedure TTyAdvanceChart.ItemLabelSpecs(ASeriesIndex: Integer; const ABase: TTyLabelSpec;
+procedure TTyCustomAdvanceChart.ItemLabelSpecs(ASeriesIndex: Integer; const ABase: TTyLabelSpec;
   out ASpecs: TTyLabelSpecArray; out AHas: TTyBoolArray);
 var
   node, d, it, lb: TJSONData;
@@ -272,14 +272,14 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.LabelSpecFor(ASlot: Integer): TTyLabelSpec;
+function TTyCustomAdvanceChart.LabelSpecFor(ASlot: Integer): TTyLabelSpec;
 begin
   Result := LabelSpecFor(ASlot, '');
 end;
 
 { THE THEME HALF OF A LABEL SPEC: fonts, the outside ink and the three
   inside bands, the ground -- everything but what the option says. }
-function TTyAdvanceChart.LabelBaseFor(ASlot: Integer): TTyLabelSpec;
+function TTyCustomAdvanceChart.LabelBaseFor(ASlot: Integer): TTyLabelSpec;
 var
   outS, lightS, midS, darkS: TTyStyleSet;
   hasCol: Boolean;
@@ -309,7 +309,7 @@ begin
   Result.RtGlobal := RtGlobal;
 end;
 
-function TTyAdvanceChart.LabelSpecFor(ASlot: Integer;
+function TTyCustomAdvanceChart.LabelSpecFor(ASlot: Integer;
   const ADefaultFormatter: string): TTyLabelSpec;
 var
   base: TTyLabelSpec;
@@ -352,7 +352,7 @@ begin
   Result := TyLabelSpecOf(FOption, FBindings[ASlot].SeriesIndex, base);
 end;
 
-function TTyAdvanceChart.PieLabelInk: TTyPieLabelInk;
+function TTyCustomAdvanceChart.PieLabelInk: TTyPieLabelInk;
 var
   dummyCol: TTyChartColor;
   outS, lightS, midS, darkS: TTyStyleSet;
@@ -377,7 +377,7 @@ begin
   Result.LineWidthLogical := 1;
 end;
 
-function TTyAdvanceChart.NewTextMeasurer(APPI: Integer): ITyTextMeasurer;
+function TTyCustomAdvanceChart.NewTextMeasurer(APPI: Integer): ITyTextMeasurer;
 begin
   Result := TTyPainterTextMeasurer.Create(APPI);
 end;
@@ -470,7 +470,7 @@ begin
   Result := -1;
 end;
 
-procedure TTyAdvanceChart.LayoutSeriesLabels(AList: TTyPaintList;
+procedure TTyCustomAdvanceChart.LayoutSeriesLabels(AList: TTyPaintList;
   const ASpecs: TTyLabelSpecArray; const AItemSpecs: TTyLabelSpecTable;
   const AMeasurer: ITyTextMeasurer; APPI: Integer);
 type
@@ -842,7 +842,7 @@ begin
   FLmItems := items;
 end;
 
-procedure TTyAdvanceChart.RouteLabelLines(AList: TTyPaintList;
+procedure TTyCustomAdvanceChart.RouteLabelLines(AList: TTyPaintList;
   const ASpecs: TTyLabelSpecArray; const AItemSpecs: TTyLabelSpecTable;
   const AMeasurer: ITyTextMeasurer; APPI: Integer);
 const
@@ -1029,7 +1029,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.OwnLabelOpacity(ASlot: Integer; AList: TTyPaintList;
+procedure TTyCustomAdvanceChart.OwnLabelOpacity(ASlot: Integer; AList: TTyPaintList;
   ALo, AHi: Integer);
 var
   k, j, si, raw: Integer;
@@ -1088,7 +1088,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.LabelGround(out AGround: TTyChartColor;
+procedure TTyCustomAdvanceChart.LabelGround(out AGround: TTyChartColor;
   out ADark: Boolean);
 var
   a, l: Double;

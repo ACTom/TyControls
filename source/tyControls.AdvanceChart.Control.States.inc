@@ -344,7 +344,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.StKindOf(ASlot: Integer): TTyStKind;
+function TTyCustomAdvanceChart.StKindOf(ASlot: Integer): TTyStKind;
 var t: string;
 begin
   Result := sskNone;
@@ -397,7 +397,7 @@ begin
   if (FBindings[ASlot].CalendarIndex >= 0) and (t = 'line') then Result := sskNone;
 end;
 
-function TTyAdvanceChart.StSeriesNode(ASeriesIndex: Integer): TJSONObject;
+function TTyCustomAdvanceChart.StSeriesNode(ASeriesIndex: Integer): TJSONObject;
 var d: TJSONData;
 begin
   Result := nil;
@@ -406,7 +406,7 @@ begin
   if d is TJSONObject then Result := TJSONObject(d);
 end;
 
-function TTyAdvanceChart.StItemNode(ASeriesIndex, ARaw: Integer): TJSONObject;
+function TTyCustomAdvanceChart.StItemNode(ASeriesIndex, ARaw: Integer): TJSONObject;
 var s: TJSONObject; d: TJSONData; slot: Integer;
 begin
   Result := nil;
@@ -464,13 +464,13 @@ begin
   if d is TJSONObject then Result := TJSONObject(d);
 end;
 
-function TTyAdvanceChart.StRowRecordsForTest(ASeriesIndex: Integer): Integer;
+function TTyCustomAdvanceChart.StRowRecordsForTest(ASeriesIndex: Integer): Integer;
 begin
   if (ASeriesIndex < 0) or (ASeriesIndex > High(FSt)) then Exit(-1);
   Result := Length(FSt[ASeriesIndex].Rows);
 end;
 
-function TTyAdvanceChart.StItemPlainArray(ASeriesIndex: Integer;
+function TTyCustomAdvanceChart.StItemPlainArray(ASeriesIndex: Integer;
   out AArr: TJSONArray): Boolean;
 var s: TJSONObject; d: TJSONData; slot: Integer;
 begin
@@ -494,7 +494,7 @@ end;
 
 { tokens.color.primary -- the ink a title is written in, which is how the
   skin says it }
-function TTyAdvanceChart.StMemoMatches(ASeries: Integer;
+function TTyCustomAdvanceChart.StMemoMatches(ASeries: Integer;
   const ANodes: TTyStNodeArray; const ABlock: string): Boolean;
 var k: Integer;
 begin
@@ -506,7 +506,7 @@ begin
   Result := True;
 end;
 
-function TTyAdvanceChart.StPrimaryInk: TTyChartColor;
+function TTyCustomAdvanceChart.StPrimaryInk: TTyChartColor;
 begin
   { ONCE PER SYNC: every row of a bar or a scatter asked the theme for it
     [P2]; outside a sync it is asked afresh }
@@ -520,7 +520,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.StDeclareItem(ASlot, ARaw: Integer;
+procedure TTyCustomAdvanceChart.StDeclareItem(ASlot, ARaw: Integer;
   AList: TTyPaintList; APPI: Integer);
 var
   blk: string;
@@ -1103,7 +1103,7 @@ end;
   color0, borderColor or borderColor0, the colour again for a missing border
   -- and the emphasis border is 2 wide unless declared
   (CandlestickSeries.ts:130-134) [Batch 90] }
-procedure TTyAdvanceChart.StDeclareCandle(ASlot, ARaw: Integer;
+procedure TTyCustomAdvanceChart.StDeclareCandle(ASlot, ARaw: Integer;
   const ANodes: array of TJSONObject; var AHost: TTyStElement);
 var
   st: TTyDataStore;
@@ -1162,7 +1162,7 @@ end;
   itemModel) and toggleHoverEmphasis with the item's emphasis, z2EmphasisLift
   0 (GaugeView.ts:566-573) -- the pointer's own states, on a dispatcher of
   its own. A render makes it anew: no flag survives a full update. }
-procedure TTyAdvanceChart.StDeclarePeer(ASlot, ARaw: Integer; AList: TTyPaintList);
+procedure TTyCustomAdvanceChart.StDeclarePeer(ASlot, ARaw: Integer; AList: TTyPaintList);
 var
   s: Integer;
   item: PTyStItem;
@@ -1218,7 +1218,7 @@ end;
   its bottom-right (mergeAll, the same) -- then the series' own marker
   option, the top-level one and the marker defaults (MarkerModel's parent
   chain) }
-function TTyAdvanceChart.StMarkItemNodes(ASeriesIndex: Integer;
+function TTyCustomAdvanceChart.StMarkItemNodes(ASeriesIndex: Integer;
   AKind: TTyChartTargetKind; ADataIndex: Integer): TTyStNodeArray;
 var
   m, q: Integer;
@@ -1272,7 +1272,7 @@ end;
 
 { [R2-B] the item's hoverState, as the flags keep it across renders (the
   Symbol, Line and polygon are updated in place, not made anew) }
-function TTyAdvanceChart.StMarkFlag(ASeriesIndex: Integer; const AKey: string): Integer;
+function TTyCustomAdvanceChart.StMarkFlag(ASeriesIndex: Integer; const AKey: string): Integer;
 var k: Integer;
 begin
   Result := TyStHoverNormal;
@@ -1282,7 +1282,7 @@ begin
       Exit(FSt[ASeriesIndex].MarkFlagHover[k]);
 end;
 
-procedure TTyAdvanceChart.StSetMarkFlag(ASeriesIndex: Integer; const AKey: string;
+procedure TTyCustomAdvanceChart.StSetMarkFlag(ASeriesIndex: Integer; const AKey: string;
   AHover: Integer);
 var k, n: Integer;
 begin
@@ -1316,7 +1316,7 @@ end;
   blurSeries reached enters blur -- whatever it was, the hovered one too
   (enterBlur has no __highByOuter test); allLeaveBlur takes the blurred
   ones out again }
-procedure TTyAdvanceChart.StMarksBlur(ASeriesIndex: Integer; AEnter: Boolean);
+procedure TTyCustomAdvanceChart.StMarksBlur(ASeriesIndex: Integer; AEnter: Boolean);
 var
   k: Integer;
   key: string;
@@ -1353,7 +1353,7 @@ end;
 
 { [R2-B] the marker item a target is, by its series and key; False when it
   has no element or is no highDownDispatcher (emphasis.disabled) }
-function TTyAdvanceChart.StMarkTarget(const ATarget: TTyChartEventTarget;
+function TTyCustomAdvanceChart.StMarkTarget(const ATarget: TTyChartEventTarget;
   out AKey: string; out AFirst: Integer): Boolean;
 var
   s, k: Integer;
@@ -1383,7 +1383,7 @@ end;
   blurScope -- blurSeries around the host, then the item enters emphasis
   (no action ever holds a marker). A markArea's polygon is a dispatcher of
   no focus (toggleHoverEmphasis(polygon, null, null, ...)). }
-procedure TTyAdvanceChart.StMarkHoverOver(const ATarget: TTyChartEventTarget);
+procedure TTyCustomAdvanceChart.StMarkHoverOver(const ATarget: TTyChartEventTarget);
 var
   key: string;
   k, s: Integer;
@@ -1410,7 +1410,7 @@ end;
 
 { handleGlobalMouseOutForHighDown: allLeaveBlur, then the item leaves
   emphasis }
-procedure TTyAdvanceChart.StMarkHoverOut(const ATarget: TTyChartEventTarget);
+procedure TTyCustomAdvanceChart.StMarkHoverOut(const ATarget: TTyChartEventTarget);
 var key: string; k: Integer;
 begin
   if not StMarkTarget(ATarget, key, k) then Exit;
@@ -1452,7 +1452,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.StDeclareMarks(ASeriesIndex: Integer; AList: TTyPaintList);
+procedure TTyCustomAdvanceChart.StDeclareMarks(ASeriesIndex: Integer; AList: TTyPaintList);
 var
   k, j, tw: Integer;
   el: TTyChartElement;
@@ -1585,7 +1585,7 @@ begin
   StApplyMarks(ASeriesIndex);
 end;
 
-procedure TTyAdvanceChart.StSyncMarks(AList: TTyPaintList);
+procedure TTyCustomAdvanceChart.StSyncMarks(AList: TTyPaintList);
 var
   s, k, tw: Integer;
   el: TTyChartElement;
@@ -1687,7 +1687,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.StApplyMarks(ASeriesIndex: Integer): Boolean;
+function TTyCustomAdvanceChart.StApplyMarks(ASeriesIndex: Integer): Boolean;
 var k: Integer;
 begin
   Result := False;
@@ -1700,7 +1700,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.StDeclareLine(ASlot: Integer; AList: TTyPaintList);
+procedure TTyCustomAdvanceChart.StDeclareLine(ASlot: Integer; AList: TTyPaintList);
 
   procedure One(var AItem: TTyStItem; const AIdx: TTyIntegerArray;
     const ABlock: string);
@@ -1754,7 +1754,7 @@ begin
   One(FSt[s].Area, FSt[s].AreaIdx, 'areaStyle');
 end;
 
-procedure TTyAdvanceChart.StSync(AList: TTyPaintList; APPI: Integer);
+procedure TTyCustomAdvanceChart.StSync(AList: TTyPaintList; APPI: Integer);
 var
   slot, s, k, raw, n, i, hoverS: Integer;
   ed: TTySelData;
@@ -2271,7 +2271,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.StCarryTake(const AViewKeys: TTyStringArray);
+procedure TTyCustomAdvanceChart.StCarryTake(const AViewKeys: TTyStringArray);
 var
   slot, si: Integer;
   vk: TTyStringArray;
@@ -2310,7 +2310,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.StCarryApply;
+procedure TTyCustomAdvanceChart.StCarryApply;
 var
   slot, s, o, k, n, oldRaw, newRaw: Integer;
   vk, keys: TTyStringArray;
@@ -2370,7 +2370,7 @@ begin
   FStCarryKeys := nil;
 end;
 
-procedure TTyAdvanceChart.StWrite(AList: TTyPaintList);
+procedure TTyCustomAdvanceChart.StWrite(AList: TTyPaintList);
 begin
   { a state write: journaled, where a build's session is open [P2] }
   AList.JournalRecord(True);
@@ -2381,7 +2381,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.StWriteRows(AList: TTyPaintList);
+procedure TTyCustomAdvanceChart.StWriteRows(AList: TTyPaintList);
 var
   s, raw, k: Integer;
   el, hostRest, hostNow: TTyChartElement;
@@ -2522,7 +2522,7 @@ end;
   Not where a geo's flags changed (only TyBuildGeo draws those), a relayout
   or an update is pending, or anything else wrote to the list since the
   build: then it is built again, as before. }
-function TTyAdvanceChart.StPatchList: Boolean;
+function TTyCustomAdvanceChart.StPatchList: Boolean;
 var
   region: Boolean;
   prevIdx: TTyIntegerArray;
@@ -2568,7 +2568,7 @@ begin
   Result := True;
 end;
 
-function TTyAdvanceChart.StApplyChanged: Boolean;
+function TTyCustomAdvanceChart.StApplyChanged: Boolean;
 var
   s, raw: Integer;
   layer: Boolean;
@@ -2617,7 +2617,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.StHoverThreshold: Double;
+function TTyCustomAdvanceChart.StHoverThreshold: Double;
 var d: TJSONData;
 begin
   { retrieve2(ecModel.get('hoverLayerThreshold'), 3000): undefined and null
@@ -2630,7 +2630,7 @@ begin
   Result := TyJsonToNumber(d);
 end;
 
-function TTyAdvanceChart.StSeriesHoverOn(ASlot: Integer; AThl: Boolean): Boolean;
+function TTyCustomAdvanceChart.StSeriesHoverOn(ASlot: Integer; AThl: Boolean): Boolean;
 var
   s: Integer;
   st: string;
@@ -2651,7 +2651,7 @@ begin
   Result := AThl and (FSt[s].Kind <> sskTreemap);
 end;
 
-procedure TTyAdvanceChart.StHoverStamp(AEnter: Boolean);
+procedure TTyCustomAdvanceChart.StHoverStamp(AEnter: Boolean);
 var
   slot, s, raw, k: Integer;
   t: Double;
@@ -2713,7 +2713,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.StHoverCollect;
+procedure TTyCustomAdvanceChart.StHoverCollect;
 var
   s, raw, k, n, i, j: Integer;
   item: PTyStItem;
@@ -2838,23 +2838,23 @@ begin
   for i := 0 to n - 1 do FHoverList.Add(els[i]);
 end;
 
-function TTyAdvanceChart.StHoverAny: Boolean;
+function TTyCustomAdvanceChart.StHoverAny: Boolean;
 begin
   if FHoverDirty then StHoverCollect;
   Result := (FHoverList <> nil) and (FHoverList.Count > 0);
 end;
 
-procedure TTyAdvanceChart.PaintHoverLayer(APainter: TTyPainter);
+procedure TTyCustomAdvanceChart.PaintHoverLayer(APainter: TTyPainter);
 begin
   if StHoverAny then TyRenderPaintList(APainter, FHoverList);
 end;
 
-function TTyAdvanceChart.HoverLayerForTest: TTyPaintList;
+function TTyCustomAdvanceChart.HoverLayerForTest: TTyPaintList;
 begin
   if StHoverAny then Result := FHoverList else Result := nil;
 end;
 
-function TTyAdvanceChart.StRowsInStatesForTest(ASeriesIndex: Integer): Integer;
+function TTyCustomAdvanceChart.StRowsInStatesForTest(ASeriesIndex: Integer): Integer;
 var raw: Integer;
 begin
   Result := 0;
@@ -2979,7 +2979,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.StAnimClearAll;
+procedure TTyCustomAdvanceChart.StAnimClearAll;
 var
   i: Integer;
   p: TTyChartAnimProxy;
@@ -2997,7 +2997,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.StAnimCfg(ASeriesIndex: Integer; out ACfg: TTyAnimCfg): Boolean;
+function TTyCustomAdvanceChart.StAnimCfg(ASeriesIndex: Integer; out ACfg: TTyAnimCfg): Boolean;
 var
   slot, n: Integer;
   model: TTyAnimModel;
@@ -3061,7 +3061,7 @@ begin
   Result := True;
 end;
 
-procedure TTyAdvanceChart.StAnimEl(var AEl: TTyStElement; AListIdx, ASeries,
+procedure TTyCustomAdvanceChart.StAnimEl(var AEl: TTyStElement; AListIdx, ASeries,
   ARaw: Integer; const AName: string; AKind: Integer; const ACfg: TTyAnimCfg;
   AHasCfg: Boolean);
 var
@@ -3219,7 +3219,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.StAnimSync;
+procedure TTyCustomAdvanceChart.StAnimSync;
 var
   s, raw, k, clips: Integer;
   item: PTyStItem;
@@ -3348,7 +3348,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.StPeerAt(ASeriesIndex, AInnerRow: Integer): PTyStItem;
+function TTyCustomAdvanceChart.StPeerAt(ASeriesIndex, AInnerRow: Integer): PTyStItem;
 var raw: Integer;
 begin
   Result := nil;
@@ -3358,7 +3358,7 @@ begin
   Result := @FSt[ASeriesIndex].PeerRows[raw];
 end;
 
-function TTyAdvanceChart.StItemAt(ASeriesIndex, AInnerRow: Integer): PTyStItem;
+function TTyCustomAdvanceChart.StItemAt(ASeriesIndex, AInnerRow: Integer): PTyStItem;
 var slot, raw: Integer;
 begin
   Result := nil;
@@ -3380,7 +3380,7 @@ end;
 
 { ---- focus and blur [Batch 90] ---- }
 
-function TTyAdvanceChart.StPolyOf(ASeriesIndex: Integer): Integer;
+function TTyCustomAdvanceChart.StPolyOf(ASeriesIndex: Integer): Integer;
 begin
   Result := -1;
   if (ASeriesIndex < 0) or (ASeriesIndex > High(FSt)) then Exit;
@@ -3389,7 +3389,7 @@ begin
 end;
 
 { LineView._changePolyState: setStatesFlag on the polyline and the area }
-procedure TTyAdvanceChart.StPolyTo(ASeriesIndex, AState: Integer);
+procedure TTyCustomAdvanceChart.StPolyTo(ASeriesIndex, AState: Integer);
 begin
   if (ASeriesIndex < 0) or (ASeriesIndex > High(FSt)) then Exit;
   if not FSt[ASeriesIndex].IsLine then Exit;
@@ -3398,7 +3398,7 @@ begin
   FStDirty := True;
 end;
 
-function TTyAdvanceChart.StCoordKey(ASlot: Integer): string;
+function TTyCustomAdvanceChart.StCoordKey(ASlot: Integer): string;
 begin
   Result := '';
   if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
@@ -3432,7 +3432,7 @@ begin
 end;
 
 { an item's model chain: the item, a sunburst row's level, the series }
-function TTyAdvanceChart.StNodes(ASeriesIndex, ARaw: Integer): TTyStNodeArray;
+function TTyCustomAdvanceChart.StNodes(ASeriesIndex, ARaw: Integer): TTyStNodeArray;
 var slot, d: Integer;
 begin
   Result := nil;
@@ -3512,7 +3512,7 @@ end;
 
 { A SANKEY LINK'S CHAIN: its item, the level of its SOURCE's depth, the
   series [Batch 114] }
-function TTyAdvanceChart.StEdgeNodes(ASeriesIndex, AEdge: Integer): TTyStNodeArray;
+function TTyCustomAdvanceChart.StEdgeNodes(ASeriesIndex, AEdge: Integer): TTyStNodeArray;
 var slot: Integer; sNode: TJSONObject; links: TJSONData;
 begin
   Result := nil;
@@ -3551,19 +3551,19 @@ begin
   Result[2] := StSeriesNode(ASeriesIndex);
 end;
 
-function TTyAdvanceChart.StIsSankey(ASeriesIndex: Integer): Boolean;
+function TTyCustomAdvanceChart.StIsSankey(ASeriesIndex: Integer): Boolean;
 begin
   Result := (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSt))
     and (FSt[ASeriesIndex].Kind = sskSankey);
 end;
 
-function TTyAdvanceChart.StIsChord(ASeriesIndex: Integer): Boolean;
+function TTyCustomAdvanceChart.StIsChord(ASeriesIndex: Integer): Boolean;
 begin
   Result := (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSt))
     and (FSt[ASeriesIndex].Kind = sskChord);
 end;
 
-function TTyAdvanceChart.StHasEdges(ASeriesIndex: Integer): Boolean;
+function TTyCustomAdvanceChart.StHasEdges(ASeriesIndex: Integer): Boolean;
 begin
   Result := StIsSankey(ASeriesIndex) or StIsChord(ASeriesIndex)
     { a graph's edge data [F2a] }
@@ -3576,7 +3576,7 @@ end;
   of [state].lineStyle along link -> series: the colour a STROKE, the width
   its width -- the series' emphasis opacity 0.5 under what is declared. It
   has no label. }
-procedure TTyAdvanceChart.StDeclareChordEdge(ASlot, AEdge: Integer; AList: TTyPaintList);
+procedure TTyCustomAdvanceChart.StDeclareChordEdge(ASlot, AEdge: Integer; AList: TTyPaintList);
 var
   s: Integer;
   item: PTyStItem;
@@ -3617,7 +3617,7 @@ begin
   TyStApplyItem(item^);
 end;
 
-function TTyAdvanceChart.EdgeStates(ASeriesIndex, AIndex: Integer;
+function TTyCustomAdvanceChart.EdgeStates(ASeriesIndex, AIndex: Integer;
   out AItem: TTyStItem): Boolean;
 begin
   AItem := Default(TTyStItem);
@@ -3627,7 +3627,7 @@ begin
   if Result then AItem := FSt[ASeriesIndex].EdgeRows[AIndex];
 end;
 
-function TTyAdvanceChart.ChordEdgeStates(ASeriesIndex, AEdge: Integer;
+function TTyCustomAdvanceChart.ChordEdgeStates(ASeriesIndex, AEdge: Integer;
   out AItem: TTyStItem): Boolean;
 begin
   AItem := Default(TTyStItem);
@@ -3639,7 +3639,7 @@ end;
 
 { applyCurveStyle on a state's style: 'source' / 'target' take that end
   node's colour [Batch 114] }
-procedure TTyAdvanceChart.StSankeyCurveFill(ASlot, AEdge: Integer;
+procedure TTyCustomAdvanceChart.StSankeyCurveFill(ASlot, AEdge: Integer;
   const ANodes: TTyStNodeArray; const AState: string; var AObj: TTyStObject);
 var w: string; has: Boolean; n: Integer;
 begin
@@ -3657,7 +3657,7 @@ end;
   getItemStyle of [state].lineStyle, the words through applyCurveStyle --
   the series' emphasis opacity 0.5 under what is declared; its label the
   band's list. }
-procedure TTyAdvanceChart.StDeclareEdge(ASlot, AEdge: Integer; AList: TTyPaintList);
+procedure TTyCustomAdvanceChart.StDeclareEdge(ASlot, AEdge: Integer; AList: TTyPaintList);
 var
   s, idx: Integer;
   item: PTyStItem;
@@ -3734,7 +3734,7 @@ end;
 
 { ==================== graph, tree and treemap states [F2a] ==================== }
 
-function TTyAdvanceChart.StGraphNodeOfRaw(ASlot, ARaw: Integer): Integer;
+function TTyCustomAdvanceChart.StGraphNodeOfRaw(ASlot, ARaw: Integer): Integer;
 var j: Integer;
 begin
   Result := -1;
@@ -3743,7 +3743,7 @@ begin
     if FGraphNodes[ASlot][j].RawRow = ARaw then Exit(j);
 end;
 
-function TTyAdvanceChart.StGraphEdgeOfRow(ASlot, ARow: Integer): Integer;
+function TTyCustomAdvanceChart.StGraphEdgeOfRow(ASlot, ARow: Integer): Integer;
 var j: Integer;
 begin
   Result := -1;
@@ -3752,7 +3752,7 @@ begin
     if FGraphEdges[ASlot][j].Row = ARow then Exit(j);
 end;
 
-function TTyAdvanceChart.StGraphEdgeInner(ASlot, AEdge: Integer): Integer;
+function TTyCustomAdvanceChart.StGraphEdgeInner(ASlot, AEdge: Integer): Integer;
 var j: Integer;
 begin
   Result := -1;
@@ -3764,7 +3764,7 @@ begin
     if GraphEdgeSurvives(FGraphNodes[ASlot], FGraphEdges[ASlot][j]) then Inc(Result);
 end;
 
-function TTyAdvanceChart.StGraphEdgeOfInner(ASlot, AInner: Integer): Integer;
+function TTyCustomAdvanceChart.StGraphEdgeOfInner(ASlot, AInner: Integer): Integer;
 var j, n: Integer;
 begin
   Result := -1;
@@ -3779,19 +3779,19 @@ begin
 end;
 
 { [F3a] the slot holds a solved sankey }
-function TTyAdvanceChart.StSankeySlot(ASlot: Integer): Boolean;
+function TTyCustomAdvanceChart.StSankeySlot(ASlot: Integer): Boolean;
 begin
   Result := (ASlot >= 0) and (ASlot <= High(FBindings)) and (ASlot <= High(FSankeys))
     and FSankeys[ASlot].Valid and (FBindings[ASlot].SeriesType = TySankeySeriesTypeName);
 end;
 
-function TTyAdvanceChart.StChordSlot(ASlot: Integer): Boolean;
+function TTyCustomAdvanceChart.StChordSlot(ASlot: Integer): Boolean;
 begin
   Result := (ASlot >= 0) and (ASlot <= High(FBindings)) and (ASlot <= High(FChords))
     and FChords[ASlot].Valid and (FBindings[ASlot].SeriesType = TyChordSeriesTypeName);
 end;
 
-function TTyAdvanceChart.SelEdgeData(ASlot: Integer): TTySelData;
+function TTyCustomAdvanceChart.SelEdgeData(ASlot: Integer): TTySelData;
 var
   j, n, s: Integer;
   links: TJSONData;
@@ -3875,7 +3875,7 @@ end;
 
 { queryDataIndex on the edge data (dataIndexInside as it is, dataIndex raw,
   else the edge data's name), as solved edge indices }
-function TTyAdvanceChart.QueryEdgeIndex(ASlot: Integer; APayload: TJSONObject;
+function TTyCustomAdvanceChart.QueryEdgeIndex(ASlot: Integer; APayload: TJSONObject;
   out AEdges: TTyIntegerArray): Boolean;
 var
   d: TJSONData;
@@ -3967,7 +3967,7 @@ end;
   the series' `edgeLabel` (resolveParentPath), its emphasis show defaulting
   to the normal one (defaultEmphasis). emphasis.disabled: no dispatcher, no
   proxy on any of them. }
-procedure TTyAdvanceChart.StDeclareGraphEdge(ASlot, AEdge: Integer; AList: TTyPaintList);
+procedure TTyCustomAdvanceChart.StDeclareGraphEdge(ASlot, AEdge: Integer; AList: TTyPaintList);
 var
   s, idx, k: Integer;
   item: PTyStItem;
@@ -4091,7 +4091,7 @@ end;
 { A TREE'S EDGE (TreeView.ts drawEdge): setStatesStylesFromModel(edge,
   itemModel, 'lineStyle') along the node's chain and the default proxy --
   installed whatever the node's emphasis says; no label, no dispatcher }
-procedure TTyAdvanceChart.StDeclareTreeEdge(ASlot, ARaw: Integer; AList: TTyPaintList);
+procedure TTyCustomAdvanceChart.StDeclareTreeEdge(ASlot, ARaw: Integer; AList: TTyPaintList);
 var
   s: Integer;
   item: PTyStItem;
@@ -4137,7 +4137,7 @@ end;
   hosts, its background is a part with states of its own); a parent's
   background alone. The labels: the content's `label`, a header's
   `upperLabel` (shown under emphasis by default). }
-procedure TTyAdvanceChart.StDeclareTreemap(ASlot, ARaw: Integer; AList: TTyPaintList);
+procedure TTyCustomAdvanceChart.StDeclareTreemap(ASlot, ARaw: Integer; AList: TTyPaintList);
 var
   s, idx, k: Integer;
   item: PTyStItem;
@@ -4254,7 +4254,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.StTreeFollow(ASeriesIndex, ARaw, AOld: Integer);
+procedure TTyCustomAdvanceChart.StTreeFollow(ASeriesIndex, ARaw, AOld: Integer);
 var
   slot, par, nw: Integer;
 begin
@@ -4277,7 +4277,7 @@ begin
   FStDirty := True;
 end;
 
-function TTyAdvanceChart.StItemFocus(ASeriesIndex, ARaw: Integer;
+function TTyCustomAdvanceChart.StItemFocus(ASeriesIndex, ARaw: Integer;
   out AScope: TTyStScope): TTyStFocus;
 var
   nodes: TTyStNodeArray;
@@ -4454,7 +4454,7 @@ end;
 
 { A SANKEY LINK'S focus: along link -> level -> series, the two words its
   index sets [Batch 114] }
-function TTyAdvanceChart.StEdgeFocus(ASeriesIndex, AEdge: Integer;
+function TTyCustomAdvanceChart.StEdgeFocus(ASeriesIndex, AEdge: Integer;
   out AScope: TTyStScope): TTyStFocus;
 var
   nodes: TTyStNodeArray;
@@ -4507,7 +4507,7 @@ begin
   Result := TyStFocusOf(d);
 end;
 
-function TTyAdvanceChart.StSeriesFocus(ASeriesIndex: Integer;
+function TTyCustomAdvanceChart.StSeriesFocus(ASeriesIndex: Integer;
   out AScope: TTyStScope): TTyStFocus;
 var nodes: array[0..0] of TJSONObject;
 begin
@@ -4516,7 +4516,7 @@ begin
   AScope := TyStScopeOf(TyStFind(nodes, ['emphasis', 'blurScope']));
 end;
 
-function TTyAdvanceChart.StInnerRaw(ASeriesIndex, AInner: Integer): Integer;
+function TTyCustomAdvanceChart.StInnerRaw(ASeriesIndex, AInner: Integer): Integer;
 var slot: Integer;
 begin
   Result := -1;
@@ -4532,7 +4532,7 @@ end;
   itself), or all -- except the target itself under focus 'series': every
   element enters blur, but one held by an action stays in the target series
   under focus 'self'; data indices of a focus list leave the blur again. }
-procedure TTyAdvanceChart.StBlurSeries(ATarget: Integer; const AFocus: TTyStFocus;
+procedure TTyCustomAdvanceChart.StBlurSeries(ATarget: Integer; const AFocus: TTyStFocus;
   AScope: TTyStScope);
 var
   slot, s, raw, k, poly, tslot, old: Integer;
@@ -4607,7 +4607,7 @@ end;
 
 { allLeaveBlur (util/states.ts:404-427): every series blurSeries reached
   leaves blur, whole; none is blured after }
-procedure TTyAdvanceChart.StAllLeaveBlur;
+procedure TTyCustomAdvanceChart.StAllLeaveBlur;
 var s, raw, poly, old: Integer;
 begin
   for s := 0 to High(FSt) do
@@ -4658,7 +4658,7 @@ begin
     end;
 end;
 
-function TTyAdvanceChart.StDispatcher(const ATarget: TTyChartEventTarget;
+function TTyCustomAdvanceChart.StDispatcher(const ATarget: TTyChartEventTarget;
   out AItem: PTyStItem; out APart: Integer): Boolean;
 var
   s, idx, k: Integer;
@@ -4725,7 +4725,7 @@ end;
 
 { handleGlobalMouseOutForHighDown: allLeaveBlur, then the dispatcher leaves
   emphasis unless an action holds it }
-procedure TTyAdvanceChart.StHoverOut(const ATarget: TTyChartEventTarget);
+procedure TTyCustomAdvanceChart.StHoverOut(const ATarget: TTyChartEventTarget);
 var item: PTyStItem; part, s, poly, old: Integer;
 begin
   { [Batch 148] a geo region's group }
@@ -4808,7 +4808,7 @@ end;
 
 { handleGlobalMouseOverForHighDown: blurSeries by the dispatcher's focus,
   then it enters emphasis unless an action holds it }
-procedure TTyAdvanceChart.StHoverOver(const ATarget: TTyChartEventTarget);
+procedure TTyCustomAdvanceChart.StHoverOver(const ATarget: TTyChartEventTarget);
 begin
   { [Batch 148] a geo region's group }
   if ATarget.HdKind = 14 then
@@ -4827,7 +4827,7 @@ begin
   StHoverOverSeries(ATarget);
 end;
 
-procedure TTyAdvanceChart.StHoverOverSeries(const ATarget: TTyChartEventTarget);
+procedure TTyCustomAdvanceChart.StHoverOverSeries(const ATarget: TTyChartEventTarget);
 var
   item: PTyStItem;
   part, s, poly, old: Integer;
@@ -4894,7 +4894,7 @@ begin
   if FStDirty then InvalidateFrame;
 end;
 
-function TTyAdvanceChart.StOwnsElement(AIndex: Integer): Boolean;
+function TTyCustomAdvanceChart.StOwnsElement(AIndex: Integer): Boolean;
 var d: TTyChartDatumRef;
 begin
   Result := False;
@@ -4908,7 +4908,7 @@ begin
   Result := FSt[d.SeriesIndex].Kind <> sskNone;
 end;
 
-function TTyAdvanceChart.StEmphasised(AIndex: Integer): Boolean;
+function TTyCustomAdvanceChart.StEmphasised(AIndex: Integer): Boolean;
 var d: TTyChartDatumRef; item: PTyStItem; k: Integer;
 begin
   Result := False;
@@ -4930,7 +4930,7 @@ end;
 
 { ---- the selection model ---- }
 
-function TTyAdvanceChart.SelData(ASlot: Integer): TTySelData;
+function TTyCustomAdvanceChart.SelData(ASlot: Integer): TTySelData;
 var
   st: TTyDataStore;
   i, n, raw, s: Integer;
@@ -4961,7 +4961,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.SelEnsure(ASlot: Integer);
+procedure TTyCustomAdvanceChart.SelEnsure(ASlot: Integer);
 var
   s, i: Integer;
   tb: TJSONBoolean;
@@ -5027,7 +5027,7 @@ begin
   TySelInitFromData(FSel[s], data, flags);
 end;
 
-procedure TTyAdvanceChart.SelSyncFlags(ASlot: Integer);
+procedure TTyCustomAdvanceChart.SelSyncFlags(ASlot: Integer);
 var
   s, raw, inner, k: Integer;
   data: TTySelData;
@@ -5078,7 +5078,7 @@ end;
 { makeQueryConditionKindA + findComponents: seriesIndex (a number or a
   list, in its order), else seriesId, else seriesName (in series order);
   none of them is every series }
-function TTyAdvanceChart.MatchSeries(APayload: TJSONObject): TTyIntegerArray;
+function TTyCustomAdvanceChart.MatchSeries(APayload: TJSONObject): TTyIntegerArray;
 var
   d: TJSONData;
   i, k, n, cnt: Integer;
@@ -5162,7 +5162,7 @@ end;
 { queryDataIndex (util/model.ts:704-726): dataIndexInside as it is, else
   dataIndex (raw) through indexOfRawIndex, else name -- the first inner index
   of that name. False when the payload names no item at all. }
-function TTyAdvanceChart.QueryDataIndex(ASlot: Integer; APayload: TJSONObject;
+function TTyCustomAdvanceChart.QueryDataIndex(ASlot: Integer; APayload: TJSONObject;
   out AInner: TTyIntegerArray): Boolean;
 var
   d: TJSONData;
@@ -5222,7 +5222,7 @@ end;
 
 { model/Series.ts's id: the written one, else '\0' + name + '\0' + n, n the
   first number no earlier series took (util/model.ts:500-525) }
-function TTyAdvanceChart.SeriesModelId(ASeriesIndex: Integer): string;
+function TTyCustomAdvanceChart.SeriesModelId(ASeriesIndex: Integer): string;
 var
   ids: TTyStringArray;
   i, k, num: Integer;
@@ -5261,7 +5261,7 @@ begin
   Result := ids[ASeriesIndex];
 end;
 
-function TTyAdvanceChart.HasChartHandler(const AType: string): Boolean;
+function TTyCustomAdvanceChart.HasChartHandler(const AType: string): Boolean;
 var i: Integer;
 begin
   for i := 0 to High(FEventRegs) do
@@ -5271,7 +5271,7 @@ end;
 
 { an action's event: no params, no pointer, the object as JSON; a query
   never filters it (upstream's eventInfo is empty for these) }
-procedure TTyAdvanceChart.EmitPayloadEvent(const AType, APayloadJson: string;
+procedure TTyCustomAdvanceChart.EmitPayloadEvent(const AType, APayloadJson: string;
   AObj: TJSONObject);
 var
   ev: TTyChartEvent;
@@ -5324,7 +5324,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.DoSelectAction(APayload: TJSONObject);
+procedure TTyCustomAdvanceChart.DoSelectAction(APayload: TJSONObject);
 var ev: TJSONObject;
 begin
   SelApply(APayload, APayload.Strings['type']);
@@ -5338,7 +5338,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.SelApply(APayload: TJSONObject; const AType: string);
+procedure TTyCustomAdvanceChart.SelApply(APayload: TJSONObject; const AType: string);
 var
   t: string;
   series, inner: TTyIntegerArray;
@@ -5397,7 +5397,7 @@ begin
   if FStDirty then InvalidateFrame;
 end;
 
-procedure TTyAdvanceChart.SelPublish(APayload: TJSONObject; const AOwnEvent: string);
+procedure TTyCustomAdvanceChart.SelPublish(APayload: TJSONObject; const AOwnEvent: string);
 var
   t, lt, sel, selMap, nm: string;
   inner: TTyIntegerArray;
@@ -5508,7 +5508,7 @@ end;
   series' view enters / leaves emphasis on the queried items (all of them
   when none) with highlightKey's bit -- a line's one-point highlight on the
   symbol PATH, with the polyline (LineView.ts:937-1026). [Batch 90] }
-procedure TTyAdvanceChart.DoHighDownAction(APayload: TJSONObject; ABatchItem: Boolean);
+procedure TTyCustomAdvanceChart.DoHighDownAction(APayload: TJSONObject; ABatchItem: Boolean);
 var
   t, key: string;
   series, inner, kept: TTyIntegerArray;
@@ -5759,7 +5759,7 @@ end;
 { echarts.ts:2341-2357: the first element on the chain with a dataIndex --
   a data item, a label for its host -- dispatches unselect when it is
   selected, select otherwise, whatever selectedMode says }
-procedure TTyAdvanceChart.StClickSelect(const ATarget: TTyChartEventTarget);
+procedure TTyCustomAdvanceChart.StClickSelect(const ATarget: TTyChartEventTarget);
 var
   slot, s, inner: Integer;
   selected: Boolean;
@@ -5816,7 +5816,7 @@ begin
   DispatchAction(p);
 end;
 
-function TTyAdvanceChart.SelectedDataIndices(ASeriesIndex: Integer): TTyIntegerArray;
+function TTyCustomAdvanceChart.SelectedDataIndices(ASeriesIndex: Integer): TTyIntegerArray;
 var slot: Integer;
 begin
   Result := nil;
@@ -5827,7 +5827,7 @@ begin
   Result := TySelIndices(FSel[ASeriesIndex], SelData(slot));
 end;
 
-function TTyAdvanceChart.SelectedMapText(ASeriesIndex: Integer): string;
+function TTyCustomAdvanceChart.SelectedMapText(ASeriesIndex: Integer): string;
 var slot: Integer;
 begin
   Result := 'null';
@@ -5837,7 +5837,7 @@ begin
   Result := TySelMapJson(FSel[ASeriesIndex]);
 end;
 
-function TTyAdvanceChart.TargetOfElement(AIndex: Integer): TTyChartEventTarget;
+function TTyCustomAdvanceChart.TargetOfElement(AIndex: Integer): TTyChartEventTarget;
 var d: TTyChartDatumRef;
 begin
   d := FPaintList.Element(AIndex).Datum;
@@ -5849,7 +5849,7 @@ begin
   if d.DataIndex >= 0 then Result.HdKind := 1 else Result.HdKind := 2;
 end;
 
-function TTyAdvanceChart.ItemStates(ASeriesIndex, ADataIndex: Integer;
+function TTyCustomAdvanceChart.ItemStates(ASeriesIndex, ADataIndex: Integer;
   out AItem: TTyStItem): Boolean;
 var item: PTyStItem;
 begin
@@ -5859,7 +5859,7 @@ begin
   if Result then AItem := item^;
 end;
 
-function TTyAdvanceChart.PeerStates(ASeriesIndex, ADataIndex: Integer;
+function TTyCustomAdvanceChart.PeerStates(ASeriesIndex, ADataIndex: Integer;
   out AItem: TTyStItem): Boolean;
 var item: PTyStItem;
 begin
@@ -5869,7 +5869,7 @@ begin
   if Result then AItem := item^;
 end;
 
-function TTyAdvanceChart.MarkerStates(ASeriesIndex: Integer; const APart: string;
+function TTyCustomAdvanceChart.MarkerStates(ASeriesIndex: Integer; const APart: string;
   out AEl: TTyStElement; out AListIndex: Integer): Boolean;
 var k: Integer;
 begin
@@ -5886,7 +5886,7 @@ begin
     end;
 end;
 
-function TTyAdvanceChart.SankeyEdgeStates(ASeriesIndex, AEdge: Integer;
+function TTyCustomAdvanceChart.SankeyEdgeStates(ASeriesIndex, AEdge: Integer;
   out AItem: TTyStItem): Boolean;
 begin
   AItem := Default(TTyStItem);
@@ -5896,14 +5896,14 @@ begin
   if Result then AItem := FSt[ASeriesIndex].EdgeRows[AEdge];
 end;
 
-function TTyAdvanceChart.GraphForceState(ASeriesIndex: Integer): TTyGraphForceState;
+function TTyCustomAdvanceChart.GraphForceState(ASeriesIndex: Integer): TTyGraphForceState;
 begin
   Result := Default(TTyGraphForceState);
   if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FGraphForce)) then
     Result := FGraphForce[ASeriesIndex];
 end;
 
-function TTyAdvanceChart.LineStates(ASeriesIndex: Integer; out ARun,
+function TTyCustomAdvanceChart.LineStates(ASeriesIndex: Integer; out ARun,
   AArea: TTyStItem): Boolean;
 begin
   ARun := Default(TTyStItem);
@@ -5917,7 +5917,7 @@ end;
 
 { a tree row's emphasis: the series', `leaves` over it for a leaf-modelled
   row, the item over both }
-function TTyAdvanceChart.TreeEmphasisOf(ASlot, ARow: Integer): TTyChartEmphasisSpec;
+function TTyCustomAdvanceChart.TreeEmphasisOf(ASlot, ARow: Integer): TTyChartEmphasisSpec;
 var ser, lv: TJSONData;
 begin
   Result := TyChartEmphasisDefault;
@@ -5938,7 +5938,7 @@ end;
 
 { `emphasis.focus` along item -> leaves -> series, as the word it is: the
   tree reads three more than any other series }
-function TTyAdvanceChart.TreeFocusOf(ASlot, ARow: Integer): string;
+function TTyCustomAdvanceChart.TreeFocusOf(ASlot, ARow: Integer): string;
 var
   ser, d: TJSONData;
   k: Integer;
@@ -5966,7 +5966,7 @@ begin
 end;
 
 
-function TTyAdvanceChart.GraphEmphasisOf(ASlot: Integer; AIsEdge: Boolean;
+function TTyCustomAdvanceChart.GraphEmphasisOf(ASlot: Integer; AIsEdge: Boolean;
   AIndex: Integer): TTyChartEmphasisSpec;
 var
   ser: TJSONData;
@@ -6013,7 +6013,7 @@ begin
     Result := TyChartMergeEmphasis(Result, TyChartReadEmphasis(arr.Items[raw]));
 end;
 
-function TTyAdvanceChart.EmphasiseElement(AIndex: Integer; APPI: Integer;
+function TTyCustomAdvanceChart.EmphasiseElement(AIndex: Integer; APPI: Integer;
   out AElement: TTyChartElement): Boolean;
 var
   spec: TTyChartEmphasisSpec;
@@ -6099,7 +6099,7 @@ begin
   Result := True;
 end;
 
-procedure TTyAdvanceChart.PaintEmphasis(APainter: TTyPainter; APPI: Integer;
+procedure TTyCustomAdvanceChart.PaintEmphasis(APainter: TTyPainter; APPI: Integer;
   const AHits: TTyAxisHitArray);
 var
   list: TTyPaintList;

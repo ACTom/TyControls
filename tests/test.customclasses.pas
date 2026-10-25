@@ -69,7 +69,7 @@ const
     + 'fresh-streams.txt';
 
   { The classes not split, each with its reason. }
-  CNotSplit: array[0..17] of string = (
+  CNotSplit: array[0..16] of string = (
     'TTyForm',              // designer base classes, the TForm role (plan Q5)
     'TTyDialog',            // same
     'TTyPopupMenu',         // LCL does not split TPopupMenu (menus.pp:465)
@@ -88,10 +88,7 @@ const
     'TTySavePreviewDialog',
     { already TTyCustomToolWindowManager + final; the final carries the implementation for
       unit dependencies (plan Q4) }
-    'TTyToolWindowManager',
-    { split after feat/advancechart merged, with Calendar and DateTimePicker (plan appendix B);
-      left for when the chart stops moving }
-    'TTyAdvanceChart');
+    'TTyToolWindowManager');
 
   { Registered with RegisterClass only: not on the palette, but streamed in .lfm files. }
   CStreamOnly: array[0..0] of string = ('TTyScrollContent');
@@ -1065,8 +1062,8 @@ end;
   Through a host form, as in G9 (FreshStreamBody), with clock values pinned and only the values
   read off the machine or the locale masked (CMachineValues). Sizes are measured on Windows,
   as G6's are. The classes this plan does not split
-  (CNotSplit) stay out: the forms cannot sit on a form, and the AdvChart-branch classes are
-  still being changed elsewhere.
+  (CNotSplit) stay out: the forms cannot sit on a form. The calendar, the date-time picker
+  and the chart joined later, each with its own section written by its split.
 
   Rewrite with TY_WRITE_FRESH_STREAMS=1 only when a change to what a form file says is the
   point of the commit (or a new class is registered); the diff of the fixture is then the
@@ -1230,6 +1227,8 @@ initialization
     'TTyProgressDialog', 'TTyAboutDialog', 'TTyIconBrowserDialog',
     // after the AdvChart merge (plan appendix B)
     'TTyCalendar', 'TTyDateTimePicker',
+    // the chart, once its fourth round had merged (2026-10-26)
+    'TTyAdvanceChart',
     // DB
     'TTyDBEdit', 'TTyDBMaskEdit', 'TTyDBMemo', 'TTyDBText', 'TTyDBNumericEdit', 'TTyDBCurrencyEdit',
     'TTyDBSpinEdit', 'TTyDBFloatSpinEdit', 'TTyDBCheckBox', 'TTyDBToggleSwitch', 'TTyDBRadioGroup',

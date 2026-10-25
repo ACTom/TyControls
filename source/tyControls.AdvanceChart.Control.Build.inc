@@ -50,7 +50,7 @@ end;
 
 { ==================== the pipeline ==================== }
 
-procedure TTyAdvanceChart.Rebuild;
+procedure TTyCustomAdvanceChart.Rebuild;
 var prev: TComponent; prevRes: TTyChartImageUrlResolver;
 begin
   prev := TyChartImageScopeEnter(Owner);
@@ -63,7 +63,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.RebuildBody;
+procedure TTyCustomAdvanceChart.RebuildBody;
 var
   d: TJSONData;
   lnRaws: TTyLinesRawArray;
@@ -650,7 +650,7 @@ end;
   item style task only met the rows in view. The palette is the series' own
   `color` / `colorLayer`, else the chart's, both over the shared scope, asked
   with the RAW count. }
-procedure TTyAdvanceChart.SolveDatumPalette;
+procedure TTyCustomAdvanceChart.SolveDatumPalette;
 type
   TKeyedScope = record
     Key: string;
@@ -747,7 +747,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.RawItemNode(ASlot, ARaw: Integer): TJSONObject;
+function TTyCustomAdvanceChart.RawItemNode(ASlot, ARaw: Integer): TJSONObject;
 var d: TJSONArray;
 begin
   Result := nil;
@@ -757,7 +757,7 @@ begin
   if d.Items[ARaw] is TJSONObject then Result := TJSONObject(d.Items[ARaw]);
 end;
 
-function TTyAdvanceChart.RawItemArray(ASlot: Integer): TJSONArray;
+function TTyCustomAdvanceChart.RawItemArray(ASlot: Integer): TJSONArray;
 var d: TJSONData;
 begin
   Result := nil;
@@ -779,7 +779,7 @@ begin
   if d is TJSONArray then Result := TJSONArray(d);
 end;
 
-function TTyAdvanceChart.RowObjectFill(ASlot, ARaw: Integer;
+function TTyCustomAdvanceChart.RowObjectFill(ASlot, ARaw: Integer;
   out AColor: TTyOptColor): Boolean;
 var st: TTyOptStyle;
 begin
@@ -790,7 +790,7 @@ begin
   if Result then AColor := st.Color;
 end;
 
-function TTyAdvanceChart.DatumObjectFill(ASlot, ARaw: Integer): TTyChartObjFill;
+function TTyCustomAdvanceChart.DatumObjectFill(ASlot, ARaw: Integer): TTyChartObjFill;
 var
   item: TJSONObject;
   d: TJSONData;
@@ -823,7 +823,7 @@ begin
   Result := SeriesObjectFill(ASlot);
 end;
 
-function TTyAdvanceChart.SeriesObjectFill(ASlot: Integer): TTyChartObjFill;
+function TTyCustomAdvanceChart.SeriesObjectFill(ASlot: Integer): TTyChartObjFill;
 var
   d: TJSONData;
   st: TTyOptStyle;
@@ -842,7 +842,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.SeriesRowFills(ASlot: Integer): TTyRowFillArray;
+function TTyCustomAdvanceChart.SeriesRowFills(ASlot: Integer): TTyRowFillArray;
 var
   k, n: Integer;
   oc: TTyOptColor;
@@ -922,7 +922,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.SolveSampling;
+procedure TTyCustomAdvanceChart.SolveSampling;
 var
   i: Integer;
   d: TJSONData;
@@ -956,7 +956,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.WeakKeep(ARawIndex: Integer): Boolean;
+function TTyCustomAdvanceChart.WeakKeep(ARawIndex: Integer): Boolean;
 var
   k: Integer;
   v: Double;
@@ -981,7 +981,7 @@ begin
   Result := hasValue and leftOut and rightOut;
 end;
 
-procedure TTyAdvanceChart.Relayout(APainter: TTyPainter; const ARect: TTyRectF;
+procedure TTyCustomAdvanceChart.Relayout(APainter: TTyPainter; const ARect: TTyRectF;
   APPI: Integer; const AMeasurer: ITyTextMeasurer);
 var
   txt: TTyAxisTextStyle;
@@ -1194,7 +1194,7 @@ end;
 
 { ==================== axis breaks [Batch 132] ==================== }
 
-function TTyAdvanceChart.BreakAxisOf(AAxisKey: Integer; out AGrid: TTyGridBuild): TTyAxis;
+function TTyCustomAdvanceChart.BreakAxisOf(AAxisKey: Integer; out AGrid: TTyGridBuild): TTyAxis;
 var g, a: Integer;
 begin
   Result := nil;
@@ -1218,7 +1218,7 @@ end;
 
 { zrender's hit test of a break group: the polygon's fill, or within half
   the strokeContainThreshold (5) of either polyline -- they have no fill }
-function TTyAdvanceChart.BreakAreaAt(AX, AY: Integer; out AAxisKey, AArea: Integer): Boolean;
+function TTyCustomAdvanceChart.BreakAreaAt(AX, AY: Integer; out AAxisKey, AArea: Integer): Boolean;
 var
   g, a, q, pass: Integer;
   gb: TTyGridBuild;
@@ -1324,7 +1324,7 @@ begin
     end;
 end;
 
-procedure TTyAdvanceChart.BreakAreaClickAt(AAxisKey, AArea: Integer);
+procedure TTyCustomAdvanceChart.BreakAreaClickAt(AAxisKey, AArea: Integer);
 var
   gb: TTyGridBuild;
   ax: TTyAxis;
@@ -1340,7 +1340,7 @@ begin
   BreakExpandClick(AAxisKey, spec^.BreakAreas[AArea].BreakIndex);
 end;
 
-procedure TTyAdvanceChart.BreakExpandClick(AAxisKey, ABreakIndex: Integer);
+procedure TTyCustomAdvanceChart.BreakExpandClick(AAxisKey, ABreakIndex: Integer);
 var
   gb: TTyGridBuild;
   ax: TTyAxis;
@@ -1356,7 +1356,7 @@ begin
     + IntToStr(ax.ComponentIndex) + '}');
 end;
 
-procedure TTyAdvanceChart.DoAxisBreakAction(APayload: TJSONObject);
+procedure TTyCustomAdvanceChart.DoAxisBreakAction(APayload: TJSONObject);
 var
   t, evBreaks, payloadJson: string;
   m: Integer;
@@ -1524,7 +1524,7 @@ begin
     + '","fromActionPayload":' + payloadJson + ',"escapeConnect":true}');
 end;
 
-procedure TTyAdvanceChart.PaintBreakAreas(APainter: TTyPainter);
+procedure TTyCustomAdvanceChart.PaintBreakAreas(APainter: TTyPainter);
 var
   pass, g, a, si: Integer;
   gb: TTyGridBuild;
@@ -1663,7 +1663,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.SolveSeriesColors;
+procedure TTyCustomAdvanceChart.SolveSeriesColors;
 
   { An unnamed series is NOT nameless as far as the palette is concerned.
     Upstream builds `series` + NUL + index precisely so two unnamed series
@@ -1844,7 +1844,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.MarkerLayout(ASeriesIndex: Integer;
+function TTyCustomAdvanceChart.MarkerLayout(ASeriesIndex: Integer;
   AKind: TTyMarkerKind): TTyMkBlock;
 var slot: Integer;
 begin
@@ -1855,7 +1855,7 @@ begin
   Result := FMarkers[slot].Blocks[AKind];
 end;
 
-procedure TTyAdvanceChart.SolveMarkers(APPI: Integer);
+procedure TTyCustomAdvanceChart.SolveMarkers(APPI: Integer);
 var
   i, k: Integer;
   b: TTySeriesBinding;
@@ -2006,7 +2006,7 @@ end;
 
 { upstream's series style colour as a css string: what the author wrote in
   itemStyle.color, candlestick's own default, else the palette's }
-function TTyAdvanceChart.MarkerSeriesColorCss(ASlot: Integer): string;
+function TTyCustomAdvanceChart.MarkerSeriesColorCss(ASlot: Integer): string;
 var
   node, d: TJSONData;
   c: TTyColor;
@@ -2033,7 +2033,7 @@ end;
 
 { the author's series colour when it is not a string: a gradient, used by a
   markArea as it is }
-function TTyAdvanceChart.MarkerSeriesColorData(ASlot: Integer): TJSONData;
+function TTyCustomAdvanceChart.MarkerSeriesColorData(ASlot: Integer): TJSONData;
 var node, d: TJSONData;
 begin
   Result := nil;
@@ -2049,7 +2049,7 @@ end;
 { THE GROUND upstream's marker label halo is made of: the option's
   backgroundColor, else 'transparent' -- and dark by the option's darkMode
   when it says, else by zrender's own luminance test }
-procedure TTyAdvanceChart.MarkerGround(out ABackground: string; out AIsDark: Boolean);
+procedure TTyCustomAdvanceChart.MarkerGround(out ABackground: string; out AIsDark: Boolean);
 var
   d: TJSONData;
 begin
@@ -2065,7 +2065,7 @@ begin
   else AIsDark := TyMkGroundIsDark(ABackground);
 end;
 
-function TTyAdvanceChart.MarkLinePictures(ASeriesIndex: Integer): TTyMkLinePicArray;
+function TTyCustomAdvanceChart.MarkLinePictures(ASeriesIndex: Integer): TTyMkLinePicArray;
 var slot: Integer;
 begin
   Result := nil;
@@ -2074,7 +2074,7 @@ begin
   Result := FMarkLinePics[slot];
 end;
 
-function TTyAdvanceChart.MarkPointPictures(ASeriesIndex: Integer): TTyMkPointPicArray;
+function TTyCustomAdvanceChart.MarkPointPictures(ASeriesIndex: Integer): TTyMkPointPicArray;
 var slot: Integer;
 begin
   Result := nil;
@@ -2083,7 +2083,7 @@ begin
   Result := FMarkPointPics[slot];
 end;
 
-function TTyAdvanceChart.DecalOfSeries(ASeriesIndex: Integer): TTyChartDecal;
+function TTyCustomAdvanceChart.DecalOfSeries(ASeriesIndex: Integer): TTyChartDecal;
 var slot: Integer;
 begin
   Result := Default(TTyChartDecal);
@@ -2091,12 +2091,12 @@ begin
   if (slot >= 0) and (slot <= High(FSeriesDecals)) then Result := FSeriesDecals[slot];
 end;
 
-function TTyAdvanceChart.DecalOfRow(ASeriesIndex, ARawIndex: Integer): TTyChartDecal;
+function TTyCustomAdvanceChart.DecalOfRow(ASeriesIndex, ARawIndex: Integer): TTyChartDecal;
 begin
   Result := RowDecalOf(SlotOfSeries(ASeriesIndex), ARawIndex);
 end;
 
-function TTyAdvanceChart.RowDecalOf(ASlot, ARaw: Integer): TTyChartDecal;
+function TTyCustomAdvanceChart.RowDecalOf(ASlot, ARaw: Integer): TTyChartDecal;
 begin
   Result := Default(TTyChartDecal);
   if (ASlot < 0) or (ASlot > High(FSeriesDecals)) then Exit;
@@ -2106,7 +2106,7 @@ begin
     Result := FRowDecals[ASlot][ARaw];
 end;
 
-function TTyAdvanceChart.RowDecalJson(ASlot, ARaw: Integer): TJSONData;
+function TTyCustomAdvanceChart.RowDecalJson(ASlot, ARaw: Integer): TJSONData;
 var
   r: TTyDecalRaw;
   k: TTyDecalKey;
@@ -2124,13 +2124,13 @@ begin
       TJSONObject(Result).Add(TyDecalKeyNames[k], r.Keys[k].Clone);
 end;
 
-function TTyAdvanceChart.DecalGround: TTyChartColor;
+function TTyCustomAdvanceChart.DecalGround: TTyChartColor;
 begin
   Result := TTyChartColor(ActiveController.Model.ResolveStyle(TyDecalSkin, '',
     []).Background.Color);
 end;
 
-function TTyAdvanceChart.RawRowDecals(ASlot: Integer): TTyChartDecalArray;
+function TTyCustomAdvanceChart.RawRowDecals(ASlot: Integer): TTyChartDecalArray;
 var k, n: Integer;
 begin
   Result := nil;
@@ -2140,7 +2140,7 @@ begin
   for k := 0 to n - 1 do Result[k] := RowDecalOf(ASlot, k);
 end;
 
-function TTyAdvanceChart.AriaDecalPalette(out APal: TJSONData;
+function TTyCustomAdvanceChart.AriaDecalPalette(out APal: TJSONData;
   out APalN: Integer): Boolean;
 var aria, d: TJSONData;
 begin
@@ -2165,7 +2165,7 @@ end;
   ancestor's name, or that ancestor's data index -- the root asks for its
   own, the series' name as written -- and setVisual('decal') puts the
   palette's object in place of the node's, the node's own not merged. }
-function TTyAdvanceChart.TreeNodeDecals(ASlot: Integer; const AHier: TTyHierarchy;
+function TTyCustomAdvanceChart.TreeNodeDecals(ASlot: Integer; const AHier: TTyHierarchy;
   const AOrder: TTyIntegerArray): TTyChartDecalArray;
 var
   n, r, k, cur, pick, palN: Integer;
@@ -2225,7 +2225,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.AriaEnabled: Boolean;
+function TTyCustomAdvanceChart.AriaEnabled: Boolean;
 var aria: TJSONData;
 begin
   Result := False;
@@ -2247,7 +2247,7 @@ end;
   palette's decal goes under the written one key by key. decalVisual then
   skips the series the legend filtered. A decal written as a string throws
   upstream (`dirty` set on a primitive): here it is none. }
-procedure TTyAdvanceChart.SolveDecals;
+procedure TTyCustomAdvanceChart.SolveDecals;
 type
   TTypeScope = record
     Key: string;
@@ -2409,7 +2409,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.GetAriaDescription: string;
+function TTyCustomAdvanceChart.GetAriaDescription: string;
 var
   aria, d: TJSONData;
   facts: TTyAriaFacts;
@@ -2432,7 +2432,7 @@ begin
   Result := TyAriaLabel(loc, facts);
 end;
 
-procedure TTyAdvanceChart.AriaGather(AAria: TJSONObject; out AFacts: TTyAriaFacts);
+procedure TTyCustomAdvanceChart.AriaGather(AAria: TJSONObject; out AFacts: TTyAriaFacts);
 var
   d, rd, ex: TJSONData;
   facts: TTyAriaFacts;
@@ -2550,12 +2550,12 @@ begin
   AFacts := facts;
 end;
 
-function TTyAdvanceChart.PaletteSeriesColour(ASeriesIndex: Integer): TTyChartColor;
+function TTyCustomAdvanceChart.PaletteSeriesColour(ASeriesIndex: Integer): TTyChartColor;
 begin
   Result := TTyChartColor(SeriesColor(ASeriesIndex));
 end;
 
-function TTyAdvanceChart.PaletteDatumColour(ASeriesIndex,
+function TTyCustomAdvanceChart.PaletteDatumColour(ASeriesIndex,
   ARawIndex: Integer): TTyChartColor;
 var
   slot, view: Integer;
@@ -2582,7 +2582,7 @@ begin
   else Result := v.Fill;
 end;
 
-function TTyAdvanceChart.MarkAreaPictures(ASeriesIndex: Integer): TTyMkAreaPicArray;
+function TTyCustomAdvanceChart.MarkAreaPictures(ASeriesIndex: Integer): TTyMkAreaPicArray;
 var slot: Integer;
 begin
   Result := nil;
@@ -2591,7 +2591,7 @@ begin
   Result := FMarkAreaPics[slot];
 end;
 
-function TTyAdvanceChart.BuildMarkers(const AMeasurer: ITyTextMeasurer;
+function TTyCustomAdvanceChart.BuildMarkers(const AMeasurer: ITyTextMeasurer;
   AList: TTyPaintList): Integer;
 var
   i, n: Integer;
@@ -2641,7 +2641,7 @@ begin
   Inc(Result, n);
 end;
 
-function TTyAdvanceChart.SeriesStore(ASeriesIndex: Integer): TTyDataStore;
+function TTyCustomAdvanceChart.SeriesStore(ASeriesIndex: Integer): TTyDataStore;
 var k: Integer;
 begin
   Result := nil;
@@ -2650,7 +2650,7 @@ begin
       Exit(FStores[k]);
 end;
 
-procedure TTyAdvanceChart.ApplyOptStyle(var AVisual: TTySeriesVisual;
+procedure TTyCustomAdvanceChart.ApplyOptStyle(var AVisual: TTySeriesVisual;
   ASlot: Integer);
 var
   node: TJSONObject;
@@ -2737,7 +2737,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.ThemeRampColor(ASlot: Integer): TTyColor;
+function TTyCustomAdvanceChart.ThemeRampColor(ASlot: Integer): TTyColor;
 var
   st: TTyStyleSet;
 begin
@@ -2762,7 +2762,7 @@ begin
   Result := st.TextColor;
 end;
 
-function TTyAdvanceChart.PickColor(const APick: TTyPalettePick): TTyColor;
+function TTyCustomAdvanceChart.PickColor(const APick: TTyPalettePick): TTyColor;
 begin
   case APick.Kind of
     ppkColor: Result := TTyColor(APick.Color);
@@ -2773,7 +2773,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.SeriesPaletteColor(ASeriesIndex: Integer): TTyColor;
+function TTyCustomAdvanceChart.SeriesPaletteColor(ASeriesIndex: Integer): TTyColor;
 begin
   if (ASeriesIndex >= 0) and (ASeriesIndex <= High(FSeriesPickAsked))
     and FSeriesPickAsked[ASeriesIndex] then
@@ -2781,7 +2781,7 @@ begin
   Result := ThemeRampColor(ASeriesIndex);
 end;
 
-function TTyAdvanceChart.SeriesColor(ASeriesIndex: Integer): TTyColor;
+function TTyCustomAdvanceChart.SeriesColor(ASeriesIndex: Integer): TTyColor;
 begin
   { THE AUTHOR'S PALETTE FIRST. `color: [...]` or an authored
     `itemStyle.color` is the author speaking about their own chart, and a
@@ -2801,7 +2801,7 @@ begin
   Result := ThemeRampColor(ASeriesIndex);
 end;
 
-function TTyAdvanceChart.TitleFont(const AKey: string): TTyTitleFont;
+function TTyCustomAdvanceChart.TitleFont(const AKey: string): TTyTitleFont;
 var st: TTyStyleSet;
 begin
   st := ActiveController.Model.ResolveStyle(AKey, '', []);
@@ -2815,7 +2815,7 @@ end;
 { A TITLE LINE'S FONT: the theme's, the root textStyle over it, the title's
   own textStyle or subtextStyle over that -- upstream's getFont order, and
   the colour free-standing text takes [Batch 83] }
-function TTyAdvanceChart.TitleFontOf(AIndex: Integer; const AKey,
+function TTyCustomAdvanceChart.TitleFontOf(AIndex: Integer; const AKey,
   AStyleKey: string; APick: TTyTextPick): TTyTitleFont;
 var
   node, st, d: TJSONData;
@@ -2842,7 +2842,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.SolveTitles(const AMeasurer: ITyTextMeasurer;
+procedure TTyCustomAdvanceChart.SolveTitles(const AMeasurer: ITyTextMeasurer;
   APPI: Integer);
 var
   i, n, line: Integer;
@@ -2944,32 +2944,32 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.TitleCount: Integer;
+function TTyCustomAdvanceChart.TitleCount: Integer;
 begin
   Result := Length(FTitles);
 end;
 
-function TTyAdvanceChart.TitleLayoutOf(AIndex: Integer): TTyTitleLayout;
+function TTyCustomAdvanceChart.TitleLayoutOf(AIndex: Integer): TTyTitleLayout;
 begin
   Result := Default(TTyTitleLayout);
   if (AIndex >= 0) and (AIndex <= High(FTitles)) then Result := FTitles[AIndex];
 end;
 
-function TTyAdvanceChart.TitleFontUsed(AIndex, ALine: Integer): TTyTitleFont;
+function TTyCustomAdvanceChart.TitleFontUsed(AIndex, ALine: Integer): TTyTitleFont;
 begin
   Result := Default(TTyTitleFont);
   if (AIndex >= 0) and (AIndex <= High(FTitleFonts)) and (ALine in [0, 1]) then
     Result := FTitleFonts[AIndex][ALine];
 end;
 
-function TTyAdvanceChart.TitleRt(AIndex, ALine: Integer): TTyRtDrawn;
+function TTyCustomAdvanceChart.TitleRt(AIndex, ALine: Integer): TTyRtDrawn;
 begin
   Result := Default(TTyRtDrawn);
   if (AIndex >= 0) and (AIndex <= High(FTitleRt)) and (ALine in [0, 1]) then
     Result := FTitleRt[AIndex][ALine];
 end;
 
-procedure TTyAdvanceChart.PaintTitles(APainter: TTyPainter);
+procedure TTyCustomAdvanceChart.PaintTitles(APainter: TTyPainter);
 var
   i: Integer;
   st, subSt: TTyStyleSet;
@@ -3058,7 +3058,7 @@ begin
 end;
 
 
-function TTyAdvanceChart.SeriesNameOf(ASlot: Integer): string;
+function TTyCustomAdvanceChart.SeriesNameOf(ASlot: Integer): string;
 var
   d: TJSONData;
   node: TJSONObject;
@@ -3105,7 +3105,7 @@ end;
   1 of each item and y element 0, exactly as it would pick table columns.
   Only the plain coordinate columns -- a multi-value series places its own,
   and a row-index column reads no element at all. }
-procedure TTyAdvanceChart.SeriesDataEncode(ASlot: Integer;
+procedure TTyCustomAdvanceChart.SeriesDataEncode(ASlot: Integer;
   var ADims: TTySeriesDimArray; out AEnc: TTySeriesEncode);
 var
   coord: TTyCoordDimArray;
@@ -3143,7 +3143,7 @@ begin
       ADims[k].SourceSlot := AEnc.Columns[k] + 1;
 end;
 
-function TTyAdvanceChart.SeriesModelName(ASeriesIndex: Integer): string;
+function TTyCustomAdvanceChart.SeriesModelName(ASeriesIndex: Integer): string;
 var
   d: TJSONData;
   node: TJSONObject;
@@ -3161,7 +3161,7 @@ begin
   if Result = '' then Result := TyChartSeriesDefaultName(ASeriesIndex);
 end;
 
-procedure TTyAdvanceChart.MultiValueDims(const ABinding: TTySeriesBinding;
+procedure TTyCustomAdvanceChart.MultiValueDims(const ABinding: TTySeriesBinding;
   var ADims: TTySeriesDimArray);
 var
   info: TTySeriesTypeInfo;
@@ -3241,7 +3241,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.AxisDimOf(AAxis: TTyAxis): string;
+function TTyCustomAdvanceChart.AxisDimOf(AAxis: TTyAxis): string;
 begin
   if AAxis = nil then Result := '' else Result := AAxis.Dim;
 end;
@@ -3280,7 +3280,7 @@ begin
 end;
 
 { each data item's own itemStyle.borderRadius, by raw row }
-procedure TTyAdvanceChart.HeatmapItemRadii(ASeriesIndex, APPI: Integer;
+procedure TTyCustomAdvanceChart.HeatmapItemRadii(ASeriesIndex, APPI: Integer;
   out ARadii: TTyCornerRadiiArray; out AHas: TTyBoolArray);
 var
   node, d, it: TJSONData;
@@ -3303,7 +3303,7 @@ begin
 end;
 
 { Each object data item's own symbol options over the series' spec. }
-procedure TTyAdvanceChart.SymbolItems(ASeriesIndex: Integer;
+procedure TTyCustomAdvanceChart.SymbolItems(ASeriesIndex: Integer;
   const ABase: TTySymbolSpec; out ASpecs: TTySymbolSpecArray; out AHas: TTyBoolArray);
 var
   node, d, it: TJSONData;
@@ -3345,7 +3345,7 @@ end;
   params: the item's getDataParams (TyLabelParams: the series' name and
   index, the row and its raw index, the name, the raw item -- rawValue).
   A handler nobody registered answers undefined: the series' value stands. }
-function TTyAdvanceChart.ItemCallbacks(ASlot: Integer; AOnlyRow: Integer;
+function TTyCustomAdvanceChart.ItemCallbacks(ASlot: Integer; AOnlyRow: Integer;
   ASymColour: TTyChartColor): TTyItemCallbacks;
 const
   cSym: array[0..3] of string = ('symbol', 'symbolSize', 'symbolRotate',
@@ -3462,14 +3462,14 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.FreeItemCbs;
+procedure TTyCustomAdvanceChart.FreeItemCbs;
 var i: Integer;
 begin
   for i := 0 to High(FItemCbs) do FreeAndNil(FItemCbs[i]);
   FItemCbs := nil;
 end;
 
-function TTyAdvanceChart.ItemCbOf(ASlot: Integer): TTyItemCallbacks;
+function TTyCustomAdvanceChart.ItemCbOf(ASlot: Integer): TTyItemCallbacks;
 begin
   Result := nil;
   if (ASlot >= 0) and (ASlot <= High(FItemCbs)) then Result := FItemCbs[ASlot];
@@ -3477,7 +3477,7 @@ end;
 
 { the series style's colour a symbol callback is handed where no colour
   callback answered: the palette's, or the option's itemStyle.color }
-procedure TTyAdvanceChart.SolveItemCallbacks;
+procedure TTyCustomAdvanceChart.SolveItemCallbacks;
 var
   i: Integer;
   v: TTySeriesVisual;
@@ -3498,7 +3498,7 @@ end;
   builders: the symbol spec of a scatter's, an effectScatter's and a line's
   items (SymItems, the item's own keys over the answers) [R2-J3: a line's
   too], and the colour callback's fill (CbFill: RowVisualEarly) }
-procedure TTyAdvanceChart.VisualCallbacks(ASlot: Integer;
+procedure TTyCustomAdvanceChart.VisualCallbacks(ASlot: Integer;
   var AVisual: TTySeriesVisual; AOnlyRow: Integer);
 var
   cb: TTyItemCallbacks;
@@ -3558,7 +3558,7 @@ end;
 
 { AN effectScatter's rippleEffect and showEffectOn, upstream's defaults
   under them: ripples on render, three of them, filled. [Batch 71] }
-procedure TTyAdvanceChart.RippleOf(ASlot: Integer; var AVisual: TTySeriesVisual);
+procedure TTyCustomAdvanceChart.RippleOf(ASlot: Integer; var AVisual: TTySeriesVisual);
 var
   node, re, d: TJSONData;
   c: TTyChartColor;
@@ -3594,7 +3594,7 @@ begin
 end;
 
 { a heatmap's itemStyle.borderRadius: a number, or zrender's array forms }
-function TTyAdvanceChart.HeatmapRadii(ASeriesIndex, APPI: Integer): TTyCornerRadii;
+function TTyCustomAdvanceChart.HeatmapRadii(ASeriesIndex, APPI: Integer): TTyCornerRadii;
 var
   node, d: TJSONData;
   vals: array of Double;
@@ -3626,7 +3626,7 @@ begin
   for k := 0 to 3 do Result[k] := Result[k] * APPI / 96;
 end;
 
-function TTyAdvanceChart.BuildSeriesList(const AMeasurer: ITyTextMeasurer;
+function TTyCustomAdvanceChart.BuildSeriesList(const AMeasurer: ITyTextMeasurer;
   APPI: Integer): Integer;
 var
   list: TTyPaintList;
@@ -4300,7 +4300,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.BuildListTail(AList: TTyPaintList;
+function TTyCustomAdvanceChart.BuildListTail(AList: TTyPaintList;
   const AMeasurer: ITyTextMeasurer): Integer;
 var n: Integer;
 begin
@@ -4358,7 +4358,7 @@ end;
   incremental layer is drawn again, as after a build. Not where an update
   is still to be laid out or armed, an export runs, or the journal keeps
   an element of the end (a rewind would put an old one back). }
-function TTyAdvanceChart.ListTailRebuild: Boolean;
+function TTyCustomAdvanceChart.ListTailRebuild: Boolean;
 begin
   Result := False;
   if GListTailOff or (FPaintList = nil) or not FPaintListValid or FDirty
@@ -4380,17 +4380,17 @@ begin
   Result := True;
 end;
 
-procedure TTyAdvanceChart.ListTailRefresh;
+procedure TTyCustomAdvanceChart.ListTailRefresh;
 begin
   if not ListTailRebuild then DropStaticKeepList;
 end;
 
-procedure TTyAdvanceChart.FullUpdate;
+procedure TTyCustomAdvanceChart.FullUpdate;
 begin
   FullUpdateWith(TyAnimNoOverride, False);
 end;
 
-procedure TTyAdvanceChart.FullUpdateWith(const APayload: TTyAnimOverride;
+procedure TTyCustomAdvanceChart.FullUpdateWith(const APayload: TTyAnimOverride;
   AHasPayload: Boolean);
 var
   m: ITyTextMeasurer;
@@ -4463,7 +4463,7 @@ end;
 
 { ==================== [R2-I6] the parsed store kept between builds ==================== }
 
-function TTyAdvanceChart.StoreKeepSig(ASlot, ABranch, ADs: Integer;
+function TTyCustomAdvanceChart.StoreKeepSig(ASlot, ABranch, ADs: Integer;
   const ADims: TTySeriesDimArray; const AEnc: TTySeriesEncode): string;
 var k: Integer;
 
@@ -4491,7 +4491,7 @@ begin
     + IntToStr(AEnc.ItemName) + ';' + IntToStr(AEnc.SeriesName);
 end;
 
-procedure TTyAdvanceChart.StoreKeepPre(const ADims: TTySeriesDimArray;
+procedure TTyCustomAdvanceChart.StoreKeepPre(const ADims: TTySeriesDimArray;
   out APre: TTyIntegerArray);
 var k: Integer;
 begin
@@ -4521,13 +4521,13 @@ begin
   Result := True;
 end;
 
-procedure TTyAdvanceChart.StoreKeepBegin;
+procedure TTyCustomAdvanceChart.StoreKeepBegin;
 var i: Integer;
 begin
   for i := 0 to High(FStoreKeep) do FStoreKeep[i].Used := False;
 end;
 
-procedure TTyAdvanceChart.StoreKeepEnd;
+procedure TTyCustomAdvanceChart.StoreKeepEnd;
 var i: Integer;
 begin
   for i := 0 to High(FStoreKeep) do
@@ -4540,14 +4540,14 @@ begin
     SetLength(FStoreKeep, Length(FBindings));
 end;
 
-procedure TTyAdvanceChart.StoreKeepDrop;
+procedure TTyCustomAdvanceChart.StoreKeepDrop;
 var i: Integer;
 begin
   for i := 0 to High(FStoreKeep) do FreeAndNil(FStoreKeep[i].Store);
   FStoreKeep := nil;
 end;
 
-function TTyAdvanceChart.StoreKeepTake(ASlot: Integer; const ASig: string;
+function TTyCustomAdvanceChart.StoreKeepTake(ASlot: Integer; const ASig: string;
   const ADims: TTySeriesDimArray): Boolean;
 var
   e: ^TTyStoreKeep;
@@ -4597,7 +4597,7 @@ begin
   Result := True;
 end;
 
-procedure TTyAdvanceChart.StoreKeepPut(ASlot: Integer; const ASig: string;
+procedure TTyCustomAdvanceChart.StoreKeepPut(ASlot: Integer; const ASig: string;
   const ADims: TTySeriesDimArray; const APre: TTyIntegerArray);
 var
   e: TTyStoreKeep;

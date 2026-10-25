@@ -2,7 +2,7 @@
   filter, layout, paint and actions. Moved out of the unit only to keep it readable; what
   the control is and why it is built the way it is, see the unit header. }
 
-function TTyAdvanceChart.LegendDecalOf(ALegend: Integer; const AName: string;
+function TTyCustomAdvanceChart.LegendDecalOf(ALegend: Integer; const AName: string;
   const ASeries: TTyChartDecal): TTyChartDecal;
 var
   lg, d, own: TJSONData;
@@ -45,12 +45,12 @@ begin
   Result := TyDecalResolve(TyDecalRawOf(own), skin, DecalGround);
 end;
 
-function TTyAdvanceChart.LegendLayoutCount: Integer;
+function TTyCustomAdvanceChart.LegendLayoutCount: Integer;
 begin
   Result := Length(FLegends);
 end;
 
-function TTyAdvanceChart.LegendLayout(AIndex: Integer): TTyLegendLayout;
+function TTyCustomAdvanceChart.LegendLayout(AIndex: Integer): TTyLegendLayout;
 begin
   Result := Default(TTyLegendLayout);
   if (AIndex >= 0) and (AIndex <= High(FLegends)) then
@@ -76,7 +76,7 @@ end;
   produce is in it, and an entry that is NOT in it reads as switched off
   however `legend.selected` is written -- which is what greys out a
   `legend.data` entry naming a series nobody declared. }
-procedure TTyAdvanceChart.LegendNames(out APotential, AAvailable: TTyLegendNames);
+procedure TTyCustomAdvanceChart.LegendNames(out APotential, AAvailable: TTyLegendNames);
 var
   i, k, np, na: Integer;
   nm: string;
@@ -152,7 +152,7 @@ begin
   SetLength(AAvailable, na);
 end;
 
-function TTyAdvanceChart.SeriesSymbolWord(ASlot: Integer): string;
+function TTyCustomAdvanceChart.SeriesSymbolWord(ASlot: Integer): string;
 var
   d: TJSONData;
   node: TJSONObject;
@@ -167,7 +167,7 @@ begin
   if (d <> nil) and (d.JSONType = jtString) then Result := d.AsString;
 end;
 
-function TTyAdvanceChart.LegendSources(const AEntries: TTyLegendEntryArray;
+function TTyCustomAdvanceChart.LegendSources(const AEntries: TTyLegendEntryArray;
   ALegend: Integer): TTyLegendSourceArray;
 var
   i, j, k, si: Integer;
@@ -334,7 +334,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.SolveLegendData;
+procedure TTyCustomAdvanceChart.SolveLegendData;
 var
   i, n: Integer;
   potential, available: TTyLegendNames;
@@ -375,7 +375,7 @@ end;
 { A name is switched off when ANY legend says so -- legendFilter.ts:36-41.
   Nothing is switched off when there is no legend at all, which is why a
   chart without one is untouched by any of this. }
-function TTyAdvanceChart.LegendHides(const AName: string): Boolean;
+function TTyCustomAdvanceChart.LegendHides(const AName: string): Boolean;
 var i: Integer;
 begin
   Result := False;
@@ -384,14 +384,14 @@ begin
       Exit(True);
 end;
 
-function TTyAdvanceChart.KeepSlice(ARawIndex: Integer): Boolean;
+function TTyCustomAdvanceChart.KeepSlice(ARawIndex: Integer): Boolean;
 begin
   Result := True;
   if FFilterStore = nil then Exit;
   Result := not LegendHides(FFilterStore.GetNameByRaw(ARawIndex));
 end;
 
-function TTyAdvanceChart.KeepGraphNode(ARawIndex: Integer): Boolean;
+function TTyCustomAdvanceChart.KeepGraphNode(ARawIndex: Integer): Boolean;
 var
   v: TTyDataValue;
   i: Integer;
@@ -431,7 +431,7 @@ begin
       Exit(False);
 end;
 
-procedure TTyAdvanceChart.ApplyLegendFilter;
+procedure TTyCustomAdvanceChart.ApplyLegendFilter;
 var
   i, k: Integer;
   st: TTyDataStore;
@@ -513,7 +513,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.LegendFont: TTyLegendFont;
+function TTyCustomAdvanceChart.LegendFont: TTyLegendFont;
 var st: TTyStyleSet;
 begin
   st := ActiveController.Model.ResolveStyle('TyAdvChartLegend', '', []);
@@ -524,7 +524,7 @@ end;
 
 { ONE LEGEND'S FONT AND TEXT COLOUR: the theme's, the root textStyle over
   it, the legend's own textStyle over that [Batch 83] }
-procedure TTyAdvanceChart.LegendTextOf(AIndex: Integer; var AFont: TTyLegendFont;
+procedure TTyCustomAdvanceChart.LegendTextOf(AIndex: Integer; var AFont: TTyLegendFont;
   var AInk: TTyLegendInk);
 var
   node, st, d: TJSONData;
@@ -591,7 +591,7 @@ begin
     AInk.Text := col;
 end;
 
-function TTyAdvanceChart.LegendInk: TTyLegendInk;
+function TTyCustomAdvanceChart.LegendInk: TTyLegendInk;
 var model: TTyStyleModel;
 begin
   model := ActiveController.Model;
@@ -622,7 +622,7 @@ begin
       [tysNormal]).Background.Color);
 end;
 
-function TTyAdvanceChart.LegendDeco(AIndex: Integer;
+function TTyCustomAdvanceChart.LegendDeco(AIndex: Integer;
   const AMeasurer: ITyTextMeasurer): TTyLegendDeco;
 var
   model: TTyStyleModel;
@@ -725,7 +725,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.SolveLegends(const AMeasurer: ITyTextMeasurer;
+procedure TTyCustomAdvanceChart.SolveLegends(const AMeasurer: ITyTextMeasurer;
   APPI: Integer);
 var
   i: Integer;
@@ -756,7 +756,7 @@ begin
   LegAnimSync;
 end;
 
-function TTyAdvanceChart.BuildLegends(APPI: Integer;
+function TTyCustomAdvanceChart.BuildLegends(APPI: Integer;
   AList: TTyPaintList; const AMeasurer: ITyTextMeasurer): Integer;
 var
   i, hov, k: Integer;
@@ -804,14 +804,14 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.LegendSelectedText(AIndex: Integer): string;
+function TTyCustomAdvanceChart.LegendSelectedText(AIndex: Integer): string;
 begin
   Result := TyLegendSelectedJson(FOption, AIndex);
 end;
 
 { ==================== the legend's actions [Batch 93] ==================== }
 
-function TTyAdvanceChart.LegendQuery(APayload: TJSONObject): TTyIntegerArray;
+function TTyCustomAdvanceChart.LegendQuery(APayload: TJSONObject): TTyIntegerArray;
 var
   d, x: TJSONData;
   i, k, n, cnt: Integer;
@@ -898,7 +898,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.LegendSelectedMapInto(AIndex: Integer; AMap: TJSONObject);
+procedure TTyCustomAdvanceChart.LegendSelectedMapInto(AIndex: Integer; AMap: TJSONObject);
 var
   i, k: Integer;
   nm: string;
@@ -933,7 +933,7 @@ begin
   Result := Result + '}';
 end;
 
-procedure TTyAdvanceChart.DoLegendAction(APayload: TJSONObject);
+procedure TTyCustomAdvanceChart.DoLegendAction(APayload: TJSONObject);
 var
   ev, js: string;
 begin
@@ -943,7 +943,7 @@ begin
   EmitPayloadEvent(ev, js);
 end;
 
-function TTyAdvanceChart.LegendActionApply(APayload: TJSONObject;
+function TTyCustomAdvanceChart.LegendActionApply(APayload: TJSONObject;
   const AType: string; out AEvent: string): string;
 var
   t, ev, nm, nameJson, idx: string;
@@ -1042,7 +1042,7 @@ end;
 { every raw series whose legendHoverLink is falsy: the option's value, else
   the type's default -- true where a type's defaultOption says so, undefined
   (falsy) elsewhere (a heatmap, a sunburst, a treemap, a tree, a sankey) }
-function TTyAdvanceChart.LegendExcludeIds: string;
+function TTyCustomAdvanceChart.LegendExcludeIds: string;
 const
   cLinked: array[0..14] of string = ('bar', 'pictorialBar', 'line', 'scatter',
     'effectScatter', 'pie', 'funnel', 'gauge', 'graph', 'radar', 'candlestick',
@@ -1084,7 +1084,7 @@ begin
   Result := Result + ']';
 end;
 
-procedure TTyAdvanceChart.LegendHighDown(const ATarget: TTyChartEventTarget;
+procedure TTyCustomAdvanceChart.LegendHighDown(const ATarget: TTyChartEventTarget;
   const AType: string);
 var p: string;
 begin
@@ -1096,7 +1096,7 @@ begin
   DispatchAction(p + ',"excludeSeriesId":' + LegendExcludeIds + '}');
 end;
 
-procedure TTyAdvanceChart.LegendClick(const ATarget: TTyChartEventTarget);
+procedure TTyCustomAdvanceChart.LegendClick(const ATarget: TTyChartEventTarget);
 begin
   { downplay before unselect, highlight after select (LegendView.ts:709-724) }
   LegendHighDown(ATarget, 'downplay');
@@ -1105,7 +1105,7 @@ begin
   LegendHighDown(ATarget, 'highlight');
 end;
 
-procedure TTyAdvanceChart.LegendSelectorClick(const ATarget: TTyChartEventTarget);
+procedure TTyCustomAdvanceChart.LegendSelectorClick(const ATarget: TTyChartEventTarget);
 var k, b: Integer; p: string;
 begin
   k := ATarget.HdSeries;
@@ -1117,7 +1117,7 @@ begin
     + '"}');
 end;
 
-procedure TTyAdvanceChart.LegendPagerClick(const ATarget: TTyChartEventTarget);
+procedure TTyCustomAdvanceChart.LegendPagerClick(const ATarget: TTyChartEventTarget);
 var k, toIdx: Integer;
 begin
   k := ATarget.HdSeries;
@@ -1130,7 +1130,7 @@ begin
     + ',"legendId":"' + StringToJSONString(ComponentModelId('legend', k)) + '"}');
 end;
 
-procedure TTyAdvanceChart.DoLegendScroll(APayload: TJSONObject);
+procedure TTyCustomAdvanceChart.DoLegendScroll(APayload: TJSONObject);
 var
   d: TJSONData;
   legends: TTyIntegerArray;
@@ -1160,12 +1160,12 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.LegLive: Boolean;
+function TTyCustomAdvanceChart.LegLive: Boolean;
 begin
   Result := (FLegAnim <> nil) and (FLegAnim.ClipCount > 0);
 end;
 
-procedure TTyAdvanceChart.LegAnimDrop;
+procedure TTyCustomAdvanceChart.LegAnimDrop;
 var i: Integer;
 begin
   { the proxies before the driver: freeing one takes its clips off it }
@@ -1173,7 +1173,7 @@ begin
   FLegProxies := nil;
 end;
 
-procedure TTyAdvanceChart.LegAnimSync;
+procedure TTyCustomAdvanceChart.LegAnimSync;
 var
   i: Integer;
   lay: TTyLegendLayout;
@@ -1221,7 +1221,7 @@ begin
   AnimArmTimer;
 end;
 
-procedure TTyAdvanceChart.LegendSelHover(ALegend, AIndex: Integer);
+procedure TTyCustomAdvanceChart.LegendSelHover(ALegend, AIndex: Integer);
 begin
   if (FLegendSelHoverLegend = ALegend) and (FLegendSelHoverIdx = AIndex) then Exit;
   FLegendSelHoverLegend := ALegend;
@@ -1231,7 +1231,7 @@ begin
   InvalidateFrame;
 end;
 
-procedure TTyAdvanceChart.LegendBorderOf(ASlot, ARaw: Integer;
+procedure TTyCustomAdvanceChart.LegendBorderOf(ASlot, ARaw: Integer;
   var ASrc: TTyLegendSource);
 var
   s, k: Integer;

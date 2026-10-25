@@ -735,7 +735,7 @@ var
   st: TJSONObject;
   i, k, c, n: Integer;
   op, ret, line, typ, payload: string;
-  list_: array of TTyAdvanceChart;
+  list_: array of TTyCustomAdvanceChart;
   t: Double;
   want, got: TJSONData;
   parts: TStringArray;

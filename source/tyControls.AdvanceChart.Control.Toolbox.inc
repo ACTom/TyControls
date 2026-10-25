@@ -29,7 +29,7 @@
   - FTbBackup: the option a restore recreates, OptionManager's
     _optionBackup -- the last notMerge's. }
 
-function TTyAdvanceChart.TbTitles: TTyTbTitles;
+function TTyCustomAdvanceChart.TbTitles: TTyTbTitles;
 begin
   Result := Default(TTyTbTitles);
   Result.SaveAsImage := rsTyChartToolboxSaveAsImage;
@@ -52,12 +52,12 @@ begin
   Result.BrushClear := rsTyChartToolboxBrushClear;
 end;
 
-function TTyAdvanceChart.TbScale: Double;
+function TTyCustomAdvanceChart.TbScale: Double;
 begin
   if FLastPPI > 0 then Result := FLastPPI / 96 else Result := 1;
 end;
 
-function TTyAdvanceChart.TbInk: TTyTbInk;
+function TTyCustomAdvanceChart.TbInk: TTyTbInk;
 var
   model: TTyStyleModel;
   st: TTyStyleSet;
@@ -94,7 +94,7 @@ begin
   Result := True;
 end;
 
-function TTyAdvanceChart.TbStatusOf(ATb: Integer): TStringList;
+function TTyCustomAdvanceChart.TbStatusOf(ATb: Integer): TStringList;
 var
   i: Integer;
   pre, k: string;
@@ -109,20 +109,20 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.TbSetStatus(ATb: Integer; const AFeature, AIcon,
+procedure TTyCustomAdvanceChart.TbSetStatus(ATb: Integer; const AFeature, AIcon,
   AState: string);
 begin
   FTbStatus.Values[IntToStr(ATb) + '|' + AFeature + '|' + AIcon] := AState;
 end;
 
-function TTyAdvanceChart.TbStatusIs(ATb: Integer; const AFeature,
+function TTyCustomAdvanceChart.TbStatusIs(ATb: Integer; const AFeature,
   AIcon: string): Boolean;
 begin
   Result := FTbStatus.Values[IntToStr(ATb) + '|' + AFeature + '|' + AIcon] = 'emphasis';
 end;
 
 { the feature exists and shows: its object lives }
-function TTyAdvanceChart.TbHasFeature(ATb: Integer; const AName: string): Boolean;
+function TTyCustomAdvanceChart.TbHasFeature(ATb: Integer; const AName: string): Boolean;
 var d: TJSONData;
 begin
   Result := False;
@@ -140,7 +140,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.SolveToolboxes(const AMeasurer: ITyTextMeasurer;
+procedure TTyCustomAdvanceChart.SolveToolboxes(const AMeasurer: ITyTextMeasurer;
   APPI: Integer);
 var
   n, t, i: Integer;
@@ -234,7 +234,7 @@ begin
   Result := (V > 5e-5) or (V < -5e-5);
 end;
 
-procedure TTyAdvanceChart.TbIconOrigin(ATb, AIcon: Integer; out AX, AY: Double);
+procedure TTyCustomAdvanceChart.TbIconOrigin(ATb, AIcon: Integer; out AX, AY: Double);
 var gx, gy, x, y: Double;
 begin
   gx := FTbLayouts[ATb].GroupX;
@@ -266,14 +266,14 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.TbEmphasised(ATb, AIcon: Integer): Boolean;
+function TTyCustomAdvanceChart.TbEmphasised(ATb, AIcon: Integer): Boolean;
 begin
   Result := FTbSpecs[ATb].Icons[AIcon].Status;
   if (ATb <= High(FTbLive)) and (AIcon <= High(FTbLive[ATb])) then
     Result := Result or FTbLive[ATb][AIcon].HoverEmph;
 end;
 
-function TTyAdvanceChart.BuildToolboxes(AList: TTyPaintList;
+function TTyCustomAdvanceChart.BuildToolboxes(AList: TTyPaintList;
   const AMeasurer: ITyTextMeasurer): Integer;
 var
   t, i: Integer;
@@ -462,7 +462,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.TbHitAt(AX, AY: Integer; out ATb, AIcon: Integer): Boolean;
+function TTyCustomAdvanceChart.TbHitAt(AX, AY: Integer; out ATb, AIcon: Integer): Boolean;
 var
   t, i: Integer;
   s, x, y, ox, oy: Double;
@@ -501,7 +501,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.TbChanged;
+procedure TTyCustomAdvanceChart.TbChanged;
 begin
   DropStatic;
   FZrDirty := True;
@@ -511,7 +511,7 @@ end;
 { the icon's mouseover: the title shown at once (its position the
   mouseover's), the emphasis entered at the next frame -- with the state's
   adjusted text config -- unless the element is already in it }
-procedure TTyAdvanceChart.TbMouseOver(const ATarget: TTyChartEventTarget);
+procedure TTyCustomAdvanceChart.TbMouseOver(const ATarget: TTyChartEventTarget);
 var t, i: Integer;
 begin
   if (ATarget.HdKind <> 8) or (ATarget.HdGen <> FTbGen) then Exit;
@@ -526,7 +526,7 @@ end;
 
 { the icon's mouseout: the emphasis left at the next frame unless the
   feature's status holds it; the title hidden at once }
-procedure TTyAdvanceChart.TbMouseOut(const ATarget: TTyChartEventTarget);
+procedure TTyCustomAdvanceChart.TbMouseOut(const ATarget: TTyChartEventTarget);
 var t, i: Integer;
 begin
   if (ATarget.HdKind <> 8) or (ATarget.HdGen <> FTbGen) then Exit;
@@ -542,7 +542,7 @@ end;
 
 { echarts' _onframe: the hover's emphasis changes applied -- entering brings
   the state's adjusted position and align, leaving takes them away }
-procedure TTyAdvanceChart.TbFrame;
+procedure TTyCustomAdvanceChart.TbFrame;
 begin
   if not TbFrameApply then Exit;
   { [R2-E] a repaint, nothing marked: upstream enters the emphasis in the
@@ -554,7 +554,7 @@ end;
 
 { the emphasis an icon's mouseover / mouseout left pending: entered at the
   next frame -- here the next pointer event's }
-function TTyAdvanceChart.TbFrameApply: Boolean;
+function TTyCustomAdvanceChart.TbFrameApply: Boolean;
 var
   t, i: Integer;
   any: Boolean;
@@ -583,7 +583,7 @@ begin
   Result := any;
 end;
 
-procedure TTyAdvanceChart.TbClick(ATb, AIcon: Integer);
+procedure TTyCustomAdvanceChart.TbClick(ATb, AIcon: Integer);
 var
   f, ic, nm: string;
   h: TTyChartToolboxHandler;
@@ -622,7 +622,7 @@ begin
   else if f = 'brush' then TbBrushClick(ic);
 end;
 
-function TTyAdvanceChart.ToolboxClick(ATb: Integer; const AFeature, AIcon: string): Boolean;
+function TTyCustomAdvanceChart.ToolboxClick(ATb: Integer; const AFeature, AIcon: string): Boolean;
 var i: Integer;
 begin
   Result := False;
@@ -635,7 +635,7 @@ begin
     end;
 end;
 
-procedure TTyAdvanceChart.TbDoRestore(APayload: TJSONObject);
+procedure TTyCustomAdvanceChart.TbDoRestore(APayload: TJSONObject);
 var h: TTyTbHistory;
 begin
   { resetOption('recreate'): new models from the backup -- the same
@@ -647,7 +647,7 @@ begin
   EmitPayloadEvent('restore', TbEventJson(APayload, 'restore'));
 end;
 
-function TTyAdvanceChart.TbMagicSeries: TTyMagicSeriesArray;
+function TTyCustomAdvanceChart.TbMagicSeries: TTyMagicSeriesArray;
 var
   i, n, slot: Integer;
   d: TJSONData;
@@ -685,7 +685,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.TbMagicType(ATb: Integer; const AType: string);
+procedure TTyCustomAdvanceChart.TbMagicType(ATb: Integer; const AType: string);
 var
   fm, opt, ttl, pay: TJSONObject;
   st: TStringList;
@@ -734,7 +734,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.TbDoMagic(APayload: TJSONObject);
+procedure TTyCustomAdvanceChart.TbDoMagic(APayload: TJSONObject);
 var
   d, ft: TJSONData;
   t: Integer;
@@ -757,7 +757,7 @@ begin
 end;
 
 { getContentFromModel's two kinds of series, from the stores }
-function TTyAdvanceChart.TbDataViewContent(out AMeta: TTyDvMetaArray): string;
+function TTyCustomAdvanceChart.TbDataViewContent(out AMeta: TTyDvMetaArray): string;
 var
   groups: TTyDvGroupArray;
   lists: TTyDvListArray;
@@ -851,13 +851,13 @@ begin
   Result := TyDataViewText(groups, lists);
 end;
 
-function TTyAdvanceChart.ToolboxDataViewText: string;
+function TTyCustomAdvanceChart.ToolboxDataViewText: string;
 var meta: TTyDvMetaArray;
 begin
   Result := TbDataViewContent(meta);
 end;
 
-function TTyAdvanceChart.TbDvFind(const AName: string; out AData: TJSONData): Boolean;
+function TTyCustomAdvanceChart.TbDvFind(const AName: string; out AData: TJSONData): Boolean;
 var
   i: Integer;
   d: TJSONData;
@@ -873,7 +873,7 @@ begin
     end;
 end;
 
-procedure TTyAdvanceChart.TbDataView(ATb: Integer);
+procedure TTyCustomAdvanceChart.TbDataView(ATb: Integer);
 var
   fm, parsed, pay: TJSONObject;
   meta: TTyDvMetaArray;
@@ -931,7 +931,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.TbDoDataView(APayload: TJSONObject);
+procedure TTyCustomAdvanceChart.TbDoDataView(APayload: TJSONObject);
 var
   d: TJSONData;
   merged: TJSONObject;
@@ -949,20 +949,20 @@ begin
   EmitPayloadEvent('dataviewchanged', TbEventJson(APayload, 'dataviewchanged'));
 end;
 
-function TTyAdvanceChart.ToolboxShowDataView(const ATitle: string;
+function TTyCustomAdvanceChart.ToolboxShowDataView(const ATitle: string;
   var AText: string; AReadOnly: Boolean; const ACloseCaption,
   ARefreshCaption: string): Boolean;
 begin
   Result := TyShowDataViewDialog(ATitle, AText, AReadOnly, ACloseCaption, ARefreshCaption);
 end;
 
-function TTyAdvanceChart.ToolboxAskFileName(var AFileName: string;
+function TTyCustomAdvanceChart.ToolboxAskFileName(var AFileName: string;
   const AType: string): Boolean;
 begin
   Result := TyAskImageFileName(AFileName, AType);
 end;
 
-procedure TTyAdvanceChart.TbSaveAsImage(ATb: Integer);
+procedure TTyCustomAdvanceChart.TbSaveAsImage(ATb: Integer);
 var
   fm: TJSONObject;
   opts, fileName, typ: string;
@@ -983,7 +983,7 @@ begin
   SaveConnectedToFile(fileName, opts);
 end;
 
-procedure TTyAdvanceChart.TbDoTakeCursor(APayload: TJSONObject);
+procedure TTyCustomAdvanceChart.TbDoTakeCursor(APayload: TJSONObject);
 var d: TJSONData;
 begin
   d := APayload.Find('key');
@@ -1009,7 +1009,7 @@ end;
 
 { the select dataZoom for an axis key ('x0'); -1 for none (findDataZoom:
   the last one) }
-function TTyAdvanceChart.TbSelIndexOf(const AKey: string): Integer;
+function TTyCustomAdvanceChart.TbSelIndexOf(const AKey: string): Integer;
 var i, k: Integer;
 begin
   Result := -1;
@@ -1020,7 +1020,7 @@ begin
           Result := i;
 end;
 
-procedure TTyAdvanceChart.TbSelPut(const AKey: string; AIsValue: Boolean; A, B: Double);
+procedure TTyCustomAdvanceChart.TbSelPut(const AKey: string; AIsValue: Boolean; A, B: Double);
 var i: Integer;
 begin
   for i := 0 to High(FTbSel) do
@@ -1039,7 +1039,7 @@ begin
   FTbSel[i].B := B;
 end;
 
-procedure TTyAdvanceChart.TbDispatchZoom(const ASnap: TTyTbSnapshot);
+procedure TTyCustomAdvanceChart.TbDispatchZoom(const ASnap: TTyTbSnapshot);
 var
   a: TTyDzAction;
   i, k, n: Integer;
@@ -1063,7 +1063,7 @@ begin
   DzDispatch(a);
 end;
 
-procedure TTyAdvanceChart.TbBack;
+procedure TTyCustomAdvanceChart.TbBack;
 var snap: TTyTbSnapshot;
 begin
   snap := TyTbHistoryPop(FTbHistory);
@@ -1078,7 +1078,7 @@ end;
   its x axes are declared, lineY only its y, else rect; the controller on
   with brushType 'auto' while the zoom is on and there is a panel, off
   otherwise. CSS px. }
-procedure TTyAdvanceChart.TbZoomCtlSync;
+procedure TTyCustomAdvanceChart.TbZoomCtlSync;
 var
   g, i, k, n: Integer;
   xd, yd: Boolean;
@@ -1134,7 +1134,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.TbCtlDown(AX, AY: Integer; ADraggable: Boolean);
+procedure TTyCustomAdvanceChart.TbCtlDown(AX, AY: Integer; ADraggable: Boolean);
 var x, y: Double;
 begin
   if FTbBrushCtl = nil then Exit;
@@ -1142,7 +1142,7 @@ begin
   TbCtlTrigger(FTbBrushCtl.MouseDown(x, y, ADraggable));
 end;
 
-procedure TTyAdvanceChart.TbCtlMove(AX, AY: Integer);
+procedure TTyCustomAdvanceChart.TbCtlMove(AX, AY: Integer);
 var x, y: Double;
 begin
   if (FTbBrushCtl = nil) or not FTbBrushCtl.Dragging then Exit;
@@ -1151,7 +1151,7 @@ begin
   TbChanged;
 end;
 
-procedure TTyAdvanceChart.TbCtlUp(AX, AY: Integer);
+procedure TTyCustomAdvanceChart.TbCtlUp(AX, AY: Integer);
 var x, y: Double;
 begin
   if (FTbBrushCtl = nil) or not FTbBrushCtl.Dragging then Exit;
@@ -1162,7 +1162,7 @@ end;
 
 { DataZoomFeature._onBrush: only an end with areas; the cover goes
   (updateCovers([])) and the area is the zoom }
-procedure TTyAdvanceChart.TbCtlTrigger(const ATrig: TTyBrushTrigger);
+procedure TTyCustomAdvanceChart.TbCtlTrigger(const ATrig: TTyBrushTrigger);
 var
   a: TTyBrushArea;
   i, g: Integer;
@@ -1204,7 +1204,7 @@ end;
 
 { the pointer's cursor: an icon's own ('pointer'), and over a brush panel
   the brush's crosshair, which is set after it }
-procedure TTyAdvanceChart.TbApplyCursor(AX, AY: Integer);
+procedure TTyCustomAdvanceChart.TbApplyCursor(AX, AY: Integer);
 var
   x, y: Double;
   c, bc: string;
@@ -1256,29 +1256,29 @@ end;
 
 { ---- what the tests read ---- }
 
-procedure TTyAdvanceChart.ToolboxFrame;
+procedure TTyCustomAdvanceChart.ToolboxFrame;
 begin
   TbFrame;
 end;
 
-function TTyAdvanceChart.ToolboxCount: Integer;
+function TTyCustomAdvanceChart.ToolboxCount: Integer;
 begin
   Result := Length(FTbSpecs);
 end;
 
-function TTyAdvanceChart.ToolboxSpec(AIndex: Integer): TTyToolboxSpec;
+function TTyCustomAdvanceChart.ToolboxSpec(AIndex: Integer): TTyToolboxSpec;
 begin
   Result := Default(TTyToolboxSpec);
   if (AIndex >= 0) and (AIndex <= High(FTbSpecs)) then Result := FTbSpecs[AIndex];
 end;
 
-function TTyAdvanceChart.ToolboxLayout(AIndex: Integer): TTyToolboxLayout;
+function TTyCustomAdvanceChart.ToolboxLayout(AIndex: Integer): TTyToolboxLayout;
 begin
   Result := Default(TTyToolboxLayout);
   if (AIndex >= 0) and (AIndex <= High(FTbLayouts)) then Result := FTbLayouts[AIndex];
 end;
 
-function TTyAdvanceChart.ToolboxIconState(ATb, AIcon: Integer;
+function TTyCustomAdvanceChart.ToolboxIconState(ATb, AIcon: Integer;
   out AEmphasised, ATitleShown, APosAdjusted, AAlignAdjusted: Boolean): Boolean;
 begin
   AEmphasised := False;
@@ -1297,7 +1297,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.ToolboxTitle(ATb, AIcon: Integer): TTyTbTitlePlace;
+function TTyCustomAdvanceChart.ToolboxTitle(ATb, AIcon: Integer): TTyTbTitlePlace;
 var e, shown, ap, aa: Boolean;
 begin
   Result := Default(TTyTbTitlePlace);
@@ -1305,18 +1305,18 @@ begin
   Result := TyToolboxTitlePlace(FTbSpecs[ATb], FTbLayouts[ATb], AIcon, ap, aa, e);
 end;
 
-function TTyAdvanceChart.ToolboxIconStatus(ATb: Integer; const AFeature,
+function TTyCustomAdvanceChart.ToolboxIconStatus(ATb: Integer; const AFeature,
   AIcon: string): string;
 begin
   Result := FTbStatus.Values[IntToStr(ATb) + '|' + AFeature + '|' + AIcon];
 end;
 
-function TTyAdvanceChart.ToolboxHistoryCount: Integer;
+function TTyCustomAdvanceChart.ToolboxHistoryCount: Integer;
 begin
   Result := TyTbHistoryCount(FTbHistory);
 end;
 
-function TTyAdvanceChart.ToolboxCover(out ARect: TTyXYWH): Boolean;
+function TTyCustomAdvanceChart.ToolboxCover(out ARect: TTyXYWH): Boolean;
 begin
   ARect := Default(TTyXYWH);
   Result := (FTbBrushCtl <> nil) and (Length(FTbBrushCtl.Covers) > 0);

@@ -4,22 +4,22 @@
 
 { ==================== export and loading [Batch 106] ==================== }
 
-function TTyAdvanceChart.ViewHidden(AView: TTyChartView): Boolean;
+function TTyCustomAdvanceChart.ViewHidden(AView: TTyChartView): Boolean;
 begin
   Result := FExporting and (AView in FExportExclude);
 end;
 
-procedure TTyAdvanceChart.ViewDrew(AView: TTyChartView);
+procedure TTyCustomAdvanceChart.ViewDrew(AView: TTyChartView);
 begin
   Include(FViewsDrawn, AView);
 end;
 
-function TTyAdvanceChart.LastViewsDrawn: TTyChartViews;
+function TTyCustomAdvanceChart.LastViewsDrawn: TTyChartViews;
 begin
   Result := FViewsDrawn;
 end;
 
-procedure TTyAdvanceChart.ExportOptsOrRaise(const AJson: string;
+procedure TTyCustomAdvanceChart.ExportOptsOrRaise(const AJson: string;
   out AOpts: TTyChartExportOpts);
 begin
   if not TyExportOptsOf(AJson, AOpts) then
@@ -32,7 +32,7 @@ end;
   survives. A render at another size or PPI than the window's lays the chart
   out at that size, and the window's layout is put back afterwards: the
   legend, the dataZoom and the hit test answer from it. }
-function TTyAdvanceChart.RenderExport(const AOpts: TTyChartExportOpts): TBGRABitmap;
+function TTyCustomAdvanceChart.RenderExport(const AOpts: TTyChartExportOpts): TBGRABitmap;
 var
   w, h, ppi, ppi0: Integer;
   bg: TTyExportBg;
@@ -138,7 +138,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.WriteExport(AStream: TStream; ABmp: TBGRABitmap;
+procedure TTyCustomAdvanceChart.WriteExport(AStream: TStream; ABmp: TBGRABitmap;
   AType: TTyExportImageType);
 var
   jpg: TBGRABitmap;
@@ -163,7 +163,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.RenderToBitmap(const AOptsJson: string): TBGRABitmap;
+function TTyCustomAdvanceChart.RenderToBitmap(const AOptsJson: string): TBGRABitmap;
 var prev: TComponent; prevRes: TTyChartImageUrlResolver;
 begin
   prev := TyChartImageScopeEnter(Owner);
@@ -176,14 +176,14 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.RenderToBitmapBody(const AOptsJson: string): TBGRABitmap;
+function TTyCustomAdvanceChart.RenderToBitmapBody(const AOptsJson: string): TBGRABitmap;
 var o: TTyChartExportOpts;
 begin
   ExportOptsOrRaise(AOptsJson, o);
   Result := RenderExport(o);
 end;
 
-procedure TTyAdvanceChart.SaveToStream(AStream: TStream; const AOptsJson: string);
+procedure TTyCustomAdvanceChart.SaveToStream(AStream: TStream; const AOptsJson: string);
 var
   o: TTyChartExportOpts;
   bmp: TBGRABitmap;
@@ -198,7 +198,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.SaveToBytes(const AOptsJson: string): TBytes;
+function TTyCustomAdvanceChart.SaveToBytes(const AOptsJson: string): TBytes;
 var ms: TMemoryStream;
 begin
   Result := nil;
@@ -212,7 +212,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.SaveToFile(const AFileName: string; const AOptsJson: string);
+procedure TTyCustomAdvanceChart.SaveToFile(const AFileName: string; const AOptsJson: string);
 var
   o: TTyChartExportOpts;
   bmp: TBGRABitmap;
@@ -239,7 +239,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.GetDataURL(const AOptsJson: string): string;
+function TTyCustomAdvanceChart.GetDataURL(const AOptsJson: string): string;
 var
   o: TTyChartExportOpts;
   bmp: TBGRABitmap;
@@ -263,7 +263,7 @@ begin
   Result := Result + EncodeStringBase64(raw);
 end;
 
-procedure TTyAdvanceChart.SaveToPng(const AFileName: string);
+procedure TTyCustomAdvanceChart.SaveToPng(const AFileName: string);
 var
   o: TTyChartExportOpts;
   bmp: TBGRABitmap;
@@ -288,24 +288,24 @@ end;
 
 { ---- the loading effect ---- }
 
-function TTyAdvanceChart.LoadLive: Boolean;
+function TTyCustomAdvanceChart.LoadLive: Boolean;
 begin
   Result := FLoadShown and (FLoadAnim <> nil) and (FLoadAnim.ClipCount > 0)
     and (FAnimMode <> camOff);
 end;
 
-procedure TTyAdvanceChart.LoadDrop;
+procedure TTyCustomAdvanceChart.LoadDrop;
 begin
   { freeing the element takes its clips off the driver }
   FreeAndNil(FLoadArc);
 end;
 
-procedure TTyAdvanceChart.ShowLoading(const ACfgJson: string);
+procedure TTyCustomAdvanceChart.ShowLoading(const ACfgJson: string);
 begin
   ShowLoading('', ACfgJson);
 end;
 
-procedure TTyAdvanceChart.ShowLoading(const AName, ACfgJson: string);
+procedure TTyCustomAdvanceChart.ShowLoading(const AName, ACfgJson: string);
 var cfg: TTyLoadingCfg;
 begin
   if not TyLoadingCfgOf(ACfgJson, rsTyChartLoading, cfg) then
@@ -329,7 +329,7 @@ begin
   InvalidateFrame;
 end;
 
-procedure TTyAdvanceChart.HideLoading;
+procedure TTyCustomAdvanceChart.HideLoading;
 begin
   if not FLoadShown and (FLoadArc = nil) then Exit;
   LoadDrop;
@@ -339,18 +339,18 @@ begin
   InvalidateFrame;
 end;
 
-function TTyAdvanceChart.LoadingGeometry(out AGeo: TTyLoadingGeometry): Boolean;
+function TTyCustomAdvanceChart.LoadingGeometry(out AGeo: TTyLoadingGeometry): Boolean;
 begin
   AGeo := FLoadGeo;
   Result := FLoadShown and FLoadGeoValid;
 end;
 
-function TTyAdvanceChart.LoadingCfg: TTyLoadingCfg;
+function TTyCustomAdvanceChart.LoadingCfg: TTyLoadingCfg;
 begin
   Result := FLoadCfg;
 end;
 
-function TTyAdvanceChart.LoadingArcAngles(out AStart, AEnd: Double): Boolean;
+function TTyCustomAdvanceChart.LoadingArcAngles(out AStart, AEnd: Double): Boolean;
 begin
   AStart := NaN;
   AEnd := NaN;
@@ -360,7 +360,7 @@ begin
   AEnd := FLoadArc.Num('shape.endAngle');
 end;
 
-function TTyAdvanceChart.LoadingClipCount: Integer;
+function TTyCustomAdvanceChart.LoadingClipCount: Integer;
 begin
   if FLoadAnim = nil then Result := 0 else Result := FLoadAnim.ClipCount;
 end;
@@ -369,7 +369,7 @@ end;
   middle off its anchor, the arc clockwise from its start to its end with
   round caps. Measured in device px and laid out in CSS px, as upstream's
   numbers are -- at 96 PPI the two are the same bits. }
-procedure TTyAdvanceChart.PaintLoading(APainter: TTyPainter; const ARect: TRect;
+procedure TTyCustomAdvanceChart.PaintLoading(APainter: TTyPainter; const ARect: TRect;
   APPI: Integer; const AMeasurer: ITyTextMeasurer);
 var
   st, spin: TTyStyleSet;

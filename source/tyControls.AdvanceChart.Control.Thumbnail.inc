@@ -7,7 +7,7 @@
 { ThumbnailModel.optionUpdated -> _updateBridge: the target forgotten,
   every series' bridge cleared, then -- when it shows -- getTarget and its
   bridge injected into the target (none when there is no graph) }
-procedure TTyAdvanceChart.ThumbOptionUpdated(AIndex: Integer);
+procedure TTyCustomAdvanceChart.ThumbOptionUpdated(AIndex: Integer);
 var
   m: TTyThumbModel;
   d: TJSONData;
@@ -25,7 +25,7 @@ begin
 end;
 
 { a new option: every thumbnail model's init and optionUpdated, in order }
-procedure TTyAdvanceChart.ThumbInitAll;
+procedure TTyCustomAdvanceChart.ThumbInitAll;
 var k, n: Integer;
 begin
   FThumbFresh := False;
@@ -45,7 +45,7 @@ end;
 { getTarget: the series seriesIndex names (else seriesId), which must be a
   graph; with neither, the first graph series. (A named series that is no
   graph: upstream's dev build throws on it; here there is no target.) }
-function TTyAdvanceChart.ThumbResolveTarget(const AModel: TTyThumbModel): Integer;
+function TTyCustomAdvanceChart.ThumbResolveTarget(const AModel: TTyThumbModel): Integer;
 var n, i, s: Integer;
 begin
   Result := -1;
@@ -78,7 +78,7 @@ begin
       Exit(i);
 end;
 
-function TTyAdvanceChart.ThumbTargetMatrix(ASlot: Integer): TTyMat2D;
+function TTyCustomAdvanceChart.ThumbTargetMatrix(ASlot: Integer): TTyMat2D;
 begin
   Result := TyMatIdentity;
   if (ASlot < 0) or (ASlot > High(FGraphs)) or (FGraphs[ASlot] = nil) then Exit;
@@ -95,7 +95,7 @@ end;
 { GraphView._renderThumbnail: every drawn node's symbol sub-path with its
   shape at half the symbol size round the node, every edge's line path,
   their styles as the list drew them }
-function TTyAdvanceChart.ThumbCopy(ASlot: Integer): TTyThumbItemArray;
+function TTyCustomAdvanceChart.ThumbCopy(ASlot: Integer): TTyThumbItemArray;
 var
   si, i, n, idx, row: Integer;
   nodeEl, edgeEl: array of Integer;
@@ -304,7 +304,7 @@ end;
 { ThumbnailView.render with the bridge's content: every thumbnail's model,
   enabled or not, its box and content rect; the one the target graph
   renders into takes the copy, its view and its window }
-procedure TTyAdvanceChart.ThumbRender;
+procedure TTyCustomAdvanceChart.ThumbRender;
 var
   k, slot: Integer;
   d: TJSONData;
@@ -350,7 +350,7 @@ begin
 end;
 
 { the graph's __updateOnOwnRoam -> updateWindow }
-procedure TTyAdvanceChart.ThumbUpdateWindows;
+procedure TTyCustomAdvanceChart.ThumbUpdateWindows;
 var k, slot: Integer;
 begin
   k := FThumbOwner;
@@ -365,7 +365,7 @@ end;
 { the thumbnails' elements, at the model's z: the background (z2 141, not
   silent -- nothing under it is hovered), the copy clipped to the content
   rect (151, silent) and the window (161, in the clip) }
-function TTyAdvanceChart.BuildThumbnails(AList: TTyPaintList): Integer;
+function TTyCustomAdvanceChart.BuildThumbnails(AList: TTyPaintList): Integer;
 var
   k, i: Integer;
   st: TTyThumbState;
@@ -536,7 +536,7 @@ end;
 
 { the thumbnail's RoamController mousedown: the owner with a copy, a roam
   that pans, the press in its content rect }
-procedure TTyAdvanceChart.ThumbDown(AX, AY: Integer);
+procedure TTyCustomAdvanceChart.ThumbDown(AX, AY: Integer);
 var k: Integer;
 begin
   FThumbDrag := -1;
@@ -551,7 +551,7 @@ end;
 
 { its mousewheel: a roam that zooms, the pointer in the content rect: the
   graph zooms by 1 / the factor about the pointer carried into its canvas }
-function TTyAdvanceChart.ThumbWheel(AX, AY, AWheelDelta: Integer): Boolean;
+function TTyCustomAdvanceChart.ThumbWheel(AX, AY, AWheelDelta: Integer): Boolean;
 var
   k: Integer;
   s, z, ox, oy: Double;
@@ -568,24 +568,24 @@ begin
   Result := True;
 end;
 
-function TTyAdvanceChart.ThumbnailCount: Integer;
+function TTyCustomAdvanceChart.ThumbnailCount: Integer;
 begin
   Result := Length(FThumbs);
 end;
 
-function TTyAdvanceChart.ThumbnailState(AIndex: Integer): TTyThumbState;
+function TTyCustomAdvanceChart.ThumbnailState(AIndex: Integer): TTyThumbState;
 begin
   Result := Default(TTyThumbState);
   Result.Target := -1;
   if (AIndex >= 0) and (AIndex <= High(FThumbs)) then Result := FThumbs[AIndex];
 end;
 
-function TTyAdvanceChart.ThumbnailOwner: Integer;
+function TTyCustomAdvanceChart.ThumbnailOwner: Integer;
 begin
   Result := FThumbOwner;
 end;
 
-function TTyAdvanceChart.ThumbnailHitAt(AX, AY: Double): Integer;
+function TTyCustomAdvanceChart.ThumbnailHitAt(AX, AY: Double): Integer;
 var
   k: Integer;
   e: Double;

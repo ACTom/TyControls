@@ -26,7 +26,7 @@ begin
     + TyJsNumberToString(TyChartColorAlpha(AColour)) + ')';
 end;
 
-function TTyAdvanceChart.TlInk: TTyTimelineInk;
+function TTyCustomAdvanceChart.TlInk: TTyTimelineInk;
 var
   model: TTyStyleModel;
   st: TTyStyleSet;
@@ -63,17 +63,17 @@ begin
   Result.LabelEmphasis := TlCss(TTyChartColor(st.TextColor));
 end;
 
-function TTyAdvanceChart.TlClock: Double;
+function TTyCustomAdvanceChart.TlClock: Double;
 begin
   if IsNan(FTlNow) then Result := TyAnimClockMs else Result := FTlNow;
 end;
 
-function TTyAdvanceChart.TlLive: Boolean;
+function TTyCustomAdvanceChart.TlLive: Boolean;
 begin
   Result := (FTlAnim <> nil) and (FTlAnim.ClipCount > 0);
 end;
 
-function TTyAdvanceChart.TlNode: TJSONObject;
+function TTyCustomAdvanceChart.TlNode: TJSONObject;
 var d: TJSONData;
 begin
   Result := nil;
@@ -85,7 +85,7 @@ end;
 
 { getCurrentIndex: the model's option -- its default nought where nothing
   was written; NaN for what is no number }
-function TTyAdvanceChart.TlCurrentIndex: Double;
+function TTyCustomAdvanceChart.TlCurrentIndex: Double;
 var
   n: TJSONObject;
   d: TJSONData;
@@ -100,7 +100,7 @@ end;
 
 { the component's state transition (updateStates): its animation enabled,
   stateAnimation's duration above nought }
-function TTyAdvanceChart.TlAnimCfg: TTyTlAnimCfg;
+function TTyCustomAdvanceChart.TlAnimCfg: TTyTlAnimCfg;
 var
   node, root, sa, rsa: TJSONObject;
   d: TJSONData;
@@ -164,7 +164,7 @@ begin
   Result.StateCfg := TyAnimCfg(dur, delay, easing);
 end;
 
-procedure TTyAdvanceChart.SolveTimeline(APPI: Integer);
+procedure TTyCustomAdvanceChart.SolveTimeline(APPI: Integer);
 var
   node, root: TJSONObject;
   s, w, h, interval: Double;
@@ -219,7 +219,7 @@ begin
   AnimArmTimer;
 end;
 
-function TTyAdvanceChart.BuildTimeline(AList: TTyPaintList): Integer;
+function TTyCustomAdvanceChart.BuildTimeline(AList: TTyPaintList): Integer;
 var
   i: Integer;
   ctx: TTyGfxPaintCtx;
@@ -251,7 +251,7 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.TlHitAt(AX, AY: Integer; out AEl: Integer): Boolean;
+function TTyCustomAdvanceChart.TlHitAt(AX, AY: Integer; out AEl: Integer): Boolean;
 var
   s, x, y: Double;
 begin
@@ -268,7 +268,7 @@ begin
   Result := AEl >= 0;
 end;
 
-procedure TTyAdvanceChart.TlArmTimer;
+procedure TTyCustomAdvanceChart.TlArmTimer;
 var ms: Double;
 begin
   if IsNan(FTlNow) and not IsNan(FTlDue) and not (csDesigning in ComponentState) then
@@ -290,13 +290,13 @@ begin
     FTlTimer.Enabled := False;
 end;
 
-procedure TTyAdvanceChart.TlTimerFired(Sender: TObject);
+procedure TTyCustomAdvanceChart.TlTimerFired(Sender: TObject);
 begin
   if FTlTimer <> nil then FTlTimer.Enabled := False;
   TimelineTick(TlClock);
 end;
 
-procedure TTyAdvanceChart.TimelineTick(ANowMs: Double);
+procedure TTyCustomAdvanceChart.TimelineTick(ANowMs: Double);
 var
   t, cur: Double;
   node: TJSONObject;
@@ -318,7 +318,7 @@ begin
 end;
 
 { _changeTimeline: the timelineChange action from the view }
-procedure TTyAdvanceChart.TlChange(AIndex: Double; AHasIndex: Boolean);
+procedure TTyCustomAdvanceChart.TlChange(AIndex: Double; AHasIndex: Boolean);
 var p: string;
 begin
   if FTlView = nil then Exit;
@@ -329,7 +329,7 @@ begin
   DispatchAction(p);
 end;
 
-procedure TTyAdvanceChart.TlClick(AEl: Integer);
+procedure TTyCustomAdvanceChart.TlClick(AEl: Integer);
 var
   r: TTyTlRole;
   cur: Double;
@@ -354,7 +354,7 @@ begin
   end;
 end;
 
-procedure TTyAdvanceChart.TlMouseOver(const ATarget: TTyChartEventTarget);
+procedure TTyCustomAdvanceChart.TlMouseOver(const ATarget: TTyChartEventTarget);
 begin
   if (ATarget.HdKind <> 10) or (FTlView = nil) or (ATarget.HdGen <> FTlView.Gen) then Exit;
   if not FTlView.IsDispatcher(ATarget.HdRow) then Exit;
@@ -363,7 +363,7 @@ begin
   FTlStatesDirty := True;
 end;
 
-procedure TTyAdvanceChart.TlMouseOut(const ATarget: TTyChartEventTarget);
+procedure TTyCustomAdvanceChart.TlMouseOut(const ATarget: TTyChartEventTarget);
 begin
   if (ATarget.HdKind <> 10) or (FTlView = nil) or (ATarget.HdGen <> FTlView.Gen) then Exit;
   if not FTlView.IsDispatcher(ATarget.HdRow) then Exit;
@@ -372,7 +372,7 @@ begin
   FTlStatesDirty := True;
 end;
 
-procedure TTyAdvanceChart.TlApplyStates;
+procedure TTyCustomAdvanceChart.TlApplyStates;
 var i: Integer;
 begin
   if not FTlStatesDirty then Exit;
@@ -384,7 +384,7 @@ begin
   AnimArmTimer;
 end;
 
-procedure TTyAdvanceChart.TlDragStart(const ATarget: TTyChartEventTarget);
+procedure TTyCustomAdvanceChart.TlDragStart(const ATarget: TTyChartEventTarget);
 begin
   if (ATarget.HdKind <> 10) or (FTlView = nil) or (ATarget.HdGen <> FTlView.Gen) then Exit;
   if (ATarget.HdRow < 0) or (ATarget.HdRow > High(FTlView.Els)) then Exit;
@@ -394,7 +394,7 @@ begin
 end;
 
 { _pointerChangeTimeline }
-procedure TTyAdvanceChart.TlPointerChange(AX, AY: Integer; ATrigger: Boolean);
+procedure TTyCustomAdvanceChart.TlPointerChange(AX, AY: Integer; ATrigger: Boolean);
 var
   s, coord: Double;
   target: Integer;
@@ -409,7 +409,7 @@ begin
     TlChange(target, target >= 0);
 end;
 
-procedure TTyAdvanceChart.TlDragMove(AX, AY: Integer);
+procedure TTyCustomAdvanceChart.TlDragMove(AX, AY: Integer);
 begin
   if not FTlDragging then Exit;
   { _handlePointerDrag: the timer cleared, the checkpoint moved }
@@ -418,7 +418,7 @@ begin
   TlPointerChange(AX, AY, False);
 end;
 
-procedure TTyAdvanceChart.TlDragEnd(AX, AY: Integer);
+procedure TTyCustomAdvanceChart.TlDragEnd(AX, AY: Integer);
 begin
   if not FTlDragging then Exit;
   FTlDragging := False;
@@ -429,7 +429,7 @@ end;
 
 { resetOption('timeline') with the timeline's replaceMerge, and the update
   after it }
-procedure TTyAdvanceChart.TlMerge;
+procedure TTyCustomAdvanceChart.TlMerge;
 var
   node: TJSONObject;
   d: TJSONData;
@@ -487,7 +487,7 @@ begin
     FullUpdate;
 end;
 
-procedure TTyAdvanceChart.DoTimelineChange(APayload: TJSONObject);
+procedure TTyCustomAdvanceChart.DoTimelineChange(APayload: TJSONObject);
 var
   node, full, ev: TJSONObject;
   d: TJSONData;
@@ -560,7 +560,7 @@ begin
     update and event, before the brushSelect the update dispatched.] }
 end;
 
-procedure TTyAdvanceChart.DoTimelinePlayChange(APayload: TJSONObject);
+procedure TTyCustomAdvanceChart.DoTimelinePlayChange(APayload: TJSONObject);
 var
   node, ev: TJSONObject;
   d: TJSONData;
@@ -581,12 +581,12 @@ begin
   end;
 end;
 
-function TTyAdvanceChart.TimelineView: TTyTimelineView;
+function TTyCustomAdvanceChart.TimelineView: TTyTimelineView;
 begin
   Result := FTlView;
 end;
 
-function TTyAdvanceChart.TimelineDue: Double;
+function TTyCustomAdvanceChart.TimelineDue: Double;
 begin
   Result := FTlDue;
 end;
