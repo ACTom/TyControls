@@ -1,10 +1,10 @@
 object MainForm: TMainForm
   Left = 0
-  Height = 620
+  Height = 840
   Top = 0
   Width = 900
   Caption = 'Chrome on top (pilot)'
-  ClientHeight = 620
+  ClientHeight = 840
   ClientWidth = 900
   Position = poScreenCenter
   LCLVersion = '4.4.0.0'
@@ -13,7 +13,7 @@ object MainForm: TMainForm
   TitleHeight = 34
   object Surface: TTyFormSurface
     Left = 0
-    Height = 620
+    Height = 840
     Top = 0
     Width = 900
     TabOrder = 0
@@ -190,5 +190,23 @@ object MainForm: TMainForm
       Caption = 'Each card keeps its frame, its rounded corners and the hairlines under its title and over its actions whole, whatever its children cover. Hover a card: its frame changes colour, and so does the part drawn over the children. Turn the switch off to see the cut lines as before.'
       WordWrap = True
     end
+    object Results: TTyMemo
+      Left = 20
+      Height = 220
+      Top = 612
+      Width = 860
+      Anchors = [akTop, akLeft, akRight, akBottom]
+      TabOrder = 6
+      ReadOnly = True
+      ScrollBars = ssAutoVertical
+      WordWrap = True
+    end
+  end
+  object MeasureTimer: TTimer
+    Enabled = False
+    Interval = 1000
+    OnTimer = MeasureTimerTimer
+    Left = 840
+    Top = 40
   end
 end

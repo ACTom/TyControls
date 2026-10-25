@@ -90,3 +90,54 @@ msgstr "整个窗口重画一次：外框保持在最上面时 %.1f ms，关掉�
 #, object-pascal-format
 msgid "Item %d"
 msgstr "第 %d 项"
+
+#: umain.rsroundsfmt
+#, object-pascal-format
+msgid "Each figure is an average over %d redraws of the whole window."
+msgstr "每个数字都是整个窗口重画 %d 次的平均值。"
+
+#: umain.rsmodeoff
+msgid "Off"
+msgstr "关闭"
+
+#: umain.rsmode0
+msgid "Each band draws the frame afresh"
+msgstr "每条带都重新画一遍外框"
+
+#: umain.rsmode1
+msgid "The same, but bands on a straight edge skip the corners"
+msgstr "同上，但直边上的带不再铺圆角外的底色"
+
+#: umain.rsmode2
+msgid "Each card keeps a frame layer, and bands copy from it"
+msgstr "每张卡片留一份外框层，各条带从里面拷"
+
+#: umain.rsofflinefmt
+#, object-pascal-format
+msgid "%s: %.1f ms per redraw"
+msgstr "%s：每次重画 %.1f ms"
+
+#: umain.rsmodelinefmt
+#, object-pascal-format
+msgid "%s: %.1f ms per redraw, %.1f ms more than off; %d passes, %d bands"
+msgstr "%s：每次重画 %.1f ms，比关闭时多 %.1f ms；补画 %d 次，共 %d 条带"
+
+#: umain.rsdrawpartsfmt
+#, object-pascal-format
+msgid "    set-up %.2f, drawing %.2f (corners %.2f, frame %.2f, separators %.2f), the band onto the window %.2f, the rest %.2f ms"
+msgstr "    准备 %.2f，绘制 %.2f（圆角外底色 %.2f、边框 %.2f、分隔线 %.2f），贴回窗口 %.2f，其余 %.2f ms"
+
+#: umain.rscachepartsfmt
+#, object-pascal-format
+msgid "    set-up %.2f, finding the frame layer %.2f, copying from it %.2f, the band onto the window %.2f, the rest %.2f ms"
+msgstr "    准备 %.2f，取外框层 %.2f，从里面拷 %.2f，贴回窗口 %.2f，其余 %.2f ms"
+
+#: umain.rscachebuiltfmt
+#, object-pascal-format
+msgid "    frame layers: %d built on the first redraw, %.2f ms each; %.1f KB kept"
+msgstr "    外框层：第一次重画时建了 %d 份，每份 %.2f ms；共占 %.1f KB"
+
+#: umain.rscachereusedfmt
+#, object-pascal-format
+msgid "    frame layers: none built, the ones kept before still fit; %.1f KB kept"
+msgstr "    外框层：这次没有新建，之前留的还能用；共占 %.1f KB"
