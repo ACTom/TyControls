@@ -20,10 +20,15 @@ unit test.advchart.toolbox;
   through the chart's own API: ToolboxSpec / ToolboxLayout /
   ToolboxIconState / ToolboxTitle / ToolboxIconStatus / ToolboxHistoryCount /
   ToolboxCover / ToolboxCursorName, the events, OnDataZoom's actions,
-  GetOptionJson and AxisZoom. }
+  GetOptionJson and AxisZoom.
+
+  TAdvChartDataViewTableTest [spec 232]: the data view dialog's two pages,
+  built and not shown -- the blocks as grids, the edits carried between the
+  pages and back through Refresh, the gallery's texts round-tripped. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
-     Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
+     Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes, Translations,
+     tyControls.Grid, tyControls.Columns, tyControls.StrConsts, test.danglingrefs,
      tyControls.Controller, tyControls.Dialogs, tyControls.Memo,
      tyControls.AdvanceChart.Types,
      tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.Events,
@@ -49,6 +54,9 @@ type
       AFontSizeLogical, AWeight: Integer; AMaxWidth: Double): string;
   end;
 
+  { what a test does to the real data view dialog before Refresh }
+  TTbPagesEvent = procedure(APages: TTyDataViewPages) of object;
+
   TTbProbe = class(TTyAdvanceChart)
   protected
     function NewTextMeasurer(APPI: Integer): ITyTextMeasurer; override;
@@ -65,6 +73,9 @@ type
     DvButton: string;
     DvShown, DvReadOnly: Boolean;
     DvTitle, DvText, DvClose, DvRefresh: string;
+    { set: the seam builds the real dialog, hands it here, then answers as
+      Refresh would (DvButton still picks the button) }
+    DvPages: TTbPagesEvent;
     { saveAsImage: what it asked, and a file to write when SaveTo is set }
     SaveAsked: Boolean;
     SaveName, SaveType, SaveOpts, SaveTo: string;
@@ -150,6 +161,38 @@ type
     procedure TestTheToolboxIsDrawnAndExcludedFromTheExport;
     procedure TestAnUnregisteredHandlerDoesNothing;
     procedure TestTheTitlesAreTheResourceStrings;
+  end;
+
+  { The data view's table page [spec 232]. }
+  TAdvChartDataViewTableTest = class(TTestCase)
+  private
+    FForm: TForm;
+    FCtl: TTyStyleController;
+    FChart: TTbProbe;
+    FCell: string;
+    procedure Show(const AOption: string);
+    { the data view's text after a frame has laid the merge out }
+    function TextNow: string;
+    procedure EditCell(APages: TTyDataViewPages);
+    procedure EditText(APages: TTyDataViewPages);
+    procedure EditTextThenTable(APages: TTyDataViewPages);
+    function Build(const AText: string; AReadOnly: Boolean;
+      out APages: TTyDataViewPages): TTyDialog;
+    procedure CheckRoundTrip(const AWhat, AText: string);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestTheTablePageHoldsAnAxisChartsCells;
+    procedure TestThePiesAreBlocksUnderTheirNames;
+    procedure TestAGridEditComesBackThroughRefresh;
+    procedure TestTheEditsCrossBetweenThePages;
+    procedure TestTheGalleryRoundTripsByteForByte;
+    procedure TestSeveralBlocksShowTheirRows;
+    procedure TestNoFreedGridIsRefitted;
+    procedure TestARaggedTextKeepsEveryCell;
+    procedure TestReadOnlyMakesTheCellsReadOnly;
+    procedure TestThePageCaptionsTranslate;
   end;
 
 implementation
@@ -279,6 +322,8 @@ function TTbProbe.ToolboxShowDataView(const ATitle: string; var AText: string;
 var
   i, p: Integer;
   e: string;
+  d: TTyDialog;
+  v: TTyDataViewPages;
 begin
   DvShown := True;
   DvTitle := ATitle;
@@ -286,6 +331,18 @@ begin
   DvReadOnly := AReadOnly;
   DvClose := ACloseCaption;
   DvRefresh := ARefreshCaption;
+  if Assigned(DvPages) then
+  begin
+    d := TyBuildDataViewDialog(ATitle, AText, AReadOnly, ACloseCaption, ARefreshCaption, v);
+    try
+      DvPages(v);
+      Result := (DvButton = ARefreshCaption) and not AReadOnly;
+      if Result then AText := v.Text;
+    finally
+      d.Free;
+    end;
+    Exit;
+  end;
   for i := 0 to DvEdits.Count - 1 do
   begin
     e := DvEdits[i];
@@ -1655,7 +1712,589 @@ begin
   AssertEquals('Stack', spec.Icons[7].Title);
 end;
 
+{ ==================== the data view's table page ==================== }
+
+type
+  TDvGridCrack = class(TTyStringGrid);
+  TDvWinCrack = class(TWinControl);
+
+{ laid out as on screen: an unshown form never runs the alignment, so run
+  it down the tree by hand, on the rect each control was given }
+procedure ForceAlign(AControl: TWinControl);
+var
+  r: TRect;
+  i: Integer;
+begin
+  r := AControl.ClientRect;
+  TDvWinCrack(AControl).AlignControls(nil, r);
+  for i := 0 to AControl.ControlCount - 1 do
+    if (AControl.Controls[i] is TWinControl) and AControl.Controls[i].Visible then
+      ForceAlign(TWinControl(AControl.Controls[i]));
+end;
+
+const
+  cDvAxis = '{"animation":false,"xAxis":{"type":"category","data":["Mon","Tue","Wed"]},'
+    + '"yAxis":{},"series":[{"name":"Rain","type":"bar","data":[2,4.5,7]},'
+    + '{"name":"Snow","type":"line","data":[1,3,5]}],"toolbox":{"feature":{"dataView":{}}}}';
+  cDvPies = '{"animation":false,"series":['
+    + '{"name":"Access","type":"pie","radius":"30%","center":["25%","50%"],'
+    + '"data":[{"name":"Direct","value":335},{"name":"Email","value":310}]},'
+    + '{"name":"Source","type":"pie","radius":"30%","center":["75%","50%"],'
+    + '"data":[{"name":"Search","value":1048},{"name":"Video","value":234},{"name":"Ads","value":135}]}],'
+    + '"toolbox":{"feature":{"dataView":{}}}}';
+
+procedure TAdvChartDataViewTableTest.SetUp;
+begin
+  inherited SetUp;
+  FForm := TForm.CreateNew(nil);
+  FCtl := TTyStyleController.Create(nil);
+  FCtl.Mode := 'light';
+  FCtl.ThemeName := 'default';
+  FChart := TTbProbe.Create(FForm);
+  FChart.Parent := FForm;
+  FChart.Controller := FCtl;
+  FChart.SetBounds(0, 0, cW, cH);
+  FChart.AnimationMode := camOff;
+end;
+
+procedure TAdvChartDataViewTableTest.TearDown;
+begin
+  FChart := nil;
+  FreeAndNil(FForm);
+  FreeAndNil(FCtl);
+  inherited TearDown;
+end;
+
+procedure TAdvChartDataViewTableTest.Show(const AOption: string);
+var bmp: TBGRABitmap;
+begin
+  FChart.SetOption(AOption, True);
+  bmp := TBGRABitmap.Create(cW, cH, BGRA(255, 255, 255, 255));
+  try
+    FChart.Render(bmp.Canvas, Rect(0, 0, bmp.Width, bmp.Height), 96);
+  finally
+    bmp.Free;
+  end;
+end;
+
+function TAdvChartDataViewTableTest.TextNow: string;
+var bmp: TBGRABitmap;
+begin
+  bmp := TBGRABitmap.Create(cW, cH, BGRA(255, 255, 255, 255));
+  try
+    FChart.Render(bmp.Canvas, Rect(0, 0, bmp.Width, bmp.Height), 96);
+  finally
+    bmp.Free;
+  end;
+  Result := FChart.ToolboxDataViewText;
+end;
+
+function TAdvChartDataViewTableTest.Build(const AText: string; AReadOnly: Boolean;
+  out APages: TTyDataViewPages): TTyDialog;
+begin
+  Result := TyBuildDataViewDialog('Data View', AText, AReadOnly, 'Close', 'Refresh', APages);
+end;
+
+{ Tue's Rain, typed into the grid }
+procedure TAdvChartDataViewTableTest.EditCell(APages: TTyDataViewPages);
+begin
+  APages.Grids[0].Cells[1, 1] := FCell;
+end;
+
+{ the same, typed into the text page }
+procedure TAdvChartDataViewTableTest.EditText(APages: TTyDataViewPages);
+begin
+  APages.Pages.ActivePageIndex := 1;
+  APages.Memo.Text := StringReplace(APages.MemoText, 'Tue'#9'4.5', 'Tue'#9 + FCell, []);
+end;
+
+{ the text page's edit, carried to the table, Refresh from there }
+procedure TAdvChartDataViewTableTest.EditTextThenTable(APages: TTyDataViewPages);
+begin
+  EditText(APages);
+  APages.Pages.ActivePageIndex := 0;
+end;
+
+procedure TAdvChartDataViewTableTest.TestTheTablePageHoldsAnAxisChartsCells;
+var
+  d: TTyDialog;
+  v: TTyDataViewPages;
+  g: TTyStringGrid;
+  text: string;
+begin
+  Show(cDvAxis);
+  text := FChart.ToolboxDataViewText;
+  AssertEquals('the text the table splits',
+    ' '#9'Rain'#9'Snow'#10'Mon'#9'2'#9'1'#10'Tue'#9'4.5'#9'3'#10'Wed'#9'7'#9'5', text);
+  d := Build(text, False, v);
+  try
+    AssertEquals('two pages', 2, v.Pages.PageCount);
+    AssertTrue('the table page first', v.Pages.Pages[0] = v.TablePage);
+    AssertTrue('and shown', v.Pages.ActivePage = v.TablePage);
+    AssertTrue('the memo on the text page', v.Memo.Parent = v.TextPage);
+    AssertEquals('one block, one grid', 1, v.GridCount);
+    AssertNull('no scroll box for one', v.ScrollBox);
+    AssertNull('no heading for one axis block', v.Headings[0]);
+    g := v.Grids[0];
+    AssertTrue('it fills the page', (g.Parent = v.TablePage) and (g.Align = alClient));
+    AssertTrue('the header row is the grid''s header', hoVisible in g.Header.Options);
+    AssertEquals('a column per cell', 3, g.Header.Columns.Count);
+    AssertEquals('the corner', ' ', TTyColumn(g.Header.Columns.Items[0]).Text);
+    AssertEquals('a series', 'Rain', TTyColumn(g.Header.Columns.Items[1]).Text);
+    AssertEquals('a series', 'Snow', TTyColumn(g.Header.Columns.Items[2]).Text);
+    AssertEquals('a row per category', 3, g.RowCount);
+    AssertEquals('Mon', g.Cells[0, 0]);
+    AssertEquals('2', g.Cells[1, 0]);
+    AssertEquals('1', g.Cells[2, 0]);
+    AssertEquals('Tue', g.Cells[0, 1]);
+    AssertEquals('4.5', g.Cells[1, 1]);
+    AssertEquals('5', g.Cells[2, 2]);
+    AssertFalse('editable', g.ReadOnly);
+    AssertFalse('the header does not sort the rows', hoHeaderClickAutoSort in g.Header.Options);
+    AssertFalse('nor drag the columns about', hoDrag in g.Header.Options);
+    AssertTrue('the columns fitted to their cells',
+      TTyColumn(g.Header.Columns.Items[0]).Width < g.DefaultColWidth);
+    AssertEquals('the memo holds the text', text, v.MemoText);
+    AssertEquals('Refresh reads the table', text, v.Text);
+  finally
+    d.Free;
+  end;
+end;
+
+procedure TAdvChartDataViewTableTest.TestThePiesAreBlocksUnderTheirNames;
+var
+  d: TTyDialog;
+  v: TTyDataViewPages;
+  text: string;
+  i: Integer;
+begin
+  Show(cDvPies);
+  text := FChart.ToolboxDataViewText;
+  AssertEquals('the text the table splits',
+    'Access'#10'Direct'#9'335'#10'Email'#9'310'#10#10 + TyDataViewBlock + #10#10
+    + 'Source'#10'Search'#9'1048'#10'Video'#9'234'#10'Ads'#9'135', text);
+  d := Build(text, False, v);
+  try
+    AssertEquals('a grid per block', 2, v.GridCount);
+    AssertNotNull('stacked in a scroll box', v.ScrollBox);
+    AssertTrue('the scroll box fills the page',
+      (v.ScrollBox.Parent = v.TablePage) and (v.ScrollBox.Align = alClient));
+    for i := 0 to 1 do
+    begin
+      AssertTrue('in the box', v.Grids[i].Parent = v.ScrollBox);
+      AssertNotNull('a heading', v.Headings[i]);
+      AssertTrue('in the box', v.Headings[i].Parent = v.ScrollBox);
+      AssertFalse('no header band: a list block has no header row',
+        hoVisible in v.Grids[i].Header.Options);
+      AssertEquals('a name and a value', 2, v.Grids[i].Header.Columns.Count);
+    end;
+    AssertEquals('the heading is the series'' name', 'Access', v.Headings[0].Caption);
+    AssertEquals('the heading is the series'' name', 'Source', v.Headings[1].Caption);
+    AssertEquals(2, v.Grids[0].RowCount);
+    AssertEquals(3, v.Grids[1].RowCount);
+    AssertEquals('Email', v.Grids[0].Cells[0, 1]);
+    AssertEquals('310', v.Grids[0].Cells[1, 1]);
+    AssertEquals('Ads', v.Grids[1].Cells[0, 2]);
+    AssertEquals('135', v.Grids[1].Cells[1, 2]);
+    AssertTrue('top to bottom: heading, grid, heading, grid',
+      (v.Headings[0].Top < v.Grids[0].Top) and (v.Grids[0].Top < v.Headings[1].Top)
+      and (v.Headings[1].Top < v.Grids[1].Top));
+    AssertTrue('a grid as tall as its rows, not the page',
+      v.Grids[0].Height < v.Grids[1].Height);
+    AssertEquals('Refresh reads the table', text, v.Text);
+  finally
+    d.Free;
+  end;
+  { one list block alone: its name is the heading still }
+  d := Build('Access'#10'Direct'#9'335', False, v);
+  try
+    AssertEquals(1, v.GridCount);
+    AssertNull('one block: no scroll box', v.ScrollBox);
+    AssertNotNull('the name has nowhere else to show', v.Headings[0]);
+    AssertEquals('Access', v.Headings[0].Caption);
+    AssertTrue('the grid fills the page under it', v.Grids[0].Align = alClient);
+    AssertEquals(1, v.Grids[0].RowCount);
+  finally
+    d.Free;
+  end;
+end;
+
+{ several blocks: each grid as tall as its header and rows, at most the box }
+procedure TAdvChartDataViewTableTest.TestSeveralBlocksShowTheirRows;
+var
+  d: TTyDialog;
+  v: TTyDataViewPages;
+  text, wide: string;
+  i: Integer;
+  g: TDvGridCrack;
+begin
+  text := ' '#9'A'#9'B'#10'x'#9'1'#9'2'#10'y'#9'3'#9'4'#10#10 + TyDataViewBlock + #10#10'P';
+  for i := 1 to 300 do text := text + #10'n' + IntToStr(i) + #9 + IntToStr(i);
+  text := text + #10#10 + TyDataViewBlock + #10#10'Q'#10'm'#9'1';
+  { and first a block wider than the box: its own horizontal bar }
+  wide := ' ';
+  for i := 1 to 30 do wide := wide + #9'Series ' + IntToStr(i);
+  wide := wide + #10'a';
+  for i := 1 to 30 do wide := wide + #9 + IntToStr(i);
+  text := wide + #10#10 + TyDataViewBlock + #10#10 + text;
+  d := Build(text, False, v);
+  try
+    ForceAlign(d);
+    AssertEquals(4, v.GridCount);
+    g := TDvGridCrack(v.Grids[0]);
+    AssertTrue('the wide block: wider than its viewport', g.GridWidth > g.ClientWidth);
+    AssertTrue(Format('the wide block: its bar takes room (vp %d client %d)', [g.ViewportH, g.ClientHeight]),
+      g.ViewportH < g.ClientHeight);
+    AssertEquals('the wide block: header and row in view over the bar',
+      g.HeaderHeightPx + g.GridHeight, g.ViewportH);
+
+    AssertTrue('the box has a height', v.ScrollBox.ClientHeight > 0);
+    g := TDvGridCrack(v.Grids[1]);
+    AssertTrue(Format('the axis block: its header and both rows in view (h %d vp %d hd %d rows %d box %d w %d)',
+      [g.Height, g.ViewportH, g.HeaderHeightPx, g.GridHeight, v.ScrollBox.ClientHeight, g.Width]),
+      g.ViewportH >= g.HeaderHeightPx + g.GridHeight);
+    AssertEquals('and no taller', g.HeaderHeightPx + g.GridHeight, g.ViewportH);
+    g := TDvGridCrack(v.Grids[3]);
+    AssertEquals('the small list block: its row in view, no taller', g.GridHeight, g.ViewportH);
+    g := TDvGridCrack(v.Grids[2]);
+    AssertTrue('the long list block: no taller than the box',
+      g.Height <= v.ScrollBox.ClientHeight);
+    AssertTrue('it scrolls its rows itself', g.ViewportH < g.GridHeight);
+  finally
+    d.Free;
+  end;
+end;
+
+{ a grid freed -- by a re-split, by the dialog going -- realigns the box,
+  which refits the grids it still names: none of them may be the freed one
+  (poisoned frees, so a read of one faults) }
+procedure TAdvChartDataViewTableTest.TestNoFreedGridIsRefitted;
+var
+  d: TTyDialog;
+  v: TTyDataViewPages;
+  r: TRect;
+begin
+  Show(cDvPies);
+  d := Build(FChart.ToolboxDataViewText, False, v);
+  try
+    ForceAlign(d);
+    BeginPoison;
+    try
+      v.Pages.ActivePageIndex := 1;
+      v.Memo.Text := v.MemoText + '1';
+      v.Pages.ActivePageIndex := 0;
+      AssertEquals('re-split', 2, v.GridCount);
+      ForceAlign(d);
+      r := v.ScrollBox.ClientRect;
+      TDvWinCrack(v.ScrollBox).AlignControls(nil, r);
+      FreeAndNil(d);
+    finally
+      EndPoison;
+    end;
+  finally
+    d.Free;
+  end;
+end;
+
+procedure TAdvChartDataViewTableTest.TestAGridEditComesBackThroughRefresh;
+var before, byGrid, byText: string;
+begin
+  Show(cDvAxis);
+  before := FChart.GetOptionJson;
+  FCell := '42';
+  FChart.DvButton := 'Refresh';
+  FChart.DvPages := @EditCell;
+  AssertTrue('the icon is there', FChart.ToolboxClick(0, 'dataView', 'dataView'));
+  AssertEquals('it read back', '', FChart.ToolboxError);
+  byGrid := FChart.GetOptionJson;
+  AssertTrue('the option changed', byGrid <> before);
+  AssertTrue('the grid''s edit is in the data view',
+    Pos('Tue'#9'42'#9'3', TextNow) > 0);
+  { the same edit typed into the text page: the same option }
+  Show(cDvAxis);
+  FChart.DvPages := @EditText;
+  AssertTrue(FChart.ToolboxClick(0, 'dataView', 'dataView'));
+  byText := FChart.GetOptionJson;
+  AssertEquals('the same option whichever page was used', byText, byGrid);
+  { Close: nothing comes back }
+  Show(cDvAxis);
+  FChart.DvButton := 'Close';
+  FChart.DvPages := @EditCell;
+  AssertTrue(FChart.ToolboxClick(0, 'dataView', 'dataView'));
+  AssertEquals('Close leaves the option', before, FChart.GetOptionJson);
+end;
+
+procedure TAdvChartDataViewTableTest.TestTheEditsCrossBetweenThePages;
+var
+  d: TTyDialog;
+  v: TTyDataViewPages;
+  text, viaText: string;
+begin
+  Show(cDvAxis);
+  text := FChart.ToolboxDataViewText;
+  d := Build(text, False, v);
+  try
+    ForceAlign(d);
+    { table to text, one edit still in the cell editor }
+    v.Grids[0].Cells[2, 0] := '9';
+    v.Grids[0].Col := 2;
+    v.Grids[0].Row := 1;
+    v.Grids[0].EditorMode := True;
+    AssertTrue(Format('the cell editor is open (grid %d x %d, page %d x %d, pages %d x %d)',
+      [v.Grids[0].Width, v.Grids[0].Height, v.TablePage.Width, v.TablePage.Height,
+       v.Pages.Width, v.Pages.Height]), v.Grids[0].EditorMode);
+    v.Grids[0].Editor.Text := '6';
+    v.Pages.ActivePageIndex := 1;
+    AssertTrue('on the text page', v.Pages.ActivePage = v.TextPage);
+    AssertEquals('the grid''s edit in the memo, tabs and newlines as written',
+      ' '#9'Rain'#9'Snow'#10'Mon'#9'2'#9'9'#10'Tue'#9'4.5'#9'6'#10'Wed'#9'7'#9'5', v.MemoText);
+    AssertEquals('Refresh reads the text page', v.MemoText, v.Text);
+    { text to table }
+    v.Memo.Text := StringReplace(v.MemoText, 'Wed'#9'7', 'Thu'#9'8', []);
+    v.Pages.ActivePageIndex := 0;
+    AssertEquals('the memo''s edit in the grid', 'Thu', v.Grids[0].Cells[0, 2]);
+    AssertEquals('the memo''s edit in the grid', '8', v.Grids[0].Cells[1, 2]);
+    AssertEquals('the earlier edit kept', '9', v.Grids[0].Cells[2, 0]);
+    viaText := v.Text;
+    AssertEquals('both edits, from the table',
+      ' '#9'Rain'#9'Snow'#10'Mon'#9'2'#9'9'#10'Tue'#9'4.5'#9'6'#10'Thu'#9'8'#9'5', viaText);
+    { a text that became two blocks re-splits into two grids }
+    v.Pages.ActivePageIndex := 1;
+    v.Memo.Text := v.MemoText + #10#10 + TyDataViewBlock + #10#10'P'#10'x'#9'1';
+    v.Pages.ActivePageIndex := 0;
+    AssertEquals('two blocks now', 2, v.GridCount);
+    AssertNotNull('in a scroll box', v.ScrollBox);
+    AssertEquals('P', v.Headings[1].Caption);
+    AssertEquals('Rain, Snow', v.Headings[0].Caption);
+    AssertEquals('x', v.Grids[1].Cells[0, 0]);
+  finally
+    d.Free;
+  end;
+  { through Refresh from the table page after the text page's edit }
+  FCell := '42';
+  FChart.DvButton := 'Refresh';
+  FChart.DvPages := @EditTextThenTable;
+  AssertTrue(FChart.ToolboxClick(0, 'dataView', 'dataView'));
+  AssertTrue('the text page''s edit, read from the table',
+    Pos('Tue'#9'42'#9'3', TextNow) > 0);
+end;
+
+procedure TAdvChartDataViewTableTest.CheckRoundTrip(const AWhat, AText: string);
+var
+  d: TTyDialog;
+  v: TTyDataViewPages;
+begin
+  AssertEquals(AWhat + ': split and joined', AText, TyDvJoinTable(TyDvSplitTable(AText)));
+  d := Build(AText, False, v);
+  try
+    AssertTrue(AWhat + ': grids', v.GridCount > 0);
+    AssertEquals(AWhat + ': the table', AText, v.TableText);
+    AssertEquals(AWhat + ': Refresh from the table', AText, v.Text);
+    v.Pages.ActivePageIndex := 1;
+    AssertEquals(AWhat + ': to the text page', AText, v.MemoText);
+    AssertEquals(AWhat + ': Refresh from the text', AText, v.Text);
+    v.Pages.ActivePageIndex := 0;
+    AssertEquals(AWhat + ': and back', AText, v.TableText);
+    v.Memo.Text := v.MemoText + ' ';
+    v.Pages.ActivePageIndex := 1;
+    v.Pages.ActivePageIndex := 0;
+    v.Pages.ActivePageIndex := 1;
+    AssertEquals(AWhat + ': through a re-split', AText + ' ', v.MemoText);
+  finally
+    d.Free;
+  end;
+end;
+
+procedure TAdvChartDataViewTableTest.TestTheGalleryRoundTripsByteForByte;
+var
+  dir, text, body: string;
+  sr: TSearchRec;
+  sl: TStringList;
+  o: TJSONData;
+  n, cells, b: Integer;
+  bl: TTyDvTableBlockArray;
+begin
+  dir := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'examples' + PathDelim
+    + 'advchart' + PathDelim + 'gallery' + PathDelim;
+  n := 0;
+  cells := 0;
+  if FindFirst(dir + '*.json', faAnyFile, sr) = 0 then
+  try
+    repeat
+      sl := TStringList.Create;
+      try
+        sl.LoadFromFile(dir + sr.Name);
+        body := sl.Text;
+      finally
+        sl.Free;
+      end;
+      { the charts whose toolbox has the data view }
+      if Pos('"dataView": {', body) = 0 then Continue;
+      o := GetJSON(body);
+      try
+        TJSONObject(o).Booleans['animation'] := False;
+        Show(o.AsJSON);
+      finally
+        o.Free;
+      end;
+      text := FChart.ToolboxDataViewText;
+      AssertTrue(sr.Name + ': a text', text <> '');
+      CheckRoundTrip(sr.Name, text);
+      bl := TyDvSplitTable(text);
+      for b := 0 to High(bl) do Inc(cells, Length(bl[b].Rows));
+      Inc(n);
+    until FindNext(sr) <> 0;
+  finally
+    FindClose(sr);
+  end;
+  AssertTrue('the gallery''s data views (' + IntToStr(n) + ')', n >= 18);
+  AssertTrue('rows in them', cells > 100);
+end;
+
+procedure TAdvChartDataViewTableTest.TestARaggedTextKeepsEveryCell;
+const
+  { a ragged table, a blank line, a trailing tab, a separator written with one
+    newline each side, a list block, a separator at the very end }
+  cRagged = ' '#9'A'#10'x'#9'1'#9'2'#9'3'#10#10'y'#10'z'#9'5'#9
+    + #10 + TyDataViewBlock + #10'P'#10#10'q'#9'7'#10#10 + TyDataViewBlock;
+var
+  d: TTyDialog;
+  v: TTyDataViewPages;
+  bl: TTyDvTableBlockArray;
+  g: TTyStringGrid;
+begin
+  bl := TyDvSplitTable(cRagged);
+  AssertEquals('three blocks, as parseContents splits them', 3, Length(bl));
+  AssertEquals('the glue as written', #10 + TyDataViewBlock + #10, bl[1].Glue);
+  AssertEquals('the glue as written', #10#10 + TyDataViewBlock, bl[2].Glue);
+  AssertTrue('a table', bl[0].IsTable);
+  AssertFalse('a list', bl[1].IsTable);
+  AssertEquals('rows', 4, Length(bl[0].Rows));
+  AssertEquals('a long row', 4, Length(bl[0].Rows[0]));
+  AssertEquals('a blank line is a row of one empty cell', 1, Length(bl[0].Rows[1]));
+  AssertEquals('a short row', 1, Length(bl[0].Rows[2]));
+  AssertEquals('a trailing tab is an empty cell', 3, Length(bl[0].Rows[3]));
+  AssertEquals('the list''s blank line', 2, Length(bl[1].Rows));
+  { isTSVFormat's slice: with no newline the last character is not looked at }
+  AssertFalse('a lone line ending in its only tab', TyDvSplitTable('P'#9)[0].IsTable);
+  AssertTrue('a lone line with a tab inside', TyDvSplitTable('P'#9'x')[0].IsTable);
+  CheckRoundTrip('ragged', cRagged);
+  d := Build(cRagged, False, v);
+  try
+    g := v.Grids[0];
+    AssertEquals('as wide as the longest row', 4, g.Header.Columns.Count);
+    AssertEquals('A', TTyColumn(g.Header.Columns.Items[1]).Text);
+    AssertEquals('', TTyColumn(g.Header.Columns.Items[2]).Text);
+    AssertEquals('3', g.Cells[3, 0]);
+    AssertEquals('y', g.Cells[0, 2]);
+    AssertEquals('', g.Cells[1, 2]);
+    AssertEquals('the empty end-of-list block', 0, v.Grids[2].RowCount);
+    AssertEquals('its heading', '', v.Headings[2].Caption);
+    { typed past a short row's end: the row grows to it }
+    g.Cells[2, 2] := 'w';
+    { emptied at a row's end: the row keeps its cells }
+    g.Cells[3, 0] := '';
+    AssertEquals(' '#9'A'#10'x'#9'1'#9'2'#9#10#10'y'#9#9'w'#10'z'#9'5'#9
+      + #10 + TyDataViewBlock + #10'P'#10#10'q'#9'7'#10#10 + TyDataViewBlock, v.TableText);
+  finally
+    d.Free;
+  end;
+end;
+
+procedure TAdvChartDataViewTableTest.TestReadOnlyMakesTheCellsReadOnly;
+var
+  d: TTyDialog;
+  v: TTyDataViewPages;
+  i: Integer;
+begin
+  Show(cDvPies);
+  d := Build(FChart.ToolboxDataViewText, True, v);
+  try
+    AssertEquals('read only: Close alone', 1, d.ButtonCount);
+    AssertTrue('the memo', v.Memo.ReadOnly);
+    for i := 0 to v.GridCount - 1 do
+      AssertTrue('the grid', v.Grids[i].ReadOnly);
+    { and the grids a re-split makes }
+    v.Pages.ActivePageIndex := 1;
+    v.Memo.Text := v.MemoText + 'x';
+    v.Pages.ActivePageIndex := 0;
+    for i := 0 to v.GridCount - 1 do
+      AssertTrue('the grid, re-split', v.Grids[i].ReadOnly);
+  finally
+    d.Free;
+  end;
+  d := Build(FChart.ToolboxDataViewText, False, v);
+  try
+    AssertFalse('the memo', v.Memo.ReadOnly);
+    for i := 0 to v.GridCount - 1 do
+      AssertFalse('the grid', v.Grids[i].ReadOnly);
+  finally
+    d.Free;
+  end;
+end;
+
+procedure TAdvChartDataViewTableTest.TestThePageCaptionsTranslate;
+var
+  po: TPOFile;
+  d: TTyDialog;
+  v: TTyDataViewPages;
+  root, zhTable, zhText: string;
+  sl: TStringList;
+begin
+  root := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'languages' + PathDelim;
+  d := Build('x', False, v);
+  try
+    AssertEquals('Table', v.TablePage.Caption);
+    AssertEquals('Text', v.TextPage.Caption);
+  finally
+    d.Free;
+  end;
+  po := TPOFile.Create(True);
+  sl := TStringList.Create;
+  try
+    sl.LoadFromFile(root + 'tycontrols.strconsts.zh_CN.po');
+    po.ReadPOText(sl.Text);
+  finally
+    sl.Free;
+  end;
+  try
+    zhTable := po.Translate('tycontrols.strconsts.rstycharttoolboxdataviewtable', 'Table');
+    zhText := po.Translate('tycontrols.strconsts.rstycharttoolboxdataviewtext', 'Text');
+    AssertTrue('the catalogue translates them', (zhTable <> 'Table') and (zhText <> 'Text'));
+    AssertTrue(TranslateUnitResourceStrings('tyControls.StrConsts', po));
+  finally
+    po.Free;
+  end;
+  try
+    d := Build('x', False, v);
+    try
+      AssertEquals('the table page''s caption, translated', zhTable, v.TablePage.Caption);
+      AssertEquals('the text page''s caption, translated', zhText, v.TextPage.Caption);
+    finally
+      d.Free;
+    end;
+  finally
+    { a catalogue that names the two in English: every string it does not
+      name falls back to its English default too }
+    po := TPOFile.Create(True);
+    try
+      po.ReadPOText('msgid ""' + LineEnding + 'msgstr ""' + LineEnding
+        + '"Content-Type: text/plain; charset=UTF-8\n"' + LineEnding + LineEnding
+        + '#: tycontrols.strconsts.rstycharttoolboxdataviewtable' + LineEnding
+        + 'msgid "Table"' + LineEnding + 'msgstr "Table"' + LineEnding + LineEnding
+        + '#: tycontrols.strconsts.rstycharttoolboxdataviewtext' + LineEnding
+        + 'msgid "Text"' + LineEnding + 'msgstr "Text"' + LineEnding);
+      TranslateUnitResourceStrings('tyControls.StrConsts', po);
+    finally
+      po.Free;
+    end;
+  end;
+  AssertEquals('every string English again', 'Refresh', rsTyChartToolboxDataViewRefresh);
+  AssertEquals('English again', 'Table', rsTyChartToolboxDataViewTable);
+end;
+
 initialization
   RegisterTest(TAdvChartToolboxOracleTest);
   RegisterTest(TAdvChartToolboxTest);
+  RegisterTest(TAdvChartDataViewTableTest);
 end.

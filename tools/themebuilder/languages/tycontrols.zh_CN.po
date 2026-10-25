@@ -1273,6 +1273,14 @@ msgstr "数据视图的文本无法读回：%s"
 msgid "Refresh"
 msgstr "刷新"
 
+#: tycontrols.strconsts.rstycharttoolboxdataviewtable
+msgid "Table"
+msgstr "表格"
+
+#: tycontrols.strconsts.rstycharttoolboxdataviewtext
+msgid "Text"
+msgstr "文本"
+
 #: tycontrols.strconsts.rstycharttoolboximagefilter
 msgid "PNG image (*.png)|*.png|JPEG image (*.jpeg;*.jpg)|*.jpeg;*.jpg|All files (*.*)|*.*"
 msgstr "PNG 图片 (*.png)|*.png|JPEG 图片 (*.jpeg;*.jpg)|*.jpeg;*.jpg|所有文件 (*.*)|*.*"

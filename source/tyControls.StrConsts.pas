@@ -511,6 +511,9 @@ resourcestring
   rsTyChartToolboxRestore = 'Restore';
   rsTyChartToolboxDataView = 'Data View';
   rsTyChartToolboxDataViewRefresh = 'Refresh';
+  // the data view's two pages [spec 232]: the blocks as grids, and the text
+  rsTyChartToolboxDataViewTable = 'Table';
+  rsTyChartToolboxDataViewText = 'Text';
   rsTyChartToolboxZoom = 'Zoom';
   rsTyChartToolboxZoomBack = 'Zoom Reset';
   rsTyChartToolboxLine = 'Switch to Line Chart';

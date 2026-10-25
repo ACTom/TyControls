@@ -278,6 +278,15 @@ function TyDataViewText(const AGroups: TTyDvGroupArray;
   upstream throws ('Data view format error'). }
 function TyDataViewParse(const AText: string; const AMeta: TTyDvMetaArray;
   out AError: string): TJSONObject;
+{ parseContents' split into blocks, str.split(/\n*<block>\n*/g): AGlue[i]
+  is the separator text, as written, in front of block i ('' for the
+  first), so the blocks and their glue join back to AText exactly }
+function TyDataViewSplitBlocks(const AText: string;
+  out AGlue: TTyStringArray): TTyStringArray;
+{ isTSVFormat: whether parseContents reads a block as a table (a header row,
+  a row per category) -- a tab in its first line, which with no newline is
+  the whole block but its last character }
+function TyDataViewIsTable(const ABlock: string): Boolean;
 { the changeDataView action: the option it merges (the series by name,
   their data merged into the items they replace; a new name a scatter) }
 function TyDataViewChange(AParsed: TJSONObject; AFind: TTyDvFindSeries): TJSONObject;
@@ -1551,11 +1560,17 @@ begin
 end;
 
 { str.split(/\n*<block>\n*/g) }
-function SplitBlocks(const S: string): TTyStringArray;
+function TyDataViewSplitBlocks(const AText: string;
+  out AGlue: TTyStringArray): TTyStringArray;
 var
   i, j, start, at: Integer;
+  S: string;
 begin
+  S := AText;
   Result := nil;
+  AGlue := nil;
+  SetLength(AGlue, 1);
+  AGlue[0] := '';
   start := 1;
   i := 1;
   while i <= Length(S) do
@@ -1570,6 +1585,8 @@ begin
       while (at <= Length(S)) and (S[at] = #10) do Inc(at);
       SetLength(Result, Length(Result) + 1);
       Result[High(Result)] := Copy(S, start, i - start);
+      SetLength(AGlue, Length(AGlue) + 1);
+      AGlue[High(AGlue)] := Copy(S, i, at - i);
       start := at;
       i := at;
       Continue;
@@ -1580,12 +1597,24 @@ begin
   Result[High(Result)] := Copy(S, start, Length(S) - start + 1);
 end;
 
+function TyDataViewIsTable(const ABlock: string): Boolean;
+var
+  nl: Integer;
+  first: string;
+begin
+  { block.slice(0, block.indexOf('\n')): -1 with no newline }
+  nl := Pos(#10, ABlock);
+  if nl > 0 then first := Copy(ABlock, 1, nl - 1)
+  else first := Copy(ABlock, 1, Length(ABlock) - 1);
+  Result := Pos(#9, first) > 0;
+end;
+
 function TyDataViewParse(const AText: string; const AMeta: TTyDvMetaArray;
   out AError: string): TJSONObject;
 var
-  blocks, lines, headers, items: TTyStringArray;
-  b, i, j, nl: Integer;
-  block, first, axisKey, nm: string;
+  blocks, glue, lines, headers, items: TTyStringArray;
+  b, i, j: Integer;
+  block, axisKey, nm: string;
   series, axes, item, valueArr: TJSONData;
   heads: array of TJSONObject;
   cats, data, vals: TJSONArray;
@@ -1617,16 +1646,11 @@ begin
   Result := TJSONObject.Create;
   series := TJSONArray.Create;
   TJSONObject(Result).Add('series', series);
-  blocks := SplitBlocks(AText);
+  blocks := TyDataViewSplitBlocks(AText, glue);
   for b := 0 to High(blocks) do
   begin
     block := blocks[b];
-    { isTSVFormat: block.slice(0, block.indexOf('\n')) -- with no newline
-      the whole block but its last character }
-    nl := Pos(#10, block);
-    if nl > 0 then first := Copy(block, 1, nl - 1)
-    else first := Copy(block, 1, Length(block) - 1);
-    if Pos(#9, first) > 0 then
+    if TyDataViewIsTable(block) then
     begin
       lines := SplitRuns(block, #10);
       headers := SplitRuns(TyJsTrim(lines[0]), #9);
