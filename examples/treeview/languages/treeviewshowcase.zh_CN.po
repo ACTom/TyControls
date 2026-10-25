@@ -68,8 +68,8 @@ msgid "Multi-Select"
 msgstr "多选"
 
 #: tshowcaseform.lblmulti.caption
-msgid "Multi-select + full-row highlight. Ctrl+click / Shift+click / Ctrl+A. OnSelectionChanged shows live count in the status bar.  Ctrl+Space toggles the focused row in or out of the selection; OnFocusChanged names it on the right.  Type a few characters to jump to a row (toIncrementalSearch) - OnIncrementalSearch turns the built-in prefix test into a substring match, and 1.5 s of idle clears the buffer (SearchTimeout).  The strip below drives ShowButtons / ShowTreeLines / ShowRoot / Indent live; DefaultNodeHeight is left unset, so rows follow the theme item-height token."
-msgstr "多选加整行高亮。Ctrl+点击 / Shift+点击 / Ctrl+A。OnSelectionChanged 在状态栏实时显示选中数量。Ctrl+空格把当前焦点行加入或移出选区；OnFocusChanged 在右边报出它的名字。敲几个字符可以跳到某一行（toIncrementalSearch）—— OnIncrementalSearch 把内置的前缀匹配换成了子串匹配，停手 1.5 秒后缓冲区清空（SearchTimeout）。下面这一条控件实时驱动 ShowButtons / ShowTreeLines / ShowRoot / Indent；DefaultNodeHeight 没有设置，所以行高跟随主题的 item-height 令牌。"
+msgid "Multi-select + full-row highlight. Ctrl+click / Shift+click / Ctrl+A. OnSelectionChanged shows live count in the status bar.  Ctrl+Space toggles the focused row in or out of the selection; OnFocusChanged names it on the right.  Type a few characters to jump to a row (toIncrementalSearch) - OnIncrementalSearch turns the built-in prefix test into a substring match, and 1.5 s of idle clears the buffer (SearchTimeout).  The first strip below drives ShowButtons / ShowTreeLines / ShowRoot / Indent live; DefaultNodeHeight is left unset, so rows follow the theme item-height token.  The second sets how this tree draws its lines and expanders, in its own StyleOverride (--treeview-lines, --treeview-lines-style, --treeview-expander); left on From theme, the skin decides - classic and xp draw a boxed +/- over dotted lines.  The third sizes and inks every chevron in the application at once - the trees', the combo boxes', the menus' - through :root in the controller's StyleOverride (--glyph-chevron-size, --glyph-chevron-alpha)."
+msgstr "多选加整行高亮。Ctrl+点击 / Shift+点击 / Ctrl+A。OnSelectionChanged 在状态栏实时显示选中数量。Ctrl+空格把当前焦点行加入或移出选区；OnFocusChanged 在右边报出它的名字。敲几个字符可以跳到某一行（toIncrementalSearch）—— OnIncrementalSearch 把内置的前缀匹配换成了子串匹配，停手 1.5 秒后缓冲区清空（SearchTimeout）。下面第一条控件实时驱动 ShowButtons / ShowTreeLines / ShowRoot / Indent；DefaultNodeHeight 没有设置，所以行高跟随主题的 item-height 令牌。第二条设置这棵树的连线和展开符号怎么画，写在它自己的 StyleOverride 里（--treeview-lines、--treeview-lines-style、--treeview-expander）；选“跟随主题”就由皮肤决定 —— classic 和 xp 画的是方框 +/- 加点线。第三条一次性调整整个应用里所有箭头的大小和浓淡 —— 树的、下拉框的、菜单的 —— 写在控制器 StyleOverride 的 :root 里（--glyph-chevron-size、--glyph-chevron-alpha）。"
 
 #: tshowcaseform.chkbuttons.caption
 msgid "Expand buttons"
@@ -391,3 +391,77 @@ msgstr "节点 %d  (L%d)"
 #: tshowcaseform.dragtree.emptylistmessage
 msgid "Nothing here - press Rebuild to add the groups back."
 msgstr "这里空了 - 按“重建”把分组加回来。"
+
+#: tshowcaseform.lbllines.caption
+msgid "Lines"
+msgstr "连线"
+
+#: tshowcaseform.lbldash.caption
+msgid "Dash"
+msgstr "线型"
+
+#: tshowcaseform.lblexpander.caption
+msgid "Expander"
+msgstr "展开符号"
+
+#: tshowcaseform.lblchevron.caption
+msgid "Chevron size"
+msgstr "箭头大小"
+
+#: tshowcaseform.lblchevronink.caption
+msgid "Chevron ink"
+msgstr "箭头浓淡"
+
+#: showcasemain.rsfromtheme
+msgid "From theme"
+msgstr "跟随主题"
+
+#: showcasemain.rslinesguides
+msgid "Guides"
+msgstr "参考线"
+
+#: showcasemain.rslinesclassic
+msgid "Classic"
+msgstr "经典连线"
+
+#: showcasemain.rslinesnone
+msgid "None"
+msgstr "不画"
+
+#: showcasemain.rsdashsolid
+msgid "Solid"
+msgstr "实线"
+
+#: showcasemain.rsdashdotted
+msgid "Dotted"
+msgstr "点线"
+
+#: showcasemain.rsdashdashed
+msgid "Dashed"
+msgstr "虚线"
+
+#: showcasemain.rsdashlong
+msgid "Long dash"
+msgstr "长虚线"
+
+#: showcasemain.rsexpchevron
+msgid "Chevron"
+msgstr "箭头"
+
+#: showcasemain.rsexpplusminus
+msgid "Boxed +/-"
+msgstr "方框 +/-"
+
+#: showcasemain.rslinesfromtheme
+msgid "Lines and expanders: as the theme draws them"
+msgstr "连线和展开符号：跟随主题"
+
+#: showcasemain.rsstyleoverridefmt
+#, object-pascal-format
+msgid "MultiTree.StyleOverride = '%s'"
+msgstr "MultiTree.StyleOverride = '%s'"
+
+#: showcasemain.rschevronfmt
+#, object-pascal-format
+msgid "Every chevron: --glyph-chevron-size %d px, --glyph-chevron-alpha %d"
+msgstr "所有箭头：--glyph-chevron-size %d px，--glyph-chevron-alpha %d"

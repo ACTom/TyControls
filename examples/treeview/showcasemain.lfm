@@ -183,19 +183,19 @@ object ShowcaseForm: TShowcaseForm
         Caption = 'Multi-Select'
         object LblMulti: TTyLabel
           Left = 0
-          Height = 84
+          Height = 124
           Top = 0
           Width = 900
           Align = alTop
           BorderSpacing.Left = 8
-          Caption = 'Multi-select + full-row highlight. Ctrl+click / Shift+click / Ctrl+A. OnSelectionChanged shows live count in the status bar.  Ctrl+Space toggles the focused row in or out of the selection; OnFocusChanged names it on the right.  Type a few characters to jump to a row (toIncrementalSearch) - OnIncrementalSearch turns the built-in prefix test into a substring match, and 1.5 s of idle clears the buffer (SearchTimeout).  The strip below drives ShowButtons / ShowTreeLines / ShowRoot / Indent live; DefaultNodeHeight is left unset, so rows follow the theme item-height token.'
+          Caption = 'Multi-select + full-row highlight. Ctrl+click / Shift+click / Ctrl+A. OnSelectionChanged shows live count in the status bar.  Ctrl+Space toggles the focused row in or out of the selection; OnFocusChanged names it on the right.  Type a few characters to jump to a row (toIncrementalSearch) - OnIncrementalSearch turns the built-in prefix test into a substring match, and 1.5 s of idle clears the buffer (SearchTimeout).  The first strip below drives ShowButtons / ShowTreeLines / ShowRoot / Indent live; DefaultNodeHeight is left unset, so rows follow the theme item-height token.  The second sets how this tree draws its lines and expanders, in its own StyleOverride (--treeview-lines, --treeview-lines-style, --treeview-expander); left on From theme, the skin decides - classic and xp draw a boxed +/- over dotted lines.  The third sizes and inks every chevron in the application at once - the trees'', the combo boxes'', the menus'' - through :root in the controller''s StyleOverride (--glyph-chevron-size, --glyph-chevron-alpha).'
           Layout = tlTop
           WordWrap = True
         end
         object MultiBar: TTyPanel
           Left = 0
           Height = 40
-          Top = 84
+          Top = 124
           Width = 900
           Align = alTop
           object ChkButtons: TTyCheckBox
@@ -244,10 +244,102 @@ object ShowcaseForm: TShowcaseForm
             OnChange = TrkIndentChange
           end
         end
+        object LinesBar: TTyPanel
+          Left = 0
+          Height = 40
+          Top = 164
+          Width = 900
+          Align = alTop
+          object LblLines: TTyLabel
+            Left = 8
+            Height = 20
+            Top = 10
+            Width = 44
+            Caption = 'Lines'
+          end
+          object CmbLines: TTyComboBox
+            Left = 54
+            Height = 26
+            Top = 7
+            Width = 112
+            OnChange = LinesLookChange
+          end
+          object LblDash: TTyLabel
+            Left = 180
+            Height = 20
+            Top = 10
+            Width = 44
+            Caption = 'Dash'
+          end
+          object CmbDash: TTyComboBox
+            Left = 226
+            Height = 26
+            Top = 7
+            Width = 112
+            OnChange = LinesLookChange
+          end
+          object LblExpander: TTyLabel
+            Left = 352
+            Height = 20
+            Top = 10
+            Width = 68
+            Caption = 'Expander'
+          end
+          object CmbExpander: TTyComboBox
+            Left = 422
+            Height = 26
+            Top = 7
+            Width = 112
+            OnChange = LinesLookChange
+          end
+        end
+        object ChevronBar: TTyPanel
+          Left = 0
+          Height = 40
+          Top = 204
+          Width = 900
+          Align = alTop
+          object LblChevron: TTyLabel
+            Left = 8
+            Height = 20
+            Top = 10
+            Width = 92
+            Caption = 'Chevron size'
+          end
+          object TrkChevron: TTyTrackBar
+            Left = 102
+            Height = 24
+            Top = 8
+            Width = 200
+            Min = 5
+            Max = 12
+            Position = 7
+            ShowValue = True
+            OnChange = ChevronLookChange
+          end
+          object LblChevronInk: TTyLabel
+            Left = 320
+            Height = 20
+            Top = 10
+            Width = 92
+            Caption = 'Chevron ink'
+          end
+          object TrkChevronInk: TTyTrackBar
+            Left = 414
+            Height = 24
+            Top = 8
+            Width = 200
+            Min = 60
+            Max = 255
+            Position = 200
+            ShowValue = True
+            OnChange = ChevronLookChange
+          end
+        end
         object MultiTree: TTyTreeView
           Left = 0
-          Height = 488
-          Top = 124
+          Height = 368
+          Top = 244
           Width = 900
           Align = alClient
           SearchTimeout = 1500
