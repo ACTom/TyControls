@@ -129,6 +129,7 @@ begin
   FreeAndNil(FBrushTimer);
   FreeAndNil(FParExpTimer);
   FreeAndNil(FTipTimer);
+  VmModelsClear;
   { THE PROXIES BEFORE THE DRIVER: freeing one takes its clips off it }
   FreeAndNil(FAnimTimer);
   AxisAnimDrop;
@@ -355,6 +356,8 @@ begin
   FOptPtrBack := nil;
   { EVERY visualMap VIEW GOES with its model [Batch 116] }
   VmDisposeAll;
+  { and the models' own visuals: made again from the base [R3-B] }
+  VmModelsClear;
   { THE OLD OPTION'S SERIES VIEWS, before the text goes: an update keeps a
     series whose view id and type are the same -- unless an update already
     waits, whose old render is still the one before it [Batch 90] -- or a
@@ -591,6 +594,12 @@ end;
 procedure TTyAdvanceChart.MergePass(const AReport: TTyMergeReport);
 var si, s, t: Integer;
 begin
+  { [R3-B] a fresh option's base, no merge }
+  if AReport.AtBase then
+  begin
+    NotMergePass(AReport);
+    Exit;
+  end;
   if FMergeFirst then
   begin
     FMergeFirst := False;
@@ -673,6 +682,17 @@ end;
 procedure TTyAdvanceChart.NotMergePass(const AReport: TTyMergeReport);
 var si, s, n, k: Integer;
 begin
+  { [R3-B] THE BASE'S MODELS, before a frame or a media unit merges over
+    them: the visualMaps' visuals completed, the graphic model's list made
+    from the base's elements -- what upstream's initBase builds }
+  if AReport.AtBase then
+  begin
+    VmModelsInitAll;
+    if FGfxFresh then GfxInitFromTree;
+    Exit;
+  end;
+  { the visualMap models' optionUpdated [R3-B] }
+  VmModelsPass(AReport);
   { the graphic model's optionUpdated [Batch 122] }
   GfxPass(AReport);
   { EVERY THUMBNAIL MODEL THE MERGE REACHED, in index order: its
@@ -856,25 +876,9 @@ end;
 
 procedure TTyAdvanceChart.MergeBefore(const AMainType: string; AIndex: Integer;
   ANode, ANew: TJSONObject);
-
-  function HasKeys(AData: TJSONData): Boolean;
-  begin
-    Result := (AData <> nil) and (AData.JSONType in [jtObject, jtArray]) and (AData.Count > 0);
-  end;
-
 begin
-  { replaceVisualOption [Batch 127]: a merge that writes inBrush or
-    outOfBrush with any key replaces both -- the one it does not write goes
-    (and optionUpdated's defaults come back) }
-  if AMainType = 'brush' then
-  begin
-    if HasKeys(ANew.Find('inBrush')) or HasKeys(ANew.Find('outOfBrush')) then
-    begin
-      if ANode.IndexOfName('inBrush') >= 0 then ANode.Delete('inBrush');
-      if ANode.IndexOfName('outOfBrush') >= 0 then ANode.Delete('outOfBrush');
-    end;
-    Exit;
-  end;
+  { [R3-B] a brush's replaceVisualOption [Batch 127] is the merge's own now
+    (OptionMerge, every merge -- a frame's and a media unit's too) }
   if AMainType = 'visualMap' then
   begin
     { setSelected wrote `range` into the model's option: it goes into the

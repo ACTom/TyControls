@@ -271,6 +271,40 @@ function TyVisualMapSpecOf(AOption: TTyChartOption; AIndex: Integer;
 function TyVisualMapSpecOf(AOption: TTyChartOption; AIndex: Integer;
   const ARamp: TTyVisualColorArray;
   const AInactive: TTyVisualColor): TTyVisualMapSpec; overload;
+{ [R3-B] AModel: the model's own visuals (TyVisualMapModelNew, kept by the
+  caller across merges) -- read as they stand, not completed again; nil
+  makes a fresh model, as the forms above do. }
+function TyVisualMapSpecOf(AOption: TTyChartOption; AIndex: Integer;
+  const ARamp: TTyVisualColorArray; const AInactive: TTyVisualColor;
+  AModel: TJSONObject): TTyVisualMapSpec; overload;
+
+{ ---- the model's own visuals [R3-B] ----
+  VisualMapModel keeps what completeVisualOption made of inRange /
+  outOfRange / target / controller in its option: optionUpdated completes
+  them at init and again at every merge, but only what is missing -- a
+  target state made once stays, whatever the pieces write later -- and
+  replaceVisualOption throws them away when a merge writes one of the five
+  visual keys. A model is a JSON object holding those four keys as the
+  model has them. The theme's two defaults -- the gradient (the option
+  root's `gradientColor`, which the model's array aliases, else the
+  skin's ramp) and an `inactiveColor` the author did not write -- are kept
+  as markers and resolved when read, so a skin change still reaches them. }
+{ init: the node's four keys, cloned; nil without such a visualMap. The
+  caller owns it. Not completed yet. }
+function TyVisualMapModelNew(AOption: TTyChartOption; AIndex: Integer): TJSONObject;
+{ mergeOption's zrUtil.merge of the four keys, then optionUpdated's
+  replaceVisualOption against ANew (the merged-in option) }
+procedure TyVisualMapModelMerge(AModel, ANew: TJSONObject);
+{ completeVisualOption on the model, against the node as it stands now
+  (the pieces, the categories, itemWidth, itemSymbol, ec2's `color`,
+  inactiveColor) }
+procedure TyVisualMapModelComplete(AOption: TTyChartOption; AIndex: Integer;
+  AModel: TJSONObject);
+{ a copy with the theme's markers resolved: ARamp / the root gradientColor,
+  AInactive }
+function TyVisualMapModelResolved(AOption: TTyChartOption; AModel: TJSONObject;
+  const ARamp: TTyVisualColorArray; const AInactive: TTyVisualColor): TJSONObject;
+
 function TyVisualMapTargets(const ASpec: TTyVisualMapSpec;
   ASeriesIndex: Integer; const ASeriesId: string): Boolean;
 function TyVisualMapDimFor(const ASpec: TTyVisualMapSpec;
@@ -326,7 +360,8 @@ function TyVisualLineGradient(const AFill: TTyVisualLineFill): TTyChartGradient;
 implementation
 
 uses tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Scale,
-     tyControls.AdvanceChart.Complete, tyControls.AdvanceChart.Handlers;
+     tyControls.AdvanceChart.Complete, tyControls.AdvanceChart.Handlers,
+     tyControls.AdvanceChart.OptionMerge;
 
 { JAVASCRIPT'S ORDERED COMPARISONS: false whenever either side is NaN. FPC's
   raise on a NaN instead, masked or not, so every comparison a NaN can reach
@@ -1703,21 +1738,61 @@ begin
     TyVisualRgba(207, 210, 215, 1));
 end;
 
-function TyVisualMapSpecOf(AOption: TTyChartOption; AIndex: Integer;
-  const ARamp: TTyVisualColorArray;
-  const AInactive: TTyVisualColor): TTyVisualMapSpec;
+{ ==================== the model's own visuals [R3-B] ====================
+
+  completeVisualOption (VisualMapModel.ts:484-618, PiecewiseModel.ts:169-210,
+  ContinuousModel.ts:166-176) on AModel, in place: the pieces' visual types
+  into the model's states, the states into target and controller without
+  overwriting, the gradient, the inactive state, the controller's symbols
+  and sizes. Run at init and at every merge, as optionUpdated runs it. }
+const
+  { the theme's two defaults, resolved on read; NULs never come out of a
+    parsed option (fpjson drops \u0000) }
+  cVmRampMarker = #0'ty:gradientColor'#0;
+  cVmInactiveMarker = #0'ty:inactiveColor'#0;
+
+procedure VmCompleteInputs(ANode: TJSONObject; out ASubType: string;
+  out AIsCat: Boolean; out AItemW: Double; out ADefSymbol: string);
+var d: TJSONData;
+begin
+  ASubType := TyOptDefaultSubType('visualMap', ANode);
+  d := ANode.Find('type');
+  if (d <> nil) and (d.JSONType = jtString) then
+  begin
+    if (d.AsString = 'continuous') or (d.AsString = 'piecewise') then
+      ASubType := d.AsString
+    else
+      ASubType := '';
+  end;
+  AIsCat := False;
+  ADefSymbol := 'roundRect';
+  if ASubType = 'piecewise' then
+  begin
+    AIsCat := Truthy(ANode.Find('categories'));
+    { getItemSymbol: the option's, 'roundRect' by default; `|| 'roundRect'` }
+    d := ANode.Find('itemSymbol');
+    if (d = nil) or (d.JSONType = jtNull) then ADefSymbol := 'roundRect'
+    else if Truthy(d) then ADefSymbol := JsStrOf(d);
+  end;
+  { resetItemSize's width, for the controller's sizes }
+  AItemW := NaN;
+  d := ANode.Find('itemWidth');
+  if (d <> nil) and (d.JSONType = jtNumber) then AItemW := d.AsFloat
+  else if (d <> nil) and (d.JSONType = jtString) then AItemW := TyJsParseFloat(d.AsString);
+  if IsNan(AItemW) then AItemW := 20;
+end;
+
+procedure VmComplete(AOption: TTyChartOption; node, AModel: TJSONObject;
+  const ASubType: string; isCat: Boolean; itemW: Double;
+  const defSymbol, AInactiveCss: string);
 var
-  node, target, controller, base, st, absent: TJSONObject;
+  target, controller, base, st, absent: TJSONObject;
   d: TJSONData;
   i: Integer;
-  e0, e1, r0, r1, t: Double;
   defa: TJSONData;
   vs: TTyVisualState;
   symExists, sizeExists: TJSONData;
-  itemW, mx: Double;
-  isCat: Boolean;
-  method: TTyVisualMethod;
-  defSymbol: string;
+  mx: Double;
 
   { PiecewiseModel.completeVisualOption: a visual type some piece writes
     that no state of the option or its target has gets visualDefault's
@@ -1765,7 +1840,7 @@ var
           types[High(types)] := cHandlerOrder[j];
         end;
     end;
-    tg := node.Find('target');
+    tg := AModel.Find('target');
     for k := 0 to High(types) do
     begin
       exists := False;
@@ -1814,7 +1889,7 @@ var
   { completeSingle: ec2's high-to-low `color`, then the gradient }
   procedure CompleteSingle(AObj: TJSONObject);
   var
-    inRange, root, ramp, c: TJSONData;
+    inRange, c: TJSONData;
     arr: TJSONArray;
     so: TJSONObject;
     k: Integer;
@@ -1833,20 +1908,306 @@ var
     end;
     if not Truthy(inRange) then
     begin
-      root := AOption.Find('gradientColor');
-      if root <> nil then
-        ramp := root.Clone
-      else
-      begin
-        arr := TJSONArray.Create;
-        for k := 0 to High(ARamp) do arr.Add(TyVisualCss(ARamp[k]));
-        ramp := arr;
-      end;
+      { ecModel.get('gradientColor'): the root's array itself, which a
+        later root merge changes in place -- a marker, resolved on read }
       so := TJSONObject.Create;
-      so.Add('color', ramp);
+      so.Add('color', TJSONString.Create(cVmRampMarker));
       SetKey(AObj, 'inRange', so);
     end;
   end;
+
+
+  { the model's own object under AKey, made where it is none (`x || (x = {})`) }
+  function OwnObj(const AKey: string): TJSONObject;
+  begin
+    Result := ObjOf(AModel.Find(AKey));
+    if Result = nil then
+    begin
+      Result := TJSONObject.Create;
+      SetKey(AModel, AKey, Result);
+    end;
+  end;
+
+begin
+  { PiecewiseModel: the pieces' visual types into the model's own states }
+  if ASubType = 'piecewise' then CompletePieceTypes(AModel);
+  target := OwnObj('target');
+  controller := OwnObj('controller');
+  base := TJSONObject.Create;
+  try
+    d := AModel.Find('inRange');
+    if (d <> nil) then base.Add('inRange', d.Clone);
+    d := AModel.Find('outOfRange');
+    if (d <> nil) then base.Add('outOfRange', d.Clone);
+    MergeKeep(target, base);
+    MergeKeep(controller, base);
+  finally
+    base.Free;
+  end;
+  CompleteSingle(target);
+  CompleteSingle(controller);
+
+  { completeInactive: an absent outOfRange gets every inRange type's
+    inactive value, and a colour an opacity of nought beside it }
+  st := ObjOf(target.Find('inRange'));
+  if (st <> nil) and not Truthy(target.Find('outOfRange')) then
+  begin
+    absent := TJSONObject.Create;
+    SetKey(target, 'outOfRange', absent);
+    for i := 0 to st.Count - 1 do
+    begin
+      if not TyVisualIsValidType(st.Names[i]) then Continue;
+      defa := InactiveDefault(st.Names[i], isCat);
+      if defa = nil then Continue;
+      SetKey(absent, st.Names[i], defa);
+      if (st.Names[i] = 'color') and (absent.IndexOfName('opacity') < 0)
+        and (absent.IndexOfName('colorAlpha') < 0) then
+        absent.Add('opacity', TJSONArray.Create([0, 0]));
+    end;
+  end;
+
+    { completeController: a missing state is the inactive colour; a missing
+      symbol or size is the other state's, else a round rect the item width
+      square; `none` is the round rect; every size rescaled so the largest is
+      the item width; and, continuous, a size pair that differs starts at a
+      third of its end. What either state wrote is looked for BEFORE any
+      state is filled in. }
+    symExists := nil;
+    sizeExists := nil;
+    for vs := Low(TTyVisualState) to High(TTyVisualState) do
+    begin
+      st := ObjOf(controller.Find(cStateNames[vs]));
+      if st = nil then Continue;
+      if (symExists = nil) and Truthy(st.Find('symbol')) then
+        symExists := st.Find('symbol');
+      if (sizeExists = nil) and Truthy(st.Find('symbolSize')) then
+        sizeExists := st.Find('symbolSize');
+    end;
+    if symExists <> nil then symExists := symExists.Clone;
+    if sizeExists <> nil then sizeExists := sizeExists.Clone;
+    try
+      for vs := Low(TTyVisualState) to High(TTyVisualState) do
+      begin
+        if not Truthy(controller.Find(cStateNames[vs])) then
+        begin
+          st := TJSONObject.Create;
+          if isCat then st.Add('color', TJSONString.Create(AInactiveCss))
+          else st.Add('color', TJSONArray.Create([AInactiveCss]));
+          SetKey(controller, cStateNames[vs], st);
+        end;
+        st := ObjOf(controller.Find(cStateNames[vs]));
+        if st = nil then Continue;
+        d := st.Find('symbol');
+        if (d = nil) or (d.JSONType = jtNull) then
+        begin
+          if symExists <> nil then SetKey(st, 'symbol', symExists.Clone)
+          else if isCat then SetKey(st, 'symbol', TJSONString.Create(defSymbol))
+          else SetKey(st, 'symbol', TJSONArray.Create([defSymbol]));
+        end;
+        d := st.Find('symbolSize');
+        if (d = nil) or (d.JSONType = jtNull) then
+        begin
+          if sizeExists <> nil then SetKey(st, 'symbolSize', sizeExists.Clone)
+          else if isCat then SetKey(st, 'symbolSize', TJSONFloatNumber.Create(itemW))
+          else SetKey(st, 'symbolSize', TJSONArray.Create([itemW, itemW]));
+        end;
+        { `none` filtered to the default symbol }
+        NoneToDefault(st);
+        { normalise the size to [0, itemW] by its largest value }
+        d := st.Find('symbolSize');
+        if d <> nil then
+        begin
+          mx := NegInfinity;
+          if d.JSONType = jtArray then
+          begin
+            { [R2-F] JavaScript's `value > max` and linearMap take a word
+              as its number ('5' is 5) and anything else -- a word that is
+              none, a pair -- as NaN, which compares false and maps to NaN }
+            for i := 0 to TJSONArray(d).Count - 1 do
+              if not IsNan(JsSizeOf(TJSONArray(d).Items[i]))
+                and (JsSizeOf(TJSONArray(d).Items[i]) > mx) then
+                mx := JsSizeOf(TJSONArray(d).Items[i]);
+            for i := 0 to TJSONArray(d).Count - 1 do
+              if TJSONArray(d).Items[i].JSONType = jtNumber then
+                TJSONArray(d).Items[i] := TJSONFloatNumber.Create(TyVmLinearMap(
+                  TJSONArray(d).Items[i].AsFloat, 0, mx, 0, itemW, True))
+              else if IsNan(JsSizeOf(TJSONArray(d).Items[i])) then
+                TJSONArray(d).Items[i] := TJSONNull.Create
+              else
+                TJSONArray(d).Items[i] := TJSONFloatNumber.Create(TyVmLinearMap(
+                  JsSizeOf(TJSONArray(d).Items[i]), 0, mx, 0, itemW, True));
+            { ContinuousModel: a pair that differs starts at a third }
+            if (ASubType = 'continuous') and (TJSONArray(d).Count >= 2)
+              and (TJSONArray(d).Items[0].JSONType = jtNumber)
+              and (TJSONArray(d).Items[1].JSONType = jtNumber)
+              and (TJSONArray(d).Items[0].AsFloat <> TJSONArray(d).Items[1].AsFloat) then
+              TJSONArray(d).Items[0] := TJSONFloatNumber.Create(
+                TJSONArray(d).Items[1].AsFloat / 3);
+          end
+          else if d.JSONType = jtObject then
+          begin
+            { a categories object: every value, by the largest }
+            for i := 0 to TJSONObject(d).Count - 1 do
+              if (TJSONObject(d).Items[i].JSONType = jtNumber)
+                and (TJSONObject(d).Items[i].AsFloat > mx) then
+                mx := TJSONObject(d).Items[i].AsFloat;
+            for i := 0 to TJSONObject(d).Count - 1 do
+              if TJSONObject(d).Items[i].JSONType = jtNumber then
+                TJSONObject(d).Items[i] := TJSONFloatNumber.Create(TyVmLinearMap(
+                  TJSONObject(d).Items[i].AsFloat, 0, mx, 0, itemW, True));
+          end
+          else if d.JSONType = jtNumber then
+          begin
+            mx := d.AsFloat;
+            SetKey(st, 'symbolSize', TJSONFloatNumber.Create(
+              TyVmLinearMap(mx, 0, mx, 0, itemW, True)));
+          end;
+        end;
+      end;
+    finally
+      symExists.Free;
+      sizeExists.Free;
+    end;
+end;
+
+function TyVisualMapModelNew(AOption: TTyChartOption; AIndex: Integer): TJSONObject;
+const cKeys: array[0..3] of string = ('inRange', 'outOfRange', 'target', 'controller');
+var
+  node: TJSONObject;
+  d: TJSONData;
+  k: Integer;
+begin
+  Result := nil;
+  if AOption = nil then Exit;
+  node := ObjOf(AOption.ComponentAt('visualMap', AIndex));
+  if node = nil then Exit;
+  Result := TJSONObject.Create;
+  for k := 0 to High(cKeys) do
+  begin
+    d := node.Find(cKeys[k]);
+    if d <> nil then Result.Add(cKeys[k], d.Clone);
+  end;
+end;
+
+procedure TyVisualMapModelMerge(AModel, ANew: TJSONObject);
+const cKeys: array[0..3] of string = ('inRange', 'outOfRange', 'target', 'controller');
+var
+  piece: TJSONObject;
+  d: TJSONData;
+  k: Integer;
+begin
+  if (AModel = nil) or (ANew = nil) then Exit;
+  { Component.mergeOption's zrUtil.merge(this.option, newOption, true), on
+    the four keys }
+  piece := TJSONObject.Create;
+  try
+    for k := 0 to High(cKeys) do
+    begin
+      d := ANew.Find(cKeys[k]);
+      if d <> nil then piece.Add(cKeys[k], d.Clone);
+    end;
+    TyOptionZrMerge(AModel, piece);
+  finally
+    piece.Free;
+  end;
+  { optionUpdated: replaceVisualOption -- `color` counts, though the model
+    keeps it in the tree }
+  TyOptionReplaceVisual(AModel, ANew, ['inRange', 'outOfRange', 'target', 'controller', 'color']);
+  { the tree keeps `color`; the model never holds it }
+  if AModel.IndexOfName('color') >= 0 then AModel.Delete('color');
+end;
+
+procedure TyVisualMapModelComplete(AOption: TTyChartOption; AIndex: Integer;
+  AModel: TJSONObject);
+var
+  node: TJSONObject;
+  d: TJSONData;
+  sub, defSymbol, inact: string;
+  isCat: Boolean;
+  itemW: Double;
+  c: TTyVisualColor;
+begin
+  if (AOption = nil) or (AModel = nil) then Exit;
+  node := ObjOf(AOption.ComponentAt('visualMap', AIndex));
+  if node = nil then Exit;
+  VmCompleteInputs(node, sub, isCat, itemW, defSymbol);
+  if sub = '' then Exit;
+  { this.get('inactiveColor'): the author's, as written now -- the model
+    keeps it; the theme's otherwise (one that does not parse too, as the
+    view reads it), resolved on read }
+  inact := cVmInactiveMarker;
+  d := node.Find('inactiveColor');
+  if (d <> nil) and (d.JSONType = jtString) and TyVisualTryParse(d.AsString, c) then
+    inact := d.AsString;
+  VmComplete(AOption, node, AModel, sub, isCat, itemW, defSymbol, inact);
+end;
+
+procedure VmResolve(AData: TJSONData; ARampData: TJSONData; const AInactiveCss: string);
+var i: Integer;
+begin
+  case AData.JSONType of
+    jtArray:
+      for i := AData.Count - 1 downto 0 do
+        if (AData.Items[i].JSONType = jtString) and (AData.Items[i].AsString = cVmInactiveMarker) then
+          TJSONArray(AData).Items[i] := TJSONString.Create(AInactiveCss)
+        else if (AData.Items[i].JSONType = jtString) and (AData.Items[i].AsString = cVmRampMarker) then
+          TJSONArray(AData).Items[i] := ARampData.Clone
+        else
+          VmResolve(AData.Items[i], ARampData, AInactiveCss);
+    jtObject:
+      for i := 0 to AData.Count - 1 do
+        if (AData.Items[i].JSONType = jtString) and (AData.Items[i].AsString = cVmInactiveMarker) then
+          TJSONObject(AData).Items[i] := TJSONString.Create(AInactiveCss)
+        else if (AData.Items[i].JSONType = jtString) and (AData.Items[i].AsString = cVmRampMarker) then
+          TJSONObject(AData).Items[i] := ARampData.Clone
+        else
+          VmResolve(AData.Items[i], ARampData, AInactiveCss);
+  end;
+end;
+
+function TyVisualMapModelResolved(AOption: TTyChartOption; AModel: TJSONObject;
+  const ARamp: TTyVisualColorArray; const AInactive: TTyVisualColor): TJSONObject;
+var
+  ramp: TJSONData;
+  arr: TJSONArray;
+  k: Integer;
+begin
+  if AModel = nil then Exit(TJSONObject.Create);
+  Result := TJSONObject(AModel.Clone);
+  ramp := nil;
+  if AOption <> nil then ramp := AOption.Find('gradientColor');
+  if ramp <> nil then
+    ramp := ramp.Clone
+  else
+  begin
+    arr := TJSONArray.Create;
+    for k := 0 to High(ARamp) do arr.Add(TyVisualCss(ARamp[k]));
+    ramp := arr;
+  end;
+  try
+    VmResolve(Result, ramp, TyVisualCss(AInactive));
+  finally
+    ramp.Free;
+  end;
+end;
+
+function TyVisualMapSpecOf(AOption: TTyChartOption; AIndex: Integer;
+  const ARamp: TTyVisualColorArray;
+  const AInactive: TTyVisualColor): TTyVisualMapSpec;
+begin
+  Result := TyVisualMapSpecOf(AOption, AIndex, ARamp, AInactive, nil);
+end;
+
+function TyVisualMapSpecOf(AOption: TTyChartOption; AIndex: Integer;
+  const ARamp: TTyVisualColorArray; const AInactive: TTyVisualColor;
+  AModel: TJSONObject): TTyVisualMapSpec;
+var
+  node, target, controller, model, resolved: TJSONObject;
+  d: TJSONData;
+  e0, e1, r0, r1, t: Double;
+  isCat: Boolean;
+  method: TTyVisualMethod;
+  defSymbol: string;
 
 begin
   Result := Default(TTyVisualMapSpec);
@@ -1935,165 +2296,34 @@ begin
     if (d = nil) or (d.JSONType = jtNull) then defSymbol := 'roundRect'
     else if Truthy(d) then defSymbol := JsStrOf(d);
   end;
-  { resetItemSize's width, for the controller's sizes }
-  itemW := NaN;
-  d := node.Find('itemWidth');
-  if (d <> nil) and (d.JSONType = jtNumber) then itemW := d.AsFloat
-  else if (d <> nil) and (d.JSONType = jtString) then itemW := TyJsParseFloat(d.AsString);
-  if IsNan(itemW) then itemW := 20;
-
-  { completeVisualOption, on a copy: target merged with the option's own
-    states, per key and without overwriting }
-  d := node.Find('target');
-  if (d <> nil) and (d.JSONType = jtObject) then
-    target := TJSONObject(d.Clone)
-  else
-    target := TJSONObject.Create;
-  d := node.Find('controller');
-  if (d <> nil) and (d.JSONType = jtObject) then
-    controller := TJSONObject(d.Clone)
-  else
-    controller := TJSONObject.Create;
-  base := TJSONObject.Create;
+  { THE MODEL'S OWN VISUALS [R3-B]: as completeVisualOption left them --
+    a fresh model is made and completed here when the caller keeps none }
+  model := AModel;
+  if model = nil then
+  begin
+    model := TyVisualMapModelNew(AOption, AIndex);
+    TyVisualMapModelComplete(AOption, AIndex, model);
+  end;
+  resolved := TyVisualMapModelResolved(AOption, model, ARamp, AInactive);
   try
-    d := node.Find('inRange');
-    if (d <> nil) then base.Add('inRange', d.Clone);
-    d := node.Find('outOfRange');
-    if (d <> nil) then base.Add('outOfRange', d.Clone);
-    if Result.SubType = 'piecewise' then CompletePieceTypes(base);
-    MergeKeep(target, base);
-    MergeKeep(controller, base);
-    CompleteSingle(target);
-    CompleteSingle(controller);
-
-    { completeInactive: an absent outOfRange gets every inRange type's
-      inactive value, and a colour an opacity of nought beside it }
-    st := ObjOf(target.Find('inRange'));
-    if (st <> nil) and not Truthy(target.Find('outOfRange')) then
+    target := ObjOf(resolved.Find('target'));
+    if target = nil then
     begin
-      absent := TJSONObject.Create;
-      SetKey(target, 'outOfRange', absent);
-      for i := 0 to st.Count - 1 do
-      begin
-        if not TyVisualIsValidType(st.Names[i]) then Continue;
-        defa := InactiveDefault(st.Names[i], isCat);
-        if defa = nil then Continue;
-        SetKey(absent, st.Names[i], defa);
-        if (st.Names[i] = 'color') and (absent.IndexOfName('opacity') < 0)
-          and (absent.IndexOfName('colorAlpha') < 0) then
-          absent.Add('opacity', TJSONArray.Create([0, 0]));
-      end;
+      target := TJSONObject.Create;
+      resolved.Add('target', target);
+    end;
+    controller := ObjOf(resolved.Find('controller'));
+    if controller = nil then
+    begin
+      controller := TJSONObject.Create;
+      resolved.Add('controller', controller);
     end;
     ReadStates(target, Result.Keys, Result.States, method, Result.Categories);
-
-    { completeController: a missing state is the inactive colour; a missing
-      symbol or size is the other state's, else a round rect the item width
-      square; `none` is the round rect; every size rescaled so the largest is
-      the item width; and, continuous, a size pair that differs starts at a
-      third of its end. What either state wrote is looked for BEFORE any
-      state is filled in. }
-    symExists := nil;
-    sizeExists := nil;
-    for vs := Low(TTyVisualState) to High(TTyVisualState) do
-    begin
-      st := ObjOf(controller.Find(cStateNames[vs]));
-      if st = nil then Continue;
-      if (symExists = nil) and Truthy(st.Find('symbol')) then
-        symExists := st.Find('symbol');
-      if (sizeExists = nil) and Truthy(st.Find('symbolSize')) then
-        sizeExists := st.Find('symbolSize');
-    end;
-    if symExists <> nil then symExists := symExists.Clone;
-    if sizeExists <> nil then sizeExists := sizeExists.Clone;
-    try
-      for vs := Low(TTyVisualState) to High(TTyVisualState) do
-      begin
-        if not Truthy(controller.Find(cStateNames[vs])) then
-        begin
-          st := TJSONObject.Create;
-          if isCat then st.Add('color', TyVisualCss(AInactive))
-          else st.Add('color', TJSONArray.Create([TyVisualCss(AInactive)]));
-          SetKey(controller, cStateNames[vs], st);
-        end;
-        st := ObjOf(controller.Find(cStateNames[vs]));
-        if st = nil then Continue;
-        d := st.Find('symbol');
-        if (d = nil) or (d.JSONType = jtNull) then
-        begin
-          if symExists <> nil then SetKey(st, 'symbol', symExists.Clone)
-          else if isCat then SetKey(st, 'symbol', TJSONString.Create(defSymbol))
-          else SetKey(st, 'symbol', TJSONArray.Create([defSymbol]));
-        end;
-        d := st.Find('symbolSize');
-        if (d = nil) or (d.JSONType = jtNull) then
-        begin
-          if sizeExists <> nil then SetKey(st, 'symbolSize', sizeExists.Clone)
-          else if isCat then SetKey(st, 'symbolSize', TJSONFloatNumber.Create(itemW))
-          else SetKey(st, 'symbolSize', TJSONArray.Create([itemW, itemW]));
-        end;
-        { `none` filtered to the default symbol }
-        NoneToDefault(st);
-        { normalise the size to [0, itemW] by its largest value }
-        d := st.Find('symbolSize');
-        if d <> nil then
-        begin
-          mx := NegInfinity;
-          if d.JSONType = jtArray then
-          begin
-            { [R2-F] JavaScript's `value > max` and linearMap take a word
-              as its number ('5' is 5) and anything else -- a word that is
-              none, a pair -- as NaN, which compares false and maps to NaN }
-            for i := 0 to TJSONArray(d).Count - 1 do
-              if not IsNan(JsSizeOf(TJSONArray(d).Items[i]))
-                and (JsSizeOf(TJSONArray(d).Items[i]) > mx) then
-                mx := JsSizeOf(TJSONArray(d).Items[i]);
-            for i := 0 to TJSONArray(d).Count - 1 do
-              if TJSONArray(d).Items[i].JSONType = jtNumber then
-                TJSONArray(d).Items[i] := TJSONFloatNumber.Create(TyVmLinearMap(
-                  TJSONArray(d).Items[i].AsFloat, 0, mx, 0, itemW, True))
-              else if IsNan(JsSizeOf(TJSONArray(d).Items[i])) then
-                TJSONArray(d).Items[i] := TJSONNull.Create
-              else
-                TJSONArray(d).Items[i] := TJSONFloatNumber.Create(TyVmLinearMap(
-                  JsSizeOf(TJSONArray(d).Items[i]), 0, mx, 0, itemW, True));
-            { ContinuousModel: a pair that differs starts at a third }
-            if (Result.SubType = 'continuous') and (TJSONArray(d).Count >= 2)
-              and (TJSONArray(d).Items[0].JSONType = jtNumber)
-              and (TJSONArray(d).Items[1].JSONType = jtNumber)
-              and (TJSONArray(d).Items[0].AsFloat <> TJSONArray(d).Items[1].AsFloat) then
-              TJSONArray(d).Items[0] := TJSONFloatNumber.Create(
-                TJSONArray(d).Items[1].AsFloat / 3);
-          end
-          else if d.JSONType = jtObject then
-          begin
-            { a categories object: every value, by the largest }
-            for i := 0 to TJSONObject(d).Count - 1 do
-              if (TJSONObject(d).Items[i].JSONType = jtNumber)
-                and (TJSONObject(d).Items[i].AsFloat > mx) then
-                mx := TJSONObject(d).Items[i].AsFloat;
-            for i := 0 to TJSONObject(d).Count - 1 do
-              if TJSONObject(d).Items[i].JSONType = jtNumber then
-                TJSONObject(d).Items[i] := TJSONFloatNumber.Create(TyVmLinearMap(
-                  TJSONObject(d).Items[i].AsFloat, 0, mx, 0, itemW, True));
-          end
-          else if d.JSONType = jtNumber then
-          begin
-            mx := d.AsFloat;
-            SetKey(st, 'symbolSize', TJSONFloatNumber.Create(
-              TyVmLinearMap(mx, 0, mx, 0, itemW, True)));
-          end;
-        end;
-      end;
-    finally
-      symExists.Free;
-      sizeExists.Free;
-    end;
     ReadStates(controller, Result.ControllerKeys, Result.Controller, method,
       Result.Categories);
   finally
-    base.Free;
-    target.Free;
-    controller.Free;
+    resolved.Free;
+    if model <> AModel then model.Free;
   end;
 end;
 

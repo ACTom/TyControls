@@ -44,13 +44,14 @@ begin
     if not VmKeepNow(k) then FVisualLayouts[k] := Default(TTyVisualMapLayout);
     { the controller's colour for a state it was given nothing for:
       `inactiveColor` as written, the theme's otherwise }
+    { [R3-B] the model's own visuals, as the merges left them }
     if FVisualViews[k].HasInactive then
       FVisualSpecs[k] := TyVisualMapSpecOf(FOption, k, ramp,
-        FVisualViews[k].Inactive)
+        FVisualViews[k].Inactive, VmModel(k))
     else
       FVisualSpecs[k] := TyVisualMapSpecOf(FOption, k, ramp,
         TyVisualFromChart(TTyChartColor(ActiveController.Model.ResolveStyle(
-          'TyAdvChartVisualMapInactive', '', []).TextColor)));
+          'TyAdvChartVisualMapInactive', '', []).TextColor)), VmModel(k));
     { WHAT selectDataRange WROTE INTO THE MODEL [Batch 116]: a continuous
       one's range, a piecewise one's selected map }
     if (FVisualSpecs[k].SubType = 'continuous') and FVmRangeHas[k] then
@@ -293,6 +294,119 @@ end;
 function TTyAdvanceChart.VisualMapCount: Integer;
 begin
   Result := Length(FVisualSpecs);
+end;
+
+{ ---- the models' own visuals [R3-B] ---- }
+
+procedure TTyAdvanceChart.VmModelsClear;
+var k: Integer;
+begin
+  for k := 0 to High(FVmModels) do FreeAndNil(FVmModels[k]);
+  FVmModels := nil;
+end;
+
+procedure TTyAdvanceChart.VmModelsInitAll;
+var k: Integer;
+begin
+  VmModelsClear;
+  if FOption = nil then Exit;
+  SetLength(FVmModels, FOption.ComponentCount('visualMap'));
+  for k := 0 to High(FVmModels) do
+  begin
+    { init, then optionUpdated(null, true) }
+    FVmModels[k] := TyVisualMapModelNew(FOption, k);
+    TyVisualMapModelComplete(FOption, k, FVmModels[k]);
+  end;
+end;
+
+procedure TTyAdvanceChart.VmModelsPass(const AReport: TTyMergeReport);
+var
+  si, s, n, old: Integer;
+  newOpt: TJSONObject;
+begin
+  if FOption = nil then Exit;
+  si := TyMergeSlotsIndex(AReport, 'visualMap');
+  if si < 0 then Exit;
+  n := Length(AReport.Slots[si].Fate);
+  if Length(FVmModels) < n then
+  begin
+    old := Length(FVmModels);
+    SetLength(FVmModels, n);
+    for s := old to n - 1 do FVmModels[s] := nil;
+  end;
+  for s := 0 to n - 1 do
+    case AReport.Slots[si].Fate[s] of
+      mfNew:
+        begin
+          FreeAndNil(FVmModels[s]);
+          FVmModels[s] := TyVisualMapModelNew(FOption, s);
+          TyVisualMapModelComplete(FOption, s, FVmModels[s]);
+        end;
+      mfMerged, mfKept:
+        begin
+          if FVmModels[s] = nil then
+            FVmModels[s] := TyVisualMapModelNew(FOption, s)
+          else if AReport.Slots[si].Fate[s] = mfMerged then
+          begin
+            { mergeOption, then optionUpdated's replaceVisualOption }
+            newOpt := nil;
+            if s <= High(AReport.Slots[si].NewOpt) then newOpt := AReport.Slots[si].NewOpt[s];
+            TyVisualMapModelMerge(FVmModels[s], newOpt);
+          end;
+          { completeVisualOption: what is missing, again }
+          TyVisualMapModelComplete(FOption, s, FVmModels[s]);
+        end;
+      mfRemoved, mfHole:
+        FreeAndNil(FVmModels[s]);
+    end;
+  { slots past the report's are gone }
+  for s := n to High(FVmModels) do FreeAndNil(FVmModels[s]);
+  SetLength(FVmModels, n);
+end;
+
+function TTyAdvanceChart.VmModel(AIndex: Integer): TJSONObject;
+begin
+  Result := nil;
+  if (AIndex >= 0) and (AIndex <= High(FVmModels)) then Result := FVmModels[AIndex];
+end;
+
+procedure TTyAdvanceChart.VmThemeDefaults(AIndex: Integer; out ARamp: TTyVisualColorArray;
+  out AInactive: TTyVisualColor);
+var view: TTyVmViewSpec;
+begin
+  ARamp := TyVisualDefaultRamp(TTyChartColor(ThemeRampColor(0)));
+  view := TyVisualMapViewSpecOf(FOption, AIndex);
+  if view.HasInactive then AInactive := view.Inactive
+  else
+    AInactive := TyVisualFromChart(TTyChartColor(ActiveController.Model.ResolveStyle(
+      'TyAdvChartVisualMapInactive', '', []).TextColor));
+end;
+
+function TTyAdvanceChart.VisualMapVisualsJson(AIndex: Integer): string;
+var
+  ramp: TTyVisualColorArray;
+  inact: TTyVisualColor;
+  model, res: TJSONObject;
+begin
+  Result := '{}';
+  if (FOption = nil) or (AIndex < 0) or (AIndex >= TyVisualMapCount(FOption)) then Exit;
+  VmThemeDefaults(AIndex, ramp, inact);
+  model := VmModel(AIndex);
+  if model = nil then
+  begin
+    model := TyVisualMapModelNew(FOption, AIndex);
+    TyVisualMapModelComplete(FOption, AIndex, model);
+  end;
+  try
+    res := TyVisualMapModelResolved(FOption, model, ramp, inact);
+    try
+      Result := res.AsJSON;
+    finally
+      res.Free;
+    end;
+  finally
+    if model <> VmModel(AIndex) then model.Free;
+  end;
 end;
 
 function TTyAdvanceChart.VisualMapSpec(AIndex: Integer): TTyVisualMapSpec;
