@@ -9,6 +9,12 @@ uses
   tyControls.ScrollBar, tyControls.UndoStack, tyControls.Animation,
   tyControls.PlatformWS, tyControls.Controller, tyControls.TextMenu
   {$IFDEF LCLCocoa}, LMessages, tyControls.CocoaWS{$ENDIF};
+
+const
+  { #97. Where tab stops fall by default: every eight spaces (--memo-tab-size), as in TMemo
+    and most editors. }
+  TyMemoTabSize = 8;
+
 type
   // Cumulative-prefix pixel widths, length = codepoints+1 (shared name with Edit).
   TTyIntArray = array of Integer;
@@ -151,6 +157,12 @@ type
     FVisualRows: TTyVisualRowArray;
     FVisualRowsValid: Boolean;
     FVisualRowsWidth: Integer;
+    // #97: the tab stop (px) the rows were built with -- a new one moves where a line with a
+    // tab wraps, so it forces a rebuild like a new width does
+    FVisualRowsTabPx: Integer;
+    // #97: the tab stop TabStopFor last worked out, and what it was worked out from
+    FTabStopKey: string;
+    FTabStopPx: Integer;
     // Embedded vertical scrollbar, lazily created on first overflow (owned by
     // Self via Create(Self), so freed by TComponent). nil until first needed.
     FScrollBar: TTyScrollBar;
@@ -471,6 +483,23 @@ type
     // measurement matches drawing (lifted from TTyEdit.MeasureCodepointWidths,
     // generalised to take the line as a parameter — no per-line cache).
     function MeasureLineWidths(const ALine: string; APPI: Integer): TTyIntArray;
+    { #97. The distance between tab stops, in px at APPI: --memo-tab-size as CSS reads
+      tab-size -- a number of spaces (TyMemoTabSize by default) or a length such as 32px.
+      Read per control (StyleToken), so one memo can set it in its StyleOverride. }
+    function TabStopPx(APPI: Integer): Integer;
+    { #97. TabStopPx for a style and font signature already in hand; memoised on the font,
+      the theme and the control's StyleOverride. }
+    function TabStopFor(const S: TTyStyleSet; const AFontSig: string; APPI: Integer): Integer;
+    { The font a width was measured in: name, size, weight and PPI. }
+    function FontSig(const S: TTyStyleSet; APPI: Integer): string;
+    { #97. The width caches' signature: the font and the tab stop, so a new stop drops the
+      widths measured with the old one. }
+    function WidthSig(const S: TTyStyleSet; APPI: Integer): string;
+    { #97. The prefix widths of a line with a tab into AWidths (sized, [0] = 0): each tab
+      advances to the next multiple of FTabStopPx from the line's start (one on a stop goes to
+      the next), and the runs between tabs are measured whole from where each starts, as they
+      are drawn. FMeasureBmp is configured by the caller. }
+    procedure MeasureTabbedWidths(const ALine: string; var AWidths: TTyIntArray);
     // Cheap TOTAL width of ALine (px) = a single TextSize(ALine).cx, cached by content. Equals
     // MeasureLineWidths(ALine)[High] exactly but skips the O(L^2) per-character prefix work. Used by
     // WidestLineWidth (which only needs the total), NOT for caret/selection/render geometry.
@@ -942,6 +971,9 @@ type
 
 implementation
 
+uses
+  tyControls.Css.Values;
+
 // ---- The document ----
 
 { #58. The memo's text is a byte-for-byte account of what was set, typed or loaded. TStrings
@@ -1049,6 +1081,7 @@ begin
   FVisualRows := nil;
   FVisualRowsValid := False;
   FVisualRowsWidth := -1;
+  FVisualRowsTabPx := -1;
   FScrollBar := nil;
   FHScrollBar := nil;
   FSyncingScroll := False;
@@ -2255,8 +2288,7 @@ var
 
 begin
   S := CurrentStyle;
-  sig := S.FontName + '|' + IntToStr(EffectiveFontSize(S)) + '|'
-    + IntToStr(S.FontWeight) + '|' + IntToStr(APPI);
+  sig := WidthSig(S, APPI);
   if FWidestWidthValid and (sig = FWidestWidthSig) then
     Exit(FWidestWidth);
   Result := 0;
@@ -2285,7 +2317,8 @@ begin
       j := 1;
       while j <= Length(line) do
       begin
-        if TyNeedsWholeLineShaping(UTF8CodepointToUnicode(@line[j], k)) then
+        { #97: so is a tab, whose advance depends on where it falls }
+        if (line[j] = #9) or TyNeedsWholeLineShaping(UTF8CodepointToUnicode(@line[j], k)) then
         begin
           shaped := True;
           Break;
@@ -3341,12 +3374,14 @@ end;
 
 procedure TTyMemo.EnsureVisualRows(APPI: Integer);
 var
-  CW: Integer;
+  CW, T: Integer;
 begin
   CW := ContentWidthFor(APPI);
-  if FVisualRowsValid and (FVisualRowsWidth = CW) then Exit;
+  T := TabStopPx(APPI);
+  if FVisualRowsValid and (FVisualRowsWidth = CW) and (FVisualRowsTabPx = T) then Exit;
   FVisualRows := BuildVisualRows(CW, APPI);
   FVisualRowsWidth := CW;
+  FVisualRowsTabPx := T;
   FVisualRowsValid := True;
 end;
 
@@ -3364,7 +3399,8 @@ end;
 
 function TTyMemo.RowsFor(AContentWidth, APPI: Integer): TTyVisualRowArray;
 begin
-  if FVisualRowsValid and (FVisualRowsWidth = AContentWidth) then
+  if FVisualRowsValid and (FVisualRowsWidth = AContentWidth)
+     and (FVisualRowsTabPx = TabStopPx(APPI)) then
     Exit(FVisualRows);
   Result := BuildVisualRows(AContentWidth, APPI);
 end;
@@ -3388,7 +3424,8 @@ var
 begin
   AVisualRow := 0;
   AX := TextStartX(APPI);
-  Cached := FVisualRowsValid and (FVisualRowsWidth = AContentWidth);
+  Cached := FVisualRowsValid and (FVisualRowsWidth = AContentWidth)
+    and (FVisualRowsTabPx = TabStopPx(APPI));
   Rows := RowsFor(AContentWidth, APPI);
   if Length(Rows) = 0 then Exit;
   // Find the owning row. Tie-break: a caret at a soft-wrap boundary column binds
@@ -3451,7 +3488,8 @@ begin
   ALine := 0;
   ACol := 0;
   AAfterPrev := True;
-  Cached := FVisualRowsValid and (FVisualRowsWidth = AContentWidth);
+  Cached := FVisualRowsValid and (FVisualRowsWidth = AContentWidth)
+    and (FVisualRowsTabPx = TabStopPx(APPI));
   Rows := RowsFor(AContentWidth, APPI);
   if Length(Rows) = 0 then Exit;
   if AVisualRow < 0 then AVisualRow := 0;
@@ -3808,7 +3846,7 @@ begin
   S := CurrentStyle;
   EffSize := EffectiveFontSize(S);
   // Drop the caches if the font (name/size/weight/PPI) changed — all widths would be stale.
-  sig := S.FontName + '|' + IntToStr(EffSize) + '|' + IntToStr(S.FontWeight) + '|' + IntToStr(APPI);
+  sig := WidthSig(S, APPI);
   if sig <> FWidthCacheSig then
   begin
     FLineWidthCache.Clear;
@@ -3836,7 +3874,11 @@ begin
     // PREFIX measurement (TextSize of growing prefixes) captures inter-glyph kerning as drawn.
     // Incremental: if the edited line just EXTENDED the last one (append at end), reuse its prefix
     // widths and measure only the new tail; if it TRUNCATED it (delete at end), just copy the prefix.
-    if (lastLen > 0) and (Length(FLastMeasuredWidths) = lastLen + 1)
+    { #97. A line with a tab is measured run by run; the prefix fast paths below measure
+      whole prefixes, which a tab would make wrong. }
+    if Pos(#9, ALine) > 0 then
+      MeasureTabbedWidths(ALine, Result)
+    else if (lastLen > 0) and (Length(FLastMeasuredWidths) = lastLen + 1)
        and (aBLen > lastBLen)
        and (CompareByte(PChar(ALine)^, PChar(FLastMeasuredLine)^, lastBLen) = 0) then
     begin
@@ -3882,7 +3924,7 @@ begin
   if ALine = '' then Exit;   // empty line has zero width (matches MeasureLineWidths[0] = 0)
   S := CurrentStyle;
   EffSize := EffectiveFontSize(S);
-  sig := S.FontName + '|' + IntToStr(EffSize) + '|' + IntToStr(S.FontWeight) + '|' + IntToStr(APPI);
+  sig := WidthSig(S, APPI);
   if sig <> FWidthCacheSig then
   begin
     // Font changed: both caches are stale. Mirror MeasureLineWidths' reset so they stay coherent.
@@ -3899,7 +3941,14 @@ begin
   // redundant TextSize for lines the render/caret path already measured. Read into a LOCAL: never
   // clobber the (FLastMeasuredLine, FLastMeasuredWidths) incremental-edit hint pair, or the next
   // MeasureLineWidths prefix fast-path could reuse a mismatched array.
-  if FLineWidthCache.TryGetValue(ALine, cachedW) and (Length(cachedW) > 0) then
+  if Pos(#9, ALine) > 0 then
+  begin
+    { #97: a tab's advance depends on where it falls, so one TextSize of the line is not its
+      width; the run-by-run prefix widths are }
+    cachedW := MeasureLineWidths(ALine, APPI);
+    Result := cachedW[High(cachedW)];
+  end
+  else if FLineWidthCache.TryGetValue(ALine, cachedW) and (Length(cachedW) > 0) then
     Result := cachedW[High(cachedW)]
   else
   begin
@@ -3912,6 +3961,84 @@ begin
   if FLineTotalWidthCache.Count > 4096 then
     FLineTotalWidthCache.Clear;
   FLineTotalWidthCache.AddOrSetValue(ALine, Result);
+end;
+
+function TTyMemo.FontSig(const S: TTyStyleSet; APPI: Integer): string;
+begin
+  Result := S.FontName + '|' + IntToStr(EffectiveFontSize(S)) + '|' + IntToStr(S.FontWeight)
+    + '|' + IntToStr(APPI);
+end;
+
+function TTyMemo.WidthSig(const S: TTyStyleSet; APPI: Integer): string;
+begin
+  Result := FontSig(S, APPI);
+  Result := Result + '|' + IntToStr(TabStopFor(S, Result, APPI));
+end;
+
+function TTyMemo.TabStopPx(APPI: Integer): Integer;
+var
+  S: TTyStyleSet;
+begin
+  S := CurrentStyle;
+  Result := TabStopFor(S, FontSig(S, APPI), APPI);
+end;
+
+function TTyMemo.TabStopFor(const S: TTyStyleSet; const AFontSig: string;
+  APPI: Integer): Integer;
+var
+  key, tok: string;
+  n, sp: Integer;
+begin
+  key := AFontSig + '|' + IntToHex(PtrUInt(ActiveController.Model), 16) + '|'
+    + IntToStr(ActiveController.Model.ThemeVersion) + '|' + StyleOverride;
+  if key = FTabStopKey then Exit(FTabStopPx);
+  Result := 0;
+  tok := LowerCase(Trim(StyleToken('--memo-tab-size', '')));
+  if (Length(tok) > 2) and (Copy(tok, Length(tok) - 1, 2) = 'px') then
+    try
+      Result := MulDiv(TyEvalLength(tok, nil), APPI, 96);
+    except
+      Result := 0;   // not a length: the default below
+    end;
+  if Result < 1 then
+  begin
+    n := StrToIntDef(tok, TyMemoTabSize);
+    if n < 1 then n := TyMemoTabSize;
+    if FMeasureBmp = nil then
+      FMeasureBmp := TBGRABitmap.Create(1, 1);
+    TyConfigureTextFont(FMeasureBmp, S.FontName, EffectiveFontSize(S), S.FontWeight, APPI);
+    sp := FMeasureBmp.TextSize(' ').cx;
+    if sp < 1 then sp := 1;
+    Result := n * sp;
+  end;
+  FTabStopKey := key;
+  FTabStopPx := Result;
+end;
+
+procedure TTyMemo.MeasureTabbedWidths(const ALine: string; var AWidths: TTyIntArray);
+var
+  i, bp, cpLen, runByte, runX, t: Integer;
+begin
+  t := FTabStopPx;
+  if t < 1 then t := 1;
+  runX := 0;
+  runByte := 1;
+  bp := 1;
+  for i := 1 to High(AWidths) do
+  begin
+    if bp > Length(ALine) then Break;
+    cpLen := UTF8CodepointSize(@ALine[bp]);
+    if cpLen < 1 then cpLen := 1;
+    if ALine[bp] = #9 then
+    begin
+      runX := (AWidths[i - 1] div t + 1) * t;
+      AWidths[i] := runX;
+      runByte := bp + 1;
+    end
+    else
+      AWidths[i] := runX + FMeasureBmp.TextSize(Copy(ALine, runByte, bp + cpLen - runByte)).cx;
+    Inc(bp, cpLen);
+  end;
 end;
 
 function TTyMemo.ColPixelXAt(const ALine: string; ACol, APPI: Integer): Integer;
@@ -4380,6 +4507,49 @@ var
   BandFill: TTyFill;
   BandColor: TTyColor;
   DrawBand, ShowSel: Boolean;
+
+  { #97. A row with a tab, run by run: each run between tabs at the x the line's widths give
+    its first column, so the text sits on the tab stops the caret, the hit test, the band and
+    the wrap use. A row with right-to-left text keeps the one-call path: its glyphs are
+    placed by the bidirectional layout, which is what its caret reads. }
+  procedure DrawTabbedRow(const ALine, ASeg: string; ARowStart: Integer);
+  var
+    wd: TTyIntArray;
+    bp, cpLen, col, runCol, runByte: Integer;
+
+    procedure DrawRun(AEndByte: Integer);
+    var
+      x: Integer;
+    begin
+      x := LineRect.Left + wd[runCol] - wd[ARowStart];
+      if (AEndByte > runByte) and (x < LineRect.Right) then
+        P.DrawText(Rect(x, LineRect.Top, LineRect.Right, LineRect.Bottom),
+          Copy(ASeg, runByte, AEndByte - runByte), S.FontName, EffSize, S.FontWeight,
+          S.TextColor, taLeftJustify, tlTop, False);
+    end;
+
+  begin
+    wd := MeasureLineWidths(ALine, APPI);
+    col := ARowStart;
+    runCol := col;
+    runByte := 1;
+    bp := 1;
+    while bp <= Length(ASeg) do
+    begin
+      cpLen := UTF8CodepointSize(@ASeg[bp]);
+      if cpLen < 1 then cpLen := 1;
+      if ASeg[bp] = #9 then
+      begin
+        DrawRun(bp);
+        runCol := col + 1;
+        runByte := bp + 1;
+      end;
+      Inc(col);
+      Inc(bp, cpLen);
+    end;
+    DrawRun(Length(ASeg) + 1);
+  end;
+
 begin
   // Keep the scrollbar in sync (cheap; catches external Lines mutations).
   UpdateScrollBar;
@@ -4568,8 +4738,11 @@ begin
         end;
       end;
 
-      P.DrawText(LineRect, Seg, S.FontName, EffSize, S.FontWeight,
-        S.TextColor, taLeftJustify, tlTop, False);
+      if (Pos(#9, Seg) > 0) and not RowBidi(vr, APPI, RowRB) then
+        DrawTabbedRow(Line, Seg, RS)
+      else
+        P.DrawText(LineRect, Seg, S.FontName, EffSize, S.FontWeight,
+          S.TextColor, taLeftJustify, tlTop, False);
     end;
 
     // Static caret: only when focused (or headless-forced), no active selection,

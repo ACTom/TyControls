@@ -240,6 +240,7 @@ begin
     '  --listview-text-margin: 4px;' + LineEnding +
     '  --listview-tile-label-width: 150px;' + LineEnding +
     '  --listview-vgap: 8px;' + LineEnding +
+    '  --memo-tab-size: 8;' + LineEnding +
     '  --menu-arrow-slot: 16px;' + LineEnding +
     '  --menu-check-slot: 18px;' + LineEnding +
     '  --menu-separator-height: 7px;' + LineEnding +
