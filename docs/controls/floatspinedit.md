@@ -99,7 +99,7 @@ function TyFloatSpinGlyphBox(const AHalf: TRect): TRect;
 
 ## 6. 按钮几何与主题
 
-- **按钮列宽 = `--field-button-width` 令牌**（缺省 18px），**实时读取**——和 `TTyComboBox` 的下拉按钮、`TTyComboEdit` 的箭头区、`TTySpinEdit` 的上下键读的是**同一个**令牌，所以换密度包 / 换皮肤时四者一起变。
+- **按钮列宽 = `--field-button-width` 令牌**（缺省 18px），**实时读取**——和 `TTyComboBox` 的下拉按钮、`TTyComboEdit` 的箭头区、`TTySpinEdit` 的上下键读的是**同一个**令牌，所以换密度包 / 换皮肤时四者一起变。下拉字段（组合框、组合编辑框、日期选择、树选择、级联）还要在这一列两侧各加 `--field-drop-pad`（缺省 5），让下拉 V 离边框有余地；微调按钮不加。
 - **上下半区**由 `TySpinUpButtonRect` / `TySpinDownButtonRect` 切分——直接复用 `TTySpinEdit` 的几何函数，两个微调控件不会对"上按钮到哪里为止"给出两个答案。
 - **箭头**是 `tgArrowUp` / `tgArrowDown`，走 `TyDrawGlyph`，因此可被主题的 `--glyph-arrow-up` / `--glyph-arrow-down` 覆盖（图标字体或图片）；颜色平时取解析样式的 `TextColor`。
 - **悬停 / 按下**：指针下那一半铺 `TyButton:hover` / `TyButton:active` 的底色，箭头改用该状态的 `color`，和 `TTySpinEdit`、`TTyUpDown` 一样。底色只铺在字段的边框和焦点环以内。

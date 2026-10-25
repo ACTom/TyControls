@@ -3030,7 +3030,10 @@ begin
   oldJoin := FBmp.JoinStyle;
   FBmp.JoinStyle := pjsRound;
   try
-    FBmp.DrawPolyLineAntialias(pts, px, th, False);
+    { AClosedCap TRUE: BGRA's False means "leave the LAST point open so a next segment can
+      join it" -- no cap and a gap -- which made the second arm visibly shorter than the
+      first (the V's right arm, the >'s lower one). Both ends take the pen's round cap. }
+    FBmp.DrawPolyLineAntialias(pts, px, th, True);
   finally
     FBmp.JoinStyle := oldJoin;
   end;

@@ -1396,6 +1396,11 @@ Engine-level limitations (each expanded in the sections above):
     little lighter than the text beside it; 255 gives the text colour. The values sit where Windows 11, macOS and
     GNOME draw the same marks (ink about 0.9x the cap height of the body text beside it).
 
+    **The drop fields' button zone**: the combo box family, the combo edit, the date picker (drop-down mode), the tree
+    select and the cascader reserve `--field-button-width` plus `--field-drop-pad` on each side (default 5, so
+    18 + 10 = 28). The drop V is centred in it, about 10 px from the right border (Windows 11 about 16, GNOME 13,
+    macOS 6.5-12; centred in the bare 18 it was 5). A spin edit's buttons use `--field-button-width` alone.
+
     Token names follow the `--glyph-<kind>` convention, and internal glyph drawing funnels through one overridable entry
     point, so the remaining glyph slots (calendar paging and so on) can each be wired up with one
     line if ever needed; nobody skins those internal glyphs in practice, so they are not wired yet.

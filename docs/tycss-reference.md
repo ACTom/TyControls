@@ -1369,6 +1369,11 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
     旁边的文字浅一些,设 255 即与文字同色。这组取值是对照 Windows 11、macOS、GNOME 同角色标记取的
     共同区间(墨迹约为旁边正文大写字母高度的 0.9 倍)。
 
+    **下拉字段的按钮区**:组合框族、组合编辑框、日期选择(下拉模式)、树选择、级联的按钮区宽
+    `--field-button-width` 加两侧各 `--field-drop-pad`(默认 5,即 18 + 10 = 28),下拉 V 在其中
+    居中、离右框约 10 px(Windows 11 约 16、GNOME 13、macOS 6.5–12;以前在 18 宽的区里居中,只有
+    5)。微调框的上下按钮只用 `--field-button-width`,不加这个余量。
+
     令牌名遵循 `--glyph-<kind>` 约定,内部字形绘制统一走一个可覆盖入口,所以其余字形槽(日历翻页等)
     如需也能一行接入——只是这些内部字形一般无人换肤,暂未接。
     例:`--glyph-check: "Segoe MDL2 Assets" "\e73e";`。未设时用内置矢量字形。**注意**:设了有效覆盖

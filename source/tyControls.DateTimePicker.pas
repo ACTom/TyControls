@@ -1780,6 +1780,10 @@ function TTyDateTimePicker.ButtonColumnLogical: Integer;
 begin
   if FDateMode = dmNone then
     Result := 0
+  else if HasDropDownButton then
+    { The date drop-down is a drop field: its V gets the same room a combo box's does. The
+      spin pair of the other modes keeps the bare button column, as a spin edit does. }
+    Result := TyDropZoneWidth(ActiveController)
   else
     Result := ActiveController.Metric('--field-button-width', TyFieldButtonWidth);
 end;

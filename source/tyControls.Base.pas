@@ -675,6 +675,14 @@ function TySquareGlyphBox(const ARect: TRect): TRect;
   so a skin that swapped the mark changed a combo box and left a date picker beside it alone. }
 procedure TyDrawDropChevron(APainter: TTyPainter; AController: TTyStyleController;
   const AZoneRect: TRect; AColor: TTyColor);
+{ A drop field's button zone, logical px: the spin buttons' column (--field-button-width) plus
+  --field-drop-pad on EACH side, so the V has room around it as every desktop gives it --
+  centred in the bare 18px column it sat 5px from the border. One function, because the
+  combo box, the combo edit, the date picker and the tree select each measured the zone for
+  their paint, their hit test and their inline editor; a cascader adds the same pad to its
+  own --cascader-button-width (TyDropZonePad). }
+function TyDropZoneWidth(AController: TTyStyleController): Integer;
+function TyDropZonePad(AController: TTyStyleController): Integer;
 { Every OTHER disclosure chevron -- a tree node's, a submenu's, a list group's, an expander's,
   a cascader branch's -- through one routine, so they are one mark: TTyPainter.DrawChevron at
   --glyph-chevron-size, centred in AZoneRect (the slot places it, it does not size it), in the
@@ -1730,6 +1738,23 @@ begin
   if TyTryDrawGlyphOverride(APainter, AController, AZoneRect, '--glyph-dropdown', ink) then Exit;
   APainter.DrawChevron(AZoneRect, tgChevronDown, ink,
     ctrl.Metric('--glyph-chevron-size', TyDropChevronSize));
+end;
+
+function TyDropZonePad(AController: TTyStyleController): Integer;
+var
+  ctrl: TTyStyleController;
+begin
+  if AController <> nil then ctrl := AController else ctrl := TyDefaultController;
+  Result := ctrl.Metric('--field-drop-pad', TyFieldDropPad);
+  if Result < 0 then Result := 0;
+end;
+
+function TyDropZoneWidth(AController: TTyStyleController): Integer;
+var
+  ctrl: TTyStyleController;
+begin
+  if AController <> nil then ctrl := AController else ctrl := TyDefaultController;
+  Result := ctrl.Metric('--field-button-width', TyFieldButtonWidth) + 2 * TyDropZonePad(ctrl);
 end;
 
 procedure TyDrawChevron(APainter: TTyPainter; AController: TTyStyleController;

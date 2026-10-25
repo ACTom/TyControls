@@ -278,7 +278,7 @@ TyCascaderItem:disabled { color: var(--muted); }
 | `--cascader-row-height` | `24`（= `TyCascaderRowHeight`） | 一个选项行的高度。**钳到至少 1**——零高的行会让命中检测除零 |
 | `--cascader-expand-size` | `12`（= `TyCascaderExpandSize`） | 分支行上 `>` 的方形槽边长（`>` 本身是全库统一的展开标记，大小取 `--glyph-chevron-size`，与菜单的子菜单标记同一个） |
 | `--cascader-expand-gap` | `4`（= `TyCascaderExpandGap`） | 文字与 `>` 槽位之间的间隙 |
-| `--cascader-button-width` | `18`（= `TyCascaderButtonWidth` = `TyFieldButtonWidth`） | 字段的 chevron 区宽度。**刻意就是 `TyFieldButtonWidth`**：级联器的 chevron 区和下拉框的一样宽，两个字段在表单里才对得齐 |
+| `--cascader-button-width` | 未设时跟 `--field-button-width`（18） | 字段的按钮列宽度。**刻意跟下拉框读同一个值**：级联器的 chevron 区和下拉框的一样宽，两个字段在表单里才对得齐（以前缺省是写死的 18，现代密度把下拉框加宽到 25 时它没跟上）。实际的 chevron 区还要在两侧各加 `--field-drop-pad`（缺省 5），与所有下拉字段一致 |
 
 > **为什么是具名常量而不是内联字面量：** 几何、测量、测试这几个调用点必须对 token 的**拼写**达成一致——某一处打错字会让它悄悄停在默认值上，几何就与命中检测漂移了。
 
