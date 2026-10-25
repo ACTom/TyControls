@@ -448,6 +448,10 @@ type
     procedure TestBarSwitchSurvivesTheFormsSync;
     procedure TestBorderIconsStillGateAnExplicitlyShownButton;
     procedure TestSwitchReadsTheUsersValueNotTheEffectiveVisibility;
+    { #105: the designer draws a control whose Visible is False unless it opts out, so a hidden
+      caption button stayed on screen at its old place, over the one that moved into its slot. }
+    procedure TestADesignerDoesNotDrawASwitchedOffButton;
+    procedure TestADesignerDoesNotDrawAButtonTheWindowDoesNotOffer;
   end;
 
   { A title bar belonging to another form cannot be associated. }
@@ -3298,6 +3302,58 @@ begin
     f.BorderIcons := [biSystemMenu, biMinimize, biMaximize];
     AssertTrue('offered again -> shown again; the switch was True all along',
       f.TitleBar.MaxButton.Visible);
+  finally f.Free; end;
+end;
+
+{ What the designer draws of the cluster: no hidden button, and no two buttons on one spot. }
+procedure AssertDesignerCluster(const AWhat: string; ABar: TTyTitleBar;
+  AMin, AMax, AClose: Boolean);
+var
+  btns: array[0..2] of TControl;
+  i, j: Integer;
+  r: TRect;
+begin
+  TAssert.AssertEquals(AWhat + ': min drawn', AMin, ABar.MinButton.IsControlVisible);
+  TAssert.AssertEquals(AWhat + ': max drawn', AMax, ABar.MaxButton.IsControlVisible);
+  TAssert.AssertEquals(AWhat + ': close drawn', AClose, ABar.CloseButton.IsControlVisible);
+  btns[0] := ABar.MinButton; btns[1] := ABar.MaxButton; btns[2] := ABar.CloseButton;
+  for i := 0 to 2 do
+    for j := i + 1 to 2 do
+      if btns[i].IsControlVisible and btns[j].IsControlVisible then
+        TAssert.AssertFalse(Format('%s: buttons %d and %d drawn on one spot', [AWhat, i, j]),
+          IntersectRect(r, btns[i].BoundsRect, btns[j].BoundsRect));
+end;
+
+procedure TFormDrivesBarTest.TestADesignerDoesNotDrawASwitchedOffButton;
+var f: TTyForm;
+begin
+  f := MakeFormWithBar;
+  try
+    AssertTrue('precondition: the buttons are on a design surface',
+      csDesigning in f.TitleBar.CloseButton.ComponentState);
+    f.TitleBar.ShowClose := False;
+    AssertDesignerCluster('ShowClose off', f.TitleBar, True, True, False);
+    f.TitleBar.ShowClose := True;
+    f.TitleBar.ShowMaximize := False;
+    AssertDesignerCluster('ShowMaximize off', f.TitleBar, True, False, True);
+    f.TitleBar.ShowMaximize := True;
+    f.TitleBar.ShowMinimize := False;
+    AssertDesignerCluster('ShowMinimize off', f.TitleBar, False, True, True);
+    f.TitleBar.ShowMinimize := True;
+    AssertDesignerCluster('all on again', f.TitleBar, True, True, True);
+  finally f.Free; end;
+end;
+
+procedure TFormDrivesBarTest.TestADesignerDoesNotDrawAButtonTheWindowDoesNotOffer;
+var f: TTyForm;
+begin
+  f := MakeFormWithBar;
+  try
+    f.BorderIcons := [biSystemMenu, biMaximize];
+    AssertDesignerCluster('no biMinimize', f.TitleBar, False, True, True);
+    f.BorderIcons := [biSystemMenu, biMinimize, biMaximize];
+    f.Resizable := False;
+    AssertDesignerCluster('not resizable', f.TitleBar, True, False, True);
   finally f.Free; end;
 end;
 
