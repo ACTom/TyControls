@@ -175,6 +175,7 @@
   --pad-none:            0px;
   --pad-tight:           2px;
   --pad-control:         4px;
+  --pad-field:           4px 9px;   /* 文本字段:9 + 1px 边框 = 文字离外框 10,和下拉箭头离右框一样(#103) */
   --pad-tooltip:         5px 9px;
   --pad-button:          6px;
   --pad-container:       8px;
@@ -405,7 +406,7 @@ TyEdit {
   border-color: var(--input-border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
-  padding: var(--pad-control);
+  padding: var(--pad-field);
   font-size: var(--font-size-base);
 }
 TyEdit:hover    { border-color: var(--input-border-hover); }
@@ -497,7 +498,7 @@ TyComboBox {
   border-color: var(--input-border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
-  padding: var(--pad-control);
+  padding: var(--pad-field);
   font-size: var(--font-size-base);
 }
 TyComboBox:hover    { border-color: var(--input-border-hover); }
@@ -784,7 +785,7 @@ TySpinEdit {
   border-color: var(--input-border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
-  padding: var(--pad-control);
+  padding: var(--pad-field);
   font-size: var(--font-size-base);
 }
 TySpinEdit:hover    { border-color: var(--input-border-hover); }
@@ -947,7 +948,7 @@ TyCalendarCell { background: none; color: var(--on-surface); border-radius: var(
 TyCalendarCell:hover { background: var(--surface-hover); }
 TyCalendarCell:selected { background: var(--accent); color: var(--on-accent); }
 TyCalendarCell:disabled { color: var(--muted); }
-TyDateTimePicker { background: var(--input-bg); color: var(--on-surface); border-color: var(--input-border); border-width: var(--input-border-width); border-radius: var(--radius); padding: var(--pad-datetime); font-size: var(--font-size-base); }
+TyDateTimePicker { background: var(--input-bg); color: var(--on-surface); border-color: var(--input-border); border-width: var(--input-border-width); border-radius: var(--radius); padding: var(--pad-field); font-size: var(--font-size-base); }
 TyDateTimePicker:hover { border-color: var(--input-border-hover); }
 TyDateTimePicker:focus { border-color: var(--accent); outline: 2px var(--focus-ring); }
 TyDateTimePicker:disabled { opacity: var(--disabled-opacity); }
@@ -1247,7 +1248,7 @@ TyCascader {
   border-color: var(--input-border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
-  padding: var(--pad-control);
+  padding: var(--pad-field);
   font-size: var(--font-size-base);
 }
 TyCascader:hover    { border-color: var(--input-border-hover); }

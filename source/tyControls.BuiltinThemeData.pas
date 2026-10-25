@@ -74,7 +74,7 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
-    '  padding: 4px;' + LineEnding +
+    '  padding: var(--pad-field);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '}' + LineEnding +
     'TyEdit:hover    { border-color: var(--input-border-hover); }' + LineEnding +
@@ -130,7 +130,7 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
-    '  padding: 4px;' + LineEnding +
+    '  padding: var(--pad-field);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '}' + LineEnding +
     'TyComboBox:hover    { border-color: var(--input-border-hover); }' + LineEnding +
@@ -346,7 +346,7 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
-    '  padding: 4px;' + LineEnding +
+    '  padding: var(--pad-field);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '}' + LineEnding +
     'TySpinEdit:hover    { border-color: var(--input-border-hover); }' + LineEnding +
@@ -466,7 +466,7 @@ begin
     'TyCalendarCell:hover { background: var(--surface-hover); }' + LineEnding +
     'TyCalendarCell:selected { background: var(--accent); color: var(--on-accent); }' + LineEnding +
     'TyCalendarCell:disabled { color: var(--muted); }' + LineEnding +
-    'TyDateTimePicker { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: 4px 6px; font-size: var(--font-size-base); }' + LineEnding +
+    'TyDateTimePicker { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: var(--pad-field); font-size: var(--font-size-base); }' + LineEnding +
     'TyDateTimePicker:hover { border-color: var(--input-border-hover); }' + LineEnding +
     'TyDateTimePicker:focus { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
     'TyDateTimePicker:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
@@ -725,7 +725,7 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
-    '  padding: 4px;' + LineEnding +
+    '  padding: var(--pad-field);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '}' + LineEnding +
     'TyEdit:hover    { border-color: var(--input-border-hover); }' + LineEnding +
@@ -781,7 +781,7 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
-    '  padding: 4px;' + LineEnding +
+    '  padding: var(--pad-field);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '}' + LineEnding +
     'TyComboBox:hover    { border-color: var(--input-border-hover); }' + LineEnding +
@@ -985,7 +985,7 @@ begin
     '  border-color: var(--border);' + LineEnding +
     '  border-width: var(--input-border-width);' + LineEnding +
     '  border-radius: var(--radius);' + LineEnding +
-    '  padding: 4px;' + LineEnding +
+    '  padding: var(--pad-field);' + LineEnding +
     '  font-size: var(--font-size-base);' + LineEnding +
     '}' + LineEnding +
     'TySpinEdit:hover    { border-color: var(--input-border-hover); }' + LineEnding +
@@ -1060,7 +1060,7 @@ begin
     'TyCalendarCell:hover { background: var(--surface-hover); }' + LineEnding +
     'TyCalendarCell:selected { background: var(--accent); color: var(--on-accent); }' + LineEnding +
     'TyCalendarCell:disabled { color: var(--muted); }' + LineEnding +
-    'TyDateTimePicker { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: 4px 6px; font-size: var(--font-size-base); }' + LineEnding +
+    'TyDateTimePicker { background: var(--input-bg); color: var(--on-surface); border-color: var(--border); border-width: var(--input-border-width); border-radius: var(--radius); padding: var(--pad-field); font-size: var(--font-size-base); }' + LineEnding +
     'TyDateTimePicker:hover { border-color: var(--input-border-hover); }' + LineEnding +
     'TyDateTimePicker:focus { border-color: var(--accent); outline: 2px var(--focus-ring); }' + LineEnding +
     'TyDateTimePicker:disabled { opacity: var(--disabled-opacity); }' + LineEnding +
