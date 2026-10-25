@@ -6,7 +6,7 @@ uses
   Interfaces, consoletestrunner, Graphics, Forms, tyControls.Painter, tyControls.Controller,
   tyControls.Calendar,
   test.Types, test.Css.Tokens, test.Css.Lexer, test.Css.Parser,
-  test.Css.Values, test.StyleModel, test.accent, test.gradient, test.bevelborder, test.nineslice, test.metric, test.glyph, test.chevron, test.skins, test.fontcascade, test.controlfont, test.stylemetric, test.styletoken, test.listview.inset, test.treeview.inset, test.treeview.lines, test.darktext, test.painter, test.controller,
+  test.Css.Values, test.StyleModel, test.accent, test.gradient, test.bevelborder, test.nineslice, test.metric, test.glyph, test.chevron, test.skins, test.fontcascade, test.controlfont, test.stylemetric, test.chrome.overlay, test.styletoken, test.listview.inset, test.treeview.inset, test.treeview.lines, test.darktext, test.painter, test.controller,
   test.controller.hotreload, test.base,
   test.baseevents,
   test.eventfiring,
