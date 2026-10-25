@@ -711,7 +711,8 @@ function TyPainterKeptStrokeReplaysForTest: Integer;
   kept one met again does not count). }
 function TyPainterKeptStrokeContoursForTest: Integer;
 { Every kept fill hashed alike, so that a lookup is decided by its polygon and
-  clip compare alone (the kept fills dropped either way). }
+  clip compare alone (the kept fills dropped either way) -- the distance strokes'
+  too [R4-P]. }
 procedure TyPainterKeptFillHashesCollideForTest(AOn: Boolean);
 { [R4-P] how many strokes the hairline rasteriser took, how many distance strokes were
   computed (a kept one met again does not count) and how many replayed }
@@ -5957,6 +5958,7 @@ end;
 procedure TyPainterKeptFillHashesCollideForTest(AOn: Boolean);
 begin
   DropKeptFills;
+  DropKeptBands;
   GKeptFillHashCollide := AOn;
 end;
 
@@ -7025,8 +7027,9 @@ begin
     keep := not GKeptFillsOff;
     { found by the path, the width and the clip }
     h := KeptFillHash(pts, clip);
+    { (all alike when the test asks the fills' hashes to collide) }
     {$push}{$R-}{$Q-}
-    h := (h xor QWord(PLongWord(@ws)^)) * QWord($100000001B3);
+    if not GKeptFillHashCollide then h := (h xor QWord(PLongWord(@ws)^)) * QWord($100000001B3);
     {$pop}
     first := nil;
     f := nil;

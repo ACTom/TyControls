@@ -92,7 +92,7 @@ end;
 { ---- painter-level helpers ---- }
 
 type
-  TPathKind = (pkCurves, pkSteep, pkRing, pkZigzag, pkShallow, pkStraight, pkCross, pkFlat, pkPast, pkSpikes);
+  TPathKind = (pkCurves, pkSteep, pkRing, pkZigzag, pkShallow, pkStraight, pkCross, pkFlat, pkPast, pkSpikes, pkLoop, pkVee);
 
 { the path of AKind on P, device px }
 procedure TracePath(P: TTyPainter; AKind: TPathKind);
@@ -163,6 +163,13 @@ begin
         P.MoveTo(330.5, 20.5);
         P.LineTo(330.5, 220.5);
       end;
+    pkVee:
+      begin
+        { one sharp turn, 8.6 degrees inside, its tip pointing up from (180, 120) }
+        P.MoveTo(174, 200);
+        P.LineTo(180, 120);
+        P.LineTo(186, 200);
+      end;
     pkSpikes:
       begin
         { sharp turns: mitred within the limit (33 degrees inside), and cut at it
@@ -181,6 +188,17 @@ begin
         P.LineTo(140, 270);
         P.MoveTo(-20, -10);
         P.CurveTo(200, 300, 250, -100, 420, 260);
+        { along the bitmap clip's top and left edges, a third of a pixel inside them }
+        P.MoveTo(60, 30.2);
+        P.LineTo(280, 30.2);
+        P.MoveTo(50.2, 40);
+        P.LineTo(50.2, 190);
+      end;
+    pkLoop:
+      begin
+        { a tight bend: the flattened points far from straight }
+        P.MoveTo(100, 200);
+        P.CurveTo(400, -60, -60, -60, 250, 200);
       end;
   end;
 end;
@@ -382,8 +400,33 @@ procedure TAdvChartFastStrokesTest.TestAHairlineHasNoGaps;
 var
   e, f: TBGRABitmap;
   x, y: Integer;
-  ce, cf: Double;
+  ce, cf, moved, total: Double;
+  k: TPathKind;
 begin
+  { the coverage lies where the fill's does: on the curves and a tight bend, the
+    pixels' differences summed are under a quarter of the ink (about a tenth
+    here) -- a hairline a few tenths of a pixel off its course differs by most
+    of it }
+  for k in [pkCurves, pkLoop] do
+  begin
+    e := Stroke(k, swExact, cInk, 0.5, BGRAPixelTransparent);
+    f := Stroke(k, swFast, cInk, 0.5, BGRAPixelTransparent);
+    try
+      moved := 0;
+      total := 0;
+      for y := 0 to cH - 1 do
+        for x := 0 to cW - 1 do
+        begin
+          moved := moved + Abs(AlphaAt(f, x, y) - AlphaAt(e, x, y));
+          total := total + AlphaAt(e, x, y);
+        end;
+      AssertTrue(Format('kind %d: the coverage moved %.0f of %.0f', [Ord(k), moved, total]),
+        (total > 0) and (moved < 0.25 * total));
+    finally
+      e.Free;
+      f.Free;
+    end;
+  end;
   e := Stroke(pkStraight, swExact, cInk, 0.5, BGRAPixelTransparent);
   f := Stroke(pkStraight, swFast, cInk, 0.5, BGRAPixelTransparent);
   try
@@ -561,7 +604,7 @@ end;
   beyond). 1 px wide: full on the path, nothing a pixel off it. }
 procedure TAdvChartFastStrokesTest.TestTheBandIsTheDistance;
 var
-  b: TBGRABitmap;
+  b, e: TBGRABitmap;
   x, y: Integer;
 begin
   b := Stroke(pkFlat, swBand, TTyColor($FF000000), 4, BGRAPixelTransparent);
@@ -600,6 +643,20 @@ begin
     AssertEquals('1 px: a pixel off', 0, AlphaAt(b, 100, 49));
   finally
     b.Free;
+  end;
+  { A MITER CUT AT THE LIMIT: a turn of 8.6 degrees inside, 5 px wide -- its tip
+    would lie 33 px above the vertex, the limit (10) cuts it at 25, as BGRA's
+    pen does: inked 20 px up, nothing 28 px up, in the band as in the stroke }
+  b := Stroke(pkVee, swBand, TTyColor($FF000000), 5, BGRAPixelTransparent);
+  e := Stroke(pkVee, swKept, TTyColor($FF000000), 5, BGRAPixelTransparent);
+  try
+    AssertTrue('the stroke: 20 up', AlphaAt(e, 179, 100) + AlphaAt(e, 180, 100) > 0);
+    AssertEquals('the stroke: 28 up', 0, AlphaAt(e, 179, 92) + AlphaAt(e, 180, 92));
+    AssertTrue('the band: 20 up', AlphaAt(b, 179, 100) + AlphaAt(b, 180, 100) > 0);
+    AssertEquals('the band: 28 up', 0, AlphaAt(b, 179, 92) + AlphaAt(b, 180, 92));
+  finally
+    b.Free;
+    e.Free;
   end;
 end;
 
@@ -713,6 +770,32 @@ begin
     AssertEquals('another bitmap clip: computed', m0 + 1, TyPainterDistanceStrokesForTest);
     AssertEquals('another bitmap clip: as fresh', 0, DiffPixels(a, ref));
     a.Free;
+    { every hash alike: the lookup decided by the compare -- another width, another
+      clip computed anew and painted as fresh ones }
+    TyPainterKeptFillHashesCollideForTest(True);
+    try
+      a := Stroke(pkRing, swBand, cInk, 3, BGRAWhite);
+      a.Free;
+      m0 := TyPainterDistanceStrokesForTest;
+      a := Stroke(pkRing, swBand, cInk, 3, BGRAWhite, 1, False, False, False, 1, True);
+      AssertEquals('colliding: another clip computed', m0 + 1, TyPainterDistanceStrokesForTest);
+      AssertEquals('colliding: another clip as fresh', 0, DiffPixels(a, ref));
+      a.Free;
+      ref.Free;
+      TyPainterKeptStrokesForTest(False);
+      ref := Stroke(pkRing, swBand, cInk, 4, BGRAWhite);
+      TyPainterKeptStrokesForTest(True);
+      TyPainterKeptFillHashesCollideForTest(True);
+      a := Stroke(pkRing, swBand, cInk, 3, BGRAWhite);
+      a.Free;
+      m0 := TyPainterDistanceStrokesForTest;
+      a := Stroke(pkRing, swBand, cInk, 4, BGRAWhite);
+      AssertEquals('colliding: another width computed', m0 + 1, TyPainterDistanceStrokesForTest);
+      AssertEquals('colliding: another width as fresh', 0, DiffPixels(a, ref));
+      a.Free;
+    finally
+      TyPainterKeptFillHashesCollideForTest(False);
+    end;
   finally
     ref.Free;
   end;
@@ -943,19 +1026,32 @@ begin
     AssertTrue('fast: a band', TyPainterDistanceStrokesForTest > m0);
     ref.Free;
     { toggled on a live chart, both ways, on both }
-    for i := 0 to 3 do
+    for i := 0 to 5 do
     begin
-      if i < 2 then o := opt else o := cHaloBars;
+      if (i < 2) or (i > 3) then o := opt else o := cHaloBars;
       live := NewChart(form, ctl, o, Odd(i));
       ref := NewChart(form, ctl, o, not Odd(i));
       a := nil;
       b := nil;
       try
         a := Shot(live);
-        Drain(live);
-        a.Free;
-        a := Shot(live);
-        a.Free;
+        if i > 3 then
+        begin
+          { halfway through the progressive chunks, a chunk armed and not yet drawn }
+          for k := 1 to 3 do
+          begin
+            a.Free;
+            live.ProgressTick;
+            if k < 3 then a := Shot(live) else a := nil;
+          end;
+        end
+        else
+        begin
+          Drain(live);
+          a.Free;
+          a := Shot(live);
+          a.Free;
+        end;
         live.ExactRendering := not Odd(i);
         a := Shot(live);
         Drain(live);
@@ -965,7 +1061,7 @@ begin
         Drain(ref);
         b.Free;
         b := Shot(ref);
-        AssertEquals(Format('option %d toggled to exact=%d: a fresh chart''s frame',
+        AssertEquals(Format('case %d toggled to exact=%d: a fresh chart''s frame',
           [i div 2, Ord(not Odd(i))]), 0, DiffPixels(a, b));
       finally
         a.Free;
