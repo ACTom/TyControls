@@ -628,6 +628,9 @@ var
     band that touches none of the host's corners skips their parent background; 2: the host
     keeps its chrome layer (rebuilt when ChromeSignature changes) and a band copies its part. }
   TyChromeMode: Integer = 2;
+  { Pilot only: part of every kept layer's key, so bumping it rebuilds them all (to time a
+    build). }
+  TyChromeCacheEpoch: Integer = 0;
 
 type
   { Pilot only: where the overlay's time goes, in microseconds, summed until reset. }
@@ -635,6 +638,10 @@ type
     Passes, Bands, CacheBuilds: Int64;
     SetupUs, LayerUs, CornerUs, FrameUs, SeparatorUs: Int64;
     FetchUs, CacheBuildUs, CopyUs, BlitUs: Int64;
+    KeyUs: Int64;         // the kept layer's key, its ChromeSignature in it (part of FetchUs)
+    SignatureUs: Int64;   // a host checking its ChromeSignature after it paints
+    FreeRectUs: Int64;    // asking hosts for their ChromeFreeRect
+    HookUs: Int64;        // the whole overlay after each paint message, everything above in it
     CacheBytes: Int64;   // what the hosts' chrome caches hold now
   end;
 
@@ -2632,9 +2639,13 @@ function TyReachesChrome(const AHost: ITyChromeHost; AHostCtl: TControl;
   const AArea: TRect): Boolean;
 var
   bands: TTyChromeBands;
+  free: TRect;
+  t0: Int64;
 begin
-  Result := TyChromeBands(AArea, Point(0, 0), AHostCtl.Width, AHostCtl.Height,
-    AHost.ChromeFreeRect, bands) > 0;
+  t0 := TyChromeClockUs;
+  free := AHost.ChromeFreeRect;
+  Inc(TyChromeStats.FreeRectUs, TyChromeClockUs - t0);
+  Result := TyChromeBands(AArea, Point(0, 0), AHostCtl.Width, AHostCtl.Height, free, bands) > 0;
 end;
 
 { Whether any ancestor of AControl is a chrome host -- the cheap first question. }
@@ -2681,10 +2692,6 @@ begin
       TyInvalidateTree(TWinControl(AControl.Controls[i]));
 end;
 
-{ AHost's chrome painted over AArea (in ACanvas's coordinates; the host's (0,0) is at
-  AHostOrigin there): one transparent layer per band that reaches into the chrome, composited
-  over what ACanvas already holds. Bands, not the whole area: a large child that touches the
-  frame along one edge pays for that edge only. }
 {$IFDEF MSWINDOWS}
 function TyQpcCounter(out ACount: Int64): LongBool; stdcall;
   external 'kernel32' name 'QueryPerformanceCounter';
@@ -2721,7 +2728,10 @@ var
   op: Single;
   t0: Int64;
 begin
-  key := AHost.ChromeSignature + '|' + IntToStr(APPI) + '|' + IntToStr(AScale);
+  t0 := TyChromeClockUs;
+  key := AHost.ChromeSignature + '|' + IntToStr(APPI) + '|' + IntToStr(AScale) + '|'
+    + IntToStr(TyChromeCacheEpoch);
+  Inc(TyChromeStats.KeyUs, TyChromeClockUs - t0);
   if (AHostCtl.FChromeCache <> nil) and (AHostCtl.FChromeCacheKey = key) then
     Exit(AHostCtl.FChromeCache);
   t0 := TyChromeClockUs;
@@ -2754,6 +2764,10 @@ begin
   Inc(TyChromeStats.CacheBuildUs, TyChromeClockUs - t0);
 end;
 
+{ AHost's chrome painted over AArea (in ACanvas's coordinates; the host's (0,0) is at
+  AHostOrigin there): one transparent layer per band that reaches into the chrome, composited
+  over what ACanvas already holds. Bands, not the whole area: a large child that touches the
+  frame along one edge pays for that edge only. }
 procedure TyPaintHostChrome(const AHost: ITyChromeHost; AHostCtl: TControl; ACanvas: TCanvas;
   APPI: Integer; const AHostOrigin: TPoint; const AArea: TRect);
 var
@@ -2761,10 +2775,13 @@ var
   i, n, s: Integer;
   P: TTyPainter;
   cache: TBGRABitmap;
+  free: TRect;
   t0, t1, t2: Int64;
 begin
-  n := TyChromeBands(AArea, AHostOrigin, AHostCtl.Width, AHostCtl.Height,
-    AHost.ChromeFreeRect, bands);
+  t0 := TyChromeClockUs;
+  free := AHost.ChromeFreeRect;
+  Inc(TyChromeStats.FreeRectUs, TyChromeClockUs - t0);
+  n := TyChromeBands(AArea, AHostOrigin, AHostCtl.Width, AHostCtl.Height, free, bands);
   if n = 0 then Exit;
   Inc(TyChromeStats.Passes);
   for i := 0 to n - 1 do
@@ -2849,6 +2866,7 @@ var
   dc: HDC;
   host: ITyChromeHost;
   isHost, dcChanged: Boolean;
+  t0: Int64;
 begin
   inherited WndProc(TheMessage);
   { After the paint message the control AND its graphic children are on the DC, and on a
@@ -2858,6 +2876,7 @@ begin
   if (TheMessage.Msg <> LM_PAINT) or not TyChromeOverlayEnabled then Exit;
   dc := HDC(TheMessage.WParam);
   if dc = 0 then Exit;
+  t0 := TyChromeClockUs;
   isHost := Supports(Self, ITyChromeHost, host);
   if isHost or TyHasChromeAncestor(Self) then
   begin
@@ -2878,6 +2897,7 @@ begin
   end;
   if isHost then
     CheckChromeChanged;
+  Inc(TyChromeStats.HookUs, TyChromeClockUs - t0);
 end;
 
 procedure TTyCustomControl.DoSetBounds(ALeft, ATop, AWidth, AHeight: Integer);
@@ -2899,9 +2919,12 @@ var
   sig: string;
   i: Integer;
   c: TControl;
+  t0: Int64;
 begin
   if not Supports(Self, ITyChromeHost, host) then Exit;
+  t0 := TyChromeClockUs;
   sig := host.ChromeSignature;
+  Inc(TyChromeStats.SignatureUs, TyChromeClockUs - t0);
   if sig = FChromeSig then Exit;
   FChromeSig := sig;
   for i := 0 to ControlCount - 1 do

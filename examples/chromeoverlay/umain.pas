@@ -70,19 +70,23 @@ implementation
 resourcestring
   rsMeasureFmt = 'One redraw of this window: %.1f ms with the frame on top, %.1f ms without';
   rsItem = 'Item %d';
-  rsRoundsFmt = 'Each figure is an average over %d redraws of the whole window.';
+  rsRoundsFmt = 'Times per redraw are the fastest of %d runs of %d redraws, the four ways '
+    + 'taking turns; the parts are averages over all runs.';
   rsModeOff = 'Off';
   rsMode0 = 'Each band draws the frame afresh';
   rsMode1 = 'The same, but bands on a straight edge skip the corners';
   rsMode2 = 'Each card keeps a frame layer, and bands copy from it';
-  rsOffLineFmt = '%s: %.1f ms per redraw';
-  rsModeLineFmt = '%s: %.1f ms per redraw, %.1f ms more than off; %d passes, %d bands';
-  rsDrawPartsFmt = '    set-up %.2f, drawing %.2f (corners %.2f, frame %.2f, separators %.2f), '
-    + 'the band onto the window %.2f, the rest %.2f ms';
-  rsCachePartsFmt = '    set-up %.2f, finding the frame layer %.2f, copying from it %.2f, '
-    + 'the band onto the window %.2f, the rest %.2f ms';
+  rsOffLineFmt = '%s: %.1f ms per redraw (runs from %.1f to %.1f)';
+  rsModeLineFmt = '%s: %.1f ms per redraw (runs from %.1f to %.1f), %.1f ms more than off; '
+    + '%d passes, %d bands';
+  rsDrawPartsFmt = '    in the overlay %.2f ms: set-up %.2f, drawing %.2f (corners %.2f, '
+    + 'frame %.2f, separators %.2f), the band onto the window %.2f, the signature %.2f, '
+    + 'the free area %.2f, the rest %.2f';
+  rsCachePartsFmt = '    in the overlay %.2f ms: set-up %.2f, the kept layer %.2f (its key '
+    + '%.2f), copying from it %.2f, the band onto the window %.2f, the signature %.2f, '
+    + 'the free area %.2f, the rest %.2f';
   rsCacheBuiltFmt = '    frame layers: %d built on the first redraw, %.2f ms each; %.1f KB kept';
-  rsCacheReusedFmt = '    frame layers: none built, the ones kept before still fit; %.1f KB kept';
+  rsCacheNoneFmt = '    frame layers: none built; %.1f KB kept';
 
 procedure TMainForm.FormCreate(Sender: TObject);
 var
@@ -137,97 +141,117 @@ begin
   RedrawAll;
 end;
 
-{ The window redrawn ROUNDS times with the overlay off, then in each TyChromeMode, after one
-  redraw to warm up (with frame layers kept, that one builds them). "The rest" is what the
-  overlay adds that none of the timed parts covers: walking up the parents, working out the
-  bands, checking each card's signature. }
+{ RUNS runs of ROUNDS redraws in each of the four ways (off, then TyChromeMode 0, 1, 2), the
+  ways taking turns so that whatever else the machine is doing falls on all of them alike; a
+  way's time is its fastest run. Each run starts with one redraw that is not counted; the
+  first of them in mode 2 rebuilds every frame layer, which is what a build costs. "The rest"
+  is the part of the overlay none of the named parts covers: walking up the parents, working
+  out the bands, the painters coming and going. }
 procedure TMainForm.Measure;
 const
-  ROUNDS = 40;
+  RUNS = 5;
+  ROUNDS = 20;
 var
   keepOn: Boolean;
-  keepMode, m, i: Integer;
-  offMs, ms, rest: Double;
-  t0, builds, buildUs: Int64;
+  keepMode, r, m, i: Integer;
+  best, worst: array[-1..2] of Double;
+  sums: array[-1..2] of TTyChromeStats;
+  ms, rest: Double;
+  t0, held, builds, buildUs: Int64;
   st: TTyChromeStats;
   what: string;
 
-  procedure ResetStats;
-  var
-    held: Int64;
-  begin
-    held := TyChromeStats.CacheBytes;   // what is kept now, not a sum: it stays
-    FillChar(TyChromeStats, SizeOf(TyChromeStats), 0);
-    TyChromeStats.CacheBytes := held;
-  end;
-
   function PerRedraw(AUs: Int64): Double;
   begin
-    Result := AUs / 1000 / ROUNDS;
+    Result := AUs / 1000 / (RUNS * ROUNDS);
   end;
 
 begin
   keepOn := TyChromeOverlayEnabled;
   keepMode := TyChromeMode;
-  offMs := 0;
-  ms := 0;
+  FillChar(sums, SizeOf(sums), 0);
+  builds := 0;
+  buildUs := 0;
+  for m := -1 to 2 do
+  begin
+    best[m] := 0;
+    worst[m] := 0;
+  end;
+  try
+    for r := 1 to RUNS do
+      for m := -1 to 2 do
+      begin
+        TyChromeOverlayEnabled := m >= 0;
+        if m >= 0 then TyChromeMode := m;
+        if (r = 1) and (m = 2) then
+        begin
+          Inc(TyChromeCacheEpoch);   // every kept layer is stale: the next redraw builds them
+          t0 := TyChromeStats.CacheBuilds;
+          held := TyChromeStats.CacheBuildUs;
+          RedrawAll;
+          builds := TyChromeStats.CacheBuilds - t0;
+          buildUs := TyChromeStats.CacheBuildUs - held;
+        end
+        else
+          RedrawAll;
+        { this way's sums go on from where its last run left them; CacheBytes is what is kept
+          now, not a sum, so it is carried over as it stands }
+        held := TyChromeStats.CacheBytes;
+        TyChromeStats := sums[m];
+        TyChromeStats.CacheBytes := held;
+        t0 := TyChromeClockUs;
+        for i := 1 to ROUNDS do
+          RedrawAll;
+        ms := (TyChromeClockUs - t0) / 1000 / ROUNDS;
+        sums[m] := TyChromeStats;
+        if (r = 1) or (ms < best[m]) then best[m] := ms;
+        if (r = 1) or (ms > worst[m]) then worst[m] := ms;
+      end;
+  finally
+    TyChromeOverlayEnabled := keepOn;
+    TyChromeMode := keepMode;
+    RedrawAll;
+  end;
+
   Results.Lines.BeginUpdate;
   try
     Results.Lines.Clear;
-    Results.Lines.Add(Format(rsRoundsFmt, [ROUNDS]));
-    for m := -1 to 2 do
+    Results.Lines.Add(Format(rsRoundsFmt, [RUNS, ROUNDS]));
+    Results.Lines.Add(Format(rsOffLineFmt, [rsModeOff, best[-1], best[-1], worst[-1]]));
+    for m := 0 to 2 do
     begin
-      TyChromeOverlayEnabled := m >= 0;
-      if m >= 0 then TyChromeMode := m;
-      ResetStats;
-      RedrawAll;
-      builds := TyChromeStats.CacheBuilds;
-      buildUs := TyChromeStats.CacheBuildUs;
-      ResetStats;
-      t0 := TyChromeClockUs;
-      for i := 1 to ROUNDS do
-        RedrawAll;
-      ms := PerRedraw(TyChromeClockUs - t0);
-      st := TyChromeStats;
+      st := sums[m];
       case m of
-        -1: what := rsModeOff;
         0: what := rsMode0;
         1: what := rsMode1;
       else
         what := rsMode2;
       end;
-      if m < 0 then
-      begin
-        offMs := ms;
-        Results.Lines.Add(Format(rsOffLineFmt, [what, ms]));
-        Continue;
-      end;
-      Results.Lines.Add(Format(rsModeLineFmt, [what, ms, ms - offMs,
-        st.Passes div ROUNDS, st.Bands div ROUNDS]));
-      rest := (ms - offMs) - PerRedraw(st.SetupUs + st.LayerUs + st.FetchUs + st.CopyUs
-        + st.BlitUs);
+      Results.Lines.Add(Format(rsModeLineFmt, [what, best[m], best[m], worst[m],
+        best[m] - best[-1], st.Passes div (RUNS * ROUNDS), st.Bands div (RUNS * ROUNDS)]));
+      rest := PerRedraw(st.HookUs - st.SetupUs - st.LayerUs - st.FetchUs - st.CopyUs
+        - st.BlitUs - st.SignatureUs - st.FreeRectUs);
       if m < 2 then
-        Results.Lines.Add(Format(rsDrawPartsFmt, [PerRedraw(st.SetupUs), PerRedraw(st.LayerUs),
-          PerRedraw(st.CornerUs), PerRedraw(st.FrameUs), PerRedraw(st.SeparatorUs),
-          PerRedraw(st.BlitUs), rest]))
+        Results.Lines.Add(Format(rsDrawPartsFmt, [PerRedraw(st.HookUs), PerRedraw(st.SetupUs),
+          PerRedraw(st.LayerUs), PerRedraw(st.CornerUs), PerRedraw(st.FrameUs),
+          PerRedraw(st.SeparatorUs), PerRedraw(st.BlitUs), PerRedraw(st.SignatureUs),
+          PerRedraw(st.FreeRectUs), rest]))
       else
       begin
-        Results.Lines.Add(Format(rsCachePartsFmt, [PerRedraw(st.SetupUs), PerRedraw(st.FetchUs),
-          PerRedraw(st.CopyUs), PerRedraw(st.BlitUs), rest]));
+        Results.Lines.Add(Format(rsCachePartsFmt, [PerRedraw(st.HookUs), PerRedraw(st.SetupUs),
+          PerRedraw(st.FetchUs), PerRedraw(st.KeyUs), PerRedraw(st.CopyUs),
+          PerRedraw(st.BlitUs), PerRedraw(st.SignatureUs), PerRedraw(st.FreeRectUs), rest]));
         if builds > 0 then
-          Results.Lines.Add(Format(rsCacheBuiltFmt, [Integer(builds),
-            buildUs / 1000 / builds, st.CacheBytes / 1024]))
+          Results.Lines.Add(Format(rsCacheBuiltFmt, [Integer(builds), buildUs / 1000 / builds,
+            TyChromeStats.CacheBytes / 1024]))
         else
-          Results.Lines.Add(Format(rsCacheReusedFmt, [st.CacheBytes / 1024]));
+          Results.Lines.Add(Format(rsCacheNoneFmt, [TyChromeStats.CacheBytes / 1024]));
       end;
     end;
   finally
     Results.Lines.EndUpdate;
-    TyChromeOverlayEnabled := keepOn;
-    TyChromeMode := keepMode;
-    RedrawAll;
   end;
-  LblMeasure.Caption := Format(rsMeasureFmt, [ms, offMs]);
+  LblMeasure.Caption := Format(rsMeasureFmt, [best[2], best[-1]]);
 end;
 
 procedure TMainForm.BtnMeasureClick(Sender: TObject);

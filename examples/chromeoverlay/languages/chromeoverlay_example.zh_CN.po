@@ -93,8 +93,8 @@ msgstr "第 %d 项"
 
 #: umain.rsroundsfmt
 #, object-pascal-format
-msgid "Each figure is an average over %d redraws of the whole window."
-msgstr "每个数字都是整个窗口重画 %d 次的平均值。"
+msgid "Times per redraw are the fastest of %d runs of %d redraws, the four ways taking turns; the parts are averages over all runs."
+msgstr "每次重画的耗时取 %d 轮里最快的一轮（每轮重画 %d 次，四种方式轮流测）；各部分是所有轮的平均值。"
 
 #: umain.rsmodeoff
 msgid "Off"
@@ -114,30 +114,30 @@ msgstr "每张卡片留一份外框层，各条带从里面拷"
 
 #: umain.rsofflinefmt
 #, object-pascal-format
-msgid "%s: %.1f ms per redraw"
-msgstr "%s：每次重画 %.1f ms"
+msgid "%s: %.1f ms per redraw (runs from %.1f to %.1f)"
+msgstr "%s：每次重画 %.1f ms（各轮 %.1f 到 %.1f）"
 
 #: umain.rsmodelinefmt
 #, object-pascal-format
-msgid "%s: %.1f ms per redraw, %.1f ms more than off; %d passes, %d bands"
-msgstr "%s：每次重画 %.1f ms，比关闭时多 %.1f ms；补画 %d 次，共 %d 条带"
+msgid "%s: %.1f ms per redraw (runs from %.1f to %.1f), %.1f ms more than off; %d passes, %d bands"
+msgstr "%s：每次重画 %.1f ms（各轮 %.1f 到 %.1f），比关闭时多 %.1f ms；补画 %d 次，共 %d 条带"
 
 #: umain.rsdrawpartsfmt
 #, object-pascal-format
-msgid "    set-up %.2f, drawing %.2f (corners %.2f, frame %.2f, separators %.2f), the band onto the window %.2f, the rest %.2f ms"
-msgstr "    准备 %.2f，绘制 %.2f（圆角外底色 %.2f、边框 %.2f、分隔线 %.2f），贴回窗口 %.2f，其余 %.2f ms"
+msgid "    in the overlay %.2f ms: set-up %.2f, drawing %.2f (corners %.2f, frame %.2f, separators %.2f), the band onto the window %.2f, the signature %.2f, the free area %.2f, the rest %.2f"
+msgstr "    外框层代码共 %.2f ms：准备 %.2f，绘制 %.2f（圆角外底色 %.2f、边框 %.2f、分隔线 %.2f），贴回窗口 %.2f，取签名 %.2f，算空闲区 %.2f，其余 %.2f"
 
 #: umain.rscachepartsfmt
 #, object-pascal-format
-msgid "    set-up %.2f, finding the frame layer %.2f, copying from it %.2f, the band onto the window %.2f, the rest %.2f ms"
-msgstr "    准备 %.2f，取外框层 %.2f，从里面拷 %.2f，贴回窗口 %.2f，其余 %.2f ms"
+msgid "    in the overlay %.2f ms: set-up %.2f, the kept layer %.2f (its key %.2f), copying from it %.2f, the band onto the window %.2f, the signature %.2f, the free area %.2f, the rest %.2f"
+msgstr "    外框层代码共 %.2f ms：准备 %.2f，取外框层 %.2f（其中算键 %.2f），从里面拷 %.2f，贴回窗口 %.2f，取签名 %.2f，算空闲区 %.2f，其余 %.2f"
 
 #: umain.rscachebuiltfmt
 #, object-pascal-format
 msgid "    frame layers: %d built on the first redraw, %.2f ms each; %.1f KB kept"
 msgstr "    外框层：第一次重画时建了 %d 份，每份 %.2f ms；共占 %.1f KB"
 
-#: umain.rscachereusedfmt
+#: umain.rscachenonefmt
 #, object-pascal-format
-msgid "    frame layers: none built, the ones kept before still fit; %.1f KB kept"
-msgstr "    外框层：这次没有新建，之前留的还能用；共占 %.1f KB"
+msgid "    frame layers: none built; %.1f KB kept"
+msgstr "    外框层：没有新建；共占 %.1f KB"
