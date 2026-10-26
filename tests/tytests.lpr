@@ -99,6 +99,7 @@ uses
   test.buttonroles,
   test.comboprops,
   test.editinputfilter,
+  test.listselection,
   test.calendar,
   test.datetimepicker,
   test.treeview.events,
