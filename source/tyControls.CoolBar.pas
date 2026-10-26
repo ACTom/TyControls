@@ -898,9 +898,23 @@ begin
 end;
 
 procedure TTyCoolBand.SetControl(AValue: TControl);
+var
+  w: Integer;
 begin
   if FControl = AValue then Exit;
   FControl := AValue;
+  { #128: the band's Width and Visible, set before it had a control, go over to the control --
+    its extent and its Visible are what the packer reads (see SetWidth / SetVisible). }
+  if FControl <> nil then
+  begin
+    if FWidth > 0 then
+    begin
+      w := FWidth;
+      FWidth := 0;
+      SetWidth(w);   // the scaling and the axis, in one place
+    end;
+    if not FVisible then FControl.Visible := False;
+  end;
   Changed(False);
 end;
 
