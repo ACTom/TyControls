@@ -141,3 +141,12 @@ msgstr "    外框层：第一次重画时建了 %d 份，每份 %.2f ms；共�
 #, object-pascal-format
 msgid "    frame layers: none built; %.1f KB kept"
 msgstr "    外框层：没有新建；共占 %.1f KB"
+
+#: umain.rsskippedfmt
+#, object-pascal-format
+msgid "%d runs left out: not every redraw reached the screen (the window was minimised or hidden)."
+msgstr "有 %d 轮没算进去：不是每次重画都画到了屏幕上（窗口被最小化或隐藏了）。"
+
+#: umain.rsnotshowing
+msgid "Nothing measured: the window is not on screen."
+msgstr "没有测：窗口不在屏幕上。"

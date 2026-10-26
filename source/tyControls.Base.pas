@@ -650,6 +650,7 @@ type
     SignatureUs: Int64;   // a host checking its ChromeSignature after it paints
     FreeRectUs: Int64;    // asking hosts for their ChromeFreeRect
     HookUs: Int64;        // the whole overlay after each paint message, everything above in it
+    Paints: Int64;        // paint messages our windowed controls got, the overlay on or off
     CacheBytes: Int64;   // what the hosts' chrome caches hold now
   end;
 
@@ -2904,6 +2905,7 @@ begin
     double-buffered control the DC is still the back buffer: the overlay lands before the
     blit, so it never flashes. Nothing below runs for a control that is neither a host nor
     inside one. }
+  if TheMessage.Msg = LM_PAINT then Inc(TyChromeStats.Paints);
   if (TheMessage.Msg <> LM_PAINT) or not TyChromeOverlayEnabled then Exit;
   dc := HDC(TheMessage.WParam);
   if dc = 0 then Exit;
