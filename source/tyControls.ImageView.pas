@@ -621,7 +621,7 @@ end;
 procedure TTyImageView.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseDown(Button, Shift, X, Y);
-  if (Button = mbLeft) and Enabled and (FSource <> nil) then
+  if (Button = mbLeft) and IsEnabled and (FSource <> nil) then
   begin
     FDragging := True;
     FDragStartX := X;

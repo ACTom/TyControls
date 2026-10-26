@@ -176,7 +176,7 @@ end;
 
 function TTyCheckBox.DialogChar(var Message: TLMKey): Boolean;
 begin
-  if Enabled and TyIsAccelKey(Message, Caption) then
+  if IsEnabled and TyIsAccelKey(Message, Caption) then
   begin
     if CanFocus then SetFocus;
     Click;
@@ -197,7 +197,7 @@ begin
   // CAPTION too, so RenderTo resolves the caption text from a separate
   // active-free state set — keeping the accent + white-glyph effect box-only.
   Result := inherited CurrentStates;
-  if (FState in [cbChecked, cbGrayed]) and Enabled then
+  if (FState in [cbChecked, cbGrayed]) and IsEnabled then
     Include(Result, tysActive);
 end;
 
@@ -498,7 +498,7 @@ end;
 
 function TTyRadioButton.DialogChar(var Message: TLMKey): Boolean;
 begin
-  if Enabled and TyIsAccelKey(Message, Caption) then
+  if IsEnabled and TyIsAccelKey(Message, Caption) then
   begin
     if CanFocus then SetFocus;
     Click;
@@ -518,7 +518,7 @@ begin
   // white dot resolve; the caption text is resolved active-free in RenderTo so
   // the accent/white stays confined to the box (dot).
   Result := inherited CurrentStates;
-  if FChecked and Enabled then
+  if FChecked and IsEnabled then
     Include(Result, tysActive);
 end;
 

@@ -226,7 +226,7 @@ begin
   // whole client area, but only the band is clickable, so only the band may read as hot.
   states := CurrentStates;
   Exclude(states, tysHover);
-  if FHeaderHover and Enabled then Include(states, tysHover);
+  if FHeaderHover and IsEnabled then Include(states, tysHover);
   Result := PartStyle('TyExPanelHeader', StyleClass, states);
 end;
 
@@ -368,7 +368,7 @@ var
   hdr: TRect;
 begin
   inherited MouseDown(Button, Shift, X, Y);
-  if (Button = mbLeft) and Enabled then
+  if (Button = mbLeft) and IsEnabled then
   begin
     hdr := TyExPanelHeaderRect(ClientRect, ScaledHeaderHeight);
     if PtInRect(hdr, Point(X, Y)) then

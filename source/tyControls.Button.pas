@@ -300,7 +300,7 @@ function TTyButton.DialogChar(var Message: TLMKey): Boolean;
 begin
   { No mnemonic parsing means no mnemonic: a button showing 'AT&T' literally must not also
     answer Alt+T, or the escape hatch would only fix half the bug. }
-  if Enabled and FShowAccelChar and TyIsAccelKey(Message, Caption) then
+  if IsEnabled and FShowAccelChar and TyIsAccelKey(Message, Caption) then
   begin
     Click;
     Exit(True);
@@ -390,7 +390,7 @@ begin
   Result := inherited CurrentStates;   // hover/active/focused/disabled, or normal
   // Enabled=False makes inherited return [tysDisabled] only; disabled wins, so we
   // never layer selected on top of it. Otherwise Down adds the resting selected state.
-  if FDown and Enabled then
+  if FDown and IsEnabled then
   begin
     Include(Result, tysSelected);
     Exclude(Result, tysNormal);
@@ -520,7 +520,7 @@ procedure TTyButton.CMDialogKey(var Message: TCMDialogKey);
 begin
   if WantsDialogKey(Message.CharCode) then
   begin
-    if Enabled then Click;
+    if IsEnabled then Click;
     Message.Result := 1;  // handled
   end
   else
