@@ -307,10 +307,11 @@ To keep one child out of this, put this in its `StyleOverride`:
 ```
 
 Put in `:root` of a theme or of the controller's `StyleOverride`, it turns this off for the
-whole application. `0`, `false`, `none` or no value at all leave it on.
+whole application. `0`, `false`, `none` or no value at all leave it on. Code can turn it all
+off too: `TyChromeOverlayEnabled := False;` (unit `tyControls.Base`, `True` by default).
 
 Only TyControls' own controls get the frame drawn over them; a native LCL control placed on
-a frame still covers it. This behaviour starts with 4.0.
+a frame still covers it. This behaviour starts with 3.0.5.
 
 ---
 

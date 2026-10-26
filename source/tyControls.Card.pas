@@ -286,7 +286,6 @@ procedure TTyCustomCard.PaintChromeLayer(APainter: TTyPainter; const AOrigin: TP
 var
   S: TTyStyleSet;
   R: TRect;
-  t0: Int64;
 begin
   S := CurrentStyle;
   R := Rect(AOrigin.X, AOrigin.Y, AOrigin.X + Width, AOrigin.Y + Height);
@@ -294,9 +293,7 @@ begin
     base would paint over everything the child drew. }
   if tpOpacity in S.Present then APainter.Opacity := S.Opacity;
   TyDrawChromeFrame(Self, APainter, R, S);
-  t0 := TyChromeClockUs;
   PaintSeparators(APainter, R);
-  Inc(TyChromeStats.SeparatorUs, TyChromeClockUs - t0);
 end;
 
 function TTyCustomCard.ChromeSignature: string;

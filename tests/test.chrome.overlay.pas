@@ -103,8 +103,6 @@ type
     procedure TestTheChildsPaintMessageDrawsIt;
     procedure TestTheCachedLayerDrawsTheSamePixels;
     procedure TestTheCacheFollowsAChange;
-    procedure TestTheCacheGoesWithItsHost;
-    procedure TestSkippingCornersStillFillsACorner;
     procedure TestAChildShowsTheFrameTheCardShows;
     procedure TestAChangeAndBackBeforeTheCardPaints;
     procedure TestAChildFollowsTheFrameWhenTheCardResizes;
@@ -257,7 +255,7 @@ end;
 procedure TChromeTestBase.SetUp;
 begin
   TyChromeOverlayEnabled := True;
-  TyChromeMode := 2;
+  TyChromeKeepLayers := True;
   FCtl := TTyStyleController.Create(nil);
   FForm := TForm.CreateNew(nil);
   FForm.SetBounds(0, 0, 400, 300);
@@ -266,7 +264,7 @@ end;
 procedure TChromeTestBase.TearDown;
 begin
   TyChromeOverlayEnabled := True;
-  TyChromeMode := 2;
+  TyChromeKeepLayers := True;
   FForm.Free;
   FCtl.Free;
 end;
@@ -624,9 +622,9 @@ begin
         + ' opacity: 0.5;';
     for i := 0 to High(kids) do
     begin
-      TyChromeMode := 0;
+      TyChromeKeepLayers := False;
       a := kids[i].Render;
-      TyChromeMode := 2;
+      TyChromeKeepLayers := True;
       b := kids[i].Render;
       try
         AssertTrue(Format('pass %d, child %d: the kept layer gives what drawing it afresh gives',
@@ -654,42 +652,6 @@ begin
     p := bmp.GetPixel(1, 12);
     AssertTrue(Format('the new frame colour, not the kept old one (%d,%d,%d)',
       [p.red, p.green, p.blue]), (p.red > 200) and (p.blue > 200) and (p.green < 80));
-  finally
-    bmp.Free;
-  end;
-end;
-
-procedure TChromeOverlayTest.TestTheCacheGoesWithItsHost;
-var
-  before: Int64;
-  b: TOvlButton;
-  bmp: TBGRABitmap;
-begin
-  before := TyChromeStats.CacheBytes;
-  b := AddButton(FCard, 0, 70, 60, 24);
-  bmp := b.Render;
-  bmp.Free;
-  AssertTrue('the card keeps its layer', TyChromeStats.CacheBytes > before);
-  FreeAndNil(FForm);   { the card with it }
-  AssertEquals('and lets it go with itself', before, TyChromeStats.CacheBytes);
-end;
-
-procedure TChromeOverlayTest.TestSkippingCornersStillFillsACorner;
-var
-  b: TOvlButton;
-  bmp: TBGRABitmap;
-  pc: TTyColor;
-  want: TBGRAPixel;
-begin
-  TyChromeMode := 1;
-  AssertTrue('precondition: the card has a parent colour', TyResolveParentBg(FCard, pc));
-  b := AddButton(FCard, 0, 0, 40, 30);
-  bmp := b.Render;
-  try
-    want := TyColorToBGRA(pc);
-    AssertEquals('a band on a corner still gets its parent background', want.red,
-      bmp.GetPixel(0, 0).red);
-    AssertEquals(want.blue, bmp.GetPixel(0, 0).blue);
   finally
     bmp.Free;
   end;
@@ -963,9 +925,9 @@ begin
   kids[1] := AddButton(pn, 150, 90, 50, 30);  { a corner }
   for i := 0 to High(kids) do
   begin
-    TyChromeMode := 0;
+    TyChromeKeepLayers := False;
     a := kids[i].Render;
-    TyChromeMode := 2;
+    TyChromeKeepLayers := True;
     b := kids[i].Render;
     try
       AssertTrue(Format('child %d: the kept layer gives what drawing it afresh gives', [i]),
@@ -1083,9 +1045,9 @@ var
 begin
   gb := NewGroupBox(FForm, FCtl);
   b := AddButton(gb, 0, 0, 120, 40);
-  TyChromeMode := 0;
+  TyChromeKeepLayers := False;
   a := b.Render;
-  TyChromeMode := 2;
+  TyChromeKeepLayers := True;
   c := b.Render;
   try
     AssertTrue('the kept layer gives what drawing it afresh gives', Same(a, c));
@@ -1204,9 +1166,9 @@ var
   a, b: TBGRABitmap;
 begin
   pc := NewPagedControl(FForm, FCtl, tpTop, pg);
-  TyChromeMode := 0;
+  TyChromeKeepLayers := False;
   a := pg.Render;
-  TyChromeMode := 2;
+  TyChromeKeepLayers := True;
   b := pg.Render;
   try
     AssertTrue('the kept layer gives what drawing it afresh gives', Same(a, b));

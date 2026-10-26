@@ -296,9 +296,10 @@ typeKey 与文本类控件引用。它们都是普通 `--变量`,可被主题作
 ```
 
 写在主题或控制器 `StyleOverride` 的 `:root` 里,整个应用都不再补画。值是 `0`、`false`、`none`
-或者不写,都表示照常补画。
+或者不写,都表示照常补画。代码里也可以整个关掉:`TyChromeOverlayEnabled := False;`
+(`tyControls.Base` 单元,默认 `True`)。
 
-补画只发生在 TyControls 自己的控件上;原生 LCL 控件放上去,照旧会盖住外框。这个行为从 4.0 开始。
+补画只发生在 TyControls 自己的控件上;原生 LCL 控件放上去,照旧会盖住外框。这个行为从 3.0.5 开始。
 
 ---
 

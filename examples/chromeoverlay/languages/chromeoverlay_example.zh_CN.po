@@ -137,59 +137,31 @@ msgstr "第 %d 项"
 
 #: umain.rsroundsfmt
 #, object-pascal-format
-msgid "Times per redraw are the fastest of %d runs of %d redraws, the four ways taking turns; the parts are averages over all runs."
-msgstr "每次重画的耗时取 %d 轮里最快的一轮（每轮重画 %d 次，四种方式轮流测）；各部分是所有轮的平均值。"
+msgid "Each time is the fastest of %d runs of %d redraws, the two ways taking turns."
+msgstr "每个耗时都取 %d 轮里最快的一轮（每轮重画 %d 次，两种方式轮流测）。"
 
-#: umain.rsmodeoff
-msgid "Off"
+#: umain.rswayon
+msgid "Frame on top"
+msgstr "外框保持在最上面"
+
+#: umain.rswayoff
+msgid "Without"
 msgstr "关闭"
 
-#: umain.rsmode0
-msgid "Each band draws the frame afresh"
-msgstr "每条带都重新画一遍外框"
-
-#: umain.rsmode1
-msgid "The same, but bands on a straight edge skip the corners"
-msgstr "同上，但直边上的带不再铺圆角外的底色"
-
-#: umain.rsmode2
-msgid "Each card keeps a frame layer, and bands copy from it"
-msgstr "每张卡片留一份外框层，各条带从里面拷"
-
-#: umain.rsofflinefmt
+#: umain.rswaylinefmt
 #, object-pascal-format
 msgid "%s: %.1f ms per redraw (runs from %.1f to %.1f)"
 msgstr "%s：每次重画 %.1f ms（各轮 %.1f 到 %.1f）"
 
-#: umain.rsmodelinefmt
+#: umain.rscostfmt
 #, object-pascal-format
-msgid "%s: %.1f ms per redraw (runs from %.1f to %.1f), %.1f ms more than off; %d passes, %d bands"
-msgstr "%s：每次重画 %.1f ms（各轮 %.1f 到 %.1f），比关闭时多 %.1f ms；补画 %d 次，共 %d 条带"
-
-#: umain.rsdrawpartsfmt
-#, object-pascal-format
-msgid "    in the overlay %.2f ms: set-up %.2f, drawing %.2f (corners %.2f, frame %.2f, separators %.2f), the band onto the window %.2f, the signature %.2f, the free area %.2f, the rest %.2f"
-msgstr "    外框层代码共 %.2f ms：准备 %.2f，绘制 %.2f（圆角外底色 %.2f、边框 %.2f、分隔线 %.2f），贴回窗口 %.2f，取签名 %.2f，算空闲区 %.2f，其余 %.2f"
-
-#: umain.rscachepartsfmt
-#, object-pascal-format
-msgid "    in the overlay %.2f ms: set-up %.2f, the kept layer %.2f (its key %.2f), copying from it %.2f, the band onto the window %.2f, the signature %.2f, the free area %.2f, the rest %.2f"
-msgstr "    外框层代码共 %.2f ms：准备 %.2f，取外框层 %.2f（其中算键 %.2f），从里面拷 %.2f，贴回窗口 %.2f，取签名 %.2f，算空闲区 %.2f，其余 %.2f"
-
-#: umain.rscachebuiltfmt
-#, object-pascal-format
-msgid "    frame layers: %d built on the first redraw, %.2f ms each; %.1f KB kept"
-msgstr "    外框层：第一次重画时建了 %d 份，每份 %.2f ms；共占 %.1f KB"
-
-#: umain.rscachenonefmt
-#, object-pascal-format
-msgid "    frame layers: none built; %.1f KB kept"
-msgstr "    外框层：没有新建；共占 %.1f KB"
+msgid "Keeping the frame on top costs %.1f ms of a redraw."
+msgstr "外框保持在最上面，每次重画多花 %.1f ms。"
 
 #: umain.rsskippedfmt
 #, object-pascal-format
-msgid "%d runs left out: not every redraw reached the screen (the window was minimised or hidden)."
-msgstr "有 %d 轮没算进去：不是每次重画都画到了屏幕上（窗口被最小化或隐藏了）。"
+msgid "%d runs left out: the window was minimised or hidden while they ran."
+msgstr "有 %d 轮没算进去：测的时候窗口被最小化或隐藏了。"
 
 #: umain.rsnotshowing
 msgid "Nothing measured: the window is not on screen."
