@@ -94,6 +94,7 @@ uses
   test.autosize.effect,
   test.borderwidth,
   test.panelcaption,
+  test.qatspacing,
   test.calendar,
   test.datetimepicker,
   test.treeview.events,
