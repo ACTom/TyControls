@@ -10,7 +10,8 @@ uses
   tyControls.Types, tyControls.Controller, tyControls.Columns, tyControls.Grid, tyControls.ComboBox,
   tyControls.Painter, tyControls.ImageCollection, tyControls.Edit, StdCtrls,
   tyControls.DateTimePicker, tyControls.CalcEdit,
-  tyControls.Grid.Layout, tyControls.Panel;
+  tyControls.Grid.Layout, tyControls.Panel,
+  tyControls.Popover;      // the filter drop-down's popover (TestFilterDropDownDoesNotAnimate)
 
 type
   TTyGridControlTest = class(TTestCase)
@@ -348,6 +349,7 @@ type
     procedure TestClickingFilterRowOpensAnEditorThatFilters;
     procedure TestFilterEditorSitsInTheBandThatIsPainted;
     procedure TestFilterDropDownIsLaidOutInLogicalPx;
+    procedure TestFilterDropDownDoesNotAnimate;
     procedure TestCsvStreamRoundTrip;
     procedure TestClearContentsRangeIsUndoable;
     procedure TestRangeLimitedExport;
@@ -10854,6 +10856,20 @@ begin
     hi.Free;
     lo.Free;
   end;
+end;
+
+{ 列头筛选下拉的弹层不做淡出:FilterPopupClosed 挂在 OnHide 上,读的是 FFilterCol /
+  FFilterAccepted 此刻的值。TTyPopover 默认开动画、OnHide 等淡出播完才来,那期间再点
+  另一列的漏斗,迟到的 OnHide 会把上一列「确定」的结果丢掉。面板的 Owner 就是那个弹层。 }
+procedure TTyStringGridTest.TestFilterDropDownDoesNotAnimate;
+var
+  G: TStrGridAccess;
+  pop: TTyPopover;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  AssertTrue('the panel belongs to the popover', G.FilterDropDownPanelForTest.Owner is TTyPopover);
+  pop := TTyPopover(G.FilterDropDownPanelForTest.Owner);
+  AssertFalse('its OnHide must stay synchronous: no fade', pop.AnimationsEnabled);
 end;
 
 { P3.6:删一列要撤得回来 —— 连**那一列的全部身份**一起。

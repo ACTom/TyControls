@@ -12786,6 +12786,11 @@ var
 begin
   if FFilterPopup <> nil then Exit;
   FFilterPopup := TTyPopover.Create(Self);
+  { 不要淡出动画:FilterPopupClosed 挂在 OnHide 上,读的是 FFilterCol / FFilterAccepted
+    这两个**此刻**的值。淡出时 OnHide 要等动画播完才来,这期间再点另一列的漏斗,
+    ShowColumnFilterDropDown 已经把 FFilterCol 换成新列、FFilterAccepted 清成 False,
+    迟到的 OnHide 就会把上一列「确定」的结果丢掉,还把新列的 FFilterCol 清成 -1。 }
+  FFilterPopup.AnimationsEnabled := False;
   { Popover.Content 只收**一个**控件,而且不按子控件自动定尺寸 ——
     所以自己摆一个固定尺寸的面板。 }
   FFilterPanel := TTyPanel.Create(FFilterPopup);

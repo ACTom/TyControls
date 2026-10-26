@@ -4,7 +4,8 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Controller, tyControls.Popover;
+  tyControls.Types, tyControls.Controller, tyControls.Popover,
+  test.danglingrefs;   // BeginPoison / EndPoison: freeing a popover mid-animation
 
 type
   { Pure-rules tests: every function here takes plain integers / enums, so they run with no
@@ -48,6 +49,7 @@ type
     procedure TestTipMarginAddsTheCornerInset;
     procedure TestPlaceKeepsTheTipOffTheCorners;
     procedure TestLayoutKeepsTheArrowOffTheCorners;
+    procedure TestMoveOffsetComesFromTheFarSide;
   end;
 
   { Headless component behaviour: typeKeys, defaults, theme-driven measurement + placement,
@@ -60,7 +62,9 @@ type
     FForm: TForm;
     FPanel: TWinControl;   // the "container the designer filled" this popover hosts
     FHidden: Integer;      // OnHide fire count
+    FShown: Integer;       // OnShow fire count
     procedure HandleHide(Sender: TObject);
+    procedure HandleShow(Sender: TObject);
     function NewPopover: TTyPopover;   // wired to the test controller + the test panel
   protected
     procedure SetUp; override;
@@ -103,6 +107,18 @@ type
     procedure TestClearingStyleOverrideReturnsToTheTheme;
     procedure TestStyleOverrideRetunesThisPopoversTokens;
     procedure TestStyleOverrideTextReachesTheTitleAndNothingElse;
+    procedure TestAnimationDefaults;
+    procedure TestShowFadesAndMovesIn;
+    procedure TestHideFadesOutThenFiresOnHide;
+    procedure TestAnimationsOffIsTheUnanimatedPopover;
+    procedure TestNoEffectsOrZeroTimesIsTheUnanimatedPopover;
+    procedure TestFadeOnlyAndMoveOnly;
+    procedure TestTimesComeFromOptionsThenTheTheme;
+    procedure TestShowDuringTheFadeOutTurnsItBack;
+    procedure TestShowElsewhereDuringTheFadeOutFinishesItFirst;
+    procedure TestAnimationsOffMidFadeFinishesNow;
+    procedure TestFreeingMidFadeSendsTheContentHome;
+    procedure TestFreeingWhileUpDoesNotStartAFade;
   end;
 
 implementation
@@ -158,6 +174,14 @@ type
     function TitleInk: TTyColor;
     function PopoverStyle: TTyStyleSet;
     function TitleStyle: TTyStyleSet;
+    procedure ArmShowAnimation(const AGeometry: TTyPopoverGeometry; APPI: Integer);
+    function TurnBackHide(const AAnchorScreen, AWorkArea: TRect; APPI: Integer): Boolean;
+    function CanDriveAnimation: Boolean; override;
+    function Win: TForm;
+  public
+    { The headless runner cannot put the window on screen, so it answers "the window is up"
+      for the hide animation by this switch. Off (the default) = what a hidden window says. }
+    Drive: Boolean;
   end;
 
 function TPopAccess.BeginShowing(const AAnchorScreen, AWorkArea: TRect;
@@ -185,6 +209,26 @@ end;
 function TPopAccess.TitleStyle: TTyStyleSet;
 begin
   Result := inherited TitleStyle;
+end;
+
+procedure TPopAccess.ArmShowAnimation(const AGeometry: TTyPopoverGeometry; APPI: Integer);
+begin
+  inherited ArmShowAnimation(AGeometry, APPI);
+end;
+
+function TPopAccess.TurnBackHide(const AAnchorScreen, AWorkArea: TRect; APPI: Integer): Boolean;
+begin
+  Result := inherited TurnBackHide(AAnchorScreen, AWorkArea, APPI);
+end;
+
+function TPopAccess.CanDriveAnimation: Boolean;
+begin
+  Result := Drive;
+end;
+
+function TPopAccess.Win: TForm;
+begin
+  Result := PopupWindow;
 end;
 
 { ============================== TTyPopoverRulesTest ============================== }
@@ -701,6 +745,23 @@ begin
   AssertEquals('old rule without an inset', 8, L.ArrowTip.X);
 end;
 
+procedure TTyPopoverRulesTest.TestMoveOffsetComesFromTheFarSide;
+var
+  dx, dy: Integer;
+begin
+  // The popup travels TOWARDS its anchor: it starts on the side away from it.
+  TyPopoverMoveOffset(psvBottom, 8, dx, dy);
+  AssertTrue('below: starts lower', (dx = 0) and (dy = 8));
+  TyPopoverMoveOffset(psvTop, 8, dx, dy);
+  AssertTrue('above: starts higher', (dx = 0) and (dy = -8));
+  TyPopoverMoveOffset(psvRight, 8, dx, dy);
+  AssertTrue('right: starts further right', (dx = 8) and (dy = 0));
+  TyPopoverMoveOffset(psvLeft, 8, dx, dy);
+  AssertTrue('left: starts further left', (dx = -8) and (dy = 0));
+  TyPopoverMoveOffset(psvBottom, -3, dx, dy);
+  AssertTrue('a negative distance is none', (dx = 0) and (dy = 0));
+end;
+
 { ============================ TTyPopoverComponentTest ============================ }
 
 procedure TTyPopoverComponentTest.SetUp;
@@ -713,6 +774,7 @@ begin
   FPanel.SetBounds(CPanelL, CPanelT, CContentW, CContentH);
   FPanel.Visible := False;
   FHidden := 0;
+  FShown := 0;
 end;
 
 procedure TTyPopoverComponentTest.TearDown;
@@ -724,6 +786,11 @@ end;
 procedure TTyPopoverComponentTest.HandleHide(Sender: TObject);
 begin
   Inc(FHidden);
+end;
+
+procedure TTyPopoverComponentTest.HandleShow(Sender: TObject);
+begin
+  Inc(FShown);
 end;
 
 function TTyPopoverComponentTest.NewPopover: TTyPopover;
@@ -1739,6 +1806,422 @@ begin
   finally
     P.Free;
   end;
+end;
+
+const
+  { D1: the animation tokens, pinned (round numbers so every frame is arithmetic). }
+  CAnimRoot = ':root { --popover-show-duration: 160; --popover-hide-duration: 80;'
+    + ' --popover-move-distance: 8px; }';
+  CAnchor: TRect = (Left: 100; Top: 100; Right: 180; Bottom: 124);
+  CWork: TRect = (Left: CWorkL; Top: CWorkT; Right: CWorkR; Bottom: CWorkB);
+
+procedure TTyPopoverComponentTest.TestAnimationDefaults;
+var
+  P: TTyPopover;
+begin
+  P := TTyPopover.Create(nil);
+  try
+    AssertTrue('animates by default', P.AnimationsEnabled);
+    AssertTrue('fades by default', P.AnimationOptions.FadeEffect);
+    AssertTrue('moves by default', P.AnimationOptions.MoveEffect);
+    AssertEquals('show time follows the theme', -1, P.AnimationOptions.ShowingAnimationTime);
+    AssertEquals('hide time follows the theme', -1, P.AnimationOptions.HidingAnimationTime);
+    P.AnimationOptions.ShowingAnimationTime := -7;
+    AssertEquals('any negative time means the theme''s', -1,
+      P.AnimationOptions.ShowingAnimationTime);
+    AssertFalse('nothing running', P.Animating);
+  finally
+    P.Free;
+  end;
+end;
+
+{ TestShowFadesAndMovesIn
+  Armed before the window goes up: transparent, and MoveEffect's distance BELOW where it lands
+  (it sits below its anchor, so it rises in). Stepped 16 ms at a time over the pinned 160 ms
+  the opacity only climbs and the frame only rises, and the end is the placement, opaque, with
+  the window off the layered path again. The midpoint is the ease-out curve's: 1-(1-t)^3. }
+procedure TTyPopoverComponentTest.TestShowFadesAndMovesIn;
+var
+  P: TPopAccess;
+  g: TTyPopoverGeometry;
+  i, lastA, lastTop: Integer;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    CAnimRoot));
+  P := TPopAccess(NewPopover);
+  try
+    g := P.BeginShowing(CAnchor, CWork, 96);
+    P.ArmShowAnimation(g, 96);
+    AssertTrue('animating', P.Animating);
+    AssertTrue('fading', P.Win.AlphaBlend);
+    AssertEquals('starts transparent', 0, P.Win.AlphaBlendValue);
+    AssertEquals('starts the move distance below', g.Frame.Top + 8, P.Win.Top);
+    AssertEquals('no sideways move', g.Frame.Left, P.Win.Left);
+    lastA := 0;
+    lastTop := P.Win.Top;
+    for i := 1 to 4 do
+    begin
+      AssertTrue('a frame changed', P.AdvanceAnimation(20));
+      AssertTrue('opacity only climbs', P.Win.AlphaBlendValue >= lastA);
+      AssertTrue('the frame only rises', P.Win.Top <= lastTop);
+      lastA := P.Win.AlphaBlendValue;
+      lastTop := P.Win.Top;
+    end;
+    // 80 of 160 ms: eased 1 - 0.5^3 = 0.875.
+    AssertEquals('midpoint opacity', Round(255 * 0.875), P.Win.AlphaBlendValue);
+    AssertEquals('midpoint position', g.Frame.Top + Round(8 * 0.125), P.Win.Top);
+    for i := 1 to 4 do P.AdvanceAnimation(20);
+    AssertFalse('done', P.Animating);
+    AssertFalse('off the layered path again', P.Win.AlphaBlend);
+    AssertEquals('opaque', 255, P.Win.AlphaBlendValue);
+    AssertEquals('settled on the placement', g.Frame.Top, P.Win.Top);
+    AssertEquals('settled on the placement (x)', g.Frame.Left, P.Win.Left);
+    AssertTrue('still up', P.Showing);
+  finally
+    P.Free;
+  end;
+end;
+
+{ TestHideFadesOutThenFiresOnHide
+  Hide on a popup that is up: Showing drops at once, but the content stays in the window and
+  fades with it; OnHide fires once, when the fade ends, with the content back home. The frame
+  does not move back out (DevExpress's hide is a fade only). }
+procedure TTyPopoverComponentTest.TestHideFadesOutThenFiresOnHide;
+var
+  P: TPopAccess;
+  g: TTyPopoverGeometry;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    CAnimRoot));
+  P := TPopAccess(NewPopover);
+  try
+    P.Drive := True;
+    P.OnHide := @HandleHide;
+    g := P.BeginShowing(CAnchor, CWork, 96);
+    P.ArmShowAnimation(g, 96);
+    P.AdvanceAnimation(160);
+    AssertFalse('shown and settled', P.Animating);
+    P.Hide;
+    AssertFalse('Showing drops at once', P.Showing);
+    AssertTrue('fading out', P.Animating);
+    AssertEquals('no OnHide yet', 0, FHidden);
+    AssertTrue('the content fades with the window', FPanel.Parent <> FForm);
+    AssertTrue('on the layered path', P.Win.AlphaBlend);
+    P.AdvanceAnimation(40);
+    // 40 of 80 ms back down: eased 0.875 of the way from 0, i.e. alpha 223.
+    AssertEquals('half way out', Round(255 * 0.875), P.Win.AlphaBlendValue);
+    P.Hide;
+    AssertEquals('a second Hide mid-fade adds nothing', 0, FHidden);
+    P.AdvanceAnimation(40);
+    AssertFalse('done', P.Animating);
+    AssertEquals('OnHide once, at the end', 1, FHidden);
+    AssertSame('the content is home', FForm, FPanel.Parent);
+    AssertFalse('and hidden again, as it was', FPanel.Visible);
+    AssertFalse('opacity reset', P.Win.AlphaBlend);
+    AssertEquals('it faded where it stood', g.Frame.Top, P.Win.Top);
+  finally
+    P.Free;
+  end;
+end;
+
+{ TestAnimationsOffIsTheUnanimatedPopover
+  The switch off: the window is never touched -- no AlphaBlend, bounds exactly the placement
+  -- there is nothing to step, and Hide is immediate: OnHide and the content's return happen
+  inside the call, as before the popover could animate. Drive is on, so it is the switch and
+  not a missing window that keeps it still. }
+procedure TTyPopoverComponentTest.TestAnimationsOffIsTheUnanimatedPopover;
+var
+  P: TPopAccess;
+  g: TTyPopoverGeometry;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    CAnimRoot));
+  P := TPopAccess(NewPopover);
+  try
+    P.Drive := True;
+    P.OnHide := @HandleHide;
+    P.AnimationsEnabled := False;
+    g := P.BeginShowing(CAnchor, CWork, 96);
+    P.ArmShowAnimation(g, 96);
+    AssertFalse('not animating', P.Animating);
+    AssertFalse('never layered', P.Win.AlphaBlend);
+    AssertEquals('opacity untouched', 255, P.Win.AlphaBlendValue);
+    AssertTrue('exactly the placement', EqualRect(g.Frame, P.Win.BoundsRect));
+    AssertFalse('nothing to step', P.AdvanceAnimation(16));
+    P.Hide;
+    AssertEquals('OnHide inside the call', 1, FHidden);
+    AssertSame('content home inside the call', FForm, FPanel.Parent);
+    AssertFalse('not animating', P.Animating);
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyPopoverComponentTest.TestNoEffectsOrZeroTimesIsTheUnanimatedPopover;
+var
+  P: TPopAccess;
+  g: TTyPopoverGeometry;
+  pass: Integer;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    CAnimRoot));
+  for pass := 0 to 1 do
+  begin
+    FHidden := 0;
+    P := TPopAccess(NewPopover);
+    try
+      P.Drive := True;
+      P.OnHide := @HandleHide;
+      if pass = 0 then
+      begin
+        P.AnimationOptions.FadeEffect := False;
+        P.AnimationOptions.MoveEffect := False;
+      end
+      else
+      begin
+        P.AnimationOptions.ShowingAnimationTime := 0;
+        P.AnimationOptions.HidingAnimationTime := 0;
+      end;
+      g := P.BeginShowing(CAnchor, CWork, 96);
+      P.ArmShowAnimation(g, 96);
+      AssertFalse(Format('pass %d: not animating', [pass]), P.Animating);
+      AssertFalse(Format('pass %d: never layered', [pass]), P.Win.AlphaBlend);
+      AssertTrue(Format('pass %d: exactly the placement', [pass]),
+        EqualRect(g.Frame, P.Win.BoundsRect));
+      P.Hide;
+      AssertEquals(Format('pass %d: OnHide inside the call', [pass]), 1, FHidden);
+      AssertSame(Format('pass %d: content home', [pass]), FForm, FPanel.Parent);
+    finally
+      P.Free;
+    end;
+  end;
+end;
+
+procedure TTyPopoverComponentTest.TestFadeOnlyAndMoveOnly;
+var
+  P: TPopAccess;
+  g: TTyPopoverGeometry;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    CAnimRoot));
+  P := TPopAccess(NewPopover);
+  try
+    // Move only: never layered, but it starts below and rises.
+    P.Drive := True;
+    P.OnHide := @HandleHide;
+    P.AnimationOptions.FadeEffect := False;
+    g := P.BeginShowing(CAnchor, CWork, 96);
+    P.ArmShowAnimation(g, 96);
+    AssertTrue('animating', P.Animating);
+    AssertFalse('no fade', P.Win.AlphaBlend);
+    AssertEquals('but the move', g.Frame.Top + 8, P.Win.Top);
+    P.AdvanceAnimation(160);
+    AssertEquals('settled', g.Frame.Top, P.Win.Top);
+    // The hide is a fade; with no fade there is nothing to play: immediate.
+    P.Hide;
+    AssertEquals('immediate OnHide', 1, FHidden);
+  finally
+    P.Free;
+  end;
+  P := TPopAccess(NewPopover);
+  try
+    // Fade only: transparent at the placement itself.
+    P.AnimationOptions.MoveEffect := False;
+    g := P.BeginShowing(CAnchor, CWork, 96);
+    P.ArmShowAnimation(g, 96);
+    AssertEquals('transparent', 0, P.Win.AlphaBlendValue);
+    AssertTrue('where it lands', EqualRect(g.Frame, P.Win.BoundsRect));
+  finally
+    P.Free;
+  end;
+end;
+
+{ TestTimesComeFromOptionsThenTheTheme
+  The pinned theme says 160 ms. Without an option the show is still running at 144 ms and done
+  at 160; ShowingAnimationTime = 32 is done at 32; a StyleOverride token is this popover's own
+  theme value. }
+procedure TTyPopoverComponentTest.TestTimesComeFromOptionsThenTheTheme;
+var
+  P: TPopAccess;
+  g: TTyPopoverGeometry;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    CAnimRoot));
+  P := TPopAccess(NewPopover);
+  try
+    g := P.BeginShowing(CAnchor, CWork, 96);
+    P.ArmShowAnimation(g, 96);
+    P.AdvanceAnimation(144);
+    AssertTrue('the theme''s 160 ms: still running at 144', P.Animating);
+    P.AdvanceAnimation(16);
+    AssertFalse('done at 160', P.Animating);
+    P.AnimationOptions.ShowingAnimationTime := 32;
+    P.ArmShowAnimation(g, 96);
+    P.AdvanceAnimation(31);
+    AssertTrue('the option''s 32 ms: running at 31', P.Animating);
+    P.AdvanceAnimation(1);
+    AssertFalse('done at 32', P.Animating);
+    P.AnimationOptions.ShowingAnimationTime := -1;
+    P.StyleOverride := '--popover-show-duration: 48; --popover-move-distance: 20px;';
+    P.ArmShowAnimation(g, 96);
+    AssertEquals('the override''s move distance', g.Frame.Top + 20, P.Win.Top);
+    P.AdvanceAnimation(47);
+    AssertTrue('the override''s 48 ms: running at 47', P.Animating);
+    P.AdvanceAnimation(1);
+    AssertFalse('done at 48', P.Animating);
+  finally
+    P.Free;
+  end;
+end;
+
+{ TestShowDuringTheFadeOutTurnsItBack
+  A Show for the same place while the popup is fading out: it turns round from the opacity it
+  had reached -- no jump to 0, no flash to 255 -- and since it never went away there is no
+  OnHide (and the content never left). }
+procedure TTyPopoverComponentTest.TestShowDuringTheFadeOutTurnsItBack;
+var
+  P: TPopAccess;
+  g: TTyPopoverGeometry;
+  a: Integer;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    CAnimRoot));
+  P := TPopAccess(NewPopover);
+  try
+    P.Drive := True;
+    P.OnHide := @HandleHide;
+    g := P.BeginShowing(CAnchor, CWork, 96);
+    P.ArmShowAnimation(g, 96);
+    P.AdvanceAnimation(160);
+    P.Hide;
+    P.AdvanceAnimation(40);
+    a := P.Win.AlphaBlendValue;
+    AssertTrue('part way out', (a > 0) and (a < 255));
+    AssertTrue('turned back', P.TurnBackHide(CAnchor, CWork, 96));
+    AssertTrue('up again', P.Showing);
+    AssertEquals('from where it was: no jump', a, P.Win.AlphaBlendValue);
+    P.AdvanceAnimation(16);
+    AssertTrue('and climbing', P.Win.AlphaBlendValue > a);
+    P.AdvanceAnimation(160);
+    AssertFalse('settled', P.Animating);
+    AssertFalse('opaque again', P.Win.AlphaBlend);
+    AssertEquals('the dismissal never completed: no OnHide', 0, FHidden);
+    AssertTrue('the content never left', FPanel.Parent <> FForm);
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyPopoverComponentTest.TestShowElsewhereDuringTheFadeOutFinishesItFirst;
+var
+  P: TPopAccess;
+  g: TTyPopoverGeometry;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    CAnimRoot));
+  P := TPopAccess(NewPopover);
+  try
+    P.Drive := True;
+    P.OnHide := @HandleHide;
+    g := P.BeginShowing(CAnchor, CWork, 96);
+    P.ArmShowAnimation(g, 96);
+    P.AdvanceAnimation(160);
+    P.Hide;
+    P.AdvanceAnimation(40);
+    // Somewhere else: the old dismissal completes first (its OnHide, its content home), and
+    // the caller goes on to a fresh show.
+    AssertFalse('not turned back', P.TurnBackHide(Rect(600, 400, 680, 424), CWork, 96));
+    AssertEquals('the old dismissal''s OnHide', 1, FHidden);
+    AssertSame('its content home', FForm, FPanel.Parent);
+    AssertFalse('nothing running', P.Animating);
+    AssertFalse('opacity reset', P.Win.AlphaBlend);
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyPopoverComponentTest.TestAnimationsOffMidFadeFinishesNow;
+var
+  P: TPopAccess;
+  g: TTyPopoverGeometry;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    CAnimRoot));
+  P := TPopAccess(NewPopover);
+  try
+    P.Drive := True;
+    P.OnHide := @HandleHide;
+    g := P.BeginShowing(CAnchor, CWork, 96);
+    P.ArmShowAnimation(g, 96);
+    P.AdvanceAnimation(160);
+    P.Hide;
+    P.AdvanceAnimation(20);
+    P.AnimationsEnabled := False;
+    AssertFalse('finished at once', P.Animating);
+    AssertEquals('its OnHide', 1, FHidden);
+    AssertSame('content home', FForm, FPanel.Parent);
+    AssertFalse('not left half transparent', P.Win.AlphaBlend);
+  finally
+    P.Free;
+  end;
+end;
+
+{ TestFreeingMidFadeSendsTheContentHome
+  The popover is freed while its fade-out runs on a REAL timer. The content goes home (it
+  belongs to the form), OnHide does not fire (a component going away is not a dismissal), and
+  nothing reads the freed popover afterwards: its memory is poisoned and the message queue is
+  pumped past a timer tick, so a timer left running into it would fault. }
+procedure TTyPopoverComponentTest.TestFreeingMidFadeSendsTheContentHome;
+var
+  P: TPopAccess;
+  g: TTyPopoverGeometry;
+  t0: QWord;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    ':root { --popover-show-duration: 160; --popover-hide-duration: 5000; }'));
+  P := TPopAccess(NewPopover);
+  P.Drive := True;
+  P.OnHide := @HandleHide;
+  g := P.BeginShowing(CAnchor, CWork, 96);
+  P.ArmShowAnimation(g, 96);
+  P.AdvanceAnimation(160);
+  P.Hide;
+  AssertTrue('fading', P.Animating);
+  BeginPoison;
+  try
+    P.Free;
+    t0 := GetTickCount64;
+    repeat
+      Application.ProcessMessages;
+      Sleep(5);
+    until GetTickCount64 - t0 > 80;
+  finally
+    EndPoison;
+  end;
+  AssertSame('the content is home', FForm, FPanel.Parent);
+  AssertEquals('original bounds', CPanelL, FPanel.Left);
+  AssertEquals('destroying is not a dismissal: no OnHide', 0, FHidden);
+end;
+
+{ TestFreeingWhileUpDoesNotStartAFade
+  Freed while up (and with a window that could fade): the destructor's Hide must not start a
+  fade-out that outlives the component -- the content goes home inside the Free. }
+procedure TTyPopoverComponentTest.TestFreeingWhileUpDoesNotStartAFade;
+var
+  P: TPopAccess;
+  g: TTyPopoverGeometry;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    CAnimRoot));
+  P := TPopAccess(NewPopover);
+  P.Drive := True;
+  g := P.BeginShowing(CAnchor, CWork, 96);
+  P.ArmShowAnimation(g, 96);
+  P.AdvanceAnimation(40);
+  AssertTrue('mid-show', P.Animating);
+  P.Free;
+  AssertSame('the content is home', FForm, FPanel.Parent);
+  AssertFalse('hidden again, as it was', FPanel.Visible);
 end;
 
 initialization

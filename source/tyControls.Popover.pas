@@ -33,8 +33,8 @@ unit tyControls.Popover;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Forms, Graphics, LCLType, LCLIntf,
-  tyControls.Types, tyControls.Component, tyControls.Painter, tyControls.Base,
+  Classes, SysUtils, Types, Controls, Forms, Graphics, ExtCtrls, LCLType, LCLIntf,
+  tyControls.Types, tyControls.Animation, tyControls.Component, tyControls.Painter, tyControls.Base,
   tyControls.Controller, tyControls.StyleModel;
 
 const
@@ -47,6 +47,14 @@ const
                             // the triangle stops being a right-angled 45 deg wedge)
   TyPopoverOffset    = 4;   // gap between the anchor's edge and the popup FRAME's near edge
   TyPopoverTitleGap  = 6;   // gap between the title line and the content
+  TyPopoverMoveDistance = 8; // how far the popup travels in as it appears (MoveEffect)
+
+  { The animation times' fallbacks, in MILLISECONDS (the scroll bar's fade times, 120/200,
+    are the nearest relatives; a popover is a bigger, nearer surface, so a little quicker to
+    leave). AnimationOptions.ShowingAnimationTime / HidingAnimationTime override them per
+    instance; -1 there means "the theme's". }
+  TyPopoverShowDuration = 150;
+  TyPopoverHideDuration = 100;
 
   { The metric token each constant backs. Named constants rather than inline literals because
     several call sites (the layout, the measurement, the tests) must agree on the spelling —
@@ -55,6 +63,9 @@ const
   TyPopoverArrowSizeVar = '--popover-arrow-size';
   TyPopoverOffsetVar    = '--popover-offset';
   TyPopoverTitleGapVar  = '--popover-title-gap';
+  TyPopoverMoveDistanceVar = '--popover-move-distance';
+  TyPopoverShowDurationVar = '--popover-show-duration';   // unitless ms, like --scrollbar-auto-hide
+  TyPopoverHideDurationVar = '--popover-hide-duration';
 
 type
   { Which side OF THE ANCHOR the popup body sits on. psvTop means the body is ABOVE the
@@ -206,9 +217,53 @@ function TyPopoverFrameSize(AContentW, AContentH: Integer; ASide: TTyPopoverSide
 function TyPopoverArrowPoints(const ALayout: TTyPopoverLayout; ASide: TTyPopoverSide;
   out ATip, ABase1, ABase2: TPoint): Boolean;
 
+{ MoveEffect's start: where the frame sits, relative to where it lands, when it begins to
+  move in. It comes from the far side -- the opposite of the way its arrow points -- and
+  travels towards the anchor: a popup below its anchor starts ADistance lower and rises. }
+procedure TyPopoverMoveOffset(ASide: TTyPopoverSide; ADistance: Integer; out ADX, ADY: Integer);
+
+{ Whether this widgetset can fade a top-level window: True where LCL's AlphaBlend reaches the
+  window (Win32, Cocoa, Qt5/6 on X11, GTK2 under a compositing window manager), False on
+  GTK3 (LCL's TGtk3WSCustomForm.SetAlphaBlend is an empty stub through 4.x) and on Wayland
+  (no client-side window opacity). Where it is False FadeEffect does nothing and the popup
+  shows and hides at once; MoveEffect still plays. A GTK2 desktop without a compositor
+  cannot be told apart from here: the fade is asked for and the window simply stays opaque. }
+function TyPopoverFadeSupported: Boolean;
+
 type
   TTyPopover = class;
   TTyCustomPopover = class;
+
+  { DevExpress TdxCalloutPopupAnimationOptions, member for member: how a popover appears and
+    goes away. Only consulted while the popover's AnimationsEnabled is True.
+      FadeEffect           -- fade in on show, out on hide (where TyPopoverFadeSupported).
+      MoveEffect           -- move in towards the anchor on show. Hiding does not move back:
+                              it only fades, as DevExpress's does.
+      ShowingAnimationTime -- ms for the show; -1 = the theme's --popover-show-duration.
+      HidingAnimationTime  -- ms for the hide; -1 = the theme's --popover-hide-duration.
+    A time of 0 is no animation for that half. }
+  TTyPopoverAnimationOptions = class(TPersistent)
+  private
+    FOwner: TPersistent;
+    FFadeEffect: Boolean;
+    FMoveEffect: Boolean;
+    FShowingAnimationTime: Integer;
+    FHidingAnimationTime: Integer;
+    procedure SetShowingAnimationTime(AValue: Integer);
+    procedure SetHidingAnimationTime(AValue: Integer);
+  protected
+    function GetOwner: TPersistent; override;
+  public
+    constructor Create(AOwner: TPersistent);
+    procedure Assign(Source: TPersistent); override;
+  published
+    property FadeEffect: Boolean read FFadeEffect write FFadeEffect default True;
+    property MoveEffect: Boolean read FMoveEffect write FMoveEffect default True;
+    property ShowingAnimationTime: Integer read FShowingAnimationTime
+      write SetShowingAnimationTime default -1;
+    property HidingAnimationTime: Integer read FHidingAnimationTime
+      write SetHidingAnimationTime default -1;
+  end;
 
   { The popover's window. A plain borderless TForm (TTyBalloonHint's shell) rather than a
     TTyPopupSurface, because a popover needs three things that surface does not offer: an
@@ -266,6 +321,43 @@ type
     FOrigAlign: TAlign;
     FOrigBounds: TRect;
     FOrigVisible: Boolean;
+    { Animation. Two animators, because the two effects do not run the same way: the fade
+      goes 0 -> 1 on show and back to 0 on hide, while the move only ever goes in (a hide
+      fades where the popup stands). Progress 1 = settled. FAnimActive: a show or hide is
+      being animated right now (the timer is, or is about to be, ticking). FHiding: Hide was
+      called and the window is fading out -- Showing is already False, the content is still
+      adopted, OnHide has not fired yet. FFadeOn: we turned the window's AlphaBlend on and
+      owe it a reset. }
+    FAnimationsEnabled: Boolean;
+    FAnimationOptions: TTyPopoverAnimationOptions;
+    FFadeAnim: TTyAnimator;
+    FMoveAnim: TTyAnimator;
+    FAnimFade: Boolean;
+    FAnimMove: Boolean;
+    FAnimActive: Boolean;
+    FHiding: Boolean;
+    FFadeOn: Boolean;
+    FAnimTimer: TTimer;
+    FRestFrame: TRect;     // where the frame lands: the placement, untouched by the animation
+    FMoveDX, FMoveDY: Integer;   // MoveEffect's start, relative to FRestFrame (device px)
+    procedure SetAnimationOptions(AValue: TTyPopoverAnimationOptions);
+    procedure SetAnimationsEnabled(AValue: Boolean);
+    procedure AnimTimerTick(Sender: TObject);
+    procedure StartAnimTimer;
+    { Stop animating and put the window's opacity back; the window stays where it is. }
+    procedure StopAnimation;
+    { Paint the current animation frame onto the window: its opacity and its position. }
+    procedure ApplyAnimFrame;
+    { The animation reached its end: a show settles at FRestFrame, opaque; a hide finishes. }
+    procedure AnimationFinished;
+    { The hide's bookkeeping, done now: content home, window down, opacity reset, OnHide. }
+    procedure FinishHide;
+    { Times in ms and the move distance in device px: the options, else the theme. }
+    function ShowDurationMs: Integer;
+    function HideDurationMs: Integer;
+    function MoveDistanceAt(APPI: Integer): Integer;
+    function WantsFade: Boolean;
+    function WantsMove: Boolean;
     procedure SetTarget(AValue: TControl);
     procedure SetContent(AValue: TWinControl);
     procedure SetPlacement(AValue: TTyPopoverPlacement);
@@ -302,6 +394,23 @@ type
       Returns the geometry it placed to. }
     function BeginShowing(const AAnchorScreen, AWorkArea: TRect;
       APPI: Integer): TTyPopoverGeometry;
+    { Set up the show animation for a popup BeginShowing just placed at AGeometry: the
+      window's opacity to 0 and its position to MoveEffect's start, BEFORE it is shown (so
+      the first frame on screen is the first frame of the animation, not a flash of the
+      last). Does nothing -- leaves the window exactly as BeginShowing put it -- when
+      AnimationsEnabled is off, both effects are off or unavailable, or the time is 0.
+      ShowAt calls it; split out so the tests can drive the animation with no window. }
+    procedure ArmShowAnimation(const AGeometry: TTyPopoverGeometry; APPI: Integer);
+    { A Show while the popup is still fading out. The same place: the fade turns round from
+      where it is, no OnHide, no second OnShow -- the popup never went away -- and True is
+      returned. Anywhere else: the dismissal completes now (content home, OnHide) and False
+      is returned, for a fresh show to follow. }
+    function TurnBackHide(const AAnchorScreen, AWorkArea: TRect; APPI: Integer): Boolean;
+    { Whether a hide may be animated: the window is really up. The tests answer for a window
+      that cannot be shown headlessly. }
+    function CanDriveAnimation: Boolean; virtual;
+    { The window, for the tests (its opacity and bounds are what the animation drives). }
+    property PopupWindow: TTyPopoverWindow read FWin;
     { How far in from each end of its edge the arrow's base must stay so it leaves the
       outline on a straight run: the body's largest corner radius (clamped the way the
       painter clamps it, to half the body's shorter side) plus its border width, device px.
@@ -365,8 +474,15 @@ type
       the paint fills and the content is placed into. }
     function LayoutIn(AFrameW, AFrameH: Integer; ASide: TTyPopoverSide;
       ATipLocal, APPI: Integer): TTyPopoverLayout;
-    { Whether the popup is currently up. }
+    { Step the running show / hide animation by AMs milliseconds; the window's timer calls it
+      every ~16 ms. True when a frame changed. Public as the test seam the toggle switch has:
+      the tests step time instead of waiting for a timer. }
+    function AdvanceAnimation(AMs: Integer): Boolean;
+    { Whether the popup is currently up. False from the moment Hide is called, even while
+      the window is still fading out. }
     property Showing: Boolean read FShowing;
+    { True while a show or hide animation is running. }
+    property Animating: Boolean read FAnimActive;
     { The control the popover belongs to and points at. Show uses it; ShowFor/ShowAt override
       it for one call without disturbing it. }
     property Target: TControl read FTarget write SetTarget;
@@ -397,6 +513,15 @@ type
     { The variant entry: a `TyPopover.danger` rule in the theme. Resolved for BOTH typeKeys,
       so TyPopoverTitle.danger tints a danger popover's headline. }
     property StyleClass: string read FStyleClass write SetStyleClass;
+    { The library's master switch for animation (as on the toggle switch, the gauges...). Off,
+      the popup shows and hides at once, exactly as it did before it could animate. On, the
+      AnimationOptions decide what plays. Turning it off mid-animation finishes it at once. }
+    property AnimationsEnabled: Boolean read FAnimationsEnabled write SetAnimationsEnabled
+      default True;
+    { How the popup appears and goes away: fade, move, and their times. See
+      TTyPopoverAnimationOptions. }
+    property AnimationOptions: TTyPopoverAnimationOptions read FAnimationOptions
+      write SetAnimationOptions;
     { This one popover's look, as a bare tycss declaration block laid over the theme and
       StyleClass -- the controls' StyleOverride, same parser and same merge:
         'background: #1F2937; color: #F9FAFB; border-color: #111827; border-radius: 0;'
@@ -407,11 +532,14 @@ type
     property StyleOverride: string read FStyleOverride write SetStyleOverride;
     property Controller: TTyCustomStyleController read FController write SetController;
     { Fired after the popup is on screen (and after the content has been adopted into it, so a
-      handler may focus a control inside). }
+      handler may focus a control inside). With an animation it fires as the animation
+      STARTS, not when it ends: the content is already live. }
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     { Fired once per dismissal, whatever caused it: a click away, Escape, or Hide. NOT fired
       when the component is destroyed — a component going away is not a popover the user
-      dismissed. }
+      dismissed. With a fade-out it fires when the fade ENDS (the content is back home by
+      then); a Show that catches the popup still fading turns it round and the OnHide never
+      comes, because the popup never went away. }
     property OnHide: TNotifyEvent read FOnHide write FOnHide;
   end;
 
@@ -426,6 +554,8 @@ type
     property ShowArrow;
     property CloseOnClickOutside;
     property CloseOnEscape;
+    property AnimationsEnabled;
+    property AnimationOptions;
     property StyleClass;
     property StyleOverride;
     property Controller;
@@ -798,6 +928,75 @@ begin
   end;
 end;
 
+procedure TyPopoverMoveOffset(ASide: TTyPopoverSide; ADistance: Integer; out ADX, ADY: Integer);
+begin
+  ADX := 0;
+  ADY := 0;
+  if ADistance < 0 then ADistance := 0;
+  case ASide of
+    psvBottom: ADY := ADistance;    // below the anchor: start lower, rise towards it
+    psvTop:    ADY := -ADistance;   // above: start higher, come down
+    psvRight:  ADX := ADistance;    // to its right: start further right, come left
+  else
+    ADX := -ADistance;              // to its left: start further left, come right
+  end;
+end;
+
+function TyPopoverFadeSupported: Boolean;
+begin
+  {$IFDEF LCLGTK3}
+  Result := False;   // TGtk3WSCustomForm.SetAlphaBlend does nothing (Lazarus 3.0 .. 4.x)
+  {$ELSE}
+  Result := not TyIsWayland;
+  {$ENDIF}
+end;
+
+// ---------------------------------------------------------------------------
+// TTyPopoverAnimationOptions
+// ---------------------------------------------------------------------------
+constructor TTyPopoverAnimationOptions.Create(AOwner: TPersistent);
+begin
+  inherited Create;
+  FOwner := AOwner;
+  FFadeEffect := True;
+  FMoveEffect := True;
+  FShowingAnimationTime := -1;
+  FHidingAnimationTime := -1;
+end;
+
+function TTyPopoverAnimationOptions.GetOwner: TPersistent;
+begin
+  Result := FOwner;
+end;
+
+procedure TTyPopoverAnimationOptions.Assign(Source: TPersistent);
+var
+  src: TTyPopoverAnimationOptions;
+begin
+  if Source is TTyPopoverAnimationOptions then
+  begin
+    src := TTyPopoverAnimationOptions(Source);
+    FFadeEffect := src.FFadeEffect;
+    FMoveEffect := src.FMoveEffect;
+    FShowingAnimationTime := src.FShowingAnimationTime;
+    FHidingAnimationTime := src.FHidingAnimationTime;
+  end
+  else
+    inherited Assign(Source);
+end;
+
+procedure TTyPopoverAnimationOptions.SetShowingAnimationTime(AValue: Integer);
+begin
+  if AValue < -1 then AValue := -1;   // anything negative means "the theme's"
+  FShowingAnimationTime := AValue;
+end;
+
+procedure TTyPopoverAnimationOptions.SetHidingAnimationTime(AValue: Integer);
+begin
+  if AValue < -1 then AValue := -1;
+  FHidingAnimationTime := AValue;
+end;
+
 // ---------------------------------------------------------------------------
 // TTyPopoverWindow
 // ---------------------------------------------------------------------------
@@ -889,16 +1088,26 @@ begin
   FShowArrow := True;
   FCloseOnClickOutside := True;
   FCloseOnEscape := True;
+  FAnimationsEnabled := True;
+  FAnimationOptions := TTyPopoverAnimationOptions.Create(Self);
+  FFadeAnim.SetTargetImmediate(1);
+  FMoveAnim.SetTargetImmediate(1);
 end;
 
 destructor TTyCustomPopover.Destroy;
 begin
   // Dismiss WITHOUT firing OnHide: a component being destroyed is not a popover the user
   // dismissed, and the handler's form may already be half torn down. The content still has
-  // to go home — it belongs to that form, not to us.
+  // to go home — it belongs to that form, not to us. A popup caught mid-animation finishes
+  // now (csDestroying keeps Hide from starting a fade), and the timer is stopped before
+  // anything it would call into goes away.
   FOnHide := nil;
+  if FHiding then FinishHide;
   Hide;
+  StopAnimation;
+  FreeAndNil(FAnimTimer);
   FreeAndNil(FWin);   // CreateNew(nil): owned by us, not by a form
+  FreeAndNil(FAnimationOptions);
   inherited Destroy;
 end;
 
@@ -1234,35 +1443,269 @@ procedure TTyCustomPopover.ShowAt(const AAnchorScreen: TRect);
 var
   geo: TTyPopoverGeometry;
   ppi: Integer;
+  wasShowing: Boolean;
 begin
   if csDesigning in ComponentState then Exit;   // a popover is a runtime gesture, not a preview
   ppi := Screen.PixelsPerInch;
   if ppi <= 0 then ppi := 96;
+  // Still fading out from the last Hide: turn round in place, or finish that dismissal first.
+  if FHiding and TurnBackHide(AAnchorScreen, Screen.WorkAreaRect, ppi) then Exit;
+  wasShowing := FShowing;
   geo := BeginShowing(AAnchorScreen, Screen.WorkAreaRect, ppi);
+  if not wasShowing then
+    ArmShowAnimation(geo, ppi)   // before Show: the first frame on screen is the animation's
+  else if FAnimActive then
+    FRestFrame := geo.Frame;     // re-placed mid-animation: it now settles HERE
   TyRaisePopupWindow(FWin);   // macOS: above a modal dialog it opens in (#104)
   FWin.Show;
   FWin.BringToFront;
   // A bsNone form can be re-placed by the WM on show (TTyBalloonHint / TTyNotification re-set
-  // for the same reason), so assert the rect again once it is up.
-  FWin.SetBounds(geo.Frame.Left, geo.Frame.Top,
-    geo.Frame.Right - geo.Frame.Left, geo.Frame.Bottom - geo.Frame.Top);
+  // for the same reason), so assert the rect again once it is up -- the animation's current
+  // frame while one runs.
+  if FAnimActive then
+    ApplyAnimFrame
+  else
+    FWin.SetBounds(geo.Frame.Left, geo.Frame.Top,
+      geo.Frame.Right - geo.Frame.Left, geo.Frame.Bottom - geo.Frame.Top);
   FWin.Invalidate;
+  if FAnimActive then StartAnimTimer;
   if Assigned(FOnShow) then FOnShow(Self);
 end;
 
 procedure TTyCustomPopover.Hide;
+var
+  dur: Integer;
 begin
   if not FShowing then
   begin
+    // Already fading out: that dismissal is under way and fires its own OnHide.
+    if FHiding then Exit;
     // Not up, but the content may still be adopted if a Show never finished — put it back
     // regardless, then get out. A Hide on a hidden popover fires nothing (idempotent).
     ReleaseContent;
     Exit;
   end;
   FShowing := False;   // set FIRST: hiding the window can fire OnDeactivate straight back here
+  dur := HideDurationMs;
+  if WantsFade and (dur > 0) and CanDriveAnimation
+     and not (csDestroying in ComponentState) then
+  begin
+    { Fade out from wherever the show got to; the move does not run backwards (DevExpress's
+      hide is a fade too), so it stops where it is. The content stays adopted -- it fades
+      with the window -- and goes home with OnHide when the fade ends. }
+    FHiding := True;
+    FAnimFade := True;
+    FFadeAnim.DurationMs := dur;
+    FFadeAnim.Target := 0;
+    FMoveAnim.Target := FMoveAnim.Progress;
+    FAnimActive := True;
+    ApplyAnimFrame;
+    StartAnimTimer;
+    Exit;
+  end;
+  FinishHide;
+end;
+
+procedure TTyCustomPopover.FinishHide;
+begin
+  FHiding := False;
+  FShowing := False;
+  StopAnimation;
   ReleaseContent;
   if (FWin <> nil) and FWin.Visible then FWin.Hide;
   if Assigned(FOnHide) then FOnHide(Self);
+end;
+
+// ---------------------------------------------------------------------------
+// Animation
+// ---------------------------------------------------------------------------
+function TTyCustomPopover.ShowDurationMs: Integer;
+begin
+  Result := FAnimationOptions.ShowingAnimationTime;
+  if Result < 0 then Result := StyleMetric(TyPopoverShowDurationVar, TyPopoverShowDuration);
+  if Result < 0 then Result := 0;
+end;
+
+function TTyCustomPopover.HideDurationMs: Integer;
+begin
+  Result := FAnimationOptions.HidingAnimationTime;
+  if Result < 0 then Result := StyleMetric(TyPopoverHideDurationVar, TyPopoverHideDuration);
+  if Result < 0 then Result := 0;
+end;
+
+function TTyCustomPopover.MoveDistanceAt(APPI: Integer): Integer;
+begin
+  if APPI <= 0 then APPI := 96;
+  Result := MulDiv(StyleMetric(TyPopoverMoveDistanceVar, TyPopoverMoveDistance), APPI, 96);
+  if Result < 0 then Result := 0;
+end;
+
+function TTyCustomPopover.WantsFade: Boolean;
+begin
+  Result := FAnimationsEnabled and FAnimationOptions.FadeEffect and TyPopoverFadeSupported;
+end;
+
+function TTyCustomPopover.WantsMove: Boolean;
+begin
+  Result := FAnimationsEnabled and FAnimationOptions.MoveEffect;
+end;
+
+function TTyCustomPopover.CanDriveAnimation: Boolean;
+begin
+  Result := (FWin <> nil) and FWin.HandleAllocated and FWin.Visible;
+end;
+
+procedure TTyCustomPopover.ArmShowAnimation(const AGeometry: TTyPopoverGeometry; APPI: Integer);
+var
+  dur, dist: Integer;
+begin
+  StopAnimation;   // a stale opacity from an interrupted run must not leak into this one
+  if FWin = nil then Exit;
+  dur := ShowDurationMs;
+  if dur <= 0 then Exit;
+  dist := MoveDistanceAt(APPI);
+  FAnimFade := WantsFade;
+  FAnimMove := WantsMove and (dist > 0);
+  if not (FAnimFade or FAnimMove) then Exit;
+  FRestFrame := AGeometry.Frame;
+  if FAnimMove then
+    TyPopoverMoveOffset(AGeometry.Side, dist, FMoveDX, FMoveDY)
+  else
+  begin
+    FMoveDX := 0;
+    FMoveDY := 0;
+  end;
+  if FAnimFade then FFadeAnim := TyAnimatorInit(dur, teEaseOutCubic)
+  else FFadeAnim.SetTargetImmediate(1);
+  if FAnimMove then FMoveAnim := TyAnimatorInit(dur, teEaseOutCubic)
+  else FMoveAnim.SetTargetImmediate(1);
+  FAnimActive := True;
+  ApplyAnimFrame;
+end;
+
+function TTyCustomPopover.TurnBackHide(const AAnchorScreen, AWorkArea: TRect;
+  APPI: Integer): Boolean;
+var
+  geo: TTyPopoverGeometry;
+begin
+  Result := False;
+  if not FHiding then Exit;
+  geo := GeometryIn(AAnchorScreen, AWorkArea, APPI);
+  if (FWin <> nil) and EqualRect(geo.Frame, FRestFrame) and (geo.Side = FWin.FSide) then
+  begin
+    FHiding := False;
+    FShowing := True;
+    FFadeAnim.DurationMs := ShowDurationMs;
+    FFadeAnim.Target := 1;
+    FMoveAnim.Target := 1;   // a move the hide froze carries on in
+    FAnimActive := True;
+    StartAnimTimer;
+    Exit(True);
+  end;
+  FinishHide;
+end;
+
+procedure TTyCustomPopover.ApplyAnimFrame;
+var
+  e: Single;
+  v: Integer;
+begin
+  if FWin = nil then Exit;
+  if FAnimFade then
+  begin
+    v := Round(255 * FFadeAnim.Eased);
+    if v < 0 then v := 0 else if v > 255 then v := 255;
+    FWin.AlphaBlendValue := v;   // value first: turning AlphaBlend on must not flash opaque
+    FWin.AlphaBlend := True;
+    FFadeOn := True;
+  end;
+  if FAnimMove then
+  begin
+    e := 1 - FMoveAnim.Eased;
+    FWin.SetBounds(FRestFrame.Left + Round(FMoveDX * e), FRestFrame.Top + Round(FMoveDY * e),
+      FRestFrame.Right - FRestFrame.Left, FRestFrame.Bottom - FRestFrame.Top);
+  end;
+end;
+
+function TTyCustomPopover.AdvanceAnimation(AMs: Integer): Boolean;
+var
+  a, b: Boolean;
+begin
+  Result := False;
+  if not FAnimActive then Exit;
+  a := FFadeAnim.Advance(AMs);
+  b := FMoveAnim.Advance(AMs);
+  Result := a or b;
+  if Result then ApplyAnimFrame;
+  if not (FFadeAnim.Running or FMoveAnim.Running) then
+    AnimationFinished;
+end;
+
+procedure TTyCustomPopover.AnimationFinished;
+begin
+  if FHiding then
+    FinishHide
+  else
+  begin
+    StopAnimation;
+    // Settled: exactly the placement, whatever rounding the last frame did.
+    if FWin <> nil then
+      FWin.SetBounds(FRestFrame.Left, FRestFrame.Top,
+        FRestFrame.Right - FRestFrame.Left, FRestFrame.Bottom - FRestFrame.Top);
+  end;
+end;
+
+procedure TTyCustomPopover.StopAnimation;
+begin
+  if FAnimTimer <> nil then FAnimTimer.Enabled := False;
+  FAnimActive := False;
+  FFadeAnim.SetTargetImmediate(1);
+  FMoveAnim.SetTargetImmediate(1);
+  if FFadeOn then
+  begin
+    FFadeOn := False;
+    { Opaque, and off the layered path again (Win32 drops WS_EX_LAYERED): a popup that is
+      not fading paints exactly as one that never animated. }
+    if (FWin <> nil) and not (csDestroying in FWin.ComponentState) then
+    begin
+      FWin.AlphaBlendValue := 255;
+      FWin.AlphaBlend := False;
+    end;
+  end;
+end;
+
+procedure TTyCustomPopover.StartAnimTimer;
+begin
+  if FAnimTimer = nil then
+  begin
+    FAnimTimer := TTimer.Create(nil);   // freed in Destroy, after it is stopped
+    FAnimTimer.Interval := 16;          // ~60 fps, the library's animation tick
+    FAnimTimer.OnTimer := @AnimTimerTick;
+  end;
+  FAnimTimer.Enabled := True;
+end;
+
+procedure TTyCustomPopover.AnimTimerTick(Sender: TObject);
+begin
+  if not FAnimActive then
+  begin
+    FAnimTimer.Enabled := False;
+    Exit;
+  end;
+  AdvanceAnimation(FAnimTimer.Interval);
+end;
+
+procedure TTyCustomPopover.SetAnimationsEnabled(AValue: Boolean);
+begin
+  if FAnimationsEnabled = AValue then Exit;
+  FAnimationsEnabled := AValue;
+  // Off mid-animation: no half-faded popup left behind -- finish it now.
+  if (not AValue) and FAnimActive then AnimationFinished;
+end;
+
+procedure TTyCustomPopover.SetAnimationOptions(AValue: TTyPopoverAnimationOptions);
+begin
+  FAnimationOptions.Assign(AValue);
 end;
 
 // ---------------------------------------------------------------------------
@@ -1387,7 +1830,9 @@ procedure TTyCustomPopover.SetContent(AValue: TWinControl);
 begin
   if FContent = AValue then Exit;
   // Swapping the content out from under a live popup would strand the old one in our window:
-  // put it home first, and let the caller re-Show with the new one.
+  // put it home first, and let the caller re-Show with the new one. A popup still fading out
+  // finishes now, so the content it releases is the one it adopted.
+  if FHiding then FinishHide;
   if FAdopted then Hide;
   if FContent <> nil then FContent.RemoveFreeNotification(Self);
   FContent := AValue;
