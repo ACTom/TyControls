@@ -237,7 +237,8 @@ refers to nothing leaves the theme's value standing too.
 Controls that read their tokens this way so far: `TTyListView` (and `TTyShellListView`), for every
 length token it reads -- `--listview-*`, `--row-height` and `--scrollbar-size`; `TTyTreeView` (and
 `TTyShellTreeView`), for `--treeview-margin`, `--treeview-icon-gap` and the four tree-line tokens of
-§3.5; `TTyMemo`, for `--memo-tab-size`. Other controls take the theme's values only, for now.
+§3.5; `TTyMemo`, for `--memo-tab-size`. Other controls take the theme's values only, for now --
+except for `--over-parent-chrome` (§3.6), which every control reads.
 Versions before 3.0.4 ignore `--`
 declarations in a control's `StyleOverride`, so a form saved with them still loads there.
 
@@ -279,6 +280,37 @@ To leave the lines off one tree only, put this in its `StyleOverride`:
 ```
 
 Before 3.0.4 there were no such tokens, and a tree drew solid full connectors with a chevron.
+
+### 3.6 A container's frame stays on top of its children
+
+When a child sits on a container's border, rounded corner or separator line, the container
+draws those again after the child has painted, so the line is not cut where the child is.
+These containers do it:
+
+| Container | What is drawn on top |
+|---|---|
+| `TTyPanel`, and `TTyExPanel`, `TTyPaintPanel`, `TTyScrollBox`, `TTyScrollPanel`, `TTyControlBar`, `TTyCoolBar`, `TTyGridPanel`, `TTyRelativePanel` | border, focus ring, the parent's background outside the rounded corners |
+| `TTyCard` | the same, plus the lines under the title and over the actions |
+| `TTyGroupBox`, and `TTyRadioGroup`, `TTyCheckGroup`, `TTyToolGroupPanel` | border, focus ring, the parent's background outside the rounded corners, plus the caption and the gap it makes in the top border |
+| `TTyPageControl` | the page area's border, focus ring and the parent's background outside its rounded corners (the active page used to cover three of its sides) |
+| `TTyToolBar` | the bottom line |
+
+Only a visible border or focus ring counts: a panel with `border-width: 0` and no focus ring
+shows no rounded shape, so the square corners of its children are left alone. A scroll bar
+along the edge of a scroll box already draws the box's frame over itself, so the box does
+not draw it again.
+
+To keep one child out of this, put this in its `StyleOverride`:
+
+```text
+--over-parent-chrome: 1;
+```
+
+Put in `:root` of a theme or of the controller's `StyleOverride`, it turns this off for the
+whole application. `0`, `false`, `none` or no value at all leave it on.
+
+Only TyControls' own controls get the frame drawn over them; a native LCL control placed on
+a frame still covers it. This behaviour starts with 4.0.
 
 ---
 

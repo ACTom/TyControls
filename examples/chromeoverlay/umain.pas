@@ -1,9 +1,11 @@
 unit umain;
 
-{ Pilot: a container's chrome stays whole on top of its children (ITyChromeHost, TTyCard for
-  now). Each card here has children placed ON its frame, across its corners and across the
-  hairlines under its title and over its actions rail -- the places where a child used to cut
-  the line. The switch turns the overlay off for a before/after look. Measure redraws the
+{ A container's chrome stays whole on top of its children (ITyChromeHost). The first page's
+  cards have children placed ON their frames, across their corners and across the hairlines
+  under their titles and over their actions rails -- the places where a child used to cut
+  the line; the second page does the same to a panel, a group box (over its caption), a
+  scroll box and an expandable panel, and the page control's own frame now shows over its
+  pages. The switch turns the overlay off for a before/after look. Measure redraws the
   whole window with the overlay off and in each of the pilot's three ways of drawing it, and
   lists where the time goes (TyChromeStats); `--measure <file>` does the same once the window
   is up, writes the list to the file and closes. Hover a card: its frame changes colour, and
@@ -18,7 +20,9 @@ uses
   Classes, SysUtils, Types, Forms, Controls, ExtCtrls, LCLType, LCLIntf,
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes, tyControls.Base,
   tyControls.Button, tyControls.TyLabel, tyControls.ComboBox, tyControls.ToggleSwitch,
-  tyControls.Card, tyControls.Panel, tyControls.Edit, tyControls.ListBox, tyControls.Memo;
+  tyControls.Card, tyControls.Panel, tyControls.Edit, tyControls.ListBox, tyControls.Memo,
+  tyControls.PageControl, tyControls.TabSheet, tyControls.GroupBox, tyControls.ScrollBox,
+  tyControls.ExPanel;
 
 type
 
@@ -32,6 +36,8 @@ type
     OverlaySwitch: TTyToggleSwitch;
     BtnMeasure: TTyButton;
     LblMeasure: TTyLabel;
+    Pages: TTyPageControl;
+    PageCards: TTyTabSheet;
     CardEdges: TTyCard;
     BtnLeftEdge: TTyButton;
     PnlHeaderLine: TTyPanel;
@@ -45,6 +51,18 @@ type
     CardActions: TTyCard;
     BtnAcrossActions: TTyButton;
     BtnActionsCorner: TTyButton;
+    PageOthers: TTyTabSheet;
+    PnlFlush: TTyPanel;
+    PnlFill: TTyPanel;
+    GrpCaption: TTyGroupBox;
+    BtnOverCaption: TTyButton;
+    BtnGroupEdge: TTyButton;
+    Scr: TTyScrollBox;
+    PnlScrollEdge: TTyPanel;
+    BtnScrollFar: TTyButton;
+    ExP: TTyExPanel;
+    PnlExFill: TTyPanel;
+    LblOthers: TTyLabel;
     LblHint: TTyLabel;
     Results: TTyMemo;
     MeasureTimer: TTimer;

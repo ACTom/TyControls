@@ -31,6 +31,10 @@ msgstr "外框保持在最上面"
 msgid "Measure"
 msgstr "测量"
 
+#: tmainform.pagecards.caption
+msgid "Cards"
+msgstr "卡片"
+
 #: tmainform.cardedges.title
 msgid "Children on the frame"
 msgstr "压在外框上的子控件"
@@ -75,9 +79,49 @@ msgstr "跨过操作栏的线"
 msgid "In the corner"
 msgstr "在角上"
 
+#: tmainform.pageothers.caption
+msgid "Other containers"
+msgstr "其他容器"
+
+#: tmainform.pnlfill.caption
+msgid "An alClient child"
+msgstr "alClient 的子控件"
+
+#: tmainform.grpcaption.caption
+msgid "Group box"
+msgstr "分组框"
+
+#: tmainform.btnovercaption.caption
+msgid "Over the caption"
+msgstr "压着标题"
+
+#: tmainform.btngroupedge.caption
+msgid "On the left edge"
+msgstr "压着左边框"
+
+#: tmainform.pnlscrolledge.caption
+msgid "On the frame"
+msgstr "压着边框"
+
+#: tmainform.btnscrollfar.caption
+msgid "Further down"
+msgstr "下面还有"
+
+#: tmainform.exp.caption
+msgid "Expandable panel"
+msgstr "可折叠面板"
+
+#: tmainform.pnlexfill.caption
+msgid "Its bottom corners stay round"
+msgstr "下面两个角还是圆的"
+
+#: tmainform.lblothers.caption
+msgid "A panel, a group box, a scroll box and an expandable panel, each with children over its frame. The page control's own frame stays on top of its pages too: before, the page covered three of its sides. The scroll box's scroll bar draws the frame over itself already and is left to it."
+msgstr "面板、分组框、滚动框和可折叠面板，各有子控件压在外框上。分页控件自己的外框也保持在页面上面：以前页面会盖住它的三条边。滚动框的滚动条本来就会在自己身上画外框，所以不再重复画。"
+
 #: tmainform.lblhint.caption
-msgid "Each card keeps its frame, its rounded corners and the hairlines under its title and over its actions whole, whatever its children cover. Hover a card: its frame changes colour, and so does the part drawn over the children. Turn the switch off to see the cut lines as before."
-msgstr "每张卡片的外框、圆角，以及标题下和操作栏上的分隔线，不管被子控件压住多少都保持完整。把鼠标移到卡片上，边框会变色，画在子控件上的那一段也跟着变。关掉开关，可以看到原来线被截断的样子。"
+msgid "Each container keeps its frame, its rounded corners and its separators whole, whatever its children cover. Hover a card: its frame changes colour, and so does the part drawn over the children. Turn the switch off to see the cut lines as before."
+msgstr "每个容器的外框、圆角和分隔线，不管被子控件压住多少都保持完整。把鼠标移到卡片上，边框会变色，画在子控件上的那一段也跟着变。关掉开关，可以看到原来线被截断的样子。"
 
 # --- resourcestrings ---
 

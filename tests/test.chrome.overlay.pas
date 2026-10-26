@@ -96,6 +96,7 @@ type
     procedure TestANestedChildGetsTheSeparatorWhereItIs;
     procedure TestAGraphicChildIsCoveredToo;
     procedure TestAChildCanOptOut;
+    procedure TestTheWholeAppCanOptOut;
     procedure TestTheSwitchTurnsItOff;
     procedure TestAChromeChangeRepaintsTheChildrenOnIt;
     procedure TestMovingAChildOntoTheFrameRepaintsIt;
@@ -527,6 +528,29 @@ begin
   bmp := b.Render;
   try
     AssertTrue('a child that asks to stay on top does', IsBlue(bmp.GetPixel(0, 12)));
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ The same word in :root -- a theme's, or the controller's StyleOverride -- is every
+  control's. The default theme says 0. }
+procedure TChromeOverlayTest.TestTheWholeAppCanOptOut;
+var
+  b: TOvlButton;
+  bmp: TBGRABitmap;
+begin
+  b := AddButton(FCard, 0, 70, 60, 24);
+  bmp := b.Render;
+  try
+    AssertTrue('precondition: the theme''s own value leaves it on', IsRed(bmp.GetPixel(1, 12)));
+  finally
+    bmp.Free;
+  end;
+  FCtl.StyleOverride := FCtl.StyleOverride + ' :root { --over-parent-chrome: 1; }';
+  bmp := b.Render;
+  try
+    AssertTrue('the controller''s :root turns it off for every child', IsBlue(bmp.GetPixel(1, 12)));
   finally
     bmp.Free;
   end;
