@@ -24,6 +24,9 @@ type
       redirect a header target to its group's nearest real item so headers are never selectable
       on ANY path (the MouseDown swallow keeps a header click a no-op rather than a redirect). }
     procedure SelectItem(AIndex: Integer); override;
+    { #123: the multi-select paths -- arrows, Shift ranges, SelectAll -- step over headers too. }
+    function RowSelectable(AIndex: Integer): Boolean; override;
+    function FocusTarget(ATarget: Integer): Integer; override;
   public
     // Append a group-header row (tinted, bold, non-selectable).
     procedure AddHeader(const S: string);
@@ -139,10 +142,23 @@ procedure TTyOfficeListBox.SelectItem(AIndex: Integer);
 begin
   if IsHeader(AIndex) then
   begin
-    AIndex := NextSelectable(AIndex);
+    AIndex := FocusTarget(AIndex);
     if AIndex < 0 then Exit;   // list is all headers — refuse
   end;
   inherited SelectItem(AIndex);
+end;
+
+function TTyOfficeListBox.RowSelectable(AIndex: Integer): Boolean;
+begin
+  Result := inherited RowSelectable(AIndex) and not IsHeader(AIndex);
+end;
+
+function TTyOfficeListBox.FocusTarget(ATarget: Integer): Integer;
+begin
+  if IsHeader(ATarget) then
+    Result := NextSelectable(ATarget)
+  else
+    Result := ATarget;
 end;
 
 end.

@@ -104,6 +104,11 @@ type
     procedure ClearAllBits;
     function FSelAnchorOr(ADefault: Integer): Integer;
     procedure ApplyRangeSelection(ALo, AHi: Integer);
+    { Items tells the box a row is about to go in / come out / all go, so the selection stays
+      on the rows it was on, as a native list box's does (#123). }
+    procedure RowInserting(AIndex: Integer);
+    procedure RowDeleting(AIndex: Integer);
+    procedure RowsClearing;
   protected
     { False = do not write Items into the .lfm, the switch TTyComboBox has (FItemsStreamed there
       too). A subclass whose rows are BUILT rather than authored clears it: TTyColorListBox,
@@ -218,6 +223,13 @@ type
     { #114: what AutoSize asks for -- see the body. }
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
       WithThemeSpace: Boolean); override;
+    { #123: whether row AIndex can be selected at all, and the row the keyboard focus lands
+      on when it is sent to ATarget. Every multi-select path asks them -- the arrow keys, a
+      Shift range, SelectRange, SelectAll, Selected[] -- so a descendant with rows that are
+      not items (TTyOfficeListBox's group headers) says so once. Defaults: every row, and
+      ATarget itself; -1 from FocusTarget means there is nowhere to go. }
+    function RowSelectable(AIndex: Integer): Boolean; virtual;
+    function FocusTarget(ATarget: Integer): Integer; virtual;
   public
     { Whether ItemHeight was set, or follows the theme's --item-height; and the way back to the
       theme. For a host that pins the height and later lets it go -- the combo box's ItemHeight
@@ -325,12 +337,52 @@ implementation
 function IfThenIdx(ACond: Boolean; ATrue, AFalse: Integer): Integer;
 begin if ACond then Result := ATrue else Result := AFalse; end;
 
+type
+  { Items' own class: TStringList's change notification says only THAT the list changed, so
+    an insert or a delete could not move the selection with the rows (#123). }
+  TTyListBoxItems = class(TStringList)
+  private
+    FBox: TTyListBox;
+  protected
+    procedure InsertItem(Index: Integer; const S: string; O: TObject); override;
+  public
+    constructor Create(ABox: TTyListBox);
+    procedure Delete(Index: Integer); override;
+    procedure Clear; override;
+  end;
+
+constructor TTyListBoxItems.Create(ABox: TTyListBox);
+begin
+  inherited Create;
+  FBox := ABox;
+end;
+
+procedure TTyListBoxItems.InsertItem(Index: Integer; const S: string; O: TObject);
+begin
+  FBox.RowInserting(Index);
+  inherited InsertItem(Index, S, O);
+end;
+
+procedure TTyListBoxItems.Delete(Index: Integer);
+begin
+  if (Index >= 0) and (Index < Count) then
+    FBox.RowDeleting(Index);
+  inherited Delete(Index);
+end;
+
+procedure TTyListBoxItems.Clear;
+begin
+  if Count > 0 then
+    FBox.RowsClearing;
+  inherited Clear;
+end;
+
 { TTyListBox }
 
 constructor TTyListBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  FItems := TStringList.Create;
+  FItems := TTyListBoxItems.Create(Self);
   FItems.OnChange := @ItemsChanged;
   FItemsStreamed := True;   // a plain list's Items IS the persisted row set
   FSorted := False;
@@ -392,7 +444,10 @@ begin
 end;
 
 procedure TTyListBox.SetItems(const AValue: TStrings);
+var
+  wasIndex: Integer;
 begin
+  wasIndex := FItemIndex;
   // Drive the assignment ourselves; suppress the per-mutation ItemsChanged hook
   // so we do the clamping/selection bookkeeping exactly once below.
   FSuppressItemsChanged := True;
@@ -405,14 +460,12 @@ begin
   finally
     FSuppressItemsChanged := False;
   end;
-  // Clamp TopIndex and ItemIndex in case list shrank
+  // Clamp TopIndex in case list shrank
   if FTopIndex > MaxTopIndex then
     FTopIndex := MaxTopIndex;
-  if (FItemIndex >= 0) and (FItemIndex >= FItems.Count) then
-  begin
-    FItemIndex := -1;
+  { Assign clears first, and the selection goes with the rows it was on (#123), as LCL's. }
+  if (wasIndex >= 0) and (FItemIndex < 0) then
     FireSelectionChanged;
-  end;
   SetLength(FSelected, FItems.Count);
   UpdateScrollBar;
   Invalidate;
@@ -724,10 +777,66 @@ begin
     NewIndex := -1;
   if NewIndex = FItemIndex then Exit;
   FItemIndex := NewIndex;
+  if FMultiSelect then
+  begin
+    { #123, as LCL's (win32wsstdctrls.pp:1025): with several rows selectable, ItemIndex
+      written makes that row the selection, not just the caret. }
+    ClearAllBits;
+    if NewIndex >= 0 then FSelected[NewIndex] := True;
+    FSelAnchor := NewIndex;
+  end;
   EnsureSelectionVisible;
   UpdateScrollBar;
   Invalidate;
   FireSelectionChanged;
+end;
+
+procedure TTyListBox.RowInserting(AIndex: Integer);
+var
+  i: Integer;
+begin
+  EnsureSelectedLen;   // as long as the list still is
+  SetLength(FSelected, Length(FSelected) + 1);
+  for i := High(FSelected) downto AIndex + 1 do
+    FSelected[i] := FSelected[i - 1];
+  if (AIndex >= 0) and (AIndex <= High(FSelected)) then
+    FSelected[AIndex] := False;
+  if (FItemIndex >= 0) and (FItemIndex >= AIndex) then Inc(FItemIndex);
+  if (FSelAnchor >= 0) and (FSelAnchor >= AIndex) then Inc(FSelAnchor);
+end;
+
+procedure TTyListBox.RowDeleting(AIndex: Integer);
+var
+  i: Integer;
+begin
+  EnsureSelectedLen;
+  for i := AIndex to High(FSelected) - 1 do
+    FSelected[i] := FSelected[i + 1];
+  if Length(FSelected) > 0 then
+    SetLength(FSelected, Length(FSelected) - 1);
+  { The selected row itself going takes the selection with it, as LCL's (no event: the host
+    deleted it, the user did not change anything). }
+  if FItemIndex = AIndex then FItemIndex := -1
+  else if FItemIndex > AIndex then Dec(FItemIndex);
+  if FSelAnchor = AIndex then FSelAnchor := -1
+  else if FSelAnchor > AIndex then Dec(FSelAnchor);
+end;
+
+procedure TTyListBox.RowsClearing;
+begin
+  SetLength(FSelected, 0);
+  FItemIndex := -1;
+  FSelAnchor := -1;
+end;
+
+function TTyListBox.RowSelectable(AIndex: Integer): Boolean;
+begin
+  Result := (AIndex >= 0) and (AIndex < FItems.Count);
+end;
+
+function TTyListBox.FocusTarget(ATarget: Integer): Integer;
+begin
+  Result := ATarget;
 end;
 
 function TTyListBox.ItemsStored: Boolean;
@@ -839,6 +948,7 @@ begin
   begin
     EnsureSelectedLen;
     if FSelected[AIndex] = AValue then Exit;
+    if AValue and not RowSelectable(AIndex) then Exit;   // #123
     FSelected[AIndex] := AValue;
     Invalidate;
     FireSelectionChanged;
@@ -905,7 +1015,7 @@ begin
   EnsureSelectedLen;
   AnyChanged := False;
   for i := 0 to High(FSelected) do
-    if not FSelected[i] then begin FSelected[i] := True; AnyChanged := True; end;
+    if not FSelected[i] and RowSelectable(i) then begin FSelected[i] := True; AnyChanged := True; end;
   if AnyChanged then
   begin
     Invalidate;
@@ -962,7 +1072,7 @@ begin
   if ALo > AHi then begin t := ALo; ALo := AHi; AHi := t; end;
   ClearAllBits;
   for i := ALo to AHi do
-    if (i >= 0) and (i < FItems.Count) then FSelected[i] := True;
+    if (i >= 0) and (i < FItems.Count) and RowSelectable(i) then FSelected[i] := True;
   Invalidate;
   DoChangeSel;
 end;
@@ -1173,9 +1283,17 @@ begin
   end;
 
   // Multi mode: move focus; extend range from anchor if Shift, else select-only.
+  NewFocus := FocusTarget(NewFocus);   // #123: rows that are not items are stepped over
+  if NewFocus < 0 then Exit;
   FItemIndex := NewFocus;
   EnsureSelectedLen;
-  if Extend then
+  if not FExtendedSelect then
+  begin
+    { #123: ExtendedSelect = False is the simple multi-select (LBS_MULTIPLESEL): the arrows
+      move the caret only, Shift or not, as Win32 and Qt do; Space toggles the row under it. }
+    Invalidate;
+  end
+  else if Extend then
     ApplyRangeSelection(FSelAnchorOr(NewFocus), NewFocus)
   else
   begin
@@ -1589,7 +1707,8 @@ begin
   EnsureSelectedLen;
   moved := False;
   for i := lo to hi do
-    if (i <= High(FSelected)) and (FSelected[i] <> ASelected) then
+    if (i <= High(FSelected)) and (FSelected[i] <> ASelected)
+       and ((not ASelected) or RowSelectable(i)) then
     begin
       FSelected[i] := ASelected;
       moved := True;
