@@ -219,6 +219,11 @@ type
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
       WithThemeSpace: Boolean); override;
   public
+    { Whether ItemHeight was set, or follows the theme's --item-height; and the way back to the
+      theme. For a host that pins the height and later lets it go -- the combo box's ItemHeight
+      set back to 0 (#120). }
+    function ItemHeightIsExplicit: Boolean;
+    procedure FollowThemeItemHeight;
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure SelectItem(AIndex: Integer); virtual;
@@ -526,6 +531,19 @@ begin
     Result := FItemHeight
   else
     Result := ActiveController.Metric('--item-height', 24);
+end;
+
+function TTyListBox.ItemHeightIsExplicit: Boolean;
+begin
+  Result := FItemHeightExplicit;
+end;
+
+procedure TTyListBox.FollowThemeItemHeight;
+begin
+  if not FItemHeightExplicit then Exit;
+  FItemHeightExplicit := False;
+  UpdateScrollBar;
+  Invalidate;
 end;
 
 procedure TTyListBox.SetItemHeight(const AValue: Integer);

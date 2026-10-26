@@ -88,6 +88,7 @@ uses
   test.qatspacing,
   test.disabledlook,
   test.buttonroles,
+  test.comboprops,
   test.calendar,
   test.datetimepicker,
   test.treeview.events,
