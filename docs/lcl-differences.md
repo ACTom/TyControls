@@ -38,12 +38,12 @@ TyControls 的属性名和语义尽量与 LCL 一致，从 Lazarus 移植的代�
 
 ## 设计器里隐藏的属性
 
-下面这些属性对所在的控件不可能起作用。为了让已保存的窗体照常载入，它们仍然保留，只是对象查看器里不再显示。
+下面这些属性对所在的控件不可能起作用。为了让已保存的窗体照常载入，它们仍然保留，只是对象查看器里不再显示。4.0 起它们不再发布。
 
 | 控件 | 属性 | 原因 |
 |------|------|------|
 | `TTyNumericEdit` 及其子类 | `CharCase` | 只能输入数字、符号和小数点 |
-| `TTyAdvancedComboBox`、`TTyCheckComboBox`、`TTyColorBox`、`TTyFilterComboBox`、`TTyOfficeComboBox`、`TTyShellComboBox` | `MaxLength`、`CharCase`、`ReadOnly` | 只能选、不能输入，没有可编辑的文字 |
+| `TTyAdvancedComboBox`、`TTyCheckComboBox`、`TTyColorBox`(及 `TTyColorComboBox`)、`TTyFilterComboBox`、`TTyOfficeComboBox`、`TTyShellComboBox` | `MaxLength`、`CharCase`、`ReadOnly` | 只能选、不能输入，没有可编辑的文字 |
 | 同上(`TTyColorBox` 除外) | `Style` | 下拉列表里只列出只能选的样式;可编辑的样式设上去也会被换成对应的只能选样式 |
 | `TTyDrawGrid` | `HideSelectionWhenInactive`、`FadeUnfocusedSelection`、`MinEditorWidth` | 没有选区，也没有内置的单元格编辑器;`TTyStringGrid` 上照常显示 |
 | 网格的 `Header` | `MainColumn` | 网格没有主列 |
