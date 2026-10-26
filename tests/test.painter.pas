@@ -37,6 +37,7 @@ type
     procedure TestDrawTextRastersPixels;
     procedure TestTextIsInkedAsWindowsInksIt;
     procedure TestTextOnAnOpaqueSurfaceIsWhatWindowsDrawsThere;
+    procedure TestTheClearTypeAnswerIsKeptASecond;
     procedure TestTheCanvasRendererDrawsInTheInksPolarity;
     procedure TestMacTextGoesThroughTheCanvasRenderer;
     procedure TestDrawnTextEndsWhereItWasMeasured;
@@ -288,6 +289,48 @@ end;
   white and white on black, where GDI's blend and ours are the same arithmetic. First the
   grey of the two is compared, so a run in the wrong place cannot pass for the wrong colour.
   A desktop with ClearType off gets grey from both. }
+{ #107. Text on an opaque surface asks whether the desktop draws in ClearType; the answer
+  is kept a second, not asked of the system per run: three runs in a row ask once, a run a
+  second later asks again, a run after TyForgetDesktopClearType asks at once. }
+procedure TPainterTest.TestTheClearTypeAnswerIsKeptASecond;
+{$IFDEF LCLWin32}
+var
+  bmp: TBGRABitmap;
+  n: Integer;
+begin
+  bmp := TBGRABitmap.Create(200, 30, BGRAWhite);
+  try
+    TyConfigureTextFont(bmp, 'Segoe UI', 9, 400, 96);
+    TyDesktopClearTypeClockShiftForTest(0);
+    TyForgetDesktopClearType;
+    n := TyDesktopClearTypeAsksForTest;
+    bmp.TextOut(4, 4, 'one', BGRABlack);
+    bmp.TextOut(4, 4, 'two', BGRABlack);
+    bmp.TextOut(4, 4, 'three', BGRABlack);
+    AssertEquals('three runs within a second ask the system once', n + 1,
+      TyDesktopClearTypeAsksForTest);
+    TyDesktopClearTypeClockShiftForTest(1000);
+    bmp.TextOut(4, 4, 'four', BGRABlack);
+    AssertEquals('a second later the system is asked again', n + 2,
+      TyDesktopClearTypeAsksForTest);
+    bmp.TextOut(4, 4, 'five', BGRABlack);
+    AssertEquals('and that answer is kept', n + 2, TyDesktopClearTypeAsksForTest);
+    TyForgetDesktopClearType;
+    bmp.TextOut(4, 4, 'six', BGRABlack);
+    AssertEquals('a forgotten answer is asked for at once', n + 3,
+      TyDesktopClearTypeAsksForTest);
+  finally
+    TyDesktopClearTypeClockShiftForTest(0);
+    TyForgetDesktopClearType;
+    bmp.Free;
+  end;
+end;
+{$ELSE}
+begin
+  AssertEquals('only Win32 asks the system', 0, TyDesktopClearTypeAsksForTest);
+end;
+{$ENDIF}
+
 procedure TPainterTest.TestTextOnAnOpaqueSurfaceIsWhatWindowsDrawsThere;
 {$IFDEF LCLWin32}
   procedure Compare(const AFont: string; ALightInk: Boolean);
