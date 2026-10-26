@@ -689,6 +689,15 @@ function TyGdiTextConversionsForTest: Integer;
 { FOR THE TESTS: let go of the kept bitmap (the next run makes a new one); send every run
   through the conversion (the path a bitmap that is not a DIB takes). }
 procedure TyGdiTextResetForTest;
+{ #107. Whether the desktop draws its own text in ClearType is asked of the system at most
+  once a second: the answer is kept that long, so a change in the system's settings shows
+  within a second and a frame full of text asks once. An application that knows the setting
+  changed calls this to have the next text run ask again. Does nothing elsewhere than Win32. }
+procedure TyForgetDesktopClearType;
+{ FOR THE TESTS: how many times the system has been asked (0 elsewhere than Win32), and a
+  shift added to the clock the kept answer is aged by. }
+function TyDesktopClearTypeAsksForTest: Integer;
+procedure TyDesktopClearTypeClockShiftForTest(AMs: Int64);
 procedure TyGdiTextForceConversionForTest(AOn: Boolean);
 { The kept measuring DC and turned-run DIB (Win32): how many times either was made or
   grown, and a switch back to BGRA's own per-call scratch for both -- the reference the
@@ -1782,9 +1791,21 @@ function TySystemParametersInfo(uiAction, uiParam: LongWord; pvParam: Pointer;
   fWinIni: LongWord): LongBool; stdcall; external 'user32' name 'SystemParametersInfoW';
 
 { Whether the desktop draws its own text in ClearType: font smoothing on, and of that type.
-  Asked per run -- a user32 read of a setting the user can change at any time, which LCL does
-  not pass on (it swallows WM_SETTINGCHANGE). }
-function TyDesktopClearType: Boolean;
+  A user32 read of a setting the user can change at any time, which LCL does not pass on (it
+  swallows WM_SETTINGCHANGE), so there is no message to refresh a kept answer with. #107:
+  asking per run cost two system calls a run (a hundred microseconds and more on a slow
+  machine, a tenth of a text-heavy frame), so the answer is kept for ClearTypeKeepMs and asked
+  again after; TyForgetDesktopClearType drops it at once. }
+const
+  ClearTypeKeepMs = 1000;
+var
+  GClearTypeKnown: Boolean = False;
+  GClearType: Boolean = False;
+  GClearTypeAskedAt: QWord = 0;
+  GClearTypeAsks: Integer = 0;
+  GClearTypeClockShift: Int64 = 0;
+
+function TyAskDesktopClearType: Boolean;
 const
   SPI_GETFONTSMOOTHING = $004A;
   SPI_GETFONTSMOOTHINGTYPE = $200A;
@@ -1793,11 +1814,26 @@ var
   smooth: LongBool;
   kind: LongWord;
 begin
+  Inc(GClearTypeAsks);
   smooth := False;
   kind := 0;
   Result := TySystemParametersInfo(SPI_GETFONTSMOOTHING, 0, @smooth, 0) and smooth
     and TySystemParametersInfo(SPI_GETFONTSMOOTHINGTYPE, 0, @kind, 0)
     and (kind = FE_FONTSMOOTHINGCLEARTYPE);
+end;
+
+function TyDesktopClearType: Boolean;
+var
+  now: QWord;
+begin
+  now := QWord(Int64(GetTickCount64) + GClearTypeClockShift);
+  if not GClearTypeKnown or (now - GClearTypeAskedAt >= ClearTypeKeepMs) then
+  begin
+    GClearType := TyAskDesktopClearType;
+    GClearTypeAskedAt := now;
+    GClearTypeKnown := True;
+  end;
+  Result := GClearType;
 end;
 
 function TTyGdiTextRenderer.RunStyle(ARightToLeft, AShowPrefix: Boolean): TTextStyle;
@@ -2413,6 +2449,29 @@ begin
   end;
 end;
 {$ENDIF}
+
+procedure TyForgetDesktopClearType;
+begin
+  {$IFDEF LCLWin32}
+  GClearTypeKnown := False;
+  {$ENDIF}
+end;
+
+function TyDesktopClearTypeAsksForTest: Integer;
+begin
+  {$IFDEF LCLWin32}
+  Result := GClearTypeAsks;
+  {$ELSE}
+  Result := 0;
+  {$ENDIF}
+end;
+
+procedure TyDesktopClearTypeClockShiftForTest(AMs: Int64);
+begin
+  {$IFDEF LCLWin32}
+  GClearTypeClockShift := AMs;
+  {$ENDIF}
+end;
 
 function TyGdiTextBitmapsMade: Integer;
 begin
