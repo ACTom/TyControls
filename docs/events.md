@@ -46,7 +46,7 @@ TyControls 的全部控件继承自两个基类之一（`tyControls.Base`）：
 | `OnStartDrag` | 事件 | 本控件作为拖动源开始拖动 |
 | `OnEndDrag` | 事件 | 拖动结束 |
 | `Visible` | 属性 | 是否可见（`default True`；此前只能从代码设，对象查看器与 `.lfm` 里都没有） |
-| `AutoSize` | 属性 | 是否按控件自己的首选尺寸（`CalculatePreferredSize`）自动调整大小；`default False`，未实现首选尺寸的控件保持原有 bounds |
+| `AutoSize` | 属性 | 是否按控件自己的首选尺寸（`CalculatePreferredSize`）自动调整大小；`default False`。单行输入框和组合框按字体定高、宽度不动（同 LCL 的 TEdit）；状态栏、表头、页签条保持主题高度，字体放不下时变高；徽标、评分、日历、滚动条（只定粗细）按内容。备注框、列表视图、树视图、表格、列表框、仪表、形状这类没有自然尺寸的控件不受影响，保持原有 bounds（LCL 的同类控件也是这样） |
 | `DragMode` | 属性 | `dmManual` / `dmAutomatic`；置 `dmAutomatic` 即可让控件成为拖动源 |
 | `DragKind` | 属性 | 拖动种类（`dkDrag` / `dkDock`） |
 | `DragCursor` | 属性 | 拖动过程中的指针形状 |

@@ -2,7 +2,7 @@ unit tyControls.TabSet;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Controls, tyControls.TabStrip;
+  Classes, SysUtils, LCLType, Controls, tyControls.Types, tyControls.Base, tyControls.TabStrip;
 type
   { TTyTabSet — a pure tab strip (no page container) on the SP1 TTyCustomTabStrip
     header engine. Captions live in a TStrings; selection = TabIndex + OnChange. }
@@ -14,6 +14,9 @@ type
     procedure SetTabs(AValue: TStrings);
     procedure TabsListChanged(Sender: TObject);
   protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
     function GetStyleTypeKey: string; override;
     { No pages — see the class comment. Without this the header engine would frame
       the area below the tabs as a page container, i.e. an empty box under the strip
@@ -126,9 +129,27 @@ implementation
 constructor TTyCustomTabSet.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   FTabs := TStringList.Create;
   TStringList(FTabs).OnChange := @TabsListChanged;
   Width := 240; Height := 32;
+end;
+
+procedure TTyCustomTabSet.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  S: TTyStyleSet;
+  ppi, h: Integer;
+begin
+  { The bar's own height from the theme, or more when the font needs it; the width stays the
+    form's. }
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  S := PartStyle('TyTab', '', [tysNormal]);
+  PreferredWidth := 0;
+  PreferredHeight := MulDiv(TabHeight, ppi, 96);
+  h := TyFieldPreferredHeight(S, ResolveFontSize(S), ppi);
+  if h > PreferredHeight then PreferredHeight := h;
 end;
 
 destructor TTyCustomTabSet.Destroy;

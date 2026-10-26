@@ -327,6 +327,10 @@ type
     { TControl.ActionChange copies a linked action's Caption into Caption on every change;
       routed to Text that would replace the field. The combo keeps it. }
     procedure ActionChange(Sender: TObject; CheckDefaults: Boolean); override;
+  protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -768,6 +772,7 @@ end;
 constructor TTyCustomComboBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   { Not csSetCaption: Caption reads the field now (RealGetText), and LCL's SetName would
     otherwise write a fresh combo's Name into it the first time it is named. }
   ControlStyle := ControlStyle - [csSetCaption];
@@ -810,6 +815,21 @@ begin
   { Keep the (normally hidden) child editor out of the IDE designer's selectable
     sub-control set — same rule as the TreeView inline editor. }
   FEditor.ControlStyle := FEditor.ControlStyle + [csNoDesignVisible];
+end;
+
+procedure TTyCustomComboBox.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  S: TTyStyleSet;
+begin
+  { As TTyEdit, but a simple combo has no natural size: its height is field + list, the
+    form's (LCL's csSimple ignores AutoSize too). No inherited -- TWinControl would size the
+    control to its editor and list. }
+  PreferredWidth := 0;
+  PreferredHeight := 0;
+  if FStyle = csSimple then Exit;
+  S := CurrentStyle;
+  PreferredHeight := TyFieldPreferredHeight(S, ResolveFontSize(S), Font.PixelsPerInch);
 end;
 
 destructor TTyCustomComboBox.Destroy;

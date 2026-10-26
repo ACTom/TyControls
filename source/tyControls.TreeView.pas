@@ -918,6 +918,10 @@ type
       toIncrementalSearch is set we accumulate them into FSearchBuffer and jump
       focus to the next matching visible node. }
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
+  protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor  Destroy; override;
@@ -3547,6 +3551,15 @@ begin
   FEditor.OnExit    := @EditorExit;
   TabStop           := True;
   Width := 200; Height := 160;
+end;
+
+procedure TTyCustomTreeView.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+begin
+  { No natural size, as LCL's own has none: 0 x 0 keeps the bounds, where TWinControl would
+    otherwise size the control to its internal scroll bars or editor. }
+  PreferredWidth := 0;
+  PreferredHeight := 0;
 end;
 
 destructor TTyCustomTreeView.Destroy;

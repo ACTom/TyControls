@@ -508,6 +508,7 @@ begin
     control is being built or torn down (a paint, a mouse-leave) finds it there. }
   FSpin := TTySpinButtons.Create(Self, @SpinStep);
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   TabStop := True;
   Cursor := crIBeam;
   FMinValue := 0;
@@ -774,16 +775,12 @@ begin
   ppi := Font.PixelsPerInch;
   if ppi <= 0 then ppi := 96;
   S := CurrentStyle;
-  if FMeasureBmp = nil then FMeasureBmp := TBGRABitmap.Create(1, 1);
-  TyConfigureTextFont(FMeasureBmp, S.FontName, ResolveFontSize(S), S.FontWeight, ppi);
   { WIDTH 0 == "no preference on this axis" (LCL): the form author owns how wide a
     number field is. The height is the one a skin can push out from under us -- the
-    same digits + padding + border RenderTo lays out. }
+    same digits + padding + border RenderTo lays out, which every one-line field now
+    answers the same way (TyFieldPreferredHeight, #114). }
   PreferredWidth := 0;
-  PreferredHeight := FMeasureBmp.TextSize('0').cy
-    + MulDiv(S.Padding.Top + S.Padding.Bottom, ppi, 96)
-    + 2 * MulDiv(S.BorderWidth, ppi, 96);
-  if PreferredHeight < 1 then PreferredHeight := 1;
+  PreferredHeight := TyFieldPreferredHeight(S, ResolveFontSize(S), ppi);
 end;
 
 procedure TTyCustomSpinEdit.SetAlignment(const AValue: TAlignment);

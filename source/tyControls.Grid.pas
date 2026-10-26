@@ -1227,6 +1227,10 @@ type
     function  FAttrs2Find(ACol, ARow: Integer): TTyGridCellAttr; virtual;
     { 网格自己的列类;列还没建时返回 nil。 }
     function  GridColumn(ACol: Integer): TTyGridColumn;
+  protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
   public
     { --- 列的显式隐藏 ---
       底层就是 TTyColumn.Options 里的 coVisible;这三个方法只是免得宿主
@@ -4409,6 +4413,15 @@ begin
   FHScroll.OnChange := @HScrollChange;
   FHScroll.ControlStyle := FHScroll.ControlStyle + [csNoDesignVisible];
   FHScroll.Visible := False;
+end;
+
+procedure TTyCustomGrid.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+begin
+  { No natural size, as LCL's own has none: 0 x 0 keeps the bounds, where TWinControl would
+    otherwise size the control to its internal scroll bars or editor. }
+  PreferredWidth := 0;
+  PreferredHeight := 0;
 end;
 
 destructor TTyCustomGrid.Destroy;

@@ -247,6 +247,10 @@ type
     function AutoHideTimerNeeded: Boolean;
     { 手动走一拍 HandleHideTimer（无头没有表）。和位置缓动的 HandleTimerTick 同路。 }
     procedure HandleHideTimerTick;
+  protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
   public
     { 设定位置并**立刻落位**,绝不缓动。
 
@@ -577,6 +581,7 @@ end;
 constructor TTyCustomScrollBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   // A scroll bar never takes the focus (CanFocus, #56), so it is not a tab stop either.
   TabStop := False;
   FKind := sbVertical;
@@ -608,6 +613,26 @@ begin
   // stays a plain constant.
   Width := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), Font.PixelsPerInch, 96);
   Height := 160;
+end;
+
+procedure TTyCustomScrollBar.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  thick: Integer;
+begin
+  { The thickness only (--scrollbar-size), as LCL's TScrollBar: the length is the form's. }
+  thick := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize),
+    Font.PixelsPerInch, 96);
+  if FKind = sbVertical then
+  begin
+    PreferredWidth := thick;
+    PreferredHeight := 0;
+  end
+  else
+  begin
+    PreferredWidth := 0;
+    PreferredHeight := thick;
+  end;
 end;
 
 destructor TTyCustomScrollBar.Destroy;

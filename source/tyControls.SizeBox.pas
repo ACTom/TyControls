@@ -23,6 +23,9 @@ type
     procedure SetTarget(AValue: TControl);
     function ResolveTarget: TControl;   // FTarget, else owner form, else Parent
   protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
@@ -180,6 +183,14 @@ begin
   Width := 16;
   Height := 16;
   Cursor := crSizeNWSE;
+end;
+
+procedure TTyCustomSizeBox.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+begin
+  { The grip it is born as. }
+  PreferredWidth := MulDiv(16, Font.PixelsPerInch, 96);
+  PreferredHeight := PreferredWidth;
 end;
 
 function TTyCustomSizeBox.GetStyleTypeKey: string;

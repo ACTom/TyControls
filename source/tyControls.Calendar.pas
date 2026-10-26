@@ -211,6 +211,9 @@ type
     procedure RenderDecadesView(P: TTyPainter; const ARect: TRect; APPI: Integer;
       const S: TTyStyleSet; HeaderH, ColW, RowH: Integer; const GridRect: TRect);
   protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
@@ -532,6 +535,7 @@ var
   dy, dm, dd: Word;
 begin
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   FDate         := DateOf(Now);
   FMinDate      := 0;
   FMaxDate      := 0;
@@ -548,6 +552,17 @@ begin
   DecodeDate(FDate, dy, dm, dd);
   FViewYear  := dy;
   FViewMonth := dm;
+end;
+
+procedure TTyCustomCalendar.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  sz: TSize;
+begin
+  { The month the theme lays out (TyCalendarSizeFor), which is also its default size. }
+  sz := TyCalendarSizeFor(ActiveController);
+  PreferredWidth := MulDiv(sz.cx, Font.PixelsPerInch, 96);
+  PreferredHeight := MulDiv(sz.cy, Font.PixelsPerInch, 96);
 end;
 
 function TTyCustomCalendar.GetStyleTypeKey: string;

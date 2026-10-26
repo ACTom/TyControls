@@ -496,6 +496,10 @@ type
     procedure DoChange; virtual;
     procedure DoDropDown; virtual;
     procedure DoCloseUp; virtual;
+  protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -1754,6 +1758,7 @@ end;
 constructor TTyCustomCascader.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   FNodes := TTyCascaderNodes.Create(Self);
   FNodes.OnChange := @NodesChanged;
   SetLength(FPath, 0);
@@ -1766,6 +1771,18 @@ begin
   // The same drop size as TTyComboBox: the two fields are meant to sit in one column.
   Width := 145;
   Height := TyDensityHeight(ActiveController, 26);
+end;
+
+procedure TTyCustomCascader.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  S: TTyStyleSet;
+begin
+  { One line of the font plus the padding, as LCL's TEdit: the width stays the form's. No
+    inherited -- TWinControl would size the control to its child controls. }
+  S := CurrentStyle;
+  PreferredWidth := 0;
+  PreferredHeight := TyFieldPreferredHeight(S, ResolveFontSize(S), Font.PixelsPerInch);
 end;
 
 destructor TTyCustomCascader.Destroy;

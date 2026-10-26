@@ -42,6 +42,9 @@ type
     procedure ApplyValue(AValue: Double);   // clamp + Invalidate + fire OnChange on real change
     function DisplayValue: Double;           // hover preview if active, else committed Value
   protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
     function GetStyleTypeKey: string; override;   // 'TyRating' (+ 'Star' sub-part)
     procedure Paint; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
@@ -144,6 +147,7 @@ end;
 constructor TTyCustomRating.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   TabStop := True;
   FCount := 5;
   FValue := 0;
@@ -152,6 +156,17 @@ begin
   FHoverValue := -1;
   Width := 120;
   Height := TyDensityHeight(ActiveController, 24);
+end;
+
+procedure TTyCustomRating.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  h: Integer;
+begin
+  { Count square cells a row tall -- the default 120 x 24 is five of them. }
+  h := MulDiv(TyDensityHeight(ActiveController, 24), Font.PixelsPerInch, 96);
+  PreferredWidth := FCount * h;
+  PreferredHeight := h;
 end;
 
 function TTyCustomRating.GetStyleTypeKey: string;

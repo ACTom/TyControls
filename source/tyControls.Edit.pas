@@ -285,6 +285,10 @@ type
     { True while ActionChange runs; RealSetText ignores the write then. Read by descendants
       that route Caption through a setter of their own (TTyCustomMaskEdit). }
     property InActionChange: Boolean read FInActionChange;
+  protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -553,6 +557,7 @@ end;
 constructor TTyCustomEdit.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   { Not csSetCaption: with Caption routed to Text (RealGetText), LCL's SetName would write a
     fresh edit's Name into its text the first time it is named -- TEdit does, this control
     never did, and a form that names its fields in code would suddenly show the names. }
@@ -592,6 +597,18 @@ begin
     unidentified custom control. LCL does the same one line in TCustomEdit.Create
     (include/customedit.inc:87). }
   AccessibleRole := larTextEditorSingleline;
+end;
+
+procedure TTyCustomEdit.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  S: TTyStyleSet;
+begin
+  { One line of the font plus the padding, as LCL's TEdit: the width stays the form's. No
+    inherited -- TWinControl would size the control to its child controls. }
+  S := CurrentStyle;
+  PreferredWidth := 0;
+  PreferredHeight := TyFieldPreferredHeight(S, ResolveFontSize(S), Font.PixelsPerInch);
 end;
 
 destructor TTyCustomEdit.Destroy;

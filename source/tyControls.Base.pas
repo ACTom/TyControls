@@ -107,9 +107,16 @@ type
     procedure SetStyleClass(const AValue: string);
     procedure SetStyleOverride(const AValue: string);
     procedure SetController(AValue: TTyCustomStyleController);
+  private
+    FFitThemeVer: Cardinal;    // theme version the AutoSize answer was last fitted for (#114)
+    FRefittingStyle: Boolean;
   protected
     FHover, FPressed: Boolean;
+    { Set by a control whose AutoSize answer comes from its style (#114): it re-fits when the
+      theme changes, which reaches it only as a bare Invalidate. }
+    FFitsToStyle: Boolean;
     FDpiAdjusting: Boolean;
+    procedure RefitToStyle;
     function _AddRef: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function _Release: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function GetStyleTypeKey: string; virtual; abstract;
@@ -296,6 +303,7 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    procedure Invalidate; override;
     function GetVersion: string;
     { #98/#99. A theme length token, in logical px, as this control reads it: a '--'
       declaration in its own StyleOverride wins (e.g. '--listview-text-margin: 8px'), then
@@ -350,9 +358,16 @@ type
     FOvrMetricVer: Cardinal;
     procedure SetStyleClass(const AValue: string);
     procedure SetStyleOverride(const AValue: string);
+  private
+    FFitThemeVer: Cardinal;    // theme version the AutoSize answer was last fitted for (#114)
+    FRefittingStyle: Boolean;
   protected
     FHover, FPressed: Boolean;
+    { Set by a control whose AutoSize answer comes from its style (#114): it re-fits when the
+      theme changes, which reaches it only as a bare Invalidate. }
+    FFitsToStyle: Boolean;
     FDpiAdjusting: Boolean;
+    procedure RefitToStyle;
     procedure SetController(AValue: TTyCustomStyleController); virtual;
     function _AddRef: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function _Release: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
@@ -513,6 +528,12 @@ function TyControlFontSize(AControl: TControl): Integer;
   the theme, not the inherited system font. (Headless masks the bug: rootless Font.Size is 0.) }
 function TyResolveFontSize(const AStyle: TTyStyleSet; AParentFont: Boolean;
   AControlFontSize: Integer; AController: TTyCustomStyleController): Integer;
+
+{ The height a one-line field asks for under AutoSize (#114): one line of AStyle's font at
+  AFontSize, plus its vertical padding and border, at APPI -- what TTySpinEdit has always
+  answered, now shared by the edits, the combo boxes and the other one-line controls. LCL's
+  TEdit answers the same way: height from the font, width left to the form. }
+function TyFieldPreferredHeight(const AStyle: TTyStyleSet; AFontSize, APPI: Integer): Integer;
 
 { Resolve the background a windowed child should composite onto (it does not inherit its
   parent's painted bg, so corner-gaps / transparent fills would otherwise show the child's
@@ -1039,6 +1060,33 @@ begin
   if not found then
     Result := ActiveController.Metric(AName, ADefault);
   FOvrMetrics.AddObject(key, TObject(PtrInt(Result)));
+end;
+
+procedure TTyGraphicControl.Invalidate;
+begin
+  inherited Invalidate;
+  if FFitsToStyle and AutoSize then RefitToStyle;
+end;
+
+{ #114: an AutoSize answer that comes from the style moves with the theme, and a theme switch
+  reaches a control only as a bare Invalidate -- so re-fit here, once per theme version (a hover
+  repaint finds nothing to do), guarded against AdjustSize -> SetBounds -> Invalidate. A font
+  change needs none of this: LCL re-fits on it itself. }
+procedure TTyGraphicControl.RefitToStyle;
+var
+  ver: Cardinal;
+begin
+  if FRefittingStyle or ([csLoading, csDestroying] * ComponentState <> []) then Exit;
+  ver := ActiveController.Model.ThemeVersion;
+  if ver = FFitThemeVer then Exit;
+  FRefittingStyle := True;
+  try
+    FFitThemeVer := ver;
+    InvalidatePreferredSize;
+    AdjustSize;
+  finally
+    FRefittingStyle := False;
+  end;
 end;
 
 function TTyGraphicControl.CurrentStyle: TTyStyleSet;
@@ -2173,6 +2221,7 @@ begin
   RefreshGtk3EraseColor;
   {$ENDIF}
   inherited Invalidate;
+  if FFitsToStyle and AutoSize then RefitToStyle;
   { 替本控件画了一截框的子控件跟着重画。为什么挂在 Invalidate 上、而不是挂在「获得焦点」
     「悬停」这几个事件上:框会变的理由有一长串(焦点、悬停、按下、禁用、StyleClass、
     StyleOverride、换 controller),它们**全部**以一句 Invalidate 收尾,这是唯一不会漏掉
@@ -2187,6 +2236,27 @@ begin
     c := Controls[i];
     if c.Visible and (c is TTyCustomControl) and TTyCustomControl(c).PaintsParentFrame then
       c.Invalidate;
+  end;
+end;
+
+{ #114: an AutoSize answer that comes from the style moves with the theme, and a theme switch
+  reaches a control only as a bare Invalidate -- so re-fit here, once per theme version (a hover
+  repaint finds nothing to do), guarded against AdjustSize -> SetBounds -> Invalidate. A font
+  change needs none of this: LCL re-fits on it itself. }
+procedure TTyCustomControl.RefitToStyle;
+var
+  ver: Cardinal;
+begin
+  if FRefittingStyle or ([csLoading, csDestroying] * ComponentState <> []) then Exit;
+  ver := ActiveController.Model.ThemeVersion;
+  if ver = FFitThemeVer then Exit;
+  FRefittingStyle := True;
+  try
+    FFitThemeVer := ver;
+    InvalidatePreferredSize;
+    AdjustSize;
+  finally
+    FRefittingStyle := False;
   end;
 end;
 
@@ -2572,6 +2642,20 @@ begin
     Result := 9;
 end;
 
+var
+  GFieldMeasure: TBGRABitmap = nil;   // TyFieldPreferredHeight's 1x1 measuring surface
+
+function TyFieldPreferredHeight(const AStyle: TTyStyleSet; AFontSize, APPI: Integer): Integer;
+begin
+  if APPI <= 0 then APPI := 96;
+  if GFieldMeasure = nil then GFieldMeasure := TBGRABitmap.Create(1, 1);
+  TyConfigureTextFont(GFieldMeasure, AStyle.FontName, AFontSize, AStyle.FontWeight, APPI);
+  Result := GFieldMeasure.TextSize('0').cy
+    + MulDiv(AStyle.Padding.Top + AStyle.Padding.Bottom, APPI, 96)
+    + 2 * MulDiv(AStyle.BorderWidth, APPI, 96);
+  if Result < 1 then Result := 1;
+end;
+
 function TTyCustomControl.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
 begin
   Result := TyResolveFontSize(AStyle, ParentFont, Font.Size, ActiveController);
@@ -2692,4 +2776,6 @@ begin
   end;
 end;
 
+finalization
+  FreeAndNil(GFieldMeasure);
 end.
