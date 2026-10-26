@@ -133,6 +133,7 @@ type
     FKeyColumnWidth: Integer;         // logical px
     FIndent: Integer;                 // logical px per nesting level
     FReadOnly: Boolean;
+    FSortRows: Boolean;               // Sorted: the root rows in key order (#124)
     FKeyOptions: TTyKeyOptions;
     FDraggingSplit: Boolean;
     FImages: TCustomImageList;
@@ -165,6 +166,9 @@ type
     procedure SetValue(const AKey, AValue: string);
     procedure SetKeyColumnWidth(AValue: Integer);
     procedure SetKeyOptions(AValue: TTyKeyOptions);
+    procedure SetReadOnly(AValue: Boolean);
+    procedure SetSortRows(AValue: Boolean);
+    procedure SortRoots;
     procedure SetImages(const AValue: TCustomImageList);
     { keyUnique's collision rule: does AKey already name one of ARow's SIBLINGS? Case-insensitive
       (LCL uses AnsiCompareText, valedit.pas:1610) and blind to empty keys, like LCL's.
@@ -345,7 +349,12 @@ type
     property InlineEditor: TTyValueEdit read FEditor;
   published
     property KeyColumnWidth: Integer read FKeyColumnWidth write SetKeyColumnWidth default 110;
-    property ReadOnly: Boolean read FReadOnly write FReadOnly default False;
+    { Set while a cell editor is open, it closes that editor without committing it (#124). }
+    property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
+    { #124: the ROOT rows in key order -- the rows the editor shows -- keeping rows that share
+      a key; a rename re-sorts. TTyListBox's Sorted, which this replaces, sorted the Items
+      mirror instead: the editor does not paint from it, and it dropped duplicate keys. }
+    property Sorted: Boolean read FSortRows write SetSortRows default False;
     { What the user may do to the row set: rename a key, add a row, delete a row, and whether a
       rename must stay unique. See TTyKeyOption. Default [], which is the behaviour that shipped
       before this existed -- values editable, the row SET fixed.
@@ -573,7 +582,7 @@ begin
 end;
 
 procedure TTyValueListEditor.RebuildFlat;
-var i, newIdx: Integer; sel: TTyValueRow;
+var i, j, newIdx: Integer; sel: TTyValueRow; picked: array of TTyValueRow;
 begin
   if FRebuilding then Exit;
   if FEditFlat >= 0 then EndEdit(True);   // commit before the flat indices change
@@ -585,6 +594,16 @@ begin
     sel := nil;
     if (ItemIndex >= 0) and (ItemIndex <= High(FFlatRow)) then
       sel := FFlatRow[ItemIndex];
+    { The multi-selection the same way (#123/#124): by row object. }
+    SetLength(picked, 0);
+    if MultiSelect then
+      for i := 0 to High(FFlatRow) do
+        if Selected[i] then
+        begin
+          SetLength(picked, Length(picked) + 1);
+          picked[High(picked)] := FFlatRow[i];
+        end;
+    if FSortRows then SortRoots;
     SetLength(FFlatRow, 0);
     SetLength(FFlatLevel, 0);
     for i := 0 to High(FRoot) do
@@ -604,6 +623,9 @@ begin
       for i := 0 to High(FFlatRow) do
         if FFlatRow[i] = sel then begin newIdx := i; Break; end;
     SetItemIndexSilent(newIdx);
+    for j := 0 to High(picked) do
+      for i := 0 to High(FFlatRow) do
+        if FFlatRow[i] = picked[j] then begin SetSelectedSilent(i, True); Break; end;
   finally
     FRebuilding := False;
   end;
@@ -616,8 +638,11 @@ begin
 end;
 
 function TTyValueListEditor.ContentLeftDp: Integer;
+var r: Integer;
 begin
-  Result := Dp(CurrentStyle.Padding.Left);
+  { RowContentBounds, what RenderTo hands PaintItemContent as the row: the hit tests and the
+    editor follow ScrollWidth's sideways scroll the paint does (#124). }
+  RowContentBounds(ClientWidth, Font.PixelsPerInch, Result, r);
 end;
 
 function TTyValueListEditor.ContentTopDp: Integer;
@@ -626,9 +651,9 @@ begin
 end;
 
 function TTyValueListEditor.ContentRightDp: Integer;
+var l: Integer;
 begin
-  Result := ClientWidth - Dp(CurrentStyle.Padding.Right);
-  if Length(FFlatRow) > VisibleRows then Dec(Result, Dp(ActiveController.Metric('--scrollbar-size', TyScrollbarSize)));
+  RowContentBounds(ClientWidth, Font.PixelsPerInch, l, Result);   // see ContentLeftDp
 end;
 
 function TTyValueListEditor.SplitXDp: Integer;
@@ -828,12 +853,15 @@ end;
   writes report through OnValueChanged, so a programmatic rename reporting through
   OnKeyChanged is the same contract on the other column. }
 procedure TTyValueListEditor.SetKey(AIndex: Integer; const AValue: string);
+var sel: TTyValueRow;
 begin
   if (AIndex < 0) or (AIndex > High(FRoot)) then Exit;
   if FRoot[AIndex].Key = AValue then Exit;
   FRoot[AIndex].Key := AValue;
+  sel := FRoot[AIndex];
+  if FSortRows then RebuildFlat;   // its place in the order moved with its name
   Invalidate;
-  if Assigned(FOnKeyChanged) then FOnKeyChanged(Self, FRoot[AIndex]);
+  if Assigned(FOnKeyChanged) then FOnKeyChanged(Self, sel);
 end;
 
 function TTyValueListEditor.GetValueFromIndex(AIndex: Integer): string;
@@ -909,6 +937,41 @@ end;
   blank row you cannot name is not a row anybody wanted. So `KeyOptions := [keyAdd]` READS BACK as
   [keyEdit, keyAdd] -- deliberate, and pinned by a test, since a setter that silently rewrites its
   argument is exactly the kind of thing a later refactor "tidies away". }
+procedure TTyValueListEditor.SetReadOnly(AValue: Boolean);
+begin
+  if FReadOnly = AValue then Exit;
+  FReadOnly := AValue;
+  { An editor already open would otherwise stay open and still commit (#124). }
+  if AValue and ((FEditFlat >= 0) or FDropMode) then EndEdit(False);
+end;
+
+procedure TTyValueListEditor.SetSortRows(AValue: Boolean);
+begin
+  if FSortRows = AValue then Exit;
+  FSortRows := AValue;
+  if AValue then RebuildFlat;   // switching it off keeps the order the rows are in
+end;
+
+{ Stable, so rows that share a key keep the order they were added in; case-insensitive, as a
+  TStringList sorts. }
+procedure TTyValueListEditor.SortRoots;
+var
+  i, j: Integer;
+  r: TTyValueRow;
+begin
+  for i := 1 to High(FRoot) do
+  begin
+    r := FRoot[i];
+    j := i - 1;
+    while (j >= 0) and (AnsiCompareText(FRoot[j].EffectiveKey, r.EffectiveKey) > 0) do
+    begin
+      FRoot[j + 1] := FRoot[j];
+      Dec(j);
+    end;
+    FRoot[j + 1] := r;
+  end;
+end;
+
 procedure TTyValueListEditor.SetKeyOptions(AValue: TTyKeyOptions);
 begin
   if keyAdd in AValue then Include(AValue, keyEdit);
@@ -979,6 +1042,7 @@ begin
     Exit;
   end;
   ARow.Key := AText;
+  if FSortRows then RebuildFlat;   // see SetKey
   if Assigned(FOnKeyChanged) then FOnKeyChanged(Self, ARow);
   Invalidate;
 end;
