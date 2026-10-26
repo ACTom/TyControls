@@ -304,7 +304,7 @@ var
   ctx: TBGRACanvas2D;
   cx, cy, radius, ang, r0, r1: Double;
   frac: Double;
-  bw: Integer;
+  bw, vSize: Integer;
 begin
   P := TTyPainter.Create;
   try
@@ -359,8 +359,15 @@ begin
     end;
 
     if FShowValue then
-      P.DrawText(R, Format(FValueFormat, [FValue]), Font.Name, 10, 700,
+    begin
+      { The theme's face and the font's style flags under the bold (#113); a size the author
+        set wins over the figure's own 10. }
+      vSize := TyControlFontSize(Self);
+      if vSize <= 0 then vSize := 10;
+      P.DrawText(R, Format(FValueFormat, [FValue]), bodyS.FontName, vSize,
+        700 or (bodyS.FontWeight and not TyFontWeightMask),
         bodyS.TextColor, taCenter, tlCenter, False);
+    end;
     P.EndPaint;
   finally
     P.Free;

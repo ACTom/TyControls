@@ -297,7 +297,7 @@ begin
   states := CurrentStates;
   Exclude(states, tysHover);
   if FHeaderHover and Enabled then Include(states, tysHover);
-  Result := ActiveController.Model.ResolveStyle('TyExPanelHeader', StyleClass, states);
+  Result := PartStyle('TyExPanelHeader', StyleClass, states);
 end;
 
 { Effective header height: an explicit set wins; otherwise follow the theme's

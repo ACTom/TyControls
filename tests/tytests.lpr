@@ -90,6 +90,7 @@ uses
   test.popup,
   test.defaults.guard,
   test.fontprecedence,
+  test.partfont,
   test.calendar,
   test.datetimepicker,
   test.treeview.events,

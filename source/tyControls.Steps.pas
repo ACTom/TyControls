@@ -837,8 +837,9 @@ end;
 
 function TTyCustomSteps.ItemStyle(AIndex: Integer): TTyStyleSet;
 begin
-  Result := ActiveController.Model.ResolveStyle('TyStepsItem', StepVariant(AIndex),
-    ItemStates(AIndex));
+  { The marker: the steps' font (#113), the theme's ink -- a status chip's colour is the
+    status, not text. }
+  Result := PartStyle('TyStepsItem', StepVariant(AIndex), ItemStates(AIndex), False);
 end;
 
 function TTyCustomSteps.TitleStyle(AIndex: Integer): TTyStyleSet;
@@ -857,7 +858,7 @@ begin
     exactly as a checkbox's caption reads alike checked or not. }
   st := ItemStates(AIndex) - [tysSelected];
   if st = [] then Include(st, tysNormal);   // the current step, with nothing else on it
-  Result := ActiveController.Model.ResolveStyle('TyStepsItem', StepVariant(AIndex), st);
+  Result := PartStyle('TyStepsItem', StepVariant(AIndex), st);   // the steps' font (#113)
 end;
 
 function TTyCustomSteps.ConnectorStyle(AIndex: Integer): TTyStyleSet;
@@ -935,7 +936,7 @@ begin
   // The RESTING title style: a theme that bolds the current step must not make the rail's
   // size depend on which step the wizard happens to be on.
   txtS := InheritText(RestStrip,
-    ActiveController.Model.ResolveStyle('TyStepsItem', StyleClass, [tysNormal]));
+    PartStyle('TyStepsItem', StyleClass, [tysNormal]));
   P := TTyPainter.Create;
   try
     P.BeginPaint(nil, Rect(0, 0, 1, 1), APPI);   // 1x1: nothing is drawn, only measured
@@ -1007,7 +1008,7 @@ begin
   try
     P.BeginPaint(nil, Rect(0, 0, 1, 1), ppi);
     lineH := LineHeightWith(P, InheritText(RestStrip,
-      ActiveController.Model.ResolveStyle('TyStepsItem', StyleClass, [tysNormal])));
+      PartStyle('TyStepsItem', StyleClass, [tysNormal])));
     P.EndPaint;
   finally
     P.Free;
@@ -1171,7 +1172,7 @@ begin
     // TyStepLayout reports and AutoSize measured (both use RestStrip). Same reason the padding
     // just above uses RestStrip. A theme setting a font on TySteps:focus was the trigger.
     lineH := LineHeightWith(P, InheritText(RestStrip,
-      ActiveController.Model.ResolveStyle('TyStepsItem', StyleClass, [tysNormal])));
+      PartStyle('TyStepsItem', StyleClass, [tysNormal])));
 
     for i := 0 to FItems.Count - 1 do
     begin

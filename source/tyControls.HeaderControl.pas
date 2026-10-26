@@ -810,8 +810,8 @@ begin
 
     // Section styles (base + hover). :selected is available too but the strip uses
     // hover for the pointer; a sorted section is signalled by the triangle, not fill.
-    secStyle := ActiveController.Model.ResolveStyle('TyTreeHeaderSection', '', []);
-    hotStyle := ActiveController.Model.ResolveStyle('TyTreeHeaderSection', '', [tysHover]);
+    secStyle := PartStyle('TyTreeHeaderSection', '', []);
+    hotStyle := PartStyle('TyTreeHeaderSection', '', [tysHover]);
 
     // Device-px widths -> tiled rects. Pure math == hit-test geometry.
     widths := DeviceWidths;

@@ -655,7 +655,7 @@ end;
 
 function TTyCustomBreadcrumb.SlotStyle(AItemIndex: Integer; AHovered: Boolean): TTyStyleSet;
 begin
-  Result := ActiveController.Model.ResolveStyle('TyBreadcrumbItem', StyleClass,
+  Result := PartStyle('TyBreadcrumbItem', StyleClass,
     TyBreadcrumbItemStates(AItemIndex, FItems.Count, AHovered, Enabled));
 end;
 

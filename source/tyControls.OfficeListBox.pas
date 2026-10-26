@@ -105,19 +105,30 @@ type
   text. Factored out so TTyOfficeComboBox's popup list draws identical bands. AController resolves
   the band style (each control has its own ActiveController). }
 procedure TyDrawOfficeHeaderBand(P: TTyPainter; const ARowRect: TRect; const S: string;
-  AController: TTyCustomStyleController);
+  AController: TTyCustomStyleController); overload;
+{ The same with the band's style already resolved -- the list passes its PartStyle, so the
+  header text takes the list's font (#113). }
+procedure TyDrawOfficeHeaderBand(P: TTyPainter; const ARowRect: TRect; const S: string;
+  const AStyle: TTyStyleSet; AController: TTyCustomStyleController); overload;
 
 implementation
 
 procedure TyDrawOfficeHeaderBand(P: TTyPainter; const ARowRect: TRect; const S: string;
   AController: TTyCustomStyleController);
+begin
+  // The band uses the 'TyGroupBox' token so the header colour tracks the theme.
+  TyDrawOfficeHeaderBand(P, ARowRect, S, AController.Model.ResolveStyle('TyGroupBox', '', []),
+    AController);
+end;
+
+procedure TyDrawOfficeHeaderBand(P: TTyPainter; const ARowRect: TRect; const S: string;
+  const AStyle: TTyStyleSet; AController: TTyCustomStyleController);
 var
   hs: TTyStyleSet;
   textR: TRect;
   band: TTyColor;
 begin
-  // The band uses the 'TyGroupBox' token so the header colour tracks the theme.
-  hs := AController.Model.ResolveStyle('TyGroupBox', '', []);
+  hs := AStyle;
   if (tpBackground in hs.Present) and (TyAlphaOf(hs.Background.Color) > 0) then
     P.FillBackground(ARowRect, hs.Background, 0)
   else
@@ -131,8 +142,9 @@ begin
   end;
   // Bold header text, left-aligned with a small left pad.
   textR := Rect(ARowRect.Left + P.Scale(6), ARowRect.Top, ARowRect.Right, ARowRect.Bottom);
-  P.DrawText(textR, S, hs.FontName, TyResolveFontSize(hs, True, 0, AController), 700, hs.TextColor,
-    taLeftJustify, tlCenter, True);
+  // Bold over whatever italic/underline the font carries (#113).
+  P.DrawText(textR, S, hs.FontName, TyResolveFontSize(hs, True, 0, AController),
+    700 or (hs.FontWeight and not TyFontWeightMask), hs.TextColor, taLeftJustify, tlCenter, True);
 end;
 
 { TTyCustomOfficeListBox }
@@ -157,7 +169,8 @@ procedure TTyCustomOfficeListBox.PaintItemContent(P: TTyPainter; const ARowRect:
   AIndex: Integer; const AStyle: TTyStyleSet);
 begin
   if IsHeader(AIndex) then
-    TyDrawOfficeHeaderBand(P, ARowRect, Items[AIndex], ActiveController)
+    TyDrawOfficeHeaderBand(P, ARowRect, Items[AIndex], PartStyle('TyGroupBox', '', []),
+      ActiveController)
   else
     inherited PaintItemContent(P, ARowRect, AIndex, AStyle);
 end;

@@ -978,7 +978,7 @@ begin
   w := FileTabWidthPx;
   h := MulDiv(TabHeight, ppi, 96);
   if (w <= 0) or (h <= 0) then Exit;
-  S := ActiveController.Model.ResolveStyle('TyButton', 'primary', []);
+  S := PartStyle('TyButton', 'primary', [], False);   // the ribbon's font, the accent's ink (#113)
   fs := S.FontSize; if fs <= 0 then fs := 9;
   P := TTyPainter.Create;
   try

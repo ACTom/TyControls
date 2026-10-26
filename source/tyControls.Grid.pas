@@ -5330,7 +5330,7 @@ begin
   for i := 0 to High(FCellStyleStates) do
     if FCellStyleStates[i] = st then Exit(i);
 
-  sty := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, st);
+  sty := PartStyle('TyGridCell', StyleClass, st);
   n := Length(FCellStyleStates);
   SetLength(FCellStyleStates, n + 1);
   SetLength(FCellStyleCache, n + 1);
@@ -5839,7 +5839,7 @@ begin
   if (ACol = FPressedBtnCol) and (ARow = FPressedBtnRow) then Include(st, tysActive)
   else if (ACol = FHoverCol) and (ARow = FHoverRow) then Include(st, tysHover);
 
-  bS := ActiveController.Model.ResolveStyle('TyGridButton', StyleClass, st);
+  bS := PartStyle('TyGridButton', StyleClass, st);
   if tpBackground in bS.Present then
     P.FillBackground(r, bS.Background, TyEffectiveCorners(bS));
   if TyBorderVisible(bS) then
@@ -6084,7 +6084,7 @@ begin
 
   { 量最高的那个标题。Header.Height 当**下限** —— 自适应只往上撑,
     不会把一条正常高度的列头压扁。 }
-  hdrS := ActiveController.Model.ResolveStyle('TyGridHeader', StyleClass, []);
+  hdrS := PartStyle('TyGridHeader', StyleClass, []);
   bmp := TBGRABitmap.Create(1, 1);
   try
     TyConfigureTextFont(bmp, hdrS.FontName, ResolveFontSize(hdrS),
@@ -6228,7 +6228,7 @@ begin
 
   { 复用行头槽自己的 typeKey 取墨色与字体 —— 不硬编码任何视觉值,
     也不借别的控件的键。 }
-  indS := ActiveController.Model.ResolveStyle('TyGridIndicator', StyleClass, []);
+  indS := PartStyle('TyGridIndicator', StyleClass, []);
   if tpTextColor in indS.Present then ink := indS.TextColor
   else ink := CurrentStyle.TextColor;
 
@@ -7652,9 +7652,9 @@ begin
     整条列头带的每一段都换底,而且 goHeaderPushedLook 关着也照样发生。按下去的观感
     **只有一个来源** —— 下面那趟按 FPressedHeaderCol 逐段判定、且由标志把门的解析。
     (加这条规则之前 :active 不存在,所以剔掉它对既有主题逐像素无影响。) }
-  hdrS := ActiveController.Model.ResolveStyle('TyGridHeader', StyleClass,
+  hdrS := PartStyle('TyGridHeader', StyleClass,
     CurrentStates - [tysActive]);
-  secS := ActiveController.Model.ResolveStyle('TyGridHeaderSection', StyleClass,
+  secS := PartStyle('TyGridHeaderSection', StyleClass,
     CurrentStates - [tysActive]);
   if tpTextColor in secS.Present then ink := secS.TextColor
   else if tpTextColor in hdrS.Present then ink := hdrS.TextColor
@@ -7662,7 +7662,7 @@ begin
   line := TyColorToBGRA(hdrS.BorderColor);
   { 激活态漏斗的颜色走主题(选中态的表头文字色);主题没给就退回普通墨色 ——
     绝不自己发明一个颜色。 }
-  actHdrS := ActiveController.Model.ResolveStyle('TyGridHeaderSection',
+  actHdrS := PartStyle('TyGridHeaderSection',
     StyleClass, [tysSelected]);
   if tpTextColor in actHdrS.Present then accentInk := actHdrS.TextColor
   else accentInk := ink;
@@ -7676,7 +7676,7 @@ begin
     好处在列头上全赔掉。没在 hot-track 或者鼠标不在列头上时一次都不解析。 }
   hotTrack := (hoHotTrack in FHeader.Options) and (FHoverHeaderCol >= 0);
   if hotTrack then
-    hotS := ActiveController.Model.ResolveStyle('TyGridHeaderSection',
+    hotS := PartStyle('TyGridHeaderSection',
       StyleClass, [tysHover]);
 
   { 按下去的那一段 —— goHeaderPushedLook。这个标志从前**没有进枚举**,理由写在
@@ -7687,7 +7687,7 @@ begin
     与 hotS 同样**在循环外解析一次**:每段各解析一遍会把逐格记忆化的好处全赔掉。 }
   pushed := (goHeaderPushedLook in Options) and (FPressedHeaderCol >= 0);
   if pushed then
-    pushS := ActiveController.Model.ResolveStyle('TyGridHeaderSection',
+    pushS := PartStyle('TyGridHeaderSection',
       StyleClass, [tysActive]);
 
   imgList := HeaderImageList;
@@ -8080,7 +8080,7 @@ begin
   h := FilterRowHeightPx;
   if h <= 0 then Exit;
 
-  fs := ActiveController.Model.ResolveStyle('TyGridFilterRow', StyleClass, []);
+  fs := PartStyle('TyGridFilterRow', StyleClass, []);
 
   { 整条带先铺底 —— 与列头带一样横跨整幅宽度(含行头槽上方那一块)。 }
   r := Rect(0, ATop, M.ClientW, ATop + h);
@@ -8127,8 +8127,8 @@ begin
   h := GroupBandHeightPx;
   if h <= 0 then Exit;
 
-  hdrS := ActiveController.Model.ResolveStyle('TyGridHeader', StyleClass, CurrentStates);
-  secS := ActiveController.Model.ResolveStyle('TyGridHeaderGroup', StyleClass, CurrentStates);
+  hdrS := PartStyle('TyGridHeader', StyleClass, CurrentStates);
+  secS := PartStyle('TyGridHeaderGroup', StyleClass, CurrentStates);
   if tpTextColor in secS.Present then ink := secS.TextColor
   else if tpTextColor in hdrS.Present then ink := hdrS.TextColor
   else ink := CurrentStyle.TextColor;
@@ -8627,7 +8627,7 @@ begin
   if not TyGridDrawSlots(M, firstSlot, lastSlot) then Exit;
 
   { 同上:内边距也别跟着网格自身的状态变,否则鼠标进出会让文字左右挪一下。 }
-  cellS := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, []);
+  cellS := PartStyle('TyGridCell', StyleClass, []);
   if tpTextColor in cellS.Present then ink := cellS.TextColor
   else ink := AFrame.TextColor;
   padL := ScaleI(cellS.Padding.Left);
@@ -11832,7 +11832,7 @@ begin
     树形列再减缩进。少减一项就会出现"提示说放得下、屏幕上却带着…"。 }
   M := GridMetrics;
   cell := TyGridCellContentRect(CellRect(ACol, ARow), M);
-  cellSty := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, []);
+  cellSty := PartStyle('TyGridCell', StyleClass, []);
   textR := ToReadingRect(cell);
   textR := Rect(textR.Left + ScaleI(cellSty.Padding.Left), cell.Top,
                 textR.Right - ScaleI(cellSty.Padding.Right), cell.Bottom);
@@ -12262,7 +12262,7 @@ begin
   GetPressedButton(bc, br);
   if (ACol = bc) and (ARow = br) then Include(st, tysActive);
 
-  bS := ActiveController.Model.ResolveStyle('TyGridButton', StyleClass, st);
+  bS := PartStyle('TyGridButton', StyleClass, st);
   if tpBackground in bS.Present then
     P.FillBackground(r, bS.Background, TyEffectiveCorners(bS));
   if TyBorderVisible(bS) then
@@ -13517,7 +13517,7 @@ var
   r: TRect;
 begin
   if (ARow < 0) or (ARow >= RowCount) then Exit;
-  cS := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, []);
+  cS := PartStyle('TyGridCell', StyleClass, []);
   padL := ScaleI(cS.Padding.Left);
   padR := ScaleI(cS.Padding.Right);
 
@@ -13601,8 +13601,8 @@ begin
   { 1x1 的临时位图只用来量文字 —— 不需要画布,也不需要窗口句柄。 }
   bmp := TBGRABitmap.Create(1, 1);
   try
-    cSty := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, []);
-    hSty := ActiveController.Model.ResolveStyle('TyGridHeader', StyleClass, []);
+    cSty := PartStyle('TyGridCell', StyleClass, []);
+    hSty := PartStyle('TyGridHeader', StyleClass, []);
 
     widest := TextW(TTyColumn(Header.Columns.Items[ACol]).Text, hSty);
 
@@ -13728,7 +13728,7 @@ begin
   if (r.Bottom <= M.FrozenTop) or (r.Top >= M.ClientH) then Exit;
 
   info := GroupInfo(AGroupIndex);
-  gS := ActiveController.Model.ResolveStyle('TyGridGroupRow', StyleClass, CurrentStates);
+  gS := PartStyle('TyGridGroupRow', StyleClass, CurrentStates);
   if tpBackground in gS.Present then
     P.FillBackground(r, gS.Background, 0);
   if tpTextColor in gS.Present then ink := gS.TextColor else ink := AFrame.TextColor;
@@ -13976,7 +13976,7 @@ var
 begin
   inherited RenderFooter(P, M, AFooterRect, AFrame);
 
-  fS := ActiveController.Model.ResolveStyle('TyGridSummaryRow', StyleClass, CurrentStates);
+  fS := PartStyle('TyGridSummaryRow', StyleClass, CurrentStates);
   if tpTextColor in fS.Present then ink := fS.TextColor else ink := AFrame.TextColor;
 
   for i := 0 to Header.Columns.Count - 1 do

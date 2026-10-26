@@ -5564,8 +5564,8 @@ begin
       { Band rect spans the full content width, at the top of CR (before headerH offset) }
       headerBandRect := Rect(CR.Left, CR.Top - headerH, CR.Right, CR.Top);
       { Resolve styles — tolerate absent typeKeys (fallback to tree tokens) }
-      headerBgStyle  := ActiveController.Model.ResolveStyle('TyTreeHeader', '', []);
-      headerSecStyle := ActiveController.Model.ResolveStyle('TyTreeHeaderSection', '', []);
+      headerBgStyle  := PartStyle('TyTreeHeader', '', []);
+      headerSecStyle := PartStyle('TyTreeHeaderSection', '', []);
 
       { Fill header band background }
       if tpBackground in headerBgStyle.Present then
@@ -5712,7 +5712,7 @@ begin
       begin
         { Drag overlay accent from the THEME (TyTreeNode:selected bg = --accent),
           never a hard-coded color. NodeStyle is free here — the node loop runs later. }
-        NodeStyle := ActiveController.Model.ResolveStyle('TyTreeNode', '', [tysSelected]);
+        NodeStyle := PartStyle('TyTreeNode', '', [tysSelected]);
         if tpBackground in NodeStyle.Present then
           accentPx := TyColorToBGRA(NodeStyle.Background.Color)
         else
@@ -5790,7 +5790,7 @@ begin
         node area, BELOW the header band which has already painted above. }
       if (FRoot^.FirstChild = nil) and (FEmptyListMessage <> '') then
       begin
-        NodeStyle := ActiveController.Model.ResolveStyle('TyTreeNode', '', []);
+        NodeStyle := PartStyle('TyTreeNode', '', []);
         P.DrawText(CR, FEmptyListMessage, S.FontName, ResolveFontSize(S), S.FontWeight,
           NodeStyle.TextColor, taCenter, tlCenter, True);
       end;
@@ -5828,7 +5828,7 @@ begin
       else if FHotTrack and (node = FHotNode) then
         nodeStates := [tysHover];
 
-      NodeStyle := ActiveController.Model.ResolveStyle('TyTreeNode', '', nodeStates);
+      NodeStyle := PartStyle('TyTreeNode', '', nodeStates);
       { #71: the row ground is the selection's only with toFullRowSelect, as treeview.md
         says and LCL's RowSelect does; without it the caption carries the highlight
         (FillCaptionHighlight) and everything else here is drawn plain. }
@@ -5836,7 +5836,7 @@ begin
       if fullRow or (nodeStates = []) then
         ChromeStyle := NodeStyle
       else
-        ChromeStyle := ActiveController.Model.ResolveStyle('TyTreeNode', '', []);
+        ChromeStyle := PartStyle('TyTreeNode', '', []);
 
       if tpBackground in ChromeStyle.Present then
       begin
@@ -6414,7 +6414,7 @@ begin
       if GetCellRect(FDropTarget, mainColBase, rowRect) then
       begin
         { Theme accent (same resolution as the header drag overlay above). }
-        NodeStyle := ActiveController.Model.ResolveStyle('TyTreeNode', '', [tysSelected]);
+        NodeStyle := PartStyle('TyTreeNode', '', [tysSelected]);
         if tpBackground in NodeStyle.Present then
           accentPx := TyColorToBGRA(NodeStyle.Background.Color)
         else

@@ -1573,7 +1573,7 @@ end;
 
 function TTyCascaderPanel.RowStyle(AColumn, AIndex: Integer): TTyStyleSet;
 begin
-  Result := ActiveController.Model.ResolveStyle('TyCascaderItem', StyleClass,
+  Result := PartStyle('TyCascaderItem', StyleClass,
     RowStates(AColumn, AIndex));
 end;
 

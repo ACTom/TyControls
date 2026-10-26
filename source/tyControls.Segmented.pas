@@ -476,7 +476,7 @@ end;
 
 function TTyCustomSegmented.ItemStyle(AIndex: Integer): TTyStyleSet;
 begin
-  Result := ActiveController.Model.ResolveStyle('TySegmentedItem', StyleClass,
+  Result := PartStyle('TySegmentedItem', StyleClass,
     ItemStates(AIndex));
 end;
 
@@ -556,7 +556,7 @@ begin
   if ppi <= 0 then ppi := 96;
   // Measured against the RESTING segment style: a theme that makes the selected chip bold
   // must not make the track's width depend on which segment is currently selected.
-  segStyle := ActiveController.Model.ResolveStyle('TySegmentedItem', StyleClass, [tysNormal]);
+  segStyle := PartStyle('TySegmentedItem', StyleClass, [tysNormal]);
   // MEASURE with the same font the paint DRAWS with: the label inherits the TRACK's font via
   // ItemTextStyle, so a theme that sets a font on TySegmented but not TySegmentedItem must size
   // segments to that font — else they are measured for the default and the paint clips the
