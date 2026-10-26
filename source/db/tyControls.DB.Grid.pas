@@ -2172,11 +2172,13 @@ var
 begin
   { Tab wraps to another record only off the window's last field (first, backwards); every
     other Tab is the string grid's, which moves within the window (and so through
-    MoveCursor). }
+    MoveCursor). Last and first on screen: a dragged column's index is not its place (#111). }
   tabWraps := (Key = VK_TAB) and (dgTabs in FDBOptions) and (FDataLink <> nil)
     and FDataLink.Active and (Shift * [ssCtrl, ssAlt, ssMeta] = []) and (RowCount > 0)
-    and (((ssShift in Shift) and (Col <= FirstVisibleCol) and (Row = 0))
-      or (not (ssShift in Shift) and (Col >= LastVisibleCol) and (Row = RowCount - 1)));
+    and (((ssShift in Shift) and (ColumnPlace(Col) <= ColumnPlace(FirstVisibleCol))
+          and (Row = 0))
+      or (not (ssShift in Shift) and (ColumnPlace(Col) >= ColumnPlace(LastVisibleCol))
+          and (Row = RowCount - 1)));
   if (FDataLink = nil) or not FDataLink.Active or not Enabled
     or not (tabWraps or (Key in [VK_UP, VK_DOWN, VK_PRIOR, VK_NEXT, VK_HOME, VK_END,
                                 VK_ESCAPE, VK_INSERT, VK_DELETE, VK_MULTIPLY]))

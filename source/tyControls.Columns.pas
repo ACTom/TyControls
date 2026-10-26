@@ -595,15 +595,55 @@ end;
 
 procedure TTyColumn.SetIndex(Value: Integer);
 var
-  old, i: Integer;
+  old, newIndex, i, e, slot, target, temp: Integer;
   cols: TTyColumns;
 begin
   old := Index;
+  { The column takes the visual place of the one now at index Value: inserting a column at
+    index 1 puts it on screen where that column stood, and in the natural order (position =
+    index) moving by index and moving on screen are the same move. }
+  target := -1;
+  if (Collection <> nil) and (Value <> old) and (Value >= 0) and (Value < Collection.Count) then
+    target := Integer(GetOwnerColumns.Items[Value].FPosition);
   inherited SetIndex(Value);
-  if (Collection = nil) or (Index = old) then Exit;
+  newIndex := Index;
+  if (Collection = nil) or (newIndex = old) then Exit;
   cols := GetOwnerColumns;
-  { The position map holds collection indices, so the visual order moved with the item.
-    Every column's Position is stamped again from it: Position is published, and a stale
+  { The position map holds collection indices, and the items between old and newIndex were just
+    renumbered by one. Renumber the map with them -- read as it stood, it put the columns in a
+    different order whenever the map was not the natural one (#111). }
+  for i := 0 to Length(cols.FPositionToIndex) - 1 do
+  begin
+    e := cols.FPositionToIndex[i];
+    if e = old then
+      cols.FPositionToIndex[i] := newIndex
+    else if (old < newIndex) and (e > old) and (e <= newIndex) then
+      cols.FPositionToIndex[i] := e - 1
+    else if (old > newIndex) and (e >= newIndex) and (e < old) then
+      cols.FPositionToIndex[i] := e + 1;
+  end;
+  if target >= 0 then
+  begin
+    slot := -1;
+    for i := 0 to Length(cols.FPositionToIndex) - 1 do
+      if cols.FPositionToIndex[i] = newIndex then
+      begin
+        slot := i;
+        Break;
+      end;
+    if (slot >= 0) and (slot <> target) then
+    begin
+      temp := cols.FPositionToIndex[slot];
+      if slot < target then
+        for i := slot to target - 1 do
+          cols.FPositionToIndex[i] := cols.FPositionToIndex[i + 1]
+      else
+        for i := slot downto target + 1 do
+          cols.FPositionToIndex[i] := cols.FPositionToIndex[i - 1];
+      cols.FPositionToIndex[target] := temp;
+    end;
+  end;
+  { Every column's Position is stamped again from the map: Position is published, and a stale
     one is what the next form file said -- loading it put the columns back where they had
     stood. Then the left edges, and the header and its host hear of it, as for any other
     change of order (AdjustPosition). }

@@ -232,7 +232,7 @@ uses
   test.rtl.chrome,
   test.card, test.tag, test.badge,
   test.grid.layout, test.grid, test.grid.streaming, test.grid.bidi,
-  test.grid.objects, test.grid.options, test.grid.hooks,
+  test.grid.objects, test.grid.options, test.grid.hooks, test.grid.colmove,
   test.alert, test.notification, test.empty, test.segmented,
   test.pagination, test.steps, test.breadcrumb, test.transfer,
   test.treeselect, test.cascader, test.popover,

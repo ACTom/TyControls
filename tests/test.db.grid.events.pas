@@ -137,6 +137,7 @@ type
     procedure TestTabWrapsToTheNextRecord;
     procedure TestTabOnTheLastRecordAppends;
     procedure TestShiftTabWrapsBack;
+    procedure TestTabWrapsOffTheFieldsAtTheEndsOnScreen;
     procedure TestRefusedEditFiresNoCheckBoxChange;
     procedure TestOneNotchFiresTheEventOnce;
   end;
@@ -1042,6 +1043,31 @@ begin
   FGrid.Col := FGrid.FirstVisibleCol;
   FGrid.PressKey(VK_TAB, [ssShift]);
   AssertEquals('on the first record it goes nowhere', 1, ID);
+end;
+
+{ #111: the last field is the last one on screen, not the one with the highest index. }
+procedure TDBGridEventsTest.TestTabWrapsOffTheFieldsAtTheEndsOnScreen;
+var
+  n, last, first: Integer;
+begin
+  n := FGrid.RowCount;
+  DS.MoveBy(n - 1);
+  last := FGrid.LastVisibleCol;
+  FGrid.Columns[last].Position := 0;        { the last field dragged to the front }
+  AssertTrue('premise: another field ends the row on screen', FGrid.LastVisibleCol <> last);
+  FGrid.Col := last;
+  FGrid.PressKey(VK_TAB);
+  AssertEquals('first on screen: Tab stays in the record', n, ID);
+  FGrid.Col := FGrid.LastVisibleCol;
+  FGrid.PressKey(VK_TAB);
+  AssertEquals('off the last field on screen: the next record', n + 1, ID);
+
+  DS.Last;
+  DS.MoveBy(-(FGrid.RowCount - 1));
+  first := ID;
+  FGrid.Col := 0;                           { second on screen now }
+  FGrid.PressKey(VK_TAB, [ssShift]);
+  AssertEquals('Shift+Tab stays in the record', first, ID);
 end;
 
 { M: OnCheckBoxChange after a refused Edit. }
