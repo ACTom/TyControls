@@ -300,7 +300,7 @@ begin
 end;
 procedure TTyStatusBar.SetPanels(AValue: TTyStatusPanels); begin FPanels.Assign(AValue); end;
 procedure TTyStatusBar.SetSimplePanel(AValue: Boolean); begin if FSimplePanel = AValue then Exit; FSimplePanel := AValue; Invalidate; end;
-procedure TTyStatusBar.SetSimpleText(const AValue: TCaption); begin if FSimpleText = AValue then Exit; FSimpleText := AValue; if FSimplePanel then Invalidate; end;
+procedure TTyStatusBar.SetSimpleText(const AValue: TCaption); begin if FSimpleText = AValue then Exit; FSimpleText := AValue; if FSimplePanel or (FPanels.Count = 0) then Invalidate; end;
 procedure TTyStatusBar.SetSizeGrip(AValue: Boolean); begin if FSizeGrip = AValue then Exit; FSizeGrip := AValue; Invalidate; end;
 
 function TTyStatusBar.GetStyleTypeKey: string;
@@ -319,9 +319,9 @@ function TTyStatusBar.DoSetApplicationHint(const AHintStr: string): Boolean;
 begin
   Result := DoHint;
   if Result then Exit;
-  if FSimplePanel then
+  if FSimplePanel or (FPanels.Count = 0) then   // #128: a bar with no panels shows SimpleText
     SimpleText := AHintStr
-  else if FPanels.Count > 0 then
+  else
     FPanels[0].Text := AHintStr;
   Result := True;
 end;
@@ -420,7 +420,9 @@ begin
       bg.Color := S.BorderColor;
       P.FillBackground(Rect(0, 0, W, bw), bg, 0);   // top hairline
     end;
-    if FSimplePanel then
+    { #128: SimpleText also on a bar with no panels -- SimplePanel defaults to False here (True
+      in LCL), so a bar that was only ever given SimpleText showed nothing at all. }
+    if FSimplePanel or (FPanels.Count = 0) then
       P.DrawText(Rect(padX, 0, W - padX, H), FSimpleText, S.FontName, fs, S.FontWeight, S.TextColor, taLeftJustify, tlCenter, True)
     else
     begin

@@ -228,6 +228,8 @@ type
     FImages: TCustomImageList;      // per-row icon source (nil = no icons); any list works
     FHeaderHeight: Integer;
     FItemHeight: Integer;
+    FHeaderHeightExplicit: Boolean;   // set by the host or a form file (#128)
+    FItemHeightExplicit: Boolean;
     FSelGroup: Integer;     // -1 = none
     FSelItem: Integer;      // -1 = none
     FHoverKind: TTyListGroupPartKind;
@@ -256,6 +258,7 @@ type
     procedure SetImages(AValue: TCustomImageList);
     function ScaledHeaderHeight: Integer;
     function ScaledItemHeight: Integer;
+    function BandHeight(const AToken: string; AValue: Integer; AExplicit: Boolean): Integer;
     { Effective band heights in DEVICE px at APPI: the theme metric token when set, else the
       published property. The token WINS so airiness is a skin decision (see the const notes). }
     function EffHeaderHPx(APPI: Integer): Integer;
@@ -776,8 +779,10 @@ end;
 procedure TTyListGroupPanel.SetHeaderHeight(AValue: Integer);
 begin
   if AValue < 1 then AValue := 1;
-  if FHeaderHeight = AValue then Exit;
+  { Pinned even at the default: from here on the theme's token no longer decides (#128). }
+  if (FHeaderHeight = AValue) and FHeaderHeightExplicit then Exit;
   FHeaderHeight := AValue;
+  FHeaderHeightExplicit := True;
   ClampScroll;
   Invalidate;
 end;
@@ -785,8 +790,9 @@ end;
 procedure TTyListGroupPanel.SetItemHeight(AValue: Integer);
 begin
   if AValue < 1 then AValue := 1;
-  if FItemHeight = AValue then Exit;
+  if (FItemHeight = AValue) and FItemHeightExplicit then Exit;   // see SetHeaderHeight
   FItemHeight := AValue;
+  FItemHeightExplicit := True;
   ClampScroll;
   Invalidate;
 end;
@@ -822,15 +828,34 @@ begin
   if (Operation = opRemove) and (AComponent = FImages) then FImages := nil;
 end;
 
+{ #128: StyleOverride first, then a height the host set, then the theme's token, then the
+  default -- so a skin still owns the rhythm of a panel nobody sized, and HeaderHeight /
+  ItemHeight set on one panel are no longer lost under a skin that sets the token. }
+function TTyListGroupPanel.BandHeight(const AToken: string; AValue: Integer;
+  AExplicit: Boolean): Integer;
+var
+  found: Boolean;
+begin
+  if not AExplicit then Exit(StyleMetric(AToken, AValue));
+  Result := AValue;
+  if StyleOverride <> '' then
+  begin
+    Result := ActiveController.Model.ResolveOverrideMetric(StyleOverride, AToken, AValue, found);
+    if not found then Result := AValue;
+  end;
+end;
+
 function TTyListGroupPanel.EffHeaderHPx(APPI: Integer): Integer;
 begin
-  Result := MulDiv(ActiveController.Metric(TyListGroupHeaderHeightVar, FHeaderHeight), APPI, 96);
+  Result := MulDiv(BandHeight(TyListGroupHeaderHeightVar, FHeaderHeight, FHeaderHeightExplicit),
+    APPI, 96);
   if Result < 1 then Result := 1;
 end;
 
 function TTyListGroupPanel.EffItemHPx(APPI: Integer): Integer;
 begin
-  Result := MulDiv(ActiveController.Metric(TyListGroupItemHeightVar, FItemHeight), APPI, 96);
+  Result := MulDiv(BandHeight(TyListGroupItemHeightVar, FItemHeight, FItemHeightExplicit),
+    APPI, 96);
   if Result < 1 then Result := 1;
 end;
 

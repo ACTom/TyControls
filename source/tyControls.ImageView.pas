@@ -62,6 +62,7 @@ type
     procedure SetAutoFit(AValue: Boolean);
     procedure SetZoomMin(AValue: Double);
     procedure SetZoomMax(AValue: Double);
+    procedure ReclampZoom;   // the current zoom back inside new limits (#128)
     procedure SetGrayscale(AValue: Boolean);
     procedure SetBlurRadius(AValue: Integer);
     procedure SetSharpen(AValue: Boolean);
@@ -499,13 +500,14 @@ end;
 
 procedure TTyImageView.ZoomToActual;
 var
-  ox, oy: Double;
+  ox, oy, z: Double;
 begin
   FAutoFit := False;
   if FSource = nil then Exit;
+  z := TyImageViewClamp(1.0, FZoomMin, FZoomMax);   // #128: 100%, inside the limits
   ox := FOffX; oy := FOffY;
-  TyImageViewClampOffset(FSource.Width, FSource.Height, ViewW, ViewH, 1.0, ox, oy);
-  StartAnim(1.0, ox, oy);
+  TyImageViewClampOffset(FSource.Width, FSource.Height, ViewW, ViewH, z, ox, oy);
+  StartAnim(z, ox, oy);
 end;
 
 procedure TTyImageView.ZoomIn;
@@ -542,6 +544,7 @@ begin
   if AValue <= 0 then AValue := 0.01;
   if FZoomMin = AValue then Exit;
   FZoomMin := AValue;
+  ReclampZoom;
 end;
 
 procedure TTyImageView.SetZoomMax(AValue: Double);
@@ -549,6 +552,22 @@ begin
   if AValue <= 0 then AValue := 0.01;
   if FZoomMax = AValue then Exit;
   FZoomMax := AValue;
+  ReclampZoom;
+end;
+
+procedure TTyImageView.ReclampZoom;
+var
+  z: Double;
+begin
+  if (FSource = nil) or (csLoading in ComponentState) then Exit;
+  if FAutoFit then
+  begin
+    ZoomToFit;   // the fit is clamped to the limits too
+    Exit;
+  end;
+  z := TyImageViewClamp(FZoom, FZoomMin, FZoomMax);
+  if (z <> FZoom) and (FZoom > 0) then
+    ZoomAt(z / FZoom, ViewW div 2, ViewH div 2);
 end;
 
 procedure TTyImageView.SetGrayscale(AValue: Boolean);
