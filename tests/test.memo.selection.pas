@@ -342,6 +342,9 @@ begin
   finally
     L.Free;
   end;
+  { Loading the content is itself a change (#110), as on LCL's TMemo; what a test counts is
+    what comes after it. }
+  FChangeCount := 0;
 end;
 
 procedure TTyMemoSelectionTest.OnMemoChange(Sender: TObject);
@@ -421,6 +424,9 @@ begin
   finally
     L.Free;
   end;
+  { Loading the content is itself a change (#110), as on LCL's TMemo; what a test counts is
+    what comes after it. }
+  FChangeCount := 0;
 end;
 
 procedure TTyMemoSelectionTest.TearDown;
