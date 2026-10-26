@@ -78,6 +78,10 @@ type
     procedure TestTheCacheFollowsAChange;
     procedure TestTheCacheGoesWithItsHost;
     procedure TestSkippingCornersStillFillsACorner;
+    procedure TestAChildShowsTheFrameTheCardShows;
+    procedure TestAChangeAndBackBeforeTheCardPaints;
+    procedure TestAChildFollowsTheFrameWhenTheCardResizes;
+    procedure TestAFrameThatMovesOffAChildRepaintsIt;
     procedure TestTheHostsPaintMessageChecksItsChrome;
   end;
 
@@ -561,6 +565,111 @@ begin
   finally
     bmp.Free;
   end;
+end;
+
+{ The card takes its chrome once each time it paints, and the bands over its children read
+  that instead of asking again: a child drawn between two of the card's paints shows the
+  frame the card is showing. }
+procedure TChromeOverlayTest.TestAChildShowsTheFrameTheCardShows;
+var
+  b: TOvlButton;
+  bmp: TBGRABitmap;
+  p: TBGRAPixel;
+begin
+  b := AddButton(FCard, 0, 70, 60, 24);
+  FCard.XChromeChanged;   { the card paints: red }
+  bmp := b.Render;
+  bmp.Free;
+  FCard.StyleOverride := 'border-color: #ff00ff; border-width: 2px; border-radius: 8px;';
+  bmp := b.Render;
+  try
+    AssertTrue('until the card paints again, the frame it is showing',
+      IsRed(bmp.GetPixel(1, 12)));
+  finally
+    bmp.Free;
+  end;
+  FCard.XChromeChanged;   { the card paints: magenta }
+  bmp := b.Render;
+  try
+    p := bmp.GetPixel(1, 12);
+    AssertTrue(Format('then the new one (%d,%d,%d)', [p.red, p.green, p.blue]),
+      (p.red > 200) and (p.blue > 200) and (p.green < 80));
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ A layer is drawn from the chrome as it is now and kept under that: a change made and taken
+  back before the card paints leaves nothing of itself behind. }
+procedure TChromeOverlayTest.TestAChangeAndBackBeforeTheCardPaints;
+var
+  b: TOvlButton;
+  bmp: TBGRABitmap;
+  p: TBGRAPixel;
+begin
+  b := AddButton(FCard, 0, 70, 60, 24);
+  FCard.XChromeChanged;   { the card paints: red }
+  FCard.StyleOverride := 'border-color: #ff00ff; border-width: 2px; border-radius: 8px;';
+  bmp := b.Render;        { drawn before the card paints the change }
+  try
+    p := bmp.GetPixel(1, 12);
+    AssertTrue(Format('precondition: the change, drawn (%d,%d,%d)', [p.red, p.green, p.blue]),
+      (p.red > 200) and (p.blue > 200) and (p.green < 80));
+  finally
+    bmp.Free;
+  end;
+  FCard.StyleOverride := 'border-color: #ff0000; border-width: 2px; border-radius: 8px;';
+  FCard.XChromeChanged;   { back as it was: nothing changed, nothing repaints }
+  bmp := b.Render;
+  try
+    AssertTrue('the frame as it is, not the one taken back', IsRed(bmp.GetPixel(1, 12)));
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TChromeOverlayTest.TestAChildFollowsTheFrameWhenTheCardResizes;
+var
+  b: TOvlButton;
+  bmp: TBGRABitmap;
+begin
+  FCard.SetBounds(10, 10, 300, 170);
+  b := AddButton(FCard, 180, 70, 40, 24);
+  FCard.XChromeChanged;
+  bmp := b.Render;
+  try
+    AssertTrue('precondition: in the wide card the child is clear of the frame',
+      IsBlue(bmp.GetPixel(38, 12)));
+  finally
+    bmp.Free;
+  end;
+  FCard.SetBounds(10, 10, 220, 170);   { now its right edge is on the frame }
+  b.Invalidations := 0;
+  FCard.XChromeChanged;
+  AssertTrue('the frame came onto it: it repaints', b.Invalidations > 0);
+  bmp := b.Render;
+  try
+    AssertTrue('and gets the frame where the card now has it', IsRed(bmp.GetPixel(38, 12)));
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TChromeOverlayTest.TestAFrameThatMovesOffAChildRepaintsIt;
+var
+  b, inside: TOvlButton;
+  r: TRect;
+begin
+  r := FCard.ContentRect;
+  b := AddButton(FCard, 180, 70, 40, 24);   { on the right frame of the 220 px card }
+  inside := AddButton(FCard, r.Left + 8, r.Top + 8, 40, 20);
+  FCard.XChromeChanged;
+  FCard.SetBounds(10, 10, 300, 170);        { the frame moves off it }
+  b.Invalidations := 0;
+  inside.Invalidations := 0;
+  FCard.XChromeChanged;
+  AssertTrue('it repaints, or it keeps the old stroke', b.Invalidations > 0);
+  AssertEquals('one never on the frame does not', 0, inside.Invalidations);
 end;
 
 { Only these two need a real native window: the console runner never calls

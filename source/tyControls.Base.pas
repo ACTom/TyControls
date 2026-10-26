@@ -355,8 +355,13 @@ type
     FOvrMetricText: string;
     FOvrMetricModel: TObject;
     FOvrMetricVer: Cardinal;
-    // pilot (ITyChromeHost): the ChromeSignature the windowed children were last repainted for
+    { pilot (ITyChromeHost): the chrome as this host last painted it -- its ChromeSignature
+      (the one the windowed children were last repainted for) and its ChromeFreeRect. The
+      children's bands read these instead of asking the host again; FChromeKnown says they
+      have been taken. }
     FChromeSig: string;
+    FChromeFree: TRect;
+    FChromeKnown: Boolean;
     // pilot (ITyChromeHost, TyChromeMode 2): this host's chrome layer, and what it was drawn for
     FChromeCache: TBGRABitmap;
     FChromeCacheKey: string;
@@ -429,14 +434,17 @@ type
       single funnel into Paint. See the body for why it cannot live in Paint itself. }
     procedure PaintWindow(DC: HDC); override;
     { Pilot (ITyChromeHost). After the paint message -- the control and its graphic children
-      drawn -- the chrome overlay: a host paints its chrome over its graphic children and
-      checks whether it changed; every control paints its ancestors' chrome over itself. }
+      drawn -- the chrome overlay: a host takes its chrome as it is now (CheckChromeChanged)
+      and paints it over its graphic children; every control paints its ancestors' chrome
+      over itself. }
     procedure WndProc(var TheMessage: TLMessage); override;
     { Pilot. A move or a resize on or off an ancestor's chrome repaints this control, whose
       pixels the OS may otherwise carry along with the old chrome on them. }
     procedure DoSetBounds(ALeft, ATop, AWidth, AHeight: Integer); override;
-    { Pilot. For an ITyChromeHost: when ChromeSignature changed since the last call, repaint
-      the windowed children on the chrome. Called after each paint. }
+    { Pilot. For an ITyChromeHost: take its ChromeSignature and ChromeFreeRect, once per paint,
+      for the bands to read; when the signature changed since the last call, repaint the
+      windowed children on the chrome -- as it is now and as it was. Called as each paint's
+      overlay starts. }
     procedure CheckChromeChanged;
   public
     constructor Create(AOwner: TComponent); override;
@@ -2634,18 +2642,34 @@ begin
   end;
 end;
 
+{ AHost's ChromeFreeRect as it was when it last painted, or asked afresh of a host that has
+  not painted yet. An answer gone stale is put right: when the host paints next and finds its
+  chrome changed, it repaints the children on it. }
+function TyChromeFreeOf(const AHost: ITyChromeHost; AHostCtl: TControl): TRect;
+var
+  t0: Int64;
+begin
+  if (AHostCtl is TTyCustomControl) and TTyCustomControl(AHostCtl).FChromeKnown then
+    Exit(TTyCustomControl(AHostCtl).FChromeFree);
+  t0 := TyChromeClockUs;
+  Result := AHost.ChromeFreeRect;
+  Inc(TyChromeStats.FreeRectUs, TyChromeClockUs - t0);
+end;
+
+{ Whether the area (in AHostCtl's client coordinates) reaches into a chrome whose free rect is
+  AFree. }
+function TyReachesChromeOf(AHostCtl: TControl; const AArea, AFree: TRect): Boolean;
+var
+  bands: TTyChromeBands;
+begin
+  Result := TyChromeBands(AArea, Point(0, 0), AHostCtl.Width, AHostCtl.Height, AFree, bands) > 0;
+end;
+
 { Whether the area (in AHostCtl's client coordinates) reaches into AHost's chrome. }
 function TyReachesChrome(const AHost: ITyChromeHost; AHostCtl: TControl;
   const AArea: TRect): Boolean;
-var
-  bands: TTyChromeBands;
-  free: TRect;
-  t0: Int64;
 begin
-  t0 := TyChromeClockUs;
-  free := AHost.ChromeFreeRect;
-  Inc(TyChromeStats.FreeRectUs, TyChromeClockUs - t0);
-  Result := TyChromeBands(AArea, Point(0, 0), AHostCtl.Width, AHostCtl.Height, free, bands) > 0;
+  Result := TyReachesChromeOf(AHostCtl, AArea, TyChromeFreeOf(AHost, AHostCtl));
 end;
 
 { Whether any ancestor of AControl is a chrome host -- the cheap first question. }
@@ -2718,19 +2742,29 @@ end;
 { TyChromeMode 2: AHostCtl's chrome layer at AScale device px per layout px, drawn once and
   kept until what it shows changes (ChromeSignature) or the PPI or the scale does. The whole
   host, transparent where there is no chrome: a band copies its part. Built only for a host
-  that has a child on its chrome, so a host without one holds nothing. }
+  that has a child on its chrome, so a host without one holds nothing.
+  A layer is only ever drawn from the chrome as it is now, and kept under that signature.
+  The cheap way in is the signature the host took when it last painted: a layer kept for it
+  is what the host is showing. Anything else -- the host changed and has not painted since --
+  asks the host afresh. }
 function TyChromeCacheFor(AHostCtl: TTyCustomControl; const AHost: ITyChromeHost;
   APPI, AScale: Integer): TBGRABitmap;
 var
-  key: string;
+  key, suffix: string;
   P: TTyPainter;
   sc: TTyCanvasScale;
   op: Single;
   t0: Int64;
 begin
   t0 := TyChromeClockUs;
-  key := AHost.ChromeSignature + '|' + IntToStr(APPI) + '|' + IntToStr(AScale) + '|'
-    + IntToStr(TyChromeCacheEpoch);
+  suffix := '|' + IntToStr(APPI) + '|' + IntToStr(AScale) + '|' + IntToStr(TyChromeCacheEpoch);
+  if (AHostCtl.FChromeCache <> nil) and AHostCtl.FChromeKnown
+     and (AHostCtl.FChromeCacheKey = AHostCtl.FChromeSig + suffix) then
+  begin
+    Inc(TyChromeStats.KeyUs, TyChromeClockUs - t0);
+    Exit(AHostCtl.FChromeCache);
+  end;
+  key := AHost.ChromeSignature + suffix;
   Inc(TyChromeStats.KeyUs, TyChromeClockUs - t0);
   if (AHostCtl.FChromeCache <> nil) and (AHostCtl.FChromeCacheKey = key) then
     Exit(AHostCtl.FChromeCache);
@@ -2775,13 +2809,10 @@ var
   i, n, s: Integer;
   P: TTyPainter;
   cache: TBGRABitmap;
-  free: TRect;
   t0, t1, t2: Int64;
 begin
-  t0 := TyChromeClockUs;
-  free := AHost.ChromeFreeRect;
-  Inc(TyChromeStats.FreeRectUs, TyChromeClockUs - t0);
-  n := TyChromeBands(AArea, AHostOrigin, AHostCtl.Width, AHostCtl.Height, free, bands);
+  n := TyChromeBands(AArea, AHostOrigin, AHostCtl.Width, AHostCtl.Height,
+    TyChromeFreeOf(AHost, AHostCtl), bands);
   if n = 0 then Exit;
   Inc(TyChromeStats.Passes);
   for i := 0 to n - 1 do
@@ -2878,6 +2909,11 @@ begin
   if dc = 0 then Exit;
   t0 := TyChromeClockUs;
   isHost := Supports(Self, ITyChromeHost, host);
+  { a host takes its chrome as it is now first, once for this paint: the bands over its
+    graphic children below read it, and so do those over its windowed children when they
+    paint next }
+  if isHost then
+    CheckChromeChanged;
   if isHost or TyHasChromeAncestor(Self) then
   begin
     Canvas.Lock;
@@ -2895,8 +2931,6 @@ begin
       Canvas.Unlock;
     end;
   end;
-  if isHost then
-    CheckChromeChanged;
   Inc(TyChromeStats.HookUs, TyChromeClockUs - t0);
 end;
 
@@ -2917,6 +2951,8 @@ procedure TTyCustomControl.CheckChromeChanged;
 var
   host: ITyChromeHost;
   sig: string;
+  oldFree: TRect;
+  wasKnown: Boolean;
   i: Integer;
   c: TControl;
   t0: Int64;
@@ -2925,13 +2961,22 @@ begin
   t0 := TyChromeClockUs;
   sig := host.ChromeSignature;
   Inc(TyChromeStats.SignatureUs, TyChromeClockUs - t0);
+  t0 := TyChromeClockUs;
+  oldFree := FChromeFree;
+  wasKnown := FChromeKnown;
+  FChromeFree := host.ChromeFreeRect;
+  FChromeKnown := True;
+  Inc(TyChromeStats.FreeRectUs, TyChromeClockUs - t0);
   if sig = FChromeSig then Exit;
   FChromeSig := sig;
+  { the children on the chrome as it is now, and those on it as it was: a frame that moved
+    off a child left its old stroke on the child's pixels }
   for i := 0 to ControlCount - 1 do
   begin
     c := Controls[i];
-    if (c is TWinControl) and TyReachesChrome(host, Self, c.BoundsRect)
-       and not TyOverParentChrome(c) then
+    if (c is TWinControl) and not TyOverParentChrome(c)
+       and (TyReachesChromeOf(Self, c.BoundsRect, FChromeFree)
+         or (wasKnown and TyReachesChromeOf(Self, c.BoundsRect, oldFree))) then
       TyInvalidateTree(TWinControl(c));
   end;
 end;
