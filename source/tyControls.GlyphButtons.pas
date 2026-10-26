@@ -951,6 +951,10 @@ begin
   if AValue < 0 then AValue := 0;
   if FGroupIndex = AValue then Exit;
   FGroupIndex := AValue;
+  { #119, as LCL's TSpeedButton (UpdateExclusive): joining a group while pressed releases the
+    group's other pressed button. }
+  if Down and (FGroupIndex > 0) and not (csLoading in ComponentState) then
+    UnpressSiblings;
   Invalidate;
 end;
 
@@ -1000,6 +1004,13 @@ var
 begin
   if FAllowAllUp = AValue then Exit;
   FAllowAllUp := AValue;
+  { #119: a group's setting, as LCL's (speedbutton.inc:1118) -- the other members of the
+    group take it too. }
+  if (FGroupIndex > 0) and (Parent <> nil) then
+    for i := 0 to Parent.ControlCount - 1 do
+      if (Parent.Controls[i] <> Self) and (Parent.Controls[i] is TTySpeedButton)
+         and (TTySpeedButton(Parent.Controls[i]).FGroupIndex = FGroupIndex) then
+        TTySpeedButton(Parent.Controls[i]).FAllowAllUp := AValue;
   { Turning it off means "this group must always have exactly one member down". If none
     is, press Self -- it is the button the caller was configuring, so it is the least
     surprising one to become the selection. }
