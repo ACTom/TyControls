@@ -432,6 +432,24 @@ type
     True: the host saved (or declined) -- no dialog, no file. }
   TTyToolboxSaveEvent = procedure(Sender: TObject; var AFileName: string;
     const AOptsJson: string; var AHandled: Boolean) of object;
+  { [spec 237] THE DATA VIEW'S CONTENT, the non-'@' way of optionToContent:
+    called when the view opens, before the option's optionToContent
+    handler. AOptionJson is GetOptionJson (upstream's api.getOption()).
+    Fill AContent (see TTyChartDataViewContent) and set AHandled; the view
+    then shows it, and counts as given an optionToContent. Unhandled, the
+    option's handler -- or the default view -- runs after you. }
+  TTyDataViewContentEvent = procedure(Sender: TObject; const AOptionJson: string;
+    var AContent: TTyChartDataViewContent; var AHandled: Boolean) of object;
+  { [spec 237] THE DATA VIEW'S REFRESH, the non-'@' way of contentToOption:
+    called on every Refresh, before the option's contentToOption (or the
+    default view's parse). AContent is what the user left (the default
+    view's: Kind cdvText, the table text it read back), AOptionJson the
+    option now. Set ANewOption to the option to merge through the
+    changeDataView action ('' merges nothing) and AHandled; unhandled,
+    upstream's rule runs after you. }
+  TTyDataViewApplyEvent = procedure(Sender: TObject;
+    const AContent: TTyChartDataViewContent; const AOptionJson: string;
+    var ANewOption: string; var AHandled: Boolean) of object;
   { [R2-J2] AN IMAGE THE CHART CANNOT LOAD ITSELF: an option's picture given
     as a URL (an http address, a file path -- anything but a `data:` URL
     and an image list's `image://list/index`), written without the
@@ -1369,6 +1387,9 @@ type
     FTbBfSnapType: TTyBrushType;
     FTbError: string;
     FOnToolboxSaveAsImage: TTyToolboxSaveEvent;
+    { [spec 237] }
+    FOnDataViewContent: TTyDataViewContentEvent;
+    FOnDataViewApply: TTyDataViewApplyEvent;
     { [R2-J2] OnResolveImage and the answers it gave, by URL (owned; a nil
       answer kept too) }
     FOnResolveImage: TTyChartResolveImageEvent;
@@ -2320,6 +2341,8 @@ type
     function TbDataViewContent(out AMeta: TTyDvMetaArray): string;
     function TbDvFind(const AName: string; out AData: TJSONData): Boolean;
     procedure TbDataView(ATb: Integer);
+    { [spec 237] what a contentToOption answered, through changeDataView }
+    procedure TbDvApply(const ANewOption: string);
     procedure TbDoDataView(APayload: TJSONObject);
     procedure TbSaveAsImage(ATb: Integer);
     procedure TbDoTakeCursor(APayload: TJSONObject);
@@ -3467,6 +3490,12 @@ type
       library's dialogs (tyControls.AdvanceChart.ToolboxDlg). }
     function ToolboxShowDataView(const ATitle: string; var AText: string;
       AReadOnly: Boolean; const ACloseCaption, ARefreshCaption: string): Boolean; virtual;
+    { [spec 237] an optionToContent's content (TyShowDataViewContentDialog):
+      True when Refresh closed it, AContent then as the user left it.
+      AReadOnly: no Refresh; AEditable: something reads the content back. }
+    function ToolboxShowDataViewContent(const ATitle: string;
+      var AContent: TTyChartDataViewContent; AReadOnly, AEditable: Boolean;
+      const ACloseCaption, ARefreshCaption: string): Boolean; virtual;
     function ToolboxAskFileName(var AFileName: string; const AType: string): Boolean; virtual;
     function GetStyleTypeKey: string; override;
     { A RESIZE ASKS THE MEDIA QUERIES AGAIN (upstream's resize ->
@@ -4898,6 +4927,13 @@ type
       SaveToFile }
     property OnToolboxSaveAsImage: TTyToolboxSaveEvent read FOnToolboxSaveAsImage
       write FOnToolboxSaveAsImage;
+    { [spec 237] the data view's content and its Refresh, before the
+      option's optionToContent / contentToOption: see
+      TTyDataViewContentEvent and TTyDataViewApplyEvent }
+    property OnDataViewContent: TTyDataViewContentEvent read FOnDataViewContent
+      write FOnDataViewContent;
+    property OnDataViewApply: TTyDataViewApplyEvent read FOnDataViewApply
+      write FOnDataViewApply;
     { [R2-J2] a picture the option names by URL: see TTyChartResolveImageEvent }
     property OnResolveImage: TTyChartResolveImageEvent read FOnResolveImage
       write FOnResolveImage;
@@ -5017,6 +5053,8 @@ type
     property OnSankeyRoam;
     property OnDataZoom;
     property OnToolboxSaveAsImage;
+    property OnDataViewContent;
+    property OnDataViewApply;
     property OnResolveImage;
     property OnTooltipHtml;
     property AnimationMode;

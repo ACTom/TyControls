@@ -873,19 +873,33 @@ begin
     end;
 end;
 
+{ [spec 237] an optionToContent / contentToOption value: given when it is
+  neither absent nor null (upstream's `== null`), its text when a string }
+function TbDvSpec(AData: TJSONData; out ASpec: string): Boolean;
+begin
+  ASpec := '';
+  Result := (AData <> nil) and (AData.JSONType <> jtNull);
+  if Result and (AData.JSONType = jtString) then ASpec := AData.AsString;
+end;
+
 procedure TTyCustomAdvanceChart.TbDataView(ATb: Integer);
 var
   fm, parsed, pay: TJSONObject;
   meta: TTyDvMetaArray;
-  body, title, closeC, refreshC, err: string;
+  body, title, closeC, refreshC, err, o2cSpec, c2oSpec, newOpt, outside: string;
   d: TJSONData;
-  ro: Boolean;
+  ro, hasO2C, hasC2O, custom, handled, refreshed: Boolean;
+  o2c: TTyChartOptionToContent;
+  c2o: TTyChartContentToOption;
+  content: TTyChartDataViewContent;
 begin
   FTbError := '';
   fm := TyToolboxFeatureModel(FOption, ATb, 'dataView', TbTitles);
   if fm = nil then Exit;
   try
     body := TbDataViewContent(meta);
+    hasO2C := TbDvSpec(fm.Find('optionToContent'), o2cSpec);
+    hasC2O := TbDvSpec(fm.Find('contentToOption'), c2oSpec);
     d := fm.Find('readOnly');
     ro := (d <> nil) and (((d.JSONType = jtBoolean) and d.AsBoolean)
       or ((d.JSONType = jtNumber) and (d.AsFloat <> 0))
@@ -912,22 +926,151 @@ begin
   finally
     fm.Free;
   end;
-  if not ToolboxShowDataView(title, body, ro, closeC, refreshC) then Exit;
-  body := StringReplace(StringReplace(body, #13#10, #10, [rfReplaceAll]), #13, #10, [rfReplaceAll]);
-  parsed := TyDataViewParse(body, meta, err);
-  if parsed = nil then
+  { a '@Name' nobody registered is a value that is not a function: given,
+    never called }
+  o2c := nil;
+  c2o := nil;
+  if hasO2C and TyChartIsHandlerRef(o2cSpec) then
+    TyChartFindOptionToContent(Copy(o2cSpec, 2, MaxInt), o2c);
+  if hasC2O and TyChartIsHandlerRef(c2oSpec) then
+    TyChartFindContentToOption(Copy(c2oSpec, 2, MaxInt), c2o);
+  { the content: the host's event first, then the option's optionToContent
+    (upstream calls it with api.getOption()); an exception closes nothing
+    -- the view never opened }
+  content := Default(TTyChartDataViewContent);
+  custom := False;
+  if Assigned(FOnDataViewContent) then
   begin
-    { upstream throws 'Data view format error' after closing }
-    FTbError := Format(rsTyChartToolboxDataViewBad, [err]);
+    handled := False;
+    FOnDataViewContent(Self, GetOptionJson, content, handled);
+    custom := handled;
+    if not custom then content := Default(TTyChartDataViewContent);
+  end;
+  if not custom and Assigned(o2c) then
+  begin
+    try
+      content := o2c(GetOptionJson);
+    except
+      on E: Exception do
+      begin
+        FTbError := E.Message;
+        Exit;
+      end;
+    end;
+    custom := True;
+  end;
+  try
+    if custom then
+    begin
+      if content.Kind = cdvHtml then content.Tables := TyHtmlTables(content.Text, outside);
+      { editable when something will read the edits back }
+      refreshed := ToolboxShowDataViewContent(title, content, ro,
+        not ro and (Assigned(c2o) or Assigned(FOnDataViewApply)), closeC, refreshC);
+      { upstream's textarea was never filled }
+      body := '';
+    end
+    else
+    begin
+      refreshed := ToolboxShowDataView(title, body, ro, closeC, refreshC);
+      body := StringReplace(StringReplace(body, #13#10, #10, [rfReplaceAll]), #13, #10, [rfReplaceAll]);
+      content.Kind := cdvText;
+      content.Text := body;
+    end;
+    if not refreshed then Exit;
+    newOpt := '';
+    handled := False;
+    if Assigned(FOnDataViewApply) then
+      FOnDataViewApply(Self, content, GetOptionJson, newOpt, handled);
+    if not handled then
+    begin
+      { one of the two without the other: "Data change is ignored" }
+      if (hasO2C or custom) <> hasC2O then Exit;
+      if Assigned(c2o) then
+      begin
+        try
+          newOpt := c2o(content, GetOptionJson);
+        except
+          on E: Exception do
+          begin
+            { upstream throws 'Data view format error ' + e after closing }
+            FTbError := Format(rsTyChartToolboxDataViewBad, [E.Message]);
+            Exit;
+          end;
+        end;
+      end
+      else
+      begin
+        parsed := TyDataViewParse(body, meta, err);
+        if parsed = nil then
+        begin
+          { upstream throws 'Data view format error' after closing }
+          FTbError := Format(rsTyChartToolboxDataViewBad, [err]);
+          Exit;
+        end;
+        pay := TJSONObject.Create;
+        try
+          pay.Add('type', 'changeDataView');
+          pay.Add('newOption', parsed);
+          DispatchAction(TyTbJson(pay));
+        finally
+          pay.Free;
+        end;
+        Exit;
+      end;
+    end;
+    TbDvApply(newOpt);
+  finally
+    { a control nobody owns is the chart's to free once the view is done }
+    if (content.Control is TComponent) and (TComponent(content.Control).Owner = nil) then
+      content.Control.Free;
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.TbDvApply(const ANewOption: string);
+var
+  d: TJSONData;
+  pay: TJSONObject;
+  nLine, nCol: Integer;
+  falsy: Boolean;
+begin
+  if Trim(ANewOption) = '' then Exit;
+  if TyJsonNestingExceeds(ANewOption, TyOptionMaxNesting, nLine, nCol) then
+  begin
+    FTbError := Format(rsTyChartToolboxDataViewBad, [Format(rsTyOptTooDeep,
+      [TyOptionMaxNesting])]);
     Exit;
   end;
-  pay := TJSONObject.Create;
   try
-    pay.Add('type', 'changeDataView');
-    pay.Add('newOption', parsed);
-    DispatchAction(TyTbJson(pay));
+    d := GetJSON(ANewOption);
+  except
+    on E: Exception do
+    begin
+      FTbError := Format(rsTyChartToolboxDataViewBad, [E.Message]);
+      Exit;
+    end;
+  end;
+  try
+    { upstream's `if (newOption)`: null, false, 0 and '' merge nothing }
+    case d.JSONType of
+      jtNull: falsy := True;
+      jtBoolean: falsy := not d.AsBoolean;
+      jtNumber: falsy := d.AsFloat = 0;
+      jtString: falsy := d.AsString = '';
+    else
+      falsy := False;
+    end;
+    if falsy then Exit;
+    pay := TJSONObject.Create;
+    try
+      pay.Add('type', 'changeDataView');
+      pay.Add('newOption', d);
+      d := nil;
+      DispatchAction(TyTbJson(pay));
+    finally
+      pay.Free;
+    end;
   finally
-    pay.Free;
+    d.Free;
   end;
 end;
 
@@ -954,6 +1097,14 @@ function TTyCustomAdvanceChart.ToolboxShowDataView(const ATitle: string;
   ARefreshCaption: string): Boolean;
 begin
   Result := TyShowDataViewDialog(ATitle, AText, AReadOnly, ACloseCaption, ARefreshCaption);
+end;
+
+function TTyCustomAdvanceChart.ToolboxShowDataViewContent(const ATitle: string;
+  var AContent: TTyChartDataViewContent; AReadOnly, AEditable: Boolean;
+  const ACloseCaption, ARefreshCaption: string): Boolean;
+begin
+  Result := TyShowDataViewContentDialog(ATitle, AContent, AReadOnly, AEditable,
+    ACloseCaption, ARefreshCaption);
 end;
 
 function TTyCustomAdvanceChart.ToolboxAskFileName(var AFileName: string;
