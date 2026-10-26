@@ -434,8 +434,8 @@ begin
   if ppi <= 0 then ppi := 96;
   { 按**静止态**的分段样式来量:主题可以把选中格写成粗体,但分段条的尺寸不该取决于此刻选中
     的是哪一格 —— 否则每次点击都会让整条抖动。这和 RenderTo 解析未选中格用的是同一条
-    (typeKey + StyleClass + [tysNormal])路径,也和它一样不叠 StyleOverride。 }
-  S := ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass, [tysNormal]);
+    (typeKey + StyleClass + [tysNormal])路径;控件的字体与 StyleOverride 一起叠上(#113)。 }
+  S := StyleInState([tysNormal]);
   MeasureItems(ppi, S, widest, lineH);
   { 每格 = 最宽的文字 + 该样式的左右 padding —— RenderTo 交给 DrawText 之前对每格做的正是这个
     内缩。分段是均分的(最后一格吃掉余数),所以整条 = 格数 x 每格;少算一格就是每格都被截。
@@ -495,7 +495,7 @@ begin
     // transparent background, which on the Win10 DWM sheet-of-glass would otherwise bleed
     // through as white/mismatched patches on dark themes (same fix as TTyButton).
     TyFillParentBg(Self, P, Rect(0, 0, W, H),
-      ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass, [tysNormal]));
+      StyleInState([tysNormal]));
     n := FItems.Count;
     if n <= 0 then
     begin
@@ -507,7 +507,7 @@ begin
 
     // The outer corner radius comes from the resolved base style (BorderRadius token).
     // Left cell rounds its left corners, right cell its right corners, middles square.
-    radius := ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass, [tysNormal]).BorderRadius;
+    radius := StyleInState([tysNormal]).BorderRadius;
     if radius < 0 then radius := 0;
 
     for i := 0 to n - 1 do
@@ -524,7 +524,13 @@ begin
         if segStates = [] then Include(segStates, tysNormal);
       end;
 
-      segStyle := ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass, segStates);
+      { The group's font and StyleOverride reach every segment (#113), except that the
+        selected one keeps the theme's fill and ink -- an override that recoloured it too
+        would leave nothing to show which segment is selected. }
+      if tysSelected in segStates then
+        segStyle := PartStyle(GetStyleTypeKey, TyStyleClassFor(Self, StyleClass), segStates)
+      else
+        segStyle := StyleInState(segStates);
 
       segRect := TySegmentRect(i, W, H, n);
 

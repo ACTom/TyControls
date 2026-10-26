@@ -125,7 +125,25 @@ type
     property CloseUpTick: QWord read FCloseUpTick;
   end;
 
+{ A popup's content is parented to the popup's own form, not under its anchor, so a font set on
+  the anchor -- or on a container the anchor sits in -- would never reach it. This hands it
+  down so the content's walk reads what the anchor's does (TyApplyControlFont, #113): the
+  popup form takes the anchor's form's font, the content the anchor's own. }
+procedure TyHandPopupFont(APopupForm: TCustomForm; AContent, AAnchor: TControl);
+
 implementation
+
+procedure TyHandPopupFont(APopupForm: TCustomForm; AContent, AAnchor: TControl);
+var
+  top: TCustomForm;
+begin
+  if AAnchor = nil then Exit;
+  top := GetParentForm(AAnchor);
+  if (top <> nil) and (APopupForm <> nil) then
+    APopupForm.Font.Assign(top.Font);
+  if AContent <> nil then
+    AContent.Font.Assign(AAnchor.Font);
+end;
 
 // ---------------------------------------------------------------------------
 // TyPopupRect
@@ -228,6 +246,7 @@ var
 begin
   FAnchor := AAnchor;   // remembered so Resize can re-anchor an already-open popup
   FRightToLeft := ARightToLeft;   // and to the same EDGE
+  TyHandPopupFont(FForm, FContent, AAnchor);   // #113
   // Resolve the anchor control's screen rectangle.
   AnchorTL := AAnchor.ClientToScreen(Types.Point(0, 0));
   AnchorScreen := Types.Rect(AnchorTL.X, AnchorTL.Y,

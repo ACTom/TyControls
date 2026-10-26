@@ -366,7 +366,7 @@ begin
 
     if FShowHeader and (lay.Header.Bottom > lay.Header.Top) then
     begin
-      hs := ActiveController.Model.ResolveStyle('TyCardHeader', StyleClass, states);
+      hs := PartStyle('TyCardHeader', StyleClass, states);
       sepT := P.Scale(hs.BorderWidth);
       if sepT < 1 then sepT := 1;
       PaintStrip(lay.Header, hs, True);

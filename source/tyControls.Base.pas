@@ -116,6 +116,24 @@ type
     function ActiveController: TTyStyleController;
     function CurrentStates: TTyStateSet; virtual;
     function CurrentStyle: TTyStyleSet;
+    { CurrentStyle as it would be in AStates: the theme, this control's font, StyleOverride
+      (#113). For a control whose parts are drawn with its OWN type key in states of their own
+      -- a segment, a button in a group -- so that the font and every StyleOverride
+      declaration reach each part as they reach the control. }
+    function StyleInState(const AStates: TTyStateSet): TTyStyleSet;
+    { The style a PART of this control draws its text with (#113): AKey's own theme rule -- a
+      list row, a cell, a tab, a header section -- with this control's font and StyleOverride's
+      text declarations (font-family, font-size, font-weight, color) laid over it, by
+      CurrentStyle's rule. Without it a part read the theme alone, so the control's Font and
+      StyleOverride never reached the text inside it. AInk False keeps the theme's colour, for
+      an accent part (a primary button, a step's marker), and for a row or tab that is drawn
+      highlighted, as a native list keeps its highlight ink. A part resolved with
+      tysSelected keeps it without being asked; one that marks its current item with
+      tysActive passes AInk itself, since the control's own tysActive means pressed. Measure with the same call you draw with. }
+    function PartStyle(const AKey, AClass: string; const AStates: TTyStateSet;
+      AInk: Boolean = True): TTyStyleSet;
+    { FOvrCache, parsed again only when the override text or the theme changed. }
+    procedure RefreshOverride(AModel: TTyStyleModel);
     { ===== PER-MONITOR DPI: the size floor (see the twin on TTyCustomControl, and
       plans/2026-08-08-permonitor-dpi.md) =====================================
 
@@ -397,6 +415,24 @@ type
     function ActiveController: TTyStyleController;
     function CurrentStates: TTyStateSet; virtual;
     function CurrentStyle: TTyStyleSet;
+    { CurrentStyle as it would be in AStates: the theme, this control's font, StyleOverride
+      (#113). For a control whose parts are drawn with its OWN type key in states of their own
+      -- a segment, a button in a group -- so that the font and every StyleOverride
+      declaration reach each part as they reach the control. }
+    function StyleInState(const AStates: TTyStateSet): TTyStyleSet;
+    { The style a PART of this control draws its text with (#113): AKey's own theme rule -- a
+      list row, a cell, a tab, a header section -- with this control's font and StyleOverride's
+      text declarations (font-family, font-size, font-weight, color) laid over it, by
+      CurrentStyle's rule. Without it a part read the theme alone, so the control's Font and
+      StyleOverride never reached the text inside it. AInk False keeps the theme's colour, for
+      an accent part (a primary button, a step's marker), and for a row or tab that is drawn
+      highlighted, as a native list keeps its highlight ink. A part resolved with
+      tysSelected keeps it without being asked; one that marks its current item with
+      tysActive passes AInk itself, since the control's own tysActive means pressed. Measure with the same call you draw with. }
+    function PartStyle(const AKey, AClass: string; const AStates: TTyStateSet;
+      AInk: Boolean = True): TTyStyleSet;
+    { FOvrCache, parsed again only when the override text or the theme changed. }
+    procedure RefreshOverride(AModel: TTyStyleModel);
     { ===== PER-MONITOR DPI: the size floor ===================================
       The twin of the block on TTyGraphicControl -- read it there. Duplicated, not shared,
       because the two bases descend from TGraphicControl and TCustomControl and have no
@@ -587,6 +623,10 @@ procedure TyApplyControlFont(var AStyle: TTyStyleSet; AFont: TFont; AParentFont:
   still does. A value set equal to the container's is the container's. }
 procedure TyApplyControlFont(var AStyle: TTyStyleSet; AControl: TControl;
   const AStates: TTyStateSet); overload;
+{ The Font.Size that counts for AControl by that rule, or 0 when the theme decides. For a
+  control that sizes some text of its own -- a dial's figure, a gauge's value -- and keeps its
+  own default unless the author set a size (#113). }
+function TyControlFontSize(AControl: TControl): Integer;
 
 { Shared font-size resolution for every ty control (windowed AND graphic — the label family
   each carried its own copy). Priority:
@@ -726,6 +766,35 @@ function TyStyleClassFor(AControl: TControl; const AStyleClass: string): string;
 implementation
 
 procedure TyParentChainFontChanged(AControl: TControl); forward;
+procedure TyApplyControlFontInk(var AStyle: TTyStyleSet; AControl: TControl;
+  const AStates: TTyStateSet; AInk: Boolean); forward;
+
+{ StyleOverride's text declarations over a part's style (#113): the font, and the colour
+  unless AInk is False. The rest of the override -- background, border, padding -- is the
+  control's box, not the part's. }
+procedure TyMergeTextDecls(var AStyle: TTyStyleSet; const AOver: TTyStyleSet; AInk: Boolean);
+begin
+  if tpFontName in AOver.Present then
+  begin
+    AStyle.FontName := AOver.FontName;
+    Include(AStyle.Present, tpFontName);
+  end;
+  if tpFontSize in AOver.Present then
+  begin
+    AStyle.FontSize := AOver.FontSize;
+    Include(AStyle.Present, tpFontSize);
+  end;
+  if tpFontWeight in AOver.Present then
+  begin
+    AStyle.FontWeight := AOver.FontWeight;
+    Include(AStyle.Present, tpFontWeight);
+  end;
+  if AInk and (tpTextColor in AOver.Present) then
+  begin
+    AStyle.TextColor := AOver.TextColor;
+    Include(AStyle.Present, tpTextColor);
+  end;
+end;
 
 function TyOnTitleBar(AControl: TControl): Boolean;
 var
@@ -1045,26 +1114,51 @@ begin
 end;
 
 function TTyGraphicControl.CurrentStyle: TTyStyleSet;
+begin
+  Result := StyleInState(CurrentStates);
+end;
+
+function TTyGraphicControl.StyleInState(const AStates: TTyStateSet): TTyStyleSet;
 var
   model: TTyStyleModel;
 begin
   model := ActiveController.Model;
-  Result := model.ResolveStyle(GetStyleTypeKey,
-    TyStyleClassFor(Self, FStyleClass), CurrentStates);
-  TyApplyControlFont(Result, Self, CurrentStates);   // #92, #112
+  Result := model.ResolveStyle(GetStyleTypeKey, TyStyleClassFor(Self, FStyleClass), AStates);
+  TyApplyControlFont(Result, Self, AStates);   // #92, #112
   // A9 layer 2: overlay the per-instance override last. Recompute only when stale —
   // the override text changed or the theme version bumped (so var(--...) re-binds).
   if FStyleOverride <> '' then
   begin
-    if (not FOvrCacheValid) or (FOvrCacheText <> FStyleOverride)
-       or (FOvrCacheVer <> model.ThemeVersion) then
-    begin
-      FOvrCache := model.ResolveOverride(FStyleOverride);
-      FOvrCacheText := FStyleOverride;
-      FOvrCacheVer := model.ThemeVersion;
-      FOvrCacheValid := True;
-    end;
+    RefreshOverride(model);
     TyMergeStyleSet(Result, FOvrCache);   // override wins per Present flag (§3.3)
+  end;
+end;
+
+procedure TTyGraphicControl.RefreshOverride(AModel: TTyStyleModel);
+begin
+  if (not FOvrCacheValid) or (FOvrCacheText <> FStyleOverride)
+     or (FOvrCacheVer <> AModel.ThemeVersion) then
+  begin
+    FOvrCache := AModel.ResolveOverride(FStyleOverride);
+    FOvrCacheText := FStyleOverride;
+    FOvrCacheVer := AModel.ThemeVersion;
+    FOvrCacheValid := True;
+  end;
+end;
+
+function TTyGraphicControl.PartStyle(const AKey, AClass: string; const AStates: TTyStateSet;
+  AInk: Boolean): TTyStyleSet;
+var
+  model: TTyStyleModel;
+begin
+  model := ActiveController.Model;
+  Result := model.ResolveStyle(AKey, AClass, AStates);
+  if tysSelected in AStates then AInk := False;   // the highlight keeps its ink
+  TyApplyControlFontInk(Result, Self, AStates, AInk);
+  if FStyleOverride <> '' then
+  begin
+    RefreshOverride(model);
+    TyMergeTextDecls(Result, FOvrCache, AInk);
   end;
 end;
 
@@ -2267,26 +2361,51 @@ begin
 end;
 
 function TTyCustomControl.CurrentStyle: TTyStyleSet;
+begin
+  Result := StyleInState(CurrentStates);
+end;
+
+function TTyCustomControl.StyleInState(const AStates: TTyStateSet): TTyStyleSet;
 var
   model: TTyStyleModel;
 begin
   model := ActiveController.Model;
-  Result := model.ResolveStyle(GetStyleTypeKey,
-    TyStyleClassFor(Self, FStyleClass), CurrentStates);
-  TyApplyControlFont(Result, Self, CurrentStates);   // #92, #112
+  Result := model.ResolveStyle(GetStyleTypeKey, TyStyleClassFor(Self, FStyleClass), AStates);
+  TyApplyControlFont(Result, Self, AStates);   // #92, #112
   // A9 layer 2: overlay the per-instance override last. Recompute only when stale —
   // the override text changed or the theme version bumped (so var(--...) re-binds).
   if FStyleOverride <> '' then
   begin
-    if (not FOvrCacheValid) or (FOvrCacheText <> FStyleOverride)
-       or (FOvrCacheVer <> model.ThemeVersion) then
-    begin
-      FOvrCache := model.ResolveOverride(FStyleOverride);
-      FOvrCacheText := FStyleOverride;
-      FOvrCacheVer := model.ThemeVersion;
-      FOvrCacheValid := True;
-    end;
+    RefreshOverride(model);
     TyMergeStyleSet(Result, FOvrCache);   // override wins per Present flag (§3.3)
+  end;
+end;
+
+procedure TTyCustomControl.RefreshOverride(AModel: TTyStyleModel);
+begin
+  if (not FOvrCacheValid) or (FOvrCacheText <> FStyleOverride)
+     or (FOvrCacheVer <> AModel.ThemeVersion) then
+  begin
+    FOvrCache := AModel.ResolveOverride(FStyleOverride);
+    FOvrCacheText := FStyleOverride;
+    FOvrCacheVer := AModel.ThemeVersion;
+    FOvrCacheValid := True;
+  end;
+end;
+
+function TTyCustomControl.PartStyle(const AKey, AClass: string; const AStates: TTyStateSet;
+  AInk: Boolean): TTyStyleSet;
+var
+  model: TTyStyleModel;
+begin
+  model := ActiveController.Model;
+  Result := model.ResolveStyle(AKey, AClass, AStates);
+  if tysSelected in AStates then AInk := False;   // the highlight keeps its ink
+  TyApplyControlFontInk(Result, Self, AStates, AInk);
+  if FStyleOverride <> '' then
+  begin
+    RefreshOverride(model);
+    TyMergeTextDecls(Result, FOvrCache, AInk);
   end;
 end;
 
@@ -2361,6 +2480,20 @@ end;
 
 procedure TyApplyControlFont(var AStyle: TTyStyleSet; AControl: TControl;
   const AStates: TTyStateSet);
+begin
+  TyApplyControlFontInk(AStyle, AControl, AStates, True);
+end;
+
+function TyControlFontSize(AControl: TControl): Integer;
+begin
+  Result := 0;
+  if (AControl <> nil) and (AControl.Font.Size > 0)
+     and TyFontAttrSetBelowForm(AControl, tfaSize) then
+    Result := AControl.Font.Size;
+end;
+
+procedure TyApplyControlFontInk(var AStyle: TTyStyleSet; AControl: TControl;
+  const AStates: TTyStateSet; AInk: Boolean);
 var
   f: TFont;
   c: TColor;
@@ -2378,7 +2511,7 @@ begin
     AStyle.FontWeight := TyFontWeightWithStyle(AStyle.FontWeight, f.Style);
     Include(AStyle.Present, tpFontWeight);
   end;
-  if (f.Color <> clDefault) and not (tysDisabled in AStates)
+  if AInk and (f.Color <> clDefault) and not (tysDisabled in AStates)
      and TyFontAttrSetBelowForm(AControl, tfaColor) then
   begin
     c := ColorToRGB(f.Color);

@@ -1059,7 +1059,7 @@ begin
     IconGap := 0;
   IconSlot  := IconSize + IconGap;              // 0 without a list -> pre-icon arithmetic
 
-  TabStyle := ActiveController.Model.ResolveStyle('TyTab', '', [tysNormal]);
+  TabStyle := PartStyle('TyTab', '', [tysNormal]);   // the strip's font (#113)
 
   { Pass 1 -- measure each tab's CAPTION BOX. This is the number the old single-position
     builder called TW and used directly as the header width; it still is, and on a
@@ -2090,7 +2090,8 @@ begin
       else
         Include(TabStates, tysNormal);
 
-      TabStyle := ActiveController.Model.ResolveStyle('TyTab', '', TabStates);
+      { The strip's font (#113); the current tab keeps the theme's ink, as a native tab does. }
+      TabStyle := PartStyle('TyTab', '', TabStates, not (tysActive in TabStates));
 
       { Active-tab header cross-fade. For the newly-active tab only, while the
         fade is mid-flight, blend the inactive TyTab background into the active

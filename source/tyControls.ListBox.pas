@@ -1387,7 +1387,8 @@ begin
       ItemStates := ItemStatesFor(i, ItemStates);
 
       // Resolve the row style for this row ('TyListItem', or the descendant's own key)
-      RowStyle := ActiveController.Model.ResolveStyle(GetItemStyleTypeKey, '', ItemStates);
+      RowStyle := PartStyle(GetItemStyleTypeKey, '', ItemStates,
+        not (tysActive in ItemStates));   // the list's font (#113); a selected row keeps its ink
 
       // Row rect: the content width (RowContentBounds already gave up the bar's gutter on
       // whichever side the bar is on), height = scaledItemHeight

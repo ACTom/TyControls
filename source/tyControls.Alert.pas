@@ -428,6 +428,7 @@ begin
   // NOT inherited CurrentStyle: that resolves with StyleClass ALONE, and it cannot know
   // about AlertType — the whole point here is that the type contributes a variant token.
   Result := model.ResolveStyle(GetStyleTypeKey, StyleVariant, CurrentStates);
+  TyApplyControlFont(Result, Self, CurrentStates);   // the alert's own font, as CurrentStyle lays it (#113)
   // Resolving for ourselves means re-applying the StyleOverride layer the base would
   // otherwise have added, with the same staleness rule (the text changed, or the theme
   // version bumped so var(--...) must re-bind). The base's cache fields are private,

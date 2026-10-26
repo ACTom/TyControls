@@ -1669,9 +1669,9 @@ begin
     did -- these are hooks, not a repaint. Colour only: the geometry (indent, divider width,
     swatch size) stays where the layout constants put it. }
   expSty := ActiveController.Model.ResolveStyle('TyValueListEditorExpander', '', []);
-  keySty := ActiveController.Model.ResolveStyle('TyValueListEditorKey', '', []);
+  keySty := PartStyle('TyValueListEditorKey', '', []);   // the editor's font (#113)
   divSty := ActiveController.Model.ResolveStyle('TyValueListEditorDivider', '', []);
-  valSty := ActiveController.Model.ResolveStyle('TyValueListEditorValue', '', []);
+  valSty := PartStyle('TyValueListEditorValue', '', []);
   if tpTextColor in expSty.Present then triCol := expSty.TextColor else triCol := AStyle.TextColor;
   if tpTextColor in keySty.Present then keyCol := keySty.TextColor else keyCol := AStyle.TextColor;
   if tpTextColor in valSty.Present then valDef := valSty.TextColor else valDef := AStyle.TextColor;

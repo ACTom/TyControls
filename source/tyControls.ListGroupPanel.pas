@@ -1147,7 +1147,7 @@ begin
         // Its OWN key, not the tree column header's: TyTreeHeaderSection is shared with
         // TreeView/ListView, so borrowing it made the sider un-restyleable. tysSelected = the
         // group is OPEN (a skin tints the open group accent through it).
-        HdrStyle := ActiveController.Model.ResolveStyle('TyListGroupHeader', StyleClass, states);
+        HdrStyle := PartStyle('TyListGroupHeader', StyleClass, states);   // the panel's font (#113)
 
         // Fill ONLY when the theme gives a background: a modern sider leaves the group row
         // unfilled (no grey band), so the absence of a bg must mean "no band", not a default.
@@ -1214,7 +1214,8 @@ begin
         else Include(states, tysNormal);
         // Its OWN key (was TyListItem, shared with every list): so a selected item can be a
         // soft INSET ROUNDED pill instead of a full-bleed saturated bar.
-        ItemStyle := ActiveController.Model.ResolveStyle('TyListGroupItem', StyleClass, states);
+        ItemStyle := PartStyle('TyListGroupItem', StyleClass, states,
+          not selected);   // the panel's font (#113); the selected item keeps its ink
 
         // The pill: inset from the row's four edges (so it floats, not a full-width bar) and
         // rounded by the style's own border-radius. Inset/radius are theme-driven — that is the
@@ -1269,7 +1270,7 @@ begin
         R.Bottom - P.Scale(BoxStyle.BorderWidth) - trigH,
         R.Right - P.Scale(BoxStyle.BorderWidth),
         R.Bottom - P.Scale(BoxStyle.BorderWidth));
-      HdrStyle := ActiveController.Model.ResolveStyle('TyListGroupHeader', StyleClass, [tysNormal]);
+      HdrStyle := PartStyle('TyListGroupHeader', StyleClass, [tysNormal]);
       if tpBackground in HdrStyle.Present then
         P.FillBackground(trigR, HdrStyle.Background, TyEffectiveCorners(HdrStyle));
       leftSider := Align <> alRight;

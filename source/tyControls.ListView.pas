@@ -3149,8 +3149,8 @@ begin
   { The REPORT column-header band and its cells. Distinct from the group band's key
     ('TyListViewGroupHeader'): the two used to share one literal, so a skin that wanted a flat
     column strip also got a flat group strip whether it wanted one or not. }
-  hb := ActiveController.Model.ResolveStyle('TyListViewHeader', '', []);
-  hs := ActiveController.Model.ResolveStyle('TyListViewHeaderSection', '', []);
+  hb := PartStyle('TyListViewHeader', '', []);
+  hs := PartStyle('TyListViewHeaderSection', '', []);
   border := TyColorToBGRA(AFrame.BorderColor);
 
   { band background }
@@ -3436,7 +3436,7 @@ begin
   S := CurrentStyle;
   { The GROUP band's own key. It used to resolve the same literal as the report's column
     header, so the two could never be styled apart -- inside one control. }
-  hb := ActiveController.Model.ResolveStyle('TyListViewGroupHeader', '', []);
+  hb := PartStyle('TyListViewGroupHeader', '', []);
 
   if tpBackground in hb.Present then
     P.FillBackground(band, hb.Background, 0)
@@ -3491,7 +3491,7 @@ begin
       if item < 0 then Continue;
       cell := TyListGroupItemRect(FGroupMap, g, i, M, GroupHeaderHeightPx, FOffsetX, FOffsetY);
       states := StatesFor(item);
-      rowStyle := ActiveController.Model.ResolveStyle('TyListViewItem', '', states);
+      rowStyle := PartStyle('TyListViewItem', '', states);
       RenderItem(P, item, cell, rowStyle, states);
     end;
   end;
@@ -3539,7 +3539,7 @@ begin
           if item < 0 then Continue;
           cell := TyListItemRect(pos, cnt, m, FOffsetX, FOffsetY);
           states := StatesFor(item);
-          rowStyle := ActiveController.Model.ResolveStyle('TyListViewItem', '', states);
+          rowStyle := PartStyle('TyListViewItem', '', states);
           RenderItem(P, item, cell, rowStyle, states);
         end;
 
@@ -3884,8 +3884,8 @@ begin
 
   SyncArrays;
   { Measure with the SAME styles the paint uses, or the fitted width misses the drawn text. }
-  rowS := ActiveController.Model.ResolveStyle('TyListViewItem', '', []);
-  hdrS := ActiveController.Model.ResolveStyle('TyListViewHeaderSection', '', []);
+  rowS := PartStyle('TyListViewItem', '', []);
+  hdrS := PartStyle('TyListViewHeaderSection', '', []);
 
   iconDev := 0;
   if (AColumn = FHeader.MainColumn) and (FSmallImages <> nil) then

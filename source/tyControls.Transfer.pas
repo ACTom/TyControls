@@ -1122,7 +1122,7 @@ begin
       lay := LayoutAtPPI(R, APPI);
       // One resolve for both bands: they are the same key, the same class and the same state
       // (a title band has no state of its own — it is a label, not an affordance).
-      titleS := ActiveController.Model.ResolveStyle('TyTransferTitle', StyleClass, CurrentStates);
+      titleS := PartStyle('TyTransferTitle', StyleClass, CurrentStates);
       PaintTitleBand(P, lay.LeftTitleRect, FLeftTitle, S, titleS);
       PaintTitleBand(P, lay.RightTitleRect, FRightTitle, S, titleS);
     end;
