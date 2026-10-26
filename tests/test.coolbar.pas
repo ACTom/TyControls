@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType,
   fpcunit, testregistry,
   tyControls.Types, tyControls.Controller, tyControls.Base,
-  tyControls.Panel, tyControls.ControlBar, tyControls.CoolBar;
+  tyControls.Panel, tyControls.Painter, tyControls.ControlBar, tyControls.CoolBar;
 
 type
   { Pure band math — the headless-tested core (no window handle). }
@@ -91,6 +91,8 @@ type
     { Run the bar's own packing. The LCL never aligns a form that was not shown, so a test that
       wants the packer's answer has to ask for it (headless-tests-never-run-lcl-align). }
     procedure Pack;
+    { The grippers and band captions, painted onto ACanvas the way Paint does it. }
+    procedure PaintBandsTo(ACanvas: TCanvas);
   end;
 
   { The control: the per-child band map — keyed, drop-on-free, clamp defaults. }
@@ -145,8 +147,10 @@ type
     procedure TestAutoMaxWidthLeavesAnOpinionlessControlUncapped;
     procedure TestAutoMaxWidthTakesWhicheverCeilingBindsFirst;
     procedure TestAutoMaxWidthHonoursTheControlsOwnConstraint;
-    // a vertical band's length
+    // vertical bands and band captions
     procedure TestAVerticalBandKeepsItsLengthWhenLaidOut;
+    procedure TestABandCaptionIsDrawnBetweenItsGripperAndItsChild;
+    procedure TestABandCaptionFollowsItsGripperMirroredAndVertically;
     procedure TestABandWithNoControlIsNeverInTheLayout;
     // the band model is LOGICAL px; the controls and the pointer are not (ACTom/TyControls#2)
     procedure TestABandsWidthIsLogicalPx;
@@ -176,6 +180,44 @@ var r: TRect;
 begin
   r := Rect(0, 0, Width, Height);
   AlignControls(nil, r);
+end;
+
+procedure TCoolBarAccess.PaintBandsTo(ACanvas: TCanvas);
+var P: TTyPainter;
+begin
+  P := TTyPainter.Create;
+  try
+    P.BeginPaint(ACanvas, Rect(0, 0, Width, Height), Font.PixelsPerInch, IsRightToLeft);
+    PaintGrippers(P, CurrentStyle, 1, BandHeight, GripPx, BandSpacing);
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+end;
+
+const
+  SENTINEL = TColor($FF00FF);   // magenta: no theme paints it, so any other pixel is ink
+
+{ A bitmap the size of the bar, filled with SENTINEL, with the bar's grippers and captions on it. }
+function PaintedBands(CB: TCoolBarAccess): TBitmap;
+begin
+  Result := TBitmap.Create;
+  Result.SetSize(CB.Width, CB.Height);
+  Result.Canvas.Brush.Color := SENTINEL;
+  Result.Canvas.FillRect(Rect(0, 0, CB.Width, CB.Height));
+  CB.PaintBandsTo(Result.Canvas);
+end;
+
+{ True when anything was drawn inside ARect. }
+function InkIn(ABmp: TBitmap; const ARect: TRect): Boolean;
+var x, y: Integer;
+begin
+  Result := False;
+  for y := ARect.Top to ARect.Bottom - 1 do
+    for x := ARect.Left to ARect.Right - 1 do
+      if (x >= 0) and (y >= 0) and (x < ABmp.Width) and (y < ABmp.Height)
+         and (ABmp.Canvas.Pixels[x, y] <> SENTINEL) then
+        Exit(True);
 end;
 
 { The pitch the packer advances by from one row to the next, device px. }
@@ -1601,7 +1643,7 @@ begin
     CB.BandMaxWidth(b));
 end;
 
-{ ── a vertical band's length ─────────────────────────────────────────────────────────────── }
+{ ── vertical bands and band captions ─────────────────────────────────────────────────────── }
 
 procedure TCoolBarControlTest.TestAVerticalBandKeepsItsLengthWhenLaidOut;
 var CB: TCoolBarAccess; b0, b1: TControl;
@@ -1627,6 +1669,89 @@ begin
   AssertEquals('and the second still 50', 50, b1.Height);
   AssertEquals('which starts below the first: grip, 80, gap, its own grip',
     CB.ContentBox.Top + 10 + 80 + 3 + 10, b1.Top);
+end;
+
+procedure TCoolBarControlTest.TestABandCaptionIsDrawnBetweenItsGripperAndItsChild;
+var CB: TCoolBarAccess; b: TControl; r: TRect; bmp: TBitmap; L, capW: Integer;
+begin
+  { With ShowText the packer reserves [gripper][caption][child]. The gripper was placed against
+    the child instead -- over the end of the caption's strip -- and the caption was handed the
+    empty rect between that gripper and the child, so no band caption was ever seen. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  CB.SetBounds(0, 0, 400, 60);
+  CB.BandHeight := 26;
+  CB.BandSpacing := 3;
+  CB.GripperWidth := 10;
+  CB.ShowText := True;
+  b := MakeBand(CB, 0, 0, 80, 26);
+  CB.SetBandText(b, 'Tools');
+  CB.Pack;
+  L := CB.ContentBox.Left;
+  capW := CB.LeadPx(b) - CB.GripPx;
+  AssertTrue('precondition: the caption has room reserved', capW > 0);
+  AssertEquals('precondition: the child sits past the gripper and the caption',
+    L + 10 + capW, b.Left);
+  r := CB.BandRect(b);
+  AssertEquals('the gripper is on the band''s leading edge', L, r.Left);
+  AssertEquals('and one gripper wide', 10, r.Right - r.Left);
+  bmp := PaintedBands(CB);
+  try
+    AssertTrue('the gripper is drawn there', InkIn(bmp, r));
+    AssertTrue('and the caption in the strip between it and the child',
+      InkIn(bmp, Rect(r.Right, r.Top, b.Left, r.Bottom)));
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TCoolBarControlTest.TestABandCaptionFollowsItsGripperMirroredAndVertically;
+var CB: TCoolBarAccess; b: TControl; r: TRect; bmp: TBitmap; lead: Integer;
+begin
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  CB.SetBounds(0, 0, 400, 60);
+  CB.BandHeight := 26;
+  CB.BandSpacing := 3;
+  CB.GripperWidth := 10;
+  CB.ShowText := True;
+  b := MakeBand(CB, 0, 0, 80, 26);
+  CB.SetBandText(b, 'Tools');
+  lead := CB.LeadPx(b);
+
+  { Mirrored: the band fills from the right, so the gripper is on its right, a lead past it. }
+  CB.BiDiMode := bdRightToLeft;
+  CB.Pack;
+  r := CB.BandRect(b);
+  AssertEquals('mirrored, the gripper is the band''s rightmost strip', b.Left + b.Width + lead,
+    r.Right);
+  AssertEquals('and one gripper wide', 10, r.Right - r.Left);
+  bmp := PaintedBands(CB);
+  try
+    AssertTrue('the caption is between the child and the gripper',
+      InkIn(bmp, Rect(b.Left + b.Width, r.Top, r.Left, r.Bottom)));
+  finally
+    bmp.Free;
+  end;
+
+  { Vertical: the gripper is above the band, a lead above it, and the caption below that. }
+  CB.BiDiMode := bdLeftToRight;
+  CB.SetBounds(0, 0, 60, 300);
+  CB.Vertical := True;
+  CB.SetBandWidth(b, 80);
+  CB.Pack;
+  r := CB.BandRect(b);
+  AssertEquals('vertically, the gripper starts a lead above the band', b.Top - lead, r.Top);
+  AssertEquals('and is one gripper tall', 10, r.Bottom - r.Top);
+  bmp := PaintedBands(CB);
+  try
+    AssertTrue('the caption is between the gripper and the child',
+      InkIn(bmp, Rect(b.Left, r.Bottom, b.Left + b.Width, b.Top)));
+  finally
+    bmp.Free;
+  end;
 end;
 
 procedure TCoolBarControlTest.TestABandWithNoControlIsNeverInTheLayout;

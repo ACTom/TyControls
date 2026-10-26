@@ -1175,7 +1175,7 @@ end;
 
 function TTyCustomCoolBar.BandRectFor(ACtl: TControl): TRect;
 var
-  gw: Integer;
+  gw, lead: Integer;
   content: TRect;
 begin
   // The base (TTyControlBar) reserves + draws ONE gripper per band-ROW, at the row's left edge
@@ -1191,6 +1191,11 @@ begin
     The old rule returned an empty rect for anything that was not the row's first child, which
     is a ControlBar's one-grip-per-row model: band 2 had no handle to grab and none drawn. }
   Result := ACtl.BoundsRect;
+  { The packer reserves the band's whole LEAD before its child -- the gripper, then the caption
+    when ShowText is on (TyCoolBarPack) -- so the gripper starts a whole lead before the child,
+    not against it. Placed against the child it sat on the end of the caption's strip and left
+    the caption an empty rect to be drawn in. With no caption the lead IS the gripper. }
+  lead := BandLeadPx(ACtl);
   { Clamped to the CONTENT box, not to the raw client rect: a gripper for a band on the first
     row/column would otherwise be allowed to back onto the frame stroke it must stay inside. }
   content := BandContentRect;
@@ -1198,8 +1203,8 @@ begin
   begin
     { Above the band on either reading -- up is not a reading direction, so a mirrored
       vertical rebar reverses which COLUMN a band is in and nothing about its gripper. }
-    Result.Bottom := Result.Top;
-    Dec(Result.Top, gw);
+    Dec(Result.Top, lead);
+    Result.Bottom := Result.Top + gw;
     if Result.Top < content.Top then Result.Top := content.Top;
   end
   else if IsRightToLeft then
@@ -1209,14 +1214,14 @@ begin
       FROM has already moved: reflecting a rect built off a mirrored child would mirror it
       twice. This function stays the single source -- PaintGrippers draws what it returns and
       BandAtPoint hit-tests what it returns -- so paint and hit cannot take different sides. }
-    Result.Left := Result.Right;
-    Inc(Result.Right, gw);
+    Inc(Result.Right, lead);
+    Result.Left := Result.Right - gw;
     if Result.Right > content.Right then Result.Right := content.Right;
   end
   else
   begin
-    Result.Right := Result.Left;
-    Dec(Result.Left, gw);
+    Dec(Result.Left, lead);
+    Result.Right := Result.Left + gw;
     if Result.Left < content.Left then Result.Left := content.Left;
   end;
 end;
@@ -1410,8 +1415,12 @@ begin
       begin
         { Between the gripper and the child -- the strip PackBands reserved for exactly this.
           Mirrored, the gripper is on the child's right, so the span runs the other way; the
-          painter (armed in TTyControlBar.Paint) turns the taLeftJustify into the right side. }
-        if IsRightToLeft then
+          painter (armed in TTyControlBar.Paint) turns the taLeftJustify into the right side.
+          Vertically the strip is below the gripper and as wide as the column, and the
+          caption is written across it (cut short with an ellipsis when the column is narrow). }
+        if FVertical then
+          cap := Rect(ctl.Left, r.Bottom, ctl.Left + ctl.Width, ctl.Top)
+        else if IsRightToLeft then
           cap := Rect(ctl.Left + ctl.Width, r.Top, r.Left, r.Bottom)
         else
           cap := Rect(r.Right, r.Top, ctl.Left, r.Bottom);
