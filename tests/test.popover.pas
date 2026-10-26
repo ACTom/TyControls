@@ -99,6 +99,10 @@ type
     procedure TestBorderlessInsetIsTheRadiusAlone;
     procedure TestRoundedCornerBesideTheArrowStaysACurve;
     procedure TestArrowSidesCarryTheBorder;
+    procedure TestStyleOverrideRestylesOneInstance;
+    procedure TestClearingStyleOverrideReturnsToTheTheme;
+    procedure TestStyleOverrideRetunesThisPopoversTokens;
+    procedure TestStyleOverrideTextReachesTheTitleAndNothingElse;
   end;
 
 implementation
@@ -153,6 +157,7 @@ type
       ATipLocal, APPI: Integer);
     function TitleInk: TTyColor;
     function PopoverStyle: TTyStyleSet;
+    function TitleStyle: TTyStyleSet;
   end;
 
 function TPopAccess.BeginShowing(const AAnchorScreen, AWorkArea: TRect;
@@ -175,6 +180,11 @@ end;
 function TPopAccess.PopoverStyle: TTyStyleSet;
 begin
   Result := inherited PopoverStyle;
+end;
+
+function TPopAccess.TitleStyle: TTyStyleSet;
+begin
+  Result := inherited TitleStyle;
 end;
 
 { ============================== TTyPopoverRulesTest ============================== }
@@ -1584,6 +1594,148 @@ begin
     finally
       R.Free;
     end;
+  finally
+    P.Free;
+  end;
+end;
+
+const
+  { D2: the theme's popover is a square blue card; the override makes one instance a rounded
+    lime one with a 4px magenta border. All three colours are far from each other and from
+    the clRed sentinel. }
+  CThemeBlueSquare = 'TyPopover { background: #3B82F6; color: #111111; border-radius: 0px;'
+    + ' padding: 10px 12px; font-size: 12px; }';
+  COverrideLime = 'background: #00FF00; border: 4px solid #FF00FF; border-radius: 12px;';
+
+function IsThemeBlue(const APx: TBGRAPixel): Boolean;
+begin
+  Result := (APx.blue > 180) and (APx.red < 120) and (APx.green < 170);
+end;
+
+function IsLime(const APx: TBGRAPixel): Boolean;
+begin
+  Result := (APx.green > 180) and (APx.red < 120) and (APx.blue < 120);
+end;
+
+function IsMagenta(const APx: TBGRAPixel): Boolean;
+begin
+  Result := (APx.red > 180) and (APx.blue > 180) and (APx.green < 100);
+end;
+
+{ TestStyleOverrideRestylesOneInstance
+  cx's Color / BorderColor / Rounded / RoundRadius, the library's way: two popovers on one
+  theme, one with a StyleOverride. Each paints its own fill, border and corner. }
+procedure TTyPopoverComponentTest.TestStyleOverrideRestylesOneInstance;
+var
+  Plain, Styled: TPopAccess;
+  R1, R2: TBGRABitmap;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap,
+    CThemeBlueSquare));
+  Plain := TPopAccess(NewPopover);
+  Styled := TPopAccess(NewPopover);
+  R1 := nil;
+  R2 := nil;
+  try
+    Styled.StyleOverride := COverrideLime;
+    R1 := RenderOnSentinel(Plain, 224, 128, psvBottom, 112);
+    R2 := RenderOnSentinel(Styled, 224, 128, psvBottom, 112);
+    AssertTrue('the plain one keeps the theme fill', IsThemeBlue(R1.GetPixel(112, 64)));
+    AssertTrue('the styled one takes its own fill', IsLime(R2.GetPixel(112, 64)));
+    // Row 9 is inside the body's top edge (y=8): border on the styled one, fill on the plain.
+    AssertTrue('the styled one has its own border', IsMagenta(R2.GetPixel(60, 9)));
+    AssertTrue('the plain one has none', IsThemeBlue(R1.GetPixel(60, 9)));
+    // (2,10) is inside a square corner but outside a 12px rounded one.
+    AssertTrue('square corner on the plain one', IsThemeBlue(R1.GetPixel(2, 10)));
+    AssertTrue('rounded corner on the styled one', IsSentinel(R2.GetPixel(2, 10)));
+  finally
+    R1.Free;
+    R2.Free;
+    Plain.Free;
+    Styled.Free;
+  end;
+end;
+
+procedure TTyPopoverComponentTest.TestClearingStyleOverrideReturnsToTheTheme;
+var
+  P: TPopAccess;
+  R: TBGRABitmap;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap,
+    CThemeBlueSquare));
+  P := TPopAccess(NewPopover);
+  try
+    P.StyleOverride := COverrideLime;
+    R := RenderOnSentinel(P, 224, 128, psvBottom, 112);
+    try
+      AssertTrue('overridden', IsLime(R.GetPixel(112, 64)));
+    finally
+      R.Free;
+    end;
+    // A new text is a new look, not the cached old one.
+    P.StyleOverride := 'background: #FF00FF;';
+    R := RenderOnSentinel(P, 224, 128, psvBottom, 112);
+    try
+      AssertTrue('the new override, not the cached one', IsMagenta(R.GetPixel(112, 64)));
+    finally
+      R.Free;
+    end;
+    P.StyleOverride := '';
+    R := RenderOnSentinel(P, 224, 128, psvBottom, 112);
+    try
+      AssertTrue('cleared: the theme again', IsThemeBlue(R.GetPixel(112, 64)));
+      AssertTrue('and its square corner', IsThemeBlue(R.GetPixel(2, 10)));
+    finally
+      R.Free;
+    end;
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyPopoverComponentTest.TestStyleOverrideRetunesThisPopoversTokens;
+var
+  Plain, Tuned: TTyPopover;
+begin
+  // The '--popover-*' tokens are per-instance too: only the tuned popover's strip grows.
+  FCtl.LoadThemeCss(ThemeCss);
+  Plain := NewPopover;
+  Tuned := NewPopover;
+  try
+    Tuned.StyleOverride := '--popover-arrow-size: 14px;';
+    AssertEquals('the tuned strip', 14 + CPadT + CContentH + CPadB,
+      Tuned.MeasureFrameAtPPI(96).cy);
+    AssertEquals('the other keeps the theme''s', TyPopoverArrowSize + CPadT + CContentH + CPadB,
+      Plain.MeasureFrameAtPPI(96).cy);
+    Tuned.StyleOverride := '--popover-offset: 20px;';
+    AssertEquals('the offset token too', 144,
+      Tuned.GeometryIn(Rect(100, 100, 180, 124), Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96).Frame.Top);
+  finally
+    Plain.Free;
+    Tuned.Free;
+  end;
+end;
+
+{ TestStyleOverrideTextReachesTheTitleAndNothingElse
+  The headline is the only text a popover draws, so the override's colour reaches it even
+  though the theme gives TyPopoverTitle a colour of its own; its background does NOT (laid on
+  the title band too, a gradient would restart inside the band). }
+procedure TTyPopoverComponentTest.TestStyleOverrideTextReachesTheTitleAndNothingElse;
+var
+  P: TPopAccess;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    'TyPopoverTitle { color: #10B981; }'));
+  P := TPopAccess(NewPopover);
+  try
+    P.Title := 'Confirm';
+    P.StyleOverride := 'color: #FF0000; background: #000080; font-weight: 300;';
+    AssertEquals('the override colours the title', Int64(TyRGB($FF, $00, $00)),
+      Int64(P.TitleInk));
+    AssertEquals('and sets its weight', 300, P.TitleStyle.FontWeight);
+    AssertFalse('but lays no band behind it', tpBackground in P.TitleStyle.Present);
+    AssertEquals('the body takes the background', Int64(TyRGB($00, $00, $80)),
+      Int64(P.PopoverStyle.Background.Color));
   finally
     P.Free;
   end;

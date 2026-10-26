@@ -245,6 +245,14 @@ type
     FCloseOnClickOutside: Boolean;
     FCloseOnEscape: Boolean;
     FStyleClass: string;
+    FStyleOverride: string;
+    { The StyleOverride block, resolved once per (text, model, theme version) -- the base
+      controls' cache rule: var(--...) in it re-binds after a theme switch. }
+    FOvrSet: TTyStyleSet;
+    FOvrText: string;
+    FOvrModel: TObject;
+    FOvrVer: Cardinal;
+    FOvrValid: Boolean;
     FController: TTyCustomStyleController;
     FOnShow: TNotifyEvent;
     FOnHide: TNotifyEvent;
@@ -264,7 +272,13 @@ type
     procedure SetTitle(const AValue: TCaption);
     procedure SetShowArrow(AValue: Boolean);
     procedure SetStyleClass(const AValue: string);
+    procedure SetStyleOverride(const AValue: string);
     procedure SetController(AValue: TTyCustomStyleController);
+    { A repaint after a style input changed: the window's own Color too, since it is the
+      body's fill (EnsureWindow) and the corners/strip erase to it. }
+    procedure Restyle;
+    { The StyleOverride block as a style set (cached), EmptyStyleSet without one. }
+    function OverrideSet: TTyStyleSet;
     { The theme metrics in LOGICAL px (each call site scales). Named helpers rather than
       inline Metric() calls so a typo cannot strand one call site on the default. }
     function ArrowSizeLogical: Integer;
@@ -294,9 +308,15 @@ type
       The largest of the four rather than the two on the arrow's edge, because the side is
       not known until the placement has decided whether to flip. }
     function CornerInsetAt(AFrameW, AFrameH, APPI: Integer): Integer;
-    { The two typeKeys, resolved with the user's StyleClass. }
+    { The two typeKeys, resolved with the user's StyleClass, with StyleOverride laid on top:
+      the whole block over the body, its text properties (color, font-*) over the title --
+      the headline is the only text a popover draws, so that is where they show. }
     function PopoverStyle: TTyStyleSet;
     function TitleStyle: TTyStyleSet;
+    { A theme length token as this popover reads it: a '--' declaration in its own
+      StyleOverride wins, then the theme, then ADefault -- TTyCustomControl.StyleMetric's
+      rule, for a component that is not a control. Logical px. }
+    function StyleMetric(const AName: string; ADefault: Integer): Integer;
     { A non-visual component has no Font of its own, so the theme is the ONLY source: pass
       ParentFont=True / size 0 and let TyResolveFontSize fall through to --font-size-base. }
     function ResolveFontSize(const AStyle: TTyStyleSet): Integer;
@@ -377,6 +397,14 @@ type
     { The variant entry: a `TyPopover.danger` rule in the theme. Resolved for BOTH typeKeys,
       so TyPopoverTitle.danger tints a danger popover's headline. }
     property StyleClass: string read FStyleClass write SetStyleClass;
+    { This one popover's look, as a bare tycss declaration block laid over the theme and
+      StyleClass -- the controls' StyleOverride, same parser and same merge:
+        'background: #1F2937; color: #F9FAFB; border-color: #111827; border-radius: 0;'
+      Background, border, radius, padding and opacity style the body (and the arrow, which
+      is the body carried past its edge); color and font-* style the title. Its '--'
+      declarations retune this popover's own tokens ('--popover-arrow-size: 12px;'). Like
+      the controls' property it takes declarations only: a selector block is not parsed. }
+    property StyleOverride: string read FStyleOverride write SetStyleOverride;
     property Controller: TTyCustomStyleController read FController write SetController;
     { Fired after the popup is on screen (and after the content has been adopted into it, so a
       handler may focus a control inside). }
@@ -399,6 +427,7 @@ type
     property CloseOnClickOutside;
     property CloseOnEscape;
     property StyleClass;
+    property StyleOverride;
     property Controller;
     property OnShow;
     property OnHide;
@@ -891,14 +920,57 @@ begin
     Result := TyDefaultController;
 end;
 
+function TTyCustomPopover.OverrideSet: TTyStyleSet;
+var
+  model: TTyStyleModel;
+begin
+  if FStyleOverride = '' then Exit(EmptyStyleSet);
+  model := ActiveController.Model;
+  if (not FOvrValid) or (FOvrText <> FStyleOverride) or (FOvrModel <> model)
+     or (FOvrVer <> model.ThemeVersion) then
+  begin
+    FOvrSet := model.ResolveOverride(FStyleOverride);
+    FOvrText := FStyleOverride;
+    FOvrModel := model;
+    FOvrVer := model.ThemeVersion;
+    FOvrValid := True;
+  end;
+  Result := FOvrSet;
+end;
+
 function TTyCustomPopover.PopoverStyle: TTyStyleSet;
 begin
   Result := ActiveController.Model.ResolveStyle(StyleTypeKey, FStyleClass, []);
+  if FStyleOverride <> '' then
+    TyMergeStyleSet(Result, OverrideSet);   // the override wins per Present flag
 end;
 
 function TTyCustomPopover.TitleStyle: TTyStyleSet;
+var
+  ov: TTyStyleSet;
 begin
   Result := ActiveController.Model.ResolveStyle(TitleStyleTypeKey, FStyleClass, []);
+  if FStyleOverride <> '' then
+  begin
+    { Only the text properties reach the headline. The rest are the body's: a gradient
+      background laid on the title too would restart the gradient inside the title band. }
+    ov := OverrideSet;
+    ov.Present := ov.Present * [tpTextColor, tpFontName, tpFontSize, tpFontWeight];
+    TyMergeStyleSet(Result, ov);
+  end;
+end;
+
+function TTyCustomPopover.StyleMetric(const AName: string; ADefault: Integer): Integer;
+var
+  found: Boolean;
+begin
+  if FStyleOverride <> '' then
+  begin
+    Result := ActiveController.Model.ResolveOverrideMetric(FStyleOverride, AName, ADefault,
+      found);
+    if found then Exit;
+  end;
+  Result := ActiveController.Metric(AName, ADefault);
 end;
 
 function TTyCustomPopover.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
@@ -934,19 +1006,19 @@ end;
 // ---------------------------------------------------------------------------
 function TTyCustomPopover.ArrowSizeLogical: Integer;
 begin
-  Result := ActiveController.Metric(TyPopoverArrowSizeVar, TyPopoverArrowSize);
+  Result := StyleMetric(TyPopoverArrowSizeVar, TyPopoverArrowSize);
   if Result < 0 then Result := 0;
 end;
 
 function TTyCustomPopover.OffsetLogical: Integer;
 begin
-  Result := ActiveController.Metric(TyPopoverOffsetVar, TyPopoverOffset);
+  Result := StyleMetric(TyPopoverOffsetVar, TyPopoverOffset);
   if Result < 0 then Result := 0;
 end;
 
 function TTyCustomPopover.TitleGapLogical: Integer;
 begin
-  Result := ActiveController.Metric(TyPopoverTitleGapVar, TyPopoverTitleGap);
+  Result := StyleMetric(TyPopoverTitleGapVar, TyPopoverTitleGap);
   if Result < 0 then Result := 0;
 end;
 
@@ -1347,11 +1419,29 @@ begin
   if (FWin <> nil) and FWin.Visible then FWin.Invalidate;
 end;
 
+procedure TTyCustomPopover.Restyle;
+begin
+  if (FWin <> nil) and FWin.Visible then
+  begin
+    EnsureWindow;   // re-takes the body's fill as the window Color
+    FWin.Invalidate;
+  end;
+end;
+
 procedure TTyCustomPopover.SetStyleClass(const AValue: string);
 begin
   if FStyleClass = AValue then Exit;
   FStyleClass := AValue;
-  if (FWin <> nil) and FWin.Visible then FWin.Invalidate;
+  Restyle;
+end;
+
+procedure TTyCustomPopover.SetStyleOverride(const AValue: string);
+begin
+  if FStyleOverride = AValue then Exit;
+  FStyleOverride := AValue;
+  { A live popup repaints in the new look. Like Title, a change that would RESIZE it (a
+    padding, a token) lands on the next Show -- that is when a popover's geometry is decided. }
+  Restyle;
 end;
 
 procedure TTyCustomPopover.SetController(AValue: TTyCustomStyleController);
@@ -1360,7 +1450,7 @@ begin
   if FController <> nil then FController.RemoveFreeNotification(Self);
   FController := AValue;
   if FController <> nil then FController.FreeNotification(Self);
-  if (FWin <> nil) and FWin.Visible then FWin.Invalidate;
+  Restyle;
 end;
 
 procedure TTyCustomPopover.Notification(AComponent: TComponent; Operation: TOperation);

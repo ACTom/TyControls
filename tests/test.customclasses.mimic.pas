@@ -7590,6 +7590,7 @@ type
     property CloseOnClickOutside;
     property CloseOnEscape;
     property StyleClass;
+    property StyleOverride;
     property Controller;
     property OnShow;
     property OnHide;
