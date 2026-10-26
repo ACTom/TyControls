@@ -462,8 +462,11 @@ begin
         FAssignBand[I] := rects[I].Top div (bandH + spacing)
       else
         FAssignBand[I] := 0;
+      { The packed rect's own height, not bandH: the two are the same across a row, but a
+        packer that runs bands DOWN a column (TTyCoolBar.Vertical) hands back each band's
+        length there, and bandH made every one of them a band-height long. }
       list[I].SetBounds(rects[I].Left + content.Left, rects[I].Top + content.Top,
-                        rects[I].Right - rects[I].Left, bandH);
+                        rects[I].Right - rects[I].Left, rects[I].Bottom - rects[I].Top);
     end;
     bands := BandCount;
 

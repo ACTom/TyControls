@@ -88,6 +88,9 @@ type
     procedure CallMouseDown(X, Y: Integer);
     procedure CallMouseMove(X, Y: Integer);
     procedure CallMouseUp(X, Y: Integer);
+    { Run the bar's own packing. The LCL never aligns a form that was not shown, so a test that
+      wants the packer's answer has to ask for it (headless-tests-never-run-lcl-align). }
+    procedure Pack;
   end;
 
   { The control: the per-child band map — keyed, drop-on-free, clamp defaults. }
@@ -142,6 +145,8 @@ type
     procedure TestAutoMaxWidthLeavesAnOpinionlessControlUncapped;
     procedure TestAutoMaxWidthTakesWhicheverCeilingBindsFirst;
     procedure TestAutoMaxWidthHonoursTheControlsOwnConstraint;
+    // a vertical band's length
+    procedure TestAVerticalBandKeepsItsLengthWhenLaidOut;
     procedure TestABandWithNoControlIsNeverInTheLayout;
     // the band model is LOGICAL px; the controls and the pointer are not (ACTom/TyControls#2)
     procedure TestABandsWidthIsLogicalPx;
@@ -165,6 +170,13 @@ function TCoolBarAccess.LeadPx(ACtl: TControl): Integer;    begin Result := Band
 procedure TCoolBarAccess.CallMouseDown(X, Y: Integer);      begin MouseDown(mbLeft, [ssLeft], X, Y); end;
 procedure TCoolBarAccess.CallMouseMove(X, Y: Integer);      begin MouseMove([ssLeft], X, Y); end;
 procedure TCoolBarAccess.CallMouseUp(X, Y: Integer);        begin MouseUp(mbLeft, [], X, Y); end;
+
+procedure TCoolBarAccess.Pack;
+var r: TRect;
+begin
+  r := Rect(0, 0, Width, Height);
+  AlignControls(nil, r);
+end;
 
 { The pitch the packer advances by from one row to the next, device px. }
 function RowPitchPx(CB: TTyCoolBar): Integer;
@@ -1587,6 +1599,34 @@ begin
   CB.SetBandAutoMaxWidth(b, True);
   AssertEquals('and with it on, the tighter of the two declared ceilings binds', 90,
     CB.BandMaxWidth(b));
+end;
+
+{ ── a vertical band's length ─────────────────────────────────────────────────────────────── }
+
+procedure TCoolBarControlTest.TestAVerticalBandKeepsItsLengthWhenLaidOut;
+var CB: TCoolBarAccess; b0, b1: TControl;
+begin
+  { A vertical band's length is its HEIGHT: TTyCoolBand.Width sets it there and the packer
+    reads it there. The bar then applied each packed rect with the band height as the child's
+    height -- the horizontal case's constant -- so every band of a vertical bar came out
+    BandHeight long the first time it was laid out. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  CB.SetBounds(0, 0, 60, 300);
+  CB.BandHeight := 26;      // pinned so nothing follows the active theme
+  CB.BandSpacing := 3;
+  CB.GripperWidth := 10;
+  CB.Vertical := True;
+  b0 := MakeBand(CB, 0, 0, 26, 80);
+  b1 := MakeBand(CB, 0, 0, 26, 50);
+  CB.SetBandWidth(b0, 80);
+  CB.SetBandWidth(b1, 50);
+  CB.Pack;
+  AssertEquals('the first band is still 80 down the column', 80, b0.Height);
+  AssertEquals('and the second still 50', 50, b1.Height);
+  AssertEquals('which starts below the first: grip, 80, gap, its own grip',
+    CB.ContentBox.Top + 10 + 80 + 3 + 10, b1.Top);
 end;
 
 procedure TCoolBarControlTest.TestABandWithNoControlIsNeverInTheLayout;
