@@ -762,7 +762,7 @@ procedure TTyCustomRibbonGallery.MouseDown(Button: TMouseButton; Shift: TShiftSt
 var
   hit: Integer;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button <> mbLeft then Exit;
   hit := InlineCellAt(X, Y);

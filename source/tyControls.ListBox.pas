@@ -1280,7 +1280,7 @@ var RowTotal, NewFocus, VR: Integer; Extend: Boolean;
     NewFocus := ATarget;
   end;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   RowTotal := FItems.Count;
   if RowTotal = 0 then Exit;
@@ -1345,7 +1345,7 @@ procedure TTyCustomListBox.MouseDown(Button: TMouseButton; Shift: TShiftState; X
 var
   Row: Integer;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbLeft then
   begin
@@ -1448,7 +1448,7 @@ function TTyCustomListBox.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
 var
   Delta: Integer;
 begin
-  if not Enabled then Exit(False);
+  if not IsEnabled then Exit(False);
   // Let the user's OnMouseWheel handler run first; if it consumes the event, stop.
   if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then
   begin

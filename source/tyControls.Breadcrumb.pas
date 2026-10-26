@@ -876,7 +876,7 @@ end;
 procedure TTyCustomBreadcrumb.MouseDown(Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button <> mbLeft then Exit;
   // Remember WHICH link the gesture started on, not merely that it started: releasing on a
@@ -906,7 +906,7 @@ procedure TTyCustomBreadcrumb.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   h: Integer;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
   // Only LINKS light up. The current crumb is where you are — a hover chip on it would
   // promise a navigation that cannot happen — and the '…' is a mark, not a place.

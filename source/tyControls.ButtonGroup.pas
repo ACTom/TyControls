@@ -439,7 +439,7 @@ end;
 
 procedure TTyCustomButtonGroup.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbLeft then
     SelectAt(X);
@@ -604,7 +604,7 @@ begin
       // Per-segment state set: disabled wins; else selected (radio index / multi bit)
       // + hover layer on the hovered segment; otherwise normal.
       segStates := [];
-      if not Enabled then
+      if not IsEnabled then
         Include(segStates, tysDisabled)
       else
       begin

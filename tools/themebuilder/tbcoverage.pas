@@ -118,7 +118,7 @@ const
     (U: 'tyControls.SpinEdit'; K: 'TyButton,TySpinEdit,TyTextHint'),
     (U: 'tyControls.Splitter'; K: 'TySplitter'),
     (U: 'tyControls.StatusBar'; K: 'TyStatusBar'),
-    (U: 'tyControls.TabSet'; K: 'TyTabSet'),
+    (U: 'tyControls.TabSet'; K: 'TyTab,TyTabSet'),
     (U: 'tyControls.TabSheet'; K: 'TyTabSheet'),
     (U: 'tyControls.TabStrip'; K: 'TyTab,TyTabClose'),
     (U: 'tyControls.Tag'; K: 'TyTag,TyTagClose'),

@@ -517,7 +517,13 @@ begin
     else
       TyFillParentBg(Self, P, R, st);
     // Display strip — an input-styled band with the expression (small) over the value (large).
-    es := PartStyle('TyEdit', StyleClass, []);   // the display: the calculator's font (#113)
+    // the display: the calculator's font (#113); disabled, the calculator's muted ink (#118)
+    es := PartStyle('TyEdit', StyleClass, []);
+    if not IsEnabled then
+    begin
+      es.TextColor := st.TextColor;
+      Include(es.Present, tpTextColor);
+    end;
     pad := P.Scale(6);
     dispR := Rect(P.Scale(4), P.Scale(4), ClientWidth - P.Scale(4), FDisplayHeight - P.Scale(2));
     if tpBackground in es.Present then

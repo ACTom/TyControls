@@ -1551,7 +1551,7 @@ procedure TTyCustomToolButton.Click;
 var
   inArrow: Boolean;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   // A space holder is not a control surface. LCL declines the hit outright (CMHitTest,
   // toolbutton.inc:557); doing it here keeps a mnemonic/keyboard Click out too.
   if FStyle in [tbsSeparator, tbsDivider] then

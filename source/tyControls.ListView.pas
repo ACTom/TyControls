@@ -1818,7 +1818,7 @@ end;
 function TTyCustomListView.StatesFor(AItem: Integer): TTyStateSet;
 begin
   Result := [];
-  if not Enabled then
+  if not IsEnabled then
   begin
     Include(Result, tysDisabled);
     Exit;
@@ -3296,7 +3296,7 @@ begin
     ('TyListViewGroupHeader'): the two used to share one literal, so a skin that wanted a flat
     column strip also got a flat group strip whether it wanted one or not. }
   hb := PartStyle('TyListViewHeader', '', []);
-  hs := PartStyle('TyListViewHeaderSection', '', []);
+  hs := PartStyle('TyListViewHeaderSection', '', TyStatesUnlessDisabled(Self, []));   // #118
   border := TyColorToBGRA(AFrame.BorderColor);
 
   { band background }
@@ -3860,7 +3860,7 @@ var
   cnt, pos, item, dividerCol, clickCol, g, idx: Integer;
   col: TTyColumn;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button <> mbLeft then Exit;
   try
@@ -4201,7 +4201,7 @@ var
   mapped: Boolean;
   before: TTyIntArray;   { selection snapshot for the OnSelectItem delta }
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   cnt := GetItemCount;
   if cnt = 0 then Exit;
@@ -4353,7 +4353,7 @@ var
   m: TTyListMetrics;
   step: Integer;
 begin
-  if not Enabled then Exit(False);
+  if not IsEnabled then Exit(False);
   if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then Exit(True);
   EndEdit(True);   { rule 4: wheel scroll moves the edited cell — commit + close first }
   m := CurrentMetrics;

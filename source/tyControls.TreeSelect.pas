@@ -619,7 +619,7 @@ var
   sz: TSize;
   treeStyle: TTyStyleSet;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   if DroppedDown then Exit;
   { The click-while-open reopen race: the popup deactivates → Close → PopupClosed BEFORE this
     control's Click runs, so DroppedDown is already False there and a click on an open field
@@ -731,7 +731,7 @@ end;
 
 procedure TTyCustomTreeSelect.Click;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited Click;
   { The whole field is the drop affordance (there is no editable zone to protect, as
     TTyComboBox's csDropDown has): a click anywhere toggles. DropDown's own 200ms guard
@@ -744,7 +744,7 @@ end;
 
 procedure TTyCustomTreeSelect.KeyDown(var Key: Word; Shift: TShiftState);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   if (Key = VK_ESCAPE) and DroppedDown then
   begin

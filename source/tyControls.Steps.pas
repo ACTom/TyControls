@@ -797,7 +797,7 @@ end;
 function TTyCustomSteps.ItemStates(AIndex: Integer): TTyStateSet;
 begin
   Result := TyStepStates(AIndex, FStepIndex, FItems.Count);
-  if not Enabled then
+  if not IsEnabled then
   begin
     { A disabled rail KEEPS :selected on its current step — losing it would make the bar
       read as "no step is current" rather than "you cannot change this", and which step you
@@ -1039,7 +1039,7 @@ procedure TTyCustomSteps.MouseDown(Button: TMouseButton; Shift: TShiftState; X, 
 var
   hit: Integer;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   // The base sets FPressed and moves focus here (TabStop + CanFocus), so a click behaves
   // like a Tab and the arrow keys work straight after it.
   inherited MouseDown(Button, Shift, X, Y);
@@ -1055,7 +1055,7 @@ procedure TTyCustomSteps.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   hit: Integer;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
   // An inert rail lights nothing: no Clickable, no hover, and no per-move hit-test either.
   if not FClickable then Exit;
@@ -1081,7 +1081,7 @@ procedure TTyCustomSteps.KeyDown(var Key: Word; Shift: TShiftState);
 var
   back, fwd: Word;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   if (not FClickable) or (FItems.Count = 0) then Exit;
   { The arrow keys walk the rail — the reason this control is windowed at all. They follow

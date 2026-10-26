@@ -8552,7 +8552,7 @@ var
   hit: TTyGridHit;
 begin
   inherited MouseDown(Button, Shift, X, Y);
-  if not FReportsClicks or not Enabled then Exit;
+  if not FReportsClicks or not IsEnabled then Exit;
   hit := CellAt(X, Y);
   if Button = mbRight then
   begin
@@ -9946,7 +9946,7 @@ begin
   { 每次按下都从头记:上一次按住的来历不能带到这一次。 }
   FCellPress := False;
   FSortArmedCol := -1;
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
 
   { 填充柄优先于一切:它压在选区右下角那一格上,不先判它就会被当成
     "在那一格上按下"而重置选区。 }
@@ -10209,7 +10209,7 @@ var
   vc: string;
 begin
   inherited KeyPress(Key);
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   if FEditing then Exit;              { 编辑器自己收键 }
   if Key < #32 then Exit;             { 控制字符不算录入 }
   if EditorKindFor(FCol, FRow) in [gekNone, gekCheckBox] then Exit;
@@ -10312,7 +10312,7 @@ begin
   { 单字节留给 KeyPress —— 那条路上的吞键语义(Key := #0)这里给不出来,
     而且两条都跑一遍会开两次编辑。 }
   if Length(UTF8Key) <= 1 then Exit;
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   if FEditing then Exit;              { 编辑器自己收键 }
   if EditorKindFor(FCol, FRow) in [gekNone, gekCheckBox] then Exit;
   { ValidChars 是一串**字符**,所以用整字去找:一个汉字要么整个在里面,要么不在。
@@ -10334,7 +10334,7 @@ begin
   { Key 会在下面被置 0(表示已消费),所以想知道"按的是哪个键"必须先存一份。 }
   navKey := Key;
   inherited KeyDown(Key, Shift);
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
 
   { 只有**导航键 + Shift** 才算扩选。Ctrl+A / Ctrl+C / Ctrl+V 都不该动锚点
     (Ctrl+A 尤其:从前末尾那句无差别的 AnchorSelection 会把刚拉满的选区
@@ -11712,7 +11712,7 @@ var
 begin
   if FGestureRefused and (ssLeft in Shift) then Exit;   { the refused press is still held }
   inherited MouseMove(Shift, X, Y);
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
 
   { 正在拖填充柄:只记目标行,松开才真正填 ——
     拖过程中就写数据的话,往回拖一格就再也退不回来了。 }
@@ -16340,7 +16340,7 @@ begin
     RefocusEditor;
     Exit(True);
   end;
-  if FReadOnly or (not Enabled) then Exit;
+  if FReadOnly or (not IsEnabled) then Exit;
   if (ACol < 0) or (ACol >= Header.Columns.Count) then Exit;
   if (ARow < 0) or (ARow >= RowCount) then Exit;
   { 这里问 CanEditCell(不是 EditorKindFor):宿主可能只想禁用编辑、

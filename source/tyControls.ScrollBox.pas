@@ -1068,7 +1068,7 @@ function TTyCustomScrollBox.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer
 var
   step: Integer;
 begin
-  if not Enabled then Exit(False);
+  if not IsEnabled then Exit(False);
   if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then Exit(True);
   // Wheel scrolls the vertical axis when it overflows, else the horizontal one.
   step := ScrollbarThick;   // one "line" ~ a scrollbar thickness of content

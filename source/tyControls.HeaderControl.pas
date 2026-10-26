@@ -831,8 +831,8 @@ begin
 
     // Section styles (base + hover). :selected is available too but the strip uses
     // hover for the pointer; a sorted section is signalled by the triangle, not fill.
-    secStyle := PartStyle('TyTreeHeaderSection', '', []);
-    hotStyle := PartStyle('TyTreeHeaderSection', '', [tysHover]);
+    secStyle := PartStyle('TyTreeHeaderSection', '', TyStatesUnlessDisabled(Self, []));   // #118
+    hotStyle := PartStyle('TyTreeHeaderSection', '', TyStatesUnlessDisabled(Self, [tysHover]));
 
     // Device-px widths -> tiled rects. Pure math == hit-test geometry.
     widths := DeviceWidths;
@@ -951,7 +951,7 @@ var
   edge: Integer;
 begin
   inherited MouseDown(Button, Shift, X, Y);
-  if (Button <> mbLeft) or not Enabled then Exit;
+  if (Button <> mbLeft) or not IsEnabled then Exit;
   widths := DeviceWidths;
   // A boundary within the grip starts a resize; otherwise a plain section press.
   edge := TyHeaderResizeEdgeAtX(widths, ClientRect, X, ScaledGrip, IsRightToLeft);
@@ -1037,7 +1037,7 @@ begin
     Exit;
   end;
   inherited MouseUp(Button, Shift, X, Y);
-  if (Button <> mbLeft) or not Enabled then Exit;
+  if (Button <> mbLeft) or not IsEnabled then Exit;
   // A plain click (no drag) on a section body toggles its sort and fires the event.
   widths := DeviceWidths;
   movedX := TyHeaderResizeEdgeAtX(widths, ClientRect, X, ScaledGrip, IsRightToLeft);

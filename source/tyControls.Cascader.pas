@@ -1556,7 +1556,7 @@ begin
     // ':selected' theme rule styles all three.
     Include(Result, tysSelected);
   lvl := TyCascaderColumnNodes(FRoot, FPath, AColumn);
-  if (not Enabled) or (lvl = nil) or (AIndex < 0) or (AIndex >= lvl.Count)
+  if (not IsEnabled) or (lvl = nil) or (AIndex < 0) or (AIndex >= lvl.Count)
      or (not lvl[AIndex].Enabled) then
   begin
     { Disabled KEEPS :selected, TTySegmented's rule: a greyed-out row must still show that it
@@ -1594,7 +1594,7 @@ procedure TTyCascaderPanel.MouseDown(Button: TMouseButton; Shift: TShiftState;
 var
   c, r: Integer;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button <> mbLeft then Exit;
   // Pick on PRESS: a cascader column is a menu, and every menu in this library commits on
@@ -1607,7 +1607,7 @@ procedure TTyCascaderPanel.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   c, r: Integer;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
   if TyPanelHitTest(X, Y, c, r) then SetHover(c, r) else SetHover(-1, -1);
 end;
@@ -2100,7 +2100,7 @@ end;
 
 procedure TTyCustomCascader.Click;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited Click;
   { Clicking the field while the popup is open fires the form's deactivate -> FPopup.Close ->
     PopupClosed BEFORE this handler runs, so DroppedDown is already False here and a naive
@@ -2114,7 +2114,7 @@ end;
 
 procedure TTyCustomCascader.KeyDown(var Key: Word; Shift: TShiftState);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   if (Key = VK_ESCAPE) and DroppedDown then
   begin

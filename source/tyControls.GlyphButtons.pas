@@ -1274,7 +1274,7 @@ end;
 
 procedure TTyCustomSpeedButton.Click;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   if FGroupIndex > 0 then
   begin
     if Down then

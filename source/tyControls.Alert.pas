@@ -687,7 +687,7 @@ procedure TTyCustomAlert.MouseDown(Button: TMouseButton; Shift: TShiftState; X, 
 var
   closeHit: Boolean;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   // A background-less (theme-degraded) alert paints NOTHING — the input must agree it is not
   // there, or it swallows clicks and (over the invisible x's slot) can even hide itself.
   if not (tpBackground in AlertStyle.Present) then Exit;
@@ -725,7 +725,7 @@ procedure TTyCustomAlert.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   h: Boolean;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
   h := FClosable and PtOnClose(X, Y);
   if FHoverClose <> h then
@@ -799,7 +799,7 @@ begin
       // (so TyAlertClose.error can tint the x of an error alert) and with the state of the
       // GLYPH, not the bar — hovering precisely the x is what lights TyAlertClose:hover.
       closeStates := [];
-      if not Enabled then
+      if not IsEnabled then
         Include(closeStates, tysDisabled)
       else if FHoverClose then
         Include(closeStates, tysHover)

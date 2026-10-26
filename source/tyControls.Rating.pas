@@ -225,7 +225,7 @@ end;
 procedure TTyCustomRating.KeyDown(var Key: Word; Shift: TShiftState);
 var stp: Double;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   if FReadOnly then Exit;
   if FAllowHalf then stp := 0.5 else stp := 1.0;
@@ -240,7 +240,7 @@ end;
 procedure TTyCustomRating.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var v: Double;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button <> mbLeft then Exit;
   if TabStop and CanFocus then SetFocus;
@@ -254,7 +254,7 @@ end;
 procedure TTyCustomRating.MouseMove(Shift: TShiftState; X, Y: Integer);
 var v: Double;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
   if FReadOnly then Exit;
   v := TyRatingValueFromX(X, ClientWidth, FCount, FAllowHalf);

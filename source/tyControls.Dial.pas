@@ -241,7 +241,7 @@ begin if FValueFormat = AValue then Exit; FValueFormat := AValue; Invalidate; en
 procedure TTyCustomDial.KeyDown(var Key: Word; Shift: TShiftState);
 var stp: Double;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   stp := FStep;
   if stp <= 0 then stp := 1;
@@ -257,7 +257,7 @@ end;
 
 procedure TTyCustomDial.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbLeft then
   begin
@@ -269,7 +269,7 @@ end;
 
 procedure TTyCustomDial.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
   if FDragging then DragToPoint(X, Y);
 end;
@@ -288,7 +288,7 @@ begin
   // that marks the wheel handled and do not step.
   Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
   if Result then Exit;
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   stp := FStep;
   if stp <= 0 then stp := 1;
   // Wheel-up (WheelDelta > 0) increases; wheel-down decreases.

@@ -95,6 +95,7 @@ uses
   test.borderwidth,
   test.panelcaption,
   test.qatspacing,
+  test.disabledlook,
   test.calendar,
   test.datetimepicker,
   test.treeview.events,
