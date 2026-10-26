@@ -21,10 +21,12 @@ unit test.chrome.overlay;
 interface
 
 uses
-  Classes, SysUtils, Types, Graphics, Controls, Forms, LCLType, LMessages, fpcunit, testregistry,
+  Classes, SysUtils, Types, Graphics, Controls, Forms, ComCtrls, LCLType, LMessages, fpcunit,
+  testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.Base,
-  tyControls.Card, tyControls.Button, tyControls.Panel, tyControls.TyLabel, tyControls.GroupBox;
+  tyControls.Card, tyControls.Button, tyControls.Panel, tyControls.TyLabel, tyControls.GroupBox,
+  tyControls.PageControl, tyControls.TabSheet;
 
 type
   TOvlButton = class(TTyButton)
@@ -50,6 +52,12 @@ type
   TOvlGroupBox = class(TTyGroupBox)
   public
     procedure XChromeChanged;
+  end;
+
+  TOvlSheet = class(TTyTabSheet)
+  public
+    function Render: TBGRABitmap;
+    function RenderOwn: TBGRABitmap;
   end;
 
   TOvlLabel = class(TTyLabel)
@@ -118,6 +126,9 @@ type
     procedure TestAGroupBoxsKeptLayerMatchesAFreshOne;
     procedure TestTheGroupBoxCaptionIsNotFreeGround;
     procedure TestANewCaptionRepaintsTheChildUnderIt;
+    procedure TestAPageGetsThePageControlsFrame;
+    procedure TestASideBandKeepsTheFrameOnThePage;
+    procedure TestAPageControlsKeptLayerMatchesAFreshOne;
   end;
 
 implementation
@@ -192,6 +203,43 @@ end;
 procedure TOvlGroupBox.XChromeChanged;
 begin
   CheckChromeChanged;
+end;
+
+{ TOvlSheet }
+
+function TOvlSheet.RenderOwn: TBGRABitmap;
+var
+  b: TBitmap;
+begin
+  b := TBitmap.Create;
+  try
+    b.PixelFormat := pf32bit;
+    b.SetSize(Width, Height);
+    b.Canvas.Brush.Color := clWhite;
+    b.Canvas.FillRect(0, 0, Width, Height);
+    RenderTo(b.Canvas, Rect(0, 0, Width, Height), 96);
+    Result := TBGRABitmap.Create(b);
+  finally
+    b.Free;
+  end;
+end;
+
+function TOvlSheet.Render: TBGRABitmap;
+var
+  b: TBitmap;
+begin
+  b := TBitmap.Create;
+  try
+    b.PixelFormat := pf32bit;
+    b.SetSize(Width, Height);
+    b.Canvas.Brush.Color := clWhite;
+    b.Canvas.FillRect(0, 0, Width, Height);
+    RenderTo(b.Canvas, Rect(0, 0, Width, Height), 96);
+    TyPaintAncestorChrome(Self, b.Canvas, 96);
+    Result := TBGRABitmap.Create(b);
+  finally
+    b.Free;
+  end;
 end;
 
 { TOvlLabel }
@@ -1047,6 +1095,97 @@ begin
   gb.Caption := 'Another caption';
   gb.XChromeChanged;
   AssertTrue('a new caption repaints the child under it', b.Invalidations > 0);
+end;
+
+{ A page control with one blue page, laid where the align engine lays it (DisplayRect). }
+function NewPagedControl(AOwner: TForm; ACtl: TTyStyleController;
+  ASide: TTabPosition; out APage: TOvlSheet): TTyPageControl;
+begin
+  Result := TTyPageControl.Create(AOwner);
+  Result.Controller := ACtl;
+  Result.Font.PixelsPerInch := 96;
+  Result.StyleOverride := PANEL_CSS;
+  Result.TabPosition := ASide;
+  Result.Parent := AOwner;
+  Result.SetBounds(10, 10, 240, 160);
+  APage := TOvlSheet.Create(AOwner);
+  APage.Controller := ACtl;
+  APage.Font.PixelsPerInch := 96;
+  APage.Caption := 'Page';
+  APage.StyleOverride := 'background: #0000ff;';
+  APage.Parent := Result;
+  APage.BoundsRect := Result.DisplayRect;
+end;
+
+{ The page fills the box below the band and used to cover three sides of the frame and its
+  two far corners. }
+procedure TChromeHostsTest.TestAPageGetsThePageControlsFrame;
+var
+  pc: TTyPageControl;
+  pg: TOvlSheet;
+  bmp: TBGRABitmap;
+  midX, midY: Integer;
+begin
+  pc := NewPagedControl(FForm, FCtl, tpTop, pg);
+  midX := pg.Width div 2;
+  midY := pg.Height div 2;
+  bmp := pg.RenderOwn;
+  try
+    AssertTrue('precondition: the page covers the frame', IsBlue(bmp.GetPixel(1, midY)));
+  finally
+    bmp.Free;
+  end;
+  bmp := pg.Render;
+  try
+    AssertTrue('the left side of the frame, over the page', IsRed(bmp.GetPixel(1, midY)));
+    AssertTrue('the right side', IsRed(bmp.GetPixel(pg.Width - 2, midY)));
+    AssertTrue('the bottom', IsRed(bmp.GetPixel(midX, pg.Height - 2)));
+    AssertFalse('outside the rounded far corner, not the page',
+      IsBlue(bmp.GetPixel(0, pg.Height - 1)));
+    AssertTrue('inside the frame the page is itself', IsBlue(bmp.GetPixel(midX, midY)));
+  finally
+    bmp.Free;
+  end;
+  AssertTrue('precondition: the page sits below the band', pg.Top > 0);
+end;
+
+{ With the band down the left side, the frame's line along it is pushed 1px into the band
+  and its other px lands on the page's first column. }
+procedure TChromeHostsTest.TestASideBandKeepsTheFrameOnThePage;
+var
+  pc: TTyPageControl;
+  pg: TOvlSheet;
+  bmp: TBGRABitmap;
+begin
+  pc := NewPagedControl(FForm, FCtl, tpLeft, pg);
+  AssertTrue('precondition: the page sits right of the band', pg.Left > 0);
+  bmp := pg.Render;
+  try
+    AssertTrue('the frame''s line along the band, on the page''s first column',
+      IsRed(bmp.GetPixel(0, pg.Height div 2)));
+    AssertTrue('the far side', IsRed(bmp.GetPixel(pg.Width - 2, pg.Height div 2)));
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TChromeHostsTest.TestAPageControlsKeptLayerMatchesAFreshOne;
+var
+  pc: TTyPageControl;
+  pg: TOvlSheet;
+  a, b: TBGRABitmap;
+begin
+  pc := NewPagedControl(FForm, FCtl, tpTop, pg);
+  TyChromeMode := 0;
+  a := pg.Render;
+  TyChromeMode := 2;
+  b := pg.Render;
+  try
+    AssertTrue('the kept layer gives what drawing it afresh gives', Same(a, b));
+  finally
+    a.Free;
+    b.Free;
+  end;
 end;
 
 initialization

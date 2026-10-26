@@ -254,6 +254,12 @@ type
       Strip-only mode keeps the frame's TOP border as a baseline rail — the tabs must
       still sit on a line — and drops the rest of the box. }
     function HasPageBody: Boolean; virtual;
+    { The page box RenderTo frames, for a strip AW x AH at APPI: the control less the band,
+      pushed back into the band by 1px so the active tab merges into the frame -- which edge
+      follows the band. With no band (TabHeight = 0) the box is the whole control: an overlap
+      there would pull the frame's border off it. One definition for the strip's own paint
+      and for a page container's chrome layer. }
+    function PageBodyRectAt(AW, AH, APPI: Integer): TRect;
     procedure SetController(AValue: TTyCustomStyleController); override;
     { Drops the Images reference when the list is freed. The setter also registers a
       FreeNotification, because opRemove only reaches us for a component we asked about:
@@ -1653,6 +1659,17 @@ begin
   end;
 end;
 
+function TTyCustomTabStrip.PageBodyRectAt(AW, AH, APPI: Integer): TRect;
+var
+  TabH: Integer;
+begin
+  TabH := BandThicknessPx;
+  Result := Rect(0, 0, AW, AH);
+  InsetForBand(Result);
+  if TabH > 0 then
+    GrowTowardBand(Result, Min(MulDiv(1, APPI, 96), TabH));
+end;
+
 { The AThick-px sliver of ARect that lies ALONG the band -- the baseline rail a caption-only
   strip keeps when it drops the rest of the page box. At tpTop this is
   `Rect(0, Top, W, Top + AThick)`, the row the frame's top border occupied. }
@@ -1967,7 +1984,7 @@ var
   P: TTyPainter;
   BoxStyle, TabStyle, ArrowStyle, CloseS, InactiveS, ActiveS: TTyStyleSet;
   R: TRect;
-  W, H, TabH, I, Overlap: Integer;
+  W, H, TabH, I: Integer;
   HdrRect, CloseRect, TextRect, IconRect, SavedClip: TRect;
   Band, Body, ClipBand: TRect;
   TabStates: TTyStateSet;
@@ -2010,11 +2027,7 @@ begin
       NO strip (TabHeight = 0) that would pull the frame's border off the control. Which
       EDGE it overlaps follows the band, so a bottom band's frame reaches down and a side
       band's reaches sideways; at tpTop this is the old `ContentTop := TabH - 1px`. }
-    Body := Rect(0, 0, W, H);
-    InsetForBand(Body);
-    Overlap := MulDiv(1, APPI, 96);
-    if TabH > 0 then
-      GrowTowardBand(Body, Min(Overlap, TabH));
+    Body := PageBodyRectAt(W, H, APPI);
     if not FillSharpBackdrop(P, Body) then
       TyFillParentBg(Self, P, Body, BoxStyle);
     if HasPageBody then
