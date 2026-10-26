@@ -24,15 +24,6 @@ type
   protected
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
-    { BorderWidth's ONLY consumer. It is a TWinControl member the base class republishes,
-      but TWinControl itself never reads it -- TWinControl.AdjustClientRect is an empty
-      no-op (C:/lazarus/lcl/include/wincontrol.inc:2498) and SetBorderWidth only posts
-      CM_BORDERCHANGED (:4225). In the LCL the inset is done here, by TCustomPanel
-      (include/custompanel.inc:191-204), and nowhere else. So publishing it without this
-      override left the Object Inspector offering a gutter the container ignored: the
-      designer wrote BorderWidth = 8, the children stayed flush against the frame, and
-      nothing said why. Same rect maths as TCustomPanel, minus the bevels we do not have. }
-    procedure AdjustClientRect(var ARect: TRect); override;
   public
     destructor Destroy; override;
     procedure Invalidate; override;
@@ -177,17 +168,6 @@ begin
   Height := 41;
 end;
 
-{ See the declaration: this is the only place BorderWidth is read. }
-procedure TTyCustomPanel.AdjustClientRect(var ARect: TRect);
-begin
-  inherited AdjustClientRect(ARect);
-  if BorderWidth > 0 then
-  begin
-    InflateRect(ARect, -BorderWidth, -BorderWidth);
-    if ARect.Right < ARect.Left then ARect.Right := ARect.Left;
-    if ARect.Bottom < ARect.Top then ARect.Bottom := ARect.Top;
-  end;
-end;
 function TTyCustomPanel.GetStyleTypeKey: string;
 begin
   Result := 'TyPanel';
@@ -260,12 +240,13 @@ begin
     S := CurrentStyle;
     ContentRect := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     DrawFrame(P, ContentRect, S);
-    // Inset content by padding
+    // Inset content by padding, and by BorderWidth as TCustomPanel insets its caption
+    // (custompanel.inc:155; the children get it in TTyCustomControl.AdjustClientRect, #115)
     ContentRect := Rect(
-      ContentRect.Left   + P.Scale(S.Padding.Left),
-      ContentRect.Top    + P.Scale(S.Padding.Top),
-      ContentRect.Right  - P.Scale(S.Padding.Right),
-      ContentRect.Bottom - P.Scale(S.Padding.Bottom)
+      ContentRect.Left   + P.Scale(S.Padding.Left + BorderWidth),
+      ContentRect.Top    + P.Scale(S.Padding.Top + BorderWidth),
+      ContentRect.Right  - P.Scale(S.Padding.Right + BorderWidth),
+      ContentRect.Bottom - P.Scale(S.Padding.Bottom + BorderWidth)
     );
     if Caption <> '' then
     begin

@@ -375,10 +375,10 @@ var
   ins: Integer;
 begin
   { NOTE ClientRect is LCL's RAW rect -- it is NOT inset by AdjustClientRect, so a control that
-    positions children itself has to apply its own inset (see the note on TTyPanel.BorderWidth).
-    That is this function. }
+    positions children itself has to apply its own inset. That is this function: the frame,
+    and BorderWidth as TTyCustomControl.AdjustClientRect insets it (#115). }
   Result := ClientRect;
-  ins := FrameInsetPx;
+  ins := FrameInsetPx + BorderInsetPx;
   InflateRect(Result, -ins, -ins);
   if Result.Right < Result.Left then Result.Right := Result.Left;
   if Result.Bottom < Result.Top then Result.Bottom := Result.Top;
