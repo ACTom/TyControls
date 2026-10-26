@@ -100,6 +100,7 @@ uses
   test.comboprops,
   test.editinputfilter,
   test.listselection,
+  test.vleprops,
   test.calendar,
   test.datetimepicker,
   test.treeview.events,

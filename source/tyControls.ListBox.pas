@@ -212,6 +212,9 @@ type
       logical selection across a structural rebuild (only positions shifted, selection set
       unchanged). Mirrors ResyncSelectionFromTexts' silent contract, but caller-driven. }
     procedure SetItemIndexSilent(const AIndex: Integer);
+    { The same for one multi-select bit: a rebuild putting the selection back on the rows it
+      was on (TTyValueListEditor, #124). No OnChange; ignored outside MultiSelect. }
+    procedure SetSelectedSilent(AIndex: Integer; AValue: Boolean);
     { TopIndex setter — protected virtual so a subclass with an inline editor
       (TTyValueListEditor) can commit/close it before the list scrolls (all scroll paths —
       wheel, scrollbar, keyboard auto-scroll — funnel through here). }
@@ -2042,6 +2045,13 @@ begin
     FItemIndex := AIndex
   else
     FItemIndex := -1;
+end;
+
+procedure TTyCustomListBox.SetSelectedSilent(AIndex: Integer; AValue: Boolean);
+begin
+  if not FMultiSelect or (AIndex < 0) or (AIndex >= FItems.Count) then Exit;
+  EnsureSelectedLen;
+  FSelected[AIndex] := AValue;
 end;
 
 procedure TTyCustomListBox.Paint;
