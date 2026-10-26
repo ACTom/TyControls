@@ -271,24 +271,11 @@ end;
 
 function TTyCustomCard.ChromeFreeRect: TRect;
 var
-  S: TTyStyleSet;
-  ppi, band, r: Integer;
-  c: TTyCorners;
+  ppi: Integer;
   lay: TTyCardLayout;
 begin
   ppi := Font.PixelsPerInch;
-  S := CurrentStyle;
-  { The frame's band -- the border or the focus ring, whichever is wider, and a column of
-    anti-aliasing -- and, for a rounded corner, how far its arc reaches in from the corner of
-    the rect: r(1 - 1/sqrt 2), a little under 0.3 r. Conservative along the straight edges,
-    which only means a child near one is checked and finds nothing to draw. }
-  c := TyEffectiveCorners(S);
-  r := c.TL;
-  if c.TR > r then r := c.TR;
-  if c.BR > r then r := c.BR;
-  if c.BL > r then r := c.BL;
-  band := MulDiv(TyChromeInsetLogical(S) + (r * 3 + 9) div 10, ppi, 96);
-  Result := Rect(band, band, Width - band, Height - band);
+  Result := TyFrameChromeFreeRect(Self, CurrentStyle, ppi);
   { and nothing of a strip: its separator is chrome }
   lay := LayoutAtPPI(Rect(0, 0, Width, Height), ppi);
   if FShowHeader and (lay.Header.Bottom > Result.Top) then Result.Top := lay.Header.Bottom;
@@ -314,26 +301,13 @@ end;
 
 function TTyCustomCard.ChromeSignature: string;
 var
-  S, st: TTyStyleSet;
-  c: TTyCorners;
-  pc: TTyColor;
+  st: TTyStyleSet;
   states: TTyStateSet;
   ppi: Integer;
 begin
-  S := CurrentStyle;
-  c := TyEffectiveCorners(S);
   states := CurrentStates;
   ppi := Font.PixelsPerInch;
-  if not TyResolveParentBg(Self, pc) then pc := 0;
-  Result := IntToStr(Width) + ',' + IntToStr(Height) + ',' + IntToStr(ppi)
-    + '|' + IntToHex(S.BorderColor, 8) + ',' + IntToStr(S.BorderWidth)
-    + ',' + IntToStr(Ord(S.BorderStyle)) + ',' + BoolToStr(TyBorderVisible(S), '1', '0')
-    + '|' + IntToStr(c.TL) + ',' + IntToStr(c.TR) + ',' + IntToStr(c.BR) + ',' + IntToStr(c.BL)
-    + '|' + BoolToStr(tpOutline in S.Present, '1', '0') + ',' + IntToHex(S.OutlineColor, 8)
-    + ',' + IntToStr(S.OutlineWidth) + ',' + IntToStr(S.OutlineOffset)
-    + '|' + IntToHex(pc, 8);
-  if tpOpacity in S.Present then
-    Result := Result + '|o' + FloatToStr(S.Opacity);
+  Result := TyFrameChromeSignature(Self, CurrentStyle, ppi);
   if FShowHeader then
   begin
     st := ActiveController.Model.ResolveStyle('TyCardHeader', StyleClass, states);

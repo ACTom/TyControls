@@ -719,6 +719,19 @@ procedure TyDrawFrameChrome(AOwner: TControl; APainter: TTyPainter; const ARect:
   host. On an image or glass parent the corners are left alone for now. }
 procedure TyDrawChromeFrame(AOwner: TControl; APainter: TTyPainter; const ARect: TRect;
   const AStyle: TTyStyleSet);
+{ Pilot (ITyChromeHost). The frame's part of a host's ChromeFreeRect, in its client
+  coordinates at APPI: in from every edge by the frame's band -- the border or the focus ring,
+  whichever is wider, and a column of anti-aliasing -- and, for a rounded corner, by how far
+  its arc reaches in from the corner of the rect: r(1 - 1/sqrt 2), a little under 0.3 r.
+  Conservative along the straight edges, which only means a child near one is checked and
+  finds nothing to draw. A host with separators takes its strips out of this as well. }
+function TyFrameChromeFreeRect(AControl: TControl; const AStyle: TTyStyleSet;
+  APPI: Integer): TRect;
+{ Pilot (ITyChromeHost). The frame's part of a host's ChromeSignature: its size and PPI,
+  border, corners, focus ring, the parent background its corners show, its opacity. A host
+  with separators adds theirs. }
+function TyFrameChromeSignature(AControl: TControl; const AStyle: TTyStyleSet;
+  APPI: Integer): string;
 
 implementation
 
@@ -753,6 +766,40 @@ begin
     if AStyle.OutlineOffset + AStyle.OutlineWidth > Result then
       Result := AStyle.OutlineOffset + AStyle.OutlineWidth;
   if Result > 0 then Inc(Result);   { 抗锯齿留量;完全没有 chrome 就一寸都不让 }
+end;
+
+function TyFrameChromeFreeRect(AControl: TControl; const AStyle: TTyStyleSet;
+  APPI: Integer): TRect;
+var
+  c: TTyCorners;
+  band, r: Integer;
+begin
+  c := TyEffectiveCorners(AStyle);
+  r := c.TL;
+  if c.TR > r then r := c.TR;
+  if c.BR > r then r := c.BR;
+  if c.BL > r then r := c.BL;
+  band := MulDiv(TyChromeInsetLogical(AStyle) + (r * 3 + 9) div 10, APPI, 96);
+  Result := Rect(band, band, AControl.Width - band, AControl.Height - band);
+end;
+
+function TyFrameChromeSignature(AControl: TControl; const AStyle: TTyStyleSet;
+  APPI: Integer): string;
+var
+  c: TTyCorners;
+  pc: TTyColor;
+begin
+  c := TyEffectiveCorners(AStyle);
+  if not TyResolveParentBg(AControl, pc) then pc := 0;
+  Result := IntToStr(AControl.Width) + ',' + IntToStr(AControl.Height) + ',' + IntToStr(APPI)
+    + '|' + IntToHex(AStyle.BorderColor, 8) + ',' + IntToStr(AStyle.BorderWidth)
+    + ',' + IntToStr(Ord(AStyle.BorderStyle)) + ',' + BoolToStr(TyBorderVisible(AStyle), '1', '0')
+    + '|' + IntToStr(c.TL) + ',' + IntToStr(c.TR) + ',' + IntToStr(c.BR) + ',' + IntToStr(c.BL)
+    + '|' + BoolToStr(tpOutline in AStyle.Present, '1', '0') + ',' + IntToHex(AStyle.OutlineColor, 8)
+    + ',' + IntToStr(AStyle.OutlineWidth) + ',' + IntToStr(AStyle.OutlineOffset)
+    + '|' + IntToHex(pc, 8);
+  if tpOpacity in AStyle.Present then
+    Result := Result + '|o' + FloatToStr(AStyle.Opacity);
 end;
 
 
