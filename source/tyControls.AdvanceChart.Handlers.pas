@@ -268,6 +268,64 @@ type
   TTyChartToolboxHandler = procedure(ASender: TObject;
     const AFeature, AIcon: string) of object;
 
+  { ==== the data view's optionToContent / contentToOption [spec 237] ====
+
+    `toolbox.feature.dataView.optionToContent: '@Name'` -- upstream calls
+    it with api.getOption() when the view opens and shows what it answers
+    (an html string, or a DOM node) in place of the textarea. Here the
+    handler is given the chart's option as GetOptionJson writes it (the
+    same shape) and answers a TTyChartDataViewContent in one of four forms:
+
+      cdvHtml     Text is html, as upstream's string is. Each <table> in it
+                  is a grid on the dialog's Table page (a row in <thead>, or
+                  a first row of <th> cells, is the grid's header); the text
+                  outside the tables, read as the tooltip reads html
+                  (tyControls.AdvanceChart.TipHtml), is on the Text page.
+      cdvText     Text is plain text, shown as written on the Text page.
+      cdvTable    Tables are the grids, with no html to write.
+      cdvControl  Control is a TWinControl the handler made (unparented):
+                  the dialog shows it in place of the pages. One with no
+                  Owner is freed by the chart when the view is done.
+
+    `contentToOption: '@Name'` -- upstream calls it on Refresh with the
+    view's DOM and api.getOption() and merges what it answers through the
+    changeDataView action. Here the handler is given the content as the
+    user left it -- the same record, its Tables read back from the grids
+    (and an html content's Text the html with the cells the user changed
+    rewritten, as the edited DOM's innerHTML would be), a text content's
+    Text from the memo, a control as it is -- and the option, and answers the
+    option to merge as JSON text; '' (or null) is upstream's falsy answer:
+    nothing is merged. Under the default view (no optionToContent handler)
+    it is given Kind cdvText and the table text the view read back.
+
+    Refresh reads back only when BOTH are given or neither is -- upstream's
+    rule, "Data change is ignored" otherwise. A '@Name' nobody registered is
+    what upstream sees for a value that is not a function: given, but not
+    called (an optionToContent so named leaves the default view; a
+    contentToOption so named leaves Refresh to parse the default text). }
+  TTyChartDataViewKind = (cdvHtml, cdvText, cdvTable, cdvControl);
+  TTyChartDataViewRows = array of TTyStringArray;
+  TTyChartDataViewTable = record
+    { a <caption>'s text: the heading above the grid ('' for none) }
+    Caption: string;
+    { the header row's cells; empty for a table with none }
+    Header: TTyStringArray;
+    { every other row, its cells }
+    Rows: TTyChartDataViewRows;
+  end;
+  TTyChartDataViewTables = array of TTyChartDataViewTable;
+  TTyChartDataViewContent = record
+    Kind: TTyChartDataViewKind;
+    Text: string;
+    Tables: TTyChartDataViewTables;
+    { cdvControl: a TWinControl (TObject here: this unit stays LCL-free) }
+    Control: TObject;
+  end;
+  TTyChartOptionToContent = function(
+    const AOption: string): TTyChartDataViewContent of object;
+  TTyChartContentToOption = function(const AContent: TTyChartDataViewContent;
+    const AOption: string): string of object;
+
   { ==== axisPointer.link's mapper [Batch 141] ====
     `axisPointer.link[i].mapper: '@Name'` -- upstream calls it with the
     source axis' value and the two axes as makeMapperParam builds them, and
@@ -362,6 +420,22 @@ procedure TyChartUnregisterToolboxHandler(const AName: string);
 function TyChartFindToolboxHandler(const AName: string;
   out AHandler: TTyChartToolboxHandler): Boolean;
 procedure TyChartClearToolboxHandlers;
+
+{ ---- the data view's optionToContent / contentToOption [spec 237] ----
+  The same rules again: a name ('@' left off), registered once, replaced
+  when registered again. }
+procedure TyChartRegisterOptionToContent(const AName: string;
+  AHandler: TTyChartOptionToContent);
+procedure TyChartUnregisterOptionToContent(const AName: string);
+function TyChartFindOptionToContent(const AName: string;
+  out AHandler: TTyChartOptionToContent): Boolean;
+procedure TyChartClearOptionToContents;
+procedure TyChartRegisterContentToOption(const AName: string;
+  AHandler: TTyChartContentToOption);
+procedure TyChartUnregisterContentToOption(const AName: string);
+function TyChartFindContentToOption(const AName: string;
+  out AHandler: TTyChartContentToOption): Boolean;
+procedure TyChartClearContentToOptions;
 
 { axisPointer.link mappers [Batch 141], by name, '@' left off as for the
   others; registering a name again replaces it }
@@ -689,6 +763,118 @@ end;
 procedure TyChartClearToolboxHandlers;
 begin
   GToolboxHandlers := nil;
+end;
+
+type
+  TO2CEntry = record
+    Name: string;
+    Handler: TTyChartOptionToContent;
+  end;
+  TC2OEntry = record
+    Name: string;
+    Handler: TTyChartContentToOption;
+  end;
+
+var
+  GO2C: array of TO2CEntry;
+  GC2O: array of TC2OEntry;
+
+function IndexOfO2C(const AName: string): Integer;
+var i: Integer;
+begin
+  for i := 0 to High(GO2C) do
+    if SameText(GO2C[i].Name, AName) then
+      Exit(i);
+  Result := -1;
+end;
+
+function IndexOfC2O(const AName: string): Integer;
+var i: Integer;
+begin
+  for i := 0 to High(GC2O) do
+    if SameText(GC2O[i].Name, AName) then
+      Exit(i);
+  Result := -1;
+end;
+
+procedure TyChartRegisterOptionToContent(const AName: string;
+  AHandler: TTyChartOptionToContent);
+var i: Integer;
+begin
+  if AName = '' then Exit;
+  i := IndexOfO2C(AName);
+  if i < 0 then
+  begin
+    i := Length(GO2C);
+    SetLength(GO2C, i + 1);
+    GO2C[i].Name := AName;
+  end;
+  GO2C[i].Handler := AHandler;
+end;
+
+procedure TyChartUnregisterOptionToContent(const AName: string);
+var i, j: Integer;
+begin
+  i := IndexOfO2C(AName);
+  if i < 0 then Exit;
+  for j := i to High(GO2C) - 1 do
+    GO2C[j] := GO2C[j + 1];
+  SetLength(GO2C, Length(GO2C) - 1);
+end;
+
+function TyChartFindOptionToContent(const AName: string;
+  out AHandler: TTyChartOptionToContent): Boolean;
+var i: Integer;
+begin
+  AHandler := nil;
+  i := IndexOfO2C(AName);
+  Result := (i >= 0) and Assigned(GO2C[i].Handler);
+  if Result then AHandler := GO2C[i].Handler;
+end;
+
+procedure TyChartClearOptionToContents;
+begin
+  GO2C := nil;
+end;
+
+procedure TyChartRegisterContentToOption(const AName: string;
+  AHandler: TTyChartContentToOption);
+var i: Integer;
+begin
+  if AName = '' then Exit;
+  i := IndexOfC2O(AName);
+  if i < 0 then
+  begin
+    i := Length(GC2O);
+    SetLength(GC2O, i + 1);
+    GC2O[i].Name := AName;
+  end;
+  GC2O[i].Handler := AHandler;
+end;
+
+procedure TyChartUnregisterContentToOption(const AName: string);
+var i, j: Integer;
+begin
+  i := IndexOfC2O(AName);
+  if i < 0 then Exit;
+  for j := i to High(GC2O) - 1 do
+    GC2O[j] := GC2O[j + 1];
+  SetLength(GC2O, Length(GC2O) - 1);
+end;
+
+function TyChartFindContentToOption(const AName: string;
+  out AHandler: TTyChartContentToOption): Boolean;
+var i: Integer;
+begin
+  AHandler := nil;
+  i := IndexOfC2O(AName);
+  Result := (i >= 0) and Assigned(GC2O[i].Handler);
+  if Result then AHandler := GC2O[i].Handler;
+end;
+
+procedure TyChartClearContentToOptions;
+begin
+  GC2O := nil;
 end;
 
 type
@@ -1109,5 +1295,7 @@ finalization
   TyChartClearFormatters;
   TyChartClearPositionHandlers;
   TyChartClearVisualHandlers;
+  TyChartClearOptionToContents;
+  TyChartClearContentToOptions;
 
 end.

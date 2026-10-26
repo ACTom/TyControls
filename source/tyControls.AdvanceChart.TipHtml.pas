@@ -49,7 +49,8 @@ unit tyControls.AdvanceChart.TipHtml;
 interface
 uses
   SysUtils, Math,
-  tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Tooltip;
+  tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
+  tyControls.AdvanceChart.Tooltip, tyControls.AdvanceChart.Handlers;
 
 type
   { [R2-I8] Replace the built-in reading of a tooltip's html: AHtml is the
@@ -83,11 +84,33 @@ function TyTooltipEncodeHtml(const AText: string): string;
   and numeric (&#NNN; &#xHH;); an unknown name is left as written. }
 function TyTooltipDecodeEntities(const AText: string): string;
 
+{ [spec 237] THE TEXT A BROWSER SHOWS FOR AHtml, without its styles: the
+  lines TyTooltipHtmlLines lays out, each its text runs joined (a marker or
+  a box is no text), the lines joined by ASep (an empty line a <br> made
+  stays an empty line). }
+function TyHtmlPlainText(const AHtml: string; const ASep: string = #10): string;
+
+{ [spec 237] THE TABLES IN AHtml, for the data view's grids: every <table>
+  that is not inside another, in order -- its <caption>'s text, its header
+  row (the first row when it is in a <thead> or all its cells are <th>) and
+  every other row, each cell's text as TyHtmlPlainText reads it, its lines
+  joined by a space (a table nested in a cell is part of that cell's text).
+  AOutside is AHtml with those tables cut out (each leaves a block break). }
+function TyHtmlTables(const AHtml: string;
+  out AOutside: string): TTyChartDataViewTables;
+
+{ [spec 237] AHtml with its tables' cells as ATables holds them now (as the
+  user left the grids TyHtmlTables made of it): each cell whose text
+  differs has its content replaced by the new text, encoded; every other
+  byte stays as written -- what upstream's contentToOption reads off the
+  DOM after the user edited it. Cells past the html's own are left out. }
+function TyHtmlSetCells(const AHtml: string;
+  const ATables: TTyChartDataViewTables): string;
+
 implementation
 
 uses
-  tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Scale, tyControls.FontUnits,
-  tyControls.AdvanceChart.Handlers;
+  tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Scale, tyControls.FontUnits;
 
 const
   { tyControls.Types' TyFontItalic: the italic flag above a font weight. Not
@@ -1260,6 +1283,365 @@ begin
   finally
     r.Free;
   end;
+end;
+
+{ ============================ [spec 237] the data view ============================ }
+
+function TyHtmlPlainText(const AHtml: string; const ASep: string): string;
+var
+  lines: TTyTooltipLineArray;
+  i, j, k: Integer;
+  ln: string;
+  first: Boolean;
+begin
+  Result := '';
+  lines := TyTooltipHtmlLines(AHtml, Default(TTyTooltipInk));
+  first := True;
+  for i := 0 to High(lines) do
+  begin
+    if lines[i].Spacer then Continue;
+    ln := '';
+    for j := 0 to High(lines[i].Runs) do
+      if lines[i].Runs[j].Kind = ttrText then ln := ln + lines[i].Runs[j].Text;
+    { the empty lines a <br> left before this one }
+    if not first then
+      for k := 1 to lines[i].BlankLinesBefore do Result := Result + ASep;
+    if not first then Result := Result + ASep;
+    Result := Result + ln;
+    first := False;
+  end;
+end;
+
+type
+  { where one cell's content lies in the html: Copy(html, S, E - S) }
+  THtmlCellSpan = record
+    S, E: Integer;
+  end;
+  THtmlRowSpans = array of THtmlCellSpan;
+  { per table, per row (the header row too), per cell }
+  THtmlSpans = array of array of THtmlRowSpans;
+
+  { one table being read: its rows, whether each sat in a <thead> and was
+    all <th>, and where its cells lie }
+  THtmlTableAcc = record
+    Caption: string;
+    Rows: array of TTyStringArray;
+    InHead, AllTh: array of Boolean;
+    Spans: array of THtmlRowSpans;
+  end;
+
+function ReadHtmlTables(const AHtml: string; out AOutside: string;
+  out ASpans: THtmlSpans): TTyChartDataViewTables;
+var
+  n, i, j, k, depth, tagStart, cellStart: Integer;
+  tag, low: string;
+  closing: Boolean;
+  q: Char;
+  acc: THtmlTableAcc;
+  inRow, inCell, inCap, inHead, cellTh: Boolean;
+  cellHtml, capHtml, chunk: string;
+
+  procedure Add(const S: string);
+  begin
+    { a piece of the html: the cell's or the caption's when inside one,
+      the outside text's when outside every table }
+    if depth = 0 then AOutside := AOutside + S
+    else if inCell then cellHtml := cellHtml + S
+    else if inCap then capHtml := capHtml + S;
+  end;
+
+  procedure EndCell;
+  var r: Integer;
+  begin
+    if not inCell then Exit;
+    inCell := False;
+    r := High(acc.Rows);
+    SetLength(acc.Rows[r], Length(acc.Rows[r]) + 1);
+    acc.Rows[r][High(acc.Rows[r])] := Trim(TyHtmlPlainText(cellHtml, ' '));
+    SetLength(acc.Spans[r], Length(acc.Spans[r]) + 1);
+    acc.Spans[r][High(acc.Spans[r])].S := cellStart;
+    acc.Spans[r][High(acc.Spans[r])].E := tagStart;
+    if not cellTh then acc.AllTh[r] := False;
+    cellHtml := '';
+  end;
+
+  procedure StartRow;
+  var r: Integer;
+  begin
+    EndCell;
+    r := Length(acc.Rows);
+    SetLength(acc.Rows, r + 1);
+    SetLength(acc.InHead, r + 1);
+    SetLength(acc.AllTh, r + 1);
+    SetLength(acc.Spans, r + 1);
+    acc.InHead[r] := inHead;
+    acc.AllTh[r] := True;
+    inRow := True;
+  end;
+
+  procedure EndRow;
+  begin
+    EndCell;
+    inRow := False;
+  end;
+
+  procedure EndTable;
+  var
+    t, r, first: Integer;
+  begin
+    EndRow;
+    t := Length(Result);
+    SetLength(Result, t + 1);
+    SetLength(ASpans, t + 1);
+    ASpans[t] := acc.Spans;
+    Result[t].Caption := acc.Caption;
+    first := 0;
+    if (Length(acc.Rows) > 0) and (Length(acc.Rows[0]) > 0)
+      and (acc.InHead[0] or acc.AllTh[0]) then
+    begin
+      Result[t].Header := acc.Rows[0];
+      first := 1;
+    end;
+    SetLength(Result[t].Rows, Length(acc.Rows) - first);
+    for r := first to High(acc.Rows) do Result[t].Rows[r - first] := acc.Rows[r];
+  end;
+
+begin
+  Result := nil;
+  ASpans := nil;
+  AOutside := '';
+  n := Length(AHtml);
+  low := LowerCase(AHtml);
+  depth := 0;
+  tagStart := 1;
+  cellStart := 1;
+  inRow := False;
+  inCell := False;
+  inCap := False;
+  inHead := False;
+  cellTh := False;
+  cellHtml := '';
+  capHtml := '';
+  acc := Default(THtmlTableAcc);
+  i := 1;
+  while i <= n do
+  begin
+    if AHtml[i] <> '<' then
+    begin
+      j := i;
+      while (j <= n) and (AHtml[j] <> '<') do Inc(j);
+      Add(Copy(AHtml, i, j - i));
+      i := j;
+      Continue;
+    end;
+    tagStart := i;
+    { a comment, a declaration: as written, where it stands }
+    if Copy(AHtml, i, 4) = '<!--' then
+    begin
+      k := Pos('-->', Copy(AHtml, i + 4, MaxInt));
+      if k = 0 then j := n + 1 else j := i + 4 + k + 2;
+      Add(Copy(AHtml, i, j - i));
+      i := j;
+      Continue;
+    end;
+    closing := (i < n) and (AHtml[i + 1] = '/');
+    j := i + 1;
+    if closing then Inc(j);
+    if (j > n) or not (AHtml[j] in ['a'..'z', 'A'..'Z']) then
+    begin
+      Add('<');
+      Inc(i);
+      Continue;
+    end;
+    k := j;
+    while (k <= n) and not (AHtml[k] in [' ', #9, #10, #13, #12, '/', '>']) do Inc(k);
+    tag := LowerCase(Copy(AHtml, j, k - j));
+    while (k <= n) and (AHtml[k] <> '>') do
+    begin
+      if AHtml[k] in ['"', ''''] then
+      begin
+        q := AHtml[k];
+        Inc(k);
+        while (k <= n) and (AHtml[k] <> q) do Inc(k);
+      end;
+      Inc(k);
+    end;
+    chunk := Copy(AHtml, i, k - i + 1);
+    i := k + 1;
+    { a raw element (script, style ...): its content is no markup }
+    if not closing and InList(tag, cRawTags) then
+    begin
+      k := Pos('</' + tag, Copy(low, i, MaxInt));
+      if k = 0 then j := n + 1
+      else
+      begin
+        j := i + k - 1;
+        while (j <= n) and (AHtml[j] <> '>') do Inc(j);
+        Inc(j);
+      end;
+      Add(chunk + Copy(AHtml, i, j - i));
+      i := j;
+      Continue;
+    end;
+    if tag = 'table' then
+    begin
+      if closing then
+      begin
+        if depth = 0 then Continue;
+        if depth = 1 then
+        begin
+          EndTable;
+          depth := 0;
+          { the table was a block: the text on either side does not run
+            together }
+          AOutside := AOutside + '<div></div>';
+        end
+        else
+        begin
+          Add(chunk);
+          Dec(depth);
+        end;
+      end
+      else if depth = 0 then
+      begin
+        depth := 1;
+        acc := Default(THtmlTableAcc);
+        inRow := False;
+        inCell := False;
+        inCap := False;
+        inHead := False;
+        AOutside := AOutside + '<div></div>';
+      end
+      else
+      begin
+        Add(chunk);
+        Inc(depth);
+      end;
+      Continue;
+    end;
+    if depth <> 1 then
+    begin
+      Add(chunk);
+      Continue;
+    end;
+    { the outer table's own structure }
+    if tag = 'caption' then
+    begin
+      if closing then
+      begin
+        if inCap then acc.Caption := Trim(TyHtmlPlainText(capHtml, ' '));
+        inCap := False;
+      end
+      else
+      begin
+        EndRow;
+        inCap := True;
+        capHtml := '';
+      end;
+    end
+    else if (tag = 'thead') or (tag = 'tbody') or (tag = 'tfoot') then
+    begin
+      EndRow;
+      inHead := (tag = 'thead') and not closing;
+    end
+    else if tag = 'tr' then
+    begin
+      if closing then EndRow else StartRow;
+    end
+    else if (tag = 'td') or (tag = 'th') then
+    begin
+      if closing then EndCell
+      else
+      begin
+        if not inRow then StartRow else EndCell;
+        inCell := True;
+        cellTh := tag = 'th';
+        cellHtml := '';
+        cellStart := i;
+      end;
+    end
+    else
+      Add(chunk);
+  end;
+  { an unclosed table ends with the text }
+  tagStart := n + 1;
+  if depth > 0 then EndTable;
+end;
+
+function TyHtmlTables(const AHtml: string;
+  out AOutside: string): TTyChartDataViewTables;
+var spans: THtmlSpans;
+begin
+  Result := ReadHtmlTables(AHtml, AOutside, spans);
+end;
+
+function TyHtmlSetCells(const AHtml: string;
+  const ATables: TTyChartDataViewTables): string;
+type
+  TRepl = record
+    S, E: Integer;
+    Text: string;
+  end;
+var
+  old: TTyChartDataViewTables;
+  spans: THtmlSpans;
+  outside: string;
+  repl: array of TRepl;
+  t, r, c, k, j: Integer;
+  oldRows, newRows: TTyChartDataViewRows;
+  tmp: TRepl;
+
+  function AllRows(const ATable: TTyChartDataViewTable): TTyChartDataViewRows;
+  var i: Integer;
+  begin
+    Result := nil;
+    if Length(ATable.Header) > 0 then
+    begin
+      SetLength(Result, 1);
+      Result[0] := ATable.Header;
+    end;
+    for i := 0 to High(ATable.Rows) do
+    begin
+      SetLength(Result, Length(Result) + 1);
+      Result[High(Result)] := ATable.Rows[i];
+    end;
+  end;
+
+begin
+  old := ReadHtmlTables(AHtml, outside, spans);
+  repl := nil;
+  for t := 0 to Min(High(old), High(ATables)) do
+  begin
+    oldRows := AllRows(old[t]);
+    newRows := AllRows(ATables[t]);
+    for r := 0 to Min(High(oldRows), High(newRows)) do
+      for c := 0 to Min(High(oldRows[r]), High(newRows[r])) do
+        if (newRows[r][c] <> oldRows[r][c]) and (r <= High(spans[t]))
+          and (c <= High(spans[t][r])) then
+        begin
+          k := Length(repl);
+          SetLength(repl, k + 1);
+          repl[k].S := spans[t][r][c].S;
+          repl[k].E := spans[t][r][c].E;
+          repl[k].Text := TyTooltipEncodeHtml(newRows[r][c]);
+        end;
+  end;
+  { the latest first, so the earlier places stand }
+  for k := 1 to High(repl) do
+  begin
+    tmp := repl[k];
+    j := k - 1;
+    while (j >= 0) and (repl[j].S < tmp.S) do
+    begin
+      repl[j + 1] := repl[j];
+      Dec(j);
+    end;
+    repl[j + 1] := tmp;
+  end;
+  Result := AHtml;
+  for k := 0 to High(repl) do
+    Result := Copy(Result, 1, repl[k].S - 1) + repl[k].Text
+      + Copy(Result, repl[k].E, MaxInt);
 end;
 
 end.
