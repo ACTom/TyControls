@@ -118,7 +118,7 @@ TyControls 的硬性原则是**视觉由主题（.tycss）拥有**：颜色、�
 | 未暴露的属性 | 原因 |
 |--------------|------|
 | `Color` / `ParentColor` | 背景色由主题 `background` 令牌决定，不接受控件级覆盖 |
-| `Font`（仅暴露用于 PPI/字号传递）/ `ParentFont` | 字体族与字号优先由主题控制；`Font` 虽 published，但其作用是传 PPI，主题令牌覆盖字体族/大小 |
+| `ParentFont`（`Font` 是 published 的） | 在控件自己或它所在的容器上设的字体名、样式、颜色、字号盖过主题，`StyleOverride` 又盖过它们。窗体自己的字体不算：整窗的字体由主题的 `--font-family` / `--font-size-base` 定。设成和所在容器一样的值，就是沿用容器的 |
 | `Brush` | 填充由 Painter + 主题决定 |
 | `Bevel*`（BevelInner/Outer/Kind/Width/Edges） | 立体边框是原生外观，与主题边框语义冲突 |
 | `BorderStyle` | 边框样式由主题 `border-*` 令牌决定 |
