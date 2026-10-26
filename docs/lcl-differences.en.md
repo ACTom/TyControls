@@ -38,12 +38,12 @@ These controls have no natural size to fit their content to, so `AutoSize` leave
 
 ## Properties hidden in the designer
 
-These properties can never act on the control that publishes them. They are kept so that saved forms still load, but the Object Inspector no longer shows them.
+These properties can never act on the control that publishes them. They are kept so that saved forms still load, but the Object Inspector no longer shows them. From 4.0 on they are not published.
 
 | Control | Properties | Why |
 |---------|-----------|-----|
 | `TTyNumericEdit` and descendants | `CharCase` | Only digits, a sign and a decimal separator can be entered |
-| `TTyAdvancedComboBox`, `TTyCheckComboBox`, `TTyColorBox`, `TTyFilterComboBox`, `TTyOfficeComboBox`, `TTyShellComboBox` | `MaxLength`, `CharCase`, `ReadOnly` | Pick-only: there is no text to edit |
+| `TTyAdvancedComboBox`, `TTyCheckComboBox`, `TTyColorBox` (and `TTyColorComboBox`), `TTyFilterComboBox`, `TTyOfficeComboBox`, `TTyShellComboBox` | `MaxLength`, `CharCase`, `ReadOnly` | Pick-only: there is no text to edit |
 | The same, except `TTyColorBox` | `Style` | The list offers only the pick-only styles; an editable style is replaced by its pick-only counterpart anyway |
 | `TTyDrawGrid` | `HideSelectionWhenInactive`, `FadeUnfocusedSelection`, `MinEditorWidth` | No selection and no built-in cell editor; still shown on `TTyStringGrid` |
 | A grid's `Header` | `MainColumn` | A grid has no main column |
