@@ -390,6 +390,10 @@ begin
     to anything but the first enum member and this line stops being a no-op while the bars
     keep the old one -- move the seed into EnsureBars then. }
   FScrollBarAutoHide := sbahDefault;
+  { LCL's TScrollBox has no caption (no csSetCaption, scrollingwincontrol.inc:349); this one
+    inherited TTyPanel's, so a new box acquired its own Name as a caption its children cover
+    (#116). An .lfm that stores a Caption keeps it. }
+  ControlStyle := ControlStyle - [csSetCaption];
   Width := 200;
   Height := 150;
 end;

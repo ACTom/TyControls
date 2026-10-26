@@ -501,6 +501,9 @@ constructor TTyCustomGridPanel.Create(AOwner: TComponent);
 var i: Integer;
 begin
   inherited Create(AOwner);
+  { The cells tile the client, so an inherited caption only showed in the gaps between them --
+    a new grid panel acquired its own Name there (#116). An .lfm that stores a Caption keeps it. }
+  ControlStyle := ControlStyle - [csSetCaption];
   FColumnCount := 2;
   FRowCount := 2;
   FSpacing := 4;
