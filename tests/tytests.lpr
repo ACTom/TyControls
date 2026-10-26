@@ -94,6 +94,7 @@ uses
   test.vleprops,
   test.headerautosize,
   test.listviewprops,
+  test.gridprops,
   test.calendar,
   test.datetimepicker,
   test.treeview.events,
