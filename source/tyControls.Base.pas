@@ -2722,6 +2722,46 @@ function TyQpcCounter(out ACount: Int64): LongBool; stdcall;
   external 'kernel32' name 'QueryPerformanceCounter';
 function TyQpcFrequency(out AFreq: Int64): LongBool; stdcall;
   external 'kernel32' name 'QueryPerformanceFrequency';
+{ ABlend is a BLENDFUNCTION packed into its four bytes: AC_SRC_OVER, no flags, a constant
+  alpha of 255 and AC_SRC_ALPHA -- $01FF0000. }
+function TyAlphaBlend(ADest: HDC; AX, AY, AW, AH: Integer; ASrc: HDC; ASrcX, ASrcY, ASrcW,
+  ASrcH: Integer; ABlend: LongWord): LongBool; stdcall; external 'msimg32.dll' name 'AlphaBlend';
+
+const
+  TY_BLEND_PREMULTIPLIED = $01FF0000;
+
+{ A kept chrome layer made ready for AlphaBlend, in place: premultiplied the way LCL
+  premultiplies a band it is handed (a clear pixel to black, x * a div 255), so the layer
+  lands exactly as a band drawn afresh would. A TBGRABitmap on Windows is a DIB section
+  already: GDI reads these very pixels, and nothing is copied. }
+procedure TyPremultiplyForGdi(ABmp: TBGRABitmap);
+var
+  p: PBGRAPixel;
+  i, a, c: Integer;
+begin
+  p := ABmp.Data;
+  for i := 0 to ABmp.NbPixels - 1 do
+  begin
+    a := p^.alpha;
+    if a = 0 then
+    begin
+      p^.red := 0;
+      p^.green := 0;
+      p^.blue := 0;
+    end
+    else if a < 255 then
+    begin
+      c := p^.red;   // through an Integer: a Byte field cast wider reads past it
+      p^.red := c * a div 255;
+      c := p^.green;
+      p^.green := c * a div 255;
+      c := p^.blue;
+      p^.blue := c * a div 255;
+    end;
+    Inc(p);
+  end;
+  ABmp.InvalidateBitmap;
+end;
 {$ENDIF}
 
 function TyChromeClockUs: Int64;
@@ -2792,6 +2832,10 @@ begin
   end;
   if op < 1.0 then
     Result.ApplyGlobalOpacity(Round(op * 255));
+  {$IFDEF MSWINDOWS}
+  if AScale = 1 then
+    TyPremultiplyForGdi(Result);   // it goes straight onto the window: see TyPaintHostChrome
+  {$ENDIF}
   AHostCtl.FChromeCache := Result;
   AHostCtl.FChromeCacheKey := key;
   Inc(TyChromeStats.CacheBytes, Int64(Result.Width) * Result.Height * 4);
@@ -2802,7 +2846,10 @@ end;
 { AHost's chrome painted over AArea (in ACanvas's coordinates; the host's (0,0) is at
   AHostOrigin there): one transparent layer per band that reaches into the chrome, composited
   over what ACanvas already holds. Bands, not the whole area: a large child that touches the
-  frame along one edge pays for that edge only. }
+  frame along one edge pays for that edge only.
+  On Windows a kept layer skips the band's own layer altogether: the layer is premultiplied
+  once, when it is built, and each band is one AlphaBlend from it straight onto ACanvas --
+  no band bitmap, no copy into one, and no premultiplied copy of it made by LCL on the way. }
 procedure TyPaintHostChrome(const AHost: ITyChromeHost; AHostCtl: TControl; ACanvas: TCanvas;
   APPI: Integer; const AHostOrigin: TPoint; const AArea: TRect);
 var
@@ -2819,6 +2866,26 @@ begin
   for i := 0 to n - 1 do
   begin
     Inc(TyChromeStats.Bands);
+    {$IFDEF MSWINDOWS}
+    if (TyChromeMode = 2) and (AHostCtl is TTyCustomControl)
+       and (TyCanvasDeviceScale(ACanvas).Scale <= 1) then
+    begin
+      t1 := TyChromeClockUs;
+      cache := TyChromeCacheFor(TTyCustomControl(AHostCtl), AHost, APPI, 1);
+      t2 := TyChromeClockUs;
+      Inc(TyChromeStats.FetchUs, t2 - t1);
+      { straight onto the handle, so the canvas is told, as its own drawing would tell it: a
+        bitmap behind it otherwise keeps what it held before }
+      ACanvas.Changing;
+      TyAlphaBlend(ACanvas.Handle, bands[i].Left, bands[i].Top,
+        bands[i].Right - bands[i].Left, bands[i].Bottom - bands[i].Top,
+        cache.Bitmap.Canvas.Handle, bands[i].Left - AHostOrigin.X, bands[i].Top - AHostOrigin.Y,
+        bands[i].Right - bands[i].Left, bands[i].Bottom - bands[i].Top, TY_BLEND_PREMULTIPLIED);
+      ACanvas.Changed;
+      Inc(TyChromeStats.BlitUs, TyChromeClockUs - t2);
+      Continue;
+    end;
+    {$ENDIF}
     P := TTyPainter.Create;
     try
       t0 := TyChromeClockUs;
