@@ -440,6 +440,7 @@ The repository also has a theme editor, `tools/themebuilder`: the preview follow
 | [calendar](examples/calendar/) | `TTyCalendar`: week numbers, read-only, a selectable date range |
 | [chart](examples/chart/) | `TTyChart`: line, bar, pie, donut; legend, value labels, hover tooltip, click hit-testing |
 | [checkbox](examples/checkbox/) | `TTyCheckBox`: tri-state, disabled, `OnClick` versus `OnChange`, mnemonics |
+| [chromeoverlay](examples/chromeoverlay/) | A container's frame stays on top of its children: cards, panels, group boxes, scroll boxes, expandable panels, page controls; before/after switch and redraw timing |
 | [combobox](examples/combobox/) | `TTyComboBox`: read-only list, editable with prefix autocomplete, opening and closing from code |
 | [containers](examples/containers/) | Layout containers: dividers, bevels, paint panel, group containers, scrolling and collapsible panels, grid panel, relative layout, cool bar and more |
 | [datetimepicker](examples/datetimepicker/) | `TTyDateTimePicker`: date, time, nullable, read-only, limited range, 12-hour clock, OS date format |
