@@ -486,6 +486,7 @@ CharImage1.GlyphName := 'house';
 | [events.md](docs/events.md) | 通用事件约定 |
 | [subclassing.md](docs/subclassing.md) | 从 `TTyCustomXxx` 派生自己的控件；从 3.0 升级 |
 | [rtl.md](docs/rtl.md) | 双向文本与右到左布局 |
+| [lcl-differences.md](docs/lcl-differences.md) | 与 LCL 的有意差异(移植时留意) |
 | [known-issues.md](docs/known-issues.md) | 已知问题 |
 | [CHANGELOG.md](CHANGELOG.md) | 更新日志 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 报告问题、功能建议、提交代码、路线图 |
