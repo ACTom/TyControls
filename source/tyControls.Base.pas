@@ -442,6 +442,8 @@ type
     { The post-draw hook's entry point on the WINDOWED side -- TWinControl.PaintHandler's
       single funnel into Paint. See the body for why it cannot live in Paint itself. }
     procedure PaintWindow(DC: HDC); override;
+    { Repaints on a font change up the parent chain (TyParentChainFontChanged, #112). }
+    procedure WndProc(var TheMessage: TLMessage); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -571,7 +573,20 @@ type
   calls this between the theme and StyleOverride, so a per-control override still wins and
   measuring and drawing read the same style. }
 procedure TyApplyControlFont(var AStyle: TTyStyleSet; AFont: TFont; AParentFont: Boolean;
-  const AStates: TTyStateSet);
+  const AStates: TTyStateSet); overload;
+{ The same for AControl's font, which is what CurrentStyle calls (#112), with two changes.
+  An attribute counts when it was SET below the form, on the control or on a container it
+  inherits from: walking up from AControl, the attribute differs from the parent's at some
+  step before the walk reaches the top-level window. Equal all the way up, it is the form's,
+  and the form-wide font is the theme's (--font-family, --font-size-base): a form is always
+  ParentFont = False, so whether its font was set cannot be told, and a form converted from
+  Delphi carries Tahoma and clWindowText. ParentFont needs no test -- a ParentFont child holds
+  a copy of its parent's font, so the walk goes on through it -- and an unparented control
+  counts its own values unless ParentFont is True. And the size counts too: it goes into AStyle.FontSize, so the theme's
+  size for the control's type no longer wins over it, while StyleOverride, merged after,
+  still does. A value set equal to the container's is the container's. }
+procedure TyApplyControlFont(var AStyle: TTyStyleSet; AControl: TControl;
+  const AStates: TTyStateSet); overload;
 
 { Shared font-size resolution for every ty control (windowed AND graphic — the label family
   each carried its own copy). Priority:
@@ -709,6 +724,8 @@ function TyOnTitleBar(AControl: TControl): Boolean;
 function TyStyleClassFor(AControl: TControl; const AStyleClass: string): string;
 
 implementation
+
+procedure TyParentChainFontChanged(AControl: TControl); forward;
 
 function TyOnTitleBar(AControl: TControl): Boolean;
 var
@@ -1034,7 +1051,7 @@ begin
   model := ActiveController.Model;
   Result := model.ResolveStyle(GetStyleTypeKey,
     TyStyleClassFor(Self, FStyleClass), CurrentStates);
-  TyApplyControlFont(Result, Font, ParentFont, CurrentStates);   // #92
+  TyApplyControlFont(Result, Self, CurrentStates);   // #92, #112
   // A9 layer 2: overlay the per-instance override last. Recompute only when stale —
   // the override text changed or the theme version bumped (so var(--...) re-binds).
   if FStyleOverride <> '' then
@@ -1945,6 +1962,8 @@ begin
     released again -- and none of that runs unless a handler exists. With OnPaint unassigned
     this override is one integer compare per message. }
   inherited WndProc(TheMessage);
+  if (TheMessage.Msg = CM_PARENTFONTCHANGED) and not ParentFont then
+    TyParentChainFontChanged(Self);   // #112
   if (TheMessage.Msg <> LM_PAINT) or not Assigned(OnPaint) then Exit;
   // TLMPaint.DC occupies the WParam slot (both sit directly after Msg/UnusedMsg), which is
   // also where Perform(LM_PAINT, DC, 0) puts it.
@@ -2254,7 +2273,7 @@ begin
   model := ActiveController.Model;
   Result := model.ResolveStyle(GetStyleTypeKey,
     TyStyleClassFor(Self, FStyleClass), CurrentStates);
-  TyApplyControlFont(Result, Font, ParentFont, CurrentStates);   // #92
+  TyApplyControlFont(Result, Self, CurrentStates);   // #92, #112
   // A9 layer 2: overlay the per-instance override last. Recompute only when stale —
   // the override text changed or the theme version bumped (so var(--...) re-binds).
   if FStyleOverride <> '' then
@@ -2292,6 +2311,84 @@ begin
     c := ColorToRGB(AFont.Color);
     AStyle.TextColor := TyRGBA(Red(c), Green(c), Blue(c), 255);
     Include(AStyle.Present, tpTextColor);
+  end;
+end;
+
+type
+  TTyFontAttr = (tfaName, tfaStyle, tfaColor, tfaSize);
+  TTyFontControl = class(TControl);   // ParentFont is protected
+
+{ A font up AControl's parent chain changed (#112). A ParentFont child repaints through the
+  copy of the new font LCL hands it; a control that keeps its own font (ParentFont False) is
+  told nothing, yet whether its attributes count depends on that font -- one equal to the
+  container's is the container's -- so it repaints, and so does everything under it, whose
+  walk goes through it. }
+procedure TyParentChainFontChanged(AControl: TControl);
+var
+  i: Integer;
+begin
+  if csLoading in AControl.ComponentState then Exit;
+  AControl.Invalidate;
+  if AControl is TWinControl then
+    for i := 0 to TWinControl(AControl).ControlCount - 1 do
+      TyParentChainFontChanged(TWinControl(AControl).Controls[i]);
+end;
+
+function TyFontAttrEqual(A, B: TFont; AAttr: TTyFontAttr): Boolean;
+begin
+  case AAttr of
+    tfaName: Result := SameText(A.Name, B.Name);
+    tfaStyle: Result := A.Style = B.Style;
+    tfaColor: Result := A.Color = B.Color;
+  else
+    Result := A.Size = B.Size;
+  end;
+end;
+
+{ Was this attribute of AControl's font set below the form? See TyApplyControlFont. }
+function TyFontAttrSetBelowForm(AControl: TControl; AAttr: TTyFontAttr): Boolean;
+var
+  c: TControl;
+begin
+  c := AControl;
+  if c.Parent = nil then Exit(not TTyFontControl(c).ParentFont);   // nothing to inherit from
+  repeat
+    if not TyFontAttrEqual(c.Font, c.Parent.Font, AAttr) then Exit(True);
+    c := c.Parent;
+  until c.Parent = nil;   // c is the top-level window: equal to its font, the value is the form's
+  Result := False;
+end;
+
+procedure TyApplyControlFont(var AStyle: TTyStyleSet; AControl: TControl;
+  const AStates: TTyStateSet);
+var
+  f: TFont;
+  c: TColor;
+begin
+  if AControl = nil then Exit;
+  f := AControl.Font;
+  if (f.Name <> '') and not SameText(f.Name, 'default')
+     and TyFontAttrSetBelowForm(AControl, tfaName) then
+  begin
+    AStyle.FontName := f.Name;
+    Include(AStyle.Present, tpFontName);
+  end;
+  if (f.Style <> []) and TyFontAttrSetBelowForm(AControl, tfaStyle) then
+  begin
+    AStyle.FontWeight := TyFontWeightWithStyle(AStyle.FontWeight, f.Style);
+    Include(AStyle.Present, tpFontWeight);
+  end;
+  if (f.Color <> clDefault) and not (tysDisabled in AStates)
+     and TyFontAttrSetBelowForm(AControl, tfaColor) then
+  begin
+    c := ColorToRGB(f.Color);
+    AStyle.TextColor := TyRGBA(Red(c), Green(c), Blue(c), 255);
+    Include(AStyle.Present, tpTextColor);
+  end;
+  if (f.Size > 0) and TyFontAttrSetBelowForm(AControl, tfaSize) then
+  begin
+    AStyle.FontSize := f.Size;
+    Include(AStyle.Present, tpFontSize);
   end;
 end;
 
@@ -2430,6 +2527,13 @@ procedure TTyCustomControl.DoExit;
 begin
   inherited DoExit;
   Invalidate;
+end;
+
+procedure TTyCustomControl.WndProc(var TheMessage: TLMessage);
+begin
+  inherited WndProc(TheMessage);
+  if (TheMessage.Msg = CM_PARENTFONTCHANGED) and not ParentFont then
+    TyParentChainFontChanged(Self);   // #112
 end;
 
 procedure TTyCustomControl.PaintWindow(DC: HDC);

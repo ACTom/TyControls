@@ -80,6 +80,7 @@ uses
   test.datetime.events,
   test.popup,
   test.defaults.guard,
+  test.fontprecedence,
   test.calendar,
   test.datetimepicker,
   test.treeview.events,
