@@ -1,14 +1,20 @@
 unit test.designhidden;
-{ #130: the published properties that can never act on the control that publishes them are
-  hidden from the designer -- they stay published, a form saved with one has to load --
-  and where a descendant does use one, it is offered again there. Read off the registration
-  source, as tests/test.designeditors.pas does; that unit checks each registration names a
-  property the class really publishes. }
+{ #130: the published properties that could never act on the control that publishes them are
+  not published from 4.0 on. 3.0 hid them in the designer and kept them so its forms would
+  load; 4.0 drops them. Where a control does use one -- TTyStringGrid's selection and editor
+  settings, a ListView's or TreeView's MainColumn, a plain edit's CharCase -- it is still
+  published there. A pick-only combo box's Style still lists only the pick-only styles, read off
+  the registration source as tests/test.designeditors.pas does. }
 {$mode objfpc}{$H+}
 interface
 
 uses
-  Classes, SysUtils, fpcunit, testregistry, test.designregistry,
+  Classes, SysUtils, TypInfo, fpcunit, testregistry, test.designregistry,
+  tyControls.Edit, tyControls.NumericEdit, tyControls.CurrencyEdit, tyControls.CalcEdit,
+  tyControls.CalcCurrencyEdit, tyControls.FloatSpinEdit, tyControls.TrackEdit,
+  tyControls.DB.Edits, tyControls.ComboBox, tyControls.AdvancedComboBox,
+  tyControls.CheckComboBox, tyControls.ColorBox, tyControls.ColorComboBox,
+  tyControls.FilterComboBox, tyControls.OfficeComboBox, tyControls.ShellComboBox,
   tyControls.Columns, tyControls.Grid;
 
 type
@@ -16,11 +22,11 @@ type
   private
     function EditorFor(const ABase, AProp: string): string;
   published
-    procedure TestNumericEditsHideCharCase;
-    procedure TestPickOnlyCombosHideTheTextProperties;
+    procedure TestNumericEditsDoNotPublishCharCase;
+    procedure TestPickOnlyCombosDoNotPublishTheTextProperties;
     procedure TestPickOnlyCombosListOnlyPickOnlyStyles;
-    procedure TestTheDrawGridHidesWhatOnlyTheStringGridUses;
-    procedure TestAGridsHeaderHidesMainColumn;
+    procedure TestTheDrawGridDoesNotPublishWhatOnlyTheStringGridUses;
+    procedure TestAGridsHeaderPublishesEverythingButMainColumn;
   end;
 
 implementation
@@ -53,23 +59,35 @@ begin
   end;
 end;
 
-procedure TDesignHiddenTest.TestNumericEditsHideCharCase;
+procedure TDesignHiddenTest.TestNumericEditsDoNotPublishCharCase;
+const
+  { Every final class on TTyCustomNumericEdit: a numeric edit takes digits, a sign and a
+    separator, so there is no case to change. }
+  CLS: array[0..8] of TClass = (TTyNumericEdit, TTyCurrencyEdit, TTyCalcEdit,
+    TTyCalcCurrencyEdit, TTyFloatSpinEdit, TTyTrackEdit, TTyDBNumericEdit, TTyDBCurrencyEdit,
+    TTyDBFloatSpinEdit);
+var
+  c: Integer;
 begin
-  AssertEquals('TTyCustomNumericEdit.CharCase', 'THiddenPropertyEditor',
-    EditorFor('TTyCustomNumericEdit', 'CharCase'));
+  for c := 0 to High(CLS) do
+    AssertFalse(CLS[c].ClassName + '.CharCase', IsPublishedProp(CLS[c], 'CharCase'));
+  AssertTrue('a plain edit still publishes it', IsPublishedProp(TTyEdit, 'CharCase'));
 end;
 
-procedure TDesignHiddenTest.TestPickOnlyCombosHideTheTextProperties;
+procedure TDesignHiddenTest.TestPickOnlyCombosDoNotPublishTheTextProperties;
 const
-  CLS: array[0..5] of string = ('TTyCustomAdvancedComboBox', 'TTyCustomCheckComboBox', 'TTyCustomColorBox',
-    'TTyCustomFilterComboBox', 'TTyCustomOfficeComboBox', 'TTyCustomShellComboBox');
+  CLS: array[0..6] of TClass = (TTyAdvancedComboBox, TTyCheckComboBox, TTyColorBox,
+    TTyColorComboBox, TTyFilterComboBox, TTyOfficeComboBox, TTyShellComboBox);
   PROPS: array[0..2] of string = ('MaxLength', 'CharCase', 'ReadOnly');
 var
   c, p: Integer;
 begin
   for c := 0 to High(CLS) do
     for p := 0 to High(PROPS) do
-      AssertEquals(CLS[c] + '.' + PROPS[p], 'THiddenPropertyEditor', EditorFor(CLS[c], PROPS[p]));
+      AssertFalse(CLS[c].ClassName + '.' + PROPS[p], IsPublishedProp(CLS[c], PROPS[p]));
+  for p := 0 to High(PROPS) do
+    AssertTrue('an editable combo box still publishes ' + PROPS[p],
+      IsPublishedProp(TTyComboBox, PROPS[p]));
 end;
 
 procedure TDesignHiddenTest.TestPickOnlyCombosListOnlyPickOnlyStyles;
@@ -83,29 +101,42 @@ begin
     AssertEquals(CLS[c] + '.Style', 'TTyPickOnlyComboStyleEditor', EditorFor(CLS[c], 'Style'));
 end;
 
-procedure TDesignHiddenTest.TestTheDrawGridHidesWhatOnlyTheStringGridUses;
+procedure TDesignHiddenTest.TestTheDrawGridDoesNotPublishWhatOnlyTheStringGridUses;
+const
+  PROPS: array[0..2] of string = ('HideSelectionWhenInactive', 'FadeUnfocusedSelection',
+    'MinEditorWidth');
+var
+  p: Integer;
 begin
-  AssertEquals('TTyCustomDrawGrid.HideSelectionWhenInactive', 'THiddenPropertyEditor',
-    EditorFor('TTyCustomDrawGrid', 'HideSelectionWhenInactive'));
-  AssertEquals('TTyCustomDrawGrid.FadeUnfocusedSelection', 'THiddenPropertyEditor',
-    EditorFor('TTyCustomDrawGrid', 'FadeUnfocusedSelection'));
-  AssertEquals('TTyCustomDrawGrid.MinEditorWidth', 'THiddenPropertyEditor',
-    EditorFor('TTyCustomDrawGrid', 'MinEditorWidth'));
-  AssertEquals('offered again on TTyStringGrid', 'TBoolPropertyEditor',
-    EditorFor('TTyCustomStringGrid', 'HideSelectionWhenInactive'));
-  AssertEquals('', 'TBoolPropertyEditor', EditorFor('TTyCustomStringGrid', 'FadeUnfocusedSelection'));
-  AssertEquals('', 'TIntegerPropertyEditor', EditorFor('TTyCustomStringGrid', 'MinEditorWidth'));
+  for p := 0 to High(PROPS) do
+  begin
+    AssertFalse('TTyDrawGrid.' + PROPS[p], IsPublishedProp(TTyDrawGrid, PROPS[p]));
+    AssertTrue('TTyStringGrid still publishes ' + PROPS[p],
+      IsPublishedProp(TTyStringGrid, PROPS[p]));
+  end;
 end;
 
-procedure TDesignHiddenTest.TestAGridsHeaderHidesMainColumn;
+procedure TDesignHiddenTest.TestAGridsHeaderPublishesEverythingButMainColumn;
 var
+  list: PPropList;
+  n, i: Integer;
   g: TTyStringGrid;
 begin
-  AssertEquals('TTyGridHeader.MainColumn', 'THiddenPropertyEditor',
-    EditorFor('TTyGridHeader', 'MainColumn'));
+  AssertFalse('TTyGridHeader.MainColumn', IsPublishedProp(TTyGridHeader, 'MainColumn'));
+  AssertTrue('the header ListView and TreeView use still publishes it',
+    IsPublishedProp(TTyHeader, 'MainColumn'));
+  n := GetPropList(TTyHeader, list);
+  try
+    for i := 0 to n - 1 do
+      if list^[i]^.Name <> 'MainColumn' then
+        AssertTrue('and the grid''s header publishes the rest: ' + list^[i]^.Name,
+          IsPublishedProp(TTyGridHeader, list^[i]^.Name));
+  finally
+    FreeMem(list);
+  end;
   g := TTyStringGrid.Create(nil);
   try
-    AssertTrue('and the grid''s header is one', g.Header is TTyGridHeader);
+    AssertTrue('the grid''s header is one', g.Header is TTyGridHeader);
   finally
     g.Free;
   end;

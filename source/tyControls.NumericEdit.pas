@@ -138,7 +138,6 @@ type
     property AutoSelect;
     property TextHint;
     property Alignment;
-    property CharCase;
     property NumbersOnly;
     property Align;
     property Anchors;

@@ -64,7 +64,7 @@ type
   TTyColumnOptions = set of TTyColumnOption;
 
   TTyColumns = class;   { forward }
-  TTyHeader  = class;   { forward }
+  TTyCustomHeader = class;   { forward }
 
   { The width a new column starts at, asked of the owner (#127); <= 0 = TTyColumn's own. }
   TTyColumnWidthQuery = function: Integer of object;
@@ -214,7 +214,7 @@ type
     { Owning header (Phase B). nil in Phase-A headless tests and during raw
       LFM streaming via the parameterless Create — GetOwner returns it so the
       first-column add hook can reach the header's MainColumn. }
-    FOwnerHeader: TTyHeader;
+    FOwnerHeader: TTyCustomHeader;
     FNewColumnWidth: TTyColumnWidthQuery;
 
     procedure RebuildPositionMap;
@@ -226,11 +226,11 @@ type
     function  GetOwner: TPersistent; override;
   public
     constructor Create; overload;
-    constructor Create(AOwnerHeader: TTyHeader); overload;
+    constructor Create(AOwnerHeader: TTyCustomHeader); overload;
     { Lets an owner (the grid) supply its own TTyColumn descendant, so grid-only
       column properties don't have to be pushed down into the shared TTyColumn
       that ListView/TreeView also use. Nil = plain TTyColumn. }
-    constructor Create(AOwnerHeader: TTyHeader;
+    constructor Create(AOwnerHeader: TTyCustomHeader;
       AItemClass: TCollectionItemClass); overload;
     { #127: what a column added from here on starts as wide as -- the grid answers with its
       DefaultColWidth, as LCL's columns follow the grid's (grids.pas GetDefaultWidth). Not
@@ -343,7 +343,7 @@ type
     TTyHeader — header band descriptor (Phase B)
     Owned by TTyTreeView; painted by the tree (not a windowed control).
     =================================================================== }
-  TTyHeader = class(TPersistent)
+  TTyCustomHeader = class(TPersistent)
   private
     FHeight:        Integer;
     FHeightExplicit: Boolean;   { True once a host/.lfm sets Height; False = follow --header-height (density) }
@@ -392,7 +392,8 @@ type
       with them -- TTyListView's SortColumn / SortDirection (#125) -- so a form file carries
       the sort once, under the names it always had. }
     property SortStored: Boolean read FSortStored write FSortStored;
-  published
+    { The header's properties. TTyHeader publishes every one of them; TTyGridHeader all but
+      MainColumn (#130). }
     property Height:        Integer              read FHeight        write SetHeight        default 22;
     { The setter is what makes this collection STREAM, and it is not optional.
 
@@ -422,6 +423,19 @@ type
       setter re-resolves every column's pending ImageIndex the moment a list is assigned. }
     property Images:        TCustomImageList     read FImages        write SetImages;
     property Options:       TTyHeaderOptions read FOptions       write SetOptions;
+  end;
+
+  { The header ListView and TreeView publish. }
+  TTyHeader = class(TTyCustomHeader)
+  published
+    property Height;
+    property Columns;
+    property MainColumn;
+    property SortColumn;
+    property SortDirection;
+    property AutoSizeIndex;
+    property Images;
+    property Options;
   end;
 
   { Names this model carried while it was tree-only. Kept so v2.2 code keeps compiling;
@@ -836,13 +850,13 @@ begin
   FOwnerHeader := nil;
 end;
 
-constructor TTyColumns.Create(AOwnerHeader: TTyHeader);
+constructor TTyColumns.Create(AOwnerHeader: TTyCustomHeader);
 begin
   Create;
   FOwnerHeader := AOwnerHeader;
 end;
 
-constructor TTyColumns.Create(AOwnerHeader: TTyHeader;
+constructor TTyColumns.Create(AOwnerHeader: TTyCustomHeader;
   AItemClass: TCollectionItemClass);
 begin
   if AItemClass = nil then AItemClass := TTyColumn;
@@ -899,9 +913,9 @@ begin
         add (Count = 1), so any explicit later choice (incl. an opt-out
         MainColumn := NoColumn, or := 2) is fully respected. The assignment
         goes through SetMainColumn, which now succeeds because Count >= 1. }
-      if (Count = 1) and (GetOwner is TTyHeader) and
-         (TTyHeader(GetOwner).MainColumn = NoColumn) then
-        TTyHeader(GetOwner).MainColumn := 0;
+      if (Count = 1) and (GetOwner is TTyCustomHeader) and
+         (TTyCustomHeader(GetOwner).MainColumn = NoColumn) then
+        TTyCustomHeader(GetOwner).MainColumn := 0;
       UpdatePositions;
       DoChange;
     end;
@@ -938,8 +952,8 @@ begin
         now-out-of-range MainColumn makes RenderTo's `colIdx = MainColumn` never match
         and ALL tree chrome (expand buttons / images / main caption) silently vanishes.
         Count still includes the column being deleted, so post-delete count = Count - 1. }
-      if GetOwner is TTyHeader then
-        with TTyHeader(GetOwner) do
+      if GetOwner is TTyCustomHeader then
+        with TTyCustomHeader(GetOwner) do
         begin
           if FMainColumn = col.Index then
           begin
@@ -1388,17 +1402,17 @@ end;
   TTyHeader
   --------------------------------------------------------------------------- }
 
-constructor TTyHeader.Create;
+constructor TTyCustomHeader.Create;
 begin
   Create(nil);
 end;
 
-constructor TTyHeader.Create(AColumnClass: TCollectionItemClass);
+constructor TTyCustomHeader.Create(AColumnClass: TCollectionItemClass);
 begin
   Create(AColumnClass, TTyColumns);
 end;
 
-constructor TTyHeader.Create(AColumnClass: TCollectionItemClass;
+constructor TTyCustomHeader.Create(AColumnClass: TCollectionItemClass;
   AColumnsClass: TTyColumnsClass);
 begin
   inherited Create;
@@ -1417,29 +1431,29 @@ begin
   FSortStored    := True;
 end;
 
-function TTyHeader.IsSortStored: Boolean;
+function TTyCustomHeader.IsSortStored: Boolean;
 begin
   Result := FSortStored;
 end;
 
-destructor TTyHeader.Destroy;
+destructor TTyCustomHeader.Destroy;
 begin
   FColumns.Free;
   inherited Destroy;
 end;
 
-procedure TTyHeader.ColumnsChanged(Sender: TObject);
+procedure TTyCustomHeader.ColumnsChanged(Sender: TObject);
 begin
   Changed;
 end;
 
-procedure TTyHeader.Changed;
+procedure TTyCustomHeader.Changed;
 begin
   if Assigned(FOnChange) then
     FOnChange(Self);
 end;
 
-procedure TTyHeader.SetHeight(AValue: Integer);
+procedure TTyCustomHeader.SetHeight(AValue: Integer);
 begin
   FHeightExplicit := True;
   if FHeight = AValue then Exit;
@@ -1451,13 +1465,13 @@ end;
   through the DESTINATION's item class, so a grid header stays full of TTyGridColumns
   even when assigned from a plain TTyColumns. Guarding against self-assign matters:
   TCollection.Assign would Clear first and hand back an empty collection. }
-procedure TTyHeader.SetColumns(AValue: TTyColumns);
+procedure TTyCustomHeader.SetColumns(AValue: TTyColumns);
 begin
   if AValue = FColumns then Exit;
   FColumns.Assign(AValue);
 end;
 
-procedure TTyHeader.SetMainColumn(AValue: Integer);
+procedure TTyCustomHeader.SetMainColumn(AValue: Integer);
 var
   maxCol: Integer;
 begin
@@ -1475,28 +1489,28 @@ begin
   Changed;
 end;
 
-procedure TTyHeader.SetSortColumn(AValue: Integer);
+procedure TTyCustomHeader.SetSortColumn(AValue: Integer);
 begin
   if FSortColumn = AValue then Exit;
   FSortColumn := AValue;
   Changed;
 end;
 
-procedure TTyHeader.SetSortDirection(AValue: TTySortDirection);
+procedure TTyCustomHeader.SetSortDirection(AValue: TTySortDirection);
 begin
   if FSortDirection = AValue then Exit;
   FSortDirection := AValue;
   Changed;
 end;
 
-procedure TTyHeader.SetAutoSizeIndex(AValue: Integer);
+procedure TTyCustomHeader.SetAutoSizeIndex(AValue: Integer);
 begin
   if FAutoSizeIndex = AValue then Exit;
   FAutoSizeIndex := AValue;
   Changed;
 end;
 
-procedure TTyHeader.SetImages(AValue: TCustomImageList);
+procedure TTyCustomHeader.SetImages(AValue: TCustomImageList);
 var i: Integer;
 begin
   if FImages = AValue then Exit;
@@ -1508,22 +1522,22 @@ begin
   Changed;
 end;
 
-procedure TTyHeader.SetOptions(AValue: TTyHeaderOptions);
+procedure TTyCustomHeader.SetOptions(AValue: TTyHeaderOptions);
 begin
   if FOptions = AValue then Exit;
   FOptions := AValue;
   Changed;
 end;
 
-procedure TTyHeader.Assign(ASource: TPersistent);
+procedure TTyCustomHeader.Assign(ASource: TPersistent);
 var
-  Src: TTyHeader;
+  Src: TTyCustomHeader;
   i: Integer;
   srcCol, dstCol: TTyColumn;
 begin
-  if ASource is TTyHeader then
+  if ASource is TTyCustomHeader then
   begin
-    Src := TTyHeader(ASource);
+    Src := TTyCustomHeader(ASource);
     FHeight        := Src.FHeight;
     FHeightExplicit := Src.FHeightExplicit;
     FSortColumn    := Src.FSortColumn;

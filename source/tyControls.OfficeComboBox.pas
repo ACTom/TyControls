@@ -103,13 +103,10 @@ type
     property Text;
     property DropDownCount;
     property Sorted;
-    property MaxLength;
-    property CharCase;
     property Style;
     property ItemHeight;
     property ItemWidth;
     property TextHint;
-    property ReadOnly;
     property OnDrawItem;
     property OnMeasureItem;
     property OnChange;

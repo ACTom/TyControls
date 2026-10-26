@@ -36,14 +36,15 @@ TyControls 的属性名和语义尽量与 LCL 一致，从 Lazarus 移植的代�
 
 下列控件没有"按内容"的自然尺寸,`AutoSize` 不改变它们的大小:`TTyMemo`、`TTyListView`、`TTyTreeView`、`TTyDrawGrid`、`TTyStringGrid`、`TTyValueListEditor`、仪表类控件、`TTyChart`、`TTySparkline`、`TTyProgressBar`、`TTyShape`、`TTyStarShape`、`TTyArrow`、`TTyBevel`、`TTySplitter`、取色控件、`TTyPreviewBox`、`TTyImageView`、`TTyTransfer`、`TTyRibbonBackstage`、`TTyRibbonGallery`、`TTyTitleBar`。
 
-## 设计器里隐藏的属性
+## 不再发布的属性
 
-下面这些属性对所在的控件不可能起作用。为了让已保存的窗体照常载入，它们仍然保留，只是对象查看器里不再显示。4.0 起它们不再发布。
+下面这些属性对所在的控件不可能起作用，4.0 起不再发布(3.0 里只是在对象查看器里隐藏)。3.x 的窗体如果给它们设过值，4.0 载入时会报 `Unknown property`:在 IDE 里打开窗体时选择跳过，或者从 `.lfm` 里删掉那几行。
 
 | 控件 | 属性 | 原因 |
 |------|------|------|
-| `TTyNumericEdit` 及其子类 | `CharCase` | 只能输入数字、符号和小数点 |
-| `TTyAdvancedComboBox`、`TTyCheckComboBox`、`TTyColorBox`(及 `TTyColorComboBox`)、`TTyFilterComboBox`、`TTyOfficeComboBox`、`TTyShellComboBox` | `MaxLength`、`CharCase`、`ReadOnly` | 只能选、不能输入，没有可编辑的文字 |
-| 同上(`TTyColorBox` 除外) | `Style` | 下拉列表里只列出只能选的样式;可编辑的样式设上去也会被换成对应的只能选样式 |
-| `TTyDrawGrid` | `HideSelectionWhenInactive`、`FadeUnfocusedSelection`、`MinEditorWidth` | 没有选区，也没有内置的单元格编辑器;`TTyStringGrid` 上照常显示 |
-| 网格的 `Header` | `MainColumn` | 网格没有主列 |
+| 数值框:`TTyNumericEdit`、`TTyCurrencyEdit`、`TTyCalcEdit`、`TTyCalcCurrencyEdit`、`TTyFloatSpinEdit`、`TTyTrackEdit` 及它们的 DB 版本 | `CharCase` | 只能输入数字、符号和小数点 |
+| `TTyAdvancedComboBox`、`TTyCheckComboBox`、`TTyColorBox`、`TTyColorComboBox`、`TTyFilterComboBox`、`TTyOfficeComboBox`、`TTyShellComboBox` | `MaxLength`、`CharCase`、`ReadOnly` | 只能选、不能输入，没有可编辑的文字 |
+| `TTyDrawGrid` | `HideSelectionWhenInactive`、`FadeUnfocusedSelection`、`MinEditorWidth` | 没有选区，也没有内置的单元格编辑器;`TTyStringGrid` 照常发布 |
+| 网格的 `Header` | `MainColumn` | 网格没有主列;`TTyListView`、`TTyTreeView` 的表头照常发布 |
+
+上面这些只能选的组合框(`TTyColorBox`、`TTyColorComboBox` 除外)的 `Style` 仍然发布，但对象查看器的下拉列表里只列出只能选的样式;可编辑的样式设上去也会被换成对应的只能选样式。

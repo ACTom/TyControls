@@ -36,14 +36,15 @@ TyControls keeps LCL's property names and meanings wherever it can, so most code
 
 These controls have no natural size to fit their content to, so `AutoSize` leaves their size alone: `TTyMemo`, `TTyListView`, `TTyTreeView`, `TTyDrawGrid`, `TTyStringGrid`, `TTyValueListEditor`, the gauges, `TTyChart`, `TTySparkline`, `TTyProgressBar`, `TTyShape`, `TTyStarShape`, `TTyArrow`, `TTyBevel`, `TTySplitter`, the colour pickers, `TTyPreviewBox`, `TTyImageView`, `TTyTransfer`, `TTyRibbonBackstage`, `TTyRibbonGallery`, `TTyTitleBar`.
 
-## Properties hidden in the designer
+## Properties no longer published
 
-These properties can never act on the control that publishes them. They are kept so that saved forms still load, but the Object Inspector no longer shows them. From 4.0 on they are not published.
+These properties can never act on the control that publishes them, and from 4.0 on they are not published (3.0 only hid them in the Object Inspector). A 3.x form that sets one of them reports `Unknown property` when 4.0 loads it: skip the property when the IDE opens the form, or delete those lines from the `.lfm`.
 
 | Control | Properties | Why |
 |---------|-----------|-----|
-| `TTyNumericEdit` and descendants | `CharCase` | Only digits, a sign and a decimal separator can be entered |
-| `TTyAdvancedComboBox`, `TTyCheckComboBox`, `TTyColorBox` (and `TTyColorComboBox`), `TTyFilterComboBox`, `TTyOfficeComboBox`, `TTyShellComboBox` | `MaxLength`, `CharCase`, `ReadOnly` | Pick-only: there is no text to edit |
-| The same, except `TTyColorBox` | `Style` | The list offers only the pick-only styles; an editable style is replaced by its pick-only counterpart anyway |
-| `TTyDrawGrid` | `HideSelectionWhenInactive`, `FadeUnfocusedSelection`, `MinEditorWidth` | No selection and no built-in cell editor; still shown on `TTyStringGrid` |
-| A grid's `Header` | `MainColumn` | A grid has no main column |
+| The numeric edits: `TTyNumericEdit`, `TTyCurrencyEdit`, `TTyCalcEdit`, `TTyCalcCurrencyEdit`, `TTyFloatSpinEdit`, `TTyTrackEdit` and their DB versions | `CharCase` | Only digits, a sign and a decimal separator can be entered |
+| `TTyAdvancedComboBox`, `TTyCheckComboBox`, `TTyColorBox`, `TTyColorComboBox`, `TTyFilterComboBox`, `TTyOfficeComboBox`, `TTyShellComboBox` | `MaxLength`, `CharCase`, `ReadOnly` | Pick-only: there is no text to edit |
+| `TTyDrawGrid` | `HideSelectionWhenInactive`, `FadeUnfocusedSelection`, `MinEditorWidth` | No selection and no built-in cell editor; still published on `TTyStringGrid` |
+| A grid's `Header` | `MainColumn` | A grid has no main column; still published on the headers of `TTyListView` and `TTyTreeView` |
+
+The `Style` of these pick-only combo boxes (except `TTyColorBox` and `TTyColorComboBox`) is still published, but the Object Inspector lists only the pick-only styles; an editable style is replaced by its pick-only counterpart anyway.

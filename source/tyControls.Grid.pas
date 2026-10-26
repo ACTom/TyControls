@@ -778,14 +778,23 @@ type
     procedure SnapshotKeys(ADest: TStrings);
   end;
 
-  { 网格的表头。与 TTyHeader 完全一样,只是有了自己的类 —— 设计器才能单独藏起网格用不上的
-    MainColumn(#130):它在树/列表上决定哪一列画树线与图标,网格里没有任何代码读它。 }
-  TTyGridHeader = class(TTyHeader);
+  { 网格的表头。TTyHeader 发布的它都发布,只差 MainColumn(#130):那一项在树/列表上决定哪一列
+    画树线与图标,网格里没有任何代码读它,4.0 起不再发布。 }
+  TTyGridHeader = class(TTyCustomHeader)
+  published
+    property Height;
+    property Columns;
+    property SortColumn;
+    property SortDirection;
+    property AutoSizeIndex;
+    property Images;
+    property Options;
+  end;
 
   { 网格基类:有几何、有外观,但不规定数据从哪来。 }
   TTyCustomGrid = class(TTyCustomControl, ITyScrollBarFrameHost)
   private
-    FHeader:           TTyHeader;
+    FHeader:           TTyGridHeader;
     FRowCount:         Integer;
     FDefaultRowHeight: Integer;
     FDefaultRowHeightExplicit: Boolean;   { True once set; False = follow --row-height (density) }
@@ -1044,7 +1053,7 @@ type
     procedure HeaderChanged(Sender: TObject);
     { #127: 新列起多宽 —— 网格的 DefaultColWidth;装载窗体时答 0,让读进来的列保持原样。 }
     function  NewColumnWidth: Integer;
-    procedure SetHeader(AValue: TTyHeader);
+    procedure SetHeader(AValue: TTyGridHeader);
     procedure SetRowCount(AValue: Integer);
     function  GetDefaultRowHeight: Integer;
     procedure SetDefaultRowHeight(AValue: Integer);
@@ -1738,7 +1747,7 @@ type
       "Unknown property: Anchors"),编译期完全看不出来。 }
   protected
     { 列模型(含列集合、列头高度、排序列、自动适宽列)。 }
-    property Header: TTyHeader read FHeader write SetHeader;
+    property Header: TTyGridHeader read FHeader write SetHeader;
     { 数据行数(不含列头与固定行)。 }
     property RowCount: Integer read FRowCount write SetRowCount default 0;
     { 统一行高,逻辑像素(P0 不支持可变行高)。 }
@@ -2073,8 +2082,6 @@ type
     property Options;
     property ShowFocusCell;
     property FocusRectVisible;
-    property HideSelectionWhenInactive;
-    property FadeUnfocusedSelection;
     property FixedCols;
     property FixedRows;
     property FixedRowsBottom;
@@ -2100,7 +2107,6 @@ type
     property OnColumnMove;
     property OnRowMove;
     property OnGetEditorProp;
-    property MinEditorWidth;
     property MinRowHeight;
     property MaxRowHeight;
     property MinColWidth;
@@ -4523,7 +4529,7 @@ begin
 end;
 
 
-procedure TTyCustomGrid.SetHeader(AValue: TTyHeader);
+procedure TTyCustomGrid.SetHeader(AValue: TTyGridHeader);
 begin
   FHeader.Assign(AValue);
 end;

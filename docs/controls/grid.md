@@ -35,7 +35,7 @@ end;
 
 | 属性 | 说明 |
 |---|---|
-| `Header` | 列模型(`TTyHeader`),含 `Columns` 集合、列头高度、排序列、自动适宽列 |
+| `Header` | 列模型(`TTyGridHeader`,和列表、树的 `TTyHeader` 同属 `TTyCustomHeader`,只是不发布网格用不上的 `MainColumn`),含 `Columns` 集合、列头高度、排序列、自动适宽列 |
 | `RowCount` | 数据行数。拉到一百万也没关系 —— 只绘制可视窗口内的几十行 |
 | `DefaultRowHeight` | 统一行高(逻辑像素) |
 | `FixedCols` | 冻结在左侧、**不随横向滚动**的列数 |
