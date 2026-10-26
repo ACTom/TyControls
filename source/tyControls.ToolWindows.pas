@@ -2604,7 +2604,7 @@ begin
   { 禁用含焦点的页:继承那一句里 LCL 把 ActiveControl 置 nil(RemoveFocus → DefocusControl,
     customform.inc:901-910),焦点掉到窗体本身、快捷键全部失灵 —— 跟收起那一路是同一个问题
     (spec §5.3)。所以「焦点原来在不在里面」要在继承之前记。设计期不管焦点。 }
-  focusIn := (b <> nil) and not Enabled and not (csDesigning in ComponentState)
+  focusIn := (b <> nil) and not IsEnabled and not (csDesigning in ComponentState)
     and ([csLoading, csDestroying] * b.ComponentState = []) and b.FocusIsInside(Self);
   inherited;
   if (b <> nil) and not (csDestroying in b.ComponentState) then
@@ -4309,7 +4309,7 @@ function TTyCustomToolWindowBar.OverflowStates: TTyStateSet;
 begin
   { 同 StripItemStates:禁用时不接悬停、按下。溢出按钮没有「当前」。 }
   Result := [];
-  if not Enabled then
+  if not IsEnabled then
     Include(Result, tysDisabled)
   else
   begin
@@ -4326,7 +4326,7 @@ begin
     Include(Result, tysSelected);
   { 禁用时保留 :selected(同 TTySegmented):灰掉的栏也得看得出哪一页是当前页。窗口自己被禁用
     同样画 :disabled(spec §3.7)。 }
-  if not Enabled or not WindowClickable(AWindow) then
+  if not IsEnabled or not WindowClickable(AWindow) then
     Include(Result, tysDisabled);
   { 悬停、按下:栏启用,且窗口可点 —— 或者它就是当前页。禁用的当前页仍然点一下收起 / 展开
     (收起是栏的动作,不许被困住,spec §3.7),所以它照样接悬停和按下,只是不能拖。 }
@@ -6199,10 +6199,10 @@ end;
 procedure TTyCustomToolWindowBar.CMEnabledChanged(var Message: TLMessage);
 begin
   inherited;
-  if not Enabled then ResetGesture(twgeCancel);
+  if not IsEnabled then ResetGesture(twgeCancel);
   { 拖动中被禁用的隐藏侧栏不再是放置目标(manager 的 IsCrossCandidate):预览当场收掉,不等指针
     再动一下(spec §9.8)。 }
-  if not Enabled then HideDropPreview;
+  if not IsEnabled then HideDropPreview;
   { 标签行跟着灰掉 / 恢复(它画在当前页里)。 }
   InvalidateHeader;
 end;

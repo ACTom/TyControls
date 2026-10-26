@@ -2225,7 +2225,7 @@ begin
   if FPremixValid and (key = FPremixSig) then Exit;
   a := 255;
   base := 0;
-  if not Enabled then
+  if not IsEnabled then
   begin
     st := ActiveController.Model.ResolveStyle(GetStyleTypeKey, TyStyleClassFor(Self, StyleClass), [tysDisabled]);
     if StyleOverride <> '' then TyMergeStyleSet(st, OverrideStyle);

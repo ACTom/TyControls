@@ -9,9 +9,15 @@ interface
 uses
   Classes, SysUtils, Controls, Graphics, Forms, fpcunit, testregistry, BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.Panel, tyControls.Edit,
-  tyControls.TyLabel, tyControls.TreeView, tyControls.Gauge, tyControls.Button, test.dpi.support;
+  tyControls.TyLabel, tyControls.TreeView, tyControls.Gauge, tyControls.Button,
+  tyControls.MultiTrackBar, test.dpi.support;
 
 type
+  TWheelProbe = class(TTyMultiTrackBar)
+  public
+    procedure Wheel(ADelta: Integer);
+  end;
+
   TDisabledLookTest = class(TTestCase)
   private
     FForm: TForm;
@@ -26,6 +32,7 @@ type
     procedure TestADisabledGaugeArcDims;
     procedure TestASkinThatDressesLabelsStillGreysThem;
     procedure TestAPressedButtonInADisabledPanelLooksDisabled;
+    procedure TestAMultiTrackBarInADisabledPanelIgnoresTheWheel;
   end;
 
 implementation
@@ -242,6 +249,34 @@ begin
   p.Enabled := False;
   AssertTrue('disabled with its panel', tysDisabled in b.States);
   AssertFalse('and not drawn pressed on top of it', tysSelected in b.States);
+end;
+
+procedure TWheelProbe.Wheel(ADelta: Integer);
+begin
+  DoMouseWheel([], ADelta, Point(0, 0));
+end;
+
+procedure TDisabledLookTest.TestAMultiTrackBarInADisabledPanelIgnoresTheWheel;
+var
+  pnl: TTyPanel;
+  mb: TWheelProbe;
+  before: Integer;
+begin
+  pnl := TTyPanel.Create(nil);
+  try
+    mb := TWheelProbe.Create(pnl);
+    mb.Parent := pnl;
+    mb.SelectedThumb := 0;
+    before := mb.ThumbValues[0];
+    pnl.Enabled := False;
+    mb.Wheel(120);
+    AssertEquals('the bar in a disabled panel stays where it is', before, mb.ThumbValues[0]);
+    pnl.Enabled := True;
+    mb.Wheel(120);
+    AssertTrue('setup: the wheel moves it otherwise', mb.ThumbValues[0] <> before);
+  finally
+    pnl.Free;
+  end;
 end;
 
 initialization
