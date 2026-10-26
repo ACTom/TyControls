@@ -39,6 +39,7 @@ type
     procedure SetMinValue(const AValue: Double);
     procedure SetMaxValue(const AValue: Double);
     function ClampVal(AValue: Double): Double;
+    function AcceptsChar(C: Char): Boolean;   // digits, the sign, the separator with decimals
   protected
     // Re-derive the displayed text from the current value (AGroup = grouped display form).
     // Protected so a subclass can refresh after changing a display-affecting property.
@@ -54,6 +55,9 @@ type
     // (only on the grouped form, so the raw-edit form stays a clean editable number).
     function Formatted(AValue: Double; AGroup: Boolean): string; virtual;
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
+    { #122: a paste and an input-method commit take the typed key's filter -- what it would
+      refuse is dropped, so pasting "1,234.50 kg" leaves the number. }
+    function FilterInsert(const AText: string): string; override;
     procedure DoEnter; override;   // show RAW (ungrouped) for editing
     procedure DoExit; override;    // clamp + re-display GROUPED on blur
     procedure Loaded; override;
@@ -345,19 +349,36 @@ begin
   if not Focused then Reformat(True);
 end;
 
+function TTyCustomNumericEdit.AcceptsChar(C: Char): Boolean;
+begin
+  Result := (C in ['0'..'9']) or (C = '-') or ((C = FDecimalSep) and (FDecimals > 0));
+end;
+
 procedure TTyCustomNumericEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
-var c: Char;
 begin
   if Length(UTF8Key) = 1 then
   begin
-    c := UTF8Key[1];
-    if (c in ['0'..'9']) or (c = '-') or ((c = FDecimalSep) and (FDecimals > 0)) then
+    if AcceptsChar(UTF8Key[1]) then
       inherited UTF8KeyPress(UTF8Key)
     else
       UTF8Key := '';   // reject any other printable char
   end
   else
     UTF8Key := '';      // reject multi-byte (non-numeric) input
+end;
+
+function TTyCustomNumericEdit.FilterInsert(const AText: string): string;
+var
+  s: string;
+  i: Integer;
+begin
+  s := inherited FilterInsert(AText);
+  Result := '';
+  { Byte by byte: every byte of a multi-byte character is >= $80, so none is accepted and a
+    character is dropped whole. }
+  for i := 1 to Length(s) do
+    if AcceptsChar(s[i]) then
+      Result := Result + s[i];
 end;
 
 procedure TTyCustomNumericEdit.DoEnter;

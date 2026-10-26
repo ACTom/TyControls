@@ -98,6 +98,7 @@ uses
   test.disabledlook,
   test.buttonroles,
   test.comboprops,
+  test.editinputfilter,
   test.calendar,
   test.datetimepicker,
   test.treeview.events,

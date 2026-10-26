@@ -1133,7 +1133,9 @@ end;
 
 procedure TTyCustomEdit.SetText(const AValue: TCaption);
 begin
-  SetTextInternal(AValue, True);   // the published writer is by definition programmatic
+  { The published writer is by definition programmatic. CharCase applies to it as to typing
+    (#122), as LCL's RealSetText does (customedit.inc:546). }
+  SetTextInternal(ApplyCharCase(AValue), True);
 end;
 
 procedure TTyCustomEdit.SetTextInternal(const AValue: TCaption; AByCode: Boolean);
