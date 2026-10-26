@@ -42,7 +42,11 @@ type
     // ordinal stays where it was; a GlyphKind in an .lfm streams by name either way. The
     // ribbon's collapse button points up while the ribbon is open, and without this kind it
     // drew a shafted arrow instead.
-    tgChevronUp);
+    tgChevronUp,
+    // No glyph (#129). Appended for the same reason as tgChevronUp. It is what a glyph button
+    // starts at, and choosing it in the designer takes a GlyphKind off again -- before it there
+    // was no value that meant "none", so once set, a GlyphKind could only go by editing the .lfm.
+    tgNone);
 
   { Which side of a body a speech-balloon pointer leaves from. Named for the BODY's edge, so
     tpsTop means the wedge stands above the body -- which is what a balloon ANCHORED BELOW its
@@ -4116,6 +4120,7 @@ begin
         FBmp.DrawLineAntialias(cx - m * 0.19, cy - m * 0.19, cx + m * 0.19, cy + m * 0.19, px, th, True);
         FBmp.DrawLineAntialias(cx + m * 0.19, cy - m * 0.19, cx - m * 0.19, cy + m * 0.19, px, th, True);
       end;
+    tgNone: ;   // nothing to draw (#129)
   end;
 end;
 

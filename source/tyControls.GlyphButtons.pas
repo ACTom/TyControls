@@ -108,7 +108,7 @@ type
     FGlyphKind: TTyGlyphKind;   { painter (vector) glyph icon source -- an alternative to a
                                   font glyph / image, for arrows and chrome that ship with the
                                   painter and need no bundled icon font. }
-    FHasGlyphKind: Boolean;     { True once GlyphKind is assigned (TTyGlyphKind has no 'none'). }
+    FHasGlyphKind: Boolean;     { GlyphKind <> tgNone -- what CanShowGlyph and the paint ask. }
     FSpacing: Integer;
     FShowCaption: Boolean;
     { True once anything has WRITTEN ShowCaption on this button. AdoptShowCaption
@@ -227,8 +227,9 @@ type
     property GlyphName: string read FGlyphName write SetGlyphName;
     { A painter vector glyph as the icon (e.g. tgArrowLeft for a nav button) -- drawn straight
       by TTyPainter.DrawGlyph, so it needs no bundled icon font. Takes precedence over
-      GlyphName/ImageName once assigned. `stored FHasGlyphKind` keeps it out of the .lfm until
-      set (the enum has no 'none' value to default to). }
+      GlyphName/ImageName once assigned; tgNone (the start value) takes it off again (#129).
+      `stored FHasGlyphKind` keeps tgNone out of the .lfm, and a form saved before tgNone
+      existed reads the same. }
     property GlyphKind: TTyGlyphKind read FGlyphKind write SetGlyphKind stored FHasGlyphKind;
     { Glyph edge length in LOGICAL px (scaled by PPI). 0 = auto: derive from the
       content box (the short side for glyph-top, the box height for glyph-left). }
@@ -770,6 +771,7 @@ begin
   // asks for icon-only, and it does that through AdoptShowCaption.
   FShowCaption := True;
   FShowCaptionExplicit := False;
+  FGlyphKind := tgNone;   // #129
 end;
 
 procedure TTyGlyphButtonBase.SetIconFont(AValue: TTyCustomIconFont);
@@ -792,9 +794,9 @@ end;
 
 procedure TTyGlyphButtonBase.SetGlyphKind(AValue: TTyGlyphKind);
 begin
-  if FHasGlyphKind and (FGlyphKind = AValue) then Exit;
+  if FGlyphKind = AValue then Exit;
   FGlyphKind := AValue;
-  FHasGlyphKind := True;
+  FHasGlyphKind := AValue <> tgNone;
   Invalidate;
 end;
 
