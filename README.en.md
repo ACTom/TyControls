@@ -486,6 +486,7 @@ The repository also has a theme editor, `tools/themebuilder`: the preview follow
 | [events.en.md](docs/events.en.md) | Common event conventions |
 | [subclassing.en.md](docs/subclassing.en.md) | Deriving your own controls from `TTyCustomXxx`; upgrading from 3.0 |
 | [rtl.md](docs/rtl.md) | Bidirectional text and right-to-left layout (Chinese) |
+| [lcl-differences.en.md](docs/lcl-differences.en.md) | Deliberate differences from LCL (worth a look when porting) |
 | [known-issues.en.md](docs/known-issues.en.md) | Known issues |
 | [CHANGELOG.en.md](CHANGELOG.en.md) | Changelog |
 | [CONTRIBUTING.en.md](CONTRIBUTING.en.md) | Bug reports, feature requests, pull requests, roadmap |

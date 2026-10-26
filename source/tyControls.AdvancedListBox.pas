@@ -200,7 +200,8 @@ begin
     midY := ARect.Top + (rowH div 2);
     titleR := Rect(textLeft, ARect.Top, ARect.Right - pad, midY);
     subR := Rect(textLeft, midY, ARect.Right - pad, ARect.Bottom);
-    P.DrawText(titleR, titleText, AStyle.FontName, AFontSize, 700,
+    P.DrawText(titleR, titleText, AStyle.FontName, AFontSize,
+      700 or (AStyle.FontWeight and not TyFontWeightMask),   // bold over the font's italic etc. (#113)
       AStyle.TextColor, taLeftJustify, tlCenter, True);
     P.DrawText(subR, subText, AStyle.FontName, subSize, AStyle.FontWeight,
       subColor, taLeftJustify, tlCenter, True);
@@ -208,7 +209,8 @@ begin
   else
   begin
     titleR := Rect(textLeft, ARect.Top, ARect.Right - pad, ARect.Bottom);
-    P.DrawText(titleR, titleText, AStyle.FontName, AFontSize, 700,
+    P.DrawText(titleR, titleText, AStyle.FontName, AFontSize,
+      700 or (AStyle.FontWeight and not TyFontWeightMask),   // bold over the font's italic etc. (#113)
       AStyle.TextColor, taLeftJustify, tlCenter, True);
   end;
 end;

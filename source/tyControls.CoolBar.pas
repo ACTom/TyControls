@@ -67,6 +67,13 @@ unit tyControls.CoolBar;
                 from that one list, so there is nothing to keep in sync. TyCoolBandDropIndex is
                 the (pure) rule for where a drop lands.
 
+    * HELD IN PLACE — a band with no Control (a caption-only separator band) is laid out as an
+                internal placeholder child, so the packer, the gripper paint, the hit test and
+                the drag -- which all read Controls[] -- treat it as any other band. It used to
+                put nothing there, and vanished (#128). Its place is its position in Bands: a
+                drag that moves it brings Bands into the children's order (AdoptChildOrder),
+                and a loaded form puts it back by the list (PlacePlaceholders).
+
   Per-band metadata (a fixed/min Width the band is given) is stored keyed by the child
   TControl in FBands and dropped when the child is freed (Notification/opRemove) — never
   a parallel array indexed by position, which would desync the moment a band is removed.
@@ -120,6 +127,9 @@ type
     FFixedSize: Boolean;
     FAutoMaxWidth: Boolean;
     FVisible: Boolean;
+    FSpacer: TControl;   // #128: lays the band out while it has no Control; see LaidOutControl
+    procedure FitSpacer;
+    procedure RetireSpacer;
     procedure SetControl(AValue: TControl);
     procedure SetText(const AValue: TCaption);
     procedure SetBreak(AValue: Boolean);
@@ -128,12 +138,19 @@ type
     procedure SetVisible(AValue: Boolean);
   protected
     function GetDisplayName: string; override;
+    { What the bar lays out for this band: Control, or -- while the band has none -- an internal
+      placeholder child that holds its place. nil only while the bar is loading. }
+    function LaidOutControl: TControl;
   public
     constructor Create(ACollection: TCollection); override;
+    destructor Destroy; override;
     procedure Assign(ASource: TPersistent); override;
   published
     { The control this band wraps. A band with no control still occupies its place -- that is
-      how a caption-only separator band is expressed. }
+      how a caption-only separator band is expressed: it is laid out as its gripper, its caption
+      when ShowText is on, and Width px of empty band, and it is grabbed, dragged and resized
+      like any other. Its place is its position in Bands. Given a control, the control takes
+      that place. }
     property Control: TControl read FControl write SetControl;
     property Text: TCaption read FText write SetText;
     { Start a new row at this band even when it would fit on the current one. }
@@ -161,8 +178,8 @@ type
 
       A control that declares no preferred width -- an edit, which is meaningfully any width --
       is left UNCAPPED rather than pinned: this caps bands whose content has an end, and says
-      nothing about bands whose content does not. A band with no hosted control never reaches
-      this question at all: with no child it is never packed, gripped or resized.
+      nothing about bands whose content does not. A band with no hosted control declares
+      nothing either, so it is uncapped too.
 
       Default OFF, so no existing form changes behaviour. }
     property AutoMaxWidth: Boolean read FAutoMaxWidth write SetAutoMaxWidth default False;
@@ -194,6 +211,7 @@ type
     FDragMode: TTyCoolDrag;
     FShowText: Boolean;
     FVertical: Boolean;
+    FAdoptingOrder: Boolean;           // AdoptChildOrder is reordering Bands; BandsChanged waits
     FOnChange: TNotifyEvent;
     // --- live drag state (real-machine) ---
     FDragging: Boolean;
@@ -215,8 +233,21 @@ type
     procedure Changed;
     function EnsureBand(ACtl: TControl): TTyCoolBand;   // find, or create, this child's band
     procedure SetBands(AValue: TTyCoolBands);
-    procedure BandsChanged;
+    { AItem is what TCollection.Update names: the band that changed, or nil when the list
+      itself did (a band added, deleted or moved). }
+    procedure BandsChanged(AItem: TCollectionItem);
     function BandAtPoint(AX, AY: Integer): TControl;   // the band whose gripper is under (X,Y)
+    { #128: give every band without a Control a placeholder child and take it away from a band
+      that gained one -- the control steps into the placeholder's place. With ARestructured
+      (the list itself changed) every placeholder is put back in its place as well. True when a
+      placeholder was made or retired. }
+    function SyncPlaceholders(ARestructured: Boolean): Boolean;
+    { Each placeholder goes just before the next band in Bands that is laid out here, or last:
+      for a band with no control, its position in Bands is the only record of its place. }
+    procedure PlacePlaceholders;
+    { After a drag has reordered the children: bring Bands into the same order, so the place a
+      band with no control was dragged to is the place the list -- and the .lfm -- remembers. }
+    procedure AdoptChildOrder;
   protected
     { The laid-out bands, in the order the packer sees them, with their current rects. ONE
       reading of the layout, shared by the seam lookup and anything else that needs to know
@@ -269,6 +300,7 @@ type
       TCoolBar (which has this same dead gesture). }
     function RejoinRow(AX, AY, ATargetRow: Integer): Boolean;
     function GetStyleTypeKey: string; override;
+    procedure Loaded; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
@@ -863,10 +895,56 @@ end;
 // =============================================================================
 // TTyCoolBand / TTyCoolBands
 // =============================================================================
+type
+  { #128: what a band with no Control is laid out as. The packer, the gripper paint, the hit
+    test and the drag all read the bar's Controls[], so a band that is a child there takes part
+    in every one of them with no special case -- and a band that is not one is in none of them,
+    which is how a control-less band used to vanish. Owned by nobody, so it is never streamed
+    and never listed in the designer (both go by Owner); it paints nothing, since the bar draws
+    the band's gripper and caption. }
+  TTyCoolBandSpacer = class(TGraphicControl);
+
 constructor TTyCoolBand.Create(ACollection: TCollection);
 begin
-  inherited Create(ACollection);
+  { Before inherited: joining the collection reports to the bar, which gives a new band its
+    placeholder right then -- and makes it as visible as the band is. }
   FVisible := True;
+  inherited Create(ACollection);
+end;
+
+destructor TTyCoolBand.Destroy;
+begin
+  RetireSpacer;
+  inherited Destroy;
+end;
+
+procedure TTyCoolBand.RetireSpacer;
+var
+  sp: TControl;
+begin
+  sp := FSpacer;
+  { Cleared first: freeing the placeholder notifies the bar, which looks the band up by it. }
+  FSpacer := nil;
+  sp.Free;
+end;
+
+procedure TTyCoolBand.FitSpacer;
+var
+  bar: TTyCustomCoolBar;
+  run, thick: Integer;
+begin
+  if FSpacer = nil then Exit;
+  bar := nil;
+  if Collection is TTyCoolBands then bar := TTyCoolBands(Collection).OwnerBar;
+  if bar = nil then Exit;
+  { Width is all there is to lay out. 0 -- auto, "the hosted control's own width" -- is nothing
+    when there is no control, so an unsized band is just its gripper and caption. }
+  run := bar.RunPx(FWidth);
+  thick := MulDiv(bar.BandHeight, bar.Font.PixelsPerInch, 96);
+  if bar.Vertical then
+    FSpacer.SetBounds(FSpacer.Left, FSpacer.Top, thick, run)
+  else
+    FSpacer.SetBounds(FSpacer.Left, FSpacer.Top, run, thick);
 end;
 
 procedure TTyCoolBand.Assign(ASource: TPersistent);
@@ -897,10 +975,29 @@ begin
   else Result := inherited GetDisplayName;
 end;
 
+function TTyCoolBand.LaidOutControl: TControl;
+begin
+  if FControl <> nil then Result := FControl else Result := FSpacer;
+end;
+
 procedure TTyCoolBand.SetControl(AValue: TControl);
+var
+  w: Integer;
 begin
   if FControl = AValue then Exit;
   FControl := AValue;
+  { #128: the band's Width and Visible, set before it had a control, go over to the control --
+    its extent and its Visible are what the packer reads (see SetWidth / SetVisible). }
+  if FControl <> nil then
+  begin
+    if FWidth > 0 then
+    begin
+      w := FWidth;
+      FWidth := 0;
+      SetWidth(w);   // the scaling and the axis, in one place
+    end;
+    if not FVisible then FControl.Visible := False;
+  end;
   Changed(False);
 end;
 
@@ -940,7 +1037,9 @@ begin
     if bar <> nil then AValue := bar.RunPx(AValue);
     if (bar <> nil) and bar.Vertical then FControl.Height := AValue
     else FControl.Width := AValue;
-  end;
+  end
+  else
+    FitSpacer;   // a band with no control lays out its own Width, 0 included
   Changed(False);
 end;
 
@@ -958,8 +1057,10 @@ procedure TTyCoolBand.SetVisible(AValue: Boolean);
 begin
   if FVisible = AValue then Exit;
   FVisible := AValue;
-  { The hosted control's own Visible is the single source of truth the packer already reads. }
-  if FControl <> nil then FControl.Visible := AValue;
+  { The hosted control's own Visible is the single source of truth the packer already reads --
+    the placeholder's, while there is no control. }
+  if FControl <> nil then FControl.Visible := AValue
+  else if FSpacer <> nil then FSpacer.Visible := AValue;
   Changed(False);
 end;
 
@@ -993,8 +1094,10 @@ var i: Integer;
 begin
   Result := nil;
   if AControl = nil then Exit;
+  { A band's placeholder answers for it too: everything that finds a band from a laid-out child
+    -- the packer, the paint, the hit test, the drag -- then works for a band with no control. }
   for i := 0 to Count - 1 do
-    if Items[i].Control = AControl then Exit(Items[i]);
+    if (Items[i].Control = AControl) or (Items[i].FSpacer = AControl) then Exit(Items[i]);
 end;
 
 procedure TTyCoolBands.Update(AItem: TCollectionItem);
@@ -1004,7 +1107,7 @@ begin
   { Any edit -- from the designer or from code -- re-lays the bar and reports the change, so a
     band designed in the Object Inspector behaves exactly like one set at run time. }
   bar := OwnerBar;
-  if bar <> nil then bar.BandsChanged;
+  if bar <> nil then bar.BandsChanged(AItem);
 end;
 
 // =============================================================================
@@ -1047,6 +1150,9 @@ end;
 
 
 function TTyCustomCoolBar.EnsureBand(ACtl: TControl): TTyCoolBand;
+var
+  i, at: Integer;
+  prev: TTyCoolBand;
 begin
   { Band metadata used to spring into existence only when a WIDTH was assigned, so setting any
     other band property on a band nobody had sized yet silently did nothing. Every setter goes
@@ -1055,8 +1161,33 @@ begin
   if ACtl = nil then Exit;
   Result := FBandList.FindBand(ACtl);
   if Result <> nil then Exit;
-  Result := FBandList.Add;
-  Result.Control := ACtl;
+  { #128: into Bands at the place its control has among the children -- just after the band of
+    the nearest child before it -- because a band with no control is placed by its position in
+    Bands, and appending would put the list out of step with the row it describes. }
+  at := FBandList.Count;
+  if ACtl.Parent = Self then
+  begin
+    at := 0;
+    for i := GetControlIndex(ACtl) - 1 downto 0 do
+    begin
+      prev := FBandList.FindBand(Controls[i]);
+      if prev <> nil then
+      begin
+        at := prev.Index + 1;
+        Break;
+      end;
+    end;
+  end;
+  { One update: a band seen for a moment without its control would be given a placeholder,
+    and the control would then step into the placeholder's place at the end of the row. }
+  FBandList.BeginUpdate;
+  try
+    Result := FBandList.Add;
+    Result.Control := ACtl;
+    Result.Index := at;
+  finally
+    FBandList.EndUpdate;
+  end;
 end;
 
 procedure TTyCustomCoolBar.SetBandWidth(ACtl: TControl; AWidth: Integer);
@@ -1161,7 +1292,7 @@ end;
 
 function TTyCustomCoolBar.BandRectFor(ACtl: TControl): TRect;
 var
-  gw: Integer;
+  gw, lead: Integer;
   content: TRect;
 begin
   // The base (TTyControlBar) reserves + draws ONE gripper per band-ROW, at the row's left edge
@@ -1177,6 +1308,11 @@ begin
     The old rule returned an empty rect for anything that was not the row's first child, which
     is a ControlBar's one-grip-per-row model: band 2 had no handle to grab and none drawn. }
   Result := ACtl.BoundsRect;
+  { The packer reserves the band's whole LEAD before its child -- the gripper, then the caption
+    when ShowText is on (TyCoolBarPack) -- so the gripper starts a whole lead before the child,
+    not against it. Placed against the child it sat on the end of the caption's strip and left
+    the caption an empty rect to be drawn in. With no caption the lead IS the gripper. }
+  lead := BandLeadPx(ACtl);
   { Clamped to the CONTENT box, not to the raw client rect: a gripper for a band on the first
     row/column would otherwise be allowed to back onto the frame stroke it must stay inside. }
   content := BandContentRect;
@@ -1184,8 +1320,8 @@ begin
   begin
     { Above the band on either reading -- up is not a reading direction, so a mirrored
       vertical rebar reverses which COLUMN a band is in and nothing about its gripper. }
-    Result.Bottom := Result.Top;
-    Dec(Result.Top, gw);
+    Dec(Result.Top, lead);
+    Result.Bottom := Result.Top + gw;
     if Result.Top < content.Top then Result.Top := content.Top;
   end
   else if IsRightToLeft then
@@ -1195,14 +1331,14 @@ begin
       FROM has already moved: reflecting a rect built off a mirrored child would mirror it
       twice. This function stays the single source -- PaintGrippers draws what it returns and
       BandAtPoint hit-tests what it returns -- so paint and hit cannot take different sides. }
-    Result.Left := Result.Right;
-    Inc(Result.Right, gw);
+    Inc(Result.Right, lead);
+    Result.Left := Result.Right - gw;
     if Result.Right > content.Right then Result.Right := content.Right;
   end
   else
   begin
-    Result.Right := Result.Left;
-    Dec(Result.Left, gw);
+    Dec(Result.Left, lead);
+    Result.Right := Result.Left + gw;
     if Result.Left < content.Left then Result.Left := content.Left;
   end;
 end;
@@ -1308,18 +1444,119 @@ begin
   FBandList.Assign(AValue);
 end;
 
-procedure TTyCustomCoolBar.BandsChanged;
+procedure TTyCustomCoolBar.BandsChanged(AItem: TCollectionItem);
 begin
+  { The drag that is reordering the list re-lays and reports for itself. }
+  if FAdoptingOrder then Exit;
   { One place the collection reports into, so a designer edit and a run-time setter take the
     same path: re-lay, then tell the application. }
+  SyncPlaceholders(AItem = nil);
   Relayout;
   Changed;
 end;
 
+function TTyCustomCoolBar.SyncPlaceholders(ARestructured: Boolean): Boolean;
+var
+  i: Integer;
+  bnd: TTyCoolBand;
+  sp: TControl;
+begin
+  Result := False;
+  { Not while loading -- the Control links are fixed up only once the whole form has been read,
+    so until then every band looks control-less; Loaded runs this once they are in -- and not
+    while the bar is being freed. }
+  if (FBandList = nil) or ([csLoading, csDestroying] * ComponentState <> []) then Exit;
+  for i := 0 to FBandList.Count - 1 do
+  begin
+    bnd := FBandList[i];
+    if (bnd.Control = nil) and (bnd.FSpacer = nil) then
+    begin
+      sp := TTyCoolBandSpacer.Create(nil);
+      sp.Visible := bnd.Visible;
+      bnd.FSpacer := sp;
+      bnd.FitSpacer;
+      { Notification then ends a drag that was holding it, as it does for a freed control. }
+      sp.FreeNotification(Self);
+      sp.Parent := Self;
+      Result := True;
+    end
+    else if (bnd.Control <> nil) and (bnd.FSpacer <> nil) then
+    begin
+      { The band's place is where its placeholder is, so that is where the control goes. }
+      if bnd.Control.Parent = Self then
+        SetControlIndex(bnd.Control, GetControlIndex(bnd.FSpacer));
+      bnd.RetireSpacer;
+      Result := True;
+    end;
+  end;
+  if Result or ARestructured then PlacePlaceholders;
+end;
+
+procedure TTyCustomCoolBar.PlacePlaceholders;
+var
+  i, cur, dest: Integer;
+  bnd: TTyCoolBand;
+  next, ctl: TControl;
+begin
+  { Walked from the end of the list, so the band each placeholder is put in front of has already
+    been put in its own place. }
+  next := nil;
+  for i := FBandList.Count - 1 downto 0 do
+  begin
+    bnd := FBandList[i];
+    if bnd.FSpacer <> nil then
+    begin
+      cur := GetControlIndex(bnd.FSpacer);
+      if next = nil then
+        dest := ControlCount - 1
+      else
+      begin
+        dest := GetControlIndex(next);
+        if cur < dest then Dec(dest);   // it leaves its own slot first
+      end;
+      if (cur >= 0) and (cur <> dest) then SetControlIndex(bnd.FSpacer, dest);
+    end;
+    ctl := bnd.LaidOutControl;
+    if (ctl <> nil) and (ctl.Parent = Self) then next := ctl;
+  end;
+end;
+
+procedure TTyCustomCoolBar.AdoptChildOrder;
+var
+  i, k: Integer;
+  bnd: TTyCoolBand;
+begin
+  FAdoptingOrder := True;
+  FBandList.BeginUpdate;
+  try
+    k := 0;
+    for i := 0 to ControlCount - 1 do
+    begin
+      bnd := FBandList.FindBand(Controls[i]);
+      if bnd = nil then Continue;
+      if bnd.Index <> k then bnd.Index := k;
+      Inc(k);
+    end;
+  finally
+    FBandList.EndUpdate;
+    FAdoptingOrder := False;
+  end;
+end;
+
+procedure TTyCustomCoolBar.Loaded;
+begin
+  inherited Loaded;
+  if SyncPlaceholders(True) then Relayout;
+end;
+
 procedure TTyCustomCoolBar.SetVertical(AValue: Boolean);
+var
+  i: Integer;
 begin
   if FVertical = AValue then Exit;
   FVertical := AValue;
+  { A placeholder's extent is on the run's axis, which has just swapped. }
+  for i := 0 to FBandList.Count - 1 do FBandList[i].FitSpacer;
   Relayout;
   Changed;
 end;
@@ -1396,8 +1633,12 @@ begin
       begin
         { Between the gripper and the child -- the strip PackBands reserved for exactly this.
           Mirrored, the gripper is on the child's right, so the span runs the other way; the
-          painter (armed in TTyControlBar.Paint) turns the taLeftJustify into the right side. }
-        if IsRightToLeft then
+          painter (armed in TTyControlBar.Paint) turns the taLeftJustify into the right side.
+          Vertically the strip is below the gripper and as wide as the column, and the
+          caption is written across it (cut short with an ellipsis when the column is narrow). }
+        if FVertical then
+          cap := Rect(ctl.Left, r.Bottom, ctl.Left + ctl.Width, ctl.Top)
+        else if IsRightToLeft then
           cap := Rect(ctl.Left + ctl.Width, r.Top, r.Left, r.Bottom)
         else
           cap := Rect(r.Right, r.Top, ctl.Left, r.Bottom);
@@ -1624,7 +1865,11 @@ begin
   { Clearing Break is still necessary -- it is just no longer SUFFICIENT, which was the whole
     bug: a band that came down by overflow never had it set. }
   SetBandBreak(FDragCtl, False);
-  if drop <> idx then SetControlIndex(FDragCtl, GetControlIndex(ctls[drop]));
+  if drop <> idx then
+  begin
+    SetControlIndex(FDragCtl, GetControlIndex(ctls[drop]));
+    AdoptChildOrder;
+  end;
 
   Relayout;
   Changed;
@@ -1654,6 +1899,7 @@ begin
     if idx <> High(ctls) then
     begin
       SetControlIndex(FDragCtl, ControlCount - 1);
+      AdoptChildOrder;
       Result := True;
     end;
     if not BandBreak(FDragCtl) then
@@ -1677,6 +1923,7 @@ begin
     bands in between shift back and the dragged band lands after ctls[drop]; moving earlier, it
     lands before it. }
   SetControlIndex(FDragCtl, GetControlIndex(ctls[drop]));
+  AdoptChildOrder;
   { A reorder inside a row must not leave a stale Break behind: the band that used to open the
     row would otherwise keep breaking it from its new position. }
   if BandBreak(FDragCtl) and (drop > 0) then SetBandBreak(FDragCtl, False);

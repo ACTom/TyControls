@@ -185,7 +185,8 @@ begin
     which meant recolouring a gauge's fill silently recoloured every hyperlink in the app,
     and the link colour itself could not be themed at all. Same resolved value (both are
     var(--accent)), read off `color` because this is text ink, not a fill. }
-  accentS := ActiveController.Model.ResolveStyle('TyLinkLabelLink', StyleClass, []);
+  { The label's Font.Color and a StyleOverride colour win over the theme's link ink (#113). }
+  accentS := PartStyle('TyLinkLabelLink', StyleClass, []);
   Result := accentS.TextColor;
   if FHover then
     Result := TyLighten(Result, 15);   // brighten slightly on hover

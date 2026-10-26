@@ -508,6 +508,7 @@ begin
     control is being built or torn down (a paint, a mouse-leave) finds it there. }
   FSpin := TTySpinButtons.Create(Self, @SpinStep);
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   TabStop := True;
   Cursor := crIBeam;
   FMinValue := 0;
@@ -774,16 +775,12 @@ begin
   ppi := Font.PixelsPerInch;
   if ppi <= 0 then ppi := 96;
   S := CurrentStyle;
-  if FMeasureBmp = nil then FMeasureBmp := TBGRABitmap.Create(1, 1);
-  TyConfigureTextFont(FMeasureBmp, S.FontName, ResolveFontSize(S), S.FontWeight, ppi);
   { WIDTH 0 == "no preference on this axis" (LCL): the form author owns how wide a
     number field is. The height is the one a skin can push out from under us -- the
-    same digits + padding + border RenderTo lays out. }
+    same digits + padding + border RenderTo lays out, which every one-line field now
+    answers the same way (TyFieldPreferredHeight, #114). }
   PreferredWidth := 0;
-  PreferredHeight := FMeasureBmp.TextSize('0').cy
-    + MulDiv(S.Padding.Top + S.Padding.Bottom, ppi, 96)
-    + 2 * MulDiv(S.BorderWidth, ppi, 96);
-  if PreferredHeight < 1 then PreferredHeight := 1;
+  PreferredHeight := TyFieldPreferredHeight(S, ResolveFontSize(S), ppi);
 end;
 
 procedure TTyCustomSpinEdit.SetAlignment(const AValue: TAlignment);
@@ -1008,7 +1005,7 @@ end;
 
 procedure TTyCustomSpinEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited UTF8KeyPress(UTF8Key);
   InsertEditChar(UTF8Key);
   Invalidate;
@@ -1016,7 +1013,7 @@ end;
 
 procedure TTyCustomSpinEdit.KeyDown(var Key: Word; Shift: TShiftState);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   case Key of
     VK_UP:
@@ -1052,7 +1049,7 @@ end;
 function TTyCustomSpinEdit.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 begin
-  if not Enabled then Exit(False);
+  if not IsEnabled then Exit(False);
   // Let the user's OnMouseWheel handler run first; if it consumes the event, stop.
   if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then
   begin
@@ -1070,7 +1067,7 @@ end;
 
 procedure TTyCustomSpinEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbLeft then
   begin
@@ -1087,7 +1084,7 @@ end;
 procedure TTyCustomSpinEdit.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseMove(Shift, X, Y);
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   FSpin.MouseMove(SpinHitAt(X, Y), not FReadOnly);
 end;
 

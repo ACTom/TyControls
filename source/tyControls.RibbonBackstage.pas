@@ -535,6 +535,7 @@ begin
   P := TTyPainter.Create;
   try
     P.BeginPaint(ACanvas, ARect, APPI);
+    TyApplyStyleOpacity(Self, P, CurrentStyle);   // it draws without DrawFrame (#118)
     W := ARect.Right - ARect.Left;
     H := ARect.Bottom - ARect.Top;
     sbW := P.Scale(GetSidebarWidth);
@@ -547,7 +548,8 @@ begin
       P.FillBackground(Rect(0, 0, W, H), ContentS.Background, 0);
 
     // Sidebar accent panel via the 'TyButton' primary style.
-    SideS := ActiveController.Model.ResolveStyle('TyButton', 'primary', []);
+    { The backstage's font, the accent's ink (#113): the sidebar is an accent surface. }
+    SideS := PartStyle('TyButton', 'primary', [], False);
     if tpBackground in SideS.Present then
       P.FillBackground(Rect(0, 0, sbW, H), SideS.Background, 0);
     // Bigger than the base font — the sidebar reads as a menu, not fine print. Resolve through
@@ -592,9 +594,9 @@ begin
       end;
 
       if k = FItemIndex then
-        RowS := ActiveController.Model.ResolveStyle('TyButton', 'primary', [tysActive])
+        RowS := PartStyle('TyButton', 'primary', [tysActive], False)
       else if k = FHoverIndex then
-        RowS := ActiveController.Model.ResolveStyle('TyButton', 'primary', [tysHover])
+        RowS := PartStyle('TyButton', 'primary', [tysHover], False)
       else
         RowS := SideS;
       if (k = FItemIndex) or (k = FHoverIndex) then
@@ -639,7 +641,8 @@ begin
     // content control over ContentRect covers this; kept for headless / un-wired use.
     if (FItemIndex >= 0) and (FItemIndex < TotalCount) and not EntryIsSeparator(FItemIndex) then
       P.DrawText(Rect(sbW + P.Scale(40), P.Scale(30), W - P.Scale(20), P.Scale(70)),
-        EntryCaption(FItemIndex), ContentS.FontName, fs + 8, 600, ContentS.TextColor,
+        EntryCaption(FItemIndex), ContentS.FontName, fs + 8,
+        600 or (ContentS.FontWeight and not TyFontWeightMask), ContentS.TextColor,
         taLeftJustify, tlTop, True);
 
     P.EndPaint;

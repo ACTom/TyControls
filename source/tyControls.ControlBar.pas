@@ -375,10 +375,10 @@ var
   ins: Integer;
 begin
   { NOTE ClientRect is LCL's RAW rect -- it is NOT inset by AdjustClientRect, so a control that
-    positions children itself has to apply its own inset (see the note on TTyPanel.BorderWidth).
-    That is this function. }
+    positions children itself has to apply its own inset. That is this function: the frame,
+    and BorderWidth as TTyCustomControl.AdjustClientRect insets it (#115). }
   Result := ClientRect;
-  ins := FrameInsetPx;
+  ins := FrameInsetPx + BorderInsetPx;
   InflateRect(Result, -ins, -ins);
   if Result.Right < Result.Left then Result.Right := Result.Left;
   if Result.Bottom < Result.Top then Result.Bottom := Result.Top;
@@ -462,8 +462,11 @@ begin
         FAssignBand[I] := rects[I].Top div (bandH + spacing)
       else
         FAssignBand[I] := 0;
+      { The packed rect's own height, not bandH: the two are the same across a row, but a
+        packer that runs bands DOWN a column (TTyCoolBar.Vertical) hands back each band's
+        length there, and bandH made every one of them a band-height long. }
       list[I].SetBounds(rects[I].Left + content.Left, rects[I].Top + content.Top,
-                        rects[I].Right - rects[I].Left, bandH);
+                        rects[I].Right - rects[I].Left, rects[I].Bottom - rects[I].Top);
     end;
     bands := BandCount;
 

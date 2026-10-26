@@ -746,7 +746,7 @@ end;
 
 procedure TTbPreviewFrame.FillCodeOnlyData;
 
-  procedure AddCol(AHeader: TTyHeader; const AText: string; AWidth: Integer);
+  procedure AddCol(AHeader: TTyCustomHeader; const AText: string; AWidth: Integer);
   var
     c: TTyColumn;
   begin

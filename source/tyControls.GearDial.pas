@@ -227,7 +227,7 @@ begin if FValueFormat = AValue then Exit; FValueFormat := AValue; Invalidate; en
 procedure TTyCustomGearDial.KeyDown(var Key: Word; Shift: TShiftState);
 var stp: Double;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   stp := FStep;
   if stp <= 0 then stp := 1;
@@ -243,7 +243,7 @@ end;
 
 procedure TTyCustomGearDial.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbLeft then
   begin
@@ -255,7 +255,7 @@ end;
 
 procedure TTyCustomGearDial.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
   if FDragging then DragToPoint(X, Y);
 end;
@@ -274,7 +274,7 @@ begin
   // that marks the wheel handled and do not step.
   Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
   if Result then Exit;
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   stp := FStep;
   if stp <= 0 then stp := 1;
   // Wheel-up (WheelDelta > 0) increases; wheel-down decreases.
@@ -290,7 +290,7 @@ var
   ctx: TBGRACanvas2D;
   cx, cy, radius, ang, r0, r1, rimR, tipR, halfW: Double;
   frac, tAng, ca, sa: Double;
-  bw, i: Integer;
+  bw, i, vSize: Integer;
 begin
   P := TTyPainter.Create;
   try
@@ -379,8 +379,15 @@ begin
     end;
 
     if FShowValue then
-      P.DrawText(R, Format(FValueFormat, [FValue]), Font.Name, 10, 700,
+    begin
+      { The theme's face and the font's style flags under the bold (#113); a size the author
+        set wins over the figure's own 10. }
+      vSize := TyControlFontSize(Self);
+      if vSize <= 0 then vSize := 10;
+      P.DrawText(R, Format(FValueFormat, [FValue]), bodyS.FontName, vSize,
+        700 or (bodyS.FontWeight and not TyFontWeightMask),
         bodyS.TextColor, taCenter, tlCenter, False);
+    end;
     P.EndPaint;
   finally
     P.Free;

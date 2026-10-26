@@ -211,6 +211,9 @@ type
     procedure RenderDecadesView(P: TTyPainter; const ARect: TRect; APPI: Integer;
       const S: TTyStyleSet; HeaderH, ColW, RowH: Integer; const GridRect: TRect);
   protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
@@ -532,6 +535,7 @@ var
   dy, dm, dd: Word;
 begin
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   FDate         := DateOf(Now);
   FMinDate      := 0;
   FMaxDate      := 0;
@@ -548,6 +552,17 @@ begin
   DecodeDate(FDate, dy, dm, dd);
   FViewYear  := dy;
   FViewMonth := dm;
+end;
+
+procedure TTyCustomCalendar.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  sz: TSize;
+begin
+  { The month the theme lays out (TyCalendarSizeFor), which is also its default size. }
+  sz := TyCalendarSizeFor(ActiveController);
+  PreferredWidth := MulDiv(sz.cx, Font.PixelsPerInch, 96);
+  PreferredHeight := MulDiv(sz.cy, Font.PixelsPerInch, 96);
 end;
 
 function TTyCustomCalendar.GetStyleTypeKey: string;
@@ -787,7 +802,7 @@ begin
   end;
 
   TitleText := IntToStr(FViewYear);
-  CellStyle := ActiveController.Model.ResolveStyle('TyCalendarTitle', '', [tysNormal]);
+  CellStyle := PartStyle('TyCalendarTitle', '', [tysNormal]);
   if not (tpTextColor in CellStyle.Present) then CellStyle.TextColor := S.TextColor;
   if CellStyle.FontSize <= 0 then CellStyle.FontSize := FontSz;
   P.DrawText(TitleRect, TitleText, CellStyle.FontName, ResolveFontSize(CellStyle),
@@ -811,7 +826,7 @@ begin
     else
       CellStates := [tysNormal];
 
-    CellStyle := ActiveController.Model.ResolveStyle('TyCalendarCell', '', CellStates);
+    CellStyle := PartStyle('TyCalendarCell', '', CellStates);
     if CellStyle.FontSize <= 0 then CellStyle.FontSize := FontSz;
     if not (tpTextColor in CellStyle.Present) then CellStyle.TextColor := S.TextColor;
 
@@ -867,7 +882,7 @@ begin
   end;
 
   TitleText := IntToStr(DS) + '–' + IntToStr(DS + 9);
-  CellStyle := ActiveController.Model.ResolveStyle('TyCalendarTitle', '', [tysNormal]);
+  CellStyle := PartStyle('TyCalendarTitle', '', [tysNormal]);
   if not (tpTextColor in CellStyle.Present) then CellStyle.TextColor := S.TextColor;
   if CellStyle.FontSize <= 0 then CellStyle.FontSize := FontSz;
   P.DrawText(TitleRect, TitleText, CellStyle.FontName, ResolveFontSize(CellStyle),
@@ -895,7 +910,7 @@ begin
     else
       CellStates := [tysNormal];
 
-    CellStyle := ActiveController.Model.ResolveStyle('TyCalendarCell', '', CellStates);
+    CellStyle := PartStyle('TyCalendarCell', '', CellStates);
     if CellStyle.FontSize <= 0 then CellStyle.FontSize := FontSz;
     if not (tpTextColor in CellStyle.Present) then
     begin
@@ -959,7 +974,7 @@ begin
   end;
 
   TitleText := IntToStr(CentStart) + '–' + IntToStr(CentStart + 99);
-  CellStyle := ActiveController.Model.ResolveStyle('TyCalendarTitle', '', [tysNormal]);
+  CellStyle := PartStyle('TyCalendarTitle', '', [tysNormal]);
   if not (tpTextColor in CellStyle.Present) then CellStyle.TextColor := S.TextColor;
   if CellStyle.FontSize <= 0 then CellStyle.FontSize := FontSz;
   P.DrawText(TitleRect, TitleText, CellStyle.FontName, ResolveFontSize(CellStyle),
@@ -988,7 +1003,7 @@ begin
     else
       CellStates := [tysNormal];
 
-    CellStyle := ActiveController.Model.ResolveStyle('TyCalendarCell', '', CellStates);
+    CellStyle := PartStyle('TyCalendarCell', '', CellStates);
     if CellStyle.FontSize <= 0 then CellStyle.FontSize := FontSz;
     if not (tpTextColor in CellStyle.Present) then
     begin
@@ -1154,7 +1169,7 @@ begin
         change the other, or the month/year click split drifts off the glyphs. }
       TitleText := FormatDateTime('mmmm yyyy',
         EncodeDate(FViewYear, FViewMonth, 1), Names);
-      CellStyle := ActiveController.Model.ResolveStyle('TyCalendarTitle', '', [tysNormal]);
+      CellStyle := PartStyle('TyCalendarTitle', '', [tysNormal]);
       if not (tpTextColor in CellStyle.Present) then
         CellStyle.TextColor := S.TextColor;
       if CellStyle.FontSize <= 0 then
@@ -1165,7 +1180,7 @@ begin
 
     // Weekday name row   (suppressed by dsShowDayNames)
     WeekOrderArr := TyWeekdayOrder(FFirstDayOfWeek);
-    CellStyle := ActiveController.Model.ResolveStyle('TyCalendarWeekday', '', [tysNormal]);
+    CellStyle := PartStyle('TyCalendarWeekday', '', [tysNormal]);
     if not (tpTextColor in CellStyle.Present) then
       CellStyle.TextColor := S.TextColor;
     if CellStyle.FontSize <= 0 then
@@ -1222,7 +1237,7 @@ begin
       else
         CellStates := [tysNormal];
 
-      CellStyle := ActiveController.Model.ResolveStyle('TyCalendarCell', '', CellStates);
+      CellStyle := PartStyle('TyCalendarCell', '', CellStates);
       if CellStyle.FontSize <= 0 then
         CellStyle.FontSize := FontSz;
       if not (tpTextColor in CellStyle.Present) then
@@ -1272,7 +1287,7 @@ begin
           GridRect.Top + row * RowH,
           WkNumW,
           GridRect.Top + (row + 1) * RowH);
-        CellStyle := ActiveController.Model.ResolveStyle('TyCalendarWeekday', '', [tysNormal]);
+        CellStyle := PartStyle('TyCalendarWeekday', '', [tysNormal]);
         if not (tpTextColor in CellStyle.Present) then
           CellStyle.TextColor := S.TextColor;
         if CellStyle.FontSize <= 0 then
@@ -1362,7 +1377,7 @@ begin
     TitleText  := FormatDateTime('mmmm yyyy',
       EncodeDate(FViewYear, FViewMonth, 1), TyDateTimeNames);
     S          := CurrentStyle;
-    TitleStyle := ActiveController.Model.ResolveStyle('TyCalendarTitle', '', [tysNormal]);
+    TitleStyle := PartStyle('TyCalendarTitle', '', [tysNormal]);
     if TitleStyle.FontSize <= 0 then TitleStyle.FontSize := ResolveFontSize(S);
     SpacePos := Pos(' ', TitleText);
     Result   := cpTitle;

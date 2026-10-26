@@ -761,7 +761,7 @@ begin
   // The SAME resting state TTyButton.Down injects, so one ':selected' theme rule styles the
   // pressed button and the current page alike.
   if (AItem.Kind = pikPage) and (AItem.Page = FPageIndex) then Include(Result, tysSelected);
-  if not Enabled then
+  if not IsEnabled then
   begin
     { Disabled KEEPS :selected -- TTySegmented's deviation from TTyButton.Down, for the same
       reason: a greyed-out pagination must still show WHICH page is in force. Losing the chip
@@ -792,7 +792,7 @@ end;
 function TTyCustomPagination.CellStyle(const AItem: TTyPaginationItem;
   AIndex: Integer): TTyStyleSet;
 begin
-  Result := ActiveController.Model.ResolveStyle('TyPaginationItem', CellVariant(AItem.Kind),
+  Result := PartStyle('TyPaginationItem', CellVariant(AItem.Kind),
     CellStates(AItem, AIndex));
 end;
 
@@ -848,7 +848,7 @@ begin
     // The RESTING style of THIS kind: a theme that makes the current page bold must not make
     // the strip's width depend on which page is current, but a per-kind rule
     // (TyPaginationItem.ellipsis { padding: 0px; }) must still be honoured.
-    cellS := ActiveController.Model.ResolveStyle('TyPaginationItem',
+    cellS := PartStyle('TyPaginationItem',
       CellVariant(AList[i].Kind), [tysNormal]);
     txtS := CellTextStyle(stripS, cellS);   // inherit the strip's font, exactly as the paint does
     if AList[i].Kind in [pikPrev, pikNext] then
@@ -926,7 +926,7 @@ begin
     // The height comes from the PAGE cell's resting style and a stable reference glyph:
     // page numbers are the strip's baseline content, so a run whose window happens to be all
     // ellipses is still exactly as tall as any other.
-    refS := ActiveController.Model.ResolveStyle('TyPaginationItem', CellVariant(pikPage),
+    refS := PartStyle('TyPaginationItem', CellVariant(pikPage),
       [tysNormal]);
     lineH := P.MeasureText('Ag', refS.FontName, ResolveFontSize(refS), refS.FontWeight).cy;
     if lineH < 1 then lineH := 1;
@@ -955,7 +955,7 @@ var
   lst: TTyPaginationItems;
   hit: Integer;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   // The base sets FPressed and moves focus here (TabStop + CanFocus), so a click behaves like
   // a Tab and the arrow keys work straight after it.
   inherited MouseDown(Button, Shift, X, Y);
@@ -974,7 +974,7 @@ procedure TTyCustomPagination.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   hit: Integer;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
   // The raw cell index, inert cells included: CellStates is what decides that an inert cell
   // does not light up, so the two rules live in one place.
@@ -998,7 +998,7 @@ end;
 
 procedure TTyCustomPagination.KeyDown(var Key: Word; Shift: TShiftState);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   if FPageCount <= 0 then Exit;
   { Left/Right turn the page -- the reason this control is focusable at all. Every handled key

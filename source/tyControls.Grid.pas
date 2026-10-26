@@ -275,6 +275,8 @@ type
     procedure SetText(const AValue: TCaption);
     procedure SetFirstCol(AValue: Integer);
     procedure SetLastCol(AValue: Integer);
+    procedure SetLevel(AValue: Integer);
+    procedure SetAlignment(AValue: TAlignment);
   public
     constructor Create(ACollection: TCollection); override;
     procedure Assign(ASource: TPersistent); override;
@@ -283,8 +285,8 @@ type
     property FirstCol: Integer read FFirstCol write SetFirstCol default 0;
     property LastCol: Integer read FLastCol write SetLastCol default 0;
     { 第几级(0 = 最上面那条带)。目前只画 0 级。 }
-    property Level: Integer read FLevel write FLevel default 0;
-    property Alignment: TAlignment read FAlignment write FAlignment default taCenter;
+    property Level: Integer read FLevel write SetLevel default 0;
+    property Alignment: TAlignment read FAlignment write SetAlignment default taCenter;
   end;
 
   TTyGridHeaderGroups = class(TCollection)
@@ -776,10 +778,23 @@ type
     procedure SnapshotKeys(ADest: TStrings);
   end;
 
+  { 网格的表头。TTyHeader 发布的它都发布,只差 MainColumn(#130):那一项在树/列表上决定哪一列
+    画树线与图标,网格里没有任何代码读它,4.0 起不再发布。 }
+  TTyGridHeader = class(TTyCustomHeader)
+  published
+    property Height;
+    property Columns;
+    property SortColumn;
+    property SortDirection;
+    property AutoSizeIndex;
+    property Images;
+    property Options;
+  end;
+
   { 网格基类:有几何、有外观,但不规定数据从哪来。 }
   TTyCustomGrid = class(TTyCustomControl, ITyScrollBarFrameHost)
   private
-    FHeader:           TTyHeader;
+    FHeader:           TTyGridHeader;
     FRowCount:         Integer;
     FDefaultRowHeight: Integer;
     FDefaultRowHeightExplicit: Boolean;   { True once set; False = follow --row-height (density) }
@@ -1036,7 +1051,9 @@ type
     { 把「指针在本控件身上」转发给两条内嵌条。见 MouseEnter。 }
     procedure NoteHostHover(AHovered: Boolean);
     procedure HeaderChanged(Sender: TObject);
-    procedure SetHeader(AValue: TTyHeader);
+    { #127: 新列起多宽 —— 网格的 DefaultColWidth;装载窗体时答 0,让读进来的列保持原样。 }
+    function  NewColumnWidth: Integer;
+    procedure SetHeader(AValue: TTyGridHeader);
     procedure SetRowCount(AValue: Integer);
     function  GetDefaultRowHeight: Integer;
     procedure SetDefaultRowHeight(AValue: Integer);
@@ -1227,6 +1244,10 @@ type
     function  FAttrs2Find(ACol, ARow: Integer): TTyGridCellAttr; virtual;
     { 网格自己的列类;列还没建时返回 nil。 }
     function  GridColumn(ACol: Integer): TTyGridColumn;
+  protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
   public
     { --- 列的显式隐藏 ---
       底层就是 TTyColumn.Options 里的 coVisible;这三个方法只是免得宿主
@@ -1292,6 +1313,9 @@ type
     property LeftCol: Integer read GetLeftCol write SetLeftCol;
     property TopRow: Integer read GetTopRow write SetTopRow;
   protected
+    { 表头(列、排序键……)变了之后。基类什么都不做;TTyStringGrid 用它跟随宿主写的
+      Header.SortColumn / SortDirection(#127)。 }
+    procedure DoHeaderChanged; virtual;
     { 按内容自适应列宽。基类没有数据、什么都不做;TTyStringGrid 改写。 }
     procedure AutoFitColumnWidth(ACol: Integer); virtual;
     { 把点在星级格上的坐标翻成分值并写回。 }
@@ -1723,7 +1747,7 @@ type
       "Unknown property: Anchors"),编译期完全看不出来。 }
   protected
     { 列模型(含列集合、列头高度、排序列、自动适宽列)。 }
-    property Header: TTyHeader read FHeader write SetHeader;
+    property Header: TTyGridHeader read FHeader write SetHeader;
     { 数据行数(不含列头与固定行)。 }
     property RowCount: Integer read FRowCount write SetRowCount default 0;
     { 统一行高,逻辑像素(P0 不支持可变行高)。 }
@@ -2058,8 +2082,6 @@ type
     property Options;
     property ShowFocusCell;
     property FocusRectVisible;
-    property HideSelectionWhenInactive;
-    property FadeUnfocusedSelection;
     property FixedCols;
     property FixedRows;
     property FixedRowsBottom;
@@ -2085,7 +2107,6 @@ type
     property OnColumnMove;
     property OnRowMove;
     property OnGetEditorProp;
-    property MinEditorWidth;
     property MinRowHeight;
     property MaxRowHeight;
     property MinColWidth;
@@ -2425,6 +2446,11 @@ type
     FSortDir: TTySortDirection;
     FSortKind: TTyGridSortKind;
     FOnCompareCells: TTyGridCompareEvent;
+    { #127:正在由网格自己写 Header.SortColumn/SortDirection —— 那不是宿主在改排序。 }
+    FHeaderSortSync: Integer;
+    { #127:网格级 SortKind = gskAuto 时每列判定出来的比较方式,一次排序内有效。 }
+    FAutoKinds: array of TTyGridSortKind;
+    FAutoKindsValid: Boolean;
     procedure CollectKey(Item: string; const Key: string; var AContinue: Boolean);
     procedure SnapshotCellKeys(ADest: TStrings);
     procedure ShiftCells(AFromIndex, ADelta: Integer; ARows: Boolean);
@@ -2442,6 +2468,12 @@ type
     function  CompareRows(ACol, ARow1, ARow2: Integer): Integer;
     procedure MergeSortOrder(ACol: Integer; ADirection: TTySortDirection);
     procedure MergeSortOrderByKeys(const AKeys: TTyGridSortKeys);
+    { #127:这一列按什么比 —— 列自己的,其次网格的;gskAuto 看这一列的内容。 }
+    function  SortKindOf(ACol: Integer): TTyGridSortKind;
+    function  DetectSortKind(ACol: Integer): TTyGridSortKind;
+    procedure ShowSortInHeader(ACol: Integer; ADir: TTySortDirection);
+    procedure SetGroupRowFormat(const AValue: string);
+    procedure SeedSort(ACol: Integer; ADir: TTySortDirection);
     function  CompareRowsByKeys(const AKeys: TTyGridSortKeys;
       ARow1, ARow2: Integer): Integer;
     function  BlankVerdict(ACol, ARow1, ARow2: Integer;
@@ -2506,6 +2538,10 @@ type
     { 全状态流的内容段(数据行序)。见实现处的说明。 }
     function  StateContentText: string;
     procedure SetRow(AValue: Integer);
+  protected
+    { #127:宿主写的 Header.SortColumn / SortDirection 真的排序(从前只动了那个三角);
+      窗体里存着的排序在 Loaded 里种下排序键。 }
+    procedure DoHeaderChanged; override;
   protected
     function  GetCellText(ACol, ARow: Integer): string; override;
     procedure RenderCells(P: TTyPainter; const M: TTyGridMetrics;
@@ -3324,7 +3360,7 @@ type
       `Options` 里的 goEditing 是它的反视图。 }
     property ReadOnly: Boolean read FReadOnly write FReadOnly default False;
     { 分组行的格式串:%s = 分组值,%d = 组内行数。 }
-    property GroupRowFormat: string read FGroupRowFormat write FGroupRowFormat;
+    property GroupRowFormat: string read FGroupRowFormat write SetGroupRowFormat;
     { 选择粒度:单元格矩形 / 整行 / 整列。 }
     property SelectionMode: TTyGridSelectionMode
       read FSelectionMode write SetSelectionMode default gsmCell;
@@ -3360,7 +3396,8 @@ type
     { 勾选框单元格允许第三态(灰显)。关着时切换只在两态间走 ——
       灰显不能凭空冒出来。 }
     property AllowGrayed: Boolean read FAllowGrayed write FAllowGrayed default False;
-    { 排序比较方式:文本还是数值。数值列用 gskText 排会得到 '10' < '9' 这种结果。 }
+    { 排序比较方式:文本还是数值。数值列用 gskText 排会得到 '10' < '9' 这种结果。
+      gskAuto(#127):每列看自己的内容 —— 非空格都是数就按数,都是日期就按日期,否则按文本。 }
     property SortKind: TTyGridSortKind read FSortKind write FSortKind default gskText;
     { 空值排最前还是最后(翻方向时位置不变)。 }
     property BlanksPosition: TTyGridBlanksPosition read FBlanksPosition
@@ -4016,6 +4053,22 @@ begin
   Changed;
 end;
 
+{ 改了要通知网格重画(#127)—— 从前直写字段,换级/换对齐都得等下一次别的重画。 }
+procedure TTyGridHeaderGroup.SetLevel(AValue: Integer);
+begin
+  if AValue < 0 then AValue := 0;
+  if FLevel = AValue then Exit;
+  FLevel := AValue;
+  Changed;
+end;
+
+procedure TTyGridHeaderGroup.SetAlignment(AValue: TAlignment);
+begin
+  if FAlignment = AValue then Exit;
+  FAlignment := AValue;
+  Changed;
+end;
+
 procedure TTyGridHeaderGroup.Assign(ASource: TPersistent);
 begin
   if ASource is TTyGridHeaderGroup then
@@ -4326,7 +4379,8 @@ begin
     的点击取焦点是拿 TabStop 当闸门的。放到基类,两个派生网格一起对。 }
   TabStop := True;
   { 让表头造网格自己的列类。 }
-  FHeader := TTyHeader.Create(ColumnClass, ColumnsClass);
+  FHeader := TTyGridHeader.Create(ColumnClass, ColumnsClass);
+  FHeader.Columns.NewColumnWidth := @NewColumnWidth;   { #127 }
   FHeader.OnChange := @HeaderChanged;
   FRowCount := 0;
   FDefaultRowHeight := 22;              { fallback; unused while FDefaultRowHeightExplicit=False }
@@ -4411,6 +4465,15 @@ begin
   FHScroll.Visible := False;
 end;
 
+procedure TTyCustomGrid.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+begin
+  { No natural size, as LCL's own has none: 0 x 0 keeps the bounds, where TWinControl would
+    otherwise size the control to its internal scroll bars or editor. }
+  PreferredWidth := 0;
+  PreferredHeight := 0;
+end;
+
 destructor TTyCustomGrid.Destroy;
 begin
   { 先摘监听再释放:否则析构过程中列集合的变更会回调到半毁的控件上。 }
@@ -4452,9 +4515,21 @@ begin
   InvalidateColumnCache;   { 列宽/列数/可见性变了 → 列几何缓存作废 }
   UpdateScrollBars;   { 列宽/列数变了,横向内容量随之变 }
   Invalidate;
+  DoHeaderChanged;
 end;
 
-procedure TTyCustomGrid.SetHeader(AValue: TTyHeader);
+procedure TTyCustomGrid.DoHeaderChanged;
+begin
+end;
+
+function TTyCustomGrid.NewColumnWidth: Integer;
+begin
+  if csLoading in ComponentState then Exit(0);
+  Result := GetDefaultColWidth;
+end;
+
+
+procedure TTyCustomGrid.SetHeader(AValue: TTyGridHeader);
 begin
   FHeader.Assign(AValue);
 end;
@@ -4636,6 +4711,7 @@ begin
   if FIndicatorWidth = AValue then Exit;
   FIndicatorWidth := AValue;
   InvalidateColumnCache;   { 行头槽宽度进了每列的基准左缘 }
+  UpdateScrollBars;        { #127: 横向内容量随之变 }
   Invalidate;
 end;
 
@@ -5094,11 +5170,15 @@ begin
     **高度**,与列宽无关。 }
   if FAutoFillColumns and not FSyncingScroll then
     FHeader.Columns.DistributeFill(UnscaleI(ViewportW)
-      - IfThen(FShowIndicator, FIndicatorWidth, 0));
+      - IfThen(FShowIndicator, FIndicatorWidth, 0), FMinColWidth, FMaxColWidth);   { #127 }
+  { #127:喂给 ApplyAutoSize 的也是列可用的宽度(与铺满同一个式子)。从前给的是
+    ClientWidth - 冻结列宽,而 ApplyAutoSize 自己又减了一遍所有可见列(冻结列在内),
+    冻结列就被减了两次;用 ClientWidth 也没让出纵向滚动条那一条。 }
   if (hoAutoResize in FHeader.Options) and (FHeader.AutoSizeIndex >= 0)
      and not FSyncingScroll then
-    FHeader.Columns.ApplyAutoSize(UnscaleI(ClientWidth - FrozenWidthPx),
-      FHeader.AutoSizeIndex);
+    FHeader.Columns.ApplyAutoSize(UnscaleI(ViewportW)
+      - IfThen(FShowIndicator, FIndicatorWidth, 0), FHeader.AutoSizeIndex,
+      FMinColWidth, FMaxColWidth);
 
   { 两趟收敛"互夺":一条轴出现滚动条会吃掉另一条轴的可用空间,可能反过来又逼出对方。 }
   for pass := 0 to 1 do
@@ -5330,7 +5410,7 @@ begin
   for i := 0 to High(FCellStyleStates) do
     if FCellStyleStates[i] = st then Exit(i);
 
-  sty := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, st);
+  sty := PartStyle('TyGridCell', StyleClass, st);
   n := Length(FCellStyleStates);
   SetLength(FCellStyleStates, n + 1);
   SetLength(FCellStyleCache, n + 1);
@@ -5839,7 +5919,7 @@ begin
   if (ACol = FPressedBtnCol) and (ARow = FPressedBtnRow) then Include(st, tysActive)
   else if (ACol = FHoverCol) and (ARow = FHoverRow) then Include(st, tysHover);
 
-  bS := ActiveController.Model.ResolveStyle('TyGridButton', StyleClass, st);
+  bS := PartStyle('TyGridButton', StyleClass, st);
   if tpBackground in bS.Present then
     P.FillBackground(r, bS.Background, TyEffectiveCorners(bS));
   if TyBorderVisible(bS) then
@@ -6084,7 +6164,7 @@ begin
 
   { 量最高的那个标题。Header.Height 当**下限** —— 自适应只往上撑,
     不会把一条正常高度的列头压扁。 }
-  hdrS := ActiveController.Model.ResolveStyle('TyGridHeader', StyleClass, []);
+  hdrS := PartStyle('TyGridHeader', StyleClass, []);
   bmp := TBGRABitmap.Create(1, 1);
   try
     TyConfigureTextFont(bmp, hdrS.FontName, ResolveFontSize(hdrS),
@@ -6228,7 +6308,7 @@ begin
 
   { 复用行头槽自己的 typeKey 取墨色与字体 —— 不硬编码任何视觉值,
     也不借别的控件的键。 }
-  indS := ActiveController.Model.ResolveStyle('TyGridIndicator', StyleClass, []);
+  indS := PartStyle('TyGridIndicator', StyleClass, []);
   if tpTextColor in indS.Present then ink := indS.TextColor
   else ink := CurrentStyle.TextColor;
 
@@ -7652,9 +7732,9 @@ begin
     整条列头带的每一段都换底,而且 goHeaderPushedLook 关着也照样发生。按下去的观感
     **只有一个来源** —— 下面那趟按 FPressedHeaderCol 逐段判定、且由标志把门的解析。
     (加这条规则之前 :active 不存在,所以剔掉它对既有主题逐像素无影响。) }
-  hdrS := ActiveController.Model.ResolveStyle('TyGridHeader', StyleClass,
+  hdrS := PartStyle('TyGridHeader', StyleClass,
     CurrentStates - [tysActive]);
-  secS := ActiveController.Model.ResolveStyle('TyGridHeaderSection', StyleClass,
+  secS := PartStyle('TyGridHeaderSection', StyleClass,
     CurrentStates - [tysActive]);
   if tpTextColor in secS.Present then ink := secS.TextColor
   else if tpTextColor in hdrS.Present then ink := hdrS.TextColor
@@ -7662,7 +7742,7 @@ begin
   line := TyColorToBGRA(hdrS.BorderColor);
   { 激活态漏斗的颜色走主题(选中态的表头文字色);主题没给就退回普通墨色 ——
     绝不自己发明一个颜色。 }
-  actHdrS := ActiveController.Model.ResolveStyle('TyGridHeaderSection',
+  actHdrS := PartStyle('TyGridHeaderSection',
     StyleClass, [tysSelected]);
   if tpTextColor in actHdrS.Present then accentInk := actHdrS.TextColor
   else accentInk := ink;
@@ -7676,7 +7756,7 @@ begin
     好处在列头上全赔掉。没在 hot-track 或者鼠标不在列头上时一次都不解析。 }
   hotTrack := (hoHotTrack in FHeader.Options) and (FHoverHeaderCol >= 0);
   if hotTrack then
-    hotS := ActiveController.Model.ResolveStyle('TyGridHeaderSection',
+    hotS := PartStyle('TyGridHeaderSection',
       StyleClass, [tysHover]);
 
   { 按下去的那一段 —— goHeaderPushedLook。这个标志从前**没有进枚举**,理由写在
@@ -7687,7 +7767,7 @@ begin
     与 hotS 同样**在循环外解析一次**:每段各解析一遍会把逐格记忆化的好处全赔掉。 }
   pushed := (goHeaderPushedLook in Options) and (FPressedHeaderCol >= 0);
   if pushed then
-    pushS := ActiveController.Model.ResolveStyle('TyGridHeaderSection',
+    pushS := PartStyle('TyGridHeaderSection',
       StyleClass, [tysActive]);
 
   imgList := HeaderImageList;
@@ -8080,7 +8160,7 @@ begin
   h := FilterRowHeightPx;
   if h <= 0 then Exit;
 
-  fs := ActiveController.Model.ResolveStyle('TyGridFilterRow', StyleClass, []);
+  fs := PartStyle('TyGridFilterRow', StyleClass, []);
 
   { 整条带先铺底 —— 与列头带一样横跨整幅宽度(含行头槽上方那一块)。 }
   r := Rect(0, ATop, M.ClientW, ATop + h);
@@ -8127,8 +8207,8 @@ begin
   h := GroupBandHeightPx;
   if h <= 0 then Exit;
 
-  hdrS := ActiveController.Model.ResolveStyle('TyGridHeader', StyleClass, CurrentStates);
-  secS := ActiveController.Model.ResolveStyle('TyGridHeaderGroup', StyleClass, CurrentStates);
+  hdrS := PartStyle('TyGridHeader', StyleClass, CurrentStates);
+  secS := PartStyle('TyGridHeaderGroup', StyleClass, CurrentStates);
   if tpTextColor in secS.Present then ink := secS.TextColor
   else if tpTextColor in hdrS.Present then ink := hdrS.TextColor
   else ink := CurrentStyle.TextColor;
@@ -8539,7 +8619,7 @@ var
   hit: TTyGridHit;
 begin
   inherited MouseDown(Button, Shift, X, Y);
-  if not FReportsClicks or not Enabled then Exit;
+  if not FReportsClicks or not IsEnabled then Exit;
   hit := CellAt(X, Y);
   if Button = mbRight then
   begin
@@ -8627,7 +8707,7 @@ begin
   if not TyGridDrawSlots(M, firstSlot, lastSlot) then Exit;
 
   { 同上:内边距也别跟着网格自身的状态变,否则鼠标进出会让文字左右挪一下。 }
-  cellS := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, []);
+  cellS := PartStyle('TyGridCell', StyleClass, []);
   if tpTextColor in cellS.Present then ink := cellS.TextColor
   else ink := AFrame.TextColor;
   padL := ScaleI(cellS.Padding.Left);
@@ -9823,6 +9903,9 @@ var
   c, r: Integer;
 begin
   inherited Loaded;
+  { #127:窗体里存着的排序在这里种下排序键(见 SeedSort)。 }
+  if Header.SortColumn <> NoColumn then
+    SeedSort(Header.SortColumn, Header.SortDirection);
   if not (FColWaits or FRowWaits) then Exit;
   if FColWaits then c := FStreamedCol else c := FCol;
   if FRowWaits then r := FStreamedRow else r := FRow;
@@ -9933,7 +10016,7 @@ begin
   { 每次按下都从头记:上一次按住的来历不能带到这一次。 }
   FCellPress := False;
   FSortArmedCol := -1;
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
 
   { 填充柄优先于一切:它压在选区右下角那一格上,不先判它就会被当成
     "在那一格上按下"而重置选区。 }
@@ -10196,7 +10279,7 @@ var
   vc: string;
 begin
   inherited KeyPress(Key);
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   if FEditing then Exit;              { 编辑器自己收键 }
   if Key < #32 then Exit;             { 控制字符不算录入 }
   if EditorKindFor(FCol, FRow) in [gekNone, gekCheckBox] then Exit;
@@ -10299,7 +10382,7 @@ begin
   { 单字节留给 KeyPress —— 那条路上的吞键语义(Key := #0)这里给不出来,
     而且两条都跑一遍会开两次编辑。 }
   if Length(UTF8Key) <= 1 then Exit;
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   if FEditing then Exit;              { 编辑器自己收键 }
   if EditorKindFor(FCol, FRow) in [gekNone, gekCheckBox] then Exit;
   { ValidChars 是一串**字符**,所以用整字去找:一个汉字要么整个在里面,要么不在。
@@ -10321,7 +10404,7 @@ begin
   { Key 会在下面被置 0(表示已消费),所以想知道"按的是哪个键"必须先存一份。 }
   navKey := Key;
   inherited KeyDown(Key, Shift);
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
 
   { 只有**导航键 + Shift** 才算扩选。Ctrl+A / Ctrl+C / Ctrl+V 都不该动锚点
     (Ctrl+A 尤其:从前末尾那句无差别的 AnchorSelection 会把刚拉满的选区
@@ -11063,9 +11146,7 @@ begin
   { 排序方式**跟着列走**;列没配(gskAuto)才回落到网格的 SortKind。
     混合表里日期列按文本排会得到 '10/1' < '2/1' —— 这本来就该是列的属性,
     而不是全表一个开关。 }
-  kind := FSortKind;
-  if (GridColumn(ACol) <> nil) and (GridColumn(ACol).SortKind <> gskAuto) then
-    kind := GridColumn(ACol).SortKind;
+  kind := SortKindOf(ACol);
 
   if kind = gskDate then
   begin
@@ -11133,9 +11214,7 @@ begin
   a := GetCellText(ACol, ARow1);
   b := GetCellText(ACol, ARow2);
 
-  kind := FSortKind;
-  if (GridColumn(ACol) <> nil) and (GridColumn(ACol).SortKind <> gskAuto) then
-    kind := GridColumn(ACol).SortKind;
+  kind := SortKindOf(ACol);
 
   blankA := Trim(a) = '';
   blankB := Trim(b) = '';
@@ -11237,10 +11316,115 @@ var
     MergeRun(lo, mid, hi);
   end;
 
+var
+  i: Integer;
 begin
   if Length(FOrder) < 2 then Exit;
   SetLength(buf, Length(FOrder));
-  SortRun(0, High(FOrder));
+  { gskAuto 的判定一列一次,不是一次比较一次。 }
+  SetLength(FAutoKinds, Header.Columns.Count);
+  for i := 0 to High(FAutoKinds) do FAutoKinds[i] := gskAuto;   { gskAuto = 还没判 }
+  FAutoKindsValid := True;
+  try
+    SortRun(0, High(FOrder));
+  finally
+    FAutoKindsValid := False;
+  end;
+end;
+
+function TTyCustomStringGrid.SortKindOf(ACol: Integer): TTyGridSortKind;
+begin
+  Result := FSortKind;
+  if (GridColumn(ACol) <> nil) and (GridColumn(ACol).SortKind <> gskAuto) then
+    Result := GridColumn(ACol).SortKind;
+  if Result <> gskAuto then Exit;
+  if FAutoKindsValid and (ACol >= 0) and (ACol <= High(FAutoKinds)) then
+  begin
+    if FAutoKinds[ACol] = gskAuto then FAutoKinds[ACol] := DetectSortKind(ACol);
+    Result := FAutoKinds[ACol];
+  end
+  else
+    Result := DetectSortKind(ACol);
+end;
+
+function TTyCustomStringGrid.DetectSortKind(ACol: Integer): TTyGridSortKind;
+var
+  keys: TStringList;
+  i, sep, c, r: Integer;
+  s: string;
+  allNum, allDate, any: Boolean;
+begin
+  { 只看**写过的**格(稀疏存储),与 AutoFitColumn 同一个做法。空格不投票。 }
+  allNum := True;
+  allDate := True;
+  any := False;
+  keys := TStringList.Create;
+  try
+    SnapshotCellKeys(keys);
+    for i := 0 to keys.Count - 1 do
+    begin
+      sep := Pos(':', keys[i]);
+      c := StrToIntDef(Copy(keys[i], 1, sep - 1), -1);
+      if c <> ACol then Continue;
+      r := StrToIntDef(Copy(keys[i], sep + 1, MaxInt), -1);
+      s := Trim(GetCellText(ACol, r));
+      if s = '' then Continue;
+      any := True;
+      if allNum and IsNan(StrToFloatDef(s, NaN)) then allNum := False;
+      if allDate and (StrToDateTimeDef(s, NoDateSentinel) = NoDateSentinel) then allDate := False;
+      if not (allNum or allDate) then Break;
+    end;
+  finally
+    keys.Free;
+  end;
+  if any and allNum then Result := gskNumber
+  else if any and allDate then Result := gskDate
+  else Result := gskText;
+end;
+
+procedure TTyCustomStringGrid.SetGroupRowFormat(const AValue: string);
+begin
+  if FGroupRowFormat = AValue then Exit;
+  FGroupRowFormat := AValue;
+  Invalidate;   { #127:分组行马上换上新格式 }
+end;
+
+procedure TTyCustomStringGrid.DoHeaderChanged;
+begin
+  inherited DoHeaderChanged;
+  if FHeaderSortSync > 0 then Exit;
+  if [csLoading, csDestroying] * ComponentState <> [] then Exit;
+  { NoColumn 只是熄掉三角(与 HideSortArrow 同义,顺序留着),不动排序键。 }
+  if Header.SortColumn = NoColumn then Exit;
+  if (Header.SortColumn <> FSortCol) or (Header.SortDirection <> FSortDir) then
+    if RowCount = 0 then
+      SeedSort(Header.SortColumn, Header.SortDirection)   { 空表:见 SeedSort }
+    else
+      SortByColumn(Header.SortColumn, Header.SortDirection);
+end;
+
+{ 只种下排序键,不立即排:窗体刚读进来时多半还没有行(SortByColumn 遇到空表会把排序清掉),
+  行和格子到了之后重建显示序时按它排。 }
+procedure TTyCustomStringGrid.SeedSort(ACol: Integer; ADir: TTySortDirection);
+begin
+  if (ACol < 0) or (ACol >= Header.Columns.Count) then Exit;
+  SetLength(FSortKeys, 1);
+  FSortKeys[0].Col := ACol;
+  FSortKeys[0].Dir := ADir;
+  FSortCol := ACol;
+  FSortDir := ADir;
+  InvalidateOrder;
+end;
+
+procedure TTyCustomStringGrid.ShowSortInHeader(ACol: Integer; ADir: TTySortDirection);
+begin
+  Inc(FHeaderSortSync);
+  try
+    Header.SortColumn := ACol;
+    if ACol <> NoColumn then Header.SortDirection := ADir;
+  finally
+    Dec(FHeaderSortSync);
+  end;
 end;
 
 
@@ -11699,7 +11883,7 @@ var
 begin
   if FGestureRefused and (ssLeft in Shift) then Exit;   { the refused press is still held }
   inherited MouseMove(Shift, X, Y);
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
 
   { 正在拖填充柄:只记目标行,松开才真正填 ——
     拖过程中就写数据的话,往回拖一格就再也退不回来了。 }
@@ -11832,7 +12016,7 @@ begin
     树形列再减缩进。少减一项就会出现"提示说放得下、屏幕上却带着…"。 }
   M := GridMetrics;
   cell := TyGridCellContentRect(CellRect(ACol, ARow), M);
-  cellSty := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, []);
+  cellSty := PartStyle('TyGridCell', StyleClass, []);
   textR := ToReadingRect(cell);
   textR := Rect(textR.Left + ScaleI(cellSty.Padding.Left), cell.Top,
                 textR.Right - ScaleI(cellSty.Padding.Right), cell.Bottom);
@@ -12262,7 +12446,7 @@ begin
   GetPressedButton(bc, br);
   if (ACol = bc) and (ARow = br) then Include(st, tysActive);
 
-  bS := ActiveController.Model.ResolveStyle('TyGridButton', StyleClass, st);
+  bS := PartStyle('TyGridButton', StyleClass, st);
   if tpBackground in bS.Present then
     P.FillBackground(r, bS.Background, TyEffectiveCorners(bS));
   if TyBorderVisible(bS) then
@@ -13522,7 +13706,7 @@ var
   r: TRect;
 begin
   if (ARow < 0) or (ARow >= RowCount) then Exit;
-  cS := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, []);
+  cS := PartStyle('TyGridCell', StyleClass, []);
   padL := ScaleI(cS.Padding.Left);
   padR := ScaleI(cS.Padding.Right);
 
@@ -13606,8 +13790,8 @@ begin
   { 1x1 的临时位图只用来量文字 —— 不需要画布,也不需要窗口句柄。 }
   bmp := TBGRABitmap.Create(1, 1);
   try
-    cSty := ActiveController.Model.ResolveStyle('TyGridCell', StyleClass, []);
-    hSty := ActiveController.Model.ResolveStyle('TyGridHeader', StyleClass, []);
+    cSty := PartStyle('TyGridCell', StyleClass, []);
+    hSty := PartStyle('TyGridHeader', StyleClass, []);
 
     widest := TextW(TTyColumn(Header.Columns.Items[ACol]).Text, hSty);
 
@@ -13634,7 +13818,8 @@ begin
 
   { 加上左右内边距与一点余量,再换回逻辑像素。 }
   widest := widest + ScaleI(cSty.Padding.Left + cSty.Padding.Right) + ScaleI(8);
-  TTyColumn(Header.Columns.Items[ACol]).Width := UnscaleI(widest);
+  { 走 ColWidths:网格级的 MinColWidth/MaxColWidth 也管自适应(#127),与拖动同规则。 }
+  ColWidths[ACol] := UnscaleI(widest);
   UpdateScrollBars;
   Invalidate;
 end;
@@ -13733,7 +13918,7 @@ begin
   if (r.Bottom <= M.FrozenTop) or (r.Top >= M.ClientH) then Exit;
 
   info := GroupInfo(AGroupIndex);
-  gS := ActiveController.Model.ResolveStyle('TyGridGroupRow', StyleClass, CurrentStates);
+  gS := PartStyle('TyGridGroupRow', StyleClass, CurrentStates);
   if tpBackground in gS.Present then
     P.FillBackground(r, gS.Background, 0);
   if tpTextColor in gS.Present then ink := gS.TextColor else ink := AFrame.TextColor;
@@ -13981,7 +14166,7 @@ var
 begin
   inherited RenderFooter(P, M, AFooterRect, AFrame);
 
-  fS := ActiveController.Model.ResolveStyle('TyGridSummaryRow', StyleClass, CurrentStates);
+  fS := PartStyle('TyGridSummaryRow', StyleClass, CurrentStates);
   if tpTextColor in fS.Present then ink := fS.TextColor else ink := AFrame.TextColor;
 
   for i := 0 to Header.Columns.Count - 1 do
@@ -14442,13 +14627,12 @@ begin
       begin
         FSortCol := FSortKeys[0].Col;
         FSortDir := FSortKeys[0].Dir;
-        Header.SortColumn := FSortCol;
-        Header.SortDirection := FSortDir;
+        ShowSortInHeader(FSortCol, FSortDir);
       end
       else
       begin
         FSortCol := -1;
-        Header.SortColumn := NoColumn;
+        ShowSortInHeader(NoColumn, sdAscending);
       end;
       InvalidateOrder;
       InvalidateColumnCache;
@@ -15622,7 +15806,7 @@ begin
     FSortCol := -1;
     SetLength(FSortKeys, 0);
     { 表头也要跟着清 —— 排序小三角看的是 Header.SortColumn。 }
-    Header.SortColumn := NoColumn;
+    ShowSortInHeader(NoColumn, sdAscending);
     InvalidateOrder;
     UpdateScrollBars;
     Invalidate;
@@ -15641,8 +15825,7 @@ begin
   { **同步给表头**。此前只写了 FSortCol,而 hoShowSortGlyphs 那个小三角看的是
     Header.SortColumn —— 于是三角永远停在 NoColumn、一次都没画出来过。
     又一个"属性存在却没人写"的洞。 }
-  Header.SortColumn := ACol;
-  Header.SortDirection := ADirection;
+  ShowSortInHeader(ACol, ADirection);
   InvalidateOrder;
   EnsureOrder;      { 重建里已按 FSortCol 排过 }
 
@@ -15715,8 +15898,7 @@ begin
         { 表头也要同步。从前这一支没写,于是翻方向时小三角的朝向不跟着变
           (三角画的是 Header.SortDirection);HideSortArrow 之后再走到这一支
           还会让三角回不来。 }
-        Header.SortColumn := ACol;
-        Header.SortDirection := ADirection;
+        ShowSortInHeader(ACol, ADirection);
       end;
       InvalidateOrder;
       UpdateScrollBars;
@@ -15731,8 +15913,7 @@ begin
   begin
     FSortCol := ACol;
     FSortDir := ADirection;
-    Header.SortColumn := ACol;
-    Header.SortDirection := ADirection;
+    ShowSortInHeader(ACol, ADirection);
   end;
   InvalidateOrder;
   UpdateScrollBars;
@@ -15744,7 +15925,7 @@ begin
   SetLength(FSortKeys, 0);
   FSortCol := -1;
   FSortArrowHidden := False;   { 没有排序键了,"熄掉指示器"这个状态也就无从谈起 }
-  Header.SortColumn := NoColumn;
+  ShowSortInHeader(NoColumn, sdAscending);
   InvalidateOrder;
   UpdateScrollBars;
   Invalidate;
@@ -15756,7 +15937,7 @@ begin
     而这个方法的全部意义正是"顺序留着、只是别画那个三角"。
     (LCL 的排序是物理的,顺序留在数据里,所以它只需要清 FSortColumn。) }
   FSortArrowHidden := True;
-  Header.SortColumn := NoColumn;
+  ShowSortInHeader(NoColumn, sdAscending);
   Invalidate;
 end;
 
@@ -16332,7 +16513,7 @@ begin
     RefocusEditor;
     Exit(True);
   end;
-  if FReadOnly or (not Enabled) then Exit;
+  if FReadOnly or (not IsEnabled) then Exit;
   if (ACol < 0) or (ACol >= Header.Columns.Count) then Exit;
   if (ARow < 0) or (ARow >= RowCount) then Exit;
   { 这里问 CanEditCell(不是 EditorKindFor):宿主可能只想禁用编辑、

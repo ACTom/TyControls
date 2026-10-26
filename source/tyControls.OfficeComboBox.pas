@@ -103,13 +103,10 @@ type
     property Text;
     property DropDownCount;
     property Sorted;
-    property MaxLength;
-    property CharCase;
     property Style;
     property ItemHeight;
     property ItemWidth;
     property TextHint;
-    property ReadOnly;
     property OnDrawItem;
     property OnMeasureItem;
     property OnChange;
@@ -126,13 +123,13 @@ implementation
 { Shared header-band draw: a tinted band (the 'TyGroupBox' background) with bold, left-aligned
   text — same look as TTyOfficeListBox, kept unit-local so this combo is self-contained. }
 procedure DrawHeaderBand(P: TTyPainter; const ARowRect: TRect; const S: string;
-  AController: TTyCustomStyleController);
+  const AStyle: TTyStyleSet; AController: TTyCustomStyleController);
 var
   hs: TTyStyleSet;
   textR: TRect;
   band: TTyColor;
 begin
-  hs := AController.Model.ResolveStyle('TyGroupBox', '', []);
+  hs := AStyle;   // the list's PartStyle: its font reaches the header (#113)
   if (tpBackground in hs.Present) and (TyAlphaOf(hs.Background.Color) > 0) then
     P.FillBackground(ARowRect, hs.Background, 0)
   else
@@ -145,8 +142,8 @@ begin
       ARowRect.Right - ARowRect.Left, ARowRect.Bottom - ARowRect.Top);
   end;
   textR := Rect(ARowRect.Left + P.Scale(6), ARowRect.Top, ARowRect.Right, ARowRect.Bottom);
-  P.DrawText(textR, S, hs.FontName, TyResolveFontSize(hs, True, 0, AController), 700, hs.TextColor,
-    taLeftJustify, tlCenter, True);
+  P.DrawText(textR, S, hs.FontName, TyResolveFontSize(hs, True, 0, AController),
+    700 or (hs.FontWeight and not TyFontWeightMask), hs.TextColor, taLeftJustify, tlCenter, True);
 end;
 
 { TTyOfficeComboPopupList }
@@ -162,7 +159,7 @@ begin
   if TyComboCollectRowOwnerDraw(Self, ARowRect, AIndex) then Exit;
   // Read this list's OWN Objects[] (copied via Assign from the combo).
   if (AIndex >= 0) and (AIndex < Items.Count) and (PtrInt(Items.Objects[AIndex]) = 1) then
-    DrawHeaderBand(P, ARowRect, Items[AIndex], ActiveController)
+    DrawHeaderBand(P, ARowRect, Items[AIndex], PartStyle('TyGroupBox', '', []), ActiveController)
   else
     inherited PaintItemContent(P, ARowRect, AIndex, AStyle);
 end;

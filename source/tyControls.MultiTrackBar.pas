@@ -2378,7 +2378,7 @@ var
   v: Int64;
 begin
   Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
-  if Result or not Enabled then Exit;
+  if Result or not IsEnabled then Exit;
   i := KeyThumb;
   if i < 0 then Exit;
   v := FValues[i];
@@ -2396,7 +2396,7 @@ var
   idx, pos: Integer;
   onThumb, handled: Boolean;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button <> mbLeft then Exit;
   FDragSpan := -1;
@@ -2421,7 +2421,7 @@ begin
     end;
     { The handler may have added, removed or moved thumbs (or disabled the bar): any index
       from before it is stale, so look again at what is under the pointer. }
-    if not Enabled then Exit;
+    if not IsEnabled then Exit;
     idx := ThumbAtPoint(X, Y);
     if (idx >= 0) and not ThumbEnabled(idx) then Exit;
   end;
@@ -2475,7 +2475,7 @@ var
   pos, v, i, j, h: Integer;
   off: Boolean;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
   if FDragSpan >= 0 then
   begin
@@ -2565,7 +2565,7 @@ var
   i, nxt: Integer;
   v: Int64;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   if (Key = VK_TAB) and (Shift - [ssShift] = []) then
   begin

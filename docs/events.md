@@ -46,7 +46,7 @@ TyControls 的全部控件继承自两个基类之一（`tyControls.Base`）：
 | `OnStartDrag` | 事件 | 本控件作为拖动源开始拖动 |
 | `OnEndDrag` | 事件 | 拖动结束 |
 | `Visible` | 属性 | 是否可见（`default True`；此前只能从代码设，对象查看器与 `.lfm` 里都没有） |
-| `AutoSize` | 属性 | 是否按控件自己的首选尺寸（`CalculatePreferredSize`）自动调整大小；`default False`，未实现首选尺寸的控件保持原有 bounds |
+| `AutoSize` | 属性 | 是否按控件自己的首选尺寸（`CalculatePreferredSize`）自动调整大小；`default False`。单行输入框和组合框按字体定高、宽度不动（同 LCL 的 TEdit）；状态栏、表头、页签条保持主题高度，字体放不下时变高；徽标、评分、日历、滚动条（只定粗细）按内容。备注框、列表视图、树视图、表格、列表框、仪表、形状这类没有自然尺寸的控件不受影响，保持原有 bounds（LCL 的同类控件也是这样） |
 | `DragMode` | 属性 | `dmManual` / `dmAutomatic`；置 `dmAutomatic` 即可让控件成为拖动源 |
 | `DragKind` | 属性 | 拖动种类（`dkDrag` / `dkDock`） |
 | `DragCursor` | 属性 | 拖动过程中的指针形状 |
@@ -118,7 +118,7 @@ TyControls 的硬性原则是**视觉由主题（.tycss）拥有**：颜色、�
 | 未暴露的属性 | 原因 |
 |--------------|------|
 | `Color` / `ParentColor` | 背景色由主题 `background` 令牌决定，不接受控件级覆盖 |
-| `Font`（仅暴露用于 PPI/字号传递）/ `ParentFont` | 字体族与字号优先由主题控制；`Font` 虽 published，但其作用是传 PPI，主题令牌覆盖字体族/大小 |
+| `ParentFont`（`Font` 是 published 的） | 在控件自己或它所在的容器上设的字体名、样式、颜色、字号盖过主题，`StyleOverride` 又盖过它们。窗体自己的字体不算：整窗的字体由主题的 `--font-family` / `--font-size-base` 定。设成和所在容器一样的值，就是沿用容器的。控件里面的文字（列表行、单元格、页签、表头等）也一样，只是选中和当前的那一项保留主题的高亮色 |
 | `Brush` | 填充由 Painter + 主题决定 |
 | `Bevel*`（BevelInner/Outer/Kind/Width/Edges） | 立体边框是原生外观，与主题边框语义冲突 |
 | `BorderStyle` | 边框样式由主题 `border-*` 令牌决定 |

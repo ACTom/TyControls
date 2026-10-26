@@ -496,6 +496,10 @@ type
     procedure DoChange; virtual;
     procedure DoDropDown; virtual;
     procedure DoCloseUp; virtual;
+  protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -1552,7 +1556,7 @@ begin
     // ':selected' theme rule styles all three.
     Include(Result, tysSelected);
   lvl := TyCascaderColumnNodes(FRoot, FPath, AColumn);
-  if (not Enabled) or (lvl = nil) or (AIndex < 0) or (AIndex >= lvl.Count)
+  if (not IsEnabled) or (lvl = nil) or (AIndex < 0) or (AIndex >= lvl.Count)
      or (not lvl[AIndex].Enabled) then
   begin
     { Disabled KEEPS :selected, TTySegmented's rule: a greyed-out row must still show that it
@@ -1573,7 +1577,7 @@ end;
 
 function TTyCascaderPanel.RowStyle(AColumn, AIndex: Integer): TTyStyleSet;
 begin
-  Result := ActiveController.Model.ResolveStyle('TyCascaderItem', StyleClass,
+  Result := PartStyle('TyCascaderItem', StyleClass,
     RowStates(AColumn, AIndex));
 end;
 
@@ -1590,7 +1594,7 @@ procedure TTyCascaderPanel.MouseDown(Button: TMouseButton; Shift: TShiftState;
 var
   c, r: Integer;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button <> mbLeft then Exit;
   // Pick on PRESS: a cascader column is a menu, and every menu in this library commits on
@@ -1603,7 +1607,7 @@ procedure TTyCascaderPanel.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   c, r: Integer;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
   if TyPanelHitTest(X, Y, c, r) then SetHover(c, r) else SetHover(-1, -1);
 end;
@@ -1754,6 +1758,7 @@ end;
 constructor TTyCustomCascader.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   FNodes := TTyCascaderNodes.Create(Self);
   FNodes.OnChange := @NodesChanged;
   SetLength(FPath, 0);
@@ -1766,6 +1771,18 @@ begin
   // The same drop size as TTyComboBox: the two fields are meant to sit in one column.
   Width := 145;
   Height := TyDensityHeight(ActiveController, 26);
+end;
+
+procedure TTyCustomCascader.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  S: TTyStyleSet;
+begin
+  { One line of the font plus the padding, as LCL's TEdit: the width stays the form's. No
+    inherited -- TWinControl would size the control to its child controls. }
+  S := CurrentStyle;
+  PreferredWidth := 0;
+  PreferredHeight := TyFieldPreferredHeight(S, ResolveFontSize(S), Font.PixelsPerInch);
 end;
 
 destructor TTyCustomCascader.Destroy;
@@ -2083,7 +2100,7 @@ end;
 
 procedure TTyCustomCascader.Click;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited Click;
   { Clicking the field while the popup is open fires the form's deactivate -> FPopup.Close ->
     PopupClosed BEFORE this handler runs, so DroppedDown is already False here and a naive
@@ -2097,7 +2114,7 @@ end;
 
 procedure TTyCustomCascader.KeyDown(var Key: Word; Shift: TShiftState);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   if (Key = VK_ESCAPE) and DroppedDown then
   begin

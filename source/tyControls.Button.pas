@@ -20,6 +20,7 @@ type
     FTimer: TTimer;
     FDefault: Boolean;
     FCancel: Boolean;
+    FRolesUpdateLocked: Boolean;   // while we register with the form (LCL's TCustomButton, #119)
     FModalResult: TModalResult;
     FDown: Boolean;
     FAlignment: TAlignment;
@@ -141,6 +142,11 @@ type
     // returned nil and the registration was dropped — redo it now that the parent
     // form is known (mirrors native re-application in Loaded/CreateWnd).
     procedure Loaded; override;
+    { #119, as LCL's TCustomButton: a button set Default or Cancel in code before it had a
+      parent registers once it has one; and the form tells the button that lost the role to
+      another, so its own Default/Cancel follows instead of staying True and being saved. }
+    procedure SetParent(NewParent: TWinControl); override;
+    procedure UpdateRolesForForm; override;
     procedure Click; override;
     // LCL-native default/cancel routing. A focused control's Enter/Esc make the
     // owning form invoke ExecuteDefaultAction / ExecuteCancelAction on its
@@ -359,7 +365,7 @@ function TTyCustomButton.DialogChar(var Message: TLMKey): Boolean;
 begin
   { No mnemonic parsing means no mnemonic: a button showing 'AT&T' literally must not also
     answer Alt+T, or the escape hatch would only fix half the bug. }
-  if Enabled and FShowAccelChar and TyIsAccelKey(Message, Caption) then
+  if IsEnabled and FShowAccelChar and TyIsAccelKey(Message, Caption) then
   begin
     Click;
     Exit(True);
@@ -371,7 +377,7 @@ procedure TTyCustomButton.Click;
 var
   Form: TCustomForm;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   // Set the host form's ModalResult BEFORE OnClick (native TButton semantics,
   // buttons.inc:160-170). This lets an OnClick handler veto/override the close by
   // writing Form.ModalResult := mrNone; doing it after would clobber the handler.
@@ -392,10 +398,15 @@ begin
   Form := GetParentForm(Self);
   if Form <> nil then
   begin
-    if FDefault then
-      Form.DefaultControl := Self
-    else if Form.DefaultControl = Self then
-      Form.DefaultControl := nil;
+    FRolesUpdateLocked := True;
+    try
+      if FDefault then
+        Form.DefaultControl := Self
+      else if Form.DefaultControl = Self then
+        Form.DefaultControl := nil;
+    finally
+      FRolesUpdateLocked := False;
+    end;
   end;
 end;
 
@@ -407,11 +418,54 @@ begin
   Form := GetParentForm(Self);
   if Form <> nil then
   begin
-    if FCancel then
-      Form.CancelControl := Self
-    else if Form.CancelControl = Self then
-      Form.CancelControl := nil;
+    FRolesUpdateLocked := True;
+    try
+      if FCancel then
+        Form.CancelControl := Self
+      else if Form.CancelControl = Self then
+        Form.CancelControl := nil;
+    finally
+      FRolesUpdateLocked := False;
+    end;
   end;
+end;
+
+procedure TTyCustomButton.SetParent(NewParent: TWinControl);
+var
+  Form: TCustomForm;
+begin
+  { Leaving a form: it keeps no role pointing at us. Locked, so the button keeps its own
+    Default/Cancel for the form it goes to. }
+  Form := GetParentForm(Self);
+  if (Form <> nil) and (NewParent <> Parent) then
+  begin
+    FRolesUpdateLocked := True;
+    try
+      if Form.DefaultControl = Self then Form.DefaultControl := nil;
+      if Form.CancelControl = Self then Form.CancelControl := nil;
+    finally
+      FRolesUpdateLocked := False;
+    end;
+  end;
+  inherited SetParent(NewParent);
+  if not (csLoading in ComponentState) then
+  begin
+    if FDefault then RegisterDefaultWithForm;
+    if FCancel then RegisterCancelWithForm;
+  end;
+end;
+
+procedure TTyCustomButton.UpdateRolesForForm;
+var
+  Form: TCustomForm;
+  roles: TControlRolesForForm;
+begin
+  if FRolesUpdateLocked then Exit;
+  Form := GetParentForm(Self);
+  if Form = nil then Exit;   // not on a form: keep the settings
+  roles := Form.GetRolesForControl(Self);
+  Default := crffDefault in roles;
+  Cancel := crffCancel in roles;
 end;
 
 procedure TTyCustomButton.Loaded;
@@ -449,7 +503,7 @@ begin
   Result := inherited CurrentStates;   // hover/active/focused/disabled, or normal
   // Enabled=False makes inherited return [tysDisabled] only; disabled wins, so we
   // never layer selected on top of it. Otherwise Down adds the resting selected state.
-  if FDown and Enabled then
+  if FDown and IsEnabled then
   begin
     Include(Result, tysSelected);
     Exclude(Result, tysNormal);
@@ -579,7 +633,7 @@ procedure TTyCustomButton.CMDialogKey(var Message: TCMDialogKey);
 begin
   if WantsDialogKey(Message.CharCode) then
   begin
-    if Enabled then Click;
+    if IsEnabled then Click;
     Message.Result := 1;  // handled
   end
   else
@@ -588,7 +642,7 @@ end;
 
 procedure TTyCustomButton.KeyDown(var Key: Word; Shift: TShiftState);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   if (Key = VK_SPACE) or (Key = VK_RETURN) then
   begin

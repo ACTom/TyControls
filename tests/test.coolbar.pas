@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType,
   fpcunit, testregistry,
   tyControls.Types, tyControls.Controller, tyControls.Base,
-  tyControls.Panel, tyControls.ControlBar, tyControls.CoolBar;
+  tyControls.Panel, tyControls.Painter, tyControls.ControlBar, tyControls.CoolBar;
 
 type
   { Pure band math — the headless-tested core (no window handle). }
@@ -88,6 +88,17 @@ type
     procedure CallMouseDown(X, Y: Integer);
     procedure CallMouseMove(X, Y: Integer);
     procedure CallMouseUp(X, Y: Integer);
+    { Run the bar's own packing. The LCL never aligns a form that was not shown, so a test that
+      wants the packer's answer has to ask for it (headless-tests-never-run-lcl-align). }
+    procedure Pack;
+    { The grippers and band captions, painted onto ACanvas the way Paint does it. }
+    procedure PaintBandsTo(ACanvas: TCanvas);
+  end;
+
+  { What a band lays out: its Control, or the placeholder that holds a control-less band's place. }
+  TCoolBandAccess = class(TTyCoolBand)
+  public
+    function LaidOut: TControl;
   end;
 
   { The control: the per-child band map — keyed, drop-on-free, clamp defaults. }
@@ -98,6 +109,7 @@ type
     procedure CountChange(Sender: TObject);
     function MakeBand(AParent: TWinControl; AL, AT, AW, AH: Integer): TControl;
     function MakeOverflowedPair(CB: TCoolBarAccess; out b0, b1: TControl): Integer;
+    function MakeRowWithAPlaceholder(CB: TCoolBarAccess; out b0, b1: TControl): TTyCoolBand;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -142,7 +154,21 @@ type
     procedure TestAutoMaxWidthLeavesAnOpinionlessControlUncapped;
     procedure TestAutoMaxWidthTakesWhicheverCeilingBindsFirst;
     procedure TestAutoMaxWidthHonoursTheControlsOwnConstraint;
-    procedure TestABandWithNoControlIsNeverInTheLayout;
+    // vertical bands, band captions, and a band with no Control (#128)
+    procedure TestAVerticalBandKeepsItsLengthWhenLaidOut;
+    procedure TestABandCaptionIsDrawnBetweenItsGripperAndItsChild;
+    procedure TestABandCaptionFollowsItsGripperMirroredAndVertically;
+    procedure TestABandWithNoControlKeepsItsPlaceInTheRow;
+    procedure TestABandWithNoControlDrawsItsCaption;
+    procedure TestABandWithNoControlIsResizedThroughTheSeamAfterIt;
+    procedure TestABandWithNoControlIsDraggedToANewPlaceAndStaysThere;
+    procedure TestGivingABandAControlPutsTheControlInItsPlace;
+    procedure TestHidingOrDeletingABandWithNoControlFreesItsPlace;
+    procedure TestABandWithNoControlIsNotStoredButKeepsItsPlaceOnReload;
+    procedure TestMovingABandWithNoControlInTheListMovesItInTheRow;
+    procedure TestSizingAControlBesideABandWithNoControlLeavesTheRowAlone;
+    procedure TestFreeingABandWithNoControlMidDragEndsTheDrag;
+    procedure TestABandWithNoControlRunsDownAVerticalBar;
     // the band model is LOGICAL px; the controls and the pointer are not (ACTom/TyControls#2)
     procedure TestABandsWidthIsLogicalPx;
     procedure TestAGripperDragFollowsThePointerAt175Percent;
@@ -165,6 +191,54 @@ function TCoolBarAccess.LeadPx(ACtl: TControl): Integer;    begin Result := Band
 procedure TCoolBarAccess.CallMouseDown(X, Y: Integer);      begin MouseDown(mbLeft, [ssLeft], X, Y); end;
 procedure TCoolBarAccess.CallMouseMove(X, Y: Integer);      begin MouseMove([ssLeft], X, Y); end;
 procedure TCoolBarAccess.CallMouseUp(X, Y: Integer);        begin MouseUp(mbLeft, [], X, Y); end;
+
+procedure TCoolBarAccess.Pack;
+var r: TRect;
+begin
+  r := Rect(0, 0, Width, Height);
+  AlignControls(nil, r);
+end;
+
+procedure TCoolBarAccess.PaintBandsTo(ACanvas: TCanvas);
+var P: TTyPainter;
+begin
+  P := TTyPainter.Create;
+  try
+    P.BeginPaint(ACanvas, Rect(0, 0, Width, Height), Font.PixelsPerInch, IsRightToLeft);
+    PaintGrippers(P, CurrentStyle, 1, BandHeight, GripPx, BandSpacing);
+    P.EndPaint;
+  finally
+    P.Free;
+  end;
+end;
+
+{ TCoolBandAccess }
+function TCoolBandAccess.LaidOut: TControl; begin Result := LaidOutControl; end;
+
+const
+  SENTINEL = TColor($FF00FF);   // magenta: no theme paints it, so any other pixel is ink
+
+{ A bitmap the size of the bar, filled with SENTINEL, with the bar's grippers and captions on it. }
+function PaintedBands(CB: TCoolBarAccess): TBitmap;
+begin
+  Result := TBitmap.Create;
+  Result.SetSize(CB.Width, CB.Height);
+  Result.Canvas.Brush.Color := SENTINEL;
+  Result.Canvas.FillRect(Rect(0, 0, CB.Width, CB.Height));
+  CB.PaintBandsTo(Result.Canvas);
+end;
+
+{ True when anything was drawn inside ARect. }
+function InkIn(ABmp: TBitmap; const ARect: TRect): Boolean;
+var x, y: Integer;
+begin
+  Result := False;
+  for y := ARect.Top to ARect.Bottom - 1 do
+    for x := ARect.Left to ARect.Right - 1 do
+      if (x >= 0) and (y >= 0) and (x < ABmp.Width) and (y < ABmp.Height)
+         and (ABmp.Canvas.Pixels[x, y] <> SENTINEL) then
+        Exit(True);
+end;
 
 { The pitch the packer advances by from one row to the next, device px. }
 function RowPitchPx(CB: TTyCoolBar): Integer;
@@ -1589,28 +1663,411 @@ begin
     CB.BandMaxWidth(b));
 end;
 
-procedure TCoolBarControlTest.TestABandWithNoControlIsNeverInTheLayout;
-var CB: TCoolBarAccess; b: TControl; sep: TTyCoolBand;
+{ ── vertical bands, band captions, and a band with no Control ───────────────── }
+
+procedure TCoolBarControlTest.TestAVerticalBandKeepsItsLengthWhenLaidOut;
+var CB: TCoolBarAccess; b0, b1: TControl;
 begin
-  { The caption-only separator band. It hosts nothing, so the content-cap question never
-    arises for it: with no child it is never packed, never gripped and never resized. That is
-    the decision -- not "the cap is zero" but "the band is not in the layout at all" -- and it
-    is why AutoMaxWidth needs no special case for a control-less band. }
+  { A vertical band's length is its HEIGHT: TTyCoolBand.Width sets it there and the packer
+    reads it there. The bar then applied each packed rect with the band height as the child's
+    height -- the horizontal case's constant -- so every band of a vertical bar came out
+    BandHeight long the first time it was laid out. }
   CB := TCoolBarAccess.Create(FForm);
   CB.Parent := FForm;
   CB.Font.PixelsPerInch := 96;
+  CB.SetBounds(0, 0, 60, 300);
+  CB.BandHeight := 26;      // pinned so nothing follows the active theme
+  CB.BandSpacing := 3;
+  CB.GripperWidth := 10;
+  CB.Vertical := True;
+  b0 := MakeBand(CB, 0, 0, 26, 80);
+  b1 := MakeBand(CB, 0, 0, 26, 50);
+  CB.SetBandWidth(b0, 80);
+  CB.SetBandWidth(b1, 50);
+  CB.Pack;
+  AssertEquals('the first band is still 80 down the column', 80, b0.Height);
+  AssertEquals('and the second still 50', 50, b1.Height);
+  AssertEquals('which starts below the first: grip, 80, gap, its own grip',
+    CB.ContentBox.Top + 10 + 80 + 3 + 10, b1.Top);
+end;
+
+procedure TCoolBarControlTest.TestABandCaptionIsDrawnBetweenItsGripperAndItsChild;
+var CB: TCoolBarAccess; b: TControl; r: TRect; bmp: TBitmap; L, capW: Integer;
+begin
+  { With ShowText the packer reserves [gripper][caption][child]. The gripper was placed against
+    the child instead -- over the end of the caption's strip -- and the caption was handed the
+    empty rect between that gripper and the child, so no band caption was ever seen. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  CB.SetBounds(0, 0, 400, 60);
+  CB.BandHeight := 26;
+  CB.BandSpacing := 3;
+  CB.GripperWidth := 10;
+  CB.ShowText := True;
   b := MakeBand(CB, 0, 0, 80, 26);
-  CB.SetBandWidth(b, 80);                 // gives b a collection item of its own
+  CB.SetBandText(b, 'Tools');
+  CB.Pack;
+  L := CB.ContentBox.Left;
+  capW := CB.LeadPx(b) - CB.GripPx;
+  AssertTrue('precondition: the caption has room reserved', capW > 0);
+  AssertEquals('precondition: the child sits past the gripper and the caption',
+    L + 10 + capW, b.Left);
+  r := CB.BandRect(b);
+  AssertEquals('the gripper is on the band''s leading edge', L, r.Left);
+  AssertEquals('and one gripper wide', 10, r.Right - r.Left);
+  bmp := PaintedBands(CB);
+  try
+    AssertTrue('the gripper is drawn there', InkIn(bmp, r));
+    AssertTrue('and the caption in the strip between it and the child',
+      InkIn(bmp, Rect(r.Right, r.Top, b.Left, r.Bottom)));
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TCoolBarControlTest.TestABandCaptionFollowsItsGripperMirroredAndVertically;
+var CB: TCoolBarAccess; b: TControl; r: TRect; bmp: TBitmap; lead: Integer;
+begin
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  CB.SetBounds(0, 0, 400, 60);
+  CB.BandHeight := 26;
+  CB.BandSpacing := 3;
+  CB.GripperWidth := 10;
+  CB.ShowText := True;
+  b := MakeBand(CB, 0, 0, 80, 26);
+  CB.SetBandText(b, 'Tools');
+  lead := CB.LeadPx(b);
+
+  { Mirrored: the band fills from the right, so the gripper is on its right, a lead past it. }
+  CB.BiDiMode := bdRightToLeft;
+  CB.Pack;
+  r := CB.BandRect(b);
+  AssertEquals('mirrored, the gripper is the band''s rightmost strip', b.Left + b.Width + lead,
+    r.Right);
+  AssertEquals('and one gripper wide', 10, r.Right - r.Left);
+  bmp := PaintedBands(CB);
+  try
+    AssertTrue('the caption is between the child and the gripper',
+      InkIn(bmp, Rect(b.Left + b.Width, r.Top, r.Left, r.Bottom)));
+  finally
+    bmp.Free;
+  end;
+
+  { Vertical: the gripper is above the band, a lead above it, and the caption below that. }
+  CB.BiDiMode := bdLeftToRight;
+  CB.SetBounds(0, 0, 60, 300);
+  CB.Vertical := True;
+  CB.SetBandWidth(b, 80);
+  CB.Pack;
+  r := CB.BandRect(b);
+  AssertEquals('vertically, the gripper starts a lead above the band', b.Top - lead, r.Top);
+  AssertEquals('and is one gripper tall', 10, r.Bottom - r.Top);
+  bmp := PaintedBands(CB);
+  try
+    AssertTrue('the caption is between the gripper and the child',
+      InkIn(bmp, Rect(b.Left, r.Bottom, b.Left + b.Width, b.Top)));
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ One row: b0 (80 wide), a band with no Control (Width 50), b1 (60 wide), packed. }
+function TCoolBarControlTest.MakeRowWithAPlaceholder(CB: TCoolBarAccess;
+  out b0, b1: TControl): TTyCoolBand;
+begin
+  CB.SetBounds(0, 0, 400, 60);
+  CB.BandHeight := 26;
+  CB.BandSpacing := 3;
+  CB.GripperWidth := 10;
+  b0 := MakeBand(CB, 0, 0, 80, 26);
+  CB.SetBandWidth(b0, 80);
+  Result := CB.Bands.Add;
+  Result.Width := 50;
+  b1 := MakeBand(CB, 0, 0, 60, 26);
+  CB.SetBandWidth(b1, 60);
+  CB.Pack;
+end;
+
+procedure TCoolBarControlTest.TestABandWithNoControlKeepsItsPlaceInTheRow;
+var CB: TCoolBarAccess; b0, b1, ph: TControl; sep: TTyCoolBand;
+begin
+  { #128. A band with no Control is how a caption-only separator band is expressed, and the
+    Control property said such a band "still occupies its place". It did not: the packer, the
+    gripper paint, the hit test and the drag all read Controls[], the band put nothing there,
+    and it vanished. It is now laid out as an internal placeholder child, which puts it in every
+    one of those with no special case. This test used to pin the vanishing. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  sep := MakeRowWithAPlaceholder(CB, b0, b1);
+  AssertTrue('the band really hosts nothing', sep.Control = nil);
+  ph := TCoolBandAccess(sep).LaidOut;
+  AssertTrue('but something stands in for it in the layout', ph <> nil);
+  AssertSame('between its neighbours', ph, CB.Controls[1]);
+  AssertEquals('as wide as the band says', 50, ph.Width);
+  AssertEquals('so the band after it starts past it: grip, 80, gap, grip, 50, gap, grip',
+    CB.ContentBox.Left + 10 + 80 + 3 + 10 + 50 + 3 + 10, b1.Left);
+  AssertFalse('it has a gripper of its own', IsRectEmpty(CB.BandRect(ph)));
+  AssertSame('and is the seam the next band''s gripper moves', ph, CB.SeamOwner(b1));
+  AssertSame('the placeholder leads back to its band', sep, CB.Bands.FindBand(ph));
+  AssertEquals('it declares no content, so AutoMaxWidth leaves it uncapped', 0,
+    CB.ContentCap(ph));
+  if b0 = nil then ;
+end;
+
+procedure TCoolBarControlTest.TestABandWithNoControlDrawsItsCaption;
+var CB: TCoolBarAccess; b0, b1, ph: TControl; sep: TTyCoolBand; r: TRect; bmp: TBitmap;
+begin
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  sep := MakeRowWithAPlaceholder(CB, b0, b1);
+  CB.ShowText := True;
+  sep.Text := 'Edit';
+  CB.Pack;
+  ph := TCoolBandAccess(sep).LaidOut;
+  r := CB.BandRect(ph);
+  AssertTrue('precondition: the caption has room reserved', ph.Left - r.Right > 0);
+  bmp := PaintedBands(CB);
+  try
+    AssertTrue('its gripper is drawn', InkIn(bmp, r));
+    AssertTrue('and so is its caption, after the gripper',
+      InkIn(bmp, Rect(r.Right, r.Top, ph.Left, r.Bottom)));
+  finally
+    bmp.Free;
+  end;
+  if (b0 = nil) or (b1 = nil) then ;
+end;
+
+procedure TCoolBarControlTest.TestABandWithNoControlIsResizedThroughTheSeamAfterIt;
+var CB: TCoolBarAccess; b0, b1, ph: TControl; sep: TTyCoolBand; x, y: Integer;
+begin
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  sep := MakeRowWithAPlaceholder(CB, b0, b1);
+  ph := TCoolBandAccess(sep).LaidOut;
+  { b1's gripper is the seam between b1 and the band before it, which is the placeholder. }
+  x := b1.Left - 5;
+  y := b1.Top + 13;
+  CB.CallMouseDown(x, y);
+  CB.CallMouseMove(x + 30, y);
+  CB.CallMouseUp(x + 30, y);
+  AssertEquals('the band with no control grew by the drag', 80, sep.Width);
+  AssertEquals('and its placeholder with it', 80, ph.Width);
+  if b0 = nil then ;
+end;
+
+procedure TCoolBarControlTest.TestABandWithNoControlIsDraggedToANewPlaceAndStaysThere;
+var CB: TCoolBarAccess; b0, b1, ph: TControl; sep: TTyCoolBand; r: TRect; x, y: Integer;
+begin
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  sep := MakeRowWithAPlaceholder(CB, b0, b1);
+  ph := TCoolBandAccess(sep).LaidOut;
+  r := CB.BandRect(ph);
+  x := r.Left + 5;
+  y := r.Top + 13;
+  { Not the row's first band, so a sideways start would move the seam before it; a move starts
+    with a nudge down, then goes past b1's midpoint. }
+  FChangeCount := 0;
+  CB.OnChange := @CountChange;
+  CB.CallMouseDown(x, y);
+  CB.CallMouseMove(x, y + 6);
+  CB.CallMouseMove(b1.Left + 45, y);
+  CB.CallMouseUp(b1.Left + 45, y);
+  AssertEquals('the band moved behind b1', 2, CB.GetControlIndex(ph));
+  AssertEquals('which took its place', 1, CB.GetControlIndex(b1));
+  AssertEquals('reported once -- bringing the list into line is part of the same move', 1,
+    FChangeCount);
+  { The band list is the only record of where a band with no Control sits -- it has no child of
+    its own in the .lfm -- so the list has to follow the move, or the next change to the list
+    puts the band back where it was. }
+  AssertEquals('and the band list followed the move', 2, sep.Index);
+  CB.Bands.Add;
+  AssertEquals('another band added does not pull it back', 2, CB.GetControlIndex(ph));
+  if b0 = nil then ;
+end;
+
+procedure TCoolBarControlTest.TestGivingABandAControlPutsTheControlInItsPlace;
+var CB: TCoolBarAccess; b0, b1, c, ph: TControl; sep: TTyCoolBand; n: Integer;
+begin
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  sep := MakeRowWithAPlaceholder(CB, b0, b1);
+  n := CB.ControlCount;
+  c := MakeBand(CB, 0, 0, 40, 26);   // a new child lands at the END of the list
+  sep.Control := c;
+  AssertSame('the band lays out its control now', c, TCoolBandAccess(sep).LaidOut);
+  AssertEquals('the placeholder is gone', n, CB.ControlCount);
+  AssertEquals('and the control took the band''s place, not the end of the row', 1,
+    CB.GetControlIndex(c));
+  AssertEquals('at the band''s width', 50, c.Width);
+  sep.Control := nil;
+  ph := TCoolBandAccess(sep).LaidOut;
+  AssertTrue('left without a control, the band gets a placeholder back', ph <> nil);
+  AssertEquals('placed by the band list: just before the band that follows it',
+    CB.GetControlIndex(b1) - 1, CB.GetControlIndex(ph));
+  if b0 = nil then ;
+end;
+
+procedure TCoolBarControlTest.TestHidingOrDeletingABandWithNoControlFreesItsPlace;
+var CB: TCoolBarAccess; b0, b1: TControl; sep: TTyCoolBand; L, n, owned: Integer;
+begin
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  sep := MakeRowWithAPlaceholder(CB, b0, b1);
+  L := CB.ContentBox.Left;
+  sep.Visible := False;
+  CB.Pack;
+  AssertEquals('hidden, the band takes no room', L + 10 + 80 + 3 + 10, b1.Left);
+  sep.Visible := True;
+  CB.Pack;
+  AssertEquals('shown again, it does', L + 10 + 80 + 3 + 10 + 50 + 3 + 10, b1.Left);
+  n := CB.ControlCount;
+  sep.Free;
+  CB.Pack;
+  AssertEquals('deleted, its placeholder goes with it', n - 1, CB.ControlCount);
+  AssertEquals('and so does its room', L + 10 + 80 + 3 + 10, b1.Left);
+  { A bar freed while it still has one -- the band list goes first, taking the placeholders. }
+  CB.Bands.Add;
+  owned := FForm.ComponentCount;
+  CB.Free;
+  AssertEquals('the bar left the form cleanly', owned - 1, FForm.ComponentCount);
+  if b0 = nil then ;
+end;
+
+procedure TCoolBarControlTest.TestABandWithNoControlIsNotStoredButKeepsItsPlaceOnReload;
+var
+  CB, bar2: TTyCoolBar; p0, p1: TTyPanel; f2: TForm; ms, txt: TMemoryStream;
+  lfm: string; i, objects: Integer;
+begin
+  if GetClass('TTyPanel') = nil then RegisterClass(TTyPanel);
+  CB := TTyCoolBar.Create(FForm);
+  CB.Name := 'Bar';
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  p0 := TTyPanel.Create(FForm);
+  p0.Name := 'P0';
+  p0.Parent := CB;
+  CB.SetBandWidth(p0, 80);
+  CB.Bands.Add.Text := 'Sep';
+  p1 := TTyPanel.Create(FForm);
+  p1.Name := 'P1';
+  p1.Parent := CB;
+  CB.SetBandWidth(p1, 60);
+  AssertEquals('precondition: the band with no control is laid out between the panels', 3,
+    CB.ControlCount);
+  f2 := nil;
+  ms := TMemoryStream.Create;
+  txt := TMemoryStream.Create;
+  try
+    ms.WriteComponent(FForm);
+    ms.Position := 0;
+    ObjectBinaryToText(ms, txt);
+    SetString(lfm, PChar(txt.Memory), txt.Size);
+    objects := 0;
+    i := Pos('object ', lfm);
+    while i > 0 do
+    begin
+      Inc(objects);
+      i := Pos('object ', lfm, i + 1);
+    end;
+    AssertEquals('the form file holds the form, the bar and the two panels -- no placeholder',
+      4, objects);
+    ms.Position := 0;
+    f2 := TForm.CreateNew(nil);
+    ms.ReadComponent(f2);
+    bar2 := f2.FindComponent('Bar') as TTyCoolBar;
+    AssertEquals('reloaded, the band is laid out again', 3, bar2.ControlCount);
+    AssertSame('after the first panel', f2.FindComponent('P0'), bar2.Controls[0]);
+    AssertSame('and before the second', f2.FindComponent('P1'), bar2.Controls[2]);
+    AssertSame('by a placeholder of its own', bar2.Bands[1],
+      bar2.Bands.FindBand(bar2.Controls[1]));
+  finally
+    txt.Free;
+    ms.Free;
+    f2.Free;
+  end;
+end;
+
+procedure TCoolBarControlTest.TestMovingABandWithNoControlInTheListMovesItInTheRow;
+var CB: TCoolBarAccess; b0, b1, c, ph: TControl; sep: TTyCoolBand;
+begin
+  { What the collection editor's "move down" does. For a band with no control the list is its
+    place, so moving it in the list moves it in the row. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  sep := MakeRowWithAPlaceholder(CB, b0, b1);
+  c := MakeBand(CB, 0, 0, 40, 26);
+  CB.SetBandWidth(c, 40);
+  ph := TCoolBandAccess(sep).LaidOut;
+  sep.Index := 2;
+  AssertEquals('it moved behind b1 in the row', 2, CB.GetControlIndex(ph));
+  AssertEquals('and stays ahead of the band after it in the list', 3, CB.GetControlIndex(c));
+  if b0 = nil then ;
+end;
+
+procedure TCoolBarControlTest.TestSizingAControlBesideABandWithNoControlLeavesTheRowAlone;
+var CB: TCoolBarAccess; x: TControl; sep: TTyCoolBand;
+begin
+  { Setting a band property on a control that has no band yet creates its band. That band goes
+    into the list where its control is in the row: appended, it would sit behind the band with
+    no control, and the list would put that band in front of x. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  x := MakeBand(CB, 0, 0, 80, 26);
   sep := CB.Bands.Add;
-  sep.Text := 'separator';
-  AssertEquals('both bands exist in the designable collection', 2, CB.Bands.Count);
-  AssertTrue('and the separator really hosts nothing', sep.Control = nil);
-  AssertEquals('but it contributes no child to pack', 1, CB.ControlCount);
-  AssertTrue('and it has no gripper strip to grab', IsRectEmpty(CB.BandRect(nil)));
-  AssertEquals('asking the ceiling of no control at all is unbounded, not a trap', 0,
-    CB.BandMaxWidth(nil));
-  AssertEquals('and so is its content cap', 0, CB.ContentCap(nil));
-  if b = nil then ;
+  AssertEquals('precondition: the band with no control is laid out after x', 1,
+    CB.GetControlIndex(TCoolBandAccess(sep).LaidOut));
+  CB.SetBandWidth(x, 70);
+  AssertEquals('x keeps its place at the head of the row', 0, CB.GetControlIndex(x));
+  AssertSame('and its band is first in the list, as x is in the row', x, CB.Bands[0].Control);
+end;
+
+procedure TCoolBarControlTest.TestFreeingABandWithNoControlMidDragEndsTheDrag;
+var CB: TCoolBarAccess; b0, b1, ph: TControl; sep: TTyCoolBand; r: TRect; x, y: Integer;
+begin
+  { A drag holds the grabbed band and the seam before it. The grabbed one here is a placeholder,
+    and deleting its band frees it; the drag has to end with it, as it does for a freed control,
+    instead of going on to move a seam on behalf of a band that is gone. }
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  sep := MakeRowWithAPlaceholder(CB, b0, b1);
+  ph := TCoolBandAccess(sep).LaidOut;
+  r := CB.BandRect(ph);
+  x := r.Left + 5;
+  y := r.Top + 13;
+  AssertSame('precondition: the seam under its gripper is b0', b0, CB.SeamOwner(ph));
+  CB.CallMouseDown(x, y);
+  sep.Free;
+  CB.CallMouseMove(x + 30, y);
+  CB.CallMouseUp(x + 30, y);
+  AssertEquals('the drag ended with its band: b0 was not resized', 80, CB.GetBandWidth(b0));
+  if b1 = nil then ;
+end;
+
+procedure TCoolBarControlTest.TestABandWithNoControlRunsDownAVerticalBar;
+var CB: TCoolBarAccess; b0, b1, ph: TControl; sep: TTyCoolBand;
+begin
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  sep := MakeRowWithAPlaceholder(CB, b0, b1);
+  ph := TCoolBandAccess(sep).LaidOut;
+  CB.Vertical := True;
+  AssertEquals('turned vertical, its Width is its length down the column', 50, ph.Height);
+  AssertEquals('and the column is a band height thick', 26, ph.Width);
+  if (b0 = nil) or (b1 = nil) then ;
 end;
 
 { ── the band model at a PPI other than 96 ──────────────────────────────────────

@@ -314,16 +314,21 @@ begin
 end;
 
 procedure TTyCustomGauge.DrawValueText(P: TTyPainter; const R: TRect; AColor: TTyColor);
-var fs: Integer;
+var
+  fs: Integer;
+  vs: TTyStyleSet;
 begin
   if not FShowValue then Exit;
   { A sixth of the dial -- but the dial is measured in DEVICE px and DrawText takes a
     LOGICAL size, which it scales by the PPI itself. Handed the device number, it scaled a
     size that was already scaled: at 175% the figure came out 1.75x too large and ran out
     of the ring it is supposed to sit in. }
-  fs := Math.Max(9, MulDiv((R.Bottom - R.Top) div 6, 96, P.PPI));
-  P.DrawText(R, Format(FValueFormat, [FValue]), Font.Name, fs, 700, AColor,
-    taCenter, tlCenter, False);
+  fs := TyControlFontSize(Self);   // a size the author set wins over the ring's sixth (#113)
+  if fs <= 0 then
+    fs := Math.Max(9, MulDiv((R.Bottom - R.Top) div 6, 96, P.PPI));
+  vs := CurrentStyle;   // the theme's face, the font's style flags under the bold
+  P.DrawText(R, Format(FValueFormat, [FValue]), vs.FontName, fs,
+    700 or (vs.FontWeight and not TyFontWeightMask), AColor, taCenter, tlCenter, False);
 end;
 
 procedure TTyCustomGauge.DrawLinear(P: TTyPainter; const R: TRect; AFrac: Double;
@@ -398,7 +403,11 @@ begin
     case FStyle of
       gsLinearH, gsLinearV: DrawLinear(P, R, frac, trackS, fillS);
     else
-      DrawArc(P, R, frac, trackS, fillS);
+      begin
+        { The arc never goes through DrawFrame, so its :disabled opacity was dead (#118). }
+        TyApplyStyleOpacity(Self, P, trackS);
+        DrawArc(P, R, frac, trackS, fillS);
+      end;
     end;
     P.EndPaint;
   finally

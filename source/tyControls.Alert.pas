@@ -470,6 +470,7 @@ begin
   // NOT inherited CurrentStyle: that resolves with StyleClass ALONE, and it cannot know
   // about AlertType — the whole point here is that the type contributes a variant token.
   Result := model.ResolveStyle(GetStyleTypeKey, StyleVariant, CurrentStates);
+  TyApplyControlFont(Result, Self, CurrentStates);   // the alert's own font, as CurrentStyle lays it (#113)
   // Resolving for ourselves means re-applying the StyleOverride layer the base would
   // otherwise have added, with the same staleness rule (the text changed, or the theme
   // version bumped so var(--...) must re-bind). The base's cache fields are private,
@@ -686,7 +687,7 @@ procedure TTyCustomAlert.MouseDown(Button: TMouseButton; Shift: TShiftState; X, 
 var
   closeHit: Boolean;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   // A background-less (theme-degraded) alert paints NOTHING — the input must agree it is not
   // there, or it swallows clicks and (over the invisible x's slot) can even hide itself.
   if not (tpBackground in AlertStyle.Present) then Exit;
@@ -724,7 +725,7 @@ procedure TTyCustomAlert.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   h: Boolean;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
   h := FClosable and PtOnClose(X, Y);
   if FHoverClose <> h then
@@ -798,7 +799,7 @@ begin
       // (so TyAlertClose.error can tint the x of an error alert) and with the state of the
       // GLYPH, not the bar — hovering precisely the x is what lights TyAlertClose:hover.
       closeStates := [];
-      if not Enabled then
+      if not IsEnabled then
         Include(closeStates, tysDisabled)
       else if FHoverClose then
         Include(closeStates, tysHover)

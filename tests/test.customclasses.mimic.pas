@@ -231,6 +231,8 @@ type
     property OnSankeyRoam;
     property OnDataZoom;
     property OnToolboxSaveAsImage;
+    property OnDataViewContent;
+    property OnDataViewApply;
     property OnResolveImage;
     property OnTooltipHtml;
     property AnimationMode;
@@ -298,13 +300,10 @@ type
     property Text;
     property DropDownCount;
     property Sorted;
-    property MaxLength;
-    property CharCase;
     property Style;
     property ItemHeight;
     property ItemWidth;
     property TextHint;
-    property ReadOnly;
     property OnDrawItem;
     property OnMeasureItem;
     property OnChange;
@@ -877,7 +876,6 @@ type
     property AutoSelect;
     property TextHint;
     property Alignment;
-    property CharCase;
     property NumbersOnly;
     property Align;
     property Anchors;
@@ -951,7 +949,6 @@ type
     property AutoSelect;
     property TextHint;
     property Alignment;
-    property CharCase;
     property NumbersOnly;
     property Align;
     property Anchors;
@@ -1436,13 +1433,10 @@ type
     property Text;
     property DropDownCount;
     property Sorted;
-    property MaxLength;
-    property CharCase;
     property Style;
     property ItemHeight;
     property ItemWidth;
     property TextHint;
-    property ReadOnly;
     property OnDrawItem;
     property OnMeasureItem;
     property OnChange;
@@ -1710,13 +1704,10 @@ type
     property Text;
     property DropDownCount;
     property Sorted;
-    property MaxLength;
-    property CharCase;
     property Style;
     property ItemHeight;
     property ItemWidth;
     property TextHint;
-    property ReadOnly;
     property OnDrawItem;
     property OnMeasureItem;
     property OnChange;
@@ -1865,13 +1856,10 @@ type
     property Text;
     property DropDownCount;
     property Sorted;
-    property MaxLength;
-    property CharCase;
     property Style;
     property ItemHeight;
     property ItemWidth;
     property TextHint;
-    property ReadOnly;
     property OnDrawItem;
     property OnMeasureItem;
     property OnChange;
@@ -2458,7 +2446,6 @@ type
     property AutoSelect;
     property TextHint;
     property Alignment;
-    property CharCase;
     property NumbersOnly;
     property Align;
     property Anchors;
@@ -2749,7 +2736,6 @@ type
     property AutoSelect;
     property TextHint;
     property Alignment;
-    property CharCase;
     property NumbersOnly;
     property Align;
     property Anchors;
@@ -2975,7 +2961,6 @@ type
     property AutoSelect;
     property TextHint;
     property Alignment;
-    property CharCase;
     property NumbersOnly;
     property Align;
     property Anchors;
@@ -3646,7 +3631,6 @@ type
     property AutoSelect;
     property TextHint;
     property Alignment;
-    property CharCase;
     property NumbersOnly;
     property Align;
     property Anchors;
@@ -4306,8 +4290,6 @@ type
     property Options;
     property ShowFocusCell;
     property FocusRectVisible;
-    property HideSelectionWhenInactive;
-    property FadeUnfocusedSelection;
     property FixedCols;
     property FixedRows;
     property FixedRowsBottom;
@@ -4333,7 +4315,6 @@ type
     property OnColumnMove;
     property OnRowMove;
     property OnGetEditorProp;
-    property MinEditorWidth;
     property MinRowHeight;
     property MaxRowHeight;
     property MinColWidth;
@@ -4690,13 +4671,10 @@ type
     property Text;
     property DropDownCount;
     property Sorted;
-    property MaxLength;
-    property CharCase;
     property Style;
     property ItemHeight;
     property ItemWidth;
     property TextHint;
-    property ReadOnly;
     property OnDrawItem;
     property OnMeasureItem;
     property OnChange;
@@ -4773,7 +4751,6 @@ type
     property AutoSelect;
     property TextHint;
     property Alignment;
-    property CharCase;
     property NumbersOnly;
     property Align;
     property Anchors;
@@ -7132,7 +7109,6 @@ type
     property AutoSelect;
     property TextHint;
     property Alignment;
-    property CharCase;
     property NumbersOnly;
     property Align;
     property Anchors;
@@ -7200,13 +7176,10 @@ type
     property Text;
     property DropDownCount;
     property Sorted;
-    property MaxLength;
-    property CharCase;
     property Style;
     property ItemHeight;
     property ItemWidth;
     property TextHint;
-    property ReadOnly;
     property OnDrawItem;
     property OnMeasureItem;
     property OnChange;
@@ -9106,13 +9079,10 @@ type
     property Text;
     property DropDownCount;
     property Sorted;
-    property MaxLength;
-    property CharCase;
     property Style;
     property ItemHeight;
     property ItemWidth;
     property TextHint;
-    property ReadOnly;
     property OnDrawItem;
     property OnMeasureItem;
     property OnChange;
@@ -11089,7 +11059,6 @@ type
     property AutoSelect;
     property TextHint;
     property Alignment;
-    property CharCase;
     property NumbersOnly;
     property Align;
     property Anchors;

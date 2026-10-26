@@ -2,7 +2,7 @@ unit tyControls.ColorButton;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, LCLType,
+  Classes, SysUtils, Types, Graphics, LCLType, Controls, Forms,
   tyControls.Types, tyControls.Painter, tyControls.Button, tyControls.ColorMath,
   tyControls.Accel, tyControls.Dialogs.Color;
 
@@ -60,6 +60,9 @@ type
       十六进制文字,而那一行的高度和基类量的是同一套字体度量(同名字体、同 MulDiv 字号、
       同粗体阈值),所以直接问基类要,不另起一套。 }
     function MeasureContentHeight(APPI: Integer): Integer; override;
+    { Ask the user for a colour, starting from AColor; True if they accepted one. The colour
+      dialog (TySelectColor) unless a descendant asks some other way (#119). }
+    function PickColor(var AColor: TTyColor): Boolean; virtual;
   public
     { The colour dialog's title: DialogCaption, or the translated default when it is empty. }
     function DialogTitle: string;
@@ -414,21 +417,41 @@ procedure TTyCustomColorButton.Click;
 var
   newColor: TTyColor;
   didChange: Boolean;
+  mr: TModalResult;
+  Form: TCustomForm;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   { inherited FIRST, so OnClick observes the PRE-dialog colour and can still cancel or
     reconfigure -- LCL runs the click before opening the picker. Ours opened the dialog
     first, so an OnClick handler was told about a decision the user had already made and
-    could do nothing about. }
-  inherited Click;
+    could do nothing about.
+    ModalResult waits for the dialog, though (#119): applied by the inherited click, it closed
+    the host form even when the user cancelled the colour. }
+  mr := ModalResult;
+  ModalResult := mrNone;
+  try
+    inherited Click;
+  finally
+    ModalResult := mr;
+  end;
   newColor := FSelectedColor;
-  // TySelectColor updates newColor in place; True iff the user accepted (OK).
-  if TySelectColor(DialogTitle, newColor) then
+  // PickColor updates newColor in place; True iff the user accepted (OK).
+  if PickColor(newColor) then
   begin
     didChange := newColor <> FSelectedColor;
     if didChange then
       SelectedColor := newColor;   { one path for the repaint + OnColorChange }
+    if mr <> mrNone then
+    begin
+      Form := GetParentForm(Self);
+      if Form <> nil then Form.ModalResult := mr;
+    end;
   end;
+end;
+
+function TTyCustomColorButton.PickColor(var AColor: TTyColor): Boolean;
+begin
+  Result := TySelectColor(DialogTitle, AColor);
 end;
 
 function TTyCustomColorButton.DialogTitle: string;

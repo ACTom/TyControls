@@ -74,6 +74,7 @@ type
     procedure SetItemObject(AIndex: Integer; AValue: TObject);
     procedure SetEmptyText(const AValue: TTranslateString);
     procedure PopupCheckClick(Sender: TObject);
+    procedure SetSeparator(const AValue: string);   // repaints the summary (#120)
   protected
     { Owns every state object ever created, so nothing leaks when the app deletes or clears
       Items behind our back -- LCL's model leaks exactly there (it only frees what is still
@@ -141,7 +142,7 @@ type
       (Items.AddObject) is adopted into Data on first use, so either order works. }
     property Objects[AIndex: Integer]: TObject read GetItemObject write SetItemObject;
     // Joins the checked item texts in the field summary (default ', ').
-    property Separator: string read FSeparator write FSeparator;
+    property Separator: string read FSeparator write SetSeparator;
     // Shown in the field when nothing is checked (default '').
     property EmptyText: TTranslateString read FEmptyText write SetEmptyText;
     { Lets the user's toggle pass through cbGrayed. Off (LCL's default) the click cycle is
@@ -211,13 +212,10 @@ type
     property Text;
     property DropDownCount;
     property Sorted;
-    property MaxLength;
-    property CharCase;
     property Style;
     property ItemHeight;
     property ItemWidth;
     property TextHint;
-    property ReadOnly;
     property OnDrawItem;
     property OnMeasureItem;
     property OnChange;
@@ -334,6 +332,13 @@ begin
 end;
 
 { TTyCustomCheckComboBox }
+
+procedure TTyCustomCheckComboBox.SetSeparator(const AValue: string);
+begin
+  if FSeparator = AValue then Exit;
+  FSeparator := AValue;
+  Invalidate;
+end;
 
 constructor TTyCustomCheckComboBox.Create(AOwner: TComponent);
 begin

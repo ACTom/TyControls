@@ -170,6 +170,9 @@ type
     procedure PopupFormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure DeferredCloseUp(Data: PtrInt);
   protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
     function GetStyleTypeKey: string; override;
     procedure SetController(AValue: TTyCustomStyleController); override;
     { Create the popup helper and park the tree in it. Lazy (the window is only needed once
@@ -450,6 +453,7 @@ end;
 constructor TTyCustomTreeSelect.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   FSelectedNode := nil;
   FText := '';
   FTextHint := '';
@@ -466,6 +470,18 @@ begin
     PARENTED into the popup form, which never owns it (TTyDropdownPopup.SetContent). }
   FTree := TTyTreeSelectTree.Create(Self);
   FTree.Picker := Self;
+end;
+
+procedure TTyCustomTreeSelect.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  S: TTyStyleSet;
+begin
+  { One line of the font plus the padding, as LCL's TEdit: the width stays the form's. No
+    inherited -- TWinControl would size the control to its child controls. }
+  S := CurrentStyle;
+  PreferredWidth := 0;
+  PreferredHeight := TyFieldPreferredHeight(S, ResolveFontSize(S), Font.PixelsPerInch);
 end;
 
 destructor TTyCustomTreeSelect.Destroy;
@@ -603,7 +619,7 @@ var
   sz: TSize;
   treeStyle: TTyStyleSet;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   if DroppedDown then Exit;
   { The click-while-open reopen race: the popup deactivates → Close → PopupClosed BEFORE this
     control's Click runs, so DroppedDown is already False there and a click on an open field
@@ -715,7 +731,7 @@ end;
 
 procedure TTyCustomTreeSelect.Click;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited Click;
   { The whole field is the drop affordance (there is no editable zone to protect, as
     TTyComboBox's csDropDown has): a click anywhere toggles. DropDown's own 200ms guard
@@ -728,7 +744,7 @@ end;
 
 procedure TTyCustomTreeSelect.KeyDown(var Key: Word; Shift: TShiftState);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   if (Key = VK_ESCAPE) and DroppedDown then
   begin

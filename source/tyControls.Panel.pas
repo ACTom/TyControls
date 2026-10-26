@@ -23,16 +23,13 @@ type
     procedure SetShowAccelChar(AValue: Boolean);
   protected
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { The caption as the panel draws it -- Alignment, VerticalAlignment, WordWrap,
+      ShowAccelChar, the theme's line height -- into ARect, in AStyle's font and ink (#116).
+      For a descendant that puts its caption somewhere else: the ExPanel's header band, the
+      PaintPanel's surface. }
+    procedure DrawCaption(P: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet;
+      APPI: Integer);
     procedure Paint; override;
-    { BorderWidth's ONLY consumer. It is a TWinControl member the base class republishes,
-      but TWinControl itself never reads it -- TWinControl.AdjustClientRect is an empty
-      no-op (C:/lazarus/lcl/include/wincontrol.inc:2498) and SetBorderWidth only posts
-      CM_BORDERCHANGED (:4225). In the LCL the inset is done here, by TCustomPanel
-      (include/custompanel.inc:191-204), and nowhere else. So publishing it without this
-      override left the Object Inspector offering a gutter the container ignored: the
-      designer wrote BorderWidth = 8, the children stayed flush against the frame, and
-      nothing said why. Same rect maths as TCustomPanel, minus the bevels we do not have. }
-    procedure AdjustClientRect(var ARect: TRect); override;
   public
     destructor Destroy; override;
     procedure Invalidate; override;
@@ -177,17 +174,6 @@ begin
   Height := 41;
 end;
 
-{ See the declaration: this is the only place BorderWidth is read. }
-procedure TTyCustomPanel.AdjustClientRect(var ARect: TRect);
-begin
-  inherited AdjustClientRect(ARect);
-  if BorderWidth > 0 then
-  begin
-    InflateRect(ARect, -BorderWidth, -BorderWidth);
-    if ARect.Right < ARect.Left then ARect.Right := ARect.Left;
-    if ARect.Bottom < ARect.Top then ARect.Bottom := ARect.Top;
-  end;
-end;
 function TTyCustomPanel.GetStyleTypeKey: string;
 begin
   Result := 'TyPanel';
@@ -231,22 +217,10 @@ begin
   Invalidate;
 end;
 procedure TTyCustomPanel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
-const
-  { LCL's own map, verbatim (custompanel.inc:147) -- and it maps by NAME, not by ordinal:
-    the two enums order their members differently ((top, BOTTOM, centre) on the RTL side,
-    (top, CENTRE, bottom) on the painter's), so a Delphi-style typecast here would swap
-    bottom and centre and compile clean. This array is the single seam between the
-    published LCL-typed axis and the painter's TTextLayout; paint has no other source. }
-  VerticalAlignmentToTextLayout: array[TVerticalAlignment] of TTextLayout =
-    (tlTop, tlBottom, tlCenter);
 var
   P: TTyPainter;
   S: TTyStyleSet;
   ContentRect: TRect;
-  Disp: string;
-  MnPos: Integer;
-  Meas: TBitmap;
-  Lines: TStringList;
 begin
   P := TTyPainter.Create;
   try
@@ -260,65 +234,86 @@ begin
     S := CurrentStyle;
     ContentRect := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     DrawFrame(P, ContentRect, S);
-    // Inset content by padding
+    // Inset content by padding, and by BorderWidth as TCustomPanel insets its caption
+    // (custompanel.inc:155; the children get it in TTyCustomControl.AdjustClientRect, #115)
     ContentRect := Rect(
-      ContentRect.Left   + P.Scale(S.Padding.Left),
-      ContentRect.Top    + P.Scale(S.Padding.Top),
-      ContentRect.Right  - P.Scale(S.Padding.Right),
-      ContentRect.Bottom - P.Scale(S.Padding.Bottom)
+      ContentRect.Left   + P.Scale(S.Padding.Left + BorderWidth),
+      ContentRect.Top    + P.Scale(S.Padding.Top + BorderWidth),
+      ContentRect.Right  - P.Scale(S.Padding.Right + BorderWidth),
+      ContentRect.Bottom - P.Scale(S.Padding.Bottom + BorderWidth)
     );
-    if Caption <> '' then
-    begin
-      { Mnemonic: strip the '&' and remember which character it marked. Off, the caption
-        goes to the painter untouched, so a caption that really contains an ampersand still
-        paints one -- the same either/or TCustomPanel's TS.ShowPrefix gives. }
-      if FShowAccelChar then
-        TyParseMnemonic(Caption, Disp, MnPos)
-      else
-      begin
-        Disp := Caption;
-        MnPos := 0;
-      end;
-      { Wrapping is done HERE, not by the painter's AMultiLine: AMultiLine only honours line
-        breaks the caption already contains, and a caption that needs wrapping by definition
-        has none. TyWrapTextCJK is the library's one greedy wrap kernel (it breaks between
-        CJK codepoints as well as at spaces, so a Chinese caption wraps instead of running
-        off the edge) and it needs a canvas carrying the resolved font to measure against.
-        The wrapped lines then go back through AMultiLine, which anchors the block by
-        FVerticalAlignment and draws each line in its own box.
-
-        The mnemonic underline survives only on the single-line path -- the painter's
-        multi-line loop has no per-line mnemonic offset. Wrapping a caption AND underlining
-        an access key in it is a combination TCustomPanel does not really serve either
-        (its ShowPrefix is a single TTextStyle flag over the whole block), and the '&' is
-        still consumed, so the caption reads correctly; only the underline is absent. }
-      if FWordWrap then
-      begin
-        Meas := TBitmap.Create;
-        Lines := TStringList.Create;
-        try
-          Meas.SetSize(1, 1);
-          TyConfigureMeasureFont(Meas.Canvas, S.FontName, ResolveFontSize(S),
-            S.FontWeight, APPI);
-          TyWrapTextCJK(Disp, ContentRect.Right - ContentRect.Left, Meas.Canvas, Lines);
-          Disp := Lines.Text;
-        finally
-          Lines.Free;
-          Meas.Free;
-        end;
-      end;
-      { Ellipsis and wrapping are the two halves of "the caption does not fit": wrapping ON
-        means the text may use more lines, so it must NOT also be cut at one. }
-      P.DrawText(ContentRect, Disp, S.FontName, ResolveFontSize(S), S.FontWeight,
-        S.TextColor, FAlignment, VerticalAlignmentToTextLayout[FVerticalAlignment],
-        not FWordWrap,
-        TyAccelGatePos(MnPos), False, FWordWrap, TyLineHeight(ActiveController));
-    end;
+    DrawCaption(P, ContentRect, S, APPI);
     P.EndPaint;
   finally
     P.Free;
   end;
 end;
+{ See the declaration (#116). }
+procedure TTyCustomPanel.DrawCaption(P: TTyPainter; const ARect: TRect; const AStyle: TTyStyleSet;
+  APPI: Integer);
+const
+  { LCL's own map, verbatim (custompanel.inc:147) -- and it maps by NAME, not by ordinal:
+    the two enums order their members differently ((top, BOTTOM, centre) on the RTL side,
+    (top, CENTRE, bottom) on the painter's), so a Delphi-style typecast here would swap
+    bottom and centre and compile clean. This array is the single seam between the
+    published LCL-typed axis and the painter's TTextLayout; paint has no other source. }
+  VerticalAlignmentToTextLayout: array[TVerticalAlignment] of TTextLayout =
+    (tlTop, tlBottom, tlCenter);
+var
+  Disp: string;
+  MnPos: Integer;
+  Meas: TBitmap;
+  Lines: TStringList;
+begin
+  if Caption <> '' then
+  begin
+    { Mnemonic: strip the '&' and remember which character it marked. Off, the caption
+      goes to the painter untouched, so a caption that really contains an ampersand still
+      paints one -- the same either/or TCustomPanel's TS.ShowPrefix gives. }
+    if FShowAccelChar then
+      TyParseMnemonic(Caption, Disp, MnPos)
+    else
+    begin
+      Disp := Caption;
+      MnPos := 0;
+    end;
+    { Wrapping is done HERE, not by the painter's AMultiLine: AMultiLine only honours line
+      breaks the caption already contains, and a caption that needs wrapping by definition
+      has none. TyWrapTextCJK is the library's one greedy wrap kernel (it breaks between
+      CJK codepoints as well as at spaces, so a Chinese caption wraps instead of running
+      off the edge) and it needs a canvas carrying the resolved font to measure against.
+      The wrapped lines then go back through AMultiLine, which anchors the block by
+      FVerticalAlignment and draws each line in its own box.
+
+      The mnemonic underline survives only on the single-line path -- the painter's
+      multi-line loop has no per-line mnemonic offset. Wrapping a caption AND underlining
+      an access key in it is a combination TCustomPanel does not really serve either
+      (its ShowPrefix is a single TTextStyle flag over the whole block), and the '&' is
+      still consumed, so the caption reads correctly; only the underline is absent. }
+    if FWordWrap then
+    begin
+      Meas := TBitmap.Create;
+      Lines := TStringList.Create;
+      try
+        Meas.SetSize(1, 1);
+        TyConfigureMeasureFont(Meas.Canvas, AStyle.FontName, ResolveFontSize(AStyle),
+          AStyle.FontWeight, APPI);
+        TyWrapTextCJK(Disp, ARect.Right - ARect.Left, Meas.Canvas, Lines);
+        Disp := Lines.Text;
+      finally
+        Lines.Free;
+        Meas.Free;
+      end;
+    end;
+    { Ellipsis and wrapping are the two halves of "the caption does not fit": wrapping ON
+      means the text may use more lines, so it must NOT also be cut at one. }
+    P.DrawText(ARect, Disp, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
+      AStyle.TextColor, FAlignment, VerticalAlignmentToTextLayout[FVerticalAlignment],
+      not FWordWrap,
+      TyAccelGatePos(MnPos), False, FWordWrap, TyLineHeight(ActiveController));
+  end;
+end;
+
 destructor TTyCustomPanel.Destroy;
 begin
   { Only ever registered while ShowAccelChar was on; unregistering an absent control is a

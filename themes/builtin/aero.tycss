@@ -553,3 +553,8 @@ TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,
 TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {
   color: var(--on-titlebar);
 }
+
+/* #118: this theme dresses these keys itself, which drops the base layer's :disabled --
+   so it is restated here (see light.tycss). */
+TyControlBar:disabled, TyCoolBar:disabled { color: var(--muted); }
+TyBadge:disabled { opacity: var(--disabled-opacity); }

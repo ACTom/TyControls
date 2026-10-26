@@ -77,6 +77,9 @@ type
 
   TTyCustomMemo = class(TTyCustomControl, ITyTextEditActions, ITyImeEditable, ITyScrollBarFrameHost)
   protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
     // Pixel x where text begins (left padding scaled). Promoted from private so
     // the horizontal-scroll geometry is testable through the access subclass.
     function TextStartX(APPI: Integer): Integer;
@@ -734,7 +737,7 @@ type
     // EndPaint blits at ARect origin). APPI scales padding/line metrics.
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
-    // Input handlers. Both early-Exit when not Enabled (v1.5 policy); when
+    // Input handlers. Both early-Exit when not IsEnabled (v1.5 policy); when
     // disabled, KeyDown does NOT consume Key so navigation falls through.
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
     // Qt6: own input-method commit interceptor (custom controls otherwise get the String[7]-truncated
@@ -746,12 +749,12 @@ type
     // text-edit menu at the click point (ITEM 1).
     procedure DoContextPopup(MousePos: TPoint; var Handled: Boolean); override;
     // Left-click caret hit-test: Y -> logical line, X -> codepoint column. Early
-    // Exit when not Enabled (v1.5 policy). try/except SetFocus like Edit/ListBox.
+    // Exit when not IsEnabled (v1.5 policy). try/except SetFocus like Edit/ListBox.
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState;
       X, Y: Integer); override;
     // Drag-select while the left button is held: re-hit-test (line,col) under the
     // pointer using the SAME math as MouseDown, moving the caret while leaving the
-    // anchor fixed. Mirrors TTyEdit.MouseMove. Early Exit when not Enabled.
+    // anchor fixed. Mirrors TTyEdit.MouseMove. Early Exit when not IsEnabled.
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     // End the drag on left-button release (no Enabled guard, matching TTyEdit).
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState;
@@ -1216,6 +1219,15 @@ begin
   Height := 120;
 end;
 
+procedure TTyCustomMemo.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+begin
+  { No natural size, as LCL's own has none: 0 x 0 keeps the bounds, where TWinControl would
+    otherwise size the control to its internal scroll bars or editor. }
+  PreferredWidth := 0;
+  PreferredHeight := 0;
+end;
+
 destructor TTyCustomMemo.Destroy;
 begin
   // The default context menu holds only an interface reference back to Self (TComponent
@@ -1422,14 +1434,14 @@ end;
 
 procedure TTyCustomMemo.Undo;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   if FUndoStack.CanUndo then
     RestoreState(FUndoStack.Undo(CaptureState));
 end;
 
 procedure TTyCustomMemo.Redo;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   if FUndoStack.CanRedo then
     RestoreState(FUndoStack.Redo(CaptureState));
 end;
@@ -2886,7 +2898,7 @@ function TTyCustomMemo.TeIsReadOnly: Boolean;             begin Result := FReadO
 // ---- ITyImeEditable (macOS IME composition seam; see tyControls.CocoaWS) ----
 
 function  TTyCustomMemo.ImeTargetControl: TWinControl;    begin Result := Self; end;
-function  TTyCustomMemo.ImeIsReadOnly: Boolean;           begin Result := FReadOnly or (not Enabled); end;
+function  TTyCustomMemo.ImeIsReadOnly: Boolean;           begin Result := FReadOnly or (not IsEnabled); end;
 function  TTyCustomMemo.ImeCaretBoundClient: TRect;       begin Result := GetImeCaretRect; end;
 function  TTyCustomMemo.ImeCaretIndex: Integer;           begin Result := SelStart; end;
 // Bracket the WHOLE composition in one undo step (mirrors HandleImeCommit): BeginUndoStep captures the
@@ -2998,7 +3010,7 @@ procedure TTyCustomMemo.MouseDown(Button: TMouseButton; Shift: TShiftState;
 var
   APPI, LH, Row, CW, NewLine, NewCol, Clicks, Dy: Integer;
 begin
-  if not Enabled then Exit;          // v1.5 policy: ignore input when disabled
+  if not IsEnabled then Exit;          // v1.5 policy: ignore input when disabled
   inherited MouseDown(Button, Shift, X, Y);
   if Button <> mbLeft then Exit;
   APPI := Font.PixelsPerInch;
@@ -3082,7 +3094,7 @@ procedure TTyCustomMemo.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   APPI, LH, Row, CW, NewLine, NewCol, Dy: Integer;
 begin
-  if not Enabled then Exit;          // v1.5 policy: ignore input when disabled
+  if not IsEnabled then Exit;          // v1.5 policy: ignore input when disabled
   inherited MouseMove(Shift, X, Y);
   if not FMouseSelecting then Exit;
   // Re-hit-test under the pointer using the SAME visual-row math as MouseDown;
@@ -3123,7 +3135,7 @@ function TTyCustomMemo.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
 var
   Delta: Integer;
 begin
-  if not Enabled then Exit(False);
+  if not IsEnabled then Exit(False);
   // Let the user's OnMouseWheel handler run first; if it consumes the event, stop.
   if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then
   begin
@@ -5034,7 +5046,7 @@ procedure TTyCustomMemo.UTF8KeyPress(var UTF8Key: TUTF8Char);
 var
   imeFull: string;
 begin
-  if not Enabled then Exit;          // v1.5 policy: ignore input when disabled
+  if not IsEnabled then Exit;          // v1.5 policy: ignore input when disabled
   if FReadOnly then Exit;            // ReadOnly: block printable typing
   { GTK3: the backend truncated this commit into a TUTF8Char on its way here. The whole
     string is still pending in the widgetset, so take it and insert THAT instead. Returns ''
@@ -5084,7 +5096,7 @@ var
   S: string;
   Room: Integer;
 begin
-  if FReadOnly or not Enabled then Exit;
+  if FReadOnly or not IsEnabled then Exit;
   if ACommitUtf8 = '' then Exit;
   S := ACommitUtf8;
   if FMaxLength > 0 then
@@ -5135,7 +5147,7 @@ var
   CtrlLike, Extending: Boolean;
   CurLine: string;
 begin
-  if not Enabled then Exit;          // when disabled, do NOT consume Key
+  if not IsEnabled then Exit;          // when disabled, do NOT consume Key
   inherited KeyDown(Key, Shift);
   APPI := Font.PixelsPerInch;
   MaxLine := LineCountLogical - 1;

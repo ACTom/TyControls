@@ -285,6 +285,10 @@ type
     { True while ActionChange runs; RealSetText ignores the write then. Read by descendants
       that route Caption through a setter of their own (TTyCustomMaskEdit). }
     property InActionChange: Boolean read FInActionChange;
+  protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -553,6 +557,7 @@ end;
 constructor TTyCustomEdit.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   { Not csSetCaption: with Caption routed to Text (RealGetText), LCL's SetName would write a
     fresh edit's Name into its text the first time it is named -- TEdit does, this control
     never did, and a form that names its fields in code would suddenly show the names. }
@@ -592,6 +597,18 @@ begin
     unidentified custom control. LCL does the same one line in TCustomEdit.Create
     (include/customedit.inc:87). }
   AccessibleRole := larTextEditorSingleline;
+end;
+
+procedure TTyCustomEdit.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  S: TTyStyleSet;
+begin
+  { One line of the font plus the padding, as LCL's TEdit: the width stays the form's. No
+    inherited -- TWinControl would size the control to its child controls. }
+  S := CurrentStyle;
+  PreferredWidth := 0;
+  PreferredHeight := TyFieldPreferredHeight(S, ResolveFontSize(S), Font.PixelsPerInch);
 end;
 
 destructor TTyCustomEdit.Destroy;
@@ -813,14 +830,14 @@ end;
 
 procedure TTyCustomEdit.Undo;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   if FUndoStack.CanUndo then
     RestoreState(FUndoStack.Undo(CaptureState));
 end;
 
 procedure TTyCustomEdit.Redo;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   if FUndoStack.CanRedo then
     RestoreState(FUndoStack.Redo(CaptureState));
 end;
@@ -857,7 +874,7 @@ function TTyCustomEdit.TeIsReadOnly: Boolean;            begin Result := FReadOn
 // ---- ITyImeEditable (macOS IME composition seam; see tyControls.CocoaWS) ----
 
 function  TTyCustomEdit.ImeTargetControl: TWinControl;   begin Result := Self; end;
-function  TTyCustomEdit.ImeIsReadOnly: Boolean;          begin Result := FReadOnly or (not Enabled); end;
+function  TTyCustomEdit.ImeIsReadOnly: Boolean;          begin Result := FReadOnly or (not IsEnabled); end;
 function  TTyCustomEdit.ImeCaretBoundClient: TRect;      begin Result := GetImeCaretRect; end;
 function  TTyCustomEdit.ImeCaretIndex: Integer;          begin Result := SelStart; end;
 // Bracket the WHOLE composition in one undo step (mirrors HandleImeCommit): BeginUndoStep captures the
@@ -1116,7 +1133,9 @@ end;
 
 procedure TTyCustomEdit.SetText(const AValue: TCaption);
 begin
-  SetTextInternal(AValue, True);   // the published writer is by definition programmatic
+  { The published writer is by definition programmatic. CharCase applies to it as to typing
+    (#122), as LCL's RealSetText does (customedit.inc:546). }
+  SetTextInternal(ApplyCharCase(AValue), True);
 end;
 
 procedure TTyCustomEdit.SetTextInternal(const AValue: TCaption; AByCode: Boolean);
@@ -2087,7 +2106,7 @@ procedure TTyCustomEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y
 var
   Clicks: Integer;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbLeft then
   begin
@@ -2192,7 +2211,7 @@ end;
 
 procedure TTyCustomEdit.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
   if FMouseSelecting then
   begin
@@ -2352,7 +2371,7 @@ procedure TTyCustomEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
 var
   imeFull: string;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   { GTK3: the backend truncated this commit into a TUTF8Char on its way here. The whole
     string is still pending in the widgetset, so take it and insert THAT instead. Returns ''
     on every other widgetset and whenever nothing was truncated, so the normal path below is
@@ -2377,7 +2396,7 @@ var
   TextBefore, Filtered: string;
   i: Integer;
 begin
-  if FReadOnly or not Enabled then Exit;
+  if FReadOnly or not IsEnabled then Exit;
   if ACommitUtf8 = '' then Exit;
   TextBefore := FText;
   BeginUndoStep(uskTyping);
@@ -2429,7 +2448,7 @@ var
   Extending: Boolean;
   HasModifier: Boolean;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   // Any key activity while focused makes the caret solid for one blink cycle.
   ResetCaretBlink;

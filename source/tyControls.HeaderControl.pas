@@ -153,6 +153,9 @@ type
     function DeviceWidths: TIntegerDynArray;
     function GetEffectiveSectionWidth(AIndex: Integer): Integer;
   protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
     function GetStyleTypeKey: string; override;   // 'TyHeaderControl' — its own key: a standalone header control is not the tree's header band
     { The three event seams, as protected virtuals — LCL's SectionClick / SectionResize /
       SectionTrack (comctrls.pp:4066-4068). Every fire site in this control goes through
@@ -498,6 +501,7 @@ end;
 constructor TTyCustomHeaderControl.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   FHotIndex := -1;
   FResizeIndex := -1;
   Width := 300;
@@ -510,6 +514,23 @@ begin
     header BAND a grid/tree paints inside itself, but that band is not this control (this
     one is never embedded; every user of it drops it on a form). }
   TabStop := True;
+end;
+
+procedure TTyCustomHeaderControl.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  S: TTyStyleSet;
+  ppi, h: Integer;
+begin
+  { The bar's own height from the theme, or more when the font needs it; the width stays the
+    form's. }
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  S := PartStyle('TyTreeHeaderSection', '', []);
+  PreferredWidth := 0;
+  PreferredHeight := MulDiv(TyDensityHeight(ActiveController, TyHeaderDefaultHeight), ppi, 96);
+  h := TyFieldPreferredHeight(S, ResolveFontSize(S), ppi);
+  if h > PreferredHeight then PreferredHeight := h;
 end;
 
 { ---- event seams ---- }
@@ -810,8 +831,8 @@ begin
 
     // Section styles (base + hover). :selected is available too but the strip uses
     // hover for the pointer; a sorted section is signalled by the triangle, not fill.
-    secStyle := ActiveController.Model.ResolveStyle('TyTreeHeaderSection', '', []);
-    hotStyle := ActiveController.Model.ResolveStyle('TyTreeHeaderSection', '', [tysHover]);
+    secStyle := PartStyle('TyTreeHeaderSection', '', TyStatesUnlessDisabled(Self, []));   // #118
+    hotStyle := PartStyle('TyTreeHeaderSection', '', TyStatesUnlessDisabled(Self, [tysHover]));
 
     // Device-px widths -> tiled rects. Pure math == hit-test geometry.
     widths := DeviceWidths;
@@ -930,7 +951,7 @@ var
   edge: Integer;
 begin
   inherited MouseDown(Button, Shift, X, Y);
-  if (Button <> mbLeft) or not Enabled then Exit;
+  if (Button <> mbLeft) or not IsEnabled then Exit;
   widths := DeviceWidths;
   // A boundary within the grip starts a resize; otherwise a plain section press.
   edge := TyHeaderResizeEdgeAtX(widths, ClientRect, X, ScaledGrip, IsRightToLeft);
@@ -1016,7 +1037,7 @@ begin
     Exit;
   end;
   inherited MouseUp(Button, Shift, X, Y);
-  if (Button <> mbLeft) or not Enabled then Exit;
+  if (Button <> mbLeft) or not IsEnabled then Exit;
   // A plain click (no drag) on a section body toggles its sort and fires the event.
   widths := DeviceWidths;
   movedX := TyHeaderResizeEdgeAtX(widths, ClientRect, X, ScaledGrip, IsRightToLeft);

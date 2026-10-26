@@ -568,3 +568,8 @@ TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,
 TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {
   color: var(--on-titlebar);
 }
+
+/* #118: this theme dresses these keys itself, which drops the base layer's :disabled --
+   so it is restated here (see light.tycss). */
+TyPanel:disabled, TyScrollBox:disabled, TyExPanel:disabled, TyChart:disabled, TyCalculator:disabled, TyBevel:disabled, TySizeBox:disabled, TyControlBar:disabled, TyCoolBar:disabled, TyColorGrid:disabled, TyShape:disabled, TyStarShape:disabled, TyArrow:disabled, TyImageView:disabled, TyImage:disabled, TyPreviewBox:disabled, TyListGroupPanel:disabled, TyGroupBox:disabled, TyToolGroupPanel:disabled, TyStatusBar:disabled, TyTreeHeaderSection:disabled, TyListViewHeaderSection:disabled { color: var(--muted); }
+TyCalendar:disabled, TyBadge:disabled { opacity: var(--disabled-opacity); }

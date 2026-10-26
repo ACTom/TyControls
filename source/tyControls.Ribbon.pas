@@ -978,7 +978,7 @@ begin
   w := FileTabWidthPx;
   h := MulDiv(TabHeight, ppi, 96);
   if (w <= 0) or (h <= 0) then Exit;
-  S := ActiveController.Model.ResolveStyle('TyButton', 'primary', []);
+  S := PartStyle('TyButton', 'primary', TyStatesUnlessDisabled(Self, []), False);   // font (#113), disabled (#118)
   fs := S.FontSize; if fs <= 0 then fs := 9;
   P := TTyPainter.Create;
   try
@@ -1134,7 +1134,7 @@ var
 begin
   if not FKeyTipsActive then Exit;
   if Length(FKeyTipKeys) <> GetTabCount then RebuildKeyTipKeys;
-  chipS := ActiveController.Model.ResolveStyle('TyButton', 'primary', []);
+  chipS := ActiveController.Model.ResolveStyle('TyButton', 'primary', TyStatesUnlessDisabled(Self, []));   // #118
   P := TTyPainter.Create;
   try
     P.BeginPaint(Canvas, Rect(0, 0, ClientWidth, ClientHeight), Font.PixelsPerInch);

@@ -77,6 +77,9 @@ type
     procedure SetSimpleText(const AValue: TCaption);
     procedure SetSizeGrip(AValue: Boolean);
   protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
     function GetStyleTypeKey: string; override;
     { Which window-resize edge (0 = none) the point sits on, so the status bar -- which covers the
       form's bottom edge + the size-grip corner -- can hand the drag to the OS window resize.
@@ -327,11 +330,29 @@ end;
 constructor TTyCustomStatusBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   FPanels := TTyStatusPanels.Create(Self, TTyStatusPanel);
   FSizeGrip := True;
   Align := alBottom;
   Width := 200;
   Height := TyDensityHeight(ActiveController, 22);
+end;
+
+procedure TTyCustomStatusBar.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  S: TTyStyleSet;
+  ppi, h: Integer;
+begin
+  { The bar's own height from the theme, or more when the font needs it; the width stays the
+    form's. }
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  S := CurrentStyle;
+  PreferredWidth := 0;
+  PreferredHeight := MulDiv(TyDensityHeight(ActiveController, 22), ppi, 96);
+  h := TyFieldPreferredHeight(S, ResolveFontSize(S), ppi);
+  if h > PreferredHeight then PreferredHeight := h;
 end;
 destructor TTyCustomStatusBar.Destroy;
 begin
@@ -340,7 +361,7 @@ begin
 end;
 procedure TTyCustomStatusBar.SetPanels(AValue: TTyStatusPanels); begin FPanels.Assign(AValue); end;
 procedure TTyCustomStatusBar.SetSimplePanel(AValue: Boolean); begin if FSimplePanel = AValue then Exit; FSimplePanel := AValue; Invalidate; end;
-procedure TTyCustomStatusBar.SetSimpleText(const AValue: TCaption); begin if FSimpleText = AValue then Exit; FSimpleText := AValue; if FSimplePanel then Invalidate; end;
+procedure TTyCustomStatusBar.SetSimpleText(const AValue: TCaption); begin if FSimpleText = AValue then Exit; FSimpleText := AValue; if FSimplePanel or (FPanels.Count = 0) then Invalidate; end;
 procedure TTyCustomStatusBar.SetSizeGrip(AValue: Boolean); begin if FSizeGrip = AValue then Exit; FSizeGrip := AValue; Invalidate; end;
 
 function TTyCustomStatusBar.GetStyleTypeKey: string;
@@ -359,9 +380,9 @@ function TTyCustomStatusBar.DoSetApplicationHint(const AHintStr: string): Boolea
 begin
   Result := DoHint;
   if Result then Exit;
-  if FSimplePanel then
+  if FSimplePanel or (FPanels.Count = 0) then   // #128: a bar with no panels shows SimpleText
     SimpleText := AHintStr
-  else if FPanels.Count > 0 then
+  else
     FPanels[0].Text := AHintStr;
   Result := True;
 end;
@@ -460,7 +481,9 @@ begin
       bg.Color := S.BorderColor;
       P.FillBackground(Rect(0, 0, W, bw), bg, 0);   // top hairline
     end;
-    if FSimplePanel then
+    { #128: SimpleText also on a bar with no panels -- SimplePanel defaults to False here (True
+      in LCL), so a bar that was only ever given SimpleText showed nothing at all. }
+    if FSimplePanel or (FPanels.Count = 0) then
       P.DrawText(Rect(padX, 0, W - padX, H), FSimpleText, S.FontName, fs, S.FontWeight, S.TextColor, taLeftJustify, tlCenter, True)
     else
     begin

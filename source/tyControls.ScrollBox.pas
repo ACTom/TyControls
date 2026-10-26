@@ -390,6 +390,10 @@ begin
     to anything but the first enum member and this line stops being a no-op while the bars
     keep the old one -- move the seed into EnsureBars then. }
   FScrollBarAutoHide := sbahDefault;
+  { LCL's TScrollBox has no caption (no csSetCaption, scrollingwincontrol.inc:349); this one
+    inherited TTyPanel's, so a new box acquired its own Name as a caption its children cover
+    (#116). An .lfm that stores a Caption keeps it. }
+  ControlStyle := ControlStyle - [csSetCaption];
   Width := 200;
   Height := 150;
 end;
@@ -843,9 +847,9 @@ begin
   { Grow by the content PLUS everything AdjustClientRect is about to take back off both edges,
     so what the children actually get laid out in is exactly the content. Growing to the bare
     content would leave them a frame short of it and clip the last row by a border width.
-    BorderWidth is in that sum because TTyPanel.AdjustClientRect now honours it -- leave it
-    out and an 8px gutter would cost the last row 16px instead of moving it. }
-  bw := 2 * (FrameInset + BorderWidth);
+    BorderWidth is in that sum because the base AdjustClientRect honours it, in device px
+    (#115) -- leave it out and an 8px gutter would cost the last row 16px instead of moving it. }
+  bw := 2 * (FrameInset + BorderInsetPx);
   if (FHScrollBar <> nil) and FHScrollBar.Visible and (FContentW > viewW) then
     Result.Right := Result.Left + FContentW + bw;
   if (FVScrollBar <> nil) and FVScrollBar.Visible and (FContentH > viewH) then
@@ -1064,7 +1068,7 @@ function TTyCustomScrollBox.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer
 var
   step: Integer;
 begin
-  if not Enabled then Exit(False);
+  if not IsEnabled then Exit(False);
   if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then Exit(True);
   // Wheel scrolls the vertical axis when it overflows, else the horizontal one.
   step := ScrollbarThick;   // one "line" ~ a scrollbar thickness of content

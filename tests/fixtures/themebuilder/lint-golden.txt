@@ -28,17 +28,23 @@ undefined variable --font-size-base
 undefined variable --font-size-base
 == themes/builtin/adwaita.tycss
 unknown property 'border-bottom'
+undefined variable --disabled-opacity
 == themes/builtin/aero.tycss
 undefined variable --pad-container
+undefined variable --muted
+undefined variable --disabled-opacity
 == themes/builtin/antdesign.tycss
 undefined variable --on-surface
 undefined variable --on-surface
 undefined variable --on-surface
 undefined variable --pad-card
 undefined variable --on-surface
+undefined variable --disabled-opacity
 == themes/builtin/bootstrap.tycss
+undefined variable --disabled-opacity
 == themes/builtin/breeze.tycss
 undefined variable --radius-round
+undefined variable --disabled-opacity
 == themes/builtin/classic.tycss
 undefined variable --pad-tight
 undefined variable --pad-control
@@ -54,24 +60,33 @@ undefined variable --pad-control
 undefined variable --pad-control
 undefined variable --pad-tooltip
 undefined variable --font-size-base
+undefined variable --disabled-opacity
 == themes/builtin/fluent.tycss
+undefined variable --disabled-opacity
 == themes/builtin/macos.tycss
 undefined variable --on-surface
 undefined variable --on-surface
+undefined variable --disabled-opacity
 == themes/builtin/material3.tycss
 undefined variable --on-surface
 undefined variable --on-surface
+undefined variable --disabled-opacity
 == themes/builtin/office.tycss
+undefined variable --disabled-opacity
 == themes/builtin/showcase.tycss
 == themes/builtin/ubuntu.tycss
+undefined variable --disabled-opacity
 == themes/builtin/win10.tycss
 undefined variable --on-surface
 undefined variable --on-surface
+undefined variable --disabled-opacity
 == themes/builtin/win11.tycss
 undefined variable --on-surface
 undefined variable --on-surface
 undefined variable --on-surface
+undefined variable --disabled-opacity
 == themes/builtin/xp.tycss
+undefined variable --disabled-opacity
 == themes/dark.tycss
 undefined variable --pad-field
 undefined variable --pad-field
@@ -84,6 +99,7 @@ undefined variable --disabled-opacity
 undefined variable --pad-field
 undefined variable --surface-hover
 undefined variable --pad-field
+undefined variable --disabled-opacity
 == themes/light.tycss
 == themes/palettes/catppuccin.tycss
 undefined variable --font-size-base

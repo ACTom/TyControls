@@ -708,6 +708,7 @@ var
 begin
   for g := Low(TTyGlyphKind) to High(TTyGlyphKind) do
   begin
+    if g = tgNone then Continue;   // the one kind that draws nothing (#129), below
     MakePainter(24, 24, 96);
     FPainter.DrawGlyph(Rect(0, 0, 24, 24), g, TyRGBA(0, 0, 0, 255), 2);
     hits := 0;

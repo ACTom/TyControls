@@ -19,6 +19,8 @@ uses
   tyControls.ShellComboBox, tyControls.ShellListView, tyControls.ShellTreeView,
   tyControls.FilterComboBox, tyControls.CharImage, tyControls.GlyphButtons,
   tyControls.AdvanceChart, tyControls.ToolWindows, tyControls.DB.Lists, DBPropEdits,
+  tyControls.ComboBox, tyControls.AdvancedComboBox, tyControls.CheckComboBox,
+  tyControls.OfficeComboBox,
   { The SynEdit-backed tycss editor for StyleOverride (design-time only). }
   tyControls.Design.Css.Editor, tyControls.Design.AdvanceChart.Editor;
 
@@ -174,6 +176,14 @@ type
   public
     function GetAttributes: TPropertyAttributes; override;
     procedure Edit; override;
+  end;
+
+  { #130: Style on the combo boxes that are pick-only by design. An editable style is turned into
+    its pick-only twin the moment it is set (TyComboStylePickOnly), so the list offers only the
+    styles that stay as chosen. }
+  TTyPickOnlyComboStyleEditor = class(TEnumPropertyEditor)
+  public
+    procedure GetValues(Proc: TGetStrProc); override;
   end;
 
 { All RegisterPropertyEditor calls of the package (including the THiddenPropertyEditor
@@ -675,6 +685,17 @@ begin
   end;
 end;
 
+{ ---- TTyPickOnlyComboStyleEditor ---- }
+
+procedure TTyPickOnlyComboStyleEditor.GetValues(Proc: TGetStrProc);
+var
+  s: TTyComboBoxStyle;
+begin
+  for s := Low(TTyComboBoxStyle) to High(TTyComboBoxStyle) do
+    if TyComboStylePickOnly(s) = s then
+      Proc(GetEnumName(TypeInfo(TTyComboBoxStyle), Ord(s)));
+end;
+
 { ---- registration ---- }
 
 procedure RegisterPropertyEditors;
@@ -872,6 +893,16 @@ begin
   // specificity —so they must be the LAST word: Version/Purpose are never in the hide list).
   RegisterPropertyEditor(TypeInfo(string), TTyFormSurface, 'Version', TTyVersionEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyFormSurface, 'Purpose', TTySurfacePurposeEditor);
+  { #130: a pick-only combo box's Style lists only the styles that stay as chosen: an editable
+    style is turned into its pick-only twin the moment it is set. (TTyCustomColorBox's Style is
+    its palette, another type.) The properties that could never act on these controls --
+    MaxLength, CharCase and ReadOnly here, CharCase on the numeric edits, a draw grid's
+    selection and cell-editor settings, a grid header's MainColumn -- are not published. }
+  RegisterPropertyEditor(TypeInfo(TTyComboBoxStyle), TTyCustomAdvancedComboBox, 'Style', TTyPickOnlyComboStyleEditor);
+  RegisterPropertyEditor(TypeInfo(TTyComboBoxStyle), TTyCustomCheckComboBox, 'Style', TTyPickOnlyComboStyleEditor);
+  RegisterPropertyEditor(TypeInfo(TTyComboBoxStyle), TTyCustomFilterComboBox, 'Style', TTyPickOnlyComboStyleEditor);
+  RegisterPropertyEditor(TypeInfo(TTyComboBoxStyle), TTyCustomOfficeComboBox, 'Style', TTyPickOnlyComboStyleEditor);
+  RegisterPropertyEditor(TypeInfo(TTyComboBoxStyle), TTyCustomShellComboBox, 'Style', TTyPickOnlyComboStyleEditor);
 end;
 
 end.

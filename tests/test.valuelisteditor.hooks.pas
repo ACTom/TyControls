@@ -18,7 +18,7 @@ interface
 
 uses
   Classes, SysUtils, LCLType, Controls, Graphics, Forms, fpcunit, testregistry,
-  tyControls.ListBox, tyControls.ValueListEditor, tyControls.ColorBox;
+  tyControls.ListBox, tyControls.ValueListEditor, tyControls.ColorBox, tyControls.ColorComboBox;
 
 type
   { Drives the inline editor the way the keyboard does. }
@@ -403,7 +403,7 @@ begin
   FVle.ClickValue(0);
   lst := FVle.Dropped;
   AssertNotNull('dropped', lst);
-  AssertEquals('the last row is the "more…" sentinel', clNone,
+  AssertEquals('the last row is the "more…" sentinel', TyColorMoreMarker,
     TyColorOfItem(lst.Items, lst.Items.Count - 1));
   lst.SelectItem(lst.Items.Count - 1);
   AssertEquals('picking "more…" is not itself a commit', 0, FVle.Asked);

@@ -312,7 +312,7 @@ procedure TTyCustomColorGrid.MouseDown(Button: TMouseButton; Shift: TShiftState;
 var
   idx: Integer;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbLeft then
   begin

@@ -451,7 +451,7 @@ begin
   // The SAME resting state TTyButton.Down injects, so one ':selected' theme rule styles
   // the pressed button and the chosen segment alike.
   if AIndex = FItemIndex then Include(Result, tysSelected);
-  if not Enabled then
+  if not IsEnabled then
   begin
     { Disabled KEEPS :selected — unlike TTyButton.Down, which drops it. A greyed-out
       segmented control must still show WHICH option is in force: losing the chip would
@@ -476,7 +476,7 @@ end;
 
 function TTyCustomSegmented.ItemStyle(AIndex: Integer): TTyStyleSet;
 begin
-  Result := ActiveController.Model.ResolveStyle('TySegmentedItem', StyleClass,
+  Result := PartStyle('TySegmentedItem', StyleClass,
     ItemStates(AIndex));
 end;
 
@@ -556,7 +556,7 @@ begin
   if ppi <= 0 then ppi := 96;
   // Measured against the RESTING segment style: a theme that makes the selected chip bold
   // must not make the track's width depend on which segment is currently selected.
-  segStyle := ActiveController.Model.ResolveStyle('TySegmentedItem', StyleClass, [tysNormal]);
+  segStyle := PartStyle('TySegmentedItem', StyleClass, [tysNormal]);
   // MEASURE with the same font the paint DRAWS with: the label inherits the TRACK's font via
   // ItemTextStyle, so a theme that sets a font on TySegmented but not TySegmentedItem must size
   // segments to that font — else they are measured for the default and the paint clips the
@@ -581,7 +581,7 @@ procedure TTyCustomSegmented.MouseDown(Button: TMouseButton; Shift: TShiftState;
 var
   i: Integer;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   // A track with no themed background paints NOTHING (RenderTo early-exits on the same test),
   // so a click on apparent blank space must not silently select a segment and fire OnChange.
   if not (tpBackground in CurrentStyle.Present) then Exit;
@@ -600,7 +600,7 @@ procedure TTyCustomSegmented.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   i: Integer;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   if not (tpBackground in CurrentStyle.Present) then Exit;   // invisible track: no hover
   inherited MouseMove(Shift, X, Y);
   i := TySegmentAt(X, Y);
@@ -623,7 +623,7 @@ end;
 
 procedure TTyCustomSegmented.KeyDown(var Key: Word; Shift: TShiftState);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   if not (tpBackground in CurrentStyle.Present) then Exit;   // invisible track: inert
   inherited KeyDown(Key, Shift);
   if FItems.Count = 0 then Exit;

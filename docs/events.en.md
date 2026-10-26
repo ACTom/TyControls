@@ -46,7 +46,7 @@ The `TTyGraphicControl` descendants are the display-only controls (`TTyLabel` / 
 | `OnStartDrag` | event | This control started a drag |
 | `OnEndDrag` | event | Drag finished |
 | `Visible` | property | Visibility (`default True`) |
-| `AutoSize` | property | Size to the control's preferred size (`CalculatePreferredSize`); `default False` |
+| `AutoSize` | property | Size to the control's preferred size (`CalculatePreferredSize`); `default False`. One-line edits and combo boxes take their height from the font and keep their width (as LCL's TEdit); status bars, headers and tab strips keep their theme height and grow when the font needs more; badges, ratings, calendars and scroll bars (thickness only) take their content. Controls with no natural size -- memos, list and tree views, grids, list boxes, gauges, shapes -- keep their bounds, as LCL's own do |
 | `DragMode` | property | `dmManual` / `dmAutomatic`; automatic makes the control a drag source |
 | `DragKind` | property | `dkDrag` / `dkDock` |
 | `DragCursor` | property | Pointer shape while dragging |
@@ -115,7 +115,7 @@ TyControls' hard rule is that visuals belong to the theme (`.tycss`): colors, fo
 | Not exposed | Why |
 |--------------|------|
 | `Color` / `ParentColor` | Background comes from the theme's `background` token |
-| `Font` (published only to carry PPI/size) / `ParentFont` | Family and size are theme-controlled; `Font` exists to carry PPI |
+| `ParentFont` (`Font` is published) | A name, style, colour or size set on the control, or on a container it sits in, wins over the theme, and `StyleOverride` wins over that. The form's own font does not count: the form-wide font is the theme's `--font-family` / `--font-size-base`. A value set equal to the container's is the container's. The same goes for the text inside a control (list rows, cells, tabs, headers), except that the selected or current item keeps the theme's highlight colour |
 | `Brush` | Fills come from the painter + theme |
 | `Bevel*` (Inner/Outer/Kind/Width/Edges) | Native 3D borders conflict with theme border semantics |
 | `BorderStyle` | Border style comes from the theme's `border-*` tokens |

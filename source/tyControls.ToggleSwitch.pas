@@ -403,14 +403,14 @@ end;
 
 procedure TTyCustomToggleSwitch.Click;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   Toggle;
   inherited Click;
 end;
 
 procedure TTyCustomToggleSwitch.KeyDown(var Key: Word; Shift: TShiftState);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   if (Key = VK_SPACE) or (Key = VK_RETURN) then
   begin

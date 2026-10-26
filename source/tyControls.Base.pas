@@ -107,15 +107,40 @@ type
     procedure SetStyleClass(const AValue: string);
     procedure SetStyleOverride(const AValue: string);
     procedure SetController(AValue: TTyCustomStyleController);
+  private
+    FFitThemeVer: Cardinal;    // theme version the AutoSize answer was last fitted for (#114)
+    FRefittingStyle: Boolean;
   protected
     FHover, FPressed: Boolean;
+    { Set by a control whose AutoSize answer comes from its style (#114): it re-fits when the
+      theme changes, which reaches it only as a bare Invalidate. }
+    FFitsToStyle: Boolean;
     FDpiAdjusting: Boolean;
+    procedure RefitToStyle;
     function _AddRef: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function _Release: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function GetStyleTypeKey: string; virtual; abstract;
     function ActiveController: TTyCustomStyleController;
     function CurrentStates: TTyStateSet; virtual;
     function CurrentStyle: TTyStyleSet;
+    { CurrentStyle as it would be in AStates: the theme, this control's font, StyleOverride
+      (#113). For a control whose parts are drawn with its OWN type key in states of their own
+      -- a segment, a button in a group -- so that the font and every StyleOverride
+      declaration reach each part as they reach the control. }
+    function StyleInState(const AStates: TTyStateSet): TTyStyleSet;
+    { The style a PART of this control draws its text with (#113): AKey's own theme rule -- a
+      list row, a cell, a tab, a header section -- with this control's font and StyleOverride's
+      text declarations (font-family, font-size, font-weight, color) laid over it, by
+      CurrentStyle's rule. Without it a part read the theme alone, so the control's Font and
+      StyleOverride never reached the text inside it. AInk False keeps the theme's colour, for
+      an accent part (a primary button, a step's marker), and for a row or tab that is drawn
+      highlighted, as a native list keeps its highlight ink. A part resolved with
+      tysSelected keeps it without being asked; one that marks its current item with
+      tysActive passes AInk itself, since the control's own tysActive means pressed. Measure with the same call you draw with. }
+    function PartStyle(const AKey, AClass: string; const AStates: TTyStateSet;
+      AInk: Boolean = True): TTyStyleSet;
+    { FOvrCache, parsed again only when the override text or the theme changed. }
+    procedure RefreshOverride(AModel: TTyStyleModel);
     { ===== PER-MONITOR DPI: the size floor (see the twin on TTyCustomControl, and
       plans/2026-08-08-permonitor-dpi.md) =====================================
 
@@ -278,6 +303,7 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    procedure Invalidate; override;
     function GetVersion: string;
     { #98/#99. A theme length token, in logical px, as this control reads it: a '--'
       declaration in its own StyleOverride wins (e.g. '--listview-text-margin: 8px'), then
@@ -332,9 +358,16 @@ type
     FOvrMetricVer: Cardinal;
     procedure SetStyleClass(const AValue: string);
     procedure SetStyleOverride(const AValue: string);
+  private
+    FFitThemeVer: Cardinal;    // theme version the AutoSize answer was last fitted for (#114)
+    FRefittingStyle: Boolean;
   protected
     FHover, FPressed: Boolean;
+    { Set by a control whose AutoSize answer comes from its style (#114): it re-fits when the
+      theme changes, which reaches it only as a bare Invalidate. }
+    FFitsToStyle: Boolean;
     FDpiAdjusting: Boolean;
+    procedure RefitToStyle;
     procedure SetController(AValue: TTyCustomStyleController); virtual;
     function _AddRef: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function _Release: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
@@ -342,6 +375,24 @@ type
     function ActiveController: TTyCustomStyleController;
     function CurrentStates: TTyStateSet; virtual;
     function CurrentStyle: TTyStyleSet;
+    { CurrentStyle as it would be in AStates: the theme, this control's font, StyleOverride
+      (#113). For a control whose parts are drawn with its OWN type key in states of their own
+      -- a segment, a button in a group -- so that the font and every StyleOverride
+      declaration reach each part as they reach the control. }
+    function StyleInState(const AStates: TTyStateSet): TTyStyleSet;
+    { The style a PART of this control draws its text with (#113): AKey's own theme rule -- a
+      list row, a cell, a tab, a header section -- with this control's font and StyleOverride's
+      text declarations (font-family, font-size, font-weight, color) laid over it, by
+      CurrentStyle's rule. Without it a part read the theme alone, so the control's Font and
+      StyleOverride never reached the text inside it. AInk False keeps the theme's colour, for
+      an accent part (a primary button, a step's marker), and for a row or tab that is drawn
+      highlighted, as a native list keeps its highlight ink. A part resolved with
+      tysSelected keeps it without being asked; one that marks its current item with
+      tysActive passes AInk itself, since the control's own tysActive means pressed. Measure with the same call you draw with. }
+    function PartStyle(const AKey, AClass: string; const AStates: TTyStateSet;
+      AInk: Boolean = True): TTyStyleSet;
+    { FOvrCache, parsed again only when the override text or the theme changed. }
+    procedure RefreshOverride(AModel: TTyStyleModel);
     { ===== PER-MONITOR DPI: the size floor ===================================
       The twin of the block on TTyGraphicControl -- read it there. Duplicated, not shared,
       because the two bases descend from TGraphicControl and TCustomControl and have no
@@ -398,10 +449,25 @@ type
     { The post-draw hook's entry point on the WINDOWED side -- TWinControl.PaintHandler's
       single funnel into Paint. See the body for why it cannot live in Paint itself. }
     procedure PaintWindow(DC: HDC); override;
+    { BORDERWIDTH IS EXTRA INNER PADDING (#115), in logical px like every other length here:
+      the themed frame stays at the edge and what sits inside moves in. Children move in
+      here, for every control; a control that draws its own content (BorderWidthIsPadding)
+      also has it added to CurrentStyle's padding, so its paint, hit-testing, caret and
+      preferred size all move in together. LCL publishes BorderWidth on its containers and
+      views and insets the same way (TCustomPanel.Paint, TCustomTreeView). }
+    procedure AdjustClientRect(var ARect: TRect); override;
+    { True for a control that draws its content itself rather than hosting children: the
+      default, unless it accepts controls. A container that also adds its own padding in
+      AdjustClientRect keeps the answer False, so the width is not counted twice. }
+    function BorderWidthIsPadding: Boolean; virtual;
+    { Repaints on a font change up the parent chain (TyParentChainFontChanged, #112). }
+    procedure WndProc(var TheMessage: TLMessage); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function GetVersion: string;
+    { BorderWidth in device px (#115). }
+    function BorderInsetPx: Integer;
     { #98/#99. A theme length token, in logical px, as this control reads it: a '--'
       declaration in its own StyleOverride wins (e.g. '--listview-text-margin: 8px'), then
       the theme's value, then ADefault. A control that reads its layout tokens through this
@@ -442,7 +508,27 @@ type
   calls this between the theme and StyleOverride, so a per-control override still wins and
   measuring and drawing read the same style. }
 procedure TyApplyControlFont(var AStyle: TTyStyleSet; AFont: TFont; AParentFont: Boolean;
-  const AStates: TTyStateSet);
+  const AStates: TTyStateSet); overload;
+{ The same for AControl's font, which is what CurrentStyle calls (#112), with two changes.
+  An attribute counts when it was SET below the form, on the control or on a container it
+  inherits from: walking up from AControl, the attribute differs from the parent's at some
+  step before the walk reaches the top-level window. Equal all the way up, it is the form's,
+  and the form-wide font is the theme's (--font-family, --font-size-base): a form is always
+  ParentFont = False, so whether its font was set cannot be told, and a form converted from
+  Delphi carries Tahoma and clWindowText. ParentFont needs no test -- a ParentFont child holds
+  a copy of its parent's font, so the walk goes on through it -- and an unparented control
+  counts its own values unless ParentFont is True. And the size counts too: it goes into AStyle.FontSize, so the theme's
+  size for the control's type no longer wins over it, while StyleOverride, merged after,
+  still does. A value set equal to the container's is the container's. }
+procedure TyApplyControlFont(var AStyle: TTyStyleSet; AControl: TControl;
+  const AStates: TTyStateSet); overload;
+{ The Font.Size that counts for AControl by that rule, or 0 when the theme decides. For a
+  control that sizes some text of its own -- a dial's figure, a gauge's value -- and keeps its
+  own default unless the author set a size (#113). }
+function TyControlFontSize(AControl: TControl): Integer;
+{ AStates, or [tysDisabled] when AControl -- or one of its parents -- is disabled (#118): for a
+  part a control resolves with states of its own, which would otherwise never look disabled. }
+function TyStatesUnlessDisabled(AControl: TControl; const AStates: TTyStateSet): TTyStateSet;
 
 { Shared font-size resolution for every ty control (windowed AND graphic — the label family
   each carried its own copy). Priority:
@@ -458,6 +544,12 @@ procedure TyApplyControlFont(var AStyle: TTyStyleSet; AFont: TFont; AParentFont:
   the theme, not the inherited system font. (Headless masks the bug: rootless Font.Size is 0.) }
 function TyResolveFontSize(const AStyle: TTyStyleSet; AParentFont: Boolean;
   AControlFontSize: Integer; AController: TTyCustomStyleController): Integer;
+
+{ The height a one-line field asks for under AutoSize (#114): one line of AStyle's font at
+  AFontSize, plus its vertical padding and border, at APPI -- what TTySpinEdit has always
+  answered, now shared by the edits, the combo boxes and the other one-line controls. LCL's
+  TEdit answers the same way: height from the font, width left to the form. }
+function TyFieldPreferredHeight(const AStyle: TTyStyleSet; AFontSize, APPI: Integer): Integer;
 
 { Resolve the background a windowed child should composite onto (it does not inherit its
   parent's painted bg, so corner-gaps / transparent fills would otherwise show the child's
@@ -627,6 +719,37 @@ procedure TyDrawFrameChrome(AOwner: TControl; APainter: TTyPainter; const ARect:
   const AStyle: TTyStyleSet);
 
 implementation
+
+procedure TyParentChainFontChanged(AControl: TControl); forward;
+procedure TyApplyControlFontInk(var AStyle: TTyStyleSet; AControl: TControl;
+  const AStates: TTyStateSet; AInk: Boolean); forward;
+
+{ StyleOverride's text declarations over a part's style (#113): the font, and the colour
+  unless AInk is False. The rest of the override -- background, border, padding -- is the
+  control's box, not the part's. }
+procedure TyMergeTextDecls(var AStyle: TTyStyleSet; const AOver: TTyStyleSet; AInk: Boolean);
+begin
+  if tpFontName in AOver.Present then
+  begin
+    AStyle.FontName := AOver.FontName;
+    Include(AStyle.Present, tpFontName);
+  end;
+  if tpFontSize in AOver.Present then
+  begin
+    AStyle.FontSize := AOver.FontSize;
+    Include(AStyle.Present, tpFontSize);
+  end;
+  if tpFontWeight in AOver.Present then
+  begin
+    AStyle.FontWeight := AOver.FontWeight;
+    Include(AStyle.Present, tpFontWeight);
+  end;
+  if AInk and (tpTextColor in AOver.Present) then
+  begin
+    AStyle.TextColor := AOver.TextColor;
+    Include(AStyle.Present, tpTextColor);
+  end;
+end;
 
 function TyOnTitleBar(AControl: TControl): Boolean;
 var
@@ -889,7 +1012,7 @@ end;
 function TTyGraphicControl.CurrentStates: TTyStateSet;
 begin
   Result := [];
-  if not Enabled then
+  if not IsEnabled then
   begin
     Include(Result, tysDisabled);
     Exit;
@@ -955,27 +1078,79 @@ begin
   FOvrMetrics.AddObject(key, TObject(PtrInt(Result)));
 end;
 
+procedure TTyGraphicControl.Invalidate;
+begin
+  inherited Invalidate;
+  if FFitsToStyle and AutoSize then RefitToStyle;
+end;
+
+{ #114: an AutoSize answer that comes from the style moves with the theme, and a theme switch
+  reaches a control only as a bare Invalidate -- so re-fit here, once per theme version (a hover
+  repaint finds nothing to do), guarded against AdjustSize -> SetBounds -> Invalidate. A font
+  change needs none of this: LCL re-fits on it itself. }
+procedure TTyGraphicControl.RefitToStyle;
+var
+  ver: Cardinal;
+begin
+  if FRefittingStyle or ([csLoading, csDestroying] * ComponentState <> []) then Exit;
+  ver := ActiveController.Model.ThemeVersion;
+  if ver = FFitThemeVer then Exit;
+  FRefittingStyle := True;
+  try
+    FFitThemeVer := ver;
+    InvalidatePreferredSize;
+    AdjustSize;
+  finally
+    FRefittingStyle := False;
+  end;
+end;
+
 function TTyGraphicControl.CurrentStyle: TTyStyleSet;
+begin
+  Result := StyleInState(CurrentStates);
+end;
+
+function TTyGraphicControl.StyleInState(const AStates: TTyStateSet): TTyStyleSet;
 var
   model: TTyStyleModel;
 begin
   model := ActiveController.Model;
-  Result := model.ResolveStyle(GetStyleTypeKey,
-    TyStyleClassFor(Self, FStyleClass), CurrentStates);
-  TyApplyControlFont(Result, Font, ParentFont, CurrentStates);   // #92
+  Result := model.ResolveStyle(GetStyleTypeKey, TyStyleClassFor(Self, FStyleClass), AStates);
+  TyApplyControlFont(Result, Self, AStates);   // #92, #112
   // A9 layer 2: overlay the per-instance override last. Recompute only when stale —
   // the override text changed or the theme version bumped (so var(--...) re-binds).
   if FStyleOverride <> '' then
   begin
-    if (not FOvrCacheValid) or (FOvrCacheText <> FStyleOverride)
-       or (FOvrCacheVer <> model.ThemeVersion) then
-    begin
-      FOvrCache := model.ResolveOverride(FStyleOverride);
-      FOvrCacheText := FStyleOverride;
-      FOvrCacheVer := model.ThemeVersion;
-      FOvrCacheValid := True;
-    end;
+    RefreshOverride(model);
     TyMergeStyleSet(Result, FOvrCache);   // override wins per Present flag (§3.3)
+  end;
+end;
+
+procedure TTyGraphicControl.RefreshOverride(AModel: TTyStyleModel);
+begin
+  if (not FOvrCacheValid) or (FOvrCacheText <> FStyleOverride)
+     or (FOvrCacheVer <> AModel.ThemeVersion) then
+  begin
+    FOvrCache := AModel.ResolveOverride(FStyleOverride);
+    FOvrCacheText := FStyleOverride;
+    FOvrCacheVer := AModel.ThemeVersion;
+    FOvrCacheValid := True;
+  end;
+end;
+
+function TTyGraphicControl.PartStyle(const AKey, AClass: string; const AStates: TTyStateSet;
+  AInk: Boolean): TTyStyleSet;
+var
+  model: TTyStyleModel;
+begin
+  model := ActiveController.Model;
+  Result := model.ResolveStyle(AKey, AClass, AStates);
+  if tysSelected in AStates then AInk := False;   // the highlight keeps its ink
+  TyApplyControlFontInk(Result, Self, AStates, AInk);
+  if FStyleOverride <> '' then
+  begin
+    RefreshOverride(model);
+    TyMergeTextDecls(Result, FOvrCache, AInk);
   end;
 end;
 
@@ -1947,6 +2122,8 @@ begin
     released again -- and none of that runs unless a handler exists. With OnPaint unassigned
     this override is one integer compare per message. }
   inherited WndProc(TheMessage);
+  if (TheMessage.Msg = CM_PARENTFONTCHANGED) and not ParentFont then
+    TyParentChainFontChanged(Self);   // #112
   if (TheMessage.Msg <> LM_PAINT) or not Assigned(OnPaint) then Exit;
   // TLMPaint.DC occupies the WParam slot (both sit directly after Msg/UnusedMsg), which is
   // also where Perform(LM_PAINT, DC, 0) puts it.
@@ -2060,6 +2237,7 @@ begin
   RefreshGtk3EraseColor;
   {$ENDIF}
   inherited Invalidate;
+  if FFitsToStyle and AutoSize then RefitToStyle;
   { 替本控件画了一截框的子控件跟着重画。为什么挂在 Invalidate 上、而不是挂在「获得焦点」
     「悬停」这几个事件上:框会变的理由有一长串(焦点、悬停、按下、禁用、StyleClass、
     StyleOverride、换 controller),它们**全部**以一句 Invalidate 收尾,这是唯一不会漏掉
@@ -2074,6 +2252,27 @@ begin
     c := Controls[i];
     if c.Visible and (c is TTyCustomControl) and TTyCustomControl(c).PaintsParentFrame then
       c.Invalidate;
+  end;
+end;
+
+{ #114: an AutoSize answer that comes from the style moves with the theme, and a theme switch
+  reaches a control only as a bare Invalidate -- so re-fit here, once per theme version (a hover
+  repaint finds nothing to do), guarded against AdjustSize -> SetBounds -> Invalidate. A font
+  change needs none of this: LCL re-fits on it itself. }
+procedure TTyCustomControl.RefitToStyle;
+var
+  ver: Cardinal;
+begin
+  if FRefittingStyle or ([csLoading, csDestroying] * ComponentState <> []) then Exit;
+  ver := ActiveController.Model.ThemeVersion;
+  if ver = FFitThemeVer then Exit;
+  FRefittingStyle := True;
+  try
+    FFitThemeVer := ver;
+    InvalidatePreferredSize;
+    AdjustSize;
+  finally
+    FRefittingStyle := False;
   end;
 end;
 
@@ -2207,7 +2406,7 @@ end;
 function TTyCustomControl.CurrentStates: TTyStateSet;
 begin
   Result := [];
-  if not Enabled then
+  if not IsEnabled then
   begin
     Include(Result, tysDisabled);
     Exit;
@@ -2275,26 +2474,59 @@ begin
 end;
 
 function TTyCustomControl.CurrentStyle: TTyStyleSet;
+begin
+  Result := StyleInState(CurrentStates);
+end;
+
+function TTyCustomControl.StyleInState(const AStates: TTyStateSet): TTyStyleSet;
 var
   model: TTyStyleModel;
 begin
   model := ActiveController.Model;
-  Result := model.ResolveStyle(GetStyleTypeKey,
-    TyStyleClassFor(Self, FStyleClass), CurrentStates);
-  TyApplyControlFont(Result, Font, ParentFont, CurrentStates);   // #92
+  Result := model.ResolveStyle(GetStyleTypeKey, TyStyleClassFor(Self, FStyleClass), AStates);
+  TyApplyControlFont(Result, Self, AStates);   // #92, #112
   // A9 layer 2: overlay the per-instance override last. Recompute only when stale —
   // the override text changed or the theme version bumped (so var(--...) re-binds).
   if FStyleOverride <> '' then
   begin
-    if (not FOvrCacheValid) or (FOvrCacheText <> FStyleOverride)
-       or (FOvrCacheVer <> model.ThemeVersion) then
-    begin
-      FOvrCache := model.ResolveOverride(FStyleOverride);
-      FOvrCacheText := FStyleOverride;
-      FOvrCacheVer := model.ThemeVersion;
-      FOvrCacheValid := True;
-    end;
+    RefreshOverride(model);
     TyMergeStyleSet(Result, FOvrCache);   // override wins per Present flag (§3.3)
+  end;
+  if (BorderWidth > 0) and BorderWidthIsPadding then   // #115: on top of whatever padding won
+  begin
+    Inc(Result.Padding.Left, BorderWidth);
+    Inc(Result.Padding.Top, BorderWidth);
+    Inc(Result.Padding.Right, BorderWidth);
+    Inc(Result.Padding.Bottom, BorderWidth);
+    Include(Result.Present, tpPadding);
+  end;
+end;
+
+procedure TTyCustomControl.RefreshOverride(AModel: TTyStyleModel);
+begin
+  if (not FOvrCacheValid) or (FOvrCacheText <> FStyleOverride)
+     or (FOvrCacheVer <> AModel.ThemeVersion) then
+  begin
+    FOvrCache := AModel.ResolveOverride(FStyleOverride);
+    FOvrCacheText := FStyleOverride;
+    FOvrCacheVer := AModel.ThemeVersion;
+    FOvrCacheValid := True;
+  end;
+end;
+
+function TTyCustomControl.PartStyle(const AKey, AClass: string; const AStates: TTyStateSet;
+  AInk: Boolean): TTyStyleSet;
+var
+  model: TTyStyleModel;
+begin
+  model := ActiveController.Model;
+  Result := model.ResolveStyle(AKey, AClass, AStates);
+  if tysSelected in AStates then AInk := False;   // the highlight keeps its ink
+  TyApplyControlFontInk(Result, Self, AStates, AInk);
+  if FStyleOverride <> '' then
+  begin
+    RefreshOverride(model);
+    TyMergeTextDecls(Result, FOvrCache, AInk);
   end;
 end;
 
@@ -2322,6 +2554,103 @@ begin
   end;
 end;
 
+type
+  TTyFontAttr = (tfaName, tfaStyle, tfaColor, tfaSize);
+  TTyFontControl = class(TControl);   // ParentFont is protected
+
+{ A font up AControl's parent chain changed (#112). A ParentFont child repaints through the
+  copy of the new font LCL hands it; a control that keeps its own font (ParentFont False) is
+  told nothing, yet whether its attributes count depends on that font -- one equal to the
+  container's is the container's -- so it repaints, and so does everything under it, whose
+  walk goes through it. }
+procedure TyParentChainFontChanged(AControl: TControl);
+var
+  i: Integer;
+begin
+  if csLoading in AControl.ComponentState then Exit;
+  AControl.Invalidate;
+  if AControl is TWinControl then
+    for i := 0 to TWinControl(AControl).ControlCount - 1 do
+      TyParentChainFontChanged(TWinControl(AControl).Controls[i]);
+end;
+
+function TyFontAttrEqual(A, B: TFont; AAttr: TTyFontAttr): Boolean;
+begin
+  case AAttr of
+    tfaName: Result := SameText(A.Name, B.Name);
+    tfaStyle: Result := A.Style = B.Style;
+    tfaColor: Result := A.Color = B.Color;
+  else
+    Result := A.Size = B.Size;
+  end;
+end;
+
+{ Was this attribute of AControl's font set below the form? See TyApplyControlFont. }
+function TyFontAttrSetBelowForm(AControl: TControl; AAttr: TTyFontAttr): Boolean;
+var
+  c: TControl;
+begin
+  c := AControl;
+  if c.Parent = nil then Exit(not TTyFontControl(c).ParentFont);   // nothing to inherit from
+  repeat
+    if not TyFontAttrEqual(c.Font, c.Parent.Font, AAttr) then Exit(True);
+    c := c.Parent;
+  until c.Parent = nil;   // c is the top-level window: equal to its font, the value is the form's
+  Result := False;
+end;
+
+procedure TyApplyControlFont(var AStyle: TTyStyleSet; AControl: TControl;
+  const AStates: TTyStateSet);
+begin
+  TyApplyControlFontInk(AStyle, AControl, AStates, True);
+end;
+
+function TyStatesUnlessDisabled(AControl: TControl; const AStates: TTyStateSet): TTyStateSet;
+begin
+  if (AControl = nil) or AControl.IsEnabled then Result := AStates else Result := [tysDisabled];
+end;
+
+function TyControlFontSize(AControl: TControl): Integer;
+begin
+  Result := 0;
+  if (AControl <> nil) and (AControl.Font.Size > 0)
+     and TyFontAttrSetBelowForm(AControl, tfaSize) then
+    Result := AControl.Font.Size;
+end;
+
+procedure TyApplyControlFontInk(var AStyle: TTyStyleSet; AControl: TControl;
+  const AStates: TTyStateSet; AInk: Boolean);
+var
+  f: TFont;
+  c: TColor;
+begin
+  if AControl = nil then Exit;
+  f := AControl.Font;
+  if (f.Name <> '') and not SameText(f.Name, 'default')
+     and TyFontAttrSetBelowForm(AControl, tfaName) then
+  begin
+    AStyle.FontName := f.Name;
+    Include(AStyle.Present, tpFontName);
+  end;
+  if (f.Style <> []) and TyFontAttrSetBelowForm(AControl, tfaStyle) then
+  begin
+    AStyle.FontWeight := TyFontWeightWithStyle(AStyle.FontWeight, f.Style);
+    Include(AStyle.Present, tpFontWeight);
+  end;
+  if AInk and (f.Color <> clDefault) and not (tysDisabled in AStates)
+     and TyFontAttrSetBelowForm(AControl, tfaColor) then
+  begin
+    c := ColorToRGB(f.Color);
+    AStyle.TextColor := TyRGBA(Red(c), Green(c), Blue(c), 255);
+    Include(AStyle.Present, tpTextColor);
+  end;
+  if (f.Size > 0) and TyFontAttrSetBelowForm(AControl, tfaSize) then
+  begin
+    AStyle.FontSize := f.Size;
+    Include(AStyle.Present, tpFontSize);
+  end;
+end;
+
 function TyResolveFontSize(const AStyle: TTyStyleSet; AParentFont: Boolean;
   AControlFontSize: Integer; AController: TTyCustomStyleController): Integer;
 var
@@ -2340,6 +2669,20 @@ begin
     Result := AControlFontSize
   else
     Result := 9;
+end;
+
+var
+  GFieldMeasure: TBGRABitmap = nil;   // TyFieldPreferredHeight's 1x1 measuring surface
+
+function TyFieldPreferredHeight(const AStyle: TTyStyleSet; AFontSize, APPI: Integer): Integer;
+begin
+  if APPI <= 0 then APPI := 96;
+  if GFieldMeasure = nil then GFieldMeasure := TBGRABitmap.Create(1, 1);
+  TyConfigureTextFont(GFieldMeasure, AStyle.FontName, AFontSize, AStyle.FontWeight, APPI);
+  Result := GFieldMeasure.TextSize('0').cy
+    + MulDiv(AStyle.Padding.Top + AStyle.Padding.Bottom, APPI, 96)
+    + 2 * MulDiv(AStyle.BorderWidth, APPI, 96);
+  if Result < 1 then Result := 1;
 end;
 
 function TTyCustomControl.ResolveFontSize(const AStyle: TTyStyleSet): Integer;
@@ -2428,6 +2771,48 @@ begin
   PointerStateChanged;
 end;
 
+procedure TTyCustomControl.AdjustClientRect(var ARect: TRect);
+var
+  d: Integer;
+begin
+  inherited AdjustClientRect(ARect);
+  if BorderWidth <= 0 then Exit;
+  d := BorderInsetPx;
+  InflateRect(ARect, -d, -d);
+  if ARect.Right < ARect.Left then ARect.Right := ARect.Left;
+  if ARect.Bottom < ARect.Top then ARect.Bottom := ARect.Top;
+end;
+
+function TTyCustomControl.BorderWidthIsPadding: Boolean;
+begin
+  Result := not (csAcceptsControls in ControlStyle);
+end;
+
+function TTyCustomControl.BorderInsetPx: Integer;
+var
+  ppi: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  Result := MulDiv(BorderWidth, ppi, 96);
+end;
+
+procedure TTyCustomControl.WndProc(var TheMessage: TLMessage);
+var
+  i: Integer;
+begin
+  inherited WndProc(TheMessage);
+  if (TheMessage.Msg = CM_PARENTFONTCHANGED) and not ParentFont then
+    TyParentChainFontChanged(Self);   // #112
+  { #118: a control looks disabled when it OR a parent is (IsEnabled), and LCL repaints only
+    the control whose Enabled changed -- so its windowed children are told too. Its graphic
+    children repaint with it. }
+  if TheMessage.Msg = CM_ENABLEDCHANGED then
+    for i := 0 to ControlCount - 1 do
+      if Controls[i] is TWinControl then
+        TWinControl(Controls[i]).Perform(CM_ENABLEDCHANGED, 0, 0);
+end;
+
 procedure TTyCustomControl.PaintWindow(DC: HDC);
 var
   dcChanged: Boolean;
@@ -2455,4 +2840,6 @@ begin
   end;
 end;
 
+finalization
+  FreeAndNil(GFieldMeasure);
 end.

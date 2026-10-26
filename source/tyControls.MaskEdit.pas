@@ -1095,7 +1095,7 @@ begin
   end;
   { The base class reaches ReadOnly and Enabled through InjectKey, which this override
     does not call -- so a read-only masked field took dictation. }
-  if Enabled and not ReadOnly and (Length(UTF8Key) = 1) then
+  if IsEnabled and not ReadOnly and (Length(UTF8Key) = 1) then
   begin
     c := UTF8Key[1];
     if InPlace then

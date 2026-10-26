@@ -64,7 +64,10 @@ type
   TTyColumnOptions = set of TTyColumnOption;
 
   TTyColumns = class;   { forward }
-  TTyHeader  = class;   { forward }
+  TTyCustomHeader = class;   { forward }
+
+  { The width a new column starts at, asked of the owner (#127); <= 0 = TTyColumn's own. }
+  TTyColumnWidthQuery = function: Integer of object;
 
   { Header option flags (mirrors VTV's TVTHeaderOption subset) }
   TTyHeaderOption = (
@@ -211,7 +214,8 @@ type
     { Owning header (Phase B). nil in Phase-A headless tests and during raw
       LFM streaming via the parameterless Create — GetOwner returns it so the
       first-column add hook can reach the header's MainColumn. }
-    FOwnerHeader: TTyHeader;
+    FOwnerHeader: TTyCustomHeader;
+    FNewColumnWidth: TTyColumnWidthQuery;
 
     procedure RebuildPositionMap;
     procedure DoChange;
@@ -222,12 +226,16 @@ type
     function  GetOwner: TPersistent; override;
   public
     constructor Create; overload;
-    constructor Create(AOwnerHeader: TTyHeader); overload;
+    constructor Create(AOwnerHeader: TTyCustomHeader); overload;
     { Lets an owner (the grid) supply its own TTyColumn descendant, so grid-only
       column properties don't have to be pushed down into the shared TTyColumn
       that ListView/TreeView also use. Nil = plain TTyColumn. }
-    constructor Create(AOwnerHeader: TTyHeader;
+    constructor Create(AOwnerHeader: TTyCustomHeader;
       AItemClass: TCollectionItemClass); overload;
+    { #127: what a column added from here on starts as wide as -- the grid answers with its
+      DefaultColWidth, as LCL's columns follow the grid's (grids.pas GetDefaultWidth). Not
+      asked of columns a form file is reading in: the grid answers 0 then. }
+    property NewColumnWidth: TTyColumnWidthQuery read FNewColumnWidth write FNewColumnWidth;
 
     { Typed collection surface, matching TGridColumns (grids.pas:661 `function Add:
       TGridColumn`, :670 `property Items[Index]: TGridColumn ... default`).
@@ -289,8 +297,10 @@ type
                                      ATolRight: Integer = 5): Integer; overload;
 
     { Set column AAutoSizeIndex.Width so that TotalWidth = AClientWidth,
-      clamped to that column's [MinWidth, MaxWidth]. }
-    procedure ApplyAutoSize(AClientWidth, AAutoSizeIndex: Integer);
+      clamped to that column's [MinWidth, MaxWidth] -- and to the owner's own limits,
+      AMinWidth / AMaxWidth (0 = none), the grid's MinColWidth / MaxColWidth (#127). }
+    procedure ApplyAutoSize(AClientWidth, AAutoSizeIndex: Integer;
+      AMinWidth: Integer = 0; AMaxWidth: Integer = 0);
 
     { Distribute ADeltaWidth across all visible coAutoSpring columns
       proportionally (integral bonus-pixel remainder so widths stay whole
@@ -313,8 +323,11 @@ type
           silently swallows slack it cannot use and the row comes up short;
         - integral throughout, and the last free column absorbs the rounding remainder
           so the sum is EXACT -- one pixel of gap at the right edge is precisely what a
-          user notices about a "fill the width" feature. }
-    procedure DistributeFill(AClientWidth: Integer);
+          user notices about a "fill the width" feature.
+      AMinWidth / AMaxWidth (0 = none) bound every column on top of its own limits --
+      the grid's MinColWidth / MaxColWidth (#127). }
+    procedure DistributeFill(AClientWidth: Integer; AMinWidth: Integer = 0;
+      AMaxWidth: Integer = 0);
 
     { Notify hook wired by the header in Phase B. }
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
@@ -330,7 +343,7 @@ type
     TTyHeader — header band descriptor (Phase B)
     Owned by TTyTreeView; painted by the tree (not a windowed control).
     =================================================================== }
-  TTyHeader = class(TPersistent)
+  TTyCustomHeader = class(TPersistent)
   private
     FHeight:        Integer;
     FHeightExplicit: Boolean;   { True once a host/.lfm sets Height; False = follow --header-height (density) }
@@ -342,6 +355,7 @@ type
     FImages:        TCustomImageList;
     FOptions:       TTyHeaderOptions;
     FOnChange:      TNotifyEvent;
+    FSortStored:    Boolean;
 
     procedure SetHeight(AValue: Integer);
     procedure SetColumns(AValue: TTyColumns);
@@ -353,6 +367,7 @@ type
     procedure SetOptions(AValue: TTyHeaderOptions);
     { Forwarded from FColumns.OnChange }
     procedure ColumnsChanged(Sender: TObject);
+    function IsSortStored: Boolean;
   public
     constructor Create; overload;
     { See TTyColumns.Create(AOwnerHeader, AItemClass). }
@@ -373,7 +388,12 @@ type
       band to follow the density axis reads this: while False, size the band from
       the '--header-height' token (classic 22 / modern 36); while True, honour the pin. }
     property HeightIsExplicit: Boolean read FHeightExplicit;
-  published
+    { False when the owner streams the sort under its own names and keeps these two in step
+      with them -- TTyListView's SortColumn / SortDirection (#125) -- so a form file carries
+      the sort once, under the names it always had. }
+    property SortStored: Boolean read FSortStored write FSortStored;
+    { The header's properties. TTyHeader publishes every one of them; TTyGridHeader all but
+      MainColumn (#130). }
     property Height:        Integer              read FHeight        write SetHeight        default 22;
     { The setter is what makes this collection STREAM, and it is not optional.
 
@@ -391,8 +411,8 @@ type
       what TTyStatusBar.Panels and TTyListView.Items already do. }
     property Columns:       TTyColumns       read FColumns       write SetColumns;
     property MainColumn:    Integer              read FMainColumn    write SetMainColumn    default 0;
-    property SortColumn:    Integer              read FSortColumn    write SetSortColumn    default -1;
-    property SortDirection: TTySortDirection     read FSortDirection write SetSortDirection default sdAscending;
+    property SortColumn:    Integer              read FSortColumn    write SetSortColumn    stored IsSortStored default -1;
+    property SortDirection: TTySortDirection     read FSortDirection write SetSortDirection stored IsSortStored default sdAscending;
     property AutoSizeIndex: Integer              read FAutoSizeIndex write SetAutoSizeIndex default -1;
     { Icon source for the column headers, indexed by TTyColumn.ImageIndex (or keyed by
       TTyColumn.ImageName). LCL's equivalent is TCustomHeaderControl.Images (comctrls.pp:4037).
@@ -403,6 +423,19 @@ type
       setter re-resolves every column's pending ImageIndex the moment a list is assigned. }
     property Images:        TCustomImageList     read FImages        write SetImages;
     property Options:       TTyHeaderOptions read FOptions       write SetOptions;
+  end;
+
+  { The header ListView and TreeView publish. }
+  TTyHeader = class(TTyCustomHeader)
+  published
+    property Height;
+    property Columns;
+    property MainColumn;
+    property SortColumn;
+    property SortDirection;
+    property AutoSizeIndex;
+    property Images;
+    property Options;
   end;
 
   { Names this model carried while it was tree-only. Kept so v2.2 code keeps compiling;
@@ -529,6 +562,9 @@ begin
     position cache and any wired OnChange handler see the correct defaults. }
   inherited Create(ACollection);
   FWidth            := 100;
+  if (ACollection is TTyColumns) and Assigned(TTyColumns(ACollection).FNewColumnWidth)
+     and (TTyColumns(ACollection).FNewColumnWidth() > 0) then
+    FWidth := TTyColumns(ACollection).FNewColumnWidth();   // #127
   FMinWidth         := 10;
   FMaxWidth         := 10000;
   FAlignment        := taLeftJustify;
@@ -814,13 +850,13 @@ begin
   FOwnerHeader := nil;
 end;
 
-constructor TTyColumns.Create(AOwnerHeader: TTyHeader);
+constructor TTyColumns.Create(AOwnerHeader: TTyCustomHeader);
 begin
   Create;
   FOwnerHeader := AOwnerHeader;
 end;
 
-constructor TTyColumns.Create(AOwnerHeader: TTyHeader;
+constructor TTyColumns.Create(AOwnerHeader: TTyCustomHeader;
   AItemClass: TCollectionItemClass);
 begin
   if AItemClass = nil then AItemClass := TTyColumn;
@@ -877,9 +913,9 @@ begin
         add (Count = 1), so any explicit later choice (incl. an opt-out
         MainColumn := NoColumn, or := 2) is fully respected. The assignment
         goes through SetMainColumn, which now succeeds because Count >= 1. }
-      if (Count = 1) and (GetOwner is TTyHeader) and
-         (TTyHeader(GetOwner).MainColumn = NoColumn) then
-        TTyHeader(GetOwner).MainColumn := 0;
+      if (Count = 1) and (GetOwner is TTyCustomHeader) and
+         (TTyCustomHeader(GetOwner).MainColumn = NoColumn) then
+        TTyCustomHeader(GetOwner).MainColumn := 0;
       UpdatePositions;
       DoChange;
     end;
@@ -916,8 +952,8 @@ begin
         now-out-of-range MainColumn makes RenderTo's `colIdx = MainColumn` never match
         and ALL tree chrome (expand buttons / images / main caption) silently vanishes.
         Count still includes the column being deleted, so post-delete count = Count - 1. }
-      if GetOwner is TTyHeader then
-        with TTyHeader(GetOwner) do
+      if GetOwner is TTyCustomHeader then
+        with TTyCustomHeader(GetOwner) do
         begin
           if FMainColumn = col.Index then
           begin
@@ -1166,7 +1202,22 @@ begin
   end;
 end;
 
-procedure TTyColumns.ApplyAutoSize(AClientWidth, AAutoSizeIndex: Integer);
+{ A column's limits with an owner's laid over them (0 = none); the owner's never widen them. }
+function TyColumnLo(ACol: TTyColumn; AMinWidth: Integer): Integer;
+begin
+  Result := ACol.MinWidth;
+  if (AMinWidth > 0) and (AMinWidth > Result) then Result := AMinWidth;
+end;
+
+function TyColumnHi(ACol: TTyColumn; AMinWidth, AMaxWidth: Integer): Integer;
+begin
+  Result := ACol.MaxWidth;
+  if (AMaxWidth > 0) and (AMaxWidth < Result) then Result := AMaxWidth;
+  if Result < TyColumnLo(ACol, AMinWidth) then Result := TyColumnLo(ACol, AMinWidth);
+end;
+
+procedure TTyColumns.ApplyAutoSize(AClientWidth, AAutoSizeIndex: Integer;
+  AMinWidth: Integer; AMaxWidth: Integer);
 { Set column AAutoSizeIndex.Width so that TotalWidth becomes AClientWidth.
   Delta may be negative (column is too wide). Clamped to [MinWidth, MaxWidth]. }
 var
@@ -1194,11 +1245,12 @@ begin
   end;
 
   needed := AClientWidth - others;
-  { Clamp to the column's own limits }
-  needed := Max(autoCol.FMinWidth, Min(autoCol.FMaxWidth, needed));
+  { Clamp to the column's own limits, and the owner's }
+  needed := Max(TyColumnLo(autoCol, AMinWidth),
+    Min(TyColumnHi(autoCol, AMinWidth, AMaxWidth), needed));
   { Floor at MinWidth even if client is very small }
-  if needed < autoCol.FMinWidth then
-    needed := autoCol.FMinWidth;
+  if needed < TyColumnLo(autoCol, AMinWidth) then
+    needed := TyColumnLo(autoCol, AMinWidth);
 
   if autoCol.FWidth <> needed then
   begin
@@ -1260,7 +1312,8 @@ begin
   DoChange;
 end;
 
-procedure TTyColumns.DistributeFill(AClientWidth: Integer);
+procedure TTyColumns.DistributeFill(AClientWidth: Integer; AMinWidth: Integer;
+  AMaxWidth: Integer);
 var
   free_: array of Integer;      { collection indices still free to move }
   freeCount, weightTotal, budget, i, colIndex, w, given, lastFree: Integer;
@@ -1301,8 +1354,8 @@ begin
     begin
       col := Items[free_[i]];
       w := (budget * col.FSizePriority) div weightTotal;
-      if w < col.FMinWidth then w := col.FMinWidth
-      else if w > col.FMaxWidth then w := col.FMaxWidth
+      if w < TyColumnLo(col, AMinWidth) then w := TyColumnLo(col, AMinWidth)
+      else if w > TyColumnHi(col, AMinWidth, AMaxWidth) then w := TyColumnHi(col, AMinWidth, AMaxWidth)
       else Continue;                          { still free }
       { Retire it at its clamped width and take it out of the budget. }
       if col.FWidth <> w then anyChanged := True;
@@ -1328,8 +1381,8 @@ begin
     col := Items[colIndex];
     if i = lastFree then w := budget - given
     else w := (budget * col.FSizePriority) div weightTotal;
-    if w < col.FMinWidth then w := col.FMinWidth;
-    if w > col.FMaxWidth then w := col.FMaxWidth;
+    if w < TyColumnLo(col, AMinWidth) then w := TyColumnLo(col, AMinWidth);
+    if w > TyColumnHi(col, AMinWidth, AMaxWidth) then w := TyColumnHi(col, AMinWidth, AMaxWidth);
     if col.FWidth <> w then anyChanged := True;
     col.FWidth := w;
     Inc(given, w);
@@ -1349,17 +1402,17 @@ end;
   TTyHeader
   --------------------------------------------------------------------------- }
 
-constructor TTyHeader.Create;
+constructor TTyCustomHeader.Create;
 begin
   Create(nil);
 end;
 
-constructor TTyHeader.Create(AColumnClass: TCollectionItemClass);
+constructor TTyCustomHeader.Create(AColumnClass: TCollectionItemClass);
 begin
   Create(AColumnClass, TTyColumns);
 end;
 
-constructor TTyHeader.Create(AColumnClass: TCollectionItemClass;
+constructor TTyCustomHeader.Create(AColumnClass: TCollectionItemClass;
   AColumnsClass: TTyColumnsClass);
 begin
   inherited Create;
@@ -1375,26 +1428,32 @@ begin
                      hoHeaderClickAutoSort, hoDrag];
   FColumns       := AColumnsClass.Create(Self, AColumnClass);
   FColumns.OnChange := @ColumnsChanged;
+  FSortStored    := True;
 end;
 
-destructor TTyHeader.Destroy;
+function TTyCustomHeader.IsSortStored: Boolean;
+begin
+  Result := FSortStored;
+end;
+
+destructor TTyCustomHeader.Destroy;
 begin
   FColumns.Free;
   inherited Destroy;
 end;
 
-procedure TTyHeader.ColumnsChanged(Sender: TObject);
+procedure TTyCustomHeader.ColumnsChanged(Sender: TObject);
 begin
   Changed;
 end;
 
-procedure TTyHeader.Changed;
+procedure TTyCustomHeader.Changed;
 begin
   if Assigned(FOnChange) then
     FOnChange(Self);
 end;
 
-procedure TTyHeader.SetHeight(AValue: Integer);
+procedure TTyCustomHeader.SetHeight(AValue: Integer);
 begin
   FHeightExplicit := True;
   if FHeight = AValue then Exit;
@@ -1406,13 +1465,13 @@ end;
   through the DESTINATION's item class, so a grid header stays full of TTyGridColumns
   even when assigned from a plain TTyColumns. Guarding against self-assign matters:
   TCollection.Assign would Clear first and hand back an empty collection. }
-procedure TTyHeader.SetColumns(AValue: TTyColumns);
+procedure TTyCustomHeader.SetColumns(AValue: TTyColumns);
 begin
   if AValue = FColumns then Exit;
   FColumns.Assign(AValue);
 end;
 
-procedure TTyHeader.SetMainColumn(AValue: Integer);
+procedure TTyCustomHeader.SetMainColumn(AValue: Integer);
 var
   maxCol: Integer;
 begin
@@ -1430,28 +1489,28 @@ begin
   Changed;
 end;
 
-procedure TTyHeader.SetSortColumn(AValue: Integer);
+procedure TTyCustomHeader.SetSortColumn(AValue: Integer);
 begin
   if FSortColumn = AValue then Exit;
   FSortColumn := AValue;
   Changed;
 end;
 
-procedure TTyHeader.SetSortDirection(AValue: TTySortDirection);
+procedure TTyCustomHeader.SetSortDirection(AValue: TTySortDirection);
 begin
   if FSortDirection = AValue then Exit;
   FSortDirection := AValue;
   Changed;
 end;
 
-procedure TTyHeader.SetAutoSizeIndex(AValue: Integer);
+procedure TTyCustomHeader.SetAutoSizeIndex(AValue: Integer);
 begin
   if FAutoSizeIndex = AValue then Exit;
   FAutoSizeIndex := AValue;
   Changed;
 end;
 
-procedure TTyHeader.SetImages(AValue: TCustomImageList);
+procedure TTyCustomHeader.SetImages(AValue: TCustomImageList);
 var i: Integer;
 begin
   if FImages = AValue then Exit;
@@ -1463,22 +1522,22 @@ begin
   Changed;
 end;
 
-procedure TTyHeader.SetOptions(AValue: TTyHeaderOptions);
+procedure TTyCustomHeader.SetOptions(AValue: TTyHeaderOptions);
 begin
   if FOptions = AValue then Exit;
   FOptions := AValue;
   Changed;
 end;
 
-procedure TTyHeader.Assign(ASource: TPersistent);
+procedure TTyCustomHeader.Assign(ASource: TPersistent);
 var
-  Src: TTyHeader;
+  Src: TTyCustomHeader;
   i: Integer;
   srcCol, dstCol: TTyColumn;
 begin
-  if ASource is TTyHeader then
+  if ASource is TTyCustomHeader then
   begin
-    Src := TTyHeader(ASource);
+    Src := TTyCustomHeader(ASource);
     FHeight        := Src.FHeight;
     FHeightExplicit := Src.FHeightExplicit;
     FSortColumn    := Src.FSortColumn;

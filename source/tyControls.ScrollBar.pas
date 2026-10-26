@@ -247,6 +247,10 @@ type
     function AutoHideTimerNeeded: Boolean;
     { 手动走一拍 HandleHideTimer（无头没有表）。和位置缓动的 HandleTimerTick 同路。 }
     procedure HandleHideTimerTick;
+  protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
   public
     { 设定位置并**立刻落位**,绝不缓动。
 
@@ -577,6 +581,7 @@ end;
 constructor TTyCustomScrollBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   // A scroll bar never takes the focus (CanFocus, #56), so it is not a tab stop either.
   TabStop := False;
   FKind := sbVertical;
@@ -608,6 +613,26 @@ begin
   // stays a plain constant.
   Width := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize), Font.PixelsPerInch, 96);
   Height := 160;
+end;
+
+procedure TTyCustomScrollBar.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  thick: Integer;
+begin
+  { The thickness only (--scrollbar-size), as LCL's TScrollBar: the length is the form's. }
+  thick := MulDiv(ActiveController.Metric('--scrollbar-size', TyScrollbarSize),
+    Font.PixelsPerInch, 96);
+  if FKind = sbVertical then
+  begin
+    PreferredWidth := thick;
+    PreferredHeight := 0;
+  end
+  else
+  begin
+    PreferredWidth := 0;
+    PreferredHeight := thick;
+  end;
 end;
 
 destructor TTyCustomScrollBar.Destroy;
@@ -1347,7 +1372,7 @@ begin
   // the wheel handled, honor that and do not step.
   Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
   if Result then Exit;
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   // Convention: wheel-up (WheelDelta > 0) scrolls content up -> Position
   // DECREASES by SmallChange; wheel-down increases it. (Standard scrollbar.)
   Position := Position - Sign(WheelDelta) * FSmallChange;
@@ -1928,7 +1953,7 @@ var
   Back, Fwd: TScrollCode;
   BackSign: Integer;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbLeft then
   begin
@@ -1993,7 +2018,7 @@ end;
 
 procedure TTyCustomScrollBar.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
   if FDragging then
     DragThumbTo(PosAlong(X, Y));
@@ -2019,7 +2044,7 @@ var
   Dec1, Inc1: Word;
 begin
   Result := False;
-  if (Key = 0) or not Enabled then Exit;
+  if (Key = 0) or not IsEnabled then Exit;
   if FKind = sbVertical then
   begin
     Dec1 := VK_UP;

@@ -186,10 +186,9 @@ begin
       FrameRect.Right  - P.Scale(S.Padding.Right),
       FrameRect.Bottom - P.Scale(S.Padding.Bottom)
     );
-    // Optional caption first (base behaviour), so the owner-draw handler paints on top.
-    if Caption <> '' then
-      P.DrawText(ContentRect, Caption, S.FontName, ResolveFontSize(S), S.FontWeight,
-        S.TextColor, Alignment, tlCenter, True);
+    // Optional caption first, drawn as TTyPanel draws it (#116), so the owner-draw handler
+    // paints on top.
+    DrawCaption(P, ContentRect, S, APPI);
     // Owner-draw: hand the live painter + content rect to the app, inside this paint pass.
     if Assigned(FOnPaintSurface) then
       FOnPaintSurface(Self, P, ContentRect);

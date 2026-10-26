@@ -157,6 +157,7 @@ type
     with AddItem(text, imageIndex) / Add / Insert. The image source is Images. }
   TTyCustomComboBoxEx = class(TTyCustomComboBox)
   private
+    FPaintingField: Boolean;   // the closed field takes no Indent (#120)
     FImages: TCustomImageList;
     FItemsEx: TTyComboExItems;
     { Re-entrancy guard: the two lists write to each other, and every write fires the
@@ -930,7 +931,8 @@ begin
   R := ARect;
   { Indent is a left inset in LOGICAL px, so it has to be scaled like every other
     geometry value or it would shrink on a HiDPI screen. }
-  if AItem.Indent > 0 then Inc(R.Left, P.Scale(AItem.Indent));
+  if (AItem.Indent > 0) and not FPaintingField then   // rows only, as LCL's (comboex.inc:380, #120)
+    Inc(R.Left, P.Scale(AItem.Indent));
 
   { A selected row swaps in SelectedImageIndex when it has one — that is the whole point
     of the field having a different icon once picked. }
@@ -956,7 +958,14 @@ begin
   it := ItemEx(ItemIndex);
   if it <> nil then
     { The field always shows the row as SELECTED — it is, by definition, the picked one. }
-    DrawExItem(P, ATextRect, it, True, AStyle)
+  begin
+    FPaintingField := True;
+    try
+      DrawExItem(P, ATextRect, it, True, AStyle);
+    finally
+      FPaintingField := False;
+    end;
+  end
   else
     inherited PaintFieldContent(P, ATextRect, AStyle);   // empty field -> the TextHint
 end;

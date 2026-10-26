@@ -133,6 +133,9 @@ type
     procedure AssociateEnabledChanged(Sender: TObject);
     procedure AssociateVisibleChanged(Sender: TObject);
   protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
     { Drops a dying associate. Without it the pair keeps a pointer to freed memory and the
       next step writes through it. LCL does the same (customupdown.inc:598-602). }
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
@@ -425,6 +428,7 @@ end;
 constructor TTyCustomUpDown.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   FMin := 0;
   FMax := 100;
   FPosition := 0;
@@ -441,6 +445,29 @@ begin
   FSyncing := False;
   Width := TyDensityMetric(ActiveController, 20, '--icon-size');  // button-column width follows the icon-slot density token
   Height := TyDensityHeight(ActiveController, 34);
+end;
+
+procedure TTyCustomUpDown.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  ppi, w, h: Integer;
+begin
+  { The size it is born with: a button column the icon slot wide, two buttons tall --
+    across for udoHorizontal. }
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  w := MulDiv(TyDensityMetric(ActiveController, 20, '--icon-size'), ppi, 96);
+  h := MulDiv(TyDensityHeight(ActiveController, 34), ppi, 96);
+  if FOrientation = udoHorizontal then
+  begin
+    PreferredWidth := h;
+    PreferredHeight := w;
+  end
+  else
+  begin
+    PreferredWidth := w;
+    PreferredHeight := h;
+  end;
 end;
 
 destructor TTyCustomUpDown.Destroy;
