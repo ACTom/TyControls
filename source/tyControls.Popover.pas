@@ -999,7 +999,7 @@ begin
     CornerInsetAt(sz.cx, sz.cy, APPI));
 end;
 
-function TTyCustomPopover.CornerInsetAt(AFrameW, AFrameH, APPI: Integer): Integer;
+function TTyPopover.CornerInsetAt(AFrameW, AFrameH, APPI: Integer): Integer;
 var
   S: TTyStyleSet;
   c: TTyCorners;
