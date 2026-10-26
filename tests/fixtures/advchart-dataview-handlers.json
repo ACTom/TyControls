@@ -1,0 +1,5312 @@
+{
+ "source": "ECharts 6.1 dist (echarts.js), node SSR, SVG renderer",
+ "W": 600,
+ "H": 400,
+ "scenarios": [
+  {
+   "id": "H-BOTH",
+   "note": "both functions: the table, a cell edited, Refresh reads it back",
+   "option": {
+    "animation": false,
+    "legend": {
+     "show": false
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "name": "Email",
+      "data": [
+       120,
+       132,
+       101,
+       134,
+       90
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "Ads",
+      "data": [
+       220,
+       182,
+       {
+        "value": 191,
+        "name": "peak",
+        "itemStyle": {
+         "color": "#f00"
+        }
+       },
+       234,
+       290
+      ]
+     }
+    ],
+    "toolbox": {
+     "feature": {
+      "dataView": {
+       "optionToContent": "@Table",
+       "contentToOption": "@Read"
+      }
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": {
+      "type": "open"
+     },
+     "record": {
+      "panel": {
+       "header": "Data View",
+       "custom": true,
+       "content": "<table style=\"width:100%;text-align:center\"><tbody><tr><td>Day</td><td>Email</td><td>Ads</td></tr><tr><td>Mon</td><td>120</td><td>220</td></tr><tr><td>Tue</td><td>132</td><td>182</td></tr><tr><td>Wed</td><td>101</td><td>191</td></tr><tr><td>Thu</td><td>134</td><td>234</td></tr><tr><td>Fri</td><td>90</td><td>290</td></tr></tbody></table>",
+       "textarea": null,
+       "buttons": [
+        "Refresh",
+        "Close"
+       ]
+      },
+      "calls": [
+       {
+        "fn": "Table",
+        "series": [
+         {
+          "name": "Email",
+          "data": [
+           120,
+           132,
+           101,
+           134,
+           90
+          ]
+         },
+         {
+          "name": "Ads",
+          "data": [
+           220,
+           182,
+           {
+            "value": 191,
+            "name": "peak",
+            "itemStyle": {
+             "color": "#f00"
+            }
+           },
+           234,
+           290
+          ]
+         }
+        ],
+        "xAxisData": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu",
+         "Fri"
+        ]
+       }
+      ],
+      "actions": [],
+      "events": [],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          120,
+          132,
+          101,
+          134,
+          90
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          220,
+          182,
+          {
+           "value": 191,
+           "name": "peak",
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          234,
+          290
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    },
+    {
+     "step": {
+      "type": "cell",
+      "row": 3,
+      "col": 1,
+      "value": "105"
+     },
+     "record": {
+      "panel": {
+       "header": "Data View",
+       "custom": true,
+       "content": "<table style=\"width:100%;text-align:center\"><tbody><tr><td>Day</td><td>Email</td><td>Ads</td></tr><tr><td>Mon</td><td>120</td><td>220</td></tr><tr><td>Tue</td><td>132</td><td>182</td></tr><tr><td>Wed</td><td>105</td><td>191</td></tr><tr><td>Thu</td><td>134</td><td>234</td></tr><tr><td>Fri</td><td>90</td><td>290</td></tr></tbody></table>",
+       "textarea": null,
+       "buttons": [
+        "Refresh",
+        "Close"
+       ]
+      },
+      "calls": [],
+      "actions": [],
+      "events": [],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          120,
+          132,
+          101,
+          134,
+          90
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          220,
+          182,
+          {
+           "value": 191,
+           "name": "peak",
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          234,
+          290
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    },
+    {
+     "step": {
+      "type": "button",
+      "button": "Refresh"
+     },
+     "record": {
+      "panel": null,
+      "calls": [
+       {
+        "fn": "Read",
+        "rows": [
+         [
+          "Day",
+          "Email",
+          "Ads"
+         ],
+         [
+          "Mon",
+          "120",
+          "220"
+         ],
+         [
+          "Tue",
+          "132",
+          "182"
+         ],
+         [
+          "Wed",
+          "105",
+          "191"
+         ],
+         [
+          "Thu",
+          "134",
+          "234"
+         ],
+         [
+          "Fri",
+          "90",
+          "290"
+         ]
+        ],
+        "content": "<table style=\"width:100%;text-align:center\"><tbody><tr><td>Day</td><td>Email</td><td>Ads</td></tr><tr><td>Mon</td><td>120</td><td>220</td></tr><tr><td>Tue</td><td>132</td><td>182</td></tr><tr><td>Wed</td><td>105</td><td>191</td></tr><tr><td>Thu</td><td>134</td><td>234</td></tr><tr><td>Fri</td><td>90</td><td>290</td></tr></tbody></table>",
+        "series": [
+         {
+          "name": "Email",
+          "data": [
+           120,
+           132,
+           101,
+           134,
+           90
+          ]
+         },
+         {
+          "name": "Ads",
+          "data": [
+           220,
+           182,
+           {
+            "value": 191,
+            "name": "peak",
+            "itemStyle": {
+             "color": "#f00"
+            }
+           },
+           234,
+           290
+          ]
+         }
+        ],
+        "xAxisData": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu",
+         "Fri"
+        ]
+       }
+      ],
+      "actions": [
+       {
+        "type": "changeDataView",
+        "newOption": {
+         "series": [
+          {
+           "name": "Email",
+           "data": [
+            121,
+            133,
+            106,
+            135,
+            91
+           ]
+          },
+          {
+           "name": "Ads",
+           "data": [
+            221,
+            183,
+            192,
+            235,
+            291
+           ]
+          }
+         ]
+        }
+       }
+      ],
+      "events": [
+       {
+        "series": [
+         {
+          "name": "Email",
+          "data": [
+           121,
+           133,
+           106,
+           135,
+           91
+          ]
+         },
+         {
+          "name": "Ads",
+          "data": [
+           221,
+           183,
+           192,
+           235,
+           291
+          ]
+         }
+        ]
+       }
+      ],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          121,
+          133,
+          106,
+          135,
+          91
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          221,
+          183,
+          {
+           "value": 192,
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          235,
+          291
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "H-BOTH-CLOSE",
+   "note": "both functions, Close: nothing read back",
+   "option": {
+    "animation": false,
+    "legend": {
+     "show": false
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "name": "Email",
+      "data": [
+       120,
+       132,
+       101,
+       134,
+       90
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "Ads",
+      "data": [
+       220,
+       182,
+       {
+        "value": 191,
+        "name": "peak",
+        "itemStyle": {
+         "color": "#f00"
+        }
+       },
+       234,
+       290
+      ]
+     }
+    ],
+    "toolbox": {
+     "feature": {
+      "dataView": {
+       "optionToContent": "@Table",
+       "contentToOption": "@Read"
+      }
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": {
+      "type": "open"
+     },
+     "record": {
+      "panel": {
+       "header": "Data View",
+       "custom": true,
+       "content": "<table style=\"width:100%;text-align:center\"><tbody><tr><td>Day</td><td>Email</td><td>Ads</td></tr><tr><td>Mon</td><td>120</td><td>220</td></tr><tr><td>Tue</td><td>132</td><td>182</td></tr><tr><td>Wed</td><td>101</td><td>191</td></tr><tr><td>Thu</td><td>134</td><td>234</td></tr><tr><td>Fri</td><td>90</td><td>290</td></tr></tbody></table>",
+       "textarea": null,
+       "buttons": [
+        "Refresh",
+        "Close"
+       ]
+      },
+      "calls": [
+       {
+        "fn": "Table",
+        "series": [
+         {
+          "name": "Email",
+          "data": [
+           120,
+           132,
+           101,
+           134,
+           90
+          ]
+         },
+         {
+          "name": "Ads",
+          "data": [
+           220,
+           182,
+           {
+            "value": 191,
+            "name": "peak",
+            "itemStyle": {
+             "color": "#f00"
+            }
+           },
+           234,
+           290
+          ]
+         }
+        ],
+        "xAxisData": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu",
+         "Fri"
+        ]
+       }
+      ],
+      "actions": [],
+      "events": [],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          120,
+          132,
+          101,
+          134,
+          90
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          220,
+          182,
+          {
+           "value": 191,
+           "name": "peak",
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          234,
+          290
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    },
+    {
+     "step": {
+      "type": "button",
+      "button": "Close"
+     },
+     "record": {
+      "panel": null,
+      "calls": [],
+      "actions": [],
+      "events": [],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          120,
+          132,
+          101,
+          134,
+          90
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          220,
+          182,
+          {
+           "value": 191,
+           "name": "peak",
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          234,
+          290
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "H-HEAD",
+   "note": "a table with a thead of th, a caption and a paragraph after it",
+   "option": {
+    "animation": false,
+    "legend": {
+     "show": false
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "name": "Email",
+      "data": [
+       120,
+       132,
+       101,
+       134,
+       90
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "Ads",
+      "data": [
+       220,
+       182,
+       {
+        "value": 191,
+        "name": "peak",
+        "itemStyle": {
+         "color": "#f00"
+        }
+       },
+       234,
+       290
+      ]
+     }
+    ],
+    "toolbox": {
+     "feature": {
+      "dataView": {
+       "optionToContent": "@HeadTable",
+       "contentToOption": "@Read"
+      }
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": {
+      "type": "open"
+     },
+     "record": {
+      "panel": {
+       "header": "Data View",
+       "custom": true,
+       "content": "<table><caption>Sales</caption><thead><tr><th>Day</th><th>Email</th><th>Ads</th></tr></thead><tbody><tr><td>Mon</td><td>120</td><td>220</td></tr><tr><td>Tue</td><td>132</td><td>182</td></tr><tr><td>Wed</td><td>101</td><td>191</td></tr><tr><td>Thu</td><td>134</td><td>234</td></tr><tr><td>Fri</td><td>90</td><td>290</td></tr></tbody></table><p>Units: <b>k</b></p>",
+       "textarea": null,
+       "buttons": [
+        "Refresh",
+        "Close"
+       ]
+      },
+      "calls": [
+       {
+        "fn": "HeadTable",
+        "series": [
+         {
+          "name": "Email",
+          "data": [
+           120,
+           132,
+           101,
+           134,
+           90
+          ]
+         },
+         {
+          "name": "Ads",
+          "data": [
+           220,
+           182,
+           {
+            "value": 191,
+            "name": "peak",
+            "itemStyle": {
+             "color": "#f00"
+            }
+           },
+           234,
+           290
+          ]
+         }
+        ],
+        "xAxisData": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu",
+         "Fri"
+        ]
+       }
+      ],
+      "actions": [],
+      "events": [],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          120,
+          132,
+          101,
+          134,
+          90
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          220,
+          182,
+          {
+           "value": 191,
+           "name": "peak",
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          234,
+          290
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    },
+    {
+     "step": {
+      "type": "button",
+      "button": "Refresh"
+     },
+     "record": {
+      "panel": null,
+      "calls": [
+       {
+        "fn": "Read",
+        "rows": [
+         [
+          "Day",
+          "Email",
+          "Ads"
+         ],
+         [
+          "Mon",
+          "120",
+          "220"
+         ],
+         [
+          "Tue",
+          "132",
+          "182"
+         ],
+         [
+          "Wed",
+          "101",
+          "191"
+         ],
+         [
+          "Thu",
+          "134",
+          "234"
+         ],
+         [
+          "Fri",
+          "90",
+          "290"
+         ]
+        ],
+        "content": "<table><caption>Sales</caption><thead><tr><th>Day</th><th>Email</th><th>Ads</th></tr></thead><tbody><tr><td>Mon</td><td>120</td><td>220</td></tr><tr><td>Tue</td><td>132</td><td>182</td></tr><tr><td>Wed</td><td>101</td><td>191</td></tr><tr><td>Thu</td><td>134</td><td>234</td></tr><tr><td>Fri</td><td>90</td><td>290</td></tr></tbody></table><p>Units: <b>k</b></p>",
+        "series": [
+         {
+          "name": "Email",
+          "data": [
+           120,
+           132,
+           101,
+           134,
+           90
+          ]
+         },
+         {
+          "name": "Ads",
+          "data": [
+           220,
+           182,
+           {
+            "value": 191,
+            "name": "peak",
+            "itemStyle": {
+             "color": "#f00"
+            }
+           },
+           234,
+           290
+          ]
+         }
+        ],
+        "xAxisData": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu",
+         "Fri"
+        ]
+       }
+      ],
+      "actions": [
+       {
+        "type": "changeDataView",
+        "newOption": {
+         "series": [
+          {
+           "name": "Email",
+           "data": [
+            121,
+            133,
+            102,
+            135,
+            91
+           ]
+          },
+          {
+           "name": "Ads",
+           "data": [
+            221,
+            183,
+            192,
+            235,
+            291
+           ]
+          }
+         ]
+        }
+       }
+      ],
+      "events": [
+       {
+        "series": [
+         {
+          "name": "Email",
+          "data": [
+           121,
+           133,
+           102,
+           135,
+           91
+          ]
+         },
+         {
+          "name": "Ads",
+          "data": [
+           221,
+           183,
+           192,
+           235,
+           291
+          ]
+         }
+        ]
+       }
+      ],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          121,
+          133,
+          102,
+          135,
+          91
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          221,
+          183,
+          {
+           "value": 192,
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          235,
+          291
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "H-READONLY",
+   "note": "both functions and readOnly: no Refresh button",
+   "option": {
+    "animation": false,
+    "legend": {
+     "show": false
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "name": "Email",
+      "data": [
+       120,
+       132,
+       101,
+       134,
+       90
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "Ads",
+      "data": [
+       220,
+       182,
+       {
+        "value": 191,
+        "name": "peak",
+        "itemStyle": {
+         "color": "#f00"
+        }
+       },
+       234,
+       290
+      ]
+     }
+    ],
+    "toolbox": {
+     "feature": {
+      "dataView": {
+       "optionToContent": "@Table",
+       "contentToOption": "@Read",
+       "readOnly": true
+      }
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": {
+      "type": "open"
+     },
+     "record": {
+      "panel": {
+       "header": "Data View",
+       "custom": true,
+       "content": "<table style=\"width:100%;text-align:center\"><tbody><tr><td>Day</td><td>Email</td><td>Ads</td></tr><tr><td>Mon</td><td>120</td><td>220</td></tr><tr><td>Tue</td><td>132</td><td>182</td></tr><tr><td>Wed</td><td>101</td><td>191</td></tr><tr><td>Thu</td><td>134</td><td>234</td></tr><tr><td>Fri</td><td>90</td><td>290</td></tr></tbody></table>",
+       "textarea": null,
+       "buttons": [
+        "Close"
+       ]
+      },
+      "calls": [
+       {
+        "fn": "Table",
+        "series": [
+         {
+          "name": "Email",
+          "data": [
+           120,
+           132,
+           101,
+           134,
+           90
+          ]
+         },
+         {
+          "name": "Ads",
+          "data": [
+           220,
+           182,
+           {
+            "value": 191,
+            "name": "peak",
+            "itemStyle": {
+             "color": "#f00"
+            }
+           },
+           234,
+           290
+          ]
+         }
+        ],
+        "xAxisData": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu",
+         "Fri"
+        ]
+       }
+      ],
+      "actions": [],
+      "events": [],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          120,
+          132,
+          101,
+          134,
+          90
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          220,
+          182,
+          {
+           "value": 191,
+           "name": "peak",
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          234,
+          290
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    },
+    {
+     "step": {
+      "type": "button",
+      "button": "Close"
+     },
+     "record": {
+      "panel": null,
+      "calls": [],
+      "actions": [],
+      "events": [],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          120,
+          132,
+          101,
+          134,
+          90
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          220,
+          182,
+          {
+           "value": 191,
+           "name": "peak",
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          234,
+          290
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "H-LANG",
+   "note": "both functions and the feature's own lang",
+   "option": {
+    "animation": false,
+    "legend": {
+     "show": false
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "name": "Email",
+      "data": [
+       120,
+       132,
+       101,
+       134,
+       90
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "Ads",
+      "data": [
+       220,
+       182,
+       {
+        "value": 191,
+        "name": "peak",
+        "itemStyle": {
+         "color": "#f00"
+        }
+       },
+       234,
+       290
+      ]
+     }
+    ],
+    "toolbox": {
+     "feature": {
+      "dataView": {
+       "optionToContent": "@Table",
+       "contentToOption": "@Read",
+       "lang": [
+        "Mine",
+        "Shut",
+        "Apply"
+       ]
+      }
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": {
+      "type": "open"
+     },
+     "record": {
+      "panel": {
+       "header": "Mine",
+       "custom": true,
+       "content": "<table style=\"width:100%;text-align:center\"><tbody><tr><td>Day</td><td>Email</td><td>Ads</td></tr><tr><td>Mon</td><td>120</td><td>220</td></tr><tr><td>Tue</td><td>132</td><td>182</td></tr><tr><td>Wed</td><td>101</td><td>191</td></tr><tr><td>Thu</td><td>134</td><td>234</td></tr><tr><td>Fri</td><td>90</td><td>290</td></tr></tbody></table>",
+       "textarea": null,
+       "buttons": [
+        "Apply",
+        "Shut"
+       ]
+      },
+      "calls": [
+       {
+        "fn": "Table",
+        "series": [
+         {
+          "name": "Email",
+          "data": [
+           120,
+           132,
+           101,
+           134,
+           90
+          ]
+         },
+         {
+          "name": "Ads",
+          "data": [
+           220,
+           182,
+           {
+            "value": 191,
+            "name": "peak",
+            "itemStyle": {
+             "color": "#f00"
+            }
+           },
+           234,
+           290
+          ]
+         }
+        ],
+        "xAxisData": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu",
+         "Fri"
+        ]
+       }
+      ],
+      "actions": [],
+      "events": [],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          120,
+          132,
+          101,
+          134,
+          90
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          220,
+          182,
+          {
+           "value": 191,
+           "name": "peak",
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          234,
+          290
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    },
+    {
+     "step": {
+      "type": "button",
+      "button": "Apply"
+     },
+     "record": {
+      "panel": null,
+      "calls": [
+       {
+        "fn": "Read",
+        "rows": [
+         [
+          "Day",
+          "Email",
+          "Ads"
+         ],
+         [
+          "Mon",
+          "120",
+          "220"
+         ],
+         [
+          "Tue",
+          "132",
+          "182"
+         ],
+         [
+          "Wed",
+          "101",
+          "191"
+         ],
+         [
+          "Thu",
+          "134",
+          "234"
+         ],
+         [
+          "Fri",
+          "90",
+          "290"
+         ]
+        ],
+        "content": "<table style=\"width:100%;text-align:center\"><tbody><tr><td>Day</td><td>Email</td><td>Ads</td></tr><tr><td>Mon</td><td>120</td><td>220</td></tr><tr><td>Tue</td><td>132</td><td>182</td></tr><tr><td>Wed</td><td>101</td><td>191</td></tr><tr><td>Thu</td><td>134</td><td>234</td></tr><tr><td>Fri</td><td>90</td><td>290</td></tr></tbody></table>",
+        "series": [
+         {
+          "name": "Email",
+          "data": [
+           120,
+           132,
+           101,
+           134,
+           90
+          ]
+         },
+         {
+          "name": "Ads",
+          "data": [
+           220,
+           182,
+           {
+            "value": 191,
+            "name": "peak",
+            "itemStyle": {
+             "color": "#f00"
+            }
+           },
+           234,
+           290
+          ]
+         }
+        ],
+        "xAxisData": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu",
+         "Fri"
+        ]
+       }
+      ],
+      "actions": [
+       {
+        "type": "changeDataView",
+        "newOption": {
+         "series": [
+          {
+           "name": "Email",
+           "data": [
+            121,
+            133,
+            102,
+            135,
+            91
+           ]
+          },
+          {
+           "name": "Ads",
+           "data": [
+            221,
+            183,
+            192,
+            235,
+            291
+           ]
+          }
+         ]
+        }
+       }
+      ],
+      "events": [
+       {
+        "series": [
+         {
+          "name": "Email",
+          "data": [
+           121,
+           133,
+           102,
+           135,
+           91
+          ]
+         },
+         {
+          "name": "Ads",
+          "data": [
+           221,
+           183,
+           192,
+           235,
+           291
+          ]
+         }
+        ]
+       }
+      ],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          121,
+          133,
+          102,
+          135,
+          91
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          221,
+          183,
+          {
+           "value": 192,
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          235,
+          291
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "H-ONLY-O2C",
+   "note": "optionToContent alone: Refresh only closes",
+   "option": {
+    "animation": false,
+    "legend": {
+     "show": false
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "name": "Email",
+      "data": [
+       120,
+       132,
+       101,
+       134,
+       90
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "Ads",
+      "data": [
+       220,
+       182,
+       {
+        "value": 191,
+        "name": "peak",
+        "itemStyle": {
+         "color": "#f00"
+        }
+       },
+       234,
+       290
+      ]
+     }
+    ],
+    "toolbox": {
+     "feature": {
+      "dataView": {
+       "optionToContent": "@Table"
+      }
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": {
+      "type": "open"
+     },
+     "record": {
+      "panel": {
+       "header": "Data View",
+       "custom": true,
+       "content": "<table style=\"width:100%;text-align:center\"><tbody><tr><td>Day</td><td>Email</td><td>Ads</td></tr><tr><td>Mon</td><td>120</td><td>220</td></tr><tr><td>Tue</td><td>132</td><td>182</td></tr><tr><td>Wed</td><td>101</td><td>191</td></tr><tr><td>Thu</td><td>134</td><td>234</td></tr><tr><td>Fri</td><td>90</td><td>290</td></tr></tbody></table>",
+       "textarea": null,
+       "buttons": [
+        "Refresh",
+        "Close"
+       ]
+      },
+      "calls": [
+       {
+        "fn": "Table",
+        "series": [
+         {
+          "name": "Email",
+          "data": [
+           120,
+           132,
+           101,
+           134,
+           90
+          ]
+         },
+         {
+          "name": "Ads",
+          "data": [
+           220,
+           182,
+           {
+            "value": 191,
+            "name": "peak",
+            "itemStyle": {
+             "color": "#f00"
+            }
+           },
+           234,
+           290
+          ]
+         }
+        ],
+        "xAxisData": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu",
+         "Fri"
+        ]
+       }
+      ],
+      "actions": [],
+      "events": [],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          120,
+          132,
+          101,
+          134,
+          90
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          220,
+          182,
+          {
+           "value": 191,
+           "name": "peak",
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          234,
+          290
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    },
+    {
+     "step": {
+      "type": "button",
+      "button": "Refresh"
+     },
+     "record": {
+      "panel": null,
+      "calls": [],
+      "actions": [],
+      "events": [],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          120,
+          132,
+          101,
+          134,
+          90
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          220,
+          182,
+          {
+           "value": 191,
+           "name": "peak",
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          234,
+          290
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "H-ONLY-C2O",
+   "note": "contentToOption alone: the textarea, edited; Refresh only closes and calls nothing",
+   "option": {
+    "animation": false,
+    "legend": {
+     "show": false
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "name": "Email",
+      "data": [
+       120,
+       132,
+       101,
+       134,
+       90
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "Ads",
+      "data": [
+       220,
+       182,
+       {
+        "value": 191,
+        "name": "peak",
+        "itemStyle": {
+         "color": "#f00"
+        }
+       },
+       234,
+       290
+      ]
+     }
+    ],
+    "toolbox": {
+     "feature": {
+      "dataView": {
+       "contentToOption": "@Read"
+      }
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": {
+      "type": "open"
+     },
+     "record": {
+      "panel": {
+       "header": "Data View",
+       "custom": false,
+       "content": null,
+       "textarea": {
+        "value": " \tEmail\tAds\nMon\t120\t220\nTue\t132\t182\nWed\t101\t191\nThu\t134\t234\nFri\t90\t290",
+        "readOnly": false
+       },
+       "buttons": [
+        "Refresh",
+        "Close"
+       ]
+      },
+      "calls": [],
+      "actions": [],
+      "events": [],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          120,
+          132,
+          101,
+          134,
+          90
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          220,
+          182,
+          {
+           "value": 191,
+           "name": "peak",
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          234,
+          290
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    },
+    {
+     "step": {
+      "type": "text",
+      "value": " \tEmail\tAds\nMon\t1\t2"
+     },
+     "record": {
+      "panel": {
+       "header": "Data View",
+       "custom": false,
+       "content": null,
+       "textarea": {
+        "value": " \tEmail\tAds\nMon\t1\t2",
+        "readOnly": false
+       },
+       "buttons": [
+        "Refresh",
+        "Close"
+       ]
+      },
+      "calls": [],
+      "actions": [],
+      "events": [],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          120,
+          132,
+          101,
+          134,
+          90
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          220,
+          182,
+          {
+           "value": 191,
+           "name": "peak",
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          234,
+          290
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    },
+    {
+     "step": {
+      "type": "button",
+      "button": "Refresh"
+     },
+     "record": {
+      "panel": null,
+      "calls": [],
+      "actions": [],
+      "events": [],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          120,
+          132,
+          101,
+          134,
+          90
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          220,
+          182,
+          {
+           "value": 191,
+           "name": "peak",
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          234,
+          290
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "H-UNDEF",
+   "note": "contentToOption answers undefined: no action",
+   "option": {
+    "animation": false,
+    "legend": {
+     "show": false
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "name": "Email",
+      "data": [
+       120,
+       132,
+       101,
+       134,
+       90
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "Ads",
+      "data": [
+       220,
+       182,
+       {
+        "value": 191,
+        "name": "peak",
+        "itemStyle": {
+         "color": "#f00"
+        }
+       },
+       234,
+       290
+      ]
+     }
+    ],
+    "toolbox": {
+     "feature": {
+      "dataView": {
+       "optionToContent": "@Table",
+       "contentToOption": "@Nothing"
+      }
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": {
+      "type": "open"
+     },
+     "record": {
+      "panel": {
+       "header": "Data View",
+       "custom": true,
+       "content": "<table style=\"width:100%;text-align:center\"><tbody><tr><td>Day</td><td>Email</td><td>Ads</td></tr><tr><td>Mon</td><td>120</td><td>220</td></tr><tr><td>Tue</td><td>132</td><td>182</td></tr><tr><td>Wed</td><td>101</td><td>191</td></tr><tr><td>Thu</td><td>134</td><td>234</td></tr><tr><td>Fri</td><td>90</td><td>290</td></tr></tbody></table>",
+       "textarea": null,
+       "buttons": [
+        "Refresh",
+        "Close"
+       ]
+      },
+      "calls": [
+       {
+        "fn": "Table",
+        "series": [
+         {
+          "name": "Email",
+          "data": [
+           120,
+           132,
+           101,
+           134,
+           90
+          ]
+         },
+         {
+          "name": "Ads",
+          "data": [
+           220,
+           182,
+           {
+            "value": 191,
+            "name": "peak",
+            "itemStyle": {
+             "color": "#f00"
+            }
+           },
+           234,
+           290
+          ]
+         }
+        ],
+        "xAxisData": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu",
+         "Fri"
+        ]
+       }
+      ],
+      "actions": [],
+      "events": [],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          120,
+          132,
+          101,
+          134,
+          90
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          220,
+          182,
+          {
+           "value": 191,
+           "name": "peak",
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          234,
+          290
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    },
+    {
+     "step": {
+      "type": "button",
+      "button": "Refresh"
+     },
+     "record": {
+      "panel": null,
+      "calls": [
+       {
+        "fn": "Nothing",
+        "rows": [
+         [
+          "Day",
+          "Email",
+          "Ads"
+         ],
+         [
+          "Mon",
+          "120",
+          "220"
+         ],
+         [
+          "Tue",
+          "132",
+          "182"
+         ],
+         [
+          "Wed",
+          "101",
+          "191"
+         ],
+         [
+          "Thu",
+          "134",
+          "234"
+         ],
+         [
+          "Fri",
+          "90",
+          "290"
+         ]
+        ],
+        "content": "<table style=\"width:100%;text-align:center\"><tbody><tr><td>Day</td><td>Email</td><td>Ads</td></tr><tr><td>Mon</td><td>120</td><td>220</td></tr><tr><td>Tue</td><td>132</td><td>182</td></tr><tr><td>Wed</td><td>101</td><td>191</td></tr><tr><td>Thu</td><td>134</td><td>234</td></tr><tr><td>Fri</td><td>90</td><td>290</td></tr></tbody></table>",
+        "series": [
+         {
+          "name": "Email",
+          "data": [
+           120,
+           132,
+           101,
+           134,
+           90
+          ]
+         },
+         {
+          "name": "Ads",
+          "data": [
+           220,
+           182,
+           {
+            "value": 191,
+            "name": "peak",
+            "itemStyle": {
+             "color": "#f00"
+            }
+           },
+           234,
+           290
+          ]
+         }
+        ],
+        "xAxisData": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu",
+         "Fri"
+        ]
+       }
+      ],
+      "actions": [],
+      "events": [],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          120,
+          132,
+          101,
+          134,
+          90
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          220,
+          182,
+          {
+           "value": 191,
+           "name": "peak",
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          234,
+          290
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "H-THROW",
+   "note": "contentToOption throws: Data view format error",
+   "option": {
+    "animation": false,
+    "legend": {
+     "show": false
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "name": "Email",
+      "data": [
+       120,
+       132,
+       101,
+       134,
+       90
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "Ads",
+      "data": [
+       220,
+       182,
+       {
+        "value": 191,
+        "name": "peak",
+        "itemStyle": {
+         "color": "#f00"
+        }
+       },
+       234,
+       290
+      ]
+     }
+    ],
+    "toolbox": {
+     "feature": {
+      "dataView": {
+       "optionToContent": "@Table",
+       "contentToOption": "@Boom"
+      }
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": {
+      "type": "open"
+     },
+     "record": {
+      "panel": {
+       "header": "Data View",
+       "custom": true,
+       "content": "<table style=\"width:100%;text-align:center\"><tbody><tr><td>Day</td><td>Email</td><td>Ads</td></tr><tr><td>Mon</td><td>120</td><td>220</td></tr><tr><td>Tue</td><td>132</td><td>182</td></tr><tr><td>Wed</td><td>101</td><td>191</td></tr><tr><td>Thu</td><td>134</td><td>234</td></tr><tr><td>Fri</td><td>90</td><td>290</td></tr></tbody></table>",
+       "textarea": null,
+       "buttons": [
+        "Refresh",
+        "Close"
+       ]
+      },
+      "calls": [
+       {
+        "fn": "Table",
+        "series": [
+         {
+          "name": "Email",
+          "data": [
+           120,
+           132,
+           101,
+           134,
+           90
+          ]
+         },
+         {
+          "name": "Ads",
+          "data": [
+           220,
+           182,
+           {
+            "value": 191,
+            "name": "peak",
+            "itemStyle": {
+             "color": "#f00"
+            }
+           },
+           234,
+           290
+          ]
+         }
+        ],
+        "xAxisData": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu",
+         "Fri"
+        ]
+       }
+      ],
+      "actions": [],
+      "events": [],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          120,
+          132,
+          101,
+          134,
+          90
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          220,
+          182,
+          {
+           "value": 191,
+           "name": "peak",
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          234,
+          290
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    },
+    {
+     "step": {
+      "type": "button",
+      "button": "Refresh"
+     },
+     "record": {
+      "panel": null,
+      "calls": [
+       {
+        "fn": "Boom",
+        "rows": [
+         [
+          "Day",
+          "Email",
+          "Ads"
+         ],
+         [
+          "Mon",
+          "120",
+          "220"
+         ],
+         [
+          "Tue",
+          "132",
+          "182"
+         ],
+         [
+          "Wed",
+          "101",
+          "191"
+         ],
+         [
+          "Thu",
+          "134",
+          "234"
+         ],
+         [
+          "Fri",
+          "90",
+          "290"
+         ]
+        ],
+        "content": "<table style=\"width:100%;text-align:center\"><tbody><tr><td>Day</td><td>Email</td><td>Ads</td></tr><tr><td>Mon</td><td>120</td><td>220</td></tr><tr><td>Tue</td><td>132</td><td>182</td></tr><tr><td>Wed</td><td>101</td><td>191</td></tr><tr><td>Thu</td><td>134</td><td>234</td></tr><tr><td>Fri</td><td>90</td><td>290</td></tr></tbody></table>",
+        "series": [
+         {
+          "name": "Email",
+          "data": [
+           120,
+           132,
+           101,
+           134,
+           90
+          ]
+         },
+         {
+          "name": "Ads",
+          "data": [
+           220,
+           182,
+           {
+            "value": 191,
+            "name": "peak",
+            "itemStyle": {
+             "color": "#f00"
+            }
+           },
+           234,
+           290
+          ]
+         }
+        ],
+        "xAxisData": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu",
+         "Fri"
+        ]
+       }
+      ],
+      "actions": [],
+      "events": [],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          120,
+          132,
+          101,
+          134,
+          90
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          220,
+          182,
+          {
+           "value": 191,
+           "name": "peak",
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          234,
+          290
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": "Data view format error Error: bad cell"
+     }
+    }
+   ]
+  },
+  {
+   "id": "H-FULL",
+   "note": "contentToOption answers the whole option it was handed, changed",
+   "option": {
+    "animation": false,
+    "legend": {
+     "show": false
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "name": "Email",
+      "data": [
+       120,
+       132,
+       101,
+       134,
+       90
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "Ads",
+      "data": [
+       220,
+       182,
+       {
+        "value": 191,
+        "name": "peak",
+        "itemStyle": {
+         "color": "#f00"
+        }
+       },
+       234,
+       290
+      ]
+     }
+    ],
+    "toolbox": {
+     "feature": {
+      "dataView": {
+       "optionToContent": "@Table",
+       "contentToOption": "@ReadFull"
+      }
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": {
+      "type": "open"
+     },
+     "record": {
+      "panel": {
+       "header": "Data View",
+       "custom": true,
+       "content": "<table style=\"width:100%;text-align:center\"><tbody><tr><td>Day</td><td>Email</td><td>Ads</td></tr><tr><td>Mon</td><td>120</td><td>220</td></tr><tr><td>Tue</td><td>132</td><td>182</td></tr><tr><td>Wed</td><td>101</td><td>191</td></tr><tr><td>Thu</td><td>134</td><td>234</td></tr><tr><td>Fri</td><td>90</td><td>290</td></tr></tbody></table>",
+       "textarea": null,
+       "buttons": [
+        "Refresh",
+        "Close"
+       ]
+      },
+      "calls": [
+       {
+        "fn": "Table",
+        "series": [
+         {
+          "name": "Email",
+          "data": [
+           120,
+           132,
+           101,
+           134,
+           90
+          ]
+         },
+         {
+          "name": "Ads",
+          "data": [
+           220,
+           182,
+           {
+            "value": 191,
+            "name": "peak",
+            "itemStyle": {
+             "color": "#f00"
+            }
+           },
+           234,
+           290
+          ]
+         }
+        ],
+        "xAxisData": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu",
+         "Fri"
+        ]
+       }
+      ],
+      "actions": [],
+      "events": [],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          120,
+          132,
+          101,
+          134,
+          90
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          220,
+          182,
+          {
+           "value": 191,
+           "name": "peak",
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          234,
+          290
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    },
+    {
+     "step": {
+      "type": "button",
+      "button": "Refresh"
+     },
+     "record": {
+      "panel": null,
+      "calls": [
+       {
+        "fn": "ReadFull",
+        "rows": [
+         [
+          "Day",
+          "Email",
+          "Ads"
+         ],
+         [
+          "Mon",
+          "120",
+          "220"
+         ],
+         [
+          "Tue",
+          "132",
+          "182"
+         ],
+         [
+          "Wed",
+          "101",
+          "191"
+         ],
+         [
+          "Thu",
+          "134",
+          "234"
+         ],
+         [
+          "Fri",
+          "90",
+          "290"
+         ]
+        ],
+        "content": "<table style=\"width:100%;text-align:center\"><tbody><tr><td>Day</td><td>Email</td><td>Ads</td></tr><tr><td>Mon</td><td>120</td><td>220</td></tr><tr><td>Tue</td><td>132</td><td>182</td></tr><tr><td>Wed</td><td>101</td><td>191</td></tr><tr><td>Thu</td><td>134</td><td>234</td></tr><tr><td>Fri</td><td>90</td><td>290</td></tr></tbody></table>",
+        "series": [
+         {
+          "name": "Email",
+          "data": [
+           120,
+           132,
+           101,
+           134,
+           90
+          ]
+         },
+         {
+          "name": "Ads",
+          "data": [
+           220,
+           182,
+           {
+            "value": 191,
+            "name": "peak",
+            "itemStyle": {
+             "color": "#f00"
+            }
+           },
+           234,
+           290
+          ]
+         }
+        ],
+        "xAxisData": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu",
+         "Fri"
+        ]
+       }
+      ],
+      "actions": [
+       {
+        "type": "changeDataView",
+        "newOption": {
+         "animation": false,
+         "darkMode": "auto",
+         "colorBy": "series",
+         "color": [
+          "#5070dd",
+          "#b6d634",
+          "#505372",
+          "#ff994d",
+          "#0ca8df",
+          "#ffd10a",
+          "#fb628b",
+          "#785db0",
+          "#3fbe95"
+         ],
+         "gradientColor": [
+          "rgba(212,220,247,1)",
+          "#5070dd"
+         ],
+         "aria": {
+          "decal": {
+           "decals": [
+            {
+             "color": "rgba(0, 0, 0, 0.2)",
+             "dashArrayX": [
+              1,
+              0
+             ],
+             "dashArrayY": [
+              2,
+              5
+             ],
+             "symbolSize": 1,
+             "rotation": 0.5235987755982988
+            },
+            {
+             "color": "rgba(0, 0, 0, 0.2)",
+             "symbol": "circle",
+             "dashArrayX": [
+              [
+               8,
+               8
+              ],
+              [
+               0,
+               8,
+               8,
+               0
+              ]
+             ],
+             "dashArrayY": [
+              6,
+              0
+             ],
+             "symbolSize": 0.8
+            },
+            {
+             "color": "rgba(0, 0, 0, 0.2)",
+             "dashArrayX": [
+              1,
+              0
+             ],
+             "dashArrayY": [
+              4,
+              3
+             ],
+             "rotation": -0.7853981633974483
+            },
+            {
+             "color": "rgba(0, 0, 0, 0.2)",
+             "dashArrayX": [
+              [
+               6,
+               6
+              ],
+              [
+               0,
+               6,
+               6,
+               0
+              ]
+             ],
+             "dashArrayY": [
+              6,
+              0
+             ]
+            },
+            {
+             "color": "rgba(0, 0, 0, 0.2)",
+             "dashArrayX": [
+              [
+               1,
+               0
+              ],
+              [
+               1,
+               6
+              ]
+             ],
+             "dashArrayY": [
+              1,
+              0,
+              6,
+              0
+             ],
+             "rotation": 0.7853981633974483
+            },
+            {
+             "color": "rgba(0, 0, 0, 0.2)",
+             "symbol": "triangle",
+             "dashArrayX": [
+              [
+               9,
+               9
+              ],
+              [
+               0,
+               9,
+               9,
+               0
+              ]
+             ],
+             "dashArrayY": [
+              7,
+              2
+             ],
+             "symbolSize": 0.75
+            }
+           ]
+          }
+         },
+         "textStyle": {
+          "fontFamily": "Microsoft YaHei",
+          "fontSize": 12,
+          "fontStyle": "normal",
+          "fontWeight": "normal"
+         },
+         "stateAnimation": {
+          "duration": 300,
+          "easing": "cubicOut"
+         },
+         "animationDuration": 1000,
+         "animationDurationUpdate": 500,
+         "animationEasing": "cubicInOut",
+         "animationEasingUpdate": "cubicInOut",
+         "animationThreshold": 2000,
+         "progressiveThreshold": 3000,
+         "progressive": 400,
+         "hoverLayerThreshold": 3000,
+         "useUTC": false,
+         "toolbox": [
+          {
+           "feature": {
+            "dataView": {
+             "optionToContent": "@fn",
+             "contentToOption": "@fn",
+             "show": true,
+             "readOnly": false,
+             "icon": "M17.5,17.3H33 M17.5,17.3H33 M45.4,29.5h-28 M11.5,2v56H51V14.8L38.4,2H11.5z M38.4,2.2v12.7H51 M45.4,41.7h-28",
+             "title": "Data View",
+             "lang": [
+              "Data View",
+              "Close",
+              "Refresh"
+             ],
+             "backgroundColor": "#f4f7fd",
+             "textColor": "#3c3c41",
+             "textareaColor": "#f4f7fd",
+             "textareaBorderColor": "#b7b9be",
+             "buttonColor": "#6578ba",
+             "buttonTextColor": "#fff"
+            }
+           },
+           "show": true,
+           "z": 6,
+           "orient": "horizontal",
+           "left": "right",
+           "top": "top",
+           "backgroundColor": "transparent",
+           "borderColor": "#b7b9be",
+           "borderRadius": 0,
+           "borderWidth": 0,
+           "padding": 15,
+           "itemSize": 15,
+           "itemGap": 10,
+           "showTitle": true,
+           "iconStyle": {
+            "borderColor": "#6578ba",
+            "color": "none"
+           },
+           "emphasis": {
+            "iconStyle": {
+             "borderColor": "#404c76"
+            }
+           },
+           "tooltip": {
+            "show": false,
+            "position": "bottom"
+           }
+          }
+         ],
+         "axisPointer": [
+          {
+           "show": "auto",
+           "z": 50,
+           "type": "line",
+           "snap": false,
+           "triggerTooltip": true,
+           "triggerEmphasis": true,
+           "value": null,
+           "status": null,
+           "link": [],
+           "animation": null,
+           "animationDurationUpdate": 200,
+           "lineStyle": {
+            "color": "#b7b9be",
+            "width": 1,
+            "type": "dashed"
+           },
+           "shadowStyle": {
+            "color": "rgba(129,130,136,0.2)"
+           },
+           "label": {
+            "show": true,
+            "formatter": null,
+            "precision": "auto",
+            "margin": 3,
+            "color": "#fff",
+            "padding": [
+             5,
+             7,
+             5,
+             7
+            ],
+            "backgroundColor": "#536298",
+            "borderColor": null,
+            "borderWidth": 0,
+            "borderRadius": 3
+           },
+           "handle": {
+            "show": false,
+            "icon": "M10.7,11.9v-1.3H9.3v1.3c-4.9,0.3-8.8,4.4-8.8,9.4c0,5,3.9,9.1,8.8,9.4h1.3c4.9-0.3,8.8-4.4,8.8-9.4C19.5,16.3,15.6,12.2,10.7,11.9z M13.3,24.4H6.7v-1.2h6.6z M13.3,22H6.7v-1.2h6.6z M13.3,19.6H6.7v-1.2h6.6z",
+            "size": 45,
+            "margin": 50,
+            "color": "#8292cc",
+            "throttle": 40
+           }
+          }
+         ],
+         "tooltip": [],
+         "yAxis": [
+          {
+           "type": "value",
+           "boundaryGap": [
+            0,
+            0
+           ],
+           "axisLine": {
+            "show": "auto",
+            "onZero": "auto",
+            "onZeroAxisIndex": null,
+            "lineStyle": {
+             "color": "#54555a",
+             "width": 1,
+             "type": "solid"
+            },
+            "symbol": [
+             "none",
+             "none"
+            ],
+            "symbolSize": [
+             10,
+             15
+            ],
+            "breakLine": true
+           },
+           "axisTick": {
+            "show": "auto",
+            "inside": false,
+            "length": 5,
+            "lineStyle": {
+             "width": 1
+            }
+           },
+           "splitNumber": 5,
+           "minorTick": {
+            "show": false,
+            "splitNumber": 5,
+            "length": 3,
+            "lineStyle": {}
+           },
+           "minorSplitLine": {
+            "show": false,
+            "lineStyle": {
+             "color": "#f4f7fd",
+             "width": 1
+            }
+           },
+           "show": true,
+           "z": 0,
+           "inverse": false,
+           "name": "",
+           "nameLocation": "end",
+           "nameRotate": null,
+           "nameTruncate": {
+            "maxWidth": null,
+            "ellipsis": "...",
+            "placeholder": "."
+           },
+           "nameTextStyle": {},
+           "nameGap": 15,
+           "silent": false,
+           "triggerEvent": false,
+           "tooltip": {
+            "show": false
+           },
+           "axisPointer": {},
+           "axisLabel": {
+            "show": true,
+            "inside": false,
+            "rotate": 0,
+            "showMinLabel": null,
+            "showMaxLabel": null,
+            "margin": 8,
+            "fontSize": 12,
+            "color": "#54555a",
+            "textMargin": [
+             0,
+             3
+            ]
+           },
+           "splitLine": {
+            "show": true,
+            "showMinLine": true,
+            "showMaxLine": true,
+            "lineStyle": {
+             "color": "#dbdee4",
+             "width": 1,
+             "type": "solid"
+            }
+           },
+           "splitArea": {
+            "show": false,
+            "areaStyle": {
+             "color": [
+              "rgba(234,237,245,0.5)",
+              "rgba(255,255,255,0)"
+             ]
+            }
+           },
+           "breakArea": {
+            "show": true,
+            "itemStyle": {
+             "color": "#fff",
+             "borderColor": "#b7b9be",
+             "borderWidth": 1,
+             "borderType": [
+              3,
+              3
+             ],
+             "opacity": 0.6
+            },
+            "zigzagAmplitude": 4,
+            "zigzagMinSpan": 4,
+            "zigzagMaxSpan": 20,
+            "zigzagZ": 100,
+            "expandOnClick": true
+           },
+           "breakLabelLayout": {
+            "moveOverlap": "auto"
+           },
+           "offset": 0
+          }
+         ],
+         "xAxis": [
+          {
+           "type": "category",
+           "data": [
+            "Mon",
+            "Tue",
+            "Wed",
+            "Thu",
+            "Fri"
+           ],
+           "boundaryGap": true,
+           "deduplication": null,
+           "jitter": 0,
+           "jitterOverlap": true,
+           "jitterMargin": 2,
+           "splitLine": {
+            "show": false,
+            "showMinLine": true,
+            "showMaxLine": true,
+            "lineStyle": {
+             "color": "#dbdee4",
+             "width": 1,
+             "type": "solid"
+            }
+           },
+           "axisTick": {
+            "alignWithLabel": false,
+            "interval": "auto",
+            "show": "auto",
+            "inside": false,
+            "length": 5,
+            "lineStyle": {
+             "width": 1
+            }
+           },
+           "axisLabel": {
+            "interval": "auto",
+            "show": true,
+            "inside": false,
+            "rotate": 0,
+            "showMinLabel": null,
+            "showMaxLabel": null,
+            "margin": 8,
+            "fontSize": 12,
+            "color": "#54555a",
+            "textMargin": [
+             0,
+             3
+            ]
+           },
+           "show": true,
+           "z": 0,
+           "inverse": false,
+           "name": "",
+           "nameLocation": "end",
+           "nameRotate": null,
+           "nameTruncate": {
+            "maxWidth": null,
+            "ellipsis": "...",
+            "placeholder": "."
+           },
+           "nameTextStyle": {},
+           "nameGap": 15,
+           "silent": false,
+           "triggerEvent": false,
+           "tooltip": {
+            "show": false
+           },
+           "axisPointer": {},
+           "axisLine": {
+            "show": true,
+            "onZero": "auto",
+            "onZeroAxisIndex": null,
+            "lineStyle": {
+             "color": "#54555a",
+             "width": 1,
+             "type": "solid"
+            },
+            "symbol": [
+             "none",
+             "none"
+            ],
+            "symbolSize": [
+             10,
+             15
+            ],
+            "breakLine": true
+           },
+           "splitArea": {
+            "show": false,
+            "areaStyle": {
+             "color": [
+              "rgba(234,237,245,0.5)",
+              "rgba(255,255,255,0)"
+             ]
+            }
+           },
+           "breakArea": {
+            "show": true,
+            "itemStyle": {
+             "color": "#fff",
+             "borderColor": "#b7b9be",
+             "borderWidth": 1,
+             "borderType": [
+              3,
+              3
+             ],
+             "opacity": 0.6
+            },
+            "zigzagAmplitude": 4,
+            "zigzagMinSpan": 4,
+            "zigzagMaxSpan": 20,
+            "zigzagZ": 100,
+            "expandOnClick": true
+           },
+           "breakLabelLayout": {
+            "moveOverlap": "auto"
+           },
+           "offset": 0
+          }
+         ],
+         "grid": [
+          {
+           "show": false,
+           "z": 0,
+           "left": "15%",
+           "top": 65,
+           "right": "10%",
+           "bottom": 80,
+           "containLabel": false,
+           "outerBoundsMode": "auto",
+           "outerBounds": {
+            "left": 0,
+            "right": 0,
+            "top": 0,
+            "bottom": 0
+           },
+           "outerBoundsContain": "all",
+           "outerBoundsClampWidth": "25%",
+           "outerBoundsClampHeight": "25%",
+           "backgroundColor": "rgba(0,0,0,0)",
+           "borderWidth": 1,
+           "borderColor": "#b7b9be"
+          }
+         ],
+         "series": [
+          {
+           "type": "line",
+           "name": "Email",
+           "data": [
+            120,
+            132,
+            101,
+            134,
+            90
+           ],
+           "z": 3,
+           "coordinateSystem": "cartesian2d",
+           "legendHoverLink": true,
+           "clip": true,
+           "label": {
+            "position": "top"
+           },
+           "endLabel": {
+            "show": false,
+            "valueAnimation": true,
+            "distance": 8
+           },
+           "lineStyle": {
+            "width": 2,
+            "type": "solid"
+           },
+           "emphasis": {
+            "scale": true,
+            "label": {}
+           },
+           "step": false,
+           "smooth": false,
+           "smoothMonotone": null,
+           "symbol": "emptyCircle",
+           "symbolSize": 6,
+           "symbolRotate": null,
+           "showSymbol": true,
+           "showAllSymbol": "auto",
+           "connectNulls": false,
+           "sampling": "none",
+           "animationEasing": "linear",
+           "progressive": 0,
+           "hoverLayerThreshold": {
+            "$num": "Infinity"
+           },
+           "universalTransition": {
+            "divideShape": "clone"
+           },
+           "triggerLineEvent": false,
+           "triggerEvent": false
+          },
+          {
+           "type": "bar",
+           "name": "Ads",
+           "data": [
+            999,
+            182,
+            {
+             "value": 191,
+             "name": "peak",
+             "itemStyle": {
+              "color": "#f00"
+             }
+            },
+            234,
+            290
+           ],
+           "z": 2,
+           "coordinateSystem": "cartesian2d",
+           "legendHoverLink": true,
+           "barMinHeight": 0,
+           "barMinAngle": 0,
+           "large": false,
+           "largeThreshold": 400,
+           "progressive": 3000,
+           "progressiveChunkMode": "mod",
+           "defaultBarGap": "10%",
+           "clip": true,
+           "roundCap": false,
+           "showBackground": false,
+           "backgroundStyle": {
+            "color": "rgba(180, 180, 180, 0.2)",
+            "borderColor": null,
+            "borderWidth": 0,
+            "borderType": "solid",
+            "borderRadius": 0,
+            "shadowBlur": 0,
+            "shadowColor": null,
+            "shadowOffsetX": 0,
+            "shadowOffsetY": 0,
+            "opacity": 1
+           },
+           "select": {
+            "itemStyle": {
+             "borderColor": "#3c3c41",
+             "borderWidth": 2
+            }
+           },
+           "realtimeSort": false,
+           "label": {},
+           "emphasis": {
+            "label": {}
+           }
+          }
+         ],
+         "thumbnail": [],
+         "visualMap": [],
+         "legend": [
+          {
+           "show": false,
+           "z": 4,
+           "orient": "horizontal",
+           "left": "center",
+           "bottom": 15,
+           "align": "auto",
+           "backgroundColor": "rgba(0,0,0,0)",
+           "borderColor": "#b7b9be",
+           "borderRadius": 0,
+           "borderWidth": 0,
+           "padding": 5,
+           "itemGap": 8,
+           "itemWidth": 25,
+           "itemHeight": 14,
+           "symbolRotate": "inherit",
+           "symbolKeepAspect": true,
+           "inactiveColor": "#cfd2d7",
+           "inactiveBorderColor": "#cfd2d7",
+           "inactiveBorderWidth": "auto",
+           "itemStyle": {
+            "color": "inherit",
+            "opacity": "inherit",
+            "borderColor": "inherit",
+            "borderWidth": "auto",
+            "borderCap": "inherit",
+            "borderJoin": "inherit",
+            "borderDashOffset": "inherit",
+            "borderMiterLimit": "inherit"
+           },
+           "lineStyle": {
+            "width": "auto",
+            "color": "inherit",
+            "inactiveColor": "#cfd2d7",
+            "inactiveWidth": 2,
+            "opacity": "inherit",
+            "type": "inherit",
+            "cap": "inherit",
+            "join": "inherit",
+            "dashOffset": "inherit",
+            "miterLimit": "inherit"
+           },
+           "textStyle": {
+            "color": "#54555a"
+           },
+           "selectedMode": true,
+           "selector": false,
+           "selectorLabel": {
+            "show": true,
+            "borderRadius": 10,
+            "padding": [
+             3,
+             5,
+             3,
+             5
+            ],
+            "fontSize": 12,
+            "fontFamily": "sans-serif",
+            "color": "#6d6e73",
+            "borderWidth": 1,
+            "borderColor": "#b7b9be"
+           },
+           "emphasis": {
+            "selectorLabel": {
+             "show": true,
+             "color": "#86878c"
+            }
+           },
+           "selectorPosition": "auto",
+           "selectorItemGap": 7,
+           "selectorButtonGap": 10,
+           "tooltip": {
+            "show": false
+           },
+           "triggerEvent": false,
+           "selected": {}
+          }
+         ],
+         "markArea": [],
+         "markLine": [],
+         "markPoint": [],
+         "brush": [],
+         "dataZoom": [],
+         "title": [
+          {
+           "text": "Edited"
+          }
+         ]
+        }
+       }
+      ],
+      "events": [
+       {
+        "animation": false,
+        "darkMode": "auto",
+        "colorBy": "series",
+        "color": [
+         "#5070dd",
+         "#b6d634",
+         "#505372",
+         "#ff994d",
+         "#0ca8df",
+         "#ffd10a",
+         "#fb628b",
+         "#785db0",
+         "#3fbe95"
+        ],
+        "gradientColor": [
+         "rgba(212,220,247,1)",
+         "#5070dd"
+        ],
+        "aria": {
+         "decal": {
+          "decals": [
+           {
+            "color": "rgba(0, 0, 0, 0.2)",
+            "dashArrayX": [
+             1,
+             0
+            ],
+            "dashArrayY": [
+             2,
+             5
+            ],
+            "symbolSize": 1,
+            "rotation": 0.5235987755982988
+           },
+           {
+            "color": "rgba(0, 0, 0, 0.2)",
+            "symbol": "circle",
+            "dashArrayX": [
+             [
+              8,
+              8
+             ],
+             [
+              0,
+              8,
+              8,
+              0
+             ]
+            ],
+            "dashArrayY": [
+             6,
+             0
+            ],
+            "symbolSize": 0.8
+           },
+           {
+            "color": "rgba(0, 0, 0, 0.2)",
+            "dashArrayX": [
+             1,
+             0
+            ],
+            "dashArrayY": [
+             4,
+             3
+            ],
+            "rotation": -0.7853981633974483
+           },
+           {
+            "color": "rgba(0, 0, 0, 0.2)",
+            "dashArrayX": [
+             [
+              6,
+              6
+             ],
+             [
+              0,
+              6,
+              6,
+              0
+             ]
+            ],
+            "dashArrayY": [
+             6,
+             0
+            ]
+           },
+           {
+            "color": "rgba(0, 0, 0, 0.2)",
+            "dashArrayX": [
+             [
+              1,
+              0
+             ],
+             [
+              1,
+              6
+             ]
+            ],
+            "dashArrayY": [
+             1,
+             0,
+             6,
+             0
+            ],
+            "rotation": 0.7853981633974483
+           },
+           {
+            "color": "rgba(0, 0, 0, 0.2)",
+            "symbol": "triangle",
+            "dashArrayX": [
+             [
+              9,
+              9
+             ],
+             [
+              0,
+              9,
+              9,
+              0
+             ]
+            ],
+            "dashArrayY": [
+             7,
+             2
+            ],
+            "symbolSize": 0.75
+           }
+          ]
+         }
+        },
+        "textStyle": {
+         "fontFamily": "Microsoft YaHei",
+         "fontSize": 12,
+         "fontStyle": "normal",
+         "fontWeight": "normal"
+        },
+        "stateAnimation": {
+         "duration": 300,
+         "easing": "cubicOut"
+        },
+        "animationDuration": 1000,
+        "animationDurationUpdate": 500,
+        "animationEasing": "cubicInOut",
+        "animationEasingUpdate": "cubicInOut",
+        "animationThreshold": 2000,
+        "progressiveThreshold": 3000,
+        "progressive": 400,
+        "hoverLayerThreshold": 3000,
+        "useUTC": false,
+        "toolbox": [
+         {
+          "feature": {
+           "dataView": {
+            "optionToContent": "@fn",
+            "contentToOption": "@fn",
+            "show": true,
+            "readOnly": false,
+            "icon": "M17.5,17.3H33 M17.5,17.3H33 M45.4,29.5h-28 M11.5,2v56H51V14.8L38.4,2H11.5z M38.4,2.2v12.7H51 M45.4,41.7h-28",
+            "title": "Data View",
+            "lang": [
+             "Data View",
+             "Close",
+             "Refresh"
+            ],
+            "backgroundColor": "#f4f7fd",
+            "textColor": "#3c3c41",
+            "textareaColor": "#f4f7fd",
+            "textareaBorderColor": "#b7b9be",
+            "buttonColor": "#6578ba",
+            "buttonTextColor": "#fff"
+           }
+          },
+          "show": true,
+          "z": 6,
+          "orient": "horizontal",
+          "left": "right",
+          "top": "top",
+          "backgroundColor": "transparent",
+          "borderColor": "#b7b9be",
+          "borderRadius": 0,
+          "borderWidth": 0,
+          "padding": 15,
+          "itemSize": 15,
+          "itemGap": 10,
+          "showTitle": true,
+          "iconStyle": {
+           "borderColor": "#6578ba",
+           "color": "none"
+          },
+          "emphasis": {
+           "iconStyle": {
+            "borderColor": "#404c76"
+           }
+          },
+          "tooltip": {
+           "show": false,
+           "position": "bottom"
+          }
+         }
+        ],
+        "axisPointer": [
+         {
+          "show": "auto",
+          "z": 50,
+          "type": "line",
+          "snap": false,
+          "triggerTooltip": true,
+          "triggerEmphasis": true,
+          "value": null,
+          "status": null,
+          "link": [],
+          "animation": null,
+          "animationDurationUpdate": 200,
+          "lineStyle": {
+           "color": "#b7b9be",
+           "width": 1,
+           "type": "dashed"
+          },
+          "shadowStyle": {
+           "color": "rgba(129,130,136,0.2)"
+          },
+          "label": {
+           "show": true,
+           "formatter": null,
+           "precision": "auto",
+           "margin": 3,
+           "color": "#fff",
+           "padding": [
+            5,
+            7,
+            5,
+            7
+           ],
+           "backgroundColor": "#536298",
+           "borderColor": null,
+           "borderWidth": 0,
+           "borderRadius": 3
+          },
+          "handle": {
+           "show": false,
+           "icon": "M10.7,11.9v-1.3H9.3v1.3c-4.9,0.3-8.8,4.4-8.8,9.4c0,5,3.9,9.1,8.8,9.4h1.3c4.9-0.3,8.8-4.4,8.8-9.4C19.5,16.3,15.6,12.2,10.7,11.9z M13.3,24.4H6.7v-1.2h6.6z M13.3,22H6.7v-1.2h6.6z M13.3,19.6H6.7v-1.2h6.6z",
+           "size": 45,
+           "margin": 50,
+           "color": "#8292cc",
+           "throttle": 40
+          }
+         }
+        ],
+        "tooltip": [],
+        "yAxis": [
+         {
+          "type": "value",
+          "boundaryGap": [
+           0,
+           0
+          ],
+          "axisLine": {
+           "show": "auto",
+           "onZero": "auto",
+           "onZeroAxisIndex": null,
+           "lineStyle": {
+            "color": "#54555a",
+            "width": 1,
+            "type": "solid"
+           },
+           "symbol": [
+            "none",
+            "none"
+           ],
+           "symbolSize": [
+            10,
+            15
+           ],
+           "breakLine": true
+          },
+          "axisTick": {
+           "show": "auto",
+           "inside": false,
+           "length": 5,
+           "lineStyle": {
+            "width": 1
+           }
+          },
+          "splitNumber": 5,
+          "minorTick": {
+           "show": false,
+           "splitNumber": 5,
+           "length": 3,
+           "lineStyle": {}
+          },
+          "minorSplitLine": {
+           "show": false,
+           "lineStyle": {
+            "color": "#f4f7fd",
+            "width": 1
+           }
+          },
+          "show": true,
+          "z": 0,
+          "inverse": false,
+          "name": "",
+          "nameLocation": "end",
+          "nameRotate": null,
+          "nameTruncate": {
+           "maxWidth": null,
+           "ellipsis": "...",
+           "placeholder": "."
+          },
+          "nameTextStyle": {},
+          "nameGap": 15,
+          "silent": false,
+          "triggerEvent": false,
+          "tooltip": {
+           "show": false
+          },
+          "axisPointer": {},
+          "axisLabel": {
+           "show": true,
+           "inside": false,
+           "rotate": 0,
+           "showMinLabel": null,
+           "showMaxLabel": null,
+           "margin": 8,
+           "fontSize": 12,
+           "color": "#54555a",
+           "textMargin": [
+            0,
+            3
+           ]
+          },
+          "splitLine": {
+           "show": true,
+           "showMinLine": true,
+           "showMaxLine": true,
+           "lineStyle": {
+            "color": "#dbdee4",
+            "width": 1,
+            "type": "solid"
+           }
+          },
+          "splitArea": {
+           "show": false,
+           "areaStyle": {
+            "color": [
+             "rgba(234,237,245,0.5)",
+             "rgba(255,255,255,0)"
+            ]
+           }
+          },
+          "breakArea": {
+           "show": true,
+           "itemStyle": {
+            "color": "#fff",
+            "borderColor": "#b7b9be",
+            "borderWidth": 1,
+            "borderType": [
+             3,
+             3
+            ],
+            "opacity": 0.6
+           },
+           "zigzagAmplitude": 4,
+           "zigzagMinSpan": 4,
+           "zigzagMaxSpan": 20,
+           "zigzagZ": 100,
+           "expandOnClick": true
+          },
+          "breakLabelLayout": {
+           "moveOverlap": "auto"
+          },
+          "offset": 0
+         }
+        ],
+        "xAxis": [
+         {
+          "type": "category",
+          "data": [
+           "Mon",
+           "Tue",
+           "Wed",
+           "Thu",
+           "Fri"
+          ],
+          "boundaryGap": true,
+          "deduplication": null,
+          "jitter": 0,
+          "jitterOverlap": true,
+          "jitterMargin": 2,
+          "splitLine": {
+           "show": false,
+           "showMinLine": true,
+           "showMaxLine": true,
+           "lineStyle": {
+            "color": "#dbdee4",
+            "width": 1,
+            "type": "solid"
+           }
+          },
+          "axisTick": {
+           "alignWithLabel": false,
+           "interval": "auto",
+           "show": "auto",
+           "inside": false,
+           "length": 5,
+           "lineStyle": {
+            "width": 1
+           }
+          },
+          "axisLabel": {
+           "interval": "auto",
+           "show": true,
+           "inside": false,
+           "rotate": 0,
+           "showMinLabel": null,
+           "showMaxLabel": null,
+           "margin": 8,
+           "fontSize": 12,
+           "color": "#54555a",
+           "textMargin": [
+            0,
+            3
+           ]
+          },
+          "show": true,
+          "z": 0,
+          "inverse": false,
+          "name": "",
+          "nameLocation": "end",
+          "nameRotate": null,
+          "nameTruncate": {
+           "maxWidth": null,
+           "ellipsis": "...",
+           "placeholder": "."
+          },
+          "nameTextStyle": {},
+          "nameGap": 15,
+          "silent": false,
+          "triggerEvent": false,
+          "tooltip": {
+           "show": false
+          },
+          "axisPointer": {},
+          "axisLine": {
+           "show": true,
+           "onZero": "auto",
+           "onZeroAxisIndex": null,
+           "lineStyle": {
+            "color": "#54555a",
+            "width": 1,
+            "type": "solid"
+           },
+           "symbol": [
+            "none",
+            "none"
+           ],
+           "symbolSize": [
+            10,
+            15
+           ],
+           "breakLine": true
+          },
+          "splitArea": {
+           "show": false,
+           "areaStyle": {
+            "color": [
+             "rgba(234,237,245,0.5)",
+             "rgba(255,255,255,0)"
+            ]
+           }
+          },
+          "breakArea": {
+           "show": true,
+           "itemStyle": {
+            "color": "#fff",
+            "borderColor": "#b7b9be",
+            "borderWidth": 1,
+            "borderType": [
+             3,
+             3
+            ],
+            "opacity": 0.6
+           },
+           "zigzagAmplitude": 4,
+           "zigzagMinSpan": 4,
+           "zigzagMaxSpan": 20,
+           "zigzagZ": 100,
+           "expandOnClick": true
+          },
+          "breakLabelLayout": {
+           "moveOverlap": "auto"
+          },
+          "offset": 0
+         }
+        ],
+        "grid": [
+         {
+          "show": false,
+          "z": 0,
+          "left": "15%",
+          "top": 65,
+          "right": "10%",
+          "bottom": 80,
+          "containLabel": false,
+          "outerBoundsMode": "auto",
+          "outerBounds": {
+           "left": 0,
+           "right": 0,
+           "top": 0,
+           "bottom": 0
+          },
+          "outerBoundsContain": "all",
+          "outerBoundsClampWidth": "25%",
+          "outerBoundsClampHeight": "25%",
+          "backgroundColor": "rgba(0,0,0,0)",
+          "borderWidth": 1,
+          "borderColor": "#b7b9be"
+         }
+        ],
+        "series": [
+         {
+          "type": "line",
+          "name": "Email",
+          "data": [
+           120,
+           132,
+           101,
+           134,
+           90
+          ],
+          "z": 3,
+          "coordinateSystem": "cartesian2d",
+          "legendHoverLink": true,
+          "clip": true,
+          "label": {
+           "position": "top"
+          },
+          "endLabel": {
+           "show": false,
+           "valueAnimation": true,
+           "distance": 8
+          },
+          "lineStyle": {
+           "width": 2,
+           "type": "solid"
+          },
+          "emphasis": {
+           "scale": true,
+           "label": {}
+          },
+          "step": false,
+          "smooth": false,
+          "smoothMonotone": null,
+          "symbol": "emptyCircle",
+          "symbolSize": 6,
+          "symbolRotate": null,
+          "showSymbol": true,
+          "showAllSymbol": "auto",
+          "connectNulls": false,
+          "sampling": "none",
+          "animationEasing": "linear",
+          "progressive": 0,
+          "hoverLayerThreshold": {
+           "$num": "Infinity"
+          },
+          "universalTransition": {
+           "divideShape": "clone"
+          },
+          "triggerLineEvent": false,
+          "triggerEvent": false
+         },
+         {
+          "type": "bar",
+          "name": "Ads",
+          "data": [
+           999,
+           182,
+           {
+            "value": 191,
+            "name": "peak",
+            "itemStyle": {
+             "color": "#f00"
+            }
+           },
+           234,
+           290
+          ],
+          "z": 2,
+          "coordinateSystem": "cartesian2d",
+          "legendHoverLink": true,
+          "barMinHeight": 0,
+          "barMinAngle": 0,
+          "large": false,
+          "largeThreshold": 400,
+          "progressive": 3000,
+          "progressiveChunkMode": "mod",
+          "defaultBarGap": "10%",
+          "clip": true,
+          "roundCap": false,
+          "showBackground": false,
+          "backgroundStyle": {
+           "color": "rgba(180, 180, 180, 0.2)",
+           "borderColor": null,
+           "borderWidth": 0,
+           "borderType": "solid",
+           "borderRadius": 0,
+           "shadowBlur": 0,
+           "shadowColor": null,
+           "shadowOffsetX": 0,
+           "shadowOffsetY": 0,
+           "opacity": 1
+          },
+          "select": {
+           "itemStyle": {
+            "borderColor": "#3c3c41",
+            "borderWidth": 2
+           }
+          },
+          "realtimeSort": false,
+          "label": {},
+          "emphasis": {
+           "label": {}
+          }
+         }
+        ],
+        "thumbnail": [],
+        "visualMap": [],
+        "legend": [
+         {
+          "show": false,
+          "z": 4,
+          "orient": "horizontal",
+          "left": "center",
+          "bottom": 15,
+          "align": "auto",
+          "backgroundColor": "rgba(0,0,0,0)",
+          "borderColor": "#b7b9be",
+          "borderRadius": 0,
+          "borderWidth": 0,
+          "padding": 5,
+          "itemGap": 8,
+          "itemWidth": 25,
+          "itemHeight": 14,
+          "symbolRotate": "inherit",
+          "symbolKeepAspect": true,
+          "inactiveColor": "#cfd2d7",
+          "inactiveBorderColor": "#cfd2d7",
+          "inactiveBorderWidth": "auto",
+          "itemStyle": {
+           "color": "inherit",
+           "opacity": "inherit",
+           "borderColor": "inherit",
+           "borderWidth": "auto",
+           "borderCap": "inherit",
+           "borderJoin": "inherit",
+           "borderDashOffset": "inherit",
+           "borderMiterLimit": "inherit"
+          },
+          "lineStyle": {
+           "width": "auto",
+           "color": "inherit",
+           "inactiveColor": "#cfd2d7",
+           "inactiveWidth": 2,
+           "opacity": "inherit",
+           "type": "inherit",
+           "cap": "inherit",
+           "join": "inherit",
+           "dashOffset": "inherit",
+           "miterLimit": "inherit"
+          },
+          "textStyle": {
+           "color": "#54555a"
+          },
+          "selectedMode": true,
+          "selector": false,
+          "selectorLabel": {
+           "show": true,
+           "borderRadius": 10,
+           "padding": [
+            3,
+            5,
+            3,
+            5
+           ],
+           "fontSize": 12,
+           "fontFamily": "sans-serif",
+           "color": "#6d6e73",
+           "borderWidth": 1,
+           "borderColor": "#b7b9be"
+          },
+          "emphasis": {
+           "selectorLabel": {
+            "show": true,
+            "color": "#86878c"
+           }
+          },
+          "selectorPosition": "auto",
+          "selectorItemGap": 7,
+          "selectorButtonGap": 10,
+          "tooltip": {
+           "show": false
+          },
+          "triggerEvent": false,
+          "selected": {}
+         }
+        ],
+        "markArea": [],
+        "markLine": [],
+        "markPoint": [],
+        "brush": [],
+        "dataZoom": [],
+        "title": [
+         {
+          "text": "Edited",
+          "z": 6,
+          "show": true,
+          "target": "blank",
+          "subtext": "",
+          "subtarget": "blank",
+          "left": "center",
+          "top": 15,
+          "backgroundColor": "rgba(0,0,0,0)",
+          "borderColor": "#3c3c41",
+          "borderWidth": 0,
+          "padding": 5,
+          "itemGap": 10,
+          "textStyle": {
+           "fontSize": 18,
+           "fontWeight": "bold",
+           "color": "#3c3c41"
+          },
+          "subtextStyle": {
+           "fontSize": 12,
+           "color": "#86878c"
+          }
+         }
+        ]
+       }
+      ],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          120,
+          132,
+          101,
+          134,
+          90
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          999,
+          182,
+          {
+           "value": 191,
+           "name": "peak",
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          234,
+          290
+         ]
+        }
+       ],
+       "title": [
+        "Edited"
+       ]
+      },
+      "error": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "H-NEW",
+   "note": "contentToOption answers a known series, a new one, a nameless one and a title",
+   "option": {
+    "animation": false,
+    "legend": {
+     "show": false
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "name": "Email",
+      "data": [
+       120,
+       132,
+       101,
+       134,
+       90
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "Ads",
+      "data": [
+       220,
+       182,
+       {
+        "value": 191,
+        "name": "peak",
+        "itemStyle": {
+         "color": "#f00"
+        }
+       },
+       234,
+       290
+      ]
+     }
+    ],
+    "toolbox": {
+     "feature": {
+      "dataView": {
+       "optionToContent": "@Table",
+       "contentToOption": "@NewSeries"
+      }
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": {
+      "type": "open"
+     },
+     "record": {
+      "panel": {
+       "header": "Data View",
+       "custom": true,
+       "content": "<table style=\"width:100%;text-align:center\"><tbody><tr><td>Day</td><td>Email</td><td>Ads</td></tr><tr><td>Mon</td><td>120</td><td>220</td></tr><tr><td>Tue</td><td>132</td><td>182</td></tr><tr><td>Wed</td><td>101</td><td>191</td></tr><tr><td>Thu</td><td>134</td><td>234</td></tr><tr><td>Fri</td><td>90</td><td>290</td></tr></tbody></table>",
+       "textarea": null,
+       "buttons": [
+        "Refresh",
+        "Close"
+       ]
+      },
+      "calls": [
+       {
+        "fn": "Table",
+        "series": [
+         {
+          "name": "Email",
+          "data": [
+           120,
+           132,
+           101,
+           134,
+           90
+          ]
+         },
+         {
+          "name": "Ads",
+          "data": [
+           220,
+           182,
+           {
+            "value": 191,
+            "name": "peak",
+            "itemStyle": {
+             "color": "#f00"
+            }
+           },
+           234,
+           290
+          ]
+         }
+        ],
+        "xAxisData": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu",
+         "Fri"
+        ]
+       }
+      ],
+      "actions": [],
+      "events": [],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          120,
+          132,
+          101,
+          134,
+          90
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          220,
+          182,
+          {
+           "value": 191,
+           "name": "peak",
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          234,
+          290
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    },
+    {
+     "step": {
+      "type": "button",
+      "button": "Refresh"
+     },
+     "record": {
+      "panel": null,
+      "calls": [
+       {
+        "fn": "NewSeries",
+        "rows": [
+         [
+          "Day",
+          "Email",
+          "Ads"
+         ],
+         [
+          "Mon",
+          "120",
+          "220"
+         ],
+         [
+          "Tue",
+          "132",
+          "182"
+         ],
+         [
+          "Wed",
+          "101",
+          "191"
+         ],
+         [
+          "Thu",
+          "134",
+          "234"
+         ],
+         [
+          "Fri",
+          "90",
+          "290"
+         ]
+        ],
+        "content": "<table style=\"width:100%;text-align:center\"><tbody><tr><td>Day</td><td>Email</td><td>Ads</td></tr><tr><td>Mon</td><td>120</td><td>220</td></tr><tr><td>Tue</td><td>132</td><td>182</td></tr><tr><td>Wed</td><td>101</td><td>191</td></tr><tr><td>Thu</td><td>134</td><td>234</td></tr><tr><td>Fri</td><td>90</td><td>290</td></tr></tbody></table>",
+        "series": [
+         {
+          "name": "Email",
+          "data": [
+           120,
+           132,
+           101,
+           134,
+           90
+          ]
+         },
+         {
+          "name": "Ads",
+          "data": [
+           220,
+           182,
+           {
+            "value": 191,
+            "name": "peak",
+            "itemStyle": {
+             "color": "#f00"
+            }
+           },
+           234,
+           290
+          ]
+         }
+        ],
+        "xAxisData": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu",
+         "Fri"
+        ]
+       }
+      ],
+      "actions": [
+       {
+        "type": "changeDataView",
+        "newOption": {
+         "series": [
+          {
+           "name": "Email",
+           "data": [
+            1,
+            2,
+            3,
+            4,
+            5
+           ]
+          },
+          {
+           "name": "Extra",
+           "data": [
+            [
+             1,
+             2
+            ],
+            [
+             3,
+             4
+            ]
+           ]
+          },
+          {
+           "data": [
+            5,
+            6
+           ]
+          }
+         ],
+         "title": {
+          "text": "T"
+         }
+        }
+       }
+      ],
+      "events": [
+       {
+        "series": [
+         {
+          "name": "Email",
+          "data": [
+           1,
+           2,
+           3,
+           4,
+           5
+          ]
+         },
+         {
+          "name": "Extra",
+          "data": [
+           [
+            1,
+            2
+           ],
+           [
+            3,
+            4
+           ]
+          ]
+         },
+         {
+          "data": [
+           5,
+           6
+          ]
+         }
+        ],
+        "title": {
+         "text": "T",
+         "z": 6,
+         "show": true,
+         "target": "blank",
+         "subtext": "",
+         "subtarget": "blank",
+         "left": "center",
+         "top": 15,
+         "backgroundColor": "rgba(0,0,0,0)",
+         "borderColor": "#3c3c41",
+         "borderWidth": 0,
+         "padding": 5,
+         "itemGap": 10,
+         "textStyle": {
+          "fontSize": 18,
+          "fontWeight": "bold",
+          "color": "#3c3c41"
+         },
+         "subtextStyle": {
+          "fontSize": 12,
+          "color": "#86878c"
+         }
+        }
+       }
+      ],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          1,
+          2,
+          3,
+          4,
+          5
+         ]
+        },
+        {
+         "type": "scatter",
+         "name": "Extra",
+         "data": [
+          [
+           1,
+           2
+          ],
+          [
+           3,
+           4
+          ]
+         ]
+        },
+        {
+         "type": "scatter",
+         "name": null,
+         "data": [
+          5,
+          6
+         ]
+        }
+       ],
+       "title": [
+        "T"
+       ]
+      },
+      "error": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "H-ITEMS",
+   "note": "contentToOption's data over object items: wrapped, defaulted, the name dropped",
+   "option": {
+    "animation": false,
+    "legend": {
+     "show": false
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "name": "Email",
+      "data": [
+       120,
+       132,
+       101,
+       134,
+       90
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "Ads",
+      "data": [
+       220,
+       182,
+       {
+        "value": 191,
+        "name": "peak",
+        "itemStyle": {
+         "color": "#f00"
+        }
+       },
+       234,
+       290
+      ]
+     }
+    ],
+    "toolbox": {
+     "feature": {
+      "dataView": {
+       "optionToContent": "@Table",
+       "contentToOption": "@Items"
+      }
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": {
+      "type": "open"
+     },
+     "record": {
+      "panel": {
+       "header": "Data View",
+       "custom": true,
+       "content": "<table style=\"width:100%;text-align:center\"><tbody><tr><td>Day</td><td>Email</td><td>Ads</td></tr><tr><td>Mon</td><td>120</td><td>220</td></tr><tr><td>Tue</td><td>132</td><td>182</td></tr><tr><td>Wed</td><td>101</td><td>191</td></tr><tr><td>Thu</td><td>134</td><td>234</td></tr><tr><td>Fri</td><td>90</td><td>290</td></tr></tbody></table>",
+       "textarea": null,
+       "buttons": [
+        "Refresh",
+        "Close"
+       ]
+      },
+      "calls": [
+       {
+        "fn": "Table",
+        "series": [
+         {
+          "name": "Email",
+          "data": [
+           120,
+           132,
+           101,
+           134,
+           90
+          ]
+         },
+         {
+          "name": "Ads",
+          "data": [
+           220,
+           182,
+           {
+            "value": 191,
+            "name": "peak",
+            "itemStyle": {
+             "color": "#f00"
+            }
+           },
+           234,
+           290
+          ]
+         }
+        ],
+        "xAxisData": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu",
+         "Fri"
+        ]
+       }
+      ],
+      "actions": [],
+      "events": [],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          120,
+          132,
+          101,
+          134,
+          90
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          220,
+          182,
+          {
+           "value": 191,
+           "name": "peak",
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          234,
+          290
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    },
+    {
+     "step": {
+      "type": "button",
+      "button": "Refresh"
+     },
+     "record": {
+      "panel": null,
+      "calls": [
+       {
+        "fn": "Items",
+        "rows": [
+         [
+          "Day",
+          "Email",
+          "Ads"
+         ],
+         [
+          "Mon",
+          "120",
+          "220"
+         ],
+         [
+          "Tue",
+          "132",
+          "182"
+         ],
+         [
+          "Wed",
+          "101",
+          "191"
+         ],
+         [
+          "Thu",
+          "134",
+          "234"
+         ],
+         [
+          "Fri",
+          "90",
+          "290"
+         ]
+        ],
+        "content": "<table style=\"width:100%;text-align:center\"><tbody><tr><td>Day</td><td>Email</td><td>Ads</td></tr><tr><td>Mon</td><td>120</td><td>220</td></tr><tr><td>Tue</td><td>132</td><td>182</td></tr><tr><td>Wed</td><td>101</td><td>191</td></tr><tr><td>Thu</td><td>134</td><td>234</td></tr><tr><td>Fri</td><td>90</td><td>290</td></tr></tbody></table>",
+        "series": [
+         {
+          "name": "Email",
+          "data": [
+           120,
+           132,
+           101,
+           134,
+           90
+          ]
+         },
+         {
+          "name": "Ads",
+          "data": [
+           220,
+           182,
+           {
+            "value": 191,
+            "name": "peak",
+            "itemStyle": {
+             "color": "#f00"
+            }
+           },
+           234,
+           290
+          ]
+         }
+        ],
+        "xAxisData": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu",
+         "Fri"
+        ]
+       }
+      ],
+      "actions": [
+       {
+        "type": "changeDataView",
+        "newOption": {
+         "series": [
+          {
+           "name": "Ads",
+           "data": [
+            1,
+            2,
+            3,
+            {
+             "value": 4,
+             "name": "four"
+            },
+            5
+           ]
+          }
+         ]
+        }
+       }
+      ],
+      "events": [
+       {
+        "series": [
+         {
+          "name": "Ads",
+          "data": [
+           1,
+           2,
+           3,
+           {
+            "value": 4,
+            "name": "four"
+           },
+           5
+          ]
+         }
+        ]
+       }
+      ],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          120,
+          132,
+          101,
+          134,
+          90
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          1,
+          2,
+          {
+           "value": 3,
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          {
+           "value": 4,
+           "name": "four"
+          },
+          5
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "H-O2C-NAME",
+   "note": "optionToContent names no function: the textarea, and contentToOption reads it",
+   "option": {
+    "animation": false,
+    "legend": {
+     "show": false
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "name": "Email",
+      "data": [
+       120,
+       132,
+       101,
+       134,
+       90
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "Ads",
+      "data": [
+       220,
+       182,
+       {
+        "value": 191,
+        "name": "peak",
+        "itemStyle": {
+         "color": "#f00"
+        }
+       },
+       234,
+       290
+      ]
+     }
+    ],
+    "toolbox": {
+     "feature": {
+      "dataView": {
+       "optionToContent": "@Missing",
+       "contentToOption": "@Read"
+      }
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": {
+      "type": "open"
+     },
+     "record": {
+      "panel": {
+       "header": "Data View",
+       "custom": false,
+       "content": null,
+       "textarea": {
+        "value": " \tEmail\tAds\nMon\t120\t220\nTue\t132\t182\nWed\t101\t191\nThu\t134\t234\nFri\t90\t290",
+        "readOnly": false
+       },
+       "buttons": [
+        "Refresh",
+        "Close"
+       ]
+      },
+      "calls": [],
+      "actions": [],
+      "events": [],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          120,
+          132,
+          101,
+          134,
+          90
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          220,
+          182,
+          {
+           "value": 191,
+           "name": "peak",
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          234,
+          290
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    },
+    {
+     "step": {
+      "type": "button",
+      "button": "Refresh"
+     },
+     "record": {
+      "panel": null,
+      "calls": [
+       {
+        "fn": "Read",
+        "rows": [],
+        "content": " \tEmail\tAds\nMon\t120\t220\nTue\t132\t182\nWed\t101\t191\nThu\t134\t234\nFri\t90\t290",
+        "series": [
+         {
+          "name": "Email",
+          "data": [
+           120,
+           132,
+           101,
+           134,
+           90
+          ]
+         },
+         {
+          "name": "Ads",
+          "data": [
+           220,
+           182,
+           {
+            "value": 191,
+            "name": "peak",
+            "itemStyle": {
+             "color": "#f00"
+            }
+           },
+           234,
+           290
+          ]
+         }
+        ],
+        "xAxisData": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu",
+         "Fri"
+        ]
+       }
+      ],
+      "actions": [
+       {
+        "type": "changeDataView",
+        "newOption": {
+         "series": []
+        }
+       }
+      ],
+      "events": [
+       {
+        "series": []
+       }
+      ],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          120,
+          132,
+          101,
+          134,
+          90
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          220,
+          182,
+          {
+           "value": 191,
+           "name": "peak",
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          234,
+          290
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "H-C2O-NAME",
+   "note": "contentToOption names no function: Refresh parses the textarea's empty value",
+   "option": {
+    "animation": false,
+    "legend": {
+     "show": false
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "name": "Email",
+      "data": [
+       120,
+       132,
+       101,
+       134,
+       90
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "Ads",
+      "data": [
+       220,
+       182,
+       {
+        "value": 191,
+        "name": "peak",
+        "itemStyle": {
+         "color": "#f00"
+        }
+       },
+       234,
+       290
+      ]
+     }
+    ],
+    "toolbox": {
+     "feature": {
+      "dataView": {
+       "optionToContent": "@Table",
+       "contentToOption": "@Missing"
+      }
+     }
+    }
+   },
+   "steps": [
+    {
+     "step": {
+      "type": "open"
+     },
+     "record": {
+      "panel": {
+       "header": "Data View",
+       "custom": true,
+       "content": "<table style=\"width:100%;text-align:center\"><tbody><tr><td>Day</td><td>Email</td><td>Ads</td></tr><tr><td>Mon</td><td>120</td><td>220</td></tr><tr><td>Tue</td><td>132</td><td>182</td></tr><tr><td>Wed</td><td>101</td><td>191</td></tr><tr><td>Thu</td><td>134</td><td>234</td></tr><tr><td>Fri</td><td>90</td><td>290</td></tr></tbody></table>",
+       "textarea": null,
+       "buttons": [
+        "Refresh",
+        "Close"
+       ]
+      },
+      "calls": [
+       {
+        "fn": "Table",
+        "series": [
+         {
+          "name": "Email",
+          "data": [
+           120,
+           132,
+           101,
+           134,
+           90
+          ]
+         },
+         {
+          "name": "Ads",
+          "data": [
+           220,
+           182,
+           {
+            "value": 191,
+            "name": "peak",
+            "itemStyle": {
+             "color": "#f00"
+            }
+           },
+           234,
+           290
+          ]
+         }
+        ],
+        "xAxisData": [
+         "Mon",
+         "Tue",
+         "Wed",
+         "Thu",
+         "Fri"
+        ]
+       }
+      ],
+      "actions": [],
+      "events": [],
+      "option": {
+       "series": [
+        {
+         "type": "line",
+         "name": "Email",
+         "data": [
+          120,
+          132,
+          101,
+          134,
+          90
+         ]
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          220,
+          182,
+          {
+           "value": 191,
+           "name": "peak",
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          234,
+          290
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    },
+    {
+     "step": {
+      "type": "button",
+      "button": "Refresh"
+     },
+     "record": {
+      "panel": null,
+      "calls": [],
+      "actions": [
+       {
+        "type": "changeDataView",
+        "newOption": {
+         "series": [
+          {
+           "name": "",
+           "data": []
+          }
+         ]
+        }
+       }
+      ],
+      "events": [
+       {
+        "series": [
+         {
+          "name": "",
+          "data": []
+         }
+        ]
+       }
+      ],
+      "option": {
+       "series": [
+        {
+         "type": "scatter",
+         "name": "",
+         "data": []
+        },
+        {
+         "type": "bar",
+         "name": "Ads",
+         "data": [
+          220,
+          182,
+          {
+           "value": 191,
+           "name": "peak",
+           "itemStyle": {
+            "color": "#f00"
+           }
+          },
+          234,
+          290
+         ]
+        }
+       ],
+       "title": []
+      },
+      "error": null
+     }
+    }
+   ]
+  }
+ ],
+ "guards": [
+  {
+   "id": "G1",
+   "mutation": "Refresh runs contentToOption when either function is given",
+   "named": [
+    "H-ONLY-C2O"
+   ],
+   "changed": [
+    "H-ONLY-C2O"
+   ],
+   "ok": true
+  },
+  {
+   "id": "G2",
+   "mutation": "readOnly keeps the Refresh button",
+   "named": [
+    "H-READONLY"
+   ],
+   "changed": [
+    "H-READONLY"
+   ],
+   "ok": true
+  }
+ ]
+}
