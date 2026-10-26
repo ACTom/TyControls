@@ -96,6 +96,7 @@ uses
   test.listviewprops,
   test.gridprops,
   test.miscprops,
+  test.glyphnone,
   test.calendar,
   test.datetimepicker,
   test.treeview.events,
