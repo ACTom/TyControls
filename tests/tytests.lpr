@@ -82,6 +82,7 @@ uses
   test.defaults.guard,
   test.fontprecedence,
   test.partfont,
+  test.autosize.effect,
   test.calendar,
   test.datetimepicker,
   test.treeview.events,

@@ -109,6 +109,9 @@ type
       stays a normal control (its OnClick works). }
     procedure CMHitTest(var Message: TCMHitTest); message CM_HITTEST;
   protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
     function GetStyleTypeKey: string; override;   // 'TyBadge' (shared with TTyButton's badge)
     { The natural pill size in DEVICE px for APPI. }
     function MeasureBadge(APPI: Integer): TSize;
@@ -215,6 +218,7 @@ end;
 constructor TTyBadge.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   FValue := 0;
   FShowZero := False;
   FDot := False;
@@ -225,6 +229,17 @@ begin
   Height := 16;
   FReady := True;
   ApplyNaturalSize;
+end;
+
+procedure TTyBadge.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  sz: TSize;
+begin
+  { The pill the badge draws: its text plus the padding (MeasureBadge). }
+  sz := MeasureBadge(Font.PixelsPerInch);
+  PreferredWidth := sz.cx;
+  PreferredHeight := sz.cy;
 end;
 
 destructor TTyBadge.Destroy;

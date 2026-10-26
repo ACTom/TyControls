@@ -214,6 +214,10 @@ type
       runtime view state, never something a .lfm should carry (ScrollWidth is the streamed
       half); a subclass that hit-tests an x coordinate needs it, and so do the tests. }
     property HScrollOffset: Integer read FHOffset write SetHOffset;
+  protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -344,6 +348,15 @@ begin
   TabStop := True;
   Width := 160;
   Height := 120;
+end;
+
+procedure TTyListBox.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+begin
+  { No natural size, as LCL's own has none: 0 x 0 keeps the bounds, where TWinControl would
+    otherwise size the control to its internal scroll bars or editor. }
+  PreferredWidth := 0;
+  PreferredHeight := 0;
 end;
 
 destructor TTyListBox.Destroy;

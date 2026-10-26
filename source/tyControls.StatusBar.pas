@@ -76,6 +76,9 @@ type
     procedure SetSimpleText(const AValue: TCaption);
     procedure SetSizeGrip(AValue: Boolean);
   protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
     function GetStyleTypeKey: string; override;
     { Which window-resize edge (0 = none) the point sits on, so the status bar -- which covers the
       form's bottom edge + the size-grip corner -- can hand the drag to the OS window resize.
@@ -266,11 +269,29 @@ end;
 constructor TTyStatusBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   FPanels := TTyStatusPanels.Create(Self, TTyStatusPanel);
   FSizeGrip := True;
   Align := alBottom;
   Width := 200;
   Height := TyDensityHeight(ActiveController, 22);
+end;
+
+procedure TTyStatusBar.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  S: TTyStyleSet;
+  ppi, h: Integer;
+begin
+  { The bar's own height from the theme, or more when the font needs it; the width stays the
+    form's. }
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  S := CurrentStyle;
+  PreferredWidth := 0;
+  PreferredHeight := MulDiv(TyDensityHeight(ActiveController, 22), ppi, 96);
+  h := TyFieldPreferredHeight(S, ResolveFontSize(S), ppi);
+  if h > PreferredHeight then PreferredHeight := h;
 end;
 destructor TTyStatusBar.Destroy;
 begin

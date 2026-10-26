@@ -469,6 +469,9 @@ type
     procedure SetDividerCursor(AOn: Boolean);
     procedure UpdateHoverCursor(X, Y: Integer);
   protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
     { The boundary between the two index spaces. FOrder/FRank themselves stay private --
       a descendant has no business reshuffling the display order -- but reading the map
       is exactly what a descendant (and a test) needs: TTyShellListView wants to know
@@ -1123,6 +1126,15 @@ begin
   Height  := 180;
 
   RebuildOrder;
+end;
+
+procedure TTyListView.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+begin
+  { No natural size, as LCL's own has none: 0 x 0 keeps the bounds, where TWinControl would
+    otherwise size the control to its internal scroll bars or editor. }
+  PreferredWidth := 0;
+  PreferredHeight := 0;
 end;
 
 destructor TTyListView.Destroy;

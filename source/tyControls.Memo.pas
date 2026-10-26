@@ -77,6 +77,9 @@ type
 
   TTyMemo = class(TTyCustomControl, ITyTextEditActions, ITyImeEditable)
   protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
     // Pixel x where text begins (left padding scaled). Promoted from private so
     // the horizontal-scroll geometry is testable through the access subclass.
     function TextStartX(APPI: Integer): Integer;
@@ -1138,6 +1141,15 @@ begin
   AccessibleRole := larTextEditorMultiline;
   Width := 200;
   Height := 120;
+end;
+
+procedure TTyMemo.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+begin
+  { No natural size, as LCL's own has none: 0 x 0 keeps the bounds, where TWinControl would
+    otherwise size the control to its internal scroll bars or editor. }
+  PreferredWidth := 0;
+  PreferredHeight := 0;
 end;
 
 destructor TTyMemo.Destroy;

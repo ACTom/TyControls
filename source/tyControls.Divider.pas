@@ -3,7 +3,7 @@ unit tyControls.Divider;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller;
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, LCLType;
 
 type
   { The geometry of a labelled divider, in DEVICE pixels relative to the content
@@ -78,6 +78,9 @@ type
       TTyCustomControl); mirror TTyLabel and resolve it locally. }
     function ResolveFontSize(const AStyle: TTyStyleSet): Integer;
   protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
     { Repaint when Caption/Text changes -- the LCL hook that replaces our old setter. }
     procedure TextChanged; override;
     function GetStyleTypeKey: string; override;
@@ -243,10 +246,28 @@ end;
 constructor TTyDivider.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   FAlignment := taLeftJustify;
   FLeftIndent := TyDividerIndentAuto;
   Width := 150;
   Height := TyDensityHeight(ActiveController, 24);
+end;
+
+procedure TTyDivider.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  S: TTyStyleSet;
+  ppi, h: Integer;
+begin
+  { The bar's own height from the theme, or more when the font needs it; the width stays the
+    form's. }
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  S := CurrentStyle;
+  PreferredWidth := 0;
+  PreferredHeight := MulDiv(TyDensityHeight(ActiveController, 24), ppi, 96);
+  h := TyFieldPreferredHeight(S, ResolveFontSize(S), ppi);
+  if h > PreferredHeight then PreferredHeight := h;
 end;
 
 function TTyDivider.GetStyleTypeKey: string;

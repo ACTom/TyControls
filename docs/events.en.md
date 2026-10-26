@@ -46,7 +46,7 @@ The `TTyGraphicControl` descendants are the display-only controls (`TTyLabel` / 
 | `OnStartDrag` | event | This control started a drag |
 | `OnEndDrag` | event | Drag finished |
 | `Visible` | property | Visibility (`default True`) |
-| `AutoSize` | property | Size to the control's preferred size (`CalculatePreferredSize`); `default False` |
+| `AutoSize` | property | Size to the control's preferred size (`CalculatePreferredSize`); `default False`. One-line edits and combo boxes take their height from the font and keep their width (as LCL's TEdit); status bars, headers and tab strips keep their theme height and grow when the font needs more; badges, ratings, calendars and scroll bars (thickness only) take their content. Controls with no natural size -- memos, list and tree views, grids, list boxes, gauges, shapes -- keep their bounds, as LCL's own do |
 | `DragMode` | property | `dmManual` / `dmAutomatic`; automatic makes the control a drag source |
 | `DragKind` | property | `dkDrag` / `dkDock` |
 | `DragCursor` | property | Pointer shape while dragging |

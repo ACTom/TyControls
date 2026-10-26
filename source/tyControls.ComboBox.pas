@@ -305,6 +305,10 @@ type
     procedure Click; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
+  protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -672,6 +676,7 @@ end;
 constructor TTyComboBox.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   FItems := TStringList.Create;
   FItems.OnChange := @ItemsChanged;
   FItemIndex := -1;
@@ -711,6 +716,21 @@ begin
   { Keep the (normally hidden) child editor out of the IDE designer's selectable
     sub-control set — same rule as the TreeView inline editor. }
   FEditor.ControlStyle := FEditor.ControlStyle + [csNoDesignVisible];
+end;
+
+procedure TTyComboBox.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  S: TTyStyleSet;
+begin
+  { As TTyEdit, but a simple combo has no natural size: its height is field + list, the
+    form's (LCL's csSimple ignores AutoSize too). No inherited -- TWinControl would size the
+    control to its editor and list. }
+  PreferredWidth := 0;
+  PreferredHeight := 0;
+  if FStyle = csSimple then Exit;
+  S := CurrentStyle;
+  PreferredHeight := TyFieldPreferredHeight(S, ResolveFontSize(S), Font.PixelsPerInch);
 end;
 
 destructor TTyComboBox.Destroy;

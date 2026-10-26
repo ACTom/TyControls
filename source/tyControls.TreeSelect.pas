@@ -170,6 +170,9 @@ type
     procedure PopupFormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure DeferredCloseUp(Data: PtrInt);
   protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
     function GetStyleTypeKey: string; override;
     procedure SetController(AValue: TTyStyleController); override;
     { Create the popup helper and park the tree in it. Lazy (the window is only needed once
@@ -394,6 +397,7 @@ end;
 constructor TTyTreeSelect.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   FSelectedNode := nil;
   FText := '';
   FTextHint := '';
@@ -410,6 +414,18 @@ begin
     PARENTED into the popup form, which never owns it (TTyDropdownPopup.SetContent). }
   FTree := TTyTreeSelectTree.Create(Self);
   FTree.Picker := Self;
+end;
+
+procedure TTyTreeSelect.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  S: TTyStyleSet;
+begin
+  { One line of the font plus the padding, as LCL's TEdit: the width stays the form's. No
+    inherited -- TWinControl would size the control to its child controls. }
+  S := CurrentStyle;
+  PreferredWidth := 0;
+  PreferredHeight := TyFieldPreferredHeight(S, ResolveFontSize(S), Font.PixelsPerInch);
 end;
 
 destructor TTyTreeSelect.Destroy;

@@ -271,6 +271,10 @@ type
     // Clipboard virtual hooks (override in tests to avoid real clipboard)
     function ReadClipboardText: string; virtual;
     procedure WriteClipboardText(const S: string); virtual;
+  protected
+    { #114: what AutoSize asks for -- see the body. }
+    procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+      WithThemeSpace: Boolean); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -474,6 +478,7 @@ end;
 constructor TTyEdit.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   TabStop := True;
   Cursor := crIBeam;
   Width := 140;
@@ -509,6 +514,18 @@ begin
     unidentified custom control. LCL does the same one line in TCustomEdit.Create
     (include/customedit.inc:87). }
   AccessibleRole := larTextEditorSingleline;
+end;
+
+procedure TTyEdit.CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
+  WithThemeSpace: Boolean);
+var
+  S: TTyStyleSet;
+begin
+  { One line of the font plus the padding, as LCL's TEdit: the width stays the form's. No
+    inherited -- TWinControl would size the control to its child controls. }
+  S := CurrentStyle;
+  PreferredWidth := 0;
+  PreferredHeight := TyFieldPreferredHeight(S, ResolveFontSize(S), Font.PixelsPerInch);
 end;
 
 destructor TTyEdit.Destroy;
