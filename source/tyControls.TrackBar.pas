@@ -526,7 +526,7 @@ procedure TTyTrackBar.KeyDown(var Key: Word; Shift: TShiftState);
 var
   DecKey, IncKey: Word;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   if FOrientation = toVertical then
   begin
@@ -575,7 +575,7 @@ end;
 
 procedure TTyTrackBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbLeft then
   begin
@@ -590,7 +590,7 @@ var
   HoverRect: TRect;
   WasHover: Boolean;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
   if FDragging then
   begin
@@ -634,7 +634,7 @@ begin
   // the wheel handled, honor that and do not step.
   Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
   if Result then Exit;
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   // Convention: match the native LCL TTrackBar slider -> wheel-up
   // (WheelDelta > 0) INCREASES Position by LineSize; wheel-down decreases it.
   Position := Position + Sign(WheelDelta) * FLineSize;

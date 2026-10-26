@@ -346,7 +346,7 @@ procedure TTyDropDownButton.Click;
 var
   inArrow: Boolean;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   // Decide from the mouse-down position: a press in the arrow zone drops the menu and
   // swallows the primary OnClick; anything else (incl. a keyboard-driven Click, where
   // FDownX stays -1) runs the normal button click.
@@ -476,7 +476,7 @@ end;
 
 procedure TTyMenuButton.Click;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   // A MenuButton's click IS the drop — do it FIRST, then run the base OnClick/
   // ModalResult contract. Order matters: an OnClick handler that frees this button
   // (a common pattern) would leave DoDropDown dereferencing freed memory if it ran

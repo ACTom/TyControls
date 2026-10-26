@@ -1356,7 +1356,7 @@ end;
 function TTyComboBox.FieldOwnerDrawState: TOwnerDrawState;
 begin
   Result := [odComboBoxEdit, odBackgroundPainted];
-  if not Enabled then Result := Result + [odDisabled, odGrayed];
+  if not IsEnabled then Result := Result + [odDisabled, odGrayed];
   if Focused then Include(Result, odFocused);
 end;
 
@@ -1378,7 +1378,7 @@ begin
   { odBackgroundPainted always: RenderTo filled this row before calling PaintItemContent,
     so the handler must be told not to paint one of its own over the highlight. }
   St := [odBackgroundPainted];
-  if not Enabled then St := St + [odDisabled, odGrayed];
+  if not IsEnabled then St := St + [odDisabled, odGrayed];
   if AList <> nil then
   begin
     if AList.MultiSelect then
@@ -1870,7 +1870,7 @@ end;
 
 procedure TTyComboBox.Click;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited Click;
   { csSimple: nothing to toggle -- no popup, no chevron. The click still reached the
     user's OnClick above; the field itself belongs to the embedded editor. }
@@ -1892,7 +1892,7 @@ end;
 procedure TTyComboBox.KeyDown(var Key: Word; Shift: TShiftState);
 var Cnt: Integer;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   { csSimple: there is no open/close, so Escape and F4/Alt+Down mean nothing here -- and
     with DroppedDown pinned True they would otherwise EAT every Escape (breaking a
@@ -1935,7 +1935,7 @@ end;
 procedure TTyComboBox.UTF8KeyPress(var UTF8Key: TUTF8Char);
 var nowTick: QWord; hit: Integer;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited UTF8KeyPress(UTF8Key);
   if (UTF8Key = '') or (UTF8Key[1] < #32) then Exit;
   nowTick := GetTickCount64;

@@ -310,7 +310,7 @@ end;
 
 procedure TTyFloatSpinEdit.KeyDown(var Key: Word; Shift: TShiftState);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   { Before inherited, for the same reason as above: TTyEdit's handler would already have
     deleted / pasted / undone by the time control came back here. }
   if (not FEditorEnabled) and KeyWouldEditTheText(Key, Shift) then
@@ -337,7 +337,7 @@ end;
 
 procedure TTyFloatSpinEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   { A press on a button steps once and holds it, repeating until the release (TTySpinButtons).
     ReadOnly locks the value: there the press steps nothing but is still the button's. }
   if (Button = mbLeft) and FSpin.MouseDown(SpinHitAt(X, Y), not ReadOnly) then
@@ -359,7 +359,7 @@ end;
 procedure TTyFloatSpinEdit.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseMove(Shift, X, Y);
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   FSpin.MouseMove(SpinHitAt(X, Y), not ReadOnly);
 end;
 
@@ -378,7 +378,7 @@ end;
 function TTyFloatSpinEdit.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 begin
-  if not Enabled then Exit(False);
+  if not IsEnabled then Exit(False);
   // The application's OnMouseWheel runs first; if it consumed the notch, stop.
   if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then Exit(True);
   { Read-only: report the notch UNHANDLED so an enclosing scroll box still gets it. Returning

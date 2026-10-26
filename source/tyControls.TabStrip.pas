@@ -2289,7 +2289,7 @@ var
   PPI, Step, I: Integer;
   HdrRect, CloseRect: TRect;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   { A design-time press only ever reaches us through the CM_DESIGNHITTEST pass
     (i.e. it landed on a tab): arm the gesture so every consultation until the
@@ -2505,7 +2505,7 @@ function TTyCustomTabStrip.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
 var
   PPI, Step: Integer;
 begin
-  if not Enabled then Exit(False);
+  if not IsEnabled then Exit(False);
   if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then
     Exit(True);
 
@@ -2534,7 +2534,7 @@ end;
 procedure TTyCustomTabStrip.KeyDown(var Key: Word; Shift: TShiftState);
 var NewIndex, Cnt, Step: Integer;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   Cnt := GetTabCount;
   if Cnt = 0 then Exit;

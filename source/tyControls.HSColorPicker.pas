@@ -181,7 +181,7 @@ end;
 
 procedure TTyHSColorPicker.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbLeft then
   begin
@@ -192,7 +192,7 @@ end;
 
 procedure TTyHSColorPicker.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
   if FDragging then UpdateFromXY(X, Y);
 end;

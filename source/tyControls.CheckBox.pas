@@ -221,7 +221,7 @@ end;
 
 procedure TTyCheckBox.Click;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   if FAllowGrayed then
     case FState of
       cbUnchecked: SetState(cbChecked);
@@ -235,7 +235,7 @@ end;
 
 procedure TTyCheckBox.KeyDown(var Key: Word; Shift: TShiftState);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   if Key = VK_SPACE then
   begin
@@ -550,14 +550,14 @@ end;
 
 procedure TTyRadioButton.Click;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   SetChecked(True);
   inherited Click;
 end;
 
 procedure TTyRadioButton.KeyDown(var Key: Word; Shift: TShiftState);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   if Key = VK_SPACE then
   begin

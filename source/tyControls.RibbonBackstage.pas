@@ -430,6 +430,7 @@ begin
   P := TTyPainter.Create;
   try
     P.BeginPaint(ACanvas, ARect, APPI);
+    TyApplyStyleOpacity(Self, P, CurrentStyle);   // it draws without DrawFrame (#118)
     W := ARect.Right - ARect.Left;
     H := ARect.Bottom - ARect.Top;
     sbW := P.Scale(GetSidebarWidth);

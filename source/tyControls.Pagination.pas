@@ -706,7 +706,7 @@ begin
   // The SAME resting state TTyButton.Down injects, so one ':selected' theme rule styles the
   // pressed button and the current page alike.
   if (AItem.Kind = pikPage) and (AItem.Page = FPageIndex) then Include(Result, tysSelected);
-  if not Enabled then
+  if not IsEnabled then
   begin
     { Disabled KEEPS :selected -- TTySegmented's deviation from TTyButton.Down, for the same
       reason: a greyed-out pagination must still show WHICH page is in force. Losing the chip
@@ -900,7 +900,7 @@ var
   lst: TTyPaginationItems;
   hit: Integer;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   // The base sets FPressed and moves focus here (TabStop + CanFocus), so a click behaves like
   // a Tab and the arrow keys work straight after it.
   inherited MouseDown(Button, Shift, X, Y);
@@ -919,7 +919,7 @@ procedure TTyPagination.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   hit: Integer;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
   // The raw cell index, inert cells included: CellStates is what decides that an inert cell
   // does not light up, so the two rules live in one place.
@@ -943,7 +943,7 @@ end;
 
 procedure TTyPagination.KeyDown(var Key: Word; Shift: TShiftState);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   if FPageCount <= 0 then Exit;
   { Left/Right turn the page -- the reason this control is focusable at all. Every handled key

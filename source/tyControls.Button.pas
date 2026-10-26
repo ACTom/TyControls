@@ -312,7 +312,7 @@ procedure TTyButton.Click;
 var
   Form: TCustomForm;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   // Set the host form's ModalResult BEFORE OnClick (native TButton semantics,
   // buttons.inc:160-170). This lets an OnClick handler veto/override the close by
   // writing Form.ModalResult := mrNone; doing it after would clobber the handler.
@@ -529,7 +529,7 @@ end;
 
 procedure TTyButton.KeyDown(var Key: Word; Shift: TShiftState);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   if (Key = VK_SPACE) or (Key = VK_RETURN) then
   begin

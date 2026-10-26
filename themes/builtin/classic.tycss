@@ -249,3 +249,7 @@ TyTrackThumb:active { render-style: bevel3d; background: var(--face); }
 
 /* Tooltip: the pale yellow box with a thin black frame. */
 TyHint { background: #FFFFE1; color: var(--ink); border-color: #000000; border-width: 1px; border-radius: 0; padding: var(--pad-tooltip); font-size: var(--font-size-base); }
+
+/* #118: this theme dresses these keys itself, which drops the base layer's :disabled --
+   so it is restated here (see light.tycss). */
+TyCalendar:disabled, TyBadge:disabled, TyLabel:disabled, TyHtmlLabel:disabled, TyLinkLabel:disabled, TyShadowLabel:disabled, TyGlowLabel:disabled, TyDivider:disabled, TyCharImage:disabled { opacity: var(--disabled-opacity); }

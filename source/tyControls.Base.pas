@@ -655,6 +655,9 @@ procedure TyApplyControlFont(var AStyle: TTyStyleSet; AControl: TControl;
   control that sizes some text of its own -- a dial's figure, a gauge's value -- and keeps its
   own default unless the author set a size (#113). }
 function TyControlFontSize(AControl: TControl): Integer;
+{ AStates, or [tysDisabled] when AControl -- or one of its parents -- is disabled (#118): for a
+  part a control resolves with states of its own, which would otherwise never look disabled. }
+function TyStatesUnlessDisabled(AControl: TControl; const AStates: TTyStateSet): TTyStateSet;
 
 { Shared font-size resolution for every ty control (windowed AND graphic — the label family
   each carried its own copy). Priority:
@@ -1081,7 +1084,7 @@ end;
 function TTyGraphicControl.CurrentStates: TTyStateSet;
 begin
   Result := [];
-  if not Enabled then
+  if not IsEnabled then
   begin
     Include(Result, tysDisabled);
     Exit;
@@ -2378,7 +2381,7 @@ end;
 function TTyCustomControl.CurrentStates: TTyStateSet;
 begin
   Result := [];
-  if not Enabled then
+  if not IsEnabled then
   begin
     Include(Result, tysDisabled);
     Exit;
@@ -2575,6 +2578,11 @@ procedure TyApplyControlFont(var AStyle: TTyStyleSet; AControl: TControl;
   const AStates: TTyStateSet);
 begin
   TyApplyControlFontInk(AStyle, AControl, AStates, True);
+end;
+
+function TyStatesUnlessDisabled(AControl: TControl; const AStates: TTyStateSet): TTyStateSet;
+begin
+  if (AControl = nil) or AControl.IsEnabled then Result := AStates else Result := [tysDisabled];
 end;
 
 function TyControlFontSize(AControl: TControl): Integer;
@@ -2796,10 +2804,19 @@ begin
 end;
 
 procedure TTyCustomControl.WndProc(var TheMessage: TLMessage);
+var
+  i: Integer;
 begin
   inherited WndProc(TheMessage);
   if (TheMessage.Msg = CM_PARENTFONTCHANGED) and not ParentFont then
     TyParentChainFontChanged(Self);   // #112
+  { #118: a control looks disabled when it OR a parent is (IsEnabled), and LCL repaints only
+    the control whose Enabled changed -- so its windowed children are told too. Its graphic
+    children repaint with it. }
+  if TheMessage.Msg = CM_ENABLEDCHANGED then
+    for i := 0 to ControlCount - 1 do
+      if Controls[i] is TWinControl then
+        TWinControl(Controls[i]).Perform(CM_ENABLEDCHANGED, 0, 0);
 end;
 
 procedure TTyCustomControl.PaintWindow(DC: HDC);

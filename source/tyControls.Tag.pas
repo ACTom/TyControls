@@ -336,7 +336,7 @@ procedure TTyTag.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integ
 var
   closeHit: Boolean;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   // Hit-test the close x on the RESTING geometry, BEFORE inherited MouseDown sets FPressed:
   // FPressed makes CurrentStyle resolve TyTag:active, whose padding can move the close rect off
   // the painted (resting) x, so a press squarely on the visible x reads as a pill press — the
@@ -371,7 +371,7 @@ procedure TTyTag.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   h: Boolean;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
   h := FClosable and PtOnClose(X, Y);
   if FHoverClose <> h then
@@ -418,7 +418,7 @@ begin
     // TyTagClose.danger can tint the x of a danger tag) and with the state of the GLYPH,
     // not the pill — hovering precisely the x is what lights TyTagClose:hover.
     closeStates := [];
-    if not Enabled then
+    if not IsEnabled then
       Include(closeStates, tysDisabled)
     else if FHoverClose then
       Include(closeStates, tysHover)

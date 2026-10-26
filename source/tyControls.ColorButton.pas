@@ -341,7 +341,7 @@ var
   newColor: TTyColor;
   didChange: Boolean;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   { inherited FIRST, so OnClick observes the PRE-dialog colour and can still cancel or
     reconfigure -- LCL runs the click before opening the picker. Ours opened the dialog
     first, so an OnClick handler was told about a decision the user had already made and

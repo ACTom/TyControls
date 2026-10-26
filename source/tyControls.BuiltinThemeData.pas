@@ -658,7 +658,12 @@ begin
     'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
     'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
     '  color: var(--on-titlebar);' + LineEnding +
-    '}' + LineEnding;
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* #118: this theme dresses these keys itself, which drops the base layer''s :disabled --' + LineEnding +
+    '   so it is restated here (see light.tycss). */' + LineEnding +
+    'TyPanel:disabled, TyScrollBox:disabled, TyExPanel:disabled, TyChart:disabled, TyCalculator:disabled, TyBevel:disabled, TySizeBox:disabled, TyControlBar:disabled, TyCoolBar:disabled, TyColorGrid:disabled, TyShape:disabled, TyStarShape:disabled, TyArrow:disabled, TyImageView:disabled, TyImage:disabled, TyPreviewBox:disabled, TyListGroupPanel:disabled, TyGroupBox:disabled, TyToolGroupPanel:disabled, TyStatusBar:disabled, TyTreeHeaderSection:disabled, TyListViewHeaderSection:disabled { color: var(--muted); }' + LineEnding +
+    'TyCalendar:disabled, TyBadge:disabled { opacity: var(--disabled-opacity); }' + LineEnding;
 end;
 
 function TyBuiltinSystemCss: string;
@@ -1242,7 +1247,12 @@ begin
     'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
     'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
     '  color: var(--on-titlebar);' + LineEnding +
-    '}' + LineEnding;
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* #118: this theme dresses these keys itself, which drops the base layer''s :disabled --' + LineEnding +
+    '   so it is restated here (see light.tycss). */' + LineEnding +
+    'TyPanel:disabled, TyScrollBox:disabled, TyExPanel:disabled, TyChart:disabled, TyCalculator:disabled, TyBevel:disabled, TySizeBox:disabled, TyControlBar:disabled, TyCoolBar:disabled, TyColorGrid:disabled, TyShape:disabled, TyStarShape:disabled, TyArrow:disabled, TyImageView:disabled, TyImage:disabled, TyPreviewBox:disabled, TyListGroupPanel:disabled, TyGroupBox:disabled, TyToolGroupPanel:disabled, TyStatusBar:disabled, TyTreeHeaderSection:disabled, TyListViewHeaderSection:disabled { color: var(--muted); }' + LineEnding +
+    'TyCalendar:disabled, TyBadge:disabled { opacity: var(--disabled-opacity); }' + LineEnding;
 end;
 
 function SkinCss_adwaita: string;
@@ -1435,7 +1445,11 @@ begin
     'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
     'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
     '  color: var(--on-titlebar);' + LineEnding +
-    '}' + LineEnding;
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* #118: this theme dresses these keys itself, which drops the base layer''s :disabled --' + LineEnding +
+    '   so it is restated here (see light.tycss). */' + LineEnding +
+    'TyBadge:disabled, TyLabel:disabled, TyHtmlLabel:disabled, TyLinkLabel:disabled, TyShadowLabel:disabled, TyGlowLabel:disabled, TyDivider:disabled, TyCharImage:disabled { opacity: var(--disabled-opacity); }' + LineEnding;
 end;
 
 function SkinCss_aero: string;
@@ -1995,7 +2009,12 @@ begin
     'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
     'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
     '  color: var(--on-titlebar);' + LineEnding +
-    '}' + LineEnding;
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* #118: this theme dresses these keys itself, which drops the base layer''s :disabled --' + LineEnding +
+    '   so it is restated here (see light.tycss). */' + LineEnding +
+    'TyControlBar:disabled, TyCoolBar:disabled { color: var(--muted); }' + LineEnding +
+    'TyBadge:disabled { opacity: var(--disabled-opacity); }' + LineEnding;
 end;
 
 function SkinCss_antdesign: string;
@@ -2258,7 +2277,11 @@ begin
     'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
     'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
     '  color: var(--on-titlebar);' + LineEnding +
-    '}' + LineEnding;
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* #118: this theme dresses these keys itself, which drops the base layer''s :disabled --' + LineEnding +
+    '   so it is restated here (see light.tycss). */' + LineEnding +
+    'TyBadge:disabled, TyLabel:disabled, TyHtmlLabel:disabled, TyLinkLabel:disabled, TyShadowLabel:disabled, TyGlowLabel:disabled, TyDivider:disabled, TyCharImage:disabled { opacity: var(--disabled-opacity); }' + LineEnding;
 end;
 
 function SkinCss_bootstrap: string;
@@ -2699,7 +2722,11 @@ begin
     'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
     'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
     '  color: var(--on-titlebar);' + LineEnding +
-    '}' + LineEnding;
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* #118: this theme dresses these keys itself, which drops the base layer''s :disabled --' + LineEnding +
+    '   so it is restated here (see light.tycss). */' + LineEnding +
+    'TyBadge:disabled, TyLabel:disabled, TyHtmlLabel:disabled, TyLinkLabel:disabled, TyShadowLabel:disabled, TyGlowLabel:disabled, TyDivider:disabled, TyCharImage:disabled { opacity: var(--disabled-opacity); }' + LineEnding;
 end;
 
 function SkinCss_breeze: string;
@@ -2928,7 +2955,11 @@ begin
     'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
     'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
     '  color: var(--on-titlebar);' + LineEnding +
-    '}' + LineEnding;
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* #118: this theme dresses these keys itself, which drops the base layer''s :disabled --' + LineEnding +
+    '   so it is restated here (see light.tycss). */' + LineEnding +
+    'TyBadge:disabled, TyLabel:disabled, TyHtmlLabel:disabled, TyLinkLabel:disabled, TyShadowLabel:disabled, TyGlowLabel:disabled, TyDivider:disabled, TyCharImage:disabled { opacity: var(--disabled-opacity); }' + LineEnding;
 end;
 
 function SkinCss_classic: string;
@@ -3184,7 +3215,11 @@ begin
     'TyTrackThumb:active { render-style: bevel3d; background: var(--face); }' + LineEnding +
     '' + LineEnding +
     '/* Tooltip: the pale yellow box with a thin black frame. */' + LineEnding +
-    'TyHint { background: #FFFFE1; color: var(--ink); border-color: #000000; border-width: 1px; border-radius: 0; padding: var(--pad-tooltip); font-size: var(--font-size-base); }' + LineEnding;
+    'TyHint { background: #FFFFE1; color: var(--ink); border-color: #000000; border-width: 1px; border-radius: 0; padding: var(--pad-tooltip); font-size: var(--font-size-base); }' + LineEnding +
+    '' + LineEnding +
+    '/* #118: this theme dresses these keys itself, which drops the base layer''s :disabled --' + LineEnding +
+    '   so it is restated here (see light.tycss). */' + LineEnding +
+    'TyCalendar:disabled, TyBadge:disabled, TyLabel:disabled, TyHtmlLabel:disabled, TyLinkLabel:disabled, TyShadowLabel:disabled, TyGlowLabel:disabled, TyDivider:disabled, TyCharImage:disabled { opacity: var(--disabled-opacity); }' + LineEnding;
 end;
 
 function SkinCss_fluent: string;
@@ -3499,7 +3534,11 @@ begin
     'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
     'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
     '  color: var(--on-titlebar);' + LineEnding +
-    '}' + LineEnding;
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* #118: this theme dresses these keys itself, which drops the base layer''s :disabled --' + LineEnding +
+    '   so it is restated here (see light.tycss). */' + LineEnding +
+    'TyBadge:disabled { opacity: var(--disabled-opacity); }' + LineEnding;
 end;
 
 function SkinCss_macos: string;
@@ -3758,7 +3797,11 @@ begin
     'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
     'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
     '  color: var(--on-titlebar);' + LineEnding +
-    '}' + LineEnding;
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* #118: this theme dresses these keys itself, which drops the base layer''s :disabled --' + LineEnding +
+    '   so it is restated here (see light.tycss). */' + LineEnding +
+    'TyBadge:disabled, TyLabel:disabled, TyHtmlLabel:disabled, TyLinkLabel:disabled, TyShadowLabel:disabled, TyGlowLabel:disabled, TyDivider:disabled, TyCharImage:disabled { opacity: var(--disabled-opacity); }' + LineEnding;
 end;
 
 function SkinCss_material3: string;
@@ -3969,7 +4012,11 @@ begin
     'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
     'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
     '  color: var(--on-titlebar);' + LineEnding +
-    '}' + LineEnding;
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* #118: this theme dresses these keys itself, which drops the base layer''s :disabled --' + LineEnding +
+    '   so it is restated here (see light.tycss). */' + LineEnding +
+    'TyBadge:disabled, TyLabel:disabled, TyHtmlLabel:disabled, TyLinkLabel:disabled, TyShadowLabel:disabled, TyGlowLabel:disabled, TyDivider:disabled, TyCharImage:disabled { opacity: var(--disabled-opacity); }' + LineEnding;
 end;
 
 function SkinCss_office: string;
@@ -4295,7 +4342,11 @@ begin
     'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
     'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
     '  color: var(--on-titlebar);' + LineEnding +
-    '}' + LineEnding;
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* #118: this theme dresses these keys itself, which drops the base layer''s :disabled --' + LineEnding +
+    '   so it is restated here (see light.tycss). */' + LineEnding +
+    'TyBadge:disabled, TyLabel:disabled, TyHtmlLabel:disabled, TyLinkLabel:disabled, TyShadowLabel:disabled, TyGlowLabel:disabled, TyDivider:disabled, TyCharImage:disabled { opacity: var(--disabled-opacity); }' + LineEnding;
 end;
 
 function SkinCss_showcase: string;
@@ -4889,7 +4940,12 @@ begin
     'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
     'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
     '  color: var(--on-titlebar);' + LineEnding +
-    '}' + LineEnding;
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* #118: this theme dresses these keys itself, which drops the base layer''s :disabled --' + LineEnding +
+    '   so it is restated here (see light.tycss). */' + LineEnding +
+    'TyPanel:disabled, TyScrollBox:disabled, TyExPanel:disabled, TyChart:disabled, TyCalculator:disabled, TyBevel:disabled, TySizeBox:disabled, TyControlBar:disabled, TyCoolBar:disabled, TyColorGrid:disabled, TyShape:disabled, TyStarShape:disabled, TyArrow:disabled, TyImageView:disabled, TyImage:disabled, TyPreviewBox:disabled, TyListGroupPanel:disabled, TyGroupBox:disabled, TyToolGroupPanel:disabled, TyStatusBar:disabled, TyTreeHeaderSection:disabled, TyListViewHeaderSection:disabled { color: var(--muted); }' + LineEnding +
+    'TyCalendar:disabled, TyBadge:disabled { opacity: var(--disabled-opacity); }' + LineEnding;
 end;
 
 function SkinCss_ubuntu: string;
@@ -5067,7 +5123,11 @@ begin
     'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
     'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
     '  color: var(--on-titlebar);' + LineEnding +
-    '}' + LineEnding;
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* #118: this theme dresses these keys itself, which drops the base layer''s :disabled --' + LineEnding +
+    '   so it is restated here (see light.tycss). */' + LineEnding +
+    'TyBadge:disabled, TyLabel:disabled, TyHtmlLabel:disabled, TyLinkLabel:disabled, TyShadowLabel:disabled, TyGlowLabel:disabled, TyDivider:disabled, TyCharImage:disabled { opacity: var(--disabled-opacity); }' + LineEnding;
 end;
 
 function SkinCss_win10: string;
@@ -5307,7 +5367,11 @@ begin
     'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
     'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
     '  color: var(--on-titlebar);' + LineEnding +
-    '}' + LineEnding;
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* #118: this theme dresses these keys itself, which drops the base layer''s :disabled --' + LineEnding +
+    '   so it is restated here (see light.tycss). */' + LineEnding +
+    'TyBadge:disabled, TyLabel:disabled, TyHtmlLabel:disabled, TyLinkLabel:disabled, TyShadowLabel:disabled, TyGlowLabel:disabled, TyDivider:disabled, TyCharImage:disabled { opacity: var(--disabled-opacity); }' + LineEnding;
 end;
 
 function SkinCss_win11: string;
@@ -5576,7 +5640,11 @@ begin
     'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
     'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
     '  color: var(--on-titlebar);' + LineEnding +
-    '}' + LineEnding;
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* #118: this theme dresses these keys itself, which drops the base layer''s :disabled --' + LineEnding +
+    '   so it is restated here (see light.tycss). */' + LineEnding +
+    'TyBadge:disabled { opacity: var(--disabled-opacity); }' + LineEnding;
 end;
 
 function SkinCss_xp: string;
@@ -5929,7 +5997,11 @@ begin
     'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
     'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
     '  color: var(--on-titlebar);' + LineEnding +
-    '}' + LineEnding;
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* #118: this theme dresses these keys itself, which drops the base layer''s :disabled --' + LineEnding +
+    '   so it is restated here (see light.tycss). */' + LineEnding +
+    'TyBadge:disabled { opacity: var(--disabled-opacity); }' + LineEnding;
 end;
 
 function TyBuiltinSkinNames: TStringArray;

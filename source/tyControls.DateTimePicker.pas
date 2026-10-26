@@ -2280,7 +2280,7 @@ end;
 procedure TTyDateTimePicker.KeyDown(var Key: Word; Shift: TShiftState);
 var OldVal: TDateTime;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
 
   { Escape: close the dropdown if it is open, otherwise revert the whole edit.
@@ -2410,7 +2410,7 @@ var
   OldVal:   TDateTime;
   AutoAdv:  Boolean;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited UTF8KeyPress(UTF8Key);
   if FReadOnly then Exit;
   if IsInert then Exit;
@@ -2466,7 +2466,7 @@ end;
 function TTyDateTimePicker.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 begin
-  if not Enabled then Exit(False);
+  if not IsEnabled then Exit(False);
   if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then Exit(True);
   if FReadOnly then Exit(False);
   if IsInert then Exit(False);
@@ -2506,7 +2506,7 @@ var
   CbBoxR:   TRect;
   Spans:    TTySegmentArray;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   FMouseDownOnButton := False;
   if Button = mbLeft then

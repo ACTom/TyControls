@@ -747,14 +747,14 @@ end;
 
 procedure TTyEdit.Undo;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   if FUndoStack.CanUndo then
     RestoreState(FUndoStack.Undo(CaptureState));
 end;
 
 procedure TTyEdit.Redo;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   if FUndoStack.CanRedo then
     RestoreState(FUndoStack.Redo(CaptureState));
 end;
@@ -791,7 +791,7 @@ function TTyEdit.TeIsReadOnly: Boolean;            begin Result := FReadOnly; en
 // ---- ITyImeEditable (macOS IME composition seam; see tyControls.CocoaWS) ----
 
 function  TTyEdit.ImeTargetControl: TWinControl;   begin Result := Self; end;
-function  TTyEdit.ImeIsReadOnly: Boolean;          begin Result := FReadOnly or (not Enabled); end;
+function  TTyEdit.ImeIsReadOnly: Boolean;          begin Result := FReadOnly or (not IsEnabled); end;
 function  TTyEdit.ImeCaretBoundClient: TRect;      begin Result := GetImeCaretRect; end;
 function  TTyEdit.ImeCaretIndex: Integer;          begin Result := SelStart; end;
 // Bracket the WHOLE composition in one undo step (mirrors HandleImeCommit): BeginUndoStep captures the
@@ -2000,7 +2000,7 @@ procedure TTyEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Inte
 var
   Clicks: Integer;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbLeft then
   begin
@@ -2105,7 +2105,7 @@ end;
 
 procedure TTyEdit.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
   if FMouseSelecting then
   begin
@@ -2265,7 +2265,7 @@ procedure TTyEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
 var
   imeFull: string;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   { GTK3: the backend truncated this commit into a TUTF8Char on its way here. The whole
     string is still pending in the widgetset, so take it and insert THAT instead. Returns ''
     on every other widgetset and whenever nothing was truncated, so the normal path below is
@@ -2290,7 +2290,7 @@ var
   TextBefore, Filtered: string;
   i: Integer;
 begin
-  if FReadOnly or not Enabled then Exit;
+  if FReadOnly or not IsEnabled then Exit;
   if ACommitUtf8 = '' then Exit;
   TextBefore := FText;
   BeginUndoStep(uskTyping);
@@ -2342,7 +2342,7 @@ var
   Extending: Boolean;
   HasModifier: Boolean;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   // Any key activity while focused makes the caret solid for one blink cycle.
   ResetCaretBlink;

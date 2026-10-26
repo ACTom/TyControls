@@ -1217,7 +1217,13 @@ begin
     'TyMenuButton.on-titlebar, TyColorButton.on-titlebar, TyButtonGroup.on-titlebar,' + LineEnding +
     'TyLabel.on-titlebar, TyCheckBox.on-titlebar, TyToggleSwitch.on-titlebar {' + LineEnding +
     '  color: var(--on-titlebar);' + LineEnding +
-    '}' + LineEnding;
+    '}' + LineEnding +
+    '' + LineEnding +
+    '/* #118: a disabled control reads as disabled. A container and its aliases grey their' + LineEnding +
+    '   ink (an opacity would leave each windowed child filled with the undimmed colour behind' + LineEnding +
+    '   it, and the children dim themselves); surfaces the control draws itself dim. */' + LineEnding +
+    'TyPanel:disabled, TyScrollBox:disabled, TyExPanel:disabled, TyChart:disabled, TyCalculator:disabled, TyBevel:disabled, TySizeBox:disabled, TyControlBar:disabled, TyCoolBar:disabled, TyColorGrid:disabled, TyShape:disabled, TyStarShape:disabled, TyArrow:disabled, TyImageView:disabled, TyImage:disabled, TyPreviewBox:disabled, TyListGroupPanel:disabled, TyGroupBox:disabled, TyToolGroupPanel:disabled, TyExPanelHeader:disabled, TyStatusBar:disabled, TyTreeHeaderSection:disabled, TyListViewHeaderSection:disabled { color: var(--muted); }' + LineEnding +
+    'TyCalendar:disabled, TyBadge:disabled { opacity: var(--disabled-opacity); }' + LineEnding;
 end;
 
 end.

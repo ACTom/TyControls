@@ -645,7 +645,7 @@ begin
   // the wheel handled, honor that and do not step.
   Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
   if Result then Exit;
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   // Convention: wheel-up (WheelDelta > 0) scrolls content up -> Position
   // DECREASES by SmallChange; wheel-down increases it. (Standard scrollbar.)
   Position := Position - Sign(WheelDelta) * FSmallChange;
@@ -896,7 +896,7 @@ var
   Back, Fwd: TScrollCode;
   BackSign: Integer;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbLeft then
   begin
@@ -999,7 +999,7 @@ end;
 
 procedure TTyScrollBar.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
   if FDragging then
     DragThumbTo(PosAlong(X, Y));
@@ -1019,7 +1019,7 @@ procedure TTyScrollBar.KeyDown(var Key: Word; Shift: TShiftState);
 var
   Dec1, Inc1: Word;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   if FKind = sbVertical then
   begin

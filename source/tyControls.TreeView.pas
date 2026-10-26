@@ -3224,7 +3224,7 @@ function TTyTreeView.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
 var
   Delta, step: Integer;
 begin
-  if not Enabled then Exit(False);
+  if not IsEnabled then Exit(False);
   if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then Exit(True);
 
   // ③d B1: a notch scrolls three default rows' worth of pixels, also under
@@ -5431,8 +5431,10 @@ begin
       { Band rect spans the full content width, at the top of CR (before headerH offset) }
       headerBandRect := Rect(CR.Left, CR.Top - headerH, CR.Right, CR.Top);
       { Resolve styles — tolerate absent typeKeys (fallback to tree tokens) }
-      headerBgStyle  := PartStyle('TyTreeHeader', '', []);
-      headerSecStyle := PartStyle('TyTreeHeaderSection', '', []);
+      { #118: a disabled tree's parts resolve :disabled -- the theme's TyTreeNode:disabled and
+        TyTreeCheckBox:disabled rules were never reached. }
+      headerBgStyle  := PartStyle('TyTreeHeader', '', TyStatesUnlessDisabled(Self, []));
+      headerSecStyle := PartStyle('TyTreeHeaderSection', '', TyStatesUnlessDisabled(Self, []));
 
       { Fill header band background }
       if tpBackground in headerBgStyle.Present then
@@ -5579,7 +5581,7 @@ begin
       begin
         { Drag overlay accent from the THEME (TyTreeNode:selected bg = --accent),
           never a hard-coded color. NodeStyle is free here — the node loop runs later. }
-        NodeStyle := PartStyle('TyTreeNode', '', [tysSelected]);
+        NodeStyle := PartStyle('TyTreeNode', '', TyStatesUnlessDisabled(Self, [tysSelected]));
         if tpBackground in NodeStyle.Present then
           accentPx := TyColorToBGRA(NodeStyle.Background.Color)
         else
@@ -5657,7 +5659,7 @@ begin
         node area, BELOW the header band which has already painted above. }
       if (FRoot^.FirstChild = nil) and (FEmptyListMessage <> '') then
       begin
-        NodeStyle := PartStyle('TyTreeNode', '', []);
+        NodeStyle := PartStyle('TyTreeNode', '', TyStatesUnlessDisabled(Self, []));
         P.DrawText(CR, FEmptyListMessage, S.FontName, ResolveFontSize(S), S.FontWeight,
           NodeStyle.TextColor, taCenter, tlCenter, True);
       end;
@@ -5695,7 +5697,7 @@ begin
       else if FHotTrack and (node = FHotNode) then
         nodeStates := [tysHover];
 
-      NodeStyle := PartStyle('TyTreeNode', '', nodeStates);
+      NodeStyle := PartStyle('TyTreeNode', '', TyStatesUnlessDisabled(Self, nodeStates));
       { #71: the row ground is the selection's only with toFullRowSelect, as treeview.md
         says and LCL's RowSelect does; without it the caption carries the highlight
         (FillCaptionHighlight) and everything else here is drawn plain. }
@@ -5703,7 +5705,7 @@ begin
       if fullRow or (nodeStates = []) then
         ChromeStyle := NodeStyle
       else
-        ChromeStyle := PartStyle('TyTreeNode', '', []);
+        ChromeStyle := PartStyle('TyTreeNode', '', TyStatesUnlessDisabled(Self, []));
 
       if tpBackground in ChromeStyle.Present then
       begin
@@ -5829,11 +5831,11 @@ begin
             begin
               { Resolve checkbox style — fall back gracefully if typeKey absent }
               if node^.CheckState = csChecked then
-                cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', [tysActive])
+                cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', TyStatesUnlessDisabled(Self, [tysActive]))
               else if (nsSelected in node^.States) and fullRow then   { #71: on the highlight }
-                cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', [tysSelected])
+                cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', TyStatesUnlessDisabled(Self, [tysSelected]))
               else
-                cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', []);
+                cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', TyStatesUnlessDisabled(Self, []));
               cbBoxSize := P.Scale(12);
               if cbBoxSize > rowH - P.Scale(2) then cbBoxSize := rowH - P.Scale(2);
               if cbBoxSize < 4 then cbBoxSize := 4;
@@ -6090,11 +6092,11 @@ begin
         begin
           { Resolve checkbox style }
           if node^.CheckState = csChecked then
-            cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', [tysActive])
+            cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', TyStatesUnlessDisabled(Self, [tysActive]))
           else if (nsSelected in node^.States) and fullRow then   { #71: on the highlight }
-            cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', [tysSelected])
+            cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', TyStatesUnlessDisabled(Self, [tysSelected]))
           else
-            cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', []);
+            cbStyle := ActiveController.Model.ResolveStyle('TyTreeCheckBox', '', TyStatesUnlessDisabled(Self, []));
           cbBoxSize := P.Scale(12);
           if cbBoxSize > rowH - P.Scale(2) then cbBoxSize := rowH - P.Scale(2);
           if cbBoxSize < 4 then cbBoxSize := 4;
@@ -6281,7 +6283,7 @@ begin
       if GetCellRect(FDropTarget, mainColBase, rowRect) then
       begin
         { Theme accent (same resolution as the header drag overlay above). }
-        NodeStyle := PartStyle('TyTreeNode', '', [tysSelected]);
+        NodeStyle := PartStyle('TyTreeNode', '', TyStatesUnlessDisabled(Self, [tysSelected]));
         if tpBackground in NodeStyle.Present then
           accentPx := TyColorToBGRA(NodeStyle.Background.Color)
         else
@@ -6655,7 +6657,7 @@ var
 begin
   inherited MouseDown(Button, Shift, X, Y);
 
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
 
   { Request keyboard focus so arrow-key navigation works after click }
   if CanSetFocus then SetFocus;

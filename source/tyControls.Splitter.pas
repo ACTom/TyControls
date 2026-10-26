@@ -242,7 +242,7 @@ begin
     resize cursor, so the pointer promised a drag over a control that ignores MouseDown --
     the user pulls, nothing moves, and there is nothing on screen saying why. LCL
     re-derives the cursor from Enabled for the same reason. }
-  if not Enabled then
+  if not IsEnabled then
     Cursor := crDefault
   else if Vertical then
     Cursor := crHSplit

@@ -939,7 +939,7 @@ end;
 
 procedure TTySpinEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited UTF8KeyPress(UTF8Key);
   InsertEditChar(UTF8Key);
   Invalidate;
@@ -947,7 +947,7 @@ end;
 
 procedure TTySpinEdit.KeyDown(var Key: Word; Shift: TShiftState);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
   case Key of
     VK_UP:
@@ -983,7 +983,7 @@ end;
 function TTySpinEdit.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 begin
-  if not Enabled then Exit(False);
+  if not IsEnabled then Exit(False);
   // Let the user's OnMouseWheel handler run first; if it consumes the event, stop.
   if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then
   begin
@@ -1001,7 +1001,7 @@ end;
 
 procedure TTySpinEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button = mbLeft then
   begin
@@ -1018,7 +1018,7 @@ end;
 procedure TTySpinEdit.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseMove(Shift, X, Y);
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   FSpin.MouseMove(SpinHitAt(X, Y), not FReadOnly);
 end;
 

@@ -353,7 +353,11 @@ begin
     case FStyle of
       gsLinearH, gsLinearV: DrawLinear(P, R, frac, trackS, fillS);
     else
-      DrawArc(P, R, frac, trackS, fillS);
+      begin
+        { The arc never goes through DrawFrame, so its :disabled opacity was dead (#118). }
+        TyApplyStyleOpacity(Self, P, trackS);
+        DrawArc(P, R, frac, trackS, fillS);
+      end;
     end;
     P.EndPaint;
   finally

@@ -982,7 +982,7 @@ var
   hit: TTyListGroupHit;
   bw: Integer;
 begin
-  if not Enabled then Exit;
+  if not IsEnabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
   if Button <> mbLeft then Exit;
   bw := MulDiv(CurrentStyle.BorderWidth, Font.PixelsPerInch, 96);
@@ -1064,7 +1064,7 @@ function TTyListGroupPanel.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
 var
   step, m, old: Integer;
 begin
-  if not Enabled then Exit(False);
+  if not IsEnabled then Exit(False);
   if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then Exit(True);
   m := MaxScrollOffset;
   if m <= 0 then Exit(False);   // nothing to scroll
@@ -1147,7 +1147,7 @@ begin
         // Its OWN key, not the tree column header's: TyTreeHeaderSection is shared with
         // TreeView/ListView, so borrowing it made the sider un-restyleable. tysSelected = the
         // group is OPEN (a skin tints the open group accent through it).
-        HdrStyle := PartStyle('TyListGroupHeader', StyleClass, states);   // the panel's font (#113)
+        HdrStyle := PartStyle('TyListGroupHeader', StyleClass, TyStatesUnlessDisabled(Self, states));   // font (#113), disabled (#118)
 
         // Fill ONLY when the theme gives a background: a modern sider leaves the group row
         // unfilled (no grey band), so the absence of a bg must mean "no band", not a default.
@@ -1214,7 +1214,7 @@ begin
         else Include(states, tysNormal);
         // Its OWN key (was TyListItem, shared with every list): so a selected item can be a
         // soft INSET ROUNDED pill instead of a full-bleed saturated bar.
-        ItemStyle := PartStyle('TyListGroupItem', StyleClass, states,
+        ItemStyle := PartStyle('TyListGroupItem', StyleClass, TyStatesUnlessDisabled(Self, states),
           not selected);   // the panel's font (#113); the selected item keeps its ink
 
         // The pill: inset from the row's four edges (so it floats, not a full-width bar) and
