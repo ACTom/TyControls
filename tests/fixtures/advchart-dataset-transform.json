@@ -8771,7 +8771,7 @@
   {
    "id": "f-reg",
    "group": "filter",
-   "note": "reg: the port does not have it",
+   "note": "reg: a regular expression over the words",
    "option": {
     "animation": false,
     "dataset": [
@@ -8860,7 +8860,6 @@
      }
     ]
    },
-   "deviation": "reg",
    "datasets": [
     {
      "k": 0,
@@ -48765,6 +48764,4022 @@
      "results": []
     }
    ]
+  },
+  {
+   "id": "f-reg-num",
+   "group": "filter",
+   "note": "reg over numbers: String(2011), and the string 2013",
+   "option": {
+    "animation": false,
+    "dataset": [
+     {
+      "source": [
+       [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       [
+        "Tofu",
+        2011,
+        41.1,
+        "12",
+        "a"
+       ],
+       [
+        "Milk",
+        2012,
+        86.5,
+        " 30 ",
+        "b"
+       ],
+       [
+        "Cheese",
+        2013,
+        24.1,
+        "7px",
+        null
+       ],
+       [
+        "Walnut",
+        2012,
+        55.2,
+        "-",
+        "a"
+       ],
+       [
+        "Matcha",
+        2014,
+        72.4,
+        "0x10",
+        "c"
+       ],
+       [
+        "Biscuit",
+        2011,
+        53.9,
+        5,
+        "b"
+       ],
+       [
+        "Tea",
+        "2013",
+        66,
+        "1e2",
+        "a"
+       ],
+       [
+        "Coffee",
+        2015,
+        null,
+        "",
+        "B"
+       ],
+       [
+        "Juice",
+        2016,
+        33.3,
+        "Infinity",
+        "b"
+       ]
+      ]
+     },
+     {
+      "transform": {
+       "type": "filter",
+       "config": {
+        "dimension": "year",
+        "reg": "^201[13]$"
+       }
+      }
+     }
+    ]
+   },
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:product",
+         "s:year",
+         "s:sales",
+         "s:price",
+         "s:tag"
+        ],
+        [
+         "s:Tofu",
+         "409f6c0000000000",
+         "40448ccccccccccd",
+         "s:12",
+         "s:a"
+        ],
+        [
+         "s:Milk",
+         "409f700000000000",
+         "4055a00000000000",
+         "s: 30 ",
+         "s:b"
+        ],
+        [
+         "s:Cheese",
+         "409f740000000000",
+         "403819999999999a",
+         "s:7px",
+         null
+        ],
+        [
+         "s:Walnut",
+         "409f700000000000",
+         "404b99999999999a",
+         "s:-",
+         "s:a"
+        ],
+        [
+         "s:Matcha",
+         "409f780000000000",
+         "405219999999999a",
+         "s:0x10",
+         "s:c"
+        ],
+        [
+         "s:Biscuit",
+         "409f6c0000000000",
+         "404af33333333333",
+         "4014000000000000",
+         "s:b"
+        ],
+        [
+         "s:Tea",
+         "s:2013",
+         "4050800000000000",
+         "s:1e2",
+         "s:a"
+        ],
+        [
+         "s:Coffee",
+         "409f7c0000000000",
+         null,
+         "s:",
+         "s:B"
+        ],
+        [
+         "s:Juice",
+         "409f800000000000",
+         "4040a66666666666",
+         "s:Infinity",
+         "s:b"
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:product",
+         "s:year",
+         "s:sales",
+         "s:price",
+         "s:tag"
+        ],
+        [
+         "s:Tofu",
+         "409f6c0000000000",
+         "40448ccccccccccd",
+         "s:12",
+         "s:a"
+        ],
+        [
+         "s:Cheese",
+         "409f740000000000",
+         "403819999999999a",
+         "s:7px",
+         null
+        ],
+        [
+         "s:Biscuit",
+         "409f6c0000000000",
+         "404af33333333333",
+         "4014000000000000",
+         "s:b"
+        ],
+        [
+         "s:Tea",
+         "s:2013",
+         "4050800000000000",
+         "s:1e2",
+         "s:a"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "f-reg-float",
+   "group": "filter",
+   "note": "reg over floats and a null: String(41.1), String(null)",
+   "option": {
+    "animation": false,
+    "dataset": [
+     {
+      "source": [
+       [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       [
+        "Tofu",
+        2011,
+        41.1,
+        "12",
+        "a"
+       ],
+       [
+        "Milk",
+        2012,
+        86.5,
+        " 30 ",
+        "b"
+       ],
+       [
+        "Cheese",
+        2013,
+        24.1,
+        "7px",
+        null
+       ],
+       [
+        "Walnut",
+        2012,
+        55.2,
+        "-",
+        "a"
+       ],
+       [
+        "Matcha",
+        2014,
+        72.4,
+        "0x10",
+        "c"
+       ],
+       [
+        "Biscuit",
+        2011,
+        53.9,
+        5,
+        "b"
+       ],
+       [
+        "Tea",
+        "2013",
+        66,
+        "1e2",
+        "a"
+       ],
+       [
+        "Coffee",
+        2015,
+        null,
+        "",
+        "B"
+       ],
+       [
+        "Juice",
+        2016,
+        33.3,
+        "Infinity",
+        "b"
+       ]
+      ]
+     },
+     {
+      "transform": {
+       "type": "filter",
+       "config": {
+        "dimension": "sales",
+        "reg": "\\.[19]$|^null$"
+       }
+      }
+     }
+    ]
+   },
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:product",
+         "s:year",
+         "s:sales",
+         "s:price",
+         "s:tag"
+        ],
+        [
+         "s:Tofu",
+         "409f6c0000000000",
+         "40448ccccccccccd",
+         "s:12",
+         "s:a"
+        ],
+        [
+         "s:Milk",
+         "409f700000000000",
+         "4055a00000000000",
+         "s: 30 ",
+         "s:b"
+        ],
+        [
+         "s:Cheese",
+         "409f740000000000",
+         "403819999999999a",
+         "s:7px",
+         null
+        ],
+        [
+         "s:Walnut",
+         "409f700000000000",
+         "404b99999999999a",
+         "s:-",
+         "s:a"
+        ],
+        [
+         "s:Matcha",
+         "409f780000000000",
+         "405219999999999a",
+         "s:0x10",
+         "s:c"
+        ],
+        [
+         "s:Biscuit",
+         "409f6c0000000000",
+         "404af33333333333",
+         "4014000000000000",
+         "s:b"
+        ],
+        [
+         "s:Tea",
+         "s:2013",
+         "4050800000000000",
+         "s:1e2",
+         "s:a"
+        ],
+        [
+         "s:Coffee",
+         "409f7c0000000000",
+         null,
+         "s:",
+         "s:B"
+        ],
+        [
+         "s:Juice",
+         "409f800000000000",
+         "4040a66666666666",
+         "s:Infinity",
+         "s:b"
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:product",
+         "s:year",
+         "s:sales",
+         "s:price",
+         "s:tag"
+        ],
+        [
+         "s:Tofu",
+         "409f6c0000000000",
+         "40448ccccccccccd",
+         "s:12",
+         "s:a"
+        ],
+        [
+         "s:Cheese",
+         "409f740000000000",
+         "403819999999999a",
+         "s:7px",
+         null
+        ],
+        [
+         "s:Biscuit",
+         "409f6c0000000000",
+         "404af33333333333",
+         "4014000000000000",
+         "s:b"
+        ],
+        [
+         "s:Coffee",
+         "409f7c0000000000",
+         null,
+         "s:",
+         "s:B"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "f-reg-case",
+   "group": "filter",
+   "note": "reg is case-sensitive: B is not b",
+   "option": {
+    "animation": false,
+    "dataset": [
+     {
+      "source": [
+       [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       [
+        "Tofu",
+        2011,
+        41.1,
+        "12",
+        "a"
+       ],
+       [
+        "Milk",
+        2012,
+        86.5,
+        " 30 ",
+        "b"
+       ],
+       [
+        "Cheese",
+        2013,
+        24.1,
+        "7px",
+        null
+       ],
+       [
+        "Walnut",
+        2012,
+        55.2,
+        "-",
+        "a"
+       ],
+       [
+        "Matcha",
+        2014,
+        72.4,
+        "0x10",
+        "c"
+       ],
+       [
+        "Biscuit",
+        2011,
+        53.9,
+        5,
+        "b"
+       ],
+       [
+        "Tea",
+        "2013",
+        66,
+        "1e2",
+        "a"
+       ],
+       [
+        "Coffee",
+        2015,
+        null,
+        "",
+        "B"
+       ],
+       [
+        "Juice",
+        2016,
+        33.3,
+        "Infinity",
+        "b"
+       ]
+      ]
+     },
+     {
+      "transform": {
+       "type": "filter",
+       "config": {
+        "dimension": "tag",
+        "reg": "b"
+       }
+      }
+     }
+    ]
+   },
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:product",
+         "s:year",
+         "s:sales",
+         "s:price",
+         "s:tag"
+        ],
+        [
+         "s:Tofu",
+         "409f6c0000000000",
+         "40448ccccccccccd",
+         "s:12",
+         "s:a"
+        ],
+        [
+         "s:Milk",
+         "409f700000000000",
+         "4055a00000000000",
+         "s: 30 ",
+         "s:b"
+        ],
+        [
+         "s:Cheese",
+         "409f740000000000",
+         "403819999999999a",
+         "s:7px",
+         null
+        ],
+        [
+         "s:Walnut",
+         "409f700000000000",
+         "404b99999999999a",
+         "s:-",
+         "s:a"
+        ],
+        [
+         "s:Matcha",
+         "409f780000000000",
+         "405219999999999a",
+         "s:0x10",
+         "s:c"
+        ],
+        [
+         "s:Biscuit",
+         "409f6c0000000000",
+         "404af33333333333",
+         "4014000000000000",
+         "s:b"
+        ],
+        [
+         "s:Tea",
+         "s:2013",
+         "4050800000000000",
+         "s:1e2",
+         "s:a"
+        ],
+        [
+         "s:Coffee",
+         "409f7c0000000000",
+         null,
+         "s:",
+         "s:B"
+        ],
+        [
+         "s:Juice",
+         "409f800000000000",
+         "4040a66666666666",
+         "s:Infinity",
+         "s:b"
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:product",
+         "s:year",
+         "s:sales",
+         "s:price",
+         "s:tag"
+        ],
+        [
+         "s:Milk",
+         "409f700000000000",
+         "4055a00000000000",
+         "s: 30 ",
+         "s:b"
+        ],
+        [
+         "s:Biscuit",
+         "409f6c0000000000",
+         "404af33333333333",
+         "4014000000000000",
+         "s:b"
+        ],
+        [
+         "s:Juice",
+         "409f800000000000",
+         "4040a66666666666",
+         "s:Infinity",
+         "s:b"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "f-reg-trim",
+   "group": "filter",
+   "note": "parser 'trim' on the cell and on the source",
+   "option": {
+    "animation": false,
+    "dataset": [
+     {
+      "source": [
+       [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       [
+        "Tofu",
+        2011,
+        41.1,
+        "12",
+        "a"
+       ],
+       [
+        "Milk",
+        2012,
+        86.5,
+        " 30 ",
+        "b"
+       ],
+       [
+        "Cheese",
+        2013,
+        24.1,
+        "7px",
+        null
+       ],
+       [
+        "Walnut",
+        2012,
+        55.2,
+        "-",
+        "a"
+       ],
+       [
+        "Matcha",
+        2014,
+        72.4,
+        "0x10",
+        "c"
+       ],
+       [
+        "Biscuit",
+        2011,
+        53.9,
+        5,
+        "b"
+       ],
+       [
+        "Tea",
+        "2013",
+        66,
+        "1e2",
+        "a"
+       ],
+       [
+        "Coffee",
+        2015,
+        null,
+        "",
+        "B"
+       ],
+       [
+        "Juice",
+        2016,
+        33.3,
+        "Infinity",
+        "b"
+       ]
+      ]
+     },
+     {
+      "transform": {
+       "type": "filter",
+       "config": {
+        "dimension": "price",
+        "reg": " ^30$ ",
+        "parser": "trim"
+       }
+      }
+     }
+    ]
+   },
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:product",
+         "s:year",
+         "s:sales",
+         "s:price",
+         "s:tag"
+        ],
+        [
+         "s:Tofu",
+         "409f6c0000000000",
+         "40448ccccccccccd",
+         "s:12",
+         "s:a"
+        ],
+        [
+         "s:Milk",
+         "409f700000000000",
+         "4055a00000000000",
+         "s: 30 ",
+         "s:b"
+        ],
+        [
+         "s:Cheese",
+         "409f740000000000",
+         "403819999999999a",
+         "s:7px",
+         null
+        ],
+        [
+         "s:Walnut",
+         "409f700000000000",
+         "404b99999999999a",
+         "s:-",
+         "s:a"
+        ],
+        [
+         "s:Matcha",
+         "409f780000000000",
+         "405219999999999a",
+         "s:0x10",
+         "s:c"
+        ],
+        [
+         "s:Biscuit",
+         "409f6c0000000000",
+         "404af33333333333",
+         "4014000000000000",
+         "s:b"
+        ],
+        [
+         "s:Tea",
+         "s:2013",
+         "4050800000000000",
+         "s:1e2",
+         "s:a"
+        ],
+        [
+         "s:Coffee",
+         "409f7c0000000000",
+         null,
+         "s:",
+         "s:B"
+        ],
+        [
+         "s:Juice",
+         "409f800000000000",
+         "4040a66666666666",
+         "s:Infinity",
+         "s:b"
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:product",
+         "s:year",
+         "s:sales",
+         "s:price",
+         "s:tag"
+        ],
+        [
+         "s:Milk",
+         "409f700000000000",
+         "4055a00000000000",
+         "s: 30 ",
+         "s:b"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "f-reg-and",
+   "group": "filter",
+   "note": "reg with gt in one condition, and under not",
+   "option": {
+    "animation": false,
+    "dataset": [
+     {
+      "source": [
+       [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       [
+        "Tofu",
+        2011,
+        41.1,
+        "12",
+        "a"
+       ],
+       [
+        "Milk",
+        2012,
+        86.5,
+        " 30 ",
+        "b"
+       ],
+       [
+        "Cheese",
+        2013,
+        24.1,
+        "7px",
+        null
+       ],
+       [
+        "Walnut",
+        2012,
+        55.2,
+        "-",
+        "a"
+       ],
+       [
+        "Matcha",
+        2014,
+        72.4,
+        "0x10",
+        "c"
+       ],
+       [
+        "Biscuit",
+        2011,
+        53.9,
+        5,
+        "b"
+       ],
+       [
+        "Tea",
+        "2013",
+        66,
+        "1e2",
+        "a"
+       ],
+       [
+        "Coffee",
+        2015,
+        null,
+        "",
+        "B"
+       ],
+       [
+        "Juice",
+        2016,
+        33.3,
+        "Infinity",
+        "b"
+       ]
+      ]
+     },
+     {
+      "transform": {
+       "type": "filter",
+       "config": {
+        "and": [
+         {
+          "dimension": "sales",
+          "gt": 40,
+          "reg": "[05]"
+         },
+         {
+          "not": {
+           "dimension": "product",
+           "reg": "^T"
+          }
+         }
+        ]
+       }
+      }
+     }
+    ]
+   },
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:product",
+         "s:year",
+         "s:sales",
+         "s:price",
+         "s:tag"
+        ],
+        [
+         "s:Tofu",
+         "409f6c0000000000",
+         "40448ccccccccccd",
+         "s:12",
+         "s:a"
+        ],
+        [
+         "s:Milk",
+         "409f700000000000",
+         "4055a00000000000",
+         "s: 30 ",
+         "s:b"
+        ],
+        [
+         "s:Cheese",
+         "409f740000000000",
+         "403819999999999a",
+         "s:7px",
+         null
+        ],
+        [
+         "s:Walnut",
+         "409f700000000000",
+         "404b99999999999a",
+         "s:-",
+         "s:a"
+        ],
+        [
+         "s:Matcha",
+         "409f780000000000",
+         "405219999999999a",
+         "s:0x10",
+         "s:c"
+        ],
+        [
+         "s:Biscuit",
+         "409f6c0000000000",
+         "404af33333333333",
+         "4014000000000000",
+         "s:b"
+        ],
+        [
+         "s:Tea",
+         "s:2013",
+         "4050800000000000",
+         "s:1e2",
+         "s:a"
+        ],
+        [
+         "s:Coffee",
+         "409f7c0000000000",
+         null,
+         "s:",
+         "s:B"
+        ],
+        [
+         "s:Juice",
+         "409f800000000000",
+         "4040a66666666666",
+         "s:Infinity",
+         "s:b"
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:product",
+         "s:year",
+         "s:sales",
+         "s:price",
+         "s:tag"
+        ],
+        [
+         "s:Milk",
+         "409f700000000000",
+         "4055a00000000000",
+         "s: 30 ",
+         "s:b"
+        ],
+        [
+         "s:Walnut",
+         "409f700000000000",
+         "404b99999999999a",
+         "s:-",
+         "s:a"
+        ],
+        [
+         "s:Biscuit",
+         "409f6c0000000000",
+         "404af33333333333",
+         "4014000000000000",
+         "s:b"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "f-reg-odd",
+   "group": "filter",
+   "note": "reg over odd cells: 1e+21, 1e-7, 0 for minus nought, 0.30000000000000004, true, [object Object], the joined list, null, undefined",
+   "option": {
+    "animation": false,
+    "dataset": [
+     {
+      "source": [
+       [
+        "k",
+        "v"
+       ],
+       [
+        "n1",
+        1e+21
+       ],
+       [
+        "n2",
+        1e-7
+       ],
+       [
+        "n3",
+        0
+       ],
+       [
+        "n4",
+        0.30000000000000004
+       ],
+       [
+        "b1",
+        true
+       ],
+       [
+        "b2",
+        false
+       ],
+       [
+        "o",
+        {
+         "a": 1
+        }
+       ],
+       [
+        "l",
+        [
+         1,
+         [
+          2,
+          null
+         ],
+         "x"
+        ]
+       ],
+       [
+        "z",
+        null
+       ],
+       [
+        "u"
+       ],
+       [
+        "s",
+        "line\nend"
+       ],
+       [
+        "p",
+        "été"
+       ],
+       [
+        "q",
+        "😀"
+       ],
+       [
+        "w",
+        " 30 "
+       ],
+       [
+        "ls",
+        "a b"
+       ]
+      ]
+     },
+     {
+      "transform": {
+       "type": "filter",
+       "config": {
+        "dimension": "v",
+        "reg": "e[-+]|^0$|00004$|^true$|object|^1,2,,x$|^null$|^undefined$"
+       }
+      }
+     }
+    ]
+   },
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "k",
+        "v"
+       ],
+       "detected": 2,
+       "rows": [
+        [
+         "s:k",
+         "s:v"
+        ],
+        [
+         "s:n1",
+         "444b1ae4d6e2ef50"
+        ],
+        [
+         "s:n2",
+         "3e7ad7f29abcaf48"
+        ],
+        [
+         "s:n3",
+         "0000000000000000"
+        ],
+        [
+         "s:n4",
+         "3fd3333333333334"
+        ],
+        [
+         "s:b1",
+         "b:true"
+        ],
+        [
+         "s:b2",
+         "b:false"
+        ],
+        [
+         "s:o",
+         "j:{\"a\":1}"
+        ],
+        [
+         "s:l",
+         "j:[1,[2,null],\"x\"]"
+        ],
+        [
+         "s:z",
+         null
+        ],
+        [
+         "s:u"
+        ],
+        [
+         "s:s",
+         "s:line\nend"
+        ],
+        [
+         "s:p",
+         "s:été"
+        ],
+        [
+         "s:q",
+         "s:😀"
+        ],
+        [
+         "s:w",
+         "s: 30 "
+        ],
+        [
+         "s:ls",
+         "s:a b"
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "k",
+        "v"
+       ],
+       "detected": 2,
+       "rows": [
+        [
+         "s:k",
+         "s:v"
+        ],
+        [
+         "s:n1",
+         "444b1ae4d6e2ef50"
+        ],
+        [
+         "s:n2",
+         "3e7ad7f29abcaf48"
+        ],
+        [
+         "s:n3",
+         "0000000000000000"
+        ],
+        [
+         "s:n4",
+         "3fd3333333333334"
+        ],
+        [
+         "s:b1",
+         "b:true"
+        ],
+        [
+         "s:o",
+         "j:{\"a\":1}"
+        ],
+        [
+         "s:l",
+         "j:[1,[2,null],\"x\"]"
+        ],
+        [
+         "s:z",
+         null
+        ],
+        [
+         "s:u"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "f-reg-unicode",
+   "group": "filter",
+   "note": "reg over UTF-16: the dot is one unit and crosses no line end, \\s is Unicode",
+   "option": {
+    "animation": false,
+    "dataset": [
+     {
+      "source": [
+       [
+        "k",
+        "v"
+       ],
+       [
+        "n1",
+        1e+21
+       ],
+       [
+        "n2",
+        1e-7
+       ],
+       [
+        "n3",
+        0
+       ],
+       [
+        "n4",
+        0.30000000000000004
+       ],
+       [
+        "b1",
+        true
+       ],
+       [
+        "b2",
+        false
+       ],
+       [
+        "o",
+        {
+         "a": 1
+        }
+       ],
+       [
+        "l",
+        [
+         1,
+         [
+          2,
+          null
+         ],
+         "x"
+        ]
+       ],
+       [
+        "z",
+        null
+       ],
+       [
+        "u"
+       ],
+       [
+        "s",
+        "line\nend"
+       ],
+       [
+        "p",
+        "été"
+       ],
+       [
+        "q",
+        "😀"
+       ],
+       [
+        "w",
+        " 30 "
+       ],
+       [
+        "ls",
+        "a b"
+       ]
+      ]
+     },
+     {
+      "transform": {
+       "type": "filter",
+       "config": {
+        "or": [
+         {
+          "dimension": "v",
+          "reg": "^.t.$"
+         },
+         {
+          "dimension": "v",
+          "reg": "^..$"
+         },
+         {
+          "dimension": "v",
+          "reg": "^line.end$|^a.b$"
+         },
+         {
+          "dimension": "v",
+          "reg": "^\\s30\\s$"
+         }
+        ]
+       }
+      }
+     }
+    ]
+   },
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "k",
+        "v"
+       ],
+       "detected": 2,
+       "rows": [
+        [
+         "s:k",
+         "s:v"
+        ],
+        [
+         "s:n1",
+         "444b1ae4d6e2ef50"
+        ],
+        [
+         "s:n2",
+         "3e7ad7f29abcaf48"
+        ],
+        [
+         "s:n3",
+         "0000000000000000"
+        ],
+        [
+         "s:n4",
+         "3fd3333333333334"
+        ],
+        [
+         "s:b1",
+         "b:true"
+        ],
+        [
+         "s:b2",
+         "b:false"
+        ],
+        [
+         "s:o",
+         "j:{\"a\":1}"
+        ],
+        [
+         "s:l",
+         "j:[1,[2,null],\"x\"]"
+        ],
+        [
+         "s:z",
+         null
+        ],
+        [
+         "s:u"
+        ],
+        [
+         "s:s",
+         "s:line\nend"
+        ],
+        [
+         "s:p",
+         "s:été"
+        ],
+        [
+         "s:q",
+         "s:😀"
+        ],
+        [
+         "s:w",
+         "s: 30 "
+        ],
+        [
+         "s:ls",
+         "s:a b"
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "k",
+        "v"
+       ],
+       "detected": 2,
+       "rows": [
+        [
+         "s:k",
+         "s:v"
+        ],
+        [
+         "s:p",
+         "s:été"
+        ],
+        [
+         "s:q",
+         "s:😀"
+        ],
+        [
+         "s:w",
+         "s: 30 "
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "f-reg-annexb",
+   "group": "filter",
+   "note": "Annex B: a lone brace, \\8, an octal, a back reference",
+   "option": {
+    "animation": false,
+    "dataset": [
+     {
+      "source": [
+       [
+        "k",
+        "v"
+       ],
+       [
+        "a",
+        "x{"
+       ],
+       [
+        "b",
+        "8"
+       ],
+       [
+        "c",
+        "\n"
+       ],
+       [
+        "d",
+        "abab"
+       ],
+       [
+        "e",
+        "ab"
+       ]
+      ]
+     },
+     {
+      "transform": {
+       "type": "filter",
+       "config": {
+        "dimension": "v",
+        "reg": "^x{$|^\\8$|^\\12$|^(ab)\\1$"
+       }
+      }
+     }
+    ]
+   },
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "k",
+        "v"
+       ],
+       "detected": 2,
+       "rows": [
+        [
+         "s:k",
+         "s:v"
+        ],
+        [
+         "s:a",
+         "s:x{"
+        ],
+        [
+         "s:b",
+         "s:8"
+        ],
+        [
+         "s:c",
+         "s:\n"
+        ],
+        [
+         "s:d",
+         "s:abab"
+        ],
+        [
+         "s:e",
+         "s:ab"
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "k",
+        "v"
+       ],
+       "detected": 2,
+       "rows": [
+        [
+         "s:k",
+         "s:v"
+        ],
+        [
+         "s:a",
+         "s:x{"
+        ],
+        [
+         "s:b",
+         "s:8"
+        ],
+        [
+         "s:c",
+         "s:\n"
+        ],
+        [
+         "s:d",
+         "s:abab"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "f-reg-keyed",
+   "group": "filter",
+   "note": "reg over object rows",
+   "option": {
+    "animation": false,
+    "dataset": [
+     {
+      "source": [
+       {
+        "product": "Tofu",
+        "year": 2011,
+        "sales": 41.1,
+        "price": "12",
+        "tag": "a"
+       },
+       {
+        "product": "Milk",
+        "year": 2012,
+        "sales": 86.5,
+        "price": " 30 ",
+        "tag": "b"
+       },
+       {
+        "product": "Cheese",
+        "year": 2013,
+        "sales": 24.1,
+        "price": "7px",
+        "tag": null
+       },
+       {
+        "product": "Walnut",
+        "year": 2012,
+        "sales": 55.2,
+        "price": "-",
+        "tag": "a"
+       },
+       {
+        "product": "Matcha",
+        "year": 2014,
+        "sales": 72.4,
+        "price": "0x10",
+        "tag": "c"
+       },
+       {
+        "product": "Biscuit",
+        "year": 2011,
+        "sales": 53.9,
+        "price": 5,
+        "tag": "b"
+       },
+       {
+        "product": "Tea",
+        "year": "2013",
+        "sales": 66,
+        "price": "1e2",
+        "tag": "a"
+       },
+       {
+        "product": "Coffee",
+        "year": 2015,
+        "sales": null,
+        "price": "",
+        "tag": "B"
+       },
+       {
+        "product": "Juice",
+        "year": 2016,
+        "sales": 33.3,
+        "price": "Infinity",
+        "tag": "b"
+       }
+      ]
+     },
+     {
+      "transform": {
+       "type": "filter",
+       "config": {
+        "dimension": "product",
+        "reg": "^(?:M|W)"
+       }
+      }
+     }
+    ]
+   },
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "objectRows",
+       "clone": false,
+       "startIndex": 0,
+       "dims": [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       "detected": null,
+       "rows": [
+        {
+         "o": [
+          [
+           "product",
+           "s:Tofu"
+          ],
+          [
+           "year",
+           "409f6c0000000000"
+          ],
+          [
+           "sales",
+           "40448ccccccccccd"
+          ],
+          [
+           "price",
+           "s:12"
+          ],
+          [
+           "tag",
+           "s:a"
+          ]
+         ]
+        },
+        {
+         "o": [
+          [
+           "product",
+           "s:Milk"
+          ],
+          [
+           "year",
+           "409f700000000000"
+          ],
+          [
+           "sales",
+           "4055a00000000000"
+          ],
+          [
+           "price",
+           "s: 30 "
+          ],
+          [
+           "tag",
+           "s:b"
+          ]
+         ]
+        },
+        {
+         "o": [
+          [
+           "product",
+           "s:Cheese"
+          ],
+          [
+           "year",
+           "409f740000000000"
+          ],
+          [
+           "sales",
+           "403819999999999a"
+          ],
+          [
+           "price",
+           "s:7px"
+          ],
+          [
+           "tag",
+           null
+          ]
+         ]
+        },
+        {
+         "o": [
+          [
+           "product",
+           "s:Walnut"
+          ],
+          [
+           "year",
+           "409f700000000000"
+          ],
+          [
+           "sales",
+           "404b99999999999a"
+          ],
+          [
+           "price",
+           "s:-"
+          ],
+          [
+           "tag",
+           "s:a"
+          ]
+         ]
+        },
+        {
+         "o": [
+          [
+           "product",
+           "s:Matcha"
+          ],
+          [
+           "year",
+           "409f780000000000"
+          ],
+          [
+           "sales",
+           "405219999999999a"
+          ],
+          [
+           "price",
+           "s:0x10"
+          ],
+          [
+           "tag",
+           "s:c"
+          ]
+         ]
+        },
+        {
+         "o": [
+          [
+           "product",
+           "s:Biscuit"
+          ],
+          [
+           "year",
+           "409f6c0000000000"
+          ],
+          [
+           "sales",
+           "404af33333333333"
+          ],
+          [
+           "price",
+           "4014000000000000"
+          ],
+          [
+           "tag",
+           "s:b"
+          ]
+         ]
+        },
+        {
+         "o": [
+          [
+           "product",
+           "s:Tea"
+          ],
+          [
+           "year",
+           "s:2013"
+          ],
+          [
+           "sales",
+           "4050800000000000"
+          ],
+          [
+           "price",
+           "s:1e2"
+          ],
+          [
+           "tag",
+           "s:a"
+          ]
+         ]
+        },
+        {
+         "o": [
+          [
+           "product",
+           "s:Coffee"
+          ],
+          [
+           "year",
+           "409f7c0000000000"
+          ],
+          [
+           "sales",
+           null
+          ],
+          [
+           "price",
+           "s:"
+          ],
+          [
+           "tag",
+           "s:B"
+          ]
+         ]
+        },
+        {
+         "o": [
+          [
+           "product",
+           "s:Juice"
+          ],
+          [
+           "year",
+           "409f800000000000"
+          ],
+          [
+           "sales",
+           "4040a66666666666"
+          ],
+          [
+           "price",
+           "s:Infinity"
+          ],
+          [
+           "tag",
+           "s:b"
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "objectRows",
+       "clone": false,
+       "startIndex": 0,
+       "dims": [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       "detected": null,
+       "rows": [
+        {
+         "o": [
+          [
+           "product",
+           "s:Milk"
+          ],
+          [
+           "year",
+           "409f700000000000"
+          ],
+          [
+           "sales",
+           "4055a00000000000"
+          ],
+          [
+           "price",
+           "s: 30 "
+          ],
+          [
+           "tag",
+           "s:b"
+          ]
+         ]
+        },
+        {
+         "o": [
+          [
+           "product",
+           "s:Walnut"
+          ],
+          [
+           "year",
+           "409f700000000000"
+          ],
+          [
+           "sales",
+           "404b99999999999a"
+          ],
+          [
+           "price",
+           "s:-"
+          ],
+          [
+           "tag",
+           "s:a"
+          ]
+         ]
+        },
+        {
+         "o": [
+          [
+           "product",
+           "s:Matcha"
+          ],
+          [
+           "year",
+           "409f780000000000"
+          ],
+          [
+           "sales",
+           "405219999999999a"
+          ],
+          [
+           "price",
+           "s:0x10"
+          ],
+          [
+           "tag",
+           "s:c"
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "f-reg-empty",
+   "group": "filter",
+   "note": "reg '': everything passes",
+   "option": {
+    "animation": false,
+    "dataset": [
+     {
+      "source": [
+       [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       [
+        "Tofu",
+        2011,
+        41.1,
+        "12",
+        "a"
+       ],
+       [
+        "Milk",
+        2012,
+        86.5,
+        " 30 ",
+        "b"
+       ],
+       [
+        "Cheese",
+        2013,
+        24.1,
+        "7px",
+        null
+       ],
+       [
+        "Walnut",
+        2012,
+        55.2,
+        "-",
+        "a"
+       ],
+       [
+        "Matcha",
+        2014,
+        72.4,
+        "0x10",
+        "c"
+       ],
+       [
+        "Biscuit",
+        2011,
+        53.9,
+        5,
+        "b"
+       ],
+       [
+        "Tea",
+        "2013",
+        66,
+        "1e2",
+        "a"
+       ],
+       [
+        "Coffee",
+        2015,
+        null,
+        "",
+        "B"
+       ],
+       [
+        "Juice",
+        2016,
+        33.3,
+        "Infinity",
+        "b"
+       ]
+      ]
+     },
+     {
+      "transform": {
+       "type": "filter",
+       "config": {
+        "dimension": "tag",
+        "reg": ""
+       }
+      }
+     }
+    ]
+   },
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:product",
+         "s:year",
+         "s:sales",
+         "s:price",
+         "s:tag"
+        ],
+        [
+         "s:Tofu",
+         "409f6c0000000000",
+         "40448ccccccccccd",
+         "s:12",
+         "s:a"
+        ],
+        [
+         "s:Milk",
+         "409f700000000000",
+         "4055a00000000000",
+         "s: 30 ",
+         "s:b"
+        ],
+        [
+         "s:Cheese",
+         "409f740000000000",
+         "403819999999999a",
+         "s:7px",
+         null
+        ],
+        [
+         "s:Walnut",
+         "409f700000000000",
+         "404b99999999999a",
+         "s:-",
+         "s:a"
+        ],
+        [
+         "s:Matcha",
+         "409f780000000000",
+         "405219999999999a",
+         "s:0x10",
+         "s:c"
+        ],
+        [
+         "s:Biscuit",
+         "409f6c0000000000",
+         "404af33333333333",
+         "4014000000000000",
+         "s:b"
+        ],
+        [
+         "s:Tea",
+         "s:2013",
+         "4050800000000000",
+         "s:1e2",
+         "s:a"
+        ],
+        [
+         "s:Coffee",
+         "409f7c0000000000",
+         null,
+         "s:",
+         "s:B"
+        ],
+        [
+         "s:Juice",
+         "409f800000000000",
+         "4040a66666666666",
+         "s:Infinity",
+         "s:b"
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:product",
+         "s:year",
+         "s:sales",
+         "s:price",
+         "s:tag"
+        ],
+        [
+         "s:Tofu",
+         "409f6c0000000000",
+         "40448ccccccccccd",
+         "s:12",
+         "s:a"
+        ],
+        [
+         "s:Milk",
+         "409f700000000000",
+         "4055a00000000000",
+         "s: 30 ",
+         "s:b"
+        ],
+        [
+         "s:Cheese",
+         "409f740000000000",
+         "403819999999999a",
+         "s:7px",
+         null
+        ],
+        [
+         "s:Walnut",
+         "409f700000000000",
+         "404b99999999999a",
+         "s:-",
+         "s:a"
+        ],
+        [
+         "s:Matcha",
+         "409f780000000000",
+         "405219999999999a",
+         "s:0x10",
+         "s:c"
+        ],
+        [
+         "s:Biscuit",
+         "409f6c0000000000",
+         "404af33333333333",
+         "4014000000000000",
+         "s:b"
+        ],
+        [
+         "s:Tea",
+         "s:2013",
+         "4050800000000000",
+         "s:1e2",
+         "s:a"
+        ],
+        [
+         "s:Coffee",
+         "409f7c0000000000",
+         null,
+         "s:",
+         "s:B"
+        ],
+        [
+         "s:Juice",
+         "409f800000000000",
+         "4040a66666666666",
+         "s:Infinity",
+         "s:b"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "e-reg-bad",
+   "group": "error",
+   "note": "a source new RegExp throws on",
+   "option": {
+    "animation": false,
+    "dataset": [
+     {
+      "source": [
+       [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       [
+        "Tofu",
+        2011,
+        41.1,
+        "12",
+        "a"
+       ],
+       [
+        "Milk",
+        2012,
+        86.5,
+        " 30 ",
+        "b"
+       ],
+       [
+        "Cheese",
+        2013,
+        24.1,
+        "7px",
+        null
+       ],
+       [
+        "Walnut",
+        2012,
+        55.2,
+        "-",
+        "a"
+       ],
+       [
+        "Matcha",
+        2014,
+        72.4,
+        "0x10",
+        "c"
+       ],
+       [
+        "Biscuit",
+        2011,
+        53.9,
+        5,
+        "b"
+       ],
+       [
+        "Tea",
+        "2013",
+        66,
+        "1e2",
+        "a"
+       ],
+       [
+        "Coffee",
+        2015,
+        null,
+        "",
+        "B"
+       ],
+       [
+        "Juice",
+        2016,
+        33.3,
+        "Infinity",
+        "b"
+       ]
+      ]
+     },
+     {
+      "transform": {
+       "type": "filter",
+       "config": {
+        "dimension": "tag",
+        "reg": "["
+       }
+      }
+     }
+    ]
+   },
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:product",
+         "s:year",
+         "s:sales",
+         "s:price",
+         "s:tag"
+        ],
+        [
+         "s:Tofu",
+         "409f6c0000000000",
+         "40448ccccccccccd",
+         "s:12",
+         "s:a"
+        ],
+        [
+         "s:Milk",
+         "409f700000000000",
+         "4055a00000000000",
+         "s: 30 ",
+         "s:b"
+        ],
+        [
+         "s:Cheese",
+         "409f740000000000",
+         "403819999999999a",
+         "s:7px",
+         null
+        ],
+        [
+         "s:Walnut",
+         "409f700000000000",
+         "404b99999999999a",
+         "s:-",
+         "s:a"
+        ],
+        [
+         "s:Matcha",
+         "409f780000000000",
+         "405219999999999a",
+         "s:0x10",
+         "s:c"
+        ],
+        [
+         "s:Biscuit",
+         "409f6c0000000000",
+         "404af33333333333",
+         "4014000000000000",
+         "s:b"
+        ],
+        [
+         "s:Tea",
+         "s:2013",
+         "4050800000000000",
+         "s:1e2",
+         "s:a"
+        ],
+        [
+         "s:Coffee",
+         "409f7c0000000000",
+         null,
+         "s:",
+         "s:B"
+        ],
+        [
+         "s:Juice",
+         "409f800000000000",
+         "4040a66666666666",
+         "s:Infinity",
+         "s:b"
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "error": "Invalid regular expression: /[/: Unterminated character class",
+     "results": []
+    }
+   ]
+  },
+  {
+   "id": "e-reg-quant",
+   "group": "error",
+   "note": "nothing to repeat",
+   "option": {
+    "animation": false,
+    "dataset": [
+     {
+      "source": [
+       [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       [
+        "Tofu",
+        2011,
+        41.1,
+        "12",
+        "a"
+       ],
+       [
+        "Milk",
+        2012,
+        86.5,
+        " 30 ",
+        "b"
+       ],
+       [
+        "Cheese",
+        2013,
+        24.1,
+        "7px",
+        null
+       ],
+       [
+        "Walnut",
+        2012,
+        55.2,
+        "-",
+        "a"
+       ],
+       [
+        "Matcha",
+        2014,
+        72.4,
+        "0x10",
+        "c"
+       ],
+       [
+        "Biscuit",
+        2011,
+        53.9,
+        5,
+        "b"
+       ],
+       [
+        "Tea",
+        "2013",
+        66,
+        "1e2",
+        "a"
+       ],
+       [
+        "Coffee",
+        2015,
+        null,
+        "",
+        "B"
+       ],
+       [
+        "Juice",
+        2016,
+        33.3,
+        "Infinity",
+        "b"
+       ]
+      ]
+     },
+     {
+      "transform": {
+       "type": "filter",
+       "config": {
+        "dimension": "tag",
+        "reg": "*a"
+       }
+      }
+     }
+    ]
+   },
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:product",
+         "s:year",
+         "s:sales",
+         "s:price",
+         "s:tag"
+        ],
+        [
+         "s:Tofu",
+         "409f6c0000000000",
+         "40448ccccccccccd",
+         "s:12",
+         "s:a"
+        ],
+        [
+         "s:Milk",
+         "409f700000000000",
+         "4055a00000000000",
+         "s: 30 ",
+         "s:b"
+        ],
+        [
+         "s:Cheese",
+         "409f740000000000",
+         "403819999999999a",
+         "s:7px",
+         null
+        ],
+        [
+         "s:Walnut",
+         "409f700000000000",
+         "404b99999999999a",
+         "s:-",
+         "s:a"
+        ],
+        [
+         "s:Matcha",
+         "409f780000000000",
+         "405219999999999a",
+         "s:0x10",
+         "s:c"
+        ],
+        [
+         "s:Biscuit",
+         "409f6c0000000000",
+         "404af33333333333",
+         "4014000000000000",
+         "s:b"
+        ],
+        [
+         "s:Tea",
+         "s:2013",
+         "4050800000000000",
+         "s:1e2",
+         "s:a"
+        ],
+        [
+         "s:Coffee",
+         "409f7c0000000000",
+         null,
+         "s:",
+         "s:B"
+        ],
+        [
+         "s:Juice",
+         "409f800000000000",
+         "4040a66666666666",
+         "s:Infinity",
+         "s:b"
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "error": "Invalid regular expression: /*a/: Nothing to repeat",
+     "results": []
+    }
+   ]
+  },
+  {
+   "id": "e-reg-number",
+   "group": "error",
+   "note": "a number is not a regular expression",
+   "option": {
+    "animation": false,
+    "dataset": [
+     {
+      "source": [
+       [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       [
+        "Tofu",
+        2011,
+        41.1,
+        "12",
+        "a"
+       ],
+       [
+        "Milk",
+        2012,
+        86.5,
+        " 30 ",
+        "b"
+       ],
+       [
+        "Cheese",
+        2013,
+        24.1,
+        "7px",
+        null
+       ],
+       [
+        "Walnut",
+        2012,
+        55.2,
+        "-",
+        "a"
+       ],
+       [
+        "Matcha",
+        2014,
+        72.4,
+        "0x10",
+        "c"
+       ],
+       [
+        "Biscuit",
+        2011,
+        53.9,
+        5,
+        "b"
+       ],
+       [
+        "Tea",
+        "2013",
+        66,
+        "1e2",
+        "a"
+       ],
+       [
+        "Coffee",
+        2015,
+        null,
+        "",
+        "B"
+       ],
+       [
+        "Juice",
+        2016,
+        33.3,
+        "Infinity",
+        "b"
+       ]
+      ]
+     },
+     {
+      "transform": {
+       "type": "filter",
+       "config": {
+        "dimension": "year",
+        "reg": 2011
+       }
+      }
+     }
+    ]
+   },
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:product",
+         "s:year",
+         "s:sales",
+         "s:price",
+         "s:tag"
+        ],
+        [
+         "s:Tofu",
+         "409f6c0000000000",
+         "40448ccccccccccd",
+         "s:12",
+         "s:a"
+        ],
+        [
+         "s:Milk",
+         "409f700000000000",
+         "4055a00000000000",
+         "s: 30 ",
+         "s:b"
+        ],
+        [
+         "s:Cheese",
+         "409f740000000000",
+         "403819999999999a",
+         "s:7px",
+         null
+        ],
+        [
+         "s:Walnut",
+         "409f700000000000",
+         "404b99999999999a",
+         "s:-",
+         "s:a"
+        ],
+        [
+         "s:Matcha",
+         "409f780000000000",
+         "405219999999999a",
+         "s:0x10",
+         "s:c"
+        ],
+        [
+         "s:Biscuit",
+         "409f6c0000000000",
+         "404af33333333333",
+         "4014000000000000",
+         "s:b"
+        ],
+        [
+         "s:Tea",
+         "s:2013",
+         "4050800000000000",
+         "s:1e2",
+         "s:a"
+        ],
+        [
+         "s:Coffee",
+         "409f7c0000000000",
+         null,
+         "s:",
+         "s:B"
+        ],
+        [
+         "s:Juice",
+         "409f800000000000",
+         "4040a66666666666",
+         "s:Infinity",
+         "s:b"
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "error": "Illegal regexp 2011 in",
+     "results": []
+    }
+   ]
+  },
+  {
+   "id": "e-reg-null",
+   "group": "error",
+   "note": "null is not one either",
+   "option": {
+    "animation": false,
+    "dataset": [
+     {
+      "source": [
+       [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       [
+        "Tofu",
+        2011,
+        41.1,
+        "12",
+        "a"
+       ],
+       [
+        "Milk",
+        2012,
+        86.5,
+        " 30 ",
+        "b"
+       ],
+       [
+        "Cheese",
+        2013,
+        24.1,
+        "7px",
+        null
+       ],
+       [
+        "Walnut",
+        2012,
+        55.2,
+        "-",
+        "a"
+       ],
+       [
+        "Matcha",
+        2014,
+        72.4,
+        "0x10",
+        "c"
+       ],
+       [
+        "Biscuit",
+        2011,
+        53.9,
+        5,
+        "b"
+       ],
+       [
+        "Tea",
+        "2013",
+        66,
+        "1e2",
+        "a"
+       ],
+       [
+        "Coffee",
+        2015,
+        null,
+        "",
+        "B"
+       ],
+       [
+        "Juice",
+        2016,
+        33.3,
+        "Infinity",
+        "b"
+       ]
+      ]
+     },
+     {
+      "transform": {
+       "type": "filter",
+       "config": {
+        "dimension": "year",
+        "reg": null
+       }
+      }
+     }
+    ]
+   },
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:product",
+         "s:year",
+         "s:sales",
+         "s:price",
+         "s:tag"
+        ],
+        [
+         "s:Tofu",
+         "409f6c0000000000",
+         "40448ccccccccccd",
+         "s:12",
+         "s:a"
+        ],
+        [
+         "s:Milk",
+         "409f700000000000",
+         "4055a00000000000",
+         "s: 30 ",
+         "s:b"
+        ],
+        [
+         "s:Cheese",
+         "409f740000000000",
+         "403819999999999a",
+         "s:7px",
+         null
+        ],
+        [
+         "s:Walnut",
+         "409f700000000000",
+         "404b99999999999a",
+         "s:-",
+         "s:a"
+        ],
+        [
+         "s:Matcha",
+         "409f780000000000",
+         "405219999999999a",
+         "s:0x10",
+         "s:c"
+        ],
+        [
+         "s:Biscuit",
+         "409f6c0000000000",
+         "404af33333333333",
+         "4014000000000000",
+         "s:b"
+        ],
+        [
+         "s:Tea",
+         "s:2013",
+         "4050800000000000",
+         "s:1e2",
+         "s:a"
+        ],
+        [
+         "s:Coffee",
+         "409f7c0000000000",
+         null,
+         "s:",
+         "s:B"
+        ],
+        [
+         "s:Juice",
+         "409f800000000000",
+         "4040a66666666666",
+         "s:Infinity",
+         "s:b"
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "error": "Illegal regexp null in",
+     "results": []
+    }
+   ]
+  },
+  {
+   "id": "e-reg-parser",
+   "group": "error",
+   "note": "parser 'number' turns the source into a number",
+   "option": {
+    "animation": false,
+    "dataset": [
+     {
+      "source": [
+       [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       [
+        "Tofu",
+        2011,
+        41.1,
+        "12",
+        "a"
+       ],
+       [
+        "Milk",
+        2012,
+        86.5,
+        " 30 ",
+        "b"
+       ],
+       [
+        "Cheese",
+        2013,
+        24.1,
+        "7px",
+        null
+       ],
+       [
+        "Walnut",
+        2012,
+        55.2,
+        "-",
+        "a"
+       ],
+       [
+        "Matcha",
+        2014,
+        72.4,
+        "0x10",
+        "c"
+       ],
+       [
+        "Biscuit",
+        2011,
+        53.9,
+        5,
+        "b"
+       ],
+       [
+        "Tea",
+        "2013",
+        66,
+        "1e2",
+        "a"
+       ],
+       [
+        "Coffee",
+        2015,
+        null,
+        "",
+        "B"
+       ],
+       [
+        "Juice",
+        2016,
+        33.3,
+        "Infinity",
+        "b"
+       ]
+      ]
+     },
+     {
+      "transform": {
+       "type": "filter",
+       "config": {
+        "dimension": "price",
+        "reg": "^1",
+        "parser": "number"
+       }
+      }
+     }
+    ]
+   },
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:product",
+         "s:year",
+         "s:sales",
+         "s:price",
+         "s:tag"
+        ],
+        [
+         "s:Tofu",
+         "409f6c0000000000",
+         "40448ccccccccccd",
+         "s:12",
+         "s:a"
+        ],
+        [
+         "s:Milk",
+         "409f700000000000",
+         "4055a00000000000",
+         "s: 30 ",
+         "s:b"
+        ],
+        [
+         "s:Cheese",
+         "409f740000000000",
+         "403819999999999a",
+         "s:7px",
+         null
+        ],
+        [
+         "s:Walnut",
+         "409f700000000000",
+         "404b99999999999a",
+         "s:-",
+         "s:a"
+        ],
+        [
+         "s:Matcha",
+         "409f780000000000",
+         "405219999999999a",
+         "s:0x10",
+         "s:c"
+        ],
+        [
+         "s:Biscuit",
+         "409f6c0000000000",
+         "404af33333333333",
+         "4014000000000000",
+         "s:b"
+        ],
+        [
+         "s:Tea",
+         "s:2013",
+         "4050800000000000",
+         "s:1e2",
+         "s:a"
+        ],
+        [
+         "s:Coffee",
+         "409f7c0000000000",
+         null,
+         "s:",
+         "s:B"
+        ],
+        [
+         "s:Juice",
+         "409f800000000000",
+         "4040a66666666666",
+         "s:Infinity",
+         "s:b"
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "error": "Illegal regexp NaN in",
+     "results": []
+    }
+   ]
+  },
+  {
+   "id": "e-reg-name",
+   "group": "error",
+   "note": "a named reference to no group",
+   "option": {
+    "animation": false,
+    "dataset": [
+     {
+      "source": [
+       [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       [
+        "Tofu",
+        2011,
+        41.1,
+        "12",
+        "a"
+       ],
+       [
+        "Milk",
+        2012,
+        86.5,
+        " 30 ",
+        "b"
+       ],
+       [
+        "Cheese",
+        2013,
+        24.1,
+        "7px",
+        null
+       ],
+       [
+        "Walnut",
+        2012,
+        55.2,
+        "-",
+        "a"
+       ],
+       [
+        "Matcha",
+        2014,
+        72.4,
+        "0x10",
+        "c"
+       ],
+       [
+        "Biscuit",
+        2011,
+        53.9,
+        5,
+        "b"
+       ],
+       [
+        "Tea",
+        "2013",
+        66,
+        "1e2",
+        "a"
+       ],
+       [
+        "Coffee",
+        2015,
+        null,
+        "",
+        "B"
+       ],
+       [
+        "Juice",
+        2016,
+        33.3,
+        "Infinity",
+        "b"
+       ]
+      ]
+     },
+     {
+      "transform": {
+       "type": "filter",
+       "config": {
+        "dimension": "tag",
+        "reg": "(?<a>x)\\k<b>"
+       }
+      }
+     }
+    ]
+   },
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:product",
+         "s:year",
+         "s:sales",
+         "s:price",
+         "s:tag"
+        ],
+        [
+         "s:Tofu",
+         "409f6c0000000000",
+         "40448ccccccccccd",
+         "s:12",
+         "s:a"
+        ],
+        [
+         "s:Milk",
+         "409f700000000000",
+         "4055a00000000000",
+         "s: 30 ",
+         "s:b"
+        ],
+        [
+         "s:Cheese",
+         "409f740000000000",
+         "403819999999999a",
+         "s:7px",
+         null
+        ],
+        [
+         "s:Walnut",
+         "409f700000000000",
+         "404b99999999999a",
+         "s:-",
+         "s:a"
+        ],
+        [
+         "s:Matcha",
+         "409f780000000000",
+         "405219999999999a",
+         "s:0x10",
+         "s:c"
+        ],
+        [
+         "s:Biscuit",
+         "409f6c0000000000",
+         "404af33333333333",
+         "4014000000000000",
+         "s:b"
+        ],
+        [
+         "s:Tea",
+         "s:2013",
+         "4050800000000000",
+         "s:1e2",
+         "s:a"
+        ],
+        [
+         "s:Coffee",
+         "409f7c0000000000",
+         null,
+         "s:",
+         "s:B"
+        ],
+        [
+         "s:Juice",
+         "409f800000000000",
+         "4040a66666666666",
+         "s:Infinity",
+         "s:b"
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "error": "Invalid regular expression: /(?<a>x)\\k<b>/: Invalid named capture referenced",
+     "results": []
+    }
+   ]
+  },
+  {
+   "id": "r-reg",
+   "group": "render",
+   "note": "a bar over a reg filter",
+   "option": {
+    "animation": false,
+    "dataset": [
+     {
+      "source": [
+       [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       [
+        "Tofu",
+        2011,
+        41.1,
+        "12",
+        "a"
+       ],
+       [
+        "Milk",
+        2012,
+        86.5,
+        " 30 ",
+        "b"
+       ],
+       [
+        "Cheese",
+        2013,
+        24.1,
+        "7px",
+        null
+       ],
+       [
+        "Walnut",
+        2012,
+        55.2,
+        "-",
+        "a"
+       ],
+       [
+        "Matcha",
+        2014,
+        72.4,
+        "0x10",
+        "c"
+       ],
+       [
+        "Biscuit",
+        2011,
+        53.9,
+        5,
+        "b"
+       ],
+       [
+        "Tea",
+        "2013",
+        66,
+        "1e2",
+        "a"
+       ],
+       [
+        "Coffee",
+        2015,
+        null,
+        "",
+        "B"
+       ],
+       [
+        "Juice",
+        2016,
+        33.3,
+        "Infinity",
+        "b"
+       ]
+      ]
+     },
+     {
+      "transform": {
+       "type": "filter",
+       "config": {
+        "dimension": "product",
+        "reg": "^[A-M]"
+       }
+      }
+     }
+    ],
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "datasetIndex": 1,
+      "encode": {
+       "x": "product",
+       "y": "sales"
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ]
+   },
+   "render": {
+    "rect": [
+     "4056800000000000",
+     "4050400000000000",
+     "407c200000000000",
+     "406fe00000000000"
+    ],
+    "axes": [
+     {
+      "dim": "x",
+      "index": 0,
+      "categories": [
+       "Milk",
+       "Cheese",
+       "Matcha",
+       "Biscuit",
+       "Coffee",
+       "Juice"
+      ]
+     },
+     {
+      "dim": "y",
+      "index": 0,
+      "categories": null
+     }
+    ],
+    "series": [
+     {
+      "index": 0,
+      "type": "bar",
+      "count": 6,
+      "items": [
+       [
+        "4059680000000000",
+        "4074000000000000",
+        "4049e00000000000",
+        "c06b926666666666"
+       ],
+       [
+        "4066140000000000",
+        "4074000000000000",
+        "4049e00000000000",
+        "c04eba3d70a3d710"
+       ],
+       [
+        "406f740000000000",
+        "4074000000000000",
+        "4049e00000000000",
+        "c06713d70a3d70a5"
+       ],
+       [
+        "40746a0000000000",
+        "4074000000000000",
+        "4049e00000000000",
+        "c0612e3d70a3d70b"
+       ],
+       [
+        "40791a0000000000",
+        "4074000000000000",
+        "4049e00000000000",
+        "7ff8000000000000"
+       ],
+       [
+        "407dca0000000000",
+        "4074000000000000",
+        "4049e00000000000",
+        "c0553a8f5c28f5c2"
+       ]
+      ],
+      "labels": [
+       {
+        "d": 0,
+        "text": "86.5"
+       },
+       {
+        "d": 1,
+        "text": "24.1"
+       },
+       {
+        "d": 2,
+        "text": "72.4"
+       },
+       {
+        "d": 3,
+        "text": "53.9"
+       },
+       {
+        "d": 5,
+        "text": "33.3"
+       }
+      ]
+     }
+    ]
+   },
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:product",
+         "s:year",
+         "s:sales",
+         "s:price",
+         "s:tag"
+        ],
+        [
+         "s:Tofu",
+         "409f6c0000000000",
+         "40448ccccccccccd",
+         "s:12",
+         "s:a"
+        ],
+        [
+         "s:Milk",
+         "409f700000000000",
+         "4055a00000000000",
+         "s: 30 ",
+         "s:b"
+        ],
+        [
+         "s:Cheese",
+         "409f740000000000",
+         "403819999999999a",
+         "s:7px",
+         null
+        ],
+        [
+         "s:Walnut",
+         "409f700000000000",
+         "404b99999999999a",
+         "s:-",
+         "s:a"
+        ],
+        [
+         "s:Matcha",
+         "409f780000000000",
+         "405219999999999a",
+         "s:0x10",
+         "s:c"
+        ],
+        [
+         "s:Biscuit",
+         "409f6c0000000000",
+         "404af33333333333",
+         "4014000000000000",
+         "s:b"
+        ],
+        [
+         "s:Tea",
+         "s:2013",
+         "4050800000000000",
+         "s:1e2",
+         "s:a"
+        ],
+        [
+         "s:Coffee",
+         "409f7c0000000000",
+         null,
+         "s:",
+         "s:B"
+        ],
+        [
+         "s:Juice",
+         "409f800000000000",
+         "4040a66666666666",
+         "s:Infinity",
+         "s:b"
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "product",
+        "year",
+        "sales",
+        "price",
+        "tag"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:product",
+         "s:year",
+         "s:sales",
+         "s:price",
+         "s:tag"
+        ],
+        [
+         "s:Milk",
+         "409f700000000000",
+         "4055a00000000000",
+         "s: 30 ",
+         "s:b"
+        ],
+        [
+         "s:Cheese",
+         "409f740000000000",
+         "403819999999999a",
+         "s:7px",
+         null
+        ],
+        [
+         "s:Matcha",
+         "409f780000000000",
+         "405219999999999a",
+         "s:0x10",
+         "s:c"
+        ],
+        [
+         "s:Biscuit",
+         "409f6c0000000000",
+         "404af33333333333",
+         "4014000000000000",
+         "s:b"
+        ],
+        [
+         "s:Coffee",
+         "409f7c0000000000",
+         null,
+         "s:",
+         "s:B"
+        ],
+        [
+         "s:Juice",
+         "409f800000000000",
+         "4040a66666666666",
+         "s:Infinity",
+         "s:b"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
   }
  ],
  "guards": [
@@ -48866,6 +52881,22 @@
   },
   {
    "name": "reg runs upstream",
+   "ok": true
+  },
+  {
+   "name": "reg over numbers: String(2011) and the string 2013",
+   "ok": true
+  },
+  {
+   "name": "reg is case-sensitive",
+   "ok": true
+  },
+  {
+   "name": "reg over odd cells",
+   "ok": true
+  },
+  {
+   "name": "a bad source throws",
    "ok": true
   },
   {

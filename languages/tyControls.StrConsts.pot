@@ -1268,7 +1268,11 @@ msgid "a filter condition is not an object"
 msgstr ""
 
 #: tycontrols.strconsts.rstydscondreg
-msgid "\"reg\" (a regular expression) is not supported"
+msgid "\"reg\" is not a regular expression: %s"
+msgstr ""
+
+#: tycontrols.strconsts.rstydscondregslow
+msgid "the regular expression in \"reg\" runs too long: %s"
 msgstr ""
 
 #: tycontrols.strconsts.rstydscopyhasnometa

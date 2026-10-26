@@ -21,7 +21,8 @@ unit test.advchart.datasettransform;
 
   Hand-written beside it: the registry's naming rules; TyJsArraySort against
   a plain stable sort for consistent comparators; the diagnostic a failing
-  transform leaves; `reg`, which the port does not have. }
+  transform leaves; the reason a `reg` that is no regular expression gives
+  [spec 242]. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -70,7 +71,7 @@ type
     procedure TestEveryTableIsUpstreamsTable;
     procedure TestEveryThrowLeavesNoTable;
     procedure TestSeriesOverTransformsDrawAsUpstream;
-    procedure TestRegIsRefusedWithAReason;
+    procedure TestRegMatchesAndSaysWhyNot;
     procedure TestAFailingTransformIsADiagnostic;
     procedure TestTheRegistryNamesItsTransforms;
     procedure TestTheSortIsStableForAConsistentComparator;
@@ -827,28 +828,45 @@ begin
   Finish('render');
 end;
 
-procedure TAdvChartDatasetTransformTest.TestRegIsRefusedWithAReason;
-var
-  c: TJSONObject;
-  opt: TTyChartOption;
-  cache: TTyDatasetCache;
-begin
-  c := CaseById('f-reg');
-  AssertNotNull('the case', c);
-  { upstream matches the expression: the header and six rows }
-  AssertEquals('upstream kept rows', 7,
-    c.Arrays['datasets'].Objects[1].Arrays['results'].Objects[0].Arrays['rows'].Count);
-  opt := TTyChartOption.Create;
-  cache := TTyDatasetCache.Create;
-  try
-    AssertTrue(opt.SetOptionText(c.Objects['option'].AsJSON));
-    AssertNotNull('the root is there', cache.ResultNode(opt, 0, 0));
-    AssertEquals('no table here', 0, cache.ResultCount(opt, 1));
-    AssertEquals('and the reason', rsTyDsCondReg, cache.ErrorOf(1));
-  finally
-    cache.Free;
-    opt.Free;
+procedure TAdvChartDatasetTransformTest.TestRegMatchesAndSaysWhyNot;
+
+  procedure Check(const AId, AReason: string);
+  var
+    c: TJSONObject;
+    opt: TTyChartOption;
+    cache: TTyDatasetCache;
+  begin
+    c := CaseById(AId);
+    AssertNotNull(AId, c);
+    opt := TTyChartOption.Create;
+    cache := TTyDatasetCache.Create;
+    try
+      AssertTrue(opt.SetOptionText(c.Objects['option'].AsJSON));
+      AssertNotNull('the root is there', cache.ResultNode(opt, 0, 0));
+      if AReason = '' then
+        AssertEquals(AId + ': the table', 1, cache.ResultCount(opt, 1))
+      else
+      begin
+        AssertEquals(AId + ': no table here', 0, cache.ResultCount(opt, 1));
+        AssertEquals(AId + ': and the reason', AReason, cache.ErrorOf(1));
+      end;
+    finally
+      cache.Free;
+      opt.Free;
+    end;
   end;
+
+begin
+  { the tables themselves are replayed with the rest: here, that there is
+    one, and what the port says where upstream throws }
+  Check('f-reg', '');
+  Check('f-reg-odd', '');
+  Check('e-reg-bad', Format(rsTyDsCondReg, ['[']));
+  Check('e-reg-quant', Format(rsTyDsCondReg, ['*a']));
+  Check('e-reg-number', Format(rsTyDsCondReg, ['2011']));
+  Check('e-reg-null', Format(rsTyDsCondReg, ['null']));
+  Check('e-reg-parser', Format(rsTyDsCondReg, ['NaN']));
+  Check('e-reg-name', Format(rsTyDsCondReg, ['(?<a>x)\k<b>']));
 end;
 
 procedure TAdvChartDatasetTransformTest.TestAFailingTransformIsADiagnostic;

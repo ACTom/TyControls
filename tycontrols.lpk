@@ -866,6 +866,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.AdvanceChart.JsMath"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.AdvanceChart.JsRegExp.pas"/>
+        <UnitName Value="tyControls.AdvanceChart.JsRegExp"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.AdvanceChart.AxisLabels.pas"/>
         <UnitName Value="tyControls.AdvanceChart.AxisLabels"/>
       </Item>
