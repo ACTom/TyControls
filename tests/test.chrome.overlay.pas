@@ -24,7 +24,7 @@ uses
   Classes, SysUtils, Types, Graphics, Controls, Forms, LCLType, LMessages, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.Base,
-  tyControls.Card, tyControls.Button, tyControls.Panel, tyControls.TyLabel;
+  tyControls.Card, tyControls.Button, tyControls.Panel, tyControls.TyLabel, tyControls.GroupBox;
 
 type
   TOvlButton = class(TTyButton)
@@ -44,6 +44,11 @@ type
   TOvlCard = class(TTyCard)
   public
     procedure XRender(ACanvas: TCanvas);
+    procedure XChromeChanged;
+  end;
+
+  TOvlGroupBox = class(TTyGroupBox)
+  public
     procedure XChromeChanged;
   end;
 
@@ -109,6 +114,10 @@ type
     procedure TestAPanelsKeptLayerMatchesAFreshOne;
     procedure TestAPanelWithoutABorderLeavesItsChildAlone;
     procedure TestAStripThatDrawsItsHostsFrameIsLeftToIt;
+    procedure TestAGroupBoxKeepsItsCaptionOverAChild;
+    procedure TestAGroupBoxsKeptLayerMatchesAFreshOne;
+    procedure TestTheGroupBoxCaptionIsNotFreeGround;
+    procedure TestANewCaptionRepaintsTheChildUnderIt;
   end;
 
 implementation
@@ -174,6 +183,13 @@ begin
 end;
 
 procedure TOvlCard.XChromeChanged;
+begin
+  CheckChromeChanged;
+end;
+
+{ TOvlGroupBox }
+
+procedure TOvlGroupBox.XChromeChanged;
 begin
   CheckChromeChanged;
 end;
@@ -942,6 +958,95 @@ begin
   finally
     bmp.Free;
   end;
+end;
+
+function NewGroupBox(AOwner: TForm; ACtl: TTyStyleController): TOvlGroupBox;
+begin
+  Result := TOvlGroupBox.Create(AOwner);
+  Result.Controller := ACtl;
+  Result.Font.PixelsPerInch := 96;
+  Result.Caption := 'Caption';
+  Result.StyleOverride := PANEL_CSS;
+  Result.SetBounds(10, 10, 200, 120);
+  Result.Parent := AOwner;
+end;
+
+{ A hand-placed child over the caption and the top line: the caption is part of the frame,
+  so the gap it breaks in the line and its ink stay on top of the child. }
+procedure TChromeHostsTest.TestAGroupBoxKeepsItsCaptionOverAChild;
+var
+  gb: TOvlGroupBox;
+  b: TOvlButton;
+  bmp: TBGRABitmap;
+  gap: TBGRAPixel;
+  x, inkless: Integer;
+begin
+  gb := NewGroupBox(FForm, FCtl);
+  b := AddButton(gb, 0, 0, 120, 40);
+  bmp := b.Render;
+  try
+    gap := bmp.GetPixel(5, 2);   { inside the caption's band, left of its text }
+    AssertFalse('the caption''s gap, over the child', IsBlue(gap));
+    inkless := 0;
+    for x := 8 to 50 do
+      if bmp.GetPixel(x, 8) = gap then Inc(inkless);
+    AssertTrue('and its text inked across the middle of the band', inkless < 43);
+    AssertTrue('the frame''s left line, over the child', IsRed(bmp.GetPixel(1, 30)));
+    AssertTrue('below the frame''s line and right of the caption, the child itself',
+      IsBlue(bmp.GetPixel(110, 30)));
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TChromeHostsTest.TestAGroupBoxsKeptLayerMatchesAFreshOne;
+var
+  gb: TOvlGroupBox;
+  b: TOvlButton;
+  a, c: TBGRABitmap;
+begin
+  gb := NewGroupBox(FForm, FCtl);
+  b := AddButton(gb, 0, 0, 120, 40);
+  TyChromeMode := 0;
+  a := b.Render;
+  TyChromeMode := 2;
+  c := b.Render;
+  try
+    AssertTrue('the kept layer gives what drawing it afresh gives', Same(a, c));
+  finally
+    a.Free;
+    c.Free;
+  end;
+end;
+
+{ The caption runs from the top of the box to the bottom of its band, above the frame's line
+  too: a child anywhere in that band is under chrome. }
+procedure TChromeHostsTest.TestTheGroupBoxCaptionIsNotFreeGround;
+var
+  gb: TOvlGroupBox;
+begin
+  gb := NewGroupBox(FForm, FCtl);
+  AssertTrue(Format('the free ground starts below the caption''s band (%d)',
+    [gb.ChromeFreeRect.Top]), gb.ChromeFreeRect.Top >= 16);
+  gb.Caption := '';
+  gb.StyleOverride := 'border-width: 0; border-radius: 0;';
+  AssertEquals('no caption and no frame: all of it is free', 0, gb.ChromeFreeRect.Top);
+end;
+
+procedure TChromeHostsTest.TestANewCaptionRepaintsTheChildUnderIt;
+var
+  gb: TOvlGroupBox;
+  b: TOvlButton;
+begin
+  gb := NewGroupBox(FForm, FCtl);
+  b := AddButton(gb, 0, 0, 120, 40);
+  gb.XChromeChanged;
+  b.Invalidations := 0;
+  gb.XChromeChanged;
+  AssertEquals('nothing changed: nothing repaints', 0, b.Invalidations);
+  gb.Caption := 'Another caption';
+  gb.XChromeChanged;
+  AssertTrue('a new caption repaints the child under it', b.Invalidations > 0);
 end;
 
 initialization

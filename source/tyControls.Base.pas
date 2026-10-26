@@ -419,6 +419,10 @@ type
       so they read as the form's photo on image themes. A no-op (False) off-image and
       headless, so the caller's existing opaque/transparent path is left untouched. }
     function FillSharpBackdrop(APainter: TTyPainter; const ARect: TRect): Boolean;
+    { FillSharpBackdrop with this control's (0,0) at AOrigin on APainter: ARect is still the
+      control's own slice, drawn AOrigin further on -- for a chrome layer laid over a child. }
+    function FillSharpBackdropAt(APainter: TTyPainter; const ARect: TRect;
+      const AOrigin: TPoint): Boolean;
     { See TTyGraphicControl.PointerStateChanged -- the same seam, on the
       windowed twin, and the one this library actually needed: the chart is a
       windowed control with a cached static layer. }
@@ -2588,6 +2592,19 @@ begin
   if Result then
     // ARect is control-local; shift the backdrop sample by the sub-rect's origin.
     APainter.FillImageSlice(ARect, host.GlassSharpBackdrop,
+      Point(off.X + ARect.Left, off.Y + ARect.Top));
+end;
+
+function TTyCustomControl.FillSharpBackdropAt(APainter: TTyPainter; const ARect: TRect;
+  const AOrigin: TPoint): Boolean;
+var
+  host: ITyGlassHost;
+  off: TPoint;
+begin
+  Result := TyResolveGlassHost(Self, host, off);
+  if Result then
+    APainter.FillImageSlice(Rect(ARect.Left + AOrigin.X, ARect.Top + AOrigin.Y,
+      ARect.Right + AOrigin.X, ARect.Bottom + AOrigin.Y), host.GlassSharpBackdrop,
       Point(off.X + ARect.Left, off.Y + ARect.Top));
 end;
 
