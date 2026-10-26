@@ -440,6 +440,7 @@ CharImage1.GlyphName := 'house';
 | [calendar](examples/calendar/) | `TTyCalendar`:周数、只读、可选日期范围 |
 | [chart](examples/chart/) | `TTyChart`:折线、柱状、饼图、环形图,图例、数值标签、悬停提示、点击命中 |
 | [checkbox](examples/checkbox/) | `TTyCheckBox`:三态、禁用、`OnClick` 与 `OnChange` 的区别、助记符 |
+| [chromeoverlay](examples/chromeoverlay/) | 容器外框保持在子控件上面:卡片、面板、分组框、滚动框、可折叠面板、分页控件;开关前后对比,测重画耗时 |
 | [combobox](examples/combobox/) | `TTyComboBox`:只读下拉、可编辑前缀补全、程序控制展开收起 |
 | [containers](examples/containers/) | 布局容器:分隔线、凹凸线、自绘面板、分组容器、滚动与折叠面板、网格面板、相对布局、CoolBar 等 |
 | [datetimepicker](examples/datetimepicker/) | `TTyDateTimePicker`:日期、时间、可空、只读、限定范围、12 小时制、跟随系统格式 |
