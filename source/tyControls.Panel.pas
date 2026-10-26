@@ -6,7 +6,7 @@ uses
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Accel,
   tyControls.Controller;
 type
-  TTyCustomPanel = class(TTyCustomControl)
+  TTyCustomPanel = class(TTyCustomControl, ITyChromeHost)
   protected
     { protected, not private: a test drives the invalidation rule through it. }
     FPaintCache: TTyPaintCache;
@@ -38,6 +38,13 @@ type
     procedure Invalidate; override;
     constructor Create(AOwner: TComponent); override;
     function GetStyleTypeKey: string; override;
+    { ITyChromeHost: the panel's frame, its focus ring and the parent background outside its
+      rounded corners stay whole on top of its children -- an alClient child sits flush on
+      the frame, since the panel keeps its children off nothing but BorderWidth. Virtual, so
+      a descendant that draws separators of its own adds them (TTyCustomCard shows how). }
+    function ChromeFreeRect: TRect; virtual;
+    procedure PaintChromeLayer(APainter: TTyPainter; const AOrigin: TPoint); virtual;
+    function ChromeSignature: string; virtual;
     property Alignment: TAlignment read FAlignment write SetAlignment default taCenter;
   protected
     { The caption's VERTICAL placement. The horizontal Alignment has been here since the
@@ -319,6 +326,28 @@ begin
     P.Free;
   end;
 end;
+function TTyCustomPanel.ChromeFreeRect: TRect;
+begin
+  Result := TyFrameChromeFreeRect(Self, CurrentStyle, Font.PixelsPerInch);
+end;
+
+procedure TTyCustomPanel.PaintChromeLayer(APainter: TTyPainter; const AOrigin: TPoint);
+var
+  S: TTyStyleSet;
+begin
+  S := CurrentStyle;
+  { Dimmed with the panel. Plain alpha, no base colour: the layer goes over the child, and a
+    base would paint over everything the child drew. }
+  if tpOpacity in S.Present then APainter.Opacity := S.Opacity;
+  TyDrawChromeFrame(Self, APainter,
+    Rect(AOrigin.X, AOrigin.Y, AOrigin.X + Width, AOrigin.Y + Height), S);
+end;
+
+function TTyCustomPanel.ChromeSignature: string;
+begin
+  Result := TyFrameChromeSignature(Self, CurrentStyle, Font.PixelsPerInch);
+end;
+
 destructor TTyCustomPanel.Destroy;
 begin
   { Only ever registered while ShowAccelChar was on; unregistering an absent control is a

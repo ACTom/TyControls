@@ -101,11 +101,11 @@ type
       children against it, since raw client coords would let them slide under the
       header. }
     function ContentRect: TRect;
-    { Pilot (ITyChromeHost): the card's frame, focus ring and strip separators stay whole
-      on top of its children. }
-    function ChromeFreeRect: TRect;
-    procedure PaintChromeLayer(APainter: TTyPainter; const AOrigin: TPoint);
-    function ChromeSignature: string;
+    { ITyChromeHost: the card's frame, focus ring and strip separators stay whole on top of
+      its children. Virtual, so a descendant that draws more chrome adds it. }
+    function ChromeFreeRect: TRect; virtual;
+    procedure PaintChromeLayer(APainter: TTyPainter; const AOrigin: TPoint); virtual;
+    function ChromeSignature: string; virtual;
     { The header strip's title. Drawn literally (no mnemonic parsing — a card titles
       a surface, it does not activate anything), ellipsised when it does not fit. }
     property Title: TCaption read FTitle write SetTitle;

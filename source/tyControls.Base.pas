@@ -719,12 +719,20 @@ procedure TyDrawFrameChrome(AOwner: TControl; APainter: TTyPainter; const ARect:
   host. On an image or glass parent the corners are left alone for now. }
 procedure TyDrawChromeFrame(AOwner: TControl; APainter: TTyPainter; const ARect: TRect;
   const AStyle: TTyStyleSet);
+{ Pilot (ITyChromeHost). Whether a frame drawn in AStyle has a line to keep whole: a
+  visible border or a focus ring. Without one the frame is no chrome at all -- a borderless
+  panel's rounded shape cannot be seen, and its children's corners are left square. }
+function TyFrameHasChrome(const AStyle: TTyStyleSet): Boolean;
+{ Pilot (ITyChromeHost). How far a frame drawn in AStyle reaches in from its rect's edges, at
+  APPI: the frame's band -- the border or the focus ring, whichever is wider, and a column of
+  anti-aliasing -- and, for a rounded corner, how far its arc reaches in from the corner of
+  the rect: r(1 - 1/sqrt 2), a little under 0.3 r. Conservative along the straight edges,
+  which only means a child near one is checked and finds nothing to draw. 0 when the frame
+  has no chrome (TyFrameHasChrome). }
+function TyFrameChromeBand(const AStyle: TTyStyleSet; APPI: Integer): Integer;
 { Pilot (ITyChromeHost). The frame's part of a host's ChromeFreeRect, in its client
-  coordinates at APPI: in from every edge by the frame's band -- the border or the focus ring,
-  whichever is wider, and a column of anti-aliasing -- and, for a rounded corner, by how far
-  its arc reaches in from the corner of the rect: r(1 - 1/sqrt 2), a little under 0.3 r.
-  Conservative along the straight edges, which only means a child near one is checked and
-  finds nothing to draw. A host with separators takes its strips out of this as well. }
+  coordinates: the whole control in by TyFrameChromeBand. A host with separators takes its
+  strips out of this as well. }
 function TyFrameChromeFreeRect(AControl: TControl; const AStyle: TTyStyleSet;
   APPI: Integer): TRect;
 { Pilot (ITyChromeHost). The frame's part of a host's ChromeSignature: its size and PPI,
@@ -768,18 +776,32 @@ begin
   if Result > 0 then Inc(Result);   { 抗锯齿留量;完全没有 chrome 就一寸都不让 }
 end;
 
-function TyFrameChromeFreeRect(AControl: TControl; const AStyle: TTyStyleSet;
-  APPI: Integer): TRect;
+function TyFrameHasChrome(const AStyle: TTyStyleSet): Boolean;
+begin
+  Result := TyBorderVisible(AStyle)
+    or ((tpOutline in AStyle.Present) and (AStyle.OutlineWidth > 0));
+end;
+
+function TyFrameChromeBand(const AStyle: TTyStyleSet; APPI: Integer): Integer;
 var
   c: TTyCorners;
-  band, r: Integer;
+  r: Integer;
 begin
+  if not TyFrameHasChrome(AStyle) then Exit(0);
   c := TyEffectiveCorners(AStyle);
   r := c.TL;
   if c.TR > r then r := c.TR;
   if c.BR > r then r := c.BR;
   if c.BL > r then r := c.BL;
-  band := MulDiv(TyChromeInsetLogical(AStyle) + (r * 3 + 9) div 10, APPI, 96);
+  Result := MulDiv(TyChromeInsetLogical(AStyle) + (r * 3 + 9) div 10, APPI, 96);
+end;
+
+function TyFrameChromeFreeRect(AControl: TControl; const AStyle: TTyStyleSet;
+  APPI: Integer): TRect;
+var
+  band: Integer;
+begin
+  band := TyFrameChromeBand(AStyle, APPI);
   Result := Rect(band, band, AControl.Width - band, AControl.Height - band);
 end;
 
@@ -2011,7 +2033,8 @@ begin
   effStyle := AStyle;
   TyApplyRenderStyle(effStyle, corners);   // the shape the host's own fill has
   t0 := TyChromeClockUs;
-  if ((corners.TL > 0) or (corners.TR > 0) or (corners.BR > 0) or (corners.BL > 0))
+  if TyFrameHasChrome(AStyle)
+     and ((corners.TL > 0) or (corners.TR > 0) or (corners.BR > 0) or (corners.BL > 0))
      and not TyResolveGlassHost(AOwner, gHost, gOff) and TyResolveParentBg(AOwner, pc) then
   begin
     touches := True;
@@ -2734,18 +2757,29 @@ begin
   Result := False;
 end;
 
+{ A strip that paints its parent's frame over itself already -- an embedded scroll bar
+  (PaintsParentFrame) -- is left to it by that parent; hosts further out still draw over it. }
+function TyPaintsOwnHostFrame(AControl: TControl): Boolean;
+begin
+  Result := (AControl is TTyCustomControl) and TTyCustomControl(AControl).PaintsParentFrame;
+end;
+
 { Whether ARect -- AControl's bounds, now or before a move, in its parent's coordinates --
   reaches into an ancestor's chrome. }
 function TyReachesAncestorChrome(AControl: TControl; ARect: TRect): Boolean;
 var
   p: TWinControl;
   host: ITyChromeHost;
+  first: Boolean;
 begin
   p := AControl.Parent;
+  first := True;
   while p <> nil do
   begin
-    if Supports(p, ITyChromeHost, host) and TyReachesChrome(host, p, ARect) then
+    if Supports(p, ITyChromeHost, host) and not (first and TyPaintsOwnHostFrame(AControl))
+       and TyReachesChrome(host, p, ARect) then
       Exit(True);
+    first := False;
     OffsetRect(ARect, p.Left, p.Top);
     p := p.Parent;
   end;
@@ -2969,11 +3003,17 @@ procedure TyPaintAncestorChrome(AControl: TControl; ACanvas: TCanvas; APPI: Inte
 var
   c: TControl;
   p: TWinControl;
-  ox, oy: Integer;
+  ox, oy, optOut: Integer;
   host: ITyChromeHost;
+  area: TRect;
+  bands: TTyChromeBands;
 begin
-  if not TyChromeOverlayEnabled or (AControl = nil) or not TyHasChromeAncestor(AControl)
-     or TyOverParentChrome(AControl) then Exit;
+  if not TyChromeOverlayEnabled or (AControl = nil) or not TyHasChromeAncestor(AControl) then
+    Exit;
+  area := Rect(0, 0, AControl.Width, AControl.Height);
+  { The opt-out token is read only once some chrome reaches the control: most controls in a
+    host sit clear of it, and reading a token is not free. }
+  optOut := -1;
   { Inner hosts first, so an outer frame that passes over an inner one stays on top of it. }
   ox := 0;
   oy := 0;
@@ -2983,9 +3023,16 @@ begin
   begin
     Inc(ox, c.Left);
     Inc(oy, c.Top);
-    if Supports(p, ITyChromeHost, host) then
-      TyPaintHostChrome(host, p, ACanvas, APPI, Point(-ox, -oy),
-        Rect(0, 0, AControl.Width, AControl.Height));
+    if Supports(p, ITyChromeHost, host)
+       and not ((c = AControl) and TyPaintsOwnHostFrame(AControl))
+       and (TyChromeBands(area, Point(-ox, -oy), p.Width, p.Height,
+         TyChromeFreeOf(host, p), bands) > 0) then
+    begin
+      if optOut < 0 then
+        optOut := Ord(TyOverParentChrome(AControl));
+      if optOut = 1 then Exit;
+      TyPaintHostChrome(host, p, ACanvas, APPI, Point(-ox, -oy), area);
+    end;
     c := p;
     p := p.Parent;
   end;
@@ -3068,31 +3115,56 @@ var
   host: ITyChromeHost;
   sig: string;
   oldFree: TRect;
-  wasKnown: Boolean;
+  wasKnown, any: Boolean;
   i: Integer;
   c: TControl;
   t0: Int64;
+
+  { on the chrome as it is now, or as it was: a frame that moved off a child left its old
+    stroke on the child's pixels }
+  function OnChrome(AChild: TControl): Boolean;
+  begin
+    Result := not TyPaintsOwnHostFrame(AChild)
+      and (TyReachesChromeOf(Self, AChild.BoundsRect, FChromeFree)
+        or (wasKnown and TyReachesChromeOf(Self, AChild.BoundsRect, oldFree)));
+  end;
+
 begin
   if not Supports(Self, ITyChromeHost, host) then Exit;
-  t0 := TyChromeClockUs;
-  sig := host.ChromeSignature;
-  Inc(TyChromeStats.SignatureUs, TyChromeClockUs - t0);
   t0 := TyChromeClockUs;
   oldFree := FChromeFree;
   wasKnown := FChromeKnown;
   FChromeFree := host.ChromeFreeRect;
   FChromeKnown := True;
   Inc(TyChromeStats.FreeRectUs, TyChromeClockUs - t0);
-  if sig = FChromeSig then Exit;
-  FChromeSig := sig;
-  { the children on the chrome as it is now, and those on it as it was: a frame that moved
-    off a child left its old stroke on the child's pixels }
+  { Nothing on the chrome: nothing to repaint and no signature to take -- the commonest case
+    once every panel is a host. The empty signature left behind matches no kept layer, so a
+    child that comes onto the chrome before the next paint asks the host afresh, and the next
+    paint repaints it. }
+  any := False;
   for i := 0 to ControlCount - 1 do
   begin
     c := Controls[i];
-    if (c is TWinControl) and not TyOverParentChrome(c)
-       and (TyReachesChromeOf(Self, c.BoundsRect, FChromeFree)
-         or (wasKnown and TyReachesChromeOf(Self, c.BoundsRect, oldFree))) then
+    if (c.Visible or (csDesigning in c.ComponentState)) and OnChrome(c) then
+    begin
+      any := True;
+      Break;
+    end;
+  end;
+  if not any then
+  begin
+    FChromeSig := '';
+    Exit;
+  end;
+  t0 := TyChromeClockUs;
+  sig := host.ChromeSignature;
+  Inc(TyChromeStats.SignatureUs, TyChromeClockUs - t0);
+  if sig = FChromeSig then Exit;
+  FChromeSig := sig;
+  for i := 0 to ControlCount - 1 do
+  begin
+    c := Controls[i];
+    if (c is TWinControl) and OnChrome(c) and not TyOverParentChrome(c) then
       TyInvalidateTree(TWinControl(c));
   end;
 end;
