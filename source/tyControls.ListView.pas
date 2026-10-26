@@ -270,6 +270,7 @@ type
     FSortDirection: TTySortDirection;
     FSortKind:      TTyListSortKind;
     FAutoSort:      Boolean;
+    FAutoSizing:    Boolean;   // reentrancy guard: ApplyAutoSize -> column width -> HeaderChanged (#125)
     { selection / focus (all keyed by ITEM index) }
     FMultiSelect: Boolean;
     FItemIndex:   Integer;        { focused item index, -1 = none }
@@ -353,6 +354,13 @@ type
     function  GetColumn(AIndex: Integer): TTyColumn;
     function  GetColumnCount: Integer;
     procedure HeaderChanged(Sender: TObject);
+    { #125: hoAutoResize -- the Header.AutoSizeIndex column takes up the rest of the width,
+      on a resize and on any header change, as TTyTreeView's does. }
+    procedure ApplyHeaderAutoSize;
+    { #125: the column an inline rename reads and writes -- Header.MainColumn in the report
+      view, where the editor sits over it, else the caption. }
+    function EditColumn: Integer;
+    function HighlightRect(const ACell: TRect): TRect;
     procedure GroupsChanged(Sender: TObject);
     procedure VScrollChange(Sender: TObject);
     procedure HScrollChange(Sender: TObject);
@@ -569,6 +577,9 @@ type
     procedure CommitEdit(AIndex: Integer; const AText: string); virtual;   { item index }
     { The persistent inline editor, read-only to descendants. }
     property InlineEditor: TTyEdit read FEditor;
+    { #125: a form file may carry the sort under either name -- this control's own, or a
+      hand-written Header.SortColumn; the control's wins, the header's fills in for it. }
+    procedure Loaded; override;
 
     { The item-change seams, mirroring LCL's protected Change / CanChange / DoSelectItem
       (comctrls.pp:1529-1531, customlistview.inc:193/208/701).
@@ -624,7 +635,7 @@ type
     procedure BeginUpdate;
     procedure EndUpdate;
     { Call after the app mutated its own store in OwnerData mode: resizes the order /
-      rank / selection arrays, clamps focus/anchor/hot, re-sorts when AutoSort. }
+      rank / selection arrays, clamps focus/anchor/hot, re-sorts while SortColumn is set. }
     procedure ItemsChanged;
 
     procedure Sort;
@@ -684,6 +695,8 @@ type
     property SortColumn: Integer read FSortColumn write SetSortColumn default -1;
     property SortDirection: TTySortDirection read FSortDirection write SetSortDirection default sdAscending;
     property SortKind: TTyListSortKind read FSortKind write SetSortKind default lskText;
+    { Whether a click on a column header sorts by it, as LCL's (#125). A list with a SortColumn
+      keeps itself sorted as items change either way; SortColumn := -1 stops that. }
     property AutoSort: Boolean read FAutoSort write SetAutoSort default True;
     property LargeImages: TCustomImageList read FLargeImages write SetLargeImages;
     property SmallImages: TCustomImageList read FSmallImages write SetSmallImages;
@@ -1082,6 +1095,7 @@ begin
   { Header sub-object; wire its change hook so column edits re-layout. }
   FHeader := TTyHeader.Create;
   FHeader.OnChange := @HeaderChanged;
+  FHeader.SortStored := False;   // SortColumn / SortDirection stream under this control (#125)
 
   { Two embedded scrollbars, eager + hidden + non-designable (see TreeView 1835).
     TabStop=False: a standalone TTyScrollBar is focusable (it owns arrow/page keys), but a
@@ -1514,8 +1528,8 @@ begin
   if Length(FRank) <> cnt then
   begin
     RebuildOrder;
-    if FAutoSort and (FSortColumn >= 0) then
-      Sort;   { re-permutes FOrder + SyncRank }
+    if FSortColumn >= 0 then
+      Sort;   { re-permutes FOrder + SyncRank (#125: whatever AutoSort says, as LCL's) }
   end
   else if UseGroupedLayout then
     RefreshGroupMap;   { metrics may have changed (resize / scrollbar flip); keep Tops fresh }
@@ -2040,7 +2054,7 @@ begin
   ClampIndex(FItemIndex);
   ClampIndex(FAnchor);
   ClampIndex(FHot);
-  if FAutoSort and (FSortColumn >= 0) then
+  if FSortColumn >= 0 then   { #125: AutoSort is the header click only, as LCL's }
     Sort                       { rule 9: a sort commits the surviving edit (EndEdit inside Sort) }
   else if (FEditor <> nil) and (FEditItem >= 0) and (FEditItem < GetItemCount) then
     { No sort, but RebuildOrder may have moved the edited row: follow it (edit survives, rule 9). }
@@ -2101,10 +2115,63 @@ begin
   Result := FHeader.Columns.Count;
 end;
 
+procedure TTyListView.Loaded;
+begin
+  inherited Loaded;
+  if (FSortColumn < 0) and (FHeader.SortColumn >= 0) then
+  begin
+    FSortColumn := FHeader.SortColumn;
+    FSortDirection := FHeader.SortDirection;
+  end
+  else
+  begin
+    FHeader.SortColumn := FSortColumn;
+    FHeader.SortDirection := FSortDirection;
+  end;
+  if FSortColumn >= 0 then Sort;
+  ApplyHeaderAutoSize;
+end;
+
 procedure TTyListView.HeaderChanged(Sender: TObject);
 begin
   if csLoading in ComponentState then Exit;
+  { #125: one sort state. Header.SortColumn / SortDirection set by the host (or assigned with
+    the header) sort the list as this control's own two properties do. }
+  if (FHeader.SortColumn <> FSortColumn) or (FHeader.SortDirection <> FSortDirection) then
+  begin
+    FSortColumn := FHeader.SortColumn;
+    if FSortColumn < -1 then FSortColumn := -1;
+    FSortDirection := FHeader.SortDirection;
+    if FSortColumn >= 0 then Sort;
+  end;
+  ApplyHeaderAutoSize;
   Invalidate;
+end;
+
+procedure TTyListView.ApplyHeaderAutoSize;
+var
+  w: Integer;
+begin
+  if FAutoSizing or (FHeader = nil) then Exit;
+  if not (hoAutoResize in FHeader.Options) then Exit;
+  if (FHeader.AutoSizeIndex < 0) or (FHeader.AutoSizeIndex >= FHeader.Columns.Count) then Exit;
+  FAutoSizing := True;
+  try
+    w := ClientWidth;
+    if (FVScroll <> nil) and FVScroll.Visible then Dec(w, FVScroll.Width);
+    FHeader.Columns.ApplyAutoSize(MulDiv(w, 96, Font.PixelsPerInch), FHeader.AutoSizeIndex);
+    UpdateScrollBars;
+  finally
+    FAutoSizing := False;
+  end;
+end;
+
+function TTyListView.EditColumn: Integer;
+begin
+  Result := 0;
+  if (FViewStyle = lvsReport) and (FHeader.MainColumn >= 0)
+     and (FHeader.MainColumn < FHeader.Columns.Count) then
+    Result := FHeader.MainColumn;
 end;
 
 { ---------------------------------------------------------------------------
@@ -2514,7 +2581,7 @@ begin
 
   FEditItem := AIndex;                             { rule 6/9: store the ITEM index }
   FEditor.Controller := Self.Controller;           { rule 3: themed like the list }
-  FEditor.Text := GetItemText(AIndex, 0);          { column 0 = the caption }
+  FEditor.Text := GetItemText(AIndex, EditColumn); { the column the editor sits over (#125) }
   FEditor.BoundsRect := EditorBoundsFor(AIndex);
   FEditor.Visible := True;
   try
@@ -2566,6 +2633,7 @@ end;
 procedure TTyListView.CommitEdit(AIndex: Integer; const AText: string);
 var
   s: string;
+  col: Integer;
 begin
   if (AIndex < 0) or (AIndex >= GetItemCount) then Exit;
   s := AText;
@@ -2576,7 +2644,16 @@ begin
   if not FOwnerData then
   begin
     if (AIndex >= 0) and (AIndex < FItems.Count) then
-      FItems[AIndex].Caption := s;
+    begin
+      col := EditColumn;   // the column the editor was over (#125)
+      if col = 0 then
+        FItems[AIndex].Caption := s
+      else
+      begin
+        while FItems[AIndex].SubItems.Count < col do FItems[AIndex].SubItems.Add('');
+        FItems[AIndex].SubItems[col - 1] := s;
+      end;
+    end;
   end;
   { The one place this control produces a TEXT change, and the reason OnChange carries a
     reason at all: a host filtering on ctText hears renames without also hearing every
@@ -2748,6 +2825,7 @@ begin
   if AValue < -1 then AValue := -1;
   if FSortColumn = AValue then Exit;
   FSortColumn := AValue;
+  FHeader.SortColumn := AValue;   // #125: the header shows what the list does
   Sort;
 end;
 
@@ -2755,6 +2833,7 @@ procedure TTyListView.SetSortDirection(AValue: TTySortDirection);
 begin
   if FSortDirection = AValue then Exit;
   FSortDirection := AValue;
+  FHeader.SortDirection := AValue;   // #125
   if FSortColumn >= 0 then Sort else Invalidate;
 end;
 
@@ -2969,12 +3048,22 @@ var
   col: TTyColumn;
   span: TTyColumnSpan;
   txt: string;
-  tc: TTyColor;
+  tc, restTc: TTyColor;
+  rest: TTyStyleSet;
   tr, chk: TRect;
 begin
   mainCol := FHeader.MainColumn;
   if tpTextColor in AStyle.Present then tc := AStyle.TextColor
   else tc := CurrentStyle.TextColor;
+  { #125: without RowSelect only the main column is highlighted, so the others keep the ink
+    of a row that is not -- the highlight's own ink may not read on the bare background. }
+  restTc := tc;
+  if not FRowSelect then
+  begin
+    rest := PartStyle('TyListViewItem', '', TyStatesUnlessDisabled(Self, []));
+    if tpTextColor in rest.Present then restTc := rest.TextColor
+    else restTc := CurrentStyle.TextColor;
+  end;
   imgPx := ScaleI(StyleMetric('--listview-small-icon-size', TyLvSmallIcon));
   for posIdx := 0 to FHeader.Columns.Count - 1 do
   begin
@@ -3029,8 +3118,12 @@ begin
     else
       tr := Rect(textLead, ACell.Top, trail - margin, ACell.Bottom);
     if tr.Left < tr.Right then
-      P.DrawText(tr, txt, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
-        tc, col.Alignment, tlCenter, True);
+      if colIdx = mainCol then
+        P.DrawText(tr, txt, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
+          tc, col.Alignment, tlCenter, True)
+      else
+        P.DrawText(tr, txt, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
+          restTc, col.Alignment, tlCenter, True);
   end;
 end;
 
@@ -3121,11 +3214,24 @@ procedure TTyListView.RenderItem(P: TTyPainter; AIndex: Integer; const ACell: TR
 begin
   { Highlight only selected / hovered cells (a resting TyListViewItem has no row fill). }
   if ((tysSelected in AStates) or (tysHover in AStates)) and (tpBackground in AStyle.Present) then
-    P.FillBackground(ACell, AStyle.Background, 0);
+    P.FillBackground(HighlightRect(ACell), AStyle.Background, 0);
   if FViewStyle = lvsReport then
     RenderReportRow(P, AIndex, ACell, AStyle)
   else
     RenderFlowCell(P, AIndex, ACell, AStyle);
+end;
+
+function TTyListView.HighlightRect(const ACell: TRect): TRect;
+var
+  span: TTyColumnSpan;
+begin
+  { #125: RowSelect = False highlights the main column's cell only, as LCL's report view
+    without full-row select does; the other views have one cell per item anyway. }
+  Result := ACell;
+  if FRowSelect or (FViewStyle <> lvsReport) then Exit;
+  if (FHeader.MainColumn < 0) or (FHeader.MainColumn >= FHeader.Columns.Count) then Exit;
+  span := (FHeader.Columns.Items[FHeader.MainColumn] as TTyColumn).Span(ColumnAxis);
+  Result := Rect(span.Left, ACell.Top, span.Right, ACell.Bottom);
 end;
 
 function TTyListView.HeaderImageList: TCustomImageList;
@@ -3592,6 +3698,7 @@ begin
     EndEdit(True);
   end;
   UpdateScrollBars;
+  ApplyHeaderAutoSize;   // #125
 end;
 
 { ---------------------------------------------------------------------------
@@ -3783,6 +3890,8 @@ begin
           FSortColumn := clickCol;
           FSortDirection := sdAscending;
         end;
+        FHeader.SortColumn := FSortColumn;       // #125: in step before the header notifies
+        FHeader.SortDirection := FSortDirection;
         Sort;
       end;
     end;
