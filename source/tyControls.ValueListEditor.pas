@@ -1403,7 +1403,7 @@ begin
   FEnumList := TTyListBox.Create(nil);
   FEnumList.OnChange := @DropPick;      // a real selection change picks + closes
   FEnumList.OnMouseUp := @DropClick;    // ...and so does clicking the ALREADY-selected row
-  FColorList := TTyColorMorePopupList.Create(nil);   // draws swatches; the clNone "more…" as text
+  FColorList := TTyColorMorePopupList.Create(nil);   // draws swatches; the "more…" row as text
   FColorList.OnChange := @DropPick;
   FColorList.OnMouseUp := @DropClick;
 end;
@@ -1463,8 +1463,8 @@ begin
   FDropPopup.Popup(FEditor, cell.Right - cell.Left, DropdownHeightFor(rows));
 end;
 
-{ vekColor: a palette dropdown (swatch per colour) whose LAST row is a "more…" entry (clNone
-  sentinel) that opens the themed colour dialog. }
+{ vekColor: a palette dropdown (swatch per colour) whose LAST row is a "more…" entry
+  (TyColorMoreMarker) that opens the themed colour dialog. }
 procedure TTyCustomValueListEditor.BeginColorDropdown(AFlat: Integer);
 var cell: TRect; rows, idx: Integer;
 begin
@@ -1488,7 +1488,7 @@ begin
   idx := TySelectColorIndex(FColorList.Items, StringToColorDef(FFlatRow[AFlat].Value, clBlack));
   { #68: the translated "More…" (it was a Chinese literal), read here rather than kept from
     the constructor so a language picked later still reaches it -- as TTyColorComboBox does. }
-  TyAddColorItem(FColorList.Items, rsColorComboMore, clNone);   // "more…" sentinel, kept LAST
+  TyAddColorItem(FColorList.Items, rsColorComboMore, TyColorMoreMarker);   // "more…", kept LAST
   FColorList.ItemIndex := idx;
   FDropSeeding := False;
   ConfigureDropCorners;
@@ -1519,7 +1519,7 @@ begin
       begin
         idx := FColorList.ItemIndex;
         if idx < 0 then begin if FDropPopup <> nil then FDropPopup.Close; Exit; end;
-        if TyColorOfItem(FColorList.Items, idx) = clNone then
+        if TyColorOfItem(FColorList.Items, idx) = TyColorMoreMarker then
         begin
           { "more…": close the popup, then open the modal dialog on a DEFERRED call so this
             mouse-down event (and the popup's mouse capture) fully unwinds first. Remember the row

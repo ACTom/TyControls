@@ -6,19 +6,28 @@ uses
   tyControls.Types, tyControls.Painter, tyControls.StyleModel, tyControls.Base,
   tyControls.ListBox, tyControls.ComboBox, tyControls.ColorBox, tyControls.Dialogs.Color, LCLType;
 
+const
+  { The "more…" row's value in Objects[], here and in the value list editor's colour
+    drop-down: no colour LCL defines (those are $00BBGGRR, the system colours from $80000000,
+    clNone $1FFFFFFF and clDefault $20000000), so a palette's own clNone row (cbIncludeNone)
+    is never taken for it (#121). }
+  TyColorMoreMarker = TColor($7FFFFFFF);
+
 type
-  { The drop-down list for TTyColorComboBox: like TTyColorPopupList, but a row whose colour
-    is clNone (the "more…" sentinel) is drawn as plain text instead of a swatch. }
-  TTyColorMorePopupList = class(TTyComboPopupList)
+  { The drop-down list for TTyColorComboBox: TTyColorPopupList -- so the swatches take the
+    combo's ColorRectWidth / ColorRectOffset and pseudo-row colours (#121) -- but the "more…"
+    row is drawn as plain text instead of a swatch. }
+  TTyColorMorePopupList = class(TTyColorPopupList)
   protected
     procedure PaintItemContent(P: TTyPainter; const ARowRect: TRect; AIndex: Integer;
       const AStyle: TTyStyleSet); override;
   end;
 
   { A colour box (TTyCustomColorBox) + a trailing "more…" row that opens the themed colour dialog; the picked
-    colour is inserted before "more" and selected. The "more…" item is marked by a clNone
-    colour in Objects[], so it renders as plain text and is detected without a side flag.
-    Kept last, so appended custom colours slot in above it. }
+    colour is inserted before "more" and selected. The "more…" item is marked by a colour
+    value of its own in Objects[] (TyColorMoreMarker), so it renders as plain text and is
+    detected without a side flag -- not by clNone, which is a colour the palette may carry
+    (cbIncludeNone, #121). Kept last, so appended custom colours slot in above it. }
   TTyCustomColorComboBox = class(TTyCustomColorBox)
   private
     FMoreCaption: string;
@@ -30,6 +39,9 @@ type
     function CreatePopupList: TTyCustomListBox; override;
     procedure PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet); override;
     procedure DoSelect; override;
+    { Every rebuild of the palette -- a form file's Loaded, a Style change -- ends with the
+      "more…" row, not just the constructor's (#121). }
+    procedure SetColorList; override;
   public
     constructor Create(AOwner: TComponent); override;
     { The "more" row's text: MoreCaption, or the translated default when it is empty. }
@@ -129,21 +141,19 @@ uses tyControls.StrConsts;
 
 procedure TTyColorMorePopupList.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
   AIndex: Integer; const AStyle: TTyStyleSet);
-var c: TColor;
 begin
-  { Owner-draw first: both branches below replace the whole row, so an inherited call would
-    be too late. Inert unless the combo has both an owner-draw Style and a handler. }
+  if TyColorOfItem(Items, AIndex) <> TyColorMoreMarker then
+  begin
+    inherited PaintItemContent(P, ARowRect, AIndex, AStyle);   // a colour: the swatch row
+    Exit;
+  end;
+  { The "more…" row: plain text, no swatch. Owner-draw first, as the swatch row does. }
   if TyComboCollectRowOwnerDraw(Self, ARowRect, AIndex) then Exit;
-  c := TyColorOfItem(Items, AIndex);
-  if c = clNone then
-    // the "more…" row: plain text, no swatch.
-    P.DrawText(
-      Rect(ARowRect.Left + P.Scale(AStyle.Padding.Left), ARowRect.Top,
-           ARowRect.Right - P.Scale(AStyle.Padding.Right), ARowRect.Bottom),
-      Items[AIndex], AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
-      AStyle.TextColor, taLeftJustify, tlCenter, True)
-  else
-    TyDrawColorRow(P, ARowRect, c, Items[AIndex], AStyle, ResolveFontSize(AStyle));
+  P.DrawText(
+    Rect(ARowRect.Left + P.Scale(AStyle.Padding.Left), ARowRect.Top,
+         ARowRect.Right - P.Scale(AStyle.Padding.Right), ARowRect.Bottom),
+    Items[AIndex], AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
+    AStyle.TextColor, taLeftJustify, tlCenter, True);
 end;
 
 { TTyCustomColorComboBox }
@@ -154,17 +164,22 @@ begin
   { Empty, not 'More…': a literal here was English in every language. MoreText supplies
     the translated default. }
   FMoreCaption := '';
-  FPrevIndex := ItemIndex;
+  FPrevIndex := ItemIndex;   // the inherited constructor's SetColorList already added "more…"
+end;
+
+procedure TTyCustomColorComboBox.SetColorList;
+begin
+  inherited SetColorList;
   RebuildMoreItem;
 end;
 
 procedure TTyCustomColorComboBox.RebuildMoreItem;
 var i: Integer;
 begin
-  // Drop any existing "more…" (clNone) row, then append a fresh one at the end.
+  // Drop any existing "more…" row, then append a fresh one at the end.
   for i := Items.Count - 1 downto 0 do
-    if TyColorOfItem(Items, i) = clNone then Items.Delete(i);
-  TyAddColorItem(Items, MoreText, clNone);
+    if TyColorOfItem(Items, i) = TyColorMoreMarker then Items.Delete(i);
+  TyAddColorItem(Items, MoreText, TyColorMoreMarker);
 end;
 
 procedure TTyCustomColorComboBox.SetMoreCaption(const AValue: TTranslateString);
@@ -184,7 +199,7 @@ end;
 
 function TTyCustomColorComboBox.IsMoreIndex(AIndex: Integer): Boolean;
 begin
-  Result := (AIndex >= 0) and (AIndex < Items.Count) and (ColorAt(AIndex) = clNone);
+  Result := (AIndex >= 0) and (AIndex < Items.Count) and (ColorAt(AIndex) = TyColorMoreMarker);
 end;
 
 function TTyCustomColorComboBox.CreatePopupList: TTyCustomListBox;
@@ -194,10 +209,13 @@ end;
 
 procedure TTyCustomColorComboBox.PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet);
 begin
-  if (ItemIndex >= 0) and (ItemIndex < Items.Count) and not IsMoreIndex(ItemIndex) then
-    TyDrawColorRow(P, ATextRect, ColorAt(ItemIndex), Items[ItemIndex], AStyle, ResolveFontSize(AStyle))
+  { A colour row is TTyColorBox's swatch, with its ColorRectWidth / ColorRectOffset and
+    pseudo-row colours (#121); "more…", picked for the moment its dialog is open, is text. }
+  if IsMoreIndex(ItemIndex) then
+    P.DrawText(ATextRect, Items[ItemIndex], AStyle.FontName, ResolveFontSize(AStyle),
+      AStyle.FontWeight, AStyle.TextColor, taLeftJustify, tlCenter, True)
   else
-    inherited PaintFieldContent(P, ATextRect, AStyle);   // "more…" / none -> plain text
+    inherited PaintFieldContent(P, ATextRect, AStyle);
 end;
 
 procedure TTyCustomColorComboBox.DoSelect;
