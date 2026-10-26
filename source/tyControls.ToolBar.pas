@@ -346,7 +346,7 @@ type
     use, so the LCL-ported handler works unchanged. }
   TTyToolBarOnPaintButton = procedure(Sender: TTyToolButton; AState: Integer) of object;
 
-  TTyToolBar = class(TTyCustomControl)
+  TTyToolBar = class(TTyCustomControl, ITyChromeHost)
   private
     FButtonHeight: Integer;
     FButtonHeightExplicit: Boolean;
@@ -431,6 +431,12 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     procedure InsertControl(AControl: TControl; Index: Integer); override;
+    { ITyChromeHost: the bottom hairline -- the bar's one painted border -- stays whole on top
+      of a tool too tall for the row shift to keep off it. No frame and no corners: the bar
+      draws neither. Virtual, so a descendant adds chrome of its own. }
+    function ChromeFreeRect: TRect; virtual;
+    procedure PaintChromeLayer(APainter: TTyPainter; const AOrigin: TPoint); virtual;
+    function ChromeSignature: string; virtual;
     { The bar's TTyToolButton children, in child order — LCL's TToolBar.ButtonCount /
       Buttons[] (comctrls.pp:2367), and the index space TTyToolButton.Index, Grouped and
       GetGroupBounds all speak in.
@@ -1949,6 +1955,35 @@ begin
 end;
 
 procedure TTyToolBar.Paint; begin RenderTo(Canvas, ClientRect, Font.PixelsPerInch); end;
+
+function TTyToolBar.ChromeFreeRect: TRect;
+begin
+  { BottomBorderPx is 0 exactly when RenderTo draws no line: then nothing is chrome. }
+  Result := Rect(0, 0, Width, Height - BottomBorderPx(Font.PixelsPerInch));
+end;
+
+procedure TTyToolBar.PaintChromeLayer(APainter: TTyPainter; const AOrigin: TPoint);
+var
+  S: TTyStyleSet;
+  bw: Integer;
+  f: TTyFill;
+begin
+  S := CurrentStyle;
+  bw := BottomBorderPx(Font.PixelsPerInch);
+  if bw <= 0 then Exit;
+  f := Default(TTyFill);
+  f.Kind := tfkSolid;
+  f.Color := S.BorderColor;
+  { the same strip RenderTo fills }
+  APainter.FillBackground(Rect(AOrigin.X, AOrigin.Y + Height - bw, AOrigin.X + Width,
+    AOrigin.Y + Height), f, 0);
+end;
+
+function TTyToolBar.ChromeSignature: string;
+begin
+  Result := IntToStr(Width) + ',' + IntToStr(Height) + ',' + IntToStr(Font.PixelsPerInch)
+    + '|' + IntToStr(BottomBorderPx(Font.PixelsPerInch)) + ',' + IntToHex(CurrentStyle.BorderColor, 8);
+end;
 procedure TTyToolBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var P: TTyPainter; S: TTyStyleSet; W, H, bw: Integer; bg: TTyFill;
 begin

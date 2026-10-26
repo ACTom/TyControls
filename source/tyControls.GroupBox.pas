@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, Types, Controls, Forms, Graphics, LCLType, LMessages,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Accel;
 type
-  TTyGroupBox = class(TTyCustomControl)
+  TTyGroupBox = class(TTyCustomControl, ITyChromeHost)
   private
     FCaption: TCaption;
     FAlignment: TAlignment;
@@ -14,6 +14,14 @@ type
     { Shared caption-band height: 16 logical px scaled to APPI.
       Used by both RenderTo and AdjustClientRect so they stay in sync. }
     function CapHAtPPI(APPI: Integer): Integer;
+    { The caption's band -- the gap it breaks in the top border -- and the box its text is
+      drawn in, for a box AW wide at APPI; False when there is no caption. One definition
+      for the box's own paint and for its chrome layer. }
+    function LegendAt(APPI, AW: Integer; const AStyle: TTyStyleSet; out ABand, AText: TRect;
+      out ADisp: string; out AMnemonic: Integer): Boolean;
+    { The caption over the top border, with the box's (0,0) at AOrigin on APainter. }
+    procedure PaintLegend(APainter: TTyPainter; const AOrigin: TPoint;
+      const AStyle: TTyStyleSet; APPI, AW: Integer);
   protected
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -23,6 +31,12 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    { ITyChromeHost: the frame, its focus ring and the caption across the top border stay
+      whole on top of the children -- a hand-placed child no longer cuts the caption out of
+      the line. Virtual, so a descendant that draws more chrome adds it. }
+    function ChromeFreeRect: TRect; virtual;
+    procedure PaintChromeLayer(APainter: TTyPainter; const AOrigin: TPoint); virtual;
+    function ChromeSignature: string; virtual;
   published
     property Caption: TCaption read FCaption write SetCaption;
     { NOTE: this is the CAPTION's alignment in the band, and it has no LCL counterpart --
@@ -191,17 +205,130 @@ begin
   Invalidate;
 end;
 
+function TTyGroupBox.LegendAt(APPI, AW: Integer; const AStyle: TTyStyleSet;
+  out ABand, AText: TRect; out ADisp: string; out AMnemonic: Integer): Boolean;
+var
+  CapH, TextW, BandLeft: Integer;
+  MeasBmp: TBitmap;
+  BandAlign: TAlignment;
+begin
+  ABand := Rect(0, 0, 0, 0);
+  AText := ABand;
+  ADisp := '';
+  AMnemonic := 0;
+  Result := FCaption <> '';
+  if not Result then Exit;
+  CapH := CapHAtPPI(APPI);
+  { MIRRORING: the caption band moves to the other end of the top border (see RenderTo). }
+  BandAlign := BidiFlipAlignment(FAlignment, IsRightToLeft);
+  TyParseMnemonic(FCaption, ADisp, AMnemonic);
+  // Measure actual text width using a scratch bitmap canvas so CJK and
+  // variable-width fonts are handled correctly (avoids byte-Length * 8).
+  MeasBmp := TBitmap.Create;
+  try
+    MeasBmp.SetSize(1, 1);
+    // Measure with the same effective size AND weight the caption is drawn at, so the
+    // erased band matches the now-readable text (ResolveFontSize fallback).
+    TyConfigureMeasureFont(MeasBmp.Canvas, AStyle.FontName, ResolveFontSize(AStyle),
+      AStyle.FontWeight, APPI);
+    TextW := MeasBmp.Canvas.TextWidth(ADisp);
+  finally
+    MeasBmp.Free;
+  end;
+  if TextW < 1 then TextW := 1;
+
+  // Position the erase band AND the text from the SAME BandLeft per
+  // Alignment, so the erased gap stays centered on the caption ink.
+  // BandAlign, not FAlignment: this is a physical x, and the two differ under mirroring.
+  case BandAlign of
+    taCenter:      BandLeft := (AW - (TextW + MulDiv(16, APPI, 96))) div 2;
+    taRightJustify:BandLeft := AW - (TextW + MulDiv(16, APPI, 96)) - MulDiv(4, APPI, 96);
+  else             BandLeft := MulDiv(4, APPI, 96);   // taLeftJustify (current look: band starts ~Scale(8))
+  end;
+  if BandLeft < 0 then BandLeft := 0;
+  ABand := Rect(BandLeft, 0, BandLeft + TextW + MulDiv(16, APPI, 96), CapH);
+  AText := Rect(BandLeft + MulDiv(4, APPI, 96), 0,
+    BandLeft + MulDiv(4, APPI, 96) + TextW + MulDiv(8, APPI, 96), CapH);
+end;
+
+procedure TTyGroupBox.PaintLegend(APainter: TTyPainter; const AOrigin: TPoint;
+  const AStyle: TTyStyleSet; APPI, AW: Integer);
+var
+  BandRect, TextRect: TRect;
+  disp: string;
+  mp: Integer;
+begin
+  if not LegendAt(APPI, AW, AStyle, BandRect, TextRect, disp, mp) then Exit;
+  // Break the top border behind the caption. On an image theme show the
+  // form's photo through the gap; otherwise fill the OPAQUE resolved parent
+  // background (not a transparent erase — the Win10 DWM glass shows an erased
+  // gap as white on deactivate).
+  if not FillSharpBackdropAt(APainter, BandRect, AOrigin) then
+    TyFillParentBgAt(Self, APainter, BandRect, AOrigin, AStyle);
+  // Draw caption text within the band, aligned per FAlignment. The alignment is logical
+  // for a painter armed for mirroring (the box's own paint) and physical for one that is
+  // not (a chrome layer), so the second gets it flipped here.
+  OffsetRect(TextRect, AOrigin.X, AOrigin.Y);
+  APainter.DrawText(TextRect, disp, AStyle.FontName, ResolveFontSize(AStyle),
+    AStyle.FontWeight, AStyle.TextColor,
+    BidiFlipAlignment(FAlignment, IsRightToLeft and not APainter.RightToLeft), tlCenter, True,
+    TyAccelGatePos(mp));
+end;
+
+function TTyGroupBox.ChromeFreeRect: TRect;
+var
+  S: TTyStyleSet;
+  ppi, capH, band: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  S := CurrentStyle;
+  capH := CapHAtPPI(ppi);
+  band := TyFrameChromeBand(S, ppi);
+  if (band = 0) and (FCaption = '') then Exit(Rect(0, 0, Width, Height));
+  Result := Rect(band, capH div 2 + band, Width - band, Height - band);
+  { the caption sits across the top border, in the whole band above the frame's line }
+  if (FCaption <> '') and (Result.Top < capH) then Result.Top := capH;
+end;
+
+procedure TTyGroupBox.PaintChromeLayer(APainter: TTyPainter; const AOrigin: TPoint);
+var
+  S: TTyStyleSet;
+  ppi, capH: Integer;
+begin
+  S := CurrentStyle;
+  ppi := Font.PixelsPerInch;
+  capH := CapHAtPPI(ppi);
+  { Dimmed with the box. Plain alpha, no base colour: the layer goes over the child. }
+  if tpOpacity in S.Present then APainter.Opacity := S.Opacity;
+  TyDrawChromeFrame(Self, APainter, Rect(AOrigin.X, AOrigin.Y + capH div 2,
+    AOrigin.X + Width, AOrigin.Y + Height), S);
+  PaintLegend(APainter, AOrigin, S, ppi, Width);
+end;
+
+function TTyGroupBox.ChromeSignature: string;
+var
+  S: TTyStyleSet;
+  ppi: Integer;
+  band, txt: TRect;
+  disp: string;
+  mp: Integer;
+begin
+  S := CurrentStyle;
+  ppi := Font.PixelsPerInch;
+  Result := TyFrameChromeSignature(Self, S, ppi) + '|g' + IntToStr(CapHAtPPI(ppi));
+  if LegendAt(ppi, Width, S, band, txt, disp, mp) then
+    Result := Result + '|' + disp + '|' + IntToStr(band.Left) + ',' + IntToStr(band.Right)
+      + '|' + S.FontName + ',' + IntToStr(ResolveFontSize(S)) + ',' + IntToStr(S.FontWeight)
+      + ',' + IntToHex(S.TextColor, 8) + ',' + IntToStr(Ord(FAlignment))
+      + BoolToStr(IsRightToLeft, 'r', 'l') + ',' + IntToStr(TyAccelGatePos(mp));
+end;
+
 procedure TTyGroupBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 var
   P: TTyPainter;
   S: TTyStyleSet;
   W, H, CapH: Integer;
-  FrameRect, BandRect, TextRect: TRect;
-  TextW, BandLeft: Integer;
-  MeasBmp: TBitmap;
-  disp: string;
-  mp: Integer;
-  BandAlign: TAlignment;
+  FrameRect: TRect;
 begin
   P := TTyPainter.Create;
   try
@@ -212,7 +339,6 @@ begin
       skin gave it asymmetric padding, and swapping those would put our containers out of
       step with LCL's for no visible gain. Children are laid out by the align engine, which
       does not mirror (see TTyPanel.RenderTo). No internal hit test. }
-    BandAlign := BidiFlipAlignment(FAlignment, IsRightToLeft);
     S := CurrentStyle;
 
     W := ARect.Right - ARect.Left;
@@ -233,48 +359,8 @@ begin
     if not FillSharpBackdrop(P, Rect(0, 0, W, CapH div 2)) then
       TyFillParentBg(Self, P, Rect(0, 0, W, CapH div 2), S);
 
-    // Draw caption text with a background band behind it
-    if FCaption <> '' then
-    begin
-      TyParseMnemonic(FCaption, disp, mp);
-      // Measure actual text width using a scratch bitmap canvas so CJK and
-      // variable-width fonts are handled correctly (avoids byte-Length * 8).
-      MeasBmp := TBitmap.Create;
-      try
-        MeasBmp.SetSize(1, 1);
-        // Measure with the same effective size AND weight the caption is drawn at, so the
-        // erased band matches the now-readable text (ResolveFontSize fallback).
-        TyConfigureMeasureFont(MeasBmp.Canvas, S.FontName, ResolveFontSize(S),
-          S.FontWeight, APPI);
-        TextW := MeasBmp.Canvas.TextWidth(disp);
-      finally
-        MeasBmp.Free;
-      end;
-      if TextW < 1 then TextW := 1;
-
-      // Position the erase band AND the text from the SAME BandLeft per
-      // Alignment, so the erased gap stays centered on the caption ink.
-      // BandAlign, not FAlignment: this is a physical x, and the two differ under mirroring.
-      case BandAlign of
-        taCenter:      BandLeft := (W - (TextW + P.Scale(16))) div 2;
-        taRightJustify:BandLeft := W - (TextW + P.Scale(16)) - P.Scale(4);
-      else             BandLeft := P.Scale(4);   // taLeftJustify (current look: band starts ~Scale(8))
-      end;
-      if BandLeft < 0 then BandLeft := 0;
-
-      // Break the top border behind the caption. On an image theme show the
-      // form's photo through the gap; otherwise fill the OPAQUE resolved parent
-      // background (not a transparent erase — the Win10 DWM glass shows an erased
-      // gap as white on deactivate).
-      BandRect := Rect(BandLeft, 0, BandLeft + TextW + P.Scale(16), CapH);
-      if not FillSharpBackdrop(P, BandRect) then
-        TyFillParentBg(Self, P, BandRect, S);
-
-      // Draw caption text within the band, aligned per FAlignment.
-      TextRect := Rect(BandLeft + P.Scale(4), 0, BandLeft + P.Scale(4) + TextW + P.Scale(8), CapH);
-      P.DrawText(TextRect, disp, S.FontName, ResolveFontSize(S), S.FontWeight,
-        S.TextColor, FAlignment, tlCenter, True, TyAccelGatePos(mp));
-    end;
+    // The caption, with a band of the parent's ground breaking the top border behind it.
+    PaintLegend(P, Point(0, 0), S, APPI, W);
 
     P.EndPaint;
   finally

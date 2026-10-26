@@ -66,7 +66,7 @@ type
     font/color = the title). Every visual value is theme-token-driven — a card that
     lifts on hover is just a 'TyCard:hover' rule (the base already tracks hover). }
 
-  TTyCard = class(TTyCustomControl)
+  TTyCard = class(TTyCustomControl, ITyChromeHost)
   private
     FTitle: TCaption;
     FTitleAlignment: TAlignment;
@@ -82,6 +82,9 @@ type
     function HeaderHAtPPI(APPI: Integer): Integer;
     function ActionsHAtPPI(APPI: Integer): Integer;
     function LayoutAtPPI(const AClient: TRect; APPI: Integer): TTyCardLayout;
+    { The strips' hairline separators, for the card whose rect is AR on APainter. One
+      definition for the card's own paint and for its chrome layer (ITyChromeHost). }
+    procedure PaintSeparators(APainter: TTyPainter; const AR: TRect);
   protected
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -98,6 +101,11 @@ type
       children against it, since raw client coords would let them slide under the
       header. }
     function ContentRect: TRect;
+    { ITyChromeHost: the card's frame, focus ring and strip separators stay whole on top of
+      its children. Virtual, so a descendant that draws more chrome adds it. }
+    function ChromeFreeRect: TRect; virtual;
+    procedure PaintChromeLayer(APainter: TTyPainter; const AOrigin: TPoint); virtual;
+    function ChromeSignature: string; virtual;
   published
     { The header strip's title. Drawn literally (no mnemonic parsing — a card titles
       a surface, it does not activate anything), ellipsised when it does not fit. }
@@ -205,6 +213,98 @@ begin
   AdjustClientRect(Result);
 end;
 
+function TTyCard.ChromeFreeRect: TRect;
+var
+  ppi: Integer;
+  lay: TTyCardLayout;
+begin
+  ppi := Font.PixelsPerInch;
+  Result := TyFrameChromeFreeRect(Self, CurrentStyle, ppi);
+  { and nothing of a strip: its separator is chrome }
+  lay := LayoutAtPPI(Rect(0, 0, Width, Height), ppi);
+  if FShowHeader and (lay.Header.Bottom > Result.Top) then Result.Top := lay.Header.Bottom;
+  if FShowActions and (lay.Actions.Top < Result.Bottom) then Result.Bottom := lay.Actions.Top;
+end;
+
+procedure TTyCard.PaintChromeLayer(APainter: TTyPainter; const AOrigin: TPoint);
+var
+  S: TTyStyleSet;
+  R: TRect;
+begin
+  S := CurrentStyle;
+  R := Rect(AOrigin.X, AOrigin.Y, AOrigin.X + Width, AOrigin.Y + Height);
+  { Dimmed with the card. Plain alpha, no base colour: the layer goes over the child, and a
+    base would paint over everything the child drew. }
+  if tpOpacity in S.Present then APainter.Opacity := S.Opacity;
+  TyDrawChromeFrame(Self, APainter, R, S);
+  PaintSeparators(APainter, R);
+end;
+
+function TTyCard.ChromeSignature: string;
+var
+  st: TTyStyleSet;
+  states: TTyStateSet;
+  ppi: Integer;
+begin
+  states := CurrentStates;
+  ppi := Font.PixelsPerInch;
+  Result := TyFrameChromeSignature(Self, CurrentStyle, ppi);
+  if FShowHeader then
+  begin
+    st := ActiveController.Model.ResolveStyle('TyCardHeader', StyleClass, states);
+    Result := Result + '|h' + IntToStr(HeaderHAtPPI(ppi)) + ',' + IntToHex(st.BorderColor, 8)
+      + ',' + IntToStr(st.BorderWidth) + ',' + BoolToStr(TyBorderVisible(st), '1', '0');
+  end;
+  if FShowActions then
+  begin
+    st := ActiveController.Model.ResolveStyle('TyCardActions', StyleClass, states);
+    Result := Result + '|a' + IntToStr(ActionsHAtPPI(ppi)) + ',' + IntToHex(st.BorderColor, 8)
+      + ',' + IntToStr(st.BorderWidth) + ',' + BoolToStr(TyBorderVisible(st), '1', '0');
+  end;
+end;
+
+procedure TTyCard.PaintSeparators(APainter: TTyPainter; const AR: TRect);
+var
+  S: TTyStyleSet;
+  lay: TTyCardLayout;
+  bw: Integer;
+  states: TTyStateSet;
+
+  { The hairline between a strip and the body -- a filled band, not a border: it is one
+    edge, and squaring it keeps it crisp at any radius. Inset by the card's border like the
+    strip's fill, and not drawn where that fill would not be. }
+  procedure One(const ABand: TRect; const AStyle: TTyStyleSet; ATop: Boolean);
+  var
+    sepRect: TRect;
+    sepT: Integer;
+    f: TTyFill;
+  begin
+    if (ABand.Bottom <= ABand.Top) or (ABand.Right - bw <= ABand.Left + bw)
+       or not TyBorderVisible(AStyle) then Exit;
+    sepT := APainter.Scale(AStyle.BorderWidth);
+    if sepT < 1 then sepT := 1;
+    if ATop then
+      sepRect := Rect(ABand.Left + bw, ABand.Bottom - sepT, ABand.Right - bw, ABand.Bottom)
+    else
+      sepRect := Rect(ABand.Left + bw, ABand.Top, ABand.Right - bw, ABand.Top + sepT);
+    if sepRect.Bottom <= sepRect.Top then Exit;
+    f := Default(TTyFill);
+    f.Kind := tfkSolid;
+    f.Color := AStyle.BorderColor;
+    APainter.FillBackground(sepRect, f, 0);
+  end;
+
+begin
+  S := CurrentStyle;
+  if TyBorderVisible(S) then bw := APainter.Scale(S.BorderWidth) else bw := 0;
+  lay := LayoutAtPPI(AR, APainter.PPI);
+  states := CurrentStates;
+  if FShowHeader then
+    One(lay.Header, ActiveController.Model.ResolveStyle('TyCardHeader', StyleClass, states), True);
+  if FShowActions then
+    One(lay.Actions, ActiveController.Model.ResolveStyle('TyCardActions', StyleClass, states), False);
+end;
+
 procedure TTyCard.AdjustClientRect(var ARect: TRect);
 var
   S: TTyStyleSet;
@@ -270,16 +370,15 @@ var
   bw, bwLogical, sepT: Integer;
   hpad: TRect;
 
-  { Fill a strip band with its own themed tint (when the theme set one) and stroke its
-    hairline separator. The band is inset by the card's border width so it never paints
+  { Fill a strip band with its own themed tint (when the theme set one); its hairline
+    separator is PaintSeparators'. The band is inset by the card's border width so it never paints
     OVER the frame, and its outer corners are rounded to match the card (a square fill
     on a rounded card would spill into the corner arcs). ATop = the header (rounded at
     the top, separator along its bottom edge); otherwise the actions rail (mirrored). }
   procedure PaintStrip(const ABand: TRect; const AStyle: TTyStyleSet; ATop: Boolean);
   var
-    fillRect, sepRect: TRect;
+    fillRect: TRect;
     bandCorners: TTyCorners;
-    f: TTyFill;
   begin
     if ABand.Bottom <= ABand.Top then Exit;
 
@@ -314,23 +413,8 @@ var
       if fillRect.Bottom > fillRect.Top then
         P.FillBackground(fillRect, AStyle.Background, bandCorners);
     end;
-
-    // The hairline separator between the strip and the body — a filled band, not a
-    // border: it is one edge, and squaring it keeps it crisp at any radius.
-    if TyBorderVisible(AStyle) then
-    begin
-      if ATop then
-        sepRect := Rect(fillRect.Left, ABand.Bottom - sepT, fillRect.Right, ABand.Bottom)
-      else
-        sepRect := Rect(fillRect.Left, ABand.Top, fillRect.Right, ABand.Top + sepT);
-      if sepRect.Bottom > sepRect.Top then
-      begin
-        f := Default(TTyFill);
-        f.Kind := tfkSolid;
-        f.Color := AStyle.BorderColor;
-        P.FillBackground(sepRect, f, 0);
-      end;
-    end;
+    { The separator is drawn by PaintSeparators, after the strips: it is chrome, and the
+      chrome layer a child gets over it (ITyChromeHost) draws it the same way. }
   end;
 
 begin
@@ -400,6 +484,8 @@ begin
       if sepT < 1 then sepT := 1;
       PaintStrip(lay.Actions, acts, False);
     end;
+
+    PaintSeparators(P, R);
 
     P.EndPaint;
   finally

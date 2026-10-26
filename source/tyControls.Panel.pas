@@ -6,7 +6,7 @@ uses
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Accel,
   tyControls.Controller;
 type
-  TTyPanel = class(TTyCustomControl)
+  TTyPanel = class(TTyCustomControl, ITyChromeHost)
   protected
     { protected, not private: a test drives the invalidation rule through it. }
     FPaintCache: TTyPaintCache;
@@ -35,6 +35,13 @@ type
     procedure Invalidate; override;
     constructor Create(AOwner: TComponent); override;
     function GetStyleTypeKey: string; override;
+    { ITyChromeHost: the panel's frame, its focus ring and the parent background outside its
+      rounded corners stay whole on top of its children -- an alClient child sits flush on
+      the frame, since the panel keeps its children off nothing but BorderWidth. Virtual, so
+      a descendant that draws separators of its own adds them (TTyCard shows how). }
+    function ChromeFreeRect: TRect; virtual;
+    procedure PaintChromeLayer(APainter: TTyPainter; const AOrigin: TPoint); virtual;
+    function ChromeSignature: string; virtual;
   published
     { Caption is TControl's, not a second string of our own.
 
@@ -255,6 +262,28 @@ begin
       not FWordWrap,
       TyAccelGatePos(MnPos), False, FWordWrap, TyLineHeight(ActiveController));
   end;
+end;
+
+function TTyPanel.ChromeFreeRect: TRect;
+begin
+  Result := TyFrameChromeFreeRect(Self, CurrentStyle, Font.PixelsPerInch);
+end;
+
+procedure TTyPanel.PaintChromeLayer(APainter: TTyPainter; const AOrigin: TPoint);
+var
+  S: TTyStyleSet;
+begin
+  S := CurrentStyle;
+  { Dimmed with the panel. Plain alpha, no base colour: the layer goes over the child, and a
+    base would paint over everything the child drew. }
+  if tpOpacity in S.Present then APainter.Opacity := S.Opacity;
+  TyDrawChromeFrame(Self, APainter,
+    Rect(AOrigin.X, AOrigin.Y, AOrigin.X + Width, AOrigin.Y + Height), S);
+end;
+
+function TTyPanel.ChromeSignature: string;
+begin
+  Result := TyFrameChromeSignature(Self, CurrentStyle, Font.PixelsPerInch);
 end;
 
 destructor TTyPanel.Destroy;
