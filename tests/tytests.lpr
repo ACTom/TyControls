@@ -92,6 +92,7 @@ uses
   test.editinputfilter,
   test.listselection,
   test.vleprops,
+  test.headerautosize,
   test.calendar,
   test.datetimepicker,
   test.treeview.events,
