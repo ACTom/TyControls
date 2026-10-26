@@ -66,6 +66,9 @@ type
   TTyColumns = class;   { forward }
   TTyHeader  = class;   { forward }
 
+  { The width a new column starts at, asked of the owner (#127); <= 0 = TTyColumn's own. }
+  TTyColumnWidthQuery = function: Integer of object;
+
   { Header option flags (mirrors VTV's TVTHeaderOption subset) }
   TTyHeaderOption = (
     hoVisible,              { paint the header band above the node area }
@@ -212,6 +215,7 @@ type
       LFM streaming via the parameterless Create — GetOwner returns it so the
       first-column add hook can reach the header's MainColumn. }
     FOwnerHeader: TTyHeader;
+    FNewColumnWidth: TTyColumnWidthQuery;
 
     procedure RebuildPositionMap;
     procedure DoChange;
@@ -228,6 +232,10 @@ type
       that ListView/TreeView also use. Nil = plain TTyColumn. }
     constructor Create(AOwnerHeader: TTyHeader;
       AItemClass: TCollectionItemClass); overload;
+    { #127: what a column added from here on starts as wide as -- the grid answers with its
+      DefaultColWidth, as LCL's columns follow the grid's (grids.pas GetDefaultWidth). Not
+      asked of columns a form file is reading in: the grid answers 0 then. }
+    property NewColumnWidth: TTyColumnWidthQuery read FNewColumnWidth write FNewColumnWidth;
 
     { Typed collection surface, matching TGridColumns (grids.pas:661 `function Add:
       TGridColumn`, :670 `property Items[Index]: TGridColumn ... default`).
@@ -289,8 +297,10 @@ type
                                      ATolRight: Integer = 5): Integer; overload;
 
     { Set column AAutoSizeIndex.Width so that TotalWidth = AClientWidth,
-      clamped to that column's [MinWidth, MaxWidth]. }
-    procedure ApplyAutoSize(AClientWidth, AAutoSizeIndex: Integer);
+      clamped to that column's [MinWidth, MaxWidth] -- and to the owner's own limits,
+      AMinWidth / AMaxWidth (0 = none), the grid's MinColWidth / MaxColWidth (#127). }
+    procedure ApplyAutoSize(AClientWidth, AAutoSizeIndex: Integer;
+      AMinWidth: Integer = 0; AMaxWidth: Integer = 0);
 
     { Distribute ADeltaWidth across all visible coAutoSpring columns
       proportionally (integral bonus-pixel remainder so widths stay whole
@@ -313,8 +323,11 @@ type
           silently swallows slack it cannot use and the row comes up short;
         - integral throughout, and the last free column absorbs the rounding remainder
           so the sum is EXACT -- one pixel of gap at the right edge is precisely what a
-          user notices about a "fill the width" feature. }
-    procedure DistributeFill(AClientWidth: Integer);
+          user notices about a "fill the width" feature.
+      AMinWidth / AMaxWidth (0 = none) bound every column on top of its own limits --
+      the grid's MinColWidth / MaxColWidth (#127). }
+    procedure DistributeFill(AClientWidth: Integer; AMinWidth: Integer = 0;
+      AMaxWidth: Integer = 0);
 
     { Notify hook wired by the header in Phase B. }
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
@@ -535,6 +548,9 @@ begin
     position cache and any wired OnChange handler see the correct defaults. }
   inherited Create(ACollection);
   FWidth            := 100;
+  if (ACollection is TTyColumns) and Assigned(TTyColumns(ACollection).FNewColumnWidth)
+     and (TTyColumns(ACollection).FNewColumnWidth() > 0) then
+    FWidth := TTyColumns(ACollection).FNewColumnWidth();   // #127
   FMinWidth         := 10;
   FMaxWidth         := 10000;
   FAlignment        := taLeftJustify;
@@ -1172,7 +1188,22 @@ begin
   end;
 end;
 
-procedure TTyColumns.ApplyAutoSize(AClientWidth, AAutoSizeIndex: Integer);
+{ A column's limits with an owner's laid over them (0 = none); the owner's never widen them. }
+function TyColumnLo(ACol: TTyColumn; AMinWidth: Integer): Integer;
+begin
+  Result := ACol.MinWidth;
+  if (AMinWidth > 0) and (AMinWidth > Result) then Result := AMinWidth;
+end;
+
+function TyColumnHi(ACol: TTyColumn; AMinWidth, AMaxWidth: Integer): Integer;
+begin
+  Result := ACol.MaxWidth;
+  if (AMaxWidth > 0) and (AMaxWidth < Result) then Result := AMaxWidth;
+  if Result < TyColumnLo(ACol, AMinWidth) then Result := TyColumnLo(ACol, AMinWidth);
+end;
+
+procedure TTyColumns.ApplyAutoSize(AClientWidth, AAutoSizeIndex: Integer;
+  AMinWidth: Integer; AMaxWidth: Integer);
 { Set column AAutoSizeIndex.Width so that TotalWidth becomes AClientWidth.
   Delta may be negative (column is too wide). Clamped to [MinWidth, MaxWidth]. }
 var
@@ -1200,11 +1231,12 @@ begin
   end;
 
   needed := AClientWidth - others;
-  { Clamp to the column's own limits }
-  needed := Max(autoCol.FMinWidth, Min(autoCol.FMaxWidth, needed));
+  { Clamp to the column's own limits, and the owner's }
+  needed := Max(TyColumnLo(autoCol, AMinWidth),
+    Min(TyColumnHi(autoCol, AMinWidth, AMaxWidth), needed));
   { Floor at MinWidth even if client is very small }
-  if needed < autoCol.FMinWidth then
-    needed := autoCol.FMinWidth;
+  if needed < TyColumnLo(autoCol, AMinWidth) then
+    needed := TyColumnLo(autoCol, AMinWidth);
 
   if autoCol.FWidth <> needed then
   begin
@@ -1266,7 +1298,8 @@ begin
   DoChange;
 end;
 
-procedure TTyColumns.DistributeFill(AClientWidth: Integer);
+procedure TTyColumns.DistributeFill(AClientWidth: Integer; AMinWidth: Integer;
+  AMaxWidth: Integer);
 var
   free_: array of Integer;      { collection indices still free to move }
   freeCount, weightTotal, budget, i, colIndex, w, given, lastFree: Integer;
@@ -1307,8 +1340,8 @@ begin
     begin
       col := Items[free_[i]];
       w := (budget * col.FSizePriority) div weightTotal;
-      if w < col.FMinWidth then w := col.FMinWidth
-      else if w > col.FMaxWidth then w := col.FMaxWidth
+      if w < TyColumnLo(col, AMinWidth) then w := TyColumnLo(col, AMinWidth)
+      else if w > TyColumnHi(col, AMinWidth, AMaxWidth) then w := TyColumnHi(col, AMinWidth, AMaxWidth)
       else Continue;                          { still free }
       { Retire it at its clamped width and take it out of the budget. }
       if col.FWidth <> w then anyChanged := True;
@@ -1334,8 +1367,8 @@ begin
     col := Items[colIndex];
     if i = lastFree then w := budget - given
     else w := (budget * col.FSizePriority) div weightTotal;
-    if w < col.FMinWidth then w := col.FMinWidth;
-    if w > col.FMaxWidth then w := col.FMaxWidth;
+    if w < TyColumnLo(col, AMinWidth) then w := TyColumnLo(col, AMinWidth);
+    if w > TyColumnHi(col, AMinWidth, AMaxWidth) then w := TyColumnHi(col, AMinWidth, AMaxWidth);
     if col.FWidth <> w then anyChanged := True;
     col.FWidth := w;
     Inc(given, w);
