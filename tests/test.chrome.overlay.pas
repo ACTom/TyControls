@@ -26,7 +26,7 @@ uses
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.Base,
   tyControls.Card, tyControls.Button, tyControls.Panel, tyControls.TyLabel, tyControls.GroupBox,
-  tyControls.PageControl, tyControls.TabSheet;
+  tyControls.PageControl, tyControls.TabSheet, tyControls.ToolBar;
 
 type
   TOvlButton = class(TTyButton)
@@ -129,6 +129,8 @@ type
     procedure TestAPageGetsThePageControlsFrame;
     procedure TestASideBandKeepsTheFrameOnThePage;
     procedure TestAPageControlsKeptLayerMatchesAFreshOne;
+    procedure TestATallToolKeepsTheBarsHairlineOverIt;
+    procedure TestABarsLayerIsItsLineAndNothingElse;
   end;
 
 implementation
@@ -1040,6 +1042,8 @@ begin
       if bmp.GetPixel(x, 8) = gap then Inc(inkless);
     AssertTrue('and its text inked across the middle of the band', inkless < 43);
     AssertTrue('the frame''s left line, over the child', IsRed(bmp.GetPixel(1, 30)));
+    AssertTrue('above the line and left of the caption, the child itself',
+      IsBlue(bmp.GetPixel(1, 3)));
     AssertTrue('below the frame''s line and right of the caption, the child itself',
       IsBlue(bmp.GetPixel(110, 30)));
   finally
@@ -1185,6 +1189,59 @@ begin
   finally
     a.Free;
     b.Free;
+  end;
+end;
+
+function NewToolBar(AOwner: TForm; ACtl: TTyStyleController; const ACss: string): TTyToolBar;
+begin
+  Result := TTyToolBar.Create(AOwner);
+  Result.Controller := ACtl;
+  Result.Font.PixelsPerInch := 96;
+  Result.StyleOverride := ACss;
+  Result.Parent := AOwner;
+  Result.SetBounds(10, 10, 240, 36);
+end;
+
+{ The row shift keeps a tool off the bar's hairline only as far as the vertical pad goes: a
+  taller one reaches it. Placed by hand here, where the bar's own layout would put the
+  row's bottom. }
+procedure TChromeHostsTest.TestATallToolKeepsTheBarsHairlineOverIt;
+var
+  tb: TTyToolBar;
+  b: TOvlButton;
+  bmp: TBGRABitmap;
+begin
+  tb := NewToolBar(FForm, FCtl, 'border-color: #ff0000; border-width: 2px;');
+  b := AddButton(tb, 20, 0, 60, 36);
+  b.SetBounds(20, 0, 60, 36);   { the bar may have moved it; put it back across the line }
+  bmp := b.Render;
+  try
+    AssertTrue('the hairline, over the tool', IsRed(bmp.GetPixel(30, 35)));
+    AssertTrue('its upper row too', IsRed(bmp.GetPixel(30, 34)));
+    AssertTrue('above it the tool is itself', IsBlue(bmp.GetPixel(30, 20)));
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ The bar draws no frame and no corners, only its hairline: with the line's colour clear, a
+  tool across it is left exactly as it painted itself. }
+procedure TChromeHostsTest.TestABarsLayerIsItsLineAndNothingElse;
+var
+  tb: TTyToolBar;
+  b: TOvlButton;
+  own, over: TBGRABitmap;
+begin
+  tb := NewToolBar(FForm, FCtl, 'border-color: transparent; border-width: 0; border-radius: 8px;');
+  b := AddButton(tb, 0, 0, 60, 36);
+  b.SetBounds(0, 0, 60, 36);
+  own := b.RenderOwn;
+  over := b.Render;
+  try
+    AssertTrue('nothing drawn over the tool', Same(own, over));
+  finally
+    own.Free;
+    over.Free;
   end;
 end;
 
