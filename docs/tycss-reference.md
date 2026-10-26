@@ -239,7 +239,8 @@ typeKey 与文本类控件引用。它们都是普通 `--变量`,可被主题作
 
 目前按控件读令牌的是:`TTyListView`(含 `TTyShellListView`)读的全部尺寸令牌,即
 `--listview-*`、`--row-height` 和 `--scrollbar-size`;`TTyTreeView`(含 `TTyShellTreeView`)的
-`--treeview-margin`、`--treeview-icon-gap` 和 §3.5 的四个树线令牌;`TTyMemo` 的 `--memo-tab-size`。
+`--treeview-margin`、`--treeview-icon-gap` 和 §3.5 的四个树线令牌;`TTyMemo` 的 `--memo-tab-size`;
+`TTyPopover` 的六个 `--popover-*` 令牌(它不是控件,但 `StyleOverride` 的规则相同)。
 其他控件暂时只认主题里的值。
 3.0.4 以前的版本会忽略控件 `StyleOverride` 里的 `--` 声明,用新版本保存的窗体在旧版本里照样能打开。
 
@@ -1456,6 +1457,9 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
       这两组还可以只给一个控件设,见 §3.4。
     - `--memo-tab-size` — Memo 的制表位间距，写法同 CSS 的 `tab-size`:写数字是几个空格宽，写长度
       (如 `32px`)是像素(默认 8 个空格)。也可以只给一个 Memo 设，见 §3.4。
+    - `--popover-move-distance` / `--popover-show-duration` / `--popover-hide-duration` — 浮层移入
+      走的距离(默认 8)、显示动画和淡出的毫秒数(默认 150 / 100,**不带单位**)。也可以只给一个
+      浮层设,见 §3.4。
     - `--line-height` — **多行**标题的行框高度(logical px)。**没有内置常数**:未设时用字体
       自己的行框,所以加上这个令牌之前一切不动;设了就是 `行数 × 该值`,多出来的部分作为行距
       平分到每行上下。控件由此派生的**高度下限**(文字块高 + 上下 padding)也跟着走——

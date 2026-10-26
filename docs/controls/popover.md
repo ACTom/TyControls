@@ -10,7 +10,9 @@
 
 **为什么 `Content` 是「应用自己已经拥有的控件」,而不是由本组件创建的容器?** 整件事的意义就是让应用把**真实控件**放进去,而开发者唯一能搭出这些控件的地方是设计器、在窗体上。所以弹窗在 `Show` 时把一个既有容器**收养(adopt)**进自己的窗口,在 `Hide` 时把它**原样交还**给原来的父控件——用的是 `TTyPopupSurface` 那套久经考验的 `AdoptContent` / `ReleaseContent`,Ribbon 早就靠它把活的控件树搬进 flyout。
 
-凡是**规则**的部分——弹窗落在哪、往哪边翻、框里装什么——都是接受纯整数的自由函数,所以整套几何**无窗口、无屏幕**即可验证。只有「把窗口真正立起来」需要真机;**观感必须在真机上核对**(尤其 `RenderTo` 里注明的箭头 / 边框装饰问题,见 §8)。
+凡是**规则**的部分——弹窗落在哪、往哪边翻、框里装什么——都是接受纯整数的自由函数,所以整套几何**无窗口、无屏幕**即可验证。只有「把窗口真正立起来」需要真机;**观感必须在真机上核对**。
+
+除了气泡,它还能淡入淡出、移入(§9),单个实例可以用 `StyleOverride` 改外观(§10),也可以换成贴在目标控件某条边上的 Flyout 面板(§11)。从 DevExpress 的 `TdxCalloutPopup` 迁过来,看 §12 的对照表。
 
 ---
 
@@ -23,7 +25,8 @@
 | 主体 typeKey | `'TyPopover'`(类函数 `TTyPopover.StyleTypeKey`)——`background` / `border-*` / `color` / `font-*` / `padding` / `opacity` |
 | 标题 typeKey | `'TyPopoverTitle'`(类函数 `TTyPopover.TitleStyleTypeKey`)——`background`(可选头带) / `color` / `font-*` |
 | 默认尺寸 | **无**。非可视组件没有尺寸;弹窗窗口的大小是**测出来的**(`Content` 的设计期尺寸 + 主题 `padding` + 标题行 + 箭头条),见 `MeasureFrameAtPPI` |
-| 新增 metric 令牌 | `--popover-arrow-size` / `--popover-offset` / `--popover-title-gap`(见 §6) |
+| 新增 metric 令牌 | `--popover-arrow-size` / `--popover-offset` / `--popover-title-gap` / `--popover-move-distance` / `--popover-show-duration` / `--popover-hide-duration`(见 §6) |
+| 子对象 | `AnimationOptions: TTyPopoverAnimationOptions`(§9)、`FlyoutPanel: TTyPopoverFlyoutPanel`(§11) |
 
 ```pascal
 uses tyControls.Popover;
@@ -46,16 +49,21 @@ uses tyControls.Popover;
 | `ShowArrow` | `Boolean` | `True` | 画出指向 `Target` 的箭头。关掉 = 一张普通浮动卡片,**照样**按同一套规则定位与翻转,只是没有箭头条(**也不占那条厚度**)。 |
 | `CloseOnClickOutside` | `Boolean` | `True` | 点击别处(即弹窗窗口失活)时关闭。默认开——flyout 本该如此。**关掉它**用于「内容必须被回答」的弹窗:此时它只能靠 `Hide` 或 Escape 消失。 |
 | `CloseOnEscape` | `Boolean` | `True` | 按 Escape 关闭。**刻意与 `CloseOnClickOutside` 分开**:这样「必须回答」的弹窗仍然保留每个用户都期待的键盘退路,而不会有误触退路。 |
+| `AnimationsEnabled` | `Boolean` | `True` | 动画总开关,和 `TTyToggleSwitch` 等控件同名同义。关掉后弹出、收起都是立即的,和加动画之前一模一样。动画进行中关掉,当场播完。见 §9。 |
+| `AnimationOptions` | `TTyPopoverAnimationOptions` | 见 §9 | 淡入淡出、移入,以及显示 / 隐藏各用多少毫秒。成员和 DevExpress 的同名。 |
+| `FlyoutPanel` | `TTyPopoverFlyoutPanel` | `Active=False`、`Align=fpaTop` | 打开后不再是气泡,而是贴着目标控件某条边的面板。见 §11。 |
 | `StyleClass` | `string` | `''` | 变体入口:主题里的 `TyPopover.danger` 规则。**两个 typeKey 都用它解析**,所以 `TyPopoverTitle.danger` 能单独给危险弹窗的标题上色。 |
+| `StyleOverride` | `string` | `''` | 只改这一个弹窗的外观:一段 tycss 声明,叠在主题和 `StyleClass` 之上,和控件的 `StyleOverride` 用同一个解析器、同一套合并规则。见 §10。 |
 | `Controller` | `TTyCustomStyleController` | `nil`(用全局 `TyDefaultController`) | 指定样式控制器。被销毁时置 `nil` 并**回落到全局默认**,而不是悬垂。 |
 
-> **属性变更不会移动已经弹出的窗口。** `Placement` 改了只记下来(「活着的弹窗不跳:布局是在它弹起来时读的——在用户指针底下挪走它,正是用户够不到那个按钮的原因」)。`Title` / `ShowArrow` / `StyleClass` / `Controller` 改了只 `Invalidate` **重绘**:`Title` 的 `''` ↔ 有文字其实是**尺寸变化**(整条标题带),要重新测量、重新定位、重新给内容定界——新尺寸落在**下一次 `Show`**,那才是 popover 决定几何的时机。
+> **属性变更不会移动已经弹出的窗口。** `Placement`、`FlyoutPanel` 改了只记下来(「活着的弹窗不跳:布局是在它弹起来时读的——在用户指针底下挪走它,正是用户够不到那个按钮的原因」)。`Title` / `ShowArrow` / `StyleClass` / `StyleOverride` / `Controller` 改了只**重绘**(连同窗口的 `Color`):`Title` 的 `''` ↔ 有文字、`StyleOverride` 里改了 `padding` 或令牌,其实都是**尺寸变化**,要重新测量、重新定位、重新给内容定界——新尺寸落在**下一次 `Show`**,那才是 popover 决定几何的时机。
 
 ### public 属性
 
 | 属性 | 类型 | 说明 |
 |------|------|------|
-| `Showing` | `Boolean`(只读) | 弹窗当前是否立着。 |
+| `Showing` | `Boolean`(只读) | 弹窗当前是否立着。调用 `Hide` 的那一刻就变成 `False`,哪怕窗口还在淡出。 |
+| `Animating` | `Boolean`(只读) | 显示或隐藏动画正在播。 |
 
 ---
 
@@ -63,8 +71,10 @@ uses tyControls.Popover;
 
 | 事件 | 触发时机 |
 |------|----------|
-| `OnShow` | `TNotifyEvent`。在弹窗**已经上屏之后**触发(且在内容**已被收养进去之后**,所以处理函数里可以给内部某个控件设焦点)。 |
-| `OnHide` | `TNotifyEvent`。**每次消失触发一次**,不论起因:点击别处、Escape、还是 `Hide`。**组件被销毁时不触发**——组件消失不等于用户关掉了弹窗(且此时处理函数所在的窗体可能已经拆了一半)。 |
+| `OnShow` | `TNotifyEvent`。在弹窗**已经上屏之后**触发(且在内容**已被收养进去之后**,所以处理函数里可以给内部某个控件设焦点)。有动画时在动画**开始**时触发,不等它播完。 |
+| `OnHide` | `TNotifyEvent`。**每次消失触发一次**,不论起因:点击别处、Escape、还是 `Hide`。**组件被销毁时不触发**——组件消失不等于用户关掉了弹窗(且此时处理函数所在的窗体可能已经拆了一半)。有淡出时在淡出**结束后**触发,这时内容已经回到原来的窗体。淡出途中又在同一位置 `Show`,弹窗原路淡回来,这次的 `OnHide` 不会来,也不会多一次 `OnShow`——它根本没有消失过。 |
+
+> **`OnHide` 会晚到。** 默认开着淡出,`Hide` 返回时 `OnHide` 还没触发。处理函数要是读「此刻」的状态(比如哪一列的筛选、用户点的是确定还是取消),而这些状态在淡出期间可能被下一次操作改掉,就把 `AnimationsEnabled` 关掉,或者在按钮的 `OnClick` 里先把结果记下来。`TTyStringGrid` 的列头筛选下拉就是因为这个关掉了动画。
 
 ---
 
@@ -105,16 +115,26 @@ function TyPopoverSideIsVertical(ASide: TTyPopoverSide): Boolean;
 
 function TyPopoverPlace(const AAnchor: TRect; AFrameW, AFrameH: Integer;
   const AWorkArea: TRect; APlacement: TTyPopoverPlacement;
-  AOffset, AArrowSize: Integer): TTyPopoverGeometry;
+  AOffset, AArrowSize: Integer; ACornerInset: Integer = 0): TTyPopoverGeometry;
+function TyPopoverTipMargin(AExtent, AArrowSize, ACornerInset: Integer): Integer;
 function TyPopoverTipLocal(const AGeometry: TTyPopoverGeometry): Integer;
 function TyPopoverLayout(AFrameW, AFrameH: Integer; ASide: TTyPopoverSide; ATipLocal: Integer;
   AShowArrow, AHasTitle: Boolean;
-  APadL, APadT, APadR, APadB, ATitleH, ATitleGap, AArrowSize: Integer): TTyPopoverLayout;
+  APadL, APadT, APadR, APadB, ATitleH, ATitleGap, AArrowSize: Integer;
+  ACornerInset: Integer = 0): TTyPopoverLayout;
 function TyPopoverFrameSize(AContentW, AContentH: Integer; ASide: TTyPopoverSide;
   AShowArrow, AHasTitle: Boolean;
   APadL, APadT, APadR, APadB, ATitleH, ATitleGap, AArrowSize: Integer): TSize;
 function TyPopoverArrowPoints(const ALayout: TTyPopoverLayout; ASide: TTyPopoverSide;
   out ATip, ABase1, ABase2: TPoint): Boolean;
+
+// 动画(§9)与 Flyout(§11)
+procedure TyPopoverMoveOffset(ASide: TTyPopoverSide; ADistance: Integer; out ADX, ADY: Integer);
+function TyPopoverFadeSupported: Boolean;
+function TyFlyoutPlace(const ATarget: TRect; AThickness: Integer; AAlign: TTyFlyoutPanelAlign;
+  const AWorkArea: TRect): TRect;
+procedure TyFlyoutMoveOffset(AAlign: TTyFlyoutPanelAlign; ADistance: Integer; out ADX, ADY: Integer);
+function TyFlyoutSide(AAlign: TTyFlyoutPanelAlign): TTyPopoverSide;
 ```
 
 全部纯整数 / 枚举入参,无控件状态、无句柄、无屏幕,测试直接调用(`tests/test.popover.pas`)。
@@ -127,7 +147,7 @@ function TyPopoverArrowPoints(const ALayout: TTyPopoverLayout; ASide: TTyPopover
 - 主轴上**刻意不做钳制**:一个沿主轴滑走的弹窗就不再读作「属于那个锚点」了,而且它的箭头会指向虚空。翻转帮不上忙时,框保持贴着锚点、任其溢出工作区。
 - **交叉轴(对齐):** 先按请求对齐,再**钳进工作区**——这条轴上滑动恰恰是对的,因为弹窗无论如何都还在锚点旁边。**先钳右边、再钳左边**:比工作区还宽的框会贴**左**(阅读侧)边缘,不是右边——这是 `TTyBalloonHint` 的钳制顺序,理由相同。
 - **翻转只改侧,不改对齐:** 放不下的 `ppBottomLeft` 变成 `ppTopLeft`,**绝不是** `ppTop`;对齐是用户的意思,必须活过翻转(`TyPopoverPlacementOf` 就是为此存在的)。
-- **顶点**瞄准锚点中心,然后钳进框内(离框角至少一个 `AArrowSize`),这样被迫滑动过的弹窗仍有一个**形状良好**的箭头——只是不再指着正中间。
+- **顶点**瞄准锚点中心,然后钳进框内,这样被迫滑动过的弹窗仍有一个**形状良好**的箭头——只是不再指着正中间。离框两端的距离是 `TyPopoverTipMargin`:半底宽 `AArrowSize` 加上 `ACornerInset`(主体的圆角半径加边框宽度,组件按主题算好传进来),这样箭头底边总落在两个圆角之间的直线段上。边太短、两头的余量放不下时,退回只留半底宽。
 
 #### `TyPopoverLayout` 的契约
 
@@ -163,6 +183,7 @@ procedure Hide;                        // 收起:把内容还回它自己的窗�
                                        // 幂等 —— OnHide 每次消失只触发一次,对已收起的 popover
                                        // 调 Hide 什么都不触发
 
+function AdvanceAnimation(AMs: Integer): Boolean;   // 把动画往前推 AMs 毫秒(计时器每 16 ms 调一次;测试直接调)
 function TitleHeightAt(APPI: Integer): Integer;      // 标题解析字体下的一行高(设备像素)
 function MeasureFrameAtPPI(APPI: Integer): TSize;    // 框的自然尺寸(设备像素)
 function GeometryIn(const AAnchorScreen, AWorkArea: TRect; APPI: Integer): TTyPopoverGeometry;
@@ -195,10 +216,10 @@ TyPopover {
   border-color: var(--border);
   border-width: var(--input-border-width);
   border-radius: var(--radius);
-  padding: 8px;
+  padding: var(--pad-container);
   font-size: var(--font-size-base);
 }
-TyPopoverTitle { color: var(--on-surface); font-size: var(--font-size-base);
+TyPopoverTitle { color: var(--on-surface); font-size: var(--font-size-title);
                  font-weight: var(--font-weight-bold); }
 ```
 
@@ -211,10 +232,13 @@ TyPopoverTitle { color: var(--on-surface); font-size: var(--font-size-base);
 | `--popover-arrow-size` | `8`(= `TyPopoverArrowSize`) | 箭头的**半底宽**,**同时**是箭头条的厚度(`TTyBalloonHint` 的指针也是一个数管两件事;两者必须一致,否则三角形就不再是 45° 直角楔形) |
 | `--popover-offset` | `4`(= `TyPopoverOffset`) | 锚点边缘与弹窗**框**近边之间的间隙 |
 | `--popover-title-gap` | `6`(= `TyPopoverTitleGap`) | 标题行与内容之间的间隙 |
+| `--popover-move-distance` | `8`(= `TyPopoverMoveDistance`) | 移入动画走的距离 |
+| `--popover-show-duration` | `150`(= `TyPopoverShowDuration`) | 显示动画的毫秒数,**不带单位**(同 `--scrollbar-auto-hide`) |
+| `--popover-hide-duration` | `100`(= `TyPopoverHideDuration`) | 淡出的毫秒数,不带单位 |
 
-每个都在调用点缩放到设备像素(`MulDiv(..., APPI, 96)`,与 `TTyPainter.Scale` 同一套换算,所以**这里测出的框就是绘制切开的框**)。负值一律钳为 0。
+长度令牌都在调用点缩放到设备像素(`MulDiv(..., APPI, 96)`,与 `TTyPainter.Scale` 同一套换算,所以**这里测出的框就是绘制切开的框**)。负值一律钳为 0。
 
-> 常量而非内联字面量,是因为**多个调用点(布局、测量、测试)必须拼写一致**:任何一处拼错都会静默回落到兜底值,几何就会与测量漂移。**目前随库发布的主题都没有声明这三个令牌**,因此它们实际都取兜底常量;它们的存在是为了让皮肤能各自重调。
+> 常量而非内联字面量,是因为**多个调用点(布局、测量、测试)必须拼写一致**:任何一处拼错都会静默回落到兜底值,几何就会与测量漂移。六个令牌都写在基础层 `themes/light.tycss` 的 `:root` 里,取值和兜底常量相同,写出来是为了让 `StyleOverride` 编辑器能补全;`modern` 密度包把 `--popover-arrow-size` 调成 10。每个令牌都可以只在某一个弹窗的 `StyleOverride` 里改(§10)。
 
 ### 优雅降级
 
@@ -224,7 +248,7 @@ TyPopoverTitle { color: var(--on-surface); font-size: var(--font-size-base);
 - **主体是渐变 / 图片 / 九宫格(非 `tfkSolid`)** → **没有箭头**:那里没有唯一一个颜色可以带出去,而发明一个正是本库不做的事。**箭头条依然预留**(所以什么都不会挪位),这样的主题只是读作一张浮动卡片。要在渐变弹窗上要箭头,请关掉 `ShowArrow`,或给一个纯色的 `TyPopover`。
 - **`TyPopoverTitle` 未定义某个值** → **逐属性**回落到**主体的**:只给了 `font-weight` 的主题照样拿到主体的字族与字号;`color` 未定义 → 标题用弹窗自己的墨色;`background` 未定义 → **不画头带**(主题填了它就白得一条头带)。**绝不回退到任何硬编码字体 / 颜色。**
 - **`opacity` 令牌**:设了才应用。
-- **边框可见时**(`TyBorderVisible`),箭头**只描两条斜边**——底边属于主体,由主体自己的边框画。
+- **主体和箭头是同一条轮廓**(`TTyPainter.FillPointerShape`):边框可见时(`TyBorderVisible`),箭头的两条斜边带边框,箭头底边那一段没有线——主体的边框不会横穿箭头。圆角主体上箭头只落在直线段上(§5 `TyPopoverTipMargin`)。
 - **Wayland**:没有 XShape,窗口形状被静默忽略 → 弹窗保持**方角与方形箭头条**(`TTyBalloonHint` 的规则原样照搬)。
 - **不画阴影**:窗口被裁成主体的轮廓,阴影会和轮廓外的一切一起被裁掉。顶层窗口的高度感是**操作系统的事**。
 
@@ -290,7 +314,97 @@ Pop.ShowAt(Grid.ClientToScreen(CellRect));
 - **设计期惰性:** `ShowAt` 在 `csDesigning` 下直接返回——popover 是**运行期手势,不是设计器预览**;IDE 绝不该落得把窗体的容器重新挂进一个野生弹窗窗口里。
 - **`ShowFor` 的锚点矩形** = `AControl.ClientToScreen(Point(0, 0))` 作为左上角,加上控件的 `Width` × `Height`。
 - **窗口的 `Color` 必须设:** `TTyPopupSurface` 的教训——裸无边框窗体从不设 `Color`,于是保留操作系统默认的 `clBtnFace`,在**暗色系统上近乎黑**。主体没盖住的每一个像素都会擦除成它(圆角外的四角、箭头旁边的条,以及 Wayland 上——形状区域被静默忽略——的整个轮廓),**应用挂进来的每个透明 / ghost 子控件也一样**,而那正是本组件存在的全部意义。所以 `EnsureWindow` 先用主体自己的表面色(纯色背景时)刷窗口。
-- **已知装饰问题(与 `TTyBalloonHint` 共有):** 有边框的主题上,主体自己的边框线**仍会横穿箭头底边**。**观感请在真机上核对。**
-- **主题锁定:** 非可视组件没有自己的 `Font`,所以**主题是唯一来源**——`ResolveFontSize` 传 `ParentFont=True` / size 0,让 `TyResolveFontSize` 一路落到 `--font-size-base`。改字号 / 字色请改主题令牌,或用 `StyleClass`。
-- **没有 `StyleOverride`:** 那是 `TTyGraphicControl` / `TTyCustomControl` 的成员,本组件继承自 `TComponent`,只有 `StyleClass` 这一个变体入口。
+- **主题锁定:** 非可视组件没有自己的 `Font`,所以**主题是唯一来源**——`ResolveFontSize` 传 `ParentFont=True` / size 0,让 `TyResolveFontSize` 一路落到 `--font-size-base`。改字号 / 字色请改主题令牌,或用 `StyleClass` / `StyleOverride`。
 - **`ContentRect` 不被绘制:** 那里住着一个真实控件,它自己画自己。
+- **淡出期间内容还在弹窗里:** 内容跟着窗口一起淡出,淡完才回到原来的窗体;这段时间里换 `Content`,会先把这次收起当场做完。
+
+---
+
+## 9. 动画
+
+`AnimationsEnabled` 开着(默认)时,`AnimationOptions` 决定播什么:
+
+| 成员 | 默认 | 说明 |
+|------|------|------|
+| `FadeEffect` | `True` | 显示时淡入,隐藏时淡出 |
+| `MoveEffect` | `True` | 显示时从远离目标的一侧移入,落到定位的位置。隐藏时不往回移,只淡出(DevExpress 也是这样) |
+| `ShowingAnimationTime` | `-1` | 显示动画的毫秒数;`-1` 用主题的 `--popover-show-duration`(150) |
+| `HidingAnimationTime` | `-1` | 淡出的毫秒数;`-1` 用 `--popover-hide-duration`(100) |
+
+- 移入的方向是箭头所指的反方向:弹窗在目标下方,就从下面往上移,走 `--popover-move-distance`(8 逻辑像素)。落点就是不开动画时的位置,动画只改起点。Flyout 面板从它贴的那条边滑出。
+- 两个效果都关、时间设成 0、或者 `AnimationsEnabled` 关掉,弹窗立即出现、立即消失,行为和加动画之前完全一样:窗口的 `AlphaBlend` 一次都不碰,`OnHide` 在 `Hide` 返回前触发。
+- 只开 `MoveEffect` 时,隐藏没有东西可播,是立即的。
+- 淡出途中在同一位置再 `Show`,从当前透明度淡回来,不闪;换了位置就先把这次收起做完(触发 `OnHide`),再重新弹出。
+- 动画进行中销毁组件:当场收尾,内容照常回到原来的窗体,不触发 `OnHide`。
+- 驱动是一个 16 ms 的计时器,每一帧调 `AdvanceAnimation`;缓动是 ease-out cubic(`tyControls.Animation`)。
+
+### 平台
+
+淡入淡出靠 LCL 的窗体 `AlphaBlend`。各 widgetset 的情况(按 LCL 源码核对,Lazarus 3.0 与 4.x 相同):
+
+| 平台 | 淡入淡出 |
+|------|----------|
+| Win32 / Win64 | 支持(分层窗口,`SetLayeredWindowAttributes`)。动画结束后撤掉分层样式 |
+| Cocoa | 支持(`NSWindow.alphaValue`) |
+| Qt5 / Qt6(X11) | 支持(`setWindowOpacity`) |
+| GTK2(X11) | 需要合成管理器;没有合成管理器时窗口保持不透明,只是隐藏晚 100 ms |
+| GTK3 | **不支持**:LCL 的 `TGtk3WSCustomForm.SetAlphaBlend` 在 3.0 到 4.x 都是空的。`TyPopoverFadeSupported` 返回 `False`,`FadeEffect` 不起作用,弹窗立即出现、立即消失;`MoveEffect` 照常 |
+| Wayland(任何 widgetset) | **不支持**:客户端不能设顶层窗口透明度,同上处理 |
+
+以上是读 LCL 源码得出的结论,还没有在每个平台的真机上逐一看过。
+
+---
+
+## 10. 单个实例的外观:`StyleOverride`
+
+库里不加写死颜色的属性。要让某一个弹窗和别的不一样,写它的 `StyleOverride`:
+
+```pascal
+PopDanger.StyleOverride := 'background: var(--danger); color: var(--on-accent);' +
+  ' border-width: 0; border-radius: 0;';
+```
+
+- 和控件的 `StyleOverride` 一样,只收**声明**,不收带选择器的块(写 `TyPopoverTitle { … }` 整段都会被当成解析失败丢掉)。
+- `background`、`border-*`、`border-radius`、`padding`、`opacity` 作用在主体上,箭头是主体伸出去的那一角,跟着变。
+- `color` 和 `font-*` 同时作用在标题上:标题是弹窗唯一会画的文字,而主题给 `TyPopoverTitle` 单独定了颜色,不这样处理的话 `color` 写了也看不出效果。`background` 不会叠到标题上,所以渐变背景不会在标题那一条里重新开始。
+- `--popover-*` 令牌可以只为这一个弹窗改,比如 `'--popover-arrow-size: 12px; --popover-show-duration: 0;'`。
+- 写 `shadow` 没有效果:窗口被裁成主体轮廓,阴影画了也会被裁掉(§6)。
+- 清空 `StyleOverride` 就回到主题。
+
+---
+
+## 11. Flyout 面板
+
+`FlyoutPanel.Active := True` 后,弹窗不再是气泡,而是贴着目标控件某条边的面板,像自动隐藏的工具条那样:
+
+- **位置:** 盖在目标控件**内侧**,贴着 `FlyoutPanel.Align` 那条边(`fpaTop` / `fpaBottom` / `fpaLeft` / `fpaRight`,默认 `fpaTop`,和 DevExpress 同名)。
+- **长度**等于那条边的长度:上、下边取目标的宽,左、右边取目标的高。内容控件沿这条边被拉长(收起时按原尺寸还回去)。
+- **厚度**是内容的设计期尺寸加上 padding 和标题。
+- 没有箭头,也不占箭头那条厚度,`ShowArrow` 不起作用;`Placement` 也不起作用。
+- 不翻转,只按工作区夹住。
+- `ShowAt` 传进来的矩形就当作目标。
+- 移入动画从那条边滑出。
+- 关掉 `Active`,下一次 `Show` 又是原来的气泡。
+
+**为什么是盖在内侧。** DevExpress 的公开文档只说 flyout 面板「横跨关联控件、沿它的一条边弹出」,可以用来模仿自动隐藏工具条(`TdxFlyoutPanel` 类说明页),没有说贴在边的外侧还是内侧,文档里的示例动图也看不出来。所以这里取自动隐藏工具条的样子:盖在控件内侧、贴着那条边。这是本库的取法,不保证和 DevExpress 逐像素一致。
+
+---
+
+## 12. 从 DevExpress Callout 迁移
+
+| `TdxCalloutPopup` | `TTyPopover` |
+|------|------|
+| `PopupControl` | `Content`(弹窗按它的设计期尺寸测量) |
+| `Popup(AControl)` | `ShowFor(AControl)`;`Target` 设好后直接 `Show` |
+| `Popup(AControl, ARect)` | `ShowAt(ARect)`,矩形是**屏幕坐标**(控件里的矩形先 `ClientToScreen`) |
+| `Close` | `Hide` |
+| `IsVisible` | `Showing` |
+| `Alignment` | `Placement`(12 个取值,放不下会翻到对面) |
+| `HideCallout`(不画箭头) | `ShowArrow := False` |
+| `AnimationOptions.FadeEffect` / `MoveEffect` / `ShowingAnimationTime` / `HidingAnimationTime` | 同名,在 `AnimationOptions` 里;另有总开关 `AnimationsEnabled` |
+| `Color` / `BorderColor` | `StyleOverride := 'background: …; border-color: …;'` |
+| `Rounded := False` | `StyleOverride := 'border-radius: 0;'` |
+| `RoundRadius` | `StyleOverride := 'border-radius: 6px;'` |
+| `FlyoutPanel.Active` / `FlyoutPanel.Align` | 同名,在 `FlyoutPanel` 里 |
+| `OnShow` / `OnHide` | 同名 |
+| `LookAndFeel` | 不提供:外观跟着主题走,单个实例用 `StyleClass` / `StyleOverride` |

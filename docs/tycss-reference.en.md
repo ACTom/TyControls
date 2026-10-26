@@ -245,7 +245,9 @@ refers to nothing leaves the theme's value standing too.
 Controls that read their tokens this way so far: `TTyListView` (and `TTyShellListView`), for every
 length token it reads -- `--listview-*`, `--row-height` and `--scrollbar-size`; `TTyTreeView` (and
 `TTyShellTreeView`), for `--treeview-margin`, `--treeview-icon-gap` and the four tree-line tokens of
-§3.5; `TTyMemo`, for `--memo-tab-size`. Other controls take the theme's values only, for now.
+§3.5; `TTyMemo`, for `--memo-tab-size`; `TTyPopover`, for its six `--popover-*` tokens (it is not a
+control, but its `StyleOverride` follows the same rule). Other controls take the theme's values only,
+for now.
 Versions before 3.0.4 ignore `--`
 declarations in a control's `StyleOverride`, so a form saved with them still loads there.
 
@@ -1487,6 +1489,9 @@ Engine-level limitations (each expanded in the sections above):
     - `--memo-tab-size` — the distance between a memo's tab stops, as CSS reads `tab-size`: a number is
       that many spaces, a length (such as `32px`) is pixels (default 8 spaces). It can also be set for
       one memo alone (§3.4).
+    - `--popover-move-distance` / `--popover-show-duration` / `--popover-hide-duration` — how far a
+      popover moves in (default 8), and its show and fade-out times in milliseconds (defaults 150 /
+      100, **unitless**). They can also be set for one popover alone (§3.4).
     - `--line-height` — the line box height (logical px) of **multi-line** captions. **No built-in constant**: when unset,
       the font's own line box is used, so nothing moves until you add the token; once set, the text block is
       `line count × value`, with the extra height split evenly above and below each line. The control's derived
