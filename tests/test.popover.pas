@@ -50,6 +50,9 @@ type
     procedure TestPlaceKeepsTheTipOffTheCorners;
     procedure TestLayoutKeepsTheArrowOffTheCorners;
     procedure TestMoveOffsetComesFromTheFarSide;
+    procedure TestFlyoutLiesInsideAlongEachEdge;
+    procedure TestFlyoutIsKeptOnTheWorkArea;
+    procedure TestFlyoutSlidesOutOfItsEdge;
   end;
 
   { Headless component behaviour: typeKeys, defaults, theme-driven measurement + placement,
@@ -119,6 +122,12 @@ type
     procedure TestAnimationsOffMidFadeFinishesNow;
     procedure TestFreeingMidFadeSendsTheContentHome;
     procedure TestFreeingWhileUpDoesNotStartAFade;
+    procedure TestFlyoutDefaults;
+    procedure TestFlyoutSpansTheTargetEdge;
+    procedure TestFlyoutHasNoArrow;
+    procedure TestFlyoutIgnoresPlacementAndOffBringsTheBubbleBack;
+    procedure TestFlyoutStretchesTheContentAlongTheEdge;
+    procedure TestFlyoutMovesInFromItsEdge;
   end;
 
 implementation
@@ -760,6 +769,56 @@ begin
   AssertTrue('left: starts further left', (dx = -8) and (dy = 0));
   TyPopoverMoveOffset(psvBottom, -3, dx, dy);
   AssertTrue('a negative distance is none', (dx = 0) and (dy = 0));
+end;
+
+procedure TTyPopoverRulesTest.TestFlyoutLiesInsideAlongEachEdge;
+var
+  T, W, R: TRect;
+begin
+  // Target 100..500 x 100..400 on a big work area; a 60 px thick panel inside each edge,
+  // spanning that edge's whole length.
+  T := Rect(100, 100, 500, 400);
+  W := Rect(0, 0, 1920, 1040);
+  R := TyFlyoutPlace(T, 60, fpaTop, W);
+  AssertTrue('top: along the top edge, inside', EqualRect(Rect(100, 100, 500, 160), R));
+  R := TyFlyoutPlace(T, 60, fpaBottom, W);
+  AssertTrue('bottom: along the bottom edge, inside', EqualRect(Rect(100, 340, 500, 400), R));
+  R := TyFlyoutPlace(T, 60, fpaLeft, W);
+  AssertTrue('left: along the left edge, inside', EqualRect(Rect(100, 100, 160, 400), R));
+  R := TyFlyoutPlace(T, 60, fpaRight, W);
+  AssertTrue('right: along the right edge, inside', EqualRect(Rect(440, 100, 500, 400), R));
+  AssertTrue('the side it reports: below the top edge', TyFlyoutSide(fpaTop) = psvBottom);
+  AssertTrue('above the bottom edge', TyFlyoutSide(fpaBottom) = psvTop);
+  AssertTrue('right of the left edge', TyFlyoutSide(fpaLeft) = psvRight);
+  AssertTrue('left of the right edge', TyFlyoutSide(fpaRight) = psvLeft);
+end;
+
+procedure TTyPopoverRulesTest.TestFlyoutIsKeptOnTheWorkArea;
+var
+  R: TRect;
+begin
+  // A target hanging off the work area's right/bottom: the panel slides back on, whole; it is
+  // pinned to its edge, so it never flips to another one.
+  R := TyFlyoutPlace(Rect(1800, 1000, 2000, 1100), 60, fpaTop, Rect(0, 0, 1920, 1040));
+  AssertTrue('slid left and up onto the work area', EqualRect(Rect(1720, 980, 1920, 1040), R));
+  // Longer than the work area: it hugs the reading (left) edge.
+  R := TyFlyoutPlace(Rect(-100, 10, 2100, 300), 60, fpaTop, Rect(0, 0, 1920, 1040));
+  AssertEquals('wider than the work area: hugs the left', 0, R.Left);
+  AssertEquals('keeps its length', 2200, R.Right - R.Left);
+end;
+
+procedure TTyPopoverRulesTest.TestFlyoutSlidesOutOfItsEdge;
+var
+  dx, dy: Integer;
+begin
+  TyFlyoutMoveOffset(fpaTop, 8, dx, dy);
+  AssertTrue('top: starts higher, slides down', (dx = 0) and (dy = -8));
+  TyFlyoutMoveOffset(fpaBottom, 8, dx, dy);
+  AssertTrue('bottom: starts lower, slides up', (dx = 0) and (dy = 8));
+  TyFlyoutMoveOffset(fpaLeft, 8, dx, dy);
+  AssertTrue('left: starts further left', (dx = -8) and (dy = 0));
+  TyFlyoutMoveOffset(fpaRight, 8, dx, dy);
+  AssertTrue('right: starts further right', (dx = 8) and (dy = 0));
 end;
 
 { ============================ TTyPopoverComponentTest ============================ }
@@ -2222,6 +2281,159 @@ begin
   P.Free;
   AssertSame('the content is home', FForm, FPanel.Parent);
   AssertFalse('hidden again, as it was', FPanel.Visible);
+end;
+
+const
+  { D3: a target well inside the work area. }
+  CTarget: TRect = (Left: 100; Top: 100; Right: 500; Bottom: 400);
+
+procedure TTyPopoverComponentTest.TestFlyoutDefaults;
+var
+  P: TTyPopover;
+begin
+  P := TTyPopover.Create(nil);
+  try
+    AssertFalse('the bubble by default', P.FlyoutPanel.Active);
+    AssertTrue('top edge by default, as DevExpress''s', P.FlyoutPanel.Align = fpaTop);
+  finally
+    P.Free;
+  end;
+end;
+
+{ TestFlyoutSpansTheTargetEdge
+  Each edge: the panel lies inside the target along it, as long as that edge, as thick as the
+  content's designed size in its padding -- with no arrow strip in the thickness. }
+procedure TTyPopoverComponentTest.TestFlyoutSpansTheTargetEdge;
+var
+  P: TTyPopover;
+  g: TTyPopoverGeometry;
+  thickV, thickH: Integer;
+begin
+  FCtl.LoadThemeCss(ThemeCss);
+  P := NewPopover;
+  try
+    P.FlyoutPanel.Active := True;
+    thickV := CPadT + CContentH + CPadB;   // 120
+    thickH := CPadL + CContentW + CPadR;   // 224
+    P.FlyoutPanel.Align := fpaTop;
+    g := P.GeometryIn(CTarget, Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    AssertTrue('top', EqualRect(Rect(100, 100, 500, 100 + thickV), g.Frame));
+    AssertFalse('never flips', g.Flipped);
+    P.FlyoutPanel.Align := fpaBottom;
+    g := P.GeometryIn(CTarget, Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    AssertTrue('bottom', EqualRect(Rect(100, 400 - thickV, 500, 400), g.Frame));
+    P.FlyoutPanel.Align := fpaLeft;
+    g := P.GeometryIn(CTarget, Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    AssertTrue('left', EqualRect(Rect(100, 100, 100 + thickH, 400), g.Frame));
+    P.FlyoutPanel.Align := fpaRight;
+    g := P.GeometryIn(CTarget, Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    AssertTrue('right', EqualRect(Rect(500 - thickH, 100, 500, 400), g.Frame));
+    // The length follows the target, not the content.
+    P.FlyoutPanel.Align := fpaTop;
+    g := P.GeometryIn(Rect(100, 100, 900, 400), Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    AssertEquals('a wider target, a longer panel', 800, g.Frame.Right - g.Frame.Left);
+  finally
+    P.Free;
+  end;
+end;
+
+{ TestFlyoutHasNoArrow
+  ShowArrow stays True, yet the flyout has no arrow: no strip in the layout, and the frame's
+  top rows -- where a bubble's strip would be -- are the body's fill, not the ground. }
+procedure TTyPopoverComponentTest.TestFlyoutHasNoArrow;
+var
+  P: TPopAccess;
+  L: TTyPopoverLayout;
+  R: TBGRABitmap;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap,
+    CThemeBlueSquare));
+  P := TPopAccess(NewPopover);
+  try
+    P.FlyoutPanel.Active := True;
+    AssertTrue('ShowArrow itself untouched', P.ShowArrow);
+    L := P.LayoutIn(400, 120, TyFlyoutSide(fpaTop), 200, 96);
+    AssertTrue('no arrow box', L.ArrowRect.Right <= L.ArrowRect.Left);
+    AssertTrue('the body is the frame', EqualRect(Rect(0, 0, 400, 120), L.BodyRect));
+    R := RenderOnSentinel(P, 400, 120, TyFlyoutSide(fpaTop), 200);
+    try
+      AssertTrue('body where a strip would be', IsThemeBlue(R.GetPixel(20, 3)));
+      AssertTrue('and under where an apex would be', IsThemeBlue(R.GetPixel(200, 1)));
+    finally
+      R.Free;
+    end;
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyPopoverComponentTest.TestFlyoutIgnoresPlacementAndOffBringsTheBubbleBack;
+var
+  P: TTyPopover;
+  bubble, a, b, back: TTyPopoverGeometry;
+begin
+  FCtl.LoadThemeCss(ThemeCss);
+  P := NewPopover;
+  try
+    bubble := P.GeometryIn(CTarget, Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    P.FlyoutPanel.Active := True;
+    a := P.GeometryIn(CTarget, Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    P.Placement := ppTopRight;
+    b := P.GeometryIn(CTarget, Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    AssertTrue('Placement does not move a flyout', EqualRect(a.Frame, b.Frame));
+    P.Placement := ppBottom;
+    P.FlyoutPanel.Active := False;
+    back := P.GeometryIn(CTarget, Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    AssertTrue('off again: the bubble, exactly', EqualRect(bubble.Frame, back.Frame));
+    AssertTrue('on the same side', bubble.Side = back.Side);
+    AssertEquals('pointing at the same place', bubble.TipX, back.TipX);
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyPopoverComponentTest.TestFlyoutStretchesTheContentAlongTheEdge;
+var
+  P: TPopAccess;
+begin
+  FCtl.LoadThemeCss(ThemeCss);
+  P := TPopAccess(NewPopover);
+  try
+    P.FlyoutPanel.Active := True;
+    P.BeginShowing(CTarget, Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    AssertEquals('stretched to the edge, inside the padding', 400 - CPadL - CPadR, FPanel.Width);
+    AssertEquals('its designed thickness', CContentH, FPanel.Height);
+    AssertEquals('no strip above it', CPadT, FPanel.Top);
+    P.Hide;
+    AssertEquals('and home at its own size', CContentW, FPanel.Width);
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyPopoverComponentTest.TestFlyoutMovesInFromItsEdge;
+var
+  P: TPopAccess;
+  g: TTyPopoverGeometry;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    CAnimRoot));
+  P := TPopAccess(NewPopover);
+  try
+    P.FlyoutPanel.Active := True;
+    P.FlyoutPanel.Align := fpaTop;
+    g := P.BeginShowing(CTarget, Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    P.ArmShowAnimation(g, 96);
+    AssertEquals('starts out of the top edge', g.Frame.Top - 8, P.Win.Top);
+    P.AdvanceAnimation(160);
+    AssertEquals('lands on the edge', g.Frame.Top, P.Win.Top);
+    P.FlyoutPanel.Align := fpaRight;
+    g := P.GeometryIn(CTarget, Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    P.ArmShowAnimation(g, 96);
+    AssertEquals('starts out of the right edge', g.Frame.Left + 8, P.Win.Left);
+  finally
+    P.Free;
+  end;
 end;
 
 initialization

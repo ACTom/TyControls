@@ -87,6 +87,10 @@ type
     ppLeft, ppLeftTop, ppLeftBottom,
     ppRight, ppRightTop, ppRightBottom);
 
+  { The target's edge a flyout panel lies along (DevExpress TdxFlyoutPanelAlign, same names;
+    nothing else in the library or the LCL spells them). }
+  TTyFlyoutPanelAlign = (fpaTop, fpaBottom, fpaLeft, fpaRight);
+
   { Where the popup window goes and where its arrow points. Frame/TipX/TipY are in the SAME
     coordinate space as the work area handed to TyPopoverPlace (screen px at runtime; the
     tests pass a synthetic rect, which is exactly why it is a parameter).
@@ -217,6 +221,26 @@ function TyPopoverFrameSize(AContentW, AContentH: Integer; ASide: TTyPopoverSide
 function TyPopoverArrowPoints(const ALayout: TTyPopoverLayout; ASide: TTyPopoverSide;
   out ATip, ABase1, ABase2: TPoint): Boolean;
 
+{ Where a flyout panel goes: INSIDE the target, lying along its AAlign edge -- an auto-hide
+  tool bar sliding out over the control it belongs to. Its length is that edge's (the target's
+  width for fpaTop/fpaBottom, its height for fpaLeft/fpaRight) and its thickness AThickness
+  (the content's designed size, wrapped in the body's padding). It does not flip -- it is
+  pinned to an edge -- but it is kept on the work area: slid in from the right/bottom first,
+  then the left/top, so one bigger than the work area hugs the reading edge (TyPopoverPlace's
+  cross-axis order). Same coordinate space as the inputs; headless-safe. }
+function TyFlyoutPlace(const ATarget: TRect; AThickness: Integer; AAlign: TTyFlyoutPanelAlign;
+  const AWorkArea: TRect): TRect;
+
+{ A flyout's MoveEffect start: it slides out FROM its edge, so it starts ADistance further
+  towards that edge (fpaTop: higher) and travels into the target. }
+procedure TyFlyoutMoveOffset(AAlign: TTyFlyoutPanelAlign; ADistance: Integer;
+  out ADX, ADY: Integer);
+
+{ The side a flyout reports in its TTyPopoverGeometry: the body sits on the inner side of the
+  edge (fpaTop -> psvBottom). It carries no arrow, so nothing is drawn from it; it is there
+  for the code that reads a geometry's Side. }
+function TyFlyoutSide(AAlign: TTyFlyoutPanelAlign): TTyPopoverSide;
+
 { MoveEffect's start: where the frame sits, relative to where it lands, when it begins to
   move in. It comes from the far side -- the opposite of the way its arrow points -- and
   travels towards the anchor: a popup below its anchor starts ADistance lower and rises. }
@@ -242,6 +266,28 @@ type
       ShowingAnimationTime -- ms for the show; -1 = the theme's --popover-show-duration.
       HidingAnimationTime  -- ms for the hide; -1 = the theme's --popover-hide-duration.
     A time of 0 is no animation for that half. }
+  { DevExpress's FlyoutPanel, member for member: show the popover as a panel lying along one
+    edge of its target instead of a bubble beside it.
+      Active -- the flyout style. Off (the default) = the arrowed bubble.
+      Align  -- which edge of the target (default fpaTop, as DevExpress's).
+    With Active on, Placement and ShowArrow are not consulted: there is no arrow and no strip,
+    the panel spans the edge's whole length and is as thick as the content's designed size
+    (plus padding and title), and it does not flip. ShowAt's rect is the target. }
+  TTyPopoverFlyoutPanel = class(TPersistent)
+  private
+    FOwner: TPersistent;
+    FActive: Boolean;
+    FAlign: TTyFlyoutPanelAlign;
+  protected
+    function GetOwner: TPersistent; override;
+  public
+    constructor Create(AOwner: TPersistent);
+    procedure Assign(Source: TPersistent); override;
+  published
+    property Active: Boolean read FActive write FActive default False;
+    property Align: TTyFlyoutPanelAlign read FAlign write FAlign default fpaTop;
+  end;
+
   TTyPopoverAnimationOptions = class(TPersistent)
   private
     FOwner: TPersistent;
@@ -328,6 +374,7 @@ type
       called and the window is fading out -- Showing is already False, the content is still
       adopted, OnHide has not fired yet. FFadeOn: we turned the window's AlphaBlend on and
       owe it a reset. }
+    FFlyoutPanel: TTyPopoverFlyoutPanel;
     FAnimationsEnabled: Boolean;
     FAnimationOptions: TTyPopoverAnimationOptions;
     FFadeAnim: TTyAnimator;
@@ -341,6 +388,10 @@ type
     FRestFrame: TRect;     // where the frame lands: the placement, untouched by the animation
     FMoveDX, FMoveDY: Integer;   // MoveEffect's start, relative to FRestFrame (device px)
     procedure SetAnimationOptions(AValue: TTyPopoverAnimationOptions);
+    procedure SetFlyoutPanel(AValue: TTyPopoverFlyoutPanel);
+    { Whether the arrow (and its strip) is part of the frame: ShowArrow, and never in the
+      flyout style. }
+    function ArrowShown: Boolean;
     procedure SetAnimationsEnabled(AValue: Boolean);
     procedure AnimTimerTick(Sender: TObject);
     procedure StartAnimTimer;
@@ -522,6 +573,9 @@ type
       TTyPopoverAnimationOptions. }
     property AnimationOptions: TTyPopoverAnimationOptions read FAnimationOptions
       write SetAnimationOptions;
+    { Show as a panel along one edge of the target instead of an arrowed bubble. See
+      TTyPopoverFlyoutPanel. Read when the popup goes up, like Placement. }
+    property FlyoutPanel: TTyPopoverFlyoutPanel read FFlyoutPanel write SetFlyoutPanel;
     { This one popover's look, as a bare tycss declaration block laid over the theme and
       StyleClass -- the controls' StyleOverride, same parser and same merge:
         'background: #1F2937; color: #F9FAFB; border-color: #111827; border-radius: 0;'
@@ -556,6 +610,7 @@ type
     property CloseOnEscape;
     property AnimationsEnabled;
     property AnimationOptions;
+    property FlyoutPanel;
     property StyleClass;
     property StyleOverride;
     property Controller;
@@ -942,6 +997,84 @@ begin
   end;
 end;
 
+function TyFlyoutPlace(const ATarget: TRect; AThickness: Integer; AAlign: TTyFlyoutPanelAlign;
+  const AWorkArea: TRect): TRect;
+var
+  w, h, x, y: Integer;
+begin
+  if AThickness < 0 then AThickness := 0;
+  case AAlign of
+    fpaBottom: Result := Rect(ATarget.Left, ATarget.Bottom - AThickness, ATarget.Right, ATarget.Bottom);
+    fpaLeft:   Result := Rect(ATarget.Left, ATarget.Top, ATarget.Left + AThickness, ATarget.Bottom);
+    fpaRight:  Result := Rect(ATarget.Right - AThickness, ATarget.Top, ATarget.Right, ATarget.Bottom);
+  else
+    Result := Rect(ATarget.Left, ATarget.Top, ATarget.Right, ATarget.Top + AThickness);
+  end;
+  w := Result.Right - Result.Left;
+  h := Result.Bottom - Result.Top;
+  if w < 0 then w := 0;
+  if h < 0 then h := 0;
+  x := Result.Left;
+  y := Result.Top;
+  if x + w > AWorkArea.Right then x := AWorkArea.Right - w;
+  if x < AWorkArea.Left then x := AWorkArea.Left;
+  if y + h > AWorkArea.Bottom then y := AWorkArea.Bottom - h;
+  if y < AWorkArea.Top then y := AWorkArea.Top;
+  Result := Rect(x, y, x + w, y + h);
+end;
+
+procedure TyFlyoutMoveOffset(AAlign: TTyFlyoutPanelAlign; ADistance: Integer;
+  out ADX, ADY: Integer);
+begin
+  ADX := 0;
+  ADY := 0;
+  if ADistance < 0 then ADistance := 0;
+  case AAlign of
+    fpaBottom: ADY := ADistance;
+    fpaLeft:   ADX := -ADistance;
+    fpaRight:  ADX := ADistance;
+  else
+    ADY := -ADistance;   // fpaTop: out of the top edge, downwards
+  end;
+end;
+
+function TyFlyoutSide(AAlign: TTyFlyoutPanelAlign): TTyPopoverSide;
+begin
+  case AAlign of
+    fpaBottom: Result := psvTop;
+    fpaLeft:   Result := psvRight;
+    fpaRight:  Result := psvLeft;
+  else
+    Result := psvBottom;
+  end;
+end;
+
+// ---------------------------------------------------------------------------
+// TTyPopoverFlyoutPanel
+// ---------------------------------------------------------------------------
+constructor TTyPopoverFlyoutPanel.Create(AOwner: TPersistent);
+begin
+  inherited Create;
+  FOwner := AOwner;
+  FAlign := fpaTop;
+end;
+
+function TTyPopoverFlyoutPanel.GetOwner: TPersistent;
+begin
+  Result := FOwner;
+end;
+
+procedure TTyPopoverFlyoutPanel.Assign(Source: TPersistent);
+begin
+  if Source is TTyPopoverFlyoutPanel then
+  begin
+    FActive := TTyPopoverFlyoutPanel(Source).FActive;
+    FAlign := TTyPopoverFlyoutPanel(Source).FAlign;
+  end
+  else
+    inherited Assign(Source);
+end;
+
 function TyPopoverFadeSupported: Boolean;
 begin
   {$IFDEF LCLGTK3}
@@ -1090,6 +1223,7 @@ begin
   FCloseOnEscape := True;
   FAnimationsEnabled := True;
   FAnimationOptions := TTyPopoverAnimationOptions.Create(Self);
+  FFlyoutPanel := TTyPopoverFlyoutPanel.Create(Self);
   FFadeAnim.SetTargetImmediate(1);
   FMoveAnim.SetTargetImmediate(1);
 end;
@@ -1108,6 +1242,7 @@ begin
   FreeAndNil(FAnimTimer);
   FreeAndNil(FWin);   // CreateNew(nil): owned by us, not by a form
   FreeAndNil(FAnimationOptions);
+  FreeAndNil(FFlyoutPanel);
   inherited Destroy;
 end;
 
@@ -1278,7 +1413,7 @@ begin
   end;
   // MulDiv(...,APPI,96) is the same logical->device conversion TTyPainter.Scale applies, so
   // the frame measured here is the frame the paint carves up.
-  Result := TyPopoverFrameSize(cw, ch, TyPopoverSide(FPlacement), FShowArrow, FTitle <> '',
+  Result := TyPopoverFrameSize(cw, ch, TyPopoverSide(FPlacement), ArrowShown, FTitle <> '',
     MulDiv(S.Padding.Left, APPI, 96), MulDiv(S.Padding.Top, APPI, 96),
     MulDiv(S.Padding.Right, APPI, 96), MulDiv(S.Padding.Bottom, APPI, 96),
     TitleHeightAt(APPI), MulDiv(TitleGapLogical, APPI, 96),
@@ -1292,6 +1427,20 @@ var
 begin
   if APPI <= 0 then APPI := 96;
   sz := MeasureFrameAtPPI(APPI);
+  if FFlyoutPanel.Active then
+  begin
+    { Flyout: the anchor is the target, the panel lies inside it along the chosen edge. The
+      measured frame (no strip) gives the thickness; the edge gives the length. }
+    if FFlyoutPanel.Align in [fpaTop, fpaBottom] then
+      Result.Frame := TyFlyoutPlace(AAnchorScreen, sz.cy, FFlyoutPanel.Align, AWorkArea)
+    else
+      Result.Frame := TyFlyoutPlace(AAnchorScreen, sz.cx, FFlyoutPanel.Align, AWorkArea);
+    Result.Side := TyFlyoutSide(FFlyoutPanel.Align);
+    Result.Flipped := False;
+    Result.TipX := (Result.Frame.Left + Result.Frame.Right) div 2;
+    Result.TipY := (Result.Frame.Top + Result.Frame.Bottom) div 2;
+    Exit;
+  end;
   Result := TyPopoverPlace(AAnchorScreen, sz.cx, sz.cy, AWorkArea, FPlacement,
     MulDiv(OffsetLogical, APPI, 96), MulDiv(ArrowSizeLogical, APPI, 96),
     CornerInsetAt(sz.cx, sz.cy, APPI));
@@ -1313,7 +1462,7 @@ begin
   // The body, not the frame: the strip is no part of the curve.
   bodyW := AFrameW;
   bodyH := AFrameH;
-  if FShowArrow then
+  if ArrowShown then
   begin
     strip := MulDiv(ArrowSizeLogical, APPI, 96);
     if TyPopoverSideIsVertical(TyPopoverSide(FPlacement)) then Dec(bodyH, strip)
@@ -1334,7 +1483,7 @@ begin
   S := PopoverStyle;
   // MulDiv(...,APPI,96) is the same logical->device conversion TTyPainter.Scale applies, so
   // the rects the content is placed into are the rects the paint drew.
-  Result := TyPopoverLayout(AFrameW, AFrameH, ASide, ATipLocal, FShowArrow, FTitle <> '',
+  Result := TyPopoverLayout(AFrameW, AFrameH, ASide, ATipLocal, ArrowShown, FTitle <> '',
     MulDiv(S.Padding.Left, APPI, 96), MulDiv(S.Padding.Top, APPI, 96),
     MulDiv(S.Padding.Right, APPI, 96), MulDiv(S.Padding.Bottom, APPI, 96),
     TitleHeightAt(APPI), MulDiv(TitleGapLogical, APPI, 96),
@@ -1568,7 +1717,9 @@ begin
   FAnimMove := WantsMove and (dist > 0);
   if not (FAnimFade or FAnimMove) then Exit;
   FRestFrame := AGeometry.Frame;
-  if FAnimMove then
+  if FAnimMove and FFlyoutPanel.Active then
+    TyFlyoutMoveOffset(FFlyoutPanel.Align, dist, FMoveDX, FMoveDY)
+  else if FAnimMove then
     TyPopoverMoveOffset(AGeometry.Side, dist, FMoveDX, FMoveDY)
   else
   begin
@@ -1706,6 +1857,16 @@ end;
 procedure TTyCustomPopover.SetAnimationOptions(AValue: TTyPopoverAnimationOptions);
 begin
   FAnimationOptions.Assign(AValue);
+end;
+
+procedure TTyCustomPopover.SetFlyoutPanel(AValue: TTyPopoverFlyoutPanel);
+begin
+  FFlyoutPanel.Assign(AValue);
+end;
+
+function TTyCustomPopover.ArrowShown: Boolean;
+begin
+  Result := FShowArrow and not FFlyoutPanel.Active;
 end;
 
 // ---------------------------------------------------------------------------

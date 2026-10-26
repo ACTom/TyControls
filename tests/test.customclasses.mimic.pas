@@ -7589,6 +7589,9 @@ type
     property ShowArrow;
     property CloseOnClickOutside;
     property CloseOnEscape;
+    property AnimationsEnabled;
+    property AnimationOptions;
+    property FlyoutPanel;
     property StyleClass;
     property StyleOverride;
     property Controller;
