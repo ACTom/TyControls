@@ -575,7 +575,7 @@ type
     AttrKey:   string;
     Attr:      TTyGridAttrSnapshot;
     { 列结构:gukColDelete 用 Col(插回哪儿)+ ColSnap(整列的身份);
-      gukColInsert 只用 Col;gukColMove 用 Col(从)与 OldCount(到)。 }
+      gukColInsert 只用 Col;gukColMove 用 Col(哪一列)与 OldCount(它要回到的 Position)。 }
     ColSnap:   TTyGridColumnSnapshot;
   end;
 
@@ -893,6 +893,10 @@ type
       所以滚动不必重建它。 }
     FColBasePx:        array of Integer;
     FColWidthPx:       array of Integer;
+    { 列的**屏幕次序**(阅读起点那一头是 0)与它的逆:FColOrder[次序] = 列下标,
+      FColPlace[列下标] = 次序。与上面两份同时建、同时作废(#111)。 }
+    FColOrder:         array of Integer;
+    FColPlace:         array of Integer;
     FColCacheValid:    Boolean;
     FColCachePPI:      Integer;
     { --- 脏区重绘 ---
@@ -1223,11 +1227,23 @@ type
     procedure HideColumn(ACol: Integer);
     procedure ShowColumn(ACol: Integer);
     function  IsHiddenColumn(ACol: Integer): Boolean;
-    { 从 AFrom 起沿 AStep 找第一个**可见**列;找不到就原样返回。 }
+    { 从 AFrom 起沿 AStep(+1 = 往阅读终点那头)**按屏幕次序**找第一个**可见**列;
+      找不到就原样返回。 }
     function  NextVisibleCol(AFrom, AStep: Integer): Integer;
-    { 第一个 / 最后一个可见列。 }
+    { 屏幕上第一个 / 最后一个可见列。 }
     function  FirstVisibleCol: Integer;
     function  LastVisibleCol: Integer;
+    { 列在屏幕上排第几(阅读起点那头是 0),以及它的逆。列被拖过之后次序与下标
+      就分叉了:下标是列的身份(单元格、事件都按它),次序是它站在哪儿(#111)。
+      越界时原样返回传入值。 }
+    function  ColumnPlace(ACol: Integer): Integer;
+    function  ColumnAtPlace(APlace: Integer): Integer;
+    { 从 ACol 起按屏幕次序走 ADelta 步,钳在第一列与最后一列之间。 }
+    function  ColumnStep(ACol, ADelta: Integer): Integer;
+    { 把 AFrom 拖到 ATo 那儿去行不行:两列得在同一条冻结带里(左固定 / 正文 /
+      右冻结),也得在同样的那几个分组表头底下 —— 带与分组都按下标划,拖出去
+      就画在别人的地盘上了。 }
+    function  ColumnMoveAllowed(AFrom, ATo: Integer): Boolean;
 
   public
     { 显式行高。设为 <= 0 表示"清掉,回到回调/默认值"。
@@ -1403,8 +1419,9 @@ type
       于是"看得见的那条分隔线"和"拖起来变宽的那一列"不可能是两列。 }
     function ColumnResizeEdgeX(ACol: Integer): Integer;
 
-    { 方向键在列上走一步的**下标增量**。ADelta 是"往屏幕右边走 +1 / 左边走 -1",
-      返回的是列下标该加多少 —— RTL 下取反。抽成一个函数而不是在 KeyDown 里
+    { 方向键在列上走一步的**次序增量**。ADelta 是"往屏幕右边走 +1 / 左边走 -1",
+      返回的是屏幕次序(ColumnPlace,阅读起点那头是 0)该加多少 —— RTL 下取反。
+      抽成一个函数而不是在 KeyDown 里
       写两个 `if RtlLayout`:方向键漏翻是本程序记在案的第三号静默故障,
       而每一处都只是一个减号,review 时几乎看不出来。 }
     function ArrowColStep(ADelta: Integer): Integer;
@@ -2187,6 +2204,8 @@ type
     function MaxRowSpanHint: Integer; override;
     { 这段数据行此刻是不是正连续升序地显示着。 }
     function RowsDisplayedConsecutively(ABaseRow, ACount: Integer): Boolean;
+    { 列的同一个问题:从 ABaseCol 起这几列此刻是不是按下标顺序挨着站(#111)。 }
+    function ColsDisplayedConsecutively(ABaseCol, ACount: Integer): Boolean;
     function WidenEditorRect(ACol, ARow: Integer; const ARect: TRect): TRect;
     function DoBeginEdit(ACol, ARow: Integer): Boolean;
     procedure RecordRowCountUndo(AOldCount: Integer); override;
@@ -4167,6 +4186,7 @@ begin
   if AValue < 0 then AValue := 0;
   if FFixedCols = AValue then Exit;
   FFixedCols := AValue;
+  InvalidateColumnCache;   { 屏幕次序先按冻结带分(#111) }
   Invalidate;
 end;
 
@@ -5424,26 +5444,82 @@ end;
 
 function TTyCustomGrid.NextVisibleCol(AFrom, AStep: Integer): Integer;
 var
-  c: Integer;
+  p: Integer;
 begin
   Result := AFrom;
   if AStep = 0 then Exit;
-  c := AFrom;
-  while (c >= 0) and (c < FHeader.Columns.Count) do
+  if (AFrom < 0) or (AFrom >= FHeader.Columns.Count) then Exit;
+  { 按**屏幕次序**走,不按下标 —— 拖过列之后,下标相邻的两列未必挨着站。 }
+  p := ColumnPlace(AFrom);
+  while (p >= 0) and (p < FHeader.Columns.Count) do
   begin
-    if not IsHiddenColumn(c) then Exit(c);
-    Inc(c, AStep);
+    if not IsHiddenColumn(ColumnAtPlace(p)) then Exit(ColumnAtPlace(p));
+    Inc(p, AStep);
   end;
 end;
 
 function TTyCustomGrid.FirstVisibleCol: Integer;
 begin
-  Result := NextVisibleCol(0, 1);
+  Result := NextVisibleCol(ColumnAtPlace(0), 1);
 end;
 
 function TTyCustomGrid.LastVisibleCol: Integer;
 begin
-  Result := NextVisibleCol(FHeader.Columns.Count - 1, -1);
+  Result := NextVisibleCol(ColumnAtPlace(FHeader.Columns.Count - 1), -1);
+end;
+
+function TTyCustomGrid.ColumnPlace(ACol: Integer): Integer;
+begin
+  Result := ACol;
+  if not FColCacheValid then BuildColumnCache;
+  if (ACol >= 0) and (ACol < Length(FColPlace)) then Result := FColPlace[ACol];
+end;
+
+function TTyCustomGrid.ColumnAtPlace(APlace: Integer): Integer;
+begin
+  Result := APlace;
+  if not FColCacheValid then BuildColumnCache;
+  if (APlace >= 0) and (APlace < Length(FColOrder)) then Result := FColOrder[APlace];
+end;
+
+function TTyCustomGrid.ColumnStep(ACol, ADelta: Integer): Integer;
+var
+  p: Integer;
+begin
+  Result := ACol;
+  if (ACol < 0) or (ACol >= FHeader.Columns.Count) then Exit;
+  p := ColumnPlace(ACol) + ADelta;
+  if p < 0 then p := 0;
+  if p > FHeader.Columns.Count - 1 then p := FHeader.Columns.Count - 1;
+  Result := ColumnAtPlace(p);
+end;
+
+function TTyCustomGrid.ColumnMoveAllowed(AFrom, ATo: Integer): Boolean;
+
+  function Band(ACol: Integer): Integer;
+  begin
+    if ACol < FFixedCols then Result := 0
+    else if ACol >= FHeader.Columns.Count - EffectiveFixedColsRight then Result := 2
+    else Result := 1;
+  end;
+
+var
+  i: Integer;
+  g: TTyGridHeaderGroup;
+begin
+  Result := False;
+  if (AFrom < 0) or (AFrom >= FHeader.Columns.Count) then Exit;
+  if (ATo < 0) or (ATo >= FHeader.Columns.Count) then Exit;
+  if Band(AFrom) <> Band(ATo) then Exit;
+  { 每一级分组都要"同进同出"。这样一列只在自己那组里挪,组里的几列始终挨着,
+    分组表头才画得出一整条;不在任何组里的列也不会插进一个组的中间。 }
+  for i := 0 to FHeaderGroups.Count - 1 do
+  begin
+    g := TTyGridHeaderGroup(FHeaderGroups.Items[i]);
+    if ((AFrom >= g.FirstCol) and (AFrom <= g.LastCol))
+       <> ((ATo >= g.FirstCol) and (ATo <= g.LastCol)) then Exit;
+  end;
+  Result := True;
 end;
 
 function TTyCustomGrid.GetRowHeights(ARow: Integer): Integer;
@@ -5963,20 +6039,59 @@ end;
 
 procedure TTyCustomGrid.BuildColumnCache;
 var
-  i, n, logical: Integer;
+  i, n, k, nl, nr, logical: Integer;
   c: TTyColumn;
+
+  { 把 [ALo, AHi] 这一段次序按 Position 排(相同时按下标)。插入排序:
+    没拖过的表本来就是有序的,一趟扫过去就完。 }
+  procedure SortBand(ALo, AHi: Integer);
+  var
+    a, b, v: Integer;
+    pv: Cardinal;
+  begin
+    for a := ALo + 1 to AHi do
+    begin
+      v := FColOrder[a];
+      pv := TTyColumn(FHeader.Columns.Items[v]).Position;
+      b := a - 1;
+      while (b >= ALo)
+        and ((TTyColumn(FHeader.Columns.Items[FColOrder[b]]).Position > pv)
+          or ((TTyColumn(FHeader.Columns.Items[FColOrder[b]]).Position = pv)
+              and (FColOrder[b] > v))) do
+      begin
+        FColOrder[b + 1] := FColOrder[b];
+        Dec(b);
+      end;
+      FColOrder[b + 1] := v;
+    end;
+  end;
+
 begin
   n := FHeader.Columns.Count;
   SetLength(FColBasePx, n);
   SetLength(FColWidthPx, n);
+  SetLength(FColOrder, n);
+  SetLength(FColPlace, n);
 
-  { 行头槽之后,累加本列之前所有可见列的宽度。
-    这里刻意按索引顺序累加而不用 TTyColumn.Left —— Left 是按**显示位置**算的,
-    拖动重排之后两者会分叉;列冻结与否取决于索引,所以此处必须按索引。 }
+  { **屏幕次序**:先按冻结带分(左固定 / 正文 / 右冻结,带的归属看下标 ——
+    全网格的冻结判定都按下标),带内再按列的 Position 排。拖动不许出带
+    (ColumnMoveAllowed),所以带内的先后就是用户拖出来的那个顺序。
+    从前这里只按下标累加、从不读 Position:列模型里换了位,屏幕上一动不动(#111)。 }
+  nl := FFixedCols;
+  if nl > n then nl := n;
+  nr := EffectiveFixedColsRight;
+  for k := 0 to n - 1 do FColOrder[k] := k;
+  SortBand(0, nl - 1);
+  SortBand(nl, n - nr - 1);
+  SortBand(n - nr, n - 1);
+  for k := 0 to n - 1 do FColPlace[FColOrder[k]] := k;
+
+  { 行头槽之后,按屏幕次序累加本列之前所有可见列的宽度。 }
   logical := 0;
   if FShowIndicator then Inc(logical, FIndicatorWidth);
-  for i := 0 to n - 1 do
+  for k := 0 to n - 1 do
   begin
+    i := FColOrder[k];
     c := TTyColumn(FHeader.Columns.Items[i]);
     FColBasePx[i] := ScaleI(logical);
     { **隐藏列宽度记 0**。这是整条隐藏链路的收口点:
@@ -6078,7 +6193,8 @@ end;
 function TTyCustomGrid.ColumnSpanX(AFirst, ALast: Integer;
   out ALeft, ARight: Integer): Boolean;
 var
-  a0, a1, b0, b1: Integer;
+  i, a0, a1: Integer;
+  any: Boolean;
 begin
   ALeft := 0;
   ARight := 0;
@@ -6086,11 +6202,25 @@ begin
   if (AFirst < 0) or (AFirst >= FHeader.Columns.Count) then Exit;
   if ALast < AFirst then ALast := AFirst;
   if ALast >= FHeader.Columns.Count then ALast := FHeader.Columns.Count - 1;
-  a0 := ColumnLeftPx(AFirst);  a1 := a0 + ColumnWidthPx(AFirst);
-  b0 := ColumnLeftPx(ALast);   b1 := b0 + ColumnWidthPx(ALast);
-  { 取两端的并集而不是 `a0 .. b1` —— 后者在 RTL 下是反向矩形。 }
-  ALeft  := a0; if b0 < ALeft  then ALeft  := b0;
-  ARight := a1; if b1 > ARight then ARight := b1;
+  { 取**每一列**的并集,不只是两端:列可以在组里换位(#111),首尾两列未必站在两头。
+    也不是 `首列左缘 .. 末列右缘` —— 那在 RTL 下是反向矩形。 }
+  any := False;
+  for i := AFirst to ALast do
+  begin
+    a0 := ColumnLeftPx(i);
+    a1 := a0 + ColumnWidthPx(i);
+    if not any then
+    begin
+      ALeft := a0;
+      ARight := a1;
+      any := True;
+    end
+    else
+    begin
+      if a0 < ALeft then ALeft := a0;
+      if a1 > ARight then ARight := a1;
+    end;
+  end;
   Result := ARight > ALeft;
 end;
 
@@ -6131,10 +6261,12 @@ begin
   begin
     { 锚在**视口**右沿,不是控件右沿 —— 纵向滚动条占掉的那十几像素不属于视口。
       用 ClientWidth 的话整条右冻结带右移一个滚动条宽,最右那一列被裁掉一截
-      (窗格矩形走的是 M.ClientW = ViewportW,两边必须同源)。 }
+      (窗格矩形走的是 M.ClientW = ViewportW,两边必须同源)。
+      扣的是**屏幕次序**在它之后(含它)的那几列 —— 右冻结列占着最后几个次序,
+      带内的先后归 Position 管(#111)。 }
     Result := ViewportW;
-    for i := FHeader.Columns.Count - 1 downto ACol do
-      if i < Length(FColWidthPx) then Dec(Result, FColWidthPx[i]);
+    for i := FHeader.Columns.Count - 1 downto FColPlace[ACol] do
+      Dec(Result, FColWidthPx[FColOrder[i]]);
     Result := MirrorColX(Result, ACol);
     Exit;
   end;
@@ -6272,7 +6404,7 @@ end;
 
 function TTyCustomGrid.GetLeftCol: Integer;
 var
-  i, l, w, frozen: Integer;
+  i, p, l, w, frozen: Integer;
 begin
   { 第一个"有像素落在正文区里"的可滚动列。倒序扫不行 —— 要的是最靠阅读起点的那个,
     而 ColumnAtX(冻结带边缘) 也不行:那一点归属谁,取决于 ColumnAtX 里
@@ -6284,8 +6416,11 @@ begin
     所以这一句在 LTR 下逐字节等价于从前的 `右缘 > FrozenWidthPx`。
     (不走 GridMetrics:本函数在每次滚动时都被调,而那个记录要装配行高前缀和。) }
   frozen := FrozenWidthPx;
-  for i := FFixedCols to FHeader.Columns.Count - 1 do
+  { 按**屏幕次序**扫(#111):要的是站在阅读起点那头的,不是下标最小的。
+    左固定列占着最前面那 FixedCols 个次序。 }
+  for p := FFixedCols to FHeader.Columns.Count - 1 do
   begin
+    i := ColumnAtPlace(p);
     if not (coVisible in FHeader.Columns.Items[i].Options) then Continue;
     l := ColumnLeftPx(i);
     w := ColumnWidthPx(i);
@@ -6293,12 +6428,15 @@ begin
   end;
   { 一列都没有(或全滚过去了):答第一个可滚列,别答 -1 —— 这是个"视口在哪"的
     坐标,不是命中判定,给个界外值只会让宿主拿去当下标。 }
-  Result := NextVisibleCol(FFixedCols, 1);
+  Result := NextVisibleCol(ColumnAtPlace(FFixedCols), 1);
 end;
 
 procedure TTyCustomGrid.SetLeftCol(AValue: Integer);
 begin
-  if AValue < FFixedCols then AValue := FFixedCols;
+  { 落在左固定带里的,换成正文里站在最前面的那一列(#111)。 }
+  if (AValue < FFixedCols) and (FFixedCols < FHeader.Columns.Count) then
+    AValue := ColumnAtPlace(FFixedCols)
+  else if AValue < FFixedCols then AValue := FFixedCols;
   if AValue > FHeader.Columns.Count - 1 then AValue := FHeader.Columns.Count - 1;
   if AValue < 0 then Exit;
   if not FColCacheValid then BuildColumnCache;
@@ -6900,7 +7038,9 @@ begin
     if Abs(X - FDragStartX) < ScaleI(8) then Exit;
     FHeaderDragMoved := True;   { 越过阈值 = 这一下已经是拖动,松开时不再算点击 }
     target := ColumnAtX(X);
-    if (target >= 0) and (target <> FDragCol) then
+    { 出带、出组的落点不算数,也不去问宿主 —— 问了它也挪不过去(#111)。 }
+    if (target >= 0) and (target <> FDragCol)
+       and ColumnMoveAllowed(FDragCol, target) then
     begin
       { 复用列模型现成的位置调整(coDraggable/AdjustPosition 早就建好了,
         一直没人接线 —— 这里就是那根线)。 }
@@ -8465,6 +8605,9 @@ begin
   b.ImageIndex := ASnap.ImageIndex;
   b.Options := ASnap.Options;
   b.Tag := ASnap.Tag;
+  { 快照里一直记着它站在哪儿,只是从没放回去:撤销删列后,列回到的是下标的位置,
+    拖过的表里那不是它原来站的地方(#111)。 }
+  b.Position := ASnap.Position;
 
   if b is TTyGridColumn then
   begin
@@ -8509,7 +8652,7 @@ begin
   e := Default(TTyGridUndoEntry);
   e.Kind := AKind;
   e.Col := ACol;
-  e.OldCount := ATo;                    { gukColMove 用它当"到哪儿" }
+  e.OldCount := ATo;                    { gukColMove 用它当"回到哪个 Position" }
   e.ColSnap := ASnap;
   RecordUndo(e);
 end;
@@ -8882,11 +9025,15 @@ begin
         end;
       gukColMove:
         begin
-          { 撤销"换位" = 反着换回来。 }
+          { 撤销"换位" = 把那一列放回它原来站的位置;反记录记下它此刻的位置,
+            重做时同一段代码再放回来(#111)。 }
           Result[n].Kind := gukColMove;
-          Result[n].Col := e.OldCount;
-          Result[n].OldCount := e.Col;
-          MoveColumn(e.OldCount, e.Col);
+          Result[n].Col := e.Col;
+          if (e.Col >= 0) and (e.Col < Header.Columns.Count) then
+          begin
+            Result[n].OldCount := TTyColumn(Header.Columns.Items[e.Col]).Position;
+            TTyColumn(Header.Columns.Items[e.Col]).Position := e.OldCount;
+          end;
         end;
     end;
     Inc(n);
@@ -9167,18 +9314,19 @@ begin
   MoveCursor(FCol, AValue);
 end;
 
-{ 从 AFrom 起沿 AStep 方向找第一个可编辑的列;找不到就原样返回。 }
+{ 从 AFrom 起沿 AStep 方向(屏幕次序,#111)找第一个可编辑的列;找不到就原样返回。 }
 function TTyStringGrid.NextEditableCol(AFrom, AStep, ARow: Integer): Integer;
 var
-  c: Integer;
+  p: Integer;
 begin
   Result := AFrom;
   if AStep = 0 then Exit;
-  c := AFrom;
-  while (c >= 0) and (c < Header.Columns.Count) do
+  if (AFrom < 0) or (AFrom >= Header.Columns.Count) then Exit;
+  p := ColumnPlace(AFrom);
+  while (p >= 0) and (p < Header.Columns.Count) do
   begin
-    if EditorKindFor(c, ARow) <> gekNone then Exit(c);
-    Inc(c, AStep);
+    if EditorKindFor(ColumnAtPlace(p), ARow) <> gekNone then Exit(ColumnAtPlace(p));
+    Inc(p, AStep);
   end;
 end;
 
@@ -9194,11 +9342,12 @@ begin
   if (ACol = FCol) and (ARow = FRow) then Exit;
 
   { **隐藏列上不能停光标** —— 停上去的话编辑器会在一个看不见的地方打开。
-    沿本次移动的方向找下一个可见列;方向不明(直接赋值)时先往右找、再往左找。 }
+    沿本次移动的方向找下一个可见列;方向不明(直接赋值)时先往右找、再往左找。
+    "方向"是**屏幕上**的方向:比的是两列的次序,不是下标(#111)。 }
   if IsHiddenColumn(ACol) then
   begin
     if ACol <> FCol then
-      ACol := NextVisibleCol(ACol, Sign(ACol - FCol))
+      ACol := NextVisibleCol(ACol, Sign(ColumnPlace(ACol) - ColumnPlace(FCol)))
     else
       ACol := NextVisibleCol(ACol, 1);
     if IsHiddenColumn(ACol) then ACol := NextVisibleCol(ACol, -1);
@@ -9208,7 +9357,7 @@ begin
     原地不动的话方向键会像撞墙,用户以为网格卡了。
     找不到就落回原来的目标(总得有个当前格)。 }
   if FSkipReadOnly and (ARow = FRow) and (ACol <> FCol) then
-    ACol := NextEditableCol(ACol, Sign(ACol - FCol), ARow);
+    ACol := NextEditableCol(ACol, Sign(ColumnPlace(ACol) - ColumnPlace(FCol)), ARow);
 
   { 光标要动了 —— 先把正在编辑的格提交掉,否则编辑框会悬在旧位置。
     提交被校验拦下就**不动**:FCol/FRow 保持原样,这正是 OnSelectCell 否决时
@@ -9660,8 +9809,8 @@ begin
       HOST editor supplied through OnCreateEditLink is the grid's guest and carries no such
       wiring -- when focus is on the grid rather than inside that guest, this is the way out. }
     VK_ESCAPE: if FEditing then begin EndEdit(False); Key := 0; end;
-    VK_LEFT:  begin MoveCursor(FCol + ArrowColStep(-1), FRow); Key := 0; end;
-    VK_RIGHT: begin MoveCursor(FCol + ArrowColStep(1), FRow); Key := 0; end;
+    VK_LEFT:  begin MoveCursor(ColumnStep(FCol, ArrowColStep(-1)), FRow); Key := 0; end;
+    VK_RIGHT: begin MoveCursor(ColumnStep(FCol, ArrowColStep(1)), FRow); Key := 0; end;
     VK_UP:    begin MoveCursor(FCol, FRow - 1); Key := 0; end;
     VK_DOWN:  begin MoveCursor(FCol, FRow + 1); Key := 0; end;
     VK_HOME:  begin MoveCursor(FirstVisibleCol, FRow); Key := 0; end;
@@ -9702,15 +9851,18 @@ begin
                   "关了也还是不放行"。外面是 try..finally,直接 Exit 安全。 }
                 if not (goTabs in Options) then Exit;
                 if FEditing and not TryEndEdit(True) then begin Key := 0; RefocusEditor; Exit; end;
-                { 折行时也要落在**可见**列上,别折到一个隐藏列里去。 }
+                { 折行时也要落在**可见**列上,别折到一个隐藏列里去。
+                  前后、行首行尾都按屏幕次序(#111)。 }
                 if ssShift in Shift then
                 begin
-                  if FCol > FirstVisibleCol then MoveCursor(FCol - 1, FRow)
+                  if ColumnPlace(FCol) > ColumnPlace(FirstVisibleCol) then
+                    MoveCursor(ColumnStep(FCol, -1), FRow)
                   else if FRow > 0 then MoveCursor(LastVisibleCol, FRow - 1);
                 end
                 else
                 begin
-                  if FCol < LastVisibleCol then MoveCursor(FCol + 1, FRow)
+                  if ColumnPlace(FCol) < ColumnPlace(LastVisibleCol) then
+                    MoveCursor(ColumnStep(FCol, 1), FRow)
                   else if FRow < RowCount - 1 then MoveCursor(FirstVisibleCol, FRow + 1);
                 end;
                 Key := 0;
@@ -10832,13 +10984,15 @@ begin
   { 横向:冻结列永远可见,所以只在光标落在可滚动区时才管。 }
   if FCol >= FFixedCols then
   begin
-    lc := GetLeftCol;
+    { 前后按**屏幕次序**比(#111):拖过列之后,下标大的未必站在右边。 }
+    lc := ColumnPlace(GetLeftCol);
     vc := VisibleColCount;
     if vc < 1 then vc := 1;
-    if FCol < lc then newCol := lc
-    else if FCol > lc + vc - 1 then newCol := lc + vc - 1;
-    if newCol > Header.Columns.Count - 1 then newCol := Header.Columns.Count - 1;
-    if newCol < FFixedCols then newCol := FFixedCols;
+    if ColumnPlace(FCol) < lc then newCol := ColumnAtPlace(lc)
+    else if ColumnPlace(FCol) > lc + vc - 1 then
+      newCol := ColumnAtPlace(Min(lc + vc - 1, Header.Columns.Count - 1));
+    if (newCol < FFixedCols) and (FFixedCols < Header.Columns.Count) then
+      newCol := ColumnAtPlace(FFixedCols);
   end;
 
   if (newCol = FCol) and (newRow = FRow) then Exit;
@@ -12647,14 +12801,21 @@ begin
 end;
 
 procedure TTyStringGrid.MoveColumn(AFrom, ATo: Integer);
+var
+  oldPos: Cardinal;
 begin
   if (AFrom < 0) or (AFrom >= Header.Columns.Count) then Exit;
   if (ATo < 0) or (ATo >= Header.Columns.Count) then Exit;
+  { 与拖列头同一条规矩:不出冻结带、不出分组(#111)。 }
+  if (AFrom = ATo) or not ColumnMoveAllowed(AFrom, ATo) then Exit;
   { 列的顺序交给列模型自己管(AdjustPosition 早就建好了),
-    单元格内容按**索引**存,所以不用搬。 }
+    单元格内容按**索引**存,所以不用搬。
+    撤销记的是这一列**原来站的位置**,不是"挪到了哪一列那儿":
+    跨过不止一列的换位,反着挪一次回不到原样(#111)。 }
+  oldPos := TTyColumn(Header.Columns.Items[AFrom]).Position;
   Header.Columns.AdjustPosition(TTyColumn(Header.Columns.Items[AFrom]),
     TTyColumn(Header.Columns.Items[ATo]).Position);
-  RecordColumnUndo(gukColMove, AFrom, ATo);
+  RecordColumnUndo(gukColMove, AFrom, Integer(oldPos));
   Invalidate;
 end;
 
@@ -13405,6 +13566,16 @@ begin
   Result := True;
 end;
 
+function TTyStringGrid.ColsDisplayedConsecutively(ABaseCol, ACount: Integer): Boolean;
+var
+  i, p0: Integer;
+begin
+  p0 := ColumnPlace(ABaseCol);
+  for i := 1 to ACount - 1 do
+    if ColumnPlace(ABaseCol + i) <> p0 + i then Exit(False);
+  Result := True;
+end;
+
 { 选区在客户区里的外接矩形(显示序 → 像素)。 }
 function TTyStringGrid.SelectionBoundsRect: TRect;
 var
@@ -13413,12 +13584,12 @@ var
 begin
   Result := Rect(0, 0, 0, 0);
   if Header.Columns.Count = 0 then Exit;
-  r := ActiveSelectionRect;                 { 显示序空间 }
-  tl := CellRect(r.Left, DisplayToData(r.Top));
-  br := CellRect(r.Right, DisplayToData(r.Bottom));
+  r := ActiveSelectionRect;                 { 显示序空间(行与列都是) }
+  tl := CellRect(ColumnAtPlace(r.Left), DisplayToData(r.Top));
+  br := CellRect(ColumnAtPlace(r.Right), DisplayToData(r.Bottom));
   if IsRectEmpty(tl) or IsRectEmpty(br) then Exit;
-  { 横轴取两端的并集,不是 `tl.Left .. br.Right`:r.Left / r.Right 是**列下标**
-    (锚点与角落,与像素无关,所以它们不镜像),而 RTL 下下标小的那一列在屏幕右边
+  { 横轴取两端的并集,不是 `tl.Left .. br.Right`:r.Left / r.Right 是**列的屏幕次序**
+    (按阅读方向数,与像素无关,所以它们不镜像),而 RTL 下次序小的那一列在屏幕右边
     —— 直接拼两端会得到一个反向矩形,选区外框与填充柄一起消失。 }
   Result := Rect(tl.Left, tl.Top, br.Right, br.Bottom);
   if br.Left < Result.Left then Result.Left := br.Left;
@@ -13487,14 +13658,18 @@ var
   src: TRect;
   tgt: TRect;
   handled: Boolean;
-  c, r, n, srcH, idx, first, step: Integer;
+  c, p, r, n, srcH, idx, first, step: Integer;
+  places: TRect;
 begin
   { ReadOnly 下填充被拒。柄本身在 FillHandleRect 里已经变空(不画、点不中),
     这一句守的是 API 直调 —— 宿主自己的"向下填充"菜单项也改不了只读表。
     放在 OnFillCells 之前,与粘贴那头同一个理由:不请宿主否决一个不会发生的操作。 }
   if FReadOnly then Exit;
   src := Selection;                          { 数据行坐标 }
-  if (src.Right < src.Left) or (src.Bottom < src.Top) then Exit;
+  { 填哪几列看**屏幕上**选中的那一段(#111):列被拖过之后,src 的左右两角是屏幕两头
+    那两列的下标,左角的下标可以比右角大,下标区间也不是选中的那几列。 }
+  places := ActiveSelectionRect;
+  if src.Bottom < src.Top then Exit;
   if ARow < 0 then ARow := 0;
   if ARow > RowCount - 1 then ARow := RowCount - 1;
 
@@ -13510,8 +13685,9 @@ begin
   srcH := src.Bottom - src.Top + 1;
   BeginUpdate;
   try
-    for c := src.Left to src.Right do
+    for p := places.Left to places.Right do
     begin
+      c := ColumnAtPlace(p);
       { 逐格/逐列只读走 EditorKindFor 这同一道门 —— 粘贴(PasteFromText)与剪切
         (CutToClipboard)一直这么问,填充从前**不问**,于是同一格"不能改"对三条
         路径答两种话。跳过的是**写入**,计数器照走:位置阶梯保持一致,10,20 铺过
@@ -13692,8 +13868,14 @@ begin
       begin
         TTyColumn(Header.Columns.Items[i]).Width := newW[i];
         if newVis[i] <> 0 then ShowColumn(i) else HideColumn(i);
-        TTyColumn(Header.Columns.Items[i]).Position := newPos[i];
       end;
+      { 位置按**目标次序**从左往右一个个放:放到第 n 位的那一列只挤动 n 之后的,
+        前面放好的不动。从前按下标逐列设,后设的会把先设好的挤开 —— 有些顺序
+        (比如 D C A B)存得下、读不回来(#111)。 }
+      for n := 0 to High(newPos) do
+        for i := 0 to High(newPos) do
+          if newPos[i] = n then
+            TTyColumn(Header.Columns.Items[i]).Position := n;
       FixedCols := fl;
       FixedColsRight := fr;
       FixedRows := ft;
@@ -13776,7 +13958,7 @@ end;
 function TTyStringGrid.MergeSelection: Boolean;
 var
   r: TRect;
-  i, baseRow, prev, dr: Integer;   { 别叫 top —— 与 TRect.Top 撞名 }
+  i, baseRow, baseCol, prev, dr: Integer;   { 别叫 top —— 与 TRect.Top 撞名 }
 begin
   Result := False;
   r := ActiveSelectionRect;            { 显示序空间 }
@@ -13795,7 +13977,12 @@ begin
     prev := dr;
   end;
 
-  MergeCells(r.Left, baseRow, r.Right - r.Left + 1, r.Bottom - r.Top + 1);
+  { 列同理(#111):屏幕上挨着的几列,得同时是下标连续升序的几列 —— 合并块按下标记。 }
+  baseCol := ColumnAtPlace(r.Left);
+  for i := r.Left + 1 to r.Right do
+    if ColumnAtPlace(i) <> baseCol + (i - r.Left) then Exit;
+
+  MergeCells(baseCol, baseRow, r.Right - r.Left + 1, r.Bottom - r.Top + 1);
   Result := True;
 end;
 
@@ -13913,6 +14100,10 @@ begin
     失效不等于销毁:排回去它自己就回来了。 }
   if (ARowSpan > 1) and (not RowsDisplayedConsecutively(ARow, ARowSpan)) then
     ARowSpan := 1;
+  { 列同理:跨的是一段**列下标**,列被拖开或倒了个儿就不成立,拖回来又成立(#111)。
+    BaseCellOf 按下标往左回扫、格线按 i 与 i+1 问"同一块吗",都靠这一句才对。 }
+  if (AColSpan > 1) and (not ColsDisplayedConsecutively(ACol, AColSpan)) then
+    AColSpan := 1;
   Result := (AColSpan > 1) or (ARowSpan > 1);
 end;
 
@@ -13991,13 +14182,14 @@ begin
   if startPos < 0 then startPos := 0;
 
   { 把 (显示行, 列) 压成一维序号,从当前光标的下一格起环绕一圈 ——
-    这样连按"查找下一个"能不重不漏地走遍全表。 }
+    这样连按"查找下一个"能不重不漏地走遍全表。
+    列这一维也是**显示序**:按屏幕上站的次序往右找(#111)。 }
   total := DisplayRowCount * n;
   for i := 1 to total do
   begin
-    flat := (startPos * n + FCol + i) mod total;
+    flat := (startPos * n + ColumnPlace(FCol) + i) mod total;
     pos := flat div n;
-    c := flat mod n;
+    c := ColumnAtPlace(flat mod n);
     dataRow := DisplayToData(pos);
     if dataRow < 0 then Continue;                 { 分组行跳过 }
     if TyGridMatches(GetCellText(c, dataRow), AText, ACaseSensitive, AWholeCell) then
@@ -14026,7 +14218,7 @@ end;
 function TTyStringGrid.ReplaceCells(const AFind, AReplace: string;
   ACaseSensitive, AWholeCell, AAll: Boolean): Integer;
 var
-  pos, c, dataRow: Integer;
+  pos, p, c, dataRow: Integer;
   cur: string;
   flags: TReplaceFlags;
 begin
@@ -14046,8 +14238,9 @@ begin
     begin
       dataRow := DisplayToData(pos);
       if dataRow < 0 then Continue;
-      for c := 0 to Header.Columns.Count - 1 do
+      for p := 0 to Header.Columns.Count - 1 do
       begin
+        c := ColumnAtPlace(p);             { 与 FindCell 同序:屏幕上从左往右(#111) }
         cur := GetCellText(c, dataRow);
         if not TyGridMatches(cur, AFind, ACaseSensitive, AWholeCell) then Continue;
         if EditorKindFor(c, dataRow) = gekNone then Continue;    { 只读格不动 }
@@ -14112,7 +14305,7 @@ end;
 function TTyStringGrid.SelectionAsText: string;
 var
   sel: TRect;
-  pos, cIdx, dataRow: Integer;
+  pos, p, dataRow: Integer;
   sb: TStringList;
   line: string;
 begin
@@ -14125,16 +14318,17 @@ begin
 
   sb := TStringList.Create;
   try
-    { 按**显示序**导出 —— 用户复制的是他看到的那块,不是底层行号区间。 }
+    { 按**显示序**导出 —— 用户复制的是他看到的那块,不是底层行号区间。
+      列也一样,按屏幕上站的次序(#111)。 }
     for pos := sel.Top to sel.Bottom do
     begin
       dataRow := DisplayToData(pos);
       if dataRow < 0 then Continue;   { 分组行不是数据,别导成一行空格子 }
       line := '';
-      for cIdx := sel.Left to sel.Right do
+      for p := sel.Left to sel.Right do
       begin
-        if cIdx > sel.Left then line := line + #9;
-        line := line + GetCellText(cIdx, dataRow);
+        if p > sel.Left then line := line + #9;
+        line := line + GetCellText(ColumnAtPlace(p), dataRow);
       end;
       sb.Add(line);
     end;
@@ -14159,7 +14353,7 @@ end;
 procedure TTyStringGrid.PasteFromText(const AText: string);
 var
   lines: TStringList;
-  i, j, targetRow, startPos, needRows, needCols, maxCols: Integer;
+  i, j, c, targetRow, startPos, startPlace, needRows, needCols, maxCols: Integer;
   parts: TStringArray;
   txt, cellTxt: string;
   allow: Boolean;
@@ -14213,10 +14407,12 @@ begin
         j := Length(lines[i].Split(#9));
         if j > maxCols then maxCols := j;
       end;
-      needCols := FCol + maxCols - Header.Columns.Count;
+      needCols := ColumnPlace(FCol) + maxCols - Header.Columns.Count;
       if needCols > 0 then InsertCols(Header.Columns.Count, needCols);
     end;
 
+    { 列也按**屏幕次序**往右铺,与复制端对称(#111)。 }
+    startPlace := ColumnPlace(FCol);
     for i := 0 to lines.Count - 1 do
     begin
       { 粘贴按**显示序**落位:从光标所在的显示行往下铺,
@@ -14226,18 +14422,19 @@ begin
       parts := lines[i].Split(#9);
       for j := 0 to High(parts) do
       begin
-        if FCol + j >= Header.Columns.Count then Break;
-        if EditorKindFor(FCol + j, targetRow) = gekNone then Continue;  { 只读列跳过 }
+        if startPlace + j >= Header.Columns.Count then Break;
+        c := ColumnAtPlace(startPlace + j);
+        if EditorKindFor(c, targetRow) = gekNone then Continue;  { 只读列跳过 }
 
         cellTxt := parts[j];
         allow := True;
         if Assigned(FOnBeforePasteCell) then
-          FOnBeforePasteCell(Self, FCol + j, targetRow, cellTxt, allow);
+          FOnBeforePasteCell(Self, c, targetRow, cellTxt, allow);
         if not allow then Continue;
 
-        Cells[FCol + j, targetRow] := cellTxt;
+        Cells[c, targetRow] := cellTxt;
         if Assigned(FOnAfterPasteCell) then
-          FOnAfterPasteCell(Self, FCol + j, targetRow);
+          FOnAfterPasteCell(Self, c, targetRow);
       end;
     end;
   finally
@@ -15123,8 +15320,10 @@ begin
   if a < 0 then a := c;
   if c < 0 then c := a;
 
-  Result.Left   := Min(FSelAnchorCol, FCol);
-  Result.Right  := Max(FSelAnchorCol, FCol);
+  { 列也在**显示序**空间里:锚点与光标存的是列下标(列的身份),框住的是屏幕上
+    两者之间站着的那几列 —— 拖过列之后,下标区间与屏幕上的那一段不是一回事(#111)。 }
+  Result.Left   := Min(ColumnPlace(FSelAnchorCol), ColumnPlace(FCol));
+  Result.Right  := Max(ColumnPlace(FSelAnchorCol), ColumnPlace(FCol));
   Result.Top    := Min(a, c);
   Result.Bottom := Max(a, c);
 end;
@@ -15143,17 +15342,19 @@ end;
 
 function TTyStringGrid.IsCellSelected(ACol, ARow: Integer): Boolean;
 var
-  rp, i: Integer;
+  rp, cp, i: Integer;
 begin
   Result := False;
   if (ACol < 0) or (ARow < 0) then Exit;
   rp := DataToDisplay(ARow);
   if rp < 0 then Exit;               { 被筛掉的行不参与 }
 
-  { 活动矩形 + 已提交的离散矩形。FSelRects 为空时就是从前的单矩形行为。 }
-  if TyGridRectHolds(ActiveSelectionRect, ACol, rp, FSelectionMode) then Exit(True);
+  { 活动矩形 + 已提交的离散矩形。FSelRects 为空时就是从前的单矩形行为。
+    矩形在显示序空间里,列也一样 —— 问的是这一列**站在**第几(#111)。 }
+  cp := ColumnPlace(ACol);
+  if TyGridRectHolds(ActiveSelectionRect, cp, rp, FSelectionMode) then Exit(True);
   for i := 0 to High(FSelRects) do
-    if TyGridRectHolds(FSelRects[i], ACol, rp, FSelectionMode) then Exit(True);
+    if TyGridRectHolds(FSelRects[i], cp, rp, FSelectionMode) then Exit(True);
 end;
 
 procedure TTyStringGrid.CommitActiveSelection;
@@ -15205,9 +15406,10 @@ begin
     if d >= 0 then begin lastData := d; Break; end;
   end;
 
-  FSelAnchorCol := 0;
+  { 列的两头也按屏幕次序取(#111)。 }
+  FSelAnchorCol := ColumnAtPlace(0);
   FSelAnchorRow := firstData;
-  FCol := Header.Columns.Count - 1;
+  FCol := ColumnAtPlace(Header.Columns.Count - 1);
   FRow := lastData;
   SelectionChanged;
 end;
@@ -15241,7 +15443,7 @@ end;
 procedure TTyStringGrid.SelectRows(ARow1, ARow2: Integer);
 begin
   if Header.Columns.Count = 0 then Exit;
-  SelectRange(0, ARow1, Header.Columns.Count - 1, ARow2);
+  SelectRange(ColumnAtPlace(0), ARow1, ColumnAtPlace(Header.Columns.Count - 1), ARow2);
 end;
 
 procedure TTyStringGrid.ClearSelection;
@@ -15271,10 +15473,10 @@ begin
   if (AIndex < 0) or (AIndex >= GetSelectedRangeCount) then Exit;
   if AIndex = 0 then r := ActiveSelectionRect
   else r := FSelRects[AIndex - 1];
-  { 内部按显示序存,对外一律数据行 —— 与 GetSelection 同一条纪律,
-    否则宿主拿到的 Top/Bottom 没法直接索引 Cells。 }
-  Result.Left := r.Left;
-  Result.Right := r.Right;
+  { 内部按显示序存,对外一律数据行、列下标 —— 与 GetSelection 同一条纪律,
+    否则宿主拿到的四个数没法直接索引 Cells。 }
+  Result.Left := ColumnAtPlace(r.Left);
+  Result.Right := ColumnAtPlace(r.Right);
   Result.Top := DisplayToData(r.Top);
   Result.Bottom := DisplayToData(r.Bottom);
 end;
@@ -15289,9 +15491,11 @@ var
   r: TRect;
 begin
   r := ActiveSelectionRect;
-  { 对外一律用**数据行**坐标:显示序是内部表示,宿主拿到手要能直接索引 Cells。 }
-  Result.Left := r.Left;
-  Result.Right := r.Right;
+  { 对外一律用**数据行**坐标与**列下标**:显示序是内部表示,宿主拿到手要能直接
+    索引 Cells。列被拖过之后,Left / Right 是屏幕上两头那两列的下标(#111),
+    Left 可能比 Right 大 —— 与排过序的行同理。 }
+  Result.Left := ColumnAtPlace(r.Left);
+  Result.Right := ColumnAtPlace(r.Right);
   Result.Top := DisplayToData(r.Top);
   Result.Bottom := DisplayToData(r.Bottom);
 end;
@@ -16221,7 +16425,7 @@ begin
   { 裁到选区**所属的那个窗格**,而不是笼统裁到正文窗格。
     光标停在固定行上时,柄会探进正文窗格一个像素 —— 而正文窗格是会被
     滚动平移的,那一个像素于是跟着跑,脏区快路径与整幅重画就对不上了。 }
-  DrawInPane(P, CellPane(r.Right, r.Bottom), M, @DrawFrameAndHandle);
+  DrawInPane(P, CellPane(ColumnAtPlace(r.Right), r.Bottom), M, @DrawFrameAndHandle);
 end;
 
 procedure TTyStringGrid.RenderCells(P: TTyPainter; const M: TTyGridMetrics;
