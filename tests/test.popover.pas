@@ -45,6 +45,9 @@ type
     procedure TestFrameSizeSpendsNoGapWithoutContent;
     procedure TestArrowPointsPerSide;
     procedure TestArrowPointsNoneWithoutArrow;
+    procedure TestTipMarginAddsTheCornerInset;
+    procedure TestPlaceKeepsTheTipOffTheCorners;
+    procedure TestLayoutKeepsTheArrowOffTheCorners;
   end;
 
   { Headless component behaviour: typeKeys, defaults, theme-driven measurement + placement,
@@ -92,6 +95,10 @@ type
     procedure TestGradientBodyDrawsNoArrow;
     procedure TestTitleBandFillsItsThemeBackground;
     procedure TestNoThemedBackgroundDrawsNothing;
+    procedure TestGeometryKeepsTheTipOnTheStraightRun;
+    procedure TestBorderlessInsetIsTheRadiusAlone;
+    procedure TestRoundedCornerBesideTheArrowStaysACurve;
+    procedure TestArrowSidesCarryTheBorder;
   end;
 
 implementation
@@ -638,6 +645,50 @@ begin
   // And nothing to draw when the strip could not be carved at all.
   L := TyPopoverLayout(224, 6, psvBottom, 112, True, False, 12, 10, 12, 10, 16, 6, 8);
   AssertFalse('degenerate frame, no points', TyPopoverArrowPoints(L, psvBottom, tip, b1, b2));
+end;
+
+procedure TTyPopoverRulesTest.TestTipMarginAddsTheCornerInset;
+begin
+  // The base stays a half-base PLUS the corner's curve in from each end of the edge...
+  AssertEquals('half-base + corner', 14, TyPopoverTipMargin(224, 8, 6));
+  AssertEquals('no corner: the old rule', 8, TyPopoverTipMargin(224, 8, 0));
+  // ...unless the edge cannot hold both margins: then the old rule is all that is left.
+  AssertEquals('too short for both margins', 8, TyPopoverTipMargin(27, 8, 6));
+  AssertEquals('exactly long enough', 14, TyPopoverTipMargin(28, 8, 6));
+end;
+
+procedure TTyPopoverRulesTest.TestPlaceKeepsTheTipOffTheCorners;
+var
+  g: TTyPopoverGeometry;
+begin
+  // TestTipClampedIntoFrame's frame, but with a 6px corner: the tip slides in past the curve
+  // as well as the half-base, at both ends of the edge.
+  g := TyPopoverPlace(Rect(0, 100, 16, 124), 224, 128,
+    Rect(0, 0, 200, 1040), ppBottom, 4, 8, 6);
+  AssertEquals('frame hugs the work area left', 0, g.Frame.Left);
+  AssertEquals('tip clamped past the corner', 14, g.TipX);
+  g := TyPopoverPlace(Rect(1900, 100, 1920, 124), 224, 128,
+    Rect(0, 0, 1920, 1040), ppBottom, 4, 8, 6);
+  AssertEquals('and at the far end', g.Frame.Right - 14, g.TipX);
+  // The horizontal axis follows the same rule.
+  g := TyPopoverPlace(Rect(100, 0, 180, 10), 224, 128,
+    Rect(0, 0, 1920, 1040), ppRight, 4, 8, 6);
+  AssertEquals('beside: tip clamped past the corner', g.Frame.Top + 14, g.TipY);
+end;
+
+procedure TTyPopoverRulesTest.TestLayoutKeepsTheArrowOffTheCorners;
+var
+  L: TTyPopoverLayout;
+begin
+  // A tip asked for at the very corner: the wedge's base starts after the 6px curve.
+  L := TyPopoverLayout(224, 128, psvBottom, 0, True, False, 12, 10, 12, 10, 16, 6, 8, 6);
+  AssertEquals('apex past the corner', 14, L.ArrowTip.X);
+  AssertEquals('base starts where the straight run does', 6, L.ArrowRect.Left);
+  L := TyPopoverLayout(224, 128, psvBottom, 224, True, False, 12, 10, 12, 10, 16, 6, 8, 6);
+  AssertEquals('base ends where the straight run does', 224 - 6, L.ArrowRect.Right);
+  // No inset: exactly the old clamp.
+  L := TyPopoverLayout(224, 128, psvBottom, 0, True, False, 12, 10, 12, 10, 16, 6, 8);
+  AssertEquals('old rule without an inset', 8, L.ArrowTip.X);
 end;
 
 { ============================ TTyPopoverComponentTest ============================ }
@@ -1390,6 +1441,151 @@ begin
   finally
     P.Free;
     Bmp.Free;
+  end;
+end;
+
+const
+  { D4 fixtures: a rounded body with an opaque 4px border (StrokeBorder centres on an inset
+    line, so a 1px border is a ~50% blend that proves nothing), lime fill, blue border, on
+    the clRed sentinel ground. }
+  CRoundBordered = 'TyPopover { background: #00FF00; color: #111111; border-radius: 8px;'
+    + ' border: 4px solid #0000FF; padding: 10px 12px; font-size: 12px; }';
+  CRoundBorderless = 'TyPopover { background: #00FF00; color: #111111; border-radius: 8px;'
+    + ' padding: 10px 12px; font-size: 12px; }';
+  CSquareBordered = 'TyPopover { background: #00FF00; color: #111111; border-radius: 0px;'
+    + ' border: 4px solid #0000FF; padding: 10px 12px; font-size: 12px; }';
+
+function IsSentinel(const APx: TBGRAPixel): Boolean;
+begin
+  Result := (APx.red > 200) and (APx.green < 60) and (APx.blue < 60);
+end;
+
+function IsBorderBlue(const APx: TBGRAPixel): Boolean;
+begin
+  Result := (APx.blue > 150) and (APx.green < 120) and (APx.red < 120);
+end;
+
+{ Paint P into a fresh AW x AH sentinel ground and hand back a readable copy. }
+function RenderOnSentinel(P: TPopAccess; AW, AH: Integer; ASide: TTyPopoverSide;
+  ATipLocal: Integer): TBGRABitmap;
+var
+  Bmp: TBitmap;
+begin
+  Bmp := TBitmap.Create;
+  try
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(AW, AH);
+    Bmp.Canvas.Brush.Color := clRed;
+    Bmp.Canvas.FillRect(0, 0, AW, AH);
+    P.RenderTo(Bmp.Canvas, Rect(0, 0, AW, AH), ASide, ATipLocal, 96);
+    Result := TBGRABitmap.Create(Bmp);
+  finally
+    Bmp.Free;
+  end;
+end;
+
+{ TestGeometryKeepsTheTipOnTheStraightRun
+  The anchor sits at the work area's far left, so the frame hugs that edge and the tip is
+  clamped. With an 8px corner and a 4px border it must come to rest a half-base (8) + the
+  corner (8) + the border (4) in -- the wedge's base then starts where the outline's straight
+  run does. Placement and layout agree on it. }
+procedure TTyPopoverComponentTest.TestGeometryKeepsTheTipOnTheStraightRun;
+var
+  P: TTyPopover;
+  g: TTyPopoverGeometry;
+  L: TTyPopoverLayout;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap,
+    CRoundBordered));
+  P := NewPopover;
+  try
+    g := P.GeometryIn(Rect(0, 100, 10, 124), Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    AssertEquals('frame hugs the work area', 0, g.Frame.Left);
+    AssertEquals('tip = half-base + corner + border in', 8 + 8 + 4, g.TipX - g.Frame.Left);
+    L := P.LayoutIn(g.Frame.Right - g.Frame.Left, g.Frame.Bottom - g.Frame.Top, g.Side, 0, 96);
+    AssertEquals('the layout clamps to the same place', 20, L.ArrowTip.X);
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyPopoverComponentTest.TestBorderlessInsetIsTheRadiusAlone;
+var
+  P: TTyPopover;
+  g: TTyPopoverGeometry;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap,
+    CRoundBorderless));
+  P := NewPopover;
+  try
+    g := P.GeometryIn(Rect(0, 100, 10, 124), Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    AssertEquals('no border: half-base + corner', 8 + 8, g.TipX - g.Frame.Left);
+  finally
+    P.Free;
+  end;
+end;
+
+{ TestRoundedCornerBesideTheArrowStaysACurve
+  Asked for a tip at the very corner (0), a wedge whose base started inside the 8px curve
+  sent the outline back along the top edge: the stroke drew a border bar straight across the
+  rounded corner. Pixel (1,9) is just inside the body's top edge (y=8) and well outside the
+  corner's arc, so on a correct balloon it is the sentinel ground -- neither border nor fill. }
+procedure TTyPopoverComponentTest.TestRoundedCornerBesideTheArrowStaysACurve;
+var
+  P: TPopAccess;
+  R: TBGRABitmap;
+  Px: TBGRAPixel;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap,
+    CRoundBordered));
+  P := TPopAccess(NewPopover);
+  try
+    R := RenderOnSentinel(P, 224, 128, psvBottom, 0);
+    try
+      Px := R.GetPixel(1, 9);
+      AssertTrue(Format('the corner outside the curve is untouched (got %d,%d,%d)',
+        [Px.red, Px.green, Px.blue]), IsSentinel(Px));
+      // And the balloon is still there: the body's middle is the fill.
+      Px := R.GetPixel(112, 64);
+      AssertTrue('the body still paints', (Px.green > 180) and (Px.red < 120));
+    finally
+      R.Free;
+    end;
+  finally
+    P.Free;
+  end;
+end;
+
+{ TestArrowSidesCarryTheBorder
+  One outline: the two slanted sides of the wedge are stroked with the border colour (which a
+  wedge pasted onto a box never had), while the base under the apex stays fill. }
+procedure TTyPopoverComponentTest.TestArrowSidesCarryTheBorder;
+var
+  P: TPopAccess;
+  R: TBGRABitmap;
+  Px: TBGRAPixel;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap,
+    CSquareBordered));
+  P := TPopAccess(NewPopover);
+  try
+    R := RenderOnSentinel(P, 224, 128, psvBottom, 112);
+    try
+      // The stroke's centreline runs (104,10)-(112,2)-(120,10): both pixels sit on it.
+      Px := R.GetPixel(106, 8);
+      AssertTrue(Format('left slant is border (got %d,%d,%d)', [Px.red, Px.green, Px.blue]),
+        IsBorderBlue(Px));
+      Px := R.GetPixel(118, 8);
+      AssertTrue(Format('right slant is border (got %d,%d,%d)', [Px.red, Px.green, Px.blue]),
+        IsBorderBlue(Px));
+      Px := R.GetPixel(112, 9);
+      AssertTrue(Format('the base under the apex is fill (got %d,%d,%d)',
+        [Px.red, Px.green, Px.blue]), (Px.green > 180) and (Px.blue < 120));
+    finally
+      R.Free;
+    end;
+  finally
+    P.Free;
   end;
 end;
 
