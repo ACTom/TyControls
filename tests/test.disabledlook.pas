@@ -9,7 +9,7 @@ interface
 uses
   Classes, SysUtils, Controls, Graphics, Forms, fpcunit, testregistry, BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.Panel, tyControls.Edit,
-  tyControls.TyLabel, tyControls.TreeView, tyControls.Gauge, test.dpi.support;
+  tyControls.TyLabel, tyControls.TreeView, tyControls.Gauge, tyControls.Button, test.dpi.support;
 
 type
   TDisabledLookTest = class(TTestCase)
@@ -25,6 +25,7 @@ type
     procedure TestADisabledTreesNodesGrey;
     procedure TestADisabledGaugeArcDims;
     procedure TestASkinThatDressesLabelsStillGreysThem;
+    procedure TestAPressedButtonInADisabledPanelLooksDisabled;
   end;
 
 implementation
@@ -42,6 +43,15 @@ type
   public
     function Style: TTyStyleSet;
   end;
+  TButtonAcc = class(TTyButton)
+  public
+    function States: TTyStateSet;
+  end;
+
+function TButtonAcc.States: TTyStateSet;
+begin
+  Result := CurrentStates;
+end;
 
 function TEditAcc.Style: TTyStyleSet;
 begin
@@ -217,6 +227,21 @@ begin
     FreeAndNil(FForm);   // the label goes before its controller
     ctl.Free;
   end;
+end;
+
+procedure TDisabledLookTest.TestAPressedButtonInADisabledPanelLooksDisabled;
+var
+  p: TTyPanel;
+  b: TButtonAcc;
+begin
+  p := TTyPanel.Create(FForm);
+  p.Parent := FForm;
+  b := TButtonAcc.Create(FForm);
+  b.Parent := p;
+  b.Down := True;
+  p.Enabled := False;
+  AssertTrue('disabled with its panel', tysDisabled in b.States);
+  AssertFalse('and not drawn pressed on top of it', tysSelected in b.States);
 end;
 
 initialization
