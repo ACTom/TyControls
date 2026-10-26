@@ -26,7 +26,9 @@ unit tyControls.Popover;
   Everything that is a RULE — where the popup lands, which way it flips, what its frame
   holds — is a free function taking plain ints, so the whole geometry is exercisable with
   no window and no screen. Only putting the window up needs a real machine; verify the LOOK
-  there (and note the arrow/border cosmetic in DrawArrow). }
+  there. (Body and arrow are one outline -- TTyPainter.FillPointerShape -- so no border runs
+  across the arrow's base, and the base is kept on the straight run between the body's
+  rounded corners: TyPopoverTipMargin.) }
 
 interface
 
@@ -132,6 +134,10 @@ function TyPopoverSideIsVertical(ASide: TTyPopoverSide): Boolean;
     AOffset    — gap between the anchor's edge and the frame's near edge.
     AArrowSize — the arrow's half-base; needed here only to keep the tip far enough from the
                  frame's corners that the triangle's base still lands ON the frame.
+    ACornerInset — how much further in from each end of the edge the base must stay: the
+                 body's corner radius (plus its border), so the wedge leaves the outline on
+                 the STRAIGHT run between two rounded corners rather than on a curve. 0 = the
+                 old rule. A frame too short for both margins falls back to AArrowSize alone.
 
   Main axis (the side): the requested side is honoured when the frame fits between the anchor
   and the work-area edge. When it does not and the OPPOSITE side does, the popup FLIPS — that
@@ -149,7 +155,13 @@ function TyPopoverSideIsVertical(ASide: TTyPopoverSide): Boolean;
   Headless-safe: no control state, no handle, no screen — the tests call it directly. }
 function TyPopoverPlace(const AAnchor: TRect; AFrameW, AFrameH: Integer;
   const AWorkArea: TRect; APlacement: TTyPopoverPlacement;
-  AOffset, AArrowSize: Integer): TTyPopoverGeometry;
+  AOffset, AArrowSize: Integer; ACornerInset: Integer = 0): TTyPopoverGeometry;
+
+{ How far from each end of an edge AExtent long the arrow's apex must stay: the half-base
+  plus ACornerInset, or the half-base alone when the edge is too short for both. The one
+  rule TyPopoverPlace and TyPopoverLayout share, so the tip the placement aims and the
+  wedge the layout carves cannot disagree. }
+function TyPopoverTipMargin(AExtent, AArrowSize, ACornerInset: Integer): Integer;
 
 { The tip's frame-local cross-axis coordinate — the one number TyPopoverLayout needs out of a
   geometry, and the only place the two coordinate spaces meet. }
@@ -166,6 +178,7 @@ function TyPopoverTipLocal(const AGeometry: TTyPopoverGeometry): Integer;
     ATitleH    — the measured title line height.
     ATitleGap  — the gap between the title and the content; spent only when BOTH are there.
     AArrowSize — the arrow's half-base and the strip's thickness.
+    ACornerInset — as TyPopoverPlace's: keeps the wedge on the straight run of the edge.
 
   The frame is carved in one order: strip, then body, then padding, then title, then content.
   The content is the only elastic part, and it collapses to empty rather than showing a sliver
@@ -174,7 +187,8 @@ function TyPopoverTipLocal(const AGeometry: TTyPopoverGeometry): Integer;
   frame) leaves every rect empty rather than inverted. }
 function TyPopoverLayout(AFrameW, AFrameH: Integer; ASide: TTyPopoverSide; ATipLocal: Integer;
   AShowArrow, AHasTitle: Boolean;
-  APadL, APadT, APadR, APadB, ATitleH, ATitleGap, AArrowSize: Integer): TTyPopoverLayout;
+  APadL, APadT, APadR, APadB, ATitleH, ATitleGap, AArrowSize: Integer;
+  ACornerInset: Integer = 0): TTyPopoverLayout;
 
 { The frame that holds AContentW x AContentH of content whole — the INVERSE of TyPopoverLayout:
   feed the result back in as AFrameW/AFrameH (same other arguments) and ContentRect comes out
@@ -273,6 +287,12 @@ type
       Returns the geometry it placed to. }
     function BeginShowing(const AAnchorScreen, AWorkArea: TRect;
       APPI: Integer): TTyPopoverGeometry;
+    { How far in from each end of its edge the arrow's base must stay so it leaves the
+      outline on a straight run: the body's largest corner radius (clamped the way the
+      painter clamps it, to half the body's shorter side) plus its border width, device px.
+      The largest of the four rather than the two on the arrow's edge, because the side is
+      not known until the placement has decided whether to flip. }
+    function CornerInsetAt(AFrameW, AFrameH, APPI: Integer): Integer;
     { The two typeKeys, resolved with the user's StyleClass. }
     function PopoverStyle: TTyStyleSet;
     function TitleStyle: TTyStyleSet;
@@ -459,13 +479,23 @@ begin
   if Result < 0 then Result := 0;
 end;
 
+function TyPopoverTipMargin(AExtent, AArrowSize, ACornerInset: Integer): Integer;
+begin
+  if AArrowSize < 0 then AArrowSize := 0;
+  if ACornerInset < 0 then ACornerInset := 0;
+  Result := AArrowSize + ACornerInset;
+  // An edge too short to keep the base clear of BOTH corners: the old rule (base on the
+  // frame) is all that is left. The wedge then meets a curve, which beats no wedge at all.
+  if 2 * Result > AExtent then Result := AArrowSize;
+end;
+
 function TyPopoverPlace(const AAnchor: TRect; AFrameW, AFrameH: Integer;
   const AWorkArea: TRect; APlacement: TTyPopoverPlacement;
-  AOffset, AArrowSize: Integer): TTyPopoverGeometry;
+  AOffset, AArrowSize: Integer; ACornerInset: Integer): TTyPopoverGeometry;
 var
   chosen, other: TTyPopoverSide;
   algn: TTyPopoverAlign;
-  need, x, y, lo, hi: Integer;
+  need, x, y, lo, hi, margin: Integer;
 begin
   if AFrameW < 0 then AFrameW := 0;
   if AFrameH < 0 then AFrameH := 0;
@@ -520,12 +550,14 @@ begin
 
   Result.Frame := Rect(x, y, x + AFrameW, y + AFrameH);
 
-  // --- the tip: the anchor's centre, clamped so its base still lands on the frame ---
+  // --- the tip: the anchor's centre, clamped so its base still lands on the frame, on the
+  //     straight run between the body's rounded corners ---
   if TyPopoverSideIsVertical(chosen) then
   begin
     Result.TipX := (AAnchor.Left + AAnchor.Right) div 2;
-    lo := Result.Frame.Left + AArrowSize;
-    hi := Result.Frame.Right - AArrowSize;
+    margin := TyPopoverTipMargin(AFrameW, AArrowSize, ACornerInset);
+    lo := Result.Frame.Left + margin;
+    hi := Result.Frame.Right - margin;
     if Result.TipX < lo then Result.TipX := lo;
     if Result.TipX > hi then Result.TipX := hi;
     if chosen = psvBottom then Result.TipY := Result.Frame.Top
@@ -534,8 +566,9 @@ begin
   else
   begin
     Result.TipY := (AAnchor.Top + AAnchor.Bottom) div 2;
-    lo := Result.Frame.Top + AArrowSize;
-    hi := Result.Frame.Bottom - AArrowSize;
+    margin := TyPopoverTipMargin(AFrameH, AArrowSize, ACornerInset);
+    lo := Result.Frame.Top + margin;
+    hi := Result.Frame.Bottom - margin;
     if Result.TipY < lo then Result.TipY := lo;
     if Result.TipY > hi then Result.TipY := hi;
     if chosen = psvRight then Result.TipX := Result.Frame.Left
@@ -553,9 +586,10 @@ end;
 
 function TyPopoverLayout(AFrameW, AFrameH: Integer; ASide: TTyPopoverSide; ATipLocal: Integer;
   AShowArrow, AHasTitle: Boolean;
-  APadL, APadT, APadR, APadB, ATitleH, ATitleGap, AArrowSize: Integer): TTyPopoverLayout;
+  APadL, APadT, APadR, APadB, ATitleH, ATitleGap, AArrowSize: Integer;
+  ACornerInset: Integer): TTyPopoverLayout;
 var
-  strip, bandL, bandT, bandR, bandB, extent, aL, aR, y: Integer;
+  strip, bandL, bandT, bandR, bandB, extent, aL, aR, y, margin: Integer;
 begin
   Result.BodyRect := Rect(0, 0, 0, 0);
   Result.ArrowRect := Rect(0, 0, 0, 0);
@@ -595,10 +629,14 @@ begin
   if AShowArrow and (AArrowSize > 0) then
   begin
     if TyPopoverSideIsVertical(ASide) then extent := AFrameW else extent := AFrameH;
-    // The tip's base must land ON the frame; a frame narrower than the whole base simply
-    // clamps the box into it (the triangle degenerates rather than spilling out).
-    if ATipLocal < AArrowSize then ATipLocal := AArrowSize;
-    if ATipLocal > extent - AArrowSize then ATipLocal := extent - AArrowSize;
+    // The tip's base must land ON the frame, and on the straight run between the body's
+    // rounded corners (ACornerInset): a base that starts inside a corner's curve makes the
+    // outline run back along the edge and strokes a border line across the corner. A frame
+    // narrower than the whole base simply clamps the box into it (the triangle degenerates
+    // rather than spilling out).
+    margin := TyPopoverTipMargin(extent, AArrowSize, ACornerInset);
+    if ATipLocal < margin then ATipLocal := margin;
+    if ATipLocal > extent - margin then ATipLocal := extent - margin;
     aL := ATipLocal - AArrowSize;
     aR := ATipLocal + AArrowSize;
     if aL < 0 then aL := 0;
@@ -957,7 +995,36 @@ begin
   if APPI <= 0 then APPI := 96;
   sz := MeasureFrameAtPPI(APPI);
   Result := TyPopoverPlace(AAnchorScreen, sz.cx, sz.cy, AWorkArea, FPlacement,
-    MulDiv(OffsetLogical, APPI, 96), MulDiv(ArrowSizeLogical, APPI, 96));
+    MulDiv(OffsetLogical, APPI, 96), MulDiv(ArrowSizeLogical, APPI, 96),
+    CornerInsetAt(sz.cx, sz.cy, APPI));
+end;
+
+function TTyCustomPopover.CornerInsetAt(AFrameW, AFrameH, APPI: Integer): Integer;
+var
+  S: TTyStyleSet;
+  c: TTyCorners;
+  r, bodyW, bodyH, strip: Integer;
+begin
+  if APPI <= 0 then APPI := 96;
+  S := PopoverStyle;
+  c := TyEffectiveCorners(S);
+  r := c.TL;
+  if c.TR > r then r := c.TR;
+  if c.BR > r then r := c.BR;
+  if c.BL > r then r := c.BL;
+  // The body, not the frame: the strip is no part of the curve.
+  bodyW := AFrameW;
+  bodyH := AFrameH;
+  if FShowArrow then
+  begin
+    strip := MulDiv(ArrowSizeLogical, APPI, 96);
+    if TyPopoverSideIsVertical(TyPopoverSide(FPlacement)) then Dec(bodyH, strip)
+    else Dec(bodyW, strip);
+  end;
+  Result := TyClampRadiusPx(MulDiv(r, APPI, 96), bodyW, bodyH);
+  if Result < 0 then Result := 0;
+  // The stroke rides an inset centreline, so its curve starts that much further in.
+  if TyBorderVisible(S) then Inc(Result, MulDiv(S.BorderWidth, APPI, 96));
 end;
 
 function TTyPopover.LayoutIn(AFrameW, AFrameH: Integer; ASide: TTyPopoverSide;
@@ -973,7 +1040,7 @@ begin
     MulDiv(S.Padding.Left, APPI, 96), MulDiv(S.Padding.Top, APPI, 96),
     MulDiv(S.Padding.Right, APPI, 96), MulDiv(S.Padding.Bottom, APPI, 96),
     TitleHeightAt(APPI), MulDiv(TitleGapLogical, APPI, 96),
-    MulDiv(ArrowSizeLogical, APPI, 96));
+    MulDiv(ArrowSizeLogical, APPI, 96), CornerInsetAt(AFrameW, AFrameH, APPI));
 end;
 
 // ---------------------------------------------------------------------------
