@@ -176,7 +176,7 @@ type
   published
     procedure TestAutoDisplayOffShowsTheLabelUntilEnter;
     procedure TestNothingIsTypedIntoTheUnloadedLabel;
-    procedure TestLinesAddIsNotAnEdit;
+    procedure TestLinesAddIsAnEditAsTextIs;
     procedure TestNonBlobFieldShowsDisplayTextUnfocused;
     procedure TestOldValuePutBackAfterAWriteIsWritten;
   end;
@@ -1004,14 +1004,18 @@ begin
   AssertEquals('and nothing is written', CFixNotes[1], BoundField.AsString);
 end;
 
-{ Lines is handed out bare and a change through it does not notify the memo (Memo.pas,
-  LinesChanged): code appending a line is not the user editing the record. }
-procedure TDBMemoTest.TestLinesAddIsNotAnEdit;
+{ A change through Lines notifies the memo (#110), as Text := does, so it is what the unit
+  comment of tyControls.DB.Edits counts as an edit: it arrives outside a load and differs from
+  what was loaded. The dataset goes into dsEdit, and the field takes the line. }
+procedure TDBMemoTest.TestLinesAddIsAnEditAsTextIs;
 begin
   Bind('Note');
   Memo.Lines.Add('appended by code');
   AssertEquals('two lines', 2, Memo.Lines.Count);
-  AssertBrowsing('Lines.Add');
+  AssertTrue('Lines.Add: the dataset is being edited', FFix.DS.State = dsEdit);
+  Commit;
+  AssertEquals('the field holds the line', CFixNotes[1] + LineEnding + 'appended by code',
+    BoundField.AsString);
 end;
 
 procedure TDBMemoTest.TestNonBlobFieldShowsDisplayTextUnfocused;

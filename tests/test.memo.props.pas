@@ -23,6 +23,10 @@ type
     function ProbeCaretCol: Integer;
     procedure ProbeSetCaret(ALine, ACol: Integer);
     procedure ProbeSetAnchor(ALine, ACol: Integer);
+    { Inside a form being read, as TReader would put it. }
+    procedure ProbeBeginLoading;
+    procedure ProbeEndLoading;
+    procedure ProbeType(const S: TUTF8Char);
   end;
 
   TTyMemoPropsTest = class(TTestCase)
@@ -41,6 +45,14 @@ type
     procedure TestWantReturnsFalseNoNewline;
     procedure TestWantTabsTrueInsertsTab;
     procedure TestScrollBarsNoneHidesScrollbar;
+    { #110: a change through Lines fires OnChange, as LCL's TMemo does -- as one made by code,
+      so Modified stays as it was; nothing fires while a form is read. }
+    procedure TestAChangeThroughLinesFiresOnChange;
+    procedure TestAssigningLinesFiresOnChangeOnlyWhenTheyDiffer;
+    procedure TestReadingTheFormFiresNoOnChange;
+    { ... while each of the control's own edits, which rewrite the lines too, still reports
+      its change once -- through AfterEdit, not a second time through Lines. }
+    procedure TestEachOwnEditFiresOnChangeOnce;
   end;
 
 implementation
@@ -91,6 +103,24 @@ end;
 procedure TTyMemoPropsProbe.ProbeSetAnchor(ALine, ACol: Integer);
 begin
   SetSelAnchor(ALine, ACol);
+end;
+
+procedure TTyMemoPropsProbe.ProbeType(const S: TUTF8Char);
+var
+  u: TUTF8Char;
+begin
+  u := S;
+  UTF8KeyPress(u);
+end;
+
+procedure TTyMemoPropsProbe.ProbeBeginLoading;
+begin
+  Loading;
+end;
+
+procedure TTyMemoPropsProbe.ProbeEndLoading;
+begin
+  Loaded;
 end;
 
 { TTyMemoPropsTest }
@@ -278,6 +308,99 @@ begin
   // ssVertical forces it visible again.
   FMemo.ScrollBars := ssVertical;
   AssertTrue('ScrollBars=ssVertical shows the bar', FMemo.ProbeScrollBarVisible);
+end;
+
+procedure TTyMemoPropsTest.TestAChangeThroughLinesFiresOnChange;
+begin
+  SetUpMemo;
+  FMemo.Lines.Add('one');
+  AssertEquals('Lines.Add', 1, FChangeCount);
+  FMemo.Lines.Text := 'two' + LineEnding + 'three';
+  AssertEquals('Lines.Text :=', 2, FChangeCount);
+  FMemo.Lines.Delete(0);
+  AssertEquals('Lines.Delete', 3, FChangeCount);
+  FMemo.Lines.BeginUpdate;
+  try
+    FMemo.Lines.Add('four');
+    FMemo.Lines.Add('five');
+  finally
+    FMemo.Lines.EndUpdate;
+  end;
+  AssertEquals('a batch is one change', 4, FChangeCount);
+  AssertFalse('code is not the user editing: Modified stays False', FMemo.Modified);
+end;
+
+procedure TTyMemoPropsTest.TestAssigningLinesFiresOnChangeOnlyWhenTheyDiffer;
+var
+  sl: TStringList;
+begin
+  SetUpMemo;
+  sl := TStringList.Create;
+  try
+    sl.Add('alpha');
+    sl.Add('beta');
+    FMemo.Lines := sl;
+    AssertEquals('an assignment that changes the lines', 1, FChangeCount);
+    FMemo.Lines := sl;
+    AssertEquals('the same lines again change nothing', 1, FChangeCount);
+    AssertFalse('Modified stays False', FMemo.Modified);
+  finally
+    sl.Free;
+  end;
+end;
+
+procedure TTyMemoPropsTest.TestReadingTheFormFiresNoOnChange;
+begin
+  SetUpMemo;
+  FMemo.ProbeBeginLoading;
+  FMemo.Lines.Text := 'read from the form file';
+  FMemo.ProbeEndLoading;
+  AssertEquals('nothing while the form is read', 0, FChangeCount);
+  FMemo.Lines.Add('after');
+  AssertEquals('and the next change fires again', 1, FChangeCount);
+end;
+
+procedure TTyMemoPropsTest.TestEachOwnEditFiresOnChangeOnce;
+var
+  n: Integer;
+
+  procedure Step(const AWhat: string);
+  begin
+    AssertEquals(AWhat + ' fires OnChange once', n + 1, FChangeCount);
+    n := FChangeCount;
+  end;
+
+begin
+  SetUpMemo;
+  FMemo.Text := 'alpha beta' + LineEnding + 'gamma delta';
+  n := 0;
+  FChangeCount := 0;
+  FMemo.ProbeSetCaret(0, 5);
+  FMemo.ProbeType('x');
+  Step('typing');
+  FMemo.ProbeInjectKey(VK_BACK, []);
+  Step('Backspace');
+  FMemo.ProbeInjectKey(VK_DELETE, []);
+  Step('Delete');
+  FMemo.ProbeInjectKey(VK_RETURN, []);
+  Step('Enter');
+  FMemo.ProbeSetCaret(0, 5);
+  FMemo.ProbeInjectKey(VK_BACK, [ssCtrl]);
+  Step('Ctrl+Backspace');
+  FMemo.ProbeSetCaret(0, 0);
+  FMemo.ProbeInjectKey(VK_DELETE, [ssCtrl]);
+  Step('Ctrl+Delete');
+  FMemo.ProbeSetCaret(0, 0);
+  FMemo.SelText := 'one' + LineEnding + 'two';
+  Step('a multi-line SelText');
+  FMemo.Undo;
+  Step('Undo');
+  FMemo.Text := 'reset';
+  Step('Text :=');
+  FMemo.Append('more');
+  Step('Append');
+  FMemo.Clear;
+  Step('Clear');
 end;
 
 initialization

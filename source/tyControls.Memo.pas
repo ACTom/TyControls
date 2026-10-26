@@ -156,6 +156,7 @@ type
     // FVisualRowsWidth records the content width the cache was built at so a
     // resize/scrollbar change forces a rebuild even when FVisualRowsValid was set.
     FInLinesChange: Boolean;   // re-entrancy guard for the Lines change notification
+    FOwnEdit: Integer;         // > 0 while one of the control's own edits rewrites the lines (#110)
     FVisualRows: TTyVisualRowArray;
     FVisualRowsValid: Boolean;
     FVisualRowsWidth: Integer;
@@ -618,6 +619,8 @@ type
     procedure InvalidateVisualRows;
     { Fired by FLines itself, so a mutation made THROUGH the published Lines is seen. }
     procedure LinesChanged(Sender: TObject);
+    { OnChange for a change made by code: Modified stays as it was (#110). }
+    procedure ReportChangeByCode;
     // Map a logical caret (ALine,ACol) to the visual row index that owns it plus
     // the device-x of the caret on that row. At a soft-wrap boundary column the
     // caret binds to the EARLIER (line-end) row (tie-break), so a caret typed at
@@ -1339,66 +1342,71 @@ var
   fi, cp: Integer;
   Num: string;
 begin
-  NL := Pos(#10, S);
-  if NL = 0 then Exit;  // malformed; ignore
-  Header := Copy(S, 1, NL - 1);
-  Body := Copy(S, NL + 1, Length(S) - NL);
-  // Parse the five comma-separated header fields.
-  for fi := 0 to 4 do Fields[fi] := 0;
-  fi := 0;
-  Num := '';
-  for cp := 1 to Length(Header) do
-  begin
-    if Header[cp] = ',' then
+  Inc(FOwnEdit);   // its change is reported by AfterEdit, not by LinesChanged (#110)
+  try
+    NL := Pos(#10, S);
+    if NL = 0 then Exit;  // malformed; ignore
+    Header := Copy(S, 1, NL - 1);
+    Body := Copy(S, NL + 1, Length(S) - NL);
+    // Parse the five comma-separated header fields.
+    for fi := 0 to 4 do Fields[fi] := 0;
+    fi := 0;
+    Num := '';
+    for cp := 1 to Length(Header) do
     begin
-      if fi <= 4 then Fields[fi] := StrToIntDef(Num, 0);
-      Inc(fi);
-      Num := '';
-    end
-    else
-      Num := Num + Header[cp];
-  end;
-  if fi <= 4 then Fields[fi] := StrToIntDef(Num, 0);
-  LineCount := Fields[4];
-  // Rebuild FLines from the body by splitting on #10. We add exactly LineCount
-  // lines so a document with trailing empty line(s) round-trips (do NOT use
-  // FLines.Text, which drops trailing empty lines). When LineCount is 0 the body
-  // is empty and FLines ends up Count=0 (the empty-document state).
-  FLines.Clear;
-  if LineCount > 0 then
-  begin
-    FieldStart := 1;
-    i := 1;
-    while i <= Length(Body) do
-    begin
-      if Body[i] = #10 then
+      if Header[cp] = ',' then
       begin
-        FLines.Add(Copy(Body, FieldStart, i - FieldStart));
-        FieldStart := i + 1;
-      end;
-      Inc(i);
+        if fi <= 4 then Fields[fi] := StrToIntDef(Num, 0);
+        Inc(fi);
+        Num := '';
+      end
+      else
+        Num := Num + Header[cp];
     end;
-    FLines.Add(Copy(Body, FieldStart, Length(Body) - FieldStart + 1));
-    // Defensive: clamp to the recorded line count (the body always has exactly
-    // LineCount-1 separators, so this matches, but stay safe against malformed S).
-    while FLines.Count > LineCount do
-      FLines.Delete(FLines.Count - 1);
-    while FLines.Count < LineCount do
-      FLines.Add('');
+    if fi <= 4 then Fields[fi] := StrToIntDef(Num, 0);
+    LineCount := Fields[4];
+    // Rebuild FLines from the body by splitting on #10. We add exactly LineCount
+    // lines so a document with trailing empty line(s) round-trips (do NOT use
+    // FLines.Text, which drops trailing empty lines). When LineCount is 0 the body
+    // is empty and FLines ends up Count=0 (the empty-document state).
+    FLines.Clear;
+    if LineCount > 0 then
+    begin
+      FieldStart := 1;
+      i := 1;
+      while i <= Length(Body) do
+      begin
+        if Body[i] = #10 then
+        begin
+          FLines.Add(Copy(Body, FieldStart, i - FieldStart));
+          FieldStart := i + 1;
+        end;
+        Inc(i);
+      end;
+      FLines.Add(Copy(Body, FieldStart, Length(Body) - FieldStart + 1));
+      // Defensive: clamp to the recorded line count (the body always has exactly
+      // LineCount-1 separators, so this matches, but stay safe against malformed S).
+      while FLines.Count > LineCount do
+        FLines.Delete(FLines.Count - 1);
+      while FLines.Count < LineCount do
+        FLines.Add('');
+    end;
+    FCaretLine := Fields[0];
+    FCaretCol := Fields[1];
+    FSelAnchorLine := Fields[2];
+    FSelAnchorCol := Fields[3];
+    FDesiredCol := FCaretCol;
+    // Clamp anchor into the restored model (caret is clamped inside AfterEdit).
+    if FSelAnchorLine < 0 then FSelAnchorLine := 0;
+    if FSelAnchorLine > LineCountLogical - 1 then FSelAnchorLine := LineCountLogical - 1;
+    if FSelAnchorCol < 0 then FSelAnchorCol := 0;
+    if FSelAnchorCol > LineLen(FSelAnchorLine) then FSelAnchorCol := LineLen(FSelAnchorLine);
+    // AfterEdit clamps the caret, keeps it visible, refreshes the scrollbar,
+    // repaints and fires OnChange (so undo/redo report a state change for free).
+    AfterEdit(Font.PixelsPerInch);
+  finally
+    Dec(FOwnEdit);
   end;
-  FCaretLine := Fields[0];
-  FCaretCol := Fields[1];
-  FSelAnchorLine := Fields[2];
-  FSelAnchorCol := Fields[3];
-  FDesiredCol := FCaretCol;
-  // Clamp anchor into the restored model (caret is clamped inside AfterEdit).
-  if FSelAnchorLine < 0 then FSelAnchorLine := 0;
-  if FSelAnchorLine > LineCountLogical - 1 then FSelAnchorLine := LineCountLogical - 1;
-  if FSelAnchorCol < 0 then FSelAnchorCol := 0;
-  if FSelAnchorCol > LineLen(FSelAnchorLine) then FSelAnchorCol := LineLen(FSelAnchorLine);
-  // AfterEdit clamps the caret, keeps it visible, refreshes the scrollbar,
-  // repaints and fires OnChange (so undo/redo report a state change for free).
-  AfterEdit(Font.PixelsPerInch);
 end;
 
 procedure TTyCustomMemo.BeginUndoStep(AKind: Byte);
@@ -1716,24 +1724,29 @@ end;
 
 procedure TTyCustomMemo.SetText(const AValue: TCaption);
 begin
-  // Replace all lines from the string (n breaks are n + 1 lines, TTyMemoLines), collapse
-  // the caret/selection to the origin, refresh layout + fire OnChange.
-  BeginUndoStep(uskNone);
-  FLines.Text := ApplyCharCase(AValue);
-  FCaretLine := 0;
-  FCaretCol := 0;
-  FSelAnchorLine := 0;
-  FSelAnchorCol := 0;
-  FDesiredCol := 0;
-  { A programmatic write: OnChange still fires (LCL's does too), but it must not dirty the
-    field -- that difference is the whole content of Modified. }
-  FTextChangeByCode := True;
+  Inc(FOwnEdit);   // its change is reported by AfterEdit, not by LinesChanged (#110)
   try
-    AfterEdit(Font.PixelsPerInch);
+    // Replace all lines from the string (n breaks are n + 1 lines, TTyMemoLines), collapse
+    // the caret/selection to the origin, refresh layout + fire OnChange.
+    BeginUndoStep(uskNone);
+    FLines.Text := ApplyCharCase(AValue);
+    FCaretLine := 0;
+    FCaretCol := 0;
+    FSelAnchorLine := 0;
+    FSelAnchorCol := 0;
+    FDesiredCol := 0;
+    { A programmatic write: OnChange still fires (LCL's does too), but it must not dirty the
+      field -- that difference is the whole content of Modified. }
+    FTextChangeByCode := True;
+    try
+      AfterEdit(Font.PixelsPerInch);
+    finally
+      FTextChangeByCode := False;
+    end;
+    FModified := False;
   finally
-    FTextChangeByCode := False;
+    Dec(FOwnEdit);
   end;
-  FModified := False;
 end;
 
 function TTyCustomMemo.ContentCodepointCount: Integer;
@@ -1768,16 +1781,34 @@ begin
   if FTopRow < 0 then FTopRow := 0;
   UpdateScrollBar;
   Invalidate;
+  { And it is a change: OnChange fires, as LCL's TMemo's does (#110) -- one made by code, so
+    Modified stays as it was. Not for one of the control's own edits, which AfterEdit reports,
+    nor while the form is being read. }
+  if (FOwnEdit = 0) and not (csLoading in ComponentState) then
+    ReportChangeByCode;
+end;
+
+procedure TTyCustomMemo.ReportChangeByCode;
+begin
+  FTextChangeByCode := True;
+  try
+    DoChange;
+  finally
+    FTextChangeByCode := False;
+  end;
 end;
 
 procedure TTyCustomMemo.SetLines(AValue: TStrings);
+var
+  differs: Boolean;   { not "changed": that name is already taken up the inheritance chain }
 begin
   // Capture a fresh (non-typing) undo step only when the assignment actually
   // changes the content, so a no-op reassign does not push a spurious step and
   // TestSetLinesClampsCaret (which never touches undo) is unaffected.
   { By line, not by Text: AValue is an ordinary TStrings whose Text ends every line with a
     break, and FLines' does not (#58), so the two texts never match. }
-  if (AValue = nil) or not FLines.Equals(AValue) then
+  differs := (AValue = nil) or not FLines.Equals(AValue);
+  if differs then
     BeginUndoStep(uskNone);
   FInLinesChange := True;      // the notification would duplicate what follows
   try
@@ -1794,6 +1825,8 @@ begin
   UpdateScrollBar;
   FModified := False;   // loading content into the control is not the user editing it
   Invalidate;
+  if differs and not (csLoading in ComponentState) then
+    ReportChangeByCode;   // #110: an assignment that changes the lines is a change
 end;
 
 function TTyCustomMemo.LineCountLogical: Integer;
@@ -3222,21 +3255,26 @@ var
   Cur, Before, After, Ins: string;
   L: Integer;
 begin
-  if AStr = '' then Exit;
-  { CharCase folds at the single splice point, so typing, IME commits and paste all land
-    already-cased and nothing can enter the model in the wrong case. Identity under the
-    default ecNormal. }
-  Ins := ApplyCharCase(AStr);
-  // Ensure the model has a backing line for the caret.
-  if FLines.Count = 0 then
-    FLines.Add('');
-  Cur := FLines[FCaretLine];
-  L := UTF8Length(Cur);
-  if FCaretCol > L then FCaretCol := L;
-  Before := UTF8Copy(Cur, 1, FCaretCol);
-  After  := UTF8Copy(Cur, FCaretCol + 1, L - FCaretCol);
-  FLines[FCaretLine] := Before + Ins + After;
-  FCaretCol := FCaretCol + UTF8Length(Ins);
+  Inc(FOwnEdit);   // its change is reported by AfterEdit, not by LinesChanged (#110)
+  try
+    if AStr = '' then Exit;
+    { CharCase folds at the single splice point, so typing, IME commits and paste all land
+      already-cased and nothing can enter the model in the wrong case. Identity under the
+      default ecNormal. }
+    Ins := ApplyCharCase(AStr);
+    // Ensure the model has a backing line for the caret.
+    if FLines.Count = 0 then
+      FLines.Add('');
+    Cur := FLines[FCaretLine];
+    L := UTF8Length(Cur);
+    if FCaretCol > L then FCaretCol := L;
+    Before := UTF8Copy(Cur, 1, FCaretCol);
+    After  := UTF8Copy(Cur, FCaretCol + 1, L - FCaretCol);
+    FLines[FCaretLine] := Before + Ins + After;
+    FCaretCol := FCaretCol + UTF8Length(Ins);
+  finally
+    Dec(FOwnEdit);
+  end;
 end;
 
 procedure TTyCustomMemo.DoSplitLine;
@@ -3246,17 +3284,22 @@ var
   Cur, Before, After: string;
   L: Integer;
 begin
-  if FLines.Count = 0 then
-    FLines.Add('');
-  Cur := FLines[FCaretLine];
-  L := UTF8Length(Cur);
-  if FCaretCol > L then FCaretCol := L;
-  Before := UTF8Copy(Cur, 1, FCaretCol);
-  After  := UTF8Copy(Cur, FCaretCol + 1, L - FCaretCol);
-  FLines[FCaretLine] := Before;
-  FLines.Insert(FCaretLine + 1, After);
-  Inc(FCaretLine);
-  FCaretCol := 0;
+  Inc(FOwnEdit);   // its change is reported by AfterEdit, not by LinesChanged (#110)
+  try
+    if FLines.Count = 0 then
+      FLines.Add('');
+    Cur := FLines[FCaretLine];
+    L := UTF8Length(Cur);
+    if FCaretCol > L then FCaretCol := L;
+    Before := UTF8Copy(Cur, 1, FCaretCol);
+    After  := UTF8Copy(Cur, FCaretCol + 1, L - FCaretCol);
+    FLines[FCaretLine] := Before;
+    FLines.Insert(FCaretLine + 1, After);
+    Inc(FCaretLine);
+    FCaretCol := 0;
+  finally
+    Dec(FOwnEdit);
+  end;
 end;
 
 procedure TTyCustomMemo.DoBackspace;
@@ -3267,35 +3310,40 @@ var
   Cur, Prev, Before, After: string;
   L, PrevLen: Integer;
 begin
-  if FCaretCol > 0 then
-  begin
-    Cur := FLines[FCaretLine];
-    L := UTF8Length(Cur);
-    Before := UTF8Copy(Cur, 1, FCaretCol - 1);
-    After  := UTF8Copy(Cur, FCaretCol + 1, L - FCaretCol);
-    // Drop the caret onto its post-delete column BEFORE the assignment. Assigning FLines[...] fires
-    // FLines.OnChange -> LinesChanged -> ClampCaret, which clamps FCaretCol to the now-shorter line.
-    // At end-of-line the old FCaretCol (= old length) is past the new end, so ClampCaret already pulls
-    // it back one; a Dec afterwards would double-decrement -> caret one char too far left. (Same class
-    // of bug as the line-merge branch below: never mutate FLines while the caret is out of range.)
-    Dec(FCaretCol);
-    FLines[FCaretLine] := Before + After;
-  end
-  else
-  begin
-    // col = 0, must be line > 0 (caller guards the (0,0) no-op).
-    Prev := FLines[FCaretLine - 1];
-    Cur  := FLines[FCaretLine];
-    PrevLen := UTF8Length(Prev);
-    FLines[FCaretLine - 1] := Prev + Cur;
-    // Move the caret up onto the merged line BEFORE deleting the current one. FLines.Delete fires
-    // FLines.OnChange -> LinesChanged, which clamps FCaretLine to the new last index. If we delete
-    // while FCaretLine still points at the (about-to-vanish) last line, that clamp already knocks it
-    // down by one, and the Dec would then double-decrement -> caret one line too high. This only bit
-    // the LAST line (any other line stays in range through the delete, so the clamp was a no-op there).
-    Dec(FCaretLine);
-    FCaretCol := PrevLen;
-    FLines.Delete(FCaretLine + 1);
+  Inc(FOwnEdit);   // its change is reported by AfterEdit, not by LinesChanged (#110)
+  try
+    if FCaretCol > 0 then
+    begin
+      Cur := FLines[FCaretLine];
+      L := UTF8Length(Cur);
+      Before := UTF8Copy(Cur, 1, FCaretCol - 1);
+      After  := UTF8Copy(Cur, FCaretCol + 1, L - FCaretCol);
+      // Drop the caret onto its post-delete column BEFORE the assignment. Assigning FLines[...] fires
+      // FLines.OnChange -> LinesChanged -> ClampCaret, which clamps FCaretCol to the now-shorter line.
+      // At end-of-line the old FCaretCol (= old length) is past the new end, so ClampCaret already pulls
+      // it back one; a Dec afterwards would double-decrement -> caret one char too far left. (Same class
+      // of bug as the line-merge branch below: never mutate FLines while the caret is out of range.)
+      Dec(FCaretCol);
+      FLines[FCaretLine] := Before + After;
+    end
+    else
+    begin
+      // col = 0, must be line > 0 (caller guards the (0,0) no-op).
+      Prev := FLines[FCaretLine - 1];
+      Cur  := FLines[FCaretLine];
+      PrevLen := UTF8Length(Prev);
+      FLines[FCaretLine - 1] := Prev + Cur;
+      // Move the caret up onto the merged line BEFORE deleting the current one. FLines.Delete fires
+      // FLines.OnChange -> LinesChanged, which clamps FCaretLine to the new last index. If we delete
+      // while FCaretLine still points at the (about-to-vanish) last line, that clamp already knocks it
+      // down by one, and the Dec would then double-decrement -> caret one line too high. This only bit
+      // the LAST line (any other line stays in range through the delete, so the clamp was a no-op there).
+      Dec(FCaretLine);
+      FCaretCol := PrevLen;
+      FLines.Delete(FCaretLine + 1);
+    end;
+  finally
+    Dec(FOwnEdit);
   end;
 end;
 
@@ -3307,21 +3355,26 @@ var
   Cur, Nxt, Before, After: string;
   L: Integer;
 begin
-  Cur := FLines[FCaretLine];
-  L := UTF8Length(Cur);
-  if FCaretCol < L then
-  begin
-    Before := UTF8Copy(Cur, 1, FCaretCol);
-    After  := UTF8Copy(Cur, FCaretCol + 2, L - FCaretCol - 1);
-    FLines[FCaretLine] := Before + After;
-  end
-  else
-  begin
-    // At end of line; merge the following line up (caller guards end-of-doc).
-    Nxt := FLines[FCaretLine + 1];
-    FLines[FCaretLine] := Cur + Nxt;
-    FLines.Delete(FCaretLine + 1);
-    // caret stays at (FCaretLine, FCaretCol = L)
+  Inc(FOwnEdit);   // its change is reported by AfterEdit, not by LinesChanged (#110)
+  try
+    Cur := FLines[FCaretLine];
+    L := UTF8Length(Cur);
+    if FCaretCol < L then
+    begin
+      Before := UTF8Copy(Cur, 1, FCaretCol);
+      After  := UTF8Copy(Cur, FCaretCol + 2, L - FCaretCol - 1);
+      FLines[FCaretLine] := Before + After;
+    end
+    else
+    begin
+      // At end of line; merge the following line up (caller guards end-of-doc).
+      Nxt := FLines[FCaretLine + 1];
+      FLines[FCaretLine] := Cur + Nxt;
+      FLines.Delete(FCaretLine + 1);
+      // caret stays at (FCaretLine, FCaretCol = L)
+    end;
+  finally
+    Dec(FOwnEdit);
   end;
 end;
 
@@ -3692,22 +3745,27 @@ var
   Cur, Before, After: string;
   t, L: Integer;
 begin
-  if FReadOnly then Exit;            // ReadOnly: block word-backward delete
-  if FLines.Count = 0 then Exit;
-  Cur := FLines[FCaretLine];
-  t := PrevWordBoundary(Cur, FCaretCol);
-  if t < FCaretCol then
-  begin
-    // Splice [t, FCaretCol) out of the line; caret lands at t.
-    L := UTF8Length(Cur);
-    Before := UTF8Copy(Cur, 1, t);
-    After  := UTF8Copy(Cur, FCaretCol + 1, L - FCaretCol);
-    FLines[FCaretLine] := Before + After;
-    FCaretCol := t;
-  end
-  else
-    // At col 0: fall back to the cross-line merge (caller guards (0,0) earlier).
-    DoBackspace;
+  Inc(FOwnEdit);   // its change is reported by AfterEdit, not by LinesChanged (#110)
+  try
+    if FReadOnly then Exit;            // ReadOnly: block word-backward delete
+    if FLines.Count = 0 then Exit;
+    Cur := FLines[FCaretLine];
+    t := PrevWordBoundary(Cur, FCaretCol);
+    if t < FCaretCol then
+    begin
+      // Splice [t, FCaretCol) out of the line; caret lands at t.
+      L := UTF8Length(Cur);
+      Before := UTF8Copy(Cur, 1, t);
+      After  := UTF8Copy(Cur, FCaretCol + 1, L - FCaretCol);
+      FLines[FCaretLine] := Before + After;
+      FCaretCol := t;
+    end
+    else
+      // At col 0: fall back to the cross-line merge (caller guards (0,0) earlier).
+      DoBackspace;
+  finally
+    Dec(FOwnEdit);
+  end;
 end;
 
 procedure TTyCustomMemo.DeleteWordForward;
@@ -3715,21 +3773,26 @@ var
   Cur, Before, After: string;
   t, L: Integer;
 begin
-  if FReadOnly then Exit;            // ReadOnly: block word-forward delete
-  if FLines.Count = 0 then Exit;
-  Cur := FLines[FCaretLine];
-  t := NextWordBoundary(Cur, FCaretCol);
-  if t > FCaretCol then
-  begin
-    // Splice [FCaretCol, t) out of the line; caret stays.
-    L := UTF8Length(Cur);
-    Before := UTF8Copy(Cur, 1, FCaretCol);
-    After  := UTF8Copy(Cur, t + 1, L - t);
-    FLines[FCaretLine] := Before + After;
-  end
-  else
-    // At line end: fall back to the cross-line merge (caller guards end-of-doc).
-    DoDelete;
+  Inc(FOwnEdit);   // its change is reported by AfterEdit, not by LinesChanged (#110)
+  try
+    if FReadOnly then Exit;            // ReadOnly: block word-forward delete
+    if FLines.Count = 0 then Exit;
+    Cur := FLines[FCaretLine];
+    t := NextWordBoundary(Cur, FCaretCol);
+    if t > FCaretCol then
+    begin
+      // Splice [FCaretCol, t) out of the line; caret stays.
+      L := UTF8Length(Cur);
+      Before := UTF8Copy(Cur, 1, FCaretCol);
+      After  := UTF8Copy(Cur, t + 1, L - t);
+      FLines[FCaretLine] := Before + After;
+    end
+    else
+      // At line end: fall back to the cross-line merge (caller guards end-of-doc).
+      DoDelete;
+  finally
+    Dec(FOwnEdit);
+  end;
 end;
 
 procedure TTyCustomMemo.DeleteSelection;
@@ -3740,31 +3803,36 @@ var
   SL, SC, EL, EC, i: Integer;
   Line, Before, After, Head, Tail: string;
 begin
-  if not HasSelection then Exit;
-  GetOrderedSel(SL, SC, EL, EC);
-  if SL = EL then
-  begin
-    // Splice within a single line.
-    Line   := FLines[SL];
-    Before := UTF8Copy(Line, 1, SC);
-    After  := UTF8Copy(Line, EC + 1, UTF8Length(Line) - EC);
-    FLines[SL] := Before + After;
-  end
-  else
-  begin
-    // Merge SL's head with EL's tail, then delete the interior + EL lines.
-    Head := UTF8Copy(FLines[SL], 1, SC);
-    Tail := UTF8Copy(FLines[EL], EC + 1, UTF8Length(FLines[EL]) - EC);
-    FLines[SL] := Head + Tail;
-    // Lines SL+1..EL inclusive all shift to index SL+1 as they are removed.
-    for i := 1 to EL - SL do
-      FLines.Delete(SL + 1);
+  Inc(FOwnEdit);   // its change is reported by AfterEdit, not by LinesChanged (#110)
+  try
+    if not HasSelection then Exit;
+    GetOrderedSel(SL, SC, EL, EC);
+    if SL = EL then
+    begin
+      // Splice within a single line.
+      Line   := FLines[SL];
+      Before := UTF8Copy(Line, 1, SC);
+      After  := UTF8Copy(Line, EC + 1, UTF8Length(Line) - EC);
+      FLines[SL] := Before + After;
+    end
+    else
+    begin
+      // Merge SL's head with EL's tail, then delete the interior + EL lines.
+      Head := UTF8Copy(FLines[SL], 1, SC);
+      Tail := UTF8Copy(FLines[EL], EC + 1, UTF8Length(FLines[EL]) - EC);
+      FLines[SL] := Head + Tail;
+      // Lines SL+1..EL inclusive all shift to index SL+1 as they are removed.
+      for i := 1 to EL - SL do
+        FLines.Delete(SL + 1);
+    end;
+    FCaretLine := SL;
+    FCaretCol  := SC;
+    // Collapse the selection onto the new caret position.
+    FSelAnchorLine := FCaretLine;
+    FSelAnchorCol  := FCaretCol;
+  finally
+    Dec(FOwnEdit);
   end;
-  FCaretLine := SL;
-  FCaretCol  := SC;
-  // Collapse the selection onto the new caret position.
-  FSelAnchorLine := FCaretLine;
-  FSelAnchorCol  := FCaretCol;
 end;
 
 // ---- Clipboard implementation ----
@@ -3821,60 +3889,65 @@ var
   Segs: TStringList;
   i, InsertAt: Integer;
 begin
-  // Normalise CR/LF: CRLF -> LF, lone CR -> LF, so each remaining LF is one break.
-  // (CharCase first: the multi-line path builds its lines itself rather than going through
-  //  DoInsertText, so a pasted block has to be folded here too. Identity under ecNormal.)
-  Norm := StringReplace(ApplyCharCase(AStr), #13#10, #10, [rfReplaceAll]);
-  Norm := StringReplace(Norm, #13, #10, [rfReplaceAll]);
-  // Split into segments on LF. A single segment (no break) is a plain insert.
-  // Build the segment list manually (rather than via TStringList.Text) so a
-  // trailing break's empty segment is preserved: 'a'#10 -> ['a',''] (two lines),
-  // matching the Enter semantics.
-  Segs := TStringList.Create;
+  Inc(FOwnEdit);   // its change is reported by AfterEdit, not by LinesChanged (#110)
   try
-    Head := '';
-    for i := 1 to Length(Norm) do
-    begin
-      if Norm[i] = #10 then
+    // Normalise CR/LF: CRLF -> LF, lone CR -> LF, so each remaining LF is one break.
+    // (CharCase first: the multi-line path builds its lines itself rather than going through
+    //  DoInsertText, so a pasted block has to be folded here too. Identity under ecNormal.)
+    Norm := StringReplace(ApplyCharCase(AStr), #13#10, #10, [rfReplaceAll]);
+    Norm := StringReplace(Norm, #13, #10, [rfReplaceAll]);
+    // Split into segments on LF. A single segment (no break) is a plain insert.
+    // Build the segment list manually (rather than via TStringList.Text) so a
+    // trailing break's empty segment is preserved: 'a'#10 -> ['a',''] (two lines),
+    // matching the Enter semantics.
+    Segs := TStringList.Create;
+    try
+      Head := '';
+      for i := 1 to Length(Norm) do
       begin
-        Segs.Add(Head);
-        Head := '';
+        if Norm[i] = #10 then
+        begin
+          Segs.Add(Head);
+          Head := '';
+        end
+        else
+          Head := Head + Norm[i];
+      end;
+      Segs.Add(Head);
+
+      if Segs.Count = 1 then
+      begin
+        // No line breaks: a plain in-line insert at the caret.
+        DoInsertText(Segs[0]);
       end
       else
-        Head := Head + Norm[i];
-    end;
-    Segs.Add(Head);
-
-    if Segs.Count = 1 then
-    begin
-      // No line breaks: a plain in-line insert at the caret.
-      DoInsertText(Segs[0]);
-    end
-    else
-    begin
-      // Split the caret line into head (before caret) + tail (after caret).
-      if FLines.Count = 0 then
-        FLines.Add('');
-      Cur  := FLines[FCaretLine];
-      Head := UTF8Copy(Cur, 1, FCaretCol);
-      Tail := UTF8Copy(Cur, FCaretCol + 1, UTF8Length(Cur) - FCaretCol);
-      // First segment joins the head on the caret line.
-      FLines[FCaretLine] := Head + Segs[0];
-      // Interior segments become whole new lines after the caret line.
-      InsertAt := FCaretLine + 1;
-      for i := 1 to Segs.Count - 2 do
       begin
-        FLines.Insert(InsertAt, Segs[i]);
-        Inc(InsertAt);
+        // Split the caret line into head (before caret) + tail (after caret).
+        if FLines.Count = 0 then
+          FLines.Add('');
+        Cur  := FLines[FCaretLine];
+        Head := UTF8Copy(Cur, 1, FCaretCol);
+        Tail := UTF8Copy(Cur, FCaretCol + 1, UTF8Length(Cur) - FCaretCol);
+        // First segment joins the head on the caret line.
+        FLines[FCaretLine] := Head + Segs[0];
+        // Interior segments become whole new lines after the caret line.
+        InsertAt := FCaretLine + 1;
+        for i := 1 to Segs.Count - 2 do
+        begin
+          FLines.Insert(InsertAt, Segs[i]);
+          Inc(InsertAt);
+        end;
+        // Final segment + the preserved tail becomes the last inserted line; caret
+        // lands at the end of the final segment, before the preserved tail.
+        FLines.Insert(InsertAt, Segs[Segs.Count - 1] + Tail);
+        FCaretLine := InsertAt;
+        FCaretCol  := UTF8Length(Segs[Segs.Count - 1]);
       end;
-      // Final segment + the preserved tail becomes the last inserted line; caret
-      // lands at the end of the final segment, before the preserved tail.
-      FLines.Insert(InsertAt, Segs[Segs.Count - 1] + Tail);
-      FCaretLine := InsertAt;
-      FCaretCol  := UTF8Length(Segs[Segs.Count - 1]);
+    finally
+      Segs.Free;
     end;
   finally
-    Segs.Free;
+    Dec(FOwnEdit);
   end;
 end;
 
