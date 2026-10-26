@@ -63,12 +63,29 @@ type
     FCellText: string;
     FAsked: Integer;      { 宿主被问过多少次 —— 用来证明虚拟化真的生效 }
     procedure HandleGetCellText(Sender: TObject; ACol, ARow: Integer; var AText: string);
+  private
+    FClickCol, FClickRow, FRightCol, FRightRow, FHeaderRightCol: Integer;
+    FButtonCol, FButtonRow, FVetoCol: Integer;
+    procedure HookClickCell(Sender: TObject; ACol, ARow: Integer);
+    procedure HookButtonClick(Sender: TObject; ACol, ARow: Integer);
+    procedure HookCanClickCell(Sender: TObject; ACol, ARow: Integer; var AAllow: Boolean);
+    procedure HookRightClickCell(Sender: TObject; ACol, ARow: Integer);
+    procedure HookHeaderRightClick(Sender: TObject; ACol: Integer);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
   published
     procedure TestPaintsCellTextSuppliedByTheHost;
     procedure TestOnlyAsksForVisibleRows;
+    { #109: a draw grid has no cursor, so a click is only ever reported -- and the code that
+      reports one lived in TTyStringGrid's own mouse handler: on a TTyDrawGrid the published
+      OnClickCell, OnRightClickCell, OnHeaderRightClick and OnCellButtonClick never fired. }
+    procedure TestAClickOnACellIsReported;
+    procedure TestARightClickOnACellIsReported;
+    procedure TestARightClickOnTheHeaderIsReported;
+    procedure TestAButtonCellClickIsReported;
+    procedure TestAButtonPressReleasedElsewhereIsDropped;
+    procedure TestCanClickCellVetoesTheReport;
   end;
 
   { 完整体:稀疏存储 + 二维光标 + 键鼠。 }
@@ -232,6 +249,9 @@ type
     procedure TestGridLineStyleCanDropOneAxis;
     procedure TestRightClickOnCellFiresEventWithThatCell;
     procedure TestCanClickCellVetoesTheWholeClick;
+    { #109: the draw grid under it reports a click too; the string grid reports its own,
+      after moving its cursor, and only that one. }
+    procedure TestAClickIsReportedOnceWithTheCursorMoved;
     procedure TestButtonCellClickFiresWithThatCell;
     procedure TestDoubleClickOnDividerAutoFitsColumn;
     procedure TestWordWrapMakesLongTextUseMoreLines;
@@ -409,6 +429,7 @@ type
     FRightCol, FRightRow: Integer;
     FBtnCol, FBtnRow: Integer;
     FVetoCol: Integer;
+    FClickCount, FClickCursorCol: Integer;
     procedure HookClickCell(Sender: TObject; ACol, ARow: Integer);
     procedure HookRightClickCell(Sender: TObject; ACol, ARow: Integer);
     procedure HookCellButtonClick(Sender: TObject; ACol, ARow: Integer);
@@ -967,7 +988,187 @@ type
   TDrawGridAccess = class(TTyDrawGrid)
   public
     procedure DoRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    procedure ClickAt(X, Y: Integer);
+    procedure RightClickAt(X, Y: Integer);
+    procedure PressAt(X, Y: Integer);
+    procedure ReleaseAt(X, Y: Integer);
+  protected
+    { A subclass that draws buttons in its last column -- the base draws text only. }
+    function CellDisplayOf(ACol, ARow: Integer): TTyGridCellDisplay; override;
   end;
+
+function TDrawGridAccess.CellDisplayOf(ACol, ARow: Integer): TTyGridCellDisplay;
+begin
+  if ACol = 3 then Result := gcdButton else Result := inherited CellDisplayOf(ACol, ARow);
+end;
+
+procedure TDrawGridAccess.ClickAt(X, Y: Integer);
+begin
+  MouseDown(mbLeft, [], X, Y);
+  MouseUp(mbLeft, [], X, Y);
+end;
+
+procedure TDrawGridAccess.PressAt(X, Y: Integer);
+begin
+  MouseDown(mbLeft, [], X, Y);
+end;
+
+procedure TDrawGridAccess.ReleaseAt(X, Y: Integer);
+begin
+  MouseUp(mbLeft, [], X, Y);
+end;
+
+procedure TDrawGridAccess.RightClickAt(X, Y: Integer);
+begin
+  MouseDown(mbRight, [], X, Y);
+  MouseUp(mbRight, [], X, Y);
+end;
+
+function MakeClickDrawGrid(AForm: TForm; ACtl: TTyStyleController): TDrawGridAccess;
+var
+  i: Integer;
+begin
+  Result := TDrawGridAccess.Create(AForm);
+  Result.Parent := AForm;
+  Result.Controller := ACtl;
+  Result.Font.PixelsPerInch := 96;
+  Result.SetBounds(0, 0, 400, 300);
+  for i := 0 to 3 do
+    (Result.Header.Columns.Add as TTyColumn).Width := 80;
+  Result.DefaultRowHeight := 20;
+  Result.RowCount := 10;
+end;
+
+procedure TTyDrawGridTest.HookClickCell(Sender: TObject; ACol, ARow: Integer);
+begin
+  FClickCol := ACol;
+  FClickRow := ARow;
+end;
+
+procedure TTyDrawGridTest.HookRightClickCell(Sender: TObject; ACol, ARow: Integer);
+begin
+  FRightCol := ACol;
+  FRightRow := ARow;
+end;
+
+procedure TTyDrawGridTest.HookHeaderRightClick(Sender: TObject; ACol: Integer);
+begin
+  FHeaderRightCol := ACol;
+end;
+
+procedure TTyDrawGridTest.HookButtonClick(Sender: TObject; ACol, ARow: Integer);
+begin
+  FButtonCol := ACol;
+  FButtonRow := ARow;
+end;
+
+procedure TTyDrawGridTest.HookCanClickCell(Sender: TObject; ACol, ARow: Integer;
+  var AAllow: Boolean);
+begin
+  AAllow := ACol <> FVetoCol;
+end;
+
+procedure TTyDrawGridTest.TestAClickOnACellIsReported;
+var
+  g: TDrawGridAccess;
+  r: TRect;
+begin
+  g := MakeClickDrawGrid(FForm, FCtl);
+  g.Header.Options := g.Header.Options - [hoVisible];
+  FClickCol := -9;
+  FClickRow := -9;
+  FRightCol := -9;
+  g.OnClickCell := @HookClickCell;
+  g.OnRightClickCell := @HookRightClickCell;
+  r := g.CellRect(2, 3);
+  g.ClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+  AssertEquals('OnClickCell reports the column', 2, FClickCol);
+  AssertEquals('and the row', 3, FClickRow);
+  AssertEquals('a left click is not a right click', -9, FRightCol);
+end;
+
+procedure TTyDrawGridTest.TestARightClickOnACellIsReported;
+var
+  g: TDrawGridAccess;
+  r: TRect;
+begin
+  g := MakeClickDrawGrid(FForm, FCtl);
+  g.Header.Options := g.Header.Options - [hoVisible];
+  FRightCol := -9;
+  FRightRow := -9;
+  FClickCol := -9;
+  g.OnRightClickCell := @HookRightClickCell;
+  g.OnClickCell := @HookClickCell;
+  r := g.CellRect(1, 4);
+  g.RightClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+  AssertEquals('OnRightClickCell reports the column', 1, FRightCol);
+  AssertEquals('and the row', 4, FRightRow);
+  AssertEquals('a right click is not a click', -9, FClickCol);
+end;
+
+procedure TTyDrawGridTest.TestAButtonCellClickIsReported;
+var
+  g: TDrawGridAccess;
+  r: TRect;
+begin
+  g := MakeClickDrawGrid(FForm, FCtl);
+  g.Header.Options := g.Header.Options - [hoVisible];
+  FButtonCol := -9;
+  FButtonRow := -9;
+  g.OnCellButtonClick := @HookButtonClick;
+  r := g.CellButtonRect(3, 2);
+  AssertFalse('precondition: column 3 draws a button', IsRectEmpty(r));
+  g.ClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+  AssertEquals('OnCellButtonClick reports the column', 3, FButtonCol);
+  AssertEquals('and the row', 2, FButtonRow);
+end;
+
+procedure TTyDrawGridTest.TestAButtonPressReleasedElsewhereIsDropped;
+var
+  g: TDrawGridAccess;
+  r, away: TRect;
+begin
+  g := MakeClickDrawGrid(FForm, FCtl);
+  g.Header.Options := g.Header.Options - [hoVisible];
+  FButtonCol := -9;
+  g.OnCellButtonClick := @HookButtonClick;
+  r := g.CellButtonRect(3, 2);
+  away := g.CellRect(1, 5);
+  g.PressAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+  g.ReleaseAt((away.Left + away.Right) div 2, (away.Top + away.Bottom) div 2);
+  AssertEquals('a press dragged off the button is not a click', -9, FButtonCol);
+end;
+
+procedure TTyDrawGridTest.TestCanClickCellVetoesTheReport;
+var
+  g: TDrawGridAccess;
+  r: TRect;
+begin
+  g := MakeClickDrawGrid(FForm, FCtl);
+  g.Header.Options := g.Header.Options - [hoVisible];
+  FVetoCol := 2;
+  FClickCol := -9;
+  g.OnCanClickCell := @HookCanClickCell;
+  g.OnClickCell := @HookClickCell;
+  r := g.CellRect(2, 3);
+  g.ClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+  AssertEquals('a vetoed column is not reported', -9, FClickCol);
+  r := g.CellRect(1, 3);
+  g.ClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+  AssertEquals('one that is not still is', 1, FClickCol);
+end;
+
+procedure TTyDrawGridTest.TestARightClickOnTheHeaderIsReported;
+var
+  g: TDrawGridAccess;
+begin
+  g := MakeClickDrawGrid(FForm, FCtl);
+  g.Header.Options := g.Header.Options + [hoVisible];
+  FHeaderRightCol := -9;
+  g.OnHeaderRightClick := @HookHeaderRightClick;
+  g.RightClickAt(80 + 40, 5);   // the second column's header
+  AssertEquals('OnHeaderRightClick reports the column', 1, FHeaderRightCol);
+end;
 
 procedure TDrawGridAccess.DoRenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
@@ -4802,6 +5003,8 @@ end;
 procedure TTyStringGridTest.HookClickCell(Sender: TObject; ACol, ARow: Integer);
 begin
   FClickCol := ACol; FClickRow := ARow;
+  Inc(FClickCount);
+  FClickCursorCol := TTyStringGrid(Sender).Col;   // where the cursor is when the click is reported
 end;
 
 procedure TTyStringGridTest.HookRightClickCell(Sender: TObject; ACol, ARow: Integer);
@@ -4878,6 +5081,23 @@ begin
   G.ClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
   AssertEquals('没被否决的列正常触发', 1, FClickCol);
   AssertEquals('光标跟着走', 1, G.Col);
+end;
+
+procedure TTyStringGridTest.TestAClickIsReportedOnceWithTheCursorMoved;
+var
+  G: TStrGridAccess;
+  r: TRect;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 5;
+  G.MoveCursor(0, 0);
+  FClickCount := 0;
+  FClickCursorCol := -9;
+  G.OnClickCell := @HookClickCell;
+  r := G.CellRect(2, 3);
+  G.ClickAt((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+  AssertEquals('one click, one report', 1, FClickCount);
+  AssertEquals('reported with the cursor already on the cell', 2, FClickCursorCol);
 end;
 
 { 按钮单元格:点在按钮上要报出是哪一格。 }
