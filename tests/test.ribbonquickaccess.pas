@@ -76,10 +76,13 @@ begin
     B := Qat.AddButton('B');
     C := Qat.AddButton('C');
     Qat.RunAlign;
-    AssertEquals('the first one added sits at the left edge', 0, A.Left);
+    { #117: Indent and Spacing place the buttons now; before, they packed flush. }
+    AssertEquals('the first one added sits at the indent',
+      MulDiv(Qat.Indent, Qat.Font.PixelsPerInch, 96), A.Left);
     AssertTrue(Format('then the second, then the third (A=%d B=%d C=%d)',
       [A.Left, B.Left, C.Left]), (B.Left > A.Left) and (C.Left > B.Left));
-    AssertEquals('packed flush', A.Left + A.Width, B.Left);
+    AssertEquals('Spacing apart', A.Left + A.Width + MulDiv(Qat.Spacing, Qat.Font.PixelsPerInch, 96),
+      B.Left);
   finally
     F.Free;
   end;

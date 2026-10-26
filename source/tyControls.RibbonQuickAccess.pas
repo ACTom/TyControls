@@ -33,7 +33,7 @@ unit tyControls.RibbonQuickAccess;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Graphics,
+  Classes, SysUtils, Types, LCLType, Controls, Graphics,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.GlyphButtons;
 
 const
@@ -50,7 +50,13 @@ type
     FSpacing: Integer;
     procedure SetIndent(AValue: Integer);
     procedure SetSpacing(AValue: Integer);
+    { Indent and Spacing, in device px at APPI, into ChildSizing -- which LCL's align pass
+      already honours for aligned children: LeftRightSpacing from the edge, HorizontalSpacing
+      between neighbours (#117). }
+    procedure SyncSpacing(APPI: Integer);
   protected
+    procedure Loaded; override;
+    procedure ScaleFontsPPI(const AToPPI: Integer; const AProportion: Double); override;
     function GetStyleTypeKey: string; override;   // 'TyRibbon' — reuse the ribbon band token
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
@@ -62,13 +68,14 @@ type
       control, so it is freed with the QAT. }
     function AddButton(const ACaption: string): TTyGlyphButton;
   published
-    { Left/top inset before the first item (logical px). Purely advisory for a
-      host that sizes the strip via TyQatContentWidth; child Align=alLeft packs
-      flush to the client edge, so Indent does not itself move the buttons. }
+    { The inset before the first button (logical px). It used to be advisory only -- read by
+      TyQatContentWidth and by nothing that placed a button -- and moves the buttons now
+      (#117). }
     property Indent: Integer read FIndent write SetIndent default 3;
-    { Advisory inter-item spacing (logical px) used by TyQatContentWidth when a
-      host measures the packed width. }
+    { The gap between buttons (logical px), likewise. }
     property Spacing: Integer read FSpacing write SetSpacing default 2;
+    { Indent and Spacing own it on this strip, so it is not written to the form. }
+    property ChildSizing stored False;
     property Align;
     property Anchors;
     property StyleClass;
@@ -108,6 +115,7 @@ begin
   ControlStyle := ControlStyle + [csAcceptsControls];   // hosts the small command controls
   FIndent := 3;
   FSpacing := 2;
+  SyncSpacing(Font.PixelsPerInch);
   // Default alNone: a title-bar strip is positioned by the app, not docked.
   Align := alNone;
   Width := ActiveController.Metric('--qat-width', TyQatDefaultWidth);
@@ -127,6 +135,7 @@ begin
   if AValue < 0 then AValue := 0;
   if FIndent = AValue then Exit;
   FIndent := AValue;
+  SyncSpacing(Font.PixelsPerInch);
   Invalidate;
 end;
 
@@ -135,7 +144,27 @@ begin
   if AValue < 0 then AValue := 0;
   if FSpacing = AValue then Exit;
   FSpacing := AValue;
+  SyncSpacing(Font.PixelsPerInch);
   Invalidate;
+end;
+
+procedure TTyRibbonQuickAccess.SyncSpacing(APPI: Integer);
+begin
+  if APPI <= 0 then APPI := 96;
+  ChildSizing.LeftRightSpacing := MulDiv(FIndent, APPI, 96);
+  ChildSizing.HorizontalSpacing := MulDiv(FSpacing, APPI, 96);
+end;
+
+procedure TTyRibbonQuickAccess.Loaded;
+begin
+  inherited Loaded;
+  SyncSpacing(Font.PixelsPerInch);
+end;
+
+procedure TTyRibbonQuickAccess.ScaleFontsPPI(const AToPPI: Integer; const AProportion: Double);
+begin
+  inherited ScaleFontsPPI(AToPPI, AProportion);
+  SyncSpacing(AToPPI);   // LCL does not scale ChildSizing itself
 end;
 
 function TTyRibbonQuickAccess.AddButton(const ACaption: string): TTyGlyphButton;
