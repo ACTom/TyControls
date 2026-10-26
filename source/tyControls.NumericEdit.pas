@@ -68,6 +68,8 @@ type
     property UseThousands: Boolean read FUseThousands write SetUseThousands default True;
     property MinValue: Double read FMinValue write SetMinValue;
     property MaxValue: Double read FMaxValue write SetMaxValue;
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property Alignment default taRightJustify;
   end;
 
   { TTyNumericEdit publishes TTyCustomNumericEdit's properties; everything lives in TTyCustomNumericEdit. }

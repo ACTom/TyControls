@@ -123,6 +123,8 @@ type
   published
     property ReplaceText: string read FReplaceText write FReplaceText;
     property OnReplace: TNotifyEvent read FOnReplace write FOnReplace;
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property Options default [frDown, frReplace, frReplaceAll, frHidePromptOnReplace];
   end;
 
 implementation

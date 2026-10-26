@@ -93,25 +93,21 @@
     TabOrder = 0
   end
 # TTyCalcCurrencyEdit
-    Cursor = crIBeam
     Left = 0
     Height = 28
     Top = 0
     Width = 140
     TabOrder = 0
     Text = <from the locale>
-    Alignment = taRightJustify
     CurrencySymbol = '$'
   end
 # TTyCalcEdit
-    Cursor = crIBeam
     Left = 0
     Height = 28
     Top = 0
     Width = 140
     TabOrder = 0
     Text = <from the locale>
-    Alignment = taRightJustify
   end
 # TTyCalculator
     Left = 0
@@ -239,7 +235,6 @@
     Top = 0
     Width = 160
     TabOrder = 0
-    ItemIndex = 0
     Selected = clBlack
   end
 # TTyComboBox
@@ -260,7 +255,6 @@
     ItemsEx = <>
   end
 # TTyComboEdit
-    Cursor = crIBeam
     Left = 0
     Height = 28
     Top = 0
@@ -280,22 +274,18 @@
     Top = 0
     Width = 320
     TabOrder = 0
-    GripperWidth = 10
     Bands = <>
   end
 # TTyCurrencyEdit
-    Cursor = crIBeam
     Left = 0
     Height = 28
     Top = 0
     Width = 140
     TabOrder = 0
     Text = <from the locale>
-    Alignment = taRightJustify
     CurrencySymbol = '$'
   end
 # TTyDateTimePicker
-    Cursor = crArrow
     Left = 0
     Height = 24
     Top = 0
@@ -329,17 +319,14 @@
     TabOrder = 0
   end
 # TTyDBCurrencyEdit
-    Cursor = crIBeam
     Left = 0
     Height = 28
     Top = 0
     Width = 140
     TabOrder = 0
-    Alignment = taRightJustify
     CurrencySymbol = '$'
   end
 # TTyDBDateTimePicker
-    Cursor = crArrow
     Left = 0
     Height = 24
     Top = 0
@@ -349,7 +336,6 @@
     TextForNullDate = 'NULL'
   end
 # TTyDBEdit
-    Cursor = crIBeam
     Left = 0
     Height = 28
     Top = 0
@@ -357,13 +343,11 @@
     TabOrder = 0
   end
 # TTyDBFloatSpinEdit
-    Cursor = crIBeam
     Left = 0
     Height = 28
     Top = 0
     Width = 140
     TabOrder = 0
-    Alignment = taRightJustify
   end
 # TTyDBGrid
     Left = 0
@@ -400,7 +384,6 @@
     TabOrder = 0
   end
 # TTyDBMaskEdit
-    Cursor = crIBeam
     Left = 0
     Height = 28
     Top = 0
@@ -408,7 +391,6 @@
     TabOrder = 0
   end
 # TTyDBMemo
-    Cursor = crIBeam
     Left = 0
     Height = 120
     Top = 0
@@ -421,16 +403,13 @@
     Top = 0
     Width = 241
     TabOrder = 0
-    ParentShowHint = False
   end
 # TTyDBNumericEdit
-    Cursor = crIBeam
     Left = 0
     Height = 28
     Top = 0
     Width = 140
     TabOrder = 0
-    Alignment = taRightJustify
   end
 # TTyDBRadioGroup
     Left = 0
@@ -454,7 +433,6 @@
     TabOrder = 0
   end
 # TTyDBSpinEdit
-    Cursor = crIBeam
     Left = 0
     Height = 28
     Top = 0
@@ -510,7 +488,6 @@
     Constraints.MinWidth = 12
   end
 # TTyEdit
-    Cursor = crIBeam
     Left = 0
     Height = 28
     Top = 0
@@ -540,14 +517,12 @@
     ItemIndex = -1
   end
 # TTyFloatSpinEdit
-    Cursor = crIBeam
     Left = 0
     Height = 28
     Top = 0
     Width = 140
     TabOrder = 0
     Text = <from the locale>
-    Alignment = taRightJustify
   end
 # TTyFontComboBox
     Left = 0
@@ -564,7 +539,6 @@
     Top = 0
     Width = 160
     TabOrder = 0
-    ItemIndex = 0
   end
 # TTyFontSizeComboBox
     Left = 0
@@ -594,7 +568,6 @@
     )
     ItemIndex = 6
     Text = '12'
-    Style = csDropDown
   end
 # TTyFormSurface
     Left = 0
@@ -651,7 +624,6 @@
     TabOrder = 0
     Constraints.MinHeight = 24
     Constraints.MinWidth = 12
-    GlyphSize = 24
   end
 # TTyGlyphImageList
     DefaultColor = -16777216
@@ -804,7 +776,6 @@
     ValueFormat = '%.0f'
   end
 # TTyLinkLabel
-    Cursor = crHandPoint
     Left = 0
     Height = 0
     Top = 0
@@ -842,7 +813,6 @@
 # TTyLucideImageList
   end
 # TTyMaskEdit
-    Cursor = crIBeam
     Left = 0
     Height = 28
     Top = 0
@@ -850,7 +820,6 @@
     TabOrder = 0
   end
 # TTyMemo
-    Cursor = crIBeam
     Left = 0
     Height = 120
     Top = 0
@@ -890,7 +859,6 @@
     Width = 145
     TabOrder = 0
     ItemIndex = -1
-    Style = csDropDown
   end
 # TTyMultiTrackBar
     Left = 0
@@ -915,14 +883,12 @@
 # TTyNotification
   end
 # TTyNumericEdit
-    Cursor = crIBeam
     Left = 0
     Height = 28
     Top = 0
     Width = 140
     TabOrder = 0
     Text = <from the locale>
-    Alignment = taRightJustify
   end
 # TTyOfficeComboBox
     Left = 0
@@ -1061,7 +1027,6 @@
     Height = 0
     Top = 0
     Width = 0
-    Visible = False
     TabOrder = 0
   end
 # TTyRibbonGallery
@@ -1083,7 +1048,6 @@
     Height = 0
     Top = 0
     Width = 0
-    Visible = False
     TabOrder = 0
   end
 # TTyRibbonQuickAccess
@@ -1157,7 +1121,6 @@
     Top = 0
     Width = 280
     TabOrder = 0
-    OwnerData = True
     Items = <>
     Header.Columns = <    
       item
@@ -1186,7 +1149,6 @@
         Options = [coVisible, coResizable, coAllowClick, coDraggable]
       end>
     Header.Options = [hoVisible, hoColumnResize, hoShowSortGlyphs, hoHeaderClickAutoSort]
-    SortColumn = 0
     Groups = <>
     Mask = '*'
   end
@@ -1199,13 +1161,9 @@
     Header.Columns = <>
     Header.Options = [hoVisible, hoColumnResize, hoShowSortGlyphs, hoHeaderClickAutoSort, hoDrag]
     Items = <>
-    NodeDataSize = 4
     DefaultNodeHeight = 22
-    RootNodeCount = <from the machine>
-    HotTrack = True
   end
 # TTySizeBox
-    Cursor = crSizeNWSE
     Left = 0
     Height = 16
     Top = 0
@@ -1228,7 +1186,6 @@
     Constraints.MinWidth = 12
   end
 # TTySpinEdit
-    Cursor = crIBeam
     Left = 0
     Height = 28
     Top = 0
@@ -1236,7 +1193,6 @@
     TabOrder = 0
   end
 # TTySplitter
-    Cursor = crHSplit
     Left = 0
     Height = 100
     Top = 0
@@ -1331,7 +1287,6 @@
     Top = 0
     Width = 300
     TabOrder = 0
-    Wrapable = False
   end
 # TTyToolButton
     Left = 0
@@ -1379,15 +1334,12 @@
     TabOrder = 0
   end
 # TTyTrackEdit
-    Cursor = crIBeam
     Left = 0
     Height = 28
     Top = 0
     Width = 140
     TabOrder = 0
     Text = '0'
-    Alignment = taRightJustify
-    Decimals = 0
     MaxValue =  1.0000000000000000E+002
   end
 # TTyTransfer
@@ -1422,7 +1374,6 @@
     Width = 20
   end
 # TTyURLEdit
-    Cursor = crIBeam
     Left = 0
     Height = 28
     Top = 0

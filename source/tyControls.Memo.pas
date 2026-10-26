@@ -963,6 +963,11 @@ type
     // mutation (arrow keys, click, shift-select, programmatic SetCaret) and after
     // edits that move the caret. Self-guarded: a no-op move never fires.
     property OnSelectionChange: TNotifyEvent read FOnSelectionChange write FOnSelectionChange;
+  published
+    { #108: TControl publishes Cursor and a redeclaration cannot unpublish it, so it is redeclared
+      here with the value the constructor sets -- the designer can then store the other ones,
+      and a descendant gets the clause too. }
+    property Cursor default crIBeam;
   end;
 
   { TTyMemo publishes TTyCustomMemo's properties; everything lives in TTyCustomMemo. }

@@ -77,6 +77,9 @@ type
     property DefaultColorColor: TColor read FDefaultColorColor write SetDefaultColorColor default clBlack;
     property NoneColorColor: TColor read FNoneColorColor write SetNoneColorColor default clBlack;
     property OnGetColors: TTyGetColorsEvent read FOnGetColors write FOnGetColors;
+    { The row is derived: Selected is what the form file keeps, and Loaded finds its row in the
+      rebuilt palette. Written as well, the row only disagreed with it (#108). }
+    property ItemIndex stored False;
   end;
 
   { TTyColorListBox publishes TTyCustomColorListBox's properties; everything lives in TTyCustomColorListBox. }
@@ -196,8 +199,11 @@ begin
 end;
 
 procedure TTyCustomColorListBox.Loaded;
+var
+  scrolled: Integer;
 begin
   inherited Loaded;
+  scrolled := TopIndex;   // the row the form file scrolled to: the rebuild below resets it (#108)
   { ALWAYS rebuild from Style, as LCL does (colorbox.pas Loaded). Items cannot carry the colours:
     a form file stores a TStrings as its strings alone, so a list read back from one is names over
     black swatches. 3.0.0 wrote Items for every box, and on a form that left Style at its default
@@ -206,6 +212,7 @@ begin
     them right. A palette of one's own is cbCustomColors + OnGetColors, or AddColor at run time. }
   SetColorList;              // a Selected the form file held is found in the rebuilt palette
   FSelectedWaits := False;   // and from here on the box's own selection is what survives
+  TopIndex := scrolled;
 end;
 
 procedure TTyCustomColorListBox.SetColorList;

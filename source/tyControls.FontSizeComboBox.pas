@@ -16,6 +16,8 @@ type
     constructor Create(AOwner: TComponent); override;
     // The numeric size (parsed from the text; 0 if the text is not a number).
     property FontSize: Integer read GetFontSize write SetFontSize;
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property Style default csDropDown;
   end;
 
   { TTyFontSizeComboBox publishes TTyCustomFontSizeComboBox's properties; everything lives in TTyCustomFontSizeComboBox. }

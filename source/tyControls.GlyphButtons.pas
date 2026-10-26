@@ -383,6 +383,8 @@ type
       otherwise the streamer writes GlyphLayout into every ribbon .lfm just to restate what
       the constructor already did. }
     property GlyphLayout default glTop;
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property GlyphSize default 24;
   end;
 
   { TTyGlyphContainerButton publishes TTyCustomGlyphContainerButton's properties; everything lives in TTyCustomGlyphContainerButton. }

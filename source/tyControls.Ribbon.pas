@@ -307,6 +307,8 @@ type
       context of this name is active (TTyRibbon.ShowContext/HideContext). Empty = a
       normal always-visible tab. }
     property Context: string read FContext write SetContext;
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property Visible default False;
   end;
 
   { TTyRibbonPage publishes TTyCustomRibbonPage's properties; everything lives in TTyCustomRibbonPage. }

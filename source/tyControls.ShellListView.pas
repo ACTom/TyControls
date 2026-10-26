@@ -148,6 +148,8 @@ type
       rename on disk. Abandons on a blank / unchanged / path-bearing name. }
     procedure CommitEdit(AIndex: Integer; const AText: string); override;
     procedure Loaded; override;
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property SortColumn default 0;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -250,6 +252,8 @@ type
       Inspector still offers every shell tree on the form: the library's and a third
       party's TTyCustomShellTreeView descendants all descend from the seam. }
     property ShellTreeView: TTyShellTreeLink read FShellTreeView write SetShellTreeView;
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property OwnerData default True;
   end;
 
   { TTyShellListView publishes TTyCustomShellListView's properties; everything lives in TTyCustomShellListView. }

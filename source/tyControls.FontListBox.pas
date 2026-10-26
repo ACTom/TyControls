@@ -28,6 +28,8 @@ type
     { List only the families the system reports as fixed-pitch -- see
       TTyCustomFontComboBox.FixedPitchOnly. }
     property FixedPitchOnly: Boolean read FFixedPitchOnly write SetFixedPitchOnly default False;
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property ItemIndex default 0;
   end;
 
   { TTyFontListBox publishes TTyCustomFontListBox's properties; everything lives in TTyCustomFontListBox. }

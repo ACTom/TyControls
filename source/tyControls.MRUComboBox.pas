@@ -35,6 +35,8 @@ type
     procedure AddToHistory(const S: string);
     { Maximum number of remembered entries (>= 1). Lowering it trims the tail. }
     property MaxItems: Integer read FMaxItems write SetMaxItems default 10;
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property Style default csDropDown;
   end;
 
   { TTyMRUComboBox publishes TTyCustomMRUComboBox's properties; everything lives in TTyCustomMRUComboBox. }

@@ -84,6 +84,11 @@ type
     property OnCanResize: TTySplitterCanResizeEvent read FOnCanResize write FOnCanResize;
     property OnMoved: TNotifyEvent read FOnMoved write FOnMoved;
     property Align default alLeft;
+  published
+    { #108: TControl publishes Cursor and a redeclaration cannot unpublish it, so it is redeclared
+      here with the value the constructor sets -- the designer can then store the other ones,
+      and a descendant gets the clause too. }
+    property Cursor default crHSplit;
   end;
 
   { TTySplitter publishes TTyCustomSplitter's properties; everything lives in TTyCustomSplitter. }

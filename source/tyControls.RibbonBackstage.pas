@@ -129,6 +129,8 @@ type
     property SidebarWidth: Integer read GetSidebarWidth write SetSidebarWidth stored FSidebarWidthExplicit;
     property OnCommandSelect: TTyBackstageSelectEvent read FOnCommandSelect write FOnCommandSelect;
     property OnClose: TNotifyEvent read FOnClose write FOnClose;
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property Visible default False;
   end;
 
   { TTyRibbonBackstage publishes TTyCustomRibbonBackstage's properties; everything lives in TTyCustomRibbonBackstage. }

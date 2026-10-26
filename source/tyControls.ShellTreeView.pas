@@ -391,6 +391,11 @@ type
       and never noticed a change again. }
     property ExpandCollapseMode: TTyExpandCollapseMode read FExpandMode write FExpandMode
       default ecmRefreshedExpanding;
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property NodeDataSize default 4;
+    property HotTrack default True;
+    { How many roots this machine has when the tree is made: nothing for a form file to hold. }
+    property RootNodeCount stored False;
   end;
 
   { TTyShellTreeView publishes TTyCustomShellTreeView's properties; everything lives in TTyCustomShellTreeView. }

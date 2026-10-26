@@ -38,6 +38,8 @@ type
       slider always had. 0 hides the slider and leaves a plain numeric edit; below 0 reads
       as 0. }
     property SliderWidth: Integer read FSliderWidth write SetSliderWidth default 74;
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property Decimals default 0;
   end;
 
   { TTyTrackEdit publishes TTyCustomTrackEdit's properties; everything lives in TTyCustomTrackEdit. }

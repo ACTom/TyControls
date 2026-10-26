@@ -149,6 +149,9 @@ type
     function ButtonHint(AButton: TDBNavButtonType): string;
     property TabStop default False;
     property ShowHint default True;
+    { #108: setting ShowHint clears ParentShowHint (LCL's TControl.SetShowHint), so False is the
+      value the constructor leaves -- and the one the designer must not write. }
+    property ParentShowHint default False;
     property DataSource: TDataSource read GetDataSource write SetDataSource;
     property VisibleButtons: TDBNavButtonSet read FVisibleButtons write SetVisibleButtons
       default DefaultDBNavigatorButtons;

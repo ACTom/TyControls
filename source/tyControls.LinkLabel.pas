@@ -65,6 +65,11 @@ type
     property AutoOpen: Boolean read FAutoOpen write FAutoOpen default True;
     property Alignment: TAlignment read FAlignment write SetAlignment default taLeftJustify;
     property Layout: TTextLayout read FLayout write SetLayout default tlCenter;
+  published
+    { #108: TControl publishes Cursor and a redeclaration cannot unpublish it, so it is redeclared
+      here with the value the constructor sets -- the designer can then store the other ones,
+      and a descendant gets the clause too. }
+    property Cursor default crHandPoint;
   end;
 
   { TTyLinkLabel publishes TTyCustomLinkLabel's properties; everything lives in TTyCustomLinkLabel. }

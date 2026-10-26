@@ -332,6 +332,8 @@ type
     { The bands, editable in the designer. Every per-control helper below is a facade over
       this, so code written against either sees the same state. }
     property Bands: TTyCoolBands read FBandList write SetBands;
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property GripperWidth default 10;
   end;
 
   { TTyCoolBar publishes TTyCustomCoolBar's properties; everything lives in TTyCustomCoolBar. }

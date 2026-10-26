@@ -60,6 +60,8 @@ type
     function OverflowCount: Integer;
     { True when the "»" chevron is currently shown. }
     function OverflowVisible: Boolean;
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property Wrapable default False;
   end;
 
   { TTyToolBarEx publishes TTyCustomToolBarEx's properties; everything lives in TTyCustomToolBarEx. }

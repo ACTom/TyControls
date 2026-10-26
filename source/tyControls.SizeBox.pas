@@ -35,6 +35,11 @@ type
     { The control resized by dragging the grip. When nil, the grip resizes the owner
       form (if the owner is a TCustomForm) or, failing that, the Parent control. }
     property Target: TControl read FTarget write SetTarget;
+  published
+    { #108: TControl publishes Cursor and a redeclaration cannot unpublish it, so it is redeclared
+      here with the value the constructor sets -- the designer can then store the other ones,
+      and a descendant gets the clause too. }
+    property Cursor default crSizeNWSE;
   end;
 
   { TTySizeBox publishes TTyCustomSizeBox's properties; everything lives in TTyCustomSizeBox. }
