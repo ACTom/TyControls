@@ -374,6 +374,7 @@ Each example builds standalone: `lazbuild examples/<name>/<project>.lpi`.
 | [theming](examples/theming/) | A custom theme + runtime hot-swap |
 | [ribbon](examples/ribbon/) | The full Ribbon |
 | [containers](examples/containers/) | Layout containers |
+| [chromeoverlay](examples/chromeoverlay/) | A container's frame stays on top of its children |
 | [listview](examples/listview/) | List view: five views / grouping / 100k rows virtual |
 | [inputs](examples/inputs/) | Rich input controls |
 | [shapes](examples/shapes/) | Shape controls + `StyleOverride` |

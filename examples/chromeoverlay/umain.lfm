@@ -1,0 +1,330 @@
+object MainForm: TMainForm
+  Left = 0
+  Height = 860
+  Top = 0
+  Width = 900
+  Caption = 'Chrome on top (pilot)'
+  ClientHeight = 860
+  ClientWidth = 900
+  Position = poScreenCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = Bar
+  TitleHeight = 34
+  object Surface: TTyFormSurface
+    Left = 0
+    Height = 860
+    Top = 0
+    Width = 900
+    TabOrder = 0
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 900
+      TabOrder = 0
+      Caption = 'Chrome on top  ·  TyControls (pilot)'
+      Align = alTop
+      object DarkSwitch: TTyToggleSwitch
+        Left = 552
+        Height = 24
+        Top = 5
+        Width = 74
+        TabOrder = 0
+        TabStop = True
+        Caption = 'Dark'
+        OnChange = DarkSwitchChange
+        Anchors = [akTop, akRight]
+      end
+      object ThemeCombo: TTyComboBox
+        Left = 634
+        Height = 26
+        Top = 4
+        Width = 120
+        TabOrder = 1
+        ItemIndex = -1
+        OnChange = ThemeComboChange
+        Anchors = [akTop, akRight]
+      end
+    end
+    object OverlaySwitch: TTyToggleSwitch
+      Left = 20
+      Height = 24
+      Top = 48
+      Width = 230
+      TabOrder = 1
+      TabStop = True
+      Caption = 'Keep the frame on top'
+      OnChange = OverlaySwitchChange
+    end
+    object BtnMeasure: TTyButton
+      Left = 270
+      Height = 28
+      Top = 46
+      Width = 100
+      TabOrder = 2
+      OnClick = BtnMeasureClick
+      Caption = 'Measure'
+    end
+    object LblMeasure: TTyLabel
+      Left = 384
+      Height = 20
+      Top = 50
+      Width = 496
+      AutoSize = False
+      Caption = ''
+    end
+    object Pages: TTyPageControl
+      Left = 20
+      Height = 490
+      Top = 84
+      Width = 860
+      TabOrder = 3
+      ActivePageIndex = 0
+      object PageCards: TTyTabSheet
+        Left = 0
+        Height = 458
+        Top = 32
+        Width = 860
+        TabOrder = 0
+        Caption = 'Cards'
+        object CardEdges: TTyCard
+          Left = 6
+          Height = 230
+          Top = 6
+          Width = 420
+          TabOrder = 0
+          Title = 'Children on the frame'
+          object BtnLeftEdge: TTyButton
+            Left = 0
+            Height = 30
+            Top = 64
+            Width = 130
+            TabOrder = 0
+            Caption = 'On the left edge'
+          end
+          object PnlHeaderLine: TTyPanel
+            Left = 170
+            Height = 40
+            Top = 20
+            Width = 150
+            TabOrder = 1
+            Caption = 'Across the title line'
+          end
+          object LblRightEdge: TTyLabel
+            Left = 350
+            Height = 40
+            Top = 80
+            Width = 70
+            AutoSize = False
+            Caption = 'Label'
+            Transparent = False
+            StyleOverride = 'background: var(--accent); color: #ffffff;'
+          end
+          object EdtCorner: TTyEdit
+            Left = 300
+            Height = 34
+            Top = 196
+            Width = 120
+            TabOrder = 2
+            Text = 'In the corner'
+          end
+          object BtnOptedOut: TTyButton
+            Left = 0
+            Height = 30
+            Top = 120
+            Width = 190
+            TabOrder = 3
+            Caption = 'Opted out: stays on top'
+            StyleOverride = '--over-parent-chrome: 1;'
+          end
+        end
+        object CardNested: TTyCard
+          Left = 432
+          Height = 230
+          Top = 6
+          Width = 420
+          TabOrder = 1
+          Title = 'A panel inside, a button inside that'
+          object PnlInner: TTyPanel
+            Left = 0
+            Height = 120
+            Top = 56
+            Width = 220
+            TabOrder = 0
+            object BtnInnerEdge: TTyButton
+              Left = 0
+              Height = 30
+              Top = 40
+              Width = 140
+              TabOrder = 0
+              Caption = 'Two levels down'
+            end
+          end
+          object LstCorner: TTyListBox
+            Left = 300
+            Height = 80
+            Top = 150
+            Width = 120
+            TabOrder = 1
+          end
+        end
+        object CardActions: TTyCard
+          Left = 6
+          Height = 200
+          Top = 244
+          Width = 846
+          TabOrder = 2
+          Title = 'Over the actions line'
+          ShowActions = True
+          object BtnAcrossActions: TTyButton
+            Left = 20
+            Height = 32
+            Top = 140
+            Width = 190
+            TabOrder = 0
+            Caption = 'Across the actions line'
+          end
+          object BtnActionsCorner: TTyButton
+            Left = 706
+            Height = 30
+            Top = 170
+            Width = 140
+            TabOrder = 1
+            Caption = 'In the corner'
+          end
+        end
+      end
+      object PageOthers: TTyTabSheet
+        Left = 0
+        Height = 458
+        Top = 32
+        Width = 860
+        TabOrder = 1
+        Caption = 'Other containers'
+        object PnlFlush: TTyPanel
+          Left = 6
+          Height = 200
+          Top = 6
+          Width = 270
+          TabOrder = 0
+          object PnlFill: TTyPanel
+            Left = 0
+            Height = 200
+            Top = 0
+            Width = 270
+            Align = alClient
+            TabOrder = 0
+            Caption = 'An alClient child'
+            WordWrap = True
+            StyleOverride = 'background: var(--accent); color: #ffffff; border-width: 0;'
+          end
+        end
+        object GrpCaption: TTyGroupBox
+          Left = 290
+          Height = 200
+          Top = 6
+          Width = 270
+          TabOrder = 1
+          Caption = 'Group box'
+          object BtnOverCaption: TTyButton
+            Left = 40
+            Height = 28
+            Top = 0
+            Width = 150
+            TabOrder = 0
+            Caption = 'Over the caption'
+          end
+          object BtnGroupEdge: TTyButton
+            Left = 0
+            Height = 28
+            Top = 90
+            Width = 150
+            TabOrder = 1
+            Caption = 'On the left edge'
+          end
+        end
+        object Scr: TTyScrollBox
+          Left = 574
+          Height = 200
+          Top = 6
+          Width = 276
+          TabOrder = 2
+          object PnlScrollEdge: TTyPanel
+            Left = 0
+            Height = 60
+            Top = 30
+            Width = 160
+            TabOrder = 0
+            Caption = 'On the frame'
+            StyleOverride = 'background: var(--accent); color: #ffffff; border-width: 0;'
+          end
+          object BtnScrollFar: TTyButton
+            Left = 20
+            Height = 28
+            Top = 320
+            Width = 150
+            TabOrder = 1
+            Caption = 'Further down'
+          end
+        end
+        object ExP: TTyExPanel
+          Left = 6
+          Height = 220
+          Top = 220
+          Width = 420
+          TabOrder = 3
+          Caption = 'Expandable panel'
+          object PnlExFill: TTyPanel
+            Left = 0
+            Height = 180
+            Top = 40
+            Width = 420
+            Align = alClient
+            TabOrder = 0
+            Caption = 'Its bottom corners stay round'
+            WordWrap = True
+            StyleOverride = 'background: var(--accent); color: #ffffff; border-width: 0;'
+          end
+        end
+        object LblOthers: TTyLabel
+          Left = 440
+          Height = 220
+          Top = 220
+          Width = 410
+          AutoSize = False
+          Caption = 'A panel, a group box, a scroll box and an expandable panel, each with children over its frame. The page control''s own frame stays on top of its pages too: before, the page covered three of its sides.'
+          WordWrap = True
+        end
+      end
+    end
+    object LblHint: TTyLabel
+      Left = 20
+      Height = 56
+      Top = 584
+      Width = 860
+      AutoSize = False
+      Caption = 'Each container keeps its frame, its rounded corners and its separators whole, whatever its children cover. Hover a card: its frame changes colour, and so does the part drawn over the children. Turn the switch off to see the cut lines as before.'
+      WordWrap = True
+    end
+    object Results: TTyMemo
+      Left = 20
+      Height = 206
+      Top = 646
+      Width = 860
+      Anchors = [akTop, akLeft, akRight, akBottom]
+      TabOrder = 4
+      ReadOnly = True
+      ScrollBars = ssAutoVertical
+      WordWrap = True
+    end
+  end
+  object MeasureTimer: TTimer
+    Enabled = False
+    Interval = 1000
+    OnTimer = MeasureTimerTimer
+    Left = 840
+    Top = 40
+  end
+end

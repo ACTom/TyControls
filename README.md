@@ -374,6 +374,7 @@ CharImage1.GlyphName := 'house';
 | [theming](examples/theming/) | 自定义主题 + 运行时热切换 |
 | [ribbon](examples/ribbon/) | Ribbon 全家桶 |
 | [containers](examples/containers/) | 布局容器 |
+| [chromeoverlay](examples/chromeoverlay/) | 容器外框保持在子控件上面 |
 | [listview](examples/listview/) | 列表视图:五视图 / 分组 / 10 万行虚拟 |
 | [inputs](examples/inputs/) | 富输入控件 |
 | [shapes](examples/shapes/) | 形状控件 + `StyleOverride` |

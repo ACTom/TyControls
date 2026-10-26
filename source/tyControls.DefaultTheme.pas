@@ -252,6 +252,7 @@ begin
     '  --notification-margin: 16px;' + LineEnding +
     '  --notification-stack-gap: 8px;' + LineEnding +
     '  --notification-width: 340px;' + LineEnding +
+    '  --over-parent-chrome: 0;' + LineEnding +
     '  --pagination-gap: 4px;' + LineEnding +
     '  --pagination-glyph-size: 12px;' + LineEnding +
     '  --popover-arrow-size: 8px;' + LineEnding +
