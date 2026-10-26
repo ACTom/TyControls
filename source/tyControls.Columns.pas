@@ -342,6 +342,7 @@ type
     FImages:        TCustomImageList;
     FOptions:       TTyHeaderOptions;
     FOnChange:      TNotifyEvent;
+    FSortStored:    Boolean;
 
     procedure SetHeight(AValue: Integer);
     procedure SetColumns(AValue: TTyColumns);
@@ -353,6 +354,7 @@ type
     procedure SetOptions(AValue: TTyHeaderOptions);
     { Forwarded from FColumns.OnChange }
     procedure ColumnsChanged(Sender: TObject);
+    function IsSortStored: Boolean;
   public
     constructor Create; overload;
     { See TTyColumns.Create(AOwnerHeader, AItemClass). }
@@ -373,6 +375,10 @@ type
       band to follow the density axis reads this: while False, size the band from
       the '--header-height' token (classic 22 / modern 36); while True, honour the pin. }
     property HeightIsExplicit: Boolean read FHeightExplicit;
+    { False when the owner streams the sort under its own names and keeps these two in step
+      with them -- TTyListView's SortColumn / SortDirection (#125) -- so a form file carries
+      the sort once, under the names it always had. }
+    property SortStored: Boolean read FSortStored write FSortStored;
   published
     property Height:        Integer              read FHeight        write SetHeight        default 22;
     { The setter is what makes this collection STREAM, and it is not optional.
@@ -391,8 +397,8 @@ type
       what TTyStatusBar.Panels and TTyListView.Items already do. }
     property Columns:       TTyColumns       read FColumns       write SetColumns;
     property MainColumn:    Integer              read FMainColumn    write SetMainColumn    default 0;
-    property SortColumn:    Integer              read FSortColumn    write SetSortColumn    default -1;
-    property SortDirection: TTySortDirection     read FSortDirection write SetSortDirection default sdAscending;
+    property SortColumn:    Integer              read FSortColumn    write SetSortColumn    stored IsSortStored default -1;
+    property SortDirection: TTySortDirection     read FSortDirection write SetSortDirection stored IsSortStored default sdAscending;
     property AutoSizeIndex: Integer              read FAutoSizeIndex write SetAutoSizeIndex default -1;
     { Icon source for the column headers, indexed by TTyColumn.ImageIndex (or keyed by
       TTyColumn.ImageName). LCL's equivalent is TCustomHeaderControl.Images (comctrls.pp:4037).
@@ -1375,6 +1381,12 @@ begin
                      hoHeaderClickAutoSort, hoDrag];
   FColumns       := AColumnsClass.Create(Self, AColumnClass);
   FColumns.OnChange := @ColumnsChanged;
+  FSortStored    := True;
+end;
+
+function TTyHeader.IsSortStored: Boolean;
+begin
+  Result := FSortStored;
 end;
 
 destructor TTyHeader.Destroy;

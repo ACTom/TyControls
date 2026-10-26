@@ -102,6 +102,7 @@ uses
   test.listselection,
   test.vleprops,
   test.headerautosize,
+  test.listviewprops,
   test.calendar,
   test.datetimepicker,
   test.treeview.events,
