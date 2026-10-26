@@ -682,9 +682,9 @@ begin
   { Grow by the content PLUS everything AdjustClientRect is about to take back off both edges,
     so what the children actually get laid out in is exactly the content. Growing to the bare
     content would leave them a frame short of it and clip the last row by a border width.
-    BorderWidth is in that sum because TTyPanel.AdjustClientRect now honours it -- leave it
-    out and an 8px gutter would cost the last row 16px instead of moving it. }
-  bw := 2 * (FrameInset + BorderWidth);
+    BorderWidth is in that sum because the base AdjustClientRect honours it, in device px
+    (#115) -- leave it out and an 8px gutter would cost the last row 16px instead of moving it. }
+  bw := 2 * (FrameInset + BorderInsetPx);
   if (FHScrollBar <> nil) and FHScrollBar.Visible and (FContentW > viewW) then
     Result.Right := Result.Left + FContentW + bw;
   if (FVScrollBar <> nil) and FVScrollBar.Visible and (FContentH > viewH) then

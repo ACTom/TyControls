@@ -408,6 +408,7 @@ begin
     padL := 0; padT := 0; padR := 0; padB := 0;
   end;
   Result := Rect(padL, padT, Width - padR, Height - padB);
+  InflateRect(Result, -BorderInsetPx, -BorderInsetPx);   // and the BorderWidth band (#115)
   // Never let padding invert the rect (tiny panel + big padding).
   if Result.Right < Result.Left then Result.Right := Result.Left;
   if Result.Bottom < Result.Top then Result.Bottom := Result.Top;

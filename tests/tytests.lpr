@@ -83,6 +83,7 @@ uses
   test.fontprecedence,
   test.partfont,
   test.autosize.effect,
+  test.borderwidth,
   test.calendar,
   test.datetimepicker,
   test.treeview.events,

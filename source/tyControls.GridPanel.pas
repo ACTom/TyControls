@@ -623,6 +623,7 @@ begin
   FInLayout := True;
   try
     cr := ClientRect;
+    AdjustClientRect(cr);   // the BorderWidth band stays clear of the cells (#115)
     SolveTracks(cr, colW, rowH, colX, rowY);
     for i := 0 to High(FCells) do
     begin
@@ -650,6 +651,7 @@ begin
   inherited Paint;
   if not (csDesigning in ComponentState) then Exit;   // guides are design-time only
   cr := ClientRect;
+  AdjustClientRect(cr);   // the guides follow the cells (#115)
   SolveTracks(cr, colW, rowH, colX, rowY);
   Canvas.Pen.Style := psDot;
   Canvas.Pen.Color := clGray;

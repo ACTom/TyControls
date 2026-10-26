@@ -493,12 +493,25 @@ type
     { The post-draw hook's entry point on the WINDOWED side -- TWinControl.PaintHandler's
       single funnel into Paint. See the body for why it cannot live in Paint itself. }
     procedure PaintWindow(DC: HDC); override;
+    { BORDERWIDTH IS EXTRA INNER PADDING (#115), in logical px like every other length here:
+      the themed frame stays at the edge and what sits inside moves in. Children move in
+      here, for every control; a control that draws its own content (BorderWidthIsPadding)
+      also has it added to CurrentStyle's padding, so its paint, hit-testing, caret and
+      preferred size all move in together. LCL publishes BorderWidth on its containers and
+      views and insets the same way (TCustomPanel.Paint, TCustomTreeView). }
+    procedure AdjustClientRect(var ARect: TRect); override;
+    { True for a control that draws its content itself rather than hosting children: the
+      default, unless it accepts controls. A container that also adds its own padding in
+      AdjustClientRect keeps the answer False, so the width is not counted twice. }
+    function BorderWidthIsPadding: Boolean; virtual;
     { Repaints on a font change up the parent chain (TyParentChainFontChanged, #112). }
     procedure WndProc(var TheMessage: TLMessage); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function GetVersion: string;
+    { BorderWidth in device px (#115). }
+    function BorderInsetPx: Integer;
     { #98/#99. A theme length token, in logical px, as this control reads it: a '--'
       declaration in its own StyleOverride wins (e.g. '--listview-text-margin: 8px'), then
       the theme's value, then ADefault. A control that reads its layout tokens through this
@@ -2451,6 +2464,14 @@ begin
     RefreshOverride(model);
     TyMergeStyleSet(Result, FOvrCache);   // override wins per Present flag (§3.3)
   end;
+  if (BorderWidth > 0) and BorderWidthIsPadding then   // #115: on top of whatever padding won
+  begin
+    Inc(Result.Padding.Left, BorderWidth);
+    Inc(Result.Padding.Top, BorderWidth);
+    Inc(Result.Padding.Right, BorderWidth);
+    Inc(Result.Padding.Bottom, BorderWidth);
+    Include(Result.Present, tpPadding);
+  end;
 end;
 
 procedure TTyCustomControl.RefreshOverride(AModel: TTyStyleModel);
@@ -2746,6 +2767,32 @@ procedure TTyCustomControl.DoExit;
 begin
   inherited DoExit;
   Invalidate;
+end;
+
+procedure TTyCustomControl.AdjustClientRect(var ARect: TRect);
+var
+  d: Integer;
+begin
+  inherited AdjustClientRect(ARect);
+  if BorderWidth <= 0 then Exit;
+  d := BorderInsetPx;
+  InflateRect(ARect, -d, -d);
+  if ARect.Right < ARect.Left then ARect.Right := ARect.Left;
+  if ARect.Bottom < ARect.Top then ARect.Bottom := ARect.Top;
+end;
+
+function TTyCustomControl.BorderWidthIsPadding: Boolean;
+begin
+  Result := not (csAcceptsControls in ControlStyle);
+end;
+
+function TTyCustomControl.BorderInsetPx: Integer;
+var
+  ppi: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  Result := MulDiv(BorderWidth, ppi, 96);
 end;
 
 procedure TTyCustomControl.WndProc(var TheMessage: TLMessage);
