@@ -1935,6 +1935,14 @@ type
   private
     FOnGetCellText: TTyGridGetCellTextEvent;
   protected
+    { #109: a draw grid has no cursor, so a click on it is only reported -- OnClickCell,
+      OnRightClickCell, OnHeaderRightClick, OnCellButtonClick, by TTyStringGrid's rules.
+      TTyStringGrid reports from its own handler, after it moves its cursor, and clears this
+      so that a click is reported once. }
+    FReportsClicks: Boolean;
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+  protected
     { 取一个单元格要显示的文本。派生类可改写以接自己的存储。 }
     function GetCellText(ACol, ARow: Integer): string; virtual;
     { **画出来的**那串文字。与 GetCellText(原始值)分开:格式化只作用于显示,
@@ -1948,6 +1956,7 @@ type
     procedure RenderCells(P: TTyPainter; const M: TTyGridMetrics;
       const AFrame: TTyStyleSet); override;
   public
+    constructor Create(AOwner: TComponent); override;
     { Promoted to public at this level, as TCustomDrawGrid promotes them over TCustomGrid
       (grids.pas:1397); TTyCustomGrid keeps them protected, as TCustomGrid does. }
     property RowCount;
@@ -8376,6 +8385,65 @@ end;
 
 { ---- TTyDrawGrid ---------------------------------------------------------- }
 
+constructor TTyCustomDrawGrid.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  FReportsClicks := True;
+end;
+
+{ What TTyStringGrid.MouseDown reports, without the cursor, the editor and the selection a
+  draw grid does not have: a right click on the header or a cell, a left click on a cell, a
+  press on a cell button (fired on the release, as a button is). OnCanClickCell vetoes a cell. }
+procedure TTyCustomDrawGrid.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  hit: TTyGridHit;
+begin
+  inherited MouseDown(Button, Shift, X, Y);
+  if not FReportsClicks or not Enabled then Exit;
+  hit := CellAt(X, Y);
+  if Button = mbRight then
+  begin
+    if (hit.Part = ghpHeader) and (hit.Col >= 0) then
+    begin
+      if Assigned(OnHeaderRightClick) then OnHeaderRightClick(Self, hit.Col);
+    end
+    else if (hit.Part = ghpCell) and CanClickCell(hit.Col, hit.Row) then
+      if Assigned(OnRightClickCell) then OnRightClickCell(Self, hit.Col, hit.Row);
+    Exit;
+  end;
+  if (Button <> mbLeft) or (hit.Part <> ghpCell) then Exit;
+  if not CanClickCell(hit.Col, hit.Row) then Exit;
+  if (CellDisplayOf(hit.Col, hit.Row) = gcdButton)
+     and PtInRect(CellButtonRect(hit.Col, hit.Row), Point(X, Y)) then
+  begin
+    SetPressedButton(hit.Col, hit.Row);
+    Invalidate;
+  end;
+  if Assigned(OnClickCell) then OnClickCell(Self, hit.Col, hit.Row);
+end;
+
+procedure TTyCustomDrawGrid.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  bc, br: Integer;
+  hit: TTyGridHit;
+begin
+  if FReportsClicks and (Button = mbLeft) then
+  begin
+    GetPressedButton(bc, br);
+    if bc >= 0 then
+    begin
+      SetPressedButton(-1, -1);
+      Invalidate;
+      { only a press and a release on the same button: one dragged away is dropped }
+      hit := CellAt(X, Y);
+      if (hit.Part = ghpCell) and (hit.Col = bc) and (hit.Row = br)
+         and PtInRect(CellButtonRect(bc, br), Point(X, Y)) then
+        if Assigned(OnCellButtonClick) then OnCellButtonClick(Self, bc, br);
+    end;
+  end;
+  inherited MouseUp(Button, Shift, X, Y);
+end;
+
 function TTyCustomDrawGrid.GetCellText(ACol, ARow: Integer): string;
 begin
   Result := '';
@@ -8503,6 +8571,7 @@ end;
 constructor TTyCustomStringGrid.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FReportsClicks := False;   // its own MouseDown/MouseUp report, after moving the cursor (#109)
   FCells := TFPStringHashTable.Create;
   FTreeCollapsed := TStringList.Create;
   FFilterText := TStringList.Create;
