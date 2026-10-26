@@ -231,6 +231,8 @@ type
     property OnSankeyRoam;
     property OnDataZoom;
     property OnToolboxSaveAsImage;
+    property OnDataViewContent;
+    property OnDataViewApply;
     property OnResolveImage;
     property OnTooltipHtml;
     property AnimationMode;
