@@ -346,6 +346,9 @@ type
     FSortDirection: TTySortDirection;
     FAutoSizeIndex: Integer;
     FImages:        TCustomImageList;
+    { Told when FImages is freed. The header is a TPersistent, so it cannot ask for the
+      notice itself; without it a freed list stays referenced and the next paint uses it. }
+    FImagesWatch:   TComponent;
     FOptions:       TTyHeaderOptions;
     FOnChange:      TNotifyEvent;
     FSortStored:    Boolean;
@@ -357,6 +360,8 @@ type
     procedure SetSortDirection(AValue: TTySortDirection);
     procedure SetAutoSizeIndex(AValue: Integer);
     procedure SetImages(AValue: TCustomImageList);
+    { Points FImages at AValue and moves the free notice with it. }
+    procedure WatchImages(AValue: TCustomImageList);
     procedure SetOptions(AValue: TTyHeaderOptions);
     { Forwarded from FColumns.OnChange }
     procedure ColumnsChanged(Sender: TObject);
@@ -472,6 +477,25 @@ function TyColumnAxis(AOriginX, APPI: Integer; ARightToLeft: Boolean;
   ABandLeft, ABandRight: Integer): TTyColumnAxis; overload;
 
 implementation
+
+type
+  { The component TTyHeader.FImagesWatch holds. }
+  TTyHeaderImagesWatch = class(TComponent)
+  private
+    FHeader: TTyHeader;
+  protected
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+  end;
+
+procedure TTyHeaderImagesWatch.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (AComponent = FHeader.FImages) then
+  begin
+    FHeader.FImages := nil;
+    FHeader.Changed;
+  end;
+end;
 
 function TyColumnAxis(AOriginX, APPI: Integer): TTyColumnAxis;
 begin
@@ -1407,8 +1431,24 @@ end;
 
 destructor TTyHeader.Destroy;
 begin
+  WatchImages(nil);
+  FImagesWatch.Free;
   FColumns.Free;
   inherited Destroy;
+end;
+
+procedure TTyHeader.WatchImages(AValue: TCustomImageList);
+begin
+  if (FImages <> nil) and (FImagesWatch <> nil) then
+    FImages.RemoveFreeNotification(FImagesWatch);
+  FImages := AValue;
+  if FImages = nil then Exit;
+  if FImagesWatch = nil then
+  begin
+    FImagesWatch := TTyHeaderImagesWatch.Create(nil);
+    TTyHeaderImagesWatch(FImagesWatch).FHeader := Self;
+  end;
+  FImages.FreeNotification(FImagesWatch);
 end;
 
 procedure TTyHeader.ColumnsChanged(Sender: TObject);
@@ -1483,7 +1523,7 @@ procedure TTyHeader.SetImages(AValue: TCustomImageList);
 var i: Integer;
 begin
   if FImages = AValue then Exit;
-  FImages := AValue;
+  WatchImages(AValue);
   // A list arriving is when each column's streamed-but-unresolved ImageIndex can finally become a
   // name; ResolveImageIndex is private to TTyColumn but reachable from this unit.
   for i := 0 to FColumns.Count - 1 do
@@ -1512,7 +1552,7 @@ begin
     FSortColumn    := Src.FSortColumn;
     FSortDirection := Src.FSortDirection;
     FAutoSizeIndex := Src.FAutoSizeIndex;
-    FImages        := Src.FImages;
+    WatchImages(Src.FImages);
     FOptions       := Src.FOptions;
     { Rebuild columns }
     FColumns.Clear;

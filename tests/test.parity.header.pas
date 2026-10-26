@@ -156,6 +156,16 @@ type
     { Header.Images WINS over SmallImages when both are set — otherwise the override
       is not an override. }
     procedure TestHeaderImagesOverridesSmallImages;
+    { Freeing the list Header.Images points at clears it, and the next paint draws no icon.
+      The header used to keep the freed list, and the next header paint read it. }
+    procedure TestFreeingHeaderImagesClearsIt;
+    { A form freeing a list it created after the list view: the notice reaches the header
+      while the form is being destroyed, and nothing breaks. }
+    procedure TestFormFreesTheListBeforeTheListView;
+    { The header reports the loss through OnChange, so its host repaints without the icons. }
+    procedure TestFreeingTheListFiresOnChange;
+    { A header that got the list through Assign watches it too. }
+    procedure TestAnAssignedHeaderLetsGoOfAFreedList;
   end;
 
 implementation
@@ -621,6 +631,87 @@ begin
     AssertFalse('Header.Images wins over SmallImages', IconInk);
   finally
     empty.Free;
+  end;
+end;
+
+procedure TColumnHeaderIconParityTest.TestFreeingHeaderImagesClearsIt;
+begin
+  FLV.SmallImages := nil;
+  FLV.Header.Images := FImgs;
+  (FLV.Header.Columns.Items[0] as TTyColumn).ImageIndex := 0;
+  AssertTrue('precondition: the icon draws', IconInk);
+  FreeAndNil(FImgs);
+  AssertNull('freeing the list clears Header.Images', FLV.Header.Images);
+  AssertFalse('and the next paint draws no icon from it', IconInk);
+end;
+
+procedure TColumnHeaderIconParityTest.TestFormFreesTheListBeforeTheListView;
+var
+  form: TForm;
+  lv: TTyListView;
+  lst: TTyVirtualImageList;
+begin
+  form := TForm.CreateNew(nil);
+  try
+    lv := TTyListView.Create(form);
+    lv.Parent := form;
+    lv.ViewStyle := lvsReport;
+    lv.Header.Columns.Add;
+    lst := TTyVirtualImageList.Create(form);   // created last, so the form frees it first
+    lst.Collection := FColl;
+    lv.Header.Images := lst;
+  finally
+    form.Free;
+  end;
+  AssertTrue('the form freed both without an error', True);
+end;
+
+type
+  TChangeCounter = class
+    Count: Integer;
+    procedure Changed(Sender: TObject);
+  end;
+
+procedure TChangeCounter.Changed(Sender: TObject);
+begin
+  Inc(Count);
+end;
+
+procedure TColumnHeaderIconParityTest.TestFreeingTheListFiresOnChange;
+var
+  hdr: TTyHeader;
+  cnt: TChangeCounter;
+begin
+  hdr := TTyHeader.Create;
+  cnt := TChangeCounter.Create;
+  try
+    hdr.Images := FImgs;
+    hdr.OnChange := @cnt.Changed;
+    FreeAndNil(FImgs);
+    AssertNull('the header let go of the list', hdr.Images);
+    AssertEquals('and said so through OnChange', 1, cnt.Count);
+  finally
+    hdr.Free;
+    cnt.Free;
+  end;
+end;
+
+procedure TColumnHeaderIconParityTest.TestAnAssignedHeaderLetsGoOfAFreedList;
+var
+  src, dst: TTyHeader;
+begin
+  src := TTyHeader.Create;
+  dst := TTyHeader.Create;
+  try
+    src.Images := FImgs;
+    dst.Assign(src);
+    AssertSame('precondition: Assign copied the list', FImgs, dst.Images);
+    FreeAndNil(FImgs);
+    AssertNull('the copy let go of the freed list', dst.Images);
+    AssertNull('and so did the source', src.Images);
+  finally
+    src.Free;
+    dst.Free;
   end;
 end;
 
