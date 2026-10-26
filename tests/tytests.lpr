@@ -84,6 +84,7 @@ uses
   test.partfont,
   test.autosize.effect,
   test.borderwidth,
+  test.panelcaption,
   test.calendar,
   test.datetimepicker,
   test.treeview.events,

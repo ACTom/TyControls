@@ -287,6 +287,10 @@ begin
   // re-nil the field references here (that would orphan those bars and let a later
   // Resize create a duplicate pair).
   inherited Create(AOwner);
+  { LCL's TScrollBox has no caption (no csSetCaption, scrollingwincontrol.inc:349); this one
+    inherited TTyPanel's, so a new box acquired its own Name as a caption its children cover
+    (#116). An .lfm that stores a Caption keeps it. }
+  ControlStyle := ControlStyle - [csSetCaption];
   Width := 200;
   Height := 150;
 end;

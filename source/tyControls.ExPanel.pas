@@ -90,6 +90,7 @@ type
       returns to when expanded; while expanded it tracks the live Height. }
     property ExpandedHeight: Integer read FExpandedHeight write FExpandedHeight;
   published
+    property Alignment default taLeftJustify;   // the header's side (#116)
     property Collapsed: Boolean read FCollapsed write SetCollapsed default False;
     { Left unset it follows --expander-header-height (26 classic / 36 modern), so the
       header band grows with density; set it and that value wins and is streamed. }
@@ -187,6 +188,10 @@ constructor TTyExPanel.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   // TTyPanel already adds csAcceptsControls (real container) and sets a default size.
+  { The header caption has always sat at the left; now that it honours Alignment (#116),
+    the left is what it starts at -- and the default says so, so a form that never set it
+    reads the header exactly as before. }
+  Alignment := taLeftJustify;
   FCollapsed := False;
   FHeaderHeight := TyExPanelDefaultHeaderHeight;   { fallback; unused while not explicit }
   FHeaderHeightExplicit := False;                  { follow --expander-header-height (density) }
@@ -470,8 +475,7 @@ begin
       // its ink (font + colour) is the header key's business.
       textRect := Rect(hdr.Left + chevW, hdr.Top,
         hdr.Right - P.Scale(S.Padding.Right), hdr.Bottom);
-      P.DrawText(textRect, Caption, HS.FontName, ResolveFontSize(HS), HS.FontWeight,
-        HS.TextColor, taLeftJustify, tlCenter, True);
+      DrawCaption(P, textRect, HS, APPI);   // Alignment & co., as the panel's (#116)
     end;
 
     P.EndPaint;
