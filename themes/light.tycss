@@ -294,7 +294,12 @@
   --pagination-gap: 4px;
   --pagination-glyph-size: 12px;
   --popover-arrow-size: 8px;
+  /* 浮层动画的毫秒数，不带单位(同 --scrollbar-auto-hide)。和代码里的兜底值相同，
+     写出来是为了让 StyleOverride 编辑器能补全。 */
+  --popover-hide-duration: 100;
+  --popover-move-distance: 8px;
   --popover-offset: 4px;
+  --popover-show-duration: 150;
   --popover-title-gap: 6px;
   --qat-height: 26px;
   --qat-width: 120px;
