@@ -291,6 +291,42 @@ msgstr "TTyNotification 是角落通知:不打断人、会自己消失(Duration=
 msgid "All subscribers will be notified after publishing. Continue?"
 msgstr "发布后所有订阅者都会收到通知,确定吗?"
 
+#: tmainform.chkpopanim.caption
+msgid "Animate the popovers"
+msgstr "浮层动画"
+
+#: tmainform.btnpopaccent.caption
+msgid "Accent popover"
+msgstr "强调色浮层"
+
+#: tmainform.btnpopflyout.caption
+msgid "Flyout panel"
+msgstr "Flyout 面板"
+
+#: tmainform.lblpopmore.caption
+msgid "The accent popover differs from the others only by its StyleOverride. The flyout panel has no arrow: it lies inside this card along its bottom edge, as long as that edge. Untick the box and both appear and go at once."
+msgstr "强调色浮层和其他浮层只差一个 StyleOverride。Flyout 面板没有箭头,盖在这张卡片里面、贴着下边,和这条边一样长。取消勾选后,两个都是立即出现、立即消失。"
+
+#: tmainform.lblpopaccent.caption
+msgid "Fill, ink and square corners come from this popover's own StyleOverride."
+msgstr "底色、字色和直角都来自这个浮层自己的 StyleOverride。"
+
+#: tmainform.lblfly.caption
+msgid "A flyout panel: no arrow, the width of its edge."
+msgstr "Flyout 面板:没有箭头,和所贴的边一样宽。"
+
+#: tmainform.btnflyclose.caption
+msgid "Close"
+msgstr "关闭"
+
+#: tmainform.popaccent.title
+msgid "Accent popover"
+msgstr "强调色浮层"
+
+#: tmainform.popflyout.title
+msgid "Flyout panel"
+msgstr "Flyout 面板"
+
 #: tmainform.btnpopok.caption
 msgid "Confirm publish"
 msgstr "确定发布"

@@ -198,6 +198,17 @@ type
     { 浮层的内容容器:在设计器里摆好,平时 Visible = False 待在卡片里,
       Show 的时候被 TTyPopover 收编进弹窗、Hide 的时候原样还回来。 }
     PopBox: TTyPanel;
+    ChkPopAnim: TTyCheckBox;
+    BtnPopAccent: TTyButton;
+    BtnPopFlyout: TTyButton;
+    LblPopMore: TTyLabel;
+    PopAccentBox: TTyPanel;
+    LblPopAccent: TTyLabel;
+    FlyBox: TTyPanel;
+    LblFly: TTyLabel;
+    BtnFlyClose: TTyButton;
+    PopAccent: TTyPopover;
+    PopFlyout: TTyPopover;
     LblPopBody: TTyLabel;
     BtnPopOk: TTyButton;
     BtnPopCancel: TTyButton;
@@ -289,6 +300,10 @@ type
     procedure PopOkClick(Sender: TObject);
     procedure PopCancelClick(Sender: TObject);
     procedure SegPopPlaceChange(Sender: TObject);
+    procedure PopAnimChange(Sender: TObject);
+    procedure PopAccentClick(Sender: TObject);
+    procedure PopFlyoutClick(Sender: TObject);
+    procedure FlyCloseClick(Sender: TObject);
     procedure PopShow(Sender: TObject);
     procedure PopHide(Sender: TObject);
     procedure TabsDemoChange(Sender: TObject);
@@ -709,9 +724,12 @@ begin
   { 这两个平时是收起来的。Visible 只能在这里设:TTyEmpty / TTyPanel 都**没有 published
     Visible**,写进 .lfm 会在流式加载时炸(编译期看不出来 —— 这就是为什么要跑一次)。
       · 空态盖在列表那块矩形上,两者只有一个露面;
-      · PopBox 是浮层的内容容器,平时躲着,Show 的时候被收编进弹窗。 }
+      · PopBox 是浮层的内容容器,平时躲着,Show 的时候被收编进弹窗(另外两个浮层的
+        PopAccentBox / FlyBox 也一样)。 }
   EmptyOrders.Visible := False;
   PopBox.Visible := False;
+  PopAccentBox.Visible := False;
+  FlyBox.Visible := False;
 
   PlaceEmptyAction;
   AdvancedPickChange(nil);
@@ -1332,6 +1350,33 @@ end;
 procedure TMainForm.PopCancelClick(Sender: TObject);
 begin
   Pop.Hide;
+end;
+
+{ 动画总开关。开着时浮层淡入、朝目标移入,收起时淡出;关掉就是立即出现、立即消失。 }
+procedure TMainForm.PopAnimChange(Sender: TObject);
+begin
+  Pop.AnimationsEnabled := ChkPopAnim.Checked;
+  PopAccent.AnimationsEnabled := ChkPopAnim.Checked;
+  PopFlyout.AnimationsEnabled := ChkPopAnim.Checked;
+end;
+
+{ 这个浮层和别的只差 .lfm 里的一行 StyleOverride:底色、字色取强调色,去掉边框和圆角。
+  写的是 var(--accent) 而不是颜色值,所以换肤时跟着变。 }
+procedure TMainForm.PopAccentClick(Sender: TObject);
+begin
+  PopAccent.Show;
+end;
+
+{ FlyoutPanel.Active = True:不是气泡,而是盖在目标(这张卡片)里面、贴着它下边的面板,
+  长度等于卡片的宽,厚度取 FlyBox 的设计期高度。 }
+procedure TMainForm.PopFlyoutClick(Sender: TObject);
+begin
+  PopFlyout.Show;
+end;
+
+procedure TMainForm.FlyCloseClick(Sender: TObject);
+begin
+  PopFlyout.Hide;
 end;
 
 { 浮层贴哪一边。Placement 是**偏好**不是命令:那边放不下就翻到对面 —— 12 个取值里
