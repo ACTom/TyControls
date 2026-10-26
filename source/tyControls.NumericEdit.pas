@@ -57,6 +57,8 @@ type
     constructor Create(AOwner: TComponent); override;
     property Value: Double read GetValue write SetValue;
   published
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property Alignment default taRightJustify;
     property Decimals: Integer read FDecimals write SetDecimals default 2;
     property UseThousands: Boolean read FUseThousands write SetUseThousands default True;
     property MinValue: Double read FMinValue write SetMinValue;

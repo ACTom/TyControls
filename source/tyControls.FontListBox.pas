@@ -22,6 +22,9 @@ type
     constructor Create(AOwner: TComponent); override;
     procedure RefreshFonts;
     property SelectedFont: string read GetSelectedFont write SetSelectedFont;
+    published
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property ItemIndex default 0;
   end;
 
 implementation

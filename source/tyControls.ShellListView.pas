@@ -183,6 +183,9 @@ type
       says `List.Root := Dir` compiles and means what it says. }
     property Root: string read FDirectory write LoadDirectory;
   published
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property OwnerData default True;
+    property SortColumn default 0;
     { Setting Directory reads that path from disk (LoadDirectory). }
     property Directory: string read FDirectory write LoadDirectory;
     { The file filter (';'-separated masks). Changing it re-reads. }

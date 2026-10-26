@@ -319,6 +319,8 @@ type
     procedure SetBandVisible(ACtl: TControl; AValue: Boolean);
     function BandVisible(ACtl: TControl): Boolean;
   published
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property GripperWidth default 10;
     // GripperWidth is INHERITED from TTyControlBar (same field the band packing uses) — do NOT
     // redeclare it here, or the base would pack with one width while our hit-test used another.
     { Fallback resize floor for a band that has no MinWidth of its own (logical px). }

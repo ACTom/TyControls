@@ -60,7 +60,8 @@ type
     { True when the "»" chevron is currently shown. }
     function OverflowVisible: Boolean;
   published
-    property Wrapable;
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property Wrapable default False;
   end;
 
 { Pure overflow decision (device px, left-to-right): given each lead button's width and the

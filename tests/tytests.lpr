@@ -79,6 +79,7 @@ uses
   test.litetrio.events,
   test.datetime.events,
   test.popup,
+  test.defaults.guard,
   test.calendar,
   test.datetimepicker,
   test.treeview.events,

@@ -33,6 +33,8 @@ type
   public
     constructor Create(AOwner: TComponent); override;
   published
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property Cursor default crSizeNWSE;
     { The control resized by dragging the grip. When nil, the grip resizes the owner
       form (if the owner is a TCustomForm) or, failing that, the Parent control. }
     property Target: TControl read FTarget write SetTarget;

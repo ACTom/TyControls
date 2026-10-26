@@ -112,6 +112,8 @@ type
   public
     constructor Create(AOwner: TComponent); override;
   published
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property Options default [frDown, frReplace, frReplaceAll];
     property ReplaceText: string read FReplaceText write FReplaceText;
     property OnReplace: TNotifyEvent read FOnReplace write FOnReplace;
   end;

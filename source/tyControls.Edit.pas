@@ -398,6 +398,8 @@ type
       first click inside an already-focused edit does not re-select. Cleared on focus loss. }
     property AutoSelected: Boolean read FAutoSelected write FAutoSelected;
   published
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property Cursor default crIBeam;
     property Text: TCaption read FText write SetText;
     property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
     property MaxLength: Integer read FMaxLength write SetMaxLength default 0;

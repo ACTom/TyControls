@@ -71,6 +71,8 @@ type
   public
     constructor Create(AOwner: TComponent); override;
   published
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property Cursor default crHSplit;
     { LOGICAL px: the drag scales it by the splitter's PPI before it is compared with the
       pane, whose size is device px. Raw, 30 meant a 30 px pane at every scaling -- at 175%
       barely half of what it meant at 100%. }

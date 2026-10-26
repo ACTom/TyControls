@@ -227,6 +227,8 @@ type
   public
     constructor Create(AOwner: TComponent); override;
   published
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property Visible default False;
     property Caption: TCaption read FCaption write SetCaption;
     { When non-empty, this page is a CONTEXTUAL tab: shown only while its host ribbon's
       context of this name is active (TTyRibbon.ShowContext/HideContext). Empty = a

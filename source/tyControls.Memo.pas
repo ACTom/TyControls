@@ -880,6 +880,8 @@ type
     procedure RemoveHandlerOnChange(const AnOnChangeEvent: TNotifyEvent);
     procedure RemoveAllHandlersOfObject(AnObject: TObject); override;
   published
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property Cursor default crIBeam;
     property Lines: TStrings read GetLines write SetLines;
     // Whole-document text as one string with platform line breaks (TStrings.Text
     // get/set). Writing replaces all lines, collapses the caret to the origin and

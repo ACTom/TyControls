@@ -61,6 +61,8 @@ type
   public
     constructor Create(AOwner: TComponent); override;
   published
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property Cursor default crHandPoint;
     { Off by default (a designed link keeps the width the .lfm gave it). Switch it on and the
       link WIDENS to hug its caption plus the theme's padding, so a caption that grows
       lengthens the control -- and with it the accent underline -- instead of being clipped.

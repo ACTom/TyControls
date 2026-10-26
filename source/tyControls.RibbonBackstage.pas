@@ -89,6 +89,8 @@ type
       document info, …). Anchor it [akLeft,akTop,akRight,akBottom] so it tracks resizes. }
     function ContentRect: TRect;
   published
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property Visible default False;
     property Commands: TStrings read FCommands write SetCommands;
     { Optional per-command glyph names, rendered from IconFont at the left of each row.
 

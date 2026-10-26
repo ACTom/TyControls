@@ -175,6 +175,8 @@ type
       can drive enable-Save / prompt-on-close off it. }
     property Modified: Boolean read FModified write FModified;
   published
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property Cursor default crIBeam;
     property MinValue: Integer read FMinValue write SetMinValue default 0;
     { LCL's DefMaxValue is 0 (spin.pp:37) and Max <= Min means "no limit", so a freshly
       dropped spin edit accepts any integer. Ours shipped 100, which turned the same

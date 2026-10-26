@@ -301,6 +301,8 @@ type
   public
     constructor Create(AOwner: TComponent); override;
   published
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property GlyphSize default 24;
     { The tile IS the glyph-over-caption layout, so its declared default has to say so —
       otherwise the streamer writes GlyphLayout into every ribbon .lfm just to restate what
       the constructor already did. }

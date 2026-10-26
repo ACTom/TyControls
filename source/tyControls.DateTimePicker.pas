@@ -554,6 +554,8 @@ type
     property Calendar:    TTyCalendar      read FCalendar;
 
   published
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property Cursor default crArrow;
     { Published so DateTime appears in the Object Inspector and is streamed. }
     property DateTime:    TDateTime       read FDateTime    write SetDateTime;
     property Kind:         TTyDateTimeKind read FKind        write SetKind        default dtkDate;

@@ -314,6 +314,11 @@ type
       code that says `Tree.Path := X` compiles and means what LCL means. }
     property Path: string read GetPath write SetPath;
   published
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property NodeDataSize default 4;
+    property HotTrack default True;
+    { How many roots this machine has when the tree is made: nothing for a form file to hold. }
+    property RootNodeCount stored False;
     { The selection as a path. Reading returns SelectedPath (raw, no trailing
       delimiter); writing reveals + focuses it.
 

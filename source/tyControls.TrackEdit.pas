@@ -31,6 +31,9 @@ type
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
   public
     constructor Create(AOwner: TComponent); override;
+    published
+    { #108: the value the constructor sets, so the designer can store the other ones. }
+    property Decimals default 0;
   end;
 
 implementation
