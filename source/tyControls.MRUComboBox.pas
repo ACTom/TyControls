@@ -151,7 +151,7 @@ begin
     dropped — that also makes the base's restore a no-op. A designer-set Sorted:=True must
     neither raise SSortedListError on the promote nor silently turn the history
     alphabetical. }
-  Items.Sorted := False;
+  Sorted := False;   // through the property, so Sorted reads back what the list does (#120)
   { One promote/dedupe/trim, in the base, exactly as every other combo runs it. This
     method's narrower contract is expressed as ARGUMENTS — always case-insensitive, never
     an object, capped at MaxItems — instead of as a second implementation that drifts.

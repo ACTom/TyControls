@@ -128,6 +128,7 @@ type
       Kept as a combo-level value so the height is known BEFORE the popup list exists
       and so a .lfm can stream it. }
     FItemHeight: Integer;
+    FFactoryItemHeight: Integer;   // the row height the list factory pinned; 0 = the theme's (#120)
     { 0 = the dropdown is exactly as wide as the closed field; > 0 is a MINIMUM width in
       logical px, which is how LCL spells "let the list be wider than the field". }
     FItemWidth: Integer;
@@ -622,6 +623,33 @@ implementation
 uses
   Math, tyControls.QtWS, tyControls.PlatformWS;
 
+type
+  { Items' own class: it tells a rename (Items[i] := S) apart from a rebuild, so the selected
+    row keeps its selection through one, and only through one (#120). }
+  TTyComboItemList = class(TStringList)
+  public
+    FPutIndex: Integer;   // the row being renamed, while Put runs; -1 otherwise
+    constructor Create;
+  protected
+    procedure Put(Index: Integer; const S: string); override;
+  end;
+
+constructor TTyComboItemList.Create;
+begin
+  inherited Create;
+  FPutIndex := -1;
+end;
+
+procedure TTyComboItemList.Put(Index: Integer; const S: string);
+begin
+  FPutIndex := Index;
+  try
+    inherited Put(Index, S);
+  finally
+    FPutIndex := -1;
+  end;
+end;
+
 function TyComboStyleHasEditBox(AStyle: TTyComboBoxStyle): Boolean;
 begin
   { csSimple is in the True row of LCL's own table (customcombobox.inc:1255): the simple
@@ -776,7 +804,7 @@ begin
   { Not csSetCaption: Caption reads the field now (RealGetText), and LCL's SetName would
     otherwise write a fresh combo's Name into it the first time it is named. }
   ControlStyle := ControlStyle - [csSetCaption];
-  FItems := TStringList.Create;
+  FItems := TTyComboItemList.Create;
   FItems.OnChange := @ItemsChanged;
   FItemIndex := -1;
   FText := '';
@@ -954,6 +982,15 @@ procedure TTyCustomComboBox.SetText(const AValue: TCaption);
 begin
   if FText = AValue then Exit;
   FText := AValue;
+  { #120, as LCL's TCustomComboBox (UpdateItemIndex): text that names an item selects it --
+    case-insensitively, as LCL's default AutoCompleteText matches -- and text that names
+    none leaves nothing selected. No OnChange: it is the host writing, not the user picking. }
+  if not (csLoading in ComponentState) then
+    if (FItemIndex < 0) or (FItemIndex >= FItems.Count) or (FItems[FItemIndex] <> AValue) then
+      if AValue = '' then
+        FItemIndex := -1
+      else
+        FItemIndex := TyComboIndexOfText(FItems, AValue, False);
   { In editable mode keep the visible field in sync with a programmatic Text set,
     but under the guard so it does not re-trigger the autocomplete filter/popup. }
   if (FEditor <> nil) and TyComboStyleHasEditBox(FStyle) and (FEditor.Text <> AValue) then
@@ -1094,10 +1131,18 @@ procedure TTyCustomComboBox.SetItemHeight(const AValue: Integer);
 begin
   if FItemHeight = AValue then Exit;
   if AValue < 0 then FItemHeight := 0 else FItemHeight := AValue;
-  { Push it into an already-built popup list. Only when pinned: 0 must leave whatever the
-    list chose for itself, which is how TTyAdvancedComboBox keeps its 40px rich rows. }
-  if (FPopupList <> nil) and (FItemHeight > 0) then
-    FPopupList.ItemHeight := FItemHeight;
+  { Push it into an already-built popup list. 0 gives the rows back to whatever the list
+    chose for itself -- how TTyAdvancedComboBox keeps its 40px rich rows -- instead of leaving
+    the last pinned height in place (#120). }
+  if FPopupList <> nil then
+  begin
+    if FItemHeight > 0 then
+      FPopupList.ItemHeight := FItemHeight
+    else if FFactoryItemHeight > 0 then
+      FPopupList.ItemHeight := FFactoryItemHeight
+    else
+      FPopupList.FollowThemeItemHeight;
+  end;
   Invalidate;
 end;
 
@@ -1334,7 +1379,12 @@ begin
     combo, not the form. }
   FPopupList.ControlStyle := FPopupList.ControlStyle + [csNoDesignVisible];
   { A pinned ItemHeight overrides whatever the list (or a subclass's factory) chose;
-    0 leaves that choice alone so themed / rich-row lists keep working. }
+    0 leaves that choice alone so themed / rich-row lists keep working -- and that choice is
+    remembered, so ItemHeight set back to 0 later can hand the rows back to it (#120). }
+  if FPopupList.ItemHeightIsExplicit then
+    FFactoryItemHeight := FPopupList.ItemHeight
+  else
+    FFactoryItemHeight := 0;
   if FItemHeight > 0 then
     FPopupList.ItemHeight := FItemHeight;
   FPopupList.OnChange := @PopupListChange;
@@ -1715,6 +1765,14 @@ begin
   Idx := FItems.IndexOf(FText);
   if Idx >= 0 then
     FItemIndex := Idx
+  else if (FItems is TTyComboItemList) and (TTyComboItemList(FItems).FPutIndex = FItemIndex) then
+  begin
+    { #120: the selected row was renamed (Items[i] := S). It stays selected and shows its new
+      text, as LCL's widget lists put the selection back (win32listsl.inc:267). }
+    FText := FItems[FItemIndex];
+    if (FEditor <> nil) and TyComboStyleHasEditBox(FStyle) then
+      SetEditorText(FText);
+  end
   else
   begin
     { Selected text no longer present — clear selection. In editable mode the

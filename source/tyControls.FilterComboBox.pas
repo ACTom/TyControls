@@ -46,6 +46,9 @@ type
     { A row was committed by the user (chevron pick or keyboard). Recover the active
       segment from the row's Objects[] model index and fire OnFilterChange on a change. }
     procedure DoSelect; override;
+    { #120: ItemIndex set in code moves FilterIndex, Mask and the shell list too -- LCL's
+      GetMask reads ItemIndex (filectrl.pp:519). }
+    procedure SelectItem(AIndex: Integer); override;
     { Always pick-only -- ignore any attempt to make the field editable. }
     procedure SetStyle(AValue: TTyComboBoxStyle); override;
     { Nils a link whose list is being freed (filectrl.pp:565 does the same). }
@@ -304,6 +307,22 @@ begin
   PushMask;
   if Assigned(FOnFilterChange) then
     FOnFilterChange(Self);
+end;
+
+procedure TTyCustomFilterComboBox.SelectItem(AIndex: Integer);
+var
+  newIdx: Integer;
+begin
+  inherited SelectItem(AIndex);
+  if FUpdating or (ItemIndex < 0) or (ItemIndex >= Items.Count) then Exit;
+  newIdx := PtrInt(Items.Objects[ItemIndex]) + 1;   { model index -> 1-based FilterIndex }
+  if newIdx <> FFilterIndex then
+  begin
+    FFilterIndex := newIdx;
+    PushMask;
+    if Assigned(FOnFilterChange) then
+      FOnFilterChange(Self);
+  end;
 end;
 
 procedure TTyCustomFilterComboBox.DoSelect;

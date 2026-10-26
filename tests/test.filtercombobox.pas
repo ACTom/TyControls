@@ -55,7 +55,7 @@ const
 
 procedure TTyFilterComboBoxAccess.PickRow(AIndex: Integer);
 begin
-  ItemIndex := AIndex;   { public setter -> SelectItem (fires OnChange, NOT OnFilterChange) }
+  ItemIndex := AIndex;   { public setter -> SelectItem (moves FilterIndex too, #120) }
   DoSelect;              { the protected user-pick seam (reads Objects[ItemIndex]) }
 end;
 

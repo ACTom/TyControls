@@ -470,6 +470,7 @@ type
     function  GetDroppedDown: Boolean;
     procedure SetDroppedDown(AValue: Boolean);
 
+    procedure SetOptions(const AValue: TTyDateTimePickerOptions);   // repaints (#120)
   protected
     { Everything the paint and the click both need, out of ONE call: the field's rects,
       the resolved style and font size behind them, the string the control is showing,
@@ -591,7 +592,7 @@ type
     property CenturyFrom:  Word            read FCenturyFrom write SetCenturyFrom default TyDefaultCenturyFrom;
     { LCL's Options set (datetimepicker.pas:456), default [] as there. The one that
       changes existing behaviour is dtpoDoChangeOnSetDateTime -- see SetDateTime. }
-    property Options:      TTyDateTimePickerOptions read FOptions write FOptions default [];
+    property Options:      TTyDateTimePickerOptions read FOptions write SetOptions default [];
     { Which right-hand affordance the field carries, and whether it reserves a column
       at all. Was hardwired to Kind, so a date field could only drop a calendar and the
       button column was spent whether or not anything used it. }
@@ -1390,6 +1391,13 @@ begin
 end;
 
 { ── TTyDateTimePicker ────────────────────────────────────────────────────── }
+
+procedure TTyCustomDateTimePicker.SetOptions(const AValue: TTyDateTimePickerOptions);
+begin
+  if FOptions = AValue then Exit;
+  FOptions := AValue;
+  Invalidate;   // dtpoEnabledIfUnchecked changes the dimmed paint
+end;
 
 constructor TTyCustomDateTimePicker.Create(AOwner: TComponent);
 begin
