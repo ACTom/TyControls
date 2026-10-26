@@ -291,6 +291,7 @@
   --notification-margin: 16px;
   --notification-stack-gap: 8px;
   --notification-width: 340px;
+  --over-parent-chrome: 0;
   --pagination-gap: 4px;
   --pagination-glyph-size: 12px;
   --popover-arrow-size: 8px;

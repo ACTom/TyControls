@@ -240,7 +240,7 @@ typeKey 与文本类控件引用。它们都是普通 `--变量`,可被主题作
 目前按控件读令牌的是:`TTyListView`(含 `TTyShellListView`)读的全部尺寸令牌,即
 `--listview-*`、`--row-height` 和 `--scrollbar-size`;`TTyTreeView`(含 `TTyShellTreeView`)的
 `--treeview-margin`、`--treeview-icon-gap` 和 §3.5 的四个树线令牌;`TTyMemo` 的 `--memo-tab-size`。
-其他控件暂时只认主题里的值。
+其他控件暂时只认主题里的值。另外,每个控件都认 §3.6 的 `--over-parent-chrome`。
 3.0.4 以前的版本会忽略控件 `StyleOverride` 里的 `--` 声明,用新版本保存的窗体在旧版本里照样能打开。
 
 ### 3.5 树线与展开符号
@@ -279,6 +279,34 @@ typeKey 与文本类控件引用。它们都是普通 `--变量`,可被主题作
 ```
 
 3.0.4 以前没有这些令牌,树画的是实线的完整连线加 `chevron`。
+
+### 3.6 外框压在子控件上面
+
+子控件放到容器的边框、圆角或分隔线上时,容器会在子控件画完之后把这几样补画在上面,线不会在子控件那里断开。
+会这样做的容器:
+
+| 容器 | 补画的东西 |
+|---|---|
+| `TTyPanel`,以及 `TTyExPanel`、`TTyPaintPanel`、`TTyScrollBox`、`TTyScrollPanel`、`TTyControlBar`、`TTyCoolBar`、`TTyGridPanel`、`TTyRelativePanel` | 边框、焦点环、圆角外的父背景 |
+| `TTyCard` | 同上,加标题下和操作栏上的分隔线 |
+| `TTyGroupBox`,以及 `TTyRadioGroup`、`TTyCheckGroup`、`TTyToolGroupPanel` | 边框、焦点环、圆角外的父背景,加标题和它在上边框断开的那一段 |
+| `TTyPageControl` | 页面区的边框、焦点环、圆角外的父背景(以前当前页会盖住其中三条边) |
+| `TTyToolBar` | 底部细线 |
+
+只有看得见的边框或焦点环才算外框:`border-width: 0` 又没有焦点环的面板,圆角本来就看不出来,
+里面子控件的直角照旧。滚动框里贴边的滚动条自己就会画宿主的外框,宿主不再重复画。
+
+不想让某个子控件被盖住,在它的 `StyleOverride` 里写:
+
+```text
+--over-parent-chrome: 1;
+```
+
+写在主题或控制器 `StyleOverride` 的 `:root` 里,整个应用都不再补画。值是 `0`、`false`、`none`
+或者不写,都表示照常补画。代码里也可以整个关掉:`TyChromeOverlayEnabled := False;`
+(`tyControls.Base` 单元,默认 `True`)。
+
+补画只发生在 TyControls 自己的控件上;原生 LCL 控件放上去,照旧会盖住外框。这个行为从 3.0.5 开始。
 
 ---
 

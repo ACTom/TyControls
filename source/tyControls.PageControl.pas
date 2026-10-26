@@ -3,14 +3,14 @@ unit tyControls.PageControl;
 interface
 uses
   Classes, SysUtils, Types, Controls,
-  tyControls.Types, tyControls.Controller, tyControls.Base,
+  tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.Painter,
   tyControls.TabStrip, tyControls.TabSheet;
 type
   { A TPageControl-faithful designer container: TTyTabSheet pages owned by the form,
     parented to the control, streamed via the default GetChildren (Owner=Root). The
     tab strip (header) comes from TTyCustomTabStrip; tab captions are read from the
     pages. Active-page switching toggles Visible + csNoDesignVisible per page. }
-  TTyCustomPageControl = class(TTyCustomTabStrip)
+  TTyCustomPageControl = class(TTyCustomTabStrip, ITyChromeHost)
   private
     FPages: array of TTyCustomTabSheet;
     FDestroying: Boolean;
@@ -43,6 +43,13 @@ type
       page that hosts the shown control -- Sheet.Show and Delphi-ported code rely on it. }
     procedure ShowControl(AControl: TControl); override;
   public
+    { ITyChromeHost: the page box's frame, its focus ring and the parent background outside
+      its rounded corners stay whole on top of the pages. A page fills the box below the band,
+      so without this it covered three sides of the frame, its two far corners and the focus
+      ring, children or not. Virtual, so a descendant adds chrome of its own. }
+    function ChromeFreeRect: TRect; virtual;
+    procedure PaintChromeLayer(APainter: TTyPainter; const AOrigin: TPoint); virtual;
+    function ChromeSignature: string; virtual;
     { Hiding the ACTIVE page's tab moves the selection to the nearest visible tab
       (next first, then previous -- the Delphi behaviour); with no visible tab left
       the page keeps showing (the wizard pattern owns the band then). }
@@ -195,6 +202,41 @@ implementation
 function TTyCustomPageControl.GetStyleTypeKey: string;
 begin
   Result := 'TyPageControl';
+end;
+
+function TTyCustomPageControl.ChromeFreeRect: TRect;
+var
+  ppi, band: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  band := TyFrameChromeBand(CurrentStyle, ppi);
+  if band = 0 then Exit(Rect(0, 0, Width, Height));
+  Result := PageBodyRectAt(Width, Height, ppi);
+  InflateRect(Result, -band, -band);
+end;
+
+procedure TTyCustomPageControl.PaintChromeLayer(APainter: TTyPainter; const AOrigin: TPoint);
+var
+  S: TTyStyleSet;
+  body: TRect;
+begin
+  S := CurrentStyle;
+  { Dimmed with the control. Plain alpha, no base colour: the layer goes over the page. }
+  if tpOpacity in S.Present then APainter.Opacity := S.Opacity;
+  body := PageBodyRectAt(Width, Height, Font.PixelsPerInch);
+  OffsetRect(body, AOrigin.X, AOrigin.Y);
+  TyDrawChromeFrame(Self, APainter, body, S);
+end;
+
+function TTyCustomPageControl.ChromeSignature: string;
+var
+  ppi: Integer;
+  body: TRect;
+begin
+  ppi := Font.PixelsPerInch;
+  body := PageBodyRectAt(Width, Height, ppi);
+  Result := TyFrameChromeSignature(Self, CurrentStyle, ppi) + '|b' + IntToStr(body.Left)
+    + ',' + IntToStr(body.Top) + ',' + IntToStr(body.Right) + ',' + IntToStr(body.Bottom);
 end;
 
 function TTyCustomPageControl.PageCount: Integer;
