@@ -614,6 +614,7 @@ type
     FOnCompareNodes:   TTyTreeCompareEvent;
     FOnHeaderClick:    TTyTreeColumnEvent;
     FSorting:          Boolean;   // reentrancy guard: SortTree -> HeaderChanged -> SortTree
+    FAutoSizing:       Boolean;   // reentrancy guard: ApplyAutoSize -> column width -> HeaderChanged (#126)
     FSortedColumn:     Integer;   // last key SortTree ran with — so a width/reorder
     FSortedDirection:  TTySortDirection;  //   change (same key) does NOT re-sort the tree
     FCustomSortProc:   TTyTreeNodeCompare;   { live only for the duration of CustomSort }
@@ -658,6 +659,10 @@ type
     procedure UpdateScrollBars;
     { B (columns): header/column change handler }
     procedure HeaderChanged(Sender: TObject);
+    { hoAutoResize: the AutoSizeIndex column takes up the rest of the width. On a resize and on
+      any header change (#126) -- a column added, resized or hidden moves what "the rest" is. }
+    procedure ApplyHeaderAutoSize;
+    procedure SetEmptyListMessage(const AValue: TCaption);
     procedure SetHeader(AValue: TTyHeader);
     procedure SetIndent(AValue: Integer);
     procedure ImagesChanged(Sender: TObject);
@@ -1217,7 +1222,7 @@ type
     property RootNodeCount: Cardinal read GetRootNodeCount write SetRootNodeCount default 0;
     { C1: display properties }
     property Indent: Integer read FIndent write SetIndent default 16;
-    property EmptyListMessage: TCaption read FEmptyListMessage write FEmptyListMessage;
+    property EmptyListMessage: TCaption read FEmptyListMessage write SetEmptyListMessage;
     property ShowButtons: Boolean read FShowButtons write SetShowButtons default True;
     property ShowTreeLines: Boolean read FShowTreeLines write SetShowTreeLines default True;
     property ShowRoot: Boolean read FShowRoot write SetShowRoot default True;
@@ -3385,25 +3390,42 @@ end;
   D4: when hoAutoResize is on, re-apply auto-size so the designated column fills
   the remaining width whenever the control is resized. }
 procedure TTyCustomTreeView.Resize;
-var
-  PPI, contentW: Integer;
 begin
   inherited Resize;
   UpdateScrollBars;
-  { D4: auto-size hook — runs after UpdateScrollBars so ContentRect is current }
+  ApplyHeaderAutoSize;   // D4: after UpdateScrollBars so ContentRect is current
+  RepositionEditor;   // ③e E4: keep an open editor glued to its cell after a resize
+end;
+
+procedure TTyCustomTreeView.ApplyHeaderAutoSize;
+var
+  PPI, contentW: Integer;
+begin
+  if FAutoSizing then Exit;
   if (FHeader <> nil) and (hoAutoResize in FHeader.Options) and
      (FHeader.AutoSizeIndex >= 0) and
      (FHeader.AutoSizeIndex < FHeader.Columns.Count) and
      (FHeader.Columns.Count > 0) then
   begin
-    PPI      := Font.PixelsPerInch;
-    contentW := MulDiv(ContentRect.Width, 96, PPI);
-    FHeader.Columns.ApplyAutoSize(contentW, FHeader.AutoSizeIndex);
-    if FHeader.Columns.Count > 0 then
-      FRangeX := MulDiv(FHeader.Columns.TotalWidth, Font.PixelsPerInch, 96);
-    UpdateScrollBars;
+    FAutoSizing := True;
+    try
+      PPI      := Font.PixelsPerInch;
+      contentW := MulDiv(ContentRect.Width, 96, PPI);
+      FHeader.Columns.ApplyAutoSize(contentW, FHeader.AutoSizeIndex);
+      if FHeader.Columns.Count > 0 then
+        FRangeX := MulDiv(FHeader.Columns.TotalWidth, Font.PixelsPerInch, 96);
+      UpdateScrollBars;
+    finally
+      FAutoSizing := False;
+    end;
   end;
-  RepositionEditor;   // ③e E4: keep an open editor glued to its cell after a resize
+end;
+
+procedure TTyCustomTreeView.SetEmptyListMessage(const AValue: TCaption);
+begin
+  if FEmptyListMessage = AValue then Exit;
+  FEmptyListMessage := AValue;
+  Invalidate;   // #126: an empty tree shows it
 end;
 
 { B (columns): header/column change handler }
@@ -3428,6 +3450,7 @@ begin
      ((FHeader.SortColumn <> FSortedColumn) or
       (FHeader.SortDirection <> FSortedDirection)) then
     SortTree(FHeader.SortColumn, FHeader.SortDirection);
+  ApplyHeaderAutoSize;   // #126
   Invalidate;
 end;
 
