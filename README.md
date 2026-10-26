@@ -395,6 +395,7 @@ CharImage1.GlyphName := 'house';
 | [tycss-reference.md](docs/tycss-reference.md) | `.tycss` 语言参考 |
 | [events.md](docs/events.md) | 通用事件约定 |
 | [rtl.md](docs/rtl.md) | 双向文本与右到左布局 |
+| [lcl-differences.md](docs/lcl-differences.md) | 与 LCL 的有意差异(移植时留意) |
 | [known-issues.md](docs/known-issues.md) | 已知问题 |
 | [CHANGELOG.md](CHANGELOG.md) | 更新日志 |
 

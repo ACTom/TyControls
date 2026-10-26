@@ -775,6 +775,10 @@ type
     procedure SnapshotKeys(ADest: TStrings);
   end;
 
+  { 网格的表头。与 TTyHeader 完全一样,只是有了自己的类 —— 设计器才能单独藏起网格用不上的
+    MainColumn(#130):它在树/列表上决定哪一列画树线与图标,网格里没有任何代码读它。 }
+  TTyGridHeader = class(TTyHeader);
+
   { 网格基类:有几何、有外观,但不规定数据从哪来。 }
   TTyCustomGrid = class(TTyCustomControl)
   private
@@ -3998,7 +4002,7 @@ begin
     的点击取焦点是拿 TabStop 当闸门的。放到基类,两个派生网格一起对。 }
   TabStop := True;
   { 让表头造网格自己的列类。 }
-  FHeader := TTyHeader.Create(TTyGridColumn);
+  FHeader := TTyGridHeader.Create(TTyGridColumn);
   FHeader.Columns.NewColumnWidth := @NewColumnWidth;   { #127 }
   FHeader.OnChange := @HeaderChanged;
   FRowCount := 0;

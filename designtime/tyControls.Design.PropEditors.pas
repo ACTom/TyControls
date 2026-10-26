@@ -8,7 +8,7 @@ unit tyControls.Design.PropEditors;
   whole designtime/ directory, so registrations are found wherever they live. }
 interface
 uses
-  Classes, SysUtils, Forms, Controls, Dialogs, Menus, Graphics, LCLType,
+  Classes, SysUtils, Forms, Controls, StdCtrls, Dialogs, Menus, Graphics, LCLType,
   PropEdits, TypInfo, BGRABitmap,
   tyControls.Types, tyControls.Component, tyControls.Base, tyControls.Controller,
   tyControls.StyleModel, tyControls.BuiltinThemes, tyControls.ThemeRegistry,
@@ -18,6 +18,8 @@ uses
   tyControls.Dialogs.SelectPath, tyControls.Dialogs.FileDialog,
   tyControls.ShellComboBox, tyControls.ShellListView, tyControls.ShellTreeView,
   tyControls.FilterComboBox, tyControls.CharImage, tyControls.GlyphButtons,
+  tyControls.NumericEdit, tyControls.ComboBox, tyControls.AdvancedComboBox,
+  tyControls.CheckComboBox, tyControls.ColorBox, tyControls.OfficeComboBox, tyControls.Grid,
   { The SynEdit-backed tycss editor for StyleOverride (design-time only). }
   tyControls.Design.Css.Editor;
 
@@ -172,6 +174,14 @@ type
   public
     function GetAttributes: TPropertyAttributes; override;
     procedure Edit; override;
+  end;
+
+  { #130: Style on the combo boxes that are pick-only by design. An editable style is turned into
+    its pick-only twin the moment it is set (TyComboStylePickOnly), so the list offers only the
+    styles that stay as chosen. }
+  TTyPickOnlyComboStyleEditor = class(TEnumPropertyEditor)
+  public
+    procedure GetValues(Proc: TGetStrProc); override;
   end;
 
 { All RegisterPropertyEditor calls of the package (including the THiddenPropertyEditor
@@ -672,6 +682,17 @@ begin
   end;
 end;
 
+{ ---- TTyPickOnlyComboStyleEditor ---- }
+
+procedure TTyPickOnlyComboStyleEditor.GetValues(Proc: TGetStrProc);
+var
+  s: TTyComboBoxStyle;
+begin
+  for s := Low(TTyComboBoxStyle) to High(TTyComboBoxStyle) do
+    if TyComboStylePickOnly(s) = s then
+      Proc(GetEnumName(TypeInfo(TTyComboBoxStyle), Ord(s)));
+end;
+
 { ---- registration ---- }
 
 procedure RegisterPropertyEditors;
@@ -838,6 +859,46 @@ begin
   // specificity —so they must be the LAST word: Version/Purpose are never in the hide list).
   RegisterPropertyEditor(TypeInfo(string), TTyFormSurface, 'Version', TTyVersionEditor);
   RegisterPropertyEditor(TypeInfo(string), TTyFormSurface, 'Purpose', TTySurfacePurposeEditor);
+  { #130: properties that can never act on the control that publishes them. They stay
+    published -- a form saved with one must still load -- and the designer stops offering them. }
+  // A numeric edit takes digits, a sign and a separator: there is no case to change.
+  RegisterPropertyEditor(TypeInfo(TEditCharCase), TTyNumericEdit, 'CharCase', THiddenPropertyEditor);
+  // The pick-only combo boxes have no text to type, so nothing to limit, re-case or lock.
+  RegisterPropertyEditor(TypeInfo(Integer), TTyAdvancedComboBox, 'MaxLength', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TEditCharCase), TTyAdvancedComboBox, 'CharCase', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(Boolean), TTyAdvancedComboBox, 'ReadOnly', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(Integer), TTyCheckComboBox, 'MaxLength', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TEditCharCase), TTyCheckComboBox, 'CharCase', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(Boolean), TTyCheckComboBox, 'ReadOnly', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(Integer), TTyColorBox, 'MaxLength', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TEditCharCase), TTyColorBox, 'CharCase', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(Boolean), TTyColorBox, 'ReadOnly', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(Integer), TTyFilterComboBox, 'MaxLength', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TEditCharCase), TTyFilterComboBox, 'CharCase', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(Boolean), TTyFilterComboBox, 'ReadOnly', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(Integer), TTyOfficeComboBox, 'MaxLength', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TEditCharCase), TTyOfficeComboBox, 'CharCase', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(Boolean), TTyOfficeComboBox, 'ReadOnly', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(Integer), TTyShellComboBox, 'MaxLength', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TEditCharCase), TTyShellComboBox, 'CharCase', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(Boolean), TTyShellComboBox, 'ReadOnly', THiddenPropertyEditor);
+  // ... and their Style lists only the styles that stay as chosen. (TTyColorBox's Style is
+  // its palette, another type: the combo style is not published there.)
+  RegisterPropertyEditor(TypeInfo(TTyComboBoxStyle), TTyAdvancedComboBox, 'Style', TTyPickOnlyComboStyleEditor);
+  RegisterPropertyEditor(TypeInfo(TTyComboBoxStyle), TTyCheckComboBox, 'Style', TTyPickOnlyComboStyleEditor);
+  RegisterPropertyEditor(TypeInfo(TTyComboBoxStyle), TTyFilterComboBox, 'Style', TTyPickOnlyComboStyleEditor);
+  RegisterPropertyEditor(TypeInfo(TTyComboBoxStyle), TTyOfficeComboBox, 'Style', TTyPickOnlyComboStyleEditor);
+  RegisterPropertyEditor(TypeInfo(TTyComboBoxStyle), TTyShellComboBox, 'Style', TTyPickOnlyComboStyleEditor);
+  { TTyDrawGrid has no selection to fade and no built-in cell editor to widen; TTyStringGrid,
+    which has both, gets the stock editors back (the more specific class wins). }
+  RegisterPropertyEditor(TypeInfo(Boolean), TTyDrawGrid, 'HideSelectionWhenInactive', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(Boolean), TTyDrawGrid, 'FadeUnfocusedSelection', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(Integer), TTyDrawGrid, 'MinEditorWidth', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(Boolean), TTyStringGrid, 'HideSelectionWhenInactive', TBoolPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(Boolean), TTyStringGrid, 'FadeUnfocusedSelection', TBoolPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(Integer), TTyStringGrid, 'MinEditorWidth', TIntegerPropertyEditor);
+  // A grid's header has no main column: nothing in the grid reads it (see TTyGridHeader).
+  RegisterPropertyEditor(TypeInfo(Integer), TTyGridHeader, 'MainColumn', THiddenPropertyEditor);
 end;
 
 end.

@@ -395,6 +395,7 @@ Thirty-plus single-control examples live under [examples/](examples/).
 | [tycss-reference.en.md](docs/tycss-reference.en.md) | The `.tycss` language reference |
 | [events.en.md](docs/events.en.md) | Common event conventions |
 | [rtl.md](docs/rtl.md) | Bidirectional text and right-to-left layout (Chinese) |
+| [lcl-differences.en.md](docs/lcl-differences.en.md) | Deliberate differences from LCL (worth a look when porting) |
 | [known-issues.en.md](docs/known-issues.en.md) | Known issues |
 | [CHANGELOG.en.md](CHANGELOG.en.md) | Changelog |
 

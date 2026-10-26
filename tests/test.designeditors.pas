@@ -33,7 +33,8 @@ uses
   tyControls.CharImage, tyControls.GlyphButtons, tyControls.Ribbon,
   tyControls.Dialogs.FileDialog, tyControls.Dialogs.SelectPath, tyControls.FilterComboBox,
   tyControls.ShellComboBox, tyControls.ShellListView, tyControls.ShellTreeView,
-  tyControls.ImageCollection;
+  tyControls.ImageCollection, tyControls.NumericEdit, tyControls.AdvancedComboBox,
+  tyControls.CheckComboBox, tyControls.ColorBox, tyControls.OfficeComboBox, tyControls.Grid;
 
 type
   TDesignEditorsTest = class(TTestCase)
@@ -387,6 +388,9 @@ initialization
     TTyFormSurface, TTyPopupMenu, TTyPopover, TTyIconFont, TTyCharImage, TTyGlyphButtonBase,
     TTyRibbonPage, TTyCustomFileDialog, TTyFilterComboBox, TTySelectPathDialog,
     TTyShellComboBox, TTyShellListView, TTyShellTreeView,
+    { #130's hides. }
+    TTyNumericEdit, TTyAdvancedComboBox, TTyCheckComboBox, TTyColorBox, TTyOfficeComboBox,
+    TTyDrawGrid, TTyStringGrid, TTyGridHeader,
     { A collection ITEM, not a component — the image-payload editor is registered on
       TTyImageItem so it applies inside the stock collection editor for
       TTyImageCollection.Images. GetClass needs it registered to resolve the name. }

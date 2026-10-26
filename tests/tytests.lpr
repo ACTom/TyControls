@@ -97,6 +97,7 @@ uses
   test.gridprops,
   test.miscprops,
   test.glyphnone,
+  test.designhidden,
   test.calendar,
   test.datetimepicker,
   test.treeview.events,
