@@ -9147,8 +9147,21 @@ begin
     carTmRect:
       begin
         { [Batch 138] a treemap rect's local shape under its node group's
-          computed transform (a translation) }
-        TyZrRect(path, AEl.Anim.G[0], AEl.Anim.G[1], AEl.Anim.G[2], AEl.Anim.G[3]);
+          computed transform (a translation) -- [R5-I] Rect.buildPath's
+          rounded one where it has corners (itemStyle.borderRadius) [was:
+          the plain rect, the morph from square corners] }
+        if AEl.Shape.Kind = cskRoundRect then
+          TyZrRadii([AEl.Shape.Radii[0], AEl.Shape.Radii[1], AEl.Shape.Radii[2],
+            AEl.Shape.Radii[3]], r1, r2, r3, r4)
+        else
+        begin
+          r1 := 0; r2 := 0; r3 := 0; r4 := 0;
+        end;
+        if (r1 <> 0) or (r2 <> 0) or (r3 <> 0) or (r4 <> 0) then
+          TyZrRoundRect(path, AEl.Anim.G[0], AEl.Anim.G[1], AEl.Anim.G[2], AEl.Anim.G[3],
+            r1, r2, r3, r4)
+        else
+          TyZrRect(path, AEl.Anim.G[0], AEl.Anim.G[1], AEl.Anim.G[2], AEl.Anim.G[3]);
         AData := TyGuidePathData(path);
         AHasM := AEl.Anim.G[5] <> 0;
         if AHasM then

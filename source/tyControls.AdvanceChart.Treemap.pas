@@ -305,6 +305,9 @@ procedure TyTreemapBreadcrumb(var ASolved: TTyTreemapSolved;
   const ACrumbSpec: TTyLabelSpec; const AMeasurer: ITyTextMeasurer;
   const ARef: TTyXYWH; const ACanvas: TTyRectF; ATarget: Integer;
   const AHave, APrevHave: TTyTreemapHave; const APrev: TTyTreemapSolved); overload;
+{ [R5-I] a node's rect: its corners (the author's radii) clamped to the
+  bounds it has -- zrender's buildPath does it each time it draws }
+function TyTreemapRectShape(const ABounds: TTyRectF; const ARadii: TTyDoubleArray): TTyChartShape;
 { The rects in pre-order, then the breadcrumb. }
 function TyBuildTreemapMarks(ASeriesIndex: Integer; const ASolved: TTyTreemapSolved;
   const AInk: TTyTreemapInk; AList: TTyPaintList): Integer;
@@ -2530,6 +2533,11 @@ function TmRect(const ABounds: TTyRectF; const ARadii: TTyDoubleArray): TTyChart
 begin
   if Length(ARadii) = 0 then Result := TyShapeRect(ABounds)
   else Result := TyShapeRoundRect(ABounds, ARadii);
+end;
+
+function TyTreemapRectShape(const ABounds: TTyRectF; const ARadii: TTyDoubleArray): TTyChartShape;
+begin
+  Result := TmRect(ABounds, ARadii);
 end;
 
 function TyBuildTreemapMarks(ASeriesIndex: Integer; const ASolved: TTyTreemapSolved;

@@ -90,6 +90,7 @@ type
     procedure TestATreesDataMergeWalksTheOldTreeAsUpstream;
     procedure TestARadarsSymbolsSlideAsUpstream;
     procedure TestATreesEdgeInFlightIsHitWhereItIsDrawn;
+    procedure TestATreemapsCornersFitTheRectInEveryFrame;
   end;
 
 implementation
@@ -1295,6 +1296,59 @@ end;
 procedure TAdvChartAnimUpdate4OracleTest.TestATreesDataMergeWalksTheOldTreeAsUpstream;
 begin
   RunGroup('treeData', 1000);
+end;
+
+{ HAND-WRITTEN [R5-I]: a treemap with rounded corners (itemStyle.borderRadius
+  20): a merge takes b2 away, its rects shrink to b's centre. zrender's
+  roundRect clamps the radii to the rect each time it draws (r1 + r2 over
+  the width scales both down), so in every frame the corners fit the rect
+  as it is -- the leaving content's, and a kept one's -- not the rest's. }
+procedure TAdvChartAnimUpdate4OracleTest.TestATreemapsCornersFitTheRectInEveryFrame;
+var
+  t: Double;
+  l: TTyPaintList;
+  e: TTyChartElement;
+  k, j, seen: Integer;
+  want: TTyChartShape;
+begin
+  NewChart(400, 300);
+  FChart.AnimationMode := camAlways;
+  FChart.AnimNow := 1000;
+  FChart.SetOption('{"animation": true, "series": [{"type": "treemap", "breadcrumb": {"show": false},'
+    + ' "width": 300, "height": 200, "left": 50, "top": 50, "animationDurationUpdate": 1000,'
+    + ' "animationEasing": "linear", "itemStyle": {"borderRadius": 20},'
+    + ' "data": [{"name": "a", "value": 6}, {"name": "b", "children": [{"name": "b1", "value": 3},'
+    + ' {"name": "b2", "value": 3}]}, {"name": "c", "value": 4}]}]}', True);
+  RenderNow;
+  FChart.AnimTick(4000);
+  FChart.AnimNow := 4000;
+  RenderNow;
+  FChart.SetOption('{"series": [{"data": [{"name": "a", "value": 6}, {"name": "b", "children":'
+    + ' [{"name": "b1", "value": 3}]}, {"name": "c", "value": 4}]}]}', False);
+  RenderNow;
+  seen := 0;
+  t := 4016;
+  while t <= 4900 do
+  begin
+    FChart.AnimNow := t;
+    FChart.AnimTick(t);
+    RenderNow;
+    l := FChart.Frame;
+    AssertTrue('a frame', l <> nil);
+    for k := 0 to l.Count - 1 do
+    begin
+      e := l.Element(k);
+      if (e.Anim.Role <> carTmRect) or (e.Shape.Kind <> cskRoundRect) then Continue;
+      Inc(seen);
+      want := TyShapeRoundRect(e.Shape.Bounds, [20]);
+      for j := 0 to 3 do
+        AssertEquals(Format('t=%g row %d sub %d corner %d (%.3f x %.3f)', [t, e.Anim.Index,
+          e.Anim.Sub, j, e.Shape.Bounds.Right - e.Shape.Bounds.Left,
+          e.Shape.Bounds.Bottom - e.Shape.Bounds.Top]), want.Radii[j], e.Shape.Radii[j], 1e-9);
+    end;
+    t := t + 100;
+  end;
+  AssertTrue('rounded rects in the frames', seen > 20);
 end;
 
 initialization

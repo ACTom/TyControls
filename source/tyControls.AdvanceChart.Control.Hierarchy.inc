@@ -2388,11 +2388,23 @@ var
     end;
   end;
 
-  procedure Place(var AEl: TTyChartElement; ARow: Integer);
+  { [R5-I] the rect at bounds of this frame, its corners clamped to them
+    again (roundRect's buildPath, each time it draws) [was: the corners
+    clamped to the rest's bounds -- a shrinking rect drew them too big] }
+  procedure Reshape(var AEl: TTyChartElement; const ABounds: TTyRectF;
+    const ARadii: TTyDoubleArray);
+  begin
+    if AEl.Shape.Kind = cskRoundRect then
+      AEl.Shape := TyTreemapRectShape(ABounds, ARadii)
+    else
+      AEl.Shape.Bounds := ABounds;
+  end;
+
+  procedure Place(var AEl: TTyChartElement; ARow: Integer; const ARadii: TTyDoubleArray);
   begin
     Compose(ARow);
-    AEl.Shape.Bounds := TyRectF(sx + T[ARow].TX, sy + T[ARow].TY,
-      (sx + sw) + T[ARow].TX, (sy + sh) + T[ARow].TY);
+    Reshape(AEl, TyRectF(sx + T[ARow].TX, sy + T[ARow].TY,
+      (sx + sw) + T[ARow].TX, (sy + sh) + T[ARow].TY), ARadii);
     AEl.Style.Alpha := op;
   end;
 
@@ -2443,7 +2455,7 @@ begin
         sub := el.Anim.Sub;
         if (row < 0) or (row >= nn) or (sub < 0) or (sub > 1) then Continue;
         RectOf(A^.Rects[row][sub], el);
-        Place(el, row);
+        Place(el, row, TS^.Nodes[row].Radii);
         AFrame.SetElement(i, el);
       end
       else if (el.Anim.Role = carLabel) and (el.Datum.SeriesIndex = si) then
@@ -2493,8 +2505,12 @@ begin
         OCompose(row);
         ox0 := el.Shape.Bounds.Left;
         oy0 := el.Shape.Bounds.Top;
-        el.Shape.Bounds := TyRectF(sx + OT[row].TX, sy + OT[row].TY,
-          (sx + sw) + OT[row].TX, (sy + sh) + OT[row].TY);
+        if row <= High(A^.Old.Nodes) then
+          Reshape(el, TyRectF(sx + OT[row].TX, sy + OT[row].TY,
+            (sx + sw) + OT[row].TX, (sy + sh) + OT[row].TY), A^.Old.Nodes[row].Radii)
+        else
+          el.Shape.Bounds := TyRectF(sx + OT[row].TX, sy + OT[row].TY,
+            (sx + sw) + OT[row].TX, (sy + sh) + OT[row].TY);
         el.Style.Alpha := op;
         AFrame.Add(el);
         if A^.Ghosts[i].HasLabel then
@@ -2540,7 +2556,8 @@ begin
         end;
         Continue;
       end;
-      Place(el, row);
+      if row <= High(A^.Old.Nodes) then Place(el, row, A^.Old.Nodes[row].Radii)
+      else Place(el, row, nil);
       AFrame.Add(el);
       if A^.Ghosts[i].HasLabel then
       begin

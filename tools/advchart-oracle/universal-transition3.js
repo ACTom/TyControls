@@ -565,6 +565,10 @@ function chartCases() {
       merge: false }, s(tmSmall(PALETTE))], { digest: true });
   add('tm-tm.recolor', 'the same treemap with a new palette: one view, its own update -- a treemap keeps no old style, so the '
     + 'transition animates no style', [s(tmSmall(PALETTE)), s(tmSmall(PALETTE.slice().reverse()))], { digest: true });
+  // [R5-I] rounded rects: the morph starts from Rect.buildPath's rounded path (r, clamped to the rect)
+  const tmRound = () => { const o = tmSmall(PALETTE); o.series[0].itemStyle = { borderRadius: 6 }; return o; };
+  add('tm-sb.rounded', 'a treemap whose rects have rounded corners (itemStyle.borderRadius 6) becomes the sunburst: each rect '
+    + 'morphs from its rounded path', [s(tmRound()), s(sbSmall)], { digest: true });
   return list;
 }
 
