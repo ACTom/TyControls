@@ -154,8 +154,27 @@ type
 
 function TyTrackThumbOffset(AMainLen, AThumbLen, AMin, AMax, APos: Integer; AInvert: Boolean): Integer;
 function TyTrackPosFromOffset(AMainLen, AThumbLen, AMin, AMax, AOffset: Integer; AInvert: Boolean): Integer;
+{ The step between automatic ticks over a track ALenPx long (#187): Frequency, widened to a
+  multiple of it once the ticks would stand closer than 2 px. With Frequency 1 a range of a
+  million drew a million ticks on every paint, and at High(Integer) the counter wrapped and
+  the paint never ended. Int64, so a caller can count with it without wrapping either. }
+function TyTrackAutoTickStride(AMin, AMax, AFrequency, ALenPx: Integer): Int64;
 
 implementation
+
+function TyTrackAutoTickStride(AMin, AMax, AFrequency, ALenPx: Integer): Int64;
+var
+  ticks, maxTicks: Int64;
+begin
+  Result := AFrequency;
+  if (AFrequency <= 0) or (AMax <= AMin) then Exit;
+  maxTicks := ALenPx div 2;
+  if maxTicks < 2 then maxTicks := 2;
+  ticks := (Int64(AMax) - AMin) div AFrequency + 1;
+  if ticks > maxTicks then
+    Result := Int64(AFrequency) * ((ticks + maxTicks - 1) div maxTicks);
+end;
+
 
 function TyTrackThumbOffset(AMainLen, AThumbLen, AMin, AMax, APos: Integer; AInvert: Boolean): Integer;
 var travel, span, eff: Integer;
@@ -649,7 +668,8 @@ var
   ThumbStates: TTyStateSet;
   TW, MLen, Off: Integer;
   TickFill: TTyFill;
-  TickLen, TickW, V, TickOff, Idx: Integer;
+  TickLen, TickW, TickOff, Idx: Integer;
+  V, Stride: Int64;
   Band, GrooveTh, Mid: Integer;
   vs, vw: TSize;
 
@@ -804,12 +824,13 @@ begin
       end
       else if FFrequency > 0 then
       begin
+        Stride := TyTrackAutoTickStride(FMin, FMax, FFrequency, MLen);   { #187 }
         V := FMin;
         while V <= FMax do
         begin
-          TickOff := TyTrackThumbOffset(MLen, TW, FMin, FMax, V, Inverted);
+          TickOff := TyTrackThumbOffset(MLen, TW, FMin, FMax, Integer(V), Inverted);
           DrawTickAt(TickOff + TW div 2);
-          Inc(V, FFrequency);
+          Inc(V, Stride);
         end;
       end;
     end;
