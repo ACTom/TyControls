@@ -352,7 +352,7 @@ const CASES = [
   {
     id: 'x-image', note: 'an image:// handle: the picture in the rect [-1, -1, 2, 2] scaled by size / 2, dragged by it', style: true,
     charts: [{ animation: false, xAxis: { type: 'category', data: CATS, axisPointer: { handle: { show: true, size: 30,
-      icon: 'image://data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVR4nGP4z8DwnwEJMDAgAQBfZgf5bUGqSAAAAABJRU5ErkJggg==' } } },
+      icon: 'image://data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAEklEQVR4nGP4z8DwHxkzkC4AADxAH+HggXe0AAAAAElFTkSuQmCC' } } },
       yAxis: { type: 'value' }, series: [LINE] }],
     steps: [
       { op: 'idle', ms: 10 },

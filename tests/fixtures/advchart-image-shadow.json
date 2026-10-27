@@ -1,0 +1,821 @@
+{
+ "source": "ECharts 6.1 dist: chart/helper/Symbol.ts, zrender canvas brushImage",
+ "W": 600,
+ "H": 400,
+ "cases": [
+  {
+   "id": "scatter",
+   "note": "scatter image symbols: the series' itemStyle shadow, item 1 its own blur and colour",
+   "option": {
+    "animation": false,
+    "xAxis": {},
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "symbol": "image://data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAEklEQVR4nGP4z8DwHxkzkC4AADxAH+HggXe0AAAAAElFTkSuQmCC",
+      "symbolSize": 20,
+      "itemStyle": {
+       "shadowBlur": 6,
+       "shadowOffsetX": 3,
+       "shadowOffsetY": 2,
+       "shadowColor": "rgba(0,0,0,0.5)"
+      },
+      "data": [
+       [
+        1,
+        2
+       ],
+       {
+        "value": [
+         3,
+         5
+        ],
+        "itemStyle": {
+         "shadowBlur": 12,
+         "shadowColor": "#ff0000"
+        }
+       },
+       [
+        5,
+        1
+       ]
+      ]
+     }
+    ]
+   },
+   "images": [
+    {
+     "s": 0,
+     "d": 0,
+     "shadowBlur": 6,
+     "shadowOffsetX": 3,
+     "shadowOffsetY": 2,
+     "shadowColor": "rgba(0,0,0,0.5)",
+     "rect": [
+      "4065400000000000",
+      "406a000000000000",
+      "4034000000000000",
+      "4034000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "shadowBlur": 12,
+     "shadowOffsetX": 3,
+     "shadowOffsetY": 2,
+     "shadowColor": "#ff0000",
+     "rect": [
+      "4075e00000000000",
+      "404b800000000000",
+      "4034000000000000",
+      "4034000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "shadowBlur": 6,
+     "shadowOffsetX": 3,
+     "shadowOffsetY": 2,
+     "shadowColor": "rgba(0,0,0,0.5)",
+     "rect": [
+      "4080900000000000",
+      "4070300000000000",
+      "4034000000000000",
+      "4034000000000000"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "line",
+   "note": "line symbols drawn as pictures with a shadow",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "symbol": "image://data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAEklEQVR4nGP4z8DwHxkzkC4AADxAH+HggXe0AAAAAElFTkSuQmCC",
+      "symbolSize": 14,
+      "itemStyle": {
+       "shadowBlur": 4,
+       "shadowOffsetY": 4,
+       "shadowColor": "#333"
+      },
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ]
+     }
+    ]
+   },
+   "images": [
+    {
+     "s": 0,
+     "d": 0,
+     "shadowBlur": 4,
+     "shadowOffsetX": 0,
+     "shadowOffsetY": 4,
+     "shadowColor": "#333",
+     "rect": [
+      "4061680000000000",
+      "4064000000000000",
+      "402c000000000000",
+      "402c000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "shadowBlur": 4,
+     "shadowOffsetX": 0,
+     "shadowOffsetY": 4,
+     "shadowColor": "#333",
+     "rect": [
+      "406f780000000000",
+      "404d000000000000",
+      "402c000000000000",
+      "402c000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "shadowBlur": 4,
+     "shadowOffsetX": 0,
+     "shadowOffsetY": 4,
+     "shadowColor": "#333",
+     "rect": [
+      "4076c40000000000",
+      "406a600000000000",
+      "402c000000000000",
+      "402c000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "shadowBlur": 4,
+     "shadowOffsetX": 0,
+     "shadowOffsetY": 4,
+     "shadowColor": "#333",
+     "rect": [
+      "407dcc0000000000",
+      "405b400000000000",
+      "402c000000000000",
+      "402c000000000000"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "pictorial",
+   "note": "a pictorial bar of pictures: the itemStyle shadow on every glyph",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "pictorialBar",
+      "symbol": "image://data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAEklEQVR4nGP4z8DwHxkzkC4AADxAH+HggXe0AAAAAElFTkSuQmCC",
+      "symbolRepeat": true,
+      "symbolSize": [
+       16,
+       16
+      ],
+      "itemStyle": {
+       "shadowBlur": 5,
+       "shadowOffsetX": 2,
+       "shadowColor": "#0000ff"
+      },
+      "data": [
+       30,
+       50,
+       20,
+       40
+      ]
+     }
+    ]
+   },
+   "images": [
+    {
+     "s": 0,
+     "d": 0,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "4061480000000000",
+      "4073000000000000",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 0,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "4061480000000000",
+      "4071c15555555555",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 0,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "4061480000000000",
+      "407082aaaaaaaaaa",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 0,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "4061480000000000",
+      "406e880000000000",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 0,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "4061480000000000",
+      "406c0aaaaaaaaaaa",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 0,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "4061480000000000",
+      "40698d5555555555",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 0,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "4061480000000000",
+      "4067100000000000",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 0,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "4061480000000000",
+      "406492aaaaaaaaaa",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "406f580000000000",
+      "4073000000000000",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "406f580000000000",
+      "4071c15555555555",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "406f580000000000",
+      "407082aaaaaaaaaa",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "406f580000000000",
+      "406e880000000000",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "406f580000000000",
+      "406c0aaaaaaaaaaa",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "406f580000000000",
+      "40698d5555555555",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "406f580000000000",
+      "4067100000000000",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "406f580000000000",
+      "406492aaaaaaaaaa",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "406f580000000000",
+      "4062155555555555",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "406f580000000000",
+      "405f300000000000",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "406f580000000000",
+      "405a355555555554",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "406f580000000000",
+      "40553aaaaaaaaaa8",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "406f580000000000",
+      "4050400000000000",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "4076b40000000000",
+      "4073000000000000",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "4076b40000000000",
+      "4071c15555555555",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "4076b40000000000",
+      "407082aaaaaaaaab",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "4076b40000000000",
+      "406e880000000000",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "4076b40000000000",
+      "406c0aaaaaaaaaab",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "4076b40000000000",
+      "40698d5555555555",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "407dbc0000000000",
+      "4073000000000000",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "407dbc0000000000",
+      "4071c15555555555",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "407dbc0000000000",
+      "407082aaaaaaaaaa",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "407dbc0000000000",
+      "406e880000000000",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "407dbc0000000000",
+      "406c0aaaaaaaaaaa",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "407dbc0000000000",
+      "40698d5555555555",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "407dbc0000000000",
+      "4067100000000000",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "407dbc0000000000",
+      "406492aaaaaaaaaa",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "407dbc0000000000",
+      "4062155555555555",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "407dbc0000000000",
+      "405f300000000000",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "shadowBlur": 5,
+     "shadowOffsetX": 2,
+     "shadowOffsetY": 0,
+     "shadowColor": "#0000ff",
+     "rect": [
+      "407dbc0000000000",
+      "405a355555555554",
+      "4030000000000000",
+      "4030000000000000"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "none",
+   "note": "pictures with no shadow written",
+   "option": {
+    "animation": false,
+    "xAxis": {},
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "symbol": "image://data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAEklEQVR4nGP4z8DwHxkzkC4AADxAH+HggXe0AAAAAElFTkSuQmCC",
+      "symbolSize": 20,
+      "data": [
+       [
+        1,
+        2
+       ],
+       [
+        3,
+        5
+       ]
+      ]
+     }
+    ]
+   },
+   "images": [
+    {
+     "s": 0,
+     "d": 0,
+     "shadowBlur": 0,
+     "shadowOffsetX": 0,
+     "shadowOffsetY": 0,
+     "shadowColor": "#000",
+     "rect": [
+      "406cc00000000000",
+      "406a000000000000",
+      "4034000000000000",
+      "4034000000000000"
+     ]
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "shadowBlur": 0,
+     "shadowOffsetX": 0,
+     "shadowOffsetY": 0,
+     "shadowColor": "#000",
+     "rect": [
+      "4080900000000000",
+      "404b800000000000",
+      "4034000000000000",
+      "4034000000000000"
+     ]
+    }
+   ]
+  }
+ ],
+ "guards": [
+  "scatter: every picture casts, item 1 its own",
+  "line: four pictures with a shadow",
+  "pictorial: glyphs with a shadow",
+  "none: no blur"
+ ]
+}

@@ -207,6 +207,7 @@ uses
   test.advchart.linetempsymbol,
   test.advchart.labellinestates,
   test.advchart.legenditemown,
+  test.advchart.imageshadow,
   test.advchart.axisemphasis,
   test.advchart.brushstyle,
   test.advchart.loadingpointer,

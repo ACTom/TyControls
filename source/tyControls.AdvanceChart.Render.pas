@@ -3350,6 +3350,12 @@ begin
       ApplyClipPaths(P, AElement);
       if AElement.Style.Alpha < 1 then
         P.SetElementAlpha(AElement.Style.Alpha);
+      { [R5-F] ITS SHADOW, cast from the picture's own alpha: zrender's canvas
+        draws an Image with the context's shadow bound (brushImage after
+        bindContextStyle) [was: a picture cast none] }
+      if TyStyleHasShadow(AElement.Style) then
+        P.SetShadow(TTyColor(AElement.Style.ShadowColor), AElement.Style.ShadowBlur,
+          AElement.Style.ShadowOffsetX, AElement.Style.ShadowOffsetY);
       PaintImageInto(P, AElement.Shape.Image, AElement.Shape.Points);
     finally
       P.RestoreState;
