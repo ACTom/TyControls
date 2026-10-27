@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, ExtCtrls, LCLType,
   fpcunit, testregistry,
   tyControls.Base, tyControls.Controller, tyControls.CheckBox, tyControls.GroupBox,
-  tyControls.RadioGroup;
+  tyControls.RadioGroup, test.danglingrefs;
 type
   { Reaches TTyCustomControl's protected MouseDown / KeyDown / AdjustClientRect, so a test
     can drive a hosted radio the way the widgetset does instead of calling Click (which
@@ -35,12 +35,21 @@ type
     function BuildSpy: TSpyRadioGroup;
     function SelChangeFired: Boolean;
     procedure OnSel(Sender: TObject);
+    procedure AddItemOnSel(Sender: TObject);
+    procedure DeleteLastItemOnSel(Sender: TObject);
   private
     FSelCount: Integer;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
   published
+    { #137: an Items edit from the group's own click event frees no button that is still
+      running its click -- the edit used to free and rebuild every button. }
+    procedure TestAnItemsEditInTheClickFreesNoButtonUnderIt;
+    procedure TestDeletingTheClickedItemInItsClickIsSafe;
+    { The buttons are reused, as LCL's are: a new one each time took the focus and the
+      handlers an application had put on a button away with it. }
+    procedure TestAnItemsEditKeepsTheButtons;
     // typeKey / basics
     procedure TestTypeKeyInherited;
     procedure TestDefaultColumns;
@@ -434,6 +443,82 @@ begin
 end;
 
 { ---- events -------------------------------------------------------------- }
+
+procedure TRadioGroupTest.AddItemOnSel(Sender: TObject);
+begin
+  FGrp.Items.Add('C');
+end;
+
+procedure TRadioGroupTest.DeleteLastItemOnSel(Sender: TObject);
+begin
+  FGrp.Items.Delete(FGrp.Items.Count - 1);
+end;
+
+procedure TRadioGroupTest.TestAnItemsEditInTheClickFreesNoButtonUnderIt;
+var
+  raised: string;
+begin
+  FGrp.Items.Add('A');
+  FGrp.Items.Add('B');
+  FGrp.OnSelectionChanged := @AddItemOnSel;
+  raised := '';
+  BeginPoison;   // a click going on in a freed button faults every time
+  try
+    try
+      (FGrp.Controls[1] as TTyRadioButton).Click;
+    except
+      on E: Exception do raised := E.ClassName + ': ' + E.Message;
+    end;
+  finally
+    EndPoison;
+  end;
+  AssertEquals('the click goes on in a button that is still there', '', raised);
+  AssertEquals('the item was added', 3, FGrp.Count);
+  AssertEquals('and the click selected B', 1, FGrp.ItemIndex);
+end;
+
+procedure TRadioGroupTest.TestDeletingTheClickedItemInItsClickIsSafe;
+var
+  raised: string;
+begin
+  FGrp.Items.Add('A');
+  FGrp.Items.Add('B');
+  FGrp.Items.Add('C');
+  FGrp.OnSelectionChanged := @DeleteLastItemOnSel;
+  raised := '';
+  BeginPoison;
+  try
+    try
+      (FGrp.Controls[2] as TTyRadioButton).Click;
+    except
+      on E: Exception do raised := E.ClassName + ': ' + E.Message;
+    end;
+  finally
+    EndPoison;
+  end;
+  AssertEquals('the button left over finishes its click', '', raised);
+  AssertEquals('two buttons are left', 2, FGrp.Count);
+  AssertEquals('and nothing is selected', -1, FGrp.ItemIndex);
+end;
+
+procedure TRadioGroupTest.TestAnItemsEditKeepsTheButtons;
+var
+  b0, b1: TTyRadioButton;
+begin
+  FGrp.Items.Add('A');
+  FGrp.Items.Add('B');
+  b0 := FGrp.Buttons[0];
+  b1 := FGrp.Buttons[1];
+  { Marked, because a new button can land at the freed one's address. }
+  b0.Tag := 7;
+  b1.Tag := 8;
+  FGrp.Items.Add('C');
+  AssertEquals('the first button is the same control', 7, FGrp.Buttons[0].Tag);
+  AssertEquals('so is the second', 8, FGrp.Buttons[1].Tag);
+  FGrp.Items[0] := 'A2';
+  AssertEquals('a renamed item keeps its button', 7, FGrp.Buttons[0].Tag);
+  AssertEquals('which shows the new caption', 'A2', b0.Caption);
+end;
 
 procedure TRadioGroupTest.TestClickFiresSelectionChanged;
 begin
