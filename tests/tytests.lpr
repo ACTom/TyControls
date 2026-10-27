@@ -205,6 +205,7 @@ uses
   test.advchart.brushstyle,
   test.advchart.loadingpointer,
   test.advchart.handleemphasis,
+  test.advchart.toolboxextra,
   test.advchart.backwardcompat,
   test.advchart.multiline, test.bgrarandompin,
   test.subpixel,

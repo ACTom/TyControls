@@ -43,7 +43,8 @@ unit tyControls.AdvanceChart.Toolbox;
 interface
 uses SysUtils, Classes, Math, fpjson, jsonparser,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
-     tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.ZrPath;
+     tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.ZrPath,
+     tyControls.AdvanceChart.Paint;
 
 const
   { the built-in icons (the features' getDefaultOption) }
@@ -85,6 +86,9 @@ type
   end;
 
   { An ItemStyle as getItemStyle reads it (the keys the toolbox draws by). }
+  { [R5-D] four sides or four corners }
+  TTyTbFour = array[0..3] of Double;
+
   TTyTbItemStyle = record
     HasStroke: Boolean;
     Stroke: TTyTbColour;
@@ -94,6 +98,9 @@ type
     LineWidth: Double;
     HasOpacity: Boolean;
     Opacity: Double;
+    { [R5-D] getItemStyle's line keys as written (JSON; '' not): borderType,
+      borderDashOffset, borderCap, borderJoin, borderMiterLimit }
+    DashJson, DashOffsetJson, CapJson, JoinJson, MiterJson: string;
   end;
 
   { The render-time adjustment of a horizontal toolbox's title. }
@@ -119,6 +126,10 @@ type
     TextAlign: string;
     TextFontSize: Double;
     TextFontWeight, TextFontFamily, TextFontStyle: string;
+    { [R5-D] the title's box: textBorderRadius (four corners, CSS px) and
+      textPadding (top, right, bottom, left), as zrender reads them }
+    TextRadius: TTyTbFour;
+    TextPadding: TTyTbFour;
     { iconStatus 'emphasis' when rendered }
     Status: Boolean;
     { ---- the layout ---- }
@@ -185,6 +196,9 @@ procedure TyTbMerge(ATarget, ASource: TJSONObject; AOverwrite: Boolean);
 { The style an icon is drawn with: its normal style, or the emphasis state
   over it }
 function TyTbStyleOf(const AIcon: TTyTbIcon; AEmphasised: Boolean): TTyTbItemStyle;
+{ [R5-D] a style's line keys onto an element's style, against its width }
+procedure TyTbLineOnto(const AStyle: TTyTbItemStyle; ALineWidth: Double;
+  var AEl: TTyChartElementStyle);
 { The rect getBoundingRect gives the icon in its normal or emphasis state }
 function TyToolboxIconRect(const ASpec: TTyToolboxSpec; const AIcon: TTyTbIcon;
   AEmphasised: Boolean): TTyXYWH;
@@ -322,7 +336,8 @@ function TyTbJson(AData: TJSONData): string;
 implementation
 
 uses tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Scale,
-     tyControls.AdvanceChart.DataZoom, tyControls.AdvanceChart.OptionMerge;
+     tyControls.AdvanceChart.DataZoom, tyControls.AdvanceChart.OptionMerge,
+     tyControls.AdvanceChart.Color;
 
 { ==================== JavaScript's arithmetic ====================
   A degenerate icon (a path with no height, say) is NaN all the way
@@ -527,6 +542,46 @@ begin
   if d <> nil then Result.HasLineWidth := NumOf(d, Result.LineWidth);
   d := GetChain(AFirst, ASecond, PathPlus(APath, 'opacity'));
   if d <> nil then Result.HasOpacity := NumOf(d, Result.Opacity);
+  { [R5-D] the line keys, each where it is not null }
+  d := GetChain(AFirst, ASecond, PathPlus(APath, 'borderType'));
+  if (d <> nil) and (d.JSONType <> jtNull) then Result.DashJson := d.AsJSON;
+  d := GetChain(AFirst, ASecond, PathPlus(APath, 'borderDashOffset'));
+  if (d <> nil) and (d.JSONType <> jtNull) then Result.DashOffsetJson := d.AsJSON;
+  d := GetChain(AFirst, ASecond, PathPlus(APath, 'borderCap'));
+  if (d <> nil) and (d.JSONType <> jtNull) then Result.CapJson := d.AsJSON;
+  d := GetChain(AFirst, ASecond, PathPlus(APath, 'borderJoin'));
+  if (d <> nil) and (d.JSONType <> jtNull) then Result.JoinJson := d.AsJSON;
+  d := GetChain(AFirst, ASecond, PathPlus(APath, 'borderMiterLimit'));
+  if (d <> nil) and (d.JSONType <> jtNull) then Result.MiterJson := d.AsJSON;
+end;
+
+{ [R5-D] zrender's padding / a radius of a written value: a number all four,
+  a list of one to four as css reads it; anything else nought }
+procedure FourOf(AData: TJSONData; var A: TTyTbFour);
+var
+  i, n: Integer;
+  v: array[0..3] of Double;
+begin
+  for i := 0 to 3 do A[i] := 0;
+  if AData = nil then Exit;
+  if AData.JSONType = jtNumber then
+  begin
+    for i := 0 to 3 do A[i] := AData.AsFloat;
+    Exit;
+  end;
+  if not (AData is TJSONArray) then Exit;
+  n := AData.Count;
+  if (n < 1) or (n > 4) then Exit;
+  for i := 0 to n - 1 do
+    if AData.Items[i].JSONType = jtNumber then v[i] := AData.Items[i].AsFloat
+    else v[i] := 0;
+  case n of
+    1: for i := 0 to 3 do A[i] := v[0];
+    2: begin A[0] := v[0]; A[2] := v[0]; A[1] := v[1]; A[3] := v[1]; end;
+    3: begin A[0] := v[0]; A[1] := v[1]; A[3] := v[1]; A[2] := v[2]; end;
+  else
+    for i := 0 to 3 do A[i] := v[i];
+  end;
 end;
 
 { ==================== the model ==================== }
@@ -923,6 +978,11 @@ begin
         if t <> nil then icon.TextFontFamily := StrOf(t);
         t := GetChain(fm, tb, ['emphasis', 'iconStyle', 'textFontStyle']);
         if t <> nil then icon.TextFontStyle := StrOf(t);
+        { [R5-D] the title's box }
+        FourOf(GetChain(fm, tb, ['emphasis', 'iconStyle', 'textBorderRadius']), icon.TextRadius);
+        FourOf(GetChain(fm, tb, ['emphasis', 'iconStyle', 'textPadding']), icon.TextPadding);
+        t := GetChain(fm, tb, ['emphasis', 'iconStyle', 'textFontWeight']);
+        if (t <> nil) and (t.JSONType = jtNumber) then icon.TextFontWeight := t.AsJSON;
         if AStatus <> nil then
           icon.Status := AStatus.Values[name + '|' + icon.Name] = 'emphasis';
         SetLength(Result.Icons, n + 1);
@@ -956,6 +1016,65 @@ begin
   if AEmph.HasFill then Result.Fill := AEmph.Fill;
   if AEmph.HasLineWidth then Result.LineWidth := AEmph.LineWidth;
   if AEmph.HasOpacity then Result.Opacity := AEmph.Opacity;
+  { [R5-D] }
+  if AEmph.DashJson <> '' then Result.DashJson := AEmph.DashJson;
+  if AEmph.DashOffsetJson <> '' then Result.DashOffsetJson := AEmph.DashOffsetJson;
+  if AEmph.CapJson <> '' then Result.CapJson := AEmph.CapJson;
+  if AEmph.JoinJson <> '' then Result.JoinJson := AEmph.JoinJson;
+  if AEmph.MiterJson <> '' then Result.MiterJson := AEmph.MiterJson;
+end;
+
+procedure TyTbLineOnto(const AStyle: TTyTbItemStyle; ALineWidth: Double;
+  var AEl: TTyChartElementStyle);
+var
+  d: TJSONData;
+  w: Byte;
+
+  function Parse(const AText: string): TJSONData;
+  begin
+    Result := nil;
+    if AText = '' then Exit;
+    try
+      Result := GetJSON(AText);
+    except
+      Result := nil;
+    end;
+  end;
+
+begin
+  d := Parse(AStyle.DashJson);
+  try
+    AEl.DashLogical := TyLineDashOf(d, ALineWidth, w);
+    AEl.DashWord := w;
+  finally
+    d.Free;
+  end;
+  d := Parse(AStyle.DashOffsetJson);
+  try
+    if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then
+      AEl.DashOffsetLogical := d.AsFloat;
+  finally
+    d.Free;
+  end;
+  d := Parse(AStyle.CapJson);
+  try
+    AEl.LineCap := TyLineCapOf(d);
+  finally
+    d.Free;
+  end;
+  d := Parse(AStyle.JoinJson);
+  try
+    AEl.LineJoin := TyLineJoinOf(d);
+  finally
+    d.Free;
+  end;
+  d := Parse(AStyle.MiterJson);
+  try
+    if (d <> nil) and (d.JSONType = jtNumber) and (d.AsFloat > 0) then
+      AEl.MiterLimit := d.AsFloat;
+  finally
+    d.Free;
+  end;
 end;
 
 function TyTbStyleOf(const AIcon: TTyTbIcon; AEmphasised: Boolean): TTyTbItemStyle;

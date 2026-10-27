@@ -509,6 +509,65 @@ begin
   end;
 end;
 
+{ [R5-D] A TOOLBOX ICON'S CASCADE (_showComponentItemTooltip over the
+  icon's tooltipConfig: content the icon's name): the toolbox's `tooltip`
+  over its model's default {show: false, position: 'bottom'}, then
+  {formatter: the name}, then the global component }
+function TTyCustomAdvanceChart.TipTbSpec(ATb, AIcon: Integer): TTyTooltipSpec;
+var
+  n, tt: TJSONData;
+  lvTb, lvName: TJSONObject;
+  k: Integer;
+begin
+  lvTb := TJSONObject.Create(['show', False, 'position', 'bottom']);
+  lvName := nil;
+  try
+    n := FOption.ComponentAt('toolbox', ATb);
+    tt := nil;
+    if n is TJSONObject then tt := TJSONObject(n).Find('tooltip');
+    if tt is TJSONObject then
+      for k := 0 to tt.Count - 1 do
+        lvTb.Elements[TJSONObject(tt).Names[k]] := tt.Items[k].Clone;
+    if (ATb <= High(FTbSpecs)) and (AIcon >= 0) and (AIcon <= High(FTbSpecs[ATb].Icons)) then
+      lvName := TJSONObject.Create(['formatter', FTbSpecs[ATb].Icons[AIcon].Name]);
+    Result := TyTooltipSpecOfLevels(FOption, [lvTb, lvName]);
+    Result.Trigger := tttItem;
+  finally
+    lvName.Free;
+    lvTb.Free;
+  end;
+end;
+
+{ its text: formatTpl over the params' $vars [name, title] -- `{a}` the
+  icon's name, `{b}` its title, each value encodeHTML'd, the first of each
+  only (String.replace) }
+function TTyCustomAdvanceChart.TipTbText(ATb, AIcon: Integer;
+  const ASpec: TTyTooltipSpec): string;
+var
+  nm, tl: string;
+
+  function ReplaceFirst(const S, AOld, ANew: string): string;
+  var p: Integer;
+  begin
+    p := Pos(AOld, S);
+    if p = 0 then Exit(S);
+    Result := Copy(S, 1, p - 1) + ANew + Copy(S, p + Length(AOld), MaxInt);
+  end;
+
+begin
+  Result := '';
+  if not ASpec.HasFormatter then Exit;
+  if (ATb > High(FTbSpecs)) or (AIcon < 0) or (AIcon > High(FTbSpecs[ATb].Icons)) then Exit;
+  nm := FTbSpecs[ATb].Icons[AIcon].Name;
+  if FTbSpecs[ATb].Icons[AIcon].HasTitle then tl := FTbSpecs[ATb].Icons[AIcon].Title
+  else tl := 'undefined';
+  Result := ASpec.Formatter;
+  Result := ReplaceFirst(Result, '{a}', '{a0}');
+  Result := ReplaceFirst(Result, '{b}', '{b0}');
+  Result := ReplaceFirst(Result, '{a0}', TyChartEncodeHtml(nm));
+  Result := ReplaceFirst(Result, '{b0}', TyChartEncodeHtml(tl));
+end;
+
 { The proxy's text: the formatter as formatTpl leaves it with the empty
   formatterParams (no $vars: nothing is replaced) -- the content's level is
   a formatter as well }
@@ -2806,6 +2865,7 @@ begin
       Result := TyTooltipSpecOf(FOption, -1, -1);
   end
   else if ASnap.ProxyJson <> '' then Result := TipProxySpec(ASnap.ProxyJson)
+  else if ASnap.TbHas then Result := TipTbSpec(ASnap.TbIndex, ASnap.TbIcon)
   else Result := TooltipSpecFor(ASnap.Datum);
   { [Batch 153] a manual show: the payload's position before the
     cascade's (positionExpr || model.get('position')); else, for an item
@@ -2870,7 +2930,7 @@ begin
     A component item (a geo region, an axis' text, a matrix cell) has none. }
   if Length(ASnap.Hits) = 0 then
   begin
-    if ASnap.ProxyJson <> '' then Exit;
+    if (ASnap.ProxyJson <> '') or ASnap.TbHas then Exit;
     if not TipTargetValid(ASnap.Datum) or IsGeoDatum(ASnap.Datum)
       or IsAxisTextDatum(ASnap.Datum) or TipIsMatrix(ASnap.Datum) then Exit;
   end;
@@ -3375,7 +3435,10 @@ begin
           ev.Element := AElement;
           { [F4c] no item: an axis' name or label that is not silent }
           if not TipTargetValid(ADatum) and AxisTextAt(AX, AY, ev.Datum) then
-            ev.Element := -1;
+            ev.Element := -1
+          { [R5-D] or a toolbox's icon: its tooltipConfig }
+          else if not TipTargetValid(ADatum) and TbHitAt(AX, AY, ev.TbIndex, ev.TbIcon) then
+            ev.TbHas := True;
         end;
         TipTryShowEvent(ev, True);
       end
@@ -4013,6 +4076,17 @@ begin
   snap.Element := AEv.Element;
   { [F4b] a target, or none: no axis tooltip to keep }
   FTipLastDbc := '';
+  { [R5-D] A TOOLBOX ICON: a component item too }
+  if AEv.TbHas then
+  begin
+    snap.TbHas := True;
+    snap.TbIndex := AEv.TbIndex;
+    snap.TbIcon := AEv.TbIcon;
+    TipTryShow(snap, TipSpecOf(snap));
+    TipDispatch(TJSONObject.Create(['type', 'showTip', 'from', TipUid]), nil,
+      False, AViaListener);
+    Exit;
+  end;
   { [R5-D] THE PROXY of a showTip's payload.tooltip: a component item --
     shown whatever the trigger, and a showTip from the view }
   if AEv.ProxyJson <> '' then
@@ -5018,9 +5092,16 @@ begin
     end;
     Exit;
   end;
-  { [R5-D] a showTip proxy }
+  { [R5-D] a showTip proxy, a toolbox icon }
   if FTipSnap.ProxyJson <> '' then
     Result := 'proxy'
+  else if FTipSnap.TbHas then
+  begin
+    Result := 'toolbox:';
+    if (FTipSnap.TbIndex <= High(FTbSpecs)) and (FTipSnap.TbIcon >= 0)
+      and (FTipSnap.TbIcon <= High(FTbSpecs[FTipSnap.TbIndex].Icons)) then
+      Result := Result + FTbSpecs[FTipSnap.TbIndex].Icons[FTipSnap.TbIcon].Name;
+  end
   { [Batch 148] a geo region: 'geo:<geoIndex>:<name>' }
   else if IsGeoDatum(FTipSnap.Datum) then
     Result := 'geo:' + IntToStr(FTipSnap.Datum.ComponentIndex) + ':'
@@ -5607,7 +5688,8 @@ begin
   AContent := Default(TTyTipContent);
   snap := ASnap;
   onAxis := Length(snap.Hits) > 0;
-  if not TipTargetValid(snap.Datum) and not onAxis and (snap.ProxyJson = '') then Exit;
+  if not TipTargetValid(snap.Datum) and not onAxis and (snap.ProxyJson = '')
+    and not snap.TbHas then Exit;
   { UNDER AN AXIS TRIGGER THERE IS NO CASCADE. Upstream builds the axis
     tooltip's model from the global component and a positioning hint and
     nothing else -- no series level, no data item -- so every option but
@@ -5619,7 +5701,7 @@ begin
     SHAPE -- if a coordinate system reported axes, the axis path runs and
     the item trigger is never consulted. }
   if not onAxis and (spec.Trigger <> tttItem) and not IsGeoDatum(snap.Datum)
-    and not IsAxisTextDatum(snap.Datum) and (snap.ProxyJson = '') then Exit;
+    and not IsAxisTextDatum(snap.Datum) and (snap.ProxyJson = '') and not snap.TbHas then Exit;
   ink := TooltipInk(spec);
   mkNames := nil;
   mkColours := nil;
@@ -5628,11 +5710,13 @@ begin
   htmlHas := False;
   htmlLines := nil;
   try
-    if (not onAxis) and (snap.ProxyJson <> '') then
+    if (not onAxis) and ((snap.ProxyJson <> '') or snap.TbHas) then
     begin
       { [R5-D] A SHOWTIP PROXY'S TEXT: its formatter as formatTpl leaves it
-        (no params), else its content }
-      tipText := TipProxyText(snap.ProxyJson, spec);
+        (no params), else its content; A TOOLBOX ICON'S over its name and
+        title }
+      if snap.TbHas then tipText := TipTbText(snap.TbIndex, snap.TbIcon, spec)
+      else tipText := TipProxyText(snap.ProxyJson, spec);
       AContent.Fmt := tipText;
       if tipText = '' then Exit;
       if html then
@@ -5952,7 +6036,10 @@ begin
     { [R5-D] the proxy: a 2 x 2 rect centred on its point }
     else if (not onAxis) and (snap.ProxyJson <> '') then
       elRect := TyRectF(snap.X - APPI / 96, snap.Y - APPI / 96,
-        snap.X + APPI / 96, snap.Y + APPI / 96);
+        snap.X + APPI / 96, snap.Y + APPI / 96)
+    { [R5-D] a toolbox icon: its rect as getBoundingRect gives it }
+    else if (not onAxis) and snap.TbHas then
+      elRect := TipTbIconRect(snap.TbIndex, snap.TbIcon);
     if TyRectFIsValid(elRect) then
     begin
       pin.HasRect := True;

@@ -581,7 +581,8 @@ procedure TyBrushThrottleCall(var T: TTyBrushThrottle; ANow: Double;
 
 implementation
 
-uses jsonparser, tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.JsMath;
+uses jsonparser, tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.JsMath,
+  tyControls.AdvanceChart.Color;
 
 var
   GBrushUid: Integer = 0;
@@ -792,8 +793,6 @@ function TyBrushDash(const AStyle: TTyBrushStyle; ALineWidth: Double;
   out AWord: Byte; out AOffset: Double): TTyDoubleArray;
 var
   d: TJSONData;
-  i: Integer;
-  s: string;
 begin
   Result := nil;
   AWord := 0;
@@ -812,39 +811,8 @@ begin
     except
       d := nil;
     end;
-    { normalizeLineDash: nothing for a falsy type, 'solid' or a width that
-      is not above nought; the two words against the width; a number is a
-      list of one; a list as it is }
-    if (d = nil) or not JsTruthy(d) or not (ALineWidth > 0) then Exit;
-    case d.JSONType of
-      jtString:
-        begin
-          s := d.AsString;
-          if s = 'dashed' then
-          begin
-            AWord := 1;
-            SetLength(Result, 2);
-            Result[0] := 4 * ALineWidth;
-            Result[1] := 2 * ALineWidth;
-          end
-          else if s = 'dotted' then
-          begin
-            AWord := 2;
-            SetLength(Result, 1);
-            Result[0] := ALineWidth;
-          end;
-        end;
-      jtNumber:
-        begin
-          SetLength(Result, 1);
-          Result[0] := d.AsFloat;
-        end;
-      jtArray:
-        begin
-          SetLength(Result, d.Count);
-          for i := 0 to d.Count - 1 do Result[i] := NumOf(d.Items[i]);
-        end;
-    end;
+    { normalizeLineDash (TyLineDashOf) }
+    Result := TyLineDashOf(d, ALineWidth, AWord);
   finally
     d.Free;
   end;

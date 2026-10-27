@@ -567,6 +567,10 @@ type
       model }
     ProxyJson: string;
     OptJson: string;
+    { [R5-D] a toolbox icon's component tooltip (setTooltipConfig): the
+      toolbox and the icon }
+    TbHas: Boolean;
+    TbIndex, TbIcon: Integer;
     { [F4b] ACROSS A RE-RENDER (TooltipView.render keeps the box up): the
       axes as a dataByCoordSys (JSON) while the build they pointed into is
       gone -- Stale until the next build reads them back by raw row -- and
@@ -636,6 +640,8 @@ type
     { [R5-D] as TTyTipSnap's }
     ProxyJson: string;
     OptJson: string;
+    TbHas: Boolean;
+    TbIndex, TbIcon: Integer;
   end;
 
   { [Batch 115] THE RETURN CIRCLE'S LAYOUT, as the virtual root's layout
@@ -3310,6 +3316,10 @@ type
     function TipCoordNode(ASeriesIndex: Integer): TJSONData;
     { [R5-D] a proxy's tooltip cascade and text }
     function TipProxySpec(const AJson: string): TTyTooltipSpec;
+    { [R5-D] a toolbox icon's tooltip cascade and text }
+    function TipTbSpec(ATb, AIcon: Integer): TTyTooltipSpec;
+    function TipTbText(ATb, AIcon: Integer; const ASpec: TTyTooltipSpec): string;
+    function TipTbIconRect(ATb, AIcon: Integer): TTyRectF;
     function TipProxyText(const AJson: string; const ASpec: TTyTooltipSpec): string;
     procedure TipTryShow(const ASnap: TTyTipSnap; const ASpec: TTyTooltipSpec);
     procedure TipApplyShow(const ASnap: TTyTipSnap);
