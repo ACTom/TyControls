@@ -1741,6 +1741,9 @@ var
   lineRuns, areaRuns: TTyPathCmdArray2;
   runsMatch: Boolean;
   runIdx: Integer;
+  { [R5-C] no run of two points or more: the polyline upstream still has
+    (one point, nothing to stroke) stands in, inkless, for its clip }
+  pointsOnly, pointRunDone: Boolean;
   { upstream's clip rect before a `clip: false` widening, and the widening;
     the base axis' direction as flags: 2 horizontal, 4 inverse [Batch 89] }
   clipX, clipY, clipW, clipH, clipEx, animFlags: Double;
@@ -2273,6 +2276,10 @@ var
     runsMatch := (Length(lineRuns) = runs)
       and ((not spec.HasArea) or (Length(areaRuns) = runs));
     runIdx := 0;
+    pointsOnly := anyLegal;
+    for k := 0 to High(lineRuns) do
+      if Length(lineRuns[k]) >= 2 then pointsOnly := False;
+    pointRunDone := False;
   end;
 
   { One run, from the points gathered so far. The AREA goes in FIRST so the
@@ -2380,6 +2387,24 @@ var
       AList.Add(el);
       Inc(Result);
 
+    end
+    else if pointsOnly and not pointRunDone and (pol = nil) then
+    begin
+      { the polyline of one point: no ink, no pointer -- its clip runs (the
+        end label rides it) [R5-C] }
+      SetLength(up, 1);
+      up[0] := pts[0];
+      el := MarkElement(TyShapePolyline(up), AVisual, ABinding.SeriesIndex, -1);
+      el.Style.HasFill := False;
+      el.Style.FillGradient := Default(TTyChartGradient);
+      el.Style.FillPattern := Default(TTyChartPattern);
+      el.Style.StrokeWidthLogical := 0;
+      el.Style.StrokeGradient := Default(TTyChartGradient);
+      el.Silent := True;
+      SetClip(el);
+      TagClip(el, carLineRun);
+      AList.Add(el);
+      pointRunDone := True;
     end;
 
     { THE MARKERS GO ON LAST, so they sit over the line they belong to -- and

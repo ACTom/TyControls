@@ -35,6 +35,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Anim, tyControls.AdvanceChart.AnimOpt,
      tyControls.AdvanceChart.AnimView, tyControls.AdvanceChart,
      tyControls.AdvanceChart.MarkerView, tyControls.AdvanceChart.Graph,
+     tyControls.AdvanceChart.Handlers,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TAnProbe = class(TTyAdvanceChart)
@@ -72,6 +73,8 @@ type
     FSeen: TStringList;
     procedure Miss(const AWhere: string; const AOnce: string = '');
     function HIdx50(ADataIndex: Integer; AHasIndex: Boolean): Double;
+    { [R5-C] animation-an4.js' endfmt: 'v' + Math.round(params.value) }
+    function HEndFmt(const AParams: TTyChartParams): string;
     function HDur600(ADataIndex: Integer; AHasIndex: Boolean): Double;
     procedure NewChart(AMode: TTyChartAnimationMode);
     procedure Load(const AOption: string);
@@ -871,6 +874,15 @@ end;
 
 { ==================== plumbing ==================== }
 
+function TAdvChartAnimEnterTest.HEndFmt(const AParams: TTyChartParams): string;
+var v: Double;
+begin
+  Result := '';
+  if (Length(AParams) = 0) or (Length(AParams[0].Values) = 0) then Exit;
+  v := AParams[0].Values[High(AParams[0].Values)];
+  Result := 'v' + FloatToStr(Floor(v + 0.5));
+end;
+
 function TAdvChartAnimEnterTest.HIdx50(ADataIndex: Integer; AHasIndex: Boolean): Double;
 begin
   { (idx) => idx * 50; null * 50 is 0, and undefined's NaN is a 0 delay too }
@@ -888,6 +900,7 @@ begin
   inherited SetUp;
   TyChartRegisterAnimTiming('idx*50', @HIdx50);
   TyChartRegisterAnimTiming('dur:600+idx*100', @HDur600);
+  TyChartRegisterFormatter('endfmt', @HEndFmt);
   FForm := TForm.CreateNew(nil);
   FCtl := TTyStyleController.Create(nil);
   FCtl.Mode := 'light';
@@ -1522,7 +1535,9 @@ begin
     end;
     Exit;
   end;
-  if ATy + ALy = 0 then ;
+  { (the two are read by the marker branches; not a number for an end
+    label with no clip) }
+  if IsNan(ATy) or IsNan(ALy) then ;
 end;
 
 procedure TAdvChartAnimEnterTest.TestEnterTimelinesAsUpstream;

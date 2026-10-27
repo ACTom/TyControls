@@ -1758,6 +1758,19 @@ type
     { [R5-C] the hover ripples' symbols emphasised at the last sync,
       'series:row' }
     FRipHover: TTyStringArray;
+    { [R5-C] every end label's wording, by series: what a frame needs to
+      word it at a value (EndLabelTextOf) or lay its block out again
+      (EndLabelPiecesOf) }
+    FEndLbls: array of record
+      Series, Last, ValueDim: Integer;
+      Name: string;
+      Spec: TTyLabelSpec;
+      Ink: TTyChartColor;
+      AH: TTyTextAnchorH;
+      AV: TTyTextAnchorV;
+      Scale: Double;
+      Measurer: ITyTextMeasurer;
+    end;
     { THE STATE PROXIES by insertion index [Batch 94, AN3b]: the proxy each
       state element's states run on -- its role's, or one of the states'
       own; whether this build's states run through them; and an option
@@ -1986,6 +1999,9 @@ type
       sync starts its ripples now, one that turned back stops them; a ripple
       is drawn while it runs }
     procedure RippleHoverSync;
+    { [R5-C] a line's end label in its polyline's states: shown where the
+      state's endLabel.show (the normal one by default) says, its colour }
+    procedure StWriteEndLabel(AList: TTyPaintList; ASeries: Integer; AStates: TTyStNames);
     procedure StAnimEl(var AEl: TTyStElement; AListIdx, ASeries, ARaw: Integer;
       const AName: string; AKind: Integer; const ACfg: TTyAnimCfg;
       AHasCfg: Boolean);
@@ -3435,6 +3451,10 @@ type
       its own label.opacity up the item's chain, the global textStyle's, else
       its mark's style.opacity (setLabelStyle's defaultOpacity) [was: 1] }
     procedure OwnLabelOpacity(ASlot: Integer; AList: TTyPaintList; ALo, AHi: Integer);
+    { [R5-C] an end label's words at a value, by its named formatter, and a
+      rich one's block for words (the frames' callbacks) }
+    function EndLabelTextOf(ASeriesIndex: Integer; AValue: Double): string;
+    function EndLabelPiecesOf(ASeriesIndex: Integer; const AText: string): TTyRtPieceArray;
     { [R5-C] A LABEL LINE'S lineStyle -- getLineStyle, the keys written:
       color, width, opacity, type, dashOffset, cap, join, miterLimit -- read
       down ANodes under APath (['labelLine', 'lineStyle'] or a state's) onto

@@ -212,9 +212,21 @@ type
 
   { A LINE'S END LABEL, driven by its clip (LineView._endLabelOnDuring)
     [Batch 92, AN4] }
+  { [R5-C] an end label's words at a value (a named formatter's) and a rich
+    one's block for words -- the control's, by series index }
+  TTyEndLabelTextFn = function(ASeriesIndex: Integer; AValue: Double): string of object;
+  TTyEndLabelPiecesFn = function(ASeriesIndex: Integer;
+    const AText: string): TTyRtPieceArray of object;
+
   TTyChartAnimEndLabel = record
     { the clip drives it: an entering clip with the label shown }
     Active: Boolean;
+    { [R5-C] whose it is; a named formatter words it at each value
+      (TextOf), a rich one is laid out again for its words (PiecesOf) }
+    Series: Integer;
+    IsFn, IsRich: Boolean;
+    TextOf: TTyEndLabelTextFn;
+    PiecesOf: TTyEndLabelPiecesFn;
     { the layout points (flat x, y per row, Float32 values), each row's raw
       value (not a number: none), the polyline's path }
     Pts, Vals: TTyDoubleArray;
@@ -695,6 +707,9 @@ type
   public
     { [R2-D] see TTyUtStopEvent }
     OnUtStop: TTyUtStopEvent;
+    { [R5-C] what an end label's frames word it with }
+    OnEndLabelText: TTyEndLabelTextFn;
+    OnEndLabelPieces: TTyEndLabelPiecesFn;
     constructor Create(AAnimation: TTyAnimation);
     destructor Destroy; override;
     { every proxy freed, its clips taken off the driver }
@@ -871,7 +886,7 @@ uses tyControls.AdvanceChart.Labels, tyControls.AdvanceChart.Data, tyControls.Ad
   tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.MarkerView,
   tyControls.AdvanceChart.LabelGuide, tyControls.AdvanceChart.PolarBar,
   tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.LabelLayout,
-  tyControls.AdvanceChart.Graph;
+  tyControls.AdvanceChart.Graph, tyControls.AdvanceChart.RichStyle;
 
 function UtHostRole(const AEl: TTyChartElement): string; forward;
 procedure UtRebakeViewNodes(AList: TTyPaintList; const AOldOf: TTyIntegerArray;
@@ -1086,8 +1101,25 @@ begin
     FEnd.X := st.X + dX;
     FEnd.Y := st.Y + dY;
   end;
-  { valueAnimation: setLabelText(the value there) }
-  if FEnd.ValueAnim and (FEnd.Tpl <> '') then
+  { valueAnimation: setLabelText(the value there) -- a named formatter's
+    words for it [R5-C] }
+  if FEnd.ValueAnim and FEnd.IsFn and Assigned(FEnd.TextOf) then
+  begin
+    if st.Interp then
+    begin
+      if IsNan(EndRowValue(FEnd, st.Row1)) then Exit;
+      v := TyAnimInterpolateValue(EndRowValue(FEnd, st.Row0),
+        EndRowValue(FEnd, st.Row1), st.T, FEnd.HasPrec, FEnd.Prec);
+    end
+    else
+    begin
+      v := EndRowValue(FEnd, st.Row0);
+      if IsNan(v) then Exit;
+    end;
+    FEnd.Text := FEnd.TextOf(FEnd.Series, v);
+    FEnd.HasText := True;
+  end
+  else if FEnd.ValueAnim and (FEnd.Tpl <> '') then
   begin
     if st.Interp then
     begin
@@ -1990,8 +2022,16 @@ begin
   AP.FEnd.Prec := AEnd.Anim.G[2];
   AP.FEnd.Distance := AEnd.Anim.G[0];
   AP.FEnd.Tpl := AEnd.Caption.ValTpl;
-  AP.FEnd.Cmds := TyPolylinePath(PtsOf(AP.FEnd.Pts), AEnd.Anim.G[3],
-    AEnd.Anim.Mono, AP.FEnd.ConnectNulls);
+  { [R5-C] a step line's polyline is the stepped one (Base) }
+  if Length(AEnd.Anim.Base) >= 2 then
+    AP.FEnd.Cmds := TyPolylinePath(PtsOf(AEnd.Anim.Base), AEnd.Anim.G[3],
+      AEnd.Anim.Mono, AP.FEnd.ConnectNulls)
+  else
+    AP.FEnd.Cmds := TyPolylinePath(PtsOf(AP.FEnd.Pts), AEnd.Anim.G[3],
+      AEnd.Anim.Mono, AP.FEnd.ConnectNulls);
+  AP.FEnd.Series := AEnd.Anim.Series;
+  AP.FEnd.IsFn := (flags and 32) <> 0;
+  AP.FEnd.IsRich := (flags and 64) <> 0;
   AP.FEnd.X := AEnd.Caption.X;
   AP.FEnd.Y := AEnd.Caption.Y;
   AP.FEnd.Text := AEnd.Caption.Text;
@@ -2405,6 +2445,8 @@ begin
         if FindEndLabel(AList, AEl.Anim.Series, endEl) then
         begin
           SetupEndLabel(p, endEl);
+          p.FEnd.TextOf := OnEndLabelText;
+          p.FEnd.PiecesOf := OnEndLabelPieces;
           opts.During := @p.EndLabelDuring;
           opts.Done := @p.EndLabelDone;
         end;
@@ -6520,7 +6562,19 @@ begin
         MoveCaption(AEl, AProxy.FEnd.X - AEl.Caption.X, AProxy.FEnd.Y - AEl.Caption.Y);
         AEl.Caption.X := AProxy.FEnd.X;
         AEl.Caption.Y := AProxy.FEnd.Y;
-        if AProxy.FEnd.HasText then AEl.Caption.Text := AProxy.FEnd.Text;
+        if AProxy.FEnd.HasText then
+        begin
+          { [R5-C] a rich label's block laid out again for its words }
+          if AProxy.FEnd.IsRich and Assigned(AProxy.FEnd.PiecesOf)
+            and (AProxy.FEnd.Text <> AEl.Caption.Text) then
+          begin
+            AEl.Caption.RtPieces := AProxy.FEnd.PiecesOf(AProxy.FEnd.Series, AProxy.FEnd.Text);
+            if Length(AEl.Caption.RtPieces) > 0 then
+              AEl.Shape := TyShapeRect(TyRtDeviceBox(AEl.Caption.RtPieces,
+                AEl.Caption.X, AEl.Caption.Y, AEl.Caption.RotationRad, AEl.Caption.RtScale));
+          end;
+          AEl.Caption.Text := AProxy.FEnd.Text;
+        end;
       end;
   end;
 end;

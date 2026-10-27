@@ -98,6 +98,12 @@ var
   strokeW: Double;
   ah: TTyTextAnchorH;
   av: TTyTextAnchorV;
+  normalShow, anyShow, isFn: Boolean;
+  k: Integer;
+  stepped: TTyPointFArray;
+  turn: TTyStepTurn;
+  scale: Double;
+  pieces: TTyRtPieceArray;
 begin
   Result := 0;
   if (AList = nil) or (AMeasurer = nil) or (ASlot > High(FStores)) then Exit;
@@ -105,10 +111,27 @@ begin
   if store = nil then Exit;
   node := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
   if not (node is TJSONObject) then Exit;
+  { anyStateShowEndLabel: the label is there where any state shows it, and
+    hidden at rest unless the normal one does [R5-C: was the normal only] }
   en := TJSONObject(node).Find('endLabel');
-  if not (en is TJSONObject) then Exit;
-  d := TJSONObject(en).Find('show');
-  if not ((d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean) then Exit;
+  normalShow := (en is TJSONObject) and TyOptTruthy(TJSONObject(en).Find('show'));
+  anyShow := normalShow;
+  for k := 0 to 2 do
+  begin
+    case k of
+      0: d := TJSONObject(node).Find('emphasis');
+      1: d := TJSONObject(node).Find('blur');
+    else
+      d := TJSONObject(node).Find('select');
+    end;
+    if d is TJSONObject then
+    begin
+      d := TJSONObject(d).Find('endLabel');
+      if (d is TJSONObject) and TyOptTruthy(TJSONObject(d).Find('show')) then anyShow := True;
+    end;
+  end;
+  if not anyShow then Exit;
+  if not (en is TJSONObject) then en := nil;
   { the series' line: its points and its clip }
   found := False;
   run := Default(TTyChartElement);
@@ -129,7 +152,7 @@ begin
   spec.Show := True;
   spec.DistanceLogical := 8;
   spec.ValueAnim := True;
-  spec := TyLabelSpecOfNode(TJSONObject(en), nil, spec);
+  if en <> nil then spec := TyLabelSpecOfNode(TJSONObject(en), nil, spec);
   horiz := (Round(run.Anim.G[5]) and 2) <> 0;
   inverse := (Round(run.Anim.G[5]) and 4) <> 0;
   connect := run.Anim.G[10] <> 0;
@@ -139,13 +162,15 @@ begin
   begin
     vals[row] := NaN;
     it := store.RawItem(row);
-    case it.Shape of
-      rshNone:
-        if (AVisual.LabelValueDim >= 0) and (AVisual.LabelValueDim < store.DimCount) then
-          vals[row] := store.Get(AVisual.LabelValueDim, row);
-      rshScalar:
-        if it.Scalar.Kind = dvkNumber then vals[row] := it.Scalar.Num;
-    end;
+    { a scalar as it is; an item of several values (or none) the label's
+      value dimension -- interpolateRawValues runs over each dimension and
+      the default text prints the label's [R5-C: arrays did not count] }
+    if it.Shape = rshScalar then
+    begin
+      if it.Scalar.Kind = dvkNumber then vals[row] := it.Scalar.Num;
+    end
+    else if (AVisual.LabelValueDim >= 0) and (AVisual.LabelValueDim < store.DimCount) then
+      vals[row] := store.Get(AVisual.LabelValueDim, row);
   end;
   { the words: the value's template for the last row, else its text }
   tpl := '';
@@ -166,7 +191,22 @@ begin
   SetLength(pts, Length(run.Anim.Pts) div 2);
   for i := 0 to High(pts) do
     pts[i] := TyPointF(run.Anim.Pts[i * 2], run.Anim.Pts[i * 2 + 1]);
-  cmds := TyPolylinePath(pts, run.Anim.G[8], run.Anim.Mono, connect);
+  { [R5-C] A STEP LINE's polyline is the stepped one (getPointOn), its
+    index range the layout's points }
+  stepped := nil;
+  if run.Anim.G[7] <> 0 then
+  begin
+    case Round(run.Anim.G[7]) of
+      2: turn := sttMiddle;
+      3: turn := sttEnd;
+    else
+      turn := sttStart;
+    end;
+    stepped := TyTurnPointsIntoStep(pts, nil, False, horiz, turn, connect);
+    cmds := TyPolylinePath(stepped, run.Anim.G[8], run.Anim.Mono, connect);
+  end
+  else
+    cmds := TyPolylinePath(pts, run.Anim.G[8], run.Anim.Mono, connect);
   lfi := 0;
   st := TyEndLabelStep(run.Anim.Pts, cmds, xOrY, horiz, connect, True, lfi);
   if not st.HasPoint then Exit;
@@ -180,7 +220,36 @@ begin
   end;
   x := st.X + dX;
   y := st.Y + dY;
-  if (tpl <> '') then
+  { [R5-C] what a frame needs to word the label again: its spec, its row,
+    its value dimension, its ink and alignment, the measurer }
+  k := -1;
+  for i := 0 to High(FEndLbls) do
+    if FEndLbls[i].Series = FBindings[ASlot].SeriesIndex then k := i;
+  if k < 0 then
+  begin
+    k := Length(FEndLbls);
+    SetLength(FEndLbls, k + 1);
+  end;
+  FEndLbls[k].Series := FBindings[ASlot].SeriesIndex;
+  FEndLbls[k].Last := last;
+  FEndLbls[k].ValueDim := AVisual.LabelValueDim;
+  FEndLbls[k].Name := AVisual.SeriesName;
+  FEndLbls[k].Spec := spec;
+  FEndLbls[k].Ink := AVisual.Fill;
+  FEndLbls[k].Scale := APPI / 96;
+  FEndLbls[k].Measurer := AMeasurer;
+  { [R5-C] a named formatter counts too: called with the value there }
+  isFn := spec.ValueAnim and spec.HasFormatter and TyChartIsHandlerRef(spec.Formatter);
+  if isFn then
+  begin
+    if st.Interp then
+      v := TyAnimInterpolateValue(vals[st.Row0], vals[st.Row1], st.T,
+        spec.HasPrecision, spec.Precision)
+    else
+      v := vals[st.Row0];
+    if not IsNan(v) then words := EndLabelTextOf(FBindings[ASlot].SeriesIndex, v);
+  end
+  else if (tpl <> '') then
   begin
     if st.Interp then
       v := TyAnimInterpolateValue(vals[st.Row0], vals[st.Row1], st.T,
@@ -203,8 +272,25 @@ begin
   end;
   if spec.HasAlignH then ah := spec.AlignH;
   if spec.HasAlignV then av := spec.AlignV;
-  AMeasurer.MeasureLine(words, spec.FontName, spec.FontSizeLogical, spec.FontWeight, w, h);
-  el := TyChartElement(TyShapeRect(TyAnchorBox(x, y, w, h, ah, av)));
+  scale := APPI / 96;
+  pieces := nil;
+  FEndLbls[k].AH := ah;
+  FEndLbls[k].AV := av;
+  { [R5-C] A RICH END LABEL is a block, laid out about its anchor [was: one
+    run] }
+  if spec.Rt.Needed then
+  begin
+    pieces := TyLabelBlockPieces(spec, words, AVisual.Fill, True, False, False,
+      ah, av, scale, AMeasurer);
+    el := TyChartElement(TyShapeRect(TyRtDeviceBox(pieces, x, y, 0, scale)));
+    el.Caption.RtPieces := pieces;
+    el.Caption.RtScale := scale;
+  end
+  else
+  begin
+    AMeasurer.MeasureLine(words, spec.FontName, spec.FontSizeLogical, spec.FontWeight, w, h);
+    el := TyChartElement(TyShapeRect(TyAnchorBox(x, y, w, h, ah, av)));
+  end;
   el.Caption.Text := words;
   el.Caption.FontName := spec.FontName;
   el.Caption.FontSizeLogical := spec.FontSizeLogical;
@@ -221,6 +307,8 @@ begin
   el.Z := AVisual.Z;
   el.Z2 := 200;
   el.Silent := True;
+  { hidden at rest where only a state shows it [R5-C] }
+  el.Ignore := not normalShow;
   el.Datum := TyChartDatum(-1, -1);
   el.Anim.Role := carEndLabel;
   el.Anim.Series := FBindings[ASlot].SeriesIndex;
@@ -235,11 +323,61 @@ begin
   if connect then flags := flags or 4;
   if tpl <> '' then flags := flags or 8;
   if spec.HasPrecision then flags := flags or 16;
+  { [R5-C] 32 a named formatter counts (EndLabelTextOf), 64 its words are a
+    block (EndLabelPiecesOf) }
+  if isFn then flags := flags or 32 or 8;
+  if spec.Rt.Needed then flags := flags or 64;
   el.Anim.G[1] := flags;
   el.Anim.G[2] := spec.Precision;
   el.Anim.G[3] := run.Anim.G[8];
+  { the stepped polyline the label rides, flattened (none: the layout's) }
+  SetLength(el.Anim.Base, Length(stepped) * 2);
+  for i := 0 to High(stepped) do
+  begin
+    el.Anim.Base[i * 2] := stepped[i].X;
+    el.Anim.Base[i * 2 + 1] := stepped[i].Y;
+  end;
   AList.Add(el);
   Result := 1;
+end;
+
+function TTyCustomAdvanceChart.EndLabelTextOf(ASeriesIndex: Integer; AValue: Double): string;
+var
+  i, slot, k: Integer;
+  prm: TTyChartCallbackParams;
+begin
+  Result := '';
+  for i := 0 to High(FEndLbls) do
+  begin
+    if FEndLbls[i].Series <> ASeriesIndex then Continue;
+    slot := SlotOfSeries(ASeriesIndex);
+    if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Exit;
+    if not (FEndLbls[i].Spec.HasFormatter and TyChartIsHandlerRef(FEndLbls[i].Spec.Formatter)) then Exit;
+    { getFormattedLabel(dataIndex, 'normal', ..., {interpolatedValue}): the
+      last row's params, the value the interpolated one }
+    prm := TyLabelParams(FStores[slot], FEndLbls[i].Last, FEndLbls[i].Name,
+      FEndLbls[i].ValueDim, NaN, False, ASeriesIndex, 'line', 0, '');
+    if Length(prm.Values) > 0 then
+    begin
+      k := High(prm.Values);
+      if (FEndLbls[i].ValueDim >= 0) and (FEndLbls[i].ValueDim <= High(prm.Values)) then
+        k := FEndLbls[i].ValueDim;
+      prm.Values[k] := AValue;
+    end;
+    prm.ValueText := TyJsNumberToString(AValue);
+    Exit(TyChartRunHandler(FEndLbls[i].Spec.Formatter, TyChartOneParams(prm)));
+  end;
+end;
+
+function TTyCustomAdvanceChart.EndLabelPiecesOf(ASeriesIndex: Integer;
+  const AText: string): TTyRtPieceArray;
+var i: Integer;
+begin
+  Result := nil;
+  for i := 0 to High(FEndLbls) do
+    if (FEndLbls[i].Series = ASeriesIndex) and (FEndLbls[i].Measurer <> nil) then
+      Exit(TyLabelBlockPieces(FEndLbls[i].Spec, AText, FEndLbls[i].Ink, True, False,
+        False, FEndLbls[i].AH, FEndLbls[i].AV, FEndLbls[i].Scale, FEndLbls[i].Measurer));
 end;
 
 { each data item's own `label`, read over its series' spec, by raw row }

@@ -65,6 +65,7 @@ type
     procedure TestTheFunnelsOwnLineAsUpstream;
     procedure TestTheOtherSeriesLinesAsUpstream;
     procedure TestAPieLineInkAndPen;
+    procedure TestEndLabelStatesAsUpstream;
   end;
 
 implementation
@@ -613,6 +614,82 @@ begin
   AssertEquals('b: its own colour', $FFABCDEF, el.Style.StrokeColor);
   AssertEquals('b: the series'' width', 4.0, el.Style.StrokeWidthLogical, 0);
   AssertEquals('b: square', Ord(tlcSquare), Ord(TyStyleLineCap(el.Style)));
+end;
+
+{ A LINE'S END LABEL IN ITS POLYLINE'S STATES (endlabel-states.js): there
+  where any state shows it, hidden at rest unless the normal one does, a
+  state's show (the normal one by default) and colour under highlight }
+procedure TAdvChartLabelGuidesTest.TestEndLabelStatesAsUpstream;
+var
+  root: TJSONData;
+  sl: TStringList;
+  cs, steps: TJSONArray;
+  c, s, k, idx, n: Integer;
+  cse, st, rest: TJSONObject;
+  col: TTyChartColor;
+
+  function EndIdx: Integer;
+  var i: Integer;
+  begin
+    for i := 0 to FChart.List.Count - 1 do
+      if FChart.List.Element(i).Anim.Role = carEndLabel then Exit(i);
+    Result := -1;
+  end;
+
+begin
+  sl := TStringList.Create;
+  try
+    sl.LoadFromFile(FixtureDir + 'advchart-endlabel-states.json');
+    root := GetJSON(sl.Text);
+  finally
+    sl.Free;
+  end;
+  n := 0;
+  try
+    cs := TJSONObject(root).Arrays['cases'];
+    for c := 0 to cs.Count - 1 do
+    begin
+      cse := cs.Objects[c];
+      FChart.Option := '{}';
+      FChart.Option := cse.Objects['option'].AsJSON;
+      FChart.SetBounds(0, 0, cse.Integers['W'], cse.Integers['H']);
+      FBmp.SetSize(cse.Integers['W'], cse.Integers['H']);
+      FChart.Render(FBmp.Canvas, Classes.Rect(0, 0, cse.Integers['W'], cse.Integers['H']), 96);
+      rest := cse.Objects['rest'];
+      FName := cse.Strings['id'] + ' at rest';
+      idx := EndIdx;
+      Same('there', idx >= 0, rest.Booleans['exists']);
+      if idx < 0 then Continue;
+      Same('hidden', FChart.List.Element(idx).Ignore, rest.Booleans['ignore']);
+      steps := cse.Arrays['steps'];
+      for s := 0 to steps.Count - 1 do
+      begin
+        st := steps.Objects[s];
+        FName := Format('%s step %d', [cse.Strings['id'], s]);
+        AssertTrue('dispatch', FChart.DispatchAction(st.Objects['payload'].AsJSON));
+        FChart.Render(FBmp.Canvas, Classes.Rect(0, 0, cse.Integers['W'], cse.Integers['H']), 96);
+        idx := EndIdx;
+        Same('there', idx >= 0, True);
+        if idx < 0 then Continue;
+        Same('hidden', FChart.List.Element(idx).Ignore, st.Booleans['ignore']);
+        Inc(n);
+        if not IsNull(st.Find('fill')) then
+        begin
+          Inc(FCompared);
+          if not TyTryParseChartColor(st.Strings['fill'], col) then Miss('fill unread')
+          else if col <> FChart.List.Element(idx).Caption.Colour then
+            Miss(Format('fill %s upstream, %.8x here', [st.Strings['fill'],
+              FChart.List.Element(idx).Caption.Colour]));
+        end;
+      end;
+    end;
+  finally
+    root.Free;
+  end;
+  AssertEquals(IntToStr(FBad) + ' of ' + IntToStr(FCompared)
+    + ' disagree with upstream:' + FReport, 0, FBad);
+  AssertTrue(Format('states compared (%d)', [n]), n >= 8);
+  if k = 0 then ;
 end;
 
 { ---------------- plumbing ---------------- }

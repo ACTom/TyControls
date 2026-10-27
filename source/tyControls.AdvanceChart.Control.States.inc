@@ -2456,12 +2456,16 @@ begin
       end;
     end;
     if FSt[s].Run.Host.Exists and (FSt[s].Run.Host.States <> []) then
+    begin
       for k := 0 to High(FSt[s].RunIdx) do
       begin
         el := AList.Element(FSt[s].RunIdx[k]);
         StWriteHost(el, FSt[s].Run.Host, FStProxied);
         AList.SetElement(FSt[s].RunIdx[k], el);
       end;
+      { [R5-C] the polyline's text, its end label, in the polyline's state }
+      StWriteEndLabel(AList, s, FSt[s].Run.Host.States);
+    end;
     if FSt[s].Area.Host.Exists and (FSt[s].Area.Host.States <> []) then
       for k := 0 to High(FSt[s].AreaIdx) do
       begin
@@ -3230,6 +3234,8 @@ begin
   if not FStProxied or (FPaintList = nil) then Exit;
   if FAnim = nil then FAnim := NewAnimDriver;
   if FAnimSet = nil then FAnimSet := TTyChartAnimSet.Create(FAnim);
+  FAnimSet.OnEndLabelText := @EndLabelTextOf;
+  FAnimSet.OnEndLabelPieces := @EndLabelPiecesOf;
   SetLength(FAnimStBind, FPaintList.Count);
   for k := 0 to High(FAnimStBind) do FAnimStBind[k] := nil;
   clips := FAnim.ClipCount;
@@ -3346,6 +3352,53 @@ begin
     FAnimLive := True;
     FAnimContinuous := AnimLoopOnly;
     AnimArmTimer;
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.StWriteEndLabel(AList: TTyPaintList; ASeries: Integer;
+  AStates: TTyStNames);
+var
+  k: Integer;
+  pe: PTyChartElement;
+  node, st, en: TJSONObject;
+  d: TJSONData;
+  shown, has: Boolean;
+  stName: string;
+  c: TTyChartColor;
+begin
+  node := StSeriesNode(ASeries);
+  if node = nil then Exit;
+  { the state that wins: emphasis over blur over select (the order the
+    states go on) }
+  if stnEmphasis in AStates then stName := 'emphasis'
+  else if stnBlur in AStates then stName := 'blur'
+  else if stnSelect in AStates then stName := 'select'
+  else Exit;
+  en := nil;
+  d := node.Find('endLabel');
+  if d is TJSONObject then en := TJSONObject(d);
+  shown := (en <> nil) and TyOptTruthy(en.Find('show'));
+  st := nil;
+  d := node.Find(stName);
+  if d is TJSONObject then
+  begin
+    d := TJSONObject(d).Find('endLabel');
+    if d is TJSONObject then st := TJSONObject(d);
+  end;
+  { setLabelStyle: a state's show, else the normal one }
+  has := (st <> nil) and (st.Find('show') <> nil) and (st.Find('show').JSONType <> jtNull);
+  if has then shown := TyOptTruthy(st.Find('show'));
+  for k := 0 to AList.Count - 1 do
+  begin
+    pe := AList.Ref(k);
+    if (pe^.Anim.Role <> carEndLabel) or (pe^.Anim.Series <> ASeries) then Continue;
+    pe^.Ignore := not shown;
+    if st <> nil then
+    begin
+      d := st.Find('color');
+      if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
+        pe^.Caption.Colour := c;
+    end;
   end;
 end;
 
