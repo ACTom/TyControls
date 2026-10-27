@@ -104,6 +104,12 @@ type
       `show` triggers the tooltip with. A tooltip axis is handed its own
       (the trigger), so this is not read for one. }
     TriggerTooltip: Boolean;
+    { [R5-D] `triggerEmphasis` as the axis' own model says it, default true:
+      whether the rows the shown pointer stands on are highlighted
+      (axisTrigger.dispatchHighDownActually). Like triggerTooltip it is not
+      one of the fields the tooltip hands its axes, so tooltip.axisPointer's
+      is never read: the axis block, then the root component. }
+    TriggerEmphasis: Boolean;
   end;
 
 { The resolved spec for one axis.
@@ -120,7 +126,8 @@ type
   other axis as well. }
 function TyAxisPointerSpecOf(AOption: TTyChartOption;
   const AAxisMainType: string; AAxisIndex: Integer; AAxisIsCategory: Boolean;
-  AFromTooltip, ATriggerTooltip, ACross: Boolean): TTyAxisPointerSpec;
+  AFromTooltip, ATriggerTooltip, ACross: Boolean;
+  ACoordTip: TJSONObject = nil): TTyAxisPointerSpec;
 
 { `label.precision` the way upstream's round reads it: 'auto'; a number; a
   string Number() reads ('3' is three, '' is nought); true and false as one
@@ -130,13 +137,22 @@ function TyLabelPrecisionOf(AData: TJSONData): TTyLabelPrecision;
 
 { The type the TOOLTIP asked for, read on its own -- which is how a caller
   learns it said 'cross' before that word is rewritten away per axis. }
-function TyTooltipAxisPointerType(AOption: TTyChartOption): TTyAxisPointerType;
+function TyTooltipAxisPointerType(AOption: TTyChartOption;
+  ACoordTip: TJSONObject = nil): TTyAxisPointerType;
 
 { Which axis an 'axis' trigger points at: 'x', 'y', or '' for auto.
   `tooltip.axisPointer.axis`, default 'auto'. }
-function TyTooltipAxisPointerAxis(AOption: TTyChartOption): string;
+function TyTooltipAxisPointerAxis(AOption: TTyChartOption;
+  ACoordTip: TJSONObject = nil): string;
 { The same on a polar: 'radius', 'angle', or '' for auto [Batch 111] }
-function TyTooltipPolarPointerAxis(AOption: TTyChartOption): string;
+function TyTooltipPolarPointerAxis(AOption: TTyChartOption;
+  ACoordTip: TJSONObject = nil): string;
+{ [R5-D] ACoordTip IN ALL FOUR: the coordinate system's own `tooltip`
+  (grid, polar, singleAxis -- nil for none). collectAxesInfo reads
+  coordSysModel.getModel('tooltip', globalTooltipModel), so every key of it
+  is asked first and the global tooltip's only where it is missing or null
+  -- `axisPointer.type` / `axis`, and the fields makeAxisPointerModel copies
+  (a whole lineStyle at the first level that has one). }
 
 { The band a shadow covers, CLAMPED TO THE AXIS EXTENT rather than centred and
   overflowing -- so the band at the first or last category is HALF WIDTH, and
@@ -403,6 +419,9 @@ begin
     root; never the tooltip's (not one of the nine fields) }
   if (ALevel <> apnTooltip) and Claim(ANode, 'triggerTooltip', ASeen) then
     ASpec.TriggerTooltip := PtrTruthy(ANode.Find('triggerTooltip'));
+  { [R5-D] triggerEmphasis the same way }
+  if (ALevel <> apnTooltip) and Claim(ANode, 'triggerEmphasis', ASeen) then
+    ASpec.TriggerEmphasis := PtrTruthy(ANode.Find('triggerEmphasis'));
   if Claim(ANode, 'type', ASeen) then
   begin
     d := ANode.Find('type');
@@ -476,10 +495,24 @@ begin
   if d is TJSONObject then Result := TJSONObject(d);
 end;
 
-function TyTooltipAxisPointerType(AOption: TTyChartOption): TTyAxisPointerType;
+{ [R5-D] tooltip.axisPointer.<AKey>: the coordinate system's, else the
+  global tooltip's (Model.get falls to the parent on null) }
+function TipPointerKey(AOption: TTyChartOption; ACoordTip: TJSONObject;
+  const AKey: string): TJSONData;
+var ap: TJSONObject;
+begin
+  Result := nil;
+  ap := PointerNodeIn(ACoordTip);
+  if ap <> nil then Result := ap.Find(AKey);
+  if (Result <> nil) and (Result.JSONType <> jtNull) then Exit;
+  Result := nil;
+  ap := PointerNodeIn(TooltipNode(AOption));
+  if ap <> nil then Result := ap.Find(AKey);
+end;
+
+function TyTooltipAxisPointerType(AOption: TTyChartOption;
+  ACoordTip: TJSONObject): TTyAxisPointerType;
 var
-  tip: TJSONObject;
-  ap: TJSONObject;
   d: TJSONData;
 begin
   { THE TOOLTIP'S OWN DEFAULT IS 'line' AND IT WINS AT RUNTIME. Both upstream
@@ -489,44 +522,32 @@ begin
     per-axis-kind default table anywhere in 6.1: every shadow in an ECharts
     bar demo was written by its author. }
   Result := aptLine;
-  tip := TooltipNode(AOption);
-  if tip = nil then Exit;
-  ap := PointerNodeIn(tip);
-  if ap = nil then Exit;
-  d := ap.Find('type');
+  d := TipPointerKey(AOption, ACoordTip, 'type');
   if (d <> nil) and (d.JSONType = jtString) then
     Result := PointerTypeOf(d.AsString);
 end;
 
-function TyTooltipAxisPointerAxis(AOption: TTyChartOption): string;
+function TyTooltipAxisPointerAxis(AOption: TTyChartOption;
+  ACoordTip: TJSONObject): string;
 var
-  tip, ap: TJSONObject;
   d: TJSONData;
   s: string;
 begin
   Result := '';
-  tip := TooltipNode(AOption);
-  if tip = nil then Exit;
-  ap := PointerNodeIn(tip);
-  if ap = nil then Exit;
-  d := ap.Find('axis');
+  d := TipPointerKey(AOption, ACoordTip, 'axis');
   if (d = nil) or (d.JSONType <> jtString) then Exit;
   s := d.AsString;
   if (s = 'x') or (s = 'y') then Result := s;
 end;
 
-function TyTooltipPolarPointerAxis(AOption: TTyChartOption): string;
+function TyTooltipPolarPointerAxis(AOption: TTyChartOption;
+  ACoordTip: TJSONObject): string;
 var
-  tip, ap: TJSONObject;
   d: TJSONData;
   s: string;
 begin
   Result := '';
-  tip := TooltipNode(AOption);
-  if tip = nil then Exit;
-  ap := PointerNodeIn(tip);
-  if ap = nil then Exit;
-  d := ap.Find('axis');
+  d := TipPointerKey(AOption, ACoordTip, 'axis');
   if (d = nil) or (d.JSONType <> jtString) then Exit;
   s := d.AsString;
   if (s = 'radius') or (s = 'angle') then Result := s;
@@ -534,7 +555,8 @@ end;
 
 function TyAxisPointerSpecOf(AOption: TTyChartOption;
   const AAxisMainType: string; AAxisIndex: Integer; AAxisIsCategory: Boolean;
-  AFromTooltip, ATriggerTooltip, ACross: Boolean): TTyAxisPointerSpec;
+  AFromTooltip, ATriggerTooltip, ACross: Boolean;
+  ACoordTip: TJSONObject): TTyAxisPointerSpec;
 var
   seen: TTyStringArray;
   tip: TJSONObject;
@@ -546,6 +568,7 @@ begin
   Result.LineDash := todDashed;
   Result.LabelSpec.MarginLogical := 3;
   Result.TriggerTooltip := True;
+  Result.TriggerEmphasis := True;
   { [R2-I7] THE ROOT COMPONENT'S DEFAULT IS A SHOWN LABEL. Only the volatile
     tooltip layer turns it off (below); an axis collected for its own `show`
     reads the root's `label.show: true`. }
@@ -571,6 +594,10 @@ begin
       arm at the border shade and the other at a darker one, both dashed. }
     if ACross and not ATriggerTooltip then penKey := 'crossStyle'
     else penKey := 'lineStyle';
+    { [R5-D] the coordinate system's tooltip first: each field the first
+      level that has it }
+    if ACoordTip <> nil then
+      MergePointerNode(PointerNodeIn(ACoordTip), penKey, apnTooltip, Result, seen);
     if tip <> nil then
       MergePointerNode(PointerNodeIn(tip), penKey, apnTooltip, Result, seen);
   end;

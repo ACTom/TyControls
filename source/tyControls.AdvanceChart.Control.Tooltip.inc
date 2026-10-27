@@ -422,7 +422,7 @@ begin
         kind := mkPoint;
       end;
     Exit(TyTooltipSpecOfMarker(FOption, ADatum.ComponentIndex,
-      TyMarkerKey[kind], opt));
+      TyMarkerKey[kind], opt, TipCoordNode(ADatum.ComponentIndex)));
   end;
   { THE RAW ROW, not the view row. A data-item tooltip is written beside the
     datum in the option text, and the option text is the raw order -- a filter
@@ -430,10 +430,91 @@ begin
   { A GRAPH LINK has a row of its own, in the LINK list, and a node's tooltip
     written at that position is somebody else's -- so a link takes the
     series'. }
+  { [R5-D] and the coordinate system's level under the series' }
   if ADatum.IsEdge then
-    Result := TyTooltipSpecOf(FOption, ADatum.SeriesIndex, -1)
+    Result := TyTooltipSpecOf(FOption, ADatum.SeriesIndex, -1,
+      TipCoordNode(ADatum.SeriesIndex))
   else
-    Result := TyTooltipSpecOf(FOption, ADatum.SeriesIndex, ADatum.RawDataIndex);
+    Result := TyTooltipSpecOf(FOption, ADatum.SeriesIndex, ADatum.RawDataIndex,
+      TipCoordNode(ADatum.SeriesIndex));
+end;
+
+function TTyCustomAdvanceChart.TipCoordNode(ASeriesIndex: Integer): TJSONData;
+var
+  slot: Integer;
+  b: TTySeriesBinding;
+begin
+  Result := nil;
+  if FOption = nil then Exit;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FBindings)) then Exit;
+  b := FBindings[slot];
+  { a cartesian2D's model is its grid }
+  if (b.Cart <> nil) and (b.XAxis <> nil) then
+    Result := FOption.ComponentAt('grid', b.XAxis.GridIndex)
+  else if b.PolarIndex >= 0 then
+    Result := FOption.ComponentAt('polar', b.PolarIndex)
+  else if b.SingleIndex >= 0 then
+    Result := FOption.ComponentAt('singleAxis', b.SingleIndex)
+  else if b.ParallelIndex >= 0 then
+    Result := FOption.ComponentAt('parallel', b.ParallelIndex)
+  else if b.GeoIndex >= 0 then
+    Result := FOption.ComponentAt('geo', b.GeoIndex);
+end;
+
+{ [R5-D] THE PROXY'S CASCADE (_showComponentItemTooltip over the proxy
+  rect's tooltipConfig {name: null, option: payload.tooltip}): the option
+  -- a string is {content: it, formatter: it} --, no component (its main
+  type is none), {formatter: option.content} -- skipped when there is no
+  content, so the global formatter is reached --, the global component. }
+function TTyCustomAdvanceChart.TipProxySpec(const AJson: string): TTyTooltipSpec;
+var
+  d: TJSONData;
+  lvTop, lvl: TJSONObject;
+  c: TJSONData;
+  nLine, nCol: Integer;
+begin
+  d := nil;
+  lvTop := nil;
+  lvl := nil;
+  try
+    if not TyJsonNestingExceeds(AJson, TyOptionMaxNesting, nLine, nCol) then
+      try
+        d := GetJSON(AJson);
+      except
+        d := nil;
+      end;
+    if (d <> nil) and (d.JSONType = jtString) then
+      lvTop := TJSONObject.Create(['content', d.AsString, 'formatter', d.AsString])
+    else if d is TJSONObject then
+      lvTop := TJSONObject(d.Clone);
+    if lvTop <> nil then
+    begin
+      c := lvTop.Find('content');
+      if (c <> nil) and (c.JSONType <> jtNull) then
+      begin
+        lvl := TJSONObject.Create;
+        lvl.Add('formatter', c.Clone);
+      end;
+    end;
+    Result := TyTooltipSpecOfLevels(FOption, [lvTop, lvl]);
+    { a component item is not asked its trigger }
+    Result.Trigger := tttItem;
+  finally
+    lvl.Free;
+    lvTop.Free;
+    d.Free;
+  end;
+end;
+
+{ The proxy's text: the formatter as formatTpl leaves it with the empty
+  formatterParams (no $vars: nothing is replaced) -- the content's level is
+  a formatter as well }
+function TTyCustomAdvanceChart.TipProxyText(const AJson: string;
+  const ASpec: TTyTooltipSpec): string;
+begin
+  Result := '';
+  if ASpec.HasFormatter then Result := ASpec.Formatter;
 end;
 
 function TTyCustomAdvanceChart.TooltipInk(
@@ -1633,6 +1714,8 @@ var
   tipSpec: TTyTooltipSpec;
   tipOn, crossType, triggerAxis: Boolean;
   wantAxis, wantPolar: string;
+  { [R5-D] the coordinate system's own `tooltip` (nil: none) }
+  coordTip: TJSONObject;
   g, c, k: Integer;
   gb: TTyGridBuild;
   cart: TTyCartesian2D;
@@ -1682,7 +1765,7 @@ var
     begin
       info.TriggerTooltip := ATrigger;
       info.Spec := TyAxisPointerSpecOf(FOption, AAxis.MainType,
-        AAxis.ComponentIndex, isCat, True, ATrigger, ACrossFrom);
+        AAxis.ComponentIndex, isCat, True, ATrigger, ACrossFrom, coordTip);
     end
     else
     begin
@@ -1717,19 +1800,44 @@ var
         Save(AOthers[j], APlot, APolar, ASingle, ACsKey, True, True, False);
   end;
 
+  { [R5-D] baseTooltipModel = coordSysModel.getModel('tooltip',
+    globalTooltipModel): the coordinate system's tooltip over the global
+    one, key by key -- show, trigger, axisPointer.type and .axis }
+  procedure BaseTooltip(const AMainType: string; AIndex: Integer);
+  var n, d: TJSONData;
+  begin
+    coordTip := nil;
+    n := FOption.ComponentAt(AMainType, AIndex);
+    if n is TJSONObject then
+    begin
+      d := TJSONObject(n).Find('tooltip');
+      if d is TJSONObject then coordTip := TJSONObject(d);
+    end;
+    { the tooltip's axes: a tooltip component that shows (showContent false
+      still draws the pointer) }
+    tipOn := tipSpec.HasComponent and tipSpec.Show;
+    triggerAxis := tipSpec.Trigger = tttAxis;
+    if coordTip <> nil then
+    begin
+      d := coordTip.Find('show');
+      if (d <> nil) and (d.JSONType <> jtNull) then
+        tipOn := tipSpec.HasComponent and JsTruthy(d);
+      d := coordTip.Find('trigger');
+      if (d <> nil) and (d.JSONType <> jtNull) then
+        triggerAxis := (d.JSONType = jtString) and (d.AsString = 'axis');
+    end;
+    crossType := TyTooltipAxisPointerType(FOption, coordTip) = aptCross;
+    wantAxis := TyTooltipAxisPointerAxis(FOption, coordTip);
+    wantPolar := TyTooltipPolarPointerAxis(FOption, coordTip);
+  end;
+
 var
   nb, no_: Integer;
 begin
   Result := nil;
   if (FBuild = nil) or (FOption = nil) then Exit;
   tipSpec := TyTooltipSpecOf(FOption, -1, -1);
-  { the tooltip's axes: a tooltip component that shows (showContent false
-    still draws the pointer) }
-  tipOn := tipSpec.HasComponent and tipSpec.Show;
-  crossType := TyTooltipAxisPointerType(FOption) = aptCross;
-  triggerAxis := tipSpec.Trigger = tttAxis;
-  wantAxis := TyTooltipAxisPointerAxis(FOption);
-  wantPolar := TyTooltipPolarPointerAxis(FOption);
+  coordTip := nil;
   { THE GRIDS: grid.getAxes() is every x axis, then every y axis, in their
     component order; getTooltipAxes every cartesian's base axis (or the one
     `tooltip.axisPointer.axis` names), then every other one, each once }
@@ -1737,6 +1845,7 @@ begin
   begin
     gb := FBuild.Grid(g);
     if gb.CartesianCount = 0 then Continue;
+    BaseTooltip('grid', g);
     for k := 0 to gb.XAxisCount - 1 do
       Save(gb.XAxis(k), gb.PlotRect, nil, nil, 'g' + IntToStr(g), False, False, False);
     for k := 0 to gb.YAxisCount - 1 do
@@ -1762,6 +1871,7 @@ begin
   begin
     pol := FPolars[g];
     if pol = nil then Continue;
+    BaseTooltip('polar', g);
     Save(pol.AxisByDim('radius'), Default(TTyRectF), pol, nil, 'p' + IntToStr(g), False, False, False);
     Save(pol.AxisByDim('angle'), Default(TTyRectF), pol, nil, 'p' + IntToStr(g), False, False, False);
     if wantPolar <> '' then base := pol.AxisByDim(wantPolar)
@@ -1780,6 +1890,7 @@ begin
   begin
     sgl := FSingles[g];
     if sgl = nil then Continue;
+    BaseTooltip('singleAxis', g);
     Save(sgl.Axis, sgl.GetRect, nil, sgl, 's' + IntToStr(g), False, False, False);
     SetLength(bases, 1);
     bases[0] := sgl.Axis;
@@ -2670,7 +2781,29 @@ var
   d: TJSONData;
   nLine, nCol: Integer;
 begin
-  if Length(ASnap.Hits) > 0 then Result := TyTooltipSpecOf(FOption, -1, -1)
+  { [R5-D] an axis tooltip's model is [e.tooltipOption] over the global
+    one; a proxy's its own cascade }
+  if Length(ASnap.Hits) > 0 then
+  begin
+    if ASnap.OptJson <> '' then
+    begin
+      d := nil;
+      if not TyJsonNestingExceeds(ASnap.OptJson, TyOptionMaxNesting, nLine, nCol) then
+        try
+          d := GetJSON(ASnap.OptJson);
+        except
+          d := nil;
+        end;
+      try
+        Result := TyTooltipSpecOfLevels(FOption, [d]);
+      finally
+        d.Free;
+      end;
+    end
+    else
+      Result := TyTooltipSpecOf(FOption, -1, -1);
+  end
+  else if ASnap.ProxyJson <> '' then Result := TipProxySpec(ASnap.ProxyJson)
   else Result := TooltipSpecFor(ASnap.Datum);
   { [Batch 153] a manual show: the payload's position before the
     cascade's (positionExpr || model.get('position')); else, for an item
@@ -2735,6 +2868,7 @@ begin
     A component item (a geo region, an axis' text, a matrix cell) has none. }
   if Length(ASnap.Hits) = 0 then
   begin
+    if ASnap.ProxyJson <> '' then Exit;
     if not TipTargetValid(ASnap.Datum) or IsGeoDatum(ASnap.Datum)
       or IsAxisTextDatum(ASnap.Datum) or TipIsMatrix(ASnap.Datum) then Exit;
   end;
@@ -3866,13 +4000,27 @@ begin
   if AEv.HasDbc then
   begin
     snap.Hits := Copy(AEv.Hits, 0, Length(AEv.Hits));
-    TipTryShow(snap, g);
+    { [R5-D] its model: [e.tooltipOption] over the global one -- the delay
+      it is shown with too }
+    snap.OptJson := AEv.OptJson;
+    if snap.OptJson <> '' then TipTryShow(snap, TipSpecOf(snap))
+    else TipTryShow(snap, g);
     Exit;
   end;
   snap.Datum := AEv.Datum;
   snap.Element := AEv.Element;
   { [F4b] a target, or none: no axis tooltip to keep }
   FTipLastDbc := '';
+  { [R5-D] THE PROXY of a showTip's payload.tooltip: a component item --
+    shown whatever the trigger, and a showTip from the view }
+  if AEv.ProxyJson <> '' then
+  begin
+    snap.ProxyJson := AEv.ProxyJson;
+    TipTryShow(snap, TipSpecOf(snap));
+    TipDispatch(TJSONObject.Create(['type', 'showTip', 'from', TipUid]), nil,
+      False, AViaListener);
+    Exit;
+  end;
   { findEventDispatcher: tooltipDisabled on the way up is no dispatcher }
   if CustomTipDisabled(AEv.Element) then
   begin
@@ -3931,6 +4079,79 @@ var
   el, i, k, slot: Integer;
   ev, ax, tip: TJSONObject;
   done: array of Boolean;
+
+  { [R5-D] dispatchHighDownActually: every shown axis whose model says
+    triggerEmphasis gives its rows (seriesIndex|dataIndex, the first keeps
+    its place), in the axisPointer model's order; what the last call lit
+    and this one does not is downplayed, then what is new is highlighted --
+    {type, escapeConnect, notBlur, batch [{seriesIndex, dataIndex}]}
+    through api.dispatchAction, so they wait for this action to finish }
+  procedure HighDown(const AOrder: TTyAxisArray);
+  var
+    ns, nd: TTyIntegerArray;
+    q, r, j, si, raw: Integer;
+    hd: array of Boolean;
+
+    function IndexIn(const AS_, AD: TTyIntegerArray; ASer, ARaw: Integer): Integer;
+    var z: Integer;
+    begin
+      for z := 0 to High(AS_) do
+        if (AS_[z] = ASer) and (AD[z] = ARaw) then Exit(z);
+      Result := -1;
+    end;
+
+    function Batch(const AS_, AD: TTyIntegerArray; const AOther_S,
+      AOther_D: TTyIntegerArray; const AType: string): TJSONObject;
+    var z: Integer; b: TJSONArray;
+    begin
+      Result := nil;
+      b := nil;
+      for z := 0 to High(AS_) do
+        if IndexIn(AOther_S, AOther_D, AS_[z], AD[z]) < 0 then
+        begin
+          if b = nil then b := TJSONArray.Create;
+          b.Add(TJSONObject.Create(['seriesIndex', AS_[z], 'dataIndex', AD[z]]));
+        end;
+      if b = nil then Exit;
+      Result := TJSONObject.Create(['type', AType, 'escapeConnect', True,
+        'notBlur', True]);
+      Result.Add('batch', b);
+    end;
+
+  var pl: TJSONObject;
+  begin
+    ns := nil;
+    nd := nil;
+    SetLength(hd, Length(hits));
+    for q := 0 to High(hd) do hd[q] := False;
+    for q := 0 to High(AOrder) do
+      for r := 0 to High(hits) do
+        if not hd[r] and (hits[r].Axis = AOrder[q]) then
+        begin
+          hd[r] := True;
+          if not hits[r].Spec.TriggerEmphasis then Continue;
+          for j := 0 to High(hits[r].Slots) do
+          begin
+            slot := hits[r].Slots[j];
+            si := SlotSeriesIndex(slot);
+            if (slot >= 0) and (slot <= High(FStores)) and (FStores[slot] <> nil) then
+              raw := FStores[slot].GetRawIndex(hits[r].Rows[j])
+            else
+              raw := hits[r].Rows[j];
+            if IndexIn(ns, nd, si, raw) >= 0 then Continue;
+            SetLength(ns, Length(ns) + 1);
+            SetLength(nd, Length(nd) + 1);
+            ns[High(ns)] := si;
+            nd[High(nd)] := raw;
+          end;
+        end;
+    pl := Batch(FApHighS, FApHighD, ns, nd, 'downplay');
+    if pl <> nil then TipDispatch(pl, nil, False, False);
+    pl := Batch(ns, nd, FApHighS, FApHighD, 'highlight');
+    if pl <> nil then TipDispatch(pl, nil, False, False);
+    FApHighS := ns;
+    FApHighD := nd;
+  end;
 
   function ModelValue(const AHit: TTyAxisHit): Double;
   begin
@@ -4047,6 +4268,7 @@ begin
         tip.Add('dataByCoordSys', TipDbcJson(tips));
         TipDispatch(tip, hits, True, via);
       end;
+      HighDown(order);
     finally
       Dec(FActCycle);
       none_.Free;
@@ -4110,9 +4332,22 @@ begin
         TipTryShowEvent(ev, False);
       end
       else if JsTruthy(APayload.Find('tooltip')) and (APayload.Find('x') <> nil)
-        and (APayload.Find('y') <> nil) then
-        { a proxy element carrying the payload's own tooltip option: not
-          modelled }
+        and (APayload.Find('x').JSONType <> jtNull) and (APayload.Find('y') <> nil)
+        and (APayload.Find('y').JSONType <> jtNull) then
+      begin
+        { [R5-D] a proxy element at x / y carrying the payload's own tooltip
+          option: _tryShow on it, no position of the payload's }
+        if not TipPayloadXY(APayload, ev.X, ev.Y) then
+        begin
+          d := APayload.Find('x');
+          if d.JSONType = jtNumber then ev.X := d.AsFloat;
+          d := APayload.Find('y');
+          if d.JSONType = jtNumber then ev.Y := d.AsFloat;
+        end;
+        ev.PosJson := '';
+        ev.ProxyJson := APayload.Find('tooltip').AsJSON;
+        TipTryShowEvent(ev, False);
+      end
       else if JsTruthy(APayload.Find('dataByCoordSys')) then
       begin
         { from axisTrigger: the axes and their rows at the point }
@@ -4131,6 +4366,9 @@ begin
         end;
         ev.Hits := hits;
         ev.HasDbc := (d is TJSONArray) and (d.Count > 0);
+        { [R5-D] the axis tooltip's tooltipOption: a truthy one is a level }
+        if JsTruthy(APayload.Find('tooltipOption')) then
+          ev.OptJson := APayload.Find('tooltipOption').AsJSON;
         TipTryShowEvent(ev, False);
       end
       else if (APayload.Find('seriesIndex') <> nil)
@@ -4145,8 +4383,10 @@ begin
         begin
           sIdx := Trunc(APayload.Find('seriesIndex').AsFloat);
           raw := Trunc(d.AsFloat);
+          { [R5-D] [item, series, coordinate system] over the global }
           if SlotOfSeries(sIdx) >= 0 then
-            isAxis := TyTooltipSpecOf(FOption, sIdx, raw).Trigger = tttAxis;
+            isAxis := TyTooltipSpecOf(FOption, sIdx, raw,
+              TipCoordNode(sIdx)).Trigger = tttAxis;
         end;
         if isAxis then
         begin
@@ -4776,8 +5016,11 @@ begin
     end;
     Exit;
   end;
+  { [R5-D] a showTip proxy }
+  if FTipSnap.ProxyJson <> '' then
+    Result := 'proxy'
   { [Batch 148] a geo region: 'geo:<geoIndex>:<name>' }
-  if IsGeoDatum(FTipSnap.Datum) then
+  else if IsGeoDatum(FTipSnap.Datum) then
     Result := 'geo:' + IntToStr(FTipSnap.Datum.ComponentIndex) + ':'
       + FGeos[FTipSnap.Datum.ComponentIndex].GroupName(FTipSnap.Datum.DataIndex)
   else if TipIsMarker(FTipSnap.Datum) or TipIsMatrix(FTipSnap.Datum)
@@ -5362,7 +5605,7 @@ begin
   AContent := Default(TTyTipContent);
   snap := ASnap;
   onAxis := Length(snap.Hits) > 0;
-  if not TipTargetValid(snap.Datum) and not onAxis then Exit;
+  if not TipTargetValid(snap.Datum) and not onAxis and (snap.ProxyJson = '') then Exit;
   { UNDER AN AXIS TRIGGER THERE IS NO CASCADE. Upstream builds the axis
     tooltip's model from the global component and a positioning hint and
     nothing else -- no series level, no data item -- so every option but
@@ -5374,7 +5617,7 @@ begin
     SHAPE -- if a coordinate system reported axes, the axis path runs and
     the item trigger is never consulted. }
   if not onAxis and (spec.Trigger <> tttItem) and not IsGeoDatum(snap.Datum)
-    and not IsAxisTextDatum(snap.Datum) then Exit;
+    and not IsAxisTextDatum(snap.Datum) and (snap.ProxyJson = '') then Exit;
   ink := TooltipInk(spec);
   mkNames := nil;
   mkColours := nil;
@@ -5383,7 +5626,26 @@ begin
   htmlHas := False;
   htmlLines := nil;
   try
-    if (not onAxis) and IsGeoDatum(snap.Datum) then
+    if (not onAxis) and (snap.ProxyJson <> '') then
+    begin
+      { [R5-D] A SHOWTIP PROXY'S TEXT: its formatter as formatTpl leaves it
+        (no params), else its content }
+      tipText := TipProxyText(snap.ProxyJson, spec);
+      AContent.Fmt := tipText;
+      if tipText = '' then Exit;
+      if html then
+      begin
+        htmlLines := TooltipHtmlLines(tipText, ink);
+        htmlHas := True;
+      end
+      else
+      begin
+        block := TTyTooltipBlock.CreateSection('', True);
+        block.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, tipText, False,
+          '', True));
+      end;
+    end
+    else if (not onAxis) and IsGeoDatum(snap.Datum) then
     begin
       { [Batch 148] A GEO REGION'S TEXT: the formatter through formatTpl
         with the component's params, else the content (the name) }
@@ -5684,7 +5946,11 @@ begin
     elRect := TyInvalidRectF;
     if (not onAxis) and (FPaintList <> nil) and FPaintListValid
       and (snap.Element >= 0) and (snap.Element < FPaintList.Count) then
-      elRect := TipElementRect(snap.Element, APPI);
+      elRect := TipElementRect(snap.Element, APPI)
+    { [R5-D] the proxy: a 2 x 2 rect centred on its point }
+    else if (not onAxis) and (snap.ProxyJson <> '') then
+      elRect := TyRectF(snap.X - APPI / 96, snap.Y - APPI / 96,
+        snap.X + APPI / 96, snap.Y + APPI / 96);
     if TyRectFIsValid(elRect) then
     begin
       pin.HasRect := True;

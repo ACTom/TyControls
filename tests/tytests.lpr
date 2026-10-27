@@ -201,6 +201,7 @@ uses
   test.advchart.hoverlayer,
   test.advchart.radarlabel,
   test.advchart.pieitemlabel,
+  test.advchart.axisemphasis,
   test.advchart.backwardcompat,
   test.advchart.multiline, test.bgrarandompin,
   test.subpixel,

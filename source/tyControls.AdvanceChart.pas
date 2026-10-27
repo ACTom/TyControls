@@ -561,6 +561,12 @@ type
       default model of position 'bottom' under the cascade }
     PosJson: string;
     PosDefault: Boolean;
+    { [R5-D] showTip's payload.tooltip at x / y: the proxy element's tooltip
+      option (its JSON; '' none) -- a component item shown from it -- and
+      the axis tooltip's tooltipOption (JSON; '' none), the top level of its
+      model }
+    ProxyJson: string;
+    OptJson: string;
     { [F4b] ACROSS A RE-RENDER (TooltipView.render keeps the box up): the
       axes as a dataByCoordSys (JSON) while the build they pointed into is
       gone -- Stale until the next build reads them back by raw row -- and
@@ -627,6 +633,9 @@ type
     Element: Integer;
     PosJson: string;
     PosDefault: Boolean;
+    { [R5-D] as TTyTipSnap's }
+    ProxyJson: string;
+    OptJson: string;
   end;
 
   { [Batch 115] THE RETURN CIRCLE'S LAYOUT, as the virtual root's layout
@@ -1692,6 +1701,10 @@ type
     FUapListener: Boolean;
     FActHits: TTyTipAct;
     FPressEl: Integer;
+    { [R5-D] axisTrigger's axisPointerLastHighlights (kept on the zr, so
+      across a setOption): the rows the last updateAxisPointer highlighted,
+      by series index and raw data index, in the order they were taken }
+    FApHighS, FApHighD: TTyIntegerArray;
     { [F4b] TooltipView._lastX / _lastY (NaN: null) and _lastDataByCoordSys
       (JSON, '' null); the keep timer _keepShow arms (NaN: none); the axis
       pointers kept across a re-render, put back by the next build; a guard
@@ -3273,6 +3286,13 @@ type
     { the spec a snapshot is shown under: the global one for an axis
       tooltip, the cascade for an item }
     function TipSpecOf(const ASnap: TTyTipSnap): TTyTooltipSpec;
+    { [R5-D] seriesModel.coordinateSystem.model's option for a series: its
+      grid, polar, single axis, parallel or geo; nil for none (a calendar,
+      a radar and a matrix keep their model private) }
+    function TipCoordNode(ASeriesIndex: Integer): TJSONData;
+    { [R5-D] a proxy's tooltip cascade and text }
+    function TipProxySpec(const AJson: string): TTyTooltipSpec;
+    function TipProxyText(const AJson: string; const ASpec: TTyTooltipSpec): string;
     procedure TipTryShow(const ASnap: TTyTipSnap; const ASpec: TTyTooltipSpec);
     procedure TipApplyShow(const ASnap: TTyTipSnap);
     { [R2-I7] the default markup of a show being tried; the content a show
