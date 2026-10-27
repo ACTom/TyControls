@@ -625,7 +625,7 @@ begin
     SameStr('the tooltip', Format('item:%d:%d', [d.SeriesIndex, d.RawDataIndex]), which);
     SameInt('the tooltip row', d.DataIndex, tip.Integers['inner']);
   end;
-  if (t = 'snap') and (ASnap.Find('geom') is TJSONArray) then
+  if ((t = 'snap') or (t = 'update')) and (ASnap.Find('geom') is TJSONArray) then
     CheckGeom(ASnap.Arrays['geom']);
 end;
 
@@ -667,9 +667,18 @@ begin
         FChart.ProgressiveStepCostMs := sn.Floats['cost']
       else if t = 'append' then
       begin
-        if not FChart.AppendData(sn.Integers['seriesIndex'], sn.Arrays['data'].AsJSON) then
+        { [spec 242] upstream's throw: the port refuses }
+        if sn.Find('threw') <> nil then
+        begin
+          if FChart.AppendData(sn.Integers['seriesIndex'], sn.Arrays['data'].AsJSON) then
+            Miss('appendData taken, upstream throws: ' + sn.Strings['threw']);
+        end
+        else if not FChart.AppendData(sn.Integers['seriesIndex'], sn.Arrays['data'].AsJSON) then
           Miss('appendData refused');
       end
+      { [spec 242] setOption of nothing: a full update }
+      else if t = 'update' then
+        FChart.SetOption('{}', False)
       else if (t = 'move') or (t = 'leave') then
       begin
         nowMs := nowMs + 1000;
@@ -852,9 +861,11 @@ procedure TAdvChartProgressiveTest.TestAppendDataRefusesWhatUpstreamCannotTake;
 var deep: string; i: Integer; d: TJSONData;
 begin
   Show('{"animation": false, "xAxis": {}, "yAxis": {}, "dataset": {"source": [[1, 2], [2, 3]]},' +
-    '"series": [{"type": "scatter", "data": [[1, 2]]}, {"type": "scatter"}]}');
+    '"series": [{"type": "scatter", "data": [[1, 2]]}, {"type": "scatter"},' +
+    ' {"type": "scatter", "seriesLayoutBy": "row"}]}');
   AssertFalse('no such series', FChart.AppendData(5, '[[1, 2]]'));
-  AssertFalse('a dataset series', FChart.AppendData(1, '[[1, 2]]'));
+  { [spec 242] a table laid out by row: upstream throws }
+  AssertFalse('a dataset series laid out by row', FChart.AppendData(2, '[[1, 2]]'));
   AssertFalse('not an array', FChart.AppendData(0, '{"a": 1}'));
   AssertFalse('not JSON', FChart.AppendData(0, '[[1, 2'));
   deep := '';
@@ -872,6 +883,20 @@ begin
   d := GetJSON(FChart.GetOptionJson);
   try
     AssertEquals('the option holds them', 3, TJSONArray(d.FindPath('series[0].data')).Count);
+  finally
+    d.Free;
+  end;
+  { [spec 242] a dataset series: the rows go into the table }
+  AssertTrue('a dataset series', FChart.AppendData(1, '[[7, 8]]'));
+  FChart.ProgressTick;
+  RenderNow;
+  AssertEquals('its store holds them', 3, FChart.SeriesStore(1).Count);
+  d := GetJSON(FChart.GetOptionJson);
+  try
+    if d.FindPath('dataset.source') <> nil then
+      AssertEquals('the table holds them', 3, TJSONArray(d.FindPath('dataset.source')).Count)
+    else
+      AssertEquals('the table holds them', 3, TJSONArray(d.FindPath('dataset[0].source')).Count);
   finally
     d.Free;
   end;

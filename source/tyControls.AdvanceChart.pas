@@ -851,6 +851,14 @@ type
     FFrozen: TTyAxisZoomArray;
     FFrozenKeys: TTyStringArray;
     FFrozenOn: Boolean;
+    { [spec 242] THE SERIES A dataZoom FILTERED at the last update (any mode
+      but 'none'): selectRange / filterSelf / map left them on a store of
+      their own whose count appendData does not move -- so the frame keeps
+      that view, new rows unseen until the next update. FDzTouched is the
+      last SolveDataZooms' marks, FDzFrozenStore the views appendData froze
+      (owned, their category lists borrowed from nothing) }
+    FDzTouched: array of Boolean;
+    FDzFrozenStore: array of TTyDataStore;
     FFlushDue: Boolean;
     { THE INCREMENTAL LAYER (zrender's, for `incremental` elements): every
       shown element of a progressive run painted once, onto a layer of its
@@ -2702,6 +2710,9 @@ type
     function ProgFrame(AEmit: Boolean): Boolean;
     procedure FrozenCapture;
     function FrozenZooms: TTyAxisZoomArray;
+    function FrozenAxisOf(const AKey: string): TTyAxis;
+    procedure DzFrozenDrop;
+    procedure DzFrozenRestore;
     procedure EmitPlain(const AType: string);
     procedure EmitFlush;
     function ProgIsLayered(const AEl: TTyChartElement): Boolean;

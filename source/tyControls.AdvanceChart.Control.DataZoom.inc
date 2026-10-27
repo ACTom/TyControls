@@ -79,6 +79,9 @@ begin
   FAxisZooms := nil;
   FZoomWindows := nil;
   FZoomHost := nil;
+  { [spec 242] which series a filter touches this time }
+  FDzTouched := nil;
+  SetLength(FDzTouched, Length(FStores));
   if FBuild = nil then Exit;
   n := TyDataZoomCount(FOption);
   SetLength(FZoomSpecs, n);
@@ -204,6 +207,7 @@ begin
         else
           cols := TyAxisDataDims(FStores[si], ax, FBindings[si], Default(TTySeriesStack));
         if Length(cols) = 0 then Continue;
+        if si <= High(FDzTouched) then FDzTouched[si] := True;
         case spec.FilterMode of
           dzfFilter:
             begin
@@ -237,6 +241,34 @@ begin
         end;
       end;
     end;
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.DzFrozenDrop;
+var i: Integer;
+begin
+  for i := 0 to High(FDzFrozenStore) do FreeAndNil(FDzFrozenStore[i]);
+  FDzFrozenStore := nil;
+end;
+
+{ the frozen views back in place of the stores this frame built, each
+  borrowing this build's category lists where the new store borrows one }
+procedure TTyCustomAdvanceChart.DzFrozenRestore;
+var
+  s, k: Integer;
+  metas: array of TTyOrdinalMeta;
+begin
+  for s := 0 to Min(High(FDzFrozenStore), High(FStores)) do
+  begin
+    if (FDzFrozenStore[s] = nil) or (FStores[s] = nil) then Continue;
+    metas := nil;
+    SetLength(metas, FStores[s].DimCount);
+    for k := 0 to High(metas) do
+      if FStores[s].BorrowsMeta(k) then metas[k] := FStores[s].OrdinalMeta(k)
+      else metas[k] := nil;
+    if FDzFrozenStore[s].DimCount <> FStores[s].DimCount then Continue;
+    FStores[s].Free;
+    FStores[s] := FDzFrozenStore[s].CloneWith(metas);
   end;
 end;
 

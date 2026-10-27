@@ -985,6 +985,12 @@ begin
   FFrozen := nil;
   FFrozenKeys := nil;
   FFrozenOn := True;
+  { [spec 242] the views a dataZoom filtered, as they are }
+  DzFrozenDrop;
+  SetLength(FDzFrozenStore, Length(FStores));
+  for g := 0 to Min(High(FDzTouched), High(FStores)) do
+    if FDzTouched[g] and (FStores[g] <> nil) then
+      FDzFrozenStore[g] := FStores[g].CloneWith([]);
   if FBuild = nil then Exit;
   for g := 0 to FBuild.GridCount - 1 do
   begin
@@ -992,19 +998,34 @@ begin
     for a := 0 to gb.XAxisCount - 1 do Take(gb.XAxis(a));
     for a := 0 to gb.YAxisCount - 1 do Take(gb.YAxis(a));
   end;
+  { [spec 242] a polar's and a single axis' too: the frame updates no
+    coordinate system }
+  for g := 0 to High(FPolars) do
+    if FPolars[g] <> nil then
+    begin
+      Take(FPolars[g].RadiusAxis);
+      Take(FPolars[g].AngleAxis);
+    end;
+  for g := 0 to High(FSingles) do
+    if FSingles[g] <> nil then Take(FSingles[g].Axis);
 end;
 
-function TTyCustomAdvanceChart.FrozenZooms: TTyAxisZoomArray;
+{ [spec 242] an axis of this build by its frozen key: a grid's, a polar's
+  or a single axis' }
+function TTyCustomAdvanceChart.FrozenAxisOf(const AKey: string): TTyAxis;
 var
-  j, g, a, k, hit: Integer;
+  g, a: Integer;
   gb: TTyGridBuild;
-  ax, cand: TTyAxis;
-begin
-  Result := Copy(FAxisZooms);
-  if FBuild = nil then Exit;
-  for j := 0 to High(FFrozen) do
+  cand: TTyAxis;
+
+  function Is_(AAxis: TTyAxis): Boolean;
   begin
-    ax := nil;
+    Result := (AAxis <> nil) and (AAxis.MainType + ':' + IntToStr(AAxis.ComponentIndex) = AKey);
+  end;
+
+begin
+  Result := nil;
+  if FBuild <> nil then
     for g := 0 to FBuild.GridCount - 1 do
     begin
       gb := FBuild.Grid(g);
@@ -1012,10 +1033,29 @@ begin
       begin
         if a < gb.XAxisCount then cand := gb.XAxis(a)
         else cand := gb.YAxis(a - gb.XAxisCount);
-        if (cand <> nil) and (cand.MainType + ':' + IntToStr(cand.ComponentIndex) = FFrozenKeys[j]) then
-          ax := cand;
+        if Is_(cand) then Exit(cand);
       end;
     end;
+  for g := 0 to High(FPolars) do
+    if FPolars[g] <> nil then
+    begin
+      if Is_(FPolars[g].RadiusAxis) then Exit(FPolars[g].RadiusAxis);
+      if Is_(FPolars[g].AngleAxis) then Exit(FPolars[g].AngleAxis);
+    end;
+  for g := 0 to High(FSingles) do
+    if (FSingles[g] <> nil) and Is_(FSingles[g].Axis) then Exit(FSingles[g].Axis);
+end;
+
+function TTyCustomAdvanceChart.FrozenZooms: TTyAxisZoomArray;
+var
+  j, k, hit: Integer;
+  ax: TTyAxis;
+begin
+  Result := Copy(FAxisZooms);
+  if FBuild = nil then Exit;
+  for j := 0 to High(FFrozen) do
+  begin
+    ax := FrozenAxisOf(FFrozenKeys[j]);
     if ax = nil then Continue;
     hit := -1;
     for k := 0 to High(Result) do
@@ -1102,8 +1142,8 @@ end;
 function TTyCustomAdvanceChart.AppendData(ASeriesIndex: Integer;
   const ADataJson: string): Boolean;
 var
-  d, node, arr: TJSONData;
-  nLine, nCol, k: Integer;
+  d, node, arr, dsNode: TJSONData;
+  nLine, nCol, k, ds: Integer;
 begin
   Result := False;
   if (FOption = nil) or not (FOption.Root is TJSONObject) then Exit;
@@ -1111,10 +1151,28 @@ begin
   if TyJsonNestingExceeds(ADataJson, TyOptionMaxNesting, nLine, nCol) then Exit;
   node := FOption.ComponentAt('series', ASeriesIndex);
   if not (node is TJSONObject) then Exit;
-  { THE SERIES' OWN ARRAY: upstream's provider pushes into it; a series
-    reading a dataset is not taken (upstream would push into the table) }
+  { THE SERIES' OWN ARRAY: upstream's provider pushes into it }
   arr := TJSONObject(node).Find('data');
-  if not (arr is TJSONArray) then Exit;
+  if not (arr is TJSONArray) then
+  begin
+    { [spec 242] A SERIES READING A DATASET: the provider pushes the rows
+      into the dataset's own table -- every series on it takes them at the
+      next frame (they share the store); a table laid out by row throws
+      upstream ("Do not support appendData when set seriesLayoutBy: row"),
+      and a transform's output is no table of the option's (refused) }
+    if arr <> nil then Exit;
+    ds := TySeriesDatasetIndex(FOption, ASeriesIndex);
+    if ds < 0 then Exit;
+    dsNode := TJSONObject(node).Find('seriesLayoutBy');
+    if (dsNode <> nil) and (dsNode.JSONType = jtString) and (dsNode.AsString = 'row') then Exit;
+    dsNode := FOption.ComponentAt('dataset', ds);
+    if not (dsNode is TJSONObject) then Exit;
+    if (TJSONObject(dsNode).Find('transform') <> nil)
+      or (TJSONObject(dsNode).Find('fromDatasetIndex') <> nil)
+      or (TJSONObject(dsNode).Find('fromDatasetId') <> nil) then Exit;
+    arr := TJSONObject(dsNode).Find('source');
+    if not (arr is TJSONArray) then Exit;
+  end;
   try
     d := GetJSON(NulSafeJson(ADataJson));
     NulRestore(d);

@@ -100,6 +100,8 @@ begin
   DropBuild;
   { [R2-I6] the kept stores borrow nothing; after the build all the same }
   StoreKeepDrop;
+  { [spec 242] nor do appendData's frozen views }
+  DzFrozenDrop;
   FreeAndNil(FPaintList);
   FreeAndNil(FHoverList);
   FreeGeoSel;
