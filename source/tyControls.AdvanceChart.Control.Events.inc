@@ -1969,13 +1969,12 @@ begin
     s := DzScale;
     x := (AX - FLastRect.Left) / s;
     y := (AY - FLastRect.Top) / s;
-    for g := 0 to FBuild.GridCount - 1 do
+    { [R5-D] and the polars' and single axes' }
+    for g := 0 to DzRecCount - 1 do
       if DzControlType(g) >= 1 then
       begin
-        node := nil;
-        if FOption <> nil then
-          node := FOption.ComponentAt('grid', FBuild.Grid(g).ComponentIndex);
-        Consider(NumOr(node, 'zlevel', 0), NumOr(node, 'z', 0), g, DzGridContains(g, x, y));
+        node := DzRecNode(g);
+        Consider(NumOr(node, 'zlevel', 0), NumOr(node, 'z', 0), g, DzRecContains(g, x, y));
       end;
   end;
   { the geos' }
@@ -2065,7 +2064,7 @@ begin
     if (gg <> nil) and gg.Valid and gg.Spec.Show and (gg.Spec.Roam in [grmPan, grmBoth]) then Exit;
   end;
   if (FBuild <> nil) and (Length(FDzState) > 0) then
-    for i := 0 to FBuild.GridCount - 1 do
+    for i := 0 to DzRecCount - 1 do
       if DzControlType(i) >= 1 then Exit;
   Result := False;
 end;

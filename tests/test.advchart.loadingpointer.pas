@@ -59,6 +59,34 @@ type
     procedure TestAThumbnailOverAMatrixGraphAsUpstream;
   end;
 
+  { [R5-D] tools/advchart-oracle/inside-roam-coordsys.js: an inside
+    dataZoom on a single axis and on a polar -- one roam record per
+    coordinate system, its containPoint, getDirectionInfo.singleAxis /
+    .polar; per step the datazoom events, the cursor and every inside's
+    view range }
+  TAdvChartInsideRoamCoordSysOracleTest = class(TTestCase)
+  private
+    FForm: TForm;
+    FCtl: TTyStyleController;
+    FRoot: TJSONData;
+    FBmp: TBGRABitmap;
+    FBad, FCompared: Integer;
+    FReport, FWhere: string;
+    FLog: TStrings;
+    procedure Bad(const AWhat: string);
+    procedure OnEvent(Sender: TObject; const AEvent: TTyChartEvent);
+    procedure RunCase(const AId: string);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestAHorizontalSingleAxisAsUpstream;
+    procedure TestAVerticalInverseSingleAxisAsUpstream;
+    procedure TestThePolarRadiusAsUpstream;
+    procedure TestThePolarAngleAsUpstream;
+    procedure TestBothPolarAxesAsUpstream;
+  end;
+
 implementation
 
 const
@@ -443,6 +471,228 @@ begin
   RunCase('thumb-matrix');
 end;
 
+{ ==================== the inside roam on a polar and a single ==================== }
+
+procedure TAdvChartInsideRoamCoordSysOracleTest.SetUp;
+var sl: TStringList;
+begin
+  inherited SetUp;
+  FForm := TForm.CreateNew(nil);
+  FCtl := TTyStyleController.Create(nil);
+  FCtl.Mode := 'light';
+  FCtl.ThemeName := 'default';
+  FBmp := TBGRABitmap.Create(cW, cH, BGRA(255, 255, 255, 255));
+  FLog := TStringList.Create;
+  sl := TStringList.Create;
+  try
+    sl.LoadFromFile(FixturePath('advchart-inside-roam-coordsys.json'));
+    FRoot := GetJSON(sl.Text);
+  finally
+    sl.Free;
+  end;
+  FBad := 0;
+  FCompared := 0;
+  FReport := '';
+end;
+
+procedure TAdvChartInsideRoamCoordSysOracleTest.TearDown;
+begin
+  FLog.Free;
+  FRoot.Free;
+  FBmp.Free;
+  FForm.Free;
+  FCtl.Free;
+  inherited TearDown;
+end;
+
+procedure TAdvChartInsideRoamCoordSysOracleTest.Bad(const AWhat: string);
+begin
+  Inc(FBad);
+  if Length(FReport) < 20000 then
+    FReport := FReport + LineEnding + FWhere + ': ' + AWhat;
+end;
+
+procedure TAdvChartInsideRoamCoordSysOracleTest.OnEvent(Sender: TObject;
+  const AEvent: TTyChartEvent);
+begin
+  if AEvent.EventType <> 'datazoom' then Exit;
+  FLog.Add(AEvent.EventType + #9 + AEvent.Payload);
+end;
+
+procedure TAdvChartInsideRoamCoordSysOracleTest.RunCase(const AId: string);
+var
+  cases, steps, want, pts, dzs: TJSONArray;
+  cs, st, state: TJSONObject;
+  probe: TLpProbe;
+  i, j, k, n: Integer;
+  op: string;
+  now_, t0, lo, hi: Double;
+  e: TJSONArray;
+  parts: TStringList;
+  got, opt: TJSONData;
+  insides: array of Integer;
+begin
+  cases := TJSONObject(FRoot).Arrays['cases'];
+  cs := nil;
+  for i := 0 to cases.Count - 1 do
+    if cases.Objects[i].Strings['id'] = AId then cs := cases.Objects[i];
+  AssertTrue('no case ' + AId, cs <> nil);
+  { the inside dataZooms, in component order }
+  opt := cs.Arrays['charts'].Objects[0].Objects['option'];
+  insides := nil;
+  if TJSONObject(opt).Find('dataZoom') is TJSONArray then
+  begin
+    dzs := TJSONObject(opt).Arrays['dataZoom'];
+    for i := 0 to dzs.Count - 1 do
+      if dzs.Objects[i].Get('type', '') = 'inside' then
+      begin
+        SetLength(insides, Length(insides) + 1);
+        insides[High(insides)] := i;
+      end;
+  end;
+  probe := TLpProbe.Create(FForm);
+  parts := TStringList.Create;
+  try
+    probe.Parent := FForm;
+    probe.Controller := FCtl;
+    probe.TooltipNow := 0;
+    t0 := TJSONObject(FRoot).Objects['clock'].Floats['start'];
+    probe.DataZoomNow := t0;
+    probe.AnimationMode := camOff;
+    probe.SetBounds(0, 0, cW, cH);
+    probe.Option := opt.AsJSON;
+    probe.OnChartEvent := @OnEvent;
+    probe.Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
+    parts.Delimiter := #9;
+    parts.StrictDelimiter := True;
+    now_ := 0;
+    steps := cs.Arrays['steps'];
+    for j := 0 to steps.Count - 1 do
+    begin
+      st := steps.Objects[j];
+      op := st.Strings['op'];
+      FWhere := Format('%s step %d (%s)', [AId, j, op]);
+      FLog.Clear;
+      if op <> 'idle' then
+        now_ := now_ + TJSONObject(FRoot).Objects['clock'].Floats['stepDt']
+      else
+        now_ := now_ + st.Floats['ms'];
+      probe.TooltipNow := now_;
+      probe.TooltipTick(now_);
+      probe.DataZoomNow := t0 + now_;
+      probe.DataZoomTick(t0 + now_);
+      if op = 'move' then
+        probe.Move(st.Arrays['at'].Integers[0], st.Arrays['at'].Integers[1])
+      else if op = 'wheel' then
+      begin
+        probe.Move(st.Arrays['at'].Integers[0], st.Arrays['at'].Integers[1]);
+        probe.Wheel(st.Arrays['at'].Integers[0], st.Arrays['at'].Integers[1],
+          st.Integers['delta']);
+      end
+      else if op = 'drag' then
+      begin
+        pts := st.Arrays['points'];
+        probe.Move(pts.Arrays[0].Integers[0], pts.Arrays[0].Integers[1]);
+        probe.Down(pts.Arrays[0].Integers[0], pts.Arrays[0].Integers[1]);
+        for k := 1 to pts.Count - 1 do
+        begin
+          now_ := now_ + 200;
+          probe.TooltipNow := now_;
+          probe.TooltipTick(now_);
+          probe.DataZoomNow := t0 + now_;
+          probe.DataZoomTick(t0 + now_);
+          probe.Move(pts.Arrays[k].Integers[0], pts.Arrays[k].Integers[1]);
+        end;
+        now_ := now_ + 200;
+        probe.TooltipNow := now_;
+        probe.TooltipTick(now_);
+        probe.DataZoomNow := t0 + now_;
+        probe.DataZoomTick(t0 + now_);
+        k := pts.Count - 1;
+        probe.Up(pts.Arrays[k].Integers[0], pts.Arrays[k].Integers[1]);
+      end;
+      probe.Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
+      { the events }
+      want := st.Arrays['events'];
+      Inc(FCompared);
+      if FLog.Count <> want.Count then
+      begin
+        Bad(Format('%d events, upstream %d', [FLog.Count, want.Count]));
+        for i := 0 to FLog.Count - 1 do Bad('  port: ' + Copy(FLog[i], 1, 300));
+        for i := 0 to want.Count - 1 do Bad('  upstream: ' + Copy(want.Items[i].AsJSON, 1, 300));
+      end
+      else
+        for i := 0 to want.Count - 1 do
+        begin
+          e := TJSONArray(want.Items[i]);
+          parts.DelimitedText := FLog[i];
+          got := GetJSON(StringReplace(parts[1], '\u0000', cNulMark, [rfReplaceAll]));
+          try
+            FromIsUid(got);
+            Inc(FCompared);
+            if not SameJson(e.Items[2], got) then
+              Bad(Format('event %d: %s, upstream %s', [i, Copy(got.AsJSON, 1, 300),
+                Copy(e.Items[2].AsJSON, 1, 300)]));
+          finally
+            got.Free;
+          end;
+        end;
+      { the state }
+      state := st.Arrays['state'].Objects[0];
+      if state.Find('cursor').JSONType = jtString then
+      begin
+        Inc(FCompared);
+        if probe.CursorName <> state.Strings['cursor'] then
+          Bad(Format('cursor %s, upstream %s', [probe.CursorName, state.Strings['cursor']]));
+      end;
+      want := state.Arrays['ranges'];
+      n := Min(want.Count, Length(insides));
+      Inc(FCompared);
+      if want.Count <> Length(insides) then Bad('the insides differ in number');
+      for k := 0 to n - 1 do
+      begin
+        Inc(FCompared);
+        probe.DataZoomInsideRange(insides[k], lo, hi);
+        if (lo <> want.Arrays[k].Floats[0]) or (hi <> want.Arrays[k].Floats[1]) then
+          Bad(Format('inside %d range [%.17g, %.17g], upstream %s', [insides[k], lo, hi,
+            want.Items[k].AsJSON]));
+      end;
+    end;
+  finally
+    parts.Free;
+    probe.Free;
+  end;
+  AssertTrue(AId + ': nothing compared', FCompared > 0);
+  AssertEquals(Format('%s: %d of %d comparisons differ:%s',
+    [AId, FBad, FCompared, FReport]), 0, FBad);
+end;
+
+procedure TAdvChartInsideRoamCoordSysOracleTest.TestAHorizontalSingleAxisAsUpstream;
+begin
+  RunCase('single-h');
+end;
+
+procedure TAdvChartInsideRoamCoordSysOracleTest.TestAVerticalInverseSingleAxisAsUpstream;
+begin
+  RunCase('single-v');
+end;
+
+procedure TAdvChartInsideRoamCoordSysOracleTest.TestThePolarRadiusAsUpstream;
+begin
+  RunCase('polar-radius');
+end;
+
+procedure TAdvChartInsideRoamCoordSysOracleTest.TestThePolarAngleAsUpstream;
+begin
+  RunCase('polar-angle');
+end;
+
+procedure TAdvChartInsideRoamCoordSysOracleTest.TestBothPolarAxesAsUpstream;
+begin
+  RunCase('polar-both');
+end;
+
 initialization
   RegisterTest(TAdvChartLoadingPointerOracleTest);
+  RegisterTest(TAdvChartInsideRoamCoordSysOracleTest);
 end.

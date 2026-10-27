@@ -593,10 +593,10 @@ begin
       FDzInHi[i] := FZoomWindows[rep].Percent[1];
     end;
   end;
-  if (FBuild <> nil) and (Length(FDzRoamThrottle) <> FBuild.GridCount) then
+  if Length(FDzRoamThrottle) <> DzRecCount then
   begin
-    SetLength(FDzRoamThrottle, FBuild.GridCount);
-    SetLength(FDzRoamBatch, FBuild.GridCount);
+    SetLength(FDzRoamThrottle, DzRecCount);
+    SetLength(FDzRoamBatch, DzRecCount);
   end;
 end;
 
@@ -658,13 +658,101 @@ begin
   end;
 end;
 
+{ [R5-D] THE ROAM RECORDS. installDataZoomRoamProcessor makes one
+  coordSysRecord per coordinate system an inside dataZoom's axes live in --
+  a grid, a polar, a singleAxis (its axis model is its own coordinate
+  system model) -- each with its own RoamController, throttle and
+  containPoint. Here: the grids first, then the polars, then the singles.
+  [was: grids only -- an inside on a polar or a single axis never roamed] }
+function TTyCustomAdvanceChart.DzRecCount: Integer;
+begin
+  Result := 0;
+  if FBuild <> nil then Result := FBuild.GridCount;
+  Result := Result + Length(FPolars) + Length(FSingles);
+end;
+
+function TTyCustomAdvanceChart.DzRecInsides(ARec: Integer): TTyIntegerArray;
+var
+  ng, i, t, k: Integer;
+  ax: TTyAxis;
+  hit: Boolean;
+begin
+  Result := nil;
+  ng := 0;
+  if FBuild <> nil then ng := FBuild.GridCount;
+  if ARec < ng then Exit(DzGridInsides(ARec));
+  k := ARec - ng;
+  for i := 0 to Min(High(FZoomSpecs), High(FDzInteract)) do
+  begin
+    if (FZoomSpecs[i].SubType <> 'inside') or FZoomSpecs[i].NoTarget then Continue;
+    hit := False;
+    for t := 0 to High(FZoomSpecs[i].Targets) do
+    begin
+      ax := DzAxis(FZoomSpecs[i].Targets[t].Dim, FZoomSpecs[i].Targets[t].AxisIndex);
+      if ax = nil then Continue;
+      if k <= High(FPolars) then
+        hit := (FPolars[k] <> nil)
+          and ((ax = FPolars[k].RadiusAxis) or (ax = FPolars[k].AngleAxis))
+      else if k - Length(FPolars) <= High(FSingles) then
+        hit := (FSingles[k - Length(FPolars)] <> nil)
+          and (ax = FSingles[k - Length(FPolars)].Axis);
+      if hit then Break;
+    end;
+    if hit then
+    begin
+      SetLength(Result, Length(Result) + 1);
+      Result[High(Result)] := i;
+    end;
+  end;
+end;
+
+{ containPoint of the record's system: AX, AY in CSS px from the chart's
+  corner (a polar and a single work in the control's pixels) }
+function TTyCustomAdvanceChart.DzRecContains(ARec: Integer; AX, AY: Double): Boolean;
+var
+  ng, k: Integer;
+  s, dx, dy: Double;
+begin
+  Result := False;
+  ng := 0;
+  if FBuild <> nil then ng := FBuild.GridCount;
+  if ARec < ng then Exit(DzGridContains(ARec, AX, AY));
+  s := DzScale;
+  dx := FLastRect.Left + AX * s;
+  dy := FLastRect.Top + AY * s;
+  k := ARec - ng;
+  if k <= High(FPolars) then
+    Result := (FPolars[k] <> nil) and FPolars[k].ContainXY(dx, dy)
+  else if k - Length(FPolars) <= High(FSingles) then
+    Result := (FSingles[k - Length(FPolars)] <> nil)
+      and FSingles[k - Length(FPolars)].ContainXY(dx, dy);
+end;
+
+{ the record's component node (its z and zlevel) }
+function TTyCustomAdvanceChart.DzRecNode(ARec: Integer): TJSONData;
+var ng, k: Integer;
+begin
+  Result := nil;
+  if FOption = nil then Exit;
+  ng := 0;
+  if FBuild <> nil then ng := FBuild.GridCount;
+  if ARec < ng then Exit(FOption.ComponentAt('grid', FBuild.Grid(ARec).ComponentIndex));
+  k := ARec - ng;
+  if k <= High(FPolars) then
+  begin
+    if FPolars[k] <> nil then Result := FOption.ComponentAt('polar', FPolars[k].Index);
+  end
+  else if (k - Length(FPolars) <= High(FSingles)) and (FSingles[k - Length(FPolars)] <> nil) then
+    Result := FOption.ComponentAt('singleAxis', FSingles[k - Length(FPolars)].Index);
+end;
+
 { mergeControllerParams: the strongest of the insides -- 2 zooms and moves,
   1 moves only (zoomLock), 0 disabled -- or -1 for no controller }
 function TTyCustomAdvanceChart.DzControlType(AGrid: Integer): Integer;
 var ins: TTyIntegerArray; k, v: Integer;
 begin
   Result := -1;
-  ins := DzGridInsides(AGrid);
+  ins := DzRecInsides(AGrid);
   for k := 0 to High(ins) do
   begin
     if FDzInteract[ins[k]].Disabled then v := 0
@@ -1007,10 +1095,56 @@ var
   mn, mx: Double;
   moved: Boolean;
   items: TTyDzActionItemArray;
+  ng, pk, sk: Integer;
+  pol: TTyPolar;
+  sgl: TTySingle;
+  sc, e0, e1, oRad, oA, nRad, nA: Double;
+  srect: TTyXYWH;
+  isRadius: Boolean;
+
+  { getDirectionInfo.polar: pointToCoord of the old point (the zoom's is
+    [0, 0] as it is) and of the new one; the radius' px or the angle's
+    degrees over the axis' extent }
+  function PolarDir(AOld: Boolean): TTyDzDirection;
+  begin
+    if AOld then
+      pol.PointToCoord(FLastRect.Left + AOldX * sc, FLastRect.Top + AOldY * sc, oRad, oA)
+    else
+    begin
+      oRad := 0;
+      oA := 0;
+    end;
+    pol.PointToCoord(FLastRect.Left + ANewX * sc, FLastRect.Top + ANewY * sc, nRad, nA);
+    if isRadius then
+    begin
+      pol.AxisExtent(pol.RadiusAxis, e0, e1);
+      Result.Pixel := nRad - oRad;
+      if pol.RadiusInverse then Result.Signal := 1 else Result.Signal := -1;
+    end
+    else
+    begin
+      pol.AxisExtent(pol.AngleAxis, e0, e1);
+      Result.Pixel := nA - oA;
+      if pol.AngleInverse then Result.Signal := -1 else Result.Signal := 1;
+    end;
+    Result.PixelLength := e1 - e0;
+    Result.PixelStart := e0;
+  end;
+
 begin
   Result := False;
   items := nil;
-  ins := DzGridInsides(AGrid);
+  ins := DzRecInsides(AGrid);
+  ng := 0;
+  if FBuild <> nil then ng := FBuild.GridCount;
+  pol := nil;
+  sgl := nil;
+  sc := DzScale;
+  pk := AGrid - ng;
+  sk := pk - Length(FPolars);
+  if (AGrid >= ng) and (pk <= High(FPolars)) then pol := FPolars[pk]
+  else if (AGrid >= ng) and (sk >= 0) and (sk <= High(FSingles)) then sgl := FSingles[sk];
+  if (AGrid >= ng) and (pol = nil) and (sgl = nil) then Exit;
   for k := 0 to High(ins) do
   begin
     d := ins[k];
@@ -1019,31 +1153,52 @@ begin
     else setting := FDzInteract[d].MoveOnMouseWheel;
     if not TyDzBehaviour(setting, ssShift in AShift, ssCtrl in AShift,
       ssAlt in AShift, ssMeta in AShift) then Continue;
-    { the dataZoom's first target axis on this grid }
+    { the dataZoom's first target axis on this grid (polar, single) }
     axis := nil;
     for t := 0 to High(FZoomSpecs[d].Targets) do
     begin
       ax := DzAxis(FZoomSpecs[d].Targets[t].Dim, FZoomSpecs[d].Targets[t].AxisIndex);
-      if (ax <> nil) and (ax.GridIndex = FBuild.Grid(AGrid).ComponentIndex) then
+      if ax = nil then Continue;
+      if ((pol <> nil) and ((ax = pol.RadiusAxis) or (ax = pol.AngleAxis)))
+        or ((sgl <> nil) and (ax = sgl.Axis))
+        or ((pol = nil) and (sgl = nil) and (ax.GridIndex = FBuild.Grid(AGrid).ComponentIndex)) then
       begin
         axis := ax;
         Break;
       end;
     end;
     if axis = nil then Continue;
+    isRadius := (pol <> nil) and (axis = pol.RadiusAxis);
+    { getDirectionInfo.singleAxis: a grid's x / y by the orient, over the
+      single's rect }
+    if sgl <> nil then
+    begin
+      srect := sgl.Rect;
+      srect := TyXYWH((srect.X - FLastRect.Left) / sc, (srect.Y - FLastRect.Top) / sc,
+        srect.W / sc, srect.H / sc);
+    end;
     r[0] := FDzInLo[d];
     r[1] := FDzInHi[d];
     if AKind = 'zoom' then
     begin
-      dir := TyDzDirectionInfo(axis.Dim = 'x', axis.Inverse, DzGridRect(AGrid),
-        0, 0, ANewX, ANewY);
+      if pol <> nil then dir := PolarDir(False)
+      else if sgl <> nil then
+        dir := TyDzDirectionInfo(sgl.OrientHorizontal, axis.Inverse, srect, 0, 0, ANewX, ANewY)
+      else
+        dir := TyDzDirectionInfo(axis.Dim = 'x', axis.Inverse, DzGridRect(AGrid),
+          0, 0, ANewX, ANewY);
       DzSpans(d, mn, mx);
       moved := TyDzInsideZoom(r, dir, AScale, mn, mx);
     end
     else
     begin
-      dir := TyDzDirectionInfo(axis.Dim = 'x', axis.Inverse, DzGridRect(AGrid),
-        AOldX, AOldY, ANewX, ANewY);
+      if pol <> nil then dir := PolarDir(True)
+      else if sgl <> nil then
+        dir := TyDzDirectionInfo(sgl.OrientHorizontal, axis.Inverse, srect,
+          AOldX, AOldY, ANewX, ANewY)
+      else
+        dir := TyDzDirectionInfo(axis.Dim = 'x', axis.Inverse, DzGridRect(AGrid),
+          AOldX, AOldY, ANewX, ANewY);
       if AKind = 'pan' then moved := TyDzInsideMove(r, TyDzPanDelta(r, dir))
       else moved := TyDzInsideMove(r, TyDzScrollMoveDelta(r, dir, AScroll));
     end;
@@ -1072,9 +1227,14 @@ var
   rate: Double;
   a: TTyDzAction;
 begin
-  ins := DzGridInsides(AGrid);
+  ins := DzRecInsides(AGrid);
   rate := 100;
   if Length(ins) > 0 then rate := FDzInteract[ins[0]].Throttle;
+  if Length(FDzRoamThrottle) < DzRecCount then
+  begin
+    SetLength(FDzRoamThrottle, DzRecCount);
+    SetLength(FDzRoamBatch, DzRecCount);
+  end;
   FDzRoamBatch[AGrid] := AItems;
   if TyDzThrottleCall(FDzRoamThrottle[AGrid], DzClock, rate) then
   begin
@@ -1498,7 +1658,7 @@ begin
         if FDzPanGrid >= 0 then
         begin
           FDzCursor := 'grabbing';
-          if FDzPanGrid < FBuild.GridCount then
+          if FDzPanGrid < DzRecCount then
           begin
             ct := FDzPanGrid;
             dx := FDzPanX;
@@ -1507,14 +1667,14 @@ begin
             FDzPanY := y;
             { preventDefaultMouseMove: every inside of the grid must allow it }
             Result := True;
-            for i in DzGridInsides(ct) do
+            for i in DzRecInsides(ct) do
               if not FDzInteract[i].PreventDefaultMouseMove then Result := False;
             DzRoam(ct, 'pan', AShift, dx, dy, x, y, 1, 0);
           end;
         end
         else if t.Kind = dtkNone then
-          for g := 0 to FBuild.GridCount - 1 do
-            if (DzControlType(g) >= 1) and DzGridContains(g, x, y) then
+          for g := 0 to DzRecCount - 1 do
+            if (DzControlType(g) >= 1) and DzRecContains(g, x, y) then
             begin
               FDzCursor := 'grab';
               Break;
@@ -1560,8 +1720,8 @@ begin
           that moves }
         FDzPanGrid := -1;
         if FDzDrag.Kind = dtkNone then
-          for g := 0 to FBuild.GridCount - 1 do
-            if (DzControlType(g) >= 1) and DzGridContains(g, x, y) then
+          for g := 0 to DzRecCount - 1 do
+            if (DzControlType(g) >= 1) and DzRecContains(g, x, y) then
             begin
               FDzPanGrid := g;
               FDzPanX := x;
@@ -1602,14 +1762,14 @@ begin
     dpWheel:
       begin
         if AZrDelta = 0 then Exit;
-        for g := 0 to FBuild.GridCount - 1 do
+        for g := 0 to DzRecCount - 1 do
         begin
           if DzControlType(g) < 2 then Continue;
-          if not DzGridContains(g, x, y) then Continue;
+          if not DzRecContains(g, x, y) then Continue;
           { stopped whether or not anything zooms }
           Result := True;
           DzRoam(g, 'zoom', AShift, 0, 0, x, y, TyDzWheelScale(AZrDelta), 0);
-          if (g < FBuild.GridCount) then
+          if (g < DzRecCount) then
             DzRoam(g, 'scrollMove', AShift, 0, 0, x, y, 1, TyDzScrollDelta(AZrDelta));
         end;
       end;
@@ -1945,6 +2105,7 @@ begin
   s := DzScale;
   x := (AX - FLastRect.Left) / s;
   y := (AY - FLastRect.Top) / s;
-  for g := 0 to FBuild.GridCount - 1 do
-    if (DzControlType(g) >= 1) and DzGridContains(g, x, y) then Exit(True);
+  { [R5-D] every roam record: a polar's and a single axis' too }
+  for g := 0 to DzRecCount - 1 do
+    if (DzControlType(g) >= 1) and DzRecContains(g, x, y) then Exit(True);
 end;

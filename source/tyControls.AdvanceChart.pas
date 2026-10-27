@@ -2281,6 +2281,13 @@ type
     function DzGridRect(AGrid: Integer): TTyXYWH;
     function DzGridContains(AGrid: Integer; AX, AY: Double): Boolean;
     function DzGridInsides(AGrid: Integer): TTyIntegerArray;
+    { [R5-D] THE ROAM RECORDS (roams.ts' coordSysRecords): the grids, then
+      the polars, then the single axes -- record r below the grid count is
+      that grid; DzControlType, DzRoam and DzRoamDispatch take a record }
+    function DzRecCount: Integer;
+    function DzRecInsides(ARec: Integer): TTyIntegerArray;
+    function DzRecContains(ARec: Integer; AX, AY: Double): Boolean;
+    function DzRecNode(ARec: Integer): TJSONData;
     function DzControlType(AGrid: Integer): Integer;
     function DzFindTarget(AX, AY: Double): TTyDzTarget;
     function DzHits(ASlider: Integer; ARole: TTyDzRole; AX, AY: Double): Boolean;
