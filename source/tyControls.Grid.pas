@@ -2239,6 +2239,8 @@ type
     { 上一次被拒绝的文本。同一段文本只问宿主一次:单击别的格会先经失焦、再经 MoveCursor
       两条路到达校验,不记住的话宿主的提示框会连弹两次。文本一变就作废。 }
     FRefusedText: string;
+    { What the editor showed when it opened (#140); see EditedText. }
+    FEditOpenText: string;
     FRefused: Boolean;
     FOnCanEditCell:  TTyGridCanEditEvent;
     FOnEditChange:   TTyGridEditChangeEvent;
@@ -2512,6 +2514,14 @@ type
     { 当前打开的编辑器此刻持有的文本,**不关闭任何东西**地读出来。EndEdit 也经它取值,
       于是宿主校验时看到的字符串和最终写回的是同一个,不可能漂成两个。 }
     function PendingEditText: string;
+    { #140: what the edit writes to the cell. An editor that opens showing the cell in its own
+      form -- a spin edit shows '' as 0, a date editor shows today, a slider clamps 250 to 100 --
+      wrote that form back although the user changed nothing; the cell is then left as it is. }
+    function EditedText: string;
+    { #140: the block Copy puts on the clipboard, in display space; Cut clears exactly this. A
+      row selection is whole rows, a column selection whole columns. }
+    function ClipboardRect: TRect;
+    procedure SetReadOnly(AValue: Boolean);
     { 把焦点还给正在打开的编辑器。只从**手势处理**里调(点击/按键之后,焦点变化已经完成);
       绝不从 EditorExit 这类失焦回调里调 —— 那是 widgetset 层的焦点递归陷阱。 }
     procedure RefocusEditor;
@@ -3370,7 +3380,7 @@ type
       程序化写入(Cells[..] :=、LoadFromCSVText、Undo/Redo)**不受它管** ——
       ReadOnly 管用户,不管宿主,与本库每个编辑控件的含义一致。
       `Options` 里的 goEditing 是它的反视图。 }
-    property ReadOnly: Boolean read FReadOnly write FReadOnly default False;
+    property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
     { 分组行的格式串:%s = 分组值,%d = 组内行数。 }
     property GroupRowFormat: string read FGroupRowFormat write SetGroupRowFormat;
     { 选择粒度:单元格矩形 / 整行 / 整列。 }
@@ -9439,6 +9449,12 @@ var
   doomed: array of Integer;
 begin
   inherited TrimRowStateTo(ANewCount);    { 行高 }
+  { #140: an edit on a row that goes is dropped, and the cursor and the selection anchor come
+    back inside the grid -- left past the end, the next key or paint worked on no row. }
+  if FEditing and (FEditRow >= ANewCount) then EndEdit(False);
+  if FRow >= ANewCount then
+    if ANewCount > 0 then FRow := ANewCount - 1 else FRow := 0;
+  if FSelAnchorRow >= ANewCount then FSelAnchorRow := FRow;
 
   SetLength(doomed, 0);
   for i := 0 to FHiddenRows.Count - 1 do
@@ -9705,6 +9721,13 @@ begin
     行置换、撤销全都自动失效 —— 与撤销的记录点是同一处口子。 }
   InvalidateAggregates;
   Invalidate;
+  { #140: written while the user edits it, the cell's new value goes into the editor, as LCL's
+    EditorDoSetValue does -- the commit used to write the user's draft over it. }
+  if FEditing and not FEndingEdit and (ACol = FEditCol) and (ARow = FEditRow) then
+  begin
+    EndEdit(False);
+    BeginEdit(ACol, ARow);
+  end;
 end;
 
 procedure TTyCustomStringGrid.ClearRowContents(AFrom, ACount: Integer);
@@ -10478,7 +10501,10 @@ end;
 procedure TTyCustomStringGrid.KeyDown(var Key: Word; Shift: TShiftState);
 var
   navKey: Word;
+  oldCol, oldRow: Integer;
 begin
+  oldCol := FCol;
+  oldRow := FRow;
   { Key 会在下面被置 0(表示已消费),所以想知道"按的是哪个键"必须先存一份。 }
   navKey := Key;
   inherited KeyDown(Key, Shift);
@@ -10568,8 +10594,10 @@ begin
       它家 C/V 都用 ssModifier,X 却写成 ssShift),不跟。 }
     Ord('X'): if ssCtrl in Shift then begin CutToClipboard; Key := 0; end;
     Ord('V'): if ssCtrl in Shift then begin PasteFromClipboard; Key := 0; end;
-    Ord('Z'): if ssCtrl in Shift then begin Undo; Key := 0; end;
-    Ord('Y'): if ssCtrl in Shift then begin Redo; Key := 0; end;
+    { #140: not on a read-only grid -- the keys are the user's, and ReadOnly is what the user
+      may not change (Undo and Redo from code still work, as Cells[] := does). }
+    Ord('Z'): if (ssCtrl in Shift) and not FReadOnly then begin Undo; Key := 0; end;
+    Ord('Y'): if (ssCtrl in Shift) and not FReadOnly then begin Redo; Key := 0; end;
     Ord('A'): if ssCtrl in Shift then
               begin
                 { **走 SelectAll,不要在这里内联抄一遍。**
@@ -10581,6 +10609,14 @@ begin
               end;
   end;
 
+    { #140: a move that is not extending the selection drops the Ctrl+click blocks, as a plain
+      click does -- left selected, a later Cut cleared them. }
+    if ((FCol <> oldCol) or (FRow <> oldRow)) and not FExtendingSelection
+       and (Length(FSelRects) > 0) then
+    begin
+      SetLength(FSelRects, 0);
+      Invalidate;
+    end;
   finally
     FExtendingSelection := False;
   end;
@@ -11728,7 +11764,17 @@ end;
 
 procedure TTyCustomStringGrid.SetOptEditing(AValue: Boolean);
 begin
-  FReadOnly := not AValue;
+  SetReadOnly(not AValue);
+end;
+
+procedure TTyCustomStringGrid.SetReadOnly(AValue: Boolean);
+begin
+  if FReadOnly = AValue then Exit;
+  FReadOnly := AValue;
+  { #140: an editor open when the grid turns read-only closes without writing -- its commit
+    went on writing into the read-only grid. }
+  if FReadOnly and FEditing then EndEdit(False);
+  Invalidate;   // the fill handle goes with it
 end;
 
 function TTyCustomStringGrid.GetOptRowSelect: Boolean;
@@ -13632,7 +13678,8 @@ end;
 
 procedure TTyCustomStringGrid.CutToClipboard;
 var
-  pos, dataRow, colIdx: Integer;
+  pos, dataRow, colIdx, p: Integer;
+  sel: TRect;
 begin
   CopySelectionToClipboard;
   { ReadOnly 下剪切**退化为复制**:剪贴板照拿选区(上一行已经拿了),表里一格不清。
@@ -13643,17 +13690,24 @@ begin
     放在 BeginUpdate 之前:被拒的手势不该开事务(空事务虽被 PushUndoStep 丢弃,
     但"否决在开事务之前"是 InsertRow 起就立下的规矩)。 }
   if FReadOnly then Exit;
-  { 剪掉一片 = **一条**撤销记录。逐格记的话,剪 20 格要按 20 次 Ctrl+Z。 }
+  { 剪掉一片 = **一条**撤销记录。逐格记的话,剪 20 格要按 20 次 Ctrl+Z。
+    #140: exactly the cells Copy put on the clipboard (ClipboardRect) -- it cleared every
+    selected cell, the Ctrl+click blocks and, in row selection, whole rows, while the clipboard
+    held one block, or one column. }
+  sel := ClipboardRect;
   BeginUpdate;
   try
-    for pos := 0 to DisplayRowCount - 1 do
+    for pos := sel.Top to sel.Bottom do
     begin
       dataRow := DisplayToData(pos);
       if dataRow < 0 then Continue;
-      for colIdx := 0 to Header.Columns.Count - 1 do
-        if IsCellSelected(colIdx, dataRow)
+      for p := sel.Left to sel.Right do
+      begin
+        colIdx := ColumnAtPlace(p);
+        if (colIdx >= 0) and not IsHiddenColumn(colIdx)
            and (EditorKindFor(colIdx, dataRow) <> gekNone) then    { 只读格不清 }
           SetEditText(colIdx, dataRow, '');
+      end;
     end;
   finally
     EndUpdate;
@@ -15118,19 +15172,37 @@ end;
 
 { ---- 剪贴板 / CSV ---------------------------------------------------------- }
 
+function TTyCustomStringGrid.ClipboardRect: TRect;
+begin
+  Result := ActiveSelectionRect;
+  case FSelectionMode of
+    gsmRow:
+      begin
+        Result.Left := 0;
+        Result.Right := Header.Columns.Count - 1;
+      end;
+    gsmColumn:
+      begin
+        Result.Top := 0;
+        Result.Bottom := DisplayRowCount - 1;
+      end;
+  end;
+end;
+
 function TTyCustomStringGrid.SelectionAsText: string;
 var
   sel: TRect;
   pos, p, dataRow: Integer;
   sb: TStringList;
   line: string;
+  first: Boolean;
 begin
   { **用** ActiveSelectionRect,不自己再算一遍 Min/Max ——
     从前这里有第二份同样的算式,而"锚点被筛掉时返回 -1"那个坑只在那一份里修了:
     屏幕上高亮的是一行(绘制走 IsCellSelected → ActiveSelectionRect),
     剪贴板里却是从表顶一路到光标的所有行,还多一行空的。
     粘回去会覆盖用户从没选过的行。 }
-  sel := ActiveSelectionRect;         { 显示序空间,-1 已在那里处理过 }
+  sel := ClipboardRect;               { 显示序空间,-1 已在那里处理过 }
 
   sb := TStringList.Create;
   try
@@ -15141,9 +15213,12 @@ begin
       dataRow := DisplayToData(pos);
       if dataRow < 0 then Continue;   { 分组行不是数据,别导成一行空格子 }
       line := '';
+      first := True;
       for p := sel.Left to sel.Right do
       begin
-        if p > sel.Left then line := line + #9;
+        if IsHiddenColumn(ColumnAtPlace(p)) then Continue;   { #140: what the user sees }
+        if not first then line := line + #9;
+        first := False;
         line := line + GetCellText(ColumnAtPlace(p), dataRow);
       end;
       sb.Add(line);
@@ -16574,11 +16649,17 @@ end;
   宿主在这里改属性(字体、限长、宽度)都来得及生效;想在"显示之前"插手的话
   已经晚一步 —— 换来的是这十几种编辑器不可能有一种忘了通知。 }
 function TTyCustomStringGrid.BeginEdit(ACol, ARow: Integer): Boolean;
+var
+  reopened: Boolean;
 begin
+  { Back to the cell already being edited: the editor keeps what the user typed, and what it
+    showed when it opened. }
+  reopened := FEditing and (ACol = FEditCol) and (ARow = FEditRow);
   Result := DoBeginEdit(ACol, ARow);
   if Result and FEditing then FPlacedEditorRect := EditorTargetRect;   { where DoBeginEdit put it }
   if Result and Assigned(FOnGetEditorProp) and (EditorControl <> nil) then
     FOnGetEditorProp(Self, FEditCol, FEditRow, EditorControl);
+  if Result and FEditing and not reopened then FEditOpenText := PendingEditText;   { #140 }
 end;
 
 function TTyCustomStringGrid.DoBeginEdit(ACol, ARow: Integer): Boolean;
@@ -16828,6 +16909,12 @@ begin
   Result := FEditor.Text;
 end;
 
+function TTyCustomStringGrid.EditedText: string;
+begin
+  Result := PendingEditText;
+  if Result = FEditOpenText then Result := GetEditText(FEditCol, FEditRow);
+end;
+
 function TTyCustomStringGrid.TryEndEdit(ACommit: Boolean): Boolean;
 var
   oldTxt, newTxt: string;
@@ -16843,7 +16930,7 @@ begin
   if Assigned(FOnValidateCell) then
   begin
     oldTxt := GetEditText(FEditCol, FEditRow);
-    newTxt := PendingEditText;
+    newTxt := EditedText;
     if newTxt <> oldTxt then          { 没改过的格永远可以离开 —— 不为文件里带来的旧脏值困住用户 }
     begin
       { 同一段文本已经被拒过就不再问:单击别的格会先经失焦、再经 MoveCursor 两次到这里。 }
@@ -16879,7 +16966,7 @@ begin
     { **先取值,再拆**。宿主 EditLink 的控件一释放值就没了;其它编辑器也没理由等隐藏之后才读。
       取值走 PendingEditText —— 校验时宿主看到的字符串和这里写回的是同一个。 }
     oldTxt := GetEditText(FEditCol, FEditRow);
-    if ACommit then newTxt := PendingEditText else newTxt := oldTxt;
+    if ACommit then newTxt := EditedText else newTxt := oldTxt;
     { #67. Not written, even by a close that nothing can refuse. }
     maskRefused := ACommit and MaskUnfilled;
     FEditing := False;
@@ -16930,6 +17017,9 @@ begin
     留着它会得到一个趴在失焦网格上的编辑器 —— Editing 为 True 却没人在编辑。
     宿主可以经 OnInvalidEditExit 改主意(留着;用户回到网格点任意一格就会回到它)。
     注意到这里的 FEditing 一定是被拦下的那个:合法的值在编辑器失焦时已经提交掉了。 }
+  { #140: a host editor (OnCreateEditLink) has no OnExit of ours to commit it, so it is
+    committed here first; only a value it is refused goes the way below. }
+  if FEditing and (FEditLink <> nil) then TryEndEdit(True);
   if FEditing then
   begin
     keep := False;
