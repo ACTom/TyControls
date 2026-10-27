@@ -571,6 +571,38 @@ type
     { 0..1, per element. Orthogonal to the Opacity field, which dims the whole
       frame at EndPaint; both may be in force at once. }
     procedure SetElementAlpha(AAlpha: Double);
+    { [R5-A] A CANVAS SHADOW under every fill and stroke that follows, until the state is
+      restored or ClearShadow: shadowColor, shadowBlur and shadowOffsetX / Y as a canvas
+      takes them -- LOGICAL px, and the blur and the offsets NOT through the current
+      transform (a canvas' shadow lives in device space; zrender multiplies both by its
+      pixel ratio, the painter by its PPI and its device scale). Each fill and each stroke
+      casts its own shadow from its own ink -- the shape's coverage times its paint's alpha
+      (a texture's per pixel) and the global alpha -- blurred by a Gaussian of standard
+      deviation blur / 2 (from a deviation of 2 up, the SVG specification's three box blurs
+      that approximate it), moved by the offset, in AColor, through the clip mask, under
+      the shape, which then draws exactly as it would without one. A colour of no alpha, or
+      a blur and offsets all nought, is no shadow (the canvas' rule). Kept in the canvas
+      state: SaveState / RestoreState scope it. Off unless set: no control but the one that
+      sets it draws any differently. }
+    procedure SetShadow(AColor: TTyColor; ABlurLogical, AOffsetXLogical,
+      AOffsetYLogical: Double);
+    procedure ClearShadow;
+    { [R5-A] THE SAME SHADOW CAST FROM A PICTURE'S ALPHA: AMask's alpha (the ink as it was
+      drawn there) with its top-left at (ALeft, ATop) RASTER px of this painter's bitmap --
+      a text's glyphs drawn on a mask of their own. Blurred, moved and clipped as SetShadow
+      says (ABlur and the offsets LOGICAL px), the offsets to the nearest raster pixel. }
+    procedure CastShadowOf(AMask: TBGRABitmap; ALeft, ATop: Integer; AColor: TTyColor;
+      ABlurLogical, AOffsetXLogical, AOffsetYLogical: Double);
+    { [R5-A] A CANVAS COMPOSITE OPERATION for every fill and stroke that follows, until it is
+      set back to '' (or 'source-over'): the canvas' globalCompositeOperation by its name --
+      'lighter' (the sum, clamped) and the separable blend modes of the compositing
+      specification ('multiply', 'screen', 'overlay', 'darken', 'lighten', 'color-dodge',
+      'color-burn', 'hard-light', 'soft-light', 'difference', 'exclusion'), each source over
+      with the blend in sRGB as a canvas does it. Each fill and each stroke composites once,
+      its whole ink -- where its own path overlaps itself it does not add up. A name it
+      does not know draws source over. Not part of the saved state; no control but the one
+      that sets it draws any differently. }
+    procedure SetBlendMode(const AMode: string);
 
     { ---- rotated text ---- }
     { Text rotated about (AX, AY), with AHAlign/AVAlign saying where that anchor
@@ -732,6 +764,11 @@ procedure TyPainterKeptFillHashesCollideForTest(AOn: Boolean);
 function TyPainterHairlinesForTest: Integer;
 function TyPainterDistanceStrokesForTest: Integer;
 function TyPainterDistanceReplaysForTest: Integer;
+{ [R5-A] FOR THE TESTS: canvas shadows cast since start (each fill or stroke under a
+  SetShadow, each CastShadowOf) }
+function TyPainterShadowsCastForTest: Integer;
+{ [R5-A] FOR THE TESTS: fills and strokes composited by a blend mode since start }
+function TyPainterBlendsForTest: Integer;
 
 { BGRA'S POLYGON FILLER TAKES ITS PIVOTS FROM THE GLOBAL Random. The one-pass
   filler behind FillPolyAntialias and the Canvas2D fill, stroke and clip
@@ -1021,6 +1058,21 @@ uses
   LCLIntf, BGRAText, BGRAGrayscaleMask, Generics.Collections, BGRAPolygon, BGRABlend,
   tyControls.CanvasText, tyControls.PlatformWS;
 
+{ [R5-A] a fill or a stroke under a canvas shadow or a composite operation: see
+  ShadowedOp }
+procedure ShadowedOp(ACtx: TBGRACanvas2D; AStroke: Boolean); forward;
+
+{ [R5-A] the canvas a composite operation is set on (SetBlendMode), and the operation:
+  0 none, 1 'lighter', 2.. the separable blend modes }
+var
+  GBlendCtx: TBGRACanvas2D = nil;
+  GBlendOp: Integer = 0;
+
+function BlendActive(ACtx: TBGRACanvas2D): Boolean; inline;
+begin
+  Result := (GBlendOp <> 0) and (ACtx = GBlendCtx);
+end;
+
 { Canvas2D's own fill, stroke and clip with the generator pinned. }
 procedure CtxFill(ACtx: TBGRACanvas2D);
 var
@@ -1028,7 +1080,8 @@ var
 begin
   saved := TyPinBgraRandom;
   try
-    ACtx.fill;
+    if ACtx.hasShadow or BlendActive(ACtx) then ShadowedOp(ACtx, False)
+    else ACtx.fill;
   finally
     TyUnpinBgraRandom(saved);
   end;
@@ -1040,7 +1093,8 @@ var
 begin
   saved := TyPinBgraRandom;
   try
-    ACtx.stroke;
+    if ACtx.hasShadow or BlendActive(ACtx) then ShadowedOp(ACtx, True)
+    else ACtx.stroke;
   finally
     TyUnpinBgraRandom(saved);
   end;
@@ -6120,7 +6174,7 @@ begin
   if not GKeptFillsOff and (GetCurrentThreadId = MainThreadID) then
     st := CanvasStateOf(ctx);
   if (st = nil) or (st.strokeTextureProvider <> nil)
-    or ctx.hasShadow or not ctx.antialiasing or (st.lineWidth = 0)
+    or ctx.hasShadow or BlendActive(ctx) or not ctx.antialiasing or (st.lineWidth = 0)
     or (ctx.surface <> FBmp) or (st.penStroker.Arrow <> nil) then
   begin
     CtxStroke(ctx);
@@ -6267,7 +6321,7 @@ begin
   AWidth := 0;
   if GetCurrentThreadId <> MainThreadID then Exit;
   ASt := CanvasStateOf(ACtx);
-  if (ASt = nil) or (ASt.strokeTextureProvider <> nil) or ACtx.hasShadow
+  if (ASt = nil) or (ASt.strokeTextureProvider <> nil) or ACtx.hasShadow or BlendActive(ACtx)
     or not ACtx.antialiasing or (ACtx.surface <> ABmp) or (ASt.penStroker.Arrow <> nil)
     or (Length(ASt.penStroker.CustomPenStyle) > 0) then Exit;
   m := ASt.penStroker.StrokeMatrix;
@@ -7288,6 +7342,609 @@ begin
   if AAlpha < 0 then AAlpha := 0;
   if AAlpha > 1 then AAlpha := 1;
   FBmp.Canvas2D.globalAlpha := AAlpha;
+end;
+
+{ ==================== [R5-A] canvas shadows ==================== }
+
+var
+  GShadowsCast: Integer = 0;
+
+function TyPainterShadowsCastForTest: Integer;
+begin
+  Result := GShadowsCast;
+end;
+
+{ what a deviation needs around the ink: the box blurs' reach, or the kernel's }
+function ShadowPad(ASigma: Double): Integer;
+var d: Integer;
+begin
+  if not (ASigma > 0) then Exit(0);
+  if ASigma < 2 then Exit(Ceil(3 * ASigma) + 1);
+  d := Floor(ASigma * 3 * Sqrt(2 * Pi) / 4 + 0.5);
+  Result := 3 * (d div 2) + 2;
+end;
+
+{ one box pass along a line of ALen values, AStride apart: each the mean of the values from
+  ALeft before it to ARight after it, nought outside the line }
+procedure ShadowBoxLine(ASrc, ADst: PSingle; ALen, AStride, ALeft, ARight: Integer);
+var
+  i, k: Integer;
+  sum, inv: Double;
+begin
+  inv := 1 / (ALeft + ARight + 1);
+  sum := 0;
+  for k := 0 to Min(ARight, ALen - 1) do sum := sum + ASrc[k * AStride];
+  for i := 0 to ALen - 1 do
+  begin
+    ADst[i * AStride] := sum * inv;
+    k := i + 1 + ARight;
+    if k < ALen then sum := sum + ASrc[k * AStride];
+    k := i - ALeft;
+    if k >= 0 then sum := sum - ASrc[k * AStride];
+  end;
+end;
+
+{ one Gaussian pass along a line, the kernel AK (2 r + 1 weights) }
+procedure ShadowKernelLine(ASrc, ADst: PSingle; ALen, AStride: Integer;
+  const AK: array of Double);
+var
+  i, k, r, j: Integer;
+  sum: Double;
+begin
+  r := High(AK) div 2;
+  for i := 0 to ALen - 1 do
+  begin
+    sum := 0;
+    for k := -r to r do
+    begin
+      j := i + k;
+      if (j >= 0) and (j < ALen) then sum := sum + AK[k + r] * ASrc[j * AStride];
+    end;
+    ADst[i * AStride] := sum;
+  end;
+end;
+
+{ THE BLUR, in place over AW x AH values: a Gaussian of deviation ASigma -- the canvas'
+  shadowBlur / 2. From 2 up, the SVG specification's approximation (feGaussianBlur): three
+  box blurs of d = floor(sigma * 3 * sqrt(2 pi) / 4 + 0.5) along x, then along y -- an
+  even d two of d, one centred left of the pixel and one right, and one of d + 1; below 2,
+  where the boxes are too coarse, the Gaussian itself over 3 sigma. }
+procedure ShadowBlur(var ABuf: array of Single; AW, AH: Integer; ASigma: Double);
+var
+  tmp: array of Single;
+  ls, rs: array[0..2] of Integer;
+  ker: array of Double;
+  d, p, x, y, r, k: Integer;
+  sum: Double;
+begin
+  if not (ASigma > 0) or (AW <= 0) or (AH <= 0) then Exit;
+  SetLength(tmp, AW * AH);
+  if ASigma < 2 then
+  begin
+    r := Ceil(3 * ASigma);
+    SetLength(ker, 2 * r + 1);
+    sum := 0;
+    for k := -r to r do
+    begin
+      ker[k + r] := Exp(-(k * k) / (2 * ASigma * ASigma));
+      sum := sum + ker[k + r];
+    end;
+    for k := 0 to High(ker) do ker[k] := ker[k] / sum;
+    for y := 0 to AH - 1 do
+      ShadowKernelLine(@ABuf[y * AW], @tmp[y * AW], AW, 1, ker);
+    for x := 0 to AW - 1 do
+      ShadowKernelLine(@tmp[x], @ABuf[x], AH, AW, ker);
+    Exit;
+  end;
+  d := Floor(ASigma * 3 * Sqrt(2 * Pi) / 4 + 0.5);
+  if d < 1 then Exit;
+  if Odd(d) then
+    for p := 0 to 2 do
+    begin
+      ls[p] := (d - 1) div 2;
+      rs[p] := (d - 1) div 2;
+    end
+  else
+  begin
+    ls[0] := d div 2;
+    rs[0] := d div 2 - 1;
+    ls[1] := d div 2 - 1;
+    rs[1] := d div 2;
+    ls[2] := d div 2;
+    rs[2] := d div 2;
+  end;
+  for y := 0 to AH - 1 do
+  begin
+    ShadowBoxLine(@ABuf[y * AW], @tmp[y * AW], AW, 1, ls[0], rs[0]);
+    ShadowBoxLine(@tmp[y * AW], @ABuf[y * AW], AW, 1, ls[1], rs[1]);
+    ShadowBoxLine(@ABuf[y * AW], @tmp[y * AW], AW, 1, ls[2], rs[2]);
+  end;
+  for x := 0 to AW - 1 do
+  begin
+    ShadowBoxLine(@tmp[x], @ABuf[x], AH, AW, ls[0], rs[0]);
+    ShadowBoxLine(@ABuf[x], @tmp[x], AH, AW, ls[1], rs[1]);
+    ShadowBoxLine(@tmp[x], @ABuf[x], AH, AW, ls[2], rs[2]);
+  end;
+end;
+
+{ THE SHADOW LAID: ABuf (AW x AH, 0..1, its top-left at (ALeft, ATop) on ASurf) blurred,
+  through the canvas' clip mask, filled in AColour under nothing but what is drawn next }
+procedure ShadowComposite(ACtx: TBGRACanvas2D; ASurf: TBGRACustomBitmap;
+  var ABuf: array of Single; AW, AH, ALeft, ATop: Integer; ASigma: Double;
+  const AColour: TBGRAPixel; AClip: TGrayscaleMask);
+var
+  x0, y0, x1, y1, x, y, w, h: Integer;
+  m: TGrayscaleMask;
+  row, crow: PByte;
+  v: Double;
+  mode: TDrawMode;
+begin
+  Inc(GShadowsCast);
+  if AColour.alpha = 0 then Exit;
+  ShadowBlur(ABuf, AW, AH, ASigma);
+  x0 := Max(ALeft, 0);
+  y0 := Max(ATop, 0);
+  x1 := Min(ALeft + AW, ASurf.Width);
+  y1 := Min(ATop + AH, ASurf.Height);
+  if (AClip <> nil) and ((AClip.Width < x1) or (AClip.Height < y1)) then
+  begin
+    x1 := Min(x1, AClip.Width);
+    y1 := Min(y1, AClip.Height);
+  end;
+  w := x1 - x0;
+  h := y1 - y0;
+  if (w <= 0) or (h <= 0) then Exit;
+  m := TGrayscaleMask.Create(w, h, 0);
+  try
+    for y := 0 to h - 1 do
+    begin
+      row := m.ScanLineByte[y];
+      if AClip <> nil then crow := AClip.ScanLineByte[y0 + y] + x0 else crow := nil;
+      for x := 0 to w - 1 do
+      begin
+        v := ABuf[(y0 + y - ATop) * AW + (x0 + x - ALeft)];
+        if crow <> nil then v := v * crow[x] / 255;
+        if v <= 0 then Continue;
+        if v >= 1 then row[x] := 255 else row[x] := Round(v * 255);
+      end;
+    end;
+    if ACtx.linearBlend then mode := dmLinearBlend else mode := dmDrawWithTransparency;
+    ASurf.FillMask(x0, y0, m, AColour, mode);
+  finally
+    m.Free;
+  end;
+end;
+
+{ THE SHADOW OF THE FILL OR THE STROKE ABOUT TO BE DRAWN: the current path's points (BGRA has
+  flattened them through the matrix onto the raster), or the pen's polygon of them -- the very
+  polygon the canvas fills for the stroke -- rasterised, times the paint's alpha and the
+  global alpha, moved by the offset, blurred and laid. False: the canvas' state could not be
+  read, and BGRA's own shadow goes in. }
+function CastCanvasShadow(ACtx: TBGRACanvas2D; AStroke: Boolean): Boolean;
+var
+  st: TBGRACanvasState2D;
+  surf: TBGRACustomBitmap;
+  pts, poly: ArrayOfTPointF;
+  winding: Boolean;
+  tex: IBGRAScanner;
+  paint: TBGRAPixel;
+  sigma, ox, oy, ga, f: Double;
+  minx, miny, maxx, maxy: Double;
+  pad, i, x, y, w, h, x0, y0, x1, y1: Integer;
+  mask: TGrayscaleMask;
+  buf: array of Single;
+  row: PByte;
+  seen: Boolean;
+begin
+  Result := False;
+  st := CanvasStateOf(ACtx);
+  surf := ACtx.surface;
+  if (st = nil) or (surf = nil) or (st.penStroker = nil) then Exit;
+  Result := True;
+  pts := ACtx.currentPath;
+  if Length(pts) = 0 then Exit;
+  if AStroke then
+  begin
+    if st.lineWidth = 0 then Exit;
+    poly := st.penStroker.ComputePolylineAutocycle(pts, st.lineWidth);
+    winding := True;
+    tex := nil;
+    if st.strokeTextureProvider <> nil then tex := st.strokeTextureProvider.texture;
+    paint := st.strokeColor;
+  end
+  else
+  begin
+    poly := pts;
+    winding := st.fillMode = fmWinding;
+    tex := nil;
+    if st.fillTextureProvider <> nil then tex := st.fillTextureProvider.texture;
+    paint := st.fillColor;
+  end;
+  if (tex = nil) and (paint.alpha = 0) then Exit;
+  ga := st.globalAlpha / 255;
+  if ga <= 0 then Exit;
+  sigma := ACtx.shadowBlur / 2;
+  ox := ACtx.shadowOffsetX;
+  oy := ACtx.shadowOffsetY;
+  seen := False;
+  minx := 0; miny := 0; maxx := 0; maxy := 0;
+  for i := 0 to High(poly) do
+  begin
+    if isEmptyPointF(poly[i]) then Continue;
+    if not seen then
+    begin
+      minx := poly[i].x; maxx := minx;
+      miny := poly[i].y; maxy := miny;
+      seen := True;
+    end
+    else
+    begin
+      if poly[i].x < minx then minx := poly[i].x;
+      if poly[i].x > maxx then maxx := poly[i].x;
+      if poly[i].y < miny then miny := poly[i].y;
+      if poly[i].y > maxy then maxy := poly[i].y;
+    end;
+  end;
+  if not seen then Exit;
+  pad := ShadowPad(sigma);
+  { where the moved ink lies, and as much around it as the blur reaches -- what lies
+    further outside the bitmap than that never reaches it }
+  x0 := Max(Floor(minx + ox) - 1 - pad, -pad);
+  y0 := Max(Floor(miny + oy) - 1 - pad, -pad);
+  x1 := Min(Ceil(maxx + ox) + 2 + pad, surf.Width + pad);
+  y1 := Min(Ceil(maxy + oy) + 2 + pad, surf.Height + pad);
+  w := x1 - x0;
+  h := y1 - y0;
+  if (w <= 0) or (h <= 0) or (Int64(w) * h > 64 * 1024 * 1024) then Exit;
+  for i := 0 to High(poly) do
+    if not isEmptyPointF(poly[i]) then
+    begin
+      poly[i].x := poly[i].x + ox - x0;
+      poly[i].y := poly[i].y + oy - y0;
+    end;
+  mask := TGrayscaleMask.Create(w, h, 0);
+  try
+    if winding then mask.FillMode := fmWinding else mask.FillMode := fmAlternate;
+    mask.FillPolyAntialias(poly, BGRAWhite);
+    SetLength(buf, w * h);
+    f := paint.alpha / 255 * ga;
+    for y := 0 to h - 1 do
+    begin
+      row := mask.ScanLineByte[y];
+      for x := 0 to w - 1 do
+      begin
+        if row[x] = 0 then Continue;
+        if tex <> nil then
+          buf[y * w + x] := row[x] / 255
+            * tex.ScanAt(x + x0 - ox, y + y0 - oy).alpha / 255 * ga
+        else
+          buf[y * w + x] := row[x] / 255 * f;
+      end;
+    end;
+  finally
+    mask.Free;
+  end;
+  ShadowComposite(ACtx, surf, buf, w, h, x0, y0, sigma, ACtx.getShadowColor,
+    st.clipMaskReadOnly);
+end;
+
+var
+  GBlendsDone: Integer = 0;
+
+function TyPainterBlendsForTest: Integer;
+begin
+  Result := GBlendsDone;
+end;
+
+{ the separable blend functions of the compositing specification, over 0..1 }
+function BlendChannel(AOp: Integer; Cb, Cs: Double): Double;
+var d: Double;
+begin
+  case AOp of
+    2: Result := Cb * Cs;                                   // multiply
+    3: Result := Cb + Cs - Cb * Cs;                         // screen
+    4: if Cb <= 0.5 then Result := Cs * 2 * Cb              // overlay: hard-light(Cs, Cb)
+       else Result := Cs + (2 * Cb - 1) - Cs * (2 * Cb - 1);
+    5: Result := Min(Cb, Cs);                               // darken
+    6: Result := Max(Cb, Cs);                               // lighten
+    7: if Cb = 0 then Result := 0                           // color-dodge
+       else if Cs >= 1 then Result := 1
+       else Result := Min(1.0, Cb / (1 - Cs));
+    8: if Cb >= 1 then Result := 1                          // color-burn
+       else if Cs <= 0 then Result := 0
+       else Result := 1 - Min(1.0, (1 - Cb) / Cs);
+    9: if Cs <= 0.5 then Result := Cb * 2 * Cs              // hard-light
+       else Result := Cb + (2 * Cs - 1) - Cb * (2 * Cs - 1);
+    10:                                                     // soft-light
+      begin
+        if Cb <= 0.25 then d := ((16 * Cb - 12) * Cb + 4) * Cb
+        else d := Sqrt(Cb);
+        if Cs <= 0.5 then Result := Cb - (1 - 2 * Cs) * Cb * (1 - Cb)
+        else Result := Cb + (2 * Cs - 1) * (d - Cb);
+      end;
+    11: Result := Abs(Cb - Cs);                             // difference
+    12: Result := Cb + Cs - 2 * Cb * Cs;                    // exclusion
+  else
+    Result := Cs;
+  end;
+end;
+
+function BlendOpOf(const AMode: string): Integer;
+var m: string;
+begin
+  m := LowerCase(Trim(AMode));
+  if m = 'lighter' then Result := 1
+  else if m = 'multiply' then Result := 2
+  else if m = 'screen' then Result := 3
+  else if m = 'overlay' then Result := 4
+  else if m = 'darken' then Result := 5
+  else if m = 'lighten' then Result := 6
+  else if m = 'color-dodge' then Result := 7
+  else if m = 'color-burn' then Result := 8
+  else if m = 'hard-light' then Result := 9
+  else if m = 'soft-light' then Result := 10
+  else if m = 'difference' then Result := 11
+  else if m = 'exclusion' then Result := 12
+  else Result := 0;
+end;
+
+{ THE FILL OR THE STROKE COMPOSITED BY THE CANVAS' OPERATION: its ink -- the coverage of
+  the path (or of the pen's polygon) times its paint, a texture's per pixel, and the
+  global alpha, premultiplied -- laid over the bitmap through the clip, once:
+  'lighter' adds it, a blend mode mixes it source over. False: the state could not be
+  read (the op draws as it is). }
+function BlendCanvasOp(ACtx: TBGRACanvas2D; AStroke: Boolean): Boolean;
+var
+  st: TBGRACanvasState2D;
+  surf: TBGRACustomBitmap;
+  pts, poly: ArrayOfTPointF;
+  winding: Boolean;
+  tex: IBGRAScanner;
+  paint, sp: TBGRAPixel;
+  ga, cov, sa, sr, sg, sb, da, dr, dg, db, oa, orr, og, ob: Double;
+  minx, miny, maxx, maxy: Double;
+  i, x, y, w, h, x0, y0, x1, y1: Integer;
+  mask, clip: TGrayscaleMask;
+  row, crow: PByte;
+  p: PBGRAPixel;
+  seen: Boolean;
+begin
+  Result := False;
+  st := CanvasStateOf(ACtx);
+  surf := ACtx.surface;
+  if (st = nil) or (surf = nil) or (st.penStroker = nil) then Exit;
+  Result := True;
+  Inc(GBlendsDone);
+  pts := ACtx.currentPath;
+  if Length(pts) = 0 then Exit;
+  if AStroke then
+  begin
+    if st.lineWidth = 0 then Exit;
+    poly := st.penStroker.ComputePolylineAutocycle(pts, st.lineWidth);
+    winding := True;
+    tex := nil;
+    if st.strokeTextureProvider <> nil then tex := st.strokeTextureProvider.texture;
+    paint := st.strokeColor;
+  end
+  else
+  begin
+    poly := pts;
+    winding := st.fillMode = fmWinding;
+    tex := nil;
+    if st.fillTextureProvider <> nil then tex := st.fillTextureProvider.texture;
+    paint := st.fillColor;
+  end;
+  ga := st.globalAlpha / 255;
+  if (ga <= 0) or ((tex = nil) and (paint.alpha = 0)) then Exit;
+  seen := False;
+  minx := 0; miny := 0; maxx := 0; maxy := 0;
+  for i := 0 to High(poly) do
+  begin
+    if isEmptyPointF(poly[i]) then Continue;
+    if not seen then
+    begin
+      minx := poly[i].x; maxx := minx;
+      miny := poly[i].y; maxy := miny;
+      seen := True;
+    end
+    else
+    begin
+      if poly[i].x < minx then minx := poly[i].x;
+      if poly[i].x > maxx then maxx := poly[i].x;
+      if poly[i].y < miny then miny := poly[i].y;
+      if poly[i].y > maxy then maxy := poly[i].y;
+    end;
+  end;
+  if not seen then Exit;
+  x0 := Max(Floor(minx) - 1, surf.ClipRect.Left);
+  y0 := Max(Floor(miny) - 1, surf.ClipRect.Top);
+  x1 := Min(Ceil(maxx) + 2, surf.ClipRect.Right);
+  y1 := Min(Ceil(maxy) + 2, surf.ClipRect.Bottom);
+  w := x1 - x0;
+  h := y1 - y0;
+  if (w <= 0) or (h <= 0) then Exit;
+  for i := 0 to High(poly) do
+    if not isEmptyPointF(poly[i]) then
+    begin
+      poly[i].x := poly[i].x - x0;
+      poly[i].y := poly[i].y - y0;
+    end;
+  clip := st.clipMaskReadOnly;
+  mask := TGrayscaleMask.Create(w, h, 0);
+  try
+    if winding then mask.FillMode := fmWinding else mask.FillMode := fmAlternate;
+    if ACtx.antialiasing then mask.FillPolyAntialias(poly, BGRAWhite)
+    else mask.FillPoly(poly, BGRAWhite, dmSet);
+    surf.LoadFromBitmapIfNeeded;
+    for y := 0 to h - 1 do
+    begin
+      row := mask.ScanLineByte[y];
+      if (clip <> nil) and (y0 + y < clip.Height) then crow := clip.ScanLineByte[y0 + y] + x0
+      else crow := nil;
+      p := surf.ScanLine[y0 + y] + x0;
+      for x := 0 to w - 1 do
+      begin
+        cov := row[x] / 255;
+        if (crow <> nil) and (x0 + x < clip.Width) then cov := cov * crow[x] / 255;
+        if cov > 0 then
+        begin
+          if tex <> nil then sp := tex.ScanAt(x0 + x, y0 + y) else sp := paint;
+          sa := sp.alpha / 255 * ga * cov;
+          if sa > 0 then
+          begin
+            { premultiplied, 0..1 }
+            sr := sp.red / 255 * sa;
+            sg := sp.green / 255 * sa;
+            sb := sp.blue / 255 * sa;
+            da := p^.alpha / 255;
+            dr := p^.red / 255 * da;
+            dg := p^.green / 255 * da;
+            db := p^.blue / 255 * da;
+            if GBlendOp = 1 then
+            begin
+              oa := Min(1.0, sa + da);
+              orr := Min(1.0, sr + dr);
+              og := Min(1.0, sg + dg);
+              ob := Min(1.0, sb + db);
+            end
+            else
+            begin
+              oa := sa + da - sa * da;
+              if da > 0 then
+              begin
+                orr := sr * (1 - da) + dr * (1 - sa) + sa * da * BlendChannel(GBlendOp, dr / da, sp.red / 255);
+                og := sg * (1 - da) + dg * (1 - sa) + sa * da * BlendChannel(GBlendOp, dg / da, sp.green / 255);
+                ob := sb * (1 - da) + db * (1 - sa) + sa * da * BlendChannel(GBlendOp, db / da, sp.blue / 255);
+              end
+              else
+              begin
+                orr := sr;
+                og := sg;
+                ob := sb;
+              end;
+            end;
+            if oa > 0 then
+            begin
+              p^.red := Min(255, Round(orr / oa * 255));
+              p^.green := Min(255, Round(og / oa * 255));
+              p^.blue := Min(255, Round(ob / oa * 255));
+              p^.alpha := Min(255, Round(oa * 255));
+            end;
+          end;
+        end;
+        Inc(p);
+      end;
+    end;
+    surf.InvalidateBitmap;
+  finally
+    mask.Free;
+  end;
+end;
+
+{ THE OP UNDER ITS SHADOW: ours cast, BGRA's own put aside for the op -- which then draws
+  with the generator pinned again, the same pixels as with no shadow at all }
+procedure ShadowedOp(ACtx: TBGRACanvas2D; AStroke: Boolean);
+var
+  keep: TBGRAPixel;
+  cast: Boolean;
+begin
+  cast := False;
+  if ACtx.hasShadow then
+  begin
+    cast := CastCanvasShadow(ACtx, AStroke);
+    if not cast and not BlendActive(ACtx) then
+    begin
+      if AStroke then ACtx.stroke else ACtx.fill;
+      Exit;
+    end;
+  end;
+  keep := ACtx.getShadowColor;
+  if cast then ACtx.shadowNone;
+  try
+    RandSeed := CBgraPinnedSeed;
+    if BlendActive(ACtx) and BlendCanvasOp(ACtx, AStroke) then
+    else if AStroke then ACtx.stroke
+    else ACtx.fill;
+  finally
+    if cast then ACtx.shadowColor(keep);
+  end;
+end;
+
+procedure TTyPainter.SetShadow(AColor: TTyColor; ABlurLogical, AOffsetXLogical,
+  AOffsetYLogical: Double);
+var ctx: TBGRACanvas2D;
+begin
+  if FBmp = nil then Exit;
+  ctx := FBmp.Canvas2D;
+  if IsNan(ABlurLogical) or IsInfinite(ABlurLogical) or (ABlurLogical < 0) then ABlurLogical := 0;
+  if IsNan(AOffsetXLogical) or IsInfinite(AOffsetXLogical) then AOffsetXLogical := 0;
+  if IsNan(AOffsetYLogical) or IsInfinite(AOffsetYLogical) then AOffsetYLogical := 0;
+  ctx.shadowColor(TyColorToBGRA(AColor));
+  ctx.shadowBlur := ScaleF(ABlurLogical) * FScale;
+  ctx.shadowOffsetX := ScaleF(AOffsetXLogical) * FScale;
+  ctx.shadowOffsetY := ScaleF(AOffsetYLogical) * FScale;
+end;
+
+procedure TTyPainter.SetBlendMode(const AMode: string);
+begin
+  if FBmp = nil then Exit;
+  GBlendOp := BlendOpOf(AMode);
+  if GBlendOp = 0 then GBlendCtx := nil
+  else GBlendCtx := FBmp.Canvas2D;
+end;
+
+procedure TTyPainter.ClearShadow;
+var ctx: TBGRACanvas2D;
+begin
+  if FBmp = nil then Exit;
+  ctx := FBmp.Canvas2D;
+  ctx.shadowNone;
+  ctx.shadowBlur := 0;
+  ctx.shadowOffsetX := 0;
+  ctx.shadowOffsetY := 0;
+end;
+
+procedure TTyPainter.CastShadowOf(AMask: TBGRABitmap; ALeft, ATop: Integer; AColor: TTyColor;
+  ABlurLogical, AOffsetXLogical, AOffsetYLogical: Double);
+var
+  ctx: TBGRACanvas2D;
+  st: TBGRACanvasState2D;
+  colour: TBGRAPixel;
+  sigma: Double;
+  pad, ox, oy, w, h, x, y: Integer;
+  buf: array of Single;
+  p: PBGRAPixel;
+  clip: TGrayscaleMask;
+begin
+  if (FBmp = nil) or (AMask = nil) or (AMask.Width <= 0) or (AMask.Height <= 0) then Exit;
+  colour := TyColorToBGRA(AColor);
+  if colour.alpha = 0 then Exit;
+  if IsNan(ABlurLogical) or IsInfinite(ABlurLogical) or (ABlurLogical < 0) then ABlurLogical := 0;
+  if IsNan(AOffsetXLogical) or IsInfinite(AOffsetXLogical) then AOffsetXLogical := 0;
+  if IsNan(AOffsetYLogical) or IsInfinite(AOffsetYLogical) then AOffsetYLogical := 0;
+  if (ABlurLogical = 0) and (AOffsetXLogical = 0) and (AOffsetYLogical = 0) then Exit;
+  ctx := FBmp.Canvas2D;
+  st := CanvasStateOf(ctx);
+  clip := nil;
+  if st <> nil then clip := st.clipMaskReadOnly;
+  sigma := ScaleF(ABlurLogical) * FScale / 2;
+  ox := Round(ScaleF(AOffsetXLogical) * FScale);
+  oy := Round(ScaleF(AOffsetYLogical) * FScale);
+  pad := ShadowPad(sigma);
+  w := AMask.Width + 2 * pad;
+  h := AMask.Height + 2 * pad;
+  SetLength(buf, w * h);
+  AMask.LoadFromBitmapIfNeeded;
+  for y := 0 to AMask.Height - 1 do
+  begin
+    p := AMask.ScanLine[y];
+    for x := 0 to AMask.Width - 1 do
+    begin
+      if p^.alpha <> 0 then buf[(y + pad) * w + x + pad] := p^.alpha / 255;
+      Inc(p);
+    end;
+  end;
+  ShadowComposite(ctx, FBmp, buf, w, h, ALeft + ox - pad, ATop + oy - pad, sigma, colour, clip);
 end;
 
 { ---- rotated text ---- }
