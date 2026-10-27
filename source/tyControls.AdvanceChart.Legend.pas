@@ -1911,8 +1911,13 @@ begin
   spec.Kind := kind;
   spec.Empty := empty;
   spec.PathData := path;
-  { [R5-F] the icon's keepAspect, as it is drawn }
-  spec.KeepAspect := AKeepAspect;
+  { [R5-F] the icon's keepAspect, as it is laid out: a path:// is fitted
+    to its aspect at once (makePath 'center', graphic.ts:184-198), but an
+    image:// is centred only in its onload (makeImage, graphic.ts:207-231),
+    which a browser runs after the legend is laid out -- until then the
+    ZRImage's bounds are its style rect, the whole box (Image.ts:113-121),
+    and the item's group and its hit rect measure that [R5-K] }
+  spec.KeepAspect := AKeepAspect and (kind <> tsyImage);
   sh := TyBuildSymbolInRealBox(spec, box);
   Result := TyShapeBounds(sh);
   if not TyRectFIsValid(Result) then Exit;
