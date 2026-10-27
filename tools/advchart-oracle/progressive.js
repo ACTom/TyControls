@@ -172,6 +172,9 @@ function newChart() {
   const chart = echarts.init(null, null, { renderer: 'svg', ssr: true, width: W, height: H });
   chart._ssr = false;
   chart.getZr().painter.type = 'canvas';
+  // [spec 242] LinesView clears its canvas layer (motion blur): a layer
+  // that clears nothing
+  chart.getZr().painter.getLayer = function () { return { clear() {} }; };
   const sch = chart._scheduler;
   const orig = sch.performSeriesTasks;
   sch.performSeriesTasks = function (m) {
@@ -420,6 +423,31 @@ C('ap-dz', 'append', 'a scatter under an inside dataZoom of 25% to 75% of x (fil
   base(Object.assign({}, XY, { dataZoom: [{ type: 'inside', xAxisIndex: 0, start: 25, end: 75 }],
     series: [{ type: 'scatter', symbolSize: 6, data: [[0, 5], [20, 10], [40, 15], [60, 20], [80, 25], [100, 30]] }] })),
   [['append', 0, [[200, 12], [120, 22], [150, 8]]], ['frame'], ['frame'], ['snap'], ['update'], ['snap']]);
+// [spec 242] the lines' and the custom series' incremental views
+(function () {
+  const ln = [];
+  for (let i = 0; i < 10; i++) ln.push({ coords: [[i * 9, (i * 7) % 50], [100 - i * 8, (i * 13) % 50]] });
+  C('pr-lines', 'switch', 'a lines series, progressive 3 / threshold 5, 10 rows: its lines drawn chunk by chunk (LinesView.incrementalRender)',
+    base(Object.assign({}, XY, { series: [{ type: 'lines', coordinateSystem: 'cartesian2d', progressive: 3, progressiveThreshold: 5, data: ln }] })),
+    F(5).concat([['snap']]));
+  C('pr-lines-under', 'switch', 'the same under its threshold (20): at once',
+    base(Object.assign({}, XY, { series: [{ type: 'lines', coordinateSystem: 'cartesian2d', progressive: 3, progressiveThreshold: 20, data: ln }] })),
+    F(2));
+  C('pr-lines-large', 'switch', 'large lines, progressive 3 / threshold 5: the segs of a chunk concatenated onto the batch while that holds under 2e4 numbers (LargeLineDraw.incrementalUpdate)',
+    base(Object.assign({}, XY, { series: [{ type: 'lines', coordinateSystem: 'cartesian2d', large: true, largeThreshold: 5,
+      progressive: 3, progressiveThreshold: 5, lineStyle: { opacity: 1 }, data: ln }] })),
+    F(5).concat([['snap']]));
+  const big = [];
+  for (let i = 0; i < 5001; i++) big.push({ coords: [[i % 97, i % 41], [(i * 7) % 100, (i * 3) % 50]] });
+  C('pr-lines-large-split', 'switch', 'large lines by 2500 rows (1e4 numbers): the second chunk joins the first batch, the third starts its own',
+    base(Object.assign({}, XY, { series: [{ type: 'lines', coordinateSystem: 'cartesian2d', large: true, largeThreshold: 5,
+      progressive: 2500, progressiveThreshold: 5, data: big }] })),
+    F(4).concat([['snap']]));
+  C('pr-custom', 'switch', 'a custom series, progressive 4 / threshold 5, 10 items: its items made chunk by chunk (CustomView.incrementalRender)',
+    base(Object.assign({}, XY, { series: [{ type: 'custom', renderItem: '@progDot', progressive: 4, progressiveThreshold: 5,
+      data: pts(10, 97, [0, 100], [0, 50]) }] })),
+    F(5).concat([['snap']]));
+})();
 C('ap-cal', 'append', 'a scatter on a calendar: days appended in the range and out of it',
   base({ calendar: { range: '2024-01', cellSize: 20, left: 60, top: 60 },
     series: [{ type: 'scatter', coordinateSystem: 'calendar', symbolSize: 6, data: [['2024-01-03', 1], ['2024-01-10', 2]] }] }),
@@ -433,6 +461,8 @@ function largeKind(el) {
   if (el.type === 'largeBar') return el.silent ? 'barBg' : 'bar';
   if (el.type === 'largeCandlestickBox') return 'candle';
   if (typeof el.findDataIndex === 'function' && el.symbolProxy) return 'symbol';
+  // [spec 242] a LargeLinesPath
+  if (typeof el.findDataIndex === 'function' && el.shape && el.shape.segs != null) return 'lines';
   return null;
 }
 function largeEls(chart, sm) {
@@ -444,6 +474,24 @@ function largeEls(chart, sm) {
 // {el, d, data}; a progressive candle box has no ECData at all
 // (_incrementalRenderNormal never calls setItemGraphicEl), so its row is
 // read back off its x through the base axis and `data` is false
+// [spec 242] a custom series' renderItem written '@progDot': a dot at the
+// item's place in its colour (the port's test registers the same)
+const RENDER_ITEMS = {
+  progDot(params, api) {
+    const p = api.coord([api.value(0), api.value(1)]);
+    return { type: 'circle', shape: { cx: p[0], cy: p[1], r: 4 }, style: { fill: api.visual('color') } };
+  },
+};
+function withRenderItems(opt) {
+  (opt.series || []).forEach(s => {
+    if (typeof s.renderItem === 'string' && s.renderItem[0] === '@') {
+      must(RENDER_ITEMS[s.renderItem.slice(1)], 'no renderItem ' + s.renderItem);
+      s.renderItem = RENDER_ITEMS[s.renderItem.slice(1)];
+    }
+  });
+  return opt;
+}
+
 function owners(chart, sm) {
   const out = [];
   const seen = new Set();
@@ -492,8 +540,9 @@ function bboxOf(el) {
 }
 function elRec(el) {
   const kind = largeKind(el);
-  const p = el.shape.points;
-  const r = { kind, z2: el.z2, silent: !!el.silent, si: el.startIndex == null ? null : el.startIndex, n: p.length };
+  const p = kind === 'lines' ? el.shape.segs : el.shape.points;
+  const si = kind === 'lines' ? el.__startIndex : el.startIndex;
+  const r = { kind, z2: el.z2, silent: !!el.silent, si: si == null ? null : si, n: p.length };
   const hs = hexes(p);
   if (p.length > 600) r.fnv = fnv(hs);
   else r.pts = hs;
@@ -510,6 +559,9 @@ function elRec(el) {
   }
   else if (kind === 'symbol') {
     r.size = el.shape.size.map(hex);
+  }
+  else if (kind === 'lines') {
+    r.poly = !!el.shape.polyline;
   }
   else {
     r.sign = el.__sign;
@@ -632,7 +684,7 @@ function recordCase(c) {
     let lastWhich = null;
     let lastInner = null;
     const opt = JSON.parse(JSON.stringify(c.option));
-    chart.setOption(JSON.parse(JSON.stringify(c.option)));
+    chart.setOption(withRenderItems(JSON.parse(JSON.stringify(c.option))));
     chart.getZr().storage.getDisplayList(true);
     const view = (() => {
       const m = chart.getModel().getComponent('tooltip', 0);

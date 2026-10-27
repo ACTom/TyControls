@@ -2085,6 +2085,14 @@ begin
       end;
       sol.LargeStroke := stroke;
       sol.LargeGrad := FLnSeriesGrad;
+      { [spec 242] progressive: a batch a chunk }
+      sol.LargeChunks := nil;
+      if ProgOnOf(i) then
+      begin
+        SetLength(sol.LargeChunks, Length(FProg[i].Starts));
+        for k := 0 to High(FProg[i].Starts) do
+          sol.LargeChunks[k] := TyProgRowsOf(FProg[i], k);
+      end;
       d := LnNode(node, ['lineStyle', 'opacity']);
       if d = nil then sol.LargeOpacity := 0.5 else sol.LargeOpacity := TyLinesJsNum(d);
       LnDashOf(LnNode(node, ['lineStyle', 'type']), dash, expl);

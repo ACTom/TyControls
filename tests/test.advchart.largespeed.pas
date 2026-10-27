@@ -62,6 +62,7 @@ type
     procedure TestTheRectMemoIsTheBrush;
     procedure TestALargeSeriesKeepsNoRowRecords;
     procedure TestAProgressFrameIsTheFullPaint;
+    procedure TestAGrowingLinesBatchIsTheFullPaint;
     procedure TestTheIndicatorRebuildsTheTail;
     procedure TestALayerRegionIsTheWholeLayer;
     procedure TestOneRowValueIsTheSeriesValue;
@@ -195,6 +196,26 @@ begin
     Inc(i, 3);
   end;
   Result := Format(' (%d pixels in %d,%d..%d,%d)', [n, x0, y0, x1, y1]);
+end;
+
+{ [spec 242] the pixels of A and B that differ by more than AChan in a
+  channel }
+function FarPixels(const A, B: RawByteString; AChan: Integer): Integer;
+var i, c: Integer;
+begin
+  Result := 0;
+  if Length(A) <> Length(B) then Exit(MaxInt);
+  i := 1;
+  while i <= Length(A) do
+  begin
+    for c := 0 to 2 do
+      if Abs(Ord(A[i + c]) - Ord(B[i + c])) > AChan then
+      begin
+        Inc(Result);
+        Break;
+      end;
+    Inc(i, 3);
+  end;
 end;
 
 { the paint list as a text: each element's kind, place in the order, box,
@@ -516,6 +537,97 @@ begin
       AssertTrue(Format('frame %d the same pixels%s', [k, FrameDiff(frames[False][k], frames[True][k], 520)]),
         frames[False][k] = frames[True][k]);
     AssertTrue('most progress frames kept the static layer', used >= frames[False].Count - 6);
+  finally
+    bmp.Free;
+    frames[False].Free;
+    frames[True].Free;
+    TyAdvChartProgFastForTest(True);
+  end;
+end;
+
+{ [spec 242] a large lines run by 40 rows: its chunks grow one batch (under
+  2e4 numbers), each frame's new segs drawn onto the layer (LargeLinesPath's
+  _off) -- every frame, chunks apart, the pixels of the layer drawn again
+  whole }
+procedure TAdvChartLargeSpeedTest.TestAGrowingLinesBatchIsTheFullPaint;
+var
+  frames: array[Boolean] of TStringList;
+  fast: Boolean;
+  chart: TLsChart;
+  bmp: TBitmap;
+  n, k, f0, used, i: Integer;
+  sb: TStringBuilder;
+  opt: string;
+begin
+  GLcg := 17;
+  sb := TStringBuilder.Create;
+  try
+    sb.Append('{"animation": false, "xAxis": {"type": "value", "min": 0, "max": 300},');
+    sb.Append(' "yAxis": {"type": "value", "min": 0, "max": 100},');
+    sb.Append(' "series": [{"type": "lines", "coordinateSystem": "cartesian2d", "large": true,');
+    sb.Append(' "largeThreshold": 20, "progressive": 40, "progressiveThreshold": 50,');
+    sb.Append(' "lineStyle": {"width": 2, "opacity": 0.5}, "data": [');
+    { each chunk's lines in a band of its own, crossing each other: a chunk
+      drawn twice shows, and nothing of one chunk lies under another's (the
+      canvas' incremental layer draws a chunk's segs as a path of their own,
+      over the batch's) }
+    for i := 0 to 299 do
+    begin
+      if i > 0 then sb.Append(',');
+      sb.Append(Format('{"coords": [[%d, %d], [%d, %d]]}', [Lcg(300),
+        (i div 40) * 12 + 2 + Lcg(6), Lcg(300), (i div 40) * 12 + 2 + Lcg(6)]));
+    end;
+    sb.Append(']}]}');
+    opt := sb.ToString;
+  finally
+    sb.Free;
+  end;
+  frames[False] := TStringList.Create;
+  frames[True] := TStringList.Create;
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf24bit;
+    bmp.SetSize(520, 360);
+    used := 0;
+    for fast := False to True do
+    begin
+      TyAdvChartProgFastForTest(fast);
+      f0 := TyAdvChartProgFastFramesForTest;
+      chart := NewChart(520, 360, opt);
+      try
+        chart.Cached(bmp.Canvas, Rect(0, 0, 520, 360));
+        frames[fast].Add(Frame(bmp));
+        n := 0;
+        while chart.ProgressiveUnfinished and (n < 60) do
+        begin
+          chart.ProgressTick;
+          chart.Cached(bmp.Canvas, Rect(0, 0, 520, 360));
+          frames[fast].Add(Frame(bmp));
+          Inc(n);
+          { the layer dropped (another rendering and back): drawn again whole }
+          chart.ExactRendering := not chart.ExactRendering;
+          chart.ExactRendering := not chart.ExactRendering;
+          chart.Cached(bmp.Canvas, Rect(0, 0, 520, 360));
+          { (the rasteriser may round a lone edge pixel of one path apart
+            from the same segs in a longer one: a step or two of a channel) }
+          AssertEquals(Format('frame %d: the grown layer is the whole layer%s', [n,
+            FrameDiff(frames[fast][frames[fast].Count - 1], Frame(bmp), 520)]),
+            0, FarPixels(frames[fast][frames[fast].Count - 1], Frame(bmp), 2));
+        end;
+        AssertFalse('drawn to the end', chart.ProgressiveUnfinished);
+        if fast then used := TyAdvChartProgFastFramesForTest - f0;
+      finally
+        chart.Free;
+      end;
+    end;
+    AssertTrue('several chunks', frames[False].Count > 5);
+    AssertEquals('as many frames', frames[False].Count, frames[True].Count);
+    for k := 0 to frames[False].Count - 1 do
+      AssertTrue(Format('frame %d the same pixels%s', [k, FrameDiff(frames[False][k], frames[True][k], 520)]),
+        frames[False][k] = frames[True][k]);
+    { every frame grew the batch: the chunk is not the whole batch again }
+    for k := 1 to frames[False].Count - 1 do
+      AssertTrue(Format('frame %d drew more', [k]), frames[False][k] <> frames[False][k - 1]);
   finally
     bmp.Free;
     frames[False].Free;

@@ -228,6 +228,10 @@ type
     LargeDash: TTyDoubleArray;
     { [spec 242] the large batch's colour as a gradient (cgkNone: none) }
     LargeGrad: TTyChartGradient;
+    { [spec 242] PROGRESSIVE LARGE: the rows of each planned chunk (none:
+      one batch of every row) -- LargeLineDraw.incrementalUpdate's path a
+      chunk }
+    LargeChunks: array of TTyIntegerArray;
     { [spec 242] device px per CSS px, what the build measured with }
     Scale: Double;
   end;
@@ -1353,6 +1357,8 @@ var
   av: TTyTextAnchorV;
   eff: TTyLinesEffect;
   flags: Integer;
+  part, cg: TTyLargeGeom;
+  k0, j, pat: Integer;
 
   procedure SetClip(var AEl: TTyChartElement);
   begin
@@ -1374,36 +1380,111 @@ var
     end;
   end;
 
-begin
-  Result := 0;
-  if (AList = nil) or not ASolved.Valid then Exit;
-  { LARGE: LargeLineDraw's one path, silent to nothing but its own scan }
-  if ASolved.IsLarge then
+  { one LargeLinesPath of AGeom (AChunk: the progressive chunk that draws
+    it, 0 none) }
+  function AddLarge(const AGeom: TTyLargeGeom; AChunk: Integer): Integer;
+  var lel: TTyChartElement;
   begin
-    el := TyChartElement(TyShapeRect(TyRectF(0, 0, 0, 0)));
-    el.Shape.Kind := cskLarge;
-    el.Shape.Large := ASolved.Large;
-    el.Shape.Bounds := TyLargeBounds(ASolved.Large);
-    el.Style.HasFill := False;
-    el.Style.StrokeColor := ASolved.LargeStroke;
+    lel := TyChartElement(TyShapeRect(TyRectF(0, 0, 0, 0)));
+    lel.Shape.Kind := cskLarge;
+    lel.Shape.Large := AGeom;
+    lel.Shape.Bounds := TyLargeBounds(AGeom);
+    lel.Style.HasFill := False;
+    lel.Style.StrokeColor := ASolved.LargeStroke;
     { [spec 242] a gradient over the batch's own bounding rect (the
       LargeLinesPath's, no pen) }
     if ASolved.LargeGrad.Kind <> cgkNone then
     begin
-      el.Style.StrokeGradient := ASolved.LargeGrad;
-      el.Style.GradBoxSet := True;
-      el.Style.GradBox := TyRectToXYWH(el.Shape.Bounds);
+      lel.Style.StrokeGradient := ASolved.LargeGrad;
+      lel.Style.GradBoxSet := True;
+      lel.Style.GradBox := TyRectToXYWH(lel.Shape.Bounds);
     end;
-    el.Style.StrokeWidthLogical := ASolved.LargeWidth;
-    el.Style.Alpha := ASolved.LargeOpacity;
-    el.Style.DashLogical := ASolved.LargeDash;
-    el.Z := ASolved.Z;
-    el.Z2 := ASolved.Z2;
-    el.Silent := False;
-    el.Datum := TyChartDatum(ASolved.SeriesIndex, -1, -1);
-    SetClip(el);
-    AList.Add(el);
-    Exit(1);
+    lel.Style.StrokeWidthLogical := ASolved.LargeWidth;
+    lel.Style.Alpha := ASolved.LargeOpacity;
+    lel.Style.DashLogical := ASolved.LargeDash;
+    lel.Z := ASolved.Z;
+    lel.Z2 := ASolved.Z2;
+    lel.Silent := False;
+    lel.Datum := TyChartDatum(ASolved.SeriesIndex, -1, -1);
+    lel.ProgChunk := AChunk;
+    SetClip(lel);
+    AList.Add(lel);
+    Result := 1;
+  end;
+
+  { [spec 242] the batch of the rows ARows: linesLayout's progress writes
+    the chunk's own linesPoints (each row's floats, in the chunk's order) }
+  function ChunkGeom(const ARows: TTyIntegerArray): TTyLargeGeom;
+  var
+    j, r, a, b, k, at: Integer;
+    src: TTyDoubleArray;
+  begin
+    Result := ASolved.Large;
+    src := ASolved.Large.Pts;
+    Result.Pts := nil;
+    at := 0;
+    for j := 0 to High(ARows) do
+    begin
+      r := ARows[j];
+      if (r < 0) or (r > High(ASolved.Large.Idx)) then Continue;
+      a := ASolved.Large.Idx[r];
+      if r < High(ASolved.Large.Idx) then b := ASolved.Large.Idx[r + 1]
+      else b := Length(src);
+      SetLength(Result.Pts, at + b - a);
+      for k := a to b - 1 do Result.Pts[at + k - a] := src[k];
+      Inc(at, b - a);
+    end;
+    TyLargeLinesIndex(Result);
+    TyLargeSetBox(Result);
+  end;
+
+  { a batch as its first chunk shows it (the frames grow it) }
+  function Grown(const AGeom: TTyLargeGeom): TTyLargeGeom;
+  begin
+    Result := AGeom;
+    if Length(Result.ChunkEnds) > 1 then Result.Shown := Result.ChunkEnds[0]
+    else Result.Shown := 0;
+    TyLargeSetBox(Result);
+  end;
+
+begin
+  Result := 0;
+  if (AList = nil) or not ASolved.Valid then Exit;
+  { LARGE: LargeLineDraw's one path, silent to nothing but its own scan;
+    [spec 242] progressive, a path a chunk }
+  if ASolved.IsLarge then
+  begin
+    if Length(ASolved.LargeChunks) = 0 then Exit(AddLarge(ASolved.Large, 0));
+    { LargeLineDraw.incrementalUpdate concatenates a chunk's segs onto the
+      batch added last while that holds under 2e4 numbers (its
+      __startIndex stays), else starts a batch at the chunk's start: a
+      batch grows a chunk at a time (ChunkEnds, as a scatter's) }
+    k0 := -1;
+    part := ASolved.Large;
+    for e := 0 to High(ASolved.LargeChunks) do
+    begin
+      cg := ChunkGeom(ASolved.LargeChunks[e]);
+      if (k0 >= 0) and (Length(part.Pts) < 20000) then
+      begin
+        pat := Length(part.Pts);
+        SetLength(part.Pts, pat + Length(cg.Pts));
+        for j := 0 to High(cg.Pts) do part.Pts[pat + j] := cg.Pts[j];
+        TyLargeLinesIndex(part);
+        SetLength(part.ChunkEnds, Length(part.ChunkEnds) + 1);
+        part.ChunkEnds[High(part.ChunkEnds)] := Length(part.Idx);
+        Continue;
+      end;
+      if k0 >= 0 then Inc(Result, AddLarge(Grown(part), k0 + 1));
+      k0 := e;
+      part := cg;
+      part.ChunkFirst := e;
+      if Length(ASolved.LargeChunks[e]) > 0 then part.Start := ASolved.LargeChunks[e][0]
+      else part.Start := 0;
+      SetLength(part.ChunkEnds, 1);
+      part.ChunkEnds[0] := Length(part.Idx);
+    end;
+    if k0 >= 0 then Inc(Result, AddLarge(Grown(part), k0 + 1));
+    Exit;
   end;
   for i := 0 to High(ASolved.Geoms) do
   begin

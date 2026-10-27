@@ -29,8 +29,15 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Progressive, tyControls.AdvanceChart.Events,
      tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Scale,
      tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Builder,
+     tyControls.AdvanceChart.Custom,
      tyControls.AdvanceChart;
 type
+  { [spec 242] the oracle's renderItem '@progDot': a dot at the item's place
+    in its colour }
+  TPgRenderItems = class
+    function ProgDot(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+  end;
+
   TPgProbe = class(TTyAdvanceChart)
   public
     Events: TStringList;
@@ -418,6 +425,8 @@ begin
       lgkBar: if el.Silent then gotKind := 'barBg' else gotKind := 'bar';
       lgkSymbol: gotKind := 'symbol';
       lgkCandle: gotKind := 'candle';
+      { [spec 242] a LargeLinesPath }
+      lgkLines: gotKind := 'lines';
     else
       gotKind := '?';
     end;
@@ -428,6 +437,7 @@ begin
     case g.Kind of
       lgkBar: n := rows * 3;
       lgkSymbol: n := rows * 2;
+      lgkLines: n := TyLargeLinesUsed(g);
     else
       n := rows * 4;
     end;
@@ -482,6 +492,9 @@ begin
       SameHex(what + ' width', g.SymW, er.Arrays['size'].Items[0]);
       SameHex(what + ' height', g.SymH, er.Arrays['size'].Items[1]);
     end
+    else if kind = 'lines' then
+      SameStr(what + ' polyline', BoolToStr(g.LinesPoly, 'true', 'false'),
+        BoolToStr(er.Booleans['poly'], 'true', 'false'))
     else
       SameInt(what + ' sign', g.Sign, er.Integers['sign']);
   end;
@@ -1054,7 +1067,25 @@ begin
   AssertTrue('a frame stays a frame, not the whole series again', tWorst < 30000);
 end;
 
+{ ==================== the render items [spec 242] ==================== }
+
+function TPgRenderItems.ProgDot(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+var p: TTyDoubleArray;
+begin
+  p := AApi.Coord([AApi.Value(0), AApi.Value(1)]);
+  Result := TJSONObject.Create(['type', 'circle',
+    'shape', TJSONObject.Create(['cx', p[0], 'cy', p[1], 'r', 4]),
+    'style', TJSONObject.Create(['fill', AApi.Visual('color')])]);
+end;
+
+var
+  GPgItems: TPgRenderItems;
+
 initialization
+  GPgItems := TPgRenderItems.Create;
+  TyChartRegisterRenderItem('progDot', @GPgItems.ProgDot);
   RegisterTest(TAdvChartProgressiveOracleTest);
   RegisterTest(TAdvChartProgressiveTest);
+finalization
+  GPgItems.Free;
 end.

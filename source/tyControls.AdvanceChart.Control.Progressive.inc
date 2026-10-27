@@ -297,11 +297,13 @@ begin
     else done := MaxInt;
     hid := pe^.ProgChunk > done;
     moved := hid <> pe^.ProgHidden;
-    if not moved and not ((pe^.Shape.Kind = cskLarge) and (pe^.Shape.Large.Kind = lgkSymbol)
+    if not moved and not ((pe^.Shape.Kind = cskLarge)
+      and (pe^.Shape.Large.Kind in [lgkSymbol, lgkLines])
       and (Length(pe^.Shape.Large.ChunkEnds) > 0)) then Continue;
     el := pe^;
-    { A GROWING SCATTER BATCH holds the rows of its chunks drawn so far }
-    if (el.Shape.Kind = cskLarge) and (el.Shape.Large.Kind = lgkSymbol)
+    { A GROWING SCATTER BATCH holds the rows of its chunks drawn so far;
+      [spec 242] a growing lines batch too }
+    if (el.Shape.Kind = cskLarge) and (el.Shape.Large.Kind in [lgkSymbol, lgkLines])
       and (Length(el.Shape.Large.ChunkEnds) > 0) then
     begin
       j := done - el.Shape.Large.ChunkFirst;
@@ -313,6 +315,9 @@ begin
         el.Shape.Large.Shown := shown;
         TyLargeSetBox(el.Shape.Large);
         el.Shape.Bounds := TyLargeBounds(el.Shape.Large);
+        { [spec 242] a lines batch's gradient spans what it holds now }
+        if (el.Shape.Large.Kind = lgkLines) and el.Style.GradBoxSet then
+          el.Style.GradBox := TyRectToXYWH(el.Shape.Bounds);
         moved := True;
       end;
     end;
@@ -445,6 +450,18 @@ begin
         part.Shape.Large.Pts := Copy(el.Shape.Large.Pts, have * 2, (rows - have) * 2);
         part.Shape.Large.Shown := 0;
         part.Shape.Large.ChunkEnds := nil;
+        TyRenderElement(P, part);
+      end
+      else if (have > 0) and (el.Shape.Kind = cskLarge) and (el.Shape.Large.Kind = lgkLines)
+        and (have < Length(el.Shape.Large.Idx)) then
+      begin
+        { [spec 242] LargeLinesPath's _off: only the segs the batch grew by }
+        part := el;
+        part.Shape.Large.Pts := Copy(el.Shape.Large.Pts, el.Shape.Large.Idx[have],
+          TyLargeLinesUsed(el.Shape.Large) - el.Shape.Large.Idx[have]);
+        part.Shape.Large.Shown := 0;
+        part.Shape.Large.ChunkEnds := nil;
+        TyLargeLinesIndex(part.Shape.Large);
         TyRenderElement(P, part);
       end
       else
