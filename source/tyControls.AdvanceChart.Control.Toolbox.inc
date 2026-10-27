@@ -383,6 +383,8 @@ begin
       end;
       if sty.HasOpacity and not IsNan(sty.Opacity) then
         el.Style.Alpha := Max(0, Min(1, sty.Opacity));
+      { [R5-A] the icon style's shadow }
+      TyStyleSetShadow(el.Style, TyTbShadowOf(sty));
       AList.Add(el);
       Inc(Result);
     end;

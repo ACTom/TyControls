@@ -1563,6 +1563,8 @@ begin
     el.Style.DashLogical := TyDashPattern(spec.Item.Dash, spec.Item.DashLogical, cellLw);
     if not IsNan(spec.Item.Opacity) then el.Style.Alpha := spec.Item.Opacity
     else el.Style.Alpha := 1;
+    { [R5-A] itemStyle's shadow (CalendarView's itemRectStyleModel) }
+    TyStyleSetShadow(el.Style, spec.Item.Shadow);
     el.Z := spec.Z;
     el.Z2 := 0;
     el.Silent := True;
@@ -1586,6 +1588,8 @@ begin
   splitStyle.DashLogical := TyDashPattern(spec.Split.Dash, spec.Split.DashLogical, splitLw);
   if not IsNan(spec.Split.Opacity) then splitStyle.Alpha := spec.Split.Opacity
   else splitStyle.Alpha := 1;
+  { [R5-A] splitLine.lineStyle's shadow }
+  TyStyleSetShadow(splitStyle, spec.Split.Shadow);
   splitLw := splitLw * scale;
 
   tl := nil;

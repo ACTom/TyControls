@@ -283,7 +283,18 @@ type
       written (getLineStyle's / getItemStyle's lineDashOffset), px }
     DashOffsetHas: Boolean;
     DashOffset: Double;
+    { [R5-A] the block's shadow: getItemStyle / getLineStyle / getAreaStyle's
+      four shadow keys (TyShadowOfValues) }
+    Shadow: TTyChartShadow;
   end;
+
+{ [R5-A] A SHADOW FROM THE FOUR VALUES a style block writes (nil or null: not
+  written), as the canvas takes them: a blur or an offset that is no number (a
+  numeric string is one) or a blur below nought is nought; a colour that does
+  not parse, or none, zrender's '#000' (style.shadowColor || '#000'). False:
+  none of the four is written -- the zero value, no shadow. }
+function TyShadowOfValues(ABlur, AOffsetX, AOffsetY, AColour: TJSONData;
+  out AShadow: TTyChartShadow): Boolean;
 
 { Read one style block. AKey is 'itemStyle', 'lineStyle' or 'areaStyle', and
   which keys exist differs between them:
@@ -1270,6 +1281,60 @@ begin
   if (d <> nil) and (d.JSONType = jtNumber) then Result := d.AsFloat;
 end;
 
+function TyShadowOfValues(ABlur, AOffsetX, AOffsetY, AColour: TJSONData;
+  out AShadow: TTyChartShadow): Boolean;
+
+  { dpr * value as the canvas reads it }
+  function Num(AData: TJSONData): Double;
+  var v: Double; fs: TFormatSettings;
+  begin
+    Result := NaN;
+    case AData.JSONType of
+      jtNumber: Result := AData.AsFloat;
+      jtString:
+        begin
+          fs := DefaultFormatSettings;
+          fs.DecimalSeparator := '.';
+          if Trim(AData.AsString) = '' then Result := 0
+          else if TryStrToFloat(Trim(AData.AsString), v, fs) then Result := v;
+        end;
+      jtBoolean: if AData.AsBoolean then Result := 1 else Result := 0;
+    end;
+  end;
+
+var
+  c: TTyChartColor;
+  v: Double;
+begin
+  AShadow := Default(TTyChartShadow);
+  { a null is not written (the model's get falls through it) }
+  if (ABlur <> nil) and (ABlur.JSONType = jtNull) then ABlur := nil;
+  if (AOffsetX <> nil) and (AOffsetX.JSONType = jtNull) then AOffsetX := nil;
+  if (AOffsetY <> nil) and (AOffsetY.JSONType = jtNull) then AOffsetY := nil;
+  if (AColour <> nil) and (AColour.JSONType = jtNull) then AColour := nil;
+  Result := (ABlur <> nil) or (AOffsetX <> nil) or (AOffsetY <> nil) or (AColour <> nil);
+  if not Result then Exit;
+  if ABlur <> nil then
+  begin
+    v := Num(ABlur);
+    if (not IsNan(v)) and (not IsInfinite(v)) and (v > 0) then AShadow.Blur := v;
+  end;
+  if AOffsetX <> nil then
+  begin
+    v := Num(AOffsetX);
+    if (not IsNan(v)) and not IsInfinite(v) then AShadow.OffsetX := v;
+  end;
+  if AOffsetY <> nil then
+  begin
+    v := Num(AOffsetY);
+    if (not IsNan(v)) and not IsInfinite(v) then AShadow.OffsetY := v;
+  end;
+  AShadow.Color := $FF000000;
+  if (AColour <> nil) and (AColour.JSONType = jtString)
+    and TyTryParseChartColor(AColour.AsString, c) then
+    AShadow.Color := c;
+end;
+
 function TyReadOptStyle(ANode: TJSONObject; const AKey: string): TTyOptStyle;
 var sub: TJSONObject; d: TJSONData;
 begin
@@ -1281,6 +1346,9 @@ begin
   d := ANode.Find(AKey);
   sub := ObjOf(d);
   if sub = nil then Exit;
+  { [R5-A] the block's shadow, whichever block }
+  TyShadowOfValues(sub.Find('shadowBlur'), sub.Find('shadowOffsetX'),
+    sub.Find('shadowOffsetY'), sub.Find('shadowColor'), Result.Shadow);
   Result.Color := ReadOptColor(sub, 'color');
   Result.Opacity := NumOr(sub, 'opacity');
   if AKey = 'lineStyle' then

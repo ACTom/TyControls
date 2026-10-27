@@ -268,7 +268,8 @@ uses
   jsonparser,
   tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Scale,
   tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.Color,
-  tyControls.AdvanceChart.PolarBar, tyControls.AdvanceChart.RichStyle;
+  tyControls.AdvanceChart.PolarBar, tyControls.AdvanceChart.RichStyle,
+  tyControls.AdvanceChart.States;
 
 const
   PI2 = 2 * Pi;
@@ -1867,6 +1868,17 @@ begin
   if NumOf(S.Find('textShadowBlur'), x) then R.ShadowBlur := x;
   if NumOf(S.Find('textShadowOffsetX'), x) then R.ShadowOffsetX := x;
   if NumOf(S.Find('textShadowOffsetY'), x) then R.ShadowOffsetY := x;
+  { [R5-A] the box's shadow: a text's own shadowBlur / shadowColor /
+    shadowOffsetX / Y (Text.ts _renderBackground) }
+  if NumOf(S.Find('shadowBlur'), x) then R.BoxShadowBlur := x;
+  if NumOf(S.Find('shadowOffsetX'), x) then R.BoxShadowOffsetX := x;
+  if NumOf(S.Find('shadowOffsetY'), x) then R.BoxShadowOffsetY := x;
+  d := S.Find('shadowColor');
+  if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
+  begin
+    R.HasBoxShadowColor := True;
+    R.BoxShadowColor := c;
+  end;
 end;
 
 function TextOf(S: TJSONObject): string;
@@ -2519,6 +2531,7 @@ var
   dash: TTyDoubleArray;
   q: array[0..3] of TTyPointF;
   ox, oy: Double;
+  sh: TTyChartShadow;
 
   procedure Corner(AI: Integer; AX, AY: Double);
   begin
@@ -2539,6 +2552,13 @@ begin
   d := AEl.Style.Find('opacity');
   if (d <> nil) and (d.JSONType = jtNumber) then op := d.AsFloat;
   AOut.Style.Alpha := Max(Double(0), Min(Double(1), op));
+  { [R5-A] THE CANVAS SHADOW the element's style writes -- a path's and an
+    image's (bindCommonProps), in css px whatever its transform: a canvas'
+    shadow is in device space. A text's words take their textShadow* (the
+    pieces), its box its own shadow keys (not drawn here). }
+  if (AEl.Kind <> gkText) and (AEl.Style <> nil)
+    and TyStReadShadow([AEl.Style], [], [], sh) then
+    TyStyleSetShadow(AOut.Style, sh);
   case AEl.Kind of
     gkImage:
       begin

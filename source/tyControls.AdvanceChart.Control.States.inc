@@ -134,6 +134,25 @@ begin
     and TyAnimGradientOfValue(StColourValue(AObj, AKey), AGrad);
 end;
 
+{ [R5-A] A STATE'S SHADOW onto an element: the four keys where they differ from rest }
+procedure StWriteShadow(var AEl: TTyChartElement; const C, R: TTyStObject);
+begin
+  if not StSameNum(C.Num[stkShadowBlur], R.Num[stkShadowBlur]) then
+    AEl.Style.ShadowBlur := C.Num[stkShadowBlur];
+  if not StSameNum(C.Num[stkShadowOffsetX], R.Num[stkShadowOffsetX]) then
+    AEl.Style.ShadowOffsetX := C.Num[stkShadowOffsetX];
+  if not StSameNum(C.Num[stkShadowOffsetY], R.Num[stkShadowOffsetY]) then
+    AEl.Style.ShadowOffsetY := C.Num[stkShadowOffsetY];
+  if C.Has[stkShadowColor] and (C.Color[stkShadowColor] <> R.Color[stkShadowColor]) then
+    AEl.Style.ShadowColor := C.Color[stkShadowColor]
+  { a shadow the state brings on an element that had none: its colour,
+    the prototype's '#000' where it says none }
+  else if C.Has[stkShadowColor] and (AEl.Style.ShadowColor = 0)
+    and ((AEl.Style.ShadowBlur > 0) or (AEl.Style.ShadowOffsetX <> 0)
+      or (AEl.Style.ShadowOffsetY <> 0)) then
+    AEl.Style.ShadowColor := C.Color[stkShadowColor];
+end;
+
 { THE CURRENT VALUES ONTO A MARK. A colour a state did not change is left as
   the build drew it -- a gradient stays a gradient; a lifted colour over a
   gradient fill leaves the gradient too (the port does not lift a ramp). }
@@ -209,6 +228,7 @@ begin
   if AEl.Style.DashWord <> 0 then
     AEl.Style.DashLogical := TyDashOfWord(AEl.Style.DashWord, AEl.Style.StrokeWidthLogical);
   if not StSameNum(c.Num[stkOpacity], r.Num[stkOpacity]) then AEl.Style.Alpha := c.Num[stkOpacity];
+  StWriteShadow(AEl, c, r);
   AEl.Z2 := Round(c.Num[stkZ2]);
   StShiftShape(AEl.Shape, c.Num[stkX] - r.Num[stkX], c.Num[stkY] - r.Num[stkY]);
   if (AEl.Shape.Kind = cskSector) and not StSameNum(c.Num[stkR], r.Num[stkR]) then
@@ -247,6 +267,7 @@ begin
     AEl.Style.StrokeWidthLogical := c.Num[stkLineWidth];
   if not StSameNum(c.Num[stkOpacity], r.Num[stkOpacity]) then
     AEl.Style.Alpha := c.Num[stkOpacity];
+  StWriteShadow(AEl, c, r);
   AEl.Z2 := AEl.Z2 + Round(c.Num[stkZ2] - r.Num[stkZ2]);
   StShiftShape(AEl.Shape, c.Num[stkX] - r.Num[stkX], c.Num[stkY] - r.Num[stkY]);
   AEl.Ignore := c.Num[stkIgnore] <> 0;
@@ -308,6 +329,7 @@ begin
   if not AProxied and c.Has[stkStroke] then AEl.Style.StrokeColor := c.Color[stkStroke];
   if not AProxied and c.Has[stkLineWidth] then
     AEl.Style.StrokeWidthLogical := c.Num[stkLineWidth];
+  if not AProxied then StWriteShadow(AEl, c, r);
   if c.Has[stkSmooth] and not StSameNum(c.Num[stkSmooth], r.Num[stkSmooth]) then
     AEl.Shape.Cmds := TyLabelLineCmds(AEl.Shape.Points, c.Num[stkSmooth]);
 end;
@@ -520,6 +542,12 @@ begin
   end;
 end;
 
+function TTyCustomAdvanceChart.StShadowInk: TTyChartColor;
+begin
+  Result := TTyChartColor(ActiveController.Model.ResolveStyle('TyAdvChartShadow',
+    '', []).TextColor);
+end;
+
 procedure TTyCustomAdvanceChart.StDeclareItem(ASlot, ARaw: Integer;
   AList: TTyPaintList; APPI: Integer);
 var
@@ -690,6 +718,8 @@ var
       if has and TyTryParseChartColor(txt, c) then TyStSetColor(obj, stkStroke, c);
       ss := TyStReadNumber(nodes, [cStNames[n], 'labelLine', 'lineStyle', 'width'], has);
       if has and not IsNan(ss) then TyStSetNum(obj, stkLineWidth, ss);
+      { [R5-A] its lineStyle's shadow }
+      TyStReadShadowKeys(nodes, [cStNames[n], 'labelLine', 'lineStyle'], obj);
       AG.Decl[n] := obj;
     end;
     TyStSetNum(AG.Decl[stnSelect], stkX, dx);
@@ -810,6 +840,19 @@ begin
     emphasis.itemStyle); its shadow is not drawn here [Batch 108] }
   if (FSt[s].Kind = sskBox) and not item^.Host.Decl[stnEmphasis].Has[stkLineWidth] then
     TyStSetNum(item^.Host.Decl[stnEmphasis], stkLineWidth, 2);
+  { [R5-A] and its shadow, BoxplotSeries' emphasis.itemStyle: a blur of 5 at
+    (1, 1) in tokens.color.shadow, key by key under what is declared }
+  if FSt[s].Kind = sskBox then
+  begin
+    if not item^.Host.Decl[stnEmphasis].Has[stkShadowBlur] then
+      TyStSetNum(item^.Host.Decl[stnEmphasis], stkShadowBlur, 5);
+    if not item^.Host.Decl[stnEmphasis].Has[stkShadowOffsetX] then
+      TyStSetNum(item^.Host.Decl[stnEmphasis], stkShadowOffsetX, 1);
+    if not item^.Host.Decl[stnEmphasis].Has[stkShadowOffsetY] then
+      TyStSetNum(item^.Host.Decl[stnEmphasis], stkShadowOffsetY, 1);
+    if not item^.Host.Decl[stnEmphasis].Has[stkShadowColor] then
+      TyStSetColor(item^.Host.Decl[stnEmphasis], stkShadowColor, StShadowInk);
+  end;
   { a sunburst blurs to 0.2 unless told (SunburstSeries.ts:274-279) [Batch 90] }
   if (FSt[s].Kind = sskSunburst) and not item^.Host.Decl[stnBlur].Has[stkOpacity] then
     TyStSetNum(item^.Host.Decl[stnBlur], stkOpacity, 0.2);
@@ -2923,6 +2966,13 @@ begin
     Result := TyAnimColorValue(AObj.Color[AKey], AObj.Lifted[AKey]);
 end;
 
+{ [R5-A] some state of the element declares AKey }
+function StAnyDecl(const AEl: TTyStElement; AKey: TTyStKey): Boolean;
+begin
+  Result := AEl.Decl[stnSelect].Has[AKey] or AEl.Decl[stnEmphasis].Has[AKey]
+    or AEl.Decl[stnBlur].Has[AKey];
+end;
+
 { A MERGED STATE OBJECT as the proxy's keys: the style keys, and the place,
   the scale and the radius where the proxy carries them }
 function StAnimStateOf(const AEl: TTyStElement; const AM: TTyStObject;
@@ -2959,6 +3009,15 @@ begin
       TyAnimPropPut(Result.Props, 'style.lineDashOffset', TyAnimNum(AM.Num[stkDashOffset]));
     if AM.Has[stkOpacity] then
       TyAnimPropPut(Result.Props, 'style.opacity', TyAnimNum(AM.Num[stkOpacity]));
+    { [R5-A] the shadow, where the state says it }
+    if AM.Has[stkShadowBlur] and P.HasStKey('style.shadowBlur') then
+      TyAnimPropPut(Result.Props, 'style.shadowBlur', TyAnimNum(AM.Num[stkShadowBlur]));
+    if AM.Has[stkShadowOffsetX] and P.HasStKey('style.shadowOffsetX') then
+      TyAnimPropPut(Result.Props, 'style.shadowOffsetX', TyAnimNum(AM.Num[stkShadowOffsetX]));
+    if AM.Has[stkShadowOffsetY] and P.HasStKey('style.shadowOffsetY') then
+      TyAnimPropPut(Result.Props, 'style.shadowOffsetY', TyAnimNum(AM.Num[stkShadowOffsetY]));
+    if AM.Has[stkShadowColor] and P.HasStKey('style.shadowColor') then
+      TyAnimPropPut(Result.Props, 'style.shadowColor', StColourValue(AM, stkShadowColor));
   end;
   if AM.Has[stkX] and P.HasStKey('x') then
     TyAnimPropPut(Result.Props, 'x', TyAnimNum(AM.Num[stkX]));
@@ -3136,6 +3195,15 @@ begin
     if AEl.Decl[stnSelect].Has[stkDashOffset] or AEl.Decl[stnEmphasis].Has[stkDashOffset]
       or AEl.Decl[stnBlur].Has[stkDashOffset] then
       Seed('style.lineDashOffset', TyAnimNum(AEl.Rest.Num[stkDashOffset]));
+    { [R5-A] the shadow's keys, where some state says one }
+    if StAnyDecl(AEl, stkShadowBlur) then
+      Seed('style.shadowBlur', TyAnimNum(AEl.Rest.Num[stkShadowBlur]));
+    if StAnyDecl(AEl, stkShadowOffsetX) then
+      Seed('style.shadowOffsetX', TyAnimNum(AEl.Rest.Num[stkShadowOffsetX]));
+    if StAnyDecl(AEl, stkShadowOffsetY) then
+      Seed('style.shadowOffsetY', TyAnimNum(AEl.Rest.Num[stkShadowOffsetY]));
+    if StAnyDecl(AEl, stkShadowColor) then
+      Seed('style.shadowColor', StColourValue(AEl.Rest, stkShadowColor));
     if isPie and (AKind in [cStPxPath, cStPxGuide]) then
     begin
       Seed('x', TyAnimNum(0));
@@ -4170,6 +4238,8 @@ var
     if h and TyTryParseChartColor(t, col) then TyStSetColor(Result, stkStroke, col);
     v := TyStReadNumber(nodes, [cStNames[AState], 'itemStyle', 'strokeWidth'], h);
     if h and not IsNan(v) then TyStSetNum(Result, stkLineWidth, v);
+    { [R5-A] getStateItemStyle's shadow keys }
+    TyStReadShadowKeys(nodes, [cStNames[AState], 'itemStyle'], Result);
   end;
 
   procedure Declare(var AEl: TTyStElement; const AFrom: TTyChartElement);
@@ -6070,6 +6140,18 @@ begin
     AElement.Style.StrokeWidthLogical := st.Num[cskLineWidth];
   if TyChartStyleHas(st, cskOpacity) then
     AElement.Style.Alpha := st.Num[cskOpacity];
+  { [R5-A] the declared shadow, key by key; a shadow brought on an element of
+    none in zrender's '#000' unless it names its colour }
+  if TyChartStyleHas(st, cskShadowBlur) then
+    AElement.Style.ShadowBlur := Max(Double(0), st.Num[cskShadowBlur]);
+  if TyChartStyleHas(st, cskShadowOffsetX) then
+    AElement.Style.ShadowOffsetX := st.Num[cskShadowOffsetX];
+  if TyChartStyleHas(st, cskShadowOffsetY) then
+    AElement.Style.ShadowOffsetY := st.Num[cskShadowOffsetY];
+  if TyChartStyleHas(st, cskShadowColor) then
+    AElement.Style.ShadowColor := st.Color[cskShadowColor]
+  else if AElement.Style.ShadowColor = 0 then
+    AElement.Style.ShadowColor := $FF000000;
   { A GRADIENT IS NOT LIFTED. Upstream lifts a colour, and a ramp has no single
     colour to lift -- so a gradient-filled mark keeps its ramp and gains only
     whatever the option declared. }

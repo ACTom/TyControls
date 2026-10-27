@@ -244,6 +244,8 @@ begin
   if AView.HasHandleStroke then Result.HandleStroke := AView.HandleStroke
   else Result.HandleStroke := TTyChartColor(
     model.ResolveStyle('TyAdvChartVisualMapHandle', '', []).BorderColor);
+  { [R5-A] the indicator's default shadow colour }
+  Result.Shadow := StShadowInk;
 end;
 
 procedure TTyCustomAdvanceChart.SolveVisualMapViews(const AMeasurer: ITyTextMeasurer;

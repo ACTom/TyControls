@@ -47,6 +47,8 @@ type
     LineWidth: Double;
     HasOpacity: Boolean;
     Opacity: Double;
+    { [R5-A] the block's shadow (getItemStyle / getLineStyle / getAreaStyle) }
+    Shadow: TTyChartShadow;
   end;
 
   { What a slider dataZoom's option says about how it looks. }
@@ -248,7 +250,7 @@ implementation
 uses tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Scale,
      tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Color,
      tyControls.AdvanceChart.Symbol, tyControls.AdvanceChart.DataZoom,
-     tyControls.AdvanceChart.Handlers;
+     tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.States;
 
 { ==================== small things ==================== }
 
@@ -329,6 +331,8 @@ begin
     AStyle.HasOpacity := True;
     AStyle.Opacity := d.AsFloat;
   end;
+  { [R5-A] its shadow keys }
+  TyStReadShadow([ANode], [], [], AStyle.Shadow);
 end;
 
 function BlankStyle: TTyDzStyleSpec;
@@ -1428,12 +1432,14 @@ var
       el.Style.HasFill := True;
       el.Style.FillColor := Ink(ASpec.ShadowArea[Ord(gi = 1)], True,
         AInk.ShadowArea[Ord(gi = 1)], 0.2 + 0.1 * Ord(gi = 1));
+      TyStyleSetShadow(el.Style, ASpec.ShadowArea[Ord(gi = 1)].Shadow);
     end
     else
     begin
       el.Style.StrokeColor := Ink(ASpec.ShadowLine[Ord(gi = 1)], False,
         AInk.ShadowLine[Ord(gi = 1)], 1);
       el.Style.StrokeWidthLogical := LineWidthOr(ASpec.ShadowLine[Ord(gi = 1)], 0.5);
+      TyStyleSetShadow(el.Style, ASpec.ShadowLine[Ord(gi = 1)].Shadow);
     end;
     AList.Add(el);
     Inc(Result);
@@ -1490,6 +1496,8 @@ begin
       dzrHandle0, dzrHandle1:
         begin
           el := Blank(role);
+          { [R5-A] handleStyle's shadow on the icon }
+          TyStyleSetShadow(el.Style, ASpec.Handle.Shadow);
           { the emphasis colours are upstream's own, not the author's
             normal ones }
           if ALayout.HandleHover[Ord(role) - Ord(dzrHandle0)] then
@@ -1518,6 +1526,7 @@ begin
               el.Style.FillColor shr 24 / 255);
             el.Style.StrokeWidthLogical := LineWidthOr(ASpec.MoveHandle, 1);
           end;
+          TyStyleSetShadow(el.Style, ASpec.MoveHandle.Shadow);
           if e.Shape.W > 0 then
           begin
             AList.Add(el);
@@ -1563,6 +1572,7 @@ begin
       Dev(dzrBackground)));
     el.Style.HasFill := True;
     el.Style.FillColor := Ink(ASpec.Brush, True, AInk.Brush, 0.3);
+    TyStyleSetShadow(el.Style, ASpec.Brush.Shadow);
     AList.Add(el);
     Inc(Result);
   end;

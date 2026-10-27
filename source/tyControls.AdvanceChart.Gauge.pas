@@ -64,6 +64,9 @@ type
 
   TTyGaugeAxisLine = record
     Show: Boolean;
+    { [R5-A] axisLine.lineStyle's shadow: every band casts it (GaugeView's
+      sector.setStyle(lineStyleModel.getLineStyle(['color', 'width']))) }
+    Shadow: TTyChartShadow;
     { Not honoured: this library has no capped arc and no stroke line-cap to
       fake one with. Carried so the option is not silently swallowed and so
       the day a Sausage shape exists there is somewhere to read it. }
@@ -80,6 +83,8 @@ type
     are separate. }
   TTyGaugeTick = record
     Show: Boolean;
+    { [R5-A] its lineStyle's shadow (getLineStyle) }
+    Shadow: TTyChartShadow;
     { `'20%'` is twenty per cent of the gauge RADIUS; a bare number is logical
       px. Upstream types splitLine.length as a number and then parses a percent
       out of it anyway -- the declaration is what is wrong, not the code. }
@@ -139,6 +144,9 @@ type
     Auto: Boolean;
     HasColour: Boolean;
     Colour: TTyChartColor;
+    { [R5-A] the series' pointer shadow (pointer.itemStyle over itemStyle), for
+      a row with no item of its own }
+    Shadow: TTyChartShadow;
   end;
 
   TTyGaugeAnchor = record
@@ -155,6 +163,8 @@ type
     BorderWidthLogical: Double;
     HasBorder: Boolean;
     Border: TTyChartColor;
+    { [R5-A] its itemStyle's shadow }
+    Shadow: TTyChartShadow;
   end;
 
   { title and detail. One record: they differ in their defaults and in the
@@ -212,11 +222,18 @@ type
   TTyGaugeItem = record
     Title: TTyGaugeText;
     Detail: TTyGaugeText;
+    { [R5-A] the item's pointer and progress arc shadows: the item model's
+      pointer.itemStyle (progress.itemStyle) set over its visual style
+      (itemStyle) key by key, the item's over the series' }
+    NeedleShadow, ProgressShadow: TTyChartShadow;
   end;
   TTyGaugeItemArray = array of TTyGaugeItem;
 
   TTyGaugeProgress = record
     Show: Boolean;
+    { [R5-A] the series' progress shadow (progress.itemStyle over itemStyle),
+      for a row with no item of its own }
+    Shadow: TTyChartShadow;
     { True stacks every value on the same outer ring and sorts them by z so the
       smallest is on top; False nests them, each in a band of its own. }
     Overlap: Boolean;
@@ -375,7 +392,7 @@ function TyBuildGaugeValue(const ABinding: TTySeriesBinding;
 implementation
 
 uses jsonparser, tyControls.AdvanceChart.Scale, tyControls.FontUnits,
-  tyControls.AdvanceChart.RichStyle;
+  tyControls.AdvanceChart.RichStyle, tyControls.AdvanceChart.States;
 
 var
   { GaugeSeries.ts' detail defaults that shape its block }
@@ -524,6 +541,7 @@ begin
       ATick.SplitNumber, 0, 10000);
   ls := ObjIn(n, 'lineStyle');
   if ls = nil then Exit;
+  TyStReadShadow([ls], [], [], ATick.Shadow);
   ATick.WidthLogical := NumIn(ls, 'width', ATick.WidthLogical);
   ReadColour(ls, 'color', ATick.Auto, ATick.HasColour, ATick.Colour);
 end;
@@ -777,6 +795,7 @@ begin
     ls := ObjIn(n2, 'lineStyle');
     if ls <> nil then
     begin
+      TyStReadShadow([ls], [], [], Result.AxisLine.Shadow);
       Result.AxisLine.WidthLogical := NumIn(ls, 'width',
         Result.AxisLine.WidthLogical);
       Result.AxisLine.Stops := ReadStops(ls);
@@ -847,6 +866,8 @@ begin
     end;
   end;
 
+  TyStReadShadow([node], ['pointer', 'itemStyle'], ['itemStyle'], Result.Needle.Shadow);
+  TyStReadShadow([node], ['progress', 'itemStyle'], ['itemStyle'], Result.Progress.Shadow);
   n2 := ObjIn(node, 'pointer');
   if n2 <> nil then
   begin
@@ -873,6 +894,8 @@ begin
     Result.Anchor.KeepAspect := BoolIn(n2, 'keepAspect',
       Result.Anchor.KeepAspect);
     ls := ObjIn(n2, 'itemStyle');
+    { [R5-A] anchorModel.getModel('itemStyle').getItemStyle(): its shadow }
+    if ls <> nil then TyStReadShadow([ls], [], [], Result.Anchor.Shadow);
     if ls <> nil then
     begin
       { NO `auto` ON THE HUB. Upstream reads the anchor's itemStyle with the
@@ -927,6 +950,20 @@ begin
   begin
     Result[i].Title := ASpec.Title;
     Result[i].Detail := ASpec.Detail;
+    { [R5-A] the pointer's and the progress arc's shadows, the item's model
+      over the series' }
+    if arr.Items[i] is TJSONObject then
+    begin
+      TyStReadShadow([TJSONObject(arr.Items[i]), node], ['pointer', 'itemStyle'],
+        ['itemStyle'], Result[i].NeedleShadow);
+      TyStReadShadow([TJSONObject(arr.Items[i]), node], ['progress', 'itemStyle'],
+        ['itemStyle'], Result[i].ProgressShadow);
+    end
+    else
+    begin
+      TyStReadShadow([node], ['pointer', 'itemStyle'], ['itemStyle'], Result[i].NeedleShadow);
+      TyStReadShadow([node], ['progress', 'itemStyle'], ['itemStyle'], Result[i].ProgressShadow);
+    end;
     if arr.Items[i].JSONType <> jtObject then Continue;
     ReadText(TJSONObject(arr.Items[i]), 'title', Result[i].Title, False);
     ReadText(TJSONObject(arr.Items[i]), 'detail', Result[i].Detail, True);
@@ -1259,7 +1296,7 @@ var
   prevEnd, endA, frac, step, subStep, angle, unitX, unitY: Double;
   splitLen, tickLen, dist, labelDist, x1, y1, x2, y2, tx, ty: Double;
   w, h, rot: Double;
-  fsize, fweight: Integer;
+  fsize, fweight, trackAt: Integer;
   fname: string;
   bands: array of TTyChartElement;
   el: TTyChartElement;
@@ -1282,6 +1319,7 @@ begin
         what a theme replaces. }
       if Abs(ALayout.Span) > cSweepEps then
       begin
+        trackAt := AList.Count;
         if ASpec.AxisLine.RoundCap then
           AddCaps(ALayout, Max(Double(0), ALayout.R - ALayout.AxisWidth),
             ALayout.R, ALayout.StartRad, ALayout.EndRad, AVisual.Track,
@@ -1289,6 +1327,10 @@ begin
         AList.Add(BandElement(ALayout, ALayout.StartRad, ALayout.EndRad,
           AVisual.Track, AVisual.Z));
         Inc(Result);
+        { [R5-A] the band casts the lineStyle's shadow (its round ends too:
+          upstream's one Sausage) }
+        for j := trackAt to AList.Count - 1 do
+          TyStyleSetShadow(AList.Ref(j)^.Style, ASpec.AxisLine.Shadow);
       end;
     end
     else
@@ -1317,6 +1359,7 @@ begin
       { ADDED BACKWARDS. Upstream reverses the list before adding it, so the
         FIRST stop ends up topmost -- which only shows when stops overlap, and
         they can, because nothing requires them to ascend. }
+      trackAt := AList.Count;
       for i := j - 1 downto 0 do
       begin
         if ASpec.AxisLine.RoundCap then
@@ -1326,6 +1369,9 @@ begin
         AList.Add(bands[i]);
         Inc(Result);
       end;
+      { [R5-A] every band casts the lineStyle's shadow }
+      for i := trackAt to AList.Count - 1 do
+        TyStyleSetShadow(AList.Ref(i)^.Style, ASpec.AxisLine.Shadow);
     end;
   end;
 
@@ -1374,6 +1420,7 @@ begin
       else
         el := TickElement(x1, y1, x2, y2, AVisual.SplitLine,
           ASpec.SplitLine.WidthLogical, AVisual.Z);
+      TyStyleSetShadow(el.Style, ASpec.SplitLine.Shadow);
       AList.Add(el);
       Inc(Result);
     end;
@@ -1495,6 +1542,7 @@ begin
         else
           el := TickElement(x1, y1, x2, y2, AVisual.Tick,
             ASpec.AxisTick.WidthLogical, AVisual.Z);
+        TyStyleSetShadow(el.Style, ASpec.AxisTick.Shadow);
         AList.Add(el);
         Inc(Result);
       end;
@@ -1659,8 +1707,23 @@ function TyBuildGaugeValue(const ABinding: TTySeriesBinding;
   const AItems: TTyGaugeItemArray; const AVisual: TTyGaugeVisual;
   AStore: TTyDataStore; ADim: Integer; const AMeasurer: ITyTextMeasurer;
   APPI: Integer; AList: TTyPaintList): Integer;
+
+  { [R5-A] a row's pointer and progress shadows: its item's, or the series'
+    where the row has no item of the data array }
+  function NeedleShadow(ARaw: Integer): TTyChartShadow;
+  begin
+    if (ARaw >= 0) and (ARaw <= High(AItems)) then Result := AItems[ARaw].NeedleShadow
+    else Result := ASpec.Needle.Shadow;
+  end;
+
+  function ProgShadow(ARaw: Integer): TTyChartShadow;
+  begin
+    if (ARaw >= 0) and (ARaw <= High(AItems)) then Result := AItems[ARaw].ProgressShadow
+    else Result := ASpec.Progress.Shadow;
+  end;
+
 var
-  k, raw, n, textZ2, added: Integer;
+  k, raw, n, textZ2, added, capAt, c: Integer;
   val, frac, angle, endA, pw, r0, r1, len, halfW, ox, oy, scale: Double;
   det: TTyChartElement;
   fill, autoC: TTyChartColor;
@@ -1762,6 +1825,7 @@ begin
     el.Z := AVisual.Z;
     if ASpec.Anchor.ShowAbove then el.Z2 := 1 else el.Z2 := 0;
     el.Silent := True;
+    TyStyleSetShadow(el.Style, ASpec.Anchor.Shadow);
     AList.Add(el);
     Inc(Result);
   end;
@@ -1826,10 +1890,15 @@ begin
         el.Anim.G[3] := r1;
         el.Anim.G[4] := ALayout.StartRad;
         el.Anim.G[5] := endA;
+        { [R5-A] the item's progress shadow (its round ends too) }
+        TyStyleSetShadow(el.Style, ProgShadow(raw));
+        capAt := AList.Count;
         if ASpec.Progress.RoundCap then
           AddCaps(ALayout, Max(Double(0), r0), r1, ALayout.StartRad, endA,
             el.Style.FillColor, AVisual.Z, el.Z2, AList, Result,
             ABinding.SeriesIndex, k);
+        for c := capAt to AList.Count - 1 do
+          TyStyleSetShadow(AList.Ref(c)^.Style, ProgShadow(raw));
         AList.Add(el);
         Inc(Result);
       end;
@@ -1873,6 +1942,7 @@ begin
           el.Caption.LgG[1] := len;
           el.Caption.LgG[2] := ox;
           el.Caption.LgG[3] := oy;
+          TyStyleSetShadow(el.Style, NeedleShadow(raw));
           AList.Add(el);
           Inc(Result);
         end;
@@ -1934,6 +2004,7 @@ begin
         el.Caption.LgG[1] := len;
         el.Caption.LgG[2] := ox;
         el.Caption.LgG[3] := oy;
+        TyStyleSetShadow(el.Style, NeedleShadow(raw));
         AList.Add(el);
         Inc(Result);
       end;

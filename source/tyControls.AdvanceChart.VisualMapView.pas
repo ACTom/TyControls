@@ -68,6 +68,11 @@ type
     HandleImage: string;
     { handleStyle.borderWidth, doubled as upstream draws it }
     HandleLineWidth: Double;
+    { [R5-A] handleStyle's shadow (the thumbs' useStyle(handleStyle's
+      getItemStyle)); indicatorStyle's, ContinuousModel's default a blur of
+      2 at (1, 1) in tokens.color.shadow -- a Color of 0 there is the ink's
+      Shadow }
+    HandleShadow, IndicatorShadow: TTyChartShadow;
     BorderWidth: Double;
     Z: Integer;
     { the colours an author may write over the theme's }
@@ -233,6 +238,8 @@ type
 
   TTyVisualMapInk = record
     Text, Border, Background, HandleStroke: TTyChartColor;
+    { [R5-A] tokens.color.shadow, the skin's TyAdvChartShadow }
+    Shadow: TTyChartColor;
     FontName: string;
     FontSizeLogical, FontWeight: Integer;
   end;
@@ -330,7 +337,8 @@ implementation
 uses tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Scale,
      tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Color,
      tyControls.AdvanceChart.Complete, tyControls.AdvanceChart.Symbol,
-     tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.ZrPath;
+     tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.ZrPath,
+     tyControls.AdvanceChart.States;
 
 { ==================== small things ==================== }
 
@@ -421,6 +429,20 @@ begin
 end;
 
 { ==================== the spec ==================== }
+
+{ [R5-A] indicatorStyle's shadow keys over the default, each as written }
+procedure StReadIndicatorShadow(AStyle: TJSONObject; var AShadow: TTyChartShadow);
+var
+  o: TTyStObject;
+begin
+  if AStyle = nil then Exit;
+  o := TyStNoObject;
+  TyStReadShadowKeys([AStyle], [], o);
+  if o.Has[stkShadowBlur] then AShadow.Blur := o.Num[stkShadowBlur];
+  if o.Has[stkShadowOffsetX] then AShadow.OffsetX := o.Num[stkShadowOffsetX];
+  if o.Has[stkShadowOffsetY] then AShadow.OffsetY := o.Num[stkShadowOffsetY];
+  if o.Has[stkShadowColor] then AShadow.Color := o.Color[stkShadowColor];
+end;
 
 function TyVisualMapViewSpecOf(AOption: TTyChartOption;
   AIndex: Integer): TTyVmViewSpec;
@@ -558,6 +580,13 @@ begin
   if (d <> nil) and (d.JSONType = jtString) and (Copy(d.AsString, 1, 8) = 'image://') then
     Result.HandleImage := d.AsString;
   hs := ObjOf(node.Find('handleStyle'));
+  { [R5-A] the thumbs' shadow, and the indicator's over its default }
+  if hs <> nil then TyStReadShadow([hs], [], [], Result.HandleShadow);
+  Result.IndicatorShadow.Blur := 2;
+  Result.IndicatorShadow.OffsetX := 1;
+  Result.IndicatorShadow.OffsetY := 1;
+  Result.IndicatorShadow.Color := 0;
+  StReadIndicatorShadow(ObjOf(node.Find('indicatorStyle')), Result.IndicatorShadow);
   if hs <> nil then
   begin
     d := hs.Find('borderWidth');
@@ -2346,6 +2375,7 @@ begin
     el.Style.StrokeColor := AInk.HandleStroke;
     el.Style.StrokeWidthLogical := AView.HandleLineWidth;
     el.Style.Alpha := 1;
+    TyStyleSetShadow(el.Style, AView.HandleShadow);
     AList.Add(el);
     Inc(Result);
   end;
@@ -2361,6 +2391,9 @@ begin
     el.Style.StrokeColor := AInk.HandleStroke;
     el.Style.StrokeWidthLogical := 2;
     el.Style.Alpha := 1;
+    { [R5-A] indicatorStyle's shadow }
+    TyStyleSetShadow(el.Style, AView.IndicatorShadow);
+    if el.Style.ShadowColor = 0 then el.Style.ShadowColor := AInk.Shadow;
     AList.Add(el);
     Inc(Result);
   end;

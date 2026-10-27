@@ -2969,6 +2969,42 @@ begin
     Result := FTitleRt[AIndex][ALine];
 end;
 
+{ [R5-A] A TITLE FRAME'S CANVAS SHADOW: the frame's fill (its alpha) on a mask, the
+  painter's shadow cast from it -- the frame itself is drawn as it always was }
+procedure TitleShadow(P: TTyPainter; const AFrame: TTyRectF; ARadius: Integer;
+  AFill: TTyColor; const AShadow: TTyChartShadow);
+var
+  st: TTyChartElementStyle;
+  mask: TBGRABitmap;
+  mp: TTyPainter;
+  sc: TTyCanvasScale;
+  r: TRect;
+  s: Integer;
+begin
+  st := Default(TTyChartElementStyle);
+  TyStyleSetShadow(st, AShadow);
+  if (P = nil) or not TyStyleHasShadow(st) or ((AFill shr 24) = 0) then Exit;
+  r := Rect(Round(AFrame.Left), Round(AFrame.Top), Round(AFrame.Right), Round(AFrame.Bottom));
+  if (r.Right <= r.Left) or (r.Bottom <= r.Top) then Exit;
+  s := P.DeviceScale;
+  sc.Scale := s;
+  sc.DeviceUnits := False;
+  mask := TBGRABitmap.Create((r.Right - r.Left) * s, (r.Bottom - r.Top) * s, BGRAPixelTransparent);
+  mp := TTyPainter.Create;
+  try
+    mp.BeginPaintOnScaled(nil, Rect(0, 0, r.Right - r.Left, r.Bottom - r.Top), P.PPI, mask, sc);
+    mp.BeginPath;
+    mp.RoundRectPath(0, 0, r.Right - r.Left, r.Bottom - r.Top, ARadius);
+    mp.FillPath(AFill);
+    mp.EndPaint;
+    P.CastShadowOf(mask, r.Left * s, r.Top * s, TTyColor(AShadow.Color), AShadow.Blur,
+      AShadow.OffsetX, AShadow.OffsetY);
+  finally
+    mp.Free;
+    mask.Free;
+  end;
+end;
+
 procedure TTyCustomAdvanceChart.PaintTitles(APainter: TTyPainter);
 var
   i: Integer;
@@ -3025,6 +3061,10 @@ begin
       the title a transparent background by default, and painting the surface
       colour instead would put a visible plate behind every title on an image
       theme. }
+    { [R5-A] the frame's shadow, under it }
+    if FTitleSpecs[i].HasBackground then
+      TitleShadow(APainter, lay.Frame, Round(FTitleSpecs[i].BorderRadii[0]),
+        TTyColor(FTitleSpecs[i].BackgroundColor), FTitleSpecs[i].Shadow);
     if FTitleSpecs[i].HasBackground then
       APainter.FillBackground(
         Rect(Round(lay.Frame.Left), Round(lay.Frame.Top),
@@ -4250,6 +4290,9 @@ begin
     { the label lines, after the layout [Batch 112] }
     if drawn > 0 then
       RouteLabelLines(list, specs, itemSpecs, AMeasurer, APPI);
+    { the shadows, on the marks and the lines, before the states take their
+      rest values [R5-A] }
+    if drawn > 0 then ApplySeriesShadows(list);
     { A SILENT SERIES TAKES NO POINTER: nothing of it -- marks, labels -- is
       hit, hovered or clicked (upstream's series `silent`) [Batch 84] }
     if drawn > 0 then SilenceSeries(list);
@@ -4279,6 +4322,8 @@ begin
     Inc(drawn, BuildMarkers(AMeasurer, list));
     { the markers' blur, with their series' [F2b] }
     StSyncMarks(list);
+    { [R5-A] the series' blendMode and zlevel, their markers' zlevel }
+    if drawn > 0 then ApplySeriesLayers(list);
     if not ViewHidden(cvLegend) then
     begin
       n := BuildLegends(APPI, list, AMeasurer);
@@ -4297,6 +4342,215 @@ begin
       LineHistRoll;
     end;
     list.JournalClose;
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.ApplySeriesShadows(AList: TTyPaintList);
+var
+  k, s, slot, raw, e: Integer;
+  pe: PTyChartElement;
+  typ: string;
+  nodes: TTyStNodeArray;
+  sh: TTyChartShadow;
+  sNode: TJSONObject;
+
+  procedure Take(const ANodes: TTyStNodeArray; const APath: array of string);
+  begin
+    if TyStReadShadow(ANodes, APath, [], sh) then TyStyleSetShadow(pe^.Style, sh);
+  end;
+
+  function SeriesOnly: TTyStNodeArray;
+  begin
+    Result := nil;
+    SetLength(Result, 1);
+    Result[0] := sNode;
+  end;
+
+begin
+  if (AList = nil) or (FOption = nil) then Exit;
+  for k := 0 to AList.Count - 1 do
+  begin
+    pe := AList.Ref(k);
+    { words are no path: a label's shadow is its text's own }
+    if pe^.Caption.FontSizeLogical > 0 then Continue;
+    if pe^.Datum.Kind <> ctkSeries then Continue;
+    s := pe^.Datum.SeriesIndex;
+    if s < 0 then Continue;
+    slot := SlotOfSeries(s);
+    if (slot < 0) or (slot > High(FBindings)) then Continue;
+    typ := FBindings[slot].SeriesType;
+    { a gauge's parts are its builder's; a custom series' and a map's are
+      their elements' own }
+    if (typ = TyGaugeSeriesTypeName) or (typ = TyCustomSeriesType)
+      or (typ = 'map') then Continue;
+    sNode := StSeriesNode(s);
+    if sNode = nil then Continue;
+    { ---- the edges ---- }
+    if pe^.Datum.IsEdge then
+    begin
+      { an edge's own symbols (its arrows) are no line }
+      if pe^.Silent and (typ = TyGraphSeriesTypeName) then Continue;
+      if typ = TyGraphSeriesTypeName then
+        e := StGraphEdgeOfRow(slot, pe^.Datum.DataIndex)
+      else if typ = TySankeySeriesTypeName then
+        e := pe^.Datum.DataIndex
+      else
+        e := pe^.Datum.RawDataIndex;
+      Take(StEdgeNodes(s, e), ['lineStyle']);
+      Continue;
+    end;
+    { ---- a line's polyline and area (no row) ---- }
+    if pe^.Datum.DataIndex < 0 then
+    begin
+      if typ = 'line' then
+      begin
+        if pe^.Shape.Kind = cskPolyline then Take(SeriesOnly, ['lineStyle'])
+        else if pe^.Shape.Kind = cskPolygon then Take(SeriesOnly, ['areaStyle']);
+      end
+      { a large batch: the series' visual style }
+      else if pe^.Shape.Kind = cskLarge then
+      begin
+        if (typ = TyLinesSeriesTypeName) or (typ = TyParallelSeriesTypeName) then
+          Take(SeriesOnly, ['lineStyle'])
+        else
+          Take(SeriesOnly, ['itemStyle']);
+      end;
+      Continue;
+    end;
+    { ---- the row ---- }
+    if typ = TySankeySeriesTypeName then raw := pe^.Datum.DataIndex
+    else if (slot <= High(FStores)) and (FStores[slot] <> nil) then
+      raw := FStores[slot].GetRawIndex(pe^.Datum.DataIndex)
+    else
+      raw := pe^.Datum.RawDataIndex;
+    nodes := StNodes(s, raw);
+    { a label line: its labelLine.lineStyle (setLabelLineStyle) }
+    if pe^.IsGuide then
+    begin
+      Take(nodes, ['labelLine', 'lineStyle']);
+      Continue;
+    end;
+    case pe^.Anim.Role of
+      { an effectScatter's ripples take the effect's colour and nothing else
+        (EffectSymbol.updateRipplePath) }
+      carRipple, carLinesEffect, carLinesFrom, carLinesTo, carPictorialRect,
+      carGraphEdgeFrom, carGraphEdgeTo:
+        Continue;
+      { a radar item's polyline its lineStyle, its polygon its areaStyle
+        (RadarView); a tree's edge its node's lineStyle (TreeView drawEdge) }
+      carRadarLine, carTreeEdge, carLinesLine, carParallelLine:
+        Take(nodes, ['lineStyle']);
+      carRadarArea:
+        Take(nodes, ['areaStyle']);
+    else
+      { a sankey's node is a rect of its own; anything else of the row --
+        a bar, a symbol, a slice, a candle and its wicks, a cell -- its
+        visual style }
+      if (typ = TySankeySeriesTypeName) and pe^.Silent then Continue;
+      if (typ = TyLinesSeriesTypeName) or (typ = TyParallelSeriesTypeName) then
+        Take(nodes, ['lineStyle'])
+      else
+        Take(nodes, ['itemStyle']);
+    end;
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.ApplySeriesLayers(AList: TTyPaintList);
+type
+  TMkLevels = array[0..2] of Integer;
+var
+  k, s, n, kind: Integer;
+  pe: PTyChartElement;
+  el: TTyChartElement;
+  blends: TTyStringArray;
+  mkLevels: array of TMkLevels;
+  zl: array of Integer;
+  any: Boolean;
+  node, mk, d: TJSONData;
+  root: TJSONObject;
+
+  { model.get('zlevel') || 0 off a node, the root under it }
+  function LevelOf(ANode: TJSONData; AClimb: Boolean): Integer;
+  var x: TJSONData; v: Double;
+  begin
+    Result := 0;
+    x := nil;
+    if ANode is TJSONObject then x := TJSONObject(ANode).Find('zlevel');
+    if ((x = nil) or (x.JSONType = jtNull)) and AClimb and (root <> nil) then
+      x := root.Find('zlevel');
+    if (x = nil) or (x.JSONType <> jtNumber) then Exit;
+    v := x.AsFloat;
+    if IsNan(v) or IsInfinite(v) then Exit;
+    Result := Round(Max(Double(-100000), Min(Double(100000), v)));
+  end;
+
+begin
+  if (AList = nil) or (FOption = nil) then Exit;
+  root := nil;
+  if FOption.Root is TJSONObject then root := TJSONObject(FOption.Root);
+  n := FOption.ComponentCount('series');
+  SetLength(blends, n);
+  SetLength(zl, n);
+  SetLength(mkLevels, n);
+  any := False;
+  for s := 0 to n - 1 do
+  begin
+    node := FOption.ComponentAt('series', s);
+    blends[s] := '';
+    d := nil;
+    if node is TJSONObject then d := TJSONObject(node).Find('blendMode');
+    if ((d = nil) or (d.JSONType = jtNull)) and (root <> nil) then d := root.Find('blendMode');
+    if (d <> nil) and (d.JSONType = jtString) then blends[s] := d.AsString;
+    zl[s] := LevelOf(node, True);
+    for kind := 0 to 2 do
+    begin
+      mk := nil;
+      if node is TJSONObject then
+        case kind of
+          0: mk := TJSONObject(node).Find('markPoint');
+          1: mk := TJSONObject(node).Find('markLine');
+          2: mk := TJSONObject(node).Find('markArea');
+        end;
+      mkLevels[s][kind] := LevelOf(mk, False);
+      if mkLevels[s][kind] <> 0 then any := True;
+    end;
+    if (blends[s] <> '') or (zl[s] <> 0) then any := True;
+  end;
+  if not any then Exit;
+  for k := 0 to AList.Count - 1 do
+  begin
+    pe := AList.Ref(k);
+    case pe^.Datum.Kind of
+      ctkMarkPoint, ctkMarkLine, ctkMarkArea:
+        begin
+          s := pe^.Datum.ComponentIndex;
+          if (s < 0) or (s >= n) then Continue;
+          kind := Ord(pe^.Datum.Kind) - Ord(ctkMarkPoint);
+          if mkLevels[s][kind] <> pe^.ZLevel then
+          begin
+            el := pe^;
+            el.ZLevel := mkLevels[s][kind];
+            AList.SetElement(k, el);
+          end;
+          Continue;
+        end;
+      ctkSeries: s := pe^.Datum.SeriesIndex;
+    else
+      Continue;
+    end;
+    { a view's own path of no datum (a bar's background) }
+    if (s < 0) and ((pe^.Anim.Role <> carNone) or (pe^.Anim.UtTag <> 0)) then
+      s := pe^.Anim.Series;
+    if (s < 0) or (s >= n) then Continue;
+    if zl[s] <> pe^.ZLevel then
+    begin
+      el := pe^;
+      el.ZLevel := zl[s];
+      AList.SetElement(k, el);
+      pe := AList.Ref(k);
+    end;
+    if (blends[s] <> '') and (pe^.Caption.FontSizeLogical <= 0) and not pe^.IsGuide then
+      pe^.Style.Blend := blends[s];
   end;
 end;
 

@@ -63,7 +63,7 @@ unit tyControls.AdvanceChart.Brush;
 interface
 uses SysUtils, Math, fpjson,
   tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Coord,
-  tyControls.AdvanceChart.VisualMap;
+  tyControls.AdvanceChart.VisualMap, tyControls.AdvanceChart.Paint;
 
 const
   TyBrushCoverZ = 10000;
@@ -103,6 +103,10 @@ type
     Fill, Stroke: TTyBrushInk;
     LineWidth: Double;
     Opacity: Double;
+    { [R5-A] the shadow keys (getItemStyle's / a cover config's zrender
+      style's), NaN where not set; the colour as written ('' not set) }
+    ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
+    ShadowColor: string;
   end;
 
   { BrushCoverConfig: what a cover is drawn from }
@@ -425,6 +429,9 @@ function TyBrushMergeJson(var AOpt: TTyBrushOpt; AObj: TJSONObject): Boolean;
 { merge(clone(ABase), AOver, true) of two configs: the style's set values,
   and the identity and range of AOver when it has them }
 function TyBrushMergeOpt(const ABase, AOver: TTyBrushOpt): TTyBrushOpt;
+{ [R5-A] a cover style's canvas shadow: (x || 0) for the numbers, the colour
+  as written or zrender's '#000' }
+function TyBrushShadowOf(const AStyle: TTyBrushStyle): TTyChartShadow;
 { setBrushOption: generateBrushOption over the takeGlobalCursor payload's
   brushOption (nil: none) }
 function TyBrushPaintOpt(const ASpec: TTyBrushSpec; ABrushOption: TJSONData): TTyBrushOpt;
@@ -568,7 +575,8 @@ procedure TyBrushThrottleCall(var T: TTyBrushThrottle; ANow: Double;
 
 implementation
 
-uses jsonparser, tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.JsMath;
+uses jsonparser, tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.JsMath,
+  tyControls.AdvanceChart.Color;
 
 var
   GBrushUid: Integer = 0;
@@ -669,12 +677,33 @@ end;
 
 { ==================== the model ==================== }
 
+{ [R5-A] a cover's shadow as the canvas takes its style: (x || 0) for the three numbers,
+  the colour as written or '#000' }
+function TyBrushShadowOf(const AStyle: TTyBrushStyle): TTyChartShadow;
+var c: TTyChartColor;
+begin
+  Result := Default(TTyChartShadow);
+  if (not IsNan(AStyle.ShadowBlur)) and (not IsInfinite(AStyle.ShadowBlur))
+    and (AStyle.ShadowBlur > 0) then Result.Blur := AStyle.ShadowBlur;
+  if (not IsNan(AStyle.ShadowOffsetX)) and not IsInfinite(AStyle.ShadowOffsetX) then
+    Result.OffsetX := AStyle.ShadowOffsetX;
+  if (not IsNan(AStyle.ShadowOffsetY)) and not IsInfinite(AStyle.ShadowOffsetY) then
+    Result.OffsetY := AStyle.ShadowOffsetY;
+  Result.Color := $FF000000;
+  if (AStyle.ShadowColor <> '') and TyTryParseChartColor(AStyle.ShadowColor, c) then
+    Result.Color := c;
+end;
+
 function NoStyle: TTyBrushStyle;
 begin
   Result := Default(TTyBrushStyle);
   Result.LineWidth := NaN;
   Result.Opacity := NaN;
+  Result.ShadowBlur := NaN;
+  Result.ShadowOffsetX := NaN;
+  Result.ShadowOffsetY := NaN;
 end;
+
 
 function TyBrushDefaultOpt: TTyBrushOpt;
 begin
@@ -731,6 +760,20 @@ begin
   AInk.Text := AData.AsString;
 end;
 
+{ [R5-A] the four shadow keys of a style object, where written (null is not) }
+procedure ShadowKeysOf(AObj: TJSONObject; var AStyle: TTyBrushStyle);
+var d: TJSONData;
+begin
+  d := AObj.Find('shadowBlur');
+  if (d <> nil) and (d.JSONType <> jtNull) then AStyle.ShadowBlur := NumOf(d);
+  d := AObj.Find('shadowOffsetX');
+  if (d <> nil) and (d.JSONType <> jtNull) then AStyle.ShadowOffsetX := NumOf(d);
+  d := AObj.Find('shadowOffsetY');
+  if (d <> nil) and (d.JSONType <> jtNull) then AStyle.ShadowOffsetY := NumOf(d);
+  d := AObj.Find('shadowColor');
+  if (d <> nil) and (d.JSONType = jtString) then AStyle.ShadowColor := d.AsString;
+end;
+
 { the zrender style keys a cover config's brushStyle writes }
 procedure MergeStyleJson(var AStyle: TTyBrushStyle; AObj: TJSONObject);
 var d: TJSONData;
@@ -741,6 +784,7 @@ begin
   if (d <> nil) and (d.JSONType = jtNumber) then AStyle.LineWidth := d.AsFloat;
   d := AObj.Find('opacity');
   if (d <> nil) and (d.JSONType = jtNumber) then AStyle.Opacity := d.AsFloat;
+  ShadowKeysOf(AObj, AStyle);
 end;
 
 function TyBrushRangeOfJson(AType: TTyBrushType; AData: TJSONData): TTyBrushRange;
@@ -830,6 +874,10 @@ begin
   if AOver.Stroke.Written or (AOver.Stroke.Skin <> '') then Result.Stroke := AOver.Stroke;
   if not IsNan(AOver.LineWidth) then Result.LineWidth := AOver.LineWidth;
   if not IsNan(AOver.Opacity) then Result.Opacity := AOver.Opacity;
+  if not IsNan(AOver.ShadowBlur) then Result.ShadowBlur := AOver.ShadowBlur;
+  if not IsNan(AOver.ShadowOffsetX) then Result.ShadowOffsetX := AOver.ShadowOffsetX;
+  if not IsNan(AOver.ShadowOffsetY) then Result.ShadowOffsetY := AOver.ShadowOffsetY;
+  if AOver.ShadowColor <> '' then Result.ShadowColor := AOver.ShadowColor;
 end;
 
 function TyBrushMergeOpt(const ABase, AOver: TTyBrushOpt): TTyBrushOpt;
@@ -940,6 +988,7 @@ begin
     end;
     d := st.Find('opacity');
     if (d <> nil) and (d.JSONType = jtNumber) then Result.Base.Style.Opacity := d.AsFloat;
+    ShadowKeysOf(st, Result.Base.Style);
   end;
   d := o.Find('throttleType');
   if d <> nil then
@@ -1245,6 +1294,15 @@ begin
       Result := Result + ',"lineWidth":' + NumJson(a.Opt.Style.LineWidth);
     if not IsNan(a.Opt.Style.Opacity) then
       Result := Result + ',"opacity":' + NumJson(a.Opt.Style.Opacity);
+    { [R5-A] getItemStyle's shadow keys, in its order }
+    if not IsNan(a.Opt.Style.ShadowBlur) then
+      Result := Result + ',"shadowBlur":' + NumJson(a.Opt.Style.ShadowBlur);
+    if not IsNan(a.Opt.Style.ShadowOffsetX) then
+      Result := Result + ',"shadowOffsetX":' + NumJson(a.Opt.Style.ShadowOffsetX);
+    if not IsNan(a.Opt.Style.ShadowOffsetY) then
+      Result := Result + ',"shadowOffsetY":' + NumJson(a.Opt.Style.ShadowOffsetY);
+    if a.Opt.Style.ShadowColor <> '' then
+      Result := Result + ',"shadowColor":' + JsonStr(a.Opt.Style.ShadowColor);
     Result := Result + '}';
     if a.Opt.RemoveOnClick then Result := Result + ',"removeOnClick":true'
     else Result := Result + ',"removeOnClick":false';

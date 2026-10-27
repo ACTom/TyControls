@@ -244,6 +244,9 @@ type
     HasBackground: Boolean;
     BorderWidth: Double;
     BorderRadii: TTyCornerRadii;
+    { [R5-A] the box's shadow: the legend's own shadow keys
+      (listComponent.makeBackground's getItemStyle(['color', 'opacity'])) }
+    Shadow: TTyChartShadow;
     { `legend.z`, so the legend sorts against the series in the one paint
       list. Default 4. }
     Z: Integer;
@@ -993,6 +996,7 @@ begin
   d := node.Find('backgroundColor');
   Result.HasBackground := (d <> nil) and (d.JSONType = jtString)
     and (d.AsString <> '') and (d.AsString <> 'transparent');
+  TyStReadShadow([node], [], [], Result.Shadow);
   Result.BorderWidth := NumIn(node, 'borderWidth', 0);
   d := node.Find('borderRadius');
   if (d <> nil) and (d.JSONType = jtNumber) then
@@ -2828,6 +2832,7 @@ begin
       el.Style.StrokeWidthLogical := ASpec.BorderWidth;
       el.Style.StrokeColor := AInk.Border;
     end;
+    TyStyleSetShadow(el.Style, ASpec.Shadow);
     AList.Add(el);
     Inc(Result);
   end;

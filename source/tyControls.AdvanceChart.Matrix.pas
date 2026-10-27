@@ -374,7 +374,7 @@ implementation
 uses Classes, tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Calendar,
   tyControls.AdvanceChart.RichStyle, tyControls.AdvanceChart.GfxEl,
   tyControls.AdvanceChart.AnimAxis, tyControls.AdvanceChart.JsMath,
-  tyControls.AdvanceChart.Handlers;
+  tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.States;
 
 { ==================== small readers ==================== }
 
@@ -2004,6 +2004,8 @@ type
     { a fill that is an object: a gradient or an image [Batch 149] }
     Grad: TTyChartGradient;
     Pat: TTyChartPattern;
+    { [R5-A] its shadow: getItemStyle's / getLineStyle's }
+    Shadow: TTyChartShadow;
   end;
 
 var
@@ -2079,6 +2081,8 @@ begin
     Result.Dash := TyDashPattern(a.Dash, a.DashLogical, Result.LineWidth)
   else if b.Dash <> todNone then
     Result.Dash := TyDashPattern(b.Dash, b.DashLogical, Result.LineWidth);
+  { [R5-A] the cell's own over its parent's, key by key }
+  TyStReadShadow([ACell, AParent], [AKey], [], Result.Shadow);
 end;
 
 { a dimension's dividerLineStyle: width 1 in AStroke by default }
@@ -2097,6 +2101,8 @@ begin
   Result.Dash := nil;
   if a.Dash <> todNone then
     Result.Dash := TyDashPattern(a.Dash, a.DashLogical, Result.LineWidth);
+  { [R5-A] getLineStyle's shadow }
+  TyStReadShadow([ADimNode], ['dividerLineStyle'], [], Result.Shadow);
 end;
 
 function AdjX(AX, AW: Double; AAlign: TTyRtAlign; AInverse: Boolean): Double;
@@ -2251,6 +2257,7 @@ var
     else el.Style.StrokeWidthLogical := S.LineWidth;
     el.Style.DashLogical := S.Dash;
     el.Style.Alpha := S.Opacity;
+    TyStyleSetShadow(el.Style, S.Shadow);
     el.Z := z;
     el.Z2 := AZ2;
     el.Silent := ASilent;
@@ -2273,6 +2280,7 @@ var
     else el.Style.StrokeWidthLogical := S.LineWidth;
     el.Style.DashLogical := S.Dash;
     el.Style.Alpha := S.Opacity;
+    TyStyleSetShadow(el.Style, S.Shadow);
     el.Z := z;
     el.Z2 := AZ2;
     el.Silent := True;
@@ -2675,6 +2683,9 @@ begin
   bg.Stroke := 0;
   bg.LineWidth := 0;
   if not IsNan(bs.Opacity) then bg.Opacity := bs.Opacity else bg.Opacity := 1;
+  { [R5-A] the background casts backgroundStyle's shadow, the border none
+    (MatrixView: getItemStyle without the shadow keys for it) }
+  if node <> nil then TyStReadShadow([node], ['backgroundStyle'], [], bg.Shadow);
   AddRect(AMatrix.Rect, bg, TyMatrixZ2Background);
   border := Default(TCellStyle);
   border.HasFill := False;

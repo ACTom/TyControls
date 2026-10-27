@@ -43,7 +43,8 @@ unit tyControls.AdvanceChart.Toolbox;
 interface
 uses SysUtils, Classes, Math, fpjson, jsonparser,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
-     tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.ZrPath;
+     tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.ZrPath,
+     tyControls.AdvanceChart.Paint;
 
 const
   { the built-in icons (the features' getDefaultOption) }
@@ -94,6 +95,10 @@ type
     LineWidth: Double;
     HasOpacity: Boolean;
     Opacity: Double;
+    { [R5-A] getItemStyle's shadow keys, each where the chain writes it }
+    HasShadowBlur, HasShadowOffsetX, HasShadowOffsetY, HasShadowColor: Boolean;
+    ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
+    ShadowColor: TTyChartColor;
   end;
 
   { The render-time adjustment of a horizontal toolbox's title. }
@@ -185,6 +190,8 @@ procedure TyTbMerge(ATarget, ASource: TJSONObject; AOverwrite: Boolean);
 { The style an icon is drawn with: its normal style, or the emphasis state
   over it }
 function TyTbStyleOf(const AIcon: TTyTbIcon; AEmphasised: Boolean): TTyTbItemStyle;
+{ [R5-A] an icon style's canvas shadow }
+function TyTbShadowOf(const AStyle: TTyTbItemStyle): TTyChartShadow;
 { The rect getBoundingRect gives the icon in its normal or emphasis state }
 function TyToolboxIconRect(const ASpec: TTyToolboxSpec; const AIcon: TTyTbIcon;
   AEmphasised: Boolean): TTyXYWH;
@@ -322,7 +329,8 @@ function TyTbJson(AData: TJSONData): string;
 implementation
 
 uses tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Scale,
-     tyControls.AdvanceChart.DataZoom, tyControls.AdvanceChart.OptionMerge;
+     tyControls.AdvanceChart.DataZoom, tyControls.AdvanceChart.OptionMerge,
+     tyControls.AdvanceChart.States;
 
 { ==================== JavaScript's arithmetic ====================
   A degenerate icon (a path with no height, say) is NaN all the way
@@ -508,7 +516,7 @@ end;
 
 { getItemStyle over a chain of iconStyle models }
 function ItemStyleOf(AFirst, ASecond: TJSONObject; const APath: array of string): TTyTbItemStyle;
-var d: TJSONData;
+var d: TJSONData; o: TTyStObject;
 begin
   Result := Default(TTyTbItemStyle);
   d := GetChain(AFirst, ASecond, PathPlus(APath, 'borderColor'));
@@ -527,6 +535,16 @@ begin
   if d <> nil then Result.HasLineWidth := NumOf(d, Result.LineWidth);
   d := GetChain(AFirst, ASecond, PathPlus(APath, 'opacity'));
   if d <> nil then Result.HasOpacity := NumOf(d, Result.Opacity);
+  o := TyStNoObject;
+  TyStReadShadowKeys([AFirst, ASecond], APath, o);
+  Result.HasShadowBlur := o.Has[stkShadowBlur];
+  Result.ShadowBlur := o.Num[stkShadowBlur];
+  Result.HasShadowOffsetX := o.Has[stkShadowOffsetX];
+  Result.ShadowOffsetX := o.Num[stkShadowOffsetX];
+  Result.HasShadowOffsetY := o.Has[stkShadowOffsetY];
+  Result.ShadowOffsetY := o.Num[stkShadowOffsetY];
+  Result.HasShadowColor := o.Has[stkShadowColor];
+  Result.ShadowColor := o.Color[stkShadowColor];
 end;
 
 { ==================== the model ==================== }
@@ -956,6 +974,38 @@ begin
   if AEmph.HasFill then Result.Fill := AEmph.Fill;
   if AEmph.HasLineWidth then Result.LineWidth := AEmph.LineWidth;
   if AEmph.HasOpacity then Result.Opacity := AEmph.Opacity;
+  if AEmph.HasShadowBlur then
+  begin
+    Result.HasShadowBlur := True;
+    Result.ShadowBlur := AEmph.ShadowBlur;
+  end;
+  if AEmph.HasShadowOffsetX then
+  begin
+    Result.HasShadowOffsetX := True;
+    Result.ShadowOffsetX := AEmph.ShadowOffsetX;
+  end;
+  if AEmph.HasShadowOffsetY then
+  begin
+    Result.HasShadowOffsetY := True;
+    Result.ShadowOffsetY := AEmph.ShadowOffsetY;
+  end;
+  if AEmph.HasShadowColor then
+  begin
+    Result.HasShadowColor := True;
+    Result.ShadowColor := AEmph.ShadowColor;
+  end;
+end;
+
+function TyTbShadowOf(const AStyle: TTyTbItemStyle): TTyChartShadow;
+begin
+  Result := Default(TTyChartShadow);
+  if not (AStyle.HasShadowBlur or AStyle.HasShadowOffsetX or AStyle.HasShadowOffsetY
+    or AStyle.HasShadowColor) then Exit;
+  if AStyle.HasShadowBlur then Result.Blur := AStyle.ShadowBlur;
+  if AStyle.HasShadowOffsetX then Result.OffsetX := AStyle.ShadowOffsetX;
+  if AStyle.HasShadowOffsetY then Result.OffsetY := AStyle.ShadowOffsetY;
+  if AStyle.HasShadowColor then Result.Color := AStyle.ShadowColor
+  else Result.Color := $FF000000;
 end;
 
 function TyTbStyleOf(const AIcon: TTyTbIcon; AEmphasised: Boolean): TTyTbItemStyle;

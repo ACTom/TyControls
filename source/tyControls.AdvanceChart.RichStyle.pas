@@ -560,6 +560,15 @@ begin
     if NumOf(Get(AOwn, 'borderDashOffset'), x) then S.BorderDashOffset := x;
     d := Get(AOwn, 'borderType');
     if (d <> nil) and (d.JSONType <> jtNull) then S.BorderDash := TyDashTextOf(d);
+    { [R5-A] the box's shadow }
+    if NumOf(Get(AOwn, 'shadowBlur'), x) then S.BoxShadowBlur := x;
+    if NumOf(Get(AOwn, 'shadowOffsetX'), x) then S.BoxShadowOffsetX := x;
+    if NumOf(Get(AOwn, 'shadowOffsetY'), x) then S.BoxShadowOffsetY := x;
+    if ColourRead(Get(AOwn, 'shadowColor'), c) = crColour then
+    begin
+      S.HasBoxShadowColor := True;
+      S.BoxShadowColor := c;
+    end;
   end;
 end;
 

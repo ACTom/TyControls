@@ -80,11 +80,15 @@ type
     Show: Boolean;
     WidthLogical: Double;
     Colours: TTyChartColorArray;
+    { [R5-A] its lineStyle's shadow (getLineStyle) }
+    Shadow: TTyChartShadow;
   end;
 
   TTyRadarAreaSpec = record
     Show: Boolean;
     Colours: TTyChartColorArray;
+    { [R5-A] its areaStyle's shadow (getAreaStyle) }
+    Shadow: TTyChartShadow;
   end;
 
   TTyRadarTickSpec = record
@@ -352,7 +356,8 @@ function TyBuildRadarMarks(const ABinding: TTySeriesBinding; ARadar: TTyRadar;
 
 implementation
 
-uses tyControls.FontUnits, tyControls.AdvanceChart.LabelGuide, tyControls.AdvanceChart.JsMath;
+uses tyControls.FontUnits, tyControls.AdvanceChart.LabelGuide, tyControls.AdvanceChart.JsMath,
+  tyControls.AdvanceChart.States;
 
 const
   cRadian = Pi / 180;
@@ -448,6 +453,7 @@ begin
   if ls = nil then Exit;
   ALine.WidthLogical := NumIn(ls, 'width', ALine.WidthLogical);
   ALine.Colours := ColoursIn(ls, 'color', ALine.Colours);
+  TyStReadShadow([ls], [], [], ALine.Shadow);
 end;
 
 function TyRadarSpecDefault: TTyRadarSpec;
@@ -663,6 +669,7 @@ begin
     if ts <> nil then
       Result.SplitArea.Colours := ColoursIn(ts, 'color',
         Result.SplitArea.Colours);
+    if ts <> nil then TyStReadShadow([ts], [], [], Result.SplitArea.Shadow);
   end;
 
   Result.Indicators := ReadIndicators(node);
@@ -1220,6 +1227,7 @@ begin
       end;
       el.Style.HasFill := True;
       el.Style.FillColor := c;
+      TyStyleSetShadow(el.Style, spec.SplitArea.Shadow);
       el.Z := AInk.Z;
       el.Z2 := 0;
       el.Silent := True;
@@ -1248,6 +1256,7 @@ begin
       end;
       el.Style.StrokeColor := c;
       el.Style.StrokeWidthLogical := spec.SplitLine.WidthLogical;
+      TyStyleSetShadow(el.Style, spec.SplitLine.Shadow);
       el.Z := AInk.Z;
       el.Z2 := 0;
       el.Silent := True;
@@ -1269,6 +1278,7 @@ begin
       if not TyRadarBucket(spec.AxisLine.Colours, 0, c) then c := AInk.AxisLine;
       el.Style.StrokeColor := c;
       el.Style.StrokeWidthLogical := spec.AxisLine.WidthLogical;
+      TyStyleSetShadow(el.Style, spec.AxisLine.Shadow);
       el.Z := AInk.Z;
       el.Z2 := 1;
       el.Silent := True;

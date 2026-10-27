@@ -6625,6 +6625,17 @@ begin
   Result := A.Kind = avkNull;
 end;
 
+{ [R5-A] the shadow colour a frame draws a tweening shadow in, where the element had
+  none at rest: the proxy's shadowColor now, else zrender's '#000' }
+function ShadowInkOf(AProxy: TTyChartAnimProxy): TTyChartColor;
+var v: TTyAnimValue; c: TTyChartColor;
+begin
+  Result := $FF000000;
+  if AProxy = nil then Exit;
+  v := AProxy.GetAnimProp('style.shadowColor');
+  if StColourOf(v, c) then Result := c;
+end;
+
 procedure TyAnimApplyState(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy;
   ARole: Boolean);
 var
@@ -6704,6 +6715,30 @@ begin
     begin
       if not Off(key, v, rest) then Continue;
       if v.Kind = avkNumber then AEl.Style.DashOffsetLogical := v.Num;
+    end
+    { [R5-A] a state's shadow, tweening }
+    else if key = 'style.shadowBlur' then
+    begin
+      if not Off(key, v, rest) then Continue;
+      if v.Kind = avkNumber then AEl.Style.ShadowBlur := Max(Double(0), v.Num);
+      if AEl.Style.ShadowColor = 0 then AEl.Style.ShadowColor := ShadowInkOf(AProxy);
+    end
+    else if key = 'style.shadowOffsetX' then
+    begin
+      if not Off(key, v, rest) then Continue;
+      if v.Kind = avkNumber then AEl.Style.ShadowOffsetX := v.Num;
+      if AEl.Style.ShadowColor = 0 then AEl.Style.ShadowColor := ShadowInkOf(AProxy);
+    end
+    else if key = 'style.shadowOffsetY' then
+    begin
+      if not Off(key, v, rest) then Continue;
+      if v.Kind = avkNumber then AEl.Style.ShadowOffsetY := v.Num;
+      if AEl.Style.ShadowColor = 0 then AEl.Style.ShadowColor := ShadowInkOf(AProxy);
+    end
+    else if key = 'style.shadowColor' then
+    begin
+      if not Off(key, v, rest) then Continue;
+      if StColourOf(v, c) then AEl.Style.ShadowColor := c;
     end
     else if key = 'style.opacity' then
     begin
