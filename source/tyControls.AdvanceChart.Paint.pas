@@ -791,6 +791,19 @@ type
     Role: TTyChartAnimRole;
     { the series index, and the datum's view row (-1 for a whole series) }
     Series, Index: Integer;
+    { [spec 242] AN UPDATE'S updateProps of a shape the role does not tween
+      itself: 0 none; 1 a parallel row's polyline (TwVals its points, flat;
+      G[6] its smooth), 2 a themeRiver layer's polygon (its bottoms then its
+      tops, flat; G[4] the group's y), 3 a chord piece's sector (cx, cy, r0,
+      r, startAngle, endAngle; G[2] clockwise; Pts its corner radii), 4 a
+      chord ribbon (s1, s2, its start and end angle, t1, t2, theirs, cx,
+      cy, r; G[2] clockwise), 5 a lines row's line (x1, y1, x2, y2, cpx1,
+      cpy1: G[0..5]; its line, end symbols and label alike). TwRow the
+      proxy's row; TwKey the old element's key where the data diff is not
+      the rows' (a layer's name, a node's or a link's), '' the row map }
+    TwKind, TwRow: Integer;
+    TwKey: string;
+    TwVals: TTyDoubleArray;
     { the role's own numbers -- see AdvanceChart.AnimView for each }
     G: array[0..11] of Double;
     { A LINE'S RUN OR AREA [Batch 90]: which of the series' runs it is,

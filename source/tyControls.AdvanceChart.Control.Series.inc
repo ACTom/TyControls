@@ -824,6 +824,23 @@ begin
     el.Anim.G[2] := pg.Box.W;
     el.Anim.G[3] := pg.Box.H;
     el.Anim.G[4] := gy;
+    { [spec 242] a kept layer (by its name) tweens its points and stacked-on
+      points in an update }
+    el.Anim.TwKind := 2;
+    el.Anim.TwRow := k;
+    el.Anim.TwKey := st.GetItemName(pg.StyleRow);
+    SetLength(el.Anim.TwVals, 2 * (Length(pg.Bottoms) + Length(pg.Tops)));
+    for j := 0 to High(pg.Bottoms) do
+    begin
+      el.Anim.TwVals[2 * j] := pg.Bottoms[j].X;
+      el.Anim.TwVals[2 * j + 1] := pg.Bottoms[j].Y;
+    end;
+    n := 2 * Length(pg.Bottoms);
+    for j := 0 to High(pg.Tops) do
+    begin
+      el.Anim.TwVals[n + 2 * j] := pg.Tops[j].X;
+      el.Anim.TwVals[n + 2 * j + 1] := pg.Tops[j].Y;
+    end;
     { [F3c] THE LAYER'S PATH for the universal transition -- at the layer's
       index among the data's items (setItemGraphicEl(idx), upstream's) --
       in the group, which sits at its y }

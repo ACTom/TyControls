@@ -162,6 +162,10 @@ function TyChordCorners(const S: TTyChordSolved; ARaw: Integer): TTyDoubleArray;
 function TyChordSectorPath(const S: TTyChordSolved; ARaw: Integer): TTyZrPath;
 { ChordEdge.buildPath, PathProxy's data }
 function TyChordRibbonPath(const S: TTyChordSolved; ARaw: Integer): TTyZrPath;
+{ [spec 242] the same from a ribbon's shape: s1, s2, sStartAngle,
+  sEndAngle, t1, t2, tStartAngle, tEndAngle, cx, cy, r (15 numbers) }
+function TyChordRibbonPathOf(const AV: array of Double; AClockwise: Boolean): TTyZrPath;
+
 
 { One label spec per raw node: the item's label over the series'; the
   colour, when none is written, the node's own (inheritColor), as is the
@@ -904,6 +908,32 @@ begin
   end;
 end;
 
+function TyChordRibbonPathOf(const AV: array of Double; AClockwise: Boolean): TTyZrPath;
+var mask: TFPUExceptionMask;
+begin
+  Result := nil;
+  if Length(AV) < 15 then Exit;
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
+  try
+    TyZrMoveTo(Result, AV[0], AV[1]);
+    TyZrArc(Result, AV[12], AV[13], AV[14], AV[4], AV[5], not AClockwise);
+    TyZrCubic(Result,
+      (AV[12] - AV[2]) * cRibbonRatio + AV[2], (AV[13] - AV[3]) * cRibbonRatio + AV[3],
+      (AV[12] - AV[6]) * cRibbonRatio + AV[6], (AV[13] - AV[7]) * cRibbonRatio + AV[7],
+      AV[6], AV[7]);
+    TyZrArc(Result, AV[12], AV[13], AV[14], AV[10], AV[11], not AClockwise);
+    TyZrCubic(Result,
+      (AV[12] - AV[8]) * cRibbonRatio + AV[8], (AV[13] - AV[9]) * cRibbonRatio + AV[9],
+      (AV[12] - AV[0]) * cRibbonRatio + AV[0], (AV[13] - AV[1]) * cRibbonRatio + AV[1],
+      AV[0], AV[1]);
+    TyZrClose(Result);
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+end;
+
 procedure TyZrPathToCmds(const APath: TTyZrPath; out ACmds: TTyPathCmdArray;
   out APoints: TTyPointFArray);
 var
@@ -1287,6 +1317,13 @@ begin
       sec := NodeSector(S, i);
       el.Anim.UtBase := TTyDoubleArray.Create(2, sec.CX, sec.CY, sec.R0, sec.R, sec.SA,
         sec.EA, Ord(sec.CW));
+      { [spec 242] a kept piece (by its node) tweens its sector }
+      el.Anim.TwKind := 3;
+      el.Anim.TwRow := i;
+      el.Anim.TwKey := S.Nodes[i].Key;
+      el.Anim.TwVals := TTyDoubleArray.Create(sec.CX, sec.CY, sec.R0, sec.R, sec.SA, sec.EA);
+      el.Anim.G[2] := Ord(sec.CW);
+      el.Anim.Pts := TyChordCorners(S, i);
       if S.Nodes[i].HasLabel and Finite([S.Nodes[i].LabelX, S.Nodes[i].LabelY]) then
       begin
         el.Caption.Text := S.Nodes[i].LabelText;
@@ -1400,6 +1437,18 @@ begin
       { [F3c] a ribbon fades in where a universal transition morphs }
       el.Anim.UtTag := 2;
       el.Anim.UtRow := -2 - i;
+      { [spec 242] a kept ribbon (by its link's name) tweens its shape }
+      if not noInk then
+      begin
+        el.Anim.TwKind := 4;
+        el.Anim.TwRow := i;
+        el.Anim.TwKey := S.Edges[i].Name;
+        el.Anim.TwVals := TTyDoubleArray.Create(S.Edges[i].S1X, S.Edges[i].S1Y,
+          S.Edges[i].S2X, S.Edges[i].S2Y, S.Edges[i].SStart, S.Edges[i].SEnd,
+          S.Edges[i].T1X, S.Edges[i].T1Y, S.Edges[i].T2X, S.Edges[i].T2Y,
+          S.Edges[i].TStart, S.Edges[i].TEnd, S.CX, S.CY, S.R0);
+        el.Anim.G[2] := Ord(S.Clockwise);
+      end;
       AList.Add(el);
       Inc(Result);
     end;

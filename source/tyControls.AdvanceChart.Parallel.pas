@@ -238,6 +238,9 @@ function TyParallelSmoothOf(ASeries: TJSONObject): Double;
 function TyParallelSmoothCmds(const APts: TTyPointFArray; ASmooth: Double): TTyPathCmdArray;
 { The curve sampled for the hit test, ASteps points a segment }
 function TyParallelSampleCmds(const ACmds: TTyPathCmdArray; ASteps: Integer): TTyPointFArray;
+{ [spec 242] a row's polyline from its points: smoothed where ASmooth says
+  (buildPath's `if (smooth)`), the points no number dropped }
+function TyParallelRowShape(const APts: TTyPointFArray; ASmooth: Double): TTyChartShape;
 
 { ParallelView: one polyline per row (z2 10), its datum the row, hit within
   max(lineWidth, 5) / 2 of its stroke; a smooth one drawn by its curve and
@@ -1424,6 +1427,18 @@ begin
   SetLength(Result, n);
 end;
 
+function PtsFlat(const APts: TTyPointFArray): TTyDoubleArray;
+var i: Integer;
+begin
+  Result := nil;
+  SetLength(Result, 2 * Length(APts));
+  for i := 0 to High(APts) do
+  begin
+    Result[2 * i] := APts[i].X;
+    Result[2 * i + 1] := APts[i].Y;
+  end;
+end;
+
 function DrawablePoints(const APts: TTyPointFArray): TTyPointFArray;
 var i, n: Integer;
 begin
@@ -1437,6 +1452,26 @@ begin
       Inc(n);
     end;
   SetLength(Result, n);
+end;
+
+function TyParallelRowShape(const APts: TTyPointFArray; ASmooth: Double): TTyChartShape;
+var
+  cmds: TTyPathCmdArray;
+  pts: TTyPointFArray;
+begin
+  cmds := nil;
+  if (ASmooth <> 0) and not IsNan(ASmooth) and (Length(APts) >= 2) then
+    cmds := TyParallelSmoothCmds(APts, ASmooth);
+  if Length(cmds) > 0 then
+  begin
+    cmds := DrawableCmds(cmds);
+    if (Length(cmds) > 0) and (cmds[0].Kind <> pckMove) then cmds[0].Kind := pckMove;
+    pts := TyParallelSampleCmds(cmds, 16);
+  end
+  else
+    pts := DrawablePoints(APts);
+  Result := TyShapePolyline(pts);
+  if Length(cmds) > 1 then Result.Cmds := cmds;
 end;
 
 function TyBuildParallelMarks(const ASolved: TTyParallelSolved; AList: TTyPaintList): Integer;
@@ -1480,6 +1515,11 @@ begin
     el.HitSlopLogical := Math.Max(r.Width, Double(5)) / 2;
     el.Anim.Series := ASolved.SeriesIndex;
     el.Anim.Index := r.Row;
+    { [spec 242] its points tween in an update (updateProps on its row) }
+    el.Anim.TwKind := 1;
+    el.Anim.TwRow := r.Row;
+    el.Anim.TwVals := PtsFlat(r.Pts);
+    el.Anim.G[6] := ASolved.Smooth;
     if ASolved.EnterClip then
     begin
       el.Anim.Role := carParallelLine;

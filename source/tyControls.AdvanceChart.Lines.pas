@@ -1272,6 +1272,23 @@ begin
     AEl.Anim.G[5] := NaN;
     AEl.Anim.G[6] := 0;
   end;
+  { [spec 242] a Line's updateProps of its shape in an update: the line,
+    its end symbols and its label follow it }
+  if (AEl.Anim.Role in [carLinesLine, carLinesFrom, carLinesTo, carLinesLabel])
+    and (Length(AG.Pts) = 2) then
+  begin
+    AEl.Anim.TwKind := 5;
+    AEl.Anim.TwRow := AEl.Anim.Index;
+    AEl.Anim.TwVals := TTyDoubleArray.Create(AEl.Anim.G[0], AEl.Anim.G[1], AEl.Anim.G[2],
+      AEl.Anim.G[3], AEl.Anim.G[4], AEl.Anim.G[5]);
+    { a straight line's control point is undefined upstream (not tweened):
+      0 here, so an unchanged line is the same values }
+    if not AG.Curved then
+    begin
+      AEl.Anim.TwVals[4] := 0;
+      AEl.Anim.TwVals[5] := 0;
+    end;
+  end;
 end;
 
 { An end symbol: createSymbol(type, -w / 2, -h / 2, w, h) at the end, turned

@@ -864,9 +864,91 @@ uses tyControls.AdvanceChart.Labels, tyControls.AdvanceChart.Data, tyControls.Ad
   tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.MarkerView,
   tyControls.AdvanceChart.LabelGuide, tyControls.AdvanceChart.PolarBar,
   tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.LabelLayout,
-  tyControls.AdvanceChart.Graph;
+  tyControls.AdvanceChart.Graph, tyControls.AdvanceChart.Parallel,
+  tyControls.AdvanceChart.ThemeRiver, tyControls.AdvanceChart.Chord;
 
 function UtHostRole(const AEl: TTyChartElement): string; forward;
+
+{ ==================== [spec 242] an update's shape tweens ==================== }
+
+function TwRoleOf(AKind: Integer): string;
+begin
+  Result := 'tw' + IntToStr(AKind);
+end;
+
+{ the element's shape where its tween is now (AV its numbers) }
+procedure TwApply(var AEl: TTyChartElement; const AV: TTyDoubleArray; APercent: Double);
+var
+  pts, b, t: TTyPointFArray;
+  i, n: Integer;
+  sec: TTyPolarSector;
+  path: TTyZrPath;
+  cmds: TTyPathCmdArray;
+  box: TTyXYWH;
+  hit: Boolean;
+begin
+  case AEl.Anim.TwKind of
+    1:
+      begin
+        SetLength(pts, Length(AV) div 2);
+        for i := 0 to High(pts) do pts[i] := TyPointF(AV[2 * i], AV[2 * i + 1]);
+        AEl.Shape := TyParallelRowShape(pts, AEl.Anim.G[6]);
+      end;
+    2:
+      begin
+        n := Length(AV) div 4;
+        SetLength(b, n);
+        SetLength(t, n);
+        for i := 0 to n - 1 do
+        begin
+          b[i] := TyPointF(AV[2 * i], AV[2 * i + 1]);
+          t[i] := TyPointF(AV[2 * n + 2 * i], AV[2 * n + 2 * i + 1]);
+        end;
+        hit := AEl.Shape.HitNonZero;
+        AEl.Shape := TyRiverLayerShape(b, t, AEl.Anim.G[4]);
+        AEl.Shape.HitNonZero := hit;
+      end;
+    3:
+      if Length(AV) >= 6 then
+      begin
+        sec.CX := AV[0];
+        sec.CY := AV[1];
+        sec.R0 := AV[2];
+        sec.R := AV[3];
+        sec.SA := AV[4];
+        sec.EA := AV[5];
+        sec.CW := AEl.Anim.G[2] <> 0;
+        AEl.Shape := TyPolarSectorShape(sec, AEl.Anim.Pts, False);
+      end;
+    4:
+      begin
+        path := TyChordRibbonPathOf(AV, AEl.Anim.G[2] <> 0);
+        TyZrPathToCmds(path, cmds, pts);
+        AEl.Shape := TyShapePolygon(pts);
+        AEl.Shape.Cmds := cmds;
+        box := TyZrBBox(path);
+        AEl.Shape.HasCmdBounds := True;
+        AEl.Shape.CmdBounds := TyRectF(box.X, box.Y, box.X + box.W, box.Y + box.H);
+        AEl.Shape.HitNonZero := True;
+      end;
+    5:
+      if Length(AV) >= 6 then
+      begin
+        for i := 0 to 5 do AEl.Anim.G[i] := AV[i];
+        { a straight line has no control point (its tween carries 0s) }
+        if AEl.Anim.G[6] = 0 then
+        begin
+          AEl.Anim.G[4] := NaN;
+          AEl.Anim.G[5] := NaN;
+        end;
+        case AEl.Anim.Role of
+          carLinesLine: TyLinesFrameLine(AEl, APercent);
+          carLinesFrom, carLinesTo: TyLinesFrameSymbol(AEl, APercent);
+          carLinesLabel: TyLinesFrameLabel(AEl, APercent);
+        end;
+      end;
+  end;
+end;
 procedure UtRebakeViewNodes(AList: TTyPaintList; const AOldOf: TTyIntegerArray;
   var ASnaps: TTyUtOldSnapArray); forward;
 
@@ -2824,6 +2906,116 @@ var
   procedure Ensure(AP: TTyChartAnimProxy; const AKey: string; AValue: Double);
   begin
     if AP.GetAnimProp(AKey).Kind = avkNull then AP.SetNum(AKey, AValue);
+  end;
+
+  { [spec 242] updateProps of a kept element's shape: the old element by
+    its key (or its row through the data diff), a proxy of the tween's own
+    from where it was (an old tween carried) to the new shape -- the
+    series' update timing, the row the data index (a themeRiver's layer
+    none) }
+  procedure UpdateTweens(ASer, AOld: Integer; const AC: TTyChartAnimSeries);
+
+    { a chord piece's or ribbon's key in the new render }
+    function KeyIn(AKind: Integer; const AKey: string): Boolean;
+    var j: Integer; ne: TTyChartElement;
+    begin
+      Result := False;
+      for j := 0 to AList.Count - 1 do
+      begin
+        ne := AList.Element(j);
+        if (ne.Anim.Series = ASer) and (ne.Anim.TwKind = AKind) and (ne.Anim.TwKey = AKey) then
+          Exit(True);
+      end;
+    end;
+
+  var
+    olds: TFPHashList;
+    i, q, row: Integer;
+    e, oe: TTyChartElement;
+    key: string;
+    v: Pointer;
+    p: TTyChartAnimProxy;
+    props, oprops: TTyAnimProps;
+    opts: TTyAnimCallOpts;
+    taken: TFPHashList;
+  begin
+    if not AC.Enabled then Exit;
+    olds := TFPHashList.Create;
+    taken := TFPHashList.Create;
+    try
+      for i := 0 to High(APrev.Elements) do
+      begin
+        e := APrev.Elements[i];
+        if (e.Anim.TwKind = 0) or (e.Anim.Series <> AOld) then Continue;
+        if e.Anim.TwKey <> '' then key := IntToStr(e.Anim.TwKind) + 'k' + e.Anim.TwKey
+        else key := IntToStr(e.Anim.TwKind) + 'r' + IntToStr(e.Anim.TwRow);
+        if olds.Find(key) = nil then olds.Add(key, Pointer(PtrInt(i + 1)));
+      end;
+      for i := 0 to AList.Count - 1 do
+      begin
+        e := AList.Element(i);
+        if (e.Anim.TwKind = 0) or (e.Anim.Series <> ASer) then Continue;
+        if Find(ASer, e.Anim.TwRow, TwRoleOf(e.Anim.TwKind)) <> nil then Continue;
+        if e.Anim.TwKey <> '' then key := IntToStr(e.Anim.TwKind) + 'k' + e.Anim.TwKey
+        else
+        begin
+          row := e.Anim.TwRow;
+          q := -1;
+          if (row >= 0) and (row <= High(rowMap[ASer])) then q := rowMap[ASer][row];
+          if q < 0 then Continue;
+          key := IntToStr(e.Anim.TwKind) + 'r' + IntToStr(q);
+        end;
+        v := olds.Find(key);
+        if v = nil then Continue;
+        if taken.Find(key) = nil then taken.Add(key, Pointer(1));
+        oe := APrev.Elements[PtrInt(v) - 1];
+        if Length(oe.Anim.TwVals) <> Length(e.Anim.TwVals) then Continue;
+        { a line that turns straight or curved has nothing to tween between }
+        if (e.Anim.TwKind = 5) and (oe.Anim.G[6] <> e.Anim.G[6]) then Continue;
+        { a parallel's points are rows ([x, y] each): never the same array
+          upstream (isValueSame compares them by reference) }
+        if e.Anim.TwKind = 1 then
+        begin
+          props := TyAnimProps([TyAnimProp('tw', TyAnimArr(e.Anim.TwVals, 2))]);
+          oprops := TyAnimProps([TyAnimProp('tw', TyAnimArr(oe.Anim.TwVals, 2))]);
+        end
+        else
+        begin
+          props := TyAnimProps([TyAnimProp('tw', TyAnimArr(e.Anim.TwVals))]);
+          oprops := TyAnimProps([TyAnimProp('tw', TyAnimArr(oe.Anim.TwVals))]);
+        end;
+        p := Take(AOld, oe.Anim.TwRow, ASer, e.Anim.TwRow, TwRoleOf(e.Anim.TwKind),
+          oprops, props, True);
+        p.SetFinal(props);
+        if e.Anim.TwKind = 2 then opts := TyAnimCallNoIndex
+        else opts := TyAnimCallAt(e.Anim.TwRow);
+        TyUpdateProps(p, props, AC.Model, opts);
+      end;
+      { A CHORD'S PIECE OR RIBBON THE DATA NO LONGER HOLDS fades out
+        (removeElementWithFadeOut: leave timing, its old row) }
+      for i := 0 to High(APrev.Elements) do
+      begin
+        e := APrev.Elements[i];
+        if not (e.Anim.TwKind in [3, 4]) or (e.Anim.Series <> AOld) then Continue;
+        { a key still there in the new render (matched or not) stays }
+        key := IntToStr(e.Anim.TwKind) + 'k' + e.Anim.TwKey;
+        if taken.Find(key) <> nil then Continue;
+        if KeyIn(e.Anim.TwKind, e.Anim.TwKey) then Continue;
+        p := TTyChartAnimProxy.Create(ASer, e.Anim.TwRow, 'chordGone' + IntToStr(e.Anim.TwKind));
+        p.Animation := FAnimation;
+        p.FSeries := ASer;
+        p.FIndex := e.Anim.TwRow;
+        p.FLeaving := True;
+        p.FGhost := e;
+        p.FFinal := nil;
+        FGhosts.Add(p);
+        p.SetNum('style.opacity', e.Style.Alpha);
+        TyFadeOutElement(p, AC.Model, e.Anim.TwRow, True, @p.LeaveDone);
+      end;
+    finally
+      olds.Free;
+      taken.Free;
+    end;
   end;
 
   { A COUNT IN AN UPDATE (animateLabelValue) [Batch 92]: nothing when the
@@ -5148,6 +5340,11 @@ begin
     for s := 0 to High(ASeries) do
       if upd[s] and (ASeries[s].SeriesType = 'line') and not lineInit[s] then
         UpdateLine(s, oldOf[s], ASeries[s]);
+    { [spec 242] THE SHAPES A KEPT ELEMENT updateProps: a parallel's rows, a
+      themeRiver's layers, a chord's pieces and ribbons, a lines series'
+      lines }
+    for s := 0 to High(ASeries) do
+      if upd[s] then UpdateTweens(s, oldOf[s], ASeries[s]);
     { [R2-I7] THE markPoint SYMBOLS OF AN ID NO LONGER THERE fade (a merge's
       or a full update's, where markers are diffed at all) }
     if APrev.FullUpdate or APrev.Merge then
@@ -10707,6 +10904,21 @@ begin
         pel^.Style.StrokeGradient := tmpEl.Style.StrokeGradient;
         pel^.Style.StrokeWidthLogical := tmpEl.Style.StrokeWidthLogical;
         pel^.Style.Alpha := tmpEl.Style.Alpha;
+      end;
+    end;
+    { [spec 242] A SHAPE AN UPDATE TWEENS, where its tween is now }
+    if (ASet <> nil) and (pel^.Anim.TwKind <> 0) then
+    begin
+      g := ASet.Find(pel^.Anim.Series, pel^.Anim.TwRow, TwRoleOf(pel^.Anim.TwKind));
+      if (g <> nil) and not g.AtFinal then
+      begin
+        x0 := 1;
+        if pel^.Anim.TwKind = 5 then
+        begin
+          bp := ASet.Find(pel^.Anim.Series, pel^.Anim.Index, 'linesLine');
+          if bp <> nil then x0 := bp.Num('shape.percent');
+        end;
+        TwApply(pel^, g.GetAnimProp('tw').Arr, x0);
       end;
     end;
     { A LINE'S POINTS IN AN UPDATE [Batch 90] }
