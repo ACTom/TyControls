@@ -670,6 +670,9 @@ type
     LmInkFill: TTyChartColor;
     LmInkHasFill, LmInkGradient, LmInkInside: Boolean;
     LmFree, LmOverlapHidden, LmEmphShow: Boolean;
+    { [R5-C] the layout's draggable: the label takes the pointer to be
+      dragged (zrender's Draggable), its cursor 'move' }
+    LmDraggable: Boolean;
     LmHasM: Boolean;
     LmM: TTyMat2D;
     { ==== WHAT A LABEL LINE READS [Batch 112] ====

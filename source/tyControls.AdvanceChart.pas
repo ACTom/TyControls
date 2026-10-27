@@ -1291,6 +1291,17 @@ type
     FGfxPaint: array of TTyChartElement;
     FGfxPaintEl: TTyGfxElArray;
     FGfxUnder: TTyPaintList;
+    { [R5-C] A LABEL THE LAYOUT MADE DRAGGABLE, dragged: its series and data
+      index and the last point; and every label's drift so far (device px),
+      kept until the next option or another size }
+    FLbDragOn: Boolean;
+    FLbDragS, FLbDragD: Integer;
+    FLbDragX, FLbDragY: Integer;
+    FLbDrifts: array of record
+      S, D: Integer;
+      DX, DY: Double;
+    end;
+    FLbDriftW, FLbDriftH: Integer;
     { a draggable element being dragged: its id and the last point }
     FGfxDragOn: Boolean;
     FGfxDragId: string;
@@ -3819,6 +3830,13 @@ type
       draggable group) starts a drag, every move drifts it, a release ends it }
     procedure GfxDragStart(const ATarget: TTyChartEventTarget; AX, AY: Integer);
     procedure GfxDragMove(AX, AY: Integer);
+    { [R5-C] zrender's Draggable on a label a labelLayout made draggable:
+      pressed on it, every move drifts it -- a label the layout placed (an x
+      or a y, a pie's) moves and its line is routed again; one its host
+      places by its position stays where the position puts it }
+    procedure LbDragStart(const ATarget: TTyChartEventTarget; AX, AY: Integer);
+    procedure LbDragMove(AX, AY: Integer);
+    function LbDriftOf(ASeries, AData: Integer; out ADX, ADY: Double): Boolean;
     { ---- element states and the selection [Batch 88] ---- }
     function StKindOf(ASlot: Integer): TTyStKind;
     function StSeriesNode(ASeriesIndex: Integer): TJSONObject;

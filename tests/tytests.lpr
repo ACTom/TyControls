@@ -205,6 +205,7 @@ uses
   test.advchart.backwardcompat,
   test.advchart.labelguides,
   test.advchart.effecthover,
+  test.advchart.labellayoutsize,
   test.advchart.multiline, test.bgrarandompin,
   test.subpixel,
   test.advchart.option,

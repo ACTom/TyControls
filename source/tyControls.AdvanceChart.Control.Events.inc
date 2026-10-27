@@ -1422,6 +1422,8 @@ begin
   FEvLastY := AY;
   { a graphic element dragged [Batch 122] }
   GfxDragMove(AX, AY);
+  { a label dragged [R5-C] }
+  LbDragMove(AX, AY);
   { zrender #6198: a hovered element an update removed (a visualMap view
     rebuilt) is looked for again where it was hovered [Batch 116] }
   if (FEvHover.Id <> 0) and (FEvHover.HdKind = 7)
@@ -1529,6 +1531,7 @@ begin
   FEvDownX := AX;
   FEvDownY := AY;
   GfxDragStart(t, AX, AY);
+  if AButton = mbLeft then LbDragStart(t, AX, AY);
   { the timeline's checkpoint is draggable [Batch 129] }
   if AButton = mbLeft then TlDragStart(t);
   if GfxElementEvent('mousedown', t, AX, AY) then Exit;
@@ -1549,6 +1552,7 @@ begin
   { the timeline's checkpoint: its dragend changes the index [Batch 129] }
   if AButton = mbLeft then TlDragEnd(AX, AY);
   FGfxDragOn := False;
+  FLbDragOn := False;
   if not GfxElementEvent('mouseup', t, AX, AY) and t.HasData then
     EmitChartEvent('mouseup', t, AX, AY);
   if AButton <> mbLeft then

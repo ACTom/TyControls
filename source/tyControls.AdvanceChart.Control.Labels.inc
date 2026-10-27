@@ -509,6 +509,8 @@ var
   px0, py0: Double;
   pah: TTyTextAnchorH;
   pav: TTyTextAnchorV;
+  sized: Boolean;
+  ddx, ddy: Double;
 begin
   if (AList = nil) or (FOption = nil) or (AMeasurer = nil) then Exit;
   if APPI > 0 then scale := APPI / 96 else scale := 1;
@@ -687,7 +689,39 @@ begin
       refs[r].Relaid := False;
       refs[r].Pieces := c.RtPieces;
       it := Default(TTyLabelLayoutItem);
-      if Length(c.RtPieces) = 0 then
+      { [R5-C] THE LAYOUT'S width / height ON THE LABEL'S STYLE
+        (LABEL_OPTION_TO_STYLE_KEYS): the text block sized so -- an
+        overflow cut or wrapped at the width, lines past the height dropped
+        under lineOverflow, a box drawn at that size -- laid out again for a
+        label of a series (its spec at hand) [was: read, not applied] }
+      sized := ((lo.HasWidth and not IsNan(lo.Width)) or (lo.HasHeight and not IsNan(lo.Height)))
+        and (c.LmKind = 1) and (si <= High(ASpecs));
+      if sized then
+      begin
+        spec := ASpecs[si];
+        if (c.ItemSpec > 0) and (si <= High(AItemSpecs))
+          and (c.ItemSpec - 1 <= High(AItemSpecs[si])) then
+          spec := AItemSpecs[si][c.ItemSpec - 1];
+        spec.FontSizeLogical := fsz;
+        spec.Rt.Style.Align := rtaNone;
+        spec.Rt.Style.VAlign := rtvNone;
+        if lo.HasWidth and not IsNan(lo.Width) then
+        begin
+          spec.Rt.Style.WidthKind := rtwNumber;
+          spec.Rt.Style.Width := lo.Width;
+        end;
+        if lo.HasHeight and not IsNan(lo.Height) then
+        begin
+          spec.Rt.Style.HasHeight := True;
+          spec.Rt.Style.Height := lo.Height;
+        end;
+        spec.Rt.Needed := True;
+        refs[r].Pieces := TyLabelBlockPieces(spec, c.Text, c.LmInkFill,
+          c.LmInkHasFill, c.LmInkGradient, c.LmInkInside, ah, av, c.RtScale, AMeasurer);
+        refs[r].Relaid := True;
+        it.RawLocal := LmBlockRect(refs[r].Pieces, c.RtScale);
+      end
+      else if Length(c.RtPieces) = 0 then
       begin
         w := c.LmTextW;
         h := c.LmTextH;
@@ -807,6 +841,23 @@ begin
     end;
     hasM := TyLabelLocalTransform(x, y, items[r].OriginX, items[r].OriginY,
       items[r].Rotation, items[r].ScaleX, items[r].ScaleY, m);
+    { [R5-C] A DRAGGED LABEL the layout placed: its drift on its transform
+      (Element.drift), its line routed again from where it is now; one its
+      host places by its position is put back there by updateInnerText }
+    if items[r].Free and refs[r].Layout.Draggable
+      and LbDriftOf(el.Datum.SeriesIndex, el.Datum.DataIndex, ddx, ddy) then
+    begin
+      if not hasM then
+      begin
+        m[0] := 1; m[1] := 0; m[2] := 0; m[3] := 1; m[4] := 0; m[5] := 0;
+      end;
+      hasM := True;
+      m[4] := m[4] + ddx;
+      m[5] := m[5] + ddy;
+      FLmRoute[r] := True;
+    end;
+    el.Caption.LmDraggable := refs[r].Layout.Draggable;
+    if refs[r].Layout.Draggable then el.Cursor := 'move';
     if hasM then
     begin
       el.Caption.X := m[4];
@@ -1096,6 +1147,71 @@ begin
         Break;
       end;
   end;
+end;
+
+procedure TTyCustomAdvanceChart.LbDragStart(const ATarget: TTyChartEventTarget;
+  AX, AY: Integer);
+var pe: PTyChartElement;
+begin
+  FLbDragOn := False;
+  if (FPaintList = nil) or (ATarget.Id <= 0) or (ATarget.Id > FPaintList.Count) then Exit;
+  pe := FPaintList.Ref(ATarget.Id - 1);
+  if not pe^.Caption.LmDraggable or (pe^.Anim.Role = carGuide) then Exit;
+  FLbDragOn := True;
+  FLbDragS := pe^.Datum.SeriesIndex;
+  FLbDragD := pe^.Datum.DataIndex;
+  FLbDragX := AX;
+  FLbDragY := AY;
+end;
+
+procedure TTyCustomAdvanceChart.LbDragMove(AX, AY: Integer);
+var
+  k, n: Integer;
+  dx, dy: Integer;
+begin
+  if not FLbDragOn then Exit;
+  dx := AX - FLbDragX;
+  dy := AY - FLbDragY;
+  FLbDragX := AX;
+  FLbDragY := AY;
+  { drift(dx, dy): the label's translation, whatever then draws it }
+  n := -1;
+  for k := 0 to High(FLbDrifts) do
+    if (FLbDrifts[k].S = FLbDragS) and (FLbDrifts[k].D = FLbDragD) then n := k;
+  if n < 0 then
+  begin
+    n := Length(FLbDrifts);
+    SetLength(FLbDrifts, n + 1);
+    FLbDrifts[n].S := FLbDragS;
+    FLbDrifts[n].D := FLbDragD;
+    FLbDrifts[n].DX := 0;
+    FLbDrifts[n].DY := 0;
+  end;
+  FLbDrifts[n].DX := FLbDrifts[n].DX + dx;
+  FLbDrifts[n].DY := FLbDrifts[n].DY + dy;
+  FLbDriftW := Width;
+  FLbDriftH := Height;
+  DropStatic;
+  InvalidateFrame;
+end;
+
+function TTyCustomAdvanceChart.LbDriftOf(ASeries, AData: Integer; out ADX,
+  ADY: Double): Boolean;
+var k: Integer;
+begin
+  ADX := 0;
+  ADY := 0;
+  Result := False;
+  { another size lays every label out again (resize's update) }
+  if (Length(FLbDrifts) > 0) and ((FLbDriftW <> Width) or (FLbDriftH <> Height)) then
+    FLbDrifts := nil;
+  for k := 0 to High(FLbDrifts) do
+    if (FLbDrifts[k].S = ASeries) and (FLbDrifts[k].D = AData) then
+    begin
+      ADX := FLbDrifts[k].DX;
+      ADY := FLbDrifts[k].DY;
+      Exit(True);
+    end;
 end;
 
 procedure TTyCustomAdvanceChart.GuideLineStyle(const ANodes: TTyStNodeArray;
