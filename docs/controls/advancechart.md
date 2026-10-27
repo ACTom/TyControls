@@ -94,7 +94,7 @@ end;
 
 `Option` 读的是宽松 JSON：键可以不加引号，字符串可以用单引号，可以有多余的逗号和注释。ECharts 示例里的配置一般能原样贴进来。配置里有 JS 函数时解析会失败，`OptionError` 会提示改写成模板或 `'@名字'`（第 6 节）。
 
-文本解析不了时图表是空的，`OptionError` 写着原因。配置能解析、但有画不了的部分（拼错的轴类型、指向不存在的轴等）时，图照画，问题列在 `Diagnostic` 里。诊断在图表排过一次版（画出来）之后才有：
+文本解析不了时图表是空的，`OptionError` 写着原因。配置能解析、但有画不了的部分（拼错的轴类型、指向不存在的轴等）时，图照画，问题列在 `Diagnostic` 里。设置配置后就能读，不用等画出来（控件要已经有大小）：
 
 ```pascal
 for i := 0 to Chart.DiagnosticCount - 1 do
@@ -177,7 +177,7 @@ Chart.ShowLoading('{"text": "加载中…"}');
 Chart.HideLoading;
 ```
 
-参数同 ECharts 的 `showLoading('default', opts)`。颜色和字体没写时取皮肤。遮罩显示时，下面的图形不响应悬停和点击。
+参数同 ECharts 的 `showLoading('default', opts)`。颜色和字体没写时取皮肤。遮罩显示时，它下面的图形不响应悬停和点击；`zlevel` 比遮罩高的图形画在遮罩上面，照常响应（遮罩的 `zlevel` 缺省 0）。
 
 ### 联动
 
@@ -229,7 +229,7 @@ TyChartDisconnect('sales');
 | `TooltipAutoRichText: Boolean` | 缺省 False：`renderMode` 为 `auto` 时，formatter 返回的文本按 HTML 读，和浏览器里一样。True 时按 richText 读（node 里的行为），标记原样显示 |
 | `LoadingShown: Boolean` | 加载遮罩是否显示中 |
 | `AriaDescription: string` | 按 `aria` 配置生成的图表描述，`aria` 没开时为空 |
-| `DiagnosticCount` / `Diagnostic(i)` | 配置里画不了的部分 |
+| `DiagnosticCount` / `Diagnostic(i)` | 配置里画不了的部分。设置配置后马上能读：画过的图按上次的尺寸重新排版，没画过的按控件当前的大小和 `Font.PixelsPerInch` 先排一次（之后的第一次绘制不再重排）。控件还没有大小时为 0 |
 | `ToolboxError: string` | 工具栏操作（数据视图 Refresh 等）的出错原因 |
 | `InvalidateFrame` | 只重画动态层（提示框、指示器等），不重建 |
 | `ForgetResolvedImages` | 清掉 `OnResolveImage` 给过的图片，下次重新问 |
@@ -257,7 +257,7 @@ Chart.ChartOff(FClickId);
 
 | 成员 | 说明 |
 |------|------|
-| `ChartOn(AType, AHandler, AQuery = ''): Integer` | 注册，返回 id；类型不认识时返回 -1。`AQuery` 可以是空、`'series.bar'` 这样的类型，或 `'{"seriesIndex": 1}'` 这样的 JSON |
+| `ChartOn(AType, AHandler, AQuery = ''): Integer` | 注册，返回 id；图表不发的类型返回 -1。`AQuery` 可以是空、`'series.bar'` 这样的类型，或 `'{"seriesIndex": 1}'` 这样的 JSON。查询只过滤鼠标事件，动作事件和渲染事件不受查询影响（和 ECharts 一样） |
 | `ChartOff(AId)` | 注销 |
 | `OnChartEvent` | 每个鼠标事件和动作事件都会到这里，不过滤 |
 
@@ -272,13 +272,18 @@ Chart.ChartOff(FClickId);
 | `HasOffset` / `OffsetX` / `OffsetY` | 指针位置，客户区像素；`globalout` 没有 |
 | `Payload` | 动作事件的对象，JSON 文本；鼠标事件为空 |
 
-`ChartOn` 认的类型：
+`ChartOn` 认 ECharts 的 `chart.on` 能收到的所有类型（大小写不限，按小写比较）：
 
 - 鼠标：`click`、`dblclick`、`mousedown`、`mouseup`、`mousemove`、`mouseover`、`mouseout`、`globalout`、`contextmenu`
-- 动作：`select`、`unselect`、`toggleselect`、`selectchanged`、`highlight`、`downplay`、`legendselectchanged`、`legendselected`、`legendunselected`、`legendselectall`、`legendinverseselect`、`legendscroll`、`pieselectchanged` 等旧式选择事件、`geoselectchanged`、`georoam`、`dragnode`、`sunburstroottonode`、`treemapzoomtonode`、`treemaproottonode`、`treemapmove`、`treemaprender`、`datarangeselected`、`timelinechanged`、`timelineplaychanged`、`brush`、`brushend`、`brushselected`、`globalcursortaken`、`axisareaselected`、`axisbreakchanged`、`parallelaxisexpand`
+- 选择与高亮：`select`、`unselect`、`toggleselect`、`selectchanged`、`highlight`、`downplay`，以及旧式的 `pieselectchanged`、`pieselected`、`pieunselected`、`mapselectchanged`、`mapselected`、`mapunselected` 和 `pietoggleselect`、`pieselect`、`pieunselect`、`maptoggleselect`、`mapselect`、`mapunselect`
+- 图例：`legendselectchanged`、`legendselected`、`legendunselected`、`legendselectall`、`legendinverseselect`、`legendscroll`
+- 缩放、提示框、指示器、工具栏：`datazoom`、`showtip`、`hidetip`、`updateaxispointer`、`restore`、`magictypechanged`、`dataviewchanged`、`globalcursortaken`
+- 刷选与平行坐标：`brush`、`brushend`、`brushselected`、`axisareaselected`、`parallelaxisexpand`
+- 系列：`dragnode`、`graphroam`、`treeroam`、`sankeyroam`、`treeexpandandcollapse`、`focusnodeadjacency`、`unfocusnodeadjacency`、`sunburstroottonode`、`sunbursthighlight`、`sunburstunhighlight`、`treemapzoomtonode`、`treemaproottonode`、`treemapmove`、`treemaprender`、`changeaxisorder`
+- 其他组件：`geoselectchanged`、`geoselected`、`geounselected`、`georoam`、`datarangeselected`、`timelinechanged`、`timelineplaychanged`、`axisbreakchanged`
 - 渲染：`updated`、`rendered`、`finished`
 
-`datazoom`、`restore`、`magictypechanged`、`dataviewchanged`、`showtip`、`hidetip`、`updateaxispointer` 不能用 `ChartOn` 注册，从 `OnChartEvent` 收（`datazoom` 也可以用 `OnDataZoom`）。
+动作事件的 `Payload` 是 ECharts 交给处理函数的那个对象（动作载荷的副本，`type` 换成小写的事件名）。拖动、滚轮漫游关系图 / 树图 / 桑基图，点击展开树图节点，缩略图拖动，都会发出对应的动作事件，和 ECharts 一样。`expandaxisbreak`、`collapseaxisbreak`、`toggleaxisbreak` 只在联动内部使用，ECharts 不交给 `chart.on`，这里也返回 -1；断轴的公开事件是 `axisbreakchanged`。
 
 ### 专有事件
 
@@ -542,6 +547,8 @@ option 编辑器：
 - 阴影的模糊（包括地图热力图的模糊）是近似算法，和浏览器不逐像素相同。
 - SVG 地图里斜切或拉伸过的文字，先画成位图再变形。
 - 力导向布局、散点抖动（jitter）、聚类用固定的随机种子，每次结果一样。力导向的迭代步数有上限。
+- `zlevel` 照 ECharts 分层画、分层找命中，只有这几处不同：提示框、坐标轴指示器、悬停层、键盘焦点环总在最上面；加载遮罩不会低于坐标轴和标题的 `zlevel`；数据量过渐进门槛的散点、带拖尾的 lines，ECharts 会自动另分一层（遮罩因此在它们下面），这里不分。
+- 圆形雷达的分割区域只有一种颜色时，相邻两环之间有一道很淡的接缝（ECharts 把同色的环合成一条路径）。
 - 命中检测是近似的。正好落在图形边上的点（扇区边缘、圆头柱的两端、K 线和箱线的线宽、抽样过的折线）可能和 ECharts 判得不同。
 
 ### 提示框
@@ -553,7 +560,8 @@ option 编辑器：
 
 ### 交互与事件
 
-- 事件用 `ChartOn` / `ChartOff` / `OnChartEvent`。`datazoom`、`restore`、`magictypechanged`、`dataviewchanged`、`showtip`、`hidetip`、`updateaxispointer` 只能从 `OnChartEvent` 收。
+- 事件用 `ChartOn` / `ChartOff` / `OnChartEvent`。`ChartOn` 对图表不发的类型返回 -1（ECharts 的 `chart.on` 什么名字都收，只是永远不触发）。
+- `GraphRoam`、`TreeToggle` 这类直接调用的方法不发事件；同样的操作用 `DispatchAction` 发动作时会发。
 - `chart.group` 是 `Group` 属性，空串表示不在组里。
 - 键盘操作和读屏是本控件加的，ECharts 没有。
 - 拖动只认左键。

@@ -328,6 +328,17 @@ C('cd-large-mod', 'chunk', 'large candles, 10 rows by 4, mod: three paths a chun
   base(Object.assign({}, catX(10), { series: [{ type: 'candlestick', large: true, largeThreshold: 5, progressive: 4, progressiveThreshold: 5, data: ohlc(10, 23) }] })), F(5));
 C('sc-mod', 'chunk', 'a scatter asked for mod: its layout walks start..end, only the restart remains',
   base(Object.assign({}, XY, { series: [scatter(10, { progressive: 4, progressiveThreshold: 5, progressiveChunkMode: 'mod' })] })), F(5));
+// [R5-J, spec 244b] a large scatter on a single axis, progressive: each
+// chunk's pointsLayout array is Float32Array(count * 1) yet written two
+// numbers a row -- its first count / 2 points, an odd count's x dangling --
+// and LargeSymbolDraw.incrementalUpdate concatenates the arrays, read in
+// pairs again (a dangling x pairs with the next chunk's first number)
+for (const by of [4, 3]) {
+  C('sg-large-' + by, 'chunk', 'a large scatter on a single axis by ' + by + ' rows, 13 rows: every chunk holds its first rows / 2 points' + (by % 2 ? ', the dangling x pairing with the next chunk' : ''),
+    base({ singleAxis: { type: 'value', min: 0, max: 100, top: 150, bottom: 150 },
+      series: [{ type: 'scatter', coordinateSystem: 'singleAxis', large: true, largeThreshold: 5, progressive: by, progressiveThreshold: 5, symbolSize: 6,
+        data: [5, 12, 20, 27, 33, 41, 48, 55, 61, 68, 74, 83, 91] }] }), F(6).concat([['snap']]));
+}
 
 // --- the frame budget
 C('sc-cost-04', 'budget', 'a step costs 0.4 ms: three chunks a frame',

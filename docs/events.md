@@ -102,6 +102,14 @@ TyControls 的全部控件继承自两个基类之一（`tyControls.Base`）：
 | `TTyCustomTabStrip`(`TTyTabSet` / `TTyPageControl` 继承) | `OnChanging` | `TTyTabChangingEvent` | 切换页签**之前**；签名 `(Sender; ANewIndex: Integer; var AllowChange: Boolean)`，把 `AllowChange := False` 即可**否决**切换 |
 | `TTyCustomTabStrip`(同上) | `OnReorder` | `TTyTabReorderEvent` | 拖拽重排松手后触发一次；签名 `(Sender; AFromIndex, AToIndex: Integer)` |
 | `TTyProgressBar` | `OnChange` | `TNotifyEvent` | `Position` / `Min` / `Max` 实际变化后 |
+| `TTyAdvanceChart` | `OnChartEvent` | `TTyChartEventHandler` | 图表的每个鼠标事件和动作事件，不过滤；签名 `(Sender; const AEvent: TTyChartEvent)`。按类型和查询注册用 `ChartOn` / `ChartOff`（同 ECharts 的 `chart.on` / `chart.off`） |
+| `TTyAdvanceChart` | `OnDataZoom` | `TTyDataZoomEvent` | 每次 dataZoom 动作，不管来自拖动、滚轮、工具栏还是代码；签名 `(Sender; const AAction: TTyDzAction)` |
+| `TTyAdvanceChart` | `OnGraphRoam` / `OnTreeRoam` / `OnSankeyRoam` | `TTyGraphRoamEvent` | 关系图 / 树图 / 桑基图平移或缩放后；签名 `(Sender; const APayload: TTyGraphRoamPayload)` |
+| `TTyAdvanceChart` | `OnTreeExpandAndCollapse` | `TTyTreeToggleEvent` | 树图节点展开或收起；签名 `(Sender; ASeriesIndex, ADataIndex: Integer)` |
+| `TTyAdvanceChart` | `OnToolboxSaveAsImage` | `TTyToolboxSaveEvent` | 点工具栏的「保存为图片」；`AHandled := True` 表示自己处理了，不弹保存对话框 |
+| `TTyAdvanceChart` | `OnDataViewContent` / `OnDataViewApply` | `TTyDataViewContentEvent` / `TTyDataViewApplyEvent` | 数据视图打开时 / 点 Refresh 时，代替配置里的 `optionToContent` / `contentToOption` |
+| `TTyAdvanceChart` | `OnResolveImage` | `TTyChartResolveImageEvent` | 配置里有图表自己取不到的图片（网址等）；签名 `(Sender; const AUrl: string; var AImage: TBGRABitmap)` |
+| `TTyAdvanceChart` | `OnTooltipHtml` | `TTyChartTooltipHtmlEvent` | 提示框要画一段 HTML 时，换成自己的读法；不处理就用内置的 |
 
 > **`TTyForm` 使用标准 `TForm` 生命周期事件：** 自绘窗框窗口现在通过继承 `TTyForm = class(TForm)` 获得（旧的非可视控制器 `TTyFormChrome` 已**移除**）。`TTyForm` *就是*一个 `TForm`，因此 `OnCloseQuery` / `OnClose` / `OnShow` / `OnActivate` / `WindowState` 等都是标准的、已 published 的窗体事件，直接在对象查看器里挂接即可。旧 `TTyFormChrome` 的自定义 `OnMinimize` / `OnMaximize` / `OnRestore` 事件**已废弃**——标题栏最小化按钮设 `WindowState := wsMinimized`、最大化由引擎 `ToggleMaximize` 处理、关闭走标准 `Close`（`OnCloseQuery` → `OnClose`）。详见 [controls/ttyform.md](controls/ttyform.md)。
 

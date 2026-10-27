@@ -185,7 +185,8 @@ begin
           n := TJSONObject(n).Find('expandAndCollapse');
           { absent is the default, true; anything but JSON true is off }
           if (n = nil) or ((n.JSONType = jtBoolean) and n.AsBoolean) then
-            TreeToggle(d.SeriesIndex, d.DataIndex);
+            { [R5-J] the action TreeView dispatches, its event too }
+            TreeClickToggle(d.SeriesIndex, d.DataIndex);
         end;
       end;
     end;
@@ -287,11 +288,17 @@ begin
     Exit(True);
   end;
   if si < 0 then Exit;
-  if IsTreeSeries(si) then Result := TreeZoom(si, s, MousePos.X, MousePos.Y)
-  else if IsSankeySeries(si) then Result := SankeyZoom(si, s, MousePos.X, MousePos.Y)
-  { [Batch 115] }
-  else if IsTreemapSeries(si) then Result := TreemapWheel(si, s, MousePos.X, MousePos.Y)
-  else Result := GraphZoom(si, s, MousePos.X, MousePos.Y);
+  { [R5-J] the series' RoamController dispatches its roam: the event too }
+  FRoamEvSrc := 1;
+  try
+    if IsTreeSeries(si) then Result := TreeZoom(si, s, MousePos.X, MousePos.Y)
+    else if IsSankeySeries(si) then Result := SankeyZoom(si, s, MousePos.X, MousePos.Y)
+    { [Batch 115] }
+    else if IsTreemapSeries(si) then Result := TreemapWheel(si, s, MousePos.X, MousePos.Y)
+    else Result := GraphZoom(si, s, MousePos.X, MousePos.Y);
+  finally
+    FRoamEvSrc := 0;
+  end;
 end;
 
 function TTyCustomAdvanceChart.SlotOfSeries(ASeriesIndex: Integer): Integer;
@@ -345,22 +352,62 @@ begin
   Result := HitTestAt(AX, AY, ignored);
 end;
 
+{ [R5-J] canvas by canvas from the highest, as EventTargetAt }
 function TTyCustomAdvanceChart.HitTestAt(AX, AY: Integer;
   out AElement: Integer): TTyChartDatumRef;
+var
+  lv: TTyIntegerArray;
+  i: Integer;
+  blocked: Boolean;
+begin
+  lv := HitLevels;
+  if Length(lv) <= 1 then Exit(HitTestIn(AX, AY, AElement, blocked));
+  for i := High(lv) downto 0 do
+  begin
+    FHitBandOn := True;
+    FHitLo := lv[i] - 1;
+    FHitHi := lv[i];
+    try
+      Result := HitTestIn(AX, AY, AElement, blocked);
+    finally
+      FHitBandOn := False;
+    end;
+    if (AElement >= 0) or blocked then Exit;
+  end;
+  Result := TyChartNoDatum;
+  AElement := -1;
+end;
+
+function TTyCustomAdvanceChart.HitTestIn(AX, AY: Integer; out AElement: Integer;
+  out ABlocked: Boolean): TTyChartDatumRef;
 var
   idx, slot, row, bb, bi: Integer;
   bp: TTyBrushPiece;
 begin
   Result := TyChartNoDatum;
   AElement := -1;
+  ABlocked := False;
   if (FPaintList = nil) or not FPaintListValid then Exit;
-  { [R5-D] the loading mask over everything }
-  if LoadMasks then Exit;
+  { [R5-D] the loading mask over everything -- [R5-J] on its own canvas }
+  if LoadMasks and HitIn(MaskZLevel) then
+  begin
+    ABlocked := True;
+    Exit;
+  end;
   { A BRUSH COVER over the item is the target: nothing beneath it is
-    hovered or pressed [Batch 126] }
-  if BrushPieceAt(AX, AY, bb, bi, bp) then Exit;
-  { [R5-D] an axis pointer's handle (z 50) over the series }
-  if HdAt(AX, AY) >= 0 then Exit;
+    hovered or pressed [Batch 126] -- [R5-J] on zlevel 0 }
+  if HitIn(0) and BrushPieceAt(AX, AY, bb, bi, bp) then
+  begin
+    ABlocked := True;
+    Exit;
+  end;
+  { [R5-D] an axis pointer's handle (z 50) over the series -- [R5-J] the
+    axes' level }
+  if HitIn(ComponentZLevel) and (HdAt(AX, AY) >= 0) then
+  begin
+    ABlocked := True;
+    Exit;
+  end;
   { IN MOTION, WHAT IS DRAWN IS WHAT IS HIT: the frame keeps the list's
     insertion indices, so the element named is the list's [Batch 89] }
   { and AT REST ON A STATE PROXY, where the list keeps the rest values (a
@@ -875,7 +922,38 @@ begin
   Result.Model := SeriesEventModel(ASeries);
 end;
 
+{ [R5-J] THE POINTER FINDS THE TOP CANVAS FIRST: zrender's handler walks
+  the display list sorted by zlevel, then z. Where everything stands on one
+  zlevel the search is the one it always was; else canvas by canvas from
+  the highest, each with the order of its own -- a title of zlevel 2 over a
+  series of 1, a series of 1 over the loading mask of 0 [was: the
+  components apart from the list first, the mask over everything] }
 function TTyCustomAdvanceChart.EventTargetAt(AX, AY: Integer): TTyChartEventTarget;
+var
+  lv: TTyIntegerArray;
+  i: Integer;
+  blocked: Boolean;
+begin
+  lv := HitLevels;
+  if Length(lv) <= 1 then Exit(EventTargetIn(AX, AY, blocked));
+  for i := High(lv) downto 0 do
+  begin
+    FHitBandOn := True;
+    FHitLo := lv[i] - 1;
+    FHitHi := lv[i];
+    try
+      Result := EventTargetIn(AX, AY, blocked);
+    finally
+      FHitBandOn := False;
+    end;
+    if (Result.Id <> 0) or blocked then Exit;
+  end;
+  Result := Default(TTyChartEventTarget);
+  Result.Params := TyChartBlankParams;
+end;
+
+function TTyCustomAdvanceChart.EventTargetIn(AX, AY: Integer;
+  out ABlocked: Boolean): TTyChartEventTarget;
 var
   i, k, g, a, q, idx, slot: Integer;
   lay: TTyTitleLayout;
@@ -943,11 +1021,17 @@ var
 begin
   Result := Default(TTyChartEventTarget);
   Result.Params := TyChartBlankParams;
-  { [R5-D] the loading mask: no ECData, no event }
-  if LoadMasks then Exit;
+  ABlocked := False;
+  { [R5-D] the loading mask: no ECData, no event -- [R5-J] on its own
+    canvas: nothing under it is found }
+  if LoadMasks and HitIn(MaskZLevel) then
+  begin
+    ABlocked := True;
+    Exit;
+  end;
   { THE BRUSH'S COVERS, z 10000 over everything [Batch 126]: no data, only
-    zrender's Draggable }
-  if BrushPieceAt(AX, AY, k, q, piece) then
+    zrender's Draggable -- [R5-J] its controller's group: zlevel 0 }
+  if HitIn(0) and BrushPieceAt(AX, AY, k, q, piece) then
   begin
     Result.Id := -((Int64(9) shl 44) + (Int64(k) shl 36)
       + Int64(BrushCtlOf(k).Covers[q].Serial) * 16 + Ord(piece));
@@ -958,8 +1042,8 @@ begin
     Exit;
   end;
   { A BREAK AREA THAT EXPANDS ON A CLICK, zigzagZ (100) over the rest: no
-    data, only its group's click [Batch 132] }
-  if BreakAreaAt(AX, AY, k, q) then
+    data, only its group's click [Batch 132] -- [R5-J] the axes' level }
+  if HitIn(ComponentZLevel) and BreakAreaAt(AX, AY, k, q) then
   begin
     Result.Id := -((Int64(10) shl 44) + Int64(k) * 1000 + q);
     Result.HdKind := 12;
@@ -969,7 +1053,7 @@ begin
   end;
   { [R5-D] AN AXIS POINTER'S HANDLE (z 50): a target without ECData -- no
     event -- its cursor 'move' }
-  k := HdAt(AX, AY);
+  if HitIn(ComponentZLevel) then k := HdAt(AX, AY) else k := -1;
   if k >= 0 then
   begin
     Result.Id := -((Int64(17) shl 44) + k);
@@ -983,6 +1067,8 @@ begin
   begin
     lay := FTitles[i];
     if not lay.Valid then Continue;
+    { [R5-J] on its own zlevel's canvas, the mask over a lower one }
+    if not HitIn(ModelZLevel('title', i)) or MaskOver(ModelZLevel('title', i)) then Continue;
     for k := 0 to 1 do
     begin
       if (k = 1) and not lay.HasSub then Continue;
@@ -1249,6 +1335,8 @@ begin
       if a < gb.XAxisCount then axObj := gb.XAxis(a)
       else axObj := gb.YAxis(a - gb.XAxisCount);
       if axObj = nil then Continue;
+      { [R5-J] on its own zlevel's canvas }
+      if not HitIn(AxisModelZLevel(axObj)) or MaskOver(AxisModelZLevel(axObj)) then Continue;
       mainT := axObj.MainType;
       if mainT = '' then mainT := axObj.Dim + 'Axis';
       if not TriggersEvent(FOption.ComponentAt(mainT, axObj.ComponentIndex)) then Continue;
@@ -1552,8 +1640,8 @@ begin
   FEvHoverY := AY;
   { [R5-D] over the canvas while the mask shows, the mask is what is
     hovered }
-  FEvHoverMask := LoadMasks and (AX >= FLastRect.Left) and (AY >= FLastRect.Top)
-    and (AX <= FLastRect.Right) and (AY <= FLastRect.Bottom);
+  FEvHoverMask := LoadMasks and (t.Id = 0) and (AX >= FLastRect.Left)
+    and (AY >= FLastRect.Top) and (AX <= FLastRect.Right) and (AY <= FLastRect.Bottom);
 end;
 
 procedure TTyCustomAdvanceChart.EventOver;
@@ -1793,7 +1881,13 @@ begin
           dx, dy, pdx, pdy);
         FThumbDragX := X;
         FThumbDragY := Y;
-        roamed := GraphRoam(FThumbs[FThumbDrag].Target, pdx, pdy);
+        { [R5-J] the thumbnail's dispatch publishes graphroam }
+        FRoamEvSrc := 2;
+        try
+          roamed := GraphRoam(FThumbs[FThumbDrag].Target, pdx, pdy);
+        finally
+          FRoamEvSrc := 0;
+        end;
       end
       else
       begin
@@ -1808,11 +1902,17 @@ begin
     dy := Y - FRoamY;
     FRoamX := X;
     FRoamY := Y;
-    if IsTreeSeries(FRoamSeries) then TreeRoam(FRoamSeries, dx, dy)
-    else if IsSankeySeries(FRoamSeries) then SankeyRoam(FRoamSeries, dx, dy)
-    { a treemap's pan: past 3 px, else the delta is lost [Batch 115] }
-    else if IsTreemapSeries(FRoamSeries) then TreemapPan(FRoamSeries, Round(dx), Round(dy))
-    else roamed := GraphRoam(FRoamSeries, dx, dy);
+    { [R5-J] the series' RoamController dispatches its roam: the event too }
+    FRoamEvSrc := 1;
+    try
+      if IsTreeSeries(FRoamSeries) then TreeRoam(FRoamSeries, dx, dy)
+      else if IsSankeySeries(FRoamSeries) then SankeyRoam(FRoamSeries, dx, dy)
+      { a treemap's pan: past 3 px, else the delta is lost [Batch 115] }
+      else if IsTreemapSeries(FRoamSeries) then TreemapPan(FRoamSeries, Round(dx), Round(dy))
+      else roamed := GraphRoam(FRoamSeries, dx, dy);
+    finally
+      FRoamEvSrc := 0;
+    end;
   end;
   { A NODE DRAG: one 'drag' per move, the delta from the last move [Batch 114] }
   if FGraphDragSlot >= 0 then GraphDragMove(X, Y);
@@ -2167,8 +2267,9 @@ begin
       c := 'grab';
   end;
   if FTbCursor <> '' then c := FTbCursor;
-  { [R5-D] the loading mask's own cursor, unless a pan holds the pointer }
-  if LoadMasks and (c <> 'grabbing') then c := 'pointer';
+  { [R5-D] the loading mask's own cursor, unless a pan holds the pointer --
+    [R5-J] or something of a higher zlevel is hovered over it }
+  if LoadMasks and (FEvHover.Id = 0) and (c <> 'grabbing') then c := 'pointer';
   ApplyCursorName(c);
 end;
 
@@ -2213,7 +2314,7 @@ begin
   else
     c := TargetCursor(t);
   { [R5-D] released on the loading mask: its own cursor }
-  if LoadMasks and (AX >= FLastRect.Left) and (AY >= FLastRect.Top)
+  if LoadMasks and (t.Id = 0) and (AX >= FLastRect.Left) and (AY >= FLastRect.Top)
     and (AX <= FLastRect.Right) and (AY <= FLastRect.Bottom) then c := 'pointer';
   ApplyCursorName(c);
 end;

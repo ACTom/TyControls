@@ -1005,10 +1005,19 @@ begin
         if s <= High(FSelInit) then FSelInit[s] := False;
         if s <= High(FSankeyRoam) then FSankeyRoam[s] := Default(TTyGraphRoamState);
         if s <= High(FSankeyLocal) then FSankeyLocal[s] := nil;
+        { [R5-J] a river's written-back gaps are the model's }
+        if s <= High(FRiverGaps) then FRiverGaps[s].Has := False;
         Continue;
       end;
       if fate = mfMerged then
       begin
+        { [R5-J] A MERGE THAT WRITES boundaryGap, whatever it writes: the
+          model's array is replaced by the new one (zrUtil.merge clones an
+          array over), which the next layout parses at its own size -- the
+          same text written again too [was: the px kept while the text was
+          the same] }
+        if (s <= High(FRiverGaps)) and (opt <> nil) and (opt.Find('boundaryGap') <> nil) then
+          FRiverGaps[s].Has := False;
         if s <= High(FGraphRoam) then MergeRoamOverride(FGraphRoam[s], s, opt);
         { a sankey's roam as a graph's; its dragNode positions live in the
           node items, which a merge that writes the node list replaces
@@ -1161,14 +1170,41 @@ begin
     end;
 end;
 
+procedure TTyCustomAdvanceChart.DiagReady;
+var
+  m: ITyTextMeasurer;
+  r: TRect;
+  ppi: Integer;
+begin
+  if not FDirty or (FOption = nil) then Exit;
+  { laid out before: again at that size, as a conversion does }
+  if FLastPPI > 0 then
+  begin
+    ConvertReady;
+    Exit;
+  end;
+  { never: where the first paint will lay it out (Paint: ClientRect,
+    Font.PixelsPerInch) -- that paint then finds it done, and finishes the
+    update (FLaidAhead) }
+  r := ClientRect;
+  if (r.Right <= r.Left) or (r.Bottom <= r.Top) then Exit;
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then Exit;
+  m := NewTextMeasurer(ppi);
+  Relayout(nil, TyRectF(r.Left, r.Top, r.Right, r.Bottom), ppi, m);
+  FLaidAhead := True;
+end;
+
 function TTyCustomAdvanceChart.DiagnosticCount: Integer;
 begin
+  DiagReady;
   if FBuild = nil then Exit(0);
   Result := FBuild.DiagnosticCount;
 end;
 
 function TTyCustomAdvanceChart.Diagnostic(AIndex: Integer): string;
 begin
+  DiagReady;
   if FBuild = nil then Exit('');
   Result := FBuild.Diagnostic(AIndex);
 end;

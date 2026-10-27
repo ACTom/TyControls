@@ -287,7 +287,7 @@ end;
 
 procedure TTyCustomAdvanceChart.ProgApplyVisibility(AList: TTyPaintList);
 var
-  k, done, j, shown: Integer;
+  k, done, j, shown, nums: Integer;
   el: TTyChartElement;
   pe: PTyChartElement;
   hid, moved: Boolean;
@@ -315,9 +315,14 @@ begin
       if j > Length(el.Shape.Large.ChunkEnds) then j := Length(el.Shape.Large.ChunkEnds);
       if j < 1 then j := 1;
       shown := el.Shape.Large.ChunkEnds[j - 1];
-      if shown <> el.Shape.Large.Shown then
+      { [R5-J] and the numbers it holds then: a chunk can add a number
+        and no row (a single axis' odd chunk) }
+      if j - 1 <= High(el.Shape.Large.ChunkNums) then nums := el.Shape.Large.ChunkNums[j - 1]
+      else nums := 0;
+      if (shown <> el.Shape.Large.Shown) or (nums <> el.Shape.Large.ShownNums) then
       begin
         el.Shape.Large.Shown := shown;
+        el.Shape.Large.ShownNums := nums;
         TyLargeSetBox(el.Shape.Large);
         el.Shape.Bounds := TyLargeBounds(el.Shape.Large);
         { [spec 242] a lines batch's gradient spans what it holds now }
@@ -455,6 +460,8 @@ begin
         part.Shape.Large.Pts := Copy(el.Shape.Large.Pts, have * 2, (rows - have) * 2);
         part.Shape.Large.Shown := 0;
         part.Shape.Large.ChunkEnds := nil;
+        part.Shape.Large.ChunkNums := nil;
+        part.Shape.Large.ShownNums := 0;
         TyRenderElement(P, part);
       end
       else if (have > 0) and (el.Shape.Kind = cskLarge) and (el.Shape.Large.Kind = lgkLines)
@@ -489,6 +496,7 @@ end;
 procedure TTyCustomAdvanceChart.ProgRenderList(APainter: TTyPainter; AList: TTyPaintList;
   APPI: Integer);
 var
+  zs: TTyZBandState;
   i, idx: Integer;
   pe: PTyChartElement;
   any, blitted: Boolean;
@@ -509,12 +517,19 @@ begin
     TyRenderPaintList(APainter, AList);
     Exit;
   end;
-  if not FProgLayerOk or (FProgLayer = nil) or (FProgLayer.Width <> bmp.Width)
-    or (FProgLayer.Height <> bmp.Height) or (FProgLayerPPI <> APPI)
-    or (FProgLayerScale <> APainter.DeviceScale) then
-    ProgLayerBuild(bmp.Width, bmp.Height, APPI, APainter.DeviceScale)
-  else if FProgLayerRegionOn then
-    ProgLayerRegionRedraw;
+  { [R5-J] the layer holds the whole run, whatever band this pass draws:
+    built in a band it lost the chunks of another zlevel for good }
+  zs := TySuspendZBand;
+  try
+    if not FProgLayerOk or (FProgLayer = nil) or (FProgLayer.Width <> bmp.Width)
+      or (FProgLayer.Height <> bmp.Height) or (FProgLayerPPI <> APPI)
+      or (FProgLayerScale <> APainter.DeviceScale) then
+      ProgLayerBuild(bmp.Width, bmp.Height, APPI, APainter.DeviceScale)
+    else if FProgLayerRegionOn then
+      ProgLayerRegionRedraw;
+  finally
+    TyResumeZBand(zs);
+  end;
   blitted := False;
   for i := 0 to AList.Count - 1 do
   begin
@@ -524,7 +539,9 @@ begin
     if pe^.Ignore or pe^.ProgHidden or pe^.GfxUnder then Continue;
     if pe^.ProgChunk > 0 then
     begin
-      if not blitted then
+      { [R5-J] the run's layer in its zlevel's band only [was: blitted with
+        the first band whatever the run's zlevel] }
+      if not blitted and TyZBandHas(pe^.ZLevel) then
       begin
         { [R2-L] what is under the layer, and the layer, as they stand here }
         if FProgCap and (FProgLayer <> nil) then
@@ -756,6 +773,10 @@ begin
   if FExporting or FAnimLive or FAnimContinuous or (Length(FAnimBind) > 0)
     or (Length(FAnimStBind) > 0) or TmAnimAny or FDrPrepDone then Exit;
   if (FPaintList = nil) or not FPaintListValid or not FProgReuse then Exit;
+  { [R5-J] the levels drawn canvas by canvas, or the run's layer blitted
+    over the components (its zlevel above theirs): what is under the layer
+    is no one capture }
+  if FZMixed or (ProgRunZLevel > ZBase) then Exit;
   if (FProgWork = nil) or (FProgUnder = nil) or (FProgSeen = nil) or (FProgLayer = nil)
     or not FProgLayerOk then Exit;
   if (FProgLayer.Width <> FProgWork.Width) or (FProgLayer.Height <> FProgWork.Height)
@@ -822,7 +843,7 @@ begin
         P.BeginPaintOnScaled(nil, Rect(0, 0, w, h), APPI, nb, sc);
         clip := nb.ClipRect;
         { [R5-G] the two zlevel passes the full paint makes }
-        zc := ComponentZLevel;
+        zc := ZBase;
         for pass := 0 to 1 do
         begin
           if pass = 0 then

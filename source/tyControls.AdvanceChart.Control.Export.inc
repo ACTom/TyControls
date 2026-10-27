@@ -386,6 +386,60 @@ begin
     and not (csDesigning in ComponentState);
 end;
 
+function TTyCustomAdvanceChart.MaskZLevel: Integer;
+var v: Double;
+begin
+  v := FLoadCfg.ZLevel;
+  if IsNan(v) or IsInfinite(v) then Result := 0
+  else Result := Round(Max(Double(-100000), Min(Double(100000), v)));
+  { as the static layer draws it (ZStaticTop): never under the components
+    drawn apart from the list -- they are the static layer's, the mask the
+    dynamic layer's over it }
+  Result := Max(ZBase, Result);
+end;
+
+function TTyCustomAdvanceChart.MaskOver(AZ: Integer): Boolean;
+begin
+  Result := LoadMasks and (AZ <= MaskZLevel);
+end;
+
+function TTyCustomAdvanceChart.HitIn(AZ: Integer): Boolean;
+begin
+  Result := not FHitBandOn or ((AZ > FHitLo) and (AZ <= FHitHi));
+end;
+
+function TTyCustomAdvanceChart.HitLevels: TTyIntegerArray;
+var
+  k, t: Integer;
+  lv: TTyIntegerArray;
+
+  procedure Add(AZ: Integer);
+  var i, j: Integer;
+  begin
+    i := 0;
+    while (i <= High(Result)) and (Result[i] < AZ) do Inc(i);
+    if (i <= High(Result)) and (Result[i] = AZ) then Exit;
+    SetLength(Result, Length(Result) + 1);
+    for j := High(Result) downto i + 1 do Result[j] := Result[j - 1];
+    Result[i] := AZ;
+  end;
+
+begin
+  Result := nil;
+  if (FPaintList <> nil) and FPaintListValid then
+    for k := 0 to FPaintList.Count - 1 do
+      if not FPaintList.Ref(k)^.Ignore then Add(FPaintList.Ref(k)^.ZLevel);
+  lv := ApartLevels;
+  for k := 0 to High(lv) do Add(lv[k]);
+  if FOption <> nil then
+  begin
+    for t := 0 to FOption.ComponentCount('toolbox') - 1 do Add(ModelZLevel('toolbox', t));
+    for t := 0 to FOption.ComponentCount('timeline') - 1 do Add(ModelZLevel('timeline', t));
+    for t := 0 to FOption.ComponentCount('visualMap') - 1 do Add(ModelZLevel('visualMap', t));
+  end;
+  if LoadMasks then Add(MaskZLevel);
+end;
+
 function TTyCustomAdvanceChart.LoadingGeometry(out AGeo: TTyLoadingGeometry): Boolean;
 begin
   AGeo := FLoadGeo;

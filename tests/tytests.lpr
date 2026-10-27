@@ -218,6 +218,7 @@ uses
   test.advchart.handleemphasis,
   test.advchart.toolboxextra,
   test.advchart.edgesaxes,
+  test.advchart.edgesmisc,
   test.advchart.backwardcompat,
   test.advchart.labelguides,
   test.advchart.effecthover,

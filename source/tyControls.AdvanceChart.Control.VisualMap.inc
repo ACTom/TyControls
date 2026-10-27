@@ -277,14 +277,19 @@ begin
 end;
 
 function TTyCustomAdvanceChart.BuildVisualMaps(AList: TTyPaintList): Integer;
-var k: Integer;
+var k, lt: Integer;
 begin
   Result := 0;
   for k := 0 to High(FVisualLayouts) do
     if (k <= High(FVisualViews)) and FVisualLayouts[k].Valid then
+    begin
+      lt := AList.Count;
       Inc(Result, TyBuildVisualMapMarks(FVisualLayouts[k], FVisualViews[k],
         VisualMapInk(FVisualViews[k]), FLastRect.Left, FLastRect.Top, AList,
         VmLiveDraw(k)));
+      { [R5-J] its own zlevel, else the root's }
+      LevelTail(AList, lt, 'visualMap', k);
+    end;
 end;
 
 function TTyCustomAdvanceChart.VisualMapLayout(AIndex: Integer): TTyVisualMapLayout;
@@ -689,10 +694,12 @@ begin
   Result := False;
   AIndex := -1;
   APart := 0;
-  { [R5-D] under the loading mask }
-  if LoadMasks then Exit;
+  { [R5-D] under the loading mask -- [R5-J] by its zlevel, as the canvas
+    searched }
   for k := High(FVisualLayouts) downto 0 do
   begin
+    if MaskOver(ModelZLevel('visualMap', k)) or not HitIn(ModelZLevel('visualMap', k)) then
+      Continue;
     L := FVisualLayouts[k];
     if (not L.Valid) or (k > High(FVisualViews)) then Continue;
     gx := AX - VmGroupX(k);

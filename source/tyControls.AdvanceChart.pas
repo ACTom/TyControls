@@ -831,6 +831,19 @@ type
     FRivers: TTyThemeRiverLayoutArray;
     { [R5-G] the list the series pass drew last (zlevel's second pass) }
     FZList: TTyPaintList;
+    { [R5-J] the zlevel the components drawn apart from the list (axes,
+      break areas, parallel axes, titles) are filtered to while FZApartOn
+      (PaintZLevels), and the last static paint's levels and whether they
+      were mixed -- the components on more than one zlevel, or an element
+      of the list under theirs }
+    FZApartOn: Boolean;
+    FZApartLevel: Integer;
+    FZMixed: Boolean;
+    FZLevels: TTyIntegerArray;
+    { [R5-J] the canvas the pointer's search is on (EventTargetAt,
+      HitTestAt): what stands on zlevel FHitHi (above FHitLo) only }
+    FHitBandOn: Boolean;
+    FHitLo, FHitHi: Integer;
     { [R5-G] a river's boundaryGap as its first layout resolved it, by
       series index: upstream writes the px back into the model's array, so
       a resize keeps them; a setOption starts again (AfterSetOption) }
@@ -1891,6 +1904,13 @@ type
     { [F4b] a view action (graphRoam, sankeyRoam, dragNode) running as an
       action: the roam helpers leave the event and `updated` to it }
     FViewActionDepth: Integer;
+    { [R5-J] who is roaming a graph, a sankey or a tree outside an action:
+      0 the host's own call (GraphRoam ...: no event), 1 the series' own
+      RoamController (its payload: dx / dy or zoom / originX / originY,
+      payloadDisableAnimation's animation, the seriesId), 2 the thumbnail
+      (makeRoamPayload: the seriesId, then dx / dy or zoom / originX /
+      originY) -- the roam's action event is published for 1 and 2 }
+    FRoamEvSrc: Integer;
     { [F4b] zrender's dirty flag: something asked for a repaint since the
       last flush (a paint emits `rendered` only then); the tooltip's and
       the pointer's state as the last paint drew it (their actions ask for a
@@ -2017,6 +2037,10 @@ type
     FRtQueue, FRtQueueInit: TTyStringArray;
     FRtChange, FAnimRtChange: Integer;
     FRtAfterRelayout, FRtFlushing: Boolean;
+    { [R5-J] the option was laid out ahead of the first paint (DiagReady):
+      that paint finishes the update -- the lazy update's `updated`, a bar
+      race's pass -- as a paint that lays out does }
+    FLaidAhead: Boolean;
     FRtLens: TTyDoubleArray;
     { THE AXES' groupTransition [Batch 96]: one proxy per leaf of an axis
       group, by 'xAxis0/anid', on the series' driver; made by a full update's
@@ -2349,6 +2373,46 @@ type
     function ZStaticTop: Integer;
     procedure PaintAboveComponents(APainter: TTyPainter; AList: TTyPaintList);
     procedure PaintOverLoading(APainter: TTyPainter);
+    { [R5-J] A MODEL'S zlevel: retrieveZInfo's model.get('zlevel') || 0 --
+      its own, else the option root's (6.1's component and series models
+      write no default of their own) }
+    function ModelZLevel(const AMainType: string; AIndex: Integer): Integer;
+    function AxisModelZLevel(AAxis: TTyAxis): Integer;
+    { [R5-J] whether a component drawn apart from the list stands on the
+      level PaintZLevels draws now (always outside it) }
+    function ApartIn(AZLevel: Integer): Boolean;
+    { [R5-J] the zlevels of the components drawn apart from the list,
+      sorted, each once }
+    function ApartLevels: TTyIntegerArray;
+    { [R5-J] the lowest zlevel the list's components and series take, from
+      the option (MaxInt when none) }
+    function ListMinZLevel: Integer;
+    { [R5-J] the components apart on more than one zlevel, or something of
+      the list under theirs: PaintZLevels draws them level by level }
+    function ZMixedNow(out ALevels: TTyIntegerArray): Boolean;
+    { [R5-J] the level the components drawn apart stand on: their one
+      level, the highest when mixed, the root's when there is none }
+    function ZBase: Integer;
+    { [R5-J] the list drawn as the series pass draws it: the progressive
+      run's layer through ProgRenderList when it is the paint list }
+    procedure RenderZList(APainter: TTyPainter; AList: TTyPaintList; APPI: Integer);
+    { [R5-J] THE CANVASES IN ZLEVEL ORDER: for each level of ALevels the
+      list under it, the components apart on it (the axes, then what is
+      over the series: break areas, parallel axes, titles) with the list's
+      elements of that level between them; then what is above the last.
+      ADynamic: the dynamic layer's (AFrame the list in motion) }
+    procedure PaintZLevels(APainter: TTyPainter; APPI: Integer;
+      const AMeasurer: ITyTextMeasurer; const ALevels: TTyIntegerArray;
+      ADynamic: Boolean; AFrame: TTyPaintList);
+    { [R5-J] the elements of AList from AFrom on take the zlevel of
+      component AIndex of AMainType }
+    procedure LevelTail(AList: TTyPaintList; AFrom: Integer;
+      const AMainType: string; AIndex: Integer);
+    { [R5-J] the axes go into the dynamic layer: their groupTransition, or
+      an animation over levels the static layer would draw out of order }
+    function AxesInDynamic: Boolean;
+    { [R5-J] the progressive run's zlevel, -MaxInt for none }
+    function ProgRunZLevel: Integer;
     procedure PaintStatic(APainter: TTyPainter; const ARect: TRect;
       APPI: Integer; const AMeasurer: ITyTextMeasurer);
     { Every series' marks, in one list, ordered once. }
@@ -3392,6 +3456,10 @@ type
       date, the finder parsed against the option's models, each coordinate
       system asked in upstream's order }
     procedure ConvertReady;
+    { [R5-J] the layout the diagnostics are read from brought up to date:
+      ConvertReady once laid out; never laid out, at the client rect and the
+      PPI the first paint will use, when the control has a size }
+    procedure DiagReady;
     function ConvertDispatch(AFinder, AValue: TJSONData; AFrom: Boolean;
       AOpt: TJSONData = nil): TTyConvertResult;
     { Matrix.convertToPixel / convertFromPixel, the opt's clamp [Batch 147] }
@@ -3441,6 +3509,12 @@ type
       FGraphNodes / FGraphEdges of ASlot. }
     procedure GraphEdgeLabels(ASlot: Integer; var AInk: TTyGraphInk);
     function DoViewAction(const AType: string; APayload: TJSONObject): Boolean;
+    { [R5-J] a roam's action event, as the dispatch FRoamEvSrc names would
+      publish it (nothing for the host's own call, nor inside an action) }
+    procedure RoamEvent(const AType: string; const APayload: TTyGraphRoamPayload);
+    { [R5-J] a tree node's click: the treeExpandAndCollapse TreeView
+      dispatches -- the flip, the update, its event, `updated` }
+    procedure TreeClickToggle(ASeriesIndex, ADataIndex: Integer);
     { ---- the drill-downs [Batch 115] ---- }
     { a new tree: the view roots, the storage and the animation go }
     procedure HierDrillReset;
@@ -3457,6 +3531,18 @@ type
     function DoSunLegacy(APayload: TJSONObject; AHigh: Boolean): Boolean;
     { [R5-D] the loading effect's mask is the pointer's target }
     function LoadMasks: Boolean;
+    { [R5-J] the loading mask's zlevel (z 10000 on it) as it is drawn --
+      not under the components' (ZStaticTop) -- and whether it is over a
+      thing of zlevel AZ: shown, and AZ not above its level }
+    function MaskZLevel: Integer;
+    function MaskOver(AZ: Integer): Boolean;
+    { [R5-J] whether a thing of zlevel AZ is on the canvas searched now
+      (always outside a search by canvas) }
+    function HitIn(AZ: Integer): Boolean;
+    { [R5-J] the zlevels the pointer can find something on, sorted, each
+      once: the list's, the components' apart, the toolboxes', timelines',
+      visual maps', the mask's }
+    function HitLevels: TTyIntegerArray;
     { [F3d] treeExpandAndCollapse as an action: the queried trees' node
       flipped, then the update (update: 'update') }
     function DoTreeToggleAction(APayload: TJSONObject): Boolean;
@@ -4044,6 +4130,11 @@ type
     procedure DoContextPopup(MousePos: TPoint; var Handled: Boolean); override;
     { the chart's mouse events [Batch 84] }
     function EventTargetAt(AX, AY: Integer): TTyChartEventTarget;
+    { [R5-J] the search on one canvas (HitIn); ABlocked: the loading mask
+      stands there, nothing under it is found }
+    function EventTargetIn(AX, AY: Integer; out ABlocked: Boolean): TTyChartEventTarget;
+    function HitTestIn(AX, AY: Integer; out AElement: Integer;
+      out ABlocked: Boolean): TTyChartDatumRef;
     { [R2-B] the breadcrumb item a list element is, and its target }
     function CrumbOfElement(AIdx: Integer; out ASeries, AIndex: Integer): Boolean;
     function CrumbTarget(ASeries, AIndex: Integer): TTyChartEventTarget;
@@ -4411,7 +4502,13 @@ type
     { Everything the option said that could not be honoured -- a misspelled axis
       type, a series naming an axis that does not exist. A chart that silently
       drops what it cannot draw is a chart that lies, so these are readable
-      rather than logged and forgotten. }
+      rather than logged and forgotten.
+      [R5-J] OF THE OPTION AS IT IS NOW: an option set since the last layout
+      is laid out first (at the client size and Font.PixelsPerInch, before
+      the first paint) -- as setOption lays the chart out before it returns.
+      A control of no size yet has no layout to answer from: 0. [Was: the
+      last paint's build -- empty before it, the previous option's after
+      it.] }
     function DiagnosticCount: Integer;
     function Diagnostic(AIndex: Integer): string;
     { Draw the chart to a PNG at its current size.

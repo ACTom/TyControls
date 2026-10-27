@@ -802,7 +802,7 @@ end;
 function TTyCustomAdvanceChart.BuildLegends(APPI: Integer;
   AList: TTyPaintList; const AMeasurer: ITyTextMeasurer): Integer;
 var
-  i, hov, k: Integer;
+  i, hov, k, lt, lk: Integer;
   lay: TTyLegendLayout;
   dx, dy: Double;
   ink: TTyLegendInk;
@@ -810,8 +810,14 @@ var
 begin
   Result := 0;
   if Length(FLegends) = 0 then Exit;
+  lk := -1;
+  lt := 0;
   for i := 0 to High(FLegends) do
   begin
+    { [R5-J] the elements the last one added take its zlevel }
+    if lk >= 0 then LevelTail(AList, lt, 'legend', lk);
+    lt := AList.Count;
+    lk := i;
     ink := LegendInk;
     fnt := LegendFont;
     LegendTextOf(i, fnt, ink);
@@ -845,6 +851,7 @@ begin
     Inc(Result, TyBuildLegendMarks(FLegendSpecs[i], lay, ink, fnt,
       APPI, AList, i, AMeasurer, hov));
   end;
+  if lk >= 0 then LevelTail(AList, lt, 'legend', lk);
 end;
 
 function TTyCustomAdvanceChart.LegendSelectedText(AIndex: Integer): string;

@@ -37,6 +37,8 @@ type
   public
     Events: TStringList;
     Roams: array of TTyGraphRoamPayload;
+    { [R5-J] the graphroam chart events' payloads, in order }
+    RoamEvs: TStringList;
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -62,6 +64,7 @@ type
     FEvSeen, FRoamSeen, FActSeen, FAxActSeen: Integer;
     procedure Miss(const AWhat: string);
     procedure SameHex(const AWhat: string; AGot: Double; AWant: TJSONData);
+    procedure CheckRoamEvent(const AWhat, APayload: string; AWant: TJSONObject);
     procedure SameItem(const AWhat: string; AGot: Double; AWant: TJSONData);
     procedure SameStr(const AWhat, AGot, AWant: string);
     procedure SameBool(const AWhat: string; AGot, AWant: Boolean);
@@ -133,6 +136,7 @@ constructor TTaProbe.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
   Events := TStringList.Create;
+  RoamEvs := TStringList.Create;
   OnChartEvent := @OnEv;
   OnGraphRoam := @OnRoam;
 end;
@@ -140,6 +144,7 @@ end;
 destructor TTaProbe.Destroy;
 begin
   Events.Free;
+  RoamEvs.Free;
   inherited Destroy;
 end;
 
@@ -178,6 +183,7 @@ begin
   if (AEvent.EventType = 'parallelaxisexpand') or (AEvent.EventType = 'brushselected')
     or (AEvent.EventType = 'axisareaselected') then
     Events.Add(AEvent.EventType + #9 + AEvent.Payload);
+  if AEvent.EventType = 'graphroam' then RoamEvs.Add(AEvent.Payload);
 end;
 
 procedure TTaProbe.OnRoam(Sender: TObject; const APayload: TTyGraphRoamPayload);
@@ -330,6 +336,45 @@ begin
     System.Move(AGot, q, SizeOf(q));
     Miss(Format('%s is %s upstream, %s here (%s / %s)', [AWhat, Fmt(want), Fmt(AGot),
       JStr(AWant), LowerCase(IntToHex(q, 16))]));
+  end;
+end;
+
+{ [R5-J] a graphroam chart event's payload against the oracle's record:
+  the seriesId (an auto id's NULs as '<NUL>', null where none) and the five
+  numbers, each to the bit (null where the payload has none) }
+procedure TAdvChartThumbnailAxisExpandOracleTest.CheckRoamEvent(const AWhat,
+  APayload: string; AWant: TJSONObject);
+var
+  pd, sid: TJSONData;
+  got: string;
+
+  function Num(const AKey: string): Double;
+  var x: TJSONData;
+  begin
+    x := TJSONObject(pd).Find(AKey);
+    if (x = nil) or (x.JSONType <> jtNumber) then Result := NaN
+    else Result := x.AsFloat;
+  end;
+
+begin
+  pd := GetJSON(StringReplace(APayload, '\u0000', '<NUL>', [rfReplaceAll]));
+  try
+    if not (pd is TJSONObject) then
+    begin
+      Miss(AWhat + ' is no object here');
+      Exit;
+    end;
+    sid := TJSONObject(pd).Find('seriesId');
+    if sid = nil then got := 'null' else got := sid.AsString;
+    if AWant.Find('seriesId').JSONType = jtNull then SameStr(AWhat + ' seriesId', got, 'null')
+    else SameStr(AWhat + ' seriesId', got, AWant.Strings['seriesId']);
+    SameHex(AWhat + ' dx', Num('dx'), AWant.Find('dx'));
+    SameHex(AWhat + ' dy', Num('dy'), AWant.Find('dy'));
+    SameHex(AWhat + ' zoom', Num('zoom'), AWant.Find('zoom'));
+    SameHex(AWhat + ' originX', Num('originX'), AWant.Find('originX'));
+    SameHex(AWhat + ' originY', Num('originY'), AWant.Find('originY'));
+  finally
+    pd.Free;
   end;
 end;
 
@@ -858,6 +903,14 @@ begin
         Continue;
       end;
       rp := FChart.Roams[FRoamSeen + nr];
+      { [R5-J] AND THE CHART EVENT: the dispatch's payload -- the
+        thumbnail's makeRoamPayload, the graph's own RoamController's, an
+        action's -- its seriesId and numbers [was: no event from a
+        thumbnail or a gesture] }
+      if FRoamSeen + nr >= FChart.RoamEvs.Count then
+        Miss(Format('no graphroam chart event %d here', [nr]))
+      else
+        CheckRoamEvent(Format('graphroam event %d', [nr]), FChart.RoamEvs[FRoamSeen + nr], e);
       SameBool(Format('graphroam %d pans', [nr]), rp.HasPan, e.Find('dx').JSONType <> jtNull);
       if rp.HasPan then
       begin
@@ -915,6 +968,7 @@ begin
   SameStr('the chart events', IntToStr(FChart.Events.Count - FEvSeen), IntToStr(n));
   SameStr('the graphroam events', IntToStr(Length(FChart.Roams) - FRoamSeen), IntToStr(nr));
   FEvSeen := FChart.Events.Count;
+  SameStr('the graphroam chart events', IntToStr(FChart.RoamEvs.Count - FRoamSeen), IntToStr(nr));
   FRoamSeen := Length(FChart.Roams);
 end;
 

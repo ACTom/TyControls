@@ -296,7 +296,7 @@ end;
 function TTyCustomAdvanceChart.BuildToolboxes(AList: TTyPaintList;
   const AMeasurer: ITyTextMeasurer): Integer;
 var
-  t, i: Integer;
+  t, i, lt, lk: Integer;
   ink: TTyTbInk;
   s, ox, oy, tw, th, l, tp: Double;
   el: TTyChartElement;
@@ -329,8 +329,14 @@ begin
   Result := 0;
   ink := TbInk;
   s := TbScale;
+  lk := -1;
+  lt := 0;
   for t := 0 to High(FTbLayouts) do
   begin
+    { [R5-J] the elements the last one added take its zlevel }
+    if lk >= 0 then LevelTail(AList, lt, 'toolbox', lk);
+    lt := AList.Count;
+    lk := t;
     if (t > High(FTbSpecs)) or not FTbLayouts[t].Valid then Continue;
     { a group a degenerate icon placed at NaN draws nothing at all }
     if IsNan(FTbLayouts[t].GroupX) or IsNan(FTbLayouts[t].GroupY) then Continue;
@@ -561,6 +567,7 @@ begin
     AList.Add(el);
     Inc(Result);
   end;
+  if lk >= 0 then LevelTail(AList, lt, 'toolbox', lk);
 end;
 
 { [R5-D] an icon's rect in the control (device px), as its path's
@@ -592,8 +599,8 @@ begin
   ATb := -1;
   AIcon := -1;
   if csDesigning in ComponentState then Exit;
-  { [R5-D] under the loading mask }
-  if LoadMasks then Exit;
+  { [R5-D] under the loading mask -- [R5-J] a toolbox of a higher zlevel
+    is over it, and the search by canvas takes its own (below) }
   s := TbScale;
   x := (AX - FLastRect.Left) / s;
   y := (AY - FLastRect.Top) / s;
@@ -602,6 +609,8 @@ begin
     or (y > (FLastRect.Bottom - FLastRect.Top) / s) then Exit;
   for t := High(FTbLayouts) downto 0 do
   begin
+    { [R5-J] its zlevel: under the mask, or not the canvas searched }
+    if MaskOver(ModelZLevel('toolbox', t)) or not HitIn(ModelZLevel('toolbox', t)) then Continue;
     if (t > High(FTbSpecs)) or not FTbLayouts[t].Valid then Continue;
     for i := High(FTbSpecs[t].Icons) downto 0 do
     begin
@@ -766,6 +775,10 @@ begin
   ApplyNotMerge(FTbBackup);
   FTbHistory := h;
   AfterSetOption(False, True);
+  { [R5-J] the action's update (prepareAndUpdate) runs in the dispatch: its
+    visual stage's brushSelect waits there and is published before the
+    dispatch's `updated` [was: at the next paint, after `updated`] }
+  ConvertReady;
   EmitPayloadEvent('restore', TbEventJson(APayload, 'restore'));
 end;
 
@@ -875,6 +888,9 @@ begin
     SetLength(FTbMagicTitle, Max(Length(FTbMagicTitle), TyToolboxCount(FOption)));
     for t := 0 to High(FTbMagicTitle) do FTbMagicTitle[t] := TyTbJson(d);
   end;
+  { [R5-J] the update in the dispatch, as restore's -- after the title it
+    renders }
+  ConvertReady;
   EmitPayloadEvent('magictypechanged', TbEventJson(APayload, 'magictypechanged'));
 end;
 
@@ -1211,6 +1227,8 @@ begin
       merged.Free;
     end;
   end;
+  { [R5-J] the update in the dispatch, as restore's }
+  ConvertReady;
   EmitPayloadEvent('dataviewchanged', TbEventJson(APayload, 'dataviewchanged'));
 end;
 

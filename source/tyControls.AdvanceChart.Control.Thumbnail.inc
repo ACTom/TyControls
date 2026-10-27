@@ -367,7 +367,7 @@ end;
   rect (151, silent) and the window (161, in the clip) }
 function TTyCustomAdvanceChart.BuildThumbnails(AList: TTyPaintList): Integer;
 var
-  k, i: Integer;
+  k, i, lt, lk: Integer;
   st: TTyThumbState;
   el: TTyChartElement;
   path: TTyZrPath;
@@ -405,8 +405,14 @@ var
 begin
   Result := 0;
   haveSkin := False;
+  lk := -1;
+  lt := 0;
   for k := 0 to High(FThumbs) do
   begin
+    { [R5-J] the elements the last one added take its zlevel }
+    if lk >= 0 then LevelTail(AList, lt, 'thumbnail', lk);
+    lt := AList.Count;
+    lk := k;
     st := FThumbs[k];
     if not st.Enabled then Continue;
     if not haveSkin then
@@ -532,6 +538,7 @@ begin
     AList.Add(el);
     Inc(Result);
   end;
+  if lk >= 0 then LevelTail(AList, lt, 'thumbnail', lk);
 end;
 
 { the thumbnail's RoamController mousedown: the owner with a copy, a roam
@@ -564,7 +571,13 @@ begin
   if s = 0 then Exit;
   if not TyThumbRectContains(FThumbs[k].Content, AX, AY) then Exit;
   TyThumbZoomPayload(FThumbs[k].View, s, AX, AY, z, ox, oy);
-  GraphZoom(FThumbs[k].Target, z, ox, oy);
+  { [R5-J] the thumbnail's dispatch publishes graphroam }
+  FRoamEvSrc := 2;
+  try
+    GraphZoom(FThumbs[k].Target, z, ox, oy);
+  finally
+    FRoamEvSrc := 0;
+  end;
   Result := True;
 end;
 
@@ -591,11 +604,11 @@ var
   e: Double;
   r: TTyXYWH;
 begin
-  { [R5-D] under the loading mask }
-  if LoadMasks then Exit(-1);
+  { [R5-D] under the loading mask -- [R5-J] by its zlevel }
   for k := High(FThumbs) downto 0 do
   begin
     if not FThumbs[k].Enabled then Continue;
+    if MaskOver(ModelZLevel('thumbnail', k)) then Continue;
     r := FThumbs[k].Box;
     e := Math.Max(0, FThumbs[k].Model.BorderWidth) / 2;
     r.X := r.X - e;

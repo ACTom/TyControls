@@ -36,12 +36,15 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.Controller,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Shape,
      tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Graph, tyControls.AdvanceChart.Color,
-     tyControls.AdvanceChart.States,
+     tyControls.AdvanceChart.States, tyControls.AdvanceChart.Events,
      tyControls.AdvanceChart;
 type
   TGraphRoamProbe = class(TTyAdvanceChart)
   public
     Events: array of TTyGraphRoamPayload;
+    { [R5-J] the graphroam chart events' payloads }
+    ChartEvs: array of string;
+    procedure OnRoamEv(Sender: TObject; const AEvent: TTyChartEvent);
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     function List: TTyPaintList;
     procedure Down(AButton: TMouseButton; AX, AY: Integer);
@@ -144,6 +147,12 @@ begin
   Events[High(Events)] := APayload;
 end;
 
+procedure TGraphRoamProbe.OnRoamEv(Sender: TObject; const AEvent: TTyChartEvent);
+begin
+  SetLength(ChartEvs, Length(ChartEvs) + 1);
+  ChartEvs[High(ChartEvs)] := AEvent.Payload;
+end;
+
 procedure TGraphRoamProbe.Relayout;
 begin
   Invalidate;
@@ -229,6 +238,8 @@ begin
   FChart.Parent := FForm;
   FChart.Controller := FCtl;
   FChart.OnGraphRoam := @FChart.Log;
+  { [R5-J] the RoamController's dispatch publishes graphroam: its payload }
+  AssertTrue('graphroam registered', FChart.ChartOn('graphroam', @FChart.OnRoamEv) > 0);
   AssertTrue('the fixture is where the suite expects it', FileExists(FixturePath));
   sl := TStringList.Create;
   try
@@ -403,11 +414,59 @@ end;
 procedure TAdvChartGraphRoamOracleTest.CheckEvents(AState: TJSONObject);
 var
   arr: TJSONArray;
-  e: TJSONObject;
-  i: Integer;
+  e, pe: TJSONObject;
+  i, s, si: Integer;
   tag: string;
+  pd, an: TJSONData;
 begin
   arr := AState.Arrays['events'];
+  { [R5-J] THE CHART EVENT, as roamHelper's dispatch publishes it: the same
+    count, each with its series' id, the numbers, and the animation
+    payloadDisableAnimation wrote [was: none -- only OnGraphRoam heard a
+    gesture] }
+  Inc(FCompared);
+  if arr.Count <> Length(FChart.ChartEvs) then
+    Miss(Format('%d graphroam events upstream, %d here', [arr.Count, Length(FChart.ChartEvs)]))
+  else
+    for i := 0 to arr.Count - 1 do
+    begin
+      e := TJSONObject(arr.Items[i]);
+      tag := 'event ' + IntToStr(i);
+      { an auto id's NULs, which fpjson would drop }
+      pd := GetJSON(StringReplace(FChart.ChartEvs[i], '\u0000', '<NUL>', [rfReplaceAll]));
+      try
+        Inc(FCompared);
+        if not (pd is TJSONObject) then
+        begin
+          Miss(tag + ' is no object here');
+          Continue;
+        end;
+        pe := TJSONObject(pd);
+        si := -1;
+        for s := 0 to 15 do
+          if (pe.Find('seriesId') <> nil)
+            and (pe.Strings['seriesId'] = StringReplace(FChart.ComponentModelId('series', s),
+              #0, '<NUL>', [rfReplaceAll])) then si := s;
+        if si <> e.Integers['series'] then
+          Miss(Format('%s names series %d upstream, %d here', [tag, e.Integers['series'], si]));
+        an := pe.Find('animation');
+        if not ((an is TJSONObject) and (TJSONObject(an).Get('duration', -1.0) = 0)) then
+          Miss(tag + ' carries no animation {duration: 0}');
+        if e.Find('dx') <> nil then
+        begin
+          SameNum(tag + ' dx', pe.Get('dx', NaN), e, 'dx');
+          SameNum(tag + ' dy', pe.Get('dy', NaN), e, 'dy');
+        end
+        else
+        begin
+          SameNum(tag + ' zoom', pe.Get('zoom', NaN), e, 'zoom');
+          SameNum(tag + ' originX', pe.Get('originX', NaN), e, 'originX');
+          SameNum(tag + ' originY', pe.Get('originY', NaN), e, 'originY');
+        end;
+      finally
+        pd.Free;
+      end;
+    end;
   Inc(FCompared);
   if arr.Count <> Length(FChart.Events) then
   begin
@@ -929,6 +988,7 @@ begin
     FChart.Option := cs.Objects['option'].AsJSON;
     FChart.SetBounds(0, 0, w, h);
     FChart.Events := nil;
+    FChart.ChartEvs := nil;
     RenderNow(w, h);
     states := cs.Arrays['states'];
     steps := cs.Arrays['steps'];
@@ -939,6 +999,7 @@ begin
       gesture := (st.Find('wheel') <> nil) or (st.Find('drag') <> nil);
       if gesture then Inc(FGestures);
       FChart.Events := nil;
+      FChart.ChartEvs := nil;
       Step(st, w, h);
       RenderNow(w, h);
       CheckState(cs, TJSONObject(states.Items[k + 1]), k + 1, gesture);

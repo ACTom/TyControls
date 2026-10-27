@@ -436,7 +436,9 @@ begin
     rows := TyLargeRows(g);
     case g.Kind of
       lgkBar: n := rows * 3;
-      lgkSymbol: n := rows * 2;
+      { [R5-J] the typed array's numbers: a single axis' chunk holds an odd
+        count's dangling x }
+      lgkSymbol: n := TyLargeSymbolNumbers(g);
       lgkLines: n := TyLargeLinesUsed(g);
     else
       n := rows * 4;

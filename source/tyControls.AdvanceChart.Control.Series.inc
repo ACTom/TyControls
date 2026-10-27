@@ -168,6 +168,8 @@ var
   model: TTyStyleModel;
   lineS, tickS, splitS, areaS, minorTickS, labelS, nameS: TTyStyleSet;
   areaColour: TTyColor;
+  { [R5-J] a gradient band's rect }
+  gbox: TTyXYWH;
   lblW, lblH: Integer;
   v: TTySingleAxisView;
   sp: TTyAxisLayoutSpec;
@@ -323,6 +325,8 @@ begin
     if s = nil then Continue;
     v := s.View;
     if not v.Shown then Continue;
+    { [R5-J] on the zlevel PaintZLevels draws now }
+    if not ApartIn(AxisModelZLevel(s.Axis)) then Continue;
     ViewDrew(cvSingleAxis);
     if ABelow then
     begin
@@ -336,6 +340,25 @@ begin
           if ink > High(v.Furn.SplitAreaInks) then ink := 0;
           if not v.Furn.SplitAreaInks[ink].Ok then Continue;
           areaColour := TTyColor(v.Furn.SplitAreaInks[ink].Colour);
+          { [R5-J] a gradient: the band's own Rect's ramp, as the
+            cartesian axis' [was: the first stop] }
+          if v.Furn.SplitAreaInks[ink].Grad.Kind <> cgkNone then
+          begin
+            APainter.BeginPath;
+            APainter.MoveTo(v.SplitAreas[q].X, v.SplitAreas[q].Y);
+            APainter.LineTo(v.SplitAreas[q].X + v.SplitAreas[q].W, v.SplitAreas[q].Y);
+            APainter.LineTo(v.SplitAreas[q].X + v.SplitAreas[q].W,
+              v.SplitAreas[q].Y + v.SplitAreas[q].H);
+            APainter.LineTo(v.SplitAreas[q].X, v.SplitAreas[q].Y + v.SplitAreas[q].H);
+            APainter.ClosePath;
+            gbox.X := Math.Min(v.SplitAreas[q].X, v.SplitAreas[q].X + v.SplitAreas[q].W);
+            gbox.Y := Math.Min(v.SplitAreas[q].Y, v.SplitAreas[q].Y + v.SplitAreas[q].H);
+            gbox.W := Abs(v.SplitAreas[q].W);
+            gbox.H := Abs(v.SplitAreas[q].H);
+            TyFillAxisGradient(APainter, v.Furn.SplitAreaInks[ink].Grad, gbox,
+              v.Furn.AreaOpacity);
+            Continue;
+          end;
         end
         else if (ink <> 0) or not (tpBackground in areaS.Present) then
           Continue
@@ -1084,26 +1107,55 @@ var
   { the split areas in their colours: the author's list, or the skin's
     colour and none in turn }
   procedure FillAreas(const AView: TTyPolarAxisView);
-  var q: Integer;
+  var
+    q, g, n: Integer;
+    bx, by, bw, bh: Double;
+    gbox: TTyXYWH;
   begin
-    for q := 0 to High(AView.SplitAreas) do
+    { [R5-J] THE ANGLE AND RADIUS VIEWS MERGE THE BANDS OF ONE COLOUR into
+      one path (mergePath), in colour order: one fill per colour -- no seam
+      between two bands of it -- and a gradient's ramp over the merged
+      path's box [was: a fill per band, a gradient's first stop] }
+    for g := 0 to Math.Max(0, High(AView.Furn.SplitAreaInks)) do
     begin
-      ink := AView.SplitAreas[q].ColourIndex;
       if Length(AView.Furn.SplitAreaInks) > 0 then
       begin
-        if ink > High(AView.Furn.SplitAreaInks) then ink := 0;
-        if not AView.Furn.SplitAreaInks[ink].Ok then Continue;
-        areaColour := TTyColor(AView.Furn.SplitAreaInks[ink].Colour);
+        if not AView.Furn.SplitAreaInks[g].Ok then Continue;
+        areaColour := TTyColor(AView.Furn.SplitAreaInks[g].Colour);
       end
-      else if (ink <> 0) or not (tpBackground in areaS.Present) then
+      { the skin's colour and none in turn: the first only }
+      else if not (tpBackground in areaS.Present) then
         Continue
       else
         areaColour := areaS.Background.Color;
-      { areaStyle.opacity [R5-B] }
-      areaColour := TyAxisAreaAlpha(areaColour, AView.Furn.AreaOpacity);
       APainter.BeginPath;
-      ArcPath(AView.SplitAreas[q]);
-      APainter.FillPath(areaColour);
+      n := 0;
+      for q := 0 to High(AView.SplitAreas) do
+      begin
+        ink := AView.SplitAreas[q].ColourIndex;
+        if Length(AView.Furn.SplitAreaInks) > 0 then
+        begin
+          if ink > High(AView.Furn.SplitAreaInks) then ink := 0;
+        end;
+        if ink <> g then Continue;
+        ArcPath(AView.SplitAreas[q]);
+        Inc(n);
+      end;
+      if n = 0 then Continue;
+      if (Length(AView.Furn.SplitAreaInks) > 0)
+        and (AView.Furn.SplitAreaInks[g].Grad.Kind <> cgkNone) then
+      begin
+        if not APainter.PathBounds(bx, by, bw, bh) then Continue;
+        gbox.X := bx;
+        gbox.Y := by;
+        gbox.W := bw;
+        gbox.H := bh;
+        TyFillAxisGradient(APainter, AView.Furn.SplitAreaInks[g].Grad, gbox,
+          AView.Furn.AreaOpacity);
+      end
+      else
+        { areaStyle.opacity [R5-B] }
+        APainter.FillPath(TyAxisAreaAlpha(areaColour, AView.Furn.AreaOpacity));
     end;
   end;
 
@@ -1303,6 +1355,9 @@ begin
     begin
       if k = 0 then view := cvAngleAxis else view := cvRadiusAxis;
       if ViewHidden(view) then Continue;
+      { [R5-J] on the zlevel PaintZLevels draws now }
+      if (k = 0) and not ApartIn(AxisModelZLevel(p.AngleAxis)) then Continue;
+      if (k = 1) and not ApartIn(AxisModelZLevel(p.RadiusAxis)) then Continue;
       if k = 0 then
       begin
         if not p.AngleView.Shown then Continue;
@@ -2650,6 +2705,9 @@ begin
     for a := 0 to High(par.Views) do
     begin
       if not par.Views[a].Shown then Continue;
+      { [R5-J] on the zlevel PaintZLevels draws now }
+      if (a <= High(par.AxisIndices))
+        and not ApartIn(ModelZLevel('parallelAxis', par.AxisIndices[a])) then Continue;
       ViewDrew(cvParallelAxis);
       sp := par.Views[a].Spec;
       { a lone axis stands nowhere (its place is not a number) }

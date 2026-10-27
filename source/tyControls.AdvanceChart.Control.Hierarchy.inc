@@ -146,6 +146,8 @@ begin
   DropStaticKeepList;
   FZrDirty := True;
   inherited Invalidate;
+  { [R5-J] the gesture's dispatch publishes its event first }
+  RoamEvent('graphroam', APayload);
   { the dispatch's triggerUpdatedEvent [Batch 97] }
   if FViewActionDepth = 0 then EmitUpdated;
 end;
@@ -646,6 +648,8 @@ begin
   { the series group's transform changes; everything on the canvas follows
     it -- laid out again here, as the tree's roam is }
   Invalidate;
+  { [R5-J] the gesture's dispatch publishes its event first }
+  RoamEvent('sankeyroam', APayload);
   if FViewActionDepth = 0 then EmitUpdated;
 end;
 
@@ -2727,7 +2731,9 @@ begin
   if FLastPPI <= 0 then
   begin
     Invalidate;
-    EmitUpdated;
+    RoamEvent('treeroam', APayload);
+    { [R5-J] an action's `updated` is the dispatch's }
+    if FViewActionDepth = 0 then EmitUpdated;
     Exit;
   end;
   m := NewTextMeasurer(FLastPPI);
@@ -2738,8 +2744,11 @@ begin
   TipResetQuiet;
   FZrDirty := True;
   inherited Invalidate;
-  { the dispatch's triggerUpdatedEvent [Batch 97] }
-  EmitUpdated;
+  { [R5-J] the gesture's dispatch publishes its event first }
+  RoamEvent('treeroam', APayload);
+  { the dispatch's triggerUpdatedEvent [Batch 97] -- [R5-J] an action's is
+    the dispatch's }
+  if FViewActionDepth = 0 then EmitUpdated;
 end;
 
 function TTyCustomAdvanceChart.TreeRoam(ASeriesIndex: Integer; ADX, ADY: Double): Boolean;
@@ -2824,7 +2833,78 @@ begin
   for k := 0 to High(slots) do
     if TreeFlip(slots[k], di) then Result := True;
   FullUpdate;
+  { [R5-J] the action's event, a copy of its payload; `updated` is the
+    dispatch's [was: no event, and `updated` twice] }
+  EmitPayloadEvent('treeexpandandcollapse',
+    CopyWithType(APayload, 'treeexpandandcollapse'));
+end;
+
+procedure TTyCustomAdvanceChart.TreeClickToggle(ASeriesIndex, ADataIndex: Integer);
+var
+  ev: TJSONObject;
+  i: Integer;
+  any: Boolean;
+begin
+  any := False;
+  for i := 0 to High(FBindings) do
+    if (FBindings[i].SeriesIndex = ASeriesIndex) and TreeFlip(i, ADataIndex) then
+      any := True;
+  { a row TreeFlip refuses (TreeToggle's rule) does nothing }
+  if not any then Exit;
+  { TreeView's click: dispatchAction({type: 'treeExpandAndCollapse',
+    seriesId, dataIndex}) -- the update (with its payload: the brush's
+    visual stage dispatches brushSelect), the event, `updated` }
+  FBrushPayload := True;
+  FullUpdate;
+  ev := TJSONObject.Create;
+  try
+    ev.Strings['type'] := 'treeexpandandcollapse';
+    ev.Strings['seriesId'] := SeriesModelId(ASeriesIndex);
+    ev.Integers['dataIndex'] := ADataIndex;
+    EmitPayloadEvent('treeexpandandcollapse', ev.AsJSON, ev);
+  finally
+    ev.Free;
+  end;
   EmitUpdated;
+end;
+
+procedure TTyCustomAdvanceChart.RoamEvent(const AType: string;
+  const APayload: TTyGraphRoamPayload);
+var
+  ev, anim: TJSONObject;
+begin
+  if (FRoamEvSrc = 0) or (FViewActionDepth > 0) then Exit;
+  ev := TJSONObject.Create;
+  try
+    ev.Strings['type'] := AType;
+    { makeRoamPayload: the id before the params }
+    if (FRoamEvSrc = 2) and (APayload.SeriesIndex >= 0) then
+      ev.Strings['seriesId'] := SeriesModelId(APayload.SeriesIndex);
+    if APayload.HasPan then
+    begin
+      ev.Floats['dx'] := APayload.DX;
+      ev.Floats['dy'] := APayload.DY;
+    end;
+    if APayload.HasZoom then
+    begin
+      ev.Floats['zoom'] := APayload.Zoom;
+      ev.Floats['originX'] := APayload.OriginX;
+      ev.Floats['originY'] := APayload.OriginY;
+    end;
+    { roamHelper: defaults({type}, extra), payloadDisableAnimation, then
+      `${mainType}Id` }
+    if FRoamEvSrc = 1 then
+    begin
+      anim := TJSONObject.Create;
+      anim.Add('duration', 0);
+      ev.Add('animation', anim);
+      if APayload.SeriesIndex >= 0 then
+        ev.Strings['seriesId'] := SeriesModelId(APayload.SeriesIndex);
+    end;
+    EmitPayloadEvent(AType, VmJsJson(ev), ev);
+  finally
+    ev.Free;
+  end;
 end;
 
 function TTyCustomAdvanceChart.TreeExpanded(ASeriesIndex, ADataIndex: Integer): Boolean;

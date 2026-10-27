@@ -165,8 +165,13 @@ var
     if not TyGfxPaintElement(AEl, meas, ctx, pe) then Exit;
     pe.Silent := ASilent;
     pe.Datum := TyChartComponentDatum(ctkGraphic, 0, n);
-    { zlevel over z, as zrender sorts; z and z2 whole }
-    pe.Z := Round(AEl.ZLevel) * 100000 + Round(AEl.Z);
+    { zlevel over z, as zrender sorts; z and z2 whole -- [R5-J] the zlevel
+      the element's own, so the canvases are drawn and searched in their
+      order with the series' and the components' [was: folded into z, the
+      element on canvas 0] }
+    if IsNan(AEl.ZLevel) or IsInfinite(AEl.ZLevel) then pe.ZLevel := 0
+    else pe.ZLevel := Round(Max(Double(-100000), Min(Double(100000), AEl.ZLevel)));
+    pe.Z := Round(AEl.Z);
     pe.Z2 := Round(AEl.Z2);
     pe.GfxUnder := (AEl.ZLevel = 0) and (AEl.Z <= 0);
     SetLength(FGfxPaint, n + 1);

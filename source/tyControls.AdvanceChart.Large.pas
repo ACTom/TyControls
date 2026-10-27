@@ -93,6 +93,12 @@ type
     Shown: Integer;
     ChunkFirst: Integer;
     ChunkEnds: TTyIntegerArray;
+    { [R5-J] a symbol batch's NUMBERS after each of its chunks, and those
+      it holds now (0: every one) -- a single axis' chunk is
+      Float32Array(count), an odd count's x dangling, so a batch's numbers
+      are not always twice its rows }
+    ChunkNums: TTyIntegerArray;
+    ShownNums: Integer;
     { LINES [Batch 121]: Pts holds the segs -- [x0, y0, x1, y1] per row, or
       [count, x, y, ...] per row on a polyline (LinesPoly); Idx the offset of
       each row's first number; the series' curveness (a straight row is a
@@ -146,6 +152,9 @@ function TyLargeBounds(const AGeom: TTyLargeGeom): TTyRectF;
 { The rows the batch holds now: every row, or a growing symbol batch's
   Shown [Batch 119] -- [spec 242] or a growing lines batch's. }
 function TyLargeRows(const AGeom: TTyLargeGeom): Integer;
+{ [R5-J] the numbers a symbol batch holds now: its typed array's length --
+  every number, or a growing batch's ShownNums }
+function TyLargeSymbolNumbers(const AGeom: TTyLargeGeom): Integer;
 { [spec 242] the numbers of a lines batch's segs it holds now: every one,
   or those of a growing batch's Shown rows }
 function TyLargeLinesUsed(const AGeom: TTyLargeGeom): Integer;
@@ -166,6 +175,12 @@ begin
     Result := AGeom.Idx[AGeom.Shown]
   else
     Result := Length(AGeom.Pts);
+end;
+
+function TyLargeSymbolNumbers(const AGeom: TTyLargeGeom): Integer;
+begin
+  Result := Length(AGeom.Pts);
+  if (AGeom.ShownNums > 0) and (AGeom.ShownNums < Result) then Result := AGeom.ShownNums;
 end;
 
 function TyLargeRows(const AGeom: TTyLargeGeom): Integer;
@@ -368,13 +383,26 @@ begin
         { LargeSymbolPath.getBoundingRect: the points' extremes grown by the
           symbol's own size -- not the hit box's 4 px floor }
         a := Infinity; b := Infinity; c := NegInfinity; d := NegInfinity;
-        n := TyLargeRows(AGeom);
-        for i := 0 to n - 1 do
+        { [R5-J] over the typed array's numbers, two at a time: an odd
+          count's last x reads an undefined y, which Math.min / max make
+          NaN [was: whole pairs only] }
+        n := TyLargeSymbolNumbers(AGeom);
+        i := 0;
+        while i < n do
         begin
-          a := JsMin(AGeom.Pts[i * 2], a);
-          c := JsMax(AGeom.Pts[i * 2], c);
-          b := JsMin(AGeom.Pts[i * 2 + 1], b);
-          d := JsMax(AGeom.Pts[i * 2 + 1], d);
+          a := JsMin(AGeom.Pts[i], a);
+          c := JsMax(AGeom.Pts[i], c);
+          if i + 1 < n then
+          begin
+            b := JsMin(AGeom.Pts[i + 1], b);
+            d := JsMax(AGeom.Pts[i + 1], d);
+          end
+          else
+          begin
+            b := NaN;
+            d := NaN;
+          end;
+          Inc(i, 2);
         end;
         AGeom.Box.X := JsAdd(a, -AGeom.SymW / 2);
         AGeom.Box.Y := JsAdd(b, -AGeom.SymH / 2);

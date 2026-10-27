@@ -1415,8 +1415,8 @@ begin
   Result := False;
   AAxisKey := -1;
   AArea := -1;
-  { [R5-D] under the loading mask }
-  if LoadMasks then Exit;
+  { [R5-D] under the loading mask -- [R5-J] the axes' (the root's) level }
+  if MaskOver(ComponentZLevel) then Exit;
   { THE SINGLES' first: drawn after the grids' [F4a] }
   for a := High(FSingles) downto 0 do
   begin
@@ -1787,6 +1787,8 @@ begin
           if (pass = 0) <> (a >= gb.XAxisCount) then Continue;
           if a < gb.XAxisCount then axo := gb.XAxis(a) else axo := gb.YAxis(a - gb.XAxisCount);
           if axo = nil then Continue;
+          { [R5-J] on the zlevel PaintZLevels draws now }
+          if not ApartIn(AxisModelZLevel(axo)) then Continue;
           spec := gb.SpecFor(axo);
           if (spec = nil) or (Length(spec^.BreakAreas) = 0) then Continue;
           Areas;
@@ -1798,6 +1800,8 @@ begin
   begin
     if FSingles[si] = nil then Continue;
     axo := FSingles[si].Axis;
+    { [R5-J] on the zlevel PaintZLevels draws now }
+    if not ApartIn(AxisModelZLevel(axo)) then Continue;
     spec := @FSingles[si].View.Spec;
     if Length(spec^.BreakAreas) = 0 then Continue;
     Areas;
@@ -3176,6 +3180,8 @@ begin
   begin
     lay := FTitles[i];
     if not lay.Valid then Continue;
+    { [R5-J] on the zlevel PaintZLevels draws now }
+    if not ApartIn(ModelZLevel('title', i)) then Continue;
     ViewDrew(cvTitle);
     { The frame first, and only when the option asked for one: ECharts gives
       the title a transparent background by default, and painting the surface
@@ -4719,7 +4725,12 @@ begin
           1: mk := TJSONObject(node).Find('markLine');
           2: mk := TJSONObject(node).Find('markArea');
         end;
-      mkLevels[s][kind] := LevelOf(mk, False);
+      { [R5-J] a marker model's parent is its series: its own zlevel, else
+        the series' (the root's under it) [was: its own, else 0] }
+      d := nil;
+      if mk is TJSONObject then d := TJSONObject(mk).Find('zlevel');
+      if (d = nil) or (d.JSONType = jtNull) then mkLevels[s][kind] := zl[s]
+      else mkLevels[s][kind] := LevelOf(mk, False);
       if mkLevels[s][kind] <> 0 then any := True;
     end;
     if (blends[s] <> '') or (zl[s] <> 0) then any := True;

@@ -4739,7 +4739,8 @@ function BuildLargeSymbolsAt(const ABinding: TTySeriesBinding; AStore: TTyDataSt
   const AStack: TTySeriesStack; const AVisual: TTySeriesVisual;
   AList: TTyPaintList; AColX, AColY: Integer; ACal: ITyCoordSys): Integer;
 var
-  i, n, k, k0, j, rows: Integer;
+  i, n, k, k0, j, nums, take: Integer;
+  single: Boolean;
   part: TTyLargeGeom;
   ch: TTyIntegerArray;
   baseHoriz, stacked: Boolean;
@@ -4838,24 +4839,33 @@ begin
   { PROGRESSIVE [Batch 119]: LargeSymbolDraw.incrementalUpdate concatenates
     a chunk onto the batch added last while that holds under 2e4 numbers
     (its endIndex moves, its startIndex stays), else starts a batch at the
-    chunk's start }
+    chunk's start.
+    [R5-J] IN NUMBERS, as the typed arrays are: on a single axis each
+    chunk's pointsLayout array is Float32Array(count) -- the first count
+    numbers of its pairs, its first count / 2 points (and an odd count's
+    dangling x) -- and the batch is the arrays concatenated, read in pairs
+    again: a dangling x pairs with the next chunk's first number. The rows
+    a batch holds after a chunk are its numbers / 2. [Was: every point of
+    every chunk on a single axis.] }
+  single := SingleOf(ABinding) <> nil;
   k0 := -1;
   part := g;
-  rows := 0;
+  nums := 0;
   for k := 0 to High(AVisual.LargeChunks) do
   begin
-    if (k0 >= 0) and (rows * 2 < 20000) then
+    if (k0 >= 0) and (nums < 20000) then
     begin
       ch := AVisual.LargeChunks[k];
-      SetLength(part.Pts, (rows + Length(ch)) * 2);
-      for j := 0 to High(ch) do
-      begin
-        part.Pts[(rows + j) * 2] := g.Pts[ch[j] * 2];
-        part.Pts[(rows + j) * 2 + 1] := g.Pts[ch[j] * 2 + 1];
-      end;
-      Inc(rows, Length(ch));
+      take := Length(ch) * 2;
+      if single then take := Length(ch);
+      SetLength(part.Pts, nums + take);
+      for j := 0 to take - 1 do
+        part.Pts[nums + j] := g.Pts[ch[j div 2] * 2 + (j and 1)];
+      Inc(nums, take);
       SetLength(part.ChunkEnds, Length(part.ChunkEnds) + 1);
-      part.ChunkEnds[High(part.ChunkEnds)] := rows;
+      part.ChunkEnds[High(part.ChunkEnds)] := nums div 2;
+      SetLength(part.ChunkNums, Length(part.ChunkNums) + 1);
+      part.ChunkNums[High(part.ChunkNums)] := nums;
       Continue;
     end;
     if k0 >= 0 then
@@ -4870,17 +4880,19 @@ begin
     part := g;
     part.Pts := nil;
     part.ChunkEnds := nil;
+    part.ChunkNums := nil;
     part.ChunkFirst := k;
     if Length(ch) > 0 then part.Start := ch[0] else part.Start := 0;
-    SetLength(part.Pts, Length(ch) * 2);
-    for j := 0 to High(ch) do
-    begin
-      part.Pts[j * 2] := g.Pts[ch[j] * 2];
-      part.Pts[j * 2 + 1] := g.Pts[ch[j] * 2 + 1];
-    end;
-    rows := Length(ch);
+    take := Length(ch) * 2;
+    if single then take := Length(ch);
+    SetLength(part.Pts, take);
+    for j := 0 to take - 1 do
+      part.Pts[j] := g.Pts[ch[j div 2] * 2 + (j and 1)];
+    nums := take;
     SetLength(part.ChunkEnds, 1);
-    part.ChunkEnds[0] := rows;
+    part.ChunkEnds[0] := nums div 2;
+    SetLength(part.ChunkNums, 1);
+    part.ChunkNums[0] := nums;
   end;
   if k0 >= 0 then
   begin

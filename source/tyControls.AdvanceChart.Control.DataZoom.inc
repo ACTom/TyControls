@@ -553,15 +553,20 @@ end;
 
 function TTyCustomAdvanceChart.BuildDataZooms(AList: TTyPaintList): Integer;
 var
-  k: Integer;
+  k, lt: Integer;
   scale: Double;
 begin
   Result := 0;
   if FLastPPI > 0 then scale := FLastPPI / 96 else scale := 1;
   for k := 0 to High(FDzLayouts) do
     if (k <= High(FDzViews)) and FDzLayouts[k].Valid then
+    begin
+      lt := AList.Count;
       Inc(Result, TyBuildDzSliderMarks(FDzLayouts[k], FDzViews[k],
         DataZoomInk(FDzViews[k]), FLastRect.Left, FLastRect.Top, scale, AList));
+      { [R5-J] its own zlevel, else the root's }
+      LevelTail(AList, lt, 'dataZoom', k);
+    end;
 end;
 
 { ==================== dataZoom interaction ==================== }
@@ -868,7 +873,8 @@ var
 
   function Hit(ARole: TTyDzRole): Boolean;
   begin
-    Result := DzHits(i, ARole, AX, AY);
+    { [R5-J] a slider under the loading mask is not found }
+    Result := not MaskOver(ModelZLevel('dataZoom', i)) and DzHits(i, ARole, AX, AY);
     if Result then
     begin
       res.Kind := dtkSlider;
@@ -880,8 +886,8 @@ var
 begin
   Result := Default(TTyDzTarget);
   res := Default(TTyDzTarget);
-  { [R5-D] a slider is under the loading mask }
-  if LoadMasks then Exit;
+  { [R5-D] a slider is under the loading mask -- [R5-J] one of a zlevel
+    above the mask's is not (Slider below) }
   s := DzScale;
   if (AX < 0) or (AY < 0) or (AX > (FLastRect.Right - FLastRect.Left) / s)
     or (AY > (FLastRect.Bottom - FLastRect.Top) / s) then Exit;
