@@ -1869,7 +1869,11 @@ var
             lastH[ARow] := AOld.Nodes[OldOf(ARow)].H;
           end;
         end;
-        Task(q, NewShape(ARow, c));
+        { [R5-I] one still fading in fades on to 1 with this transition }
+        if OldOpacity(OldOf(ARow), c) < 1 then
+          Task(q, With1(NewShape(ARow, c), 'style.opacity', 1))
+        else
+          Task(q, NewShape(ARow, c));
       end
       else if (pr >= 0) and ((not reRoot) or drill) then
       begin

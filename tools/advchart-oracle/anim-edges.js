@@ -764,6 +764,10 @@ add('funnel', 'fn-inside', "the same with the labels inside",
 add('funnel', 'fn-delay', "animationDelayUpdate idx * 100: each piece and its label wait their row's turn",
   FN(FD1, null, { animationDelayUpdate: { $fn: 'idx*100' } }), ['funnel'],
   [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'merge', option: { series: [{ data: FD2 }] } }, ...after([0, 150, 250, 350, 1101, 1301, 1350], T1)]);
+add('funnel', 'fn-midway', "[R5-I] a second merge 300 ms into the first: the outer labels move on from where they are (their style x / y now), not from where the first was sending them",
+  FN(FD1), ['funnel'],
+  [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'merge', option: { series: [{ data: FD2 }] } }, ...after([0, 300], T1),
+    { t: T1 + 300, do: 'merge', option: { series: [{ data: FD1 }] } }, ...after([300, 301, 500, 900, 1299, 1301], T1)]);
 add('funnel', 'fn-add', "a merge adds a row: the new piece fades in (its points set), the kept ones move to make room",
   FN(FD1), ['funnel'],
   [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'merge', option: { series: [{ data: FD1.concat([{ name: 'e', value: 10 }]) }] } },

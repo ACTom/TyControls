@@ -622,6 +622,15 @@ add('treemap', 'tm-del-words', "[R5-I] a merge that takes away b2, whose name is
     { t: T1, do: 'merge', option: { series: [{ data: [{ name: 'a', children: [{ name: 'a1', value: 6 }, { name: 'a2', value: 4 }] },
       { name: 'b', children: [{ name: 'b1', value: 3 }] }, { name: 'c', value: 4 }] }] } },
     ...after([0, 1, 16, 100, 300, 500, 700, 900, 999, 1001], T1)]);
+add('treemap', 'tm-midway-add', "[R5-I] a merge adds d (it comes out of the root's corner, fading in, 1000 ms linear), and 300 ms in a second merge changes the values: d is kept -- its rects go on from their shape and opacity now",
+  { animation: true, series: [Object.assign({}, TMO, { data: TM, animationDurationUpdate: 1000, animationEasing: 'linear' })] },
+  ['tm'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: TM.concat([{ name: 'd', value: 3 }]) }] } },
+    ...after([0, 300], T1),
+    { t: T1 + 300, do: 'merge', option: { series: [{ data: [{ name: 'a', children: [{ name: 'a1', value: 2 }, { name: 'a2', value: 8 }] },
+      { name: 'b', children: [{ name: 'b1', value: 5 }, { name: 'b2', value: 1 }] }, { name: 'c', value: 6 }, { name: 'd', value: 4 }] }] } },
+    ...after([300, 301, 500, 1000, 1299, 1301], T1)]);
 add('treemap', 'tm-midway', "[R5-I] a second merge 300 ms into the first (1000 ms linear): every kept group and rect tweens on from where it is now (the elements' current values), not from where the first merge was sending it",
   { animation: true, series: [Object.assign({}, TMO, { data: TM, animationDurationUpdate: 1000, animationEasing: 'linear' })] },
   ['tm'],

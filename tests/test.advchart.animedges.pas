@@ -80,6 +80,8 @@ type
     procedure TestTheContinuousPhasesZOrderAsUpstream;
     procedure TestAnEffectScattersStateOverItsUpdateAsUpstream;
     procedure TestARichEndLabelsPiecesAsUpstream;
+    procedure TestARemovedPictorialBarLeavesNoGhost;
+    procedure TestATranslucentTitleIsDrawnOnceOverTheRipples;
   end;
 
 implementation
@@ -1096,6 +1098,78 @@ begin
   end;
   AssertTrue(Format('the label inked at rest (%d)', [inkRest]), inkRest > 20);
   AssertEquals(Format('none of it past the clip (of %d at rest)', [inkRest]), 0, inkEarly);
+end;
+
+{ HAND-WRITTEN [R5-I]: a merge moves every glyph and 100 ms in a second
+  merge drops c -- c's bundle (removeBar's ghost the paths ride) goes with
+  the last of its paths: when every transition has run, no ghost is left. }
+procedure TAdvChartAnimEdgesOracleTest.TestARemovedPictorialBarLeavesNoGhost;
+var t0: Double;
+begin
+  NewChart(400, 300);
+  t0 := 1700000000000;
+  FChart.AnimationMode := camAlways;
+  FChart.AnimNow := t0;
+  FChart.SetOption('{"animation": true, "xAxis": {"type": "category", "data": ["a", "b", "c"]},'
+    + ' "yAxis": {"type": "value", "max": 100}, "series": [{"type": "pictorialBar", "symbol": "rect",'
+    + ' "symbolPosition": "end", "symbolSize": [20, 20], "animationDurationUpdate": 600,'
+    + ' "animationEasingUpdate": "linear", "data": [30, 60, 90]}]}', True);
+  RenderNow;
+  FChart.AnimTick(t0 + 3000);
+  FChart.AnimNow := t0 + 3000;
+  RenderNow;
+  FChart.SetOption('{"series": [{"data": [60, 30, 40]}]}', False);
+  RenderNow;
+  FChart.AnimTick(t0 + 3100);
+  FChart.AnimNow := t0 + 3100;
+  RenderNow;
+  FChart.SetOption('{"series": [{"data": [60, 30]}]}', False);
+  RenderNow;
+  AssertTrue('c leaves', FChart.AnimGhostCount > 0);
+  FChart.AnimTick(t0 + 6000);
+  FChart.AnimNow := t0 + 6000;
+  RenderNow;
+  FChart.AnimTick(t0 + 6100);
+  RenderNow;
+  AssertEquals('ghosts once every transition has run', 0, FChart.AnimGhostCount);
+end;
+
+{ HAND-WRITTEN [R5-I]: in the continuous phase the title (z 6) is drawn over
+  the ripples -- once: a translucent title box away from every ripple shows
+  the same pixel as with the animation off (drawn twice, under and over the
+  dynamic layer, it would be darker). }
+procedure TAdvChartAnimEdgesOracleTest.TestATranslucentTitleIsDrawnOnceOverTheRipples;
+const
+  cOpt = '{"animation": true, "animationDuration": 300,'
+    + ' "title": {"text": "T", "left": 10, "top": 10, "padding": 12, "backgroundColor": "rgba(0, 170, 0, 0.5)"},'
+    + ' "xAxis": {"type": "value", "min": 0, "max": 10}, "yAxis": {"type": "value", "min": 0, "max": 10},'
+    + ' "series": [{"type": "effectScatter", "data": [[5, 5]], "symbolSize": 10}]}';
+var
+  t0: Double;
+  live, still: TBGRAPixel;
+begin
+  NewChart(400, 300);
+  t0 := 1700000000000;
+  FChart.AnimationMode := camOff;
+  FChart.SetOption(cOpt, True);
+  RenderNow;
+  still := FBmp.GetPixel(13, 13);
+  NewChart(400, 300);
+  FChart.AnimationMode := camAlways;
+  FChart.AnimNow := t0;
+  FChart.SetOption(cOpt, True);
+  RenderNow;
+  FChart.AnimTick(t0 + 2000);
+  FChart.AnimNow := t0 + 2000;
+  RenderNow;
+  FChart.AnimTick(t0 + 2100);
+  FChart.AnimNow := t0 + 2100;
+  RenderNow;
+  live := FBmp.GetPixel(13, 13);
+  AssertTrue('the box is translucent green', (still.green > still.red + 40));
+  AssertEquals('red', still.red, live.red);
+  AssertEquals('green', still.green, live.green);
+  AssertEquals('blue', still.blue, live.blue);
 end;
 
 initialization
