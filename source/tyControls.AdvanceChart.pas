@@ -772,6 +772,15 @@ type
   end;
   TTyStoreKeepArray = array of TTyStoreKeep;
 
+  { [R5-G] WHICH ITEMS OF AN OPTION ARRAY ARE OBJECTS (ObjectRowsOf), kept
+    for the tree they were read off: the array, the option's Generation, the
+    positions in order }
+  TTyObjRowsKeep = record
+    Arr: TJSONArray;
+    Gen: Int64;
+    Rows: TTyIntegerArray;
+  end;
+
   { [spec 242] a custom series' clip on a polar (createPolarClipPath), device
     px: the centre, the radii, the start and end angles (radians, as the
     element clip holds them), clockwise }
@@ -860,6 +869,8 @@ type
     FStores: array of TTyDataStore;
     { [R2-I6] the parsed stores kept between builds of one tree, per slot }
     FStoreKeep: TTyStoreKeepArray;
+    { [R5-G] the object items of the large option arrays, for this tree }
+    FObjRows: array of TTyObjRowsKeep;
     { Every bar's width and offset, index-parallel to FBindings. Solved in
       Relayout rather than Rebuild because it needs the FINAL pixel extents:
       the plot rect is shrunk to fit the labels in phase C, and a band measured
@@ -2821,6 +2832,11 @@ type
     { the array RawItemNode reads its items from, nil where it reads none:
       a loop over every row asks for it once [R2-L] }
     function RawItemArray(ASlot: Integer): TJSONArray;
+    { [R5-G] the positions of AArr's items that are objects, ascending -- what
+      a loop over every item that acts on the object items alone visits; for
+      an array of cObjRowsMinItems items and more, kept for the tree's
+      Generation (a tree written to in place is touched: a new one) }
+    function ObjectRowsOf(AArr: TJSONArray): TTyIntegerArray;
     { a row's own colour object -- a gradient or a pattern in the item's
       itemStyle.color -- for the row fills a renderer reads [Batch 105] }
     function RowObjectFill(ASlot, ARaw: Integer; out AColor: TTyOptColor): Boolean;
@@ -5407,6 +5423,12 @@ function TyAdvChartLayerRegionsForTest: Integer;
   default 4096), and how many builds have taken one. }
 procedure TyAdvChartStoreKeepForTest(AMinRows: Integer);
 function TyAdvChartStoreKeepsForTest: Integer;
+{ [R5-G] The object items of an option array kept for its tree
+  (ObjectRowsOf): the fewest items an array has to have to be kept (-1: none
+  is, the reference; the default 4096), and how many answers came from the
+  kept ones. }
+procedure TyAdvChartObjRowsForTest(AMinItems: Integer);
+function TyAdvChartObjRowsKeptForTest: Integer;
 
 implementation
 
@@ -5523,6 +5545,26 @@ end;
 function TyAdvChartStoreKeepsForTest: Integer;
 begin
   Result := GStoreKeeps;
+end;
+
+const
+  { [R5-G] an array is read again below this many items: the walk costs
+    less than keeping it }
+  cObjRowsMinItems = 4096;
+  cObjRowsMaxKept = 16;
+
+var
+  GObjRowsMinItems: Integer = cObjRowsMinItems;
+  GObjRowsKept: Integer = 0;
+
+procedure TyAdvChartObjRowsForTest(AMinItems: Integer);
+begin
+  GObjRowsMinItems := AMinItems;
+end;
+
+function TyAdvChartObjRowsKeptForTest: Integer;
+begin
+  Result := GObjRowsKept;
 end;
 
 { ==================== echarts.connect [Batch 141] ==================== }

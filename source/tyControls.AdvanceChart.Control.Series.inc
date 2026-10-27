@@ -3612,15 +3612,18 @@ function TTyCustomAdvanceChart.CandleRowsOf(ASlot: Integer;
   const ASeries: TTyCandleSpec): TTyCandleRowArray;
 var
   items: TJSONArray;
-  k: Integer;
+  k, j: Integer;
   row: TTyCandleRow;
+  objRows: TTyIntegerArray;
 begin
   Result := nil;
   items := RawItemArray(ASlot);
   if items = nil then Exit;
-  for k := 0 to items.Count - 1 do
+  { [R5-G] the object items only, in order }
+  objRows := ObjectRowsOf(items);
+  for j := 0 to High(objRows) do
   begin
-    if not (items.Items[k] is TJSONObject) then Continue;
+    k := objRows[j];
     row := TyCandleRowOf(ASeries, TJSONObject(items.Items[k]));
     if not row.Present then Continue;
     if Result = nil then SetLength(Result, items.Count);

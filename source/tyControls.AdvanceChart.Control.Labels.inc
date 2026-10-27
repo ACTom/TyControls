@@ -385,7 +385,8 @@ procedure TTyCustomAdvanceChart.ItemLabelSpecs(ASeriesIndex: Integer; const ABas
   out ASpecs: TTyLabelSpecArray; out AHas: TTyBoolArray);
 var
   node, d, it, lb: TJSONData;
-  k: Integer;
+  k, j: Integer;
+  objRows: TTyIntegerArray;
 begin
   ASpecs := nil;
   AHas := nil;
@@ -393,10 +394,12 @@ begin
   if (node = nil) or (node.JSONType <> jtObject) then Exit;
   d := TJSONObject(node).Find('data');
   if (d = nil) or (d.JSONType <> jtArray) then Exit;
-  for k := 0 to d.Count - 1 do
+  { [R5-G] the object items only, in order: no other has a label }
+  objRows := ObjectRowsOf(TJSONArray(d));
+  for j := 0 to High(objRows) do
   begin
+    k := objRows[j];
     it := d.Items[k];
-    if (it = nil) or (it.JSONType <> jtObject) then Continue;
     lb := TJSONObject(it).Find('label');
     if (lb = nil) or (lb.JSONType <> jtObject) then Continue;
     { [R2-L] the tables only once an item has its own: none reads as nil }

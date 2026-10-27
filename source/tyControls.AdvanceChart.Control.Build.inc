@@ -806,6 +806,49 @@ begin
   if d is TJSONArray then Result := TJSONArray(d);
 end;
 
+function TTyCustomAdvanceChart.ObjectRowsOf(AArr: TJSONArray): TTyIntegerArray;
+var
+  k, n, e: Integer;
+  gen: Int64;
+begin
+  Result := nil;
+  if AArr = nil then Exit;
+  gen := 0;
+  e := -1;
+  if (FOption <> nil) and (GObjRowsMinItems >= 0) and (AArr.Count >= GObjRowsMinItems) then
+  begin
+    gen := FOption.Generation;
+    { another tree: none of the kept answers is its }
+    if (Length(FObjRows) > 0) and (FObjRows[0].Gen <> gen) then FObjRows := nil;
+    for k := 0 to High(FObjRows) do
+      if FObjRows[k].Arr = AArr then
+      begin
+        Inc(GObjRowsKept);
+        Exit(FObjRows[k].Rows);
+      end;
+    if Length(FObjRows) < cObjRowsMaxKept then
+    begin
+      e := Length(FObjRows);
+      SetLength(FObjRows, e + 1);
+    end;
+  end;
+  n := 0;
+  for k := 0 to AArr.Count - 1 do
+    if AArr.Items[k] is TJSONObject then
+    begin
+      if n >= Length(Result) then SetLength(Result, 2 * n + 16);
+      Result[n] := k;
+      Inc(n);
+    end;
+  SetLength(Result, n);
+  if e >= 0 then
+  begin
+    FObjRows[e].Arr := AArr;
+    FObjRows[e].Gen := gen;
+    FObjRows[e].Rows := Result;
+  end;
+end;
+
 function TTyCustomAdvanceChart.RowObjectFill(ASlot, ARaw: Integer;
   out AColor: TTyOptColor): Boolean;
 var st: TTyOptStyle;
@@ -902,7 +945,8 @@ end;
 
 function TTyCustomAdvanceChart.SeriesRowFills(ASlot: Integer): TTyRowFillArray;
 var
-  k, n: Integer;
+  k, n, j: Integer;
+  objRows: TTyIntegerArray;
   oc: TTyOptColor;
   st: TTyOptStyle;
   items: TJSONArray;
@@ -924,10 +968,12 @@ begin
       none (RowObjectFill reads nothing from a nil item) }
     FRowObjFills[ASlot] := nil;
     items := RawItemArray(ASlot);
-    if items <> nil then
-      for k := 0 to n - 1 do
+    { [R5-G] the object items only, in order: no other is read }
+    objRows := ObjectRowsOf(items);
+    for j := 0 to High(objRows) do
       begin
-        if (k >= items.Count) or not (items.Items[k] is TJSONObject) then Continue;
+        k := objRows[j];
+        if k >= n then Break;
         if RowObjectFill(ASlot, k, oc) then
         begin
           if FRowObjFills[ASlot] = nil then SetLength(FRowObjFills[ASlot], n);
@@ -2340,7 +2386,8 @@ type
 var
   scopes: array of TTypeScope;
   aria, pal, d: TJSONData;
-  palN, si, slot, n, k, rawN, pick, t: Integer;
+  palN, si, slot, n, k, rawN, pick, t, q: Integer;
+  objRows: TTyIntegerArray;
   useDecal, noItems: Boolean;
   skin, ground: TTyChartColor;
   node, item: TJSONObject;
@@ -2413,10 +2460,13 @@ begin
       decal of its own; the rows' arrays only once one has [R2-L] }
     items := nil;
     if not noItems then items := RawItemArray(slot);
-    if items <> nil then
-      for k := 0 to rawN - 1 do
-        if (k < items.Count) and (items.Items[k] is TJSONObject)
-          and (st.IndexOfRawIndex(k) >= 0) then
+    { [R5-G] the object items only, in order }
+    objRows := ObjectRowsOf(items);
+    for q := 0 to High(objRows) do
+    begin
+      k := objRows[q];
+      if k >= rawN then Break;
+        if st.IndexOfRawIndex(k) >= 0 then
         begin
           own := OwnDecal(items.Items[k]);
           if not own.Present then Continue;
@@ -2428,6 +2478,7 @@ begin
           rows[k] := own;
           rowSet[k] := True;
         end;
+    end;
     if useDecal and not FBindings[slot].Hidden and (typ <> TySunburstSeriesTypeName)
       and (typ <> TyTreemapSeriesTypeName) then
     begin
@@ -3425,7 +3476,8 @@ procedure TTyCustomAdvanceChart.SymbolItems(ASeriesIndex: Integer;
   const ABase: TTySymbolSpec; out ASpecs: TTySymbolSpecArray; out AHas: TTyBoolArray);
 var
   node, d, it: TJSONData;
-  k: Integer;
+  k, j: Integer;
+  objRows: TTyIntegerArray;
 begin
   ASpecs := nil;
   AHas := nil;
@@ -3433,12 +3485,17 @@ begin
   if (node = nil) or (node.JSONType <> jtObject) then Exit;
   d := TJSONObject(node).Find('data');
   if (d = nil) or (d.JSONType <> jtArray) then Exit;
+  { [R5-G] the object items only, in order; the tables only once one is
+    there -- every reader takes a row past them (or none at all) for one
+    with no symbol of its own, which is what an empty slot of them says }
+  objRows := ObjectRowsOf(TJSONArray(d));
+  if Length(objRows) = 0 then Exit;
   SetLength(ASpecs, d.Count);
   SetLength(AHas, d.Count);
-  for k := 0 to d.Count - 1 do
+  for j := 0 to High(objRows) do
   begin
+    k := objRows[j];
     it := d.Items[k];
-    if (it = nil) or (it.JSONType <> jtObject) then Continue;
     AHas[k] := True;
     ASpecs[k] := TySymbolSpecOf(TJSONObject(it), ABase);
   end;
