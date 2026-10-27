@@ -952,7 +952,8 @@ begin
       labels shrink it -- upstream's Grid.create sizes the axes before the
       data processing and dataSample reads them there. Device pixels are
       upstream's css pixels times its pixel ratio. }
-    TySampleStore(mode, FStores[i], cols[0], Abs(FBindings[i].BaseAxis.PxLength));
+    TySampleStore(mode, FStores[i], cols[0], Abs(FBindings[i].BaseAxis.PxLength),
+      TySamplerHandlerOf(TJSONObject(d).Find('sampling')));
   end;
 end;
 

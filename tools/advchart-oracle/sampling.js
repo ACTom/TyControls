@@ -37,6 +37,9 @@
 //            -Infinity fff0000000000000). Arrays of hex have a readable twin
 //            (`...Text`, String(v), '-0' for negative zero) only where noted.
 //   option   recorded as fed (JSON only: a null in `data` is a missing value).
+//            A `sampling: '@Name'` is fed as the function FN_SAMPLERS[Name]
+//            [spec 242] -- the Pascal suite registers the same samplers under
+//            the same names -- and samplingOption records it as '@Name'.
 //
 // Top level
 //   source, W, H, seed, api, notes[]
@@ -391,7 +394,32 @@ function transcribe(sr, mut) {
   if (typeof sampling === 'string' && Object.prototype.hasOwnProperty.call(samplers, sampling)) {
     return downSample(st.rawIndices, col, 1 / rate, samplers[sampling], mut);
   }
+  if (typeof sampling === 'string' && sampling[0] === '@' && FN_SAMPLERS[sampling.slice(1)]) {
+    return downSample(st.rawIndices, col, 1 / rate, FN_SAMPLERS[sampling.slice(1)], mut);
+  }
   return null;
+}
+
+// [spec 242] `sampling` functions, fed for '@Name' (the Pascal suite has the
+// same four, registered under the same names)
+const FN_SAMPLERS = {
+  Last: frame => frame[frame.length - 1],
+  Len: frame => frame.length,
+  Ends: frame => (frame[0] + frame[frame.length - 1]) / 2,
+  NaNs: frame => { let n = 0; for (let i = 0; i < frame.length; i++) if (isNaN(frame[i])) n++; return n; },
+};
+function withSamplers(option) {
+  const o = clone(option);
+  for (const s of [].concat(o.series || [])) {
+    if (typeof s.sampling === 'string' && s.sampling[0] === '@' && FN_SAMPLERS[s.sampling.slice(1)]) {
+      s.sampling = FN_SAMPLERS[s.sampling.slice(1)];
+    }
+  }
+  return o;
+}
+function samplingName(v) {
+  for (const k of Object.keys(FN_SAMPLERS)) if (FN_SAMPLERS[k] === v) return '@' + k;
+  return v;
 }
 
 // ---------- data ----------
@@ -553,6 +581,16 @@ add('symbol-auto', ['label'], 'lttb, showAllSymbol auto on a category axis: the 
 add('throws-alt-nan', ['nan'], 'lttb over 41 rows, every odd one null, on 20 px: rate 2 and 42 indices into an array of 41 -- upstream throws in the render',
   catChart(41, 20, [line('lttb', wave(41).map((v, i) => (i % 2 ? null : v)))]), { expectThrow: true });
 
+// [spec 242] sampling as a function, written '@Name'
+add('fn-last', ['function'], "a function sampler (the frame's last value), rate 3", catChart(300, 100, [line('@Last', wave(300, 1))]));
+add('fn-len', ['function'], 'the frame as long as it is: 301 rows, rate 3, a last frame of one', catChart(301, 100, [line('@Len', wave(301, 2))]));
+add('fn-ends-nan', ['function', 'nan'], 'a function over null runs: NaN in, NaN out', catChart(300, 100, [line('@Ends', holes(wave(300, 3), NANS))]));
+add('fn-nans', ['function', 'nan'], 'the frame holds the NaNs as they are', catChart(300, 100, [line('@NaNs', holes(wave(300, 4), NANS))]));
+add('fn-unknown', ['function', 'option'], "a '@Name' with no function: a string that names no sampler", catChart(300, 100, [line('@Nobody', wave(300))]));
+add('fn-bar', ['function', 'bar'], 'a bar with a function sampler', catChart(300, 100, [{ type: 'bar', sampling: '@Len', data: wave(300, 5) }]));
+add('fn-zoom', ['function', 'zoom'], 'a function sampler after a dataZoom 20-70 %', catChart(600, 100, [line('@Last', wave(600, 6))], { dataZoom: [{ type: 'inside', start: 20, end: 70 }] }));
+add('fn-stack', ['function', 'stack'], 'two stacked lines, a function on the second', catChart(300, 100, [line('average', wave(300, 1), { stack: 's' }), line('@Last', wave(300, 2), { stack: 's' })]));
+
 // ---------- recording ----------
 function hexPairs(arr) {
   const o = [];
@@ -569,7 +607,7 @@ function run(c) {
   const rec = { id: c.id, groups: c.groups, note: c.note, width: W, height: H, option: clone(c.option), throws: null, series: [], axes: [], tips: [] };
   try {
     try {
-      chart.setOption(clone(c.option));
+      chart.setOption(withSamplers(c.option));
       chart.renderToSVGString();
     } catch (e) {
       rec.throws = String(e.message);
@@ -584,7 +622,7 @@ function run(c) {
       const data = s.getData();
       const sr = {
         index: si, type: s.subType, coordSys: cs ? cs.type : null,
-        samplingOption: s.get('sampling') === undefined ? null : clone(s.get('sampling')),
+        samplingOption: s.get('sampling') === undefined ? null : clone(samplingName(s.get('sampling'))),
         baseDim: null, valueDim: null, valueCol: null, rawCount: s.getRawData().count(),
         prefilter: null, stage: null, ran: null,
       };
