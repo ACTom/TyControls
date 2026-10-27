@@ -1254,6 +1254,12 @@ type
     FStCarryHoverSeries, FStCarryHoverRaw: Integer;
     FStGen, FStBuiltGen: Integer;
     FStRerender, FStDirty: Boolean;
+    { [R5-I] a layout that snapped (a resize, an export at another size):
+      the next sync puts each element's states back WITHOUT a transition --
+      renderSeries' updateStates over an update of {duration: 0}, whose
+      animateOrSetProps stopped every animator [was: the proxies were new,
+      a hovered element's state tweened again from normal] }
+    FStSnapPut, FStSnapNow: Boolean;
     { [R5-F] the lines' temporary symbols; a render takes them away
       (LineView.render removes every __temp) }
     FLineTemps: array of TTyLineTemp;

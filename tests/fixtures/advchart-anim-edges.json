@@ -22238,6 +22238,315 @@
    ]
   },
   {
+   "id": "sa-resize",
+   "group": "stanim",
+   "note": "a resize 100 ms into a 400 ms hover tween: the update ({duration: 0}) clears the states without a transition, stops every animator, and puts the states back without one -- the emphasis colour at once",
+   "W": 400,
+   "H": 300,
+   "option": {
+    "animation": true,
+    "animationDuration": 10,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       10,
+       20
+      ],
+      "itemStyle": {
+       "color": "#3366cc"
+      },
+      "emphasis": {
+       "itemStyle": {
+        "color": "#ff0000"
+       }
+      },
+      "stateAnimation": {
+       "duration": 400,
+       "easing": "linear"
+      }
+     }
+    ]
+   },
+   "probes": [
+    "bfill"
+   ],
+   "events": [
+    {
+     "t": 2999,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#3366cc",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 3000,
+     "do": "act",
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     }
+    },
+    {
+     "t": 3000,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#3366cc",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3001,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(51,102,204,1)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3100,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(101,76,153,1)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3100,
+     "do": "resize",
+     "W": 420,
+     "H": 300
+    },
+    {
+     "t": 3100,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#ff0000",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 3101,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#ff0000",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 3200,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#ff0000",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 3401,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#ff0000",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 4000,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#ff0000",
+       "n": 0
+      }
+     }
+    }
+   ],
+   "rows": [
+    0
+   ]
+  },
+  {
+   "id": "sa-export",
+   "group": "stanim",
+   "note": "an export at another pixel ratio 100 ms into a 400 ms hover tween: the SVG renderer's getDataURL (getSvgDataURL) stops every animator forwarding to its last frame -- the emphasis colour at once, no update",
+   "W": 400,
+   "H": 300,
+   "option": {
+    "animation": true,
+    "animationDuration": 10,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       10,
+       20
+      ],
+      "itemStyle": {
+       "color": "#3366cc"
+      },
+      "emphasis": {
+       "itemStyle": {
+        "color": "#ff0000"
+       }
+      },
+      "stateAnimation": {
+       "duration": 400,
+       "easing": "linear"
+      }
+     }
+    ]
+   },
+   "probes": [
+    "bfill"
+   ],
+   "events": [
+    {
+     "t": 2999,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#3366cc",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 3000,
+     "do": "act",
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     }
+    },
+    {
+     "t": 3000,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#3366cc",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3001,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(51,102,204,1)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3100,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(101,76,153,1)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3100,
+     "do": "export",
+     "pixelRatio": 2
+    },
+    {
+     "t": 3100,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(255,0,0,1)",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 3101,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(255,0,0,1)",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 3200,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(255,0,0,1)",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 3401,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(255,0,0,1)",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 4000,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(255,0,0,1)",
+       "n": 0
+      }
+     }
+    }
+   ],
+   "rows": [
+    0
+   ]
+  },
+  {
    "id": "ht-3",
    "group": "htip",
    "note": "x, y, a value: the column past x and y is generated 'value' (not extra), the last a label suits",
@@ -26282,6 +26591,14 @@
   }
  ],
  "guards": [
+  {
+   "name": "sa-resize: mid-tween, then the emphasis colour at once",
+   "ok": true
+  },
+  {
+   "name": "sa-export: the emphasis colour at once",
+   "ok": true
+  },
   {
    "name": "cd-simple-enter: the boxes are simple",
    "ok": true

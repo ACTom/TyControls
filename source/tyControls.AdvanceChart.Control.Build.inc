@@ -1167,7 +1167,10 @@ begin
     if not FAnimPrev.Valid then AnimSnapshot;
   end
   else
+  begin
     AnimDropAll;
+    FStSnapPut := True;
+  end;
   { a new option's data: the pieces the old one still named go with it
     [milestone D5-D8] }
   if FAnimPending and not FAnimFull then FUtStale := nil;

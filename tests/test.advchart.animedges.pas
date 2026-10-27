@@ -809,6 +809,15 @@ begin
       FChart.SetOption(ev.Objects['option'].AsJSON, True);
       RenderNow;
     end
+    else if act = 'resize' then
+    begin
+      { chart.resize: a layout at the new size, rendered at once }
+      FChart.SetBounds(0, 0, ev.Integers['W'], ev.Integers['H']);
+      RenderNow;
+    end
+    else if act = 'export' then
+      { getDataURL at another pixel ratio (the window's layout after it) }
+      FChart.SaveToBytes(Format('{"pixelRatio": %d}', [ev.Integers['pixelRatio']]))
     else if act = 'act' then
       { no paint after it: upstream applies an action's states in the frame
         that follows (its animators step from the one after) -- the next

@@ -610,6 +610,14 @@ add('stanim', 'sa-delay-fn', "stateAnimation.delay a function: Clip's start is g
   SA({ duration: 200, easing: 'linear', delay: { $fn: 'idx*100' } }), ['bfill'], SAEV, { rows: [0] });
 add('stanim', 'sa-dur-fn', "stateAnimation.duration a function: not above 0 -- no transition, the state at once",
   SA({ duration: { $fn: 'idx*100' }, easing: 'linear' }), ['bfill'], SAEV, { rows: [0] });
+add('stanim', 'sa-resize', "a resize 100 ms into a 400 ms hover tween: the update ({duration: 0}) clears the states without a transition, stops every animator, and puts the states back without one -- the emphasis colour at once",
+  SA({ duration: 400, easing: 'linear' }), ['bfill'],
+  [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'act', action: { type: 'highlight', seriesIndex: 0, dataIndex: 0 } },
+    ...after([0, 1, 100], T1), { t: T1 + 100, do: 'resize', W: 420, H: 300 }, ...after([100, 101, 200, 401, 1000], T1)], { rows: [0] });
+add('stanim', 'sa-export', "an export at another pixel ratio 100 ms into a 400 ms hover tween: the SVG renderer's getDataURL (getSvgDataURL) stops every animator forwarding to its last frame -- the emphasis colour at once, no update",
+  SA({ duration: 400, easing: 'linear' }), ['bfill'],
+  [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'act', action: { type: 'highlight', seriesIndex: 0, dataIndex: 0 } },
+    ...after([0, 1, 100], T1), { t: T1 + 100, do: 'export', pixelRatio: 2 }, ...after([100, 101, 200, 401, 1000], T1)], { rows: [0] });
 
 // ---- a heatmap's tooltip dimension (prepareSeriesDataSchema, generateCoord 'value') ----
 const HM = (data, s, extra) => Object.assign({ animation: false, xAxis: { type: 'category', data: ['a', 'b'] },
@@ -689,6 +697,11 @@ function guards(out) {
     return smp.rec[key];
   };
   const n = v => num(v);
+  guard('sa-resize: mid-tween, then the emphasis colour at once', (() => {
+    const a = cs('sa-resize').events.filter(q => q.do === 'sample' && q.t === T1 + 100);
+    return a.length === 2 && a[0].rec['bf0/0'].n > 0 && /^#ff0000$/i.test(a[1].rec['bf0/0'].fill) && a[1].rec['bf0/0'].n === 0;
+  })());
+  guard('sa-export: the emphasis colour at once', /255,0,0/.test(rec('sa-export', T1 + 100, 'bf0/0').fill) && rec('sa-export', T1 + 100, 'bf0/0').n === 0);
   guard('cd-simple-enter: the boxes are simple', rec('cd-simple-enter', 0, 'cd0/0').simple);
   guard('cd-simple-enter: a simple box tweens', (() => {
     const a = rec('cd-simple-enter', 100, 'cd0/150'), b = rec('cd-simple-enter', 1001, 'cd0/150');
@@ -749,6 +762,8 @@ function runCase(c) {
       else if (ev.do === 'merge' || ev.do === 'mergeq') quiet(() => chart.setOption(materialize(clone(ev.option))));
       else if (ev.do === 'set') quiet(() => chart.setOption(materialize(clone(ev.option)), true));
       else if (ev.do === 'act') quiet(() => chart.dispatchAction(clone(ev.action)));
+      else if (ev.do === 'export') quiet(() => chart.getDataURL({ pixelRatio: ev.pixelRatio }));
+      else if (ev.do === 'resize') quiet(() => chart.resize({ width: ev.W, height: ev.H }));
       else if (ev.do === 'move') quiet(() => zr(chart).handler.mousemove({ zrX: ev.x, zrY: ev.y, which: 1, preventDefault() {}, stopPropagation() {} }));
       else must(false, 'an event it does not know: ' + ev.do);
       out.events.push(o);

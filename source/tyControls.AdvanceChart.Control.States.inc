@@ -3433,8 +3433,9 @@ begin
     layer] }
   want := TyStNamesText(TyStLayerStates(AEl));
   if want = p.CurrentStates then Exit;
-  { no timer, no transition }
-  noAnim := not AnimAllowed;
+  { no timer, no transition; [R5-I] nor after a layout that snapped
+    (updateStates' useStates(prevStates) with the transition nulled) }
+  noAnim := not AnimAllowed or FStSnapNow;
   if want = '' then p.ClearStates(noAnim)
   else
   begin
@@ -3459,6 +3460,9 @@ var
   hasCfg: Boolean;
   hostP: TTyChartAnimProxy;
 begin
+  { [R5-I] the snap's states, this sync's alone }
+  FStSnapNow := FStSnapPut;
+  FStSnapPut := False;
   if not FStProxied or (FPaintList = nil) then Exit;
   if FAnim = nil then FAnim := NewAnimDriver;
   if FAnimSet = nil then FAnimSet := TTyChartAnimSet.Create(FAnim);
