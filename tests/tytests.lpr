@@ -123,6 +123,7 @@ uses
   test.meter,
   test.levelmeter,
   test.dial,
+  test.valueformat,
   test.analogclock,
   test.sparkline,
   test.rating,

@@ -304,7 +304,7 @@ begin
         set wins over the figure's own 10. }
       vSize := TyControlFontSize(Self);
       if vSize <= 0 then vSize := 10;
-      P.DrawText(R, Format(FValueFormat, [FValue]), bodyS.FontName, vSize,
+      P.DrawText(R, TyFormatValue(FValueFormat, FValue), bodyS.FontName, vSize,
         700 or (bodyS.FontWeight and not TyFontWeightMask),
         bodyS.TextColor, taCenter, tlCenter, False);
     end;
