@@ -4749,8 +4749,7 @@
    ],
    "then": {
     "type": "legendToggleSelect",
-    "name": "c",
-    "__ec_inner_14": {}
+    "name": "c"
    },
    "labelsThen": [
     {
@@ -5424,6 +5423,231 @@
      ],
      "styleWidth": null,
      "styleHeight": "402c000000000000",
+     "draggable": false,
+     "cursor": "pointer"
+    }
+   ]
+  },
+  {
+   "id": "pie.cut",
+   "note": "long pie labels by the left edge: the pie itself cuts them to the room it has",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "pie",
+      "center": [
+       "14%",
+       "50%"
+      ],
+      "radius": "25%",
+      "data": [
+       {
+        "name": "A rather long slice name",
+        "value": 1048
+       },
+       {
+        "name": "Another long slice name",
+        "value": 735
+       },
+       {
+        "name": "Yet one more long name",
+        "value": 580
+       },
+       {
+        "name": "The last long slice name",
+        "value": 484
+       }
+      ]
+     }
+    ]
+   },
+   "labels": [
+    {
+     "s": 0,
+     "d": 0,
+     "ignore": false,
+     "texts": [
+      "A rather long slice name"
+     ],
+     "rect": [
+      "40664ffb8f93b908",
+      "4064fa97e08489d4",
+      "40603ae147ae147b",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "ignore": false,
+     "texts": [
+      "Another long slice name"
+     ],
+     "rect": [
+      "405e097186e437ce",
+      "40702fd68141332f",
+      "406027ae147ae148",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "ignore": false,
+     "texts": [
+      ""
+     ],
+     "rect": [
+      "c02ec66e3cafc196",
+      "40695cdb978bd63d",
+      "0000000000000000",
+      "4028000000000000"
+     ],
+     "styleWidth": "c03963371e57e0cb",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "ignore": false,
+     "texts": [
+      ""
+     ],
+     "rect": [
+      "402fd2c91c5d4100",
+      "406141ab1395dc6d",
+      "0000000000000000",
+      "4028000000000000"
+     ],
+     "styleWidth": "4017a59238ba8200",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    }
+   ]
+  },
+  {
+   "id": "pie.cut.width",
+   "note": "the same under labelLayout width 120: the label is its own text again, cut at 120",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "pie",
+      "center": [
+       "14%",
+       "50%"
+      ],
+      "radius": "25%",
+      "data": [
+       {
+        "name": "A rather long slice name",
+        "value": 1048
+       },
+       {
+        "name": "Another long slice name",
+        "value": 735
+       },
+       {
+        "name": "Yet one more long name",
+        "value": 580
+       },
+       {
+        "name": "The last long slice name",
+        "value": 484
+       }
+      ],
+      "labelLayout": {
+       "width": 120
+      }
+     }
+    ]
+   },
+   "labels": [
+    {
+     "s": 0,
+     "d": 0,
+     "ignore": false,
+     "texts": [
+      "A rather long slice n..."
+     ],
+     "rect": [
+      "40664ffb8f93b908",
+      "4064fa97e08489d4",
+      "405d2147ae147ae1",
+      "4028000000000000"
+     ],
+     "styleWidth": "405e000000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "ignore": false,
+     "texts": [
+      "Another long slice n..."
+     ],
+     "rect": [
+      "405e097186e437ce",
+      "40702fd68141332f",
+      "405cfae147ae147b",
+      "4028000000000000"
+     ],
+     "styleWidth": "405e000000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "ignore": false,
+     "texts": [
+      "Yet one more long ..."
+     ],
+     "rect": [
+      "c05fd63e6b6d0270",
+      "40695cdb978bd63d",
+      "405bfd70a3d70a3d",
+      "4028000000000000"
+     ],
+     "styleWidth": "405e000000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "ignore": false,
+     "texts": [
+      "The last long slice n..."
+     ],
+     "rect": [
+      "c05926ee8a88d2c1",
+      "406141ab1395dc6d",
+      "405d2147ae147ae1",
+      "4028000000000000"
+     ],
+     "styleWidth": "405e000000000000",
+     "styleHeight": null,
      "draggable": false,
      "cursor": "pointer"
     }

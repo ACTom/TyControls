@@ -89,6 +89,8 @@ function scatter(s, extra) {
 const BG = { show: true, backgroundColor: '#eee', borderColor: '#999', borderWidth: 1, padding: 2 };
 const PIE = () => [{ name: 'Search Engine', value: 1048 }, { name: 'Direct', value: 735 }, { name: 'Email', value: 580 },
   { name: 'Union Ads', value: 484 }, { name: 'Video Ads', value: 300 }];
+const PIELONG = () => [{ name: 'A rather long slice name', value: 1048 }, { name: 'Another long slice name', value: 735 },
+  { name: 'Yet one more long name', value: 580 }, { name: 'The last long slice name', value: 484 }];
 
 const CASES = [
   { id: 'bg.size', note: 'a boxed label, labelLayout width 50 and height 24: the box at that size',
@@ -136,7 +138,10 @@ const CASES = [
       label: { formatter: '{a|{b}} {c|{c}}', rich: { a: { color: '#333' }, c: { color: '#999' } } }, labelLayout: { width: 45 } }] } },
   { id: 'pie.height', note: "three-line pie labels, lineOverflow 'truncate' under labelLayout height 14",
     option: { animation: false, series: [{ type: 'pie', radius: '40%', data: PIE(),
-      label: { formatter: '{b}\n{c}\n{d}%', lineOverflow: 'truncate' }, labelLayout: { height: 14 } }] } },
+      label: { formatter: '{b}\n{c}\n{d}%', lineOverflow: 'truncate' }, labelLayout: { height: 14 } }] } },  { id: 'pie.cut', note: 'long pie labels by the left edge: the pie itself cuts them to the room it has',
+    option: { animation: false, series: [{ type: 'pie', center: ['14%', '50%'], radius: '25%', data: PIELONG() }] } },
+  { id: 'pie.cut.width', note: 'the same under labelLayout width 120: the label is its own text again, cut at 120',
+    option: { animation: false, series: [{ type: 'pie', center: ['14%', '50%'], radius: '25%', data: PIELONG(), labelLayout: { width: 120 } }] } },
 ];
 
 function guideRecs(chart) {
@@ -210,7 +215,9 @@ function runCase(c) {
       rec.labelsAfter = read();
       rec.guidesAfter = guideRecs(chart);
       if (c.then) {
-        chart.dispatchAction(c.then);
+        // a copy: dispatchAction hangs an inner store on its payload, under a
+        // key with a random base
+        chart.dispatchAction(Object.assign({}, c.then));
         chart.renderToSVGString();
         rec.then = c.then;
         rec.labelsThen = read();
@@ -243,6 +250,8 @@ function generate() {
   must(by['pie.width'].labels.some(l => l.texts.join('').indexOf('...') >= 0), 'anchor: a pie label cut at the layout width');
   must(by['pie.width.box'].labels.every(l => fh(l.rect[2]) >= 70), 'anchor: a boxed pie label as wide as the layout says');
   must(by['pie.height'].labels.every(l => l.texts.length === 1), 'anchor: a pie label lost the lines past the height');
+  const cutLen = id => by[id].labels.map(l => l.texts.join('').length);
+  must(cutLen('pie.cut').some((n, i) => n < cutLen('pie.cut.width')[i]), 'anchor: the layout width gives a label back more of its own text than the pie\'s cut');
   return { source: 'ECharts 6.1 dist, label/LabelManager.ts, zrender graphic/Text.ts, graphic/helper/parseText.ts', W, H, cases };
 }
 
