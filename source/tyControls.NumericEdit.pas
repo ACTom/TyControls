@@ -28,6 +28,8 @@ type
     FDecimalSep: Char;
     FUseThousands: Boolean;
     FMinValue, FMaxValue: Double;
+    { #159: the last value the field showed -- what malformed text reads as. }
+    FLastValue: Double;
     function GetValue: Double;
     procedure SetValue(const AValue: Double);
     procedure SetDecimals(const AValue: Integer);
@@ -167,18 +169,29 @@ begin
 end;
 
 function TTyNumericEdit.GetValue: Double;
+var
+  s: string;
 begin
   { The decoration comes off first, as text, before the character filter: a symbol such as
     'Fr.', 'kr.' or 'US$1' carries characters the filter keeps, and 'Fr.1,234.50' filtered
     whole is '.1234.50' -- not a number, so the value read 0, and the next reformat (focusing
     the field is one) wrote that 0 back. }
-  if not TyParseNumber(StripDecoration(Text), FThousands, FDecimalSep, Result) then Result := 0;
-  Result := ClampVal(Result);
+  s := StripDecoration(Text);
+  if TyParseNumber(s, FThousands, FDecimalSep, Result) then
+    Result := ClampVal(Result)
+  else if Trim(s) = '' then
+    Result := ClampVal(0)       { an emptied field is 0, as it always was }
+  else
+    { #159: malformed text such as '1.2.3' or '-' is no number: the field keeps the last
+      value it showed, as LCL's spin edits go back to theirs. It read 0, and the reformat on
+      blur wrote that 0 over the user's value. }
+    Result := FLastValue;
 end;
 
 procedure TTyNumericEdit.SetValue(const AValue: Double);
 begin
-  Text := Formatted(ClampVal(AValue), not Focused);
+  FLastValue := ClampVal(AValue);
+  Text := Formatted(FLastValue, not Focused);
 end;
 
 procedure TTyNumericEdit.Reformat(AGroup: Boolean);
@@ -201,6 +214,7 @@ begin
     currency symbol ...), so a text parsed then would be parsed under the defaults: 'Fr.1,234.50'
     read before CurrencySymbol = 'Fr.' came out 0. }
   if csLoading in ComponentState then Exit;
+  FLastValue := AValue;
   WasModified := Modified;
   Text := Formatted(AValue, AGroup);
   Modified := WasModified;
