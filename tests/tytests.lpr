@@ -203,6 +203,7 @@ uses
   test.advchart.hoverlayer,
   test.advchart.edgesseries,
   test.advchart.edgesinteract,
+  test.advchart.edgesinteract2,
   test.advchart.radarlabel,
   test.advchart.pieitemlabel,
   test.advchart.axisemphasis,

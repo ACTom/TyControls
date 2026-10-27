@@ -223,6 +223,8 @@ begin
     else ok := sp.Roam in [grmPan, grmBoth];
     if not ok then Continue;
     if not (sp.RoamGlobal or FGraphs[i].ContainTrigger(AX, AY)) then Continue;
+    { [R5-G] RoamController._checkPointer: onIrrelevantElement first }
+    if SeriesRoamIrrelevant(i, AX, AY, sp.Z, sp.ZLevel) then Continue;
     { HIGHER zlevel, THEN HIGHER z; A TIE GOES TO THE ONE FOUND FIRST. }
     if (best < 0) or (sp.ZLevel > bs.ZLevel)
       or ((sp.ZLevel = bs.ZLevel) and (sp.Z > bs.Z))
@@ -242,6 +244,7 @@ begin
     else ok := sp.Roam in [grmPan, grmBoth];
     if not ok then Continue;
     if not (sp.RoamGlobal or FTreeViews[i].ContainTrigger(AX, AY)) then Continue;
+    if SeriesRoamIrrelevant(i, AX, AY, sp.Z, sp.ZLevel) then Continue;
     if (best < 0) or (sp.ZLevel > bs.ZLevel)
       or ((sp.ZLevel = bs.ZLevel) and (sp.Z > bs.Z))
       or ((sp.ZLevel = bs.ZLevel) and (sp.Z = bs.Z)
@@ -261,6 +264,7 @@ begin
     else ok := sp.Roam in [grmPan, grmBoth];
     if not ok then Continue;
     if not (sp.RoamGlobal or SankeySelfAt(i, AX, AY)) then Continue;
+    if SeriesRoamIrrelevant(i, AX, AY, sp.Z, sp.ZLevel) then Continue;
     if (best < 0) or (sp.ZLevel > bs.ZLevel)
       or ((sp.ZLevel = bs.ZLevel) and (sp.Z > bs.Z))
       or ((sp.ZLevel = bs.ZLevel) and (sp.Z = bs.Z)
@@ -293,6 +297,7 @@ begin
         and (AY - FTreemaps[i].Box.Y >= FTreemaps[i].Nodes[0].Y)
         and (AY - FTreemaps[i].Box.Y <= FTreemaps[i].Nodes[0].Y + FTreemaps[i].Nodes[0].H);
     if not ok then Continue;
+    if SeriesRoamIrrelevant(i, AX, AY, sp.Z, sp.ZLevel) then Continue;
     if (best < 0) or (sp.ZLevel > bs.ZLevel)
       or ((sp.ZLevel = bs.ZLevel) and (sp.Z > bs.Z))
       or ((sp.ZLevel = bs.ZLevel) and (sp.Z = bs.Z)

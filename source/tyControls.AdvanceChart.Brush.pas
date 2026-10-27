@@ -200,6 +200,11 @@ type
     { the grid component the panel is (targetInfo.coordSysModel), -1 none
       [Batch 127] }
     GridComponent: Integer;
+    { [R5-G] the parallel component a parallel axis' panel is (its
+      coordSysModel), for onIrrelevantElement; unused elsewhere }
+    ParallelComponent: Integer;
+    { and its parallelAxis component -- its line is a target of its own }
+    AxisComponent: Integer;
   end;
 
   { isTargetByCursor's second half: onIrrelevantElement -- True when what the

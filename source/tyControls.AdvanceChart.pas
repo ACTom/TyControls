@@ -1439,6 +1439,12 @@ type
       slider view's own state, each inside's view range }
     FDzRawHas: array of Boolean;
     FDzRawStart, FDzRawStop: TTyDoubleArray;
+    { [R5-G] an API action's setRawRange, end by end: the pairs written, as
+      JSON ('' none); it takes over from FDzRawHas for that dataZoom }
+    FDzRawOv: TTyStringArray;
+    { [R5-G] the pointer the brush controllers were last handed, CSS px --
+      a parallel panel's onIrrelevantElement asks what is under it }
+    FBrushPtrX, FBrushPtrY: Double;
     FDzInteract: array of TTyDzInteractSpec;
     FDzState: array of TTyDzSliderState;
     FDzInLo, FDzInHi: TTyDoubleArray;
@@ -2680,6 +2686,9 @@ type
       window }
     function DzQuery(APayload: TJSONObject): TTyIntegerArray;
     procedure DzItemsOf(AItem: TJSONObject; var AAction: TTyDzAction);
+    { [R5-G] an API payload's setRawRange pairs }
+    procedure DzOverlayPut(AIndex: Integer; const AOverlay: string);
+    procedure DzApplyOv(AIndex: Integer);
     function DzModelId(AIndex: Integer): string;
     function DzPayloadOf(const AAction: TTyDzAction): TJSONObject;
     function DoDataZoomAction(APayload: TJSONObject): Boolean;
@@ -4304,6 +4313,23 @@ type
     { [R5-G] a sankey's roamTrigger other than 'global': the pointer in the
       main group's own box (createIsInSelfByPointerCheckerEl) }
     function SankeySelfAt(ASlot: Integer; AX, AY: Double): Boolean;
+    { [R5-G] the jittered scatters' points as the next build places them:
+      a fresh jitter pass over every scatter slot in build order, with the
+      visual the build hands BuildScatter (the rows' pre-brush visuals);
+      nil for a slot that does not jitter }
+    function JitterReplay(APPI: Integer): TTyPointFArrays;
+    { [R5-G] cursorHelper's onIrrelevantElement for a roam or a panel whose
+      model is series ATargetSeries (-1 none) or parallel ATargetParallel
+      (-1 none), at zlevel ATZL / z ATZ: the topmost element at (AX, AY),
+      device px, belongs to another component with a coordinate system of
+      another model drawn higher (zlevel, then z; equal is relevant) }
+    function ElementIrrelevant(AX, AY: Double; ATargetSeries, ATargetParallel: Integer;
+      ATZ, ATZL: Double): Boolean;
+    { a series roam's: the slot's series at its own z }
+    function SeriesRoamIrrelevant(ASlot: Integer; AX, AY: Double; AZ, AZL: Double): Boolean;
+    { a parallel axis panel's (the pointer the controllers were last handed) }
+    function ParallelIrrelevant(const APanel: TTyBrushPanel; AX, AY: Double): Boolean;
+    function ParallelAxisLineHalf(AAxis: Integer): Double;
     { the same, with the winner's z and zlevel (0 when none) [Batch 150] }
     function RoamSeriesAtZ(AX, AY: Integer; AZoom: Boolean;
       out AZ, AZLevel: Integer): Integer;

@@ -444,6 +444,7 @@ begin
   FSankeyRoam := nil;
   { nor a zoom: the dataZooms are new models, read from what was written }
   FDzRawHas := nil;
+  FDzRawOv := nil;
   FDzRawStart := nil;
   FDzRawStop := nil;
   FDzRawValue := nil;
@@ -886,6 +887,9 @@ end;
 
 procedure TTyCustomAdvanceChart.MergeBefore(const AMainType: string; AIndex: Integer;
   ANode, ANew: TJSONObject);
+var
+  ovd: TJSONData;
+  k: Integer;
 begin
   { [R3-B] a brush's replaceVisualOption [Batch 127] is the merge's own now
     (OptionMerge, every merge -- a frame's and a media unit's too) }
@@ -910,6 +914,25 @@ begin
     and end, their values cleared. A merge that writes this dataZoom's range
     lands on it, so it goes into the tree first and leaves the side state. }
   if AMainType <> 'dataZoom' then Exit;
+  { [R5-G] an API payload's pairs, as setRawRange wrote them }
+  if (AIndex >= 0) and (AIndex <= High(FDzRawOv)) and (FDzRawOv[AIndex] <> '')
+    and not ((ANew.Find('start') = nil) and (ANew.Find('end') = nil)
+    and (ANew.Find('startValue') = nil) and (ANew.Find('endValue') = nil)
+    and (ANew.Find('rangeMode') = nil)) then
+  begin
+    ovd := GetJSON(FDzRawOv[AIndex]);
+    try
+      for k := 0 to TJSONObject(ovd).Count - 1 do
+      begin
+        if ANode.Find(TJSONObject(ovd).Names[k]) <> nil then
+          ANode.Delete(TJSONObject(ovd).Names[k]);
+        ANode.Add(TJSONObject(ovd).Names[k], TJSONObject(ovd).Items[k].Clone);
+      end;
+    finally
+      ovd.Free;
+    end;
+    FDzRawOv[AIndex] := '';
+  end;
   if (AIndex < 0) or (AIndex > High(FDzRawHas)) or not FDzRawHas[AIndex] then Exit;
   if (ANew.Find('start') = nil) and (ANew.Find('end') = nil)
     and (ANew.Find('startValue') = nil) and (ANew.Find('endValue') = nil)
@@ -1022,8 +1045,15 @@ begin
     i := Length(FDzRawValue);
     SetLength(FDzRawValue, n);
     for s := i to n - 1 do FDzRawValue[s] := False;
+    i := Length(FDzRawOv);
+    SetLength(FDzRawOv, n);
+    for s := i to n - 1 do FDzRawOv[s] := '';
     for s := 0 to n - 1 do
-      if not (AReport.Slots[si].Fate[s] in [mfKept, mfMerged]) then FDzRawHas[s] := False;
+      if not (AReport.Slots[si].Fate[s] in [mfKept, mfMerged]) then
+      begin
+        FDzRawHas[s] := False;
+        FDzRawOv[s] := '';
+      end;
   end;
 
   { ---- by visualMap [Batch 116]: every merge visits it (it follows the

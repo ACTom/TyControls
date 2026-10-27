@@ -41,13 +41,37 @@ var
   end;
 
   procedure SetBatch(ADim: Integer; AAxis: TTyAxis; A, B: Double);
-  var j: Integer;
+  var
+    j, q, hostDz: Integer;
+    sp: TTyDzSpans;
+    ends: array[0..1] of Double;
   begin
     if AAxis = nil then Exit;
     if ADim = 0 then key := 'x' else key := 'y';
     key := key + IntToStr(AAxis.ComponentIndex);
     if TbSelIndexOf(key) < 0 then Exit;
     ext := AAxis.Scale.GetExtent;
+    { [R5-G] RESTRICT RANGE: the axis proxy's getMinMaxSpan -- its host
+      dataZoom's minValueSpan / maxValueSpan (or the percent ones over its
+      data extent) -- through sliderMove(0, minMax, scaleExtent, 0, ..)
+      [was: not restricted] }
+    for q := 0 to High(FAxisZooms) do
+      if (FAxisZooms[q].Axis = AAxis) and (q <= High(FZoomHost)) then
+      begin
+        hostDz := FZoomHost[q];
+        if (hostDz < 0) or (hostDz > High(FZoomSpecs)) then Break;
+        sp := TyDzSpansOf(FZoomSpecs[hostDz], AAxis, FAxisZooms[q].Raw.Lo,
+          FAxisZooms[q].Raw.Hi);
+        if not IsNan(sp.MinValueSpan) or not IsNan(sp.MaxValueSpan) then
+        begin
+          ends[0] := A;
+          ends[1] := B;
+          TyDzSliderMove(0, ends, ext.Start, ext.Stop, 0, sp.MinValueSpan, sp.MaxValueSpan);
+          A := ends[0];
+          B := ends[1];
+        end;
+        Break;
+      end;
     if ADim = 0 then px := r.W else px := r.H;
     prec := TyAcceptableTickPrecision(ext.Start, ext.Stop, px, 0.5);
     if not IsNan(prec) and not IsInfinite(prec) then
@@ -1124,6 +1148,8 @@ var
   x, y: Double;
 begin
   BrushCss(AX, AY, x, y);
+  FBrushPtrX := x;
+  FBrushPtrY := y;
   for b := 0 to High(FBrushCtls) do
     if FBrushCtls[b] <> nil then
       BrushOnTrigger(b, FBrushCtls[b].MouseDown(x, y, ADraggable));
@@ -1141,6 +1167,8 @@ var
 begin
   if (Length(FBrushCtls) = 0) and (Length(FParBrushCtls) = 0) then Exit;
   BrushCss(AX, AY, x, y);
+  FBrushPtrX := x;
+  FBrushPtrY := y;
   { Draggable's drag: the delta from the last pointer event }
   if FBrushDragOn and (BrushCtlOf(FBrushDragBrush) <> nil) then
   begin
@@ -1381,6 +1409,134 @@ begin
   Result := PanTaken;
 end;
 
+function TTyCustomAdvanceChart.ParallelIrrelevant(const APanel: TTyBrushPanel; AX, AY: Double): Boolean;
+var
+  v: TTyBrushView;
+  node, d: TJSONData;
+  z, zl, az, azl: Double;
+begin
+  Result := False;
+  v := BrushViewOf;
+  z := 0;
+  zl := 0;
+  node := FOption.ComponentAt('parallel', APanel.ParallelComponent);
+  if node is TJSONObject then
+  begin
+    d := TJSONObject(node).Find('z');
+    if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then z := d.AsFloat;
+    d := TJSONObject(node).Find('zlevel');
+    if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then zl := d.AsFloat;
+  end;
+  Result := ElementIrrelevant(v.OX + FBrushPtrX * v.S, v.OY + FBrushPtrY * v.S, -1,
+    APanel.ParallelComponent, z, zl);
+  if not Result then Exit;
+  { THE AXIS' OWN LINE is a target too, drawn outside the element list: a
+    pointer on it (Path.contain: max(lineWidth, the band's width) / 2
+    across, local) finds
+    the parallelAxis -- no coordinate system, relevant -- unless what is
+    over it is drawn higher still (the axis' zlevel / z, z 10 by default) }
+  if Abs(AY) <= ParallelAxisLineHalf(APanel.AxisComponent) then
+  begin
+    az := 10;
+    azl := 0;
+    node := FOption.ComponentAt('parallelAxis', APanel.AxisComponent);
+    if node is TJSONObject then
+    begin
+      d := TJSONObject(node).Find('z');
+      if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then az := d.AsFloat;
+      d := TJSONObject(node).Find('zlevel');
+      if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then azl := d.AsFloat;
+    end;
+    if not ElementIrrelevant(v.OX + FBrushPtrX * v.S, v.OY + FBrushPtrY * v.S, -1,
+      APanel.ParallelComponent, az, azl) then Result := False;
+  end;
+end;
+
+function TTyCustomAdvanceChart.ParallelAxisLineHalf(AAxis: Integer): Double;
+var
+  node, al, ls, d: TJSONData;
+  w: Double;
+begin
+  w := 1;
+  node := FOption.ComponentAt('parallelAxis', AAxis);
+  if node is TJSONObject then
+  begin
+    al := TJSONObject(node).Find('axisLine');
+    if al is TJSONObject then
+    begin
+      ls := TJSONObject(al).Find('lineStyle');
+      if ls is TJSONObject then
+      begin
+        d := TJSONObject(ls).Find('width');
+        if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then w := d.AsFloat;
+      end;
+    end;
+  end;
+  { ParallelAxisView's builder: strokeContainThreshold = the select band's
+    width -- the line's hit is the whole band }
+  Result := Max(w, TyParallelSelectStyleOf(node).Width) / 2;
+end;
+
+function TTyCustomAdvanceChart.ElementIrrelevant(AX, AY: Double; ATargetSeries,
+  ATargetParallel: Integer; ATZ, ATZL: Double): Boolean;
+var
+  idx, si, slot, oi: Integer;
+  el: TTyChartElement;
+  oz, ozl, diff: Double;
+  hasCoord: Boolean;
+  t: string;
+begin
+  Result := False;
+  if (FPaintList = nil) or not FPaintListValid then Exit;
+  idx := FPaintList.TopElementAt(AX, AY, FPaintListPPI);
+  if idx < 0 then Exit;
+  el := FPaintList.Element(idx);
+  if el.Datum.Kind = ctkGeo then
+  begin
+    { a geo: its own coordinate system, its own model }
+    oi := el.Datum.ComponentIndex;
+    if (oi < 0) or (oi > High(FGeos)) or (FGeos[oi] = nil) then Exit;
+    oz := FGeos[oi].Spec.Z;
+    ozl := FGeos[oi].Spec.ZLevel;
+  end
+  else if (el.Datum.Kind = ctkSeries) and (el.Datum.SeriesIndex >= 0) then
+  begin
+    si := el.Datum.SeriesIndex;
+    { the target itself }
+    if si = ATargetSeries then Exit;
+    slot := SlotOfSeries(si);
+    if (slot < 0) or (slot > High(FBindings)) then Exit;
+    { a series on the target parallel: that model is its coordinate
+      system's }
+    if (ATargetParallel >= 0) and (FBindings[slot].Parallel <> nil)
+      and (FBindings[slot].ParallelIndex = ATargetParallel) then Exit;
+    t := FBindings[slot].SeriesType;
+    hasCoord := (FBindings[slot].Cart <> nil) or (FBindings[slot].Polar <> nil)
+      or (FBindings[slot].CalendarIndex >= 0) or (FBindings[slot].GeoIndex >= 0)
+      or (FBindings[slot].Single <> nil) or (FBindings[slot].Parallel <> nil)
+      or (t = TyMapSeriesTypeName) or (t = TyGraphSeriesTypeName)
+      or (t = TyTreeSeriesTypeName) or (t = 'radar');
+    if not hasCoord then Exit;
+    if t = 'line' then oz := SeriesIntIn(si, 'z', 3)
+    else oz := SeriesIntIn(si, 'z', 2);
+    ozl := SeriesIntIn(si, 'zlevel', 0);
+  end
+  else
+    Exit;
+  { retrieveZInfo: zlevel, then z; equal is relevant }
+  diff := ozl - ATZL;
+  if diff = 0 then diff := oz - ATZ;
+  Result := diff > 0;
+end;
+
+function TTyCustomAdvanceChart.SeriesRoamIrrelevant(ASlot: Integer; AX, AY: Double;
+  AZ, AZL: Double): Boolean;
+begin
+  Result := False;
+  if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  Result := ElementIrrelevant(AX, AY, FBindings[ASlot].SeriesIndex, -1, AZ, AZL);
+end;
+
 function TTyCustomAdvanceChart.BrushIrrelevant(const APanel: TTyBrushPanel; AX, AY: Double): Boolean;
 var
   v: TTyBrushView;
@@ -1446,6 +1602,51 @@ begin
   for i := 0 to High(FVisualRows) do FBrushVisBase[i] := Copy(FVisualRows[i]);
 end;
 
+function TTyCustomAdvanceChart.JitterReplay(APPI: Integer): TTyPointFArrays;
+var
+  i: Integer;
+  v: TTySeriesVisual;
+  saved, pass: TTyJitterPass;
+  any: Boolean;
+begin
+  Result := nil;
+  SetLength(Result, Length(FBindings));
+  any := False;
+  for i := 0 to High(FBindings) do
+    if FBindings[i].SeriesType = 'scatter' then any := True;
+  if not any then Exit;
+  saved := FJitter;
+  pass := TTyJitterPass.Create;
+  FJitter := pass;
+  try
+    pass.Reset;
+    for i := 0 to High(FBindings) do
+    begin
+      if FBindings[i].SeriesType <> 'scatter' then Continue;
+      if (i > High(FStores)) or (FStores[i] = nil) or FBindings[i].Hidden then Continue;
+      if not FBindings[i].Resolved then Continue;
+      { what BuildSeriesList hands BuildScatter that the jitter reads: the
+        symbol, the item symbols, the size callbacks, the visual map's sizes }
+      v := TySeriesVisual(TTyChartColor(SeriesColor(FBindings[i].SeriesIndex)));
+      ApplyOptStyle(v, FBindings[i].SeriesIndex);
+      ApplyVisualMaps(v, i, APPI);
+      v.Line := TyLineSpecOf(FOption, FBindings[i].SeriesIndex);
+      v.Symbol := SymbolFor(i);
+      v.Large := LargeKindOf(i);
+      SymbolItems(FBindings[i].SeriesIndex, v.Symbol, v.SymItems, v.SymItemHas);
+      VisualCallbacks(i, v);
+      v.ItemCb := ItemCbOf(i);
+      v.PxScale := APPI / 96;
+      JitterFor(i, APPI, v);
+      if v.Jitter = nil then Continue;
+      Result[i] := TyScatterJitterPoints(FBindings[i], FStores[i], StackFor(i), v);
+    end;
+  finally
+    FJitter := saved;
+    pass.Free;
+  end;
+end;
+
 function TTyCustomAdvanceChart.BrushSelectCompute: TTyBrushSelectBatch;
 var
   b, i, k, r, raw, n, si, t: Integer;
@@ -1457,6 +1658,7 @@ var
   layDone: array of Boolean;
   lists: array of TTyIntegerArray;
   linkSel: array of Boolean;
+  jit: TTyPointFArrays;
   hasBrush, linked, inB, applies, ctrl: Boolean;
   v: TTyBrushView;
   sv: TTySeriesVisual;
@@ -1495,6 +1697,16 @@ var
       lays[ASlot] := GeoBrushLayouts(ASlot)
     else
       lays[ASlot] := TyBrushItemLayouts(FBindings[ASlot], FStores[ASlot], StackFor(ASlot), sv);
+    { [R5-G] a jittered scatter's points: jitterLayout ran before the
+      brush's visual stage upstream, so the selector reads the jittered
+      layout [was: the plain point] }
+    if (ASlot <= High(jit)) and (jit[ASlot] <> nil) then
+      for q := 0 to Min(High(lays[ASlot]), High(jit[ASlot])) do
+        if lays[ASlot][q].Kind = blkPoint then
+        begin
+          lays[ASlot][q].X := jit[ASlot][q].X;
+          lays[ASlot][q].Y := jit[ASlot][q].Y;
+        end;
     { the cartesian's device px -> the brush's CSS px }
     for q := 0 to High(lays[ASlot]) do
     begin
@@ -1535,6 +1747,9 @@ begin
   v := BrushViewOf;
   SetLength(lays, Length(FBindings));
   SetLength(layDone, Length(FBindings));
+  { the jitter before the brush, replayed on the rows' pre-brush visuals
+    (restored just above) }
+  jit := JitterReplay(FLastPPI);
   for i := 0 to High(layDone) do layDone[i] := False;
   outColor := TyVisualFromChart(TTyChartColor(
     ActiveController.Model.ResolveStyle('TyAdvChartBrushOut', '', []).TextColor));
@@ -2014,6 +2229,11 @@ begin
       pn[0].Rect := TyParallelBrushPanelRect(e0 / v.S, e1 / v.S, ss.Width);
       pn[0].DefaultType := btLineX;
       pn[0].GridComponent := -1;
+      { [R5-G] makeRectIsTargetByCursor(rect, api, parallelModel): the
+        panel asks onIrrelevantElement too [was: never] }
+      pn[0].ParallelComponent := p;
+      pn[0].AxisComponent := k;
+      ctl.IsIrrelevant := @ParallelIrrelevant;
       ctl.CanvasW := (FLastRect.Right - FLastRect.Left) / v.S;
       ctl.CanvasH := (FLastRect.Bottom - FLastRect.Top) / v.S;
       ctl.SetPanels(pn, True);

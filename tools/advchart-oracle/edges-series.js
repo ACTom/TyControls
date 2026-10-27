@@ -224,6 +224,26 @@ add('pie-delay', 'pd-neg', 'a pie with negative values: the delay callback is ca
   { animation: true, animationDelay: '@delayLog',
     series: [{ type: 'pie', data: [3, -1, 4, -2, 5] }] });
 
+// ---- large-scatter ----
+const lpts = []; for (let i = 0; i < 30; i++) lpts.push([i % 10, (i * 7) % 10]);
+add('large-scatter', 'ls-polar', 'a large scatter on a polar: one batch, the ring its soft clip',
+  { animation: false, polar: { radius: [20, 140] }, angleAxis: { type: 'value', max: 10 }, radiusAxis: { max: 8 },
+    series: [{ type: 'scatter', coordinateSystem: 'polar', large: true, largeThreshold: 10, symbolSize: 6, data: lpts }] });
+add('large-scatter', 'ls-calendar', 'a large scatter on a calendar: one batch, no clip',
+  { animation: false, calendar: { range: '2020-01', cellSize: 20, left: 40, top: 40 },
+    series: [{ type: 'scatter', coordinateSystem: 'calendar', large: true, largeThreshold: 10, symbolSize: 6,
+      data: Array.from({ length: 20 }, (_, i) => ['2020-01-' + String(i + 1).padStart(2, '0'), i]) }] });
+add('large-scatter', 'ls-single', 'a large scatter on a single axis',
+  { animation: false, singleAxis: { type: 'value', top: 100, height: 100 },
+    series: [{ type: 'scatter', coordinateSystem: 'singleAxis', large: true, largeThreshold: 10, symbolSize: 6,
+      data: Array.from({ length: 20 }, (_, i) => i * 3) }] });
+add('large-scatter', 'ls-path', 'a large path:// scatter: one batch whose path collapsed to its 0 x 0 box -- no ink',
+  { animation: false, xAxis: { type: 'value' }, yAxis: { type: 'value' },
+    series: [{ type: 'scatter', symbol: 'path://M0,0L10,0L5,10Z', symbolSize: 12, large: true, largeThreshold: 10, data: lpts }] });
+add('large-scatter', 'ls-image', 'a large image:// scatter: upstream throws (an image has no buildPath)',
+  { animation: false, xAxis: { type: 'value' }, yAxis: { type: 'value' },
+    series: [{ type: 'scatter', symbol: 'image://data:image/png;base64,iVBORw0KGgo=', large: true, largeThreshold: 10, data: lpts }] });
+
 // ---------------------------------------------------------------------------
 // the readers
 // ---------------------------------------------------------------------------
@@ -358,12 +378,31 @@ const READ = {
     });
     return { items };
   },
-  'pie-delay': (chart, c) => ({ calls: c._calls })
+  'pie-delay': (chart, c) => ({ calls: c._calls }),
+  'large-scatter': (chart, c) => {
+    const s = chart.getModel().getSeriesByIndex(0);
+    const v = chart.getViewOfSeriesModel(s);
+    let el = null;
+    v.group.traverse(e => { if (!el && e.symbolProxy) el = e; });
+    must(el && s.pipelineContext.large, c.id + ': no large batch');
+    const pts = Array.from(el.shape.points).map(hex);
+    el.path || el.createPathProxy();
+    el.path.beginPath();
+    el.buildPath(el.path, el.shape);
+    const b = el.path.getBoundingRect();
+    const sc = el.softClipShape;
+    return { points: pts, clip: !sc ? null : sc.r0 != null ? 'ring' : 'rect', ink: b.width > 0 || b.height > 0 };
+  }
 };
 
 function run(c) {
   const chart = mk(c.W, c.H);
   try {
+    if (c.id === 'ls-image') {
+      let threw = false;
+      try { chart.setOption(clone(c.option)); chart.renderToSVGString(); } catch (e) { threw = true; }
+      return { id: c.id, group: c.group, note: c.note, W: c.W, H: c.H, option: c.option, throws: threw };
+    }
     const option = clone(c.option);
     c._calls = [];
     if (option.animationDelay === '@delayLog') {
@@ -448,6 +487,9 @@ function guards(out) {
   guard('which a stable merge sort would not give', JSON.stringify(v8Order(keys, idx)) !== JSON.stringify(mergeOrder(keys, idx)));
   const lc = byId('li-candle').items[0].icons;
   guard('a candlestick icon has a 2 px pen', lc.some(ic => ic.lineWidth === 2 && ic.stroke));
+  guard('a polar batch clips by the ring, a calendar one not at all', byId('ls-polar').clip === 'ring' && byId('ls-calendar').clip === null);
+  guard('a large path:// batch has no ink', byId('ls-path').ink === false);
+  guard('a large image:// scatter throws upstream', byId('ls-image').throws === true);
   const pdc = byId('pd-neg').calls;
   guard('the pie delay is called with the filtered indices only', pdc.length > 0 && Math.max(...pdc) === 2);
   return g;

@@ -2059,7 +2059,8 @@ begin
     sp := FGraphSpecs[i];
     if not (sp.Roam in [grmPan, grmBoth]) then Continue;
     Consider(sp.ZLevel, sp.Z, 100000 + FBindings[i].SeriesIndex,
-      sp.RoamGlobal or FGraphs[i].ContainTrigger(AX, AY));
+      (sp.RoamGlobal or FGraphs[i].ContainTrigger(AX, AY))
+      and not SeriesRoamIrrelevant(i, AX, AY, sp.Z, sp.ZLevel));
   end;
   for i := 0 to High(FTreeViews) do
   begin
@@ -2067,7 +2068,8 @@ begin
     sp := FTreeSpecs[i];
     if not (sp.Roam in [grmPan, grmBoth]) then Continue;
     Consider(sp.ZLevel, sp.Z, 100000 + FBindings[i].SeriesIndex,
-      sp.RoamGlobal or FTreeViews[i].ContainTrigger(AX, AY));
+      (sp.RoamGlobal or FTreeViews[i].ContainTrigger(AX, AY))
+      and not SeriesRoamIrrelevant(i, AX, AY, sp.Z, sp.ZLevel));
   end;
   for i := 0 to High(FSankeyViews) do
   begin
@@ -2075,7 +2077,8 @@ begin
     sp := FSankeySpecs[i];
     if not (sp.Roam in [grmPan, grmBoth]) then Continue;
     Consider(sp.ZLevel, sp.Z, 100000 + FBindings[i].SeriesIndex,
-      sp.RoamGlobal or SankeySelfAt(i, AX, AY));
+      (sp.RoamGlobal or SankeySelfAt(i, AX, AY))
+      and not SeriesRoamIrrelevant(i, AX, AY, sp.Z, sp.ZLevel));
   end;
   for i := 0 to High(FTreemaps) do
   begin

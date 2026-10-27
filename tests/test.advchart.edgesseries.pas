@@ -21,6 +21,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Data,
      tyControls.AdvanceChart.Dataset, tyControls.AdvanceChart.ThemeRiver,
      tyControls.AdvanceChart.AnimOpt, tyControls.AdvanceChart.AnimView,
+     tyControls.AdvanceChart.Large,
      tyControls.AdvanceChart,
      test.advchart.graphic;
 type
@@ -53,6 +54,7 @@ type
     procedure TestARiverLayerIsSortedAsV8;
     procedure TestACandlestickAndABoxplotIconHaveTheirPen;
     procedure TestAPieDelayGetsTheFilteredIndices;
+    procedure TestALargeScatterBatchesOnEverySystem;
   end;
 
 implementation
@@ -744,6 +746,105 @@ begin
     cs.Free;
   end;
   Finish('the delays');
+end;
+
+{ the batch: one large symbol element whose points are upstream's Float32
+  points bit for bit, its soft clip the ring on a polar and none on a
+  calendar or a single axis; a path:// batch and an image:// one put no ink
+  down (upstream's path collapsed to its 0 x 0 box; upstream throws on the
+  image, the port draws nothing of it) }
+procedure TAdvChartEdgesSeriesOracleTest.TestALargeScatterBatchesOnEverySystem;
+var
+  cs, pts: TJSONArray;
+  c: TJSONObject;
+  i, j, k, n, x, y, ink: Integer;
+  lst: TTyPaintList;
+  e, big: TTyChartElement;
+  b: TBGRABitmap;
+  p: TTyPainter;
+  px: PBGRAPixel;
+  clip: string;
+begin
+  cs := Cases('large-scatter');
+  try
+    for i := 0 to cs.Count - 1 do
+    begin
+      c := cs.Objects[i];
+      Load(c);
+      lst := FChart.List;
+      n := 0;
+      big := Default(TTyChartElement);
+      for j := 0 to lst.Count - 1 do
+      begin
+        e := lst.Element(j);
+        if (e.Shape.Kind = cskLarge) and (e.Shape.Large.Kind = lgkSymbol) then
+        begin
+          Inc(n);
+          big := e;
+        end;
+      end;
+      Inc(FCompared);
+      if n <> 1 then
+      begin
+        Bad(Format('%d large batches', [n]));
+        Continue;
+      end;
+      if c.Find('points') <> nil then
+      begin
+        pts := c.Arrays['points'];
+        Inc(FCompared);
+        if Length(big.Shape.Large.Pts) <> pts.Count then
+          Bad(Format('%d numbers upstream, %d here', [pts.Count, Length(big.Shape.Large.Pts)]))
+        else
+          for k := 0 to pts.Count - 1 do
+            if not SameNum(big.Shape.Large.Pts[k], FromHex(pts.Strings[k]), 0) then
+            begin
+              Bad(Format('number %d: %s upstream, %s here', [k, Txt(FromHex(pts.Strings[k])),
+                Txt(big.Shape.Large.Pts[k])]));
+              Break;
+            end;
+        if not big.Shape.Large.SoftOn then clip := 'null'
+        else if big.Shape.Large.SoftRing then clip := 'ring'
+        else clip := 'rect';
+        Inc(FCompared);
+        if (c.Find('clip').JSONType = jtString) and (clip <> c.Strings['clip'])
+          or (c.Find('clip').JSONType = jtNull) and (clip <> 'null') then
+          Bad('clip ' + c.Find('clip').AsJSON + ' upstream, ' + clip + ' here');
+      end;
+      { ink, where upstream has none }
+      if ((c.Find('ink') <> nil) and not c.Booleans['ink']) or (c.Find('throws') <> nil) then
+      begin
+        b := TBGRABitmap.Create(c.Integers['W'], c.Integers['H'], BGRA(255, 255, 255, 255));
+        try
+          p := TTyPainter.Create;
+          try
+            p.BeginPaintOn(nil, Rect(0, 0, b.Width, b.Height), 96, b);
+            TyRenderElement(p, big);
+            p.EndPaint;
+          finally
+            p.Free;
+          end;
+          ink := 0;
+          for y := 0 to b.Height - 1 do
+          begin
+            px := b.ScanLine[y];
+            for x := 0 to b.Width - 1 do
+            begin
+              if (px^.red <> 255) or (px^.green <> 255) or (px^.blue <> 255) then Inc(ink);
+              Inc(px);
+            end;
+          end;
+        finally
+          b.Free;
+        end;
+        Inc(FCompared);
+        if ink > 0 then Bad(Format('%d inked pixels, upstream none', [ink]));
+      end;
+    end;
+  finally
+    cs.Free;
+  end;
+  Finish('the large batches');
 end;
 
 initialization

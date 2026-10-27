@@ -452,6 +452,20 @@ function TyBrushItemLayouts(const ABinding: TTySeriesBinding;
   AStore: TTyDataStore; const AStack: TTySeriesStack;
   const AVisual: TTySeriesVisual): TTyBrushItemLayoutArray;
 
+type
+  { [R5-G] per slot, a scatter's jittered points }
+  TTyPointFArrays = array of TTyPointFArray;
+
+{ [R5-G] A JITTERED SCATTER'S POINTS, as its builder places them (jitterLayout
+  over pointsLayout: every row drawn its jitter in row order, a gap too; a
+  large batch's through Float32 and the series' size), one per store row --
+  NaN where the row has no point. AVisual.Jitter is the pass the points are
+  fixed on; nil: the plain points. The brush's selector reads these, as
+  upstream's runs after the jitter. }
+function TyScatterJitterPoints(const ABinding: TTySeriesBinding;
+  AStore: TTyDataStore; const AStack: TTySeriesStack;
+  const AVisual: TTySeriesVisual): TTyPointFArray;
+
 implementation
 
 uses tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.AxisLabels,
@@ -461,6 +475,10 @@ uses tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.AxisLabels,
 
 procedure TyBarBackgroundStyle(var AEl: TTyChartElement;
   const AVisual: TTySeriesVisual); forward;
+function BuildLargeSymbolsAt(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
+  const AStack: TTySeriesStack; const AVisual: TTySeriesVisual;
+  AList: TTyPaintList; AColX, AColY: Integer; ACal: ITyCoordSys): Integer; forward;
+
 
 { THE POLAR A SERIES IS ON, nil on a cartesian [Batch 113] }
 function PolarOf(const ABinding: TTySeriesBinding): TTyPolar;
@@ -2996,6 +3014,14 @@ begin
   if AVisual.Symbol.Kind = tsyNone then Exit;
   colT := AStore.DimIndexOf(TyCalendarTimeDim);
   if colT < 0 then Exit;
+  { [R5-G] LARGE: LargeSymbolDraw over pointsLayout's points, as on any
+    other system [was: one symbol per row] }
+  if AVisual.Large = lgkSymbol then
+  begin
+    Result := BuildLargeSymbolsAt(ABinding, AStore, TyNoStack, AVisual,
+      AList, colT, colT, ACal);
+    Exit;
+  end;
   for i := 0 to AStore.Count - 1 do
   begin
     p := ACal.DataToPoint([AStore.Get(colT, i)]);
@@ -4681,6 +4707,13 @@ end;
 function BuildLargeSymbols(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
   const AStack: TTySeriesStack; const AVisual: TTySeriesVisual;
   AList: TTyPaintList; AColX, AColY: Integer): Integer;
+begin
+  Result := BuildLargeSymbolsAt(ABinding, AStore, AStack, AVisual, AList, AColX, AColY, nil);
+end;
+
+function BuildLargeSymbolsAt(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
+  const AStack: TTySeriesStack; const AVisual: TTySeriesVisual;
+  AList: TTyPaintList; AColX, AColY: Integer; ACal: ITyCoordSys): Integer;
 var
   i, n, k, k0, j, rows: Integer;
   part: TTyLargeGeom;
@@ -4709,14 +4742,35 @@ begin
     fillRect; the hit box never shrinks under it }
   g.Boost := (not IsNan(spec.WidthPx)) and (spec.WidthPx < 4 * scale);
   g.HitMin := 4 * scale;
-  if AVisual.Line.Clip then
+  { [R5-G] createCoordSysClipAreaSimply: the cartesian's getArea(0.1), a
+    polar's ring; a calendar and a single axis have no getArea }
+  if AVisual.Line.Clip and (ACal = nil) then
   begin
-    g.SoftOn := True;
-    g.Soft := ABinding.Cart.GetAreaTol(0.1);
+    if PolarOf(ABinding) <> nil then
+    begin
+      g.SoftOn := True;
+      g.SoftRing := True;
+      g.RingCX := PolarOf(ABinding).CX;
+      g.RingCY := PolarOf(ABinding).CY;
+      PolarOf(ABinding).AxisExtent(PolarOf(ABinding).RadiusAxis, g.RingR0, g.RingR1);
+    end
+    else if ABinding.Cart <> nil then
+    begin
+      g.SoftOn := True;
+      g.Soft := ABinding.Cart.GetAreaTol(0.1);
+    end;
   end;
   SetLength(g.Pts, n * 2);
   for i := 0 to n - 1 do
   begin
+    { [R5-G] a calendar's point: its date's cell centre }
+    if ACal <> nil then
+    begin
+      p := ACal.DataToPoint([AStore.Get(AColX, i)]);
+      g.Pts[i * 2] := TyLargeF32(p.X);
+      g.Pts[i * 2 + 1] := TyLargeF32(p.Y);
+      Continue;
+    end;
     x := AStore.Get(AColX, i);
     y := AStore.Get(AColY, i);
     if stacked then
@@ -4747,6 +4801,11 @@ begin
   if g.Boost or (v.Stroke = 0) then v.StrokeWidthLogical := 0;
   if Length(AVisual.LargeChunks) = 0 then
   begin
+    { [R5-G] ON A SINGLE AXIS pointsLayout's array is Float32Array(count *
+      dimLen) with dimLen 1, yet it writes two numbers a row: what does not
+      fit is dropped, so the batch holds the first count / 2 points (an odd
+      count's last x meets no y) -- upstream draws half the rows }
+    if SingleOf(ABinding) <> nil then SetLength(g.Pts, n);
     el := LargeElement(g, v, ABinding.SeriesIndex);
     AList.Add(el);
     Inc(Result);
@@ -4958,6 +5017,83 @@ begin
   if Length(cols) > 0 then Result := cols[0];
 end;
 
+function TyScatterJitterPoints(const ABinding: TTySeriesBinding;
+  AStore: TTyDataStore; const AStack: TTySeriesStack;
+  const AVisual: TTySeriesVisual): TTyPointFArray;
+var
+  colX, colY, sizeCol, i: Integer;
+  x, y, px, py: Double;
+  p: TTyPointF;
+  baseHoriz, stacked, large: Boolean;
+  spec: TTySymbolSpec;
+  m: TFPUExceptionMask;
+begin
+  Result := nil;
+  if (AStore = nil) or not ABinding.Resolved or (ABinding.XAxis = nil) then Exit;
+  colX := FirstColumnOn(AStore, ABinding.XAxis);
+  if SingleOf(ABinding) <> nil then colY := colX
+  else
+  begin
+    if ABinding.YAxis = nil then Exit;
+    colY := FirstColumnOn(AStore, ABinding.YAxis);
+  end;
+  if (colX < 0) or (colY < 0) then Exit;
+  spec := AVisual.Symbol;
+  large := AVisual.Large = lgkSymbol;
+  baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
+  stacked := AStack.Stacked and (AStack.ResultCol >= 0);
+  { BuildScatter's size column: a float column the axes do not use }
+  sizeCol := -1;
+  if not large then
+    for i := 0 to AStore.DimCount - 1 do
+      if (i <> colX) and (i <> colY) and (AStore.DimType(i) = ddtFloat) then
+      begin
+        sizeCol := i;
+        Break;
+      end;
+  SetLength(Result, AStore.Count);
+  m := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+  try
+    for i := 0 to AStore.Count - 1 do
+    begin
+      x := AStore.Get(colX, i);
+      y := AStore.Get(colY, i);
+      if stacked then
+      begin
+        if baseHoriz then y := AStore.Get(AStack.ResultCol, i)
+                     else x := AStore.Get(AStack.ResultCol, i);
+      end;
+      p := SysPoint(ABinding, [x, y]);
+      if large then
+      begin
+        px := TyLargeF32(p.X);
+        py := TyLargeF32(p.Y);
+        if AVisual.Jitter <> nil then
+        begin
+          if AVisual.JitterOnX then
+            px := TyLargeF32(AVisual.Jitter.Fix(py, px, ScatterRowRadius(AVisual, AStore, i, spec, -1)))
+          else
+            py := TyLargeF32(AVisual.Jitter.Fix(px, py, ScatterRowRadius(AVisual, AStore, i, spec, -1)));
+        end;
+        p := TyPointF(px, py);
+      end
+      else if AVisual.Jitter <> nil then
+      begin
+        if AVisual.JitterOnX then
+          p.X := AVisual.Jitter.Fix(p.Y, p.X, ScatterRowRadius(AVisual, AStore, i, spec, sizeCol))
+        else
+          p.Y := AVisual.Jitter.Fix(p.X, p.Y, ScatterRowRadius(AVisual, AStore, i, spec, sizeCol));
+      end;
+      if IsNan(x) or IsNan(y) then p := TyPointF(NaN, NaN);
+      Result[i] := p;
+    end;
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(m);
+  end;
+end;
+
 function TyBrushItemLayouts(const ABinding: TTySeriesBinding;
   AStore: TTyDataStore; const AStack: TTySeriesStack;
   const AVisual: TTySeriesVisual): TTyBrushItemLayoutArray;
@@ -5164,7 +5300,10 @@ begin
     if ABinding.XAxis = nil then Exit;
     colX := FirstColumnOn(AStore, ABinding.XAxis);
     if colX < 0 then Exit;
-    if (ABinding.SeriesType = 'scatter') or (ABinding.SeriesType = 'effectScatter') then
+    if AVisual.Large = lgkSymbol then
+      { [R5-G] the large batch on a single axis too }
+      Result := BuildLargeSymbols(ABinding, AStore, AStack, AVisual, AList, colX, colX)
+    else if (ABinding.SeriesType = 'scatter') or (ABinding.SeriesType = 'effectScatter') then
       Result := BuildScatter(ABinding, AStore, AStack, AVisual, AList, colX, colX);
   end
   else if PolarOf(ABinding) <> nil then
@@ -5177,6 +5316,10 @@ begin
       Result := BuildPolarBars(ABinding, AStore, AStack, AVisual, AList, colX, colY)
     else if ABinding.SeriesType = 'line' then
       Result := BuildLine(ABinding, AStore, AStack, AVisual, AList, colX, colY)
+    else if AVisual.Large = lgkSymbol then
+      { [R5-G] the large batch on a polar: LargeSymbolDraw is the
+        coordinate system's whatever it is [was: one symbol per row] }
+      Result := BuildLargeSymbols(ABinding, AStore, AStack, AVisual, AList, colX, colY)
     else if (ABinding.SeriesType = 'scatter') or (ABinding.SeriesType = 'effectScatter') then
       Result := BuildScatter(ABinding, AStore, AStack, AVisual, AList, colX, colY);
   end

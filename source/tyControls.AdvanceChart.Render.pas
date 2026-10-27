@@ -994,8 +994,7 @@ begin
         x := AGeom.Pts[ARow * 2];
         y := AGeom.Pts[ARow * 2 + 1];
         if Bad(x) or Bad(y) then Exit;
-        if AGeom.SoftOn and not ((x >= AGeom.Soft.X) and (x <= AGeom.Soft.X + AGeom.Soft.W)
-          and (y >= AGeom.Soft.Y) and (y <= AGeom.Soft.Y + AGeom.Soft.H)) then Exit;
+        if not TyLargeSoftContains(AGeom, x, y) then Exit;
         AX0 := x - AGeom.SymW / 2;
         AX1 := x + AGeom.SymW / 2;
         AY0 := y - AGeom.SymH / 2;
@@ -1074,15 +1073,16 @@ begin
         x := AGeom.Pts[ARow * 2];
         y := AGeom.Pts[ARow * 2 + 1];
         if Bad(x) or Bad(y) then Exit;
-        if AGeom.SoftOn and not ((x >= AGeom.Soft.X) and (x <= AGeom.Soft.X + AGeom.Soft.W)
-          and (y >= AGeom.Soft.Y) and (y <= AGeom.Soft.Y + AGeom.Soft.H)) then Exit;
+        if not TyLargeSoftContains(AGeom, x, y) then Exit;
         w := AGeom.SymW;
         h := AGeom.SymH;
         if AGeom.Boost then
           P.RectPath(x - w / 2, y - h / 2, x - w / 2 + w, y - h / 2 + h)
         { [F6a] a picture in a large batch: LargeSymbolPath builds through
-          the symbol's path, and an image has none -- nothing }
-        else if not (ASpec.Kind in [tsyNone, tsyImage]) then
+          the symbol's path, and an image has none -- nothing. [R5-G] Nor a
+          path://: createSymbol fits it into the proxy's 0 x 0 box once and
+          buildPath replays that collapsed path at every point -- no ink }
+        else if not (ASpec.Kind in [tsyNone, tsyImage, tsyPath]) then
         begin
           sub := TyBuildSymbolInBox(ASpec, TyRectF(x - w / 2, y - h / 2,
             x - w / 2 + w, y - h / 2 + h));

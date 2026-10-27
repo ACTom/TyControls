@@ -19,7 +19,12 @@ begin
     (createLarge would then read no points), and the polar and calendar
     scatters are left drawn one by one. LINES are batched on any of their
     systems: linesLayout's large branch is dataToPoint [Batch 121] }
-  if (st <> TyLinesSeriesTypeName) and ((FBindings[ASlot].Cart = nil)
+  { [R5-G] a scatter batches on a polar, a calendar and a single axis too
+    (pointsLayout + LargeSymbolDraw know no system) }
+  if (st <> TyLinesSeriesTypeName) and not ((st = 'scatter')
+    and ((FBindings[ASlot].Polar <> nil) or (FBindings[ASlot].CalendarIndex >= 0)
+    or (FBindings[ASlot].Single <> nil)))
+    and ((FBindings[ASlot].Cart = nil)
     or (FBindings[ASlot].Polar <> nil) or (FBindings[ASlot].CalendarIndex >= 0)) then Exit;
   d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
   if not (d is TJSONObject) then Exit;
@@ -28,9 +33,9 @@ begin
     [Batch 119] }
   if not TyLargeIsOn(st, node.Find('large'), node.Find('largeThreshold'),
     FStores[ASlot].Count) and not ((st = 'bar') and ProgOnOf(ASlot)) then Exit;
-  { A path:// SYMBOL stays one element per row: upstream's batch would
-    replay one fitted path, which this port does not model }
-  if (st = 'scatter') and (SymbolFor(ASlot).Kind = tsyPath) then Exit;
+  { [R5-G] a path:// symbol batches too: upstream's batch replays the path
+    createSymbol fitted into a 0 x 0 box -- it draws nothing, and the
+    pointer still finds its rows [was: one element per row] }
   Result := TyLargeKindOfType(st);
 end;
 
