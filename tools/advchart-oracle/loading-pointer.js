@@ -23,6 +23,17 @@
 // state: {tip ('axis:' / 'item:' as tooltip-actions.js, null hidden), cursor
 // (the last proxy.setCursor of the step, null none), pointers (the shown
 // axes' keys), window ([start, end] of dataZoom 0, null none)}.
+//
+// THE THUMBNAIL'S BOX (cases 'thumb*', appended): ThumbnailView's _bgRect
+// and _windowRect are not silent and carry no ecData -- the dispatcher in
+// echarts.ts finds no params on them, so they fire no mouse event of their
+// own, and as the hover target over a graph node under them (z 10 over the
+// series' 2) they keep the node from being hovered, clicked or tipped; the
+// cursor is their 'grab'. A thumbnail over a graph on a calendar or a matrix
+// (GraphView._getThumbnailInfo: no thumbnail info but on a view) shows its
+// box and an empty window, no copy. Their state also records thumb: {box,
+// window ([x, y, w, h] of the two rects' shapes), copy (the copy's leaf
+// count)}.
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -154,7 +165,7 @@ function watchTooltip(chart) {
     if (Array.isArray(params)) {
       w.which = 'axis:' + params.map(p => p.seriesIndex + '/' + p.dataIndex + '@' + p.axisDim + p.axisIndex).join(',');
     } else if (params && params.componentType === 'series') {
-      w.which = 'item:' + params.seriesIndex + ':' + params.dataIndex;
+      w.which = 'item:' + params.seriesIndex + ':' + params.dataIndex + (params.dataType ? ':' + params.dataType : '');
     } else w.which = 'other';
     return show.apply(this, arguments);
   };
@@ -296,6 +307,46 @@ const CASES = [
       { op: 'move', at: [240, 152] },
     ],
   },
+  {
+    id: 'thumb', note: 'a thumbnail over a graph on a view: the node under its box (460, 360) is not hovered, clicked or tipped, the '
+      + 'box fires nothing and its cursor is grab; the node outside it (300, 200) as ever',
+    thumb: true,
+    charts: [{ animation: false, tooltip: { trigger: 'item' }, thumbnail: {},
+      series: [{ type: 'graph', layout: 'none', roam: true, symbolSize: 20,
+        data: [{ name: 'p', x: 0, y: 0 }, { name: 'q', x: 50, y: 50 }, { name: 'r', x: 90, y: 90 }, { name: 's', x: 100, y: 100 }],
+        links: [{ source: 'p', target: 'q' }] }] }],
+    steps: [
+      { op: 'move', at: [300, 200] },
+      { op: 'move', at: [460, 360] },
+      { op: 'click', at: [460, 360] },
+      { op: 'move', at: [300, 201] },
+      { op: 'click', at: [300, 201] },
+      { op: 'leave' },
+      { op: 'idle', ms: 200 },
+    ],
+  },
+  {
+    id: 'thumb-calendar', note: 'a thumbnail over a graph on a calendar: its box, an empty window, no copy; the box fires nothing',
+    thumb: true,
+    charts: [{ animation: false, thumbnail: {}, calendar: { range: '2024-01', cellSize: 40, left: 20, top: 20 },
+      series: [{ type: 'graph', coordinateSystem: 'calendar', symbolSize: 10,
+        data: [['2024-01-02', 1], ['2024-01-10', 2], ['2024-01-30', 3]] }] }],
+    steps: [
+      { op: 'move', at: [500, 350] },
+      { op: 'click', at: [500, 350] },
+    ],
+  },
+  {
+    id: 'thumb-matrix', note: 'a thumbnail over a graph on a matrix: the same',
+    thumb: true,
+    charts: [{ animation: false, thumbnail: { coordinateSystem: 'matrix', coord: [1, 1] },
+      matrix: { x: { data: ['a', 'b'] }, y: { data: ['u', 'v'] } },
+      series: [{ type: 'graph', coordinateSystem: 'matrix', symbolSize: 10,
+        data: [['a', 'u'], ['b', 'v']] }] }],
+    steps: [
+      { op: 'move', at: [450, 300] },
+    ],
+  },
 ];
 
 // =====================================================================
@@ -312,11 +363,25 @@ function stateOf2(chart, w, cur) {
   const dz = chart.getModel().getComponent('dataZoom', 0);
   let tip = null;
   if (w.view) tip = visible(w.view._tooltipContent) ? w.which : null;
-  return { tip, cursor: cur.v, pointers, window: dz ? [dz.option.start, dz.option.end] : null };
+  const rec = { tip, cursor: cur.v, pointers, window: dz ? [dz.option.start, dz.option.end] : null };
+  if (thumbOn) rec.thumb = thumbOf(chart);
+  return rec;
+}
+let thumbOn = false;
+function thumbOf(chart) {
+  const m = chart.getModel().getComponent('thumbnail', 0);
+  const v = m ? chart.getViewOfComponentModel(m) : null;
+  if (!v || !v._bgRect || !v.group.children().length) return null;
+  const xywh = sh => [sh.x, sh.y, sh.width, sh.height];
+  let copy = 0;
+  const walk = g => g.eachChild(c => { if (c.isGroup) walk(c); else copy++; });
+  if (v._targetGroup) walk(v._targetGroup);
+  return { box: xywh(v._bgRect.shape), window: xywh(v._windowRect.shape), copy };
 }
 function runCase(def) {
   NOW = CLOCK0;
   TIMERS = [];
+  thumbOn = !!def.thumb;
   const ch = newChart();
   const log = [];
   const cur = { v: null };
@@ -405,6 +470,19 @@ function anchors(cases) {
   const zl = cs('zlevel');
   guard('zlevel-over', ev(zl.steps[1], 'mouseover').length === 0, 'zlevel 1 masks');
   guard('zlevel-after', ev(zl.steps[3], 'mouseover').length === 0 && zl.steps[3].state[0].tip !== null, 'hidden: the mask is gone, the last hover is looked for again where it was (no mouseover), the tip shows');
+  const th = cs('thumb');
+  guard('thumb-node', ev(th.steps[0], 'mouseover').length === 1 && ev(th.steps[0], 'mouseover')[0][2].dataIndex === 1
+    && th.steps[0].state[0].tip !== null, 'the node outside the box is hovered and tipped');
+  guard('thumb-box', ev(th.steps[1], 'mouseover').length === 0 && ev(th.steps[1], 'mouseout').length === 1
+    && th.steps[1].state[0].cursor === 'grab', 'over the box: the node left, nothing hovered, grab');
+  guard('thumb-noclick', ev(th.steps[2], 'click').length === 0 && ev(th.steps[2], 'mousedown').length === 0, 'the box clicks nothing');
+  guard('thumb-copy', th.steps[0].state[0].thumb && th.steps[0].state[0].thumb.copy > 0, 'a copy on a view');
+  guard('thumb-click', ev(th.steps[4], 'click').length === 1, 'the node outside clicks');
+  for (const id of ['thumb-calendar', 'thumb-matrix']) {
+    const c = cs(id);
+    const t = c.steps[0].state[0].thumb;
+    guard(id + '-box', t && t.copy === 0 && t.window[2] === 0 && t.window[3] === 0 && t.box[2] > 0, 'the box, no copy, an empty window');
+  }
   return guards;
 }
 

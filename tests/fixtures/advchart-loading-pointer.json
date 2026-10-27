@@ -1113,6 +1113,788 @@
      ]
     }
    ]
+  },
+  {
+   "id": "thumb",
+   "note": "a thumbnail over a graph on a view: the node under its box (460, 360) is not hovered, clicked or tipped, the box fires nothing and its cursor is grab; the node outside it (300, 200) as ever",
+   "types": [
+    "mouseover",
+    "mouseout",
+    "click",
+    "mousedown",
+    "legendselectchanged",
+    "datazoom",
+    "updateaxispointer",
+    "showtip",
+    "hidetip"
+   ],
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "item"
+      },
+      "thumbnail": {},
+      "series": [
+       {
+        "type": "graph",
+        "layout": "none",
+        "roam": true,
+        "symbolSize": 20,
+        "data": [
+         {
+          "name": "p",
+          "x": 0,
+          "y": 0
+         },
+         {
+          "name": "q",
+          "x": 50,
+          "y": 50
+         },
+         {
+          "name": "r",
+          "x": 90,
+          "y": 90
+         },
+         {
+          "name": "s",
+          "x": 100,
+          "y": 100
+         }
+        ],
+        "links": [
+         {
+          "source": "p",
+          "target": "q"
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "at": [
+      300,
+      200
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "mouseover",
+       {
+        "componentType": "series",
+        "seriesIndex": 0,
+        "dataIndex": 1,
+        "name": "q"
+       }
+      ]
+     ],
+     "state": [
+      {
+       "tip": "item:0:1:node",
+       "cursor": "pointer",
+       "pointers": [],
+       "window": null,
+       "thumb": {
+        "box": [
+         449,
+         299,
+         150,
+         100
+        ],
+        "window": [
+         457.1818181818182,
+         304.45454545454544,
+         133.63636363636365,
+         89.0909090909091
+        ],
+        "copy": 5
+       }
+      }
+     ]
+    },
+    {
+     "op": "move",
+     "at": [
+      460,
+      360
+     ],
+     "events": [
+      [
+       0,
+       "mouseout",
+       {
+        "componentType": "series",
+        "seriesIndex": 0,
+        "dataIndex": 1,
+        "name": "q"
+       }
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": [
+      {
+       "tip": "item:0:1:node",
+       "cursor": "grab",
+       "pointers": [],
+       "window": null,
+       "thumb": {
+        "box": [
+         449,
+         299,
+         150,
+         100
+        ],
+        "window": [
+         457.1818181818182,
+         304.45454545454544,
+         133.63636363636365,
+         89.0909090909091
+        ],
+        "copy": 5
+       }
+      }
+     ]
+    },
+    {
+     "op": "click",
+     "at": [
+      460,
+      360
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": [
+      {
+       "tip": "item:0:1:node",
+       "cursor": "grab",
+       "pointers": [],
+       "window": null,
+       "thumb": {
+        "box": [
+         449,
+         299,
+         150,
+         100
+        ],
+        "window": [
+         457.1818181818182,
+         304.45454545454544,
+         133.63636363636365,
+         89.0909090909091
+        ],
+        "copy": 5
+       }
+      }
+     ]
+    },
+    {
+     "op": "move",
+     "at": [
+      300,
+      201
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "mouseover",
+       {
+        "componentType": "series",
+        "seriesIndex": 0,
+        "dataIndex": 1,
+        "name": "q"
+       }
+      ]
+     ],
+     "state": [
+      {
+       "tip": "item:0:1:node",
+       "cursor": "pointer",
+       "pointers": [],
+       "window": null,
+       "thumb": {
+        "box": [
+         449,
+         299,
+         150,
+         100
+        ],
+        "window": [
+         457.1818181818182,
+         304.45454545454544,
+         133.63636363636365,
+         89.0909090909091
+        ],
+        "copy": 5
+       }
+      }
+     ]
+    },
+    {
+     "op": "click",
+     "at": [
+      300,
+      201
+     ],
+     "events": [
+      [
+       0,
+       "mouseout",
+       {
+        "componentType": "series",
+        "seriesIndex": 0,
+        "dataIndex": 1,
+        "name": "q"
+       }
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "mouseover",
+       {
+        "componentType": "series",
+        "seriesIndex": 0,
+        "dataIndex": 1,
+        "name": "q"
+       }
+      ],
+      [
+       0,
+       "mousedown",
+       {
+        "componentType": "series",
+        "seriesIndex": 0,
+        "dataIndex": 1,
+        "name": "q"
+       }
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "click",
+       {
+        "componentType": "series",
+        "seriesIndex": 0,
+        "dataIndex": 1,
+        "name": "q"
+       }
+      ]
+     ],
+     "state": [
+      {
+       "tip": "item:0:1:node",
+       "cursor": "pointer",
+       "pointers": [],
+       "window": null,
+       "thumb": {
+        "box": [
+         449,
+         299,
+         150,
+         100
+        ],
+        "window": [
+         457.1818181818182,
+         304.45454545454544,
+         133.63636363636365,
+         89.0909090909091
+        ],
+        "copy": 5
+       }
+      }
+     ]
+    },
+    {
+     "op": "leave",
+     "events": [
+      [
+       0,
+       "mouseout",
+       {
+        "componentType": "series",
+        "seriesIndex": 0,
+        "dataIndex": 1,
+        "name": "q"
+       }
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": [
+      {
+       "tip": "item:0:1:node",
+       "cursor": null,
+       "pointers": [],
+       "window": null,
+       "thumb": {
+        "box": [
+         449,
+         299,
+         150,
+         100
+        ],
+        "window": [
+         457.1818181818182,
+         304.45454545454544,
+         133.63636363636365,
+         89.0909090909091
+        ],
+        "copy": 5
+       }
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 200,
+     "events": [],
+     "state": [
+      {
+       "tip": null,
+       "cursor": null,
+       "pointers": [],
+       "window": null,
+       "thumb": {
+        "box": [
+         449,
+         299,
+         150,
+         100
+        ],
+        "window": [
+         457.1818181818182,
+         304.45454545454544,
+         133.63636363636365,
+         89.0909090909091
+        ],
+        "copy": 5
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "thumb-calendar",
+   "note": "a thumbnail over a graph on a calendar: its box, an empty window, no copy; the box fires nothing",
+   "types": [
+    "mouseover",
+    "mouseout",
+    "click",
+    "mousedown",
+    "legendselectchanged",
+    "datazoom",
+    "updateaxispointer",
+    "showtip",
+    "hidetip"
+   ],
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "thumbnail": {},
+      "calendar": {
+       "range": "2024-01",
+       "cellSize": 40,
+       "left": 20,
+       "top": 20
+      },
+      "series": [
+       {
+        "type": "graph",
+        "coordinateSystem": "calendar",
+        "symbolSize": 10,
+        "data": [
+         [
+          "2024-01-02",
+          1
+         ],
+         [
+          "2024-01-10",
+          2
+         ],
+         [
+          "2024-01-30",
+          3
+         ]
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "at": [
+      500,
+      350
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": [
+      {
+       "tip": null,
+       "cursor": "grab",
+       "pointers": [],
+       "window": null,
+       "thumb": {
+        "box": [
+         449,
+         299,
+         150,
+         100
+        ],
+        "window": [
+         0,
+         0,
+         0,
+         0
+        ],
+        "copy": 0
+       }
+      }
+     ]
+    },
+    {
+     "op": "click",
+     "at": [
+      500,
+      350
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": [
+      {
+       "tip": null,
+       "cursor": "grab",
+       "pointers": [],
+       "window": null,
+       "thumb": {
+        "box": [
+         449,
+         299,
+         150,
+         100
+        ],
+        "window": [
+         0,
+         0,
+         0,
+         0
+        ],
+        "copy": 0
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "thumb-matrix",
+   "note": "a thumbnail over a graph on a matrix: the same",
+   "types": [
+    "mouseover",
+    "mouseout",
+    "click",
+    "mousedown",
+    "legendselectchanged",
+    "datazoom",
+    "updateaxispointer",
+    "showtip",
+    "hidetip"
+   ],
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "thumbnail": {
+       "coordinateSystem": "matrix",
+       "coord": [
+        1,
+        1
+       ]
+      },
+      "matrix": {
+       "x": {
+        "data": [
+         "a",
+         "b"
+        ]
+       },
+       "y": {
+        "data": [
+         "u",
+         "v"
+        ]
+       }
+      },
+      "series": [
+       {
+        "type": "graph",
+        "coordinateSystem": "matrix",
+        "symbolSize": 10,
+        "data": [
+         [
+          "a",
+          "u"
+         ],
+         [
+          "b",
+          "v"
+         ]
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "move",
+     "at": [
+      450,
+      300
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": [
+      {
+       "tip": null,
+       "cursor": "default",
+       "pointers": [],
+       "window": null,
+       "thumb": {
+        "box": [
+         499,
+         332.33333333333337,
+         40,
+         26.666666666666657
+        ],
+        "window": [
+         0,
+         0,
+         0,
+         0
+        ],
+        "copy": 0
+       }
+      }
+     ]
+    }
+   ]
   }
  ],
  "guards": [
@@ -1160,6 +1942,41 @@
    "id": "zlevel-after",
    "ok": true,
    "what": "hidden: the mask is gone, the last hover is looked for again where it was (no mouseover), the tip shows"
+  },
+  {
+   "id": "thumb-node",
+   "ok": true,
+   "what": "the node outside the box is hovered and tipped"
+  },
+  {
+   "id": "thumb-box",
+   "ok": true,
+   "what": "over the box: the node left, nothing hovered, grab"
+  },
+  {
+   "id": "thumb-noclick",
+   "ok": true,
+   "what": "the box clicks nothing"
+  },
+  {
+   "id": "thumb-copy",
+   "ok": true,
+   "what": "a copy on a view"
+  },
+  {
+   "id": "thumb-click",
+   "ok": true,
+   "what": "the node outside clicks"
+  },
+  {
+   "id": "thumb-calendar-box",
+   "ok": true,
+   "what": "the box, no copy, an empty window"
+  },
+  {
+   "id": "thumb-matrix-box",
+   "ok": true,
+   "what": "the box, no copy, an empty window"
   }
  ]
 }

@@ -21,6 +21,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Types, tyControls.Controller,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Events,
+     tyControls.AdvanceChart.Thumbnail,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax,
      test.advchart.tooltipactions;
@@ -52,6 +53,10 @@ type
     procedure TestTheAxisPointerUnderTheMaskAsUpstream;
     procedure TestTheZoomUnderTheMaskAsUpstream;
     procedure TestAZlevelAsUpstream;
+    { [R5-D] the thumbnail's box over a node; on a calendar and a matrix }
+    procedure TestTheThumbnailsBoxAsUpstream;
+    procedure TestAThumbnailOverACalendarGraphAsUpstream;
+    procedure TestAThumbnailOverAMatrixGraphAsUpstream;
   end;
 
 implementation
@@ -208,6 +213,18 @@ var
   parts: TStringList;
   got: TJSONData;
   hits: TTyAxisHitArray;
+  th: TJSONObject;
+  ts: TTyThumbState;
+
+  procedure SameRect(const AWhat: string; const AGot: TTyXYWH; AWant: TJSONArray);
+  begin
+    Inc(FCompared);
+    if (Abs(AGot.X - AWant.Floats[0]) > 1e-6) or (Abs(AGot.Y - AWant.Floats[1]) > 1e-6)
+      or (Abs(AGot.W - AWant.Floats[2]) > 1e-6) or (Abs(AGot.H - AWant.Floats[3]) > 1e-6) then
+      Bad(Format('%s [%g, %g, %g, %g], upstream %s', [AWhat, AGot.X, AGot.Y, AGot.W, AGot.H,
+        AWant.AsJSON]));
+  end;
+
 begin
   cases := TJSONObject(FRoot).Arrays['cases'];
   cs := nil;
@@ -357,6 +374,30 @@ begin
       if axes <> parts.DelimitedText then
         Bad(Format('pointers [%s], upstream [%s]', [axes, parts.DelimitedText]));
       parts.Delimiter := #9;
+      { [R5-D] the thumbnail: its box, its window (an empty one where the
+        graph is on no view), the copy's items }
+      if state.Find('thumb') <> nil then
+      begin
+        Inc(FCompared);
+        if state.Find('thumb').JSONType = jtNull then
+        begin
+          if (probe.ThumbnailCount > 0) and probe.ThumbnailState(0).Enabled then
+            Bad('a thumbnail, upstream none');
+        end
+        else if (probe.ThumbnailCount = 0) or not probe.ThumbnailState(0).Enabled then
+          Bad('no thumbnail, upstream one')
+        else
+        begin
+          th := state.Objects['thumb'];
+          ts := probe.ThumbnailState(0);
+          SameRect('the box', ts.Box, th.Arrays['box']);
+          if ts.View.Valid then SameRect('the window', ts.Window, th.Arrays['window'])
+          else SameRect('the window', TyXYWH(0, 0, 0, 0), th.Arrays['window']);
+          Inc(FCompared);
+          if Length(ts.Items) <> th.Integers['copy'] then
+            Bad(Format('%d copied items, upstream %d', [Length(ts.Items), th.Integers['copy']]));
+        end;
+      end;
     end;
   finally
     parts.Free;
@@ -385,6 +426,21 @@ end;
 procedure TAdvChartLoadingPointerOracleTest.TestAZlevelAsUpstream;
 begin
   RunCase('zlevel');
+end;
+
+procedure TAdvChartLoadingPointerOracleTest.TestTheThumbnailsBoxAsUpstream;
+begin
+  RunCase('thumb');
+end;
+
+procedure TAdvChartLoadingPointerOracleTest.TestAThumbnailOverACalendarGraphAsUpstream;
+begin
+  RunCase('thumb-calendar');
+end;
+
+procedure TAdvChartLoadingPointerOracleTest.TestAThumbnailOverAMatrixGraphAsUpstream;
+begin
+  RunCase('thumb-matrix');
 end;
 
 initialization
