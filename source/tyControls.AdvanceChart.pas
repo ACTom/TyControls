@@ -3416,6 +3416,16 @@ type
       its own label.opacity up the item's chain, the global textStyle's, else
       its mark's style.opacity (setLabelStyle's defaultOpacity) [was: 1] }
     procedure OwnLabelOpacity(ASlot: Integer; AList: TTyPaintList; ALo, AHi: Integer);
+    { [R5-C] A LABEL LINE'S lineStyle -- getLineStyle, the keys written:
+      color, width, opacity, type, dashOffset, cap, join, miterLimit -- read
+      down ANodes under APath (['labelLine', 'lineStyle'] or a state's) onto
+      AStyle; what is not written keeps AStyle's }
+    procedure GuideLineStyle(const ANodes: TTyStNodeArray;
+      const APath: array of string; var AStyle: TTyChartElementStyle);
+    { [R5-C] A PIE'S OR A FUNNEL'S OWN LINES, built by their label passes from
+      AFrom on: their normal labelLine.lineStyle (setLabelLineStyle over the
+      item's colour) }
+    procedure StyleOwnGuides(ASlot: Integer; AList: TTyPaintList; AFrom: Integer);
     function EmphasiseElement(AIndex: Integer; APPI: Integer;
       out AElement: TTyChartElement): Boolean;
     { Every value of one datum as one string, for a store that kept no raw

@@ -4034,6 +4034,7 @@ begin
             FunnelLabelInk, fv.Fills, FStores[i], SeriesModelName(FBindings[i].SeriesIndex),
             FStores[i].DimIndexOf(TyPieValueDim), AMeasurer, APPI, list));
           OwnLabelOpacity(i, list, lo, hi);
+          StyleOwnGuides(i, list, hi);
         end;
         Continue;
       end;
@@ -4062,6 +4063,7 @@ begin
             FStores[i].DimIndexOf(TyPieValueDim),
             FPieSpecs[i].PercentPrecision, AMeasurer, APPI, list));
           OwnLabelOpacity(i, list, lo, hi);
+          StyleOwnGuides(i, list, hi);
         end;
         Continue;
       end;

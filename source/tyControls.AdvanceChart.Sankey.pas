@@ -2089,6 +2089,22 @@ begin
       { [F3c] the node's Rect in the main group, for the universal
         transition }
       UtNodePath(el, ASolved, i, x, y, w, h, r);
+      { [R5-C] and a label line's host: the Rect in the main group, the
+        group's transform over it, in the node's colour }
+      el.Caption.LgKind := cTyGuideHostRect;
+      el.Caption.LgColor := ASolved.Nodes[i].Colour;
+      el.Caption.LgG[0] := x;
+      el.Caption.LgG[1] := y;
+      el.Caption.LgG[2] := w;
+      el.Caption.LgG[3] := h;
+      if r > 0 then
+      begin
+        el.Caption.LgG[4] := r;
+        el.Caption.LgG[5] := r;
+        el.Caption.LgG[6] := r;
+        el.Caption.LgG[7] := r;
+      end;
+      TyGuideStampFrame(el.Caption, ASolved.M4, ASolved.M5, ASolved.M0, ASolved.M3, 0, 0, 1);
       { and so does a node [Batch 100] }
       el.Silent := False;
       if ASolved.Nodes[i].HasLabel and Finite([ASolved.Nodes[i].LabelX, ASolved.Nodes[i].LabelY]) then
@@ -2101,6 +2117,8 @@ begin
         el.Caption.FixedInside := ASolved.Nodes[i].LabelInside;
         el.Caption.FixedAH := ASolved.Nodes[i].LabelAH;
         el.Caption.FixedAV := ASolved.Nodes[i].LabelAV;
+        { [R5-C] upstream places it by the node's textConfig }
+        el.Caption.FixedByConfig := 1;
         el.Caption.HasFixedZ2 := True;
         el.Caption.FixedZ2 := 12;
       end;

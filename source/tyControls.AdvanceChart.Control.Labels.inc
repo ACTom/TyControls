@@ -506,6 +506,9 @@ var
   spec: TTyLabelSpec;
   fsz: Integer;
   it: TTyLabelLayoutItem;
+  px0, py0: Double;
+  pah: TTyTextAnchorH;
+  pav: TTyTextAnchorV;
 begin
   if (AList = nil) or (FOption = nil) or (AMeasurer = nil) then Exit;
   if APPI > 0 then scale := APPI / 96 else scale := 1;
@@ -740,6 +743,28 @@ begin
       end;
       it.OriginX := -offX;
       it.OriginY := -offY;
+      { [R5-C] A HOST THAT SET ITS OWN ORIGIN -- a radial tree's
+        textConfig.origin 'center' -- keeps it where the layout gives no x
+        or y: updateInnerText places the label by the position again, adds
+        the offset to the place and leaves the origin at the box's centre
+        (relative to the place before the offset). The offset is then not
+        turned with the label. }
+      if c.HasFixedPos and c.HasHostBox and (lo.X.Kind = cpvAbsent)
+        and (lo.Y.Kind = cpvAbsent) then
+      begin
+        TyLabelAnchorXYWH(c.HostBox, TTyLabelPosition(c.FixedPos), c.FixedDist,
+          0, 0, px0, py0, pah, pav);
+        it.Free := False;
+        it.InnerX := px0 + offX;
+        it.InnerY := py0 + offY;
+        it.OriginX := (-px0 + c.HostBox.W * 0.5) + c.HostBox.X;
+        it.OriginY := (-py0 + c.HostBox.H * 0.5) + c.HostBox.Y;
+        { its turn is the host's textConfig.rotation as set, not one read
+          back off the matrix }
+        if not lo.HasRotate then rot := c.RotationRad;
+        lx := defX;
+        ly := defY;
+      end;
       it.Rotation := rot;
       it.ScaleX := defSx;
       it.ScaleY := defSy;
@@ -908,8 +933,9 @@ begin
   for e := 0 to count - 1 do
   begin
     { most elements are not such a label: asked by reference before the
-      copies [P2] }
-    if AList.Ref(e)^.Caption.LmKind <> 1 then Continue;
+      copies [P2]; a mark that fixed its own anchor (a tree's, a sunburst's,
+      a sankey's) hangs its label on its host as well [R5-C] }
+    if not (AList.Ref(e)^.Caption.LmKind in [1, 2]) then Continue;
     el := AList.Element(e);
     c := el.Caption;
     hi := c.LmHostPlus1 - 1;
@@ -987,28 +1013,12 @@ begin
     guide := TyChartElement(TyShapePolyline(pts));
     guide.Shape.Cmds := TyLabelLineCmds(pts, smooth);
     guide.Caption.LgSmooth := smooth;
-    { lineStyle over the item's colour (the visual's, by its draw type) }
-    col := host.Caption.LgColor;
-    txt := TyStReadString(nodes, ['labelLine', 'lineStyle', 'color'], has);
-    if has then TyTryParseChartColor(txt, col);
+    { lineStyle over the item's colour (the visual's, by its draw type) and
+      zrender's width of 1 [R5-C: every key getLineStyle reads] }
     guide.Style.HasFill := False;
-    guide.Style.StrokeColor := col;
-    w := TyStReadNumber(nodes, ['labelLine', 'lineStyle', 'width'], has);
-    if not has or IsNan(w) then w := 1;
-    guide.Style.StrokeWidthLogical := w;
-    w := TyStReadNumber(nodes, ['labelLine', 'lineStyle', 'opacity'], has);
-    if has and not IsNan(w) then guide.Style.Alpha := w;
-    d := TyStFind(nodes, ['labelLine', 'lineStyle', 'type']);
-    if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'dashed') then
-      guide.Style.DashLogical := TyDashPattern(todDashed, nil, guide.Style.StrokeWidthLogical)
-    else if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'dotted') then
-      guide.Style.DashLogical := TyDashPattern(todDotted, nil, guide.Style.StrokeWidthLogical)
-    else if (d <> nil) and (d.JSONType = jtArray) then
-    begin
-      SetLength(guide.Style.DashLogical, d.Count);
-      for j := 0 to d.Count - 1 do
-        guide.Style.DashLogical[j] := TyGuideJsNumber(d.Items[j], NaN);
-    end;
+    guide.Style.StrokeColor := host.Caption.LgColor;
+    guide.Style.StrokeWidthLogical := 1;
+    GuideLineStyle(nodes, ['labelLine', 'lineStyle'], guide.Style);
     { a pointer at its datum, never a target }
     guide.Silent := True;
     guide.IsGuide := True;
@@ -1085,6 +1095,93 @@ begin
         pe^.Style.Alpha := AList.Ref(j)^.Style.Alpha;
         Break;
       end;
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.GuideLineStyle(const ANodes: TTyStNodeArray;
+  const APath: array of string; var AStyle: TTyChartElementStyle);
+var
+  p: array of string;
+  i, j: Integer;
+  d, typ: TJSONData;
+  c: TTyChartColor;
+  v: Double;
+
+  function At(const AKey: string): TJSONData;
+  begin
+    p[High(p)] := AKey;
+    Result := TyStFind(ANodes, p);
+  end;
+
+  function NumOf(D: TJSONData; out V: Double): Boolean;
+  begin
+    Result := (D <> nil) and (D.JSONType = jtNumber);
+    if Result then V := D.AsFloat else V := NaN;
+    if Result and IsNan(V) then Result := False;
+  end;
+
+begin
+  SetLength(p, Length(APath) + 1);
+  for i := 0 to High(APath) do p[i] := APath[i];
+  d := At('color');
+  if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
+    AStyle.StrokeColor := c;
+  if NumOf(At('width'), v) then AStyle.StrokeWidthLogical := v;
+  if NumOf(At('opacity'), v) then AStyle.Alpha := v;
+  if NumOf(At('dashOffset'), v) then AStyle.DashOffsetLogical := v;
+  if NumOf(At('miterLimit'), v) then AStyle.MiterLimit := v;
+  d := At('cap');
+  if (d <> nil) and (d.JSONType = jtString) then AStyle.LineCap := TyCapOfWord(d.AsString);
+  d := At('join');
+  if (d <> nil) and (d.JSONType = jtString) then AStyle.LineJoin := TyJoinOfWord(d.AsString);
+  { type: normalizeLineDash against the width the line strokes at -- the
+    words as multiples of it (kept as the word, so a state's width carries
+    the dash along), a number or an array as lengths }
+  typ := At('type');
+  if typ = nil then Exit;
+  AStyle.DashWord := 0;
+  AStyle.DashLogical := nil;
+  if typ.JSONType = jtString then
+  begin
+    if typ.AsString = 'dashed' then AStyle.DashWord := 1
+    else if typ.AsString = 'dotted' then AStyle.DashWord := 2;
+    if AStyle.DashWord > 0 then
+      AStyle.DashLogical := TyDashOfWord(AStyle.DashWord, AStyle.StrokeWidthLogical);
+  end
+  else if (typ.JSONType = jtNumber) and (AStyle.StrokeWidthLogical > 0) then
+  begin
+    SetLength(AStyle.DashLogical, 1);
+    AStyle.DashLogical[0] := typ.AsFloat;
+  end
+  else if (typ.JSONType = jtArray) and (AStyle.StrokeWidthLogical > 0) then
+  begin
+    SetLength(AStyle.DashLogical, typ.Count);
+    for j := 0 to typ.Count - 1 do
+      AStyle.DashLogical[j] := TyGuideJsNumber(typ.Items[j], NaN);
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.StyleOwnGuides(ASlot: Integer; AList: TTyPaintList;
+  AFrom: Integer);
+var
+  k, si, raw: Integer;
+  pe: PTyChartElement;
+  st: TTyChartElementStyle;
+begin
+  if (AList = nil) or (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  si := FBindings[ASlot].SeriesIndex;
+  for k := AFrom to AList.Count - 1 do
+  begin
+    pe := AList.Ref(k);
+    if (pe^.Anim.Role <> carGuide) or (pe^.Datum.SeriesIndex <> si) then Continue;
+    raw := pe^.Datum.RawDataIndex;
+    if raw < 0 then raw := pe^.Datum.DataIndex;
+    { the item's colour and the theme's width under what the chain writes;
+      the opacity is the line's own (zrender's default 1 already stands, so
+      defaults() never hands it the item's) }
+    st := pe^.Style;
+    GuideLineStyle(StNodes(si, raw), ['labelLine', 'lineStyle'], st);
+    pe^.Style := st;
   end;
 end;
 

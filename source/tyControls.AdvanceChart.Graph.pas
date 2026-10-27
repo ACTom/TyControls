@@ -1066,6 +1066,9 @@ type
       HasFrame False on axes (the identity) }
     HasFrame: Boolean;
     Frame: TTyGraphLabelFrame;
+    { [R5-C] the compensation scale of a node's group on a view
+      (getNodeGlobalScale), for a label line's host }
+    NodeScale: Double;
     { the edge labels' specs, for the expansion's item spec row }
     EdgeLabelSpecs: TTyLabelSpecArray;
     { [F2a] per edge: the label's own turn (radians, NaN: none) and offset
@@ -2240,6 +2243,7 @@ var
   c: TTyChartColor;
   empty: Boolean;
   path: string;
+  offSpec: TTySymbolSpec;
 begin
   Result := TyGraphSpecDefault;
   node := NodeAt(AOption, ASlot);
@@ -2315,6 +2319,17 @@ begin
   d := node.Find('symbolKeepAspect');
   if (d <> nil) and (d.JSONType = jtBoolean) then
     Result.Symbol.KeepAspect := d.AsBoolean;
+  { [R5-C] the series' symbolOffset (seriesSymbolTask) [was: not read] }
+  if node.Find('symbolOffset') <> nil then
+  begin
+    offSpec := TySymbolSpecOf(node, Result.Symbol);
+    Result.Symbol.OffsetX := offSpec.OffsetX;
+    Result.Symbol.OffsetY := offSpec.OffsetY;
+    Result.Symbol.OffsetXIsPct := offSpec.OffsetXIsPct;
+    Result.Symbol.OffsetYIsPct := offSpec.OffsetYIsPct;
+    Result.Symbol.OffsetXPct := offSpec.OffsetXPct;
+    Result.Symbol.OffsetYPct := offSpec.OffsetYPct;
+  end;
 
   ReadEdgeSymbol(node, Result);
   { (Sizes below are clamped; see SaneSize.) }
@@ -6359,7 +6374,7 @@ var
   { [F3a] the edge's enter tag, its arrows' too; a node's half size before
     the compensation }
   edgeAnim: TTyChartAnim;
-  hw, hh: Double;
+  hw, hh, offX0, offY0: Double;
 
   { [R2-I3] A NODE'S PEN, as a Symbol path takes its style: the visual's
     stroke (borderColor) and lineWidth (borderWidth, zrender's 1 where none
@@ -6729,6 +6744,9 @@ begin
       sym.OffsetYPct := ANodes[i].Off.OffsetYPct;
     end;
     sym := TySymbolResolveOffset(sym);
+    { the path's offset in its group's frame [R5-C] }
+    offX0 := sym.OffsetX;
+    offY0 := sym.OffsetY;
     { Symbol's _sizeX / _sizeY: the half size the path is scaled to, before
       any compensation [F3a] }
     hw := sym.WidthPx / 2;
@@ -6801,6 +6819,18 @@ begin
     el.Caption.LgG[4] := sym.OffsetY;
     el.Caption.LgG[5] := ANodes[i].PX;
     el.Caption.LgG[6] := ANodes[i].PY;
+    { [R5-C] AND A LABEL LINE'S HOST (LabelManager's _updateLabelLine): the
+      symbol path, in the node's colour; on a view in its group, the view's
+      group over it }
+    el.Caption.LgKind := cTyGuideHostSymbol;
+    el.Caption.LgColor := fill;
+    if AInk.HasFrame and not ANodes[i].HasDragScale then
+    begin
+      TyGuideStampFrame(el.Caption, AInk.Frame.X, AInk.Frame.Y, AInk.Frame.SX,
+        AInk.Frame.SY, ANodes[i].X, ANodes[i].Y, AInk.NodeScale);
+      el.Caption.LgG[8] := offX0;
+      el.Caption.LgG[9] := offY0;
+    end;
     { [F3d] ON A VIEW the Symbol group's place is the layout's, in the main
       group -- what SymbolDraw's update tweens -- and the main group's
       transform carries it to the canvas (its own tween over that) }

@@ -1204,7 +1204,8 @@ begin
     cap := TyChartElement(TyShapeRect(box));
     cap.Caption := host.Caption;
     { WHAT THE LABEL LAYOUT READS [Batch 103] }
-    if host.Caption.HasFixedAnchor then cap.Caption.LmKind := 2
+    if host.Caption.HasFixedAnchor and (host.Caption.FixedByConfig = 0) then
+      cap.Caption.LmKind := 2
     else cap.Caption.LmKind := 1;
     cap.Caption.LmHostPlus1 := i + 1;
     cap.Caption.LmBaseX := baseX;
@@ -1213,12 +1214,17 @@ begin
     cap.Caption.LmOffY := offY;
     { textConfig.rotation is there when the label wrote `rotate`; nought is
       the same turn either way }
-    cap.Caption.LmHasAttachedRot := (not host.Caption.HasFixedAnchor) and (rot <> 0);
+    cap.Caption.LmHasAttachedRot := ((not host.Caption.HasFixedAnchor)
+      or (host.Caption.FixedByConfig > 0)) and (rot <> 0);
     cap.Caption.LmAttachedRot := rot;
     cap.Caption.LmPosAH := posAH;
     cap.Caption.LmPosAV := posAV;
-    cap.Caption.LmStyleHasAH := spec.HasAlignH or host.Caption.HasFixedAnchor;
-    cap.Caption.LmStyleHasAV := spec.HasAlignV or host.Caption.HasFixedAnchor;
+    { [R5-C] a fixed anchor's alignment is its style's only where upstream
+      writes it there }
+    cap.Caption.LmStyleHasAH := spec.HasAlignH
+      or (host.Caption.HasFixedAnchor and (host.Caption.FixedByConfig = 0));
+    cap.Caption.LmStyleHasAV := spec.HasAlignV
+      or (host.Caption.HasFixedAnchor and (host.Caption.FixedByConfig <> 1));
     cap.Caption.LmStyleAH := ah;
     cap.Caption.LmStyleAV := av;
     cap.Caption.LmHasHostRect := hasHostRect;
