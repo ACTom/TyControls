@@ -469,6 +469,8 @@ type
     function LineCountLogical: Integer;
     // Clamp the caret into the current model (line then col).
     procedure ClampCaret;
+    { Drop the selection, leaving the caret where it is; no event (see LinesChanged). }
+    procedure DropSelectionAnchor;
     // Refresh FDesiredX (the desired device-x for wrap Up/Down) from the caret's
     // current position. Called on every HORIZONTAL move so a later vertical move
     // tracks the on-screen x; vertical moves themselves never call it, so the x is
@@ -1239,15 +1241,18 @@ begin
   // Free the timer first so its OnTimer callback can never fire mid-teardown.
   FreeAndNil(FBlinkTimer);
   TyImeUninstall(FImeHook);   // in case DestroyWnd never ran (Qt-only; no-op elsewhere)
-  FUndoStack.Free;
-  FMeasureBmp.Free;
-  FLineWidthCache.Free;
-  FLineTotalWidthCache.Free;
-  FCharWidthCache.Free;
-  FRowBidiCache.Free;
-  FLines.Free;
-  FreeAndNil(FOnChangeHandlers);
+  { The text engine outlives `inherited Destroy` (#137), for the reason TTyEdit.Destroy gives:
+    removing the focus there runs OnExit on this object, and an OnExit that reads or writes
+    Text used the lines after they were freed. }
   inherited Destroy;
+  FreeAndNil(FUndoStack);
+  FreeAndNil(FMeasureBmp);
+  FreeAndNil(FLineWidthCache);
+  FreeAndNil(FLineTotalWidthCache);
+  FreeAndNil(FCharWidthCache);
+  FreeAndNil(FRowBidiCache);
+  FreeAndNil(FLines);
+  FreeAndNil(FOnChangeHandlers);
 end;
 
 // ---- Multicast OnChange (LCL customedit.inc:91-97) ----
@@ -1788,6 +1793,10 @@ begin
     appending to a log is not that. The SETTER keeps pushing one, as it did. }
   if FInLinesChange then Exit;   // our own Assign inside SetLines re-enters here
   ClampCaret;
+  { #137: a change made by code leaves no selection behind, as in the native memo. Its anchor
+    named a place in the old text: after Lines.Clear it pointed past the end, and the next
+    keystroke raised EStringListError or deleted text the user never selected. }
+  if FOwnEdit = 0 then DropSelectionAnchor;
   InvalidateVisualRows;
   if FTopRow > MaxTopLine then FTopRow := MaxTopLine;
   if FTopRow < 0 then FTopRow := 0;
@@ -1797,7 +1806,10 @@ begin
     Modified stays as it was. Not for one of the control's own edits, which AfterEdit reports,
     nor while the form is being read. }
   if (FOwnEdit = 0) and not (csLoading in ComponentState) then
+  begin
     ReportChangeByCode;
+    DoSelectionChange;
+  end;
 end;
 
 procedure TTyCustomMemo.ReportChangeByCode;
@@ -1829,6 +1841,7 @@ begin
     FInLinesChange := False;
   end;
   ClampCaret;
+  DropSelectionAnchor;   // #137: see LinesChanged
   // The text model changed: any cached wrap layout is stale.
   InvalidateVisualRows;
   // Clamp the window and refresh the scrollbar in case the row count changed.
@@ -1839,6 +1852,13 @@ begin
   Invalidate;
   if differs and not (csLoading in ComponentState) then
     ReportChangeByCode;   // #110: an assignment that changes the lines is a change
+  if not (csLoading in ComponentState) then DoSelectionChange;
+end;
+
+procedure TTyCustomMemo.DropSelectionAnchor;
+begin
+  FSelAnchorLine := FCaretLine;
+  FSelAnchorCol := FCaretCol;
 end;
 
 function TTyCustomMemo.LineCountLogical: Integer;
