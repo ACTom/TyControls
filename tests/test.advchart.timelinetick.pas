@@ -13,7 +13,9 @@ unit test.advchart.timelinetick;
   This replays the steps through TTyAdvanceChart (the probe of
   test.advchart.tooltipactions: the SSR width table, the box 80 x 40). }
 interface
-uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
+uses
+     tyControls.AdvanceChart.Timeline, tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Anim,
+     Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Types, tyControls.Controller,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
@@ -48,6 +50,7 @@ type
     procedure TestNoTooltipNoDataEvents;
     procedure TestAnItemsOwnTooltipAsUpstream;
     procedure TestAClickAsUpstream;
+    procedure TestAnEmphasisColourOfNullLiftsAsUpstream;
   end;
 
 implementation
@@ -138,6 +141,9 @@ var
   op, want: string;
   now_: Double;
   d: TJSONData;
+  tv: TTyTimelineView;
+  k, q: Integer;
+  cwant, cgot: TTyChartColor;
 begin
   cases := TJSONObject(FRoot).Arrays['cases'];
   cs := nil;
@@ -203,6 +209,27 @@ begin
           Bad(Format('events %s, upstream %s', [FLog.DelimitedText, want]));
       if op = 'click' then Continue;
       state := st.Objects['state'];
+      { the ticks' fills (where the case's colours are the author's) }
+      if AId = 'tl-emph-null' then
+      begin
+        tv := probe.TimelineViewAt(0);
+        k := 0;
+        for q := 0 to High(tv.Els) do
+          if tv.RoleOf(q).Kind = tlrTick then
+          begin
+            if k < state.Arrays['fills'].Count then
+            begin
+              Inc(FCompared);
+              if not (TyTryParseChartColor(state.Arrays['fills'].Strings[k], cwant)
+                and (tv.Els[q].StyleValue('fill').Kind = avkString)
+                and TyTryParseChartColor(tv.Els[q].StyleValue('fill').Str, cgot)
+                and ((cwant and $FFFFFF) = (cgot and $FFFFFF))) then
+                Bad(Format('tick %d fill %s, upstream %s', [k, tv.Els[q].StyleValue('fill').Str,
+                  state.Arrays['fills'].Strings[k]]));
+            end;
+            Inc(k);
+          end;
+      end;
       d := state.Find('tip');
       Inc(FCompared);
       if probe.TooltipShown <> (d.JSONType = jtObject) then
@@ -260,6 +287,11 @@ end;
 procedure TAdvChartTimelineTickOracleTest.TestAClickAsUpstream;
 begin
   RunCase('tl-click');
+end;
+
+procedure TAdvChartTimelineTickOracleTest.TestAnEmphasisColourOfNullLiftsAsUpstream;
+begin
+  RunCase('tl-emph-null');
 end;
 
 initialization

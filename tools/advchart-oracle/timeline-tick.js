@@ -22,7 +22,7 @@
 // type, payload]] (showtip, hidetip; mouseover, mouseout, click with the
 // params' componentType, componentSubType, componentIndex, name, dataIndex,
 // value, seriesIndex), state: {tip {which ('timeline:<dataIndex>'), text,
-// box [x, y]} | null}.
+// box [x, y]} | null, fills [the tick symbols' style.fill as drawn]}.
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -275,6 +275,14 @@ const CASES = [
     ],
   },
   {
+    id: 'tl-emph-null', note: "emphasis.itemStyle.color written null (the model's merge keeps it, get falls through to nothing): enableHoverEmphasis lifts the tick's own colour",
+    option: TL({ itemStyle: { color: '#3366cc' }, emphasis: { itemStyle: { color: null } } }),
+    steps: [
+      { op: 'move', at: 'tick:1' },
+      { op: 'move', at: [300, 100] },
+    ],
+  },
+  {
     id: 'tl-click', note: "a click on a tick: the chart's click with the timeline's params (the change follows)",
     option: TL(),
     steps: [
@@ -315,7 +323,11 @@ function stateOf3(chart, w) {
       }
     }
   }
-  return { tip };
+  // [R5-I] the ticks' fills as drawn
+  const m = chart.getModel().getComponent('timeline', 0);
+  const v = m && chart.getViewOfComponentModel(m);
+  const fills = v && v._tickSymbols ? v._tickSymbols.map(s => String(s.style.fill)) : null;
+  return { tip, fills };
 }
 function watchTooltip2(chart) {
   const w = watchTooltip(chart);
@@ -393,6 +405,8 @@ function anchors(cases) {
   const o = cs('tl-tip-off');
   guard('tip-off', !o.steps[0].state.tip && !o.steps[0].events.some(e => e[1] === 'mouseover'), 'no tooltip, no data event');
   const c = cs('tl-click');
+  const e = cs('tl-emph-null');
+  guard('emph-lift', /^rgba/.test(e.steps[0].state.fills[1]) && e.steps[1].state.fills[1] === '#3366cc', 'a null emphasis colour lifts the hovered tick, the colour back after');
   guard('click', c.steps[1].events.some(e => e[1] === 'click' && e[2].componentType === 'timeline'), 'a click');
   return guards;
 }

@@ -216,11 +216,62 @@ function TyTlJsNum(A: TJSONData): Double;
 
 implementation
 
-uses tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Scale,
+uses
+  { [R5-I] first: nothing of theirs is to stand over the units below }
+  tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Style,
+  tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Scale,
   tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Layout,
   tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.Time,
   tyControls.AdvanceChart.AxisLabels, tyControls.FontUnits,
   tyControls.AdvanceChart.Option;
+
+{ [R5-I] createEmphasisDefaultState over a path's emphasis style (a JSON
+  style object): 'inherit' takes the normal fill; no fill of its own
+  (none written, or null all the way up) lifts the normal one
+  (liftColor); else no stroke of its own lifts the normal stroke }
+procedure TyTlEmphasisDefault(AStyle: TJSONObject; const AFill, AStroke: TTyAnimValue);
+
+  function Has(const AV: TTyAnimValue): Boolean;
+  begin
+    Result := (AV.Kind = avkString) and (AV.Str <> 'none');
+  end;
+
+  function HasJ(AD: TJSONData): Boolean;
+  begin
+    Result := (AD <> nil) and (AD.JSONType <> jtNull)
+      and not ((AD.JSONType = jtString) and (AD.AsString = 'none'));
+  end;
+
+  function Lifted(const AText: string): string;
+  var c: TTyChartColor; fs: TFormatSettings;
+  begin
+    if not TyTryParseChartColor(AText, c) then Exit(AText);
+    c := TyChartLiftColor(c);
+    fs := DefaultFormatSettings;
+    fs.DecimalSeparator := '.';
+    Result := Format('rgba(%d,%d,%d,%s)', [(c shr 16) and $FF, (c shr 8) and $FF, c and $FF,
+      TyJsNumberToString(((c shr 24) and $FF) / 255)], fs);
+  end;
+
+var d: TJSONData;
+begin
+  if not (Has(AFill) or Has(AStroke)) then Exit;
+  d := AStyle.Find('fill');
+  if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'inherit') then
+  begin
+    if AFill.Kind = avkString then AStyle.Strings['fill'] := AFill.Str;
+  end
+  else if not HasJ(d) and Has(AFill) then
+  begin
+    if d <> nil then AStyle.Delete('fill');
+    AStyle.Add('fill', Lifted(AFill.Str));
+  end
+  else if not HasJ(AStyle.Find('stroke')) and Has(AStroke) then
+  begin
+    if AStyle.Find('stroke') <> nil then AStyle.Delete('stroke');
+    AStyle.Add('stroke', Lifted(AStroke.Str));
+  end;
+end;
 
 const
   { a DOUBLE: a bare real literal is a Single in FPC }
@@ -1714,6 +1765,10 @@ begin
     st := ItemStyleOf([Sub(Sub(t, 'emphasis'), 'itemStyle'),
       Sub(Sub(fo, 'emphasis'), 'itemStyle')], False);
     try
+      { [R5-I] enableHoverEmphasis: the default state over it -- an emphasis
+        colour written as null all the way up lifts the tick's own [was:
+        the tick kept its colour] }
+      TyTlEmphasisDefault(st, el.StyleValue('fill'), el.StyleValue('stroke'));
       StyleProps(st, FEmph[n]);
       FHasEmph[n] := True;
     finally

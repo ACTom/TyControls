@@ -88,7 +88,12 @@
         287
        ],
        "plain": "2002"
-      }
+      },
+      "fills": [
+       "#c0c9e6",
+       "#536298",
+       "#c0c9e6"
+      ]
      }
     },
     {
@@ -143,7 +148,12 @@
         287
        ],
        "plain": "2003"
-      }
+      },
+      "fills": [
+       "#c0c9e6",
+       "#c0c9e6",
+       "#536298"
+      ]
      }
     },
     {
@@ -184,7 +194,12 @@
         287
        ],
        "plain": "2003"
-      }
+      },
+      "fills": [
+       "#c0c9e6",
+       "#c0c9e6",
+       "#c0c9e6"
+      ]
      }
     },
     {
@@ -192,7 +207,12 @@
      "ms": 200,
      "events": [],
      "state": {
-      "tip": null
+      "tip": null,
+      "fills": [
+       "#c0c9e6",
+       "#c0c9e6",
+       "#c0c9e6"
+      ]
      }
     }
    ]
@@ -275,7 +295,12 @@
         338,
         287
        ]
-      }
+      },
+      "fills": [
+       "#c0c9e6",
+       "#536298",
+       "#c0c9e6"
+      ]
      }
     },
     {
@@ -311,7 +336,12 @@
         338,
         287
        ]
-      }
+      },
+      "fills": [
+       "#c0c9e6",
+       "#c0c9e6",
+       "#c0c9e6"
+      ]
      }
     },
     {
@@ -319,7 +349,12 @@
      "ms": 200,
      "events": [],
      "state": {
-      "tip": null
+      "tip": null,
+      "fills": [
+       "#c0c9e6",
+       "#c0c9e6",
+       "#c0c9e6"
+      ]
      }
     }
    ]
@@ -379,7 +414,12 @@
       ]
      ],
      "state": {
-      "tip": null
+      "tip": null,
+      "fills": [
+       "#c0c9e6",
+       "#536298",
+       "#c0c9e6"
+      ]
      }
     },
     {
@@ -387,7 +427,12 @@
      "ms": 200,
      "events": [],
      "state": {
-      "tip": null
+      "tip": null,
+      "fills": [
+       "#c0c9e6",
+       "#536298",
+       "#c0c9e6"
+      ]
      }
     }
    ]
@@ -452,7 +497,12 @@
       ]
      ],
      "state": {
-      "tip": null
+      "tip": null,
+      "fills": [
+       "#c0c9e6",
+       "#536298",
+       "#c0c9e6"
+      ]
      }
     },
     {
@@ -494,7 +544,12 @@
         409,
         287
        ]
-      }
+      },
+      "fills": [
+       "#c0c9e6",
+       "#c0c9e6",
+       "#536298"
+      ]
      }
     },
     {
@@ -509,7 +564,152 @@
         409,
         287
        ]
+      },
+      "fills": [
+       "#c0c9e6",
+       "#c0c9e6",
+       "#536298"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "tl-emph-null",
+   "note": "emphasis.itemStyle.color written null (the model's merge keeps it, get falls through to nothing): enableHoverEmphasis lifts the tick's own colour",
+   "option": {
+    "animation": false,
+    "tooltip": {},
+    "timeline": {
+     "axisType": "category",
+     "data": [
+      "2001",
+      "2002",
+      "2003"
+     ],
+     "bottom": 10,
+     "left": 40,
+     "right": 40,
+     "itemStyle": {
+      "color": "#3366cc"
+     },
+     "emphasis": {
+      "itemStyle": {
+       "color": null
       }
+     }
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "op": "move",
+     "at": [
+      318,
+      347
+     ],
+     "events": [
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "mouseover",
+       {
+        "componentType": "timeline",
+        "componentSubType": "slider",
+        "componentIndex": 0,
+        "name": "2002",
+        "dataIndex": 1,
+        "value": 1
+       }
+      ]
+     ],
+     "state": {
+      "tip": {
+       "which": "timeline:1",
+       "text": "default",
+       "box": [
+        338,
+        287
+       ],
+       "plain": "2002"
+      },
+      "fills": [
+       "#3366cc",
+       "rgba(56,112,224,1)",
+       "#3366cc"
+      ]
+     }
+    },
+    {
+     "op": "move",
+     "at": [
+      300,
+      100
+     ],
+     "events": [
+      [
+       0,
+       "mouseout",
+       {
+        "componentType": "timeline",
+        "componentSubType": "slider",
+        "componentIndex": 0,
+        "name": "2002",
+        "dataIndex": 1,
+        "value": 1
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": {
+      "tip": {
+       "which": "timeline:1",
+       "text": "default",
+       "box": [
+        338,
+        287
+       ],
+       "plain": "2002"
+      },
+      "fills": [
+       "#3366cc",
+       "#3366cc",
+       "#3366cc"
+      ]
      }
     }
    ]
@@ -590,7 +790,12 @@
         287
        ],
        "plain": "2003"
-      }
+      },
+      "fills": [
+       "#c0c9e6",
+       "#c0c9e6",
+       "#536298"
+      ]
      }
     },
     {
@@ -633,7 +838,12 @@
         287
        ],
        "plain": "2003"
-      }
+      },
+      "fills": [
+       "#8292cc",
+       "#8292cc",
+       "#c0c9e6"
+      ]
      }
     }
    ]
@@ -654,6 +864,11 @@
    "id": "tip-off",
    "ok": true,
    "what": "no tooltip, no data event"
+  },
+  {
+   "id": "emph-lift",
+   "ok": true,
+   "what": "a null emphasis colour lifts the hovered tick, the colour back after"
   },
   {
    "id": "click",
