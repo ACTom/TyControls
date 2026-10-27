@@ -1,0 +1,4276 @@
+{
+ "source": "ECharts 6.1.0, zrender 6.1.0",
+ "cases": [
+  {
+   "id": "bar",
+   "note": "bars: the series' itemStyle shadow; item 1 its own shadowOffsetY 5 and shadowColor #ff0000 over it key by key; item 2 shadowBlur null (falls through); the second series only a blur (the colour '#000'), a blur of 0 with offsets on item 0 of a third, a negative blur on its item 1",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "itemStyle": {
+       "shadowBlur": 10,
+       "shadowColor": "rgba(0, 0, 0, 0.5)",
+       "shadowOffsetX": 2,
+       "shadowOffsetY": 3
+      },
+      "data": [
+       5,
+       {
+        "value": 7,
+        "itemStyle": {
+         "shadowOffsetY": 5,
+         "shadowColor": "#ff0000"
+        }
+       },
+       {
+        "value": 3,
+        "itemStyle": {
+         "shadowBlur": null
+        }
+       }
+      ]
+     },
+     {
+      "type": "bar",
+      "itemStyle": {
+       "shadowBlur": 6
+      },
+      "data": [
+       4,
+       6,
+       2
+      ]
+     },
+     {
+      "type": "bar",
+      "data": [
+       {
+        "value": 2,
+        "itemStyle": {
+         "shadowBlur": 0,
+         "shadowOffsetX": 4,
+         "shadowColor": "#00f"
+        }
+       },
+       {
+        "value": 3,
+        "itemStyle": {
+         "shadowBlur": -5,
+         "shadowOffsetY": 2
+        }
+       },
+       1
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 0,
+     "blur": "4024000000000000",
+     "ox": "4000000000000000",
+     "oy": "4008000000000000",
+     "color": "rgba(0, 0, 0, 0.5)"
+    },
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 1,
+     "blur": "4024000000000000",
+     "ox": "4000000000000000",
+     "oy": "4014000000000000",
+     "color": "#ff0000"
+    },
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 2,
+     "blur": "4024000000000000",
+     "ox": "4000000000000000",
+     "oy": "4008000000000000",
+     "color": "rgba(0, 0, 0, 0.5)"
+    },
+    {
+     "role": "bar",
+     "s": 1,
+     "i": 0,
+     "blur": "4018000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    },
+    {
+     "role": "bar",
+     "s": 1,
+     "i": 1,
+     "blur": "4018000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    },
+    {
+     "role": "bar",
+     "s": 1,
+     "i": 2,
+     "blur": "4018000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    },
+    {
+     "role": "bar",
+     "s": 2,
+     "i": 0,
+     "blur": "0000000000000000",
+     "ox": "4010000000000000",
+     "oy": "0000000000000000",
+     "color": "#00f"
+    },
+    {
+     "role": "bar",
+     "s": 2,
+     "i": 1,
+     "blur": "c014000000000000",
+     "ox": "0000000000000000",
+     "oy": "4000000000000000",
+     "color": "#000"
+    },
+    {
+     "role": "bar",
+     "s": 2,
+     "i": 2,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    }
+   ]
+  },
+  {
+   "id": "barEmphasis",
+   "note": "bar-brush's emphasis.itemStyle shadow: none at rest, the highlighted bar its blur 10 in rgba(0,0,0,0.3)",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "emphasis": {
+       "itemStyle": {
+        "shadowBlur": 10,
+        "shadowColor": "rgba(0,0,0,0.3)"
+       }
+      },
+      "data": [
+       5,
+       7,
+       3
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 0,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    },
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 1,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    },
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 2,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    }
+   ],
+   "highlight": {
+    "seriesIndex": 0,
+    "dataIndex": 1
+   },
+   "highlighted": [
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 0,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    },
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 1,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "rgba(0,0,0,0.3)"
+    },
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 2,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    }
+   ]
+  },
+  {
+   "id": "line",
+   "note": "a line: lineStyle shadow (the polyline), areaStyle shadow (the area), itemStyle shadow (the symbols, item 2 its own colour)",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "showSymbol": true,
+      "symbolSize": 8,
+      "lineStyle": {
+       "shadowBlur": 10,
+       "shadowColor": "rgba(0,0,0,0.3)",
+       "shadowOffsetY": 8
+      },
+      "areaStyle": {
+       "shadowBlur": 5,
+       "shadowColor": "#888"
+      },
+      "itemStyle": {
+       "shadowBlur": 3,
+       "shadowOffsetX": 1
+      },
+      "data": [
+       5,
+       7,
+       {
+        "value": 3,
+        "itemStyle": {
+         "shadowColor": "#ff0000"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "lineRun",
+     "s": 0,
+     "i": -1,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "4020000000000000",
+     "color": "rgba(0,0,0,0.3)"
+    },
+    {
+     "role": "lineArea",
+     "s": 0,
+     "i": -1,
+     "blur": "4014000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#888"
+    },
+    {
+     "role": "lineSymbol",
+     "s": 0,
+     "i": 0,
+     "blur": "4008000000000000",
+     "ox": "3ff0000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    },
+    {
+     "role": "lineSymbol",
+     "s": 0,
+     "i": 1,
+     "blur": "4008000000000000",
+     "ox": "3ff0000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    },
+    {
+     "role": "lineSymbol",
+     "s": 0,
+     "i": 2,
+     "blur": "4008000000000000",
+     "ox": "3ff0000000000000",
+     "oy": "0000000000000000",
+     "color": "#ff0000"
+    }
+   ]
+  },
+  {
+   "id": "scatter",
+   "note": "scatter symbols: the series' shadow (bubble-gradient's), item 1 its own; an effectScatter's symbol its itemStyle's, its ripples none",
+   "option": {
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "symbolSize": 20,
+      "itemStyle": {
+       "shadowBlur": 10,
+       "shadowColor": "rgba(120, 36, 50, 0.5)",
+       "shadowOffsetY": 5
+      },
+      "data": [
+       [
+        1,
+        2
+       ],
+       {
+        "value": [
+         3,
+         4
+        ],
+        "itemStyle": {
+         "shadowOffsetY": -2
+        }
+       }
+      ]
+     },
+     {
+      "type": "effectScatter",
+      "symbolSize": 12,
+      "itemStyle": {
+       "shadowBlur": 10,
+       "shadowColor": "#333"
+      },
+      "data": [
+       [
+        2,
+        3
+       ]
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "symbol",
+     "s": 0,
+     "i": 0,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "4014000000000000",
+     "color": "rgba(120, 36, 50, 0.5)"
+    },
+    {
+     "role": "symbol",
+     "s": 0,
+     "i": 1,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c000000000000000",
+     "color": "rgba(120, 36, 50, 0.5)"
+    },
+    {
+     "role": "effectSymbol",
+     "s": 1,
+     "i": 0,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#333"
+    },
+    {
+     "role": "ripple",
+     "s": 1,
+     "i": 0,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000",
+     "sub": 0
+    },
+    {
+     "role": "ripple",
+     "s": 1,
+     "i": 0,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000",
+     "sub": 1
+    },
+    {
+     "role": "ripple",
+     "s": 1,
+     "i": 0,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000",
+     "sub": 2
+    }
+   ]
+  },
+  {
+   "id": "pie",
+   "note": "a pie: item 0 its own itemStyle shadow (pie-custom's 200), labelLine.lineStyle shadow on every line",
+   "option": {
+    "series": [
+     {
+      "type": "pie",
+      "radius": "50%",
+      "labelLine": {
+       "lineStyle": {
+        "shadowBlur": 4,
+        "shadowColor": "#0f0"
+       }
+      },
+      "data": [
+       {
+        "value": 3,
+        "name": "a",
+        "itemStyle": {
+         "shadowBlur": 200,
+         "shadowColor": "rgba(0, 0, 0, 0.5)"
+        }
+       },
+       {
+        "value": 2,
+        "name": "b"
+       },
+       {
+        "value": 1,
+        "name": "c"
+       }
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "sector",
+     "s": 0,
+     "i": 0,
+     "blur": "4069000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "rgba(0, 0, 0, 0.5)"
+    },
+    {
+     "role": "guide",
+     "s": 0,
+     "i": 0,
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#0f0"
+    },
+    {
+     "role": "sector",
+     "s": 0,
+     "i": 1,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    },
+    {
+     "role": "guide",
+     "s": 0,
+     "i": 1,
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#0f0"
+    },
+    {
+     "role": "sector",
+     "s": 0,
+     "i": 2,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    },
+    {
+     "role": "guide",
+     "s": 0,
+     "i": 2,
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#0f0"
+    }
+   ]
+  },
+  {
+   "id": "pieEmphasis",
+   "note": "pie-simple's emphasis shadow: the highlighted slice blur 10, offsetX 0, rgba(0,0,0,0.5)",
+   "option": {
+    "series": [
+     {
+      "type": "pie",
+      "radius": "50%",
+      "emphasis": {
+       "itemStyle": {
+        "shadowBlur": 10,
+        "shadowOffsetX": 0,
+        "shadowColor": "rgba(0, 0, 0, 0.5)"
+       }
+      },
+      "data": [
+       {
+        "value": 3,
+        "name": "a"
+       },
+       {
+        "value": 2,
+        "name": "b"
+       }
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "sector",
+     "s": 0,
+     "i": 0,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    },
+    {
+     "role": "guide",
+     "s": 0,
+     "i": 0,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    },
+    {
+     "role": "sector",
+     "s": 0,
+     "i": 1,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    },
+    {
+     "role": "guide",
+     "s": 0,
+     "i": 1,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    }
+   ],
+   "highlight": {
+    "seriesIndex": 0,
+    "dataIndex": 0
+   },
+   "highlighted": [
+    {
+     "role": "sector",
+     "s": 0,
+     "i": 0,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "rgba(0, 0, 0, 0.5)"
+    },
+    {
+     "role": "guide",
+     "s": 0,
+     "i": 0,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    },
+    {
+     "role": "sector",
+     "s": 0,
+     "i": 1,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    },
+    {
+     "role": "guide",
+     "s": 0,
+     "i": 1,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    }
+   ]
+  },
+  {
+   "id": "funnel",
+   "note": "funnel trapezoids: itemStyle shadow",
+   "option": {
+    "series": [
+     {
+      "type": "funnel",
+      "itemStyle": {
+       "shadowBlur": 10,
+       "shadowColor": "rgba(0, 0, 0, 0.5)",
+       "shadowOffsetX": 2,
+       "shadowOffsetY": 3
+      },
+      "data": [
+       {
+        "value": 60,
+        "name": "a"
+       },
+       {
+        "value": 40,
+        "name": "b"
+       }
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "funnel",
+     "s": 0,
+     "i": 0,
+     "blur": "4024000000000000",
+     "ox": "4000000000000000",
+     "oy": "4008000000000000",
+     "color": "rgba(0, 0, 0, 0.5)"
+    },
+    {
+     "role": "funnel",
+     "s": 0,
+     "i": 1,
+     "blur": "4024000000000000",
+     "ox": "4000000000000000",
+     "oy": "4008000000000000",
+     "color": "rgba(0, 0, 0, 0.5)"
+    }
+   ]
+  },
+  {
+   "id": "gauge",
+   "note": "a gauge (gauge-clock's and gauge-speed's): axisLine.lineStyle, splitLine.lineStyle (width 3), axisTick.lineStyle (width 1), anchor.itemStyle; the series' itemStyle under the progress arc and the pointer, pointer.itemStyle over it; item 1 its own pointer.itemStyle blur",
+   "option": {
+    "series": [
+     {
+      "type": "gauge",
+      "progress": {
+       "show": true,
+       "width": 8
+      },
+      "itemStyle": {
+       "shadowBlur": 10,
+       "shadowColor": "rgba(0,138,255,0.45)",
+       "shadowOffsetX": 2,
+       "shadowOffsetY": 2
+      },
+      "axisLine": {
+       "lineStyle": {
+        "width": 10,
+        "shadowBlur": 15,
+        "shadowColor": "rgba(0, 0, 0, 0.5)"
+       }
+      },
+      "splitLine": {
+       "lineStyle": {
+        "width": 3,
+        "shadowBlur": 3,
+        "shadowColor": "rgba(0, 0, 0, 0.3)",
+        "shadowOffsetX": 1,
+        "shadowOffsetY": 2
+       }
+      },
+      "axisTick": {
+       "lineStyle": {
+        "width": 1,
+        "shadowBlur": 10,
+        "shadowColor": "rgba(255, 255, 255)",
+        "shadowOffsetY": -10
+       }
+      },
+      "pointer": {
+       "itemStyle": {
+        "shadowBlur": 8,
+        "shadowOffsetX": 2,
+        "shadowOffsetY": 4,
+        "shadowColor": "rgba(0, 0, 0, 0.3)"
+       }
+      },
+      "anchor": {
+       "show": true,
+       "size": 12,
+       "itemStyle": {
+        "shadowBlur": 8,
+        "shadowColor": "rgba(0, 0, 0, 0.3)",
+        "shadowOffsetX": 2,
+        "shadowOffsetY": 4
+       }
+      },
+      "data": [
+       {
+        "value": 40
+       },
+       {
+        "value": 70,
+        "pointer": {
+         "itemStyle": {
+          "shadowBlur": 20
+         }
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "gaugePointer",
+     "s": 0,
+     "i": 0,
+     "blur": "4020000000000000",
+     "ox": "4000000000000000",
+     "oy": "4010000000000000",
+     "color": "rgba(0, 0, 0, 0.3)"
+    },
+    {
+     "role": "gaugeProgress",
+     "s": 0,
+     "i": 0,
+     "blur": "4024000000000000",
+     "ox": "4000000000000000",
+     "oy": "4000000000000000",
+     "color": "rgba(0,138,255,0.45)"
+    },
+    {
+     "role": "gaugePointer",
+     "s": 0,
+     "i": 1,
+     "blur": "4034000000000000",
+     "ox": "4000000000000000",
+     "oy": "4010000000000000",
+     "color": "rgba(0, 0, 0, 0.3)"
+    },
+    {
+     "role": "gaugeProgress",
+     "s": 0,
+     "i": 1,
+     "blur": "4024000000000000",
+     "ox": "4000000000000000",
+     "oy": "4000000000000000",
+     "color": "rgba(0,138,255,0.45)"
+    },
+    {
+     "role": "gaugeBand",
+     "s": 0,
+     "i": 0,
+     "blur": "402e000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "rgba(0, 0, 0, 0.5)"
+    },
+    {
+     "role": "gaugeSplit",
+     "s": 0,
+     "i": 0,
+     "blur": "4008000000000000",
+     "ox": "3ff0000000000000",
+     "oy": "4000000000000000",
+     "color": "rgba(0, 0, 0, 0.3)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 0,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 1,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 2,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 3,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 4,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 5,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeSplit",
+     "s": 0,
+     "i": 1,
+     "blur": "4008000000000000",
+     "ox": "3ff0000000000000",
+     "oy": "4000000000000000",
+     "color": "rgba(0, 0, 0, 0.3)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 6,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 7,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 8,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 9,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 10,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 11,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeSplit",
+     "s": 0,
+     "i": 2,
+     "blur": "4008000000000000",
+     "ox": "3ff0000000000000",
+     "oy": "4000000000000000",
+     "color": "rgba(0, 0, 0, 0.3)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 12,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 13,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 14,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 15,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 16,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 17,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeSplit",
+     "s": 0,
+     "i": 3,
+     "blur": "4008000000000000",
+     "ox": "3ff0000000000000",
+     "oy": "4000000000000000",
+     "color": "rgba(0, 0, 0, 0.3)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 18,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 19,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 20,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 21,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 22,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 23,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeSplit",
+     "s": 0,
+     "i": 4,
+     "blur": "4008000000000000",
+     "ox": "3ff0000000000000",
+     "oy": "4000000000000000",
+     "color": "rgba(0, 0, 0, 0.3)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 24,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 25,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 26,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 27,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 28,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 29,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeSplit",
+     "s": 0,
+     "i": 5,
+     "blur": "4008000000000000",
+     "ox": "3ff0000000000000",
+     "oy": "4000000000000000",
+     "color": "rgba(0, 0, 0, 0.3)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 30,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 31,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 32,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 33,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 34,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 35,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeSplit",
+     "s": 0,
+     "i": 6,
+     "blur": "4008000000000000",
+     "ox": "3ff0000000000000",
+     "oy": "4000000000000000",
+     "color": "rgba(0, 0, 0, 0.3)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 36,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 37,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 38,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 39,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 40,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 41,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeSplit",
+     "s": 0,
+     "i": 7,
+     "blur": "4008000000000000",
+     "ox": "3ff0000000000000",
+     "oy": "4000000000000000",
+     "color": "rgba(0, 0, 0, 0.3)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 42,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 43,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 44,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 45,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 46,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 47,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeSplit",
+     "s": 0,
+     "i": 8,
+     "blur": "4008000000000000",
+     "ox": "3ff0000000000000",
+     "oy": "4000000000000000",
+     "color": "rgba(0, 0, 0, 0.3)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 48,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 49,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 50,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 51,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 52,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 53,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeSplit",
+     "s": 0,
+     "i": 9,
+     "blur": "4008000000000000",
+     "ox": "3ff0000000000000",
+     "oy": "4000000000000000",
+     "color": "rgba(0, 0, 0, 0.3)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 54,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 55,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 56,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 57,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 58,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeTick",
+     "s": 0,
+     "i": 59,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "c024000000000000",
+     "color": "rgba(255, 255, 255)"
+    },
+    {
+     "role": "gaugeSplit",
+     "s": 0,
+     "i": 10,
+     "blur": "4008000000000000",
+     "ox": "3ff0000000000000",
+     "oy": "4000000000000000",
+     "color": "rgba(0, 0, 0, 0.3)"
+    },
+    {
+     "role": "gaugeAnchor",
+     "s": 0,
+     "i": 0,
+     "blur": "4020000000000000",
+     "ox": "4000000000000000",
+     "oy": "4010000000000000",
+     "color": "rgba(0, 0, 0, 0.3)"
+    }
+   ]
+  },
+  {
+   "id": "radar",
+   "note": "a radar item's polyline (lineStyle), polygon (areaStyle) and symbols (itemStyle); item 1 its own lineStyle colour",
+   "option": {
+    "radar": {
+     "indicator": [
+      {
+       "name": "a",
+       "max": 10
+      },
+      {
+       "name": "b",
+       "max": 10
+      },
+      {
+       "name": "c",
+       "max": 10
+      }
+     ]
+    },
+    "series": [
+     {
+      "type": "radar",
+      "lineStyle": {
+       "shadowBlur": 4,
+       "shadowColor": "#111"
+      },
+      "areaStyle": {
+       "shadowBlur": 10,
+       "shadowColor": "rgba(0, 0, 0, 0.2)"
+      },
+      "itemStyle": {
+       "shadowBlur": 2
+      },
+      "data": [
+       {
+        "value": [
+         5,
+         6,
+         7
+        ]
+       },
+       {
+        "value": [
+         3,
+         4,
+         5
+        ],
+        "lineStyle": {
+         "shadowColor": "#f00"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "radarLine",
+     "s": 0,
+     "i": 0,
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#111"
+    },
+    {
+     "role": "radarArea",
+     "s": 0,
+     "i": 0,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "rgba(0, 0, 0, 0.2)"
+    },
+    {
+     "role": "radarSymbol",
+     "s": 0,
+     "i": 0,
+     "blur": "4000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000",
+     "sub": 0
+    },
+    {
+     "role": "radarSymbol",
+     "s": 0,
+     "i": 0,
+     "blur": "4000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000",
+     "sub": 1
+    },
+    {
+     "role": "radarSymbol",
+     "s": 0,
+     "i": 0,
+     "blur": "4000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000",
+     "sub": 2
+    },
+    {
+     "role": "radarLine",
+     "s": 0,
+     "i": 1,
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#f00"
+    },
+    {
+     "role": "radarArea",
+     "s": 0,
+     "i": 1,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "rgba(0, 0, 0, 0.2)"
+    },
+    {
+     "role": "radarSymbol",
+     "s": 0,
+     "i": 1,
+     "blur": "4000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000",
+     "sub": 0
+    },
+    {
+     "role": "radarSymbol",
+     "s": 0,
+     "i": 1,
+     "blur": "4000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000",
+     "sub": 1
+    },
+    {
+     "role": "radarSymbol",
+     "s": 0,
+     "i": 1,
+     "blur": "4000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000",
+     "sub": 2
+    }
+   ]
+  },
+  {
+   "id": "candleBox",
+   "note": "candlesticks (itemStyle shadow) and boxplots (itemStyle shadow)",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "candlestick",
+      "itemStyle": {
+       "shadowBlur": 10,
+       "shadowColor": "rgba(0, 0, 0, 0.5)",
+       "shadowOffsetX": 2,
+       "shadowOffsetY": 3
+      },
+      "data": [
+       [
+        2,
+        4,
+        1,
+        5
+       ],
+       [
+        4,
+        3,
+        2,
+        6
+       ],
+       [
+        3,
+        5,
+        2,
+        6
+       ]
+      ]
+     },
+     {
+      "type": "boxplot",
+      "itemStyle": {
+       "shadowBlur": 6,
+       "shadowColor": "#222"
+      },
+      "data": [
+       [
+        1,
+        2,
+        3,
+        4,
+        5
+       ],
+       [
+        2,
+        3,
+        4,
+        5,
+        6
+       ]
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "candle",
+     "s": 0,
+     "i": 0,
+     "blur": "4024000000000000",
+     "ox": "4000000000000000",
+     "oy": "4008000000000000",
+     "color": "rgba(0, 0, 0, 0.5)"
+    },
+    {
+     "role": "candle",
+     "s": 0,
+     "i": 1,
+     "blur": "4024000000000000",
+     "ox": "4000000000000000",
+     "oy": "4008000000000000",
+     "color": "rgba(0, 0, 0, 0.5)"
+    },
+    {
+     "role": "candle",
+     "s": 0,
+     "i": 2,
+     "blur": "4024000000000000",
+     "ox": "4000000000000000",
+     "oy": "4008000000000000",
+     "color": "rgba(0, 0, 0, 0.5)"
+    },
+    {
+     "role": "boxplot",
+     "s": 1,
+     "i": 0,
+     "blur": "4018000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#222"
+    },
+    {
+     "role": "boxplot",
+     "s": 1,
+     "i": 1,
+     "blur": "4018000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#222"
+    }
+   ]
+  },
+  {
+   "id": "boxEmphasis",
+   "note": "BoxplotSeries' emphasis.itemStyle default: the highlighted box a blur of 5 at (1, 1) in tokens.color.shadow",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "boxplot",
+      "data": [
+       [
+        1,
+        2,
+        3,
+        4,
+        5
+       ],
+       [
+        2,
+        3,
+        4,
+        5,
+        6
+       ]
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "boxplot",
+     "s": 0,
+     "i": 0,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    },
+    {
+     "role": "boxplot",
+     "s": 0,
+     "i": 1,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    }
+   ],
+   "highlight": {
+    "seriesIndex": 0,
+    "dataIndex": 1
+   },
+   "highlighted": [
+    {
+     "role": "boxplot",
+     "s": 0,
+     "i": 0,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    },
+    {
+     "role": "boxplot",
+     "s": 0,
+     "i": 1,
+     "blur": "4014000000000000",
+     "ox": "3ff0000000000000",
+     "oy": "3ff0000000000000",
+     "color": "rgba(0,0,0,0.2)"
+    }
+   ]
+  },
+  {
+   "id": "heatEmphasis",
+   "note": "heatmap-cartesian's emphasis shadow on the highlighted cell; the series' own itemStyle shadow at rest",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "visualMap": {
+     "show": false,
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "heatmap",
+      "itemStyle": {
+       "shadowBlur": 2,
+       "shadowColor": "#999"
+      },
+      "emphasis": {
+       "itemStyle": {
+        "shadowBlur": 10,
+        "shadowColor": "rgba(0, 0, 0, 0.5)"
+       }
+      },
+      "data": [
+       [
+        0,
+        0,
+        5
+       ],
+       [
+        1,
+        1,
+        7
+       ],
+       [
+        2,
+        2,
+        3
+       ]
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "heat",
+     "s": 0,
+     "i": 0,
+     "blur": "4000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#999"
+    },
+    {
+     "role": "heat",
+     "s": 0,
+     "i": 1,
+     "blur": "4000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#999"
+    },
+    {
+     "role": "heat",
+     "s": 0,
+     "i": 2,
+     "blur": "4000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#999"
+    }
+   ],
+   "highlight": {
+    "seriesIndex": 0,
+    "dataIndex": 1
+   },
+   "highlighted": [
+    {
+     "role": "heat",
+     "s": 0,
+     "i": 0,
+     "blur": "4000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#999"
+    },
+    {
+     "role": "heat",
+     "s": 0,
+     "i": 1,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "rgba(0, 0, 0, 0.5)"
+    },
+    {
+     "role": "heat",
+     "s": 0,
+     "i": 2,
+     "blur": "4000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#999"
+    }
+   ]
+  },
+  {
+   "id": "graph",
+   "note": "graph nodes (itemStyle, a category's over the series', a node's own over both) and edges (lineStyle, a link's own)",
+   "option": {
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "symbolSize": 20,
+      "itemStyle": {
+       "shadowBlur": 9,
+       "shadowColor": "#555",
+       "shadowOffsetX": 1.5,
+       "shadowOffsetY": 3
+      },
+      "lineStyle": {
+       "shadowBlur": 3,
+       "shadowColor": "#0f0"
+      },
+      "categories": [
+       {
+        "name": "k",
+        "itemStyle": {
+         "shadowColor": "#00f"
+        }
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0
+       },
+       {
+        "name": "b",
+        "x": 100,
+        "y": 0,
+        "category": 0
+       },
+       {
+        "name": "c",
+        "x": 50,
+        "y": 80,
+        "itemStyle": {
+         "shadowBlur": 1
+        }
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "b"
+       },
+       {
+        "source": "b",
+        "target": "c",
+        "lineStyle": {
+         "shadowOffsetY": 4
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "node",
+     "s": 0,
+     "i": 0,
+     "blur": "4022000000000000",
+     "ox": "3ff8000000000000",
+     "oy": "4008000000000000",
+     "color": "#555"
+    },
+    {
+     "role": "node",
+     "s": 0,
+     "i": 1,
+     "blur": "4022000000000000",
+     "ox": "3ff8000000000000",
+     "oy": "4008000000000000",
+     "color": "#00f"
+    },
+    {
+     "role": "node",
+     "s": 0,
+     "i": 2,
+     "blur": "3ff0000000000000",
+     "ox": "3ff8000000000000",
+     "oy": "4008000000000000",
+     "color": "#555"
+    },
+    {
+     "role": "edge",
+     "s": 0,
+     "i": 0,
+     "blur": "4008000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#0f0"
+    },
+    {
+     "role": "edge",
+     "s": 0,
+     "i": 1,
+     "blur": "4008000000000000",
+     "ox": "0000000000000000",
+     "oy": "4010000000000000",
+     "color": "#0f0"
+    }
+   ]
+  },
+  {
+   "id": "tree",
+   "note": "tree nodes (itemStyle) and edges (the node's lineStyle); node b its own",
+   "option": {
+    "series": [
+     {
+      "type": "tree",
+      "initialTreeDepth": -1,
+      "itemStyle": {
+       "shadowBlur": 5,
+       "shadowColor": "#333"
+      },
+      "lineStyle": {
+       "shadowBlur": 2,
+       "shadowColor": "#999"
+      },
+      "data": [
+       {
+        "name": "r",
+        "children": [
+         {
+          "name": "a"
+         },
+         {
+          "name": "b",
+          "itemStyle": {
+           "shadowOffsetY": 3
+          },
+          "lineStyle": {
+           "shadowOffsetX": 2
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "treeNode",
+     "s": 0,
+     "i": 1,
+     "blur": "4014000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#333"
+    },
+    {
+     "role": "treeNode",
+     "s": 0,
+     "i": 2,
+     "blur": "4014000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#333"
+    },
+    {
+     "role": "treeEdge",
+     "s": 0,
+     "i": 2,
+     "blur": "4000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#999"
+    },
+    {
+     "role": "treeNode",
+     "s": 0,
+     "i": 3,
+     "blur": "4014000000000000",
+     "ox": "0000000000000000",
+     "oy": "4008000000000000",
+     "color": "#333"
+    },
+    {
+     "role": "treeEdge",
+     "s": 0,
+     "i": 3,
+     "blur": "4000000000000000",
+     "ox": "4000000000000000",
+     "oy": "0000000000000000",
+     "color": "#999"
+    }
+   ]
+  },
+  {
+   "id": "treemap",
+   "note": "treemap rects: the series' itemStyle shadow (getItemStyleNormal), a level's and a node's own",
+   "option": {
+    "series": [
+     {
+      "type": "treemap",
+      "breadcrumb": {
+       "show": false
+      },
+      "itemStyle": {
+       "shadowBlur": 4,
+       "shadowColor": "#444"
+      },
+      "levels": [
+       {},
+       {
+        "itemStyle": {
+         "shadowOffsetY": 2
+        }
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "value": 6,
+        "children": [
+         {
+          "name": "a1",
+          "value": 4,
+          "itemStyle": {
+           "shadowColor": "#f00"
+          }
+         },
+         {
+          "name": "a2",
+          "value": 2
+         }
+        ]
+       },
+       {
+        "name": "b",
+        "value": 3
+       }
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "tmBack",
+     "s": 0,
+     "i": 0,
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#444"
+    },
+    {
+     "role": "tmBack",
+     "s": 0,
+     "i": 1,
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "4000000000000000",
+     "color": "#444"
+    },
+    {
+     "role": "tmBack",
+     "s": 0,
+     "i": 2,
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#f00"
+    },
+    {
+     "role": "tmContent",
+     "s": 0,
+     "i": 2,
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#f00"
+    },
+    {
+     "role": "tmBack",
+     "s": 0,
+     "i": 3,
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#444"
+    },
+    {
+     "role": "tmContent",
+     "s": 0,
+     "i": 3,
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#444"
+    },
+    {
+     "role": "tmBack",
+     "s": 0,
+     "i": 4,
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "4000000000000000",
+     "color": "#444"
+    },
+    {
+     "role": "tmContent",
+     "s": 0,
+     "i": 4,
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "4000000000000000",
+     "color": "#444"
+    }
+   ]
+  },
+  {
+   "id": "sunburst",
+   "note": "sunburst pieces: itemStyle shadow, a node its own",
+   "option": {
+    "series": [
+     {
+      "type": "sunburst",
+      "itemStyle": {
+       "shadowBlur": 3,
+       "shadowColor": "#123456"
+      },
+      "data": [
+       {
+        "name": "a",
+        "value": 4,
+        "children": [
+         {
+          "name": "a1",
+          "value": 2,
+          "itemStyle": {
+           "shadowBlur": 8
+          }
+         }
+        ]
+       },
+       {
+        "name": "b",
+        "value": 3
+       }
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "sun",
+     "s": 0,
+     "i": 1,
+     "blur": "4008000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#123456"
+    },
+    {
+     "role": "sun",
+     "s": 0,
+     "i": 2,
+     "blur": "4020000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#123456"
+    },
+    {
+     "role": "sun",
+     "s": 0,
+     "i": 3,
+     "blur": "4008000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#123456"
+    }
+   ]
+  },
+  {
+   "id": "sankey",
+   "note": "sankey nodes (itemStyle) and links (lineStyle through getItemStyle), a link's own",
+   "option": {
+    "series": [
+     {
+      "type": "sankey",
+      "itemStyle": {
+       "shadowBlur": 3,
+       "shadowColor": "#333"
+      },
+      "lineStyle": {
+       "shadowBlur": 5,
+       "shadowColor": "#999"
+      },
+      "data": [
+       {
+        "name": "a"
+       },
+       {
+        "name": "b"
+       },
+       {
+        "name": "c"
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "b",
+        "value": 3
+       },
+       {
+        "source": "a",
+        "target": "c",
+        "value": 2,
+        "lineStyle": {
+         "shadowOffsetY": 2
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "sankeyNode",
+     "s": 0,
+     "i": 0,
+     "blur": "4008000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#333"
+    },
+    {
+     "role": "sankeyNode",
+     "s": 0,
+     "i": 1,
+     "blur": "4008000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#333"
+    },
+    {
+     "role": "sankeyNode",
+     "s": 0,
+     "i": 2,
+     "blur": "4008000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#333"
+    },
+    {
+     "role": "sankeyEdge",
+     "s": 0,
+     "i": 0,
+     "blur": "4014000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#999"
+    },
+    {
+     "role": "sankeyEdge",
+     "s": 0,
+     "i": 1,
+     "blur": "4014000000000000",
+     "ox": "0000000000000000",
+     "oy": "4000000000000000",
+     "color": "#999"
+    }
+   ]
+  },
+  {
+   "id": "river",
+   "note": "themeRiver-basic's emphasis shadow (blur 20, rgba(0,0,0,0.8)) on the highlighted layer; none at rest",
+   "option": {
+    "singleAxis": {
+     "type": "time"
+    },
+    "series": [
+     {
+      "type": "themeRiver",
+      "emphasis": {
+       "itemStyle": {
+        "shadowBlur": 20,
+        "shadowColor": "rgba(0, 0, 0, 0.8)"
+       }
+      },
+      "data": [
+       [
+        "2015/11/08",
+        10,
+        "A"
+       ],
+       [
+        "2015/11/09",
+        15,
+        "A"
+       ],
+       [
+        "2015/11/08",
+        5,
+        "B"
+       ],
+       [
+        "2015/11/09",
+        8,
+        "B"
+       ]
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "river",
+     "s": 0,
+     "i": 0,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    },
+    {
+     "role": "river",
+     "s": 0,
+     "i": 1,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    }
+   ],
+   "highlight": {
+    "seriesIndex": 0,
+    "dataIndex": 1
+   },
+   "highlighted": [
+    {
+     "role": "river",
+     "s": 0,
+     "i": 0,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    },
+    {
+     "role": "river",
+     "s": 0,
+     "i": 1,
+     "blur": "4034000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "rgba(0, 0, 0, 0.8)"
+    }
+   ]
+  },
+  {
+   "id": "parallelLines",
+   "note": "parallel lines and a lines series: lineStyle shadow, an item's own",
+   "option": {
+    "parallelAxis": [
+     {
+      "dim": 0
+     },
+     {
+      "dim": 1
+     }
+    ],
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "grid": {
+     "left": "60%"
+    },
+    "series": [
+     {
+      "type": "parallel",
+      "lineStyle": {
+       "shadowBlur": 3,
+       "shadowColor": "#333"
+      },
+      "data": [
+       [
+        1,
+        2
+       ],
+       {
+        "value": [
+         2,
+         1
+        ],
+        "lineStyle": {
+         "shadowOffsetX": 3
+        }
+       }
+      ]
+     },
+     {
+      "type": "lines",
+      "coordinateSystem": "cartesian2d",
+      "lineStyle": {
+       "shadowBlur": 4,
+       "shadowColor": "#0a0"
+      },
+      "data": [
+       {
+        "coords": [
+         [
+          0,
+          0
+         ],
+         [
+          10,
+          10
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          0,
+          10
+         ],
+         [
+          10,
+          0
+         ]
+        ],
+        "lineStyle": {
+         "shadowBlur": 7
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "parallel",
+     "s": 0,
+     "i": 0,
+     "blur": "4008000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#333"
+    },
+    {
+     "role": "parallel",
+     "s": 0,
+     "i": 1,
+     "blur": "4008000000000000",
+     "ox": "4008000000000000",
+     "oy": "0000000000000000",
+     "color": "#333"
+    },
+    {
+     "role": "lines",
+     "s": 1,
+     "i": 0,
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#0a0"
+    },
+    {
+     "role": "lines",
+     "s": 1,
+     "i": 1,
+     "blur": "401c000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#0a0"
+    }
+   ]
+  },
+  {
+   "id": "pictorialPolar",
+   "note": "a pictorial bar's glyphs (itemStyle shadow) on a grid; a polar bar's sectors",
+   "option": {
+    "grid": {
+     "right": "55%"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "polar": {
+     "center": [
+      "75%",
+      "50%"
+     ],
+     "radius": "30%"
+    },
+    "angleAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "radiusAxis": {},
+    "series": [
+     {
+      "type": "pictorialBar",
+      "symbol": "circle",
+      "symbolSize": [
+       20,
+       20
+      ],
+      "itemStyle": {
+       "shadowBlur": 5,
+       "shadowColor": "#300"
+      },
+      "data": [
+       5,
+       7,
+       3
+      ]
+     },
+     {
+      "type": "bar",
+      "coordinateSystem": "polar",
+      "itemStyle": {
+       "shadowBlur": 6,
+       "shadowColor": "#030",
+       "shadowOffsetX": 1
+      },
+      "data": [
+       2,
+       3
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "glyph",
+     "s": 0,
+     "i": 0,
+     "blur": "4014000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#300",
+     "sub": 0
+    },
+    {
+     "role": "glyph",
+     "s": 0,
+     "i": 1,
+     "blur": "4014000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#300",
+     "sub": 0
+    },
+    {
+     "role": "glyph",
+     "s": 0,
+     "i": 2,
+     "blur": "4014000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#300",
+     "sub": 0
+    },
+    {
+     "role": "polarBar",
+     "s": 1,
+     "i": 0,
+     "blur": "4018000000000000",
+     "ox": "3ff0000000000000",
+     "oy": "0000000000000000",
+     "color": "#030"
+    },
+    {
+     "role": "polarBar",
+     "s": 1,
+     "i": 1,
+     "blur": "4018000000000000",
+     "ox": "3ff0000000000000",
+     "oy": "0000000000000000",
+     "color": "#030"
+    }
+   ]
+  },
+  {
+   "id": "labelBox",
+   "note": "a bar label's box: backgroundColor with shadowBlur 4, shadowColor #333, offsetY 2; a rich token's own box with its own shadow (offsetX 3, #f00); the second series' box a blur with no colour: the text style's prototype '#000' (shadowColor || 'transparent' never reaches 'transparent')",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       7
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "backgroundColor": "#eee",
+       "padding": 4,
+       "shadowBlur": 4,
+       "shadowColor": "#333",
+       "shadowOffsetY": 2,
+       "formatter": "{a|Ab} cd",
+       "rich": {
+        "a": {
+         "backgroundColor": "#ff0",
+         "shadowOffsetX": 3,
+         "shadowColor": "#f00"
+        }
+       }
+      }
+     },
+     {
+      "type": "bar",
+      "data": [
+       3,
+       4
+      ],
+      "label": {
+       "show": true,
+       "backgroundColor": "#eee",
+       "shadowBlur": 5
+      }
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "box",
+     "s": 0,
+     "i": 0,
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "4000000000000000",
+     "color": "#333",
+     "sub": 0
+    },
+    {
+     "role": "box",
+     "s": 0,
+     "i": 0,
+     "blur": "0000000000000000",
+     "ox": "4008000000000000",
+     "oy": "0000000000000000",
+     "color": "#f00",
+     "sub": 1
+    },
+    {
+     "role": "box",
+     "s": 0,
+     "i": 1,
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "4000000000000000",
+     "color": "#333",
+     "sub": 0
+    },
+    {
+     "role": "box",
+     "s": 0,
+     "i": 1,
+     "blur": "0000000000000000",
+     "ox": "4008000000000000",
+     "oy": "0000000000000000",
+     "color": "#f00",
+     "sub": 1
+    },
+    {
+     "role": "box",
+     "s": 1,
+     "i": 0,
+     "blur": "4014000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000",
+     "sub": 0
+    },
+    {
+     "role": "box",
+     "s": 1,
+     "i": 1,
+     "blur": "4014000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000",
+     "sub": 0
+    }
+   ]
+  },
+  {
+   "id": "richText",
+   "note": "bar-rich-text's rich token a: textShadowBlur 2, #000, (0, 1); token b none; a plain label's textShadowBlur 0 with an offset (no shadow)",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       7
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "formatter": "{a|Ab}{b|Cd}",
+       "rich": {
+        "a": {
+         "color": "#fff",
+         "textShadowBlur": 2,
+         "textShadowColor": "#000",
+         "textShadowOffsetX": 0,
+         "textShadowOffsetY": 1
+        },
+        "b": {}
+       }
+      }
+     },
+     {
+      "type": "bar",
+      "data": [
+       3,
+       4
+      ],
+      "label": {
+       "show": true,
+       "textShadowBlur": 0,
+       "textShadowOffsetX": 3,
+       "textShadowColor": "#f00"
+      }
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "span",
+     "s": 0,
+     "i": 0,
+     "blur": "4000000000000000",
+     "ox": "0000000000000000",
+     "oy": "3ff0000000000000",
+     "color": "#000",
+     "sub": 0,
+     "text": "Ab"
+    },
+    {
+     "role": "span",
+     "s": 0,
+     "i": 0,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000",
+     "sub": 1,
+     "text": "Cd"
+    },
+    {
+     "role": "span",
+     "s": 0,
+     "i": 1,
+     "blur": "4000000000000000",
+     "ox": "0000000000000000",
+     "oy": "3ff0000000000000",
+     "color": "#000",
+     "sub": 0,
+     "text": "Ab"
+    },
+    {
+     "role": "span",
+     "s": 0,
+     "i": 1,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000",
+     "sub": 1,
+     "text": "Cd"
+    },
+    {
+     "role": "span",
+     "s": 1,
+     "i": 0,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000",
+     "sub": 0,
+     "text": "3"
+    },
+    {
+     "role": "span",
+     "s": 1,
+     "i": 1,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000",
+     "sub": 0,
+     "text": "4"
+    }
+   ]
+  }
+ ],
+ "whole": [
+  {
+   "id": "markers",
+   "note": "a bar's markPoint (itemStyle shadow), markLine (lineStyle shadow) and markArea (itemStyle shadow)",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       7,
+       3
+      ],
+      "markPoint": {
+       "itemStyle": {
+        "shadowBlur": 4,
+        "shadowColor": "#112233"
+       },
+       "data": [
+        {
+         "type": "max"
+        }
+       ]
+      },
+      "markLine": {
+       "symbol": "none",
+       "lineStyle": {
+        "shadowBlur": 6,
+        "shadowColor": "#223344",
+        "shadowOffsetY": 2
+       },
+       "data": [
+        {
+         "type": "average"
+        }
+       ]
+      },
+      "markArea": {
+       "itemStyle": {
+        "shadowBlur": 8,
+        "shadowColor": "#334455"
+       },
+       "data": [
+        [
+         {
+          "xAxis": "a"
+         },
+         {
+          "xAxis": "b"
+         }
+        ]
+       ]
+      }
+     }
+    ]
+   },
+   "shadows": [
+    {
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#112233"
+    },
+    {
+     "blur": "4018000000000000",
+     "ox": "0000000000000000",
+     "oy": "4000000000000000",
+     "color": "#223344"
+    },
+    {
+     "blur": "4020000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#334455"
+    }
+   ]
+  },
+  {
+   "id": "matrix",
+   "note": "a matrix: backgroundStyle's shadow on the background (not the border), the body's cells' itemStyle, the x dimension's dividerLineStyle",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "a",
+       "b"
+      ],
+      "dividerLineStyle": {
+       "shadowBlur": 3,
+       "shadowColor": "#0000ff"
+      }
+     },
+     "y": {
+      "data": [
+       "c",
+       "d"
+      ]
+     },
+     "backgroundStyle": {
+      "color": "#eee",
+      "shadowBlur": 10,
+      "shadowColor": "#ff0000"
+     },
+     "body": {
+      "itemStyle": {
+       "shadowBlur": 2,
+       "shadowColor": "#00ff00"
+      }
+     }
+    }
+   },
+   "shadows": [
+    {
+     "blur": "4000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#00ff00"
+    },
+    {
+     "blur": "4008000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#0000ff"
+    },
+    {
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#ff0000"
+    }
+   ]
+  },
+  {
+   "id": "dataZoom",
+   "note": "a slider: handleStyle, moveHandleStyle, dataBackground's areaStyle and lineStyle shadows",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       5,
+       7,
+       3
+      ]
+     }
+    ],
+    "dataZoom": [
+     {
+      "type": "slider",
+      "handleStyle": {
+       "shadowBlur": 3,
+       "shadowColor": "#ff0000"
+      },
+      "moveHandleStyle": {
+       "shadowBlur": 4,
+       "shadowColor": "#00ff00"
+      },
+      "dataBackground": {
+       "areaStyle": {
+        "shadowBlur": 5,
+        "shadowColor": "#0000ff"
+       },
+       "lineStyle": {
+        "shadowBlur": 6,
+        "shadowColor": "#ff00ff"
+       }
+      }
+     }
+    ]
+   },
+   "shadows": [
+    {
+     "blur": "4008000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#ff0000"
+    },
+    {
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#00ff00"
+    },
+    {
+     "blur": "4014000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#0000ff"
+    },
+    {
+     "blur": "4018000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#ff00ff"
+    }
+   ]
+  },
+  {
+   "id": "toolbox",
+   "note": "toolbox icons: iconStyle's shadow",
+   "option": {
+    "toolbox": {
+     "feature": {
+      "restore": {},
+      "saveAsImage": {}
+     },
+     "iconStyle": {
+      "shadowBlur": 3,
+      "shadowColor": "#ff0000",
+      "shadowOffsetX": 1
+     }
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ]
+   },
+   "shadows": [
+    {
+     "blur": "4008000000000000",
+     "ox": "3ff0000000000000",
+     "oy": "0000000000000000",
+     "color": "#ff0000"
+    }
+   ]
+  },
+  {
+   "id": "graphic",
+   "note": "line-graphic's: a graphic rect's style shadow, a circle's own",
+   "option": {
+    "graphic": [
+     {
+      "type": "rect",
+      "left": 10,
+      "top": 10,
+      "shape": {
+       "width": 50,
+       "height": 30
+      },
+      "style": {
+       "fill": "#fff",
+       "shadowBlur": 8,
+       "shadowColor": "rgba(0,0,0,0.2)",
+       "shadowOffsetX": 3,
+       "shadowOffsetY": 3
+      }
+     },
+     {
+      "type": "circle",
+      "left": 100,
+      "top": 10,
+      "shape": {
+       "r": 20
+      },
+      "style": {
+       "fill": "#f00",
+       "shadowBlur": 5,
+       "shadowColor": "#000"
+      }
+     }
+    ]
+   },
+   "shadows": [
+    {
+     "blur": "4014000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000"
+    },
+    {
+     "blur": "4020000000000000",
+     "ox": "4008000000000000",
+     "oy": "4008000000000000",
+     "color": "rgba(0,0,0,0.2)"
+    }
+   ]
+  },
+  {
+   "id": "legend",
+   "note": "a legend box: backgroundColor with the legend's own shadow keys",
+   "option": {
+    "legend": {
+     "backgroundColor": "#fff",
+     "shadowBlur": 6,
+     "shadowColor": "#123456",
+     "shadowOffsetY": 2
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "s",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ]
+   },
+   "shadows": [
+    {
+     "blur": "4018000000000000",
+     "ox": "0000000000000000",
+     "oy": "4000000000000000",
+     "color": "#123456"
+    }
+   ]
+  },
+  {
+   "id": "radarGrid",
+   "note": "radar-custom's: the radar component's splitArea.areaStyle shadow, splitLine.lineStyle and axisLine.lineStyle",
+   "option": {
+    "radar": {
+     "indicator": [
+      {
+       "name": "a",
+       "max": 10
+      },
+      {
+       "name": "b",
+       "max": 10
+      },
+      {
+       "name": "c",
+       "max": 10
+      }
+     ],
+     "splitArea": {
+      "areaStyle": {
+       "color": [
+        "#eee",
+        "#ddd"
+       ],
+       "shadowBlur": 10,
+       "shadowColor": "rgba(0, 0, 0, 0.2)"
+      }
+     },
+     "splitLine": {
+      "lineStyle": {
+       "shadowBlur": 2,
+       "shadowColor": "#ff0000"
+      }
+     },
+     "axisLine": {
+      "lineStyle": {
+       "shadowBlur": 3,
+       "shadowColor": "#00ff00"
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "radar",
+      "data": [
+       {
+        "value": [
+         5,
+         6,
+         7
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "shadows": [
+    {
+     "blur": "4000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#ff0000"
+    },
+    {
+     "blur": "4008000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#00ff00"
+    },
+    {
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "rgba(0, 0, 0, 0.2)"
+    }
+   ]
+  },
+  {
+   "id": "calendar",
+   "note": "a calendar: the day cells' itemStyle shadow, the split lines' lineStyle shadow",
+   "option": {
+    "calendar": {
+     "range": "2017-02",
+     "itemStyle": {
+      "shadowBlur": 2,
+      "shadowColor": "#ff0000"
+     },
+     "splitLine": {
+      "lineStyle": {
+       "shadowBlur": 3,
+       "shadowColor": "#0000ff"
+      }
+     }
+    }
+   },
+   "shadows": [
+    {
+     "blur": "4000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#ff0000"
+    },
+    {
+     "blur": "4008000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#0000ff"
+    }
+   ]
+  },
+  {
+   "id": "visualMap",
+   "note": "a continuous visualMap's handles: handleStyle's shadow",
+   "option": {
+    "visualMap": {
+     "type": "continuous",
+     "calculable": true,
+     "min": 0,
+     "max": 10,
+     "handleStyle": {
+      "shadowBlur": 4,
+      "shadowColor": "#ff0000"
+     }
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ]
+   },
+   "shadows": [
+    {
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#ff0000"
+    }
+   ]
+  }
+ ],
+ "layers": [
+  {
+   "id": "zlevel",
+   "note": "series 0 at zlevel 1 (z 2) over series 1 at zlevel 0 z 10 (overlapping bars), its labels with it; series 1's markPoint at its own zlevel 2",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "zlevel": 1,
+      "barGap": "-100%",
+      "label": {
+       "show": true
+      },
+      "data": [
+       5,
+       7,
+       3
+      ]
+     },
+     {
+      "type": "bar",
+      "z": 10,
+      "label": {
+       "show": true
+      },
+      "data": [
+       4,
+       8,
+       2
+      ],
+      "markPoint": {
+       "zlevel": 2,
+       "data": [
+        {
+         "type": "max"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 0,
+     "zlevel": 1,
+     "blend": null,
+     "order": 20
+    },
+    {
+     "role": "label",
+     "s": 0,
+     "i": 0,
+     "zlevel": 1,
+     "blend": "source-over",
+     "order": -1
+    },
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 1,
+     "zlevel": 1,
+     "blend": null,
+     "order": 21
+    },
+    {
+     "role": "label",
+     "s": 0,
+     "i": 1,
+     "zlevel": 1,
+     "blend": "source-over",
+     "order": -1
+    },
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 2,
+     "zlevel": 1,
+     "blend": null,
+     "order": 22
+    },
+    {
+     "role": "label",
+     "s": 0,
+     "i": 2,
+     "zlevel": 1,
+     "blend": "source-over",
+     "order": -1
+    },
+    {
+     "role": "bar",
+     "s": 1,
+     "i": 0,
+     "zlevel": 0,
+     "blend": null,
+     "order": 14
+    },
+    {
+     "role": "label",
+     "s": 1,
+     "i": 0,
+     "zlevel": 0,
+     "blend": "source-over",
+     "order": -1
+    },
+    {
+     "role": "bar",
+     "s": 1,
+     "i": 1,
+     "zlevel": 0,
+     "blend": null,
+     "order": 15
+    },
+    {
+     "role": "label",
+     "s": 1,
+     "i": 1,
+     "zlevel": 0,
+     "blend": "source-over",
+     "order": -1
+    },
+    {
+     "role": "bar",
+     "s": 1,
+     "i": 2,
+     "zlevel": 0,
+     "blend": null,
+     "order": 16
+    },
+    {
+     "role": "label",
+     "s": 1,
+     "i": 2,
+     "zlevel": 0,
+     "blend": "source-over",
+     "order": -1
+    }
+   ],
+   "marks": [
+    {
+     "role": "markPoint",
+     "zlevel": 2,
+     "order": 26
+    }
+   ]
+  },
+  {
+   "id": "blend",
+   "note": "lines-ny's blendMode 'lighter' on a bar series: every bar, not its labels; the other series none",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "blendMode": "lighter",
+      "label": {
+       "show": true
+      },
+      "data": [
+       5,
+       7,
+       3
+      ]
+     },
+     {
+      "type": "bar",
+      "data": [
+       4,
+       8,
+       2
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 0,
+     "zlevel": 0,
+     "blend": "lighter",
+     "order": 14
+    },
+    {
+     "role": "label",
+     "s": 0,
+     "i": 0,
+     "zlevel": 0,
+     "blend": "source-over",
+     "order": -1
+    },
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 1,
+     "zlevel": 0,
+     "blend": "lighter",
+     "order": 15
+    },
+    {
+     "role": "label",
+     "s": 0,
+     "i": 1,
+     "zlevel": 0,
+     "blend": "source-over",
+     "order": -1
+    },
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 2,
+     "zlevel": 0,
+     "blend": "lighter",
+     "order": 16
+    },
+    {
+     "role": "label",
+     "s": 0,
+     "i": 2,
+     "zlevel": 0,
+     "blend": "source-over",
+     "order": -1
+    },
+    {
+     "role": "bar",
+     "s": 1,
+     "i": 0,
+     "zlevel": 0,
+     "blend": null,
+     "order": 17
+    },
+    {
+     "role": "bar",
+     "s": 1,
+     "i": 1,
+     "zlevel": 0,
+     "blend": null,
+     "order": 18
+    },
+    {
+     "role": "bar",
+     "s": 1,
+     "i": 2,
+     "zlevel": 0,
+     "blend": null,
+     "order": 19
+    }
+   ],
+   "marks": []
+  },
+  {
+   "id": "rootLevel",
+   "note": "the root's zlevel 3 reaches a series that writes none (the series model's parent is the option)",
+   "option": {
+    "zlevel": 3,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       7,
+       3
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 0,
+     "zlevel": 3,
+     "blend": null,
+     "order": 20
+    },
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 1,
+     "zlevel": 3,
+     "blend": null,
+     "order": 21
+    },
+    {
+     "role": "bar",
+     "s": 0,
+     "i": 2,
+     "zlevel": 3,
+     "blend": null,
+     "order": 22
+    }
+   ],
+   "marks": []
+  }
+ ],
+ "anim": [
+  {
+   "id": "emphasisTween",
+   "note": "a bar's emphasis.itemStyle shadow (blur 10, offsetY 4, rgba(0,0,0,0.5)) by a highlight at 0 and a downplay at 500: stateAnimation's 300 ms cubicOut from the rest's prototype 0, 0, '#000' and back",
+   "option": {
+    "color": [
+     "#5470c6"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "emphasis": {
+       "itemStyle": {
+        "shadowBlur": 10,
+        "shadowOffsetY": 4,
+        "shadowColor": "rgba(0,0,0,0.5)"
+       }
+      },
+      "data": [
+       5,
+       7,
+       3
+      ]
+     }
+    ]
+   },
+   "events": [
+    {
+     "at": 0,
+     "payload": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 1
+     }
+    },
+    {
+     "at": 500,
+     "payload": {
+      "type": "downplay",
+      "seriesIndex": 0,
+      "dataIndex": 1
+     }
+    }
+   ],
+   "samples": [
+    {
+     "t": 0,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#000",
+     "states": "emphasis"
+    },
+    {
+     "t": 1,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "rgba(0,0,0,1)",
+     "states": "emphasis"
+    },
+    {
+     "t": 50,
+     "blur": "401092ad9a88d4a7",
+     "ox": "0000000000000000",
+     "oy": "3ffa8448f741543e",
+     "color": "rgba(0,0,0,0.7928379814814814)",
+     "states": "emphasis"
+    },
+    {
+     "t": 150,
+     "blur": "4021731d4e5dfa38",
+     "ox": "0000000000000000",
+     "oy": "400beb6216fcc38c",
+     "color": "rgba(0,0,0,0.5637583518518519)",
+     "states": "emphasis"
+    },
+    {
+     "t": 299,
+     "blur": "4023ffff9c94578a",
+     "ox": "0000000000000000",
+     "oy": "400fffff60ed58dd",
+     "color": "rgba(0,0,0,0.5000001481481482)",
+     "states": "emphasis"
+    },
+    {
+     "t": 300,
+     "blur": "4023fffff3928af2",
+     "ox": "0000000000000000",
+     "oy": "400fffffec1dab1c",
+     "color": "rgba(0,0,0,0.5000000185185185)",
+     "states": "emphasis"
+    },
+    {
+     "t": 301,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "4010000000000000",
+     "color": "rgba(0,0,0,0.5)",
+     "states": "emphasis"
+    },
+    {
+     "t": 500,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "4010000000000000",
+     "color": "rgba(0,0,0,0.5)",
+     "states": ""
+    },
+    {
+     "t": 501,
+     "blur": "4024000000000000",
+     "ox": "0000000000000000",
+     "oy": "4010000000000000",
+     "color": "rgba(0,0,0,0.5)",
+     "states": ""
+    },
+    {
+     "t": 650,
+     "blur": "3ff467158d102e40",
+     "ox": "0000000000000000",
+     "oy": "3fe05277a40cf1d0",
+     "color": "rgba(0,0,0,0.9362416481481481)",
+     "states": ""
+    },
+    {
+     "t": 799,
+     "blur": "3ec8daea1d800000",
+     "ox": "0000000000000000",
+     "oy": "3eb3e254e4600000",
+     "color": "rgba(0,0,0,0.9999998518518518)",
+     "states": ""
+    },
+    {
+     "t": 800,
+     "blur": "3e98daea1c000000",
+     "ox": "0000000000000000",
+     "oy": "3e83e254e4000000",
+     "color": "rgba(0,0,0,0.9999999814814815)",
+     "states": ""
+    },
+    {
+     "t": 801,
+     "blur": "0000000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "rgba(0,0,0,1)",
+     "states": ""
+    }
+   ]
+  },
+  {
+   "id": "restTween",
+   "note": "a bar's own shadow (blur 4, #ff0000) under an emphasis shadow (blur 12): from 4 to 12 in the bar's colour, the emphasis naming none",
+   "option": {
+    "color": [
+     "#5470c6"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "itemStyle": {
+       "shadowBlur": 4,
+       "shadowColor": "#ff0000"
+      },
+      "emphasis": {
+       "itemStyle": {
+        "shadowBlur": 12
+       }
+      },
+      "data": [
+       5,
+       7,
+       3
+      ]
+     }
+    ]
+   },
+   "events": [
+    {
+     "at": 0,
+     "payload": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 1
+     }
+    },
+    {
+     "at": 500,
+     "payload": {
+      "type": "downplay",
+      "seriesIndex": 0,
+      "dataIndex": 1
+     }
+    }
+   ],
+   "samples": [
+    {
+     "t": 0,
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#ff0000",
+     "states": "emphasis"
+    },
+    {
+     "t": 1,
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#ff0000",
+     "states": "emphasis"
+    },
+    {
+     "t": 50,
+     "blur": "401d42247ba0aa1f",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#ff0000",
+     "states": "emphasis"
+    },
+    {
+     "t": 150,
+     "blur": "4025f5b10b7e61c6",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#ff0000",
+     "states": "emphasis"
+    },
+    {
+     "t": 299,
+     "blur": "4027ffffb076ac6e",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#ff0000",
+     "states": "emphasis"
+    },
+    {
+     "t": 300,
+     "blur": "4027fffff60ed58e",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#ff0000",
+     "states": "emphasis"
+    },
+    {
+     "t": 301,
+     "blur": "4028000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#ff0000",
+     "states": "emphasis"
+    },
+    {
+     "t": 500,
+     "blur": "4028000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#ff0000",
+     "states": ""
+    },
+    {
+     "t": 501,
+     "blur": "4028000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#ff0000",
+     "states": ""
+    },
+    {
+     "t": 650,
+     "blur": "4014149de9033c74",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#ff0000",
+     "states": ""
+    },
+    {
+     "t": 799,
+     "blur": "401000009f12a723",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#ff0000",
+     "states": ""
+    },
+    {
+     "t": 800,
+     "blur": "4010000013e254e4",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#ff0000",
+     "states": ""
+    },
+    {
+     "t": 801,
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#ff0000",
+     "states": ""
+    }
+   ]
+  }
+ ],
+ "guards": [
+  {
+   "name": "emphasisTween: 0 at rest, between at 150, 10 from 300, back to 0 from 800",
+   "ok": true
+  },
+  {
+   "name": "restTween: from 4 to 12 in #ff0000",
+   "ok": true
+  },
+  {
+   "name": "markers: the three blocks",
+   "ok": true
+  },
+  {
+   "name": "matrix: background, cells and the divider; the border none",
+   "ok": true
+  },
+  {
+   "name": "dataZoom: four shadows",
+   "ok": true
+  },
+  {
+   "name": "toolbox, graphic, legend, visualMap",
+   "ok": true
+  },
+  {
+   "name": "zlevel: series 0 and its labels at 1, after series 1 (z 10); the markPoint at 2",
+   "ok": true
+  },
+  {
+   "name": "blend: series 0's bars 'lighter', its labels not, series 1 none",
+   "ok": true
+  },
+  {
+   "name": "rootLevel: the root zlevel 3 on the bars",
+   "ok": true
+  },
+  {
+   "name": "bar: the series' shadow, item 1 its own oy 5 and #ff0000 over it",
+   "ok": true
+  },
+  {
+   "name": "bar: a blur alone leaves the colour the prototype's",
+   "ok": true
+  },
+  {
+   "name": "barEmphasis: nothing at rest, the blur once highlighted",
+   "ok": true
+  },
+  {
+   "name": "line: the polyline its lineStyle, the area its areaStyle, a symbol its itemStyle",
+   "ok": true
+  },
+  {
+   "name": "scatter: the effect symbol has it, its ripples not",
+   "ok": true
+  },
+  {
+   "name": "pie: item 0 its 200, the others none; every label line its labelLine.lineStyle",
+   "ok": true
+  },
+  {
+   "name": "pieEmphasis: the highlighted slice blur 10",
+   "ok": true
+  },
+  {
+   "name": "gauge: every part as its block says",
+   "ok": true
+  },
+  {
+   "name": "radar: line, area, symbols",
+   "ok": true
+  },
+  {
+   "name": "boxEmphasis: the default emphasis shadow",
+   "ok": true
+  },
+  {
+   "name": "heatEmphasis: rest 2, highlighted 10",
+   "ok": true
+  },
+  {
+   "name": "graph: the category's colour, the node's own blur, the link's own offset",
+   "ok": true
+  },
+  {
+   "name": "tree, treemap, sunburst, sankey carry theirs",
+   "ok": true
+  },
+  {
+   "name": "river: the highlighted layer blur 20",
+   "ok": true
+  },
+  {
+   "name": "parallel and lines",
+   "ok": true
+  },
+  {
+   "name": "pictorial glyphs and polar bars",
+   "ok": true
+  },
+  {
+   "name": "richText: token a's TSpan its shadow, b's none, a blur of 0 none",
+   "ok": true
+  }
+ ]
+}
