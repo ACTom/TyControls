@@ -28,6 +28,7 @@ type
 
 var
   GChanging, GChange: Integer;
+  GCounting: Boolean;   // only the pager made by the reader counts
 
 type
   { Counts its own change events from the moment it is read, before Loaded. }
@@ -35,15 +36,19 @@ type
   private
     procedure CountChanging(Sender: TObject; ANewIndex: Integer; var AllowChange: Boolean);
     procedure CountChange(Sender: TObject);
-  protected
-    procedure Loading; override;
+  public
+    constructor Create(AOwner: TComponent); override;
   end;
 
-procedure TCountingPageControl.Loading;
+constructor TCountingPageControl.Create(AOwner: TComponent);
 begin
-  inherited Loading;
-  OnChanging := @CountChanging;
-  OnChange := @CountChange;
+  inherited Create(AOwner);
+  { Not for the one written out: the writer would look for these methods on the form. }
+  if GCounting then
+  begin
+    OnChanging := @CountChanging;
+    OnChange := @CountChange;
+  end;
 end;
 
 procedure TCountingPageControl.CountChanging(Sender: TObject; ANewIndex: Integer;
@@ -83,7 +88,13 @@ begin
     MS.Position := 0;
     GChanging := 0;
     GChange := 0;
-    MS.ReadComponent(Dst);
+    GCounting := True;
+    try
+      MS.ReadComponent(Dst);
+    finally
+      GCounting := False;
+    end;
+    AssertTrue('precondition: the read pager counts', Assigned(Dst.PC.OnChange));
     AssertEquals('precondition: read back on the saved page', 2, Dst.PC.ActivePageIndex);
     AssertEquals('no OnChanging while the form is read', 0, GChanging);
     AssertEquals('no OnChange either', 0, GChange);
