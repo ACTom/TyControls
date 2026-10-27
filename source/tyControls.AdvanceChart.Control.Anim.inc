@@ -2204,6 +2204,7 @@ var
   props: TTyAnimProps;
   model: TTyAnimModel;
   own: TJSONObject;
+  lx, ly: Double;
 begin
   { a mouse moves only over a live window: every mode but camOff }
   if (FAnimMode = camOff) or (csDesigning in ComponentState) then Exit;
@@ -2227,6 +2228,14 @@ begin
       at := hit.Axis.DataToCoord(PointerValue(hit), True);
       if IsNan(at) then Continue;
       props := PtrProps(hit, at);
+      { [R5-I] updateLabelEl: the label's x / y with the pointer's timing
+        [was: the label drawn about the line where it had got to] }
+      if PtrLabelAt(hit, at, lx, ly) then
+      begin
+        SetLength(props, Length(props) + 2);
+        props[High(props) - 1] := TyAnimProp('label.x', TyAnimNum(lx));
+        props[High(props)] := TyAnimProp('label.y', TyAnimNum(ly));
+      end;
     end;
     if FPtrProxies = nil then FPtrProxies := TFPList.Create;
     if FPtrAnim = nil then FPtrAnim := NewAnimDriver;
@@ -2251,6 +2260,12 @@ begin
     if PtrPropsSame(p.Final, props) then Continue;
     model := PtrModelOf(hit, own);
     try
+      { [R5-I] a label shown only now starts where it is to rest (the
+        labelEl a hidden label never moved) }
+      if TyAnimPropIndex(props, 'label.x') >= 0 then
+        if p.GetAnimProp('label.x').Kind <> avkNumber then
+          p.Attr(TyAnimProps([props[TyAnimPropIndex(props, 'label.x')],
+            props[TyAnimPropIndex(props, 'label.y')]]));
       p.SetFinal(props);
       if PtrMoves(hit, model) then
         TyUpdateProps(p, props, model, TyAnimCallNoIndex)
@@ -2361,6 +2376,55 @@ begin
       Take('label.x', ADraw.X);
       Take('label.y', ADraw.Y);
     end;
+    Exit;
+  end;
+end;
+
+function TTyCustomAdvanceChart.PtrLabelAt(const AHit: TTyAxisHit; AAt: Double;
+  out AX, AY: Double): Boolean;
+var
+  labelS: TTyStyleSet;
+  txt: string;
+  m: ITyTextMeasurer;
+  box: TRect;
+begin
+  Result := False;
+  AX := NaN;
+  AY := NaN;
+  if not AHit.Spec.LabelSpec.Show or (FLastPPI <= 0) then Exit;
+  labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel', '', []);
+  if not (tpBackground in labelS.Present) then Exit;
+  { the render's text: an action renders the pointer (the paint after it
+    draws what this one wrote) }
+  txt := PointerDrawLabelText(AHit, PointerValue(AHit));
+  if txt = '' then Exit;
+  m := NewTextMeasurer(FLastPPI);
+  if not PointerLabelBox(AHit, AAt, txt, Rect(Round(FLastRect.Left), Round(FLastRect.Top),
+    Round(FLastRect.Right), Round(FLastRect.Bottom)), FLastPPI, m, labelS, box) then Exit;
+  AX := box.Left;
+  AY := box.Top;
+  Result := True;
+end;
+
+procedure TTyCustomAdvanceChart.PtrLabelNow(const AHit: TTyAxisHit; var ABox: TRect);
+var
+  k: Integer;
+  p: TTyChartAnimProxy;
+  key: string;
+  lx, ly: Double;
+begin
+  { an export draws the pointer where it rests }
+  if (FPtrProxies = nil) or (AHit.Axis = nil) or FExporting then Exit;
+  key := PtrKeyOf(AHit.Axis);
+  for k := 0 to FPtrProxies.Count - 1 do
+  begin
+    p := TTyChartAnimProxy(FPtrProxies[k]);
+    if p.Role <> key then Continue;
+    if p.AtFinal then Exit;
+    lx := p.Num('label.x');
+    ly := p.Num('label.y');
+    if not (IsNan(lx) or IsNan(ly)) then
+      OffsetRect(ABox, Round(lx) - ABox.Left, Round(ly) - ABox.Top);
     Exit;
   end;
 end;

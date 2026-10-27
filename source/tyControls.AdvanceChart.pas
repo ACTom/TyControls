@@ -2280,6 +2280,16 @@ type
       place; and the shape / label as its proxy has them now }
     function PtrPolarProps(const AHit: TTyAxisHit; out AProps: TTyAnimProps): Boolean;
     procedure PtrPolarNow(const AHit: TTyAxisHit; var ADraw: TTyPolarPointerDraw);
+    { [R5-I] a cartesian pointer's label box with its value's line at AAt
+      (buildLabelElOption: the text's size and padding, the axis' side, the
+      container's confine); False where no label is drawn }
+    function PointerLabelBox(const AHit: TTyAxisHit; AAt: Double; const AText: string;
+      const ARect: TRect; APPI: Integer; const AMeasurer: ITyTextMeasurer;
+      const ALabelS: TTyStyleSet; out ABox: TRect): Boolean;
+    { its top-left at rest with the line at AAt, for the pointer's proxy }
+    function PtrLabelAt(const AHit: TTyAxisHit; AAt: Double; out AX, AY: Double): Boolean;
+    { the box where its slide has got to }
+    procedure PtrLabelNow(const AHit: TTyAxisHit; var ABox: TRect);
     procedure PtrAnimDrop;
     function PtrKeyOf(AAxis: TTyAxis): string;
     function PtrModelOf(const AHit: TTyAxisHit; out AOwn: TJSONObject): TTyAnimModel;

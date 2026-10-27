@@ -264,6 +264,11 @@ var
   v: TTyAnimValue;
   upTrack: TJSONArray;
   up: Double;
+  lblEl: TJSONObject;
+  lblUp, lblHere: array of Double;
+  pu, ph: Double;
+  bmp: TBGRABitmap;
+  row, x0, xx: Integer;
 begin
   name := ACase.Strings['id'];
   NewChart(camAlways);
@@ -304,6 +309,17 @@ begin
     else if ptrEl.Strings['type'] = 'Circle' then keys := ['shape.cx', 'shape.cy', 'shape.r']
     else keys := ['shape.cx', 'shape.cy', 'shape.r0', 'shape.r', 'shape.startAngle', 'shape.endAngle'];
   end;
+  { [R5-I] the label's text element, where it is shown and moves (a hidden
+    one is ignored upstream, its tween unseen) }
+  lblEl := nil;
+  for k := 0 to els.Count - 1 do
+    if (els.Objects[k].Strings['id'] = 'axisPointer/0.1')
+      and not els.Objects[k].Objects['final'].Get('ignore', True)
+      and (els.Objects[k].Find('track') is TJSONObject)
+      and (els.Objects[k].Objects['track'].Find('x') is TJSONArray) then
+      lblEl := els.Objects[k];
+  lblUp := nil;
+  lblHere := nil;
   track := nil;
   if ptrEl.Find('track') is TJSONObject then track := ptrEl.Objects['track'];
   anim := nil;
@@ -342,12 +358,43 @@ begin
     Inc(FCompared);
     upAnim := 0;
     if anim <> nil then upAnim := anim.Items[s].AsInteger;
+    { [R5-I] and the shown label's own animator }
+    if (lblEl <> nil) and (lblEl.Find('animators') is TJSONArray) then
+      upAnim := upAnim + lblEl.Arrays['animators'].Items[s].AsInteger;
     if p.AnimatorCount <> upAnim then
       Miss(Format('%s t=%s: %d animators here, %d upstream', [name,
         samples.Items[s].AsString, p.AnimatorCount, upAnim]), name + 'anim');
     if FChart.AnimPointerClipCount <> upAnim then
       Miss(Format('%s t=%s: %d pointer clips here, %d upstream', [name,
         samples.Items[s].AsString, FChart.AnimPointerClipCount, upAnim]), name + 'clips');
+    { [R5-I] the label's x, upstream's and the port's, for its progress }
+    if lblEl <> nil then
+    begin
+      SetLength(lblUp, Length(lblUp) + 1);
+      lblUp[High(lblUp)] := FromHex(lblEl.Objects['track'].Arrays['x'].Items[s].AsString);
+      SetLength(lblHere, Length(lblHere) + 1);
+      lblHere[High(lblHere)] := p.Num('label.x');
+      { and the box is DRAWN there: the first pixel of its background
+        (#123456) along a row through it }
+      if not (IsNan(p.Num('label.x')) or IsNan(p.Num('label.y'))) then
+      begin
+        bmp := Draw;
+        row := Round(p.Num('label.y')) + 8;
+        x0 := -1;
+        for xx := 0 to cW - 1 do
+          with bmp.GetPixel(xx, row) do
+            if (red = $12) and (green = $34) and (blue = $56) then
+            begin
+              x0 := xx;
+              Break;
+            end;
+        Inc(FCompared);
+        { (its left column half covered: the first full one is the next) }
+        if (x0 < Round(p.Num('label.x'))) or (x0 > Round(p.Num('label.x')) + 1) then
+          Miss(Format('%s t=%s: the label box drawn from x %d, its slide at %s',
+            [name, samples.Items[s].AsString, x0, Fmt(p.Num('label.x'))]), name + 'lbldraw');
+      end;
+    end;
     for kk := 0 to High(keys) do
     begin
       key := keys[kk];
@@ -369,6 +416,25 @@ begin
         Miss(Format('%s t=%s: %s %s here, %s upstream', [name, samples.Items[s].AsString,
           key, Fmt(v.Num), Fmt(up)]), name + key);
     end;
+  end;
+  { [R5-I] THE LABEL SLIDES ON ITS OWN (updateLabelEl: x / y with the
+    pointer's timing, from where its box was): its progress from the first
+    frame's place to the rest, sample by sample -- the box's size is the
+    skin's, its place along the slide upstream's }
+  if lblEl <> nil then
+  begin
+    if Length(lblHere) < 2 then
+      Miss(name + ': the label was not followed', name + 'lbl')
+    else
+      for s := 0 to High(lblHere) do
+      begin
+        Inc(FCompared);
+        pu := (lblUp[s] - lblUp[1]) / (lblUp[0] - lblUp[1]);
+        ph := (lblHere[s] - lblHere[1]) / (lblHere[0] - lblHere[1]);
+        if IsNan(ph) or (Abs(pu - ph) > 1e-9) then
+          Miss(Format('%s t=%s: the label %s of its slide here, %s upstream',
+            [name, samples.Items[s].AsString, Fmt(ph), Fmt(pu)]), name + 'lbl');
+      end;
   end;
 end;
 

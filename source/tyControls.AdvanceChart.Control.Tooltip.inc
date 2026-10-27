@@ -2611,12 +2611,11 @@ var
   i: Integer;
   lineS, shadowS, labelS: TTyStyleSet;
   hit: TTyAxisHit;
-  at, lo, hi, w, pv: Double;
+  at, atRest, lo, hi, w, pv: Double;
   colour: TTyColor;
   band: TTyRectF;
   dash: TTyDoubleArray;
   txt: string;
-  tw, th, margin, padL, padT, padR, padB: Double;
   box: TRect;
   corners: TTyCorners;
   surface: TTyFill;
@@ -2657,7 +2656,9 @@ begin
       hands the end back as itself at or past it }
     at := hit.Axis.DataToCoord(pv, True);
     if IsNan(at) then Continue;
-    { ON ITS WAY THERE: the pointer, and the label with it [Batch 92] }
+    atRest := at;
+    { ON ITS WAY THERE: the pointer [Batch 92] -- [R5-I] the label on a
+      slide of its own }
     at := PtrAt(hit, at);
 
     case hit.Spec.PointerType of
@@ -2723,55 +2724,11 @@ begin
       [R2-I8] through the axis' memo: a function runs as upstream runs it }
     txt := PointerDrawLabelText(hit, pv);
     if txt = '' then Continue;
-    AMeasurer.MeasureLine(txt, labelS.FontName, ResolveFontSize(labelS),
-      TyFontStyleCodeOver(hit.Spec.LabelSpec.FontStyle, labelS.FontWeight), tw, th);
-    if (tw <= 0) or (th <= 0) then Continue;
-    if hit.Spec.LabelSpec.HasPadding then
-    begin
-      padL := APainter.ScaleF(hit.Spec.LabelSpec.PadLeft);
-      padT := APainter.ScaleF(hit.Spec.LabelSpec.PadTop);
-      padR := APainter.ScaleF(hit.Spec.LabelSpec.PadRight);
-      padB := APainter.ScaleF(hit.Spec.LabelSpec.PadBottom);
-    end
-    else
-    begin
-      padL := APainter.Scale(labelS.Padding.Left);
-      padT := APainter.Scale(labelS.Padding.Top);
-      padR := APainter.Scale(labelS.Padding.Right);
-      padB := APainter.Scale(labelS.Padding.Bottom);
-    end;
-    margin := APainter.ScaleF(ActiveController.Metric(
-      TyAdvChartAxisPointerMarginVar, TyAdvChartAxisPointerMargin));
-    if hit.Spec.LabelSpec.MarginLogical <> 3 then
-      margin := APainter.ScaleF(hit.Spec.LabelSpec.MarginLogical);
-    { OUTSIDE THE PLOT, on the axis' own side. Not on the axis LINE: an
-      on-zero axis floats in the middle of the plot and its labels do not
-      follow it there. }
-    if hit.Axis.Horizontal then
-    begin
-      box.Left := Round(at - (tw + padL + padR) / 2);
-      if hit.Axis.Side = asTop then
-        box.Top := Round(hit.Plot.Top - margin - th - padT - padB)
-      else
-        box.Top := Round(hit.Plot.Bottom + margin);
-    end
-    else
-    begin
-      box.Top := Round(at - (th + padT + padB) / 2);
-      if hit.Axis.Side = asRight then
-        box.Left := Round(hit.Plot.Right + margin)
-      else
-        box.Left := Round(hit.Plot.Left - margin - tw - padL - padR);
-    end;
-    box.Right := box.Left + Round(tw + padL + padR);
-    box.Bottom := box.Top + Round(th + padT + padB);
-    { Clamped into the CONTROL, far edge first -- the same rule the tooltip
-      box follows, and for the same reason: what falls outside is not clipped,
-      it is not drawn. }
-    if box.Right > ARect.Right then OffsetRect(box, ARect.Right - box.Right, 0);
-    if box.Bottom > ARect.Bottom then OffsetRect(box, 0, ARect.Bottom - box.Bottom);
-    if box.Left < ARect.Left then OffsetRect(box, ARect.Left - box.Left, 0);
-    if box.Top < ARect.Top then OffsetRect(box, 0, ARect.Top - box.Top);
+    { [R5-I] the box at rest (the line's value, not where its slide has
+      got to), then where its own slide has got to }
+    if not PointerLabelBox(hit, atRest, txt, ARect, APPI, AMeasurer, labelS, box) then
+      Continue;
+    PtrLabelNow(hit, box);
 
     corners := TyEffectiveCorners(labelS);
     if hit.Spec.LabelSpec.HasBorderRadius then
@@ -2799,6 +2756,71 @@ begin
       TyFontStyleCodeOver(hit.Spec.LabelSpec.FontStyle, labelS.FontWeight), colour,
       taCenter, tlCenter, False);
   end;
+end;
+
+function TTyCustomAdvanceChart.PointerLabelBox(const AHit: TTyAxisHit; AAt: Double;
+  const AText: string; const ARect: TRect; APPI: Integer;
+  const AMeasurer: ITyTextMeasurer; const ALabelS: TTyStyleSet; out ABox: TRect): Boolean;
+var
+  tw, th, margin, padL, padT, padR, padB: Double;
+
+  function SF(AV: Double): Double;
+  begin
+    if APPI <= 0 then Result := AV else Result := AV * APPI / 96;
+  end;
+
+begin
+  ABox := Rect(0, 0, 0, 0);
+  AMeasurer.MeasureLine(AText, ALabelS.FontName, ResolveFontSize(ALabelS),
+    TyFontStyleCodeOver(AHit.Spec.LabelSpec.FontStyle, ALabelS.FontWeight), tw, th);
+  if (tw <= 0) or (th <= 0) then Exit(False);
+  if AHit.Spec.LabelSpec.HasPadding then
+  begin
+    padL := SF(AHit.Spec.LabelSpec.PadLeft);
+    padT := SF(AHit.Spec.LabelSpec.PadTop);
+    padR := SF(AHit.Spec.LabelSpec.PadRight);
+    padB := SF(AHit.Spec.LabelSpec.PadBottom);
+  end
+  else
+  begin
+    padL := MulDiv(ALabelS.Padding.Left, APPI, 96);
+    padT := MulDiv(ALabelS.Padding.Top, APPI, 96);
+    padR := MulDiv(ALabelS.Padding.Right, APPI, 96);
+    padB := MulDiv(ALabelS.Padding.Bottom, APPI, 96);
+  end;
+  margin := SF(ActiveController.Metric(
+    TyAdvChartAxisPointerMarginVar, TyAdvChartAxisPointerMargin));
+  if AHit.Spec.LabelSpec.MarginLogical <> 3 then
+    margin := SF(AHit.Spec.LabelSpec.MarginLogical);
+  { OUTSIDE THE PLOT, on the axis' own side. Not on the axis LINE: an
+    on-zero axis floats in the middle of the plot and its labels do not
+    follow it there. }
+  if AHit.Axis.Horizontal then
+  begin
+    ABox.Left := Round(AAt - (tw + padL + padR) / 2);
+    if AHit.Axis.Side = asTop then
+      ABox.Top := Round(AHit.Plot.Top - margin - th - padT - padB)
+    else
+      ABox.Top := Round(AHit.Plot.Bottom + margin);
+  end
+  else
+  begin
+    ABox.Top := Round(AAt - (th + padT + padB) / 2);
+    if AHit.Axis.Side = asRight then
+      ABox.Left := Round(AHit.Plot.Right + margin)
+    else
+      ABox.Left := Round(AHit.Plot.Left - margin - tw - padL - padR);
+  end;
+  ABox.Right := ABox.Left + Round(tw + padL + padR);
+  ABox.Bottom := ABox.Top + Round(th + padT + padB);
+  { Clamped into the CONTROL, far edge first -- the same rule the tooltip
+    box follows, and for the same reason: what falls outside is not clipped,
+    it is not drawn. }
+  if ABox.Right > ARect.Right then OffsetRect(ABox, ARect.Right - ABox.Right, 0);
+  if ABox.Bottom > ARect.Bottom then OffsetRect(ABox, 0, ARect.Bottom - ABox.Bottom);
+  if ABox.Left < ARect.Left then OffsetRect(ABox, ARect.Left - ABox.Left, 0);
+  if ABox.Top < ARect.Top then OffsetRect(ABox, 0, ARect.Top - ABox.Top);
+  Result := True;
 end;
 
 function TTyCustomAdvanceChart.ValuesText(
