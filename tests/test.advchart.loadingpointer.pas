@@ -116,6 +116,8 @@ type
     procedure TestASingleAxisHandleAsUpstream;
     { the handle is painted where it stands, the pointer at its value }
     procedure TestTheHandleIsDrawn;
+    procedure TestAFastDragThrottlesAsUpstream;
+    procedure TestTheHandleHidesWhatIsUnderIt;
   end;
 
 implementation
@@ -766,10 +768,29 @@ end;
 
 procedure TAdvChartPointerHandleOracleTest.OnEvent(Sender: TObject;
   const AEvent: TTyChartEvent);
+var o: TJSONObject;
 begin
   if (AEvent.EventType <> 'updateaxispointer') and (AEvent.EventType <> 'showtip')
-    and (AEvent.EventType <> 'hidetip') then Exit;
-  FLog.Add(AEvent.EventType + #9 + AEvent.Payload);
+    and (AEvent.EventType <> 'hidetip') and (AEvent.EventType <> 'mouseover')
+    and (AEvent.EventType <> 'mouseout') then Exit;
+  if AEvent.HasParams then
+  begin
+    { a mouse event: what the oracle keeps of its params }
+    o := TJSONObject.Create;
+    try
+      o.Add('componentType', AEvent.Params.ComponentType);
+      if AEvent.Params.SeriesIndex >= 0 then o.Add('seriesIndex', AEvent.Params.SeriesIndex)
+      else o.Add('seriesIndex', TJSONNull.Create);
+      if AEvent.Params.DataIndex >= 0 then o.Add('dataIndex', AEvent.Params.DataIndex)
+      else o.Add('dataIndex', TJSONNull.Create);
+      o.Add('name', AEvent.Params.Name);
+      FLog.Add(AEvent.EventType + #9 + o.AsJSON);
+    finally
+      o.Free;
+    end;
+  end
+  else
+    FLog.Add(AEvent.EventType + #9 + AEvent.Payload);
 end;
 
 procedure TAdvChartPointerHandleOracleTest.RunCase(const AId: string);
@@ -784,6 +805,7 @@ var
   parts: TStringList;
   got, opt: TJSONData;
   ps: TTyPointerHandleState;
+  dt: Double;
 
   procedure Near(const AWhat: string; AGot, AWant, ATol: Double);
   begin
@@ -837,14 +859,17 @@ begin
         pts := st.Arrays['points'];
         probe.Move(pts.Arrays[0].Integers[0], pts.Arrays[0].Integers[1]);
         probe.Down(pts.Arrays[0].Integers[0], pts.Arrays[0].Integers[1]);
+        { the moves' spacing (200 ms unless the step says) }
+        dt := 200;
+        if st.Find('dt') <> nil then dt := st.Floats['dt'];
         for k := 1 to pts.Count - 1 do
         begin
-          now_ := now_ + 200;
+          now_ := now_ + dt;
           probe.TooltipNow := now_;
           probe.TooltipTick(now_);
           probe.Move(pts.Arrays[k].Integers[0], pts.Arrays[k].Integers[1]);
         end;
-        now_ := now_ + 200;
+        now_ := now_ + dt;
         probe.TooltipNow := now_;
         probe.TooltipTick(now_);
         k := pts.Count - 1;
@@ -955,6 +980,16 @@ end;
 procedure TAdvChartPointerHandleOracleTest.TestASingleAxisHandleAsUpstream;
 begin
   RunCase('single');
+end;
+
+procedure TAdvChartPointerHandleOracleTest.TestAFastDragThrottlesAsUpstream;
+begin
+  RunCase('x-fast');
+end;
+
+procedure TAdvChartPointerHandleOracleTest.TestTheHandleHidesWhatIsUnderIt;
+begin
+  RunCase('x-over-series');
 end;
 
 procedure TAdvChartPointerHandleOracleTest.TestTheHandleIsDrawn;

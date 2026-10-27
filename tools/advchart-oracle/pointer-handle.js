@@ -282,6 +282,29 @@ const CASES = [
     ],
   },
   {
+    id: 'x-fast', note: 'moves 15 ms apart: the handle follows each, the dispatch runs at once, then at most once per 40 ms '
+      + '(fixRate: deferred to the last run + 40 with the latest place)',
+    charts: [{ animation: false, xAxis: { type: 'category', data: CATS, axisPointer: { handle: { show: true } } },
+      yAxis: { type: 'value' }, series: [LINE] }],
+    steps: [
+      { op: 'idle', ms: 10 },
+      { op: 'drag', handle: { mainType: 'xAxis', index: 0 }, dt: 15, by: [[-30, 0], [-30, 0], [-30, 0], [-30, 0], [-30, 0]] },
+      { op: 'idle', ms: 500 },
+    ],
+  },
+  {
+    id: 'x-over-series', note: 'a big symbol reaching under the axis to the handle: over the handle it is not hovered',
+    charts: [{ animation: false, xAxis: { type: 'category', data: CATS, axisPointer: { handle: { show: true } } },
+      yAxis: { type: 'value', min: 0, max: 10 },
+      series: [{ type: 'scatter', symbolSize: 120, data: [[4, 0]] }] }],
+    steps: [
+      { op: 'idle', ms: 10 },
+      { op: 'move', at: [495, 300] },
+      { op: 'move', at: [495, 370] },
+      { op: 'move', at: [495, 301] },
+    ],
+  },
+  {
     id: 'single', note: 'a single axis with a handle: dragged 100 px right',
     charts: [{ animation: false, singleAxis: { type: 'value', min: 0, max: 100, top: 100, height: 100, axisPointer: { handle: { show: true } } },
       series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [10, 50, 90] }] }],
@@ -294,7 +317,8 @@ const CASES = [
 ];
 
 // =====================================================================
-const TYPES = ['updateaxispointer', 'showtip', 'hidetip'];
+const TYPES = ['updateaxispointer', 'showtip', 'hidetip', 'mouseover', 'mouseout'];
+const MOUSE = ['mouseover', 'mouseout'];
 function axisView(chart, mainType, index) {
   const m = chart.getModel().getComponent(mainType, index);
   return m ? chart.getViewOfComponentModel(m) : null;
@@ -333,7 +357,9 @@ function runCase(def) {
     ch.setOption(clone(def.charts[0]));
     frame(ch);
     w = watchTooltip(ch);
-    for (const t of TYPES) ch.on(t, e => log.push([0, t, jsonOf(e)]));
+    for (const t of TYPES) ch.on(t, e => log.push([0, t, MOUSE.indexOf(t) >= 0
+      ? { componentType: e.componentType, seriesIndex: e.seriesIndex == null ? null : e.seriesIndex,
+        dataIndex: e.dataIndex == null ? null : e.dataIndex, name: e.name == null ? null : e.name } : jsonOf(e)]));
     const hd = ch.getZr().handler;
     const pr = hd.proxy;
     const set = pr.setCursor;
@@ -357,12 +383,14 @@ function runCase(def) {
         hd.mousedown(rawEvent('mousedown', p[0][0], p[0][1]));
         // a browser paints between moves 200 ms apart: the handle's
         // transform follows its drift before the next hover test
+        const dt = st.dt || 200;
+        if (st.dt) rec.dt = st.dt;
         for (let k = 1; k < p.length; k++) {
-          advanceClock(NOW + 200);
+          advanceClock(NOW + dt);
           ch.getZr().storage.getDisplayList(true);
           hd.mousemove(rawEvent('mousemove', p[k][0], p[k][1]));
         }
-        advanceClock(NOW + 200);
+        advanceClock(NOW + dt);
         ch.getZr().storage.getDisplayList(true);
         hd.mouseup(rawEvent('mouseup', p[p.length - 1][0], p[p.length - 1][1]));
       } else if (st.op === 'leave') hd.mouseout(rawEvent('mouseout', W + 50, H / 2));
@@ -400,6 +428,11 @@ function anchors(cases) {
   const g = cs('global');
   guard('global-both', g.steps[0].state[0].handles.length === 2, 'both axes from the component');
   guard('global-tip', ev(g.steps[1], 'showtip').length >= 1, 'the tooltip shows on the drag');
+  const xf = cs('x-fast');
+  guard('fast-throttled', ev(xf.steps[1], 'updateaxispointer').length > 0, 'the fast drag dispatches');
+  const xo = cs('x-over-series');
+  guard('over-series', ev(xo.steps[0], 'mouseover').length === 0 && ev(xo.steps[1], 'mouseover').length === 1
+    && ev(xo.steps[2], 'mouseout').length === 1 && ev(xo.steps[3], 'mouseover').length === 1, 'the handle hides the symbol under it');
   const s = cs('single');
   guard('single-drag', ev(s.steps[1], 'updateaxispointer').length >= 1, 'a single axis drags');
   return guards;
