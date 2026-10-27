@@ -56,6 +56,8 @@ type
     FontSizeLogical: Integer;
     HasWeight: Boolean;
     FontWeight: Integer;
+    { [R5-A] fontStyle as written (TyFontStyleCode) }
+    FontStyle: Byte;
     HasFontName: Boolean;
     FontName: string;
   end;
@@ -358,6 +360,7 @@ begin
       AText.FontWeight := w;
     end;
   end;
+  AText.FontStyle := TyFontStyleCode(ANode.Find('fontStyle'));
   d := ANode.Find('fontFamily');
   if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '') then
   begin
@@ -1379,7 +1382,9 @@ var
     fsize := ADefSize;
     if AText.HasFontSize then fsize := AText.FontSizeLogical;
     fweight := ADefWeight;
-    if AText.HasWeight then fweight := AText.FontWeight;
+    if AText.HasWeight then
+      fweight := (fweight and not TyChartFontWeightMask) or AText.FontWeight;
+    fweight := TyFontStyleCodeOver(AText.FontStyle, fweight);
     AMeasurer.MeasureLine(AWords, fname, fsize, fweight, w, h);
     if (w <= 0) or (h <= 0) then Exit;
     box := TyAnchorBox(AX, AY, w, h, AH, AV);
@@ -1507,7 +1512,9 @@ var
     fsize := ADefSize;
     if ATextSpec.HasFontSize then fsize := ATextSpec.FontSizeLogical;
     fweight := ADefWeight;
-    if ATextSpec.HasWeight then fweight := ATextSpec.FontWeight;
+    if ATextSpec.HasWeight then
+      fweight := (fweight and not TyChartFontWeightMask) or ATextSpec.FontWeight;
+    fweight := TyFontStyleCodeOver(ATextSpec.FontStyle, fweight);
     w := 0;
     h := 0;
     if AMeasurer <> nil then AMeasurer.MeasureLine(AWords, fname, fsize, fweight, w, h);

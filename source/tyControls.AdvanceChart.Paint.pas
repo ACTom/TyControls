@@ -325,6 +325,11 @@ type
       font it draws the block in; the engine reads only the four values.
       [Batch 86] }
     OwnFontFamily, OwnFontSize, OwnFontWeight: Boolean;
+    { [R5-A] the style wrote a fontStyle string of its own (FontItalic its
+      reading); where it did not, TyRtFinish hands it the block's or the
+      global one, as the other parts. The italic a text DRAWS is the
+      TyChartFontItalic flag in its FontWeight. }
+    OwnFontStyle: Boolean;
     { `'inherit'` (or `'auto'`) colours, and a free text's "no colour at all
       takes the inherit colour" -- bound by TyRtFinish to the site's inherit
       colour (a bar's visual colour, a legend item's), or dropped when there

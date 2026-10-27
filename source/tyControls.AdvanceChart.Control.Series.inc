@@ -473,7 +473,7 @@ begin
   ADraw.Text := PointerDrawLabelText(AHit, pv);
   labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel', '', []);
   AMeasurer.MeasureLine(ADraw.Text, labelS.FontName, ResolveFontSize(labelS),
-    labelS.FontWeight, tw, th);
+    TyFontStyleCodeOver(AHit.Spec.LabelSpec.FontStyle, labelS.FontWeight), tw, th);
   if APPI > 0 then scale := APPI / 96 else scale := 1;
   if AHit.Spec.LabelSpec.HasPadding then
   begin
@@ -603,7 +603,8 @@ begin
   colour := labelS.TextColor;
   if AHit.Spec.LabelSpec.HasColour then colour := TTyColor(AHit.Spec.LabelSpec.Colour);
   APainter.DrawText(box, d.Text, labelS.FontName, ResolveFontSize(labelS),
-    labelS.FontWeight, colour, taCenter, tlCenter, False);
+    TyFontStyleCodeOver(AHit.Spec.LabelSpec.FontStyle, labelS.FontWeight), colour,
+    taCenter, tlCenter, False);
 end;
 
 { ==================== the themeRivers [Batch 118] ==================== }
@@ -1333,7 +1334,7 @@ begin
   ADraw.Text := PointerDrawLabelText(AHit, pv);
   labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel', '', []);
   AMeasurer.MeasureLine(ADraw.Text, labelS.FontName, ResolveFontSize(labelS),
-    labelS.FontWeight, tw, th);
+    TyFontStyleCodeOver(AHit.Spec.LabelSpec.FontStyle, labelS.FontWeight), tw, th);
   if APPI > 0 then scale := APPI / 96 else scale := 1;
   if AHit.Spec.LabelSpec.HasPadding then
   begin
@@ -1480,7 +1481,8 @@ begin
   colour := labelS.TextColor;
   if AHit.Spec.LabelSpec.HasColour then colour := TTyColor(AHit.Spec.LabelSpec.Colour);
   APainter.DrawText(box, d.Text, labelS.FontName, ResolveFontSize(labelS),
-    labelS.FontWeight, colour, taCenter, tlCenter, False);
+    TyFontStyleCodeOver(AHit.Spec.LabelSpec.FontStyle, labelS.FontWeight), colour,
+    taCenter, tlCenter, False);
 end;
 
 { ==================== the lines series [Batch 121, C12] ====================

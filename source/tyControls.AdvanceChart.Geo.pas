@@ -4221,6 +4221,8 @@ begin
   end
   else
     Result.FontWeight := AInk.LabelFontWeight;
+  { [R5-A] its fontStyle in the weight's flags }
+  Result.FontWeight := TyFontStyleOver(Get('', 'fontStyle'), Result.FontWeight);
   d := Get('', 'fontFamily');
   if (d <> nil) and (d.JSONType = jtString) then
   begin
@@ -4293,7 +4295,17 @@ begin
     if d <> nil then
     begin
       st.HasFontWeight := True;
-      st.FontWeight := TyFontWeightOf(d, AInk.LabelFontWeight);
+      { the normal text's style flags under the state's weight [R5-A] }
+      st.FontWeight := TyFontWeightOf(d, (AInk.LabelFontWeight and TyChartFontWeightMask)
+        or (Result.FontWeight and not TyChartFontWeightMask));
+    end;
+    { [R5-A] a state's own fontStyle over the weight it draws in }
+    d := Get(cStateWord[s], 'fontStyle');
+    if (d <> nil) and (d.JSONType = jtString) then
+    begin
+      if not st.HasFontWeight then st.FontWeight := Result.FontWeight;
+      st.HasFontWeight := True;
+      st.FontWeight := TyFontStyleOver(d, st.FontWeight);
     end;
     d := Get(cStateWord[s], 'fontFamily');
     if (d <> nil) and (d.JSONType = jtString) then

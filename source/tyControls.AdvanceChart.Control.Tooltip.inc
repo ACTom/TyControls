@@ -441,6 +441,7 @@ function TTyCustomAdvanceChart.TooltipInk(
 var
   nameS, valueS: TTyStyleSet;
   model: TTyStyleModel;
+  fsCode: Byte;
 begin
   model := ActiveController.Model;
   nameS := model.ResolveStyle('TyAdvChartTooltip', StyleClass, [tysNormal]);
@@ -470,6 +471,21 @@ begin
   begin
     Result.NameSizeLogical := TyFontSizeFromPx(ASpec.TextSizeLogical);  // CSS px [Batch 83]
     Result.ValueSizeLogical := Result.NameSizeLogical;
+  end;
+  { [R5-A] THE FONT'S STYLE, in html mode: the box's css font is getFont()
+    (TooltipHTMLContent assembleFont) -- textStyle's fontStyle, else the root
+    textStyle's -- and the default content's spans name their size, weight
+    and colour, not a style, so they inherit it. In richText mode the
+    content's rich styles write their own font with no style
+    (tooltipMarkup): upright whatever textStyle says, the skin's as it is. }
+  if TipHtmlMode then
+  begin
+    fsCode := ASpec.TextFontStyle;
+    if (fsCode = TyFontStyleUnset) and (FOption <> nil)
+      and (FOption.Find('textStyle') is TJSONObject) then
+      fsCode := TyFontStyleCode(TJSONObject(FOption.Find('textStyle')).Find('fontStyle'));
+    Result.NameWeight := TyFontStyleCodeOver(fsCode, Result.NameWeight);
+    Result.ValueWeight := TyFontStyleCodeOver(fsCode, Result.ValueWeight);
   end;
 
   { UPSTREAM'S OWN HTML RULE -- round(fontSize * 3 / 2) -- and NOT its richText
@@ -1212,6 +1228,10 @@ begin
     ASize := TyOptFontSize(TJSONObject(ts).Find('fontSize'), ASize);
   if ttpWeight in APick then
     AWeight := TyFontWeightOf(TJSONObject(ts).Find('fontWeight'), AWeight);
+  { [R5-A] THE ROOT'S fontStyle REACHES EVERY TEXT: no component has a
+    fontStyle default of its own to shut it out (globalDefault.ts holds the
+    only 'normal'), whatever the pick says of the other parts }
+  AWeight := TyFontStyleOver(TJSONObject(ts).Find('fontStyle'), AWeight);
   d := TJSONObject(ts).Find('color');
   if (ttpColour in APick) and (d <> nil) and (d.JSONType = jtString)
     and TyTryParseChartColor(d.AsString, col) then
@@ -2350,7 +2370,7 @@ begin
     txt := PointerDrawLabelText(hit, pv);
     if txt = '' then Continue;
     AMeasurer.MeasureLine(txt, labelS.FontName, ResolveFontSize(labelS),
-      labelS.FontWeight, tw, th);
+      TyFontStyleCodeOver(hit.Spec.LabelSpec.FontStyle, labelS.FontWeight), tw, th);
     if (tw <= 0) or (th <= 0) then Continue;
     if hit.Spec.LabelSpec.HasPadding then
     begin
@@ -2422,7 +2442,8 @@ begin
     colour := labelS.TextColor;
     if hit.Spec.LabelSpec.HasColour then colour := TTyColor(hit.Spec.LabelSpec.Colour);
     APainter.DrawText(box, txt, labelS.FontName, ResolveFontSize(labelS),
-      labelS.FontWeight, colour, taCenter, tlCenter, False);
+      TyFontStyleCodeOver(hit.Spec.LabelSpec.FontStyle, labelS.FontWeight), colour,
+      taCenter, tlCenter, False);
   end;
 end;
 

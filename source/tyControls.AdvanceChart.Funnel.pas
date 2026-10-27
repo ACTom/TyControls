@@ -152,6 +152,9 @@ type
     HasFormatter: Boolean;
     { The ink options, read by the shared reader. }
     Ink: TTyLabelSpec;
+    { [R5-A] the label's fontStyle as written (TyFontStyleCode), over the
+      ink's weight }
+    FontStyle: Byte;
   end;
 
   { What the words are drawn with. Resolved by the control, like every other
@@ -782,6 +785,8 @@ begin
     lbl := TJSONObject(d);
     d := lbl.Find('show');
     if (d <> nil) and (d.JSONType = jtBoolean) then Result.Show := d.AsBoolean;
+    if TyFontStyleCode(lbl.Find('fontStyle')) <> TyFontStyleUnset then
+      Result.FontStyle := TyFontStyleCode(lbl.Find('fontStyle'));
     d := lbl.Find('position');
     if (d <> nil) and (d.JSONType = jtString) then
     begin
@@ -1100,7 +1105,7 @@ begin
     end;
 
     AMeasurer.MeasureLine(words, AInk.FontName, AInk.FontSizeLogical,
-      AInk.FontWeight, w, h);
+      TyFontStyleCodeOver(ASpec.FontStyle, AInk.FontWeight), w, h);
     if (w <= 0) or (h <= 0) then Continue;
     case anchorH of
       tahCentre: box.Left := textX - w / 2;
@@ -1119,7 +1124,7 @@ begin
     el.Caption.Text := words;
     el.Caption.FontName := AInk.FontName;
     el.Caption.FontSizeLogical := AInk.FontSizeLogical;
-    el.Caption.FontWeight := AInk.FontWeight;
+    el.Caption.FontWeight := TyFontStyleCodeOver(ASpec.FontStyle, AInk.FontWeight);
     { INSIDE IS THREE BANDS BY LUMINANCE, not a light/dark pair -- and the
       order reads backwards until you see why: on a mid-dark band you want
       maximum contrast, but on a nearly black one the brightest ink glares.
@@ -1145,7 +1150,7 @@ begin
     begin
       auto.FontName := AInk.FontName;
       auto.FontSizeLogical := AInk.FontSizeLogical;
-      auto.FontWeight := AInk.FontWeight;
+      auto.FontWeight := TyFontStyleCodeOver(ASpec.FontStyle, AInk.FontWeight);
       el.Caption.RtScale := APPI / 96;
       el.Caption.RtPieces := TyLabelBlockPieces(auto, words, fill, fill <> 0,
         False, inside, anchorH, tavMiddle, el.Caption.RtScale, AMeasurer);

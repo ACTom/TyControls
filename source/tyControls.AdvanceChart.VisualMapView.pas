@@ -81,6 +81,8 @@ type
     Content, Inactive: TTyVisualColor;
     TextColour, BorderColour, BackgroundColour, HandleStroke: TTyChartColor;
     FontSize: Integer;
+    { [R5-A] textStyle.fontStyle as written (TyFontStyleCode) }
+    FontStyle: Byte;
     { PIECEWISE: the item gap, `showLabel` as written, whether a click
       selects (not silent), and textStyle's align / verticalAlign / opacity
       ('' and HasTextOpacity False when unset) }
@@ -633,6 +635,7 @@ begin
     end;
     d := ts.Find('fontSize');
     Result.FontSize := TyOptFontSize(d, Result.FontSize);
+    Result.FontStyle := TyFontStyleCode(ts.Find('fontStyle'));
     d := ts.Find('align');
     if (d <> nil) and (d.JSONType = jtString) then Result.TextAlign := d.AsString;
     d := ts.Find('verticalAlign');

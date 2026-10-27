@@ -194,6 +194,7 @@ uses
   test.advchart.dataedge,
   test.advchart.axistooltip,
   test.advchart.visualmaptext,
+  test.advchart.fontstyle,
   test.advchart.labelhalo,
   test.advchart.textdash,
   test.advchart.richimage,

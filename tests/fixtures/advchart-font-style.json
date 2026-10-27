@@ -1,0 +1,3145 @@
+{
+ "source": "ECharts 6.1.0, zrender 6.1.0",
+ "W": 600,
+ "H": 400,
+ "maps": {
+  "fsquare": "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"name\":\"Sq\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[0,0],[10,0],[10,10],[0,10],[0,0]]]}}]}"
+ },
+ "cases": [
+  {
+   "id": "bar-label",
+   "note": "a bar label fontStyle italic",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "data": [
+       3,
+       5,
+       4
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "fontStyle": "italic"
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "0",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "1",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "2",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "3",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "4",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "5",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Mon",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Tue",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Wed",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "3",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "5",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "4",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "bar-label-oblique",
+   "note": "fontStyle 'oblique'",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "data": [
+       3,
+       5,
+       4
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "fontStyle": "oblique"
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "0",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "1",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "2",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "3",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "4",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "5",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Mon",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Tue",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Wed",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "3",
+     "font": "oblique normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "5",
+     "font": "oblique normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "4",
+     "font": "oblique normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "bar-label-normal-over-root",
+   "note": "root italic, the label 'normal'",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "data": [
+       3,
+       5,
+       4
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "fontStyle": "normal"
+      }
+     }
+    ],
+    "textStyle": {
+     "fontStyle": "italic"
+    }
+   },
+   "texts": [
+    {
+     "text": "0",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "1",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "2",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "3",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "4",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "5",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Mon",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Tue",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Wed",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "3",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "5",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "4",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    }
+   ]
+  },
+  {
+   "id": "rich-token",
+   "note": "a rich token italic, its sibling not",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "data": [
+       3,
+       5,
+       4
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "formatter": "{a|Ab}{b|Cd}",
+       "rich": {
+        "a": {
+         "fontStyle": "italic"
+        },
+        "b": {}
+       }
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "0",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "1",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "2",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "3",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "4",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "5",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Mon",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Tue",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Wed",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Ab",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Cd",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Ab",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Cd",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Ab",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Cd",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    }
+   ]
+  },
+  {
+   "id": "rich-block",
+   "note": "the block italic: tokens without their own take it",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "data": [
+       3,
+       5,
+       4
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "fontStyle": "italic",
+       "formatter": "{a|Ab}{b|Cd}",
+       "rich": {
+        "a": {},
+        "b": {
+         "fontStyle": "normal"
+        }
+       }
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "0",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "1",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "2",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "3",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "4",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "5",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Mon",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Tue",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Wed",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Ab",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Cd",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Ab",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Cd",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Ab",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Cd",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    }
+   ]
+  },
+  {
+   "id": "root",
+   "note": "root textStyle italic: every text",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed"
+     ],
+     "name": "Nx"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "data": [
+       3,
+       5,
+       4
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "title": {
+     "text": "Tt",
+     "subtext": "Sub"
+    },
+    "legend": {},
+    "textStyle": {
+     "fontStyle": "italic"
+    }
+   },
+   "texts": [
+    {
+     "text": "Nx",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "0",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "1",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "2",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "3",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "4",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "5",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Mon",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Tue",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Wed",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "3",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "5",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "4",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "S",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Tt",
+     "font": "italic bold 18px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Sub",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "title",
+   "note": "title textStyle italic, subtext not",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "data": [
+       3,
+       5,
+       4
+      ]
+     }
+    ],
+    "title": {
+     "text": "Tt",
+     "subtext": "Sub",
+     "textStyle": {
+      "fontStyle": "italic"
+     }
+    }
+   },
+   "texts": [
+    {
+     "text": "0",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "1",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "2",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "3",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "4",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "5",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Mon",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Tue",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Wed",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Tt",
+     "font": "italic bold 18px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Sub",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    }
+   ]
+  },
+  {
+   "id": "subtitle",
+   "note": "subtextStyle italic",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "data": [
+       3,
+       5,
+       4
+      ]
+     }
+    ],
+    "title": {
+     "text": "Tt",
+     "subtext": "Sub",
+     "subtextStyle": {
+      "fontStyle": "italic"
+     }
+    }
+   },
+   "texts": [
+    {
+     "text": "0",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "1",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "2",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "3",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "4",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "5",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Mon",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Tue",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Wed",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Tt",
+     "font": "normal bold 18px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Sub",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "legend",
+   "note": "legend textStyle italic",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Aa",
+      "data": [
+       3,
+       5,
+       4
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "Bb",
+      "data": [
+       3,
+       5,
+       4
+      ]
+     }
+    ],
+    "legend": {
+     "textStyle": {
+      "fontStyle": "italic"
+     }
+    }
+   },
+   "texts": [
+    {
+     "text": "0",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "1",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "2",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "3",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "4",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "5",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Mon",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Tue",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Wed",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Aa",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Bb",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "legend-selector",
+   "note": "legend selector labels italic, items not",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Aa",
+      "data": [
+       3,
+       5,
+       4
+      ]
+     }
+    ],
+    "legend": {
+     "selector": true,
+     "selectorLabel": {
+      "fontStyle": "italic"
+     }
+    }
+   },
+   "texts": [
+    {
+     "text": "0",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "1",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "2",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "3",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "4",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "5",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Mon",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Tue",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Wed",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Aa",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "All",
+     "font": "italic normal 12px sans-serif",
+     "italic": true
+    },
+    {
+     "text": "Inv",
+     "font": "italic normal 12px sans-serif",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "axis-label",
+   "note": "x axisLabel italic, y name nameTextStyle italic",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed"
+     ],
+     "axisLabel": {
+      "fontStyle": "italic"
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "name": "Ny",
+     "nameTextStyle": {
+      "fontStyle": "italic"
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "data": [
+       3,
+       5,
+       4
+      ]
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "Ny",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "0",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "1",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "2",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "3",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "4",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "5",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Mon",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Tue",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Wed",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "polar",
+   "note": "angleAxis and radiusAxis labels italic",
+   "option": {
+    "animation": false,
+    "polar": {},
+    "angleAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed"
+     ],
+     "axisLabel": {
+      "fontStyle": "italic"
+     }
+    },
+    "radiusAxis": {
+     "axisLabel": {
+      "fontStyle": "italic"
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "coordinateSystem": "polar",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "Mon",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Tue",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Wed",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "0",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "0.5",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "1",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "1.5",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "2",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "2.5",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "3",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "radar",
+   "note": "radar axisName italic",
+   "option": {
+    "animation": false,
+    "radar": {
+     "indicator": [
+      {
+       "name": "Ia",
+       "max": 5
+      },
+      {
+       "name": "Ib",
+       "max": 5
+      },
+      {
+       "name": "Ic",
+       "max": 5
+      }
+     ],
+     "axisName": {
+      "fontStyle": "italic"
+     }
+    },
+    "series": [
+     {
+      "type": "radar",
+      "data": [
+       {
+        "value": [
+         1,
+         2,
+         3
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "Ia",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Ib",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Ic",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "single",
+   "note": "singleAxis axisLabel italic",
+   "option": {
+    "animation": false,
+    "singleAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed"
+     ],
+     "axisLabel": {
+      "fontStyle": "italic"
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "coordinateSystem": "singleAxis",
+      "data": [
+       [
+        0,
+        1
+       ],
+       [
+        1,
+        2
+       ]
+      ]
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "Mon",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Tue",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Wed",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "parallel",
+   "note": "parallelAxis axisLabel and name italic",
+   "option": {
+    "animation": false,
+    "parallelAxis": [
+     {
+      "dim": 0,
+      "name": "Pa",
+      "axisLabel": {
+       "fontStyle": "italic"
+      },
+      "nameTextStyle": {
+       "fontStyle": "italic"
+      }
+     },
+     {
+      "dim": 1,
+      "name": "Pb"
+     }
+    ],
+    "series": [
+     {
+      "type": "parallel",
+      "data": [
+       [
+        1,
+        2
+       ],
+       [
+        3,
+        4
+       ]
+      ]
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "Pa",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Pb",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "0",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "0.5",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "1",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "1.5",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "2",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "2.5",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "3",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "0",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "1",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "2",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "3",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "4",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    }
+   ]
+  },
+  {
+   "id": "calendar",
+   "note": "calendar day, month and year labels italic (nameMap 'EN': the port's locale names are its own)",
+   "option": {
+    "animation": false,
+    "calendar": {
+     "range": "2024-01",
+     "dayLabel": {
+      "nameMap": "EN",
+      "fontStyle": "italic"
+     },
+     "monthLabel": {
+      "nameMap": "EN",
+      "fontStyle": "italic"
+     },
+     "yearLabel": {
+      "fontStyle": "italic"
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "coordinateSystem": "calendar",
+      "data": [
+       [
+        "2024-01-05",
+        1
+       ]
+      ]
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "2024",
+     "font": "italic bolder 20px sans-serif",
+     "italic": true
+    },
+    {
+     "text": "Jan",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "S",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "M",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "T",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "W",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "T",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "F",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "S",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "timeline",
+   "note": "timeline label italic",
+   "option": {
+    "baseOption": {
+     "animation": false,
+     "timeline": {
+      "axisType": "category",
+      "data": [
+       "T1",
+       "T2"
+      ],
+      "label": {
+       "fontStyle": "italic"
+      },
+      "autoPlay": false
+     },
+     "xAxis": {
+      "type": "category",
+      "data": [
+       "Mon",
+       "Tue",
+       "Wed"
+      ]
+     },
+     "yAxis": {
+      "type": "value"
+     },
+     "series": [
+      {
+       "type": "bar",
+       "name": "S",
+       "data": [
+        3,
+        5,
+        4
+       ]
+      }
+     ]
+    },
+    "options": [
+     {
+      "series": [
+       {
+        "data": [
+         1,
+         2,
+         3
+        ]
+       }
+      ]
+     },
+     {
+      "series": [
+       {
+        "data": [
+         3,
+         2,
+         1
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "0",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "0.5",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "1",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "1.5",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "2",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "2.5",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "3",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Mon",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Tue",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Wed",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "T1",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "T2",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "graphic",
+   "note": "graphic texts: fontStyle italic, the font shorthand, and a plain one",
+   "option": {
+    "animation": false,
+    "graphic": [
+     {
+      "type": "text",
+      "left": 10,
+      "top": 10,
+      "style": {
+       "text": "Ga",
+       "fontSize": 14,
+       "fontStyle": "italic"
+      }
+     },
+     {
+      "type": "text",
+      "left": 10,
+      "top": 40,
+      "style": {
+       "text": "Gb",
+       "font": "italic 14px serif"
+      }
+     },
+     {
+      "type": "text",
+      "left": 10,
+      "top": 70,
+      "style": {
+       "text": "Gc",
+       "fontSize": 14
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "Ga",
+     "font": "italic  14px sans-serif",
+     "italic": true
+    },
+    {
+     "text": "Gb",
+     "font": "italic 14px serif",
+     "italic": true
+    },
+    {
+     "text": "Gc",
+     "font": "14px sans-serif",
+     "italic": false
+    }
+   ]
+  },
+  {
+   "id": "visualmap-continuous",
+   "note": "continuous visualMap textStyle italic",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "data": [
+       3,
+       5,
+       4
+      ]
+     }
+    ],
+    "visualMap": {
+     "type": "continuous",
+     "min": 0,
+     "max": 10,
+     "text": [
+      "Hi",
+      "Lo"
+     ],
+     "calculable": true,
+     "textStyle": {
+      "fontStyle": "italic"
+     }
+    }
+   },
+   "texts": [
+    {
+     "text": "0",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "1",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "2",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "3",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "4",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "5",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Mon",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Tue",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Wed",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "0",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "10",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Lo",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Hi",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "visualmap-piecewise",
+   "note": "piecewise visualMap textStyle italic",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "data": [
+       3,
+       5,
+       4
+      ]
+     }
+    ],
+    "visualMap": {
+     "type": "piecewise",
+     "min": 0,
+     "max": 10,
+     "splitNumber": 2,
+     "textStyle": {
+      "fontStyle": "italic"
+     }
+    }
+   },
+   "texts": [
+    {
+     "text": "0",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "1",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "2",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "3",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "4",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "5",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Mon",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Tue",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Wed",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "5 - 10",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "0 - 5",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "gauge",
+   "note": "gauge title, detail and axis labels italic",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40,
+        "name": "Gn"
+       }
+      ],
+      "title": {
+       "fontStyle": "italic"
+      },
+      "detail": {
+       "formatter": "{value}",
+       "fontStyle": "italic"
+      },
+      "axisLabel": {
+       "fontStyle": "italic"
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "0",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "10",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "20",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "30",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "40",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "50",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "60",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "70",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "80",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "90",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "100",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Gn",
+     "font": "italic normal 16px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "40",
+     "font": "italic bold 30px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "pie",
+   "note": "pie labels italic",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "pie",
+      "data": [
+       {
+        "name": "Pa",
+        "value": 1
+       },
+       {
+        "name": "Pb",
+        "value": 2
+       }
+      ],
+      "label": {
+       "fontStyle": "italic"
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "Pa",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Pb",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "funnel",
+   "note": "funnel labels italic",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "funnel",
+      "data": [
+       {
+        "name": "Fa",
+        "value": 1
+       },
+       {
+        "name": "Fb",
+        "value": 2
+       }
+      ],
+      "label": {
+       "fontStyle": "italic"
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "Fa",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Fb",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "line-endlabel",
+   "note": "a line end label italic",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "name": "L",
+      "data": [
+       1,
+       2,
+       3
+      ],
+      "endLabel": {
+       "show": true,
+       "fontStyle": "italic"
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "0",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "0.5",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "1",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "1.5",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "2",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "2.5",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "3",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Mon",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Tue",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Wed",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "3",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "markers",
+   "note": "markPoint and markLine labels italic",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "data": [
+       3,
+       5,
+       4
+      ],
+      "markPoint": {
+       "data": [
+        {
+         "type": "max",
+         "name": "Mx"
+        }
+       ],
+       "label": {
+        "fontStyle": "italic"
+       }
+      },
+      "markLine": {
+       "data": [
+        {
+         "type": "average"
+        }
+       ],
+       "label": {
+        "fontStyle": "italic"
+       }
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "0",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "1",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "2",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "3",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "4",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "5",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Mon",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Tue",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Wed",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "4",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "5",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "sunburst",
+   "note": "sunburst labels italic",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "sunburst",
+      "data": [
+       {
+        "name": "Sa",
+        "value": 2,
+        "children": [
+         {
+          "name": "Sb",
+          "value": 1
+         }
+        ]
+       }
+      ],
+      "label": {
+       "fontStyle": "italic"
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "Sa",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Sb",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "treemap",
+   "note": "treemap labels italic",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "treemap",
+      "breadcrumb": {
+       "show": false
+      },
+      "data": [
+       {
+        "name": "Ta",
+        "value": 2
+       },
+       {
+        "name": "Tb",
+        "value": 1
+       }
+      ],
+      "label": {
+       "fontStyle": "italic"
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "Ta",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Tb",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "sankey",
+   "note": "sankey labels italic",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "sankey",
+      "data": [
+       {
+        "name": "Ka"
+       },
+       {
+        "name": "Kb"
+       }
+      ],
+      "links": [
+       {
+        "source": "Ka",
+        "target": "Kb",
+        "value": 1
+       }
+      ],
+      "label": {
+       "fontStyle": "italic"
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "Ka",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Kb",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "tree",
+   "note": "tree labels italic",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "tree",
+      "data": [
+       {
+        "name": "Ra",
+        "children": [
+         {
+          "name": "Rb"
+         }
+        ]
+       }
+      ],
+      "label": {
+       "fontStyle": "italic"
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "Ra",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Rb",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "graph",
+   "note": "graph labels italic",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "data": [
+       {
+        "name": "Na",
+        "x": 10,
+        "y": 10
+       },
+       {
+        "name": "Nb",
+        "x": 50,
+        "y": 50
+       }
+      ],
+      "label": {
+       "show": true,
+       "fontStyle": "italic"
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "Na",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Nb",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "heatmap",
+   "note": "heatmap labels italic",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "c",
+      "d"
+     ]
+    },
+    "visualMap": {
+     "show": false,
+     "min": 0,
+     "max": 5
+    },
+    "series": [
+     {
+      "type": "heatmap",
+      "data": [
+       [
+        0,
+        0,
+        1
+       ],
+       [
+        1,
+        1,
+        3
+       ]
+      ],
+      "label": {
+       "show": true,
+       "fontStyle": "italic"
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "c",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "d",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "a",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "b",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "1",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "3",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "map",
+   "note": "a map series label italic",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "map",
+      "map": "fsquare",
+      "label": {
+       "show": true,
+       "fontStyle": "italic"
+      },
+      "data": [
+       {
+        "name": "Sq",
+        "value": 1
+       }
+      ]
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "Sq",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "matrix",
+   "note": "matrix header labels italic",
+   "option": {
+    "animation": false,
+    "matrix": {
+     "x": {
+      "data": [
+       "Xa",
+       "Xb"
+      ],
+      "label": {
+       "fontStyle": "italic"
+      }
+     },
+     "y": {
+      "data": [
+       "Ya",
+       "Yb"
+      ],
+      "label": {
+       "fontStyle": "italic"
+      }
+     }
+    }
+   },
+   "texts": [
+    {
+     "text": "Xa",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Xb",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Ya",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Yb",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "loading",
+   "note": "showLoading('default') with fontStyle italic: its text",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "data": [
+       3,
+       5,
+       4
+      ]
+     }
+    ]
+   },
+   "loading": {
+    "text": "Ld",
+    "fontStyle": "italic",
+    "fontSize": 14
+   },
+   "texts": [
+    {
+     "text": "0",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "1",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "2",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "3",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "4",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "5",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Mon",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Tue",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Wed",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Ld",
+     "font": "italic normal 14px sans-serif",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "datazoom",
+   "note": "slider dataZoom handle labels (handleLabel.show) with textStyle italic",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "c1",
+      "c2",
+      "c3"
+     ],
+     "axisLabel": {
+      "show": false
+     }
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "data": [
+       3,
+       5,
+       4
+      ]
+     }
+    ],
+    "dataZoom": [
+     {
+      "type": "slider",
+      "handleLabel": {
+       "show": true
+      },
+      "textStyle": {
+       "fontStyle": "italic"
+      }
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "0",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "1",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "2",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "3",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "4",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "5",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "c1",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "c3",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "axispointer",
+   "note": "an axisPointer shown by status, its label italic",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed"
+     ],
+     "axisPointer": {
+      "show": true,
+      "value": "Tue",
+      "status": "show",
+      "label": {
+       "show": true,
+       "fontStyle": "italic"
+      }
+     }
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "data": [
+       3,
+       5,
+       4
+      ]
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "0",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "1",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "2",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "3",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "4",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "5",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Mon",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Tue",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Wed",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Tue",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "axispointer-root",
+   "note": "an axisPointer shown by status under the root textStyle italic: its label takes the root",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "Mon",
+      "Tue",
+      "Wed"
+     ],
+     "axisPointer": {
+      "show": true,
+      "value": "Tue",
+      "status": "show",
+      "label": {
+       "show": true
+      }
+     }
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "S",
+      "data": [
+       3,
+       5,
+       4
+      ]
+     }
+    ],
+    "textStyle": {
+     "fontStyle": "italic"
+    }
+   },
+   "texts": [
+    {
+     "text": "0",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "1",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "2",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "3",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "4",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "5",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Mon",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Tue",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Wed",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    },
+    {
+     "text": "Tue",
+     "font": "italic normal 12px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
+   "id": "tooltip-textstyle",
+   "note": "a richText tooltip, textStyle italic: its default content",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "textStyle": {
+      "fontStyle": "italic"
+     }
+    },
+    "series": [
+     {
+      "type": "pie",
+      "name": "Ser",
+      "label": {
+       "show": false
+      },
+      "data": [
+       {
+        "name": "Pt",
+        "value": 123
+       },
+       {
+        "name": "Qt",
+        "value": 77
+       }
+      ]
+     }
+    ]
+   },
+   "showTip": {
+    "type": "showTip",
+    "seriesIndex": 0,
+    "dataIndex": 0
+   },
+   "texts": [
+    {
+     "text": "Ser",
+     "font": "400 14px sans-serif",
+     "italic": false
+    },
+    {
+     "text": "Pt",
+     "font": "400 14px sans-serif",
+     "italic": false
+    },
+    {
+     "text": "123",
+     "font": "900 14px sans-serif",
+     "italic": false
+    }
+   ]
+  },
+  {
+   "id": "tooltip-root",
+   "note": "a richText tooltip under the root textStyle italic",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText"
+    },
+    "series": [
+     {
+      "type": "pie",
+      "name": "Ser",
+      "label": {
+       "show": false
+      },
+      "data": [
+       {
+        "name": "Pt",
+        "value": 123
+       },
+       {
+        "name": "Qt",
+        "value": 77
+       }
+      ]
+     }
+    ],
+    "textStyle": {
+     "fontStyle": "italic"
+    }
+   },
+   "showTip": {
+    "type": "showTip",
+    "seriesIndex": 0,
+    "dataIndex": 0
+   },
+   "texts": [
+    {
+     "text": "Ser",
+     "font": "400 14px sans-serif",
+     "italic": false
+    },
+    {
+     "text": "Pt",
+     "font": "400 14px sans-serif",
+     "italic": false
+    },
+    {
+     "text": "123",
+     "font": "900 14px sans-serif",
+     "italic": false
+    }
+   ]
+  },
+  {
+   "id": "tooltip-normal-over-root",
+   "note": "the tooltip's textStyle 'normal' under a root italic",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "textStyle": {
+      "fontStyle": "normal"
+     }
+    },
+    "series": [
+     {
+      "type": "pie",
+      "name": "Ser",
+      "label": {
+       "show": false
+      },
+      "data": [
+       {
+        "name": "Pt",
+        "value": 123
+       },
+       {
+        "name": "Qt",
+        "value": 77
+       }
+      ]
+     }
+    ],
+    "textStyle": {
+     "fontStyle": "italic"
+    }
+   },
+   "showTip": {
+    "type": "showTip",
+    "seriesIndex": 0,
+    "dataIndex": 0
+   },
+   "texts": [
+    {
+     "text": "Ser",
+     "font": "400 14px sans-serif",
+     "italic": false
+    },
+    {
+     "text": "Pt",
+     "font": "400 14px sans-serif",
+     "italic": false
+    },
+    {
+     "text": "123",
+     "font": "900 14px sans-serif",
+     "italic": false
+    }
+   ]
+  }
+ ]
+}

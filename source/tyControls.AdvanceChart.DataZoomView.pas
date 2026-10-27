@@ -82,6 +82,8 @@ type
     HasText: Boolean;
     TextColour: TTyChartColor;
     FontSize: Integer;
+    { [R5-A] textStyle.fontStyle as written (TyFontStyleCode) }
+    FontStyle: Byte;
   end;
 
   { What the chart knows that the option does not. CSS px. }
@@ -492,6 +494,7 @@ begin
     end;
     d := s.Find('fontSize');
     Result.FontSize := TyOptFontSize(d, Result.FontSize);
+    Result.FontStyle := TyFontStyleCode(s.Find('fontStyle'));
   end;
 end;
 

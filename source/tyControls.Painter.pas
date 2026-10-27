@@ -769,6 +769,10 @@ function TyPainterDistanceReplaysForTest: Integer;
 function TyPainterShadowsCastForTest: Integer;
 { [R5-A] FOR THE TESTS: fills and strokes composited by a blend mode since start }
 function TyPainterBlendsForTest: Integer;
+{ [R5-A] FOR THE TESTS: every DrawText / DrawTextRotated call appends its text, the weight
+  it was asked for (the style flags above the CSS weight included) and its colour's alpha,
+  tab-separated, to AList; nil stops it. Off, the painter never looks at it again. }
+procedure TyPainterTextLogForTest(AList: TStrings);
 
 { BGRA'S POLYGON FILLER TAKES ITS PIVOTS FROM THE GLOBAL Random. The one-pass
   filler behind FillPolyAntialias and the Canvas2D fill, stroke and clip
@@ -3628,10 +3632,20 @@ begin
   if Result < 1 then Result := 1;
 end;
 
+var
+  GTextLogForTest: TStrings = nil;
+
+procedure TyPainterTextLogForTest(AList: TStrings);
+begin
+  GTextLogForTest := AList;
+end;
+
 procedure TTyPainter.DrawText(const ARect: TRect; const AText, AFontName: string; AFontSizeLogical, AWeight: Integer; AColor: TTyColor; AHAlign: TAlignment; AVAlign: TTextLayout; AEllipsis: Boolean; AMnemonicPos: Integer = 0; ASmallCrisp: Boolean = False; AMultiLine: Boolean = False; ALineHeightLogical: Integer = 0);
 var
   R: TRect;
 begin
+  if GTextLogForTest <> nil then
+    GTextLogForTest.Add(AText + #9 + IntToStr(AWeight) + #9 + IntToStr(Cardinal(AColor) shr 24));
   { The only way text gets onto the layer: DrawTextLine, DrawTextLineBidi and
     DrawTextSupersampled are reached from here alone, so they receive the raster rect and
     configure their fonts at the raster PPI. The measuring side (MeasureText, TextCaretX,
@@ -7984,6 +7998,8 @@ var
   ca, sa, ox, oy, rx, ry, anchorX, anchorY: Double;
 begin
   if (FBmp = nil) or (AText = '') then Exit;
+  if GTextLogForTest <> nil then
+    GTextLogForTest.Add(AText + #9 + IntToStr(AWeight) + #9 + IntToStr(Cardinal(AColor) shr 24));
   { drawn straight on the layer, so in the raster scope: the anchor in raster pixels, the
     font at the raster PPI (#83) }
   if RasterEnter then

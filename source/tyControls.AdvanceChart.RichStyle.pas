@@ -475,8 +475,14 @@ begin
       S.OwnFontFamily := True;
       S.FontFamily := StrOf(d);
     end;
-    s_ := StrOf(Get(AOwn, 'fontStyle'));
-    S.FontItalic := (s_ = 'italic') or (s_ = 'oblique');
+    { [R5-A] a string only, as makeFont joins it: any word but 'italic' or
+      'oblique' is upright; anything else is not written }
+    d := Get(AOwn, 'fontStyle');
+    if (d <> nil) and (d.JSONType = jtString) then
+    begin
+      S.OwnFontStyle := True;
+      S.FontItalic := TyFontStyleIsItalic(d.AsString);
+    end;
   end;
   if ColourRead(WithGlobal('textShadowColor'), c) = crColour then
   begin
@@ -703,8 +709,10 @@ var
   gfam: string;
 begin
   bpx := PxOfLogical(ASizeLogical);
-  { a skin that names no weight means the normal one }
-  if AWeight <= 0 then AWeight := 400;
+  { a skin that names no weight means the normal one -- the weight, not the
+    style flags above it [R5-A] }
+  if (AWeight and TyChartFontWeightMask) <= 0 then
+    AWeight := (AWeight and not TyChartFontWeightMask) or 400;
   { A GLOBAL THAT KNOWS NO FONT (a site whose root side was read without the
     skin's) is the block's }
   gfam := AGlobal.FontFamily;
@@ -715,7 +723,8 @@ begin
     gfam := AFamily;
   end;
   gw := AGlobal.FontWeight;
-  if gw <= 0 then gw := 400;
+  if (gw and TyChartFontWeightMask) <= 0 then
+    gw := (gw and not TyChartFontWeightMask) or 400;
   ABlock.Style.FontFamily := AFamily;
   ABlock.Style.FontSizePx := bpx;
   ABlock.Style.FontWeight := AWeight;
@@ -735,6 +744,17 @@ begin
     if not s.OwnFontWeight then
       if ABlock.InheritPlain then s.FontWeight := AWeight
       else s.FontWeight := gw;
+    { [R5-A] THE STYLE, a font part of its own: the token's, else the
+      block's (or the global one's, as the other parts) }
+    s.FontWeight := s.FontWeight and not TyChartFontItalic;
+    if s.OwnFontStyle then
+    begin
+      if s.FontItalic then s.FontWeight := s.FontWeight or TyChartFontItalic;
+    end
+    else if ABlock.InheritPlain then
+      s.FontWeight := s.FontWeight or (AWeight and TyChartFontItalic)
+    else
+      s.FontWeight := s.FontWeight or (gw and TyChartFontItalic);
     if s.FontSizePx <= 0 then s.FontSizePx := bpx;
     Bind(s, AHasInherit, AInherit);
     ABlock.Rich[k].Style := s;

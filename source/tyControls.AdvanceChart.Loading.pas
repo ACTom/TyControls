@@ -56,6 +56,9 @@ type
     FontSizeLogical: Integer;
     HasFontWeight: Boolean;
     FontWeight: Integer;
+    { [R5-A] fontStyle as written (TyFontStyleCode); unset is the default's
+      'normal' (loading/default.ts) }
+    FontStyle: Byte;
     { '' is the theme's family }
     FontFamily: string;
     ShowSpinner: Boolean;
@@ -219,6 +222,7 @@ begin
       ACfg.FontWeight := TyFontWeightOf(d, 0);
       ACfg.HasFontWeight := ACfg.FontWeight > 0;
     end;
+    ACfg.FontStyle := TyFontStyleCode(o.Find('fontStyle'));
     d := o.Find('fontFamily');
     if (d <> nil) and (d.JSONType = jtString) then ACfg.FontFamily := d.AsString;
     d := o.Find('showSpinner');

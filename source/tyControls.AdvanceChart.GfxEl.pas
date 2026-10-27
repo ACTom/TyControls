@@ -269,7 +269,8 @@ uses
   tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Scale,
   tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.Color,
   tyControls.AdvanceChart.PolarBar, tyControls.AdvanceChart.RichStyle,
-  tyControls.AdvanceChart.States;
+  tyControls.AdvanceChart.States,
+  tyControls.AdvanceChart.Option;
 
 const
   PI2 = 2 * Pi;
@@ -1746,6 +1747,9 @@ begin
   R.OwnFontFamily := True;
   R.OwnFontSize := True;
   R.OwnFontWeight := True;
+  { [R5-A] the font string's style is the face drawn: in the weight's flags }
+  R.OwnFontStyle := True;
+  if R.FontItalic then R.FontWeight := R.FontWeight or TyChartFontItalic;
   if S = nil then Exit;
   d := S.Find('fill');
   if d <> nil then

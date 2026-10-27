@@ -2834,6 +2834,7 @@ begin
   Result.SizeLogical := TyOptFontSize(TJSONObject(st).Find('fontSize'),
     Result.SizeLogical);
   Result.Weight := TyFontWeightOf(TJSONObject(st).Find('fontWeight'), Result.Weight);
+  Result.Weight := TyFontStyleOver(TJSONObject(st).Find('fontStyle'), Result.Weight);
   d := TJSONObject(st).Find('color');
   if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, col) then
   begin

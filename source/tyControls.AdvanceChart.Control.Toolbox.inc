@@ -286,7 +286,7 @@ var
   r: TTyXYWH;
   place: TTyTbTitlePlace;
   rad: array of Double;
-  fs: Integer;
+  fs, wt: Integer;
   pr: TTyRectF;
 
   function Blank: TTyChartElement;
@@ -403,13 +403,25 @@ begin
       if FTbSpecs[t].Icons[i].TextFontSize > 0 then fs := Round(FTbSpecs[t].Icons[i].TextFontSize);
       tw := 0;
       th := 0;
+      { [R5-A] getFont's style: emphasis.iconStyle.textFontStyle, else the
+        root textStyle's }
+      wt := ink.FontWeight;
+      if FTbSpecs[t].Icons[i].TextFontStyle <> '' then
+      begin
+        if TyFontStyleIsItalic(FTbSpecs[t].Icons[i].TextFontStyle) then
+          wt := wt or TyChartFontItalic
+        else
+          wt := wt and not TyChartFontItalic;
+      end
+      else if (FOption <> nil) and (FOption.Find('textStyle') is TJSONObject) then
+        wt := TyFontStyleOver(TJSONObject(FOption.Find('textStyle')).Find('fontStyle'), wt);
       if AMeasurer <> nil then
         AMeasurer.MeasureLine(FTbSpecs[t].Icons[i].Title, ink.FontName,
-          Round(fs * s), ink.FontWeight, tw, th);
+          Round(fs * s), wt, tw, th);
       el.Caption.Text := FTbSpecs[t].Icons[i].Title;
       el.Caption.FontName := ink.FontName;
       el.Caption.FontSizeLogical := fs;
-      el.Caption.FontWeight := ink.FontWeight;
+      el.Caption.FontWeight := wt;
       { textFill, else the emphasis fill, else its stroke }
       sty := TyTbStyleOf(FTbSpecs[t].Icons[i], True);
       if FTbSpecs[t].Icons[i].TextFill.Kind = tbcText then

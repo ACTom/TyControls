@@ -121,6 +121,8 @@ type
     FontSizeLogical: Integer;
     HasWeight: Boolean;
     FontWeight: Integer;
+    { [R5-A] fontStyle as written (TyFontStyleCode) }
+    FontStyle: Byte;
     HasFontName: Boolean;
     FontName: string;
     HasFormatter: Boolean;
@@ -184,6 +186,8 @@ type
     FontSizeLogical: Integer;
     HasWeight: Boolean;
     FontWeight: Integer;
+    { [R5-A] fontStyle as written (TyFontStyleCode) }
+    FontStyle: Byte;
     HasFontName: Boolean;
     FontName: string;
     HasFormatter: Boolean;
@@ -586,6 +590,9 @@ begin
     AText.HasWeight := True;
     AText.FontWeight := TyRoundOpt(v, 400, 1, 1000);
   end;
+  { [R5-A] an item's own over the series' }
+  if TyFontStyleCode(n.Find('fontStyle')) <> TyFontStyleUnset then
+    AText.FontStyle := TyFontStyleCode(n.Find('fontStyle'));
   { AN ITEM'S OWN detail MERGES OVER THE SERIES': a formatter it does not
     write is the series' still -- it was read as '' and dropped it. }
   if AWantFormatter and (n.Find('formatter') <> nil) then
@@ -839,6 +846,7 @@ begin
       Result.AxisLabel.HasWeight := True;
       Result.AxisLabel.FontWeight := TyRoundOpt(v, 400, 1, 1000);
     end;
+    Result.AxisLabel.FontStyle := TyFontStyleCode(n2.Find('fontStyle'));
     Result.AxisLabel.Formatter := StrIn(n2, 'formatter', '');
     Result.AxisLabel.HasFormatter := Result.AxisLabel.Formatter <> '';
     { THE THREE ROTATE FORMS, and the third one is a number. A STRING that is
@@ -1479,7 +1487,8 @@ begin
         if ASpec.AxisLabel.HasFontSize then
           fsize := ASpec.AxisLabel.FontSizeLogical;
         if ASpec.AxisLabel.HasWeight then
-          fweight := ASpec.AxisLabel.FontWeight;
+          fweight := (fweight and not TyChartFontWeightMask) or ASpec.AxisLabel.FontWeight;
+        fweight := TyFontStyleCodeOver(ASpec.AxisLabel.FontStyle, fweight);
         AMeasurer.MeasureLine(words, fname, fsize, fweight, w, h);
         if (w > 0) and (h > 0) then
         begin
@@ -1580,7 +1589,9 @@ begin
   fweight := AWeight;
   if AText.HasFontName then fname := AText.FontName;
   if AText.HasFontSize then fsize := AText.FontSizeLogical;
-  if AText.HasWeight then fweight := AText.FontWeight;
+  if AText.HasWeight then
+    fweight := (fweight and not TyChartFontWeightMask) or AText.FontWeight;
+  fweight := TyFontStyleCodeOver(AText.FontStyle, fweight);
 
   { A RICH TEXT IS ITS BLOCK: the plate is the block's own rect, and a rich
     style without a colour takes the automatic colour, upstream's

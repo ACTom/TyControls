@@ -586,6 +586,7 @@ begin
   AFont.SizeLogical := TyOptFontSize(TJSONObject(st).Find('fontSize'),
     AFont.SizeLogical);
   AFont.Weight := TyFontWeightOf(TJSONObject(st).Find('fontWeight'), AFont.Weight);
+  AFont.Weight := TyFontStyleOver(TJSONObject(st).Find('fontStyle'), AFont.Weight);
   d := TJSONObject(st).Find('color');
   if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, col) then
     AInk.Text := col;
@@ -667,6 +668,10 @@ begin
   fam := st.FontName;
   size := ResolveFontSize(st);
   weight := st.FontWeight;
+  { [R5-A] the root's fontStyle (no default of its own shuts it out) }
+  hasCol := False;
+  gcol := 0;
+  GlobalTextOver(fam, size, weight, hasCol, gcol, []);
   if sel <> nil then
   begin
     d := sel.Find('fontFamily');
@@ -674,6 +679,7 @@ begin
       fam := d.AsString;
     size := TyOptFontSize(sel.Find('fontSize'), size);
     weight := TyFontWeightOf(sel.Find('fontWeight'), weight);
+    weight := TyFontStyleOver(sel.Find('fontStyle'), weight);
   end;
   ink := TTyChartColor(st.TextColor);
   inkH := TTyChartColor(stH.TextColor);
@@ -722,6 +728,7 @@ begin
       Result.PageFontName := d.AsString;
     Result.PageFontSize := TyOptFontSize(pts.Find('fontSize'), Result.PageFontSize);
     Result.PageFontWeight := TyFontWeightOf(pts.Find('fontWeight'), Result.PageFontWeight);
+    Result.PageFontWeight := TyFontStyleOver(pts.Find('fontStyle'), Result.PageFontWeight);
   end;
 end;
 

@@ -2361,6 +2361,8 @@ var
     if fam = '' then fam := AGlobal.FontFamily;
     size := TyOptFontSize(ChainGet(chain, 'fontSize'), AGlobal.FontSizeLogical);
     weight := TyFontWeightOf(ChainGet(chain, 'fontWeight'), AGlobal.FontWeight);
+    { [R5-A] the chain's fontStyle, else the global one's (in AGlobal's weight) }
+    weight := TyFontStyleOver(ChainGet(chain, 'fontStyle'), weight);
     TyRtFinish(rt, fam, size, weight, AGlobal, False, 0);
     { the label's colour is always written upstream (the token); the skin's
       where the option wrote none }

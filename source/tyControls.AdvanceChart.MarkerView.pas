@@ -1944,7 +1944,7 @@ var
     x, y, w, h: Double;
     ah: TTyTextAnchorH;
     av: TTyTextAnchorV;
-    fs: Integer;
+    fs, wt: Integer;
     pieces: TTyRtPieceArray;
   begin
     { [R2-I5] an empty one too where a state has words [was: nothing] }
@@ -1973,22 +1973,27 @@ var
     w := 0;
     h := 0;
     { an empty text's box is its anchor (no line to measure) }
+    { [R5-A] THE WEIGHT AND THE STYLE BEFORE THE MEASURE: what is drawn is
+      what is measured }
+    wt := AInk.FontWeight;
+    if (B.FontWeight <> nil) and (B.FontWeight <> GTextDefaults.Find('fontWeight')) then
+    begin
+      if (B.FontWeight.JSONType = jtString) and ((B.FontWeight.AsString = 'bold')
+        or (B.FontWeight.AsString = 'bolder')) then
+        wt := (wt and not TyChartFontWeightMask) or 700
+      else if B.FontWeight.JSONType = jtNumber then
+        wt := (wt and not TyChartFontWeightMask) or Round(B.FontWeight.AsFloat);
+    end;
+    wt := TyFontStyleOver(B.FontStyle, wt);
     if (AMeasurer <> nil) and (B.Text <> '') then
-      AMeasurer.MeasureLine(B.Text, AInk.FontName, fs, AInk.FontWeight, w, h);
+      AMeasurer.MeasureLine(B.Text, AInk.FontName, fs, wt, w, h);
     el := Blank(B.Z2);
     el.Ignore := B.Hidden;
     el.Shape := TyShapeRect(TyAnchorBox(x, y, w, h, ah, av));
     el.Caption.Text := B.Text;
     el.Caption.FontName := AInk.FontName;
     el.Caption.FontSizeLogical := fs;
-    el.Caption.FontWeight := AInk.FontWeight;
-    if (B.FontWeight <> nil) and (B.FontWeight <> GTextDefaults.Find('fontWeight')) then
-    begin
-      if (B.FontWeight.JSONType = jtString) and ((B.FontWeight.AsString = 'bold')
-        or (B.FontWeight.AsString = 'bolder')) then el.Caption.FontWeight := 700
-      else if B.FontWeight.JSONType = jtNumber then
-        el.Caption.FontWeight := Round(B.FontWeight.AsFloat);
-    end;
+    el.Caption.FontWeight := wt;
     { the author's colours as written; upstream's default ink is the skin's }
     if (B.StyleFill <> '') and Colour(B.InkFill, c) then el.Caption.Colour := c
     else el.Caption.Colour := AInk.Text;
@@ -3213,7 +3218,7 @@ end;
 function EmitLabel(const B: TTyMkPtLabelPic; const ABlock: TTyMkBlock;
   const AInk: TTyMkInk; const AMeasurer: ITyTextMeasurer; AList: TTyPaintList): Integer;
 var
-  fs: Integer;
+  fs, wt: Integer;
   el: TTyChartElement;
   c, defFill, defStroke: TTyChartColor;
   hasDefStroke: Boolean;
@@ -3259,8 +3264,20 @@ begin
     w := 0;
     h := 0;
     { an empty text's box is its anchor (no line to measure) }
+    { [R5-A] THE WEIGHT AND THE STYLE BEFORE THE MEASURE: what is drawn is
+      what is measured }
+    wt := AInk.FontWeight;
+    if (B.FontWeight <> nil) and (B.FontWeight <> GTextDefaults.Find('fontWeight')) then
+    begin
+      if (B.FontWeight.JSONType = jtString) and ((B.FontWeight.AsString = 'bold')
+        or (B.FontWeight.AsString = 'bolder')) then
+        wt := (wt and not TyChartFontWeightMask) or 700
+      else if B.FontWeight.JSONType = jtNumber then
+        wt := (wt and not TyChartFontWeightMask) or Round(B.FontWeight.AsFloat);
+    end;
+    wt := TyFontStyleOver(B.FontStyle, wt);
     if (AMeasurer <> nil) and (B.Text <> '') then
-      AMeasurer.MeasureLine(B.Text, AInk.FontName, fs, AInk.FontWeight, w, h);
+      AMeasurer.MeasureLine(B.Text, AInk.FontName, fs, wt, w, h);
     el := Default(TTyChartElement);
     el.Z := Trunc(ABlock.Z);
     el.Z2 := Round(B.Z2);
@@ -3272,14 +3289,7 @@ begin
     el.Caption.Text := B.Text;
     el.Caption.FontName := AInk.FontName;
     el.Caption.FontSizeLogical := fs;
-    el.Caption.FontWeight := AInk.FontWeight;
-    if (B.FontWeight <> nil) and (B.FontWeight <> GTextDefaults.Find('fontWeight')) then
-    begin
-      if (B.FontWeight.JSONType = jtString) and ((B.FontWeight.AsString = 'bold')
-        or (B.FontWeight.AsString = 'bolder')) then el.Caption.FontWeight := 700
-      else if B.FontWeight.JSONType = jtNumber then
-        el.Caption.FontWeight := Round(B.FontWeight.AsFloat);
-    end;
+    el.Caption.FontWeight := wt;
     { the author's colour as written; upstream's default ink is the skin's --
       the three inside bands by the same luminance cut, the outside colour
       and the ground's halo otherwise }

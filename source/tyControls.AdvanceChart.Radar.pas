@@ -68,6 +68,8 @@ type
     Colour: TTyChartColor;
     HasFontSize: Boolean;
     FontSizeLogical: Integer;
+    { [R5-A] fontStyle as written (TyFontStyleCode) }
+    FontStyle: Byte;
     HasFormatter: Boolean;
     Formatter: string;
     GapLogical: Double;
@@ -103,6 +105,8 @@ type
     Colour: TTyChartColor;
     HasFontSize: Boolean;
     FontSizeLogical: Integer;
+    { [R5-A] fontStyle as written (TyFontStyleCode) }
+    FontStyle: Byte;
   end;
 
   TTyRadarSpec = record
@@ -628,6 +632,7 @@ begin
       Result.AxisName.HasFontSize := True;
       Result.AxisName.FontSizeLogical := TyFontSizeFromPx(v);  // CSS px [Batch 83]
     end;
+    Result.AxisName.FontStyle := TyFontStyleCode(n2.Find('fontStyle'));
     Result.AxisName.Formatter := StrIn(n2, 'formatter', '');
     Result.AxisName.HasFormatter := Result.AxisName.Formatter <> '';
   end;
@@ -659,6 +664,7 @@ begin
       Result.AxisLabel.HasFontSize := True;
       Result.AxisLabel.FontSizeLogical := TyFontSizeFromPx(v);
     end;
+    Result.AxisLabel.FontStyle := TyFontStyleCode(n2.Find('fontStyle'));
   end;
 
   n2 := ObjIn(node, 'splitArea');
@@ -1310,7 +1316,8 @@ begin
           if Cos(a) < 0 then anchorH := tahRight else anchorH := tahLeft;
         end;
         AMeasurer.MeasureLine(words, AInk.NameFontName,
-          AInk.NameFontSizeLogical, AInk.NameFontWeight, w, h);
+          AInk.NameFontSizeLogical,
+          TyFontStyleCodeOver(spec.AxisName.FontStyle, AInk.NameFontWeight), w, h);
         if (w > 0) and (h > 0) then
         begin
           box := TyAnchorBox(p.X, p.Y, w, h, anchorH, anchorV);
@@ -1318,7 +1325,8 @@ begin
           el.Caption.Text := words;
           el.Caption.FontName := AInk.NameFontName;
           el.Caption.FontSizeLogical := AInk.NameFontSizeLogical;
-          el.Caption.FontWeight := AInk.NameFontWeight;
+          el.Caption.FontWeight := TyFontStyleCodeOver(spec.AxisName.FontStyle,
+            AInk.NameFontWeight);
           if spec.Indicators[i].HasColour then
             el.Caption.Colour := spec.Indicators[i].Colour
           else if spec.AxisName.HasColour then
@@ -1386,14 +1394,16 @@ begin
         p := ARadar.CoordToPoint(ARadar.RingRadiusOf(i, k), i);
         p := TyPointF(p.X - perp.X * margin, p.Y - perp.Y * margin);
         AMeasurer.MeasureLine(words, AInk.LabelFontName,
-          AInk.LabelFontSizeLogical, AInk.LabelFontWeight, w, h);
+          AInk.LabelFontSizeLogical,
+          TyFontStyleCodeOver(spec.AxisLabel.FontStyle, AInk.LabelFontWeight), w, h);
         if (w <= 0) or (h <= 0) then Continue;
         box := TyAnchorBox(p.X, p.Y, w, h, anchorH, anchorV);
         el := TyChartElement(TyShapeRect(box));
         el.Caption.Text := words;
         el.Caption.FontName := AInk.LabelFontName;
         el.Caption.FontSizeLogical := AInk.LabelFontSizeLogical;
-        el.Caption.FontWeight := AInk.LabelFontWeight;
+        el.Caption.FontWeight := TyFontStyleCodeOver(spec.AxisLabel.FontStyle,
+          AInk.LabelFontWeight);
         if spec.AxisLabel.HasColour then
           el.Caption.Colour := spec.AxisLabel.Colour
         else

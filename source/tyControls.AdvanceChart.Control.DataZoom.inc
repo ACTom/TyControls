@@ -254,6 +254,7 @@ begin
   GlobalInk(Result.FontName, Result.FontSizeLogical, Result.FontWeight,
     Result.Text, [ttpSize, ttpWeight, ttpFamily]);
   if ASpec.FontSize > 0 then Result.FontSizeLogical := ASpec.FontSize;
+  Result.FontWeight := TyFontStyleCodeOver(ASpec.FontStyle, Result.FontWeight);
   Result.Filler := TTyChartColor(
     model.ResolveStyle('TyAdvChartDataZoomFiller', '', []).Background.Color);
   Result.Frame := TTyChartColor(

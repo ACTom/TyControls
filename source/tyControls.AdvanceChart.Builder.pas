@@ -1569,6 +1569,8 @@ begin
   ASize := TyOptFontSize(ANode.Find('fontSize'), ASize);
   d := ANode.Find('fontWeight');
   if d <> nil then AWeight := TyFontWeightOf(d, AWeight);
+  { [R5-A] and its fontStyle, in the weight's style flags }
+  AWeight := TyFontStyleOver(ANode.Find('fontStyle'), AWeight);
   d := ANode.Find('color');
   if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
   begin
