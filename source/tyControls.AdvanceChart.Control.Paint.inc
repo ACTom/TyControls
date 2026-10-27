@@ -982,18 +982,20 @@ begin
   { THE BREAK AREAS, zigzagZ over the series [Batch 132] -- the dynamic
     layer's while the series move there, over them and in their axes'
     groupTransition [F4a] }
-  if FExporting or not FAnimLive or FAnimContinuous then PaintBreakAreas(APainter);
+  { [R5-I] and in the continuous phase too: over the series that move there
+    [was: under the ripples] }
+  if FExporting or not FAnimLive then PaintBreakAreas(APainter);
   { THE PARALLEL AXES OVER THEIR LINES: a parallelAxis is z 10, its series
     2 [Batch 128] }
-  PaintParallels(APainter, APPI, AMeasurer);
+  if FExporting or not FAnimContinuous then PaintParallels(APainter, APPI, AMeasurer);
   { AND THE TITLE LAST. It floats over the container rather than reserving
     room, so anything it overlaps it is meant to overlap. While the series
     move the title goes with them into the dynamic layer, so it stays over
     them [Batch 89]. }
-  if FExporting or not FAnimLive or FAnimContinuous then PaintTitles(APainter);
+  if FExporting or not FAnimLive then PaintTitles(APainter);
   { [R5-G] AND OVER THEM, an element of a higher zlevel -- up to the loading
     mask's, when it shows over the chart }
-  if FExporting or not FAnimLive or FAnimContinuous then
+  if FExporting or not FAnimLive then
     PaintAboveComponents(APainter, FZList);
 end;
 
@@ -1454,7 +1456,24 @@ begin
   { THE SERIES IN MOTION, and the title over them: this frame's values,
     read from the proxies [Batch 89] }
   if FAnimContinuous then
-    PaintTrail(APainter, AnimPart(True))
+  begin
+    { [R5-I] the part over the first ripple, then what the static layer
+      draws over the series: the title (z 6) over the ripples (z 2) as the
+      one display list has it [was: the ripples over the title, the break
+      areas and the parallel axes] }
+    frame := AnimFrame;
+    FZList := frame;
+    TySetZBand(-MaxInt, ComponentZLevel);
+    try
+      PaintTrail(APainter, AnimPartOf(frame, True));
+    finally
+      TyClearZBand;
+    end;
+    PaintBreakAreas(APainter);
+    PaintParallels(APainter, APPI, AMeasurer);
+    PaintTitles(APainter);
+    PaintAboveComponents(APainter, frame);
+  end
   else if FAnimLive then
   begin
     { the trail is the continuous phase's: an enter or an update in motion

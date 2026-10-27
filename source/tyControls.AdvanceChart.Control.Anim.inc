@@ -2444,21 +2444,38 @@ begin
 end;
 
 function TTyCustomAdvanceChart.AnimPart(AContinuous: Boolean): TTyPaintList;
+begin
+  Result := AnimPartOf(AnimFrame, AContinuous);
+end;
+
+function TTyCustomAdvanceChart.AnimPartOf(AFrame: TTyPaintList;
+  AContinuous: Boolean): TTyPaintList;
 var
   frame: TTyPaintList;
   i, h: Integer;
   pe: PTyChartElement;
-  cont: Boolean;
+  cont, after: Boolean;
 begin
-  frame := AnimFrame;
+  frame := AFrame;
   if FAnimSplit = nil then FAnimSplit := TTyPaintList.Create;
   FAnimSplit.Clear;
   Result := FAnimSplit;
   if frame = nil then Exit;
+  { [R5-I] AND EVERYTHING DRAWN AFTER THE FIRST OF THEM: zrender draws one
+    display list in z order, so what stands over a ripple (a series of a
+    higher z, a later label) is drawn over it every frame -- the static
+    layer holds only what lies under the first continuous element [was:
+    only the continuous elements were the dynamic layer's, over everything] }
+  after := False;
   { read in place, copied only into the half it goes to [P2] }
   for i := 0 to frame.Count - 1 do
   begin
     pe := frame.Ref(i);
+    if after then
+    begin
+      if AContinuous then FAnimSplit.Add(pe^);
+      Continue;
+    end;
     { a ripple, an effect symbol, and a label hanging off one; a lines
       effect symbol, and every element of a lines series with a trail
       (its layer is redrawn every frame) [Batch 121] }
@@ -2471,6 +2488,7 @@ begin
       cont := (h >= 0) and (h < frame.Count)
         and (frame.Ref(h)^.Anim.Role = carEffectSymbol);
     end;
+    after := cont;
     if cont = AContinuous then FAnimSplit.Add(pe^);
   end;
 end;

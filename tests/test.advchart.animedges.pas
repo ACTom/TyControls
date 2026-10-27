@@ -39,6 +39,9 @@ type
     FGlHave: array[0..7] of Boolean;
     FGlP, FGlU: array[0..7] of TTyRectF;
     FWhere, FReport: string;
+    { [R5-I] the last render's picture, and the case it is of }
+    FBmp: TBGRABitmap;
+    FCase: TJSONObject;
     procedure Bad(const AWhat: string);
     procedure SameNum(const AWhat: string; AGot: Double; AWant: TJSONData); overload;
     procedure SameNum(const AWhat: string; AGot, AWant: Double); overload;
@@ -74,6 +77,7 @@ type
     procedure TestAThemeRiversLabelsUnderTheClipAsUpstream;
     procedure TestAThemeRiversLabelIsInkedOnlyInsideTheClip;
     procedure TestAPictorialGlyphsEmphasisScaleAsUpstream;
+    procedure TestTheContinuousPhasesZOrderAsUpstream;
   end;
 
 implementation
@@ -193,6 +197,7 @@ procedure TAdvChartAnimEdgesOracleTest.TearDown;
 begin
   if FChart <> nil then FChart.Measurer := nil;
   FreeAndNil(FChart);
+  FreeAndNil(FBmp);
   TyChartUnregisterAnimDelay('idx*100');
   FreeAndNil(FRoot);
   FreeAndNil(FForm);
@@ -381,14 +386,11 @@ begin
 end;
 
 procedure TAdvChartAnimEdgesOracleTest.RenderNow;
-var bmp: TBGRABitmap;
 begin
-  bmp := TBGRABitmap.Create(FChart.Width, FChart.Height, BGRA(255, 255, 255, 255));
-  try
-    FChart.Render(bmp.Canvas, Rect(0, 0, FChart.Width, FChart.Height), 96);
-  finally
-    bmp.Free;
-  end;
+  { the picture kept for a probe that reads pixels }
+  FreeAndNil(FBmp);
+  FBmp := TBGRABitmap.Create(FChart.Width, FChart.Height, BGRA(255, 255, 255, 255));
+  FChart.Render(FBmp.Canvas, Rect(0, 0, FChart.Width, FChart.Height), 96);
 end;
 
 procedure TAdvChartAnimEdgesOracleTest.CheckSample(ARec: TJSONObject);
@@ -408,6 +410,7 @@ var
   l: TTyPaintList;
   found: Boolean;
   bx: TTyRectF;
+  px: TBGRAPixel;
 begin
   for i := 0 to ARec.Count - 1 do
   begin
@@ -753,6 +756,30 @@ begin
       SameNum(name + ' y', el.Caption.Y, leaf.Find('y'));
       SameRun(name, FChart.AnimFindProxy(s, idx, 'label'), leaf);
     end
+    else if pre = 'zo' then
+    begin
+      { [R5-I] what is on top at the point: where upstream's top element is
+        an opaque fill (a bar, the title's box) over a ripple, the picture's
+        pixel is that fill's }
+      Inc(FCompared);
+      if not leaf.Booleans['rip'] then
+      begin
+        Bad(name + ': upstream has no ripple there (the case is off)');
+        Continue;
+      end;
+      if leaf.Strings['top'] = 'ripple' then Continue;
+      if not TyTryParseChartColor(leaf.Strings['top'], c) then
+      begin
+        Bad(name + ': colour ' + leaf.Strings['top']);
+        Continue;
+      end;
+      px := FBmp.GetPixel(FCase.Arrays['pts'].Arrays[idx].Integers[0],
+        FCase.Arrays['pts'].Arrays[idx].Integers[1]);
+      if (px.red <> (c shr 16) and $FF) or (px.green <> (c shr 8) and $FF)
+        or (px.blue <> c and $FF) then
+        Bad(Format('%s: the pixel %d,%d,%d, upstream''s top %s', [name, px.red, px.green,
+          px.blue, leaf.Strings['top']]));
+    end
     else
       Bad(name + ': a probe the suite does not know');
   end;
@@ -767,6 +794,7 @@ var
   act: string;
 begin
   FWhere := ACase.Strings['id'];
+  FCase := ACase;
   NewChart(ACase.Integers['W'], ACase.Integers['H']);
   t0 := TJSONObject(FRoot).Objects['clock'].Floats['T0'];
   FChart.AnimationMode := camAlways;
@@ -917,6 +945,11 @@ end;
 procedure TAdvChartAnimEdgesOracleTest.TestAPictorialGlyphsEmphasisScaleAsUpstream;
 begin
   RunGroup('pemph', 18);
+end;
+
+procedure TAdvChartAnimEdgesOracleTest.TestTheContinuousPhasesZOrderAsUpstream;
+begin
+  RunGroup('zorder', 12);
 end;
 
 { HAND-WRITTEN: the label's ink in a frame of the enter is cut where the

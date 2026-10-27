@@ -22238,6 +22238,175 @@
    ]
   },
   {
+   "id": "zo-ripple",
+   "group": "zorder",
+   "note": "an effectScatter's ripples (z 2, z2 99) under a bar series of z 3 and under a title (z 6) with a background, over a bar of z 2 (z2 0): zrender draws one display list in z order",
+   "W": 400,
+   "H": 300,
+   "option": {
+    "animation": true,
+    "animationDuration": 300,
+    "title": {
+     "text": "T",
+     "left": 215,
+     "top": 135,
+     "backgroundColor": "#00aa00",
+     "padding": 10,
+     "textStyle": {
+      "color": "#ffffff",
+      "fontSize": 12
+     }
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "effectScatter",
+      "data": [
+       [
+        1,
+        50
+       ]
+      ],
+      "symbolSize": 20,
+      "itemStyle": {
+       "color": "#ff0000"
+      },
+      "rippleEffect": {
+       "scale": 8,
+       "brushType": "fill",
+       "period": 4
+      }
+     },
+     {
+      "type": "bar",
+      "z": 3,
+      "data": [
+       0,
+       100,
+       0
+      ],
+      "barWidth": 40,
+      "itemStyle": {
+       "color": "#3366cc"
+      }
+     },
+     {
+      "type": "bar",
+      "data": [
+       0,
+       0,
+       100
+      ],
+      "barWidth": 40,
+      "itemStyle": {
+       "color": "#33aa66"
+      }
+     }
+    ]
+   },
+   "probes": [
+    "zord"
+   ],
+   "events": [
+    {
+     "t": 1000,
+     "do": "sample",
+     "rec": {
+      "zo0/0": {
+       "top": "#3366cc",
+       "rip": true
+      },
+      "zo0/1": {
+       "top": "#00aa00",
+       "rip": true
+      },
+      "zo0/2": {
+       "top": "#3366cc",
+       "rip": true
+      },
+      "zo0/3": {
+       "top": "ripple",
+       "rip": true
+      }
+     }
+    },
+    {
+     "t": 2000,
+     "do": "sample",
+     "rec": {
+      "zo0/0": {
+       "top": "#3366cc",
+       "rip": true
+      },
+      "zo0/1": {
+       "top": "#00aa00",
+       "rip": true
+      },
+      "zo0/2": {
+       "top": "#3366cc",
+       "rip": true
+      },
+      "zo0/3": {
+       "top": "ripple",
+       "rip": true
+      }
+     }
+    },
+    {
+     "t": 3000,
+     "do": "sample",
+     "rec": {
+      "zo0/0": {
+       "top": "#3366cc",
+       "rip": true
+      },
+      "zo0/1": {
+       "top": "#00aa00",
+       "rip": true
+      },
+      "zo0/2": {
+       "top": "#3366cc",
+       "rip": true
+      },
+      "zo0/3": {
+       "top": "ripple",
+       "rip": true
+      }
+     }
+    }
+   ],
+   "pts": [
+    [
+     200,
+     175
+    ],
+    [
+     217,
+     137
+    ],
+    [
+     200,
+     120
+    ],
+    [
+     264,
+     150
+    ]
+   ]
+  },
+  {
    "id": "sa-resize",
    "group": "stanim",
    "note": "a resize 100 ms into a 400 ms hover tween: the update ({duration: 0}) clears the states without a transition, stops every animator, and puts the states back without one -- the emphasis colour at once",

@@ -2291,8 +2291,10 @@ type
       moves, the shape upstream builds otherwise [Batch 101] }
     function PtrShadowNow(const AHit: TTyAxisHit; out AShape: TTyXYWH): Boolean;
     function PtrLive: Boolean;
-    { the frame's continuous part (AContinuous) or the rest }
+    { the frame's continuous part (AContinuous) or the rest; [R5-I] of
+      AFrame, the frame built already }
     function AnimPart(AContinuous: Boolean): TTyPaintList;
+    function AnimPartOf(AFrame: TTyPaintList; AContinuous: Boolean): TTyPaintList;
     procedure SetAnimMode(AValue: TTyChartAnimationMode);
     function GetErrorText: string;
     procedure FreeStores;

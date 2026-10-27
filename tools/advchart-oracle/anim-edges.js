@@ -322,6 +322,32 @@ const PROBES = {
       rec['vl0/' + h] = { op: opOf(lb), blur: lb.hoverState === 1, n: nClip(lb) };
     });
   },
+  // [R5-I] what is drawn on top at the case's points (c.pts): the display
+  // list from the end, the first element that contains the point -- a
+  // ripple (an EffectSymbol's second child's path) 'ripple', else its fill;
+  // rip: whether some ripple contains the point
+  zord(chart, rec, c) {
+    const list = zr(chart).storage.getDisplayList(true);
+    const isRipple = el => {
+      const g = el.parent, es = g && g.parent;
+      return !!(es && es.childCount && es.childCount() === 2 && es.childAt(1) === g);
+    };
+    c.pts.forEach((p, k) => {
+      let top = null, rip = false;
+      for (let i = list.length - 1; i >= 0; i--) {
+        const el = list[i];
+        if (el.ignore || el.invisible || typeof el.contain !== 'function') continue;
+        if (!el.contain(p[0], p[1])) continue;
+        if (isRipple(el)) {
+          rip = true;
+          if (top === null) top = 'ripple';
+          continue;
+        }
+        if (top === null) top = String(el.style && el.style.fill);
+      }
+      rec['zo0/' + k] = { top, rip };
+    });
+  },
   // a bar series' rects: the fill they are drawn with now (a state's tween)
   bfill(chart, rec, c) {
     chart.getModel().eachSeries(sm => {
@@ -610,6 +636,16 @@ add('stanim', 'sa-delay-fn', "stateAnimation.delay a function: Clip's start is g
   SA({ duration: 200, easing: 'linear', delay: { $fn: 'idx*100' } }), ['bfill'], SAEV, { rows: [0] });
 add('stanim', 'sa-dur-fn', "stateAnimation.duration a function: not above 0 -- no transition, the state at once",
   SA({ duration: { $fn: 'idx*100' }, easing: 'linear' }), ['bfill'], SAEV, { rows: [0] });
+// ---- the continuous phase's z order ----
+add('zorder', 'zo-ripple', "an effectScatter's ripples (z 2, z2 99) under a bar series of z 3 and under a title (z 6) with a background, over a bar of z 2 (z2 0): zrender draws one display list in z order",
+  { animation: true, animationDuration: 300,
+    title: { text: 'T', left: 215, top: 135, backgroundColor: '#00aa00', padding: 10, textStyle: { color: '#ffffff', fontSize: 12 } },
+    xAxis: { type: 'category', data: ['a', 'b', 'c'] }, yAxis: { type: 'value', min: 0, max: 100 },
+    series: [{ type: 'effectScatter', data: [[1, 50]], symbolSize: 20, itemStyle: { color: '#ff0000' },
+      rippleEffect: { scale: 8, brushType: 'fill', period: 4 } },
+      { type: 'bar', z: 3, data: [0, 100, 0], barWidth: 40, itemStyle: { color: '#3366cc' } },
+      { type: 'bar', data: [0, 0, 100], barWidth: 40, itemStyle: { color: '#33aa66' } }] },
+  ['zord'], after([1000, 2000, 3000], 0), { pts: [[200, 175], [217, 137], [200, 120], [264, 150]] });
 add('stanim', 'sa-resize', "a resize 100 ms into a 400 ms hover tween: the update ({duration: 0}) clears the states without a transition, stops every animator, and puts the states back without one -- the emphasis colour at once",
   SA({ duration: 400, easing: 'linear' }), ['bfill'],
   [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'act', action: { type: 'highlight', seriesIndex: 0, dataIndex: 0 } },
@@ -749,6 +785,7 @@ function runCase(c) {
     const out = { id: c.id, group: c.group, note: c.note, W: c.W, H: c.H, option: clone(c.option),
       probes: c.probes, events: [] };
     if (c.rows) out.rows = c.rows;
+    if (c.pts) out.pts = c.pts;
     quiet(() => chart.setOption(materialize(clone(c.option))));
     c.events.forEach(ev => {
       NOW = T0 + ev.t;
