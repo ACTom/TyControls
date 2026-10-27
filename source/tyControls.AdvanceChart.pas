@@ -3468,11 +3468,10 @@ type
     function TipTbSpec(ATb, AIcon: Integer): TTyTooltipSpec;
     { [R5-F] a legend item's component tooltip: whether it has one (the
       item's tooltip.show over the legend's, default false), its cascade,
-      its text, its rect }
+      its text (its rect is its hit element's) }
     function LgTipItem(const ADatum: TTyChartDatumRef; out ALegend, AItem: Integer): Boolean;
     function TipLgSpec(ALegend, AItem: Integer): TTyTooltipSpec;
     function TipLgText(ALegend, AItem: Integer; const ASpec: TTyTooltipSpec): string;
-    function TipLgRect(ALegend, AItem: Integer): TTyRectF;
     function TipTbText(ATb, AIcon: Integer; const ASpec: TTyTooltipSpec): string;
     function TipTbIconRect(ATb, AIcon: Integer): TTyRectF;
     function TipProxyText(const AJson: string; const ASpec: TTyTooltipSpec): string;

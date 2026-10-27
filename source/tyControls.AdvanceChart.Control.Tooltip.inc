@@ -648,15 +648,6 @@ begin
   if p > 0 then Result := Copy(Result, 1, p - 1) + TyChartEncodeHtml(nm) + Copy(Result, p + 4, MaxInt);
 end;
 
-{ its rect: the item's hit rect (the group's bounding rect) }
-function TTyCustomAdvanceChart.TipLgRect(ALegend, AItem: Integer): TTyRectF;
-begin
-  Result := TyInvalidRectF;
-  if (ALegend < 0) or (ALegend > High(FLegends)) or (AItem < 0)
-    or (AItem > High(FLegends[ALegend].Items)) then Exit;
-  Result := FLegends[ALegend].Items[AItem].Bounds;
-end;
-
 { its text: formatTpl over the params' $vars [name, title] -- `{a}` the
   icon's name, `{b}` its title, each value encodeHTML'd, the first of each
   only (String.replace) }
@@ -6966,10 +6957,8 @@ begin
         snap.X + APPI / 96, snap.Y + APPI / 96)
     { [R5-D] a toolbox icon: its rect as getBoundingRect gives it }
     else if (not onAxis) and snap.TbHas then
-      elRect := TipTbIconRect(snap.TbIndex, snap.TbIcon)
-    { [R5-F] a legend item: its hit rect }
-    else if (not onAxis) and snap.LgHas then
-      elRect := TipLgRect(snap.LgIndex, snap.LgItem);
+      elRect := TipTbIconRect(snap.TbIndex, snap.TbIcon);
+    { [R5-F] a legend item's is its hit rect's: the element above }
     if TyRectFIsValid(elRect) then
     begin
       pin.HasRect := True;
