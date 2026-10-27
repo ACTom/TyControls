@@ -205,6 +205,7 @@ uses
   test.advchart.pieitemlabel,
   test.advchart.labelfontstates,
   test.advchart.linetempsymbol,
+  test.advchart.labellinestates,
   test.advchart.axisemphasis,
   test.advchart.brushstyle,
   test.advchart.loadingpointer,

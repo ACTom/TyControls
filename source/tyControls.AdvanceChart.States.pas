@@ -79,6 +79,12 @@ type
       that knows no gradient; Lifted with it is liftColor's gradient -- every
       stop lifted (util/color.ts liftColor) }
     GradJson: array[TTyStKey] of string;
+    { [R5-F] A STATE'S lineCap / lineJoin / miterLimit (a label line's
+      getLineStyle): no animation props, set when the state is entered.
+      CapWord / JoinWord 0 unwritten, else 1 + the cTyCap / cTyJoin value }
+    CapWord, JoinWord: Byte;
+    HasMiter: Boolean;
+    Miter: Double;
   end;
 
   { ONE zrender ELEMENT: a bar, a slice, a symbol path, a polyline, a label,

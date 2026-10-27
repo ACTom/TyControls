@@ -54,6 +54,8 @@ begin
   TyStSetNum(Result, stkLineWidth, AEl.Style.StrokeWidthLogical);
   TyStSetNum(Result, stkSmooth, AEl.Caption.LgSmooth);
   TyStSetNum(Result, stkOpacity, AEl.Style.Alpha);
+  { [R5-F] the pen's phase at rest }
+  TyStSetNum(Result, stkDashOffset, AEl.Style.DashOffsetLogical);
   TyStSetNum(Result, stkZ2, AEl.Z2);
   TyStSetNum(Result, stkX, 0);
   TyStSetNum(Result, stkY, 0);
@@ -355,12 +357,75 @@ begin
   end;
 end;
 
+{ [R5-F] a label line's state style: the state model's labelLine.lineStyle
+  along ANodes (each node's [AState, 'labelLine']) as getLineStyle reads it }
+procedure StGuideStateStyle(const ANodes: array of TJSONObject; const AState: string;
+  var AObj: TTyStObject);
+var
+  subs: array of TJSONObject;
+  i: Integer;
+  d: TJSONData;
+  bolder: Boolean;
+  st: TTyStObject;
+  k: TTyStKey;
+begin
+  SetLength(subs, Length(ANodes));
+  for i := 0 to High(ANodes) do
+  begin
+    subs[i] := nil;
+    if ANodes[i] = nil then Continue;
+    d := TyStFind([ANodes[i]], [AState, 'labelLine']);
+    if d is TJSONObject then subs[i] := TJSONObject(d);
+  end;
+  st := TyStReadStyle(subs, '', 'lineStyle', bolder);
+  for k := Low(TTyStKey) to High(TTyStKey) do
+    if st.Has[k] then
+    begin
+      AObj.Has[k] := True;
+      AObj.Num[k] := st.Num[k];
+      AObj.Color[k] := st.Color[k];
+      AObj.None[k] := st.None[k];
+      AObj.GradJson[k] := st.GradJson[k];
+    end;
+  d := TyStFind(subs, ['lineStyle', 'cap']);
+  if d <> nil then AObj.CapWord := 1 + TyLineCapOf(d);
+  d := TyStFind(subs, ['lineStyle', 'join']);
+  if d <> nil then AObj.JoinWord := 1 + TyLineJoinOf(d);
+  d := TyStFind(subs, ['lineStyle', 'miterLimit']);
+  if (d <> nil) and (d.JSONType = jtNumber) then
+  begin
+    AObj.HasMiter := True;
+    AObj.Miter := d.AsFloat;
+  end;
+end;
+
 procedure StWriteGuide(var AEl: TTyChartElement; const AState: TTyStElement;
   AProxied: Boolean);
-var c, r: TTyStObject;
+var c, r: TTyStObject; n: TTyStName;
 begin
   c := AState.Cur;
   r := AState.Rest;
+  { [R5-F] the state's dash, set at its start against the width it draws,
+    proxy or not; its cap, join and miter limit, the later state's over the
+    earlier one's (useStates merges in order) }
+  if c.Has[stkDash] then
+  begin
+    if c.Has[stkLineWidth] and StPositive(c.Num[stkLineWidth]) then
+      AEl.Style.DashLogical := TyStDashOf(c, c.Num[stkLineWidth])
+    else
+      AEl.Style.DashLogical := TyStDashOf(c, AEl.Style.StrokeWidthLogical);
+    AEl.Style.DashWord := TyDashWord(TTyOptDash(Round(c.Num[stkDash])));
+  end;
+  for n := Low(TTyStName) to High(TTyStName) do
+    if n in AState.States then
+    begin
+      if AState.Decl[n].CapWord > 0 then AEl.Style.LineCap := AState.Decl[n].CapWord - 1;
+      if AState.Decl[n].JoinWord > 0 then AEl.Style.LineJoin := AState.Decl[n].JoinWord - 1;
+      if AState.Decl[n].HasMiter then AEl.Style.MiterLimit := AState.Decl[n].Miter;
+    end;
+  if not AProxied and c.Has[stkDashOffset]
+    and not StSameNum(c.Num[stkDashOffset], r.Num[stkDashOffset]) then
+    AEl.Style.DashOffsetLogical := c.Num[stkDashOffset];
   if not AProxied then
     StShiftShape(AEl.Shape, c.Num[stkX] - r.Num[stkX], c.Num[stkY] - r.Num[stkY]);
   AEl.Z2 := Round(c.Num[stkZ2]);
@@ -759,12 +824,11 @@ var
       TyStSetNum(obj, stkIgnore, Ord(labIgn or not stShow));
       TyStSetNum(obj, stkSmooth,
         TyLabelLineSmoothOf(TyStFind(nodes, [cStNames[n], 'labelLine', 'smooth'])));
-      txt := TyStReadString(nodes, [cStNames[n], 'labelLine', 'lineStyle', 'color'], has);
-      if has and TyTryParseChartColor(txt, c) then TyStSetColor(obj, stkStroke, c);
-      ss := TyStReadNumber(nodes, [cStNames[n], 'labelLine', 'lineStyle', 'width'], has);
-      if has and not IsNan(ss) then TyStSetNum(obj, stkLineWidth, ss);
-      { [R5-A] its lineStyle's shadow }
-      TyStReadShadowKeys(nodes, [cStNames[n], 'labelLine', 'lineStyle'], obj);
+      { [R5-F] THE STATE'S WHOLE lineStyle (setLabelLineState's
+        getLineStyle): colour, width, opacity, dash, its phase, the shadow
+        [R5-A], and the cap, join and miter limit [was: the colour and the
+        width alone] }
+      StGuideStateStyle(nodes, cStNames[n], obj);
       AG.Decl[n] := obj;
     end;
     TyStSetNum(AG.Decl[stnSelect], stkX, dx);
