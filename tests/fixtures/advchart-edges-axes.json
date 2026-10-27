@@ -2835,6 +2835,166 @@
    ]
   }
  ],
+ "river": {
+  "option": {
+   "singleAxis": {
+    "type": "time",
+    "top": 40,
+    "bottom": 40
+   },
+   "series": [
+    {
+     "type": "themeRiver",
+     "data": [
+      [
+       "2020/01/01",
+       10,
+       "A"
+      ],
+      [
+       "2020/01/02",
+       20,
+       "A"
+      ],
+      [
+       "2020/01/03",
+       15,
+       "A"
+      ],
+      [
+       "2020/01/01",
+       5,
+       "B"
+      ],
+      [
+       "2020/01/02",
+       8,
+       "B"
+      ],
+      [
+       "2020/01/03",
+       12,
+       "B"
+      ]
+     ]
+    }
+   ]
+  },
+  "steps": [
+   {
+    "what": "first",
+    "gap": [
+     "4040000000000000",
+     "4040000000000000"
+    ],
+    "rect": [
+     "403e000000000000",
+     "4044000000000000",
+     "4080e00000000000",
+     "4074000000000000"
+    ]
+   },
+   {
+    "what": "resized",
+    "gap": [
+     "4040000000000000",
+     "4040000000000000"
+    ],
+    "rect": [
+     "403e000000000000",
+     "4044000000000000",
+     "4080e00000000000",
+     "406b800000000000"
+    ]
+   },
+   {
+    "what": "merged, no boundaryGap",
+    "gap": [
+     "4040000000000000",
+     "4040000000000000"
+    ],
+    "rect": [
+     "403e000000000000",
+     "4044000000000000",
+     "4080e00000000000",
+     "406b800000000000"
+    ]
+   },
+   {
+    "what": "merged, a boundaryGap",
+    "gap": [
+     "4036000000000000",
+     "4046000000000000"
+    ],
+    "rect": [
+     "403e000000000000",
+     "4044000000000000",
+     "4080e00000000000",
+     "406b800000000000"
+    ]
+   },
+   {
+    "what": "resized back",
+    "gap": [
+     "4036000000000000",
+     "4046000000000000"
+    ],
+    "rect": [
+     "403e000000000000",
+     "4044000000000000",
+     "4080e00000000000",
+     "4074000000000000"
+    ]
+   }
+  ]
+ },
+ "logPointer": {
+  "option": {
+   "grid": {
+    "left": 60,
+    "right": 60,
+    "top": 40,
+    "bottom": 60
+   },
+   "tooltip": {
+    "trigger": "axis"
+   },
+   "xAxis": {
+    "type": "log"
+   },
+   "yAxis": {
+    "type": "value"
+   },
+   "series": [
+    {
+     "type": "bar",
+     "barWidth": 30,
+     "data": [
+      [
+       1,
+       5
+      ],
+      [
+       10,
+       3
+      ],
+      [
+       100,
+       7
+      ]
+     ]
+    }
+   ]
+  },
+  "px": "404f800000000000",
+  "value": "3fd521a8dc6de313",
+  "effective": [
+   "3ff0000000000000",
+   "4059000000000000"
+  ],
+  "contain": true,
+  "inEffective": false
+ },
  "guards": [
   {
    "name": "grid-default: one rect, a transparent fill (tokens.color.transparent), #b7b9be 1 px, z2 -1, silent, under the axes",
@@ -2926,6 +3086,14 @@
   },
   {
    "name": "rl-overlap: some hidden in the middle",
+   "ok": true
+  },
+  {
+   "name": "river: the first layout's gaps survive a resize and a merge without boundaryGap; a merge with one resolves it at that size",
+   "ok": true
+  },
+  {
+   "name": "logPointer: a value outside the effective extent the log axis contains (its mapping extent)",
    "ok": true
   }
  ]

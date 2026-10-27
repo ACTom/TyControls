@@ -352,6 +352,8 @@ procedure TTyCustomAdvanceChart.ApplyNotMerge(const AValue: string;
 var i: Integer;
 begin
   FOptionText := AValue;
+  { [R5-G] new series models: no river keeps the gaps an old one wrote }
+  FRiverGaps := nil;
   { [F4b] new models, a new tooltip view: the old one's box, last point and
     the axisPointer models' state go with it }
   TipForget;

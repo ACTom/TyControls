@@ -943,11 +943,11 @@ begin
       Apply(M, hasM, fr.Ext1, 0, v.Line.X2, v.Line.Y2);
       v.Line.Value := NaN;
       v.Line.Drawn := True;
-      TySingleSubPixelLine(v.Line, AxisScaleF(LineWidthIn(node, 'axisLine', 1), APPI));
+      TySingleSubPixelLine(v.Line, AxisScaleF(TyAxisSnapWidth(node, 0, AText), APPI));
       v.Spec.Arrows := TyAxisArrows(fr, v.Furn, APPI);
       { cut at the breaks (axisLine.breakLine) [F4a] }
       TyAxisBreakLineOf(v.Spec, ax, AOption,
-        AxisScaleF(LineWidthIn(node, 'axisLine', 1), APPI));
+        AxisScaleF(TyAxisSnapWidth(node, 0, AText), APPI));
     end;
     marks := TickMarks(AOption, ax, v.Spec, v.Furn.TickInterval,
       v.Furn.AlignWithLabel, labelIv);
@@ -959,7 +959,8 @@ begin
     begin
       len := AxisScaleF(v.Spec.TickLengthLogical, APPI);
       endCoord := tickDir * len;
-      w := AxisScaleF(LineWidthIn(node, 'axisTick', 1), APPI);
+      { [R5-G] by the width it is stroked with }
+      w := AxisScaleF(TyAxisSnapWidth(node, 1, AText), APPI);
       SetLength(v.Ticks, Length(marks));
       for i := 0 to High(marks) do
       begin
@@ -989,8 +990,7 @@ begin
       else
         len := AxisScaleF(v.Furn.MinorTickLengthLogical, APPI);
       endCoord := tickDir * len;
-      mw := AxisScaleF(LineWidthIn(node, 'minorTick',
-        LineWidthIn(node, 'axisTick', 1)), APPI);
+      mw := AxisScaleF(TyAxisSnapWidth(node, 2, AText), APPI);
       SetLength(v.MinorTicks, Length(minors));
       for i := 0 to High(minors) do
       begin
@@ -1011,7 +1011,7 @@ begin
     begin
       lineMarks := TickMarks(AOption, ax, v.Spec, v.Furn.SplitLineInterval,
         v.Furn.SplitLineAlign, labelIv, True);
-      w := AxisScaleF(LineWidthIn(node, 'splitLine', 1), APPI);
+      w := AxisScaleF(TyAxisSnapWidth(node, 3, AText), APPI);
       SetLength(v.SplitLines, Length(lineMarks));
       for i := 0 to High(lineMarks) do
       begin

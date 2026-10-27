@@ -22,6 +22,9 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Color,
      tyControls.AdvanceChart.Export, tyControls.AdvanceChart.Toolbox,
      tyControls.AdvanceChart.Builder, tyControls.AdvanceChart.Measure,
+     tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.Polar,
+     tyControls.AdvanceChart.ThemeRiver, tyControls.AdvanceChart.Coord,
+     tyControls.AdvanceChart.Scale,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
@@ -35,6 +38,7 @@ type
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     function List: TTyPaintList;
     procedure Grids(AList: TTyPaintList);
+    procedure Move(AX, AY: Integer);
   end;
 
   TAdvChartEdgesAxesOracleTest = class(TTestCase)
@@ -64,6 +68,10 @@ type
     procedure TestThePorterDuffOperatorsCompositeAsTheCanvas;
     procedure TestAClipOffThePixelGridCutsAtItsEdge;
     procedure TestTheRadarLabelsGiveWayAsUpstreams;
+    procedure TestAPolarAxisSnapsByTheWidthItIsDrawnWith;
+    procedure TestTheSnapWidthsFollowTheirChains;
+    procedure TestARiversGapsOutliveAResizeAsUpstreams;
+    procedure TestALogAxisTakesAPointerOverItsMappingExtent;
   end;
 
 implementation
@@ -82,6 +90,11 @@ function TEaProbe.NewTextMeasurer(APPI: Integer): ITyTextMeasurer;
 begin
   if Measurer <> nil then Result := Measurer
   else Result := inherited NewTextMeasurer(APPI);
+end;
+
+procedure TEaProbe.Move(AX, AY: Integer);
+begin
+  MouseMove([], AX, AY);
 end;
 
 procedure TEaProbe.Grids(AList: TTyPaintList);
@@ -1044,6 +1057,139 @@ begin
   end;
   AssertEquals(IntToStr(FBad) + ' of ' + IntToStr(FCompared) + ' disagree:' + FReport, 0, FBad);
   AssertTrue('enough compared', FCompared >= 20);
+end;
+
+{ ==================== the snap ==================== }
+
+{ subPixelOptimizeLine takes the width the line is stroked with: the radius
+  axis stands up from the centre (the angle axis starts at 90), a 2 px skin
+  line on x 300 stays on 300, where a 1 px one goes to 300.5 }
+procedure TAdvChartEdgesAxesOracleTest.TestAPolarAxisSnapsByTheWidthItIsDrawnWith;
+var
+  bmp: TBGRABitmap;
+  y1, y2: Double;
+begin
+  NewChart(600, 400);
+  FChart.Option := '{"animation":false,"polar":{},"angleAxis":{"type":"value"},'
+    + '"radiusAxis":{"axisTick":{"show":true}},"series":[{"type":"bar","coordinateSystem":"polar","data":[1,2]}]}';
+  bmp := RenderBmp;
+  bmp.Free;
+  y1 := FChart.PolarLayout(0).RadiusView.Line.X1;
+  AssertEquals('a 1 px line: on the half pixel', 0.5, Frac(y1));
+  FCtl.StyleOverride := 'TyAdvChartAxisLine { border-width: 2px; } TyAdvChartAxisTick { border-width: 2px; }';
+  try
+    FChart.Invalidate;
+    bmp := RenderBmp;
+    bmp.Free;
+    y2 := FChart.PolarLayout(0).RadiusView.Line.X1;
+    AssertEquals('a 2 px skin line: on the whole pixel', 0.0, Frac(y2));
+    AssertTrue('a tick snapped by 2 too', Frac(FChart.PolarLayout(0).RadiusView.Ticks[1].Y1) = 0);
+  finally
+    FCtl.StyleOverride := '';
+  end;
+end;
+
+procedure TAdvChartEdgesAxesOracleTest.TestTheSnapWidthsFollowTheirChains;
+var
+  txt: TTyAxisTextStyle;
+  node: TJSONObject;
+begin
+  txt := Default(TTyAxisTextStyle);
+  txt.AxisLineWidthLogical := 1.5;
+  txt.TickLineWidthLogical := 2.5;
+  txt.MinorTickLineWidthLogical := 3.5;
+  txt.SplitLineWidthLogical := 4.5;
+  node := TJSONObject(GetJSON('{}'));
+  try
+    AssertEquals('the line: the skin''s', 1.5, TyAxisSnapWidth(node, 0, txt));
+    AssertEquals('a tick: the skin''s', 2.5, TyAxisSnapWidth(node, 1, txt));
+    AssertEquals('a minor tick: the skin''s', 3.5, TyAxisSnapWidth(node, 2, txt));
+    AssertEquals('a split line: the skin''s', 4.5, TyAxisSnapWidth(node, 3, txt));
+  finally
+    node.Free;
+  end;
+  node := TJSONObject(GetJSON('{"axisLine":{"lineStyle":{"width":5}},"axisTick":{"width":7,'
+    + '"lineStyle":{"width":6}},"splitLine":{"lineStyle":{"width":9}}}'));
+  try
+    AssertEquals('the line: its lineStyle''s', 5.0, TyAxisSnapWidth(node, 0, txt));
+    AssertEquals('a tick: its lineStyle''s', 6.0, TyAxisSnapWidth(node, 1, txt));
+    AssertEquals('a minor tick: the axisTick model''s own width', 7.0, TyAxisSnapWidth(node, 2, txt));
+    AssertEquals('a split line: its lineStyle''s', 9.0, TyAxisSnapWidth(node, 3, txt));
+  finally
+    node.Free;
+  end;
+  node := TJSONObject(GetJSON('{"minorTick":{"lineStyle":{"width":8}},"axisTick":{"width":7}}'));
+  try
+    AssertEquals('a minor tick: its own lineStyle''s first', 8.0, TyAxisSnapWidth(node, 2, txt));
+  finally
+    node.Free;
+  end;
+end;
+
+{ ==================== the river's gaps ==================== }
+
+procedure TAdvChartEdgesAxesOracleTest.TestARiversGapsOutliveAResizeAsUpstreams;
+var
+  river, st: TJSONObject;
+  steps: TJSONArray;
+  k: Integer;
+  bmp: TBGRABitmap;
+  lay: TTyThemeRiverLayout;
+begin
+  river := TJSONObject(FRoot).Objects['river'];
+  steps := river.Arrays['steps'];
+  NewChart(600, 400);
+  FChart.Option := TJSONObject(river.Objects['option'].Clone).AsJSON;
+  for k := 0 to steps.Count - 1 do
+  begin
+    st := steps.Objects[k];
+    FWhere := st.Strings['what'];
+    case k of
+      1: FChart.SetBounds(0, 0, 600, 300);
+      2: FChart.SetOption('{"legend":{}}', False);
+      3: FChart.SetOption('{"series":[{"boundaryGap":["10%","20%"]}]}', False);
+      4: FChart.SetBounds(0, 0, 600, 400);
+    end;
+    bmp := RenderBmp;
+    bmp.Free;
+    lay := FChart.RiverLayoutOf(0);
+    Inc(FCompared);
+    if not (SameBits(lay.Rect.H, FromHex(st.Arrays['rect'].Strings[3]))
+      and SameBits(lay.Gap[0], FromHex(st.Arrays['gap'].Strings[0]))
+      and SameBits(lay.Gap[1], FromHex(st.Arrays['gap'].Strings[1]))) then
+      Bad(Format('gaps %s %s over %s here, %s %s over %s upstream', [Fmt(lay.Gap[0]), Fmt(lay.Gap[1]),
+        Fmt(lay.Rect.H), Fmt(FromHex(st.Arrays['gap'].Strings[0])), Fmt(FromHex(st.Arrays['gap'].Strings[1])),
+        Fmt(FromHex(st.Arrays['rect'].Strings[3]))]));
+  end;
+  AssertEquals(IntToStr(FBad) + ' of ' + IntToStr(FCompared) + ' disagree:' + FReport, 0, FBad);
+end;
+
+{ ==================== a log axis' pointer ==================== }
+
+procedure TAdvChartEdgesAxesOracleTest.TestALogAxisTakesAPointerOverItsMappingExtent;
+var
+  lp: TJSONObject;
+  bmp: TBGRABitmap;
+  r: TTyXYWH;
+  ax: TTyAxis;
+  v: Double;
+begin
+  lp := TJSONObject(FRoot).Objects['logPointer'];
+  NewChart(600, 400);
+  FChart.Option := lp.Objects['option'].AsJSON;
+  bmp := RenderBmp;
+  bmp.Free;
+  ax := FChart.Build.Grid(0).XAxis(0);
+  v := FromHex(lp.Strings['value']);
+  { the value at the plot's third pixel: outside the effective extent,
+    inside the mapping one -- the first bar's outer half }
+  AssertFalse('outside the effective extent', TyRangeContains(ax.Scale.GetExtent2(sekEffective), v));
+  AssertEquals('upstream contains it', True, lp.Booleans['contain']);
+  r := FChart.Build.Grid(0).PlotXYWH;
+  FChart.Move(Round(FromHex(lp.Strings['px'])), Round(r.Y + r.H / 2));
+  bmp := RenderBmp;
+  bmp.Free;
+  AssertTrue('the pointer stands there and the tooltip shows', FChart.TooltipShown);
 end;
 
 initialization

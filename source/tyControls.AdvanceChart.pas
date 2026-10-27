@@ -799,6 +799,16 @@ type
     FSingles: TTySingleArray;
     { EVERY themeRiver laid out, index-parallel to FBindings [Batch 118] }
     FRivers: TTyThemeRiverLayoutArray;
+    { [R5-G] a river's boundaryGap as its first layout resolved it, by
+      series index: upstream writes the px back into the model's array, so
+      a resize keeps them; a setOption starts again (AfterSetOption) }
+    FRiverGaps: array of record
+      Has: Boolean;
+      G0, G1: Double;
+      { the series' boundaryGap as written when they were (JSON, '' none):
+        a merge that writes another replaces the array upstream }
+      Key: string;
+    end;
     { THE PARALLELS of the last build, by component index (a hole is nil),
       each parallel series' rows as laid out (index-parallel to FBindings),
       and the active intervals each parallelAxis MODEL keeps -- by component

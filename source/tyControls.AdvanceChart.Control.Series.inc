@@ -622,7 +622,8 @@ end;
 
 procedure TTyCustomAdvanceChart.SolveRivers(APPI: Integer);
 var
-  i: Integer;
+  i, s: Integer;
+  key: string;
   scale, margin: Double;
   d: TJSONData;
   lab: TJSONData;
@@ -648,8 +649,33 @@ begin
         if (lab <> nil) and (lab.JSONType = jtNumber) then margin := lab.AsFloat;
       end;
     end;
-    FRivers[i] := TyThemeRiverLayout(FOption, FBindings[i].SeriesIndex,
-      TTySingle(FBindings[i].Single), FStores[i], margin * scale);
+    { [R5-G] the px the first layout wrote back, where there is one and
+      no merge has written another boundaryGap since }
+    s := FBindings[i].SeriesIndex;
+    key := '';
+    if d is TJSONObject then
+    begin
+      lab := TJSONObject(d).Find('boundaryGap');
+      if lab <> nil then key := lab.AsJSON;
+    end;
+    if (s >= 0) and (s <= High(FRiverGaps)) and FRiverGaps[s].Has
+      and (FRiverGaps[s].Key = key) then
+      FRivers[i] := TyThemeRiverLayout(FOption, s, TTySingle(FBindings[i].Single),
+        FStores[i], margin * scale, True, FRiverGaps[s].G0, FRiverGaps[s].G1)
+    else
+    begin
+      FRivers[i] := TyThemeRiverLayout(FOption, s,
+        TTySingle(FBindings[i].Single), FStores[i], margin * scale);
+      if (s >= 0) and not FExporting and not IsNan(FRivers[i].Gap[0])
+        and not IsNan(FRivers[i].Gap[1]) then
+      begin
+        if s > High(FRiverGaps) then SetLength(FRiverGaps, s + 1);
+        FRiverGaps[s].Has := True;
+        FRiverGaps[s].Key := key;
+        FRiverGaps[s].G0 := FRivers[i].Gap[0];
+        FRiverGaps[s].G1 := FRivers[i].Gap[1];
+      end;
+    end;
   end;
 end;
 

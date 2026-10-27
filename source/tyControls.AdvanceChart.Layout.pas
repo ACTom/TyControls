@@ -305,6 +305,10 @@ type
     { THE AXIS LINE'S WIDTH, the skin's: the ends of a line cut at its breaks
       are snapped as the line is [Batch 132] }
     AxisLineWidthLogical: Double;
+    { [R5-G] AND THE TICKS' AND MINOR TICKS' (TyAdvChartAxisTick,
+      TyAdvChartMinorTick): what a tick is stroked with where the option
+      writes no width, so what it is snapped to the pixel grid by }
+    TickLineWidthLogical, MinorTickLineWidthLogical, SplitLineWidthLogical: Double;
     { The axis NAME's font, which the layout measures the name in: the same
       one the paint pass draws it in, and not always the labels'. }
     NameFontName: string;
@@ -821,6 +825,15 @@ function TyAxisLabelBoundsItems(const ASpec: TTyAxisLayoutSpec;
 function TyMatIdentity: TTyMat2D;
 { Transformable.getLocalTransform with no scale, skew or origin }
 function TyMatLocal(AX, AY, ARotation: Double): TTyMat2D;
+{ [R5-G] THE WIDTH A PIECE OF AN AXIS VIEW IS SNAPPED BY -- the one it is
+  stroked with (subPixelOptimizeLine takes the style's lineWidth): APiece 0
+  the line (axisLine.lineStyle.width, else the skin's), 3 a split line
+  (splitLine.lineStyle.width, else the skin's), 1 a tick
+  (axisTick.lineStyle.width, else the skin's), 2 a minor tick
+  (minorTick.lineStyle.width, else the axisTick MODEL's own width --
+  getLineStyle on it --, else the skin's). Logical px. }
+function TyAxisSnapWidth(ANode: TJSONObject; APiece: Integer;
+  const AText: TTyAxisTextStyle): Double;
 function TyMatMul(const A, B: TTyMat2D): TTyMat2D;
 { False, and the identity, for a matrix with no inverse }
 function TyMatInvert(const A: TTyMat2D; out AInverse: TTyMat2D): Boolean;
@@ -2047,6 +2060,48 @@ begin
   Result[3] := -ac * st + ct * ad;
   Result[4] := ct * (atx - 0) + st * (aty - 0) + 0;
   Result[5] := ct * (aty - 0) - st * (atx - 0) + 0;
+end;
+
+function TyAxisSnapWidth(ANode: TJSONObject; APiece: Integer;
+  const AText: TTyAxisTextStyle): Double;
+
+  function Sub(AObj: TJSONObject; const AKey: string): TJSONObject;
+  var d: TJSONData;
+  begin
+    Result := nil;
+    if AObj = nil then Exit;
+    d := AObj.Find(AKey);
+    if d is TJSONObject then Result := TJSONObject(d);
+  end;
+
+  function WidthOf(AObj: TJSONObject; out AW: Double): Boolean;
+  var d: TJSONData;
+  begin
+    Result := False;
+    AW := 0;
+    if AObj = nil then Exit;
+    d := AObj.Find('width');
+    Result := (d <> nil) and (d.JSONType = jtNumber);
+    if Result then AW := d.AsFloat;
+  end;
+
+var w: Double;
+begin
+  case APiece of
+    0:
+      if WidthOf(Sub(Sub(ANode, 'axisLine'), 'lineStyle'), w) then Result := w
+      else Result := AText.AxisLineWidthLogical;
+    1:
+      if WidthOf(Sub(Sub(ANode, 'axisTick'), 'lineStyle'), w) then Result := w
+      else Result := AText.TickLineWidthLogical;
+    3:
+      if WidthOf(Sub(Sub(ANode, 'splitLine'), 'lineStyle'), w) then Result := w
+      else Result := AText.SplitLineWidthLogical;
+  else
+    if WidthOf(Sub(Sub(ANode, 'minorTick'), 'lineStyle'), w) then Result := w
+    else if WidthOf(Sub(ANode, 'axisTick'), w) then Result := w
+    else Result := AText.MinorTickLineWidthLogical;
+  end;
 end;
 
 function TyMatLocal(AX, AY, ARotation: Double): TTyMat2D;

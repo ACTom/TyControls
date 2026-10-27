@@ -1061,6 +1061,9 @@ begin
     { [R5-G] a PPI change is a change of the CSS size: a resize }
     or ((FLastPPI > 0) and (APPI <> FLastPPI)) then
   begin
+    { [R5-G] a river's written-back gaps are px of the last PPI: resolved
+      again at this one }
+    if (FLastPPI > 0) and (APPI <> FLastPPI) then FRiverGaps := nil;
     FParBrushSkip := -1;
     { A RESIZE IS AN UPDATE WITH A PAYLOAD (type 'resize'): the brush's
       visual stage dispatches brushSelect, and resize() triggers `updated`
@@ -1139,6 +1142,20 @@ begin
   if tpBorderWidth in labelS.Present then txt.AxisLineWidthLogical := labelS.BorderWidth
   else txt.AxisLineWidthLogical := 1;
   if txt.AxisLineWidthLogical < 0.05 then txt.AxisLineWidthLogical := 0.05;
+  { [R5-G] the ticks' and minor ticks' too: a polar, single or parallel axis
+    snaps them at layout by the width they are stroked with }
+  labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisTick', '', []);
+  if tpBorderWidth in labelS.Present then txt.TickLineWidthLogical := labelS.BorderWidth
+  else txt.TickLineWidthLogical := 1;
+  if txt.TickLineWidthLogical < 0.05 then txt.TickLineWidthLogical := 0.05;
+  labelS := ActiveController.Model.ResolveStyle('TyAdvChartMinorTick', '', []);
+  if tpBorderWidth in labelS.Present then txt.MinorTickLineWidthLogical := labelS.BorderWidth
+  else txt.MinorTickLineWidthLogical := 1;
+  if txt.MinorTickLineWidthLogical < 0.05 then txt.MinorTickLineWidthLogical := 0.05;
+  labelS := ActiveController.Model.ResolveStyle('TyAdvChartSplitLine', '', []);
+  if tpBorderWidth in labelS.Present then txt.SplitLineWidthLogical := labelS.BorderWidth
+  else txt.SplitLineWidthLogical := 1;
+  if txt.SplitLineWidthLogical < 0.05 then txt.SplitLineWidthLogical := 0.05;
   { the name is measured in the font it is drawn in }
   labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisName', '', []);
   txt.NameFontName := labelS.FontName;

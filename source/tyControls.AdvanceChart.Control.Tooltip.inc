@@ -2136,8 +2136,10 @@ var
       scale.contain: a bar's half width that containShape added is part of
       the axis a pointer can stand on [Batch 101]
       [Revised in batch 101: the effective extent, so the outer half of the
-      first and last bar on a value axis took no pointer.] }
-    if AAxis.AxisType in [atValue, atTime] then
+      first and last bar on a value axis took no pointer.]
+      [R5-G] a log axis too: Log.contain is powStub.contain, the same
+      mapping-extent test [was: the effective extent on a log axis] }
+    if AAxis.AxisType in [atValue, atTime, atLog] then
     begin
       if not TyRangeContains(AAxis.Scale.GetExtent2(sekMapping), value) then Exit;
     end

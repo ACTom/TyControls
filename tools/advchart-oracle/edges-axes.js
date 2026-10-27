@@ -272,6 +272,54 @@ function runRadarLabels(c) {
   return { id: c.id, note: c.note, option: c.option, axes };
 }
 
+// ---- a river's boundaryGap through a resize: themeRiverLayout writes the
+// parsePercent results back into the model's own array ----
+const RIVER_OPT = { singleAxis: { type: 'time', top: 40, bottom: 40 },
+  series: [{ type: 'themeRiver', data: [['2020/01/01', 10, 'A'], ['2020/01/02', 20, 'A'], ['2020/01/03', 15, 'A'],
+    ['2020/01/01', 5, 'B'], ['2020/01/02', 8, 'B'], ['2020/01/03', 12, 'B']] }] };
+function runRiver() {
+  const chart = mk();
+  chart.setOption(Object.assign({ animation: false }, RIVER_OPT));
+  const steps = [];
+  const rec = (what) => {
+    const sm = chart.getModel().getSeriesByIndex(0);
+    const li = sm.getData().getLayout('layoutInfo');
+    steps.push({ what, gap: li.boundaryGap.map(hex), rect: rectRec(li.rect) });
+  };
+  rec('first');
+  chart.resize({ width: W, height: 300 });
+  rec('resized');
+  chart.setOption({ legend: {} });
+  rec('merged, no boundaryGap');
+  chart.setOption({ series: [{ boundaryGap: ['10%', '20%'] }] });
+  rec('merged, a boundaryGap');
+  chart.resize({ width: W, height: H });
+  rec('resized back');
+  chart.dispose();
+  return { option: RIVER_OPT, steps };
+}
+
+// ---- a log axis takes a pointer over its MAPPING extent: Log.contain is
+// powStub.contain, scaleMapper's contain over getScaleExtentForMappingUnsafe
+// -- the half bar containShape added on a log base axis included ----
+const LOGPTR_OPT = { grid: { left: 60, right: 60, top: 40, bottom: 60 }, tooltip: { trigger: 'axis' },
+  xAxis: { type: 'log' }, yAxis: { type: 'value' },
+  series: [{ type: 'bar', barWidth: 30, data: [[1, 5], [10, 3], [100, 7]] }] };
+function runLogPointer() {
+  const chart = mk();
+  chart.setOption(Object.assign({ animation: false }, LOGPTR_OPT));
+  const ax = chart.getModel().getComponent('xAxis', 0).axis;
+  const grid = chart.getModel().getComponent('grid', 0).coordinateSystem.getRect();
+  const eff = ax.scale.getExtent();
+  const map = ax.scale.getExtentUnsafe ? ax.scale.getExtentUnsafe(1, null) : null;
+  const px = grid.x + 3;
+  const v = ax.coordToData(ax.toLocalCoord(px));
+  const out = { option: LOGPTR_OPT, px: hex(px), value: hex(v), effective: eff.map(hex), contain: !!ax.scale.contain(v),
+    inEffective: v >= eff[0] && v <= eff[1] };
+  chart.dispose();
+  return out;
+}
+
 // ---- gradients on the axis pieces ----
 const H_GRAD = { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }] };
 const V_GRAD = { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#00c000' }, { offset: 1, color: '#c000c0' }] };
@@ -341,6 +389,8 @@ function generate() {
     gradient: GRAD_CASES.map(runGrad),
     blend: runBlend(),
     radarLabels: RADAR_LABEL_CASES.map(runRadarLabels),
+    river: runRiver(),
+    logPointer: runLogPointer(),
   };
 }
 
@@ -406,12 +456,20 @@ const guards = [
       && !x.labels[0].ignore))(out1.radarLabels.find(c => c.id === 'rl-hidemax')) },
   { name: 'rl-roomy: nothing hidden', ok: out1.radarLabels.find(c => c.id === 'rl-roomy').axes.every(x => x.labels.every(l => !l.ignore) && x.ticks.every(q => !q)) },
   { name: 'rl-overlap: some hidden in the middle', ok: out1.radarLabels.find(c => c.id === 'rl-overlap').axes.some(x => x.labels.slice(2, -2).some(l => l.ignore)) },
+  { name: "river: the first layout's gaps survive a resize and a merge without boundaryGap; a merge with one resolves it at that size",
+    ok: (r => num(r.steps[0].gap[0]) === num(r.steps[1].gap[0]) && num(r.steps[1].gap[0]) === num(r.steps[2].gap[0])
+      && num(r.steps[0].rect[3]) !== num(r.steps[1].rect[3])
+      && num(r.steps[3].gap[1]) === num(r.steps[3].rect[3]) * 0.2 && num(r.steps[4].gap[1]) === num(r.steps[3].gap[1]))(out1.river) },
+  { name: 'logPointer: a value outside the effective extent the log axis contains (its mapping extent)',
+    ok: out1.logPointer.contain && !out1.logPointer.inEffective },
 ];
 out1.guards = guards.map(g => ({ name: g.name, ok: !!g.ok }));
 out1.grid.forEach(c => console.log(c.id + ': ' + JSON.stringify(c.grids.map(g => g.present ? [g.fill, g.stroke, g.lineWidth && num(g.lineWidth), g.lineDash] : null))));
 out1.alone.forEach(c => console.log(c.id + ': ' + JSON.stringify([c.toolbox, c.visualMap, c.timeline])));
 out1.radar.forEach(c => console.log(c.id + ': ' + JSON.stringify([c.axisLines[0], c.ticks[0], c.splitLines[0], c.splitLines.length])));
 out1.radarLabels.forEach(c => console.log(c.id + ': ' + JSON.stringify(c.axes.map(x => [x.labels.map(l => (l.ignore ? '-' : '') + l.text).join(' '), x.ticks.map(q => q ? 1 : 0).join('')]))));
+console.log('river: ' + JSON.stringify(out1.river.steps.map(s => [s.what, s.gap.map(num), num(s.rect[3])])));
+console.log('logPointer: ' + JSON.stringify([num(out1.logPointer.px), num(out1.logPointer.value), out1.logPointer.effective.map(num), out1.logPointer.contain]));
 out1.gradient.forEach(c => console.log(c.id + ': ' + JSON.stringify(c.strokes.map(s => [s.axis, s.role, s.rect.map(num), s.gradient.map(num)]))));
 const bad = out1.guards.filter(q => !q.ok);
 out1.guards.forEach(q => console.log('guard ' + (q.ok ? 'ok  ' : 'FAIL') + ' ' + q.name));

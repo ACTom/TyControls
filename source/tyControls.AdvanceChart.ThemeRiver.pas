@@ -107,9 +107,13 @@ procedure TyThemeRiverFillStore(AOption: TTyChartOption; ASeriesIndex: Integer;
 function TyThemeRiverLayers(AStore: TTyDataStore): TTyRiverLayerArray;
 
 { themeRiverLayout and the view's polygons. AMarginPx is label.margin in
-  device px. }
+  device px. [R5-G] AHasGap: the two ends of boundaryGap as an earlier
+  layout already wrote them back into the option (AGap0, AGap1, px) --
+  upstream's parsePercent results replace the strings in the model's own
+  array, so a later layout (a resize) reads those numbers again. }
 function TyThemeRiverLayout(AOption: TTyChartOption; ASeriesIndex: Integer;
-  ASingle: TTySingle; AStore: TTyDataStore; AMarginPx: Double): TTyThemeRiverLayout;
+  ASingle: TTySingle; AStore: TTyDataStore; AMarginPx: Double;
+  AHasGap: Boolean = False; AGap0: Double = 0; AGap1: Double = 0): TTyThemeRiverLayout;
 
 { whether a polygon's path draws anything: a command beside its closes }
 function TyRiverPathDraws(const ACmds: TTyPathCmdArray): Boolean;
@@ -604,7 +608,8 @@ end;
 { ==================== the layout ==================== }
 
 function TyThemeRiverLayout(AOption: TTyChartOption; ASeriesIndex: Integer;
-  ASingle: TTySingle; AStore: TTyDataStore; AMarginPx: Double): TTyThemeRiverLayout;
+  ASingle: TTySingle; AStore: TTyDataStore; AMarginPx: Double;
+  AHasGap: Boolean; AGap0, AGap1: Double): TTyThemeRiverLayout;
 var
   node: TJSONObject;
   d, g0, g1: TJSONData;
@@ -628,7 +633,12 @@ begin
   d := nil;
   if node <> nil then d := node.Find('boundaryGap');
   if ASingle.OrientHorizontal then len := Result.Rect.H else len := Result.Rect.W;
-  if d = nil then
+  if AHasGap then
+  begin
+    Result.Gap[0] := AGap0;
+    Result.Gap[1] := AGap1;
+  end
+  else if d = nil then
   begin
     Result.Gap[0] := TyBoxRawResolve(TyBoxRawStr('10%'), len);
     Result.Gap[1] := TyBoxRawResolve(TyBoxRawStr('10%'), len);
