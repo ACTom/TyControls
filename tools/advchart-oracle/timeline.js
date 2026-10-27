@@ -1171,6 +1171,13 @@ const CASES = [
 const TL1 = { axisType: 'category', data: ['x', 'y', 'z'], top: 10, bottom: null, height: 50, currentIndex: 1 };
 const TL2 = { axisType: 'value', data: [0, 5, 10], orient: 'vertical', left: null, right: 0, top: 70, bottom: 100, width: 60, height: null };
 const STILL = { animation: false };
+const INK = {
+  lineStyle: { color: '#aabbcc', width: 3 }, itemStyle: { color: '#336699', borderColor: '#000000', borderWidth: 1 },
+  checkpointStyle: { color: '#ff0000', borderColor: '#00ff00', borderWidth: 2 },
+  controlStyle: { color: '#123123', borderColor: '#321321' }, label: { color: '#777777' },
+  emphasis: { itemStyle: { color: '#ff8800', borderColor: '#884400' }, label: { color: '#0000ff' }, controlStyle: { color: '#00ffff', borderColor: '#008888' } },
+  progress: { lineStyle: { color: '#444444' }, itemStyle: { color: '#999999' }, label: { color: '#bb0000' } },
+};
 function multi(tls, baseExtra) {
   const o = bars(tlCat({}), null, baseExtra);
   o.baseOption.timeline = tls;
@@ -1214,6 +1221,20 @@ const MULTI_CASES = [
     steps: [{ kind: 'move', tl: 1, at: 'tick:0' }, { kind: 'move', at: 'tick:1', dt: 50 }, { kind: 'move', tl: 1, at: 'next', dt: 50 }, { kind: 'leave', dt: 50 }] },
   { id: 'm-hidden', group: 'multi', note: 'the first timeline hidden: the second still drives its frames', option: multi([tlCat({ show: false }), TL1], STILL),
     steps: [{ kind: 'tap', tl: 1, at: 'next' }, { kind: 'tap', tl: 1, at: 'tick:0', dt: 100 }] },
+  { id: 'm-hover-anim', group: 'multi', note: "each view's state transition by its own model: the first's animation off, the second's on", option: multi([tlCat({ animation: false }), TL1]),
+    steps: [{ kind: 'move', tl: 1, at: 'tick:0' }, { kind: 'wait', dt: 100 }, { kind: 'move', at: 'tick:1', dt: 300 }, { kind: 'wait', dt: 100 },
+      { kind: 'move', tl: 1, at: 'pointer', dt: 300 }, { kind: 'down', tl: 1, at: 'pointer' },
+      { kind: 'move', tl: 1, at: 'tick:2', dt: 30 }, { kind: 'up', tl: 1, at: 'tick:2', dt: 30 },
+      { kind: 'wait', dt: 100 }, { kind: 'wait', dt: 300 },
+      { kind: 'move', at: 'pointer', dt: 50 }, { kind: 'down', at: 'pointer' },
+      { kind: 'move', at: 'tick:3', dt: 30 }, { kind: 'up', at: 'tick:3', dt: 30 }, { kind: 'wait', dt: 100 }] },
+  { id: 'm-colours', group: 'multi', colours: true, note: "every colour written: the second's hover tweens by its own animation, the first's (animation off) jumps",
+    option: multi([tlCat(Object.assign({ animation: false }, INK)), Object.assign({}, TL1, INK)]),
+    steps: [{ kind: 'move', tl: 1, at: 'tick:0' }, { kind: 'wait', dt: 100 }, { kind: 'wait', dt: 300 },
+      { kind: 'move', at: 'tick:1' }, { kind: 'wait', dt: 100 }, { kind: 'leave', dt: 300 }, { kind: 'wait', dt: 100 }] },
+  { id: 'm-boxed', group: 'multi', note: 'the second timeline in a matrix cell: its own box reference', option: multi([tlCat({}), Object.assign({}, TL1, { coordinateSystem: 'matrix', coord: ['b', 'v'], top: null, height: 40, left: 0, right: 0, bottom: 0 })],
+    { animation: false, matrix: { x: { data: ['a', 'b'] }, y: { data: ['u', 'v'] }, top: 60, bottom: 100, left: 50, right: 50 } }),
+    steps: [{ kind: 'tap', tl: 1, at: 'tick:0' }] },
   { id: 'm-replace', group: 'multi', note: 'a notMerge to one timeline takes the second view and its timer', option: multi([tlCat({}), Object.assign({}, TL1, { autoPlay: true, playInterval: 600 })], STILL),
     steps: [{ kind: 'wait', dt: 600 }, { kind: 'set', option: multi([tlCat({ currentIndex: 1 })], STILL), opts: { notMerge: true }, dt: 100 }, { kind: 'wait', dt: 1200 }] },
 ];
@@ -1269,6 +1290,16 @@ function multiGuards(out) {
   const hd = cs('m-hidden').states;
   guard('m-hidden: no first view, a second', hd[0].view === null && hd[0].more[0].view !== null);
   guard('m-hidden: the frames follow', hd[1].model.currentIndex === 2 && hd[1].titles[0] === 'F2');
+  const ha = cs('m-hover-anim').states;
+  guard('m-hover-anim: the second\'s tick tweens', elk(ha[1], 1, 'tick:0').style.fill !== elk(ha[2], 1, 'tick:0').style.fill);
+  guard('m-hover-anim: the first\'s jumps', elk(ha[3], 0, 'tick:1').style.fill === elk(ha[4], 0, 'tick:1').style.fill);
+  guard('m-hover-anim: the second\'s checkpoint slides back', elk(ha[9], 1, 'pointer').t.x !== elk(ha[10], 1, 'pointer').t.x);
+  const co = cs('m-colours').states;
+  guard('m-colours: the second\'s tick mid-tween', elk(co[2], 1, 'tick:0').style.fill !== elk(co[3], 1, 'tick:0').style.fill);
+  guard('m-colours: the first\'s at once', elk(co[4], 0, 'tick:1').style.fill === elk(co[5], 0, 'tick:1').style.fill);
+  const bx = cs('m-boxed').states;
+  guard('m-boxed: in its cell, right of the middle', num(bx[0].more[0].view.main.x) > 300);
+  guard('m-boxed: its tick sets the first', bx[1].model.currentIndex === 0);
   const rp = cs('m-replace').states;
   guard('m-replace: the second fired', rp[1].fired.length === 1);
   guard('m-replace: then it is gone', rp[2].more.length === 0 && rp[3].fired.length === 0);

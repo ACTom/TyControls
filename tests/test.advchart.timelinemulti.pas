@@ -42,6 +42,8 @@ type
     procedure TestAHitNamesItsTimeline;
     procedure TestEveryViewKeepsItsOwnTimer;
     procedure TestTheOtherViewsGoWithTheirModels;
+    procedure TestEveryViewIsDrawn;
+    procedure TestAnOverlapHitsTheLaterTimeline;
   end;
 
 implementation
@@ -208,6 +210,87 @@ begin
   RenderNow;
   AssertEquals('one view left', 1, FChart.TimelineViewCount);
   AssertTrue('and its timer', IsNan(FChart.TimelineDueAt(1)));
+end;
+
+{ the m-layout option with the timelines AShown keeps (the others show: false) }
+function LayoutWith(ACase: TJSONObject; const AShown: array of Boolean): string;
+var
+  o: TJSONObject;
+  tls: TJSONArray;
+  k: Integer;
+begin
+  o := TJSONObject(ACase.Objects['option'].Clone);
+  try
+    tls := o.Objects['baseOption'].Arrays['timeline'];
+    for k := 0 to High(AShown) do
+      if not AShown[k] then tls.Objects[k].Booleans['show'] := False;
+    Result := o.AsJSON;
+  finally
+    o.Free;
+  end;
+end;
+
+procedure TAdvChartTimelineMultiTest.TestEveryViewIsDrawn;
+var
+  a: TBGRABitmap;
+  x, y, diff: Integer;
+  p, q: PBGRAPixel;
+begin
+  NewChart;
+  FChart.Option := LayoutWith(CaseOf('m-layout'), [True, False, False]);
+  RenderNow;
+  a := FBmp.Duplicate as TBGRABitmap;
+  try
+    FBmp.Fill(BGRA(255, 255, 255, 255));
+    FChart.Option := LayoutWith(CaseOf('m-layout'), [True, True, True]);
+    RenderNow;
+    diff := 0;
+    for y := 0 to a.Height - 1 do
+    begin
+      p := a.ScanLine[y];
+      q := FBmp.ScanLine[y];
+      for x := 0 to a.Width - 1 do
+      begin
+        if (p^.red <> q^.red) or (p^.green <> q^.green) or (p^.blue <> q^.blue) then Inc(diff);
+        Inc(p);
+        Inc(q);
+      end;
+    end;
+    AssertTrue(Format('the second and the third are painted (%d pixels)', [diff]), diff > 200);
+  finally
+    a.Free;
+  end;
+end;
+
+{ two timelines in the same place: the later one is drawn over the earlier,
+  and hit first }
+procedure TAdvChartTimelineMultiTest.TestAnOverlapHitsTheLaterTimeline;
+var
+  o: TJSONObject;
+  tls: TJSONArray;
+  c: TJSONObject;
+  st: TJSONObject;
+  t: TTyChartEventTarget;
+begin
+  NewChart;
+  c := CaseOf('m-click');
+  o := TJSONObject(c.Objects['option'].Clone);
+  try
+    tls := o.Objects['baseOption'].Arrays['timeline'];
+    tls.Delete(2);
+    tls.Delete(1);
+    tls.Add(tls.Objects[0].Clone);
+    FChart.Option := o.AsJSON;
+  finally
+    o.Free;
+  end;
+  RenderNow;
+  AssertEquals(2, FChart.TimelineViewCount);
+  { m-click's step 2: the first timeline's next button }
+  st := c.Arrays['steps'].Objects[2];
+  t := FChart.Target(st.Integers['x'], st.Integers['y']);
+  AssertEquals(10, t.HdKind);
+  AssertEquals('the later timeline', 1, t.HdSeries);
 end;
 
 initialization
