@@ -53,6 +53,8 @@ type
     procedure TestTheAxisPointerUnderTheMaskAsUpstream;
     procedure TestTheZoomUnderTheMaskAsUpstream;
     procedure TestAZlevelAsUpstream;
+    { fontStyle italic / oblique slants the text; normal does not }
+    procedure TestAnItalicLoadingText;
     { [R5-D] the thumbnail's box over a node; on a calendar and a matrix }
     procedure TestTheThumbnailsBoxAsUpstream;
     procedure TestAThumbnailOverACalendarGraphAsUpstream;
@@ -118,6 +120,8 @@ type
     procedure TestTheHandleIsDrawn;
     procedure TestAFastDragThrottlesAsUpstream;
     procedure TestTheHandleHidesWhatIsUnderIt;
+    procedure TestATopSingleAxisHandleAsUpstream;
+    procedure TestTheHandleHidesATooltipTarget;
   end;
 
 implementation
@@ -482,6 +486,57 @@ end;
 procedure TAdvChartLoadingPointerOracleTest.TestTheZoomUnderTheMaskAsUpstream;
 begin
   RunCase('zoom');
+end;
+
+procedure TAdvChartLoadingPointerOracleTest.TestAnItalicLoadingText;
+
+  function Shot(const ACfg: string): TBGRABitmap;
+  var probe: TLpProbe;
+  begin
+    probe := TLpProbe.Create(FForm);
+    try
+      probe.Parent := FForm;
+      probe.Controller := FCtl;
+      probe.AnimationMode := camOff;
+      probe.SetBounds(0, 0, cW, cH);
+      probe.Option := '{"xAxis":{"type":"category","data":["a"]},"yAxis":{},"series":[{"type":"bar","data":[1]}]}';
+      probe.ShowLoading(ACfg);
+      Result := TBGRABitmap.Create(cW, cH, BGRA(255, 255, 255, 255));
+      probe.Render(Result.Canvas, Rect(0, 0, cW, cH), 96);
+    finally
+      probe.Free;
+    end;
+  end;
+
+  function Diff(A, B: TBGRABitmap): Integer;
+  var x, y: Integer; p, q: TBGRAPixel;
+  begin
+    Result := 0;
+    for y := 0 to cH - 1 do
+      for x := 0 to cW - 1 do
+      begin
+        p := A.GetPixel(x, y);
+        q := B.GetPixel(x, y);
+        if (p.red <> q.red) or (p.green <> q.green) or (p.blue <> q.blue) then Inc(Result);
+      end;
+  end;
+
+var a, b, c, d: TBGRABitmap;
+begin
+  a := Shot('{"text":"Loading data","showSpinner":false}');
+  b := Shot('{"text":"Loading data","showSpinner":false,"fontStyle":"italic"}');
+  c := Shot('{"text":"Loading data","showSpinner":false,"fontStyle":"oblique"}');
+  d := Shot('{"text":"Loading data","showSpinner":false,"fontStyle":"normal"}');
+  try
+    AssertTrue('italic slants it', Diff(a, b) > 20);
+    AssertEquals('oblique as italic', 0, Diff(b, c));
+    AssertEquals('normal is upright', 0, Diff(a, d));
+  finally
+    a.Free;
+    b.Free;
+    c.Free;
+    d.Free;
+  end;
 end;
 
 procedure TAdvChartLoadingPointerOracleTest.TestAZlevelAsUpstream;
@@ -915,6 +970,19 @@ begin
         if probe.CursorName <> state.Strings['cursor'] then
           Bad(Format('cursor %s, upstream %s', [probe.CursorName, state.Strings['cursor']]));
       end;
+      { the box: shown or not, and what for }
+      if state.Find('tip') <> nil then
+      begin
+        Inc(FCompared);
+        if state.Find('tip').JSONType = jtNull then
+        begin
+          if probe.TooltipShown then Bad('a box, upstream none: ' + probe.Which);
+        end
+        else if not probe.TooltipShown then
+          Bad('no box, upstream ' + state.Strings['tip'])
+        else if probe.Which <> state.Strings['tip'] then
+          Bad(Format('the box shows %s, upstream %s', [probe.Which, state.Strings['tip']]));
+      end;
       hs := state.Arrays['handles'];
       n := probe.PointerHandleCount;
       Inc(FCompared);
@@ -990,6 +1058,16 @@ end;
 procedure TAdvChartPointerHandleOracleTest.TestTheHandleHidesWhatIsUnderIt;
 begin
   RunCase('x-over-series');
+end;
+
+procedure TAdvChartPointerHandleOracleTest.TestATopSingleAxisHandleAsUpstream;
+begin
+  RunCase('single-top');
+end;
+
+procedure TAdvChartPointerHandleOracleTest.TestTheHandleHidesATooltipTarget;
+begin
+  RunCase('x-over-series-tip');
 end;
 
 procedure TAdvChartPointerHandleOracleTest.TestTheHandleIsDrawn;

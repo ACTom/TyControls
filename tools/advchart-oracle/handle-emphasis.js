@@ -115,6 +115,12 @@ const CASES = [
       emphasis: { handleStyle: { color: '#ff0000', borderColor: '#00ff00', borderWidth: 4 } } } }, BASE),
     hovers: ['handle0', 'none'],
   },
+  {
+    id: 'dz-lift', kind: 'dataZoom', note: 'a mid colour written, no emphasis colour: the hovered handle is the lifted colour '
+      + '(liftColor; pure green lifts to itself)',
+    option: Object.assign({ dataZoom: [{ type: 'slider', start: 20, end: 80, handleStyle: { color: '#3366cc' } }] }, BASE),
+    hovers: ['handle0', 'none'],
+  },
 ];
 function hoverPoint(chart, def, rec, what) {
   if (what === 'none') return [5, 5];
@@ -162,6 +168,8 @@ try {
   must(d.steps[3].record.move.opacity === 0.8, 'dz default: opacity 0.8');
   const v = cases[2];
   must(v.steps[1].record.handles[0].stroke === '#00ff00' && v.steps[1].record.handles[0].lineWidth === 4, 'vm: the written emphasis');
+  const l = cases[3];
+  must(l.steps[1].record.handles[0].fill !== '#3366cc' && l.steps[1].record.handles[0].states.indexOf('emphasis') >= 0, 'dz lift: lifted');
   json1 = JSON.stringify({ source: 'ECharts ' + echarts.version, W, H, cases }, null, 1) + '\n';
   const json2 = JSON.stringify({ source: 'ECharts ' + echarts.version, W, H, cases: CASES.map(runCase) }, null, 1) + '\n';
   must(json1 === json2, 'two generations differ');

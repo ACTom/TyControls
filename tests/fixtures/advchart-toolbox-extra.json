@@ -1067,6 +1067,134 @@
      }
     }
    ]
+  },
+  {
+   "id": "title-pad",
+   "note": "the title in a box with an uneven padding [2, 10, 4, 3]: the text stands where the padding puts it",
+   "option": {
+    "toolbox": {
+     "left": "center",
+     "feature": {
+      "saveAsImage": {},
+      "restore": {}
+     },
+     "emphasis": {
+      "iconStyle": {
+       "textBackgroundColor": "#333333",
+       "textPadding": [
+        2,
+        10,
+        4,
+        3
+       ],
+       "textFill": "#ffffff",
+       "textFontSize": 12
+      }
+     }
+    },
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "B",
+      "data": [
+       3,
+       9,
+       6,
+       8
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "op": "move",
+     "at": [
+      314,
+      25
+     ],
+     "events": [
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": {
+      "icons": [
+       {
+        "key": "Save as Image",
+        "states": [],
+        "style": {
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "lineJoin": null,
+         "miterLimit": 10
+        }
+       },
+       {
+        "key": "Restore",
+        "states": [
+         "emphasis"
+        ],
+        "style": {
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "lineJoin": null,
+         "miterLimit": 10
+        }
+       }
+      ],
+      "title": {
+       "key": "Restore",
+       "text": "Restore",
+       "font": "normal normal 12px Microsoft YaHei",
+       "fill": "#ffffff",
+       "backgroundColor": "#333333",
+       "borderRadius": null,
+       "padding": [
+        2,
+        10,
+        4,
+        3
+       ],
+       "box": [
+        286.4184483909607,
+        39.99999992055834,
+        55.12,
+        18
+       ],
+       "textX": 310.4784483909607,
+       "textY": 47.99999992055834,
+       "tspanAlign": [
+        "center",
+        "middle"
+       ]
+      },
+      "tip": null
+     }
+    }
+   ]
   }
  ],
  "guards": [

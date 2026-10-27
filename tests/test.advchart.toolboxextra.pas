@@ -57,6 +57,7 @@ type
   published
     procedure TestTheIconsLineKeysAsUpstream;
     procedure TestTheTitlesBoxAsUpstream;
+    procedure TestAnUnevenTitlePaddingAsUpstream;
     procedure TestTheIconsTooltipAsUpstream;
     procedure TestATooltipTemplateAsUpstream;
     procedure TestTheTooltipOffAsUpstream;
@@ -415,6 +416,11 @@ end;
 procedure TAdvChartToolboxExtraOracleTest.TestTheIconsLineKeysAsUpstream;
 begin
   RunCase('icon-line');
+end;
+
+procedure TAdvChartToolboxExtraOracleTest.TestAnUnevenTitlePaddingAsUpstream;
+begin
+  RunCase('title-pad');
 end;
 
 procedure TAdvChartToolboxExtraOracleTest.TestTheTitlesBoxAsUpstream;

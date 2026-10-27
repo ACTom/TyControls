@@ -301,6 +301,14 @@ const CASES = [
       { op: 'idle', ms: 200 },
     ],
   },
+  {
+    id: 'title-pad', note: 'the title in a box with an uneven padding [2, 10, 4, 3]: the text stands where the padding puts it',
+    option: Object.assign({ toolbox: { left: 'center', feature: { saveAsImage: {}, restore: {} },
+      emphasis: { iconStyle: { textBackgroundColor: '#333333', textPadding: [2, 10, 4, 3], textFill: '#ffffff', textFontSize: 12 } } } }, BARS),
+    steps: [
+      { op: 'move', at: 'icon:restore' },
+    ],
+  },
 ];
 
 // =====================================================================

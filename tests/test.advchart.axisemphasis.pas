@@ -78,6 +78,9 @@ type
     procedure TestALineWithoutSymbolsAsUpstream;
     procedure TestLinkedAxesAsUpstream;
     procedure TestAPolarAsUpstream;
+    { what the pointer stands on is painted lifted only where the axis'
+      model says triggerEmphasis }
+    procedure TestTheRootsNoLiftsNothing;
   end;
 
   { [R5-D] tools/advchart-oracle/sunburst-legacy.js: sunburstHighlight /
@@ -561,6 +564,59 @@ end;
 procedure TAdvChartAxisEmphasisOracleTest.TestLinkedAxesAsUpstream;
 begin
   RunCase('link');
+end;
+
+procedure TAdvChartAxisEmphasisOracleTest.TestTheRootsNoLiftsNothing;
+const
+  cOpt = '{%s"tooltip":{"trigger":"axis"},"xAxis":{"type":"category","data":["a","b","c"]},'
+    + '"yAxis":{},"series":[{"type":"bar","data":[5,8,3],"itemStyle":{"color":"#3366cc"}}]}';
+
+  { the colour at the low last bar's left edge + 3 before and after the
+    pointer stands in its column above it (not on the bar: hovering the bar
+    itself would light it) }
+  function Changed(const ARoot: string): Boolean;
+  var
+    probe: TAeProbe;
+    x, y, bx, by, top: Integer;
+    c0, c1: TBGRAPixel;
+  begin
+    probe := NewProbe(Format(cOpt, [ARoot]), 0);
+    try
+      bx := -1;
+      by := -1;
+      for y := cH - 1 downto 0 do
+      begin
+        for x := 2 * cW div 3 to cW - 1 do
+        begin
+          c0 := FBmp.GetPixel(x, y);
+          if (c0.red = $33) and (c0.green = $66) and (c0.blue = $CC) then
+          begin
+            bx := x + 3;
+            by := y - 5;
+            Break;
+          end;
+        end;
+        if bx >= 0 then Break;
+      end;
+      AssertTrue('the last bar is drawn', bx >= 0);
+      top := by;
+      while (top > 0) and (FBmp.GetPixel(bx, top - 1).blue = $CC) do Dec(top);
+      c0 := FBmp.GetPixel(bx, by);
+      probe.Move(bx, top - 30);
+      FBmp.Fill(BGRA(255, 255, 255, 255));
+      probe.Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
+      c1 := FBmp.GetPixel(bx, by);
+      Result := (c0.red <> c1.red) or (c0.green <> c1.green) or (c0.blue <> c1.blue);
+    finally
+      probe.Free;
+    end;
+  end;
+
+begin
+  { the default: the highlight lifts it }
+  AssertTrue('lit by default', Changed(''));
+  { the root says no: no highlight, and nothing painted lifted either }
+  AssertFalse('not lit when the root says no', Changed('"axisPointer":{"triggerEmphasis":false},'));
 end;
 
 procedure TAdvChartAxisEmphasisOracleTest.TestAPolarAsUpstream;

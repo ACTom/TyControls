@@ -2876,6 +2876,642 @@
      ]
     }
    ]
+  },
+  {
+   "id": "single-top",
+   "note": "a single axis at the top: the handle above it, turned half round (label direction -1); dragged 60 px left",
+   "types": [
+    "updateaxispointer",
+    "showtip",
+    "hidetip",
+    "mouseover",
+    "mouseout"
+   ],
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "singleAxis": {
+       "type": "value",
+       "min": 0,
+       "max": 100,
+       "top": 150,
+       "height": 100,
+       "position": "top",
+       "axisPointer": {
+        "handle": {
+         "show": true,
+         "margin": 30
+        }
+       }
+      },
+      "series": [
+       {
+        "type": "scatter",
+        "coordinateSystem": "singleAxis",
+        "data": [
+         10,
+         50,
+         90
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "idle",
+     "ms": 10,
+     "events": [],
+     "state": [
+      {
+       "cursor": null,
+       "tip": null,
+       "handles": [
+        {
+         "axis": "singleAxis0",
+         "status": "show",
+         "value": 100,
+         "handle": {
+          "x": 570,
+          "y": 120,
+          "rotation": 3.141592653589793,
+          "scaleX": 22.5,
+          "scaleY": 22.5,
+          "fill": "#8292cc",
+          "invisible": false
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "op": "drag",
+     "points": [
+      [
+       570,
+       120
+      ],
+      [
+       540,
+       120
+      ],
+      [
+       510,
+       120
+      ]
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [
+         {
+          "axisDim": "single",
+          "axisIndex": 0,
+          "value": 100
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "axesInfo": [
+         {
+          "axisDim": "single",
+          "axisIndex": 0,
+          "value": 100
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 570,
+        "y": 200,
+        "tooltipOption": {
+         "verticalAlign": "middle"
+        },
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "singleAxis.value",
+          "coordSysMainType": "singleAxis",
+          "dataByAxis": [
+           {
+            "axisDim": "single",
+            "axisIndex": 0,
+            "axisType": "singleAxis.value",
+            "axisId": "␀series␀0␀0",
+            "value": 90,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 2,
+              "dataIndex": 2
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "axesInfo": [
+         {
+          "axisDim": "single",
+          "axisIndex": 0,
+          "value": 94.44444444444444
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 540,
+        "y": 200,
+        "tooltipOption": {
+         "verticalAlign": "middle"
+        },
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "singleAxis.value",
+          "coordSysMainType": "singleAxis",
+          "dataByAxis": [
+           {
+            "axisDim": "single",
+            "axisIndex": 0,
+            "axisType": "singleAxis.value",
+            "axisId": "␀series␀0␀0",
+            "value": 90,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 2,
+              "dataIndex": 2
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [
+         {
+          "axisDim": "single",
+          "axisIndex": 0,
+          "value": 94.44444444444444
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "axesInfo": [
+         {
+          "axisDim": "single",
+          "axisIndex": 0,
+          "value": 88.88888888888889
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 510,
+        "y": 200,
+        "tooltipOption": {
+         "verticalAlign": "middle"
+        },
+        "dataIndexInside": 2,
+        "dataIndex": 2,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "singleAxis.value",
+          "coordSysMainType": "singleAxis",
+          "dataByAxis": [
+           {
+            "axisDim": "single",
+            "axisIndex": 0,
+            "axisType": "singleAxis.value",
+            "axisId": "␀series␀0␀0",
+            "value": 90,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 2,
+              "dataIndex": 2
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [
+         {
+          "axisDim": "single",
+          "axisIndex": 0,
+          "value": 88.88888888888889
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip"
+       }
+      ]
+     ],
+     "state": [
+      {
+       "cursor": "default",
+       "tip": null,
+       "handles": [
+        {
+         "axis": "singleAxis0",
+         "status": "show",
+         "value": 88.88888888888889,
+         "handle": {
+          "x": 510,
+          "y": 120,
+          "rotation": 3.141592653589793,
+          "scaleX": 22.5,
+          "scaleY": 22.5,
+          "fill": "#8292cc",
+          "invisible": false
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 500,
+     "events": [],
+     "state": [
+      {
+       "cursor": null,
+       "tip": null,
+       "handles": [
+        {
+         "axis": "singleAxis0",
+         "status": "show",
+         "value": 88.88888888888889,
+         "handle": {
+          "x": 510,
+          "y": 120,
+          "rotation": 3.141592653589793,
+          "scaleX": 22.5,
+          "scaleY": 22.5,
+          "fill": "#8292cc",
+          "invisible": false
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "x-over-series-tip",
+   "note": "the same with an item tooltip: over the handle the symbol under it is no tooltip target",
+   "types": [
+    "updateaxispointer",
+    "showtip",
+    "hidetip",
+    "mouseover",
+    "mouseout"
+   ],
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "tooltip": {
+       "trigger": "item"
+      },
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+       ],
+       "axisPointer": {
+        "handle": {
+         "show": true
+        }
+       }
+      },
+      "yAxis": {
+       "type": "value",
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "scatter",
+        "symbolSize": 120,
+        "data": [
+         [
+          4,
+          0
+         ]
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "idle",
+     "ms": 10,
+     "events": [],
+     "state": [
+      {
+       "cursor": null,
+       "tip": null,
+       "handles": [
+        {
+         "axis": "xAxis0",
+         "status": "show",
+         "value": 4,
+         "handle": {
+          "x": 495,
+          "y": 370,
+          "rotation": 0,
+          "scaleX": 22.5,
+          "scaleY": 22.5,
+          "fill": "#8292cc",
+          "invisible": false
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "op": "move",
+     "at": [
+      495,
+      300
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 0,
+        "dataIndex": 0,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 4
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 0,
+        "dataIndex": 0,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "mouseover",
+       {
+        "componentType": "series",
+        "seriesIndex": 0,
+        "dataIndex": 0,
+        "name": "e"
+       }
+      ]
+     ],
+     "state": [
+      {
+       "cursor": "pointer",
+       "tip": "item:0:0",
+       "handles": [
+        {
+         "axis": "xAxis0",
+         "status": "show",
+         "value": 4,
+         "handle": {
+          "x": 495,
+          "y": 370,
+          "rotation": 0,
+          "scaleX": 22.5,
+          "scaleY": 22.5,
+          "fill": "#8292cc",
+          "invisible": false
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "op": "move",
+     "at": [
+      495,
+      370
+     ],
+     "events": [
+      [
+       0,
+       "mouseout",
+       {
+        "componentType": "series",
+        "seriesIndex": 0,
+        "dataIndex": 0,
+        "name": "e"
+       }
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 4
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": [
+      {
+       "cursor": "move",
+       "tip": "item:0:0",
+       "handles": [
+        {
+         "axis": "xAxis0",
+         "status": "show",
+         "value": 4,
+         "handle": {
+          "x": 495,
+          "y": 370,
+          "rotation": 0,
+          "scaleX": 22.5,
+          "scaleY": 22.5,
+          "fill": "#8292cc",
+          "invisible": false
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 500,
+     "events": [],
+     "state": [
+      {
+       "cursor": null,
+       "tip": null,
+       "handles": [
+        {
+         "axis": "xAxis0",
+         "status": "show",
+         "value": 4,
+         "handle": {
+          "x": 495,
+          "y": 370,
+          "rotation": 0,
+          "scaleX": 22.5,
+          "scaleY": 22.5,
+          "fill": "#8292cc",
+          "invisible": false
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
   }
  ],
  "guards": [

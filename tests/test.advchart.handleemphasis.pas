@@ -51,6 +51,8 @@ type
     procedure TestWrittenSliderStatesAsUpstream;
     procedure TestDefaultSliderStatesAsUpstream;
     procedure TestAVisualMapThumbAsUpstream;
+    { a mid colour lifts (pure green lifts to itself) }
+    procedure TestALiftedSliderHandleAsUpstream;
   end;
 
 implementation
@@ -184,8 +186,8 @@ procedure TAdvChartHandleEmphasisOracleTest.RunCase(const AId: string);
 const
   { the colours the oracle's options wrote; a handle ink not among them (or
     lifted from them) is a theme token }
-  cAuthor: array[0..7] of string = ('#00ff00', '#0000ff', '#00ffff', '#ff0000',
-    '#ffff00', '#ff00ff', 'rgba(0,255,0,1)', 'xx');
+  cAuthor: array[0..8] of string = ('#00ff00', '#0000ff', '#00ffff', '#ff0000',
+    '#ffff00', '#ff00ff', 'rgba(0,255,0,1)', '#3366cc', 'rgba(56,112,224,1)');
 var
   cases, steps, hs: TJSONArray;
   cs, st, rec, h, mv: TJSONObject;
@@ -252,7 +254,15 @@ begin
           False, True, el) then
           Bad('the move handle: nothing at its centre')
         else
-          SameInk('the move handle', el.Style.FillColor, mv.Find('fill'), mv.Floats['opacity']);
+        begin
+          { the move handle's colour where the option wrote it (else the
+            theme's) }
+          authored := False;
+          want := mv.Get('fill', '');
+          for i := 0 to High(cAuthor) do if want = cAuthor[i] then authored := True;
+          if authored then
+            SameInk('the move handle', el.Style.FillColor, mv.Find('fill'), mv.Floats['opacity']);
+        end;
       end;
     end;
   finally
@@ -276,6 +286,11 @@ end;
 procedure TAdvChartHandleEmphasisOracleTest.TestAVisualMapThumbAsUpstream;
 begin
   RunCase('vm-written');
+end;
+
+procedure TAdvChartHandleEmphasisOracleTest.TestALiftedSliderHandleAsUpstream;
+begin
+  RunCase('dz-lift');
 end;
 
 initialization

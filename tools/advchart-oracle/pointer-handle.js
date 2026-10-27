@@ -314,6 +314,29 @@ const CASES = [
       { op: 'idle', ms: 500 },
     ],
   },
+  {
+    id: 'single-top', note: 'a single axis at the top: the handle above it, turned half round (label direction -1); dragged 60 px left',
+    charts: [{ animation: false, singleAxis: { type: 'value', min: 0, max: 100, top: 150, height: 100, position: 'top',
+      axisPointer: { handle: { show: true, margin: 30 } } },
+      series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [10, 50, 90] }] }],
+    steps: [
+      { op: 'idle', ms: 10 },
+      { op: 'drag', handle: { mainType: 'singleAxis', index: 0 }, by: [[-30, 0], [-30, 0]] },
+      { op: 'idle', ms: 500 },
+    ],
+  },
+  {
+    id: 'x-over-series-tip', note: 'the same with an item tooltip: over the handle the symbol under it is no tooltip target',
+    charts: [{ animation: false, tooltip: { trigger: 'item' }, xAxis: { type: 'category', data: CATS, axisPointer: { handle: { show: true } } },
+      yAxis: { type: 'value', min: 0, max: 10 },
+      series: [{ type: 'scatter', symbolSize: 120, data: [[4, 0]] }] }],
+    steps: [
+      { op: 'idle', ms: 10 },
+      { op: 'move', at: [495, 300] },
+      { op: 'move', at: [495, 370] },
+      { op: 'idle', ms: 500 },
+    ],
+  },
 ];
 
 // =====================================================================

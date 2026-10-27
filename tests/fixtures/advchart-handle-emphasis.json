@@ -705,6 +705,182 @@
      }
     }
    ]
+  },
+  {
+   "id": "dz-lift",
+   "kind": "dataZoom",
+   "note": "a mid colour written, no emphasis colour: the hovered handle is the lifted colour (liftColor; pure green lifts to itself)",
+   "option": {
+    "dataZoom": [
+     {
+      "type": "slider",
+      "start": 20,
+      "end": 80,
+      "handleStyle": {
+       "color": "#3366cc"
+      }
+     }
+    ],
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6,
+       4
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "op": "start",
+     "at": null,
+     "record": {
+      "handles": [
+       {
+        "states": [],
+        "fill": "#3366cc",
+        "stroke": "#c0c9e6",
+        "lineWidth": 1,
+        "opacity": 1,
+        "centre": [
+         184,
+         370
+        ]
+       },
+       {
+        "states": [],
+        "fill": "#3366cc",
+        "stroke": "#c0c9e6",
+        "lineWidth": 1,
+        "opacity": 1,
+        "centre": [
+         452,
+         370
+        ]
+       }
+      ],
+      "move": {
+       "states": [],
+       "fill": "#8292cc",
+       "stroke": null,
+       "lineWidth": 1,
+       "opacity": 0.5,
+       "centre": [
+        318,
+        352
+       ]
+      }
+     }
+    },
+    {
+     "op": "handle0",
+     "at": [
+      184,
+      370
+     ],
+     "record": {
+      "handles": [
+       {
+        "states": [
+         "emphasis"
+        ],
+        "fill": "rgba(56,112,224,1)",
+        "stroke": "#8292cc",
+        "lineWidth": 1,
+        "opacity": 1,
+        "centre": [
+         184,
+         370
+        ]
+       },
+       {
+        "states": [],
+        "fill": "#3366cc",
+        "stroke": "#c0c9e6",
+        "lineWidth": 1,
+        "opacity": 1,
+        "centre": [
+         452,
+         370
+        ]
+       }
+      ],
+      "move": {
+       "states": [
+        "emphasis"
+       ],
+       "fill": "#8292cc",
+       "stroke": null,
+       "lineWidth": 1,
+       "opacity": 0.8,
+       "centre": [
+        318,
+        352
+       ]
+      }
+     }
+    },
+    {
+     "op": "none",
+     "at": [
+      5,
+      5
+     ],
+     "record": {
+      "handles": [
+       {
+        "states": [],
+        "fill": "#3366cc",
+        "stroke": "#c0c9e6",
+        "lineWidth": 1,
+        "opacity": 1,
+        "centre": [
+         184,
+         370
+        ]
+       },
+       {
+        "states": [],
+        "fill": "#3366cc",
+        "stroke": "#c0c9e6",
+        "lineWidth": 1,
+        "opacity": 1,
+        "centre": [
+         452,
+         370
+        ]
+       }
+      ],
+      "move": {
+       "states": [],
+       "fill": "#8292cc",
+       "stroke": null,
+       "lineWidth": 1,
+       "opacity": 0.5,
+       "centre": [
+        318,
+        352
+       ]
+      }
+     }
+    }
+   ]
   }
  ]
 }
