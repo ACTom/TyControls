@@ -1245,6 +1245,9 @@ begin
     else if t = 'sunburstRootToNode' then
       { [Batch 115] }
       Result := DoSunAction(p)
+    { [R5-D] the two legacy ones }
+    else if (t = 'sunburstHighlight') or (t = 'sunburstUnhighlight') then
+      Result := DoSunLegacy(p, t = 'sunburstHighlight')
     { [F3d] the tree's expand and collapse }
     else if t = 'treeExpandAndCollapse' then
       Result := DoTreeToggleAction(p)

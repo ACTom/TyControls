@@ -3227,6 +3227,8 @@ type
     { the series an action's query names (none: every one of the type) }
     function HierQuery(APayload: TJSONObject; const AType: string): TTyIntegerArray;
     function DoSunAction(APayload: TJSONObject): Boolean;
+    { [R5-D] the legacy sunburstHighlight / sunburstUnhighlight }
+    function DoSunLegacy(APayload: TJSONObject; AHigh: Boolean): Boolean;
     { [F3d] treeExpandAndCollapse as an action: the queried trees' node
       flipped, then the update (update: 'update') }
     function DoTreeToggleAction(APayload: TJSONObject): Boolean;

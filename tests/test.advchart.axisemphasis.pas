@@ -42,7 +42,7 @@ type
     function SeriesText(ASeriesIndex: Integer; out AEmph, ABlur, APoly: string): Boolean;
   end;
 
-  TAdvChartAxisEmphasisOracleTest = class(TTestCase)
+  TAeOracleBase = class(TTestCase)
   private
     FForm: TForm;
     FCtl: TTyStyleController;
@@ -57,10 +57,14 @@ type
     procedure OnEvent(Sender: TObject; const AEvent: TTyChartEvent);
     procedure CompareEvents(AWant: TJSONArray);
     procedure CompareState(AChart: TAeProbe; AState: TJSONObject; AIndex: Integer);
-    procedure RunCase(const AId: string);
   protected
+    procedure RunCase(const AId: string);
+    function FixtureName: string; virtual;
     procedure SetUp; override;
     procedure TearDown; override;
+  end;
+
+  TAdvChartAxisEmphasisOracleTest = class(TAeOracleBase)
   published
     procedure TestTheDefaultAsUpstream;
     procedure TestTheRootSaysNoAsUpstream;
@@ -74,6 +78,16 @@ type
     procedure TestALineWithoutSymbolsAsUpstream;
     procedure TestLinkedAxesAsUpstream;
     procedure TestAPolarAsUpstream;
+  end;
+
+  { [R5-D] tools/advchart-oracle/sunburst-legacy.js: sunburstHighlight /
+    sunburstUnhighlight, the same records }
+  TAdvChartSunburstLegacyOracleTest = class(TAeOracleBase)
+  protected
+    function FixtureName: string; override;
+  published
+    procedure TestOneSunburstAsUpstream;
+    procedure TestTwoSunburstsAsUpstream;
   end;
 
   TAdvChartTooltipSourcesOracleTest = class(TTestCase)
@@ -114,8 +128,8 @@ const
   cW = 600;
   cH = 400;
   cNulMark = #$E2#$90#$80;
-  cTypes: array[0..5] of string = ('highlight', 'downplay', 'updateaxispointer',
-    'showtip', 'hidetip', 'updated');
+  cTypes: array[0..7] of string = ('highlight', 'downplay', 'updateaxispointer',
+    'showtip', 'hidetip', 'updated', 'sunbursthighlight', 'sunburstunhighlight');
 
 function FixturePath(const AName: string): string;
 begin
@@ -252,7 +266,7 @@ end;
 
 { ==================== the oracle test ==================== }
 
-procedure TAdvChartAxisEmphasisOracleTest.SetUp;
+procedure TAeOracleBase.SetUp;
 var sl: TStringList;
 begin
   inherited SetUp;
@@ -264,7 +278,7 @@ begin
   FLog := TStringList.Create;
   sl := TStringList.Create;
   try
-    sl.LoadFromFile(FixturePath('advchart-axis-emphasis.json'));
+    sl.LoadFromFile(FixturePath(FixtureName));
     FRoot := GetJSON(sl.Text);
     sl.LoadFromFile(FixturePath('advchart-text-style.json'));
     FMeasure := GetJSON(sl.Text);
@@ -276,7 +290,12 @@ begin
   FReport := '';
 end;
 
-procedure TAdvChartAxisEmphasisOracleTest.TearDown;
+function TAeOracleBase.FixtureName: string;
+begin
+  Result := 'advchart-axis-emphasis.json';
+end;
+
+procedure TAeOracleBase.TearDown;
 begin
   FLog.Free;
   FRoot.Free;
@@ -287,21 +306,21 @@ begin
   inherited TearDown;
 end;
 
-procedure TAdvChartAxisEmphasisOracleTest.Bad(const AWhat: string);
+procedure TAeOracleBase.Bad(const AWhat: string);
 begin
   Inc(FBad);
   if Length(FReport) < 20000 then
     FReport := FReport + LineEnding + FWhere + ': ' + AWhat;
 end;
 
-procedure TAdvChartAxisEmphasisOracleTest.Finish(const AWhat: string);
+procedure TAeOracleBase.Finish(const AWhat: string);
 begin
   AssertTrue(AWhat + ': nothing compared', FCompared > 0);
   AssertEquals(Format('%s: %d of %d comparisons differ:%s',
     [AWhat, FBad, FCompared, FReport]), 0, FBad);
 end;
 
-function TAdvChartAxisEmphasisOracleTest.NewProbe(const AOptionJson: string;
+function TAeOracleBase.NewProbe(const AOptionJson: string;
   ATag: Integer): TAeProbe;
 begin
   Result := TAeProbe.Create(FForm);
@@ -319,14 +338,14 @@ begin
   Result.Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
 end;
 
-procedure TAdvChartAxisEmphasisOracleTest.OnEvent(Sender: TObject;
+procedure TAeOracleBase.OnEvent(Sender: TObject;
   const AEvent: TTyChartEvent);
 begin
   if not IsAeType(AEvent.EventType) then Exit;
   FLog.Add(IntToStr(TComponent(Sender).Tag) + #9 + AEvent.EventType + #9 + AEvent.Payload);
 end;
 
-procedure TAdvChartAxisEmphasisOracleTest.CompareEvents(AWant: TJSONArray);
+procedure TAeOracleBase.CompareEvents(AWant: TJSONArray);
 var
   i, n: Integer;
   e: TJSONArray;
@@ -374,7 +393,7 @@ begin
   end;
 end;
 
-procedure TAdvChartAxisEmphasisOracleTest.CompareState(AChart: TAeProbe;
+procedure TAeOracleBase.CompareState(AChart: TAeProbe;
   AState: TJSONObject; AIndex: Integer);
 var
   series: TJSONArray;
@@ -422,7 +441,7 @@ begin
   end;
 end;
 
-procedure TAdvChartAxisEmphasisOracleTest.RunCase(const AId: string);
+procedure TAeOracleBase.RunCase(const AId: string);
 var
   cases, charts, steps: TJSONArray;
   cs, st: TJSONObject;
@@ -547,6 +566,23 @@ end;
 procedure TAdvChartAxisEmphasisOracleTest.TestAPolarAsUpstream;
 begin
   RunCase('polar');
+end;
+
+{ ==================== sunburst-legacy ==================== }
+
+function TAdvChartSunburstLegacyOracleTest.FixtureName: string;
+begin
+  Result := 'advchart-sunburst-legacy.json';
+end;
+
+procedure TAdvChartSunburstLegacyOracleTest.TestOneSunburstAsUpstream;
+begin
+  RunCase('one');
+end;
+
+procedure TAdvChartSunburstLegacyOracleTest.TestTwoSunburstsAsUpstream;
+begin
+  RunCase('two');
 end;
 
 { ==================== tooltip-sources ==================== }
@@ -849,5 +885,6 @@ end;
 
 initialization
   RegisterTest(TAdvChartAxisEmphasisOracleTest);
+  RegisterTest(TAdvChartSunburstLegacyOracleTest);
   RegisterTest(TAdvChartTooltipSourcesOracleTest);
 end.
