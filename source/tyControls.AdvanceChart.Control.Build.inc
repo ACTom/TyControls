@@ -1087,6 +1087,10 @@ begin
   Inc(FStGen);
   { [R5-F] and a line's render removes its temporary symbols }
   FLineTemps := nil;
+  { [R5-F] a render lays every label out afresh (series:layoutlabels'
+    updateLayoutConfig): a dragged label's drift goes [was: kept until the
+    next setOption] }
+  FLbDrifts := nil;
   { the legend is rendered anew: its buttons are new elements in no state
     [Batch 98] }
   FLegendSelHoverLegend := -1;

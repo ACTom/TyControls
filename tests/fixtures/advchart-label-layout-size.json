@@ -4401,6 +4401,474 @@
    ]
   },
   {
+   "id": "drag.pie.update",
+   "note": "a pie label dragged, then a legend toggle of another slice: the update lays the labels out afresh, the drag gone",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "legend": {},
+    "series": [
+     {
+      "type": "pie",
+      "radius": "40%",
+      "data": [
+       {
+        "name": "a",
+        "value": 3
+       },
+       {
+        "name": "b",
+        "value": 5
+       },
+       {
+        "name": "c",
+        "value": 2
+       },
+       {
+        "name": "d",
+        "value": 4
+       }
+      ],
+      "labelLayout": {
+       "draggable": true
+      }
+     }
+    ]
+   },
+   "labels": [
+    {
+     "s": 0,
+     "d": 0,
+     "ignore": false,
+     "texts": [
+      "a"
+     ],
+     "rect": [
+      "4078a3b45a08f6a0",
+      "405dee76ef25a503",
+      "401ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": null,
+     "draggable": true,
+     "cursor": "move"
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "ignore": false,
+     "texts": [
+      "b"
+     ],
+     "rect": [
+      "4078a3b45a08f6a1",
+      "4070c462443696bf",
+      "401ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": null,
+     "draggable": true,
+     "cursor": "move"
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "ignore": false,
+     "texts": [
+      "c"
+     ],
+     "rect": [
+      "4067173b7792d283",
+      "406fa768b411ed42",
+      "4018000000000000",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": null,
+     "draggable": true,
+     "cursor": "move"
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "ignore": false,
+     "texts": [
+      "d"
+     ],
+     "rect": [
+      "406700313a222eab",
+      "4060d8974bee12c0",
+      "401ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": null,
+     "draggable": true,
+     "cursor": "move"
+    }
+   ],
+   "guides": [
+    {
+     "s": 0,
+     "d": 0,
+     "ignore": false,
+     "points": [
+      [
+       "4075de112365dd28",
+       "40612e82eb6e2a88"
+      ],
+      [
+       "407673b45a08f6a0",
+       "405f6e76ef25a503"
+      ],
+      [
+       "407853b45a08f6a0",
+       "405f6e76ef25a503"
+      ]
+     ]
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "ignore": false,
+     "points": [
+      [
+       "4075de112365dd29",
+       "407068be8a48eabc"
+      ],
+      [
+       "407673b45a08f6a1",
+       "40712462443696bf"
+      ],
+      [
+       "407853b45a08f6a1",
+       "40712462443696bf"
+      ]
+     ]
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "ignore": false,
+     "points": [
+      [
+       "406dae82eb6e2a89",
+       "406f3c2246cbba52"
+      ],
+      [
+       "406c373b7792d283",
+       "407033b45a08f6a1"
+      ],
+      [
+       "4068773b7792d283",
+       "407033b45a08f6a1"
+      ]
+     ]
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "ignore": false,
+     "points": [
+      [
+       "406dae82eb6e2a88",
+       "4062c3ddb93445af"
+      ],
+      [
+       "406c373b7792d282",
+       "406198974bee12c0"
+      ],
+      [
+       "4068773b7792d282",
+       "406198974bee12c0"
+      ]
+     ]
+    }
+   ],
+   "drift": [
+    {
+     "d": 0,
+     "dx": 40,
+     "dy": 25
+    }
+   ],
+   "labelsAfter": [
+    {
+     "s": 0,
+     "d": 0,
+     "ignore": false,
+     "texts": [
+      "a"
+     ],
+     "rect": [
+      "407b23b45a08f6a0",
+      "4062173b7792d282",
+      "401ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": null,
+     "draggable": true,
+     "cursor": "move"
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "ignore": false,
+     "texts": [
+      "b"
+     ],
+     "rect": [
+      "4078a3b45a08f6a1",
+      "4070c462443696bf",
+      "401ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": null,
+     "draggable": true,
+     "cursor": "move"
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "ignore": false,
+     "texts": [
+      "c"
+     ],
+     "rect": [
+      "4067173b7792d283",
+      "406fa768b411ed42",
+      "4018000000000000",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": null,
+     "draggable": true,
+     "cursor": "move"
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "ignore": false,
+     "texts": [
+      "d"
+     ],
+     "rect": [
+      "406700313a222eab",
+      "4060d8974bee12c0",
+      "401ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": null,
+     "draggable": true,
+     "cursor": "move"
+    }
+   ],
+   "guidesAfter": [
+    {
+     "s": 0,
+     "d": 0,
+     "ignore": false,
+     "points": [
+      [
+       "4075de112365dd28",
+       "40612e82eb6e2a88"
+      ],
+      [
+       "407943b45a08f6a0",
+       "4062d73b7792d282"
+      ],
+      [
+       "407b23b45a08f6a0",
+       "4062d73b7792d282"
+      ]
+     ]
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "ignore": false,
+     "points": [
+      [
+       "4075de112365dd29",
+       "407068be8a48eabc"
+      ],
+      [
+       "407673b45a08f6a1",
+       "40712462443696bf"
+      ],
+      [
+       "407853b45a08f6a1",
+       "40712462443696bf"
+      ]
+     ]
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "ignore": false,
+     "points": [
+      [
+       "406dae82eb6e2a89",
+       "406f3c2246cbba52"
+      ],
+      [
+       "406c373b7792d283",
+       "407033b45a08f6a1"
+      ],
+      [
+       "4068773b7792d283",
+       "407033b45a08f6a1"
+      ]
+     ]
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "ignore": false,
+     "points": [
+      [
+       "406dae82eb6e2a88",
+       "4062c3ddb93445af"
+      ],
+      [
+       "406c373b7792d282",
+       "406198974bee12c0"
+      ],
+      [
+       "4068773b7792d282",
+       "406198974bee12c0"
+      ]
+     ]
+    }
+   ],
+   "then": {
+    "type": "legendToggleSelect",
+    "name": "c",
+    "__ec_inner_14": {}
+   },
+   "labelsThen": [
+    {
+     "s": 0,
+     "d": 0,
+     "ignore": false,
+     "texts": [
+      "a"
+     ],
+     "rect": [
+      "407922cd64049b98",
+      "405fb4ca6fed919e",
+      "401ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": null,
+     "draggable": true,
+     "cursor": "move"
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "ignore": false,
+     "texts": [
+      "b"
+     ],
+     "rect": [
+      "40767967aab563dc",
+      "4071dc350eb9ff74",
+      "401ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": null,
+     "draggable": true,
+     "cursor": "move"
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "ignore": false,
+     "texts": [
+      "d"
+     ],
+     "rect": [
+      "4066003e265697b5",
+      "4062500000000002",
+      "401ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": null,
+     "draggable": true,
+     "cursor": "move"
+    }
+   ],
+   "guidesThen": [
+    {
+     "s": 0,
+     "d": 0,
+     "ignore": false,
+     "points": [
+      [
+       "40764918c003e158",
+       "4061edce7ff83d50"
+      ],
+      [
+       "4076f2cd64049b98",
+       "40609a6537f6c8cf"
+      ],
+      [
+       "4078d2cd64049b98",
+       "40609a6537f6c8cf"
+      ]
+     ]
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "ignore": false,
+     "points": [
+      [
+       "40740b49d31f7c83",
+       "4071546293235ddb"
+      ],
+      [
+       "40744967aab563dc",
+       "40723c350eb9ff74"
+      ],
+      [
+       "40762967aab563dc",
+       "40723c350eb9ff74"
+      ]
+     ]
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "ignore": false,
+     "points": [
+      [
+       "406cd6f99764680a",
+       "4064000000000002"
+      ],
+      [
+       "406b374863c73b8c",
+       "4063100000000002"
+      ],
+      [
+       "4067774863c73b8c",
+       "4063100000000002"
+      ]
+     ]
+    }
+   ]
+  },
+  {
    "id": "pie.width",
    "note": "pie labels under labelLayout width 30: the pie's default overflow 'truncate' cuts them",
    "W": 600,

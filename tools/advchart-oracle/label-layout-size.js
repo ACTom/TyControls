@@ -121,6 +121,11 @@ const CASES = [
   { id: 'drag.attached', note: 'labels on their host (dx / dy) and draggable: the position puts them back, the line as it was',
     option: scatter({ label: { show: true }, labelLine: { show: true }, labelLayout: { draggable: true, dx: 20, dy: -20 }, data: pts(3, 7, 13) }),
     drift: [{ d: 0, dx: 30, dy: 15 }] },
+  // ---- [R5-F] an update after a drag: updateLayoutConfig puts every label back ----
+  { id: 'drag.pie.update', note: 'a pie label dragged, then a legend toggle of another slice: the update lays the labels out afresh, the drag gone',
+    option: { animation: false, legend: {}, series: [{ type: 'pie', radius: '40%', data: [{ name: 'a', value: 3 }, { name: 'b', value: 5 }, { name: 'c', value: 2 }, { name: 'd', value: 4 }],
+      labelLayout: { draggable: true } }] },
+    drift: [{ d: 0, dx: 40, dy: 25 }], then: { type: 'legendToggleSelect', name: 'c' } },
   // ---- [R5-F] a pie's labels: the layout's width / height on their style too ----
   { id: 'pie.width', note: "pie labels under labelLayout width 30: the pie's default overflow 'truncate' cuts them",
     option: { animation: false, series: [{ type: 'pie', radius: '40%', data: PIE(), labelLayout: { width: 30 } }] } },
@@ -204,6 +209,13 @@ function runCase(c) {
       rec.drift = c.drift;
       rec.labelsAfter = read();
       rec.guidesAfter = guideRecs(chart);
+      if (c.then) {
+        chart.dispatchAction(c.then);
+        chart.renderToSVGString();
+        rec.then = c.then;
+        rec.labelsThen = read();
+        rec.guidesThen = guideRecs(chart);
+      }
     }
     return rec;
   } finally {
@@ -227,6 +239,7 @@ function generate() {
   must(by['drag.free'].labelsAfter[1].rect[0] !== by['drag.free'].labels[1].rect[0], 'anchor: a free label moves');
   must(by['drag.attached'].labelsAfter[0].rect[0] === by['drag.attached'].labels[0].rect[0], 'anchor: an attached label stays');
   must(by['drag.pie'].labels.every(l => l.cursor === 'move'), 'anchor: the cursor is move');
+  must(by['drag.pie.update'].labelsThen[0].rect[0] !== by['drag.pie.update'].labelsAfter[0].rect[0], 'anchor: the update put the dragged label back');
   must(by['pie.width'].labels.some(l => l.texts.join('').indexOf('...') >= 0), 'anchor: a pie label cut at the layout width');
   must(by['pie.width.box'].labels.every(l => fh(l.rect[2]) >= 70), 'anchor: a boxed pie label as wide as the layout says');
   must(by['pie.height'].labels.every(l => l.texts.length === 1), 'anchor: a pie label lost the lines past the height');
