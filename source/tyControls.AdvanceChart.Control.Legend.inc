@@ -1281,4 +1281,34 @@ begin
   end;
   { MapSeries.getLegendIcon: the border is no border [Batch 152] }
   if t = TyMapSeriesTypeName then ASrc.HasStroke := False;
+  { [spec 242] A LINES SERIES DRAWS WITH ITS STROKE (visualDrawType
+    'stroke'): the visual style is its lineStyle -- the icon's pen is the
+    visual's stroke, 2 wide where lineStyle.width is above nought; a
+    gradient colour paints the pen too }
+  if t = TyLinesSeriesTypeName then
+  begin
+    ASrc.HasStroke := True;
+    ASrc.Stroke := TTyChartColor(SeriesColor(s));
+    ASrc.VisualLineWidth := 0;
+    ASrc.StrokeObj := Default(TTyChartObjFill);
+    if nodes[0] <> nil then
+    begin
+      st := nodes[0].Find('lineStyle');
+      if st is TJSONObject then
+      begin
+        d := TJSONObject(st).Find('width');
+        if (d <> nil) and (d.JSONType = jtNumber) then ASrc.VisualLineWidth := d.AsFloat;
+        d := TJSONObject(st).Find('color');
+        if (d <> nil) and (d.JSONType = jtString) then
+        begin
+          if TyTryParseChartColor(d.AsString, col) then ASrc.Stroke := col;
+        end
+        else if TyTryReadGradient(d, ASrc.StrokeObj.Gradient) then
+        begin
+          ASrc.StrokeObj.Present := True;
+          ASrc.Stroke := TyGradientSolid(ASrc.StrokeObj.Gradient);
+        end;
+      end;
+    end;
+  end;
 end;

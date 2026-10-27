@@ -1054,6 +1054,9 @@ begin
           { a gauge's arc is a dispatcher of its own [F2b] }
           Result.HdPeer := el.Anim.Role = carGaugeProgress;
           if d.DataIndex >= 0 then Result.HdKind := 1 else Result.HdKind := 2;
+          { [spec 242] a lines effect symbol: the row's events and tooltip,
+            a click selects (its `selected` is the row's), no emphasis }
+          if el.Anim.Role = carLinesEffect then Result.HdKind := 31;
         end;
       ctkMarkPoint, ctkMarkLine, ctkMarkArea:
         { [R2-B] its own function: the keyboard's marker stop takes it too }

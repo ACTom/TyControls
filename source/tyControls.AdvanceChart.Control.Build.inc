@@ -832,7 +832,11 @@ begin
   if (ASlot < 0) or (ASlot > High(FBindings)) or (FOption = nil) then Exit;
   d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
   if not (d is TJSONObject) then Exit;
-  st := TyReadOptStyle(TJSONObject(d), 'itemStyle');
+  { [spec 242] a lines series' visual colour is its lineStyle's }
+  if FBindings[ASlot].SeriesType = TyLinesSeriesTypeName then
+    st := TyReadOptStyle(TJSONObject(d), 'lineStyle')
+  else
+    st := TyReadOptStyle(TJSONObject(d), 'itemStyle');
   if st.Color.IsAuto then Exit;
   if (st.Color.Gradient.Kind <> cgkNone) or st.Color.Pattern.Present then
   begin

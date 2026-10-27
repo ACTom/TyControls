@@ -2079,8 +2079,9 @@ begin
     else if FSt[s].Kind = sskLines then
     begin
       { THE LINE HOSTS, the end symbols after it are parts; the effect
-        symbol is no part of the Line group's states [Batch 121] }
-      if pe^.Silent then Continue;
+        symbol is no part of the Line group's states [Batch 121] -- a
+        pointer target since spec 242, still no part }
+      if pe^.Silent or (pe^.Anim.Role = carLinesEffect) then Continue;
       if FSt[s].HostIdx[raw] < 0 then FSt[s].HostIdx[raw] := k
       else StPush(FSt[s].PartIdx[raw], k);
     end
@@ -5767,7 +5768,7 @@ var
 begin
   { [F2b] a large batch's row too: its ECData carries the row its handler
     found (BarView largePathUpdateDataIndex, LargeSymbolDraw) }
-  if not (ATarget.HdKind in [1, 3, 16]) then Exit;
+  if not (ATarget.HdKind in [1, 3, 16, 31]) then Exit;
   s := ATarget.HdSeries;
   slot := SlotOfSeries(s);
   if slot < 0 then Exit;
@@ -5776,7 +5777,10 @@ begin
   { a marker's element is never flagged selected: always select; nor is a
     large batch, nor a gauge's arc (updateSeriesElementSelection reaches
     the item graphic elements only) [F2b] }
-  if (ATarget.HdKind = 1) and not ATarget.HdEdge and not ATarget.HdPeer then
+  { [spec 242] a lines effect symbol is flagged with its row (enterSelect
+    traverses the item's group) }
+  if ((ATarget.HdKind = 1) and not ATarget.HdEdge and not ATarget.HdPeer)
+    or (ATarget.HdKind = 31) then
   begin
     SelEnsure(slot);
     if (s <= High(FSel)) and FSelInit[s] then

@@ -517,6 +517,12 @@ type
     { [Batch 148] the root option's keys a region model's chain reaches
       (itemStyle, label, emphasis, select, blur), a copy }
     FRoot: TJSONObject;
+    { [spec 242] addGeoCoord's map: a map series' `geoCoord` (ECharts 2),
+      name to coordinate, the last one set for a name winning }
+    FNameCoords: array of record
+      Name: string;
+      X, Y: Double;
+    end;
     { the region options, merged with their echartsStyle, by name (owned) }
     FOptNames: TTyStringArray;
     FOpts: array of TJSONObject;
@@ -620,6 +626,9 @@ type
     { getRegion / getGeoCoord }
     function RegionByName(const AName: string): TTyGeoRegion;
     function GeoCoord(const AName: string; out APt: TTyGeoPt): Boolean;
+    { [spec 242] addGeoCoord: a name's coordinate, asked before the
+      region's centre (setGeoCoords from a map series' geoCoord) }
+    procedure AddGeoCoord(const AName: string; AX, AY: Double);
     { dataToPoint of a coordinate pair, through the projection and the
       overall (ANoRoam: the raw) matrix; False is upstream's undefined }
     function PointOf(AX, AY: Double; out APx: TTyPointF;
@@ -3171,11 +3180,36 @@ begin
   if FSource <> nil then Result := FSource.RegionByName(AName);
 end;
 
+procedure TTyGeo.AddGeoCoord(const AName: string; AX, AY: Double);
+var i: Integer;
+begin
+  for i := 0 to High(FNameCoords) do
+    if FNameCoords[i].Name = AName then
+    begin
+      FNameCoords[i].X := AX;
+      FNameCoords[i].Y := AY;
+      Exit;
+    end;
+  i := Length(FNameCoords);
+  SetLength(FNameCoords, i + 1);
+  FNameCoords[i].Name := AName;
+  FNameCoords[i].X := AX;
+  FNameCoords[i].Y := AY;
+end;
+
 function TTyGeo.GeoCoord(const AName: string; out APt: TTyGeoPt): Boolean;
-var r: TTyGeoRegion;
+var r: TTyGeoRegion; i: Integer;
 begin
   APt.X := NaN;
   APt.Y := NaN;
+  { `this._nameCoordMap.get(name) || region.getCenter()` }
+  for i := 0 to High(FNameCoords) do
+    if FNameCoords[i].Name = AName then
+    begin
+      APt.X := FNameCoords[i].X;
+      APt.Y := FNameCoords[i].Y;
+      Exit(True);
+    end;
   r := RegionByName(AName);
   Result := r <> nil;
   if Result then APt := r.GetCenter;

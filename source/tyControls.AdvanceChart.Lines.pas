@@ -14,6 +14,10 @@ unit tyControls.AdvanceChart.Lines;
       value is 0 (the series' data becomes a Float32Array of zeros);
     a pair of objects with `coord` and `name` -- ECharts 2's pairs (compatEc2): the
       first point's name names the row, its keys win over the second's.
+  A coordinate written as one string (a region's name, say) is two
+  characters by the time it is projected: getLineCoords copies each
+  coordinate's [0] and [1], and a geo's string branch is never reached
+  [spec 242].
 
   THE COORDINATE HOOK. A row's coordinates go through TTyLinesProject, one
   pair at a time -- the coordinate system's dataToPoint. A cartesian, a polar
@@ -36,6 +40,14 @@ unit tyControls.AdvanceChart.Lines;
   last one stopped. TTyLinesEffect is one symbol's run state; the control's
   animation proxy steps it from the clip's during.
 
+  THE COLOUR MAY BE A GRADIENT [spec 242]: the line strokes it over its own
+  path's rect (grown by the pen), the end symbols and the effect symbol fill
+  it in their own frames, carried by their transforms (TyLinesPlacedGradient,
+  every frame for what moves). The label is not the line's colour: Line's
+  textConfig asks for the outside ink unless the label wrote a colour
+  ('inherit' is the line's). Its `rotate` and `offset` lie over what
+  Line.beforeUpdate sets, as zrender's updateInnerText lays them.
+
   LARGE LINES are in AdvanceChart.Large (lgkLines); their segs come from here.
 
   PURE: SysUtils, Math, fpjson and the AdvanceChart value units. }
@@ -53,7 +65,10 @@ const
   TyLinesEffectZ2 = 100;
 
 type
-  TTyLinesValueKind = (lvkNumber, lvkString, lvkNull, lvkOther);
+  { lvkName [spec 242]: a coordinate written as one string (a region's
+    name, say); Str is the string, and both halves of the pair carry it --
+    the projection splits it as getLineCoords does }
+  TTyLinesValueKind = (lvkNumber, lvkString, lvkNull, lvkOther, lvkName);
   { one data coordinate as written }
   TTyLinesValue = record
     Kind: TTyLinesValueKind;
@@ -130,6 +145,10 @@ type
     Ignore: Boolean;
     LastFrame: Integer;
     LastFramePercent: Double;
+    { [spec 242] the delay was a string that is no number (a '@Name' nobody
+      registered): the clip's start time is a string upstream, every
+      percent not a number -- the symbol is never anywhere }
+    Poisoned: Boolean;
   end;
 
   { ONE ROW'S LOOK, as the visual and the view resolve it: the line's
@@ -168,6 +187,21 @@ type
     EffOpacity: Double;
     EffPeriod, EffDelay: Double;
     EffLoop, EffRoundTrip: Boolean;
+    { [spec 242] see TTyLinesEffect.Poisoned }
+    EffPoisoned: Boolean;
+    { [spec 242] THE VISUAL COLOUR AS A GRADIENT (Kind cgkNone: a plain
+      colour, Stroke): the line's pen, the end symbols' and -- unless
+      effect.color is written -- the effect symbol's colour (EffGrad).
+      Stroke and EffColor hold the first stop then, what a tooltip marker
+      reads (convertToColorString) }
+    StrokeGrad: TTyChartGradient;
+    EffGrad: TTyChartGradient;
+    { [spec 242] the label's textConfig: `rotate` (degrees, as radians) and
+      `offset` where written -- applied over what Line.beforeUpdate sets }
+    LabelHasRot: Boolean;
+    LabelRot: Double;
+    LabelHasOff: Boolean;
+    LabelOffX, LabelOffY: Double;
   end;
   TTyLinesInkArray = array of TTyLinesInk;
 
@@ -192,6 +226,10 @@ type
     LargeStroke: TTyChartColor;
     LargeWidth, LargeOpacity: Double;
     LargeDash: TTyDoubleArray;
+    { [spec 242] the large batch's colour as a gradient (cgkNone: none) }
+    LargeGrad: TTyChartGradient;
+    { [spec 242] device px per CSS px, what the build measured with }
+    Scale: Double;
   end;
   TTyLinesSolvedArray = array of TTyLinesSolved;
 
@@ -245,7 +283,27 @@ procedure TyLinesLabelPlace(const AG: TTyLinesGeom; APercent: Double;
   APos: TTyLinesLabelPos; ADistX, ADistY: Double;
   out AX, AY, AOX, AOY, ARot, AAnchorX, AAnchorY: Double;
   out AAH: TTyTextAnchorH; out AAV: TTyTextAnchorV);
+{ [spec 242] the same with the label's textConfig over it -- zrender's
+  updateInnerText: the rotation where `rotate` is written (ARot then out of
+  it, `rotation && rotate`: a not-a-number turns nothing), the offset added
+  to x / y with the origin at minus the offset; AX .. ARot are then the
+  text's innerTransformable }
+procedure TyLinesLabelPlace(const AG: TTyLinesGeom; APercent: Double;
+  APos: TTyLinesLabelPos; ADistX, ADistY: Double; AHasRot: Boolean;
+  ARotate: Double; AHasOff: Boolean; AOffX, AOffY: Double;
+  out AX, AY, AOX, AOY, ARot, AAnchorX, AAnchorY: Double;
+  out AAH: TTyTextAnchorH; out AAV: TTyTextAnchorV); overload;
 function TyLinesLabelPosOf(const AWord: string): TTyLinesLabelPos;
+{ [spec 242] a gradient in an element's own frame put on its style: ALocal
+  resolved against ABox (getBoundingRect in that frame), carried by
+  scale / turn / move as Transformable composes them -- the painter's
+  coordinates. The radius scales by the root of the determinant. }
+function TyLinesPlacedGradient(const ALocal: TTyChartGradient; const ABox: TTyXYWH;
+  ASX, ASY, ARot, AX, AY: Double): TTyChartGradient;
+{ [spec 242] PathProxy.getBoundingRect of a lines row's line (moveTo, then
+  lineTo or quadraticCurveTo), grown by its pen as Path.getBoundingRect grows
+  it (no fill: by at least strokeContainThreshold) }
+function TyLinesLineBox(const AG: TTyLinesGeom; ALineWidth: Double): TTyXYWH;
 { The line from its start to percent: the straight segment, or the curve's
   first part (quadraticSubdivide) as ASteps + 1 points }
 function TyLinesPartPoints(const AG: TTyLinesGeom; APercent: Double;
@@ -297,10 +355,13 @@ function TyLinesQuadDerivAt(AP0, AP1, AP2, AT: Double): Double;
 implementation
 
 uses tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Data,
-  tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Symbol;
+  tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Symbol,
+  tyControls.AdvanceChart.ZrPath;
 
 const
   cPi: Double = 3.141592653589793;
+
+procedure PlaceLocalGrad(var AEl: TTyChartElement; ASX, ASY, ARot, AX, AY: Double); forward;
 
 { ==================== JSON ==================== }
 
@@ -417,6 +478,14 @@ begin
 end;
 
 { the coordinates of an item's `coords` or a bare array: [[x, y], ...] }
+function NameValue(const AName: string): TTyLinesValue;
+begin
+  Result := Default(TTyLinesValue);
+  Result.Kind := lvkName;
+  Result.Num := NaN;
+  Result.Str := AName;
+end;
+
 procedure ReadCoords(AData: TJSONData; var ARaw: TTyLinesRaw);
 var i, n: Integer; p: TJSONData;
 begin
@@ -427,6 +496,13 @@ begin
   for i := 0 to n - 1 do
   begin
     p := TJSONArray(AData).Items[i];
+    { [spec 242] a coordinate that is one string }
+    if (p <> nil) and (p.JSONType = jtString) then
+    begin
+      ARaw.XY[i * 2] := NameValue(p.AsString);
+      ARaw.XY[i * 2 + 1] := NameValue(p.AsString);
+      Continue;
+    end;
     if (p is TJSONArray) and (p.Count >= 1) then ARaw.XY[i * 2] := ValueOf(p.Items[0])
     else ARaw.XY[i * 2] := ValueOf(nil);
     if (p is TJSONArray) and (p.Count >= 2) then ARaw.XY[i * 2 + 1] := ValueOf(p.Items[1])
@@ -518,8 +594,10 @@ begin
       for k := 0 to 1 do
       begin
         if (c0 is TJSONArray) and (c0.Count > k) then r.XY[k] := ValueOf(TJSONArray(c0).Items[k])
+        else if (c0 <> nil) and (c0.JSONType = jtString) then r.XY[k] := NameValue(c0.AsString)
         else r.XY[k] := ValueOf(nil);
         if (c1 is TJSONArray) and (c1.Count > k) then r.XY[2 + k] := ValueOf(TJSONArray(c1).Items[k])
+        else if (c1 <> nil) and (c1.JSONType = jtString) then r.XY[2 + k] := NameValue(c1.AsString)
         else r.XY[2 + k] := ValueOf(nil);
       end;
       { `fromName` / `toName` are the two points' names; the merged item's
@@ -756,6 +834,16 @@ procedure TyLinesLabelPlace(const AG: TTyLinesGeom; APercent: Double;
   APos: TTyLinesLabelPos; ADistX, ADistY: Double;
   out AX, AY, AOX, AOY, ARot, AAnchorX, AAnchorY: Double;
   out AAH: TTyTextAnchorH; out AAV: TTyTextAnchorV);
+begin
+  TyLinesLabelPlace(AG, APercent, APos, ADistX, ADistY, False, 0, False, 0, 0,
+    AX, AY, AOX, AOY, ARot, AAnchorX, AAnchorY, AAH, AAV);
+end;
+
+procedure TyLinesLabelPlace(const AG: TTyLinesGeom; APercent: Double;
+  APos: TTyLinesLabelPos; ADistX, ADistY: Double; AHasRot: Boolean;
+  ARotate: Double; AHasOff: Boolean; AOffX, AOffY: Double;
+  out AX, AY, AOX, AOY, ARot, AAnchorX, AAnchorY: Double;
+  out AAH: TTyTextAnchorH; out AAV: TTyTextAnchorV);
 var
   fromP, toP, d, tg, cp: TTyPointF;
   half, dy, x, y, ox, oy, dir, st, ct, l4, l5, aa, ab, ac, ad, atx, aty: Double;
@@ -844,6 +932,17 @@ begin
           ox := ADistX * dir;
           oy := -dy;
         end;
+    end;
+    { [spec 242] textConfig over beforeUpdate's: the rotation where it is
+      written, the offset onto the position with the origin at minus it
+      (`if (textOffset)`; no textConfig.origin here) }
+    if AHasRot then ARot := ARotate;
+    if AHasOff then
+    begin
+      x := x + AOffX;
+      y := y + AOffY;
+      ox := -AOffX;
+      oy := -AOffY;
     end;
     AX := x;
     AY := y;
@@ -1113,6 +1212,7 @@ end;
 procedure TyLinesEffectStep(var AE: TTyLinesEffect; AT: Double);
 var mask: TFPUExceptionMask;
 begin
+  if AE.Poisoned then AT := NaN;
   AE.T := AT;
   mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
     exOverflow, exUnderflow, exPrecision]);
@@ -1269,6 +1369,14 @@ begin
     el.Shape.Bounds := TyLargeBounds(ASolved.Large);
     el.Style.HasFill := False;
     el.Style.StrokeColor := ASolved.LargeStroke;
+    { [spec 242] a gradient over the batch's own bounding rect (the
+      LargeLinesPath's, no pen) }
+    if ASolved.LargeGrad.Kind <> cgkNone then
+    begin
+      el.Style.StrokeGradient := ASolved.LargeGrad;
+      el.Style.GradBoxSet := True;
+      el.Style.GradBox := TyRectToXYWH(el.Shape.Bounds);
+    end;
     el.Style.StrokeWidthLogical := ASolved.LargeWidth;
     el.Style.Alpha := ASolved.LargeOpacity;
     el.Style.DashLogical := ASolved.LargeDash;
@@ -1289,7 +1397,22 @@ begin
     pts := LinePoints(g, ASolved.Poly, 1);
     el := TyChartElement(TyShapePolyline(pts));
     el.Style.HasFill := False;
+    { [spec 242] the visual colour a label's `color: 'inherit'` reads
+      (inheritColor); no fill is painted }
+    el.Style.FillColor := ink.Stroke;
     el.Style.StrokeColor := ink.Stroke;
+    { [spec 242] a gradient over the line path's own rect, grown by the pen
+      (the polyline's samples would cut a curve's bulge short) }
+    if ink.StrokeGrad.Kind <> cgkNone then
+    begin
+      el.Style.StrokeGradient := ink.StrokeGrad;
+      el.Style.GradBoxSet := True;
+      if ASolved.Poly then
+        el.Style.GradBox := TyZrStrokeRect(TyZrBBox(TyZrPolyPath(g.Pts, False)),
+          TyZrDataLength(TyZrPolyPath(g.Pts, False)), True, False, ink.Width * ASolved.Scale, 1)
+      else
+        el.Style.GradBox := TyLinesLineBox(g, ink.Width * ASolved.Scale);
+    end;
     el.Style.StrokeWidthLogical := ink.Width;
     el.Style.Alpha := ink.Opacity;
     el.Style.DashLogical := ink.Dash;
@@ -1314,9 +1437,22 @@ begin
       el.Anim.G[10] := ink.AlignFlags;
       { THE LABEL, where Line.beforeUpdate puts it at percent 1; a polyline
         has none }
+      { [spec 242] the label's textConfig rides with the line: [has turn,
+        turn, has offset, x, y] }
+      el.Anim.Vals := nil;
+      if ink.LabelHasRot or ink.LabelHasOff then
+      begin
+        SetLength(el.Anim.Vals, 5);
+        el.Anim.Vals[0] := Ord(ink.LabelHasRot);
+        el.Anim.Vals[1] := ink.LabelRot;
+        el.Anim.Vals[2] := Ord(ink.LabelHasOff);
+        el.Anim.Vals[3] := ink.LabelOffX;
+        el.Anim.Vals[4] := ink.LabelOffY;
+      end;
       if ink.LabelShow and (ink.LabelText <> '') then
       begin
-        TyLinesLabelPlace(g, 1, ink.LabelPos, ink.DistX, ink.DistY, ax, ay, ox, oy,
+        TyLinesLabelPlace(g, 1, ink.LabelPos, ink.DistX, ink.DistY, ink.LabelHasRot,
+          ink.LabelRot, ink.LabelHasOff, ink.LabelOffX, ink.LabelOffY, ax, ay, ox, oy,
           lrot, anx, any, ah, av);
         if not (IsNan(anx) or IsNan(any) or IsInfinite(anx) or IsInfinite(any)) then
         begin
@@ -1386,6 +1522,16 @@ begin
           sym.Style.HasFill := True;
           sym.Style.FillColor := ink.Stroke;
         end;
+        { [spec 242] the line's gradient in the symbol's own frame:
+          createSymbol(-w / 2, -h / 2, w, h), turned and placed }
+        if ink.StrokeGrad.Kind <> cgkNone then
+        begin
+          sym.Anim.LGrad := ink.StrokeGrad;
+          sym.Anim.LGradBox := TyZrBBox(TyZrSymbol(ink.Sym[e].Name,
+            -ink.Sym[e].W / 2, -ink.Sym[e].H / 2, ink.Sym[e].W, ink.Sym[e].H));
+          sym.Anim.LGradStroke := em or (kind = tsyLine);
+          PlaceLocalGrad(sym, 1, 1, rot, at.X, at.Y);
+        end;
         sym.Style.Alpha := ink.Opacity;
         sym.Z := ASolved.Z;
         sym.Z2 := ASolved.Z2;
@@ -1424,6 +1570,7 @@ begin
       if ink.EffLoop then flags := flags or 1;
       if ink.EffRoundTrip then flags := flags or 2;
       if ASolved.Poly then flags := flags or 4;
+      if ink.EffPoisoned then flags := flags or 8;
       sym.Anim.G[9] := flags;
       sym.Anim.G[10] := ink.EffW;
       sym.Anim.G[11] := ink.EffH;
@@ -1452,8 +1599,19 @@ begin
       sym.Style.Alpha := ink.EffOpacity;
       sym.Z := ASolved.Z;
       sym.Z2 := TyLinesEffectZ2;
-      { NOT A POINTER TARGET here (see the spec's deviations) }
-      sym.Silent := True;
+      { [spec 242] its colour as a gradient, in the unit symbol's frame }
+      if ink.EffGrad.Kind <> cgkNone then
+      begin
+        sym.Anim.LGrad := ink.EffGrad;
+        sym.Anim.LGradBox := TyZrBBox(TyZrSymbol(ink.EffName, -0.5, -0.5, 1, 1));
+        sym.Anim.LGradStroke := TySymbolKindOf(ink.EffName, em, pd) = tsyLine;
+      end;
+      { [spec 242] A POINTER TARGET: setItemGraphicEl writes the row onto
+        every element of the item's group, the effect symbol too -- its
+        row's events, tooltip and click-to-select; it is no highDown
+        dispatcher, so no emphasis (the control's hit kind says so) }
+      sym.Silent := False;
+      sym.HitSlopLogical := 0;
       sym.Datum := TyChartDatum(ASolved.SeriesIndex, g.Row, g.Row);
       SetClip(sym);
       TyLinesEffectOfElement(sym, eff);
@@ -1482,6 +1640,7 @@ begin
     g := GeomOfG(AEl);
   TyLinesEffectInit(AE, g, (flags and 4) <> 0, AEl.Anim.Mono, AEl.Anim.G[10],
     AEl.Anim.G[11]);
+  AE.Poisoned := (flags and 8) <> 0;
 end;
 
 procedure TyLinesFrameEffect(var AEl: TTyChartElement; const AE: TTyLinesEffect;
@@ -1497,6 +1656,9 @@ begin
   sh := EffectShape(AEl.Anim.Mono, AE.ScaleX, AE.ScaleY, AE.X, AE.Y, AE.Rotation);
   AEl.Shape := sh;
   AEl.Ignore := False;
+  { [spec 242] its gradient where the symbol is now }
+  if IsNan(AE.Rotation) then PlaceLocalGrad(AEl, AE.ScaleX, AE.ScaleY, 0, AE.X, AE.Y)
+  else PlaceLocalGrad(AEl, AE.ScaleX, AE.ScaleY, AE.Rotation, AE.X, AE.Y);
 end;
 
 procedure TyLinesFrameLine(var AEl: TTyChartElement; APercent: Double);
@@ -1530,12 +1692,15 @@ begin
   pd := AEl.Shape.PathData;
   AEl.Shape := EndSymbolShape(TTySymbolKind(Round(AEl.Anim.G[7])), AEl.Anim.G[10] <> 0,
     pd, AEl.Anim.G[8] * APercent, AEl.Anim.G[9] * APercent, at.X, at.Y, AEl.Anim.G[11]);
+  { [spec 242] the symbol is scaled by the percent: its gradient too }
+  PlaceLocalGrad(AEl, APercent, APercent, AEl.Anim.G[11], at.X, at.Y);
 end;
 
 procedure TyLinesFrameLabel(var AEl: TTyChartElement; APercent: Double);
 var
   g: TTyLinesGeom;
-  x, y, ox, oy, rot, ax, ay, x1, y1, rot1, ax1, ay1, dx, dy: Double;
+  x, y, ox, oy, rot, ax, ay, x1, y1, rot1, ax1, ay1, dx, dy, lr, lox, loy: Double;
+  hasRot, hasOff: Boolean;
   ah, ah1: TTyTextAnchorH;
   av, av1: TTyTextAnchorV;
   flags: Integer;
@@ -1550,10 +1715,25 @@ begin
   end;
   g := GeomOfG(AEl);
   pos := TTyLinesLabelPos(Round(AEl.Anim.G[7]));
-  TyLinesLabelPlace(g, APercent, pos, AEl.Anim.G[8], AEl.Anim.G[9], x, y, ox, oy, rot,
-    ax, ay, ah, av);
-  TyLinesLabelPlace(g, 1, pos, AEl.Anim.G[8], AEl.Anim.G[9], x1, y1, ox, oy, rot1,
-    ax1, ay1, ah1, av1);
+  { [spec 242] the textConfig the line carried over: every frame }
+  hasRot := (Length(AEl.Anim.Vals) >= 5) and (AEl.Anim.Vals[0] <> 0);
+  hasOff := (Length(AEl.Anim.Vals) >= 5) and (AEl.Anim.Vals[2] <> 0);
+  if Length(AEl.Anim.Vals) >= 5 then
+  begin
+    lr := AEl.Anim.Vals[1];
+    lox := AEl.Anim.Vals[3];
+    loy := AEl.Anim.Vals[4];
+  end
+  else
+  begin
+    lr := 0;
+    lox := 0;
+    loy := 0;
+  end;
+  TyLinesLabelPlace(g, APercent, pos, AEl.Anim.G[8], AEl.Anim.G[9], hasRot, lr,
+    hasOff, lox, loy, x, y, ox, oy, rot, ax, ay, ah, av);
+  TyLinesLabelPlace(g, 1, pos, AEl.Anim.G[8], AEl.Anim.G[9], hasRot, lr,
+    hasOff, lox, loy, x1, y1, ox, oy, rot1, ax1, ay1, ah1, av1);
   { where the line puts it now (the rest is where it puts it at 1), the box
     moved with it; turned and aligned anew where the author did not align
     it }
@@ -1573,6 +1753,56 @@ begin
   { LabelManager's fade on the series' timing: the rest opacity times the
     eased percent, to the bit }
   AEl.Style.Alpha := AEl.Style.Alpha * APercent;
+end;
+
+{ ==================== gradients in an element's frame [spec 242] ==================== }
+
+function TyLinesPlacedGradient(const ALocal: TTyChartGradient; const ABox: TTyXYWH;
+  ASX, ASY, ARot, AX, AY: Double): TTyChartGradient;
+var
+  m: TTyMat2D;
+  x1, y1, x2, y2, r: Double;
+begin
+  Result := ALocal;
+  if ALocal.Kind = cgkNone then Exit;
+  m := TyZrLocal(ASX, ASY, ARot, AX, AY);
+  TyResolveGradientXYWH(ALocal, ABox, x1, y1, x2, y2, r);
+  Result.Global := True;
+  TyZrApply(m, x1, y1, Result.X, Result.Y);
+  TyZrApply(m, x2, y2, Result.X2, Result.Y2);
+  Result.R := r * Sqrt(Abs(m[0] * m[3] - m[1] * m[2]));
+end;
+
+function TyLinesLineBox(const AG: TTyLinesGeom; ALineWidth: Double): TTyXYWH;
+var p: TTyZrPath;
+begin
+  p := nil;
+  if Length(AG.Pts) < 2 then Exit(TyXYWH(0, 0, 0, 0));
+  TyZrMoveTo(p, AG.Pts[0].X, AG.Pts[0].Y);
+  if AG.Curved then
+  begin
+    SetLength(p, 2);
+    p[1] := Default(TTyZrSeg);
+    p[1].Cmd := zrQ;
+    p[1].V[0] := AG.CP.X;
+    p[1].V[1] := AG.CP.Y;
+    p[1].V[2] := AG.Pts[1].X;
+    p[1].V[3] := AG.Pts[1].Y;
+  end
+  else
+    TyZrLineTo(p, AG.Pts[1].X, AG.Pts[1].Y);
+  Result := TyZrStrokeRect(TyZrBBox(p), TyZrDataLength(p), True, False, ALineWidth, 1);
+end;
+
+{ the local gradient of an end symbol or an effect symbol onto its style,
+  for the transform it has now }
+procedure PlaceLocalGrad(var AEl: TTyChartElement; ASX, ASY, ARot, AX, AY: Double);
+var g: TTyChartGradient;
+begin
+  if AEl.Anim.LGrad.Kind = cgkNone then Exit;
+  g := TyLinesPlacedGradient(AEl.Anim.LGrad, AEl.Anim.LGradBox, ASX, ASY, ARot, AX, AY);
+  if AEl.Anim.LGradStroke then AEl.Style.StrokeGradient := g
+  else AEl.Style.FillGradient := g;
 end;
 
 { ==================== containStroke ==================== }

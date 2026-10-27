@@ -1552,6 +1552,8 @@ end;
 function TTyCustomAdvanceChart.LinesProject(const AX, AY: TTyLinesValue;
   AClamp: Boolean): TTyPointF;
 var
+  u: UnicodeString;
+  cx, cy: TTyLinesValue;
   b: TTySeriesBinding;
   pol: TTyPolar;
   cal: TTyCalendar;
@@ -1596,6 +1598,32 @@ begin
   Result := TyPointF(NaN, NaN);
   if (FLnSlot < 0) or (FLnSlot > High(FBindings)) then Exit;
   b := FBindings[FLnSlot];
+  { [spec 242] A COORDINATE WRITTEN AS A STRING: LinesSeries.getLineCoords
+    copies each coordinate's [0] and [1] -- of a string, its first two
+    characters (undefined past its end) -- so every system, a geo too, is
+    handed those, never the string: a region's name is no place (Geo's
+    string branch is never reached from a lines series) }
+  if AX.Kind = lvkName then
+  begin
+    u := UTF8Decode(AX.Str);
+    cx := Default(TTyLinesValue);
+    cy := Default(TTyLinesValue);
+    cx.Kind := lvkOther;
+    cy.Kind := lvkOther;
+    cx.Num := NaN;
+    cy.Num := NaN;
+    if Length(u) >= 1 then
+    begin
+      cx.Kind := lvkString;
+      cx.Str := UTF8Encode(Copy(u, 1, 1));
+    end;
+    if Length(u) >= 2 then
+    begin
+      cy.Kind := lvkString;
+      cy.Str := UTF8Encode(Copy(u, 2, 1));
+    end;
+    Exit(LinesProject(cx, cy, AClamp));
+  end;
   if b.Polar is TTyPolar then
   begin
     pol := TTyPolar(b.Polar);
@@ -1644,6 +1672,7 @@ function TTyCustomAdvanceChart.LinesInk(ASlot: Integer; ANode: TJSONObject;
   const ASolved: TTyLinesSolved; ARow: Integer; AStroke: TTyChartColor;
   AScale: Double; out ASpec: TTyLabelSpec): TTyLinesInk;
 var
+  grad: TTyChartGradient;
   raw: TTyLinesRaw;
   d, own, fmt: TJSONData;
   c: TTyChartColor;
@@ -1682,11 +1711,26 @@ begin
   { THE STYLE: each key the row's lineStyle, else the series', else the
     default (opacity 0.5, width 1); the colour the series' visual }
   Result.Stroke := AStroke;
+  { [spec 242] the series' colour may be a gradient (the visual holds the
+    object; a stroke paints it over the element's own rect) }
+  Result.StrokeGrad := FLnSeriesGrad;
   { [R2-J3] the colour callback (lineStyle.color) under the row's own }
   if (ItemCbOf(ASlot) <> nil) and (ASlot <= High(FStores)) and (FStores[ASlot] <> nil)
     and ItemCbOf(ASlot).ColOf(FStores[ASlot].GetRawIndex(ARow), c) then
+  begin
     Result.Stroke := c;
-  if LnColour(TyLinesItemFind(raw, ['lineStyle', 'color']), c) then Result.Stroke := c;
+    Result.StrokeGrad := Default(TTyChartGradient);
+  end;
+  if LnColour(TyLinesItemFind(raw, ['lineStyle', 'color']), c) then
+  begin
+    Result.Stroke := c;
+    Result.StrokeGrad := Default(TTyChartGradient);
+  end
+  else if TyTryReadGradient(TyLinesItemFind(raw, ['lineStyle', 'color']), grad) then
+  begin
+    Result.StrokeGrad := grad;
+    Result.Stroke := TyGradientSolid(grad);
+  end;
   d := TyLinesFind(raw, ANode, ['lineStyle', 'width']);
   if d = nil then Result.Width := 1 else Result.Width := TyLinesJsNum(d);
   d := TyLinesFind(raw, ANode, ['lineStyle', 'opacity']);
@@ -1729,9 +1773,12 @@ begin
   ASpec.OffsetXLogical := 0;
   ASpec.OffsetYLogical := 0;
   ASpec.Overflow := tloNone;
-  { an outside label inherits the line's colour (setLabelStyle's
-    inheritColor) unless it wrote one }
-  if ASpec.AutoColour then ASpec.InheritColour := True;
+  { [spec 242] THE INK: Line's textConfig asks for outsideFill 'auto' -- the
+    outside ink (#333 in a light chart), with its halo -- unless the label
+    wrote a colour; `color: 'inherit'` is the line's visual colour, which
+    the line element carries as its (unpainted) fill. [Was: every label
+    that wrote no colour inherited -- from a host with no fill, so the
+    words were drawn in nothing at all.] }
   Result.LabelShow := ASpec.Show;
   Result.LabelSpec := ARow + 1;
   d := TyLinesFind(raw, ANode, ['label', 'position']);
@@ -1755,6 +1802,34 @@ begin
   end;
   Result.DistX := Result.DistX * AScale;
   Result.DistY := Result.DistY * AScale;
+  { [spec 242] createTextConfig: `rotate` (getShallow, the row's label
+    then the series') turned to radians where it is not null -- a word is
+    not a number, and zrender's `rotation && rotate` turns nothing then;
+    `offset` where it is truthy, added onto the place (its [0] and [1]: a
+    lone number has none, and the label goes nowhere) }
+  d := TyLinesFind(raw, ANode, ['label', 'rotate']);
+  if (d <> nil) and (d.JSONType <> jtNull) then
+  begin
+    Result.LabelHasRot := True;
+    Result.LabelRot := TyLinesJsNum(d) * Pi / 180;
+    if IsNan(Result.LabelRot) then Result.LabelRot := 0;
+  end;
+  d := TyLinesFind(raw, ANode, ['label', 'offset']);
+  if (d <> nil) and TyLinesJsTruthy(d) then
+  begin
+    Result.LabelHasOff := True;
+    Result.LabelOffX := NaN;
+    Result.LabelOffY := NaN;
+    if d is TJSONArray then
+    begin
+      if d.Count > 0 then Result.LabelOffX := TyLinesJsNum(TJSONArray(d).Items[0]);
+      if d.Count > 1 then Result.LabelOffY := TyLinesJsNum(TJSONArray(d).Items[1]);
+      if (d.Count > 0) and (TJSONArray(d).Items[0].JSONType = jtNull) then Result.LabelOffX := 0;
+      if (d.Count > 1) and (TJSONArray(d).Items[1].JSONType = jtNull) then Result.LabelOffY := 0;
+    end;
+    Result.LabelOffX := Result.LabelOffX * AScale;
+    Result.LabelOffY := Result.LabelOffY * AScale;
+  end;
   if ASpec.HasAlignH then
   begin
     Result.AlignFlags := Result.AlignFlags or 1;
@@ -1829,8 +1904,20 @@ begin
     LnSize(d, AScale, w, h);
   Result.EffW := w;
   Result.EffH := h;
+  { `effectModel.get('color') || lineStyle.stroke` }
   Result.EffColor := Result.Stroke;
-  if LnColour(TyLinesFind(raw, ANode, ['effect', 'color']), c) then Result.EffColor := c;
+  Result.EffGrad := Result.StrokeGrad;
+  d := TyLinesFind(raw, ANode, ['effect', 'color']);
+  if LnColour(d, c) then
+  begin
+    Result.EffColor := c;
+    Result.EffGrad := Default(TTyChartGradient);
+  end
+  else if TyTryReadGradient(d, grad) then
+  begin
+    Result.EffGrad := grad;
+    Result.EffColor := TyGradientSolid(grad);
+  end;
   d := TyLinesFind(raw, ANode, ['effect', 'opacity']);
   if d = nil then Result.EffOpacity := 1 else Result.EffOpacity := TyLinesJsNum(d);
   d := TyLinesFind(raw, ANode, ['effect', 'period']);
@@ -1848,7 +1935,20 @@ begin
   end;
   cnt := Length(ASolved.Raws);
   d := TyLinesFind(raw, ANode, ['effect', 'delay']);
-  if d <> nil then Result.EffDelay := TyLinesJsNum(d)
+  { [spec 242] '@Name': upstream's function, called with the row alone --
+    a delay handler, else a timing one; one nobody registered is a string,
+    which the clip cannot start from (not a number) }
+  if (d <> nil) and (d.JSONType = jtString) and TyChartIsHandlerRef(d.AsString)
+    and TyAnimRunTiming(Copy(d.AsString, 2, MaxInt), ARow, True, TyAnimNoDelayParams, v) then
+    { a number, or not-a-number -- which the clip takes as nought }
+    Result.EffDelay := v
+  else if (d <> nil) and (d.JSONType = jtString) and IsNan(TyJsToNumber(d.AsString)) then
+  begin
+    { a string the clip cannot start from }
+    Result.EffDelay := NaN;
+    Result.EffPoisoned := True;
+  end
+  else if d <> nil then Result.EffDelay := TyLinesJsNum(d)
   else Result.EffDelay := ARow / cnt * Result.EffPeriod / 3;
 end;
 
@@ -1898,9 +1998,14 @@ begin
     d := LnNode(node, ['effect', 'trailLength']);
     if d = nil then trail := 0.2 else trail := TyLinesJsNum(d);
     if sol.Effect and (trail > 0) then sol.TrailAlpha := TyLinesTrailAlpha(trail);
-    { the series' visual colour: lineStyle.color, else the palette's }
+    { the series' visual colour: lineStyle.color, else the palette's -- a
+      gradient object too [spec 242] }
     stroke := TTyChartColor(SeriesColor(si));
-    if LnColour(LnNode(node, ['lineStyle', 'color']), c) then stroke := c;
+    FLnSeriesGrad := Default(TTyChartGradient);
+    if LnColour(LnNode(node, ['lineStyle', 'color']), c) then stroke := c
+    else if TyTryReadGradient(LnNode(node, ['lineStyle', 'color']), FLnSeriesGrad) then
+      stroke := TyGradientSolid(FLnSeriesGrad);
+    sol.Scale := scale;
     { THE CLIP: createGridClipPath widened by the series' lineStyle.width
       (or nothing), createPolarClipPath; none on a calendar }
     d := LnNode(node, ['clip']);
@@ -1962,6 +2067,7 @@ begin
           sol.Clip.Right - sol.Clip.Left, sol.Clip.Bottom - sol.Clip.Top);
       end;
       sol.LargeStroke := stroke;
+      sol.LargeGrad := FLnSeriesGrad;
       d := LnNode(node, ['lineStyle', 'opacity']);
       if d = nil then sol.LargeOpacity := 0.5 else sol.LargeOpacity := TyLinesJsNum(d);
       LnDashOf(LnNode(node, ['lineStyle', 'type']), dash, expl);

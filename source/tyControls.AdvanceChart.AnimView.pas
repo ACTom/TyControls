@@ -1922,6 +1922,15 @@ begin
   AP.SetNum('__t', 0);
   AP.SetFinal(TyAnimProps([Num1('__t', 0)]));
   if not (period > 0) then Exit;
+  { [spec 242] a delay that is a string and no number: the clip upstream
+    starts at a string, and every frame it runs is not a number -- the
+    symbol stands nowhere for good }
+  if AP.FEff.Poisoned then
+  begin
+    AP.SetNum('__t', NaN);
+    TyLinesEffectStep(AP.FEff, NaN);
+    Exit;
+  end;
   if AResume > 0 then delay := -period * AResume;
   if round_ then
   begin

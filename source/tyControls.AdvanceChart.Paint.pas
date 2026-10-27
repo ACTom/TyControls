@@ -847,6 +847,16 @@ type
       NULs + its place -- so a max that moves to another category is a
       symbol removed and a symbol added, not one that slides }
     Key: string;
+    { [spec 242] A GRADIENT IN THE ELEMENT'S OWN FRAME -- a lines end
+      symbol's colour, a lines effect symbol's: LGrad as written (Kind
+      cgkNone: none), LGradBox the element's getBoundingRect in that frame,
+      LGradStroke whether it is the pen's (an empty or a 'line' symbol). A
+      frame that turns, scales or moves the element puts it on the style
+      again, carried by the element's transform (canvas' own way: the
+      gradient lives in the element's coordinates) }
+    LGrad: TTyChartGradient;
+    LGradBox: TTyXYWH;
+    LGradStroke: Boolean;
   end;
 
   { [F6b] zrender's own contain over an element of an SVG map, in the

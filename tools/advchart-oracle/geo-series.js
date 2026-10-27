@@ -982,6 +982,26 @@ const CASES = [
     note: "examples effectScatter-map on the hand-made 'china': a scatter and an effectScatter on the geo",
     option: (() => { const o = gallery('effectScatter-map'); o.animation = false; delete o.tooltip; return o; })(),
   },
+  // ======== [spec 242] ========
+  {
+    id: 'r5-lines-names',
+    note: "lines on a geo with coordinates written as region names (after a first point that is a pair, as the dev build asserts): getLineCoords copies each coordinate's [0] and [1], so a name reaches Geo.dataToPoint as two characters, never as the string its getGeoCoord would look up -- no row with a name is drawn (to D, to F, to a name the map lacks, to E, the ec2 pair's second coord, a polyline through names); a pan changes nothing of that",
+    option: opt({ geo: { map: 'g4' },
+      series: [{ type: 'lines', coordinateSystem: 'geo', lineStyle: { curveness: 0.2 },
+        data: [{ coords: [[5, 5], 'D'] }, { coords: [[2, 18], 'F'] }, { coords: [[1, 1], 'Nowhere'] }, { coords: [[5, 22], 'E'] }] },
+        { type: 'lines', coordinateSystem: 'geo', data: [[{ coord: [15, 5], name: 'from B' }, { coord: 'C', name: 'to C' }]] },
+        { type: 'lines', coordinateSystem: 'geo', polyline: true, data: [{ coords: [[0, 0], 'B', [25, 18], 'D'] }] }] }),
+    steps: [{ action: { type: 'geoRoam', geoIndex: 0, dx: 30, dy: -20 } }],
+  },
+  {
+    id: 'r5-map-geocoord',
+    note: "a map series' geoCoord (ECharts 2: setGeoCoords onto its own geo): convertToPixel of a name it lists (a new one, one that overrides region A's centre), of a region it does not list (the centre), of a name that is neither; two map series of one map, the later one's geoCoord winning a shared name",
+    option: opt({ series: [{ type: 'map', map: 'g4', geoCoord: { here: [3, 4], A: [1, 1], both: [5, 5] }, data: [{ name: 'A', value: 1 }] },
+      { type: 'map', map: 'g4', geoCoord: { both: [15, 15] }, data: [{ name: 'B', value: 2 }] }] }),
+    convert: [{ finder: { seriesIndex: 0 }, value: 'here' }, { finder: { seriesIndex: 0 }, value: 'A' },
+      { finder: { seriesIndex: 0 }, value: 'B' }, { finder: { seriesIndex: 0 }, value: 'nowhere' },
+      { finder: { seriesIndex: 1 }, value: 'both' }, { finder: { seriesIndex: 0 }, value: 'both' }],
+  },
 ];
 
 // ---------- guards ----------

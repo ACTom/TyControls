@@ -1249,6 +1249,8 @@ begin
     begin
       cap.Anim.Role := carLinesLabel;
       cap.Anim.G := host.Anim.G;
+      { [spec 242] and its textConfig (rotate, offset) }
+      cap.Anim.Vals := Copy(host.Anim.Vals, 0, Length(host.Anim.Vals));
     end;
     { [F3a] A GRAPH EDGE'S LABEL is the Line group's text: placed from the
       line's percent, faded on its own }

@@ -34,7 +34,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Symbol, tyControls.AdvanceChart.Data,
      tyControls.AdvanceChart.Tooltip, tyControls.AdvanceChart.Legend,
      tyControls.AdvanceChart.AnimView, tyControls.AdvanceChart.Lines,
-     tyControls.AdvanceChart;
+     tyControls.AdvanceChart.AnimOpt, tyControls.AdvanceChart;
 type
   TLnProbe = class(TTyAdvanceChart)
   public
@@ -45,6 +45,7 @@ type
     procedure Cached(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Move(AX, AY: Integer);
     procedure Leave;
+    procedure ClickAt(AX, AY: Integer);
     function List: TTyPaintList;
     function Frame: TTyPaintList;
     function ContentOf(const ADatum: TTyChartDatumRef): TTyTooltipBlock;
@@ -66,6 +67,12 @@ type
     procedure SameInt(const AWhat: string; AGot, AWant: Integer);
     procedure SameBool(const AWhat: string; AGot, AWant: Boolean);
     procedure SameColour(const AWhat: string; AGot: TTyChartColor; AWant: TJSONData);
+    { [spec 242] a gradient as the painter holds it against the oracle's
+      record of upstream's object }
+    procedure SameGrad(const AWhat: string; const AGot: TTyChartGradient; AWant: TJSONData;
+      ACheckGlobal: Boolean = True);
+    procedure SameD(const AWhat: string; AGot, AWant: Double);
+    procedure SamePlaced(const AWhat: string; const AGot, AWant: TTyChartGradient);
     procedure NewChart(AMode: TTyChartAnimationMode);
     procedure RenderNow;
     function Cases(const AGroup: string): TJSONArray;
@@ -227,6 +234,13 @@ begin
   MouseLeave;
 end;
 
+procedure TLnProbe.ClickAt(AX, AY: Integer);
+begin
+  MouseMove([], AX, AY);
+  MouseDown(mbLeft, [ssLeft], AX, AY);
+  MouseUp(mbLeft, [], AX, AY);
+end;
+
 function TLnProbe.List: TTyPaintList;
 begin
   Result := SeriesList;
@@ -250,10 +264,33 @@ end;
 
 { ==================== the oracle test ==================== }
 
+type
+  { [spec 242] the oracle's FN, transcribed }
+  TLnFns = class
+  public
+    function Lag(ADataIndex: Integer; AHasIndex: Boolean): Double;
+    function Half(ADataIndex: Integer; AHasIndex: Boolean): Double;
+  end;
+
+function TLnFns.Lag(ADataIndex: Integer; AHasIndex: Boolean): Double;
+begin
+  Result := ADataIndex * 700 + 100;
+end;
+
+function TLnFns.Half(ADataIndex: Integer; AHasIndex: Boolean): Double;
+begin
+  Result := 2000 / (ADataIndex + 1);
+end;
+
+var
+  GLnFns: TLnFns;
+
 procedure TAdvChartLinesOracleTest.SetUp;
 var sl: TStringList;
 begin
   inherited SetUp;
+  TyChartRegisterAnimTiming('Lag', @GLnFns.Lag);
+  TyChartRegisterAnimTiming('Half', @GLnFns.Half);
   FForm := TForm.CreateNew(nil);
   FCtl := TTyStyleController.Create(nil);
   FCtl.Mode := 'light';
@@ -276,6 +313,8 @@ end;
 
 procedure TAdvChartLinesOracleTest.TearDown;
 begin
+  TyChartUnregisterAnimTiming('Lag');
+  TyChartUnregisterAnimTiming('Half');
   FreeAndNil(FRoot);
   FChart := nil;
   FreeAndNil(FForm);
@@ -341,6 +380,92 @@ begin
       a.Integers[0], a.Integers[1], a.Integers[2], Fmt(a.Floats[3]), AGot]));
 end;
 
+{ [spec 242] the oracle's gradient record as the port reads a gradient }
+function GradOfRec(AData: TJSONData): TTyChartGradient;
+var
+  o: TJSONObject;
+  st, c: TJSONArray;
+  i: Integer;
+begin
+  Result := Default(TTyChartGradient);
+  if not (AData is TJSONObject) then Exit;
+  o := TJSONObject(AData);
+  if o.Strings['type'] = 'radial' then Result.Kind := cgkRadial else Result.Kind := cgkLinear;
+  Result.X := HexNum(o.Find('x'));
+  Result.Y := HexNum(o.Find('y'));
+  Result.X2 := HexNum(o.Find('x2'));
+  Result.Y2 := HexNum(o.Find('y2'));
+  Result.R := HexNum(o.Find('r'));
+  Result.Global := o.Booleans['global'];
+  st := o.Arrays['stops'];
+  SetLength(Result.Stops, st.Count);
+  for i := 0 to st.Count - 1 do
+  begin
+    Result.Stops[i].Offset := HexNum(st.Arrays[i].Items[0]);
+    c := st.Arrays[i].Arrays[1];
+    Result.Stops[i].Color := TTyChartColor((Cardinal(Round(c.Floats[3] * 255)) shl 24)
+      or (Cardinal(c.Integers[0]) shl 16) or (Cardinal(c.Integers[1]) shl 8)
+      or Cardinal(c.Integers[2]));
+  end;
+end;
+
+function XYWHOfRec(AData: TJSONData): TTyXYWH;
+begin
+  Result := TyXYWH(HexNum(TJSONArray(AData).Items[0]), HexNum(TJSONArray(AData).Items[1]),
+    HexNum(TJSONArray(AData).Items[2]), HexNum(TJSONArray(AData).Items[3]));
+end;
+
+procedure TAdvChartLinesOracleTest.SameGrad(const AWhat: string;
+  const AGot: TTyChartGradient; AWant: TJSONData; ACheckGlobal: Boolean);
+var
+  w: TTyChartGradient;
+  i: Integer;
+begin
+  Inc(FCompared);
+  if not (AWant is TJSONObject) then
+  begin
+    if AGot.Kind <> cgkNone then Miss(AWhat + ': a gradient here, none upstream');
+    Exit;
+  end;
+  w := GradOfRec(AWant);
+  if AGot.Kind <> w.Kind then
+  begin
+    Miss(AWhat + ': not the same kind of gradient');
+    Exit;
+  end;
+  if ACheckGlobal then SameBool(AWhat + ' global', AGot.Global, w.Global);
+  SameInt(AWhat + ' stops', Length(AGot.Stops), Length(w.Stops));
+  if Length(AGot.Stops) = Length(w.Stops) then
+    for i := 0 to High(w.Stops) do
+    begin
+      Inc(FCompared);
+      if (AGot.Stops[i].Offset <> w.Stops[i].Offset) or (AGot.Stops[i].Color <> w.Stops[i].Color) then
+        Miss(Format('%s stop %d: %s $%.8x upstream, %s $%.8x here', [AWhat, i,
+          Fmt(w.Stops[i].Offset), w.Stops[i].Color, Fmt(AGot.Stops[i].Offset), AGot.Stops[i].Color]));
+    end;
+end;
+
+procedure TAdvChartLinesOracleTest.SameD(const AWhat: string; AGot, AWant: Double);
+var ok: Boolean;
+begin
+  Inc(FCompared);
+  if IsNan(AWant) or IsNan(AGot) then ok := IsNan(AWant) and IsNan(AGot)
+  else ok := AGot = AWant;
+  if not ok then
+    Miss(Format('%s is %s upstream, %s here', [AWhat, Fmt(AWant), Fmt(AGot)]));
+end;
+
+procedure TAdvChartLinesOracleTest.SamePlaced(const AWhat: string;
+  const AGot, AWant: TTyChartGradient);
+begin
+  SameBool(AWhat + ' placed', AGot.Global, True);
+  SameD(AWhat + ' placed x', AGot.X, AWant.X);
+  SameD(AWhat + ' placed y', AGot.Y, AWant.Y);
+  SameD(AWhat + ' placed x2', AGot.X2, AWant.X2);
+  SameD(AWhat + ' placed y2', AGot.Y2, AWant.Y2);
+  SameD(AWhat + ' placed r', AGot.R, AWant.R);
+end;
+
 procedure TAdvChartLinesOracleTest.NewChart(AMode: TTyChartAnimationMode);
 begin
   FreeAndNil(FChart);
@@ -353,6 +478,7 @@ begin
   FChart.ChartOn('mouseover', @FChart.OnEv);
   FChart.ChartOn('mousemove', @FChart.OnEv);
   FChart.ChartOn('mouseout', @FChart.OnEv);
+  FChart.ChartOn('click', @FChart.OnEv);
 end;
 
 procedure TAdvChartLinesOracleTest.RenderNow;
@@ -406,6 +532,9 @@ end;
 procedure TAdvChartLinesOracleTest.CheckItem(ASeries: Integer;
   const ASol: TTyLinesSolved; AItem: TJSONObject);
 var
+  gr: TJSONObject;
+  bb: TTyXYWH;
+  want: TTyChartGradient;
   k, e, idx, j: Integer;
   what: string;
   g: TTyLinesGeom;
@@ -484,8 +613,13 @@ begin
   end;
   el := FChart.List.Element(idx);
   st := AItem.Objects['style'];
-  SameColour(what + ' stroke', ink.Stroke, st.Find('stroke'));
-  SameColour(what + ' element stroke', el.Style.StrokeColor, st.Find('stroke'));
+  { [spec 242] a gradient is no colour to the recorder (the grad record
+    holds it) }
+  if st.Find('stroke').JSONType <> jtNull then
+  begin
+    SameColour(what + ' stroke', ink.Stroke, st.Find('stroke'));
+    SameColour(what + ' element stroke', el.Style.StrokeColor, st.Find('stroke'));
+  end;
   SameHex(what + ' line width', ink.Width, st.Find('lineWidth'));
   SameHex(what + ' element line width', el.Style.StrokeWidthLogical, st.Find('lineWidth'));
   SameHex(what + ' opacity', el.Style.Alpha, st.Find('opacity'));
@@ -516,13 +650,67 @@ begin
     SameHex(what + ' ' + sym.Strings['name'] + ' height', el.Anim.G[9], sym.Arrays['box'].Items[3]);
     SameHex(what + ' ' + sym.Strings['name'] + ' opacity', el.Style.Alpha, sym.Find('opacity'));
     if el.Anim.G[10] <> 0 then
-      SameColour(what + ' ' + sym.Strings['name'] + ' stroke', el.Style.StrokeColor, sym.Find('stroke'))
-    else
+    begin
+      if sym.Find('stroke').JSONType <> jtNull then
+        SameColour(what + ' ' + sym.Strings['name'] + ' stroke', el.Style.StrokeColor, sym.Find('stroke'));
+    end
+    else if sym.Find('fill').JSONType <> jtNull then
       SameColour(what + ' ' + sym.Strings['name'] + ' fill', el.Style.FillColor, sym.Find('fill'));
   end;
   { no symbol here that upstream has not }
   SameInt(what + ' symbols', Ord(ElOf(ASeries, k, carLinesFrom) >= 0)
     + Ord(ElOf(ASeries, k, carLinesTo) >= 0), syms.Count);
+  { [spec 242] THE GRADIENTS: the line's over its own path rect; each end
+    symbol's and the effect's in the element's own frame, carried by its
+    transform as recorded (the painter's coordinates) }
+  if AItem.Find('grad') is TJSONObject then
+  begin
+    gr := AItem.Objects['grad'];
+    idx := ElOf(ASeries, k, carLinesLine);
+    if idx >= 0 then
+    begin
+      el := FChart.List.Element(idx);
+      SameGrad(what + ' line gradient', el.Style.StrokeGradient, gr.Find('line'));
+      SameBool(what + ' line gradient box set', el.Style.GradBoxSet, True);
+      bb := XYWHOfRec(gr.Find('bbox'));
+      SameHex(what + ' line gradient box x', el.Style.GradBox.X, gr.Arrays['bbox'].Items[0]);
+      SameHex(what + ' line gradient box y', el.Style.GradBox.Y, gr.Arrays['bbox'].Items[1]);
+      SameHex(what + ' line gradient box w', el.Style.GradBox.W, gr.Arrays['bbox'].Items[2]);
+      SameHex(what + ' line gradient box h', el.Style.GradBox.H, gr.Arrays['bbox'].Items[3]);
+    end;
+    for j := 0 to syms.Count - 1 do
+    begin
+      sym := syms.Objects[j];
+      if sym.Strings['name'] = 'fromSymbol' then idx := ElOf(ASeries, k, carLinesFrom)
+      else idx := ElOf(ASeries, k, carLinesTo);
+      if idx < 0 then Continue;
+      el := FChart.List.Element(idx);
+      bb := XYWHOfRec(gr.Arrays['symbols'].Objects[j].Find('bbox'));
+      SameHex(what + ' ' + sym.Strings['name'] + ' box x', el.Anim.LGradBox.X, gr.Arrays['symbols'].Objects[j].Arrays['bbox'].Items[0]);
+      SameHex(what + ' ' + sym.Strings['name'] + ' box y', el.Anim.LGradBox.Y, gr.Arrays['symbols'].Objects[j].Arrays['bbox'].Items[1]);
+      SameHex(what + ' ' + sym.Strings['name'] + ' box w', el.Anim.LGradBox.W, gr.Arrays['symbols'].Objects[j].Arrays['bbox'].Items[2]);
+      SameHex(what + ' ' + sym.Strings['name'] + ' box h', el.Anim.LGradBox.H, gr.Arrays['symbols'].Objects[j].Arrays['bbox'].Items[3]);
+      want := TyLinesPlacedGradient(GradOfRec(gr.Arrays['symbols'].Objects[j].Find('fill')), bb,
+        HexNum(sym.Find('scale')), HexNum(sym.Find('scale')), HexNum(sym.Find('rotation')),
+        HexNum(sym.Find('x')), HexNum(sym.Find('y')));
+      SameGrad(what + ' ' + sym.Strings['name'] + ' gradient', el.Style.FillGradient,
+        gr.Arrays['symbols'].Objects[j].Find('fill'), False);
+      SamePlaced(what + ' ' + sym.Strings['name'], el.Style.FillGradient, want);
+    end;
+    idx := ElOf(ASeries, k, carLinesEffect);
+    if (idx >= 0) and (AItem.Find('effect') is TJSONObject) and (gr.Find('effect') is TJSONObject) then
+    begin
+      el := FChart.List.Element(idx);
+      eff := AItem.Objects['effect'];
+      bb := XYWHOfRec(gr.Find('effectBox'));
+      SameHex(what + ' effect box w', el.Anim.LGradBox.W, gr.Arrays['effectBox'].Items[2]);
+      want := TyLinesPlacedGradient(GradOfRec(gr.Find('effect')), bb,
+        HexNum(eff.Find('scaleX')), HexNum(eff.Find('scaleY')), HexNum(eff.Find('rotation')),
+        HexNum(eff.Find('x')), HexNum(eff.Find('y')));
+      SameGrad(what + ' effect gradient', el.Style.FillGradient, gr.Find('effect'), False);
+      SamePlaced(what + ' effect', el.Style.FillGradient, want);
+    end;
+  end;
   { the label }
   if AItem.Find('label').JSONType = jtObject then
   begin
@@ -530,6 +718,10 @@ begin
     idx := LabelOf(ASeries, k);
     if lab.Strings['text'] = '' then
       SameBool(what + ' no label for no words', idx >= 0, False)
+    { [spec 242] a label whose transform is not a number (an offset of one
+      number) is drawn nowhere: none here }
+    else if IsNan(HexNum(lab.Arrays['anchor'].Items[0])) then
+      SameBool(what + ' no label at no place', idx >= 0, False)
     else if idx < 0 then
       Miss(what + ': no label')
     else
@@ -538,7 +730,31 @@ begin
       SameStr(what + ' label text', el.Caption.Text, lab.Strings['text']);
       SameHex(what + ' label anchor x', el.Caption.X, lab.Arrays['anchor'].Items[0]);
       SameHex(what + ' label anchor y', el.Caption.Y, lab.Arrays['anchor'].Items[1]);
-      SameHex(what + ' label rotation', el.Caption.RotationRad, lab.Find('rotation'));
+      { [spec 242] drawn with textConfig's turn (the text's
+        innerTransformable), and in the ink upstream paints it }
+      if lab.Find('drawn') <> nil then
+      begin
+        SameHex(what + ' label drawn rotation', el.Caption.RotationRad,
+          lab.Objects['drawn'].Find('rotation'));
+        TyLinesLabelPlace(g, 1, ink.LabelPos, ink.DistX, ink.DistY, ink.LabelHasRot,
+          ink.LabelRot, ink.LabelHasOff, ink.LabelOffX, ink.LabelOffY, x, y, ox, oy,
+          rot, ax, ay, ah, av);
+        SameHex(what + ' label drawn x', x, lab.Objects['drawn'].Find('x'));
+        SameHex(what + ' label drawn y', y, lab.Objects['drawn'].Find('y'));
+        SameHex(what + ' label drawn origin x', ox, lab.Objects['drawn'].Arrays['origin'].Items[0]);
+        SameHex(what + ' label drawn origin y', oy, lab.Objects['drawn'].Arrays['origin'].Items[1]);
+        SameHex(what + ' label drawn turn', rot, lab.Objects['drawn'].Find('rotation'));
+        { upstream's outside ink (#333, getOutsideFill in a light chart) is
+          the skin's outside label ink here (the spec's design difference);
+          a written colour and 'inherit' are as upstream's }
+        if (lab.Find('ink') is TJSONArray) and (lab.Arrays['ink'].AsJSON = '[51, 51, 51, 1]') then
+          SameInt(what + ' label ink (the skin''s outside ink)', Integer(el.Caption.Colour),
+            Integer(TTyChartColor(FCtl.Model.ResolveStyle('TyAdvChartLabel', '', []).TextColor)))
+        else if lab.Find('ink') <> nil then
+          SameColour(what + ' label ink', el.Caption.Colour, lab.Find('ink'));
+      end
+      else
+        SameHex(what + ' label rotation', el.Caption.RotationRad, lab.Find('rotation'));
       SameStr(what + ' label align', AlignWordH(el.Caption.AnchorH), lab.Strings['align']);
       SameStr(what + ' label vertical align', AlignWordV(el.Caption.AnchorV), lab.Strings['verticalAlign']);
       SameHex(what + ' label opacity', el.Style.Alpha, lab.Find('opacity'));
@@ -571,8 +787,11 @@ begin
   SameInt(what + ' effect z2', el.Z2, eff.Integers['z2']);
   { a 'line' is stroked in the colour (symbolPathSetColor), the rest filled }
   if eff.Strings['symbolType'] = 'line' then
-    SameColour(what + ' effect stroke', el.Style.StrokeColor, eff.Find('stroke'))
-  else
+  begin
+    if eff.Find('stroke').JSONType <> jtNull then
+      SameColour(what + ' effect stroke', el.Style.StrokeColor, eff.Find('stroke'));
+  end
+  else if eff.Find('fill').JSONType <> jtNull then
     SameColour(what + ' effect fill', el.Style.FillColor, eff.Find('fill'));
   SameHex(what + ' effect opacity', el.Style.Alpha, eff.Find('opacity'));
   { the clip's life: the period, twice it for a round trip }
@@ -580,7 +799,12 @@ begin
     SameHex(what + ' effect life', el.Anim.G[7] * 2, eff.Find('life'))
   else
     SameHex(what + ' effect life', el.Anim.G[7], eff.Find('life'));
-  SameHex(what + ' effect delay', el.Anim.G[8], eff.Find('delay'));
+  { [spec 242] a '@Name' nobody registered stays a string upstream: the
+    clip's start is not a number }
+  if Copy(eff.Strings['delay'], 1, 4) = 'str:' then
+    SameBool(what + ' effect delay not a number', IsNan(el.Anim.G[8]), True)
+  else
+    SameHex(what + ' effect delay', el.Anim.G[8], eff.Find('delay'));
   SameBool(what + ' effect loop', (Round(el.Anim.G[9]) and 1) <> 0, eff.Booleans['loop']);
   SameHex(what + ' effect scaleX (the size)', el.Anim.G[10], eff.Find('scaleX'));
   { where the clip's first step leaves it: __t 0 }
@@ -588,7 +812,8 @@ begin
   TyLinesEffectStep(runSt, 0);
   SameHex(what + ' effect x at 0', runSt.X, eff.Find('x'));
   SameHex(what + ' effect y at 0', runSt.Y, eff.Find('y'));
-  SameHex(what + ' effect rotation at 0', runSt.Rotation, eff.Find('rotation'));
+  if not IsNan(HexNum(eff.Find('x'))) then
+    SameHex(what + ' effect rotation at 0', runSt.Rotation, eff.Find('rotation'));
   SameHex(what + ' effect scaleY at 0', runSt.ScaleY, eff.Find('scaleY'));
 end;
 
@@ -675,7 +900,23 @@ begin
     SameHex(what + ' bbox y', g.Box.Y, el.Arrays['bbox'].Items[1]);
     SameHex(what + ' bbox w', g.Box.W, el.Arrays['bbox'].Items[2]);
     SameHex(what + ' bbox h', g.Box.H, el.Arrays['bbox'].Items[3]);
-    SameColour(what + ' batch stroke', sol.LargeStroke, el.Objects['style'].Find('stroke'));
+    if el.Objects['style'].Find('stroke').JSONType <> jtNull then
+      SameColour(what + ' batch stroke', sol.LargeStroke, el.Objects['style'].Find('stroke'));
+    { [spec 242] a gradient over the batch's own rect }
+    if el.Find('grad') <> nil then
+    begin
+      SameGrad(what + ' batch gradient', sol.LargeGrad, el.Find('grad'));
+      for k := 0 to FChart.List.Count - 1 do
+        if (FChart.List.Element(k).Datum.SeriesIndex = si)
+          and (FChart.List.Element(k).Shape.Kind = cskLarge) then
+        begin
+          SameGrad(what + ' the batch element''s gradient', FChart.List.Element(k).Style.StrokeGradient, el.Find('grad'));
+          SameHex(what + ' gradient box x', FChart.List.Element(k).Style.GradBox.X, el.Arrays['bbox'].Items[0]);
+          SameHex(what + ' gradient box y', FChart.List.Element(k).Style.GradBox.Y, el.Arrays['bbox'].Items[1]);
+          SameHex(what + ' gradient box w', FChart.List.Element(k).Style.GradBox.W, el.Arrays['bbox'].Items[2]);
+          SameHex(what + ' gradient box h', FChart.List.Element(k).Style.GradBox.H, el.Arrays['bbox'].Items[3]);
+        end;
+    end;
     SameHex(what + ' batch width', g.LineW, el.Objects['style'].Find('lineWidth'));
     SameHex(what + ' batch opacity', sol.LargeOpacity, el.Objects['style'].Find('opacity'));
     SameBool(what + ' no startIndex', el.Find('startIndex').JSONType = jtNull, True);
@@ -819,11 +1060,24 @@ begin
     if (it.Find('label').JSONType = jtObject) and ink.LabelShow and (ink.LabelText <> '') then
     begin
       lab := it.Objects['label'];
-      TyLinesLabelPlace(g, pct, ink.LabelPos, ink.DistX, ink.DistY, x, y, ox, oy, rot,
-        ax, ay, ah, av);
+      if lab.Find('drawn') <> nil then
+      begin
+        { [spec 242] textConfig over beforeUpdate's, every frame }
+        TyLinesLabelPlace(g, pct, ink.LabelPos, ink.DistX, ink.DistY, ink.LabelHasRot,
+          ink.LabelRot, ink.LabelHasOff, ink.LabelOffX, ink.LabelOffY, x, y, ox, oy,
+          rot, ax, ay, ah, av);
+        SameHex(what + ' label drawn rotation', rot, lab.Objects['drawn'].Find('rotation'));
+        SameHex(what + ' label drawn x', x, lab.Objects['drawn'].Find('x'));
+        SameHex(what + ' label drawn y', y, lab.Objects['drawn'].Find('y'));
+      end
+      else
+      begin
+        TyLinesLabelPlace(g, pct, ink.LabelPos, ink.DistX, ink.DistY, x, y, ox, oy, rot,
+          ax, ay, ah, av);
+        SameHex(what + ' label rotation', rot, lab.Find('rotation'));
+      end;
       SameHex(what + ' label anchor x', ax, lab.Arrays['anchor'].Items[0]);
       SameHex(what + ' label anchor y', ay, lab.Arrays['anchor'].Items[1]);
-      SameHex(what + ' label rotation', rot, lab.Find('rotation'));
       SameHex(what + ' label opacity', ink.Opacity * pct, lab.Find('opacity'));
       { and the frame draws it there }
       idx := LabelOf(s, k);
@@ -832,6 +1086,9 @@ begin
         el := FChart.Frame.Element(idx);
         if pct > 0 then
         begin
+          if lab.Find('drawn') <> nil then
+            SameHex(what + ' the frame label turn', el.Caption.RotationRad,
+              lab.Objects['drawn'].Find('rotation'));
           SameHex(what + ' the frame label x', el.Caption.X, lab.Arrays['anchor'].Items[0]);
           SameHex(what + ' the frame label opacity', el.Style.Alpha, lab.Find('opacity'));
         end;
@@ -853,7 +1110,9 @@ begin
       SameHex(what + ' effect t', p.Num('__t'), eff.Find('t'));
       SameHex(what + ' effect x', runSt.X, eff.Find('x'));
       SameHex(what + ' effect y', runSt.Y, eff.Find('y'));
-      SameHex(what + ' effect rotation', runSt.Rotation, eff.Find('rotation'));
+      { the recorder writes `rotation || 0`: a symbol nowhere has no turn }
+      if not IsNan(HexNum(eff.Find('x'))) then
+        SameHex(what + ' effect rotation', runSt.Rotation, eff.Find('rotation'));
       SameHex(what + ' effect scaleX', runSt.ScaleX, eff.Find('scaleX'));
       SameHex(what + ' effect scaleY', runSt.ScaleY, eff.Find('scaleY'));
     end;
@@ -1028,8 +1287,17 @@ begin
         SameStr('legend ' + w.Strings['name'] + ' icon', lay.Items[k].Icon, w.Strings['icon']);
         SameBool('legend ' + w.Strings['name'] + ' selected', lay.Items[k].Selected, w.Booleans['selected']);
         { an unselected item is in the inactive ink, the skin's here }
-        if w.Booleans['selected'] then
+        if w.Booleans['selected'] and (w.Find('fill').JSONType <> jtNull) then
           SameColour('legend ' + w.Strings['name'] + ' colour', lay.Items[k].Colour, w.Find('fill'));
+        { [spec 242] a gradient colour: the icon's fill and its pen }
+        if w.Find('fillGrad') <> nil then
+        begin
+          SameBool('legend ' + w.Strings['name'] + ' fill object', lay.Items[k].Obj.Present,
+            w.Find('fillGrad').JSONType = jtObject);
+          SameGrad('legend ' + w.Strings['name'] + ' fill', lay.Items[k].Obj.Gradient, w.Find('fillGrad'));
+          SameGrad('legend ' + w.Strings['name'] + ' pen', lay.Items[k].StrokeObj.Gradient, w.Find('strokeGrad'));
+          SameHex('legend ' + w.Strings['name'] + ' pen width', lay.Items[k].IconPen, w.Find('lineWidth'));
+        end;
       end;
     if not found then Miss('no legend item ' + w.Strings['name']);
   end;
@@ -1258,6 +1526,8 @@ begin
           FChart.Move(st.Integers['x'], st.Integers['y'])
         else if t = 'leave' then
           FChart.Leave
+        else if t = 'click' then
+          FChart.ClickAt(st.Integers['x'], st.Integers['y'])
         else if t = 'action' then
           FChart.DispatchAction(st.Objects['payload'].AsJSON);
         FChart.TooltipTick(nowMs + 500);
@@ -1561,6 +1831,9 @@ begin
 end;
 
 initialization
+  GLnFns := TLnFns.Create;
   RegisterTest(TAdvChartLinesOracleTest);
   RegisterTest(TAdvChartLinesTest);
+finalization
+  GLnFns.Free;
 end.

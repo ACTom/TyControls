@@ -263,7 +263,9 @@ type
     { [F2b] with HdKind 1: the item's second dispatcher (a gauge's progress
       arc), a select dispatcher never flagged selected.
       [F2b] HdKind 16: a row of a large batch -- the row its handler found
-      (HdSeries, HdRow inner): a select dispatcher, no highlight one }
+      (HdSeries, HdRow inner): a select dispatcher, no highlight one.
+      [spec 242] HdKind 31: a lines effect symbol (HdSeries, HdRow its
+      row): a select dispatcher flagged with its row, no highlight one }
     HdPeer: Boolean;
     HdName: string;
     HdLegendSeries: Boolean;
@@ -1000,6 +1002,8 @@ type
     FLines: TTyLinesSolvedArray;
     FLinesSpecs: TTyLabelSpecTable;
     FLnSlot: Integer;
+    { [spec 242] the solving lines series' lineStyle.color as a gradient }
+    FLnSeriesGrad: TTyChartGradient;
     FTrailLayer: TBGRABitmap;
     { THE CUSTOM SERIES [Batch 123]: one view per series index (its group
       of item roots and its last data, kept across updates for the merge

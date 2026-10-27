@@ -1621,6 +1621,7 @@ end;
 procedure TTyCustomAdvanceChart.SolveMapGeos(APPI: Integer);
 var
   gi, i, g, k, fi, raw, idx: Integer;
+  gx, gy: Double;
   ref: TTyXYWH;
   nameMap, nm2: TJSONObject;
   node, d: TJSONData;
@@ -1680,6 +1681,31 @@ begin
     end;
     FMapGeos[g] := geo;
     geo.SvgMeasure := @GeoSvgMeasure;
+    { [spec 242] setGeoCoords: every series of the group, in order, its
+      `geoCoord` (ECharts 2's) -- each name's coordinate as written }
+    for k := 0 to High(FMapGroups[g].R) do
+    begin
+      node := FOption.ComponentAt('series', FBindings[FMapGroups[g].R[k]].SeriesIndex);
+      d := nil;
+      if node is TJSONObject then d := TJSONObject(node).Find('geoCoord');
+      if not ((d is TJSONObject) or (d is TJSONArray)) then Continue;
+      for fi := 0 to d.Count - 1 do
+      begin
+        if d is TJSONObject then nm := TJSONObject(d).Names[fi]
+        else nm := IntToStr(fi);
+        if d.Items[fi] is TJSONArray then
+        begin
+          if d.Items[fi].Count > 0 then gx := TyJsonToNumber(TJSONArray(d.Items[fi]).Items[0]) else gx := NaN;
+          if d.Items[fi].Count > 1 then gy := TyJsonToNumber(TJSONArray(d.Items[fi]).Items[1]) else gy := NaN;
+        end
+        else
+        begin
+          gx := NaN;
+          gy := NaN;
+        end;
+        geo.AddGeoCoord(nm, gx, gy);
+      end;
+    end;
     for k := 0 to High(FMapRoam) do
       if (FMapRoam[k].Key = FMapGroups[g].Key) and FMapRoam[k].State.Valid then
         geo.SetRoamOption(FMapRoam[k].State.Centre, FMapRoam[k].State.Zoom);

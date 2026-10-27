@@ -1394,7 +1394,7 @@ var
   sid: string;
   d: TJSONData;
 begin
-  if not (ATarget.HdKind in [1, 3]) or ATarget.HdEdge then Exit;
+  if not (ATarget.HdKind in [1, 3, 31]) or ATarget.HdEdge then Exit;
   for k := 0 to High(FVisualLayouts) do
   begin
     if not (VmContinuous(k) and FVisualViews[k].HoverLink) then Continue;
