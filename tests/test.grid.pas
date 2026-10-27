@@ -266,6 +266,9 @@ type
     procedure TestValidCharsBlocksIllegalKeys;
     procedure TestEnterAdvancesDownAndTabAdvancesByCell;
     procedure TestHostEditLinkTakesOverTheCell;
+    { #140: a host editor's value is committed when the focus leaves the grid -- it was
+      dropped, as a refused edit is. }
+    procedure TestAHostEditorIsCommittedWhenTheFocusLeaves;
     procedure TestHeaderGroupBandStacksAboveColumnHeader;
     procedure TestHeaderGroupBandIsNotALeafHeaderForHitTesting;
     procedure TestSecondarySortKeyBreaksTies;
@@ -1528,6 +1531,8 @@ type
   TStrGridAccess = class(TTyStringGrid)
   public
     procedure ClickAt(X, Y: Integer);
+    { The focus leaving the whole grid. }
+    procedure LeaveGrid;
     function  PressKey(AKey: Word): Boolean;
     procedure PressKey(AKey: Word; AShift: TShiftState);
     procedure DoRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -2163,6 +2168,11 @@ end;
 procedure TStrGridAccess.DoRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TStrGridAccess.LeaveGrid;
+begin
+  DoExit;
 end;
 
 procedure TStrGridAccess.ClickAt(X, Y: Integer);
@@ -5569,6 +5579,27 @@ begin
   G.PressKeyShift(VK_TAB);
   AssertEquals('Shift+Tab 折回上一行行尾(列)', 3, G.Col);
   AssertEquals('Shift+Tab 折回上一行行尾(行)', 1, G.Row);
+end;
+
+procedure TTyStringGridTest.TestAHostEditorIsCommittedWhenTheFocusLeaves;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  G.Cells[2, 1] := 'old';
+  FProbeLink := TProbeEditLink.Create;
+  try
+    G.OnCreateEditLink := @HookCreateEditLink;
+    AssertTrue('setup: editing through the link', G.BeginEdit(2, 1));
+    TProbeEditLink(FProbeLink).SetValue('new');
+    G.LeaveGrid;
+    AssertFalse('the edit ended', G.Editing);
+    AssertEquals('with the value committed', 'new', G.Cells[2, 1]);
+  finally
+    { The grid released the link's editor; the link object itself is the test's. }
+    FreeAndNil(FProbeLink);
+  end;
 end;
 
 { 宿主 EditLink 接管整格:内建编辑器一概不出场,提交时取 EditLink 的值。 }

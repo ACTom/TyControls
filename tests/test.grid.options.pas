@@ -49,6 +49,7 @@ type
     { 返回 True = 这一下被网格吃掉了(Key 置 0)。 }
     function  PressKey(AKey: Word; AShift: TShiftState): Boolean;
     procedure ClickAt(X, Y: Integer);
+    procedure ClickWith(X, Y: Integer; AShift: TShiftState);
     procedure DragFromTo(X1, Y1, X2, Y2: Integer);
     procedure DoubleClickDivider(X, Y: Integer);
     procedure HoverAt(X, Y: Integer);
@@ -123,12 +124,23 @@ type
     { #139: the keys move by the rows on screen, and Tab can leave the grid. }
     procedure TestDownFollowsTheScreenOnASortedGrid;
     procedure TestDownStepsOverAHiddenRow;
+    procedure TestDownStepsOverAGroupHeading;
     procedure TestTabLeavesTheGridAtTheLastCell;
     procedure TestShiftTabLeavesTheGridAtTheFirstCell;
     procedure TestCtrlHomeAndCtrlEndGoToTheFirstAndLastCell;
     procedure TestTabInTheEditorGoesToTheNextCell;
     procedure TestEnterInTheEditorMovesDown;
     procedure TestNoFillHandleWhileTheRowsAreNotInDataOrder;
+    { #140: edits that lost or changed data. }
+    procedure TestCutClearsOnlyWhatItCopied;
+    procedure TestRowSelectionCopiesWholeRows;
+    procedure TestAPlainArrowDropsTheCtrlClickBlocks;
+    procedure TestEditorsLeftUnchangedLeaveTheCell;
+    procedure TestBackToTheEditedCellKeepsTheDraft;
+    procedure TestWritingTheEditedCellGoesIntoTheEditor;
+    procedure TestShrinkingTheRowsTakesTheCursorAndTheEditAlong;
+    procedure TestTurningReadOnlyOnClosesTheEditor;
+    procedure TestUndoKeysLeaveAReadOnlyGridAlone;
     procedure TestPageKeysPageByTheRowsOnScreen;
     procedure TestAMemoCellCommittedUnchangedIsNotAnEdit;
     procedure TestTheCursorCellStandsOutOfAWiderSelection;
@@ -248,6 +260,12 @@ procedure TOptGrid.ClickAt(X, Y: Integer);
 begin
   MouseDown(mbLeft, [], X, Y);
   MouseUp(mbLeft, [], X, Y);
+end;
+
+procedure TOptGrid.ClickWith(X, Y: Integer; AShift: TShiftState);
+begin
+  MouseDown(mbLeft, AShift, X, Y);
+  MouseUp(mbLeft, AShift, X, Y);
 end;
 
 procedure TOptGrid.DragFromTo(X1, Y1, X2, Y2: Integer);
@@ -1270,11 +1288,13 @@ end;
   own arrows do. }
 procedure TGridOptionsTest.TestDownFollowsTheScreenOnASortedGrid;
 begin
-  Build(1, 3, 80);
-  FGrid.Cells[0, 0] := 'b';
-  FGrid.Cells[0, 1] := 'c';
+  { Data rows chosen so that no step on screen is a step of one data row. }
+  Build(1, 4, 80);
+  FGrid.Cells[0, 0] := 'd';
+  FGrid.Cells[0, 1] := 'b';
   FGrid.Cells[0, 2] := 'a';
-  FGrid.SortByColumn(0, sdAscending);   // on screen: a, b, c
+  FGrid.Cells[0, 3] := 'c';
+  FGrid.SortByColumn(0, sdAscending);   // on screen: a, b, c, d
   FGrid.Row := 2;                       // 'a', the top row
   FGrid.PressKey(VK_DOWN, []);
   AssertEquals('Down goes to the row shown below', 'b', FGrid.Cells[0, FGrid.Row]);
@@ -1282,6 +1302,21 @@ begin
   AssertEquals('and on', 'c', FGrid.Cells[0, FGrid.Row]);
   FGrid.PressKey(VK_UP, []);
   AssertEquals('Up goes back up the screen', 'b', FGrid.Cells[0, FGrid.Row]);
+end;
+
+procedure TGridOptionsTest.TestDownStepsOverAGroupHeading;
+begin
+  Build(2, 4, 80);
+  FGrid.Cells[0, 0] := 'A';
+  FGrid.Cells[0, 1] := 'A';
+  FGrid.Cells[0, 2] := 'B';
+  FGrid.Cells[0, 3] := 'B';
+  FGrid.GroupByColumn(0);               // on screen: [A], 0, 1, [B], 2, 3
+  FGrid.Row := 1;
+  FGrid.PressKey(VK_DOWN, []);
+  AssertEquals('Down steps over the next group''s heading', 2, FGrid.Row);
+  FGrid.PressKey(VK_UP, []);
+  AssertEquals('and Up back over it', 1, FGrid.Row);
 end;
 
 procedure TGridOptionsTest.TestDownStepsOverAHiddenRow;
@@ -1379,6 +1414,131 @@ begin
   AssertTrue('a hidden row: no fill handle', IsRectEmpty(FGrid.FillHandleRect));
   FGrid.FillFromSelectionTo(0, 3);
   AssertEquals('and the fill does not write into the hidden row', '', FGrid.Cells[0, 3]);
+end;
+
+procedure TGridOptionsTest.TestCutClearsOnlyWhatItCopied;
+var
+  r, c: Integer;
+  cell: TRect;
+begin
+  Build(3, 4, 80);
+  for r := 0 to 3 do
+    for c := 0 to 2 do FGrid.Cells[c, r] := 'x';
+  cell := FGrid.CellRectOf(0, 0);
+  FGrid.ClickAt(cell.Left + 5, cell.Top + 5);
+  cell := FGrid.CellRectOf(2, 2);
+  FGrid.ClickWith(cell.Left + 5, cell.Top + 5, [ssCtrl]);   // a second block
+  AssertTrue('precondition: the first block is still selected', FGrid.IsCellSelected(0, 0));
+  AssertEquals('the copy holds the active block', 'x' + LineEnding, FGrid.SelectionAsText);
+  FGrid.CutToClipboard;
+  AssertEquals('the copied cell is cleared', '', FGrid.Cells[2, 2]);
+  AssertEquals('the block left off the clipboard is not', 'x', FGrid.Cells[0, 0]);
+end;
+
+procedure TGridOptionsTest.TestRowSelectionCopiesWholeRows;
+begin
+  Build(3, 3, 80);
+  FGrid.Cells[0, 1] := 'a';
+  FGrid.Cells[1, 1] := 'b';
+  FGrid.Cells[2, 1] := 'c';
+  FGrid.SelectionMode := gsmRow;
+  FGrid.Col := 1;
+  FGrid.Row := 1;
+  AssertEquals('the whole row is copied', 'a'#9'b'#9'c' + LineEnding, FGrid.SelectionAsText);
+end;
+
+procedure TGridOptionsTest.TestAPlainArrowDropsTheCtrlClickBlocks;
+var
+  cell: TRect;
+begin
+  Build(3, 4, 80);
+  cell := FGrid.CellRectOf(0, 0);
+  FGrid.ClickAt(cell.Left + 5, cell.Top + 5);
+  cell := FGrid.CellRectOf(2, 2);
+  FGrid.ClickWith(cell.Left + 5, cell.Top + 5, [ssCtrl]);
+  AssertTrue('precondition: two blocks', FGrid.IsCellSelected(0, 0));
+  FGrid.PressKey(VK_DOWN, []);
+  AssertFalse('a plain arrow leaves only the cursor''s cell', FGrid.IsCellSelected(0, 0));
+end;
+
+procedure TGridOptionsTest.TestEditorsLeftUnchangedLeaveTheCell;
+
+  procedure Probe(AKind: TTyGridEditorKind; const AValue, AWhat: string);
+  begin
+    (FGrid.Header.Columns.Items[0] as TTyGridColumn).EditorKind := AKind;
+    FGrid.Cells[0, 1] := AValue;
+    AssertTrue('setup: editing ' + AWhat, FGrid.BeginEdit(0, 1));
+    FGrid.EndEdit(True);
+    AssertEquals(AWhat + ': opened and left, the cell is as it was', AValue, FGrid.Cells[0, 1]);
+  end;
+
+begin
+  Build(2, 3, 80);
+  Probe(gekSpin, '', 'an empty spin cell');
+  Probe(gekSpin, '12.5', 'a spin cell holding a fraction');
+  Probe(gekSlider, '250', 'a slider cell past its maximum');
+  Probe(gekDate, '', 'an empty date cell');
+  Probe(gekTime, '', 'an empty time cell');
+end;
+
+procedure TGridOptionsTest.TestBackToTheEditedCellKeepsTheDraft;
+begin
+  Build(2, 3, 80);
+  FGrid.Cells[0, 1] := 'old';
+  AssertTrue('setup: editing', FGrid.BeginEdit(0, 1));
+  FGrid.TypeInEditor('draft');
+  AssertTrue('back to the same cell', FGrid.BeginEdit(0, 1));
+  FGrid.EndEdit(True);
+  AssertEquals('the draft is a change, and is written', 'draft', FGrid.Cells[0, 1]);
+end;
+
+procedure TGridOptionsTest.TestWritingTheEditedCellGoesIntoTheEditor;
+begin
+  Build(2, 3, 80);
+  FGrid.Cells[0, 1] := 'old';
+  AssertTrue('setup: editing', FGrid.BeginEdit(0, 1));
+  FGrid.TypeInEditor('draft');
+  FGrid.Cells[0, 1] := 'code';
+  AssertEquals('the editor shows what the code wrote', 'code', FGrid.EditorText);
+  FGrid.EndEdit(True);
+  AssertEquals('and the commit keeps it', 'code', FGrid.Cells[0, 1]);
+end;
+
+procedure TGridOptionsTest.TestShrinkingTheRowsTakesTheCursorAndTheEditAlong;
+begin
+  Build(2, 6, 80);
+  FGrid.Row := 5;
+  AssertTrue('setup: editing the last row', FGrid.BeginEdit(0, 5));
+  FGrid.RowCount := 3;
+  AssertFalse('the edit on the row that went is dropped', FGrid.Editing);
+  AssertEquals('the cursor comes back to the last row', 2, FGrid.Row);
+  FGrid.Row := 2;
+  FGrid.RemoveRows(1, 2);
+  AssertEquals('RemoveRows too', 0, FGrid.Row);
+end;
+
+procedure TGridOptionsTest.TestTurningReadOnlyOnClosesTheEditor;
+begin
+  Build(2, 3, 80);
+  FGrid.Cells[0, 1] := 'old';
+  AssertTrue('setup: editing', FGrid.BeginEdit(0, 1));
+  FGrid.TypeInEditor('new');
+  FGrid.ReadOnly := True;
+  AssertFalse('the editor closed', FGrid.Editing);
+  AssertEquals('without writing', 'old', FGrid.Cells[0, 1]);
+  FGrid.ReadOnly := False;
+  AssertTrue('setup: editing again', FGrid.BeginEdit(0, 1));
+  FGrid.Options := FGrid.Options - [goEditing];
+  AssertFalse('taking goEditing out closes it too', FGrid.Editing);
+end;
+
+procedure TGridOptionsTest.TestUndoKeysLeaveAReadOnlyGridAlone;
+begin
+  Build(2, 3, 80);
+  FGrid.Cells[0, 0] := 'a';
+  FGrid.ReadOnly := True;
+  FGrid.PressKey(Ord('Z'), [ssCtrl]);
+  AssertEquals('Ctrl+Z changes nothing', 'a', FGrid.Cells[0, 0]);
 end;
 
 procedure TGridOptionsTest.TestUpDownTheEditorLeavesMoveTheCell;
