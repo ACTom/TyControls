@@ -20,7 +20,7 @@ uses
   tyControls.ListView.Layout,  { TTyListViewStyle, TTyListSortKind }
   tyControls.ScrollBar,        { TTyScrollBar (the embedded bars) }
   tyControls.Edit,             { TTyEdit (the inline rename editor) }
-  tyControls.ListView;         { TTyListView + item / state types + events }
+  tyControls.ListView, test.danglingrefs;         { TTyListView + item / state types + events }
 
 type
   { Reaches the protected data accessors and the internal display order. }
@@ -161,6 +161,13 @@ type
     procedure TestGetNextSelectedWalk;
     { Selected[] with an out-of-range index neither crashes nor changes SelCount }
     procedure TestSelectedOutOfRangeIsSafe;
+    { #141: the selection, the focus and the anchor follow their item when items are
+      inserted or deleted -- they stayed on the row number, so on other data. }
+    procedure TestTheSelectionFollowsItsItemOnInsert;
+    procedure TestTheFocusFollowsItsItemOnDelete;
+    procedure TestDeletingTheFocusedItemLeavesNoFocus;
+    procedure TestABatchOfDeletesFollowsTheItems;
+    procedure TestUnselectingTheSelectedRowClearsIt;
   end;
 
   { -----------------------------------------------------------------------
@@ -901,6 +908,72 @@ end;
 { ===========================================================================
   SELECTION
   =========================================================================== }
+
+procedure TListViewSelectionTest.TestTheSelectionFollowsItsItemOnInsert;
+begin
+  Populate(4);
+  FLV.MultiSelect := True;
+  FLV.Selected[2] := True;
+  (FLV.Items.Insert(0) as TTyListItem).Caption := 'new';
+  AssertTrue('the selected item is still selected', FLV.Selected[3]);
+  AssertEquals('it is item2', 'item2', FLV.Items[3].Caption);
+  AssertFalse('the row number it had is not', FLV.Selected[2]);
+end;
+
+procedure TListViewSelectionTest.TestTheFocusFollowsItsItemOnDelete;
+begin
+  Populate(4);
+  FLV.ItemIndex := 2;
+  FLV.Items.Delete(0);
+  AssertEquals('the focus moved up with its item', 1, FLV.ItemIndex);
+  AssertEquals('it is item2', 'item2', FLV.Items[FLV.ItemIndex].Caption);
+end;
+
+procedure TListViewSelectionTest.TestDeletingTheFocusedItemLeavesNoFocus;
+begin
+  Populate(4);
+  FLV.ItemIndex := 2;
+  { Poisoned: the row map must let go of the freed item, not read it -- a freed item's Index
+    can still answer -1 by luck. }
+  BeginPoison;
+  try
+    FLV.Items.Delete(2);
+  finally
+    EndPoison;
+  end;
+  AssertEquals('no item is focused', -1, FLV.ItemIndex);
+end;
+
+procedure TListViewSelectionTest.TestABatchOfDeletesFollowsTheItems;
+begin
+  Populate(5);
+  FLV.ItemIndex := 3;
+  { Inside BeginUpdate the rows are counted again only at EndUpdate, when the deleted items
+    are gone: poisoned, so reading one faults. }
+  BeginPoison;
+  try
+    FLV.BeginUpdate;
+    try
+      FLV.Items.Delete(0);
+      FLV.Items.Delete(0);
+    finally
+      FLV.EndUpdate;
+    end;
+  finally
+    EndPoison;
+  end;
+  AssertEquals('the focus followed its item through the batch', 1, FLV.ItemIndex);
+  AssertEquals('it is item3', 'item3', FLV.Items[FLV.ItemIndex].Caption);
+end;
+
+procedure TListViewSelectionTest.TestUnselectingTheSelectedRowClearsIt;
+begin
+  Populate(3);
+  FLV.ItemIndex := 1;
+  FLV.Selected[1] := False;
+  AssertFalse('the row is no longer selected', FLV.Selected[1]);
+  AssertEquals('and nothing is', -1, FLV.ItemIndex);
+end;
 
 procedure TListViewSelectionTest.SetUp;
 begin
