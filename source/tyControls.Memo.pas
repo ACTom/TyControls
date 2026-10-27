@@ -5010,7 +5010,7 @@ end;
 procedure TTyMemo.KeyDown(var Key: Word; Shift: TShiftState);
 var
   APPI, L, MaxLine, WordT: Integer;
-  CtrlLike, Extending: Boolean;
+  CtrlLike, Extending, Shortcut: Boolean;
   CurLine: string;
 begin
   if not IsEnabled then Exit;          // when disabled, do NOT consume Key
@@ -5019,6 +5019,8 @@ begin
   MaxLine := LineCountLogical - 1;
   // Ctrl (Win/Linux) or Meta/Cmd (macOS) modifies Home/End to document extents.
   CtrlLike := (ssCtrl in Shift) or (ssMeta in Shift);
+  { The clipboard and undo chords never take Alt: AltGr is Ctrl+Alt (#150). }
+  Shortcut := TyIsShortcutShift(Shift);
   // Shift extends the selection: navigation moves the caret but keeps the anchor.
   // When NOT extending, each nav branch collapses the anchor onto the new caret
   // (mirrors TTyEdit; additive — existing single-caret nav never passes ssShift,
@@ -5027,25 +5029,25 @@ begin
 
   // Clipboard shortcuts (Ctrl on Win/Linux, Meta/Cmd on macOS), handled BEFORE
   // the navigation case so they take precedence. Each consumes Key and Exits.
-  if CtrlLike and (Key = VK_A) then
+  if Shortcut and (Key = VK_A) then
   begin
     SelectAll;
     Key := 0;
     Exit;
   end;
-  if CtrlLike and (Key = VK_C) then
+  if Shortcut and (Key = VK_C) then
   begin
     CopyToClipboard;
     Key := 0;
     Exit;
   end;
-  if CtrlLike and (Key = VK_X) then
+  if Shortcut and (Key = VK_X) then
   begin
     CutToClipboard;
     Key := 0;
     Exit;
   end;
-  if CtrlLike and (Key = VK_V) then
+  if Shortcut and (Key = VK_V) then
   begin
     PasteFromClipboard;
     Key := 0;
@@ -5055,15 +5057,15 @@ begin
   // Redo: Ctrl/Cmd+Shift+Z OR Ctrl/Cmd+Y. Check redo BEFORE undo so the Shift+Z
   // variant is not swallowed by the plain Ctrl+Z branch below (same idiom as
   // TTyEdit). CtrlLike already covers Ctrl (Win/Linux) and Meta/Cmd (macOS).
-  if ( (Key = VK_Z) and CtrlLike and (ssShift in Shift) )
-     or ( (Key = VK_Y) and CtrlLike ) then
+  if ( (Key = VK_Z) and Shortcut and (ssShift in Shift) )
+     or ( (Key = VK_Y) and Shortcut ) then
   begin
     Redo;
     Key := 0;
     Exit;
   end;
   // Undo: Ctrl/Cmd+Z (no Shift).
-  if (Key = VK_Z) and CtrlLike and not (ssShift in Shift) then
+  if (Key = VK_Z) and Shortcut and not (ssShift in Shift) then
   begin
     Undo;
     Key := 0;

@@ -37,6 +37,7 @@ type
     procedure ProbeMouseDown(X, Y: Integer);
     procedure ProbeMouseMove(X, Y: Integer);
     procedure ProbeMouseUp(X, Y: Integer);
+    procedure ProbeKeyDown(var Key: Word; AShift: TShiftState);
   end;
 
   { Clipboard probe: routes the virtual clipboard hooks to an in-memory string so
@@ -102,6 +103,8 @@ type
     procedure TestLinesClearLeavesNoSelection;
     procedure TestLinesDeleteLeavesNoSelection;
     procedure TestAssigningLinesLeavesNoSelection;
+    { #150: AltGr (Ctrl+Alt on Windows) with A types a letter; it is no select-all. }
+    procedure TestAltGrAIsNotSelectAll;
     // --- T3: selection-band rendering per visible line + caret gating ---
     procedure TestSelectionBandSingleLine;
     procedure TestSelectionBandFullInteriorLine;
@@ -282,6 +285,11 @@ end;
 procedure TTyMemoSelProbe.ProbeMouseUp(X, Y: Integer);
 begin
   MouseUp(mbLeft, [], X, Y);
+end;
+
+procedure TTyMemoSelProbe.ProbeKeyDown(var Key: Word; AShift: TShiftState);
+begin
+  KeyDown(Key, AShift);
 end;
 
 { TTyMemoClipboardProbe }
@@ -613,6 +621,22 @@ begin
   AssertEquals('the character goes in at the caret', 'xbbbb', FMemo.ProbeLine(1));
   AssertEquals('and deletes nothing', 'aaaa', FMemo.ProbeLine(0));
   AssertEquals('two lines', 2, FMemo.ProbeLineCount);
+end;
+
+procedure TTyMemoSelectionTest.TestAltGrAIsNotSelectAll;
+var
+  k: Word;
+begin
+  SetUpMemo;
+  LoadLines(['abc', 'def']);
+  FMemo.ProbeSetCaret(1, 3);
+  k := VK_A;
+  FMemo.ProbeKeyDown(k, [ssCtrl, ssAlt]);
+  AssertFalse('AltGr+A selects nothing', FMemo.ProbeHasSelection);
+  AssertEquals('and leaves the key for its letter', VK_A, k);
+  k := VK_A;
+  FMemo.ProbeKeyDown(k, [ssCtrl]);
+  AssertTrue('Ctrl+A alone still selects all', FMemo.ProbeHasSelection);
 end;
 
 procedure TTyMemoSelectionTest.TestAssigningLinesLeavesNoSelection;

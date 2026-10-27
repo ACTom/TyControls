@@ -706,6 +706,11 @@ procedure TyApplyControlFont(var AStyle: TTyStyleSet; AControl: TControl;
   control that sizes some text of its own -- a dial's figure, a gauge's value -- and keeps its
   own default unless the author set a size (#113). }
 function TyControlFontSize(AControl: TControl): Integer;
+{ A shortcut chord: Ctrl, or Cmd on macOS, but not Alt (#150). Windows reports AltGr as
+  Ctrl+Alt, and AltGr with A, C, X, V, Y or Z types a letter on Polish, Czech, Hungarian and
+  other keyboards -- taken for Ctrl, it selected all, copied, cut, pasted or undid instead.
+  LCL's native edits take Ctrl+Alt for no shortcut either. }
+function TyIsShortcutShift(AShift: TShiftState): Boolean;
 { AStates, or [tysDisabled] when AControl -- or one of its parents -- is disabled (#118): for a
   part a control resolves with states of its own, which would otherwise never look disabled. }
 function TyStatesUnlessDisabled(AControl: TControl; const AStates: TTyStateSet): TTyStateSet;
@@ -2795,6 +2800,11 @@ end;
 function TyStatesUnlessDisabled(AControl: TControl; const AStates: TTyStateSet): TTyStateSet;
 begin
   if (AControl = nil) or AControl.IsEnabled then Result := AStates else Result := [tysDisabled];
+end;
+
+function TyIsShortcutShift(AShift: TShiftState): Boolean;
+begin
+  Result := ((ssCtrl in AShift) or (ssMeta in AShift)) and not (ssAlt in AShift);
 end;
 
 function TyControlFontSize(AControl: TControl): Integer;

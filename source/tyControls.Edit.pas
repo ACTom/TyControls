@@ -2361,8 +2361,8 @@ begin
     Exit;
   end;
 
-  // Ctrl+A / Meta+A
-  if (Key = VK_A) and ((ssCtrl in Shift) or (ssMeta in Shift)) then
+  // Ctrl+A / Meta+A -- never with Alt: AltGr is Ctrl+Alt (#150, TyIsShortcutShift)
+  if (Key = VK_A) and TyIsShortcutShift(Shift) then
   begin
     SelectAll;
     Key := 0;
@@ -2370,7 +2370,7 @@ begin
   end;
 
   // Ctrl+C / Meta+C
-  if (Key = VK_C) and ((ssCtrl in Shift) or (ssMeta in Shift)) then
+  if (Key = VK_C) and TyIsShortcutShift(Shift) then
   begin
     CopyToClipboard;
     Key := 0;
@@ -2378,7 +2378,7 @@ begin
   end;
 
   // Ctrl+X / Meta+X
-  if (Key = VK_X) and ((ssCtrl in Shift) or (ssMeta in Shift)) then
+  if (Key = VK_X) and TyIsShortcutShift(Shift) then
   begin
     CutToClipboard;
     Key := 0;
@@ -2386,7 +2386,7 @@ begin
   end;
 
   // Ctrl+V / Meta+V
-  if (Key = VK_V) and ((ssCtrl in Shift) or (ssMeta in Shift)) then
+  if (Key = VK_V) and TyIsShortcutShift(Shift) then
   begin
     PasteFromClipboard;
     Key := 0;
@@ -2395,8 +2395,8 @@ begin
 
   // Redo: Ctrl/Cmd+Shift+Z OR Ctrl+Y. Check redo BEFORE undo so the Shift+Z
   // variant is not swallowed by the plain Ctrl+Z branch below.
-  if ( (Key = VK_Z) and ((ssCtrl in Shift) or (ssMeta in Shift)) and (ssShift in Shift) )
-     or ( (Key = VK_Y) and ((ssCtrl in Shift) or (ssMeta in Shift)) ) then
+  if ( (Key = VK_Z) and TyIsShortcutShift(Shift) and (ssShift in Shift) )
+     or ( (Key = VK_Y) and TyIsShortcutShift(Shift) ) then
   begin
     Redo;
     Key := 0;
@@ -2404,7 +2404,7 @@ begin
   end;
 
   // Undo: Ctrl/Cmd+Z (no Shift)
-  if (Key = VK_Z) and ((ssCtrl in Shift) or (ssMeta in Shift)) and not (ssShift in Shift) then
+  if (Key = VK_Z) and TyIsShortcutShift(Shift) and not (ssShift in Shift) then
   begin
     Undo;
     Key := 0;
