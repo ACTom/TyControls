@@ -286,6 +286,8 @@ type
     FontAnswer: TFont;        // nil = the dialog is cancelled
     ColorAnswer: TColor;
     FontDialogs: Integer;
+    FontSeen: TFont;          // the font the dialog was opened on
+    FontSizeAnswer: Integer;  // > 0 with FontAnswer nil: the user changes only the size, then OK
     StringsAnswer: string;    // what the "strings dialog" leaves in the list
     StringsAccept: Boolean;   // False = cancelled
     StringsDialogs: Integer;
@@ -559,16 +561,24 @@ begin
   Font.PixelsPerInch := 96;
   KeyColumnWidth := 140;
   ColorAnswer := clLime;
+  FontSeen := TFont.Create;
 end;
 
 destructor TPGGrid.Destroy;
 begin
+  FontSeen.Free;
   inherited Destroy;
 end;
 
 function TPGGrid.ExecuteFontDialog(AFont: TFont): Boolean;
 begin
   Inc(FontDialogs);
+  FontSeen.Assign(AFont);
+  if (FontAnswer = nil) and (FontSizeAnswer > 0) then
+  begin
+    AFont.Size := FontSizeAnswer;
+    Exit(True);
+  end;
   Result := FontAnswer <> nil;
   if Result then AFont.Assign(FontAnswer);
 end;

@@ -258,6 +258,10 @@ type
 
       An override must not free ARow (or rebuild the rows) from in here. Default: True. }
     function CanCommitValue(ARow: TTyValueRow; var AText: string): Boolean; virtual;
+    { The font the font dialog opens on, for a font row (#183). From the row's own children by
+      default; a host that holds the real font -- the property grid -- starts from that, so
+      what the rows do not show (CharSet, Pitch, Quality, Orientation) is not lost on OK. }
+    procedure SeedEditFont(ARow: TTyValueRow; AFont: TFont); virtual;
     { The two dialogs this control opens itself, so a descendant can supply its own and a test
       can answer without a modal window. ExecuteFontDialog starts from AFont and writes the
       choice back into it; ExecuteColorDialog likewise for AColor. True = the user confirmed. }
@@ -1674,11 +1678,18 @@ var k: string;
 begin
   Result := True;
   k := LowerCase(AKey);
-  if k = 'bold' then AFlag := fsBold
-  else if k = 'italic' then AFlag := fsItalic
-  else if k = 'underline' then AFlag := fsUnderline
-  else if k = 'strikeout' then AFlag := fsStrikeOut
+  { #183: and by the set's own element names, which is how the property grid names them -- the
+    style of a bold font was never seeded, and OK wrote it back regular. }
+  if (k = 'bold') or (k = 'fsbold') then AFlag := fsBold
+  else if (k = 'italic') or (k = 'fsitalic') then AFlag := fsItalic
+  else if (k = 'underline') or (k = 'fsunderline') then AFlag := fsUnderline
+  else if (k = 'strikeout') or (k = 'fsstrikeout') then AFlag := fsStrikeOut
   else Result := False;
+end;
+
+procedure TTyCustomValueListEditor.SeedEditFont(ARow: TTyValueRow; AFont: TFont);
+begin
+  SeedFontFromRow(ARow, AFont);
 end;
 
 procedure TTyCustomValueListEditor.SeedFontFromRow(ARow: TTyValueRow; AFont: TFont);
@@ -1773,7 +1784,7 @@ begin
   r := FFlatRow[AFlat];
   f := TFont.Create;
   try
-    SeedFontFromRow(r, f);
+    SeedEditFont(r, f);
     { By IDENTITY after the dialog: the modal pumped messages, so the row may have moved or gone. }
     if ExecuteFontDialog(f) and RowExists(r) then
     begin
