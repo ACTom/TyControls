@@ -662,6 +662,11 @@ procedure TTyCustomRadioButton.SetChecked(const AValue: Boolean);
 begin
   if FChecked = AValue then Exit;
   FChecked := AValue;
+  { #145: not while the form is read. Checked is read before GroupIndex, so the group is not
+    known yet: a radio button checked in another group unchecked the one in group 0, with an
+    OnChange that ran before FormCreate. LCL leaves the siblings alone while loading too
+    (radiobutton.inc, ApplyChanges). }
+  if csLoading in ComponentState then Exit;
   if FChecked then
     UncheckSiblings;          // each unchecked sibling routes through its own
                              // SetChecked, so it fires ITS OnChange + Invalidates
