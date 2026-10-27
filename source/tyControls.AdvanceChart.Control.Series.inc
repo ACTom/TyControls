@@ -1869,7 +1869,7 @@ var
   node: TJSONObject;
   d: TJSONData;
   sol: TTyLinesSolved;
-  stroke, c: TTyChartColor;
+  stroke, c, rowStroke: TTyChartColor;
   scale, lw, x, y, cw, ch, e0, e1, trail: Double;
   area: TTyXYWH;
   pol: TTyPolar;
@@ -1988,7 +1988,12 @@ begin
         TyLinesCurvenessOf(sol.Raws[k], node), @LinesProject);
     for k := 0 to n - 1 do
     begin
-      sol.Inks[k] := LinesInk(i, node, sol, k, stroke, scale, spec);
+      { [R5-B] the per-datum palette's colour where the row asked
+        (colorBy other than 'series'): the row's visual stroke }
+      rowStroke := stroke;
+      if (i <= High(FDatumAsked)) and (k <= High(FDatumAsked[i])) and FDatumAsked[i][k] then
+        rowStroke := TTyChartColor(PickColor(FDatumPicks[i][k]));
+      sol.Inks[k] := LinesInk(i, node, sol, k, rowStroke, scale, spec);
       FLinesSpecs[i][k] := spec;
     end;
     FLines[i] := sol;
@@ -2271,6 +2276,12 @@ begin
           d := LnNode(item, ['lineStyle', 'opacity']);
           if (d <> nil) and (d.JSONType = jtNumber) then row.Opacity := d.AsFloat;
         end;
+        { [R5-B] the per-datum palette (colorBy other than 'series'), asked
+          only by a row neither a visual channel nor its own lineStyle
+          coloured }
+        if (i <= High(FDatumAsked)) and (raw >= 0) and (raw <= High(FDatumAsked[i]))
+          and FDatumAsked[i][raw] then
+          c := TTyChartColor(PickColor(FDatumPicks[i][raw]));
         case row.Active of
           ppaActive: row.Opacity := opA;
           ppaInactive: row.Opacity := opI;
@@ -3397,6 +3408,26 @@ begin
   if (tpBorderColor in up.Present) and (up.BorderWidth > 0) then
     d.BorderWidthLogical := up.BorderWidth;
   Result := TyCandleSpecOf(FOption, ASlot, d);
+end;
+
+function TTyCustomAdvanceChart.CandleRowsOf(ASlot: Integer;
+  const ASeries: TTyCandleSpec): TTyCandleRowArray;
+var
+  items: TJSONArray;
+  k: Integer;
+  row: TTyCandleRow;
+begin
+  Result := nil;
+  items := RawItemArray(ASlot);
+  if items = nil then Exit;
+  for k := 0 to items.Count - 1 do
+  begin
+    if not (items.Items[k] is TJSONObject) then Continue;
+    row := TyCandleRowOf(ASeries, TJSONObject(items.Items[k]));
+    if not row.Present then Continue;
+    if Result = nil then SetLength(Result, items.Count);
+    Result[k] := row;
+  end;
 end;
 
 function TTyCustomAdvanceChart.PolarBarOf(ASeriesIndex: Integer): TTyPolarBarLayout;

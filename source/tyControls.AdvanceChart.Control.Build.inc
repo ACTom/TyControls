@@ -686,13 +686,19 @@ begin
     typ := FBindings[i].SeriesType;
     { THE TYPES WHOSE ROWS THIS PORT PAINTS ONE BY ONE. A graph, a tree, a
       treemap, a sunburst and a sankey colour their own nodes; a candlestick's
-      and a boxplot's defaults write the colour. }
+      defaults write the colour (its visual sets fill and stroke itself).
+      [R5-B: a boxplot's do not -- only its fill; its pen, the colour it
+      draws with, is the palette's, per datum under colorBy 'data'.] }
     if not ((typ = 'bar') or (typ = 'line') or (typ = 'scatter')
       or (typ = 'effectScatter') or (typ = 'pictorialBar')
       or (typ = TyPieSeriesTypeName) or (typ = 'funnel') or (typ = 'gauge')
       or (typ = 'radar') or (typ = TyThemeRiverSeriesTypeName)
       { a chord's nodes, colorBy 'data' by default [Batch 120] }
-      or (typ = TyChordSeriesTypeName)) then Continue;
+      or (typ = TyChordSeriesTypeName) or (typ = 'boxplot')
+      { [R5-B] a heatmap's cells, a lines' rows and a parallel's lines take
+        the per-datum palette too (lines and parallel on their lineStyle) }
+      or (typ = 'heatmap') or (typ = TyLinesSeriesTypeName)
+      or (typ = 'parallel')) then Continue;
     cb := TyChartColorByOf(FOption, si, typ);
     if cb = 'series' then Continue;
     { the scope first, whether or not a row asks: upstream hands every such
@@ -720,7 +726,9 @@ begin
     begin
       if FStores[i].IndexOfRawIndex(k) >= 0 then
       begin
-        { ITS OWN COLOUR: the key present and not null, an object included }
+        { ITS OWN COLOUR: the key present and not null, an object included
+          -- the key of the colour the type draws with (dataStyleTask's
+          `colorKey in style`: a boxplot's is its borderColor) [R5-B] }
         item := RawItemNode(i, k);
         own := False;
         if item <> nil then
@@ -728,7 +736,10 @@ begin
           d := item.Find(TyStyleAccessPath(typ));
           if d is TJSONObject then
           begin
-            d := TJSONObject(d).Find('color');
+            if TyStyleDrawsWithStroke(typ) and (TyStyleAccessPath(typ) = 'itemStyle') then
+              d := TJSONObject(d).Find('borderColor')
+            else
+              d := TJSONObject(d).Find('color');
             own := (d <> nil) and (d.JSONType <> jtNull);
           end;
         end;
@@ -4047,6 +4058,9 @@ begin
         v.Line.StackedOnSmooth := TyLineSpecOf(FOption,
           FBindings[FStacks[i].OnSlot].SeriesIndex).Smooth;
       v.Candle := CandleVisual(FBindings[i].SeriesIndex);
+      { an item's own candle over the series' [R5-B] }
+      if FBindings[i].SeriesType = 'candlestick' then
+        v.CandleRows := CandleRowsOf(i, v.Candle);
       { The thinning the AXIS settled on. When markers would crowd, upstream
         falls back to the category axis' own label interval -- which the layout
         pass already computed, so it is fetched rather than re-derived. }
@@ -4100,6 +4114,12 @@ begin
       v.BackgroundFill := TTyChartColor(
         ActiveController.Model.ResolveStyle('TyAdvChartBarBackground', '',
           []).Background.Color);
+      { and what the series wrote over it [R5-B] }
+      if FOption.ComponentAt('series', FBindings[i].SeriesIndex) is TJSONObject then
+        v.BackgroundStyle := TyReadOptStyle(TJSONObject(FOption.ComponentAt('series',
+          FBindings[i].SeriesIndex)), 'backgroundStyle')
+      else
+        v.BackgroundStyle := TyReadOptStyle(nil, 'backgroundStyle');
       { `z` AND `z2`, the series default z UPSTREAM'S 2. [Batch 64: it was 0,
         on the grounds that nothing else here shared the scale. Markers do: a
         markArea sits at z 1, UNDER its series, and a markPoint or markLine at
