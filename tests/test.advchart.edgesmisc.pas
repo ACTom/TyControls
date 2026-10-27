@@ -27,6 +27,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
      tyControls.AdvanceChart.Shape,
      tyControls.AdvanceChart.Events, tyControls.AdvanceChart.Measure,
+     tyControls.AdvanceChart.ThemeRiver,
      tyControls.AdvanceChart;
 type
   TEmProbe = class(TTyAdvanceChart)
@@ -62,6 +63,7 @@ type
     procedure TestTheActionEventsReachChartOnAsUpstream;
     procedure TestAnAppendedItemDrawsItsOwnSymbol;
     procedure TestTheDiagnosticsAreTheOptionsAtOnce;
+    procedure TestARiverMergedTheSameGapResolvesItAgain;
   end;
 
 { a payload as text both sides compare: keys sorted, numbers by value, a
@@ -550,6 +552,73 @@ begin
     bmp.Free;
     bmp2.Free;
   end;
+end;
+
+function FromHex(const AHex: string): Double;
+var q: QWord;
+begin
+  Result := 0;
+  q := StrToQWord('$' + AHex);
+  Move(q, Result, SizeOf(Result));
+end;
+
+function SameBits(A, B: Double): Boolean;
+begin
+  Result := CompareMem(@A, @B, SizeOf(Double));
+end;
+
+{ A MERGE THAT WRITES boundaryGap -- the same text too -- has the river
+  resolve it again at the size it has then: upstream's merge replaces the
+  model's array the layout wrote its px into. One that writes none keeps
+  the px. [Was: the px kept while the text was the same.] }
+procedure TAdvChartEdgesMiscOracleTest.TestARiverMergedTheSameGapResolvesItAgain;
+var
+  river, st, op: TJSONObject;
+  steps: TJSONArray;
+  chart: TEmProbe;
+  bmp: TBGRABitmap;
+  k, w, h: Integer;
+  lay: TTyThemeRiverLayout;
+  report: string;
+begin
+  river := Section('river');
+  steps := river.Arrays['steps'];
+  chart := NewChart(600, 400);
+  chart.Option := river.Objects['option'].AsJSON;
+  w := 600;
+  h := 400;
+  report := '';
+  for k := 0 to steps.Count - 1 do
+  begin
+    st := steps.Objects[k];
+    if st.Find('op') is TJSONObject then
+    begin
+      op := st.Objects['op'];
+      if op.Find('resize') <> nil then
+      begin
+        w := op.Arrays['resize'].Integers[0];
+        h := op.Arrays['resize'].Integers[1];
+        chart.SetBounds(0, 0, w, h);
+      end
+      else
+        AssertTrue('merged', chart.MergeOption(op.Objects['merge'].AsJSON));
+    end;
+    bmp := TBGRABitmap.Create(w, h, BGRA(255, 255, 255, 255));
+    try
+      chart.Render(bmp.Canvas, Rect(0, 0, w, h), 96);
+    finally
+      bmp.Free;
+    end;
+    lay := chart.RiverLayoutOf(0);
+    if not (SameBits(lay.Rect.H, FromHex(st.Strings['rectH']))
+      and SameBits(lay.Gap[0], FromHex(st.Arrays['gap'].Strings[0]))
+      and SameBits(lay.Gap[1], FromHex(st.Arrays['gap'].Strings[1]))) then
+      report := report + LineEnding + Format('%s: %g %g over %g here, %g %g over %g upstream',
+        [st.Strings['what'], lay.Gap[0], lay.Gap[1], lay.Rect.H,
+         FromHex(st.Arrays['gap'].Strings[0]), FromHex(st.Arrays['gap'].Strings[1]),
+         FromHex(st.Strings['rectH'])]);
+  end;
+  AssertEquals('the river''s gaps step by step', '', report);
 end;
 
 initialization

@@ -259,6 +259,44 @@ function runAppend() {
   }
 }
 
+// ---- river: themeRiverLayout writes the parsePercent results back into
+// the model's own boundaryGap array; a merge that writes boundaryGap -- the
+// same text too -- replaces the array (zrUtil.merge clones an array over),
+// which the next layout parses at the size it has then ----
+const RIVER = { animation: false, singleAxis: { type: 'time', top: 40, bottom: 40 },
+  series: [{ type: 'themeRiver', boundaryGap: ['10%', '20%'], data: [['2020/01/01', 10, 'A'], ['2020/01/02', 20, 'A'], ['2020/01/03', 15, 'A'],
+    ['2020/01/01', 5, 'B'], ['2020/01/02', 8, 'B'], ['2020/01/03', 12, 'B']] }] };
+function runRiverRemerge() {
+  const chart = mk();
+  const steps = [];
+  try {
+    chart.setOption(JSON.parse(JSON.stringify(RIVER)));
+    frame(chart);
+    const rec = (what, op) => {
+      frame(chart);
+      const li = chart.getModel().getSeriesByIndex(0).getData().getLayout('layoutInfo');
+      steps.push({ what, op, gap: li.boundaryGap.map(hex), rectH: hex(li.rect.height) });
+    };
+    rec('first', null);
+    chart.resize({ width: 600, height: 300 });
+    rec('resized to 300', { resize: [600, 300] });
+    chart.setOption({ series: [{ boundaryGap: ['10%', '20%'] }] });
+    rec('merged, the same boundaryGap', { merge: { series: [{ boundaryGap: ['10%', '20%'] }] } });
+    chart.resize({ width: 600, height: 400 });
+    rec('resized back', { resize: [600, 400] });
+    chart.setOption({ series: [{ name: 'river' }] });
+    rec('merged, no boundaryGap', { merge: { series: [{ name: 'river' }] } });
+    chart.resize({ width: 600, height: 250 });
+    rec('resized to 250', { resize: [600, 250] });
+    chart.setOption({ series: [{ boundaryGap: [0, '5%'] }] });
+    rec('merged, another boundaryGap', { merge: { series: [{ boundaryGap: [0, '5%'] }] } });
+    return { option: RIVER, steps };
+  }
+  finally {
+    chart.dispose();
+  }
+}
+
 function generate() {
   const types = publicTypes();
   return {
@@ -269,6 +307,7 @@ function generate() {
       queries: QUERIES.map(([h, q]) => ({ h, query: q === undefined ? null : q })),
       cases: EVENT_CASES.map(c => runEventCase(c, types.pub)) },
     append: runAppend(),
+    river: runRiverRemerge(),
   };
 }
 
@@ -314,11 +353,15 @@ const guards = [
   { name: 'append: the triangle, its rotation, colour and label; the diamond',
     ok: out1.append.written[4].symbol === 'triangle' && out1.append.written[4].fill === '#ff0000' && out1.append.written[4].label === 'M'
       && out1.append.written[5].symbol === 'diamond' },
+  { name: 'river: the same boundaryGap merged again is resolved at the new size; no boundaryGap keeps the px',
+    ok: (s => s[1].gap[0] === s[0].gap[0] && s[2].gap[0] !== s[1].gap[0] && s[3].gap[0] === s[2].gap[0] && s[4].gap[0] === s[3].gap[0]
+      && s[5].gap[0] === s[4].gap[0] && s[6].gap[0] !== s[5].gap[0])(out1.river.steps) },
 ];
 out1.guards = guards.map(g => ({ name: g.name, ok: !!g.ok }));
 console.log('public: ' + ev.public.length + ' ' + JSON.stringify(ev.public));
 console.log('connectOnly: ' + JSON.stringify(ev.connectOnly) + ' legacy: ' + JSON.stringify(ev.legacy));
 ev.cases.forEach(c => c.steps.forEach((s, k) => console.log(c.id + ' ' + k + ': ' + JSON.stringify(s.log.filter(l => l[0] === 'plain').map(l => l[1] + ' ' + l[2])))));
+console.log('river: ' + JSON.stringify(out1.river.steps.map(s => [s.what, s.gap, s.rectH])));
 console.log('append: ' + JSON.stringify(out1.append.appended.map(r => r && [r.symbol, r.fill, r.label])));
 const bad = out1.guards.filter(q => !q.ok);
 out1.guards.forEach(q => console.log('guard ' + (q.ok ? 'ok  ' : 'FAIL') + ' ' + q.name));

@@ -1005,10 +1005,19 @@ begin
         if s <= High(FSelInit) then FSelInit[s] := False;
         if s <= High(FSankeyRoam) then FSankeyRoam[s] := Default(TTyGraphRoamState);
         if s <= High(FSankeyLocal) then FSankeyLocal[s] := nil;
+        { [R5-J] a river's written-back gaps are the model's }
+        if s <= High(FRiverGaps) then FRiverGaps[s].Has := False;
         Continue;
       end;
       if fate = mfMerged then
       begin
+        { [R5-J] A MERGE THAT WRITES boundaryGap, whatever it writes: the
+          model's array is replaced by the new one (zrUtil.merge clones an
+          array over), which the next layout parses at its own size -- the
+          same text written again too [was: the px kept while the text was
+          the same] }
+        if (s <= High(FRiverGaps)) and (opt <> nil) and (opt.Find('boundaryGap') <> nil) then
+          FRiverGaps[s].Has := False;
         if s <= High(FGraphRoam) then MergeRoamOverride(FGraphRoam[s], s, opt);
         { a sankey's roam as a graph's; its dragNode positions live in the
           node items, which a merge that writes the node list replaces

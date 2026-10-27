@@ -2561,6 +2561,167 @@
    }
   ]
  },
+ "river": {
+  "option": {
+   "animation": false,
+   "singleAxis": {
+    "type": "time",
+    "top": 40,
+    "bottom": 40
+   },
+   "series": [
+    {
+     "type": "themeRiver",
+     "boundaryGap": [
+      "10%",
+      "20%"
+     ],
+     "data": [
+      [
+       "2020/01/01",
+       10,
+       "A"
+      ],
+      [
+       "2020/01/02",
+       20,
+       "A"
+      ],
+      [
+       "2020/01/03",
+       15,
+       "A"
+      ],
+      [
+       "2020/01/01",
+       5,
+       "B"
+      ],
+      [
+       "2020/01/02",
+       8,
+       "B"
+      ],
+      [
+       "2020/01/03",
+       12,
+       "B"
+      ]
+     ]
+    }
+   ]
+  },
+  "steps": [
+   {
+    "what": "first",
+    "op": null,
+    "gap": [
+     "4040000000000000",
+     "4050000000000000"
+    ],
+    "rectH": "4074000000000000"
+   },
+   {
+    "what": "resized to 300",
+    "op": {
+     "resize": [
+      600,
+      300
+     ]
+    },
+    "gap": [
+     "4040000000000000",
+     "4050000000000000"
+    ],
+    "rectH": "406b800000000000"
+   },
+   {
+    "what": "merged, the same boundaryGap",
+    "op": {
+     "merge": {
+      "series": [
+       {
+        "boundaryGap": [
+         "10%",
+         "20%"
+        ]
+       }
+      ]
+     }
+    },
+    "gap": [
+     "4036000000000000",
+     "4046000000000000"
+    ],
+    "rectH": "406b800000000000"
+   },
+   {
+    "what": "resized back",
+    "op": {
+     "resize": [
+      600,
+      400
+     ]
+    },
+    "gap": [
+     "4036000000000000",
+     "4046000000000000"
+    ],
+    "rectH": "4074000000000000"
+   },
+   {
+    "what": "merged, no boundaryGap",
+    "op": {
+     "merge": {
+      "series": [
+       {
+        "name": "river"
+       }
+      ]
+     }
+    },
+    "gap": [
+     "4036000000000000",
+     "4046000000000000"
+    ],
+    "rectH": "4074000000000000"
+   },
+   {
+    "what": "resized to 250",
+    "op": {
+     "resize": [
+      600,
+      250
+     ]
+    },
+    "gap": [
+     "4036000000000000",
+     "4046000000000000"
+    ],
+    "rectH": "4065400000000000"
+   },
+   {
+    "what": "merged, another boundaryGap",
+    "op": {
+     "merge": {
+      "series": [
+       {
+        "boundaryGap": [
+         0,
+         "5%"
+        ]
+       }
+      ]
+     }
+    },
+    "gap": [
+     "0000000000000000",
+     "4021000000000000"
+    ],
+    "rectH": "4065400000000000"
+   }
+  ]
+ },
  "guards": [
   {
    "name": "events: the axis breaks' non-refined types are connect-only; axisbreakchanged is public",
@@ -2612,6 +2773,10 @@
   },
   {
    "name": "append: the triangle, its rotation, colour and label; the diamond",
+   "ok": true
+  },
+  {
+   "name": "river: the same boundaryGap merged again is resolved at the new size; no boundaryGap keeps the px",
    "ok": true
   }
  ]
