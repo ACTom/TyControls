@@ -200,6 +200,44 @@ type
   end;
   TTyPtrAxisInfoArray = array of TTyPtrAxisInfo;
 
+  { [R5-D] AN AXIS POINTER'S HANDLE (axisPointer.handle): the axis model's
+    pointer value (option.value, kept across pointer events: a handle's
+    status is always 'show'), the handle element's place in the control's
+    pixels (x, y, rotation; the icon scaled by size / 2) and its drag --
+    BaseAxisPointer._handle, _dragging, _payloadInfo and the fixRate
+    throttle of _doDispatchAxisPointer. }
+  TTyPtrHandle = record
+    Key: string;
+    MainType: string;
+    Index: Integer;
+    HasValue: Boolean;
+    Value: Double;
+    { the handle's place, and whether one was ever placed (isInit) }
+    Placed: Boolean;
+    X, Y, Rotation: Double;
+    { the value the place was last moved to (lastProp) }
+    PlacedValue: Double;
+    Dragging: Boolean;
+    { the throttle: the last run, a deferred one due at DueAt (NaN none) }
+    LastExec: Double;
+    DueAt: Double;
+    { the payload's info: cursorPoint (CSS px) and tooltipOption }
+    PayX, PayY: Double;
+    PayTip: string;
+    Live: Boolean;
+  end;
+  TTyPtrHandleArray = array of TTyPtrHandle;
+
+  { a handle as a test reads it: CSS px from the chart's corner }
+  TTyPointerHandleState = record
+    Key: string;
+    Value: Double;
+    X, Y, Rotation, ScaleX, ScaleY: Double;
+    HasFill: Boolean;
+    Fill: TTyChartColor;
+    Dragging: Boolean;
+  end;
+
   { WHAT A SINGLE AXIS' POINTER DRAWS [Batch 118]: its line or shadow rect,
     and its label's text and padded box (top-left, after the align and the
     confinement to the control) when the label is shown. }
@@ -1723,6 +1761,11 @@ type
       across a setOption): the rows the last updateAxisPointer highlighted,
       by series index and raw data index, in the order they were taken }
     FApHighS, FApHighD: TTyIntegerArray;
+    { [R5-D] the axis pointers' handles; the one being dragged (-1 none)
+      and where the pointer last was in its drag }
+    FHandles: TTyPtrHandleArray;
+    FHdDrag: Integer;
+    FHdDragX, FHdDragY: Integer;
     { [F4b] TooltipView._lastX / _lastY (NaN: null) and _lastDataByCoordSys
       (JSON, '' null); the keep timer _keepShow arms (NaN: none); the axis
       pointers kept across a re-render, put back by the next build; a guard
@@ -3402,6 +3445,28 @@ type
     { the axisPointer model's axes in collection order, for the event's
       axesInfo }
     function TipCollectionOrder: TTyAxisArray;
+    { [R5-D] the handles: fixValue and the place of each (HdSync), the
+      handle under a point, its drag, its throttled dispatch, the pointers
+      a handle keeps shown, the painting }
+    function HdIndexOf(const AKey: string): Integer;
+    function HdAxisOf(AIndex: Integer; out AInfo: TTyPtrAxisInfo): Boolean;
+    function HdParseValue(AAxis: TTyAxis; AData: TJSONData): Double;
+    function HdPlace(const AInfo: TTyPtrAxisInfo; AValue: Double;
+      out AX, AY, ARotation: Double): Boolean;
+    procedure HdSync;
+    procedure HdTakeHits(const AHits: TTyAxisHitArray);
+    function HdAt(AX, AY: Integer): Integer;
+    function HdShape(AIndex: Integer; out AEl: TTyChartElement): Boolean;
+    procedure HdDragMove(AIndex: Integer; ADX, ADY: Double);
+    procedure HdDispatch(AIndex: Integer);
+    procedure HdRun(AIndex: Integer);
+    procedure HdTick(ANow: Double);
+    procedure HdDragEnd;
+    function HdValueOf(AAxis: TTyAxis; out AValue: Double): Boolean;
+    function HdExtraHits(const AHave: TTyAxisHitArray): TTyAxisHitArray;
+    procedure PaintHandles(APainter: TTyPainter);
+    { whether the option asks for a handle anywhere (cheap: the JSON) }
+    function HdConfigured: Boolean;
     { findPointFromSeries: the series' point of the payload's row --
       AFull reads dataIndexInside and name as well as dataIndex -- with the
       element and its dispatcher }
@@ -4611,6 +4676,10 @@ type
       axis by its key -- 'xAxis0', 'yAxis1' }
     function AnimPointerClipCount: Integer;
     function AnimPointerProxy(const AKey: string): TTyChartAnimProxy;
+    { [R5-D] the axis pointers' handles (axisPointer.handle), in the
+      axisPointer model's axis order }
+    function PointerHandleCount: Integer;
+    function PointerHandleState(AIndex: Integer): TTyPointerHandleState;
     { only loops are live: the static layer holds the rest }
     property AnimContinuous: Boolean read FAnimContinuous;
     property AnimLive: Boolean read FAnimLive;

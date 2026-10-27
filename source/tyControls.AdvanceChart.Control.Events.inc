@@ -35,6 +35,17 @@ begin
   FPressArmed := True;
   FGraphDragSlot := -1;
   FSankeyDragSlot := -1;
+  { [R5-D] AN AXIS POINTER'S HANDLE (z 50, draggable): zrender's Draggable
+    takes the press -- its onmousedown dispatches at once -- and nothing
+    under it hears it }
+  FHdDrag := HdAt(X, Y);
+  if FHdDrag >= 0 then
+  begin
+    FHdDragX := X;
+    FHdDragY := Y;
+    HdDragMove(FHdDrag, 0, 0);
+    Exit;
+  end;
   { A BREADCRUMB ITEM: its own click [Batch 115]; [R2-B] where it is the
     element under the pointer, not under what is drawn over it }
   FCrumbPressed := CrumbOfElement(el, FCrumbPressSeries, FCrumbPressIndex);
@@ -120,6 +131,8 @@ begin
     { dragend [Batch 114] }
     GraphDragEnd;
     FSankeyDragSlot := -1;
+    { [R5-D] a handle's dragend: onto the value, a hideTip }
+    if FHdDrag >= 0 then HdDragEnd;
     { the target under the release, before anything moves }
     d := HitTestAt(X, Y, el);
     cap := (el >= 0) and (FPaintList <> nil)
@@ -213,6 +226,8 @@ begin
   FThumbDrag := -1;
   GraphDragEnd;
   FSankeyDragSlot := -1;
+  { [R5-D] a handle's drag ends as a release would end it }
+  if FHdDrag >= 0 then HdDragEnd;
   FPressArmed := False;
   { a visualMap drag ends as a release would end it [Batch 116] }
   VmDragEnd;
@@ -344,6 +359,8 @@ begin
   { A BRUSH COVER over the item is the target: nothing beneath it is
     hovered or pressed [Batch 126] }
   if BrushPieceAt(AX, AY, bb, bi, bp) then Exit;
+  { [R5-D] an axis pointer's handle (z 50) over the series }
+  if HdAt(AX, AY) >= 0 then Exit;
   { IN MOTION, WHAT IS DRAWN IS WHAT IS HIT: the frame keeps the list's
     insertion indices, so the element named is the list's [Batch 89] }
   { and AT REST ON A STATE PROXY, where the list keeps the rest values (a
@@ -948,6 +965,16 @@ begin
     Result.HdKind := 12;
     Result.HdSeries := k;
     Result.HdRow := q;
+    Exit;
+  end;
+  { [R5-D] AN AXIS POINTER'S HANDLE (z 50): a target without ECData -- no
+    event -- its cursor 'move' }
+  k := HdAt(AX, AY);
+  if k >= 0 then
+  begin
+    Result.Id := -((Int64(17) shl 44) + k);
+    Result.HdKind := 17;
+    Result.HdRow := k;
     Exit;
   end;
   { THE TITLES, over everything but the tooltip: the text and the subtext are
@@ -1809,6 +1836,15 @@ begin
     then the last showTip or hideTip. The box's own state machine
     [Batch 100] takes them as requests: a show now or after showDelay, a
     hide after hideDelay. }
+  { [R5-D] zrender's Draggable on a pointer's handle: its drift -- the
+    handle along the axis and a throttled dispatch -- before the global
+    listener hears the move }
+  if FHdDrag >= 0 then
+  begin
+    HdDragMove(FHdDrag, X - FHdDragX, Y - FHdDragY);
+    FHdDragX := X;
+    FHdDragY := Y;
+  end;
   PtrListener('mousemove', X, Y, FTipDatum, FTipElement);
   { zrender's Draggable on a brush cover -- the hover above was found before
     it moved -- then the brush controllers' own mousemove [Batch 126] }
@@ -1878,6 +1914,8 @@ begin
   Result := 'default';
   if ATarget.Id = 0 then Exit;
   Result := 'pointer';
+  { [R5-D] a pointer's handle }
+  if ATarget.HdKind = 17 then Exit('move');
   case ATarget.HdKind of
     { a brush cover's piece: its own (move, the eight resizes) }
     9:

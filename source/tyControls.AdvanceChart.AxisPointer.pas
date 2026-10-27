@@ -112,6 +112,34 @@ type
     TriggerEmphasis: Boolean;
   end;
 
+{ [R5-D] axisPointerModel.getModel('handle'): the axis' own
+  axisPointer.handle over the axisPointer component's, key by key, over
+  AxisPointerModel's defaults (show false, the default icon, size 45, margin
+  50, throttle 40). getItemStyle's keys: color (unwritten: the skin's
+  accent, upstream's accent40), borderColor, borderWidth, opacity. }
+type
+  TTyAxisPointerHandle = record
+    Show: Boolean;
+    Icon: string;
+    SizeW, SizeH: Double;
+    Margin: Double;
+    Throttle: Double;
+    HasColour: Boolean;
+    Colour: TTyChartColor;
+    { a colour written as 'none' (or one that does not parse): no fill }
+    NoFill: Boolean;
+    HasBorderColour: Boolean;
+    BorderColour: TTyChartColor;
+    BorderWidth: Double;
+    Opacity: Double;
+  end;
+
+const
+  TyAxisPointerHandleIcon = 'M10.7,11.9v-1.3H9.3v1.3c-4.9,0.3-8.8,4.4-8.8,9.4c0,5,3.9,9.1,8.8,9.4h1.3c4.9-0.3,8.8-4.4,8.8-9.4C19.5,16.3,15.6,12.2,10.7,11.9z M13.3,24.4H6.7v-1.2h6.6z M13.3,22H6.7v-1.2h6.6z M13.3,19.6H6.7v-1.2h6.6z';
+
+function TyAxisPointerHandleOf(AOption: TTyChartOption;
+  const AAxisMainType: string; AAxisIndex: Integer): TTyAxisPointerHandle;
+
 { The resolved spec for one axis.
 
   AAxisMainType / AAxisIndex address the axis' own option block ('xAxis', 2).
@@ -635,6 +663,97 @@ begin
     rather than nudging it. An explicit `label.show` survives either way. }
   if not Result.LabelSpec.ShowWritten then
     Result.LabelSpec.Show := ACross;
+end;
+
+function TyAxisPointerHandleOf(AOption: TTyChartOption;
+  const AAxisMainType: string; AAxisIndex: Integer): TTyAxisPointerHandle;
+var
+  own, root: TJSONObject;
+
+  function HandleIn(AAp: TJSONObject): TJSONObject;
+  var d: TJSONData;
+  begin
+    Result := nil;
+    if AAp = nil then Exit;
+    d := AAp.Find('handle');
+    if d is TJSONObject then Result := TJSONObject(d);
+  end;
+
+  { Model.get through the parent: the axis' key, else the component's }
+  function Key(const AName: string): TJSONData;
+  begin
+    Result := nil;
+    if own <> nil then Result := own.Find(AName);
+    if (Result <> nil) and (Result.JSONType <> jtNull) then Exit;
+    Result := nil;
+    if root <> nil then Result := root.Find(AName);
+    if (Result <> nil) and (Result.JSONType = jtNull) then Result := nil;
+  end;
+
+  function Num(const AName: string; ADefault: Double): Double;
+  var d: TJSONData;
+  begin
+    Result := ADefault;
+    d := Key(AName);
+    if d is TJSONNumber then Result := d.AsFloat;
+  end;
+
+var
+  d: TJSONData;
+  c: TTyChartColor;
+begin
+  Result := Default(TTyAxisPointerHandle);
+  Result.Icon := TyAxisPointerHandleIcon;
+  Result.SizeW := 45;
+  Result.SizeH := 45;
+  Result.Margin := 50;
+  Result.Throttle := 40;
+  Result.Opacity := 1;
+  if AOption = nil then Exit;
+  own := HandleIn(PointerNodeIn(AOption.ComponentAt(AAxisMainType, AAxisIndex)));
+  root := HandleIn(PointerNodeIn(AOption.Root));
+  d := Key('show');
+  Result.Show := (d <> nil) and (((d.JSONType = jtBoolean) and d.AsBoolean)
+    or ((d.JSONType = jtNumber) and (d.AsFloat <> 0))
+    or ((d.JSONType = jtString) and (d.AsString <> '')));
+  d := Key('icon');
+  if (d <> nil) and (d.JSONType = jtString) then Result.Icon := d.AsString;
+  { size: a number, or [w, h] }
+  d := Key('size');
+  if d is TJSONNumber then
+  begin
+    Result.SizeW := d.AsFloat;
+    Result.SizeH := d.AsFloat;
+  end
+  else if (d is TJSONArray) and (d.Count >= 2) then
+  begin
+    if TJSONArray(d).Items[0] is TJSONNumber then Result.SizeW := TJSONArray(d).Items[0].AsFloat;
+    if TJSONArray(d).Items[1] is TJSONNumber then Result.SizeH := TJSONArray(d).Items[1].AsFloat;
+  end;
+  Result.Margin := Num('margin', 50);
+  { `handleModel.get('throttle') || 0` }
+  Result.Throttle := Num('throttle', 40);
+  if IsNan(Result.Throttle) then Result.Throttle := 0;
+  d := Key('color');
+  if (d <> nil) and (d.JSONType = jtString) then
+  begin
+    if TyTryParseChartColor(d.AsString, c) and not TyChartColorIsNone(d.AsString) then
+    begin
+      Result.HasColour := True;
+      Result.Colour := c;
+    end
+    else
+      Result.NoFill := True;
+  end;
+  d := Key('borderColor');
+  if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c)
+    and not TyChartColorIsNone(d.AsString) then
+  begin
+    Result.HasBorderColour := True;
+    Result.BorderColour := c;
+  end;
+  Result.BorderWidth := Num('borderWidth', 0);
+  Result.Opacity := Num('opacity', 1);
 end;
 
 function TyAxisPointerBand(AAtPx, ABandWidthPx, AExtentA, AExtentB: Double;
