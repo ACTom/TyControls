@@ -756,8 +756,9 @@ const
     'shadowBlur', 'shadowOffsetX', 'shadowOffsetY');
 var
   d, g: TJSONData;
-  i: Integer;
+  i, k: Integer;
   s: string;
+  rich, tok: TJSONObject;
 
   function Glob(const AKey: string): TJSONData;
   begin
@@ -830,6 +831,25 @@ begin
   end;
   d := ChainGet(AChain, 'borderType');
   if d <> nil then Result.Add('borderDash', d.Clone);
+  { [R5-C] setTextStyleCommon's rich: every name the chain's rich objects
+    write, each token's own text style (createTextStyle of the token's
+    model, no global) [was: not read] }
+  rich := nil;
+  for i := 0 to High(AChain) do
+  begin
+    if AChain[i] = nil then Continue;
+    d := AChain[i].Find('rich');
+    if not (d is TJSONObject) then Continue;
+    for k := 0 to TJSONObject(d).Count - 1 do
+    begin
+      if not (TJSONObject(d).Items[k] is TJSONObject) then Continue;
+      if rich = nil then rich := TJSONObject.Create;
+      if rich.IndexOfName(TJSONObject(d).Names[k]) >= 0 then Continue;
+      tok := TextStyleOf([TJSONObject(TJSONObject(d).Items[k])], nil);
+      rich.Add(TJSONObject(d).Names[k], tok);
+    end;
+  end;
+  if rich <> nil then Result.Add('rich', rich);
 end;
 
 { a style object as a state's flattened props under 'style.' }
@@ -1086,7 +1106,7 @@ var
   end;
 
   function LabelOf(AValue: Double; AIndex: Integer): string;
-  var fmt: TJSONData; lab: string; tf: TTyTimeLabelFormatter;
+  var fmt: TJSONData; lab: string; tf: TTyTimeLabelFormatter; prm: TTyChartCallbackParams;
   begin
     fmt := lbl.Find('formatter');
     if not NotNull(fmt) then fmt := nil;
@@ -1094,8 +1114,19 @@ var
     begin
       { leveledFormat: a string a template for every unit; else the
         dictionary's entry of the value's own unit }
+      { [R5-C] a named formatter answers the template (leveledFormat) }
       if (fmt <> nil) and (fmt.JSONType = jtString) and TyChartIsHandlerRef(fmt.AsString) then
-        fmt := nil;
+      begin
+        prm := TyChartBlankParams;
+        prm.ComponentType := 'timeline';
+        SetLength(prm.Values, 1);
+        prm.Values[0] := AValue;
+        prm.ValueText := TyChartValueText(AValue);
+        prm.DataIndex := AIndex;
+        prm.HasLevel := True;
+        prm.Level := 0;
+        Exit(TyFormatTime(AValue, TyChartRunHandler(fmt.AsString, TyChartOneParams(prm)), AUseUTC));
+      end;
       tf := TyTimeLabelFormatterOf(fmt);
       Exit(TyTimeLeveledLabel(tf, AValue, TyTimeUnitOf(AValue, AUseUTC), 0, AUseUTC));
     end;
@@ -1112,6 +1143,28 @@ var
       lab := TyJsAddCommas(TyJsToFixedStr(AValue, TyGetPrecision(AValue)));
     if (fmt <> nil) and (fmt.JSONType = jtString) and not TyChartIsHandlerRef(fmt.AsString) then
       Result := TyJsReplaceFirst(fmt.AsString, '{value}', lab)
+    else if (fmt <> nil) and (fmt.JSONType = jtString) then
+    begin
+      { [R5-C] makeLabelFormatter's function: the raw value (a category's
+        name) and the index -- a category's tick value from the extent's
+        start, else the label's place [was: not called] }
+      prm := TyChartBlankParams;
+      prm.ComponentType := 'timeline';
+      if FAxisType = 'category' then
+      begin
+        prm.Name := lab;
+        prm.ValueText := lab;
+        prm.DataIndex := Trunc(AValue);
+      end
+      else
+      begin
+        SetLength(prm.Values, 1);
+        prm.Values[0] := AValue;
+        prm.ValueText := TyChartValueText(AValue);
+        prm.DataIndex := AIndex;
+      end;
+      Result := TyChartRunHandler(fmt.AsString, TyChartOneParams(prm));
+    end
     else
       Result := lab;
   end;

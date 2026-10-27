@@ -207,6 +207,7 @@ uses
   test.advchart.effecthover,
   test.advchart.labellayoutsize,
   test.advchart.geolabels,
+  test.advchart.timelinelabels,
   test.advchart.multiline, test.bgrarandompin,
   test.subpixel,
   test.advchart.option,
