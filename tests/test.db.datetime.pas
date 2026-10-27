@@ -82,6 +82,10 @@ type
     procedure CountChange(Sender: TObject);
   published
     procedure TestFieldOutsideTheRangeIsClampedNotRaised;
+    { #184: on the NULL row, accepting the day the calendar shows fills the field -- the day
+      did not move, and nothing was written. }
+    procedure TestAcceptingTheShownDayOnANullRowFillsIt;
+    procedure TestClickingTheShownDayOnANullRowFillsIt;
     procedure TestPickedDayIsWrittenByAPostElsewhere;
     procedure TestClickOnADayEditsAndWritesIt;
     procedure TestNullRowKeepsTheDayAndAPickFillsIt;
@@ -465,6 +469,27 @@ begin
   AssertEquals('picked', '1990-05-22', Shown);
   AssertTrue('editing', FFix.DS.State = dsEdit);
   AssertEquals('accepted: in the record', EncodeDate(1990, 5, 22), BoundField.AsDateTime, 0);
+end;
+
+procedure TDBCalendarTest.TestAcceptingTheShownDayOnANullRowFillsIt;
+begin
+  Bind('Born');
+  GoRow(3);
+  AssertTrue('precondition: the field is NULL', BoundField.IsNull);
+  EnterControl;
+  Commit;   // Enter, on the day shown
+  AssertFalse('the field is filled', BoundField.IsNull);
+  AssertEquals('with the day shown', DateOf(FixBorn(1)), BoundField.AsDateTime, 0);
+end;
+
+procedure TDBCalendarTest.TestClickingTheShownDayOnANullRowFillsIt;
+begin
+  Bind('Born');
+  GoRow(3);
+  AssertTrue('precondition: the field is NULL', BoundField.IsNull);
+  ClickDay(Cal.Date);
+  AssertFalse('the field is filled', BoundField.IsNull);
+  AssertEquals('with the day clicked', DateOf(FixBorn(1)), BoundField.AsDateTime, 0);
 end;
 
 { D5: NULL leaves the day shown; picking one fills the field. }
