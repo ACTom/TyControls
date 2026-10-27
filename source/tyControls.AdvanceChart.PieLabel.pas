@@ -70,6 +70,9 @@ type
 
   TTyPieLabelSpec = record
     Show: Boolean;
+    { [R5-A] the label's fontStyle as written (TyFontStyleCode): the item's
+      over the series', laid over the ink's weight }
+    FontStyle: Byte;
     { A STATE SHOWS IT [F2b]: `emphasis`, `select` or `blur` .label.show
       true on the series. zrender creates the text when any state shows it
       (labelStyle.setLabelStyle needsCreateText) and the pie's layout places
@@ -540,6 +543,8 @@ begin
   if ANode.Find('backgroundColor') = nil then R.Ink.HasBackground := hadBg;
   d := ANode.Find('show');
   if (d <> nil) and (d.JSONType = jtBoolean) then R.Show := d.AsBoolean;
+  if TyFontStyleCode(ANode.Find('fontStyle')) <> TyFontStyleUnset then
+    R.FontStyle := TyFontStyleCode(ANode.Find('fontStyle'));
 
   s := StrIn(ANode, 'alignTo');
   if s = 'labelLine' then R.AlignTo := tpaLabelLine
@@ -1503,7 +1508,7 @@ var
     Result.GroundDark := AInk.GroundDark;
     Result.FontName := AInk.FontName;
     Result.FontSizeLogical := AInk.FontSizeLogical;
-    Result.FontWeight := AInk.FontWeight;
+    Result.FontWeight := TyFontStyleCodeOver(S.FontStyle, AInk.FontWeight);
     { THE PIE'S DEFAULT OVERFLOW IS 'truncate', and it is the label style's:
       a block cuts under any width -- the author's or the solver's -- unless
       the label wrote another overflow (the block reads only what was
@@ -1539,7 +1544,7 @@ begin
     fit.Measurer := AMeasurer;
     fit.FontName := AInk.FontName;
     fit.FontSize := AInk.FontSizeLogical;
-    fit.FontWeight := AInk.FontWeight;
+    fit.FontWeight := TyFontStyleCodeOver(ASpec.FontStyle, AInk.FontWeight);
     fit.Scale := scale;
 
     { ---- every label placed, and the solver's list: the outer and centre
@@ -1581,7 +1586,7 @@ begin
       h := 0;
       if words <> '' then
         AMeasurer.MeasureLine(words, AInk.FontName, AInk.FontSizeLogical,
-          AInk.FontWeight, w, h);
+          TyFontStyleCodeOver(sp.FontStyle, AInk.FontWeight), w, h);
 
       labs[nl].Sector := i;
       labs[nl].Place := place;
@@ -1731,7 +1736,7 @@ begin
       begin
         drawn := TyPiePlainFit(words, hasWidth, width, sp.Overflow = tloTruncate,
           sp.Ellipsis, AMeasurer, AInk.FontName, AInk.FontSizeLogical,
-          AInk.FontWeight, cw);
+          TyFontStyleCodeOver(sp.FontStyle, AInk.FontWeight), cw);
         if not hasWidth then cw := labs[k].W;
       end;
       { [R2-I3] A LABEL THE SOLVER'S WIDTH CUT TO NOTHING IS STILL A TEXT:
@@ -1756,7 +1761,7 @@ begin
       if drawn <> words then el.Caption.LmText := words;
       el.Caption.FontName := AInk.FontName;
       el.Caption.FontSizeLogical := AInk.FontSizeLogical;
-      el.Caption.FontWeight := AInk.FontWeight;
+      el.Caption.FontWeight := TyFontStyleCodeOver(sp.FontStyle, AInk.FontWeight);
       TyLabelInk(lbl, fill, True, False, sp.Position = tplInside, ink, stroke,
         strokeW);
       TyLabelStampEmphasis(lbl, fill, True, False, sp.Position = tplInside,

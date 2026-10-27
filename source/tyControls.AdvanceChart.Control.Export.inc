@@ -432,8 +432,11 @@ begin
   if FLoadCfg.HasFontSize then fontSize := FLoadCfg.FontSizeLogical;
   weight := st.FontWeight;
   if FLoadCfg.HasFontWeight then weight := FLoadCfg.FontWeight;
-  { [R5-D] fontStyle }
-  if FLoadCfg.Italic then weight := weight or TyFontItalic;
+  { [R5-A] the cfg's fontStyle, 'normal' by default }
+  if FLoadCfg.FontStyle = TyFontStyleItalicCode then
+    weight := TyFontStyleCodeOver(TyFontStyleItalicCode, weight)
+  else
+    weight := TyFontStyleCodeOver(TyFontStyleUpright, weight);
   if APPI > 0 then s := APPI / 96 else s := 1;
   devW := ARect.Right - ARect.Left;
   devH := ARect.Bottom - ARect.Top;

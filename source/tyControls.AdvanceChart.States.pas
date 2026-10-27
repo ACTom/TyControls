@@ -57,7 +57,11 @@ type
       GradJson the explicit lengths as 'a,b,...') -- not animated, set at
       the state's start -- and its lineDashOffset (borderDashOffset /
       dashOffset), which a transition tweens }
-    stkDash, stkDashOffset);
+    stkDash, stkDashOffset,
+    { [R5-A] a state's shadow (getItemStyle / getLineStyle / getAreaStyle's
+      four keys, the state model's): Color the shadowColor; a transition
+      tweens all four (DEFAULT_COMMON_ANIMATION_PROPS' style) }
+    stkShadowBlur, stkShadowOffsetX, stkShadowOffsetY, stkShadowColor);
 
   { A state object, sparse: a key the state does not set is absent. A colour
     key can be the word 'none' (None) -- zrender's hasFillOrStroke reads it as
@@ -309,6 +313,29 @@ function TyStReadString(const ANodes: array of TJSONObject;
 { the value the first node writes at APath (null falls through), or nil }
 function TyStFind(const ANodes: array of TJSONObject;
   const APath: array of string): TJSONData;
+{ [R5-A] one shadow key's value as the canvas reads it, into AObj (AKey one of the four
+  stkShadow* keys): a number (nought where it is none, a blur below nought), a colour
+  ('#000' where it does not parse) }
+procedure TyStSetShadowKey(var AObj: TTyStObject; AKey: TTyStKey; AData: TJSONData);
+{ [R5-A] A STATE'S SHADOW KEYS: those of the four the chain writes under APath (null falls
+  through), into AObj -- a key nobody writes stays out of the state, the element keeps its
+  own. A value the canvas cannot read is nought (a blur, an offset) or '#000' (a colour). }
+procedure TyStReadShadowKeys(const ANodes: array of TJSONObject;
+  const APath: array of string; var AObj: TTyStObject);
+{ [R5-A] A STYLE'S SHADOW off a model chain: getItemStyle / getLineStyle / getAreaStyle's
+  shadowBlur, shadowOffsetX, shadowOffsetY and shadowColor under APath, each key from the
+  first node that writes it (null falls through, the model's get) -- and, where a key is
+  written nowhere under APath, under AFallback (a gauge pointer's own itemStyle laid over
+  its item's visual style). As the canvas takes them: a blur or an offset that is no number
+  (a numeric string is one) or a blur below nought is nought (the canvas ignores the
+  assignment and keeps its last value, nought at first); a colour that does not parse is
+  zrender's '#000' (style.shadowColor || '#000' -- an assignment the canvas cannot read
+  keeps the last one), as is no colour at all. False: none of the four is written. }
+function TyStReadShadow(const ANodes: array of TJSONObject; const APath,
+  AFallback: array of string; out AShadow: TTyChartShadow): Boolean;
+{ [R5-A] the same over the four values as a reader found them (nil: not written) }
+function TyStShadowOfValues(ABlur, AOffsetX, AOffsetY, AColour: TJSONData;
+  out AShadow: TTyChartShadow): Boolean;
 
 { ==================== the selection model ==================== }
 
@@ -647,8 +674,10 @@ end;
 function TyStHoverValues(const AEl: TTyStElement): TTyStObject;
 const
   { the style keys: what _applyStateObj writes to __hoverStyle }
-  cStyle: array[0..5] of TTyStKey = (stkFill, stkStroke, stkLineWidth,
-    stkOpacity, stkDash, stkDashOffset);
+  cStyle: array[0..9] of TTyStKey = (stkFill, stkStroke, stkLineWidth,
+    stkOpacity, stkDash, stkDashOffset,
+    { [R5-A] }
+    stkShadowBlur, stkShadowOffsetX, stkShadowOffsetY, stkShadowColor);
 var
   i: Integer;
   base: TTyStObject;
@@ -1003,6 +1032,111 @@ begin
   end;
 end;
 
+{ dpr * value as the canvas reads it: a number, what Number() makes of a string (a blank
+  one nought) or of a boolean; NaN otherwise }
+function ShadowNumOf(AData: TJSONData): Double;
+var
+  v: Double;
+  fs: TFormatSettings;
+begin
+  Result := NaN;
+  if AData = nil then Exit;
+  fs := DefaultFormatSettings;
+  fs.DecimalSeparator := '.';
+  case AData.JSONType of
+    jtNumber: Result := AData.AsFloat;
+    jtString:
+      if Trim(AData.AsString) = '' then Result := 0
+      else if TryStrToFloat(Trim(AData.AsString), v, fs) then Result := v;
+    jtBoolean: if AData.AsBoolean then Result := 1 else Result := 0;
+  end;
+end;
+
+procedure TyStSetShadowKey(var AObj: TTyStObject; AKey: TTyStKey; AData: TJSONData);
+var
+  v: Double;
+  c: TTyChartColor;
+begin
+  if (AData = nil) or (AData.JSONType = jtNull) then Exit;
+  if AKey = stkShadowColor then
+  begin
+    if not ((AData.JSONType = jtString) and TyTryParseChartColor(AData.AsString, c)) then
+      c := $FF000000;
+    TyStSetColor(AObj, stkShadowColor, c);
+  end
+  else
+  begin
+    v := ShadowNumOf(AData);
+    if IsNan(v) or IsInfinite(v) or ((AKey = stkShadowBlur) and (v < 0)) then v := 0;
+    TyStSetNum(AObj, AKey, v);
+  end;
+end;
+
+procedure TyStReadShadowKeys(const ANodes: array of TJSONObject;
+  const APath: array of string; var AObj: TTyStObject);
+const
+  cKeys: array[0..3] of string = ('shadowBlur', 'shadowOffsetX', 'shadowOffsetY',
+    'shadowColor');
+  cSt: array[0..3] of TTyStKey = (stkShadowBlur, stkShadowOffsetX, stkShadowOffsetY,
+    stkShadowColor);
+var
+  p: array of string;
+  i, k: Integer;
+  d: TJSONData;
+  v: Double;
+  c: TTyChartColor;
+begin
+  SetLength(p, Length(APath) + 1);
+  for i := 0 to High(APath) do p[i] := APath[i];
+  for k := 0 to 3 do
+  begin
+    p[High(p)] := cKeys[k];
+    d := TyStFind(ANodes, p);
+    if d = nil then Continue;
+    if cSt[k] = stkShadowColor then
+    begin
+      if not ((d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c)) then
+        c := $FF000000;
+      TyStSetColor(AObj, stkShadowColor, c);
+    end
+    else
+    begin
+      v := ShadowNumOf(d);
+      if IsNan(v) or IsInfinite(v) or ((cSt[k] = stkShadowBlur) and (v < 0)) then v := 0;
+      TyStSetNum(AObj, cSt[k], v);
+    end;
+  end;
+end;
+
+function TyStReadShadow(const ANodes: array of TJSONObject; const APath,
+  AFallback: array of string; out AShadow: TTyChartShadow): Boolean;
+
+  function Leaf(const ABase: array of string; const AKey: string): TJSONData;
+  var p: array of string; i: Integer;
+  begin
+    SetLength(p, Length(ABase) + 1);
+    for i := 0 to High(ABase) do p[i] := ABase[i];
+    p[High(p)] := AKey;
+    Result := TyStFind(ANodes, p);
+  end;
+
+  function Value(const AKey: string): TJSONData;
+  begin
+    Result := Leaf(APath, AKey);
+    if (Result = nil) and (Length(AFallback) > 0) then Result := Leaf(AFallback, AKey);
+  end;
+
+begin
+  Result := TyStShadowOfValues(Value('shadowBlur'), Value('shadowOffsetX'),
+    Value('shadowOffsetY'), Value('shadowColor'), AShadow);
+end;
+
+function TyStShadowOfValues(ABlur, AOffsetX, AOffsetY, AColour: TJSONData;
+  out AShadow: TTyChartShadow): Boolean;
+begin
+  Result := TyShadowOfValues(ABlur, AOffsetX, AOffsetY, AColour, AShadow);
+end;
+
 function TyStReadString(const ANodes: array of TJSONObject;
   const APath: array of string; out AHas: Boolean): string;
 var i: Integer; d: TJSONData;
@@ -1144,6 +1278,14 @@ end;
 function TyStReadStyle(const ANodes: array of TJSONObject; const AState,
   ABlock: string; out AWidthBolder: Boolean): TTyStObject;
 var s: string; has: Boolean;
+
+  { [R5-A] the block's shadow keys }
+  procedure ShadowOf(const AName: string);
+  begin
+    if AState = '' then TyStReadShadowKeys(ANodes, [AName], Result)
+    else TyStReadShadowKeys(ANodes, [AState, AName], Result);
+  end;
+
 begin
   Result := TyStNoObject;
   AWidthBolder := False;
@@ -1156,6 +1298,7 @@ begin
     { [R2-I3] its getItemStyle's lineDash and lineDashOffset }
     ReadDashKey(ANodes, AState, 'lineStyle', 'borderType', Result);
     ReadNum(ANodes, AState, 'lineStyle', 'borderDashOffset', stkDashOffset, Result);
+    ShadowOf('lineStyle');
   end
   else if ABlock = 'lineStyle' then
   begin
@@ -1168,11 +1311,13 @@ begin
     { [R2-I3] getLineStyle's lineDash and lineDashOffset }
     ReadDashKey(ANodes, AState, ABlock, 'type', Result);
     ReadNum(ANodes, AState, ABlock, 'dashOffset', stkDashOffset, Result);
+    ShadowOf(ABlock);
   end
   else if ABlock = 'areaStyle' then
   begin
     ReadColour(ANodes, AState, ABlock, 'color', stkFill, AState = 'emphasis', Result);
     ReadNum(ANodes, AState, ABlock, 'opacity', stkOpacity, Result);
+    ShadowOf(ABlock);
   end
   else
   begin
@@ -1183,6 +1328,7 @@ begin
     { [R2-I3] getItemStyle's lineDash and lineDashOffset }
     ReadDashKey(ANodes, AState, ABlock, 'borderType', Result);
     ReadNum(ANodes, AState, ABlock, 'borderDashOffset', stkDashOffset, Result);
+    ShadowOf(ABlock);
   end;
 end;
 

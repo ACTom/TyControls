@@ -56,13 +56,14 @@ type
     FontSizeLogical: Integer;
     HasFontWeight: Boolean;
     FontWeight: Integer;
+    { [R5-A] fontStyle as written (TyFontStyleCode); unset is the default's
+      'normal' (loading/default.ts) }
+    FontStyle: Byte;
     { '' is the theme's family }
     FontFamily: string;
     ShowSpinner: Boolean;
     SpinnerRadius: Double;
     LineWidth: Double;
-    { [R5-D] fontStyle 'italic' / 'oblique' (TyFontItalic over the weight) }
-    Italic: Boolean;
     { [R5-D] zlevel, 0 unset: the effect's layer. The chart is zlevel 0
       here, so one of 0 or more is over it -- its mask the hover target over
       everything -- and one below 0 is under it and masks nothing }
@@ -225,13 +226,9 @@ begin
       ACfg.FontWeight := TyFontWeightOf(d, 0);
       ACfg.HasFontWeight := ACfg.FontWeight > 0;
     end;
+    ACfg.FontStyle := TyFontStyleCode(o.Find('fontStyle'));
     d := o.Find('fontFamily');
     if (d <> nil) and (d.JSONType = jtString) then ACfg.FontFamily := d.AsString;
-    { [R5-D] the text's fontStyle: a canvas font draws 'italic' and 'oblique'
-      slanted, anything else upright }
-    d := o.Find('fontStyle');
-    ACfg.Italic := (d <> nil) and (d.JSONType = jtString)
-      and ((d.AsString = 'italic') or (d.AsString = 'oblique'));
     { [R5-D] zlevel: a number; anything else is no layer above 0 }
     d := o.Find('zlevel');
     if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then

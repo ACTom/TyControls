@@ -63,7 +63,7 @@ unit tyControls.AdvanceChart.Brush;
 interface
 uses SysUtils, Math, fpjson,
   tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Coord,
-  tyControls.AdvanceChart.VisualMap;
+  tyControls.AdvanceChart.VisualMap, tyControls.AdvanceChart.Paint;
 
 const
   TyBrushCoverZ = 10000;
@@ -107,6 +107,10 @@ type
       lineDash (borderType), lineDashOffset (borderDashOffset), lineCap
       (borderCap), lineJoin (borderJoin), miterLimit (borderMiterLimit) }
     DashJson, DashOffsetJson, CapJson, JoinJson, MiterJson: string;
+    { [R5-A] the shadow keys (getItemStyle's / a cover config's zrender
+      style's), NaN where not set; the colour as written ('' not set) }
+    ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
+    ShadowColor: string;
   end;
 
   { BrushCoverConfig: what a cover is drawn from }
@@ -429,6 +433,9 @@ function TyBrushMergeJson(var AOpt: TTyBrushOpt; AObj: TJSONObject): Boolean;
 { merge(clone(ABase), AOver, true) of two configs: the style's set values,
   and the identity and range of AOver when it has them }
 function TyBrushMergeOpt(const ABase, AOver: TTyBrushOpt): TTyBrushOpt;
+{ [R5-A] a cover style's canvas shadow: (x || 0) for the numbers, the colour
+  as written or zrender's '#000' }
+function TyBrushShadowOf(const AStyle: TTyBrushStyle): TTyChartShadow;
 { setBrushOption: generateBrushOption over the takeGlobalCursor payload's
   brushOption (nil: none) }
 function TyBrushPaintOpt(const ASpec: TTyBrushSpec; ABrushOption: TJSONData): TTyBrushOpt;
@@ -683,12 +690,33 @@ end;
 
 { ==================== the model ==================== }
 
+{ [R5-A] a cover's shadow as the canvas takes its style: (x || 0) for the three numbers,
+  the colour as written or '#000' }
+function TyBrushShadowOf(const AStyle: TTyBrushStyle): TTyChartShadow;
+var c: TTyChartColor;
+begin
+  Result := Default(TTyChartShadow);
+  if (not IsNan(AStyle.ShadowBlur)) and (not IsInfinite(AStyle.ShadowBlur))
+    and (AStyle.ShadowBlur > 0) then Result.Blur := AStyle.ShadowBlur;
+  if (not IsNan(AStyle.ShadowOffsetX)) and not IsInfinite(AStyle.ShadowOffsetX) then
+    Result.OffsetX := AStyle.ShadowOffsetX;
+  if (not IsNan(AStyle.ShadowOffsetY)) and not IsInfinite(AStyle.ShadowOffsetY) then
+    Result.OffsetY := AStyle.ShadowOffsetY;
+  Result.Color := $FF000000;
+  if (AStyle.ShadowColor <> '') and TyTryParseChartColor(AStyle.ShadowColor, c) then
+    Result.Color := c;
+end;
+
 function NoStyle: TTyBrushStyle;
 begin
   Result := Default(TTyBrushStyle);
   Result.LineWidth := NaN;
   Result.Opacity := NaN;
+  Result.ShadowBlur := NaN;
+  Result.ShadowOffsetX := NaN;
+  Result.ShadowOffsetY := NaN;
 end;
+
 
 function TyBrushDefaultOpt: TTyBrushOpt;
 begin
@@ -752,6 +780,20 @@ begin
   else Result := AData.AsJSON;
 end;
 
+{ [R5-A] the four shadow keys of a style object, where written (null is not) }
+procedure ShadowKeysOf(AObj: TJSONObject; var AStyle: TTyBrushStyle);
+var d: TJSONData;
+begin
+  d := AObj.Find('shadowBlur');
+  if (d <> nil) and (d.JSONType <> jtNull) then AStyle.ShadowBlur := NumOf(d);
+  d := AObj.Find('shadowOffsetX');
+  if (d <> nil) and (d.JSONType <> jtNull) then AStyle.ShadowOffsetX := NumOf(d);
+  d := AObj.Find('shadowOffsetY');
+  if (d <> nil) and (d.JSONType <> jtNull) then AStyle.ShadowOffsetY := NumOf(d);
+  d := AObj.Find('shadowColor');
+  if (d <> nil) and (d.JSONType = jtString) then AStyle.ShadowColor := d.AsString;
+end;
+
 { the zrender style keys a cover config's brushStyle writes }
 procedure MergeStyleJson(var AStyle: TTyBrushStyle; AObj: TJSONObject);
 var d: TJSONData;
@@ -769,6 +811,7 @@ begin
   if RawOf(AObj.Find('lineCap')) <> '' then AStyle.CapJson := RawOf(AObj.Find('lineCap'));
   if RawOf(AObj.Find('lineJoin')) <> '' then AStyle.JoinJson := RawOf(AObj.Find('lineJoin'));
   if RawOf(AObj.Find('miterLimit')) <> '' then AStyle.MiterJson := RawOf(AObj.Find('miterLimit'));
+  ShadowKeysOf(AObj, AStyle);
 end;
 
 { a number written as JSON; NaN for anything else }
@@ -931,6 +974,10 @@ begin
   if AOver.CapJson <> '' then Result.CapJson := AOver.CapJson;
   if AOver.JoinJson <> '' then Result.JoinJson := AOver.JoinJson;
   if AOver.MiterJson <> '' then Result.MiterJson := AOver.MiterJson;
+  if not IsNan(AOver.ShadowBlur) then Result.ShadowBlur := AOver.ShadowBlur;
+  if not IsNan(AOver.ShadowOffsetX) then Result.ShadowOffsetX := AOver.ShadowOffsetX;
+  if not IsNan(AOver.ShadowOffsetY) then Result.ShadowOffsetY := AOver.ShadowOffsetY;
+  if AOver.ShadowColor <> '' then Result.ShadowColor := AOver.ShadowColor;
 end;
 
 function TyBrushMergeOpt(const ABase, AOver: TTyBrushOpt): TTyBrushOpt;
@@ -1047,6 +1094,7 @@ begin
     Result.Base.Style.CapJson := RawOf(st.Find('borderCap'));
     Result.Base.Style.JoinJson := RawOf(st.Find('borderJoin'));
     Result.Base.Style.MiterJson := RawOf(st.Find('borderMiterLimit'));
+    ShadowKeysOf(st, Result.Base.Style);
   end;
   d := o.Find('throttleType');
   if d <> nil then
@@ -1352,6 +1400,15 @@ begin
       Result := Result + ',"lineWidth":' + NumJson(a.Opt.Style.LineWidth);
     if not IsNan(a.Opt.Style.Opacity) then
       Result := Result + ',"opacity":' + NumJson(a.Opt.Style.Opacity);
+    { [R5-A] getItemStyle's shadow keys, in its order }
+    if not IsNan(a.Opt.Style.ShadowBlur) then
+      Result := Result + ',"shadowBlur":' + NumJson(a.Opt.Style.ShadowBlur);
+    if not IsNan(a.Opt.Style.ShadowOffsetX) then
+      Result := Result + ',"shadowOffsetX":' + NumJson(a.Opt.Style.ShadowOffsetX);
+    if not IsNan(a.Opt.Style.ShadowOffsetY) then
+      Result := Result + ',"shadowOffsetY":' + NumJson(a.Opt.Style.ShadowOffsetY);
+    if a.Opt.Style.ShadowColor <> '' then
+      Result := Result + ',"shadowColor":' + JsonStr(a.Opt.Style.ShadowColor);
     { [R5-D] the line keys, in ITEM_STYLE_KEY_MAP's order }
     if a.Opt.Style.DashJson <> '' then
       Result := Result + ',"lineDash":' + a.Opt.Style.DashJson;

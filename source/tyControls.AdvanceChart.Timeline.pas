@@ -219,7 +219,8 @@ implementation
 uses tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Scale,
   tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Layout,
   tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.Time,
-  tyControls.AdvanceChart.AxisLabels, tyControls.FontUnits;
+  tyControls.AdvanceChart.AxisLabels, tyControls.FontUnits,
+  tyControls.AdvanceChart.Option;
 
 const
   { a DOUBLE: a bare real literal is a Single in FPC }
@@ -1075,6 +1076,7 @@ var
   widths, heights: TTyDoubleArray;
   fontPx, interval: Double;
   fontName: string;
+  fontWt: Integer;
   w, h: Double;
   props: TTyAnimProps;
   cfg: TTyAnimCfg;
@@ -1725,6 +1727,10 @@ begin
           d := ChainGet([lbl], 'fontFamily');
           if d = nil then d := gtext.Find('fontFamily');
           fontName := StrOf(d);
+          { [R5-A] and its style: getFont's first part }
+          d := ChainGet([lbl], 'fontStyle');
+          if d = nil then d := gtext.Find('fontStyle');
+          fontWt := TyFontStyleOver(d, 400);
           SetLength(widths, nData);
           SetLength(heights, nData);
           n := 0;
@@ -1736,7 +1742,7 @@ begin
             h := 0;
             if AMeasurer <> nil then
               AMeasurer.MeasureLine(LabelOf(i, i), fontName, TyFontSizeFromPx(fontPx),
-                400, w, h);
+                fontWt, w, h);
             widths[n] := w;
             heights[n] := h;
             Inc(n);

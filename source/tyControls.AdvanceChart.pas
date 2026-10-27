@@ -3887,6 +3887,19 @@ type
       AElement: Integer): TTyChartEventTarget;
     function SeriesEventModel(ASeriesIndex: Integer): TTyEventModel;
     procedure SilenceSeries(AList: TTyPaintList);
+    { [R5-A] THE SERIES' SHADOWS onto their elements, after the label lines:
+      each item path the style its view gives it -- the visual style (the
+      item's itemStyle over the series', key by key), a line's polyline its
+      lineStyle and its area its areaStyle, an edge its lineStyle, a label
+      line its labelLine.lineStyle -- of which the four shadow keys. A gauge's
+      parts take theirs in its builder. }
+    procedure ApplySeriesShadows(AList: TTyPaintList);
+    { [R5-A] A SERIES' blendMode AND zlevel onto its elements: the blend on
+      every element its view renders (echarts' updateBlend -- not a label,
+      not a label line: they are no child of the view's group), the zlevel on
+      them and on their labels and label lines (traverseUpdateZ); a marker's
+      zlevel its own block's (MarkerView: retrieveZInfo(markerModel)) }
+    procedure ApplySeriesLayers(AList: TTyPaintList);
     { [F6a] the series' elements' cursors: an item's `cursor` (over its
       level's, its category's, its series', the root's -- the model's
       parent chain), 'move' on a node a drag takes, 'default' on a large
@@ -4061,6 +4074,9 @@ type
     function StOwnsElement(AIndex: Integer): Boolean;
     function StEmphasised(AIndex: Integer): Boolean;
     function StPrimaryInk: TTyChartColor;
+    { [R5-A] upstream's tokens.color.shadow, the skin's TyAdvChartShadow: a
+      boxplot's emphasis shadow, a continuous visualMap's indicator's }
+    function StShadowInk: TTyChartColor;
     function StMemoMatches(ASeries: Integer; const ANodes: TTyStNodeArray;
       const ABlock: string): Boolean;
     procedure SelEnsure(ASlot: Integer);
@@ -5653,6 +5669,13 @@ begin
   TyStSetNum(Result, stkIgnore, Ord(AEl.Ignore));
   { [R2-I3] the pen's phase at rest, which a state's dashOffset tweens from }
   TyStSetNum(Result, stkDashOffset, AEl.Style.DashOffsetLogical);
+  { [R5-A] the shadow at rest: the element's own -- zrender's style prototype's
+    0, 0, 0 and '#000' where it has none -- which a state's shadow tweens from }
+  TyStSetNum(Result, stkShadowBlur, AEl.Style.ShadowBlur);
+  TyStSetNum(Result, stkShadowOffsetX, AEl.Style.ShadowOffsetX);
+  TyStSetNum(Result, stkShadowOffsetY, AEl.Style.ShadowOffsetY);
+  if AEl.Style.ShadowColor <> 0 then TyStSetColor(Result, stkShadowColor, AEl.Style.ShadowColor)
+  else TyStSetColor(Result, stkShadowColor, $FF000000);
 end;
 
 { the edge data after Graph.update's filterSelf: an edge whose two ends both

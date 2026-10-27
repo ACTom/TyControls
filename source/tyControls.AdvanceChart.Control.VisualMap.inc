@@ -234,6 +234,7 @@ begin
   GlobalInk(Result.FontName, Result.FontSizeLogical, Result.FontWeight,
     Result.Text, [ttpSize, ttpWeight, ttpFamily]);
   if AView.FontSize > 0 then Result.FontSizeLogical := AView.FontSize;
+  Result.FontWeight := TyFontStyleCodeOver(AView.FontStyle, Result.FontWeight);
   if AView.HasText_ then Result.Text := AView.TextColour;
   if AView.HasBorder then Result.Border := AView.BorderColour
   else Result.Border := TTyChartColor(
@@ -244,6 +245,8 @@ begin
   if AView.HasHandleStroke then Result.HandleStroke := AView.HandleStroke
   else Result.HandleStroke := TTyChartColor(
     model.ResolveStyle('TyAdvChartVisualMapHandle', '', []).BorderColor);
+  { [R5-A] the indicator's default shadow colour }
+  Result.Shadow := StShadowInk;
 end;
 
 procedure TTyCustomAdvanceChart.SolveVisualMapViews(const AMeasurer: ITyTextMeasurer;

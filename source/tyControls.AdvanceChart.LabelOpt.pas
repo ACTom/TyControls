@@ -527,11 +527,18 @@ begin
   Result.FontSizeLogical := TyOptFontSize(node.Find('fontSize'),
     Result.FontSizeLogical);
   s := StrIn(node, 'fontWeight');
-  if (s = 'bold') or (s = 'bolder') then Result.FontWeight := 700
-  else if s = 'normal' then Result.FontWeight := 400
+  { [R5-A] the weight only: the style flags above it are the font's style }
+  if (s = 'bold') or (s = 'bolder') then
+    Result.FontWeight := (Result.FontWeight and not TyChartFontWeightMask) or 700
+  else if s = 'normal' then
+    Result.FontWeight := (Result.FontWeight and not TyChartFontWeightMask) or 400
   else
-    Result.FontWeight := TyRoundOpt(NumIn(node, 'fontWeight', Result.FontWeight),
-      Result.FontWeight);
+    Result.FontWeight := (Result.FontWeight and not TyChartFontWeightMask)
+      or TyRoundOpt(NumIn(node, 'fontWeight', Result.FontWeight and TyChartFontWeightMask),
+        Result.FontWeight and TyChartFontWeightMask);
+  { [R5-A] fontStyle: the label's own, else what the spec was handed (the
+    series' label, the root textStyle) }
+  Result.FontWeight := TyFontStyleOver(node.Find('fontStyle'), Result.FontWeight);
   ResolveBlock(node, Result);
 end;
 

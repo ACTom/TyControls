@@ -413,6 +413,8 @@ begin
       end;
       if sty.HasOpacity and not IsNan(sty.Opacity) then
         el.Style.Alpha := Max(0, Min(1, sty.Opacity));
+      { [R5-A] the icon style's shadow }
+      TyStyleSetShadow(el.Style, TyTbShadowOf(sty));
       AList.Add(el);
       Inc(Result);
     end;
@@ -436,8 +438,16 @@ begin
       fw := ink.FontWeight;
       if FTbSpecs[t].Icons[i].TextFontWeight <> '' then
         fw := TbFontWeight(FTbSpecs[t].Icons[i].TextFontWeight, fw);
-      if (FTbSpecs[t].Icons[i].TextFontStyle = 'italic')
-        or (FTbSpecs[t].Icons[i].TextFontStyle = 'oblique') then fw := fw or TyFontItalic;
+      { [R5-A] getFont's style: emphasis.iconStyle.textFontStyle, else the
+        root textStyle's -- which the ink's weight carries already
+        (GlobalInk); a weight written keeps it (TyFontWeightOf) }
+      if FTbSpecs[t].Icons[i].TextFontStyle <> '' then
+      begin
+        if TyFontStyleIsItalic(FTbSpecs[t].Icons[i].TextFontStyle) then
+          fw := fw or TyChartFontItalic
+        else
+          fw := fw and not TyChartFontItalic;
+      end;
       tw := 0;
       th := 0;
       if AMeasurer <> nil then

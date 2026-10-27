@@ -122,6 +122,8 @@ type
     TextColour: TTyChartColor;
     HasTextSize: Boolean;
     TextSizeLogical: Double;
+    { [R5-A] textStyle.fontStyle (TyFontStyleCode) }
+    TextFontStyle: Byte;
   end;
 
   { A dot, its size decided by which row it belongs to. `ttmSubItem` is the
@@ -983,6 +985,7 @@ begin
         ASpec.HasTextSize := True;
         ASpec.TextSizeLogical := Max(Double(1), Min(Double(400), d.AsFloat));
       end;
+      ASpec.TextFontStyle := TyFontStyleCode(ts.Find('fontStyle'));
     end;
   end;
 end;

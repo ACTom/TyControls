@@ -77,6 +77,9 @@ type
     BorderRadiusLogical: Double;
     HasPadding: Boolean;
     PadLeft, PadTop, PadRight, PadBottom: Double;
+    { [R5-A] the label's fontStyle (TyFontStyleCode): the nearest block's,
+      else the root textStyle's }
+    FontStyle: Byte;
   end;
 
   TTyAxisPointerSpec = record
@@ -318,6 +321,8 @@ begin
     ASpec.HasPrecision := True;
     ASpec.Precision := TyLabelPrecisionOf(d);
   end;
+  if Claim(lbl, 'fontStyle', ASeen, 'label.') then
+    ASpec.FontStyle := TyFontStyleCode(lbl.Find('fontStyle'));
   if Claim(lbl, 'margin', ASeen, 'label.') then
   begin
     d := lbl.Find('margin');
@@ -637,6 +642,12 @@ begin
   else
     MergePointerNode(PointerNodeIn(AOption.Root), 'lineStyle', apnAll,
       Result, seen);
+  { [R5-A] the label's text style falls to the root textStyle (labelStyle's
+    global one): its fontStyle where no block wrote one }
+  if (Result.LabelSpec.FontStyle = TyFontStyleUnset) and (AOption.Root is TJSONObject)
+    and (TJSONObject(AOption.Root).Find('textStyle') is TJSONObject) then
+    Result.LabelSpec.FontStyle := TyFontStyleCode(TJSONObject(TJSONObject(
+      AOption.Root).Find('textStyle')).Find('fontStyle'));
 
   if not AFromTooltip then Exit;
 

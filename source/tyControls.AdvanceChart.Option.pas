@@ -225,8 +225,39 @@ type
 function TyOptionTextHasFunction(const AText: string): Boolean;
 
 { A fontWeight as a label reads one: 'bold' and 'bolder' 700, 'normal' 400,
-  a number rounded into 1..1000; anything else leaves ADefault. }
+  a number rounded into 1..1000; anything else leaves ADefault. The style
+  flags above ADefault's weight (TyChartFontItalic) stay: a weight replaces
+  the weight, not the font's style. }
 function TyFontWeightOf(AData: TJSONData; ADefault: Integer): Integer;
+
+const
+  { [R5-A] tyControls.Types' TyFontItalic: the italic flag above a font
+    weight, which the painter's font set-ups read (#92). Declared again here
+    -- that unit uses Graphics. A chart text's weight carries its fontStyle in
+    it, so the measurer and the painter both get the face. }
+  TyChartFontItalic = $10000;
+  TyChartFontWeightMask = $FFFF;
+
+{ [R5-A] A fontStyle over a weight, as a canvas reads the font string makeFont
+  builds from it: 'italic', or 'oblique' (with or without its angle), sets
+  the italic flag; any other string ('normal' among them) clears it; a value
+  that is not a string -- absent, null, a number -- leaves AWeight as it is,
+  the next level down (the root textStyle, the theme) deciding. }
+function TyFontStyleOver(AData: TJSONData; AWeight: Integer): Integer;
+{ whether a fontStyle word names a slanted face: 'italic', 'oblique ...' }
+function TyFontStyleIsItalic(const AText: string): Boolean;
+
+const
+  { [R5-A] A fontStyle AS A SITE KEEPS IT before it knows the weight it lays
+    it over (a gauge's or a calendar's text, whose weight is the skin's
+    unless written): not written, upright, italic }
+  TyFontStyleUnset = 0;
+  TyFontStyleUpright = 1;
+  TyFontStyleItalicCode = 2;
+
+function TyFontStyleCode(AData: TJSONData): Byte;
+{ AWeight under the kept fontStyle: unset leaves it }
+function TyFontStyleCodeOver(ACode: Byte; AWeight: Integer): Integer;
 
 { A fontSize as zrender's parseFontSize takes it, as a logical size in CSS px
   (tyControls.FontUnits): a number, a string of a number ('14'), or a string
@@ -341,17 +372,54 @@ begin
 end;
 
 function TyFontWeightOf(AData: TJSONData; ADefault: Integer): Integer;
+var flags: Integer;
 begin
   Result := ADefault;
   if AData = nil then Exit;
+  flags := ADefault and not TyChartFontWeightMask;
   if AData.JSONType = jtString then
   begin
-    if (AData.AsString = 'bold') or (AData.AsString = 'bolder') then Result := 700
-    else if AData.AsString = 'normal' then Result := 400;
+    if (AData.AsString = 'bold') or (AData.AsString = 'bolder') then Result := 700 or flags
+    else if AData.AsString = 'normal' then Result := 400 or flags;
   end
   else if (AData.JSONType = jtNumber) and not IsNan(AData.AsFloat)
     and (AData.AsFloat >= 1) and (AData.AsFloat <= 1000) then
-    Result := Round(AData.AsFloat);
+    Result := Round(AData.AsFloat) or flags;
+end;
+
+function TyFontStyleIsItalic(const AText: string): Boolean;
+var s: string;
+begin
+  s := LowerCase(Trim(AText));
+  Result := (s = 'italic') or (Copy(s, 1, 7) = 'oblique');
+end;
+
+function TyFontStyleCode(AData: TJSONData): Byte;
+begin
+  Result := TyFontStyleUnset;
+  if (AData = nil) or (AData.JSONType <> jtString) then Exit;
+  if TyFontStyleIsItalic(AData.AsString) then Result := TyFontStyleItalicCode
+  else Result := TyFontStyleUpright;
+end;
+
+function TyFontStyleCodeOver(ACode: Byte; AWeight: Integer): Integer;
+begin
+  case ACode of
+    TyFontStyleUpright: Result := AWeight and not TyChartFontItalic;
+    TyFontStyleItalicCode: Result := AWeight or TyChartFontItalic;
+  else
+    Result := AWeight;
+  end;
+end;
+
+function TyFontStyleOver(AData: TJSONData; AWeight: Integer): Integer;
+begin
+  Result := AWeight;
+  if (AData = nil) or (AData.JSONType <> jtString) then Exit;
+  if TyFontStyleIsItalic(AData.AsString) then
+    Result := AWeight or TyChartFontItalic
+  else
+    Result := AWeight and not TyChartFontItalic;
 end;
 
 function TyOptionTextHasFunction(const AText: string): Boolean;

@@ -30,7 +30,8 @@ interface
 uses
   SysUtils, Math, fpjson,
   tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
-  tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Layout;
+  tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Layout,
+  tyControls.AdvanceChart.Paint;
 
 type
   { Resolved, never 'auto' by the time a caller sees a layout. }
@@ -71,6 +72,11 @@ type
     HasBackground: Boolean;
     BorderWidth: Double;
     BorderRadii: TTyCornerRadii;
+    { [R5-A] the box's shadow: the title's own shadow keys (install.ts'
+      rect, getItemStyle(['color', 'opacity'])) -- cast by the fill the
+      option writes (BackgroundColor, 0 where it does not parse) }
+    Shadow: TTyChartShadow;
+    BackgroundColor: TTyChartColor;
   end;
 
   { Where the two lines go, in DEVICE px. Each is an ANCHOR plus the alignment
@@ -113,6 +119,8 @@ function TyLayoutTitle(const ASpec: TTyTitleSpec; const AContainer: TTyXYWH;
   const ASubMeter: ITyTextMeasurer = nil): TTyTitleLayout; overload;
 
 implementation
+
+uses tyControls.AdvanceChart.States, tyControls.AdvanceChart.Color;
 
 const
   { title's defaultOption, install.ts:106-138. `top` is tokens.size.m. }
@@ -280,6 +288,9 @@ begin
   d := node.Find('backgroundColor');
   Result.HasBackground := (d <> nil) and (d.JSONType = jtString)
     and (d.AsString <> '') and (d.AsString <> 'transparent');
+  TyStReadShadow([node], [], [], Result.Shadow);
+  if not (Result.HasBackground and TyTryParseChartColor(d.AsString, Result.BackgroundColor)) then
+    Result.BackgroundColor := 0;
   Result.BorderWidth := NumIn(node, 'borderWidth', 0);
   d := node.Find('borderRadius');
   if (d <> nil) and (d.JSONType = jtNumber) then

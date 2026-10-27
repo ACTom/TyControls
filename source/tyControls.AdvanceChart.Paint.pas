@@ -176,6 +176,25 @@ type
     LineCap: Byte;                    // 0 butt, 1 round, 2 square
     LineJoin: Byte;                   // 0 miter, 1 round, 2 bevel
     MiterLimit: Double;
+    { [R5-A] THE SHADOW, zrender's style.shadowBlur / shadowOffsetX / shadowOffsetY
+      (LOGICAL px) and shadowColor: cast by the fill and by the stroke, each its own, under
+      them (the canvas' shadow; the painter's SetShadow). Drawn where the colour has alpha
+      and any of the three is not nought -- the zero value is none. A decal over the fill
+      casts none (zrender's decal element nulls it). }
+    ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
+    ShadowColor: TTyChartColor;
+    { [R5-A] zrender's style.blend, the canvas' globalCompositeOperation: a
+      series' blendMode on every element its view renders (echarts'
+      updateBlend) -- '' source over }
+    Blend: string;
+  end;
+
+  { [R5-A] A SHADOW AS A STYLE HOLDS IT: shadowBlur, shadowOffsetX / Y (LOGICAL px) and
+    shadowColor -- zrender's four common style keys, read off a model by getItemStyle,
+    getLineStyle or getAreaStyle. The zero value is none. }
+  TTyChartShadow = record
+    Blur, OffsetX, OffsetY: Double;
+    Color: TTyChartColor;
   end;
 
   { Which datum an element belongs to. Both -1 together means "none" -- one
@@ -300,12 +319,23 @@ type
     ShadowColor: TTyChartColor;
     HasShadowColor: Boolean;
     ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
+    { [R5-A] THE BOX'S SHADOW (TEXT_PROPS_BOX' shadowBlur / shadowColor /
+      shadowOffsetX / Y): the rect or the picture of the box casts it, in
+      shadowColor -- 'transparent' when none (Text.ts _renderBackground) }
+    BoxShadowBlur, BoxShadowOffsetX, BoxShadowOffsetY: Double;
+    HasBoxShadowColor: Boolean;
+    BoxShadowColor: TTyChartColor;
     { WHICH FONT PARTS THE STYLE NAMED ITSELF. A rich style's missing parts
       are filled from the block's font (or the global one, with
       richInheritPlainLabel off) by TyRtFinish, once the site knows the
       font it draws the block in; the engine reads only the four values.
       [Batch 86] }
     OwnFontFamily, OwnFontSize, OwnFontWeight: Boolean;
+    { [R5-A] the style wrote a fontStyle string of its own (FontItalic its
+      reading); where it did not, TyRtFinish hands it the block's or the
+      global one, as the other parts. The italic a text DRAWS is the
+      TyChartFontItalic flag in its FontWeight. }
+    OwnFontStyle: Boolean;
     { `'inherit'` (or `'auto'`) colours, and a free text's "no colour at all
       takes the inherit colour" -- bound by TyRtFinish to the site's inherit
       colour (a bar's visual colour, a legend item's), or dropped when there
@@ -1004,6 +1034,10 @@ type
     ZrHit: TTyZrHit;
     { [R2-I3] a marker label's emphasis twin (none, or one) }
     EmphTwin: TTyEmphTwinArray;
+    { [R5-A] zrender's zlevel: a layer of its own, painted over every lower
+      one whatever the z -- the first key of the order. A series' (and its
+      labels'), a marker's; 0, the zero value, for everything else }
+    ZLevel: Integer;
   end;
   PTyChartElement = ^TTyChartElement;
 
@@ -1148,6 +1182,10 @@ procedure TySymbolHitSlop(var AEl: TTyChartElement);
 { A style with nothing switched on: no fill, no stroke, fully opaque. Callers
   turn on what they want rather than remembering to turn off what they do not. }
 function TyChartStyle: TTyChartElementStyle;
+{ [R5-A] the element's style casts a shadow: a colour with alpha and a blur or an offset }
+function TyStyleHasShadow(const AStyle: TTyChartElementStyle): Boolean;
+{ [R5-A] AShadow onto a style, all four keys }
+procedure TyStyleSetShadow(var AStyle: TTyChartElementStyle; const AShadow: TTyChartShadow);
 { An element carrying a shape, silent and datum-less until the caller says
   otherwise -- so a decoration that forgets to set Silent is at worst inert,
   never a thing that steals hovers from the data. }
@@ -1322,6 +1360,20 @@ begin
   Result.Alpha := 1;
 end;
 
+procedure TyStyleSetShadow(var AStyle: TTyChartElementStyle; const AShadow: TTyChartShadow);
+begin
+  AStyle.ShadowBlur := AShadow.Blur;
+  AStyle.ShadowOffsetX := AShadow.OffsetX;
+  AStyle.ShadowOffsetY := AShadow.OffsetY;
+  AStyle.ShadowColor := AShadow.Color;
+end;
+
+function TyStyleHasShadow(const AStyle: TTyChartElementStyle): Boolean;
+begin
+  Result := ((AStyle.ShadowColor shr 24) <> 0)
+    and ((AStyle.ShadowBlur > 0) or (AStyle.ShadowOffsetX <> 0) or (AStyle.ShadowOffsetY <> 0));
+end;
+
 function TyChartElement(const AShape: TTyChartShape): TTyChartElement;
 begin
   { Default() rather than FillChar: the record now carries five managed
@@ -1462,7 +1514,8 @@ begin
   for k := FJrN - 1 downto 0 do
   begin
     { [R2-I6] an element whose place in the order moves }
-    if (FItems[FJrIdx[k]].Z <> FJrOld[k].Z) or (FItems[FJrIdx[k]].Z2 <> FJrOld[k].Z2) then
+    if (FItems[FJrIdx[k]].Z <> FJrOld[k].Z) or (FItems[FJrIdx[k]].Z2 <> FJrOld[k].Z2)
+      or (FItems[FJrIdx[k]].ZLevel <> FJrOld[k].ZLevel) then
       MarkOrderDirty(FJrIdx[k]);
     FItems[FJrIdx[k]] := FJrOld[k];
   end;
@@ -1524,7 +1577,8 @@ begin
     FJrTainted := True;
   { [R2-I6] the order moves only where z or z2 does [was: sorted again
     after any write] }
-  if (FItems[AIndex].Z <> AElement.Z) or (FItems[AIndex].Z2 <> AElement.Z2) then
+  if (FItems[AIndex].Z <> AElement.Z) or (FItems[AIndex].Z2 <> AElement.Z2)
+    or (FItems[AIndex].ZLevel <> AElement.ZLevel) then
     MarkOrderDirty(AIndex);
   FItems[AIndex] := AElement;
 end;
@@ -1642,6 +1696,10 @@ end;
 
 function TTyPaintList.Less(A, B: Integer): Boolean;
 begin
+  { [R5-A] the layer first: zrender paints each zlevel's canvas over the
+    lower ones }
+  if FItems[A].ZLevel <> FItems[B].ZLevel then
+    Exit(FItems[A].ZLevel < FItems[B].ZLevel);
   if FItems[A].Z <> FItems[B].Z then
     Exit(FItems[A].Z < FItems[B].Z);
   if FItems[A].Z2 <> FItems[B].Z2 then

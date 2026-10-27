@@ -1652,6 +1652,10 @@ begin
     'TyAdvChartCandleDown { background: var(--success); }' + LineEnding +
     'TyAdvChartAxisPointer { border-color: var(--border); border-width: 1px; }' + LineEnding +
     'TyAdvChartAxisPointerShadow { background: alpha(var(--on-surface), 0.10); }' + LineEnding +
+    '/* [R5-A] upstream''s tokens.color.shadow (light and dark alike): the colour of' + LineEnding +
+    '   the shadows a series or a component casts by default -- a boxplot''s' + LineEnding +
+    '   emphasis, a continuous visualMap''s indicator */' + LineEnding +
+    'TyAdvChartShadow { color: rgba(0, 0, 0, 0.2); }' + LineEnding +
     'TyAdvChartAxisPointerLabel {' + LineEnding +
     '  background: var(--accent);' + LineEnding +
     '  color: var(--on-accent);' + LineEnding +

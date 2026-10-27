@@ -154,6 +154,9 @@ type
     FontSizeLogical: Integer;
     HasFontWeight: Boolean;
     FontWeight: Integer;
+    { [R5-A] textStyle.fontStyle as written (TyFontStyleCode; unset: the
+      legend's) }
+    FontStyle: Byte;
     HasInactiveColour: Boolean;
     InactiveColour: TTyChartColor;
     HasInactiveBorderColour: Boolean;
@@ -280,6 +283,9 @@ type
     HasBackground: Boolean;
     BorderWidth: Double;
     BorderRadii: TTyCornerRadii;
+    { [R5-A] the box's shadow: the legend's own shadow keys
+      (listComponent.makeBackground's getItemStyle(['color', 'opacity'])) }
+    Shadow: TTyChartShadow;
     { `legend.z`, so the legend sorts against the series in the one paint
       list. Default 4. }
     Z: Integer;
@@ -1035,6 +1041,7 @@ begin
   d := node.Find('backgroundColor');
   Result.HasBackground := (d <> nil) and (d.JSONType = jtString)
     and (d.AsString <> '') and (d.AsString <> 'transparent');
+  TyStReadShadow([node], [], [], Result.Shadow);
   Result.BorderWidth := NumIn(node, 'borderWidth', 0);
   d := node.Find('borderRadius');
   if (d <> nil) and (d.JSONType = jtNumber) then
@@ -1160,6 +1167,9 @@ begin
         Result.FontWeight := TyFontWeightOf(d, 400);
         Result.HasFontWeight := True;
       end;
+      d := st.Find('fontStyle');
+      if TyFontStyleCode(d) <> TyFontStyleUnset then
+        Result.FontStyle := TyFontStyleCode(d);
     end;
     Colour(AObj.Find('inactiveColor'), Result.HasInactiveColour, Result.InactiveColour);
     Colour(AObj.Find('inactiveBorderColor'), Result.HasInactiveBorderColour,
@@ -2680,7 +2690,10 @@ begin
     it.FontWeight := AFont.Weight;
     if it.Own.FontName <> '' then it.FontName := it.Own.FontName;
     if it.Own.HasFontSize then it.FontSizeLogical := it.Own.FontSizeLogical;
-    if it.Own.HasFontWeight then it.FontWeight := it.Own.FontWeight;
+    if it.Own.HasFontWeight then
+      it.FontWeight := (it.Own.FontWeight and TyChartFontWeightMask)
+        or (it.FontWeight and not TyChartFontWeightMask);
+    it.FontWeight := TyFontStyleCodeOver(it.Own.FontStyle, it.FontWeight);
 
     AMeasurer.MeasureLine(it.Text, it.FontName, it.FontSizeLogical,
       it.FontWeight, it.TextW, it.TextH);
@@ -2996,6 +3009,7 @@ begin
       el.Style.StrokeWidthLogical := ASpec.BorderWidth;
       el.Style.StrokeColor := AInk.Border;
     end;
+    TyStyleSetShadow(el.Style, ASpec.Shadow);
     AList.Add(el);
     Inc(Result);
   end;
@@ -3113,7 +3127,11 @@ begin
       el.Caption.FontWeight := AFont.Weight;
       if it.Own.FontName <> '' then el.Caption.FontName := it.Own.FontName;
       if it.Own.HasFontSize then el.Caption.FontSizeLogical := it.Own.FontSizeLogical;
-      if it.Own.HasFontWeight then el.Caption.FontWeight := it.Own.FontWeight;
+      if it.Own.HasFontWeight then
+        el.Caption.FontWeight := (it.Own.FontWeight and TyChartFontWeightMask)
+          or (el.Caption.FontWeight and not TyChartFontWeightMask);
+      el.Caption.FontWeight := TyFontStyleCodeOver(it.Own.FontStyle,
+        el.Caption.FontWeight);
       if it.Selected then
       begin
         if it.Own.HasTextColour then el.Caption.Colour := it.Own.TextColour

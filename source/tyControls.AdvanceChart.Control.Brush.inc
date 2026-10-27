@@ -1314,6 +1314,8 @@ begin
       end;
       if not IsNan(cv.Opt.Style.Opacity) then
         el.Style.Alpha := Max(0, Min(1, cv.Opt.Style.Opacity));
+      { [R5-A] the cover's brushStyle shadow }
+      TyStyleSetShadow(el.Style, TyBrushShadowOf(cv.Opt.Style));
       AList.Add(el);
       Inc(Result);
     end;
@@ -2187,6 +2189,8 @@ begin
       end;
       if not IsNan(cv.Opt.Style.Opacity) then
         el.Style.Alpha := Max(0, Min(1, cv.Opt.Style.Opacity));
+      { [R5-A] the cover's brushStyle shadow }
+      TyStyleSetShadow(el.Style, TyBrushShadowOf(cv.Opt.Style));
       AList.Add(el);
       Inc(Result);
     end;

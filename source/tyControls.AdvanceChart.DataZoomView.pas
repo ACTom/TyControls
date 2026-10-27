@@ -47,6 +47,8 @@ type
     LineWidth: Double;
     HasOpacity: Boolean;
     Opacity: Double;
+    { [R5-A] the block's shadow (getItemStyle / getLineStyle / getAreaStyle) }
+    Shadow: TTyChartShadow;
   end;
 
   { What a slider dataZoom's option says about how it looks. }
@@ -83,6 +85,8 @@ type
     HasText: Boolean;
     TextColour: TTyChartColor;
     FontSize: Integer;
+    { [R5-A] textStyle.fontStyle as written (TyFontStyleCode) }
+    FontStyle: Byte;
   end;
 
   { What the chart knows that the option does not. CSS px. }
@@ -251,7 +255,7 @@ implementation
 uses tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Scale,
      tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Color,
      tyControls.AdvanceChart.Symbol, tyControls.AdvanceChart.DataZoom,
-     tyControls.AdvanceChart.Handlers,
+     tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.States,
      { [R5-D] the emphasis proxy's liftColor }
      tyControls.AdvanceChart.Style;
 
@@ -334,6 +338,8 @@ begin
     AStyle.HasOpacity := True;
     AStyle.Opacity := d.AsFloat;
   end;
+  { [R5-A] its shadow keys }
+  TyStReadShadow([ANode], [], [], AStyle.Shadow);
 end;
 
 function BlankStyle: TTyDzStyleSpec;
@@ -504,6 +510,7 @@ begin
     end;
     d := s.Find('fontSize');
     Result.FontSize := TyOptFontSize(d, Result.FontSize);
+    Result.FontStyle := TyFontStyleCode(s.Find('fontStyle'));
   end;
 end;
 
@@ -1447,12 +1454,14 @@ var
       el.Style.HasFill := True;
       el.Style.FillColor := Ink(ASpec.ShadowArea[Ord(gi = 1)], True,
         AInk.ShadowArea[Ord(gi = 1)], 0.2 + 0.1 * Ord(gi = 1));
+      TyStyleSetShadow(el.Style, ASpec.ShadowArea[Ord(gi = 1)].Shadow);
     end
     else
     begin
       el.Style.StrokeColor := Ink(ASpec.ShadowLine[Ord(gi = 1)], False,
         AInk.ShadowLine[Ord(gi = 1)], 1);
       el.Style.StrokeWidthLogical := LineWidthOr(ASpec.ShadowLine[Ord(gi = 1)], 0.5);
+      TyStyleSetShadow(el.Style, ASpec.ShadowLine[Ord(gi = 1)].Shadow);
     end;
     AList.Add(el);
     Inc(Result);
@@ -1509,6 +1518,8 @@ begin
       dzrHandle0, dzrHandle1:
         begin
           el := Blank(role);
+          { [R5-A] handleStyle's shadow on the icon }
+          TyStyleSetShadow(el.Style, ASpec.Handle.Shadow);
           { [R5-D] THE EMPHASIS STATE OVER THE NORMAL STYLE: emphasis.handleStyle's
             keys where written; else the default proxy's lift of the normal
             fill, and the model's default border (the theme's); the theme's
@@ -1574,6 +1585,7 @@ begin
               el.Style.StrokeWidthLogical := LineWidthOr(ASpec.MoveHandleEmph,
                 el.Style.StrokeWidthLogical);
           end;
+          TyStyleSetShadow(el.Style, ASpec.MoveHandle.Shadow);
           if e.Shape.W > 0 then
           begin
             AList.Add(el);
@@ -1619,6 +1631,7 @@ begin
       Dev(dzrBackground)));
     el.Style.HasFill := True;
     el.Style.FillColor := Ink(ASpec.Brush, True, AInk.Brush, 0.3);
+    TyStyleSetShadow(el.Style, ASpec.Brush.Shadow);
     AList.Add(el);
     Inc(Result);
   end;

@@ -113,6 +113,11 @@ function TyNormalizeLineDash(const AType: string; AWidth: Double;
 procedure TyRenderRtPieces(P: TTyPainter; const APieces: TTyRtPieceArray;
   AX, AY, ARotationRad, AScale, AAlpha: Double; AHasInk: Boolean;
   AInk: TTyColor);
+{ [R5-A] A FRAME'S CANVAS SHADOW (a title's): the frame's fill, its alpha, on a mask of
+  its own and the painter's shadow cast from it -- the frame itself is drawn as it
+  always was. ARadius as FillBackground takes it. }
+procedure TyCastFrameShadow(P: TTyPainter; const AFrame: TTyRectF; ARadius: Integer;
+  AFill: TTyColor; const AShadow: TTyChartShadow);
 
 { [R2-A] A TURNED TEXT OF SEVERAL LINES as zrender lays a plain block out
   (Text._updatePlainTexts) and its transform turns it: the lines stack in
@@ -2087,6 +2092,93 @@ begin
   end;
 end;
 
+{ [R5-A] A TEXT'S CANVAS SHADOW: its halo (where it has one) and its glyphs drawn as
+  DrawTextRotated and HaloRotated put them, on a mask of their own round the anchor, and
+  the painter's shadow cast from that -- blurred, moved, in AShadow -- under where they
+  will be drawn. ABlur and the offsets css px (the canvas' shadow is in device space:
+  no transform reaches it) }
+procedure RtTextShadow(P: TTyPainter; const AText, AFont: string; ASize, AWeight: Integer;
+  AX, AY, ARotationRad: Double; AH: TAlignment; AV: TTextLayout; AHasInk: Boolean;
+  AInk: TTyColor; AHasHalo: Boolean; AHalo: TTyColor; AHaloWidth: Double;
+  const ADash: string; ADashOffset: Double; AShadow: TTyColor;
+  ABlur, AOffsetX, AOffsetY: Double);
+var
+  sz: TSize;
+  r, ox, oy, mw, mh, s: Integer;
+  mx, my: Double;
+  mp: TTyPainter;
+  mask: TBGRABitmap;
+  sc: TTyCanvasScale;
+begin
+  if (P = nil) or (P.Bitmap = nil) or not (AHasInk or AHasHalo) then Exit;
+  sz := P.MeasureText(AText, AFont, ASize, AWeight);
+  { round the anchor, any turn: the text's diagonal, and the stroke }
+  r := sz.cx + sz.cy + Ceil(AHaloWidth * P.PPI / 96) + 4;
+  ox := Floor(AX) - r;
+  oy := Floor(AY) - r;
+  mw := 2 * r + 2;
+  mh := 2 * r + 2;
+  mx := AX - ox;
+  my := AY - oy;
+  s := P.DeviceScale;
+  sc.Scale := s;
+  sc.DeviceUnits := False;
+  mask := TBGRABitmap.Create(mw * s, mh * s, BGRAPixelTransparent);
+  try
+    mp := TTyPainter.Create;
+    try
+      mp.FastStrokes := P.FastStrokes;
+      mp.BeginPaintOnScaled(nil, Rect(0, 0, mw, mh), P.PPI, mask, sc);
+      if AHasHalo then
+        HaloRotated(mp, AText, AFont, ASize, AWeight, mx, my, ARotationRad, AH, AV,
+          AHalo, AHaloWidth, ADash, ADashOffset);
+      if AHasInk then
+        mp.DrawTextRotated(AText, AFont, ASize, AWeight, AInk, mx, my, ARotationRad, AH, AV);
+      mp.EndPaint;
+    finally
+      mp.Free;
+    end;
+    P.CastShadowOf(mask, ox * s, oy * s, AShadow, ABlur, AOffsetX, AOffsetY);
+  finally
+    mask.Free;
+  end;
+end;
+
+procedure TyCastFrameShadow(P: TTyPainter; const AFrame: TTyRectF; ARadius: Integer;
+  AFill: TTyColor; const AShadow: TTyChartShadow);
+var
+  st: TTyChartElementStyle;
+  mask: TBGRABitmap;
+  mp: TTyPainter;
+  sc: TTyCanvasScale;
+  r: TRect;
+  s: Integer;
+begin
+  st := Default(TTyChartElementStyle);
+  TyStyleSetShadow(st, AShadow);
+  if (P = nil) or not TyStyleHasShadow(st) or ((AFill shr 24) = 0) then Exit;
+  r := Rect(Round(AFrame.Left), Round(AFrame.Top), Round(AFrame.Right), Round(AFrame.Bottom));
+  if (r.Right <= r.Left) or (r.Bottom <= r.Top) then Exit;
+  s := P.DeviceScale;
+  sc.Scale := s;
+  sc.DeviceUnits := False;
+  mask := TBGRABitmap.Create((r.Right - r.Left) * s, (r.Bottom - r.Top) * s, BGRAPixelTransparent);
+  mp := TTyPainter.Create;
+  try
+    mp.FastStrokes := P.FastStrokes;
+    mp.BeginPaintOnScaled(nil, Rect(0, 0, r.Right - r.Left, r.Bottom - r.Top), P.PPI, mask, sc);
+    mp.BeginPath;
+    mp.RoundRectPath(0, 0, r.Right - r.Left, r.Bottom - r.Top, ARadius);
+    mp.FillPath(AFill);
+    mp.EndPaint;
+    P.CastShadowOf(mask, r.Left * s, r.Top * s, TTyColor(AShadow.Color), AShadow.Blur,
+      AShadow.OffsetX, AShadow.OffsetY);
+  finally
+    mp.Free;
+    mask.Free;
+  end;
+end;
+
 procedure TyRenderRtPieces(P: TTyPainter; const APieces: TTyRtPieceArray;
   AX, AY, ARotationRad, AScale, AAlpha: Double; AHasInk: Boolean;
   AInk: TTyColor);
@@ -2094,7 +2186,7 @@ var
   i, dx, dy, reach: Integer;
   pc: TTyRtPiece;
   a, gx, gy, r, rr, s: Double;
-  ink, halo, shade: TTyColor;
+  ink, halo: TTyColor;
   hasInk: Boolean;
   k: Integer;
   radii: array[0..3] of Double;
@@ -2146,6 +2238,10 @@ begin
       try
         if a < 1 then P.SetElementAlpha(a);
         BorderDash;
+        { [R5-A] the box's shadow, under its border and its fill each }
+        if pc.HasShadow and ((pc.ShadowColor shr 24) <> 0) then
+          P.SetShadow(TTyColor(pc.ShadowColor), pc.ShadowBlur, pc.ShadowOffsetX,
+            pc.ShadowOffsetY);
         P.Translate(AX, AY);
         if ARotationRad <> 0 then P.RotateBy(-ARotationRad);
         for k := 0 to 3 do radii[k] := pc.Radius[k] * AScale;
@@ -2186,18 +2282,18 @@ begin
       hasInk := True;
       ink := AInk;
     end;
-    { THE SHADOW, unblurred: the painter has no blur for glyphs, so what
-      survives of a text shadow is its offset copy. zrender sets none at all
-      without a blur (Text.ts:611, 850), whatever the offsets say }
-    if pc.HasShadow and ((pc.ShadowOffsetX <> 0) or (pc.ShadowOffsetY <> 0))
-      and ((pc.ShadowColor shr 24) <> 0) then
-    begin
-      shade := CaptionInk(pc.ShadowColor, a);
-      P.DrawTextRotated(TyInkText(pc.Text), pc.FontFamily,
-        TyFontSizeFromPx(pc.FontSizePx), pc.FontWeight, shade,
-        gx + pc.ShadowOffsetX * AScale, gy + pc.ShadowOffsetY * AScale,
-        ARotationRad, RtAlign(pc.TextAlign), tlCenter);
-    end;
+    { [R5-A] THE SHADOW, the TSpan's canvas shadow: zrender sets one only for
+      a textShadowBlur above nought (Text.ts:611, 850 -- whatever the offsets
+      say), in textShadowColor ('transparent' when none), blurred, under the
+      halo and the glyphs -- cast from them as they are drawn, their ink and
+      opacity. [Was: an unblurred copy at the offset.] }
+    if pc.HasShadow and (pc.ShadowBlur > 0) and ((pc.ShadowColor shr 24) <> 0) then
+      RtTextShadow(P, TyInkText(pc.Text), pc.FontFamily,
+        TyFontSizeFromPx(pc.FontSizePx), pc.FontWeight, gx, gy, ARotationRad,
+        RtAlign(pc.TextAlign), tlCenter, hasInk, CaptionInk(ink, a),
+        pc.HasStroke and (pc.LineWidth > 0) and ((pc.Stroke shr 24) <> 0),
+        CaptionInk(pc.Stroke, a), pc.LineWidth, pc.LineDash, pc.LineDashOffset,
+        TTyColor(pc.ShadowColor), pc.ShadowBlur, pc.ShadowOffsetX, pc.ShadowOffsetY);
     { THE HALO FIRST -- a text's stroke is painted under its fill -- as the
       one-run caption dilates it }
     if pc.HasStroke and (pc.LineWidth > 0) and ((pc.Stroke shr 24) <> 0) then
@@ -2743,6 +2839,9 @@ var
   var tile: TBGRABitmap; di: Integer;
   begin
     if not (AElement.Style.Decal.Present and AElement.Style.HasFill) then Exit;
+    { [R5-A] the decal element casts no shadow (Path.ts: decalElStyle.shadowColor
+      = null), its pen neither }
+    if TyStyleHasShadow(AElement.Style) then P.ClearShadow;
     { the fill rule here too: a large batch reaches this without PaintTraced }
     if AElement.Style.FillEvenOdd then rule := tfrEvenOdd else rule := tfrNonZero;
     { the tile made for the raster -- upstream's dpr: the PPI's and the device
@@ -3161,8 +3260,18 @@ begin
         P.SetLineJoin(tljMiter, mlim);
       end;
     end;
+    { [R5-A] THE SHADOW, under the fill and under the pen, each its own (the canvas') --
+      a large batch's too, as the one path upstream's large symbol draws: through the
+      path below, not the layers or the tiles }
+    if TyStyleHasShadow(AElement.Style) then
+      P.SetShadow(TTyColor(AElement.Style.ShadowColor), AElement.Style.ShadowBlur,
+        AElement.Style.ShadowOffsetX, AElement.Style.ShadowOffsetY);
+    { [R5-A] the series' blendMode: each fill and each stroke composited so
+      -- a large batch as its one path, as upstream's }
+    if AElement.Style.Blend <> '' then P.SetBlendMode(AElement.Style.Blend);
     if (AElement.Shape.Kind = cskLarge) and (P.Bitmap <> nil) and IdentityMatrix
-      and LayerFits then
+      and LayerFits and not TyStyleHasShadow(AElement.Style)
+      and (AElement.Style.Blend = '') then
     begin
       if AElement.Style.HasFill then PaintLargeOnLayer(False);
       if AElement.Style.StrokeWidthLogical > 0 then PaintLargeOnLayer(True);
@@ -3170,7 +3279,8 @@ begin
       PaintDecal;
     end
     else if (AElement.Shape.Kind = cskLarge) and (TyLargeTilePx > 0) and (P.Bitmap <> nil)
-      and IdentityMatrix then
+      and IdentityMatrix and not TyStyleHasShadow(AElement.Style)
+      and (AElement.Style.Blend = '') then
     begin
       PaintLargeInTiles;
       PaintDecal;
@@ -3189,6 +3299,8 @@ begin
       PaintDecal;
     end;
   finally
+    { [R5-A] the composite operation is no part of the saved state }
+    if AElement.Style.Blend <> '' then P.SetBlendMode('');
     { Restore even if a trace raised: the canvas state is shared, and leaking a
       dash or an alpha onto the next element is the defect the state stack
       exists to prevent. }
