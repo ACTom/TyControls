@@ -409,6 +409,12 @@ type
   { WHAT ARMING NEEDS TO KNOW OF ONE SERIES, by series index. }
   TTyChartAnimSeries = record
     Present: Boolean;
+    { [R5-I] AN OLD SERIES THE LEGEND HAS SWITCHED OFF whose markers the
+      marker views keep (their draws live in markerGroupMap by the series'
+      id): Present is False -- its view drew nothing -- and the elements of
+      its series index are its markers as they were last drawn, which a
+      marker of the series shown again updates from }
+    MarksOnly: Boolean;
     Model: TTyAnimModel;
     { isAnimationEnabled: `animation` and the threshold }
     Enabled: Boolean;
@@ -598,6 +604,17 @@ type
       no payload: a setOption's render) }
     GeoOld, GeoNew: TTyChartGeoViewArray;
   end;
+
+  { [R5-I] A SERIES' MARKERS AS LAST DRAWN, kept while the legend has the
+    series switched off: the marker views keep their draws by the series'
+    id (markerGroupMap), so the markers of the series shown again update
+    from these }
+  TTyChartAnimMarkPark = record
+    Present: Boolean;
+    ViewKey, SeriesType: string;
+    Elements: array of TTyChartElement;
+  end;
+  TTyChartAnimMarkParkArray = array of TTyChartAnimMarkPark;
 
   { AN OLD ITEM ELEMENT AS A UNIVERSAL TRANSITION READS IT [Batch 136]:
     the path it draws (PathProxy data) and its computed transform, and its
@@ -2940,6 +2957,8 @@ var
   upd: array of Boolean;
   { [R2-C] a line whose render takes LineView's init branch again }
   lineInit: array of Boolean;
+  { [R5-I] the old series a shown-again series' markers update from }
+  markOld: TTyIntegerArray;
   i, s, o, q, r, k: Integer;
   el: TTyChartElement;
   role: string;
@@ -4674,6 +4693,18 @@ var
         and (APrev.Elements[j].Anim.Key = AKey) then Exit(APrev.Elements[j].Anim.Index);
   end;
 
+  { [R5-I] the old markLine of an id (any of its four elements) }
+  function OldMarkLineRow(AOld: Integer; const AKey: string): Integer;
+  var j: Integer;
+  begin
+    Result := -1;
+    for j := 0 to High(APrev.Elements) do
+      if (APrev.Elements[j].Anim.Role in [carMarkLine, carMarkLineFrom, carMarkLineTo,
+        carMarkLineLabel])
+        and (APrev.Elements[j].Anim.Series = AOld)
+        and (APrev.Elements[j].Anim.Key = AKey) then Exit(APrev.Elements[j].Anim.Index);
+  end;
+
   { [R2-I7] createOrUpdateRepeatSymbols on a kept column: a path past the
     new count updateProps to no scale (update timing, the item's model, its
     {index, count} -- the new count) and goes when it ends; it stays at its
@@ -4868,7 +4899,12 @@ var
       pops in (enter timing, its row)
       [Revised in R2-I7: paired by the marker's data index.] }
     orow := ARow;
-    if AEl.Anim.Role = carMarkPoint then orow := OldMarkPointRow(AOld, AEl.Anim.Key);
+    if AEl.Anim.Role = carMarkPoint then orow := OldMarkPointRow(AOld, AEl.Anim.Key)
+    { [R5-I] a markLine's the same way: LineDraw's diff pairs lineData by
+      getId -- the name, else the place
+      [Revised in R5-I: paired by the marker's data index.] }
+    else if AEl.Anim.Role in [carMarkLine, carMarkLineFrom, carMarkLineTo, carMarkLineLabel] then
+      orow := OldMarkLineRow(AOld, AEl.Anim.Key);
     if not (APrev.FullUpdate or APrev.Merge) or (orow < 0)
       or not OldEl(AOld, orow, rk, oe) then
     begin
@@ -4899,7 +4935,7 @@ var
     oprops := TyAnimProps([Num1('shape.x1', oe.Anim.G[0]), Num1('shape.y1', oe.Anim.G[1]),
       Num1('shape.x2', oe.Anim.G[2]), Num1('shape.y2', oe.Anim.G[3]),
       Num1('shape.percent', 1)]);
-    p := Take(AOld, ARow, s, ARow, 'markLine', oprops, props, True);
+    p := Take(AOld, orow, s, ARow, 'markLine', oprops, props, True);
     Ensure(p, 'shape.x1', oe.Anim.G[0]);
     Ensure(p, 'shape.y1', oe.Anim.G[1]);
     Ensure(p, 'shape.x2', oe.Anim.G[2]);
@@ -5494,6 +5530,21 @@ begin
     SetLength(lineInit, Length(ASeries));
     for s := 0 to High(ASeries) do
       lineInit[s] := upd[s] and (ASeries[s].SeriesType = 'line') and LineReinit(s, oldOf[s]);
+    { [R5-I] A SERIES SHOWN AGAIN by the legend: its view enters (it kept no
+      data), its markers update from their kept draws }
+    SetLength(markOld, Length(ASeries));
+    for s := 0 to High(ASeries) do
+    begin
+      markOld[s] := -1;
+      if upd[s] or not ASeries[s].Present then Continue;
+      for o := 0 to High(APrev.Series) do
+        if APrev.Series[o].MarksOnly and (APrev.Series[o].ViewKey = ASeries[s].ViewKey)
+          and (APrev.Series[o].SeriesType = ASeries[s].SeriesType) then
+        begin
+          markOld[s] := o;
+          Break;
+        end;
+    end;
 
     { EVERY ELEMENT OF THE NEW RENDER, in list order }
     for i := 0 to AList.Count - 1 do
@@ -5508,10 +5559,15 @@ begin
       if el.Anim.Role = carEndLabel then Continue;
       if not upd[s] then
       begin
-        if Find(s, r, role) = nil then ArmOne(AList, i, el, ASeries[s]);
+        if (markOld[s] >= 0) and (el.Anim.Role in [carMarkPoint, carMarkPointLabel,
+          carMarkLine, carMarkLineFrom, carMarkLineTo, carMarkLineLabel]) then
+          UpdateMarker(i, el, ASeries[s], markOld[s], r)
+        else if Find(s, r, role) = nil then ArmOne(AList, i, el, ASeries[s]);
         Continue;
       end;
       { THE MARKERS, by their own data index [Batch 99] }
+    { (an update where the series was switched off by the legend: its
+      markers' draws, kept, below) }
       if el.Anim.Role in [carMarkPoint, carMarkPointLabel, carMarkLine, carMarkLineFrom,
         carMarkLineTo, carMarkLineLabel] then
       begin
@@ -5559,7 +5615,8 @@ begin
       or a full update's, where markers are diffed at all) }
     if APrev.FullUpdate or APrev.Merge then
       for s := 0 to High(ASeries) do
-        if upd[s] then MarkPointLeave(s, oldOf[s], ASeries[s]);
+        if upd[s] then MarkPointLeave(s, oldOf[s], ASeries[s])
+        else if markOld[s] >= 0 then MarkPointLeave(s, markOld[s], ASeries[s]);
     { [R2-I7] A KEPT PICTORIAL COLUMN'S PATHS PAST ITS NEW COUNT shrink }
     for s := 0 to High(ASeries) do
       if upd[s] and (ASeries[s].SeriesType = 'pictorialBar') then

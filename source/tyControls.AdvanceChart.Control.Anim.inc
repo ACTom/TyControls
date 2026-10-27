@@ -646,6 +646,7 @@ var
   r: TTyChartAnimSeries;
   el: TTyChartElement;
   drawnNow: Boolean;
+  park: TTyChartAnimMarkParkArray;
 begin
   AnimDropPrev;
   { NOTHING DRAWN BEFORE: the option enters }
@@ -713,6 +714,52 @@ begin
     Inc(n);
   end;
   SetLength(FAnimPrev.Elements, n);
+  { [R5-I] THE MARKERS' KEPT DRAWS: a series shown now leaves its markers
+    as drawn; one the legend has switched off keeps the ones it left (a
+    notMerge setOption makes new marker views: nothing kept), and they are
+    the old markers of its series index }
+  park := nil;
+  for slot := 0 to High(FBindings) do
+  begin
+    si := FBindings[slot].SeriesIndex;
+    if si < 0 then Continue;
+    if si > High(park) then SetLength(park, si + 1);
+    if FBindings[slot].Hidden then
+    begin
+      if (FAnimFull or FAnimMerge) and (si <= High(FAnimMarkPark)) then
+        park[si] := FAnimMarkPark[si];
+      if not park[si].Present or (Length(park[si].Elements) = 0) then Continue;
+      if si > High(FAnimPrev.Series) then SetLength(FAnimPrev.Series, si + 1);
+      r := Default(TTyChartAnimSeries);
+      r.MarksOnly := True;
+      r.ViewKey := park[si].ViewKey;
+      r.SeriesType := park[si].SeriesType;
+      FAnimPrev.Series[si] := r;
+      for k := 0 to High(park[si].Elements) do
+      begin
+        SetLength(FAnimPrev.Elements, n + 1);
+        FAnimPrev.Elements[n] := park[si].Elements[k];
+        Inc(n);
+      end;
+    end
+    else
+    begin
+      park[si].Present := True;
+      if si <= High(FAnimOldViewKeys) then park[si].ViewKey := FAnimOldViewKeys[si]
+      else park[si].ViewKey := 'x:' + IntToStr(si);
+      park[si].SeriesType := FBindings[slot].SeriesType;
+      park[si].Elements := nil;
+      for i := 0 to FPaintList.Count - 1 do
+      begin
+        el := FPaintList.Element(i);
+        if (el.Anim.Series <> si) or not (el.Anim.Role in [carMarkPoint, carMarkPointLabel,
+          carMarkLine, carMarkLineFrom, carMarkLineTo, carMarkLineLabel]) then Continue;
+        SetLength(park[si].Elements, Length(park[si].Elements) + 1);
+        park[si].Elements[High(park[si].Elements)] := el;
+      end;
+    end;
+  end;
+  FAnimMarkPark := park;
   { the pieces the data still names that the last render did not draw
     [milestone D5-D8] }
   FAnimPrev.UtStale := nil;

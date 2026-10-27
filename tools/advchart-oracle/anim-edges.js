@@ -215,6 +215,37 @@ const PROBES = {
       });
     });
   },
+  // a series' markLines (its LineDraw's lineData, by data index): the
+  // line's shape and percent, its id; and its markPoints (SymbolDraw):
+  // the group's place, the path's scale
+  mark(chart, rec) {
+    const mlv = chart._componentsViews.find(v => v && v.type === 'markLine');
+    const mpv = chart._componentsViews.find(v => v && v.type === 'markPoint');
+    chart.getModel().eachSeries(sm => {
+      const ld = mlv && mlv.markerGroupMap.get(sm.id);
+      const data = ld && ld._lineData;
+      if (data) {
+        data.each(i => {
+          const el = data.getItemGraphicEl(i);
+          if (!el || !el.parent) return;
+          const line = el.childOfName('line');
+          const sh = line.shape;
+          rec['ml' + sm.seriesIndex + '/' + i] = { id: idText(data.getId(i)), sh: arr([sh.x1, sh.y1, sh.x2, sh.y2]),
+            pc: hx(sh.percent == null ? 1 : sh.percent), n: nClip(line) };
+        });
+      }
+      const sd = mpv && mpv.markerGroupMap.get(sm.id);
+      const pd = sd && sd._data;
+      if (pd) {
+        pd.each(i => {
+          const el = pd.getItemGraphicEl(i);
+          if (!el || !el.parent) return;
+          const pth = el.childAt(0);
+          rec['mk' + sm.seriesIndex + '/' + i] = { x: hx(el.x), y: hx(el.y), sx: hx(pth.scaleX), n: nClip(el) + nClip(pth) };
+        });
+      }
+    });
+  },
   // a funnel's pieces and their labels
   funnel(chart, rec, c) {
     chart.getModel().eachSeries(sm => {
@@ -306,6 +337,31 @@ add('bar', 'br-cat', "the category axis starts at b (min 1): a lies left of the 
   [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'merge', option: { xAxis: { min: 0 } } }, ...after([0, 1, 300, 600, 999, 1001], T1),
     { t: T1 + 2000, do: 'merge', option: { xAxis: { min: 1 } } }, ...after([0, 1, 300, 1001], T1 + 2000)]);
 
+// ---- markers ----
+const MK = (ml, extra) => Object.assign({ animation: true, legend: {}, xAxis: { type: 'category', data: ['a', 'b', 'c'] },
+  yAxis: { type: 'value', min: 0, max: 40 },
+  series: [Object.assign({ type: 'bar', name: 's0', data: [10, 20, 30], markLine: ml }, LIN)] }, extra || {});
+add('mark', 'ml-name-swap', "markLines named a and b; a merge writes them as b then a: LineDraw's diff pairs them by id (the name), so the line at index 0 (now b) tweens from where b was",
+  MK({ data: [{ name: 'a', yAxis: 10 }, { name: 'b', yAxis: 20 }] }), ['mark'],
+  [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'merge', option: { series: [{ markLine: { data: [{ name: 'b', yAxis: 25 }, { name: 'a', yAxis: 5 }] } }] } },
+    ...after([0, 1, 500, 1001], T1)]);
+add('mark', 'ml-unnamed', "unnamed markLines: the id is 'e' + two NULs + the index -- paired by index",
+  MK({ data: [{ yAxis: 10 }, { yAxis: 20 }] }), ['mark'],
+  [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'merge', option: { series: [{ markLine: { data: [{ yAxis: 25 }, { yAxis: 5 }] } }] } },
+    ...after([0, 1, 500, 1001], T1)]);
+add('mark', 'ml-name-drop', "a merge drops the line named a and adds c: b moves from b, c enters (percent 0 -> 1), a is gone at once",
+  MK({ data: [{ name: 'a', yAxis: 10 }, { name: 'b', yAxis: 20 }] }), ['mark'],
+  [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'merge', option: { series: [{ markLine: { data: [{ name: 'b', yAxis: 25 }, { name: 'c', yAxis: 35 }] } }] } },
+    ...after([0, 1, 500, 1001], T1)]);
+const MK2 = () => ({ animation: true, legend: {}, xAxis: { type: 'category', data: ['a', 'b', 'c'] }, yAxis: { type: 'value' },
+  series: [Object.assign({ type: 'bar', name: 's0', data: [10, 20, 30] }, LIN),
+    Object.assign({ type: 'bar', name: 's1', data: [50, 15, 25], markLine: { data: [{ type: 'average', name: 'avg' }] },
+      markPoint: { data: [{ type: 'max', name: 'max' }] } }, LIN)] });
+add('mark', 'mk-legend', "s1 (with a markLine and a markPoint) toggled off by the legend and on again: its markers' draws are kept by the marker views -- on again they update from where they were (the axis changed back), they do not enter again",
+  MK2(), ['mark'],
+  [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'act', action: { type: 'legendToggleSelect', name: 's1' } }, ...after([0, 1001], T1),
+    { t: T1 + 2000, do: 'act', action: { type: 'legendToggleSelect', name: 's1' } }, ...after([0, 1, 16, 500, 1001], T1 + 2000)]);
+
 // ---- funnel ----
 const FN = (data, extra, s) => Object.assign({ animation: true,
   series: [Object.assign({ type: 'funnel', left: 40, width: 260, data }, LIN, s || {})] }, extra || {});
@@ -351,6 +407,14 @@ function guards(out) {
   guard('br-back: b comes back on the update timing', (() => {
     const a = rec('br-back', T1 + 600, 'br0/1'), b = rec('br-back', T1 + 999, 'br0/1');
     return a && !a.ig && a.n > 0 && b.n > 0;
+  })());
+  guard('ml-name-swap: index 0 starts from where b was', (() => {
+    const b = rec('ml-name-swap', T1 - 1, 'ml0/1'), a = rec('ml-name-swap', T1, 'ml0/0');
+    return b && a && a.sh[1] === b.sh[1] && a.id === 'b';
+  })());
+  guard('mk-legend: on again, the line does not enter', (() => {
+    const a = rec('mk-legend', T1 + 2001, 'ml1/0');
+    return a && n(a.pc) === 1;
   })());
   guard('fn-update: a piece tweens its points', (() => {
     const a = rec('fn-update', T1 - 1, 'fn0/0'), b = rec('fn-update', T1 + 500, 'fn0/0'), c = rec('fn-update', T1 + 1001, 'fn0/0');

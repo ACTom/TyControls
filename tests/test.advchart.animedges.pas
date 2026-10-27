@@ -55,6 +55,7 @@ type
     procedure TestACandlesticksBoxesAsUpstream;
     procedure TestAFunnelsPiecesAndLabelsAsUpstream;
     procedure TestABarClippedPastThePlotAsUpstream;
+    procedure TestTheMarkersAsUpstream;
   end;
 
 implementation
@@ -223,6 +224,13 @@ begin
   end;
 end;
 
+{ a proxy's key, or the rest value where the proxy has none }
+function PNumOr(P: TTyChartAnimProxy; const AKey: string; AOr: Double): Double;
+begin
+  if (P <> nil) and (P.GetAnimProp(AKey).Kind = avkNumber) then Result := P.Num(AKey)
+  else Result := AOr;
+end;
+
 { upstream's clips on the element against the proxy running }
 procedure TAdvChartAnimEdgesOracleTest.SameRun(const AWhat: string;
   AProxy: TTyChartAnimProxy; AWant: TJSONObject);
@@ -338,6 +346,40 @@ begin
       SameNum(name + ' y', p.Num('shape.y'), v[1]);
       SameNum(name + ' width', p.Num('shape.width'), v[2]);
       SameNum(name + ' height', p.Num('shape.height'), v[3]);
+      SameRun(name, p, leaf);
+    end
+    else if pre = 'ml' then
+    begin
+      { a markLine's proxy: its ends and its percent }
+      v := Nums(leaf.Arrays['sh']);
+      p := FChart.AnimFindProxy(s, idx, 'markLine');
+      if p = nil then
+      begin
+        Bad(name + ': no proxy');
+        Continue;
+      end;
+      { an entering proxy holds the percent alone: the ends are the line's }
+      if not RoleEl(s, idx, carMarkLine, el) then el := Default(TTyChartElement);
+      SameNum(name + ' x1', PNumOr(p, 'shape.x1', el.Anim.G[0]), v[0]);
+      SameNum(name + ' y1', PNumOr(p, 'shape.y1', el.Anim.G[1]), v[1]);
+      SameNum(name + ' x2', PNumOr(p, 'shape.x2', el.Anim.G[2]), v[2]);
+      SameNum(name + ' y2', PNumOr(p, 'shape.y2', el.Anim.G[3]), v[3]);
+      SameNum(name + ' percent', PNumOr(p, 'shape.percent', 1), leaf.Find('pc'));
+      SameRun(name, p, leaf);
+    end
+    else if pre = 'mk' then
+    begin
+      { a markPoint's proxy: its group's place and its path's scale }
+      p := FChart.AnimFindProxy(s, idx, 'markPoint');
+      if p = nil then
+      begin
+        Bad(name + ': no proxy');
+        Continue;
+      end;
+      if not RoleEl(s, idx, carMarkPoint, el) then el := Default(TTyChartElement);
+      SameNum(name + ' x', PNumOr(p, 'x', el.Anim.G[0]), leaf.Find('x'));
+      SameNum(name + ' y', PNumOr(p, 'y', el.Anim.G[1]), leaf.Find('y'));
+      SameNum(name + ' scaleX', PNumOr(p, 'scaleX', el.Anim.G[2]), leaf.Find('sx'));
       SameRun(name, p, leaf);
     end
     else if pre = 'fn' then
@@ -467,6 +509,11 @@ end;
 procedure TAdvChartAnimEdgesOracleTest.TestABarClippedPastThePlotAsUpstream;
 begin
   RunGroup('bar', 200);
+end;
+
+procedure TAdvChartAnimEdgesOracleTest.TestTheMarkersAsUpstream;
+begin
+  RunGroup('mark', 150);
 end;
 
 initialization

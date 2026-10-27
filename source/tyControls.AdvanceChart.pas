@@ -1932,6 +1932,9 @@ type
       put it); and the old option's series view keys, read before the option
       text is replaced. }
     FAnimPrev: TTyChartAnimPrev;
+    { [R5-I] each series' markers as last drawn, by series index, kept while
+      the legend has it switched off }
+    FAnimMarkPark: TTyChartAnimMarkParkArray;
     { WHAT A SUNBURST'S DATA STILL NAMES [milestone D5-D8]: each row's
       piece as the last render that drew it left it -- a drill removes the
       pieces outside the view from the group, but the data keeps them
