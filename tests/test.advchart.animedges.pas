@@ -15,7 +15,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.Controller,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Anim,
      tyControls.AdvanceChart.AnimView, tyControls.AdvanceChart.AnimOpt, tyControls.AdvanceChart.Shape,
-     tyControls.AdvanceChart.Color,
+     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Data,
      tyControls.AdvanceChart.Parallel, tyControls.AdvanceChart.ThemeRiver,
      tyControls.AdvanceChart.Chord, tyControls.AdvanceChart.PolarBar,
      tyControls.AdvanceChart.ZrPath,
@@ -63,6 +63,7 @@ type
     procedure TestLabelLinesAsUpstream;
     procedure TestAVisualMapsHandleLabelsFadeAsUpstream;
     procedure TestStateAnimationsFormsAsUpstream;
+    procedure TestAHeatmapsTooltipColumnAsUpstream;
   end;
 
 implementation
@@ -363,6 +364,7 @@ var
   gone: TJSONArray;
   ops: TTyDoubleArray;
   c: TTyChartColor;
+  tipPos: TTyIntegerArray;
 begin
   for i := 0 to ARec.Count - 1 do
   begin
@@ -537,6 +539,20 @@ begin
           Bad(Format('%s fill %s, upstream %s', [name, IntToHex(el.Style.FillColor, 8),
             leaf.Strings['fill']]));
       end;
+    end
+    else if pre = 'ht' then
+    begin
+      { a heatmap's tooltip columns }
+      gone := leaf.Arrays['tip'];
+      if FChart.SeriesStore(s) = nil then
+      begin
+        Bad(name + ': no store');
+        Continue;
+      end;
+      tipPos := FChart.SeriesStore(s).TooltipPositions;
+      SameNum(name + ' tooltip columns', Length(tipPos), gone.Count);
+      for k := 0 to Min(High(tipPos), gone.Count - 1) do
+        SameNum(Format('%s tooltip column %d', [name, k]), tipPos[k], gone.Integers[k]);
     end
     else if pre = 'vl' then
       { a visual map's handle label: its opacity now (its blur's fade) }
@@ -722,6 +738,11 @@ end;
 procedure TAdvChartAnimEdgesOracleTest.TestStateAnimationsFormsAsUpstream;
 begin
   RunGroup('stanim', 40);
+end;
+
+procedure TAdvChartAnimEdgesOracleTest.TestAHeatmapsTooltipColumnAsUpstream;
+begin
+  RunGroup('htip', 15);
 end;
 
 initialization

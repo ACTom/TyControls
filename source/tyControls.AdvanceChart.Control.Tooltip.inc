@@ -323,8 +323,15 @@ begin
 end;
 
 procedure TTyCustomAdvanceChart.HeatmapTipDims(ASlot: Integer;
-  const AEnc: TTySeriesEncode; AStore: TTyDataStore);
-var tip: TTyIntegerArray;
+  const AEnc: TTySeriesEncode; AStore: TTyDataStore; ASysValue: Boolean);
+var
+  tip: TTyIntegerArray;
+  role: array of Integer;
+  w, k, p, c, lab, i: Integer;
+  generated: Boolean;
+  it: TTyRawItem;
+  node, enc, cell: TJSONData;
+  key: string;
 begin
   if (AStore = nil) or (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
   if FBindings[ASlot].SeriesType <> 'heatmap' then Exit;
@@ -333,11 +340,71 @@ begin
   if Length(AEnc.Labels) > 0 then tip := Copy(AEnc.Labels)
   else
   begin
-    { createSeriesData(generateCoord: 'value'): the element past x and y is
-      a coordinate of its own, not extra, a float -- the last one a label
-      suits, and so the tooltip's }
-    SetLength(tip, 1);
-    tip[0] := 2;
+    { [R5-I] createDimensions with generateCoord 'value' (one): the
+      coordinate system's dimensions and what `encode` names take their
+      columns (a heatmap's 'value' is the system's own on a calendar, else
+      only where encode writes it); the first column left is a generated
+      coordinate -- 'value', or 'value0' where 'value' is taken -- not extra;
+      the rest are extra. defaultedLabel, and so the tooltip, is the LAST
+      column that is no extra coordinate and whose type a label suits (no
+      category, no time; a generated one guessed ordinal is a category)
+      [was: always the third column] }
+    w := AStore.RawWidth;
+    if w <= 0 then
+      for i := 0 to Math.Min(4, AStore.RawCount - 1) do
+      begin
+        it := AStore.RawItemByRaw(i);
+        if Length(it.Cells) > w then w := Length(it.Cells);
+      end;
+    SetLength(role, Math.Max(w, 0));
+    for c := 0 to High(role) do role[c] := 0;
+    for k := 0 to AStore.DimCount - 1 do
+    begin
+      p := AStore.RawDimPos(k);
+      if (p < 0) or (p > High(role)) then Continue;
+      { the heatmap's own value where nothing names it: the generated one }
+      if (AStore.DimName(k) = 'value') and not ASysValue then Continue;
+      if AStore.DimType(k) in [ddtOrdinal, ddtTime] then role[p] := 2 else role[p] := 1;
+    end;
+    { what `encode` names besides the system's own and the visual
+      dimensions: a coordinate of that name (encode.value among them) }
+    node := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+    if node is TJSONObject then node := TJSONObject(node).Find('encode') else node := nil;
+    if node is TJSONObject then
+      for i := 0 to node.Count - 1 do
+      begin
+        key := TJSONObject(node).Names[i];
+        if (key = 'x') or (key = 'y') or (key = 'tooltip') or (key = 'label')
+          or (key = 'itemName') or (key = 'itemId') or (key = 'itemGroupId')
+          or (key = 'itemChildGroupId') or (key = 'seriesName') then Continue;
+        enc := node.Items[i];
+        for k := 0 to Ord(enc is TJSONArray) * (enc.Count - 1) do
+        begin
+          if enc is TJSONArray then cell := enc.Items[k] else cell := enc;
+          if cell.JSONType <> jtNumber then Continue;
+          p := Trunc(cell.AsFloat);
+          if (p < 0) or (p > High(role)) or (role[p] <> 0) then Continue;
+          if (AStore.RawPosType(p) in [ddtOrdinal, ddtTime]) or AStore.RawPosGuessOrdinal(p, False) then
+            role[p] := 2
+          else role[p] := 1;
+        end;
+      end;
+    lab := -1;
+    generated := False;
+    for c := 0 to High(role) do
+      if role[c] = 1 then lab := c
+      else if (role[c] = 0) and not generated then
+      begin
+        generated := True;
+        if not (AStore.RawPosType(c) in [ddtOrdinal, ddtTime])
+          and not AStore.RawPosGuessOrdinal(c, False) then lab := c;
+      end;
+    tip := nil;
+    if lab >= 0 then
+    begin
+      SetLength(tip, 1);
+      tip[0] := lab;
+    end;
   end;
   AStore.SetTooltipPositions(tip);
 end;

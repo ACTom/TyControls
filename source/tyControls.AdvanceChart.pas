@@ -3378,7 +3378,7 @@ type
       third element -- upstream's defaultedLabel, x and y being categories
       [Batch 100] }
     procedure HeatmapTipDims(ASlot: Integer; const AEnc: TTySeriesEncode;
-      AStore: TTyDataStore);
+      AStore: TTyDataStore; ASysValue: Boolean = False);
     { The series' MODEL name -- what `{a}` and a handler's seriesName print:
       as written, '' when written '', and the auto name `series\0<index>`
       when not written at all. SeriesNameOf is the DISPLAY name, '' then. }

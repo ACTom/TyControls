@@ -358,6 +358,9 @@ begin
         dims[1].Name := TyCalendarValueDim;
         dims[1].Kind := ddtFloat;
         TyFillSeriesStore(FOption, i, dims, st);
+        { [R5-I] a heatmap's tooltip column: the calendar's value is its
+          own dimension }
+        HeatmapTipDims(i, Default(TTySeriesEncode), st, True);
         Continue;
       end;
       { ON A GEO: the geo's two dimensions, lng and lat -- elements 0 and 1
@@ -386,6 +389,8 @@ begin
           dims[2].Kind := ddtFloat;
         end;
         TyFillSeriesStore(FOption, i, dims, st);
+        { [R5-I] a heatmap's tooltip column }
+        HeatmapTipDims(i, Default(TTySeriesEncode), st);
         Continue;
       end;
       if TySeriesFindType(FBindings[i].SeriesType, typeInfo)

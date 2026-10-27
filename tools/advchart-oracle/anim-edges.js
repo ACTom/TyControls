@@ -334,6 +334,17 @@ const PROBES = {
       });
     });
   },
+  // a heatmap's tooltip (and label) dimensions, as the raw columns they read
+  // (encode.defaultedTooltip / defaultedLabel)
+  htip(chart, rec) {
+    chart.getModel().eachSeries(sm => {
+      if (sm.subType !== 'heatmap') return;
+      const data = sm.getData();
+      const col = d => data.getDimensionInfo(d).storeDimIndex;
+      rec['ht' + sm.seriesIndex + '/all'] = { tip: data.mapDimensionsAll('defaultedTooltip').map(col),
+        label: data.mapDimensionsAll('defaultedLabel').map(col), value: col(data.mapDimension('value')) };
+    });
+  },
   // a funnel's pieces and their labels
   funnel(chart, rec, c) {
     chart.getModel().eachSeries(sm => {
@@ -533,6 +544,28 @@ add('stanim', 'sa-delay-fn', "stateAnimation.delay a function: Clip's start is g
   SA({ duration: 200, easing: 'linear', delay: { $fn: 'idx*100' } }), ['bfill'], SAEV, { rows: [0] });
 add('stanim', 'sa-dur-fn', "stateAnimation.duration a function: not above 0 -- no transition, the state at once",
   SA({ duration: { $fn: 'idx*100' }, easing: 'linear' }), ['bfill'], SAEV, { rows: [0] });
+
+// ---- a heatmap's tooltip dimension (prepareSeriesDataSchema, generateCoord 'value') ----
+const HM = (data, s, extra) => Object.assign({ animation: false, xAxis: { type: 'category', data: ['a', 'b'] },
+  yAxis: { type: 'category', data: ['p', 'q'] }, visualMap: { min: 0, max: 10, show: false },
+  series: [Object.assign({ type: 'heatmap', data }, s || {})] }, extra || {});
+const D3 = [[0, 0, 5], [1, 1, 8]];
+const D4 = [[0, 0, 5, 7], [1, 1, 8, 2]];
+const ONE = [{ t: 0, do: 'sample' }];
+add('htip', 'ht-3', "x, y, a value: the column past x and y is generated 'value' (not extra), the last a label suits", HM(D3), ['htip'], ONE);
+add('htip', 'ht-4', "four columns: the third is 'value' (generated, not extra), the fourth extra -- the third", HM(D4), ['htip'], ONE);
+add('htip', 'ht-4-v3', "encode {value: 3}: the third column is generated 'value0', not extra -- the last friendly one is the fourth", HM(D4, { encode: { value: 3 } }), ['htip'], ONE);
+add('htip', 'ht-4-v2', "encode {value: 2}: the fourth column is generated 'value0', not extra -- the tooltip reads the fourth, the colour the third", HM(D4, { encode: { value: 2 } }), ['htip'], ONE);
+add('htip', 'ht-4-swap', "encode {x: 1, y: 0}: the value the third", HM(D4, { encode: { x: 1, y: 0 } }), ['htip'], ONE);
+add('htip', 'ht-4-str', "encode {value: 2}, the fourth column strings: 'value0' guessed ordinal -- no label for it, the third",
+  HM([[0, 0, 5, 'u'], [1, 1, 8, 'w']], { encode: { value: 2 } }), ['htip'], ONE);
+add('htip', 'ht-4-tip', "encode {tooltip: 3}: the fourth", HM(D4, { encode: { tooltip: 3 } }), ['htip'], ONE);
+add('htip', 'ht-cal', "on a calendar: time and value are the calendar's own dimensions, a third column generated -- the third",
+  { animation: false, calendar: { range: '2024-01', cellSize: 10 }, visualMap: { min: 0, max: 10, show: false },
+    series: [{ type: 'heatmap', coordinateSystem: 'calendar', data: [['2024-01-02', 5, 9], ['2024-01-03', 8, 1]] }] }, ['htip'], ONE);
+add('htip', 'ht-cal2', "on a calendar with two columns: the value",
+  { animation: false, calendar: { range: '2024-01', cellSize: 10 }, visualMap: { min: 0, max: 10, show: false },
+    series: [{ type: 'heatmap', coordinateSystem: 'calendar', data: [['2024-01-02', 5], ['2024-01-03', 8]] }] }, ['htip'], ONE);
 
 // ---- funnel ----
 const FN = (data, extra, s) => Object.assign({ animation: true,

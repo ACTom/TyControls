@@ -22238,6 +22238,608 @@
    ]
   },
   {
+   "id": "ht-3",
+   "group": "htip",
+   "note": "x, y, a value: the column past x and y is generated 'value' (not extra), the last a label suits",
+   "W": 400,
+   "H": 300,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "p",
+      "q"
+     ]
+    },
+    "visualMap": {
+     "min": 0,
+     "max": 10,
+     "show": false
+    },
+    "series": [
+     {
+      "type": "heatmap",
+      "data": [
+       [
+        0,
+        0,
+        5
+       ],
+       [
+        1,
+        1,
+        8
+       ]
+      ]
+     }
+    ]
+   },
+   "probes": [
+    "htip"
+   ],
+   "events": [
+    {
+     "t": 0,
+     "do": "sample",
+     "rec": {
+      "ht0/all": {
+       "tip": [
+        2
+       ],
+       "label": [
+        2
+       ],
+       "value": 2
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "ht-4",
+   "group": "htip",
+   "note": "four columns: the third is 'value' (generated, not extra), the fourth extra -- the third",
+   "W": 400,
+   "H": 300,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "p",
+      "q"
+     ]
+    },
+    "visualMap": {
+     "min": 0,
+     "max": 10,
+     "show": false
+    },
+    "series": [
+     {
+      "type": "heatmap",
+      "data": [
+       [
+        0,
+        0,
+        5,
+        7
+       ],
+       [
+        1,
+        1,
+        8,
+        2
+       ]
+      ]
+     }
+    ]
+   },
+   "probes": [
+    "htip"
+   ],
+   "events": [
+    {
+     "t": 0,
+     "do": "sample",
+     "rec": {
+      "ht0/all": {
+       "tip": [
+        2
+       ],
+       "label": [
+        2
+       ],
+       "value": 2
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "ht-4-v3",
+   "group": "htip",
+   "note": "encode {value: 3}: the third column is generated 'value0', not extra -- the last friendly one is the fourth",
+   "W": 400,
+   "H": 300,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "p",
+      "q"
+     ]
+    },
+    "visualMap": {
+     "min": 0,
+     "max": 10,
+     "show": false
+    },
+    "series": [
+     {
+      "type": "heatmap",
+      "data": [
+       [
+        0,
+        0,
+        5,
+        7
+       ],
+       [
+        1,
+        1,
+        8,
+        2
+       ]
+      ],
+      "encode": {
+       "value": 3
+      }
+     }
+    ]
+   },
+   "probes": [
+    "htip"
+   ],
+   "events": [
+    {
+     "t": 0,
+     "do": "sample",
+     "rec": {
+      "ht0/all": {
+       "tip": [
+        3
+       ],
+       "label": [
+        3
+       ],
+       "value": 3
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "ht-4-v2",
+   "group": "htip",
+   "note": "encode {value: 2}: the fourth column is generated 'value0', not extra -- the tooltip reads the fourth, the colour the third",
+   "W": 400,
+   "H": 300,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "p",
+      "q"
+     ]
+    },
+    "visualMap": {
+     "min": 0,
+     "max": 10,
+     "show": false
+    },
+    "series": [
+     {
+      "type": "heatmap",
+      "data": [
+       [
+        0,
+        0,
+        5,
+        7
+       ],
+       [
+        1,
+        1,
+        8,
+        2
+       ]
+      ],
+      "encode": {
+       "value": 2
+      }
+     }
+    ]
+   },
+   "probes": [
+    "htip"
+   ],
+   "events": [
+    {
+     "t": 0,
+     "do": "sample",
+     "rec": {
+      "ht0/all": {
+       "tip": [
+        3
+       ],
+       "label": [
+        3
+       ],
+       "value": 2
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "ht-4-swap",
+   "group": "htip",
+   "note": "encode {x: 1, y: 0}: the value the third",
+   "W": 400,
+   "H": 300,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "p",
+      "q"
+     ]
+    },
+    "visualMap": {
+     "min": 0,
+     "max": 10,
+     "show": false
+    },
+    "series": [
+     {
+      "type": "heatmap",
+      "data": [
+       [
+        0,
+        0,
+        5,
+        7
+       ],
+       [
+        1,
+        1,
+        8,
+        2
+       ]
+      ],
+      "encode": {
+       "x": 1,
+       "y": 0
+      }
+     }
+    ]
+   },
+   "probes": [
+    "htip"
+   ],
+   "events": [
+    {
+     "t": 0,
+     "do": "sample",
+     "rec": {
+      "ht0/all": {
+       "tip": [
+        2
+       ],
+       "label": [
+        2
+       ],
+       "value": 2
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "ht-4-str",
+   "group": "htip",
+   "note": "encode {value: 2}, the fourth column strings: 'value0' guessed ordinal -- no label for it, the third",
+   "W": 400,
+   "H": 300,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "p",
+      "q"
+     ]
+    },
+    "visualMap": {
+     "min": 0,
+     "max": 10,
+     "show": false
+    },
+    "series": [
+     {
+      "type": "heatmap",
+      "data": [
+       [
+        0,
+        0,
+        5,
+        "u"
+       ],
+       [
+        1,
+        1,
+        8,
+        "w"
+       ]
+      ],
+      "encode": {
+       "value": 2
+      }
+     }
+    ]
+   },
+   "probes": [
+    "htip"
+   ],
+   "events": [
+    {
+     "t": 0,
+     "do": "sample",
+     "rec": {
+      "ht0/all": {
+       "tip": [
+        2
+       ],
+       "label": [
+        2
+       ],
+       "value": 2
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "ht-4-tip",
+   "group": "htip",
+   "note": "encode {tooltip: 3}: the fourth",
+   "W": 400,
+   "H": 300,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "p",
+      "q"
+     ]
+    },
+    "visualMap": {
+     "min": 0,
+     "max": 10,
+     "show": false
+    },
+    "series": [
+     {
+      "type": "heatmap",
+      "data": [
+       [
+        0,
+        0,
+        5,
+        7
+       ],
+       [
+        1,
+        1,
+        8,
+        2
+       ]
+      ],
+      "encode": {
+       "tooltip": 3
+      }
+     }
+    ]
+   },
+   "probes": [
+    "htip"
+   ],
+   "events": [
+    {
+     "t": 0,
+     "do": "sample",
+     "rec": {
+      "ht0/all": {
+       "tip": [
+        3
+       ],
+       "label": [
+        2
+       ],
+       "value": 2
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "ht-cal",
+   "group": "htip",
+   "note": "on a calendar: time and value are the calendar's own dimensions, a third column generated -- the third",
+   "W": 400,
+   "H": 300,
+   "option": {
+    "animation": false,
+    "calendar": {
+     "range": "2024-01",
+     "cellSize": 10
+    },
+    "visualMap": {
+     "min": 0,
+     "max": 10,
+     "show": false
+    },
+    "series": [
+     {
+      "type": "heatmap",
+      "coordinateSystem": "calendar",
+      "data": [
+       [
+        "2024-01-02",
+        5,
+        9
+       ],
+       [
+        "2024-01-03",
+        8,
+        1
+       ]
+      ]
+     }
+    ]
+   },
+   "probes": [
+    "htip"
+   ],
+   "events": [
+    {
+     "t": 0,
+     "do": "sample",
+     "rec": {
+      "ht0/all": {
+       "tip": [
+        2
+       ],
+       "label": [
+        2
+       ],
+       "value": 1
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "ht-cal2",
+   "group": "htip",
+   "note": "on a calendar with two columns: the value",
+   "W": 400,
+   "H": 300,
+   "option": {
+    "animation": false,
+    "calendar": {
+     "range": "2024-01",
+     "cellSize": 10
+    },
+    "visualMap": {
+     "min": 0,
+     "max": 10,
+     "show": false
+    },
+    "series": [
+     {
+      "type": "heatmap",
+      "coordinateSystem": "calendar",
+      "data": [
+       [
+        "2024-01-02",
+        5
+       ],
+       [
+        "2024-01-03",
+        8
+       ]
+      ]
+     }
+    ]
+   },
+   "probes": [
+    "htip"
+   ],
+   "events": [
+    {
+     "t": 0,
+     "do": "sample",
+     "rec": {
+      "ht0/all": {
+       "tip": [
+        1
+       ],
+       "label": [
+        1
+       ],
+       "value": 1
+      }
+     }
+    }
+   ]
+  },
+  {
    "id": "fn-update",
    "group": "funnel",
    "note": "a merge changes the values (the order changes): each piece updateProps its opacity and its four points, its outer label's style x / y (update timing, its row)",
