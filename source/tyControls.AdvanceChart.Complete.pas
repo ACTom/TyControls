@@ -1331,7 +1331,11 @@ begin
     or (AKey = 'barMaxWidth') or (AKey = 'barMinWidth') or (AKey = 'barGap')
     or (AKey = 'barCategoryGap') or (AKey = 'legendHoverLink')
     or (AKey = 'symbol') or (AKey = 'symbolRotate') or (AKey = 'symbolKeepAspect')
-    or (AKey = 'symbolOffset') or (AKey = 'z');
+    or (AKey = 'symbolOffset') or (AKey = 'z')
+    { [spec 242] the object keys every series climbs to }
+    or (AKey = 'label') or (AKey = 'labelLine') or (AKey = 'labelLayout')
+    or (AKey = 'emphasis') or (AKey = 'select') or (AKey = 'blur')
+    or (AKey = 'endLabel');
 end;
 
 { [R2-J] A TREE'S NODE IS THE AUTHOR'S RECORD. A tree, a treemap and a
