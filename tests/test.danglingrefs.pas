@@ -37,6 +37,10 @@ type
     procedure TestATyFormLetsGoOfAMenuItTookOver;
   end;
 
+{ Between the two, freed memory is poisoned and held back (see the implementation). }
+procedure BeginPoison;
+procedure EndPoison;
+
 implementation
 
 { Freed memory, poisoned and held back. Between BeginPoison and EndPoison a freed block is filled

@@ -97,6 +97,11 @@ type
     procedure TestEnterReplacesSelection;
     procedure TestBackspaceDeletesSelectionNotPrevChar;
     procedure TestBackspaceNoSelectionStillNoopAtOrigin;
+    { #137: a change through Lines leaves no selection behind. The anchor used to stay on the
+      old text, and the next keystroke raised EStringListError or deleted new text. }
+    procedure TestLinesClearLeavesNoSelection;
+    procedure TestLinesDeleteLeavesNoSelection;
+    procedure TestAssigningLinesLeavesNoSelection;
     // --- T3: selection-band rendering per visible line + caret gating ---
     procedure TestSelectionBandSingleLine;
     procedure TestSelectionBandFullInteriorLine;
@@ -152,6 +157,8 @@ type
     procedure TestSetCaretFiresSelectionChange;
     procedure TestNoOpCaretSetDoesNotFire;
     procedure TestShiftSelectFiresSelectionChange;
+    { A change through Lines that moves the caret is a selection change too. }
+    procedure TestLinesClearFiresSelectionChange;
   end;
 
 implementation
@@ -575,6 +582,50 @@ begin
   AssertEquals('caret line 0', 0, FMemo.ProbeCaretLine);
   AssertEquals('caret col 2', 2, FMemo.ProbeCaretCol);
   AssertEquals('OnChange fired once', 1, FChangeCount);
+end;
+
+procedure TTyMemoSelectionTest.TestLinesClearLeavesNoSelection;
+begin
+  SetUpMemo;
+  LoadLines(['aaaa', 'bbbb', 'cccc']);
+  { Caret first: placing it collapses the selection. The anchor is left past what Clear
+    leaves, which is what broke. }
+  FMemo.ProbeSetCaret(0, 0);
+  FMemo.ProbeSetAnchor(2, 4);
+  AssertTrue('precondition: a selection', FMemo.ProbeHasSelection);
+  FMemo.Lines.Clear;
+  AssertFalse('no selection is left', FMemo.ProbeHasSelection);
+  FMemo.InjectChar('x');
+  AssertEquals('typing goes into the empty memo', 'x', FMemo.ProbeLine(0));
+  AssertEquals('one line', 1, FMemo.ProbeLineCount);
+end;
+
+procedure TTyMemoSelectionTest.TestLinesDeleteLeavesNoSelection;
+begin
+  SetUpMemo;
+  LoadLines(['aaaa', 'bbbb', 'cccc']);
+  FMemo.ProbeSetCaret(1, 0);
+  FMemo.ProbeSetAnchor(2, 4);
+  AssertTrue('precondition: a selection', FMemo.ProbeHasSelection);
+  FMemo.Lines.Delete(2);
+  AssertFalse('no selection is left', FMemo.ProbeHasSelection);
+  FMemo.InjectChar('x');
+  AssertEquals('the character goes in at the caret', 'xbbbb', FMemo.ProbeLine(1));
+  AssertEquals('and deletes nothing', 'aaaa', FMemo.ProbeLine(0));
+  AssertEquals('two lines', 2, FMemo.ProbeLineCount);
+end;
+
+procedure TTyMemoSelectionTest.TestAssigningLinesLeavesNoSelection;
+begin
+  SetUpMemo;
+  LoadLines(['aaaa', 'bbbb', 'cccc']);
+  FMemo.ProbeSetCaret(0, 0);
+  FMemo.ProbeSetAnchor(2, 4);
+  AssertTrue('precondition: a selection', FMemo.ProbeHasSelection);
+  LoadLines(['x']);   // Lines := ...
+  AssertFalse('no selection is left', FMemo.ProbeHasSelection);
+  FMemo.InjectChar('y');
+  AssertEquals('the character goes in at the caret', 'yx', FMemo.ProbeLine(0));
 end;
 
 procedure TTyMemoSelectionTest.TestEnterReplacesSelection;
@@ -1433,6 +1484,16 @@ begin
   FSelChangeCount := 0;
   FMemo.ProbeSetCaret(0, 3);
   AssertEquals('SetCaret to a new position fires OnSelectionChange', 1, FSelChangeCount);
+end;
+
+procedure TTyMemoSelectionChangeTest.TestLinesClearFiresSelectionChange;
+begin
+  SetUpMemo;
+  LoadLines(['abcde']);
+  FMemo.ProbeSetCaret(0, 3);
+  FSelChangeCount := 0;
+  FMemo.Lines.Clear;
+  AssertEquals('the caret moved back to the start: one OnSelectionChange', 1, FSelChangeCount);
 end;
 
 { Re-setting the caret to the SAME position is a no-op and must NOT fire. }

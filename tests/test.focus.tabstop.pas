@@ -5,6 +5,7 @@ uses
   Classes, SysUtils, DateUtils, TypInfo, Controls, Forms, LCLType, LCLIntf, LMessages,
   fpcunit, testregistry,
   test.designregistry,               // the runtime roster the completeness guard reads
+  test.danglingrefs,                 // BeginPoison / EndPoison
   tyControls.Base, tyControls.ScrollBar,
   { focusable side }
   tyControls.Button, tyControls.ColorButton, tyControls.DropButtons,
@@ -130,6 +131,7 @@ type
     { "Commit the field on the way out" -- the ordinary OnExit handler that used to land in
       freed memory. See TestFreeingAFocusedEditWhoseExitWritesTextDoesNotRaise. }
     procedure CommitTextOnExit(Sender: TObject);
+    procedure CommitMemoTextOnExit(Sender: TObject);
     { Build AClass on the visible form, park focus on FPark, click it, and report where
       focus ended up. Frees the control before returning. }
     function ClickAndReportFocus(AClass: TTyCtlClass; out AMoved: Boolean): string;
@@ -160,6 +162,8 @@ type
     procedure TestTheGuardIsNotVacuousForANonFocusableControl;
     procedure TestClickThenArrowWalksAClickableStepsRail;
     procedure TestFreeingAFocusedEditWhoseExitWritesTextDoesNotRaise;
+    { #137: the same for TTyMemo, whose destructor freed its lines first. }
+    procedure TestFreeingAFocusedMemoWhoseExitWritesTextDoesNotRaise;
     procedure TestArrowNavigationNeverLandsOnAControlsOwnBar;
     procedure TestClickingAControlsOwnBarLeavesTheFocusWithTheControl;
     procedure TestUpDownInAPickListCellMoveTheCursor;
@@ -678,6 +682,11 @@ begin
   TTyEdit(Sender).Text := 'committed on exit';
 end;
 
+procedure TTyClickFocusTest.CommitMemoTextOnExit(Sender: TObject);
+begin
+  TTyMemo(Sender).Text := 'committed on exit';
+end;
+
 procedure TTyClickFocusTest.AssertNothingRaised(const AWhere: string);
 var
   s: string;
@@ -910,6 +919,34 @@ begin
   e.Free;
   Forms.Application.ProcessMessages;
   AssertNothingRaised('freeing a focused TTyEdit whose OnExit writes Text');
+end;
+
+procedure TTyClickFocusTest.TestFreeingAFocusedMemoWhoseExitWritesTextDoesNotRaise;
+var
+  m: TTyMemo;
+begin
+  m := TTyMemo.Create(FForm);
+  m.Parent := FForm;
+  m.SetBounds(220, 60, 260, 80);
+  m.OnExit := @CommitMemoTextOnExit;
+  m.Visible := True;
+  m.HandleNeeded;
+  Forms.Application.ProcessMessages;
+  AssertTrue('the probe memo must be focusable, or this guard proves nothing', m.CanFocus);
+  m.SetFocus;
+  Forms.Application.ProcessMessages;
+  AssertSame('the probe memo must hold focus before it is freed',
+    TWinControl(m), TWinControl(FForm.ActiveControl));
+  { Poisoned, so a write through the freed lines faults every time instead of meeting
+    whatever the heap put there next. }
+  BeginPoison;
+  try
+    m.Free;
+    Forms.Application.ProcessMessages;
+  finally
+    EndPoison;
+  end;
+  AssertNothingRaised('freeing a focused TTyMemo whose OnExit writes Text');
 end;
 
 { The forum report behind this suite (#8): the rail took no focus, so its arrow keys -- the
