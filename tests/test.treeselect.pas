@@ -67,6 +67,11 @@ type
     procedure TestUndefinedComboKeyPaintsNothing;
     procedure TestHintUsesTyTextHintInk;
     procedure TestHintFallsBackToFieldInkWithoutHintColour;
+    { #137: the pick never points at a freed node. Deleting it clears the pick; an Items edit
+      that rebuilds every node keeps the same item picked, on its new node. }
+    procedure TestDeletingThePickedNodeClearsThePick;
+    procedure TestAnItemsEditKeepsThePickedItem;
+    procedure TestDeletingThePickedItemClearsThePick;
   end;
 
 implementation
@@ -472,6 +477,68 @@ begin
     AssertSame('the pick is the node', n1, TS.SelectedNode);
     // Read through the TREE's OnGetText — the same path that paints the row.
     AssertEquals('the field shows the node caption', 'Sales', TS.Text);
+  finally
+    TS.Free;
+  end;
+end;
+
+procedure TTyTreeSelectControlTest.TestDeletingThePickedNodeClearsThePick;
+var
+  TS: TSelectAccess;
+  n0, n1: PTyTreeNode;
+begin
+  TS := MakeSelect(FForm, FCtl, @HandleGetText, n0, n1);
+  try
+    TS.SelectedNode := n1;
+    TS.OnChange := @HandleChange;
+    FChanged := 0;
+    TS.Tree.DeleteNode(n1);
+    AssertTrue('the pick lets go of the freed node', TS.SelectedNode = nil);
+    AssertEquals('and says so', 1, FChanged);
+    AssertEquals('the field is empty', '', TS.Text);
+  finally
+    TS.Free;
+  end;
+end;
+
+procedure TTyTreeSelectControlTest.TestAnItemsEditKeepsThePickedItem;
+var
+  TS: TTyTreeSelect;
+  b: TTyTreeNodeItem;
+  old: PTyTreeNode;
+begin
+  TS := TTyTreeSelect.Create(FForm);
+  try
+    TS.Items.AddChild(nil, 'A');
+    b := TS.Items.AddChild(nil, 'B');
+    TS.SelectedNode := b.Node;
+    old := b.Node;
+    TS.OnChange := @HandleChange;
+    FChanged := 0;
+    TS.Items.AddChild(nil, 'C');   // a structural edit: every node is made again
+    AssertTrue('precondition: the nodes were made again', b.Node <> old);
+    AssertTrue('the pick follows its item to the new node', TS.SelectedNode = b.Node);
+    AssertEquals('the pick did not change', 0, FChanged);
+  finally
+    TS.Free;
+  end;
+end;
+
+procedure TTyTreeSelectControlTest.TestDeletingThePickedItemClearsThePick;
+var
+  TS: TTyTreeSelect;
+  b: TTyTreeNodeItem;
+begin
+  TS := TTyTreeSelect.Create(FForm);
+  try
+    TS.Items.AddChild(nil, 'A');
+    b := TS.Items.AddChild(nil, 'B');
+    TS.SelectedNode := b.Node;
+    TS.OnChange := @HandleChange;
+    FChanged := 0;
+    b.Free;
+    AssertTrue('the pick lets go', TS.SelectedNode = nil);
+    AssertEquals('and says so', 1, FChanged);
   finally
     TS.Free;
   end;

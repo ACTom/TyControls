@@ -122,6 +122,8 @@ type
   protected
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    procedure DoFreeNode(Node: PTyTreeNode); override;
+    procedure DoItemsRebuilt; override;
   public
     { The tree's own typeKey. GetStyleTypeKey is PROTECTED on the base and this is not its
       unit, so the picker — which shapes the popup window to that key's resolved radius —
@@ -147,6 +149,8 @@ type
       paint that re-read a deleted node would be a dangling read on every Invalidate. See
       UpdateText for the "the caption changed under us" case. }
     FText: string;
+    { The item behind the pick while Items rebuild the nodes (see NodeFreed). }
+    FKeptItem: TTyTreeNodeItem;
     FTextHint: TCaption;
     FDropDownWidth: Integer;
     FDropDownHeight: Integer;
@@ -185,6 +189,10 @@ type
       open rather than leaking into the field. A nil pick CLEARS the tree's selection: the
       popup must not highlight a row the field does not name. }
     procedure SyncTreeToSelection;
+    { #137: the tree frees a node. The pick lets go of it, so a drop never writes through a
+      freed node; an Items rebuild finds the same item's new node (ItemsRebuilt). }
+    procedure NodeFreed(ANode: PTyTreeNode; ARebuilding: Boolean);
+    procedure ItemsRebuilt;
     { The field's geometry, fed from the resolved theme. AWidth/AHeight are device px so
       nothing here reads Width behind the caller's back. }
     function LayoutFor(AWidth, AHeight, APPI: Integer): TTyTreeSelectLayout;
@@ -229,8 +237,8 @@ type
     property Tree: TTyTreeView read GetTree;
     { The chosen node, or nil. Setting it is a programmatic pick: Text re-caches and OnChange
       fires, but the drop does not close and the tree is not touched until it next opens (see
-      SyncTreeToSelection). The pointer is the APP's: delete the node from the tree and this
-      dangles, exactly as any PTyTreeNode the app holds does — clear or re-set it first. }
+      SyncTreeToSelection). Deleting the node from the tree clears it (and fires OnChange);
+      an Items edit that rebuilds the nodes keeps the same item picked (#137). }
     property SelectedNode: PTyTreeNode read FSelectedNode write SetSelectedNode;
     { The pick's caption; '' when nothing is selected. Read-only: the value here is a NODE —
       text is what it looks like, not what it is, and writing a caption could not name one. }
@@ -379,6 +387,18 @@ begin
     FPicker.PickNode(hitNode);
 end;
 
+procedure TTyTreeSelectTree.DoFreeNode(Node: PTyTreeNode);
+begin
+  if FPicker <> nil then FPicker.NodeFreed(Node, RebuildingItems);
+  inherited DoFreeNode(Node);
+end;
+
+procedure TTyTreeSelectTree.DoItemsRebuilt;
+begin
+  inherited DoItemsRebuilt;
+  if FPicker <> nil then FPicker.ItemsRebuilt;
+end;
+
 procedure TTyTreeSelectTree.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   // BEFORE the base: TTyTreeView's own VK_RETURN fires OnNodeDblClick and consumes the key,
@@ -438,7 +458,9 @@ begin
     FPopup.OnClose := nil;
   FreeAndNil(FPopup);
   { The tree is owned by Self (not by the popup form), so it outlived the window above and is
-    freed here — after it, so nothing can reach it through a dying form. }
+    freed here — after it, so nothing can reach it through a dying form. Its nodes go with it,
+    and no longer tell this picker. }
+  FTree.Picker := nil;
   FreeAndNil(FTree);
   inherited Destroy;
 end;
@@ -494,6 +516,39 @@ end;
 procedure TTyTreeSelect.ClearSelection;
 begin
   SetSelectedNode(nil);
+end;
+
+procedure TTyTreeSelect.NodeFreed(ANode: PTyTreeNode; ARebuilding: Boolean);
+begin
+  if (ANode = nil) or (ANode <> FSelectedNode) then Exit;
+  if ARebuilding then
+    FKeptItem := FTree.NodeItem[ANode];   // read now: the node is still whole
+  FSelectedNode := nil;
+  if FKeptItem <> nil then Exit;          // ItemsRebuilt decides
+  FText := '';
+  Invalidate;
+  if not (csDestroying in ComponentState) then DoChange;
+end;
+
+procedure TTyTreeSelect.ItemsRebuilt;
+var
+  i: Integer;
+  kept: TTyTreeNodeItem;
+begin
+  if FKeptItem = nil then Exit;
+  kept := FKeptItem;
+  FKeptItem := nil;
+  { Compared, never read: the item may have been the one deleted. }
+  for i := 0 to FTree.Items.Count - 1 do
+    if FTree.Items[i] = kept then
+    begin
+      FSelectedNode := kept.Node;   // the same pick, so no OnChange
+      UpdateText;
+      Exit;
+    end;
+  FText := '';
+  Invalidate;
+  DoChange;
 end;
 
 procedure TTyTreeSelect.UpdateText;

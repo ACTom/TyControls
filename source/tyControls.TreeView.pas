@@ -834,6 +834,13 @@ type
     procedure DoGetImageIndex(Node: PTyTreeNode; AKind: TTyVTImageKind; AColumn: Integer;
       var AGhosted: Boolean; var AIndex: Integer); virtual;
     procedure DoTreeChange(Node: PTyTreeNode); virtual;
+    { A node is about to be freed: its data and its item are still readable. Fires OnFreeNode. }
+    procedure DoFreeNode(Node: PTyTreeNode); virtual;
+    { Items were turned into nodes again (RebuildFromItems): every node before it is gone. }
+    procedure DoItemsRebuilt; virtual;
+    { True while RebuildFromItems replaces the nodes -- a node freed now comes back, as the
+      same item's new node, once DoItemsRebuilt runs. }
+    function  RebuildingItems: Boolean;
     { LCL parity: the veto gate in front of every selection/focus move (LCL's
       CanChange, include/treeview.inc). Returns False when a handler cleared Allowed. }
     function  DoChanging(Node: PTyTreeNode): Boolean; virtual;
@@ -3692,6 +3699,22 @@ begin
     FRebuildingItems := False;
   end;
   InvalidateTreeLayout;
+  DoItemsRebuilt;
+end;
+
+procedure TTyTreeView.DoFreeNode(Node: PTyTreeNode);
+begin
+  if Assigned(FOnFreeNode) then
+    FOnFreeNode(Self, Node);
+end;
+
+procedure TTyTreeView.DoItemsRebuilt;
+begin
+end;
+
+function TTyTreeView.RebuildingItems: Boolean;
+begin
+  Result := FRebuildingItems;
 end;
 
 procedure TTyTreeView.AdjustTotalCount(Node: PTyTreeNode; Delta: Integer);
@@ -3930,8 +3953,7 @@ begin
     dh := 0;
 
   // Fire OnFreeNode so app can release managed fields in the data blob
-  if Assigned(FOnFreeNode) then
-    FOnFreeNode(Self, Node);
+  DoFreeNode(Node);
 
   // Unlink from siblings
   if Node^.PrevSibling <> nil then
