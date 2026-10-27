@@ -2213,6 +2213,7 @@ var
   m: ITyTextMeasurer;
   el: TTyChartElement;
   sx, sy, sw, sh, op, lx, ly, ox0, oy0: Double;
+  gx, gy, gdx, gdy: Double;
   p: TTyChartAnimProxy;
   wtext: string;
   spec: TTyLabelSpec;
@@ -2485,8 +2486,9 @@ begin
       if A^.Map <> nil then
       begin
         { [R2-C] a merge's deleted rect, under the old tree's groups; its
-          words ride the rect's corner (the old option is gone: they are
-          not cut again) }
+          words ride the rect's corner -- [R5-I] a content's are cut again
+          to the rect it has, as a drill's are (the inputs held on the old
+          node) [was: not cut again, the old option being gone] }
         if (row < 0) or (row > High(OT)) then Continue;
         OCompose(row);
         ox0 := el.Shape.Bounds.Left;
@@ -2500,7 +2502,35 @@ begin
           ox0 := el.Shape.Bounds.Left - ox0;
           oy0 := el.Shape.Bounds.Top - oy0;
           el := A^.Ghosts[i].LabelEl;
-          if A^.Stepped then
+          if (A^.Ghosts[i].Kind = 1) and (row <= High(A^.Old.Nodes))
+            and A^.Old.Nodes[row].LabelPlace.Has then
+          begin
+            if m = nil then m := NewTextMeasurer(FLastPPI);
+            gx := el.Caption.X;
+            gy := el.Caption.Y;
+            gdx := el.Caption.X - el.Caption.FixedX;
+            gdy := el.Caption.Y - el.Caption.FixedY;
+            if TyTreemapLabelAt(A^.Old, row, FTreemapInks[slot].Label_, m,
+              sx * 1 + OT[row].TX, sy * 1 + OT[row].TY, sw, sh, wtext, lx, ly)
+              and (wtext <> '') then
+            begin
+              el.Caption.Text := wtext;
+              { not dirty yet: the words cut, where they were }
+              if A^.Stepped then
+              begin
+                el.Caption.X := lx + gdx;
+                el.Caption.Y := ly + gdy;
+              end
+              else
+              begin
+                el.Caption.X := gx;
+                el.Caption.Y := gy;
+              end;
+            end
+            else
+              el.Ignore := True;
+          end
+          else if A^.Stepped then
           begin
             el.Caption.X := el.Caption.X + ox0;
             el.Caption.Y := el.Caption.Y + oy0;

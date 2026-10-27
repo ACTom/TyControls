@@ -74,6 +74,7 @@ type
     procedure ProbeTreeHit(ARec: TJSONObject);
     function HIdx30(ADataIndex: Integer; AHasIndex: Boolean): Double;
     function HDur300(ADataIndex: Integer; AHasIndex: Boolean): Double;
+    procedure ProbeTmWords(ARec: TJSONObject);
     procedure CheckSample(const AProbes: TJSONArray; ARec: TJSONObject);
     procedure RunCase(ACase: TJSONObject);
     procedure RunGroup(const AGroup: string; AMin: Integer);
@@ -1108,6 +1109,58 @@ begin
   end;
 end;
 
+{ [R5-I] A MERGE'S DELETED CONTENT'S WORDS, as they are cut in this frame:
+  the label the frame adds right after the ghost rect (the last content rect
+  of that old row) }
+procedure TAdvChartAnimUpdate4OracleTest.ProbeTmWords(ARec: TJSONObject);
+var
+  i, k, s, di, slash, at: Integer;
+  name, want, got, sep: string;
+  leaf: TJSONObject;
+  lines: TJSONArray;
+  l: TTyPaintList;
+  e: TTyChartElement;
+begin
+  for i := 0 to ARec.Count - 1 do
+  begin
+    name := ARec.Names[i];
+    if Copy(name, 1, 2) <> 'tw' then Continue;
+    slash := Pos('/', name);
+    s := StrToInt(Copy(name, 3, slash - 3));
+    di := StrToInt(Copy(name, slash + 1, MaxInt));
+    leaf := TJSONObject(ARec.Items[i]);
+    lines := leaf.Arrays['lines'];
+    want := '';
+    sep := '';
+    for k := 0 to lines.Count - 1 do
+    begin
+      want := want + sep + lines.Strings[k];
+      sep := #10;
+    end;
+    l := FChart.Frame;
+    at := -1;
+    if l <> nil then
+      for k := 0 to l.Count - 1 do
+      begin
+        e := l.Element(k);
+        if (e.Anim.Role = carTmRect) and (e.Anim.Series = s) and (e.Anim.Index = di)
+          and (e.Anim.Sub = 1) then at := k;
+      end;
+    Inc(FCompared);
+    if at < 0 then
+    begin
+      Bad(name + ': no deleted content drawn');
+      Continue;
+    end;
+    got := '';
+    if (at + 1 < l.Count) and (l.Element(at + 1).Anim.Role = carLabel)
+      and not l.Element(at + 1).Ignore then
+      got := l.Element(at + 1).Caption.Text;
+    if got <> want then
+      Bad(Format('%s: the words "%s", upstream "%s"', [name, got, want]));
+  end;
+end;
+
 procedure TAdvChartAnimUpdate4OracleTest.CheckSample(const AProbes: TJSONArray;
   ARec: TJSONObject);
 var i: Integer;
@@ -1117,6 +1170,7 @@ begin
     else if AProbes.Strings[i] = 'tree' then ProbeTree(ARec)
     else if AProbes.Strings[i] = 'sun' then ProbeSun(ARec)
     else if AProbes.Strings[i] = 'tm' then ProbeTm(ARec)
+    else if AProbes.Strings[i] = 'tmw' then ProbeTmWords(ARec)
     else if AProbes.Strings[i] = 'geo' then ProbeGeo(ARec)
     else if AProbes.Strings[i] = 'line' then ProbeLine(ARec)
     else if AProbes.Strings[i] = 'radar' then ProbeRadar(ARec)

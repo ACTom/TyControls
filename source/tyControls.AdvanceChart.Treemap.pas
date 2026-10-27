@@ -58,6 +58,19 @@ const
   TyTreemapSeriesTypeName = 'treemap';
 
 type
+  { [R5-I] A CONTENT LABEL'S LAYOUT INPUTS (PlaceLabel's): the padding,
+    the distance and position, whether it is rich, the font -- held by
+    value on the node }
+  TTyTmLabelPlace = record
+    Has: Boolean;
+    Pad: array[0..3] of Double;
+    Dist: Double;
+    Pos: string;
+    Rich: Boolean;
+    FontName: string;
+    FontSizeLogical, FontWeight: Integer;
+  end;
+
   TTyTreemapNode = record
     Value: Double;
     { false: removed by visibleMin, or never reached }
@@ -115,6 +128,11 @@ type
     { drawn although outside the canvas: an element kept from the last
       render while the drill-down moves it out (willInvisibleEls) }
     DrawInvisible: Boolean;
+    { [R5-I] what cuts and places the words again in a frame, read from the
+      option when they were laid out: a merge's deleted content keeps
+      cutting its words to the rect it shrinks to after the option it was
+      read from is gone }
+    LabelPlace: TTyTmLabelPlace;
     { [R5-I] laid out in view but its rects invisible: a transition this
       render took over had it on its willInvisibleEls, and that one's
       renderFinally (its animators aborted by this render's start) hid them
@@ -1639,27 +1657,21 @@ end;
   shorthand), distance (0), position ('inside') by zrender's table; the
   words cut to the padded rect [Batch 115: from TyTreemapLabels, for the
   drill-down's frames too] }
-function PlaceLabel(const ASolved: TTyTreemapSolved; ARow: Integer;
-  const spec: TTyLabelSpec; const AText: string; ARX0, ARY0, ACW, ACH: Double;
-  const AMeasurer: ITyTextMeasurer; out AWords: string; out ALX, ALY: Double;
-  out AAH: TTyTextAnchorH; out AAV: TTyTextAnchorV): Boolean;
+{ [R5-I] the inputs PlaceLabel reads from the option and the spec }
+function PlaceOf(const ASolved: TTyTreemapSolved; ARow: Integer;
+  const spec: TTyLabelSpec): TTyTmLabelPlace;
 var
   k, j: Integer;
-  pad, ps: string;
-  rich: Boolean;
-  cw, ch, rx, ry, dist, tw, th, ow, oh, bx, by, xl, lt, tokW, h_: Double;
-  pd: array[0..3] of Double;
-  lines: TStringArray;
   d: TJSONData;
 begin
-  cw := ACW;
-  ch := ACH;
-  for k := 0 to 3 do pd[k] := 5 * ASolved.Scale;
+  Result := Default(TTyTmLabelPlace);
+  Result.Has := True;
+  for k := 0 to 3 do Result.Pad[k] := 5 * ASolved.Scale;
   d := ChainFind(ASolved, ARow, 'label', 'padding');
   if d <> nil then
   begin
     if d.JSONType = jtNumber then
-      for k := 0 to 3 do pd[k] := d.AsFloat * ASolved.Scale
+      for k := 0 to 3 do Result.Pad[k] := d.AsFloat * ASolved.Scale
     else if (d.JSONType = jtArray) and (d.Count > 0) then
       for k := 0 to 3 do
       begin
@@ -1670,18 +1682,41 @@ begin
         else
           j := k;
         end;
-        pd[k] := JsNum(d.Items[j]) * ASolved.Scale;
+        Result.Pad[k] := JsNum(d.Items[j]) * ASolved.Scale;
       end;
   end;
   d := ChainFind(ASolved, ARow, 'label', 'distance');
-  if d <> nil then dist := JsNum(d) * ASolved.Scale else dist := 0;
+  if d <> nil then Result.Dist := JsNum(d) * ASolved.Scale else Result.Dist := 0;
   d := ChainFind(ASolved, ARow, 'label', 'position');
-  if (d <> nil) and (d.JSONType = jtString) then ps := d.AsString else ps := 'inside';
-  rich := ChainFind(ASolved, ARow, 'label', 'rich') is TJSONObject;
+  if (d <> nil) and (d.JSONType = jtString) then Result.Pos := d.AsString else Result.Pos := 'inside';
+  Result.Rich := ChainFind(ASolved, ARow, 'label', 'rich') is TJSONObject;
+  Result.FontName := spec.FontName;
+  Result.FontSizeLogical := spec.FontSizeLogical;
+  Result.FontWeight := spec.FontWeight;
+end;
+
+function PlaceWith(const APlace: TTyTmLabelPlace; const AText: string;
+  ARX0, ARY0, ACW, ACH: Double;
+  const AMeasurer: ITyTextMeasurer; out AWords: string; out ALX, ALY: Double;
+  out AAH: TTyTextAnchorH; out AAV: TTyTextAnchorV): Boolean;
+var
+  k: Integer;
+  pad, ps: string;
+  rich: Boolean;
+  cw, ch, rx, ry, dist, tw, th, ow, oh, bx, by, xl, lt, tokW, h_: Double;
+  pd: array[0..3] of Double;
+  lines: TStringArray;
+begin
+  cw := ACW;
+  ch := ACH;
+  for k := 0 to 3 do pd[k] := APlace.Pad[k];
+  dist := APlace.Dist;
+  ps := APlace.Pos;
+  rich := APlace.Rich;
   tw := JsMax(cw - pd[1] - pd[3], 0);
   th := JsMax(ch - pd[0] - pd[2], 0);
-  lines := TyZrPlainTextLines(AText, tw, th, 2, '...', AMeasurer, spec.FontName,
-    spec.FontSizeLogical, spec.FontWeight, rich);
+  lines := TyZrPlainTextLines(AText, tw, th, 2, '...', AMeasurer, APlace.FontName,
+    APlace.FontSizeLogical, APlace.FontWeight, rich);
   { the anchor in the content rect, by zrender's table }
   rx := ARX0;
   ry := ARY0;
@@ -1754,8 +1789,8 @@ begin
     end;
     xl := bx + pd[3];
     lt := by + pd[0];
-    AMeasurer.MeasureLine(lines[0], spec.FontName, spec.FontSizeLogical,
-      spec.FontWeight, tokW, h_);
+    AMeasurer.MeasureLine(lines[0], APlace.FontName, APlace.FontSizeLogical,
+      APlace.FontWeight, tokW, h_);
     case AAH of
       tahLeft: rx := rx + xl;
       tahRight: rx := rx + (xl + tw);
@@ -1790,6 +1825,15 @@ begin
   ALY := ry;
 end;
 
+function PlaceLabel(const ASolved: TTyTreemapSolved; ARow: Integer;
+  const spec: TTyLabelSpec; const AText: string; ARX0, ARY0, ACW, ACH: Double;
+  const AMeasurer: ITyTextMeasurer; out AWords: string; out ALX, ALY: Double;
+  out AAH: TTyTextAnchorH; out AAV: TTyTextAnchorV): Boolean;
+begin
+  Result := PlaceWith(PlaceOf(ASolved, ARow, spec), AText, ARX0, ARY0, ACW, ACH,
+    AMeasurer, AWords, ALX, ALY, AAH, AAV);
+end;
+
 function TyTreemapLabelAt(const ASolved: TTyTreemapSolved; ARow: Integer;
   const ASpec: TTyLabelSpec; const AMeasurer: ITyTextMeasurer;
   AX0, AY0, ACW, ACH: Double; out AText: string; out ALX, ALY: Double): Boolean;
@@ -1807,8 +1851,13 @@ begin
   mask := GetExceptionMask;
   SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
   try
-    Result := PlaceLabel(ASolved, ARow, ASpec, ASolved.Nodes[ARow].LabelRaw,
-      AX0, AY0, JsMax(ACW, 0), JsMax(ACH, 0), AMeasurer, AText, ALX, ALY, ah, av);
+    { [R5-I] the inputs held on the node where it has them }
+    if ASolved.Nodes[ARow].LabelPlace.Has then
+      Result := PlaceWith(ASolved.Nodes[ARow].LabelPlace, ASolved.Nodes[ARow].LabelRaw,
+        AX0, AY0, JsMax(ACW, 0), JsMax(ACH, 0), AMeasurer, AText, ALX, ALY, ah, av)
+    else
+      Result := PlaceLabel(ASolved, ARow, ASpec, ASolved.Nodes[ARow].LabelRaw,
+        AX0, AY0, JsMax(ACW, 0), JsMax(ACH, 0), AMeasurer, AText, ALX, ALY, ah, av);
   finally
     ClearExceptions(False);
     SetExceptionMask(mask);
@@ -1841,6 +1890,7 @@ begin
       ASolved.Nodes[row].LabelText := '';
       ASolved.Nodes[row].HasLabelRaw := False;
       ASolved.Nodes[row].LabelRaw := '';
+      ASolved.Nodes[row].LabelPlace := Default(TTyTmLabelPlace);
       if not ASolved.Nodes[row].HasLayout or not ASolved.Nodes[row].InView
         or ASolved.Nodes[row].Invisible or ASolved.Nodes[row].AboveView then Continue;
       if Length(ASolved.Nodes[row].View) > 0 then Continue;
@@ -1884,7 +1934,8 @@ begin
       { the words before the cut, for a frame of the drill-down [Batch 115] }
       ASolved.Nodes[row].LabelRaw := text;
       ASolved.Nodes[row].HasLabelRaw := True;
-      ASolved.Nodes[row].HasLabel := PlaceLabel(ASolved, row, spec, text,
+      ASolved.Nodes[row].LabelPlace := PlaceOf(ASolved, row, spec);
+      ASolved.Nodes[row].HasLabel := PlaceWith(ASolved.Nodes[row].LabelPlace, text,
         bw * 1 + ASolved.Nodes[row].TX, bw * 1 + ASolved.Nodes[row].TY, cw, ch,
         AMeasurer, ASolved.Nodes[row].LabelText, ASolved.Nodes[row].LabelX,
         ASolved.Nodes[row].LabelY, ASolved.Nodes[row].LabelAH, ASolved.Nodes[row].LabelAV);

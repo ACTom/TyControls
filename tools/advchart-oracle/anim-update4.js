@@ -445,6 +445,27 @@ const PROBES = {
       rec[key + '/state'] = v._state;
     });
   },
+  // [R5-I] a deleted content's words as they are cut in this frame: its
+  // text's lines (the TSpans the plain layout made), by old rawIndex
+  tmw(chart, rec) {
+    chart.getModel().eachSeries(sm => {
+      if (sm.subType !== 'treemap') return;
+      const v = chart.getViewOfSeriesModel(sm);
+      const cg = v._containerGroup;
+      const st = v._storage;
+      const live = new Set(st.content.filter(Boolean));
+      if (!cg) return;
+      cg.traverse(el => {
+        if (el.type !== 'rect' || live.has(el)) return;
+        const who = DELETED.get(el);
+        if (!who || who.kind !== 'content') return;
+        const t = el.getTextContent();
+        if (!t) return;
+        const lines = (t.childrenRef ? t.childrenRef() : []).map(c => String(c.style.text));
+        rec['tw' + sm.seriesIndex + '/' + who.di] = { lines, ign: !!t.ignore, inv: !!t.invisible };
+      });
+    });
+  },
   geo(chart, rec) {
     let g = 0;
     chart.getModel().eachComponent('geo', gm => {
@@ -592,6 +613,15 @@ add('treemap', 'tm-renamed', "a merge that renames a1 and moves c into b: the di
     { t: T1, do: 'merge', option: { series: [{ data: [{ name: 'a', children: [{ name: 'x1', value: 6 }, { name: 'a2', value: 4 }] },
       { name: 'b', children: [{ name: 'b1', value: 3 }, { name: 'b2', value: 3 }, { name: 'c', value: 4 }] }] }] } },
     ...after([0, 1, 100, 300, 599, 600, 601], T1)]);
+add('treemap', 'tm-del-words', "[R5-I] a merge that takes away b2, whose name is long: its content shrinks to b's centre and its words are cut again to the rect it has in each frame (the plain layout's truncate), not left as they were",
+  { animation: true, series: [Object.assign({}, TMO, { data: [{ name: 'a', children: [{ name: 'a1', value: 6 }, { name: 'a2', value: 4 }] },
+    { name: 'b', children: [{ name: 'b1', value: 3 }, { name: 'b2 with a rather long name', value: 3 }] }, { name: 'c', value: 4 }],
+    animationDurationUpdate: 1000, animationEasing: 'linear' })] },
+  ['tm', 'tmw'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [{ name: 'a', children: [{ name: 'a1', value: 6 }, { name: 'a2', value: 4 }] },
+      { name: 'b', children: [{ name: 'b1', value: 3 }] }, { name: 'c', value: 4 }] }] } },
+    ...after([0, 1, 16, 100, 300, 500, 700, 900, 999, 1001], T1)]);
 add('treemap', 'tm-midway', "[R5-I] a second merge 300 ms into the first (1000 ms linear): every kept group and rect tweens on from where it is now (the elements' current values), not from where the first merge was sending it",
   { animation: true, series: [Object.assign({}, TMO, { data: TM, animationDurationUpdate: 1000, animationEasing: 'linear' })] },
   ['tm'],
