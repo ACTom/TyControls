@@ -831,6 +831,19 @@ type
     FRivers: TTyThemeRiverLayoutArray;
     { [R5-G] the list the series pass drew last (zlevel's second pass) }
     FZList: TTyPaintList;
+    { [R5-J] the zlevel the components drawn apart from the list (axes,
+      break areas, parallel axes, titles) are filtered to while FZApartOn
+      (PaintZLevels), and the last static paint's levels and whether they
+      were mixed -- the components on more than one zlevel, or an element
+      of the list under theirs }
+    FZApartOn: Boolean;
+    FZApartLevel: Integer;
+    FZMixed: Boolean;
+    FZLevels: TTyIntegerArray;
+    { [R5-J] the canvas the pointer's search is on (EventTargetAt,
+      HitTestAt): what stands on zlevel FHitHi (above FHitLo) only }
+    FHitBandOn: Boolean;
+    FHitLo, FHitHi: Integer;
     { [R5-G] a river's boundaryGap as its first layout resolved it, by
       series index: upstream writes the px back into the model's array, so
       a resize keeps them; a setOption starts again (AfterSetOption) }
@@ -2360,6 +2373,46 @@ type
     function ZStaticTop: Integer;
     procedure PaintAboveComponents(APainter: TTyPainter; AList: TTyPaintList);
     procedure PaintOverLoading(APainter: TTyPainter);
+    { [R5-J] A MODEL'S zlevel: retrieveZInfo's model.get('zlevel') || 0 --
+      its own, else the option root's (6.1's component and series models
+      write no default of their own) }
+    function ModelZLevel(const AMainType: string; AIndex: Integer): Integer;
+    function AxisModelZLevel(AAxis: TTyAxis): Integer;
+    { [R5-J] whether a component drawn apart from the list stands on the
+      level PaintZLevels draws now (always outside it) }
+    function ApartIn(AZLevel: Integer): Boolean;
+    { [R5-J] the zlevels of the components drawn apart from the list,
+      sorted, each once }
+    function ApartLevels: TTyIntegerArray;
+    { [R5-J] the lowest zlevel the list's components and series take, from
+      the option (MaxInt when none) }
+    function ListMinZLevel: Integer;
+    { [R5-J] the components apart on more than one zlevel, or something of
+      the list under theirs: PaintZLevels draws them level by level }
+    function ZMixedNow(out ALevels: TTyIntegerArray): Boolean;
+    { [R5-J] the level the components drawn apart stand on: their one
+      level, the highest when mixed, the root's when there is none }
+    function ZBase: Integer;
+    { [R5-J] the list drawn as the series pass draws it: the progressive
+      run's layer through ProgRenderList when it is the paint list }
+    procedure RenderZList(APainter: TTyPainter; AList: TTyPaintList; APPI: Integer);
+    { [R5-J] THE CANVASES IN ZLEVEL ORDER: for each level of ALevels the
+      list under it, the components apart on it (the axes, then what is
+      over the series: break areas, parallel axes, titles) with the list's
+      elements of that level between them; then what is above the last.
+      ADynamic: the dynamic layer's (AFrame the list in motion) }
+    procedure PaintZLevels(APainter: TTyPainter; APPI: Integer;
+      const AMeasurer: ITyTextMeasurer; const ALevels: TTyIntegerArray;
+      ADynamic: Boolean; AFrame: TTyPaintList);
+    { [R5-J] the elements of AList from AFrom on take the zlevel of
+      component AIndex of AMainType }
+    procedure LevelTail(AList: TTyPaintList; AFrom: Integer;
+      const AMainType: string; AIndex: Integer);
+    { [R5-J] the axes go into the dynamic layer: their groupTransition, or
+      an animation over levels the static layer would draw out of order }
+    function AxesInDynamic: Boolean;
+    { [R5-J] the progressive run's zlevel, -MaxInt for none }
+    function ProgRunZLevel: Integer;
     procedure PaintStatic(APainter: TTyPainter; const ARect: TRect;
       APPI: Integer; const AMeasurer: ITyTextMeasurer);
     { Every series' marks, in one list, ordered once. }
@@ -3478,6 +3531,18 @@ type
     function DoSunLegacy(APayload: TJSONObject; AHigh: Boolean): Boolean;
     { [R5-D] the loading effect's mask is the pointer's target }
     function LoadMasks: Boolean;
+    { [R5-J] the loading mask's zlevel (z 10000 on it) as it is drawn --
+      not under the components' (ZStaticTop) -- and whether it is over a
+      thing of zlevel AZ: shown, and AZ not above its level }
+    function MaskZLevel: Integer;
+    function MaskOver(AZ: Integer): Boolean;
+    { [R5-J] whether a thing of zlevel AZ is on the canvas searched now
+      (always outside a search by canvas) }
+    function HitIn(AZ: Integer): Boolean;
+    { [R5-J] the zlevels the pointer can find something on, sorted, each
+      once: the list's, the components' apart, the toolboxes', timelines',
+      visual maps', the mask's }
+    function HitLevels: TTyIntegerArray;
     { [F3d] treeExpandAndCollapse as an action: the queried trees' node
       flipped, then the update (update: 'update') }
     function DoTreeToggleAction(APayload: TJSONObject): Boolean;
@@ -4065,6 +4130,11 @@ type
     procedure DoContextPopup(MousePos: TPoint; var Handled: Boolean); override;
     { the chart's mouse events [Batch 84] }
     function EventTargetAt(AX, AY: Integer): TTyChartEventTarget;
+    { [R5-J] the search on one canvas (HitIn); ABlocked: the loading mask
+      stands there, nothing under it is found }
+    function EventTargetIn(AX, AY: Integer; out ABlocked: Boolean): TTyChartEventTarget;
+    function HitTestIn(AX, AY: Integer; out AElement: Integer;
+      out ABlocked: Boolean): TTyChartDatumRef;
     { [R2-B] the breadcrumb item a list element is, and its target }
     function CrumbOfElement(AIdx: Integer; out ASeries, AIndex: Integer): Boolean;
     function CrumbTarget(ASeries, AIndex: Integer): TTyChartEventTarget;

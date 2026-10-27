@@ -5704,6 +5704,814 @@
    ]
   }
  ],
+ "zlevel": [
+  {
+   "id": "zl-title-above",
+   "note": "a title of zlevel 2 over a series of zlevel 1: drawn and hit over it",
+   "option": {
+    "title": {
+     "text": "TITLE",
+     "triggerEvent": true,
+     "left": 250,
+     "top": 175,
+     "textStyle": {
+      "fontSize": 40,
+      "color": "#00c000"
+     },
+     "backgroundColor": "#00ff00",
+     "padding": 10,
+     "zlevel": 2
+    },
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "symbol": "rect",
+      "symbolSize": 120,
+      "itemStyle": {
+       "color": "#0000ff",
+       "opacity": 1
+      },
+      "data": [
+       [
+        5,
+        5
+       ]
+      ],
+      "zlevel": 1
+     }
+    ]
+   },
+   "loading": null,
+   "frames": 0,
+   "probes": [
+    {
+     "at": [
+      315,
+      205
+     ],
+     "probe": "title",
+     "draw": {
+      "comp": "title",
+      "zlevel": 2,
+      "z": 6,
+      "type": "tspan"
+     },
+     "hit": {
+      "comp": "title",
+      "zlevel": 2,
+      "type": "tspan"
+     }
+    }
+   ]
+  },
+  {
+   "id": "zl-title-under",
+   "note": "a title of the default zlevel (0, whatever z) under a series of zlevel 1",
+   "option": {
+    "title": {
+     "text": "TITLE",
+     "triggerEvent": true,
+     "left": 250,
+     "top": 175,
+     "textStyle": {
+      "fontSize": 40,
+      "color": "#00c000"
+     },
+     "backgroundColor": "#00ff00",
+     "padding": 10
+    },
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "symbol": "rect",
+      "symbolSize": 120,
+      "itemStyle": {
+       "color": "#0000ff",
+       "opacity": 1
+      },
+      "data": [
+       [
+        5,
+        5
+       ]
+      ],
+      "zlevel": 1
+     }
+    ]
+   },
+   "loading": null,
+   "frames": 0,
+   "probes": [
+    {
+     "at": [
+      315,
+      205
+     ],
+     "probe": "title",
+     "draw": {
+      "comp": "series",
+      "zlevel": 1,
+      "z": 2,
+      "type": "path"
+     },
+     "hit": {
+      "comp": "series",
+      "zlevel": 1,
+      "type": "path"
+     }
+    }
+   ]
+  },
+  {
+   "id": "zl-root",
+   "note": "the root's zlevel 1: the axes (no zlevel of their own) take it, the series and the title (theirs, 0) do not: the axis line over the bar, the title under the axes",
+   "option": {
+    "zlevel": 1,
+    "title": {
+     "text": "TITLE",
+     "triggerEvent": true,
+     "left": 40,
+     "top": 300,
+     "textStyle": {
+      "fontSize": 40,
+      "color": "#00c000"
+     },
+     "backgroundColor": "#00ff00",
+     "padding": 10
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ],
+     "axisLine": {
+      "lineStyle": {
+       "color": "#ff0000",
+       "width": 6
+      }
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "barWidth": "90%",
+      "itemStyle": {
+       "color": "#0000ff"
+      },
+      "data": [
+       5,
+       5
+      ]
+     }
+    ]
+   },
+   "loading": null,
+   "frames": 0,
+   "probes": [
+    {
+     "at": [
+      203,
+      319
+     ],
+     "probe": "xAxisLine",
+     "draw": {
+      "comp": "series",
+      "zlevel": 1,
+      "z": 2,
+      "type": "rect"
+     },
+     "hit": {
+      "comp": "series",
+      "zlevel": 1,
+      "type": "rect"
+     }
+    },
+    {
+     "at": [
+      105,
+      330
+     ],
+     "probe": "title",
+     "draw": {
+      "comp": "title",
+      "zlevel": 1,
+      "z": 6,
+      "type": "tspan"
+     },
+     "hit": {
+      "comp": "title",
+      "zlevel": 1,
+      "type": "tspan"
+     }
+    }
+   ]
+  },
+  {
+   "id": "zl-axis",
+   "note": "an x axis of zlevel 2 over a bar of the default zlevel",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ],
+     "zlevel": 2,
+     "axisLine": {
+      "lineStyle": {
+       "color": "#ff0000",
+       "width": 6
+      }
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "barWidth": "90%",
+      "itemStyle": {
+       "color": "#0000ff"
+      },
+      "data": [
+       5,
+       5
+      ]
+     }
+    ]
+   },
+   "loading": null,
+   "frames": 0,
+   "probes": [
+    {
+     "at": [
+      203,
+      319
+     ],
+     "probe": "xAxisLine",
+     "draw": {
+      "comp": "xAxis",
+      "zlevel": 2,
+      "z": 0,
+      "type": "line"
+     },
+     "hit": {
+      "comp": "series",
+      "zlevel": 0,
+      "type": "rect"
+     }
+    }
+   ]
+  },
+  {
+   "id": "zl-axis-default",
+   "note": "the same at the default zlevel: the bar (z 2) over the axis (z 0)",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ],
+     "axisLine": {
+      "lineStyle": {
+       "color": "#ff0000",
+       "width": 6
+      }
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "barWidth": "90%",
+      "itemStyle": {
+       "color": "#0000ff"
+      },
+      "data": [
+       5,
+       5
+      ]
+     }
+    ]
+   },
+   "loading": null,
+   "frames": 0,
+   "probes": [
+    {
+     "at": [
+      203,
+      319
+     ],
+     "probe": "xAxisLine",
+     "draw": {
+      "comp": "series",
+      "zlevel": 0,
+      "z": 2,
+      "type": "rect"
+     },
+     "hit": {
+      "comp": "series",
+      "zlevel": 0,
+      "type": "rect"
+     }
+    }
+   ]
+  },
+  {
+   "id": "zl-legend",
+   "note": "a legend of zlevel 2 over a series of zlevel 1",
+   "option": {
+    "legend": {
+     "zlevel": 2,
+     "left": 250,
+     "top": 190,
+     "itemWidth": 60,
+     "itemHeight": 30,
+     "itemStyle": {
+      "color": "#ff00ff"
+     },
+     "data": [
+      "s"
+     ]
+    },
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "symbol": "rect",
+      "symbolSize": 120,
+      "itemStyle": {
+       "color": "#0000ff",
+       "opacity": 1
+      },
+      "data": [
+       [
+        5,
+        5
+       ]
+      ],
+      "name": "s",
+      "zlevel": 1
+     }
+    ]
+   },
+   "loading": null,
+   "frames": 0,
+   "probes": [
+    {
+     "at": [
+      291,
+      210
+     ],
+     "probe": "legendItem",
+     "draw": {
+      "comp": "legend",
+      "zlevel": 2,
+      "z": 4,
+      "type": "rect"
+     },
+     "hit": {
+      "comp": "legend",
+      "zlevel": 2,
+      "type": "rect"
+     }
+    }
+   ]
+  },
+  {
+   "id": "zl-toolbox",
+   "note": "a toolbox of zlevel 2 over a series of zlevel 1: its icon is the hover",
+   "option": {
+    "toolbox": {
+     "zlevel": 2,
+     "left": 280,
+     "top": 180,
+     "itemSize": 40,
+     "feature": {
+      "restore": {}
+     }
+    },
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "symbol": "rect",
+      "symbolSize": 120,
+      "itemStyle": {
+       "color": "#0000ff",
+       "opacity": 1
+      },
+      "data": [
+       [
+        5,
+        5
+       ]
+      ],
+      "zlevel": 1
+     }
+    ]
+   },
+   "loading": null,
+   "frames": 0,
+   "probes": [
+    {
+     "at": [
+      317,
+      217
+     ],
+     "probe": "toolboxIcon",
+     "draw": {
+      "comp": "toolbox",
+      "zlevel": 2,
+      "z": 6,
+      "type": "rect"
+     },
+     "hit": {
+      "comp": "toolbox",
+      "zlevel": 2,
+      "type": "path"
+     }
+    }
+   ]
+  },
+  {
+   "id": "zl-mask",
+   "note": "the loading mask (zlevel 0) under a series of zlevel 1: the symbol is drawn and hit over it; off the symbol the mask",
+   "option": {
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "symbol": "rect",
+      "symbolSize": 120,
+      "itemStyle": {
+       "color": "#0000ff",
+       "opacity": 1
+      },
+      "data": [
+       [
+        5,
+        5
+       ]
+      ],
+      "zlevel": 1
+     }
+    ]
+   },
+   "loading": {},
+   "frames": 0,
+   "probes": [
+    {
+     "at": [
+      315,
+      193
+     ],
+     "probe": "symbol",
+     "draw": {
+      "comp": "series",
+      "zlevel": 1,
+      "z": 2,
+      "type": "path"
+     },
+     "hit": {
+      "comp": "series",
+      "zlevel": 1,
+      "type": "path"
+     }
+    },
+    {
+     "at": [
+      60,
+      60
+     ],
+     "probe": "point",
+     "draw": {
+      "comp": "mask",
+      "zlevel": 0,
+      "z": 10000,
+      "type": "rect"
+     },
+     "hit": {
+      "comp": "mask",
+      "zlevel": 0,
+      "type": "rect"
+     }
+    }
+   ]
+  },
+  {
+   "id": "zl-mask-high",
+   "note": "a loading mask of zlevel 2 over the series of zlevel 1",
+   "option": {
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "symbol": "rect",
+      "symbolSize": 120,
+      "itemStyle": {
+       "color": "#0000ff",
+       "opacity": 1
+      },
+      "data": [
+       [
+        5,
+        5
+       ]
+      ],
+      "zlevel": 1
+     }
+    ]
+   },
+   "loading": {
+    "zlevel": 2
+   },
+   "frames": 0,
+   "probes": [
+    {
+     "at": [
+      315,
+      193
+     ],
+     "probe": "symbol",
+     "draw": {
+      "comp": "mask",
+      "zlevel": 2,
+      "z": 10000,
+      "type": "rect"
+     },
+     "hit": {
+      "comp": "mask",
+      "zlevel": 2,
+      "type": "rect"
+     }
+    }
+   ]
+  },
+  {
+   "id": "zl-graphic",
+   "note": "a graphic rect of zlevel 2 over a title of zlevel 1 (the title over the series of 0)",
+   "option": {
+    "title": {
+     "text": "TITLE",
+     "triggerEvent": true,
+     "left": 250,
+     "top": 175,
+     "textStyle": {
+      "fontSize": 40,
+      "color": "#00c000"
+     },
+     "backgroundColor": "#00ff00",
+     "padding": 10,
+     "zlevel": 1
+    },
+    "graphic": {
+     "elements": [
+      {
+       "type": "rect",
+       "zlevel": 2,
+       "left": 300,
+       "top": 195,
+       "shape": {
+        "width": 40,
+        "height": 20
+       },
+       "style": {
+        "fill": "#ff00ff"
+       }
+      }
+     ]
+    },
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "symbol": "rect",
+      "symbolSize": 120,
+      "itemStyle": {
+       "color": "#0000ff",
+       "opacity": 1
+      },
+      "data": [
+       [
+        5,
+        5
+       ]
+      ]
+     }
+    ]
+   },
+   "loading": null,
+   "frames": 0,
+   "probes": [
+    {
+     "at": [
+      315,
+      205
+     ],
+     "probe": "point",
+     "draw": {
+      "comp": "graphic",
+      "zlevel": 2,
+      "z": 0,
+      "type": "rect"
+     },
+     "hit": {
+      "comp": "graphic",
+      "zlevel": 2,
+      "type": "rect"
+     }
+    }
+   ]
+  },
+  {
+   "id": "zl-progressive",
+   "note": "a large progressive scatter of zlevel 1 drawn chunk by chunk over a title of the default zlevel: its points over the title once drawn",
+   "option": {
+    "title": {
+     "text": "TITLE",
+     "triggerEvent": true,
+     "left": 250,
+     "top": 175,
+     "textStyle": {
+      "fontSize": 40,
+      "color": "#00c000"
+     },
+     "backgroundColor": "#00ff00",
+     "padding": 10
+    },
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "zlevel": 1,
+      "large": true,
+      "largeThreshold": 5,
+      "progressive": 4,
+      "progressiveThreshold": 5,
+      "symbol": "rect",
+      "symbolSize": 30,
+      "itemStyle": {
+       "color": "#0000ff",
+       "opacity": 1
+      },
+      "data": [
+       [
+        1,
+        1
+       ],
+       [
+        2,
+        2
+       ],
+       [
+        3,
+        3
+       ],
+       [
+        4,
+        4
+       ],
+       [
+        5,
+        5
+       ],
+       [
+        6,
+        6
+       ],
+       [
+        7,
+        7
+       ],
+       [
+        8,
+        8
+       ],
+       [
+        5.4,
+        5
+       ],
+       [
+        9,
+        9
+       ]
+      ]
+     }
+    ]
+   },
+   "loading": null,
+   "frames": 10,
+   "probes": [
+    {
+     "at": [
+      315,
+      205
+     ],
+     "probe": "point",
+     "draw": {
+      "comp": "series",
+      "zlevel": 1,
+      "z": 2,
+      "type": "path"
+     },
+     "hit": {
+      "comp": "series",
+      "zlevel": 1,
+      "type": "path"
+     }
+    }
+   ]
+  }
+ ],
  "guards": [
   {
    "name": "events: the axis breaks' non-refined types are connect-only; axisbreakchanged is public",

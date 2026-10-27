@@ -362,6 +362,8 @@ var
 
 begin
   if AAxis = nil then Exit;
+  { [R5-J] on the zlevel PaintZLevels draws now }
+  if not ApartIn(AxisModelZLevel(AAxis)) then Exit;
   akey := AAxis.MainType + IntToStr(AAxis.ComponentIndex);
   { `show: false` means "do not draw me". The axis still exists and its series
     still map to pixels; only the domain, ticks, labels and split lines go. }
@@ -1037,6 +1039,16 @@ begin
     [Batch 122] }
   GfxBuild(APPI);
   GfxPaintUnder(APainter);
+  { [R5-J] COMPONENTS ON SEVERAL ZLEVELS (a title's, an axis' own), or the
+    list under theirs: canvas by canvas, in level order -- no dirty-rect
+    ground, no fast progressive frame [was: every component on the root's
+    zlevel, whatever it wrote] }
+  FZMixed := ZMixedNow(FZLevels);
+  if FZMixed then
+  begin
+    PaintZLevels(APainter, APPI, AMeasurer, FZLevels, False, nil);
+    Exit;
+  end;
   { WHILE THEIR groupTransition RUNS the axes are the dynamic layer's, as
     the series are [Batch 96] -- an export draws them at rest [Batch 106] }
   if FExporting or not AxesDynamic then PaintAxes(APainter, APPI, AMeasurer, False);
@@ -1047,7 +1059,7 @@ begin
   { AFTER THE AXES, so a bar sits on the grid rather than under it. Within the
     series, the paint list decides the order. [R5-G] Only what stands on the
     components' zlevel or under it: a higher zlevel is a canvas over them. }
-  TySetZBand(-MaxInt, ComponentZLevel);
+  TySetZBand(-MaxInt, ZBase);
   try
     PaintSeries(APainter, AMeasurer, APPI);
   finally
@@ -1090,25 +1102,266 @@ begin
   if not FLoadShown or (csDesigning in ComponentState) then Exit;
   v := FLoadCfg.ZLevel;
   if IsNan(v) or IsInfinite(v) then Exit;
-  Result := Max(ComponentZLevel, Round(Max(Double(-100000), Min(Double(100000), v))));
+  Result := Max(ZBase, Round(Max(Double(-100000), Min(Double(100000), v))));
 end;
 
 { [R5-G] the elements of AList over the components' zlevel and up to the
   static layer's top -- drawn after the components, as zrender draws a
-  canvas of a higher zlevel over the one they stand on }
+  canvas of a higher zlevel over the one they stand on.
+  [R5-J] A progressive run among them through its layer (RenderZList): its
+  chunks were blitted with the components' level whatever their own
+  [was: the layer under the components, the chunks again over them]. }
 procedure TTyCustomAdvanceChart.PaintAboveComponents(APainter: TTyPainter;
   AList: TTyPaintList);
 var zc: Integer;
 begin
   if AList = nil then Exit;
-  zc := ComponentZLevel;
+  zc := ZBase;
   if TyMaxZLevelOf(AList) <= zc then Exit;
   TySetZBand(zc, ZStaticTop);
   try
-    TyRenderPaintList(APainter, AList);
+    RenderZList(APainter, AList, FLastPPI);
   finally
     TyClearZBand;
   end;
+end;
+
+function TTyCustomAdvanceChart.ModelZLevel(const AMainType: string;
+  AIndex: Integer): Integer;
+var
+  node, d: TJSONData;
+  v: Double;
+begin
+  Result := 0;
+  if FOption = nil then Exit;
+  d := nil;
+  node := FOption.ComponentAt(AMainType, AIndex);
+  if node is TJSONObject then d := TJSONObject(node).Find('zlevel');
+  { Model.get climbs where the value is null or not written }
+  if ((d = nil) or (d.JSONType = jtNull)) and (FOption.Root is TJSONObject) then
+    d := TJSONObject(FOption.Root).Find('zlevel');
+  if (d = nil) or (d.JSONType <> jtNumber) then Exit;
+  v := d.AsFloat;
+  if IsNan(v) or IsInfinite(v) then Exit;
+  Result := Round(Max(Double(-100000), Min(Double(100000), v)));
+end;
+
+function TTyCustomAdvanceChart.AxisModelZLevel(AAxis: TTyAxis): Integer;
+var mt: string;
+begin
+  Result := ComponentZLevel;
+  if AAxis = nil then Exit;
+  mt := AAxis.MainType;
+  if mt = '' then mt := AAxis.Dim + 'Axis';
+  Result := ModelZLevel(mt, AAxis.ComponentIndex);
+end;
+
+function TTyCustomAdvanceChart.ApartIn(AZLevel: Integer): Boolean;
+begin
+  Result := not FZApartOn or (AZLevel = FZApartLevel);
+end;
+
+function TTyCustomAdvanceChart.ApartLevels: TTyIntegerArray;
+var
+  g, a, i: Integer;
+  gb: TTyGridBuild;
+
+  procedure Add(AZ: Integer);
+  var k, j: Integer;
+  begin
+    k := 0;
+    while (k <= High(Result)) and (Result[k] < AZ) do Inc(k);
+    if (k <= High(Result)) and (Result[k] = AZ) then Exit;
+    SetLength(Result, Length(Result) + 1);
+    for j := High(Result) downto k + 1 do Result[j] := Result[j - 1];
+    Result[k] := AZ;
+  end;
+
+begin
+  Result := nil;
+  if FOption = nil then Exit;
+  if FBuild <> nil then
+    for g := 0 to FBuild.GridCount - 1 do
+    begin
+      gb := FBuild.Grid(g);
+      for a := 0 to gb.XAxisCount - 1 do
+        if gb.XAxis(a) <> nil then Add(AxisModelZLevel(gb.XAxis(a)));
+      for a := 0 to gb.YAxisCount - 1 do
+        if gb.YAxis(a) <> nil then Add(AxisModelZLevel(gb.YAxis(a)));
+    end;
+  for i := 0 to High(FPolars) do
+    if FPolars[i] <> nil then
+    begin
+      if FPolars[i].AngleAxis <> nil then Add(AxisModelZLevel(FPolars[i].AngleAxis));
+      if FPolars[i].RadiusAxis <> nil then Add(AxisModelZLevel(FPolars[i].RadiusAxis));
+    end;
+  for i := 0 to High(FSingles) do
+    if (FSingles[i] <> nil) and (FSingles[i].Axis <> nil) then
+      Add(AxisModelZLevel(FSingles[i].Axis));
+  for i := 0 to High(FParallels) do
+    if FParallels[i] <> nil then
+      for a := 0 to High(FParallels[i].AxisIndices) do
+        Add(ModelZLevel('parallelAxis', FParallels[i].AxisIndices[a]));
+  for i := 0 to High(FTitles) do
+    if FTitles[i].Valid then Add(ModelZLevel('title', i));
+end;
+
+function TTyCustomAdvanceChart.ListMinZLevel: Integer;
+const
+  cTypes: array[0..9] of string = ('series', 'legend', 'toolbox', 'dataZoom',
+    'visualMap', 'timeline', 'thumbnail', 'geo', 'matrix', 'radar');
+var
+  t, i, k, z: Integer;
+  node, mk, d: TJSONData;
+begin
+  Result := MaxInt;
+  if FOption = nil then Exit;
+  for t := 0 to High(cTypes) do
+    for i := 0 to FOption.ComponentCount(cTypes[t]) - 1 do
+    begin
+      z := ModelZLevel(cTypes[t], i);
+      if z < Result then Result := z;
+      { a series' markers: their own, else the series' }
+      if t <> 0 then Continue;
+      node := FOption.ComponentAt('series', i);
+      if not (node is TJSONObject) then Continue;
+      for k := 0 to 2 do
+      begin
+        case k of
+          0: mk := TJSONObject(node).Find('markPoint');
+          1: mk := TJSONObject(node).Find('markLine');
+        else
+          mk := TJSONObject(node).Find('markArea');
+        end;
+        if not (mk is TJSONObject) then Continue;
+        d := TJSONObject(mk).Find('zlevel');
+        if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat)
+          and not IsInfinite(d.AsFloat) then
+          if Round(Max(Double(-100000), Min(Double(100000), d.AsFloat))) < Result then
+            Result := Round(Max(Double(-100000), Min(Double(100000), d.AsFloat)));
+      end;
+    end;
+end;
+
+function TTyCustomAdvanceChart.ZMixedNow(out ALevels: TTyIntegerArray): Boolean;
+begin
+  ALevels := ApartLevels;
+  Result := (Length(ALevels) > 1)
+    or ((Length(ALevels) = 1) and (ListMinZLevel < ALevels[0]));
+end;
+
+function TTyCustomAdvanceChart.ZBase: Integer;
+var lv: TTyIntegerArray;
+begin
+  lv := ApartLevels;
+  if Length(lv) = 0 then Result := ComponentZLevel
+  else Result := lv[High(lv)];
+end;
+
+procedure TTyCustomAdvanceChart.RenderZList(APainter: TTyPainter; AList: TTyPaintList;
+  APPI: Integer);
+begin
+  if (AList = nil) or (APainter = nil) then Exit;
+  if (AList = FPaintList) and not FExporting then ProgRenderList(APainter, AList, APPI)
+  else TyRenderPaintList(APainter, AList);
+end;
+
+function TTyCustomAdvanceChart.AxesInDynamic: Boolean;
+begin
+  Result := AxesDynamic or (FAnimLive and not FAnimContinuous and FZMixed);
+end;
+
+procedure TTyCustomAdvanceChart.PaintZLevels(APainter: TTyPainter; APPI: Integer;
+  const AMeasurer: ITyTextMeasurer; const ALevels: TTyIntegerArray;
+  ADynamic: Boolean; AFrame: TTyPaintList);
+var
+  i, lv, prev: Integer;
+  over: Boolean;
+
+  procedure ListBand(ALo, AHi: Integer; AFirst: Boolean);
+  begin
+    TySetZBand(ALo, AHi);
+    try
+      if ADynamic then TyRenderPaintList(APainter, AFrame)
+      { the static layer's first: the series pass builds the list }
+      else if AFirst then PaintSeries(APainter, AMeasurer, APPI)
+      else RenderZList(APainter, FZList, APPI);
+    finally
+      TyClearZBand;
+    end;
+  end;
+
+begin
+  { what the static layer draws over the series: not while they move in the
+    dynamic layer (it draws them there) }
+  over := ADynamic or FExporting or not FAnimLive or FAnimContinuous;
+  prev := -MaxInt;
+  for i := 0 to High(ALevels) do
+  begin
+    lv := ALevels[i];
+    ListBand(prev, lv - 1, (i = 0) and not ADynamic);
+    FZApartOn := True;
+    FZApartLevel := lv;
+    try
+      if ADynamic then
+      begin
+        if AxesInDynamic then PaintAxes(APainter, APPI, AMeasurer, AxesDynamic);
+      end
+      else if FExporting or not AxesInDynamic then
+        PaintAxes(APainter, APPI, AMeasurer, False);
+      ListBand(lv - 1, lv, False);
+      if over then PaintBreakAreas(APainter);
+      PaintParallels(APainter, APPI, AMeasurer);
+      if over then PaintTitles(APainter);
+    finally
+      FZApartOn := False;
+    end;
+    prev := lv;
+  end;
+  if ADynamic then
+  begin
+    TySetZBand(prev, MaxInt);
+    try
+      TyRenderPaintList(APainter, AFrame);
+    finally
+      TyClearZBand;
+    end;
+  end
+  else if over then
+  begin
+    TySetZBand(prev, ZStaticTop);
+    try
+      RenderZList(APainter, FZList, APPI);
+    finally
+      TyClearZBand;
+    end;
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.LevelTail(AList: TTyPaintList; AFrom: Integer;
+  const AMainType: string; AIndex: Integer);
+var
+  k, z: Integer;
+  el: TTyChartElement;
+begin
+  if (AList = nil) or (AFrom < 0) then Exit;
+  z := ModelZLevel(AMainType, AIndex);
+  for k := AFrom to AList.Count - 1 do
+    if AList.Ref(k)^.ZLevel <> z then
+    begin
+      el := AList.Element(k);
+      el.ZLevel := z;
+      AList.SetElement(k, el);
+    end;
+end;
+
+function TTyCustomAdvanceChart.ProgRunZLevel: Integer;
+var k: Integer;
+begin
+  Result := -MaxInt;
+  if FPaintList = nil then Exit;
+  for k := 0 to FPaintList.Count - 1 do
+    if FPaintList.Ref(k)^.ProgChunk > 0 then Exit(FPaintList.Ref(k)^.ZLevel);
 end;
 
 procedure TTyCustomAdvanceChart.PaintAxes(APainter: TTyPainter; APPI: Integer;
@@ -1534,12 +1787,17 @@ begin
     { the trail is the continuous phase's: an enter or an update in motion
       draws every series as it stands [Batch 121] }
     FreeAndNil(FTrailLayer);
+    frame := AnimFrame;
+    FZList := frame;
+    { [R5-J] the levels in order, the axes with them }
+    if FZMixed then
+      PaintZLevels(APainter, APPI, AMeasurer, FZLevels, True, frame)
+    else
+    begin
     { the axes in their groupTransition under the series, as the static
       layer draws them [Batch 96] }
     if AxesDynamic then PaintAxes(APainter, APPI, AMeasurer, True);
-    frame := AnimFrame;
-    FZList := frame;
-    TySetZBand(-MaxInt, ComponentZLevel);
+    TySetZBand(-MaxInt, ZBase);
     try
       TyRenderPaintList(APainter, frame);
     finally
@@ -1552,6 +1810,7 @@ begin
     PaintTitles(APainter);
     { [R5-G] a higher zlevel over them }
     PaintAboveComponents(APainter, frame);
+    end;
   end;
   { THE POINTER UNDER THE HIGHLIGHT UNDER THE BOX. A shadow band drawn over
     the bars is the layer debt showing -- series marks live in the static
@@ -1929,19 +2188,34 @@ end;
 function TTyCustomAdvanceChart.ListHitAt(AX, AY: Double): Integer;
 var
   L: TTyPaintList;
-  sz: Integer;
+  sz, lo, hi: Integer;
 begin
   Result := -1;
   if (FPaintList = nil) or not FPaintListValid then Exit;
-  { [R5-D] the loading mask over it all }
-  if LoadMasks then Exit;
+  { [R5-D] the loading mask over it all -- [R5-J] over what stands on its
+    zlevel or under it: an element of a higher one is over the mask; and on
+    the canvas searched now }
+  lo := -MaxInt;
+  hi := MaxInt;
+  if FHitBandOn then
+  begin
+    lo := FHitLo;
+    hi := FHitHi;
+  end;
+  if LoadMasks then lo := Max(lo, MaskZLevel);
+  if lo >= hi then Exit;
   { IN MOTION, WHAT IS DRAWN IS WHAT IS HIT, and at rest on a state proxy
     (see HitTestAt) }
   if FAnimLive or (Length(FAnimStBind) > 0) then L := AnimFrame else L := FPaintList;
   sz := CoarseSize;
-  if sz <= 0 then Exit(L.HitTestElement(AX, AY, FPaintListPPI));
-  Result := L.HitTestElement(AX, AY, FPaintListPPI, False);
-  if Result < 0 then Result := TyCoarseHitTest(L, AX, AY, FPaintListPPI, sz);
+  if (lo > -MaxInt) or (hi < MaxInt) then TySetHitBand(lo, hi);
+  try
+    if sz <= 0 then Exit(L.HitTestElement(AX, AY, FPaintListPPI));
+    Result := L.HitTestElement(AX, AY, FPaintListPPI, False);
+    if Result < 0 then Result := TyCoarseHitTest(L, AX, AY, FPaintListPPI, sz);
+  finally
+    TyClearHitBand;
+  end;
 end;
 
 function TTyCustomAdvanceChart.LastRepaintFull: Boolean;
@@ -2030,6 +2304,8 @@ var
   P: TTyPainter;
   sc: TTyCanvasScale;
   zc, pass: Integer;
+  { [R5-J] }
+  lvs: TTyIntegerArray;
 begin
   Result := False;
   measurer := NewTextMeasurer(APPI);
@@ -2045,8 +2321,10 @@ begin
   { from here a fallback must not build it again }
   FDrPrepDone := True;
   { a state's transition took the series into the dynamic layer, or the
-    static layer would not hold one list: everything }
+    static layer would not hold one list: everything -- [R5-J] and the
+    levels drawn canvas by canvas: the ground is no one canvas }
   if FAnimLive or FAnimContinuous or (FDrStaticList = nil) then Exit;
+  if ZMixedNow(lvs) then Exit;
   snap := TyDirtySnapshot(FDrStaticList, APPI);
   if not TyDirtyDiff(FDrSnap, snap, rects) then Exit;
   FDrPrepDone := False;
@@ -2095,7 +2373,7 @@ begin
       Round(box.Y + box.H)));
     { [R5-G] in two passes as the full paint draws: the list up to the
       components' zlevel, the components, the rest over them }
-    zc := ComponentZLevel;
+    zc := ZBase;
     for pass := 0 to 1 do
     begin
       if pass = 0 then

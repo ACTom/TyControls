@@ -325,6 +325,8 @@ begin
     if s = nil then Continue;
     v := s.View;
     if not v.Shown then Continue;
+    { [R5-J] on the zlevel PaintZLevels draws now }
+    if not ApartIn(AxisModelZLevel(s.Axis)) then Continue;
     ViewDrew(cvSingleAxis);
     if ABelow then
     begin
@@ -1353,6 +1355,9 @@ begin
     begin
       if k = 0 then view := cvAngleAxis else view := cvRadiusAxis;
       if ViewHidden(view) then Continue;
+      { [R5-J] on the zlevel PaintZLevels draws now }
+      if (k = 0) and not ApartIn(AxisModelZLevel(p.AngleAxis)) then Continue;
+      if (k = 1) and not ApartIn(AxisModelZLevel(p.RadiusAxis)) then Continue;
       if k = 0 then
       begin
         if not p.AngleView.Shown then Continue;
@@ -2700,6 +2705,9 @@ begin
     for a := 0 to High(par.Views) do
     begin
       if not par.Views[a].Shown then Continue;
+      { [R5-J] on the zlevel PaintZLevels draws now }
+      if (a <= High(par.AxisIndices))
+        and not ApartIn(ModelZLevel('parallelAxis', par.AxisIndices[a])) then Continue;
       ViewDrew(cvParallelAxis);
       sp := par.Views[a].Spec;
       { a lone axis stands nowhere (its place is not a number) }

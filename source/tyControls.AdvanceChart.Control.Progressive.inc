@@ -531,7 +531,9 @@ begin
     if pe^.Ignore or pe^.ProgHidden or pe^.GfxUnder then Continue;
     if pe^.ProgChunk > 0 then
     begin
-      if not blitted then
+      { [R5-J] the run's layer in its zlevel's band only [was: blitted with
+        the first band whatever the run's zlevel] }
+      if not blitted and TyZBandHas(pe^.ZLevel) then
       begin
         { [R2-L] what is under the layer, and the layer, as they stand here }
         if FProgCap and (FProgLayer <> nil) then
@@ -763,6 +765,10 @@ begin
   if FExporting or FAnimLive or FAnimContinuous or (Length(FAnimBind) > 0)
     or (Length(FAnimStBind) > 0) or TmAnimAny or FDrPrepDone then Exit;
   if (FPaintList = nil) or not FPaintListValid or not FProgReuse then Exit;
+  { [R5-J] the levels drawn canvas by canvas, or the run's layer blitted
+    over the components (its zlevel above theirs): what is under the layer
+    is no one capture }
+  if FZMixed or (ProgRunZLevel > ZBase) then Exit;
   if (FProgWork = nil) or (FProgUnder = nil) or (FProgSeen = nil) or (FProgLayer = nil)
     or not FProgLayerOk then Exit;
   if (FProgLayer.Width <> FProgWork.Width) or (FProgLayer.Height <> FProgWork.Height)
@@ -829,7 +835,7 @@ begin
         P.BeginPaintOnScaled(nil, Rect(0, 0, w, h), APPI, nb, sc);
         clip := nb.ClipRect;
         { [R5-G] the two zlevel passes the full paint makes }
-        zc := ComponentZLevel;
+        zc := ZBase;
         for pass := 0 to 1 do
         begin
           if pass = 0 then

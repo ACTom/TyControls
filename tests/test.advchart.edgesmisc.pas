@@ -38,6 +38,9 @@ type
     procedure Down(AX, AY: Integer);
     procedure Up(AX, AY: Integer);
     function Wheel(AX, AY, ADelta: Integer): Boolean;
+    { [R5-J] what the pointer finds there: the component's main type, or
+      'mask', or '' }
+    function HitComp(AX, AY: Integer): string;
   end;
 
   TEmLogger = class
@@ -65,6 +68,7 @@ type
     procedure TestTheDiagnosticsAreTheOptionsAtOnce;
     procedure TestARiverMergedTheSameGapResolvesItAgain;
     procedure TestASplitAreaGradientRampsAsUpstreams;
+    procedure TestZLevelsLayerAndHitAsUpstream;
   end;
 
 { a payload as text both sides compare: keys sorted, numbers by value, a
@@ -102,6 +106,26 @@ end;
 function TEmProbe.Wheel(AX, AY, ADelta: Integer): Boolean;
 begin
   Result := DoMouseWheel([], ADelta, Point(AX, AY));
+end;
+
+function TEmProbe.HitComp(AX, AY: Integer): string;
+var t: TTyChartEventTarget;
+begin
+  t := EventTargetAt(AX, AY);
+  if t.Id = 0 then
+  begin
+    if LoadingShown then Result := 'mask' else Result := '';
+    Exit;
+  end;
+  if t.Model.Valid and (t.Model.MainType = 'title') then Exit('title');
+  case t.HdKind of
+    1, 2, 16: Exit('series');
+    4: Exit('legend');
+    { a toolbox icon's id is negative, a graphic element's its list index }
+    8: if t.Id > 0 then Exit('graphic') else Exit('toolbox');
+  end;
+  if t.HasData and (t.Params.ComponentType = 'series') then Exit('series');
+  Result := '?' + IntToStr(t.HdKind);
 end;
 
 procedure TEmLogger.Handle(Sender: TObject; const AEvent: TTyChartEvent);
@@ -720,6 +744,111 @@ begin
   end;
   AssertEquals(IntToStr(bad) + ' of ' + IntToStr(n) + ' pixels off the ramp:' + report, 0, bad);
   AssertTrue(Format('enough sampled (%d)', [n]), n >= 200);
+end;
+
+{ the ink a component is drawn in in the zlevel cases }
+function InkIs(const AComp: string; P: TBGRAPixel): Boolean;
+begin
+  if AComp = 'series' then
+    Result := (P.blue > 200) and (P.red < 60) and (P.green < 60)
+  else if AComp = 'title' then
+    Result := (P.green > 150) and (P.red < 100) and (P.blue < 100)
+  else if AComp = 'xAxis' then
+    Result := (P.red > 200) and (P.green < 60) and (P.blue < 60)
+  else if (AComp = 'legend') or (AComp = 'graphic') then
+    Result := (P.red > 200) and (P.blue > 200) and (P.green < 60)
+  else if AComp = 'mask' then
+    { the default mask, 0.8 white, over the blue symbol }
+    Result := (P.blue > 230) and (P.red > 150) and (P.green > 150)
+  else
+    Result := True;
+end;
+
+{ COMPONENTS LAYER BY THEIR OWN ZLEVEL AND THE POINTER FINDS THE TOP ONE: a
+  title, a legend, a toolbox, an x axis of zlevel 2 over a series of 1 (or
+  of the default), a title of the default under a series of 1, the root's
+  zlevel taken by them all, the loading mask (zlevel 0, z 10000) under a
+  series of 1 and over one when it is written higher -- the oracle's
+  topmost drawn element and findHover's target at each probe. [Was: the
+  components apart from the list on the root's zlevel whatever they wrote,
+  the legend's and the toolbox's elements on 0, and the mask over every
+  hit.] }
+procedure TAdvChartEdgesMiscOracleTest.TestZLevelsLayerAndHitAsUpstream;
+var
+  cases, probes: TJSONArray;
+  cs, pr: TJSONObject;
+  c, k, x, y, bad, n: Integer;
+  chart: TEmProbe;
+  bmp: TBGRABitmap;
+  draw, hit, got, report, cfg: string;
+  px: TBGRAPixel;
+begin
+  cases := TJSONObject(FRoot).Arrays['zlevel'];
+  bad := 0;
+  n := 0;
+  report := '';
+  for c := 0 to cases.Count - 1 do
+  begin
+    cs := cases.Objects[c];
+    chart := NewChart(600, 400);
+    chart.Option := '{"animation":false,' + Copy(cs.Objects['option'].AsJSON, 2, MaxInt);
+    if cs.Find('loading') is TJSONObject then
+    begin
+      cfg := cs.Objects['loading'].AsJSON;
+      chart.ShowLoading(cfg);
+    end;
+    bmp := TBGRABitmap.Create(600, 400, BGRA(255, 255, 255, 255));
+    try
+      chart.Render(bmp.Canvas, Rect(0, 0, 600, 400), 96);
+      { a progressive run: every chunk, a frame each }
+      if cs.Get('frames', 0) > 0 then
+      begin
+        for k := 1 to 50 do
+        begin
+          if not chart.ProgressiveUnfinished then Break;
+          chart.ProgressTick;
+          chart.Render(bmp.Canvas, Rect(0, 0, 600, 400), 96);
+        end;
+        AssertFalse(cs.Strings['id'] + ': chunks left', chart.ProgressiveUnfinished);
+      end;
+      probes := cs.Arrays['probes'];
+      for k := 0 to probes.Count - 1 do
+      begin
+        pr := probes.Objects[k];
+        x := pr.Arrays['at'].Integers[0];
+        y := pr.Arrays['at'].Integers[1];
+        if pr.Find('draw') is TJSONObject then draw := pr.Objects['draw'].Get('comp', '')
+        else draw := '';
+        if pr.Find('hit') is TJSONObject then hit := pr.Objects['hit'].Get('comp', '')
+        else hit := '';
+        { the toolbox's icon is line art: its pixel says nothing; the mask
+          off the symbol is white on white }
+        if (draw <> '') and (draw <> 'toolbox') and not ((draw = 'mask') and (pr.Strings['probe'] = 'point')) then
+        begin
+          px := bmp.GetPixel(x, y);
+          Inc(n);
+          if not InkIs(draw, px) then
+          begin
+            Inc(bad);
+            report := report + LineEnding + Format('%s %s at %d,%d: %s drawn on top upstream, here %d %d %d',
+              [cs.Strings['id'], pr.Strings['probe'], x, y, draw, px.red, px.green, px.blue]);
+          end;
+        end;
+        got := chart.HitComp(x, y);
+        Inc(n);
+        if got <> hit then
+        begin
+          Inc(bad);
+          report := report + LineEnding + Format('%s %s at %d,%d: the pointer finds %s upstream, %s here',
+            [cs.Strings['id'], pr.Strings['probe'], x, y, hit, got]);
+        end;
+      end;
+    finally
+      bmp.Free;
+    end;
+    chart.Free;
+  end;
+  AssertEquals(IntToStr(bad) + ' of ' + IntToStr(n) + ' differ:' + report, 0, bad);
 end;
 
 initialization

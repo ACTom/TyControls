@@ -1100,8 +1100,9 @@ begin
   APiece := bpMain;
   if (csDesigning in ComponentState)
     or ((Length(FBrushCtls) = 0) and (Length(FParBrushCtls) = 0)) then Exit;
-  { [R5-D] a cover is under the loading mask (it was added before it) }
-  if LoadMasks then Exit;
+  { [R5-D] a cover is under the loading mask (it was added before it) --
+    [R5-J] BrushController's group joins the root with no zlevel: 0 }
+  if MaskOver(0) then Exit;
   BrushCss(AX, AY, x, y);
   s := DzScale;
   if (x < 0) or (y < 0) or (x > (FLastRect.Right - FLastRect.Left) / s)

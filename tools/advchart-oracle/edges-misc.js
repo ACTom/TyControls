@@ -388,6 +388,125 @@ function runSplitAreas() {
   });
 }
 
+// ---- zlevel: a component's own zlevel (retrieveZInfo: model.get('zlevel')
+// || 0 -- a title's, a legend's, a toolbox's default 0; an axis has none of
+// its own and reads the option root's) layers it, and zrender's handler
+// finds the hover from the top of the sorted display list, zlevel first; the
+// loading mask (zlevel 0 unless written, z 10000) is one more displayable.
+// Per probe point: the component whose element is drawn on top there
+// (draw) and the one findHover answers (hit; null for none) ----
+const ZBOX = { type: 'value', min: 0, max: 10 };
+const ZSYM = (extra) => Object.assign({ type: 'scatter', symbol: 'rect', symbolSize: 120, itemStyle: { color: '#0000ff', opacity: 1 }, data: [[5, 5]] }, extra);
+const ZTITLE = (extra) => Object.assign({ text: 'TITLE', triggerEvent: true, left: 250, top: 175, textStyle: { fontSize: 40, color: '#00c000' },
+  backgroundColor: '#00ff00', padding: 10 }, extra);
+const ZL_CASES = [
+  { id: 'zl-title-above', note: 'a title of zlevel 2 over a series of zlevel 1: drawn and hit over it',
+    option: { title: ZTITLE({ zlevel: 2 }), xAxis: ZBOX, yAxis: ZBOX, series: [ZSYM({ zlevel: 1 })] }, probes: [['title', 0]] },
+  { id: 'zl-title-under', note: 'a title of the default zlevel (0, whatever z) under a series of zlevel 1',
+    option: { title: ZTITLE({}), xAxis: ZBOX, yAxis: ZBOX, series: [ZSYM({ zlevel: 1 })] }, probes: [['title', 0]] },
+  { id: 'zl-root', note: "the root's zlevel 1: the axes (no zlevel of their own) take it, the series and the title (theirs, 0) do not: the axis line over the bar, the title under the axes",
+    option: { zlevel: 1, title: ZTITLE({ top: 300, left: 40 }), xAxis: { type: 'category', data: ['a', 'b'], axisLine: { lineStyle: { color: '#ff0000', width: 6 } } }, yAxis: ZBOX,
+      series: [{ type: 'bar', barWidth: '90%', itemStyle: { color: '#0000ff' }, data: [5, 5] }] }, probes: [['xAxisLine', 0], ['title', 0]] },
+  { id: 'zl-axis', note: 'an x axis of zlevel 2 over a bar of the default zlevel',
+    option: { xAxis: { type: 'category', data: ['a', 'b'], zlevel: 2, axisLine: { lineStyle: { color: '#ff0000', width: 6 } } }, yAxis: ZBOX,
+      series: [{ type: 'bar', barWidth: '90%', itemStyle: { color: '#0000ff' }, data: [5, 5] }] }, probes: [['xAxisLine', 0]] },
+  { id: 'zl-axis-default', note: 'the same at the default zlevel: the bar (z 2) over the axis (z 0)',
+    option: { xAxis: { type: 'category', data: ['a', 'b'], axisLine: { lineStyle: { color: '#ff0000', width: 6 } } }, yAxis: ZBOX,
+      series: [{ type: 'bar', barWidth: '90%', itemStyle: { color: '#0000ff' }, data: [5, 5] }] }, probes: [['xAxisLine', 0]] },
+  { id: 'zl-legend', note: 'a legend of zlevel 2 over a series of zlevel 1',
+    option: { legend: { zlevel: 2, left: 250, top: 190, itemWidth: 60, itemHeight: 30, itemStyle: { color: '#ff00ff' }, data: ['s'] }, xAxis: ZBOX, yAxis: ZBOX,
+      series: [ZSYM({ name: 's', zlevel: 1 })] }, probes: [['legendItem', 0]] },
+  { id: 'zl-toolbox', note: 'a toolbox of zlevel 2 over a series of zlevel 1: its icon is the hover',
+    option: { toolbox: { zlevel: 2, left: 280, top: 180, itemSize: 40, feature: { restore: {} } }, xAxis: ZBOX, yAxis: ZBOX,
+      series: [ZSYM({ zlevel: 1 })] }, probes: [['toolboxIcon', 0]] },
+  { id: 'zl-mask', note: 'the loading mask (zlevel 0) under a series of zlevel 1: the symbol is drawn and hit over it; off the symbol the mask',
+    option: { xAxis: ZBOX, yAxis: ZBOX, series: [ZSYM({ zlevel: 1 })] }, loading: {}, probes: [['symbol', 0], ['point', [60, 60]]] },
+  { id: 'zl-mask-high', note: 'a loading mask of zlevel 2 over the series of zlevel 1',
+    option: { xAxis: ZBOX, yAxis: ZBOX, series: [ZSYM({ zlevel: 1 })] }, loading: { zlevel: 2 }, probes: [['symbol', 0]] },
+  { id: 'zl-graphic', note: 'a graphic rect of zlevel 2 over a title of zlevel 1 (the title over the series of 0)',
+    option: { title: ZTITLE({ zlevel: 1 }), graphic: { elements: [{ type: 'rect', zlevel: 2, left: 300, top: 195, shape: { width: 40, height: 20 },
+      style: { fill: '#ff00ff' } }] }, xAxis: ZBOX, yAxis: ZBOX, series: [ZSYM({})] }, probes: [['point', [315, 205]]] },
+  { id: 'zl-progressive', note: 'a large progressive scatter of zlevel 1 drawn chunk by chunk over a title of the default zlevel: its points over the title once drawn',
+    option: { title: ZTITLE({}), xAxis: ZBOX, yAxis: ZBOX,
+      series: [{ type: 'scatter', zlevel: 1, large: true, largeThreshold: 5, progressive: 4, progressiveThreshold: 5, symbol: 'rect', symbolSize: 30,
+        itemStyle: { color: '#0000ff', opacity: 1 }, data: [[1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [6, 6], [7, 7], [8, 8], [5.4, 5], [9, 9]] }] },
+    frames: 10, probes: [['point', [315, 205]]] },
+];
+function zlClassify(chart) {
+  const owners = new Map();
+  const model = chart.getModel();
+  model.eachComponent((mt, m) => {
+    const v = mt === 'series' ? chart.getViewOfSeriesModel(m) : chart.getViewOfComponentModel(m);
+    if (v && v.group) owners.set(v.group, mt);
+  });
+  if (chart._loadingFX) owners.set(chart._loadingFX, 'mask');
+  return el => {
+    for (let e = el; e; e = e.__hostTarget || e.parent) if (owners.has(e)) return owners.get(e);
+    return null;
+  };
+}
+function zlProbePoint(chart, kind) {
+  const what = kind[0], arg = kind[1];
+  if (what === 'point') return arg;
+  const centre = el => { const r = el.getBoundingRect().clone(); r.applyTransform(el.getComputedTransform()); return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)]; };
+  if (what === 'title') {
+    let tx = null;
+    chart.getViewOfComponentModel(chart.getModel().getComponent('title', 0)).group.traverse(e => { if (e.type === 'text' && !tx) tx = e; });
+    return centre(tx);
+  }
+  if (what === 'symbol') return centre(chart.getModel().getSeriesByIndex(0).getData().getItemGraphicEl(0));
+  if (what === 'xAxisLine') {
+    // the line, in the middle of the first bar
+    const bar = chart.getModel().getSeriesByIndex(0).getData().getItemGraphicEl(0);
+    const r = bar.getBoundingRect().clone(); r.applyTransform(bar.getComputedTransform());
+    return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height) - 1];
+  }
+  if (what === 'legendItem') {
+    let icon = null;
+    chart.getViewOfComponentModel(chart.getModel().getComponent('legend', 0)).group.traverse(e => { if (!icon && !e.isGroup && e.type !== 'text' && !e.silent) icon = e; });
+    return centre(icon);
+  }
+  if (what === 'toolboxIcon') {
+    let icon = null;
+    chart.getViewOfComponentModel(chart.getModel().getComponent('toolbox', 0)).group.traverse(e => { if (!icon && !e.isGroup && e.type !== 'text') icon = e; });
+    return centre(icon);
+  }
+  must(false, 'probe ' + what);
+}
+function runZLevels() {
+  return ZL_CASES.map(def => {
+    const chart = mk();
+    try {
+      chart.setOption(Object.assign({ animation: false }, JSON.parse(JSON.stringify(def.option))));
+      if (def.loading) chart.showLoading(Object.assign({}, def.loading));
+      frame(chart);
+      // the progressive chunks, every one
+      for (let i = 0; i < (def.frames || 0); i++) { chart._onframe(); frame(chart); }
+      if (def.frames) must(!chart._scheduler.unfinished, def.id + ': chunks left');
+      const owner = zlClassify(chart);
+      const list = chart.getZr().storage.getDisplayList(true);
+      const probes = def.probes.map(pk => {
+        const at = zlProbePoint(chart, pk);
+        const x = at[0], y = at[1];
+        let draw = null;
+        for (let i = list.length - 1; i >= 0; i--) {
+          const el = list[i];
+          if (el.ignore || el.invisible || !el.contain || !el.contain(x + 0.5, y + 0.5)) continue;
+          if (el.style && el.style.opacity === 0) continue;
+          draw = { comp: owner(el), zlevel: el.zlevel, z: el.z, type: el.type };
+          break;
+        }
+        const t = chart.getZr().handler.findHover(x + 0.5, y + 0.5).target;
+        return { at: [x, y], probe: pk[0], draw, hit: t ? { comp: owner(t), zlevel: t.zlevel, type: t.type } : null };
+      });
+      return { id: def.id, note: def.note, option: def.option, loading: def.loading || null, frames: def.frames || 0, probes };
+    }
+    finally {
+      chart.dispose();
+    }
+  });
+}
+
 function generate() {
   const types = publicTypes();
   return {
@@ -400,6 +519,7 @@ function generate() {
     append: runAppend(),
     river: runRiverRemerge(),
     splitArea: runSplitAreas(),
+    zlevel: runZLevels(),
   };
 }
 
@@ -464,6 +584,7 @@ console.log('connectOnly: ' + JSON.stringify(ev.connectOnly) + ' legacy: ' + JSO
 ev.cases.forEach(c => c.steps.forEach((s, k) => console.log(c.id + ' ' + k + ': ' + JSON.stringify(s.log.filter(l => l[0] === 'plain').map(l => l[1] + ' ' + l[2])))));
 console.log('river: ' + JSON.stringify(out1.river.steps.map(s => [s.what, s.gap, s.rectH])));
 out1.splitArea.forEach(c => console.log(c.id + ': ' + JSON.stringify(c.elements.map(e => [e.kind, e.rect, e.gradient, e.samples.length]))));
+out1.zlevel.forEach(c => console.log(c.id + ': ' + JSON.stringify(c.probes.map(p => [p.probe, p.at, p.draw && p.draw.comp, p.draw && p.draw.zlevel, p.hit && p.hit.comp]))));
 console.log('append: ' + JSON.stringify(out1.append.appended.map(r => r && [r.symbol, r.fill, r.label])));
 const bad = out1.guards.filter(q => !q.ok);
 out1.guards.forEach(q => console.log('guard ' + (q.ok ? 'ok  ' : 'FAIL') + ' ' + q.name));

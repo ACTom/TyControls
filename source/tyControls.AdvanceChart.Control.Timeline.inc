@@ -255,7 +255,7 @@ end;
 
 function TTyCustomAdvanceChart.BuildTimeline(AList: TTyPaintList): Integer;
 var
-  i, k: Integer;
+  i, k, lt, lk: Integer;
   ctx: TTyGfxPaintCtx;
   pe: TTyChartElement;
   meas: ITyTextMeasurer;
@@ -266,8 +266,14 @@ begin
   meas := nil;
   { [R5-G] every view, in the models' order: at an equal z a later
     component's group joins the root later and is drawn over }
+  lk := -1;
+  lt := 0;
   for k := 0 to High(FTlViews) do
   begin
+    { [R5-J] the elements the last one added take its zlevel }
+    if lk >= 0 then LevelTail(AList, lt, 'timeline', lk);
+    lt := AList.Count;
+    lk := k;
     v := FTlViews[k];
     if (v = nil) or not v.Shown then Continue;
     v.UpdateTransforms;
@@ -285,12 +291,15 @@ begin
         for it }
       pe.Silent := True;
       pe.Datum := TyChartDatum(-1, -1);
-      pe.Z := Round(el.ZLevel) * 100000 + Round(el.Z);
+      { [R5-J] z here, the zlevel the element's own (LevelTail: the
+        timeline's, else the root's) [was: the zlevel folded into z] }
+      pe.Z := Round(el.Z);
       pe.Z2 := Round(el.Z2);
       AList.Add(pe);
       Inc(Result);
     end;
   end;
+  if lk >= 0 then LevelTail(AList, lt, 'timeline', lk);
 end;
 
 function TTyCustomAdvanceChart.TlView(AIndex: Integer): TTyTimelineView;
@@ -310,8 +319,7 @@ begin
   ATl := -1;
   AEl := -1;
   if (Length(FTlViews) = 0) or (csDesigning in ComponentState) then Exit;
-  { [R5-D] under the loading mask }
-  if LoadMasks then Exit;
+  { [R5-D] under the loading mask -- [R5-J] by its zlevel (below) }
   if FLastPPI > 0 then s := FLastPPI / 96 else s := 1;
   x := AX / s;
   y := AY / s;
@@ -322,6 +330,8 @@ begin
   { [R5-G] the views top down: a later one is drawn over an earlier }
   for k := High(FTlViews) downto 0 do
   begin
+    { [R5-J] its zlevel: under the mask, or not the canvas searched }
+    if MaskOver(ModelZLevel('timeline', k)) or not HitIn(ModelZLevel('timeline', k)) then Continue;
     v := FTlViews[k];
     if (v = nil) or not v.Shown then Continue;
     AEl := v.HitAt(x, y, meas);

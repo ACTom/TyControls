@@ -1228,6 +1228,15 @@ type
 procedure TyPaintListRepairForTest(AOn: Boolean);
 function TyPaintListRepairsForTest: Integer;
 
+{ [R5-J] A ZLEVEL BAND FOR THE HIT TEST: while one is set, the list's hit
+  tests (HitTestElement, TyCoarseHitTest) consider only an element whose
+  ZLevel is above ALo and at most AHi -- the pointer searched canvas by
+  canvas, the highest first, as zrender's handler walks the sorted display
+  list. TyClearHitBand: every element again. }
+procedure TySetHitBand(ALo, AHi: Integer);
+procedure TyClearHitBand;
+function TyHitBandHas(AZ: Integer): Boolean;
+
 function TyChartNoDatum: TTyChartDatumRef;
 function TyChartDatum(ASeries, AData: Integer): TTyChartDatumRef; overload;
 { When the two spaces disagree -- a pie, whose sectors skip the rows a
@@ -1945,6 +1954,27 @@ begin
   else Result := TyShapeContains(AEl.Shape, AX, AY, ASlopPx);
 end;
 
+var
+  GHitBandOn: Boolean = False;
+  GHitBandLo, GHitBandHi: Integer;
+
+procedure TySetHitBand(ALo, AHi: Integer);
+begin
+  GHitBandOn := True;
+  GHitBandLo := ALo;
+  GHitBandHi := AHi;
+end;
+
+procedure TyClearHitBand;
+begin
+  GHitBandOn := False;
+end;
+
+function TyHitBandHas(AZ: Integer): Boolean;
+begin
+  Result := not GHitBandOn or ((AZ > GHitBandLo) and (AZ <= GHitBandHi));
+end;
+
 function TTyPaintList.HitTestElement(AX, AY: Double; APPI: Integer;
   APad: Boolean): Integer;
 var
@@ -1961,6 +1991,8 @@ begin
   begin
     idx := FOrder[i];
     if FItems[idx].Silent or FItems[idx].Ignore or FItems[idx].ProgHidden then Continue;
+    { [R5-J] the canvas searched now }
+    if GHitBandOn and not TyHitBandHas(FItems[idx].ZLevel) then Continue;
     if (FItems[idx].HitStrokeBand > 0) and (FItems[idx].Shape.Kind = cskRect) then
     begin
       { the outline's band: inside the rect grown by half the band, not

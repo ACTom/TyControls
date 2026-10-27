@@ -35,6 +35,9 @@ procedure TyRenderElement(P: TTyPainter; const AElement: TTyChartElement);
   element again. }
 procedure TySetZBand(ALo, AHi: Integer);
 procedure TyClearZBand;
+{ [R5-J] whether an element of zlevel AZ draws in the band set now (every
+  one when none is) }
+function TyZBandHas(AZ: Integer): Boolean;
 { the highest ZLevel of AList's elements that draw (-MaxInt for none) }
 function TyMaxZLevelOf(AList: TTyPaintList): Integer;
 
@@ -3041,6 +3044,11 @@ end;
 procedure TyClearZBand;
 begin
   GZBandOn := False;
+end;
+
+function TyZBandHas(AZ: Integer): Boolean;
+begin
+  Result := not GZBandOn or ((AZ > GZBandLo) and (AZ <= GZBandHi));
 end;
 
 function TyMaxZLevelOf(AList: TTyPaintList): Integer;
