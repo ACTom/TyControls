@@ -59,6 +59,7 @@ type
     procedure TestAShortDecimalIsTheLongWaysNumber;
     procedure TestATraceIsKeptByItsInk;
     procedure TestNoRecordIsCarriedWhereNoneWasKept;
+    procedure TestTheKeptObjectItemsDrawTheirOwn;
   end;
 
 implementation
@@ -485,6 +486,77 @@ begin
   finally
     chart.Free;
     bmp.Free;
+  end;
+end;
+
+{ the object items' own symbol and label are drawn, with the rows kept --
+  and an item appended in place into the kept array is one of them (its
+  label; an appended item's own symbol the port does not take, keep or no
+  keep -- not this batch's) }
+procedure TAdvChartSpeedKeepTest.TestTheKeptObjectItemsDrawTheirOwn;
+var
+  chart: TSkChart;
+  bmp: TBitmap;
+  i, n: Integer;
+  data: string;
+
+  function Sig(ARow: Integer): string;
+  var k: Integer; e: TTyChartElement;
+  begin
+    k := chart.SeriesList.IndexOfDatum(0, ARow);
+    AssertTrue('row ' + IntToStr(ARow) + ' drawn', k >= 0);
+    e := chart.SeriesList.Element(k);
+    Result := IntToStr(Ord(e.Shape.Kind)) + ':' + e.Shape.PathData + ':'
+      + IntToStr(Length(e.Shape.Points)) + ':'
+      + Bits(e.Shape.R1) + ':' + Bits(e.Shape.Bounds.Right - e.Shape.Bounds.Left);
+  end;
+
+  function Labels(const AText: string): Integer;
+  var k: Integer;
+  begin
+    Result := 0;
+    for k := 0 to chart.SeriesList.Count - 1 do
+      if chart.SeriesList.Element(k).Caption.Text = AText then Inc(Result);
+  end;
+
+begin
+  data := '';
+  for i := 0 to 19 do
+  begin
+    if i > 0 then data := data + ',';
+    if i = 3 then data := data + '{"value":[3,9],"symbol":"rect","symbolSize":16}'
+    else if i = 5 then data := data + '{"value":[5,4],"label":{"show":true,"formatter":"L"}}'
+    else data := data + Format('[%d,%d]', [i, (i * 7) mod 10]);
+  end;
+  TyAdvChartObjRowsForTest(1);
+  bmp := TBitmap.Create;
+  chart := TSkChart.Create(FForm);
+  try
+    bmp.PixelFormat := pf24bit;
+    bmp.SetSize(400, 300);
+    chart.Parent := FForm;
+    chart.Controller := FCtl;
+    chart.AnimationMode := camOff;
+    chart.SetBounds(0, 0, 400, 300);
+    chart.Option := '{"animation":false,"xAxis":{"max":30},"yAxis":{"max":12},'
+      + '"series":[{"type":"scatter","symbolSize":8,"data":[' + data + ']}]}';
+    chart.Cached(bmp.Canvas, Rect(0, 0, 400, 300));
+    AssertTrue('the item''s own symbol', Sig(3) <> Sig(0));
+    n := Labels('L');
+    AssertTrue('the item''s own label', n > 0);
+    AssertTrue('appended', chart.AppendData(0,
+      '[[20,3],{"value":[21,6],"symbol":"rect","symbolSize":16,"label":{"show":true,"formatter":"M"}}]'));
+    chart.Cached(bmp.Canvas, Rect(0, 0, 400, 300));
+    { a full build of the same tree: a resize }
+    chart.SetBounds(0, 0, 410, 300);
+    bmp.SetSize(410, 300);
+    chart.Cached(bmp.Canvas, Rect(0, 0, 410, 300));
+    AssertEquals('the appended object''s own label', n, Labels('M'));
+    AssertEquals('the first one''s still', n, Labels('L'));
+  finally
+    chart.Free;
+    bmp.Free;
+    TyAdvChartObjRowsForTest(4096);
   end;
 end;
 
