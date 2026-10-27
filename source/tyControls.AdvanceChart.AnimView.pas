@@ -268,6 +268,11 @@ type
     FPictRide: Boolean;
     FPictRow: Integer;
     FPictBX, FPictBY: Double;
+    { [R5-I] A REMOVED PICTORIAL BAR'S PATH: the bar's bundle, a ghost of
+      its own that is never drawn and goes when no path rides it -- its
+      move, and the path's own, go on while the path shrinks (removeElement
+      stops only the scale) }
+    FPictBundle: TTyChartAnimProxy;
     { a line's polyline: the symbols that follow its points }
     FFollow: array of TTyChartAnimFollow;
     { A COUNT (animateLabelValue) [Batch 92]: from, to, the interpolated
@@ -1516,9 +1521,26 @@ end;
 
 procedure TTyChartAnimSet.Purge;
 var
-  i: Integer;
+  i, k: Integer;
   g: TTyChartAnimProxy;
+  ridden: Boolean;
 begin
+  { [R5-I] a removed pictorial bar's bundle: gone with the last of its
+    paths }
+  for i := 0 to FGhosts.Count - 1 do
+  begin
+    g := TTyChartAnimProxy(FGhosts[i]);
+    if g.FGone or (g.FRole <> 'pbundle') then Continue;
+    ridden := False;
+    for k := 0 to FGhosts.Count - 1 do
+      if (TTyChartAnimProxy(FGhosts[k]).FPictBundle = g)
+        and not TTyChartAnimProxy(FGhosts[k]).FGone then
+      begin
+        ridden := True;
+        Break;
+      end;
+    if not ridden then g.FGone := True;
+  end;
   for i := FGhosts.Count - 1 downto 0 do
   begin
     g := TTyChartAnimProxy(FGhosts[i]);
@@ -4663,8 +4685,9 @@ var
     oe, ne: TTyChartElement;
     g, q2: TTyChartAnimProxy;
     opts: TTyAnimCallOpts;
-    keep: Boolean;
+    keep, clip: Boolean;
     nbx, nby: Double;
+    rk: string;
 
     function PNum(const AKey: string; AOr: Double): Double;
     var v: TTyAnimValue;
@@ -4681,19 +4704,33 @@ var
     begin
       q := ARowMap[nr];
       if q < 0 then Continue;
-      { the new column: kept (the same shape string), repeated, its count }
+      { the new column: kept (the same shape string), repeated, its count;
+        [R5-I] a symbolClip column too -- updateAttr(isUpdate) is an
+        updateProps whether it clips or not [was: only an unclipped one] }
       keep := False;
+      clip := False;
       cnt := 0;
       for j := 0 to AList.Count - 1 do
       begin
         ne := AList.Element(j);
-        if (ne.Anim.Role <> carPictorialGlyph) or (ne.Anim.Series <> ASer)
-          or (ne.Anim.Index <> nr) then Continue;
-        if (ne.Anim.G[6] = 0) or (ne.Anim.G[4] <> 0) then Break;
-        if not OldEl(AOld, q, 'pglyph0', oe) or (oe.Caption.LgSymbol <> ne.Caption.LgSymbol)
-          or (oe.Anim.G[6] = 0) then Break;
+        if not (ne.Anim.Role in [carPictorialGlyph, carPictorialClip])
+          or (ne.Anim.Series <> ASer) or (ne.Anim.Index <> nr) then Continue;
+        if ne.Anim.Role = carPictorialClip then
+        begin
+          if (ne.Anim.G[9] = 0) or (ne.Anim.G[8] <> 0) then Break;
+          if not OldClipPath(AOld, q, 0, oe) or (oe.Caption.LgSymbol <> ne.Caption.LgSymbol)
+            or (oe.Anim.G[9] = 0) then Break;
+          clip := True;
+          cnt := Round(ne.Anim.G[10]);
+        end
+        else
+        begin
+          if (ne.Anim.G[6] = 0) or (ne.Anim.G[4] <> 0) then Break;
+          if not OldEl(AOld, q, 'pglyph0', oe) or (oe.Caption.LgSymbol <> ne.Caption.LgSymbol)
+            or (oe.Anim.G[6] = 0) then Break;
+          cnt := Round(ne.Anim.G[7]);
+        end;
         keep := True;
-        cnt := Round(ne.Anim.G[7]);
         nbx := ne.Caption.LgG[6];
         nby := ne.Caption.LgG[7];
         Break;
@@ -4702,13 +4739,39 @@ var
       for j := 0 to High(APrev.Elements) do
       begin
         oe := APrev.Elements[j];
-        if (oe.Anim.Role <> carPictorialGlyph) or (oe.Anim.Series <> AOld)
-          or (oe.Anim.Index <> q) or (oe.Anim.Sub < cnt) then Continue;
-        q2 := OldProxy(AOld, q, TyChartAnimRoleKey(oe));
-        g := TTyChartAnimProxy.Create(ASer, q, TyChartAnimRoleKey(oe));
-        g.Animation := FAnimation;
-        g.Attr(TyAnimProps([Num1('scaleX', PNum('scaleX', oe.Anim.G[2])),
-          Num1('scaleY', PNum('scaleY', oe.Anim.G[3]))]));
+        if (oe.Anim.Series <> AOld) or (oe.Anim.Index <> q) or (oe.Anim.Sub < cnt) then Continue;
+        if clip then
+        begin
+          if oe.Anim.Role <> carPictorialClip then Continue;
+          rk := 'pcpath' + IntToStr(oe.Anim.Sub);
+        end
+        else
+        begin
+          if oe.Anim.Role <> carPictorialGlyph then Continue;
+          rk := TyChartAnimRoleKey(oe);
+        end;
+        q2 := OldProxy(AOld, q, rk);
+        { [R5-I] THE PATH'S OWN PROXY where it has one: the shrink stops its
+          scale and nothing else, a move in flight goes on }
+        if q2 <> nil then
+        begin
+          g := q2;
+          g.FClaimed := True;
+          g.FSeries := ASer;
+          g.FIndex := q;
+        end
+        else
+        begin
+          g := TTyChartAnimProxy.Create(ASer, q, rk);
+          g.Animation := FAnimation;
+          if clip then
+            g.Attr(TyAnimProps([Num1('x', oe.Caption.LgG[0]), Num1('y', oe.Caption.LgG[1]),
+              Num1('scaleX', oe.Caption.LgG[2]), Num1('scaleY', oe.Caption.LgG[3]),
+              Num1('rotation', oe.Caption.LgG[5])]))
+          else
+            g.Attr(TyAnimProps([Num1('scaleX', PNum('scaleX', oe.Anim.G[2])),
+              Num1('scaleY', PNum('scaleY', oe.Anim.G[3]))]));
+        end;
         g.FLeaving := True;
         g.FGhost := oe;
         g.FFinal := nil;
@@ -5202,7 +5265,7 @@ var
   var
     j: Integer;
     oe: TTyChartElement;
-    g, q2: TTyChartAnimProxy;
+    g, q2, qb: TTyChartAnimProxy;
     opts: TTyAnimCallOpts;
 
     function PNum(const AKey: string; AOr: Double): Double;
@@ -5215,6 +5278,7 @@ var
     end;
 
   begin
+    qb := nil;
     for j := 0 to High(APrev.Elements) do
     begin
       oe := APrev.Elements[j];
@@ -5223,13 +5287,44 @@ var
       { the item's animation off: no model, at once }
       if oe.Anim.G[4] <> 0 then Continue;
       q2 := OldProxy(AOld, AOldRow, TyChartAnimRoleKey(oe));
-      g := TTyChartAnimProxy.Create(ASer, AOldRow, TyChartAnimRoleKey(oe));
-      g.Animation := FAnimation;
-      g.Attr(TyAnimProps([Num1('scaleX', PNum('scaleX', oe.Anim.G[2])),
-        Num1('scaleY', PNum('scaleY', oe.Anim.G[3]))]));
+      { [R5-I] THE BAR'S BUNDLE goes on moving under its paths: a ghost of
+        its own, never drawn }
+      if qb = nil then
+      begin
+        qb := OldProxy(AOld, AOldRow, 'pbundle');
+        if qb <> nil then
+        begin
+          qb.FClaimed := True;
+          qb.FSeries := ASer;
+          qb.FIndex := AOldRow;
+          qb.FLeaving := True;
+          qb.FGhost := Default(TTyChartElement);
+          qb.FFinal := nil;
+          FGhosts.Add(qb);
+        end;
+      end;
+      { [R5-I] THE PATH'S OWN PROXY where it has one: removeElement stops
+        its scale and nothing else, a move in flight goes on
+        [Revised in R5-I: a new proxy of the scale alone, the path at its
+        rest] }
+      if q2 <> nil then
+      begin
+        g := q2;
+        g.FClaimed := True;
+        g.FSeries := ASer;
+        g.FIndex := AOldRow;
+      end
+      else
+      begin
+        g := TTyChartAnimProxy.Create(ASer, AOldRow, TyChartAnimRoleKey(oe));
+        g.Animation := FAnimation;
+        g.Attr(TyAnimProps([Num1('scaleX', PNum('scaleX', oe.Anim.G[2])),
+          Num1('scaleY', PNum('scaleY', oe.Anim.G[3]))]));
+      end;
       g.FLeaving := True;
       g.FGhost := oe;
       g.FFinal := nil;
+      g.FPictBundle := qb;
       FGhosts.Add(g);
       opts := TyAnimCallAt(AOldRow);
       opts.Done := @g.LeaveDone;
@@ -7236,6 +7331,10 @@ begin
   AEl := G.FGhost;
   op := NumOr(G, 'style.opacity', AEl.Style.Alpha);
   case AEl.Anim.Role of
+    carPictorialClip:
+      { [R5-I] a clipped column's path past its new count: its place, scale
+        and turn now (nothing at no scale) }
+      PictPathNow(AEl, G);
     carPictorialGlyph:
       begin
         { [R2-I7] a path past its column's new count: its scale about its
@@ -11226,7 +11325,23 @@ begin
     begin
       g := ASet.Ghost(i);
       if g.Gone then Continue;
+      { [R5-I] a removed pictorial bar's bundle: it only moves its paths }
+      if g.Role = 'pbundle' then Continue;
       ApplyGhost(el, g);
+      { [R5-I] a removed pictorial bar's path, or one shrinking in a kept
+        column: where its own move (and a removed bar's bundle's) has got
+        to }
+      if el.Anim.Role = carPictorialGlyph then
+      begin
+        x1 := NumOr(g, 'x', el.Caption.LgG[0]) - el.Caption.LgG[0];
+        y1 := NumOr(g, 'y', el.Caption.LgG[1]) - el.Caption.LgG[1];
+        if g.FPictBundle <> nil then
+        begin
+          x1 := x1 + NumOr(g.FPictBundle, 'x', el.Caption.LgG[6]) - el.Caption.LgG[6];
+          y1 := y1 + NumOr(g.FPictBundle, 'y', el.Caption.LgG[7]) - el.Caption.LgG[7];
+        end;
+        if (x1 <> 0) or (y1 <> 0) then TyShapeMove(el.Shape, x1, y1);
+      end;
       { [R2-I8] a path shrinking in a kept pictorial column: in its bundle
         as the bundle is now }
       if g.FPictRide then
@@ -11235,6 +11350,17 @@ begin
         x1 := NumOr(bp, 'x', g.FPictBX);
         y1 := NumOr(bp, 'y', g.FPictBY);
         TyShapeMove(el.Shape, x1 - el.Caption.LgG[6], y1 - el.Caption.LgG[7]);
+        { [R5-I] a clipped column's path: under the column's clip as it is
+          now }
+        if el.Anim.Role = carPictorialClip then
+          for k := 0 to ADest.Count - 1 do
+            if (ADest.Ref(k)^.Anim.Role = carPictorialClip) and (ADest.Ref(k)^.Anim.Series = g.Series)
+              and (ADest.Ref(k)^.Anim.Index = g.FPictRow) then
+            begin
+              el.HasClip := ADest.Ref(k)^.HasClip;
+              el.ClipRect := ADest.Ref(k)^.ClipRect;
+              Break;
+            end;
       end;
       { [F3d] a removed tree node's label on its host's ghost as drawn }
       if g.Role = 'treeNode' then

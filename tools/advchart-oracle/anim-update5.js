@@ -439,6 +439,28 @@ add('pictorial', 'pb-clip-move', "symbolClip bars whose paths move (symbolOffset
   [{ t: T1 - 1, do: 'sample' },
     { t: T1, do: 'merge', option: { series: [{ symbolOffset: [0, -6], data: [40, 60, 80] }] } },
     ...after([0, 1, 100, 300, 599, 600, 601], T1)]);
+// [R5-I] what was left of the pictorial update
+add('pictorial', 'pb-clip-shrink', "[R5-I] symbolClip columns whose count drops (symbolBoundingData 100 -> 50): createOrUpdateRepeatSymbols updateProps each path past the new count to no scale on the item model (isUpdate: the clip does not set it at once) and removes it when it ends",
+  PB([PS({ symbolRepeat: 'fixed', symbolClip: true, symbolBoundingData: 100, data: [30, 60, 90] })]),
+  ['pict'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ symbolBoundingData: 50 }] } },
+    ...after([0, 1, 100, 300, 599, 600, 601, 900, 1000], T1)]);
+add('pictorial', 'pb-item-update', "[R5-I] a data item's own animationDurationUpdate / animationEasingUpdate (the item model is the bar's animation model): a's glyph moves in 200 ms cubicOut, the rest in the series' 600 ms linear",
+  PB([PS({ symbolSize: ['100%', 20], animationDelayUpdate: 0,
+    data: [{ value: 30, animationDurationUpdate: 200, animationEasingUpdate: 'cubicOut' }, 60, 90] })]),
+  ['pict'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [{ value: 60, animationDurationUpdate: 200, animationEasingUpdate: 'cubicOut' }, 30, 80] }] } },
+    ...after([0, 1, 100, 199, 200, 201, 300, 599, 600, 601], T1)]);
+add('pictorial', 'pb-remove-mid', "[R5-I] a merge moves every glyph, and 100 ms in a second merge drops c: removeBar shrinks c's path on leave timing while its own move goes on (removeElement stops nothing)",
+  PB([PS({ symbolPosition: 'end', symbolSize: [20, 20], animationDelayUpdate: 0, data: [30, 60, 90] })]),
+  ['pict'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [60, 30, 40] }] } },
+    ...after([0, 1, 99], T1),
+    { t: T1 + 100, do: 'merge', option: { series: [{ data: [60, 30] }] } },
+    ...after([100, 101, 150, 200, 250, 299, 300, 301], T1)]);
 
 // ---- the treemap's labels ----
 const TM = [{ name: 'a', children: [{ name: 'a1', value: 6 }, { name: 'a2', value: 4 }] },
