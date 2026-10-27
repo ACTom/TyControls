@@ -250,7 +250,9 @@ end;
 
 procedure TAdvChartAnimLabelsTest.RunPointerCase(ACase: TJSONObject);
 var
-  name, key: string;
+  name, key, pkey: string;
+  keys: array of string;
+  kk: Integer;
   samples, moves, els, anim: TJSONArray;
   ptrEl, track: TJSONObject;
   done: array of Boolean;
@@ -290,7 +292,16 @@ begin
     Miss(name + ': no pointer element upstream');
     Exit;
   end;
-  if ptrEl.Strings['type'] = 'Rect' then key := 'shape.x' else key := 'shape.x1';
+  if ptrEl.Strings['type'] = 'Rect' then keys := ['shape.x'] else keys := ['shape.x1'];
+  { [R5-D] a polar's pointer: its axis, every number of its shape }
+  pkey := 'xAxis0';
+  if Copy(name, 1, 12) = 'polarPointer' then
+  begin
+    if Copy(name, 1, 18) = 'polarPointer.radiu' then pkey := 'radiusAxis0' else pkey := 'angleAxis0';
+    if ptrEl.Strings['type'] = 'Line' then keys := ['shape.x1', 'shape.y1', 'shape.x2', 'shape.y2']
+    else if ptrEl.Strings['type'] = 'Circle' then keys := ['shape.cx', 'shape.cy', 'shape.r']
+    else keys := ['shape.cx', 'shape.cy', 'shape.r0', 'shape.r', 'shape.startAngle', 'shape.endAngle'];
+  end;
   track := nil;
   if ptrEl.Find('track') is TJSONObject then track := ptrEl.Objects['track'];
   anim := nil;
@@ -320,7 +331,7 @@ begin
       end;
     end;
     if s > 0 then FChart.AnimTick(T1 + samples.Items[s].AsFloat);
-    p := FChart.AnimPointerProxy('xAxis0');
+    p := FChart.AnimPointerProxy(pkey);
     if p = nil then
     begin
       Miss(name + ': no pointer proxy', name + 'none');
@@ -335,22 +346,27 @@ begin
     if FChart.AnimPointerClipCount <> upAnim then
       Miss(Format('%s t=%s: %d pointer clips here, %d upstream', [name,
         samples.Items[s].AsString, FChart.AnimPointerClipCount, upAnim]), name + 'clips');
-    v := p.GetAnimProp(key);
-    if v.Kind <> avkNumber then
+    for kk := 0 to High(keys) do
     begin
-      Miss(Format('%s: %s is not modelled', [name, key]), name + key + 'mod');
-      Continue;
+      key := keys[kk];
+      v := p.GetAnimProp(key);
+      if v.Kind <> avkNumber then
+      begin
+        Miss(Format('%s: %s is not modelled', [name, key]), name + key + 'mod');
+        Continue;
+      end;
+      if (track <> nil) and (track.Find(key) is TJSONArray) then
+      begin
+        upTrack := track.Arrays[key];
+        up := FromHex(upTrack.Items[s].AsString);
+      end
+      else
+        up := FromHex(ptrEl.Objects['final'].Strings[key]);
+      Inc(FCompared);
+      if not SameBits(v.Num, up) then
+        Miss(Format('%s t=%s: %s %s here, %s upstream', [name, samples.Items[s].AsString,
+          key, Fmt(v.Num), Fmt(up)]), name + key);
     end;
-    if (track <> nil) and (track.Find(key) is TJSONArray) then
-    begin
-      upTrack := track.Arrays[key];
-      up := FromHex(upTrack.Items[s].AsString);
-    end
-    else
-      up := FromHex(ptrEl.Objects['final'].Strings[key]);
-    if not SameBits(v.Num, up) then
-      Miss(Format('%s t=%s: %s %s here, %s upstream', [name, samples.Items[s].AsString,
-        key, Fmt(v.Num), Fmt(up)]), name + key);
   end;
 end;
 

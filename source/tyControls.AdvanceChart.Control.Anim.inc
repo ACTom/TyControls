@@ -1893,6 +1893,7 @@ var
   v: TTyAnimOptValue;
   isCat: Boolean;
   s, cnt: Integer;
+  e0, e1: Double;
 begin
   { determineAnimation (BaseAxisPointer.ts:211-242) }
   isCat := AHit.Axis.Scale is TTyOrdinalScale;
@@ -1900,6 +1901,8 @@ begin
   v := TyAnimGetShallow(AModel, 'animation');
   if (v.Kind in [aokUndefined, aokNull]) or ((v.Kind = aokString) and (v.Str = 'auto')) then
   begin
+    { [R5-D] a polar axis' band and extent are its own: degrees on the
+      angle, px on the radius }
     if isCat and (AHit.Axis.BandWidth > 15) then Exit(True);
     if AHit.Spec.Snap then
     begin
@@ -1907,8 +1910,14 @@ begin
       cnt := 0;
       for s := 0 to High(FBindings) do
         if (s <= High(FStores)) and (FStores[s] <> nil)
-          and ((FBindings[s].XAxis = AHit.Axis) or (FBindings[s].YAxis = AHit.Axis)) then
+          and ((FBindings[s].XAxis = AHit.Axis) or (FBindings[s].YAxis = AHit.Axis)
+            or ((AHit.Polar <> nil) and (FBindings[s].Polar = AHit.Polar))) then
           Inc(cnt, FStores[s].Count);
+      if AHit.Polar <> nil then
+      begin
+        AHit.Polar.AxisExtent(AHit.Axis, e0, e1);
+        Exit(Abs(e0 - e1) / cnt > 15);
+      end;
       Exit(Abs(AHit.Axis.PxStart - AHit.Axis.PxStop) / cnt > 15);
     end;
     Exit(False);
@@ -1961,13 +1970,23 @@ begin
   begin
     hit := FTipHits[i];
     if (hit.Axis = nil) or (hit.Spec.PointerType = aptNone) then Continue;
-    { a polar pointer does not slide [Batch 111], nor a single's
-      [Batch 118] }
-    if (hit.Polar <> nil) or (hit.Single <> nil) then Continue;
-    at := hit.Axis.DataToCoord(PointerValue(hit), True);
-    if IsNan(at) then Continue;
+    { a single's pointer does not slide [Batch 118] }
+    if hit.Single <> nil then Continue;
     key := PtrKeyOf(hit.Axis);
-    props := PtrProps(hit, at);
+    { [R5-D] A POLAR'S DOES: PolarAxisPointer's shape through the same
+      updateProps -- the line's ends, the circle's r, the sector's angles
+      or radii as numbers -- and the label's place
+      [was: no slide, Batch 111] }
+    if hit.Polar <> nil then
+    begin
+      if not PtrPolarProps(hit, props) then Continue;
+    end
+    else
+    begin
+      at := hit.Axis.DataToCoord(PointerValue(hit), True);
+      if IsNan(at) then Continue;
+      props := PtrProps(hit, at);
+    end;
     if FPtrProxies = nil then FPtrProxies := TFPList.Create;
     if FPtrAnim = nil then FPtrAnim := NewAnimDriver;
     p := nil;
@@ -2004,6 +2023,105 @@ begin
     end;
   end;
   AnimArmTimer;
+end;
+
+function TTyCustomAdvanceChart.PtrPolarProps(const AHit: TTyAxisHit;
+  out AProps: TTyAnimProps): Boolean;
+var
+  d: TTyPolarPointerDraw;
+  m: ITyTextMeasurer;
+  s: TTyPolarPointerShape;
+begin
+  AProps := nil;
+  m := nil;
+  if AHit.Spec.LabelSpec.Show then m := NewTextMeasurer(FLastPPI);
+  Result := PolarPointerGeometry(AHit, Rect(Round(FLastRect.Left), Round(FLastRect.Top),
+    Round(FLastRect.Right), Round(FLastRect.Bottom)), m, FLastPPI, d);
+  if not Result then Exit;
+  s := d.Shape;
+  case s.Kind of
+    plpkLine:
+      AProps := TyAnimProps([TyAnimProp('shape.x1', TyAnimNum(s.X1)),
+        TyAnimProp('shape.y1', TyAnimNum(s.Y1)),
+        TyAnimProp('shape.x2', TyAnimNum(s.X2)),
+        TyAnimProp('shape.y2', TyAnimNum(s.Y2))]);
+    plpkCircle:
+      AProps := TyAnimProps([TyAnimProp('shape.cx', TyAnimNum(s.CX)),
+        TyAnimProp('shape.cy', TyAnimNum(s.CY)),
+        TyAnimProp('shape.r', TyAnimNum(s.R))]);
+    plpkSector:
+      AProps := TyAnimProps([TyAnimProp('shape.cx', TyAnimNum(s.CX)),
+        TyAnimProp('shape.cy', TyAnimNum(s.CY)),
+        TyAnimProp('shape.r0', TyAnimNum(s.R0)),
+        TyAnimProp('shape.r', TyAnimNum(s.R)),
+        TyAnimProp('shape.startAngle', TyAnimNum(s.StartAngle)),
+        TyAnimProp('shape.endAngle', TyAnimNum(s.EndAngle))]);
+  else
+    Exit(False);
+  end;
+  { updateLabelEl: the label's x / y with the pointer's timing }
+  if d.HasLabel then
+  begin
+    SetLength(AProps, Length(AProps) + 2);
+    AProps[High(AProps) - 1] := TyAnimProp('label.x', TyAnimNum(d.X));
+    AProps[High(AProps)] := TyAnimProp('label.y', TyAnimNum(d.Y));
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.PtrPolarNow(const AHit: TTyAxisHit;
+  var ADraw: TTyPolarPointerDraw);
+var
+  k: Integer;
+  p: TTyChartAnimProxy;
+  key: string;
+
+  procedure Take(const AKey: string; var AValue: Double);
+  var v: Double;
+  begin
+    v := p.Num(AKey);
+    if not IsNan(v) then AValue := v;
+  end;
+
+begin
+  { an export draws the pointer where it rests }
+  if (FPtrProxies = nil) or (AHit.Axis = nil) or FExporting then Exit;
+  key := PtrKeyOf(AHit.Axis);
+  for k := 0 to FPtrProxies.Count - 1 do
+  begin
+    p := TTyChartAnimProxy(FPtrProxies[k]);
+    if p.Role <> key then Continue;
+    if p.AtFinal then Exit;
+    case ADraw.Shape.Kind of
+      plpkLine:
+        begin
+          Take('shape.x1', ADraw.Shape.X1);
+          Take('shape.y1', ADraw.Shape.Y1);
+          Take('shape.x2', ADraw.Shape.X2);
+          Take('shape.y2', ADraw.Shape.Y2);
+        end;
+      plpkCircle:
+        begin
+          Take('shape.cx', ADraw.Shape.CX);
+          Take('shape.cy', ADraw.Shape.CY);
+          Take('shape.r', ADraw.Shape.R);
+        end;
+      plpkSector:
+        begin
+          Take('shape.cx', ADraw.Shape.CX);
+          Take('shape.cy', ADraw.Shape.CY);
+          Take('shape.r0', ADraw.Shape.R0);
+          Take('shape.r', ADraw.Shape.R);
+          Take('shape.startAngle', ADraw.Shape.StartAngle);
+          Take('shape.endAngle', ADraw.Shape.EndAngle);
+        end;
+    end;
+    if ADraw.HasLabel then
+    begin
+      Take('label.x', ADraw.X);
+      Take('label.y', ADraw.Y);
+    end;
+    Exit;
+  end;
 end;
 
 function TTyCustomAdvanceChart.PtrShadowNow(const AHit: TTyAxisHit;

@@ -2076,6 +2076,10 @@ type
     function AnimLoopOnly: Boolean;
     { the pointer's slide: synced to the hover, dropped with the build }
     procedure PtrAnimSync;
+    { [R5-D] a polar pointer's props: its shape's numbers and the label's
+      place; and the shape / label as its proxy has them now }
+    function PtrPolarProps(const AHit: TTyAxisHit; out AProps: TTyAnimProps): Boolean;
+    procedure PtrPolarNow(const AHit: TTyAxisHit; var ADraw: TTyPolarPointerDraw);
     procedure PtrAnimDrop;
     function PtrKeyOf(AAxis: TTyAxis): string;
     function PtrModelOf(const AHit: TTyAxisHit; out AOwn: TJSONObject): TTyAnimModel;

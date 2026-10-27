@@ -715,6 +715,33 @@ function an4Cases() {
   out.push(pointerCase('axisPointer.rootOff',
     'root animation false: the tooltip pointer keeps its own animation \'auto\' and still slides',
     ptrBar(null, { animation: false }), { x: 150, y: 150 }, [{ at: 0, x: 270, y: 150 }]));
+  // ---- [R5-D] a polar's pointer: PolarAxisPointer's shapes under the same
+  // determineAnimation (a category band in degrees on the angle axis, in px
+  // on the radius) and updateProps -- the line's ends, the circle's r, the
+  // sector's angles or radii tween as numbers ----
+  const CATS6 = ['A', 'B', 'C', 'D', 'E', 'F'];
+  const polarBar = (tip, angle, radius) => ({
+    tooltip: Object.assign({ trigger: 'axis' }, tip || {}), polar: {},
+    angleAxis: angle, radiusAxis: radius,
+    series: [{ type: 'bar', coordinateSystem: 'polar', emphasis: { disabled: true }, data: [3, 5, 2, 4, 6, 1] }] });
+  out.push(pointerCase('polarPointer.angleLine',
+    'a category angle axis (bands of 60 degrees): the radial line slides A -> C, its two ends tweened as numbers',
+    polarBar(null, { type: 'category', data: CATS6 }, { type: 'value' }), { x: 230, y: 98 }, [{ at: 0, x: 230, y: 202 }]));
+  out.push(pointerCase('polarPointer.angleShadow',
+    'the shadow sector slides A -> C (startAngle / endAngle)',
+    polarBar({ axisPointer: { type: 'shadow' } }, { type: 'category', data: CATS6 }, { type: 'value' }),
+    { x: 230, y: 98 }, [{ at: 0, x: 230, y: 202 }]));
+  out.push(pointerCase('polarPointer.radiusLine',
+    'a category radius axis (bands of 20 px): the circle grows A -> D (r)',
+    polarBar(null, { type: 'value' }, { type: 'category', data: CATS6 }), { x: 210, y: 150 }, [{ at: 0, x: 270, y: 150 }]));
+  out.push(pointerCase('polarPointer.radiusShadow',
+    'the ring slides A -> D (r0 / r)',
+    polarBar({ axisPointer: { type: 'shadow' } }, { type: 'value' }, { type: 'category', data: CATS6 }),
+    { x: 210, y: 150 }, [{ at: 0, x: 270, y: 150 }]));
+  out.push(pointerCase('polarPointer.off',
+    'animation false on the polar pointer: it jumps',
+    polarBar({ axisPointer: { animation: false } }, { type: 'category', data: CATS6 }, { type: 'value' }),
+    { x: 230, y: 98 }, [{ at: 0, x: 230, y: 202 }]));
   return out;
 }
 
@@ -742,6 +769,9 @@ function generate() {
   g.push({ id: 'pointer-off-still', ok: byId('axisPointer.off').clips.every(n => n === 0) });
   g.push({ id: 'pointer-dense-still', ok: byId('axisPointer.dense').clips.every(n => n === 0) });
   g.push({ id: 'pointer-value-snaps', ok: byId('axisPointer.valueSnap').clips.some(n => n > 0) });
+  g.push({ id: 'polar-pointer-slides', ok: ['polarPointer.angleLine', 'polarPointer.angleShadow', 'polarPointer.radiusLine',
+    'polarPointer.radiusShadow'].every(id => byId(id).clips.some(n => n > 0)) });
+  g.push({ id: 'polar-pointer-off-still', ok: byId('polarPointer.off').clips.every(n => n === 0) });
   // markLine animation false: still; the markPoint of the series whose animation is off: still; the other's pops in
   const offEls = byId('bar-markers.off').elements;
   g.push({ id: 'markers-off-still', ok: offEls.filter(e => e.owner.startsWith('markLine')).every(e => !e.animators)
