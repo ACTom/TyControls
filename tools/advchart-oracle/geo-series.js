@@ -1002,6 +1002,26 @@ const CASES = [
       { finder: { seriesIndex: 0 }, value: 'B' }, { finder: { seriesIndex: 0 }, value: 'nowhere' },
       { finder: { seriesIndex: 1 }, value: 'both' }, { finder: { seriesIndex: 0 }, value: 'both' }],
   },
+  // [spec 242] a map series' data from a dataset (createSeriesDataSimply over
+  // the series' source; makeSeriesEncodeForNameBased: the first ordinal
+  // column the name, the first number column the value), the regions not in
+  // it appended
+  {
+    id: 'r5-map-dataset',
+    note: "a map series with no data of its own reads the dataset: the first column the region's name, the second its value (the visualMap's colour, the tooltip's value); the regions the dataset does not name appended -- with no name (a rows provider reads the {name} items by column), so no region finds them: the data's own colour (the palette's)",
+    option: opt({ color: ['#123456'], tooltip: Object.assign({}, TIP), visualMap: { min: 0, max: 30, inRange: { color: ['#ffffff', '#ff0000'] } },
+      dataset: { source: [['region', 'v'], ['A', 10], ['B', 20], ['C', 30]] },
+      series: [{ type: 'map', map: 'g4' }] }),
+    steps: [{ move: { series: 0, region: 'B' } }, { leave: true }],
+  },
+  {
+    id: 'r5-map-dataset-encode',
+    note: "a map series on the second of two datasets of objects, its encode naming the name and the value columns",
+    option: opt({ color: ['#654321'], tooltip: Object.assign({}, TIP), visualMap: { min: 0, max: 30, inRange: { color: ['#ffffff', '#0000ff'] } },
+      dataset: [{ source: [{ n: 'A', v: 1 }] }, { source: [{ v: 5, n: 'B', w: 25 }, { v: 7, n: 'C', w: 5 }, { v: 9, n: 'A', w: 15 }] }],
+      series: [{ type: 'map', map: 'g4', name: 'enc', datasetIndex: 1, encode: { itemName: 'n', value: 'w' } }] }),
+    steps: [{ move: { series: 0, region: 'A' } }, { leave: true }],
+  },
 ];
 
 // ---------- guards ----------

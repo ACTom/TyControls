@@ -2027,6 +2027,9 @@ begin
   Result.Given := False;
   Result.Columns[0] := valueDim;
   Result.ItemName := nameDim;
+  { [spec 242] encode.seriesName = [nameDimIndex]: the series is named after
+    the name column }
+  Result.SeriesName := nameDim;
 end;
 
 end.
