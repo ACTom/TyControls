@@ -752,6 +752,8 @@ var
 begin
   Result := Default(TTyDzTarget);
   res := Default(TTyDzTarget);
+  { [R5-D] a slider is under the loading mask }
+  if LoadMasks then Exit;
   s := DzScale;
   if (AX < 0) or (AY < 0) or (AX > (FLastRect.Right - FLastRect.Left) / s)
     or (AY > (FLastRect.Bottom - FLastRect.Top) / s) then Exit;

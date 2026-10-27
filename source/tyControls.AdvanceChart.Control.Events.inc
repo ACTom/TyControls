@@ -183,11 +183,22 @@ begin
   end;
   { ParallelView's mouseup hears every button [Batch 140] }
   if (Button <> mbLeft) and not (csDesigning in ComponentState) then ParExpUp(X, Y);
-  if not (csDesigning in ComponentState) then EventUp(Button, X, Y);
-  { the click through the pointer's listener, after the chart's own
-    [Batch 153] }
+  FEvClickDue := False;
+  FEvClickDefer := True;
+  try
+    if not (csDesigning in ComponentState) then EventUp(Button, X, Y);
+  finally
+    FEvClickDefer := False;
+  end;
+  { the click through the pointer's listener [Batch 153] -- [R5-D] before
+    the chart's own click event, which is called at last }
   if zrClick and not (csDesigning in ComponentState) then
     PtrListener('click', X, Y, d, el);
+  if FEvClickDue then
+  begin
+    FEvClickDue := False;
+    EmitChartEvent('click', FEvClickT, FEvClickX, FEvClickY);
+  end;
   inherited MouseUp(Button, Shift, X, Y);
 end;
 
@@ -328,6 +339,8 @@ begin
   Result := TyChartNoDatum;
   AElement := -1;
   if (FPaintList = nil) or not FPaintListValid then Exit;
+  { [R5-D] the loading mask over everything }
+  if LoadMasks then Exit;
   { A BRUSH COVER over the item is the target: nothing beneath it is
     hovered or pressed [Batch 126] }
   if BrushPieceAt(AX, AY, bb, bi, bp) then Exit;
@@ -913,6 +926,8 @@ var
 begin
   Result := Default(TTyChartEventTarget);
   Result.Params := TyChartBlankParams;
+  { [R5-D] the loading mask: no ECData, no event }
+  if LoadMasks then Exit;
   { THE BRUSH'S COVERS, z 10000 over everything [Batch 126]: no data, only
     zrender's Draggable }
   if BrushPieceAt(AX, AY, k, q, piece) then
@@ -1441,6 +1456,10 @@ begin
   { and a breadcrumb item a solve replaced [F2a] }
   if (FEvHover.Id <> 0) and (FEvHover.HdKind = 15) and (FEvHover.HdGen <> FTmCrumbGen) then
     FEvHover := EventTargetAt(FEvHoverX, FEvHoverY);
+  { [R5-D] and the loading mask, gone }
+  if FEvHoverMask and not LoadMasks then
+    FEvHover := EventTargetAt(FEvHoverX, FEvHoverY);
+  FEvHoverMask := False;
   if FEvPreset then t := FEvPresetT
   else t := EventTargetAt(AX, AY);
   FEvPreset := False;
@@ -1489,6 +1508,10 @@ begin
   FEvHover := t;
   FEvHoverX := AX;
   FEvHoverY := AY;
+  { [R5-D] over the canvas while the mask shows, the mask is what is
+    hovered }
+  FEvHoverMask := LoadMasks and (AX >= FLastRect.Left) and (AY >= FLastRect.Top)
+    and (AX <= FLastRect.Right) and (AY <= FLastRect.Bottom);
 end;
 
 procedure TTyCustomAdvanceChart.EventOver;
@@ -1602,7 +1625,17 @@ begin
   { ECHARTS' OWN CLICK HANDLER FIRST: an item click dispatches select or
     unselect, whatever selectedMode says [Batch 88] }
   StClickSelect(t);
-  if t.HasData then EmitChartEvent('click', t, AX, AY);
+  { [R5-D] THE CHART'S click WAITS for the zr-level click listeners -- the
+    pointer's global one among them: echarts' mouse event handlers are
+    zrEventfulCallAtLast (MouseUp emits it) [was: here, before them] }
+  if FEvClickDefer then
+  begin
+    FEvClickDue := t.HasData;
+    FEvClickT := t;
+    FEvClickX := AX;
+    FEvClickY := AY;
+  end
+  else if t.HasData then EmitChartEvent('click', t, AX, AY);
   VmApplyStates;
   TlApplyStates;
 end;
@@ -2066,6 +2099,8 @@ begin
       c := 'grab';
   end;
   if FTbCursor <> '' then c := FTbCursor;
+  { [R5-D] the loading mask's own cursor, unless a pan holds the pointer }
+  if LoadMasks and (c <> 'grabbing') then c := 'pointer';
   ApplyCursorName(c);
 end;
 
@@ -2109,6 +2144,9 @@ begin
     c := 'grab'
   else
     c := TargetCursor(t);
+  { [R5-D] released on the loading mask: its own cursor }
+  if LoadMasks and (AX >= FLastRect.Left) and (AY >= FLastRect.Top)
+    and (AX <= FLastRect.Right) and (AY <= FLastRect.Bottom) then c := 'pointer';
   ApplyCursorName(c);
 end;
 

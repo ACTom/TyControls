@@ -1,0 +1,1165 @@
+{
+ "source": "ECharts 6.1.0, zrender 6.1.0; node v22.22.2",
+ "W": 600,
+ "H": 400,
+ "seed": 2463534242,
+ "clock": {
+  "start": 1700000000000,
+  "stepDt": 10
+ },
+ "notes": [
+  "Pointer steps: zrender Handler mousemove / mousedown + mouseup + click / mouseout from outside the canvas; each 10 ms after the last; a frame of every chart after every step.",
+  "The cursor: the last proxy.setCursor of the step (null: none)."
+ ],
+ "cases": [
+  {
+   "id": "item",
+   "note": "an item tooltip and a legend: under the mask the bar is not hovered, clicked or tipped, the legend item not clicked; the cursor is the pointer of the mask; after hideLoading all of it again",
+   "types": [
+    "mouseover",
+    "mouseout",
+    "click",
+    "mousedown",
+    "legendselectchanged",
+    "datazoom",
+    "updateaxispointer",
+    "showtip",
+    "hidetip"
+   ],
+   "charts": [
+    {
+     "option": {
+      "tooltip": {
+       "trigger": "item"
+      },
+      "animation": false,
+      "legend": {},
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "name": "B",
+        "data": [
+         3,
+         9,
+         6,
+         8
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "show",
+     "events": [],
+     "state": [
+      {
+       "tip": null,
+       "cursor": null,
+       "pointers": [],
+       "window": null
+      }
+     ]
+    },
+    {
+     "op": "move",
+     "at": [
+      240,
+      150
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": [
+      {
+       "tip": null,
+       "cursor": "pointer",
+       "pointers": [],
+       "window": null
+      }
+     ]
+    },
+    {
+     "op": "click",
+     "at": [
+      240,
+      150
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": [
+      {
+       "tip": null,
+       "cursor": "pointer",
+       "pointers": [],
+       "window": null
+      }
+     ]
+    },
+    {
+     "op": "move",
+     "at": [
+      5,
+      5
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": [
+      {
+       "tip": null,
+       "cursor": "pointer",
+       "pointers": [],
+       "window": null
+      }
+     ]
+    },
+    {
+     "op": "click",
+     "at": [
+      300,
+      13
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": [
+      {
+       "tip": null,
+       "cursor": "pointer",
+       "pointers": [],
+       "window": null
+      }
+     ]
+    },
+    {
+     "op": "hide",
+     "events": [],
+     "state": [
+      {
+       "tip": null,
+       "cursor": null,
+       "pointers": [],
+       "window": null
+      }
+     ]
+    },
+    {
+     "op": "move",
+     "at": [
+      240,
+      151
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "mouseover",
+       {
+        "componentType": "series",
+        "seriesIndex": 0,
+        "dataIndex": 1,
+        "name": "b"
+       }
+      ]
+     ],
+     "state": [
+      {
+       "tip": "item:0:1",
+       "cursor": "pointer",
+       "pointers": [],
+       "window": null
+      }
+     ]
+    },
+    {
+     "op": "click",
+     "at": [
+      240,
+      151
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "mousedown",
+       {
+        "componentType": "series",
+        "seriesIndex": 0,
+        "dataIndex": 1,
+        "name": "b"
+       }
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "click",
+       {
+        "componentType": "series",
+        "seriesIndex": 0,
+        "dataIndex": 1,
+        "name": "b"
+       }
+      ]
+     ],
+     "state": [
+      {
+       "tip": "item:0:1",
+       "cursor": "pointer",
+       "pointers": [],
+       "window": null
+      }
+     ]
+    },
+    {
+     "op": "leave",
+     "events": [
+      [
+       0,
+       "mouseout",
+       {
+        "componentType": "series",
+        "seriesIndex": 0,
+        "dataIndex": 1,
+        "name": "b"
+       }
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": [
+      {
+       "tip": "item:0:1",
+       "cursor": null,
+       "pointers": [],
+       "window": null
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 200,
+     "events": [],
+     "state": [
+      {
+       "tip": null,
+       "cursor": null,
+       "pointers": [],
+       "window": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "axis",
+   "note": "an axis tooltip: the global listener of the axis pointer still hears the moves under the mask -- the pointer and the axis tooltip show",
+   "types": [
+    "mouseover",
+    "mouseout",
+    "click",
+    "mousedown",
+    "legendselectchanged",
+    "datazoom",
+    "updateaxispointer",
+    "showtip",
+    "hidetip"
+   ],
+   "charts": [
+    {
+     "option": {
+      "tooltip": {
+       "trigger": "axis"
+      },
+      "animation": false,
+      "legend": {},
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "name": "B",
+        "data": [
+         3,
+         9,
+         6,
+         8
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "show",
+     "events": [],
+     "state": [
+      {
+       "tip": null,
+       "cursor": null,
+       "pointers": [],
+       "window": null
+      }
+     ]
+    },
+    {
+     "op": "move",
+     "at": [
+      240,
+      150
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 1
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 240,
+        "y": 150,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.category",
+            "axisId": "␀series␀0␀0",
+            "value": 1,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": [
+      {
+       "tip": "axis:0/1@x0",
+       "cursor": "pointer",
+       "pointers": [
+        "x0"
+       ],
+       "window": null
+      }
+     ]
+    },
+    {
+     "op": "leave",
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": [
+      {
+       "tip": "axis:0/1@x0",
+       "cursor": null,
+       "pointers": [],
+       "window": null
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 200,
+     "events": [],
+     "state": [
+      {
+       "tip": null,
+       "cursor": null,
+       "pointers": [],
+       "window": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "zoom",
+   "note": "an inside dataZoom pans and zooms under the mask (its RoamController is zr-level); the handle of a slider is under the mask and does not drag",
+   "types": [
+    "mouseover",
+    "mouseout",
+    "click",
+    "mousedown",
+    "datazoom"
+   ],
+   "charts": [
+    {
+     "option": {
+      "dataZoom": [
+       {
+        "type": "inside",
+        "start": 20,
+        "end": 80
+       },
+       {
+        "type": "slider",
+        "start": 20,
+        "end": 80
+       }
+      ],
+      "animation": false,
+      "legend": {},
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "name": "B",
+        "data": [
+         3,
+         9,
+         6,
+         8
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "show",
+     "events": [],
+     "state": [
+      {
+       "tip": null,
+       "cursor": null,
+       "pointers": [],
+       "window": [
+        20,
+        80
+       ]
+      }
+     ]
+    },
+    {
+     "op": "wheel",
+     "at": [
+      300,
+      200
+     ],
+     "delta": 1,
+     "events": [
+      [
+       0,
+       "datazoom",
+       {
+        "type": "datazoom",
+        "batch": [
+         {
+          "dataZoomId": "␀series␀0␀0",
+          "start": 22.545454545454547,
+          "end": 77.0909090909091,
+          "type": "datazoom",
+          "animation": {
+           "easing": "cubicOut",
+           "duration": 100
+          },
+          "batch": null
+         }
+        ]
+       }
+      ]
+     ],
+     "state": [
+      {
+       "tip": null,
+       "cursor": null,
+       "pointers": [],
+       "window": [
+        22.545454545454547,
+        77.0909090909091
+       ]
+      }
+     ]
+    },
+    {
+     "op": "drag",
+     "points": [
+      [
+       200,
+       200
+      ],
+      [
+       260,
+       200
+      ],
+      [
+       320,
+       200
+      ]
+     ],
+     "events": [
+      [
+       0,
+       "datazoom",
+       {
+        "type": "datazoom",
+        "batch": [
+         {
+          "dataZoomId": "␀series␀0␀0",
+          "start": 15.272727272727273,
+          "end": 69.81818181818181,
+          "type": "datazoom",
+          "animation": {
+           "easing": "cubicOut",
+           "duration": 100
+          },
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "datazoom",
+       {
+        "type": "datazoom",
+        "batch": [
+         {
+          "dataZoomId": "␀series␀0␀0",
+          "start": 8,
+          "end": 62.54545454545454,
+          "type": "datazoom",
+          "animation": {
+           "easing": "cubicOut",
+           "duration": 100
+          },
+          "batch": null
+         }
+        ]
+       }
+      ]
+     ],
+     "state": [
+      {
+       "tip": null,
+       "cursor": "pointer",
+       "pointers": [],
+       "window": [
+        8,
+        62.54545454545454
+       ]
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 500,
+     "events": [],
+     "state": [
+      {
+       "tip": null,
+       "cursor": null,
+       "pointers": [],
+       "window": [
+        8,
+        62.54545454545454
+       ]
+      }
+     ]
+    },
+    {
+     "op": "hide",
+     "events": [],
+     "state": [
+      {
+       "tip": null,
+       "cursor": null,
+       "pointers": [],
+       "window": [
+        8,
+        62.54545454545454
+       ]
+      }
+     ]
+    },
+    {
+     "op": "wheel",
+     "at": [
+      300,
+      200
+     ],
+     "delta": -1,
+     "events": [
+      [
+       0,
+       "datazoom",
+       {
+        "type": "datazoom",
+        "batch": [
+         {
+          "dataZoomId": "␀series␀0␀0",
+          "start": 5.454545454545453,
+          "end": 65.45454545454545,
+          "type": "datazoom",
+          "animation": {
+           "easing": "cubicOut",
+           "duration": 100
+          },
+          "batch": null
+         }
+        ]
+       }
+      ]
+     ],
+     "state": [
+      {
+       "tip": null,
+       "cursor": null,
+       "pointers": [],
+       "window": [
+        5.454545454545453,
+        65.45454545454545
+       ]
+      }
+     ]
+    },
+    {
+     "op": "drag",
+     "points": [
+      [
+       200,
+       200
+      ],
+      [
+       260,
+       200
+      ],
+      [
+       320,
+       200
+      ]
+     ],
+     "events": [
+      [
+       0,
+       "mouseout",
+       {
+        "componentType": "series",
+        "seriesIndex": 0,
+        "dataIndex": 1,
+        "name": "b"
+       }
+      ],
+      [
+       0,
+       "datazoom",
+       {
+        "type": "datazoom",
+        "batch": [
+         {
+          "dataZoomId": "␀series␀0␀0",
+          "start": 0,
+          "end": 60,
+          "type": "datazoom",
+          "animation": {
+           "easing": "cubicOut",
+           "duration": 100
+          },
+          "batch": null
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "mouseover",
+       {
+        "componentType": "series",
+        "seriesIndex": 0,
+        "dataIndex": 1,
+        "name": "b"
+       }
+      ]
+     ],
+     "state": [
+      {
+       "tip": null,
+       "cursor": "pointer",
+       "pointers": [],
+       "window": [
+        0,
+        60
+       ]
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 500,
+     "events": [],
+     "state": [
+      {
+       "tip": null,
+       "cursor": null,
+       "pointers": [],
+       "window": [
+        0,
+        60
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "zlevel",
+   "note": "the effect at zlevel 1 is still over the zlevel-0 chart: its mask is the target",
+   "types": [
+    "mouseover",
+    "mouseout",
+    "click",
+    "mousedown",
+    "legendselectchanged",
+    "datazoom",
+    "updateaxispointer",
+    "showtip",
+    "hidetip"
+   ],
+   "charts": [
+    {
+     "option": {
+      "tooltip": {
+       "trigger": "item"
+      },
+      "animation": false,
+      "legend": {},
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d"
+       ]
+      },
+      "yAxis": {
+       "min": 0,
+       "max": 10
+      },
+      "series": [
+       {
+        "type": "bar",
+        "name": "B",
+        "data": [
+         3,
+         9,
+         6,
+         8
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "show",
+     "cfg": {
+      "zlevel": 1
+     },
+     "events": [],
+     "state": [
+      {
+       "tip": null,
+       "cursor": null,
+       "pointers": [],
+       "window": null
+      }
+     ]
+    },
+    {
+     "op": "move",
+     "at": [
+      240,
+      150
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": [
+      {
+       "tip": null,
+       "cursor": "pointer",
+       "pointers": [],
+       "window": null
+      }
+     ]
+    },
+    {
+     "op": "hide",
+     "events": [],
+     "state": [
+      {
+       "tip": null,
+       "cursor": null,
+       "pointers": [],
+       "window": null
+      }
+     ]
+    },
+    {
+     "op": "move",
+     "at": [
+      240,
+      152
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": [
+      {
+       "tip": "item:0:1",
+       "cursor": "pointer",
+       "pointers": [],
+       "window": null
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "guards": [
+  {
+   "id": "item-masked",
+   "ok": true,
+   "what": "no hover, no tip under the mask"
+  },
+  {
+   "id": "item-cursor",
+   "ok": true,
+   "what": "the cursor of the mask"
+  },
+  {
+   "id": "item-noclick",
+   "ok": true,
+   "what": "no click"
+  },
+  {
+   "id": "item-nolegend",
+   "ok": true,
+   "what": "no legend click"
+  },
+  {
+   "id": "item-after",
+   "ok": true,
+   "what": "back after hideLoading"
+  },
+  {
+   "id": "axis-pointer",
+   "ok": true,
+   "what": "the axis pointer and its tooltip under the mask"
+  },
+  {
+   "id": "zoom-wheel",
+   "ok": true,
+   "what": "the inside dataZoom zooms under the mask"
+  },
+  {
+   "id": "zlevel-over",
+   "ok": true,
+   "what": "zlevel 1 masks"
+  },
+  {
+   "id": "zlevel-after",
+   "ok": true,
+   "what": "hidden: the mask is gone, the last hover is looked for again where it was (no mouseover), the tip shows"
+  }
+ ]
+}

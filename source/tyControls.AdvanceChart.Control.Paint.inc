@@ -1152,7 +1152,22 @@ begin
     [Batch 106] }
   if FExporting then
   begin
-    PaintAxisPointers(APainter, ARect, APPI, AMeasurer, OptionPointerHits);
+    { [R5-D] THE STORAGE AS IT STANDS: the axis pointers and the emphasis a
+      pointer put on the marks are zrender elements, so getDataURL draws
+      them; the box (html) and the keyboard's ring (the port's) it does
+      not. At another size or PPI the export is laid out anew and the
+      pointer's state is not carried into it.
+      [Was: the option's own pointers only, no emphasis.] }
+    if FExportSameView and (Length(FTipHits) > 0) then
+    begin
+      PaintAxisPointers(APainter, ARect, APPI, AMeasurer, FTipHits);
+      PaintEmphasis(APainter, APPI, FTipHits);
+    end
+    else
+    begin
+      PaintAxisPointers(APainter, ARect, APPI, AMeasurer, OptionPointerHits);
+      if FExportSameView then PaintEmphasis(APainter, APPI, nil);
+    end;
     { [R2-I9] getRenderedCanvas draws every built-in layer, the hover
       layer too }
     PaintHoverLayer(APainter);
@@ -1205,10 +1220,11 @@ begin
   PaintKbRing(APainter);
   { THE POINTER FIRST, THE BOX OVER IT. A tooltip with the pointer's own line
     drawn across it would read as two things at one depth. }
-  PaintTooltip(APainter, ARect, APPI, AMeasurer);
-  { THE LOADING EFFECT OVER EVERYTHING: upstream's mask is z 10000
-    [Batch 106] }
+  { THE LOADING EFFECT OVER THE CHART: upstream's mask is z 10000
+    [Batch 106] -- [R5-D] under the box, which is html over the canvas
+    there [was: over the box too] }
   PaintLoading(APainter, ARect, APPI, AMeasurer);
+  PaintTooltip(APainter, ARect, APPI, AMeasurer);
 end;
 
 function TTyCustomAdvanceChart.HasDynamicContent: Boolean;
@@ -1545,6 +1561,8 @@ var
 begin
   Result := -1;
   if (FPaintList = nil) or not FPaintListValid then Exit;
+  { [R5-D] the loading mask over it all }
+  if LoadMasks then Exit;
   { IN MOTION, WHAT IS DRAWN IS WHAT IS HIT, and at rest on a state proxy
     (see HitTestAt) }
   if FAnimLive or (Length(FAnimStBind) > 0) then L := AnimFrame else L := FPaintList;

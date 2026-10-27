@@ -67,6 +67,8 @@ begin
   ADatum := TyChartNoDatum;
   Result := False;
   if (FBuild = nil) or (FOption = nil) then Exit;
+  { [R5-D] under the loading mask }
+  if LoadMasks then Exit;
   meas := nil;
   { the same boxes the chart's mouse events find (EventTargetAt) }
   for g := 0 to FBuild.GridCount - 1 do

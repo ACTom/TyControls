@@ -258,6 +258,8 @@ begin
   Result := False;
   AEl := -1;
   if (FTlView = nil) or not FTlView.Shown or (csDesigning in ComponentState) then Exit;
+  { [R5-D] under the loading mask }
+  if LoadMasks then Exit;
   if FLastPPI > 0 then s := FLastPPI / 96 else s := 1;
   x := AX / s;
   y := AY / s;

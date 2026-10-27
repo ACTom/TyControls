@@ -1313,6 +1313,10 @@ type
     FVmDragVm, FVmDragIdx, FVmDragX, FVmDragY: Integer;
     FVmUidSeq: Integer;
     FEvHoverX, FEvHoverY: Integer;
+    { [R5-D] the last move's target was the loading mask (no ECData: the
+      target is none here) -- removed by hideLoading, zrender's Handler looks
+      for what is under the last point instead (#6198) }
+    FEvHoverMask: Boolean;
     { [Milestone D9-D14] the target a pan's move found before the picture
       moved: EventMove takes it instead of looking again }
     FEvPreset: Boolean;
@@ -1683,6 +1687,14 @@ type
     FEvOverDue: Boolean;
     FEvOverT: TTyChartEventTarget;
     FEvOverX, FEvOverY: Integer;
+    { [R5-D] the click EventUp found, for after the pointer's listener (the
+      chart's own mouse events are zrEventfulCallAtLast) }
+    FEvClickDefer, FEvClickDue: Boolean;
+    { [R5-D] the export draws the window's own layout (its size and PPI):
+      the pointer's state -- the axis pointers, the emphasis -- is in it }
+    FExportSameView: Boolean;
+    FEvClickT: TTyChartEventTarget;
+    FEvClickX, FEvClickY: Integer;
     { [R2-E] the axes ('mainType#index') a merge wrote a status on since }
     FOptPtrBack: TTyStringArray;
     { [Batch 153] THE ACTIONS THAT DRIVE THE TOOLTIP AND THE POINTER.
@@ -1910,8 +1922,10 @@ type
       APPI: Integer; const AMeasurer: ITyTextMeasurer);
     procedure ExportOptsOrRaise(const AJson: string; out AOpts: TTyChartExportOpts);
     function RenderExport(const AOpts: TTyChartExportOpts): TBGRABitmap;
-    procedure WriteExport(AStream: TStream; ABmp: TBGRABitmap;
-      AType: TTyExportImageType);
+    { [R5-D] answers the type it wrote: a WebP is a PNG where libwebp
+      cannot be loaded }
+    function WriteExport(AStream: TStream; ABmp: TBGRABitmap;
+      AType: TTyExportImageType): TTyExportImageType;
     procedure SetOptionText(const AValue: string);
     function GetOptionText: string;
     { ---- setOption [Batch 95] ---- }
@@ -3229,6 +3243,8 @@ type
     function DoSunAction(APayload: TJSONObject): Boolean;
     { [R5-D] the legacy sunburstHighlight / sunburstUnhighlight }
     function DoSunLegacy(APayload: TJSONObject; AHigh: Boolean): Boolean;
+    { [R5-D] the loading effect's mask is the pointer's target }
+    function LoadMasks: Boolean;
     { [F3d] treeExpandAndCollapse as an action: the queried trees' node
       flipped, then the update (update: 'update') }
     function DoTreeToggleAction(APayload: TJSONObject): Boolean;
@@ -5161,6 +5177,8 @@ uses
   tyControls.AdvanceChart.RichStyle, tyControls.AdvanceChart.JsMath,
   tyControls.AdvanceChart.LinePath, tyControls.AdvanceChart.LabelGuide,
   BGRABitmapTypes, FPImage, FPWriteJPEG, base64,
+  { [R5-D] the WebP export, libwebp loaded when it is asked for }
+  BGRAWriteWebP,
   tyControls.AdvanceChart.ToolboxDlg,
   tyControls.AdvanceChart.AxisBreak, tyControls.AdvanceChart.DataTransform,
   { ecStat's three transforms, registered by its initialization [Batch 134] }

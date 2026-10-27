@@ -472,6 +472,8 @@ begin
   ATb := -1;
   AIcon := -1;
   if csDesigning in ComponentState then Exit;
+  { [R5-D] under the loading mask }
+  if LoadMasks then Exit;
   s := TbScale;
   x := (AX - FLastRect.Left) / s;
   y := (AY - FLastRect.Top) / s;

@@ -76,6 +76,7 @@ begin
   FExporting := True;
   FExportBare := bg.Kind <> ebkTheme;
   FExportExclude := AOpts.Exclude;
+  FExportSameView := (w = Width) and (h = Height) and (ppi = ppi0);
   try
     StApplyChanged;
     P.BeginPaintOn(nil, R, ppi, Result);
@@ -103,6 +104,7 @@ begin
     P.EndPaint;
   finally
     FExportExclude := [];
+    FExportSameView := False;
     P.Free;
     { and back: FExporting stays on through the window's own layout below,
       so that render arms, binds and steps nothing either }
@@ -138,14 +140,42 @@ begin
   end;
 end;
 
-procedure TTyCustomAdvanceChart.WriteExport(AStream: TStream; ABmp: TBGRABitmap;
-  AType: TTyExportImageType);
+function TTyCustomAdvanceChart.WriteExport(AStream: TStream; ABmp: TBGRABitmap;
+  AType: TTyExportImageType): TTyExportImageType;
 var
   jpg: TBGRABitmap;
   writer: TFPWriterJPEG;
+  webp: TBGRAWriterWebP;
+  ms: TMemoryStream;
 begin
-  if AType <> eitJpeg then
+  Result := AType;
+  if AType = eitWebp then
   begin
+    { toDataURL('image/webp'): a lossy WebP at the canvas' default quality,
+      0.80, its alpha kept -- where the library is there; else the PNG a
+      canvas answers with for a type it cannot make. Written to memory
+      first: a failure leaves the stream as it was. }
+    ms := TMemoryStream.Create;
+    webp := TBGRAWriterWebP.Create;
+    try
+      try
+        webp.Lossless := False;
+        webp.QualityPercent := 80;
+        TFPCustomImage(ABmp).SaveToStream(ms, webp);
+        ms.Position := 0;
+        AStream.CopyFrom(ms, ms.Size);
+        Exit;
+      except
+        Result := eitPng;
+      end;
+    finally
+      webp.Free;
+      ms.Free;
+    end;
+  end;
+  if Result <> eitJpeg then
+  begin
+    Result := eitPng;
     ABmp.SaveToStreamAsPng(AStream);
     Exit;
   end;
@@ -224,6 +254,7 @@ begin
   begin
     ext := LowerCase(ExtractFileExt(AFileName));
     if (ext = '.jpg') or (ext = '.jpeg') then o.ImageType := eitJpeg;
+    if ext = '.webp' then o.ImageType := eitWebp;
   end;
   bmp := RenderExport(o);
   if bmp = nil then Exit;
@@ -245,22 +276,21 @@ var
   bmp: TBGRABitmap;
   ms: TMemoryStream;
   raw: RawByteString;
+  wrote: TTyExportImageType;
 begin
   ExportOptsOrRaise(AOptsJson, o);
   bmp := RenderExport(o);
   if bmp = nil then Exit('data:,');
   ms := TMemoryStream.Create;
   try
-    WriteExport(ms, bmp, o.ImageType);
+    wrote := WriteExport(ms, bmp, o.ImageType);
     SetLength(raw, ms.Size);
     if ms.Size > 0 then Move(ms.Memory^, raw[1], ms.Size);
   finally
     ms.Free;
     bmp.Free;
   end;
-  if o.ImageType = eitJpeg then Result := 'data:image/jpeg;base64,'
-  else Result := 'data:image/png;base64,';
-  Result := Result + EncodeStringBase64(raw);
+  Result := TyExportUrlHead(wrote) + EncodeStringBase64(raw);
 end;
 
 procedure TTyCustomAdvanceChart.SaveToPng(const AFileName: string);
@@ -339,6 +369,19 @@ begin
   InvalidateFrame;
 end;
 
+{ [R5-D] THE MASK OVER THE POINTER: default.ts' mask is a Rect over the
+  whole canvas, z 10000, not silent -- zrender's Handler finds it before
+  anything of its layer and below, so no element of the chart (zlevel 0) is
+  hovered, pressed, clicked or tipped while it shows, and the cursor is its
+  default 'pointer'. The zr-level listeners hear everything as before: the
+  axis pointer's, the RoamControllers' (a pan, an inside dataZoom), the
+  brush's. Under the chart (zlevel below 0) it masks nothing. }
+function TTyCustomAdvanceChart.LoadMasks: Boolean;
+begin
+  Result := FLoadShown and (FLoadCfg.ZLevel >= 0)
+    and not (csDesigning in ComponentState);
+end;
+
 function TTyCustomAdvanceChart.LoadingGeometry(out AGeo: TTyLoadingGeometry): Boolean;
 begin
   AGeo := FLoadGeo;
@@ -389,6 +432,8 @@ begin
   if FLoadCfg.HasFontSize then fontSize := FLoadCfg.FontSizeLogical;
   weight := st.FontWeight;
   if FLoadCfg.HasFontWeight then weight := FLoadCfg.FontWeight;
+  { [R5-D] fontStyle }
+  if FLoadCfg.Italic then weight := weight or TyFontItalic;
   if APPI > 0 then s := APPI / 96 else s := 1;
   devW := ARect.Right - ARect.Left;
   devH := ARect.Bottom - ARect.Top;

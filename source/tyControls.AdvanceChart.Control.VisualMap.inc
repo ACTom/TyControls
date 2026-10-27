@@ -686,6 +686,8 @@ begin
   Result := False;
   AIndex := -1;
   APart := 0;
+  { [R5-D] under the loading mask }
+  if LoadMasks then Exit;
   for k := High(FVisualLayouts) downto 0 do
   begin
     L := FVisualLayouts[k];

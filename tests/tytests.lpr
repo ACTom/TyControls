@@ -203,6 +203,7 @@ uses
   test.advchart.pieitemlabel,
   test.advchart.axisemphasis,
   test.advchart.brushstyle,
+  test.advchart.loadingpointer,
   test.advchart.backwardcompat,
   test.advchart.multiline, test.bgrarandompin,
   test.subpixel,
