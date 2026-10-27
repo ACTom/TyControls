@@ -171,17 +171,22 @@ begin
 end;
 
 procedure TAdvChartCandleRuleTest.TestABorderFollowsItsBodyUnlessWritten;
-var s: TTyCandleSpec;
+var s, base: TTyCandleSpec;
 begin
-  { UPSTREAM'S TWO BORDER DEFAULTS ARE THE SAME PAIR OF COLOURS WRITTEN TWICE,
-    so an author who recolours the bodies and not the borders gets a candle
-    that matches rather than one outlined in the theme's colours. }
+  { UPSTREAM'S TWO BORDER DEFAULTS ARE WRITTEN beside the two bodies in the
+    series' defaultOption, so an author who recolours the bodies and not the
+    borders gets the DEFAULT borders: candlestickVisual asks the model for
+    borderColor and finds '#eb5454' (the k-colour-only case of
+    candle-boxplot.js). Here the defaults are the skin's.
+    [R5-B: the border took the body -- a rule upstream does not have.] }
+  base := SpecOf('{"series":[{"type":"candlestick"}]}');
   s := SpecOf('{"series":[{"type":"candlestick","itemStyle":{' +
               '"color":"#ff0000","color0":"#00ff00"}}]}');
-  AssertEquals('the up border took the up body', Integer($FFFF0000),
+  AssertEquals('the up border stays the default''s', Integer(base.UpBorder),
                Integer(s.UpBorder));
-  AssertEquals('and the down border the down body', Integer($FF00FF00),
+  AssertEquals('and the down border too', Integer(base.DownBorder),
                Integer(s.DownBorder));
+  AssertTrue('the bodies are the author''s', (s.Up = $FFFF0000) and (s.Down = $FF00FF00));
   { And a written one is not overruled by the body beside it. }
   s := SpecOf('{"series":[{"type":"candlestick","itemStyle":{' +
               '"color":"#ff0000","borderColor":"#000000"}}]}');

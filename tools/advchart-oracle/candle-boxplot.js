@@ -408,6 +408,21 @@ const CASES = [
     emph: { series: 0, index: 0 } },
   { id: 'b-emph-focus', note: "focus 'self': the other boxes blur", option: catB([box(BX, { emphasis: { focus: 'self' } })]),
     emph: { series: 0, index: 2 } },
+  // ---- [R5-B] an item's own colours, the boxplot's per-datum colours ----
+  { id: 'k-item-colours', note: "items' own color0 / borderColor0, color / borderWidth / opacity over the series' color / color0",
+    option: catK({ itemStyle: { color: '#ff0000', color0: '#00ff00' }, data: [K5[0],
+      { value: K5[1], itemStyle: { color0: '#123456', borderColor0: '#654321' } },
+      { value: K5[2], itemStyle: { color: '#0000ff', borderWidth: 3, opacity: 0.5 } }, K5[3], K5[4]] }) },
+  { id: 'k-item-doji', note: "an item's own borderColorDoji: that row's sign 0 and its pen", option: catK({ data: [K5[0], K5[1], K5[2], K5[3],
+    { value: K5[4], itemStyle: { borderColorDoji: '#ff00ff' } }] }) },
+  { id: 'k-colour-only', note: "a series' color and color0 alone: the borders stay the default's", option: catK({ itemStyle: { color: '#ff0000', color0: '#00ff00' } }) },
+  { id: 'b-colorby-data', note: "colorBy 'data': each box's pen from the palette (written at the root) by its name", option: catB([box(BX, { colorBy: 'data' })],
+    { color: ['#aa0000', '#00aa00', '#0000aa', '#aaaa00'] }) },
+  { id: 'b-colorby-data-own', note: "colorBy 'data' and one item's own borderColor: that one keeps it, the rest take the palette in raw order",
+    option: catB([box([BX[0], { value: BX[1], itemStyle: { borderColor: '#00aa00' } }, BX[2]], { colorBy: 'data' })],
+      { color: ['#aa0000', '#00aa66', '#0000aa', '#aaaa00'] }) },
+  { id: 'b-visualmap', note: 'a piecewise visualMap on the boxplot: the pen from the piece of the last dimension (max)', option: catB([box(BX)], {
+    visualMap: { type: 'piecewise', show: false, seriesIndex: 0, pieces: [{ lt: 42, color: '#aa00aa' }, { gte: 42, color: '#00aaaa' }] } }) },
 ];
 
 // ---------------------------------------------------------------------------
@@ -635,6 +650,19 @@ function guards(o) {
   guard('a candle tooltip has four sub-rows', cs('k-tip').tooltip.lines.filter(l => l.marker === null && l.value !== null).length >= 4
     || cs('k-tip').tooltip.lines.length >= 5);
   // emphasis
+  // [R5-B]
+  const ki = s0('k-item-colours').items;
+  guard("an item's own color0 and borderColor0", ki[1].style.fill === '#123456' && ki[1].style.stroke === '#654321');
+  guard("an item's own color, width and opacity; the series' default border", ki[2].style.fill === '#0000ff'
+    && num(ki[2].style.lineWidth) === 3 && num(ki[2].style.opacity) === 0.5 && ki[2].style.stroke === '#eb5454');
+  guard("a series colour alone leaves the default border", s0('k-colour-only').items[0].style.fill === '#ff0000'
+    && s0('k-colour-only').items[0].style.stroke === '#eb5454');
+  guard("an item's own borderColorDoji gives its row sign 0", s0('k-item-doji').items[4].sign === 0
+    && s0('k-item-doji').items[4].style.stroke === '#ff00ff');
+  const bc = s0('b-colorby-data').items.map(it => it.style.stroke);
+  guard("colorBy 'data': each box its own pen", new Set(bc).size === 3);
+  guard('an own borderColor keeps', s0('b-colorby-data-own').items[1].style.stroke === '#00aa00');
+  guard('a visualMap colours the pen', s0('b-visualmap').items.map(it => it.style.stroke).join() === '#00aaaa,#aa00aa,#00aaaa');
   const em = cs('b-emph').emphasis.find(x => x.i === 1);
   guard('emphasis: borderWidth 2', num(em.style.lineWidth) === 2);
   guard('emphasis: z2 110', em.z2 === 110);

@@ -40603,6 +40603,1563 @@
      ]
     }
    ]
+  },
+  {
+   "id": "k-item-colours",
+   "note": "items' own color0 / borderColor0, color / borderWidth / opacity over the series' color / color0",
+   "option": {
+    "animation": false,
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 50,
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 60
+    },
+    "series": [
+     {
+      "type": "candlestick",
+      "name": "K",
+      "data": [
+       [
+        20,
+        34,
+        10,
+        38
+       ],
+       {
+        "value": [
+         40,
+         35,
+         30,
+         50
+        ],
+        "itemStyle": {
+         "color0": "#123456",
+         "borderColor0": "#654321"
+        }
+       },
+       {
+        "value": [
+         31,
+         38,
+         33,
+         44
+        ],
+        "itemStyle": {
+         "color": "#0000ff",
+         "borderWidth": 3,
+         "opacity": 0.5
+        }
+       },
+       [
+        38,
+        15,
+        5,
+        42
+       ],
+       [
+        25,
+        25,
+        20,
+        30
+       ]
+      ],
+      "itemStyle": {
+       "color": "#ff0000",
+       "color0": "#00ff00"
+      }
+     }
+    ]
+   },
+   "grid": [
+    "404e000000000000",
+    "4044000000000000",
+    "407f400000000000",
+    "4073600000000000"
+   ],
+   "axes": [
+    {
+     "dim": "x",
+     "type": "category",
+     "effective": [
+      "0000000000000000",
+      "4010000000000000"
+     ],
+     "mapping": null
+    },
+    {
+     "dim": "y",
+     "type": "value",
+     "effective": [
+      "0000000000000000",
+      "404e000000000000"
+     ],
+     "mapping": null
+    }
+   ],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "candlestick",
+     "baseDim": "x",
+     "layout": "horizontal",
+     "candleWidth": "4049000000000000",
+     "simple": false,
+     "items": [
+      {
+       "i": 0,
+       "has": true,
+       "ends": [
+        "4055600000000000",
+        "4065caaaaaaaaaab",
+        "4060d00000000000",
+        "4065caaaaaaaaaab",
+        "4060d00000000000",
+        "406ed55555555556",
+        "4055600000000000",
+        "406ed55555555556",
+        "405b600000000000",
+        "4063355555555556",
+        "405b600000000000",
+        "4065caaaaaaaaaab",
+        "405b600000000000",
+        "4072a55555555555",
+        "405b600000000000",
+        "406ed55555555556"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#ff0000",
+        "stroke": "#eb5454",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100,
+       "sign": 1,
+       "simpleBox": false
+      },
+      {
+       "i": 1,
+       "has": true,
+       "ends": [
+        "4067300000000000",
+        "4061eaaaaaaaaaab",
+        "406d500000000000",
+        "4061eaaaaaaaaaab",
+        "406d500000000000",
+        "4065255555555555",
+        "4067300000000000",
+        "4065255555555555",
+        "406a300000000000",
+        "4056eaaaaaaaaaa8",
+        "406a300000000000",
+        "4061eaaaaaaaaaab",
+        "406a300000000000",
+        "4068600000000000",
+        "406a300000000000",
+        "4065255555555555"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#123456",
+        "stroke": "#654321",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100,
+       "sign": -1,
+       "simpleBox": false
+      },
+      {
+       "i": 2,
+       "has": true,
+       "ends": [
+        "4071d80000000000",
+        "4063355555555556",
+        "4074e80000000000",
+        "4063355555555556",
+        "4074e80000000000",
+        "4067baaaaaaaaaaa",
+        "4071d80000000000",
+        "4067baaaaaaaaaaa",
+        "4073580000000000",
+        "405eaaaaaaaaaaac",
+        "4073580000000000",
+        "4063355555555556",
+        "4073580000000000",
+        "4066700000000000",
+        "4073580000000000",
+        "4067baaaaaaaaaaa"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#0000ff",
+        "stroke": "#eb5454",
+        "lineWidth": "4008000000000000",
+        "opacity": "3fe0000000000000"
+       },
+       "z2": 100,
+       "sign": 1,
+       "simpleBox": false
+      },
+      {
+       "i": 3,
+       "has": true,
+       "ends": [
+        "4078180000000000",
+        "4063355555555556",
+        "407b280000000000",
+        "4063355555555556",
+        "407b280000000000",
+        "4071080000000000",
+        "4078180000000000",
+        "4071080000000000",
+        "4079980000000000",
+        "4060a00000000000",
+        "4079980000000000",
+        "4063355555555556",
+        "4079980000000000",
+        "407442aaaaaaaaab",
+        "4079980000000000",
+        "4071080000000000"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#00ff00",
+        "stroke": "#47b262",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100,
+       "sign": -1,
+       "simpleBox": false
+      },
+      {
+       "i": 4,
+       "has": true,
+       "ends": [
+        "407e580000000000",
+        "406b9aaaaaaaaaaa",
+        "4080b40000000000",
+        "406b9aaaaaaaaaaa",
+        "4080b40000000000",
+        "406b9aaaaaaaaaaa",
+        "407e580000000000",
+        "406b9aaaaaaaaaaa",
+        "407fd80000000000",
+        "4068600000000000",
+        "407fd80000000000",
+        "406b9aaaaaaaaaaa",
+        "407fd80000000000",
+        "406ed55555555556",
+        "407fd80000000000",
+        "406b9aaaaaaaaaaa"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#ff0000",
+        "stroke": "#eb5454",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100,
+       "sign": 1,
+       "simpleBox": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "k-item-doji",
+   "note": "an item's own borderColorDoji: that row's sign 0 and its pen",
+   "option": {
+    "animation": false,
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 50,
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 60
+    },
+    "series": [
+     {
+      "type": "candlestick",
+      "name": "K",
+      "data": [
+       [
+        20,
+        34,
+        10,
+        38
+       ],
+       [
+        40,
+        35,
+        30,
+        50
+       ],
+       [
+        31,
+        38,
+        33,
+        44
+       ],
+       [
+        38,
+        15,
+        5,
+        42
+       ],
+       {
+        "value": [
+         25,
+         25,
+         20,
+         30
+        ],
+        "itemStyle": {
+         "borderColorDoji": "#ff00ff"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "grid": [
+    "404e000000000000",
+    "4044000000000000",
+    "407f400000000000",
+    "4073600000000000"
+   ],
+   "axes": [
+    {
+     "dim": "x",
+     "type": "category",
+     "effective": [
+      "0000000000000000",
+      "4010000000000000"
+     ],
+     "mapping": null
+    },
+    {
+     "dim": "y",
+     "type": "value",
+     "effective": [
+      "0000000000000000",
+      "404e000000000000"
+     ],
+     "mapping": null
+    }
+   ],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "candlestick",
+     "baseDim": "x",
+     "layout": "horizontal",
+     "candleWidth": "4049000000000000",
+     "simple": false,
+     "items": [
+      {
+       "i": 0,
+       "has": true,
+       "ends": [
+        "4055600000000000",
+        "4065caaaaaaaaaab",
+        "4060d00000000000",
+        "4065caaaaaaaaaab",
+        "4060d00000000000",
+        "406ed55555555556",
+        "4055600000000000",
+        "406ed55555555556",
+        "405b600000000000",
+        "4063355555555556",
+        "405b600000000000",
+        "4065caaaaaaaaaab",
+        "405b600000000000",
+        "4072a55555555555",
+        "405b600000000000",
+        "406ed55555555556"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#eb5454",
+        "stroke": "#eb5454",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100,
+       "sign": 1,
+       "simpleBox": false
+      },
+      {
+       "i": 1,
+       "has": true,
+       "ends": [
+        "4067300000000000",
+        "4061eaaaaaaaaaab",
+        "406d500000000000",
+        "4061eaaaaaaaaaab",
+        "406d500000000000",
+        "4065255555555555",
+        "4067300000000000",
+        "4065255555555555",
+        "406a300000000000",
+        "4056eaaaaaaaaaa8",
+        "406a300000000000",
+        "4061eaaaaaaaaaab",
+        "406a300000000000",
+        "4068600000000000",
+        "406a300000000000",
+        "4065255555555555"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#47b262",
+        "stroke": "#47b262",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100,
+       "sign": -1,
+       "simpleBox": false
+      },
+      {
+       "i": 2,
+       "has": true,
+       "ends": [
+        "4071d80000000000",
+        "4063355555555556",
+        "4074e80000000000",
+        "4063355555555556",
+        "4074e80000000000",
+        "4067baaaaaaaaaaa",
+        "4071d80000000000",
+        "4067baaaaaaaaaaa",
+        "4073580000000000",
+        "405eaaaaaaaaaaac",
+        "4073580000000000",
+        "4063355555555556",
+        "4073580000000000",
+        "4066700000000000",
+        "4073580000000000",
+        "4067baaaaaaaaaaa"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#eb5454",
+        "stroke": "#eb5454",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100,
+       "sign": 1,
+       "simpleBox": false
+      },
+      {
+       "i": 3,
+       "has": true,
+       "ends": [
+        "4078180000000000",
+        "4063355555555556",
+        "407b280000000000",
+        "4063355555555556",
+        "407b280000000000",
+        "4071080000000000",
+        "4078180000000000",
+        "4071080000000000",
+        "4079980000000000",
+        "4060a00000000000",
+        "4079980000000000",
+        "4063355555555556",
+        "4079980000000000",
+        "407442aaaaaaaaab",
+        "4079980000000000",
+        "4071080000000000"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#47b262",
+        "stroke": "#47b262",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100,
+       "sign": -1,
+       "simpleBox": false
+      },
+      {
+       "i": 4,
+       "has": true,
+       "ends": [
+        "407e580000000000",
+        "406b9aaaaaaaaaaa",
+        "4080b40000000000",
+        "406b9aaaaaaaaaaa",
+        "4080b40000000000",
+        "406b9aaaaaaaaaaa",
+        "407e580000000000",
+        "406b9aaaaaaaaaaa",
+        "407fd80000000000",
+        "4068600000000000",
+        "407fd80000000000",
+        "406b9aaaaaaaaaaa",
+        "407fd80000000000",
+        "406ed55555555556",
+        "407fd80000000000",
+        "406b9aaaaaaaaaaa"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#47b262",
+        "stroke": "#ff00ff",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100,
+       "sign": 0,
+       "simpleBox": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "k-colour-only",
+   "note": "a series' color and color0 alone: the borders stay the default's",
+   "option": {
+    "animation": false,
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 50,
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 60
+    },
+    "series": [
+     {
+      "type": "candlestick",
+      "name": "K",
+      "data": [
+       [
+        20,
+        34,
+        10,
+        38
+       ],
+       [
+        40,
+        35,
+        30,
+        50
+       ],
+       [
+        31,
+        38,
+        33,
+        44
+       ],
+       [
+        38,
+        15,
+        5,
+        42
+       ],
+       [
+        25,
+        25,
+        20,
+        30
+       ]
+      ],
+      "itemStyle": {
+       "color": "#ff0000",
+       "color0": "#00ff00"
+      }
+     }
+    ]
+   },
+   "grid": [
+    "404e000000000000",
+    "4044000000000000",
+    "407f400000000000",
+    "4073600000000000"
+   ],
+   "axes": [
+    {
+     "dim": "x",
+     "type": "category",
+     "effective": [
+      "0000000000000000",
+      "4010000000000000"
+     ],
+     "mapping": null
+    },
+    {
+     "dim": "y",
+     "type": "value",
+     "effective": [
+      "0000000000000000",
+      "404e000000000000"
+     ],
+     "mapping": null
+    }
+   ],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "candlestick",
+     "baseDim": "x",
+     "layout": "horizontal",
+     "candleWidth": "4049000000000000",
+     "simple": false,
+     "items": [
+      {
+       "i": 0,
+       "has": true,
+       "ends": [
+        "4055600000000000",
+        "4065caaaaaaaaaab",
+        "4060d00000000000",
+        "4065caaaaaaaaaab",
+        "4060d00000000000",
+        "406ed55555555556",
+        "4055600000000000",
+        "406ed55555555556",
+        "405b600000000000",
+        "4063355555555556",
+        "405b600000000000",
+        "4065caaaaaaaaaab",
+        "405b600000000000",
+        "4072a55555555555",
+        "405b600000000000",
+        "406ed55555555556"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#ff0000",
+        "stroke": "#eb5454",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100,
+       "sign": 1,
+       "simpleBox": false
+      },
+      {
+       "i": 1,
+       "has": true,
+       "ends": [
+        "4067300000000000",
+        "4061eaaaaaaaaaab",
+        "406d500000000000",
+        "4061eaaaaaaaaaab",
+        "406d500000000000",
+        "4065255555555555",
+        "4067300000000000",
+        "4065255555555555",
+        "406a300000000000",
+        "4056eaaaaaaaaaa8",
+        "406a300000000000",
+        "4061eaaaaaaaaaab",
+        "406a300000000000",
+        "4068600000000000",
+        "406a300000000000",
+        "4065255555555555"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#00ff00",
+        "stroke": "#47b262",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100,
+       "sign": -1,
+       "simpleBox": false
+      },
+      {
+       "i": 2,
+       "has": true,
+       "ends": [
+        "4071d80000000000",
+        "4063355555555556",
+        "4074e80000000000",
+        "4063355555555556",
+        "4074e80000000000",
+        "4067baaaaaaaaaaa",
+        "4071d80000000000",
+        "4067baaaaaaaaaaa",
+        "4073580000000000",
+        "405eaaaaaaaaaaac",
+        "4073580000000000",
+        "4063355555555556",
+        "4073580000000000",
+        "4066700000000000",
+        "4073580000000000",
+        "4067baaaaaaaaaaa"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#ff0000",
+        "stroke": "#eb5454",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100,
+       "sign": 1,
+       "simpleBox": false
+      },
+      {
+       "i": 3,
+       "has": true,
+       "ends": [
+        "4078180000000000",
+        "4063355555555556",
+        "407b280000000000",
+        "4063355555555556",
+        "407b280000000000",
+        "4071080000000000",
+        "4078180000000000",
+        "4071080000000000",
+        "4079980000000000",
+        "4060a00000000000",
+        "4079980000000000",
+        "4063355555555556",
+        "4079980000000000",
+        "407442aaaaaaaaab",
+        "4079980000000000",
+        "4071080000000000"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#00ff00",
+        "stroke": "#47b262",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100,
+       "sign": -1,
+       "simpleBox": false
+      },
+      {
+       "i": 4,
+       "has": true,
+       "ends": [
+        "407e580000000000",
+        "406b9aaaaaaaaaaa",
+        "4080b40000000000",
+        "406b9aaaaaaaaaaa",
+        "4080b40000000000",
+        "406b9aaaaaaaaaaa",
+        "407e580000000000",
+        "406b9aaaaaaaaaaa",
+        "407fd80000000000",
+        "4068600000000000",
+        "407fd80000000000",
+        "406b9aaaaaaaaaaa",
+        "407fd80000000000",
+        "406ed55555555556",
+        "407fd80000000000",
+        "406b9aaaaaaaaaaa"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#ff0000",
+        "stroke": "#eb5454",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100,
+       "sign": 1,
+       "simpleBox": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "b-colorby-data",
+   "note": "colorBy 'data': each box's pen from the palette (written at the root) by its name",
+   "option": {
+    "animation": false,
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 50,
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "P",
+      "Q",
+      "R"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 60
+    },
+    "series": [
+     {
+      "type": "boxplot",
+      "name": "B",
+      "data": [
+       [
+        10,
+        20,
+        25,
+        32,
+        45
+       ],
+       [
+        5,
+        18,
+        22,
+        30,
+        40
+       ],
+       [
+        15,
+        24,
+        30,
+        36,
+        52
+       ]
+      ],
+      "colorBy": "data"
+     }
+    ],
+    "color": [
+     "#aa0000",
+     "#00aa00",
+     "#0000aa",
+     "#aaaa00"
+    ]
+   },
+   "grid": [
+    "404e000000000000",
+    "4044000000000000",
+    "407f400000000000",
+    "4073600000000000"
+   ],
+   "axes": [
+    {
+     "dim": "x",
+     "type": "category",
+     "effective": [
+      "0000000000000000",
+      "4000000000000000"
+     ],
+     "mapping": null
+    },
+    {
+     "dim": "y",
+     "type": "value",
+     "effective": [
+      "0000000000000000",
+      "404e000000000000"
+     ],
+     "mapping": null
+    }
+   ],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "boxplot",
+     "baseDim": "x",
+     "layout": "horizontal",
+     "items": [
+      {
+       "i": 0,
+       "has": true,
+       "ends": [
+        "405d955555555554",
+        "406ed55555555556",
+        "40650aaaaaaaaaaa",
+        "406ed55555555556",
+        "40650aaaaaaaaaaa",
+        "4067155555555555",
+        "405d955555555554",
+        "4067155555555555",
+        "4061eaaaaaaaaaaa",
+        "4072a55555555555",
+        "4061eaaaaaaaaaaa",
+        "406ed55555555556",
+        "4061eaaaaaaaaaaa",
+        "405d600000000000",
+        "4061eaaaaaaaaaaa",
+        "4067155555555555",
+        "405d955555555554",
+        "4072a55555555555",
+        "40650aaaaaaaaaaa",
+        "4072a55555555555",
+        "405d955555555554",
+        "405d600000000000",
+        "40650aaaaaaaaaaa",
+        "405d600000000000",
+        "405d955555555554",
+        "406b9aaaaaaaaaaa",
+        "40650aaaaaaaaaaa",
+        "406b9aaaaaaaaaaa"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#fff",
+        "stroke": "#aa0000",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100
+      },
+      {
+       "i": 1,
+       "has": true,
+       "ends": [
+        "4071d00000000000",
+        "4070100000000000",
+        "4074f00000000000",
+        "4070100000000000",
+        "4074f00000000000",
+        "4068600000000000",
+        "4071d00000000000",
+        "4068600000000000",
+        "4073600000000000",
+        "407442aaaaaaaaab",
+        "4073600000000000",
+        "4070100000000000",
+        "4073600000000000",
+        "4061eaaaaaaaaaab",
+        "4073600000000000",
+        "4068600000000000",
+        "4071d00000000000",
+        "407442aaaaaaaaab",
+        "4074f00000000000",
+        "407442aaaaaaaaab",
+        "4071d00000000000",
+        "4061eaaaaaaaaaab",
+        "4074f00000000000",
+        "4061eaaaaaaaaaab",
+        "4071d00000000000",
+        "406d8aaaaaaaaaab",
+        "4074f00000000000",
+        "406d8aaaaaaaaaab"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#fff",
+        "stroke": "#00aa00",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100
+      },
+      {
+       "i": 2,
+       "has": true,
+       "ends": [
+        "407c3aaaaaaaaaab",
+        "406c400000000000",
+        "407f5aaaaaaaaaab",
+        "406c400000000000",
+        "407f5aaaaaaaaaab",
+        "4064800000000000",
+        "407c3aaaaaaaaaab",
+        "4064800000000000",
+        "407dcaaaaaaaaaab",
+        "4071080000000000",
+        "407dcaaaaaaaaaab",
+        "406c400000000000",
+        "407dcaaaaaaaaaab",
+        "4054555555555554",
+        "407dcaaaaaaaaaab",
+        "4064800000000000",
+        "407c3aaaaaaaaaab",
+        "4071080000000000",
+        "407f5aaaaaaaaaab",
+        "4071080000000000",
+        "407c3aaaaaaaaaab",
+        "4054555555555554",
+        "407f5aaaaaaaaaab",
+        "4054555555555554",
+        "407c3aaaaaaaaaab",
+        "4068600000000000",
+        "407f5aaaaaaaaaab",
+        "4068600000000000"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#fff",
+        "stroke": "#0000aa",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "b-colorby-data-own",
+   "note": "colorBy 'data' and one item's own borderColor: that one keeps it, the rest take the palette in raw order",
+   "option": {
+    "animation": false,
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 50,
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "P",
+      "Q",
+      "R"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 60
+    },
+    "series": [
+     {
+      "type": "boxplot",
+      "name": "B",
+      "data": [
+       [
+        10,
+        20,
+        25,
+        32,
+        45
+       ],
+       {
+        "value": [
+         5,
+         18,
+         22,
+         30,
+         40
+        ],
+        "itemStyle": {
+         "borderColor": "#00aa00"
+        }
+       },
+       [
+        15,
+        24,
+        30,
+        36,
+        52
+       ]
+      ],
+      "colorBy": "data"
+     }
+    ],
+    "color": [
+     "#aa0000",
+     "#00aa66",
+     "#0000aa",
+     "#aaaa00"
+    ]
+   },
+   "grid": [
+    "404e000000000000",
+    "4044000000000000",
+    "407f400000000000",
+    "4073600000000000"
+   ],
+   "axes": [
+    {
+     "dim": "x",
+     "type": "category",
+     "effective": [
+      "0000000000000000",
+      "4000000000000000"
+     ],
+     "mapping": null
+    },
+    {
+     "dim": "y",
+     "type": "value",
+     "effective": [
+      "0000000000000000",
+      "404e000000000000"
+     ],
+     "mapping": null
+    }
+   ],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "boxplot",
+     "baseDim": "x",
+     "layout": "horizontal",
+     "items": [
+      {
+       "i": 0,
+       "has": true,
+       "ends": [
+        "405d955555555554",
+        "406ed55555555556",
+        "40650aaaaaaaaaaa",
+        "406ed55555555556",
+        "40650aaaaaaaaaaa",
+        "4067155555555555",
+        "405d955555555554",
+        "4067155555555555",
+        "4061eaaaaaaaaaaa",
+        "4072a55555555555",
+        "4061eaaaaaaaaaaa",
+        "406ed55555555556",
+        "4061eaaaaaaaaaaa",
+        "405d600000000000",
+        "4061eaaaaaaaaaaa",
+        "4067155555555555",
+        "405d955555555554",
+        "4072a55555555555",
+        "40650aaaaaaaaaaa",
+        "4072a55555555555",
+        "405d955555555554",
+        "405d600000000000",
+        "40650aaaaaaaaaaa",
+        "405d600000000000",
+        "405d955555555554",
+        "406b9aaaaaaaaaaa",
+        "40650aaaaaaaaaaa",
+        "406b9aaaaaaaaaaa"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#fff",
+        "stroke": "#aa0000",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100
+      },
+      {
+       "i": 1,
+       "has": true,
+       "ends": [
+        "4071d00000000000",
+        "4070100000000000",
+        "4074f00000000000",
+        "4070100000000000",
+        "4074f00000000000",
+        "4068600000000000",
+        "4071d00000000000",
+        "4068600000000000",
+        "4073600000000000",
+        "407442aaaaaaaaab",
+        "4073600000000000",
+        "4070100000000000",
+        "4073600000000000",
+        "4061eaaaaaaaaaab",
+        "4073600000000000",
+        "4068600000000000",
+        "4071d00000000000",
+        "407442aaaaaaaaab",
+        "4074f00000000000",
+        "407442aaaaaaaaab",
+        "4071d00000000000",
+        "4061eaaaaaaaaaab",
+        "4074f00000000000",
+        "4061eaaaaaaaaaab",
+        "4071d00000000000",
+        "406d8aaaaaaaaaab",
+        "4074f00000000000",
+        "406d8aaaaaaaaaab"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#fff",
+        "stroke": "#00aa00",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100
+      },
+      {
+       "i": 2,
+       "has": true,
+       "ends": [
+        "407c3aaaaaaaaaab",
+        "406c400000000000",
+        "407f5aaaaaaaaaab",
+        "406c400000000000",
+        "407f5aaaaaaaaaab",
+        "4064800000000000",
+        "407c3aaaaaaaaaab",
+        "4064800000000000",
+        "407dcaaaaaaaaaab",
+        "4071080000000000",
+        "407dcaaaaaaaaaab",
+        "406c400000000000",
+        "407dcaaaaaaaaaab",
+        "4054555555555554",
+        "407dcaaaaaaaaaab",
+        "4064800000000000",
+        "407c3aaaaaaaaaab",
+        "4071080000000000",
+        "407f5aaaaaaaaaab",
+        "4071080000000000",
+        "407c3aaaaaaaaaab",
+        "4054555555555554",
+        "407f5aaaaaaaaaab",
+        "4054555555555554",
+        "407c3aaaaaaaaaab",
+        "4068600000000000",
+        "407f5aaaaaaaaaab",
+        "4068600000000000"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#fff",
+        "stroke": "#00aa66",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "b-visualmap",
+   "note": "a piecewise visualMap on the boxplot: the pen from the piece of the last dimension (max)",
+   "option": {
+    "animation": false,
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 50,
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "P",
+      "Q",
+      "R"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 60
+    },
+    "series": [
+     {
+      "type": "boxplot",
+      "name": "B",
+      "data": [
+       [
+        10,
+        20,
+        25,
+        32,
+        45
+       ],
+       [
+        5,
+        18,
+        22,
+        30,
+        40
+       ],
+       [
+        15,
+        24,
+        30,
+        36,
+        52
+       ]
+      ]
+     }
+    ],
+    "visualMap": {
+     "type": "piecewise",
+     "show": false,
+     "seriesIndex": 0,
+     "pieces": [
+      {
+       "lt": 42,
+       "color": "#aa00aa"
+      },
+      {
+       "gte": 42,
+       "color": "#00aaaa"
+      }
+     ]
+    }
+   },
+   "grid": [
+    "404e000000000000",
+    "4044000000000000",
+    "407f400000000000",
+    "4073600000000000"
+   ],
+   "axes": [
+    {
+     "dim": "x",
+     "type": "category",
+     "effective": [
+      "0000000000000000",
+      "4000000000000000"
+     ],
+     "mapping": null
+    },
+    {
+     "dim": "y",
+     "type": "value",
+     "effective": [
+      "0000000000000000",
+      "404e000000000000"
+     ],
+     "mapping": null
+    }
+   ],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "boxplot",
+     "baseDim": "x",
+     "layout": "horizontal",
+     "items": [
+      {
+       "i": 0,
+       "has": true,
+       "ends": [
+        "405d955555555554",
+        "406ed55555555556",
+        "40650aaaaaaaaaaa",
+        "406ed55555555556",
+        "40650aaaaaaaaaaa",
+        "4067155555555555",
+        "405d955555555554",
+        "4067155555555555",
+        "4061eaaaaaaaaaaa",
+        "4072a55555555555",
+        "4061eaaaaaaaaaaa",
+        "406ed55555555556",
+        "4061eaaaaaaaaaaa",
+        "405d600000000000",
+        "4061eaaaaaaaaaaa",
+        "4067155555555555",
+        "405d955555555554",
+        "4072a55555555555",
+        "40650aaaaaaaaaaa",
+        "4072a55555555555",
+        "405d955555555554",
+        "405d600000000000",
+        "40650aaaaaaaaaaa",
+        "405d600000000000",
+        "405d955555555554",
+        "406b9aaaaaaaaaaa",
+        "40650aaaaaaaaaaa",
+        "406b9aaaaaaaaaaa"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#fff",
+        "stroke": "#00aaaa",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100
+      },
+      {
+       "i": 1,
+       "has": true,
+       "ends": [
+        "4071d00000000000",
+        "4070100000000000",
+        "4074f00000000000",
+        "4070100000000000",
+        "4074f00000000000",
+        "4068600000000000",
+        "4071d00000000000",
+        "4068600000000000",
+        "4073600000000000",
+        "407442aaaaaaaaab",
+        "4073600000000000",
+        "4070100000000000",
+        "4073600000000000",
+        "4061eaaaaaaaaaab",
+        "4073600000000000",
+        "4068600000000000",
+        "4071d00000000000",
+        "407442aaaaaaaaab",
+        "4074f00000000000",
+        "407442aaaaaaaaab",
+        "4071d00000000000",
+        "4061eaaaaaaaaaab",
+        "4074f00000000000",
+        "4061eaaaaaaaaaab",
+        "4071d00000000000",
+        "406d8aaaaaaaaaab",
+        "4074f00000000000",
+        "406d8aaaaaaaaaab"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#fff",
+        "stroke": "#aa00aa",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100
+      },
+      {
+       "i": 2,
+       "has": true,
+       "ends": [
+        "407c3aaaaaaaaaab",
+        "406c400000000000",
+        "407f5aaaaaaaaaab",
+        "406c400000000000",
+        "407f5aaaaaaaaaab",
+        "4064800000000000",
+        "407c3aaaaaaaaaab",
+        "4064800000000000",
+        "407dcaaaaaaaaaab",
+        "4071080000000000",
+        "407dcaaaaaaaaaab",
+        "406c400000000000",
+        "407dcaaaaaaaaaab",
+        "4054555555555554",
+        "407dcaaaaaaaaaab",
+        "4064800000000000",
+        "407c3aaaaaaaaaab",
+        "4071080000000000",
+        "407f5aaaaaaaaaab",
+        "4071080000000000",
+        "407c3aaaaaaaaaab",
+        "4054555555555554",
+        "407f5aaaaaaaaaab",
+        "4054555555555554",
+        "407c3aaaaaaaaaab",
+        "4068600000000000",
+        "407f5aaaaaaaaaab",
+        "4068600000000000"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#fff",
+        "stroke": "#00aaaa",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100
+      }
+     ]
+    }
+   ]
   }
  ],
  "guards": [
@@ -40796,6 +42353,34 @@
   },
   {
    "name": "a candle tooltip has four sub-rows",
+   "ok": true
+  },
+  {
+   "name": "an item's own color0 and borderColor0",
+   "ok": true
+  },
+  {
+   "name": "an item's own color, width and opacity; the series' default border",
+   "ok": true
+  },
+  {
+   "name": "a series colour alone leaves the default border",
+   "ok": true
+  },
+  {
+   "name": "an item's own borderColorDoji gives its row sign 0",
+   "ok": true
+  },
+  {
+   "name": "colorBy 'data': each box its own pen",
+   "ok": true
+  },
+  {
+   "name": "an own borderColor keeps",
+   "ok": true
+  },
+  {
+   "name": "a visualMap colours the pen",
    "ok": true
   },
   {
