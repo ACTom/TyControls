@@ -5950,6 +5950,19 @@ var
     end;
   end;
 
+  { [R5-F] whether the payload names an item at all (queryDataIndex finds
+    an index, a list or a name to look for) }
+  function PayloadNamesItem: Boolean;
+  var x: TJSONData;
+  begin
+    x := APayload.Find('dataIndexInside');
+    if (x <> nil) and (x.JSONType <> jtNull) then Exit(True);
+    x := APayload.Find('dataIndex');
+    if (x <> nil) and (x.JSONType <> jtNull) then Exit(True);
+    x := APayload.Find('name');
+    Result := (x <> nil) and (x.JSONType <> jtNull);
+  end;
+
   { which field queryDataIndex reads, and whether it is a list }
   function QueryIsArray: Boolean;
   var x: TJSONData;
@@ -6071,6 +6084,15 @@ begin
     { a sankey's links by their own indices [Batch 114] }
     if EdgeQuery(s, inner) then
     begin
+      { [R5-F] NO INDEX AT ALL: ChartView's toggleHighlight over the whole
+        edge data -- every link [was: none] }
+      if not PayloadNamesItem then
+      begin
+        for raw := 0 to High(FSt[s].EdgeRows) do
+          if TyStItemDispatches(FSt[s].EdgeRows[raw]) then
+            Apply(FSt[s].EdgeRows[raw], False, -1);
+        Continue;
+      end;
       for k := 0 to High(inner) do
         if (inner[k] >= 0) and (inner[k] <= High(FSt[s].EdgeRows))
           and TyStItemDispatches(FSt[s].EdgeRows[inner[k]]) then
