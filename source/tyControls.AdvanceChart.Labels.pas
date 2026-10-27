@@ -173,6 +173,10 @@ type
       each rich style the emphasis names merged key by key over the normal
       one, zrender's Text state merge -- rather than only re-inked }
     EmphRtNode: string;
+    { [R5-F] a DATA ITEM's own emphasis.label as JSON text, where it writes
+      a key that lays the text out again (TyLabelEmphWantsBlock): over the
+      series' (the item's emphasis model chains to the series') }
+    EmphItemNode: string;
     { A STATE SHOWS WHAT THE NORMAL LABEL HIDES: `select.label.show`,
       `emphasis.label.show` or `blur.label.show` true on the series.
       zrender creates the label when any state shows it (needsCreateText) and
@@ -328,6 +332,35 @@ function TyLabelBlockPieces(const ASpec: TTyLabelSpec; const AText: string;
   AH: TTyTextAnchorH; AV: TTyTextAnchorV; AScale: Double;
   const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
 
+{ [R5-F] WHAT A HOVERED TEXT IS LAID OUT UNDER besides its chain: the
+  normal style's keys a site set over the option -- the label layout's
+  fontSize, width and height, a pie solver's width -- which an emphasis key
+  written over them still wins (zrender merges the state's style over the
+  normal one). Widths CSS px; FontSize the FontUnits encoding, 0 none. }
+type
+  TTyLabelEmphOver = record
+    FontSize: Integer;
+    HasWidth, HasHeight: Boolean;
+    Width, Height: Double;
+    { the alignment is the site's, not the style's (a layout's align) }
+    NoStyleAlign: Boolean;
+    { a pie's default overflow 'truncate' under a width }
+    TruncDefault: Boolean;
+  end;
+
+{ [R5-F] THE HOVERED BLOCK: the emphasis label (a data item's own over the
+  series') resolved over the normal chain -- each key, and each rich
+  style key by key, the emphasis' where written -- in the spec's font,
+  laid out in the hover's ink about (0, 0) with AH / AV. Nil where neither
+  the series nor the item writes an emphasis key that lays the text out
+  again. }
+function TyLabelEmphPiecesOver(const ASpec: TTyLabelSpec; const AText: string;
+  AHostFill: TTyChartColor; AHostHasFill: Boolean; AEmphInk: TTyChartColor;
+  AEmphStroke: TTyChartColor; AEmphStrokeW: Double;
+  AH: TTyTextAnchorH; AV: TTyTextAnchorV; AScale: Double;
+  const AMeasurer: ITyTextMeasurer; const AOver: TTyLabelEmphOver): TTyRtPieceArray;
+function TyLabelEmphOverNone: TTyLabelEmphOver;
+
 { A CAPTION IN THE HOVER'S INK: its colour and halo, and its block's
   pieces, where it stamped a hover's (HasEmph). Every place that draws a
   caption hovered goes through this, so the block cannot be left in the
@@ -382,48 +415,135 @@ implementation
 
 uses fpjson, jsonparser, tyControls.AdvanceChart.Style, tyControls.AdvanceChart.RichStyle,
   tyControls.AdvanceChart.LabelLayout, tyControls.AdvanceChart.Color,
-  tyControls.AdvanceChart.JsMath;
+  tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Option;
 
 { [R5-B] THE HOVERED BLOCK when emphasis.label writes `rich`: the chain
   resolved again with the emphasis label first (its rich styles cascade over
   the normal ones key by key, its own keys over the label's), laid out in
   the hover's ink; nil when the spec has no emphasis block or no chain }
-function TyLabelEmphPieces(const ASpec: TTyLabelSpec; const AText: string;
+function TyLabelEmphOverNone: TTyLabelEmphOver;
+begin
+  Result := Default(TTyLabelEmphOver);
+end;
+
+function TyLabelEmphPiecesOver(const ASpec: TTyLabelSpec; const AText: string;
   AHostFill: TTyChartColor; AHostHasFill: Boolean; AEmphInk: TTyChartColor;
   AEmphStroke: TTyChartColor; AEmphStrokeW: Double;
   AH: TTyTextAnchorH; AV: TTyTextAnchorV; AScale: Double;
-  const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
+  const AMeasurer: ITyTextMeasurer; const AOver: TTyLabelEmphOver): TTyRtPieceArray;
 var
   chain: array of TJSONObject;
   parsed: array of TJSONData;
-  i: Integer;
+  i, nEmph, sz, emphSz, wt: Integer;
   rt: TTyRtBlockStyle;
+  emphWidth, emphHeight, emphSize, emphWeight, emphStyle: Boolean;
+  src: TTyStringArray;
+  d: TJSONData;
 begin
   Result := nil;
-  if (ASpec.EmphRtNode = '') or (Length(ASpec.RtChain) = 0) then Exit;
-  SetLength(parsed, Length(ASpec.RtChain) + 1);
-  SetLength(chain, Length(parsed));
+  if (ASpec.EmphRtNode = '') and (ASpec.EmphItemNode = '') then Exit;
+  { the item's emphasis label, the series', then the normal chain }
+  src := nil;
+  if ASpec.EmphItemNode <> '' then
+  begin
+    SetLength(src, Length(src) + 1);
+    src[High(src)] := ASpec.EmphItemNode;
+  end;
+  if ASpec.EmphRtNode <> '' then
+  begin
+    SetLength(src, Length(src) + 1);
+    src[High(src)] := ASpec.EmphRtNode;
+  end;
+  nEmph := Length(src);
+  SetLength(src, nEmph + Length(ASpec.RtChain));
+  for i := 0 to High(ASpec.RtChain) do src[nEmph + i] := ASpec.RtChain[i];
+  SetLength(parsed, Length(src));
+  SetLength(chain, Length(src));
+  emphWidth := False;
+  emphHeight := False;
+  emphSize := False;
+  emphWeight := False;
+  emphStyle := False;
+  emphSz := 0;
+  wt := ASpec.FontWeight;
   try
     for i := 0 to High(parsed) do
     begin
       parsed[i] := nil;
       try
-        if i = 0 then parsed[i] := GetJSON(ASpec.EmphRtNode)
-        else parsed[i] := GetJSON(ASpec.RtChain[i - 1]);
+        parsed[i] := GetJSON(src[i]);
       except
         parsed[i] := nil;
       end;
       if parsed[i] is TJSONObject then chain[i] := TJSONObject(parsed[i])
       else chain[i] := nil;
+      { what the emphasis itself writes, which the site's normal keys do not
+        override }
+      if (i < nEmph) and (chain[i] <> nil) then
+      begin
+        emphWidth := emphWidth or ((chain[i].Find('width') <> nil)
+          and (chain[i].Find('width').JSONType <> jtNull));
+        emphHeight := emphHeight or ((chain[i].Find('height') <> nil)
+          and (chain[i].Find('height').JSONType <> jtNull));
+        { THE BLOCK'S FONT, which a chain does not set (the site's is final):
+          the most specific emphasis node that writes each part }
+        if not emphSize and (TyOptFontSize(chain[i].Find('fontSize'), 0) > 0) then
+        begin
+          emphSize := True;
+          emphSz := TyOptFontSize(chain[i].Find('fontSize'), 0);
+        end;
+        d := chain[i].Find('fontWeight');
+        if not emphWeight and (TyFontWeightOf(d, 0) > 0) then
+        begin
+          emphWeight := True;
+          wt := TyFontWeightOf(d, wt);
+        end;
+        d := chain[i].Find('fontStyle');
+        if not emphStyle and (d <> nil) and (d.JSONType = jtString) then
+        begin
+          emphStyle := True;
+          wt := TyFontStyleOver(d, wt);
+        end;
+      end;
     end;
     rt := TyRtResolve(chain, ASpec.RtGlobal, TyRtResolveOpt(True));
   finally
     for i := 0 to High(parsed) do parsed[i].Free;
   end;
-  TyRtFinish(rt, ASpec.FontName, ASpec.FontSizeLogical, ASpec.FontWeight,
-    ASpec.RtGlobal, AHostHasFill, AHostFill);
+  if AOver.NoStyleAlign then
+  begin
+    rt.Style.Align := rtaNone;
+    rt.Style.VAlign := rtvNone;
+  end;
+  if AOver.HasWidth and not emphWidth then
+  begin
+    rt.Style.WidthKind := rtwNumber;
+    rt.Style.Width := AOver.Width;
+    if AOver.TruncDefault and (rt.Style.Overflow = rtoNone) then
+      rt.Style.Overflow := rtoTruncate;
+  end;
+  if AOver.HasHeight and not emphHeight then
+  begin
+    rt.Style.HasHeight := True;
+    rt.Style.Height := AOver.Height;
+  end;
+  sz := ASpec.FontSizeLogical;
+  if emphSize then sz := emphSz
+  else if AOver.FontSize > 0 then sz := AOver.FontSize;
+  TyRtFinish(rt, ASpec.FontName, sz, wt, ASpec.RtGlobal, AHostHasFill, AHostFill);
   Result := TyRtLay(AText, rt, TyRtDefaultOf(True, AEmphInk, AEmphStrokeW > 0,
     AEmphStroke, True, AH, AV), AScale, AMeasurer);
+end;
+
+function TyLabelEmphPieces(const ASpec: TTyLabelSpec; const AText: string;
+  AHostFill: TTyChartColor; AHostHasFill: Boolean; AEmphInk: TTyChartColor;
+  AEmphStroke: TTyChartColor; AEmphStrokeW: Double;
+  AH: TTyTextAnchorH; AV: TTyTextAnchorV; AScale: Double;
+  const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
+begin
+  Result := TyLabelEmphPiecesOver(ASpec, AText, AHostFill, AHostHasFill,
+    AEmphInk, AEmphStroke, AEmphStrokeW, AH, AV, AScale, AMeasurer,
+    TyLabelEmphOverNone);
 end;
 
 function TyLabelBlockPieces(const ASpec: TTyLabelSpec; const AText: string;
@@ -1364,17 +1484,27 @@ begin
     cap.Caption.RtPieces := pieces;
     cap.Caption.RtEmph := nil;
     cap.Caption.RtScale := scale;
-    if Length(pieces) > 0 then
+    { emphasis.label's own rich styles: laid out again [R5-B]; its font or
+      box too, a one-run label's as well, and a data item's own over the
+      series' [R5-F: a one-run label only changed its ink] }
+    if (spec.EmphRtNode <> '') or (spec.EmphItemNode <> '') then
     begin
-      { emphasis.label's own rich styles: laid out again [R5-B] }
-      if spec.EmphRtNode <> '' then
-        cap.Caption.RtEmph := TyLabelEmphPieces(autoSpec, host.Caption.Text,
-          hostFill, hostHasFill, cap.Caption.EmphColour, cap.Caption.EmphStrokeColour,
-          cap.Caption.EmphStrokeWidthLogical, ah, av, scale, AMeasurer);
-      if Length(cap.Caption.RtEmph) = 0 then
-        cap.Caption.RtEmph := TyRtReink(pieces, cap.Caption.EmphColour, True,
-          cap.Caption.EmphStrokeColour, cap.Caption.EmphStrokeWidthLogical);
+      if Length(pieces) = 0 then
+      begin
+        autoSpec := spec;
+        if host.Caption.HasFixedAnchor then
+        begin
+          autoSpec.Rt.Style.Align := rtaNone;
+          autoSpec.Rt.Style.VAlign := rtvNone;
+        end;
+      end;
+      cap.Caption.RtEmph := TyLabelEmphPieces(autoSpec, host.Caption.Text,
+        hostFill, hostHasFill, cap.Caption.EmphColour, cap.Caption.EmphStrokeColour,
+        cap.Caption.EmphStrokeWidthLogical, ah, av, scale, AMeasurer);
     end;
+    if (Length(pieces) > 0) and (Length(cap.Caption.RtEmph) = 0) then
+      cap.Caption.RtEmph := TyRtReink(pieces, cap.Caption.EmphColour, True,
+        cap.Caption.EmphStrokeColour, cap.Caption.EmphStrokeWidthLogical);
     AList.Add(cap);
   end;
 end;

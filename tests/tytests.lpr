@@ -203,6 +203,7 @@ uses
   test.advchart.hoverlayer,
   test.advchart.radarlabel,
   test.advchart.pieitemlabel,
+  test.advchart.labelfontstates,
   test.advchart.axisemphasis,
   test.advchart.brushstyle,
   test.advchart.loadingpointer,

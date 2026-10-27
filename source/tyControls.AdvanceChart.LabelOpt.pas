@@ -51,6 +51,12 @@ function TyLabelSpecOfNode(ANode, ASeries: TJSONObject;
   -- ASeries is the series node, whose `emphasis.label` is read. }
 procedure TyLabelReadInk(ALabel, ASeries: TJSONObject; var ASpec: TTyLabelSpec);
 
+{ [R5-F] WHETHER AN emphasis.label LAYS ITS TEXT OUT AGAIN: it writes (not
+  null) rich, a font key (fontSize, fontWeight, fontStyle, fontFamily) or
+  one the block reads (TyRtNodeWantsBlock's) -- zrender's state style
+  merged over the normal one changes the text's layout, not only its ink }
+function TyLabelEmphWantsBlock(AEmph: TJSONObject): Boolean;
+
 { THE TEXT BLOCK OF A LABEL A SERIES PLACES ITSELF (a pie's, a funnel's):
   ALabel's styles into ASpec.Rt, with the root option's side. [Batch 86] }
 procedure TyLabelReadBlock(ALabel: TJSONObject; ARoot: TJSONData;
@@ -542,6 +548,24 @@ begin
   ResolveBlock(node, Result);
 end;
 
+function TyLabelEmphWantsBlock(AEmph: TJSONObject): Boolean;
+const
+  cFont: array[0..3] of string = ('fontSize', 'fontWeight', 'fontStyle', 'fontFamily');
+var
+  k: Integer;
+  d: TJSONData;
+begin
+  Result := False;
+  if AEmph = nil then Exit;
+  if AEmph.Find('rich') is TJSONObject then Exit(True);
+  for k := 0 to High(cFont) do
+  begin
+    d := AEmph.Find(cFont[k]);
+    if (d <> nil) and (d.JSONType <> jtNull) then Exit(True);
+  end;
+  Result := TyRtNodeWantsBlock(AEmph);
+end;
+
 procedure TyLabelReadInk(ALabel, ASeries: TJSONObject; var ASpec: TTyLabelSpec);
 var
   s: string;
@@ -626,8 +650,9 @@ begin
   end;
   emph := ObjOf(emph.Find('label'));
   if emph = nil then Exit;
-  { [R5-B] its rich styles: the hovered block is laid out again }
-  if emph.Find('rich') is TJSONObject then ASpec.EmphRtNode := emph.AsJSON
+  { [R5-B] its rich styles: the hovered block is laid out again; [R5-F] so
+    is any key that lays the text out (its font, its box) }
+  if TyLabelEmphWantsBlock(emph) then ASpec.EmphRtNode := emph.AsJSON
   else ASpec.EmphRtNode := '';
   s := StrIn(emph, 'color');
   if (s <> '') and (s <> 'inherit') and (s <> 'auto')
@@ -659,6 +684,12 @@ var root: TJSONObject;
 begin
   if ARoot is TJSONObject then root := TJSONObject(ARoot) else root := nil;
   ASpec.RtGlobal := TyRtGlobalOf(root, '', 0, 0);
+  { [R5-F] the node kept, for the hovered block laid out over it }
+  if ALabel <> nil then
+  begin
+    SetLength(ASpec.RtChain, 1);
+    ASpec.RtChain[0] := ALabel.AsJSON;
+  end;
   if (ALabel = nil) or not TyRtNodeWantsBlock(ALabel) then Exit;
   ASpec.Rt := TyRtResolve([ALabel], ASpec.RtGlobal, TyRtResolveOpt(True));
 end;
