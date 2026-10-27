@@ -247,6 +247,9 @@ type
     procedure PopupClosed(Sender: TObject);
     procedure DeferredCloseUp(Data: PtrInt);
   protected
+    { #130: reads past the values a 3.x form holds for properties no longer published. }
+    procedure DefineProperties(Filer: TFiler); override;
+  protected
     { Guard: tick at last CloseUp. Click reopens only if > 200ms have passed.
       Mirrored from FPopup.CloseUpTick (via PopupClosed) so test subclasses can
       still manipulate it (e.g. AgeCloseUpTick) without accessing FPopup directly. }
@@ -795,6 +798,15 @@ begin
     if (ACaseSensitive and (AItems[i] = AText))
     or ((not ACaseSensitive) and (AnsiCompareText(AItems[i], AText) = 0)) then
       Exit(i);
+end;
+
+procedure TTyCustomComboBox.DefineProperties(Filer: TFiler);
+begin
+  inherited DefineProperties(Filer);
+  { #130: published on the pick-only combo boxes (TTyAdvancedComboBox, TTyCheckComboBox,
+    TTyColorBox, TTyColorComboBox, TTyFilterComboBox, TTyOfficeComboBox, TTyShellComboBox).
+    TTyComboBox still publishes them, and a published property is read before this is asked. }
+  TyDefineRetiredProperties(Filer, ['MaxLength', 'CharCase', 'ReadOnly']);
 end;
 
 constructor TTyCustomComboBox.Create(AOwner: TComponent);

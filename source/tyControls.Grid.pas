@@ -1990,6 +1990,8 @@ type
       TTyStringGrid reports from its own handler, after it moves its cursor, and clears this
       so that a click is reported once. }
     FReportsClicks: Boolean;
+    { #130: reads past the values a 3.x form holds for properties no longer published. }
+    procedure DefineProperties(Filer: TFiler); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
   protected
@@ -8671,6 +8673,14 @@ end;
 { What TTyStringGrid.MouseDown reports, without the cursor, the editor and the selection a
   draw grid does not have: a right click on the header or a cell, a left click on a cell, a
   press on a cell button (fired on the release, as a button is). OnCanClickCell vetoes a cell. }
+procedure TTyCustomDrawGrid.DefineProperties(Filer: TFiler);
+begin
+  inherited DefineProperties(Filer);
+  { #130: published on TTyDrawGrid, which has no selection and no cell editor (TTyStringGrid
+    still publishes them). }
+  TyDefineRetiredProperties(Filer, ['HideSelectionWhenInactive', 'FadeUnfocusedSelection', 'MinEditorWidth']);
+end;
+
 procedure TTyCustomDrawGrid.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   hit: TTyGridHit;

@@ -274,7 +274,36 @@ var
     nil outside the IDE. Callers gate on csDesigning themselves. }
   TyDesignerRefreshValuesProc: procedure = nil;
 
+{ #130: properties 3.x published that 4.0 no longer does. A class lists them from its
+  DefineProperties, and a form saved by 3.x still loads: each value is read past and dropped,
+  where it stopped the load with "Unknown property". Nothing is written back. }
+procedure TyDefineRetiredProperties(AFiler: TFiler; const ANames: array of string);
+
 implementation
+
+type
+  { What TyDefineRetiredProperties hands the reader: DefineProperty takes a method. }
+  TTyRetiredPropertySink = class
+    procedure Skip(AReader: TReader);
+  end;
+
+var
+  GRetiredSink: TTyRetiredPropertySink;
+
+procedure TTyRetiredPropertySink.Skip(AReader: TReader);
+begin
+  AReader.Driver.SkipValue;
+end;
+
+procedure TyDefineRetiredProperties(AFiler: TFiler; const ANames: array of string);
+var
+  i: Integer;
+begin
+  if not (AFiler is TReader) then Exit;   // nothing is written
+  if GRetiredSink = nil then GRetiredSink := TTyRetiredPropertySink.Create;
+  for i := 0 to High(ANames) do
+    AFiler.DefineProperty(ANames[i], @GRetiredSink.Skip, nil, False);
+end;
 
 function TyRGB(R, G, B: Byte): TTyColor;
 begin
@@ -428,4 +457,6 @@ begin
   end;
 end;
 
+finalization
+  FreeAndNil(GRetiredSink);
 end.

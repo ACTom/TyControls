@@ -43,6 +43,8 @@ type
     function ClampVal(AValue: Double): Double;
     function AcceptsChar(C: Char): Boolean;   // digits, the sign, the separator with decimals
   protected
+    { #130: reads past the values a 3.x form holds for properties no longer published. }
+    procedure DefineProperties(Filer: TFiler); override;
     // Re-derive the displayed text from the current value (AGroup = grouped display form).
     // Protected so a subclass can refresh after changing a display-affecting property.
     procedure Reformat(AGroup: Boolean);
@@ -151,6 +153,17 @@ type
   end;
 
 implementation
+
+uses
+  tyControls.Types;
+
+procedure TTyCustomNumericEdit.DefineProperties(Filer: TFiler);
+begin
+  inherited DefineProperties(Filer);
+  { #130: CharCase was published on every numeric edit (TTyNumericEdit, TTyCurrencyEdit,
+    TTyCalcEdit, TTyFloatSpinEdit, TTyTrackEdit and the DB ones). }
+  TyDefineRetiredProperties(Filer, ['CharCase']);
+end;
 
 function TyFormatNumber(AValue: Double; ADecimals: Integer;
   AThousands, ADecimalSep: Char; AUseThousands: Boolean): string;

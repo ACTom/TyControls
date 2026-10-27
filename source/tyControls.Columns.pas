@@ -373,6 +373,9 @@ type
     { Forwarded from FColumns.OnChange }
     procedure ColumnsChanged(Sender: TObject);
     function IsSortStored: Boolean;
+  protected
+    { #130: reads past the values a 3.x form holds for properties no longer published. }
+    procedure DefineProperties(Filer: TFiler); override;
   public
     constructor Create; overload;
     { See TTyColumns.Create(AOwnerHeader, AItemClass). }
@@ -501,6 +504,9 @@ function TyColumnAxis(AOriginX, APPI: Integer; ARightToLeft: Boolean;
   ABandLeft, ABandRight: Integer): TTyColumnAxis; overload;
 
 implementation
+
+uses
+  tyControls.Types;
 
 type
   { The component TTyCustomHeader.FImagesWatch holds. }
@@ -1466,6 +1472,14 @@ begin
   FImagesWatch.Free;
   FColumns.Free;
   inherited Destroy;
+end;
+
+procedure TTyCustomHeader.DefineProperties(Filer: TFiler);
+begin
+  inherited DefineProperties(Filer);
+  { #130: published on a grid's header (TTyHeader, of the list and tree views, still publishes
+    it). }
+  TyDefineRetiredProperties(Filer, ['MainColumn']);
 end;
 
 procedure TTyCustomHeader.WatchImages(AValue: TCustomImageList);
