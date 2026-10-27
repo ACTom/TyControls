@@ -1443,7 +1443,13 @@ begin
       want := FVmLive[k].ThumbHover[h] = 2;
       if want <> FVmLive[k].ThumbEmph[h] then
       begin
-        if want then FVmLive[k].ThumbSaved[h] := FVmLive[k].ThumbFill[h]
+        if want then
+        begin
+          FVmLive[k].ThumbSaved[h] := FVmLive[k].ThumbFill[h];
+          { [R5-D] the state's own colour (emphasis.handleStyle.color) }
+          if (k <= High(FVisualViews)) and FVisualViews[k].HasEmphFill then
+            FVmLive[k].ThumbFill[h] := TyVisualFromChart(FVisualViews[k].EmphFill);
+        end
         else FVmLive[k].ThumbFill[h] := FVmLive[k].ThumbSaved[h];
         FVmLive[k].ThumbEmph[h] := want;
         anyChange := True;
@@ -1740,6 +1746,7 @@ begin
   for h := 0 to 1 do
   begin
     Result.HandleFill[h] := FVmLive[AIndex].ThumbFill[h];
+    Result.HandleEmph[h] := FVmLive[AIndex].ThumbEmph[h];
     Result.Labels[h] := FVmLive[AIndex].Labels[h];
     if FVmLive[AIndex].LabelBlurOn[h] then Result.LabelOpacity[h] := 0.1
     else Result.LabelOpacity[h] := 1;

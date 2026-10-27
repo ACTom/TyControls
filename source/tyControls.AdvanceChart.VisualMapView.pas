@@ -68,6 +68,12 @@ type
     HandleImage: string;
     { handleStyle.borderWidth, doubled as upstream draws it }
     HandleLineWidth: Double;
+    { [R5-D] emphasis.handleStyle: the thumb's hover state over its normal
+      style -- a colour, a border colour, a width (not doubled: the
+      doubling is the normal style's), an opacity; NaN / False unwritten }
+    HasEmphFill, HasEmphStroke: Boolean;
+    EmphFill, EmphStroke: TTyChartColor;
+    EmphLineWidth, EmphOpacity: Double;
     BorderWidth: Double;
     Z: Integer;
     { the colours an author may write over the theme's }
@@ -186,6 +192,8 @@ type
   TTyVmLiveDraw = record
     Has: Boolean;
     HandleFill: array[0..1] of TTyVisualColor;
+    { [R5-D] the thumb is in its emphasis state }
+    HandleEmph: array[0..1] of Boolean;
     Labels: array[0..1] of TTyVmText;
     LabelOpacity: array[0..1] of Double;
     IndVisible: Boolean;
@@ -557,6 +565,30 @@ begin
     Result.HandleIcon := Copy(d.AsString, 8, MaxInt);
   if (d <> nil) and (d.JSONType = jtString) and (Copy(d.AsString, 1, 8) = 'image://') then
     Result.HandleImage := d.AsString;
+  { [R5-D] the hover state's }
+  Result.EmphLineWidth := NaN;
+  Result.EmphOpacity := NaN;
+  hs := ObjOf(node.Find('emphasis'));
+  if hs <> nil then hs := ObjOf(hs.Find('handleStyle'));
+  if hs <> nil then
+  begin
+    d := hs.Find('color');
+    if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
+    begin
+      Result.HasEmphFill := True;
+      Result.EmphFill := c;
+    end;
+    d := hs.Find('borderColor');
+    if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
+    begin
+      Result.HasEmphStroke := True;
+      Result.EmphStroke := c;
+    end;
+    d := hs.Find('borderWidth');
+    if (d <> nil) and (d.JSONType = jtNumber) then Result.EmphLineWidth := d.AsFloat;
+    d := hs.Find('opacity');
+    if (d <> nil) and (d.JSONType = jtNumber) then Result.EmphOpacity := d.AsFloat;
+  end;
   hs := ObjOf(node.Find('handleStyle'));
   if hs <> nil then
   begin
@@ -2346,6 +2378,16 @@ begin
     el.Style.StrokeColor := AInk.HandleStroke;
     el.Style.StrokeWidthLogical := AView.HandleLineWidth;
     el.Style.Alpha := 1;
+    { [R5-D] in the emphasis state: emphasis.handleStyle's keys over the
+      normal style (its colour went into the fill the state saved) }
+    if ALive.Has and (h <= 1) and ALive.HandleEmph[h] then
+    begin
+      if AView.HasEmphStroke then el.Style.StrokeColor := AView.EmphStroke;
+      if not IsNan(AView.EmphLineWidth) then
+        el.Style.StrokeWidthLogical := AView.EmphLineWidth;
+      if not IsNan(AView.EmphOpacity) then
+        el.Style.Alpha := Max(0, Min(1, AView.EmphOpacity));
+    end;
     AList.Add(el);
     Inc(Result);
   end;

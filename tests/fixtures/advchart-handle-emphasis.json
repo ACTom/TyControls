@@ -1,0 +1,710 @@
+{
+ "source": "ECharts 6.1.0",
+ "W": 600,
+ "H": 400,
+ "cases": [
+  {
+   "id": "dz-written",
+   "kind": "dataZoom",
+   "note": "a slider whose emphasis.handleStyle writes a colour, a border and a width, and whose emphasis.moveHandleStyle writes a colour and an opacity: the hover shows them over the normal style",
+   "option": {
+    "dataZoom": [
+     {
+      "type": "slider",
+      "start": 20,
+      "end": 80,
+      "handleStyle": {
+       "color": "#00ff00",
+       "borderColor": "#0000ff"
+      },
+      "moveHandleStyle": {
+       "color": "#00ffff"
+      },
+      "emphasis": {
+       "handleStyle": {
+        "color": "#ff0000",
+        "borderColor": "#ffff00",
+        "borderWidth": 3
+       },
+       "moveHandleStyle": {
+        "color": "#ff00ff",
+        "opacity": 1
+       }
+      }
+     }
+    ],
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6,
+       4
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "op": "start",
+     "at": null,
+     "record": {
+      "handles": [
+       {
+        "states": [],
+        "fill": "#00ff00",
+        "stroke": "#0000ff",
+        "lineWidth": 1,
+        "opacity": 1,
+        "centre": [
+         184,
+         370
+        ]
+       },
+       {
+        "states": [],
+        "fill": "#00ff00",
+        "stroke": "#0000ff",
+        "lineWidth": 1,
+        "opacity": 1,
+        "centre": [
+         452,
+         370
+        ]
+       }
+      ],
+      "move": {
+       "states": [],
+       "fill": "#00ffff",
+       "stroke": null,
+       "lineWidth": 1,
+       "opacity": 0.5,
+       "centre": [
+        318,
+        352
+       ]
+      }
+     }
+    },
+    {
+     "op": "handle0",
+     "at": [
+      184,
+      370
+     ],
+     "record": {
+      "handles": [
+       {
+        "states": [
+         "emphasis"
+        ],
+        "fill": "#ff0000",
+        "stroke": "#ffff00",
+        "lineWidth": 3,
+        "opacity": 1,
+        "centre": [
+         184,
+         370
+        ]
+       },
+       {
+        "states": [],
+        "fill": "#00ff00",
+        "stroke": "#0000ff",
+        "lineWidth": 1,
+        "opacity": 1,
+        "centre": [
+         452,
+         370
+        ]
+       }
+      ],
+      "move": {
+       "states": [
+        "emphasis"
+       ],
+       "fill": "#ff00ff",
+       "stroke": null,
+       "lineWidth": 1,
+       "opacity": 1,
+       "centre": [
+        318,
+        352
+       ]
+      }
+     }
+    },
+    {
+     "op": "none",
+     "at": [
+      5,
+      5
+     ],
+     "record": {
+      "handles": [
+       {
+        "states": [],
+        "fill": "#00ff00",
+        "stroke": "#0000ff",
+        "lineWidth": 1,
+        "opacity": 1,
+        "centre": [
+         184,
+         370
+        ]
+       },
+       {
+        "states": [],
+        "fill": "#00ff00",
+        "stroke": "#0000ff",
+        "lineWidth": 1,
+        "opacity": 1,
+        "centre": [
+         452,
+         370
+        ]
+       }
+      ],
+      "move": {
+       "states": [],
+       "fill": "#00ffff",
+       "stroke": null,
+       "lineWidth": 1,
+       "opacity": 0.5,
+       "centre": [
+        318,
+        352
+       ]
+      }
+     }
+    },
+    {
+     "op": "move",
+     "at": [
+      318,
+      352
+     ],
+     "record": {
+      "handles": [
+       {
+        "states": [],
+        "fill": "#00ff00",
+        "stroke": "#0000ff",
+        "lineWidth": 1,
+        "opacity": 1,
+        "centre": [
+         184,
+         370
+        ]
+       },
+       {
+        "states": [],
+        "fill": "#00ff00",
+        "stroke": "#0000ff",
+        "lineWidth": 1,
+        "opacity": 1,
+        "centre": [
+         452,
+         370
+        ]
+       }
+      ],
+      "move": {
+       "states": [
+        "emphasis"
+       ],
+       "fill": "#ff00ff",
+       "stroke": null,
+       "lineWidth": 1,
+       "opacity": 1,
+       "centre": [
+        318,
+        352
+       ]
+      }
+     }
+    },
+    {
+     "op": "none",
+     "at": [
+      5,
+      5
+     ],
+     "record": {
+      "handles": [
+       {
+        "states": [],
+        "fill": "#00ff00",
+        "stroke": "#0000ff",
+        "lineWidth": 1,
+        "opacity": 1,
+        "centre": [
+         184,
+         370
+        ]
+       },
+       {
+        "states": [],
+        "fill": "#00ff00",
+        "stroke": "#0000ff",
+        "lineWidth": 1,
+        "opacity": 1,
+        "centre": [
+         452,
+         370
+        ]
+       }
+      ],
+      "move": {
+       "states": [],
+       "fill": "#00ffff",
+       "stroke": null,
+       "lineWidth": 1,
+       "opacity": 0.5,
+       "centre": [
+        318,
+        352
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "dz-default",
+   "kind": "dataZoom",
+   "note": "no emphasis colour written: the default state proxy lifts the normal colour (enableHoverEmphasis), the border is the model default, the move handle at opacity 0.8",
+   "option": {
+    "dataZoom": [
+     {
+      "type": "slider",
+      "start": 20,
+      "end": 80,
+      "handleStyle": {
+       "color": "#00ff00"
+      },
+      "moveHandleStyle": {
+       "color": "#00ffff"
+      }
+     }
+    ],
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6,
+       4
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "op": "start",
+     "at": null,
+     "record": {
+      "handles": [
+       {
+        "states": [],
+        "fill": "#00ff00",
+        "stroke": "#c0c9e6",
+        "lineWidth": 1,
+        "opacity": 1,
+        "centre": [
+         184,
+         370
+        ]
+       },
+       {
+        "states": [],
+        "fill": "#00ff00",
+        "stroke": "#c0c9e6",
+        "lineWidth": 1,
+        "opacity": 1,
+        "centre": [
+         452,
+         370
+        ]
+       }
+      ],
+      "move": {
+       "states": [],
+       "fill": "#00ffff",
+       "stroke": null,
+       "lineWidth": 1,
+       "opacity": 0.5,
+       "centre": [
+        318,
+        352
+       ]
+      }
+     }
+    },
+    {
+     "op": "handle1",
+     "at": [
+      452,
+      370
+     ],
+     "record": {
+      "handles": [
+       {
+        "states": [],
+        "fill": "#00ff00",
+        "stroke": "#c0c9e6",
+        "lineWidth": 1,
+        "opacity": 1,
+        "centre": [
+         184,
+         370
+        ]
+       },
+       {
+        "states": [
+         "emphasis"
+        ],
+        "fill": "rgba(0,255,0,1)",
+        "stroke": "#8292cc",
+        "lineWidth": 1,
+        "opacity": 1,
+        "centre": [
+         452,
+         370
+        ]
+       }
+      ],
+      "move": {
+       "states": [
+        "emphasis"
+       ],
+       "fill": "#00ffff",
+       "stroke": null,
+       "lineWidth": 1,
+       "opacity": 0.8,
+       "centre": [
+        318,
+        352
+       ]
+      }
+     }
+    },
+    {
+     "op": "none",
+     "at": [
+      5,
+      5
+     ],
+     "record": {
+      "handles": [
+       {
+        "states": [],
+        "fill": "#00ff00",
+        "stroke": "#c0c9e6",
+        "lineWidth": 1,
+        "opacity": 1,
+        "centre": [
+         184,
+         370
+        ]
+       },
+       {
+        "states": [],
+        "fill": "#00ff00",
+        "stroke": "#c0c9e6",
+        "lineWidth": 1,
+        "opacity": 1,
+        "centre": [
+         452,
+         370
+        ]
+       }
+      ],
+      "move": {
+       "states": [],
+       "fill": "#00ffff",
+       "stroke": null,
+       "lineWidth": 1,
+       "opacity": 0.5,
+       "centre": [
+        318,
+        352
+       ]
+      }
+     }
+    },
+    {
+     "op": "move",
+     "at": [
+      318,
+      352
+     ],
+     "record": {
+      "handles": [
+       {
+        "states": [],
+        "fill": "#00ff00",
+        "stroke": "#c0c9e6",
+        "lineWidth": 1,
+        "opacity": 1,
+        "centre": [
+         184,
+         370
+        ]
+       },
+       {
+        "states": [],
+        "fill": "#00ff00",
+        "stroke": "#c0c9e6",
+        "lineWidth": 1,
+        "opacity": 1,
+        "centre": [
+         452,
+         370
+        ]
+       }
+      ],
+      "move": {
+       "states": [
+        "emphasis"
+       ],
+       "fill": "#00ffff",
+       "stroke": null,
+       "lineWidth": 1,
+       "opacity": 0.8,
+       "centre": [
+        318,
+        352
+       ]
+      }
+     }
+    },
+    {
+     "op": "none",
+     "at": [
+      5,
+      5
+     ],
+     "record": {
+      "handles": [
+       {
+        "states": [],
+        "fill": "#00ff00",
+        "stroke": "#c0c9e6",
+        "lineWidth": 1,
+        "opacity": 1,
+        "centre": [
+         184,
+         370
+        ]
+       },
+       {
+        "states": [],
+        "fill": "#00ff00",
+        "stroke": "#c0c9e6",
+        "lineWidth": 1,
+        "opacity": 1,
+        "centre": [
+         452,
+         370
+        ]
+       }
+      ],
+      "move": {
+       "states": [],
+       "fill": "#00ffff",
+       "stroke": null,
+       "lineWidth": 1,
+       "opacity": 0.5,
+       "centre": [
+        318,
+        352
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "vm-written",
+   "kind": "visualMap",
+   "note": "a calculable continuous visualMap with emphasis.handleStyle: the hovered thumb takes its colour, border and width (the width not doubled)",
+   "option": {
+    "visualMap": {
+     "type": "continuous",
+     "min": 0,
+     "max": 10,
+     "calculable": true,
+     "right": 10,
+     "bottom": 20,
+     "handleStyle": {
+      "borderColor": "#0000ff",
+      "borderWidth": 1
+     },
+     "emphasis": {
+      "handleStyle": {
+       "color": "#ff0000",
+       "borderColor": "#00ff00",
+       "borderWidth": 4
+      }
+     }
+    },
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       3,
+       5,
+       2,
+       6,
+       4
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "op": "start",
+     "at": null,
+     "record": {
+      "handles": [
+       {
+        "states": [],
+        "fill": "rgba(212,220,247,1)",
+        "stroke": "#0000ff",
+        "lineWidth": 2,
+        "opacity": 1,
+        "centre": [
+         562,
+         359
+        ]
+       },
+       {
+        "states": [],
+        "fill": "rgba(80,112,221,1)",
+        "stroke": "#0000ff",
+        "lineWidth": 2,
+        "opacity": 1,
+        "centre": [
+         562,
+         219
+        ]
+       }
+      ],
+      "move": null
+     }
+    },
+    {
+     "op": "handle0",
+     "at": [
+      562,
+      359
+     ],
+     "record": {
+      "handles": [
+       {
+        "states": [
+         "emphasis"
+        ],
+        "fill": "#ff0000",
+        "stroke": "#00ff00",
+        "lineWidth": 4,
+        "opacity": 1,
+        "centre": [
+         562,
+         359
+        ]
+       },
+       {
+        "states": [],
+        "fill": "rgba(80,112,221,1)",
+        "stroke": "#0000ff",
+        "lineWidth": 2,
+        "opacity": 1,
+        "centre": [
+         562,
+         219
+        ]
+       }
+      ],
+      "move": null
+     }
+    },
+    {
+     "op": "none",
+     "at": [
+      5,
+      5
+     ],
+     "record": {
+      "handles": [
+       {
+        "states": [],
+        "fill": "rgba(212,220,247,1)",
+        "stroke": "#0000ff",
+        "lineWidth": 2,
+        "opacity": 1,
+        "centre": [
+         562,
+         359
+        ]
+       },
+       {
+        "states": [],
+        "fill": "rgba(80,112,221,1)",
+        "stroke": "#0000ff",
+        "lineWidth": 2,
+        "opacity": 1,
+        "centre": [
+         562,
+         219
+        ]
+       }
+      ],
+      "move": null
+     }
+    }
+   ]
+  }
+ ]
+}

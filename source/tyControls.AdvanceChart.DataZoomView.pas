@@ -76,6 +76,9 @@ type
     Box: TTyRawBox;
     { the author's colours and widths }
     Filler, Frame, Background, Handle, MoveHandle, Brush: TTyDzStyleSpec;
+    { [R5-D] emphasis.handleStyle / emphasis.moveHandleStyle: the hover
+      states' styles, written over the normal ones }
+    HandleEmph, MoveHandleEmph: TTyDzStyleSpec;
     ShadowArea, ShadowLine: array[0..1] of TTyDzStyleSpec;
     HasText: Boolean;
     TextColour: TTyChartColor;
@@ -248,7 +251,9 @@ implementation
 uses tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Scale,
      tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Color,
      tyControls.AdvanceChart.Symbol, tyControls.AdvanceChart.DataZoom,
-     tyControls.AdvanceChart.Handlers;
+     tyControls.AdvanceChart.Handlers,
+     { [R5-D] the emphasis proxy's liftColor }
+     tyControls.AdvanceChart.Style;
 
 { ==================== small things ==================== }
 
@@ -463,6 +468,17 @@ begin
   end;
   StyleOf(ObjOf(node.Find('moveHandleStyle')), 'color', 'borderColor', 'borderWidth',
     Result.MoveHandle);
+  { [R5-D] the two hover states }
+  Result.HandleEmph := BlankStyle;
+  Result.MoveHandleEmph := BlankStyle;
+  o := ObjOf(node.Find('emphasis'));
+  if o <> nil then
+  begin
+    StyleOf(ObjOf(o.Find('handleStyle')), 'color', 'borderColor', 'borderWidth',
+      Result.HandleEmph);
+    StyleOf(ObjOf(o.Find('moveHandleStyle')), 'color', 'borderColor', 'borderWidth',
+      Result.MoveHandleEmph);
+  end;
   Result.Brush := BlankStyle;
   StyleOf(ObjOf(node.Find('brushStyle')), 'color', 'borderColor', 'borderWidth',
     Result.Brush);
@@ -1283,6 +1299,9 @@ var
   el: TTyChartElement;
   p: Integer;
   role: TTyDzRole;
+  { [R5-D] a hovered handle's inks }
+  op: Double;
+  hf, hs: TTyChartColor;
 
   function Blank(ARole: TTyDzRole): TTyChartElement;
   begin
@@ -1490,11 +1509,25 @@ begin
       dzrHandle0, dzrHandle1:
         begin
           el := Blank(role);
-          { the emphasis colours are upstream's own, not the author's
-            normal ones }
+          { [R5-D] THE EMPHASIS STATE OVER THE NORMAL STYLE: emphasis.handleStyle's
+            keys where written; else the default proxy's lift of the normal
+            fill, and the model's default border (the theme's); the theme's
+            hover ink where the author wrote no colour at all
+            [Was: the theme's hover inks whatever the author wrote.] }
           if ALayout.HandleHover[Ord(role) - Ord(dzrHandle0)] then
-            Symbol(ASpec.HandleIcon, e, Dev(role), AInk.HandleHoverFill,
-              AInk.HandleHoverStroke, True, LineWidthOr(ASpec.Handle, 1))
+          begin
+            if ASpec.HandleEmph.HasOpacity then op := ASpec.HandleEmph.Opacity
+            else if ASpec.Handle.HasOpacity then op := ASpec.Handle.Opacity
+            else op := 1;
+            if ASpec.HandleEmph.HasFill then hf := WithOpacity(ASpec.HandleEmph.Fill, op)
+            else if ASpec.Handle.HasFill then
+              hf := WithOpacity(TyChartLiftColor(ASpec.Handle.Fill), op)
+            else hf := WithOpacity(AInk.HandleHoverFill, op);
+            if ASpec.HandleEmph.HasStroke then hs := WithOpacity(ASpec.HandleEmph.Stroke, op)
+            else hs := WithOpacity(AInk.HandleHoverStroke, op);
+            Symbol(ASpec.HandleIcon, e, Dev(role), hf, hs, True,
+              LineWidthOr(ASpec.HandleEmph, LineWidthOr(ASpec.Handle, 1)));
+          end
           else
             Symbol(ASpec.HandleIcon, e, Dev(role),
               Ink(ASpec.Handle, True, AInk.HandleFill, 1),
@@ -1506,17 +1539,40 @@ begin
           el := Blank(role);
           el.Shape := RectShape(e.Shape, True, e.R, Dev(role));
           el.Style.HasFill := True;
-          if ALayout.MoveHover and not ASpec.MoveHandle.HasFill then
-            el.Style.FillColor := AInk.MoveHandleHover
-          else if ALayout.MoveHover then
-            el.Style.FillColor := WithOpacity(ASpec.MoveHandle.Fill, 0.8)
+          { [R5-D] the hover: emphasis.moveHandleStyle over the normal style
+            -- its colour, else the normal one, at its opacity, else the
+            model's default 0.8 [was: the normal colour at 0.8, whatever the
+            emphasis said] }
+          if ALayout.MoveHover then
+          begin
+            if ASpec.MoveHandleEmph.HasOpacity then op := ASpec.MoveHandleEmph.Opacity
+            else op := 0.8;
+            if ASpec.MoveHandleEmph.HasFill then
+              el.Style.FillColor := WithOpacity(ASpec.MoveHandleEmph.Fill, op)
+            else if ASpec.MoveHandle.HasFill then
+              el.Style.FillColor := WithOpacity(ASpec.MoveHandle.Fill, op)
+            else if ASpec.MoveHandleEmph.HasOpacity then
+              el.Style.FillColor := WithOpacity(AInk.MoveHandleHover or $FF000000, op)
+            else
+              el.Style.FillColor := AInk.MoveHandleHover;
+          end
           else
             el.Style.FillColor := Ink(ASpec.MoveHandle, True, AInk.MoveHandle, 0.5);
-          if ASpec.MoveHandle.HasStroke then
+          if ALayout.MoveHover and ASpec.MoveHandleEmph.HasStroke then
+          begin
+            el.Style.StrokeColor := WithOpacity(ASpec.MoveHandleEmph.Stroke,
+              el.Style.FillColor shr 24 / 255);
+            el.Style.StrokeWidthLogical := LineWidthOr(ASpec.MoveHandleEmph,
+              LineWidthOr(ASpec.MoveHandle, 1));
+          end
+          else if ASpec.MoveHandle.HasStroke then
           begin
             el.Style.StrokeColor := WithOpacity(ASpec.MoveHandle.Stroke,
               el.Style.FillColor shr 24 / 255);
             el.Style.StrokeWidthLogical := LineWidthOr(ASpec.MoveHandle, 1);
+            if ALayout.MoveHover then
+              el.Style.StrokeWidthLogical := LineWidthOr(ASpec.MoveHandleEmph,
+                el.Style.StrokeWidthLogical);
           end;
           if e.Shape.W > 0 then
           begin
