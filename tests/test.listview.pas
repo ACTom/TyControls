@@ -947,9 +947,11 @@ end;
 procedure TListViewSelectionTest.TestABatchOfDeletesFollowsTheItems;
 begin
   Populate(5);
-  FLV.ItemIndex := 3;
+  FLV.MultiSelect := True;
+  FLV.Selected[1] := True;
+  FLV.Selected[3] := True;
   { Inside BeginUpdate the rows are counted again only at EndUpdate, when the deleted items
-    are gone: poisoned, so reading one faults. }
+    are gone -- item1, selected, among them. Poisoned, so reading one faults. }
   BeginPoison;
   try
     FLV.BeginUpdate;
@@ -962,8 +964,9 @@ begin
   finally
     EndPoison;
   end;
-  AssertEquals('the focus followed its item through the batch', 1, FLV.ItemIndex);
-  AssertEquals('it is item3', 'item3', FLV.Items[FLV.ItemIndex].Caption);
+  AssertTrue('the selected item3 is still selected, one row up', FLV.Selected[1]);
+  AssertEquals('it is item3', 'item3', FLV.Items[1].Caption);
+  AssertFalse('the deleted item1 took its selection along', FLV.Selected[0]);
 end;
 
 procedure TListViewSelectionTest.TestUnselectingTheSelectedRowClearsIt;

@@ -23,6 +23,9 @@ type
     procedure TestAButtonOnAHiddenPageDoesNotAnswer;
     procedure TestAButtonInAHiddenPanelDoesNotAnswer;
     procedure TestAPageControlInADisabledPanelKeepsItsPage;
+    { The page control passes the key to the page shown only -- even to a control that
+      would answer it without asking whether it can be seen. }
+    procedure TestAHiddenPageIsNotAskedAtAll;
   end;
 implementation
 procedure TAccelTest.TestParseMnemonic;
@@ -111,6 +114,42 @@ begin
     MakeButton(f, '&Send', @Clicked);
     AltKey(f, 's');
     AssertEquals('the hidden panel''s button does not take the key', '&Send', FClicks.Text.Trim);
+  finally
+    f.Free;
+  end;
+end;
+
+type
+  { Answers every Alt key, visible or not: what a third-party control may do. }
+  TAnyAccelProbe = class(TCustomControl)
+  public
+    Asked: Integer;
+  protected
+    function DialogChar(var Message: TLMKey): Boolean; override;
+  end;
+
+function TAnyAccelProbe.DialogChar(var Message: TLMKey): Boolean;
+begin
+  Inc(Asked);
+  Result := False;
+end;
+
+procedure TAccelVisibilityTest.TestAHiddenPageIsNotAskedAtAll;
+var
+  f: TForm;
+  pc: TTyPageControl;
+  probe: TAnyAccelProbe;
+begin
+  f := TForm.CreateNew(nil);
+  try
+    pc := TTyPageControl.Create(f);
+    pc.Parent := f;
+    probe := TAnyAccelProbe.Create(f);
+    probe.Parent := pc.AddPage('One');
+    pc.AddPage('Two');
+    pc.ActivePageIndex := 1;
+    AltKey(f, 'x');
+    AssertEquals('the hidden page''s control is not asked', 0, probe.Asked);
   finally
     f.Free;
   end;

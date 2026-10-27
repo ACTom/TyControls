@@ -17,6 +17,9 @@ type
   published
     { #152: a panel saved collapsed opens, after reading, to the height it had. }
     procedure TestAPanelSavedCollapsedOpensToItsHeight;
+    { A form saved before the expanded height was stored: reading Collapsed at the header's
+      height must not make that the height to open to. }
+    procedure TestAnOldCollapsedPanelStillOpens;
     // typeKey / defaults
     procedure TestTypeKeyIsTyExPanel;
     procedure TestDefaults;
@@ -126,6 +129,38 @@ begin
   finally
     ms.Free;
   end;
+end;
+
+type
+  TExPanelLoadProbe = class(TTyExPanel)
+  public
+    procedure BeginLoad;
+    procedure EndLoad;
+  end;
+
+procedure TExPanelLoadProbe.BeginLoad;
+begin
+  Loading;
+end;
+
+procedure TExPanelLoadProbe.EndLoad;
+begin
+  Loaded;
+end;
+
+procedure TTyExPanelTest.TestAnOldCollapsedPanelStillOpens;
+var
+  q: TExPanelLoadProbe;
+begin
+  q := TExPanelLoadProbe.Create(FForm);
+  q.Parent := FForm;
+  q.Font.PixelsPerInch := 96;
+  q.BeginLoad;
+  q.Height := 26;          // saved collapsed, at its header's height
+  q.Collapsed := True;     // and no stored expanded height
+  q.EndLoad;
+  q.Collapsed := False;
+  AssertTrue('it opens past its header', q.Height > 26);
 end;
 
 procedure TTyExPanelTest.SetUp;
