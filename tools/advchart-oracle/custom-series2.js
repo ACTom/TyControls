@@ -345,6 +345,20 @@ const RENDER = {
     return { type: 'circle', x: p[0], y: p[1], extra: { p: 1, enterFrom: { p: 0 } }, during: DURC.arc,
       shape: { cx: 0, cy: 0, r: 3 }, style: { fill: '#91cc75' } };
   },
+  // [spec 242] clipPath on a rect (a circle whose r is the third value) and
+  // on a group (a rect, or false when the third value is 1: removed)
+  clipRI(params, api) {
+    const p = api.coord([api.value(0), api.value(1)]);
+    const k = api.value(2);
+    if (params.dataIndex === 0) {
+      return { type: 'rect', x: p[0], y: p[1], shape: { x: -40, y: -20, width: 80, height: 40 }, style: { fill: api.visual('color') },
+        clipPath: { type: 'circle', shape: { cx: 0, cy: 0, r: 15 + 10 * k } } };
+    }
+    return { type: 'group', x: p[0], y: p[1], clipPath: k ? false : { type: 'rect', shape: { x: -30, y: -15, width: 30, height: 30 } },
+      children: [
+        { type: 'rect', shape: { x: -30, y: -15, width: 60, height: 30 }, style: { fill: '#91cc75' } },
+        { type: 'text', style: { text: 'clipped text', x: -30, y: 0, fontSize: 12 } }] };
+  },
   // entering: the root's and the style's enterFrom with an enterAnimation
   // of its own, a shape's enterFrom on the series' timing, a group scaled in
   enterRI(params, api) {
@@ -572,6 +586,13 @@ function elRec(el, key) {
   r.ec = ecd ? { seriesIndex: ecd.seriesIndex == null ? null : ecd.seriesIndex, dataIndex: ecd.dataIndex == null ? null : ecd.dataIndex } : null;
   const inn = customInner(el);
   r.info = inn && inn.info !== undefined ? JSON.stringify(inn.info) : null;
+  // [spec 242] its clipPath, only where it has one
+  const cp = el.getClipPath();
+  if (cp) {
+    cp.getBoundingRect();
+    r.clip = { type: cp.type, transform: cp.transform ? Array.from(cp.transform).map(hex) : null,
+      path: pathData(cp).map(hex) };
+  }
   return r;
 }
 function customSeries(chart) {
@@ -885,6 +906,11 @@ add('anim', 'during', "during on custom elements: getElementAnimationConfig bind
   { animation: true, xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
     series: [{ type: 'custom', renderItem: '@durRI', data: [[2, 3], [6, 6]] }] },
   { samples: SAMPLES, steps: [{ wait: 2000 }, { merge: { series: [{ data: [[5, 7], [3, 2]] }] } }] });
+add('hover', 'clippath', "clipPath on custom elements: a rect cut to a circle (the pointer outside the circle misses it), a group cut to a rect (its child and text cut, the pointer past the clip misses); then an update growing the circle and giving the group clipPath false (removed: the pointer there hits)",
+  { grid: { left: 60, right: 40, top: 60, bottom: 60 }, xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
+    series: [{ type: 'custom', renderItem: '@clipRI', data: [[3, 5, 0], [7, 5, 0]] }] },
+  { steps: [{ move: [240, 200] }, { move: [210, 200] }, { move: [430, 195] }, { move: [395, 195] }, { leave: true },
+    { merge: { series: [{ data: [[3, 5, 1], [7, 5, 1]] }] } }, { move: [232, 200] }, { move: [430, 195] }, { leave: true }] });
 
 // ---------------------------------------------------------------------------
 // one case

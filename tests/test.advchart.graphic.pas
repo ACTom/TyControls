@@ -31,7 +31,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Events, tyControls.AdvanceChart.ZrPath,
      tyControls.AdvanceChart.Anim, tyControls.AdvanceChart.RichText,
      tyControls.AdvanceChart.RichStyle,
-     tyControls.AdvanceChart.GfxEl, tyControls.AdvanceChart.Graphic,
+     tyControls.AdvanceChart.GfxEl, tyControls.AdvanceChart.Graphic, tyControls.AdvanceChart.Layout,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
@@ -97,6 +97,7 @@ type
       AWant: TJSONArray);
     procedure CheckTextStyle(const AWhat: string; AEl: TTyGfxEl; AWant: TJSONObject);
     procedure CheckEl(AEl: TTyGfxEl; AWant: TJSONObject);
+    procedure CheckClip(AEl: TTyGfxEl; AWant: TJSONData);
     procedure CheckEls(AWant: TJSONArray);
     procedure CheckModel(AWant: TJSONArray);
     procedure CheckOrder(AWant: TJSONArray);
@@ -121,6 +122,7 @@ type
     procedure TestATurnedRectIsHitWhereItIsDrawn;
     procedure TestAnImageIsAPatternThroughItsTransform;
     procedure TestAnImageCropShowsItsSourceRect;
+    procedure TestAClipPathCutsTheInkAndTheText;
     procedure TestAnUnknownTypeStopsTheUpdate;
     procedure TestADraggableElementFollowsThePointer;
   end;
@@ -598,6 +600,10 @@ begin
   TyChartRegisterElementHandler('log:Sstart', @FChart.OnElement);
   TyChartRegisterElementHandler('log:Hstart', @FChart.OnElement);
   TyChartRegisterElementHandler('log:Hdrag', @FChart.OnElement);
+  { [spec 242] the clip case's }
+  TyChartRegisterElementHandler('log:R', @FChart.OnElement);
+  TyChartRegisterElementHandler('log:GA', @FChart.OnElement);
+  TyChartRegisterElementHandler('log:P', @FChart.OnElement);
   { [spec 242] the during case's }
   TyChartRegisterDuring('dur:grow', @FChart.DurGrow);
   TyChartRegisterDuring('dur:grow2', @FChart.DurGrow2);
@@ -727,6 +733,44 @@ begin
     SameBool(AWhat + ' no align', v.Kind <> avkString, IsNull(AWant.Find('align')));
 end;
 
+procedure TAdvChartGraphicTest.CheckClip(AEl: TTyGfxEl; AWant: TJSONData);
+var
+  w: TJSONObject;
+  c: TTyGfxEl;
+  path: TTyDoubleArray;
+  want: TJSONArray;
+  i: Integer;
+  t: TTyMat2D;
+  has, need: Boolean;
+begin
+  c := AEl.ClipPath;
+  if not (AWant is TJSONObject) then
+  begin
+    SameBool('no clip', c = nil, True);
+    Exit;
+  end;
+  w := TJSONObject(AWant);
+  if c = nil then
+  begin
+    Bad('no clip, upstream a ' + w.Get('type', ''));
+    Exit;
+  end;
+  SameStr('clip type', c.ZrType, w.Get('type', ''));
+  { its transform under the element's, as the Storage makes it }
+  need := TyGfxNeedLocal(c);
+  has := True;
+  if AEl.HasTransform and need then t := TyMatMul(AEl.Transform, TyGfxLocalTransform(c))
+  else if AEl.HasTransform then t := AEl.Transform
+  else if need then t := TyGfxLocalTransform(c)
+  else has := False;
+  SameMatrix('clip transform', has, t, w.Find('transform'));
+  path := PathData(TyGfxPath(c));
+  want := w.Arrays['path'];
+  SameInt('clip path length', Length(path), want.Count);
+  for i := 0 to Min(Length(path), want.Count) - 1 do
+    Same(Format('clip path[%d]', [i]), path[i], want.Items[i]);
+end;
+
 procedure TAdvChartGraphicTest.CheckEl(AEl: TTyGfxEl; AWant: TJSONObject);
 const
   cT: array[0..10] of string = ('x', 'y', 'rotation', 'scaleX', 'scaleY',
@@ -781,6 +825,8 @@ begin
       Same('size.height', AEl.InnerH, AWant.Objects['size'].Find('height'));
     end;
     SameRect('rect', TyGfxRect(AEl, meas), AWant.Objects['rect']);
+    { [spec 242] the clip path }
+    CheckClip(AEl, AWant.Find('clip'));
     SameBool('eventData', AEl.HasEventData, AWant.Booleans['eventData']);
     d := AWant.Find('info');
     if IsNull(d) then SameBool('no info', AEl.Info = nil, True)
@@ -1228,7 +1274,7 @@ end;
 
 procedure TAdvChartGraphicTest.TestTheEventsAreUpstreams;
 begin
-  RunStatic(['events', 'drag'], False);
+  RunStatic(['events', 'drag', 'clip'], False);
   Finish('the events', 300);
   AssertTrue('chart events compared', FEventsSeen >= 3);
 end;
@@ -1408,6 +1454,51 @@ begin
   AssertTrue('the source rect is on the pattern', el.Style.FillPattern.HasCrop and el.Style.FillPattern.CropOk);
   AssertEquals('sx', 1, el.Style.FillPattern.CropX, 0);
   AssertEquals('sWidth', 1, el.Style.FillPattern.CropW, 0);
+end;
+
+{ [spec 242] a clip path cuts the fill to its own shape, and a text in a
+  clipped group (drawn past the canvas clip, so through a layer) too }
+procedure TAdvChartGraphicTest.TestAClipPathCutsTheInkAndTheText;
+var
+  bmp: TBGRABitmap;
+  x, y, inkIn, inkOut: Integer;
+  p: TBGRAPixel;
+
+  function Dark(AP: TBGRAPixel): Boolean;
+  begin
+    Result := (AP.red < 128) and (AP.green < 128) and (AP.blue < 128);
+  end;
+
+begin
+  NewChart(400, 300);
+  FChart.Option := '{"animation": false, "backgroundColor": "#ffffff", "graphic": ['
+    + '{"type": "rect", "x": 20, "y": 20, "shape": {"width": 200, "height": 100},'
+    + ' "style": {"fill": "#ff0000"}, "clipPath": {"type": "circle", "shape": {"cx": 50, "cy": 50, "r": 40}}},'
+    + '{"type": "group", "x": 100, "y": 200, "clipPath": {"type": "rect", "shape": {"x": 0, "y": -40, "width": 60, "height": 80}},'
+    + ' "children": [{"type": "text", "style": {"text": "MMMMMMMM", "fontSize": 40, "fill": "#000000", "verticalAlign": "middle"}}]}]}';
+  bmp := TBGRABitmap.Create(400, 300, BGRA(255, 255, 255, 255));
+  try
+    FChart.Render(bmp.Canvas, Rect(0, 0, 400, 300), 96);
+    p := bmp.GetPixel(70, 70);
+    AssertTrue('inside the circle: red', (p.red > 200) and (p.green < 60) and (p.blue < 60));
+    p := bmp.GetPixel(30, 30);
+    AssertTrue('in the rect, out of the circle: the ground', (p.red > 200) and (p.green > 200) and (p.blue > 200));
+    p := bmp.GetPixel(200, 100);
+    AssertTrue('far in the rect, out of the circle: the ground', (p.red > 200) and (p.green > 200) and (p.blue > 200));
+    inkIn := 0;
+    inkOut := 0;
+    for y := 175 to 225 do
+    begin
+      for x := 102 to 158 do
+        if Dark(bmp.GetPixel(x, y)) then Inc(inkIn);
+      for x := 164 to 395 do
+        if Dark(bmp.GetPixel(x, y)) then Inc(inkOut);
+    end;
+    AssertTrue(Format('the text inside the clip is drawn (%d px)', [inkIn]), inkIn > 50);
+    AssertEquals('none of it past the clip', 0, inkOut);
+  finally
+    bmp.Free;
+  end;
 end;
 
 procedure TAdvChartGraphicTest.TestAnUnknownTypeStopsTheUpdate;

@@ -358,6 +358,16 @@ function elRec(el, parentId) {
   const ecd = ecDataOf(el);
   r.eventData = !!(ecd && ecd.eventData);
   r.info = ecd && ecd.eventData && ecd.eventData.info !== undefined ? JSON.stringify(ecd.eventData.info) : null;
+  // [spec 242] its clipPath, only where it has one (the transform as the
+  // Storage leaves it: under the element's)
+  const cp = el.getClipPath();
+  if (cp) {
+    // the path as its shape is now (getBoundingRect rebuilds a changed one;
+    // the SVG painter does not touch a clip's own proxy)
+    cp.getBoundingRect();
+    r.clip = { type: cp.type, transform: cp.transform ? Array.from(cp.transform).map(hex) : null,
+      shape: shapeRec(cp.shape), path: pathData(cp).map(hex) };
+  }
   return r;
 }
 function readEls(chart) {
@@ -947,6 +957,28 @@ add('anim', 'during', "during: a rect whose width follows its entering x, a circ
       { id: 'd1', x: 50, transition: ['x'], during: { $fn: 'dur:grow2' } },
       { id: 'd2', extra: { p: 0.2 }, transition: 'extra' },
       { id: 'd4', $action: 'remove' }] } }] });
+// [spec 242] clipPath: setClipPath on the element, its transform under the
+// element's; a group's cuts its children and their labels; isHover asks each
+// clip's contain; a merge with the same type updates it, another type makes
+// a new one, a replace makes a new one
+add('event', 'clip', "clipPath: a rect cut to a circle (a click outside the circle misses it), a turned group cut to a rect of its own x (its child and the child's label cut, a click outside the clip misses), a polygon cut to a sector; then a merge growing the circle (the same click now hits), a merge giving the polygon a rect clip instead, a replace of the rect with a new element and a new clip",
+  { graphic: [
+    { type: 'rect', id: 'r', x: 20, y: 20, shape: { width: 200, height: 100 }, style: { fill: '#5070dd' }, onclick: { $fn: 'log:R' },
+      clipPath: { type: 'circle', shape: { cx: 50, cy: 50, r: 40 } } },
+    { type: 'group', id: 'g', x: 300, y: 50, rotation: 0.3, clipPath: { type: 'rect', x: 10, shape: { x: 0, y: 0, width: 80, height: 60 } }, children: [
+      { type: 'rect', id: 'g.a', shape: { width: 150, height: 120 }, style: { fill: '#ff994d' }, onclick: { $fn: 'log:GA' },
+        textContent: { style: { text: 'a label cut by the clip', fontSize: 14 } }, textConfig: { position: 'inside' } }] },
+    { type: 'polygon', id: 'p', shape: { points: [[20, 200], [200, 200], [110, 300]] }, style: { fill: '#b6d634' }, onclick: { $fn: 'log:P' },
+      clipPath: { type: 'sector', shape: { cx: 110, cy: 250, r: 60, r0: 20, startAngle: 0, endAngle: 3 } } }] },
+  { steps: [
+    { click: [30, 30] }, { click: [70, 70] }, { click: [423, 43] }, { click: [347, 67] }, { click: [110, 215] }, { click: [110, 280] },
+    { merge: { graphic: [{ id: 'r', clipPath: { shape: { r: 80 } } }] } },
+    { click: [30, 30] },
+    { merge: { graphic: [{ id: 'p', clipPath: { type: 'rect', shape: { x: 100, y: 200, width: 30, height: 100 } } }] } },
+    { click: [110, 215] }, { click: [60, 210] },
+    { merge: { graphic: [{ id: 'r', $action: 'replace', type: 'rect', x: 20, y: 20, shape: { width: 100, height: 60 }, style: { fill: '#0ca8df' },
+      onclick: { $fn: 'log:R' }, clipPath: { type: 'ellipse', shape: { cx: 50, cy: 30, rx: 50, ry: 10 } } }] } },
+    { click: [70, 35] }, { click: [70, 50] }] });
 
 // ---------------------------------------------------------------------------
 // running

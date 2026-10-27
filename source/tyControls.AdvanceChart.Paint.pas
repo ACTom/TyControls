@@ -999,6 +999,12 @@ type
       says so (a geo region and its text). Everything else keeps the
       rule above: the hit test ignores the clip. }
     ClipHits: Boolean;
+    { [spec 242] A GRAPHIC OR CUSTOM ELEMENT'S clipPath, and every clipPath
+      up its parents (and its host's, for a label), as zrender's Storage
+      hands them down: each a filled path in the element's coordinates, the
+      ink cut to all of them (nonzero), and the hit too (isHover asks each
+      clip's contain). Empty everywhere else. }
+    ClipPaths: TTyChartShapeArray;
     { [F6a] zrender's Displayable.cursor, the CSS name the canvas takes
       while the pointer is over the element (Handler.mousemove's
       setCursor): '' is the prototype's 'pointer'. Set where upstream sets
@@ -1789,7 +1795,11 @@ begin
 end;
 
 function TyElementContains(const AEl: TTyChartElement; AX, AY, ASlopPx: Double): Boolean;
+var k: Integer;
 begin
+  { [spec 242] a point outside a clip path is not over the element }
+  for k := 0 to High(AEl.ClipPaths) do
+    if not TyShapeContains(AEl.ClipPaths[k], AX, AY, 0) then Exit(False);
   if AEl.ClipHits and AEl.HasClip
     and not ((AX >= AEl.ClipRect.Left) and (AX <= AEl.ClipRect.Right)
       and (AY >= AEl.ClipRect.Top) and (AY <= AEl.ClipRect.Bottom)) then

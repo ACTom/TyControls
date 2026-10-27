@@ -145,6 +145,9 @@ type
     UserDuring: string;
     { the bound duringCall scopes this element made (owned, freed with it) }
     DuringScopes: TFPList;
+    { [spec 242] el.setClipPath: a path element (owned; nil none) whose
+      transform is its own under this element's }
+    ClipPath: TTyGfxEl;
     { getElementAnimationConfig's config.during: a scope bound to the
       element and the during it holds now; nil when it holds none }
     function DuringCfg: TTyAnimDuring;
@@ -798,6 +801,7 @@ begin
   FreeAndNil(Shape);
   FreeAndNil(Style);
   FreeAndNil(Extra);
+  FreeAndNil(ClipPath);
   inherited Destroy;
   { after the animators: none of them calls a scope any more }
   if DuringScopes <> nil then
@@ -3043,6 +3047,44 @@ begin
   end;
 end;
 
+{ [spec 242] Storage._updateAndAddDisplayable's clip paths: every
+  element's own up the chain (a label's host, then the parents), each
+  turned by its own transform under its element's, as a filled path }
+procedure GfxClipPathsOf(AEl: TTyGfxEl; AScale: Double; var AList: TTyChartShapeArray);
+var
+  q, c: TTyGfxEl;
+  need, has: Boolean;
+  t, m: TTyMat2D;
+  cmds: TTyPathCmdArray;
+  pts: TTyPointFArray;
+  sh: TTyChartShape;
+  n: Integer;
+begin
+  q := AEl;
+  while q <> nil do
+  begin
+    c := q.ClipPath;
+    if c <> nil then
+    begin
+      need := TyGfxNeedLocal(c);
+      has := True;
+      if q.HasTransform and need then t := TyMatMul(q.Transform, TyGfxLocalTransform(c))
+      else if q.HasTransform then t := q.Transform
+      else if need then t := TyGfxLocalTransform(c)
+      else has := False;
+      m := DeviceOf(c, has, t, AScale);
+      TyGfxPathCmds(TyGfxPath(c), m, cmds, pts);
+      sh := TyShapePolygon(pts);
+      sh.Cmds := cmds;
+      sh.HitNonZero := True;
+      n := Length(AList);
+      SetLength(AList, n + 1);
+      AList[n] := sh;
+    end;
+    if q.Host <> nil then q := q.Host else q := q.Parent;
+  end;
+end;
+
 function TyGfxPaintElement(AEl: TTyGfxEl; const AMeasurer: ITyTextMeasurer;
   const ACtx: TTyGfxPaintCtx; out AOut: TTyChartElement): Boolean;
 var
@@ -3258,6 +3300,8 @@ begin
   AOut.Silent := False;
   { [F6a] the element's own cursor, 'pointer' by the prototype }
   if AEl.Cursor <> 'pointer' then AOut.Cursor := AEl.Cursor;
+  { [spec 242] the clip paths down to it }
+  GfxClipPathsOf(AEl, ACtx.Scale, AOut.ClipPaths);
   Result := True;
 end;
 

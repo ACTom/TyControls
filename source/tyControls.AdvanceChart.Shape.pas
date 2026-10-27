@@ -110,6 +110,8 @@ type
       frame. Empty on every other shape. }
     Image: string;
   end;
+  { [spec 242] an element's clip paths }
+  TTyChartShapeArray = array of TTyChartShape;
 
   { [Batch 148] zrender's Path.contain over a path's data, device px: the
     commands (move, line, close) of every sub-path with every point --

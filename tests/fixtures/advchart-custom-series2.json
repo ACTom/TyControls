@@ -26387,6 +26387,1433 @@
     1500
    ],
    "fails": []
+  },
+  {
+   "id": "clippath",
+   "group": "hover",
+   "note": "clipPath on custom elements: a rect cut to a circle (the pointer outside the circle misses it), a group cut to a rect (its child and text cut, the pointer past the clip misses); then an update growing the circle and giving the group clipPath false (removed: the pointer there hits)",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666",
+     "#73c0de"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 60,
+     "bottom": 60
+    },
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "custom",
+      "renderItem": "@clipRI",
+      "data": [
+       [
+        3,
+        5,
+        0
+       ],
+       [
+        7,
+        5,
+        0
+       ]
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "move": [
+      240,
+      200
+     ]
+    },
+    {
+     "move": [
+      210,
+      200
+     ]
+    },
+    {
+     "move": [
+      430,
+      195
+     ]
+    },
+    {
+     "move": [
+      395,
+      195
+     ]
+    },
+    {
+     "leave": true
+    },
+    {
+     "merge": {
+      "series": [
+       {
+        "data": [
+         [
+          3,
+          5,
+          1
+         ],
+         [
+          7,
+          5,
+          1
+         ]
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "move": [
+      232,
+      200
+     ]
+    },
+    {
+     "move": [
+      430,
+      195
+     ]
+    },
+    {
+     "leave": true
+    }
+   ],
+   "states": [
+    {
+     "calls": [
+      {
+       "s": 0,
+       "name": "clipRI",
+       "params": {
+        "dataIndex": 0,
+        "dataIndexInside": 0,
+        "dataInsideLength": 2,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": {
+         "type": "cartesian2d",
+         "x": "404e000000000000",
+         "y": "404e000000000000",
+         "width": "407f400000000000",
+         "height": "4071800000000000"
+        },
+        "encode": {
+         "x": [
+          0
+         ],
+         "y": [
+          1
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "4008000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "4014000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "4008000000000000",
+           "4014000000000000"
+          ]
+         ],
+         "ret": [
+          "406a400000000000",
+          "4069000000000000"
+         ]
+        },
+        {
+         "fn": "value",
+         "args": [
+          "4000000000000000"
+         ],
+         "ret": "0000000000000000"
+        },
+        {
+         "fn": "visual",
+         "args": [
+          "color"
+         ],
+         "ret": "#5470c6"
+        }
+       ],
+       "ret": {
+        "type": "rect",
+        "x": "406a400000000000",
+        "y": "4069000000000000",
+        "shape": {
+         "x": "c044000000000000",
+         "y": "c034000000000000",
+         "width": "4054000000000000",
+         "height": "4044000000000000"
+        },
+        "style": {
+         "fill": "#5470c6"
+        },
+        "clipPath": {
+         "type": "circle",
+         "shape": {
+          "cx": "0000000000000000",
+          "cy": "0000000000000000",
+          "r": "402e000000000000"
+         }
+        }
+       }
+      },
+      {
+       "s": 0,
+       "name": "clipRI",
+       "params": {
+        "dataIndex": 1,
+        "dataIndexInside": 1,
+        "dataInsideLength": 2,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": {
+         "type": "cartesian2d",
+         "x": "404e000000000000",
+         "y": "404e000000000000",
+         "width": "407f400000000000",
+         "height": "4071800000000000"
+        },
+        "encode": {
+         "x": [
+          0
+         ],
+         "y": [
+          1
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "401c000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "4014000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "401c000000000000",
+           "4014000000000000"
+          ]
+         ],
+         "ret": [
+          "4079a00000000000",
+          "4069000000000000"
+         ]
+        },
+        {
+         "fn": "value",
+         "args": [
+          "4000000000000000"
+         ],
+         "ret": "0000000000000000"
+        }
+       ],
+       "ret": {
+        "type": "group",
+        "x": "4079a00000000000",
+        "y": "4069000000000000",
+        "clipPath": {
+         "type": "rect",
+         "shape": {
+          "x": "c03e000000000000",
+          "y": "c02e000000000000",
+          "width": "403e000000000000",
+          "height": "403e000000000000"
+         }
+        },
+        "children": [
+         {
+          "type": "rect",
+          "shape": {
+           "x": "c03e000000000000",
+           "y": "c02e000000000000",
+           "width": "404e000000000000",
+           "height": "403e000000000000"
+          },
+          "style": {
+           "fill": "#91cc75"
+          }
+         },
+         {
+          "type": "text",
+          "style": {
+           "text": "clipped text",
+           "x": "c03e000000000000",
+           "y": "0000000000000000",
+           "fontSize": "4028000000000000"
+          }
+         }
+        ]
+       }
+      }
+     ],
+     "throws": null,
+     "els": [
+      {
+       "key": "s0:0",
+       "type": "rect",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "406a400000000000",
+        "y": "4069000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": [
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "3ff0000000000000",
+        "406a400000000000",
+        "4069000000000000"
+       ],
+       "shape": {
+        "x": "c044000000000000",
+        "y": "c034000000000000",
+        "width": "4054000000000000",
+        "height": "4044000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "c044000000000000",
+        "c034000000000000",
+        "4054000000000000",
+        "4044000000000000"
+       ],
+       "style": {
+        "fill": "#5470c6",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 0
+       },
+       "info": null,
+       "clip": {
+        "type": "circle",
+        "transform": [
+         "3ff0000000000000",
+         "0000000000000000",
+         "0000000000000000",
+         "3ff0000000000000",
+         "406a400000000000",
+         "4069000000000000"
+        ],
+        "path": [
+         "3ff0000000000000",
+         "402e000000000000",
+         "0000000000000000",
+         "4014000000000000",
+         "0000000000000000",
+         "0000000000000000",
+         "402e000000000000",
+         "402e000000000000",
+         "0000000000000000",
+         "401921fb54442d18",
+         "0000000000000000",
+         "3ff0000000000000"
+        ]
+       }
+      },
+      {
+       "key": "s0:1",
+       "type": "group",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": null,
+       "zlevel": null,
+       "z2": null,
+       "t": {
+        "x": "4079a00000000000",
+        "y": "4069000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": [
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "3ff0000000000000",
+        "4079a00000000000",
+        "4069000000000000"
+       ],
+       "label": null,
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 1
+       },
+       "info": null,
+       "clip": {
+        "type": "rect",
+        "transform": [
+         "3ff0000000000000",
+         "0000000000000000",
+         "0000000000000000",
+         "3ff0000000000000",
+         "4079a00000000000",
+         "4069000000000000"
+        ],
+        "path": [
+         "401c000000000000",
+         "c03e000000000000",
+         "c02e000000000000",
+         "403e000000000000",
+         "403e000000000000"
+        ]
+       }
+      },
+      {
+       "key": "s0:1/0",
+       "type": "rect",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": [
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "3ff0000000000000",
+        "4079a00000000000",
+        "4069000000000000"
+       ],
+       "shape": {
+        "x": "c03e000000000000",
+        "y": "c02e000000000000",
+        "width": "404e000000000000",
+        "height": "403e000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "c03e000000000000",
+        "c02e000000000000",
+        "404e000000000000",
+        "403e000000000000"
+       ],
+       "style": {
+        "fill": "#91cc75",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 1
+       },
+       "info": null
+      },
+      {
+       "key": "s0:1/1",
+       "type": "text",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": [
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "3ff0000000000000",
+        "4079a00000000000",
+        "4069000000000000"
+       ],
+       "style": {
+        "text": "clipped text",
+        "font": "12px sans-serif",
+        "fill": null,
+        "stroke": null,
+        "lineWidth": null,
+        "align": null,
+        "verticalAlign": null,
+        "x": "c03e000000000000",
+        "y": "0000000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "pieces": [
+        {
+         "k": "t",
+         "text": "clipped text",
+         "x": "c03e000000000000",
+         "y": "4018000000000000",
+         "font": "12px sans-serif",
+         "align": "left",
+         "base": "middle",
+         "fill": "#000",
+         "stroke": null,
+         "lineWidth": "3ff0000000000000",
+         "opacity": "3ff0000000000000"
+        }
+       ],
+       "label": null,
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 1
+       },
+       "info": null
+      }
+     ],
+     "order": [
+      "s0:0",
+      "s0:1/0",
+      "s0:1/1"
+     ],
+     "clips": [
+      {
+       "s": 0,
+       "rect": null
+      }
+     ],
+     "st": [
+      {
+       "key": "s0:0",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s0:1/0",
+       "states": [],
+       "fill": [
+        145,
+        204,
+        117,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      }
+     ],
+     "legend": null
+    },
+    {
+     "calls": [],
+     "throws": null,
+     "st": [
+      {
+       "key": "s0:0",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s0:1/0",
+       "states": [],
+       "fill": [
+        145,
+        204,
+        117,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      }
+     ],
+     "legend": null,
+     "point": [
+      240,
+      200
+     ],
+     "hover": null,
+     "tooltip": null
+    },
+    {
+     "calls": [],
+     "throws": null,
+     "st": [
+      {
+       "key": "s0:0",
+       "states": [
+        "emphasis"
+       ],
+       "fill": [
+        92,
+        123,
+        217,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 1
+      },
+      {
+       "key": "s0:1/0",
+       "states": [],
+       "fill": [
+        145,
+        204,
+        117,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      }
+     ],
+     "legend": null,
+     "point": [
+      210,
+      200
+     ],
+     "hover": {
+      "key": "s0:0",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "tooltip": null
+    },
+    {
+     "calls": [],
+     "throws": null,
+     "st": [
+      {
+       "key": "s0:0",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s0:1/0",
+       "states": [],
+       "fill": [
+        145,
+        204,
+        117,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      }
+     ],
+     "legend": null,
+     "point": [
+      430,
+      195
+     ],
+     "hover": null,
+     "tooltip": null
+    },
+    {
+     "calls": [],
+     "throws": null,
+     "st": [
+      {
+       "key": "s0:0",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s0:1/0",
+       "states": [
+        "emphasis"
+       ],
+       "fill": [
+        159,
+        224,
+        128,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 1
+      }
+     ],
+     "legend": null,
+     "point": [
+      395,
+      195
+     ],
+     "hover": {
+      "key": "s0:1/0",
+      "seriesIndex": 0,
+      "dataIndex": 1
+     },
+     "tooltip": null
+    },
+    {
+     "calls": [],
+     "throws": null,
+     "st": [
+      {
+       "key": "s0:0",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s0:1/0",
+       "states": [],
+       "fill": [
+        145,
+        204,
+        117,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      }
+     ],
+     "legend": null,
+     "point": null,
+     "hover": null,
+     "tooltip": null
+    },
+    {
+     "calls": [
+      {
+       "s": 0,
+       "name": "clipRI",
+       "params": {
+        "dataIndex": 0,
+        "dataIndexInside": 0,
+        "dataInsideLength": 2,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": {
+         "type": "cartesian2d",
+         "x": "404e000000000000",
+         "y": "404e000000000000",
+         "width": "407f400000000000",
+         "height": "4071800000000000"
+        },
+        "encode": {
+         "x": [
+          0
+         ],
+         "y": [
+          1
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "4008000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "4014000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "4008000000000000",
+           "4014000000000000"
+          ]
+         ],
+         "ret": [
+          "406a400000000000",
+          "4069000000000000"
+         ]
+        },
+        {
+         "fn": "value",
+         "args": [
+          "4000000000000000"
+         ],
+         "ret": "3ff0000000000000"
+        },
+        {
+         "fn": "visual",
+         "args": [
+          "color"
+         ],
+         "ret": "#5470c6"
+        }
+       ],
+       "ret": {
+        "type": "rect",
+        "x": "406a400000000000",
+        "y": "4069000000000000",
+        "shape": {
+         "x": "c044000000000000",
+         "y": "c034000000000000",
+         "width": "4054000000000000",
+         "height": "4044000000000000"
+        },
+        "style": {
+         "fill": "#5470c6"
+        },
+        "clipPath": {
+         "type": "circle",
+         "shape": {
+          "cx": "0000000000000000",
+          "cy": "0000000000000000",
+          "r": "4039000000000000"
+         }
+        }
+       }
+      },
+      {
+       "s": 0,
+       "name": "clipRI",
+       "params": {
+        "dataIndex": 1,
+        "dataIndexInside": 1,
+        "dataInsideLength": 2,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": {
+         "type": "cartesian2d",
+         "x": "404e000000000000",
+         "y": "404e000000000000",
+         "width": "407f400000000000",
+         "height": "4071800000000000"
+        },
+        "encode": {
+         "x": [
+          0
+         ],
+         "y": [
+          1
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "401c000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "4014000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "401c000000000000",
+           "4014000000000000"
+          ]
+         ],
+         "ret": [
+          "4079a00000000000",
+          "4069000000000000"
+         ]
+        },
+        {
+         "fn": "value",
+         "args": [
+          "4000000000000000"
+         ],
+         "ret": "3ff0000000000000"
+        }
+       ],
+       "ret": {
+        "type": "group",
+        "x": "4079a00000000000",
+        "y": "4069000000000000",
+        "clipPath": false,
+        "children": [
+         {
+          "type": "rect",
+          "shape": {
+           "x": "c03e000000000000",
+           "y": "c02e000000000000",
+           "width": "404e000000000000",
+           "height": "403e000000000000"
+          },
+          "style": {
+           "fill": "#91cc75"
+          }
+         },
+         {
+          "type": "text",
+          "style": {
+           "text": "clipped text",
+           "x": "c03e000000000000",
+           "y": "0000000000000000",
+           "fontSize": "4028000000000000"
+          }
+         }
+        ]
+       }
+      }
+     ],
+     "throws": null,
+     "els": [
+      {
+       "key": "s0:0",
+       "type": "rect",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "406a400000000000",
+        "y": "4069000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": [
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "3ff0000000000000",
+        "406a400000000000",
+        "4069000000000000"
+       ],
+       "shape": {
+        "x": "c044000000000000",
+        "y": "c034000000000000",
+        "width": "4054000000000000",
+        "height": "4044000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "c044000000000000",
+        "c034000000000000",
+        "4054000000000000",
+        "4044000000000000"
+       ],
+       "style": {
+        "fill": "#5470c6",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 0
+       },
+       "info": null,
+       "clip": {
+        "type": "circle",
+        "transform": [
+         "3ff0000000000000",
+         "0000000000000000",
+         "0000000000000000",
+         "3ff0000000000000",
+         "406a400000000000",
+         "4069000000000000"
+        ],
+        "path": [
+         "3ff0000000000000",
+         "4039000000000000",
+         "0000000000000000",
+         "4014000000000000",
+         "0000000000000000",
+         "0000000000000000",
+         "4039000000000000",
+         "4039000000000000",
+         "0000000000000000",
+         "401921fb54442d18",
+         "0000000000000000",
+         "3ff0000000000000"
+        ]
+       }
+      },
+      {
+       "key": "s0:1",
+       "type": "group",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": null,
+       "zlevel": null,
+       "z2": null,
+       "t": {
+        "x": "4079a00000000000",
+        "y": "4069000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": [
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "3ff0000000000000",
+        "4079a00000000000",
+        "4069000000000000"
+       ],
+       "label": null,
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 1
+       },
+       "info": null
+      },
+      {
+       "key": "s0:1/0",
+       "type": "rect",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": [
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "3ff0000000000000",
+        "4079a00000000000",
+        "4069000000000000"
+       ],
+       "shape": {
+        "x": "c03e000000000000",
+        "y": "c02e000000000000",
+        "width": "404e000000000000",
+        "height": "403e000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "c03e000000000000",
+        "c02e000000000000",
+        "404e000000000000",
+        "403e000000000000"
+       ],
+       "style": {
+        "fill": "#91cc75",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 1
+       },
+       "info": null
+      },
+      {
+       "key": "s0:1/1",
+       "type": "text",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": [
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "3ff0000000000000",
+        "4079a00000000000",
+        "4069000000000000"
+       ],
+       "style": {
+        "text": "clipped text",
+        "font": "12px sans-serif",
+        "fill": null,
+        "stroke": null,
+        "lineWidth": null,
+        "align": null,
+        "verticalAlign": null,
+        "x": "c03e000000000000",
+        "y": "0000000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "pieces": [
+        {
+         "k": "t",
+         "text": "clipped text",
+         "x": "c03e000000000000",
+         "y": "4018000000000000",
+         "font": "12px sans-serif",
+         "align": "left",
+         "base": "middle",
+         "fill": "#000",
+         "stroke": null,
+         "lineWidth": "3ff0000000000000",
+         "opacity": "3ff0000000000000"
+        }
+       ],
+       "label": null,
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 1
+       },
+       "info": null
+      }
+     ],
+     "order": [
+      "s0:0",
+      "s0:1/0",
+      "s0:1/1"
+     ],
+     "clips": [
+      {
+       "s": 0,
+       "rect": null
+      }
+     ],
+     "st": [
+      {
+       "key": "s0:0",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s0:1/0",
+       "states": [],
+       "fill": [
+        145,
+        204,
+        117,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      }
+     ],
+     "legend": null,
+     "point": null,
+     "hover": null,
+     "tooltip": null
+    },
+    {
+     "calls": [],
+     "throws": null,
+     "st": [
+      {
+       "key": "s0:0",
+       "states": [
+        "emphasis"
+       ],
+       "fill": [
+        92,
+        123,
+        217,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 1
+      },
+      {
+       "key": "s0:1/0",
+       "states": [],
+       "fill": [
+        145,
+        204,
+        117,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      }
+     ],
+     "legend": null,
+     "point": [
+      232,
+      200
+     ],
+     "hover": {
+      "key": "s0:0",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "tooltip": null
+    },
+    {
+     "calls": [],
+     "throws": null,
+     "st": [
+      {
+       "key": "s0:0",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s0:1/0",
+       "states": [
+        "emphasis"
+       ],
+       "fill": [
+        159,
+        224,
+        128,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 1
+      }
+     ],
+     "legend": null,
+     "point": [
+      430,
+      195
+     ],
+     "hover": {
+      "key": "s0:1/0",
+      "seriesIndex": 0,
+      "dataIndex": 1
+     },
+     "tooltip": null
+    },
+    {
+     "calls": [],
+     "throws": null,
+     "st": [
+      {
+       "key": "s0:0",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s0:1/0",
+       "states": [],
+       "fill": [
+        145,
+        204,
+        117,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      }
+     ],
+     "legend": null,
+     "point": null,
+     "hover": null,
+     "tooltip": null
+    }
+   ],
+   "fails": []
   }
  ],
  "guards": [
@@ -26455,6 +27882,10 @@
    "ok": true
   },
   {
+   "name": "clippath: every record matches its recipe",
+   "ok": true
+  },
+  {
    "name": "polar state 1: a pointer step renders nothing",
    "ok": true
   },
@@ -26508,6 +27939,38 @@
   },
   {
    "name": "none-null state 1: a pointer step renders nothing",
+   "ok": true
+  },
+  {
+   "name": "clippath state 1: a pointer step renders nothing",
+   "ok": true
+  },
+  {
+   "name": "clippath state 2: a pointer step renders nothing",
+   "ok": true
+  },
+  {
+   "name": "clippath state 3: a pointer step renders nothing",
+   "ok": true
+  },
+  {
+   "name": "clippath state 4: a pointer step renders nothing",
+   "ok": true
+  },
+  {
+   "name": "clippath state 5: a pointer step renders nothing",
+   "ok": true
+  },
+  {
+   "name": "clippath state 7: a pointer step renders nothing",
+   "ok": true
+  },
+  {
+   "name": "clippath state 8: a pointer step renders nothing",
+   "ok": true
+  },
+  {
+   "name": "clippath state 9: a pointer step renders nothing",
    "ok": true
   },
   {

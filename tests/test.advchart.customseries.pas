@@ -35,7 +35,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Anim, tyControls.AdvanceChart.RichText,
      tyControls.AdvanceChart.Color, tyControls.AdvanceChart.JsMath,
      tyControls.AdvanceChart.Scale,
-     tyControls.AdvanceChart.GfxEl, tyControls.AdvanceChart.Custom,
+     tyControls.AdvanceChart.GfxEl, tyControls.AdvanceChart.Custom, tyControls.AdvanceChart.Layout,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
@@ -1535,6 +1535,30 @@ begin
     SameInt('path length', Length(path), want.Count);
     for i := 0 to Min(Length(path), want.Count) - 1 do
       Same(Format('path[%d]', [i]), path[i], want.Items[i]);
+  end;
+  { [spec 242] the clip path: its type, its transform under the element's,
+    its path }
+  d := AWant.Find('clip');
+  if not (d is TJSONObject) then SameBool('no clip', AEl.ClipPath = nil, True)
+  else if AEl.ClipPath = nil then Bad('no clip')
+  else
+  begin
+    SameStr('clip type', AEl.ClipPath.ZrType, TJSONObject(d).Get('type', ''));
+    if AEl.HasTransform and TyGfxNeedLocal(AEl.ClipPath) then
+      SameMatrix('clip transform', True, TyMatMul(AEl.Transform,
+        TyGfxLocalTransform(AEl.ClipPath)), TJSONObject(d).Find('transform'))
+    else if AEl.HasTransform then
+      SameMatrix('clip transform', True, AEl.Transform, TJSONObject(d).Find('transform'))
+    else if TyGfxNeedLocal(AEl.ClipPath) then
+      SameMatrix('clip transform', True, TyGfxLocalTransform(AEl.ClipPath),
+        TJSONObject(d).Find('transform'))
+    else
+      SameMatrix('clip transform', False, AEl.Transform, TJSONObject(d).Find('transform'));
+    want := TJSONObject(d).Arrays['path'];
+    path := PathData(TyGfxPath(AEl.ClipPath));
+    SameInt('clip path length', Length(path), want.Count);
+    for i := 0 to Min(Length(path), want.Count) - 1 do
+      Same(Format('clip path[%d]', [i]), path[i], want.Items[i]);
   end;
   st := nil;
   if AWant.Find('style') is TJSONObject then st := AWant.Objects['style'];

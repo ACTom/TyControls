@@ -56,6 +56,7 @@ type
     function VmDot(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
     function VmMeta(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
     function DurRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+    function ClipRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
     procedure DurGrow(AApi: TTyGfxDuringApi);
     procedure DurArc(AApi: TTyGfxDuringApi);
     function EnterRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
@@ -288,6 +289,38 @@ begin
     st.Free;
     sz.Free;
   end;
+end;
+
+{ RENDER.clipRI [spec 242] }
+function TCu2Mirror.ClipRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+var
+  p: TTyDoubleArray;
+  x, y, k: Double;
+  clip: TJSONData;
+begin
+  Open('clipRI', AParams);
+  x := Value(AApi, 0);
+  y := Value(AApi, 1);
+  p := Coord(AApi, x, y);
+  k := Value(AApi, 2);
+  if AParams.DataIndex = 0 then
+    Exit(Done(TJSONObject.Create(['type', 'rect', 'x', Num(p[0]), 'y', Num(p[1]),
+      'shape', TJSONObject.Create(['x', -40, 'y', -20, 'width', 80, 'height', 40]),
+      'style', TJSONObject.Create(['fill', Visual(AApi, 'color')]),
+      'clipPath', TJSONObject.Create(['type', 'circle',
+        'shape', TJSONObject.Create(['cx', 0, 'cy', 0, 'r', Num(15 + 10 * k)])])])));
+  if k <> 0 then clip := TJSONBoolean.Create(False)
+  else
+    clip := TJSONObject.Create(['type', 'rect',
+      'shape', TJSONObject.Create(['x', -30, 'y', -15, 'width', 30, 'height', 30])]);
+  Result := Done(TJSONObject.Create(['type', 'group', 'x', Num(p[0]), 'y', Num(p[1]),
+    'clipPath', clip,
+    'children', TJSONArray.Create([
+      TJSONObject.Create(['type', 'rect',
+        'shape', TJSONObject.Create(['x', -30, 'y', -15, 'width', 60, 'height', 30]),
+        'style', TJSONObject.Create(['fill', '#91cc75'])]),
+      TJSONObject.Create(['type', 'text',
+        'style', TJSONObject.Create(['text', 'clipped text', 'x', -30, 'y', 0, 'fontSize', 12])])])]));
 end;
 
 { RENDER.durRI [spec 242] }
@@ -543,6 +576,7 @@ begin
   TyChartRegisterRenderItem('vmDot', @m.VmDot);
   TyChartRegisterRenderItem('vmMeta', @m.VmMeta);
   TyChartRegisterRenderItem('durRI', @m.DurRI);
+  TyChartRegisterRenderItem('clipRI', @m.ClipRI);
   TyChartRegisterDuring('durc:grow', @m.DurGrow);
   TyChartRegisterDuring('durc:arc', @m.DurArc);
   TyChartRegisterRenderItem('enterRI', @m.EnterRI);
