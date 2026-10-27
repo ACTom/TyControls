@@ -86,6 +86,10 @@ type
     procedure Resize; override;
     procedure Loaded; override;
     procedure InsertControl(AControl: TControl; Index: Integer); override;
+    { The viewport leaving -- freed, or moved to another parent -- is let go here, the one
+      path both take; otherwise the box goes on laying out and scrolling a control it no
+      longer has. }
+    procedure RemoveControl(AControl: TControl); override;
     { Called by the LCL at the end of every child-layout pass — i.e. after a child was
       inserted, removed, moved or resized. That is exactly when the content extent can
       have changed, so this is where the box re-measures itself. Before this hook the
@@ -335,6 +339,16 @@ begin
   begin
     FContent := TTyScrollContent(AControl);
     UpdateScrollRange;
+  end;
+end;
+
+procedure TTyScrollBox.RemoveControl(AControl: TControl);
+begin
+  inherited RemoveControl(AControl);
+  if (AControl <> nil) and (AControl = FContent) then
+  begin
+    FContent := nil;
+    if not (csDestroying in ComponentState) then UpdateScrollRange;
   end;
 end;
 
