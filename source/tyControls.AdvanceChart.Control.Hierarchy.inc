@@ -3702,6 +3702,8 @@ begin
     if (AInk.Frame.SX = 0) or IsNan(AInk.Frame.SX) then AInk.Frame.InvScale := 1
     else AInk.Frame.InvScale := 1 / AInk.Frame.SX;
   end;
+  AInk.NodeScale := 1;
+  if ASlot <= High(FGraphNodeScale) then AInk.NodeScale := FGraphNodeScale[ASlot];
   if n = 0 then Exit;
   sNode := nil;
   d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);

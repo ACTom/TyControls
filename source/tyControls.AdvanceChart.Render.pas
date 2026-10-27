@@ -27,6 +27,12 @@ procedure TyTraceShape(P: TTyPainter; const AShape: TTyChartShape);
 { Draw one element: its shape, filled and/or stroked per its style. }
 procedure TyRenderElement(P: TTyPainter; const AElement: TTyChartElement);
 
+{ [R5-C] the pen an element's style strokes with: its cap, its join, its
+  miter limit (zrender's 10 where the style says nothing) }
+function TyStyleLineCap(const AStyle: TTyChartElementStyle): TTyLineCap;
+function TyStyleLineJoin(const AStyle: TTyChartElementStyle): TTyLineJoin;
+function TyStyleMiterLimit(const AStyle: TTyChartElementStyle): Double;
+
 var
   { A LARGE BATCH IS PAINTED IN TILES this many device px square; 0 paints
     it as the one path [Batch 117]. }
@@ -180,6 +186,31 @@ uses base64, Generics.Collections, tyControls.AdvanceChart.Large,
 var
   GDecalCache: TStringList = nil;
   GLargeFastPaths: Integer = 0;
+
+function TyStyleLineCap(const AStyle: TTyChartElementStyle): TTyLineCap;
+begin
+  case AStyle.LineCap of
+    cTyCapRound: Result := tlcRound;
+    cTyCapSquare: Result := tlcSquare;
+  else
+    Result := tlcButt;
+  end;
+end;
+
+function TyStyleLineJoin(const AStyle: TTyChartElementStyle): TTyLineJoin;
+begin
+  case AStyle.LineJoin of
+    cTyJoinRound: Result := tljRound;
+    cTyJoinBevel: Result := tljBevel;
+  else
+    Result := tljMiter;
+  end;
+end;
+
+function TyStyleMiterLimit(const AStyle: TTyChartElementStyle): Double;
+begin
+  if AStyle.MiterLimit > 0 then Result := AStyle.MiterLimit else Result := 10;
+end;
 
 function TyAdvChartLargeFastPathsForTest: Integer;
 begin

@@ -772,6 +772,9 @@ end;
 
 procedure TTyCustomAdvanceChart.AfterSetOption(ALazy, ASilent: Boolean);
 begin
+  { [R5-C] the update lays every label out again: no drift is kept }
+  FLbDrifts := nil;
+  FLbDragOn := False;
   { the update renders every parallelAxis view [Batch 130] }
   FParBrushSkip := -1;
   { restorePipelines: the next update's pipelines have no context yet; rows

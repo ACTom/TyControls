@@ -1,0 +1,263 @@
+{
+ "source": "ECharts 6.1 dist, chart/line/LineView.ts, label/labelStyle.ts",
+ "cases": [
+  {
+   "id": "emph.only",
+   "note": "endLabel shown under emphasis only, in its own colour",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       5,
+       9,
+       3,
+       7,
+       4
+      ],
+      "endLabel": {
+       "show": false
+      },
+      "emphasis": {
+       "endLabel": {
+        "show": true,
+        "color": "#ff0000"
+       }
+      }
+     }
+    ]
+   },
+   "rest": {
+    "exists": true,
+    "ignore": true,
+    "fill": null
+   },
+   "steps": [
+    {
+     "payload": {
+      "type": "highlight",
+      "seriesIndex": 0
+     },
+     "ignore": false,
+     "fill": "#ff0000"
+    },
+    {
+     "payload": {
+      "type": "downplay",
+      "seriesIndex": 0
+     },
+     "ignore": true,
+     "fill": null
+    },
+    {
+     "payload": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 2
+     },
+     "ignore": false,
+     "fill": "#ff0000"
+    },
+    {
+     "payload": {
+      "type": "downplay",
+      "seriesIndex": 0,
+      "dataIndex": 2
+     },
+     "ignore": true,
+     "fill": null
+    }
+   ]
+  },
+  {
+   "id": "emph.hide",
+   "note": "endLabel shown at rest, hidden under emphasis",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       5,
+       9,
+       3,
+       7,
+       4
+      ],
+      "endLabel": {
+       "show": true
+      },
+      "emphasis": {
+       "endLabel": {
+        "show": false
+       }
+      }
+     }
+    ]
+   },
+   "rest": {
+    "exists": true,
+    "ignore": false,
+    "fill": null
+   },
+   "steps": [
+    {
+     "payload": {
+      "type": "highlight",
+      "seriesIndex": 0
+     },
+     "ignore": true,
+     "fill": null
+    },
+    {
+     "payload": {
+      "type": "downplay",
+      "seriesIndex": 0
+     },
+     "ignore": false,
+     "fill": null
+    }
+   ]
+  },
+  {
+   "id": "emph.inherit",
+   "note": "endLabel shown at rest, emphasis writes a colour only: shown, recoloured",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       5,
+       9,
+       3,
+       7,
+       4
+      ],
+      "endLabel": {
+       "show": true
+      },
+      "emphasis": {
+       "endLabel": {
+        "color": "#00aa00"
+       }
+      }
+     }
+    ]
+   },
+   "rest": {
+    "exists": true,
+    "ignore": false,
+    "fill": null
+   },
+   "steps": [
+    {
+     "payload": {
+      "type": "highlight",
+      "seriesIndex": 0
+     },
+     "ignore": false,
+     "fill": "#00aa00"
+    },
+    {
+     "payload": {
+      "type": "downplay",
+      "seriesIndex": 0
+     },
+     "ignore": false,
+     "fill": null
+    }
+   ]
+  },
+  {
+   "id": "none",
+   "note": "no state shows it: no label",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       5,
+       9,
+       3,
+       7,
+       4
+      ],
+      "endLabel": {
+       "show": false
+      }
+     }
+    ]
+   },
+   "rest": {
+    "exists": false,
+    "ignore": true,
+    "fill": null
+   },
+   "steps": [
+    {
+     "payload": {
+      "type": "highlight",
+      "seriesIndex": 0
+     },
+     "ignore": true,
+     "fill": null
+    }
+   ]
+  }
+ ]
+}

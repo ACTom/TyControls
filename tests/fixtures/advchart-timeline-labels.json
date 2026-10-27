@@ -1,0 +1,648 @@
+{
+ "source": "ECharts 6.1 dist, component/timeline/SliderTimelineView.ts, label/labelStyle.ts",
+ "handlers": {
+  "@TL_FMT": "(value, index) => '#' + index + ' ' + value"
+ },
+ "cases": [
+  {
+   "id": "fn",
+   "note": "a formatter function: the name and the index",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "timeline": {
+     "axisType": "category",
+     "data": [
+      "Alpha",
+      "Bravo",
+      "Charlie",
+      "Delta"
+     ],
+     "label": {
+      "formatter": "@TL_FMT"
+     }
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       1,
+       2
+      ]
+     }
+    ],
+    "options": [
+     {
+      "series": [
+       {
+        "data": [
+         0,
+         2
+        ]
+       }
+      ]
+     },
+     {
+      "series": [
+       {
+        "data": [
+         1,
+         2
+        ]
+       }
+      ]
+     },
+     {
+      "series": [
+       {
+        "data": [
+         2,
+         2
+        ]
+       }
+      ]
+     },
+     {
+      "series": [
+       {
+        "data": [
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "labels": [
+    {
+     "text": "#0 Alpha",
+     "texts": [
+      "#0 Alpha"
+     ],
+     "rect": [
+      "4066e5c28f5c28f6",
+      "4077500000000000",
+      "4047d1eb851eb852",
+      "4028000000000000"
+     ]
+    },
+    {
+     "text": "#1 Bravo",
+     "texts": [
+      "#1 Bravo"
+     ],
+     "rect": [
+      "40700e147ae147ae",
+      "4077500000000000",
+      "40481eb851eb851f",
+      "4028000000000000"
+     ]
+    },
+    {
+     "text": "#2 Charlie",
+     "texts": [
+      "#2 Charlie"
+     ],
+     "rect": [
+      "40747947ae147ae1",
+      "4077500000000000",
+      "404b6b851eb851ec",
+      "4028000000000000"
+     ]
+    },
+    {
+     "text": "#3 Delta",
+     "texts": [
+      "#3 Delta"
+     ],
+     "rect": [
+      "407968f5c28f5c29",
+      "4077500000000000",
+      "404670a3d70a3d71",
+      "4028000000000000"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "fn.value",
+   "note": "a formatter function on a value timeline: the value and the index",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "timeline": {
+     "axisType": "value",
+     "data": [
+      0,
+      10,
+      25,
+      40
+     ],
+     "label": {
+      "formatter": "@TL_FMT"
+     }
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       1,
+       2
+      ]
+     }
+    ],
+    "options": [
+     {
+      "series": [
+       {
+        "data": [
+         0,
+         2
+        ]
+       }
+      ]
+     },
+     {
+      "series": [
+       {
+        "data": [
+         1,
+         2
+        ]
+       }
+      ]
+     },
+     {
+      "series": [
+       {
+        "data": [
+         2,
+         2
+        ]
+       }
+      ]
+     },
+     {
+      "series": [
+       {
+        "data": [
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "labels": [
+    {
+     "text": "#0 0",
+     "texts": [
+      "#0 0"
+     ],
+     "rect": [
+      "406867ae147ae148",
+      "4077500000000000",
+      "4037851eb851eb86",
+      "4028000000000000"
+     ]
+    },
+    {
+     "text": "#1 10",
+     "texts": [
+      "#1 10"
+     ],
+     "rect": [
+      "406eec28f5c28f5c",
+      "4077500000000000",
+      "403e3d70a3d70a3e",
+      "4028000000000000"
+     ]
+    },
+    {
+     "text": "#2 25",
+     "texts": [
+      "#2 25"
+     ],
+     "rect": [
+      "4074aa147ae147ae",
+      "4077500000000000",
+      "403e3d70a3d70a3e",
+      "4028000000000000"
+     ]
+    },
+    {
+     "text": "#3 40",
+     "texts": [
+      "#3 40"
+     ],
+     "rect": [
+      "4079de147ae147ae",
+      "4077500000000000",
+      "403e3d70a3d70a3e",
+      "4028000000000000"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "rich",
+   "note": "rich labels: a styled token and the rest",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "timeline": {
+     "axisType": "category",
+     "data": [
+      "Alpha",
+      "Bravo",
+      "Charlie",
+      "Delta"
+     ],
+     "label": {
+      "formatter": "{a|{value}}!",
+      "rich": {
+       "a": {
+        "color": "#c23531",
+        "fontSize": 15
+       }
+      }
+     }
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       1,
+       2
+      ]
+     }
+    ],
+    "options": [
+     {
+      "series": [
+       {
+        "data": [
+         0,
+         2
+        ]
+       }
+      ]
+     },
+     {
+      "series": [
+       {
+        "data": [
+         1,
+         2
+        ]
+       }
+      ]
+     },
+     {
+      "series": [
+       {
+        "data": [
+         2,
+         2
+        ]
+       }
+      ]
+     },
+     {
+      "series": [
+       {
+        "data": [
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "labels": [
+    {
+     "text": "{a|Alpha}!",
+     "texts": [
+      "Alpha",
+      "!"
+     ],
+     "rect": [
+      "40674170a3d70a3e",
+      "4077200000000000",
+      "4044f47ae147ae14",
+      "402e000000000000"
+     ]
+    },
+    {
+     "text": "{a|Charlie}!",
+     "texts": [
+      "Charlie",
+      "!"
+     ],
+     "rect": [
+      "407498b851eb851f",
+      "4077200000000000",
+      "4049747ae147ae14",
+      "402e000000000000"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "overflow",
+   "note": "overflow 'truncate' at width 30",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "timeline": {
+     "axisType": "category",
+     "data": [
+      "Alpha",
+      "Bravo",
+      "Charlie",
+      "Delta"
+     ],
+     "label": {
+      "width": 30,
+      "overflow": "truncate"
+     }
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       1,
+       2
+      ]
+     }
+    ],
+    "options": [
+     {
+      "series": [
+       {
+        "data": [
+         0,
+         2
+        ]
+       }
+      ]
+     },
+     {
+      "series": [
+       {
+        "data": [
+         1,
+         2
+        ]
+       }
+      ]
+     },
+     {
+      "series": [
+       {
+        "data": [
+         2,
+         2
+        ]
+       }
+      ]
+     },
+     {
+      "series": [
+       {
+        "data": [
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "labels": [
+    {
+     "text": "Alpha",
+     "texts": [
+      "Alp..."
+     ],
+     "rect": [
+      "40682851eb851eb8",
+      "4077500000000000",
+      "403b7ae147ae147b",
+      "4028000000000000"
+     ]
+    },
+    {
+     "text": "Bravo",
+     "texts": [
+      "Bra..."
+     ],
+     "rect": [
+      "4070a9999999999a",
+      "4077500000000000",
+      "403ccccccccccccc",
+      "4028000000000000"
+     ]
+    },
+    {
+     "text": "Charlie",
+     "texts": [
+      "Ch..."
+     ],
+     "rect": [
+      "4075647ae147ae14",
+      "4077500000000000",
+      "403970a3d70a3d71",
+      "4028000000000000"
+     ]
+    },
+    {
+     "text": "Delta",
+     "texts": [
+      "Delta"
+     ],
+     "rect": [
+      "4079ef5c28f5c28f",
+      "4077500000000000",
+      "403c147ae147ae14",
+      "4028000000000000"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "break",
+   "note": "overflow 'break' at width 20",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "timeline": {
+     "axisType": "category",
+     "data": [
+      "Aa Bb",
+      "Cc Dd",
+      "Ee Ff",
+      "Gg Hh"
+     ],
+     "label": {
+      "width": 20,
+      "overflow": "break"
+     }
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       1,
+       2
+      ]
+     }
+    ],
+    "options": [
+     {
+      "series": [
+       {
+        "data": [
+         0,
+         2
+        ]
+       }
+      ]
+     },
+     {
+      "series": [
+       {
+        "data": [
+         1,
+         2
+        ]
+       }
+      ]
+     },
+     {
+      "series": [
+       {
+        "data": [
+         2,
+         2
+        ]
+       }
+      ]
+     },
+     {
+      "series": [
+       {
+        "data": [
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "labels": [
+    {
+     "text": "Aa Bb",
+     "texts": [
+      "Aa ",
+      "Bb"
+     ],
+     "rect": [
+      "4068be147ae147ae",
+      "4076900000000000",
+      "40321eb851eb851f",
+      "4038000000000000"
+     ]
+    },
+    {
+     "text": "Cc Dd",
+     "texts": [
+      "Cc ",
+      "Dd"
+     ],
+     "rect": [
+      "4071000000000000",
+      "4076900000000000",
+      "4032000000000000",
+      "4038000000000000"
+     ]
+    },
+    {
+     "text": "Ee Ff",
+     "texts": [
+      "Ee ",
+      "Ff"
+     ],
+     "rect": [
+      "40759f0a3d70a3d7",
+      "4076900000000000",
+      "40321eb851eb851f",
+      "4038000000000000"
+     ]
+    },
+    {
+     "text": "Gg Hh",
+     "texts": [
+      "Gg ",
+      "Hh"
+     ],
+     "rect": [
+      "407a347ae147ae14",
+      "4076900000000000",
+      "403370a3d70a3d70",
+      "4038000000000000"
+     ]
+    }
+   ]
+  }
+ ]
+}

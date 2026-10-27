@@ -64,6 +64,8 @@ const FNS = {
   'idx*50': idx => idx * 50,
   'idx*30': idx => idx * 30,
   'dur:600+idx*100': idx => 600 + idx * 100,
+  // [R5-C] a label formatter: the value, rounded, with a prefix
+  'endfmt': p => 'v' + Math.round(p.value),
 };
 function materialize(v) {
   if (Array.isArray(v)) return v.map(materialize);
@@ -742,6 +744,43 @@ function an4Cases() {
     'animation false on the polar pointer: it jumps',
     polarBar({ axisPointer: { animation: false } }, { type: 'category', data: CATS6 }, { type: 'value' }),
     { x: 230, y: 98 }, [{ at: 0, x: 230, y: 202 }]));
+  // ---- [R5-C] endLabel leftovers ----
+  out.push(enterCase('line-endlabel.step',
+    "endLabel on a step 'end' line: the label rides the stepped polyline (getPointOn), the values the layout's points",
+    { xAxis: { type: 'category', data: CATS6 }, yAxis: { type: 'value' },
+      series: [{ type: 'line', step: 'end', showSymbol: false, endLabel: { show: true },
+        data: [120, 132, 101, 134, 90, 230] }] }));
+  out.push(enterCase('line-endlabel.single',
+    'endLabel on a line of one point: no polyline to speak of, the label at the point, the value as it is',
+    { xAxis: { type: 'category', data: CATS6 }, yAxis: { type: 'value' },
+      series: [{ type: 'line', endLabel: { show: true }, data: [120] }] }));
+  out.push(enterCase('line-endlabel.array',
+    'endLabel on [x, y] items on a value axis: the y value counts (interpolateRawValues on the arrays)',
+    { xAxis: { type: 'value' }, yAxis: { type: 'value' },
+      series: [{ type: 'line', showSymbol: false, endLabel: { show: true },
+        data: [[0, 120], [1, 132], [3, 101], [4, 134], [5, 90]] }] }));
+  out.push(enterCase('line-endlabel.rich',
+    'a rich endLabel, no count: its block rides the clip',
+    { xAxis: { type: 'category', data: CATS6 }, yAxis: { type: 'value' },
+      series: [{ type: 'line', showSymbol: false,
+        endLabel: { show: true, valueAnimation: false, formatter: '{a|{c}} pts', rich: { a: { fontSize: 16, color: '#c23531' } } },
+        data: [120, 132, 101, 134, 90, 230] }] }));
+  out.push(enterCase('line-endlabel.richcount',
+    'a rich endLabel that counts: the block laid out again at each value',
+    { xAxis: { type: 'category', data: CATS6 }, yAxis: { type: 'value' },
+      series: [{ type: 'line', showSymbol: false,
+        endLabel: { show: true, formatter: '{a|{c}}', rich: { a: { fontSize: 15 } } },
+        data: [120, 132, 101, 134, 90, 230] }] }));
+  out.push(enterCase('line-endlabel.fn',
+    'endLabel with a formatter function: it is called with the interpolated value',
+    { xAxis: { type: 'category', data: CATS6 }, yAxis: { type: 'value' },
+      series: [{ type: 'line', showSymbol: false, endLabel: { show: true, formatter: { $fn: 'endfmt' } },
+        data: [120, 132, 101, 134, 90, 230] }] }));
+  out.push(enterCase('line-endlabel.emph',
+    'endLabel.show false, emphasis.endLabel.show true: the label is there, hidden at rest',
+    { xAxis: { type: 'category', data: CATS6 }, yAxis: { type: 'value' },
+      series: [{ type: 'line', showSymbol: false, endLabel: { show: false }, emphasis: { endLabel: { show: true } },
+        data: [120, 132, 101, 134, 90, 230] }] }));
   return out;
 }
 

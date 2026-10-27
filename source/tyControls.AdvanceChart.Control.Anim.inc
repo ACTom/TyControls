@@ -954,6 +954,8 @@ begin
       FAnimPending := False;
       if FAnim = nil then FAnim := NewAnimDriver;
       if FAnimSet = nil then FAnimSet := TTyChartAnimSet.Create(FAnim);
+      FAnimSet.OnEndLabelText := @EndLabelTextOf;
+      FAnimSet.OnEndLabelPieces := @EndLabelPiecesOf;
       FAnimSet.OnUtStop := @AnimUtStopCustom;
       { AN UPDATE when there was a render before, an entry otherwise
         [Batch 90] }

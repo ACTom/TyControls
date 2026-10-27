@@ -279,6 +279,10 @@ type
       just under the symbol's 100. No ripples when showEffectOn is not
       'render'. [Batch 71] }
     RippleShow: Boolean;
+    { [R5-C] showEffectOn anything but 'render': the ripples are built,
+      hidden, and run only while their symbol is emphasised
+      (EffectSymbol's onHoverStateChange) }
+    RippleOnHover: Boolean;
     { A DATA ITEM'S OWN symbol options, by raw row -- the series' spec with
       the item's keys read over it, arrays included (an item's symbolSize
       [w, h] and symbolOffset never reach the override table). [Batch 71] }
@@ -830,6 +834,7 @@ begin
     billions and never finished drawing.] }
   Result.HeatPadPx := 0;
   Result.RippleShow := False;
+  Result.RippleOnHover := False;
   Result.RippleNumber := 0;
   Result.RippleFill := False;
   Result.RippleHasColor := False;
@@ -1736,6 +1741,9 @@ var
   lineRuns, areaRuns: TTyPathCmdArray2;
   runsMatch: Boolean;
   runIdx: Integer;
+  { [R5-C] no run of two points or more: the polyline upstream still has
+    (one point, nothing to stroke) stands in, inkless, for its clip }
+  pointsOnly, pointRunDone: Boolean;
   { upstream's clip rect before a `clip: false` widening, and the widening;
     the base axis' direction as flags: 2 horizontal, 4 inverse [Batch 89] }
   clipX, clipY, clipW, clipH, clipEx, animFlags: Double;
@@ -2268,6 +2276,10 @@ var
     runsMatch := (Length(lineRuns) = runs)
       and ((not spec.HasArea) or (Length(areaRuns) = runs));
     runIdx := 0;
+    pointsOnly := anyLegal;
+    for k := 0 to High(lineRuns) do
+      if Length(lineRuns[k]) >= 2 then pointsOnly := False;
+    pointRunDone := False;
   end;
 
   { One run, from the points gathered so far. The AREA goes in FIRST so the
@@ -2375,6 +2387,24 @@ var
       AList.Add(el);
       Inc(Result);
 
+    end
+    else if pointsOnly and not pointRunDone and (pol = nil) then
+    begin
+      { the polyline of one point: no ink, no pointer -- its clip runs (the
+        end label rides it) [R5-C] }
+      SetLength(up, 1);
+      up[0] := pts[0];
+      el := MarkElement(TyShapePolyline(up), AVisual, ABinding.SeriesIndex, -1);
+      el.Style.HasFill := False;
+      el.Style.FillGradient := Default(TTyChartGradient);
+      el.Style.FillPattern := Default(TTyChartPattern);
+      el.Style.StrokeWidthLogical := 0;
+      el.Style.StrokeGradient := Default(TTyChartGradient);
+      el.Silent := True;
+      SetClip(el);
+      TagClip(el, carLineRun);
+      AList.Add(el);
+      pointRunDone := True;
     end;
 
     { THE MARKERS GO ON LAST, so they sit over the line they belong to -- and
@@ -2528,7 +2558,7 @@ begin
   ink := v.Fill;
   { THE RIPPLES FIRST, under the symbol: the same shape at the same size --
     upstream's first frame, a ripple at half the group's symbol-sized scale }
-  if AVisual.RippleShow then
+  if AVisual.RippleShow or AVisual.RippleOnHover then
   begin
     if AVisual.RippleHasColor then ink := AVisual.RippleColor;
     n := AVisual.RippleNumber;
@@ -2596,6 +2626,13 @@ begin
       rip.Z2 := 99;
       rip.Silent := True;
       rip.Caption.Text := '';
+      { [R5-C] a hover's ripple: none at rest, nothing armed -- the control
+        starts it when its symbol turns to emphasis (G[10] 1) }
+      if AVisual.RippleOnHover then
+      begin
+        rip.Ignore := True;
+        rip.Anim.G[10] := 1;
+      end;
       AList.Add(rip);
       Inc(Result);
     end;
@@ -2798,7 +2835,8 @@ end;
   visual, the item's own border over the series', the item's corners over
   the series', and the row's caption. }
 function HeatCell(const ABinding: TTySeriesBinding; AStore: TTyDataStore;
-  const AVisual: TTySeriesVisual; ARow: Integer; const ARect: TTyRectF): TTyChartElement;
+  const AVisual: TTySeriesVisual; ARow: Integer; const ARect: TTyRectF;
+  AW: Double = NaN; AH: Double = NaN): TTyChartElement;
 var
   v: TTySeriesVisual;
   ov: TTyDataValue;
@@ -2828,6 +2866,24 @@ begin
   { the item's decal: HeatmapView's rect takes the item's style [F4a] }
   Result.Style.Decal := RowDecal(AVisual, AStore, ARow);
   ItemCaption(AVisual, AStore, ARow, Result.Caption);
+  { [R5-C] what a label line measures the cell by: the Rect's own shape (the
+    width and height as laid out where the caller has them), in the cell's
+    colour (a heatmap draws with its fill) }
+  Result.Caption.LgKind := cTyGuideHostRect;
+  Result.Caption.LgColor := v.Fill;
+  Result.Caption.LgG[0] := ARect.Left;
+  Result.Caption.LgG[1] := ARect.Top;
+  if IsNan(AW) then Result.Caption.LgG[2] := ARect.Right - ARect.Left
+  else Result.Caption.LgG[2] := AW;
+  if IsNan(AH) then Result.Caption.LgG[3] := ARect.Bottom - ARect.Top
+  else Result.Caption.LgG[3] := AH;
+  if radii[0] + radii[1] + radii[2] + radii[3] > 0 then
+  begin
+    Result.Caption.LgG[4] := radii[0];
+    Result.Caption.LgG[5] := radii[1];
+    Result.Caption.LgG[6] := radii[2];
+    Result.Caption.LgG[7] := radii[3];
+  end;
 end;
 
 { A HEATMAP ON A CARTESIAN: one rect per row, centred on its point, a band
@@ -2881,7 +2937,7 @@ begin
     l := p.X - w / 2;
     t := p.Y - h / 2;
     r := TyRectF(l, t, l + w, t + h);
-    el := HeatCell(ABinding, AStore, AVisual, i, r);
+    el := HeatCell(ABinding, AStore, AVisual, i, r, w, h);
     { [F3c] the cell's Rect for the universal transition }
     UtTagRect(el, ABinding.SeriesIndex, i, l, t, w, h);
     AList.Add(el);
@@ -3801,6 +3857,14 @@ begin
       el.Anim.G[3] := col.Width;
     end;
     el.Anim.G[4] := Ord(spec.AnimOff);
+    { [R5-C] and a label line's host: the bar rect as laid out, in the
+      item's colour }
+    el.Caption.LgKind := cTyGuideHostRect;
+    el.Caption.LgColor := RowVisual(AVisual, AStore, i).Fill;
+    el.Caption.LgG[0] := el.Anim.G[0];
+    el.Caption.LgG[1] := el.Anim.G[1];
+    el.Caption.LgG[2] := el.Anim.G[2];
+    el.Caption.LgG[3] := el.Anim.G[3];
     AList.Add(el);
     Inc(Result);
 
@@ -4121,6 +4185,10 @@ begin
     { [F3c] the corner radii the Sector's shape holds (its path's) }
     el.Anim.Pts := Copy(corners, 0, Length(corners));
     ItemCaption(AVisual, AStore, i, el.Caption);
+    { [R5-C] a label line's host: the Sector as roundSector builds it, in
+      the item's colour }
+    TyGuideStampSector(el.Caption, s.CX, s.CY, s.R0, s.R, s.SA, s.EA, s.CW, corners);
+    el.Caption.LgColor := rv.Fill;
     { a clipped bar's label is not drawn: its host is ignored }
     if clipped then el.Caption.Text := '';
     if el.Caption.Text <> '' then

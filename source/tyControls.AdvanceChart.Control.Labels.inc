@@ -98,6 +98,12 @@ var
   strokeW: Double;
   ah: TTyTextAnchorH;
   av: TTyTextAnchorV;
+  normalShow, anyShow, isFn: Boolean;
+  k: Integer;
+  stepped: TTyPointFArray;
+  turn: TTyStepTurn;
+  scale: Double;
+  pieces: TTyRtPieceArray;
 begin
   Result := 0;
   if (AList = nil) or (AMeasurer = nil) or (ASlot > High(FStores)) then Exit;
@@ -105,10 +111,27 @@ begin
   if store = nil then Exit;
   node := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
   if not (node is TJSONObject) then Exit;
+  { anyStateShowEndLabel: the label is there where any state shows it, and
+    hidden at rest unless the normal one does [R5-C: was the normal only] }
   en := TJSONObject(node).Find('endLabel');
-  if not (en is TJSONObject) then Exit;
-  d := TJSONObject(en).Find('show');
-  if not ((d <> nil) and (d.JSONType = jtBoolean) and d.AsBoolean) then Exit;
+  normalShow := (en is TJSONObject) and TyOptTruthy(TJSONObject(en).Find('show'));
+  anyShow := normalShow;
+  for k := 0 to 2 do
+  begin
+    case k of
+      0: d := TJSONObject(node).Find('emphasis');
+      1: d := TJSONObject(node).Find('blur');
+    else
+      d := TJSONObject(node).Find('select');
+    end;
+    if d is TJSONObject then
+    begin
+      d := TJSONObject(d).Find('endLabel');
+      if (d is TJSONObject) and TyOptTruthy(TJSONObject(d).Find('show')) then anyShow := True;
+    end;
+  end;
+  if not anyShow then Exit;
+  if not (en is TJSONObject) then en := nil;
   { the series' line: its points and its clip }
   found := False;
   run := Default(TTyChartElement);
@@ -129,7 +152,7 @@ begin
   spec.Show := True;
   spec.DistanceLogical := 8;
   spec.ValueAnim := True;
-  spec := TyLabelSpecOfNode(TJSONObject(en), nil, spec);
+  if en <> nil then spec := TyLabelSpecOfNode(TJSONObject(en), nil, spec);
   horiz := (Round(run.Anim.G[5]) and 2) <> 0;
   inverse := (Round(run.Anim.G[5]) and 4) <> 0;
   connect := run.Anim.G[10] <> 0;
@@ -139,13 +162,15 @@ begin
   begin
     vals[row] := NaN;
     it := store.RawItem(row);
-    case it.Shape of
-      rshNone:
-        if (AVisual.LabelValueDim >= 0) and (AVisual.LabelValueDim < store.DimCount) then
-          vals[row] := store.Get(AVisual.LabelValueDim, row);
-      rshScalar:
-        if it.Scalar.Kind = dvkNumber then vals[row] := it.Scalar.Num;
-    end;
+    { a scalar as it is; an item of several values (or none) the label's
+      value dimension -- interpolateRawValues runs over each dimension and
+      the default text prints the label's [R5-C: arrays did not count] }
+    if it.Shape = rshScalar then
+    begin
+      if it.Scalar.Kind = dvkNumber then vals[row] := it.Scalar.Num;
+    end
+    else if (AVisual.LabelValueDim >= 0) and (AVisual.LabelValueDim < store.DimCount) then
+      vals[row] := store.Get(AVisual.LabelValueDim, row);
   end;
   { the words: the value's template for the last row, else its text }
   tpl := '';
@@ -166,7 +191,22 @@ begin
   SetLength(pts, Length(run.Anim.Pts) div 2);
   for i := 0 to High(pts) do
     pts[i] := TyPointF(run.Anim.Pts[i * 2], run.Anim.Pts[i * 2 + 1]);
-  cmds := TyPolylinePath(pts, run.Anim.G[8], run.Anim.Mono, connect);
+  { [R5-C] A STEP LINE's polyline is the stepped one (getPointOn), its
+    index range the layout's points }
+  stepped := nil;
+  if run.Anim.G[7] <> 0 then
+  begin
+    case Round(run.Anim.G[7]) of
+      2: turn := sttMiddle;
+      3: turn := sttEnd;
+    else
+      turn := sttStart;
+    end;
+    stepped := TyTurnPointsIntoStep(pts, nil, False, horiz, turn, connect);
+    cmds := TyPolylinePath(stepped, run.Anim.G[8], run.Anim.Mono, connect);
+  end
+  else
+    cmds := TyPolylinePath(pts, run.Anim.G[8], run.Anim.Mono, connect);
   lfi := 0;
   st := TyEndLabelStep(run.Anim.Pts, cmds, xOrY, horiz, connect, True, lfi);
   if not st.HasPoint then Exit;
@@ -180,7 +220,36 @@ begin
   end;
   x := st.X + dX;
   y := st.Y + dY;
-  if (tpl <> '') then
+  { [R5-C] what a frame needs to word the label again: its spec, its row,
+    its value dimension, its ink and alignment, the measurer }
+  k := -1;
+  for i := 0 to High(FEndLbls) do
+    if FEndLbls[i].Series = FBindings[ASlot].SeriesIndex then k := i;
+  if k < 0 then
+  begin
+    k := Length(FEndLbls);
+    SetLength(FEndLbls, k + 1);
+  end;
+  FEndLbls[k].Series := FBindings[ASlot].SeriesIndex;
+  FEndLbls[k].Last := last;
+  FEndLbls[k].ValueDim := AVisual.LabelValueDim;
+  FEndLbls[k].Name := AVisual.SeriesName;
+  FEndLbls[k].Spec := spec;
+  FEndLbls[k].Ink := AVisual.Fill;
+  FEndLbls[k].Scale := APPI / 96;
+  FEndLbls[k].Measurer := AMeasurer;
+  { [R5-C] a named formatter counts too: called with the value there }
+  isFn := spec.ValueAnim and spec.HasFormatter and TyChartIsHandlerRef(spec.Formatter);
+  if isFn then
+  begin
+    if st.Interp then
+      v := TyAnimInterpolateValue(vals[st.Row0], vals[st.Row1], st.T,
+        spec.HasPrecision, spec.Precision)
+    else
+      v := vals[st.Row0];
+    if not IsNan(v) then words := EndLabelTextOf(FBindings[ASlot].SeriesIndex, v);
+  end
+  else if (tpl <> '') then
   begin
     if st.Interp then
       v := TyAnimInterpolateValue(vals[st.Row0], vals[st.Row1], st.T,
@@ -203,8 +272,25 @@ begin
   end;
   if spec.HasAlignH then ah := spec.AlignH;
   if spec.HasAlignV then av := spec.AlignV;
-  AMeasurer.MeasureLine(words, spec.FontName, spec.FontSizeLogical, spec.FontWeight, w, h);
-  el := TyChartElement(TyShapeRect(TyAnchorBox(x, y, w, h, ah, av)));
+  scale := APPI / 96;
+  pieces := nil;
+  FEndLbls[k].AH := ah;
+  FEndLbls[k].AV := av;
+  { [R5-C] A RICH END LABEL is a block, laid out about its anchor [was: one
+    run] }
+  if spec.Rt.Needed then
+  begin
+    pieces := TyLabelBlockPieces(spec, words, AVisual.Fill, True, False, False,
+      ah, av, scale, AMeasurer);
+    el := TyChartElement(TyShapeRect(TyRtDeviceBox(pieces, x, y, 0, scale)));
+    el.Caption.RtPieces := pieces;
+    el.Caption.RtScale := scale;
+  end
+  else
+  begin
+    AMeasurer.MeasureLine(words, spec.FontName, spec.FontSizeLogical, spec.FontWeight, w, h);
+    el := TyChartElement(TyShapeRect(TyAnchorBox(x, y, w, h, ah, av)));
+  end;
   el.Caption.Text := words;
   el.Caption.FontName := spec.FontName;
   el.Caption.FontSizeLogical := spec.FontSizeLogical;
@@ -221,6 +307,8 @@ begin
   el.Z := AVisual.Z;
   el.Z2 := 200;
   el.Silent := True;
+  { hidden at rest where only a state shows it [R5-C] }
+  el.Ignore := not normalShow;
   el.Datum := TyChartDatum(-1, -1);
   el.Anim.Role := carEndLabel;
   el.Anim.Series := FBindings[ASlot].SeriesIndex;
@@ -235,11 +323,61 @@ begin
   if connect then flags := flags or 4;
   if tpl <> '' then flags := flags or 8;
   if spec.HasPrecision then flags := flags or 16;
+  { [R5-C] 32 a named formatter counts (EndLabelTextOf), 64 its words are a
+    block (EndLabelPiecesOf) }
+  if isFn then flags := flags or 32 or 8;
+  if spec.Rt.Needed then flags := flags or 64;
   el.Anim.G[1] := flags;
   el.Anim.G[2] := spec.Precision;
   el.Anim.G[3] := run.Anim.G[8];
+  { the stepped polyline the label rides, flattened (none: the layout's) }
+  SetLength(el.Anim.Base, Length(stepped) * 2);
+  for i := 0 to High(stepped) do
+  begin
+    el.Anim.Base[i * 2] := stepped[i].X;
+    el.Anim.Base[i * 2 + 1] := stepped[i].Y;
+  end;
   AList.Add(el);
   Result := 1;
+end;
+
+function TTyCustomAdvanceChart.EndLabelTextOf(ASeriesIndex: Integer; AValue: Double): string;
+var
+  i, slot, k: Integer;
+  prm: TTyChartCallbackParams;
+begin
+  Result := '';
+  for i := 0 to High(FEndLbls) do
+  begin
+    if FEndLbls[i].Series <> ASeriesIndex then Continue;
+    slot := SlotOfSeries(ASeriesIndex);
+    if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Exit;
+    if not (FEndLbls[i].Spec.HasFormatter and TyChartIsHandlerRef(FEndLbls[i].Spec.Formatter)) then Exit;
+    { getFormattedLabel(dataIndex, 'normal', ..., {interpolatedValue}): the
+      last row's params, the value the interpolated one }
+    prm := TyLabelParams(FStores[slot], FEndLbls[i].Last, FEndLbls[i].Name,
+      FEndLbls[i].ValueDim, NaN, False, ASeriesIndex, 'line', 0, '');
+    if Length(prm.Values) > 0 then
+    begin
+      k := High(prm.Values);
+      if (FEndLbls[i].ValueDim >= 0) and (FEndLbls[i].ValueDim <= High(prm.Values)) then
+        k := FEndLbls[i].ValueDim;
+      prm.Values[k] := AValue;
+    end;
+    prm.ValueText := TyJsNumberToString(AValue);
+    Exit(TyChartRunHandler(FEndLbls[i].Spec.Formatter, TyChartOneParams(prm)));
+  end;
+end;
+
+function TTyCustomAdvanceChart.EndLabelPiecesOf(ASeriesIndex: Integer;
+  const AText: string): TTyRtPieceArray;
+var i: Integer;
+begin
+  Result := nil;
+  for i := 0 to High(FEndLbls) do
+    if (FEndLbls[i].Series = ASeriesIndex) and (FEndLbls[i].Measurer <> nil) then
+      Exit(TyLabelBlockPieces(FEndLbls[i].Spec, AText, FEndLbls[i].Ink, True, False,
+        False, FEndLbls[i].AH, FEndLbls[i].AV, FEndLbls[i].Scale, FEndLbls[i].Measurer));
 end;
 
 { each data item's own `label`, read over its series' spec, by raw row }
@@ -506,6 +644,11 @@ var
   spec: TTyLabelSpec;
   fsz: Integer;
   it: TTyLabelLayoutItem;
+  px0, py0: Double;
+  pah: TTyTextAnchorH;
+  pav: TTyTextAnchorV;
+  sized: Boolean;
+  ddx, ddy: Double;
 begin
   if (AList = nil) or (FOption = nil) or (AMeasurer = nil) then Exit;
   if APPI > 0 then scale := APPI / 96 else scale := 1;
@@ -684,7 +827,39 @@ begin
       refs[r].Relaid := False;
       refs[r].Pieces := c.RtPieces;
       it := Default(TTyLabelLayoutItem);
-      if Length(c.RtPieces) = 0 then
+      { [R5-C] THE LAYOUT'S width / height ON THE LABEL'S STYLE
+        (LABEL_OPTION_TO_STYLE_KEYS): the text block sized so -- an
+        overflow cut or wrapped at the width, lines past the height dropped
+        under lineOverflow, a box drawn at that size -- laid out again for a
+        label of a series (its spec at hand) [was: read, not applied] }
+      sized := ((lo.HasWidth and not IsNan(lo.Width)) or (lo.HasHeight and not IsNan(lo.Height)))
+        and (c.LmKind = 1) and (si <= High(ASpecs));
+      if sized then
+      begin
+        spec := ASpecs[si];
+        if (c.ItemSpec > 0) and (si <= High(AItemSpecs))
+          and (c.ItemSpec - 1 <= High(AItemSpecs[si])) then
+          spec := AItemSpecs[si][c.ItemSpec - 1];
+        spec.FontSizeLogical := fsz;
+        spec.Rt.Style.Align := rtaNone;
+        spec.Rt.Style.VAlign := rtvNone;
+        if lo.HasWidth and not IsNan(lo.Width) then
+        begin
+          spec.Rt.Style.WidthKind := rtwNumber;
+          spec.Rt.Style.Width := lo.Width;
+        end;
+        if lo.HasHeight and not IsNan(lo.Height) then
+        begin
+          spec.Rt.Style.HasHeight := True;
+          spec.Rt.Style.Height := lo.Height;
+        end;
+        spec.Rt.Needed := True;
+        refs[r].Pieces := TyLabelBlockPieces(spec, c.Text, c.LmInkFill,
+          c.LmInkHasFill, c.LmInkGradient, c.LmInkInside, ah, av, c.RtScale, AMeasurer);
+        refs[r].Relaid := True;
+        it.RawLocal := LmBlockRect(refs[r].Pieces, c.RtScale);
+      end
+      else if Length(c.RtPieces) = 0 then
       begin
         w := c.LmTextW;
         h := c.LmTextH;
@@ -740,6 +915,28 @@ begin
       end;
       it.OriginX := -offX;
       it.OriginY := -offY;
+      { [R5-C] A HOST THAT SET ITS OWN ORIGIN -- a radial tree's
+        textConfig.origin 'center' -- keeps it where the layout gives no x
+        or y: updateInnerText places the label by the position again, adds
+        the offset to the place and leaves the origin at the box's centre
+        (relative to the place before the offset). The offset is then not
+        turned with the label. }
+      if c.HasFixedPos and c.HasHostBox and (lo.X.Kind = cpvAbsent)
+        and (lo.Y.Kind = cpvAbsent) then
+      begin
+        TyLabelAnchorXYWH(c.HostBox, TTyLabelPosition(c.FixedPos), c.FixedDist,
+          0, 0, px0, py0, pah, pav);
+        it.Free := False;
+        it.InnerX := px0 + offX;
+        it.InnerY := py0 + offY;
+        it.OriginX := (-px0 + c.HostBox.W * 0.5) + c.HostBox.X;
+        it.OriginY := (-py0 + c.HostBox.H * 0.5) + c.HostBox.Y;
+        { its turn is the host's textConfig.rotation as set, not one read
+          back off the matrix }
+        if not lo.HasRotate then rot := c.RotationRad;
+        lx := defX;
+        ly := defY;
+      end;
       it.Rotation := rot;
       it.ScaleX := defSx;
       it.ScaleY := defSy;
@@ -782,6 +979,23 @@ begin
     end;
     hasM := TyLabelLocalTransform(x, y, items[r].OriginX, items[r].OriginY,
       items[r].Rotation, items[r].ScaleX, items[r].ScaleY, m);
+    { [R5-C] A DRAGGED LABEL the layout placed: its drift on its transform
+      (Element.drift), its line routed again from where it is now; one its
+      host places by its position is put back there by updateInnerText }
+    if items[r].Free and refs[r].Layout.Draggable
+      and LbDriftOf(el.Datum.SeriesIndex, el.Datum.DataIndex, ddx, ddy) then
+    begin
+      if not hasM then
+      begin
+        m[0] := 1; m[1] := 0; m[2] := 0; m[3] := 1; m[4] := 0; m[5] := 0;
+      end;
+      hasM := True;
+      m[4] := m[4] + ddx;
+      m[5] := m[5] + ddy;
+      FLmRoute[r] := True;
+    end;
+    el.Caption.LmDraggable := refs[r].Layout.Draggable;
+    if refs[r].Layout.Draggable then el.Cursor := 'move';
     if hasM then
     begin
       el.Caption.X := m[4];
@@ -908,8 +1122,9 @@ begin
   for e := 0 to count - 1 do
   begin
     { most elements are not such a label: asked by reference before the
-      copies [P2] }
-    if AList.Ref(e)^.Caption.LmKind <> 1 then Continue;
+      copies [P2]; a mark that fixed its own anchor (a tree's, a sunburst's,
+      a sankey's) hangs its label on its host as well [R5-C] }
+    if not (AList.Ref(e)^.Caption.LmKind in [1, 2]) then Continue;
     el := AList.Element(e);
     c := el.Caption;
     hi := c.LmHostPlus1 - 1;
@@ -987,28 +1202,12 @@ begin
     guide := TyChartElement(TyShapePolyline(pts));
     guide.Shape.Cmds := TyLabelLineCmds(pts, smooth);
     guide.Caption.LgSmooth := smooth;
-    { lineStyle over the item's colour (the visual's, by its draw type) }
-    col := host.Caption.LgColor;
-    txt := TyStReadString(nodes, ['labelLine', 'lineStyle', 'color'], has);
-    if has then TyTryParseChartColor(txt, col);
+    { lineStyle over the item's colour (the visual's, by its draw type) and
+      zrender's width of 1 [R5-C: every key getLineStyle reads] }
     guide.Style.HasFill := False;
-    guide.Style.StrokeColor := col;
-    w := TyStReadNumber(nodes, ['labelLine', 'lineStyle', 'width'], has);
-    if not has or IsNan(w) then w := 1;
-    guide.Style.StrokeWidthLogical := w;
-    w := TyStReadNumber(nodes, ['labelLine', 'lineStyle', 'opacity'], has);
-    if has and not IsNan(w) then guide.Style.Alpha := w;
-    d := TyStFind(nodes, ['labelLine', 'lineStyle', 'type']);
-    if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'dashed') then
-      guide.Style.DashLogical := TyDashPattern(todDashed, nil, guide.Style.StrokeWidthLogical)
-    else if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'dotted') then
-      guide.Style.DashLogical := TyDashPattern(todDotted, nil, guide.Style.StrokeWidthLogical)
-    else if (d <> nil) and (d.JSONType = jtArray) then
-    begin
-      SetLength(guide.Style.DashLogical, d.Count);
-      for j := 0 to d.Count - 1 do
-        guide.Style.DashLogical[j] := TyGuideJsNumber(d.Items[j], NaN);
-    end;
+    guide.Style.StrokeColor := host.Caption.LgColor;
+    guide.Style.StrokeWidthLogical := 1;
+    GuideLineStyle(nodes, ['labelLine', 'lineStyle'], guide.Style);
     { a pointer at its datum, never a target }
     guide.Silent := True;
     guide.IsGuide := True;
@@ -1085,6 +1284,158 @@ begin
         pe^.Style.Alpha := AList.Ref(j)^.Style.Alpha;
         Break;
       end;
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.LbDragStart(const ATarget: TTyChartEventTarget;
+  AX, AY: Integer);
+var pe: PTyChartElement;
+begin
+  FLbDragOn := False;
+  if (FPaintList = nil) or (ATarget.Id <= 0) or (ATarget.Id > FPaintList.Count) then Exit;
+  pe := FPaintList.Ref(ATarget.Id - 1);
+  if not pe^.Caption.LmDraggable or (pe^.Anim.Role = carGuide) then Exit;
+  FLbDragOn := True;
+  FLbDragS := pe^.Datum.SeriesIndex;
+  FLbDragD := pe^.Datum.DataIndex;
+  FLbDragX := AX;
+  FLbDragY := AY;
+end;
+
+procedure TTyCustomAdvanceChart.LbDragMove(AX, AY: Integer);
+var
+  k, n: Integer;
+  dx, dy: Integer;
+begin
+  if not FLbDragOn then Exit;
+  dx := AX - FLbDragX;
+  dy := AY - FLbDragY;
+  FLbDragX := AX;
+  FLbDragY := AY;
+  { drift(dx, dy): the label's translation, whatever then draws it }
+  n := -1;
+  for k := 0 to High(FLbDrifts) do
+    if (FLbDrifts[k].S = FLbDragS) and (FLbDrifts[k].D = FLbDragD) then n := k;
+  if n < 0 then
+  begin
+    n := Length(FLbDrifts);
+    SetLength(FLbDrifts, n + 1);
+    FLbDrifts[n].S := FLbDragS;
+    FLbDrifts[n].D := FLbDragD;
+    FLbDrifts[n].DX := 0;
+    FLbDrifts[n].DY := 0;
+  end;
+  FLbDrifts[n].DX := FLbDrifts[n].DX + dx;
+  FLbDrifts[n].DY := FLbDrifts[n].DY + dy;
+  FLbDriftW := Width;
+  FLbDriftH := Height;
+  DropStatic;
+  InvalidateFrame;
+end;
+
+function TTyCustomAdvanceChart.LbDriftOf(ASeries, AData: Integer; out ADX,
+  ADY: Double): Boolean;
+var k: Integer;
+begin
+  ADX := 0;
+  ADY := 0;
+  Result := False;
+  { another size lays every label out again (resize's update) }
+  if (Length(FLbDrifts) > 0) and ((FLbDriftW <> Width) or (FLbDriftH <> Height)) then
+    FLbDrifts := nil;
+  for k := 0 to High(FLbDrifts) do
+    if (FLbDrifts[k].S = ASeries) and (FLbDrifts[k].D = AData) then
+    begin
+      ADX := FLbDrifts[k].DX;
+      ADY := FLbDrifts[k].DY;
+      Exit(True);
+    end;
+end;
+
+procedure TTyCustomAdvanceChart.GuideLineStyle(const ANodes: TTyStNodeArray;
+  const APath: array of string; var AStyle: TTyChartElementStyle);
+var
+  p: array of string;
+  i, j: Integer;
+  d, typ: TJSONData;
+  c: TTyChartColor;
+  v: Double;
+
+  function At(const AKey: string): TJSONData;
+  begin
+    p[High(p)] := AKey;
+    Result := TyStFind(ANodes, p);
+  end;
+
+  function NumOf(D: TJSONData; out V: Double): Boolean;
+  begin
+    Result := (D <> nil) and (D.JSONType = jtNumber);
+    if Result then V := D.AsFloat else V := NaN;
+    if Result and IsNan(V) then Result := False;
+  end;
+
+begin
+  SetLength(p, Length(APath) + 1);
+  for i := 0 to High(APath) do p[i] := APath[i];
+  d := At('color');
+  if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
+    AStyle.StrokeColor := c;
+  if NumOf(At('width'), v) then AStyle.StrokeWidthLogical := v;
+  if NumOf(At('opacity'), v) then AStyle.Alpha := v;
+  if NumOf(At('dashOffset'), v) then AStyle.DashOffsetLogical := v;
+  if NumOf(At('miterLimit'), v) then AStyle.MiterLimit := v;
+  d := At('cap');
+  if (d <> nil) and (d.JSONType = jtString) then AStyle.LineCap := TyCapOfWord(d.AsString);
+  d := At('join');
+  if (d <> nil) and (d.JSONType = jtString) then AStyle.LineJoin := TyJoinOfWord(d.AsString);
+  { type: normalizeLineDash against the width the line strokes at -- the
+    words as multiples of it (kept as the word, so a state's width carries
+    the dash along), a number or an array as lengths }
+  typ := At('type');
+  if typ = nil then Exit;
+  AStyle.DashWord := 0;
+  AStyle.DashLogical := nil;
+  if typ.JSONType = jtString then
+  begin
+    if typ.AsString = 'dashed' then AStyle.DashWord := 1
+    else if typ.AsString = 'dotted' then AStyle.DashWord := 2;
+    if AStyle.DashWord > 0 then
+      AStyle.DashLogical := TyDashOfWord(AStyle.DashWord, AStyle.StrokeWidthLogical);
+  end
+  else if (typ.JSONType = jtNumber) and (AStyle.StrokeWidthLogical > 0) then
+  begin
+    SetLength(AStyle.DashLogical, 1);
+    AStyle.DashLogical[0] := typ.AsFloat;
+  end
+  else if (typ.JSONType = jtArray) and (AStyle.StrokeWidthLogical > 0) then
+  begin
+    SetLength(AStyle.DashLogical, typ.Count);
+    for j := 0 to typ.Count - 1 do
+      AStyle.DashLogical[j] := TyGuideJsNumber(typ.Items[j], NaN);
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.StyleOwnGuides(ASlot: Integer; AList: TTyPaintList;
+  AFrom: Integer);
+var
+  k, si, raw: Integer;
+  pe: PTyChartElement;
+  st: TTyChartElementStyle;
+begin
+  if (AList = nil) or (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  si := FBindings[ASlot].SeriesIndex;
+  for k := AFrom to AList.Count - 1 do
+  begin
+    pe := AList.Ref(k);
+    if (pe^.Anim.Role <> carGuide) or (pe^.Datum.SeriesIndex <> si) then Continue;
+    raw := pe^.Datum.RawDataIndex;
+    if raw < 0 then raw := pe^.Datum.DataIndex;
+    { the item's colour and the theme's width under what the chain writes;
+      the opacity is the line's own (zrender's default 1 already stands, so
+      defaults() never hands it the item's) }
+    st := pe^.Style;
+    GuideLineStyle(StNodes(si, raw), ['labelLine', 'lineStyle'], st);
+    pe^.Style := st;
   end;
 end;
 

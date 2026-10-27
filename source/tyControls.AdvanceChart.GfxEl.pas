@@ -820,6 +820,10 @@ var v: Double;
 begin
   if Copy(AKey, 1, 6) = 'style.' then
   begin
+    { [R5-C] a text's rich is an object no animation value holds: a state's
+      flattened style (and the normal one saved from it) passes it as
+      nothing, which must not wipe the rich the style has }
+    if (AKey = 'style.rich') and (AValue.Kind = avkNull) then Exit;
     PutKey(Style, Copy(AKey, 7, MaxInt), TyGfxJsonOf(AValue));
     Exit;
   end;

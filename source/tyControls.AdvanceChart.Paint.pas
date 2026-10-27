@@ -197,6 +197,17 @@ type
     Color: TTyChartColor;
   end;
 
+const
+  { [R5-C] TTyChartElementStyle.LineCap / LineJoin }
+  cTyCapButt = 0;
+  cTyCapRound = 1;
+  cTyCapSquare = 2;
+  cTyJoinMiter = 0;
+  cTyJoinRound = 1;
+  cTyJoinBevel = 2;
+
+type
+
   { Which datum an element belongs to. Both -1 together means "none" -- one
     place decides that, so the two can never disagree. }
   TTyChartTargetKind = (ctkSeries, ctkMarkPoint, ctkMarkLine, ctkMarkArea,
@@ -537,6 +548,13 @@ type
     HasFixedPos: Boolean;
     FixedPos: Integer;
     FixedDist: Double;
+    { [R5-C] HOW UPSTREAM PLACES THE LABEL a fixed anchor stands for: 0 the
+      label's own x / y and style (a pie's, a sunburst's: free under a
+      labelLayout, its alignment in its style); 1 the host's textConfig
+      position (a sankey node's: attached, the alignment the position's,
+      none in the style); 2 the same with the style's verticalAlign set (a
+      radial tree's: textConfig with an origin, verticalAlign 'middle') }
+    FixedByConfig: Byte;
     { ... and what the host's box is made of: the path's half width at rest
       (its scale on the canvas) and the stroke's half margin around it --
       strokeNoScale divides the line width by the line scale, so the margin
@@ -681,16 +699,26 @@ type
     LmInkFill: TTyChartColor;
     LmInkHasFill, LmInkGradient, LmInkInside: Boolean;
     LmFree, LmOverlapHidden, LmEmphShow: Boolean;
+    { [R5-C] the layout's draggable: the label takes the pointer to be
+      dragged (zrender's Draggable), its cursor 'move' }
+    LmDraggable: Boolean;
     LmHasM: Boolean;
     LmM: TTyMat2D;
     { ==== WHAT A LABEL LINE READS [Batch 112] ====
       On a HOST, how updateLabelLinePoints measures it (AdvanceChart.LabelGuide):
-        LgKind    0 nothing, 1 a symbol, 2 a rect;
+        LgKind    0 nothing, 1 a symbol, 2 a rect, 3 a sector [R5-C];
         LgSymbol  the symbol's zrender type ('circle', 'path://...') and
                   LgKeepAspect (symbolKeepAspect);
         LgG       a symbol's width, height, symbolRotate (degrees), offset x
                   and y, and the point x and y; a rect's x, y, width and height
-                  (the signed layout) and its four corner radii.
+                  (the signed layout) and its four corner radii; a sector's
+                  cx, cy, r0, r, startAngle, endAngle, 1 clockwise, the
+                  number of corner radii given (0..4) and they [R5-C];
+        LgHasFrame / LgFrame  [R5-C] the host's parent group's computed
+                  transform where the host sits in one (a view's group, a
+                  node's group): the host's own shape is in that frame and
+                  its computed transform is the frame times its own (a
+                  symbol's point is then nought).
       On a LINE, LgSmooth: the smooth its normal state draws (its Cmds hold
       the curves; a state may straighten it). }
     LgKind: Integer;
@@ -699,7 +727,9 @@ type
     LgColor: TTyChartColor;
     LgSymbol: string;
     LgKeepAspect: Boolean;
-    LgG: array[0..7] of Double;
+    LgG: array[0..11] of Double;
+    LgHasFrame: Boolean;
+    LgFrame: TTyMat2D;
     LgSmooth: Double;
   end;
 
@@ -1197,6 +1227,11 @@ function TyChartElement(const AShape: TTyChartShape): TTyChartElement;
 procedure TyRtPoint(AX, AY, ARotationRad, AScale, ALX, ALY: Double;
   out AGX, AGY: Double);
 
+{ [R5-C] a lineCap / lineJoin word as zrender's canvas takes it (anything
+  else leaves the canvas' default: butt, miter) }
+function TyCapOfWord(const S: string): Byte;
+function TyJoinOfWord(const S: string): Byte;
+
 { The one colour a gradient degrades to where only one will do -- a legend
   swatch, a tooltip marker. Upstream's own rule: the FIRST stop, not an
   average and not a midpoint; transparent when it has no stops. }
@@ -1285,6 +1320,20 @@ begin
     if (FItems[idx].Style.StrokeWidthLogical > 0)
       and (FItems[idx].Style.StrokeColor <> 0) then Exit(idx);
   end;
+end;
+
+function TyCapOfWord(const S: string): Byte;
+begin
+  if S = 'round' then Result := cTyCapRound
+  else if S = 'square' then Result := cTyCapSquare
+  else Result := cTyCapButt;
+end;
+
+function TyJoinOfWord(const S: string): Byte;
+begin
+  if S = 'round' then Result := cTyJoinRound
+  else if S = 'bevel' then Result := cTyJoinBevel
+  else Result := cTyJoinMiter;
 end;
 
 function TyChartNoDatum: TTyChartDatumRef;

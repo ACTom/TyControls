@@ -1344,6 +1344,17 @@ type
     FGfxPaint: array of TTyChartElement;
     FGfxPaintEl: TTyGfxElArray;
     FGfxUnder: TTyPaintList;
+    { [R5-C] A LABEL THE LAYOUT MADE DRAGGABLE, dragged: its series and data
+      index and the last point; and every label's drift so far (device px),
+      kept until the next option or another size }
+    FLbDragOn: Boolean;
+    FLbDragS, FLbDragD: Integer;
+    FLbDragX, FLbDragY: Integer;
+    FLbDrifts: array of record
+      S, D: Integer;
+      DX, DY: Double;
+    end;
+    FLbDriftW, FLbDriftH: Integer;
     { a draggable element being dragged: its id and the last point }
     FGfxDragOn: Boolean;
     FGfxDragId: string;
@@ -1818,6 +1829,22 @@ type
     FAnim: TTyAnimation;
     FAnimSet: TTyChartAnimSet;
     FAnimBind: TTyChartAnimProxyArray;
+    { [R5-C] the hover ripples' symbols emphasised at the last sync,
+      'series:row' }
+    FRipHover: TTyStringArray;
+    { [R5-C] every end label's wording, by series: what a frame needs to
+      word it at a value (EndLabelTextOf) or lay its block out again
+      (EndLabelPiecesOf) }
+    FEndLbls: array of record
+      Series, Last, ValueDim: Integer;
+      Name: string;
+      Spec: TTyLabelSpec;
+      Ink: TTyChartColor;
+      AH: TTyTextAnchorH;
+      AV: TTyTextAnchorV;
+      Scale: Double;
+      Measurer: ITyTextMeasurer;
+    end;
     { THE STATE PROXIES by insertion index [Batch 94, AN3b]: the proxy each
       state element's states run on -- its role's, or one of the states'
       own; whether this build's states run through them; and an option
@@ -2043,6 +2070,14 @@ type
       a full update's previous list put back at once, then the element's
       list applied -- with a transition where upstream's would make one }
     procedure StAnimSync;
+    { [R5-C] AN effectScatter'S HOVER RIPPLES (EffectSymbol's
+      onHoverStateChange): a symbol that turned to emphasis since the last
+      sync starts its ripples now, one that turned back stops them; a ripple
+      is drawn while it runs }
+    procedure RippleHoverSync;
+    { [R5-C] a line's end label in its polyline's states: shown where the
+      state's endLabel.show (the normal one by default) says, its colour }
+    procedure StWriteEndLabel(AList: TTyPaintList; ASeries: Integer; AStates: TTyStNames);
     procedure StAnimEl(var AEl: TTyStElement; AListIdx, ASeries, ARaw: Integer;
       const AName: string; AKind: Integer; const ACfg: TTyAnimCfg;
       AHasCfg: Boolean);
@@ -3540,6 +3575,20 @@ type
       its own label.opacity up the item's chain, the global textStyle's, else
       its mark's style.opacity (setLabelStyle's defaultOpacity) [was: 1] }
     procedure OwnLabelOpacity(ASlot: Integer; AList: TTyPaintList; ALo, AHi: Integer);
+    { [R5-C] an end label's words at a value, by its named formatter, and a
+      rich one's block for words (the frames' callbacks) }
+    function EndLabelTextOf(ASeriesIndex: Integer; AValue: Double): string;
+    function EndLabelPiecesOf(ASeriesIndex: Integer; const AText: string): TTyRtPieceArray;
+    { [R5-C] A LABEL LINE'S lineStyle -- getLineStyle, the keys written:
+      color, width, opacity, type, dashOffset, cap, join, miterLimit -- read
+      down ANodes under APath (['labelLine', 'lineStyle'] or a state's) onto
+      AStyle; what is not written keeps AStyle's }
+    procedure GuideLineStyle(const ANodes: TTyStNodeArray;
+      const APath: array of string; var AStyle: TTyChartElementStyle);
+    { [R5-C] A PIE'S OR A FUNNEL'S OWN LINES, built by their label passes from
+      AFrom on: their normal labelLine.lineStyle (setLabelLineStyle over the
+      item's colour) }
+    procedure StyleOwnGuides(ASlot: Integer; AList: TTyPaintList; AFrom: Integer);
     function EmphasiseElement(AIndex: Integer; APPI: Integer;
       out AElement: TTyChartElement): Boolean;
     { Every value of one datum as one string, for a store that kept no raw
@@ -3938,6 +3987,13 @@ type
       draggable group) starts a drag, every move drifts it, a release ends it }
     procedure GfxDragStart(const ATarget: TTyChartEventTarget; AX, AY: Integer);
     procedure GfxDragMove(AX, AY: Integer);
+    { [R5-C] zrender's Draggable on a label a labelLayout made draggable:
+      pressed on it, every move drifts it -- a label the layout placed (an x
+      or a y, a pie's) moves and its line is routed again; one its host
+      places by its position stays where the position puts it }
+    procedure LbDragStart(const ATarget: TTyChartEventTarget; AX, AY: Integer);
+    procedure LbDragMove(AX, AY: Integer);
+    function LbDriftOf(ASeries, AData: Integer; out ADX, ADY: Double): Boolean;
     { ---- element states and the selection [Batch 88] ---- }
     function StKindOf(ASlot: Integer): TTyStKind;
     function StSeriesNode(ASeriesIndex: Integer): TJSONObject;

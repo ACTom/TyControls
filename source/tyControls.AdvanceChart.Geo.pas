@@ -307,6 +307,12 @@ type
     OffX, OffY: Double;
     HasRotate: Boolean;
     RotationRad: Double;
+    { [R5-C] the state's own position word (createTextConfig: a word on the
+      region's rect, its distance -- the state's, else 5), Ord of the label
+      unit's TTyLabelPosition }
+    HasPosition: Boolean;
+    Position: Integer;
+    Distance: Double;
   end;
 
   TTyGeoLabel = record
@@ -348,6 +354,16 @@ type
     RotationRad: Double;
     Silent: Boolean;
     States: array[TTyStName] of TTyGeoLabelState;
+    { [R5-C] THE TEXT'S BLOCK -- rich, a box, a size, a line height, an
+      overflow, a text shadow -- the label's keys down the region's chain
+      (JSON, '' none); its own stroke (textBorderColor / Width) for the one
+      run; the layout rect through the transform (a state's position word
+      places on it) }
+    BlockJson: string;
+    HasTextBorder: Boolean;
+    TextBorderColour: TTyChartColor;
+    TextBorderWidth: Double;
+    TrRect: TTyXYWH;
   end;
 
   { One compound path. Subs and Drawn are local -- before the roam -- in
@@ -865,6 +881,7 @@ uses
   tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Convert,
   tyControls.AdvanceChart.Calendar,
   tyControls.AdvanceChart.Labels, tyControls.AdvanceChart.OptionMerge,
+  tyControls.AdvanceChart.RichStyle, jsonparser,
   tyControls.AdvanceChart.Scale;
 
 const
@@ -4011,6 +4028,7 @@ begin
     Exit;
   end;
   if ADraw.HasTrans then tr := RectApply(P.Lbl.Layout, ADraw.Trans) else tr := P.Lbl.Layout;
+  P.Lbl.TrRect := tr;
   P.Lbl.AnchorX := tr.X + P.Lbl.PctX / 100 * tr.W;
   P.Lbl.AnchorY := tr.Y + P.Lbl.PctY / 100 * tr.H;
 end;
@@ -4078,6 +4096,7 @@ var
   s: TTyStName;
   st: TTyGeoLabelState;
   c: TTyChartColor;
+  known: Boolean;
 
   { [Batch 152] a map series' DataFormatMixin.getFormattedLabel(dataIndex,
     status): the state's own formatter up the item's chain (the normal
@@ -4184,6 +4203,46 @@ var
     else Result := AGeo.Chain(ARegion, [AState, 'label', AKey], tok);
   end;
 
+  { [R5-C] the normal label's keys down the chain into one object: what
+    the text block reads (the rich engine), and the text's own stroke }
+  procedure ReadBlock;
+  const
+    cKeys: array[0..24] of string = ('rich', 'backgroundColor', 'borderColor',
+      'borderWidth', 'borderRadius', 'borderType', 'borderDashOffset', 'padding',
+      'width', 'height', 'lineHeight', 'overflow', 'ellipsis', 'lineOverflow',
+      'textBorderColor', 'textBorderWidth', 'textBorderType', 'textShadowColor',
+      'textShadowBlur', 'textShadowOffsetX', 'textShadowOffsetY', 'align',
+      'verticalAlign', 'richInheritPlainLabel', 'shadowColor');
+  var
+    o: TJSONObject;
+    k: Integer;
+    x: TJSONData;
+    t: TTyGeoToken;
+  begin
+    o := TJSONObject.Create;
+    try
+      for k := 0 to High(cKeys) do
+      begin
+        x := AGeo.Chain(ARegion, ['label', cKeys[k]], t);
+        if x <> nil then o.Add(cKeys[k], x.Clone);
+      end;
+      if TyRtNodeWantsBlock(o) then Result.BlockJson := o.AsJSON;
+      x := o.Find('textBorderColor');
+      if (x <> nil) and (x.JSONType = jtString)
+        and TyTryParseChartColor(x.AsString, Result.TextBorderColour) then
+      begin
+        x := o.Find('textBorderWidth');
+        if (x <> nil) and (x.JSONType = jtNumber) and (x.AsFloat > 0) then
+        begin
+          Result.HasTextBorder := True;
+          Result.TextBorderWidth := x.AsFloat;
+        end;
+      end;
+    finally
+      o.Free;
+    end;
+  end;
+
 begin
   Result := Default(TTyGeoLabel);
   isMap := (AGeo.Kind = gkMapSeries) and AGeo.Data.Active and (AGroup >= 0)
@@ -4252,6 +4311,7 @@ begin
     Result.RotationRad := TyJsonToNumber(d) * cJsPi / 180;
   end;
   Result.Silent := Truthy(Get('', 'silent'));
+  ReadBlock;
   for s := Low(TTyStName) to High(TTyStName) do
   begin
     st := Default(TTyGeoLabelState);
@@ -4331,6 +4391,16 @@ begin
     begin
       st.HasRotate := True;
       st.RotationRad := TyJsonToNumber(d) * cJsPi / 180;
+    end;
+    { [R5-C] createTextConfig: a state's position word, on the region's rect }
+    d := Get(cStateWord[s], 'position');
+    if (d <> nil) and (d.JSONType = jtString) then
+    begin
+      st.Position := Ord(TyLabelPositionOf(d.AsString, known));
+      st.HasPosition := known;
+      d := Get(cStateWord[s], 'distance');
+      if (d <> nil) and (d.JSONType = jtNumber) then st.Distance := d.AsFloat
+      else st.Distance := 5;
     end;
     Result.States[s] := st;
   end;
@@ -6263,6 +6333,16 @@ var
   dashLogical: TTyDoubleArray;
   txt, fam: string;
   fsz, fwt: Integer;
+  { [R5-C] a state's position word; a text block }
+  hasPosWord: Boolean;
+  posWord: Integer;
+  posDist, lblX, lblY, tb: Double;
+  lah: TTyTextAnchorH;
+  lav: TTyTextAnchorV;
+  pieces: TTyRtPieceArray;
+  block: TTyRtBlockStyle;
+  bj: TJSONData;
+  ink: TTyChartColor;
 
   function Tx(AX, AY: Double): TTyGeoPt;
   begin
@@ -6463,6 +6543,9 @@ begin
         offX := 0;
         offY := 0;
         rot := 0;
+        hasPosWord := False;
+        posWord := 0;
+        posDist := 0;
         hasOff := p.Lbl.HasOffset;
         if p.Lbl.HasOffset then
         begin
@@ -6484,6 +6567,27 @@ begin
             offY := p.Lbl.States[s].OffY;
           end;
           if p.Lbl.States[s].HasRotate then rot := p.Lbl.States[s].RotationRad;
+          if p.Lbl.States[s].HasPosition then
+          begin
+            hasPosWord := True;
+            posWord := p.Lbl.States[s].Position;
+            posDist := p.Lbl.States[s].Distance;
+          end;
+        end;
+        { [R5-C] A STATE'S POSITION WORD: calculateTextPosition on the
+          region's rect through the transform, at the state's distance --
+          the place; the alignment stays the style's centre / middle (a
+          style's align wins over the one the position implies) }
+        lah := tahCentre;
+        lav := tavMiddle;
+        lblX := p.Lbl.AnchorX;
+        lblY := p.Lbl.AnchorY;
+        if hasPosWord and not p.Lbl.Inside then
+        begin
+          TyLabelAnchorXYWH(p.Lbl.TrRect, TTyLabelPosition(posWord), posDist * scale,
+            0, 0, lblX, lblY, lah, lav);
+          lah := tahCentre;
+          lav := tavMiddle;
         end;
         { updateInnerText: innerTransformable at the position plus the
           offset, its origin minus the offset, turned by the rotation --
@@ -6493,15 +6597,15 @@ begin
         offY := offY * scale;
         if hasOff then
         begin
-          ax := p.Lbl.AnchorX + offX;
-          ay := p.Lbl.AnchorY + offY;
+          ax := lblX + offX;
+          ay := lblY + offY;
           ox := -offX;
           oy := -offY;
         end
         else
         begin
-          ax := p.Lbl.AnchorX;
-          ay := p.Lbl.AnchorY;
+          ax := lblX;
+          ay := lblY;
           ox := 0;
           oy := 0;
         end;
@@ -6527,10 +6631,49 @@ begin
         ay := m5 + (oy + ay);
         w := 0;
         h := 0;
+        pieces := nil;
         if txt <> '' then AMeasurer.MeasureLine(txt, fam, fsz, fwt, w, h);
-        box := TyAnchorBox(ax, ay, w, h, tahCentre, tavMiddle);
+        if TyStHasColour(c, stkFill) then ink := c.Color[stkFill] else ink := 0;
+        { [R5-C] A TEXT BLOCK (rich, a box, a size...): the rich engine's
+          pieces about the anchor, the region's ink as the default }
+        if (p.Lbl.BlockJson <> '') and (txt <> '') then
+        begin
+          bj := GetJSON(p.Lbl.BlockJson);
+          try
+            block := TyRtResolve([TJSONObject(bj)], Default(TTyRtGlobal), TyRtResolveOpt(False));
+          finally
+            bj.Free;
+          end;
+          TyRtFinish(block, fam, fsz, fwt, Default(TTyRtGlobal), False, 0);
+          pieces := TyRtLay(txt, block, TyRtDefaultOf(ink <> 0, ink, False, 0, False,
+            lah, lav), scale, AMeasurer);
+        end;
+        if Length(pieces) > 0 then
+          box := TyRtDeviceBox(pieces, ax, ay, rot, scale)
+        else
+        begin
+          box := TyAnchorBox(ax, ay, w, h, lah, lav);
+          { the text's own stroke is in its rect (a TSpan's bounding rect
+            grows by its line width) }
+          if p.Lbl.HasTextBorder then
+          begin
+            tb := p.Lbl.TextBorderWidth * scale;
+            box := TyRectF(box.Left - tb / 2, box.Top - tb / 2, box.Right + tb / 2,
+              box.Bottom + tb / 2);
+          end;
+        end;
         el := TyChartElement(TyShapeRect(box));
         el.Caption.Text := txt;
+        if Length(pieces) > 0 then
+        begin
+          el.Caption.RtPieces := pieces;
+          el.Caption.RtScale := scale;
+        end
+        else if p.Lbl.HasTextBorder then
+        begin
+          el.Caption.StrokeColour := p.Lbl.TextBorderColour;
+          el.Caption.StrokeWidthLogical := p.Lbl.TextBorderWidth;
+        end;
         el.Caption.FontName := fam;
         el.Caption.FontSizeLogical := fsz;
         el.Caption.FontWeight := fwt;
@@ -6538,8 +6681,8 @@ begin
         else el.Caption.Colour := 0;
         el.Caption.X := ax;
         el.Caption.Y := ay;
-        el.Caption.AnchorH := tahCentre;
-        el.Caption.AnchorV := tavMiddle;
+        el.Caption.AnchorH := lah;
+        el.Caption.AnchorV := lav;
         el.Caption.RotationRad := rot;
         el.Caption.Truncate := False;
         el.Style.Alpha := c.Num[stkOpacity];

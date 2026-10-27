@@ -2499,12 +2499,16 @@ begin
       end;
     end;
     if FSt[s].Run.Host.Exists and (FSt[s].Run.Host.States <> []) then
+    begin
       for k := 0 to High(FSt[s].RunIdx) do
       begin
         el := AList.Element(FSt[s].RunIdx[k]);
         StWriteHost(el, FSt[s].Run.Host, FStProxied);
         AList.SetElement(FSt[s].RunIdx[k], el);
       end;
+      { [R5-C] the polyline's text, its end label, in the polyline's state }
+      StWriteEndLabel(AList, s, FSt[s].Run.Host.States);
+    end;
     if FSt[s].Area.Host.Exists and (FSt[s].Area.Host.States <> []) then
       for k := 0 to High(FSt[s].AreaIdx) do
       begin
@@ -3298,6 +3302,8 @@ begin
   if not FStProxied or (FPaintList = nil) then Exit;
   if FAnim = nil then FAnim := NewAnimDriver;
   if FAnimSet = nil then FAnimSet := TTyChartAnimSet.Create(FAnim);
+  FAnimSet.OnEndLabelText := @EndLabelTextOf;
+  FAnimSet.OnEndLabelPieces := @EndLabelPiecesOf;
   SetLength(FAnimStBind, FPaintList.Count);
   for k := 0 to High(FAnimStBind) do FAnimStBind[k] := nil;
   clips := FAnim.ClipCount;
@@ -3406,6 +3412,7 @@ begin
         FAnimStBind[FSt[s].AreaIdx[k]] := FAnimStBind[FSt[s].AreaIdx[0]];
     end;
   end;
+  RippleHoverSync;
   { A TRANSITION BEGAN: the series go to the dynamic layer until it ends
     (an armed option's flush decides that itself) }
   if (FAnim.ClipCount > clips) and not FAnimFlush then
@@ -3414,6 +3421,104 @@ begin
     FAnimContinuous := AnimLoopOnly;
     AnimArmTimer;
   end;
+end;
+
+procedure TTyCustomAdvanceChart.StWriteEndLabel(AList: TTyPaintList; ASeries: Integer;
+  AStates: TTyStNames);
+var
+  k: Integer;
+  pe: PTyChartElement;
+  node, st, en: TJSONObject;
+  d: TJSONData;
+  shown, has: Boolean;
+  stName: string;
+  c: TTyChartColor;
+begin
+  node := StSeriesNode(ASeries);
+  if node = nil then Exit;
+  { the state that wins: emphasis over blur over select (the order the
+    states go on) }
+  if stnEmphasis in AStates then stName := 'emphasis'
+  else if stnBlur in AStates then stName := 'blur'
+  else if stnSelect in AStates then stName := 'select'
+  else Exit;
+  en := nil;
+  d := node.Find('endLabel');
+  if d is TJSONObject then en := TJSONObject(d);
+  shown := (en <> nil) and TyOptTruthy(en.Find('show'));
+  st := nil;
+  d := node.Find(stName);
+  if d is TJSONObject then
+  begin
+    d := TJSONObject(d).Find('endLabel');
+    if d is TJSONObject then st := TJSONObject(d);
+  end;
+  { setLabelStyle: a state's show, else the normal one }
+  has := (st <> nil) and (st.Find('show') <> nil) and (st.Find('show').JSONType <> jtNull);
+  if has then shown := TyOptTruthy(st.Find('show'));
+  for k := 0 to AList.Count - 1 do
+  begin
+    pe := AList.Ref(k);
+    if (pe^.Anim.Role <> carEndLabel) or (pe^.Anim.Series <> ASeries) then Continue;
+    pe^.Ignore := not shown;
+    if st <> nil then
+    begin
+      d := st.Find('color');
+      if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
+        pe^.Caption.Colour := c;
+    end;
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.RippleHoverSync;
+var
+  k, j: Integer;
+  pe: PTyChartElement;
+  item: PTyStItem;
+  key: string;
+  seen: TTyStringArray;
+  emph, was, listed: Boolean;
+  p: TTyChartAnimProxy;
+begin
+  if (FPaintList = nil) or (FAnimSet = nil) then Exit;
+  seen := nil;
+  for k := 0 to FPaintList.Count - 1 do
+  begin
+    pe := FPaintList.Ref(k);
+    if (pe^.Anim.Role <> carRipple) or (pe^.Anim.G[10] = 0) then Continue;
+    item := StItemAt(pe^.Anim.Series, pe^.Anim.Index);
+    emph := (item <> nil) and (stnEmphasis in item^.Host.States);
+    key := IntToStr(pe^.Anim.Series) + ':' + IntToStr(pe^.Anim.Index);
+    was := False;
+    for j := 0 to High(FRipHover) do
+      if FRipHover[j] = key then was := True;
+    if emph then
+    begin
+      listed := False;
+      for j := 0 to High(seen) do
+        if seen[j] = key then listed := True;
+      if not listed then
+      begin
+        SetLength(seen, Length(seen) + 1);
+        seen[High(seen)] := key;
+      end;
+    end;
+    { the turn starts or stops it; staying as it was keeps what runs (an
+      update while emphasised has stopped it for good) }
+    if emph and not was then p := FAnimSet.StartHoverRipple(pe^)
+    else if (not emph) and was then
+    begin
+      if k <= High(FAnimBind) then FAnimBind[k] := nil;
+      FAnimSet.StopHoverRipple(pe^);
+      p := nil;
+    end
+    else p := FAnimSet.HoverRippleOf(pe^);
+    pe^.Ignore := p = nil;
+    if (p <> nil) and (Length(FAnimBind) < FPaintList.Count) then
+      SetLength(FAnimBind, FPaintList.Count);
+    if k <= High(FAnimBind) then FAnimBind[k] := p;
+  end;
+  FRipHover := seen;
 end;
 
 function TTyCustomAdvanceChart.StPeerAt(ASeriesIndex, AInnerRow: Integer): PTyStItem;
