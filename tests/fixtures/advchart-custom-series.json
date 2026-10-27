@@ -6482,6 +6482,20 @@
        "z2": 0
       },
       {
+       "key": "s0:0/1",
+       "states": [],
+       "fill": [
+        68,
+        68,
+        68,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": null,
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
        "key": "s0:0/2",
        "states": [],
        "fill": [
@@ -6510,6 +6524,20 @@
        "z2": 0
       },
       {
+       "key": "s0:1/1",
+       "states": [],
+       "fill": [
+        68,
+        68,
+        68,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": null,
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
        "key": "s0:1/2",
        "states": [],
        "fill": [
@@ -6534,6 +6562,20 @@
        ],
        "stroke": null,
        "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s0:2/1",
+       "states": [],
+       "fill": [
+        68,
+        68,
+        68,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": null,
        "opacity": "3ff0000000000000",
        "z2": 0
       },

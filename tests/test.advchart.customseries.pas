@@ -133,6 +133,7 @@ type
     function KeyOf(AEl: TTyGfxEl): string;
     function Keyed: TStringList;
     function PathsOfItem(ASeries, ARaw: Integer): TTyIntegerArray;
+    procedure CheckTextInk(const AKey: string; const AEl: TTyChartElement; AWant: TJSONObject);
     procedure CheckPieces(const AWhat: string; const APieces: TTyRtPieceArray;
       AWant: TJSONArray);
     procedure CheckTextStyle(const AWhat: string; AEl: TTyGfxEl; AWant: TJSONObject);
@@ -1363,19 +1364,30 @@ end;
 { the paint list entries of an item's paths, in list order }
 function TCuOracleBase.PathsOfItem(ASeries, ARaw: Integer): TTyIntegerArray;
 var
-  k: Integer;
+  k, i, host: Integer;
   e: TTyChartElement;
   gel: TTyGfxEl;
 begin
   Result := nil;
+  host := -1;
   for k := 0 to FChart.List.Count - 1 do
   begin
     e := FChart.List.Element(k);
     gel := FChart.CustomPaintSource(k);
-    if (gel = nil) or not gel.StatePath or (gel.Host <> nil) then Continue;
+    if (gel = nil) or (gel.Host <> nil) then Continue;
+    { [spec 242] a text and an image are parts too }
+    if not gel.StatePath and not (gel.Kind in [gkText, gkImage]) then Continue;
     if (e.Datum.SeriesIndex <> ASeries) or (e.Datum.RawDataIndex <> ARaw) then Continue;
+    if (host < 0) and gel.StatePath then host := Length(Result);
     SetLength(Result, Length(Result) + 1);
     Result[High(Result)] := k;
+  end;
+  { the first path hosts, the rest are parts in their order }
+  if host > 0 then
+  begin
+    k := Result[host];
+    for i := host downto 1 do Result[i] := Result[i - 1];
+    Result[0] := k;
   end;
 end;
 
@@ -1728,6 +1740,34 @@ begin
   end;
 end;
 
+{ [spec 242] a text's block ink: the first piece no rich token inks, its
+  fill (none where it is the default's) and stroke against the style's }
+procedure TCuOracleBase.CheckTextInk(const AKey: string; const AEl: TTyChartElement;
+  AWant: TJSONObject);
+var
+  i: Integer;
+  p: TTyRtPiece;
+  found: Boolean;
+begin
+  found := False;
+  for i := 0 to High(AEl.Caption.RtPieces) do
+    if (AEl.Caption.RtPieces[i].Kind = rpkText) and not AEl.Caption.RtPieces[i].TokenFill then
+    begin
+      p := AEl.Caption.RtPieces[i];
+      found := True;
+      Break;
+    end;
+  if not found then
+  begin
+    Bad(AKey + ': no block text piece');
+    Exit;
+  end;
+  SameRgba(AKey + ' fill', p.HasFill and not p.DefaultFill, p.Fill, AWant.Find('fill'));
+  SameRgba(AKey + ' stroke', p.HasStroke and not p.DefaultStroke, p.Stroke, AWant.Find('stroke'));
+  if not IsNull(AWant.Find('stroke')) then
+    Same(AKey + ' lineWidth', p.LineWidth, AWant.Find('lineWidth'));
+end;
+
 procedure TCuOracleBase.CheckSt(AWant: TJSONArray);
 var
   i, k, s, raw, part, idx, n, inside: Integer;
@@ -1800,11 +1840,21 @@ begin
         end;
       SameStr(key + ' states', names, StringReplace(StringReplace(w.Arrays['states'].AsJSON,
         '"', '', [rfReplaceAll]), '[', '', [rfReplaceAll]).Replace(']', '').Replace(' ', ''));
-      SameRgba(key + ' fill', e.Style.HasFill, e.Style.FillColor, w.Find('fill'));
-      SameRgba(key + ' stroke', (e.Style.StrokeWidthLogical > 0) and (e.Style.StrokeColor <> 0),
-        e.Style.StrokeColor, w.Find('stroke'));
-      if not IsNull(w.Find('stroke')) then
-        Same(key + ' lineWidth', e.Style.StrokeWidthLogical, w.Find('lineWidth'));
+      if gel.Kind = gkText then
+        CheckTextInk(key, e, w)
+      else if gel.Kind = gkImage then
+      begin
+        SameBool(key + ' no fill', IsNull(w.Find('fill')), True);
+        SameBool(key + ' no stroke', IsNull(w.Find('stroke')), True);
+      end
+      else
+      begin
+        SameRgba(key + ' fill', e.Style.HasFill, e.Style.FillColor, w.Find('fill'));
+        SameRgba(key + ' stroke', (e.Style.StrokeWidthLogical > 0) and (e.Style.StrokeColor <> 0),
+          e.Style.StrokeColor, w.Find('stroke'));
+        if not IsNull(w.Find('stroke')) then
+          Same(key + ' lineWidth', e.Style.StrokeWidthLogical, w.Find('lineWidth'));
+      end;
       Same(key + ' opacity', e.Style.Alpha, w.Find('opacity'));
       SameInt(key + ' z2', e.Z2, w.Integers['z2']);
     end;

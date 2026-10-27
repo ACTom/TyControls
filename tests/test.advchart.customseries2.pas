@@ -57,6 +57,7 @@ type
     function VmMeta(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
     function DurRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
     function ClipRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+    function TextRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
     procedure DurGrow(AApi: TTyGfxDuringApi);
     procedure DurArc(AApi: TTyGfxDuringApi);
     function EnterRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
@@ -289,6 +290,36 @@ begin
     st.Free;
     sz.Free;
   end;
+end;
+
+{ RENDER.textRI [spec 242] }
+const
+  cTextRIImg = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFUlEQVR42mP4z8AAQv8ZGBYw/AcBAEcvCZiaeHRuAAAAAElFTkSuQmCC';
+
+function TCu2Mirror.TextRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+var
+  p: TTyDoubleArray;
+  x, y: Double;
+begin
+  Open('textRI', AParams);
+  x := Value(AApi, 0);
+  y := Value(AApi, 1);
+  p := Coord(AApi, x, y);
+  Result := Done(TJSONObject.Create(['type', 'group', 'x', Num(p[0]), 'y', Num(p[1]), 'focus', 'self',
+    'children', TJSONArray.Create([
+      TJSONObject.Create(['type', 'rect',
+        'shape', TJSONObject.Create(['x', -30, 'y', -15, 'width', 60, 'height', 30]),
+        'style', TJSONObject.Create(['fill', Visual(AApi, 'color')])]),
+      TJSONObject.Create(['type', 'text',
+        'style', TJSONObject.Create(['text', '{a|rich} plain', 'x', -30, 'y', 18, 'fill', '#333',
+          'rich', TJSONObject.Create(['a', TJSONObject.Create(['fill', '#00f'])])]),
+        'emphasis', TJSONObject.Create(['style', TJSONObject.Create(['fill', '#f00', 'stroke', '#0f0', 'lineWidth', 1])]),
+        'blur', TJSONObject.Create(['style', TJSONObject.Create(['opacity', 0.5])])]),
+      TJSONObject.Create(['type', 'text',
+        'style', TJSONObject.Create(['text', 'no style', 'x', -30, 'y', 34])]),
+      TJSONObject.Create(['type', 'image',
+        'style', TJSONObject.Create(['image', cTextRIImg, 'x', 32, 'y', -15, 'width', 20, 'height', 20]),
+        'emphasis', TJSONObject.Create(['style', TJSONObject.Create(['opacity', 0.3])])])])]));
 end;
 
 { RENDER.clipRI [spec 242] }
@@ -577,6 +608,7 @@ begin
   TyChartRegisterRenderItem('vmMeta', @m.VmMeta);
   TyChartRegisterRenderItem('durRI', @m.DurRI);
   TyChartRegisterRenderItem('clipRI', @m.ClipRI);
+  TyChartRegisterRenderItem('textRI', @m.TextRI);
   TyChartRegisterDuring('durc:grow', @m.DurGrow);
   TyChartRegisterDuring('durc:arc', @m.DurArc);
   TyChartRegisterRenderItem('enterRI', @m.EnterRI);

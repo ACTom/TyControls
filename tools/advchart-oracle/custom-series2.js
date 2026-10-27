@@ -262,6 +262,8 @@ const DURC = {
   grow: api => { api.setShape('width', 10 + api.getTransform('x') / 20); },
   arc: api => { const p = api.getExtra('p'); api.setShape('r', 3 + 9 * p); api.setStyle('opacity', p); },
 };
+// a 2 x 2 PNG, four colours
+const IMG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFUlEQVR42mP4z8AAQv8ZGBYw/AcBAEcvCZiaeHRuAAAAAElFTkSuQmCC';
 const RENDER = {
   // a sector per item on a polar: the radius axis' value, the angle's
   // category band (api.size in radians), barLayout (undefined off a cartesian)
@@ -344,6 +346,19 @@ const RENDER = {
     }
     return { type: 'circle', x: p[0], y: p[1], extra: { p: 1, enterFrom: { p: 0 } }, during: DURC.arc,
       shape: { cx: 0, cy: 0, r: 3 }, style: { fill: '#91cc75' } };
+  },
+  // [spec 242] a text's and an image's states: the text's emphasis fill
+  // and stroke over its block (a rich token's own fill stays), its blur
+  // opacity; a text with no style of its own; an image's emphasis opacity;
+  // z2 lifted by 1 on each
+  textRI(params, api) {
+    const p = api.coord([api.value(0), api.value(1)]);
+    return { type: 'group', x: p[0], y: p[1], focus: 'self', children: [
+      { type: 'rect', shape: { x: -30, y: -15, width: 60, height: 30 }, style: { fill: api.visual('color') } },
+      { type: 'text', style: { text: '{a|rich} plain', x: -30, y: 18, fill: '#333', rich: { a: { fill: '#00f' } } },
+        emphasis: { style: { fill: '#f00', stroke: '#0f0', lineWidth: 1 } }, blur: { style: { opacity: 0.5 } } },
+      { type: 'text', style: { text: 'no style', x: -30, y: 34 } },
+      { type: 'image', style: { image: IMG, x: 32, y: -15, width: 20, height: 20 }, emphasis: { style: { opacity: 0.3 } } }] };
   },
   // [spec 242] clipPath on a rect (a circle whose r is the third value) and
   // on a group (a rect, or false when the third value is 1: removed)
@@ -574,6 +589,11 @@ function elRec(el, key) {
     r.style = textStyleRec(el.style);
     r.pieces = piecesOf(el);
   }
+  // [spec 242] an image: its box and opacity (no shape, no path)
+  else if (el.type === 'image') {
+    const s = el.style;
+    r.image = { x: hexN(s.x), y: hexN(s.y), width: hexN(s.width), height: hexN(s.height), opacity: hex(opac(s)) };
+  }
   else if (!el.isGroup) {
     const s = el.style;
     r.shape = shapeRec(el.shape);
@@ -663,8 +683,10 @@ function readClips(chart) {
     return { s: s.seriesIndex, rect: cp ? [cp.shape.x, cp.shape.y, cp.shape.width, cp.shape.height].map(hex) : null };
   });
 }
+// [spec 242] a text too: updateElOnState gives every displayable its states
+// (a label, a textContent, is its host's and stays out)
 function readSt(chart) {
-  return keyedTree(chart).filter(q => !q.el.isGroup && q.el.type !== 'text').map(q => {
+  return keyedTree(chart).filter(q => !q.el.isGroup && !/#label$/.test(q.key)).map(q => {
     const s = q.el.style;
     return { key: q.key, states: (q.el.currentStates || []).slice(), fill: colourOf(s.fill), stroke: colourOf(s.stroke),
       lineWidth: hexN(s.lineWidth), opacity: hex(opac(s)), z2: q.el.z2 };
@@ -911,6 +933,10 @@ add('hover', 'clippath', "clipPath on custom elements: a rect cut to a circle (t
     series: [{ type: 'custom', renderItem: '@clipRI', data: [[3, 5, 0], [7, 5, 0]] }] },
   { steps: [{ move: [240, 200] }, { move: [210, 200] }, { move: [430, 195] }, { move: [395, 195] }, { leave: true },
     { merge: { series: [{ data: [[3, 5, 1], [7, 5, 1]] }] } }, { move: [232, 200] }, { move: [430, 195] }, { leave: true }] });
+add('hover', 'text-states', "a custom text's and image's states: hovering an item's rect puts its texts and its image into emphasis (the text's own emphasis fill and stroke on its block, a rich token's fill kept; the image's emphasis opacity; z2 + 1 on each) and blurs the other item's (its text's blur opacity 0.5, the others a tenth)",
+  { grid: { left: 60, right: 40, top: 60, bottom: 60 }, xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
+    series: [{ type: 'custom', renderItem: '@textRI', data: [[3, 5], [7, 5]] }] },
+  { steps: [{ move: [210, 200] }, { leave: true }, { move: [410, 200] }, { leave: true }] });
 
 // ---------------------------------------------------------------------------
 // one case

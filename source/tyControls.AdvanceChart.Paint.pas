@@ -373,6 +373,9 @@ type
       re-inks, and what a free text whose ink is the skin's takes at paint
       time. [Batch 86] }
     DefaultFill, DefaultStroke: Boolean;
+    { [spec 242] a rich token's fill or stroke of its own: a state's style
+      on the block (a custom text's emphasis fill) leaves it }
+    TokenFill, TokenStroke: Boolean;
   end;
   TTyRtPieceArray = array of TTyRtPiece;
 

@@ -2732,7 +2732,9 @@ var
     info := nil;
     if (gel <> nil) and (gel.Custom is TTyCustomElInfo) then info := TTyCustomElInfo(gel.Custom);
     AEl.Exists := True;
-    AEl.IsPath := True;
+    { [spec 242] a text or an image is no Path: no colour lift }
+    AEl.IsPath := (gel = nil) or gel.StatePath;
+    AEl.GfxText := not AEl.IsPath;
     AEl.Proxy := True;
     AEl.LiftOne := True;
     for n := Low(TTyStName) to High(TTyStName) do

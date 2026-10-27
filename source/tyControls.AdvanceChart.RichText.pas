@@ -769,6 +769,8 @@ var
     p.W := tk.ContentWidth;
     p.H := tk.ContentHeight;
     useDefaultFill := False;
+    p.TokenFill := found and ts.HasFill;
+    p.TokenStroke := found and ts.HasStroke;
     if found and ts.HasFill then
     begin
       p.HasFill := not ts.FillNone;

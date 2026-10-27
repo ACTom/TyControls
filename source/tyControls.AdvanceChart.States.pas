@@ -87,6 +87,10 @@ type
     { [R2-I1] a label line (a radar point label's, among the item's parts):
       it writes and animates as one }
     IsGuide: Boolean;
+    { [spec 242] a custom series' text or image element (no Path: no
+      colour lift): its z2, its opacity, and a text's ink from a state's
+      style }
+    GfxText: Boolean;
     { echarts' default state proxy is installed: emphasis not disabled }
     Proxy: Boolean;
     { an element a custom series made: its z2EmphasisLift and z2SelectLift
