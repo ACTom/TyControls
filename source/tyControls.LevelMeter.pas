@@ -412,7 +412,7 @@ begin
     end;
 
     if FShowValue then
-      P.DrawText(R, Format(FValueFormat, [FValue]), Font.Name, 10, 700,
+      P.DrawText(R, TyFormatValue(FValueFormat, FValue), Font.Name, 10, 700,
         trackS.TextColor, taCenter, tlCenter, False);
 
     P.EndPaint;
