@@ -1187,6 +1187,12 @@ begin
           Result.Params.TargetType := mxInfo.Target;
           if mxInfo.HasName then Result.Params.Name := mxInfo.Name;
           if mxInfo.HasText then Result.Params.ValueText := mxInfo.Value;
+          { [spec 244] a number stays a number }
+          if mxInfo.HasNum then
+          begin
+            SetLength(Result.Params.Values, 1);
+            Result.Params.Values[0] := mxInfo.Num;
+          end;
           SetLength(Result.Params.Coord, 2);
           Result.Params.Coord[0] := mxInfo.Loc[0];
           Result.Params.Coord[1] := mxInfo.Loc[1];

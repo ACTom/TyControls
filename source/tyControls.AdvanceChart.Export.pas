@@ -69,7 +69,10 @@ type
     { [Batch 145] }
     cvMatrix,
     { [R5-G] the grid's own view: its background rect (`grid.show`) }
-    cvGrid);
+    cvGrid,
+    { [spec 244] the geo component's view (GeoView): a map series' own
+      geo is its series view's, and `'series'` hides nothing }
+    cvGeo);
   TTyChartViews = set of TTyChartView;
 
   TTyExportImageType = (eitPng, eitJpeg, eitWebp);
@@ -157,7 +160,7 @@ const
   ViewNames: array[TTyChartView] of string = ('title', 'legend', 'xAxis',
     'yAxis', 'visualMap', 'dataZoom', 'markPoint', 'markLine', 'markArea',
     'radar', 'calendar', 'angleAxis', 'radiusAxis', 'singleAxis', 'series', 'toolbox', 'brush',
-    'timeline', 'parallelAxis', 'matrix', 'grid');
+    'timeline', 'parallelAxis', 'matrix', 'grid', 'geo');
 
 function TyChartViewOf(const AMainType: string; out AView: TTyChartView): Boolean;
 var v: TTyChartView;

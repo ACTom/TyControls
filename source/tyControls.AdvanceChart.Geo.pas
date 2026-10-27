@@ -3427,7 +3427,8 @@ begin
   if AOpt <> nil then
   begin
     { echartsStyle: every region of the name merges into the one entry, the
-      first one's keys winning -- so the first region's style }
+      first one's keys winning -- the first region's style here, the later
+      ones' further keys by TTyGeo.RegionOpt [spec 244] }
     for i := 0 to High(AGeo.Source.Regions) do
       if AGeo.Source.Regions[i].Name = nm then
       begin
@@ -4657,6 +4658,15 @@ begin
   if entry <> nil then Result := TJSONObject(entry.Clone)
   else Result := TJSONObject.Create(['name', nm]);
   if style <> nil then MergeAbsent(Result, style);
+  { [spec 244] AN AUTHOR'S ENTRY TAKES EVERY REGION OF ITS NAME: getFilledRegions
+    merges each region's echartsStyle into that one object in turn
+    (zrUtil.merge, not overwriting) -- the first region's keys win, a later
+    region adds the keys the earlier ones did not write }
+  if entry <> nil then
+    for i := 0 to High(FSource.Regions) do
+      if (FSource.Regions[i].Name = nm)
+        and (Own(FSource.Regions[i].Properties, 'echartsStyle') is TJSONObject) then
+        MergeAbsent(Result, TJSONObject(Own(FSource.Regions[i].Properties, 'echartsStyle')));
   n := Length(FOptNames);
   SetLength(FOptNames, n + 1);
   SetLength(FOpts, n + 1);
@@ -6083,7 +6093,10 @@ var
           SetLength(pts, 4);
           for k := 0 to 3 do pts[k] := q[k];
           el := TyChartElement(TyShapePolygon(pts));
-          if not nd.Invisible and (Copy(nd.St.Image, 1, 5) = 'data:') and (nd.St.IW > 0) and (nd.St.IH > 0) then
+          { [spec 244] ANY SOURCE, not only a data: URI: the chart's images
+            are its resolver's (image://, OnResolveImage), ready at once --
+            upstream's picture once the image has loaded [was: data: only] }
+          if not nd.Invisible and (nd.St.Image <> '') and (nd.St.IW > 0) and (nd.St.IH > 0) then
           begin
             el.Style.HasFill := True;
             el.Style.FillColor := 0;

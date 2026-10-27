@@ -375,7 +375,12 @@ begin
     s := s + ' ' + p.ComponentType;
     if p.ComponentType = 'matrix' then
     begin
-      s := s + Format(' %d %s name=%s value=%s', [p.ComponentIndex, p.TargetType, p.Name, p.ValueText]);
+      { [spec 244] a value that is a number is marked: upstream's event
+        hands a written number as a number }
+      if Length(p.Values) = 1 then
+        s := s + Format(' %d %s name=%s value=#%s', [p.ComponentIndex, p.TargetType, p.Name, p.ValueText])
+      else
+        s := s + Format(' %d %s name=%s value=%s', [p.ComponentIndex, p.TargetType, p.Name, p.ValueText]);
       if Length(p.Coord) = 2 then s := s + Format(' [%s,%s]', [Fmt(p.Coord[0]), Fmt(p.Coord[1])]);
     end
     else
@@ -1155,9 +1160,9 @@ begin
       + ' ' + Q(ARows.Objects[i], 'value') + '}';
 end;
 
-{ upstream's event as the logger's line; AGraph: a graph node's name is
-  left out (a graph on a matrix names its array items by nothing here: see
-  the batch's deviations) }
+{ upstream's event as the logger's line. AGraph is no longer used: a graph
+  node on a matrix is named by its x category as upstream names it, so its
+  name is compared too [spec 244; was: left out] }
 function WantEvent(E: TJSONObject; AGraph: Boolean): string;
 var
   d: TJSONData;
@@ -1166,7 +1171,7 @@ begin
   Result := E.Strings['type'] + ' ' + E.Get('componentType', '');
   nm := '';
   d := E.Find('name');
-  if not IsNull(d) and not AGraph then nm := d.AsString;
+  if not IsNull(d) then nm := d.AsString;
   if E.Get('componentType', '') = 'matrix' then
   begin
     v := '';
@@ -1294,8 +1299,6 @@ begin
               Miss(Format('%s: tooltip "%s" here, "%s" upstream', [w, FChart.TooltipFormatterText,
                 tip.Strings['text']]));
           end
-          else if IsGraphSeries(FChart.TooltipShownDatum.SeriesIndex) then
-            { a graph node's rows on a matrix: a deviation (see above) }
           else if RowsOf(FChart.ContentOf(FChart.TooltipShownDatum)) <> WantRows(tip.Arrays['rows']) then
             Miss(Format('%s: tooltip rows %s here, %s upstream', [w,
               RowsOf(FChart.ContentOf(FChart.TooltipShownDatum)), WantRows(tip.Arrays['rows'])]));

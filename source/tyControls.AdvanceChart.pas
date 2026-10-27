@@ -3188,6 +3188,8 @@ type
     function HeatmapRadii(ASeriesIndex, APPI: Integer): TTyCornerRadii;
     procedure RippleOf(ASlot: Integer; var AVisual: TTySeriesVisual);
     function MatrixGraphPoints(ASeriesIndex: Integer; AMatrix: TTyMatrix): TTyPointFArray;
+    procedure MatrixGraphNames(ASeriesIndex: Integer; AMatrix: TTyMatrix; AStore: TTyDataStore);
+    procedure MatrixGraphCollect(ASeriesIndex: Integer; AMatrix: TTyMatrix);
     { ---- createBoxLayoutReference [Batch 151, D13 BX1] ----
       The canvas as a refContainer; a host's dataToLayout of a coord (a
       matrix's rect, a calendar day's content rect) -- False when the host

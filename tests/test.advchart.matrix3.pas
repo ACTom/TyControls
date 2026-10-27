@@ -1225,6 +1225,8 @@ begin
   v := '';
   d := E.Find('value');
   if not IsNull(d) then v := d.AsString;
+  { [spec 244] a number marked as the logger marks one }
+  if (d <> nil) and (d.JSONType = jtNumber) then v := '#' + v;
   Result := Result + Format(' %d %s name=%s value=%s', [E.Integers['componentIndex'],
     E.Strings['targetType'], nm, v]);
   d := E.Find('coord');

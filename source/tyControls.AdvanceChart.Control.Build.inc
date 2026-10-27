@@ -306,6 +306,11 @@ begin
       if FBindings[i].SeriesType = TyGraphSeriesTypeName then
       begin
         TyGraphFillStore(FOption, i, st);
+        { [spec 244] on a matrix with a collecting tree, its nodes' x and y
+          are categories of it, in the series' order }
+        if (FBindings[i].MatrixIndex >= 0) and (FBindings[i].MatrixIndex <= High(FMatrices))
+          and not FBindings[i].MatrixBox and (FMatrices[FBindings[i].MatrixIndex] <> nil) then
+          MatrixGraphCollect(FBindings[i].SeriesIndex, FMatrices[FBindings[i].MatrixIndex]);
         Continue;
       end;
       { A CHORD'S NODES are its rows the graph's way too: `data || nodes`,
@@ -3903,7 +3908,13 @@ begin
     if FGeos[i] = nil then Continue;
     GeoSyncFromRows(FGeos[i]);
     n := list.Count;
-    Inc(drawn, TyBuildGeo(FGeos[i], GeoInk, AMeasurer, APPI, list));
+    { [spec 244] excludeComponents: ['geo'] hides the geo components' views
+      (their regions and labels; the series on them are series views) }
+    if not ViewHidden(cvGeo) then
+    begin
+      Inc(drawn, TyBuildGeo(FGeos[i], GeoInk, AMeasurer, APPI, list));
+      if list.Count > n then ViewDrew(cvGeo);
+    end;
     SetLength(FGeoDraws, Length(FGeoDraws) + 1);
     FGeoDraws[High(FGeoDraws)].Geo := FGeos[i];
     FGeoDraws[High(FGeoDraws)].Series := -1;

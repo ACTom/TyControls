@@ -3402,6 +3402,9 @@ begin
       and (FBindings[i].MatrixIndex <= High(FMatrices))
       and (FMatrices[FBindings[i].MatrixIndex] <> nil) and (store <> nil) then
     begin
+      { [spec 244] its nodes' names and tooltip as the matrix' dimensions
+        give them }
+      MatrixGraphNames(si, FMatrices[FBindings[i].MatrixIndex], store);
       solved := TyGraphSolveAtPoints(FOption, si, store,
         MatrixGraphPoints(si, FMatrices[FBindings[i].MatrixIndex]));
       FGraphLaidOut[i] := True;

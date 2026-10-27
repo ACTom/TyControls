@@ -338,6 +338,24 @@ function g2() {
     ],
   };
 }
+// [spec 244] two regions named H, each with its own echartsStyle (the second
+// writes keys the first does not and one it does), two named K (only the
+// first styled)
+function g6() {
+  return {
+    type: 'FeatureCollection',
+    features: [
+      feat('H', { type: 'Polygon', coordinates: [sq(0, 0, 10, 10)] },
+        { echartsStyle: { itemStyle: { areaColor: '#ff0000' } } }),
+      feat('H', { type: 'Polygon', coordinates: [sq(10, 0, 20, 10)] },
+        { echartsStyle: { itemStyle: { areaColor: '#00ff00', borderColor: '#0000ff', borderWidth: 2 }, label: { show: true } } }),
+      feat('K', { type: 'Polygon', coordinates: [sq(0, 10, 10, 20)] },
+        { echartsStyle: { itemStyle: { areaColor: '#ffff00' } } }),
+      feat('K', { type: 'Polygon', coordinates: [sq(10, 10, 20, 20)] }),
+      feat('L', { type: 'Polygon', coordinates: [sq(20, 0, 30, 20)] }),
+    ],
+  };
+}
 function readJson(p) { return JSON.parse(fs.readFileSync(p, 'utf8')); }
 function box(x0, y0, x1, y1) { return [[[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]]; }
 // geo.js' hand-made 'china'
@@ -359,6 +377,7 @@ const MAPS = [
   { name: 'iceland', text: JSON.stringify(readJson(path.join(EXAMPLES, 'public/data/asset/geo/iceland.geo.json'))) },
   { name: 'ch', text: JSON.stringify(readJson(path.join(EXAMPLES, 'public/data/asset/geo/ch.geo.json'))) },
   { name: 'china', text: JSON.stringify(CHINA) },
+  { name: 'g6', text: JSON.stringify(g6()) },
 ];
 const USA_SPECIAL = {
   Alaska: { left: -131, top: 25, width: 15 },
@@ -1021,6 +1040,52 @@ const CASES = [
       dataset: [{ source: [{ n: 'A', v: 1 }] }, { source: [{ v: 5, n: 'B', w: 25 }, { v: 7, n: 'C', w: 5 }, { v: 9, n: 'A', w: 15 }] }],
       series: [{ type: 'map', map: 'g4', name: 'enc', datasetIndex: 1, encode: { itemName: 'n', value: 'w' } }] }),
     steps: [{ move: { series: 0, region: 'A' } }, { leave: true }],
+  },
+  // ======== [spec 244] ========
+  // The legend symbols' labels (MapView._renderSymbols): setLabelStyle with
+  // the item's label model -- createTextConfig's position, distance (5 when
+  // not written), offset; 'outside' is 'top' -- and only a label whose model
+  // has no position is put at 'bottom'.
+  {
+    id: 'r5g-map-label-pos',
+    note: "the legend symbols' labels read the item's label model: the series' position top with a distance and an offset, an item's own position right, an item's 'outside' (top), an item that writes only a distance (bottom, at that distance), a second series' item inside with an offset",
+    option: opt({ legend: {},
+      series: [
+        { type: 'map', map: 'g4', name: 'a', label: { show: true, position: 'top', distance: 12, offset: [3, -4] },
+          data: [{ name: 'A', value: 1 }, { name: 'B', value: 2, label: { position: 'right' } },
+            { name: 'C', value: 3, label: { position: 'outside', offset: null } }] },
+        { type: 'map', map: 'g4', name: 'b', label: { show: true },
+          data: [{ name: 'A', value: 4 }, { name: 'D', value: 5, label: { distance: 9 } },
+            { name: 'F', value: 6, label: { position: 'inside', offset: [5, 6] } }] }] }),
+  },
+  {
+    id: 'r5g-map-label-root',
+    note: "a symbol label's position from the series written as a point (an array), and the label's distance alone on the series; hovering a region the label follows the region's state",
+    option: opt({ legend: {},
+      series: [{ type: 'map', map: 'g4', name: 'a', label: { show: true, position: [4, 7] },
+        data: [{ name: 'A', value: 1 }, { name: 'B', value: 2, label: { position: 'left', distance: 3 } }] },
+      { type: 'map', map: 'g4', name: 'b', label: { show: true, distance: 20 }, data: [{ name: 'C', value: 1 }] }] }),
+    steps: [{ move: { series: 0, region: 'A' } }, { leave: true }],
+  },
+  // echartsStyle of several regions of one name (geoCreator.getFilledRegions,
+  // MapSeries.getInitialData): every region of the name merges its style
+  // into the ONE entry the author wrote (zrUtil.merge, not overwriting: the
+  // first region's keys win); a name the author did not write gets a fresh
+  // entry per region and the last of them is the region model
+  {
+    id: 'r5g-echarts-style-geo',
+    note: "a geo on g6: H has an author regions entry (both regions' styles merge into it, the first's areaColor winning, the second's border and label added), K has none (the last K's entry: no style)",
+    option: opt({ geo: { map: 'g6', regions: [{ name: 'H', itemStyle: { borderWidth: 3 } }] } }),
+  },
+  {
+    id: 'r5g-echarts-style-geo-bare',
+    note: "the same geo with no regions: H's last region's style alone (green, the blue border, the label)",
+    option: opt({ geo: { map: 'g6' } }),
+  },
+  {
+    id: 'r5g-echarts-style-map',
+    note: "a map series on g6 with a data item for H (both styles merge into it) and none for K (two appended K items, each with its own region's style; the region model is the first's)",
+    option: opt({ series: [{ type: 'map', map: 'g6', data: [{ name: 'H', value: 1, itemStyle: { borderWidth: 4 } }] }] }),
   },
 ];
 

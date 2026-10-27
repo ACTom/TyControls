@@ -1537,7 +1537,7 @@ var
   encoded, sym: Boolean;
   node, data, item, es: TJSONData;
   opt: TJSONObject;
-  si: Integer;
+  si, app: Integer;
   o: TTyDataStore;
 begin
   Result := Default(TTyGeoData);
@@ -1617,19 +1617,27 @@ begin
       if raw < cnt then item := TJSONArray(data).Items[raw];
       if item is TJSONObject then opt := TJSONObject(item.Clone)
       else if raw >= cnt then opt := TJSONObject.Create(['name', nm]);
+      { [spec 244] getInitialData: a data item of the name takes the style of
+        EVERY region of it, in turn and not overwriting (the first region's
+        keys win); an appended item is one region's own -- each region the
+        data does not name appends its own {name} item, and the name finds
+        the first of them }
       if (opt <> nil) and (AGeo.Source <> nil) then
+      begin
+        app := -1;
+        { the name's first row is the item its first region appended }
+        if raw >= cnt then
+          for k := High(AGeo.Source.Regions) downto 0 do
+            if AGeo.Source.Regions[k].Name = nm then app := k;
         for k := 0 to High(AGeo.Source.Regions) do
-          if AGeo.Source.Regions[k].Name = nm then
+          if (AGeo.Source.Regions[k].Name = nm) and ((raw < cnt) or (k = app)) then
           begin
             es := nil;
             if AGeo.Source.Regions[k].Properties is TJSONObject then
               es := TJSONObject(AGeo.Source.Regions[k].Properties).Find('echartsStyle');
-            if es is TJSONObject then
-            begin
-              TyGeoMergeAbsent(opt, TJSONObject(es));
-              Break;
-            end;
+            if es is TJSONObject then TyGeoMergeAbsent(opt, TJSONObject(es));
           end;
+      end;
     end;
     Result.Groups[g].Opt := opt;
     { getDataParams: the series', the row's; the value as String() prints it }
@@ -1960,6 +1968,27 @@ var
   st: string;
   nodes: array[0..1] of TJSONObject;
   dd: TJSONData;
+  posWord: TTyLabelPosition;
+  known: Boolean;
+  atX, atY, dist, rot, ox, oy: Double;
+  lah: TTyTextAnchorH;
+  lav: TTyTextAnchorV;
+
+  { zrender's parsePercent of one element of a point position: a string with
+    a '%' is that share of AAll, another string parseFloat, a number itself }
+  function SymPct(A: TJSONArray; AIndex: Integer; AAll: Double): Double;
+  var e: TJSONData;
+  begin
+    Result := NaN;
+    if AIndex >= A.Count then Exit;
+    e := A.Items[AIndex];
+    if e.JSONType = jtString then
+    begin
+      if Pos('%', e.AsString) > 0 then Result := TyJsParseFloat(e.AsString) / 100 * AAll
+      else Result := TyJsParseFloat(e.AsString) * scale;
+    end
+    else Result := TyJsonToNumber(e) * scale;
+  end;
 
   { the item's label up its chain: the item, the series; nil where neither
     writes it }
@@ -2080,10 +2109,57 @@ begin
     w := 0;
     h := 0;
     if (txt <> '') and (AMeasurer <> nil) then AMeasurer.MeasureLine(txt, fam, fsz, fwt, w, h);
-    { position 'bottom': the box's bottom middle and the distance 5 below }
-    ax := cx;
-    ay := cy + 3 * scale + 5 * scale;
-    el := TyChartElement(TyShapeRect(TyAnchorBox(ax, ay, w, h, tahCentre, tavTop)));
+    { [spec 244] THE LABEL MODEL'S PLACE (setLabelStyle's createTextConfig on
+      the item's label model, the item over the series): its position --
+      'outside' is 'top', a point is [x, y] on the circle's box (parsePercent
+      of its width and height) -- its distance (5 where none is written),
+      offset and rotate; only a model with no position is put at 'bottom'
+      (MapView._renderSymbols) [was: always 'bottom' at 5] }
+    posWord := tlpBottom;
+    atX := 0;
+    atY := 0;
+    dd := LGet(['label', 'position']);
+    if (dd <> nil) and JsTruthy(dd) then
+    begin
+      if dd.JSONType = jtString then
+      begin
+        if dd.AsString = 'outside' then posWord := tlpTop
+        else posWord := TyLabelPositionOf(dd.AsString, known);
+      end
+      else if dd is TJSONArray then
+      begin
+        posWord := tlpAt;
+        atX := SymPct(TJSONArray(dd), 0, 6 * scale);
+        atY := SymPct(TJSONArray(dd), 1, 6 * scale);
+      end
+      else posWord := tlpNone;
+    end;
+    dist := 5;
+    dd := LGet(['label', 'distance']);
+    if dd <> nil then dist := TyJsonToNumber(dd);
+    TyLabelAnchorXYWH(TyXYWH(cx - 3 * scale, cy - 3 * scale, 6 * scale, 6 * scale),
+      posWord, dist * scale, atX, atY, ax, ay, lah, lav);
+    rot := 0;
+    dd := LGet(['label', 'rotate']);
+    if dd <> nil then rot := TyJsonToNumber(dd) * Pi / 180;
+    if IsNan(rot) then rot := 0;
+    { the offset, turned with the text about the un-offset point (zrender's
+      origin -offset under a rotation) }
+    dd := LGet(['label', 'offset']);
+    if dd is TJSONArray then
+    begin
+      ox := TyJsonToNumber(TJSONArray(dd).Items[0]) * scale;
+      if TJSONArray(dd).Count > 1 then oy := TyJsonToNumber(TJSONArray(dd).Items[1]) * scale
+      else oy := NaN;
+      if TJSONArray(dd).Count = 0 then
+      begin
+        ox := NaN;
+        oy := NaN;
+      end;
+      ax := ax + (TyJsCos(rot) * ox + TyJsSin(rot) * oy);
+      ay := ay + (TyJsCos(rot) * oy - TyJsSin(rot) * ox);
+    end;
+    el := TyChartElement(TyShapeRect(TyAnchorBox(ax, ay, w, h, lah, lav)));
     el.Caption.Text := txt;
     el.Caption.FontName := fam;
     el.Caption.FontSizeLogical := fsz;
@@ -2091,8 +2167,9 @@ begin
     el.Caption.Colour := lc;
     el.Caption.X := ax;
     el.Caption.Y := ay;
-    el.Caption.AnchorH := tahCentre;
-    el.Caption.AnchorV := tavTop;
+    el.Caption.AnchorH := lah;
+    el.Caption.AnchorV := lav;
+    el.Caption.RotationRad := rot;
     el.Caption.Truncate := False;
     el.Z := z;
     el.Z2 := 19;
@@ -2964,7 +3041,15 @@ var
     Result := NaN;
     if A = nil then Exit;
     case A.JSONType of
-      jtNumber: Result := A.AsFloat;
+      jtNumber:
+        { [spec 244] a collecting tree took the number as a category of its
+          own (parseAndCollect); a tree with data reads it as an index }
+        if AMatrix.Dims[ADim].Meta.NeedCollect then
+        begin
+          o := AMatrix.Dims[ADim].Meta.GetOrdinal(TyJsNumberToString(A.AsFloat));
+          if o >= 0 then Result := o;
+        end
+        else Result := A.AsFloat;
       jtString:
         begin
           o := AMatrix.Dims[ADim].Meta.GetOrdinal(A.AsString);
@@ -3004,6 +3089,96 @@ begin
     if IsNan(x) and IsNan(y) and IsNan(v) then Continue;
     Result[k] := AMatrix.DataToPoint([x, y]);
   end;
+end;
+
+{ [spec 244] A GRAPH ON A MATRIX keeps its nodes in data of the matrix'
+  two dimensions, x and y, both ordinal on the header trees' lists
+  (createGraphFromNodeEdge with the coordinate system's dimensions): a node
+  that names nothing is named by its x -- SeriesData.getName reads the name
+  dimension's category, categories[x] (a written string's own ordinal, a
+  number as it is: an index, else no name) -- and its tooltip lists its x
+  and its y, the elements of its value, not the value after them. }
+{ [spec 244] A COLLECTING TREE COLLECTS A GRAPH'S NODES TOO: their x and y
+  parsed by the trees' category lists as the graph's data is made, row by
+  row (a string or a number; the port's lists hold text, so 5 and '5' are
+  one category, and a null is a gap -- the matrix' own reading of them) }
+procedure TTyCustomAdvanceChart.MatrixGraphCollect(ASeriesIndex: Integer;
+  AMatrix: TTyMatrix);
+var
+  node, d, it, arr, p: TJSONData;
+  k, q: Integer;
+begin
+  if AMatrix = nil then Exit;
+  if not (AMatrix.Dims[0].Meta.NeedCollect or AMatrix.Dims[1].Meta.NeedCollect) then Exit;
+  node := FOption.ComponentAt('series', ASeriesIndex);
+  if (node = nil) or (node.JSONType <> jtObject) then Exit;
+  d := TJSONObject(node).Find('data');
+  if (d = nil) or (d.JSONType <> jtArray) then d := TJSONObject(node).Find('nodes');
+  if (d = nil) or (d.JSONType <> jtArray) then Exit;
+  for k := 0 to d.Count - 1 do
+  begin
+    it := d.Items[k];
+    arr := it;
+    if it is TJSONObject then arr := TJSONObject(it).Find('value');
+    for q := 0 to 1 do
+    begin
+      if not AMatrix.Dims[q].Meta.NeedCollect then Continue;
+      p := nil;
+      if (arr is TJSONArray) and (q < arr.Count) then p := arr.Items[q]
+      else if (q = 0) and (arr <> nil) and not (arr is TJSONArray)
+        and not (arr is TJSONObject) then p := arr;
+      if p = nil then Continue;
+      case p.JSONType of
+        jtString: AMatrix.Dims[q].Meta.ParseAndCollect(p.AsString);
+        jtNumber: AMatrix.Dims[q].Meta.ParseAndCollect(TyJsNumberToString(p.AsFloat));
+      end;
+    end;
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.MatrixGraphNames(ASeriesIndex: Integer;
+  AMatrix: TTyMatrix; AStore: TTyDataStore);
+var
+  node, d, it, arr, x: TJSONData;
+  k, o: Integer;
+  v: Double;
+  tp: TTyIntegerArray;
+begin
+  if (AMatrix = nil) or (AStore = nil) then Exit;
+  node := FOption.ComponentAt('series', ASeriesIndex);
+  if (node = nil) or (node.JSONType <> jtObject) then Exit;
+  d := TJSONObject(node).Find('data');
+  if (d = nil) or (d.JSONType <> jtArray) then d := TJSONObject(node).Find('nodes');
+  if (d = nil) or (d.JSONType <> jtArray) then Exit;
+  for k := 0 to Min(d.Count, AStore.RawCount) - 1 do
+  begin
+    if AStore.GetNameByRaw(k) <> '' then Continue;
+    it := d.Items[k];
+    arr := it;
+    if it is TJSONObject then arr := TJSONObject(it).Find('value');
+    x := nil;
+    if (arr is TJSONArray) and (arr.Count > 0) then x := arr.Items[0]
+    else if (arr <> nil) and not (arr is TJSONArray) and not (arr is TJSONObject) then x := arr;
+    if x = nil then Continue;
+    o := -1;
+    case x.JSONType of
+      jtString: o := AMatrix.Dims[0].Meta.GetOrdinal(x.AsString);
+      jtNumber:
+        begin
+          v := x.AsFloat;
+          if AMatrix.Dims[0].Meta.NeedCollect then
+            o := AMatrix.Dims[0].Meta.GetOrdinal(TyJsNumberToString(v))
+          else if (not IsNan(v)) and (Frac(v) = 0) and (v >= 0) and (v < AMatrix.Dims[0].Meta.Count) then
+            o := Trunc(v);
+        end;
+    end;
+    if (o >= 0) and (o < AMatrix.Dims[0].Meta.Count) then
+      AStore.SetName(k, AMatrix.Dims[0].Meta.CategoryAt(o));
+  end;
+  SetLength(tp, 2);
+  tp[0] := 0;
+  tp[1] := 1;
+  AStore.SetTooltipPositions(tp);
 end;
 
 function TTyCustomAdvanceChart.GeoSvgMeasure(const AText: string; const AFont: TTyGsFont): Double;
