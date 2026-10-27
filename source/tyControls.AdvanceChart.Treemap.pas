@@ -115,6 +115,12 @@ type
     { drawn although outside the canvas: an element kept from the last
       render while the drill-down moves it out (willInvisibleEls) }
     DrawInvisible: Boolean;
+    { [R5-I] laid out in view but its rects invisible: a transition this
+      render took over had it on its willInvisibleEls, and that one's
+      renderFinally (its animators aborted by this render's start) hid them
+      after this render had shown them -- until the next render; its words
+      and its hit area stay }
+    RectsHidden: Boolean;
   end;
 
   { WHAT A RENDER IS FOR [Batch 115]: the payload's type, its target (a row,
@@ -2502,7 +2508,7 @@ var
     { [R5-B] with its corners }
     el := TyChartElement(TmRect(TyRectF(0 + nd.TX, 0 + nd.TY,
       (0 + nd.W) + nd.TX, (0 + nd.H) + nd.TY), nd.Radii));
-    el.Style.HasFill := nd.HasStroke;
+    el.Style.HasFill := nd.HasStroke and not nd.RectsHidden;
     el.Style.FillColor := nd.Stroke;
     el.Z := ASolved.Z;
     el.Z2 := z2;
@@ -2553,9 +2559,10 @@ var
       { [R5-B] the same corners as the background's }
       el := TyChartElement(TmRect(TyRectF(bw + nd.TX, bw + nd.TY,
         (bw + cw) + nd.TX, (bw + ch) + nd.TY), nd.Radii));
-      el.Style.HasFill := nd.HasFill;
+      el.Style.HasFill := nd.HasFill and not nd.RectsHidden;
       el.Style.FillColor := nd.Fill;
-      if ARow <= High(AInk.NodeDecals) then el.Style.Decal := AInk.NodeDecals[ARow];
+      if (ARow <= High(AInk.NodeDecals)) and not nd.RectsHidden then
+        el.Style.Decal := AInk.NodeDecals[ARow];
       el.Z := ASolved.Z;
       el.Z2 := z2;
       el.Datum := TyChartDatum(ASeriesIndex, ARow, ARow);

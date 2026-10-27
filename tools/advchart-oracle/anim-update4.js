@@ -592,6 +592,16 @@ add('treemap', 'tm-renamed', "a merge that renames a1 and moves c into b: the di
     { t: T1, do: 'merge', option: { series: [{ data: [{ name: 'a', children: [{ name: 'x1', value: 6 }, { name: 'a2', value: 4 }] },
       { name: 'b', children: [{ name: 'b1', value: 3 }, { name: 'b2', value: 3 }, { name: 'c', value: 4 }] }] }] } },
     ...after([0, 1, 100, 300, 599, 600, 601], T1)]);
+add('treemap', 'tm-midway', "[R5-I] a second merge 300 ms into the first (1000 ms linear): every kept group and rect tweens on from where it is now (the elements' current values), not from where the first merge was sending it",
+  { animation: true, series: [Object.assign({}, TMO, { data: TM, animationDurationUpdate: 1000, animationEasing: 'linear' })] },
+  ['tm'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [{ name: 'a', children: [{ name: 'a1', value: 2 }, { name: 'a2', value: 8 }] },
+      { name: 'b', children: [{ name: 'b1', value: 5 }, { name: 'b2', value: 1 }] }, { name: 'c', value: 6 }] }] } },
+    ...after([0, 100, 300], T1),
+    { t: T1 + 300, do: 'merge', option: { series: [{ data: [{ name: 'a', children: [{ name: 'a1', value: 3 }, { name: 'a2', value: 3 }] },
+      { name: 'b', children: [{ name: 'b1', value: 2 }, { name: 'b2', value: 6 }] }, { name: 'c', value: 2 }] }] } },
+    ...after([300, 301, 500, 1299, 1300, 1301], T1)]);
 
 // ---- roam ----
 const GN = [{ name: 'a', x: 10, y: 10 }, { name: 'b', x: 100, y: 50 }, { name: 'c', x: 50, y: 100 }];

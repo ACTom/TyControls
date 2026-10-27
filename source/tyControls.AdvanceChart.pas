@@ -730,6 +730,10 @@ type
   public
     Pending: Integer;
     Live: Boolean;
+    { [R5-I] _state 'ready' while this wrap runs: it took over one still
+      running, whose finished callback (its animators aborted by this one's
+      start) set the state back after this one had set it }
+    Ready: Boolean;
     procedure Hit;
   end;
 
@@ -751,6 +755,21 @@ type
     (shape.x / y / width / height, style.opacity) and its labels' fades, by
     row; the elements leaving; the layout and storage it left; the wrap }
   TTyTmProxyPair = array[0..1] of TTyChartAnimProxy;
+  { [R5-I] A TREEMAP'S ELEMENTS WHERE THEY ARE NOW, by row: what the next
+    transition starts from -- renderNode's lasts read the elements' current
+    values, a transition still running included. Has: the row's element had
+    a proxy (else its last solve is where it is) }
+  TTyTmNowRect = record
+    Has: Boolean;
+    X, Y, W, H, Opacity: Double;
+  end;
+  TTyTmNow = record
+    { its transition was still running }
+    Live: Boolean;
+    GHas: TTyBoolArray;
+    GX, GY: TTyDoubleArray;
+    Rects: array of array[0..1] of TTyTmNowRect;
+  end;
   TTyTmAnim = record
     Wrap: TTyTmWrap;
     Groups: array of TTyChartAnimProxy;
@@ -1103,6 +1122,8 @@ type
       next solve }
     FTmOld: array of TTyTreemapSolved;
     FTmOldHave: array of TTyTreemapHave;
+    { [R5-I] and where its elements were when the setOption came }
+    FTmOldNow: array of TTyTmNow;
     FTmOldKeys: TTyStringArray;
     { the series' view keys when the treemaps were last solved }
     FTmViewKeys: TTyStringArray;
@@ -3544,6 +3565,9 @@ type
       const AOld: TTyTreemapSolved; const AOldHave: TTyTreemapHave; ADirection: Integer;
       const AMap: TTyIntegerArray);
     procedure TmAnimDrop(ASeries: Integer);
+    { [R5-I] where a series' treemap elements are now (its transition's
+      proxies) }
+    function TmNowOf(ASeries: Integer): TTyTmNow;
     procedure TmStrandLabelFades(ASlot: Integer; const AOld: TTyTreemapSolved;
       const AOldHave, AHave: TTyTreemapHave; const AMap: TTyIntegerArray);
     procedure TmAnimDropAll;
