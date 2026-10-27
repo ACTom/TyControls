@@ -3313,7 +3313,11 @@ begin
       paths their enter turns and grows }
     carGaugePointer, carGaugeProgress, carRadarLine, carRadarArea,
     { and a graph edge's label, the text its fade runs on }
-    carGraphEdgeLabel]) then
+    carGraphEdgeLabel,
+    { [R5-I] an effectScatter's symbol path: the scale its update tweens is
+      the key its state tweens -- one stops the other [was: a proxy of the
+      states' own, its factor over the update's] }
+    carEffectSymbol]) then
     p := role
   else
   begin

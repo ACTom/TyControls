@@ -348,6 +348,23 @@ const PROBES = {
       rec['zo0/' + k] = { top, rip };
     });
   },
+  // [R5-I] an effectScatter's symbol path (the EffectSymbol's Symbol's
+  // path): its scale -- half the size drawn -- and the group's place
+  esym(chart, rec, c) {
+    chart.getModel().eachSeries(sm => {
+      if (sm.subType !== 'effectScatter') return;
+      const data = sm.getData();
+      rowsOf(c, data).forEach(i => {
+        const g = data.getItemGraphicEl(i);
+        if (!g) return;
+        const sym = g.childAt(0);
+        const path = sym && sym.childAt(0);
+        if (!path) return;
+        rec['es' + sm.seriesIndex + '/' + i] = { sx: hex(path.scaleX), sy: hex(path.scaleY), x: hex(g.x), y: hex(g.y),
+          st: (path.currentStates || []).join(','), n: nClip(path) };
+      });
+    });
+  },
   // a bar series' rects: the fill they are drawn with now (a state's tween)
   bfill(chart, rec, c) {
     chart.getModel().eachSeries(sm => {
@@ -636,6 +653,15 @@ add('stanim', 'sa-delay-fn', "stateAnimation.delay a function: Clip's start is g
   SA({ duration: 200, easing: 'linear', delay: { $fn: 'idx*100' } }), ['bfill'], SAEV, { rows: [0] });
 add('stanim', 'sa-dur-fn', "stateAnimation.duration a function: not above 0 -- no transition, the state at once",
   SA({ duration: { $fn: 'idx*100' }, easing: 'linear' }), ['bfill'], SAEV, { rows: [0] });
+// ---- an effectScatter's state over its update ----
+add('esstate', 'es-hover-update', "an effectScatter's symbols grow 10 -> 20 (update, 1000 ms linear); 300 ms in the pointer hovers the second: the state transition animates the symbol path's own scale to emphasis (the new size x 1.1) from where the update has got it -- the update's scale tracks stop (one key, one element), no product of the two",
+  Object.assign({ animation: true, xAxis: { type: 'value', min: 0, max: 4 }, yAxis: { type: 'value', min: 0, max: 10 },
+    series: [{ type: 'effectScatter', symbolSize: 10, data: [[1, 5], [2, 8], [3, 3]], rippleEffect: { period: 4 } }] }, LIN),
+  ['esym'],
+  [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'merge', option: { series: [{ symbolSize: 20 }] } }, ...after([0, 1, 100, 299], T1),
+    { t: T1 + 300, do: 'move', x: 210, y: 96 }, ...after([300, 301, 400, 500, 599, 600, 601, 999, 1001, 1500], T1),
+    { t: T1 + 2000, do: 'move', x: 380, y: 290 }, ...after([0, 1, 150, 301], T1 + 2000)], { rows: [1] });
+
 // ---- the continuous phase's z order ----
 add('zorder', 'zo-ripple', "an effectScatter's ripples (z 2, z2 99) under a bar series of z 3 and under a title (z 6) with a background, over a bar of z 2 (z2 0): zrender draws one display list in z order",
   { animation: true, animationDuration: 300,

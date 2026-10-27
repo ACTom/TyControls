@@ -78,6 +78,7 @@ type
     procedure TestAThemeRiversLabelIsInkedOnlyInsideTheClip;
     procedure TestAPictorialGlyphsEmphasisScaleAsUpstream;
     procedure TestTheContinuousPhasesZOrderAsUpstream;
+    procedure TestAnEffectScattersStateOverItsUpdateAsUpstream;
   end;
 
 implementation
@@ -756,6 +757,20 @@ begin
       SameNum(name + ' y', el.Caption.Y, leaf.Find('y'));
       SameRun(name, FChart.AnimFindProxy(s, idx, 'label'), leaf);
     end
+    else if pre = 'es' then
+    begin
+      { [R5-I] an effectScatter's symbol as drawn: its half width is the
+        symbol path's scale (a unit symbol scaled by size / 2), the state's
+        and the update's on the one key }
+      if not RoleEl(s, idx, carEffectSymbol, el) then
+      begin
+        Bad(name + ': not drawn');
+        Continue;
+      end;
+      bx := TyShapeBounds(el.Shape);
+      NearNum(name + ' half width', (bx.Right - bx.Left) / 2, FromHex(leaf.Strings['sx']));
+      NearNum(name + ' half height', (bx.Bottom - bx.Top) / 2, FromHex(leaf.Strings['sy']));
+    end
     else if pre = 'zo' then
     begin
       { [R5-I] what is on top at the point: where upstream's top element is
@@ -945,6 +960,11 @@ end;
 procedure TAdvChartAnimEdgesOracleTest.TestAPictorialGlyphsEmphasisScaleAsUpstream;
 begin
   RunGroup('pemph', 18);
+end;
+
+procedure TAdvChartAnimEdgesOracleTest.TestAnEffectScattersStateOverItsUpdateAsUpstream;
+begin
+  RunGroup('esstate', 20);
 end;
 
 procedure TAdvChartAnimEdgesOracleTest.TestTheContinuousPhasesZOrderAsUpstream;
