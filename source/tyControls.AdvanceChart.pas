@@ -4005,6 +4005,8 @@ type
     procedure GfxBuild(APPI: Integer);
     { the elements under the axes }
     procedure GfxPaintUnder(APainter: TTyPainter);
+    { [R5-G] the grids' own rects (`grid.show`): GridView's Rect, z2 -1 }
+    procedure AddGridBackgrounds(AList: TTyPaintList);
     function GfxLive: Boolean;
     { an element's handlers, bubbling up its groups: True when one asked to
       stop (no chart event follows) }

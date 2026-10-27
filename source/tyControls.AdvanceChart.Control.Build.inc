@@ -1057,7 +1057,9 @@ begin
   FListFresh := False;
   { a resize renders every view [Batch 130] }
   if (ARect.Left <> FLastRect.Left) or (ARect.Top <> FLastRect.Top)
-    or (ARect.Right <> FLastRect.Right) or (ARect.Bottom <> FLastRect.Bottom) then
+    or (ARect.Right <> FLastRect.Right) or (ARect.Bottom <> FLastRect.Bottom)
+    { [R5-G] a PPI change is a change of the CSS size: a resize }
+    or ((FLastPPI > 0) and (APPI <> FLastPPI)) then
   begin
     FParBrushSkip := -1;
     { A RESIZE IS AN UPDATE WITH A PAYLOAD (type 'resize'): the brush's
@@ -3821,7 +3823,16 @@ begin
     used to be the graphic elements alone, and PaintSeries paints nothing
     for a nought, so a geo-only chart was blank }
   Result := drawn + gfxCount;
-  if Length(FBindings) = 0 then Exit;
+  { [R5-G] NO SERIES IS NO REASON TO DROP THE COMPONENTS: a toolbox, a
+    visualMap, a slider, a timeline on a chart of no series are rendered by
+    their own views upstream (a toolbox-only chart showed nothing) }
+  if Length(FBindings) = 0 then
+  begin
+    FListTailAt := list.Count;
+    Inc(drawn, BuildListTail(list, AMeasurer));
+    Result := drawn + gfxCount;
+    Exit;
+  end;
   begin
     for i := 0 to High(FBindings) do
     begin

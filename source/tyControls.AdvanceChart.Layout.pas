@@ -416,6 +416,8 @@ type
   TTyAxisInk = record
     Ok: Boolean;
     Colour: Cardinal;
+    { [R5-G] the item as a gradient (Colour its first stop), cgkNone else }
+    Grad: TTyChartGradient;
   end;
   TTyAxisInkArray = array of TTyAxisInk;
 

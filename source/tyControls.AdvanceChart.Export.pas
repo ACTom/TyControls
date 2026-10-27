@@ -67,7 +67,9 @@ type
     { [Batch 128] }
     cvParallelAxis,
     { [Batch 145] }
-    cvMatrix);
+    cvMatrix,
+    { [R5-G] the grid's own view: its background rect (`grid.show`) }
+    cvGrid);
   TTyChartViews = set of TTyChartView;
 
   TTyExportImageType = (eitPng, eitJpeg, eitWebp);
@@ -155,7 +157,7 @@ const
   ViewNames: array[TTyChartView] of string = ('title', 'legend', 'xAxis',
     'yAxis', 'visualMap', 'dataZoom', 'markPoint', 'markLine', 'markArea',
     'radar', 'calendar', 'angleAxis', 'radiusAxis', 'singleAxis', 'series', 'toolbox', 'brush',
-    'timeline', 'parallelAxis', 'matrix');
+    'timeline', 'parallelAxis', 'matrix', 'grid');
 
 function TyChartViewOf(const AMainType: string; out AView: TTyChartView): Boolean;
 var v: TTyChartView;

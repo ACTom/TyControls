@@ -1385,6 +1385,8 @@ begin
     '   set is small enough to re-check. */' + LineEnding +
     'TyAdvChartAxisLine  { border-color: var(--border); border-width: 1px; }' + LineEnding +
     'TyAdvChartAxisTick  { border-color: var(--border); border-width: 1px; }' + LineEnding +
+    '/* [R5-G] a shown grid''s border (grid.show): upstream''s tokens.color.neutral30 */' + LineEnding +
+    'TyAdvChartGridBorder { border-color: #b7b9be; border-width: 1px; }' + LineEnding +
     '/* Muted, not full ink: an axis label is a reference, not content. --muted is' + LineEnding +
     '   already alpha over --on-surface, so it follows a dark theme by itself. */' + LineEnding +
     'TyAdvChartAxisLabel { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +

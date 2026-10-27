@@ -1461,6 +1461,10 @@ var
   bgEl, el: TTyChartElement;
   rv: TTySeriesVisual;
   fix, sx, sy: Double;
+  b, v: Double;
+  pb: TTyPointF;
+  mat: TTyMat2D;
+  bgCol: TTyBarColumn;
 begin
   Result := 0;
   baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
@@ -1471,6 +1475,7 @@ begin
   if baseHoriz then valCol := AColY else valCol := AColX;
   haveCol := False;
   col := Default(TTyBarColumn);
+  bgCol := Default(TTyBarColumn);
   { THE LINE A BAR STANDS ON -- the value axis' start value, the same one
     DataToLayout built the cell from, asked again because the cell's Min/Max
     lost which end it was. A bar's length, its minimum and its outside side
@@ -1494,6 +1499,78 @@ begin
     begin
       if baseHoriz then y := AStore.Get(AStack.ResultCol, i)
                    else x := AStore.Get(AStack.ResultCol, i);
+    end;
+    { [R5-G] showBackground: the bar's own band, stretched over the WHOLE
+      plot along the value axis -- BarView.ts createBackground /
+      createBackgroundShape. FROM THE BASE VALUE ALONE, before any check of
+      the value: upstream creates it for every data index ahead of the
+      `hasValue` test, from getLayout WITHOUT the item model (no border
+      inset), so a gap row keeps its strip and a bordered bar's strip is the
+      full column. Its x (or y) is the datum's through the cartesian, which
+      the value does not move. [Was: built from the bar's inset layout, after
+      the gap rows had been skipped.]
+
+      SILENT. Upstream sets silent:true on it, and it is the right answer for
+      the same reason a gridline is silent: a strip the height of the plot
+      would take every hover the bar under the pointer was meant to get. }
+    if baseHoriz then b := x else b := y;
+    if baseHoriz then v := y else v := x;
+    if not IsNan(b) and not IsInfinite(b) then
+    begin
+      { the column: the layout pass' (a solved one needs no datum; the
+        bars' own `haveCol` stays theirs -- it gates the rows the layout
+        cannot place) }
+      if haveCol then bgCol := col
+      else if AVisual.Bar.Solved then bgCol := AVisual.Bar
+      else bgCol.ShowBackground := False;
+      if bgCol.ShowBackground then
+      begin
+        { barGrid's dataToPoint([baseValue, value]): a finite pair through
+          the matrix where the cartesian has one (both axes linear), else
+          -- a gap, a log axis -- the per-axis path, where the value does
+          not move the base coordinate (upstream's gate) }
+        if not (IsNan(v) or IsInfinite(v)) and ABinding.Cart.Transform(mat) then
+          pb := ABinding.Cart.DataToPoint([x, y])
+        else if ABinding.BaseAxis <> nil then
+        begin
+          pb.X := ABinding.BaseAxis.DataToCoord(b);
+          pb.Y := pb.X;
+        end
+        else
+          pb := TyPointF(NaN, NaN);
+        plot := ABinding.Cart.GetRect;
+        if baseHoriz then
+          bg := LayoutBox(pb.X + bgCol.Offset, plot.Top, bgCol.Width, plot.Bottom - plot.Top)
+        else
+          bg := LayoutBox(plot.Left, pb.Y + bgCol.Offset, plot.Right - plot.Left, bgCol.Width);
+        if baseHoriz then
+        begin
+          bg.Top := plot.Top;
+          bg.Bottom := plot.Bottom;
+        end
+        else
+        begin
+          bg.Left := plot.Left;
+          bg.Right := plot.Right;
+        end;
+        if TyRectFIsValid(bg) then
+        begin
+          bgEl := TyChartElement(TyShapeRoundRect(bg, bgCol.BackgroundRadii));
+          bgEl.Style.Alpha := 1;
+          { the author's backgroundStyle over the skin's strip [R5-B] }
+          TyBarBackgroundStyle(bgEl, AVisual);
+          bgEl.Z := AVisual.Z;
+          bgEl.Z2 := AVisual.Z2;
+          bgEl.Silent := True;
+          { [R2-D] a path of the view no animator runs: faded in where a
+            universal transition morphs }
+          bgEl.Anim.Series := ABinding.SeriesIndex;
+          bgEl.Anim.UtTag := 2;
+          bgEl.Anim.UtRow := -2 - i;
+          AList.Add(bgEl);
+          Inc(Result);
+        end;
+      end;
     end;
     { NaN IS THE SINGLE SPELLING OF NO DATA, which the store's header says for
       all four dimension types. A gap draws no bar; it does not draw a bar of
@@ -1599,48 +1676,6 @@ begin
       ly := ly + sy * fix / 2;
       lw := lw - sx * fix;
       lh := lh - sy * fix;
-    end;
-
-    { showBackground: the bar's own band, stretched over the WHOLE plot along
-      the value axis -- BarView.ts:1237-1246. Emitted BEFORE the bar, because
-      upstream gives it z2 0 like the bar itself and the two are then ordered
-      by insertion; this list ties the same way.
-
-      SILENT. Upstream sets silent:true on it, and it is the right answer for
-      the same reason a gridline is silent: a strip the height of the plot
-      would take every hover the bar under the pointer was meant to get.
-
-      WHERE THIS AND UPSTREAM PART: a gap in the data gets no strip here --
-      upstream reads the band from the layout stage, which keeps it. So a bar
-      chart with holes shows a gap in the backing strips too. }
-    if col.ShowBackground then
-    begin
-      bg := LayoutBox(lx, ly, lw, lh);
-      plot := ABinding.Cart.GetRect;
-      if baseHoriz then
-      begin
-        bg.Top := plot.Top;
-        bg.Bottom := plot.Bottom;
-      end
-      else
-      begin
-        bg.Left := plot.Left;
-        bg.Right := plot.Right;
-      end;
-      bgEl := TyChartElement(TyShapeRoundRect(bg, col.BackgroundRadii));
-      bgEl.Style.Alpha := 1;
-      { the author's backgroundStyle over the skin's strip [R5-B] }
-      TyBarBackgroundStyle(bgEl, AVisual);
-      bgEl.Z := AVisual.Z;
-      bgEl.Z2 := AVisual.Z2;
-      bgEl.Silent := True;
-      { [R2-D] a path of the view no animator runs: faded in where a
-        universal transition morphs }
-      bgEl.Anim.Series := ABinding.SeriesIndex;
-      bgEl.Anim.UtTag := 2;
-      bgEl.Anim.UtRow := -2 - i;
-      AList.Add(bgEl);
-      Inc(Result);
     end;
 
     { clip, default TRUE: a bar whose value runs past the axis' own min or max

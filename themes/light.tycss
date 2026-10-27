@@ -1352,6 +1352,8 @@ TyAdvChartSeries9 { background: mix(var(--accent), var(--on-surface), 15%); }
    set is small enough to re-check. */
 TyAdvChartAxisLine  { border-color: var(--border); border-width: 1px; }
 TyAdvChartAxisTick  { border-color: var(--border); border-width: 1px; }
+/* [R5-G] a shown grid's border (grid.show): upstream's tokens.color.neutral30 */
+TyAdvChartGridBorder { border-color: #b7b9be; border-width: 1px; }
 /* Muted, not full ink: an axis label is a reference, not content. --muted is
    already alpha over --on-surface, so it follows a dark theme by itself. */
 TyAdvChartAxisLabel { color: var(--muted); font-size: var(--font-size-base); }

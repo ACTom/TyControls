@@ -208,6 +208,7 @@ uses
   test.advchart.loadingpointer,
   test.advchart.handleemphasis,
   test.advchart.toolboxextra,
+  test.advchart.edgesaxes,
   test.advchart.backwardcompat,
   test.advchart.labelguides,
   test.advchart.effecthover,

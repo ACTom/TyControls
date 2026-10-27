@@ -1,0 +1,2932 @@
+{
+ "generator": "tools/advchart-oracle/edges-axes.js",
+ "echarts": "6.1.0",
+ "width": 600,
+ "height": 400,
+ "grid": [
+  {
+   "id": "grid-default",
+   "note": "show: true and nothing else: no fill, the neutral30 border 1 px",
+   "option": {
+    "grid": {
+     "show": true
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2
+      ]
+     }
+    ]
+   },
+   "grids": [
+    {
+     "present": true,
+     "rect": [
+      "4056800000000000",
+      "4050400000000000",
+      "407c200000000000",
+      "406fe00000000000"
+     ],
+     "gridRect": [
+      "4056800000000000",
+      "4050400000000000",
+      "407c200000000000",
+      "406fe00000000000"
+     ],
+     "fill": "rgba(0,0,0,0)",
+     "stroke": "#b7b9be",
+     "lineWidth": "3ff0000000000000",
+     "lineDash": null,
+     "lineDashOffset": "0000000000000000",
+     "lineCap": "butt",
+     "opacity": "3ff0000000000000",
+     "shadowBlur": "0000000000000000",
+     "shadowOffsetX": "0000000000000000",
+     "shadowOffsetY": "0000000000000000",
+     "shadowColor": "#000",
+     "z": 0,
+     "z2": -1,
+     "zlevel": 0,
+     "silent": true,
+     "underAxes": true
+    }
+   ]
+  },
+  {
+   "id": "grid-styled",
+   "note": "every item-style key a grid reads",
+   "option": {
+    "grid": {
+     "show": true,
+     "left": 70,
+     "right": 40,
+     "top": 50,
+     "bottom": 60,
+     "backgroundColor": "rgba(0,128,255,0.2)",
+     "borderColor": "#f00",
+     "borderWidth": 3,
+     "borderType": "dashed",
+     "borderDashOffset": 2,
+     "borderCap": "round",
+     "opacity": 0.5,
+     "shadowBlur": 10,
+     "shadowColor": "rgba(0,0,0,0.5)",
+     "shadowOffsetX": 3,
+     "shadowOffsetY": 4
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2
+      ]
+     }
+    ]
+   },
+   "grids": [
+    {
+     "present": true,
+     "rect": [
+      "4051800000000000",
+      "4049000000000000",
+      "407ea00000000000",
+      "4072200000000000"
+     ],
+     "gridRect": [
+      "4051800000000000",
+      "4049000000000000",
+      "407ea00000000000",
+      "4072200000000000"
+     ],
+     "fill": "rgba(0,128,255,0.2)",
+     "stroke": "#f00",
+     "lineWidth": "4008000000000000",
+     "lineDash": "dashed",
+     "lineDashOffset": "4000000000000000",
+     "lineCap": "round",
+     "opacity": "3fe0000000000000",
+     "shadowBlur": "4024000000000000",
+     "shadowOffsetX": "4008000000000000",
+     "shadowOffsetY": "4010000000000000",
+     "shadowColor": "rgba(0,0,0,0.5)",
+     "z": 0,
+     "z2": -1,
+     "zlevel": 0,
+     "silent": true,
+     "underAxes": true
+    }
+   ]
+  },
+  {
+   "id": "grid-gradient",
+   "note": "a gradient background; borderColor 'none' strokes nothing; `color` is not the fill",
+   "option": {
+    "grid": {
+     "show": true,
+     "color": "#0f0",
+     "backgroundColor": {
+      "type": "linear",
+      "x": 0,
+      "y": 0,
+      "x2": 0,
+      "y2": 1,
+      "colorStops": [
+       {
+        "offset": 0,
+        "color": "#fff"
+       },
+       {
+        "offset": 1,
+        "color": "#ccc"
+       }
+      ]
+     },
+     "borderColor": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2
+      ]
+     }
+    ]
+   },
+   "grids": [
+    {
+     "present": true,
+     "rect": [
+      "4056800000000000",
+      "4050400000000000",
+      "407c200000000000",
+      "406fe00000000000"
+     ],
+     "gridRect": [
+      "4056800000000000",
+      "4050400000000000",
+      "407c200000000000",
+      "406fe00000000000"
+     ],
+     "fill": {
+      "type": "linear",
+      "x": 0,
+      "y": 0,
+      "x2": 0,
+      "y2": 1,
+      "global": false,
+      "stops": [
+       [
+        0,
+        "#fff"
+       ],
+       [
+        1,
+        "#ccc"
+       ]
+      ]
+     },
+     "stroke": "none",
+     "lineWidth": "3ff0000000000000",
+     "lineDash": null,
+     "lineDashOffset": "0000000000000000",
+     "lineCap": "butt",
+     "opacity": "3ff0000000000000",
+     "shadowBlur": "0000000000000000",
+     "shadowOffsetX": "0000000000000000",
+     "shadowOffsetY": "0000000000000000",
+     "shadowColor": "#000",
+     "z": 0,
+     "z2": -1,
+     "zlevel": 0,
+     "silent": true,
+     "underAxes": true
+    }
+   ]
+  },
+  {
+   "id": "grid-hidden",
+   "note": "show false (the default) with a background: no rect",
+   "option": {
+    "grid": {
+     "backgroundColor": "#eee",
+     "borderColor": "#000"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2
+      ]
+     }
+    ]
+   },
+   "grids": [
+    {
+     "present": false
+    }
+   ]
+  },
+  {
+   "id": "grid-two",
+   "note": "two grids, the second shown, a truthy number for show and borderWidth 0",
+   "option": {
+    "grid": [
+     {
+      "left": "7%",
+      "right": "55%"
+     },
+     {
+      "show": 1,
+      "left": "55%",
+      "right": "7%",
+      "borderWidth": 0,
+      "backgroundColor": "#fafafa"
+     }
+    ],
+    "xAxis": [
+     {
+      "gridIndex": 0,
+      "type": "category",
+      "data": [
+       "a",
+       "b",
+       "c",
+       "d"
+      ]
+     },
+     {
+      "gridIndex": 1,
+      "type": "category",
+      "data": [
+       "a",
+       "b",
+       "c",
+       "d"
+      ]
+     }
+    ],
+    "yAxis": [
+     {
+      "gridIndex": 0,
+      "type": "value"
+     },
+     {
+      "gridIndex": 1,
+      "type": "value"
+     }
+    ],
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2
+      ]
+     },
+     {
+      "xAxisIndex": 1,
+      "yAxisIndex": 1,
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2
+      ]
+     }
+    ]
+   },
+   "grids": [
+    {
+     "present": false
+    },
+    {
+     "present": true,
+     "rect": [
+      "4074a00000000000",
+      "4050400000000000",
+      "406c800000000000",
+      "406fe00000000000"
+     ],
+     "gridRect": [
+      "4074a00000000000",
+      "4050400000000000",
+      "406c800000000000",
+      "406fe00000000000"
+     ],
+     "fill": "#fafafa",
+     "stroke": "#b7b9be",
+     "lineWidth": "0000000000000000",
+     "lineDash": null,
+     "lineDashOffset": "0000000000000000",
+     "lineCap": "butt",
+     "opacity": "3ff0000000000000",
+     "shadowBlur": "0000000000000000",
+     "shadowOffsetX": "0000000000000000",
+     "shadowOffsetY": "0000000000000000",
+     "shadowColor": "#000",
+     "z": 0,
+     "z2": -1,
+     "zlevel": 0,
+     "silent": true,
+     "underAxes": true
+    }
+   ]
+  },
+  {
+   "id": "grid-dotted",
+   "note": "a dotted border 2 px wide, a numeric dash array is verbatim on the next",
+   "option": {
+    "grid": {
+     "show": true,
+     "borderType": "dotted",
+     "borderWidth": 2,
+     "borderColor": "#333"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2
+      ]
+     }
+    ]
+   },
+   "grids": [
+    {
+     "present": true,
+     "rect": [
+      "4056800000000000",
+      "4050400000000000",
+      "407c200000000000",
+      "406fe00000000000"
+     ],
+     "gridRect": [
+      "4056800000000000",
+      "4050400000000000",
+      "407c200000000000",
+      "406fe00000000000"
+     ],
+     "fill": "rgba(0,0,0,0)",
+     "stroke": "#333",
+     "lineWidth": "4000000000000000",
+     "lineDash": "dotted",
+     "lineDashOffset": "0000000000000000",
+     "lineCap": "butt",
+     "opacity": "3ff0000000000000",
+     "shadowBlur": "0000000000000000",
+     "shadowOffsetX": "0000000000000000",
+     "shadowOffsetY": "0000000000000000",
+     "shadowColor": "#000",
+     "z": 0,
+     "z2": -1,
+     "zlevel": 0,
+     "silent": true,
+     "underAxes": true
+    }
+   ]
+  },
+  {
+   "id": "grid-dasharray",
+   "note": "borderType as an array",
+   "option": {
+    "grid": {
+     "show": true,
+     "borderType": [
+      6,
+      3
+     ],
+     "borderWidth": 1.5,
+     "borderColor": "#336"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2
+      ]
+     }
+    ]
+   },
+   "grids": [
+    {
+     "present": true,
+     "rect": [
+      "4056800000000000",
+      "4050400000000000",
+      "407c200000000000",
+      "406fe00000000000"
+     ],
+     "gridRect": [
+      "4056800000000000",
+      "4050400000000000",
+      "407c200000000000",
+      "406fe00000000000"
+     ],
+     "fill": "rgba(0,0,0,0)",
+     "stroke": "#336",
+     "lineWidth": "3ff8000000000000",
+     "lineDash": [
+      6,
+      3
+     ],
+     "lineDashOffset": "0000000000000000",
+     "lineCap": "butt",
+     "opacity": "3ff0000000000000",
+     "shadowBlur": "0000000000000000",
+     "shadowOffsetX": "0000000000000000",
+     "shadowOffsetY": "0000000000000000",
+     "shadowColor": "#000",
+     "z": 0,
+     "z2": -1,
+     "zlevel": 0,
+     "silent": true,
+     "underAxes": true
+    }
+   ]
+  }
+ ],
+ "alone": [
+  {
+   "id": "alone-toolbox",
+   "note": "a toolbox and nothing else",
+   "option": {
+    "toolbox": {
+     "feature": {
+      "saveAsImage": {},
+      "restore": {},
+      "dataView": {}
+     }
+    }
+   },
+   "toolbox": {
+    "x": "40804433ba395313",
+    "y": "4039000000000000",
+    "icons": 3
+   }
+  },
+  {
+   "id": "alone-toolbox-timeline",
+   "note": "a toolbox and a timeline, no series",
+   "option": {
+    "toolbox": {
+     "left": 10,
+     "feature": {
+      "saveAsImage": {}
+     }
+    },
+    "timeline": {
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    }
+   },
+   "toolbox": {
+    "x": "4040fd3dcc000000",
+    "y": "4039000000000000",
+    "icons": 1
+   },
+   "timeline": 12
+  },
+  {
+   "id": "alone-visualmap",
+   "note": "a continuous visualMap and nothing else",
+   "option": {
+    "visualMap": {
+     "min": 0,
+     "max": 100,
+     "calculable": true
+    }
+   },
+   "visualMap": 9
+  }
+ ],
+ "radar": [
+  {
+   "id": "radar-default",
+   "note": "the axis lines' round cap; the split lines' none",
+   "option": {
+    "radar": {
+     "indicator": [
+      {
+       "name": "A",
+       "max": 10
+      },
+      {
+       "name": "B",
+       "max": 10
+      },
+      {
+       "name": "C",
+       "max": 10
+      },
+      {
+       "name": "D",
+       "max": 10
+      },
+      {
+       "name": "E",
+       "max": 10
+      }
+     ]
+    },
+    "series": [
+     {
+      "type": "radar",
+      "data": [
+       {
+        "value": [
+         3,
+         5,
+         7,
+         4,
+         6
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "axisLines": [
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    }
+   ],
+   "ticks": [],
+   "splitLines": [
+    {
+     "cap": "butt",
+     "join": null,
+     "miter": 10
+    }
+   ]
+  },
+  {
+   "id": "radar-ends",
+   "note": "a square axis-line cap, round split lines with a bevel join and miterLimit 3, ticks shown with a round cap",
+   "option": {
+    "radar": {
+     "indicator": [
+      {
+       "name": "A",
+       "max": 10
+      },
+      {
+       "name": "B",
+       "max": 10
+      },
+      {
+       "name": "C",
+       "max": 10
+      },
+      {
+       "name": "D",
+       "max": 10
+      },
+      {
+       "name": "E",
+       "max": 10
+      }
+     ],
+     "axisLine": {
+      "lineStyle": {
+       "cap": "square",
+       "width": 3
+      }
+     },
+     "splitLine": {
+      "lineStyle": {
+       "cap": "round",
+       "join": "bevel",
+       "miterLimit": 3,
+       "width": 2
+      }
+     },
+     "axisTick": {
+      "show": true,
+      "length": 8,
+      "lineStyle": {
+       "cap": "round",
+       "width": 3
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "radar",
+      "data": [
+       {
+        "value": [
+         3,
+         5,
+         7,
+         4,
+         6
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "axisLines": [
+    {
+     "cap": "square",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "square",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "square",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "square",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "square",
+     "join": null,
+     "miter": 10
+    }
+   ],
+   "ticks": [
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    }
+   ],
+   "splitLines": [
+    {
+     "cap": "round",
+     "join": "bevel",
+     "miter": 3
+    }
+   ]
+  },
+  {
+   "id": "radar-circle-join",
+   "note": "a circle radar: the rings take the join too (miter)",
+   "option": {
+    "radar": {
+     "shape": "circle",
+     "indicator": [
+      {
+       "name": "A",
+       "max": 10
+      },
+      {
+       "name": "B",
+       "max": 10
+      },
+      {
+       "name": "C",
+       "max": 10
+      },
+      {
+       "name": "D",
+       "max": 10
+      },
+      {
+       "name": "E",
+       "max": 10
+      }
+     ],
+     "splitLine": {
+      "lineStyle": {
+       "join": "round",
+       "cap": "butt"
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "radar",
+      "data": [
+       {
+        "value": [
+         3,
+         5,
+         7,
+         4,
+         6
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "axisLines": [
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    },
+    {
+     "cap": "round",
+     "join": null,
+     "miter": 10
+    }
+   ],
+   "ticks": [],
+   "splitLines": [
+    {
+     "cap": "butt",
+     "join": "round",
+     "miter": 10
+    }
+   ]
+  }
+ ],
+ "gradient": [
+  {
+   "id": "grad-axisline",
+   "note": "a horizontal ramp on the x axis line (6 px), a vertical one on the shown y axis line (6 px)",
+   "option": {
+    "grid": {
+     "left": 60,
+     "right": 60,
+     "top": 40,
+     "bottom": 60
+    },
+    "xAxis": {
+     "axisLine": {
+      "lineStyle": {
+       "color": {
+        "type": "linear",
+        "x": 0,
+        "y": 0,
+        "x2": 1,
+        "y2": 0,
+        "colorStops": [
+         {
+          "offset": 0,
+          "color": "#ff0000"
+         },
+         {
+          "offset": 1,
+          "color": "#0000ff"
+         }
+        ]
+       },
+       "width": 6
+      }
+     },
+     "axisTick": {
+      "show": false
+     },
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "axisLine": {
+      "show": true,
+      "lineStyle": {
+       "color": {
+        "type": "linear",
+        "x": 0,
+        "y": 0,
+        "x2": 0,
+        "y2": 1,
+        "colorStops": [
+         {
+          "offset": 0,
+          "color": "#00c000"
+         },
+         {
+          "offset": 1,
+          "color": "#c000c0"
+         }
+        ]
+       },
+       "width": 6
+      }
+     },
+     "splitLine": {
+      "show": false
+     },
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2
+      ]
+     }
+    ]
+   },
+   "strokes": [
+    {
+     "axis": "xAxis",
+     "role": "line",
+     "lineWidth": "4018000000000000",
+     "rect": [
+      "404c800000000000",
+      "4075100000000000",
+      "407e600000000000",
+      "4018000000000000"
+     ],
+     "ends": [
+      "404e000000000000",
+      "4075400000000000",
+      "4080e00000000000",
+      "4075400000000000"
+     ],
+     "gradient": [
+      "404c800000000000",
+      "4075100000000000",
+      "4080f80000000000",
+      "4075100000000000"
+     ],
+     "stops": [
+      [
+       0,
+       "#ff0000"
+      ],
+      [
+       1,
+       "#0000ff"
+      ]
+     ]
+    },
+    {
+     "axis": "yAxis",
+     "role": "line",
+     "lineWidth": "4018000000000000",
+     "rect": [
+      "404c800000000000",
+      "4042800000000000",
+      "4018000000000000",
+      "4073200000000000"
+     ],
+     "ends": [
+      "404e000000000000",
+      "4075400000000000",
+      "404e000000000000",
+      "4044000000000000"
+     ],
+     "gradient": [
+      "404c800000000000",
+      "4042800000000000",
+      "404c800000000000",
+      "4075700000000000"
+     ],
+     "stops": [
+      [
+       0,
+       "#00c000"
+      ],
+      [
+       1,
+       "#c000c0"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "grad-ticks",
+   "note": "the x axis' ticks 12 px long, 6 wide, a vertical ramp over each tick's own box; the axis line plain",
+   "option": {
+    "grid": {
+     "left": 60,
+     "right": 60,
+     "top": 40,
+     "bottom": 60
+    },
+    "xAxis": {
+     "axisLine": {
+      "lineStyle": {
+       "color": "#333"
+      }
+     },
+     "axisTick": {
+      "show": true,
+      "length": 12,
+      "lineStyle": {
+       "color": {
+        "type": "linear",
+        "x": 0,
+        "y": 0,
+        "x2": 0,
+        "y2": 1,
+        "colorStops": [
+         {
+          "offset": 0,
+          "color": "#00c000"
+         },
+         {
+          "offset": 1,
+          "color": "#c000c0"
+         }
+        ]
+       },
+       "width": 6
+      }
+     },
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "splitLine": {
+      "show": false
+     },
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2
+      ]
+     }
+    ]
+   },
+   "strokes": [
+    {
+     "axis": "xAxis",
+     "role": "tick",
+     "lineWidth": "4018000000000000",
+     "rect": [
+      "404c800000000000",
+      "4075100000000000",
+      "4018000000000000",
+      "4032000000000000"
+     ],
+     "ends": [
+      "404e000000000000",
+      "4075400000000000",
+      "404e000000000000",
+      "4076000000000000"
+     ],
+     "gradient": [
+      "404c800000000000",
+      "4075100000000000",
+      "404c800000000000",
+      "4076300000000000"
+     ],
+     "stops": [
+      [
+       0,
+       "#00c000"
+      ],
+      [
+       1,
+       "#c000c0"
+      ]
+     ]
+    },
+    {
+     "axis": "xAxis",
+     "role": "tick",
+     "lineWidth": "4018000000000000",
+     "rect": [
+      "4066200000000000",
+      "4075100000000000",
+      "4018000000000000",
+      "4032000000000000"
+     ],
+     "ends": [
+      "4066800000000000",
+      "4075400000000000",
+      "4066800000000000",
+      "4076000000000000"
+     ],
+     "gradient": [
+      "4066200000000000",
+      "4075100000000000",
+      "4066200000000000",
+      "4076300000000000"
+     ],
+     "stops": [
+      [
+       0,
+       "#00c000"
+      ],
+      [
+       1,
+       "#c000c0"
+      ]
+     ]
+    },
+    {
+     "axis": "xAxis",
+     "role": "tick",
+     "lineWidth": "4018000000000000",
+     "rect": [
+      "4072900000000000",
+      "4075100000000000",
+      "4018000000000000",
+      "4032000000000000"
+     ],
+     "ends": [
+      "4072c00000000000",
+      "4075400000000000",
+      "4072c00000000000",
+      "4076000000000000"
+     ],
+     "gradient": [
+      "4072900000000000",
+      "4075100000000000",
+      "4072900000000000",
+      "4076300000000000"
+     ],
+     "stops": [
+      [
+       0,
+       "#00c000"
+      ],
+      [
+       1,
+       "#c000c0"
+      ]
+     ]
+    },
+    {
+     "axis": "xAxis",
+     "role": "tick",
+     "lineWidth": "4018000000000000",
+     "rect": [
+      "407a100000000000",
+      "4075100000000000",
+      "4018000000000000",
+      "4032000000000000"
+     ],
+     "ends": [
+      "407a400000000000",
+      "4075400000000000",
+      "407a400000000000",
+      "4076000000000000"
+     ],
+     "gradient": [
+      "407a100000000000",
+      "4075100000000000",
+      "407a100000000000",
+      "4076300000000000"
+     ],
+     "stops": [
+      [
+       0,
+       "#00c000"
+      ],
+      [
+       1,
+       "#c000c0"
+      ]
+     ]
+    },
+    {
+     "axis": "xAxis",
+     "role": "tick",
+     "lineWidth": "4018000000000000",
+     "rect": [
+      "4080c80000000000",
+      "4075100000000000",
+      "4018000000000000",
+      "4032000000000000"
+     ],
+     "ends": [
+      "4080e00000000000",
+      "4075400000000000",
+      "4080e00000000000",
+      "4076000000000000"
+     ],
+     "gradient": [
+      "4080c80000000000",
+      "4075100000000000",
+      "4080c80000000000",
+      "4076300000000000"
+     ],
+     "stops": [
+      [
+       0,
+       "#00c000"
+      ],
+      [
+       1,
+       "#c000c0"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "grad-split",
+   "note": "the y axis' split lines 4 px wide under one horizontal ramp, a Line each (the x axis' line and ticks hidden: the bottom one is in the open)",
+   "option": {
+    "grid": {
+     "left": 60,
+     "right": 60,
+     "top": 40,
+     "bottom": 60
+    },
+    "xAxis": {
+     "axisLine": {
+      "show": false
+     },
+     "axisTick": {
+      "show": false
+     },
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "splitLine": {
+      "lineStyle": {
+       "color": {
+        "type": "linear",
+        "x": 0,
+        "y": 0,
+        "x2": 1,
+        "y2": 0,
+        "colorStops": [
+         {
+          "offset": 0,
+          "color": "#ff0000"
+         },
+         {
+          "offset": 1,
+          "color": "#0000ff"
+         }
+        ]
+       },
+       "width": 4
+      }
+     },
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2
+      ]
+     }
+    ]
+   },
+   "strokes": [
+    {
+     "axis": "yAxis",
+     "role": "split",
+     "lineWidth": "4010000000000000",
+     "rect": [
+      "404cc00000000000",
+      "4075180000000000",
+      "407e500000000000",
+      "4014000000000000"
+     ],
+     "ends": [
+      "404e000000000000",
+      "4075400000000000",
+      "4080e00000000000",
+      "4075400000000000"
+     ],
+     "gradient": [
+      "404cc00000000000",
+      "4075180000000000",
+      "4080f40000000000",
+      "4075180000000000"
+     ],
+     "stops": [
+      [
+       0,
+       "#ff0000"
+      ],
+      [
+       1,
+       "#0000ff"
+      ]
+     ]
+    },
+    {
+     "axis": "yAxis",
+     "role": "split",
+     "lineWidth": "4010000000000000",
+     "rect": [
+      "404cc00000000000",
+      "4070680000000000",
+      "407e500000000000",
+      "4014000000000000"
+     ],
+     "ends": [
+      "404e000000000000",
+      "4070900000000000",
+      "4080e00000000000",
+      "4070900000000000"
+     ],
+     "gradient": [
+      "404cc00000000000",
+      "4070680000000000",
+      "4080f40000000000",
+      "4070680000000000"
+     ],
+     "stops": [
+      [
+       0,
+       "#ff0000"
+      ],
+      [
+       1,
+       "#0000ff"
+      ]
+     ]
+    },
+    {
+     "axis": "yAxis",
+     "role": "split",
+     "lineWidth": "4010000000000000",
+     "rect": [
+      "404cc00000000000",
+      "4067700000000000",
+      "407e500000000000",
+      "4014000000000000"
+     ],
+     "ends": [
+      "404e000000000000",
+      "4067c00000000000",
+      "4080e00000000000",
+      "4067c00000000000"
+     ],
+     "gradient": [
+      "404cc00000000000",
+      "4067700000000000",
+      "4080f40000000000",
+      "4067700000000000"
+     ],
+     "stops": [
+      [
+       0,
+       "#ff0000"
+      ],
+      [
+       1,
+       "#0000ff"
+      ]
+     ]
+    },
+    {
+     "axis": "yAxis",
+     "role": "split",
+     "lineWidth": "4010000000000000",
+     "rect": [
+      "404cc00000000000",
+      "405c200000000000",
+      "407e500000000000",
+      "4014000000000000"
+     ],
+     "ends": [
+      "404e000000000000",
+      "405cc00000000000",
+      "4080e00000000000",
+      "405cc00000000000"
+     ],
+     "gradient": [
+      "404cc00000000000",
+      "405c200000000000",
+      "4080f40000000000",
+      "405c200000000000"
+     ],
+     "stops": [
+      [
+       0,
+       "#ff0000"
+      ],
+      [
+       1,
+       "#0000ff"
+      ]
+     ]
+    },
+    {
+     "axis": "yAxis",
+     "role": "split",
+     "lineWidth": "4010000000000000",
+     "rect": [
+      "404cc00000000000",
+      "4042c00000000000",
+      "407e500000000000",
+      "4014000000000000"
+     ],
+     "ends": [
+      "404e000000000000",
+      "4044000000000000",
+      "4080e00000000000",
+      "4044000000000000"
+     ],
+     "gradient": [
+      "404cc00000000000",
+      "4042c00000000000",
+      "4080f40000000000",
+      "4042c00000000000"
+     ],
+     "stops": [
+      [
+       0,
+       "#ff0000"
+      ],
+      [
+       1,
+       "#0000ff"
+      ]
+     ]
+    }
+   ]
+  }
+ ],
+ "blend": [
+  {
+   "mode": "hue",
+   "blends": [
+    "hue",
+    "hue",
+    "hue",
+    "hue"
+   ]
+  },
+  {
+   "mode": "saturation",
+   "blends": [
+    "saturation",
+    "saturation",
+    "saturation",
+    "saturation"
+   ]
+  },
+  {
+   "mode": "color",
+   "blends": [
+    "color",
+    "color",
+    "color",
+    "color"
+   ]
+  },
+  {
+   "mode": "luminosity",
+   "blends": [
+    "luminosity",
+    "luminosity",
+    "luminosity",
+    "luminosity"
+   ]
+  },
+  {
+   "mode": "source-atop",
+   "blends": [
+    "source-atop",
+    "source-atop",
+    "source-atop",
+    "source-atop"
+   ]
+  },
+  {
+   "mode": "destination-over",
+   "blends": [
+    "destination-over",
+    "destination-over",
+    "destination-over",
+    "destination-over"
+   ]
+  },
+  {
+   "mode": "xor",
+   "blends": [
+    "xor",
+    "xor",
+    "xor",
+    "xor"
+   ]
+  },
+  {
+   "mode": "copy",
+   "blends": [
+    "copy",
+    "copy",
+    "copy",
+    "copy"
+   ]
+  },
+  {
+   "mode": "destination-out",
+   "blends": [
+    "destination-out",
+    "destination-out",
+    "destination-out",
+    "destination-out"
+   ]
+  },
+  {
+   "mode": "source-in",
+   "blends": [
+    "source-in",
+    "source-in",
+    "source-in",
+    "source-in"
+   ]
+  }
+ ],
+ "radarLabels": [
+  {
+   "id": "rl-crowded",
+   "note": "rings 10 px apart: the min label crowds its neighbour and gives way, its tick with it",
+   "option": {
+    "radar": {
+     "indicator": [
+      {
+       "name": "A",
+       "max": 100
+      },
+      {
+       "name": "B",
+       "max": 100
+      },
+      {
+       "name": "C",
+       "max": 100
+      },
+      {
+       "name": "D",
+       "max": 100
+      }
+     ],
+     "radius": 50,
+     "center": [
+      "50%",
+      "50%"
+     ],
+     "axisLabel": {
+      "show": true
+     },
+     "axisTick": {
+      "show": true
+     }
+    },
+    "series": [
+     {
+      "type": "radar",
+      "symbol": "none",
+      "data": [
+       {
+        "value": [
+         50,
+         60,
+         70,
+         80
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "axes": [
+    {
+     "labels": [
+      {
+       "text": "0",
+       "ignore": true
+      },
+      {
+       "text": "20",
+       "ignore": false
+      },
+      {
+       "text": "40",
+       "ignore": false
+      },
+      {
+       "text": "60",
+       "ignore": false
+      },
+      {
+       "text": "80",
+       "ignore": false
+      },
+      {
+       "text": "100",
+       "ignore": true
+      }
+     ],
+     "ticks": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      true
+     ]
+    },
+    {
+     "labels": [
+      {
+       "text": "0",
+       "ignore": false
+      },
+      {
+       "text": "20",
+       "ignore": false
+      },
+      {
+       "text": "40",
+       "ignore": false
+      },
+      {
+       "text": "60",
+       "ignore": false
+      },
+      {
+       "text": "80",
+       "ignore": false
+      },
+      {
+       "text": "100",
+       "ignore": true
+      }
+     ],
+     "ticks": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+     ]
+    },
+    {
+     "labels": [
+      {
+       "text": "0",
+       "ignore": true
+      },
+      {
+       "text": "20",
+       "ignore": false
+      },
+      {
+       "text": "40",
+       "ignore": false
+      },
+      {
+       "text": "60",
+       "ignore": false
+      },
+      {
+       "text": "80",
+       "ignore": false
+      },
+      {
+       "text": "100",
+       "ignore": true
+      }
+     ],
+     "ticks": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      true
+     ]
+    },
+    {
+     "labels": [
+      {
+       "text": "0",
+       "ignore": false
+      },
+      {
+       "text": "20",
+       "ignore": false
+      },
+      {
+       "text": "40",
+       "ignore": false
+      },
+      {
+       "text": "60",
+       "ignore": false
+      },
+      {
+       "text": "80",
+       "ignore": false
+      },
+      {
+       "text": "100",
+       "ignore": true
+      }
+     ],
+     "ticks": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+     ]
+    }
+   ]
+  },
+  {
+   "id": "rl-keepmin",
+   "note": "showMinLabel true: the neighbour gives way instead",
+   "option": {
+    "radar": {
+     "indicator": [
+      {
+       "name": "A",
+       "max": 100
+      },
+      {
+       "name": "B",
+       "max": 100
+      },
+      {
+       "name": "C",
+       "max": 100
+      },
+      {
+       "name": "D",
+       "max": 100
+      }
+     ],
+     "radius": 50,
+     "center": [
+      "50%",
+      "50%"
+     ],
+     "axisLabel": {
+      "show": true,
+      "showMinLabel": true
+     },
+     "axisTick": {
+      "show": true
+     }
+    },
+    "series": [
+     {
+      "type": "radar",
+      "symbol": "none",
+      "data": [
+       {
+        "value": [
+         50,
+         60,
+         70,
+         80
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "axes": [
+    {
+     "labels": [
+      {
+       "text": "0",
+       "ignore": false
+      },
+      {
+       "text": "20",
+       "ignore": true
+      },
+      {
+       "text": "40",
+       "ignore": false
+      },
+      {
+       "text": "60",
+       "ignore": false
+      },
+      {
+       "text": "80",
+       "ignore": false
+      },
+      {
+       "text": "100",
+       "ignore": true
+      }
+     ],
+     "ticks": [
+      false,
+      true,
+      false,
+      false,
+      false,
+      true
+     ]
+    },
+    {
+     "labels": [
+      {
+       "text": "0",
+       "ignore": false
+      },
+      {
+       "text": "20",
+       "ignore": false
+      },
+      {
+       "text": "40",
+       "ignore": false
+      },
+      {
+       "text": "60",
+       "ignore": false
+      },
+      {
+       "text": "80",
+       "ignore": false
+      },
+      {
+       "text": "100",
+       "ignore": true
+      }
+     ],
+     "ticks": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+     ]
+    },
+    {
+     "labels": [
+      {
+       "text": "0",
+       "ignore": false
+      },
+      {
+       "text": "20",
+       "ignore": true
+      },
+      {
+       "text": "40",
+       "ignore": false
+      },
+      {
+       "text": "60",
+       "ignore": false
+      },
+      {
+       "text": "80",
+       "ignore": false
+      },
+      {
+       "text": "100",
+       "ignore": true
+      }
+     ],
+     "ticks": [
+      false,
+      true,
+      false,
+      false,
+      false,
+      true
+     ]
+    },
+    {
+     "labels": [
+      {
+       "text": "0",
+       "ignore": false
+      },
+      {
+       "text": "20",
+       "ignore": false
+      },
+      {
+       "text": "40",
+       "ignore": false
+      },
+      {
+       "text": "60",
+       "ignore": false
+      },
+      {
+       "text": "80",
+       "ignore": false
+      },
+      {
+       "text": "100",
+       "ignore": true
+      }
+     ],
+     "ticks": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+     ]
+    }
+   ]
+  },
+  {
+   "id": "rl-hidemax",
+   "note": "showMaxLabel false: the max label hidden whatever its room",
+   "option": {
+    "radar": {
+     "indicator": [
+      {
+       "name": "A",
+       "max": 100
+      },
+      {
+       "name": "B",
+       "max": 100
+      },
+      {
+       "name": "C",
+       "max": 100
+      },
+      {
+       "name": "D",
+       "max": 100
+      }
+     ],
+     "radius": 150,
+     "center": [
+      "50%",
+      "50%"
+     ],
+     "axisLabel": {
+      "show": true,
+      "showMaxLabel": false
+     },
+     "axisTick": {
+      "show": true
+     }
+    },
+    "series": [
+     {
+      "type": "radar",
+      "symbol": "none",
+      "data": [
+       {
+        "value": [
+         50,
+         60,
+         70,
+         80
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "axes": [
+    {
+     "labels": [
+      {
+       "text": "0",
+       "ignore": false
+      },
+      {
+       "text": "20",
+       "ignore": false
+      },
+      {
+       "text": "40",
+       "ignore": false
+      },
+      {
+       "text": "60",
+       "ignore": false
+      },
+      {
+       "text": "80",
+       "ignore": false
+      },
+      {
+       "text": "100",
+       "ignore": true
+      }
+     ],
+     "ticks": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+     ]
+    },
+    {
+     "labels": [
+      {
+       "text": "0",
+       "ignore": false
+      },
+      {
+       "text": "20",
+       "ignore": false
+      },
+      {
+       "text": "40",
+       "ignore": false
+      },
+      {
+       "text": "60",
+       "ignore": false
+      },
+      {
+       "text": "80",
+       "ignore": false
+      },
+      {
+       "text": "100",
+       "ignore": true
+      }
+     ],
+     "ticks": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+     ]
+    },
+    {
+     "labels": [
+      {
+       "text": "0",
+       "ignore": false
+      },
+      {
+       "text": "20",
+       "ignore": false
+      },
+      {
+       "text": "40",
+       "ignore": false
+      },
+      {
+       "text": "60",
+       "ignore": false
+      },
+      {
+       "text": "80",
+       "ignore": false
+      },
+      {
+       "text": "100",
+       "ignore": true
+      }
+     ],
+     "ticks": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+     ]
+    },
+    {
+     "labels": [
+      {
+       "text": "0",
+       "ignore": false
+      },
+      {
+       "text": "20",
+       "ignore": false
+      },
+      {
+       "text": "40",
+       "ignore": false
+      },
+      {
+       "text": "60",
+       "ignore": false
+      },
+      {
+       "text": "80",
+       "ignore": false
+      },
+      {
+       "text": "100",
+       "ignore": true
+      }
+     ],
+     "ticks": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+     ]
+    }
+   ]
+  },
+  {
+   "id": "rl-roomy",
+   "note": "rings 30 px apart: every label and tick shows",
+   "option": {
+    "radar": {
+     "indicator": [
+      {
+       "name": "A",
+       "max": 100
+      },
+      {
+       "name": "B",
+       "max": 100
+      },
+      {
+       "name": "C",
+       "max": 100
+      },
+      {
+       "name": "D",
+       "max": 100
+      }
+     ],
+     "radius": 150,
+     "center": [
+      "50%",
+      "50%"
+     ],
+     "axisLabel": {
+      "show": true
+     },
+     "axisTick": {
+      "show": true
+     }
+    },
+    "series": [
+     {
+      "type": "radar",
+      "symbol": "none",
+      "data": [
+       {
+        "value": [
+         50,
+         60,
+         70,
+         80
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "axes": [
+    {
+     "labels": [
+      {
+       "text": "0",
+       "ignore": false
+      },
+      {
+       "text": "20",
+       "ignore": false
+      },
+      {
+       "text": "40",
+       "ignore": false
+      },
+      {
+       "text": "60",
+       "ignore": false
+      },
+      {
+       "text": "80",
+       "ignore": false
+      },
+      {
+       "text": "100",
+       "ignore": false
+      }
+     ],
+     "ticks": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+     ]
+    },
+    {
+     "labels": [
+      {
+       "text": "0",
+       "ignore": false
+      },
+      {
+       "text": "20",
+       "ignore": false
+      },
+      {
+       "text": "40",
+       "ignore": false
+      },
+      {
+       "text": "60",
+       "ignore": false
+      },
+      {
+       "text": "80",
+       "ignore": false
+      },
+      {
+       "text": "100",
+       "ignore": false
+      }
+     ],
+     "ticks": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+     ]
+    },
+    {
+     "labels": [
+      {
+       "text": "0",
+       "ignore": false
+      },
+      {
+       "text": "20",
+       "ignore": false
+      },
+      {
+       "text": "40",
+       "ignore": false
+      },
+      {
+       "text": "60",
+       "ignore": false
+      },
+      {
+       "text": "80",
+       "ignore": false
+      },
+      {
+       "text": "100",
+       "ignore": false
+      }
+     ],
+     "ticks": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+     ]
+    },
+    {
+     "labels": [
+      {
+       "text": "0",
+       "ignore": false
+      },
+      {
+       "text": "20",
+       "ignore": false
+      },
+      {
+       "text": "40",
+       "ignore": false
+      },
+      {
+       "text": "60",
+       "ignore": false
+      },
+      {
+       "text": "80",
+       "ignore": false
+      },
+      {
+       "text": "100",
+       "ignore": false
+      }
+     ],
+     "ticks": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+     ]
+    }
+   ]
+  },
+  {
+   "id": "rl-overlap",
+   "note": "hideOverlap: every label that crowds one kept is hidden",
+   "option": {
+    "radar": {
+     "indicator": [
+      {
+       "name": "A",
+       "max": 100
+      },
+      {
+       "name": "B",
+       "max": 100
+      },
+      {
+       "name": "C",
+       "max": 100
+      },
+      {
+       "name": "D",
+       "max": 100
+      }
+     ],
+     "radius": 70,
+     "center": [
+      "50%",
+      "50%"
+     ],
+     "axisLabel": {
+      "show": true,
+      "hideOverlap": true
+     },
+     "axisTick": {
+      "show": true
+     },
+     "splitNumber": 10
+    },
+    "series": [
+     {
+      "type": "radar",
+      "symbol": "none",
+      "data": [
+       {
+        "value": [
+         50,
+         60,
+         70,
+         80
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "axes": [
+    {
+     "labels": [
+      {
+       "text": "0",
+       "ignore": true
+      },
+      {
+       "text": "10",
+       "ignore": false
+      },
+      {
+       "text": "20",
+       "ignore": true
+      },
+      {
+       "text": "30",
+       "ignore": false
+      },
+      {
+       "text": "40",
+       "ignore": true
+      },
+      {
+       "text": "50",
+       "ignore": false
+      },
+      {
+       "text": "60",
+       "ignore": true
+      },
+      {
+       "text": "70",
+       "ignore": false
+      },
+      {
+       "text": "80",
+       "ignore": true
+      },
+      {
+       "text": "90",
+       "ignore": false
+      },
+      {
+       "text": "100",
+       "ignore": true
+      }
+     ],
+     "ticks": [
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true
+     ]
+    },
+    {
+     "labels": [
+      {
+       "text": "0",
+       "ignore": true
+      },
+      {
+       "text": "10",
+       "ignore": false
+      },
+      {
+       "text": "20",
+       "ignore": true
+      },
+      {
+       "text": "30",
+       "ignore": true
+      },
+      {
+       "text": "40",
+       "ignore": false
+      },
+      {
+       "text": "50",
+       "ignore": true
+      },
+      {
+       "text": "60",
+       "ignore": true
+      },
+      {
+       "text": "70",
+       "ignore": false
+      },
+      {
+       "text": "80",
+       "ignore": true
+      },
+      {
+       "text": "90",
+       "ignore": true
+      },
+      {
+       "text": "100",
+       "ignore": true
+      }
+     ],
+     "ticks": [
+      true,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true
+     ]
+    },
+    {
+     "labels": [
+      {
+       "text": "0",
+       "ignore": true
+      },
+      {
+       "text": "10",
+       "ignore": false
+      },
+      {
+       "text": "20",
+       "ignore": true
+      },
+      {
+       "text": "30",
+       "ignore": false
+      },
+      {
+       "text": "40",
+       "ignore": true
+      },
+      {
+       "text": "50",
+       "ignore": false
+      },
+      {
+       "text": "60",
+       "ignore": true
+      },
+      {
+       "text": "70",
+       "ignore": false
+      },
+      {
+       "text": "80",
+       "ignore": true
+      },
+      {
+       "text": "90",
+       "ignore": false
+      },
+      {
+       "text": "100",
+       "ignore": true
+      }
+     ],
+     "ticks": [
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true
+     ]
+    },
+    {
+     "labels": [
+      {
+       "text": "0",
+       "ignore": true
+      },
+      {
+       "text": "10",
+       "ignore": false
+      },
+      {
+       "text": "20",
+       "ignore": true
+      },
+      {
+       "text": "30",
+       "ignore": true
+      },
+      {
+       "text": "40",
+       "ignore": false
+      },
+      {
+       "text": "50",
+       "ignore": true
+      },
+      {
+       "text": "60",
+       "ignore": true
+      },
+      {
+       "text": "70",
+       "ignore": false
+      },
+      {
+       "text": "80",
+       "ignore": true
+      },
+      {
+       "text": "90",
+       "ignore": true
+      },
+      {
+       "text": "100",
+       "ignore": true
+      }
+     ],
+     "ticks": [
+      true,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true
+     ]
+    }
+   ]
+  }
+ ],
+ "guards": [
+  {
+   "name": "grid-default: one rect, a transparent fill (tokens.color.transparent), #b7b9be 1 px, z2 -1, silent, under the axes",
+   "ok": true
+  },
+  {
+   "name": "grid-default: the rect is the grid rect",
+   "ok": true
+  },
+  {
+   "name": "grid-styled: every key reached the style",
+   "ok": true
+  },
+  {
+   "name": "grid-gradient: the gradient is the fill (not `color`), the stroke 'none'",
+   "ok": true
+  },
+  {
+   "name": "grid-hidden: no rect",
+   "ok": true
+  },
+  {
+   "name": "grid-two: the first hidden, the second shown, width 0",
+   "ok": true
+  },
+  {
+   "name": "grid-dotted / dasharray: the words and the array as written",
+   "ok": true
+  },
+  {
+   "name": "alone-toolbox: three icons",
+   "ok": true
+  },
+  {
+   "name": "alone-toolbox-timeline: a timeline drawn",
+   "ok": true
+  },
+  {
+   "name": "alone-visualmap: a visualMap drawn",
+   "ok": true
+  },
+  {
+   "name": "radar-default: five round axis lines, the split lines butt (getLineStyle's none, the path's default)",
+   "ok": true
+  },
+  {
+   "name": "radar-ends: square lines, round ticks, round / bevel / 3 split lines",
+   "ok": true
+  },
+  {
+   "name": "radar-circle-join: the rings take the join",
+   "ok": true
+  },
+  {
+   "name": "grad-axisline: two lines, each its own ramp",
+   "ok": true
+  },
+  {
+   "name": "grad-axisline: the box is the stroke-grown rect (max(6, 5) = 6)",
+   "ok": true
+  },
+  {
+   "name": "grad-ticks: a box per tick, five ticks",
+   "ok": true
+  },
+  {
+   "name": "grad-split: a Line per split line (CartesianAxisView does not merge them), each its own box",
+   "ok": true
+  },
+  {
+   "name": "blend: every mode written reaches every bar as style.blend",
+   "ok": true
+  },
+  {
+   "name": "rl-crowded: on the two upright spokes the min label (0) crowds 20 and gives way, its tick too; every max (100) crowds 80",
+   "ok": true
+  },
+  {
+   "name": "rl-keepmin: on the upright spokes the neighbour (20) gives way instead",
+   "ok": true
+  },
+  {
+   "name": "rl-hidemax: the max hidden, its tick too",
+   "ok": true
+  },
+  {
+   "name": "rl-roomy: nothing hidden",
+   "ok": true
+  },
+  {
+   "name": "rl-overlap: some hidden in the middle",
+   "ok": true
+  }
+ ]
+}

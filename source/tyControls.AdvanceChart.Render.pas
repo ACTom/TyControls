@@ -2486,6 +2486,20 @@ end;
 procedure TyRenderCaption(P: TTyPainter; const AElement: TTyChartElement); forward;
 
 { [spec 242] an element's clip paths intersected into the painter's clip }
+{ [R5-G] A CLIP RECT OFF THE PIXEL GRID: the integer rect the painter clips
+  to holds the half pixel outside it, so the exact rect goes in as a path too
+  -- a canvas' clip(), coverage at its fractional edges (a line's clip is
+  getArea grown by half the line width, its y not rounded: Line.ts) }
+procedure ClipRectExact(P: TTyPainter; const AR: TTyRectF);
+begin
+  if (Frac(AR.Left) = 0) and (Frac(AR.Top) = 0) and (Frac(AR.Right) = 0)
+    and (Frac(AR.Bottom) = 0) then Exit;
+  P.BeginPath;
+  P.RectPath(AR.Left, AR.Top, AR.Right, AR.Bottom);
+  P.ClipPath(tfrNonZero);
+  P.BeginPath;
+end;
+
 procedure ApplyClipPaths(P: TTyPainter; const AElement: TTyChartElement);
 var k: Integer;
 begin
@@ -3344,8 +3358,11 @@ begin
     P.SaveState;
     try
       if AElement.HasClip then
+      begin
         P.ClipRect(Rect(Floor(AElement.ClipRect.Left), Floor(AElement.ClipRect.Top),
           Ceil(AElement.ClipRect.Right), Ceil(AElement.ClipRect.Bottom)));
+        ClipRectExact(P, AElement.ClipRect);
+      end;
       { [spec 242] the clip paths }
       ApplyClipPaths(P, AElement);
       if AElement.Style.Alpha < 1 then
@@ -3385,7 +3402,9 @@ begin
            AElement.ClipRadius]);
         P.ClipPath(tfrNonZero);
         P.BeginPath;
-      end;
+      end
+      else
+        ClipRectExact(P, AElement.ClipRect);
     end;
     { A POLAR LINE'S SECTOR, traced as zrender's arc takes it [Batch 113] }
     if AElement.HasClipSector then
