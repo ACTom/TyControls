@@ -22,7 +22,7 @@ unit test.advchart.shadows;
   differently. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
-     Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
+     Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes, BGRACanvas2D, BGRAPen,
      tyControls.Types, tyControls.Controller, tyControls.Painter,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
      tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Render,
@@ -79,8 +79,10 @@ type
   published
     procedure TestTheBlurIsAGaussianOfHalfTheBlur;
     procedure TestAShortBlurIsTheGaussianItself;
+    procedure TestTheBoxesAreTheSvgSpecifications;
     procedure TestTheOffsetIsInDeviceSpace;
     procedure TestTheShapeDrawsAsWithoutOne;
+    procedure TestTheShapeIsPinnedAfterItsShadow;
     procedure TestEachFillAndEachStrokeCastsItsOwn;
     procedure TestTheShadowKeepsToTheClip;
     procedure TestThePaintsAlphaCastsIt;
@@ -400,6 +402,11 @@ begin
       else if role = 'sankeyNode' then Each(Plain(el) and not el.Datum.IsEdge and (el.Datum.SeriesIndex = s)
         and (el.Datum.DataIndex = i) and not el.Silent)
       else if role = 'sankeyEdge' then Each(Plain(el) and el.Datum.IsEdge and (el.Datum.SeriesIndex = s)
+        and (el.Datum.DataIndex = i))
+      { a chord's sectors and ribbons }
+      else if role = 'chordNode' then Each(Plain(el) and not el.Datum.IsEdge and (el.Anim.Role = carChord)
+        and (el.Datum.SeriesIndex = s) and (el.Datum.DataIndex = i))
+      else if role = 'chordEdge' then Each(Plain(el) and el.Datum.IsEdge and (el.Datum.SeriesIndex = s)
         and (el.Datum.DataIndex = i))
       else if role = 'river' then Each((el.Anim.Role = carRiver) and (el.Anim.Series = s) and (el.Anim.Index = i))
       else if role = 'parallel' then Each((el.Anim.Role = carParallelLine) and (el.Anim.Series = s) and (el.Datum.DataIndex = i))
@@ -836,6 +843,169 @@ begin
     AssertTrue(Format('a deviation of 1, the Gaussian (worst %.4f)', [worst]), worst < 0.02);
     AssertTrue('half a pixel out is blurred, not a hard edge', (AlphaAt(bmp, 50, 50) > 40)
       and (AlphaAt(bmp, 50, 50) < 200));
+  finally
+    p.Free;
+    bmp.Free;
+  end;
+  { a blur of 1 (a deviation of 0.5): the SVG boxes would be one pixel wide -- no blur at
+    all -- the Gaussian puts about a tenth half a pixel out }
+  p := NewLayer(100, 100, bmp);
+  try
+    p.SetShadow(TyRGBA(0, 0, 0, 255), 1, 0, 0);
+    p.BeginPath;
+    p.RectPath(0, -100, 50, 200);
+    p.FillPath(TyRGBA(255, 0, 0, 255));
+    p.EndPaint;
+    a := AlphaAt(bmp, 50, 50) / 255;
+    { the kernel sampled at the pixels: 0.106 (the continuous one 0.159) }
+    AssertTrue(Format('a deviation of 0.5 half a pixel out: %.4f', [a]), (a > 0.08) and (a < 0.2));
+  finally
+    p.Free;
+    bmp.Free;
+  end;
+end;
+
+{ THE SHAPE PINNED AGAIN AFTER ITS SHADOW: BGRA's polygon filler takes its pivots from the
+  global Random (spec 211), and the shadow's own fill of the path drew from the pinned
+  stream -- the shape's fill after it must start from the pinned seed again, or a polygon
+  whose edges tie on a row (a stroke's outline, test.bgrarandompin's) is covered
+  differently with a shadow than without. The shadow is cast 500 px down, clear of the
+  shape. }
+procedure TAdvChartShadowsTest.TestTheShapeIsPinnedAfterItsShadow;
+
+  function Lcg(var AState: LongWord): Double;
+  begin
+    {$push}{$R-}{$Q-}
+    AState := AState * 1664525 + 1013904223;
+    {$pop}
+    Result := (AState shr 8) / 16777216;
+  end;
+
+  procedure Outline(ACtx: TBGRACanvas2D; ASeed: LongWord);
+  var
+    s: LongWord;
+    i: Integer;
+    line, wide: ArrayOfTPointF;
+    fresh: Boolean;
+    stroker: TBGRAPenStroker;
+  begin
+    s := ASeed;
+    SetLength(line, 300);
+    for i := 0 to 299 do
+      line[i] := PointF(10 + i * 780 / 299, 40 + Lcg(s) * 420);
+    stroker := TBGRAPenStroker.Create;
+    try
+      stroker.JoinStyle := pjsBevel;
+      stroker.LineCap := pecFlat;
+      wide := stroker.ComputePolylineAutocycle(line, 2);
+    finally
+      stroker.Free;
+    end;
+    ACtx.beginPath;
+    fresh := True;
+    for i := 0 to High(wide) do
+      if isEmptyPointF(wide[i]) then fresh := True
+      else if fresh then
+      begin
+        ACtx.moveTo(wide[i]);
+        fresh := False;
+      end
+      else ACtx.lineTo(wide[i]);
+    ACtx.closePath;
+  end;
+
+  function Paint(AShadow: Boolean): TBGRABitmap;
+  var
+    ctx: TBGRACanvas2D;
+    k: Integer;
+  begin
+    Result := TBGRABitmap.Create(800, 1000, BGRA(255, 255, 255, 255));
+    ctx := Result.Canvas2D;
+    if AShadow then
+    begin
+      ctx.shadowColor(BGRA(0, 0, 0, 255));
+      ctx.shadowBlur := 2;
+      ctx.shadowOffsetX := 0;
+      ctx.shadowOffsetY := 500;
+    end;
+    ctx.fillStyle(BGRA(40, 40, 160, 140));
+    for k := 0 to 1 do
+    begin
+      Outline(ctx, 1 + 2 * k);
+      TyCtxFill(ctx);
+    end;
+  end;
+
+var
+  a, b: TBGRABitmap;
+  x, y, diff: Integer;
+begin
+  a := Paint(False);
+  b := Paint(True);
+  try
+    diff := 0;
+    for y := 0 to 499 do
+      for x := 0 to 799 do
+        if LongWord(a.ScanLine[y][x]) <> LongWord(b.ScanLine[y][x]) then Inc(diff);
+    AssertEquals('the outlines over their shadow are the outlines alone', 0, diff);
+    diff := 0;
+    for y := 540 to 960 do
+      for x := 0 to 799 do
+        if b.ScanLine[y][x].red < 200 then Inc(diff);
+    AssertTrue(Format('and the shadow is there (%d dark pixels)', [diff]), diff > 1000);
+  finally
+    a.Free;
+    b.Free;
+  end;
+end;
+
+{ THE BOXES ARE THE SVG SPECIFICATION'S: d = floor(sigma * 3 * sqrt(2 pi) / 4 + 0.5) -- a
+  blur of 6 (a deviation of 3) is d = 6, where a floor without the half would make it 5 --
+  an even d two boxes of d, one centred left of the pixel and one right, and one of d + 1.
+  The edge of a tall rect, blurred along x only, against those three boxes run here. }
+procedure TAdvChartShadowsTest.TestTheBoxesAreTheSvgSpecifications;
+
+  procedure Box(var A: array of Double; ALeft, ARight: Integer);
+  var
+    b: array of Double;
+    i, j: Integer;
+    s: Double;
+  begin
+    SetLength(b, Length(A));
+    for i := 0 to High(A) do
+    begin
+      s := 0;
+      for j := i - ALeft to i + ARight do
+        if (j >= 0) and (j <= High(A)) then s := s + A[j];
+      b[i] := s / (ALeft + ARight + 1);
+    end;
+    for i := 0 to High(A) do A[i] := b[i];
+  end;
+
+var
+  p: TTyPainter;
+  bmp: TBGRABitmap;
+  want: array of Double;
+  x, worst: Integer;
+begin
+  SetLength(want, 300);
+  for x := 0 to 299 do
+    if x < 150 then want[x] := 1 else want[x] := 0;
+  Box(want, 3, 2);
+  Box(want, 2, 3);
+  Box(want, 3, 3);
+  p := NewLayer(300, 300, bmp);
+  try
+    p.SetShadow(TyRGBA(0, 0, 0, 255), 6, 0, 0);
+    p.BeginPath;
+    p.RectPath(0, -100, 150, 500);
+    p.FillPath(TyRGBA(255, 0, 0, 255));
+    p.EndPaint;
+    worst := 0;
+    for x := 150 to 165 do
+      worst := Max(worst, Abs(AlphaAt(bmp, x, 150) - Round(want[x] * 255)));
+    AssertTrue(Format('the three boxes of 6, 6 and 7 (worst %d of 255)', [worst]), worst <= 3);
+    AssertTrue('the edge is blurred', AlphaAt(bmp, 150, 150) > 90);
   finally
     p.Free;
     bmp.Free;

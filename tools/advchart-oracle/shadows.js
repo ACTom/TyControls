@@ -166,6 +166,11 @@ const PICK = {
     const ed = sm.getEdgeData();
     ed.each(i => { const el = ed.getItemGraphicEl(i); if (el) r.push(shadowRec('sankeyEdge', sm.seriesIndex, i, el.style)); });
   }),
+  chord: (chart, r) => eachSeriesOf(chart, 'chord', (sm, d) => {
+    d.each(i => { const el = d.getItemGraphicEl(i); if (el) r.push(shadowRec('chordNode', sm.seriesIndex, i, el.style)); });
+    const ed = sm.getEdgeData();
+    ed.each(i => { const el = ed.getItemGraphicEl(i); if (el) r.push(shadowRec('chordEdge', sm.seriesIndex, i, el.style)); });
+  }),
   themeRiver: (chart, r) => eachSeriesOf(chart, 'themeRiver', (sm, d, v) => {
     let n = 0;
     v.group.traverse(el => { if (el.type === 'ec-polygon' || el.type === 'polygon') r.push(shadowRec('river', sm.seriesIndex, n++, el.style)); });
@@ -265,6 +270,10 @@ const CASES = [
   { id: 'sankey', pick: ['sankey'], note: "sankey nodes (itemStyle) and links (lineStyle through getItemStyle), a link's own",
     option: { series: [{ type: 'sankey', itemStyle: { shadowBlur: 3, shadowColor: '#333' }, lineStyle: { shadowBlur: 5, shadowColor: '#999' },
       data: [{ name: 'a' }, { name: 'b' }, { name: 'c' }], links: [{ source: 'a', target: 'b', value: 3 }, { source: 'a', target: 'c', value: 2, lineStyle: { shadowOffsetY: 2 } }] }] } },
+  { id: 'chord', pick: ['chord'], note: "chord nodes (the visual style, an item's own over it) and links (lineStyle's getLineStyle), a link's own",
+    option: { series: [{ type: 'chord', itemStyle: { shadowBlur: 4, shadowColor: '#444' }, lineStyle: { shadowBlur: 6, shadowColor: '#888' },
+      data: [{ name: 'a', itemStyle: { shadowOffsetX: 3 } }, { name: 'b' }, { name: 'c' }],
+      links: [{ source: 'a', target: 'b', value: 3 }, { source: 'b', target: 'c', value: 2, lineStyle: { shadowOffsetY: 5 } }] }] } },
   { id: 'river', pick: ['themeRiver'], highlight: { seriesIndex: 0, dataIndex: 1 }, note: "themeRiver-basic's emphasis shadow (blur 20, rgba(0,0,0,0.8)) on the highlighted layer; none at rest",
     option: { singleAxis: { type: 'time' }, series: [{ type: 'themeRiver', emphasis: { itemStyle: { shadowBlur: 20, shadowColor: 'rgba(0, 0, 0, 0.8)' } },
       data: [['2015/11/08', 10, 'A'], ['2015/11/09', 15, 'A'], ['2015/11/08', 5, 'B'], ['2015/11/09', 8, 'B']] }] } },
@@ -429,6 +438,10 @@ const ANIM = [
     option: { color: ['#5470c6'], xAxis: CAT, yAxis: { type: 'value', max: 10 },
       series: [{ type: 'bar', itemStyle: { shadowBlur: 4, shadowColor: '#ff0000' }, emphasis: { itemStyle: { shadowBlur: 12 } }, data: [5, 7, 3] }] },
     events: [{ at: 0, payload: { type: 'highlight', seriesIndex: 0, dataIndex: 1 } }, { at: 500, payload: { type: 'downplay', seriesIndex: 0, dataIndex: 1 } }] },
+  { id: 'colourTween', note: "a bar's own shadow (blur 4, #ff0000) under an emphasis one of its own colour (blur 12, #0000ff): the colour tweens red to blue and back",
+    option: { color: ['#5470c6'], xAxis: CAT, yAxis: { type: 'value', max: 10 },
+      series: [{ type: 'bar', itemStyle: { shadowBlur: 4, shadowColor: '#ff0000' }, emphasis: { itemStyle: { shadowBlur: 12, shadowColor: '#0000ff' } }, data: [5, 7, 3] }] },
+    events: [{ at: 0, payload: { type: 'highlight', seriesIndex: 0, dataIndex: 1 } }, { at: 500, payload: { type: 'downplay', seriesIndex: 0, dataIndex: 1 } }] },
 ];
 function runAnimCase(c) {
   NOW = T0;
@@ -519,6 +532,9 @@ const guards = [
   { name: 'emphasisTween: 0 at rest, between at 150, 10 from 300, back to 0 from 800', ok: num(at('emphasisTween', 0).blur) === 0
     && num(at('emphasisTween', 150).blur) > 0 && num(at('emphasisTween', 150).blur) < 10 && num(at('emphasisTween', 301).blur) === 10
     && num(at('emphasisTween', 801).blur) === 0 },
+  { name: 'colourTween: red at rest, between at 150, blue from 301, red again from 801', ok: at('colourTween', 0).color === '#ff0000'
+    && /^rgba\(/.test(at('colourTween', 150).color) && at('colourTween', 150).color !== 'rgba(0,0,255,1)'
+    && /^(#0000ff|rgba\(0,0,255,1\))$/.test(at('colourTween', 301).color) && /^(#ff0000|rgba\(255,0,0,1\))$/.test(at('colourTween', 801).color) },
   { name: 'restTween: from 4 to 12 in #ff0000', ok: num(at('restTween', 0).blur) === 4 && num(at('restTween', 301).blur) === 12
     && at('restTween', 301).color === '#ff0000' },
   { name: 'map: the regions, B its own colour, then B blur 9', ok: wh('map').length === 2 && out1.whole.find(c => c.id === 'map').highlighted.some(r => num(r.blur) === 9 && r.color === '#00ff00')
@@ -565,6 +581,10 @@ const guards = [
   { name: 'tree, treemap, sunburst, sankey carry theirs', ok: cs('tree').items.some(r => r.role === 'treeEdge' && num(r.ox) === 2)
     && cs('treemap').items.some(r => r.color === '#f00') && cs('sunburst').items.some(r => num(r.blur) === 8)
     && cs('sankey').items.some(r => r.role === 'sankeyEdge' && num(r.oy) === 2) && cs('sankey').items.some(r => r.role === 'sankeyNode' && num(r.blur) === 3) },
+  { name: "chord: the nodes' blur 4, a's offset 3; the links' blur 6, link 1 its offset 5", ok: cs('chord').items.filter(r => r.role === 'chordNode').length === 3
+    && cs('chord').items.filter(r => r.role === 'chordNode').every(r => num(r.blur) === 4) && num(find(cs('chord').items, 'chordNode', 0, 0).ox) === 3
+    && cs('chord').items.filter(r => r.role === 'chordEdge').length === 2 && cs('chord').items.filter(r => r.role === 'chordEdge').every(r => num(r.blur) === 6)
+    && num(find(cs('chord').items, 'chordEdge', 0, 1).oy) === 5 && num(find(cs('chord').items, 'chordEdge', 0, 0).oy) === 0 },
   { name: 'river: the highlighted layer blur 20', ok: cs('river').highlighted.some(r => num(r.blur) === 20) && cs('river').items.every(r => num(r.blur) === 0) },
   { name: 'parallel and lines', ok: cs('parallelLines').items.some(r => r.role === 'parallel' && num(r.ox) === 3) && cs('parallelLines').items.some(r => r.role === 'lines' && num(r.blur) === 7) },
   { name: 'pictorial glyphs and polar bars', ok: cs('pictorialPolar').items.some(r => r.role === 'glyph' && num(r.blur) === 5) && cs('pictorialPolar').items.some(r => r.role === 'polarBar' && num(r.blur) === 6) },

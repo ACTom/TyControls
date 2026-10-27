@@ -2432,6 +2432,101 @@
    ]
   },
   {
+   "id": "chord",
+   "note": "chord nodes (the visual style, an item's own over it) and links (lineStyle's getLineStyle), a link's own",
+   "option": {
+    "series": [
+     {
+      "type": "chord",
+      "itemStyle": {
+       "shadowBlur": 4,
+       "shadowColor": "#444"
+      },
+      "lineStyle": {
+       "shadowBlur": 6,
+       "shadowColor": "#888"
+      },
+      "data": [
+       {
+        "name": "a",
+        "itemStyle": {
+         "shadowOffsetX": 3
+        }
+       },
+       {
+        "name": "b"
+       },
+       {
+        "name": "c"
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "b",
+        "value": 3
+       },
+       {
+        "source": "b",
+        "target": "c",
+        "value": 2,
+        "lineStyle": {
+         "shadowOffsetY": 5
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "role": "chordNode",
+     "s": 0,
+     "i": 0,
+     "blur": "4010000000000000",
+     "ox": "4008000000000000",
+     "oy": "0000000000000000",
+     "color": "#444"
+    },
+    {
+     "role": "chordNode",
+     "s": 0,
+     "i": 1,
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#444"
+    },
+    {
+     "role": "chordNode",
+     "s": 0,
+     "i": 2,
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#444"
+    },
+    {
+     "role": "chordEdge",
+     "s": 0,
+     "i": 0,
+     "blur": "4018000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#888"
+    },
+    {
+     "role": "chordEdge",
+     "s": 0,
+     "i": 1,
+     "blur": "4018000000000000",
+     "ox": "0000000000000000",
+     "oy": "4014000000000000",
+     "color": "#888"
+    }
+   ]
+  },
+  {
    "id": "river",
    "note": "themeRiver-basic's emphasis shadow (blur 20, rgba(0,0,0,0.8)) on the highlighted layer; none at rest",
    "option": {
@@ -4253,6 +4348,171 @@
      "states": ""
     }
    ]
+  },
+  {
+   "id": "colourTween",
+   "note": "a bar's own shadow (blur 4, #ff0000) under an emphasis one of its own colour (blur 12, #0000ff): the colour tweens red to blue and back",
+   "option": {
+    "color": [
+     "#5470c6"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "itemStyle": {
+       "shadowBlur": 4,
+       "shadowColor": "#ff0000"
+      },
+      "emphasis": {
+       "itemStyle": {
+        "shadowBlur": 12,
+        "shadowColor": "#0000ff"
+       }
+      },
+      "data": [
+       5,
+       7,
+       3
+      ]
+     }
+    ]
+   },
+   "events": [
+    {
+     "at": 0,
+     "payload": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 1
+     }
+    },
+    {
+     "at": 500,
+     "payload": {
+      "type": "downplay",
+      "seriesIndex": 0,
+      "dataIndex": 1
+     }
+    }
+   ],
+   "samples": [
+    {
+     "t": 0,
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#ff0000",
+     "states": "emphasis"
+    },
+    {
+     "t": 1,
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "rgba(255,0,0,1)",
+     "states": "emphasis"
+    },
+    {
+     "t": 50,
+     "blur": "401d42247ba0aa1f",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "rgba(149,0,105,1)",
+     "states": "emphasis"
+    },
+    {
+     "t": 150,
+     "blur": "4025f5b10b7e61c6",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "rgba(32,0,222,1)",
+     "states": "emphasis"
+    },
+    {
+     "t": 299,
+     "blur": "4027ffffb076ac6e",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "rgba(0,0,254,1)",
+     "states": "emphasis"
+    },
+    {
+     "t": 300,
+     "blur": "4027fffff60ed58e",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "rgba(0,0,254,1)",
+     "states": "emphasis"
+    },
+    {
+     "t": 301,
+     "blur": "4028000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "rgba(0,0,255,1)",
+     "states": "emphasis"
+    },
+    {
+     "t": 500,
+     "blur": "4028000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "rgba(0,0,255,1)",
+     "states": ""
+    },
+    {
+     "t": 501,
+     "blur": "4028000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "rgba(0,0,255,1)",
+     "states": ""
+    },
+    {
+     "t": 650,
+     "blur": "4014149de9033c74",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "rgba(222,0,32,1)",
+     "states": ""
+    },
+    {
+     "t": 799,
+     "blur": "401000009f12a723",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "rgba(254,0,0,1)",
+     "states": ""
+    },
+    {
+     "t": 800,
+     "blur": "4010000013e254e4",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "rgba(254,0,0,1)",
+     "states": ""
+    },
+    {
+     "t": 801,
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "rgba(255,0,0,1)",
+     "states": ""
+    }
+   ]
   }
  ],
  "maps": [
@@ -4264,6 +4524,10 @@
  "guards": [
   {
    "name": "emphasisTween: 0 at rest, between at 150, 10 from 300, back to 0 from 800",
+   "ok": true
+  },
+  {
+   "name": "colourTween: red at rest, between at 150, blue from 301, red again from 801",
    "ok": true
   },
   {
@@ -4352,6 +4616,10 @@
   },
   {
    "name": "tree, treemap, sunburst, sankey carry theirs",
+   "ok": true
+  },
+  {
+   "name": "chord: the nodes' blur 4, a's offset 3; the links' blur 6, link 1 its offset 5",
    "ok": true
   },
   {
