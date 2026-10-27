@@ -6146,8 +6146,14 @@ begin
     { AN AXIS TRIGGER HIGHLIGHTS THE WHOLE COLUMN. Upstream calls it
       triggerEmphasis and has it on by default: the rows the tooltip is
       describing are the rows that light up, which is what ties the two
-      together. }
+      together.
+      [R5-D] Only an axis whose model says triggerEmphasis; and a row the
+      states draw is lit by the highlight action updateAxisPointer
+      dispatched (dispatchHighDownActually), so it is in emphasis already
+      and skipped below -- what is lifted here is a row no state machine
+      speaks for. }
     for i := 0 to High(AHits) do
+      if AHits[i].Spec.TriggerEmphasis then
       for k := 0 to High(AHits[i].Slots) do
       begin
         slot := AHits[i].Slots[k];

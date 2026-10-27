@@ -73,6 +73,8 @@ begin
   FParExpNow := NaN;
   FThumbOwner := -1;
   FThumbDrag := -1;
+  { [R5-D] no handle dragged }
+  FHdDrag := -1;
   { an instance from now on [Batch 141] }
   FConnectStatus := -1;
   { the init options' defaults [Batch 142] }
@@ -375,6 +377,9 @@ begin
   FThumbOwner := -1;
   FThumbDrag := -1;
   FThumbFresh := True;
+  { [R5-D] new axisPointer models: the handles' values and places go }
+  FHandles := nil;
+  FHdDrag := -1;
   { the state records the reused elements keep, while the old option and
     its stores are still there [Batch 96] }
   StCarryTake(AnimViewKeys);

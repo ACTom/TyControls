@@ -316,7 +316,22 @@ function TyTooltipSpecDefault: TTyTooltipSpec;
 
   ARawIndex < 0 skips the data-item level, which is what an axis tooltip does. }
 function TyTooltipSpecOf(AOption: TTyChartOption; ASeriesIndex: Integer;
-  ARawIndex: Integer): TTyTooltipSpec;
+  ARawIndex: Integer): TTyTooltipSpec; overload;
+{ [R5-D] THE SAME WITH THE COORDINATE SYSTEM'S LEVEL: TooltipView's item
+  cascade is [data item, series, seriesModel.coordinateSystem.model] over the
+  global component -- ACoordNode is that model's option (a grid, a polar, a
+  single axis, a parallel, a geo; nil where the coordinate system keeps its
+  model private -- a calendar, a radar, a matrix -- or there is none); its
+  `tooltip` is read as the series' is (a string a formatter). }
+function TyTooltipSpecOf(AOption: TTyChartOption; ASeriesIndex: Integer;
+  ARawIndex: Integer; ACoordNode: TJSONData): TTyTooltipSpec; overload;
+{ [R5-D] buildTooltipModel over plain option levels, top first, then the
+  global component: a string level is `{formatter: it}`, an object is
+  merged, anything else (nil, null, a number) is skipped -- the axis
+  tooltip's [e.tooltipOption], a showTip proxy's [tooltip option, its
+  content's level]. }
+function TyTooltipSpecOfLevels(AOption: TTyChartOption;
+  const ALevels: array of TJSONData): TTyTooltipSpec;
 { `triggerOn` matching, upstream's way: a raw substring test, not equality and
   not a split on '|'. 'none' answers False for everything. }
 function TyTooltipTriggerOnHas(const ATriggerOn, AWhat: string): Boolean;
@@ -330,7 +345,7 @@ function TyTooltipComponent(AOption: TTyChartOption): TJSONObject;
   model's default `trigger: 'item'` is not in its option, so under a global
   `trigger: 'axis'` the marker shows no box of its own. }
 function TyTooltipSpecOfMarker(AOption: TTyChartOption; AHostSeries: Integer;
-  const AKind: string; AItem: Integer): TTyTooltipSpec;
+  const AKind: string; AItem: Integer; ACoordNode: TJSONData = nil): TTyTooltipSpec;
 { [Batch 147] A MATRIX CELL'S cascade (TooltipView._showComponentItemTooltip
   over setTooltipConfig): the matrix's `tooltip` (a string is its
   formatter), the matrix model itself, `{formatter: AContent}` -- the cell's
@@ -709,6 +724,14 @@ begin
     checks for the string form separately. }
 end;
 
+function SeenHas(const ASeen: TTyStringArray; const AKey: string): Boolean;
+var i: Integer;
+begin
+  for i := 0 to High(ASeen) do
+    if ASeen[i] = AKey then Exit(True);
+  Result := False;
+end;
+
 function TooltipStringOf(ANode: TJSONData; out AText: string): Boolean;
 var d: TJSONData;
 begin
@@ -966,6 +989,46 @@ end;
 
 function TyTooltipSpecOf(AOption: TTyChartOption; ASeriesIndex: Integer;
   ARawIndex: Integer): TTyTooltipSpec;
+begin
+  Result := TyTooltipSpecOf(AOption, ASeriesIndex, ARawIndex, nil);
+end;
+
+function TyTooltipSpecOfLevels(AOption: TTyChartOption;
+  const ALevels: array of TJSONData): TTyTooltipSpec;
+var
+  seen: TTyStringArray;
+  k: Integer;
+  comp: TJSONObject;
+  i: Integer;
+  had: Boolean;
+begin
+  Result := TyTooltipSpecDefault;
+  seen := nil;
+  if AOption = nil then Exit;
+  for k := 0 to High(ALevels) do
+  begin
+    if ALevels[k] = nil then Continue;
+    if ALevels[k].JSONType = jtString then
+    begin
+      had := False;
+      for i := 0 to High(seen) do
+        if seen[i] = 'formatter' then had := True;
+      if had then Continue;
+      Result.Formatter := ALevels[k].AsString;
+      Result.HasFormatter := Result.Formatter <> '';
+      SetLength(seen, Length(seen) + 1);
+      seen[High(seen)] := 'formatter';
+    end
+    else if ALevels[k] is TJSONObject then
+      MergeTooltipNode(TJSONObject(ALevels[k]), Result, seen);
+  end;
+  comp := TyTooltipComponent(AOption);
+  Result.HasComponent := comp <> nil;
+  MergeTooltipNode(comp, Result, seen);
+end;
+
+function TyTooltipSpecOf(AOption: TTyChartOption; ASeriesIndex: Integer;
+  ARawIndex: Integer; ACoordNode: TJSONData): TTyTooltipSpec;
 var
   seen: TTyStringArray;
   seriesNode, dataNode: TJSONData;
@@ -1010,6 +1073,22 @@ begin
   end;
   MergeTooltipNode(TooltipNodeOf(seriesNode), Result, seen);
 
+  { ---- [R5-D] the coordinate system's model ---- }
+  if ACoordNode is TJSONObject then
+  begin
+    if TooltipStringOf(ACoordNode, s) then
+    begin
+      if not Result.HasFormatter and not SeenHas(seen, 'formatter') then
+      begin
+        Result.Formatter := s;
+        Result.HasFormatter := s <> '';
+      end;
+      SetLength(seen, Length(seen) + 1);
+      seen[High(seen)] := 'formatter';
+    end;
+    MergeTooltipNode(TooltipNodeOf(ACoordNode), Result, seen);
+  end;
+
   { ---- the global component ----
     [Batch 100] THE COMPONENT, not the root's key: an array's first object
     is the component, and a root string or null is no component at all (it
@@ -1029,7 +1108,7 @@ begin
 end;
 
 function TyTooltipSpecOfMarker(AOption: TTyChartOption; AHostSeries: Integer;
-  const AKind: string; AItem: Integer): TTyTooltipSpec;
+  const AKind: string; AItem: Integer; ACoordNode: TJSONData): TTyTooltipSpec;
 var
   seen: TTyStringArray;
   seriesNode, mk, arr, it, comp: TJSONData;
@@ -1077,6 +1156,22 @@ begin
       seen[High(seen)] := 'formatter';
     end;
     MergeTooltipNode(TooltipNodeOf(mk), Result, seen);
+  end;
+  { [R5-D] the host series' coordinate system: _showSeriesItemTooltip's
+    third level is seriesModel.coordinateSystem.model for a marker too }
+  if ACoordNode is TJSONObject then
+  begin
+    if TooltipStringOf(ACoordNode, s) then
+    begin
+      if not Result.HasFormatter and not SeenHas(seen, 'formatter') then
+      begin
+        Result.Formatter := s;
+        Result.HasFormatter := s <> '';
+      end;
+      SetLength(seen, Length(seen) + 1);
+      seen[High(seen)] := 'formatter';
+    end;
+    MergeTooltipNode(TooltipNodeOf(ACoordNode), Result, seen);
   end;
   comp := TyTooltipComponent(AOption);
   Result.HasComponent := comp <> nil;

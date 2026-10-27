@@ -736,11 +736,9 @@ begin
       Continue;
     end;
     want := calls.Arrays[lg.Name];
-    { NOT COMPARED: line-tooltip-touch's pointer label. Its x axis pointer
-      has a value and a handle; the handle keeps it shown upstream, and
-      axisPointer.handle is one of the port's declared non-goals (spec §6),
-      so the label it formats is never drawn here. }
-    if lg.Name = 'line-tooltip-touch.formatter' then Continue;
+    { [R5-D] line-tooltip-touch's pointer label is compared now: its x
+      axis pointer has a value and a handle, and the handle keeps it shown
+      here as upstream (spec §241) [was: not compared, §6] }
     if Assigned(lg.Fmt) then
     begin
       { a formatter: every answer upstream gave is among the port's (a
@@ -934,11 +932,9 @@ begin
   Result := FormatDateTime('yyyy"-"mm"-"dd hh":"nn', dt) + Copy(S, 17, MaxInt);
 end;
 
-{ NOT COMPARED ON A HOVER, each a difference the port declares:
-    line-tooltip-touch, candlestick-touch  the pointer's handle
-        (axisPointer.handle keeps an axis' pointer and its tooltip up --
-        spec §6 leaves the handle out): the label formatter of the one, the
-        position of the other's volume grid
+{ NOT COMPARED ON A HOVER, each a difference the port declares
+  [R5-D: line-tooltip-touch and candlestick-touch, the pointer's handle,
+  are compared now -- spec §241]:
     scatter-nutrients-matrix  an axis' own pointer (axisPointer.show on
         axes a 'none' tooltip does not trigger): upstream's
         saveTooltipAxisInfo collects it and shows its axis tooltip; the
@@ -948,10 +944,7 @@ end;
         exact circle misses }
 function HoverSkipped(const AName, AWhat: string): Boolean;
 begin
-  Result := (AName = 'line-tooltip-touch.formatter')
-    or ((AName = 'candlestick-touch.position') and (Pos('"x"', AWhat) > 0)
-      and (Pos('"y" : 290', AWhat) > 0))
-    or (Pos('scatter-nutrients-matrix.', AName) = 1)
+  Result := (Pos('scatter-nutrients-matrix.', AName) = 1)
     or ((AName = 'scatter-weight.formatter') and (Pos('"x"', AWhat) > 0));
 end;
 

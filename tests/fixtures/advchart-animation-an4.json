@@ -18562,10 +18562,568 @@
      "scopes": ["update"]
     }
    ]
+  },
+  {
+   "id": "polarPointer.angleLine",
+   "kind": "pointer",
+   "note": "a category angle axis (bands of 60 degrees): the radial line slides A -> C, its two ends tweened as numbers",
+   "option": {"tooltip":{"trigger":"axis"},"polar":{},"angleAxis":{"type":"category","data":["A","B","C","D","E","F"]},"radiusAxis":{"type":"value"},"series":[{"type":"bar","coordinateSystem":"polar","emphasis":{"disabled":true},"data":[3,5,2,4,6,1]}]},
+   "first": {"x":230,"y":98},
+   "moves": [{"at":0,"x":230,"y":202}],
+   "W": 400,
+   "H": 300,
+   "clips": [2,2,2,2,2,0,0,0,0,0,0,0],
+   "elements": [
+    {
+     "id": "axisPointer/0.0",
+     "owner": "axisPointer",
+     "role": "el",
+     "type": "Line",
+     "present": null,
+     "final": {
+      "ignore": false,
+      "invisible": false,
+      "originX": "0000000000000000",
+      "originY": "0000000000000000",
+      "rotation": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "shape.percent": "3ff0000000000000",
+      "shape.x1": "4069000000000000",
+      "shape.x2": "4070400000000000",
+      "shape.y1": "4062c00000000000",
+      "shape.y2": "406fbd899ce963f0",
+      "skewX": "0000000000000000",
+      "skewY": "0000000000000000",
+      "style.fillOpacity": "3ff0000000000000",
+      "style.lineWidth": "3ff0000000000000",
+      "style.opacity": "3ff0000000000000",
+      "style.stroke": "#b7b9be",
+      "style.strokeOpacity": "3ff0000000000000",
+      "x": "0000000000000000",
+      "y": "0000000000000000"
+     },
+     "finalText": {
+      "ignore": false,
+      "invisible": false,
+      "originX": "0",
+      "originY": "0",
+      "rotation": "0",
+      "scaleX": "1",
+      "scaleY": "1",
+      "shape.percent": "1",
+      "shape.x1": "200",
+      "shape.x2": "260",
+      "shape.y1": "150",
+      "shape.y2": "253.92304845413264",
+      "skewX": "0",
+      "skewY": "0",
+      "style.fillOpacity": "1",
+      "style.lineWidth": "1",
+      "style.opacity": "1",
+      "style.stroke": "#b7b9be",
+      "style.strokeOpacity": "1",
+      "x": "0",
+      "y": "0"
+     },
+     "track": {"shape.y2":["406fbd899ce963f0","404709d98c5a7042","40604ac8ddc9f7a8","406afc51cebbffc6","406ee65c9d684916","406fbd899ce963f0","406fbd899ce963f0","406fbd899ce963f0","406fbd899ce963f0","406fbd899ce963f0","406fbd899ce963f0","406fbd899ce963f0"]},
+     "trackText": {
+      "shape.y2": [
+       "253.92304845413264","46.076951545867374","130.33701981970557","215.88498627394273","247.1988055264307","253.92304845413264","253.92304845413264","253.92304845413264","253.92304845413264","253.92304845413264","253.92304845413264",
+       "253.92304845413264"
+      ]
+     },
+     "animators": [1,1,1,1,1,0,0,0,0,0,0,0],
+     "scopes": ["update"]
+    },
+    {
+     "id": "axisPointer/0.1",
+     "owner": "axisPointer",
+     "role": "el",
+     "type": "text",
+     "present": null,
+     "final": {
+      "ignore": true,
+      "invisible": false,
+      "originX": "0000000000000000",
+      "originY": "0000000000000000",
+      "rotation": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "skewX": "0000000000000000",
+      "skewY": "0000000000000000",
+      "style.fill": "#fff",
+      "style.opacity": "3ff0000000000000",
+      "style.text": "C",
+      "x": "4070580000000000",
+      "y": "4070085686d1366b"
+     },
+     "finalText": {"ignore":true,"invisible":false,"originX":"0","originY":"0","rotation":"0","scaleX":"1","scaleY":"1","skewX":"0","skewY":"0","style.fill":"#fff","style.opacity":"1","style.text":"C","x":"261.5","y":"256.52112466548596"},
+     "track": {"y":["4070085686d1366b","40357a9792ec9954","405d30e81cea49d5","406ab0302153ebb6","406f1d5851751d08","4070085686d1366b","4070085686d1366b","4070085686d1366b","4070085686d1366b","4070085686d1366b","4070085686d1366b","4070085686d1366b"]},
+     "trackText": {
+      "y": [
+       "256.52112466548596","21.478875334514058","116.7641670501683","213.5058752669408","248.91703102945053","256.52112466548596","256.52112466548596","256.52112466548596","256.52112466548596","256.52112466548596","256.52112466548596",
+       "256.52112466548596"
+      ]
+     },
+     "animators": [1,1,1,1,1,0,0,0,0,0,0,0],
+     "scopes": ["update"]
+    }
+   ]
+  },
+  {
+   "id": "polarPointer.angleShadow",
+   "kind": "pointer",
+   "note": "the shadow sector slides A -> C (startAngle / endAngle)",
+   "option": {
+    "tooltip": {"trigger":"axis","axisPointer":{"type":"shadow"}},
+    "polar": {},
+    "angleAxis": {"type":"category","data":["A","B","C","D","E","F"]},
+    "radiusAxis": {"type":"value"},
+    "series": [{"type":"bar","coordinateSystem":"polar","emphasis":{"disabled":true},"data":[3,5,2,4,6,1]}]
+   },
+   "first": {"x":230,"y":98},
+   "moves": [{"at":0,"x":230,"y":202}],
+   "W": 400,
+   "H": 300,
+   "clips": [2,2,2,2,2,0,0,0,0,0,0,0],
+   "elements": [
+    {
+     "id": "axisPointer/0.0",
+     "owner": "axisPointer",
+     "role": "el",
+     "type": "Sector",
+     "present": null,
+     "final": {
+      "ignore": false,
+      "invisible": false,
+      "originX": "0000000000000000",
+      "originY": "0000000000000000",
+      "rotation": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "shape.clockwise": true,
+      "shape.cornerRadius": "0000000000000000",
+      "shape.cx": "4069000000000000",
+      "shape.cy": "4062c00000000000",
+      "shape.endAngle": "3ff921fb54442d18",
+      "shape.r": "405e000000000000",
+      "shape.r0": "0000000000000000",
+      "shape.startAngle": "3fe0c152382d7364",
+      "skewX": "0000000000000000",
+      "skewY": "0000000000000000",
+      "style.fill": "rgba(129,130,136,0.2)",
+      "style.fillOpacity": "3ff0000000000000",
+      "style.lineWidth": "3ff0000000000000",
+      "style.opacity": "3ff0000000000000",
+      "style.strokeOpacity": "3ff0000000000000",
+      "x": "0000000000000000",
+      "y": "0000000000000000"
+     },
+     "finalText": {
+      "ignore": false,
+      "invisible": false,
+      "originX": "0",
+      "originY": "0",
+      "rotation": "0",
+      "scaleX": "1",
+      "scaleY": "1",
+      "shape.clockwise": true,
+      "shape.cornerRadius": "0",
+      "shape.cx": "200",
+      "shape.cy": "150",
+      "shape.endAngle": "1.5707963267948966",
+      "shape.r": "120",
+      "shape.r0": "0",
+      "shape.startAngle": "0.5235987755982987",
+      "skewX": "0",
+      "skewY": "0",
+      "style.fill": "rgba(129,130,136,0.2)",
+      "style.fillOpacity": "1",
+      "style.lineWidth": "1",
+      "style.opacity": "1",
+      "style.strokeOpacity": "1",
+      "x": "0",
+      "y": "0"
+     },
+     "track": {
+      "shape.endAngle": ["3ff921fb54442d18","bfe0c152382d7365","3fd4d45cac4c102a","3ff2ffff916172d6","3ff80c71fd35a7e8","3ff921fb54442d18","3ff921fb54442d18","3ff921fb54442d18","3ff921fb54442d18","3ff921fb54442d18","3ff921fb54442d18","3ff921fb54442d18"],
+      "shape.startAngle": ["3fe0c152382d7365","bff921fb54442d18","bfe718761a34deb6","3fc1f56ac99ffb80","3fdd2c7f1420d208","3fe0c152382d7364","3fe0c152382d7364","3fe0c152382d7364","3fe0c152382d7364","3fe0c152382d7364","3fe0c152382d7364","3fe0c152382d7364"]
+     },
+     "trackText": {
+      "shape.endAngle": [
+       "1.5707963267948966","-0.5235987755982988","0.32546154809847627","1.1874995879108403","1.5030383959769953","1.5707963267948966","1.5707963267948966","1.5707963267948966","1.5707963267948966","1.5707963267948966","1.5707963267948966",
+       "1.5707963267948966"
+      ],
+      "shape.startAngle": [
+       "0.5235987755982988","-1.5707963267948966","-0.7217360030981215","0.14030203671424246","0.45584084478039744","0.5235987755982987","0.5235987755982987","0.5235987755982987","0.5235987755982987","0.5235987755982987","0.5235987755982987",
+       "0.5235987755982987"
+      ]
+     },
+     "animators": [1,1,1,1,1,0,0,0,0,0,0,0],
+     "scopes": ["update"]
+    },
+    {
+     "id": "axisPointer/0.1",
+     "owner": "axisPointer",
+     "role": "el",
+     "type": "text",
+     "present": null,
+     "final": {
+      "ignore": true,
+      "invisible": false,
+      "originX": "0000000000000000",
+      "originY": "0000000000000000",
+      "rotation": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "skewX": "0000000000000000",
+      "skewY": "0000000000000000",
+      "style.fill": "#fff",
+      "style.opacity": "3ff0000000000000",
+      "style.text": "C",
+      "x": "4070580000000000",
+      "y": "4070085686d1366b"
+     },
+     "finalText": {"ignore":true,"invisible":false,"originX":"0","originY":"0","rotation":"0","scaleX":"1","scaleY":"1","skewX":"0","skewY":"0","style.fill":"#fff","style.opacity":"1","style.text":"C","x":"261.5","y":"256.52112466548596"},
+     "track": {"y":["4070085686d1366b","40357a9792ec9954","405d30e81cea49d5","406ab0302153ebb6","406f1d5851751d08","4070085686d1366b","4070085686d1366b","4070085686d1366b","4070085686d1366b","4070085686d1366b","4070085686d1366b","4070085686d1366b"]},
+     "trackText": {
+      "y": [
+       "256.52112466548596","21.478875334514058","116.7641670501683","213.5058752669408","248.91703102945053","256.52112466548596","256.52112466548596","256.52112466548596","256.52112466548596","256.52112466548596","256.52112466548596",
+       "256.52112466548596"
+      ]
+     },
+     "animators": [1,1,1,1,1,0,0,0,0,0,0,0],
+     "scopes": ["update"]
+    }
+   ]
+  },
+  {
+   "id": "polarPointer.radiusLine",
+   "kind": "pointer",
+   "note": "a category radius axis (bands of 20 px): the circle grows A -> D (r)",
+   "option": {"tooltip":{"trigger":"axis"},"polar":{},"angleAxis":{"type":"value"},"radiusAxis":{"type":"category","data":["A","B","C","D","E","F"]},"series":[{"type":"bar","coordinateSystem":"polar","emphasis":{"disabled":true},"data":[3,5,2,4,6,1]}]},
+   "first": {"x":210,"y":150},
+   "moves": [{"at":0,"x":270,"y":150}],
+   "W": 400,
+   "H": 300,
+   "clips": [2,2,2,2,2,0,0,0,0,0,0,0],
+   "elements": [
+    {
+     "id": "axisPointer/0.0",
+     "owner": "axisPointer",
+     "role": "el",
+     "type": "Circle",
+     "present": null,
+     "final": {
+      "ignore": false,
+      "invisible": false,
+      "originX": "0000000000000000",
+      "originY": "0000000000000000",
+      "rotation": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "shape.cx": "4069000000000000",
+      "shape.cy": "4062c00000000000",
+      "shape.r": "4051800000000000",
+      "skewX": "0000000000000000",
+      "skewY": "0000000000000000",
+      "style.fillOpacity": "3ff0000000000000",
+      "style.lineWidth": "3ff0000000000000",
+      "style.opacity": "3ff0000000000000",
+      "style.stroke": "#b7b9be",
+      "style.strokeOpacity": "3ff0000000000000",
+      "x": "0000000000000000",
+      "y": "0000000000000000"
+     },
+     "finalText": {
+      "ignore": false,
+      "invisible": false,
+      "originX": "0",
+      "originY": "0",
+      "rotation": "0",
+      "scaleX": "1",
+      "scaleY": "1",
+      "shape.cx": "200",
+      "shape.cy": "150",
+      "shape.r": "70",
+      "skewX": "0",
+      "skewY": "0",
+      "style.fillOpacity": "1",
+      "style.lineWidth": "1",
+      "style.opacity": "1",
+      "style.stroke": "#b7b9be",
+      "style.strokeOpacity": "1",
+      "x": "0",
+      "y": "0"
+     },
+     "track": {"shape.r":["4051800000000000","4024000000000000","40412971d671645c","404d827a4ca32541","405103c4a95aa8a4","4051800000000000","4051800000000000","4051800000000000","4051800000000000","4051800000000000","4051800000000000","4051800000000000"]},
+     "trackText": {"shape.r":["70","10","34.32378654991837","59.01935728040781","68.05887826779741","70","70","70","70","70","70","70"]},
+     "animators": [1,1,1,1,1,0,0,0,0,0,0,0],
+     "scopes": ["update"]
+    },
+    {
+     "id": "axisPointer/0.1",
+     "owner": "axisPointer",
+     "role": "el",
+     "type": "text",
+     "present": null,
+     "final": {
+      "ignore": true,
+      "invisible": false,
+      "originX": "0000000000000000",
+      "originY": "0000000000000000",
+      "rotation": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "skewX": "0000000000000000",
+      "skewY": "0000000000000000",
+      "style.fill": "#fff",
+      "style.opacity": "3ff0000000000000",
+      "style.text": "D",
+      "x": "4065cb851eb851ec",
+      "y": "4051400000000000"
+     },
+     "finalText": {"ignore":true,"invisible":false,"originX":"0","originY":"0","rotation":"0","scaleX":"1","scaleY":"1","skewX":"0","skewY":"0","style.fill":"#fff","style.opacity":"1","style.text":"D","x":"174.36","y":"69"},
+     "track": {
+      "x": ["4065cb851eb851ec","4065deb851eb851f","4065d6efb724d627","4065cf08a77d083b","4065cc2422fe4447","4065cb851eb851ec","4065cb851eb851ec","4065cb851eb851ec","4065cb851eb851ec","4065cb851eb851ec","4065cb851eb851ec","4065cb851eb851ec"],
+      "y": ["4051400000000000","4060200000000000","405a2b4714c74dd2","4053fec2d9ae6d60","4051bc3b56a5575c","4051400000000000","4051400000000000","4051400000000000","4051400000000000","4051400000000000","4051400000000000","4051400000000000"]
+     },
+     "trackText": {
+      "x": ["174.36","174.96","174.71676213450084","174.46980642719595","174.37941121732203","174.36","174.36","174.36","174.36","174.36","174.36","174.36"],
+      "y": ["69","129","104.67621345008163","79.9806427195922","70.94112173220259","69","69","69","69","69","69","69"]
+     },
+     "animators": [1,1,1,1,1,0,0,0,0,0,0,0],
+     "scopes": ["update"]
+    }
+   ]
+  },
+  {
+   "id": "polarPointer.radiusShadow",
+   "kind": "pointer",
+   "note": "the ring slides A -> D (r0 / r)",
+   "option": {
+    "tooltip": {"trigger":"axis","axisPointer":{"type":"shadow"}},
+    "polar": {},
+    "angleAxis": {"type":"value"},
+    "radiusAxis": {"type":"category","data":["A","B","C","D","E","F"]},
+    "series": [{"type":"bar","coordinateSystem":"polar","emphasis":{"disabled":true},"data":[3,5,2,4,6,1]}]
+   },
+   "first": {"x":210,"y":150},
+   "moves": [{"at":0,"x":270,"y":150}],
+   "W": 400,
+   "H": 300,
+   "clips": [2,2,2,2,2,0,0,0,0,0,0,0],
+   "elements": [
+    {
+     "id": "axisPointer/0.0",
+     "owner": "axisPointer",
+     "role": "el",
+     "type": "Sector",
+     "present": null,
+     "final": {
+      "ignore": false,
+      "invisible": false,
+      "originX": "0000000000000000",
+      "originY": "0000000000000000",
+      "rotation": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "shape.clockwise": true,
+      "shape.cornerRadius": "0000000000000000",
+      "shape.cx": "4069000000000000",
+      "shape.cy": "4062c00000000000",
+      "shape.endAngle": "401921fb54442d18",
+      "shape.r": "4054000000000000",
+      "shape.r0": "404e000000000000",
+      "shape.startAngle": "0000000000000000",
+      "skewX": "0000000000000000",
+      "skewY": "0000000000000000",
+      "style.fill": "rgba(129,130,136,0.2)",
+      "style.fillOpacity": "3ff0000000000000",
+      "style.lineWidth": "3ff0000000000000",
+      "style.opacity": "3ff0000000000000",
+      "style.strokeOpacity": "3ff0000000000000",
+      "x": "0000000000000000",
+      "y": "0000000000000000"
+     },
+     "finalText": {
+      "ignore": false,
+      "invisible": false,
+      "originX": "0",
+      "originY": "0",
+      "rotation": "0",
+      "scaleX": "1",
+      "scaleY": "1",
+      "shape.clockwise": true,
+      "shape.cornerRadius": "0",
+      "shape.cx": "200",
+      "shape.cy": "150",
+      "shape.endAngle": "6.283185307179586",
+      "shape.r": "80",
+      "shape.r0": "60",
+      "shape.startAngle": "0",
+      "skewX": "0",
+      "skewY": "0",
+      "style.fill": "rgba(129,130,136,0.2)",
+      "style.fillOpacity": "1",
+      "style.lineWidth": "1",
+      "style.opacity": "1",
+      "style.strokeOpacity": "1",
+      "x": "0",
+      "y": "0"
+     },
+     "track": {
+      "shape.r": ["4054000000000000","4034000000000000","40462971d671645c","4051413d265192a0","405383c4a95aa8a4","4054000000000000","4054000000000000","4054000000000000","4054000000000000","4054000000000000","4054000000000000","4054000000000000"],
+      "shape.r0": ["404e000000000000","0000000000000000","403852e3ace2c8b9","4048827a4ca32541","404d078952b55149","404e000000000000","404e000000000000","404e000000000000","404e000000000000","404e000000000000","404e000000000000","404e000000000000"]
+     },
+     "trackText": {"shape.r":["80","20","44.32378654991837","69.0193572804078","78.05887826779741","80","80","80","80","80","80","80"],"shape.r0":["60","0","24.32378654991837","49.01935728040781","58.05887826779742","60","60","60","60","60","60","60"]},
+     "animators": [1,1,1,1,1,0,0,0,0,0,0,0],
+     "scopes": ["update"]
+    },
+    {
+     "id": "axisPointer/0.1",
+     "owner": "axisPointer",
+     "role": "el",
+     "type": "text",
+     "present": null,
+     "final": {
+      "ignore": true,
+      "invisible": false,
+      "originX": "0000000000000000",
+      "originY": "0000000000000000",
+      "rotation": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "skewX": "0000000000000000",
+      "skewY": "0000000000000000",
+      "style.fill": "#fff",
+      "style.opacity": "3ff0000000000000",
+      "style.text": "D",
+      "x": "4065cb851eb851ec",
+      "y": "4051400000000000"
+     },
+     "finalText": {"ignore":true,"invisible":false,"originX":"0","originY":"0","rotation":"0","scaleX":"1","scaleY":"1","skewX":"0","skewY":"0","style.fill":"#fff","style.opacity":"1","style.text":"D","x":"174.36","y":"69"},
+     "track": {
+      "x": ["4065cb851eb851ec","4065deb851eb851f","4065d6efb724d627","4065cf08a77d083b","4065cc2422fe4447","4065cb851eb851ec","4065cb851eb851ec","4065cb851eb851ec","4065cb851eb851ec","4065cb851eb851ec","4065cb851eb851ec","4065cb851eb851ec"],
+      "y": ["4051400000000000","4060200000000000","405a2b4714c74dd2","4053fec2d9ae6d60","4051bc3b56a5575c","4051400000000000","4051400000000000","4051400000000000","4051400000000000","4051400000000000","4051400000000000","4051400000000000"]
+     },
+     "trackText": {
+      "x": ["174.36","174.96","174.71676213450084","174.46980642719595","174.37941121732203","174.36","174.36","174.36","174.36","174.36","174.36","174.36"],
+      "y": ["69","129","104.67621345008163","79.9806427195922","70.94112173220259","69","69","69","69","69","69","69"]
+     },
+     "animators": [1,1,1,1,1,0,0,0,0,0,0,0],
+     "scopes": ["update"]
+    }
+   ]
+  },
+  {
+   "id": "polarPointer.off",
+   "kind": "pointer",
+   "note": "animation false on the polar pointer: it jumps",
+   "option": {
+    "tooltip": {"trigger":"axis","axisPointer":{"animation":false}},
+    "polar": {},
+    "angleAxis": {"type":"category","data":["A","B","C","D","E","F"]},
+    "radiusAxis": {"type":"value"},
+    "series": [{"type":"bar","coordinateSystem":"polar","emphasis":{"disabled":true},"data":[3,5,2,4,6,1]}]
+   },
+   "first": {"x":230,"y":98},
+   "moves": [{"at":0,"x":230,"y":202}],
+   "W": 400,
+   "H": 300,
+   "clips": [0,0,0,0,0,0,0,0,0,0,0,0],
+   "elements": [
+    {
+     "id": "axisPointer/0.0",
+     "owner": "axisPointer",
+     "role": "el",
+     "type": "Line",
+     "present": null,
+     "final": {
+      "ignore": false,
+      "invisible": false,
+      "originX": "0000000000000000",
+      "originY": "0000000000000000",
+      "rotation": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "shape.percent": "3ff0000000000000",
+      "shape.x1": "4069000000000000",
+      "shape.x2": "4070400000000000",
+      "shape.y1": "4062c00000000000",
+      "shape.y2": "406fbd899ce963f0",
+      "skewX": "0000000000000000",
+      "skewY": "0000000000000000",
+      "style.fillOpacity": "3ff0000000000000",
+      "style.lineWidth": "3ff0000000000000",
+      "style.opacity": "3ff0000000000000",
+      "style.stroke": "#b7b9be",
+      "style.strokeOpacity": "3ff0000000000000",
+      "x": "0000000000000000",
+      "y": "0000000000000000"
+     },
+     "finalText": {
+      "ignore": false,
+      "invisible": false,
+      "originX": "0",
+      "originY": "0",
+      "rotation": "0",
+      "scaleX": "1",
+      "scaleY": "1",
+      "shape.percent": "1",
+      "shape.x1": "200",
+      "shape.x2": "260",
+      "shape.y1": "150",
+      "shape.y2": "253.92304845413264",
+      "skewX": "0",
+      "skewY": "0",
+      "style.fillOpacity": "1",
+      "style.lineWidth": "1",
+      "style.opacity": "1",
+      "style.stroke": "#b7b9be",
+      "style.strokeOpacity": "1",
+      "x": "0",
+      "y": "0"
+     },
+     "track": null,
+     "trackText": null,
+     "animators": null,
+     "scopes": []
+    },
+    {
+     "id": "axisPointer/0.1",
+     "owner": "axisPointer",
+     "role": "el",
+     "type": "text",
+     "present": null,
+     "final": {
+      "ignore": true,
+      "invisible": false,
+      "originX": "0000000000000000",
+      "originY": "0000000000000000",
+      "rotation": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "skewX": "0000000000000000",
+      "skewY": "0000000000000000",
+      "style.fill": "#fff",
+      "style.opacity": "3ff0000000000000",
+      "style.text": "C",
+      "x": "4070580000000000",
+      "y": "4070085686d1366b"
+     },
+     "finalText": {"ignore":true,"invisible":false,"originX":"0","originY":"0","rotation":"0","scaleX":"1","scaleY":"1","skewX":"0","skewY":"0","style.fill":"#fff","style.opacity":"1","style.text":"C","x":"261.5","y":"256.52112466548596"},
+     "track": null,
+     "trackText": null,
+     "animators": null,
+     "scopes": []
+    }
+   ]
   }
  ],
  "guards": [
-  {"id":"pointer-slides","ok":true},{"id":"pointer-off-still","ok":true},{"id":"pointer-dense-still","ok":true},{"id":"pointer-value-snaps","ok":true},{"id":"markers-off-still","ok":true},{"id":"ripples-loop","ok":true},
-  {"id":"emphasis-no-ripple","ok":true}
+  {"id":"pointer-slides","ok":true},{"id":"pointer-off-still","ok":true},{"id":"pointer-dense-still","ok":true},{"id":"pointer-value-snaps","ok":true},{"id":"polar-pointer-slides","ok":true},{"id":"polar-pointer-off-still","ok":true},
+  {"id":"markers-off-still","ok":true},{"id":"ripples-loop","ok":true},{"id":"emphasis-no-ripple","ok":true}
  ]
 }

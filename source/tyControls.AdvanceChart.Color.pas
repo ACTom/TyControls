@@ -329,6 +329,17 @@ function TyDashPattern(ADash: TTyOptDash; const AExplicit: TTyDoubleArray;
   'dashed', 2 'dotted', 0 anything else (lengths, solid, none) }
 function TyDashWord(ADash: TTyOptDash): Byte;
 
+{ [R5-D] canvas/dashStyle normalizeLineDash of a lineDash as a style holds
+  it (getItemStyle's borderType as written): nil for a falsy one, 'solid',
+  a word nobody knows, or a width not above nought; 'dashed' [4w, 2w],
+  'dotted' [w]; a number a list of one; a list as it is. AWord: 1 'dashed',
+  2 'dotted', 0 else. }
+function TyLineDashOf(AType: TJSONData; ALineWidth: Double; out AWord: Byte): TTyDoubleArray;
+{ [R5-D] lineCap: 1 'round', 2 'square', 0 else ('butt'); lineJoin: 1
+  'round', 2 'bevel', 0 else ('miter') }
+function TyLineCapOf(AData: TJSONData): Byte;
+function TyLineJoinOf(AData: TJSONData): Byte;
+
 { The style block a series' PALETTE colour lands in, and whether it lands on
   the fill or the stroke.
 
@@ -1261,6 +1272,59 @@ begin
   if s = 'dashed' then Exit(todDashed);
   if s = 'dotted' then Exit(todDotted);
   if s = 'solid' then Exit(todSolid);
+end;
+
+function TyLineDashOf(AType: TJSONData; ALineWidth: Double; out AWord: Byte): TTyDoubleArray;
+var i: Integer;
+begin
+  Result := nil;
+  AWord := 0;
+  if (AType = nil) or (AType.JSONType = jtNull) or not (ALineWidth > 0) then Exit;
+  case AType.JSONType of
+    jtString:
+      if AType.AsString = 'dashed' then
+      begin
+        AWord := 1;
+        SetLength(Result, 2);
+        Result[0] := 4 * ALineWidth;
+        Result[1] := 2 * ALineWidth;
+      end
+      else if AType.AsString = 'dotted' then
+      begin
+        AWord := 2;
+        SetLength(Result, 1);
+        Result[0] := ALineWidth;
+      end;
+    jtNumber:
+      if AType.AsFloat <> 0 then
+      begin
+        SetLength(Result, 1);
+        Result[0] := AType.AsFloat;
+      end;
+    jtArray:
+      begin
+        SetLength(Result, AType.Count);
+        for i := 0 to AType.Count - 1 do
+          if AType.Items[i].JSONType = jtNumber then Result[i] := AType.Items[i].AsFloat
+          else Result[i] := NaN;
+      end;
+  end;
+end;
+
+function TyLineCapOf(AData: TJSONData): Byte;
+begin
+  Result := 0;
+  if (AData = nil) or (AData.JSONType <> jtString) then Exit;
+  if AData.AsString = 'round' then Result := 1
+  else if AData.AsString = 'square' then Result := 2;
+end;
+
+function TyLineJoinOf(AData: TJSONData): Byte;
+begin
+  Result := 0;
+  if (AData = nil) or (AData.JSONType <> jtString) then Exit;
+  if AData.AsString = 'round' then Result := 1
+  else if AData.AsString = 'bevel' then Result := 2;
 end;
 
 function TyDashWord(ADash: TTyOptDash): Byte;

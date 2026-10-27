@@ -74,6 +74,8 @@ type
     procedure TestOtherSeriesLabelsFadeWhateverValueAnimationSays;
     procedure TestThePointerSlidesFromWhereItWasHidden;
     procedure TestPointerOffModeJumps;
+    { [R5-D] a polar pointer is drawn where its slide has got to }
+    procedure TestAPolarRingIsDrawnOnItsWay;
   end;
 
 implementation
@@ -250,7 +252,9 @@ end;
 
 procedure TAdvChartAnimLabelsTest.RunPointerCase(ACase: TJSONObject);
 var
-  name, key: string;
+  name, key, pkey: string;
+  keys: array of string;
+  kk: Integer;
   samples, moves, els, anim: TJSONArray;
   ptrEl, track: TJSONObject;
   done: array of Boolean;
@@ -290,7 +294,16 @@ begin
     Miss(name + ': no pointer element upstream');
     Exit;
   end;
-  if ptrEl.Strings['type'] = 'Rect' then key := 'shape.x' else key := 'shape.x1';
+  if ptrEl.Strings['type'] = 'Rect' then keys := ['shape.x'] else keys := ['shape.x1'];
+  { [R5-D] a polar's pointer: its axis, every number of its shape }
+  pkey := 'xAxis0';
+  if Copy(name, 1, 12) = 'polarPointer' then
+  begin
+    if Copy(name, 1, 18) = 'polarPointer.radiu' then pkey := 'radiusAxis0' else pkey := 'angleAxis0';
+    if ptrEl.Strings['type'] = 'Line' then keys := ['shape.x1', 'shape.y1', 'shape.x2', 'shape.y2']
+    else if ptrEl.Strings['type'] = 'Circle' then keys := ['shape.cx', 'shape.cy', 'shape.r']
+    else keys := ['shape.cx', 'shape.cy', 'shape.r0', 'shape.r', 'shape.startAngle', 'shape.endAngle'];
+  end;
   track := nil;
   if ptrEl.Find('track') is TJSONObject then track := ptrEl.Objects['track'];
   anim := nil;
@@ -320,7 +333,7 @@ begin
       end;
     end;
     if s > 0 then FChart.AnimTick(T1 + samples.Items[s].AsFloat);
-    p := FChart.AnimPointerProxy('xAxis0');
+    p := FChart.AnimPointerProxy(pkey);
     if p = nil then
     begin
       Miss(name + ': no pointer proxy', name + 'none');
@@ -335,22 +348,27 @@ begin
     if FChart.AnimPointerClipCount <> upAnim then
       Miss(Format('%s t=%s: %d pointer clips here, %d upstream', [name,
         samples.Items[s].AsString, FChart.AnimPointerClipCount, upAnim]), name + 'clips');
-    v := p.GetAnimProp(key);
-    if v.Kind <> avkNumber then
+    for kk := 0 to High(keys) do
     begin
-      Miss(Format('%s: %s is not modelled', [name, key]), name + key + 'mod');
-      Continue;
+      key := keys[kk];
+      v := p.GetAnimProp(key);
+      if v.Kind <> avkNumber then
+      begin
+        Miss(Format('%s: %s is not modelled', [name, key]), name + key + 'mod');
+        Continue;
+      end;
+      if (track <> nil) and (track.Find(key) is TJSONArray) then
+      begin
+        upTrack := track.Arrays[key];
+        up := FromHex(upTrack.Items[s].AsString);
+      end
+      else
+        up := FromHex(ptrEl.Objects['final'].Strings[key]);
+      Inc(FCompared);
+      if not SameBits(v.Num, up) then
+        Miss(Format('%s t=%s: %s %s here, %s upstream', [name, samples.Items[s].AsString,
+          key, Fmt(v.Num), Fmt(up)]), name + key);
     end;
-    if (track <> nil) and (track.Find(key) is TJSONArray) then
-    begin
-      upTrack := track.Arrays[key];
-      up := FromHex(upTrack.Items[s].AsString);
-    end
-    else
-      up := FromHex(ptrEl.Objects['final'].Strings[key]);
-    if not SameBits(v.Num, up) then
-      Miss(Format('%s t=%s: %s %s here, %s upstream', [name, samples.Items[s].AsString,
-        key, Fmt(v.Num), Fmt(up)]), name + key);
   end;
 end;
 
@@ -639,6 +657,40 @@ begin
   AssertEquals('to D', 270, p.Num('shape.x1'), 0);
   AssertEquals('done', 0, FChart.AnimPointerClipCount);
   AssertFalse('the series never left the static layer', FChart.AnimLive);
+end;
+
+procedure TAdvChartAnimLabelsTest.TestAPolarRingIsDrawnOnItsWay;
+var
+  p: TTyChartAnimProxy;
+  mid, rest: TBGRAPixel;
+  r0: Double;
+  x: Integer;
+begin
+  NewChart(camAlways);
+  Load('{"tooltip":{"trigger":"axis","axisPointer":{"type":"shadow"}},"polar":{},'
+    + '"angleAxis":{"type":"value"},"radiusAxis":{"type":"category","data":["A","B","C","D","E","F"]},'
+    + '"series":[{"type":"bar","coordinateSystem":"polar","emphasis":{"disabled":true},"data":[3,5,2,4,6,1]}]}');
+  FChart.AnimTick(T0 + 5000);
+  FChart.AnimNow := T0 + 6000;
+  FChart.Hover(210, 150);
+  FChart.AnimTick(T0 + 7000);
+  FChart.AnimNow := T1;
+  FChart.Hover(270, 150);
+  { the clip starts on the first frame }
+  FChart.AnimTick(T1 + 1);
+  FChart.AnimTick(T1 + 30);
+  p := FChart.AnimPointerProxy('radiusAxis0');
+  AssertNotNull('a ring', p);
+  r0 := p.Num('shape.r0');
+  AssertTrue(Format('on its way: r0 %g', [r0]), (r0 > 25) and (r0 < 55));
+  { a pixel inside the ring where it is now, outside where it ends (r0 60) }
+  x := 200 + Round(r0) + 4;
+  mid := Draw.GetPixel(x, 150);
+  FChart.AnimTick(T1 + 1000);
+  rest := Draw.GetPixel(x, 150);
+  AssertTrue(Format('drawn where it is, not where it ends: %d %d %d / %d %d %d',
+    [mid.red, mid.green, mid.blue, rest.red, rest.green, rest.blue]),
+    (mid.red <> rest.red) or (mid.green <> rest.green) or (mid.blue <> rest.blue));
 end;
 
 { camOff: the pointer jumps -- no proxy, drawn where the hover is. }

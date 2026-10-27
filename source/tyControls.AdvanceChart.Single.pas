@@ -207,6 +207,11 @@ function TySinglePointerShape(ASingle: TTySingle; APixel, ABandWidth: Double;
 procedure TySinglePointerLabelAnchor(ASingle: TTySingle; AOption: TTyChartOption;
   AValue, AMarginPx: Double; out AX, AY: Double; out AH: TTyTextAnchorH;
   out AV: TTyTextAnchorV);
+{ [R5-D] SingleAxisPointer.getHandleTransform: getTransformedPosition with
+  layout(axisModel, {labelInside: false}) and labelMargin = the handle's
+  margin; the turn the layout's, + pi where the label direction is negative }
+procedure TySingleHandlePlace(ASingle: TTySingle; AOption: TTyChartOption;
+  AValue, AMarginPx: Double; out AX, AY, ARotation: Double);
 
 { ---- the conversions ---- }
 
@@ -1206,6 +1211,36 @@ begin
     AX := M[0] * c + M[2] * t + M[4];
     AY := M[1] * c + M[3] * t + M[5];
     TyInnerTextLayout(fr.Rotation, 0, dir, AH, AV);
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
+procedure TySingleHandlePlace(ASingle: TTySingle; AOption: TTyChartOption;
+  AValue, AMarginPx: Double; out AX, AY, ARotation: Double);
+var
+  fr: TTyAxisNameFrame;
+  M: TTyMat2D;
+  c, t: Double;
+  dir: Integer;
+  mask: TFPUExceptionMask;
+begin
+  AX := NaN;
+  AY := NaN;
+  ARotation := 0;
+  if ASingle = nil then Exit;
+  fr := FrameOf(ASingle, AOption);
+  { labelInside false: the direction from the position alone }
+  dir := TySingleDirection(ASingle, AOption, '');
+  mask := MaskFP;
+  try
+    c := ASingle.Axis.DataToLocal(AValue);
+    t := 0 + dir * AMarginPx;
+    M := TyMatLocal(fr.PosX, fr.PosY, fr.Rotation);
+    AX := M[0] * c + M[2] * t + M[4];
+    AY := M[1] * c + M[3] * t + M[5];
+    ARotation := fr.Rotation;
+    if dir < 0 then ARotation := ARotation + Pi;
   finally
     UnmaskFP(mask);
   end;

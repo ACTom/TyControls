@@ -816,6 +816,49 @@ begin
   end;
 end;
 
+{ [R5-D] THE LEGACY SUNBURST ACTIONS (sunburstAction.ts): sunburstHighlight
+  (update 'none') clones its payload, writes into the clone the dataIndex
+  of the node retrieveTargetInfo finds -- targetNode, else targetNodeId --
+  in every sunburst series the payload queries (the last one found wins;
+  none found: no dataIndex, the whole series), and dispatches the clone
+  as a `highlight`; sunburstUnhighlight (update 'updateView') dispatches its
+  clone as a `downplay`. The dispatch waits for this action (IN_EC_CYCLE):
+  the action's own event, a copy of the payload, comes first. }
+function TTyCustomAdvanceChart.DoSunLegacy(APayload: TJSONObject; AHigh: Boolean): Boolean;
+var
+  clone: TJSONObject;
+  slots: TTyIntegerArray;
+  k, slot, row: Integer;
+begin
+  Result := True;
+  clone := TJSONObject(APayload.Clone);
+  if AHigh then
+  begin
+    slots := HierQuery(clone, TySunburstSeriesTypeName);
+    for k := 0 to High(slots) do
+    begin
+      slot := slots[k];
+      if (slot > High(FSunbursts)) or not FSunbursts[slot].Valid then Continue;
+      row := HierTarget(slot, clone);
+      if row < 0 then Continue;
+      { payload.dataIndex = node.dataIndex }
+      clone.Elements['dataIndex'] := TJSONIntegerNumber.Create(row);
+    end;
+    clone.Strings['type'] := 'highlight';
+  end
+  else
+  begin
+    { updateView }
+    FullUpdate;
+    clone.Strings['type'] := 'downplay';
+  end;
+  if AHigh then
+    EmitPayloadEvent('sunbursthighlight', CopyWithType(APayload, 'sunbursthighlight'))
+  else
+    EmitPayloadEvent('sunburstunhighlight', CopyWithType(APayload, 'sunburstunhighlight'));
+  TipDispatch(clone, nil, False, False);
+end;
+
 function TTyCustomAdvanceChart.DoTreemapAction(const AType: string; APayload: TJSONObject;
   const AEventJson: string): Boolean;
 var

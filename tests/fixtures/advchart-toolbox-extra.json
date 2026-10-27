@@ -1,0 +1,1232 @@
+{
+ "source": "ECharts 6.1.0, zrender 6.1.0; node v22.22.2",
+ "W": 600,
+ "H": 400,
+ "seed": 2463534242,
+ "clock": {
+  "start": 1700000000000,
+  "stepDt": 10
+ },
+ "notes": [
+  "Pointer steps: zrender Handler mousemove / mousedown + mouseup + click / mouseout from outside the canvas; each 10 ms after the last; a frame of every chart after every step.",
+  "TooltipRichContent.getSize answers 80 x 40."
+ ],
+ "cases": [
+  {
+   "id": "icon-line",
+   "note": "iconStyle with a dashed border, its offset, a round cap, a bevel join and a miter limit; emphasis.iconStyle a list of a dash",
+   "option": {
+    "toolbox": {
+     "feature": {
+      "saveAsImage": {},
+      "restore": {}
+     },
+     "iconStyle": {
+      "borderWidth": 2,
+      "borderType": "dashed",
+      "borderDashOffset": 1,
+      "borderCap": "round",
+      "borderJoin": "bevel",
+      "borderMiterLimit": 3
+     },
+     "emphasis": {
+      "iconStyle": {
+       "borderType": [
+        2,
+        3
+       ]
+      }
+     }
+    },
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "B",
+      "data": [
+       3,
+       9,
+       6,
+       8
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "op": "idle",
+     "ms": 0,
+     "events": [],
+     "state": {
+      "icons": [
+       {
+        "key": "Save as Image",
+        "states": [],
+        "style": {
+         "lineWidth": 2,
+         "lineDash": "dashed",
+         "lineDashOffset": 1,
+         "lineCap": "round",
+         "lineJoin": "bevel",
+         "miterLimit": 3
+        }
+       },
+       {
+        "key": "Restore",
+        "states": [],
+        "style": {
+         "lineWidth": 2,
+         "lineDash": "dashed",
+         "lineDashOffset": 1,
+         "lineCap": "round",
+         "lineJoin": "bevel",
+         "miterLimit": 3
+        }
+       }
+      ],
+      "title": null,
+      "tip": null
+     }
+    },
+    {
+     "op": "move",
+     "at": [
+      546,
+      25
+     ],
+     "events": [
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": {
+      "icons": [
+       {
+        "key": "Save as Image",
+        "states": [
+         "emphasis"
+        ],
+        "style": {
+         "lineWidth": 2,
+         "lineDash": [
+          2,
+          3
+         ],
+         "lineDashOffset": 1,
+         "lineCap": "round",
+         "lineJoin": "bevel",
+         "miterLimit": 3
+        }
+       },
+       {
+        "key": "Restore",
+        "states": [],
+        "style": {
+         "lineWidth": 2,
+         "lineDash": "dashed",
+         "lineDashOffset": 1,
+         "lineCap": "round",
+         "lineJoin": "bevel",
+         "miterLimit": 3
+        }
+       }
+      ],
+      "title": {
+       "key": "Save as Image",
+       "text": "Save as Image",
+       "font": "normal normal 12px Microsoft YaHei",
+       "fill": "#404c76",
+       "backgroundColor": null,
+       "borderRadius": null,
+       "padding": null,
+       "box": null,
+       "textX": 546.1056150892713,
+       "textY": 46,
+       "tspanAlign": [
+        "center",
+        "middle"
+       ]
+      },
+      "tip": null
+     }
+    },
+    {
+     "op": "move",
+     "at": [
+      5,
+      300
+     ],
+     "events": [
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": {
+      "icons": [
+       {
+        "key": "Save as Image",
+        "states": [],
+        "style": {
+         "lineWidth": 2,
+         "lineDash": "dashed",
+         "lineDashOffset": 1,
+         "lineCap": "round",
+         "lineJoin": "bevel",
+         "miterLimit": 3
+        }
+       },
+       {
+        "key": "Restore",
+        "states": [],
+        "style": {
+         "lineWidth": 2,
+         "lineDash": "dashed",
+         "lineDashOffset": 1,
+         "lineCap": "round",
+         "lineJoin": "bevel",
+         "miterLimit": 3
+        }
+       }
+      ],
+      "title": null,
+      "tip": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "title-box",
+   "note": "the title in a box: a background, a radius, a padding, white text in a bold italic serif of 14",
+   "option": {
+    "toolbox": {
+     "left": "center",
+     "feature": {
+      "saveAsImage": {},
+      "restore": {}
+     },
+     "emphasis": {
+      "iconStyle": {
+       "textBackgroundColor": "#333333",
+       "textBorderRadius": 4,
+       "textPadding": [
+        2,
+        6
+       ],
+       "textFill": "#ffffff",
+       "textFontFamily": "serif",
+       "textFontWeight": "bold",
+       "textFontStyle": "italic",
+       "textFontSize": 14
+      }
+     }
+    },
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "B",
+      "data": [
+       3,
+       9,
+       6,
+       8
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "op": "move",
+     "at": [
+      314,
+      25
+     ],
+     "events": [
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": {
+      "icons": [
+       {
+        "key": "Save as Image",
+        "states": [],
+        "style": {
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "lineJoin": null,
+         "miterLimit": 10
+        }
+       },
+       {
+        "key": "Restore",
+        "states": [
+         "emphasis"
+        ],
+        "style": {
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "lineJoin": null,
+         "miterLimit": 10
+        }
+       }
+      ],
+      "title": {
+       "key": "Restore",
+       "text": "Restore",
+       "font": "italic bold 14px serif",
+       "fill": "#ffffff",
+       "backgroundColor": "#333333",
+       "borderRadius": 4,
+       "padding": [
+        2,
+        6,
+        2,
+        6
+       ],
+       "box": [
+        283.4084483909607,
+        39.99999992055834,
+        61.14000000000001,
+        18
+       ],
+       "textX": 313.9784483909607,
+       "textY": 48.99999992055834,
+       "tspanAlign": [
+        "center",
+        "middle"
+       ]
+      },
+      "tip": null
+     }
+    },
+    {
+     "op": "move",
+     "at": [
+      5,
+      300
+     ],
+     "events": [
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": {
+      "icons": [
+       {
+        "key": "Save as Image",
+        "states": [],
+        "style": {
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "lineJoin": null,
+         "miterLimit": 10
+        }
+       },
+       {
+        "key": "Restore",
+        "states": [],
+        "style": {
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "lineJoin": null,
+         "miterLimit": 10
+        }
+       }
+      ],
+      "title": null,
+      "tip": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "tooltip",
+   "note": "toolbox.tooltip show: the icon's component tooltip -- its name by default, a template over name and title, the position bottom by default",
+   "option": {
+    "tooltip": {},
+    "toolbox": {
+     "left": "center",
+     "feature": {
+      "saveAsImage": {},
+      "restore": {}
+     },
+     "tooltip": {
+      "show": true
+     }
+    },
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "B",
+      "data": [
+       3,
+       9,
+       6,
+       8
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "op": "move",
+     "at": [
+      285,
+      25
+     ],
+     "events": [
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": {
+      "icons": [
+       {
+        "key": "Save as Image",
+        "states": [
+         "emphasis"
+        ],
+        "style": {
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "lineJoin": null,
+         "miterLimit": 10
+        }
+       },
+       {
+        "key": "Restore",
+        "states": [],
+        "style": {
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "lineJoin": null,
+         "miterLimit": 10
+        }
+       }
+      ],
+      "title": {
+       "key": "Save as Image",
+       "text": "Save as Image",
+       "font": "normal normal 12px Microsoft YaHei",
+       "fill": "#404c76",
+       "backgroundColor": null,
+       "borderRadius": null,
+       "padding": null,
+       "box": null,
+       "textX": 285.042031740116,
+       "textY": 46,
+       "tspanAlign": [
+        "center",
+        "middle"
+       ]
+      },
+      "tip": {
+       "which": "toolbox:saveAsImage",
+       "text": "saveAsImage",
+       "box": [
+        245.042031740116,
+        45
+       ]
+      }
+     }
+    },
+    {
+     "op": "move",
+     "at": [
+      5,
+      300
+     ],
+     "events": [
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": {
+      "icons": [
+       {
+        "key": "Save as Image",
+        "states": [],
+        "style": {
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "lineJoin": null,
+         "miterLimit": 10
+        }
+       },
+       {
+        "key": "Restore",
+        "states": [],
+        "style": {
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "lineJoin": null,
+         "miterLimit": 10
+        }
+       }
+      ],
+      "title": null,
+      "tip": {
+       "which": "toolbox:saveAsImage",
+       "text": "saveAsImage",
+       "box": [
+        245.042031740116,
+        45
+       ]
+      }
+     }
+    },
+    {
+     "op": "idle",
+     "ms": 200,
+     "events": [],
+     "state": {
+      "icons": [
+       {
+        "key": "Save as Image",
+        "states": [],
+        "style": {
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "lineJoin": null,
+         "miterLimit": 10
+        }
+       },
+       {
+        "key": "Restore",
+        "states": [],
+        "style": {
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "lineJoin": null,
+         "miterLimit": 10
+        }
+       }
+      ],
+      "title": null,
+      "tip": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "tooltip-fmt",
+   "note": "toolbox.tooltip with a template ({a} is the name, {b} the title) and a position",
+   "option": {
+    "tooltip": {},
+    "toolbox": {
+     "left": "center",
+     "feature": {
+      "saveAsImage": {},
+      "restore": {}
+     },
+     "tooltip": {
+      "show": true,
+      "formatter": "{b} ({a})",
+      "position": "left"
+     }
+    },
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "B",
+      "data": [
+       3,
+       9,
+       6,
+       8
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "op": "move",
+     "at": [
+      314,
+      25
+     ],
+     "events": [
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": {
+      "icons": [
+       {
+        "key": "Save as Image",
+        "states": [],
+        "style": {
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "lineJoin": null,
+         "miterLimit": 10
+        }
+       },
+       {
+        "key": "Restore",
+        "states": [
+         "emphasis"
+        ],
+        "style": {
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "lineJoin": null,
+         "miterLimit": 10
+        }
+       }
+      ],
+      "title": {
+       "key": "Restore",
+       "text": "Restore",
+       "font": "normal normal 12px Microsoft YaHei",
+       "fill": "#404c76",
+       "backgroundColor": null,
+       "borderRadius": null,
+       "padding": null,
+       "box": null,
+       "textX": 313.9784483909607,
+       "textY": 45.99999992055834,
+       "tspanAlign": [
+        "center",
+        "middle"
+       ]
+      },
+      "tip": {
+       "which": "toolbox:restore",
+       "text": "Restore (restore)",
+       "box": [
+        214.02048013107668,
+        5
+       ]
+      }
+     }
+    },
+    {
+     "op": "leave",
+     "events": [
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": {
+      "icons": [
+       {
+        "key": "Save as Image",
+        "states": [],
+        "style": {
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "lineJoin": null,
+         "miterLimit": 10
+        }
+       },
+       {
+        "key": "Restore",
+        "states": [],
+        "style": {
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "lineJoin": null,
+         "miterLimit": 10
+        }
+       }
+      ],
+      "title": null,
+      "tip": {
+       "which": "toolbox:restore",
+       "text": "Restore (restore)",
+       "box": [
+        214.02048013107668,
+        5
+       ]
+      }
+     }
+    },
+    {
+     "op": "idle",
+     "ms": 200,
+     "events": [],
+     "state": {
+      "icons": [
+       {
+        "key": "Save as Image",
+        "states": [],
+        "style": {
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "lineJoin": null,
+         "miterLimit": 10
+        }
+       },
+       {
+        "key": "Restore",
+        "states": [],
+        "style": {
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "lineJoin": null,
+         "miterLimit": 10
+        }
+       }
+      ],
+      "title": null,
+      "tip": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "tooltip-off",
+   "note": "the toolbox's own tooltip off (its default): a hover on an icon dispatches showTip and leaves the box the bar showed as it was",
+   "option": {
+    "tooltip": {
+     "trigger": "item"
+    },
+    "toolbox": {
+     "left": "center",
+     "feature": {
+      "saveAsImage": {}
+     }
+    },
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "B",
+      "data": [
+       3,
+       9,
+       6,
+       8
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "op": "move",
+     "at": [
+      240,
+      200
+     ],
+     "events": [
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": {
+      "icons": [
+       {
+        "key": "Save as Image",
+        "states": [],
+        "style": {
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "lineJoin": null,
+         "miterLimit": 10
+        }
+       }
+      ],
+      "title": null,
+      "tip": {
+       "which": "item:0:1",
+       "text": "default",
+       "box": [
+        260,
+        220
+       ]
+      }
+     }
+    },
+    {
+     "op": "move",
+     "at": [
+      300,
+      25
+     ],
+     "events": [
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": {
+      "icons": [
+       {
+        "key": "Save as Image",
+        "states": [
+         "emphasis"
+        ],
+        "style": {
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "lineJoin": null,
+         "miterLimit": 10
+        }
+       }
+      ],
+      "title": {
+       "key": "Save as Image",
+       "text": "Save as Image",
+       "font": "normal normal 12px Microsoft YaHei",
+       "fill": "#404c76",
+       "backgroundColor": null,
+       "borderRadius": null,
+       "padding": null,
+       "box": null,
+       "textX": 300,
+       "textY": 46,
+       "tspanAlign": [
+        "center",
+        "middle"
+       ]
+      },
+      "tip": {
+       "which": "item:0:1",
+       "text": "default",
+       "box": [
+        260,
+        220
+       ]
+      }
+     }
+    },
+    {
+     "op": "idle",
+     "ms": 200,
+     "events": [],
+     "state": {
+      "icons": [
+       {
+        "key": "Save as Image",
+        "states": [
+         "emphasis"
+        ],
+        "style": {
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "lineJoin": null,
+         "miterLimit": 10
+        }
+       }
+      ],
+      "title": {
+       "key": "Save as Image",
+       "text": "Save as Image",
+       "font": "normal normal 12px Microsoft YaHei",
+       "fill": "#404c76",
+       "backgroundColor": null,
+       "borderRadius": null,
+       "padding": null,
+       "box": null,
+       "textX": 300,
+       "textY": 46,
+       "tspanAlign": [
+        "center",
+        "middle"
+       ]
+      },
+      "tip": {
+       "which": "item:0:1",
+       "text": "default",
+       "box": [
+        260,
+        220
+       ]
+      }
+     }
+    },
+    {
+     "op": "move",
+     "at": [
+      5,
+      300
+     ],
+     "events": [
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": {
+      "icons": [
+       {
+        "key": "Save as Image",
+        "states": [],
+        "style": {
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "lineJoin": null,
+         "miterLimit": 10
+        }
+       }
+      ],
+      "title": null,
+      "tip": {
+       "which": "item:0:1",
+       "text": "default",
+       "box": [
+        260,
+        220
+       ]
+      }
+     }
+    },
+    {
+     "op": "idle",
+     "ms": 200,
+     "events": [],
+     "state": {
+      "icons": [
+       {
+        "key": "Save as Image",
+        "states": [],
+        "style": {
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "lineJoin": null,
+         "miterLimit": 10
+        }
+       }
+      ],
+      "title": null,
+      "tip": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "title-pad",
+   "note": "the title in a box with an uneven padding [2, 10, 4, 3]: the text stands where the padding puts it",
+   "option": {
+    "toolbox": {
+     "left": "center",
+     "feature": {
+      "saveAsImage": {},
+      "restore": {}
+     },
+     "emphasis": {
+      "iconStyle": {
+       "textBackgroundColor": "#333333",
+       "textPadding": [
+        2,
+        10,
+        4,
+        3
+       ],
+       "textFill": "#ffffff",
+       "textFontSize": 12
+      }
+     }
+    },
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "B",
+      "data": [
+       3,
+       9,
+       6,
+       8
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "op": "move",
+     "at": [
+      314,
+      25
+     ],
+     "events": [
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": {
+      "icons": [
+       {
+        "key": "Save as Image",
+        "states": [],
+        "style": {
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "lineJoin": null,
+         "miterLimit": 10
+        }
+       },
+       {
+        "key": "Restore",
+        "states": [
+         "emphasis"
+        ],
+        "style": {
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "lineJoin": null,
+         "miterLimit": 10
+        }
+       }
+      ],
+      "title": {
+       "key": "Restore",
+       "text": "Restore",
+       "font": "normal normal 12px Microsoft YaHei",
+       "fill": "#ffffff",
+       "backgroundColor": "#333333",
+       "borderRadius": null,
+       "padding": [
+        2,
+        10,
+        4,
+        3
+       ],
+       "box": [
+        286.4184483909607,
+        39.99999992055834,
+        55.12,
+        18
+       ],
+       "textX": 310.4784483909607,
+       "textY": 47.99999992055834,
+       "tspanAlign": [
+        "center",
+        "middle"
+       ]
+      },
+      "tip": null
+     }
+    }
+   ]
+  }
+ ],
+ "guards": [
+  {
+   "id": "icon-dash",
+   "ok": true,
+   "what": "getItemStyle maps the border keys"
+  },
+  {
+   "id": "icon-emph",
+   "ok": true,
+   "what": "the emphasis dash"
+  },
+  {
+   "id": "title-box",
+   "ok": true,
+   "what": "a box behind the title"
+  },
+  {
+   "id": "tip-name",
+   "ok": true,
+   "what": "the name by default"
+  },
+  {
+   "id": "tip-fmt",
+   "ok": true,
+   "what": "the template"
+  },
+  {
+   "id": "tip-off",
+   "ok": true,
+   "what": "showTip dispatched, the box stays"
+  }
+ ]
+}

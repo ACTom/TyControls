@@ -1206,13 +1206,35 @@ end;
 
 procedure TTyCustomAdvanceChart.PaintDynamic(APainter: TTyPainter; const ARect: TRect;
   APPI: Integer; const AMeasurer: ITyTextMeasurer);
+var
+  ptrHits: TTyAxisHitArray;
 begin
   { AN EXPORT'S: the finished picture has no frame of an animation and no
     hover -- an option's own pointers, and the loading effect over all
     [Batch 106] }
   if FExporting then
   begin
-    PaintAxisPointers(APainter, ARect, APPI, AMeasurer, OptionPointerHits);
+    { [R5-D] THE STORAGE AS IT STANDS: the axis pointers and the emphasis a
+      pointer put on the marks are zrender elements, so getDataURL draws
+      them; the box (html) and the keyboard's ring (the port's) it does
+      not. At another size or PPI the export is laid out anew and the
+      pointer's state is not carried into it.
+      [Was: the option's own pointers only, no emphasis.] }
+    if FExportSameView and (Length(FTipHits) > 0) then
+    begin
+      PaintAxisPointers(APainter, ARect, APPI, AMeasurer,
+        Concat(FTipHits, HdExtraHits(FTipHits)));
+      PaintEmphasis(APainter, APPI, FTipHits);
+    end
+    else
+    begin
+      ptrHits := OptionPointerHits;
+      PaintAxisPointers(APainter, ARect, APPI, AMeasurer,
+        Concat(ptrHits, HdExtraHits(ptrHits)));
+      if FExportSameView then PaintEmphasis(APainter, APPI, nil);
+    end;
+    { [R5-D] the handles, zr elements too }
+    PaintHandles(APainter);
     { [R2-I9] getRenderedCanvas draws every built-in layer, the hover
       layer too }
     PaintHoverLayer(APainter);
@@ -1253,10 +1275,12 @@ begin
     marks on top of the band is what hides it. }
   { and before any pointer event, the ones the option shows itself
     [Batch 100] }
-  if Length(FTipHits) > 0 then
-    PaintAxisPointers(APainter, ARect, APPI, AMeasurer, FTipHits)
-  else
-    PaintAxisPointers(APainter, ARect, APPI, AMeasurer, OptionPointerHits);
+  { [R5-D] and the pointers a handle keeps shown, then the handles }
+  if Length(FTipHits) > 0 then ptrHits := FTipHits
+  else ptrHits := OptionPointerHits;
+  PaintAxisPointers(APainter, ARect, APPI, AMeasurer,
+    Concat(ptrHits, HdExtraHits(ptrHits)));
+  PaintHandles(APainter);
   PaintEmphasis(APainter, APPI, FTipHits);
   { [R2-I9] THE HOVER LAYER over every layer of the canvas (zlevel 1e5):
     the paths on it in their hover style -- the box, HTML upstream, over it }
@@ -1265,10 +1289,11 @@ begin
   PaintKbRing(APainter);
   { THE POINTER FIRST, THE BOX OVER IT. A tooltip with the pointer's own line
     drawn across it would read as two things at one depth. }
-  PaintTooltip(APainter, ARect, APPI, AMeasurer);
-  { THE LOADING EFFECT OVER EVERYTHING: upstream's mask is z 10000
-    [Batch 106] }
+  { THE LOADING EFFECT OVER THE CHART: upstream's mask is z 10000
+    [Batch 106] -- [R5-D] under the box, which is html over the canvas
+    there [was: over the box too] }
   PaintLoading(APainter, ARect, APPI, AMeasurer);
+  PaintTooltip(APainter, ARect, APPI, AMeasurer);
 end;
 
 function TTyCustomAdvanceChart.HasDynamicContent: Boolean;
@@ -1287,7 +1312,9 @@ begin
     { a component's part [F5] }
     or FKbStopOn
     { [R2-I9] the hover layer's copies }
-    or StHoverAny;
+    or StHoverAny
+    { [R5-D] an axis pointer's handle }
+    or (Length(FHandles) > 0) or HdConfigured;
 end;
 
 procedure TTyCustomAdvanceChart.DropStatic;
@@ -1605,6 +1632,8 @@ var
 begin
   Result := -1;
   if (FPaintList = nil) or not FPaintListValid then Exit;
+  { [R5-D] the loading mask over it all }
+  if LoadMasks then Exit;
   { IN MOTION, WHAT IS DRAWN IS WHAT IS HIT, and at rest on a state proxy
     (see HitTestAt) }
   if FAnimLive or (Length(FAnimStBind) > 0) then L := AnimFrame else L := FPaintList;

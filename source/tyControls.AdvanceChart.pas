@@ -200,6 +200,44 @@ type
   end;
   TTyPtrAxisInfoArray = array of TTyPtrAxisInfo;
 
+  { [R5-D] AN AXIS POINTER'S HANDLE (axisPointer.handle): the axis model's
+    pointer value (option.value, kept across pointer events: a handle's
+    status is always 'show'), the handle element's place in the control's
+    pixels (x, y, rotation; the icon scaled by size / 2) and its drag --
+    BaseAxisPointer._handle, _dragging, _payloadInfo and the fixRate
+    throttle of _doDispatchAxisPointer. }
+  TTyPtrHandle = record
+    Key: string;
+    MainType: string;
+    Index: Integer;
+    HasValue: Boolean;
+    Value: Double;
+    { the handle's place, and whether one was ever placed (isInit) }
+    Placed: Boolean;
+    X, Y, Rotation: Double;
+    { the value the place was last moved to (lastProp) }
+    PlacedValue: Double;
+    Dragging: Boolean;
+    { the throttle: the last run, a deferred one due at DueAt (NaN none) }
+    LastExec: Double;
+    DueAt: Double;
+    { the payload's info: cursorPoint (CSS px) and tooltipOption }
+    PayX, PayY: Double;
+    PayTip: string;
+    Live: Boolean;
+  end;
+  TTyPtrHandleArray = array of TTyPtrHandle;
+
+  { a handle as a test reads it: CSS px from the chart's corner }
+  TTyPointerHandleState = record
+    Key: string;
+    Value: Double;
+    X, Y, Rotation, ScaleX, ScaleY: Double;
+    HasFill: Boolean;
+    Fill: TTyChartColor;
+    Dragging: Boolean;
+  end;
+
   { WHAT A SINGLE AXIS' POINTER DRAWS [Batch 118]: its line or shadow rect,
     and its label's text and padded box (top-left, after the align and the
     confinement to the control) when the label is shown. }
@@ -561,6 +599,16 @@ type
       default model of position 'bottom' under the cascade }
     PosJson: string;
     PosDefault: Boolean;
+    { [R5-D] showTip's payload.tooltip at x / y: the proxy element's tooltip
+      option (its JSON; '' none) -- a component item shown from it -- and
+      the axis tooltip's tooltipOption (JSON; '' none), the top level of its
+      model }
+    ProxyJson: string;
+    OptJson: string;
+    { [R5-D] a toolbox icon's component tooltip (setTooltipConfig): the
+      toolbox and the icon }
+    TbHas: Boolean;
+    TbIndex, TbIcon: Integer;
     { [F4b] ACROSS A RE-RENDER (TooltipView.render keeps the box up): the
       axes as a dataByCoordSys (JSON) while the build they pointed into is
       gone -- Stale until the next build reads them back by raw row -- and
@@ -627,6 +675,11 @@ type
     Element: Integer;
     PosJson: string;
     PosDefault: Boolean;
+    { [R5-D] as TTyTipSnap's }
+    ProxyJson: string;
+    OptJson: string;
+    TbHas: Boolean;
+    TbIndex, TbIcon: Integer;
   end;
 
   { [Batch 115] THE RETURN CIRCLE'S LAYOUT, as the virtual root's layout
@@ -1304,6 +1357,10 @@ type
     FVmDragVm, FVmDragIdx, FVmDragX, FVmDragY: Integer;
     FVmUidSeq: Integer;
     FEvHoverX, FEvHoverY: Integer;
+    { [R5-D] the last move's target was the loading mask (no ECData: the
+      target is none here) -- removed by hideLoading, zrender's Handler looks
+      for what is under the last point instead (#6198) }
+    FEvHoverMask: Boolean;
     { [Milestone D9-D14] the target a pan's move found before the picture
       moved: EventMove takes it instead of looking again }
     FEvPreset: Boolean;
@@ -1674,6 +1731,14 @@ type
     FEvOverDue: Boolean;
     FEvOverT: TTyChartEventTarget;
     FEvOverX, FEvOverY: Integer;
+    { [R5-D] the click EventUp found, for after the pointer's listener (the
+      chart's own mouse events are zrEventfulCallAtLast) }
+    FEvClickDefer, FEvClickDue: Boolean;
+    { [R5-D] the export draws the window's own layout (its size and PPI):
+      the pointer's state -- the axis pointers, the emphasis -- is in it }
+    FExportSameView: Boolean;
+    FEvClickT: TTyChartEventTarget;
+    FEvClickX, FEvClickY: Integer;
     { [R2-E] the axes ('mainType#index') a merge wrote a status on since }
     FOptPtrBack: TTyStringArray;
     { [Batch 153] THE ACTIONS THAT DRIVE THE TOOLTIP AND THE POINTER.
@@ -1692,6 +1757,15 @@ type
     FUapListener: Boolean;
     FActHits: TTyTipAct;
     FPressEl: Integer;
+    { [R5-D] axisTrigger's axisPointerLastHighlights (kept on the zr, so
+      across a setOption): the rows the last updateAxisPointer highlighted,
+      by series index and raw data index, in the order they were taken }
+    FApHighS, FApHighD: TTyIntegerArray;
+    { [R5-D] the axis pointers' handles; the one being dragged (-1 none)
+      and where the pointer last was in its drag }
+    FHandles: TTyPtrHandleArray;
+    FHdDrag: Integer;
+    FHdDragX, FHdDragY: Integer;
     { [F4b] TooltipView._lastX / _lastY (NaN: null) and _lastDataByCoordSys
       (JSON, '' null); the keep timer _keepShow arms (NaN: none); the axis
       pointers kept across a re-render, put back by the next build; a guard
@@ -1897,8 +1971,10 @@ type
       APPI: Integer; const AMeasurer: ITyTextMeasurer);
     procedure ExportOptsOrRaise(const AJson: string; out AOpts: TTyChartExportOpts);
     function RenderExport(const AOpts: TTyChartExportOpts): TBGRABitmap;
-    procedure WriteExport(AStream: TStream; ABmp: TBGRABitmap;
-      AType: TTyExportImageType);
+    { [R5-D] answers the type it wrote: a WebP is a PNG where libwebp
+      cannot be loaded }
+    function WriteExport(AStream: TStream; ABmp: TBGRABitmap;
+      AType: TTyExportImageType): TTyExportImageType;
     procedure SetOptionText(const AValue: string);
     function GetOptionText: string;
     { ---- setOption [Batch 95] ---- }
@@ -2043,6 +2119,10 @@ type
     function AnimLoopOnly: Boolean;
     { the pointer's slide: synced to the hover, dropped with the build }
     procedure PtrAnimSync;
+    { [R5-D] a polar pointer's props: its shape's numbers and the label's
+      place; and the shape / label as its proxy has them now }
+    function PtrPolarProps(const AHit: TTyAxisHit; out AProps: TTyAnimProps): Boolean;
+    procedure PtrPolarNow(const AHit: TTyAxisHit; var ADraw: TTyPolarPointerDraw);
     procedure PtrAnimDrop;
     function PtrKeyOf(AAxis: TTyAxis): string;
     function PtrModelOf(const AHit: TTyAxisHit; out AOwn: TJSONObject): TTyAnimModel;
@@ -2248,6 +2328,13 @@ type
     function DzGridRect(AGrid: Integer): TTyXYWH;
     function DzGridContains(AGrid: Integer; AX, AY: Double): Boolean;
     function DzGridInsides(AGrid: Integer): TTyIntegerArray;
+    { [R5-D] THE ROAM RECORDS (roams.ts' coordSysRecords): the grids, then
+      the polars, then the single axes -- record r below the grid count is
+      that grid; DzControlType, DzRoam and DzRoamDispatch take a record }
+    function DzRecCount: Integer;
+    function DzRecInsides(ARec: Integer): TTyIntegerArray;
+    function DzRecContains(ARec: Integer; AX, AY: Double): Boolean;
+    function DzRecNode(ARec: Integer): TJSONData;
     function DzControlType(AGrid: Integer): Integer;
     function DzFindTarget(AX, AY: Double): TTyDzTarget;
     function DzHits(ASlider: Integer; ARole: TTyDzRole; AX, AY: Double): Boolean;
@@ -3220,6 +3307,10 @@ type
     { the series an action's query names (none: every one of the type) }
     function HierQuery(APayload: TJSONObject; const AType: string): TTyIntegerArray;
     function DoSunAction(APayload: TJSONObject): Boolean;
+    { [R5-D] the legacy sunburstHighlight / sunburstUnhighlight }
+    function DoSunLegacy(APayload: TJSONObject; AHigh: Boolean): Boolean;
+    { [R5-D] the loading effect's mask is the pointer's target }
+    function LoadMasks: Boolean;
     { [F3d] treeExpandAndCollapse as an action: the queried trees' node
       flipped, then the update (update: 'update') }
     function DoTreeToggleAction(APayload: TJSONObject): Boolean;
@@ -3279,6 +3370,17 @@ type
     { the spec a snapshot is shown under: the global one for an axis
       tooltip, the cascade for an item }
     function TipSpecOf(const ASnap: TTyTipSnap): TTyTooltipSpec;
+    { [R5-D] seriesModel.coordinateSystem.model's option for a series: its
+      grid, polar, single axis, parallel or geo; nil for none (a calendar,
+      a radar and a matrix keep their model private) }
+    function TipCoordNode(ASeriesIndex: Integer): TJSONData;
+    { [R5-D] a proxy's tooltip cascade and text }
+    function TipProxySpec(const AJson: string): TTyTooltipSpec;
+    { [R5-D] a toolbox icon's tooltip cascade and text }
+    function TipTbSpec(ATb, AIcon: Integer): TTyTooltipSpec;
+    function TipTbText(ATb, AIcon: Integer; const ASpec: TTyTooltipSpec): string;
+    function TipTbIconRect(ATb, AIcon: Integer): TTyRectF;
+    function TipProxyText(const AJson: string; const ASpec: TTyTooltipSpec): string;
     procedure TipTryShow(const ASnap: TTyTipSnap; const ASpec: TTyTooltipSpec);
     procedure TipApplyShow(const ASnap: TTyTipSnap);
     { [R2-I7] the default markup of a show being tried; the content a show
@@ -3349,6 +3451,28 @@ type
     { the axisPointer model's axes in collection order, for the event's
       axesInfo }
     function TipCollectionOrder: TTyAxisArray;
+    { [R5-D] the handles: fixValue and the place of each (HdSync), the
+      handle under a point, its drag, its throttled dispatch, the pointers
+      a handle keeps shown, the painting }
+    function HdIndexOf(const AKey: string): Integer;
+    function HdAxisOf(AIndex: Integer; out AInfo: TTyPtrAxisInfo): Boolean;
+    function HdParseValue(AAxis: TTyAxis; AData: TJSONData): Double;
+    function HdPlace(const AInfo: TTyPtrAxisInfo; AValue: Double;
+      out AX, AY, ARotation: Double): Boolean;
+    procedure HdSync;
+    procedure HdTakeHits(const AHits: TTyAxisHitArray);
+    function HdAt(AX, AY: Integer): Integer;
+    function HdShape(AIndex: Integer; out AEl: TTyChartElement): Boolean;
+    procedure HdDragMove(AIndex: Integer; ADX, ADY: Double);
+    procedure HdDispatch(AIndex: Integer);
+    procedure HdRun(AIndex: Integer);
+    procedure HdTick(ANow: Double);
+    procedure HdDragEnd;
+    function HdValueOf(AAxis: TTyAxis; out AValue: Double): Boolean;
+    function HdExtraHits(const AHave: TTyAxisHitArray): TTyAxisHitArray;
+    procedure PaintHandles(APainter: TTyPainter);
+    { whether the option asks for a handle anywhere (cheap: the JSON) }
+    function HdConfigured: Boolean;
     { findPointFromSeries: the series' point of the payload's row --
       AFull reads dataIndexInside and name as well as dataIndex -- with the
       element and its dispatcher }
@@ -4470,6 +4594,9 @@ type
     { [R2-I9] FOR TESTS: the hover layer as the next frame brushes it (the
       copies in list order; nil for none) }
     function HoverLayerForTest: TTyPaintList;
+    { [R5-D] FOR TESTS: the brush covers' elements as a build makes them (a
+      new list; the caller frees it) }
+    function BrushCoversForTest: TTyPaintList;
     { [R2-I9] FOR TESTS: how many rows of series ASeriesIndex have a state
       list or are on the hover layer }
     function StRowsInStatesForTest(ASeriesIndex: Integer): Integer;
@@ -4555,6 +4682,10 @@ type
       axis by its key -- 'xAxis0', 'yAxis1' }
     function AnimPointerClipCount: Integer;
     function AnimPointerProxy(const AKey: string): TTyChartAnimProxy;
+    { [R5-D] the axis pointers' handles (axisPointer.handle), in the
+      axisPointer model's axis order }
+    function PointerHandleCount: Integer;
+    function PointerHandleState(AIndex: Integer): TTyPointerHandleState;
     { only loops are live: the static layer holds the rest }
     property AnimContinuous: Boolean read FAnimContinuous;
     property AnimLive: Boolean read FAnimLive;
@@ -5142,6 +5273,8 @@ uses
   tyControls.AdvanceChart.RichStyle, tyControls.AdvanceChart.JsMath,
   tyControls.AdvanceChart.LinePath, tyControls.AdvanceChart.LabelGuide,
   BGRABitmapTypes, FPImage, FPWriteJPEG, base64,
+  { [R5-D] the WebP export, libwebp loaded when it is asked for }
+  BGRAWriteWebP,
   tyControls.AdvanceChart.ToolboxDlg,
   tyControls.AdvanceChart.AxisBreak, tyControls.AdvanceChart.DataTransform,
   { ecStat's three transforms, registered by its initialization [Batch 134] }

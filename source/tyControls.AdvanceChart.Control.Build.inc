@@ -1317,6 +1317,8 @@ begin
   Result := False;
   AAxisKey := -1;
   AArea := -1;
+  { [R5-D] under the loading mask }
+  if LoadMasks then Exit;
   { THE SINGLES' first: drawn after the grids' [F4a] }
   for a := High(FSingles) downto 0 do
   begin

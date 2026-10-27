@@ -1076,6 +1076,8 @@ begin
   APiece := bpMain;
   if (csDesigning in ComponentState)
     or ((Length(FBrushCtls) = 0) and (Length(FParBrushCtls) = 0)) then Exit;
+  { [R5-D] a cover is under the loading mask (it was added before it) }
+  if LoadMasks then Exit;
   BrushCss(AX, AY, x, y);
   s := DzScale;
   if (x < 0) or (y < 0) or (x > (FLastRect.Right - FLastRect.Left) / s)
@@ -1242,7 +1244,8 @@ var
   pts: array of TTyPointF;
   st: TTyStyleSet;
   inkFill, inkStroke, c: TTyChartColor;
-  lw: Double;
+  lw, doff: Double;
+  dw: Byte;
 begin
   Result := 0;
   if Length(FBrushCtls) = 0 then Exit;
@@ -1261,7 +1264,12 @@ begin
       el := Default(TTyChartElement);
       el.Silent := True;
       el.Datum := TyChartDatum(-1, -1);
-      el.Z := TyBrushCoverZ;
+      { [R5-D] updateZ: the cover's z (COVER_Z unset), its z2 the same }
+      if IsNan(cv.Opt.Z) or IsInfinite(cv.Opt.Z) or (Abs(cv.Opt.Z) > 1e9) then
+        el.Z := TyBrushCoverZ
+      else
+        el.Z := Round(cv.Opt.Z);
+      el.Z2 := el.Z;
       el.Style.Alpha := 1;
       if cv.Opt.BrushType = btPolygon then
       begin
@@ -1296,6 +1304,13 @@ begin
           c := inkStroke;
         el.Style.StrokeColor := c;
         el.Style.StrokeWidthLogical := lw;
+        { [R5-D] the pen's dash (strokeNoScale: against its own width), its
+          phase, cap, join and miter limit }
+        el.Style.DashLogical := TyBrushDash(cv.Opt.Style, lw, dw, doff);
+        el.Style.DashWord := dw;
+        el.Style.DashOffsetLogical := doff;
+        TyBrushCapJoin(cv.Opt.Style, el.Style.LineCap, el.Style.LineJoin,
+          el.Style.MiterLimit);
       end;
       if not IsNan(cv.Opt.Style.Opacity) then
         el.Style.Alpha := Max(0, Min(1, cv.Opt.Style.Opacity));
@@ -1303,6 +1318,12 @@ begin
       Inc(Result);
     end;
   end;
+end;
+
+function TTyCustomAdvanceChart.BrushCoversForTest: TTyPaintList;
+begin
+  Result := TTyPaintList.Create;
+  BuildBrushes(Result);
 end;
 
 { ==================== the selection [Batch 127] ====================

@@ -67,6 +67,8 @@ begin
   ADatum := TyChartNoDatum;
   Result := False;
   if (FBuild = nil) or (FOption = nil) then Exit;
+  { [R5-D] under the loading mask }
+  if LoadMasks then Exit;
   meas := nil;
   { the same boxes the chart's mouse events find (EventTargetAt) }
   for g := 0 to FBuild.GridCount - 1 do
@@ -422,7 +424,7 @@ begin
         kind := mkPoint;
       end;
     Exit(TyTooltipSpecOfMarker(FOption, ADatum.ComponentIndex,
-      TyMarkerKey[kind], opt));
+      TyMarkerKey[kind], opt, TipCoordNode(ADatum.ComponentIndex)));
   end;
   { THE RAW ROW, not the view row. A data-item tooltip is written beside the
     datum in the option text, and the option text is the raw order -- a filter
@@ -430,10 +432,150 @@ begin
   { A GRAPH LINK has a row of its own, in the LINK list, and a node's tooltip
     written at that position is somebody else's -- so a link takes the
     series'. }
+  { [R5-D] and the coordinate system's level under the series' }
   if ADatum.IsEdge then
-    Result := TyTooltipSpecOf(FOption, ADatum.SeriesIndex, -1)
+    Result := TyTooltipSpecOf(FOption, ADatum.SeriesIndex, -1,
+      TipCoordNode(ADatum.SeriesIndex))
   else
-    Result := TyTooltipSpecOf(FOption, ADatum.SeriesIndex, ADatum.RawDataIndex);
+    Result := TyTooltipSpecOf(FOption, ADatum.SeriesIndex, ADatum.RawDataIndex,
+      TipCoordNode(ADatum.SeriesIndex));
+end;
+
+function TTyCustomAdvanceChart.TipCoordNode(ASeriesIndex: Integer): TJSONData;
+var
+  slot: Integer;
+  b: TTySeriesBinding;
+begin
+  Result := nil;
+  if FOption = nil then Exit;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FBindings)) then Exit;
+  b := FBindings[slot];
+  { a cartesian2D's model is its grid }
+  if (b.Cart <> nil) and (b.XAxis <> nil) then
+    Result := FOption.ComponentAt('grid', b.XAxis.GridIndex)
+  else if b.PolarIndex >= 0 then
+    Result := FOption.ComponentAt('polar', b.PolarIndex)
+  else if b.SingleIndex >= 0 then
+    Result := FOption.ComponentAt('singleAxis', b.SingleIndex)
+  else if b.ParallelIndex >= 0 then
+    Result := FOption.ComponentAt('parallel', b.ParallelIndex)
+  else if b.GeoIndex >= 0 then
+    Result := FOption.ComponentAt('geo', b.GeoIndex);
+end;
+
+{ [R5-D] THE PROXY'S CASCADE (_showComponentItemTooltip over the proxy
+  rect's tooltipConfig {name: null, option: payload.tooltip}): the option
+  -- a string is {content: it, formatter: it} --, no component (its main
+  type is none), {formatter: option.content} -- skipped when there is no
+  content, so the global formatter is reached --, the global component. }
+function TTyCustomAdvanceChart.TipProxySpec(const AJson: string): TTyTooltipSpec;
+var
+  d: TJSONData;
+  lvTop, lvl: TJSONObject;
+  c: TJSONData;
+  nLine, nCol: Integer;
+begin
+  d := nil;
+  lvTop := nil;
+  lvl := nil;
+  try
+    if not TyJsonNestingExceeds(AJson, TyOptionMaxNesting, nLine, nCol) then
+      try
+        d := GetJSON(AJson);
+      except
+        d := nil;
+      end;
+    if (d <> nil) and (d.JSONType = jtString) then
+      lvTop := TJSONObject.Create(['content', d.AsString, 'formatter', d.AsString])
+    else if d is TJSONObject then
+      lvTop := TJSONObject(d.Clone);
+    if lvTop <> nil then
+    begin
+      c := lvTop.Find('content');
+      if (c <> nil) and (c.JSONType <> jtNull) then
+      begin
+        lvl := TJSONObject.Create;
+        lvl.Add('formatter', c.Clone);
+      end;
+    end;
+    Result := TyTooltipSpecOfLevels(FOption, [lvTop, lvl]);
+    { a component item is not asked its trigger }
+    Result.Trigger := tttItem;
+  finally
+    lvl.Free;
+    lvTop.Free;
+    d.Free;
+  end;
+end;
+
+{ [R5-D] A TOOLBOX ICON'S CASCADE (_showComponentItemTooltip over the
+  icon's tooltipConfig: content the icon's name): the toolbox's `tooltip`
+  over its model's default {show: false, position: 'bottom'}, then
+  {formatter: the name}, then the global component }
+function TTyCustomAdvanceChart.TipTbSpec(ATb, AIcon: Integer): TTyTooltipSpec;
+var
+  n, tt: TJSONData;
+  lvTb, lvName: TJSONObject;
+  k: Integer;
+begin
+  lvTb := TJSONObject.Create(['show', False, 'position', 'bottom']);
+  lvName := nil;
+  try
+    n := FOption.ComponentAt('toolbox', ATb);
+    tt := nil;
+    if n is TJSONObject then tt := TJSONObject(n).Find('tooltip');
+    if tt is TJSONObject then
+      for k := 0 to tt.Count - 1 do
+        lvTb.Elements[TJSONObject(tt).Names[k]] := tt.Items[k].Clone;
+    if (ATb <= High(FTbSpecs)) and (AIcon >= 0) and (AIcon <= High(FTbSpecs[ATb].Icons)) then
+      lvName := TJSONObject.Create(['formatter', FTbSpecs[ATb].Icons[AIcon].Name]);
+    Result := TyTooltipSpecOfLevels(FOption, [lvTb, lvName]);
+    Result.Trigger := tttItem;
+  finally
+    lvName.Free;
+    lvTb.Free;
+  end;
+end;
+
+{ its text: formatTpl over the params' $vars [name, title] -- `{a}` the
+  icon's name, `{b}` its title, each value encodeHTML'd, the first of each
+  only (String.replace) }
+function TTyCustomAdvanceChart.TipTbText(ATb, AIcon: Integer;
+  const ASpec: TTyTooltipSpec): string;
+var
+  nm, tl: string;
+
+  function ReplaceFirst(const S, AOld, ANew: string): string;
+  var p: Integer;
+  begin
+    p := Pos(AOld, S);
+    if p = 0 then Exit(S);
+    Result := Copy(S, 1, p - 1) + ANew + Copy(S, p + Length(AOld), MaxInt);
+  end;
+
+begin
+  Result := '';
+  if not ASpec.HasFormatter then Exit;
+  if (ATb > High(FTbSpecs)) or (AIcon < 0) or (AIcon > High(FTbSpecs[ATb].Icons)) then Exit;
+  nm := FTbSpecs[ATb].Icons[AIcon].Name;
+  if FTbSpecs[ATb].Icons[AIcon].HasTitle then tl := FTbSpecs[ATb].Icons[AIcon].Title
+  else tl := 'undefined';
+  Result := ASpec.Formatter;
+  Result := ReplaceFirst(Result, '{a}', '{a0}');
+  Result := ReplaceFirst(Result, '{b}', '{b0}');
+  Result := ReplaceFirst(Result, '{a0}', TyChartEncodeHtml(nm));
+  Result := ReplaceFirst(Result, '{b0}', TyChartEncodeHtml(tl));
+end;
+
+{ The proxy's text: the formatter as formatTpl leaves it with the empty
+  formatterParams (no $vars: nothing is replaced) -- the content's level is
+  a formatter as well }
+function TTyCustomAdvanceChart.TipProxyText(const AJson: string;
+  const ASpec: TTyTooltipSpec): string;
+begin
+  Result := '';
+  if ASpec.HasFormatter then Result := ASpec.Formatter;
 end;
 
 function TTyCustomAdvanceChart.TooltipInk(
@@ -1633,6 +1775,8 @@ var
   tipSpec: TTyTooltipSpec;
   tipOn, crossType, triggerAxis: Boolean;
   wantAxis, wantPolar: string;
+  { [R5-D] the coordinate system's own `tooltip` (nil: none) }
+  coordTip: TJSONObject;
   g, c, k: Integer;
   gb: TTyGridBuild;
   cart: TTyCartesian2D;
@@ -1669,7 +1813,10 @@ var
     own := TyAxisPointerSpecOf(FOption, AAxis.MainType, AAxis.ComponentIndex,
       isCat, False, False, False);
     if own.Show = apsNo then Exit;
-    if (own.Show = apsAuto) and not AFromTooltip then Exit;
+    { [R5-D] 'auto' from the tooltip, or with a handle
+      [was: a handle not modelled] }
+    if (own.Show = apsAuto) and not AFromTooltip
+      and not TyAxisPointerHandleOf(FOption, AAxis.MainType, AAxis.ComponentIndex).Show then Exit;
     info := Default(TTyPtrAxisInfo);
     info.Axis := AAxis;
     info.Plot := APlot;
@@ -1682,7 +1829,7 @@ var
     begin
       info.TriggerTooltip := ATrigger;
       info.Spec := TyAxisPointerSpecOf(FOption, AAxis.MainType,
-        AAxis.ComponentIndex, isCat, True, ATrigger, ACrossFrom);
+        AAxis.ComponentIndex, isCat, True, ATrigger, ACrossFrom, coordTip);
     end
     else
     begin
@@ -1717,19 +1864,44 @@ var
         Save(AOthers[j], APlot, APolar, ASingle, ACsKey, True, True, False);
   end;
 
+  { [R5-D] baseTooltipModel = coordSysModel.getModel('tooltip',
+    globalTooltipModel): the coordinate system's tooltip over the global
+    one, key by key -- show, trigger, axisPointer.type and .axis }
+  procedure BaseTooltip(const AMainType: string; AIndex: Integer);
+  var n, d: TJSONData;
+  begin
+    coordTip := nil;
+    n := FOption.ComponentAt(AMainType, AIndex);
+    if n is TJSONObject then
+    begin
+      d := TJSONObject(n).Find('tooltip');
+      if d is TJSONObject then coordTip := TJSONObject(d);
+    end;
+    { the tooltip's axes: a tooltip component that shows (showContent false
+      still draws the pointer) }
+    tipOn := tipSpec.HasComponent and tipSpec.Show;
+    triggerAxis := tipSpec.Trigger = tttAxis;
+    if coordTip <> nil then
+    begin
+      d := coordTip.Find('show');
+      if (d <> nil) and (d.JSONType <> jtNull) then
+        tipOn := tipSpec.HasComponent and JsTruthy(d);
+      d := coordTip.Find('trigger');
+      if (d <> nil) and (d.JSONType <> jtNull) then
+        triggerAxis := (d.JSONType = jtString) and (d.AsString = 'axis');
+    end;
+    crossType := TyTooltipAxisPointerType(FOption, coordTip) = aptCross;
+    wantAxis := TyTooltipAxisPointerAxis(FOption, coordTip);
+    wantPolar := TyTooltipPolarPointerAxis(FOption, coordTip);
+  end;
+
 var
   nb, no_: Integer;
 begin
   Result := nil;
   if (FBuild = nil) or (FOption = nil) then Exit;
   tipSpec := TyTooltipSpecOf(FOption, -1, -1);
-  { the tooltip's axes: a tooltip component that shows (showContent false
-    still draws the pointer) }
-  tipOn := tipSpec.HasComponent and tipSpec.Show;
-  crossType := TyTooltipAxisPointerType(FOption) = aptCross;
-  triggerAxis := tipSpec.Trigger = tttAxis;
-  wantAxis := TyTooltipAxisPointerAxis(FOption);
-  wantPolar := TyTooltipPolarPointerAxis(FOption);
+  coordTip := nil;
   { THE GRIDS: grid.getAxes() is every x axis, then every y axis, in their
     component order; getTooltipAxes every cartesian's base axis (or the one
     `tooltip.axisPointer.axis` names), then every other one, each once }
@@ -1737,6 +1909,7 @@ begin
   begin
     gb := FBuild.Grid(g);
     if gb.CartesianCount = 0 then Continue;
+    BaseTooltip('grid', g);
     for k := 0 to gb.XAxisCount - 1 do
       Save(gb.XAxis(k), gb.PlotRect, nil, nil, 'g' + IntToStr(g), False, False, False);
     for k := 0 to gb.YAxisCount - 1 do
@@ -1762,6 +1935,7 @@ begin
   begin
     pol := FPolars[g];
     if pol = nil then Continue;
+    BaseTooltip('polar', g);
     Save(pol.AxisByDim('radius'), Default(TTyRectF), pol, nil, 'p' + IntToStr(g), False, False, False);
     Save(pol.AxisByDim('angle'), Default(TTyRectF), pol, nil, 'p' + IntToStr(g), False, False, False);
     if wantPolar <> '' then base := pol.AxisByDim(wantPolar)
@@ -1780,6 +1954,7 @@ begin
   begin
     sgl := FSingles[g];
     if sgl = nil then Continue;
+    BaseTooltip('singleAxis', g);
     Save(sgl.Axis, sgl.GetRect, nil, sgl, 's' + IntToStr(g), False, False, False);
     SetLength(bases, 1);
     bases[0] := sgl.Axis;
@@ -2670,7 +2845,30 @@ var
   d: TJSONData;
   nLine, nCol: Integer;
 begin
-  if Length(ASnap.Hits) > 0 then Result := TyTooltipSpecOf(FOption, -1, -1)
+  { [R5-D] an axis tooltip's model is [e.tooltipOption] over the global
+    one; a proxy's its own cascade }
+  if Length(ASnap.Hits) > 0 then
+  begin
+    if ASnap.OptJson <> '' then
+    begin
+      d := nil;
+      if not TyJsonNestingExceeds(ASnap.OptJson, TyOptionMaxNesting, nLine, nCol) then
+        try
+          d := GetJSON(ASnap.OptJson);
+        except
+          d := nil;
+        end;
+      try
+        Result := TyTooltipSpecOfLevels(FOption, [d]);
+      finally
+        d.Free;
+      end;
+    end
+    else
+      Result := TyTooltipSpecOf(FOption, -1, -1);
+  end
+  else if ASnap.ProxyJson <> '' then Result := TipProxySpec(ASnap.ProxyJson)
+  else if ASnap.TbHas then Result := TipTbSpec(ASnap.TbIndex, ASnap.TbIcon)
   else Result := TooltipSpecFor(ASnap.Datum);
   { [Batch 153] a manual show: the payload's position before the
     cascade's (positionExpr || model.get('position')); else, for an item
@@ -2735,6 +2933,7 @@ begin
     A component item (a geo region, an axis' text, a matrix cell) has none. }
   if Length(ASnap.Hits) = 0 then
   begin
+    if (ASnap.ProxyJson <> '') or ASnap.TbHas then Exit;
     if not TipTargetValid(ASnap.Datum) or IsGeoDatum(ASnap.Datum)
       or IsAxisTextDatum(ASnap.Datum) or TipIsMatrix(ASnap.Datum) then Exit;
   end;
@@ -2944,7 +3143,9 @@ begin
 end;
 
 procedure TTyCustomAdvanceChart.TipArmTimer;
-var due, ms: Double;
+var
+  due, ms: Double;
+  hk: Integer;
 begin
   due := NaN;
   if not IsNan(FTipShowAt) then due := FTipShowAt;
@@ -2953,6 +3154,10 @@ begin
   { [F4b] the keep timer }
   if (not IsNan(FTipKeepAt)) and (IsNan(due) or (FTipKeepAt < due)) then
     due := FTipKeepAt;
+  { [R5-D] a handle's throttle }
+  for hk := 0 to High(FHandles) do
+    if (not IsNan(FHandles[hk].DueAt)) and (IsNan(due) or (FHandles[hk].DueAt < due)) then
+      due := FHandles[hk].DueAt;
   { only on the machine's clock: a test steps TooltipTick itself }
   if IsNan(due) or (not IsNan(FTipNow)) or (csDesigning in ComponentState) then
   begin
@@ -2976,12 +3181,15 @@ end;
 procedure TTyCustomAdvanceChart.TipTimerFired(Sender: TObject);
 begin
   if FTipTimer <> nil then FTipTimer.Enabled := False;
+  { [R5-D] a handle's deferred dispatch }
+  HdTick(TipClock);
   if TipAdvance(TipClock) then TipInvalidate;
   TipArmTimer;
 end;
 
 procedure TTyCustomAdvanceChart.TooltipTick(ANowMs: Double);
 begin
+  HdTick(ANowMs);
   if TipAdvance(ANowMs) then TipInvalidate;
   TipArmTimer;
 end;
@@ -3239,7 +3447,10 @@ begin
           ev.Element := AElement;
           { [F4c] no item: an axis' name or label that is not silent }
           if not TipTargetValid(ADatum) and AxisTextAt(AX, AY, ev.Datum) then
-            ev.Element := -1;
+            ev.Element := -1
+          { [R5-D] or a toolbox's icon: its tooltipConfig }
+          else if not TipTargetValid(ADatum) and TbHitAt(AX, AY, ev.TbIndex, ev.TbIcon) then
+            ev.TbHas := True;
         end;
         TipTryShowEvent(ev, True);
       end
@@ -3370,7 +3581,12 @@ begin
       cs := TJSONObject.Create;
       cs.Add('coordSysId', FOption.ComponentId(mt, gi));
       cs.Add('coordSysIndex', gi);
-      cs.Add('coordSysType', mt);
+      { [R5-D] the model's type: a single axis' is its own sub type
+        ('singleAxis.value') [was: 'singleAxis'] }
+      if h.Single <> nil then
+        cs.Add('coordSysType', mt + '.' + TyAxisTypeName(h.Axis.AxisType))
+      else
+        cs.Add('coordSysType', mt);
       cs.Add('coordSysMainType', mt);
       cs.Add('dataByAxis', TJSONArray.Create);
       Result.Add(cs);
@@ -3866,13 +4082,38 @@ begin
   if AEv.HasDbc then
   begin
     snap.Hits := Copy(AEv.Hits, 0, Length(AEv.Hits));
-    TipTryShow(snap, g);
+    { [R5-D] its model: [e.tooltipOption] over the global one -- the delay
+      it is shown with too }
+    snap.OptJson := AEv.OptJson;
+    if snap.OptJson <> '' then TipTryShow(snap, TipSpecOf(snap))
+    else TipTryShow(snap, g);
     Exit;
   end;
   snap.Datum := AEv.Datum;
   snap.Element := AEv.Element;
   { [F4b] a target, or none: no axis tooltip to keep }
   FTipLastDbc := '';
+  { [R5-D] A TOOLBOX ICON: a component item too }
+  if AEv.TbHas then
+  begin
+    snap.TbHas := True;
+    snap.TbIndex := AEv.TbIndex;
+    snap.TbIcon := AEv.TbIcon;
+    TipTryShow(snap, TipSpecOf(snap));
+    TipDispatch(TJSONObject.Create(['type', 'showTip', 'from', TipUid]), nil,
+      False, AViaListener);
+    Exit;
+  end;
+  { [R5-D] THE PROXY of a showTip's payload.tooltip: a component item --
+    shown whatever the trigger, and a showTip from the view }
+  if AEv.ProxyJson <> '' then
+  begin
+    snap.ProxyJson := AEv.ProxyJson;
+    TipTryShow(snap, TipSpecOf(snap));
+    TipDispatch(TJSONObject.Create(['type', 'showTip', 'from', TipUid]), nil,
+      False, AViaListener);
+    Exit;
+  end;
   { findEventDispatcher: tooltipDisabled on the way up is no dispatcher }
   if CustomTipDisabled(AEv.Element) then
   begin
@@ -3920,6 +4161,9 @@ end;
 
 procedure TTyCustomAdvanceChart.DoUpdateAxisPointer(APayload: TJSONObject);
 var
+  { [R5-D] a handle's axis in the payload }
+  hdOn: Boolean;
+  hdVal: Double;
   via, ok: Boolean;
   trig: string;
   px, py: Double;
@@ -3931,6 +4175,79 @@ var
   el, i, k, slot: Integer;
   ev, ax, tip: TJSONObject;
   done: array of Boolean;
+
+  { [R5-D] dispatchHighDownActually: every shown axis whose model says
+    triggerEmphasis gives its rows (seriesIndex|dataIndex, the first keeps
+    its place), in the axisPointer model's order; what the last call lit
+    and this one does not is downplayed, then what is new is highlighted --
+    {type, escapeConnect, notBlur, batch [{seriesIndex, dataIndex}]}
+    through api.dispatchAction, so they wait for this action to finish }
+  procedure HighDown(const AOrder: TTyAxisArray);
+  var
+    ns, nd: TTyIntegerArray;
+    q, r, j, si, raw: Integer;
+    hd: array of Boolean;
+
+    function IndexIn(const AS_, AD: TTyIntegerArray; ASer, ARaw: Integer): Integer;
+    var z: Integer;
+    begin
+      for z := 0 to High(AS_) do
+        if (AS_[z] = ASer) and (AD[z] = ARaw) then Exit(z);
+      Result := -1;
+    end;
+
+    function Batch(const AS_, AD: TTyIntegerArray; const AOther_S,
+      AOther_D: TTyIntegerArray; const AType: string): TJSONObject;
+    var z: Integer; b: TJSONArray;
+    begin
+      Result := nil;
+      b := nil;
+      for z := 0 to High(AS_) do
+        if IndexIn(AOther_S, AOther_D, AS_[z], AD[z]) < 0 then
+        begin
+          if b = nil then b := TJSONArray.Create;
+          b.Add(TJSONObject.Create(['seriesIndex', AS_[z], 'dataIndex', AD[z]]));
+        end;
+      if b = nil then Exit;
+      Result := TJSONObject.Create(['type', AType, 'escapeConnect', True,
+        'notBlur', True]);
+      Result.Add('batch', b);
+    end;
+
+  var pl: TJSONObject;
+  begin
+    ns := nil;
+    nd := nil;
+    SetLength(hd, Length(hits));
+    for q := 0 to High(hd) do hd[q] := False;
+    for q := 0 to High(AOrder) do
+      for r := 0 to High(hits) do
+        if not hd[r] and (hits[r].Axis = AOrder[q]) then
+        begin
+          hd[r] := True;
+          if not hits[r].Spec.TriggerEmphasis then Continue;
+          for j := 0 to High(hits[r].Slots) do
+          begin
+            slot := hits[r].Slots[j];
+            si := SlotSeriesIndex(slot);
+            if (slot >= 0) and (slot <= High(FStores)) and (FStores[slot] <> nil) then
+              raw := FStores[slot].GetRawIndex(hits[r].Rows[j])
+            else
+              raw := hits[r].Rows[j];
+            if IndexIn(ns, nd, si, raw) >= 0 then Continue;
+            SetLength(ns, Length(ns) + 1);
+            SetLength(nd, Length(nd) + 1);
+            ns[High(ns)] := si;
+            nd[High(nd)] := raw;
+          end;
+        end;
+    pl := Batch(FApHighS, FApHighD, ns, nd, 'downplay');
+    if pl <> nil then TipDispatch(pl, nil, False, False);
+    pl := Batch(ns, nd, FApHighS, FApHighD, 'highlight');
+    if pl <> nil then TipDispatch(pl, nil, False, False);
+    FApHighS := ns;
+    FApHighD := nd;
+  end;
 
   function ModelValue(const AHit: TTyAxisHit): Double;
   begin
@@ -3988,6 +4305,8 @@ begin
       FTipHits := hits;
       FOptPtrGone := True;
       FOptPtrBack := nil;
+      { [R5-D] a handle's axis takes the value; its status stays 'show' }
+      HdTakeHits(hits);
       PtrAnimSync;
       TipInvalidate;
       { the event: the first row a processed axis took (the first pass's,
@@ -4011,16 +4330,29 @@ begin
       SetLength(done, Length(hits));
       for i := 0 to High(done) do done[i] := False;
       for k := 0 to High(order) do
+      begin
+        hdOn := False;
         for i := 0 to High(hits) do
           if not done[i] and (hits[i].Axis = order[k]) then
           begin
             done[i] := True;
+            hdOn := True;
             ax := TJSONObject.Create;
             ax.Add('axisDim', hits[i].Axis.Dim);
             ax.Add('axisIndex', hits[i].Axis.ComponentIndex);
             ax.Add('value', TJSONFloatNumber.Create(ModelValue(hits[i])));
             arr.Add(ax);
           end;
+        { [R5-D] a handle's axis is shown whatever this action showed }
+        if not hdOn and HdValueOf(order[k], hdVal) then
+        begin
+          ax := TJSONObject.Create;
+          ax.Add('axisDim', order[k].Dim);
+          ax.Add('axisIndex', order[k].ComponentIndex);
+          ax.Add('value', TJSONFloatNumber.Create(hdVal));
+          arr.Add(ax);
+        end;
+      end;
       ev.Add('type', 'updateaxispointer');
       { dispatchTooltipActually: a showTip when an axis has something for
         the tooltip, else a hideTip }
@@ -4047,6 +4379,7 @@ begin
         tip.Add('dataByCoordSys', TipDbcJson(tips));
         TipDispatch(tip, hits, True, via);
       end;
+      HighDown(order);
     finally
       Dec(FActCycle);
       none_.Free;
@@ -4110,9 +4443,22 @@ begin
         TipTryShowEvent(ev, False);
       end
       else if JsTruthy(APayload.Find('tooltip')) and (APayload.Find('x') <> nil)
-        and (APayload.Find('y') <> nil) then
-        { a proxy element carrying the payload's own tooltip option: not
-          modelled }
+        and (APayload.Find('x').JSONType <> jtNull) and (APayload.Find('y') <> nil)
+        and (APayload.Find('y').JSONType <> jtNull) then
+      begin
+        { [R5-D] a proxy element at x / y carrying the payload's own tooltip
+          option: _tryShow on it, no position of the payload's }
+        if not TipPayloadXY(APayload, ev.X, ev.Y) then
+        begin
+          d := APayload.Find('x');
+          if d.JSONType = jtNumber then ev.X := d.AsFloat;
+          d := APayload.Find('y');
+          if d.JSONType = jtNumber then ev.Y := d.AsFloat;
+        end;
+        ev.PosJson := '';
+        ev.ProxyJson := APayload.Find('tooltip').AsJSON;
+        TipTryShowEvent(ev, False);
+      end
       else if JsTruthy(APayload.Find('dataByCoordSys')) then
       begin
         { from axisTrigger: the axes and their rows at the point }
@@ -4131,6 +4477,9 @@ begin
         end;
         ev.Hits := hits;
         ev.HasDbc := (d is TJSONArray) and (d.Count > 0);
+        { [R5-D] the axis tooltip's tooltipOption: a truthy one is a level }
+        if JsTruthy(APayload.Find('tooltipOption')) then
+          ev.OptJson := APayload.Find('tooltipOption').AsJSON;
         TipTryShowEvent(ev, False);
       end
       else if (APayload.Find('seriesIndex') <> nil)
@@ -4145,8 +4494,10 @@ begin
         begin
           sIdx := Trunc(APayload.Find('seriesIndex').AsFloat);
           raw := Trunc(d.AsFloat);
+          { [R5-D] [item, series, coordinate system] over the global }
           if SlotOfSeries(sIdx) >= 0 then
-            isAxis := TyTooltipSpecOf(FOption, sIdx, raw).Trigger = tttAxis;
+            isAxis := TyTooltipSpecOf(FOption, sIdx, raw,
+              TipCoordNode(sIdx)).Trigger = tttAxis;
         end;
         if isAxis then
         begin
@@ -4570,6 +4921,671 @@ procedure TTyCustomAdvanceChart.TooltipContentSize(var AW, AH: Double);
 begin
 end;
 
+{ ==================== the axis pointer's handle [R5-D] ====================
+
+  axisPointer.handle (BaseAxisPointer._renderHandle and its drag,
+  CartesianAxisPointer / SingleAxisPointer getHandleTransform and
+  updateHandleTransform, modelHelper.fixValue). A handle collects its axis
+  whatever its show 'auto' says; fixValue gives it a value from the start
+  (the option's, else the extent's end, clamped into the extent) and a
+  status 'show' no pointer event takes away -- updateModelActually leaves a
+  handle's status alone, so its pointer stays where the value is. The
+  handle stands at getTransformedPosition(value) with the handle's margin
+  and turns with the axis; a press on it dispatches updateAxisPointer at
+  the middle of the other extent for this axis alone, each drift moves it
+  along the axis (clamped) and dispatches again through a fixRate throttle,
+  the release moves it onto the value and hides the tip. A polar has no
+  handle (PolarAxisPointer has no updateHandleTransform). }
+
+function TTyCustomAdvanceChart.HdIndexOf(const AKey: string): Integer;
+var i: Integer;
+begin
+  for i := 0 to High(FHandles) do
+    if FHandles[i].Key = AKey then Exit(i);
+  Result := -1;
+end;
+
+function TTyCustomAdvanceChart.HdAxisOf(AIndex: Integer; out AInfo: TTyPtrAxisInfo): Boolean;
+var
+  infos: TTyPtrAxisInfoArray;
+  k: Integer;
+begin
+  Result := False;
+  AInfo := Default(TTyPtrAxisInfo);
+  if (AIndex < 0) or (AIndex > High(FHandles)) then Exit;
+  infos := PtrCollect;
+  for k := 0 to High(infos) do
+    if PtrKeyOf(infos[k].Axis) = FHandles[AIndex].Key then
+    begin
+      AInfo := infos[k];
+      Exit(True);
+    end;
+end;
+
+{ scale.parse of a written value, as OptionPointerHits reads it }
+function TTyCustomAdvanceChart.HdParseValue(AAxis: TTyAxis; AData: TJSONData): Double;
+var
+  n: Integer;
+  ms: Double;
+begin
+  Result := NaN;
+  if (AData = nil) or not (AData.JSONType in [jtNumber, jtString]) then Exit;
+  if AAxis.Scale is TTyOrdinalScale then
+  begin
+    if AData.JSONType = jtNumber then Result := TyJsRound(AData.AsFloat)
+    else if AAxis.Categories <> nil then
+    begin
+      n := AAxis.Categories.GetOrdinal(AData.AsString);
+      if n >= 0 then Result := n;
+    end;
+  end
+  else if AAxis.Scale is TTyTimeScale then
+  begin
+    if AData.JSONType = jtNumber then Result := TyJsRound(AData.AsFloat)
+    else if TyParseDateMs(AData.AsString, ms, False) then Result := ms;
+  end
+  else if AData.JSONType = jtNumber then Result := AData.AsFloat
+  else if AData.AsString <> '' then Result := TyJsToNumber(AData.AsString);
+  if IsInfinite(Result) then Result := NaN;
+end;
+
+{ getHandleTransform: the value's coordinate through the axis' frame, the
+  handle's margin on the labels' side (labelInside false), the frame's turn
+  and a half turn more where that side is negative }
+function TTyCustomAdvanceChart.HdPlace(const AInfo: TTyPtrAxisInfo; AValue: Double;
+  out AX, AY, ARotation: Double): Boolean;
+var
+  h: TTyAxisPointerHandle;
+  s, c, t: Double;
+  g: Integer;
+  gb: TTyGridBuild;
+  spec: PTyAxisLayoutSpec;
+  fr: TTyAxisNameFrame;
+  M: TTyMat2D;
+begin
+  Result := False;
+  AX := NaN;
+  AY := NaN;
+  ARotation := 0;
+  if (AInfo.Axis = nil) or (AInfo.Polar <> nil) or IsNan(AValue) then Exit;
+  h := TyAxisPointerHandleOf(FOption, AInfo.Axis.MainType, AInfo.Axis.ComponentIndex);
+  if FLastPPI > 0 then s := FLastPPI / 96 else s := 1;
+  if AInfo.Single <> nil then
+  begin
+    TySingleHandlePlace(AInfo.Single, FOption, AValue, h.Margin * s, AX, AY, ARotation);
+    Exit(not (IsNan(AX) or IsNan(AY)));
+  end;
+  if FBuild = nil then Exit;
+  gb := nil;
+  for g := 0 to FBuild.GridCount - 1 do
+    if FBuild.Grid(g).ComponentIndex = AInfo.Axis.GridIndex then gb := FBuild.Grid(g);
+  if gb = nil then Exit;
+  spec := gb.SpecFor(AInfo.Axis);
+  if (spec = nil) or not spec^.HasNameFrame then Exit;
+  fr := spec^.NameFrame;
+  c := AInfo.Axis.DataToLocal(AValue);
+  t := fr.LabelOffset + fr.NameDirection * h.Margin * s;
+  M := TyMatLocal(fr.PosX, fr.PosY, fr.Rotation);
+  AX := M[0] * c + M[2] * t + M[4];
+  AY := M[1] * c + M[3] * t + M[5];
+  ARotation := fr.Rotation;
+  if fr.NameDirection < 0 then ARotation := ARotation + Pi;
+  Result := not (IsNan(AX) or IsNan(AY));
+end;
+
+{ every axis with a handle, in the model's order: fixValue, and the handle
+  moved onto the value where it was not (_moveHandleToValue, with the
+  pointer's moveAnimation once it has been placed) }
+procedure TTyCustomAdvanceChart.HdSync;
+var
+  infos: TTyPtrAxisInfoArray;
+  list: TTyPtrHandleArray;
+  k, n, at_, j: Integer;
+  h: TTyAxisPointerHandle;
+  e: TTyPtrHandle;
+  key: string;
+  d, ap: TJSONData;
+  ext: TTyRange;
+  lo, hi, x, y, rot: Double;
+  hit: TTyAxisHit;
+  model: TTyAnimModel;
+  own: TJSONObject;
+  p: TTyChartAnimProxy;
+  props: TTyAnimProps;
+  animate: Boolean;
+
+  function AnimOn: Boolean;
+  var a: TJSONData;
+  begin
+    { Model.isAnimationEnabled up the axisPointer model's chain: the axis'
+      own axisPointer, the axisPointer component, the option }
+    a := nil;
+    ap := FOption.ComponentAt(infos[k].Axis.MainType, infos[k].Axis.ComponentIndex);
+    if ap is TJSONObject then ap := TJSONObject(ap).Find('axisPointer') else ap := nil;
+    if ap is TJSONObject then a := TJSONObject(ap).Find('animation');
+    if ((a = nil) or (a.JSONType = jtNull)) and (FOption.Root is TJSONObject) then
+    begin
+      ap := TJSONObject(FOption.Root).Find('axisPointer');
+      if ap is TJSONObject then a := TJSONObject(ap).Find('animation');
+      if ((a = nil) or (a.JSONType = jtNull)) then a := TJSONObject(FOption.Root).Find('animation');
+    end;
+    Result := (a = nil) or (a.JSONType = jtNull) or JsTruthy(a);
+  end;
+
+begin
+  if (FOption = nil) or (FBuild = nil) then
+  begin
+    FHandles := nil;
+    Exit;
+  end;
+  { no handle anywhere: nothing to collect (a paint asks every frame) }
+  if (Length(FHandles) = 0) and not HdConfigured then Exit;
+  infos := PtrCollect;
+  list := nil;
+  for k := 0 to High(infos) do
+  begin
+    if (infos[k].Axis = nil) or (infos[k].Polar <> nil) then Continue;
+    h := TyAxisPointerHandleOf(FOption, infos[k].Axis.MainType, infos[k].Axis.ComponentIndex);
+    if not h.Show then Continue;
+    key := PtrKeyOf(infos[k].Axis);
+    at_ := HdIndexOf(key);
+    if at_ >= 0 then e := FHandles[at_]
+    else
+    begin
+      e := Default(TTyPtrHandle);
+      e.Key := key;
+      e.LastExec := NaN;
+      e.DueAt := NaN;
+      e.PlacedValue := NaN;
+      e.Value := NaN;
+    end;
+    e.MainType := infos[k].Axis.MainType;
+    e.Index := infos[k].Axis.ComponentIndex;
+    { fixValue: the option's value (the axis' own, else the component's),
+      parsed, once; else the extent's end; clamped into the extent }
+    if not e.HasValue then
+    begin
+      d := nil;
+      ap := FOption.ComponentAt(e.MainType, e.Index);
+      if ap is TJSONObject then ap := TJSONObject(ap).Find('axisPointer') else ap := nil;
+      if ap is TJSONObject then d := TJSONObject(ap).Find('value');
+      if ((d = nil) or (d.JSONType = jtNull)) and (FOption.Root is TJSONObject) then
+      begin
+        ap := TJSONObject(FOption.Root).Find('axisPointer');
+        if ap is TJSONObject then d := TJSONObject(ap).Find('value');
+      end;
+      e.Value := HdParseValue(infos[k].Axis, d);
+      e.HasValue := True;
+    end;
+    ext := infos[k].Axis.Scale.GetExtent;
+    lo := ext.Start;
+    hi := ext.Stop;
+    { a blank scale: status 'hide', no handle }
+    e.Live := not (IsNan(lo) or IsNan(hi) or IsInfinite(lo) or IsInfinite(hi));
+    if e.Live then
+    begin
+      if IsNan(e.Value) or (e.Value > hi) then e.Value := hi;
+      if e.Value < lo then e.Value := lo;
+    end;
+    { the handle onto the value }
+    if e.Live and not e.Dragging
+      and ((not e.Placed) or IsNan(e.PlacedValue) or (e.PlacedValue <> e.Value))
+      and HdPlace(infos[k], e.Value, x, y, rot) then
+    begin
+      props := TyAnimProps([TyAnimProp('x', TyAnimNum(x)), TyAnimProp('y', TyAnimNum(y)),
+        TyAnimProp('rotation', TyAnimNum(rot))]);
+      hit := Default(TTyAxisHit);
+      hit.Axis := infos[k].Axis;
+      hit.Spec := infos[k].Spec;
+      hit.Single := infos[k].Single;
+      animate := e.Placed and (FAnimMode <> camOff) and not (csDesigning in ComponentState)
+        and AnimOn;
+      p := AnimPointerProxy('handle:' + key);
+      if animate then
+      begin
+        model := PtrModelOf(hit, own);
+        try
+          animate := PtrMoves(hit, model);
+          if animate then
+          begin
+            if FPtrProxies = nil then FPtrProxies := TFPList.Create;
+            if FPtrAnim = nil then FPtrAnim := NewAnimDriver;
+            if p = nil then
+            begin
+              p := TTyChartAnimProxy.Create(-1, -1, 'handle:' + key);
+              p.Animation := FPtrAnim;
+              p.Attr(TyAnimProps([TyAnimProp('x', TyAnimNum(e.X)), TyAnimProp('y', TyAnimNum(e.Y)),
+                TyAnimProp('rotation', TyAnimNum(e.Rotation))]));
+              FPtrProxies.Add(p);
+            end;
+            p.SetFinal(props);
+            TyUpdateProps(p, props, model, TyAnimCallNoIndex);
+            AnimArmTimer;
+          end;
+        finally
+          own.Free;
+        end;
+      end;
+      if not animate and (p <> nil) then
+      begin
+        p.StopAnimation;
+        p.Attr(props);
+        p.SetFinal(props);
+      end;
+      e.X := x;
+      e.Y := y;
+      e.Rotation := rot;
+      e.Placed := True;
+      e.PlacedValue := e.Value;
+    end;
+    n := Length(list);
+    SetLength(list, n + 1);
+    list[n] := e;
+  end;
+  { a drag whose axis went keeps no index }
+  if FHdDrag >= 0 then
+  begin
+    j := -1;
+    if FHdDrag <= High(FHandles) then
+      for n := 0 to High(list) do
+        if list[n].Key = FHandles[FHdDrag].Key then j := n;
+    FHdDrag := j;
+  end;
+  FHandles := list;
+end;
+
+{ updateModelActually: the value of every shown axis that is a handle's }
+procedure TTyCustomAdvanceChart.HdTakeHits(const AHits: TTyAxisHitArray);
+var
+  i, k: Integer;
+  v: Double;
+begin
+  for i := 0 to High(AHits) do
+  begin
+    if AHits[i].Axis = nil then Continue;
+    k := HdIndexOf(PtrKeyOf(AHits[i].Axis));
+    if k < 0 then Continue;
+    v := AHits[i].Value;
+    if AHits[i].Spec.Snap and not AHits[i].Linked and not IsNan(AHits[i].SnapValue)
+      and AHits[i].Axis.Scale.Contain(AHits[i].SnapValue) then v := AHits[i].SnapValue;
+    FHandles[k].Value := v;
+    FHandles[k].HasValue := True;
+  end;
+  HdSync;
+end;
+
+function TTyCustomAdvanceChart.HdValueOf(AAxis: TTyAxis; out AValue: Double): Boolean;
+var k: Integer;
+begin
+  AValue := NaN;
+  Result := False;
+  if AAxis = nil then Exit;
+  k := HdIndexOf(PtrKeyOf(AAxis));
+  if (k < 0) or not FHandles[k].Live or IsNan(FHandles[k].Value) then Exit;
+  AValue := FHandles[k].Value;
+  Result := True;
+end;
+
+{ the pointers a handle keeps shown where nothing else shows them }
+function TTyCustomAdvanceChart.HdExtraHits(const AHave: TTyAxisHitArray): TTyAxisHitArray;
+var
+  infos: TTyPtrAxisInfoArray;
+  k, j: Integer;
+  v: Double;
+  there: Boolean;
+  hit: TTyAxisHit;
+begin
+  Result := nil;
+  { fixValue first: a render reads the values it gives }
+  HdSync;
+  if Length(FHandles) = 0 then Exit;
+  infos := PtrCollect;
+  for k := 0 to High(infos) do
+  begin
+    if not HdValueOf(infos[k].Axis, v) then Continue;
+    there := False;
+    for j := 0 to High(AHave) do
+      if AHave[j].Axis = infos[k].Axis then there := True;
+    if there then Continue;
+    hit := Default(TTyAxisHit);
+    hit.Axis := infos[k].Axis;
+    hit.Plot := infos[k].Plot;
+    hit.Polar := infos[k].Polar;
+    hit.Single := infos[k].Single;
+    hit.Spec := infos[k].Spec;
+    hit.Cross := infos[k].CrossArm;
+    hit.NoTip := not infos[k].TriggerTooltip;
+    hit.Value := v;
+    hit.SnapValue := v;
+    SetLength(Result, Length(Result) + 1);
+    Result[High(Result)] := hit;
+  end;
+end;
+
+{ the handle as an element: createIcon's path fitted into [-1, 1] and
+  centred, scaled by size / 2, turned and moved; the item style }
+function TTyCustomAdvanceChart.HdShape(AIndex: Integer; out AEl: TTyChartElement): Boolean;
+var
+  h: TTyAxisPointerHandle;
+  icon: string;
+  path: TTyZrPath;
+  s, x, y, rot: Double;
+  p: TTyChartAnimProxy;
+  v: Double;
+begin
+  Result := False;
+  AEl := Default(TTyChartElement);
+  if (AIndex < 0) or (AIndex > High(FHandles)) or not FHandles[AIndex].Live
+    or not FHandles[AIndex].Placed then Exit;
+  h := TyAxisPointerHandleOf(FOption, FHandles[AIndex].MainType, FHandles[AIndex].Index);
+  icon := h.Icon;
+  if Copy(icon, 1, 8) = 'image://' then Exit;
+  if Copy(icon, 1, 7) = 'path://' then Delete(icon, 1, 7);
+  path := TyZrMakePathCenter(icon, TyXYWH(-1, -1, 2, 2));
+  if Length(path) = 0 then Exit;
+  if FLastPPI > 0 then s := FLastPPI / 96 else s := 1;
+  x := FHandles[AIndex].X;
+  y := FHandles[AIndex].Y;
+  rot := FHandles[AIndex].Rotation;
+  { on its way there }
+  p := AnimPointerProxy('handle:' + FHandles[AIndex].Key);
+  if (p <> nil) and not p.AtFinal and not FExporting and not FHandles[AIndex].Dragging then
+  begin
+    v := p.Num('x');
+    if not IsNan(v) then x := v;
+    v := p.Num('y');
+    if not IsNan(v) then y := v;
+    v := p.Num('rotation');
+    if not IsNan(v) then rot := v;
+  end;
+  AEl.Shape := TyMkZrShape(path, TyZrLocal(h.SizeW / 2 * s, h.SizeH / 2 * s, rot, x, y), True);
+  if h.HasColour then
+  begin
+    AEl.Style.HasFill := True;
+    AEl.Style.FillColor := h.Colour;
+  end
+  else if not h.NoFill then
+  begin
+    { the skin's accent (upstream's accent40) }
+    AEl.Style.HasFill := True;
+    AEl.Style.FillColor := TTyChartColor(ActiveController.Model.ResolveColorToken('accent',
+      TTyColor($FFCC9282)));
+  end;
+  if h.HasBorderColour and (h.BorderWidth > 0) then
+  begin
+    AEl.Style.StrokeColor := h.BorderColour;
+    AEl.Style.StrokeWidthLogical := h.BorderWidth;
+  end;
+  AEl.Style.Alpha := h.Opacity;
+  AEl.Datum := TyChartNoDatum;
+  AEl.Cursor := 'move';
+  Result := True;
+end;
+
+{ zrender's rectHover: the point, taken into the handle's own frame, in its
+  path's box; the last handle drawn first }
+function TTyCustomAdvanceChart.HdAt(AX, AY: Integer): Integer;
+var
+  k: Integer;
+  el: TTyChartElement;
+  h: TTyAxisPointerHandle;
+  icon: string;
+  path: TTyZrPath;
+  bb: TTyXYWH;
+  M, inv: TTyMat2D;
+  s, lx, ly: Double;
+begin
+  Result := -1;
+  if (Length(FHandles) = 0) or (csDesigning in ComponentState) then Exit;
+  if FLastPPI > 0 then s := FLastPPI / 96 else s := 1;
+  for k := High(FHandles) downto 0 do
+  begin
+    if not HdShape(k, el) then Continue;
+    h := TyAxisPointerHandleOf(FOption, FHandles[k].MainType, FHandles[k].Index);
+    icon := h.Icon;
+    if Copy(icon, 1, 7) = 'path://' then Delete(icon, 1, 7);
+    path := TyZrMakePathCenter(icon, TyXYWH(-1, -1, 2, 2));
+    bb := TyZrBBox(path);
+    M := TyZrLocal(h.SizeW / 2 * s, h.SizeH / 2 * s, FHandles[k].Rotation,
+      FHandles[k].X, FHandles[k].Y);
+    if not TyMatInvert(M, inv) then Continue;
+    lx := inv[0] * AX + inv[2] * AY + inv[4];
+    ly := inv[1] * AX + inv[3] * AY + inv[5];
+    if (lx >= bb.X) and (lx <= bb.X + bb.W) and (ly >= bb.Y) and (ly <= bb.Y + bb.H) then
+      Exit(k);
+  end;
+end;
+
+{ _onHandleDragMove: updateHandleTransform -- along the axis by the delta,
+  clamped to its extent; the cursor point the middle of the other extent --
+  the handle there at once, and the throttled dispatch }
+procedure TTyCustomAdvanceChart.HdDragMove(AIndex: Integer; ADX, ADY: Double);
+var
+  info: TTyPtrAxisInfo;
+  gb: TTyGridBuild;
+  g, c: Integer;
+  cart: TTyCartesian2D;
+  other: TTyAxis;
+  e0, e1, o0, o1, s, mid: Double;
+  isX: Boolean;
+  p: TTyChartAnimProxy;
+begin
+  if (AIndex < 0) or (AIndex > High(FHandles)) then Exit;
+  if not HdAxisOf(AIndex, info) then Exit;
+  if FLastPPI > 0 then s := FLastPPI / 96 else s := 1;
+  FHandles[AIndex].Dragging := True;
+  if info.Single <> nil then
+  begin
+    isX := info.Single.OrientHorizontal;
+    if isX then info.Single.GlobalExtent(0, e0, e1) else info.Single.GlobalExtent(1, e0, e1);
+    if isX then info.Single.GlobalExtent(1, o0, o1) else info.Single.GlobalExtent(0, o0, o1);
+    FHandles[AIndex].PayTip := '{"verticalAlign":"middle"}';
+  end
+  else
+  begin
+    isX := info.Axis.Dim = 'x';
+    e0 := info.Axis.PxStart;
+    e1 := info.Axis.PxStop;
+    other := nil;
+    for g := 0 to FBuild.GridCount - 1 do
+    begin
+      gb := FBuild.Grid(g);
+      if gb.ComponentIndex <> info.Axis.GridIndex then Continue;
+      for c := 0 to gb.CartesianCount - 1 do
+      begin
+        cart := gb.CartesianByIndex(c);
+        if (cart <> nil) and (cart.AxisByDim(info.Axis.Dim) = info.Axis) then
+        begin
+          other := cart.GetOtherAxis(info.Axis);
+          Break;
+        end;
+      end;
+    end;
+    if other = nil then Exit;
+    o0 := other.PxStart;
+    o1 := other.PxStop;
+    if isX then FHandles[AIndex].PayTip := '{"verticalAlign":"middle"}'
+    else FHandles[AIndex].PayTip := '{"align":"center"}';
+  end;
+  if e0 > e1 then
+  begin
+    mid := e0;
+    e0 := e1;
+    e1 := mid;
+  end;
+  { handle.stopAnimation, attr }
+  p := AnimPointerProxy('handle:' + FHandles[AIndex].Key);
+  if p <> nil then p.StopAnimation;
+  if isX then
+  begin
+    FHandles[AIndex].X := Math.Max(e0, Math.Min(e1, FHandles[AIndex].X + ADX));
+    mid := (o1 + o0) / 2;
+    FHandles[AIndex].PayX := (FHandles[AIndex].X - FLastRect.Left) / s;
+    FHandles[AIndex].PayY := (mid - FLastRect.Top) / s;
+  end
+  else
+  begin
+    FHandles[AIndex].Y := Math.Max(e0, Math.Min(e1, FHandles[AIndex].Y + ADY));
+    mid := (o1 + o0) / 2;
+    FHandles[AIndex].PayX := (mid - FLastRect.Left) / s;
+    FHandles[AIndex].PayY := (FHandles[AIndex].Y - FLastRect.Top) / s;
+  end;
+  if p <> nil then
+    p.Attr(TyAnimProps([TyAnimProp('x', TyAnimNum(FHandles[AIndex].X)),
+      TyAnimProp('y', TyAnimNum(FHandles[AIndex].Y)),
+      TyAnimProp('rotation', TyAnimNum(FHandles[AIndex].Rotation))]));
+  { lastProp = null: the release moves it onto the value whatever it is }
+  FHandles[AIndex].PlacedValue := NaN;
+  HdDispatch(AIndex);
+  TipInvalidate;
+end;
+
+{ the fixRate throttle of _doDispatchAxisPointer: a call handle.throttle ms
+  or more after the last run runs now; one sooner runs then, with the
+  latest payload }
+procedure TTyCustomAdvanceChart.HdDispatch(AIndex: Integer);
+var
+  h: TTyAxisPointerHandle;
+  now_: Double;
+begin
+  if (AIndex < 0) or (AIndex > High(FHandles)) then Exit;
+  h := TyAxisPointerHandleOf(FOption, FHandles[AIndex].MainType, FHandles[AIndex].Index);
+  now_ := TipClock;
+  if IsNan(FHandles[AIndex].LastExec) or (now_ - FHandles[AIndex].LastExec >= h.Throttle) then
+  begin
+    FHandles[AIndex].LastExec := now_;
+    FHandles[AIndex].DueAt := NaN;
+    HdRun(AIndex);
+  end
+  else
+  begin
+    FHandles[AIndex].DueAt := FHandles[AIndex].LastExec + h.Throttle;
+    TipArmTimer;
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.HdRun(AIndex: Integer);
+var
+  pay, ax: TJSONObject;
+  arr: TJSONArray;
+  dim: string;
+begin
+  if (AIndex < 0) or (AIndex > High(FHandles)) then Exit;
+  pay := TJSONObject.Create;
+  try
+    pay.Add('type', 'updateAxisPointer');
+    pay.Add('x', TJSONFloatNumber.Create(FHandles[AIndex].PayX));
+    pay.Add('y', TJSONFloatNumber.Create(FHandles[AIndex].PayY));
+    if FHandles[AIndex].PayTip <> '' then pay.Add('tooltipOption', GetJSON(FHandles[AIndex].PayTip));
+    dim := FHandles[AIndex].MainType;
+    if dim = 'xAxis' then dim := 'x'
+    else if dim = 'yAxis' then dim := 'y'
+    else if dim = 'singleAxis' then dim := 'single';
+    ax := TJSONObject.Create(['axisDim', dim, 'axisIndex', FHandles[AIndex].Index]);
+    arr := TJSONArray.Create;
+    arr.Add(ax);
+    pay.Add('axesInfo', arr);
+    DispatchAction(pay.AsJSON);
+  finally
+    pay.Free;
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.HdTick(ANow: Double);
+var k: Integer;
+begin
+  for k := 0 to High(FHandles) do
+    if (k <= High(FHandles)) and not IsNan(FHandles[k].DueAt) and (FHandles[k].DueAt <= ANow) then
+    begin
+      FHandles[k].LastExec := FHandles[k].DueAt;
+      FHandles[k].DueAt := NaN;
+      HdRun(k);
+    end;
+end;
+
+{ _onHandleDragEnd: onto the value, and a hideTip }
+procedure TTyCustomAdvanceChart.HdDragEnd;
+var k: Integer;
+begin
+  k := FHdDrag;
+  FHdDrag := -1;
+  if (k < 0) or (k > High(FHandles)) then Exit;
+  FHandles[k].Dragging := False;
+  HdSync;
+  DispatchAction('{"type":"hideTip"}');
+  TipInvalidate;
+end;
+
+function TTyCustomAdvanceChart.HdConfigured: Boolean;
+const
+  cMain: array[0..2] of string = ('xAxis', 'yAxis', 'singleAxis');
+var
+  m, i: Integer;
+
+  function On_(ANode: TJSONData): Boolean;
+  var d: TJSONData;
+  begin
+    Result := False;
+    if not (ANode is TJSONObject) then Exit;
+    d := TJSONObject(ANode).Find('axisPointer');
+    if not (d is TJSONObject) then Exit;
+    d := TJSONObject(d).Find('handle');
+    if not (d is TJSONObject) then Exit;
+    d := TJSONObject(d).Find('show');
+    Result := (d <> nil) and JsTruthy(d);
+  end;
+
+begin
+  Result := False;
+  if FOption = nil then Exit;
+  if On_(FOption.Root) then Exit(True);
+  for m := 0 to High(cMain) do
+    for i := 0 to FOption.ComponentCount(cMain[m]) - 1 do
+      if On_(FOption.ComponentAt(cMain[m], i)) then Exit(True);
+end;
+
+procedure TTyCustomAdvanceChart.PaintHandles(APainter: TTyPainter);
+var
+  k: Integer;
+  el: TTyChartElement;
+begin
+  HdSync;
+  for k := 0 to High(FHandles) do
+    if HdShape(k, el) then TyRenderElement(APainter, el);
+end;
+
+function TTyCustomAdvanceChart.PointerHandleCount: Integer;
+begin
+  HdSync;
+  Result := Length(FHandles);
+end;
+
+function TTyCustomAdvanceChart.PointerHandleState(AIndex: Integer): TTyPointerHandleState;
+var
+  h: TTyAxisPointerHandle;
+  el: TTyChartElement;
+  s: Double;
+begin
+  Result := Default(TTyPointerHandleState);
+  Result.Value := NaN;
+  if (AIndex < 0) or (AIndex > High(FHandles)) then Exit;
+  if FLastPPI > 0 then s := FLastPPI / 96 else s := 1;
+  h := TyAxisPointerHandleOf(FOption, FHandles[AIndex].MainType, FHandles[AIndex].Index);
+  Result.Key := FHandles[AIndex].Key;
+  Result.Value := FHandles[AIndex].Value;
+  Result.X := (FHandles[AIndex].X - FLastRect.Left) / s;
+  Result.Y := (FHandles[AIndex].Y - FLastRect.Top) / s;
+  Result.Rotation := FHandles[AIndex].Rotation;
+  Result.ScaleX := h.SizeW / 2;
+  Result.ScaleY := h.SizeH / 2;
+  Result.Dragging := FHandles[AIndex].Dragging;
+  if HdShape(AIndex, el) then
+  begin
+    Result.HasFill := el.Style.HasFill;
+    Result.Fill := el.Style.FillColor;
+  end;
+end;
+
 function TTyCustomAdvanceChart.OptionPointerHits: TTyAxisHitArray;
 var
   g, c, k: Integer;
@@ -4776,8 +5792,18 @@ begin
     end;
     Exit;
   end;
+  { [R5-D] a showTip proxy, a toolbox icon }
+  if FTipSnap.ProxyJson <> '' then
+    Result := 'proxy'
+  else if FTipSnap.TbHas then
+  begin
+    Result := 'toolbox:';
+    if (FTipSnap.TbIndex <= High(FTbSpecs)) and (FTipSnap.TbIcon >= 0)
+      and (FTipSnap.TbIcon <= High(FTbSpecs[FTipSnap.TbIndex].Icons)) then
+      Result := Result + FTbSpecs[FTipSnap.TbIndex].Icons[FTipSnap.TbIcon].Name;
+  end
   { [Batch 148] a geo region: 'geo:<geoIndex>:<name>' }
-  if IsGeoDatum(FTipSnap.Datum) then
+  else if IsGeoDatum(FTipSnap.Datum) then
     Result := 'geo:' + IntToStr(FTipSnap.Datum.ComponentIndex) + ':'
       + FGeos[FTipSnap.Datum.ComponentIndex].GroupName(FTipSnap.Datum.DataIndex)
   else if TipIsMarker(FTipSnap.Datum) or TipIsMatrix(FTipSnap.Datum)
@@ -5362,7 +6388,8 @@ begin
   AContent := Default(TTyTipContent);
   snap := ASnap;
   onAxis := Length(snap.Hits) > 0;
-  if not TipTargetValid(snap.Datum) and not onAxis then Exit;
+  if not TipTargetValid(snap.Datum) and not onAxis and (snap.ProxyJson = '')
+    and not snap.TbHas then Exit;
   { UNDER AN AXIS TRIGGER THERE IS NO CASCADE. Upstream builds the axis
     tooltip's model from the global component and a positioning hint and
     nothing else -- no series level, no data item -- so every option but
@@ -5374,7 +6401,7 @@ begin
     SHAPE -- if a coordinate system reported axes, the axis path runs and
     the item trigger is never consulted. }
   if not onAxis and (spec.Trigger <> tttItem) and not IsGeoDatum(snap.Datum)
-    and not IsAxisTextDatum(snap.Datum) then Exit;
+    and not IsAxisTextDatum(snap.Datum) and (snap.ProxyJson = '') and not snap.TbHas then Exit;
   ink := TooltipInk(spec);
   mkNames := nil;
   mkColours := nil;
@@ -5383,7 +6410,28 @@ begin
   htmlHas := False;
   htmlLines := nil;
   try
-    if (not onAxis) and IsGeoDatum(snap.Datum) then
+    if (not onAxis) and ((snap.ProxyJson <> '') or snap.TbHas) then
+    begin
+      { [R5-D] A SHOWTIP PROXY'S TEXT: its formatter as formatTpl leaves it
+        (no params), else its content; A TOOLBOX ICON'S over its name and
+        title }
+      if snap.TbHas then tipText := TipTbText(snap.TbIndex, snap.TbIcon, spec)
+      else tipText := TipProxyText(snap.ProxyJson, spec);
+      AContent.Fmt := tipText;
+      if tipText = '' then Exit;
+      if html then
+      begin
+        htmlLines := TooltipHtmlLines(tipText, ink);
+        htmlHas := True;
+      end
+      else
+      begin
+        block := TTyTooltipBlock.CreateSection('', True);
+        block.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, tipText, False,
+          '', True));
+      end;
+    end
+    else if (not onAxis) and IsGeoDatum(snap.Datum) then
     begin
       { [Batch 148] A GEO REGION'S TEXT: the formatter through formatTpl
         with the component's params, else the content (the name) }
@@ -5684,7 +6732,14 @@ begin
     elRect := TyInvalidRectF;
     if (not onAxis) and (FPaintList <> nil) and FPaintListValid
       and (snap.Element >= 0) and (snap.Element < FPaintList.Count) then
-      elRect := TipElementRect(snap.Element, APPI);
+      elRect := TipElementRect(snap.Element, APPI)
+    { [R5-D] the proxy: a 2 x 2 rect centred on its point }
+    else if (not onAxis) and (snap.ProxyJson <> '') then
+      elRect := TyRectF(snap.X - APPI / 96, snap.Y - APPI / 96,
+        snap.X + APPI / 96, snap.Y + APPI / 96)
+    { [R5-D] a toolbox icon: its rect as getBoundingRect gives it }
+    else if (not onAxis) and snap.TbHas then
+      elRect := TipTbIconRect(snap.TbIndex, snap.TbIcon);
     if TyRectFIsValid(elRect) then
     begin
       pin.HasRect := True;

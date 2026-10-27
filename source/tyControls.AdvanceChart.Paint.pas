@@ -170,6 +170,12 @@ type
     { [R2-F] the dash's phase, LOGICAL px: zrender's lineDashOffset }
     DashOffsetLogical: Double;
     Alpha: Double;                    // 0..1; 1 = opaque
+    { [R5-D] zrender's lineCap / lineJoin / miterLimit where a builder sets
+      them (a brush cover's): 0 is the canvas default -- 'butt', 'miter' --
+      and a MiterLimit of 0 is the default 10 }
+    LineCap: Byte;                    // 0 butt, 1 round, 2 square
+    LineJoin: Byte;                   // 0 miter, 1 round, 2 bevel
+    MiterLimit: Double;
   end;
 
   { Which datum an element belongs to. Both -1 together means "none" -- one

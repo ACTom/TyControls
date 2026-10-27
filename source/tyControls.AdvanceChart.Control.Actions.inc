@@ -1245,6 +1245,9 @@ begin
     else if t = 'sunburstRootToNode' then
       { [Batch 115] }
       Result := DoSunAction(p)
+    { [R5-D] the two legacy ones }
+    else if (t = 'sunburstHighlight') or (t = 'sunburstUnhighlight') then
+      Result := DoSunLegacy(p, t = 'sunburstHighlight')
     { [F3d] the tree's expand and collapse }
     else if t = 'treeExpandAndCollapse' then
       Result := DoTreeToggleAction(p)
@@ -1838,6 +1841,7 @@ begin
   begin
     ext := LowerCase(ExtractFileExt(AFileName));
     if (ext = '.jpg') or (ext = '.jpeg') then o.ImageType := eitJpeg;
+    if ext = '.webp' then o.ImageType := eitWebp;
   end;
   bmp := RenderConnectedToBitmap(AOptsJson);
   if bmp = nil then Exit;
@@ -1859,20 +1863,19 @@ var
   bmp: TBGRABitmap;
   ms: TMemoryStream;
   raw: RawByteString;
+  wrote: TTyExportImageType;
 begin
   ExportOptsOrRaise(AOptsJson, o);
   bmp := RenderConnectedToBitmap(AOptsJson);
   if bmp = nil then Exit('data:,');
   ms := TMemoryStream.Create;
   try
-    WriteExport(ms, bmp, o.ImageType);
+    wrote := WriteExport(ms, bmp, o.ImageType);
     SetLength(raw, ms.Size);
     if ms.Size > 0 then Move(ms.Memory^, raw[1], ms.Size);
   finally
     ms.Free;
     bmp.Free;
   end;
-  if o.ImageType = eitJpeg then Result := 'data:image/jpeg;base64,'
-  else Result := 'data:image/png;base64,';
-  Result := Result + EncodeStringBase64(raw);
+  Result := TyExportUrlHead(wrote) + EncodeStringBase64(raw);
 end;

@@ -1400,6 +1400,8 @@ var
   s: TTyPolarPointerShape;
 begin
   if not PolarPointerGeometry(AHit, ARect, AMeasurer, APPI, d) then Exit;
+  { [R5-D] on its way there }
+  PtrPolarNow(AHit, d);
   lineS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointer', '', []);
   shadowS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerShadow', '', []);
   labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel', '', []);

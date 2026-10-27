@@ -591,6 +591,8 @@ var
   e: Double;
   r: TTyXYWH;
 begin
+  { [R5-D] under the loading mask }
+  if LoadMasks then Exit(-1);
   for k := High(FThumbs) downto 0 do
   begin
     if not FThumbs[k].Enabled then Continue;
