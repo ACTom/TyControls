@@ -115,6 +115,10 @@ type
     { a textContent's innerTransformable and the host's default style }
     InX, InY, InRot, InOX, InOY: Double;
     DefFill, DefStroke, DefAlign, DefVAlign: string;
+    { [spec 242] textConfig.autoOverflowArea: the default style's
+      overflowRect, the layout rect in the label's own space }
+    HasOverflow: Boolean;
+    OverflowRect: TTyXYWH;
     DefAutoStroke, HasDefault: Boolean;
     { the index the last paint list build gave it }
     Serial: Integer;
@@ -301,6 +305,47 @@ function NumOf(A: TJSONData; out AV: Double): Boolean;
 begin
   Result := (A <> nil) and (A.JSONType = jtNumber);
   if Result then AV := A.AsFloat else AV := NaN;
+end;
+
+{ [spec 242] JavaScript's truthiness of a style value }
+function JsTruthy(A: TJSONData): Boolean;
+var v: Double;
+begin
+  Result := False;
+  if A = nil then Exit;
+  case A.JSONType of
+    jtNull: Result := False;
+    jtBoolean: Result := A.AsBoolean;
+    jtNumber:
+      begin
+        v := A.AsFloat;
+        Result := not IsNan(v) and (v <> 0);
+      end;
+    jtString: Result := A.AsString <> '';
+  else
+    Result := True;
+  end;
+end;
+
+{ [spec 242] TyRectApplyMat, but a rect with a NaN in it (a layoutRect
+  missing a key) comes out all NaN instead of tripping the comparisons }
+function ApplyMatNaN(const ARect: TTyXYWH; const AM: TTyMat2D): TTyXYWH;
+begin
+  if IsNan(ARect.X) or IsNan(ARect.Y) or IsNan(ARect.W) or IsNan(ARect.H) then
+  begin
+    Result.X := NaN;
+    Result.Y := NaN;
+    Result.W := NaN;
+    Result.H := NaN;
+  end
+  else
+    Result := TyRectApplyMat(ARect, AM);
+end;
+
+{ [spec 242] a property of an object, nil for anything else }
+function PropOf(A: TJSONData; const AKey: string): TJSONData;
+begin
+  if A is TJSONObject then Result := TJSONObject(A).Find(AKey) else Result := nil;
 end;
 
 { a number as JavaScript reads one out of a shape: a number, a boolean as
@@ -993,7 +1038,8 @@ end;
 
 function AroundZero(V: Double): Boolean; inline;
 begin
-  Result := not ((V > 5e-5) or (V < -5e-5));
+  { isNotAroundZero's comparisons are false for a NaN: around zero }
+  Result := IsNan(V) or not ((V > 5e-5) or (V < -5e-5));
 end;
 
 function TyGfxNeedLocal(AEl: TTyGfxEl): Boolean;
@@ -1901,6 +1947,117 @@ begin
   end;
 end;
 
+{ zrender's adjustTextX / adjustTextY (inverse: back from the box) }
+function AdjX(AX, AW: Double; AAlign: TTyRtAlign; AInverse: Boolean): Double;
+begin
+  Result := AX;
+  if AAlign = rtaRight then
+  begin
+    if AInverse then Result := AX + AW else Result := AX - AW;
+  end
+  else if AAlign = rtaCenter then
+  begin
+    if AInverse then Result := AX + AW / 2 else Result := AX - AW / 2;
+  end;
+end;
+
+function AdjY(AY, AH: Double; AVAlign: TTyRtVAlign; AInverse: Boolean): Double;
+begin
+  Result := AY;
+  if AVAlign = rtvMiddle then
+  begin
+    if AInverse then Result := AY + AH / 2 else Result := AY - AH / 2;
+  end
+  else if AVAlign = rtvBottom then
+  begin
+    if AInverse then Result := AY + AH else Result := AY - AH;
+  end;
+end;
+
+{ a > b as JavaScript answers it: false with a NaN }
+function Gt(A, B: Double): Boolean;
+begin
+  Result := not IsNan(A) and not IsNan(B) and (A > B);
+end;
+
+{ BoundingRect.intersect's one dimension with clamp, into AOut0 / ALen }
+procedure IntersectDim(A0, A1, B0, B1: Double; var AOut0, ALen: Double);
+begin
+  if IsNan(A0) or IsNan(A1) or IsNan(B0) or IsNan(B1) then
+  begin
+    { JavaScript: every comparison false, Math.max / min NaN }
+    AOut0 := NaN;
+    ALen := NaN;
+    Exit;
+  end;
+  if (A1 < B0) or (B1 < A0) then
+  begin
+    if Abs(A1 - B0) < Abs(B1 - A0) then AOut0 := A1 else AOut0 := A0;
+    ALen := 0;
+  end
+  else
+  begin
+    AOut0 := Max(A0, B0);
+    ALen := Min(A1, B1) - AOut0;
+  end;
+end;
+
+function OverflowArea(AEl: TTyGfxEl; var AStyle: TTyRtStyle; var ABaseX, ABaseY: Double): Boolean;
+var
+  al: TTyRtAlign;
+  va: TTyRtVAlign;
+  ov: TTyXYWH;
+  tx, ty, tw, th, ox, oy, ow, oh, padH, padV: Double;
+begin
+  { the block's alignment, else the default's; left / top }
+  al := AStyle.Align;
+  if (al = rtaNone) and (AEl.DefAlign <> '') then al := AlignStr(AEl.DefAlign);
+  va := AStyle.VAlign;
+  if (va = rtvNone) and (AEl.DefVAlign <> '') then va := VAlignStr(AEl.DefVAlign);
+  ov := AEl.OverflowRect;
+  tw := ov.W * 2;
+  th := ov.H * 2;
+  tx := AdjX(ABaseX, tw, al, False);
+  ty := AdjY(ABaseY, th, va, False);
+  { BoundingRect.set: a negative size flipped }
+  if Gt(0, tw) then begin tx := tx + tw; tw := -tw; end;
+  if Gt(0, th) then begin ty := ty + th; th := -th; end;
+  ox := NaN; oy := NaN; ow := NaN; oh := NaN;
+  { an empty or NaN rect on either side: no intersection, all NaN }
+  if not (Gt(ov.X, ov.X + ov.W) or Gt(ov.Y, ov.Y + ov.H) or Gt(tx, tx + tw) or Gt(ty, ty + th)) then
+  begin
+    IntersectDim(ov.X, ov.X + ov.W, tx, tx + tw, ox, ow);
+    IntersectDim(ov.Y, ov.Y + ov.H, ty, ty + th, oy, oh);
+  end;
+  ABaseX := AdjX(ox, ow, al, True);
+  ABaseY := AdjY(oy, oh, va, True);
+  { a NaN anywhere (no intersection: a rect with a NaN or a negative size):
+    upstream lays out an empty line at NaN, which draws nothing -- the port
+    lays out nothing }
+  Result := not (IsNan(ABaseX) or IsNan(ABaseY) or IsNan(ow) or IsNan(oh));
+  if not Result then Exit;
+  if AStyle.HasPadding then
+  begin
+    padH := AStyle.Padding[1] + AStyle.Padding[3];
+    padV := AStyle.Padding[0] + AStyle.Padding[2];
+  end
+  else
+  begin
+    padH := 0;
+    padV := 0;
+  end;
+  if AStyle.WidthKind = rtwNone then
+  begin
+    AStyle.WidthKind := rtwNumber;
+    AStyle.Width := ow - padH;
+  end;
+  if not AStyle.HasHeight then
+  begin
+    AStyle.HasHeight := True;
+    AStyle.Height := oh - padV;
+  end;
+end;
+
 function TyGfxTextLayout(AEl: TTyGfxEl; const AMeasurer: ITyTextMeasurer): TTyRtResult;
 var
   st: TTyRtStyle;
@@ -1961,6 +2118,11 @@ begin
   by := 0;
   if NumOf(AEl.Style.Find('x'), bx) then else bx := 0;
   if NumOf(AEl.Style.Find('y'), by) then else by := 0;
+  { [spec 242] calcInnerTextOverflowArea: a block with no width / height of
+    its own takes the overflow rect's intersection with one twice its size
+    about the anchor, and the anchor moves into it }
+  if (AEl.Host <> nil) and AEl.HasDefault and AEl.HasOverflow then
+    if not OverflowArea(AEl, st, bx, by) then Exit;
   Result := TyRtLayout(TextOf(AEl.Style), st, rich, isRich, def, bx, by, AMeasurer);
 end;
 
@@ -2176,9 +2338,10 @@ var
   d, posD: TJSONData;
   dist, px, py, rox, roy: Double;
   al, va, fill, stroke, pfStr: string;
-  auto, isPath: Boolean;
+  auto, isPath, autoOv: Boolean;
   fillD: TJSONData;
   pfKind: Integer;
+  lm, im: TTyMat2D;
 begin
   tc := AHost.TextContent;
   if tc = nil then Exit;
@@ -2198,10 +2361,26 @@ begin
   va := '';
   posD := cfg.Find('position');
   hasPos := not JNull(posD);
+  { [spec 242] the layout rect: textConfig.layoutRect (copied as written,
+    a missing key NaN), else the host's bounding rect -- through the host's
+    transform unless local }
+  autoOv := JsTruthy(cfg.Find('autoOverflowArea'));
+  if autoOv or hasPos then
+  begin
+    d := cfg.Find('layoutRect');
+    if JsTruthy(d) then
+    begin
+      rect.X := JsNum(PropOf(d, 'x'));
+      rect.Y := JsNum(PropOf(d, 'y'));
+      rect.W := JsNum(PropOf(d, 'width'));
+      rect.H := JsNum(PropOf(d, 'height'));
+    end
+    else
+      rect := TyGfxRect(AHost, AMeasurer);
+    if not local and AHost.HasTransform then rect := ApplyMatNaN(rect, AHost.Transform);
+  end;
   if hasPos then
   begin
-    rect := TyGfxRect(AHost, AMeasurer);
-    if not local and AHost.HasTransform then rect := TyRectApplyMat(rect, AHost.Transform);
     d := cfg.Find('distance');
     if JNull(d) then dist := 5 else dist := JsNum(d);
     TyGfxTextPosition(posD, dist, rect, px, py, al, va);
@@ -2251,6 +2430,16 @@ begin
       if d.Count > 0 then tc.InOX := -JsNum(d.Items[0]) else tc.InOX := NaN;
       if d.Count > 1 then tc.InOY := -JsNum(d.Items[1]) else tc.InOY := NaN;
     end;
+  end;
+  { [spec 242] autoOverflowArea: the layout rect back through the label's
+    own local transform (invert leaves the matrix as it was when it cannot) }
+  tc.HasOverflow := autoOv;
+  if autoOv then
+  begin
+    lm := LocalOf(tc.InX, tc.InY, tc.InRot, tc.ScaleX, tc.ScaleY, tc.InOX, tc.InOY,
+      tc.SkewX, tc.SkewY, tc.AnchorX, tc.AnchorY);
+    if TyMatInvert(lm, im) then lm := im;
+    tc.OverflowRect := ApplyMatNaN(rect, lm);
   end;
   { the colours }
   d := cfg.Find('inside');
@@ -2513,25 +2702,6 @@ begin
   AGrad.R := r * Sqrt(det);
 end;
 
-{ [spec 242] JavaScript's truthiness of a style value }
-function JsTruthy(A: TJSONData): Boolean;
-var v: Double;
-begin
-  Result := False;
-  if A = nil then Exit;
-  case A.JSONType of
-    jtNull: Result := False;
-    jtBoolean: Result := A.AsBoolean;
-    jtNumber:
-      begin
-        v := A.AsFloat;
-        Result := not IsNan(v) and (v <> 0);
-      end;
-    jtString: Result := A.AsString <> '';
-  else
-    Result := True;
-  end;
-end;
 
 { ToNumber of a style value, as drawImage converts its arguments }
 function CropToNum(A: TJSONData): Double;

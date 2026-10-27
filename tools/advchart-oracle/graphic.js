@@ -872,6 +872,48 @@ add('event', 'drag', "dragging (zrender's Draggable): a turned, scaled rect with
     { down: 'GC' }, { move: [430, 330] }, { up: [430, 330] },
     { down: 'S' }, { move: [450, 100] }, { up: [450, 100] },
     { down: 'HC' }, { move: [90, 280] }, { up: [90, 280] }] });
+// [spec 242] Element.updateInnerText's layoutRect (the rect a position is
+// worked out against, the host's local space, through its transform unless
+// local) and autoOverflowArea (that rect, back through the label's own
+// transform, is the text's overflowRect: calcInnerTextOverflowArea gives a
+// block with no width / height of its own the intersection's size and moves
+// its anchor into it)
+add('text', 'text-area', "textConfig.layoutRect and autoOverflowArea: a long label truncated to its host, one broken into lines and cut by lineOverflow, a rich one, a layoutRect placing 'insideTopLeft' inside a part of the host, the two together, a label turned a quarter, a turned host, a local label in a scaled host, a label of its own width (kept), a layoutRect with no position and no autoOverflowArea (nothing), autoOverflowArea with no position (the label's own x / y), a padded box, a right-aligned label",
+  { graphic: [
+    { type: 'rect', id: 'tr', shape: { x: 20, y: 20, width: 90, height: 40 }, style: { fill: '#5070dd' },
+      textContent: { style: { text: 'a label much longer than its host', fontSize: 12, overflow: 'truncate' } }, textConfig: { position: 'inside', autoOverflowArea: true } },
+    { type: 'rect', id: 'br', shape: { x: 140, y: 20, width: 80, height: 30 }, style: { fill: '#b6d634' },
+      textContent: { style: { text: 'broken into several lines here', fontSize: 12, overflow: 'break', lineOverflow: 'truncate' } }, textConfig: { position: 'inside', autoOverflowArea: true } },
+    { type: 'rect', id: 'ri', shape: { x: 250, y: 20, width: 100, height: 50 }, style: { fill: '#ff994d' },
+      textContent: { style: { text: '{a|rich} label that is too long', fontSize: 12, overflow: 'truncate', rich: { a: { fontSize: 16, fill: '#fff' } } } },
+      textConfig: { position: 'inside', autoOverflowArea: true } },
+    { type: 'rect', id: 'lr', shape: { x: 380, y: 20, width: 160, height: 80 }, style: { fill: '#0ca8df' },
+      textContent: { style: { text: 'in the right half', fontSize: 12 } }, textConfig: { position: 'insideTopLeft', layoutRect: { x: 460, y: 30, width: 70, height: 40 } } },
+    { type: 'rect', id: 'lra', shape: { x: 20, y: 120, width: 160, height: 60 }, style: { fill: '#fb628b' },
+      textContent: { style: { text: 'cut to the layout rect not the host', fontSize: 12, overflow: 'truncate' } },
+      textConfig: { position: 'inside', layoutRect: { x: 30, y: 125, width: 70, height: 50 }, autoOverflowArea: true } },
+    { type: 'rect', id: 'q', shape: { x: 220, y: 110, width: 30, height: 120 }, style: { fill: '#785db0' },
+      textContent: { style: { text: 'turned a quarter and cut', fontSize: 12, overflow: 'truncate' } },
+      textConfig: { position: 'inside', rotation: Math.PI / 2, autoOverflowArea: true } },
+    { type: 'rect', id: 'th', x: 300, y: 130, rotation: 0.4, shape: { width: 90, height: 36 }, style: { fill: '#3fbe95' },
+      textContent: { style: { text: 'a turned host truncating', fontSize: 12, overflow: 'truncate' } }, textConfig: { position: 'inside', autoOverflowArea: true } },
+    { type: 'rect', id: 'lo', x: 430, y: 130, scaleX: 2, scaleY: 1.5, shape: { width: 50, height: 30 }, style: { fill: '#ffd10a' },
+      textContent: { style: { text: 'local in a scaled host', fontSize: 12, overflow: 'truncate' } }, textConfig: { position: 'inside', local: true, autoOverflowArea: true } },
+    { type: 'rect', id: 'ow', shape: { x: 20, y: 250, width: 60, height: 30 }, style: { fill: '#5070dd' },
+      textContent: { style: { text: 'its own width wins', width: 120, fontSize: 12, overflow: 'truncate' } }, textConfig: { position: 'inside', autoOverflowArea: true } },
+    { type: 'rect', id: 'np', shape: { x: 120, y: 250, width: 60, height: 30 }, style: { fill: '#b6d634' },
+      textContent: { x: 125, y: 255, style: { text: 'no position no area', fontSize: 12, overflow: 'truncate' } }, textConfig: { layoutRect: { x: 0, y: 0, width: 10, height: 10 } } },
+    { type: 'rect', id: 'ao', shape: { x: 220, y: 250, width: 60, height: 30 }, style: { fill: '#ff994d' },
+      textContent: { x: 230, y: 260, style: { text: 'area with no position', fontSize: 12, overflow: 'truncate' } }, textConfig: { autoOverflowArea: true } },
+    { type: 'rect', id: 'pb', shape: { x: 320, y: 250, width: 100, height: 40 }, style: { fill: '#0ca8df' },
+      textContent: { style: { text: 'a padded box that is long', fontSize: 12, overflow: 'truncate', padding: [2, 6], backgroundColor: '#eee' } },
+      textConfig: { position: 'inside', autoOverflowArea: true } },
+    { type: 'rect', id: 'ra', shape: { x: 450, y: 250, width: 80, height: 40 }, style: { fill: '#fb628b' },
+      textContent: { style: { text: 'right aligned and long', fontSize: 12, overflow: 'truncate', align: 'right' } },
+      textConfig: { position: 'insideRight', autoOverflowArea: true } },
+    { type: 'rect', id: 'nr', shape: { x: 20, y: 320, width: 80, height: 40 }, style: { fill: '#785db0' },
+      textContent: { style: { text: 'a layout rect of NaN', fontSize: 12, overflow: 'truncate' } },
+      textConfig: { position: 'inside', layoutRect: { x: 30, y: 320 }, autoOverflowArea: true } }] });
 
 // ---------------------------------------------------------------------------
 // running
