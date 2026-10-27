@@ -719,6 +719,15 @@ type
   end;
   TTyStoreKeepArray = array of TTyStoreKeep;
 
+  { [spec 242] a custom series' clip on a polar (createPolarClipPath), device
+    px: the centre, the radii, the start and end angles (radians, as the
+    element clip holds them), clockwise }
+  TTyCuClipSector = record
+    On: Boolean;
+    CX, CY, R0, R1, SA, EA: Double;
+    CW: Boolean;
+  end;
+
   TTyCustomAdvanceChart = class(TTyCustomControl, ITyAccessibleHost)
   private
     FOption: TTyChartOption;
@@ -1021,6 +1030,7 @@ type
     FCustomAction: string;
     FCustomClipOn: TTyBoolArray;
     FCustomClip: array of TTyXYWH;
+    FCustomClipSec: array of TTyCuClipSector;
     FCustomSlot: Integer;
     FCustomHandler: TTyChartRenderItem;
     FCustomParams: TTyCustomParams;
@@ -4683,6 +4693,10 @@ type
     function CustomView(ASeriesIndex: Integer): TTyCustomView;
     function CustomPaintSource(AIndex: Integer): TTyGfxEl;
     function CustomClip(ASeriesIndex: Integer; out ARect: TTyXYWH): Boolean;
+    { [spec 242] the sector a polar's clip: true makes (False: none) }
+    function CustomClipSector(ASeriesIndex: Integer; out ASector: TTyCuClipSector): Boolean;
+    { [spec 242] api.visual('visualMeta') of the custom series in ASlot }
+    function CustomVisualMetaJson(ASlot: Integer): TJSONArray;
     { ---- the drill-downs [Batch 115] ---- }
     { upstream's sunburstRootToNode on the sunburst ASeriesIndex: the view
       root becomes ARow (a row of its tree; 0 the root) -- what a click on a

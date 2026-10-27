@@ -54,6 +54,7 @@ type
     function SingleDot(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
     function FreeRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
     function VmDot(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+    function VmMeta(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
     function EnterRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
     function MoveRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
     function LeaveRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
@@ -286,6 +287,24 @@ begin
   end;
 end;
 
+{ RENDER.vmMeta [spec 242] }
+function TCu2Mirror.VmMeta(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+var
+  p: TTyDoubleArray;
+  x, y: Double;
+  c: TJSONData;
+begin
+  Open('vmMeta', AParams);
+  Visual(AApi, 'visualMeta').Free;
+  x := Value(AApi, 0);
+  y := Value(AApi, 1);
+  p := Coord(AApi, x, y);
+  c := Visual(AApi, 'color');
+  Result := Done(TJSONObject.Create(['type', 'circle',
+    'shape', TJSONObject.Create(['cx', Num(p[0]), 'cy', Num(p[1]), 'r', Num(4)]),
+    'style', TJSONObject.Create(['fill', c])]));
+end;
+
 { RENDER.enterRI }
 function TCu2Mirror.EnterRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
 var
@@ -484,6 +503,7 @@ begin
   TyChartRegisterRenderItem('singleDot', @m.SingleDot);
   TyChartRegisterRenderItem('free', @m.FreeRI);
   TyChartRegisterRenderItem('vmDot', @m.VmDot);
+  TyChartRegisterRenderItem('vmMeta', @m.VmMeta);
   TyChartRegisterRenderItem('enterRI', @m.EnterRI);
   TyChartRegisterRenderItem('moveRI', @m.MoveRI);
   TyChartRegisterRenderItem('leaveRI', @m.LeaveRI);

@@ -321,6 +321,13 @@ const RENDER = {
     if (st.opacity != null) el.style.opacity = st.opacity;
     return el;
   },
+  // [spec 242] api.visual('visualMeta'): the series data's list of what
+  // the visualMaps on it give a line's gradient, read once per item
+  vmMeta(params, api) {
+    api.visual('visualMeta');
+    const p = api.coord([api.value(0), api.value(1)]);
+    return { type: 'circle', shape: { cx: p[0], cy: p[1], r: 4 }, style: { fill: api.visual('color') } };
+  },
   // entering: the root's and the style's enterFrom with an enterAnimation
   // of its own, a shape's enterFrom on the series' timing, a group scaled in
   enterRI(params, api) {
@@ -610,6 +617,11 @@ function readClips(chart) {
   return customSeries(chart).map(s => {
     const view = chart.getViewOfSeriesModel(s);
     const cp = view && view.group.getClipPath();
+    // [spec 242] a polar's clip is a sector
+    if (cp && cp.type === 'sector') {
+      const q = cp.shape;
+      return { s: s.seriesIndex, rect: null, sector: [q.cx, q.cy, q.r0, q.r, q.startAngle, q.endAngle].map(hex).concat([!!q.clockwise]) };
+    }
     return { s: s.seriesIndex, rect: cp ? [cp.shape.x, cp.shape.y, cp.shape.width, cp.shape.height].map(hex) : null };
   });
 }
@@ -837,6 +849,20 @@ add('hover', 'tooltip', "tooltipDisabled: on a root, on one child of a group (it
 add('coords', 'none-null', "coordinateSystem null: no coordSys (the key the option has keeps the default out), as 'none'; a hover",
   { series: [{ type: 'custom', coordinateSystem: null, renderItem: '@free', data: [[50, 60, 120], [200, 100, 80], [320, 240, 40]] }] },
   { steps: [{ move: 's0:1' }] });
+// [spec 242]
+add('visual', 'visualmeta', "api.visual('visualMeta'): a continuous visualMap (201 stops, outerColors the end stops), a piecewise one (each finite piece two stops in its colour as written, an open end an outer colour, an end nothing colours ''), a continuous one with a narrower range and an outOfRange colour; the second series none: []",
+  { xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
+    visualMap: [{ type: 'continuous', show: false, seriesIndex: 0, dimension: 2, min: 0, max: 10, inRange: { color: ['#e0ffff', '#006edd'] } },
+      { type: 'piecewise', show: false, seriesIndex: 0, dimension: 1, pieces: [{ min: 0, max: 5, color: 'red' }, { min: 5, color: '#00ff00' }] },
+      { type: 'continuous', show: false, seriesIndex: 0, dimension: 0, min: 2, max: 8, range: [3, 6], inRange: { color: ['#000', '#fff', 'rgba(255,0,0,0.5)'] }, outOfRange: { color: '#999' } }],
+    series: [{ type: 'custom', renderItem: '@vmMeta', data: [[1, 2, 3], [5, 6, 7]] },
+      { type: 'custom', renderItem: '@vmMeta', data: [[8, 8, 8]] }] });
+add('coords', 'polar-clip', "clip: true on a polar: createPolarClipPath's sector (the centre and radii to one decimal, the angles turned) -- a sector past the radius axis' max is cut there; an anticlockwise polar beside it",
+  { polar: [{ radius: [20, '40%'], center: ['30%', '50%'] }, { radius: [10, '35%'], center: ['75%', '50%'] }],
+    angleAxis: [{ polarIndex: 0, type: 'category', data: ['a', 'b', 'c', 'd'], startAngle: 75 }, { polarIndex: 1, type: 'category', data: ['a', 'b', 'c', 'd'], clockwise: false }],
+    radiusAxis: [{ polarIndex: 0, type: 'value', min: 0, max: 10 }, { polarIndex: 1, type: 'value', min: 0, max: 10 }],
+    series: [{ type: 'custom', coordinateSystem: 'polar', polarIndex: 0, clip: true, renderItem: '@polarBar', data: [[3, 0], [14, 1], [5, 2], [9, 3]] },
+      { type: 'custom', coordinateSystem: 'polar', polarIndex: 1, clip: true, renderItem: '@polarBar', data: [[12, 0], [7, 1]] }] });
 
 // ---------------------------------------------------------------------------
 // one case

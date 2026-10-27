@@ -18456,6 +18456,6120 @@
     }
    ],
    "fails": []
+  },
+  {
+   "id": "visualmeta",
+   "group": "visual",
+   "note": "api.visual('visualMeta'): a continuous visualMap (201 stops, outerColors the end stops), a piecewise one (each finite piece two stops in its colour as written, an open end an outer colour, an end nothing colours ''), a continuous one with a narrower range and an outOfRange colour; the second series none: []",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666",
+     "#73c0de"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "visualMap": [
+     {
+      "type": "continuous",
+      "show": false,
+      "seriesIndex": 0,
+      "dimension": 2,
+      "min": 0,
+      "max": 10,
+      "inRange": {
+       "color": [
+        "#e0ffff",
+        "#006edd"
+       ]
+      }
+     },
+     {
+      "type": "piecewise",
+      "show": false,
+      "seriesIndex": 0,
+      "dimension": 1,
+      "pieces": [
+       {
+        "min": 0,
+        "max": 5,
+        "color": "red"
+       },
+       {
+        "min": 5,
+        "color": "#00ff00"
+       }
+      ]
+     },
+     {
+      "type": "continuous",
+      "show": false,
+      "seriesIndex": 0,
+      "dimension": 0,
+      "min": 2,
+      "max": 8,
+      "range": [
+       3,
+       6
+      ],
+      "inRange": {
+       "color": [
+        "#000",
+        "#fff",
+        "rgba(255,0,0,0.5)"
+       ]
+      },
+      "outOfRange": {
+       "color": "#999"
+      }
+     }
+    ],
+    "series": [
+     {
+      "type": "custom",
+      "renderItem": "@vmMeta",
+      "data": [
+       [
+        1,
+        2,
+        3
+       ],
+       [
+        5,
+        6,
+        7
+       ]
+      ]
+     },
+     {
+      "type": "custom",
+      "renderItem": "@vmMeta",
+      "data": [
+       [
+        8,
+        8,
+        8
+       ]
+      ]
+     }
+    ]
+   },
+   "steps": [],
+   "states": [
+    {
+     "calls": [
+      {
+       "s": 0,
+       "name": "vmMeta",
+       "params": {
+        "dataIndex": 0,
+        "dataIndexInside": 0,
+        "dataInsideLength": 2,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": {
+         "type": "cartesian2d",
+         "x": "404e000000000000",
+         "y": "4044000000000000",
+         "width": "407f400000000000",
+         "height": "4074000000000000"
+        },
+        "encode": {
+         "x": [
+          0
+         ],
+         "y": [
+          1
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "visual",
+         "args": [
+          "visualMeta"
+         ],
+         "ret": [
+          {
+           "stops": [
+            {
+             "value": "0000000000000000",
+             "color": "rgba(224,255,255,1)"
+            },
+            {
+             "value": "3fa999999999999a",
+             "color": "rgba(223,254,255,1)"
+            },
+            {
+             "value": "3fb999999999999a",
+             "color": "rgba(222,254,255,1)"
+            },
+            {
+             "value": "3fc3333333333334",
+             "color": "rgba(221,253,254,1)"
+            },
+            {
+             "value": "3fc999999999999a",
+             "color": "rgba(220,252,254,1)"
+            },
+            {
+             "value": "3fd0000000000000",
+             "color": "rgba(218,251,254,1)"
+            },
+            {
+             "value": "3fd3333333333333",
+             "color": "rgba(217,251,254,1)"
+            },
+            {
+             "value": "3fd6666666666666",
+             "color": "rgba(216,250,254,1)"
+            },
+            {
+             "value": "3fd9999999999999",
+             "color": "rgba(215,249,254,1)"
+            },
+            {
+             "value": "3fdccccccccccccc",
+             "color": "rgba(214,248,253,1)"
+            },
+            {
+             "value": "3fdfffffffffffff",
+             "color": "rgba(213,248,253,1)"
+            },
+            {
+             "value": "3fe1999999999999",
+             "color": "rgba(212,247,253,1)"
+            },
+            {
+             "value": "3fe3333333333333",
+             "color": "rgba(211,246,253,1)"
+            },
+            {
+             "value": "3fe4cccccccccccd",
+             "color": "rgba(209,246,253,1)"
+            },
+            {
+             "value": "3fe6666666666667",
+             "color": "rgba(208,245,253,1)"
+            },
+            {
+             "value": "3fe8000000000001",
+             "color": "rgba(207,244,252,1)"
+            },
+            {
+             "value": "3fe999999999999b",
+             "color": "rgba(206,243,252,1)"
+            },
+            {
+             "value": "3feb333333333335",
+             "color": "rgba(205,243,252,1)"
+            },
+            {
+             "value": "3feccccccccccccf",
+             "color": "rgba(204,242,252,1)"
+            },
+            {
+             "value": "3fee666666666669",
+             "color": "rgba(203,241,252,1)"
+            },
+            {
+             "value": "3ff0000000000001",
+             "color": "rgba(202,241,252,1)"
+            },
+            {
+             "value": "3ff0ccccccccccce",
+             "color": "rgba(200,240,251,1)"
+            },
+            {
+             "value": "3ff199999999999b",
+             "color": "rgba(199,239,251,1)"
+            },
+            {
+             "value": "3ff2666666666668",
+             "color": "rgba(198,238,251,1)"
+            },
+            {
+             "value": "3ff3333333333335",
+             "color": "rgba(197,238,251,1)"
+            },
+            {
+             "value": "3ff4000000000002",
+             "color": "rgba(196,237,251,1)"
+            },
+            {
+             "value": "3ff4cccccccccccf",
+             "color": "rgba(195,236,251,1)"
+            },
+            {
+             "value": "3ff599999999999c",
+             "color": "rgba(194,235,250,1)"
+            },
+            {
+             "value": "3ff6666666666669",
+             "color": "rgba(193,235,250,1)"
+            },
+            {
+             "value": "3ff7333333333336",
+             "color": "rgba(192,234,250,1)"
+            },
+            {
+             "value": "3ff8000000000003",
+             "color": "rgba(190,233,250,1)"
+            },
+            {
+             "value": "3ff8ccccccccccd0",
+             "color": "rgba(189,233,250,1)"
+            },
+            {
+             "value": "3ff999999999999d",
+             "color": "rgba(188,232,250,1)"
+            },
+            {
+             "value": "3ffa66666666666a",
+             "color": "rgba(187,231,249,1)"
+            },
+            {
+             "value": "3ffb333333333337",
+             "color": "rgba(186,230,249,1)"
+            },
+            {
+             "value": "3ffc000000000004",
+             "color": "rgba(185,230,249,1)"
+            },
+            {
+             "value": "3ffcccccccccccd1",
+             "color": "rgba(184,229,249,1)"
+            },
+            {
+             "value": "3ffd99999999999e",
+             "color": "rgba(183,228,249,1)"
+            },
+            {
+             "value": "3ffe66666666666b",
+             "color": "rgba(181,227,249,1)"
+            },
+            {
+             "value": "3fff333333333338",
+             "color": "rgba(180,227,248,1)"
+            },
+            {
+             "value": "4000000000000002",
+             "color": "rgba(179,226,248,1)"
+            },
+            {
+             "value": "4000666666666668",
+             "color": "rgba(178,225,248,1)"
+            },
+            {
+             "value": "4000ccccccccccce",
+             "color": "rgba(177,225,248,1)"
+            },
+            {
+             "value": "4001333333333334",
+             "color": "rgba(176,224,248,1)"
+            },
+            {
+             "value": "400199999999999a",
+             "color": "rgba(175,223,248,1)"
+            },
+            {
+             "value": "4002000000000000",
+             "color": "rgba(174,222,247,1)"
+            },
+            {
+             "value": "4002666666666666",
+             "color": "rgba(172,222,247,1)"
+            },
+            {
+             "value": "4002cccccccccccc",
+             "color": "rgba(171,221,247,1)"
+            },
+            {
+             "value": "4003333333333332",
+             "color": "rgba(170,220,247,1)"
+            },
+            {
+             "value": "4003999999999998",
+             "color": "rgba(169,219,247,1)"
+            },
+            {
+             "value": "4003fffffffffffe",
+             "color": "rgba(168,219,247,1)"
+            },
+            {
+             "value": "4004666666666664",
+             "color": "rgba(167,218,246,1)"
+            },
+            {
+             "value": "4004ccccccccccca",
+             "color": "rgba(166,217,246,1)"
+            },
+            {
+             "value": "4005333333333330",
+             "color": "rgba(165,217,246,1)"
+            },
+            {
+             "value": "4005999999999996",
+             "color": "rgba(164,216,246,1)"
+            },
+            {
+             "value": "4005fffffffffffc",
+             "color": "rgba(162,215,246,1)"
+            },
+            {
+             "value": "4006666666666662",
+             "color": "rgba(161,214,245,1)"
+            },
+            {
+             "value": "4006ccccccccccc8",
+             "color": "rgba(160,214,245,1)"
+            },
+            {
+             "value": "400733333333332e",
+             "color": "rgba(159,213,245,1)"
+            },
+            {
+             "value": "4007999999999994",
+             "color": "rgba(158,212,245,1)"
+            },
+            {
+             "value": "4007fffffffffffa",
+             "color": "rgba(157,212,245,1)"
+            },
+            {
+             "value": "4008666666666660",
+             "color": "rgba(156,211,245,1)"
+            },
+            {
+             "value": "4008ccccccccccc6",
+             "color": "rgba(155,210,244,1)"
+            },
+            {
+             "value": "400933333333332c",
+             "color": "rgba(153,209,244,1)"
+            },
+            {
+             "value": "4009999999999992",
+             "color": "rgba(152,209,244,1)"
+            },
+            {
+             "value": "4009fffffffffff8",
+             "color": "rgba(151,208,244,1)"
+            },
+            {
+             "value": "400a66666666665e",
+             "color": "rgba(150,207,244,1)"
+            },
+            {
+             "value": "400accccccccccc4",
+             "color": "rgba(149,206,244,1)"
+            },
+            {
+             "value": "400b33333333332a",
+             "color": "rgba(148,206,243,1)"
+            },
+            {
+             "value": "400b999999999990",
+             "color": "rgba(147,205,243,1)"
+            },
+            {
+             "value": "400bfffffffffff6",
+             "color": "rgba(146,204,243,1)"
+            },
+            {
+             "value": "400c66666666665c",
+             "color": "rgba(144,204,243,1)"
+            },
+            {
+             "value": "400cccccccccccc2",
+             "color": "rgba(143,203,243,1)"
+            },
+            {
+             "value": "400d333333333328",
+             "color": "rgba(142,202,243,1)"
+            },
+            {
+             "value": "400d99999999998e",
+             "color": "rgba(141,201,242,1)"
+            },
+            {
+             "value": "400dfffffffffff4",
+             "color": "rgba(140,201,242,1)"
+            },
+            {
+             "value": "400e66666666665a",
+             "color": "rgba(139,200,242,1)"
+            },
+            {
+             "value": "400eccccccccccc0",
+             "color": "rgba(138,199,242,1)"
+            },
+            {
+             "value": "400f333333333326",
+             "color": "rgba(137,198,242,1)"
+            },
+            {
+             "value": "400f99999999998c",
+             "color": "rgba(136,198,242,1)"
+            },
+            {
+             "value": "400ffffffffffff2",
+             "color": "rgba(134,197,241,1)"
+            },
+            {
+             "value": "401033333333332c",
+             "color": "rgba(133,196,241,1)"
+            },
+            {
+             "value": "401066666666665f",
+             "color": "rgba(132,196,241,1)"
+            },
+            {
+             "value": "4010999999999992",
+             "color": "rgba(131,195,241,1)"
+            },
+            {
+             "value": "4010ccccccccccc5",
+             "color": "rgba(130,194,241,1)"
+            },
+            {
+             "value": "4010fffffffffff8",
+             "color": "rgba(129,193,241,1)"
+            },
+            {
+             "value": "401133333333332b",
+             "color": "rgba(128,193,240,1)"
+            },
+            {
+             "value": "401166666666665e",
+             "color": "rgba(127,192,240,1)"
+            },
+            {
+             "value": "4011999999999991",
+             "color": "rgba(125,191,240,1)"
+            },
+            {
+             "value": "4011ccccccccccc4",
+             "color": "rgba(124,190,240,1)"
+            },
+            {
+             "value": "4011fffffffffff7",
+             "color": "rgba(123,190,240,1)"
+            },
+            {
+             "value": "401233333333332a",
+             "color": "rgba(122,189,240,1)"
+            },
+            {
+             "value": "401266666666665d",
+             "color": "rgba(121,188,239,1)"
+            },
+            {
+             "value": "4012999999999990",
+             "color": "rgba(120,188,239,1)"
+            },
+            {
+             "value": "4012ccccccccccc3",
+             "color": "rgba(119,187,239,1)"
+            },
+            {
+             "value": "4012fffffffffff6",
+             "color": "rgba(118,186,239,1)"
+            },
+            {
+             "value": "4013333333333329",
+             "color": "rgba(116,185,239,1)"
+            },
+            {
+             "value": "401366666666665c",
+             "color": "rgba(115,185,239,1)"
+            },
+            {
+             "value": "401399999999998f",
+             "color": "rgba(114,184,238,1)"
+            },
+            {
+             "value": "4013ccccccccccc2",
+             "color": "rgba(113,183,238,1)"
+            },
+            {
+             "value": "4013fffffffffff5",
+             "color": "rgba(112,183,238,1)"
+            },
+            {
+             "value": "4014333333333328",
+             "color": "rgba(111,182,238,1)"
+            },
+            {
+             "value": "401466666666665b",
+             "color": "rgba(110,181,238,1)"
+            },
+            {
+             "value": "401499999999998e",
+             "color": "rgba(109,180,237,1)"
+            },
+            {
+             "value": "4014ccccccccccc1",
+             "color": "rgba(108,180,237,1)"
+            },
+            {
+             "value": "4014fffffffffff4",
+             "color": "rgba(106,179,237,1)"
+            },
+            {
+             "value": "4015333333333327",
+             "color": "rgba(105,178,237,1)"
+            },
+            {
+             "value": "401566666666665a",
+             "color": "rgba(104,177,237,1)"
+            },
+            {
+             "value": "401599999999998d",
+             "color": "rgba(103,177,237,1)"
+            },
+            {
+             "value": "4015ccccccccccc0",
+             "color": "rgba(102,176,236,1)"
+            },
+            {
+             "value": "4015fffffffffff3",
+             "color": "rgba(101,175,236,1)"
+            },
+            {
+             "value": "4016333333333326",
+             "color": "rgba(100,175,236,1)"
+            },
+            {
+             "value": "4016666666666659",
+             "color": "rgba(99,174,236,1)"
+            },
+            {
+             "value": "401699999999998c",
+             "color": "rgba(97,173,236,1)"
+            },
+            {
+             "value": "4016ccccccccccbf",
+             "color": "rgba(96,172,236,1)"
+            },
+            {
+             "value": "4016fffffffffff2",
+             "color": "rgba(95,172,235,1)"
+            },
+            {
+             "value": "4017333333333325",
+             "color": "rgba(94,171,235,1)"
+            },
+            {
+             "value": "4017666666666658",
+             "color": "rgba(93,170,235,1)"
+            },
+            {
+             "value": "401799999999998b",
+             "color": "rgba(92,169,235,1)"
+            },
+            {
+             "value": "4017ccccccccccbe",
+             "color": "rgba(91,169,235,1)"
+            },
+            {
+             "value": "4017fffffffffff1",
+             "color": "rgba(90,168,235,1)"
+            },
+            {
+             "value": "4018333333333324",
+             "color": "rgba(88,167,234,1)"
+            },
+            {
+             "value": "4018666666666657",
+             "color": "rgba(87,167,234,1)"
+            },
+            {
+             "value": "401899999999998a",
+             "color": "rgba(86,166,234,1)"
+            },
+            {
+             "value": "4018ccccccccccbd",
+             "color": "rgba(85,165,234,1)"
+            },
+            {
+             "value": "4018fffffffffff0",
+             "color": "rgba(84,164,234,1)"
+            },
+            {
+             "value": "4019333333333323",
+             "color": "rgba(83,164,234,1)"
+            },
+            {
+             "value": "4019666666666656",
+             "color": "rgba(82,163,233,1)"
+            },
+            {
+             "value": "4019999999999989",
+             "color": "rgba(81,162,233,1)"
+            },
+            {
+             "value": "4019ccccccccccbc",
+             "color": "rgba(80,161,233,1)"
+            },
+            {
+             "value": "4019ffffffffffef",
+             "color": "rgba(78,161,233,1)"
+            },
+            {
+             "value": "401a333333333322",
+             "color": "rgba(77,160,233,1)"
+            },
+            {
+             "value": "401a666666666655",
+             "color": "rgba(76,159,233,1)"
+            },
+            {
+             "value": "401a999999999988",
+             "color": "rgba(75,159,232,1)"
+            },
+            {
+             "value": "401accccccccccbb",
+             "color": "rgba(74,158,232,1)"
+            },
+            {
+             "value": "401affffffffffee",
+             "color": "rgba(73,157,232,1)"
+            },
+            {
+             "value": "401b333333333321",
+             "color": "rgba(72,156,232,1)"
+            },
+            {
+             "value": "401b666666666654",
+             "color": "rgba(71,156,232,1)"
+            },
+            {
+             "value": "401b999999999987",
+             "color": "rgba(69,155,232,1)"
+            },
+            {
+             "value": "401bccccccccccba",
+             "color": "rgba(68,154,231,1)"
+            },
+            {
+             "value": "401bffffffffffed",
+             "color": "rgba(67,154,231,1)"
+            },
+            {
+             "value": "401c333333333320",
+             "color": "rgba(66,153,231,1)"
+            },
+            {
+             "value": "401c666666666653",
+             "color": "rgba(65,152,231,1)"
+            },
+            {
+             "value": "401c999999999986",
+             "color": "rgba(64,151,231,1)"
+            },
+            {
+             "value": "401cccccccccccb9",
+             "color": "rgba(63,151,231,1)"
+            },
+            {
+             "value": "401cffffffffffec",
+             "color": "rgba(62,150,230,1)"
+            },
+            {
+             "value": "401d33333333331f",
+             "color": "rgba(60,149,230,1)"
+            },
+            {
+             "value": "401d666666666652",
+             "color": "rgba(59,148,230,1)"
+            },
+            {
+             "value": "401d999999999985",
+             "color": "rgba(58,148,230,1)"
+            },
+            {
+             "value": "401dccccccccccb8",
+             "color": "rgba(57,147,230,1)"
+            },
+            {
+             "value": "401dffffffffffeb",
+             "color": "rgba(56,146,230,1)"
+            },
+            {
+             "value": "401e33333333331e",
+             "color": "rgba(55,146,229,1)"
+            },
+            {
+             "value": "401e666666666651",
+             "color": "rgba(54,145,229,1)"
+            },
+            {
+             "value": "401e999999999984",
+             "color": "rgba(53,144,229,1)"
+            },
+            {
+             "value": "401eccccccccccb7",
+             "color": "rgba(52,143,229,1)"
+            },
+            {
+             "value": "401effffffffffea",
+             "color": "rgba(50,143,229,1)"
+            },
+            {
+             "value": "401f33333333331d",
+             "color": "rgba(49,142,228,1)"
+            },
+            {
+             "value": "401f666666666650",
+             "color": "rgba(48,141,228,1)"
+            },
+            {
+             "value": "401f999999999983",
+             "color": "rgba(47,140,228,1)"
+            },
+            {
+             "value": "401fccccccccccb6",
+             "color": "rgba(46,140,228,1)"
+            },
+            {
+             "value": "401fffffffffffe9",
+             "color": "rgba(45,139,228,1)"
+            },
+            {
+             "value": "402019999999998e",
+             "color": "rgba(44,138,228,1)"
+            },
+            {
+             "value": "4020333333333328",
+             "color": "rgba(43,138,227,1)"
+            },
+            {
+             "value": "40204cccccccccc2",
+             "color": "rgba(41,137,227,1)"
+            },
+            {
+             "value": "402066666666665c",
+             "color": "rgba(40,136,227,1)"
+            },
+            {
+             "value": "40207ffffffffff6",
+             "color": "rgba(39,135,227,1)"
+            },
+            {
+             "value": "4020999999999990",
+             "color": "rgba(38,135,227,1)"
+            },
+            {
+             "value": "4020b3333333332a",
+             "color": "rgba(37,134,227,1)"
+            },
+            {
+             "value": "4020ccccccccccc4",
+             "color": "rgba(36,133,226,1)"
+            },
+            {
+             "value": "4020e6666666665e",
+             "color": "rgba(35,132,226,1)"
+            },
+            {
+             "value": "4020fffffffffff8",
+             "color": "rgba(34,132,226,1)"
+            },
+            {
+             "value": "4021199999999992",
+             "color": "rgba(32,131,226,1)"
+            },
+            {
+             "value": "402133333333332c",
+             "color": "rgba(31,130,226,1)"
+            },
+            {
+             "value": "40214cccccccccc6",
+             "color": "rgba(30,130,226,1)"
+            },
+            {
+             "value": "4021666666666660",
+             "color": "rgba(29,129,225,1)"
+            },
+            {
+             "value": "40217ffffffffffa",
+             "color": "rgba(28,128,225,1)"
+            },
+            {
+             "value": "4021999999999994",
+             "color": "rgba(27,127,225,1)"
+            },
+            {
+             "value": "4021b3333333332e",
+             "color": "rgba(26,127,225,1)"
+            },
+            {
+             "value": "4021ccccccccccc8",
+             "color": "rgba(25,126,225,1)"
+            },
+            {
+             "value": "4021e66666666662",
+             "color": "rgba(24,125,225,1)"
+            },
+            {
+             "value": "4021fffffffffffc",
+             "color": "rgba(22,125,224,1)"
+            },
+            {
+             "value": "4022199999999996",
+             "color": "rgba(21,124,224,1)"
+            },
+            {
+             "value": "4022333333333330",
+             "color": "rgba(20,123,224,1)"
+            },
+            {
+             "value": "40224cccccccccca",
+             "color": "rgba(19,122,224,1)"
+            },
+            {
+             "value": "4022666666666664",
+             "color": "rgba(18,122,224,1)"
+            },
+            {
+             "value": "40227ffffffffffe",
+             "color": "rgba(17,121,224,1)"
+            },
+            {
+             "value": "4022999999999998",
+             "color": "rgba(16,120,223,1)"
+            },
+            {
+             "value": "4022b33333333332",
+             "color": "rgba(15,119,223,1)"
+            },
+            {
+             "value": "4022cccccccccccc",
+             "color": "rgba(13,119,223,1)"
+            },
+            {
+             "value": "4022e66666666666",
+             "color": "rgba(12,118,223,1)"
+            },
+            {
+             "value": "4023000000000000",
+             "color": "rgba(11,117,223,1)"
+            },
+            {
+             "value": "402319999999999a",
+             "color": "rgba(10,117,223,1)"
+            },
+            {
+             "value": "4023333333333334",
+             "color": "rgba(9,116,222,1)"
+            },
+            {
+             "value": "40234cccccccccce",
+             "color": "rgba(8,115,222,1)"
+            },
+            {
+             "value": "4023666666666668",
+             "color": "rgba(7,114,222,1)"
+            },
+            {
+             "value": "4023800000000002",
+             "color": "rgba(6,114,222,1)"
+            },
+            {
+             "value": "402399999999999c",
+             "color": "rgba(4,113,222,1)"
+            },
+            {
+             "value": "4023b33333333336",
+             "color": "rgba(3,112,222,1)"
+            },
+            {
+             "value": "4023ccccccccccd0",
+             "color": "rgba(2,111,221,1)"
+            },
+            {
+             "value": "4023e6666666666a",
+             "color": "rgba(1,111,221,1)"
+            },
+            {
+             "value": "4024000000000000",
+             "color": "rgba(0,110,221,1)"
+            }
+           ],
+           "outerColors": [
+            "rgba(224,255,255,1)",
+            "rgba(0,110,221,1)"
+           ],
+           "dimension": "4000000000000000"
+          },
+          {
+           "stops": [
+            {
+             "value": "0000000000000000",
+             "color": "red"
+            },
+            {
+             "value": "4014000000000000",
+             "color": "red"
+            }
+           ],
+           "outerColors": [
+            "rgba(0,0,0,0)",
+            "#00ff00"
+           ],
+           "dimension": "3ff0000000000000"
+          },
+          {
+           "stops": [
+            {
+             "value": "4000000000000000",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "40003d70a3d70a3d",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "40007ae147ae147a",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4000b851eb851eb7",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4000f5c28f5c28f4",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4001333333333331",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "400170a3d70a3d6e",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4001ae147ae147ab",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4001eb851eb851e8",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "400228f5c28f5c25",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4002666666666662",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4002a3d70a3d709f",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4002e147ae147adc",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "40031eb851eb8519",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "40035c28f5c28f56",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4003999999999993",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4003d70a3d70a3d0",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4004147ae147ae0d",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "400451eb851eb84a",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "40048f5c28f5c287",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4004ccccccccccc4",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "40050a3d70a3d701",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "400547ae147ae13e",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4005851eb851eb7b",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4005c28f5c28f5b8",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4005fffffffffff5",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "40063d70a3d70a32",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "40067ae147ae146f",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4006b851eb851eac",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4006f5c28f5c28e9",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4007333333333326",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "400770a3d70a3d63",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4007ae147ae147a0",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4007eb851eb851dd",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4008000000000000",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4008000000000000",
+             "color": "rgba(85,85,85,1)"
+            },
+            {
+             "value": "40081eb851eb851f",
+             "color": "rgba(86,86,86,1)"
+            },
+            {
+             "value": "40083d70a3d70a3e",
+             "color": "rgba(88,88,88,1)"
+            },
+            {
+             "value": "40085c28f5c28f5d",
+             "color": "rgba(89,89,89,1)"
+            },
+            {
+             "value": "40087ae147ae147c",
+             "color": "rgba(90,90,90,1)"
+            },
+            {
+             "value": "400899999999999b",
+             "color": "rgba(91,91,91,1)"
+            },
+            {
+             "value": "4008b851eb851eba",
+             "color": "rgba(93,93,93,1)"
+            },
+            {
+             "value": "4008d70a3d70a3d9",
+             "color": "rgba(94,94,94,1)"
+            },
+            {
+             "value": "4008f5c28f5c28f8",
+             "color": "rgba(95,95,95,1)"
+            },
+            {
+             "value": "4009147ae147ae17",
+             "color": "rgba(96,96,96,1)"
+            },
+            {
+             "value": "4009333333333336",
+             "color": "rgba(98,98,98,1)"
+            },
+            {
+             "value": "400951eb851eb855",
+             "color": "rgba(99,99,99,1)"
+            },
+            {
+             "value": "400970a3d70a3d74",
+             "color": "rgba(100,100,100,1)"
+            },
+            {
+             "value": "40098f5c28f5c293",
+             "color": "rgba(102,102,102,1)"
+            },
+            {
+             "value": "4009ae147ae147b2",
+             "color": "rgba(103,103,103,1)"
+            },
+            {
+             "value": "4009ccccccccccd1",
+             "color": "rgba(104,104,104,1)"
+            },
+            {
+             "value": "4009eb851eb851f0",
+             "color": "rgba(105,105,105,1)"
+            },
+            {
+             "value": "400a0a3d70a3d70f",
+             "color": "rgba(107,107,107,1)"
+            },
+            {
+             "value": "400a28f5c28f5c2e",
+             "color": "rgba(108,108,108,1)"
+            },
+            {
+             "value": "400a47ae147ae14d",
+             "color": "rgba(109,109,109,1)"
+            },
+            {
+             "value": "400a66666666666c",
+             "color": "rgba(111,111,111,1)"
+            },
+            {
+             "value": "400a851eb851eb8b",
+             "color": "rgba(112,112,112,1)"
+            },
+            {
+             "value": "400aa3d70a3d70aa",
+             "color": "rgba(113,113,113,1)"
+            },
+            {
+             "value": "400ac28f5c28f5c9",
+             "color": "rgba(114,114,114,1)"
+            },
+            {
+             "value": "400ae147ae147ae8",
+             "color": "rgba(116,116,116,1)"
+            },
+            {
+             "value": "400b000000000007",
+             "color": "rgba(117,117,117,1)"
+            },
+            {
+             "value": "400b1eb851eb8526",
+             "color": "rgba(118,118,118,1)"
+            },
+            {
+             "value": "400b3d70a3d70a45",
+             "color": "rgba(119,119,119,1)"
+            },
+            {
+             "value": "400b5c28f5c28f64",
+             "color": "rgba(121,121,121,1)"
+            },
+            {
+             "value": "400b7ae147ae1483",
+             "color": "rgba(122,122,122,1)"
+            },
+            {
+             "value": "400b9999999999a2",
+             "color": "rgba(123,123,123,1)"
+            },
+            {
+             "value": "400bb851eb851ec1",
+             "color": "rgba(125,125,125,1)"
+            },
+            {
+             "value": "400bd70a3d70a3e0",
+             "color": "rgba(126,126,126,1)"
+            },
+            {
+             "value": "400bf5c28f5c28ff",
+             "color": "rgba(127,127,127,1)"
+            },
+            {
+             "value": "400c147ae147ae1e",
+             "color": "rgba(128,128,128,1)"
+            },
+            {
+             "value": "400c33333333333d",
+             "color": "rgba(130,130,130,1)"
+            },
+            {
+             "value": "400c51eb851eb85c",
+             "color": "rgba(131,131,131,1)"
+            },
+            {
+             "value": "400c70a3d70a3d7b",
+             "color": "rgba(132,132,132,1)"
+            },
+            {
+             "value": "400c8f5c28f5c29a",
+             "color": "rgba(133,133,133,1)"
+            },
+            {
+             "value": "400cae147ae147b9",
+             "color": "rgba(135,135,135,1)"
+            },
+            {
+             "value": "400cccccccccccd8",
+             "color": "rgba(136,136,136,1)"
+            },
+            {
+             "value": "400ceb851eb851f7",
+             "color": "rgba(137,137,137,1)"
+            },
+            {
+             "value": "400d0a3d70a3d716",
+             "color": "rgba(139,139,139,1)"
+            },
+            {
+             "value": "400d28f5c28f5c35",
+             "color": "rgba(140,140,140,1)"
+            },
+            {
+             "value": "400d47ae147ae154",
+             "color": "rgba(141,141,141,1)"
+            },
+            {
+             "value": "400d666666666673",
+             "color": "rgba(142,142,142,1)"
+            },
+            {
+             "value": "400d851eb851eb92",
+             "color": "rgba(144,144,144,1)"
+            },
+            {
+             "value": "400da3d70a3d70b1",
+             "color": "rgba(145,145,145,1)"
+            },
+            {
+             "value": "400dc28f5c28f5d0",
+             "color": "rgba(146,146,146,1)"
+            },
+            {
+             "value": "400de147ae147aef",
+             "color": "rgba(147,147,147,1)"
+            },
+            {
+             "value": "400e00000000000e",
+             "color": "rgba(149,149,149,1)"
+            },
+            {
+             "value": "400e1eb851eb852d",
+             "color": "rgba(150,150,150,1)"
+            },
+            {
+             "value": "400e3d70a3d70a4c",
+             "color": "rgba(151,151,151,1)"
+            },
+            {
+             "value": "400e5c28f5c28f6b",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "400e7ae147ae148a",
+             "color": "rgba(154,154,154,1)"
+            },
+            {
+             "value": "400e9999999999a9",
+             "color": "rgba(155,155,155,1)"
+            },
+            {
+             "value": "400eb851eb851ec8",
+             "color": "rgba(156,156,156,1)"
+            },
+            {
+             "value": "400ed70a3d70a3e7",
+             "color": "rgba(158,158,158,1)"
+            },
+            {
+             "value": "400ef5c28f5c2906",
+             "color": "rgba(159,159,159,1)"
+            },
+            {
+             "value": "400f147ae147ae25",
+             "color": "rgba(160,160,160,1)"
+            },
+            {
+             "value": "400f333333333344",
+             "color": "rgba(162,162,162,1)"
+            },
+            {
+             "value": "400f51eb851eb863",
+             "color": "rgba(163,163,163,1)"
+            },
+            {
+             "value": "400f70a3d70a3d82",
+             "color": "rgba(164,164,164,1)"
+            },
+            {
+             "value": "400f8f5c28f5c2a1",
+             "color": "rgba(165,165,165,1)"
+            },
+            {
+             "value": "400fae147ae147c0",
+             "color": "rgba(167,167,167,1)"
+            },
+            {
+             "value": "400fccccccccccdf",
+             "color": "rgba(168,168,168,1)"
+            },
+            {
+             "value": "400feb851eb851fe",
+             "color": "rgba(169,169,169,1)"
+            },
+            {
+             "value": "4010051eb851eb8e",
+             "color": "rgba(170,170,170,1)"
+            },
+            {
+             "value": "4010147ae147ae1d",
+             "color": "rgba(172,172,172,1)"
+            },
+            {
+             "value": "401023d70a3d70ac",
+             "color": "rgba(173,173,173,1)"
+            },
+            {
+             "value": "401033333333333b",
+             "color": "rgba(174,174,174,1)"
+            },
+            {
+             "value": "4010428f5c28f5ca",
+             "color": "rgba(176,176,176,1)"
+            },
+            {
+             "value": "401051eb851eb859",
+             "color": "rgba(177,177,177,1)"
+            },
+            {
+             "value": "40106147ae147ae8",
+             "color": "rgba(178,178,178,1)"
+            },
+            {
+             "value": "401070a3d70a3d77",
+             "color": "rgba(179,179,179,1)"
+            },
+            {
+             "value": "4010800000000006",
+             "color": "rgba(181,181,181,1)"
+            },
+            {
+             "value": "40108f5c28f5c295",
+             "color": "rgba(182,182,182,1)"
+            },
+            {
+             "value": "40109eb851eb8524",
+             "color": "rgba(183,183,183,1)"
+            },
+            {
+             "value": "4010ae147ae147b3",
+             "color": "rgba(184,184,184,1)"
+            },
+            {
+             "value": "4010bd70a3d70a42",
+             "color": "rgba(186,186,186,1)"
+            },
+            {
+             "value": "4010ccccccccccd1",
+             "color": "rgba(187,187,187,1)"
+            },
+            {
+             "value": "4010dc28f5c28f60",
+             "color": "rgba(188,188,188,1)"
+            },
+            {
+             "value": "4010eb851eb851ef",
+             "color": "rgba(190,190,190,1)"
+            },
+            {
+             "value": "4010fae147ae147e",
+             "color": "rgba(191,191,191,1)"
+            },
+            {
+             "value": "40110a3d70a3d70d",
+             "color": "rgba(192,192,192,1)"
+            },
+            {
+             "value": "401119999999999c",
+             "color": "rgba(193,193,193,1)"
+            },
+            {
+             "value": "401128f5c28f5c2b",
+             "color": "rgba(195,195,195,1)"
+            },
+            {
+             "value": "40113851eb851eba",
+             "color": "rgba(196,196,196,1)"
+            },
+            {
+             "value": "401147ae147ae149",
+             "color": "rgba(197,197,197,1)"
+            },
+            {
+             "value": "4011570a3d70a3d8",
+             "color": "rgba(198,198,198,1)"
+            },
+            {
+             "value": "4011666666666667",
+             "color": "rgba(200,200,200,1)"
+            },
+            {
+             "value": "401175c28f5c28f6",
+             "color": "rgba(201,201,201,1)"
+            },
+            {
+             "value": "4011851eb851eb85",
+             "color": "rgba(202,202,202,1)"
+            },
+            {
+             "value": "4011947ae147ae14",
+             "color": "rgba(204,204,204,1)"
+            },
+            {
+             "value": "4011a3d70a3d70a3",
+             "color": "rgba(205,205,205,1)"
+            },
+            {
+             "value": "4011b33333333332",
+             "color": "rgba(206,206,206,1)"
+            },
+            {
+             "value": "4011c28f5c28f5c1",
+             "color": "rgba(207,207,207,1)"
+            },
+            {
+             "value": "4011d1eb851eb850",
+             "color": "rgba(209,209,209,1)"
+            },
+            {
+             "value": "4011e147ae147adf",
+             "color": "rgba(210,210,210,1)"
+            },
+            {
+             "value": "4011f0a3d70a3d6e",
+             "color": "rgba(211,211,211,1)"
+            },
+            {
+             "value": "4011fffffffffffd",
+             "color": "rgba(212,212,212,1)"
+            },
+            {
+             "value": "40120f5c28f5c28c",
+             "color": "rgba(214,214,214,1)"
+            },
+            {
+             "value": "40121eb851eb851b",
+             "color": "rgba(215,215,215,1)"
+            },
+            {
+             "value": "40122e147ae147aa",
+             "color": "rgba(216,216,216,1)"
+            },
+            {
+             "value": "40123d70a3d70a39",
+             "color": "rgba(218,218,218,1)"
+            },
+            {
+             "value": "40124cccccccccc8",
+             "color": "rgba(219,219,219,1)"
+            },
+            {
+             "value": "40125c28f5c28f57",
+             "color": "rgba(220,220,220,1)"
+            },
+            {
+             "value": "40126b851eb851e6",
+             "color": "rgba(221,221,221,1)"
+            },
+            {
+             "value": "40127ae147ae1475",
+             "color": "rgba(223,223,223,1)"
+            },
+            {
+             "value": "40128a3d70a3d704",
+             "color": "rgba(224,224,224,1)"
+            },
+            {
+             "value": "4012999999999993",
+             "color": "rgba(225,225,225,1)"
+            },
+            {
+             "value": "4012a8f5c28f5c22",
+             "color": "rgba(227,227,227,1)"
+            },
+            {
+             "value": "4012b851eb851eb1",
+             "color": "rgba(228,228,228,1)"
+            },
+            {
+             "value": "4012c7ae147ae140",
+             "color": "rgba(229,229,229,1)"
+            },
+            {
+             "value": "4012d70a3d70a3cf",
+             "color": "rgba(230,230,230,1)"
+            },
+            {
+             "value": "4012e6666666665e",
+             "color": "rgba(232,232,232,1)"
+            },
+            {
+             "value": "4012f5c28f5c28ed",
+             "color": "rgba(233,233,233,1)"
+            },
+            {
+             "value": "4013051eb851eb7c",
+             "color": "rgba(234,234,234,1)"
+            },
+            {
+             "value": "4013147ae147ae0b",
+             "color": "rgba(235,235,235,1)"
+            },
+            {
+             "value": "401323d70a3d709a",
+             "color": "rgba(237,237,237,1)"
+            },
+            {
+             "value": "4013333333333329",
+             "color": "rgba(238,238,238,1)"
+            },
+            {
+             "value": "4013428f5c28f5b8",
+             "color": "rgba(239,239,239,1)"
+            },
+            {
+             "value": "401351eb851eb847",
+             "color": "rgba(241,241,241,1)"
+            },
+            {
+             "value": "40136147ae147ad6",
+             "color": "rgba(242,242,242,1)"
+            },
+            {
+             "value": "401370a3d70a3d65",
+             "color": "rgba(243,243,243,1)"
+            },
+            {
+             "value": "40137ffffffffff4",
+             "color": "rgba(244,244,244,1)"
+            },
+            {
+             "value": "40138f5c28f5c283",
+             "color": "rgba(246,246,246,1)"
+            },
+            {
+             "value": "40139eb851eb8512",
+             "color": "rgba(247,247,247,1)"
+            },
+            {
+             "value": "4013ae147ae147a1",
+             "color": "rgba(248,248,248,1)"
+            },
+            {
+             "value": "4013bd70a3d70a30",
+             "color": "rgba(249,249,249,1)"
+            },
+            {
+             "value": "4013ccccccccccbf",
+             "color": "rgba(251,251,251,1)"
+            },
+            {
+             "value": "4013dc28f5c28f4e",
+             "color": "rgba(252,252,252,1)"
+            },
+            {
+             "value": "4013eb851eb851dd",
+             "color": "rgba(253,253,253,1)"
+            },
+            {
+             "value": "4013fae147ae146c",
+             "color": "rgba(255,255,255,1)"
+            },
+            {
+             "value": "40140a3d70a3d6fb",
+             "color": "rgba(255,254,254,0.9983333333333356)"
+            },
+            {
+             "value": "401419999999998a",
+             "color": "rgba(255,253,253,0.9958333333333357)"
+            },
+            {
+             "value": "401428f5c28f5c19",
+             "color": "rgba(255,252,252,0.9933333333333357)"
+            },
+            {
+             "value": "40143851eb851ea8",
+             "color": "rgba(255,250,250,0.9908333333333358)"
+            },
+            {
+             "value": "401447ae147ae137",
+             "color": "rgba(255,249,249,0.9883333333333358)"
+            },
+            {
+             "value": "4014570a3d70a3c6",
+             "color": "rgba(255,248,248,0.9858333333333359)"
+            },
+            {
+             "value": "4014666666666655",
+             "color": "rgba(255,247,247,0.983333333333336)"
+            },
+            {
+             "value": "401475c28f5c28e4",
+             "color": "rgba(255,245,245,0.980833333333336)"
+            },
+            {
+             "value": "4014851eb851eb73",
+             "color": "rgba(255,244,244,0.978333333333336)"
+            },
+            {
+             "value": "4014947ae147ae02",
+             "color": "rgba(255,243,243,0.9758333333333361)"
+            },
+            {
+             "value": "4014a3d70a3d7091",
+             "color": "rgba(255,241,241,0.9733333333333362)"
+            },
+            {
+             "value": "4014b33333333320",
+             "color": "rgba(255,240,240,0.9708333333333362)"
+            },
+            {
+             "value": "4014c28f5c28f5af",
+             "color": "rgba(255,239,239,0.9683333333333363)"
+            },
+            {
+             "value": "4014d1eb851eb83e",
+             "color": "rgba(255,238,238,0.9658333333333363)"
+            },
+            {
+             "value": "4014e147ae147acd",
+             "color": "rgba(255,236,236,0.9633333333333364)"
+            },
+            {
+             "value": "4014f0a3d70a3d5c",
+             "color": "rgba(255,235,235,0.9608333333333364)"
+            },
+            {
+             "value": "4014ffffffffffeb",
+             "color": "rgba(255,234,234,0.9583333333333365)"
+            },
+            {
+             "value": "40150f5c28f5c27a",
+             "color": "rgba(255,232,232,0.9558333333333365)"
+            },
+            {
+             "value": "40151eb851eb8509",
+             "color": "rgba(255,231,231,0.9533333333333366)"
+            },
+            {
+             "value": "40152e147ae14798",
+             "color": "rgba(255,230,230,0.9508333333333366)"
+            },
+            {
+             "value": "40153d70a3d70a27",
+             "color": "rgba(255,229,229,0.9483333333333367)"
+            },
+            {
+             "value": "40154cccccccccb6",
+             "color": "rgba(255,227,227,0.9458333333333367)"
+            },
+            {
+             "value": "40155c28f5c28f45",
+             "color": "rgba(255,226,226,0.9433333333333368)"
+            },
+            {
+             "value": "40156b851eb851d4",
+             "color": "rgba(255,225,225,0.9408333333333369)"
+            },
+            {
+             "value": "40157ae147ae1463",
+             "color": "rgba(255,224,224,0.9383333333333369)"
+            },
+            {
+             "value": "40158a3d70a3d6f2",
+             "color": "rgba(255,222,222,0.935833333333337)"
+            },
+            {
+             "value": "4015999999999981",
+             "color": "rgba(255,221,221,0.933333333333337)"
+            },
+            {
+             "value": "4015a8f5c28f5c10",
+             "color": "rgba(255,220,220,0.9308333333333371)"
+            },
+            {
+             "value": "4015b851eb851e9f",
+             "color": "rgba(255,218,218,0.9283333333333371)"
+            },
+            {
+             "value": "4015c7ae147ae12e",
+             "color": "rgba(255,217,217,0.9258333333333372)"
+            },
+            {
+             "value": "4015d70a3d70a3bd",
+             "color": "rgba(255,216,216,0.9233333333333372)"
+            },
+            {
+             "value": "4015e6666666664c",
+             "color": "rgba(255,215,215,0.9208333333333373)"
+            },
+            {
+             "value": "4015f5c28f5c28db",
+             "color": "rgba(255,213,213,0.9183333333333373)"
+            },
+            {
+             "value": "4016051eb851eb6a",
+             "color": "rgba(255,212,212,0.9158333333333374)"
+            },
+            {
+             "value": "4016147ae147adf9",
+             "color": "rgba(255,211,211,0.9133333333333374)"
+            },
+            {
+             "value": "401623d70a3d7088",
+             "color": "rgba(255,210,210,0.9108333333333375)"
+            },
+            {
+             "value": "4016333333333317",
+             "color": "rgba(255,208,208,0.9083333333333375)"
+            },
+            {
+             "value": "4016428f5c28f5a6",
+             "color": "rgba(255,207,207,0.9058333333333376)"
+            },
+            {
+             "value": "401651eb851eb835",
+             "color": "rgba(255,206,206,0.9033333333333377)"
+            },
+            {
+             "value": "40166147ae147ac4",
+             "color": "rgba(255,204,204,0.9008333333333377)"
+            },
+            {
+             "value": "401670a3d70a3d53",
+             "color": "rgba(255,203,203,0.8983333333333378)"
+            },
+            {
+             "value": "40167fffffffffe2",
+             "color": "rgba(255,202,202,0.8958333333333378)"
+            },
+            {
+             "value": "40168f5c28f5c271",
+             "color": "rgba(255,201,201,0.8933333333333379)"
+            },
+            {
+             "value": "40169eb851eb8500",
+             "color": "rgba(255,199,199,0.8908333333333379)"
+            },
+            {
+             "value": "4016ae147ae1478f",
+             "color": "rgba(255,198,198,0.888333333333338)"
+            },
+            {
+             "value": "4016bd70a3d70a1e",
+             "color": "rgba(255,197,197,0.885833333333338)"
+            },
+            {
+             "value": "4016ccccccccccad",
+             "color": "rgba(255,196,196,0.8833333333333381)"
+            },
+            {
+             "value": "4016dc28f5c28f3c",
+             "color": "rgba(255,194,194,0.8808333333333381)"
+            },
+            {
+             "value": "4016eb851eb851cb",
+             "color": "rgba(255,193,193,0.8783333333333382)"
+            },
+            {
+             "value": "4016fae147ae145a",
+             "color": "rgba(255,192,192,0.8758333333333382)"
+            },
+            {
+             "value": "40170a3d70a3d6e9",
+             "color": "rgba(255,190,190,0.8733333333333383)"
+            },
+            {
+             "value": "4017199999999978",
+             "color": "rgba(255,189,189,0.8708333333333383)"
+            },
+            {
+             "value": "401728f5c28f5c07",
+             "color": "rgba(255,188,188,0.8683333333333384)"
+            },
+            {
+             "value": "40173851eb851e96",
+             "color": "rgba(255,187,187,0.8658333333333385)"
+            },
+            {
+             "value": "401747ae147ae125",
+             "color": "rgba(255,185,185,0.8633333333333385)"
+            },
+            {
+             "value": "4017570a3d70a3b4",
+             "color": "rgba(255,184,184,0.8608333333333386)"
+            },
+            {
+             "value": "4017666666666643",
+             "color": "rgba(255,183,183,0.8583333333333386)"
+            },
+            {
+             "value": "401775c28f5c28d2",
+             "color": "rgba(255,181,181,0.8558333333333387)"
+            },
+            {
+             "value": "4017851eb851eb61",
+             "color": "rgba(255,180,180,0.8533333333333387)"
+            },
+            {
+             "value": "4017947ae147adf0",
+             "color": "rgba(255,179,179,0.8508333333333388)"
+            },
+            {
+             "value": "4017a3d70a3d707f",
+             "color": "rgba(255,178,178,0.8483333333333388)"
+            },
+            {
+             "value": "4017b3333333330e",
+             "color": "rgba(255,176,176,0.8458333333333389)"
+            },
+            {
+             "value": "4017c28f5c28f59d",
+             "color": "rgba(255,175,175,0.8433333333333389)"
+            },
+            {
+             "value": "4017d1eb851eb82c",
+             "color": "rgba(255,174,174,0.840833333333339)"
+            },
+            {
+             "value": "4017e147ae147abb",
+             "color": "rgba(255,173,173,0.838333333333339)"
+            },
+            {
+             "value": "4017f0a3d70a3d4a",
+             "color": "rgba(255,171,171,0.8358333333333391)"
+            },
+            {
+             "value": "4017ffffffffffd9",
+             "color": "rgba(255,170,170,0.8333333333333391)"
+            },
+            {
+             "value": "4018000000000000",
+             "color": "rgba(255,170,170,0.8333333333333334)"
+            },
+            {
+             "value": "4018000000000000",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4018147ae147ae19",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4018333333333338",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401851eb851eb857",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401870a3d70a3d76",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "40188f5c28f5c295",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4018ae147ae147b4",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4018ccccccccccd3",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4018eb851eb851f2",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "40190a3d70a3d711",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401928f5c28f5c30",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401947ae147ae14f",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401966666666666e",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4019851eb851eb8d",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4019a3d70a3d70ac",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4019c28f5c28f5cb",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4019e147ae147aea",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401a000000000009",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401a1eb851eb8528",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401a3d70a3d70a47",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401a5c28f5c28f66",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401a7ae147ae1485",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401a9999999999a4",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401ab851eb851ec3",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401ad70a3d70a3e2",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401af5c28f5c2901",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401b147ae147ae20",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401b33333333333f",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401b51eb851eb85e",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401b70a3d70a3d7d",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401b8f5c28f5c29c",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401bae147ae147bb",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401bccccccccccda",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401beb851eb851f9",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401c0a3d70a3d718",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401c28f5c28f5c37",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401c47ae147ae156",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401c666666666675",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401c851eb851eb94",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401ca3d70a3d70b3",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401cc28f5c28f5d2",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401ce147ae147af1",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401d000000000010",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401d1eb851eb852f",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401d3d70a3d70a4e",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401d5c28f5c28f6d",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401d7ae147ae148c",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401d9999999999ab",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401db851eb851eca",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401dd70a3d70a3e9",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401df5c28f5c2908",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401e147ae147ae27",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401e333333333346",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401e51eb851eb865",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401e70a3d70a3d84",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401e8f5c28f5c2a3",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401eae147ae147c2",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401ecccccccccce1",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401eeb851eb85200",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401f0a3d70a3d71f",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401f28f5c28f5c3e",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401f47ae147ae15d",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401f66666666667c",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401f851eb851eb9b",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401fa3d70a3d70ba",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401fc28f5c28f5d9",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401fe147ae147af8",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4020000000000000",
+             "color": "rgba(153,153,153,1)"
+            }
+           ],
+           "outerColors": [
+            "rgba(153,153,153,1)",
+            "rgba(153,153,153,1)"
+           ],
+           "dimension": "0000000000000000"
+          }
+         ]
+        },
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "3ff0000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "4000000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "3ff0000000000000",
+           "4000000000000000"
+          ]
+         ],
+         "ret": [
+          "405b800000000000",
+          "4072800000000000"
+         ]
+        },
+        {
+         "fn": "visual",
+         "args": [
+          "color"
+         ],
+         "ret": "rgba(153,153,153,1)"
+        }
+       ],
+       "ret": {
+        "type": "circle",
+        "shape": {
+         "cx": "405b800000000000",
+         "cy": "4072800000000000",
+         "r": "4010000000000000"
+        },
+        "style": {
+         "fill": "rgba(153,153,153,1)"
+        }
+       }
+      },
+      {
+       "s": 0,
+       "name": "vmMeta",
+       "params": {
+        "dataIndex": 1,
+        "dataIndexInside": 1,
+        "dataInsideLength": 2,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": {
+         "type": "cartesian2d",
+         "x": "404e000000000000",
+         "y": "4044000000000000",
+         "width": "407f400000000000",
+         "height": "4074000000000000"
+        },
+        "encode": {
+         "x": [
+          0
+         ],
+         "y": [
+          1
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "visual",
+         "args": [
+          "visualMeta"
+         ],
+         "ret": [
+          {
+           "stops": [
+            {
+             "value": "0000000000000000",
+             "color": "rgba(224,255,255,1)"
+            },
+            {
+             "value": "3fa999999999999a",
+             "color": "rgba(223,254,255,1)"
+            },
+            {
+             "value": "3fb999999999999a",
+             "color": "rgba(222,254,255,1)"
+            },
+            {
+             "value": "3fc3333333333334",
+             "color": "rgba(221,253,254,1)"
+            },
+            {
+             "value": "3fc999999999999a",
+             "color": "rgba(220,252,254,1)"
+            },
+            {
+             "value": "3fd0000000000000",
+             "color": "rgba(218,251,254,1)"
+            },
+            {
+             "value": "3fd3333333333333",
+             "color": "rgba(217,251,254,1)"
+            },
+            {
+             "value": "3fd6666666666666",
+             "color": "rgba(216,250,254,1)"
+            },
+            {
+             "value": "3fd9999999999999",
+             "color": "rgba(215,249,254,1)"
+            },
+            {
+             "value": "3fdccccccccccccc",
+             "color": "rgba(214,248,253,1)"
+            },
+            {
+             "value": "3fdfffffffffffff",
+             "color": "rgba(213,248,253,1)"
+            },
+            {
+             "value": "3fe1999999999999",
+             "color": "rgba(212,247,253,1)"
+            },
+            {
+             "value": "3fe3333333333333",
+             "color": "rgba(211,246,253,1)"
+            },
+            {
+             "value": "3fe4cccccccccccd",
+             "color": "rgba(209,246,253,1)"
+            },
+            {
+             "value": "3fe6666666666667",
+             "color": "rgba(208,245,253,1)"
+            },
+            {
+             "value": "3fe8000000000001",
+             "color": "rgba(207,244,252,1)"
+            },
+            {
+             "value": "3fe999999999999b",
+             "color": "rgba(206,243,252,1)"
+            },
+            {
+             "value": "3feb333333333335",
+             "color": "rgba(205,243,252,1)"
+            },
+            {
+             "value": "3feccccccccccccf",
+             "color": "rgba(204,242,252,1)"
+            },
+            {
+             "value": "3fee666666666669",
+             "color": "rgba(203,241,252,1)"
+            },
+            {
+             "value": "3ff0000000000001",
+             "color": "rgba(202,241,252,1)"
+            },
+            {
+             "value": "3ff0ccccccccccce",
+             "color": "rgba(200,240,251,1)"
+            },
+            {
+             "value": "3ff199999999999b",
+             "color": "rgba(199,239,251,1)"
+            },
+            {
+             "value": "3ff2666666666668",
+             "color": "rgba(198,238,251,1)"
+            },
+            {
+             "value": "3ff3333333333335",
+             "color": "rgba(197,238,251,1)"
+            },
+            {
+             "value": "3ff4000000000002",
+             "color": "rgba(196,237,251,1)"
+            },
+            {
+             "value": "3ff4cccccccccccf",
+             "color": "rgba(195,236,251,1)"
+            },
+            {
+             "value": "3ff599999999999c",
+             "color": "rgba(194,235,250,1)"
+            },
+            {
+             "value": "3ff6666666666669",
+             "color": "rgba(193,235,250,1)"
+            },
+            {
+             "value": "3ff7333333333336",
+             "color": "rgba(192,234,250,1)"
+            },
+            {
+             "value": "3ff8000000000003",
+             "color": "rgba(190,233,250,1)"
+            },
+            {
+             "value": "3ff8ccccccccccd0",
+             "color": "rgba(189,233,250,1)"
+            },
+            {
+             "value": "3ff999999999999d",
+             "color": "rgba(188,232,250,1)"
+            },
+            {
+             "value": "3ffa66666666666a",
+             "color": "rgba(187,231,249,1)"
+            },
+            {
+             "value": "3ffb333333333337",
+             "color": "rgba(186,230,249,1)"
+            },
+            {
+             "value": "3ffc000000000004",
+             "color": "rgba(185,230,249,1)"
+            },
+            {
+             "value": "3ffcccccccccccd1",
+             "color": "rgba(184,229,249,1)"
+            },
+            {
+             "value": "3ffd99999999999e",
+             "color": "rgba(183,228,249,1)"
+            },
+            {
+             "value": "3ffe66666666666b",
+             "color": "rgba(181,227,249,1)"
+            },
+            {
+             "value": "3fff333333333338",
+             "color": "rgba(180,227,248,1)"
+            },
+            {
+             "value": "4000000000000002",
+             "color": "rgba(179,226,248,1)"
+            },
+            {
+             "value": "4000666666666668",
+             "color": "rgba(178,225,248,1)"
+            },
+            {
+             "value": "4000ccccccccccce",
+             "color": "rgba(177,225,248,1)"
+            },
+            {
+             "value": "4001333333333334",
+             "color": "rgba(176,224,248,1)"
+            },
+            {
+             "value": "400199999999999a",
+             "color": "rgba(175,223,248,1)"
+            },
+            {
+             "value": "4002000000000000",
+             "color": "rgba(174,222,247,1)"
+            },
+            {
+             "value": "4002666666666666",
+             "color": "rgba(172,222,247,1)"
+            },
+            {
+             "value": "4002cccccccccccc",
+             "color": "rgba(171,221,247,1)"
+            },
+            {
+             "value": "4003333333333332",
+             "color": "rgba(170,220,247,1)"
+            },
+            {
+             "value": "4003999999999998",
+             "color": "rgba(169,219,247,1)"
+            },
+            {
+             "value": "4003fffffffffffe",
+             "color": "rgba(168,219,247,1)"
+            },
+            {
+             "value": "4004666666666664",
+             "color": "rgba(167,218,246,1)"
+            },
+            {
+             "value": "4004ccccccccccca",
+             "color": "rgba(166,217,246,1)"
+            },
+            {
+             "value": "4005333333333330",
+             "color": "rgba(165,217,246,1)"
+            },
+            {
+             "value": "4005999999999996",
+             "color": "rgba(164,216,246,1)"
+            },
+            {
+             "value": "4005fffffffffffc",
+             "color": "rgba(162,215,246,1)"
+            },
+            {
+             "value": "4006666666666662",
+             "color": "rgba(161,214,245,1)"
+            },
+            {
+             "value": "4006ccccccccccc8",
+             "color": "rgba(160,214,245,1)"
+            },
+            {
+             "value": "400733333333332e",
+             "color": "rgba(159,213,245,1)"
+            },
+            {
+             "value": "4007999999999994",
+             "color": "rgba(158,212,245,1)"
+            },
+            {
+             "value": "4007fffffffffffa",
+             "color": "rgba(157,212,245,1)"
+            },
+            {
+             "value": "4008666666666660",
+             "color": "rgba(156,211,245,1)"
+            },
+            {
+             "value": "4008ccccccccccc6",
+             "color": "rgba(155,210,244,1)"
+            },
+            {
+             "value": "400933333333332c",
+             "color": "rgba(153,209,244,1)"
+            },
+            {
+             "value": "4009999999999992",
+             "color": "rgba(152,209,244,1)"
+            },
+            {
+             "value": "4009fffffffffff8",
+             "color": "rgba(151,208,244,1)"
+            },
+            {
+             "value": "400a66666666665e",
+             "color": "rgba(150,207,244,1)"
+            },
+            {
+             "value": "400accccccccccc4",
+             "color": "rgba(149,206,244,1)"
+            },
+            {
+             "value": "400b33333333332a",
+             "color": "rgba(148,206,243,1)"
+            },
+            {
+             "value": "400b999999999990",
+             "color": "rgba(147,205,243,1)"
+            },
+            {
+             "value": "400bfffffffffff6",
+             "color": "rgba(146,204,243,1)"
+            },
+            {
+             "value": "400c66666666665c",
+             "color": "rgba(144,204,243,1)"
+            },
+            {
+             "value": "400cccccccccccc2",
+             "color": "rgba(143,203,243,1)"
+            },
+            {
+             "value": "400d333333333328",
+             "color": "rgba(142,202,243,1)"
+            },
+            {
+             "value": "400d99999999998e",
+             "color": "rgba(141,201,242,1)"
+            },
+            {
+             "value": "400dfffffffffff4",
+             "color": "rgba(140,201,242,1)"
+            },
+            {
+             "value": "400e66666666665a",
+             "color": "rgba(139,200,242,1)"
+            },
+            {
+             "value": "400eccccccccccc0",
+             "color": "rgba(138,199,242,1)"
+            },
+            {
+             "value": "400f333333333326",
+             "color": "rgba(137,198,242,1)"
+            },
+            {
+             "value": "400f99999999998c",
+             "color": "rgba(136,198,242,1)"
+            },
+            {
+             "value": "400ffffffffffff2",
+             "color": "rgba(134,197,241,1)"
+            },
+            {
+             "value": "401033333333332c",
+             "color": "rgba(133,196,241,1)"
+            },
+            {
+             "value": "401066666666665f",
+             "color": "rgba(132,196,241,1)"
+            },
+            {
+             "value": "4010999999999992",
+             "color": "rgba(131,195,241,1)"
+            },
+            {
+             "value": "4010ccccccccccc5",
+             "color": "rgba(130,194,241,1)"
+            },
+            {
+             "value": "4010fffffffffff8",
+             "color": "rgba(129,193,241,1)"
+            },
+            {
+             "value": "401133333333332b",
+             "color": "rgba(128,193,240,1)"
+            },
+            {
+             "value": "401166666666665e",
+             "color": "rgba(127,192,240,1)"
+            },
+            {
+             "value": "4011999999999991",
+             "color": "rgba(125,191,240,1)"
+            },
+            {
+             "value": "4011ccccccccccc4",
+             "color": "rgba(124,190,240,1)"
+            },
+            {
+             "value": "4011fffffffffff7",
+             "color": "rgba(123,190,240,1)"
+            },
+            {
+             "value": "401233333333332a",
+             "color": "rgba(122,189,240,1)"
+            },
+            {
+             "value": "401266666666665d",
+             "color": "rgba(121,188,239,1)"
+            },
+            {
+             "value": "4012999999999990",
+             "color": "rgba(120,188,239,1)"
+            },
+            {
+             "value": "4012ccccccccccc3",
+             "color": "rgba(119,187,239,1)"
+            },
+            {
+             "value": "4012fffffffffff6",
+             "color": "rgba(118,186,239,1)"
+            },
+            {
+             "value": "4013333333333329",
+             "color": "rgba(116,185,239,1)"
+            },
+            {
+             "value": "401366666666665c",
+             "color": "rgba(115,185,239,1)"
+            },
+            {
+             "value": "401399999999998f",
+             "color": "rgba(114,184,238,1)"
+            },
+            {
+             "value": "4013ccccccccccc2",
+             "color": "rgba(113,183,238,1)"
+            },
+            {
+             "value": "4013fffffffffff5",
+             "color": "rgba(112,183,238,1)"
+            },
+            {
+             "value": "4014333333333328",
+             "color": "rgba(111,182,238,1)"
+            },
+            {
+             "value": "401466666666665b",
+             "color": "rgba(110,181,238,1)"
+            },
+            {
+             "value": "401499999999998e",
+             "color": "rgba(109,180,237,1)"
+            },
+            {
+             "value": "4014ccccccccccc1",
+             "color": "rgba(108,180,237,1)"
+            },
+            {
+             "value": "4014fffffffffff4",
+             "color": "rgba(106,179,237,1)"
+            },
+            {
+             "value": "4015333333333327",
+             "color": "rgba(105,178,237,1)"
+            },
+            {
+             "value": "401566666666665a",
+             "color": "rgba(104,177,237,1)"
+            },
+            {
+             "value": "401599999999998d",
+             "color": "rgba(103,177,237,1)"
+            },
+            {
+             "value": "4015ccccccccccc0",
+             "color": "rgba(102,176,236,1)"
+            },
+            {
+             "value": "4015fffffffffff3",
+             "color": "rgba(101,175,236,1)"
+            },
+            {
+             "value": "4016333333333326",
+             "color": "rgba(100,175,236,1)"
+            },
+            {
+             "value": "4016666666666659",
+             "color": "rgba(99,174,236,1)"
+            },
+            {
+             "value": "401699999999998c",
+             "color": "rgba(97,173,236,1)"
+            },
+            {
+             "value": "4016ccccccccccbf",
+             "color": "rgba(96,172,236,1)"
+            },
+            {
+             "value": "4016fffffffffff2",
+             "color": "rgba(95,172,235,1)"
+            },
+            {
+             "value": "4017333333333325",
+             "color": "rgba(94,171,235,1)"
+            },
+            {
+             "value": "4017666666666658",
+             "color": "rgba(93,170,235,1)"
+            },
+            {
+             "value": "401799999999998b",
+             "color": "rgba(92,169,235,1)"
+            },
+            {
+             "value": "4017ccccccccccbe",
+             "color": "rgba(91,169,235,1)"
+            },
+            {
+             "value": "4017fffffffffff1",
+             "color": "rgba(90,168,235,1)"
+            },
+            {
+             "value": "4018333333333324",
+             "color": "rgba(88,167,234,1)"
+            },
+            {
+             "value": "4018666666666657",
+             "color": "rgba(87,167,234,1)"
+            },
+            {
+             "value": "401899999999998a",
+             "color": "rgba(86,166,234,1)"
+            },
+            {
+             "value": "4018ccccccccccbd",
+             "color": "rgba(85,165,234,1)"
+            },
+            {
+             "value": "4018fffffffffff0",
+             "color": "rgba(84,164,234,1)"
+            },
+            {
+             "value": "4019333333333323",
+             "color": "rgba(83,164,234,1)"
+            },
+            {
+             "value": "4019666666666656",
+             "color": "rgba(82,163,233,1)"
+            },
+            {
+             "value": "4019999999999989",
+             "color": "rgba(81,162,233,1)"
+            },
+            {
+             "value": "4019ccccccccccbc",
+             "color": "rgba(80,161,233,1)"
+            },
+            {
+             "value": "4019ffffffffffef",
+             "color": "rgba(78,161,233,1)"
+            },
+            {
+             "value": "401a333333333322",
+             "color": "rgba(77,160,233,1)"
+            },
+            {
+             "value": "401a666666666655",
+             "color": "rgba(76,159,233,1)"
+            },
+            {
+             "value": "401a999999999988",
+             "color": "rgba(75,159,232,1)"
+            },
+            {
+             "value": "401accccccccccbb",
+             "color": "rgba(74,158,232,1)"
+            },
+            {
+             "value": "401affffffffffee",
+             "color": "rgba(73,157,232,1)"
+            },
+            {
+             "value": "401b333333333321",
+             "color": "rgba(72,156,232,1)"
+            },
+            {
+             "value": "401b666666666654",
+             "color": "rgba(71,156,232,1)"
+            },
+            {
+             "value": "401b999999999987",
+             "color": "rgba(69,155,232,1)"
+            },
+            {
+             "value": "401bccccccccccba",
+             "color": "rgba(68,154,231,1)"
+            },
+            {
+             "value": "401bffffffffffed",
+             "color": "rgba(67,154,231,1)"
+            },
+            {
+             "value": "401c333333333320",
+             "color": "rgba(66,153,231,1)"
+            },
+            {
+             "value": "401c666666666653",
+             "color": "rgba(65,152,231,1)"
+            },
+            {
+             "value": "401c999999999986",
+             "color": "rgba(64,151,231,1)"
+            },
+            {
+             "value": "401cccccccccccb9",
+             "color": "rgba(63,151,231,1)"
+            },
+            {
+             "value": "401cffffffffffec",
+             "color": "rgba(62,150,230,1)"
+            },
+            {
+             "value": "401d33333333331f",
+             "color": "rgba(60,149,230,1)"
+            },
+            {
+             "value": "401d666666666652",
+             "color": "rgba(59,148,230,1)"
+            },
+            {
+             "value": "401d999999999985",
+             "color": "rgba(58,148,230,1)"
+            },
+            {
+             "value": "401dccccccccccb8",
+             "color": "rgba(57,147,230,1)"
+            },
+            {
+             "value": "401dffffffffffeb",
+             "color": "rgba(56,146,230,1)"
+            },
+            {
+             "value": "401e33333333331e",
+             "color": "rgba(55,146,229,1)"
+            },
+            {
+             "value": "401e666666666651",
+             "color": "rgba(54,145,229,1)"
+            },
+            {
+             "value": "401e999999999984",
+             "color": "rgba(53,144,229,1)"
+            },
+            {
+             "value": "401eccccccccccb7",
+             "color": "rgba(52,143,229,1)"
+            },
+            {
+             "value": "401effffffffffea",
+             "color": "rgba(50,143,229,1)"
+            },
+            {
+             "value": "401f33333333331d",
+             "color": "rgba(49,142,228,1)"
+            },
+            {
+             "value": "401f666666666650",
+             "color": "rgba(48,141,228,1)"
+            },
+            {
+             "value": "401f999999999983",
+             "color": "rgba(47,140,228,1)"
+            },
+            {
+             "value": "401fccccccccccb6",
+             "color": "rgba(46,140,228,1)"
+            },
+            {
+             "value": "401fffffffffffe9",
+             "color": "rgba(45,139,228,1)"
+            },
+            {
+             "value": "402019999999998e",
+             "color": "rgba(44,138,228,1)"
+            },
+            {
+             "value": "4020333333333328",
+             "color": "rgba(43,138,227,1)"
+            },
+            {
+             "value": "40204cccccccccc2",
+             "color": "rgba(41,137,227,1)"
+            },
+            {
+             "value": "402066666666665c",
+             "color": "rgba(40,136,227,1)"
+            },
+            {
+             "value": "40207ffffffffff6",
+             "color": "rgba(39,135,227,1)"
+            },
+            {
+             "value": "4020999999999990",
+             "color": "rgba(38,135,227,1)"
+            },
+            {
+             "value": "4020b3333333332a",
+             "color": "rgba(37,134,227,1)"
+            },
+            {
+             "value": "4020ccccccccccc4",
+             "color": "rgba(36,133,226,1)"
+            },
+            {
+             "value": "4020e6666666665e",
+             "color": "rgba(35,132,226,1)"
+            },
+            {
+             "value": "4020fffffffffff8",
+             "color": "rgba(34,132,226,1)"
+            },
+            {
+             "value": "4021199999999992",
+             "color": "rgba(32,131,226,1)"
+            },
+            {
+             "value": "402133333333332c",
+             "color": "rgba(31,130,226,1)"
+            },
+            {
+             "value": "40214cccccccccc6",
+             "color": "rgba(30,130,226,1)"
+            },
+            {
+             "value": "4021666666666660",
+             "color": "rgba(29,129,225,1)"
+            },
+            {
+             "value": "40217ffffffffffa",
+             "color": "rgba(28,128,225,1)"
+            },
+            {
+             "value": "4021999999999994",
+             "color": "rgba(27,127,225,1)"
+            },
+            {
+             "value": "4021b3333333332e",
+             "color": "rgba(26,127,225,1)"
+            },
+            {
+             "value": "4021ccccccccccc8",
+             "color": "rgba(25,126,225,1)"
+            },
+            {
+             "value": "4021e66666666662",
+             "color": "rgba(24,125,225,1)"
+            },
+            {
+             "value": "4021fffffffffffc",
+             "color": "rgba(22,125,224,1)"
+            },
+            {
+             "value": "4022199999999996",
+             "color": "rgba(21,124,224,1)"
+            },
+            {
+             "value": "4022333333333330",
+             "color": "rgba(20,123,224,1)"
+            },
+            {
+             "value": "40224cccccccccca",
+             "color": "rgba(19,122,224,1)"
+            },
+            {
+             "value": "4022666666666664",
+             "color": "rgba(18,122,224,1)"
+            },
+            {
+             "value": "40227ffffffffffe",
+             "color": "rgba(17,121,224,1)"
+            },
+            {
+             "value": "4022999999999998",
+             "color": "rgba(16,120,223,1)"
+            },
+            {
+             "value": "4022b33333333332",
+             "color": "rgba(15,119,223,1)"
+            },
+            {
+             "value": "4022cccccccccccc",
+             "color": "rgba(13,119,223,1)"
+            },
+            {
+             "value": "4022e66666666666",
+             "color": "rgba(12,118,223,1)"
+            },
+            {
+             "value": "4023000000000000",
+             "color": "rgba(11,117,223,1)"
+            },
+            {
+             "value": "402319999999999a",
+             "color": "rgba(10,117,223,1)"
+            },
+            {
+             "value": "4023333333333334",
+             "color": "rgba(9,116,222,1)"
+            },
+            {
+             "value": "40234cccccccccce",
+             "color": "rgba(8,115,222,1)"
+            },
+            {
+             "value": "4023666666666668",
+             "color": "rgba(7,114,222,1)"
+            },
+            {
+             "value": "4023800000000002",
+             "color": "rgba(6,114,222,1)"
+            },
+            {
+             "value": "402399999999999c",
+             "color": "rgba(4,113,222,1)"
+            },
+            {
+             "value": "4023b33333333336",
+             "color": "rgba(3,112,222,1)"
+            },
+            {
+             "value": "4023ccccccccccd0",
+             "color": "rgba(2,111,221,1)"
+            },
+            {
+             "value": "4023e6666666666a",
+             "color": "rgba(1,111,221,1)"
+            },
+            {
+             "value": "4024000000000000",
+             "color": "rgba(0,110,221,1)"
+            }
+           ],
+           "outerColors": [
+            "rgba(224,255,255,1)",
+            "rgba(0,110,221,1)"
+           ],
+           "dimension": "4000000000000000"
+          },
+          {
+           "stops": [
+            {
+             "value": "0000000000000000",
+             "color": "red"
+            },
+            {
+             "value": "4014000000000000",
+             "color": "red"
+            }
+           ],
+           "outerColors": [
+            "rgba(0,0,0,0)",
+            "#00ff00"
+           ],
+           "dimension": "3ff0000000000000"
+          },
+          {
+           "stops": [
+            {
+             "value": "4000000000000000",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "40003d70a3d70a3d",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "40007ae147ae147a",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4000b851eb851eb7",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4000f5c28f5c28f4",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4001333333333331",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "400170a3d70a3d6e",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4001ae147ae147ab",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4001eb851eb851e8",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "400228f5c28f5c25",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4002666666666662",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4002a3d70a3d709f",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4002e147ae147adc",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "40031eb851eb8519",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "40035c28f5c28f56",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4003999999999993",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4003d70a3d70a3d0",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4004147ae147ae0d",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "400451eb851eb84a",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "40048f5c28f5c287",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4004ccccccccccc4",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "40050a3d70a3d701",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "400547ae147ae13e",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4005851eb851eb7b",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4005c28f5c28f5b8",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4005fffffffffff5",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "40063d70a3d70a32",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "40067ae147ae146f",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4006b851eb851eac",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4006f5c28f5c28e9",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4007333333333326",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "400770a3d70a3d63",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4007ae147ae147a0",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4007eb851eb851dd",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4008000000000000",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4008000000000000",
+             "color": "rgba(85,85,85,1)"
+            },
+            {
+             "value": "40081eb851eb851f",
+             "color": "rgba(86,86,86,1)"
+            },
+            {
+             "value": "40083d70a3d70a3e",
+             "color": "rgba(88,88,88,1)"
+            },
+            {
+             "value": "40085c28f5c28f5d",
+             "color": "rgba(89,89,89,1)"
+            },
+            {
+             "value": "40087ae147ae147c",
+             "color": "rgba(90,90,90,1)"
+            },
+            {
+             "value": "400899999999999b",
+             "color": "rgba(91,91,91,1)"
+            },
+            {
+             "value": "4008b851eb851eba",
+             "color": "rgba(93,93,93,1)"
+            },
+            {
+             "value": "4008d70a3d70a3d9",
+             "color": "rgba(94,94,94,1)"
+            },
+            {
+             "value": "4008f5c28f5c28f8",
+             "color": "rgba(95,95,95,1)"
+            },
+            {
+             "value": "4009147ae147ae17",
+             "color": "rgba(96,96,96,1)"
+            },
+            {
+             "value": "4009333333333336",
+             "color": "rgba(98,98,98,1)"
+            },
+            {
+             "value": "400951eb851eb855",
+             "color": "rgba(99,99,99,1)"
+            },
+            {
+             "value": "400970a3d70a3d74",
+             "color": "rgba(100,100,100,1)"
+            },
+            {
+             "value": "40098f5c28f5c293",
+             "color": "rgba(102,102,102,1)"
+            },
+            {
+             "value": "4009ae147ae147b2",
+             "color": "rgba(103,103,103,1)"
+            },
+            {
+             "value": "4009ccccccccccd1",
+             "color": "rgba(104,104,104,1)"
+            },
+            {
+             "value": "4009eb851eb851f0",
+             "color": "rgba(105,105,105,1)"
+            },
+            {
+             "value": "400a0a3d70a3d70f",
+             "color": "rgba(107,107,107,1)"
+            },
+            {
+             "value": "400a28f5c28f5c2e",
+             "color": "rgba(108,108,108,1)"
+            },
+            {
+             "value": "400a47ae147ae14d",
+             "color": "rgba(109,109,109,1)"
+            },
+            {
+             "value": "400a66666666666c",
+             "color": "rgba(111,111,111,1)"
+            },
+            {
+             "value": "400a851eb851eb8b",
+             "color": "rgba(112,112,112,1)"
+            },
+            {
+             "value": "400aa3d70a3d70aa",
+             "color": "rgba(113,113,113,1)"
+            },
+            {
+             "value": "400ac28f5c28f5c9",
+             "color": "rgba(114,114,114,1)"
+            },
+            {
+             "value": "400ae147ae147ae8",
+             "color": "rgba(116,116,116,1)"
+            },
+            {
+             "value": "400b000000000007",
+             "color": "rgba(117,117,117,1)"
+            },
+            {
+             "value": "400b1eb851eb8526",
+             "color": "rgba(118,118,118,1)"
+            },
+            {
+             "value": "400b3d70a3d70a45",
+             "color": "rgba(119,119,119,1)"
+            },
+            {
+             "value": "400b5c28f5c28f64",
+             "color": "rgba(121,121,121,1)"
+            },
+            {
+             "value": "400b7ae147ae1483",
+             "color": "rgba(122,122,122,1)"
+            },
+            {
+             "value": "400b9999999999a2",
+             "color": "rgba(123,123,123,1)"
+            },
+            {
+             "value": "400bb851eb851ec1",
+             "color": "rgba(125,125,125,1)"
+            },
+            {
+             "value": "400bd70a3d70a3e0",
+             "color": "rgba(126,126,126,1)"
+            },
+            {
+             "value": "400bf5c28f5c28ff",
+             "color": "rgba(127,127,127,1)"
+            },
+            {
+             "value": "400c147ae147ae1e",
+             "color": "rgba(128,128,128,1)"
+            },
+            {
+             "value": "400c33333333333d",
+             "color": "rgba(130,130,130,1)"
+            },
+            {
+             "value": "400c51eb851eb85c",
+             "color": "rgba(131,131,131,1)"
+            },
+            {
+             "value": "400c70a3d70a3d7b",
+             "color": "rgba(132,132,132,1)"
+            },
+            {
+             "value": "400c8f5c28f5c29a",
+             "color": "rgba(133,133,133,1)"
+            },
+            {
+             "value": "400cae147ae147b9",
+             "color": "rgba(135,135,135,1)"
+            },
+            {
+             "value": "400cccccccccccd8",
+             "color": "rgba(136,136,136,1)"
+            },
+            {
+             "value": "400ceb851eb851f7",
+             "color": "rgba(137,137,137,1)"
+            },
+            {
+             "value": "400d0a3d70a3d716",
+             "color": "rgba(139,139,139,1)"
+            },
+            {
+             "value": "400d28f5c28f5c35",
+             "color": "rgba(140,140,140,1)"
+            },
+            {
+             "value": "400d47ae147ae154",
+             "color": "rgba(141,141,141,1)"
+            },
+            {
+             "value": "400d666666666673",
+             "color": "rgba(142,142,142,1)"
+            },
+            {
+             "value": "400d851eb851eb92",
+             "color": "rgba(144,144,144,1)"
+            },
+            {
+             "value": "400da3d70a3d70b1",
+             "color": "rgba(145,145,145,1)"
+            },
+            {
+             "value": "400dc28f5c28f5d0",
+             "color": "rgba(146,146,146,1)"
+            },
+            {
+             "value": "400de147ae147aef",
+             "color": "rgba(147,147,147,1)"
+            },
+            {
+             "value": "400e00000000000e",
+             "color": "rgba(149,149,149,1)"
+            },
+            {
+             "value": "400e1eb851eb852d",
+             "color": "rgba(150,150,150,1)"
+            },
+            {
+             "value": "400e3d70a3d70a4c",
+             "color": "rgba(151,151,151,1)"
+            },
+            {
+             "value": "400e5c28f5c28f6b",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "400e7ae147ae148a",
+             "color": "rgba(154,154,154,1)"
+            },
+            {
+             "value": "400e9999999999a9",
+             "color": "rgba(155,155,155,1)"
+            },
+            {
+             "value": "400eb851eb851ec8",
+             "color": "rgba(156,156,156,1)"
+            },
+            {
+             "value": "400ed70a3d70a3e7",
+             "color": "rgba(158,158,158,1)"
+            },
+            {
+             "value": "400ef5c28f5c2906",
+             "color": "rgba(159,159,159,1)"
+            },
+            {
+             "value": "400f147ae147ae25",
+             "color": "rgba(160,160,160,1)"
+            },
+            {
+             "value": "400f333333333344",
+             "color": "rgba(162,162,162,1)"
+            },
+            {
+             "value": "400f51eb851eb863",
+             "color": "rgba(163,163,163,1)"
+            },
+            {
+             "value": "400f70a3d70a3d82",
+             "color": "rgba(164,164,164,1)"
+            },
+            {
+             "value": "400f8f5c28f5c2a1",
+             "color": "rgba(165,165,165,1)"
+            },
+            {
+             "value": "400fae147ae147c0",
+             "color": "rgba(167,167,167,1)"
+            },
+            {
+             "value": "400fccccccccccdf",
+             "color": "rgba(168,168,168,1)"
+            },
+            {
+             "value": "400feb851eb851fe",
+             "color": "rgba(169,169,169,1)"
+            },
+            {
+             "value": "4010051eb851eb8e",
+             "color": "rgba(170,170,170,1)"
+            },
+            {
+             "value": "4010147ae147ae1d",
+             "color": "rgba(172,172,172,1)"
+            },
+            {
+             "value": "401023d70a3d70ac",
+             "color": "rgba(173,173,173,1)"
+            },
+            {
+             "value": "401033333333333b",
+             "color": "rgba(174,174,174,1)"
+            },
+            {
+             "value": "4010428f5c28f5ca",
+             "color": "rgba(176,176,176,1)"
+            },
+            {
+             "value": "401051eb851eb859",
+             "color": "rgba(177,177,177,1)"
+            },
+            {
+             "value": "40106147ae147ae8",
+             "color": "rgba(178,178,178,1)"
+            },
+            {
+             "value": "401070a3d70a3d77",
+             "color": "rgba(179,179,179,1)"
+            },
+            {
+             "value": "4010800000000006",
+             "color": "rgba(181,181,181,1)"
+            },
+            {
+             "value": "40108f5c28f5c295",
+             "color": "rgba(182,182,182,1)"
+            },
+            {
+             "value": "40109eb851eb8524",
+             "color": "rgba(183,183,183,1)"
+            },
+            {
+             "value": "4010ae147ae147b3",
+             "color": "rgba(184,184,184,1)"
+            },
+            {
+             "value": "4010bd70a3d70a42",
+             "color": "rgba(186,186,186,1)"
+            },
+            {
+             "value": "4010ccccccccccd1",
+             "color": "rgba(187,187,187,1)"
+            },
+            {
+             "value": "4010dc28f5c28f60",
+             "color": "rgba(188,188,188,1)"
+            },
+            {
+             "value": "4010eb851eb851ef",
+             "color": "rgba(190,190,190,1)"
+            },
+            {
+             "value": "4010fae147ae147e",
+             "color": "rgba(191,191,191,1)"
+            },
+            {
+             "value": "40110a3d70a3d70d",
+             "color": "rgba(192,192,192,1)"
+            },
+            {
+             "value": "401119999999999c",
+             "color": "rgba(193,193,193,1)"
+            },
+            {
+             "value": "401128f5c28f5c2b",
+             "color": "rgba(195,195,195,1)"
+            },
+            {
+             "value": "40113851eb851eba",
+             "color": "rgba(196,196,196,1)"
+            },
+            {
+             "value": "401147ae147ae149",
+             "color": "rgba(197,197,197,1)"
+            },
+            {
+             "value": "4011570a3d70a3d8",
+             "color": "rgba(198,198,198,1)"
+            },
+            {
+             "value": "4011666666666667",
+             "color": "rgba(200,200,200,1)"
+            },
+            {
+             "value": "401175c28f5c28f6",
+             "color": "rgba(201,201,201,1)"
+            },
+            {
+             "value": "4011851eb851eb85",
+             "color": "rgba(202,202,202,1)"
+            },
+            {
+             "value": "4011947ae147ae14",
+             "color": "rgba(204,204,204,1)"
+            },
+            {
+             "value": "4011a3d70a3d70a3",
+             "color": "rgba(205,205,205,1)"
+            },
+            {
+             "value": "4011b33333333332",
+             "color": "rgba(206,206,206,1)"
+            },
+            {
+             "value": "4011c28f5c28f5c1",
+             "color": "rgba(207,207,207,1)"
+            },
+            {
+             "value": "4011d1eb851eb850",
+             "color": "rgba(209,209,209,1)"
+            },
+            {
+             "value": "4011e147ae147adf",
+             "color": "rgba(210,210,210,1)"
+            },
+            {
+             "value": "4011f0a3d70a3d6e",
+             "color": "rgba(211,211,211,1)"
+            },
+            {
+             "value": "4011fffffffffffd",
+             "color": "rgba(212,212,212,1)"
+            },
+            {
+             "value": "40120f5c28f5c28c",
+             "color": "rgba(214,214,214,1)"
+            },
+            {
+             "value": "40121eb851eb851b",
+             "color": "rgba(215,215,215,1)"
+            },
+            {
+             "value": "40122e147ae147aa",
+             "color": "rgba(216,216,216,1)"
+            },
+            {
+             "value": "40123d70a3d70a39",
+             "color": "rgba(218,218,218,1)"
+            },
+            {
+             "value": "40124cccccccccc8",
+             "color": "rgba(219,219,219,1)"
+            },
+            {
+             "value": "40125c28f5c28f57",
+             "color": "rgba(220,220,220,1)"
+            },
+            {
+             "value": "40126b851eb851e6",
+             "color": "rgba(221,221,221,1)"
+            },
+            {
+             "value": "40127ae147ae1475",
+             "color": "rgba(223,223,223,1)"
+            },
+            {
+             "value": "40128a3d70a3d704",
+             "color": "rgba(224,224,224,1)"
+            },
+            {
+             "value": "4012999999999993",
+             "color": "rgba(225,225,225,1)"
+            },
+            {
+             "value": "4012a8f5c28f5c22",
+             "color": "rgba(227,227,227,1)"
+            },
+            {
+             "value": "4012b851eb851eb1",
+             "color": "rgba(228,228,228,1)"
+            },
+            {
+             "value": "4012c7ae147ae140",
+             "color": "rgba(229,229,229,1)"
+            },
+            {
+             "value": "4012d70a3d70a3cf",
+             "color": "rgba(230,230,230,1)"
+            },
+            {
+             "value": "4012e6666666665e",
+             "color": "rgba(232,232,232,1)"
+            },
+            {
+             "value": "4012f5c28f5c28ed",
+             "color": "rgba(233,233,233,1)"
+            },
+            {
+             "value": "4013051eb851eb7c",
+             "color": "rgba(234,234,234,1)"
+            },
+            {
+             "value": "4013147ae147ae0b",
+             "color": "rgba(235,235,235,1)"
+            },
+            {
+             "value": "401323d70a3d709a",
+             "color": "rgba(237,237,237,1)"
+            },
+            {
+             "value": "4013333333333329",
+             "color": "rgba(238,238,238,1)"
+            },
+            {
+             "value": "4013428f5c28f5b8",
+             "color": "rgba(239,239,239,1)"
+            },
+            {
+             "value": "401351eb851eb847",
+             "color": "rgba(241,241,241,1)"
+            },
+            {
+             "value": "40136147ae147ad6",
+             "color": "rgba(242,242,242,1)"
+            },
+            {
+             "value": "401370a3d70a3d65",
+             "color": "rgba(243,243,243,1)"
+            },
+            {
+             "value": "40137ffffffffff4",
+             "color": "rgba(244,244,244,1)"
+            },
+            {
+             "value": "40138f5c28f5c283",
+             "color": "rgba(246,246,246,1)"
+            },
+            {
+             "value": "40139eb851eb8512",
+             "color": "rgba(247,247,247,1)"
+            },
+            {
+             "value": "4013ae147ae147a1",
+             "color": "rgba(248,248,248,1)"
+            },
+            {
+             "value": "4013bd70a3d70a30",
+             "color": "rgba(249,249,249,1)"
+            },
+            {
+             "value": "4013ccccccccccbf",
+             "color": "rgba(251,251,251,1)"
+            },
+            {
+             "value": "4013dc28f5c28f4e",
+             "color": "rgba(252,252,252,1)"
+            },
+            {
+             "value": "4013eb851eb851dd",
+             "color": "rgba(253,253,253,1)"
+            },
+            {
+             "value": "4013fae147ae146c",
+             "color": "rgba(255,255,255,1)"
+            },
+            {
+             "value": "40140a3d70a3d6fb",
+             "color": "rgba(255,254,254,0.9983333333333356)"
+            },
+            {
+             "value": "401419999999998a",
+             "color": "rgba(255,253,253,0.9958333333333357)"
+            },
+            {
+             "value": "401428f5c28f5c19",
+             "color": "rgba(255,252,252,0.9933333333333357)"
+            },
+            {
+             "value": "40143851eb851ea8",
+             "color": "rgba(255,250,250,0.9908333333333358)"
+            },
+            {
+             "value": "401447ae147ae137",
+             "color": "rgba(255,249,249,0.9883333333333358)"
+            },
+            {
+             "value": "4014570a3d70a3c6",
+             "color": "rgba(255,248,248,0.9858333333333359)"
+            },
+            {
+             "value": "4014666666666655",
+             "color": "rgba(255,247,247,0.983333333333336)"
+            },
+            {
+             "value": "401475c28f5c28e4",
+             "color": "rgba(255,245,245,0.980833333333336)"
+            },
+            {
+             "value": "4014851eb851eb73",
+             "color": "rgba(255,244,244,0.978333333333336)"
+            },
+            {
+             "value": "4014947ae147ae02",
+             "color": "rgba(255,243,243,0.9758333333333361)"
+            },
+            {
+             "value": "4014a3d70a3d7091",
+             "color": "rgba(255,241,241,0.9733333333333362)"
+            },
+            {
+             "value": "4014b33333333320",
+             "color": "rgba(255,240,240,0.9708333333333362)"
+            },
+            {
+             "value": "4014c28f5c28f5af",
+             "color": "rgba(255,239,239,0.9683333333333363)"
+            },
+            {
+             "value": "4014d1eb851eb83e",
+             "color": "rgba(255,238,238,0.9658333333333363)"
+            },
+            {
+             "value": "4014e147ae147acd",
+             "color": "rgba(255,236,236,0.9633333333333364)"
+            },
+            {
+             "value": "4014f0a3d70a3d5c",
+             "color": "rgba(255,235,235,0.9608333333333364)"
+            },
+            {
+             "value": "4014ffffffffffeb",
+             "color": "rgba(255,234,234,0.9583333333333365)"
+            },
+            {
+             "value": "40150f5c28f5c27a",
+             "color": "rgba(255,232,232,0.9558333333333365)"
+            },
+            {
+             "value": "40151eb851eb8509",
+             "color": "rgba(255,231,231,0.9533333333333366)"
+            },
+            {
+             "value": "40152e147ae14798",
+             "color": "rgba(255,230,230,0.9508333333333366)"
+            },
+            {
+             "value": "40153d70a3d70a27",
+             "color": "rgba(255,229,229,0.9483333333333367)"
+            },
+            {
+             "value": "40154cccccccccb6",
+             "color": "rgba(255,227,227,0.9458333333333367)"
+            },
+            {
+             "value": "40155c28f5c28f45",
+             "color": "rgba(255,226,226,0.9433333333333368)"
+            },
+            {
+             "value": "40156b851eb851d4",
+             "color": "rgba(255,225,225,0.9408333333333369)"
+            },
+            {
+             "value": "40157ae147ae1463",
+             "color": "rgba(255,224,224,0.9383333333333369)"
+            },
+            {
+             "value": "40158a3d70a3d6f2",
+             "color": "rgba(255,222,222,0.935833333333337)"
+            },
+            {
+             "value": "4015999999999981",
+             "color": "rgba(255,221,221,0.933333333333337)"
+            },
+            {
+             "value": "4015a8f5c28f5c10",
+             "color": "rgba(255,220,220,0.9308333333333371)"
+            },
+            {
+             "value": "4015b851eb851e9f",
+             "color": "rgba(255,218,218,0.9283333333333371)"
+            },
+            {
+             "value": "4015c7ae147ae12e",
+             "color": "rgba(255,217,217,0.9258333333333372)"
+            },
+            {
+             "value": "4015d70a3d70a3bd",
+             "color": "rgba(255,216,216,0.9233333333333372)"
+            },
+            {
+             "value": "4015e6666666664c",
+             "color": "rgba(255,215,215,0.9208333333333373)"
+            },
+            {
+             "value": "4015f5c28f5c28db",
+             "color": "rgba(255,213,213,0.9183333333333373)"
+            },
+            {
+             "value": "4016051eb851eb6a",
+             "color": "rgba(255,212,212,0.9158333333333374)"
+            },
+            {
+             "value": "4016147ae147adf9",
+             "color": "rgba(255,211,211,0.9133333333333374)"
+            },
+            {
+             "value": "401623d70a3d7088",
+             "color": "rgba(255,210,210,0.9108333333333375)"
+            },
+            {
+             "value": "4016333333333317",
+             "color": "rgba(255,208,208,0.9083333333333375)"
+            },
+            {
+             "value": "4016428f5c28f5a6",
+             "color": "rgba(255,207,207,0.9058333333333376)"
+            },
+            {
+             "value": "401651eb851eb835",
+             "color": "rgba(255,206,206,0.9033333333333377)"
+            },
+            {
+             "value": "40166147ae147ac4",
+             "color": "rgba(255,204,204,0.9008333333333377)"
+            },
+            {
+             "value": "401670a3d70a3d53",
+             "color": "rgba(255,203,203,0.8983333333333378)"
+            },
+            {
+             "value": "40167fffffffffe2",
+             "color": "rgba(255,202,202,0.8958333333333378)"
+            },
+            {
+             "value": "40168f5c28f5c271",
+             "color": "rgba(255,201,201,0.8933333333333379)"
+            },
+            {
+             "value": "40169eb851eb8500",
+             "color": "rgba(255,199,199,0.8908333333333379)"
+            },
+            {
+             "value": "4016ae147ae1478f",
+             "color": "rgba(255,198,198,0.888333333333338)"
+            },
+            {
+             "value": "4016bd70a3d70a1e",
+             "color": "rgba(255,197,197,0.885833333333338)"
+            },
+            {
+             "value": "4016ccccccccccad",
+             "color": "rgba(255,196,196,0.8833333333333381)"
+            },
+            {
+             "value": "4016dc28f5c28f3c",
+             "color": "rgba(255,194,194,0.8808333333333381)"
+            },
+            {
+             "value": "4016eb851eb851cb",
+             "color": "rgba(255,193,193,0.8783333333333382)"
+            },
+            {
+             "value": "4016fae147ae145a",
+             "color": "rgba(255,192,192,0.8758333333333382)"
+            },
+            {
+             "value": "40170a3d70a3d6e9",
+             "color": "rgba(255,190,190,0.8733333333333383)"
+            },
+            {
+             "value": "4017199999999978",
+             "color": "rgba(255,189,189,0.8708333333333383)"
+            },
+            {
+             "value": "401728f5c28f5c07",
+             "color": "rgba(255,188,188,0.8683333333333384)"
+            },
+            {
+             "value": "40173851eb851e96",
+             "color": "rgba(255,187,187,0.8658333333333385)"
+            },
+            {
+             "value": "401747ae147ae125",
+             "color": "rgba(255,185,185,0.8633333333333385)"
+            },
+            {
+             "value": "4017570a3d70a3b4",
+             "color": "rgba(255,184,184,0.8608333333333386)"
+            },
+            {
+             "value": "4017666666666643",
+             "color": "rgba(255,183,183,0.8583333333333386)"
+            },
+            {
+             "value": "401775c28f5c28d2",
+             "color": "rgba(255,181,181,0.8558333333333387)"
+            },
+            {
+             "value": "4017851eb851eb61",
+             "color": "rgba(255,180,180,0.8533333333333387)"
+            },
+            {
+             "value": "4017947ae147adf0",
+             "color": "rgba(255,179,179,0.8508333333333388)"
+            },
+            {
+             "value": "4017a3d70a3d707f",
+             "color": "rgba(255,178,178,0.8483333333333388)"
+            },
+            {
+             "value": "4017b3333333330e",
+             "color": "rgba(255,176,176,0.8458333333333389)"
+            },
+            {
+             "value": "4017c28f5c28f59d",
+             "color": "rgba(255,175,175,0.8433333333333389)"
+            },
+            {
+             "value": "4017d1eb851eb82c",
+             "color": "rgba(255,174,174,0.840833333333339)"
+            },
+            {
+             "value": "4017e147ae147abb",
+             "color": "rgba(255,173,173,0.838333333333339)"
+            },
+            {
+             "value": "4017f0a3d70a3d4a",
+             "color": "rgba(255,171,171,0.8358333333333391)"
+            },
+            {
+             "value": "4017ffffffffffd9",
+             "color": "rgba(255,170,170,0.8333333333333391)"
+            },
+            {
+             "value": "4018000000000000",
+             "color": "rgba(255,170,170,0.8333333333333334)"
+            },
+            {
+             "value": "4018000000000000",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4018147ae147ae19",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4018333333333338",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401851eb851eb857",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401870a3d70a3d76",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "40188f5c28f5c295",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4018ae147ae147b4",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4018ccccccccccd3",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4018eb851eb851f2",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "40190a3d70a3d711",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401928f5c28f5c30",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401947ae147ae14f",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401966666666666e",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4019851eb851eb8d",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4019a3d70a3d70ac",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4019c28f5c28f5cb",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4019e147ae147aea",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401a000000000009",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401a1eb851eb8528",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401a3d70a3d70a47",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401a5c28f5c28f66",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401a7ae147ae1485",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401a9999999999a4",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401ab851eb851ec3",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401ad70a3d70a3e2",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401af5c28f5c2901",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401b147ae147ae20",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401b33333333333f",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401b51eb851eb85e",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401b70a3d70a3d7d",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401b8f5c28f5c29c",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401bae147ae147bb",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401bccccccccccda",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401beb851eb851f9",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401c0a3d70a3d718",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401c28f5c28f5c37",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401c47ae147ae156",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401c666666666675",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401c851eb851eb94",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401ca3d70a3d70b3",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401cc28f5c28f5d2",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401ce147ae147af1",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401d000000000010",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401d1eb851eb852f",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401d3d70a3d70a4e",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401d5c28f5c28f6d",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401d7ae147ae148c",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401d9999999999ab",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401db851eb851eca",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401dd70a3d70a3e9",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401df5c28f5c2908",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401e147ae147ae27",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401e333333333346",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401e51eb851eb865",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401e70a3d70a3d84",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401e8f5c28f5c2a3",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401eae147ae147c2",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401ecccccccccce1",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401eeb851eb85200",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401f0a3d70a3d71f",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401f28f5c28f5c3e",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401f47ae147ae15d",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401f66666666667c",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401f851eb851eb9b",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401fa3d70a3d70ba",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401fc28f5c28f5d9",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "401fe147ae147af8",
+             "color": "rgba(153,153,153,1)"
+            },
+            {
+             "value": "4020000000000000",
+             "color": "rgba(153,153,153,1)"
+            }
+           ],
+           "outerColors": [
+            "rgba(153,153,153,1)",
+            "rgba(153,153,153,1)"
+           ],
+           "dimension": "0000000000000000"
+          }
+         ]
+        },
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "4014000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "4018000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "4014000000000000",
+           "4018000000000000"
+          ]
+         ],
+         "ret": [
+          "4073600000000000",
+          "4065000000000000"
+         ]
+        },
+        {
+         "fn": "visual",
+         "args": [
+          "color"
+         ],
+         "ret": "rgba(255,255,255,1)"
+        }
+       ],
+       "ret": {
+        "type": "circle",
+        "shape": {
+         "cx": "4073600000000000",
+         "cy": "4065000000000000",
+         "r": "4010000000000000"
+        },
+        "style": {
+         "fill": "rgba(255,255,255,1)"
+        }
+       }
+      },
+      {
+       "s": 1,
+       "name": "vmMeta",
+       "params": {
+        "dataIndex": 0,
+        "dataIndexInside": 0,
+        "dataInsideLength": 1,
+        "actionType": null,
+        "seriesId": "~series~1~0",
+        "seriesName": "series~1",
+        "seriesIndex": 1,
+        "coordSys": {
+         "type": "cartesian2d",
+         "x": "404e000000000000",
+         "y": "4044000000000000",
+         "width": "407f400000000000",
+         "height": "4074000000000000"
+        },
+        "encode": {
+         "x": [
+          0
+         ],
+         "y": [
+          1
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "visual",
+         "args": [
+          "visualMeta"
+         ],
+         "ret": []
+        },
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "4020000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "4020000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "4020000000000000",
+           "4020000000000000"
+          ]
+         ],
+         "ret": [
+          "407cc00000000000",
+          "405a000000000000"
+         ]
+        },
+        {
+         "fn": "visual",
+         "args": [
+          "color"
+         ],
+         "ret": "#91cc75"
+        }
+       ],
+       "ret": {
+        "type": "circle",
+        "shape": {
+         "cx": "407cc00000000000",
+         "cy": "405a000000000000",
+         "r": "4010000000000000"
+        },
+        "style": {
+         "fill": "#91cc75"
+        }
+       }
+      }
+     ],
+     "throws": null,
+     "els": [
+      {
+       "key": "s0:0",
+       "type": "circle",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": null,
+       "shape": {
+        "cx": "405b800000000000",
+        "cy": "4072800000000000",
+        "r": "4010000000000000"
+       },
+       "path": [
+        "3ff0000000000000",
+        "405c800000000000",
+        "4072800000000000",
+        "4014000000000000",
+        "405b800000000000",
+        "4072800000000000",
+        "4010000000000000",
+        "4010000000000000",
+        "0000000000000000",
+        "401921fb54442d18",
+        "0000000000000000",
+        "3ff0000000000000"
+       ],
+       "style": {
+        "fill": "rgba(153,153,153,1)",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 0
+       },
+       "info": null
+      },
+      {
+       "key": "s0:1",
+       "type": "circle",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": null,
+       "shape": {
+        "cx": "4073600000000000",
+        "cy": "4065000000000000",
+        "r": "4010000000000000"
+       },
+       "path": [
+        "3ff0000000000000",
+        "4073a00000000000",
+        "4065000000000000",
+        "4014000000000000",
+        "4073600000000000",
+        "4065000000000000",
+        "4010000000000000",
+        "4010000000000000",
+        "0000000000000000",
+        "401921fb54442d18",
+        "0000000000000000",
+        "3ff0000000000000"
+       ],
+       "style": {
+        "fill": "rgba(255,255,255,1)",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 1
+       },
+       "info": null
+      },
+      {
+       "key": "s1:0",
+       "type": "circle",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": null,
+       "shape": {
+        "cx": "407cc00000000000",
+        "cy": "405a000000000000",
+        "r": "4010000000000000"
+       },
+       "path": [
+        "3ff0000000000000",
+        "407d000000000000",
+        "405a000000000000",
+        "4014000000000000",
+        "407cc00000000000",
+        "405a000000000000",
+        "4010000000000000",
+        "4010000000000000",
+        "0000000000000000",
+        "401921fb54442d18",
+        "0000000000000000",
+        "3ff0000000000000"
+       ],
+       "style": {
+        "fill": "#91cc75",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "ec": {
+        "seriesIndex": 1,
+        "dataIndex": 0
+       },
+       "info": null
+      }
+     ],
+     "order": [
+      "s0:0",
+      "s0:1",
+      "s1:0"
+     ],
+     "clips": [
+      {
+       "s": 0,
+       "rect": null
+      },
+      {
+       "s": 1,
+       "rect": null
+      }
+     ],
+     "st": [
+      {
+       "key": "s0:0",
+       "states": [],
+       "fill": [
+        153,
+        153,
+        153,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s0:1",
+       "states": [],
+       "fill": [
+        255,
+        255,
+        255,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s1:0",
+       "states": [],
+       "fill": [
+        145,
+        204,
+        117,
+        1
+       ],
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      }
+     ],
+     "legend": null
+    }
+   ],
+   "fails": []
+  },
+  {
+   "id": "polar-clip",
+   "group": "coords",
+   "note": "clip: true on a polar: createPolarClipPath's sector (the centre and radii to one decimal, the angles turned) -- a sector past the radius axis' max is cut there; an anticlockwise polar beside it",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666",
+     "#73c0de"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "polar": [
+     {
+      "radius": [
+       20,
+       "40%"
+      ],
+      "center": [
+       "30%",
+       "50%"
+      ]
+     },
+     {
+      "radius": [
+       10,
+       "35%"
+      ],
+      "center": [
+       "75%",
+       "50%"
+      ]
+     }
+    ],
+    "angleAxis": [
+     {
+      "polarIndex": 0,
+      "type": "category",
+      "data": [
+       "a",
+       "b",
+       "c",
+       "d"
+      ],
+      "startAngle": 75
+     },
+     {
+      "polarIndex": 1,
+      "type": "category",
+      "data": [
+       "a",
+       "b",
+       "c",
+       "d"
+      ],
+      "clockwise": false
+     }
+    ],
+    "radiusAxis": [
+     {
+      "polarIndex": 0,
+      "type": "value",
+      "min": 0,
+      "max": 10
+     },
+     {
+      "polarIndex": 1,
+      "type": "value",
+      "min": 0,
+      "max": 10
+     }
+    ],
+    "series": [
+     {
+      "type": "custom",
+      "coordinateSystem": "polar",
+      "polarIndex": 0,
+      "clip": true,
+      "renderItem": "@polarBar",
+      "data": [
+       [
+        3,
+        0
+       ],
+       [
+        14,
+        1
+       ],
+       [
+        5,
+        2
+       ],
+       [
+        9,
+        3
+       ]
+      ]
+     },
+     {
+      "type": "custom",
+      "coordinateSystem": "polar",
+      "polarIndex": 1,
+      "clip": true,
+      "renderItem": "@polarBar",
+      "data": [
+       [
+        12,
+        0
+       ],
+       [
+        7,
+        1
+       ]
+      ]
+     }
+    ]
+   },
+   "steps": [],
+   "states": [
+    {
+     "calls": [
+      {
+       "s": 0,
+       "name": "polarBar",
+       "params": {
+        "dataIndex": 0,
+        "dataIndexInside": 0,
+        "dataInsideLength": 4,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": {
+         "type": "polar",
+         "cx": "4066800000000000",
+         "cy": "4069000000000000",
+         "r": "4054000000000000",
+         "r0": "4034000000000000"
+        },
+        "encode": {
+         "radius": [
+          0
+         ],
+         "angle": [
+          1
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "4008000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "0000000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "4008000000000000",
+           "0000000000000000"
+          ]
+         ],
+         "ret": [
+          "406a9d163e7d1b62",
+          "4066a00000000000",
+          "4043000000000000",
+          "3fe0c152382d7365"
+         ]
+        },
+        {
+         "fn": "size",
+         "args": [
+          [
+           "4000000000000000",
+           "3ff0000000000000"
+          ],
+          [
+           "4008000000000000",
+           "0000000000000000"
+          ]
+         ],
+         "ret": [
+          "4028000000000000",
+          "3ff921fb54442d18"
+         ]
+        },
+        {
+         "fn": "barLayout",
+         "args": [
+          {
+           "count": "3ff0000000000000"
+          }
+         ],
+         "ret": null
+        },
+        {
+         "fn": "visual",
+         "args": [
+          "color"
+         ],
+         "ret": "#5470c6"
+        }
+       ],
+       "ret": {
+        "type": "sector",
+        "shape": {
+         "cx": "4066800000000000",
+         "cy": "4069000000000000",
+         "r0": "4034000000000000",
+         "r": "4043000000000000",
+         "startAngle": "bff4f1a6c638d03e",
+         "endAngle": "3fd0c152382d7366"
+        },
+        "style": {
+         "fill": "#5470c6",
+         "stroke": "#fff"
+        },
+        "info": {
+         "band": "4028000000000000",
+         "none": true
+        }
+       }
+      },
+      {
+       "s": 0,
+       "name": "polarBar",
+       "params": {
+        "dataIndex": 1,
+        "dataIndexInside": 1,
+        "dataInsideLength": 4,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": {
+         "type": "polar",
+         "cx": "4066800000000000",
+         "cy": "4069000000000000",
+         "r": "4054000000000000",
+         "r0": "4034000000000000"
+        },
+        "encode": {
+         "radius": [
+          0
+         ],
+         "angle": [
+          1
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "402c000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "3ff0000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "402c000000000000",
+           "3ff0000000000000"
+          ]
+         ],
+         "ret": [
+          "406d000000000000",
+          "40722110f731ef92",
+          "405a000000000000",
+          "bff0c152382d7365"
+         ]
+        },
+        {
+         "fn": "size",
+         "args": [
+          [
+           "4000000000000000",
+           "3ff0000000000000"
+          ],
+          [
+           "402c000000000000",
+           "3ff0000000000000"
+          ]
+         ],
+         "ret": [
+          "4028000000000000",
+          "3ff921fb54442d18"
+         ]
+        },
+        {
+         "fn": "barLayout",
+         "args": [
+          {
+           "count": "3ff0000000000000"
+          }
+         ],
+         "ret": null
+        },
+        {
+         "fn": "visual",
+         "args": [
+          "color"
+         ],
+         "ret": "#5470c6"
+        }
+       ],
+       "ret": {
+        "type": "sector",
+        "shape": {
+         "cx": "4066800000000000",
+         "cy": "4069000000000000",
+         "r0": "4034000000000000",
+         "r": "405a000000000000",
+         "startAngle": "3fd0c152382d7364",
+         "endAngle": "3ffd524fe24f89f1"
+        },
+        "style": {
+         "fill": "#5470c6",
+         "stroke": "#fff"
+        },
+        "info": {
+         "band": "4028000000000000",
+         "none": true
+        }
+       }
+      },
+      {
+       "s": 0,
+       "name": "polarBar",
+       "params": {
+        "dataIndex": 2,
+        "dataIndexInside": 2,
+        "dataInsideLength": 4,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": {
+         "type": "polar",
+         "cx": "4066800000000000",
+         "cy": "4069000000000000",
+         "r": "4054000000000000",
+         "r0": "4034000000000000"
+        },
+        "encode": {
+         "radius": [
+          0
+         ],
+         "angle": [
+          1
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "4014000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "4000000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "4014000000000000",
+           "4000000000000000"
+          ]
+         ],
+         "ret": [
+          "4061165bfe9ec106",
+          "406c200000000000",
+          "4049000000000000",
+          "c004f1a6c638d03f"
+         ]
+        },
+        {
+         "fn": "size",
+         "args": [
+          [
+           "4000000000000000",
+           "3ff0000000000000"
+          ],
+          [
+           "4014000000000000",
+           "4000000000000000"
+          ]
+         ],
+         "ret": [
+          "4028000000000000",
+          "3ff921fb54442d18"
+         ]
+        },
+        {
+         "fn": "barLayout",
+         "args": [
+          {
+           "count": "3ff0000000000000"
+          }
+         ],
+         "ret": null
+        },
+        {
+         "fn": "visual",
+         "args": [
+          "color"
+         ],
+         "ret": "#5470c6"
+        }
+       ],
+       "ret": {
+        "type": "sector",
+        "shape": {
+         "cx": "4066800000000000",
+         "cy": "4069000000000000",
+         "r0": "4034000000000000",
+         "r": "4049000000000000",
+         "startAngle": "3ffd524fe24f89f2",
+         "endAngle": "400b3a259b49db85"
+        },
+        "style": {
+         "fill": "#5470c6",
+         "stroke": "#fff"
+        },
+        "info": {
+         "band": "4028000000000000",
+         "none": true
+        }
+       }
+      },
+      {
+       "s": 0,
+       "name": "polarBar",
+       "params": {
+        "dataIndex": 3,
+        "dataIndexInside": 3,
+        "dataInsideLength": 4,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": {
+         "type": "polar",
+         "cx": "4066800000000000",
+         "cy": "4069000000000000",
+         "r": "4054000000000000",
+         "r0": "4034000000000000"
+        },
+        "encode": {
+         "radius": [
+          0
+         ],
+         "angle": [
+          1
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "4022000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "4008000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "4022000000000000",
+           "4008000000000000"
+          ]
+         ],
+         "ret": [
+          "4061dfffffffffff",
+          "4060fd4078d679d7",
+          "4052800000000000",
+          "c010c152382d7365"
+         ]
+        },
+        {
+         "fn": "size",
+         "args": [
+          [
+           "4000000000000000",
+           "3ff0000000000000"
+          ],
+          [
+           "4022000000000000",
+           "4008000000000000"
+          ]
+         ],
+         "ret": [
+          "4028000000000000",
+          "3ff921fb54442d18"
+         ]
+        },
+        {
+         "fn": "barLayout",
+         "args": [
+          {
+           "count": "3ff0000000000000"
+          }
+         ],
+         "ret": null
+        },
+        {
+         "fn": "visual",
+         "args": [
+          "color"
+         ],
+         "ret": "#5470c6"
+        }
+       ],
+       "ret": {
+        "type": "sector",
+        "shape": {
+         "cx": "4066800000000000",
+         "cy": "4069000000000000",
+         "r0": "4034000000000000",
+         "r": "4052800000000000",
+         "startAngle": "400b3a259b49db84",
+         "endAngle": "4013e591a2b5f908"
+        },
+        "style": {
+         "fill": "#5470c6",
+         "stroke": "#fff"
+        },
+        "info": {
+         "band": "4028000000000000",
+         "none": true
+        }
+       }
+      },
+      {
+       "s": 1,
+       "name": "polarBar",
+       "params": {
+        "dataIndex": 0,
+        "dataIndexInside": 0,
+        "dataInsideLength": 2,
+        "actionType": null,
+        "seriesId": "~series~1~0",
+        "seriesName": "series~1",
+        "seriesIndex": 1,
+        "coordSys": {
+         "type": "polar",
+         "cx": "407c200000000000",
+         "cy": "4069000000000000",
+         "r": "4051800000000000",
+         "r0": "4024000000000000"
+        },
+        "encode": {
+         "radius": [
+          0
+         ],
+         "angle": [
+          1
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "4028000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "0000000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "4028000000000000",
+           "0000000000000000"
+          ]
+         ],
+         "ret": [
+          "40788046a1959f6c",
+          "4061c08d432b3ed8",
+          "4054800000000000",
+          "4002d97c7f3321d2"
+         ]
+        },
+        {
+         "fn": "size",
+         "args": [
+          [
+           "4000000000000000",
+           "3ff0000000000000"
+          ],
+          [
+           "4028000000000000",
+           "0000000000000000"
+          ]
+         ],
+         "ret": [
+          "4028000000000000",
+          "3ff921fb54442d18"
+         ]
+        },
+        {
+         "fn": "barLayout",
+         "args": [
+          {
+           "count": "3ff0000000000000"
+          }
+         ],
+         "ret": null
+        },
+        {
+         "fn": "visual",
+         "args": [
+          "color"
+         ],
+         "ret": "#91cc75"
+        }
+       ],
+       "ret": {
+        "type": "sector",
+        "shape": {
+         "cx": "407c200000000000",
+         "cy": "4069000000000000",
+         "r0": "4024000000000000",
+         "r": "4054800000000000",
+         "startAngle": "c00921fb54442d18",
+         "endAngle": "bff921fb54442d18"
+        },
+        "style": {
+         "fill": "#91cc75",
+         "stroke": "#fff"
+        },
+        "info": {
+         "band": "4028000000000000",
+         "none": true
+        }
+       }
+      },
+      {
+       "s": 1,
+       "name": "polarBar",
+       "params": {
+        "dataIndex": 1,
+        "dataIndexInside": 1,
+        "dataInsideLength": 2,
+        "actionType": null,
+        "seriesId": "~series~1~0",
+        "seriesName": "series~1",
+        "seriesIndex": 1,
+        "coordSys": {
+         "type": "polar",
+         "cx": "407c200000000000",
+         "cy": "4069000000000000",
+         "r": "4051800000000000",
+         "r0": "4024000000000000"
+        },
+        "encode": {
+         "radius": [
+          0
+         ],
+         "angle": [
+          1
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "401c000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "3ff0000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "401c000000000000",
+           "3ff0000000000000"
+          ]
+         ],
+         "ret": [
+          "4079d3afe99713ed",
+          "406d98a02cd1d826",
+          "404a000000000000",
+          "400f6a7a2955385e"
+         ]
+        },
+        {
+         "fn": "size",
+         "args": [
+          [
+           "4000000000000000",
+           "3ff0000000000000"
+          ],
+          [
+           "401c000000000000",
+           "3ff0000000000000"
+          ]
+         ],
+         "ret": [
+          "4028000000000000",
+          "3ff921fb54442d18"
+         ]
+        },
+        {
+         "fn": "barLayout",
+         "args": [
+          {
+           "count": "3ff0000000000000"
+          }
+         ],
+         "ret": null
+        },
+        {
+         "fn": "visual",
+         "args": [
+          "color"
+         ],
+         "ret": "#91cc75"
+        }
+       ],
+       "ret": {
+        "type": "sector",
+        "shape": {
+         "cx": "407c200000000000",
+         "cy": "4069000000000000",
+         "r0": "4024000000000000",
+         "r": "404a000000000000",
+         "startAngle": "c012d97c7f3321d2",
+         "endAngle": "c00921fb54442d18"
+        },
+        "style": {
+         "fill": "#91cc75",
+         "stroke": "#fff"
+        },
+        "info": {
+         "band": "4028000000000000",
+         "none": true
+        }
+       }
+      }
+     ],
+     "throws": null,
+     "els": [
+      {
+       "key": "s0:0",
+       "type": "sector",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": null,
+       "shape": {
+        "cx": "4066800000000000",
+        "cy": "4069000000000000",
+        "r0": "4034000000000000",
+        "r": "4043000000000000",
+        "startAngle": "bff4f1a6c638d03e",
+        "endAngle": "3fd0c152382d7366",
+        "clockwise": true,
+        "cornerRadius": "0000000000000000"
+       },
+       "path": [
+        "3ff0000000000000",
+        "4067bab9555de97d",
+        "4064696f276b33a3",
+        "4014000000000000",
+        "4066800000000000",
+        "4069000000000000",
+        "4043000000000000",
+        "4043000000000000",
+        "4013e591a20210cc",
+        "3ff921fb54442d18",
+        "0000000000000000",
+        "3ff0000000000000",
+        "4000000000000000",
+        "4068ea314991aeee",
+        "4069a5a4e98fbe42",
+        "4014000000000000",
+        "4066800000000000",
+        "4069000000000000",
+        "4034000000000000",
+        "4034000000000000",
+        "3fd0c1522ceeefa1",
+        "bff921fb54442d17",
+        "0000000000000000",
+        "0000000000000000",
+        "4018000000000000"
+       ],
+       "style": {
+        "fill": "#5470c6",
+        "stroke": "#fff",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 0
+       },
+       "info": "{\"band\":12,\"none\":true}"
+      },
+      {
+       "key": "s0:1",
+       "type": "sector",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": null,
+       "shape": {
+        "cx": "4066800000000000",
+        "cy": "4069000000000000",
+        "r0": "4034000000000000",
+        "r": "405a000000000000",
+        "startAngle": "3fd0c152382d7364",
+        "endAngle": "3ffd524fe24f89f1",
+        "clockwise": true,
+        "cornerRadius": "0000000000000000"
+       },
+       "path": [
+        "3ff0000000000000",
+        "4071874cf27ac6d0",
+        "406c5d598b51dd55",
+        "4014000000000000",
+        "4066800000000000",
+        "4069000000000000",
+        "405a000000000000",
+        "405a000000000000",
+        "3fd0c1522ceeefa1",
+        "3ff921fb54442d18",
+        "0000000000000000",
+        "3ff0000000000000",
+        "4000000000000000",
+        "4065da5b167041be",
+        "406b6a314991aeee",
+        "4014000000000000",
+        "4066800000000000",
+        "4069000000000000",
+        "4034000000000000",
+        "4034000000000000",
+        "3ffd524fdf7fe900",
+        "bff921fb54442d18",
+        "0000000000000000",
+        "0000000000000000",
+        "4018000000000000"
+       ],
+       "style": {
+        "fill": "#5470c6",
+        "stroke": "#fff",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 1
+       },
+       "info": "{\"band\":12,\"none\":true}"
+      },
+      {
+       "key": "s0:2",
+       "type": "sector",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": null,
+       "shape": {
+        "cx": "4066800000000000",
+        "cy": "4069000000000000",
+        "r0": "4034000000000000",
+        "r": "4049000000000000",
+        "startAngle": "3ffd524fe24f89f2",
+        "endAngle": "400b3a259b49db85",
+        "clockwise": true,
+        "cornerRadius": "0000000000000000"
+       },
+       "path": [
+        "3ff0000000000000",
+        "4064e1e3b818a45c",
+        "406f097b37ec3552",
+        "4014000000000000",
+        "4066800000000000",
+        "4069000000000000",
+        "4049000000000000",
+        "4049000000000000",
+        "3ffd524fdf7fe900",
+        "3ff921fb54442d18",
+        "0000000000000000",
+        "3ff0000000000000",
+        "4000000000000000",
+        "406415ceb66e5112",
+        "40685a5b167041be",
+        "4014000000000000",
+        "4066800000000000",
+        "4069000000000000",
+        "4034000000000000",
+        "4034000000000000",
+        "400b3a2599e20b0d",
+        "bff921fb54442d18",
+        "0000000000000000",
+        "0000000000000000",
+        "4018000000000000"
+       ],
+       "style": {
+        "fill": "#5470c6",
+        "stroke": "#fff",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 2
+       },
+       "info": "{\"band\":12,\"none\":true}"
+      },
+      {
+       "key": "s0:3",
+       "type": "sector",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": null,
+       "shape": {
+        "cx": "4066800000000000",
+        "cy": "4069000000000000",
+        "r0": "4034000000000000",
+        "r": "4052800000000000",
+        "startAngle": "400b3a259b49db84",
+        "endAngle": "4013e591a2b5f908",
+        "clockwise": true,
+        "cornerRadius": "0000000000000000"
+       },
+       "path": [
+        "3ff0000000000000",
+        "405b216012c9f187",
+        "40669b1dd305c00e",
+        "4014000000000000",
+        "4066800000000000",
+        "4069000000000000",
+        "4052800000000000",
+        "4052800000000000",
+        "400b3a2599e20b0d",
+        "3ff921fb54442d16",
+        "0000000000000000",
+        "3ff0000000000000",
+        "4000000000000000",
+        "406725a4e98fbe41",
+        "406695ceb66e5112",
+        "4014000000000000",
+        "4066800000000000",
+        "4069000000000000",
+        "4034000000000000",
+        "4034000000000000",
+        "4013e591a20210cc",
+        "bff921fb54442d18",
+        "0000000000000000",
+        "0000000000000000",
+        "4018000000000000"
+       ],
+       "style": {
+        "fill": "#5470c6",
+        "stroke": "#fff",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 3
+       },
+       "info": "{\"band\":12,\"none\":true}"
+      },
+      {
+       "key": "s1:0",
+       "type": "sector",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": null,
+       "shape": {
+        "cx": "407c200000000000",
+        "cy": "4069000000000000",
+        "r0": "4024000000000000",
+        "r": "4054800000000000",
+        "startAngle": "c00921fb54442d18",
+        "endAngle": "bff921fb54442d18",
+        "clockwise": true,
+        "cornerRadius": "0000000000000000"
+       },
+       "path": [
+        "3ff0000000000000",
+        "4077000000000000",
+        "4069000000000000",
+        "4014000000000000",
+        "407c200000000000",
+        "4069000000000000",
+        "4054800000000000",
+        "4054800000000000",
+        "400921fb54442d18",
+        "3ff921fb54442d18",
+        "0000000000000000",
+        "3ff0000000000000",
+        "4000000000000000",
+        "407c200000000000",
+        "4067c00000000000",
+        "4014000000000000",
+        "407c200000000000",
+        "4069000000000000",
+        "4024000000000000",
+        "4024000000000000",
+        "4012d97c7f3321d2",
+        "bff921fb54442d18",
+        "0000000000000000",
+        "0000000000000000",
+        "4018000000000000"
+       ],
+       "style": {
+        "fill": "#91cc75",
+        "stroke": "#fff",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "ec": {
+        "seriesIndex": 1,
+        "dataIndex": 0
+       },
+       "info": "{\"band\":12,\"none\":true}"
+      },
+      {
+       "key": "s1:1",
+       "type": "sector",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": null,
+       "shape": {
+        "cx": "407c200000000000",
+        "cy": "4069000000000000",
+        "r0": "4024000000000000",
+        "r": "404a000000000000",
+        "startAngle": "c012d97c7f3321d2",
+        "endAngle": "c00921fb54442d18",
+        "clockwise": true,
+        "cornerRadius": "0000000000000000"
+       },
+       "path": [
+        "3ff0000000000000",
+        "407c200000000000",
+        "406f800000000000",
+        "4014000000000000",
+        "407c200000000000",
+        "4069000000000000",
+        "404a000000000000",
+        "404a000000000000",
+        "3ff921fb54442d18",
+        "3ff921fb54442d18",
+        "0000000000000000",
+        "3ff0000000000000",
+        "4000000000000000",
+        "407b800000000000",
+        "4069000000000000",
+        "4014000000000000",
+        "407c200000000000",
+        "4069000000000000",
+        "4024000000000000",
+        "4024000000000000",
+        "400921fb54442d18",
+        "bff921fb54442d18",
+        "0000000000000000",
+        "0000000000000000",
+        "4018000000000000"
+       ],
+       "style": {
+        "fill": "#91cc75",
+        "stroke": "#fff",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "ec": {
+        "seriesIndex": 1,
+        "dataIndex": 1
+       },
+       "info": "{\"band\":12,\"none\":true}"
+      }
+     ],
+     "order": [
+      "s0:0",
+      "s0:1",
+      "s0:2",
+      "s0:3",
+      "s1:0",
+      "s1:1"
+     ],
+     "clips": [
+      {
+       "s": 0,
+       "rect": null,
+       "sector": [
+        "4066800000000000",
+        "4069000000000000",
+        "4034000000000000",
+        "4054000000000000",
+        "bff4f1a6c638d03f",
+        "4013e591a2b5f908",
+        true
+       ]
+      },
+      {
+       "s": 1,
+       "rect": null,
+       "sector": [
+        "407c200000000000",
+        "4069000000000000",
+        "4024000000000000",
+        "4051800000000000",
+        "bff921fb54442d18",
+        "c01f6a7a2955385e",
+        false
+       ]
+      }
+     ],
+     "st": [
+      {
+       "key": "s0:0",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": [
+        255,
+        255,
+        255,
+        1
+       ],
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s0:1",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": [
+        255,
+        255,
+        255,
+        1
+       ],
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s0:2",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": [
+        255,
+        255,
+        255,
+        1
+       ],
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s0:3",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": [
+        255,
+        255,
+        255,
+        1
+       ],
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s1:0",
+       "states": [],
+       "fill": [
+        145,
+        204,
+        117,
+        1
+       ],
+       "stroke": [
+        255,
+        255,
+        255,
+        1
+       ],
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s1:1",
+       "states": [],
+       "fill": [
+        145,
+        204,
+        117,
+        1
+       ],
+       "stroke": [
+        255,
+        255,
+        255,
+        1
+       ],
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      }
+     ],
+     "legend": null
+    }
+   ],
+   "fails": []
   }
  ],
  "guards": [
@@ -18509,6 +24623,14 @@
   },
   {
    "name": "none-null: every record matches its recipe",
+   "ok": true
+  },
+  {
+   "name": "visualmeta: every record matches its recipe",
+   "ok": true
+  },
+  {
+   "name": "polar-clip: every record matches its recipe",
    "ok": true
   },
   {

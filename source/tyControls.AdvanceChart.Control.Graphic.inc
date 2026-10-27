@@ -526,6 +526,16 @@ begin
     Result := FCustomPaintEls[AIndex];
 end;
 
+function TTyCustomAdvanceChart.CustomClipSector(ASeriesIndex: Integer;
+  out ASector: TTyCuClipSector): Boolean;
+var slot: Integer;
+begin
+  ASector := Default(TTyCuClipSector);
+  slot := SlotOfSeries(ASeriesIndex);
+  Result := (slot >= 0) and (slot <= High(FCustomClipSec)) and FCustomClipSec[slot].On;
+  if Result then ASector := FCustomClipSec[slot];
+end;
+
 function TTyCustomAdvanceChart.CustomClip(ASeriesIndex: Integer; out ARect: TTyXYWH): Boolean;
 var slot: Integer;
 begin
@@ -1782,6 +1792,10 @@ begin
     Result := Lookup(ItemNode(r), Node, ['itemStyle', 'borderColor']);
     if Result <> nil then Result := Result.Clone;
   end
+  else if AType = 'visualMeta' then
+    { [spec 242] the series data's visualMeta: every continuous or piecewise
+      visualMap on it, in component order -- [] where none is }
+    Result := Chart.CustomVisualMetaJson(Slot)
   else if AType = 'decal' then
   begin
     { the item's decal visual, through getItemVisual's fallback to the
@@ -1867,6 +1881,30 @@ end;
 function TTyChartCustomApi.GetDevicePixelRatio: Double;
 begin
   Result := Scale;
+end;
+
+{ [spec 242] visualEncoding's visualMeta list of a series as JSON:
+  {stops: [{value, color}], outerColors, dimension} each }
+function TTyCustomAdvanceChart.CustomVisualMetaJson(ASlot: Integer): TJSONArray;
+var
+  k, s: Integer;
+  m: TTyVisualMeta;
+  o: TJSONObject;
+  stops: TJSONArray;
+begin
+  Result := TJSONArray.Create;
+  if (ASlot < 0) or (ASlot > High(FVisualMetas)) then Exit;
+  for k := 0 to High(FVisualMetas[ASlot]) do
+  begin
+    m := FVisualMetas[ASlot][k];
+    stops := TJSONArray.Create;
+    for s := 0 to High(m.Stops) do
+      stops.Add(TJSONObject.Create(['value', m.Stops[s].Value, 'color', m.Stops[s].ColorText]));
+    o := TJSONObject.Create(['stops', stops,
+      'outerColors', TJSONArray.Create([m.Outer0Text, m.Outer1Text]),
+      'dimension', m.Dimension]);
+    Result.Add(o);
+  end;
 end;
 
 { the style visual's fill of a row: the item's own itemStyle colour, the
@@ -2079,6 +2117,8 @@ begin
   FCustomClip := nil;
   SetLength(FCustomClipOn, Length(FBindings));
   SetLength(FCustomClip, Length(FBindings));
+  FCustomClipSec := nil;
+  SetLength(FCustomClipSec, Length(FBindings));
   for i := 0 to High(FBindings) do
   begin
     if FBindings[i].SeriesType <> TyCustomSeriesType then Continue;
@@ -2354,6 +2394,23 @@ begin
       end;
       FCustomClipOn[i] := True;
       FCustomClip[i] := TyXYWH(x, y, cw, ch);
+    end
+    { [spec 242] createPolarClipPath: a sector over the polar's area -- the
+      centre and the radii to one decimal, the angle extent turned to
+      radians, clockwise its angle axis' inverse -- device px, as the
+      elements are }
+    else if (sys = cusPolar) and CuTruthy(node.Find('clip')) then
+    begin
+      FCustomClipSec[i].On := True;
+      pol.AxisExtent(pol.RadiusAxis, r0, r1);
+      FCustomClipSec[i].CX := TyJsToFixed(pol.CX, 1);
+      FCustomClipSec[i].CY := TyJsToFixed(pol.CY, 1);
+      FCustomClipSec[i].R0 := TyJsToFixed(Min(r0, r1), 1);
+      FCustomClipSec[i].R1 := TyJsToFixed(Max(r0, r1), 1);
+      pol.AxisExtent(pol.AngleAxis, r0, r1);
+      FCustomClipSec[i].SA := -r0 * (Pi / 180);
+      FCustomClipSec[i].EA := -r1 * (Pi / 180);
+      FCustomClipSec[i].CW := pol.AngleInverse;
     end;
   end;
   { THE FLUSH: upstream's setOption ends with a synchronous update that
@@ -2520,6 +2577,18 @@ var
     begin
       pe.HasClip := True;
       pe.ClipRect := clip;
+    end;
+    { [spec 242] a polar's sector }
+    if (ASlot <= High(FCustomClipSec)) and FCustomClipSec[ASlot].On then
+    begin
+      pe.HasClipSector := True;
+      pe.ClipCX := FCustomClipSec[ASlot].CX;
+      pe.ClipCY := FCustomClipSec[ASlot].CY;
+      pe.ClipR0 := FCustomClipSec[ASlot].R0;
+      pe.ClipR1 := FCustomClipSec[ASlot].R1;
+      pe.ClipSA := FCustomClipSec[ASlot].SA;
+      pe.ClipEA := FCustomClipSec[ASlot].EA;
+      pe.ClipCW := FCustomClipSec[ASlot].CW;
     end;
     { [F3c] AN ITEM'S PATH as getPathList finds it (no text, no image, not
       invisible, not `morph: false`), for the universal transition }

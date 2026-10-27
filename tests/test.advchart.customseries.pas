@@ -1649,16 +1649,48 @@ end;
 
 procedure TCuOracleBase.CheckClips(AWant: TJSONArray);
 var
-  i: Integer;
+  i, k, n: Integer;
   w: TJSONObject;
   r: TTyXYWH;
-  has: Boolean;
+  has, hasSec: Boolean;
+  sec: TTyCuClipSector;
+  e: TTyChartElement;
 begin
   for i := 0 to AWant.Count - 1 do
   begin
     w := AWant.Objects[i];
     has := FChart.CustomClip(w.Integers['s'], r);
     SameBool(Format('clip %d', [w.Integers['s']]), has, not IsNull(w.Find('rect')));
+    { [spec 242] a polar's sector }
+    hasSec := FChart.CustomClipSector(w.Integers['s'], sec);
+    SameBool(Format('sector clip %d', [w.Integers['s']]), hasSec, w.Find('sector') <> nil);
+    if hasSec and (w.Find('sector') <> nil) then
+    begin
+      Same('clip.cx', sec.CX, w.Arrays['sector'].Items[0]);
+      Same('clip.cy', sec.CY, w.Arrays['sector'].Items[1]);
+      Same('clip.r0', sec.R0, w.Arrays['sector'].Items[2]);
+      Same('clip.r', sec.R1, w.Arrays['sector'].Items[3]);
+      Same('clip.startAngle', sec.SA, w.Arrays['sector'].Items[4]);
+      Same('clip.endAngle', sec.EA, w.Arrays['sector'].Items[5]);
+      SameBool('clip.clockwise', sec.CW, w.Arrays['sector'].Booleans[6]);
+    end;
+    { the series' painted elements carry it }
+    n := 0;
+    for k := 0 to FChart.List.Count - 1 do
+    begin
+      if FChart.CustomPaintSource(k) = nil then Continue;
+      e := FChart.List.Element(k);
+      if e.Datum.SeriesIndex <> w.Integers['s'] then Continue;
+      Inc(n);
+      SameBool(Format('element %d sector clip', [k]), e.HasClipSector, hasSec);
+      if hasSec and e.HasClipSector then
+      begin
+        AssertTrue(Format('element %d clip cx', [k]), e.ClipCX = sec.CX);
+        AssertTrue(Format('element %d clip r', [k]), e.ClipR1 = sec.R1);
+        AssertTrue(Format('element %d clip endAngle', [k]), e.ClipEA = sec.EA);
+      end;
+    end;
+    if hasSec then AssertTrue('a sector-clipped series paints', n > 0);
     if has and not IsNull(w.Find('rect')) then
     begin
       Same('clip.x', r.X, w.Arrays['rect'].Items[0]);
