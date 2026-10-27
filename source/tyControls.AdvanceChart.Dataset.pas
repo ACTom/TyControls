@@ -609,24 +609,50 @@ begin
   else Result := A;
 end;
 
-{ asc(): Array.prototype.sort with (a, b) => a - b, which is STABLE -- a
-  comparison that is not-a-number counts as equal. An insertion sort keeps
-  equal samples (a -0 beside a 0) in the order they came. }
-procedure SortAsc(var A: TTyDoubleArray);
-var i, j: Integer; t, d: Double;
+type
+  { (a, b) => a - b over the samples, a not-a-number difference a tie }
+  TAscCompare = class
+    Vals: TTyDoubleArray;
+    function Compare(A, B: Integer): Integer;
+  end;
+
+function TAscCompare.Compare(A, B: Integer): Integer;
+var d: Double;
 begin
-  for i := 1 to High(A) do
-  begin
-    t := A[i];
-    j := i - 1;
-    while j >= 0 do
-    begin
-      d := A[j] - t;
-      if IsNan(d) or not (d > 0) then Break;
-      A[j + 1] := A[j];
-      Dec(j);
-    end;
-    A[j + 1] := t;
+  d := Vals[A] - Vals[B];
+  if IsNan(d) then Result := 0
+  else if d < 0 then Result := -1
+  else if d > 0 then Result := 1
+  else Result := 0;
+end;
+
+{ asc(): Array.prototype.sort with (a, b) => a - b -- V8's TimSort
+  (TyJsArraySort), so a sample that is no number lands where V8 leaves it:
+  its comparisons are ties, and the binary insertion and the runs place it
+  [R5-G: was a linear insertion sort, the same order only while every
+  comparison is a number] }
+procedure SortAsc(var A: TTyDoubleArray);
+var
+  cmp: TAscCompare;
+  idx: TTyIntegerArray;
+  i: Integer;
+  mask: TFPUExceptionMask;
+begin
+  if Length(A) < 2 then Exit;
+  idx := nil;
+  SetLength(idx, Length(A));
+  for i := 0 to High(idx) do idx[i] := i;
+  cmp := TAscCompare.Create;
+  mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+  try
+    cmp.Vals := Copy(A);
+    TyJsArraySort(idx, @cmp.Compare);
+    for i := 0 to High(idx) do A[i] := cmp.Vals[idx[i]];
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+    cmp.Free;
   end;
 end;
 

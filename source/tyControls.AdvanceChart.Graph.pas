@@ -1154,6 +1154,11 @@ var
     dataSymbolTask) -- before any layout, so a ring sizes them too. The
     chart sets it around the solve; nil otherwise. }
   TyGraphItemCallbacks: TTyItemCallbacks = nil;
+  { [R5-G] THE SERIES' NODE ITEMS while the chart solves a graph -- its
+    `data`, else its `nodes` (GraphSeries.getInitialData), by raw index:
+    an item's own symbolOffset is dataSymbolTask's getShallow, over the
+    series' and the callback's. nil otherwise. }
+  TyGraphItemNodes: TJSONArray = nil;
 
 implementation
 
@@ -2701,6 +2706,19 @@ begin
     begin
       Result[i].HasRot := True;
       Result[i].RotDeg := v;
+    end;
+    { [R5-G] and its own symbolOffset (getShallow != null) over the
+      callback's and the series' [was: not read] }
+    if (TyGraphItemNodes <> nil) and (raw >= 0) and (raw < TyGraphItemNodes.Count)
+      and (TyGraphItemNodes.Items[raw] is TJSONObject) then
+    begin
+      d := TJSONObject(TyGraphItemNodes.Items[raw]).Find('symbolOffset');
+      if (d <> nil) and (d.JSONType <> jtNull) then
+      begin
+        Result[i].HasOff := True;
+        Result[i].Off := TySymbolSpecOf(TJSONObject(TyGraphItemNodes.Items[raw]),
+          Default(TTySymbolSpec));
+      end;
     end;
   end;
 end;

@@ -3587,7 +3587,7 @@ const
 var
   spec: TTyPictorialSpec;
   i, k, idx, valCol, n: Integer;
-  baseHoriz, stacked, haveCol, mirror, pxUp, empty: Boolean;
+  baseHoriz, stacked, haveCol, mirror, pxUp, empty, noGlyph: Boolean;
   x, y, own, baseline, zeroPx, floorPx, valuePx: Double;
   cutLen, boundLen, pxSign, categorySize, acrossCentre, bundleAcross: Double;
   glyphW, glyphH, glyphLen, valueBase, anchor, sizeFix, along: Double;
@@ -3795,7 +3795,16 @@ begin
     end;
     if IsNan(glyphW) or IsNan(glyphH) then Continue;
     if IsInfinite(glyphW) or IsInfinite(glyphH) then Continue;
-    if (glyphW <= 0) or (glyphH <= 0) then Continue;
+    { [R5-G] A GLYPH OF NO SIZE -- a percentage of a bar of no length --
+      draws nothing, but its bar rect and the label on it are still there
+      (upstream's symbol scales to nought); a repeat of no unit is dropped
+      as before [was: the whole item dropped, its label with it] }
+    noGlyph := (glyphW <= 0) or (glyphH <= 0);
+    if noGlyph then
+    begin
+      if spec.Repeat_ <> prNone then Continue;
+      glyphLen := 0;
+    end;
 
     { UPSTREAM ADDS THE GLYPH'S OWN STROKE to the unit length, so a bordered
       symbol takes its border's worth of room in a repeating column. NOT done
@@ -3804,7 +3813,9 @@ begin
       builder works in device pixels. Folding a logical number in would draw
       the right count at 96 dpi and the wrong one on every other screen. }
     run := TyPictorialRunOf(spec, glyphLen, boundLen, cutLen, glyphLen);
-    if run.Count <= 0 then Continue;
+    { [R5-G] a run of none (a repeat on a bar of no length) is no glyph; the
+      bar rect and its label stay [was: the item dropped] }
+    if run.Count <= 0 then noGlyph := True;
     if IsNan(run.PathLen) or IsInfinite(run.PathLen) then Continue;
     if IsNan(run.Unit_) or IsInfinite(run.Unit_) then Continue;
 
@@ -3868,6 +3879,17 @@ begin
     el.Silent := True;
     el.Datum := TyChartDatum(ABinding.SeriesIndex, i);
     ItemCaption(AVisual, AStore, i, el.Caption);
+    { [R5-G] `outside` IS PAST THE BOUNDING END (PictorialBarView's
+      barPositionOutside: posDesc[+(boundingLength > 0)]) -- 'bottom' /
+      'right' for a positive pixel length, else 'top' / 'left' [was: always
+      'top'] }
+    if baseHoriz then
+    begin
+      if boundLen > 0 then el.Caption.Outside := coBottom
+      else el.Caption.Outside := coTop;
+    end
+    else if boundLen > 0 then el.Caption.Outside := coRight
+    else el.Caption.Outside := coLeft;
     { FILLED BUT TRANSPARENT, for its label: upstream's target rect has a
       `transparent` fill, which counts as a fill. }
     el.Caption.HostTransparent := True;
@@ -3928,6 +3950,7 @@ begin
                           Min(clipRect.Right, plot.Right),
                           Min(clipRect.Bottom, plot.Bottom));
 
+    if noGlyph then Continue;
     sym := AVisual.Symbol;
     { THE SERIES' OWN `symbol`, resolved here rather than taken from the shared
       symbol spec, because a pictorialBar's default is a SOLID circle while

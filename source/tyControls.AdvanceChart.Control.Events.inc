@@ -2075,7 +2075,7 @@ begin
     sp := FSankeySpecs[i];
     if not (sp.Roam in [grmPan, grmBoth]) then Continue;
     Consider(sp.ZLevel, sp.Z, 100000 + FBindings[i].SeriesIndex,
-      sp.RoamGlobal or FSankeyViews[i].ContainTrigger(AX, AY));
+      sp.RoamGlobal or SankeySelfAt(i, AX, AY));
   end;
   for i := 0 to High(FTreemaps) do
   begin

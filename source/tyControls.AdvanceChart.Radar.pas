@@ -320,6 +320,17 @@ type
       series', per RAW row (data.getItemVisual) }
     RowSyms: TTySymbolSpecArray;
     RowSymSet: TTyBoolArray;
+    { [R5-G] THE RING'S lineStyle.color (getLineStyle's stroke over the
+      defaults' `stroke: color`): the series' (LineColour) and, per RAW row,
+      an item's own over it; a gradient strokes as one. LineNone / RowLineNone:
+      'none', no pen. Unset: the row's colour. [was: the series' moved the
+      row-less fallback Fill, an item's not read] }
+    LineColourSet, LineNone: Boolean;
+    LineColour: TTyChartColor;
+    LineGrad: TTyChartGradient;
+    RowLineColourSet, RowLineNone: TTyBoolArray;
+    RowLineColour: TTyChartColorArray;
+    RowLineGrad: array of TTyChartGradient;
   end;
 
 function TyRadarSpecDefault: TTyRadarSpec;
@@ -1797,6 +1808,26 @@ begin
 
     el := TyChartElement(TyShapePolyline(ring));
     el.Style.StrokeColor := rowColour;
+    { [R5-G] the lineStyle's colour, the item's over the series' }
+    if (raw >= 0) and (raw <= High(AVisual.RowLineColourSet))
+      and AVisual.RowLineColourSet[raw] then
+    begin
+      if AVisual.RowLineNone[raw] then el.Style.StrokeColor := 0
+      else
+      begin
+        el.Style.StrokeColor := AVisual.RowLineColour[raw];
+        el.Style.StrokeGradient := AVisual.RowLineGrad[raw];
+      end;
+    end
+    else if AVisual.LineColourSet then
+    begin
+      if AVisual.LineNone then el.Style.StrokeColor := 0
+      else
+      begin
+        el.Style.StrokeColor := AVisual.LineColour;
+        el.Style.StrokeGradient := AVisual.LineGrad;
+      end;
+    end;
     el.Style.StrokeWidthLogical := AVisual.LineWidthLogical;
     { [R2-B] the ring's lineStyle width and type: the item's own over the
       series' (RadarView: itemModel.getModel('lineStyle').getLineStyle()) }

@@ -1245,9 +1245,22 @@ begin
         of it already rotated and the fill and the stroke that follow know
         nothing about it. }
       begin
+        if (AShape.RotationRad <> 0) or AShape.FlipX or AShape.FlipY then
+          P.SaveState;
+        { [R5-G] the reflection outside the turn: the path is turned, then
+          reflected (a pictorial glyph's scale sign over its rotation) }
+        if AShape.FlipX or AShape.FlipY then
+        begin
+          P.Translate(AShape.FlipCX, AShape.FlipCY);
+          if AShape.FlipX then
+          begin
+            if AShape.FlipY then P.ScaleBy(-1, -1) else P.ScaleBy(-1, 1);
+          end
+          else P.ScaleBy(1, -1);
+          P.Translate(-AShape.FlipCX, -AShape.FlipCY);
+        end;
         if AShape.RotationRad <> 0 then
         begin
-          P.SaveState;
           P.Translate(AShape.RotCX, AShape.RotCY);
           P.RotateBy(AShape.RotationRad);
           P.Translate(-AShape.RotCX, -AShape.RotCY);
@@ -1258,7 +1271,8 @@ begin
                            Round(AShape.Bounds.Right), Round(AShape.Bounds.Bottom)))
         else
           P.SvgPath(AShape.PathData);
-        if AShape.RotationRad <> 0 then P.RestoreState;
+        if (AShape.RotationRad <> 0) or AShape.FlipX or AShape.FlipY then
+          P.RestoreState;
       end;
   end;
 end;

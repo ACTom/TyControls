@@ -3092,6 +3092,18 @@ begin
   end;
 end;
 
+{ [R5-G] a ring's lineStyle.color as the pen takes it: a colour, a gradient
+  (its solid kept for the hit and the legend), or 'none'; 'auto' and an
+  unreadable word are not written }
+procedure RadarLineColour(const AColour: TTyOptColor; out ASet, ANone: Boolean;
+  out AColourOut: TTyChartColor; out AGrad: TTyChartGradient);
+begin
+  ASet := AColour.Written and not AColour.IsAuto;
+  ANone := ASet and AColour.IsNone;
+  AColourOut := AColour.Color;
+  AGrad := AColour.Gradient;
+end;
+
 function TTyCustomAdvanceChart.RadarVisual(ASlot: Integer): TTyRadarVisual;
 var
   k: Integer;
@@ -3142,12 +3154,12 @@ begin
     d := ls.Find('width');
     if (d <> nil) and (d.JSONType = jtNumber) then
       Result.LineWidthLogical := d.AsFloat;
-    d := ls.Find('color');
-    if (d <> nil) and (d.JSONType = jtString)
-      and TyTryParseChartColor(d.AsString, c) then Result.Fill := c;
   end;
   { [R2-B] lineStyle.type, the series' and each item's own (with its width) }
   os := TyReadOptStyle(node, 'lineStyle');
+  { [R5-G] its colour: the ring's pen, not the row's colour }
+  RadarLineColour(os.Color, Result.LineColourSet, Result.LineNone,
+    Result.LineColour, Result.LineGrad);
   Result.LineDash := os.Dash;
   Result.LineDashExplicit := os.DashLogical;
   Result.LineDashOffset := os.DashOffset;
@@ -3160,11 +3172,17 @@ begin
     SetLength(Result.RowLineDashExplicit, d.Count);
     SetLength(Result.RowLineDashOffsetSet, d.Count);
     SetLength(Result.RowLineDashOffset, d.Count);
+    SetLength(Result.RowLineColourSet, d.Count);
+    SetLength(Result.RowLineNone, d.Count);
+    SetLength(Result.RowLineColour, d.Count);
+    SetLength(Result.RowLineGrad, d.Count);
     for k := 0 to d.Count - 1 do
     begin
       if not (TJSONArray(d).Items[k] is TJSONObject) then Continue;
       if not (TJSONObject(TJSONArray(d).Items[k]).Find('lineStyle') is TJSONObject) then Continue;
       os := TyReadOptStyle(TJSONObject(TJSONArray(d).Items[k]), 'lineStyle');
+      RadarLineColour(os.Color, Result.RowLineColourSet[k], Result.RowLineNone[k],
+        Result.RowLineColour[k], Result.RowLineGrad[k]);
       Result.RowLineSet[k] := True;
       Result.RowLineWidth[k] := os.BorderWidthLogical;
       Result.RowLineDash[k] := os.Dash;

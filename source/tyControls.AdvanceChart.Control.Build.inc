@@ -3649,6 +3649,20 @@ begin
   FItemCbs := nil;
 end;
 
+function TTyCustomAdvanceChart.GraphItemNodesOf(ASeriesIndex: Integer): TJSONArray;
+var d: TJSONData;
+begin
+  Result := nil;
+  if FOption = nil then Exit;
+  d := FOption.ComponentAt('series', ASeriesIndex);
+  if not (d is TJSONObject) then Exit;
+  { GraphSeries.getInitialData: option.data || option.nodes }
+  if TJSONObject(d).Find('data') is TJSONArray then
+    Result := TJSONArray(TJSONObject(d).Find('data'))
+  else if TJSONObject(d).Find('nodes') is TJSONArray then
+    Result := TJSONArray(TJSONObject(d).Find('nodes'));
+end;
+
 function TTyCustomAdvanceChart.ItemCbOf(ASlot: Integer): TTyItemCallbacks;
 begin
   Result := nil;

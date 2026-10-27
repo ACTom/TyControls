@@ -3245,6 +3245,8 @@ type
     procedure SolveItemCallbacks;
     procedure RadarSymbolCallbacks(ASlot: Integer; var AVisual: TTyRadarVisual);
     function ItemCbOf(ASlot: Integer): TTyItemCallbacks;
+    { [R5-G] a graph series' node items: `data`, else `nodes` }
+    function GraphItemNodesOf(ASeriesIndex: Integer): TJSONArray;
     procedure FreeItemCbs;
     procedure HeatmapItemRadii(ASeriesIndex, APPI: Integer;
       out ARadii: TTyCornerRadiiArray; out AHas: TTyBoolArray);
@@ -4299,6 +4301,9 @@ type
       -- highest zlevel, then z, then the lowest series index -- whose roam
       allows it and whose area holds the point. -1 when none does. }
     function RoamSeriesAt(AX, AY: Integer; AZoom: Boolean): Integer;
+    { [R5-G] a sankey's roamTrigger other than 'global': the pointer in the
+      main group's own box (createIsInSelfByPointerCheckerEl) }
+    function SankeySelfAt(ASlot: Integer; AX, AY: Double): Boolean;
     { the same, with the winner's z and zlevel (0 when none) [Batch 150] }
     function RoamSeriesAtZ(AX, AY: Integer; AZoom: Boolean;
       out AZ, AZLevel: Integer): Integer;
