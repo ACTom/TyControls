@@ -120,6 +120,15 @@ type
     procedure TestTheEditorFollowsItsCell;
     procedure TestAGestureOnTheGridLeavesTheEditFirst;
     procedure TestUpDownTheEditorLeavesMoveTheCell;
+    { #139: the keys move by the rows on screen, and Tab can leave the grid. }
+    procedure TestDownFollowsTheScreenOnASortedGrid;
+    procedure TestDownStepsOverAHiddenRow;
+    procedure TestTabLeavesTheGridAtTheLastCell;
+    procedure TestShiftTabLeavesTheGridAtTheFirstCell;
+    procedure TestCtrlHomeAndCtrlEndGoToTheFirstAndLastCell;
+    procedure TestTabInTheEditorGoesToTheNextCell;
+    procedure TestEnterInTheEditorMovesDown;
+    procedure TestNoFillHandleWhileTheRowsAreNotInDataOrder;
     procedure TestPageKeysPageByTheRowsOnScreen;
     procedure TestAMemoCellCommittedUnchangedIsNotAnEdit;
     procedure TestTheCursorCellStandsOutOfAWiderSelection;
@@ -1259,6 +1268,119 @@ end;
   scroll bar. Headless nothing has the focus, so that last step never runs here; what is
   checked is that the grid claims the key before it gets that far, and does with it what its
   own arrows do. }
+procedure TGridOptionsTest.TestDownFollowsTheScreenOnASortedGrid;
+begin
+  Build(1, 3, 80);
+  FGrid.Cells[0, 0] := 'b';
+  FGrid.Cells[0, 1] := 'c';
+  FGrid.Cells[0, 2] := 'a';
+  FGrid.SortByColumn(0, sdAscending);   // on screen: a, b, c
+  FGrid.Row := 2;                       // 'a', the top row
+  FGrid.PressKey(VK_DOWN, []);
+  AssertEquals('Down goes to the row shown below', 'b', FGrid.Cells[0, FGrid.Row]);
+  FGrid.PressKey(VK_DOWN, []);
+  AssertEquals('and on', 'c', FGrid.Cells[0, FGrid.Row]);
+  FGrid.PressKey(VK_UP, []);
+  AssertEquals('Up goes back up the screen', 'b', FGrid.Cells[0, FGrid.Row]);
+end;
+
+procedure TGridOptionsTest.TestDownStepsOverAHiddenRow;
+begin
+  Build(1, 4, 80);
+  FGrid.HideRow(1);
+  FGrid.Row := 0;
+  FGrid.PressKey(VK_DOWN, []);
+  AssertEquals('Down steps over the hidden row', 2, FGrid.Row);
+  FGrid.HideRow(3);
+  FGrid.PressKey(VK_DOWN, []);
+  AssertEquals('and stops at the last row shown', 2, FGrid.Row);
+end;
+
+procedure TGridOptionsTest.TestTabLeavesTheGridAtTheLastCell;
+begin
+  Build(2, 3, 80);
+  FGrid.Col := 1;
+  FGrid.Row := 2;
+  AssertFalse('at the last cell Tab is left to the form', FGrid.PressKey(VK_TAB, []));
+  AssertEquals('the cursor stays', 1, FGrid.Col);
+  FGrid.Col := 1;
+  FGrid.Row := 1;
+  AssertTrue('before it, Tab wraps to the next row', FGrid.PressKey(VK_TAB, []));
+  AssertEquals('to its first cell', 0, FGrid.Col);
+  AssertEquals('of the next row', 2, FGrid.Row);
+end;
+
+procedure TGridOptionsTest.TestShiftTabLeavesTheGridAtTheFirstCell;
+begin
+  Build(2, 3, 80);
+  FGrid.Col := 0;
+  FGrid.Row := 0;
+  AssertFalse('at the first cell Shift+Tab is left to the form',
+    FGrid.PressKey(VK_TAB, [ssShift]));
+  FGrid.Row := 1;
+  AssertTrue('after it, Shift+Tab wraps back', FGrid.PressKey(VK_TAB, [ssShift]));
+  AssertEquals('to the last cell of the row above', 1, FGrid.Col);
+  AssertEquals('row', 0, FGrid.Row);
+end;
+
+procedure TGridOptionsTest.TestCtrlHomeAndCtrlEndGoToTheFirstAndLastCell;
+begin
+  Build(3, 5, 80);
+  FGrid.Col := 1;
+  FGrid.Row := 2;
+  FGrid.PressKey(VK_END, [ssCtrl]);
+  AssertEquals('Ctrl+End: the last row', 4, FGrid.Row);
+  AssertEquals('and the last column', 2, FGrid.Col);
+  FGrid.PressKey(VK_HOME, [ssCtrl]);
+  AssertEquals('Ctrl+Home: the first row', 0, FGrid.Row);
+  AssertEquals('and the first column', 0, FGrid.Col);
+  FGrid.Row := 2;
+  FGrid.PressKey(VK_HOME, []);
+  AssertEquals('Home alone keeps the row', 2, FGrid.Row);
+end;
+
+procedure TGridOptionsTest.TestTabInTheEditorGoesToTheNextCell;
+var
+  ed: TWinControl;
+begin
+  Build(2, 3, 80);
+  AssertTrue('setup: editing', FGrid.BeginEdit(0, 0));
+  ed := FGrid.EditorControl as TWinControl;
+  FGrid.TypeInEditor('new');
+  AssertTrue('Tab is the grid''s while editing', FGrid.KeyTo(ed, VK_TAB));
+  AssertFalse('the edit was left', FGrid.Editing);
+  AssertEquals('and committed', 'new', FGrid.Cells[0, 0]);
+  AssertEquals('the cursor went to the next cell', 1, FGrid.Col);
+  AssertEquals('on the same row', 0, FGrid.Row);
+end;
+
+procedure TGridOptionsTest.TestEnterInTheEditorMovesDown;
+var
+  ed: TWinControl;
+begin
+  Build(2, 3, 80);
+  AssertTrue('setup: editing', FGrid.BeginEdit(0, 0));
+  ed := FGrid.EditorControl as TWinControl;
+  FGrid.TypeInEditor('new');
+  FGrid.KeyTo(ed, VK_RETURN);
+  AssertFalse('the edit was left', FGrid.Editing);
+  AssertEquals('and committed', 'new', FGrid.Cells[0, 0]);
+  AssertEquals('the cursor moved down a row', 1, FGrid.Row);
+end;
+
+procedure TGridOptionsTest.TestNoFillHandleWhileTheRowsAreNotInDataOrder;
+begin
+  Build(1, 4, 80);
+  FGrid.Cells[0, 0] := '1';
+  FGrid.Cells[0, 1] := '2';
+  FGrid.Row := 0;
+  AssertFalse('precondition: a fill handle', IsRectEmpty(FGrid.FillHandleRect));
+  FGrid.HideRow(3);
+  AssertTrue('a hidden row: no fill handle', IsRectEmpty(FGrid.FillHandleRect));
+  FGrid.FillFromSelectionTo(0, 3);
+  AssertEquals('and the fill does not write into the hidden row', '', FGrid.Cells[0, 3]);
+end;
+
 procedure TGridOptionsTest.TestUpDownTheEditorLeavesMoveTheCell;
 var
   ed: TWinControl;

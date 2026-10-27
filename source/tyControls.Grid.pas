@@ -1689,6 +1689,15 @@ type
       not count, so a page never jumps past what the user could read. At least 1: LCL moves
       nothing when fewer than two rows fit, which leaves the key dead. (#57) }
     function PageRowStep: Integer;
+    { The data row ADelta rows from ARow ON SCREEN (#139). Keys move by what the user sees:
+      on a sorted, filtered or grouped grid, or one with hidden rows, the data row next to the
+      cursor's is not the one shown next to it. Group headings are stepped over; a step past
+      either end stops at the last row shown there. ARow itself when no other row is shown. }
+    function RowStep(ARow, ADelta: Integer): Integer;
+    { True when every row is shown, in data order: what the fill handle and row dragging,
+      which work on runs of data rows, need. DisplayOrderIsDataOrder alone also answers True
+      when only the last rows are filtered out. }
+    function RowsShownInDataOrder: Boolean;
 
     { 单元格所属窗格。**吃的是显示位置 APos,不是数据行** —— 这里的两个判据
       (`< FixedRows` / `>= DisplayRowCount - FixedRowsBottom`)本来就只在显示序里
@@ -2508,6 +2517,9 @@ type
     procedure RefocusEditor;
     { #52: an arrow one of the grid's own children leaves standing. See the implementation. }
     function ChildKey(var Message: TLMKey): Boolean; override;
+    { Tab's cell-to-cell move (goTabs). False at the last cell (the first with ABack), where
+      Tab leaves the grid, as in LCL. }
+    function TabMove(ABack: Boolean): Boolean;
     function  EditorTargetRect: TRect;
     function  CellKey(ACol, ARow: Integer): string;
     function  GetCells(ACol, ARow: Integer): string;
@@ -6909,6 +6921,41 @@ begin
   if Result < 0 then Result := 0;
 end;
 
+function TTyCustomGrid.RowStep(ARow, ADelta: Integer): Integer;
+var
+  cnt, pos, p, dir: Integer;
+begin
+  Result := ARow;
+  cnt := DisplayRowCount;
+  if cnt <= 0 then Exit;
+  pos := DataToDisplay(ARow);
+  if pos < 0 then
+  begin
+    { The cursor's row is not shown: a step down starts above the first row shown, a step
+      up below the last. }
+    if ADelta >= 0 then pos := -1 else pos := cnt;
+  end;
+  if ADelta > cnt then ADelta := cnt
+  else if ADelta < -cnt then ADelta := -cnt;
+  pos := pos + ADelta;
+  if pos < 0 then pos := 0;
+  if pos > cnt - 1 then pos := cnt - 1;
+  if ADelta >= 0 then dir := 1 else dir := -1;
+  p := pos;
+  while (p >= 0) and (p < cnt) and (DisplayToData(p) < 0) do Inc(p, dir);
+  if (p < 0) or (p >= cnt) then
+  begin
+    p := pos;   // the end is a heading: the nearest data row back from it
+    while (p >= 0) and (p < cnt) and (DisplayToData(p) < 0) do Dec(p, dir);
+  end;
+  if (p >= 0) and (p < cnt) then Result := DisplayToData(p);
+end;
+
+function TTyCustomGrid.RowsShownInDataOrder: Boolean;
+begin
+  Result := DisplayOrderIsDataOrder and (DisplayRowCount = FRowCount);
+end;
+
 function TTyCustomGrid.PageRowStep: Integer;
 var
   M: TTyGridMetrics;
@@ -9931,6 +9978,37 @@ begin
   end;
 end;
 
+function TTyCustomStringGrid.TabMove(ABack: Boolean): Boolean;
+var
+  r: Integer;
+begin
+  { 折行时也要落在**可见**列上,别折到一个隐藏列里去。
+    前后、行首行尾都按屏幕次序(#111);行按屏幕上的上下(#139)。 }
+  Result := True;
+  if ABack then
+  begin
+    if ColumnPlace(FCol) > ColumnPlace(FirstVisibleCol) then
+      MoveCursor(ColumnStep(FCol, -1), FRow)
+    else
+    begin
+      r := RowStep(FRow, -1);
+      if r = FRow then Exit(False);
+      MoveCursor(LastVisibleCol, r);
+    end;
+  end
+  else
+  begin
+    if ColumnPlace(FCol) < ColumnPlace(LastVisibleCol) then
+      MoveCursor(ColumnStep(FCol, 1), FRow)
+    else
+    begin
+      r := RowStep(FRow, 1);
+      if r = FRow then Exit(False);
+      MoveCursor(FirstVisibleCol, r);
+    end;
+  end;
+end;
+
 procedure TTyCustomStringGrid.MoveCursor(ACol, ARow: Integer);
 var
   canSel: Boolean;
@@ -10427,13 +10505,22 @@ begin
     VK_ESCAPE: if FEditing then begin EndEdit(False); Key := 0; end;
     VK_LEFT:  begin MoveCursor(ColumnStep(FCol, ArrowColStep(-1)), FRow); Key := 0; end;
     VK_RIGHT: begin MoveCursor(ColumnStep(FCol, ArrowColStep(1)), FRow); Key := 0; end;
-    VK_UP:    begin MoveCursor(FCol, FRow - 1); Key := 0; end;
-    VK_DOWN:  begin MoveCursor(FCol, FRow + 1); Key := 0; end;
-    VK_HOME:  begin MoveCursor(FirstVisibleCol, FRow); Key := 0; end;
-    VK_END:   begin MoveCursor(LastVisibleCol, FRow); Key := 0; end;
+    VK_UP:    begin MoveCursor(FCol, RowStep(FRow, -1)); Key := 0; end;
+    VK_DOWN:  begin MoveCursor(FCol, RowStep(FRow, 1)); Key := 0; end;
+    { Ctrl+Home / Ctrl+End: the first and the last cell, as in LCL (grids.pas VK_HOME). }
+    VK_HOME:  begin
+                if ssCtrl in Shift then MoveCursor(FirstVisibleCol, RowStep(FRow, -RowCount))
+                else MoveCursor(FirstVisibleCol, FRow);
+                Key := 0;
+              end;
+    VK_END:   begin
+                if ssCtrl in Shift then MoveCursor(LastVisibleCol, RowStep(FRow, RowCount))
+                else MoveCursor(LastVisibleCol, FRow);
+                Key := 0;
+              end;
     { A page, as LCL turns it: the rows fully on screen, minus one (#57). }
-    VK_PRIOR: begin MoveCursor(FCol, FRow - PageRowStep); Key := 0; end;
-    VK_NEXT:  begin MoveCursor(FCol, FRow + PageRowStep); Key := 0; end;
+    VK_PRIOR: begin MoveCursor(FCol, RowStep(FRow, -PageRowStep)); Key := 0; end;
+    VK_NEXT:  begin MoveCursor(FCol, RowStep(FRow, PageRowStep)); Key := 0; end;
     VK_F2:    begin BeginEdit; Key := 0; end;
     { Enter = 提交并**向下推进一格**。表格录入是一列一列往下敲的,
       停在原地会让用户每敲一格都得再按一次方向键。 }
@@ -10456,7 +10543,7 @@ begin
                    end;
                  end;
                  if FEditing and not TryEndEdit(True) then begin Key := 0; RefocusEditor; Exit; end;
-                 MoveCursor(FCol, FRow + 1);
+                 MoveCursor(FCol, RowStep(FRow, 1));
                  Key := 0;
                end;
     { Tab = 按**格**推进,到行尾折到下一行行首。
@@ -10467,20 +10554,9 @@ begin
                   "关了也还是不放行"。外面是 try..finally,直接 Exit 安全。 }
                 if not (goTabs in Options) then Exit;
                 if FEditing and not TryEndEdit(True) then begin Key := 0; RefocusEditor; Exit; end;
-                { 折行时也要落在**可见**列上,别折到一个隐藏列里去。
-                  前后、行首行尾都按屏幕次序(#111)。 }
-                if ssShift in Shift then
-                begin
-                  if ColumnPlace(FCol) > ColumnPlace(FirstVisibleCol) then
-                    MoveCursor(ColumnStep(FCol, -1), FRow)
-                  else if FRow > 0 then MoveCursor(LastVisibleCol, FRow - 1);
-                end
-                else
-                begin
-                  if ColumnPlace(FCol) < ColumnPlace(LastVisibleCol) then
-                    MoveCursor(ColumnStep(FCol, 1), FRow)
-                  else if FRow < RowCount - 1 then MoveCursor(FirstVisibleCol, FRow + 1);
-                end;
+                { #139: at the last cell (the first, going back) Tab is left alone, and the
+                  focus moves on out of the grid -- otherwise the keyboard could never leave. }
+                if not TabMove(ssShift in Shift) then Exit;
                 Key := 0;
               end;
     VK_SPACE: if EditorKindFor(FCol, FRow) = gekCheckBox then
@@ -14344,6 +14420,10 @@ begin
   if FReadOnly then Exit;
   { No fill handle outside cell-selection mode — keep "what's drawn" == "what's hit". }
   if FSelectionMode <> gsmCell then Exit;
+  { #139: the fill works on a run of data rows, so it is offered only while the rows on screen
+    are that run -- sorted, filtered, grouped or with hidden rows, it wrote into rows the user
+    could not see. }
+  if not RowsShownInDataOrder then Exit;
   b := SelectionBoundsRect;
   if IsRectEmpty(b) then Exit;
   sz := ScaleI(6);
@@ -14401,6 +14481,7 @@ begin
     这一句守的是 API 直调 —— 宿主自己的"向下填充"菜单项也改不了只读表。
     放在 OnFillCells 之前,与粘贴那头同一个理由:不请宿主否决一个不会发生的操作。 }
   if FReadOnly then Exit;
+  if not RowsShownInDataOrder then Exit;     { #139: see FillHandleRect }
   src := Selection;                          { 数据行坐标 }
   { 填哪几列看**屏幕上**选中的那一段(#111):列被拖过之后,src 的左右两角是屏幕两头
     那两列的下标,左角的下标可以比右角大,下标区间也不是选中的那几列。 }
@@ -16985,16 +17066,36 @@ end;
   stays where it is. Arrows with a modifier are not navigation, and are left alone. }
 function TTyCustomStringGrid.ChildKey(var Message: TLMKey): Boolean;
 var
-  wasEditing, refused: Boolean;
+  wasEditing, refused, back: Boolean;
 begin
+  { #139: Tab in a cell editor is the grid's Tab -- commit and go to the next cell -- not the
+    form's, which took the focus out of the grid. At the last cell it goes on out. }
+  if (Message.CharCode = VK_TAB) and FEditing and (goTabs in Options) and
+     (GetKeyShiftState * [ssCtrl, ssAlt, ssMeta] = []) then
+  begin
+    back := ssShift in GetKeyShiftState;
+    if not TryEndEdit(True) then
+    begin
+      Message.CharCode := VK_UNKNOWN;
+      RefocusEditor;
+      ReportUnfilledMask;
+      Exit(True);
+    end;
+    if HandleAllocated and CanFocus then SetFocus;
+    if TabMove(back) then
+    begin
+      Message.CharCode := VK_UNKNOWN;
+      Exit(True);
+    end;
+  end;
   if (Message.CharCode in [VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN]) and
      (GetKeyShiftState * [ssShift, ssCtrl, ssAlt, ssMeta] = []) then
   begin
     wasEditing := FEditing;
     if FEditing then
       case Message.CharCode of
-        VK_UP:   MoveCursor(FCol, FRow - 1);
-        VK_DOWN: MoveCursor(FCol, FRow + 1);
+        VK_UP:   MoveCursor(FCol, RowStep(FRow, -1));
+        VK_DOWN: MoveCursor(FCol, RowStep(FRow, 1));
       end;
     if wasEditing and not FEditing and HandleAllocated and CanFocus then SetFocus;
     { #67: an Up/Down the edit turned down. Only Up/Down reach here from the mask editor --
@@ -17019,6 +17120,8 @@ begin
                  if TryEndEdit(True) then
                  begin
                    if HandleAllocated and CanFocus then SetFocus;
+                   { #139: and on to the next row, as Enter on the grid itself does. }
+                   MoveCursor(FCol, RowStep(FRow, 1));
                  end
                  else
                    ReportUnfilledMask;   { #67 }
@@ -17063,8 +17166,8 @@ begin
   if ((Key = VK_UP) or (Key = VK_DOWN)) and not FPickEditor.DroppedDown and
      (Shift * [ssShift, ssCtrl, ssAlt, ssMeta] = []) then
   begin
-    if Key = VK_UP then MoveCursor(FCol, FRow - 1)
-    else MoveCursor(FCol, FRow + 1);
+    if Key = VK_UP then MoveCursor(FCol, RowStep(FRow, -1))
+    else MoveCursor(FCol, RowStep(FRow, 1));
     if not FEditing and HandleAllocated and CanFocus then SetFocus;
     Key := 0;
     Exit;
