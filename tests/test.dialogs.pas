@@ -54,6 +54,9 @@ type
   TDialogBaseTest = class(TTestCase)
   published
     procedure TestAddButtonWiresModalResult;
+    { #179: Enter is left to the focused control; the default and cancel buttons are the form's
+      DefaultControl and CancelControl, which LCL gives an Enter or an Esc the control left. }
+    procedure TestEnterIsLeftToTheFocusedControl;
     procedure TestCloseGivesCancel;
     procedure TestTwoButtonLayoutRightToLeft;
     procedure TestAHiddenButtonLeavesNoGap;
@@ -298,6 +301,38 @@ begin
     AssertEquals('caption', 'OK', b.Caption);
     b.Click;                     // TTyButton.Click routes its ModalResult to the host form
     AssertEquals('modal result set', Ord(mrOk), Ord(d.ModalResult));
+  finally d.Free; end;
+end;
+
+type
+  TDialogKeyProbe = class(TTyDialog)
+  public
+    procedure PreviewKey(var Key: Word);
+  end;
+
+procedure TDialogKeyProbe.PreviewKey(var Key: Word);
+begin
+  KeyDown(Key, []);
+end;
+
+procedure TDialogBaseTest.TestEnterIsLeftToTheFocusedControl;
+var
+  d: TDialogKeyProbe;
+  ok, cancel: TTyButton;
+  k: Word;
+begin
+  d := TDialogKeyProbe.CreateNew(nil);
+  try
+    ok := d.AddButton('OK', mrOk, True, False);
+    cancel := d.AddButton('Cancel', mrCancel, False, True);
+    AssertSame('the default button is the form''s DefaultControl', TControl(ok),
+      TControl(d.DefaultControl));
+    AssertSame('the cancel button its CancelControl', TControl(cancel),
+      TControl(d.CancelControl));
+    k := 13;
+    d.PreviewKey(k);
+    AssertEquals('the key preview leaves Enter alone', 13, k);
+    AssertEquals('and closes nothing', Ord(mrNone), Ord(d.ModalResult));
   finally d.Free; end;
 end;
 
