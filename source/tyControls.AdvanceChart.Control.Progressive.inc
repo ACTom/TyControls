@@ -732,6 +732,7 @@ var
   zr, er: TTyXYWH;
   sc: TTyCanvasScale;
   measurer: ITyTextMeasurer;
+  zc, pass: Integer;
 
   procedure Band(ADst: TBGRABitmap; const ABand: TRect);
   begin
@@ -815,20 +816,36 @@ begin
         sc.DeviceUnits := False;
         P.BeginPaintOnScaled(nil, Rect(0, 0, w, h), APPI, nb, sc);
         clip := nb.ClipRect;
-        for i := FProgBlitAt + 1 to FPaintList.Count - 1 do
+        { [R5-G] the two zlevel passes the full paint makes }
+        zc := ComponentZLevel;
+        for pass := 0 to 1 do
         begin
-          idx := FPaintList.PaintOrder(i);
-          pe := FPaintList.Ref(idx);
-          { ProgRenderList's own skips; a run's elements are the layer's }
-          if pe^.Ignore or pe^.ProgHidden or pe^.GfxUnder or (pe^.ProgChunk > 0) then Continue;
-          if TyElementPaintRect(pe^, APPI, er) and not TyZrRectIntersect(er, zr) then Continue;
-          TyRenderElement(P, pe^);
-          nb.ClipRect := clip;
+          if pass = 0 then
+            TySetZBand(-MaxInt, zc)
+          else
+          begin
+            { what the static paint draws over the series, as it draws it }
+            PaintBreakAreas(P);
+            PaintParallels(P, APPI, measurer);
+            PaintTitles(P);
+            if TyMaxZLevelOf(FPaintList) <= zc then Break;
+            TySetZBand(zc, ZStaticTop);
+          end;
+          try
+            for i := FProgBlitAt + 1 to FPaintList.Count - 1 do
+            begin
+              idx := FPaintList.PaintOrder(i);
+              pe := FPaintList.Ref(idx);
+              { ProgRenderList's own skips; a run's elements are the layer's }
+              if pe^.Ignore or pe^.ProgHidden or pe^.GfxUnder or (pe^.ProgChunk > 0) then Continue;
+              if TyElementPaintRect(pe^, APPI, er) and not TyZrRectIntersect(er, zr) then Continue;
+              TyRenderElement(P, pe^);
+              nb.ClipRect := clip;
+            end;
+          finally
+            TyClearZBand;
+          end;
         end;
-        { what the static paint draws over the series, as it draws it }
-        PaintBreakAreas(P);
-        PaintParallels(P, APPI, measurer);
-        PaintTitles(P);
         nb.ClipRect := Rect(0, 0, nb.Width, nb.Height);
         P.EndPaint;
       finally

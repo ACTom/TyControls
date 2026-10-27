@@ -346,6 +346,8 @@ begin
   if (AName <> '') and (AName <> 'default') then Exit;
   FLoadCfg := cfg;
   FLoadShown := True;
+  { [R5-G] an element over the mask's zlevel leaves the static layer }
+  if TyMaxZLevelOf(FPaintList) > ZStaticTop then StaticDrop;
   if FLoadCfg.ShowSpinner then
   begin
     if FLoadAnim = nil then FLoadAnim := NewAnimDriver;
@@ -362,6 +364,8 @@ end;
 procedure TTyCustomAdvanceChart.HideLoading;
 begin
   if not FLoadShown and (FLoadArc = nil) then Exit;
+  { [R5-G] and comes back to it }
+  if FLoadShown and (TyMaxZLevelOf(FPaintList) > ZStaticTop) then StaticDrop;
   LoadDrop;
   FLoadShown := False;
   FLoadGeoValid := False;

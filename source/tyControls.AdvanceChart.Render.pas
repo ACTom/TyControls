@@ -27,6 +27,17 @@ procedure TyTraceShape(P: TTyPainter; const AShape: TTyChartShape);
 { Draw one element: its shape, filled and/or stroked per its style. }
 procedure TyRenderElement(P: TTyPainter; const AElement: TTyChartElement);
 
+{ [R5-G] A ZLEVEL BAND for what a paint list draws: while one is set,
+  TyRenderElement draws only an element whose ZLevel is above ALo and at
+  most AHi -- zrender's canvas per zlevel, the elements of the chart drawn
+  in two passes with the components (axes, titles, the loading mask) that
+  the port draws apart from the list between them. TyClearZBand: every
+  element again. }
+procedure TySetZBand(ALo, AHi: Integer);
+procedure TyClearZBand;
+{ the highest ZLevel of AList's elements that draw (-MaxInt for none) }
+function TyMaxZLevelOf(AList: TTyPaintList): Integer;
+
 { [R5-C] the pen an element's style strokes with: its cap, its join, its
   miter limit (zrender's 10 where the style says nothing) }
 function TyStyleLineCap(const AStyle: TTyChartElementStyle): TTyLineCap;
@@ -2842,6 +2853,35 @@ begin
   Result.EndRad := en;
 end;
 
+var
+  GZBandOn: Boolean = False;
+  GZBandLo, GZBandHi: Integer;
+
+procedure TySetZBand(ALo, AHi: Integer);
+begin
+  GZBandOn := True;
+  GZBandLo := ALo;
+  GZBandHi := AHi;
+end;
+
+procedure TyClearZBand;
+begin
+  GZBandOn := False;
+end;
+
+function TyMaxZLevelOf(AList: TTyPaintList): Integer;
+var i: Integer; pe: PTyChartElement;
+begin
+  Result := -MaxInt;
+  if AList = nil then Exit;
+  for i := 0 to AList.Count - 1 do
+  begin
+    pe := AList.Ref(i);
+    if pe^.Ignore or pe^.GfxUnder then Continue;
+    if pe^.ZLevel > Result then Result := pe^.ZLevel;
+  end;
+end;
+
 procedure TyRenderElement(P: TTyPainter; const AElement: TTyChartElement);
 var
   rule: TTyFillRule;
@@ -3350,6 +3390,8 @@ var
 
 begin
   if P = nil then Exit;
+  { [R5-G] outside the band a list render is held to }
+  if GZBandOn and ((AElement.ZLevel <= GZBandLo) or (AElement.ZLevel > GZBandHi)) then Exit;
   { [F6a] A PICTURE: the image in its corners, with the element's alpha and
     clip, and nothing else of the style -- zrender's Image draws no path
     (a symbol's colour never reaches it) }

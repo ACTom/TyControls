@@ -320,6 +320,87 @@ function runLogPointer() {
   return out;
 }
 
+// ---- alignTicks with what spec 82 left undone: dataZoom on the aligned
+// axis, an inverse one, containShape (bars on a value base axis), an axis
+// that writes breaks (falls back: niced on its own) ----
+const ALIGN_BASE = (extra) => Object.assign({ animation: false, grid: { left: 60, right: 60, top: 40, bottom: 60 },
+  xAxis: { type: 'category', data: ['a', 'b', 'c', 'd', 'e'] },
+  yAxis: [{ type: 'value' }, { type: 'value', alignTicks: true }],
+  series: [{ type: 'line', data: [12, 37, 51, 8, 29] }, { type: 'line', yAxisIndex: 1, data: [0.3, 2.9, 1.7, 4.4, 2.2] }] }, extra || {});
+const ALIGN_CASES = [
+  { id: 'align-plain', option: ALIGN_BASE() },
+  { id: 'align-zoom', note: 'a dataZoom window on the aligned axis: both its ends count as fixed',
+    option: ALIGN_BASE({ dataZoom: [{ type: 'inside', yAxisIndex: 1, startValue: 1, endValue: 4, filterMode: 'none' }] }) },
+  { id: 'align-zoom-ref', note: 'a dataZoom window on the reference axis',
+    option: ALIGN_BASE({ dataZoom: [{ type: 'inside', yAxisIndex: 0, start: 10, end: 80, filterMode: 'none' }] }) },
+  { id: 'align-inverse', note: 'the aligned axis inverse',
+    option: ALIGN_BASE({ yAxis: [{ type: 'value' }, { type: 'value', alignTicks: true, inverse: true }] }) },
+  { id: 'align-inverse-ref', note: 'the reference inverse',
+    option: ALIGN_BASE({ yAxis: [{ type: 'value', inverse: true }, { type: 'value', alignTicks: true }] }) },
+  { id: 'align-shape', note: 'bars on value x axes: containShape on the aligned one',
+    option: { animation: false, grid: { left: 60, right: 60, top: 40, bottom: 60 },
+      xAxis: [{ type: 'value' }, { type: 'value', alignTicks: true }], yAxis: { type: 'value' },
+      series: [{ type: 'bar', data: [[1, 3], [4, 6], [9, 2]] }, { type: 'bar', xAxisIndex: 1, data: [[0.5, 2], [2.5, 5]] }] } },
+  { id: 'align-breaks', note: 'the aligned axis writes breaks: niced on its own',
+    option: ALIGN_BASE({ yAxis: [{ type: 'value' }, { type: 'value', alignTicks: true, breaks: [{ start: 2, end: 3 }] }] }) },
+];
+function runAlign(c) {
+  const chart = mk();
+  chart.setOption(c.option);
+  const axes = [];
+  ['xAxis', 'yAxis'].forEach(t => chart.getModel().eachComponent(t, m => {
+    const ax = m.axis;
+    if (ax.type === 'category') return;
+    const ext = ax.scale.getExtent();
+    axes.push({ dim: t, index: m.componentIndex, extent: ext.map(hex), interval: hex(ax.scale.getConfig ? ax.scale.getConfig().interval : ax.scale.getInterval()),
+      ticks: ax.scale.getTicks().map(q => hex(q.value)), inverse: !!ax.inverse });
+  }));
+  chart.dispose();
+  return { id: c.id, note: c.note || '', option: c.option, axes };
+}
+
+// ---- zlevel across what the port draws apart from its list: a title (z 6,
+// zlevel 0) and a series of zlevel 1 that the title's box overlaps; the
+// loading mask (zlevel 0, z 10000) under a series of zlevel 1 ----
+const ZL_OPT = { title: { text: 'TITLE TEXT', left: 40, top: 40, backgroundColor: '#ff0000', padding: 20, textStyle: { fontSize: 20 } },
+  xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
+  series: [{ type: 'scatter', zlevel: 1, symbolSize: 40, itemStyle: { color: '#0000ff', opacity: 1 }, data: [[1, 9]] }] };
+function runZLevel() {
+  const chart = mk();
+  chart.setOption(Object.assign({ animation: false }, ZL_OPT));
+  const tm = chart.getModel().getComponent('title', 0);
+  const titleEls = [];
+  eachDisp(chart.getViewOfComponentModel(tm).group, el => titleEls.push({ zlevel: el.zlevel, z: el.z }));
+  const sm = chart.getModel().getSeriesByIndex(0);
+  const sym = sm.getData().getItemGraphicEl(0);
+  const symLayout = sm.getData().getItemLayout(0);
+  chart.showLoading({ text: '' });
+  const mask = [];
+  const fx = chart._loadingFX;
+  eachDisp(fx, el => mask.push({ zlevel: el.zlevel, z: el.z, type: el.type }));
+  chart.dispose();
+  return { option: ZL_OPT, title: titleEls, symbol: { zlevel: sym.childAt(0).zlevel, z: sym.childAt(0).z, x: hex(symLayout[0]), y: hex(symLayout[1]) }, loading: mask };
+}
+
+// ---- a title's box: install.ts' Rect, fill backgroundColor, stroke
+// borderColor (tokens.color.primary by default), lineWidth borderWidth ----
+function runTitleBox() {
+  const opts = [{ text: 'Box', left: 40, top: 40, padding: 10, backgroundColor: '#ff0000', borderColor: '#0000ff', borderWidth: 3 },
+    { text: 'Box', left: 40, top: 40, padding: 10, borderWidth: 2 }];
+  return opts.map(o => {
+    const chart = mk();
+    chart.setOption({ animation: false, title: o });
+    const tm = chart.getModel().getComponent('title', 0);
+    let rect = null;
+    eachDisp(chart.getViewOfComponentModel(tm).group, el => { if (el.type === 'rect') rect = el; });
+    const st = rect.style;
+    const out = { option: { title: o }, rect: rectRec(rect.shape), fill: colourRec(st.fill), stroke: colourRec(st.stroke),
+      lineWidth: hex(st.lineWidth) };
+    chart.dispose();
+    return out;
+  });
+}
+
 // ---- gradients on the axis pieces ----
 const H_GRAD = { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }] };
 const V_GRAD = { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#00c000' }, { offset: 1, color: '#c000c0' }] };
@@ -391,6 +472,9 @@ function generate() {
     radarLabels: RADAR_LABEL_CASES.map(runRadarLabels),
     river: runRiver(),
     logPointer: runLogPointer(),
+    align: ALIGN_CASES.map(runAlign),
+    zlevel: runZLevel(),
+    titleBox: runTitleBox(),
   };
 }
 
@@ -462,6 +546,12 @@ const guards = [
       && num(r.steps[3].gap[1]) === num(r.steps[3].rect[3]) * 0.2 && num(r.steps[4].gap[1]) === num(r.steps[3].gap[1]))(out1.river) },
   { name: 'logPointer: a value outside the effective extent the log axis contains (its mapping extent)',
     ok: out1.logPointer.contain && !out1.logPointer.inEffective },
+  { name: 'zlevel: the title at zlevel 0, the symbol at 1, the loading mask at 0 z 10000',
+    ok: out1.zlevel.title.length > 0 && out1.zlevel.title.every(e => e.zlevel === 0) && out1.zlevel.symbol.zlevel === 1
+      && out1.zlevel.loading.some(e => e.type === 'rect' && e.zlevel === 0 && e.z === 10000) },
+  { name: "titleBox: the author's fill and border; the default border the primary token",
+    ok: out1.titleBox[0].fill === '#ff0000' && out1.titleBox[0].stroke === '#0000ff' && num(out1.titleBox[0].lineWidth) === 3
+      && typeof out1.titleBox[1].stroke === 'string' && num(out1.titleBox[1].lineWidth) === 2 },
 ];
 out1.guards = guards.map(g => ({ name: g.name, ok: !!g.ok }));
 out1.grid.forEach(c => console.log(c.id + ': ' + JSON.stringify(c.grids.map(g => g.present ? [g.fill, g.stroke, g.lineWidth && num(g.lineWidth), g.lineDash] : null))));
@@ -470,6 +560,9 @@ out1.radar.forEach(c => console.log(c.id + ': ' + JSON.stringify([c.axisLines[0]
 out1.radarLabels.forEach(c => console.log(c.id + ': ' + JSON.stringify(c.axes.map(x => [x.labels.map(l => (l.ignore ? '-' : '') + l.text).join(' '), x.ticks.map(q => q ? 1 : 0).join('')]))));
 console.log('river: ' + JSON.stringify(out1.river.steps.map(s => [s.what, s.gap.map(num), num(s.rect[3])])));
 console.log('logPointer: ' + JSON.stringify([num(out1.logPointer.px), num(out1.logPointer.value), out1.logPointer.effective.map(num), out1.logPointer.contain]));
+out1.align.forEach(c => console.log(c.id + ': ' + JSON.stringify(c.axes.map(x => [x.dim + x.index, x.extent.map(num), num(x.interval), x.ticks.length]))));
+console.log('zlevel: ' + JSON.stringify([out1.zlevel.title, out1.zlevel.symbol.zlevel, out1.zlevel.loading]));
+console.log('titleBox: ' + JSON.stringify(out1.titleBox.map(b => [b.rect.map(num), b.fill, b.stroke, num(b.lineWidth)])));
 out1.gradient.forEach(c => console.log(c.id + ': ' + JSON.stringify(c.strokes.map(s => [s.axis, s.role, s.rect.map(num), s.gradient.map(num)]))));
 const bad = out1.guards.filter(q => !q.ok);
 out1.guards.forEach(q => console.log('guard ' + (q.ok ? 'ok  ' : 'FAIL') + ' ' + q.name));

@@ -2995,6 +2995,837 @@
   "contain": true,
   "inEffective": false
  },
+ "align": [
+  {
+   "id": "align-plain",
+   "note": "",
+   "option": {
+    "animation": false,
+    "grid": {
+     "left": 60,
+     "right": 60,
+     "top": 40,
+     "bottom": 60
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": [
+     {
+      "type": "value"
+     },
+     {
+      "type": "value",
+      "alignTicks": true
+     }
+    ],
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       12,
+       37,
+       51,
+       8,
+       29
+      ]
+     },
+     {
+      "type": "line",
+      "yAxisIndex": 1,
+      "data": [
+       0.3,
+       2.9,
+       1.7,
+       4.4,
+       2.2
+      ]
+     }
+    ]
+   },
+   "axes": [
+    {
+     "dim": "yAxis",
+     "index": 0,
+     "extent": [
+      "0000000000000000",
+      "404e000000000000"
+     ],
+     "interval": "4024000000000000",
+     "ticks": [
+      "0000000000000000",
+      "4024000000000000",
+      "4034000000000000",
+      "403e000000000000",
+      "4044000000000000",
+      "4049000000000000",
+      "404e000000000000"
+     ],
+     "inverse": false
+    },
+    {
+     "dim": "yAxis",
+     "index": 1,
+     "extent": [
+      "0000000000000000",
+      "4018000000000000"
+     ],
+     "interval": "3ff0000000000000",
+     "ticks": [
+      "0000000000000000",
+      "3ff0000000000000",
+      "4000000000000000",
+      "4008000000000000",
+      "4010000000000000",
+      "4014000000000000",
+      "4018000000000000"
+     ],
+     "inverse": false
+    }
+   ]
+  },
+  {
+   "id": "align-zoom",
+   "note": "a dataZoom window on the aligned axis: both its ends count as fixed",
+   "option": {
+    "animation": false,
+    "grid": {
+     "left": 60,
+     "right": 60,
+     "top": 40,
+     "bottom": 60
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": [
+     {
+      "type": "value"
+     },
+     {
+      "type": "value",
+      "alignTicks": true
+     }
+    ],
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       12,
+       37,
+       51,
+       8,
+       29
+      ]
+     },
+     {
+      "type": "line",
+      "yAxisIndex": 1,
+      "data": [
+       0.3,
+       2.9,
+       1.7,
+       4.4,
+       2.2
+      ]
+     }
+    ],
+    "dataZoom": [
+     {
+      "type": "inside",
+      "yAxisIndex": 1,
+      "startValue": 1,
+      "endValue": 4,
+      "filterMode": "none"
+     }
+    ]
+   },
+   "axes": [
+    {
+     "dim": "yAxis",
+     "index": 0,
+     "extent": [
+      "0000000000000000",
+      "404e000000000000"
+     ],
+     "interval": "4024000000000000",
+     "ticks": [
+      "0000000000000000",
+      "4024000000000000",
+      "4034000000000000",
+      "403e000000000000",
+      "4044000000000000",
+      "4049000000000000",
+      "404e000000000000"
+     ],
+     "inverse": false
+    },
+    {
+     "dim": "yAxis",
+     "index": 1,
+     "extent": [
+      "3ff0000000000000",
+      "4010000000000000"
+     ],
+     "interval": "3fe0000000000000",
+     "ticks": [
+      "3ff0000000000000",
+      "3ff8000000000000",
+      "4000000000000000",
+      "4004000000000000",
+      "4008000000000000",
+      "400c000000000000",
+      "4010000000000000"
+     ],
+     "inverse": false
+    }
+   ]
+  },
+  {
+   "id": "align-zoom-ref",
+   "note": "a dataZoom window on the reference axis",
+   "option": {
+    "animation": false,
+    "grid": {
+     "left": 60,
+     "right": 60,
+     "top": 40,
+     "bottom": 60
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": [
+     {
+      "type": "value"
+     },
+     {
+      "type": "value",
+      "alignTicks": true
+     }
+    ],
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       12,
+       37,
+       51,
+       8,
+       29
+      ]
+     },
+     {
+      "type": "line",
+      "yAxisIndex": 1,
+      "data": [
+       0.3,
+       2.9,
+       1.7,
+       4.4,
+       2.2
+      ]
+     }
+    ],
+    "dataZoom": [
+     {
+      "type": "inside",
+      "yAxisIndex": 0,
+      "start": 10,
+      "end": 80,
+      "filterMode": "none"
+     }
+    ]
+   },
+   "axes": [
+    {
+     "dim": "yAxis",
+     "index": 0,
+     "extent": [
+      "4014666666666666",
+      "4044666666666666"
+     ],
+     "interval": "4024000000000000",
+     "ticks": [
+      "4014666666666666",
+      "4024000000000000",
+      "4034000000000000",
+      "403e000000000000",
+      "4044000000000000",
+      "4044666666666666"
+     ],
+     "inverse": false
+    },
+    {
+     "dim": "yAxis",
+     "index": 1,
+     "extent": [
+      "bfef5c28f5c28f5c",
+      "4018a3d70a3d70a4"
+     ],
+     "interval": "4000000000000000",
+     "ticks": [
+      "bfef5c28f5c28f5c",
+      "0000000000000000",
+      "4000000000000000",
+      "4010000000000000",
+      "4018000000000000",
+      "4018a3d70a3d70a4"
+     ],
+     "inverse": false
+    }
+   ]
+  },
+  {
+   "id": "align-inverse",
+   "note": "the aligned axis inverse",
+   "option": {
+    "animation": false,
+    "grid": {
+     "left": 60,
+     "right": 60,
+     "top": 40,
+     "bottom": 60
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": [
+     {
+      "type": "value"
+     },
+     {
+      "type": "value",
+      "alignTicks": true,
+      "inverse": true
+     }
+    ],
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       12,
+       37,
+       51,
+       8,
+       29
+      ]
+     },
+     {
+      "type": "line",
+      "yAxisIndex": 1,
+      "data": [
+       0.3,
+       2.9,
+       1.7,
+       4.4,
+       2.2
+      ]
+     }
+    ]
+   },
+   "axes": [
+    {
+     "dim": "yAxis",
+     "index": 0,
+     "extent": [
+      "0000000000000000",
+      "404e000000000000"
+     ],
+     "interval": "4024000000000000",
+     "ticks": [
+      "0000000000000000",
+      "4024000000000000",
+      "4034000000000000",
+      "403e000000000000",
+      "4044000000000000",
+      "4049000000000000",
+      "404e000000000000"
+     ],
+     "inverse": false
+    },
+    {
+     "dim": "yAxis",
+     "index": 1,
+     "extent": [
+      "0000000000000000",
+      "4018000000000000"
+     ],
+     "interval": "3ff0000000000000",
+     "ticks": [
+      "0000000000000000",
+      "3ff0000000000000",
+      "4000000000000000",
+      "4008000000000000",
+      "4010000000000000",
+      "4014000000000000",
+      "4018000000000000"
+     ],
+     "inverse": true
+    }
+   ]
+  },
+  {
+   "id": "align-inverse-ref",
+   "note": "the reference inverse",
+   "option": {
+    "animation": false,
+    "grid": {
+     "left": 60,
+     "right": 60,
+     "top": 40,
+     "bottom": 60
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": [
+     {
+      "type": "value",
+      "inverse": true
+     },
+     {
+      "type": "value",
+      "alignTicks": true
+     }
+    ],
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       12,
+       37,
+       51,
+       8,
+       29
+      ]
+     },
+     {
+      "type": "line",
+      "yAxisIndex": 1,
+      "data": [
+       0.3,
+       2.9,
+       1.7,
+       4.4,
+       2.2
+      ]
+     }
+    ]
+   },
+   "axes": [
+    {
+     "dim": "yAxis",
+     "index": 0,
+     "extent": [
+      "0000000000000000",
+      "404e000000000000"
+     ],
+     "interval": "4024000000000000",
+     "ticks": [
+      "0000000000000000",
+      "4024000000000000",
+      "4034000000000000",
+      "403e000000000000",
+      "4044000000000000",
+      "4049000000000000",
+      "404e000000000000"
+     ],
+     "inverse": true
+    },
+    {
+     "dim": "yAxis",
+     "index": 1,
+     "extent": [
+      "0000000000000000",
+      "4018000000000000"
+     ],
+     "interval": "3ff0000000000000",
+     "ticks": [
+      "0000000000000000",
+      "3ff0000000000000",
+      "4000000000000000",
+      "4008000000000000",
+      "4010000000000000",
+      "4014000000000000",
+      "4018000000000000"
+     ],
+     "inverse": false
+    }
+   ]
+  },
+  {
+   "id": "align-shape",
+   "note": "bars on value x axes: containShape on the aligned one",
+   "option": {
+    "animation": false,
+    "grid": {
+     "left": 60,
+     "right": 60,
+     "top": 40,
+     "bottom": 60
+    },
+    "xAxis": [
+     {
+      "type": "value"
+     },
+     {
+      "type": "value",
+      "alignTicks": true
+     }
+    ],
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       [
+        1,
+        3
+       ],
+       [
+        4,
+        6
+       ],
+       [
+        9,
+        2
+       ]
+      ]
+     },
+     {
+      "type": "bar",
+      "xAxisIndex": 1,
+      "data": [
+       [
+        0.5,
+        2
+       ],
+       [
+        2.5,
+        5
+       ]
+      ]
+     }
+    ]
+   },
+   "axes": [
+    {
+     "dim": "xAxis",
+     "index": 0,
+     "extent": [
+      "0000000000000000",
+      "4024000000000000"
+     ],
+     "interval": "4000000000000000",
+     "ticks": [
+      "0000000000000000",
+      "4000000000000000",
+      "4010000000000000",
+      "4018000000000000",
+      "4020000000000000",
+      "4024000000000000"
+     ],
+     "inverse": false
+    },
+    {
+     "dim": "xAxis",
+     "index": 1,
+     "extent": [
+      "0000000000000000",
+      "4004000000000000"
+     ],
+     "interval": "3fe0000000000000",
+     "ticks": [
+      "0000000000000000",
+      "3fe0000000000000",
+      "3ff0000000000000",
+      "3ff8000000000000",
+      "4000000000000000",
+      "4004000000000000"
+     ],
+     "inverse": false
+    },
+    {
+     "dim": "yAxis",
+     "index": 0,
+     "extent": [
+      "0000000000000000",
+      "4018000000000000"
+     ],
+     "interval": "3ff0000000000000",
+     "ticks": [
+      "0000000000000000",
+      "3ff0000000000000",
+      "4000000000000000",
+      "4008000000000000",
+      "4010000000000000",
+      "4014000000000000",
+      "4018000000000000"
+     ],
+     "inverse": false
+    }
+   ]
+  },
+  {
+   "id": "align-breaks",
+   "note": "the aligned axis writes breaks: niced on its own",
+   "option": {
+    "animation": false,
+    "grid": {
+     "left": 60,
+     "right": 60,
+     "top": 40,
+     "bottom": 60
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": [
+     {
+      "type": "value"
+     },
+     {
+      "type": "value",
+      "alignTicks": true,
+      "breaks": [
+       {
+        "start": 2,
+        "end": 3
+       }
+      ]
+     }
+    ],
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       12,
+       37,
+       51,
+       8,
+       29
+      ]
+     },
+     {
+      "type": "line",
+      "yAxisIndex": 1,
+      "data": [
+       0.3,
+       2.9,
+       1.7,
+       4.4,
+       2.2
+      ]
+     }
+    ]
+   },
+   "axes": [
+    {
+     "dim": "yAxis",
+     "index": 0,
+     "extent": [
+      "0000000000000000",
+      "404e000000000000"
+     ],
+     "interval": "4024000000000000",
+     "ticks": [
+      "0000000000000000",
+      "4024000000000000",
+      "4034000000000000",
+      "403e000000000000",
+      "4044000000000000",
+      "4049000000000000",
+      "404e000000000000"
+     ],
+     "inverse": false
+    },
+    {
+     "dim": "yAxis",
+     "index": 1,
+     "extent": [
+      "0000000000000000",
+      "4012000000000000"
+     ],
+     "interval": "3fe0000000000000",
+     "ticks": [
+      "0000000000000000",
+      "3fe0000000000000",
+      "3ff0000000000000",
+      "3ff8000000000000",
+      "4000000000000000",
+      "4008000000000000",
+      "400c000000000000",
+      "4010000000000000",
+      "4012000000000000"
+     ],
+     "inverse": false
+    }
+   ]
+  }
+ ],
+ "zlevel": {
+  "option": {
+   "title": {
+    "text": "TITLE TEXT",
+    "left": 40,
+    "top": 40,
+    "backgroundColor": "#ff0000",
+    "padding": 20,
+    "textStyle": {
+     "fontSize": 20
+    }
+   },
+   "xAxis": {
+    "type": "value",
+    "min": 0,
+    "max": 10
+   },
+   "yAxis": {
+    "type": "value",
+    "min": 0,
+    "max": 10
+   },
+   "series": [
+    {
+     "type": "scatter",
+     "zlevel": 1,
+     "symbolSize": 40,
+     "itemStyle": {
+      "color": "#0000ff",
+      "opacity": 1
+     },
+     "data": [
+      [
+       1,
+       9
+      ]
+     ]
+    }
+   ]
+  },
+  "title": [
+   {
+    "zlevel": 0,
+    "z": 6
+   },
+   {
+    "zlevel": 0,
+    "z": 6
+   }
+  ],
+  "symbol": {
+   "zlevel": 1,
+   "z": 2,
+   "x": "4060e00000000000",
+   "y": "4056a00000000000"
+  },
+  "loading": [
+   {
+    "zlevel": 0,
+    "z": 10000,
+    "type": "rect"
+   },
+   {
+    "zlevel": 0,
+    "z": 10001,
+    "type": "rect"
+   },
+   {
+    "zlevel": 0,
+    "z": 10001,
+    "type": "arc"
+   }
+  ]
+ },
+ "titleBox": [
+  {
+   "option": {
+    "title": {
+     "text": "Box",
+     "left": 40,
+     "top": 40,
+     "padding": 10,
+     "backgroundColor": "#ff0000",
+     "borderColor": "#0000ff",
+     "borderWidth": 3
+    }
+   },
+   "rect": [
+    "c024000000000000",
+    "c024000000000000",
+    "404991eb851eb852",
+    "4043000000000000"
+   ],
+   "fill": "#ff0000",
+   "stroke": "#0000ff",
+   "lineWidth": "4008000000000000"
+  },
+  {
+   "option": {
+    "title": {
+     "text": "Box",
+     "left": 40,
+     "top": 40,
+     "padding": 10,
+     "borderWidth": 2
+    }
+   },
+   "rect": [
+    "c024000000000000",
+    "c024000000000000",
+    "404991eb851eb852",
+    "4043000000000000"
+   ],
+   "fill": "rgba(0,0,0,0)",
+   "stroke": "#3c3c41",
+   "lineWidth": "4000000000000000"
+  }
+ ],
  "guards": [
   {
    "name": "grid-default: one rect, a transparent fill (tokens.color.transparent), #b7b9be 1 px, z2 -1, silent, under the axes",
@@ -3094,6 +3925,14 @@
   },
   {
    "name": "logPointer: a value outside the effective extent the log axis contains (its mapping extent)",
+   "ok": true
+  },
+  {
+   "name": "zlevel: the title at zlevel 0, the symbol at 1, the loading mask at 0 z 10000",
+   "ok": true
+  },
+  {
+   "name": "titleBox: the author's fill and border; the default border the primary token",
    "ok": true
   }
  ]

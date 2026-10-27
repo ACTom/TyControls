@@ -1690,7 +1690,7 @@ const
     + '"backgroundColor":"#ffffff","padding":10%s}}';
 var
   plain, shaded: TBGRABitmap;
-  y, hits, first: Integer;
+  y, hits, first, bottom: Integer;
 begin
   NewChart(300, 200);
   FChart.Option := Format(cOpt, ['']);
@@ -1707,9 +1707,16 @@ begin
         Inc(hits);
         if first < 0 then first := y;
       end;
-    AssertTrue(Format('the frame''s shadow (%d rows)', [hits]), hits >= 20);
-    { the frame's top at 20, its shadow 12 below it }
-    AssertTrue(Format('moved down by its offset (from row %d)', [first]), (first >= 31) and (first <= 33));
+    { [R5-G] the white frame (the author's backgroundColor, no longer the
+      skin's surface) covers its own shadow: what shows is the offset's 12
+      rows below it [was: >= 20, the shadow seen through a frame painted
+      in another colour] }
+    AssertTrue(Format('the frame''s shadow (%d rows)', [hits]), (hits >= 11) and (hits <= 13));
+    { the frame's top at 20, its shadow 12 below it: what shows of it starts
+      at the frame's bottom [R5-G: the frame is opaque now] }
+    bottom := Round(FChart.TitleLayoutOf(0).Frame.Bottom);
+    AssertTrue(Format('moved down by its offset (from row %d, the frame''s bottom %d)', [first, bottom]),
+      (first >= bottom - 1) and (first <= bottom + 1));
   finally
     plain.Free;
     shaded.Free;

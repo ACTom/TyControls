@@ -799,6 +799,8 @@ type
     FSingles: TTySingleArray;
     { EVERY themeRiver laid out, index-parallel to FBindings [Batch 118] }
     FRivers: TTyThemeRiverLayoutArray;
+    { [R5-G] the list the series pass drew last (zlevel's second pass) }
+    FZList: TTyPaintList;
     { [R5-G] a river's boundaryGap as its first layout resolved it, by
       series index: upstream writes the px back into the model's array, so
       a resize keeps them; a setOption starts again (AfterSetOption) }
@@ -2296,6 +2298,14 @@ type
     { THE TWO LAYERS, split by what makes them change rather than by what they
       look like. Static is everything the model decides; dynamic is what moves
       while the model stands still. }
+    { [R5-G] ZLEVEL ACROSS THE COMPONENTS DRAWN APART FROM THE LIST: the
+      level they stand on (the root's zlevel, else 0), the top of what the
+      static layer draws (the loading mask's level when it shows over the
+      chart), the list the last series pass drew }
+    function ComponentZLevel: Integer;
+    function ZStaticTop: Integer;
+    procedure PaintAboveComponents(APainter: TTyPainter; AList: TTyPaintList);
+    procedure PaintOverLoading(APainter: TTyPainter);
     procedure PaintStatic(APainter: TTyPainter; const ARect: TRect;
       APPI: Integer; const AMeasurer: ITyTextMeasurer);
     { Every series' marks, in one list, ordered once. }

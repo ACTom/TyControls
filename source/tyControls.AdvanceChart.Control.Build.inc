@@ -3068,6 +3068,8 @@ var
   lay: TTyTitleLayout;
   f0, f1: TTyTitleFont;
   ink0, ink1: TTyColor;
+  frameFill: TTyFill;
+  frameInk: TTyColor;
 
   { The box DrawText wants, hung off an anchor with the title's alignment.
     The same job AnchorBox does for an axis label; kept local because the two
@@ -3121,11 +3123,31 @@ begin
     if FTitleSpecs[i].HasBackground then
       TyCastFrameShadow(APainter, lay.Frame, Round(FTitleSpecs[i].BorderRadii[0]),
         TTyColor(FTitleSpecs[i].BackgroundColor), FTitleSpecs[i].Shadow);
+    { [R5-G] IN THE AUTHOR'S backgroundColor (install.ts: style.fill =
+      backgroundColor) [was: the skin's surface, whatever the option wrote] }
     if FTitleSpecs[i].HasBackground then
+    begin
+      frameFill := Default(TTyFill);
+      frameFill.Kind := tfkSolid;
+      frameFill.Color := TTyColor(FTitleSpecs[i].BackgroundColor);
       APainter.FillBackground(
         Rect(Round(lay.Frame.Left), Round(lay.Frame.Top),
              Round(lay.Frame.Right), Round(lay.Frame.Bottom)),
-        st.Background, Round(FTitleSpecs[i].BorderRadii[0]));
+        frameFill, Round(FTitleSpecs[i].BorderRadii[0]));
+    end;
+    { [R5-G] AND ITS BORDER: borderWidth above nought strokes the rect in
+      borderColor, tokens.color.primary by default (the title's ink)
+      [was: never drawn] }
+    if FTitleSpecs[i].BorderWidth > 0 then
+    begin
+      if FTitleSpecs[i].HasBorderColor then frameInk := TTyColor(FTitleSpecs[i].BorderColor)
+      else if tpBorderColor in st.Present then frameInk := TTyColor(st.BorderColor)
+      else frameInk := st.TextColor;
+      APainter.BeginPath;
+      APainter.RoundRectPath(lay.Frame.Left, lay.Frame.Top, lay.Frame.Right,
+        lay.Frame.Bottom, FTitleSpecs[i].BorderRadii[0]);
+      APainter.StrokePath(frameInk, FTitleSpecs[i].BorderWidth);
+    end;
     { in the fonts the layout measured -- the author's where written }
     f0 := FTitleFonts[i][0];
     f1 := FTitleFonts[i][1];

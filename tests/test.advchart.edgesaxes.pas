@@ -24,7 +24,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Builder, tyControls.AdvanceChart.Measure,
      tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.Polar,
      tyControls.AdvanceChart.ThemeRiver, tyControls.AdvanceChart.Coord,
-     tyControls.AdvanceChart.Scale,
+     tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Title,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
@@ -72,6 +72,9 @@ type
     procedure TestTheSnapWidthsFollowTheirChains;
     procedure TestARiversGapsOutliveAResizeAsUpstreams;
     procedure TestALogAxisTakesAPointerOverItsMappingExtent;
+    procedure TestAlignTicksAsUpstreams;
+    procedure TestAHigherZLevelIsOverTheTitleAndTheMask;
+    procedure TestATitlesBoxIsTheAuthors;
   end;
 
 implementation
@@ -1190,6 +1193,159 @@ begin
   bmp := RenderBmp;
   bmp.Free;
   AssertTrue('the pointer stands there and the tooltip shows', FChart.TooltipShown);
+end;
+
+{ ==================== alignTicks ==================== }
+
+procedure TAdvChartEdgesAxesOracleTest.TestAlignTicksAsUpstreams;
+var
+  cs, a: TJSONObject;
+  c, k, q: Integer;
+  bmp: TBGRABitmap;
+  ax: TTyAxis;
+  e: TTyRange;
+  ticks: TTyScaleTickArray;
+  gb: TTyGridBuild;
+  s: string;
+begin
+  for c := 0 to Cases('align').Count - 1 do
+  begin
+    cs := Cases('align').Objects[c];
+    FWhere := cs.Strings['id'];
+    NewChart(600, 400);
+    FChart.Option := cs.Objects['option'].AsJSON;
+    bmp := RenderBmp;
+    bmp.Free;
+    gb := FChart.Build.Grid(0);
+    for k := 0 to cs.Arrays['axes'].Count - 1 do
+    begin
+      a := cs.Arrays['axes'].Objects[k];
+      if a.Strings['dim'] = 'xAxis' then ax := gb.XAxis(a.Integers['index'])
+      else ax := gb.YAxis(a.Integers['index']);
+      Inc(FCompared);
+      e := ax.Scale.GetExtent;
+      if not (SameBits(e.Start, FromHex(a.Arrays['extent'].Strings[0]))
+        and SameBits(e.Stop, FromHex(a.Arrays['extent'].Strings[1]))) then
+        Bad(Format('%s%d: extent %s..%s here, %s..%s upstream', [a.Strings['dim'], a.Integers['index'],
+          Fmt(e.Start), Fmt(e.Stop), Fmt(FromHex(a.Arrays['extent'].Strings[0])),
+          Fmt(FromHex(a.Arrays['extent'].Strings[1]))]));
+      if (ax.Scale is TTyIntervalScale)
+        and not SameBits(TTyIntervalScale(ax.Scale).Interval, FromHex(a.Strings['interval'])) then
+        Bad(Format('%s%d: interval %s here', [a.Strings['dim'], a.Integers['index'],
+          Fmt(TTyIntervalScale(ax.Scale).Interval)]));
+      ticks := ax.Scale.GetTicks;
+      s := '';
+      for q := 0 to High(ticks) do s := s + ' ' + Fmt(ticks[q].Value);
+      if Length(ticks) <> a.Arrays['ticks'].Count then
+        Bad(Format('%s%d: ticks [%s] here, %d upstream', [a.Strings['dim'], a.Integers['index'], s,
+          a.Arrays['ticks'].Count]))
+      else
+        for q := 0 to High(ticks) do
+          if not SameBits(ticks[q].Value, FromHex(a.Arrays['ticks'].Strings[q])) then
+          begin
+            Bad(Format('%s%d: ticks [%s] here', [a.Strings['dim'], a.Integers['index'], s]));
+            Break;
+          end;
+    end;
+  end;
+  AssertEquals(IntToStr(FBad) + ' of ' + IntToStr(FCompared) + ' disagree:' + FReport, 0, FBad);
+end;
+
+{ ==================== zlevel over the components ==================== }
+
+{ A series of zlevel 1 is a canvas over the title (zlevel 0, z 6): the
+  title's red box overlaps the blue symbol and the symbol is on top; and
+  over the loading mask (zlevel 0, z 10000): the symbol is not whitened }
+procedure TAdvChartEdgesAxesOracleTest.TestAHigherZLevelIsOverTheTitleAndTheMask;
+var
+  zl: TJSONObject;
+  bmp: TBGRABitmap;
+  x, y, xx, yy: Integer;
+  px: TBGRAPixel;
+  s: string;
+begin
+  zl := TJSONObject(FRoot).Objects['zlevel'];
+  AssertEquals('upstream: the symbol at zlevel 1', 1, zl.Objects['symbol'].Integers['zlevel']);
+  NewChart(600, 400);
+  FChart.Option := TJSONObject(zl.Objects['option']).AsJSON;
+  x := Round(FromHex(zl.Objects['symbol'].Strings['x']));
+  y := Round(FromHex(zl.Objects['symbol'].Strings['y']));
+  bmp := RenderBmp;
+  try
+    px := bmp.GetPixel(x, y);
+    AssertTrue(Format('the symbol over the title''s box at %d,%d: %d %d %d', [x, y, px.red, px.green, px.blue]),
+      (px.blue > 240) and (px.red < 16) and (px.green < 16));
+    { and the box is there, beside the symbol }
+    px := bmp.GetPixel(x - 30, y);
+    if not ((px.red > 240) and (px.blue < 16)) then
+    begin
+      s := '';
+      for yy := 30 to 130 do
+        for xx := 30 to 300 do
+        begin
+          px := bmp.GetPixel(xx, yy);
+          if (px.red > 240) and (px.green < 30) and (px.blue < 30) then
+          begin
+            s := s + Format(' %d,%d', [xx, yy]);
+            Break;
+          end;
+        end;
+      Fail('the title''s red box beside it; red rows start at' + s);
+    end;
+  finally
+    bmp.Free;
+  end;
+  FChart.ShowLoading('{"text":"","showSpinner":false}');
+  bmp := RenderBmp;
+  try
+    px := bmp.GetPixel(x, y);
+    AssertTrue(Format('the symbol over the mask: %d %d %d', [px.red, px.green, px.blue]),
+      (px.blue > 240) and (px.red < 16) and (px.green < 16));
+    px := bmp.GetPixel(300, 390);
+    AssertTrue(Format('the rest under the mask: %d %d %d', [px.red, px.green, px.blue]),
+      (px.red > 200) and (px.green > 200) and (px.blue > 200));
+  finally
+    bmp.Free;
+  end;
+  FChart.HideLoading;
+end;
+
+{ ==================== the title's box ==================== }
+
+procedure TAdvChartEdgesAxesOracleTest.TestATitlesBoxIsTheAuthors;
+var
+  tb: TJSONArray;
+  bmp: TBGRABitmap;
+  lay: TTyTitleLayout;
+  px: TBGRAPixel;
+  want: TTyChartColor;
+  k, x, y: Integer;
+begin
+  tb := TJSONObject(FRoot).Arrays['titleBox'];
+  for k := 0 to tb.Count - 1 do
+  begin
+    NewChart(400, 300);
+    FChart.Option := tb.Objects[k].Objects['option'].AsJSON;
+    bmp := RenderBmp;
+    try
+      lay := FChart.TitleLayoutOf(0);
+      y := Round((lay.Frame.Top + lay.Frame.Bottom) / 2);
+      { the fill, half way in from the left edge }
+      x := Round(lay.Frame.Left + 6);
+      px := bmp.GetPixel(x, y);
+      if tb.Objects[k].Find('fill').AsString = '#ff0000' then
+        AssertTrue(Format('%d: the author''s red fill: %d %d %d', [k, px.red, px.green, px.blue]),
+          (px.red > 240) and (px.green < 16) and (px.blue < 16));
+      { the pen on the left edge }
+      AssertTrue('the stroke parses', TyTryParseChartColor(tb.Objects[k].Strings['stroke'], want));
+      px := bmp.GetPixel(Floor(lay.Frame.Left), y);
+      AssertTrue(Format('%d: the border %s: %d %d %d', [k, tb.Objects[k].Strings['stroke'], px.red, px.green, px.blue]),
+        (Abs(px.red - Integer((want shr 16) and $FF)) < 24) and (Abs(px.green - Integer((want shr 8) and $FF)) < 24)
+        and (Abs(px.blue - Integer(want and $FF)) < 24));
+    finally
+      bmp.Free;
+    end;
+  end;
 end;
 
 initialization

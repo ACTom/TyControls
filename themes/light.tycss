@@ -1404,7 +1404,8 @@ TyAdvChartSankeyLink { background: var(--muted); }
 /* The chart's own title and subtitle. Upstream draws them at 18/bold and
    12/regular; the sizes come from the type scale here so a dense skin gets a
    proportionate title instead of an 18px one on 11px axis labels. */
-TyAdvChartTitle { color: var(--on-surface); font-size: var(--font-size-title); font-weight: 700; }
+/* [R5-G] border-color: a title box's default pen (borderWidth above 0) -- upstream's tokens.color.primary */
+TyAdvChartTitle { color: var(--on-surface); font-size: var(--font-size-title); font-weight: 700; border-color: #3c3c41; }
 TyAdvChartSubtitle { color: var(--muted); font-size: var(--font-size-base); }
 /* A label OUTSIDE its mark: the theme's own ink, not anything derived from the
    thing it names. Upstream picks #333 or #ccc by mode; this is the same idea
