@@ -1078,6 +1078,11 @@ begin
     { the layout's direction: 1 anticlockwise, the path a universal
       transition morphs is built with it [Batch 136] }
     if ALayout.Clockwise then el.Anim.G[7] := 0 else el.Anim.G[7] := 1;
+    { [R5-G] THE DATA INDEX THE ANIMATION IS TIMED AT, plus one: the sector's
+      subscript -- negativeDataFilter's filterSelf compressed the data, so
+      the delay and duration callbacks get the filtered index, not the view
+      row (Anim.Index, which pairs the renders) }
+    el.Anim.G[10] := i + 1;
     AList.Add(el);
     Inc(drawn);
   end;

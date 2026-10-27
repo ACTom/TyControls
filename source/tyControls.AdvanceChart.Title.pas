@@ -77,6 +77,11 @@ type
       option writes (BackgroundColor, 0 where it does not parse) }
     Shadow: TTyChartShadow;
     BackgroundColor: TTyChartColor;
+    { [R5-G] the box's pen: borderColor where written and readable
+      (HasBorderColor; else tokens.color.primary -- the skin's), stroked
+      when borderWidth is above nought }
+    HasBorderColor: Boolean;
+    BorderColor: TTyChartColor;
   end;
 
   { Where the two lines go, in DEVICE px. Each is an ANCHOR plus the alignment
@@ -292,6 +297,9 @@ begin
   if not (Result.HasBackground and TyTryParseChartColor(d.AsString, Result.BackgroundColor)) then
     Result.BackgroundColor := 0;
   Result.BorderWidth := NumIn(node, 'borderWidth', 0);
+  d := node.Find('borderColor');
+  Result.HasBorderColor := (d <> nil) and (d.JSONType = jtString)
+    and TyTryParseChartColor(d.AsString, Result.BorderColor);
   d := node.Find('borderRadius');
   if (d <> nil) and (d.JSONType = jtNumber) then
     Result.BorderRadii := TyCornerRadii([d.AsFloat]);

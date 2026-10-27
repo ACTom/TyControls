@@ -1027,14 +1027,17 @@ begin
     Result.HdGen := FTbGen;
     Exit;
   end;
-  { THE TIMELINE, z 4 [Batch 129]: no data, only its elements' own
-    handlers; HdRow the element, HdGen the render that made it }
-  if TlHitAt(AX, AY, q) then
+  { THE TIMELINES, z 4 [Batch 129]: no data, only their elements' own
+    handlers; HdRow the element, HdGen the render that made it, HdSeries
+    the timeline's slot [R5-G] }
+  if TlHitAt(AX, AY, k, q) then
   begin
-    Result.Id := -(10000000 + Int64(q));
+    if k = 0 then Result.Id := -(10000000 + Int64(q))
+    else Result.Id := -((Int64(19) shl 44) + (Int64(k) shl 30) + q);
     Result.HdKind := 10;
+    Result.HdSeries := k;
     Result.HdRow := q;
-    Result.HdGen := FTlView.Gen;
+    Result.HdGen := TlView(k).Gen;
     Exit;
   end;
   { THE visualMaps, over the series (z 4) [Batch 116]: no data, only their
@@ -1184,6 +1187,12 @@ begin
           Result.Params.TargetType := mxInfo.Target;
           if mxInfo.HasName then Result.Params.Name := mxInfo.Name;
           if mxInfo.HasText then Result.Params.ValueText := mxInfo.Value;
+          { [spec 244] a number stays a number }
+          if mxInfo.HasNum then
+          begin
+            SetLength(Result.Params.Values, 1);
+            Result.Params.Values[0] := mxInfo.Num;
+          end;
           SetLength(Result.Params.Coord, 2);
           Result.Params.Coord[0] := mxInfo.Loc[0];
           Result.Params.Coord[1] := mxInfo.Loc[1];
@@ -1478,7 +1487,7 @@ begin
     FEvHover := EventTargetAt(FEvHoverX, FEvHoverY);
   { and a timeline element [Batch 129] }
   if (FEvHover.Id <> 0) and (FEvHover.HdKind = 10)
-    and ((FTlView = nil) or (FEvHover.HdGen <> FTlView.Gen)) then
+    and (TlTargetView(FEvHover) = nil) then
     FEvHover := EventTargetAt(FEvHoverX, FEvHoverY);
   { and a geo region a render replaced [Batch 148] }
   if (FEvHover.Id <> 0) and (FEvHover.HdKind = 14) and (GeoOfTarget(FEvHover) = nil) then
@@ -1639,7 +1648,7 @@ begin
     is downplay, legendToggleSelect, highlight [Batch 93] }
   if t.HdKind = 8 then TbClick(t.HdSeries, t.HdRow)
   { [Batch 129] a timeline element's onclick }
-  else if t.HdKind = 10 then TlClick(t.HdRow)
+  else if t.HdKind = 10 then TlClick(t.HdSeries, t.HdRow)
   { a break area's group, a break label's text: expandAxisBreak [Batch 132] }
   else if t.HdKind = 12 then BreakAreaClickAt(t.HdSeries, t.HdRow)
   else if t.HdKind = 13 then BreakExpandClick(t.HdSeries, t.HdRow)
@@ -2050,7 +2059,8 @@ begin
     sp := FGraphSpecs[i];
     if not (sp.Roam in [grmPan, grmBoth]) then Continue;
     Consider(sp.ZLevel, sp.Z, 100000 + FBindings[i].SeriesIndex,
-      sp.RoamGlobal or FGraphs[i].ContainTrigger(AX, AY));
+      (sp.RoamGlobal or FGraphs[i].ContainTrigger(AX, AY))
+      and not SeriesRoamIrrelevant(i, AX, AY, sp.Z, sp.ZLevel));
   end;
   for i := 0 to High(FTreeViews) do
   begin
@@ -2058,7 +2068,8 @@ begin
     sp := FTreeSpecs[i];
     if not (sp.Roam in [grmPan, grmBoth]) then Continue;
     Consider(sp.ZLevel, sp.Z, 100000 + FBindings[i].SeriesIndex,
-      sp.RoamGlobal or FTreeViews[i].ContainTrigger(AX, AY));
+      (sp.RoamGlobal or FTreeViews[i].ContainTrigger(AX, AY))
+      and not SeriesRoamIrrelevant(i, AX, AY, sp.Z, sp.ZLevel));
   end;
   for i := 0 to High(FSankeyViews) do
   begin
@@ -2066,7 +2077,8 @@ begin
     sp := FSankeySpecs[i];
     if not (sp.Roam in [grmPan, grmBoth]) then Continue;
     Consider(sp.ZLevel, sp.Z, 100000 + FBindings[i].SeriesIndex,
-      sp.RoamGlobal or FSankeyViews[i].ContainTrigger(AX, AY));
+      (sp.RoamGlobal or SankeySelfAt(i, AX, AY))
+      and not SeriesRoamIrrelevant(i, AX, AY, sp.Z, sp.ZLevel));
   end;
   for i := 0 to High(FTreemaps) do
   begin

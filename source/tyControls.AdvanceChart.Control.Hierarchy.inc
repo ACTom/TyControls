@@ -150,6 +150,52 @@ begin
   if FViewActionDepth = 0 then EmitUpdated;
 end;
 
+{ createIsInSelfByPointerCheckerEl(mainGroup): the main group's
+  getBoundingRect -- the union of its children's, a node rect's and a band's
+  (bbox.fromCubic), each with its pen where it strokes (Path.getBoundingRect:
+  the line width, at least 4 where there is no fill) -- through its global
+  transform, closed on every side. A sankey's transform only scales and
+  moves, so the union of the drawn shapes' boxes is that rect. }
+function TTyCustomAdvanceChart.SankeySelfAt(ASlot: Integer; AX, AY: Double): Boolean;
+var
+  k, si: Integer;
+  pe: PTyChartElement;
+  b, u: TTyRectF;
+  any: Boolean;
+  w, sc: Double;
+begin
+  Result := False;
+  if (FPaintList = nil) or (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  si := FBindings[ASlot].SeriesIndex;
+  if FPaintListPPI > 0 then sc := FPaintListPPI / 96 else sc := 1;
+  any := False;
+  u := TyRectF(0, 0, 0, 0);
+  for k := 0 to FPaintList.Count - 1 do
+  begin
+    pe := FPaintList.Ref(k);
+    if (pe^.Datum.Kind <> ctkSeries) or (pe^.Datum.SeriesIndex <> si) then Continue;
+    { a label is the host's text, not a child of the group }
+    if pe^.Caption.FontSizeLogical > 0 then Continue;
+    if pe^.Ignore then Continue;
+    if pe^.Shape.HasCmdBounds then b := pe^.Shape.CmdBounds
+    else b := TyShapeBounds(pe^.Shape);
+    if not TyRectFIsValid(b) then Continue;
+    if (pe^.Style.StrokeWidthLogical > 0) and ((pe^.Style.StrokeColor shr 24) <> 0) then
+    begin
+      w := pe^.Style.StrokeWidthLogical;
+      if not pe^.Style.HasFill then w := Max(w, Double(4));
+      w := w * sc;
+      b := TyRectF(b.Left - w / 2, b.Top - w / 2, b.Right + w / 2, b.Bottom + w / 2);
+    end;
+    if not any then u := b
+    else u := TyRectF(Min(u.Left, b.Left), Min(u.Top, b.Top),
+      Max(u.Right, b.Right), Max(u.Bottom, b.Bottom));
+    any := True;
+  end;
+  if not any then Exit;
+  Result := (AX >= u.Left) and (AX <= u.Right) and (AY >= u.Top) and (AY <= u.Bottom);
+end;
+
 function TTyCustomAdvanceChart.RoamSeriesAt(AX, AY: Integer; AZoom: Boolean): Integer;
 var z, zl: Integer;
 begin
@@ -177,6 +223,8 @@ begin
     else ok := sp.Roam in [grmPan, grmBoth];
     if not ok then Continue;
     if not (sp.RoamGlobal or FGraphs[i].ContainTrigger(AX, AY)) then Continue;
+    { [R5-G] RoamController._checkPointer: onIrrelevantElement first }
+    if SeriesRoamIrrelevant(i, AX, AY, sp.Z, sp.ZLevel) then Continue;
     { HIGHER zlevel, THEN HIGHER z; A TIE GOES TO THE ONE FOUND FIRST. }
     if (best < 0) or (sp.ZLevel > bs.ZLevel)
       or ((sp.ZLevel = bs.ZLevel) and (sp.Z > bs.Z))
@@ -196,6 +244,7 @@ begin
     else ok := sp.Roam in [grmPan, grmBoth];
     if not ok then Continue;
     if not (sp.RoamGlobal or FTreeViews[i].ContainTrigger(AX, AY)) then Continue;
+    if SeriesRoamIrrelevant(i, AX, AY, sp.Z, sp.ZLevel) then Continue;
     if (best < 0) or (sp.ZLevel > bs.ZLevel)
       or ((sp.ZLevel = bs.ZLevel) and (sp.Z > bs.Z))
       or ((sp.ZLevel = bs.ZLevel) and (sp.Z = bs.Z)
@@ -206,7 +255,7 @@ begin
     end;
   end;
   { AND THE SANKEYS [Batch 114]: roamTrigger 'global' by default; any other
-    word takes the view's area here (upstream: the main group's own box) }
+    word takes the main group's own box [R5-G: was the view's area] }
   for i := 0 to High(FSankeyViews) do
   begin
     if FSankeyViews[i] = nil then Continue;
@@ -214,7 +263,8 @@ begin
     if AZoom then ok := sp.Roam in [grmZoom, grmBoth]
     else ok := sp.Roam in [grmPan, grmBoth];
     if not ok then Continue;
-    if not (sp.RoamGlobal or FSankeyViews[i].ContainTrigger(AX, AY)) then Continue;
+    if not (sp.RoamGlobal or SankeySelfAt(i, AX, AY)) then Continue;
+    if SeriesRoamIrrelevant(i, AX, AY, sp.Z, sp.ZLevel) then Continue;
     if (best < 0) or (sp.ZLevel > bs.ZLevel)
       or ((sp.ZLevel = bs.ZLevel) and (sp.Z > bs.Z))
       or ((sp.ZLevel = bs.ZLevel) and (sp.Z = bs.Z)
@@ -247,6 +297,7 @@ begin
         and (AY - FTreemaps[i].Box.Y >= FTreemaps[i].Nodes[0].Y)
         and (AY - FTreemaps[i].Box.Y <= FTreemaps[i].Nodes[0].Y + FTreemaps[i].Nodes[0].H);
     if not ok then Continue;
+    if SeriesRoamIrrelevant(i, AX, AY, sp.Z, sp.ZLevel) then Continue;
     if (best < 0) or (sp.ZLevel > bs.ZLevel)
       or ((sp.ZLevel = bs.ZLevel) and (sp.Z > bs.Z))
       or ((sp.ZLevel = bs.ZLevel) and (sp.Z = bs.Z)
@@ -458,11 +509,13 @@ begin
     FSankeyLocal[si][ADataIndex].HasY := AHasY;
     FSankeyLocal[si][ADataIndex].Y := ALocalY;
     Result := True;
-    { the action's event, 'dragnode', with the payload }
+    { the action's event, 'dragnode', with the payload -- SankeyView's
+      {type, seriesId, dataIndex, localX, localY}: the model's id
+      [R5-G: was seriesIndex] }
     ev := TJSONObject.Create;
     try
       ev.Strings['type'] := 'dragNode';
-      ev.Integers['seriesIndex'] := si;
+      ev.Strings['seriesId'] := SeriesModelId(si);
       ev.Integers['dataIndex'] := ADataIndex;
       if AHasX then ev.Floats['localX'] := ALocalX;
       if AHasY then ev.Floats['localY'] := ALocalY;
@@ -1222,7 +1275,10 @@ begin
         p.Strings['type'] := 'sunburstRootToNode';
         p.Integers['seriesIndex'] := ASeries;
         p.Strings['targetNode'] := HierIdOfRow(slot, hs[k]);
+        { [R5-G] the dispatched action's update runs the brush's stage }
+        FBrushPayload := True;
         DoSunAction(p);
+        FBrushPayload := False;
         EmitUpdated;
       finally
         p.Free;
@@ -1246,7 +1302,10 @@ begin
     p.Strings['type'] := 'sunburstRootToNode';
     p.Integers['seriesIndex'] := ASeries;
     p.Strings['targetNode'] := HierIdOfRow(slot, target);
+    { [R5-G] the dispatched action's update runs the brush's stage }
+    FBrushPayload := True;
     DoSunAction(p);
+    FBrushPayload := False;
     EmitUpdated;
   finally
     p.Free;
@@ -1287,7 +1346,10 @@ begin
     { 'link' opens a window upstream: nothing here }
     Exit;
   try
+    { [R5-G] the dispatched action's update runs the brush's stage }
+    FBrushPayload := True;
     DoTreemapAction(p.Strings['type'], p);
+    FBrushPayload := False;
     EmitUpdated;
   finally
     p.Free;
@@ -1308,7 +1370,10 @@ begin
   else
     p := TreemapViewPayload('treemapZoomToNode', ASeries, HierIdOfRow(slot, row));
   try
+    { [R5-G] the dispatched action's update runs the brush's stage }
+    FBrushPayload := True;
     DoTreemapAction(p.Strings['type'], p);
+    FBrushPayload := False;
     EmitUpdated;
   finally
     p.Free;
@@ -2735,6 +2800,9 @@ begin
     { [F3d] THE ACTION'S UPDATE (update: 'update'): a full update of the
       same option -- the kept nodes slide, the shown ones grow out of their
       parent, the hidden ones shrink into it. [Was: a relayout that snapped.] }
+    { [R5-G] an update with a payload: the brush's visual stage dispatches
+      brushSelect -- the click is treeExpandAndCollapse dispatched }
+    FBrushPayload := True;
     FullUpdate;
     { the dispatch's triggerUpdatedEvent [Batch 97] }
     EmitUpdated;
@@ -3340,6 +3408,7 @@ begin
     FGraphNodeScale[i] := 1;
     if FBindings[i].SeriesType <> TyGraphSeriesTypeName then Continue;
     TyGraphItemCallbacks := ItemCbOf(i);
+    TyGraphItemNodes := GraphItemNodesOf(FBindings[i].SeriesIndex);
     if not FBindings[i].Resolved then Continue;
     { A GRAPH THE LEGEND SWITCHED OFF IS NOT LAID OUT AT ALL -- upstream's
       legendFilter takes the series out before any layout runs -- and for a
@@ -3402,6 +3471,9 @@ begin
       and (FBindings[i].MatrixIndex <= High(FMatrices))
       and (FMatrices[FBindings[i].MatrixIndex] <> nil) and (store <> nil) then
     begin
+      { [spec 244] its nodes' names and tooltip as the matrix' dimensions
+        give them }
+      MatrixGraphNames(si, FMatrices[FBindings[i].MatrixIndex], store);
       solved := TyGraphSolveAtPoints(FOption, si, store,
         MatrixGraphPoints(si, FMatrices[FBindings[i].MatrixIndex]));
       FGraphLaidOut[i] := True;
@@ -3445,6 +3517,7 @@ begin
   end;
   finally
     TyGraphItemCallbacks := nil;
+    TyGraphItemNodes := nil;
   end;
   { [F3d] the edges' keys for the next update }
   SetLength(FGraphEdgeKeys, Length(FBindings));

@@ -163,6 +163,11 @@ type
     Loc: array[0..1] of Integer;
     HasText: Boolean;
     Value, TipName: string;
+    { [spec 244] a value written as a number: the event's `value` is that
+      number (upstream hands the option's value as it is), Value its
+      String() }
+    HasNum: Boolean;
+    Num: Double;
     HasName: Boolean;
     Name: string;
   end;
@@ -2542,6 +2547,8 @@ var
     info := NewInfo(ATarget, ALocX, ALocY);
     AMatrix.FCellInfos[info].HasText := AHasText;
     AMatrix.FCellInfos[info].Value := AText;
+    AMatrix.FCellInfos[info].HasNum := AHasText and (AValue <> nil) and (AValue.JSONType = jtNumber);
+    if AMatrix.FCellInfos[info].HasNum then AMatrix.FCellInfos[info].Num := AValue.AsFloat;
     s := CellStyleOf(ACell, AParent, 'itemStyle', AStroke, ANoStroke);
     { z2: the cell's, its parent's, else special for a cell with its own
       itemStyle }

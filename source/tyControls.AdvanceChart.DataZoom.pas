@@ -111,12 +111,54 @@ procedure TyDzSliderMove(ADelta: Double; var AEnds: array of Double;
 { util/number round: +(+x).toFixed(clamp(p, 0, 20)); NaN p is +x }
 function TyDzRound(AValue, APrecision: Double): Double;
 
+{ [R5-G] setRawRange's pairs over the settled option: each pair AOverlay
+  holds (start / startValue, end / endValue) replaces both of the spec's,
+  and the end's range mode follows _updateRangeUse -- percent alone is
+  percent, value alone is value, both are the option's rangeMode
+  (ARangeMode) or percent }
+procedure TyDzApplyOverlay(var ASpec: TTyDataZoomSpec; AOverlay: TJSONObject;
+  ARangeMode: TJSONData);
+
 implementation
 
 uses tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Data,
      tyControls.AdvanceChart.Stack, tyControls.AdvanceChart.Complete;
 
 { ---- small things ---- }
+
+function ArgOf(A: TJSONData): TTyDzArg; forward;
+
+procedure TyDzApplyOverlay(var ASpec: TTyDataZoomSpec; AOverlay: TJSONObject;
+  ARangeMode: TJSONData);
+const
+  cP: array[0..1] of string = ('start', 'end');
+  cV: array[0..1] of string = ('startValue', 'endValue');
+var
+  k: Integer;
+  hasP, hasV: Boolean;
+begin
+  if AOverlay = nil then Exit;
+  for k := 0 to 1 do
+  begin
+    if (AOverlay.Find(cP[k]) = nil) and (AOverlay.Find(cV[k]) = nil) then Continue;
+    ASpec.Percent[k] := ArgOf(AOverlay.Find(cP[k]));
+    ASpec.Value[k] := ArgOf(AOverlay.Find(cV[k]));
+    hasP := ASpec.Percent[k].Given;
+    hasV := ASpec.Value[k].Given;
+    if hasP and not hasV then ASpec.Mode[k] := dzmPercent
+    else if hasV and not hasP then ASpec.Mode[k] := dzmValue
+    else if (ARangeMode <> nil) and (ARangeMode.JSONType = jtArray)
+      and (TJSONArray(ARangeMode).Count > k) then
+    begin
+      if (TJSONArray(ARangeMode).Items[k].JSONType = jtString)
+        and (TJSONArray(ARangeMode).Items[k].AsString = 'value') then
+        ASpec.Mode[k] := dzmValue
+      else
+        ASpec.Mode[k] := dzmPercent;
+    end
+    else if hasP then ASpec.Mode[k] := dzmPercent;
+  end;
+end;
 
 function ObjOf(A: TJSONData): TJSONObject;
 begin

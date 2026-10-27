@@ -2507,6 +2507,17 @@ begin
         Break;
       end;
     if (o < 0) or (o > High(FStCarry)) then Continue;
+    { [R5-G] NO RECORD TO CARRY -- the old view hosted no row (a large
+      batch: R2-L keeps none) -- carries nothing: every update below would
+      find no old record and go on. What it left was this series' rows
+      sized to the store, blank, which the sync then drops again where no
+      element hosts a row (and blank is what it makes of an absent record
+      where one does); a million rows of it and a diff of a million keys
+      made a notMerge option over a large series ten times slower to draw
+      than the same option on a new chart. }
+    if Length(FStCarry[o].Rows) > 0 then
+    begin
+    Inc(GStCarryDiffs);
     AnimRowKeys(FStores[slot], keys, raws);
     cmds := TyDataDiff(FStCarryKeys[o].Keys, keys);
     if Length(FSt[s].Rows) < FStores[slot].RawCount then
@@ -2527,6 +2538,7 @@ begin
         FStCarryHoverSeries := -2 - s;
         FStCarryHoverRaw := newRaw;
       end;
+    end;
     end;
     { a line's polyline and area are kept with the view }
     FSt[s].Run := FStCarry[o].Run;

@@ -314,6 +314,16 @@ function TyShadowOfValues(ABlur, AOffsetX, AOffsetY, AColour: TJSONData;
     areaStyle  color opacity                          -- six keys, no stroke }
 function TyReadOptStyle(ANode: TJSONObject; const AKey: string): TTyOptStyle;
 
+{ [R5-G] One colour-valued key off AObj as a style block reads it (a
+  gradient, a pattern, 'auto', 'none', a colour; null and unreadable are not
+  written). }
+function TyReadOptColorOf(AObj: TJSONObject; const AKey: string): TTyOptColor;
+
+{ [R5-G] getItemStyle's keys read off AObj ITSELF -- color, borderColor,
+  borderWidth, borderType, borderDashOffset, opacity and the four shadow keys
+  -- as a component model that is its own item style (a grid) is asked. }
+function TyReadOptItemStyleOf(AObj: TJSONObject): TTyOptStyle;
+
 { [R5-B] A lineStyle's keys read off AObj ITSELF -- color, width, type,
   dashOffset, opacity, cap -- which is what getLineStyle does on whatever
   model it is called on: an axis' `axisTick` model is asked this way for
@@ -1469,6 +1479,30 @@ begin
   Result.BorderWidthLogical := NumOr(sub, 'borderWidth');
   Result.Dash := ReadDash(sub, 'borderType', Result.DashLogical);
   Result.DashOffset := NumOr(sub, 'borderDashOffset');
+  Result.DashOffsetHas := not IsNan(Result.DashOffset);
+  if not Result.DashOffsetHas then Result.DashOffset := 0;
+end;
+
+function TyReadOptColorOf(AObj: TJSONObject; const AKey: string): TTyOptColor;
+begin
+  Result := ReadOptColor(AObj, AKey);
+end;
+
+function TyReadOptItemStyleOf(AObj: TJSONObject): TTyOptStyle;
+begin
+  Result := Default(TTyOptStyle);
+  Result.BorderWidthLogical := NaN;
+  Result.Opacity := NaN;
+  Result.Dash := todNone;
+  if AObj = nil then Exit;
+  TyShadowOfValues(AObj.Find('shadowBlur'), AObj.Find('shadowOffsetX'),
+    AObj.Find('shadowOffsetY'), AObj.Find('shadowColor'), Result.Shadow);
+  Result.Color := ReadOptColor(AObj, 'color');
+  Result.Opacity := NumOr(AObj, 'opacity');
+  Result.BorderColor := ReadOptColor(AObj, 'borderColor');
+  Result.BorderWidthLogical := NumOr(AObj, 'borderWidth');
+  Result.Dash := ReadDash(AObj, 'borderType', Result.DashLogical);
+  Result.DashOffset := NumOr(AObj, 'borderDashOffset');
   Result.DashOffsetHas := not IsNan(Result.DashOffset);
   if not Result.DashOffsetHas then Result.DashOffset := 0;
 end;

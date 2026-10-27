@@ -91,6 +91,7 @@ type
     procedure TestTheSliderMovesAndResizes;
     procedure TestTheInsidePansAndZooms;
     procedure TestTheTimelineStepsAndPlays;
+    procedure TestEveryTimelineIsAStop;
     procedure TestTheToolboxButtons;
     procedure TestEscapeClearsTheBrush;
     procedure TestTheVisualMapHandles;
@@ -639,6 +640,47 @@ begin
   Range('zoomLock', 20, 60);
   FChart.Key(VK_RIGHT);
   Range('it still pans', 24, 64);
+end;
+
+{ [R5-G] a stop for every timeline shown; the keys are that view's buttons:
+  its next from its own index, its play button -- which the actions apply to
+  the first model }
+procedure TAdvChartComponentKeysTest.TestEveryTimelineIsAStop;
+const
+  cOpt = '{"baseOption":{"animation":false,"timeline":[{"axisType":"category",'
+    + '"data":["2002","2003","2004","2005"]},{"axisType":"category","data":["x","y","z"],'
+    + '"top":10,"bottom":null,"height":50,"currentIndex":1}],'
+    + '"xAxis":{"type":"category","data":["A"]},"yAxis":{},"series":[{"type":"bar"}]},'
+    + '"options":[{"series":[{"data":[1]}]},{"series":[{"data":[2]}]},'
+    + '{"series":[{"data":[3]}]},{"series":[{"data":[4]}]}]}';
+begin
+  Load(cOpt, ['timelinechanged', 'timelineplaychanged']);
+  FChart.TimelineNow := 1000;
+  AssertEquals('both timelines are stops', 'items0/0 timeline0/0 timeline1/0', StopsText);
+  FChart.Key(VK_TAB);
+  FChart.Key(VK_TAB);
+  AssertEquals('timeline1/0:0', Stop);
+  AssertEquals(0, FChart.Key(VK_RIGHT));
+  Frame;
+  AssertEquals('its next: its own index + 1, on the first model', 2,
+    FChart.TimelineView.CurrentIndex, 0);
+  AssertEquals('the second keeps its own', 1, FChart.TimelineViewAt(1).CurrentIndex, 0);
+  AssertTrue(Pos('timelinechanged {"currentIndex":2,', FLog.Text) = 1);
+  Logged;
+  FChart.Key(VK_RIGHT);
+  Frame;
+  AssertEquals('again the same', 2, FChart.TimelineView.CurrentIndex, 0);
+  AssertEquals('an event all the same', 1, FLog.Lines.Count);
+  Logged;
+  AssertEquals('Space is its play button', 0, FChart.Key(VK_SPACE));
+  Frame;
+  AssertTrue('the first plays', FChart.TimelineView.PlayState);
+  AssertFalse('the second does not', FChart.TimelineViewAt(1).PlayState);
+  AssertFalse('the first''s timer', IsNan(FChart.TimelineDueAt(0)));
+  AssertTrue('none of the second''s', IsNan(FChart.TimelineDueAt(1)));
+  FChart.Key(VK_SPACE);
+  Frame;
+  AssertTrue('its button still says play: playState true again', FChart.TimelineView.PlayState);
 end;
 
 procedure TAdvChartComponentKeysTest.TestTheTimelineStepsAndPlays;

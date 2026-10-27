@@ -239,10 +239,12 @@ var
   { the lines of AInk (every one when AInk < 0), one path, one stroke -- in
     the piece's own pen [R5-B] }
   procedure StrokeLines(const ALines: TTySingleLineArray; const AStroke: TTyAxisStroke;
-    AInk: Integer);
+    AInk: Integer; AEach: Boolean = False);
   var k, n: Integer;
   begin
     if not AStroke.Drawn then Exit;
+    { [R5-G] a gradient over each tick's own box (a Line per tick) }
+    AEach := AEach and (AStroke.Gradient.Kind <> cgkNone);
     n := 0;
     APainter.BeginPath;
     for k := 0 to High(ALines) do
@@ -254,6 +256,12 @@ var
       APainter.MoveTo(ALines[k].X1, ALines[k].Y1);
       APainter.LineTo(ALines[k].X2, ALines[k].Y2);
       Inc(n);
+      if AEach then
+      begin
+        TyStrokeAxisPath(APainter, AStroke);
+        APainter.BeginPath;
+        n := 0;
+      end;
     end;
     if n > 0 then TyStrokeAxisPath(APainter, AStroke);
   end;
@@ -353,6 +361,7 @@ begin
           begin
             if not v.Furn.SplitLineInks[q].Ok then Continue;
             inkK.Colour := v.Furn.SplitLineInks[q].Colour;
+            inkK.Gradient := v.Furn.SplitLineInks[q].Grad;
             inkK.Drawn := True;
             StrokeLines(v.SplitLines, inkK, q);
           end
@@ -389,8 +398,8 @@ begin
         for q := 0 to High(sp.Arrows) do
           if Finite(sp.Arrows[q].X, sp.Arrows[q].Y) then PaintArrow(sp.Arrows[q]);
     end;
-    StrokeLines(v.Ticks, TyAxisSkinStroke(v.Furn.TickPen, tickS, acButt), -1);
-    StrokeLines(v.MinorTicks, TyAxisSkinStroke(v.Furn.MinorTickPen, minorTickS, acButt), -1);
+    StrokeLines(v.Ticks, TyAxisSkinStroke(v.Furn.TickPen, tickS, acButt), -1, True);
+    StrokeLines(v.MinorTicks, TyAxisSkinStroke(v.Furn.MinorTickPen, minorTickS, acButt), -1, True);
     AxisTextStyles(@sp, labelS, nameS);
     pl := sp.NamePlacement;
     if pl.Shown and (tpTextColor in nameS.Present) and Finite(pl.X, pl.Y) then
@@ -613,7 +622,8 @@ end;
 
 procedure TTyCustomAdvanceChart.SolveRivers(APPI: Integer);
 var
-  i: Integer;
+  i, s: Integer;
+  key: string;
   scale, margin: Double;
   d: TJSONData;
   lab: TJSONData;
@@ -639,8 +649,33 @@ begin
         if (lab <> nil) and (lab.JSONType = jtNumber) then margin := lab.AsFloat;
       end;
     end;
-    FRivers[i] := TyThemeRiverLayout(FOption, FBindings[i].SeriesIndex,
-      TTySingle(FBindings[i].Single), FStores[i], margin * scale);
+    { [R5-G] the px the first layout wrote back, where there is one and
+      no merge has written another boundaryGap since }
+    s := FBindings[i].SeriesIndex;
+    key := '';
+    if d is TJSONObject then
+    begin
+      lab := TJSONObject(d).Find('boundaryGap');
+      if lab <> nil then key := lab.AsJSON;
+    end;
+    if (s >= 0) and (s <= High(FRiverGaps)) and FRiverGaps[s].Has
+      and (FRiverGaps[s].Key = key) then
+      FRivers[i] := TyThemeRiverLayout(FOption, s, TTySingle(FBindings[i].Single),
+        FStores[i], margin * scale, True, FRiverGaps[s].G0, FRiverGaps[s].G1)
+    else
+    begin
+      FRivers[i] := TyThemeRiverLayout(FOption, s,
+        TTySingle(FBindings[i].Single), FStores[i], margin * scale);
+      if (s >= 0) and not FExporting and not IsNan(FRivers[i].Gap[0])
+        and not IsNan(FRivers[i].Gap[1]) then
+      begin
+        if s > High(FRiverGaps) then SetLength(FRiverGaps, s + 1);
+        FRiverGaps[s].Has := True;
+        FRiverGaps[s].Key := key;
+        FRiverGaps[s].G0 := FRivers[i].Gap[0];
+        FRiverGaps[s].G1 := FRivers[i].Gap[1];
+      end;
+    end;
   end;
 end;
 
@@ -937,10 +972,12 @@ var
   { the lines of AInk (every one when AInk < 0), one path, one stroke -- in
     the piece's own pen [R5-B] }
   procedure StrokeLines(const ALines: TTyPolarLineArray; const AStroke: TTyAxisStroke;
-    AInk: Integer);
+    AInk: Integer; AEach: Boolean = False);
   var q, n: Integer;
   begin
     if not AStroke.Drawn then Exit;
+    { [R5-G] a gradient over each tick's own box (a Line per tick) }
+    AEach := AEach and (AStroke.Gradient.Kind <> cgkNone);
     n := 0;
     APainter.BeginPath;
     for q := 0 to High(ALines) do
@@ -950,6 +987,12 @@ var
       APainter.MoveTo(ALines[q].X1, ALines[q].Y1);
       APainter.LineTo(ALines[q].X2, ALines[q].Y2);
       Inc(n);
+      if AEach then
+      begin
+        TyStrokeAxisPath(APainter, AStroke);
+        APainter.BeginPath;
+        n := 0;
+      end;
     end;
     if n > 0 then TyStrokeAxisPath(APainter, AStroke);
   end;
@@ -1080,6 +1123,7 @@ var
       begin
         if not AView.Furn.SplitLineInks[q].Ok then Continue;
         inkK.Colour := AView.Furn.SplitLineInks[q].Colour;
+        inkK.Gradient := AView.Furn.SplitLineInks[q].Grad;
         inkK.Drawn := True;
         if ACircles then StrokeArcs(AView.SplitCircles, inkK, q)
         else StrokeLines(AView.SplitLines, inkK, q);
@@ -1148,9 +1192,9 @@ var
         and (AView.Furn.LinePen.HasColour or (tpBorderColor in lineS.Present)) then
         for q := 0 to High(sp.Arrows) do PaintArrow(sp.Arrows[q]);
     end;
-    StrokeLines(AView.Ticks, TyAxisSkinStroke(AView.Furn.TickPen, tickS, acButt), -1);
+    StrokeLines(AView.Ticks, TyAxisSkinStroke(AView.Furn.TickPen, tickS, acButt), -1, True);
     StrokeLines(AView.MinorTicks, TyAxisSkinStroke(AView.Furn.MinorTickPen,
-      minorTickS, acButt), -1);
+      minorTickS, acButt), -1, True);
     AxisTextStyles(@sp, labelS, nameS);
     pl := sp.NamePlacement;
     if pl.Shown and (tpTextColor in nameS.Present) then
@@ -1217,6 +1261,7 @@ var
       ArcPath(AView.LineArc);
       TyStrokeAxisPath(APainter, TyAxisSkinStroke(AView.Furn.LinePen, lineS, acButt));
     end;
+    { the angle axis' ticks are AngleAxisView's own: one mergePath each }
     StrokeLines(AView.Ticks, TyAxisSkinStroke(AView.Furn.TickPen, tickS, acButt), -1);
     StrokeLines(AView.MinorTicks, TyAxisSkinStroke(AView.Furn.MinorTickPen,
       minorTickS, acButt), -1);
@@ -2539,6 +2584,14 @@ var
       APainter.MoveTo(ALines[k].X1, ALines[k].Y1);
       APainter.LineTo(ALines[k].X2, ALines[k].Y2);
       Inc(n);
+      { [R5-G] parallel draws only ticks here: a Line per tick, a gradient
+        over each one's box }
+      if AStroke.Gradient.Kind <> cgkNone then
+      begin
+        TyStrokeAxisPath(APainter, AStroke);
+        APainter.BeginPath;
+        n := 0;
+      end;
     end;
     if n > 0 then TyStrokeAxisPath(APainter, AStroke);
   end;
@@ -3039,6 +3092,18 @@ begin
   end;
 end;
 
+{ [R5-G] a ring's lineStyle.color as the pen takes it: a colour, a gradient
+  (its solid kept for the hit and the legend), or 'none'; 'auto' and an
+  unreadable word are not written }
+procedure RadarLineColour(const AColour: TTyOptColor; out ASet, ANone: Boolean;
+  out AColourOut: TTyChartColor; out AGrad: TTyChartGradient);
+begin
+  ASet := AColour.Written and not AColour.IsAuto;
+  ANone := ASet and AColour.IsNone;
+  AColourOut := AColour.Color;
+  AGrad := AColour.Gradient;
+end;
+
 function TTyCustomAdvanceChart.RadarVisual(ASlot: Integer): TTyRadarVisual;
 var
   k: Integer;
@@ -3089,12 +3154,12 @@ begin
     d := ls.Find('width');
     if (d <> nil) and (d.JSONType = jtNumber) then
       Result.LineWidthLogical := d.AsFloat;
-    d := ls.Find('color');
-    if (d <> nil) and (d.JSONType = jtString)
-      and TyTryParseChartColor(d.AsString, c) then Result.Fill := c;
   end;
   { [R2-B] lineStyle.type, the series' and each item's own (with its width) }
   os := TyReadOptStyle(node, 'lineStyle');
+  { [R5-G] its colour: the ring's pen, not the row's colour }
+  RadarLineColour(os.Color, Result.LineColourSet, Result.LineNone,
+    Result.LineColour, Result.LineGrad);
   Result.LineDash := os.Dash;
   Result.LineDashExplicit := os.DashLogical;
   Result.LineDashOffset := os.DashOffset;
@@ -3107,11 +3172,17 @@ begin
     SetLength(Result.RowLineDashExplicit, d.Count);
     SetLength(Result.RowLineDashOffsetSet, d.Count);
     SetLength(Result.RowLineDashOffset, d.Count);
+    SetLength(Result.RowLineColourSet, d.Count);
+    SetLength(Result.RowLineNone, d.Count);
+    SetLength(Result.RowLineColour, d.Count);
+    SetLength(Result.RowLineGrad, d.Count);
     for k := 0 to d.Count - 1 do
     begin
       if not (TJSONArray(d).Items[k] is TJSONObject) then Continue;
       if not (TJSONObject(TJSONArray(d).Items[k]).Find('lineStyle') is TJSONObject) then Continue;
       os := TyReadOptStyle(TJSONObject(TJSONArray(d).Items[k]), 'lineStyle');
+      RadarLineColour(os.Color, Result.RowLineColourSet[k], Result.RowLineNone[k],
+        Result.RowLineColour[k], Result.RowLineGrad[k]);
       Result.RowLineSet[k] := True;
       Result.RowLineWidth[k] := os.BorderWidthLogical;
       Result.RowLineDash[k] := os.Dash;
@@ -3559,15 +3630,18 @@ function TTyCustomAdvanceChart.CandleRowsOf(ASlot: Integer;
   const ASeries: TTyCandleSpec): TTyCandleRowArray;
 var
   items: TJSONArray;
-  k: Integer;
+  k, j: Integer;
   row: TTyCandleRow;
+  objRows: TTyIntegerArray;
 begin
   Result := nil;
   items := RawItemArray(ASlot);
   if items = nil then Exit;
-  for k := 0 to items.Count - 1 do
+  { [R5-G] the object items only, in order }
+  objRows := ObjectRowsOf(items);
+  for j := 0 to High(objRows) do
   begin
-    if not (items.Items[k] is TJSONObject) then Continue;
+    k := objRows[j];
     row := TyCandleRowOf(ASeries, TJSONObject(items.Items[k]));
     if not row.Present then Continue;
     if Result = nil then SetLength(Result, items.Count);

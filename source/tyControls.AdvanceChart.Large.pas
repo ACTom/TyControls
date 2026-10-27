@@ -68,6 +68,11 @@ type
     { symbol: the soft clip (getArea(0.1)) points outside are not drawn in }
     SoftOn: Boolean;
     Soft: TTyXYWH;
+    { [R5-G] on a polar the soft clip is Polar.getArea(0.1): the ring
+      between RingR0 and RingR1 about RingCX / RingCY (the angles do not
+      matter, a ten-thousandth either way on the squares) }
+    SoftRing: Boolean;
+    RingCX, RingCY, RingR0, RingR1: Double;
     { candle: the sign this path draws, and the width its stroke answers
       within -- max(lineWidth, strokeContainThreshold 5) }
     Sign: Integer;
@@ -115,6 +120,9 @@ function TyLargeIsOn(const AType: string; ALarge, AThreshold: TJSONData;
 
 { Math.fround }
 function TyLargeF32(AX: Double): Double;
+
+{ [R5-G] the soft clip's contain: the rect, or on a polar the ring }
+function TyLargeSoftContains(const AGeom: TTyLargeGeom; AX, AY: Double): Boolean;
 
 { The bounding rect zrender answers for the element, into AGeom.Box. }
 procedure TyLargeSetBox(var AGeom: TTyLargeGeom);
@@ -178,6 +186,25 @@ begin
   else
     Result := 0;
   end;
+end;
+
+function TyLargeSoftContains(const AGeom: TTyLargeGeom; AX, AY: Double): Boolean;
+var
+  dx, dy, d2, lo, hi: Double;
+begin
+  if not AGeom.SoftOn then Exit(True);
+  if AGeom.SoftRing then
+  begin
+    lo := Min(AGeom.RingR0, AGeom.RingR1);
+    hi := Max(AGeom.RingR0, AGeom.RingR1);
+    dx := AX - AGeom.RingCX;
+    dy := AY - AGeom.RingCY;
+    d2 := dx * dx + dy * dy;
+    Result := (hi <> lo) and (d2 - 1e-4 <= hi * hi) and (d2 + 1e-4 >= lo * lo);
+  end
+  else
+    Result := (AX >= AGeom.Soft.X) and (AX <= AGeom.Soft.X + AGeom.Soft.W)
+      and (AY >= AGeom.Soft.Y) and (AY <= AGeom.Soft.Y + AGeom.Soft.H);
 end;
 
 function TyLargeKindOfType(const AType: string): TTyLargeKind;

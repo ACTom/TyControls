@@ -43,6 +43,9 @@ type
     procedure TearDown; override;
     procedure Miss(const ACase, AWhat: string);
     procedure CheckCase(ACase: TJSONObject; APass: Integer);
+    { [R5-G] the background strips, view._backgroundEls by data index: one
+      for a gap row too, the full column under a bordered bar }
+    procedure CheckBackgrounds(ACase: TJSONObject; APass: Integer);
   published
     procedure TestEveryBarAsUpstreamDrawsIt;
   end;
@@ -311,6 +314,66 @@ begin
   end;
 end;
 
+procedure TAdvChartBarGeometryOracleTest.CheckBackgrounds(ACase: TJSONObject;
+  APass: Integer);
+var
+  name: string;
+  bgs: TJSONArray;
+  bgRec, shape: TJSONObject;
+  lst: TTyPaintList;
+  e: TTyChartElement;
+  k, i, si, raw, n: Integer;
+  b: TTyRectF;
+  found: Boolean;
+begin
+  if ACase.Find('backgrounds') = nil then Exit;
+  name := ACase.Strings['name'];
+  if APass = 1 then name := name + ' (again)';
+  bgs := ACase.Arrays['backgrounds'];
+  lst := FChart.List;
+  { a strip's right edge is its x plus its width, an ulp or two off the
+    width it was handed }
+  GTolUlps := 4;
+  try
+    for k := 0 to bgs.Count - 1 do
+    begin
+      bgRec := bgs.Objects[k];
+      si := bgRec.Integers['seriesIndex'];
+      raw := bgRec.Integers['dataIndex'];
+      n := 0;
+      found := False;
+      b := TyRectF(0, 0, 0, 0);
+      if lst <> nil then
+        for i := 0 to lst.Count - 1 do
+        begin
+          e := lst.Element(i);
+          if (e.Anim.UtTag <> 2) or (e.Anim.Series <> si) or (e.Anim.UtRow <> -2 - raw) then Continue;
+          Inc(n);
+          found := True;
+          b := TyShapeBounds(e.Shape);
+        end;
+      Inc(FCompared);
+      if bgRec.Find('shape').JSONType = jtNull then
+      begin
+        if found then Miss(name, Format('background %d/%d: none upstream, one here', [si, raw]));
+        Continue;
+      end;
+      shape := bgRec.Objects['shape'];
+      if n <> 1 then
+        Miss(name, Format('background %d/%d: %d here', [si, raw, n]))
+      else if not (Same(b.Left, Num(shape, 'x')) and Same(b.Top, Num(shape, 'y'))
+        and Same(b.Right - b.Left, Num(shape, 'width'))
+        and Same(b.Bottom - b.Top, Num(shape, 'height'))) then
+        Miss(name, Format('background %d/%d: %s,%s %sx%s upstream, %s,%s %sx%s here',
+          [si, raw, Fmt(Num(shape, 'x')), Fmt(Num(shape, 'y')), Fmt(Num(shape, 'width')),
+           Fmt(Num(shape, 'height')), Fmt(b.Left), Fmt(b.Top), Fmt(b.Right - b.Left),
+           Fmt(b.Bottom - b.Top)]));
+    end;
+  finally
+    GTolUlps := 0;
+  end;
+end;
+
 procedure TAdvChartBarGeometryOracleTest.TestEveryBarAsUpstreamDrawsIt;
 var
   cases: TJSONArray;
@@ -333,6 +396,7 @@ begin
       try
         FChart.Render(FBmp.Canvas, Rect(0, 0, 600, 400), 96);
         CheckCase(cs, pass);
+        CheckBackgrounds(cs, pass);
       except
         on E: Exception do
           Miss(cs.Strings['name'], E.ClassName + ': ' + E.Message);

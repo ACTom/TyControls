@@ -90,6 +90,11 @@ type
     Opacity: Double;
     { [R5-A] its lineStyle's shadow (getLineStyle) }
     Shadow: TTyChartShadow;
+    { [R5-G] getLineStyle's cap, join and miterLimit (cTyCap* / cTyJoin*,
+      MiterLimit 0 the canvas' 10); the axis line's cap is AxisBuilder's
+      `lineCap: 'round'` under the author's }
+    Cap, Join: Byte;
+    MiterLimit: Double;
   end;
 
   TTyRadarAreaSpec = record
@@ -114,11 +119,21 @@ type
     DashLogical: TTyDoubleArray;
     DashOffset: Double;
     Opacity: Double;
+    { [R5-G] cap, join, miterLimit of axisTick.lineStyle (no default) }
+    Cap, Join: Byte;
+    MiterLimit: Double;
   end;
 
   TTyRadarLabelSpec = record
     Show: Boolean;
     MarginLogical: Double;
+    { [R5-G] AxisBuilder's end rules and hideOverlap on every spoke:
+      showMinLabel / showMaxLabel (null: auto), hideOverlap, and the
+      textMargin a hideOverlap box is padded by ([0, 3] by default: the
+      value axis' own, which every indicator axis is merged over) }
+    ShowMin, ShowMax: TTyAxisEndLabel;
+    HideOverlap: Boolean;
+    TextMarginV, TextMarginH: Double;
     HasColour: Boolean;
     Colour: TTyChartColor;
     HasFontSize: Boolean;
@@ -305,6 +320,17 @@ type
       series', per RAW row (data.getItemVisual) }
     RowSyms: TTySymbolSpecArray;
     RowSymSet: TTyBoolArray;
+    { [R5-G] THE RING'S lineStyle.color (getLineStyle's stroke over the
+      defaults' `stroke: color`): the series' (LineColour) and, per RAW row,
+      an item's own over it; a gradient strokes as one. LineNone / RowLineNone:
+      'none', no pen. Unset: the row's colour. [was: the series' moved the
+      row-less fallback Fill, an item's not read] }
+    LineColourSet, LineNone: Boolean;
+    LineColour: TTyChartColor;
+    LineGrad: TTyChartGradient;
+    RowLineColourSet, RowLineNone: TTyBoolArray;
+    RowLineColour: TTyChartColorArray;
+    RowLineGrad: array of TTyChartGradient;
   end;
 
 function TyRadarSpecDefault: TTyRadarSpec;
@@ -379,7 +405,7 @@ function TyBuildRadarMarks(const ABinding: TTySeriesBinding; ARadar: TTyRadar;
 implementation
 
 uses tyControls.FontUnits, tyControls.AdvanceChart.LabelGuide, tyControls.AdvanceChart.JsMath,
-  tyControls.AdvanceChart.States;
+  tyControls.AdvanceChart.States, tyControls.AdvanceChart.AxisLabels;
 
 const
   cRadian = Pi / 180;
@@ -464,6 +490,22 @@ begin
   SetLength(Result, n);
 end;
 
+{ [R5-G] getLineStyle's lineCap / lineJoin / miterLimit off a lineStyle
+  object: a word the canvas knows, a positive number }
+procedure ReadPenEnds(ALs: TJSONObject; var ACap, AJoin: Byte;
+  var AMiter: Double);
+var d: TJSONData;
+begin
+  if ALs = nil then Exit;
+  d := ALs.Find('cap');
+  if (d <> nil) and (d.JSONType = jtString) then ACap := TyCapOfWord(d.AsString);
+  d := ALs.Find('join');
+  if (d <> nil) and (d.JSONType = jtString) then AJoin := TyJoinOfWord(d.AsString);
+  d := ALs.Find('miterLimit');
+  if (d <> nil) and (d.JSONType = jtNumber) and (d.AsFloat > 0) then
+    AMiter := d.AsFloat;
+end;
+
 procedure ReadLine(ANode: TJSONObject; const AKey: string;
   var ALine: TTyRadarLineSpec);
 var
@@ -487,6 +529,7 @@ begin
   if st.DashOffsetHas then ALine.DashOffset := st.DashOffset;
   if not IsNan(st.Opacity) then ALine.Opacity := st.Opacity;
   TyStReadShadow([ls], [], [], ALine.Shadow);
+  ReadPenEnds(ls, ALine.Cap, ALine.Join, ALine.MiterLimit);
 end;
 
 function TyRadarSpecDefault: TTyRadarSpec;
@@ -512,6 +555,8 @@ begin
   Result.AxisLine.Show := True;
   Result.AxisLine.WidthLogical := 1;
   Result.AxisLine.Opacity := 1;
+  { [R5-G] AxisBuilder's axis line: extend({lineCap: 'round'}, lineStyle) }
+  Result.AxisLine.Cap := cTyCapRound;
 
   { OFF BY DEFAULT, both of them -- upstream flips the value axis' own defaults
     for a radar, so a plain radar shows its rings and its names and nothing
@@ -522,6 +567,9 @@ begin
   Result.AxisTick.Opacity := 1;
   Result.AxisLabel.Show := False;
   Result.AxisLabel.MarginLogical := 8;
+  { [R5-G] axisDefault's textMargin [0, 3] }
+  Result.AxisLabel.TextMarginV := 0;
+  Result.AxisLabel.TextMarginH := 3;
 
   Result.SplitLine.Show := True;
   Result.SplitLine.WidthLogical := 1;
@@ -696,6 +744,8 @@ begin
     Result.AxisTick.DashLogical := Copy(st.DashLogical, 0, Length(st.DashLogical));
     if st.DashOffsetHas then Result.AxisTick.DashOffset := st.DashOffset;
     if not IsNan(st.Opacity) then Result.AxisTick.Opacity := st.Opacity;
+    ReadPenEnds(ObjIn(n2, 'lineStyle'), Result.AxisTick.Cap, Result.AxisTick.Join,
+      Result.AxisTick.MiterLimit);
   end;
   { ELSE THE LINE'S COLOUR: defaults(tickStyle, {stroke: axisLine's}) }
   if not Result.AxisTick.HasColour and (Length(Result.AxisLine.Colours) > 0) then
@@ -719,6 +769,29 @@ begin
       Result.AxisLabel.FontSizeLogical := TyFontSizeFromPx(v);
     end;
     Result.AxisLabel.FontStyle := TyFontStyleCode(n2.Find('fontStyle'));
+    { [R5-G] the end rules' switches }
+    d := n2.Find('showMinLabel');
+    if (d <> nil) and (d.JSONType = jtBoolean) then
+      if d.AsBoolean then Result.AxisLabel.ShowMin := aelShow else Result.AxisLabel.ShowMin := aelHide;
+    d := n2.Find('showMaxLabel');
+    if (d <> nil) and (d.JSONType = jtBoolean) then
+      if d.AsBoolean then Result.AxisLabel.ShowMax := aelShow else Result.AxisLabel.ShowMax := aelHide;
+    d := n2.Find('hideOverlap');
+    Result.AxisLabel.HideOverlap := (d <> nil) and (((d.JSONType = jtBoolean) and d.AsBoolean)
+      or ((d.JSONType = jtNumber) and (d.AsFloat <> 0)) or ((d.JSONType = jtString) and (d.AsString <> '')));
+    d := n2.Find('textMargin');
+    if (d <> nil) and (d.JSONType = jtNumber) then
+    begin
+      Result.AxisLabel.TextMarginV := d.AsFloat;
+      Result.AxisLabel.TextMarginH := d.AsFloat;
+    end
+    else if (d is TJSONArray) and (TJSONArray(d).Count >= 2)
+      and (TJSONArray(d).Items[0].JSONType = jtNumber)
+      and (TJSONArray(d).Items[1].JSONType = jtNumber) then
+    begin
+      Result.AxisLabel.TextMarginV := TJSONArray(d).Items[0].AsFloat;
+      Result.AxisLabel.TextMarginH := TJSONArray(d).Items[1].AsFloat;
+    end;
   end;
 
   n2 := ObjIn(node, 'splitArea');
@@ -1248,6 +1321,93 @@ var
   anchorH: TTyTextAnchorH;
   anchorV: TTyTextAnchorV;
   box: TTyRectF;
+  hidden: TTyBoolArray;
+
+  { [R5-G] the size a scale label is drawn at -- and so measured at: the
+    author's fontSize, else the skin's [was: measured at the skin's whatever
+    the author wrote] }
+  function LabelSize: Integer;
+  begin
+    if spec.AxisLabel.HasFontSize then Result := spec.AxisLabel.FontSizeLogical
+    else Result := AInk.LabelFontSizeLogical;
+  end;
+
+  { [R5-G] the labels of spoke AI at angle AA as AxisBuilder weighs them:
+    each ring's words, measured and anchored as they are drawn below, a
+    box each (upright: the label is not turned with the spoke), then the
+    end rules and hideOverlap. AHidden[k]: ring k's label (and tick) is
+    not drawn }
+  procedure RadarLabelsShown(AI: Integer; AA: Double; const APerp: TTyPointF;
+    var AHidden: TTyBoolArray);
+  var
+    cands: TTyLabelCandidateArray;
+    rings: TTyIntegerArray;
+    q, m: Integer;
+    lw, lh, mg, x0, y0, padH, padV: Double;
+    lp: TTyPointF;
+    ah: TTyTextAnchorH;
+    av: TTyTextAnchorV;
+    txt: string;
+  begin
+    mg := spec.AxisLabel.MarginLogical * APPI / 96;
+    if Abs(Sin(AA)) < 1e-4 then
+    begin
+      ah := tahCentre;
+      if Cos(AA) > 0 then av := tavBottom else av := tavTop;
+    end
+    else
+    begin
+      av := tavMiddle;
+      if Sin(AA) > 0 then ah := tahRight else ah := tahLeft;
+    end;
+    cands := nil;
+    rings := nil;
+    SetLength(cands, ARadar.RingCount + 1);
+    SetLength(rings, ARadar.RingCount + 1);
+    m := 0;
+    for q := 0 to ARadar.RingCount do
+    begin
+      txt := TyScaleValueLabel(ARadar.GetAxis(AI).Scale, ARadar.RingValue(AI, q),
+        Default(TTyLabelPrecision));
+      if txt = '' then Continue;
+      lp := ARadar.CoordToPoint(ARadar.RingRadiusOf(AI, q), AI);
+      lp := TyPointF(lp.X - APerp.X * mg, lp.Y - APerp.Y * mg);
+      AMeasurer.MeasureLine(txt, AInk.LabelFontName, LabelSize,
+        TyFontStyleCodeOver(spec.AxisLabel.FontStyle, AInk.LabelFontWeight), lw, lh);
+      cands[m] := Default(TTyLabelCandidate);
+      cands[m].Index := q;
+      cands[m].Priority := 10;
+      x0 := 0;
+      case ah of
+        tahRight: x0 := -lw;
+        tahCentre: x0 := -lw / 2;
+      end;
+      y0 := 0;
+      case av of
+        tavBottom: y0 := -lh;
+        tavMiddle: y0 := -lh / 2;
+      end;
+      cands[m].Bare.LocalRect := TyXYWH(x0, y0, lw, lh);
+      padV := spec.AxisLabel.TextMarginV * APPI / 96;
+      padH := spec.AxisLabel.TextMarginH * APPI / 96;
+      cands[m].Margin.LocalRect := TyRectExpand(cands[m].Bare.LocalRect, padV, padH, padV, padH);
+      cands[m].Bare.M := TyMatLocal(lp.X, lp.Y, 0);
+      cands[m].Margin.M := cands[m].Bare.M;
+      cands[m].Bare.Rect := TyRectApplyMat(cands[m].Bare.LocalRect, cands[m].Bare.M);
+      cands[m].Margin.Rect := TyRectApplyMat(cands[m].Margin.LocalRect, cands[m].Margin.M);
+      cands[m].Bare.AxisAligned := True;
+      cands[m].Margin.AxisAligned := True;
+      cands[m].HasBox := (lw > 0) and (lh > 0);
+      rings[m] := q;
+      Inc(m);
+    end;
+    SetLength(cands, m);
+    TyFixMinMaxLabelShow(cands, lakValue, False, spec.AxisLabel.ShowMin,
+      spec.AxisLabel.ShowMax, spec.AxisLabel.HideOverlap, False);
+    if spec.AxisLabel.HideOverlap then TyHideOverlap(cands);
+    for q := 0 to m - 1 do
+      if cands[q].Ignore then AHidden[rings[q]] := True;
+  end;
 
   { the rest of a line's lineStyle on its element: the dash against its
     width, the phase, the opacity [R5-B] }
@@ -1257,6 +1417,9 @@ var
       ALine.WidthLogical);
     AEl.Style.DashOffsetLogical := ALine.DashOffset;
     AEl.Style.Alpha := ALine.Opacity;
+    AEl.Style.LineCap := ALine.Cap;
+    AEl.Style.LineJoin := ALine.Join;
+    AEl.Style.MiterLimit := ALine.MiterLimit;
   end;
 
 begin
@@ -1423,12 +1586,24 @@ begin
       end;
     end;
 
+    { [R5-G] WHICH LABELS SHOW, before the ticks: AxisBuilder's
+      fixMinMaxLabelShow on the spoke's labels in value order (an end that
+      crowds its neighbour gives way, unless showMinLabel / showMaxLabel
+      keeps it), hideOverlap when asked -- and a tick whose label was
+      hidden goes with it (syncLabelIgnoreToMajorTicks: a radar has no
+      minor ticks) [was: every label and every tick drawn] }
+    SetLength(hidden, ARadar.RingCount + 1);
+    for k := 0 to High(hidden) do hidden[k] := False;
+    if spec.AxisLabel.Show then
+      RadarLabelsShown(i, a, perp, hidden);
+
     { ---- the ticks and the scale labels, on EVERY spoke ---- }
     if spec.AxisTick.Show and (spec.AxisTick.LengthLogical > 0) then
     begin
       len := spec.AxisTick.LengthLogical * APPI / 96;
       for k := 0 to ARadar.RingCount do
       begin
+        if hidden[k] then Continue;
         p := ARadar.CoordToPoint(ARadar.RingRadiusOf(i, k), i);
         q := TyPointF(p.X - perp.X * len, p.Y - perp.Y * len);
         el := TyChartElement(TyShapePolyline([p, q]));
@@ -1440,6 +1615,9 @@ begin
           spec.AxisTick.DashLogical, spec.AxisTick.WidthLogical);
         el.Style.DashOffsetLogical := spec.AxisTick.DashOffset;
         el.Style.Alpha := spec.AxisTick.Opacity;
+        el.Style.LineCap := spec.AxisTick.Cap;
+        el.Style.LineJoin := spec.AxisTick.Join;
+        el.Style.MiterLimit := spec.AxisTick.MiterLimit;
         el.Z := AInk.Z;
         el.Z2 := 2;
         el.Silent := True;
@@ -1469,13 +1647,13 @@ begin
       begin
         { Interval.getLabel: the tick's own decimals, thousands grouped.
           [Revised in batch 48: printed with no grouping.] }
+        if hidden[k] then Continue;
         words := TyScaleValueLabel(ARadar.GetAxis(i).Scale,
           ARadar.RingValue(i, k), Default(TTyLabelPrecision));
         if words = '' then Continue;
         p := ARadar.CoordToPoint(ARadar.RingRadiusOf(i, k), i);
         p := TyPointF(p.X - perp.X * margin, p.Y - perp.Y * margin);
-        AMeasurer.MeasureLine(words, AInk.LabelFontName,
-          AInk.LabelFontSizeLogical,
+        AMeasurer.MeasureLine(words, AInk.LabelFontName, LabelSize,
           TyFontStyleCodeOver(spec.AxisLabel.FontStyle, AInk.LabelFontWeight), w, h);
         if (w <= 0) or (h <= 0) then Continue;
         box := TyAnchorBox(p.X, p.Y, w, h, anchorH, anchorV);
@@ -1630,6 +1808,26 @@ begin
 
     el := TyChartElement(TyShapePolyline(ring));
     el.Style.StrokeColor := rowColour;
+    { [R5-G] the lineStyle's colour, the item's over the series' }
+    if (raw >= 0) and (raw <= High(AVisual.RowLineColourSet))
+      and AVisual.RowLineColourSet[raw] then
+    begin
+      if AVisual.RowLineNone[raw] then el.Style.StrokeColor := 0
+      else
+      begin
+        el.Style.StrokeColor := AVisual.RowLineColour[raw];
+        el.Style.StrokeGradient := AVisual.RowLineGrad[raw];
+      end;
+    end
+    else if AVisual.LineColourSet then
+    begin
+      if AVisual.LineNone then el.Style.StrokeColor := 0
+      else
+      begin
+        el.Style.StrokeColor := AVisual.LineColour;
+        el.Style.StrokeGradient := AVisual.LineGrad;
+      end;
+    end;
     el.Style.StrokeWidthLogical := AVisual.LineWidthLogical;
     { [R2-B] the ring's lineStyle width and type: the item's own over the
       series' (RadarView: itemModel.getModel('lineStyle').getLineStyle()) }

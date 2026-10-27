@@ -800,7 +800,10 @@ begin
   end;
   for k := 0 to High(FZoomSpecs) do
     if KbIsSlider(k) or KbIsInside(k) then Add(ksDataZoom, k, 0);
-  if (FTlView <> nil) and FTlView.Shown and (FTlView.Count > 0) then Add(ksTimeline, 0, 0);
+  { [R5-G] a stop for every timeline shown }
+  for k := 0 to High(FTlViews) do
+    if (FTlViews[k] <> nil) and FTlViews[k].Shown and (FTlViews[k].Count > 0) then
+      Add(ksTimeline, k, 0);
   for k := 0 to High(FTbSpecs) do
     if (k <= High(FTbLayouts)) and FTbLayouts[k].Valid and (Length(FTbSpecs[k].Icons) > 0) then
       Add(ksToolbox, k, 0);
@@ -1302,35 +1305,37 @@ begin
   VmDragHandleBar(AIndex, AHandle, True, 0);
 end;
 
-procedure TTyCustomAdvanceChart.KbTimelineKey(ACmd: TTyKbCommand);
-var cur, target: Double; n, step: Integer;
+procedure TTyCustomAdvanceChart.KbTimelineKey(ATl: Integer; ACmd: TTyKbCommand);
+var cur, target: Double; n, step: Integer; v: TTyTimelineView;
 begin
-  if FTlView = nil then Exit;
-  cur := TlCurrentIndex;
-  n := FTlView.Count;
+  v := TlView(ATl);
+  if v = nil then Exit;
+  { [R5-G] the view's own buttons and ticks: its own index }
+  cur := TlCurrentIndexOf(ATl);
+  n := v.Count;
   case ACmd of
     { the prev and next buttons' own clicks }
     kbcPrev, kbcPrevSeries:
-      if FTlView.Inverse then TlChange(cur + 1, True) else TlChange(cur - 1, True);
+      if v.Inverse then TlChange(ATl, cur + 1, True) else TlChange(ATl, cur - 1, True);
     kbcNext, kbcNextSeries:
-      if FTlView.Inverse then TlChange(cur - 1, True) else TlChange(cur + 1, True);
+      if v.Inverse then TlChange(ATl, cur - 1, True) else TlChange(ATl, cur + 1, True);
     { a tick's click: Home the first tick on the axis, End the last --
       an inverse timeline's first is its last item [R2-G] }
     kbcFirst:
-      if FTlView.Inverse then TlChange(n - 1, True) else TlChange(0, True);
+      if v.Inverse then TlChange(ATl, n - 1, True) else TlChange(ATl, 0, True);
     kbcLast:
-      if FTlView.Inverse then TlChange(0, True) else TlChange(n - 1, True);
+      if v.Inverse then TlChange(ATl, 0, True) else TlChange(ATl, n - 1, True);
     kbcPagePrev, kbcPageNext:
       begin
         step := TyKbPageStep(n);
         if IsNan(cur) then cur := 0;
         { the way the arrows go: an inverse timeline's back is up the
           items [R2-G] }
-        if (ACmd = kbcPagePrev) <> FTlView.Inverse then target := cur - step
+        if (ACmd = kbcPagePrev) <> v.Inverse then target := cur - step
         else target := cur + step;
         if target < 0 then target := 0;
         if target > n - 1 then target := n - 1;
-        TlChange(target, True);
+        TlChange(ATl, target, True);
       end;
   end;
 end;
@@ -1524,18 +1529,14 @@ begin
     ksTimeline:
       if TyKbIsComponentMove(cmd) then
       begin
-        KbTimelineKey(cmd);
+        KbTimelineKey(i, cmd);
         Result := True;
       end
-      else if (cmd = kbcActivate) and (AKey = VK_SPACE) and (FTlView <> nil) then
+      else if (cmd = kbcActivate) and (AKey = VK_SPACE) and (TlView(i) <> nil) then
       begin
-        { the play button's click (_handlePlayClick): the timer cleared }
-        FTlDue := NaN;
-        TlArmTimer;
-        if FTlView.PlayState then
-          DispatchAction('{"type":"timelinePlayChange","playState":false,"from":"' + FTlView.Uid + '"}')
-        else
-          DispatchAction('{"type":"timelinePlayChange","playState":true,"from":"' + FTlView.Uid + '"}');
+        { the play button's click (_handlePlayClick) of that view: its
+          timer cleared, the play its own model shows toggled }
+        TlPlayClick(i, not TlView(i).PlayState);
         Result := True;
       end;
     ksBrush:
@@ -1551,6 +1552,7 @@ function TTyCustomAdvanceChart.KbPartRect(const AStop: TTyKbStop; APart: Integer
 var
   s, kd, ix, els, regs, pcs: TTyIntegerArray;
   n, i, j, h, q: Integer;
+  tv: TTyTimelineView;
   el: TTyChartElement;
   L: TTyVisualMapLayout;
   it: TTyVmItem;
@@ -1658,15 +1660,16 @@ begin
       end;
     ksTimeline:
       begin
-        if (FTlView = nil) or not FTlView.Shown or (FTlView.Checkpoint = nil) then Exit;
-        FTlView.UpdateTransforms;
+        tv := TlView(i);
+        if (tv = nil) or not tv.Shown or (tv.Checkpoint = nil) then Exit;
+        tv.UpdateTransforms;
         meas := NewTextMeasurer(96);
         ctx := Default(TTyGfxPaintCtx);
         if FLastPPI > 0 then ctx.Scale := FLastPPI / 96 else ctx.Scale := 1;
         ctx.HasInk := False;
-        for j := 0 to High(FTlView.Els) do
-          if (FTlView.Els[j] = FTlView.Checkpoint) and not FTlView.Els[j].Ignore
-            and FTlView.Drawable(j, meas) and TyGfxPaintElement(FTlView.Els[j], meas, ctx, pe) then
+        for j := 0 to High(tv.Els) do
+          if (tv.Els[j] = tv.Checkpoint) and not tv.Els[j].Ignore
+            and tv.Drawable(j, meas) and TyGfxPaintElement(tv.Els[j], meas, ctx, pe) then
           begin
             R := TyShapeBounds(pe.Shape);
             Exit(True);
@@ -1753,11 +1756,12 @@ begin
         Result := Format(rsTyChartAccPercentRange, [Pct(lo), Pct(hi)]);
       end;
     ksTimeline:
-      if (FTlView <> nil) and not IsNan(TlCurrentIndex) then
+      if (TlView(i) <> nil) and not IsNan(TlCurrentIndexOf(i)) then
       begin
-        cur := Trunc(TlCurrentIndex);
-        if (cur >= 0) and (cur <= High(FTlView.Names)) and (FTlView.Names[cur] <> '') then
-          Result := FTlView.Names[cur]
+        { [R5-G] the index the view shows: its own model's }
+        cur := Trunc(TlCurrentIndexOf(i));
+        if (cur >= 0) and (cur <= High(TlView(i).Names)) and (TlView(i).Names[cur] <> '') then
+          Result := TlView(i).Names[cur]
         else
           Result := IntToStr(cur);
       end;

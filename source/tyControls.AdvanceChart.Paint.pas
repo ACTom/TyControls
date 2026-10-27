@@ -1107,6 +1107,10 @@ type
       one whatever the z -- the first key of the order. A series' (and its
       labels'), a marker's; 0, the zero value, for everything else }
     ZLevel: Integer;
+    { [spec 244] the part of a z that is not whole, the second key after Z
+      (Z its floor): a geo's z of 2.5 sorts over a series' 2 and under a 3,
+      as zrender sorts the number. 0, the zero value, for everything else }
+    ZFrac: Double;
   end;
   PTyChartElement = ^TTyChartElement;
 
@@ -1603,7 +1607,8 @@ begin
   begin
     { [R2-I6] an element whose place in the order moves }
     if (FItems[FJrIdx[k]].Z <> FJrOld[k].Z) or (FItems[FJrIdx[k]].Z2 <> FJrOld[k].Z2)
-      or (FItems[FJrIdx[k]].ZLevel <> FJrOld[k].ZLevel) then
+      or (FItems[FJrIdx[k]].ZLevel <> FJrOld[k].ZLevel)
+      or (FItems[FJrIdx[k]].ZFrac <> FJrOld[k].ZFrac) then
       MarkOrderDirty(FJrIdx[k]);
     FItems[FJrIdx[k]] := FJrOld[k];
   end;
@@ -1666,7 +1671,7 @@ begin
   { [R2-I6] the order moves only where z or z2 does [was: sorted again
     after any write] }
   if (FItems[AIndex].Z <> AElement.Z) or (FItems[AIndex].Z2 <> AElement.Z2)
-    or (FItems[AIndex].ZLevel <> AElement.ZLevel) then
+    or (FItems[AIndex].ZLevel <> AElement.ZLevel) or (FItems[AIndex].ZFrac <> AElement.ZFrac) then
     MarkOrderDirty(AIndex);
   FItems[AIndex] := AElement;
 end;
@@ -1790,6 +1795,8 @@ begin
     Exit(FItems[A].ZLevel < FItems[B].ZLevel);
   if FItems[A].Z <> FItems[B].Z then
     Exit(FItems[A].Z < FItems[B].Z);
+  if FItems[A].ZFrac <> FItems[B].ZFrac then
+    Exit(FItems[A].ZFrac < FItems[B].ZFrac);
   if FItems[A].Z2 <> FItems[B].Z2 then
     Exit(FItems[A].Z2 < FItems[B].Z2);
   { The insertion index makes the order TOTAL.

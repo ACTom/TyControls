@@ -25,6 +25,11 @@ end;
   the dash and its phase, the cap, the opacity as the canvas' globalAlpha --
   inside a saved state, so nothing leaks onto the next piece }
 procedure TyStrokeAxisPath(P: TTyPainter; const AStroke: TTyAxisStroke);
+var
+  bx, by, bw, bh, gx1, gy1, gx2, gy2, gr: Double;
+  box: TTyXYWH;
+  stops: array of TTyGradStop;
+  k: Integer;
 begin
   if not AStroke.Drawn then Exit;
   P.SaveState;
@@ -37,7 +42,30 @@ begin
     else
       P.SetLineCap(tlcButt);
     end;
-    P.StrokePath(TTyColor(AStroke.Colour), AStroke.WidthLogical);
+    { [R5-G] A GRADIENT PEN: zrender's canvas gradient against the stroked
+      element's getBoundingRect -- the path's rect grown by the stroke, a
+      fill-less path by max(width, 5) (TyGrowByStroke, as an element's) --
+      the whole ramp, not its first stop [was: the first stop] }
+    if (AStroke.Gradient.Kind <> cgkNone) and (Length(AStroke.Gradient.Stops) > 0)
+      and P.PathBounds(bx, by, bw, bh) then
+    begin
+      box.X := bx;
+      box.Y := by;
+      box.W := bw;
+      box.H := bh;
+      box := TyGrowByStroke(box, False, AStroke.WidthLogical * P.PPI / 96);
+      TyResolveGradientXYWH(AStroke.Gradient, box, gx1, gy1, gx2, gy2, gr);
+      stops := nil;
+      SetLength(stops, Length(AStroke.Gradient.Stops));
+      for k := 0 to High(stops) do
+      begin
+        stops[k].Color := TTyColor(AStroke.Gradient.Stops[k].Color);
+        stops[k].Pos := AStroke.Gradient.Stops[k].Offset;
+      end;
+      P.StrokePathGradient(stops, gx1, gy1, gx2, gy2, gr, AStroke.WidthLogical);
+    end
+    else
+      P.StrokePath(TTyColor(AStroke.Colour), AStroke.WidthLogical);
   finally
     P.RestoreState;
   end;
@@ -497,6 +525,13 @@ begin
         BatchLine(along, APlot.Top, along, APlot.Bottom, minorSplitK.WidthLogical)
       else
         BatchLine(APlot.Left, along, APlot.Right, along, minorSplitK.WidthLogical);
+      { [R5-G] CartesianAxisView: a Line per minor split line -- a gradient
+        over each one's box }
+      if minorSplitK.Gradient.Kind <> cgkNone then
+      begin
+        StrokeBatch(minorSplitK);
+        APainter.BeginPath;
+      end;
     end;
     StrokeBatch(minorSplitK);
   end;
@@ -522,6 +557,7 @@ begin
       begin
         if not spec^.SplitLineInks[ink].Ok then Continue;
         inkK.Colour := spec^.SplitLineInks[ink].Colour;
+        inkK.Gradient := spec^.SplitLineInks[ink].Grad;
         inkK.Drawn := True;
       end;
       APainter.BeginPath;
@@ -536,6 +572,12 @@ begin
           BatchLine(along, APlot.Top, along, APlot.Bottom, splitK.WidthLogical)
         else
           BatchLine(APlot.Left, along, APlot.Right, along, splitK.WidthLogical);
+        { [R5-G] a Line per split line too (CartesianAxisView, not merged) }
+        if inkK.Gradient.Kind <> cgkNone then
+        begin
+          StrokeBatch(inkK);
+          APainter.BeginPath;
+        end;
       end;
       StrokeBatch(inkK);
     end;
@@ -616,6 +658,13 @@ begin
         if AAxis.Side = asRight then x2 := at + tickLen else x2 := at - tickLen;
       end;
       BatchLine(x1, y1, x2, y2, tickK.WidthLogical);
+      { [R5-G] a gradient's box is each tick's own: createTicks makes a
+        Line per tick }
+      if tickK.Gradient.Kind <> cgkNone then
+      begin
+        StrokeBatch(tickK);
+        APainter.BeginPath;
+      end;
     end;
     StrokeBatch(tickK);
   end;
@@ -656,6 +705,12 @@ begin
         else x2 := at - minorLen;
       end;
       BatchLine(x1, y1, x2, y2, minorTickK.WidthLogical);
+      { [R5-G] a Line per minor tick too }
+      if minorTickK.Gradient.Kind <> cgkNone then
+      begin
+        StrokeBatch(minorTickK);
+        APainter.BeginPath;
+      end;
     end;
     StrokeBatch(minorTickK);
   end;
@@ -890,8 +945,11 @@ begin
   end;
 
   plotF := TyRectF(ARect.Left, ARect.Top, ARect.Right, ARect.Bottom);
+  { [R5-G] A PPI OF ITS OWN IS A NEW LAYOUT TOO: every px of the option is
+    scaled by PPI / 96, so a chart moved to a monitor of another DPI at the
+    same pixel size is a chart of another CSS size -- upstream's resize() }
   if FDirty or (plotF.Right <> FLastRect.Right)
-    or (plotF.Bottom <> FLastRect.Bottom) then
+    or (plotF.Bottom <> FLastRect.Bottom) or (APPI <> FLastPPI) then
   begin
     Relayout(APainter, plotF, APPI, AMeasurer);
     { the frame a lazy setOption waited for [Batch 97] }
@@ -913,8 +971,14 @@ begin
   if FDrCapture and (APainter <> nil) then DrCaptureBase(APainter.Bitmap);
 
   { AFTER THE AXES, so a bar sits on the grid rather than under it. Within the
-    series, the paint list decides the order. }
-  PaintSeries(APainter, AMeasurer, APPI);
+    series, the paint list decides the order. [R5-G] Only what stands on the
+    components' zlevel or under it: a higher zlevel is a canvas over them. }
+  TySetZBand(-MaxInt, ComponentZLevel);
+  try
+    PaintSeries(APainter, AMeasurer, APPI);
+  finally
+    TyClearZBand;
+  end;
   { THE BREAK AREAS, zigzagZ over the series [Batch 132] -- the dynamic
     layer's while the series move there, over them and in their axes'
     groupTransition [F4a] }
@@ -927,6 +991,50 @@ begin
     move the title goes with them into the dynamic layer, so it stays over
     them [Batch 89]. }
   if FExporting or not FAnimLive or FAnimContinuous then PaintTitles(APainter);
+  { [R5-G] AND OVER THEM, an element of a higher zlevel -- up to the loading
+    mask's, when it shows over the chart }
+  if FExporting or not FAnimLive or FAnimContinuous then
+    PaintAboveComponents(APainter, FZList);
+end;
+
+function TTyCustomAdvanceChart.ComponentZLevel: Integer;
+var d: TJSONData; v: Double;
+begin
+  Result := 0;
+  if (FOption = nil) or not (FOption.Root is TJSONObject) then Exit;
+  d := TJSONObject(FOption.Root).Find('zlevel');
+  if (d = nil) or (d.JSONType <> jtNumber) then Exit;
+  v := d.AsFloat;
+  if IsNan(v) or IsInfinite(v) then Exit;
+  Result := Round(Max(Double(-100000), Min(Double(100000), v)));
+end;
+
+function TTyCustomAdvanceChart.ZStaticTop: Integer;
+var v: Double;
+begin
+  Result := MaxInt;
+  if not FLoadShown or (csDesigning in ComponentState) then Exit;
+  v := FLoadCfg.ZLevel;
+  if IsNan(v) or IsInfinite(v) then Exit;
+  Result := Max(ComponentZLevel, Round(Max(Double(-100000), Min(Double(100000), v))));
+end;
+
+{ [R5-G] the elements of AList over the components' zlevel and up to the
+  static layer's top -- drawn after the components, as zrender draws a
+  canvas of a higher zlevel over the one they stand on }
+procedure TTyCustomAdvanceChart.PaintAboveComponents(APainter: TTyPainter;
+  AList: TTyPaintList);
+var zc: Integer;
+begin
+  if AList = nil then Exit;
+  zc := ComponentZLevel;
+  if TyMaxZLevelOf(AList) <= zc then Exit;
+  TySetZBand(zc, ZStaticTop);
+  try
+    TyRenderPaintList(APainter, AList);
+  finally
+    TyClearZBand;
+  end;
 end;
 
 procedure TTyCustomAdvanceChart.PaintAxes(APainter: TTyPainter; APPI: Integer;
@@ -1093,6 +1201,7 @@ var
   built, prepped, layered, fresh: Boolean;
   frame: TTyPaintList;
 begin
+  FZList := nil;
   { WHAT THE STATIC LAYER HOLDS, for the dirty-rect path: one list at rest,
     or nil [Batch 142] }
   FDrStaticList := nil;
@@ -1127,6 +1236,7 @@ begin
     bound or stepped -- the proxies are the window's [Batch 106] }
   if FExporting then
   begin
+    FZList := FPaintList;
     if drawn > 0 then TyRenderPaintList(APainter, FPaintList);
     Exit;
   end;
@@ -1143,7 +1253,8 @@ begin
     here [Batch 92] }
   if FAnimContinuous then
   begin
-    if (drawn > 0) and (FDrMode = 0) then TyRenderPaintList(APainter, AnimPart(False));
+    FZList := AnimPart(False);
+    if (drawn > 0) and (FDrMode = 0) then TyRenderPaintList(APainter, FZList);
     Exit;
   end;
   if FAnimLive then Exit;
@@ -1154,12 +1265,14 @@ begin
     if (Length(FAnimBind) > 0) or (Length(FAnimStBind) > 0) or TmAnimAny then
     begin
       frame := AnimFrame;
+      FZList := frame;
       if FDrMode = 0 then TyRenderPaintList(APainter, frame);
       FDrStaticList := frame;
     end
     else
     begin
       { a progressive run's chunks through their own layer [Batch 119] }
+      FZList := FPaintList;
       if FDrMode = 0 then ProgRenderList(APainter, FPaintList, APPI);
       { ...which is not one list the rects could be drawn from }
       layered := False;
@@ -1190,6 +1303,92 @@ begin
   if has then AColour := TTyChartColor(col);
 end;
 
+{ [R5-G] GridView.render: when the grid model's `show` is truthy, one silent
+  Rect over coordinateSystem.getRect() at z2 -1, its style
+  defaults({fill: backgroundColor}, getItemStyle()) -- so the fill is the
+  backgroundColor (default transparent), the stroke borderColor (default
+  tokens.color.neutral30: the skin's TyAdvChartGridBorder), the lineWidth
+  borderWidth (default 1), the dash, the opacity and the shadow the grid's
+  own item-style keys. [Was: not drawn -- an option without effect.] }
+procedure TTyCustomAdvanceChart.AddGridBackgrounds(AList: TTyPaintList);
+var
+  g: Integer;
+  gb: TTyGridBuild;
+  d: TJSONData;
+  node: TJSONObject;
+  st: TTyOptStyle;
+  fill: TTyOptColor;
+  el: TTyChartElement;
+  r: TTyXYWH;
+  lw, v: Double;
+  bs: TTyStyleSet;
+begin
+  if (FBuild = nil) or (FOption = nil) or ViewHidden(cvGrid) then Exit;
+  for g := 0 to FBuild.GridCount - 1 do
+  begin
+    gb := FBuild.Grid(g);
+    d := FOption.ComponentAt('grid', gb.ComponentIndex);
+    if not (d is TJSONObject) then Continue;
+    node := TJSONObject(d);
+    if not TyJsTruthy(node.Find('show')) then Continue;
+    st := TyReadOptItemStyleOf(node);
+    fill := TyReadOptColorOf(node, 'backgroundColor');
+    r := gb.PlotXYWH;
+    el := TyChartElement(TyShapeRect(TyRectF(r.X, r.Y, r.X + r.W, r.Y + r.H)));
+    el.Style.HasFill := fill.Written and not fill.IsNone and not fill.IsAuto
+      and (((fill.Color shr 24) <> 0) or (fill.Gradient.Kind <> cgkNone)
+        or fill.Pattern.Present);
+    el.Style.FillColor := fill.Color;
+    el.Style.FillGradient := fill.Gradient;
+    el.Style.FillPattern := fill.Pattern;
+    if not IsNan(st.BorderWidthLogical) then lw := st.BorderWidthLogical
+    else lw := 1;
+    if st.BorderColor.Written then
+    begin
+      if st.BorderColor.IsNone or st.BorderColor.IsAuto then lw := 0;
+      el.Style.StrokeColor := st.BorderColor.Color;
+      el.Style.StrokeGradient := st.BorderColor.Gradient;
+    end
+    else
+    begin
+      bs := ActiveController.Model.ResolveStyle('TyAdvChartGridBorder', '', []);
+      el.Style.StrokeColor := TTyChartColor(bs.BorderColor);
+    end;
+    if (lw > 0) and not IsInfinite(lw) then el.Style.StrokeWidthLogical := lw
+    else el.Style.StrokeWidthLogical := 0;
+    el.Style.DashLogical := TyDashPattern(st.Dash, st.DashLogical, lw);
+    el.Style.DashOffsetLogical := st.DashOffset;
+    d := node.Find('borderCap');
+    if (d <> nil) and (d.JSONType = jtString) then el.Style.LineCap := TyCapOfWord(d.AsString);
+    d := node.Find('borderJoin');
+    if (d <> nil) and (d.JSONType = jtString) then el.Style.LineJoin := TyJoinOfWord(d.AsString);
+    d := node.Find('borderMiterLimit');
+    if (d <> nil) and (d.JSONType = jtNumber) and (d.AsFloat > 0) then
+      el.Style.MiterLimit := d.AsFloat;
+    if not IsNan(st.Opacity) then el.Style.Alpha := Max(Double(0), Min(Double(1), st.Opacity))
+    else el.Style.Alpha := 1;
+    TyStyleSetShadow(el.Style, st.Shadow);
+    { the grid's z (0) and zlevel (its own, else the root's) }
+    el.Z := 0;
+    d := node.Find('z');
+    if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then
+      el.Z := Round(Max(Double(-100000), Min(Double(100000), d.AsFloat)));
+    el.Z2 := -1;
+    d := node.Find('zlevel');
+    if ((d = nil) or (d.JSONType <> jtNumber)) and (FOption.Root is TJSONObject) then
+      d := TJSONObject(FOption.Root).Find('zlevel');
+    if (d <> nil) and (d.JSONType = jtNumber) then
+    begin
+      v := d.AsFloat;
+      if not IsNan(v) and not IsInfinite(v) then
+        el.ZLevel := Round(Max(Double(-100000), Min(Double(100000), v)));
+    end;
+    el.Silent := True;
+    AList.Add(el);
+    ViewDrew(cvGrid);
+  end;
+end;
+
 { backgroundColor as the option writes it, when it is a colour that paints:
   not 'transparent', not 'none', not unreadable, not fully clear }
 function TTyCustomAdvanceChart.AuthorBackground(out AColour: TTyChartColor): Boolean;
@@ -1208,6 +1407,7 @@ procedure TTyCustomAdvanceChart.PaintDynamic(APainter: TTyPainter; const ARect: 
   APPI: Integer; const AMeasurer: ITyTextMeasurer);
 var
   ptrHits: TTyAxisHitArray;
+  frame: TTyPaintList;
 begin
   { AN EXPORT'S: the finished picture has no frame of an animation and no
     hover -- an option's own pointers, and the loading effect over all
@@ -1239,6 +1439,7 @@ begin
       layer too }
     PaintHoverLayer(APainter);
     PaintLoading(APainter, ARect, APPI, AMeasurer);
+    PaintOverLoading(APainter);
     Exit;
   end;
   { WHAT IS DRAWN HERE IS COMPOSITED OVER the blitted static layer: BeginPaint
@@ -1262,12 +1463,21 @@ begin
     { the axes in their groupTransition under the series, as the static
       layer draws them [Batch 96] }
     if AxesDynamic then PaintAxes(APainter, APPI, AMeasurer, True);
-    TyRenderPaintList(APainter, AnimFrame);
+    frame := AnimFrame;
+    FZList := frame;
+    TySetZBand(-MaxInt, ComponentZLevel);
+    try
+      TyRenderPaintList(APainter, frame);
+    finally
+      TyClearZBand;
+    end;
     { the break areas over the series in motion [F4a] }
     PaintBreakAreas(APainter);
     { the parallel axes over the lines in motion [Batch 128] }
     PaintParallels(APainter, APPI, AMeasurer);
     PaintTitles(APainter);
+    { [R5-G] a higher zlevel over them }
+    PaintAboveComponents(APainter, frame);
   end;
   { THE POINTER UNDER THE HIGHLIGHT UNDER THE BOX. A shadow band drawn over
     the bars is the layer debt showing -- series marks live in the static
@@ -1293,7 +1503,24 @@ begin
     [Batch 106] -- [R5-D] under the box, which is html over the canvas
     there [was: over the box too] }
   PaintLoading(APainter, ARect, APPI, AMeasurer);
+  { [R5-G] AN ELEMENT OF A HIGHER ZLEVEL THAN THE MASK'S is a canvas over it:
+    the static layer left it out (ZStaticTop), drawn here over the mask }
+  PaintOverLoading(APainter);
   PaintTooltip(APainter, ARect, APPI, AMeasurer);
+end;
+
+procedure TTyCustomAdvanceChart.PaintOverLoading(APainter: TTyPainter);
+var zTop: Integer;
+begin
+  zTop := ZStaticTop;
+  if (zTop = MaxInt) or (FZList = nil) then Exit;
+  if TyMaxZLevelOf(FZList) <= zTop then Exit;
+  TySetZBand(zTop, MaxInt);
+  try
+    TyRenderPaintList(APainter, FZList);
+  finally
+    TyClearZBand;
+  end;
 end;
 
 function TTyCustomAdvanceChart.HasDynamicContent: Boolean;
@@ -1728,6 +1955,7 @@ var
   hit: Boolean;
   P: TTyPainter;
   sc: TTyCanvasScale;
+  zc, pass: Integer;
 begin
   Result := False;
   measurer := NewTextMeasurer(APPI);
@@ -1791,32 +2019,49 @@ begin
       TyZrRectUnion(box, TyRectToXYWH(TyRectF(px[k].Left, px[k].Top, px[k].Right, px[k].Bottom)));
     FDrWork.ClipRect := DrRaster(Rect(Round(box.X), Round(box.Y), Round(box.X + box.W),
       Round(box.Y + box.H)));
-    for i := 0 to FDrStaticList.Count - 1 do
+    { [R5-G] in two passes as the full paint draws: the list up to the
+      components' zlevel, the components, the rest over them }
+    zc := ComponentZLevel;
+    for pass := 0 to 1 do
     begin
-      idx := FDrStaticList.PaintOrder(i);
-      if (idx < 0) or (idx > High(snap)) then Continue;
-      { TyRenderPaintList's own skips }
-      if snap[idx].El.Ignore or snap[idx].El.ProgHidden or snap[idx].El.GfxUnder then
-        Continue;
-      { an element nothing bounds is drawn wherever it is: unchanged, it may
-        still be under a rect }
-      if snap[idx].Bounded then
+      if pass = 0 then
+        TySetZBand(-MaxInt, zc)
+      else
       begin
-        hit := False;
-        for k := 0 to n - 1 do
-          if TyZrRectIntersect(snap[idx].Rect, zr[k]) then
-          begin
-            hit := True;
-            Break;
-          end;
-        if not hit then Continue;
+        { what the static paint draws over the series, as it draws it }
+        PaintBreakAreas(P);
+        PaintParallels(P, APPI, measurer);
+        PaintTitles(P);
+        if TyMaxZLevelOf(FDrStaticList) <= zc then Break;
+        TySetZBand(zc, ZStaticTop);
       end;
-      TyRenderElement(P, snap[idx].El);
+      try
+        for i := 0 to FDrStaticList.Count - 1 do
+        begin
+          idx := FDrStaticList.PaintOrder(i);
+          if (idx < 0) or (idx > High(snap)) then Continue;
+          { TyRenderPaintList's own skips }
+          if snap[idx].El.Ignore or snap[idx].El.ProgHidden or snap[idx].El.GfxUnder then
+            Continue;
+          { an element nothing bounds is drawn wherever it is: unchanged, it may
+            still be under a rect }
+          if snap[idx].Bounded then
+          begin
+            hit := False;
+            for k := 0 to n - 1 do
+              if TyZrRectIntersect(snap[idx].Rect, zr[k]) then
+              begin
+                hit := True;
+                Break;
+              end;
+            if not hit then Continue;
+          end;
+          TyRenderElement(P, snap[idx].El);
+        end;
+      finally
+        TyClearZBand;
+      end;
     end;
-    { what the static paint draws over the series, as it draws it }
-    PaintBreakAreas(P);
-    PaintParallels(P, APPI, measurer);
-    PaintTitles(P);
     FDrWork.ClipRect := oldClip;
     P.EndPaint;
   finally

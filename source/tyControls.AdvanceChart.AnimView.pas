@@ -1809,6 +1809,14 @@ begin
     Num1('shape.endAngle', AEl.Anim.G[5])]);
 end;
 
+{ [R5-G] the data index a pie sector's animation is timed at: its filtered
+  subscript (G[10], plus one), else its row }
+function PieDataIndex(const AEl: TTyChartElement): Integer;
+begin
+  if AEl.Anim.G[10] > 0 then Result := Round(AEl.Anim.G[10]) - 1
+  else Result := AEl.Anim.Index;
+end;
+
 function SectorProps(const AEl: TTyChartElement): TTyAnimProps;
 begin
   Result := TyAnimProps([Num1('shape.cx', AEl.Anim.G[0]),
@@ -2571,7 +2579,7 @@ begin
         if AC.PieScale then
         begin
           p.SetNum('shape.r', AEl.Anim.G[2]);
-          Start(TyAnimProps([Num1('shape.r', AEl.Anim.G[3])]), TyAnimCallAt(idx));
+          Start(TyAnimProps([Num1('shape.r', AEl.Anim.G[3])]), TyAnimCallAt(PieDataIndex(AEl)));
         end
         else if AUpdate then
         begin
@@ -2579,14 +2587,14 @@ begin
             at UPDATE timing (PieView.ts:110-117) }
           p.SetNum('shape.endAngle', AEl.Anim.G[4]);
           TyUpdateProps(p, TyAnimProps([Num1('shape.endAngle', AEl.Anim.G[5])]),
-            AC.Model, TyAnimCallAt(idx));
+            AC.Model, TyAnimCallAt(PieDataIndex(AEl)));
         end
         else if AC.HasPieStart then
         begin
           p.SetNum('shape.startAngle', AC.PieStart);
           p.SetNum('shape.endAngle', AC.PieStart);
           Start(TyAnimProps([Num1('shape.startAngle', AEl.Anim.G[4]),
-            Num1('shape.endAngle', AEl.Anim.G[5])]), TyAnimCallAt(idx));
+            Num1('shape.endAngle', AEl.Anim.G[5])]), TyAnimCallAt(PieDataIndex(AEl)));
         end;
       end;
     carSunPiece:
@@ -4269,8 +4277,9 @@ var
           p := Take(AOld, AOldRow, s, r, 'sector', oprops, props, hasOld);
           if hasOld then Ensure(p, 'shape.angle', oe.Anim.G[6]);
           p.SetFinal(props);
-          { the whole sectorShape, at the NEW row (PieView.ts:120-125) }
-          TyUpdateProps(p, props, AC.Model, TyAnimCallAt(r));
+          { the whole sectorShape, at the NEW row (PieView.ts:120-125) --
+            the filtered data's [R5-G] }
+          TyUpdateProps(p, props, AC.Model, TyAnimCallAt(PieDataIndex(AEl)));
         end;
       carSunPiece:
         begin

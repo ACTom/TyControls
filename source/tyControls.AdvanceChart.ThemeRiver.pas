@@ -107,9 +107,13 @@ procedure TyThemeRiverFillStore(AOption: TTyChartOption; ASeriesIndex: Integer;
 function TyThemeRiverLayers(AStore: TTyDataStore): TTyRiverLayerArray;
 
 { themeRiverLayout and the view's polygons. AMarginPx is label.margin in
-  device px. }
+  device px. [R5-G] AHasGap: the two ends of boundaryGap as an earlier
+  layout already wrote them back into the option (AGap0, AGap1, px) --
+  upstream's parsePercent results replace the strings in the model's own
+  array, so a later layout (a resize) reads those numbers again. }
 function TyThemeRiverLayout(AOption: TTyChartOption; ASeriesIndex: Integer;
-  ASingle: TTySingle; AStore: TTyDataStore; AMarginPx: Double): TTyThemeRiverLayout;
+  ASingle: TTySingle; AStore: TTyDataStore; AMarginPx: Double;
+  AHasGap: Boolean = False; AGap0: Double = 0; AGap1: Double = 0): TTyThemeRiverLayout;
 
 { whether a polygon's path draws anything: a command beside its closes }
 function TyRiverPathDraws(const ACmds: TTyPathCmdArray): Boolean;
@@ -125,14 +129,13 @@ function TyRiverLayerShape(const ABottoms, ATops: TTyPointFArray; AGroupY: Doubl
   they were added. }
 function TyRiverKeyOrder(const AKeys: TTyStringArray): TTyIntegerArray;
 { V8's Array.prototype.sort of AItems by AKey ascending (a - b, a
-  not-a-number difference a tie): stable; a run under 64 by its
-  binary-insertion path exactly }
+  not-a-number difference a tie): TyJsArraySort, V8's TimSort whole }
 procedure TyV8SortBy(var AItems: TTyIntegerArray; const AKey: TTyDoubleArray);
 
 implementation
 
 uses tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Layout,
-  tyControls.AdvanceChart.LinePath;
+  tyControls.AdvanceChart.LinePath, tyControls.AdvanceChart.DataTransform;
 
 function MaskFP: TFPUExceptionMask;
 begin
@@ -315,104 +318,39 @@ begin
   if IsNan(Result) then Result := 0;
 end;
 
-procedure TyV8SortBy(var AItems: TTyIntegerArray; const AKey: TTyDoubleArray);
-var
-  n, runLen, i, left, right, mid, start, p, pivot, t: Integer;
-  desc: Boolean;
-  tmp: TTyIntegerArray;
-  mask: TFPUExceptionMask;
-
-  procedure MergeSort(ALo, AHi: Integer);
-  var m, a, b, k: Integer;
-  begin
-    if AHi - ALo < 2 then Exit;
-    m := (ALo + AHi) div 2;
-    MergeSort(ALo, m);
-    MergeSort(m, AHi);
-    a := ALo;
-    b := m;
-    k := ALo;
-    while (a < m) and (b < AHi) do
-    begin
-      { stable: the right one first only when strictly before }
-      if Cmp(AKey, AItems[b], AItems[a]) < 0 then
-      begin
-        tmp[k] := AItems[b];
-        Inc(b);
-      end
-      else
-      begin
-        tmp[k] := AItems[a];
-        Inc(a);
-      end;
-      Inc(k);
-    end;
-    while a < m do
-    begin
-      tmp[k] := AItems[a];
-      Inc(a);
-      Inc(k);
-    end;
-    while b < AHi do
-    begin
-      tmp[k] := AItems[b];
-      Inc(b);
-      Inc(k);
-    end;
-    for k := ALo to AHi - 1 do AItems[k] := tmp[k];
+type
+  { sortCompare over the keys }
+  TRiverCompare = class
+    Key: TTyDoubleArray;
+    function Compare(A, B: Integer): Integer;
   end;
 
+function TRiverCompare.Compare(A, B: Integer): Integer;
+var d: Double;
 begin
-  n := Length(AItems);
-  if n < 2 then Exit;
+  d := Cmp(Key, A, B);
+  if d < 0 then Result := -1
+  else if d > 0 then Result := 1
+  else Result := 0;
+end;
+
+{ [R5-G] V8's TimSort whole (TyJsArraySort): a run of 64 or more with a
+  not-a-number comparison lands as V8 leaves it [was: a stable merge sort
+  from 64 rows on, the binary-insertion path below that] }
+procedure TyV8SortBy(var AItems: TTyIntegerArray; const AKey: TTyDoubleArray);
+var
+  c: TRiverCompare;
+  mask: TFPUExceptionMask;
+begin
+  if Length(AItems) < 2 then Exit;
+  c := TRiverCompare.Create;
   mask := MaskFP;
   try
-    if n >= 64 then
-    begin
-      SetLength(tmp, n);
-      MergeSort(0, n);
-      Exit;
-    end;
-    { CountAndMakeRun from 0 }
-    runLen := 2;
-    desc := Cmp(AKey, AItems[1], AItems[0]) < 0;
-    i := 2;
-    while i < n do
-    begin
-      if desc then
-      begin
-        if Cmp(AKey, AItems[i], AItems[i - 1]) >= 0 then Break;
-      end
-      else if Cmp(AKey, AItems[i], AItems[i - 1]) < 0 then Break;
-      Inc(runLen);
-      Inc(i);
-    end;
-    if desc then
-      for i := 0 to runLen div 2 - 1 do
-      begin
-        t := AItems[i];
-        AItems[i] := AItems[runLen - 1 - i];
-        AItems[runLen - 1 - i] := t;
-      end;
-    { BinaryInsertionSort(0, runLen, n): the minimum run is the whole }
-    start := runLen;
-    while start < n do
-    begin
-      left := 0;
-      right := start;
-      pivot := AItems[right];
-      while left < right do
-      begin
-        mid := left + ((right - left) shr 1);
-        if Cmp(AKey, pivot, AItems[mid]) < 0 then right := mid
-        else left := mid + 1;
-      end;
-      for p := start downto left + 1 do AItems[p] := AItems[p - 1];
-      AItems[left] := pivot;
-      Inc(start);
-    end;
+    c.Key := AKey;
+    TyJsArraySort(AItems, @c.Compare);
   finally
     UnmaskFP(mask);
+    c.Free;
   end;
 end;
 
@@ -604,7 +542,8 @@ end;
 { ==================== the layout ==================== }
 
 function TyThemeRiverLayout(AOption: TTyChartOption; ASeriesIndex: Integer;
-  ASingle: TTySingle; AStore: TTyDataStore; AMarginPx: Double): TTyThemeRiverLayout;
+  ASingle: TTySingle; AStore: TTyDataStore; AMarginPx: Double;
+  AHasGap: Boolean; AGap0, AGap1: Double): TTyThemeRiverLayout;
 var
   node: TJSONObject;
   d, g0, g1: TJSONData;
@@ -628,7 +567,12 @@ begin
   d := nil;
   if node <> nil then d := node.Find('boundaryGap');
   if ASingle.OrientHorizontal then len := Result.Rect.H else len := Result.Rect.W;
-  if d = nil then
+  if AHasGap then
+  begin
+    Result.Gap[0] := AGap0;
+    Result.Gap[1] := AGap1;
+  end
+  else if d = nil then
   begin
     Result.Gap[0] := TyBoxRawResolve(TyBoxRawStr('10%'), len);
     Result.Gap[1] := TyBoxRawResolve(TyBoxRawStr('10%'), len);

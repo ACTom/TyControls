@@ -525,6 +525,10 @@ type
       parameter that is meaningless half the time. }
     procedure StrokePathGradient(const AStops: array of TTyGradStop;
       AX1, AY1, AX2, AY2, ARadius, AWidthLogical: Double);
+    { [R5-G] THE CURRENT PATH'S BOUNDING BOX in the coordinates MoveTo /
+      LineTo were handed (the canvas' points taken back through the inverse
+      of its transform; arcs as flattened). False for an empty path. }
+    function PathBounds(out AX, AY, AW, AH: Double): Boolean;
     procedure FillAndStrokePath(AFillColor, AStrokeColor: TTyColor;
       AWidthLogical: Double; ARule: TTyFillRule = tfrNonZero);
     { Hit-test the current path, DEVICE px, THROUGH the current transform -- so
@@ -597,8 +601,13 @@ type
       set back to '' (or 'source-over'): the canvas' globalCompositeOperation by its name --
       'lighter' (the sum, clamped) and the separable blend modes of the compositing
       specification ('multiply', 'screen', 'overlay', 'darken', 'lighten', 'color-dodge',
-      'color-burn', 'hard-light', 'soft-light', 'difference', 'exclusion'), each source over
-      with the blend in sRGB as a canvas does it. Each fill and each stroke composites once,
+      'color-burn', 'hard-light', 'soft-light', 'difference', 'exclusion'), [R5-G] the
+      non-separable ones ('hue', 'saturation', 'color', 'luminosity'), each source over
+      with the blend in sRGB as a canvas does it, and [R5-G] the Porter-Duff operators
+      ('source-in', 'source-out', 'source-atop', 'destination-over', 'destination-in',
+      'destination-out', 'destination-atop', 'xor', 'copy' -- the five that keep nothing of
+      the destination where the source has no ink clear it everywhere inside the clip, as
+      the canvas does). Each fill and each stroke composites once,
       its whole ink -- where its own path overlaps itself it does not add up. A name it
       does not know draws source over. Not part of the saved state; no control but the one
       that sets it draws any differently. }
@@ -5212,6 +5221,45 @@ begin
   CtxStroke(ctx);
 end;
 
+function TTyPainter.PathBounds(out AX, AY, AW, AH: Double): Boolean;
+var
+  pts: ArrayOfTPointF;
+  inv: TAffineMatrix;
+  q: TPointF;
+  i: Integer;
+  x0, y0, x1, y1: Double;
+begin
+  Result := False;
+  AX := 0; AY := 0; AW := 0; AH := 0;
+  if FBmp = nil then Exit;
+  pts := FBmp.Canvas2D.currentPath;
+  if Length(pts) = 0 then Exit;
+  inv := AffineMatrixInverse(FBmp.Canvas2D.matrix);
+  x0 := 0; y0 := 0; x1 := 0; y1 := 0;
+  for i := 0 to High(pts) do
+  begin
+    if isEmptyPointF(pts[i]) then Continue;
+    q := inv * pts[i];
+    if not Result then
+    begin
+      x0 := q.x; x1 := q.x; y0 := q.y; y1 := q.y;
+      Result := True;
+    end
+    else
+    begin
+      if q.x < x0 then x0 := q.x;
+      if q.x > x1 then x1 := q.x;
+      if q.y < y0 then y0 := q.y;
+      if q.y > y1 then y1 := q.y;
+    end;
+  end;
+  if not Result then Exit;
+  AX := x0;
+  AY := y0;
+  AW := x1 - x0;
+  AH := y1 - y0;
+end;
+
 procedure TTyPainter.FillPath(AColor: TTyColor; ARule: TTyFillRule);
 var
   ctx: TBGRACanvas2D;
@@ -6944,7 +6992,10 @@ begin
       { the subpath, its repeated points dropped; closed when it comes back to its start }
       j := s;
       while (j < High(APts)) and not isEmptyPointF(APts[j + 1]) do Inc(j);
-      SetLength(q, j - s + 1);
+      { [R5-G] the scratch only grows: a glyph's outline is many short
+        subpaths, and sixteen arrays sized anew for each was a tenth of a
+        turned label's halo. Nothing reads past segs (or q past n). }
+      if Length(q) < j - s + 2 then SetLength(q, j - s + 2);
       n := 0;
       for i := s to j do
         if (n = 0) or (APts[i].x <> q[n - 1].x) or (APts[i].y <> q[n - 1].y) then
@@ -6973,27 +7024,29 @@ begin
       end;
       if closed then
       begin
-        SetLength(q, n + 1);
         q[n] := q[0];
         segs := n;
       end
       else
         segs := n - 1;
-      SetLength(ux, segs);
-      SetLength(uy, segs);
-      SetLength(len, segs);
-      SetLength(e0, segs);
-      SetLength(e1, segs);
-      SetLength(o0, segs);
-      SetLength(o1, segs);
-      SetLength(t0, segs);
-      SetLength(t1, segs);
-      SetLength(cx0, segs);
-      SetLength(cy0, segs);
-      SetLength(cm0, segs);
-      SetLength(cx1, segs);
-      SetLength(cy1, segs);
-      SetLength(cm1, segs);
+      if Length(ux) < segs then
+      begin
+        SetLength(ux, segs);
+        SetLength(uy, segs);
+        SetLength(len, segs);
+        SetLength(e0, segs);
+        SetLength(e1, segs);
+        SetLength(o0, segs);
+        SetLength(o1, segs);
+        SetLength(t0, segs);
+        SetLength(t1, segs);
+        SetLength(cx0, segs);
+        SetLength(cy0, segs);
+        SetLength(cm0, segs);
+        SetLength(cx1, segs);
+        SetLength(cy1, segs);
+        SetLength(cm1, segs);
+      end;
       for i := 0 to segs - 1 do
       begin
         len[i] := Sqrt(Sqr(q[i + 1].x - q[i].x) + Sqr(q[i + 1].y - q[i].y));
@@ -7793,6 +7846,128 @@ begin
   end;
 end;
 
+{ [R5-G] THE NON-SEPARABLE BLEND MODES of the compositing specification (Lum, ClipColor,
+  SetLum, Sat, SetSat): AOp 13 hue, 14 saturation, 15 color, 16 luminosity, over the
+  backdrop (BR, BG, BB) and the source (SR, SG, SB), 0..1 }
+procedure BlendNonSeparable(AOp: Integer; BR, BG, BB, SR, SG, SB: Double;
+  out ARR, ARG, ARB: Double);
+
+  function Lum(R, G, B: Double): Double;
+  begin
+    Result := 0.3 * R + 0.59 * G + 0.11 * B;
+  end;
+
+  procedure ClipColor(var R, G, B: Double);
+  var l, n, x: Double;
+  begin
+    l := Lum(R, G, B);
+    n := Min(R, Min(G, B));
+    x := Max(R, Max(G, B));
+    if n < 0 then
+    begin
+      R := l + (R - l) * l / (l - n);
+      G := l + (G - l) * l / (l - n);
+      B := l + (B - l) * l / (l - n);
+    end;
+    if x > 1 then
+    begin
+      R := l + (R - l) * (1 - l) / (x - l);
+      G := l + (G - l) * (1 - l) / (x - l);
+      B := l + (B - l) * (1 - l) / (x - l);
+    end;
+  end;
+
+  procedure SetLum(var R, G, B: Double; L: Double);
+  var d: Double;
+  begin
+    d := L - Lum(R, G, B);
+    R := R + d;
+    G := G + d;
+    B := B + d;
+    ClipColor(R, G, B);
+  end;
+
+  function Sat(R, G, B: Double): Double;
+  begin
+    Result := Max(R, Max(G, B)) - Min(R, Min(G, B));
+  end;
+
+  { SetSat: the largest channel to S, the smallest to 0, the middle one in
+    proportion -- all three 0 for a grey }
+  procedure SetSat(var R, G, B: Double; S: Double);
+  var
+    c: array[0..2] of Double;
+    imax, imin, imid, k: Integer;
+  begin
+    c[0] := R; c[1] := G; c[2] := B;
+    imax := 0;
+    for k := 1 to 2 do if c[k] > c[imax] then imax := k;
+    imin := 0;
+    for k := 1 to 2 do if c[k] < c[imin] then imin := k;
+    if imin = imax then
+    begin
+      c[0] := 0; c[1] := 0; c[2] := 0;
+    end
+    else
+    begin
+      imid := 3 - imax - imin;
+      c[imid] := (c[imid] - c[imin]) * S / (c[imax] - c[imin]);
+      c[imax] := S;
+      c[imin] := 0;
+    end;
+    R := c[0]; G := c[1]; B := c[2];
+  end;
+
+begin
+  case AOp of
+    13: begin                       // hue: SetLum(SetSat(Cs, Sat(Cb)), Lum(Cb))
+          ARR := SR; ARG := SG; ARB := SB;
+          SetSat(ARR, ARG, ARB, Sat(BR, BG, BB));
+          SetLum(ARR, ARG, ARB, Lum(BR, BG, BB));
+        end;
+    14: begin                       // saturation: SetLum(SetSat(Cb, Sat(Cs)), Lum(Cb))
+          ARR := BR; ARG := BG; ARB := BB;
+          SetSat(ARR, ARG, ARB, Sat(SR, SG, SB));
+          SetLum(ARR, ARG, ARB, Lum(BR, BG, BB));
+        end;
+    15: begin                       // color: SetLum(Cs, Lum(Cb))
+          ARR := SR; ARG := SG; ARB := SB;
+          SetLum(ARR, ARG, ARB, Lum(BR, BG, BB));
+        end;
+  else
+    begin                           // luminosity: SetLum(Cb, Lum(Cs))
+      ARR := BR; ARG := BG; ARB := BB;
+      SetLum(ARR, ARG, ARB, Lum(SR, SG, SB));
+    end;
+  end;
+end;
+
+{ [R5-G] Porter-Duff's two factors for the operators 20..29 against the source's and the
+  backdrop's alpha: co = cs * Fa + cb * Fb }
+procedure PorterDuffOf(AOp: Integer; ASa, ADa: Double; out AFa, AFb: Double);
+begin
+  case AOp of
+    21: begin AFa := ADa; AFb := 0; end;               // source-in
+    22: begin AFa := 1 - ADa; AFb := 0; end;           // source-out
+    23: begin AFa := ADa; AFb := 1 - ASa; end;         // source-atop
+    24: begin AFa := 1 - ADa; AFb := 1; end;           // destination-over
+    25: begin AFa := 0; AFb := ASa; end;               // destination-in
+    26: begin AFa := 0; AFb := 1 - ASa; end;           // destination-out
+    27: begin AFa := 1 - ADa; AFb := ASa; end;         // destination-atop
+    28: begin AFa := 1 - ADa; AFb := 1 - ASa; end;     // xor
+    29: begin AFa := 1; AFb := 0; end;                 // copy
+  else
+    begin AFa := 1; AFb := 1 - ASa; end;               // source-over
+  end;
+end;
+
+{ [R5-G] an operator that keeps nothing of the backdrop where the source has no ink: it
+  clears the whole clip, not only the shape's box }
+function BlendClearsOutside(AOp: Integer): Boolean;
+begin
+  Result := AOp in [21, 22, 25, 27, 29];
+end;
+
 function BlendOpOf(const AMode: string): Integer;
 var m: string;
 begin
@@ -7809,6 +7984,20 @@ begin
   else if m = 'soft-light' then Result := 10
   else if m = 'difference' then Result := 11
   else if m = 'exclusion' then Result := 12
+  { [R5-G] }
+  else if m = 'hue' then Result := 13
+  else if m = 'saturation' then Result := 14
+  else if m = 'color' then Result := 15
+  else if m = 'luminosity' then Result := 16
+  else if m = 'source-in' then Result := 21
+  else if m = 'source-out' then Result := 22
+  else if m = 'source-atop' then Result := 23
+  else if m = 'destination-over' then Result := 24
+  else if m = 'destination-in' then Result := 25
+  else if m = 'destination-out' then Result := 26
+  else if m = 'destination-atop' then Result := 27
+  else if m = 'xor' then Result := 28
+  else if m = 'copy' then Result := 29
   else Result := 0;
 end;
 
@@ -7826,6 +8015,7 @@ var
   tex: IBGRAScanner;
   paint, sp: TBGRAPixel;
   ga, cov, sa, sr, sg, sb, da, dr, dg, db, oa, orr, og, ob: Double;
+  ccov, fa, fb, nr, ng, nb: Double;
   minx, miny, maxx, maxy: Double;
   i, x, y, w, h, x0, y0, x1, y1: Integer;
   mask, clip: TGrayscaleMask;
@@ -7859,7 +8049,9 @@ begin
     paint := st.fillColor;
   end;
   ga := st.globalAlpha / 255;
-  if (ga <= 0) or ((tex = nil) and (paint.alpha = 0)) then Exit;
+  { nothing to lay -- unless the operator clears where there is no ink [R5-G] }
+  if ((ga <= 0) or ((tex = nil) and (paint.alpha = 0))) and not BlendClearsOutside(GBlendOp) then
+    Exit;
   seen := False;
   minx := 0; miny := 0; maxx := 0; maxy := 0;
   for i := 0 to High(poly) do
@@ -7884,6 +8076,14 @@ begin
   y0 := Max(Floor(miny) - 1, surf.ClipRect.Top);
   x1 := Min(Ceil(maxx) + 2, surf.ClipRect.Right);
   y1 := Min(Ceil(maxy) + 2, surf.ClipRect.Bottom);
+  { [R5-G] an operator that clears where the source has no ink works over the whole clip }
+  if BlendClearsOutside(GBlendOp) then
+  begin
+    x0 := surf.ClipRect.Left;
+    y0 := surf.ClipRect.Top;
+    x1 := surf.ClipRect.Right;
+    y1 := surf.ClipRect.Bottom;
+  end;
   w := x1 - x0;
   h := y1 - y0;
   if (w <= 0) or (h <= 0) then Exit;
@@ -7908,6 +8108,65 @@ begin
       p := surf.ScanLine[y0 + y] + x0;
       for x := 0 to w - 1 do
       begin
+        { [R5-G] THE PORTER-DUFF OPERATORS: the source its paint times the shape's
+          coverage, composited by the operator's two factors, the result laid over the
+          backdrop by the clip's own coverage -- outside the clip nothing changes, inside
+          it an operator may clear where the shape has no ink }
+        if GBlendOp >= 20 then
+        begin
+          ccov := 1;
+          if crow <> nil then
+          begin
+            if x0 + x < clip.Width then ccov := crow[x] / 255 else ccov := 0;
+          end;
+          if ccov > 0 then
+          begin
+            cov := row[x] / 255;
+            if (cov > 0) or BlendClearsOutside(GBlendOp) then
+            begin
+              if cov > 0 then
+              begin
+                if tex <> nil then sp := tex.ScanAt(x0 + x, y0 + y) else sp := paint;
+                sa := sp.alpha / 255 * ga * cov;
+              end
+              else
+              begin
+                sp := BGRAPixelTransparent;
+                sa := 0;
+              end;
+              sr := sp.red / 255 * sa;
+              sg := sp.green / 255 * sa;
+              sb := sp.blue / 255 * sa;
+              da := p^.alpha / 255;
+              dr := p^.red / 255 * da;
+              dg := p^.green / 255 * da;
+              db := p^.blue / 255 * da;
+              PorterDuffOf(GBlendOp, sa, da, fa, fb);
+              oa := sa * fa + da * fb;
+              orr := sr * fa + dr * fb;
+              og := sg * fa + dg * fb;
+              ob := sb * fa + db * fb;
+              if ccov < 1 then
+              begin
+                oa := ccov * oa + (1 - ccov) * da;
+                orr := ccov * orr + (1 - ccov) * dr;
+                og := ccov * og + (1 - ccov) * dg;
+                ob := ccov * ob + (1 - ccov) * db;
+              end;
+              if oa > 0 then
+              begin
+                p^.red := Max(0, Min(255, Round(orr / oa * 255)));
+                p^.green := Max(0, Min(255, Round(og / oa * 255)));
+                p^.blue := Max(0, Min(255, Round(ob / oa * 255)));
+                p^.alpha := Min(255, Round(oa * 255));
+              end
+              else
+                p^ := BGRAPixelTransparent;
+            end;
+          end;
+          Inc(p);
+          Continue;
+        end;
         cov := row[x] / 255;
         if (crow <> nil) and (x0 + x < clip.Width) then cov := cov * crow[x] / 255;
         if cov > 0 then
@@ -7934,7 +8193,16 @@ begin
             else
             begin
               oa := sa + da - sa * da;
-              if da > 0 then
+              if (da > 0) and (GBlendOp >= 13) then
+              begin
+                { [R5-G] a non-separable mode: B(Cb, Cs) as one colour }
+                BlendNonSeparable(GBlendOp, dr / da, dg / da, db / da, sp.red / 255,
+                  sp.green / 255, sp.blue / 255, nr, ng, nb);
+                orr := sr * (1 - da) + dr * (1 - sa) + sa * da * nr;
+                og := sg * (1 - da) + dg * (1 - sa) + sa * da * ng;
+                ob := sb * (1 - da) + db * (1 - sa) + sa * da * nb;
+              end
+              else if da > 0 then
               begin
                 orr := sr * (1 - da) + dr * (1 - sa) + sa * da * BlendChannel(GBlendOp, dr / da, sp.red / 255);
                 og := sg * (1 - da) + dg * (1 - sa) + sa * da * BlendChannel(GBlendOp, dg / da, sp.green / 255);

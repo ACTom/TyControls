@@ -67,6 +67,9 @@ type
     DashOffset: Double;
     Cap: Integer;                 // -1 not written, else Ord(TTyAxisCap)
     Opacity: Double;              // NaN = not written
+    { [R5-G] the colour as a gradient object (Colour its first stop) --
+      cgkNone for a plain colour }
+    Gradient: TTyChartGradient;
   end;
 
   { the canvas' lineCap }
@@ -84,6 +87,9 @@ type
     DashOffset: Double;
     Cap: TTyAxisCap;
     Opacity: Double;
+    { [R5-G] a gradient stroke (zrender's canvas gradient over the stroked
+      element's getBoundingRect -- the stroke-grown rect) }
+    Gradient: TTyChartGradient;
   end;
 
   { What an axis actually draws, once its TYPE's defaults and the `auto`
@@ -1856,8 +1862,27 @@ begin
     begin
       AInks[k].Ok := (a.Items[k].JSONType = jtString)
         and TyTryParseChartColor(a.Items[k].AsString, c);
-      if AInks[k].Ok then AInks[k].Colour := c;
+      if AInks[k].Ok then AInks[k].Colour := c
+      { [R5-G] a gradient in the list: its stops over the merged path }
+      else if TyTryReadGradient(a.Items[k], AInks[k].Grad) then
+      begin
+        AInks[k].Ok := True;
+        AInks[k].Colour := TyGradientSolid(AInks[k].Grad);
+      end;
     end;
+  end
+  { [R5-G] ONE GRADIENT, not in a list: `[lineColors]` upstream }
+  else if (d is TJSONObject) then
+  begin
+    SetLength(AInks, 1);
+    if TyTryReadGradient(d, AInks[0].Grad) then
+    begin
+      AInks[0].Ok := True;
+      AInks[0].Colour := TyGradientSolid(AInks[0].Grad);
+      ACount := 1;
+    end
+    else
+      AInks := nil;
   end;
 end;
 
@@ -1969,6 +1994,7 @@ begin
     Result.HasColour := True;
     Result.ColourNone := AStyle.Color.IsNone;
     Result.Colour := AStyle.Color.Color;
+    Result.Gradient := AStyle.Color.Gradient;
   end;
   Result.Width := AStyle.BorderWidthLogical;
   Result.Dash := AStyle.Dash;
@@ -1990,6 +2016,7 @@ begin
     Result.HasColour := ABase.HasColour;
     Result.ColourNone := ABase.ColourNone;
     Result.Colour := ABase.Colour;
+    Result.Gradient := ABase.Gradient;
   end;
   if IsNan(Result.Width) then Result.Width := ABase.Width;
   if Result.Dash = todNone then
@@ -2015,6 +2042,7 @@ begin
   if APen.HasColour then
   begin
     Result.Colour := APen.Colour;
+    Result.Gradient := APen.Gradient;
     if APen.ColourNone then Result.Drawn := False;
   end
   else if ASkinHas then
@@ -2054,6 +2082,7 @@ begin
   lineColour.HasColour := AFurn.LinePen.HasColour;
   lineColour.ColourNone := AFurn.LinePen.ColourNone;
   lineColour.Colour := AFurn.LinePen.Colour;
+  lineColour.Gradient := AFurn.LinePen.Gradient;
   AFurn.TickPen := TyAxisPenOver(SubPen('axisTick'), lineColour);
   { the axisTick MODEL's own keys, not its lineStyle's }
   tickOwn := TyAxisPenOf(TyReadOptLineStyleOf(ObjOf(FindIn(ANode, 'axisTick'))));

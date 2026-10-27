@@ -107,6 +107,12 @@ type
       then linearMap onto the band extent, which hands back an end verbatim
       at 0 and 1 -- and with AClamp, at and beyond them. }
     function DataToLocal(AValue: Double; AClamp: Boolean = False): Double;
+    { [R5-G] DataToLocal with the band extent already found (BandExtent's
+      AStart, AStop): the same steps -- it is what DataToLocal runs. A loop
+      over every row of a series asks BandExtent, which counts the
+      categories, once instead of once a row. }
+    function DataToLocalIn(AValue, ABand0, ABand1: Double;
+      AClamp: Boolean = False): Double;
     { Value -> px along this axis. Extrapolates outside the extent ON PURPOSE
       unless clamped: clipping is the renderer's decision, not the coordinate
       system's, and a clipped line still has to be drawn towards a real
@@ -608,10 +614,21 @@ begin
 end;
 
 function TTyAxis.DataToLocal(AValue: Double; AClamp: Boolean): Double;
+var r0, r1: Double;
+begin
+  { the band is the axis' alone, whatever the value: found first }
+  BandExtent(r0, r1);
+  Result := DataToLocalIn(AValue, r0, r1, AClamp);
+end;
+
+function TTyAxis.DataToLocalIn(AValue, ABand0, ABand1: Double;
+  AClamp: Boolean): Double;
 var
   n, r0, r1: Double;
   e: TTyRange;
 begin
+  r0 := ABand0;
+  r1 := ABand1;
   if IsNan(AValue) then
   begin
     { A GAP ON AN AXIS OF NO LENGTH lands in its middle: upstream's normalize
@@ -621,7 +638,6 @@ begin
       n := 0.5
     else
       Exit(NaN);
-    BandExtent(r0, r1);
     Exit((n - 0) / 1 * (r1 - r0) + r0);
   end;
   { THE SCALE'S parse FIRST: a time scale rounds to the millisecond, the way
@@ -633,7 +649,6 @@ begin
   n := FScale.Normalize(AValue);
   if IsNan(n) then
     Exit(NaN);
-  BandExtent(r0, r1);
   { linearMap(n, [0, 1], [r0, r1]): an end comes back as itself, not as the
     arithmetic that would nearly reach it }
   if AClamp then

@@ -191,6 +191,9 @@ type
     Silent: Boolean;
     Clip: Boolean;
     Z, ZLevel: Integer;
+    { [spec 244] the fraction of a z that is not whole: Z is its floor, so
+      (Z, ZFrac) orders as the number zrender sorts by }
+    ZFrac: Double;
     { the box after mergeLayoutParam, a null or absent key climbing to the
       option root as getShallow does }
     Box: TTyRawBox;
@@ -2326,6 +2329,7 @@ var
   k: Integer;
   gs: TTyGraphSpec;
   v: TTyBoxRaw;
+  zv: Double;
 
   function BoxRawOwn(const AKey: string): TTyCalBoxKey;
   var x: TJSONData;
@@ -2382,10 +2386,23 @@ begin
   begin
     { the series' z, MapSeries' 2 by default }
     d := node.Find('z');
-    if (d <> nil) and (d.JSONType = jtNumber) and JsFinite(d.AsFloat) then Result.Z := Trunc(d.AsFloat)
+    if (d <> nil) and (d.JSONType = jtNumber) and JsFinite(d.AsFloat) then
+    begin
+      zv := Max(Double(-100000), Min(Double(100000), d.AsFloat));
+      Result.Z := Floor(zv);
+      Result.ZFrac := zv - Result.Z;
+    end
     else Result.Z := 2;
   end
   else if (d = nil) or JsFalsy(TyJsonToNumber(d)) then Result.Z := 0
+  else if JsFinite(TyJsonToNumber(d)) then
+  begin
+    { [spec 244] the floor and the fraction [was: truncated]; clamped as
+      every z the list keeps (an Integer key) }
+    zv := Max(Double(-100000), Min(Double(100000), TyJsonToNumber(d)));
+    Result.Z := Floor(zv);
+    Result.ZFrac := zv - Result.Z;
+  end
   else Result.Z := Trunc(TyJsonToNumber(d));
   d := Climb(node, root, 'zlevel');
   if (d = nil) or JsFalsy(TyJsonToNumber(d)) then Result.ZLevel := 0
@@ -3427,7 +3444,8 @@ begin
   if AOpt <> nil then
   begin
     { echartsStyle: every region of the name merges into the one entry, the
-      first one's keys winning -- so the first region's style }
+      first one's keys winning -- the first region's style here, the later
+      ones' further keys by TTyGeo.RegionOpt [spec 244] }
     for i := 0 to High(AGeo.Source.Regions) do
       if AGeo.Source.Regions[i].Name = nm then
       begin
@@ -4657,6 +4675,15 @@ begin
   if entry <> nil then Result := TJSONObject(entry.Clone)
   else Result := TJSONObject.Create(['name', nm]);
   if style <> nil then MergeAbsent(Result, style);
+  { [spec 244] AN AUTHOR'S ENTRY TAKES EVERY REGION OF ITS NAME: getFilledRegions
+    merges each region's echartsStyle into that one object in turn
+    (zrUtil.merge, not overwriting) -- the first region's keys win, a later
+    region adds the keys the earlier ones did not write }
+  if entry <> nil then
+    for i := 0 to High(FSource.Regions) do
+      if (FSource.Regions[i].Name = nm)
+        and (Own(FSource.Regions[i].Properties, 'echartsStyle') is TJSONObject) then
+        MergeAbsent(Result, TJSONObject(Own(FSource.Regions[i].Properties, 'echartsStyle')));
   n := Length(FOptNames);
   SetLength(FOptNames, n + 1);
   SetLength(FOpts, n + 1);
@@ -5937,6 +5964,7 @@ var
     AEl.ZrHit.SvgNode := ANode + 1;
     AEl.ZrHit.SvgLabel := ALabel;
     AEl.Z := AGeo.Spec.Z;
+    AEl.ZFrac := AGeo.Spec.ZFrac;
     AEl.Z2 := Round(AZ2);
     AEl.Silent := AOwnSilent or SilentAt(ANode);
     AEl.Datum := Datum(ANode);
@@ -6083,7 +6111,10 @@ var
           SetLength(pts, 4);
           for k := 0 to 3 do pts[k] := q[k];
           el := TyChartElement(TyShapePolygon(pts));
-          if not nd.Invisible and (Copy(nd.St.Image, 1, 5) = 'data:') and (nd.St.IW > 0) and (nd.St.IH > 0) then
+          { [spec 244] ANY SOURCE, not only a data: URI: the chart's images
+            are its resolver's (image://, OnResolveImage), ready at once --
+            upstream's picture once the image has loaded [was: data: only] }
+          if not nd.Invisible and (nd.St.Image <> '') and (nd.St.IW > 0) and (nd.St.IH > 0) then
           begin
             el.Style.HasFill := True;
             el.Style.FillColor := 0;
@@ -6502,6 +6533,7 @@ begin
           el.Style.Alpha := c.Num[stkOpacity];
           GeoWriteShadow(el, c);
           el.Z := AGeo.Spec.Z;
+          el.ZFrac := AGeo.Spec.ZFrac;
           el.Z2 := Round(c.Num[stkZ2]);
           el.Silent := silentGroup;
           el.Datum := GroupDatum(g);
@@ -6721,6 +6753,7 @@ begin
         el.Caption.Truncate := False;
         el.Style.Alpha := c.Num[stkOpacity];
         el.Z := AGeo.Spec.Z;
+        el.ZFrac := AGeo.Spec.ZFrac;
         el.Z2 := Round(c.Num[stkZ2]);
         el.Ignore := (c.Num[stkIgnore] <> 0) or (txt = '') or (w <= 0) or (h <= 0);
         { a text is silent on its own or under a silent host }
