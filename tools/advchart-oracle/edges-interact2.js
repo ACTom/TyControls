@@ -129,6 +129,15 @@ add('irrelevant', 'ir-graph', 'a graph that roams under a scatter drawn higher: 
         data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }], links: [{ source: 'a', target: 'b' }] },
       { type: 'scatter', z: 5, symbolSize: 30, data: [[300, 200]] }] },
   { probes: [[300, 200], [250, 150]] });
+add('irrelevant', 'ir-graph-equal', 'a scatter at the graph z: equal is relevant, the drag from it roams the graph',
+  { animation: false,
+    grid: { left: 0, right: 0, top: 0, bottom: 0 },
+    xAxis: { type: 'value', min: 0, max: 600, show: false }, yAxis: { type: 'value', min: 0, max: 400, show: false },
+    series: [
+      { type: 'graph', layout: 'none', roam: true, symbolSize: 20, left: 100, right: 100, top: 80, bottom: 80,
+        data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }], links: [{ source: 'a', target: 'b' }] },
+      { type: 'scatter', z: 2, symbolSize: 30, data: [[300, 200]] }] },
+  { probes: [[300, 200]] });
 add('irrelevant', 'ir-parallel', 'a parallel axis under a scatter drawn higher: an area select from the scatter does not start',
   { animation: false,
     grid: { left: 0, right: 0, top: 0, bottom: 0 },
@@ -268,6 +277,7 @@ function guards(out) {
   guard('the select is narrowed to maxValueSpan', Number(tmax[1]) - Number(tmax[0]) <= 20 + 1e-9);
   const ig = byId('ir-graph').results;
   guard('a drag from the higher scatter does not roam the graph; from blank it does', !ig[0].roamed && ig[1].roamed);
+  guard('a scatter at an equal z does not refuse the roam', byId('ir-graph-equal').results[0].roamed);
   const ip = byId('ir-parallel').results;
   guard('an area select from the higher scatter does not start; from blank it does', !ip[0].selected && ip[1].selected);
   const il = byId('ir-parallel-line').results;
