@@ -138,6 +138,40 @@ type
     RtGlobal: TTyRtGlobal;
   end;
 
+  { [R5-B] AN ITEM'S OWN STYLE: legend.data[i] is a model whose parent is
+    the legend model, so each key is the item's, else the legend's -- the
+    words' textStyle (colour and font) and inactiveColor /
+    inactiveBorderColor (the item's only: the legend's are the ink already),
+    and the icon's itemStyle (colour, borderColor, borderWidth, opacity) and
+    lineStyle (colour, width, inactiveColor, inactiveWidth), item over
+    legend. Has* false, NaN or '' where neither wrote one: the series'
+    visual ('inherit', 'auto') or the skin answers. }
+  TTyLegendOwn = record
+    HasTextColour: Boolean;
+    TextColour: TTyChartColor;
+    FontName: string;
+    HasFontSize: Boolean;
+    FontSizeLogical: Integer;
+    HasFontWeight: Boolean;
+    FontWeight: Integer;
+    HasInactiveColour: Boolean;
+    InactiveColour: TTyChartColor;
+    HasInactiveBorderColour: Boolean;
+    InactiveBorderColour: TTyChartColor;
+    HasFill: Boolean;
+    Fill: TTyChartColor;
+    HasBorder: Boolean;
+    Border: TTyChartColor;
+    BorderWidth: Double;
+    Opacity: Double;
+    HasLineColour: Boolean;
+    LineColour: TTyChartColor;
+    LineWidth: Double;
+    HasLineInactiveColour: Boolean;
+    LineInactiveColour: TTyChartColor;
+    LineInactiveWidth: Double;
+  end;
+
   { One row of `legend.data`, or one name the chart offered when there is no
     `legend.data`. }
   TTyLegendEntry = record
@@ -148,6 +182,8 @@ type
     Icon: string;
     { `''` and a lone newline are not items at all -- they are line breaks. }
     Newline: Boolean;
+    { [R5-B] its own style over the legend's }
+    Own: TTyLegendOwn;
   end;
   TTyLegendEntryArray = array of TTyLegendEntry;
   TTyLegendFlags = array of Boolean;
@@ -322,6 +358,12 @@ type
     HasStroke: Boolean;
     Stroke: TTyChartColor;
     IconPen: Double;
+    { [R5-B] the words' font as measured (the item's own over the legend's)
+      and the item's own style }
+    FontName: string;
+    FontSizeLogical: Integer;
+    FontWeight: Integer;
+    Own: TTyLegendOwn;
   end;
   TTyLegendItemArray = array of TTyLegendItem;
 
@@ -639,7 +681,7 @@ implementation
 
 uses tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.RichStyle,
   tyControls.AdvanceChart.States, tyControls.AdvanceChart.MarkerView,
-  tyControls.StrConsts;
+  tyControls.AdvanceChart.Color, tyControls.StrConsts;
 
 const
   { LegendModel.defaultOption, LegendModel.ts:450-539. `bottom` is
@@ -1056,6 +1098,95 @@ end;
 
 { ==================== entries ==================== }
 
+{ [R5-B] nothing written: every key the visual's or the skin's }
+function TyLegendNoOwn: TTyLegendOwn;
+begin
+  Result := Default(TTyLegendOwn);
+  Result.BorderWidth := NaN;
+  Result.Opacity := NaN;
+  Result.LineWidth := NaN;
+  Result.LineInactiveWidth := NaN;
+end;
+
+{ [R5-B] AObj's keys over ABase: an item's (ALegendLevel false) or the
+  legend's own itemStyle and lineStyle (true -- its textStyle and inactive
+  colours are the legend's ink already). 'inherit', 'auto' and an
+  unreadable colour are no colour; a width that is not a number is not
+  written. }
+function TyLegendOwnOf(AObj: TJSONObject; const ABase: TTyLegendOwn;
+  ALegendLevel: Boolean): TTyLegendOwn;
+var
+  st: TJSONObject;
+  d: TJSONData;
+
+  function Colour(AData: TJSONData; var AHas: Boolean; var AColour: TTyChartColor): Boolean;
+  var c: TTyChartColor;
+  begin
+    Result := False;
+    if (AData = nil) or (AData.JSONType <> jtString) then Exit;
+    if not TyTryParseChartColor(AData.AsString, c) then Exit;
+    AHas := True;
+    AColour := c;
+    Result := True;
+  end;
+
+  function Num(AData: TJSONData; ADefault: Double): Double;
+  begin
+    if (AData <> nil) and (AData.JSONType = jtNumber) then Result := AData.AsFloat
+    else Result := ADefault;
+  end;
+
+begin
+  Result := ABase;
+  if AObj = nil then Exit;
+  if not ALegendLevel then
+  begin
+    st := ObjOf(AObj.Find('textStyle'));
+    if st <> nil then
+    begin
+      Colour(st.Find('color'), Result.HasTextColour, Result.TextColour);
+      d := st.Find('fontFamily');
+      if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '') then
+        Result.FontName := d.AsString;
+      d := st.Find('fontSize');
+      if (d <> nil) and (d.JSONType in [jtNumber, jtString]) then
+      begin
+        Result.FontSizeLogical := TyOptFontSize(d, 12);
+        Result.HasFontSize := True;
+      end;
+      d := st.Find('fontWeight');
+      if (d <> nil) and (d.JSONType in [jtNumber, jtString]) then
+      begin
+        Result.FontWeight := TyFontWeightOf(d, 400);
+        Result.HasFontWeight := True;
+      end;
+    end;
+    Colour(AObj.Find('inactiveColor'), Result.HasInactiveColour, Result.InactiveColour);
+    Colour(AObj.Find('inactiveBorderColor'), Result.HasInactiveBorderColour,
+      Result.InactiveBorderColour);
+  end;
+  st := ObjOf(AObj.Find('itemStyle'));
+  if st <> nil then
+  begin
+    Colour(st.Find('color'), Result.HasFill, Result.Fill);
+    Colour(st.Find('borderColor'), Result.HasBorder, Result.Border);
+    Result.BorderWidth := Num(st.Find('borderWidth'), Result.BorderWidth);
+    Result.Opacity := Num(st.Find('opacity'), Result.Opacity);
+  end;
+  st := ObjOf(AObj.Find('lineStyle'));
+  if st <> nil then
+  begin
+    Colour(st.Find('color'), Result.HasLineColour, Result.LineColour);
+    Result.LineWidth := Num(st.Find('width'), Result.LineWidth);
+    if not ALegendLevel then
+    begin
+      Colour(st.Find('inactiveColor'), Result.HasLineInactiveColour,
+        Result.LineInactiveColour);
+      Result.LineInactiveWidth := Num(st.Find('inactiveWidth'), Result.LineInactiveWidth);
+    end;
+  end;
+end;
+
 function TyLegendEntries(AOption: TTyChartOption; AIndex: Integer;
   const APotential: array of string): TTyLegendEntryArray;
 var
@@ -1067,12 +1198,15 @@ var
   i, j, n: Integer;
   dup: Boolean;
 
-  procedure PushRaw(const AName, AIcon: string);
+  legendOwn: TTyLegendOwn;
+
+  procedure PushRaw(const AName, AIcon: string; const AOwn: TTyLegendOwn);
   begin
     SetLength(raw, Length(raw) + 1);
     raw[High(raw)].Name := AName;
     raw[High(raw)].Icon := AIcon;
     raw[High(raw)].Newline := (AName = '') or (AName = #10);
+    raw[High(raw)].Own := AOwn;
   end;
 
 begin
@@ -1082,6 +1216,8 @@ begin
   if AOption <> nil then node := ObjOf(AOption.ComponentAt('legend', AIndex));
   d := nil;
   if node <> nil then d := node.Find('data');
+  { the legend's own itemStyle / lineStyle, under every item's [R5-B] }
+  legendOwn := TyLegendOwnOf(node, TyLegendNoOwn, True);
 
   if (d <> nil) and (d is TJSONArray) then
   begin
@@ -1092,17 +1228,18 @@ begin
     for i := 0 to arr.Count - 1 do
     begin
       case arr.Items[i].JSONType of
-        jtString, jtNumber: PushRaw(arr.Items[i].AsString, '');
+        jtString, jtNumber: PushRaw(arr.Items[i].AsString, '', legendOwn);
         jtObject:
           begin
             item := TJSONObject(arr.Items[i]);
-            PushRaw(StrIn(item, 'name'), StrIn(item, 'icon'));
+            PushRaw(StrIn(item, 'name'), StrIn(item, 'icon'),
+              TyLegendOwnOf(item, legendOwn, False));
           end;
       end;
     end;
   end
   else
-    for i := 0 to High(APotential) do PushRaw(APotential[i], '');
+    for i := 0 to High(APotential) do PushRaw(APotential[i], '', legendOwn);
 
   { DEDUPLICATED BY NAME, first one wins -- and the line-break markers go
     through the same sieve, so a legend can hold one '' and one newline and no
@@ -2515,9 +2652,38 @@ begin
       else it.IconPen := 0;
     end;
     it.Text := TyLegendText(ASpec.Formatter, it.Name);
+    { [R5-B] THE ITEM'S OWN STYLE: its icon's colour, pen, opacity and rule
+      over the series' visual, and its words' font over the legend's }
+    it.Own := AEntries[i].Own;
+    if it.Own.HasFill then
+    begin
+      it.Colour := it.Own.Fill;
+      it.Obj := Default(TTyChartObjFill);
+    end;
+    if it.Own.HasBorder then
+    begin
+      it.HasStroke := True;
+      it.Stroke := it.Own.Border;
+    end;
+    if it.Selected and not IsNan(it.Own.BorderWidth) then
+      it.IconPen := Max(Double(0), it.Own.BorderWidth);
+    if not IsNan(it.Own.Opacity) then
+    begin
+      it.HasOpacity := True;
+      it.Opacity := it.Own.Opacity;
+    end;
+    if it.Own.HasLineColour then it.LineColour := it.Own.LineColour;
+    if not IsNan(it.Own.LineWidth) and (it.LineWidthLogical > 0) then
+      it.LineWidthLogical := Max(Double(0), it.Own.LineWidth);
+    it.FontName := AFont.Name;
+    it.FontSizeLogical := AFont.SizeLogical;
+    it.FontWeight := AFont.Weight;
+    if it.Own.FontName <> '' then it.FontName := it.Own.FontName;
+    if it.Own.HasFontSize then it.FontSizeLogical := it.Own.FontSizeLogical;
+    if it.Own.HasFontWeight then it.FontWeight := it.Own.FontWeight;
 
-    AMeasurer.MeasureLine(it.Text, AFont.Name, AFont.SizeLogical,
-      AFont.Weight, it.TextW, it.TextH);
+    AMeasurer.MeasureLine(it.Text, it.FontName, it.FontSizeLogical,
+      it.FontWeight, it.TextW, it.TextH);
 
     { stroked: unselected always has inactiveBorderColor, selected only the
       series' stroke }
@@ -2552,7 +2718,7 @@ begin
       item's group already (LegendView.ts _createItem: the group's bounds) }
     if Supports(AMeasurer, ITyTextBoxMeasurer, boxM) then
     begin
-      tb := boxM.MeasureBox(it.Text, AFont.Name, AFont.SizeLogical, AFont.Weight,
+      tb := boxM.MeasureBox(it.Text, it.FontName, it.FontSizeLogical, it.FontWeight,
         it.AnchorH, tavMiddle);
       textR := TyRectF(textX + tb.Left, ih / 2 + tb.Top, textX + tb.Right,
         ih / 2 + tb.Bottom);
@@ -2799,6 +2965,8 @@ var
       if (it.IconPen > 0) and ((not it.Selected) or it.HasStroke) then
       begin
         if it.Selected then Result.Style.StrokeColor := it.Stroke
+        else if it.Own.HasInactiveBorderColour then
+          Result.Style.StrokeColor := it.Own.InactiveBorderColour
         else Result.Style.StrokeColor := AInk.InactiveBorder;
         Result.Style.StrokeWidthLogical := it.IconPen;
       end;
@@ -2864,7 +3032,9 @@ begin
     { DESELECTED IS ONE COLOUR FOR EVERYTHING -- icon, ring, rule and words.
       Upstream reaches it through four separate options that all default to
       the same disabled token. }
-    if it.Selected then colour := it.Colour else colour := AInk.Inactive;
+    if it.Selected then colour := it.Colour
+    else if it.Own.HasInactiveColour then colour := it.Own.InactiveColour
+    else colour := AInk.Inactive;
 
     kind := TySymbolKindOf(it.Icon, empty, path);
     if it.OwnIcon then
@@ -2888,9 +3058,15 @@ begin
           el.Style.StrokeColor := it.LineColour
         else
         begin
-          { `lineStyle.inactiveColor` / `inactiveWidth` [Batch 93] }
-          el.Style.StrokeColor := AInk.LineInactive;
-          if AInk.LineInactiveWidth > 0 then
+          { `lineStyle.inactiveColor` / `inactiveWidth` [Batch 93], the
+            item's own over the legend's [R5-B] }
+          if it.Own.HasLineInactiveColour then
+            el.Style.StrokeColor := it.Own.LineInactiveColour
+          else
+            el.Style.StrokeColor := AInk.LineInactive;
+          if not IsNan(it.Own.LineInactiveWidth) then
+            el.Style.StrokeWidthLogical := it.Own.LineInactiveWidth
+          else if AInk.LineInactiveWidth > 0 then
             el.Style.StrokeWidthLogical := AInk.LineInactiveWidth;
         end;
         AList.Add(el);
@@ -2930,11 +3106,21 @@ begin
         it.TextX - it.TextW * Ord(it.AnchorH = tahRight), it.TextY - it.TextH / 2,
         it.TextX + it.TextW * Ord(it.AnchorH = tahLeft), it.TextY + it.TextH / 2));
       el.Caption.Text := it.Text;
+      { in the legend's font, the item's own over it, and the item's own
+        colours over the legend's [R5-B] }
       el.Caption.FontName := AFont.Name;
       el.Caption.FontSizeLogical := AFont.SizeLogical;
       el.Caption.FontWeight := AFont.Weight;
+      if it.Own.FontName <> '' then el.Caption.FontName := it.Own.FontName;
+      if it.Own.HasFontSize then el.Caption.FontSizeLogical := it.Own.FontSizeLogical;
+      if it.Own.HasFontWeight then el.Caption.FontWeight := it.Own.FontWeight;
       if it.Selected then
-        el.Caption.Colour := AInk.Text
+      begin
+        if it.Own.HasTextColour then el.Caption.Colour := it.Own.TextColour
+        else el.Caption.Colour := AInk.Text;
+      end
+      else if it.Own.HasInactiveColour then
+        el.Caption.Colour := it.Own.InactiveColour
       else
         el.Caption.Colour := AInk.Inactive;
       el.Caption.X := it.TextX;
@@ -2947,8 +3133,8 @@ begin
       begin
         if APPI > 0 then rtScale := APPI / 96 else rtScale := 1;
         rtb := AFont.Rt;
-        TyRtFinish(rtb, AFont.Name, AFont.SizeLogical, AFont.Weight,
-          AFont.RtGlobal, True, el.Caption.Colour);
+        TyRtFinish(rtb, el.Caption.FontName, el.Caption.FontSizeLogical,
+          el.Caption.FontWeight, AFont.RtGlobal, True, el.Caption.Colour);
         rtb.Style.HasFill := True;
         rtb.Style.FillNone := False;
         rtb.Style.Fill := el.Caption.Colour;

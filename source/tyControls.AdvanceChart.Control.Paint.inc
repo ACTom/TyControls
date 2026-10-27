@@ -5,6 +5,56 @@
 
 { ==================== paint ==================== }
 
+{ THE AUTHOR'S PEN OVER THE SKIN'S [R5-B]: the skin's colour and width where
+  the pen wrote none. The width the theme asked for is LOGICAL --
+  StrokePath scales it itself -- and an undeclared one falls back to one
+  logical pixel rather than to zero: a theme that names a colour and no
+  width means "draw it", not "draw nothing". Under 0.05 it is 0.05. }
+function TyAxisSkinStroke(const APen: TTyAxisPen; const ASkin: TTyStyleSet;
+  ACap: TTyAxisCap): TTyAxisStroke;
+var w: Double;
+begin
+  if tpBorderWidth in ASkin.Present then w := ASkin.BorderWidth else w := 1;
+  if w < 0.05 then w := 0.05;
+  Result := TyAxisStrokeOf(APen, tpBorderColor in ASkin.Present,
+    TTyChartColor(ASkin.BorderColor), w, ACap);
+end;
+
+{ ONE PIECE OF AN AXIS, its lines already in the painter's path [R5-B]:
+  stroked as zrender strokes a path of that style -- the colour and width,
+  the dash and its phase, the cap, the opacity as the canvas' globalAlpha --
+  inside a saved state, so nothing leaks onto the next piece }
+procedure TyStrokeAxisPath(P: TTyPainter; const AStroke: TTyAxisStroke);
+begin
+  if not AStroke.Drawn then Exit;
+  P.SaveState;
+  try
+    if AStroke.Opacity < 1 then P.SetElementAlpha(AStroke.Opacity);
+    P.SetLineDash(AStroke.Dash, AStroke.DashOffset);
+    case AStroke.Cap of
+      acRound: P.SetLineCap(tlcRound);
+      acSquare: P.SetLineCap(tlcSquare);
+    else
+      P.SetLineCap(tlcButt);
+    end;
+    P.StrokePath(TTyColor(AStroke.Colour), AStroke.WidthLogical);
+  finally
+    P.RestoreState;
+  end;
+end;
+
+{ a fill's colour at AOpacity more (areaStyle.opacity over a band whose
+  colour has an alpha of its own), NaN for none written [R5-B] }
+function TyAxisAreaAlpha(AColour: TTyColor; AOpacity: Double): TTyColor;
+var a: Integer;
+begin
+  Result := AColour;
+  if IsNan(AOpacity) or (AOpacity >= 1) then Exit;
+  if AOpacity < 0 then AOpacity := 0;
+  a := Round((AColour shr 24) * AOpacity);
+  Result := (AColour and $00FFFFFF) or (TTyColor(a) shl 24);
+end;
+
 procedure TTyCustomAdvanceChart.PaintAxis(APainter: TTyPainter; AAxis: TTyAxis;
   const APlot: TTyRectF; APPI: Integer; AGrid: TTyGridBuild;
   const AMeasurer: ITyTextMeasurer; ABelow: Boolean; AProxied: Boolean);
@@ -29,12 +79,13 @@ var
   { the split colours [Batch 101] }
   ink: Integer;
   areaFill: TTyFill;
-  inkStyle: TTyStyleSet;
   view: TTyChartView;
   { [F3b] the proxied areas, minor ticks and name }
   areaR: TRect;
   majors: Integer;
   nx, ny, nrot: Double;
+  { the author's pens over the skin [R5-B] }
+  lineK, tickK, minorTickK, splitK, minorSplitK, inkK: TTyAxisStroke;
 
   { THE BOX IS THE TRANSLATION. The layout layer says "this point, with the
     text hanging off it this way"; the painter aligns text INSIDE a rectangle.
@@ -88,20 +139,6 @@ var
     end;
   end;
 
-  { The width the theme asked for, LOGICAL -- StrokePath scales it itself.
-
-    An undeclared width falls back to one logical pixel rather than to zero: a
-    theme that names a colour and no width means "draw it", not "draw nothing",
-    and StrokePath treats a width of zero as "no border". }
-  function LineWidth(const AStyle: TTyStyleSet): Double;
-  begin
-    if tpBorderWidth in AStyle.Present then
-      Result := AStyle.BorderWidth
-    else
-      Result := 1;
-    if Result < 0.05 then Result := 0.05;
-  end;
-
   { THE LAYOUT'S OWN MEASURER, not the painter's TextSize. They are two
     different rasterisers -- Measure.pas' header says they disagree by about a
     pixel and that a size floor feeding a clip must take the LARGER, which is
@@ -150,7 +187,7 @@ var
   { one arrow of the axis line: the symbol in its box about (0, 0), turned
     and moved as the element is [Batch 101] }
   procedure PaintAxisArrow(P: TTyPainter; const AArrow: TTyAxisArrow;
-    const ALineStyle: TTyStyleSet);
+    AColour: TTyChartColor);
   var
     el: TTyChartElement;
     path: TTyZrPath;
@@ -175,18 +212,18 @@ var
       el.Style.HasFill := True;
       el.Style.FillColor := TTyChartColor(model.ResolveStyle(
         'TyAdvChartEmptyCircle', '', []).Background.Color);
-      el.Style.StrokeColor := TTyChartColor(ALineStyle.BorderColor);
+      el.Style.StrokeColor := AColour;
       el.Style.StrokeWidthLogical := 2;
     end
     else if t = 'line' then
     begin
-      el.Style.StrokeColor := TTyChartColor(ALineStyle.BorderColor);
+      el.Style.StrokeColor := AColour;
       el.Style.StrokeWidthLogical := 1;
     end
     else
     begin
       el.Style.HasFill := True;
-      el.Style.FillColor := TTyChartColor(ALineStyle.BorderColor);
+      el.Style.FillColor := AColour;
     end;
     TyRenderElement(P, el);
   end;
@@ -200,11 +237,12 @@ var
   end;
 
   { Stroke what BatchLine collected, if anything. The count guards a stroke of
-    an empty path, which a fully thinned-away set of minor ticks produces. }
-  procedure StrokeBatch(const AStyle: TTyStyleSet);
+    an empty path, which a fully thinned-away set of minor ticks produces.
+    In the piece's own pen [R5-B: in the skin's colour and width]. }
+  procedure StrokeBatch(const AStroke: TTyAxisStroke);
   begin
     if batched > 0 then
-      APainter.StrokePath(AStyle.BorderColor, LineWidth(AStyle));
+      TyStrokeAxisPath(APainter, AStroke);
     batched := 0;
   end;
 
@@ -325,7 +363,23 @@ begin
   furn.ShowLine := True;
   furn.ShowTicks := True;
   furn.ShowLabels := True;
+  furn.LinePen.Cap := -1;
+  furn.LinePen.Width := NaN;
+  furn.LinePen.Opacity := NaN;
+  furn.TickPen := furn.LinePen;
+  furn.MinorTickPen := furn.LinePen;
+  furn.SplitPen := furn.LinePen;
+  furn.MinorSplitPen := furn.LinePen;
+  furn.AreaOpacity := NaN;
   if AGrid <> nil then furn := AGrid.FurnitureFor(AAxis);
+  { EACH PIECE IN ITS OWN PEN: the author's along upstream's chain, the
+    skin's where the author wrote nothing [R5-B: the skin's, whatever the
+    option said] }
+  lineK := TyAxisSkinStroke(furn.LinePen, lineS, acRound);
+  tickK := TyAxisSkinStroke(furn.TickPen, tickStyle, acButt);
+  minorTickK := TyAxisSkinStroke(furn.MinorTickPen, minorTickS, acButt);
+  splitK := TyAxisSkinStroke(furn.SplitPen, splitS, acButt);
+  minorSplitK := TyAxisSkinStroke(furn.MinorSplitPen, minorSplitS, acButt);
 
   { THE TICK'S LENGTH, and it has to be asked AFTER the two lines above. It
     used to be asked first -- reading `spec` and `furn` before either was
@@ -409,6 +463,8 @@ begin
       end
       else if (ink <> 0) or not (tpBackground in areaS.Present) then
         Continue;
+      { areaStyle.opacity over the band's own alpha [R5-B] }
+      areaFill.Color := TyAxisAreaAlpha(areaFill.Color, furn.AreaOpacity);
       bandLo := spec^.SplitAreaMarks[i].Coord;
       bandHi := spec^.SplitAreaMarks[i + 1].Coord;
       { where its groupTransition has it now [F3b] }
@@ -427,8 +483,7 @@ begin
 
   { WHATEVER THE LABELS ARE DOING: upstream subdivides every interval.
     [Revised in batch 40: only while every major label was drawn.] }
-  if ABelow and furn.ShowMinorSplitLine
-    and (tpBorderColor in minorSplitS.Present) then
+  if ABelow and furn.ShowMinorSplitLine and minorSplitK.Drawn then
   begin
     scaleTicks := TyDrawnTicks(AAxis.Scale);
     APainter.BeginPath;
@@ -439,11 +494,11 @@ begin
       if ProxLine('minor_line_' + TyJsNumberToString(scaleTicks[i].Value)) then Continue;
       along := AAxis.DataToCoord(scaleTicks[i].Value);
       if horiz then
-        BatchLine(along, APlot.Top, along, APlot.Bottom, LineWidth(minorSplitS))
+        BatchLine(along, APlot.Top, along, APlot.Bottom, minorSplitK.WidthLogical)
       else
-        BatchLine(APlot.Left, along, APlot.Right, along, LineWidth(minorSplitS));
+        BatchLine(APlot.Left, along, APlot.Right, along, minorSplitK.WidthLogical);
     end;
-    StrokeBatch(minorSplitS);
+    StrokeBatch(minorSplitK);
   end;
 
   { WHERE THE LAYOUT PUT THEM: the split line's own interval, the labels'
@@ -457,15 +512,17 @@ begin
     count among the drawn lines gives it; the skin's one colour when none
     was written [Batch 101] }
   if ABelow and furn.ShowSplitLine and (spec <> nil)
-    and ((tpBorderColor in splitS.Present) or (Length(spec^.SplitLineInks) > 0)) then
+    and (splitK.Drawn or ((Length(spec^.SplitLineInks) > 0)
+      and (splitK.WidthLogical > 0))) then
   begin
     for ink := 0 to Max(0, High(spec^.SplitLineInks)) do
     begin
-      inkStyle := splitS;
+      inkK := splitK;
       if Length(spec^.SplitLineInks) > 0 then
       begin
         if not spec^.SplitLineInks[ink].Ok then Continue;
-        inkStyle.BorderColor := TTyColor(spec^.SplitLineInks[ink].Colour);
+        inkK.Colour := spec^.SplitLineInks[ink].Colour;
+        inkK.Drawn := True;
       end;
       APainter.BeginPath;
       for i := 0 to High(spec^.SplitLineMarks) do
@@ -476,11 +533,11 @@ begin
         if ProxLine('line_' + TyJsNumberToString(spec^.SplitLineMarks[i].Value)) then Continue;
         along := spec^.SplitLineMarks[i].Coord;
         if horiz then
-          BatchLine(along, APlot.Top, along, APlot.Bottom, LineWidth(splitS))
+          BatchLine(along, APlot.Top, along, APlot.Bottom, splitK.WidthLogical)
         else
-          BatchLine(APlot.Left, along, APlot.Right, along, LineWidth(splitS));
+          BatchLine(APlot.Left, along, APlot.Right, along, splitK.WidthLogical);
       end;
-      StrokeBatch(inkStyle);
+      StrokeBatch(inkK);
     end;
   end;
 
@@ -500,7 +557,7 @@ begin
   { The domain line. Present, not colour: an undeclared colour resolves to
     alpha zero, so testing the colour would draw an invisible line and call it
     drawn. }
-  if furn.ShowLine and (tpBorderColor in lineS.Present) then
+  if furn.ShowLine and (lineK.Drawn or (spec <> nil) and (Length(spec^.Arrows) > 0)) then
   begin
     APainter.BeginPath;
     { CUT AT THE BREAKS, each segment already on the pixel grid [Batch 132] }
@@ -516,16 +573,19 @@ begin
     end
     else if ProxLine('line') then
     else if horiz then
-      BatchLine(APlot.Left, at, APlot.Right, at, LineWidth(lineS))
+      BatchLine(APlot.Left, at, APlot.Right, at, lineK.WidthLogical)
     else
-      BatchLine(at, APlot.Top, at, APlot.Bottom, LineWidth(lineS));
-    StrokeBatch(lineS);
+      BatchLine(at, APlot.Top, at, APlot.Bottom, lineK.WidthLogical);
+    StrokeBatch(lineK);
     { THE ARROWS, over the line (z2 11 to its 1), in its colour: a symbol's
       setColor fills it -- strokes a `line`, rings an `empty` one round the
-      skin's empty-symbol ground [Batch 101] }
-    if spec <> nil then
+      skin's empty-symbol ground [Batch 101]. The line's colour, the
+      author's where written, without its opacity: createSymbol is handed
+      lineStyle.stroke alone [R5-B] }
+    if (spec <> nil) and not furn.LinePen.ColourNone
+      and (furn.LinePen.HasColour or (tpBorderColor in lineS.Present)) then
       for i := 0 to High(spec^.Arrows) do
-        PaintAxisArrow(APainter, spec^.Arrows[i], lineS);
+        PaintAxisArrow(APainter, spec^.Arrows[i], lineK.Colour);
   end;
 
   { ALIGNED WITH THE LABELS OR WITH THE BAND EDGES. On a banded category axis
@@ -535,7 +595,7 @@ begin
   { THE MARKS WHERE THE LAYOUT PUT THEM, on their own interval or the
     labels', a tick whose label was hidden gone with it.
     [Revised in batch 40: every tickStep-th tick, a hidden label's kept.] }
-  if furn.ShowTicks and (tpBorderColor in tickStyle.Present) and (spec <> nil) then
+  if furn.ShowTicks and tickK.Drawn and (spec <> nil) then
   begin
     APainter.BeginPath;
     for i := 0 to High(spec^.TickMarks) do
@@ -555,9 +615,9 @@ begin
         x1 := at;
         if AAxis.Side = asRight then x2 := at + tickLen else x2 := at - tickLen;
       end;
-      BatchLine(x1, y1, x2, y2, LineWidth(tickStyle));
+      BatchLine(x1, y1, x2, y2, tickK.WidthLogical);
     end;
-    StrokeBatch(tickStyle);
+    StrokeBatch(tickK);
   end;
 
   { Minor MARKS. The difference in LENGTH is what says which is which when both
@@ -565,7 +625,7 @@ begin
     a fraction hardcoded here. --advchart-minor-tick-length, its constant and
     its default have all been in place since item 18 with nothing reading them,
     so a skin that set it changed nothing. }
-  if furn.ShowMinorTick and (tpBorderColor in minorTickS.Present) then
+  if furn.ShowMinorTick and minorTickK.Drawn then
   begin
     scaleTicks := TyDrawnTicks(AAxis.Scale);
     APainter.BeginPath;
@@ -595,9 +655,9 @@ begin
         if AAxis.Side = asRight then x2 := at + minorLen
         else x2 := at - minorLen;
       end;
-      BatchLine(x1, y1, x2, y2, LineWidth(minorTickS));
+      BatchLine(x1, y1, x2, y2, minorTickK.WidthLogical);
     end;
-    StrokeBatch(minorTickS);
+    StrokeBatch(minorTickK);
   end;
 
   { THE AXIS NAME, WHERE THE LAYOUT PUT IT. The grid was shrunk for the

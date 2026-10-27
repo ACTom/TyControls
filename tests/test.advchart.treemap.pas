@@ -283,7 +283,8 @@ begin
             SetLength(crumbEls, Length(crumbEls) + 1);
             crumbEls[High(crumbEls)] := k;
           end
-          else if e.Shape.Kind = cskRect then
+          { a rect, rounded where itemStyle.borderRadius is written [R5-B] }
+          else if e.Shape.Kind in [cskRect, cskRoundRect] then
           begin
             if e.Z2 mod 100 = 20 then bgAt[e.Datum.DataIndex] := k
             else if e.Z2 mod 100 = 30 then ctAt[e.Datum.DataIndex] := k;

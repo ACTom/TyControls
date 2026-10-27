@@ -133,7 +133,24 @@ type
     HasDojiBorder: Boolean;
     DojiBorder: TTyChartColor;
     BorderWidthLogical: Double;
+    { [R5-B] a border WRITTEN AS null: no colour, so the pen is the body's
+      (`getBorderColor(sign, itemModel) || style.fill`) -- the default border
+      stays only where the key is absent }
+    UpBorderBody, DownBorderBody: Boolean;
   end;
+
+  { [R5-B] ONE ROW'S OWN CANDLE: the item's itemStyle over the series' --
+    candlestickVisual asks the ITEM model for color / color0 / borderColor /
+    borderColor0 / borderColorDoji (the item's own, else the series'), and
+    the layout asks it whether a doji colour is written; getItemStyle gives
+    the pen's width and the opacity. Set only where the item wrote an
+    itemStyle; Opacity NaN where it wrote none. }
+  TTyCandleRow = record
+    Present: Boolean;
+    Spec: TTyCandleSpec;
+    Opacity: Double;
+  end;
+  TTyCandleRowArray = array of TTyCandleRow;
 
   { ONE RAW ROW'S FILL, decided outside the builder [Batch 105]: what the
     per-datum palette (colorBy other than 'series') gave the row, and the
@@ -144,6 +161,8 @@ type
     { the palette answered undefined: no fill }
     PaletteNone: Boolean;
     Palette: TTyChartColor;
+    { [R5-B] the palette's entry when it is a gradient (Palette its solid) }
+    PaletteGrad: TTyChartGradient;
     ObjSet: Boolean;
     ObjSolid: TTyChartColor;
     ObjGradient: TTyChartGradient;
@@ -193,6 +212,9 @@ type
       `Down` beside `Fill` would invite every other builder to wonder which of
       the three it should be reading. }
     Candle: TTyCandleSpec;
+    { [R5-B] each raw row's own candle, where the item wrote an itemStyle
+      (empty: none did) }
+    CandleRows: TTyCandleRowArray;
     { A CANDLESTICK'S OR A BOXPLOT'S solved width, offset and clip, and a
       boxplot's style -- solved across every series of the type on the base
       axis, so it arrives like the bar column does. Unsolved: a candle half
@@ -237,6 +259,11 @@ type
       series default; here it is a theme key, so a dark skin does not get a
       pale grey band across it. }
     BackgroundFill: TTyChartColor;
+    { [R5-B] backgroundStyle as the series wrote it: getItemStyle's fill,
+      stroke, lineWidth, lineDash and opacity over the strip -- the skin's
+      fill (BackgroundFill) where no colour is written, no pen unless a
+      borderColor and a width above nought are }
+    BackgroundStyle: TTyOptStyle;
     { The words on each mark, and how they are chosen. Carried here for the
       same reason the bar column is: it was decided somewhere else. }
     Label_: TTyLabelSpec;
@@ -340,6 +367,9 @@ function TySeriesVisual(AFill: TTyChartColor): TTySeriesVisual;
   back on are the theme's and this unit cannot see a theme. }
 function TyCandleSpecOf(AOption: TTyChartOption; ASlot: Integer;
   const ADefaults: TTyCandleSpec): TTyCandleSpec;
+{ [R5-B] an item's itemStyle over its series' candle (TTyCandleRow); not
+  Present when AItem has no itemStyle object }
+function TyCandleRowOf(const ASeries: TTyCandleSpec; AItem: TJSONObject): TTyCandleRow;
 
 function TyLineSpecOf(AOption: TTyChartOption; ASlot: Integer): TTyLineSpec;
 
@@ -424,6 +454,9 @@ uses tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.AxisLabels,
      tyControls.AdvanceChart.LinePath, tyControls.AdvanceChart.LabelGuide,
      tyControls.AdvanceChart.Polar, tyControls.AdvanceChart.ZrPath,
      tyControls.AdvanceChart.Single;
+
+procedure TyBarBackgroundStyle(var AEl: TTyChartElement;
+  const AVisual: TTySeriesVisual); forward;
 
 { THE POLAR A SERIES IS ON, nil on a cartesian [Batch 113] }
 function PolarOf(const ABinding: TTySeriesBinding): TTyPolar;
@@ -529,6 +562,13 @@ var
     Result := True;
   end;
 
+  function IsNull(const AKey: string): Boolean;
+  var v: TJSONData;
+  begin
+    v := item.Find(AKey);
+    Result := (v <> nil) and (v.JSONType = jtNull);
+  end;
+
 begin
   Result := ADefaults;
   if AOption = nil then Exit;
@@ -543,17 +583,71 @@ begin
     follow the same suffix. Upstream's own comment beside them reads
     "positive" and "negative", which is a description of a price move and not
     of a number: both sides compare a datum against itself. }
+  { THE BORDER IS ITS OWN KEY: upstream's series default writes borderColor
+    and borderColor0 beside color and color0, so a `color` alone leaves the
+    border the default's -- the skin's here [R5-B: the border followed a
+    written colour] }
   ColourAt('color', Result.Up);
   ColourAt('color0', Result.Down);
-  if not ColourAt('borderColor', Result.UpBorder) then
-    if item.Find('color') <> nil then Result.UpBorder := Result.Up;
-  if not ColourAt('borderColor0', Result.DownBorder) then
-    if item.Find('color0') <> nil then Result.DownBorder := Result.Down;
+  if ColourAt('borderColor', Result.UpBorder) then Result.UpBorderBody := False
+  else if IsNull('borderColor') then Result.UpBorderBody := True;
+  if ColourAt('borderColor0', Result.DownBorder) then Result.DownBorderBody := False
+  else if IsNull('borderColor0') then Result.DownBorderBody := True;
   Result.HasDojiBorder := ColourAt('borderColorDoji', Result.DojiBorder);
 
   d := item.Find('borderWidth');
   if (d <> nil) and (d.JSONType = jtNumber) then
     Result.BorderWidthLogical := Max(Double(0), Min(Double(64), d.AsFloat));
+end;
+
+function TyCandleRowOf(const ASeries: TTyCandleSpec; AItem: TJSONObject): TTyCandleRow;
+var
+  item: TJSONObject;
+  d: TJSONData;
+  c: TTyChartColor;
+
+  function ColourAt(const AKey: string; var ATarget: TTyChartColor): Boolean;
+  var v: TJSONData;
+  begin
+    Result := False;
+    v := item.Find(AKey);
+    if (v = nil) or (v.JSONType <> jtString) then Exit;
+    if TyChartColorIsNone(v.AsString) then
+    begin
+      ATarget := 0;
+      Exit(True);
+    end;
+    if not TyTryParseChartColor(v.AsString, c) then Exit;
+    ATarget := c;
+    Result := True;
+  end;
+
+begin
+  Result := Default(TTyCandleRow);
+  Result.Spec := ASeries;
+  Result.Opacity := NaN;
+  if AItem = nil then Exit;
+  d := AItem.Find('itemStyle');
+  if not (d is TJSONObject) then Exit;
+  item := TJSONObject(d);
+  Result.Present := True;
+  ColourAt('color', Result.Spec.Up);
+  ColourAt('color0', Result.Spec.Down);
+  if ColourAt('borderColor', Result.Spec.UpBorder) then Result.Spec.UpBorderBody := False
+  else if (item.Find('borderColor') <> nil) and (item.Find('borderColor').JSONType = jtNull) then
+    Result.Spec.UpBorderBody := True;
+  if ColourAt('borderColor0', Result.Spec.DownBorder) then Result.Spec.DownBorderBody := False
+  else if (item.Find('borderColor0') <> nil) and (item.Find('borderColor0').JSONType = jtNull) then
+    Result.Spec.DownBorderBody := True;
+  { `!!itemModel.get(['itemStyle', 'borderColorDoji'])`: the item's, else
+    the series' }
+  if ColourAt('borderColorDoji', Result.Spec.DojiBorder) then
+    Result.Spec.HasDojiBorder := True;
+  d := item.Find('borderWidth');
+  if (d <> nil) and (d.JSONType = jtNumber) then
+    Result.Spec.BorderWidthLogical := Max(Double(0), Min(Double(64), d.AsFloat));
+  d := item.Find('opacity');
+  if (d <> nil) and (d.JSONType = jtNumber) then Result.Opacity := d.AsFloat;
 end;
 
 function TyLineSpecOf(AOption: TTyChartOption; ASlot: Integer): TTyLineSpec;
@@ -979,7 +1073,8 @@ begin
   if rf.PaletteSet then
   begin
     if rf.PaletteNone then Result.Fill := 0 else Result.Fill := rf.Palette;
-    Result.FillGradient := Default(TTyChartGradient);
+    { [R5-B] a gradient entry is the fill itself }
+    Result.FillGradient := rf.PaletteGrad;
     Result.FillPattern := Default(TTyChartPattern);
   end;
   { A DATUM'S OWN COLOUR THAT IS AN OBJECT replaces whatever the series had,
@@ -1528,9 +1623,9 @@ begin
         bg.Right := plot.Right;
       end;
       bgEl := TyChartElement(TyShapeRoundRect(bg, col.BackgroundRadii));
-      bgEl.Style.HasFill := True;
-      bgEl.Style.FillColor := AVisual.BackgroundFill;
       bgEl.Style.Alpha := 1;
+      { the author's backgroundStyle over the skin's strip [R5-B] }
+      TyBarBackgroundStyle(bgEl, AVisual);
       bgEl.Z := AVisual.Z;
       bgEl.Z2 := AVisual.Z2;
       bgEl.Silent := True;
@@ -2220,8 +2315,12 @@ var
         if spec.HasAreaFill then v.Fill := spec.AreaFill;
         { AND ITS OWN RAMP, which REPLACES the series' rather than adding to
           it: an area that named a gradient is that gradient, whatever the
-          bars beside it are doing. }
-        v.FillGradient := spec.AreaGradient;
+          bars beside it are doing. AN AREA THAT NAMED NO COLOUR is the
+          series' visual colour, a gradient included (LineView: `fill:
+          visualColor` under the areaStyle) [R5-B: the series' gradient was
+          dropped] }
+        if spec.HasAreaFill or (spec.AreaGradient.Kind <> cgkNone) then
+          v.FillGradient := spec.AreaGradient;
         v.FillPattern := Default(TTyChartPattern);
         v.StrokeGradient := Default(TTyChartGradient);
         { A visualMap's gradient, unless the area named its own colour. }
@@ -2937,6 +3036,10 @@ var
   v: TTySeriesVisual;
   r: TTyRectF;
   el: TTyChartElement;
+  { the row's candle: its item's own over the series' [R5-B] }
+  cs: TTyCandleSpec;
+  rowOpacity: Double;
+  raw: Integer;
   { the enter animation's numbers, shared by the body and its two wicks }
   anim: TTyChartAnim;
   ce: TTyCandleEnds;
@@ -2959,7 +3062,7 @@ var
     w := v;
     w.Fill := 0;
     w.Stroke := border;
-    w.StrokeWidthLogical := AVisual.Candle.BorderWidthLogical;
+    w.StrokeWidthLogical := cs.BorderWidthLogical;
     if w.StrokeWidthLogical <= 0 then w.StrokeWidthLogical := 1;
     wel := MarkElement(TyShapePolyline([AFrom, ATo]), w, ABinding.SeriesIndex, i);
     { the path's stroke answers within half the pen, as zrender's
@@ -3027,9 +3130,19 @@ begin
       a number compares false, and is down. The first row has no previous
       and is up. Only a written `borderColorDoji` gives it a colour of its
       own -- sign 0, whose fill is `color0`. }
+    { the row's own candle [R5-B] }
+    cs := AVisual.Candle;
+    rowOpacity := NaN;
+    raw := AStore.GetRawIndex(i);
+    if (raw >= 0) and (raw <= High(AVisual.CandleRows))
+      and AVisual.CandleRows[raw].Present then
+    begin
+      cs := AVisual.CandleRows[raw].Spec;
+      rowOpacity := AVisual.CandleRows[raw].Opacity;
+    end;
     if openV > closeV then sign := -1
     else if openV < closeV then sign := 1
-    else if AVisual.Candle.HasDojiBorder then sign := 0
+    else if cs.HasDojiBorder then sign := 0
     else if i = 0 then sign := 1
     else
     begin
@@ -3042,21 +3155,25 @@ begin
 
     if sign > 0 then
     begin
-      fill := AVisual.Candle.Up;
-      border := AVisual.Candle.UpBorder;
+      fill := cs.Up;
+      border := cs.UpBorder;
+      if cs.UpBorderBody then border := fill;
     end
     else
     begin
-      fill := AVisual.Candle.Down;
-      border := AVisual.Candle.DownBorder;
+      fill := cs.Down;
+      border := cs.DownBorder;
+      if cs.DownBorderBody then border := fill;
     end;
-    if (sign = 0) and AVisual.Candle.HasDojiBorder then
-      border := AVisual.Candle.DojiBorder;
+    if (sign = 0) and cs.HasDojiBorder then
+      border := cs.DojiBorder;
 
     v := AVisual;
     v.Fill := fill;
     v.Stroke := border;
-    v.StrokeWidthLogical := AVisual.Candle.BorderWidthLogical;
+    v.StrokeWidthLogical := cs.BorderWidthLogical;
+    { the item's own opacity (getItemStyle) [R5-B] }
+    if not IsNan(rowOpacity) then v.Alpha := rowOpacity;
     { THE BRUSH'S fill and opacity (its visual stage writes style.fill, the
       drawType, over the rise / fall colour; the pen stays) [Batch 127] }
     if (AVisual.VisualRows <> nil) and (AStore.GetRawIndex(i) >= 0)
@@ -3209,6 +3326,7 @@ var
   wl: TTyWhiskerLayout;
   band: Double;
   ws, os: TTyDoubleArray;
+  raw: Integer;
 begin
   Result := 0;
   if (AStore = nil) or (ABinding.BaseAxis = nil) or (ABinding.Cart = nil) then Exit;
@@ -3275,6 +3393,17 @@ begin
     v.FillGradient := Default(TTyChartGradient);
     v.StrokeGradient := Default(TTyChartGradient);
     v.FillPattern := Default(TTyChartPattern);
+    { [R5-B] A visualMap's colour lands on the colour a boxplot draws with,
+      its PEN (visualSolution's setItemVisual: style[drawType]), and its
+      opacity on the box (stage 4000, before the item's own style) }
+    raw := AStore.GetRawIndex(i);
+    if (AVisual.VisualRows <> nil) and (raw >= 0) and (raw <= High(AVisual.VisualRows)) then
+    begin
+      if AVisual.VisualRows[raw].ColorSet then
+        v.Stroke := TyVisualToChart(AVisual.VisualRows[raw].Color);
+      if AVisual.VisualRows[raw].OpacitySet and not IsNan(AVisual.VisualRows[raw].Opacity) then
+        v.Alpha := Min(Double(1), Max(Double(0), AVisual.VisualRows[raw].Opacity));
+    end;
     if AStore.HasOverride(i, TyOverrideKey('itemStyle.color')) then
     begin
       dv := AStore.GetOverride(i, TyOverrideKey('itemStyle.color'));
@@ -3303,6 +3432,15 @@ begin
       dv := AStore.GetOverride(i, TyOverrideKey('itemStyle.opacity'));
       if (dv.Kind = dvkNumber) and not IsNan(dv.Num) then
         v.Alpha := Min(Double(1), Max(Double(0), dv.Num));
+    end;
+    { [R5-B] THE PER-DATUM PALETTE (colorBy other than 'series', stage
+      4600): on the pen, asked only by a row neither a visual channel nor
+      its own borderColor coloured; undefined paints none }
+    if (AVisual.RowFills <> nil) and (raw >= 0) and (raw <= High(AVisual.RowFills))
+      and AVisual.RowFills[raw].PaletteSet then
+    begin
+      if AVisual.RowFills[raw].PaletteNone then v.Stroke := 0
+      else v.Stroke := AVisual.RowFills[raw].Palette;
     end;
 
     el := MarkElement(shape, v, ABinding.SeriesIndex, i);
@@ -3916,9 +4054,9 @@ begin
     begin
       bgS := TyPolarBarBackground(L, s);
       bgEl := TyChartElement(TyPolarSectorShape(bgS, TyPolarCornerRaw(L.BgCorner), False));
-      bgEl.Style.HasFill := True;
-      bgEl.Style.FillColor := AVisual.BackgroundFill;
       bgEl.Style.Alpha := 1;
+      { the author's backgroundStyle over the skin's strip [R5-B] }
+      TyBarBackgroundStyle(bgEl, AVisual);
       bgEl.Z := AVisual.Z;
       bgEl.Z2 := AVisual.Z2;
       bgEl.Silent := True;
@@ -4315,6 +4453,44 @@ begin
   end;
 end;
 
+{ [R5-B] THE STRIP'S STYLE: backgroundModel.getItemStyle() -- the colour
+  (a gradient or a pattern as it is, 'none' no fill), the border when a
+  colour and a width above nought are written (its dash and phase), the
+  opacity; the skin's fill where no colour is written }
+procedure TyBarBackgroundStyle(var AEl: TTyChartElement; const AVisual: TTySeriesVisual);
+var
+  bs: TTyOptStyle;
+  w: Double;
+begin
+  bs := AVisual.BackgroundStyle;
+  AEl.Style.HasFill := True;
+  AEl.Style.FillColor := AVisual.BackgroundFill;
+  if bs.Color.Written and not bs.Color.IsAuto then
+  begin
+    if bs.Color.IsNone then
+      AEl.Style.HasFill := False
+    else
+    begin
+      AEl.Style.FillColor := bs.Color.Color;
+      AEl.Style.FillGradient := bs.Color.Gradient;
+      AEl.Style.FillPattern := bs.Color.Pattern;
+    end;
+  end;
+  w := bs.BorderWidthLogical;
+  if bs.BorderColor.Written and not bs.BorderColor.IsNone and not bs.BorderColor.IsAuto
+    and not IsNan(w) and (w > 0) then
+  begin
+    AEl.Style.StrokeColor := bs.BorderColor.Color;
+    AEl.Style.StrokeGradient := bs.BorderColor.Gradient;
+    AEl.Style.StrokeWidthLogical := w;
+    AEl.Style.DashLogical := TyDashPattern(bs.Dash, bs.DashLogical, w);
+    AEl.Style.DashWord := TyDashWord(bs.Dash);
+    AEl.Style.DashOffsetLogical := bs.DashOffset;
+  end;
+  if not IsNan(bs.Opacity) then
+    AEl.Style.Alpha := Min(Double(1), Max(Double(0), bs.Opacity));
+end;
+
 { createLarge: the background batch first (z2 0, silent), then the bars (z2
   1, no pen: the stroke is dropped, #20465); AChunk the progressive chunk
   that draws them, 0 for none }
@@ -4340,6 +4516,8 @@ begin
     el.Silent := True;
     el.Style.DashLogical := nil;
     el.Style.DashWord := 0;
+    { the author's backgroundStyle over the skin's strip [R5-B] }
+    TyBarBackgroundStyle(el, AVisual);
     if col.Clip then
     begin
       el.HasClip := True;

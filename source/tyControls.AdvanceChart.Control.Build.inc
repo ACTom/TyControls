@@ -686,13 +686,19 @@ begin
     typ := FBindings[i].SeriesType;
     { THE TYPES WHOSE ROWS THIS PORT PAINTS ONE BY ONE. A graph, a tree, a
       treemap, a sunburst and a sankey colour their own nodes; a candlestick's
-      and a boxplot's defaults write the colour. }
+      defaults write the colour (its visual sets fill and stroke itself).
+      [R5-B: a boxplot's do not -- only its fill; its pen, the colour it
+      draws with, is the palette's, per datum under colorBy 'data'.] }
     if not ((typ = 'bar') or (typ = 'line') or (typ = 'scatter')
       or (typ = 'effectScatter') or (typ = 'pictorialBar')
       or (typ = TyPieSeriesTypeName) or (typ = 'funnel') or (typ = 'gauge')
       or (typ = 'radar') or (typ = TyThemeRiverSeriesTypeName)
       { a chord's nodes, colorBy 'data' by default [Batch 120] }
-      or (typ = TyChordSeriesTypeName)) then Continue;
+      or (typ = TyChordSeriesTypeName) or (typ = 'boxplot')
+      { [R5-B] a heatmap's cells, a lines' rows and a parallel's lines take
+        the per-datum palette too (lines and parallel on their lineStyle) }
+      or (typ = 'heatmap') or (typ = TyLinesSeriesTypeName)
+      or (typ = 'parallel')) then Continue;
     cb := TyChartColorByOf(FOption, si, typ);
     if cb = 'series' then Continue;
     { the scope first, whether or not a row asks: upstream hands every such
@@ -720,7 +726,9 @@ begin
     begin
       if FStores[i].IndexOfRawIndex(k) >= 0 then
       begin
-        { ITS OWN COLOUR: the key present and not null, an object included }
+        { ITS OWN COLOUR: the key present and not null, an object included
+          -- the key of the colour the type draws with (dataStyleTask's
+          `colorKey in style`: a boxplot's is its borderColor) [R5-B] }
         item := RawItemNode(i, k);
         own := False;
         if item <> nil then
@@ -728,7 +736,10 @@ begin
           d := item.Find(TyStyleAccessPath(typ));
           if d is TJSONObject then
           begin
-            d := TJSONObject(d).Find('color');
+            if TyStyleDrawsWithStroke(typ) and (TyStyleAccessPath(typ) = 'itemStyle') then
+              d := TJSONObject(d).Find('borderColor')
+            else
+              d := TJSONObject(d).Find('color');
             own := (d <> nil) and (d.JSONType <> jtNull);
           end;
         end;
@@ -801,7 +812,18 @@ begin
   if (ASlot <= High(FVisualRows)) and (ARaw >= 0) and (ARaw <= High(FVisualRows[ASlot]))
     and FVisualRows[ASlot][ARaw].ColorSet then Exit;
   if (ASlot <= High(FDatumAsked)) and (ARaw >= 0) and (ARaw <= High(FDatumAsked[ASlot]))
-    and FDatumAsked[ASlot][ARaw] then Exit;
+    and FDatumAsked[ASlot][ARaw] then
+  begin
+    { [R5-B] its palette entry, when that is a gradient: the object is the
+      fill (dataColorPaletteTask hands it on as it is) }
+    if (FDatumPicks[ASlot][ARaw].Kind = ppkColor)
+      and (FDatumPicks[ASlot][ARaw].Grad.Kind <> cgkNone) then
+    begin
+      Result.Present := True;
+      Result.Gradient := FDatumPicks[ASlot][ARaw].Grad;
+    end;
+    Exit;
+  end;
   item := RawItemNode(ASlot, ARaw);
   if item <> nil then
   begin
@@ -833,12 +855,28 @@ begin
   d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
   if not (d is TJSONObject) then Exit;
   st := TyReadOptStyle(TJSONObject(d), 'itemStyle');
-  if st.Color.IsAuto then Exit;
   if (st.Color.Gradient.Kind <> cgkNone) or st.Color.Pattern.Present then
   begin
     Result.Present := True;
     Result.Gradient := st.Color.Gradient;
     Result.Pattern := st.Color.Pattern;
+    Exit;
+  end;
+  { [R5-B] A PALETTE ENTRY THAT IS A GRADIENT is the series' fill when the
+    fill is the pick's (unwritten or 'auto') }
+  Result := SeriesPaletteObject(FBindings[ASlot].SeriesIndex);
+end;
+
+function TTyCustomAdvanceChart.SeriesPaletteObject(ASeriesIndex: Integer): TTyChartObjFill;
+begin
+  Result := Default(TTyChartObjFill);
+  if (ASeriesIndex < 0) or (ASeriesIndex > High(FSeriesFromPick))
+    or (ASeriesIndex > High(FSeriesPick)) then Exit;
+  if FSeriesFromPick[ASeriesIndex] and (FSeriesPick[ASeriesIndex].Kind = ppkColor)
+    and (FSeriesPick[ASeriesIndex].Grad.Kind <> cgkNone) then
+  begin
+    Result.Present := True;
+    Result.Gradient := FSeriesPick[ASeriesIndex].Grad;
   end;
 end;
 
@@ -905,6 +943,9 @@ begin
       Result[k].PaletteSet := True;
       Result[k].PaletteNone := FDatumPicks[ASlot][k].Kind = ppkNone;
       Result[k].Palette := TTyChartColor(PickColor(FDatumPicks[ASlot][k]));
+      { [R5-B] the entry's gradient }
+      if FDatumPicks[ASlot][k].Kind = ppkColor then
+        Result[k].PaletteGrad := FDatumPicks[ASlot][k].Grad;
     end;
     if objs and FRowObjFills[ASlot][k].ObjSet then
     begin
@@ -2707,6 +2748,9 @@ begin
   AVisual.FillGradient := item.Color.Gradient;
   AVisual.StrokeGradient := item.BorderColor.Gradient;
   AVisual.FillPattern := item.Color.Pattern;
+  { [R5-B] or the palette's gradient, where the fill is the pick's }
+  if not ((item.Color.Gradient.Kind <> cgkNone) or item.Color.Pattern.Present) then
+    AVisual.FillGradient := SeriesPaletteObject(ASlot).Gradient;
 
   { A LINE READS ITS OWN BLOCK FOR THE PEN, and only for the pen. Its
     palette colour came from `itemStyle` -- that is the trap in this whole
@@ -2733,7 +2777,11 @@ begin
     if not IsNan(line.Opacity) then
       AVisual.Alpha := Min(Double(1), Max(Double(0), line.Opacity));
     if line.Color.Gradient.Kind <> cgkNone then
-      AVisual.StrokeGradient := line.Color.Gradient;
+      AVisual.StrokeGradient := line.Color.Gradient
+    { [R5-B] the visual colour a line is stroked with when its lineStyle
+      writes none: the palette's gradient where the fill is that }
+    else if not line.Color.Written and (st = 'line') then
+      AVisual.StrokeGradient := SeriesPaletteObject(ASlot).Gradient;
   end;
 end;
 
@@ -4047,6 +4095,9 @@ begin
         v.Line.StackedOnSmooth := TyLineSpecOf(FOption,
           FBindings[FStacks[i].OnSlot].SeriesIndex).Smooth;
       v.Candle := CandleVisual(FBindings[i].SeriesIndex);
+      { an item's own candle over the series' [R5-B] }
+      if FBindings[i].SeriesType = 'candlestick' then
+        v.CandleRows := CandleRowsOf(i, v.Candle);
       { The thinning the AXIS settled on. When markers would crowd, upstream
         falls back to the category axis' own label interval -- which the layout
         pass already computed, so it is fetched rather than re-derived. }
@@ -4100,6 +4151,12 @@ begin
       v.BackgroundFill := TTyChartColor(
         ActiveController.Model.ResolveStyle('TyAdvChartBarBackground', '',
           []).Background.Color);
+      { and what the series wrote over it [R5-B] }
+      if FOption.ComponentAt('series', FBindings[i].SeriesIndex) is TJSONObject then
+        v.BackgroundStyle := TyReadOptStyle(TJSONObject(FOption.ComponentAt('series',
+          FBindings[i].SeriesIndex)), 'backgroundStyle')
+      else
+        v.BackgroundStyle := TyReadOptStyle(nil, 'backgroundStyle');
       { `z` AND `z2`, the series default z UPSTREAM'S 2. [Batch 64: it was 0,
         on the grounds that nothing else here shared the scale. Markers do: a
         markArea sits at z 1, UNDER its series, and a markPoint or markLine at

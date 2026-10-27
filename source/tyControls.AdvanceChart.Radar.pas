@@ -80,16 +80,34 @@ type
     Show: Boolean;
     WidthLogical: Double;
     Colours: TTyChartColorArray;
+    { [R5-B] the rest of the lineStyle: `type` (a word against the width,
+      or lengths), `dashOffset`, `opacity` -- 1 when not written }
+    Dash: TTyOptDash;
+    DashLogical: TTyDoubleArray;
+    DashOffset: Double;
+    Opacity: Double;
   end;
 
   TTyRadarAreaSpec = record
     Show: Boolean;
     Colours: TTyChartColorArray;
+    { [R5-B] areaStyle.opacity, 1 when not written }
+    Opacity: Double;
   end;
 
+  { [R5-B] THE TICKS' PEN as AxisBuilder strokes them: axisTick.lineStyle,
+    its colour else the axis line's (the radar's axisLine, which every
+    indicator's axis model is handed), its width 1 unless written }
   TTyRadarTickSpec = record
     Show: Boolean;
     LengthLogical: Double;
+    HasColour: Boolean;
+    Colour: TTyChartColor;
+    WidthLogical: Double;
+    Dash: TTyOptDash;
+    DashLogical: TTyDoubleArray;
+    DashOffset: Double;
+    Opacity: Double;
   end;
 
   TTyRadarLabelSpec = record
@@ -439,7 +457,9 @@ end;
 
 procedure ReadLine(ANode: TJSONObject; const AKey: string;
   var ALine: TTyRadarLineSpec);
-var n, ls: TJSONObject;
+var
+  n, ls: TJSONObject;
+  st: TTyOptStyle;
 begin
   n := ObjIn(ANode, AKey);
   if n = nil then Exit;
@@ -448,6 +468,15 @@ begin
   if ls = nil then Exit;
   ALine.WidthLogical := NumIn(ls, 'width', ALine.WidthLogical);
   ALine.Colours := ColoursIn(ls, 'color', ALine.Colours);
+  { the rest of getLineStyle [R5-B] }
+  st := TyReadOptLineStyleOf(ls);
+  if st.Dash <> todNone then
+  begin
+    ALine.Dash := st.Dash;
+    ALine.DashLogical := Copy(st.DashLogical, 0, Length(st.DashLogical));
+  end;
+  if st.DashOffsetHas then ALine.DashOffset := st.DashOffset;
+  if not IsNan(st.Opacity) then ALine.Opacity := st.Opacity;
 end;
 
 function TyRadarSpecDefault: TTyRadarSpec;
@@ -472,20 +501,25 @@ begin
 
   Result.AxisLine.Show := True;
   Result.AxisLine.WidthLogical := 1;
+  Result.AxisLine.Opacity := 1;
 
   { OFF BY DEFAULT, both of them -- upstream flips the value axis' own defaults
     for a radar, so a plain radar shows its rings and its names and nothing
     else. }
   Result.AxisTick.Show := False;
   Result.AxisTick.LengthLogical := 5;
+  Result.AxisTick.WidthLogical := 1;
+  Result.AxisTick.Opacity := 1;
   Result.AxisLabel.Show := False;
   Result.AxisLabel.MarginLogical := 8;
 
   Result.SplitLine.Show := True;
   Result.SplitLine.WidthLogical := 1;
+  Result.SplitLine.Opacity := 1;
   { AND SPLIT AREA IS ON, which is the other flip: a cartesian value axis
     defaults it off. }
   Result.SplitArea.Show := True;
+  Result.SplitArea.Opacity := 1;
 end;
 
 function TyRadarInk: TTyRadarInk;
@@ -559,6 +593,7 @@ end;
 function TyRadarSpecOf(AOption: TTyChartOption; ASlot: Integer): TTyRadarSpec;
 var
   node, n2, ts: TJSONObject;
+  st: TTyOptStyle;
   d: TJSONData;
   a: TJSONArray;
   s: string;
@@ -637,6 +672,25 @@ begin
     Result.AxisTick.Show := BoolIn(n2, 'show', Result.AxisTick.Show);
     Result.AxisTick.LengthLogical := NumIn(n2, 'length',
       Result.AxisTick.LengthLogical);
+    { the ticks' own lineStyle [R5-B] }
+    st := TyReadOptLineStyleOf(ObjIn(n2, 'lineStyle'));
+    if st.Color.Written and not st.Color.IsAuto and not st.Color.IsNone then
+    begin
+      Result.AxisTick.HasColour := True;
+      Result.AxisTick.Colour := st.Color.Color;
+    end;
+    if not IsNan(st.BorderWidthLogical) then
+      Result.AxisTick.WidthLogical := st.BorderWidthLogical;
+    Result.AxisTick.Dash := st.Dash;
+    Result.AxisTick.DashLogical := Copy(st.DashLogical, 0, Length(st.DashLogical));
+    if st.DashOffsetHas then Result.AxisTick.DashOffset := st.DashOffset;
+    if not IsNan(st.Opacity) then Result.AxisTick.Opacity := st.Opacity;
+  end;
+  { ELSE THE LINE'S COLOUR: defaults(tickStyle, {stroke: axisLine's}) }
+  if not Result.AxisTick.HasColour and (Length(Result.AxisLine.Colours) > 0) then
+  begin
+    Result.AxisTick.HasColour := True;
+    Result.AxisTick.Colour := Result.AxisLine.Colours[0];
   end;
 
   n2 := ObjIn(node, 'axisLabel');
@@ -661,8 +715,12 @@ begin
     Result.SplitArea.Show := BoolIn(n2, 'show', Result.SplitArea.Show);
     ts := ObjIn(n2, 'areaStyle');
     if ts <> nil then
+    begin
       Result.SplitArea.Colours := ColoursIn(ts, 'color',
         Result.SplitArea.Colours);
+      { areaStyle.opacity [R5-B] }
+      Result.SplitArea.Opacity := NumIn(ts, 'opacity', Result.SplitArea.Opacity);
+    end;
   end;
 
   Result.Indicators := ReadIndicators(node);
@@ -1176,6 +1234,17 @@ var
   anchorH: TTyTextAnchorH;
   anchorV: TTyTextAnchorV;
   box: TTyRectF;
+
+  { the rest of a line's lineStyle on its element: the dash against its
+    width, the phase, the opacity [R5-B] }
+  procedure LinePen(var AEl: TTyChartElement; const ALine: TTyRadarLineSpec);
+  begin
+    AEl.Style.DashLogical := TyDashPattern(ALine.Dash, ALine.DashLogical,
+      ALine.WidthLogical);
+    AEl.Style.DashOffsetLogical := ALine.DashOffset;
+    AEl.Style.Alpha := ALine.Opacity;
+  end;
+
 begin
   Result := 0;
   if (AList = nil) or (ARadar = nil) or not ARadar.Valid then Exit;
@@ -1220,6 +1289,8 @@ begin
       end;
       el.Style.HasFill := True;
       el.Style.FillColor := c;
+      { areaStyle.opacity [R5-B] }
+      el.Style.Alpha := spec.SplitArea.Opacity;
       el.Z := AInk.Z;
       el.Z2 := 0;
       el.Silent := True;
@@ -1248,6 +1319,8 @@ begin
       end;
       el.Style.StrokeColor := c;
       el.Style.StrokeWidthLogical := spec.SplitLine.WidthLogical;
+      { the rest of the lineStyle [R5-B] }
+      LinePen(el, spec.SplitLine);
       el.Z := AInk.Z;
       el.Z2 := 0;
       el.Silent := True;
@@ -1269,6 +1342,7 @@ begin
       if not TyRadarBucket(spec.AxisLine.Colours, 0, c) then c := AInk.AxisLine;
       el.Style.StrokeColor := c;
       el.Style.StrokeWidthLogical := spec.AxisLine.WidthLogical;
+      LinePen(el, spec.AxisLine);
       el.Z := AInk.Z;
       el.Z2 := 1;
       el.Silent := True;
@@ -1339,8 +1413,14 @@ begin
         p := ARadar.CoordToPoint(ARadar.RingRadiusOf(i, k), i);
         q := TyPointF(p.X - perp.X * len, p.Y - perp.Y * len);
         el := TyChartElement(TyShapePolyline([p, q]));
-        el.Style.StrokeColor := AInk.Tick;
-        el.Style.StrokeWidthLogical := 1;
+        { the ticks' own pen, the line's colour, else the skin's [R5-B] }
+        if spec.AxisTick.HasColour then el.Style.StrokeColor := spec.AxisTick.Colour
+        else el.Style.StrokeColor := AInk.Tick;
+        el.Style.StrokeWidthLogical := spec.AxisTick.WidthLogical;
+        el.Style.DashLogical := TyDashPattern(spec.AxisTick.Dash,
+          spec.AxisTick.DashLogical, spec.AxisTick.WidthLogical);
+        el.Style.DashOffsetLogical := spec.AxisTick.DashOffset;
+        el.Style.Alpha := spec.AxisTick.Opacity;
         el.Z := AInk.Z;
         el.Z2 := 2;
         el.Silent := True;

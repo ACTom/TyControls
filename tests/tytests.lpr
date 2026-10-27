@@ -196,6 +196,7 @@ uses
   test.advchart.visualmaptext,
   test.advchart.labelhalo,
   test.advchart.textdash,
+  test.advchart.authorstyles,
   test.advchart.richimage,
   test.advchart.halokeep, test.advchart.faststrokes, test.advchart.largespeed, test.advchart.parsekeep,
   test.advchart.hoverlayer,

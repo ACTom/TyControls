@@ -166,19 +166,14 @@ var
   i, q, ink: Integer;
   s: TTySingle;
   model: TTyStyleModel;
-  lineS, tickS, splitS, areaS, minorTickS, labelS, nameS, inkStyle: TTyStyleSet;
+  lineS, tickS, splitS, areaS, minorTickS, labelS, nameS: TTyStyleSet;
   areaColour: TTyColor;
   lblW, lblH: Integer;
   v: TTySingleAxisView;
   sp: TTyAxisLayoutSpec;
   pl: TTyAxisNamePlacement;
-
-  function LineWidth(const AStyle: TTyStyleSet): Double;
-  begin
-    if tpBorderWidth in AStyle.Present then Result := AStyle.BorderWidth
-    else Result := 1;
-    if Result < 0.05 then Result := 0.05;
-  end;
+  { the author's pens over the skin [R5-B] }
+  lineK, inkK: TTyAxisStroke;
 
   function AnchorAlign(AH2: TTyTextAnchorH): TAlignment;
   begin
@@ -241,12 +236,13 @@ var
     Result := not (IsNan(AX) or IsNan(AY) or IsInfinite(AX) or IsInfinite(AY));
   end;
 
-  { the lines of AInk (every one when AInk < 0), one path, one stroke }
-  procedure StrokeLines(const ALines: TTySingleLineArray; const AStyle: TTyStyleSet;
+  { the lines of AInk (every one when AInk < 0), one path, one stroke -- in
+    the piece's own pen [R5-B] }
+  procedure StrokeLines(const ALines: TTySingleLineArray; const AStroke: TTyAxisStroke;
     AInk: Integer);
   var k, n: Integer;
   begin
-    if not (tpBorderColor in AStyle.Present) then Exit;
+    if not AStroke.Drawn then Exit;
     n := 0;
     APainter.BeginPath;
     for k := 0 to High(ALines) do
@@ -259,9 +255,10 @@ var
       APainter.LineTo(ALines[k].X2, ALines[k].Y2);
       Inc(n);
     end;
-    if n > 0 then APainter.StrokePath(AStyle.BorderColor, LineWidth(AStyle));
+    if n > 0 then TyStrokeAxisPath(APainter, AStroke);
   end;
 
+  { an arrow in the line's colour, the author's where written [R5-B] }
   procedure PaintArrow(const AArrow: TTyAxisArrow);
   var
     el: TTyChartElement;
@@ -286,18 +283,18 @@ var
       el.Style.HasFill := True;
       el.Style.FillColor := TTyChartColor(model.ResolveStyle(
         'TyAdvChartEmptyCircle', '', []).Background.Color);
-      el.Style.StrokeColor := TTyChartColor(lineS.BorderColor);
+      el.Style.StrokeColor := lineK.Colour;
       el.Style.StrokeWidthLogical := 2;
     end
     else if t = 'line' then
     begin
-      el.Style.StrokeColor := TTyChartColor(lineS.BorderColor);
+      el.Style.StrokeColor := lineK.Colour;
       el.Style.StrokeWidthLogical := 1;
     end
     else
     begin
       el.Style.HasFill := True;
-      el.Style.FillColor := TTyChartColor(lineS.BorderColor);
+      el.Style.FillColor := lineK.Colour;
     end;
     TyRenderElement(APainter, el);
   end;
@@ -336,6 +333,8 @@ begin
           Continue
         else
           areaColour := areaS.Background.Color;
+        { areaStyle.opacity [R5-B] }
+        areaColour := TyAxisAreaAlpha(areaColour, v.Furn.AreaOpacity);
         APainter.BeginPath;
         APainter.MoveTo(v.SplitAreas[q].X, v.SplitAreas[q].Y);
         APainter.LineTo(v.SplitAreas[q].X + v.SplitAreas[q].W, v.SplitAreas[q].Y);
@@ -345,25 +344,26 @@ begin
         APainter.ClosePath;
         APainter.FillPath(areaColour);
       end;
-      { the split lines in their colours }
-      if (tpBorderColor in splitS.Present) or (Length(v.Furn.SplitLineInks) > 0) then
+      { the split lines in their colours, in the split line's pen [R5-B] }
+      inkK := TyAxisSkinStroke(v.Furn.SplitPen, splitS, acButt);
+      if inkK.Drawn or ((Length(v.Furn.SplitLineInks) > 0) and (inkK.WidthLogical > 0)) then
         for q := 0 to Math.Max(0, High(v.Furn.SplitLineInks)) do
         begin
-          inkStyle := splitS;
           if Length(v.Furn.SplitLineInks) > 0 then
           begin
             if not v.Furn.SplitLineInks[q].Ok then Continue;
-            inkStyle.BorderColor := TTyColor(v.Furn.SplitLineInks[q].Colour);
-            Include(inkStyle.Present, tpBorderColor);
-            StrokeLines(v.SplitLines, inkStyle, q);
+            inkK.Colour := v.Furn.SplitLineInks[q].Colour;
+            inkK.Drawn := True;
+            StrokeLines(v.SplitLines, inkK, q);
           end
           else
-            StrokeLines(v.SplitLines, inkStyle, -1);
+            StrokeLines(v.SplitLines, inkK, -1);
         end;
       Continue;
     end;
     sp := v.Spec;
-    if v.HasLine and (tpBorderColor in lineS.Present)
+    lineK := TyAxisSkinStroke(v.Furn.LinePen, lineS, acRound);
+    if v.HasLine and (lineK.Drawn or (Length(sp.Arrows) > 0))
       and Finite(v.Line.X1, v.Line.Y1) and Finite(v.Line.X2, v.Line.Y2) then
     begin
       APainter.BeginPath;
@@ -383,12 +383,14 @@ begin
         APainter.MoveTo(v.Line.X1, v.Line.Y1);
         APainter.LineTo(v.Line.X2, v.Line.Y2);
       end;
-      APainter.StrokePath(lineS.BorderColor, LineWidth(lineS));
-      for q := 0 to High(sp.Arrows) do
-        if Finite(sp.Arrows[q].X, sp.Arrows[q].Y) then PaintArrow(sp.Arrows[q]);
+      TyStrokeAxisPath(APainter, lineK);
+      if not v.Furn.LinePen.ColourNone
+        and (v.Furn.LinePen.HasColour or (tpBorderColor in lineS.Present)) then
+        for q := 0 to High(sp.Arrows) do
+          if Finite(sp.Arrows[q].X, sp.Arrows[q].Y) then PaintArrow(sp.Arrows[q]);
     end;
-    StrokeLines(v.Ticks, tickS, -1);
-    StrokeLines(v.MinorTicks, minorTickS, -1);
+    StrokeLines(v.Ticks, TyAxisSkinStroke(v.Furn.TickPen, tickS, acButt), -1);
+    StrokeLines(v.MinorTicks, TyAxisSkinStroke(v.Furn.MinorTickPen, minorTickS, acButt), -1);
     AxisTextStyles(@sp, labelS, nameS);
     pl := sp.NamePlacement;
     if pl.Shown and (tpTextColor in nameS.Present) and Finite(pl.X, pl.Y) then
@@ -853,18 +855,12 @@ var
   i, k, ink: Integer;
   p: TTyPolar;
   model: TTyStyleModel;
-  lineS, tickS, splitS, areaS, minorTickS, minorSplitS, labelS, nameS,
-    inkStyle: TTyStyleSet;
+  lineS, tickS, splitS, areaS, minorTickS, minorSplitS, labelS, nameS: TTyStyleSet;
   areaColour: TTyColor;
   lblW, lblH: Integer;
   view: TTyChartView;
-
-  function LineWidth(const AStyle: TTyStyleSet): Double;
-  begin
-    if tpBorderWidth in AStyle.Present then Result := AStyle.BorderWidth
-    else Result := 1;
-    if Result < 0.05 then Result := 0.05;
-  end;
+  { the line's pen of the axis being drawn, for its arrows [R5-B] }
+  lineK: TTyAxisStroke;
 
   function AnchorAlign(AH2: TTyTextAnchorH): TAlignment;
   begin
@@ -920,12 +916,13 @@ var
     AH := Round(h);
   end;
 
-  { the lines of AInk (every one when AInk < 0), one path, one stroke }
-  procedure StrokeLines(const ALines: TTyPolarLineArray; const AStyle: TTyStyleSet;
+  { the lines of AInk (every one when AInk < 0), one path, one stroke -- in
+    the piece's own pen [R5-B] }
+  procedure StrokeLines(const ALines: TTyPolarLineArray; const AStroke: TTyAxisStroke;
     AInk: Integer);
   var q, n: Integer;
   begin
-    if not (tpBorderColor in AStyle.Present) then Exit;
+    if not AStroke.Drawn then Exit;
     n := 0;
     APainter.BeginPath;
     for q := 0 to High(ALines) do
@@ -936,7 +933,7 @@ var
       APainter.LineTo(ALines[q].X2, ALines[q].Y2);
       Inc(n);
     end;
-    if n > 0 then APainter.StrokePath(AStyle.BorderColor, LineWidth(AStyle));
+    if n > 0 then TyStrokeAxisPath(APainter, AStroke);
   end;
 
   { zrender's buildPath of a circle, an arc, a ring or a sector with no
@@ -1007,11 +1004,11 @@ var
     end;
   end;
 
-  procedure StrokeArcs(const AArcs: TTyPolarArcArray; const AStyle: TTyStyleSet;
+  procedure StrokeArcs(const AArcs: TTyPolarArcArray; const AStroke: TTyAxisStroke;
     AInk: Integer);
   var q, n: Integer;
   begin
-    if not (tpBorderColor in AStyle.Present) then Exit;
+    if not AStroke.Drawn then Exit;
     n := 0;
     APainter.BeginPath;
     for q := 0 to High(AArcs) do
@@ -1020,7 +1017,7 @@ var
       ArcPath(AArcs[q]);
       Inc(n);
     end;
-    if n > 0 then APainter.StrokePath(AStyle.BorderColor, LineWidth(AStyle));
+    if n > 0 then TyStrokeAxisPath(APainter, AStroke);
   end;
 
   { the split areas in their colours: the author's list, or the skin's
@@ -1041,6 +1038,8 @@ var
         Continue
       else
         areaColour := areaS.Background.Color;
+      { areaStyle.opacity [R5-B] }
+      areaColour := TyAxisAreaAlpha(areaColour, AView.Furn.AreaOpacity);
       APainter.BeginPath;
       ArcPath(AView.SplitAreas[q]);
       APainter.FillPath(areaColour);
@@ -1049,23 +1048,26 @@ var
 
   { the split lines (or circles) in their colours }
   procedure SplitLinesOf(const AView: TTyPolarAxisView; ACircles: Boolean);
-  var q: Integer;
+  var
+    q: Integer;
+    inkK: TTyAxisStroke;
   begin
-    if not ((tpBorderColor in splitS.Present)
-      or (Length(AView.Furn.SplitLineInks) > 0)) then Exit;
+    { in the split line's pen [R5-B] }
+    inkK := TyAxisSkinStroke(AView.Furn.SplitPen, splitS, acButt);
+    if not (inkK.Drawn or ((Length(AView.Furn.SplitLineInks) > 0)
+      and (inkK.WidthLogical > 0))) then Exit;
     for q := 0 to Math.Max(0, High(AView.Furn.SplitLineInks)) do
     begin
-      inkStyle := splitS;
       if Length(AView.Furn.SplitLineInks) > 0 then
       begin
         if not AView.Furn.SplitLineInks[q].Ok then Continue;
-        inkStyle.BorderColor := TTyColor(AView.Furn.SplitLineInks[q].Colour);
-        Include(inkStyle.Present, tpBorderColor);
-        if ACircles then StrokeArcs(AView.SplitCircles, inkStyle, q)
-        else StrokeLines(AView.SplitLines, inkStyle, q);
+        inkK.Colour := AView.Furn.SplitLineInks[q].Colour;
+        inkK.Drawn := True;
+        if ACircles then StrokeArcs(AView.SplitCircles, inkK, q)
+        else StrokeLines(AView.SplitLines, inkK, q);
       end
-      else if ACircles then StrokeArcs(AView.SplitCircles, inkStyle, -1)
-      else StrokeLines(AView.SplitLines, inkStyle, -1);
+      else if ACircles then StrokeArcs(AView.SplitCircles, inkK, -1)
+      else StrokeLines(AView.SplitLines, inkK, -1);
     end;
   end;
 
@@ -1093,18 +1095,18 @@ var
       el.Style.HasFill := True;
       el.Style.FillColor := TTyChartColor(model.ResolveStyle(
         'TyAdvChartEmptyCircle', '', []).Background.Color);
-      el.Style.StrokeColor := TTyChartColor(lineS.BorderColor);
+      el.Style.StrokeColor := lineK.Colour;
       el.Style.StrokeWidthLogical := 2;
     end
     else if t = 'line' then
     begin
-      el.Style.StrokeColor := TTyChartColor(lineS.BorderColor);
+      el.Style.StrokeColor := lineK.Colour;
       el.Style.StrokeWidthLogical := 1;
     end
     else
     begin
       el.Style.HasFill := True;
-      el.Style.FillColor := TTyChartColor(lineS.BorderColor);
+      el.Style.FillColor := lineK.Colour;
     end;
     TyRenderElement(APainter, el);
   end;
@@ -1116,16 +1118,21 @@ var
     pl: TTyAxisNamePlacement;
   begin
     sp := AView.Spec;
-    if AView.HasLine and (tpBorderColor in lineS.Present) then
+    { the radius axis is AxisBuilder's: its line has a round cap [R5-B] }
+    lineK := TyAxisSkinStroke(AView.Furn.LinePen, lineS, acRound);
+    if AView.HasLine and (lineK.Drawn or (Length(sp.Arrows) > 0)) then
     begin
       APainter.BeginPath;
       APainter.MoveTo(AView.Line.X1, AView.Line.Y1);
       APainter.LineTo(AView.Line.X2, AView.Line.Y2);
-      APainter.StrokePath(lineS.BorderColor, LineWidth(lineS));
-      for q := 0 to High(sp.Arrows) do PaintArrow(sp.Arrows[q]);
+      TyStrokeAxisPath(APainter, lineK);
+      if not AView.Furn.LinePen.ColourNone
+        and (AView.Furn.LinePen.HasColour or (tpBorderColor in lineS.Present)) then
+        for q := 0 to High(sp.Arrows) do PaintArrow(sp.Arrows[q]);
     end;
-    StrokeLines(AView.Ticks, tickS, -1);
-    StrokeLines(AView.MinorTicks, minorTickS, -1);
+    StrokeLines(AView.Ticks, TyAxisSkinStroke(AView.Furn.TickPen, tickS, acButt), -1);
+    StrokeLines(AView.MinorTicks, TyAxisSkinStroke(AView.Furn.MinorTickPen,
+      minorTickS, acButt), -1);
     AxisTextStyles(@sp, labelS, nameS);
     pl := sp.NamePlacement;
     if pl.Shown and (tpTextColor in nameS.Present) then
@@ -1185,14 +1192,16 @@ var
     sp: TTyAxisLayoutSpec;
   begin
     sp := AView.Spec;
-    if AView.HasLine and (tpBorderColor in lineS.Present) then
+    { the angle axis' own circle: getLineStyle with no round cap [R5-B] }
+    if AView.HasLine then
     begin
       APainter.BeginPath;
       ArcPath(AView.LineArc);
-      APainter.StrokePath(lineS.BorderColor, LineWidth(lineS));
+      TyStrokeAxisPath(APainter, TyAxisSkinStroke(AView.Furn.LinePen, lineS, acButt));
     end;
-    StrokeLines(AView.Ticks, tickS, -1);
-    StrokeLines(AView.MinorTicks, minorTickS, -1);
+    StrokeLines(AView.Ticks, TyAxisSkinStroke(AView.Furn.TickPen, tickS, acButt), -1);
+    StrokeLines(AView.MinorTicks, TyAxisSkinStroke(AView.Furn.MinorTickPen,
+      minorTickS, acButt), -1);
     AxisTextStyles(@sp, labelS, nameS);
     if not (tpTextColor in labelS.Present) then Exit;
     for q := 0 to High(AView.Labels) do
@@ -1238,7 +1247,8 @@ begin
         if ABelow then
         begin
           FillAreas(p.AngleView);
-          StrokeLines(p.AngleView.MinorSplitLines, minorSplitS, -1);
+          StrokeLines(p.AngleView.MinorSplitLines, TyAxisSkinStroke(
+            p.AngleView.Furn.MinorSplitPen, minorSplitS, acButt), -1);
           SplitLinesOf(p.AngleView, False);
         end
         else
@@ -1251,7 +1261,8 @@ begin
         if ABelow then
         begin
           FillAreas(p.RadiusView);
-          StrokeArcs(p.RadiusView.MinorSplitCircles, minorSplitS, -1);
+          StrokeArcs(p.RadiusView.MinorSplitCircles, TyAxisSkinStroke(
+            p.RadiusView.Furn.MinorSplitPen, minorSplitS, acButt), -1);
           SplitLinesOf(p.RadiusView, True);
         end
         else
@@ -1858,7 +1869,7 @@ var
   node: TJSONObject;
   d: TJSONData;
   sol: TTyLinesSolved;
-  stroke, c: TTyChartColor;
+  stroke, c, rowStroke: TTyChartColor;
   scale, lw, x, y, cw, ch, e0, e1, trail: Double;
   area: TTyXYWH;
   pol: TTyPolar;
@@ -1977,7 +1988,12 @@ begin
         TyLinesCurvenessOf(sol.Raws[k], node), @LinesProject);
     for k := 0 to n - 1 do
     begin
-      sol.Inks[k] := LinesInk(i, node, sol, k, stroke, scale, spec);
+      { [R5-B] the per-datum palette's colour where the row asked
+        (colorBy other than 'series'): the row's visual stroke }
+      rowStroke := stroke;
+      if (i <= High(FDatumAsked)) and (k <= High(FDatumAsked[i])) and FDatumAsked[i][k] then
+        rowStroke := TTyChartColor(PickColor(FDatumPicks[i][k]));
+      sol.Inks[k] := LinesInk(i, node, sol, k, rowStroke, scale, spec);
       FLinesSpecs[i][k] := spec;
     end;
     FLines[i] := sol;
@@ -2260,6 +2276,12 @@ begin
           d := LnNode(item, ['lineStyle', 'opacity']);
           if (d <> nil) and (d.JSONType = jtNumber) then row.Opacity := d.AsFloat;
         end;
+        { [R5-B] the per-datum palette (colorBy other than 'series'), asked
+          only by a row neither a visual channel nor its own lineStyle
+          coloured }
+        if (i <= High(FDatumAsked)) and (raw >= 0) and (raw <= High(FDatumAsked[i]))
+          and FDatumAsked[i][raw] then
+          c := TTyChartColor(PickColor(FDatumPicks[i][raw]));
         case row.Active of
           ppaActive: row.Opacity := opA;
           ppaInactive: row.Opacity := opI;
@@ -2295,13 +2317,8 @@ var
   lblW, lblH: Integer;
   sp: TTyAxisLayoutSpec;
   pl: TTyAxisNamePlacement;
-
-  function LineWidth(const AStyle: TTyStyleSet): Double;
-  begin
-    if tpBorderWidth in AStyle.Present then Result := AStyle.BorderWidth
-    else Result := 1;
-    if Result < 0.05 then Result := 0.05;
-  end;
+  { the author's pens over the skin [R5-B] }
+  lineK: TTyAxisStroke;
 
   function AnchorAlign(AH2: TTyTextAnchorH): TAlignment;
   begin
@@ -2363,10 +2380,10 @@ var
     Result := not (IsNan(A) or IsInfinite(A));
   end;
 
-  procedure StrokeLines(const ALines: TTyPolarLineArray; const AStyle: TTyStyleSet);
+  procedure StrokeLines(const ALines: TTyPolarLineArray; const AStroke: TTyAxisStroke);
   var k, n: Integer;
   begin
-    if not (tpBorderColor in AStyle.Present) then Exit;
+    if not AStroke.Drawn then Exit;
     n := 0;
     APainter.BeginPath;
     for k := 0 to High(ALines) do
@@ -2378,7 +2395,7 @@ var
       APainter.LineTo(ALines[k].X2, ALines[k].Y2);
       Inc(n);
     end;
-    if n > 0 then APainter.StrokePath(AStyle.BorderColor, LineWidth(AStyle));
+    if n > 0 then TyStrokeAxisPath(APainter, AStroke);
   end;
 
   procedure PaintArrow(const AArrow: TTyAxisArrow);
@@ -2405,18 +2422,18 @@ var
       el.Style.HasFill := True;
       el.Style.FillColor := TTyChartColor(model.ResolveStyle(
         'TyAdvChartEmptyCircle', '', []).Background.Color);
-      el.Style.StrokeColor := TTyChartColor(lineS.BorderColor);
+      el.Style.StrokeColor := lineK.Colour;
       el.Style.StrokeWidthLogical := 2;
     end
     else if t = 'line' then
     begin
-      el.Style.StrokeColor := TTyChartColor(lineS.BorderColor);
+      el.Style.StrokeColor := lineK.Colour;
       el.Style.StrokeWidthLogical := 1;
     end
     else
     begin
       el.Style.HasFill := True;
-      el.Style.FillColor := TTyChartColor(lineS.BorderColor);
+      el.Style.FillColor := lineK.Colour;
     end;
     TyRenderElement(APainter, el);
   end;
@@ -2439,16 +2456,21 @@ begin
       sp := par.Views[a].Spec;
       { a lone axis stands nowhere (its place is not a number) }
       if not (Fin(par.Layouts[a].PosX) and Fin(par.Layouts[a].PosY)) then Continue;
-      if par.Views[a].HasLine and (tpBorderColor in lineS.Present) then
+      lineK := TyAxisSkinStroke(par.Views[a].Furn.LinePen, lineS, acRound);
+      if par.Views[a].HasLine and (lineK.Drawn or (Length(sp.Arrows) > 0)) then
       begin
         APainter.BeginPath;
         APainter.MoveTo(par.Views[a].Line.X1, par.Views[a].Line.Y1);
         APainter.LineTo(par.Views[a].Line.X2, par.Views[a].Line.Y2);
-        APainter.StrokePath(lineS.BorderColor, LineWidth(lineS));
-        for q := 0 to High(sp.Arrows) do PaintArrow(sp.Arrows[q]);
+        TyStrokeAxisPath(APainter, lineK);
+        if not par.Views[a].Furn.LinePen.ColourNone
+          and (par.Views[a].Furn.LinePen.HasColour or (tpBorderColor in lineS.Present)) then
+          for q := 0 to High(sp.Arrows) do PaintArrow(sp.Arrows[q]);
       end;
-      StrokeLines(par.Views[a].Ticks, tickS);
-      StrokeLines(par.Views[a].MinorTicks, minorTickS);
+      StrokeLines(par.Views[a].Ticks, TyAxisSkinStroke(par.Views[a].Furn.TickPen,
+        tickS, acButt));
+      StrokeLines(par.Views[a].MinorTicks, TyAxisSkinStroke(
+        par.Views[a].Furn.MinorTickPen, minorTickS, acButt));
       AxisTextStyles(@sp, labelS, nameS);
       pl := sp.NamePlacement;
       if pl.Shown and (tpTextColor in nameS.Present) then
@@ -3386,6 +3408,26 @@ begin
   if (tpBorderColor in up.Present) and (up.BorderWidth > 0) then
     d.BorderWidthLogical := up.BorderWidth;
   Result := TyCandleSpecOf(FOption, ASlot, d);
+end;
+
+function TTyCustomAdvanceChart.CandleRowsOf(ASlot: Integer;
+  const ASeries: TTyCandleSpec): TTyCandleRowArray;
+var
+  items: TJSONArray;
+  k: Integer;
+  row: TTyCandleRow;
+begin
+  Result := nil;
+  items := RawItemArray(ASlot);
+  if items = nil then Exit;
+  for k := 0 to items.Count - 1 do
+  begin
+    if not (items.Items[k] is TJSONObject) then Continue;
+    row := TyCandleRowOf(ASeries, TJSONObject(items.Items[k]));
+    if not row.Present then Continue;
+    if Result = nil then SetLength(Result, items.Count);
+    Result[k] := row;
+  end;
 end;
 
 function TTyCustomAdvanceChart.PolarBarOf(ASeriesIndex: Integer): TTyPolarBarLayout;

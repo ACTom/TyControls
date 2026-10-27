@@ -144,10 +144,15 @@ const
   cTyThemePaletteLength = 9;
 
 type
+  TTyChartGradientArray = array of TTyChartGradient;
+
   TTyPalette = record
     { the theme's nine slots, in place of Colors }
     Theme: Boolean;
     Colors: TTyChartColorArray;
+    { [R5-B] an entry that is a GRADIENT, beside the solid in Colors it
+      degrades to (Kind cgkNone for a plain colour); nil when none is }
+    Grads: TTyChartGradientArray;
   end;
   TTyPaletteArray = array of TTyPalette;
 
@@ -167,6 +172,9 @@ type
     Kind: TTyPalettePickKind;
     Color: TTyChartColor;
     Slot: Integer;
+    { [R5-B] the author's entry as a gradient (Color its first stop):
+      upstream hands the object itself on as the fill }
+    Grad: TTyChartGradient;
   end;
 
   TTyPaletteMemo = record
@@ -283,6 +291,9 @@ type
       written (getLineStyle's / getItemStyle's lineDashOffset), px }
     DashOffsetHas: Boolean;
     DashOffset: Double;
+    { [R5-B] lineStyle.cap as written ('' when not): 'butt', 'round' or
+      'square' -- getLineStyle's lineCap }
+    Cap: string;
   end;
 
 { Read one style block. AKey is 'itemStyle', 'lineStyle' or 'areaStyle', and
@@ -291,6 +302,13 @@ type
     lineStyle  color width       type        opacity
     areaStyle  color opacity                          -- six keys, no stroke }
 function TyReadOptStyle(ANode: TJSONObject; const AKey: string): TTyOptStyle;
+
+{ [R5-B] A lineStyle's keys read off AObj ITSELF -- color, width, type,
+  dashOffset, opacity, cap -- which is what getLineStyle does on whatever
+  model it is called on: an axis' `axisTick` model is asked this way for
+  its OWN keys (`axisTick.color`, `axisTick.width`) when the minor ticks
+  fall back to it. }
+function TyReadOptLineStyleOf(AObj: TJSONObject): TTyOptStyle;
 
 { The dash a style block asked for, as LENGTHS -- which is what a renderer can
   use and what `todDashed` is not.
@@ -757,10 +775,12 @@ end;
 
 { One `color` value -- an array of strings, or a bare string, which upstream
   leaves as a string in the resolved option and normalises only at read time. }
-function ColorsFrom(AData: TJSONData; out AColors: TTyChartColorArray): Boolean;
+function ColorsFrom(AData: TJSONData; out AColors: TTyChartColorArray;
+  out AGrads: TTyChartGradientArray): Boolean;
 var i, n: Integer; c: TTyChartColor; g: TTyChartGradient;
 begin
   AColors := nil;
+  AGrads := nil;
   Result := False;
   if AData = nil then Exit;
   if AData.JSONType = jtString then
@@ -779,14 +799,15 @@ begin
   SetLength(AColors, TJSONArray(AData).Count);
   for i := 0 to TJSONArray(AData).Count - 1 do
   begin
-    { A PALETTE ENTRY MAY BE A GRADIENT. Only the solid it degrades to is
-      kept here -- a palette is asked for one colour at a time by a dozen
-      callers, and threading the whole object through all of them to serve a
-      case nobody writes would cost more than it is worth. An author who
-      wants a gradient on a series writes it on that series' itemStyle. }
+    { A PALETTE ENTRY MAY BE A GRADIENT: the solid it degrades to for every
+      caller that wants one colour, and the object itself beside it -- the
+      fill a series or a datum takes from the palette is the gradient
+      [R5-B: only the solid was kept] }
     if TyTryReadGradient(TJSONArray(AData).Items[i], g) then
     begin
       AColors[n] := TyGradientSolid(g);
+      if AGrads = nil then SetLength(AGrads, TJSONArray(AData).Count);
+      AGrads[n] := g;
       Inc(n);
       Continue;
     end;
@@ -798,13 +819,17 @@ begin
     end;
   end;
   SetLength(AColors, n);
+  if AGrads <> nil then SetLength(AGrads, n);
 end;
 
-function TyChartPaletteOf(AOption: TTyChartOption; ASeriesIndex: Integer;
-  out ADeclared: Boolean): TTyChartColorArray;
+{ the palette AOption writes at the series ASeriesIndex (-1 the root), with
+  its gradient entries [R5-B] }
+function PaletteOf(AOption: TTyChartOption; ASeriesIndex: Integer;
+  out ADeclared: Boolean; out AGrads: TTyChartGradientArray): TTyChartColorArray;
 var node: TJSONObject;
 begin
   Result := nil;
+  AGrads := nil;
   ADeclared := False;
   if AOption = nil then Exit;
   if ASeriesIndex >= 0 then
@@ -812,7 +837,14 @@ begin
   else
     node := ObjOf(AOption.Root);
   if node = nil then Exit;
-  if ColorsFrom(node.Find('color'), Result) then ADeclared := True;
+  if ColorsFrom(node.Find('color'), Result, AGrads) then ADeclared := True;
+end;
+
+function TyChartPaletteOf(AOption: TTyChartOption; ASeriesIndex: Integer;
+  out ADeclared: Boolean): TTyChartColorArray;
+var g: TTyChartGradientArray;
+begin
+  Result := PaletteOf(AOption, ASeriesIndex, ADeclared, g);
 end;
 
 function TyPaletteStart(const AColors: TTyChartColorArray): TTyPaletteCursor;
@@ -863,13 +895,14 @@ function TyThemePalette: TTyPalette;
 begin
   Result.Theme := True;
   Result.Colors := nil;
+  Result.Grads := nil;
 end;
 
 function TyChartRootPalette(AOption: TTyChartOption): TTyPalette;
 var declared: Boolean;
 begin
   Result.Theme := False;
-  Result.Colors := TyChartPaletteOf(AOption, -1, declared);
+  Result.Colors := PaletteOf(AOption, -1, declared, Result.Grads);
   if not declared then Result := TyThemePalette;
 end;
 
@@ -878,7 +911,7 @@ function TySeriesOwnPalette(AOption: TTyChartOption;
 var declared: Boolean;
 begin
   Result.Theme := False;
-  Result.Colors := TyChartPaletteOf(AOption, ASeriesIndex, declared);
+  Result.Colors := PaletteOf(AOption, ASeriesIndex, declared, Result.Grads);
 end;
 
 function TyChartPaletteLayersOf(AOption: TTyChartOption;
@@ -905,9 +938,13 @@ begin
   begin
     Result.Layers[i].Theme := False;
     if TJSONArray(d).Items[i].JSONType = jtArray then
-      ColorsFrom(TJSONArray(d).Items[i], Result.Layers[i].Colors)
+      ColorsFrom(TJSONArray(d).Items[i], Result.Layers[i].Colors,
+        Result.Layers[i].Grads)
     else
+    begin
       Result.Layers[i].Colors := nil;
+      Result.Layers[i].Grads := nil;
+    end;
   end;
 end;
 
@@ -963,6 +1000,8 @@ begin
     begin
       Result.Kind := ppkColor;
       Result.Color := pal.Colors[AScope.Idx];
+      { [R5-B] the entry's own gradient }
+      if AScope.Idx <= High(pal.Grads) then Result.Grad := pal.Grads[AScope.Idx];
     end;
   end;
   if AName <> '' then
@@ -1286,11 +1325,7 @@ begin
   if AKey = 'lineStyle' then
   begin
     { A line has a WIDTH, not a border width, and a `type`, not a borderType. }
-    Result.BorderWidthLogical := NumOr(sub, 'width');
-    Result.Dash := ReadDash(sub, 'type', Result.DashLogical);
-    Result.DashOffset := NumOr(sub, 'dashOffset');
-    Result.DashOffsetHas := not IsNan(Result.DashOffset);
-    if not Result.DashOffsetHas then Result.DashOffset := 0;
+    Result := TyReadOptLineStyleOf(sub);
     Exit;
   end;
   if AKey = 'areaStyle' then
@@ -1303,6 +1338,25 @@ begin
   Result.DashOffset := NumOr(sub, 'borderDashOffset');
   Result.DashOffsetHas := not IsNan(Result.DashOffset);
   if not Result.DashOffsetHas then Result.DashOffset := 0;
+end;
+
+function TyReadOptLineStyleOf(AObj: TJSONObject): TTyOptStyle;
+var d: TJSONData;
+begin
+  Result := Default(TTyOptStyle);
+  Result.BorderWidthLogical := NaN;
+  Result.Opacity := NaN;
+  Result.Dash := todNone;
+  if AObj = nil then Exit;
+  Result.Color := ReadOptColor(AObj, 'color');
+  Result.Opacity := NumOr(AObj, 'opacity');
+  Result.BorderWidthLogical := NumOr(AObj, 'width');
+  Result.Dash := ReadDash(AObj, 'type', Result.DashLogical);
+  Result.DashOffset := NumOr(AObj, 'dashOffset');
+  Result.DashOffsetHas := not IsNan(Result.DashOffset);
+  if not Result.DashOffsetHas then Result.DashOffset := 0;
+  d := AObj.Find('cap');
+  if (d <> nil) and (d.JSONType = jtString) then Result.Cap := d.AsString;
 end;
 
 function TyStyleAccessPath(const ASeriesType: string): string;

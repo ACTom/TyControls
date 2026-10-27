@@ -689,6 +689,11 @@ begin
   defs := TJSONObject(GetJSON('{"padding":[3,5,3,5],"borderWidth":1,"borderRadius":10}'));
   try
     Result.SelBlock := TyRtResolve([sel, defs], g, TyRtResolveOpt(False));
+    { THE HOVERED BUTTON: setLabelStyle's emphasis state is the whole of
+      emphasis.selectorLabel over the normal one -- its font, its box (the
+      background, the border, the padding, the radius) as well as its colour
+      [R5-B: the colour alone] }
+    Result.SelEmphBlock := TyRtResolve([em, sel, defs], g, TyRtResolveOpt(False));
   finally
     defs.Free;
   end;
@@ -697,11 +702,25 @@ begin
     Result.SelBlock.Style.HasBorderColor := True;
     Result.SelBlock.Style.BorderColor := TTyChartColor(st.BorderColor);
   end;
+  if not (Result.SelEmphBlock.Style.HasBorderColor
+    or Result.SelEmphBlock.Style.BorderColorInherit) then
+  begin
+    Result.SelEmphBlock.Style.HasBorderColor := True;
+    Result.SelEmphBlock.Style.BorderColor := Result.SelBlock.Style.BorderColor;
+  end;
   Result.SelBlock.Needed := True;
-  Result.SelEmphBlock := Result.SelBlock;
+  Result.SelEmphBlock.Needed := True;
   TyRtFinish(Result.SelBlock, fam, size, weight, g, True, ink);
+  { the hovered font: emphasis.selectorLabel's own keys over the normal's }
+  if em <> nil then
+  begin
+    d := em.Find('fontFamily');
+    if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '') then
+      fam := d.AsString;
+    size := TyOptFontSize(em.Find('fontSize'), size);
+    weight := TyFontWeightOf(em.Find('fontWeight'), weight);
+  end;
   TyRtFinish(Result.SelEmphBlock, fam, size, weight, g, True, inkH);
-  { emphasis.selectorLabel is only a colour: the state changes the fill }
   Result.SelEmphBlock.Style.HasFill := True;
   Result.SelEmphBlock.Style.FillNone := False;
   Result.SelEmphBlock.Style.Fill := inkH;

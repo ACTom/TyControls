@@ -80,6 +80,11 @@ type
       borderColorSaturation has no colour to work from }
     HasStroke: Boolean;
     Stroke: TTyChartColor;
+    { [R5-B] itemStyle.borderRadius along the chain (item, level, series),
+      `|| 0`: the r of both the background and the content rect, as written
+      (a number, or the list zrender's roundRect expands), in device px;
+      empty for none }
+    Radii: TTyDoubleArray;
     { nodes with no view children only; false draws nothing }
     HasFill: Boolean;
     Fill: TTyChartColor;
@@ -1396,6 +1401,24 @@ begin
   d := Own(it, 'borderColor');
   if (d <> nil) and (d.JSONType = jtString) then
     S.Nodes[ARow].HasStroke := TyTryParseChartColor(d.AsString, S.Nodes[ARow].Stroke);
+  { [R5-B] the corners: `itemStyle.get('borderRadius') || 0` on the node's
+    model (the item over its level over the series) }
+  S.Nodes[ARow].Radii := nil;
+  d := ChainFind(S, ARow, 'itemStyle', 'borderRadius');
+  if (d <> nil) and (d.JSONType = jtNumber) and (d.AsFloat <> 0) and not IsNan(d.AsFloat) then
+  begin
+    SetLength(S.Nodes[ARow].Radii, 1);
+    S.Nodes[ARow].Radii[0] := d.AsFloat * S.Scale;
+  end
+  else if (d is TJSONArray) and (TJSONArray(d).Count > 0) then
+  begin
+    SetLength(S.Nodes[ARow].Radii, TJSONArray(d).Count);
+    for k := 0 to TJSONArray(d).Count - 1 do
+      if TJSONArray(d).Items[k].JSONType = jtNumber then
+        S.Nodes[ARow].Radii[k] := TJSONArray(d).Items[k].AsFloat * S.Scale
+      else
+        S.Nodes[ARow].Radii[k] := 0;
+  end;
   if Length(S.Nodes[ARow].View) = 0 then
   begin
     S.Nodes[ARow].HasFill := CalcColour(vis, vc);
@@ -2445,6 +2468,13 @@ end;
 
 { ==================== the marks ==================== }
 
+{ a node's rect with its corners, a plain rect without [R5-B] }
+function TmRect(const ABounds: TTyRectF; const ARadii: TTyDoubleArray): TTyChartShape;
+begin
+  if Length(ARadii) = 0 then Result := TyShapeRect(ABounds)
+  else Result := TyShapeRoundRect(ABounds, ARadii);
+end;
+
 function TyBuildTreemapMarks(ASeriesIndex: Integer; const ASolved: TTyTreemapSolved;
   const AInk: TTyTreemapInk; AList: TTyPaintList): Integer;
 var
@@ -2469,8 +2499,9 @@ var
     if nd.Invisible and not nd.DrawInvisible then Exit;
     { the background, in the border colour }
     z2 := ADepth * 100 + 20;
-    el := TyChartElement(TyShapeRect(TyRectF(0 + nd.TX, 0 + nd.TY,
-      (0 + nd.W) + nd.TX, (0 + nd.H) + nd.TY)));
+    { [R5-B] with its corners }
+    el := TyChartElement(TmRect(TyRectF(0 + nd.TX, 0 + nd.TY,
+      (0 + nd.W) + nd.TX, (0 + nd.H) + nd.TY), nd.Radii));
     el.Style.HasFill := nd.HasStroke;
     el.Style.FillColor := nd.Stroke;
     el.Z := ASolved.Z;
@@ -2519,8 +2550,9 @@ var
       cw := JsMax(nd.W - 2 * bw, 0);
       ch := JsMax(nd.H - 2 * bw, 0);
       z2 := ADepth * 100 + 30;
-      el := TyChartElement(TyShapeRect(TyRectF(bw + nd.TX, bw + nd.TY,
-        (bw + cw) + nd.TX, (bw + ch) + nd.TY)));
+      { [R5-B] the same corners as the background's }
+      el := TyChartElement(TmRect(TyRectF(bw + nd.TX, bw + nd.TY,
+        (bw + cw) + nd.TX, (bw + ch) + nd.TY), nd.Radii));
       el.Style.HasFill := nd.HasFill;
       el.Style.FillColor := nd.Fill;
       if ARow <= High(AInk.NodeDecals) then el.Style.Decal := AInk.NodeDecals[ARow];
