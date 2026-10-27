@@ -688,8 +688,15 @@ function readClips(chart) {
 function readSt(chart) {
   return keyedTree(chart).filter(q => !q.el.isGroup && !/#label$/.test(q.key)).map(q => {
     const s = q.el.style;
-    return { key: q.key, states: (q.el.currentStates || []).slice(), fill: colourOf(s.fill), stroke: colourOf(s.stroke),
+    const r = { key: q.key, states: (q.el.currentStates || []).slice(), fill: colourOf(s.fill), stroke: colourOf(s.stroke),
       lineWidth: hexN(s.lineWidth), opacity: hex(opac(s)), z2: q.el.z2 };
+    // a rich text's runs as drawn: each tspan's fill (a token with its own
+    // fill keeps it through the states)
+    if (q.el.type === 'text' && s.rich) {
+      q.el.update();
+      r.runs = q.el.childrenRef().filter(c => c.type === 'tspan').map(c => ({ text: String(c.style.text), fill: colourOf(c.style.fill) }));
+    }
+    return r;
   });
 }
 
@@ -923,6 +930,12 @@ add('coords', 'polar-clip', "clip: true on a polar: createPolarClipPath's sector
     radiusAxis: [{ polarIndex: 0, type: 'value', min: 0, max: 10 }, { polarIndex: 1, type: 'value', min: 0, max: 10 }],
     series: [{ type: 'custom', coordinateSystem: 'polar', polarIndex: 0, clip: true, renderItem: '@polarBar', data: [[3, 0], [14, 1], [5, 2], [9, 3]] },
       { type: 'custom', coordinateSystem: 'polar', polarIndex: 1, clip: true, renderItem: '@polarBar', data: [[12, 0], [7, 1]] }] });
+// [spec 242] a centre and radii that are no whole px: toFixed(1) shows
+add('coords', 'polar-clip-frac', "clip: true on a polar whose centre and radii fall between px: the clip sector's centre and radii to one decimal",
+  { polar: [{ radius: [13.37, '41.73%'], center: ['31.37%', '47.91%'] }],
+    angleAxis: [{ type: 'category', data: ['a', 'b', 'c', 'd'], startAngle: 60 }],
+    radiusAxis: [{ type: 'value', min: 0, max: 10 }],
+    series: [{ type: 'custom', coordinateSystem: 'polar', clip: true, renderItem: '@polarBar', data: [[13, 0], [4, 1], [11, 2], [8, 3]] }] });
 // [spec 242]
 add('anim', 'during', "during on custom elements: getElementAnimationConfig binds it on the enter (the series' timing above 0) and on an update with the default transition ['x', 'y']; a circle's r and opacity follow its extra",
   { animation: true, xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },

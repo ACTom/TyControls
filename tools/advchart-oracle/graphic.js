@@ -897,6 +897,16 @@ add('event', 'drag', "dragging (zrender's Draggable): a turned, scaled rect with
     { down: 'GC' }, { move: [430, 330] }, { up: [430, 330] },
     { down: 'S' }, { move: [450, 100] }, { up: [450, 100] },
     { down: 'HC' }, { move: [90, 280] }, { up: [90, 280] }] });
+// [spec 242] the dragged element drawn over its target: findHover leaves the
+// dragged one out, so what lies under it hears dragenter / dragleave / drop
+add('event', 'drag-over', "a rect dragged over one drawn below it (findHover excludes the dragged element): the one below hears dragenter, dragleave, dragenter again and the drop",
+  { graphic: [
+    { type: 'rect', id: 'T', ondragenter: { $fn: 'log:Tenter' }, ondragleave: { $fn: 'log:Tleave' }, ondrop: { $fn: 'log:Tdrop' },
+      shape: { x: 200, y: 150, width: 120, height: 90 }, style: { fill: '#b6d634' } },
+    { type: 'rect', id: 'M', draggable: true, ondragstart: { $fn: 'log:Mstart' }, ondragend: { $fn: 'log:Mend' },
+      shape: { x: 40, y: 40, width: 60, height: 40 }, style: { fill: '#5070dd' } }] },
+  { steps: [
+    { down: 'M' }, { move: [250, 190] }, { move: [100, 190] }, { move: [260, 200] }, { up: [260, 200] }] });
 // [spec 242] Element.updateInnerText's layoutRect (the rect a position is
 // worked out against, the host's local space, through its transform unless
 // local) and autoOverflowArea (that rect, back through the label's own
@@ -939,6 +949,17 @@ add('text', 'text-area', "textConfig.layoutRect and autoOverflowArea: a long lab
     { type: 'rect', id: 'nr', shape: { x: 20, y: 320, width: 80, height: 40 }, style: { fill: '#785db0' },
       textContent: { style: { text: 'a layout rect of NaN', fontSize: 12, overflow: 'truncate' } },
       textConfig: { position: 'inside', layoutRect: { x: 30, y: 320 }, autoOverflowArea: true } }] });
+// [spec 242] a label whose own place lies off its host: the two intervals do
+// not meet, BoundingRect.intersect's clamp puts the area at the near end
+// with no size
+add('text', 'text-apart', "autoOverflowArea with the label placed off its host (its own x / y, no position): apart along x, apart along y, apart on both -- the area clamped to the host's near edge, nought wide or high",
+  { graphic: [
+    { type: 'rect', id: 'ax', shape: { x: 20, y: 20, width: 60, height: 30 }, style: { fill: '#5070dd' },
+      textContent: { x: 300, y: 30, style: { text: 'off to the right', fontSize: 12, backgroundColor: '#eee', padding: 2 } }, textConfig: { autoOverflowArea: true } },
+    { type: 'rect', id: 'ay', shape: { x: 20, y: 120, width: 60, height: 30 }, style: { fill: '#b6d634' },
+      textContent: { x: 30, y: 320, style: { text: 'far below', fontSize: 12, backgroundColor: '#eee' } }, textConfig: { autoOverflowArea: true } },
+    { type: 'rect', id: 'axl', shape: { x: 400, y: 120, width: 60, height: 30 }, style: { fill: '#ff994d' },
+      textContent: { x: 100, y: 130, style: { text: 'off to the left', fontSize: 12, align: 'right', backgroundColor: '#eee' } }, textConfig: { autoOverflowArea: true } }] });
 // [spec 242] `during`: getElementAnimationConfig binds the element's
 // userDuring (the last update's option) when the animation config's
 // duration is above 0; zrender calls it after the first animator's frame;
@@ -957,6 +978,14 @@ add('anim', 'during', "during: a rect whose width follows its entering x, a circ
       { id: 'd1', x: 50, transition: ['x'], during: { $fn: 'dur:grow2' } },
       { id: 'd2', extra: { p: 0.2 }, transition: 'extra' },
       { id: 'd4', $action: 'remove' }] } }] });
+// [spec 242] duringCall releases a scope once the element holds another
+// during: the enter still running after the merge calls nobody
+add('anim', 'during-swap', "during swapped while the enter runs: 400 ms into a rect's enter a merge gives it another during (no transition of its own) and another rect none -- the enter's frames call neither the old during nor the new",
+  { animation: true, graphic: [
+    { type: 'rect', id: 's1', x: 200, y: 20, enterFrom: { x: 0 }, during: { $fn: 'dur:grow' }, shape: { width: 40, height: 30 }, style: { fill: '#5070dd' } },
+    { type: 'rect', id: 's2', x: 200, y: 120, enterFrom: { x: 0 }, during: { $fn: 'dur:grow' }, shape: { width: 40, height: 30 }, style: { fill: '#b6d634' } }] },
+  { W: 400, H: 300, samples: [0, 100, 200, 400], steps: [
+    { merge: { graphic: [{ id: 's1', during: { $fn: 'dur:grow2' } }, { id: 's2', style: { fill: '#ff994d' } }] } }] });
 // [spec 242] clipPath: setClipPath on the element, its transform under the
 // element's; a group's cuts its children and their labels; isHover asks each
 // clip's contain; a merge with the same type updates it, another type makes

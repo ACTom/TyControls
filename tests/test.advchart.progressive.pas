@@ -868,6 +868,19 @@ begin
   s := Spec('heatmap', '{"progressiveThreshold": "x"}');
   AssertFalse('a threshold that is no number never passes', TyProgRenderOn(s, 'heatmap', 99999));
   AssertFalse('a line view is not incremental', TyProgRenderOn(Spec('line', '{"progressive": 5, "progressiveThreshold": 1}'), 'line', 10));
+  { [spec 242] LinesSeriesModel.getProgressive / getProgressiveThreshold:
+    large 1e4 / 2e4, else get() -- the root's 400 / 3000 }
+  s := Spec('lines', '{}');
+  AssertEquals('lines 400', 400, s.Step);
+  AssertEquals('lines 3000', 3000, Trunc(s.Threshold));
+  s := Spec('lines', '{"large": true}');
+  AssertEquals('large lines 1e4', 10000, s.Step);
+  AssertEquals('large lines 2e4', 20000, Trunc(s.Threshold));
+  AssertFalse('19999 large lines at once', TyProgRenderOn(s, 'lines', 19999));
+  AssertTrue('20000 large lines in chunks', TyProgRenderOn(s, 'lines', 20000));
+  s := Spec('custom', '{}');
+  AssertEquals('custom 400', 400, s.Step);
+  AssertTrue('a custom view is incremental', TyProgRenderOn(s, 'custom', 3000));
 end;
 
 procedure TAdvChartProgressiveTest.TestAppendDataRefusesWhatUpstreamCannotTake;

@@ -234,6 +234,19 @@ const curatedSpec = [
   ['^1e\\+21$', ['1e+21']],
   ['undefined', ['undefined']],
   ['\\u2028', ['\u2028']],
+  // a lookahead is atomic: the first way its body matches is the one kept,
+  // so a lazy and a greedy quantifier in it leave different captures
+  ['^(?=(a+?))\\1b', ['aab', 'ab', 'b']],
+  ['^(?=(a+))\\1b', ['aab', 'ab']],
+  ['^(?=(a{1,3}?))\\1b', ['aab', 'aaab']],
+  ['^(?=(a*?))\\1b', ['b', 'ab']],
+  ['^(?=(a??))\\1b', ['ab', 'b']],
+  // RepeatMatcher resets the atom's captures each go: in a lookbehind the
+  // group's end is saved first and a back reference inside the group reads
+  // the start the reset left undefined
+  ['(?<=(?:(a\\1)c){2})b', ['acacb', 'acaacb', 'aacacb', 'acacacb']],
+  ['(?<=(?:c(a\\1)){2})b', ['cacab', 'caacab', 'cacaab']],
+  ['^(?:(a)|b(?=\\1))+$', ['abab', 'ab', 'ba']],
 ];
 
 // seeded generator (xorshift32, the port's own seed)

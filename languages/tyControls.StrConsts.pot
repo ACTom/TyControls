@@ -1268,10 +1268,12 @@ msgid "a filter condition is not an object"
 msgstr ""
 
 #: tycontrols.strconsts.rstydscondreg
+#, object-pascal-format
 msgid "\"reg\" is not a regular expression: %s"
 msgstr ""
 
 #: tycontrols.strconsts.rstydscondregslow
+#, object-pascal-format
 msgid "the regular expression in \"reg\" runs too long: %s"
 msgstr ""
 

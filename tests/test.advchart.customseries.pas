@@ -1745,9 +1745,10 @@ end;
 procedure TCuOracleBase.CheckTextInk(const AKey: string; const AEl: TTyChartElement;
   AWant: TJSONObject);
 var
-  i: Integer;
+  i, k: Integer;
   p: TTyRtPiece;
   found: Boolean;
+  runs: TJSONArray;
 begin
   found := False;
   for i := 0 to High(AEl.Caption.RtPieces) do
@@ -1766,6 +1767,27 @@ begin
   SameRgba(AKey + ' stroke', p.HasStroke and not p.DefaultStroke, p.Stroke, AWant.Find('stroke'));
   if not IsNull(AWant.Find('stroke')) then
     Same(AKey + ' lineWidth', p.LineWidth, AWant.Find('lineWidth'));
+  { [spec 242] a rich text's runs as drawn, in order: each one's fill (a
+    token's own fill kept through the state) }
+  if AWant.Find('runs') is TJSONArray then
+  begin
+    runs := AWant.Arrays['runs'];
+    k := 0;
+    for i := 0 to High(AEl.Caption.RtPieces) do
+    begin
+      p := AEl.Caption.RtPieces[i];
+      if (p.Kind <> rpkText) or (p.Text = '') then Continue;
+      if k >= runs.Count then
+      begin
+        Bad(AKey + ': more runs than upstream''s');
+        Break;
+      end;
+      SameStr(Format('%s run %d text', [AKey, k]), p.Text, runs.Objects[k].Strings['text']);
+      SameRgba(Format('%s run %d fill', [AKey, k]), p.HasFill, p.Fill, runs.Objects[k].Find('fill'));
+      Inc(k);
+    end;
+    if k < runs.Count then Bad(Format('%s: %d runs, upstream %d', [AKey, k, runs.Count]));
+  end;
 end;
 
 procedure TCuOracleBase.CheckSt(AWant: TJSONArray);

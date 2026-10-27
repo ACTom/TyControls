@@ -117,6 +117,7 @@ type
     procedure TestTheHookIsTheOnlyWayToAPoint;
     procedure TestTheLinesArePainted;
     procedure TestAnUpdateKeepsTheEffectRunning;
+    procedure TestALabelOffsetIsInCssPx;
   end;
 
 implementation
@@ -1805,6 +1806,48 @@ end;
 { EffectLine.updateData: the same period, loop and round trip keep the clip
   running through an update, on the new path; a new period starts it over
   from where __t was (delay -period * __t) }
+{ [spec 242] a label's offset is CSS px: on a 192 PPI screen it moves the
+  label twice the device px it does at 96 }
+procedure TAdvChartLinesTest.TestALabelOffsetIsInCssPx;
+var
+  d: array[0..1] of TTyPointF;
+  p, k, r, idx: Integer;
+  at: array[0..1] of TTyPointF;
+  el: TTyChartElement;
+  opt: string;
+begin
+  opt := cBase + '"series":[{"type":"lines","coordinateSystem":"cartesian2d",'
+    + '"label":{"show":true,"position":"middle"},"data":['
+    + '{"coords":[[10,50],[80,50]],"value":1},'
+    + '{"coords":[[10,50],[80,50]],"value":2,"label":{"offset":[10,-8]}}]}]}';
+  Show(opt, camOff);
+  for p := 0 to 1 do
+  begin
+    { laid out afresh at this PPI }
+    FChart.SetOption(opt, True);
+    FBmp.Fill(BGRA(255, 255, 255, 255));
+    FChart.Render(FBmp.Canvas, Rect(0, 0, 600, 400), 96 * (p + 1));
+    for r := 0 to 1 do
+    begin
+      idx := -1;
+      for k := 0 to FChart.List.Count - 1 do
+      begin
+        el := FChart.List.Element(k);
+        if (el.Datum.SeriesIndex = 0) and (el.Datum.DataIndex = r)
+          and (el.Caption.FontSizeLogical > 0) then idx := k;
+      end;
+      AssertTrue(Format('a label for row %d at %d PPI', [r, 96 * (p + 1)]), idx >= 0);
+      el := FChart.List.Element(idx);
+      at[r] := TyPointF(el.Caption.X, el.Caption.Y);
+    end;
+    d[p] := TyPointF(at[1].X - at[0].X, at[1].Y - at[0].Y);
+  end;
+  AssertEquals('96 PPI: x by 10', 10, d[0].X, 1e-9);
+  AssertEquals('96 PPI: y by -8', -8, d[0].Y, 1e-9);
+  AssertEquals('192 PPI: x by 20 device px', 20, d[1].X, 1e-9);
+  AssertEquals('192 PPI: y by -16 device px', -16, d[1].Y, 1e-9);
+end;
+
 procedure TAdvChartLinesTest.TestAnUpdateKeepsTheEffectRunning;
 var
   p, q: TTyChartAnimProxy;

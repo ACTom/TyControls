@@ -24572,6 +24572,933 @@
    "fails": []
   },
   {
+   "id": "polar-clip-frac",
+   "group": "coords",
+   "note": "clip: true on a polar whose centre and radii fall between px: the clip sector's centre and radii to one decimal",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666",
+     "#73c0de"
+    ],
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 40
+    },
+    "polar": [
+     {
+      "radius": [
+       13.37,
+       "41.73%"
+      ],
+      "center": [
+       "31.37%",
+       "47.91%"
+      ]
+     }
+    ],
+    "angleAxis": [
+     {
+      "type": "category",
+      "data": [
+       "a",
+       "b",
+       "c",
+       "d"
+      ],
+      "startAngle": 60
+     }
+    ],
+    "radiusAxis": [
+     {
+      "type": "value",
+      "min": 0,
+      "max": 10
+     }
+    ],
+    "series": [
+     {
+      "type": "custom",
+      "coordinateSystem": "polar",
+      "clip": true,
+      "renderItem": "@polarBar",
+      "data": [
+       [
+        13,
+        0
+       ],
+       [
+        4,
+        1
+       ],
+       [
+        11,
+        2
+       ],
+       [
+        8,
+        3
+       ]
+      ]
+     }
+    ]
+   },
+   "steps": [],
+   "states": [
+    {
+     "calls": [
+      {
+       "s": 0,
+       "name": "polarBar",
+       "params": {
+        "dataIndex": 0,
+        "dataIndexInside": 0,
+        "dataInsideLength": 4,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": {
+         "type": "polar",
+         "cx": "4067870a3d70a3d8",
+         "cy": "4067f47ae147ae14",
+         "r": "4054dd70a3d70a3d",
+         "r0": "402abd70a3d70a3d"
+        },
+        "encode": {
+         "radius": [
+          0
+         ],
+         "angle": [
+          1
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "402a000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "0000000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "402a000000000000",
+           "0000000000000000"
+          ]
+         ],
+         "ret": [
+          "40721258d9834d64",
+          "40649318c6b2d70e",
+          "405a1f2b020c49ba",
+          "3fd0c152382d7365"
+         ]
+        },
+        {
+         "fn": "size",
+         "args": [
+          [
+           "4000000000000000",
+           "3ff0000000000000"
+          ],
+          [
+           "402a000000000000",
+           "0000000000000000"
+          ]
+         ],
+         "ret": [
+          "402c09374bc6a7e8",
+          "3ff921fb54442d18"
+         ]
+        },
+        {
+         "fn": "barLayout",
+         "args": [
+          {
+           "count": "3ff0000000000000"
+          }
+         ],
+         "ret": null
+        },
+        {
+         "fn": "visual",
+         "args": [
+          "color"
+         ],
+         "ret": "#5470c6"
+        }
+       ],
+       "ret": {
+        "type": "sector",
+        "shape": {
+         "cx": "4067870a3d70a3d8",
+         "cy": "4067f47ae147ae14",
+         "r0": "402abd70a3d70a3d",
+         "r": "405a1f2b020c49ba",
+         "startAngle": "bff0c152382d7365",
+         "endAngle": "3fe0c152382d7366"
+        },
+        "style": {
+         "fill": "#5470c6",
+         "stroke": "#fff"
+        },
+        "info": {
+         "band": "402c09374bc6a7e8",
+         "none": true
+        }
+       }
+      },
+      {
+       "s": 0,
+       "name": "polarBar",
+       "params": {
+        "dataIndex": 1,
+        "dataIndexInside": 1,
+        "dataInsideLength": 4,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": {
+         "type": "polar",
+         "cx": "4067870a3d70a3d8",
+         "cy": "4067f47ae147ae14",
+         "r": "4054dd70a3d70a3d",
+         "r0": "402abd70a3d70a3d"
+        },
+        "encode": {
+         "radius": [
+          0
+         ],
+         "angle": [
+          1
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "4010000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "3ff0000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "4010000000000000",
+           "3ff0000000000000"
+          ]
+         ],
+         "ret": [
+          "4068ddf9214a210f",
+          "406cf452f12aeb8f",
+          "4044b3f7ced91687",
+          "bff4f1a6c638d03f"
+         ]
+        },
+        {
+         "fn": "size",
+         "args": [
+          [
+           "4000000000000000",
+           "3ff0000000000000"
+          ],
+          [
+           "4010000000000000",
+           "3ff0000000000000"
+          ]
+         ],
+         "ret": [
+          "402c09374bc6a7ec",
+          "3ff921fb54442d18"
+         ]
+        },
+        {
+         "fn": "barLayout",
+         "args": [
+          {
+           "count": "3ff0000000000000"
+          }
+         ],
+         "ret": null
+        },
+        {
+         "fn": "visual",
+         "args": [
+          "color"
+         ],
+         "ret": "#5470c6"
+        }
+       ],
+       "ret": {
+        "type": "sector",
+        "shape": {
+         "cx": "4067870a3d70a3d8",
+         "cy": "4067f47ae147ae14",
+         "r0": "402abd70a3d70a3d",
+         "r": "4044b3f7ced91687",
+         "startAngle": "3fe0c152382d7366",
+         "endAngle": "4000c152382d7366"
+        },
+        "style": {
+         "fill": "#5470c6",
+         "stroke": "#fff"
+        },
+        "info": {
+         "band": "402c09374bc6a7ec",
+         "none": true
+        }
+       }
+      },
+      {
+       "s": 0,
+       "name": "polarBar",
+       "params": {
+        "dataIndex": 2,
+        "dataIndexInside": 2,
+        "dataInsideLength": 4,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": {
+         "type": "polar",
+         "cx": "4067870a3d70a3d8",
+         "cy": "4067f47ae147ae14",
+         "r": "4054dd70a3d70a3d",
+         "r0": "402abd70a3d70a3d"
+        },
+        "encode": {
+         "radius": [
+          0
+         ],
+         "angle": [
+          1
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "4026000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "4000000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "4026000000000000",
+           "4000000000000000"
+          ]
+         ],
+         "ret": [
+          "4059355aa0768fca",
+          "406ae1c36179ff5e",
+          "40569e04189374bc",
+          "c00709d10d3e7eab"
+         ]
+        },
+        {
+         "fn": "size",
+         "args": [
+          [
+           "4000000000000000",
+           "3ff0000000000000"
+          ],
+          [
+           "4026000000000000",
+           "4000000000000000"
+          ]
+         ],
+         "ret": [
+          "402c09374bc6a7f0",
+          "3ff921fb54442d18"
+         ]
+        },
+        {
+         "fn": "barLayout",
+         "args": [
+          {
+           "count": "3ff0000000000000"
+          }
+         ],
+         "ret": null
+        },
+        {
+         "fn": "visual",
+         "args": [
+          "color"
+         ],
+         "ret": "#5470c6"
+        }
+       ],
+       "ret": {
+        "type": "sector",
+        "shape": {
+         "cx": "4067870a3d70a3d8",
+         "cy": "4067f47ae147ae14",
+         "r0": "402abd70a3d70a3d",
+         "r": "40569e04189374bc",
+         "startAngle": "4000c152382d7365",
+         "endAngle": "400d524fe24f89f1"
+        },
+        "style": {
+         "fill": "#5470c6",
+         "stroke": "#fff"
+        },
+        "info": {
+         "band": "402c09374bc6a7f0",
+         "none": true
+        }
+       }
+      },
+      {
+       "s": 0,
+       "name": "polarBar",
+       "params": {
+        "dataIndex": 3,
+        "dataIndexInside": 3,
+        "dataInsideLength": 4,
+        "actionType": null,
+        "seriesId": "~series~0~0",
+        "seriesName": "series~0",
+        "seriesIndex": 0,
+        "coordSys": {
+         "type": "polar",
+         "cx": "4067870a3d70a3d8",
+         "cy": "4067f47ae147ae14",
+         "r": "4054dd70a3d70a3d",
+         "r0": "402abd70a3d70a3d"
+        },
+        "encode": {
+         "radius": [
+          0
+         ],
+         "angle": [
+          1
+         ]
+        },
+        "itemPayload": {},
+        "context": {}
+       },
+       "api": [
+        {
+         "fn": "value",
+         "args": [
+          "0000000000000000"
+         ],
+         "ret": "4020000000000000"
+        },
+        {
+         "fn": "value",
+         "args": [
+          "3ff0000000000000"
+         ],
+         "ret": "4008000000000000"
+        },
+        {
+         "fn": "coord",
+         "args": [
+          [
+           "4020000000000000",
+           "4008000000000000"
+          ]
+         ],
+         "ret": [
+          "406547e824d21b29",
+          "405f241b8146753b",
+          "40515c49ba5e353f",
+          "c011cd675bb04a9c"
+         ]
+        },
+        {
+         "fn": "size",
+         "args": [
+          [
+           "4000000000000000",
+           "3ff0000000000000"
+          ],
+          [
+           "4020000000000000",
+           "4008000000000000"
+          ]
+         ],
+         "ret": [
+          "402c09374bc6a7f4",
+          "3ff921fb54442d18"
+         ]
+        },
+        {
+         "fn": "barLayout",
+         "args": [
+          {
+           "count": "3ff0000000000000"
+          }
+         ],
+         "ret": null
+        },
+        {
+         "fn": "visual",
+         "args": [
+          "color"
+         ],
+         "ret": "#5470c6"
+        }
+       ],
+       "ret": {
+        "type": "sector",
+        "shape": {
+         "cx": "4067870a3d70a3d8",
+         "cy": "4067f47ae147ae14",
+         "r0": "402abd70a3d70a3d",
+         "r": "40515c49ba5e353f",
+         "startAngle": "400d524fe24f89f2",
+         "endAngle": "4014f1a6c638d03f"
+        },
+        "style": {
+         "fill": "#5470c6",
+         "stroke": "#fff"
+        },
+        "info": {
+         "band": "402c09374bc6a7f4",
+         "none": true
+        }
+       }
+      }
+     ],
+     "throws": null,
+     "els": [
+      {
+       "key": "s0:0",
+       "type": "sector",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": null,
+       "shape": {
+        "cx": "4067870a3d70a3d8",
+        "cy": "4067f47ae147ae14",
+        "r0": "402abd70a3d70a3d",
+        "r": "405a1f2b020c49ba",
+        "startAngle": "bff0c152382d7365",
+        "endAngle": "3fe0c152382d7366",
+        "clockwise": true,
+        "cornerRadius": "0000000000000000"
+       },
+       "path": [
+        "3ff0000000000000",
+        "406e0ed4fdf3b647",
+        "405949b3dfbb5427",
+        "4014000000000000",
+        "4067870a3d70a3d8",
+        "4067f47ae147ae14",
+        "405a1f2b020c49ba",
+        "405a1f2b020c49ba",
+        "4014f1a6c6ecb87b",
+        "3ff921fb54442d18",
+        "0000000000000000",
+        "3ff0000000000000",
+        "4000000000000000",
+        "4068f98f706502f8",
+        "4068ca6666666666",
+        "4014000000000000",
+        "4067870a3d70a3d8",
+        "4067f47ae147ae14",
+        "402abd70a3d70a3d",
+        "402abd70a3d70a3d",
+        "3fe0c1523dccb547",
+        "bff921fb54442d18",
+        "0000000000000000",
+        "0000000000000000",
+        "4018000000000000"
+       ],
+       "style": {
+        "fill": "#5470c6",
+        "stroke": "#fff",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 0
+       },
+       "info": "{\"band\":14.017999999999986,\"none\":true}"
+      },
+      {
+       "key": "s0:1",
+       "type": "sector",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": null,
+       "shape": {
+        "cx": "4067870a3d70a3d8",
+        "cy": "4067f47ae147ae14",
+        "r0": "402abd70a3d70a3d",
+        "r": "4044b3f7ced91687",
+        "startAngle": "3fe0c152382d7366",
+        "endAngle": "4000c152382d7366",
+        "clockwise": true,
+        "cornerRadius": "0000000000000000"
+       },
+       "path": [
+        "3ff0000000000000",
+        "406c0284488935b3",
+        "406a8af9db22d0e5",
+        "4014000000000000",
+        "4067870a3d70a3d8",
+        "4067f47ae147ae14",
+        "4044b3f7ced91687",
+        "4044b3f7ced91687",
+        "3fe0c1523dccb547",
+        "3ff921fb54442d18",
+        "0000000000000000",
+        "3ff0000000000000",
+        "4000000000000000",
+        "4066b11eb851eb86",
+        "40696700143c0d34",
+        "4014000000000000",
+        "4067870a3d70a3d8",
+        "4067f47ae147ae14",
+        "402abd70a3d70a3d",
+        "402abd70a3d70a3d",
+        "4000c152399543de",
+        "bff921fb54442d19",
+        "0000000000000000",
+        "0000000000000000",
+        "4018000000000000"
+       ],
+       "style": {
+        "fill": "#5470c6",
+        "stroke": "#fff",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 1
+       },
+       "info": "{\"band\":14.017999999999994,\"none\":true}"
+      },
+      {
+       "key": "s0:2",
+       "type": "sector",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": null,
+       "shape": {
+        "cx": "4067870a3d70a3d8",
+        "cy": "4067f47ae147ae14",
+        "r0": "402abd70a3d70a3d",
+        "r": "40569e04189374bc",
+        "startAngle": "4000c152382d7365",
+        "endAngle": "400d524fe24f89f1",
+        "clockwise": true,
+        "cornerRadius": "0000000000000000"
+       },
+       "path": [
+        "3ff0000000000000",
+        "4061df89374bc6aa",
+        "4070dfd0b34fcc5c",
+        "4014000000000000",
+        "4067870a3d70a3d8",
+        "4067f47ae147ae14",
+        "40569e04189374bc",
+        "40569e04189374bc",
+        "4000c152399543de",
+        "3ff921fb54442d18",
+        "0000000000000000",
+        "3ff0000000000000",
+        "4000000000000000",
+        "406614850a7c44b8",
+        "40671e8f5c28f5c2",
+        "4014000000000000",
+        "4067870a3d70a3d8",
+        "4067f47ae147ae14",
+        "402abd70a3d70a3d",
+        "402abd70a3d70a3d",
+        "400d524fe3b75a69",
+        "bff921fb54442d18",
+        "0000000000000000",
+        "0000000000000000",
+        "4018000000000000"
+       ],
+       "style": {
+        "fill": "#5470c6",
+        "stroke": "#fff",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 2
+       },
+       "info": "{\"band\":14.018,\"none\":true}"
+      },
+      {
+       "key": "s0:3",
+       "type": "sector",
+       "name": null,
+       "ignore": false,
+       "invisible": false,
+       "silent": false,
+       "z": "4000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000"
+       },
+       "transform": null,
+       "shape": {
+        "cx": "4067870a3d70a3d8",
+        "cy": "4067f47ae147ae14",
+        "r0": "402abd70a3d70a3d",
+        "r": "40515c49ba5e353f",
+        "startAngle": "400d524fe24f89f2",
+        "endAngle": "4014f1a6c638d03f",
+        "clockwise": true,
+        "cornerRadius": "0000000000000000"
+       },
+       "path": [
+        "3ff0000000000000",
+        "4060029b5a33df42",
+        "40639d6872b020c4",
+        "4014000000000000",
+        "4067870a3d70a3d8",
+        "4067f47ae147ae14",
+        "40515c49ba5e353f",
+        "40515c49ba5e353f",
+        "400d524fe3b75a69",
+        "3ff921fb54442d16",
+        "0000000000000000",
+        "3ff0000000000000",
+        "4000000000000000",
+        "40685cf5c28f5c2a",
+        "406681f5ae534ef4",
+        "4014000000000000",
+        "4067870a3d70a3d8",
+        "4067f47ae147ae14",
+        "402abd70a3d70a3d",
+        "402abd70a3d70a3d",
+        "4014f1a6c6ecb87b",
+        "bff921fb54442d18",
+        "0000000000000000",
+        "0000000000000000",
+        "4018000000000000"
+       ],
+       "style": {
+        "fill": "#5470c6",
+        "stroke": "#fff",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "ec": {
+        "seriesIndex": 0,
+        "dataIndex": 3
+       },
+       "info": "{\"band\":14.018000000000008,\"none\":true}"
+      }
+     ],
+     "order": [
+      "s0:0",
+      "s0:1",
+      "s0:2",
+      "s0:3"
+     ],
+     "clips": [
+      {
+       "s": 0,
+       "rect": null,
+       "sector": [
+        "4067866666666666",
+        "4067f33333333333",
+        "402acccccccccccd",
+        "4054e00000000000",
+        "bff0c152382d7365",
+        "4014f1a6c638d03f",
+        true
+       ]
+      }
+     ],
+     "st": [
+      {
+       "key": "s0:0",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": [
+        255,
+        255,
+        255,
+        1
+       ],
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s0:1",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": [
+        255,
+        255,
+        255,
+        1
+       ],
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s0:2",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": [
+        255,
+        255,
+        255,
+        1
+       ],
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      },
+      {
+       "key": "s0:3",
+       "states": [],
+       "fill": [
+        84,
+        112,
+        198,
+        1
+       ],
+       "stroke": [
+        255,
+        255,
+        255,
+        1
+       ],
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "z2": 0
+      }
+     ],
+     "legend": null
+    }
+   ],
+   "fails": []
+  },
+  {
    "id": "during",
    "group": "anim",
    "note": "during on custom elements: getElementAnimationConfig binds it on the enter (the series' timing above 0) and on an update with the default transition ['x', 'y']; a circle's r and opacity follow its extra",
@@ -28825,7 +29752,27 @@
        "stroke": null,
        "lineWidth": null,
        "opacity": "3ff0000000000000",
-       "z2": 0
+       "z2": 0,
+       "runs": [
+        {
+         "text": "rich",
+         "fill": [
+          0,
+          0,
+          255,
+          1
+         ]
+        },
+        {
+         "text": " plain",
+         "fill": [
+          51,
+          51,
+          51,
+          1
+         ]
+        }
+       ]
       },
       {
        "key": "s0:0/2",
@@ -28871,7 +29818,27 @@
        "stroke": null,
        "lineWidth": null,
        "opacity": "3ff0000000000000",
-       "z2": 0
+       "z2": 0,
+       "runs": [
+        {
+         "text": "rich",
+         "fill": [
+          0,
+          0,
+          255,
+          1
+         ]
+        },
+        {
+         "text": " plain",
+         "fill": [
+          51,
+          51,
+          51,
+          1
+         ]
+        }
+       ]
       },
       {
        "key": "s0:1/2",
@@ -28933,7 +29900,27 @@
        ],
        "lineWidth": "3ff0000000000000",
        "opacity": "3ff0000000000000",
-       "z2": 1
+       "z2": 1,
+       "runs": [
+        {
+         "text": "rich",
+         "fill": [
+          0,
+          0,
+          255,
+          1
+         ]
+        },
+        {
+         "text": " plain",
+         "fill": [
+          255,
+          0,
+          0,
+          1
+         ]
+        }
+       ]
       },
       {
        "key": "s0:0/2",
@@ -28987,7 +29974,27 @@
        "stroke": null,
        "lineWidth": null,
        "opacity": "3fe0000000000000",
-       "z2": 0
+       "z2": 0,
+       "runs": [
+        {
+         "text": "rich",
+         "fill": [
+          0,
+          0,
+          255,
+          1
+         ]
+        },
+        {
+         "text": " plain",
+         "fill": [
+          51,
+          51,
+          51,
+          1
+         ]
+        }
+       ]
       },
       {
        "key": "s0:1/2",
@@ -29054,7 +30061,27 @@
        "stroke": null,
        "lineWidth": null,
        "opacity": "3ff0000000000000",
-       "z2": 0
+       "z2": 0,
+       "runs": [
+        {
+         "text": "rich",
+         "fill": [
+          0,
+          0,
+          255,
+          1
+         ]
+        },
+        {
+         "text": " plain",
+         "fill": [
+          51,
+          51,
+          51,
+          1
+         ]
+        }
+       ]
       },
       {
        "key": "s0:0/2",
@@ -29100,7 +30127,27 @@
        "stroke": null,
        "lineWidth": null,
        "opacity": "3ff0000000000000",
-       "z2": 0
+       "z2": 0,
+       "runs": [
+        {
+         "text": "rich",
+         "fill": [
+          0,
+          0,
+          255,
+          1
+         ]
+        },
+        {
+         "text": " plain",
+         "fill": [
+          51,
+          51,
+          51,
+          1
+         ]
+        }
+       ]
       },
       {
        "key": "s0:1/2",
@@ -29160,7 +30207,27 @@
        "stroke": null,
        "lineWidth": null,
        "opacity": "3fe0000000000000",
-       "z2": 0
+       "z2": 0,
+       "runs": [
+        {
+         "text": "rich",
+         "fill": [
+          0,
+          0,
+          255,
+          1
+         ]
+        },
+        {
+         "text": " plain",
+         "fill": [
+          51,
+          51,
+          51,
+          1
+         ]
+        }
+       ]
       },
       {
        "key": "s0:0/2",
@@ -29219,7 +30286,27 @@
        ],
        "lineWidth": "3ff0000000000000",
        "opacity": "3ff0000000000000",
-       "z2": 1
+       "z2": 1,
+       "runs": [
+        {
+         "text": "rich",
+         "fill": [
+          0,
+          0,
+          255,
+          1
+         ]
+        },
+        {
+         "text": " plain",
+         "fill": [
+          255,
+          0,
+          0,
+          1
+         ]
+        }
+       ]
       },
       {
        "key": "s0:1/2",
@@ -29286,7 +30373,27 @@
        "stroke": null,
        "lineWidth": null,
        "opacity": "3ff0000000000000",
-       "z2": 0
+       "z2": 0,
+       "runs": [
+        {
+         "text": "rich",
+         "fill": [
+          0,
+          0,
+          255,
+          1
+         ]
+        },
+        {
+         "text": " plain",
+         "fill": [
+          51,
+          51,
+          51,
+          1
+         ]
+        }
+       ]
       },
       {
        "key": "s0:0/2",
@@ -29332,7 +30439,27 @@
        "stroke": null,
        "lineWidth": null,
        "opacity": "3ff0000000000000",
-       "z2": 0
+       "z2": 0,
+       "runs": [
+        {
+         "text": "rich",
+         "fill": [
+          0,
+          0,
+          255,
+          1
+         ]
+        },
+        {
+         "text": " plain",
+         "fill": [
+          51,
+          51,
+          51,
+          1
+         ]
+        }
+       ]
       },
       {
        "key": "s0:1/2",
@@ -29421,6 +30548,10 @@
   },
   {
    "name": "polar-clip: every record matches its recipe",
+   "ok": true
+  },
+  {
+   "name": "polar-clip-frac: every record matches its recipe",
    "ok": true
   },
   {
