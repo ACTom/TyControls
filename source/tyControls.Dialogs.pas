@@ -550,6 +550,10 @@ begin
   SetLength(FButtons, Length(FButtons) + 1); FButtons[High(FButtons)] := Result;
   if ADefault then FDefaultResult := AResult;
   if ACancel then FCancelResult := AResult;
+  { #179: the form's DefaultControl and CancelControl, so Enter reaches the default button
+    the way LCL gives it one -- after the focused control has had it (see KeyDown). }
+  Result.Default := ADefault;
+  Result.Cancel := ACancel;
   LayoutButtonBar;
 end;
 
@@ -670,7 +674,11 @@ end;
 
 procedure TTyDialog.KeyDown(var Key: Word; Shift: TShiftState);
 begin
-  if (Key = 13) and (FDefaultResult <> mrNone) then begin ModalResult := FDefaultResult; Key := 0; Exit; end;
+  { #179: Enter is not taken here. KeyPreview put it ahead of the focused control, so the memo
+    of TyTextQuery could not get a new line, Enter on a focused No or Cancel returned the
+    default button's result, and the open dialog's Enter on a folder accepted the old name.
+    The default button is the form's DefaultControl (AddButton): LCL hands it an Enter the
+    focused control leaves alone, and a focused button takes its own. }
   if Key = 27 then begin CancelDialog; Key := 0; Exit; end;
   inherited KeyDown(Key, Shift);
 end;
