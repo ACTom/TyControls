@@ -3514,6 +3514,306 @@
    ]
   },
   {
+   "id": "x-anim",
+   "note": "[R5-I] animation on: a move in the grid takes the pointer from e to b -- the handle slides there with the pointer's moveAnimation (_moveHandleToValue: updateProps of x / y / rotation, 200 ms exponentialOut), sampled on its way",
+   "types": [
+    "updateaxispointer",
+    "showtip",
+    "hidetip",
+    "mouseover",
+    "mouseout"
+   ],
+   "charts": [
+    {
+     "option": {
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+       ],
+       "axisPointer": {
+        "handle": {
+         "show": true
+        }
+       }
+      },
+      "yAxis": {
+       "type": "value"
+      },
+      "series": [
+       {
+        "type": "line",
+        "data": [
+         3,
+         7,
+         2,
+         5,
+         6
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "idle",
+     "ms": 2000,
+     "events": [],
+     "state": [
+      {
+       "cursor": null,
+       "tip": null,
+       "handles": [
+        {
+         "axis": "xAxis0",
+         "status": "show",
+         "value": 4,
+         "handle": {
+          "x": 495,
+          "y": 370,
+          "rotation": 0,
+          "scaleX": 22.5,
+          "scaleY": 22.5,
+          "fill": "#8292cc",
+          "invisible": false
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "op": "move",
+     "at": [
+      180,
+      150
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 1
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 180,
+        "y": 150,
+        "dataIndexInside": 1,
+        "dataIndex": 1,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.category",
+            "axisId": "␀series␀0␀0",
+            "value": 1,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 1,
+              "dataIndex": 1
+             }
+            ]
+           }
+          ]
+         }
+        ],
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": [
+      {
+       "cursor": "default",
+       "tip": null,
+       "handles": [
+        {
+         "axis": "xAxis0",
+         "status": "show",
+         "value": 1,
+         "handle": {
+          "x": 225,
+          "y": 370,
+          "rotation": 0,
+          "scaleX": 22.5,
+          "scaleY": 22.5,
+          "fill": "#8292cc",
+          "invisible": false
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 16,
+     "events": [],
+     "state": [
+      {
+       "cursor": null,
+       "tip": null,
+       "handles": [
+        {
+         "axis": "xAxis0",
+         "status": "show",
+         "value": 1,
+         "handle": {
+          "x": 495,
+          "y": 370,
+          "rotation": 0,
+          "scaleX": 22.5,
+          "scaleY": 22.5,
+          "fill": "#8292cc",
+          "invisible": false
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 34,
+     "events": [],
+     "state": [
+      {
+       "cursor": null,
+       "tip": null,
+       "handles": [
+        {
+         "axis": "xAxis0",
+         "status": "show",
+         "value": 1,
+         "handle": {
+          "x": 490.57632,
+          "y": 370,
+          "rotation": 0,
+          "scaleX": 22.5,
+          "scaleY": 22.5,
+          "fill": "#8292cc",
+          "invisible": false
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 50,
+     "events": [],
+     "state": [
+      {
+       "cursor": null,
+       "tip": null,
+       "handles": [
+        {
+         "axis": "xAxis0",
+         "status": "show",
+         "value": 1,
+         "handle": {
+          "x": 425.88,
+          "y": 370,
+          "rotation": 0,
+          "scaleX": 22.5,
+          "scaleY": 22.5,
+          "fill": "#8292cc",
+          "invisible": false
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 100,
+     "events": [],
+     "state": [
+      {
+       "cursor": null,
+       "tip": null,
+       "handles": [
+        {
+         "axis": "xAxis0",
+         "status": "show",
+         "value": 1,
+         "handle": {
+          "x": 225.06912,
+          "y": 370,
+          "rotation": 0,
+          "scaleX": 22.5,
+          "scaleY": 22.5,
+          "fill": "#8292cc",
+          "invisible": false
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 300,
+     "events": [],
+     "state": [
+      {
+       "cursor": null,
+       "tip": null,
+       "handles": [
+        {
+         "axis": "xAxis0",
+         "status": "show",
+         "value": 1,
+         "handle": {
+          "x": 225,
+          "y": 370,
+          "rotation": 0,
+          "scaleX": 22.5,
+          "scaleY": 22.5,
+          "fill": "#8292cc",
+          "invisible": false
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
    "id": "x-styled",
    "note": "a handle with a border, an opacity and a shadow (blur 6 at (2, 3) in rgba(0,0,0,0.5))",
    "types": [

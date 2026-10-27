@@ -172,6 +172,11 @@ type
       `triggerTooltip` says false. Its rows (when it has any) are no part of
       dataByCoordSys. False -- the zero value -- triggers. }
     NoTip: Boolean;
+    { [R5-I] COLLECTED FOR ITS OWN show OR handle, not as the tooltip's axis
+      (saveTooltipAxisInfo(false)): its pointer model is the axis' block over
+      the axisPointer component's and the root, no tooltip layer. False --
+      the zero value -- is the tooltip's axis. }
+    OwnModel: Boolean;
   end;
   TTyAxisHitArray = array of TTyAxisHit;
 

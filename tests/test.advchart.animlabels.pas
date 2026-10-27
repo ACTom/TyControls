@@ -375,8 +375,9 @@ begin
       SetLength(lblHere, Length(lblHere) + 1);
       lblHere[High(lblHere)] := p.Num('label.x');
       { and the box is DRAWN there: the first pixel of its background
-        (#123456) along a row through it }
-      if not (IsNan(p.Num('label.x')) or IsNan(p.Num('label.y'))) then
+        (#123456, where the case writes it) along a row through it }
+      if (Pos('#123456', ACase.Elements['option'].AsJSON) > 0)
+        and not (IsNan(p.Num('label.x')) or IsNan(p.Num('label.y'))) then
       begin
         bmp := Draw;
         row := Round(p.Num('label.y')) + 8;

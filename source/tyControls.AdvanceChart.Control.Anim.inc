@@ -2103,30 +2103,58 @@ const
   cKeys: array[0..3] of string = ('animation', 'animationDurationUpdate',
     'animationEasingUpdate', 'animationDelayUpdate');
 var
-  axisNode, tip, ap, tap, d: TJSONData;
+  axisNode, tip, ap, tap, gap, d: TJSONData;
   k: Integer;
 begin
   { the axis' own axisPointer over the tooltip's, key by key }
   AOwn := TJSONObject.Create;
   ap := nil;
   tap := nil;
+  gap := nil;
   axisNode := FOption.ComponentAt(AHit.Axis.MainType, AHit.Axis.ComponentIndex);
   if axisNode is TJSONObject then ap := TJSONObject(axisNode).Find('axisPointer');
   if FOption.Root is TJSONObject then
   begin
-    tip := TJSONObject(FOption.Root).Find('tooltip');
+    { [R5-I] an axis collected for its own show or handle: its block over
+      the axisPointer component's (animation null, 200 ms, no easing of its
+      own) and the root's -- the root's animationEasingUpdate, cubicInOut
+      unless written [was: the tooltip's layer, exponentialOut, always] }
+    if AHit.OwnModel then
+      tip := TJSONObject(FOption.Root).Find('axisPointer')
+    else
+      tip := TJSONObject(FOption.Root).Find('tooltip');
     if (tip is TJSONArray) and (tip.Count > 0) then tip := tip.Items[0];
-    if tip is TJSONObject then tap := TJSONObject(tip).Find('axisPointer');
+    if AHit.OwnModel then tap := tip
+    else if tip is TJSONObject then tap := TJSONObject(tip).Find('axisPointer');
+    { the axisPointer component's block, under a tooltip axis' volatile
+      layer: makeAxisPointerModel copies no animationDelayUpdate }
+    gap := TJSONObject(FOption.Root).Find('axisPointer');
+    if (gap is TJSONArray) and (gap.Count > 0) then gap := gap.Items[0];
   end;
   for k := 0 to High(cKeys) do
   begin
     d := nil;
     if ap is TJSONObject then d := TJSONObject(ap).Find(cKeys[k]);
     if ((d = nil) or (d.JSONType = jtNull)) and (tap is TJSONObject) then
-      d := TJSONObject(tap).Find(cKeys[k]);
+    begin
+      { [R5-I] a tooltip axis' delay is not the tooltip's [was: read from
+        tooltip.axisPointer] }
+      if (cKeys[k] = 'animationDelayUpdate') and not AHit.OwnModel then
+      begin
+        if gap is TJSONObject then d := TJSONObject(gap).Find(cKeys[k]);
+      end
+      else
+        d := TJSONObject(tap).Find(cKeys[k]);
+    end
+    else if ((d = nil) or (d.JSONType = jtNull)) and (cKeys[k] = 'animationDelayUpdate')
+      and not AHit.OwnModel and (gap is TJSONObject) then
+      d := TJSONObject(gap).Find(cKeys[k]);
     if (d <> nil) and (d.JSONType <> jtNull) then AOwn.Add(cKeys[k], d.Clone);
   end;
-  Result := TyAnimComponentModel(AOwn, FOption.Root, 'tooltip.axisPointer');
+  if AHit.OwnModel then
+    Result := TyAnimComponentModel(AOwn, FOption.Root, 'axisPointer')
+  else
+    Result := TyAnimComponentModel(AOwn, FOption.Root, 'tooltip.axisPointer');
 end;
 
 function TTyCustomAdvanceChart.PtrMoves(const AHit: TTyAxisHit; const AModel: TTyAnimModel): Boolean;

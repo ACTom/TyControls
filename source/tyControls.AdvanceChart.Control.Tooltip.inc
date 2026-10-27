@@ -2280,6 +2280,7 @@ var
       tooltip axis, the axis' own block over the root for one collected for
       its own show }
     hit.Spec := AInfo.Spec;
+    hit.OwnModel := not AInfo.FromTooltip;
 
     if ALinked or given then
       value := AGivenValue
@@ -3974,7 +3975,11 @@ begin
       { [R2-I7] the axisInfo's model when the axis is collected (an axis of
         its own show reads its own label), else the tooltip's }
       m := PtrInfoOf(infos, ax);
-      if m >= 0 then hit.Spec := infos[m].Spec
+      if m >= 0 then
+      begin
+        hit.Spec := infos[m].Spec;
+        hit.OwnModel := not infos[m].FromTooltip;
+      end
       else
         hit.Spec := TyAxisPointerSpecOf(FOption, ax.MainType, ax.ComponentIndex,
           isCat, True, True, crossType);
@@ -5122,6 +5127,7 @@ begin
     hit.NoTip := not infos[m].TriggerTooltip;
     hit.Linked := FTipKeepPtr[i].Linked;
     hit.Spec := infos[m].Spec;
+    hit.OwnModel := not infos[m].FromTooltip;
     hit.Value := FTipKeepPtr[i].Value;
     hit.SnapValue := FTipKeepPtr[i].SnapValue;
     { seriesDataIndices as the model holds them: the rows that are still
@@ -5398,6 +5404,7 @@ begin
       hit := Default(TTyAxisHit);
       hit.Axis := infos[k].Axis;
       hit.Spec := infos[k].Spec;
+      hit.OwnModel := not infos[k].FromTooltip;
       hit.Single := infos[k].Single;
       animate := e.Placed and (FAnimMode <> camOff) and not (csDesigning in ComponentState)
         and AnimOn;
@@ -5514,6 +5521,7 @@ begin
     hit.Polar := infos[k].Polar;
     hit.Single := infos[k].Single;
     hit.Spec := infos[k].Spec;
+    hit.OwnModel := not infos[k].FromTooltip;
     hit.Cross := infos[k].CrossArm;
     hit.NoTip := not infos[k].TriggerTooltip;
     hit.Value := v;
@@ -5859,7 +5867,8 @@ function TTyCustomAdvanceChart.PointerHandleState(AIndex: Integer): TTyPointerHa
 var
   h: TTyAxisPointerHandle;
   el: TTyChartElement;
-  s: Double;
+  s, x, y, v: Double;
+  p: TTyChartAnimProxy;
 begin
   Result := Default(TTyPointerHandleState);
   Result.Value := NaN;
@@ -5868,9 +5877,23 @@ begin
   h := TyAxisPointerHandleOf(FOption, FHandles[AIndex].MainType, FHandles[AIndex].Index);
   Result.Key := FHandles[AIndex].Key;
   Result.Value := FHandles[AIndex].Value;
-  Result.X := (FHandles[AIndex].X - FLastRect.Left) / s;
-  Result.Y := (FHandles[AIndex].Y - FLastRect.Top) / s;
+  { [R5-I] where it is drawn: on its way there while its slide runs (the
+    handle's own x / y / rotation, as upstream's) [was: where it rests] }
+  x := FHandles[AIndex].X;
+  y := FHandles[AIndex].Y;
   Result.Rotation := FHandles[AIndex].Rotation;
+  p := AnimPointerProxy('handle:' + FHandles[AIndex].Key);
+  if (p <> nil) and not p.AtFinal and not FExporting and not FHandles[AIndex].Dragging then
+  begin
+    v := p.Num('x');
+    if not IsNan(v) then x := v;
+    v := p.Num('y');
+    if not IsNan(v) then y := v;
+    v := p.Num('rotation');
+    if not IsNan(v) then Result.Rotation := v;
+  end;
+  Result.X := (x - FLastRect.Left) / s;
+  Result.Y := (y - FLastRect.Top) / s;
   Result.ScaleX := h.SizeW / 2;
   Result.ScaleY := h.SizeH / 2;
   Result.Dragging := FHandles[AIndex].Dragging;
@@ -5962,6 +5985,7 @@ var
     hit.Polar := APolar;
     hit.Single := ASingle;
     hit.Spec := infos[m].Spec;
+    hit.OwnModel := not infos[m].FromTooltip;
     hit.Cross := infos[m].CrossArm;
     hit.NoTip := not infos[m].TriggerTooltip;
     hit.Value := v;

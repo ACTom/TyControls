@@ -339,6 +339,21 @@ const CASES = [
   },
   // [R5-F] the handle's style beyond its colour: getItemStyle's border, opacity and shadow keys; an image:// icon
   {
+    id: 'x-anim', note: "[R5-I] animation on: a move in the grid takes the pointer from e to b -- the handle slides there with the pointer's moveAnimation (_moveHandleToValue: updateProps of x / y / rotation, 200 ms exponentialOut), sampled on its way",
+    anim: true,
+    charts: [{ xAxis: { type: 'category', data: CATS, axisPointer: { handle: { show: true } } },
+      yAxis: { type: 'value' }, series: [LINE] }],
+    steps: [
+      { op: 'idle', ms: 2000 },
+      { op: 'move', at: [180, 150] },
+      { op: 'idle', ms: 16 },
+      { op: 'idle', ms: 34 },
+      { op: 'idle', ms: 50 },
+      { op: 'idle', ms: 100 },
+      { op: 'idle', ms: 300 },
+    ],
+  },
+  {
     id: 'x-styled', note: 'a handle with a border, an opacity and a shadow (blur 6 at (2, 3) in rgba(0,0,0,0.5))', style: true,
     charts: [{ animation: false, xAxis: { type: 'category', data: CATS, axisPointer: { handle: { show: true, color: '#ff0000',
       borderColor: '#0000ff', borderWidth: 2, opacity: 0.8, shadowBlur: 6, shadowOffsetX: 2, shadowOffsetY: 3, shadowColor: 'rgba(0,0,0,0.5)' } } },
