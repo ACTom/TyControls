@@ -352,6 +352,31 @@ begin
   end;
 end;
 
+{ [R5-I] EACH setOption RENDERS: upstream's setOption (not lazy) lays out,
+  renders and flushes before it returns, so a second setOption before the
+  next frame finds the first one's transitions armed -- a row the first
+  removes fades, the second brings it back as a new one. Here a setOption
+  arms at the paint that follows; one that comes while another waits has
+  that one rendered now (the build and the arming a paint does, nothing
+  drawn), once the chart has been laid out at a size.
+  [Revised in R5-I: several setOptions before a paint armed one transition,
+  from the render before the first to the option after the last.] }
+procedure TTyCustomAdvanceChart.AnimFlushPending;
+var m: ITyTextMeasurer;
+begin
+  if not FAnimPending or FLazyPending or FExporting then Exit;
+  if (FPaintList = nil) or (FLastPPI <= 0) or not AnimAllowed then Exit;
+  ConvertReady;
+  GfxBuild(FLastPPI);
+  m := NewTextMeasurer(FLastPPI);
+  FDrMode := 1;
+  try
+    PaintSeries(nil, m, FLastPPI);
+  finally
+    FDrMode := 0;
+  end;
+end;
+
 procedure TTyCustomAdvanceChart.AnimDropPrev;
 begin
   FAnimPrev := Default(TTyChartAnimPrev);
@@ -493,6 +518,146 @@ begin
     if c > 1 then Result[k] := nm + '__ec__' + IntToStr(c)
     else Result[k] := nm;
   end;
+end;
+
+{ [R5-I] BarView's updateStyle on a polar reads the ELEMENT's shape -- its
+  percentage corners (getSectorCornerRadius) and its label's automatic turn
+  (setSectorTextRotation) -- before the update's updateProps sets the new
+  layout (setToFinal): a kept row's corners and turn are the last render's
+  layout's, whether or not anything animates. The view keeps its elements
+  by its id and type (a notMerge of the same series included); one the
+  legend switched off cleared them (_clear). Each layout pass hands the
+  last one's shapes to the rows its data diff pairs (getId) and keeps its
+  own. }
+procedure TTyCustomAdvanceChart.PolarStyleTake;
+var
+  slot, si, i, m, k, n: Integer;
+  viewKeys, keys: TTyStringArray;
+  raws: TTyIntegerArray;
+  key: string;
+  mem: TTyPolarStyleMemArray;
+  e: TTyPolarStyleMem;
+  sl: TStringList;
+  s: TTyPolarSector;
+  p: TTyChartAnimProxy;
+
+  function PNum(const AKey: string; AOr: Double): Double;
+  begin
+    if (p <> nil) and (p.GetAnimProp(AKey).Kind = avkNumber) then Result := p.Num(AKey)
+    else Result := AOr;
+  end;
+
+begin
+  mem := nil;
+  viewKeys := AnimViewKeys;
+  for slot := 0 to High(FPolarBars) do
+  begin
+    if not FPolarBars[slot].Solved then Continue;
+    if (slot > High(FBindings)) or FBindings[slot].Hidden then Continue;
+    if (slot > High(FStores)) or (FStores[slot] = nil) then Continue;
+    si := FBindings[slot].SeriesIndex;
+    if (si < 0) or (si > High(viewKeys)) then Continue;
+    key := viewKeys[si] + #1 + FBindings[slot].SeriesType;
+    AnimRowKeys(FStores[slot], keys, raws);
+    n := Length(FPolarBars[slot].Rows);
+    SetLength(FPolarBars[slot].StyleRows, n);
+    SetLength(FPolarBars[slot].HasStyle, n);
+    for i := 0 to n - 1 do FPolarBars[slot].HasStyle[i] := False;
+    { the last render's elements, by the data diff }
+    for m := 0 to High(FPolarStyleMem) do
+      if FPolarStyleMem[m].Key = key then
+      begin
+        sl := TStringList.Create;
+        try
+          sl.CaseSensitive := True;
+          sl.UseLocale := False;
+          sl.Duplicates := dupIgnore;
+          sl.Sorted := True;
+          for i := 0 to High(FPolarStyleMem[m].RowKeys) do
+            sl.AddObject(FPolarStyleMem[m].RowKeys[i], TObject(PtrInt(i + 1)));
+          for i := 0 to Math.Min(n, Length(keys)) - 1 do
+            if sl.Find(keys[i], k) then
+            begin
+              k := PtrInt(sl.Objects[k]) - 1;
+              if (k <= High(FPolarStyleMem[m].Has)) and FPolarStyleMem[m].Has[k] then
+              begin
+                s := FPolarStyleMem[m].Rows[k];
+                { the element as it is now: where a tween left it (its last
+                  step's value, or mid-flight) -- setToFinal is overwritten
+                  every frame }
+                p := nil;
+                if FAnimSet <> nil then p := FAnimSet.Find(FPolarStyleMem[m].Series, k, 'bar');
+                if (p <> nil) and not p.Leaving then
+                begin
+                  s.CX := PNum('shape.cx', s.CX);
+                  s.CY := PNum('shape.cy', s.CY);
+                  s.R0 := PNum('shape.r0', s.R0);
+                  s.R := PNum('shape.r', s.R);
+                  s.SA := PNum('shape.startAngle', s.SA);
+                  s.EA := PNum('shape.endAngle', s.EA);
+                end;
+                FPolarBars[slot].StyleRows[i] := s;
+                FPolarBars[slot].HasStyle[i] := True;
+              end;
+            end;
+        finally
+          sl.Free;
+        end;
+        Break;
+      end;
+    { this render's, for the next: each element's shape, clipped as built }
+    e := Default(TTyPolarStyleMem);
+    e.Key := key;
+    e.Series := si;
+    e.RowKeys := Copy(keys, 0, n);
+    SetLength(e.Rows, n);
+    SetLength(e.Has, n);
+    for i := 0 to n - 1 do
+    begin
+      s := FPolarBars[slot].Rows[i];
+      e.Has[i] := (i <= High(FPolarBars[slot].Valid)) and FPolarBars[slot].Valid[i];
+      { a row of no element is never clipped (its layout is not a number) }
+      if e.Has[i] and FPolarBars[slot].Clip then
+        TyPolarBarClip(FPolarBars[slot].AreaR0, FPolarBars[slot].AreaR, s);
+      e.Rows[i] := s;
+    end;
+    SetLength(mem, Length(mem) + 1);
+    mem[High(mem)] := e;
+  end;
+  FPolarStyleMem := mem;
+end;
+
+procedure TTyCustomAdvanceChart.PolarStyleTrim;
+var
+  keys: TTyStringArray;
+  mem: TTyPolarStyleMemArray;
+  m, i: Integer;
+  d, t: TJSONData;
+  alive: Boolean;
+begin
+  if Length(FPolarStyleMem) = 0 then Exit;
+  keys := AnimViewKeys;
+  mem := nil;
+  for m := 0 to High(FPolarStyleMem) do
+  begin
+    alive := False;
+    for i := 0 to High(keys) do
+    begin
+      d := FOption.ComponentAt('series', i);
+      if not (d is TJSONObject) then Continue;
+      t := TJSONObject(d).Find('type');
+      if (t <> nil) and (t.JSONType = jtString)
+        and (keys[i] + #1 + t.AsString = FPolarStyleMem[m].Key) then
+      begin
+        alive := True;
+        Break;
+      end;
+    end;
+    if not alive then Continue;
+    SetLength(mem, Length(mem) + 1);
+    mem[High(mem)] := FPolarStyleMem[m];
+  end;
+  FPolarStyleMem := mem;
 end;
 
 procedure TTyCustomAdvanceChart.AnimRowKeys(AStore: TTyDataStore; out AKeys: TTyStringArray;
@@ -646,11 +811,29 @@ var
   r: TTyChartAnimSeries;
   el: TTyChartElement;
   drawnNow: Boolean;
+  park: TTyChartAnimMarkParkArray;
 begin
   AnimDropPrev;
   { NOTHING DRAWN BEFORE: the option enters }
   if FPaintList = nil then Exit;
   FAnimPrev.Valid := True;
+  { [R5-I] a notMerge's old models, for the remove() of a view kept but not
+    rendered (the legend switched its series off): their own keys over the
+    new option's root }
+  FreeAndNil(FAnimOldLiteRoot);
+  if not (FAnimFull or FAnimMerge) and (FAnimOldLiteSeries <> nil) then
+  begin
+    FAnimOldLiteRoot := TJSONObject.Create;
+    if FOption.Root is TJSONObject then
+    begin
+      if TJSONObject(FOption.Root).Find('animation') <> nil then
+        FAnimOldLiteRoot.Add('animation', TJSONObject(FOption.Root).Find('animation').Clone);
+      if TJSONObject(FOption.Root).Find('animationThreshold') <> nil then
+        FAnimOldLiteRoot.Add('animationThreshold',
+          TJSONObject(FOption.Root).Find('animationThreshold').Clone);
+    end;
+    FAnimOldLiteRoot.Add('series', FAnimOldLiteSeries.Clone);
+  end;
   FAnimPrev.FullUpdate := FAnimFull;
   FAnimPrev.Merge := FAnimMerge;
   for slot := 0 to High(FBindings) do
@@ -674,6 +857,14 @@ begin
       r.Model := TyAnimSeriesModel(FOption.Root, si, n);
       r.Model.Payload := FAnimPayload;
       r.Model.HasPayload := FAnimHasPayload;
+      r.Enabled := TyAnimIsEnabled(r.Model);
+    end
+    else if FAnimOldLiteRoot <> nil then
+    begin
+      { [R5-I] a notMerge's: the old model as its remove() asks it }
+      n := 0;
+      if (slot <= High(FStores)) and (FStores[slot] <> nil) then n := FStores[slot].Count;
+      r.Model := TyAnimSeriesModel(FAnimOldLiteRoot, si, n);
       r.Enabled := TyAnimIsEnabled(r.Model);
     end;
     if si <= High(FAnimOldViewKeys) then r.ViewKey := FAnimOldViewKeys[si]
@@ -713,6 +904,52 @@ begin
     Inc(n);
   end;
   SetLength(FAnimPrev.Elements, n);
+  { [R5-I] THE MARKERS' KEPT DRAWS: a series shown now leaves its markers
+    as drawn; one the legend has switched off keeps the ones it left (a
+    notMerge setOption makes new marker views: nothing kept), and they are
+    the old markers of its series index }
+  park := nil;
+  for slot := 0 to High(FBindings) do
+  begin
+    si := FBindings[slot].SeriesIndex;
+    if si < 0 then Continue;
+    if si > High(park) then SetLength(park, si + 1);
+    if FBindings[slot].Hidden then
+    begin
+      if (FAnimFull or FAnimMerge) and (si <= High(FAnimMarkPark)) then
+        park[si] := FAnimMarkPark[si];
+      if not park[si].Present or (Length(park[si].Elements) = 0) then Continue;
+      if si > High(FAnimPrev.Series) then SetLength(FAnimPrev.Series, si + 1);
+      r := Default(TTyChartAnimSeries);
+      r.MarksOnly := True;
+      r.ViewKey := park[si].ViewKey;
+      r.SeriesType := park[si].SeriesType;
+      FAnimPrev.Series[si] := r;
+      for k := 0 to High(park[si].Elements) do
+      begin
+        SetLength(FAnimPrev.Elements, n + 1);
+        FAnimPrev.Elements[n] := park[si].Elements[k];
+        Inc(n);
+      end;
+    end
+    else
+    begin
+      park[si].Present := True;
+      if si <= High(FAnimOldViewKeys) then park[si].ViewKey := FAnimOldViewKeys[si]
+      else park[si].ViewKey := 'x:' + IntToStr(si);
+      park[si].SeriesType := FBindings[slot].SeriesType;
+      park[si].Elements := nil;
+      for i := 0 to FPaintList.Count - 1 do
+      begin
+        el := FPaintList.Element(i);
+        if (el.Anim.Series <> si) or not (el.Anim.Role in [carMarkPoint, carMarkPointLabel,
+          carMarkLine, carMarkLineFrom, carMarkLineTo, carMarkLineLabel]) then Continue;
+        SetLength(park[si].Elements, Length(park[si].Elements) + 1);
+        park[si].Elements[High(park[si].Elements)] := el;
+      end;
+    end;
+  end;
+  FAnimMarkPark := park;
   { the pieces the data still names that the last render did not draw
     [milestone D5-D8] }
   FAnimPrev.UtStale := nil;
@@ -1781,6 +2018,8 @@ begin
   if VmLive_ then
   begin
     FVmAnim.Update(ANowMs);
+    { [R5-I] this frame applies the blurs the pointer marked }
+    VmBlurFlush;
     DropStatic;
     InvalidateFrame;
     if not VmLive_ and not FAnimLive then AnimArmTimer;
@@ -1864,30 +2103,58 @@ const
   cKeys: array[0..3] of string = ('animation', 'animationDurationUpdate',
     'animationEasingUpdate', 'animationDelayUpdate');
 var
-  axisNode, tip, ap, tap, d: TJSONData;
+  axisNode, tip, ap, tap, gap, d: TJSONData;
   k: Integer;
 begin
   { the axis' own axisPointer over the tooltip's, key by key }
   AOwn := TJSONObject.Create;
   ap := nil;
   tap := nil;
+  gap := nil;
   axisNode := FOption.ComponentAt(AHit.Axis.MainType, AHit.Axis.ComponentIndex);
   if axisNode is TJSONObject then ap := TJSONObject(axisNode).Find('axisPointer');
   if FOption.Root is TJSONObject then
   begin
-    tip := TJSONObject(FOption.Root).Find('tooltip');
+    { [R5-I] an axis collected for its own show or handle: its block over
+      the axisPointer component's (animation null, 200 ms, no easing of its
+      own) and the root's -- the root's animationEasingUpdate, cubicInOut
+      unless written [was: the tooltip's layer, exponentialOut, always] }
+    if AHit.OwnModel then
+      tip := TJSONObject(FOption.Root).Find('axisPointer')
+    else
+      tip := TJSONObject(FOption.Root).Find('tooltip');
     if (tip is TJSONArray) and (tip.Count > 0) then tip := tip.Items[0];
-    if tip is TJSONObject then tap := TJSONObject(tip).Find('axisPointer');
+    if AHit.OwnModel then tap := tip
+    else if tip is TJSONObject then tap := TJSONObject(tip).Find('axisPointer');
+    { the axisPointer component's block, under a tooltip axis' volatile
+      layer: makeAxisPointerModel copies no animationDelayUpdate }
+    gap := TJSONObject(FOption.Root).Find('axisPointer');
+    if (gap is TJSONArray) and (gap.Count > 0) then gap := gap.Items[0];
   end;
   for k := 0 to High(cKeys) do
   begin
     d := nil;
     if ap is TJSONObject then d := TJSONObject(ap).Find(cKeys[k]);
     if ((d = nil) or (d.JSONType = jtNull)) and (tap is TJSONObject) then
-      d := TJSONObject(tap).Find(cKeys[k]);
+    begin
+      { [R5-I] a tooltip axis' delay is not the tooltip's [was: read from
+        tooltip.axisPointer] }
+      if (cKeys[k] = 'animationDelayUpdate') and not AHit.OwnModel then
+      begin
+        if gap is TJSONObject then d := TJSONObject(gap).Find(cKeys[k]);
+      end
+      else
+        d := TJSONObject(tap).Find(cKeys[k]);
+    end
+    else if ((d = nil) or (d.JSONType = jtNull)) and (cKeys[k] = 'animationDelayUpdate')
+      and not AHit.OwnModel and (gap is TJSONObject) then
+      d := TJSONObject(gap).Find(cKeys[k]);
     if (d <> nil) and (d.JSONType <> jtNull) then AOwn.Add(cKeys[k], d.Clone);
   end;
-  Result := TyAnimComponentModel(AOwn, FOption.Root, 'tooltip.axisPointer');
+  if AHit.OwnModel then
+    Result := TyAnimComponentModel(AOwn, FOption.Root, 'axisPointer')
+  else
+    Result := TyAnimComponentModel(AOwn, FOption.Root, 'tooltip.axisPointer');
 end;
 
 function TTyCustomAdvanceChart.PtrMoves(const AHit: TTyAxisHit; const AModel: TTyAnimModel): Boolean;
@@ -1965,6 +2232,7 @@ var
   props: TTyAnimProps;
   model: TTyAnimModel;
   own: TJSONObject;
+  lx, ly: Double;
 begin
   { a mouse moves only over a live window: every mode but camOff }
   if (FAnimMode = camOff) or (csDesigning in ComponentState) then Exit;
@@ -1988,6 +2256,14 @@ begin
       at := hit.Axis.DataToCoord(PointerValue(hit), True);
       if IsNan(at) then Continue;
       props := PtrProps(hit, at);
+      { [R5-I] updateLabelEl: the label's x / y with the pointer's timing
+        [was: the label drawn about the line where it had got to] }
+      if PtrLabelAt(hit, at, lx, ly) then
+      begin
+        SetLength(props, Length(props) + 2);
+        props[High(props) - 1] := TyAnimProp('label.x', TyAnimNum(lx));
+        props[High(props)] := TyAnimProp('label.y', TyAnimNum(ly));
+      end;
     end;
     if FPtrProxies = nil then FPtrProxies := TFPList.Create;
     if FPtrAnim = nil then FPtrAnim := NewAnimDriver;
@@ -2012,6 +2288,12 @@ begin
     if PtrPropsSame(p.Final, props) then Continue;
     model := PtrModelOf(hit, own);
     try
+      { [R5-I] a label shown only now starts where it is to rest (the
+        labelEl a hidden label never moved) }
+      if TyAnimPropIndex(props, 'label.x') >= 0 then
+        if p.GetAnimProp('label.x').Kind <> avkNumber then
+          p.Attr(TyAnimProps([props[TyAnimPropIndex(props, 'label.x')],
+            props[TyAnimPropIndex(props, 'label.y')]]));
       p.SetFinal(props);
       if PtrMoves(hit, model) then
         TyUpdateProps(p, props, model, TyAnimCallNoIndex)
@@ -2126,6 +2408,55 @@ begin
   end;
 end;
 
+function TTyCustomAdvanceChart.PtrLabelAt(const AHit: TTyAxisHit; AAt: Double;
+  out AX, AY: Double): Boolean;
+var
+  labelS: TTyStyleSet;
+  txt: string;
+  m: ITyTextMeasurer;
+  box: TRect;
+begin
+  Result := False;
+  AX := NaN;
+  AY := NaN;
+  if not AHit.Spec.LabelSpec.Show or (FLastPPI <= 0) then Exit;
+  labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel', '', []);
+  if not (tpBackground in labelS.Present) then Exit;
+  { the render's text: an action renders the pointer (the paint after it
+    draws what this one wrote) }
+  txt := PointerDrawLabelText(AHit, PointerValue(AHit));
+  if txt = '' then Exit;
+  m := NewTextMeasurer(FLastPPI);
+  if not PointerLabelBox(AHit, AAt, txt, Rect(Round(FLastRect.Left), Round(FLastRect.Top),
+    Round(FLastRect.Right), Round(FLastRect.Bottom)), FLastPPI, m, labelS, box) then Exit;
+  AX := box.Left;
+  AY := box.Top;
+  Result := True;
+end;
+
+procedure TTyCustomAdvanceChart.PtrLabelNow(const AHit: TTyAxisHit; var ABox: TRect);
+var
+  k: Integer;
+  p: TTyChartAnimProxy;
+  key: string;
+  lx, ly: Double;
+begin
+  { an export draws the pointer where it rests }
+  if (FPtrProxies = nil) or (AHit.Axis = nil) or FExporting then Exit;
+  key := PtrKeyOf(AHit.Axis);
+  for k := 0 to FPtrProxies.Count - 1 do
+  begin
+    p := TTyChartAnimProxy(FPtrProxies[k]);
+    if p.Role <> key then Continue;
+    if p.AtFinal then Exit;
+    lx := p.Num('label.x');
+    ly := p.Num('label.y');
+    if not (IsNan(lx) or IsNan(ly)) then
+      OffsetRect(ABox, Round(lx) - ABox.Left, Round(ly) - ABox.Top);
+    Exit;
+  end;
+end;
+
 function TTyCustomAdvanceChart.PtrShadowNow(const AHit: TTyAxisHit;
   out AShape: TTyXYWH): Boolean;
 var
@@ -2205,21 +2536,38 @@ begin
 end;
 
 function TTyCustomAdvanceChart.AnimPart(AContinuous: Boolean): TTyPaintList;
+begin
+  Result := AnimPartOf(AnimFrame, AContinuous);
+end;
+
+function TTyCustomAdvanceChart.AnimPartOf(AFrame: TTyPaintList;
+  AContinuous: Boolean): TTyPaintList;
 var
   frame: TTyPaintList;
   i, h: Integer;
   pe: PTyChartElement;
-  cont: Boolean;
+  cont, after: Boolean;
 begin
-  frame := AnimFrame;
+  frame := AFrame;
   if FAnimSplit = nil then FAnimSplit := TTyPaintList.Create;
   FAnimSplit.Clear;
   Result := FAnimSplit;
   if frame = nil then Exit;
+  { [R5-I] AND EVERYTHING DRAWN AFTER THE FIRST OF THEM: zrender draws one
+    display list in z order, so what stands over a ripple (a series of a
+    higher z, a later label) is drawn over it every frame -- the static
+    layer holds only what lies under the first continuous element [was:
+    only the continuous elements were the dynamic layer's, over everything] }
+  after := False;
   { read in place, copied only into the half it goes to [P2] }
   for i := 0 to frame.Count - 1 do
   begin
     pe := frame.Ref(i);
+    if after then
+    begin
+      if AContinuous then FAnimSplit.Add(pe^);
+      Continue;
+    end;
     { a ripple, an effect symbol, and a label hanging off one; a lines
       effect symbol, and every element of a lines series with a trail
       (its layer is redrawn every frame) [Batch 121] }
@@ -2232,6 +2580,7 @@ begin
       cont := (h >= 0) and (h < frame.Count)
         and (frame.Ref(h)^.Anim.Role = carEffectSymbol);
     end;
+    after := cont;
     if cont = AContinuous then FAnimSplit.Add(pe^);
   end;
 end;

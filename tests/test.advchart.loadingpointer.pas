@@ -125,6 +125,7 @@ type
     { [R5-F] its border, opacity and shadow; an image:// icon }
     procedure TestAStyledHandleAsUpstream;
     procedure TestAnImageHandleAsUpstream;
+    procedure TestTheHandleSlidesAsUpstream;
   end;
 
 implementation
@@ -867,6 +868,22 @@ var
   ps: TTyPointerHandleState;
   shc: TTyChartColor;
   dt: Double;
+  anim: Boolean;
+  fr: Double;
+
+  { [R5-I] an animated case: the frames upstream's loop runs (every 16 ms
+    from the start) up to ATo }
+  procedure Frames(ATo: Double);
+  begin
+    if not anim then Exit;
+    while fr + 16 <= ATo do
+    begin
+      fr := fr + 16;
+      probe.AnimNow := t0 + fr;
+      probe.AnimTick(t0 + fr);
+    end;
+    probe.AnimNow := t0 + ATo;
+  end;
 
   procedure Near(const AWhat: string; AGot, AWant, ATol: Double);
   begin
@@ -890,7 +907,16 @@ begin
     probe.TooltipNow := 0;
     t0 := TJSONObject(FRoot).Objects['clock'].Floats['start'];
     probe.DataZoomNow := t0;
-    probe.AnimationMode := camOff;
+    { [R5-I] a case that leaves the animation on runs it }
+    anim := TJSONObject(opt).Find('animation') = nil;
+    fr := 0;
+    if anim then
+    begin
+      probe.AnimationMode := camAlways;
+      probe.AnimNow := t0;
+    end
+    else
+      probe.AnimationMode := camOff;
     probe.SetBounds(0, 0, cW, cH);
     probe.Option := opt.AsJSON;
     probe.OnChartEvent := @OnEvent;
@@ -909,6 +935,7 @@ begin
         now_ := now_ + TJSONObject(FRoot).Objects['clock'].Floats['stepDt']
       else
         now_ := now_ + st.Floats['ms'];
+      Frames(now_);
       probe.TooltipNow := now_;
       probe.TooltipTick(now_);
       if op = 'move' then
@@ -1062,6 +1089,13 @@ begin
   AssertTrue(AId + ': nothing compared', FCompared > 0);
   AssertEquals(Format('%s: %d of %d comparisons differ:%s',
     [AId, FBad, FCompared, FReport]), 0, FBad);
+end;
+
+{ [R5-I] the handle slides to the pointer's new value with its
+  moveAnimation, sampled on its way }
+procedure TAdvChartPointerHandleOracleTest.TestTheHandleSlidesAsUpstream;
+begin
+  RunCase('x-anim');
 end;
 
 { [R5-F] }

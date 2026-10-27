@@ -697,6 +697,7 @@ begin
 end;
 
 procedure TTyCustomAdvanceChart.HierDrillReset;
+var k: Integer;
 begin
   { [R2-C] the treemaps as last drawn, for the merge's transition from the
     old tree (the first reset since a render keeps them) }
@@ -705,6 +706,9 @@ begin
     FTmOld := FTmPrev;
     FTmOldHave := FTmHave;
     FTmOldKeys := FTmViewKeys;
+    { [R5-I] and where their elements are now, before the proxies go }
+    SetLength(FTmOldNow, Length(FTmAnim));
+    for k := 0 to High(FTmAnim) do FTmOldNow[k] := TmNowOf(k);
   end;
   FSunRoot := nil;
   FSunVirt := nil;
@@ -1196,7 +1200,8 @@ end;
 function TTyCustomAdvanceChart.TreemapAnimating(ASeriesIndex: Integer): Boolean;
 begin
   Result := (ASeriesIndex >= 0) and (ASeriesIndex <= High(FTmAnim))
-    and (FTmAnim[ASeriesIndex].Wrap <> nil) and FTmAnim[ASeriesIndex].Wrap.Live;
+    and (FTmAnim[ASeriesIndex].Wrap <> nil) and FTmAnim[ASeriesIndex].Wrap.Live
+    and not FTmAnim[ASeriesIndex].Wrap.Ready;
 end;
 
 function TTyCustomAdvanceChart.TreemapAnimProxy(ASeriesIndex, ARow: Integer;
@@ -1515,6 +1520,48 @@ begin
   FTmAnim[ASeries] := Default(TTyTmAnim);
 end;
 
+function TTyCustomAdvanceChart.TmNowOf(ASeries: Integer): TTyTmNow;
+var
+  r, j: Integer;
+  p: TTyChartAnimProxy;
+
+  function N(AKey: string): Double;
+  begin
+    Result := p.Num(AKey);
+  end;
+
+begin
+  Result := Default(TTyTmNow);
+  if (ASeries < 0) or (ASeries > High(FTmAnim)) then Exit;
+  Result.Live := (FTmAnim[ASeries].Wrap <> nil) and FTmAnim[ASeries].Wrap.Live;
+  SetLength(Result.GHas, Length(FTmAnim[ASeries].Groups));
+  SetLength(Result.GX, Length(FTmAnim[ASeries].Groups));
+  SetLength(Result.GY, Length(FTmAnim[ASeries].Groups));
+  for r := 0 to High(FTmAnim[ASeries].Groups) do
+  begin
+    p := FTmAnim[ASeries].Groups[r];
+    if p = nil then Continue;
+    Result.GX[r] := N('x');
+    Result.GY[r] := N('y');
+    Result.GHas[r] := not (IsNan(Result.GX[r]) or IsNan(Result.GY[r]));
+  end;
+  SetLength(Result.Rects, Length(FTmAnim[ASeries].Rects));
+  for r := 0 to High(FTmAnim[ASeries].Rects) do
+    for j := 0 to 1 do
+    begin
+      p := FTmAnim[ASeries].Rects[r][j];
+      if p = nil then Continue;
+      Result.Rects[r][j].X := N('shape.x');
+      Result.Rects[r][j].Y := N('shape.y');
+      Result.Rects[r][j].W := N('shape.width');
+      Result.Rects[r][j].H := N('shape.height');
+      Result.Rects[r][j].Opacity := N('style.opacity');
+      Result.Rects[r][j].Has := not (IsNan(Result.Rects[r][j].X) or IsNan(Result.Rects[r][j].Y)
+        or IsNan(Result.Rects[r][j].W) or IsNan(Result.Rects[r][j].H));
+      if IsNan(Result.Rects[r][j].Opacity) then Result.Rects[r][j].Opacity := 1;
+    end;
+end;
+
 procedure TTyCustomAdvanceChart.TmAnimDropAll;
 var k: Integer;
 begin
@@ -1651,6 +1698,8 @@ var
   { [R2-C] old -> new rows of a new tree }
   o2n: TTyIntegerArray;
   no: Integer;
+  { [R5-I] the old rows' elements where they are now }
+  now_: TTyTmNow;
 
   function Was(const AArr: TTyBoolArray; ARow: Integer): Boolean;
   begin
@@ -1678,9 +1727,36 @@ var
     tasks[High(tasks)].Props := AProps;
   end;
 
+  { [R5-I] an old row's element where it is now: its proxy's values where
+    the last transition left one, else its last solve }
+  function NowRect(ARow, AKind: Integer): Boolean;
+  begin
+    Result := (ARow >= 0) and (ARow <= High(now_.Rects)) and now_.Rects[ARow][AKind - 1].Has;
+  end;
+
+  function OldGroupAt(ARow: Integer): TTyAnimProps;
+  begin
+    if (ARow >= 0) and (ARow <= High(now_.GHas)) and now_.GHas[ARow] then
+      Result := TyAnimProps([TmNum('x', now_.GX[ARow]), TmNum('y', now_.GY[ARow])])
+    else
+      Result := TyAnimProps([TmNum('x', TmOr0(AOld.Nodes[ARow].X)),
+        TmNum('y', TmOr0(AOld.Nodes[ARow].Y))]);
+  end;
+
+  function OldOpacity(ARow, AKind: Integer): Double;
+  begin
+    if NowRect(ARow, AKind) then Result := now_.Rects[ARow][AKind - 1].Opacity
+    else Result := 1;
+  end;
+
   function OldShape(ARow, AKind: Integer): TTyAnimProps;
   var bw: Double;
   begin
+    if NowRect(ARow, AKind) then
+      Exit(TyAnimProps([TmNum('shape.x', now_.Rects[ARow][AKind - 1].X),
+        TmNum('shape.y', now_.Rects[ARow][AKind - 1].Y),
+        TmNum('shape.width', now_.Rects[ARow][AKind - 1].W),
+        TmNum('shape.height', now_.Rects[ARow][AKind - 1].H)]));
     if AKind = 1 then
       Result := TyAnimProps([TmNum('shape.x', 0), TmNum('shape.y', 0),
         TmNum('shape.width', AOld.Nodes[ARow].W), TmNum('shape.height', AOld.Nodes[ARow].H)])
@@ -1757,8 +1833,7 @@ var
     if Was(AOldHave.Group, OldOf(ARow)) then
     begin
       q := TmProxy(FAnim, si, ARow, 'tmGroup');
-      q.Attr(TyAnimProps([TmNum('x', TmOr0(AOld.Nodes[OldOf(ARow)].X)),
-        TmNum('y', TmOr0(AOld.Nodes[OldOf(ARow)].Y))]));
+      q.Attr(OldGroupAt(OldOf(ARow)));
       A.Groups[ARow] := q;
       Task(q, TyAnimProps([TmNum('x', TmOr0(TS^.Nodes[ARow].X)), TmNum('y', TmOr0(TS^.Nodes[ARow].Y))]));
     end
@@ -1782,15 +1857,27 @@ var
       q := TmProxy(FAnim, si, ARow, 'tmRect');
       if ((c = 1) and Was(AOldHave.Bg, OldOf(ARow))) or ((c = 2) and Was(AOldHave.Ct, OldOf(ARow))) then
       begin
-        { kept: from its old shape }
-        q.Attr(With1(OldShape(OldOf(ARow), c), 'style.opacity', 1));
+        { kept: from its old shape -- [R5-I] where it is now }
+        q.Attr(With1(OldShape(OldOf(ARow), c), 'style.opacity', OldOpacity(OldOf(ARow), c)));
         if c = 1 then
         begin
           lastHas[ARow] := True;
-          lastW[ARow] := AOld.Nodes[OldOf(ARow)].W;
-          lastH[ARow] := AOld.Nodes[OldOf(ARow)].H;
+          if NowRect(OldOf(ARow), 1) then
+          begin
+            lastW[ARow] := now_.Rects[OldOf(ARow)][0].W;
+            lastH[ARow] := now_.Rects[OldOf(ARow)][0].H;
+          end
+          else
+          begin
+            lastW[ARow] := AOld.Nodes[OldOf(ARow)].W;
+            lastH[ARow] := AOld.Nodes[OldOf(ARow)].H;
+          end;
         end;
-        Task(q, NewShape(ARow, c));
+        { [R5-I] one still fading in fades on to 1 with this transition }
+        if OldOpacity(OldOf(ARow), c) < 1 then
+          Task(q, With1(NewShape(ARow, c), 'style.opacity', 1))
+        else
+          Task(q, NewShape(ARow, c));
       end
       else if (pr >= 0) and ((not reRoot) or drill) then
       begin
@@ -1834,6 +1921,15 @@ begin
     oldLabels := FTmAnim[si].Labels;
     FTmAnim[si].Labels := nil;
   end;
+  { [R5-I] where the old elements are now: a drill's own proxies, a merge's
+    taken when the setOption came [was: their last solve -- a transition
+    still running started over from where the one before was going] }
+  if AMap <> nil then
+  begin
+    if si <= High(FTmOldNow) then now_ := FTmOldNow[si] else now_ := Default(TTyTmNow);
+  end
+  else
+    now_ := TmNowOf(si);
   TmAnimDrop(si);
   try
   if not AnimAllowed then Exit;
@@ -1886,6 +1982,7 @@ begin
     if (v.Kind = aokString) and (v.Str <> '') then easing := v.Str else easing := 'cubicOut';
     A.Wrap := TTyTmWrap.Create;
     A.Wrap.Live := True;
+    A.Wrap.Ready := now_.Live;
     cfg := TyAnimCfg(dur, 0, easing);
     cfg.SetToFinal := True;
     cfg.Done := @A.Wrap.Hit;
@@ -1923,7 +2020,7 @@ begin
         if kind = 0 then
         begin
           p := TmProxy(FAnim, si, row, 'tmGroup');
-          p.Attr(TyAnimProps([TmNum('x', TmOr0(AOld.Nodes[row].X)), TmNum('y', TmOr0(AOld.Nodes[row].Y))]));
+          p.Attr(OldGroupAt(row));
           { [R2-C] a new tree's deleted group, by its old row }
           if AMap <> nil then A.OldGroups[row] := p
           else
@@ -1956,7 +2053,7 @@ begin
         A.Ghosts[High(A.Ghosts)].El := el;
         A.Ghosts[High(A.Ghosts)].LabelEl := lel;
         p := TmProxy(FAnim, si, row, 'tmGhost');
-        p.Attr(With1(OldShape(row, kind), 'style.opacity', 1));
+        p.Attr(With1(OldShape(row, kind), 'style.opacity', OldOpacity(row, kind)));
         A.Ghosts[High(A.Ghosts)].P := p;
         if (row <= High(oldLabels)) and (oldLabels[row][2 - kind] <> nil) then
         begin
@@ -2003,6 +2100,16 @@ begin
     for k := 0 to High(tasks) do
       if (tasks[k].P = nil) or (Length(tasks[k].Props) = 0) then A.Wrap.Hit
       else tasks[k].P.AnimateTo(tasks[k].Props, cfg);
+    { [R5-I] A TRANSITION TAKEN OVER while it ran: its wrap's animators,
+      aborted by this one's start, finish it -- its renderFinally makes
+      invisible what it had moved out of the canvas, after this render has
+      shown it again where its new place is in view }
+    if now_.Live then
+      for row := 0 to no - 1 do
+        if AOld.Nodes[row].DrawInvisible and (NewOf(row) >= 0)
+          and (Was(have.Bg, NewOf(row)) or Was(have.Ct, NewOf(row)))
+          and not TS^.Nodes[NewOf(row)].Invisible then
+          TS^.Nodes[NewOf(row)].RectsHidden := True;
     { THE ELEMENTS MOVED OUT OF THE CANVAS are drawn until the end, in their
       old visual (processInvisible sets none) }
     for row := 0 to nn - 1 do
@@ -2114,6 +2221,7 @@ var
   m: ITyTextMeasurer;
   el: TTyChartElement;
   sx, sy, sw, sh, op, lx, ly, ox0, oy0: Double;
+  gx, gy, gdx, gdy: Double;
   p: TTyChartAnimProxy;
   wtext: string;
   spec: TTyLabelSpec;
@@ -2288,11 +2396,23 @@ var
     end;
   end;
 
-  procedure Place(var AEl: TTyChartElement; ARow: Integer);
+  { [R5-I] the rect at bounds of this frame, its corners clamped to them
+    again (roundRect's buildPath, each time it draws) [was: the corners
+    clamped to the rest's bounds -- a shrinking rect drew them too big] }
+  procedure Reshape(var AEl: TTyChartElement; const ABounds: TTyRectF;
+    const ARadii: TTyDoubleArray);
+  begin
+    if AEl.Shape.Kind = cskRoundRect then
+      AEl.Shape := TyTreemapRectShape(ABounds, ARadii)
+    else
+      AEl.Shape.Bounds := ABounds;
+  end;
+
+  procedure Place(var AEl: TTyChartElement; ARow: Integer; const ARadii: TTyDoubleArray);
   begin
     Compose(ARow);
-    AEl.Shape.Bounds := TyRectF(sx + T[ARow].TX, sy + T[ARow].TY,
-      (sx + sw) + T[ARow].TX, (sy + sh) + T[ARow].TY);
+    Reshape(AEl, TyRectF(sx + T[ARow].TX, sy + T[ARow].TY,
+      (sx + sw) + T[ARow].TX, (sy + sh) + T[ARow].TY), ARadii);
     AEl.Style.Alpha := op;
   end;
 
@@ -2343,7 +2463,7 @@ begin
         sub := el.Anim.Sub;
         if (row < 0) or (row >= nn) or (sub < 0) or (sub > 1) then Continue;
         RectOf(A^.Rects[row][sub], el);
-        Place(el, row);
+        Place(el, row, TS^.Nodes[row].Radii);
         AFrame.SetElement(i, el);
       end
       else if (el.Anim.Role = carLabel) and (el.Datum.SeriesIndex = si) then
@@ -2386,14 +2506,19 @@ begin
       if A^.Map <> nil then
       begin
         { [R2-C] a merge's deleted rect, under the old tree's groups; its
-          words ride the rect's corner (the old option is gone: they are
-          not cut again) }
+          words ride the rect's corner -- [R5-I] a content's are cut again
+          to the rect it has, as a drill's are (the inputs held on the old
+          node) [was: not cut again, the old option being gone] }
         if (row < 0) or (row > High(OT)) then Continue;
         OCompose(row);
         ox0 := el.Shape.Bounds.Left;
         oy0 := el.Shape.Bounds.Top;
-        el.Shape.Bounds := TyRectF(sx + OT[row].TX, sy + OT[row].TY,
-          (sx + sw) + OT[row].TX, (sy + sh) + OT[row].TY);
+        if row <= High(A^.Old.Nodes) then
+          Reshape(el, TyRectF(sx + OT[row].TX, sy + OT[row].TY,
+            (sx + sw) + OT[row].TX, (sy + sh) + OT[row].TY), A^.Old.Nodes[row].Radii)
+        else
+          el.Shape.Bounds := TyRectF(sx + OT[row].TX, sy + OT[row].TY,
+            (sx + sw) + OT[row].TX, (sy + sh) + OT[row].TY);
         el.Style.Alpha := op;
         AFrame.Add(el);
         if A^.Ghosts[i].HasLabel then
@@ -2401,7 +2526,35 @@ begin
           ox0 := el.Shape.Bounds.Left - ox0;
           oy0 := el.Shape.Bounds.Top - oy0;
           el := A^.Ghosts[i].LabelEl;
-          if A^.Stepped then
+          if (A^.Ghosts[i].Kind = 1) and (row <= High(A^.Old.Nodes))
+            and A^.Old.Nodes[row].LabelPlace.Has then
+          begin
+            if m = nil then m := NewTextMeasurer(FLastPPI);
+            gx := el.Caption.X;
+            gy := el.Caption.Y;
+            gdx := el.Caption.X - el.Caption.FixedX;
+            gdy := el.Caption.Y - el.Caption.FixedY;
+            if TyTreemapLabelAt(A^.Old, row, FTreemapInks[slot].Label_, m,
+              sx * 1 + OT[row].TX, sy * 1 + OT[row].TY, sw, sh, wtext, lx, ly)
+              and (wtext <> '') then
+            begin
+              el.Caption.Text := wtext;
+              { not dirty yet: the words cut, where they were }
+              if A^.Stepped then
+              begin
+                el.Caption.X := lx + gdx;
+                el.Caption.Y := ly + gdy;
+              end
+              else
+              begin
+                el.Caption.X := gx;
+                el.Caption.Y := gy;
+              end;
+            end
+            else
+              el.Ignore := True;
+          end
+          else if A^.Stepped then
           begin
             el.Caption.X := el.Caption.X + ox0;
             el.Caption.Y := el.Caption.Y + oy0;
@@ -2411,7 +2564,8 @@ begin
         end;
         Continue;
       end;
-      Place(el, row);
+      if row <= High(A^.Old.Nodes) then Place(el, row, A^.Old.Nodes[row].Radii)
+      else Place(el, row, nil);
       AFrame.Add(el);
       if A^.Ghosts[i].HasLabel then
       begin
@@ -3097,6 +3251,7 @@ begin
     else
       TmAnimDrop(si);
     if si <= High(FTmOld) then FTmOld[si] := Default(TTyTreemapSolved);
+    if si <= High(FTmOldNow) then FTmOldNow[si] := Default(TTyTmNow);
     if Length(FTmView) <= si then
     begin
       k := Length(FTmView);
@@ -3125,6 +3280,7 @@ begin
   FTmOld := nil;
   FTmOldHave := nil;
   FTmOldKeys := nil;
+  FTmOldNow := nil;
   FTmViewKeys := keys;
 end;
 

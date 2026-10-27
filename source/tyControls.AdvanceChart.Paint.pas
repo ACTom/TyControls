@@ -1087,6 +1087,9 @@ type
       ink cut to all of them (nonzero), and the hit too (isHover asks each
       clip's contain). Empty everywhere else. }
     ClipPaths: TTyChartShapeArray;
+    { [R5-I] the caption is cut to ClipPaths too, whatever it is (a
+      themeRiver layer's label under the layer's clip); else only a block's }
+    ClipCaption: Boolean;
     { [F6a] zrender's Displayable.cursor, the CSS name the canvas takes
       while the pointer is over the element (Handler.mousemove's
       setCursor): '' is the prototype's 'pointer'. Set where upstream sets

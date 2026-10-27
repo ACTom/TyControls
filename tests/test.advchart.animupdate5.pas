@@ -504,7 +504,8 @@ begin
     for g := 0 to FChart.AnimGhostCount - 1 do
     begin
       p := FChart.AnimGhostAt(g);
-      if (p <> nil) and (p.Series = s) and (p.Index = idx) and (Copy(p.Role, 1, 6) = 'pglyph') then
+      if (p <> nil) and (p.Series = s) and (p.Index = idx) and p.PictRide
+        and ((Copy(p.Role, 1, 6) = 'pglyph') or (Copy(p.Role, 1, 6) = 'pcpath')) then
         Inc(ghosts);
     end;
     Inc(FCompared);
@@ -519,7 +520,22 @@ begin
       begin
         { [R2-I8] a clipped column's paths tween on their own proxies
           [Revised in R2-I8: their rest was compared, the paths stood] }
-        if not ListEl(s, idx, carPictorialClip, el, ai) then Continue;
+        if not ListEl(s, idx, carPictorialClip, el, ai) then
+        begin
+          { [R5-I] past the new count: the ghost that shrinks }
+          p := FChart.AnimFindGhost(s, idx, 'pcpath' + IntToStr(ai));
+          Inc(FCompared);
+          if p = nil then
+          begin
+            Bad(Format('%s path %d: upstream shrinks it, the port has no ghost', [name, ai]));
+            Continue;
+          end;
+          SameKeyOr(Format('%s path %d (going)', [name, ai]), p, 'scaleX', NaN, pa.Find('sx'));
+          SameKeyOr(Format('%s path %d (going)', [name, ai]), p, 'scaleY', NaN, pa.Find('sy'));
+          SameKeyOr(Format('%s path %d (going)', [name, ai]), p, 'x', NaN, pa.Find('x'));
+          SameKeyOr(Format('%s path %d (going)', [name, ai]), p, 'y', NaN, pa.Find('y'));
+          Continue;
+        end;
         p := FChart.AnimFindProxy(s, idx, 'pcpath' + IntToStr(ai));
         Inc(FCompared);
         if (p = nil) and (pa.Integers['n'] > 0) then

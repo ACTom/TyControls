@@ -473,6 +473,163 @@ begin
   if (Result <> nil) and (ATarget.HdGen <> Result.Gen) then Result := nil;
 end;
 
+{ [R5-I] A TIMELINE TICK AS A DATA ITEM (SliderTimelineView._renderAxisTick):
+  where its item model says tooltip -- the item's own key (null falls
+  through), the timeline's, the model's default {trigger: 'item'} -- the
+  tick's ecData has its value as the dataIndex and the timeline as its
+  dataModel: the tooltip's data item, and the chart's mouse events carry
+  the timeline's getDataParams. A category timeline's data: the value its
+  index, the name the item's value as a string; any other, the value as
+  written and no name. }
+function TTyCustomAdvanceChart.TlTickData(ATl, AEl: Integer;
+  out AParams: TTyChartCallbackParams; out AModel: TTyEventModel): Boolean;
+var
+  v: TTyTimelineView;
+  r: TTyTlRole;
+  node: TJSONObject;
+  d, data, item: TJSONData;
+  want, cat: Boolean;
+  nm: string;
+begin
+  Result := False;
+  AParams := TyChartBlankParams;
+  AModel := Default(TTyEventModel);
+  v := TlView(ATl);
+  if (v = nil) or (AEl < 0) or (AEl > High(v.Els)) then Exit;
+  r := v.RoleOf(AEl);
+  if r.Kind <> tlrTick then Exit;
+  node := TlNodeOf(ATl);
+  if node = nil then Exit;
+  want := True;
+  d := node.Find('tooltip');
+  if (d <> nil) and (d.JSONType <> jtNull) then want := JsTruthy(d);
+  data := node.Find('data');
+  item := nil;
+  if (data is TJSONArray) and (r.Index >= 0) and (r.Index < data.Count) then
+    item := data.Items[r.Index];
+  if item is TJSONObject then
+  begin
+    d := TJSONObject(item).Find('tooltip');
+    if (d <> nil) and (d.JSONType <> jtNull) then want := JsTruthy(d);
+  end;
+  if not want then Exit;
+  d := node.Find('axisType');
+  cat := (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'category');
+  nm := '';
+  if cat then
+  begin
+    { getDataItemValue: an object's value, else the item }
+    if item is TJSONObject then d := TJSONObject(item).Find('value') else d := item;
+    if d <> nil then
+      case d.JSONType of
+        jtString: nm := d.AsString;
+        jtNumber: nm := TyJsNumberToString(d.AsFloat);
+        jtBoolean: if d.AsBoolean then nm := 'true' else nm := 'false';
+      end;
+  end;
+  AParams.ComponentType := 'timeline';
+  AParams.ComponentSubType := 'slider';
+  AParams.ComponentIndex := ATl;
+  AParams.SeriesIndex := -1;
+  AParams.Name := nm;
+  AParams.DataIndex := r.Index;
+  AParams.RawDataIndex := r.Index;
+  if cat then SetLength(AParams.Values, 1) else SetLength(AParams.Values, 1);
+  if cat then AParams.Values[0] := r.Index else AParams.Values[0] := r.Value;
+  AParams.ValueText := TyChartValueText(AParams.Values[0]);
+  AModel.Valid := True;
+  AModel.MainType := 'timeline';
+  AModel.SubType := 'slider';
+  AModel.Index := ATl;
+  AModel.Name := nm;
+  Result := True;
+end;
+
+function TTyCustomAdvanceChart.TlTipItem(AX, AY: Integer; out ATl, ATick: Integer): Boolean;
+var
+  k, q: Integer;
+  prm: TTyChartCallbackParams;
+  mdl: TTyEventModel;
+begin
+  Result := False;
+  ATl := -1;
+  ATick := -1;
+  if not TlHitAt(AX, AY, k, q) then Exit;
+  if not TlTickData(k, q, prm, mdl) then Exit;
+  ATl := k;
+  ATick := prm.DataIndex;
+  Result := True;
+end;
+
+{ _showSeriesItemTooltip's cascade over a timeline's data item: [the
+  item's model, the timeline's (its default tooltip {trigger: 'item'})]
+  over the global component }
+function TTyCustomAdvanceChart.TipTlSpec(ATl, ATick: Integer): TTyTooltipSpec;
+var
+  node: TJSONObject;
+  d, data: TJSONData;
+  lvItem, lvTl: TJSONObject;
+  k: Integer;
+begin
+  lvItem := nil;
+  lvTl := TJSONObject.Create(['trigger', 'item']);
+  try
+    node := TlNodeOf(ATl);
+    if node <> nil then
+    begin
+      d := node.Find('tooltip');
+      if d is TJSONObject then
+        for k := 0 to d.Count - 1 do
+          lvTl.Elements[TJSONObject(d).Names[k]] := d.Items[k].Clone;
+      data := node.Find('data');
+      if (data is TJSONArray) and (ATick >= 0) and (ATick < data.Count)
+        and (data.Items[ATick] is TJSONObject) then
+      begin
+        d := TJSONObject(data.Items[ATick]).Find('tooltip');
+        if d is TJSONObject then lvItem := TJSONObject(d.Clone);
+      end;
+    end;
+    Result := TyTooltipSpecOfLevels(FOption, [lvItem, lvTl]);
+  finally
+    lvTl.Free;
+    lvItem.Free;
+  end;
+end;
+
+{ its text: a formatter over the timeline's getDataParams (formatTpl: {a}
+  the series' name, undefined here; {b} the name; {c} the value), else
+  formatTooltip's nameValue with no name -- the tick's axis label }
+function TTyCustomAdvanceChart.TipTlText(ATl, ATick: Integer;
+  const ASpec: TTyTooltipSpec): string;
+var
+  prm: TTyChartCallbackParams;
+  mdl: TTyEventModel;
+  v: TTyTimelineView;
+  k: Integer;
+  params: TTyChartParams;
+begin
+  Result := '';
+  v := TlView(ATl);
+  if v = nil then Exit;
+  for k := 0 to High(v.Els) do
+    if (v.RoleOf(k).Kind = tlrTick) and (v.RoleOf(k).Index = ATick) then
+    begin
+      if not TlTickData(ATl, k, prm, mdl) then Exit;
+      if ASpec.HasFormatter then
+      begin
+        prm.SeriesName := 'undefined';
+        SetLength(params, 1);
+        params[0] := prm;
+        TyChartResolveText(ASpec.Formatter, params, Result, True);
+      end
+      { axis.scale.getLabel of the tick: a category's name (another
+        axis' value as a number prints) }
+      else if prm.Name <> '' then Result := prm.Name
+      else Result := prm.ValueText;
+      Exit;
+    end;
+end;
+
 procedure TTyCustomAdvanceChart.TlMouseOver(const ATarget: TTyChartEventTarget);
 var v: TTyTimelineView;
 begin

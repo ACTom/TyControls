@@ -172,6 +172,11 @@ type
       `triggerTooltip` says false. Its rows (when it has any) are no part of
       dataByCoordSys. False -- the zero value -- triggers. }
     NoTip: Boolean;
+    { [R5-I] COLLECTED FOR ITS OWN show OR handle, not as the tooltip's axis
+      (saveTooltipAxisInfo(false)): its pointer model is the axis' block over
+      the axisPointer component's and the root, no tooltip layer. False --
+      the zero value -- is the tooltip's axis. }
+    OwnModel: Boolean;
   end;
   TTyAxisHitArray = array of TTyAxisHit;
 
@@ -629,6 +634,10 @@ type
       and the item (its place in the layout) }
     LgHas: Boolean;
     LgIndex, LgItem: Integer;
+    { [R5-I] a timeline tick as a data item (its ecData's dataModel the
+      timeline): the timeline and the tick's data index }
+    TlHas: Boolean;
+    TlIndex, TlTick: Integer;
     { [F4b] ACROSS A RE-RENDER (TooltipView.render keeps the box up): the
       axes as a dataByCoordSys (JSON) while the build they pointed into is
       gone -- Stale until the next build reads them back by raw row -- and
@@ -703,6 +712,9 @@ type
     { [R5-F] as TTyTipSnap's }
     LgHas: Boolean;
     LgIndex, LgItem: Integer;
+    { [R5-I] as TTyTipSnap's }
+    TlHas: Boolean;
+    TlIndex, TlTick: Integer;
   end;
 
   { [Batch 115] THE RETURN CIRCLE'S LAYOUT, as the virtual root's layout
@@ -718,6 +730,10 @@ type
   public
     Pending: Integer;
     Live: Boolean;
+    { [R5-I] _state 'ready' while this wrap runs: it took over one still
+      running, whose finished callback (its animators aborted by this one's
+      start) set the state back after this one had set it }
+    Ready: Boolean;
     procedure Hit;
   end;
 
@@ -739,6 +755,21 @@ type
     (shape.x / y / width / height, style.opacity) and its labels' fades, by
     row; the elements leaving; the layout and storage it left; the wrap }
   TTyTmProxyPair = array[0..1] of TTyChartAnimProxy;
+  { [R5-I] A TREEMAP'S ELEMENTS WHERE THEY ARE NOW, by row: what the next
+    transition starts from -- renderNode's lasts read the elements' current
+    values, a transition still running included. Has: the row's element had
+    a proxy (else its last solve is where it is) }
+  TTyTmNowRect = record
+    Has: Boolean;
+    X, Y, W, H, Opacity: Double;
+  end;
+  TTyTmNow = record
+    { its transition was still running }
+    Live: Boolean;
+    GHas: TTyBoolArray;
+    GX, GY: TTyDoubleArray;
+    Rects: array of array[0..1] of TTyTmNowRect;
+  end;
   TTyTmAnim = record
     Wrap: TTyTmWrap;
     Groups: array of TTyChartAnimProxy;
@@ -914,6 +945,9 @@ type
     { THE BARS ON A POLAR, index-parallel to FBindings, solved where FBarCols
       is [Batch 113] }
     FPolarBars: TTyPolarBarLayoutArray;
+    { [R5-I] each polar bar series' elements as the last render laid them
+      out: what the next render's updateStyle reads off them }
+    FPolarStyleMem: TTyPolarStyleMemArray;
     { EVERY CANDLESTICK'S AND BOXPLOT'S width, offset and clip, index-parallel
       to FBindings, solved beside FBarCols for its reason [Batch 108] }
     FWhiskers: TTyWhiskerLayoutArray;
@@ -1101,6 +1135,8 @@ type
       next solve }
     FTmOld: array of TTyTreemapSolved;
     FTmOldHave: array of TTyTreemapHave;
+    { [R5-I] and where its elements were when the setOption came }
+    FTmOldNow: array of TTyTmNow;
     FTmOldKeys: TTyStringArray;
     { the series' view keys when the treemaps were last solved }
     FTmViewKeys: TTyStringArray;
@@ -1257,6 +1293,12 @@ type
     FStCarryHoverSeries, FStCarryHoverRaw: Integer;
     FStGen, FStBuiltGen: Integer;
     FStRerender, FStDirty: Boolean;
+    { [R5-I] a layout that snapped (a resize, an export at another size):
+      the next sync puts each element's states back WITHOUT a transition --
+      renderSeries' updateStates over an update of {duration: 0}, whose
+      animateOrSetProps stopped every animator [was: the proxies were new,
+      a hovered element's state tweened again from normal] }
+    FStSnapPut, FStSnapNow: Boolean;
     { [R5-F] the lines' temporary symbols; a render takes them away
       (LineView.render removes every __temp) }
     FLineTemps: array of TTyLineTemp;
@@ -1410,6 +1452,14 @@ type
       pointer where it was last); where the hovered target was found }
     FVmLive: array of TTyVmLive;
     FVmIndBag, FVmLabBag: array of TTyAnimBag;
+    { [R5-I] the handle labels' opacity ('h0', 'h1'): their blur fades
+      (stateTransition {duration: 200}) }
+    FVmBlurBag: array of TTyAnimBag;
+    { [R5-I] a blur's fade waiting for the frame that applies it (api.enterBlur
+      marks the state; the next frame's render applies it, its animator
+      stepping from the frame after): the target per visual map and handle,
+      NaN for none }
+    FVmBlurDue: array of array[0..1] of Double;
     FVmAnim: TTyAnimation;
     { THE GRAPHIC COMPONENT [Batch 122]: its model (the flattened element
       list and the options pending for the view), its view (the elements by
@@ -1983,6 +2033,17 @@ type
       put it); and the old option's series view keys, read before the option
       text is replaced. }
     FAnimPrev: TTyChartAnimPrev;
+    { [R5-I] each series' markers as last drawn, by series index, kept while
+      the legend has it switched off }
+    FAnimMarkPark: TTyChartAnimMarkParkArray;
+    { [R5-I] A notMerge's OLD SERIES MODELS, as far as their remove() asks
+      them (isAnimationEnabled): each old series' type, animation and
+      animationThreshold, taken before the option text goes; and, for the
+      snapshot, a root over them with the new option's own two keys (the
+      old model's parent is the global model, whose option is the new
+      one) }
+    FAnimOldLiteSeries: TJSONArray;
+    FAnimOldLiteRoot: TJSONObject;
     { WHAT A SUNBURST'S DATA STILL NAMES [milestone D5-D8]: each row's
       piece as the last render that drew it left it -- a drill removes the
       pieces outside the view from the group, but the data keeps them
@@ -2208,6 +2269,11 @@ type
     { each view row's DataDiffer key and raw index }
     { [F3d] a graph's edge rows' DataDiffer keys }
     function AnimGraphEdgeKeys(ASlot: Integer): TTyStringArray;
+    { [R5-I] the polar bars' last shapes into FPolarBars, this render's kept }
+    procedure PolarStyleTake;
+    { [R5-I] ... and those of a view the option no longer has: gone (each
+      setOption renders upstream, disposing the views it drops) }
+    procedure PolarStyleTrim;
     procedure AnimRowKeys(AStore: TTyDataStore; out AKeys: TTyStringArray;
       out ARaws: TTyIntegerArray);
     { A FULL UPDATE ANIMATES [Batch 96]: before its layout, the render it
@@ -2236,6 +2302,9 @@ type
     { the list and keys of the render an update starts from }
     procedure AnimSnapshot;
     procedure AnimDropPrev;
+    { [R5-I] a setOption's render, done now when another setOption comes
+      before the paint that would arm it: each setOption renders }
+    procedure AnimFlushPending;
     procedure UtStaleHarvest;
     function AnimToOldPoint(AOldSeries: Integer; AX, AY: Double): TTyPointF;
     procedure AnimArmTimer;
@@ -2261,6 +2330,16 @@ type
       place; and the shape / label as its proxy has them now }
     function PtrPolarProps(const AHit: TTyAxisHit; out AProps: TTyAnimProps): Boolean;
     procedure PtrPolarNow(const AHit: TTyAxisHit; var ADraw: TTyPolarPointerDraw);
+    { [R5-I] a cartesian pointer's label box with its value's line at AAt
+      (buildLabelElOption: the text's size and padding, the axis' side, the
+      container's confine); False where no label is drawn }
+    function PointerLabelBox(const AHit: TTyAxisHit; AAt: Double; const AText: string;
+      const ARect: TRect; APPI: Integer; const AMeasurer: ITyTextMeasurer;
+      const ALabelS: TTyStyleSet; out ABox: TRect): Boolean;
+    { its top-left at rest with the line at AAt, for the pointer's proxy }
+    function PtrLabelAt(const AHit: TTyAxisHit; AAt: Double; out AX, AY: Double): Boolean;
+    { the box where its slide has got to }
+    procedure PtrLabelNow(const AHit: TTyAxisHit; var ABox: TRect);
     procedure PtrAnimDrop;
     function PtrKeyOf(AAxis: TTyAxis): string;
     function PtrModelOf(const AHit: TTyAxisHit; out AOwn: TJSONObject): TTyAnimModel;
@@ -2272,8 +2351,10 @@ type
       moves, the shape upstream builds otherwise [Batch 101] }
     function PtrShadowNow(const AHit: TTyAxisHit; out AShape: TTyXYWH): Boolean;
     function PtrLive: Boolean;
-    { the frame's continuous part (AContinuous) or the rest }
+    { the frame's continuous part (AContinuous) or the rest; [R5-I] of
+      AFrame, the frame built already }
     function AnimPart(AContinuous: Boolean): TTyPaintList;
+    function AnimPartOf(AFrame: TTyPaintList; AContinuous: Boolean): TTyPaintList;
     procedure SetAnimMode(AValue: TTyChartAnimationMode);
     function GetErrorText: string;
     procedure FreeStores;
@@ -2497,6 +2578,7 @@ type
     procedure DoHighDownBatch(APayload: TJSONObject);
     function VmLive_: Boolean;
     function VmLiveDraw(AIndex: Integer): TTyVmLiveDraw;
+    procedure VmBlurFlush;
     procedure SolveDataZoomViews(const AMeasurer: ITyTextMeasurer; APPI: Integer);
     procedure SolveMarkers(APPI: Integer);
     function MarkerSeriesColorCss(ASlot: Integer): string;
@@ -3411,7 +3493,7 @@ type
       third element -- upstream's defaultedLabel, x and y being categories
       [Batch 100] }
     procedure HeatmapTipDims(ASlot: Integer; const AEnc: TTySeriesEncode;
-      AStore: TTyDataStore);
+      AStore: TTyDataStore; ASysValue: Boolean = False);
     { The series' MODEL name -- what `{a}` and a handler's seriesName print:
       as written, '' when written '', and the auto name `series\0<index>`
       when not written at all. SeriesNameOf is the DISPLAY name, '' then. }
@@ -3569,6 +3651,9 @@ type
       const AOld: TTyTreemapSolved; const AOldHave: TTyTreemapHave; ADirection: Integer;
       const AMap: TTyIntegerArray);
     procedure TmAnimDrop(ASeries: Integer);
+    { [R5-I] where a series' treemap elements are now (its transition's
+      proxies) }
+    function TmNowOf(ASeries: Integer): TTyTmNow;
     procedure TmStrandLabelFades(ASlot: Integer; const AOld: TTyTreemapSolved;
       const AOldHave, AHave: TTyTreemapHave; const AMap: TTyIntegerArray);
     procedure TmAnimDropAll;
@@ -3614,6 +3699,13 @@ type
       item's tooltip.show over the legend's, default false), its cascade,
       its text (its rect is its hit element's) }
     function LgTipItem(const ADatum: TTyChartDatumRef; out ALegend, AItem: Integer): Boolean;
+    { [R5-I] a timeline tick as a data item: its params, and whether it is
+      one (its item model's tooltip); the tick under a point }
+    function TlTickData(ATl, AEl: Integer; out AParams: TTyChartCallbackParams;
+      out AModel: TTyEventModel): Boolean;
+    function TlTipItem(AX, AY: Integer; out ATl, ATick: Integer): Boolean;
+    function TipTlSpec(ATl, ATick: Integer): TTyTooltipSpec;
+    function TipTlText(ATl, ATick: Integer; const ASpec: TTyTooltipSpec): string;
     function TipLgSpec(ALegend, AItem: Integer): TTyTooltipSpec;
     function TipLgText(ALegend, AItem: Integer; const ASpec: TTyTooltipSpec): string;
     function TipTbText(ATb, AIcon: Integer; const ASpec: TTyTooltipSpec): string;
@@ -4803,6 +4895,9 @@ type
       moved, the drag and hover flags, the hover link's items, the element
       states and the indicator where it is now. Alive False before a render. }
     function VisualMapLive(AIndex: Integer): TTyVmLive;
+    { [R5-I] a continuous visual map's handle label's opacity as drawn now
+      (its blur's fade) }
+    function VmHandleLabelOpacity(AIndex, AHandle: Integer): Double;
     { what the pointer at (AX, AY) is over of a visualMap, as zrender would
       find it: 'vm0.inRange', 'vm0.outOfRange', 'vm0.handle1', 'vm0.label0',
       'vm0.text1', 'vm0.item3.symbol', 'vm0.item3.label', 'vm0.ends0'; ''

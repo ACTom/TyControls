@@ -358,6 +358,9 @@ begin
         dims[1].Name := TyCalendarValueDim;
         dims[1].Kind := ddtFloat;
         TyFillSeriesStore(FOption, i, dims, st);
+        { [R5-I] a heatmap's tooltip column: the calendar's value is its
+          own dimension }
+        HeatmapTipDims(i, Default(TTySeriesEncode), st, True);
         Continue;
       end;
       { ON A GEO: the geo's two dimensions, lng and lat -- elements 0 and 1
@@ -386,6 +389,8 @@ begin
           dims[2].Kind := ddtFloat;
         end;
         TyFillSeriesStore(FOption, i, dims, st);
+        { [R5-I] a heatmap's tooltip column }
+        HeatmapTipDims(i, Default(TTySeriesEncode), st);
         Continue;
       end;
       if TySeriesFindType(FBindings[i].SeriesType, typeInfo)
@@ -1162,7 +1167,10 @@ begin
     if not FAnimPrev.Valid then AnimSnapshot;
   end
   else
+  begin
     AnimDropAll;
+    FStSnapPut := True;
+  end;
   { a new option's data: the pieces the old one still named go with it
     [milestone D5-D8] }
   if FAnimPending and not FAnimFull then FUtStale := nil;
@@ -1259,6 +1267,8 @@ begin
   FBarCols := TySolveBarLayout(FOption, FBuild, FBindings, FStores, FIndex, largeBars);
   { AND THE BARS ON A POLAR [Batch 113] }
   FPolarBars := TySolvePolarBars(FOption, FBindings, FStores, FStacks, FIndex, FPolars);
+  { [R5-I] what their updateStyle reads off the elements }
+  PolarStyleTake;
   { AND THE CANDLES AND BOXES, by the same band [Batch 108] }
   FWhiskers := TySolveWhiskerLayouts(FOption, FBindings, FStores, FIndex);
   { AFTER THE BARS: a marker on a bar series sits on its own bar }

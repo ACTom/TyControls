@@ -3740,7 +3740,9 @@ begin
     drawn inside the block would ignore the alpha and the dash it appears to be
     inside. Drawing it out here makes the bypass visible instead of hidden. }
   { [spec 242] which is why a clipped one goes through a layer }
-  if (Length(AElement.ClipPaths) > 0) and (Length(AElement.Caption.RtPieces) > 0) then
+  if (Length(AElement.ClipPaths) > 0) and ((Length(AElement.Caption.RtPieces) > 0)
+    { [R5-I] a themeRiver layer's label under the layer's growing clip }
+    or AElement.ClipCaption) then
     RenderClippedCaption(P, AElement)
   else
     TyRenderCaption(P, AElement);

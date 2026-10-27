@@ -1045,6 +1045,8 @@ begin
         begin
           fe := frm.Element(k);
           if not (fe.Anim.Role in [carCandleWickHigh, carCandleWickLow]) then Continue;
+          { [R5-I] a simple box's one stroke is the box (G[8]), not a wick }
+          if fe.Anim.G[8] <> 0 then Continue;
           if (fe.Anim.Series <> 0) or (fe.Anim.Index <> row) then Continue;
           if fe.Ignore or (fe.Style.Alpha <= 0) then Continue;
           Inc(shown);

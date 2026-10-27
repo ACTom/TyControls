@@ -1124,6 +1124,8 @@ begin
     Result.HdSeries := k;
     Result.HdRow := q;
     Result.HdGen := TlView(k).Gen;
+    { [R5-I] a tick that is a data item: the timeline's params }
+    if TlTickData(k, q, Result.Params, Result.Model) then Result.HasData := True;
     Exit;
   end;
   { THE visualMaps, over the series (z 4) [Batch 116]: no data, only their

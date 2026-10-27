@@ -744,6 +744,31 @@ function an4Cases() {
     'animation false on the polar pointer: it jumps',
     polarBar({ axisPointer: { animation: false } }, { type: 'category', data: CATS6 }, { type: 'value' }),
     { x: 230, y: 98 }, [{ at: 0, x: 230, y: 202 }]));
+  // ---- [R5-I] the cartesian pointer's label: updateLabelEl tweens its x / y
+  // (the box's top-left, after the align and the container's confine) with
+  // the pointer's timing; its text and size change at once ----
+  const ptrLabel = cats => ptrBar({ axisPointer: { label: { show: true, padding: [5, 7, 5, 7], backgroundColor: '#123456' } } },
+    { xAxis: { type: 'category', data: cats } });
+  out.push(pointerCase('axisPointer.label',
+    "a shown label, B -> D: the box's left slides from B's box to D's (a narrower text), not with the line",
+    ptrLabel(['A', 'BBBBBBBBBBBB', 'C', 'D', 'E']), { x: 150, y: 150 }, [{ at: 0, x: 270, y: 150 }]));
+  out.push(pointerCase('axisPointer.labelEdge',
+    "B -> E with E's label wide enough to be confined at the container's right edge: the box slides to the confined place",
+    ptrLabel(['A', 'B', 'C', 'D', 'EEEEEEEEEEEEEEEEEEEEEEEEEEEEEE']), { x: 150, y: 150 }, [{ at: 0, x: 330, y: 150 }]));
+  // [R5-I] the pointer's model: an axis collected for its own show (no
+  // tooltip) reads its block over the axisPointer component's and the
+  // root's -- no exponentialOut, the root's cubicInOut; a tooltip axis'
+  // volatile layer copies no animationDelayUpdate (the tooltip's is unread,
+  // the axisPointer component's is)
+  out.push(pointerCase('axisPointer.ownNoTip',
+    "no tooltip, the x axis' own axisPointer shown: the slide eases cubicInOut (the root's default), not the tooltip's exponentialOut",
+    { xAxis: { type: 'category', data: CATS5, axisPointer: { show: true } }, yAxis: { type: 'value' },
+      series: [{ type: 'bar', emphasis: { disabled: true }, data: [5, 20, 36, 10, -8] }] },
+    { x: 150, y: 150 }, [{ at: 0, x: 270, y: 150 }]));
+  out.push(pointerCase('axisPointer.tipDelay',
+    "tooltip.axisPointer animationDelayUpdate 300 is not read; the axisPointer component's 100 is",
+    ptrBar({ axisPointer: { animationDelayUpdate: 300 } }, { axisPointer: { animationDelayUpdate: 100 } }),
+    { x: 150, y: 150 }, [{ at: 0, x: 270, y: 150 }]));
   // ---- [R5-C] endLabel leftovers ----
   out.push(enterCase('line-endlabel.step',
     "endLabel on a step 'end' line: the label rides the stepped polyline (getPointOn), the values the layout's points",

@@ -440,7 +440,8 @@ begin
   if not AProxied and c.Has[stkLineWidth] then
     AEl.Style.StrokeWidthLogical := c.Num[stkLineWidth];
   if not AProxied then StWriteShadow(AEl, c, r);
-  if c.Has[stkSmooth] and not StSameNum(c.Num[stkSmooth], r.Num[stkSmooth]) then
+  { [R5-I] on a proxy the smooth too is the frame's (it tweens) }
+  if not AProxied and c.Has[stkSmooth] and not StSameNum(c.Num[stkSmooth], r.Num[stkSmooth]) then
     AEl.Shape.Cmds := TyLabelLineCmds(AEl.Shape.Points, c.Num[stkSmooth]);
 end;
 
@@ -3172,6 +3173,12 @@ begin
     TyAnimPropPut(Result.Props, 'scaleX', TyAnimNum(rx.Num * AM.Num[stkScale]));
     TyAnimPropPut(Result.Props, 'scaleY', TyAnimNum(ry.Num * AM.Num[stkScale]));
   end;
+  { [R5-I] a label line's smooth }
+  if AM.Has[stkSmooth] and P.HasStKey('shape.smooth') then
+  begin
+    TyAnimPropPut(Result.Props, 'shape.smooth', TyAnimNum(AM.Num[stkSmooth]));
+    Result.HasShape := True;
+  end;
   { PieView: the emphasis shape is r = layout.r + scaleSize }
   if AM.Has[stkR] and P.HasStKey('shape.r') then
   begin
@@ -3249,12 +3256,22 @@ begin
   d := Find('duration');
   if d = nil then dur := 300
   else if d.JSONType = jtNumber then dur := d.AsFloat
+  { [R5-I] a string: `duration > 0` and the keyframe's time read it as a
+    number (a named function, '@...', is no number) [was: no transition] }
+  else if (d.JSONType = jtString) and (Copy(d.AsString, 1, 1) <> '@') then
+    dur := TyJsToNumber(d.AsString)
   else dur := NaN;
   d := Find('easing');
   if (d <> nil) and (d.JSONType = jtString) then easing := d.AsString
   else easing := 'cubicOut';
   d := Find('delay');
   if (d <> nil) and (d.JSONType = jtNumber) then delay := d.AsFloat
+  { [R5-I] a string that is not empty: Clip starts at globalTime + delay, a
+    string -- the digits run on after the time's and the tween waits for
+    ever at its start [was: no delay] }
+  else if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '')
+    and (Copy(d.AsString, 1, 1) <> '@') and not IsNan(TyJsToNumber('1' + d.AsString)) then
+    delay := Infinity
   else delay := 0;
   { a duration above 0 makes a stateTransition, anything else none }
   if IsNan(dur) or not (dur > 0) then Exit;
@@ -3296,7 +3313,11 @@ begin
       paths their enter turns and grows }
     carGaugePointer, carGaugeProgress, carRadarLine, carRadarArea,
     { and a graph edge's label, the text its fade runs on }
-    carGraphEdgeLabel]) then
+    carGraphEdgeLabel,
+    { [R5-I] an effectScatter's symbol path: the scale its update tweens is
+      the key its state tweens -- one stops the other [was: a proxy of the
+      states' own, its factor over the update's] }
+    carEffectSymbol]) then
     p := role
   else
   begin
@@ -3333,6 +3354,11 @@ begin
     Seed('style.stroke', StColourValue(AEl.Rest, stkStroke));
     Seed('style.lineWidth', TyAnimNum(AEl.Rest.Num[stkLineWidth]));
     Seed('style.opacity', TyAnimNum(AEl.Rest.Num[stkOpacity]));
+    { [R5-I] a label line's smooth: setLabelLineState gives every state a
+      shape with its smooth, which the state transition tweens as a number
+      [was: written at once] }
+    if AKind = cStPxGuide then
+      Seed('shape.smooth', TyAnimNum(AEl.Rest.Num[stkSmooth]));
     { [R2-I3] the pen's phase, where some state says one: it tweens }
     if AEl.Decl[stnSelect].Has[stkDashOffset] or AEl.Decl[stnEmphasis].Has[stkDashOffset]
       or AEl.Decl[stnBlur].Has[stkDashOffset] then
@@ -3411,8 +3437,9 @@ begin
     layer] }
   want := TyStNamesText(TyStLayerStates(AEl));
   if want = p.CurrentStates then Exit;
-  { no timer, no transition }
-  noAnim := not AnimAllowed;
+  { no timer, no transition; [R5-I] nor after a layout that snapped
+    (updateStates' useStates(prevStates) with the transition nulled) }
+  noAnim := not AnimAllowed or FStSnapNow;
   if want = '' then p.ClearStates(noAnim)
   else
   begin
@@ -3437,6 +3464,9 @@ var
   hasCfg: Boolean;
   hostP: TTyChartAnimProxy;
 begin
+  { [R5-I] the snap's states, this sync's alone }
+  FStSnapNow := FStSnapPut;
+  FStSnapPut := False;
   if not FStProxied or (FPaintList = nil) then Exit;
   if FAnim = nil then FAnim := NewAnimDriver;
   if FAnimSet = nil then FAnimSet := TTyChartAnimSet.Create(FAnim);

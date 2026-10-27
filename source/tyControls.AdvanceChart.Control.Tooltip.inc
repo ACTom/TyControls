@@ -323,8 +323,15 @@ begin
 end;
 
 procedure TTyCustomAdvanceChart.HeatmapTipDims(ASlot: Integer;
-  const AEnc: TTySeriesEncode; AStore: TTyDataStore);
-var tip: TTyIntegerArray;
+  const AEnc: TTySeriesEncode; AStore: TTyDataStore; ASysValue: Boolean);
+var
+  tip: TTyIntegerArray;
+  role: array of Integer;
+  w, k, p, c, lab, i: Integer;
+  generated: Boolean;
+  it: TTyRawItem;
+  node, enc, cell: TJSONData;
+  key: string;
 begin
   if (AStore = nil) or (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
   if FBindings[ASlot].SeriesType <> 'heatmap' then Exit;
@@ -333,11 +340,71 @@ begin
   if Length(AEnc.Labels) > 0 then tip := Copy(AEnc.Labels)
   else
   begin
-    { createSeriesData(generateCoord: 'value'): the element past x and y is
-      a coordinate of its own, not extra, a float -- the last one a label
-      suits, and so the tooltip's }
-    SetLength(tip, 1);
-    tip[0] := 2;
+    { [R5-I] createDimensions with generateCoord 'value' (one): the
+      coordinate system's dimensions and what `encode` names take their
+      columns (a heatmap's 'value' is the system's own on a calendar, else
+      only where encode writes it); the first column left is a generated
+      coordinate -- 'value', or 'value0' where 'value' is taken -- not extra;
+      the rest are extra. defaultedLabel, and so the tooltip, is the LAST
+      column that is no extra coordinate and whose type a label suits (no
+      category, no time; a generated one guessed ordinal is a category)
+      [was: always the third column] }
+    w := AStore.RawWidth;
+    if w <= 0 then
+      for i := 0 to Math.Min(4, AStore.RawCount - 1) do
+      begin
+        it := AStore.RawItemByRaw(i);
+        if Length(it.Cells) > w then w := Length(it.Cells);
+      end;
+    SetLength(role, Math.Max(w, 0));
+    for c := 0 to High(role) do role[c] := 0;
+    for k := 0 to AStore.DimCount - 1 do
+    begin
+      p := AStore.RawDimPos(k);
+      if (p < 0) or (p > High(role)) then Continue;
+      { the heatmap's own value where nothing names it: the generated one }
+      if (AStore.DimName(k) = 'value') and not ASysValue then Continue;
+      if AStore.DimType(k) in [ddtOrdinal, ddtTime] then role[p] := 2 else role[p] := 1;
+    end;
+    { what `encode` names besides the system's own and the visual
+      dimensions: a coordinate of that name (encode.value among them) }
+    node := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
+    if node is TJSONObject then node := TJSONObject(node).Find('encode') else node := nil;
+    if node is TJSONObject then
+      for i := 0 to node.Count - 1 do
+      begin
+        key := TJSONObject(node).Names[i];
+        if (key = 'x') or (key = 'y') or (key = 'tooltip') or (key = 'label')
+          or (key = 'itemName') or (key = 'itemId') or (key = 'itemGroupId')
+          or (key = 'itemChildGroupId') or (key = 'seriesName') then Continue;
+        enc := node.Items[i];
+        for k := 0 to Ord(enc is TJSONArray) * (enc.Count - 1) do
+        begin
+          if enc is TJSONArray then cell := enc.Items[k] else cell := enc;
+          if cell.JSONType <> jtNumber then Continue;
+          p := Trunc(cell.AsFloat);
+          if (p < 0) or (p > High(role)) or (role[p] <> 0) then Continue;
+          if (AStore.RawPosType(p) in [ddtOrdinal, ddtTime]) or AStore.RawPosGuessOrdinal(p, False) then
+            role[p] := 2
+          else role[p] := 1;
+        end;
+      end;
+    lab := -1;
+    generated := False;
+    for c := 0 to High(role) do
+      if role[c] = 1 then lab := c
+      else if (role[c] = 0) and not generated then
+      begin
+        generated := True;
+        if not (AStore.RawPosType(c) in [ddtOrdinal, ddtTime])
+          and not AStore.RawPosGuessOrdinal(c, False) then lab := c;
+      end;
+    tip := nil;
+    if lab >= 0 then
+    begin
+      SetLength(tip, 1);
+      tip[0] := lab;
+    end;
   end;
   AStore.SetTooltipPositions(tip);
 end;
@@ -2213,6 +2280,7 @@ var
       tooltip axis, the axis' own block over the root for one collected for
       its own show }
     hit.Spec := AInfo.Spec;
+    hit.OwnModel := not AInfo.FromTooltip;
 
     if ALinked or given then
       value := AGivenValue
@@ -2544,12 +2612,11 @@ var
   i: Integer;
   lineS, shadowS, labelS: TTyStyleSet;
   hit: TTyAxisHit;
-  at, lo, hi, w, pv: Double;
+  at, atRest, lo, hi, w, pv: Double;
   colour: TTyColor;
   band: TTyRectF;
   dash: TTyDoubleArray;
   txt: string;
-  tw, th, margin, padL, padT, padR, padB: Double;
   box: TRect;
   corners: TTyCorners;
   surface: TTyFill;
@@ -2590,7 +2657,9 @@ begin
       hands the end back as itself at or past it }
     at := hit.Axis.DataToCoord(pv, True);
     if IsNan(at) then Continue;
-    { ON ITS WAY THERE: the pointer, and the label with it [Batch 92] }
+    atRest := at;
+    { ON ITS WAY THERE: the pointer [Batch 92] -- [R5-I] the label on a
+      slide of its own }
     at := PtrAt(hit, at);
 
     case hit.Spec.PointerType of
@@ -2656,55 +2725,11 @@ begin
       [R2-I8] through the axis' memo: a function runs as upstream runs it }
     txt := PointerDrawLabelText(hit, pv);
     if txt = '' then Continue;
-    AMeasurer.MeasureLine(txt, labelS.FontName, ResolveFontSize(labelS),
-      TyFontStyleCodeOver(hit.Spec.LabelSpec.FontStyle, labelS.FontWeight), tw, th);
-    if (tw <= 0) or (th <= 0) then Continue;
-    if hit.Spec.LabelSpec.HasPadding then
-    begin
-      padL := APainter.ScaleF(hit.Spec.LabelSpec.PadLeft);
-      padT := APainter.ScaleF(hit.Spec.LabelSpec.PadTop);
-      padR := APainter.ScaleF(hit.Spec.LabelSpec.PadRight);
-      padB := APainter.ScaleF(hit.Spec.LabelSpec.PadBottom);
-    end
-    else
-    begin
-      padL := APainter.Scale(labelS.Padding.Left);
-      padT := APainter.Scale(labelS.Padding.Top);
-      padR := APainter.Scale(labelS.Padding.Right);
-      padB := APainter.Scale(labelS.Padding.Bottom);
-    end;
-    margin := APainter.ScaleF(ActiveController.Metric(
-      TyAdvChartAxisPointerMarginVar, TyAdvChartAxisPointerMargin));
-    if hit.Spec.LabelSpec.MarginLogical <> 3 then
-      margin := APainter.ScaleF(hit.Spec.LabelSpec.MarginLogical);
-    { OUTSIDE THE PLOT, on the axis' own side. Not on the axis LINE: an
-      on-zero axis floats in the middle of the plot and its labels do not
-      follow it there. }
-    if hit.Axis.Horizontal then
-    begin
-      box.Left := Round(at - (tw + padL + padR) / 2);
-      if hit.Axis.Side = asTop then
-        box.Top := Round(hit.Plot.Top - margin - th - padT - padB)
-      else
-        box.Top := Round(hit.Plot.Bottom + margin);
-    end
-    else
-    begin
-      box.Top := Round(at - (th + padT + padB) / 2);
-      if hit.Axis.Side = asRight then
-        box.Left := Round(hit.Plot.Right + margin)
-      else
-        box.Left := Round(hit.Plot.Left - margin - tw - padL - padR);
-    end;
-    box.Right := box.Left + Round(tw + padL + padR);
-    box.Bottom := box.Top + Round(th + padT + padB);
-    { Clamped into the CONTROL, far edge first -- the same rule the tooltip
-      box follows, and for the same reason: what falls outside is not clipped,
-      it is not drawn. }
-    if box.Right > ARect.Right then OffsetRect(box, ARect.Right - box.Right, 0);
-    if box.Bottom > ARect.Bottom then OffsetRect(box, 0, ARect.Bottom - box.Bottom);
-    if box.Left < ARect.Left then OffsetRect(box, ARect.Left - box.Left, 0);
-    if box.Top < ARect.Top then OffsetRect(box, 0, ARect.Top - box.Top);
+    { [R5-I] the box at rest (the line's value, not where its slide has
+      got to), then where its own slide has got to }
+    if not PointerLabelBox(hit, atRest, txt, ARect, APPI, AMeasurer, labelS, box) then
+      Continue;
+    PtrLabelNow(hit, box);
 
     corners := TyEffectiveCorners(labelS);
     if hit.Spec.LabelSpec.HasBorderRadius then
@@ -2732,6 +2757,71 @@ begin
       TyFontStyleCodeOver(hit.Spec.LabelSpec.FontStyle, labelS.FontWeight), colour,
       taCenter, tlCenter, False);
   end;
+end;
+
+function TTyCustomAdvanceChart.PointerLabelBox(const AHit: TTyAxisHit; AAt: Double;
+  const AText: string; const ARect: TRect; APPI: Integer;
+  const AMeasurer: ITyTextMeasurer; const ALabelS: TTyStyleSet; out ABox: TRect): Boolean;
+var
+  tw, th, margin, padL, padT, padR, padB: Double;
+
+  function SF(AV: Double): Double;
+  begin
+    if APPI <= 0 then Result := AV else Result := AV * APPI / 96;
+  end;
+
+begin
+  ABox := Rect(0, 0, 0, 0);
+  AMeasurer.MeasureLine(AText, ALabelS.FontName, ResolveFontSize(ALabelS),
+    TyFontStyleCodeOver(AHit.Spec.LabelSpec.FontStyle, ALabelS.FontWeight), tw, th);
+  if (tw <= 0) or (th <= 0) then Exit(False);
+  if AHit.Spec.LabelSpec.HasPadding then
+  begin
+    padL := SF(AHit.Spec.LabelSpec.PadLeft);
+    padT := SF(AHit.Spec.LabelSpec.PadTop);
+    padR := SF(AHit.Spec.LabelSpec.PadRight);
+    padB := SF(AHit.Spec.LabelSpec.PadBottom);
+  end
+  else
+  begin
+    padL := MulDiv(ALabelS.Padding.Left, APPI, 96);
+    padT := MulDiv(ALabelS.Padding.Top, APPI, 96);
+    padR := MulDiv(ALabelS.Padding.Right, APPI, 96);
+    padB := MulDiv(ALabelS.Padding.Bottom, APPI, 96);
+  end;
+  margin := SF(ActiveController.Metric(
+    TyAdvChartAxisPointerMarginVar, TyAdvChartAxisPointerMargin));
+  if AHit.Spec.LabelSpec.MarginLogical <> 3 then
+    margin := SF(AHit.Spec.LabelSpec.MarginLogical);
+  { OUTSIDE THE PLOT, on the axis' own side. Not on the axis LINE: an
+    on-zero axis floats in the middle of the plot and its labels do not
+    follow it there. }
+  if AHit.Axis.Horizontal then
+  begin
+    ABox.Left := Round(AAt - (tw + padL + padR) / 2);
+    if AHit.Axis.Side = asTop then
+      ABox.Top := Round(AHit.Plot.Top - margin - th - padT - padB)
+    else
+      ABox.Top := Round(AHit.Plot.Bottom + margin);
+  end
+  else
+  begin
+    ABox.Top := Round(AAt - (th + padT + padB) / 2);
+    if AHit.Axis.Side = asRight then
+      ABox.Left := Round(AHit.Plot.Right + margin)
+    else
+      ABox.Left := Round(AHit.Plot.Left - margin - tw - padL - padR);
+  end;
+  ABox.Right := ABox.Left + Round(tw + padL + padR);
+  ABox.Bottom := ABox.Top + Round(th + padT + padB);
+  { Clamped into the CONTROL, far edge first -- the same rule the tooltip
+    box follows, and for the same reason: what falls outside is not clipped,
+    it is not drawn. }
+  if ABox.Right > ARect.Right then OffsetRect(ABox, ARect.Right - ABox.Right, 0);
+  if ABox.Bottom > ARect.Bottom then OffsetRect(ABox, 0, ARect.Bottom - ABox.Bottom);
+  if ABox.Left < ARect.Left then OffsetRect(ABox, ARect.Left - ABox.Left, 0);
+  if ABox.Top < ARect.Top then OffsetRect(ABox, 0, ARect.Top - ABox.Top);
+  Result := True;
 end;
 
 function TTyCustomAdvanceChart.ValuesText(
@@ -3003,6 +3093,7 @@ begin
   else if ASnap.ProxyJson <> '' then Result := TipProxySpec(ASnap.ProxyJson)
   else if ASnap.TbHas then Result := TipTbSpec(ASnap.TbIndex, ASnap.TbIcon)
   else if ASnap.LgHas then Result := TipLgSpec(ASnap.LgIndex, ASnap.LgItem)
+  else if ASnap.TlHas then Result := TipTlSpec(ASnap.TlIndex, ASnap.TlTick)
   else Result := TooltipSpecFor(ASnap.Datum);
   { [Batch 153] a manual show: the payload's position before the
     cascade's (positionExpr || model.get('position')); else, for an item
@@ -3067,7 +3158,7 @@ begin
     A component item (a geo region, an axis' text, a matrix cell) has none. }
   if Length(ASnap.Hits) = 0 then
   begin
-    if (ASnap.ProxyJson <> '') or ASnap.TbHas or ASnap.LgHas then Exit;
+    if (ASnap.ProxyJson <> '') or ASnap.TbHas or ASnap.LgHas or ASnap.TlHas then Exit;
     if not TipTargetValid(ASnap.Datum) or IsGeoDatum(ASnap.Datum)
       or IsAxisTextDatum(ASnap.Datum) or TipIsMatrix(ASnap.Datum)
       or IsGfxTipDatum(ASnap.Datum) then Exit;
@@ -3588,7 +3679,10 @@ begin
             ev.TbHas := True
           { [R5-F] or a legend item with one }
           else if not TipTargetValid(ADatum) and LgTipItem(ADatum, ev.LgIndex, ev.LgItem) then
-            ev.LgHas := True;
+            ev.LgHas := True
+          { [R5-I] or a timeline tick that is a data item }
+          else if not TipTargetValid(ADatum) and TlTipItem(AX, AY, ev.TlIndex, ev.TlTick) then
+            ev.TlHas := True;
         end;
         TipTryShowEvent(ev, True);
       end
@@ -3881,7 +3975,11 @@ begin
       { [R2-I7] the axisInfo's model when the axis is collected (an axis of
         its own show reads its own label), else the tooltip's }
       m := PtrInfoOf(infos, ax);
-      if m >= 0 then hit.Spec := infos[m].Spec
+      if m >= 0 then
+      begin
+        hit.Spec := infos[m].Spec;
+        hit.OwnModel := not infos[m].FromTooltip;
+      end
       else
         hit.Spec := TyAxisPointerSpecOf(FOption, ax.MainType, ax.ComponentIndex,
           isCat, True, True, crossType);
@@ -4240,6 +4338,24 @@ begin
     TipTryShow(snap, TipSpecOf(snap));
     TipDispatch(TJSONObject.Create(['type', 'showTip', 'from', TipUid]), nil,
       False, AViaListener);
+    Exit;
+  end;
+  { [R5-I] A TIMELINE TICK'S: a data item of the timeline's
+    (_showSeriesItemTooltip: the trigger asked, a showTip with its data
+    index) }
+  if AEv.TlHas then
+  begin
+    snap.TlHas := True;
+    snap.TlIndex := AEv.TlIndex;
+    snap.TlTick := AEv.TlTick;
+    if TipSpecOf(snap).Trigger <> tttItem then
+    begin
+      TipHideVia(AViaListener);
+      Exit;
+    end;
+    TipTryShow(snap, TipSpecOf(snap));
+    TipDispatch(TJSONObject.Create(['type', 'showTip', 'dataIndexInside', AEv.TlTick,
+      'dataIndex', AEv.TlTick, 'from', TipUid]), nil, False, AViaListener);
     Exit;
   end;
   { [R5-F] A LEGEND ITEM'S: the same component item }
@@ -5011,6 +5127,7 @@ begin
     hit.NoTip := not infos[m].TriggerTooltip;
     hit.Linked := FTipKeepPtr[i].Linked;
     hit.Spec := infos[m].Spec;
+    hit.OwnModel := not infos[m].FromTooltip;
     hit.Value := FTipKeepPtr[i].Value;
     hit.SnapValue := FTipKeepPtr[i].SnapValue;
     { seriesDataIndices as the model holds them: the rows that are still
@@ -5287,6 +5404,7 @@ begin
       hit := Default(TTyAxisHit);
       hit.Axis := infos[k].Axis;
       hit.Spec := infos[k].Spec;
+      hit.OwnModel := not infos[k].FromTooltip;
       hit.Single := infos[k].Single;
       animate := e.Placed and (FAnimMode <> camOff) and not (csDesigning in ComponentState)
         and AnimOn;
@@ -5403,6 +5521,7 @@ begin
     hit.Polar := infos[k].Polar;
     hit.Single := infos[k].Single;
     hit.Spec := infos[k].Spec;
+    hit.OwnModel := not infos[k].FromTooltip;
     hit.Cross := infos[k].CrossArm;
     hit.NoTip := not infos[k].TriggerTooltip;
     hit.Value := v;
@@ -5748,7 +5867,8 @@ function TTyCustomAdvanceChart.PointerHandleState(AIndex: Integer): TTyPointerHa
 var
   h: TTyAxisPointerHandle;
   el: TTyChartElement;
-  s: Double;
+  s, x, y, v: Double;
+  p: TTyChartAnimProxy;
 begin
   Result := Default(TTyPointerHandleState);
   Result.Value := NaN;
@@ -5757,9 +5877,23 @@ begin
   h := TyAxisPointerHandleOf(FOption, FHandles[AIndex].MainType, FHandles[AIndex].Index);
   Result.Key := FHandles[AIndex].Key;
   Result.Value := FHandles[AIndex].Value;
-  Result.X := (FHandles[AIndex].X - FLastRect.Left) / s;
-  Result.Y := (FHandles[AIndex].Y - FLastRect.Top) / s;
+  { [R5-I] where it is drawn: on its way there while its slide runs (the
+    handle's own x / y / rotation, as upstream's) [was: where it rests] }
+  x := FHandles[AIndex].X;
+  y := FHandles[AIndex].Y;
   Result.Rotation := FHandles[AIndex].Rotation;
+  p := AnimPointerProxy('handle:' + FHandles[AIndex].Key);
+  if (p <> nil) and not p.AtFinal and not FExporting and not FHandles[AIndex].Dragging then
+  begin
+    v := p.Num('x');
+    if not IsNan(v) then x := v;
+    v := p.Num('y');
+    if not IsNan(v) then y := v;
+    v := p.Num('rotation');
+    if not IsNan(v) then Result.Rotation := v;
+  end;
+  Result.X := (x - FLastRect.Left) / s;
+  Result.Y := (y - FLastRect.Top) / s;
   Result.ScaleX := h.SizeW / 2;
   Result.ScaleY := h.SizeH / 2;
   Result.Dragging := FHandles[AIndex].Dragging;
@@ -5851,6 +5985,7 @@ var
     hit.Polar := APolar;
     hit.Single := ASingle;
     hit.Spec := infos[m].Spec;
+    hit.OwnModel := not infos[m].FromTooltip;
     hit.Cross := infos[m].CrossArm;
     hit.NoTip := not infos[m].TriggerTooltip;
     hit.Value := v;
@@ -5993,6 +6128,8 @@ begin
       and (FTipSnap.LgItem <= High(FLegends[FTipSnap.LgIndex].Items)) then
       Result := Result + FLegends[FTipSnap.LgIndex].Items[FTipSnap.LgItem].Name;
   end
+  else if FTipSnap.TlHas then
+    Result := 'timeline:' + IntToStr(FTipSnap.TlTick)
   else if FTipSnap.TbHas then
   begin
     Result := 'toolbox:';
@@ -6587,7 +6724,7 @@ begin
   snap := ASnap;
   onAxis := Length(snap.Hits) > 0;
   if not TipTargetValid(snap.Datum) and not onAxis and (snap.ProxyJson = '')
-    and not snap.TbHas and not snap.LgHas then Exit;
+    and not snap.TbHas and not snap.LgHas and not snap.TlHas then Exit;
   { UNDER AN AXIS TRIGGER THERE IS NO CASCADE. Upstream builds the axis
     tooltip's model from the global component and a positioning hint and
     nothing else -- no series level, no data item -- so every option but
@@ -6609,7 +6746,7 @@ begin
   htmlHas := False;
   htmlLines := nil;
   try
-    if (not onAxis) and ((snap.ProxyJson <> '') or snap.TbHas or snap.LgHas) then
+    if (not onAxis) and ((snap.ProxyJson <> '') or snap.TbHas or snap.LgHas or snap.TlHas) then
     begin
       { [R5-D] A SHOWTIP PROXY'S TEXT: its formatter as formatTpl leaves it
         (no params), else its content; A TOOLBOX ICON'S over its name and
@@ -6617,6 +6754,8 @@ begin
       if snap.TbHas then tipText := TipTbText(snap.TbIndex, snap.TbIcon, spec)
       { [R5-F] a legend item's over its name }
       else if snap.LgHas then tipText := TipLgText(snap.LgIndex, snap.LgItem, spec)
+      { [R5-I] a timeline tick's }
+      else if snap.TlHas then tipText := TipTlText(snap.TlIndex, snap.TlTick, spec)
       else tipText := TipProxyText(snap.ProxyJson, spec);
       AContent.Fmt := tipText;
       if tipText = '' then Exit;

@@ -93,6 +93,10 @@ type
   TTyMkLinePic = record
     { the line's index in the block's Lines }
     Item: Integer;
+    { [R5-I] the lineData id LineDraw's diff pairs the lines by: the merged
+      item's name, a repeat with its count; no name 'e' + two NULs + its
+      place }
+    Id: string;
     { False when an end point holds NaN: nothing is drawn }
     Drawn: Boolean;
     X1, Y1, X2, Y2: Double;
@@ -1054,6 +1058,9 @@ var
   L: TTyMkLine;
   pic: TTyMkLinePic;
   s: Double;
+  seen: TStringList;
+  nm0: string;
+  idx0: Integer;
 
   procedure RunZ2(A: Double);
   begin
@@ -1635,20 +1642,53 @@ begin
   maxZ2 := NegInfinity;
   n := 0;
   SetLength(Result, ABlock.Count);
-  for i := 0 to High(ABlock.Lines) do
-  begin
-    L := ABlock.Lines[i];
-    if not L.Survived then Continue;
-    pic := Default(TTyMkLinePic);
-    pic.Item := i;
-    pic.Drawn := not (IsNan(L.From.Point.X) or IsNan(L.From.Point.Y)
-      or IsNan(L.To_.Point.X) or IsNan(L.To_.Point.Y));
-    if pic.Drawn then Picture(pic);
-    if n < Length(Result) then
+  seen := TStringList.Create;
+  try
+    seen.Sorted := True;
+    seen.Duplicates := dupIgnore;
+    seen.CaseSensitive := True;
+    seen.UseLocale := False;
+    for i := 0 to High(ABlock.Lines) do
     begin
-      Result[n] := pic;
-      Inc(n);
+      L := ABlock.Lines[i];
+      if not L.Survived then Continue;
+      pic := Default(TTyMkLinePic);
+      pic.Item := i;
+      { [R5-I] SeriesData's makeIdFromName over lineData: the merged item's
+        name, a repeat with its count; no name 'e' + two NULs + its place }
+      case L.LineName.Kind of
+        mvkStr: nm0 := L.LineName.Str;
+        mvkNum: nm0 := TyChartValueText(L.LineName.Num);
+      else
+        nm0 := #0;
+      end;
+      if nm0 <> #0 then
+      begin
+        idx0 := seen.IndexOf(nm0);
+        if idx0 < 0 then
+        begin
+          seen.AddObject(nm0, TObject(PtrInt(1)));
+          pic.Id := nm0;
+        end
+        else
+        begin
+          seen.Objects[idx0] := TObject(PtrInt(PtrInt(seen.Objects[idx0]) + 1));
+          pic.Id := nm0 + '__ec__' + IntToStr(PtrInt(seen.Objects[idx0]));
+        end;
+      end
+      else
+        pic.Id := 'e'#0#0 + IntToStr(L.DataIndex);
+      pic.Drawn := not (IsNan(L.From.Point.X) or IsNan(L.From.Point.Y)
+        or IsNan(L.To_.Point.X) or IsNan(L.To_.Point.Y));
+      if pic.Drawn then Picture(pic);
+      if n < Length(Result) then
+      begin
+        Result[n] := pic;
+        Inc(n);
+      end;
     end;
+  finally
+    seen.Free;
   end;
   SetLength(Result, n);
 end;
@@ -2046,6 +2086,8 @@ var
     e.Anim.Role := ARole;
     e.Anim.Series := AHostSeries;
     e.Anim.Index := ABlock.Lines[P.Item].DataIndex;
+    { [R5-I] what an update pairs the line by }
+    e.Anim.Key := P.Id;
     e.Anim.G[0] := P.X1;
     e.Anim.G[1] := P.Y1;
     e.Anim.G[2] := P.X2;
