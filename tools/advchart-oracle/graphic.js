@@ -907,6 +907,13 @@ add('event', 'drag-over', "a rect dragged over one drawn below it (findHover exc
       shape: { x: 40, y: 40, width: 60, height: 40 }, style: { fill: '#5070dd' } }] },
   { steps: [
     { down: 'M' }, { move: [250, 190] }, { move: [100, 190] }, { move: [260, 200] }, { up: [260, 200] }] });
+add('event', 'drag-under', "a rect pressed where it lies over another and moved a little: the one under it is what it is over from the first move (dragenter), and the drop's",
+  { graphic: [
+    { type: 'rect', id: 'U', ondragenter: { $fn: 'log:Uenter' }, ondragleave: { $fn: 'log:Uleave' }, ondrop: { $fn: 'log:Udrop' },
+      shape: { x: 20, y: 20, width: 160, height: 120 }, style: { fill: '#b6d634' } },
+    { type: 'rect', id: 'V', draggable: true, shape: { x: 50, y: 40, width: 60, height: 40 }, style: { fill: '#5070dd' } }] },
+  { steps: [
+    { down: 'V' }, { move: [85, 62] }, { move: [90, 64] }, { up: [90, 64] }] });
 // [spec 242] Element.updateInnerText's layoutRect (the rect a position is
 // worked out against, the host's local space, through its transform unless
 // local) and autoOverflowArea (that rect, back through the label's own

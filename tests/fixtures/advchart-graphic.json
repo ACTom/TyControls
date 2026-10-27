@@ -39369,6 +39369,840 @@
    "fails": []
   },
   {
+   "id": "drag-under",
+   "group": "event",
+   "note": "a rect pressed where it lies over another and moved a little: the one under it is what it is over from the first move (dragenter), and the drop's",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "graphic": [
+     {
+      "type": "rect",
+      "id": "U",
+      "ondragenter": {
+       "$fn": "log:Uenter"
+      },
+      "ondragleave": {
+       "$fn": "log:Uleave"
+      },
+      "ondrop": {
+       "$fn": "log:Udrop"
+      },
+      "shape": {
+       "x": 20,
+       "y": 20,
+       "width": 160,
+       "height": 120
+      },
+      "style": {
+       "fill": "#b6d634"
+      }
+     },
+     {
+      "type": "rect",
+      "id": "V",
+      "draggable": true,
+      "shape": {
+       "x": 50,
+       "y": 40,
+       "width": 60,
+       "height": 40
+      },
+      "style": {
+       "fill": "#5070dd"
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "down": "V"
+    },
+    {
+     "move": [
+      85,
+      62
+     ]
+    },
+    {
+     "move": [
+      90,
+      64
+     ]
+    },
+    {
+     "up": [
+      90,
+      64
+     ]
+    }
+   ],
+   "throws": null,
+   "states": [
+    {
+     "els": [
+      {
+       "id": "U",
+       "gtype": "rect",
+       "type": "rect",
+       "parent": null,
+       "name": "",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000",
+        "skewX": "0000000000000000",
+        "skewY": "0000000000000000",
+        "anchorX": "0000000000000000",
+        "anchorY": "0000000000000000"
+       },
+       "transform": null,
+       "silent": false,
+       "ignore": false,
+       "invisible": false,
+       "draggable": false,
+       "cursor": "pointer",
+       "z": "0000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "size": null,
+       "rect": {
+        "x": "4034000000000000",
+        "y": "4034000000000000",
+        "width": "4064000000000000",
+        "height": "405e000000000000"
+       },
+       "shape": {
+        "x": "4034000000000000",
+        "y": "4034000000000000",
+        "width": "4064000000000000",
+        "height": "405e000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "4034000000000000",
+        "4034000000000000",
+        "4064000000000000",
+        "405e000000000000"
+       ],
+       "style": {
+        "fill": "#b6d634",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "eventData": true,
+       "info": null
+      },
+      {
+       "id": "V",
+       "gtype": "rect",
+       "type": "rect",
+       "parent": null,
+       "name": "",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000",
+        "skewX": "0000000000000000",
+        "skewY": "0000000000000000",
+        "anchorX": "0000000000000000",
+        "anchorY": "0000000000000000"
+       },
+       "transform": null,
+       "silent": false,
+       "ignore": false,
+       "invisible": false,
+       "draggable": true,
+       "cursor": "pointer",
+       "z": "0000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "size": null,
+       "rect": {
+        "x": "4049000000000000",
+        "y": "4044000000000000",
+        "width": "404e000000000000",
+        "height": "4044000000000000"
+       },
+       "shape": {
+        "x": "4049000000000000",
+        "y": "4044000000000000",
+        "width": "404e000000000000",
+        "height": "4044000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "4049000000000000",
+        "4044000000000000",
+        "404e000000000000",
+        "4044000000000000"
+       ],
+       "style": {
+        "fill": "#5070dd",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "eventData": true,
+       "info": null
+      }
+     ],
+     "order": [
+      "g:U",
+      "g:V"
+     ],
+     "model": [
+      {
+       "id": "U",
+       "type": "rect",
+       "parentId": null
+      },
+      {
+       "id": "V",
+       "type": "rect",
+       "parentId": null
+      }
+     ],
+     "log": [],
+     "events": []
+    },
+    {
+     "els": [
+      {
+       "id": "U",
+       "gtype": "rect",
+       "type": "rect",
+       "parent": null,
+       "name": "",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000",
+        "skewX": "0000000000000000",
+        "skewY": "0000000000000000",
+        "anchorX": "0000000000000000",
+        "anchorY": "0000000000000000"
+       },
+       "transform": null,
+       "silent": false,
+       "ignore": false,
+       "invisible": false,
+       "draggable": false,
+       "cursor": "pointer",
+       "z": "0000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "size": null,
+       "rect": {
+        "x": "4034000000000000",
+        "y": "4034000000000000",
+        "width": "4064000000000000",
+        "height": "405e000000000000"
+       },
+       "shape": {
+        "x": "4034000000000000",
+        "y": "4034000000000000",
+        "width": "4064000000000000",
+        "height": "405e000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "4034000000000000",
+        "4034000000000000",
+        "4064000000000000",
+        "405e000000000000"
+       ],
+       "style": {
+        "fill": "#b6d634",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "eventData": true,
+       "info": null
+      },
+      {
+       "id": "V",
+       "gtype": "rect",
+       "type": "rect",
+       "parent": null,
+       "name": "",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000",
+        "skewX": "0000000000000000",
+        "skewY": "0000000000000000",
+        "anchorX": "0000000000000000",
+        "anchorY": "0000000000000000"
+       },
+       "transform": null,
+       "silent": false,
+       "ignore": false,
+       "invisible": false,
+       "draggable": true,
+       "cursor": "pointer",
+       "z": "0000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "size": null,
+       "rect": {
+        "x": "4049000000000000",
+        "y": "4044000000000000",
+        "width": "404e000000000000",
+        "height": "4044000000000000"
+       },
+       "shape": {
+        "x": "4049000000000000",
+        "y": "4044000000000000",
+        "width": "404e000000000000",
+        "height": "4044000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "4049000000000000",
+        "4044000000000000",
+        "404e000000000000",
+        "4044000000000000"
+       ],
+       "style": {
+        "fill": "#5070dd",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "eventData": true,
+       "info": null
+      }
+     ],
+     "order": [
+      "g:U",
+      "g:V"
+     ],
+     "model": [
+      {
+       "id": "U",
+       "type": "rect",
+       "parentId": null
+      },
+      {
+       "id": "V",
+       "type": "rect",
+       "parentId": null
+      }
+     ],
+     "log": [],
+     "events": [
+      {
+       "type": "mouseover",
+       "componentType": "graphic",
+       "componentIndex": 0,
+       "name": "",
+       "info": null
+      }
+     ],
+     "point": [
+      80,
+      60
+     ]
+    },
+    {
+     "els": [
+      {
+       "id": "U",
+       "gtype": "rect",
+       "type": "rect",
+       "parent": null,
+       "name": "",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000",
+        "skewX": "0000000000000000",
+        "skewY": "0000000000000000",
+        "anchorX": "0000000000000000",
+        "anchorY": "0000000000000000"
+       },
+       "transform": null,
+       "silent": false,
+       "ignore": false,
+       "invisible": false,
+       "draggable": false,
+       "cursor": "pointer",
+       "z": "0000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "size": null,
+       "rect": {
+        "x": "4034000000000000",
+        "y": "4034000000000000",
+        "width": "4064000000000000",
+        "height": "405e000000000000"
+       },
+       "shape": {
+        "x": "4034000000000000",
+        "y": "4034000000000000",
+        "width": "4064000000000000",
+        "height": "405e000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "4034000000000000",
+        "4034000000000000",
+        "4064000000000000",
+        "405e000000000000"
+       ],
+       "style": {
+        "fill": "#b6d634",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "eventData": true,
+       "info": null
+      },
+      {
+       "id": "V",
+       "gtype": "rect",
+       "type": "rect",
+       "parent": null,
+       "name": "",
+       "t": {
+        "x": "4014000000000000",
+        "y": "4000000000000000",
+        "rotation": "8000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000",
+        "skewX": "0000000000000000",
+        "skewY": "0000000000000000",
+        "anchorX": "0000000000000000",
+        "anchorY": "0000000000000000"
+       },
+       "transform": [
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "3ff0000000000000",
+        "4014000000000000",
+        "4000000000000000"
+       ],
+       "silent": false,
+       "ignore": false,
+       "invisible": false,
+       "draggable": true,
+       "cursor": "pointer",
+       "z": "0000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "size": null,
+       "rect": {
+        "x": "4049000000000000",
+        "y": "4044000000000000",
+        "width": "404e000000000000",
+        "height": "4044000000000000"
+       },
+       "shape": {
+        "x": "4049000000000000",
+        "y": "4044000000000000",
+        "width": "404e000000000000",
+        "height": "4044000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "4049000000000000",
+        "4044000000000000",
+        "404e000000000000",
+        "4044000000000000"
+       ],
+       "style": {
+        "fill": "#5070dd",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "eventData": true,
+       "info": null
+      }
+     ],
+     "order": [
+      "g:U",
+      "g:V"
+     ],
+     "model": [
+      {
+       "id": "U",
+       "type": "rect",
+       "parentId": null
+      },
+      {
+       "id": "V",
+       "type": "rect",
+       "parentId": null
+      }
+     ],
+     "log": [
+      {
+       "fn": "Uenter",
+       "type": "dragenter",
+       "self": "U",
+       "target": "U"
+      }
+     ],
+     "events": [],
+     "point": [
+      85,
+      62
+     ]
+    },
+    {
+     "els": [
+      {
+       "id": "U",
+       "gtype": "rect",
+       "type": "rect",
+       "parent": null,
+       "name": "",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000",
+        "skewX": "0000000000000000",
+        "skewY": "0000000000000000",
+        "anchorX": "0000000000000000",
+        "anchorY": "0000000000000000"
+       },
+       "transform": null,
+       "silent": false,
+       "ignore": false,
+       "invisible": false,
+       "draggable": false,
+       "cursor": "pointer",
+       "z": "0000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "size": null,
+       "rect": {
+        "x": "4034000000000000",
+        "y": "4034000000000000",
+        "width": "4064000000000000",
+        "height": "405e000000000000"
+       },
+       "shape": {
+        "x": "4034000000000000",
+        "y": "4034000000000000",
+        "width": "4064000000000000",
+        "height": "405e000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "4034000000000000",
+        "4034000000000000",
+        "4064000000000000",
+        "405e000000000000"
+       ],
+       "style": {
+        "fill": "#b6d634",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "eventData": true,
+       "info": null
+      },
+      {
+       "id": "V",
+       "gtype": "rect",
+       "type": "rect",
+       "parent": null,
+       "name": "",
+       "t": {
+        "x": "4024000000000000",
+        "y": "4010000000000000",
+        "rotation": "8000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000",
+        "skewX": "0000000000000000",
+        "skewY": "0000000000000000",
+        "anchorX": "0000000000000000",
+        "anchorY": "0000000000000000"
+       },
+       "transform": [
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "3ff0000000000000",
+        "4024000000000000",
+        "4010000000000000"
+       ],
+       "silent": false,
+       "ignore": false,
+       "invisible": false,
+       "draggable": true,
+       "cursor": "pointer",
+       "z": "0000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "size": null,
+       "rect": {
+        "x": "4049000000000000",
+        "y": "4044000000000000",
+        "width": "404e000000000000",
+        "height": "4044000000000000"
+       },
+       "shape": {
+        "x": "4049000000000000",
+        "y": "4044000000000000",
+        "width": "404e000000000000",
+        "height": "4044000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "4049000000000000",
+        "4044000000000000",
+        "404e000000000000",
+        "4044000000000000"
+       ],
+       "style": {
+        "fill": "#5070dd",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "eventData": true,
+       "info": null
+      }
+     ],
+     "order": [
+      "g:U",
+      "g:V"
+     ],
+     "model": [
+      {
+       "id": "U",
+       "type": "rect",
+       "parentId": null
+      },
+      {
+       "id": "V",
+       "type": "rect",
+       "parentId": null
+      }
+     ],
+     "log": [],
+     "events": [],
+     "point": [
+      90,
+      64
+     ]
+    },
+    {
+     "els": [
+      {
+       "id": "U",
+       "gtype": "rect",
+       "type": "rect",
+       "parent": null,
+       "name": "",
+       "t": {
+        "x": "0000000000000000",
+        "y": "0000000000000000",
+        "rotation": "0000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000",
+        "skewX": "0000000000000000",
+        "skewY": "0000000000000000",
+        "anchorX": "0000000000000000",
+        "anchorY": "0000000000000000"
+       },
+       "transform": null,
+       "silent": false,
+       "ignore": false,
+       "invisible": false,
+       "draggable": false,
+       "cursor": "pointer",
+       "z": "0000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "size": null,
+       "rect": {
+        "x": "4034000000000000",
+        "y": "4034000000000000",
+        "width": "4064000000000000",
+        "height": "405e000000000000"
+       },
+       "shape": {
+        "x": "4034000000000000",
+        "y": "4034000000000000",
+        "width": "4064000000000000",
+        "height": "405e000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "4034000000000000",
+        "4034000000000000",
+        "4064000000000000",
+        "405e000000000000"
+       ],
+       "style": {
+        "fill": "#b6d634",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "eventData": true,
+       "info": null
+      },
+      {
+       "id": "V",
+       "gtype": "rect",
+       "type": "rect",
+       "parent": null,
+       "name": "",
+       "t": {
+        "x": "4024000000000000",
+        "y": "4010000000000000",
+        "rotation": "8000000000000000",
+        "scaleX": "3ff0000000000000",
+        "scaleY": "3ff0000000000000",
+        "originX": "0000000000000000",
+        "originY": "0000000000000000",
+        "skewX": "0000000000000000",
+        "skewY": "0000000000000000",
+        "anchorX": "0000000000000000",
+        "anchorY": "0000000000000000"
+       },
+       "transform": [
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "3ff0000000000000",
+        "4024000000000000",
+        "4010000000000000"
+       ],
+       "silent": false,
+       "ignore": false,
+       "invisible": false,
+       "draggable": true,
+       "cursor": "pointer",
+       "z": "0000000000000000",
+       "zlevel": "0000000000000000",
+       "z2": "0000000000000000",
+       "size": null,
+       "rect": {
+        "x": "4049000000000000",
+        "y": "4044000000000000",
+        "width": "404e000000000000",
+        "height": "4044000000000000"
+       },
+       "shape": {
+        "x": "4049000000000000",
+        "y": "4044000000000000",
+        "width": "404e000000000000",
+        "height": "4044000000000000"
+       },
+       "path": [
+        "401c000000000000",
+        "4049000000000000",
+        "4044000000000000",
+        "404e000000000000",
+        "4044000000000000"
+       ],
+       "style": {
+        "fill": "#5070dd",
+        "stroke": null,
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000",
+        "lineDash": null
+       },
+       "label": null,
+       "eventData": true,
+       "info": null
+      }
+     ],
+     "order": [
+      "g:U",
+      "g:V"
+     ],
+     "model": [
+      {
+       "id": "U",
+       "type": "rect",
+       "parentId": null
+      },
+      {
+       "id": "V",
+       "type": "rect",
+       "parentId": null
+      }
+     ],
+     "log": [
+      {
+       "fn": "Udrop",
+       "type": "drop",
+       "self": "U",
+       "target": "U"
+      }
+     ],
+     "events": [],
+     "point": [
+      90,
+      64
+     ]
+    }
+   ],
+   "fails": []
+  },
+  {
    "id": "text-area",
    "group": "text",
    "note": "textConfig.layoutRect and autoOverflowArea: a long label truncated to its host, one broken into lines and cut by lineOverflow, a rich one, a layoutRect placing 'insideTopLeft' inside a part of the host, the two together, a label turned a quarter, a turned host, a local label in a scaled host, a label of its own width (kept), a layoutRect with no position and no autoOverflowArea (nothing), autoOverflowArea with no position (the label's own x / y), a padded box, a right-aligned label",
@@ -54250,6 +55084,10 @@
   },
   {
    "name": "drag-over: every record matches its recipe",
+   "ok": true
+  },
+  {
+   "name": "drag-under: every record matches its recipe",
    "ok": true
   },
   {

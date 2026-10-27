@@ -606,6 +606,9 @@ begin
   TyChartRegisterElementHandler('log:Tdrop', @FChart.OnElement);
   TyChartRegisterElementHandler('log:Mstart', @FChart.OnElement);
   TyChartRegisterElementHandler('log:Mend', @FChart.OnElement);
+  TyChartRegisterElementHandler('log:Uenter', @FChart.OnElement);
+  TyChartRegisterElementHandler('log:Uleave', @FChart.OnElement);
+  TyChartRegisterElementHandler('log:Udrop', @FChart.OnElement);
   { [spec 242] the clip case's }
   TyChartRegisterElementHandler('log:R', @FChart.OnElement);
   TyChartRegisterElementHandler('log:GA', @FChart.OnElement);
@@ -1280,7 +1283,7 @@ end;
 
 procedure TAdvChartGraphicTest.TestTheEventsAreUpstreams;
 begin
-  RunStatic(['events', 'drag', 'drag-over', 'clip'], False);
+  RunStatic(['events', 'drag', 'drag-over', 'drag-under', 'clip'], False);
   Finish('the events', 300);
   AssertTrue('chart events compared', FEventsSeen >= 3);
 end;
