@@ -6992,7 +6992,10 @@ begin
       { the subpath, its repeated points dropped; closed when it comes back to its start }
       j := s;
       while (j < High(APts)) and not isEmptyPointF(APts[j + 1]) do Inc(j);
-      SetLength(q, j - s + 1);
+      { [R5-G] the scratch only grows: a glyph's outline is many short
+        subpaths, and sixteen arrays sized anew for each was a tenth of a
+        turned label's halo. Nothing reads past segs (or q past n). }
+      if Length(q) < j - s + 2 then SetLength(q, j - s + 2);
       n := 0;
       for i := s to j do
         if (n = 0) or (APts[i].x <> q[n - 1].x) or (APts[i].y <> q[n - 1].y) then
@@ -7021,27 +7024,29 @@ begin
       end;
       if closed then
       begin
-        SetLength(q, n + 1);
         q[n] := q[0];
         segs := n;
       end
       else
         segs := n - 1;
-      SetLength(ux, segs);
-      SetLength(uy, segs);
-      SetLength(len, segs);
-      SetLength(e0, segs);
-      SetLength(e1, segs);
-      SetLength(o0, segs);
-      SetLength(o1, segs);
-      SetLength(t0, segs);
-      SetLength(t1, segs);
-      SetLength(cx0, segs);
-      SetLength(cy0, segs);
-      SetLength(cm0, segs);
-      SetLength(cx1, segs);
-      SetLength(cy1, segs);
-      SetLength(cm1, segs);
+      if Length(ux) < segs then
+      begin
+        SetLength(ux, segs);
+        SetLength(uy, segs);
+        SetLength(len, segs);
+        SetLength(e0, segs);
+        SetLength(e1, segs);
+        SetLength(o0, segs);
+        SetLength(o1, segs);
+        SetLength(t0, segs);
+        SetLength(t1, segs);
+        SetLength(cx0, segs);
+        SetLength(cy0, segs);
+        SetLength(cm0, segs);
+        SetLength(cx1, segs);
+        SetLength(cy1, segs);
+        SetLength(cm1, segs);
+      end;
       for i := 0 to segs - 1 do
       begin
         len[i] := Sqrt(Sqr(q[i + 1].x - q[i].x) + Sqr(q[i + 1].y - q[i].y));

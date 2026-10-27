@@ -168,6 +168,12 @@ procedure TyAdvChartHaloCacheForTest(AOn: Boolean);
   mask's origin at (0, 0) -- per contour its point count, then its points
   x, y in turn. }
 function TyTraceMaskOutlineForTest(AMask: TBGRABitmap; AScale: Integer): TTyDoubleArray;
+{ [R5-G] FOR THE TESTS: the traces kept by the mask's ink (TraceMaskOutline)
+  -- switched off (everything kept dropped) or on again (ACollide: every box
+  under one hash, so only the whole comparison tells them apart), and how
+  many traces were answered from them. }
+procedure TyAdvChartTraceKeepForTest(AOn: Boolean; ACollide: Boolean = False);
+function TyAdvChartTraceKeptHitsForTest: Integer;
 
 { [R2-L] BGRA's ABmp.FillRectAntialias(x, y, x2, y2, AColor) -- pixel-centred,
   in the bitmap's antialiasing draw mode -- byte for byte, the same brush
@@ -1354,6 +1360,66 @@ var
   GHaloTraces: Integer = 0;
   GTraceWork: TTraceWork = nil;
 
+type
+  { [R5-G] A TRACE KEPT BY WHAT IT WAS TRACED FROM: the padded alpha of the
+    ink's box, where that box stands in the mask and the scale -- all the
+    trace reads -- and the outline it made. }
+  TTyTraceKept = class
+  public
+    X0, Y0, AW, AH, Scale: Integer;
+    Al: array of Byte;
+    Pts: array of Double;
+    Starts: array of Integer;
+    Contours: Integer;
+    Next: TTyTraceKept;    // another box with the same hash
+  end;
+
+const
+  TraceKeptMaxCount = 8192;
+  TraceKeptMaxBytes = 32 * 1024 * 1024;
+
+var
+  GTraceKept: specialize TDictionary<QWord, TTyTraceKept> = nil;
+  GTraceKeptCount: Integer = 0;
+  GTraceKeptBytes: Int64 = 0;
+  GTraceKeptHits: Integer = 0;
+  GTraceKeptOff: Boolean = False;
+  GTraceKeptCollide: Boolean = False;
+
+procedure DropTraceKept;
+var
+  t, n, nx: TTyTraceKept;
+begin
+  if GTraceKept <> nil then
+  begin
+    for t in GTraceKept.Values do
+    begin
+      n := t;
+      while n <> nil do
+      begin
+        nx := n.Next;
+        n.Free;
+        n := nx;
+      end;
+    end;
+    GTraceKept.Clear;
+  end;
+  GTraceKeptCount := 0;
+  GTraceKeptBytes := 0;
+end;
+
+procedure TyAdvChartTraceKeepForTest(AOn: Boolean; ACollide: Boolean);
+begin
+  DropTraceKept;
+  GTraceKeptOff := not AOn;
+  GTraceKeptCollide := ACollide;
+end;
+
+function TyAdvChartTraceKeptHitsForTest: Integer;
+begin
+  Result := GTraceKeptHits;
+end;
+
 { THE GLYPHS' OUTLINES from their coverage: marching squares over the mask's
   alpha at half coverage, each crossing placed by linear interpolation
   between the pixel centres, the segments chained into closed contours. A
@@ -1391,6 +1457,12 @@ var
   b0, b1, b2, b3: Boolean;
   kTop, kRight, kBottom, kLeft: Integer;
   o: TTyHaloOutline;
+  rowOr: LongWord;
+  px: PLongWord;
+  keep: Boolean;
+  hk: QWord;
+  kt, kFirst: TTyTraceKept;
+  ab: PByte;
 
   function A(AX, AY: Integer): Double;
   begin
@@ -1457,6 +1529,18 @@ begin
   for y := 0 to h - 1 do
   begin
     row := AMask.ScanLine[y];
+    { [R5-G] a row with no pixel at half coverage is passed at a glance: the
+      alpha byte's top bit is set exactly where the alpha is 128 or more, and
+      the OR of the row's pixels has it set exactly where one of them does --
+      most of a turned label's square mask is such rows }
+    px := PLongWord(row);
+    rowOr := 0;
+    for x := 0 to w - 1 do
+    begin
+      rowOr := rowOr or px^;
+      Inc(px);
+    end;
+    if rowOr and (LongWord($80) shl TBGRAPixel_AlphaShift) = 0 then Continue;
     for x := 0 to w - 1 do
     begin
       if row^.alpha >= 128 then
@@ -1500,6 +1584,49 @@ begin
       for x := x0 to x1 + 1 do
         if (x >= 0) and (x < w) then
           al[(y - y0) * aw + (x - x0)] := row[x].alpha;
+    end;
+    { [R5-G] THE SAME INK TRACED BEFORE: everything below reads the padded
+      alpha, the box's place (x0, y0) and the scale and nothing else, so a
+      box met again -- a label moved along its tween, its glyphs landing on
+      the pixels they landed on in an earlier frame -- takes that trace's
+      outline, a copy }
+    keep := not ownWork and not GTraceKeptOff;
+    kFirst := nil;
+    hk := 0;
+    if keep then
+    begin
+      {$push}{$R-}{$Q-}
+      hk := QWord($CBF29CE484222325);
+      hk := (hk xor QWord(LongWord(x0))) * QWord($100000001B3);
+      hk := (hk xor QWord(LongWord(y0))) * QWord($100000001B3);
+      hk := (hk xor QWord(LongWord(aw))) * QWord($100000001B3);
+      hk := (hk xor QWord(LongWord(ah))) * QWord($100000001B3);
+      hk := (hk xor QWord(LongWord(AScale))) * QWord($100000001B3);
+      ab := al;
+      for i := 0 to aw * ah - 1 do
+      begin
+        hk := (hk xor ab^) * QWord($100000001B3);
+        Inc(ab);
+      end;
+      {$pop}
+      if GTraceKeptCollide then hk := 0;
+      if (GTraceKept <> nil) and GTraceKept.TryGetValue(hk, kFirst) then
+      begin
+        kt := kFirst;
+        while kt <> nil do
+        begin
+          if (kt.X0 = x0) and (kt.Y0 = y0) and (kt.AW = aw) and (kt.AH = ah)
+            and (kt.Scale = AScale) and CompareMem(@kt.Al[0], al, aw * ah) then
+          begin
+            o.Pts := Copy(kt.Pts);
+            o.Starts := Copy(kt.Starts);
+            o.Contours := kt.Contours;
+            Inc(GTraceKeptHits);
+            Exit;
+          end;
+          kt := kt.Next;
+        end;
+      end;
     end;
     { every slot empty; a crossing is written before it is read }
     FillDWord(adj^, nKeys * 2, LongWord(-1));
@@ -1555,6 +1682,12 @@ begin
     SetLength(used, nSeg);
     for i := 0 to nSeg - 1 do used[i] := False;
     nPts := 0;
+    { [R5-G] room for every point at once: a contour of s segments has at
+      most s + 1 points, so all of them at most twice the segments; and a
+      start per contour, one contour per segment at most -- both cut to size
+      below, as they always were }
+    SetLength(o.Pts, 4 * nSeg);
+    SetLength(o.Starts, nSeg + 1);
     for i := 0 to nSeg - 1 do
     begin
       if used[i] then Continue;
@@ -1575,10 +1708,37 @@ begin
         if segA[seg] = key then key := segB[seg] else key := segA[seg];
       end;
       Inc(o.Contours);
-      SetLength(o.Starts, o.Contours + 1);
       o.Starts[o.Contours] := nPts;
     end;
+    SetLength(o.Starts, o.Contours + 1);
     SetLength(o.Pts, 2 * nPts);
+    { [R5-G] kept by its ink, within bounds }
+    if keep then
+    begin
+      if GTraceKept = nil then
+        GTraceKept := specialize TDictionary<QWord, TTyTraceKept>.Create;
+      if (GTraceKeptCount >= TraceKeptMaxCount) or (GTraceKeptBytes + aw * ah
+        + 8 * Length(o.Pts) + 4 * Length(o.Starts) > TraceKeptMaxBytes) then
+      begin
+        DropTraceKept;
+        kFirst := nil;
+      end;
+      kt := TTyTraceKept.Create;
+      kt.X0 := x0;
+      kt.Y0 := y0;
+      kt.AW := aw;
+      kt.AH := ah;
+      kt.Scale := AScale;
+      SetLength(kt.Al, aw * ah);
+      Move(al^, kt.Al[0], aw * ah);
+      kt.Pts := Copy(o.Pts);
+      kt.Starts := Copy(o.Starts);
+      kt.Contours := o.Contours;
+      kt.Next := kFirst;
+      GTraceKept.AddOrSetValue(hk, kt);
+      Inc(GTraceKeptCount);
+      Inc(GTraceKeptBytes, aw * ah + 8 * Length(o.Pts) + 4 * Length(o.Starts));
+    end;
   finally
     if ownWork then wk.Free;
   end;
@@ -3557,5 +3717,7 @@ finalization
   FreeAndNil(GHaloOutlines);
   FreeAndNil(GHaloMask);
   FreeAndNil(GTraceWork);
+  DropTraceKept;
+  FreeAndNil(GTraceKept);
 
 end.
