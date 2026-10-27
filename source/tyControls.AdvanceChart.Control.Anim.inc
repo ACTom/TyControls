@@ -520,6 +520,113 @@ begin
   end;
 end;
 
+{ [R5-I] BarView's updateStyle on a polar reads the ELEMENT's shape -- its
+  percentage corners (getSectorCornerRadius) and its label's automatic turn
+  (setSectorTextRotation) -- before the update's updateProps sets the new
+  layout (setToFinal): a kept row's corners and turn are the last render's
+  layout's, whether or not anything animates. The view keeps its elements
+  by its id and type (a notMerge of the same series included); one the
+  legend switched off cleared them (_clear). Each layout pass hands the
+  last one's shapes to the rows its data diff pairs (getId) and keeps its
+  own. }
+procedure TTyCustomAdvanceChart.PolarStyleTake;
+var
+  slot, si, i, m, k, n: Integer;
+  viewKeys, keys: TTyStringArray;
+  raws: TTyIntegerArray;
+  key: string;
+  mem: TTyPolarStyleMemArray;
+  e: TTyPolarStyleMem;
+  sl: TStringList;
+  s: TTyPolarSector;
+  p: TTyChartAnimProxy;
+
+  function PNum(const AKey: string; AOr: Double): Double;
+  begin
+    if (p <> nil) and (p.GetAnimProp(AKey).Kind = avkNumber) then Result := p.Num(AKey)
+    else Result := AOr;
+  end;
+
+begin
+  mem := nil;
+  viewKeys := AnimViewKeys;
+  for slot := 0 to High(FPolarBars) do
+  begin
+    if not FPolarBars[slot].Solved then Continue;
+    if (slot > High(FBindings)) or FBindings[slot].Hidden then Continue;
+    if (slot > High(FStores)) or (FStores[slot] = nil) then Continue;
+    si := FBindings[slot].SeriesIndex;
+    if (si < 0) or (si > High(viewKeys)) then Continue;
+    key := viewKeys[si] + #1 + FBindings[slot].SeriesType;
+    AnimRowKeys(FStores[slot], keys, raws);
+    n := Length(FPolarBars[slot].Rows);
+    SetLength(FPolarBars[slot].StyleRows, n);
+    SetLength(FPolarBars[slot].HasStyle, n);
+    for i := 0 to n - 1 do FPolarBars[slot].HasStyle[i] := False;
+    { the last render's elements, by the data diff }
+    for m := 0 to High(FPolarStyleMem) do
+      if FPolarStyleMem[m].Key = key then
+      begin
+        sl := TStringList.Create;
+        try
+          sl.CaseSensitive := True;
+          sl.UseLocale := False;
+          sl.Duplicates := dupIgnore;
+          sl.Sorted := True;
+          for i := 0 to High(FPolarStyleMem[m].RowKeys) do
+            sl.AddObject(FPolarStyleMem[m].RowKeys[i], TObject(PtrInt(i + 1)));
+          for i := 0 to Math.Min(n, Length(keys)) - 1 do
+            if sl.Find(keys[i], k) then
+            begin
+              k := PtrInt(sl.Objects[k]) - 1;
+              if (k <= High(FPolarStyleMem[m].Has)) and FPolarStyleMem[m].Has[k] then
+              begin
+                s := FPolarStyleMem[m].Rows[k];
+                { the element as it is now: where a tween left it (its last
+                  step's value, or mid-flight) -- setToFinal is overwritten
+                  every frame }
+                p := nil;
+                if FAnimSet <> nil then p := FAnimSet.Find(FPolarStyleMem[m].Series, k, 'bar');
+                if (p <> nil) and not p.Leaving then
+                begin
+                  s.CX := PNum('shape.cx', s.CX);
+                  s.CY := PNum('shape.cy', s.CY);
+                  s.R0 := PNum('shape.r0', s.R0);
+                  s.R := PNum('shape.r', s.R);
+                  s.SA := PNum('shape.startAngle', s.SA);
+                  s.EA := PNum('shape.endAngle', s.EA);
+                end;
+                FPolarBars[slot].StyleRows[i] := s;
+                FPolarBars[slot].HasStyle[i] := True;
+              end;
+            end;
+        finally
+          sl.Free;
+        end;
+        Break;
+      end;
+    { this render's, for the next: each element's shape, clipped as built }
+    e := Default(TTyPolarStyleMem);
+    e.Key := key;
+    e.Series := si;
+    e.RowKeys := Copy(keys, 0, n);
+    SetLength(e.Rows, n);
+    SetLength(e.Has, n);
+    for i := 0 to n - 1 do
+    begin
+      s := FPolarBars[slot].Rows[i];
+      e.Has[i] := (i <= High(FPolarBars[slot].Valid)) and FPolarBars[slot].Valid[i];
+      { a row of no element is never clipped (its layout is not a number) }
+      if e.Has[i] and FPolarBars[slot].Clip then
+        TyPolarBarClip(FPolarBars[slot].AreaR0, FPolarBars[slot].AreaR, s);
+      e.Rows[i] := s;
+    end;
+    SetLength(mem, Length(mem) + 1);
+    mem[High(mem)] := e;
+  end;
+  FPolarStyleMem := mem;
+end;
+
 procedure TTyCustomAdvanceChart.AnimRowKeys(AStore: TTyDataStore; out AKeys: TTyStringArray;
   out ARaws: TTyIntegerArray);
 var

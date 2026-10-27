@@ -878,6 +878,9 @@ type
     { THE BARS ON A POLAR, index-parallel to FBindings, solved where FBarCols
       is [Batch 113] }
     FPolarBars: TTyPolarBarLayoutArray;
+    { [R5-I] each polar bar series' elements as the last render laid them
+      out: what the next render's updateStyle reads off them }
+    FPolarStyleMem: TTyPolarStyleMemArray;
     { EVERY CANDLESTICK'S AND BOXPLOT'S width, offset and clip, index-parallel
       to FBindings, solved beside FBarCols for its reason [Batch 108] }
     FWhiskers: TTyWhiskerLayoutArray;
@@ -2164,6 +2167,8 @@ type
     { each view row's DataDiffer key and raw index }
     { [F3d] a graph's edge rows' DataDiffer keys }
     function AnimGraphEdgeKeys(ASlot: Integer): TTyStringArray;
+    { [R5-I] the polar bars' last shapes into FPolarBars, this render's kept }
+    procedure PolarStyleTake;
     procedure AnimRowKeys(AStore: TTyDataStore; out AKeys: TTyStringArray;
       out ARaws: TTyIntegerArray);
     { A FULL UPDATE ANIMATES [Batch 96]: before its layout, the render it

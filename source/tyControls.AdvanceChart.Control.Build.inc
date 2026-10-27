@@ -1189,6 +1189,8 @@ begin
   FBarCols := TySolveBarLayout(FOption, FBuild, FBindings, FStores, FIndex, largeBars);
   { AND THE BARS ON A POLAR [Batch 113] }
   FPolarBars := TySolvePolarBars(FOption, FBindings, FStores, FStacks, FIndex, FPolars);
+  { [R5-I] what their updateStyle reads off the elements }
+  PolarStyleTake;
   { AND THE CANDLES AND BOXES, by the same band [Batch 108] }
   FWhiskers := TySolveWhiskerLayouts(FOption, FBindings, FStores, FIndex);
   { AFTER THE BARS: a marker on a bar series sits on its own bar }

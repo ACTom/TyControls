@@ -3949,6 +3949,42 @@ var
       end;
   end;
 
+  { [R5-I] BarView's update when roundCap changed: the old element fades out
+    (leave timing, its old row), a new one grows its r (radial) or end angle
+    from the start at update timing and the row }
+  procedure PolarBarSwap(AOld, AOldRow: Integer; const AEl, AOldEl: TTyChartElement;
+    const AC: TTyChartAnimSeries);
+  var
+    g, p: TTyChartAnimProxy;
+    props: TTyAnimProps;
+  begin
+    g := OldProxy(AOld, AOldRow, 'bar');
+    if g <> nil then g.FClaimed := True
+    else
+    begin
+      g := TTyChartAnimProxy.Create(s, AOldRow, 'bar');
+      g.Animation := FAnimation;
+      g.Attr(PolarBarProps(AOldEl));
+    end;
+    g.FSeries := s;
+    g.FIndex := AOldRow;
+    g.FLeaving := True;
+    g.FGhost := AOldEl;
+    g.FFinal := nil;
+    FGhosts.Add(g);
+    if g.GetAnimProp('style.opacity').Kind = avkNull then
+      g.SetNum('style.opacity', AOldEl.Style.Alpha);
+    TyFadeOutElement(g, AC.Model, AOldRow, True, @g.LeaveDone);
+    props := PolarBarProps(AEl);
+    p := Make(s, r, 'bar');
+    p.Attr(props);
+    p.SetFinal(props);
+    if not AC.Enabled then Exit;
+    if AEl.Anim.G[7] <> 0 then p.SetNum('shape.r', AEl.Anim.G[2])
+    else p.SetNum('shape.endAngle', AEl.Anim.G[4]);
+    TyUpdateProps(p, props, AC.Model, TyAnimCallAt(r));
+  end;
+
   procedure UpdateOne(AAt: Integer; const AEl: TTyChartElement;
     const AC: TTyChartAnimSeries; AOld, AOldRow: Integer);
   var
@@ -4215,6 +4251,16 @@ var
           end;
           props := PolarBarProps(AEl);
           hasOld := OldEl(AOld, AOldRow, 'bar', oe) and (oe.Anim.Role = carPolarBar);
+          { [R5-I] roundCap switched: a Sector cannot become a Sausage (nor
+            back) -- removeElementWithFadeOut of the old one, and a new one
+            the creator grows from its start (isUpdate) at update timing and
+            the row [was: tweened as the same bar] }
+          if hasOld and (((oe.Anim.G[8] = 0) and (AEl.Anim.G[10] <> 0))
+            or ((oe.Anim.G[8] <> 0) and (AEl.Anim.G[10] = 0))) then
+          begin
+            PolarBarSwap(AOld, AOldRow, AEl, oe, AC);
+            Exit;
+          end;
           hadProxy := OldProxy(AOld, AOldRow, 'bar') <> nil;
           if hasOld then oprops := PolarBarProps(oe) else oprops := nil;
           p := Take(AOld, AOldRow, s, r, 'bar', oprops, props, hasOld);

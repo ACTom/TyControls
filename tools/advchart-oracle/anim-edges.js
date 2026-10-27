@@ -258,10 +258,28 @@ const PROBES = {
       if (data) data.each(i => { const el = data.getItemGraphicEl(i); if (el) live.add(el); });
       const gone = [];
       v.group.eachChild(el => {
-        if (live.has(el) || el.type !== 'rect') return;
+        if (live.has(el) || (el.type !== 'rect' && el.type !== 'sector' && el.type !== 'sausage')) return;
         gone.push({ op: opOf(el), n: nClip(el) });
       });
       rec['gh' + v.__model.seriesIndex + '/all'] = gone;
+    });
+  },
+  // a bar series on a polar: each sector's shape, its cornerRadius as the
+  // shape holds it, its label's textConfig rotation
+  pol(chart, rec, c) {
+    chart.getModel().eachSeries(sm => {
+      if (sm.subType !== 'bar' || sm.coordinateSystem.type !== 'polar') return;
+      const data = sm.getData();
+      rowsOf(c, data).forEach(i => {
+        const el = data.getItemGraphicEl(i);
+        if (!el) return;
+        const sh = el.shape;
+        const cr = sh.cornerRadius;
+        const tc = el.textConfig;
+        rec['po' + sm.seriesIndex + '/' + i] = { type: el.type, sh: arr([sh.cx, sh.cy, sh.r0, sh.r, sh.startAngle, sh.endAngle]),
+          cr: cr == null ? null : arr(Array.isArray(cr) ? cr : [cr]),
+          rot: tc && tc.rotation != null ? hx(tc.rotation) : null, n: nClip(el) };
+      });
     });
   },
   // a funnel's pieces and their labels
@@ -399,6 +417,32 @@ add('setopt', 'two-merges-move', "two merges at the same instant that move every
   ['bar'],
   [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'mergeq', option: { series: [{ data: [30, 20, 10] }] } },
     { t: T1, do: 'merge', option: { series: [{ data: [5, 35, 15] }] } }, ...after([0, 1, 500, 1001], T1)]);
+
+// ---- bars on a polar: what updateStyle reads off the shape as it is ----
+const POL = (radial, s, extra) => Object.assign({ animation: true, animationDuration: 600, animationEasing: 'linear',
+  animationDurationUpdate: 1000, animationEasingUpdate: 'linear', polar: { radius: [30, 120] },
+  angleAxis: radial ? { type: 'category', data: ['a', 'b', 'c'] } : { type: 'value', max: 100 },
+  radiusAxis: radial ? { type: 'value', max: 100 } : { type: 'category', data: ['a', 'b', 'c'] },
+  series: [Object.assign({ type: 'bar', coordinateSystem: 'polar', data: [40, 70, 90] }, s || {})] }, extra || {});
+add('polar', 'pol-corner-enter', "radial bars with borderRadius '30%': the creator sets r to r0 before updateStyle, so the corners are 30% of |r0| -- and stay so after the bar has grown (nothing tweens them)",
+  POL(true, { itemStyle: { borderRadius: '30%' } }), ['pol'], after([0, 1, 300, 599, 600, 601], 0));
+add('polar', 'pol-corner-update', "the same, then a merge changes the values: updateStyle reads the shape before updateProps -- the corners are 30% of the old r",
+  POL(true, { itemStyle: { borderRadius: ['30%', 4, '10%', 0] } }), ['pol'],
+  [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'merge', option: { series: [{ data: [80, 30, 60] }] } }, ...after([0, 1, 500, 1001], T1)]);
+add('polar', 'pol-rot-enter', "tangential bars, labels in the middle (rotate auto): the creator sets endAngle to startAngle before updateStyle, so setSectorTextRotation turns the label by the start angle -- and it stays so",
+  POL(false, { label: { show: true, position: 'middle' } }), ['pol'], after([0, 1, 300, 601], 0));
+add('polar', 'pol-rot-update', "the same, then a merge: the turn read off the angles before updateProps (the old ones); end-angle labels",
+  POL(false, { label: { show: true, position: 'insideEndAngle' } }), ['pol'],
+  [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'merge', option: { series: [{ data: [20, 90, 50] }] } }, ...after([0, 1, 500, 1001], T1)]);
+add('polar', 'pol-roundcap', "tangential bars, roundCap switched on in a merge: the Sector cannot become a Sausage -- the old one fades out (leave timing), a new Sausage grows its end angle from its start (update timing, its row)",
+  POL(false), ['pol', 'ghost'],
+  [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'merge', option: { series: [{ roundCap: true, data: [50, 60, 70] }] } }, ...after([0, 1, 100, 199, 200, 500, 1001], T1)]);
+add('polar', 'pol-enter-delay', "radial bars with animationDelay idx * 100: the creator's initProps (no data index) has set the shape to its end, so the add's initProps at the row finds nothing to tween -- the bars grow together, the delay asked of no index",
+  POL(true, { animationDelay: { $fn: 'idx*100' } }), ['pol'], after([0, 1, 100, 300, 599, 600, 601, 700], 0));
+add('polar', 'pol-add', "a merge adds a radial bar: the creator's updateProps (isUpdate) grows its r from r0 at update timing with no data index",
+  POL(true, { animationDelayUpdate: { $fn: 'idx*100' } }), ['pol'],
+  [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'merge', option: { angleAxis: { data: ['a', 'b', 'c', 'd'] }, series: [{ data: [40, 70, 90, 60] }] } },
+    ...after([0, 1, 100, 300, 500, 1001, 1301], T1)]);
 
 // ---- funnel ----
 const FN = (data, extra, s) => Object.assign({ animation: true,

@@ -57,6 +57,7 @@ type
     procedure TestABarClippedPastThePlotAsUpstream;
     procedure TestTheMarkersAsUpstream;
     procedure TestEachSetOptionRendersAsUpstream;
+    procedure TestBarsOnAPolarAsUpstream;
   end;
 
 implementation
@@ -385,6 +386,38 @@ begin
       SameNum(name + ' scaleX', PNumOr(p, 'scaleX', el.Anim.G[2]), leaf.Find('sx'));
       SameRun(name, p, leaf);
     end
+    else if pre = 'po' then
+    begin
+      { a polar bar: its proxy's sector, the list's corners and its
+        label's turn (the static picture: what updateStyle set) }
+      v := Nums(leaf.Arrays['sh']);
+      if not RoleEl(s, idx, carPolarBar, el) then
+      begin
+        Bad(name + ': not drawn');
+        Continue;
+      end;
+      p := FChart.AnimFindProxy(s, idx, 'bar');
+      SameNum(name + ' cx', PNumOr(p, 'shape.cx', el.Anim.G[0]), v[0]);
+      SameNum(name + ' cy', PNumOr(p, 'shape.cy', el.Anim.G[1]), v[1]);
+      SameNum(name + ' r0', PNumOr(p, 'shape.r0', el.Anim.G[2]), v[2]);
+      SameNum(name + ' r', PNumOr(p, 'shape.r', el.Anim.G[3]), v[3]);
+      SameNum(name + ' startAngle', PNumOr(p, 'shape.startAngle', el.Anim.G[4]), v[4]);
+      SameNum(name + ' endAngle', PNumOr(p, 'shape.endAngle', el.Anim.G[5]), v[5]);
+      Inc(FCompared);
+      if (el.Anim.G[8] <> 0) <> (leaf.Strings['type'] = 'sausage') then
+        Bad(Format('%s: sausage %s, upstream a %s', [name, BoolToStr(el.Anim.G[8] <> 0, True),
+          leaf.Strings['type']]));
+      if (leaf.Find('cr') is TJSONArray) and (leaf.Strings['type'] <> 'sausage') then
+      begin
+        v := Nums(leaf.Arrays['cr']);
+        SameNum(name + ' corners', Length(el.Anim.Pts), Length(v));
+        for k := 0 to Min(High(el.Anim.Pts), High(v)) do
+          SameNum(Format('%s corner %d', [name, k]), el.Anim.Pts[k], v[k]);
+      end;
+      if not IsNull(leaf.Find('rot')) then
+        SameNum(name + ' label turn', el.Caption.SecRot, leaf.Find('rot'));
+      SameRun(name, p, leaf);
+    end
     else if pre = 'gh' then
     begin
       { a bar view's leaving elements: the bar ghosts of the series, their
@@ -395,6 +428,7 @@ begin
       begin
         p := FChart.AnimGhostAt(k);
         if (p = nil) or p.Gone or (p.Series <> s) or (p.Role <> 'bar') then Continue;
+      { a polar bar's ghost: the sector is a ghost as a rect is }
         SetLength(ops, Length(ops) + 1);
         ops[High(ops)] := p.Num('style.opacity');
       end;
@@ -542,6 +576,11 @@ end;
 procedure TAdvChartAnimEdgesOracleTest.TestEachSetOptionRendersAsUpstream;
 begin
   RunGroup('setopt', 300);
+end;
+
+procedure TAdvChartAnimEdgesOracleTest.TestBarsOnAPolarAsUpstream;
+begin
+  RunGroup('polar', 600);
 end;
 
 initialization

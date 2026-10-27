@@ -4133,6 +4133,8 @@ var
   ax, ay: Double;
   ah: TTyTextAnchorH;
   av: TTyTextAnchorV;
+  { [R5-I] the shape updateStyle reads: the last render's, else this one's }
+  st: TTyPolarSector;
 begin
   Result := 0;
   L := AVisual.PolarBar;
@@ -4172,13 +4174,18 @@ begin
     if L.Clip then clipped := TyPolarBarClip(L.AreaR0, L.AreaR, s);
     { updateStyle: the corners only on a Sector without roundCap; a
       roundCap Sector keeps its default 0 }
+    { [R5-I] updateStyle runs before the update's updateProps: the element's
+      shape is still the last render's }
+    st := s;
+    if (i <= High(L.HasStyle)) and L.HasStyle[i] and (i <= High(L.StyleRows)) then
+      st := L.StyleRows[i];
     if L.RoundCap then
     begin
       SetLength(corners, 1);
       corners[0] := 0;
     end
     else
-      corners := TyPolarCornerList(L.Corners[i], s);
+      corners := TyPolarCornerList(L.Corners[i], st);
     rv := RowVisual(AVisual, AStore, i);
     el := MarkElement(TyPolarSectorShape(s, corners, sausage), rv,
       ABinding.SeriesIndex, i);
@@ -4209,6 +4216,8 @@ begin
     if L.IsRadial then el.Anim.G[7] := 1 else el.Anim.G[7] := 0;
     if sausage then el.Anim.G[8] := 1 else el.Anim.G[8] := 0;
     if zero then el.Anim.G[9] := 1 else el.Anim.G[9] := 0;
+    { [R5-I] the series' roundCap (a radial bar's stays a Sector) }
+    if L.RoundCap then el.Anim.G[10] := 1 else el.Anim.G[10] := 0;
     { [F3c] the corner radii the Sector's shape holds (its path's) }
     el.Anim.Pts := Copy(corners, 0, Length(corners));
     ItemCaption(AVisual, AStore, i, el.Caption);
@@ -4254,7 +4263,7 @@ begin
         el.Caption.SecAH := ah;
         el.Caption.SecAV := av;
       end;
-      el.Caption.SecRot := TySectorLabelRotation(s, ask, word, L.IsRadial);
+      el.Caption.SecRot := TySectorLabelRotation(st, ask, word, L.IsRadial);
       { textConfig.inside: true for 'middle', else 'inside' in the word }
       el.Caption.SecInside := (ask.Word = 'middle')
         or ((not ask.IsArray) and (Pos('inside', word) > 0));
