@@ -91,6 +91,13 @@ type
       the decoded image's own size. }
     HasMatrix, UnitImage: Boolean;
     Matrix: TTyMat2D;
+    { [spec 242] A UNIT IMAGE'S SOURCE RECT (zrender's brushImage, sx / sy /
+      sWidth / sHeight): the part of the image, in its natural px, that the
+      unit square shows -- drawImage's nine-argument form. What falls off
+      the image is nothing, as a canvas clips the source. CropOk False:
+      drawImage was handed a number that is none, and draws nothing. }
+    HasCrop, CropOk: Boolean;
+    CropX, CropY, CropW, CropH: Double;
   end;
 
   { A FILL THAT IS AN OBJECT, for a renderer handed colours one per datum

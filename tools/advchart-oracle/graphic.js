@@ -46,7 +46,8 @@ setOption instant), notes[], cases[], guards[].
 
 A case: id, group, note, W, H, option (as run), steps[] (each: {merge
 option} | {notMerge option} | {resize [w, h]} | {click id} | {move id} |
-{leave} | {down id} | {up id} | {wait ms}), throws (the setOption threw: its
+{leave} | {down id} (a move there and a press) | {up id} (a release) |
+{wait ms}; an id may be a point [x, y]), throws (the setOption threw: its
 message), states[] (index-parallel to [after the first setOption, after step
 1, ...]), anim (animation cases: samplesMs).
 
@@ -852,6 +853,26 @@ add('order', 'forms-frame', "the preprocessor on a timeline frame: the first fra
     options: [{ graphic: [{ type: 'rect', id: 'fa', left: 10, top: 10, shape: { width: 30, height: 30 }, style: { fill: '#5070dd' } },
       { type: 'circle', id: 'fb', left: 60, top: 10, shape: { r: 15 }, style: { fill: '#b6d634' } }] }, {}] });
 
+// ---- [spec 242] dragging
+add('event', 'drag', "dragging (zrender's Draggable): a turned, scaled rect with an origin dragged over another rect -- onmousedown, ondragstart, ondrag every move (drift: the transform moved and decomposed, the origin folded in), ondragenter / ondragleave / ondrop on what it is over, ondragend; a child dragged horizontally inside a turned, scaled group; a rect whose onmousedown stops the climb (no drag at all); a group dragged by its child, the events to the group",
+  { graphic: [
+    { type: 'rect', id: 'D', x: 60, y: 60, rotation: 0.3, scaleX: 1.5, originX: 10, originY: 5, draggable: true,
+      onmousedown: { $fn: 'log:Ddown' }, ondragstart: { $fn: 'log:Dstart' }, ondrag: { $fn: 'log:Ddrag' }, ondragend: { $fn: 'log:Dend' },
+      onmouseup: { $fn: 'log:Dup' }, shape: { width: 60, height: 40 }, style: { fill: '#5070dd' } },
+    { type: 'rect', id: 'B', ondragenter: { $fn: 'log:Benter' }, ondragleave: { $fn: 'log:Bleave' }, ondrop: { $fn: 'log:Bdrop' },
+      shape: { x: 250, y: 150, width: 100, height: 80 }, style: { fill: '#b6d634' } },
+    { type: 'group', id: 'G', x: 380, y: 280, rotation: 0.5, scaleX: 2, children: [
+      { type: 'rect', id: 'GC', draggable: 'horizontal', ondrag: { $fn: 'log:GCdrag' }, shape: { width: 30, height: 20 }, style: { fill: '#ff994d' } }] },
+    { type: 'rect', id: 'S', draggable: true, onmousedown: { $fn: 'stop:Sdown' }, ondragstart: { $fn: 'log:Sstart' },
+      shape: { x: 480, y: 30, width: 50, height: 50 }, style: { fill: '#0ca8df' } },
+    { type: 'group', id: 'H', x: 40, y: 300, draggable: 'vertical', ondragstart: { $fn: 'log:Hstart' }, ondrag: { $fn: 'log:Hdrag' }, children: [
+      { type: 'rect', id: 'HC', shape: { width: 50, height: 30 }, style: { fill: '#ffd10a' } }] }] },
+  { steps: [
+    { down: 'D' }, { move: [150, 120] }, { move: [300, 190] }, { move: [305, 192] }, { move: [420, 120] }, { up: [420, 120] },
+    { down: 'GC' }, { move: [430, 330] }, { up: [430, 330] },
+    { down: 'S' }, { move: [450, 100] }, { up: [450, 100] },
+    { down: 'HC' }, { move: [90, 280] }, { up: [90, 280] }] });
+
 // ---------------------------------------------------------------------------
 // running
 // ---------------------------------------------------------------------------
@@ -936,6 +957,16 @@ function runCase(c) {
       else if (step.move !== undefined) {
         point = resolvePoint(chart, step.move, where);
         fire(chart, 'mousemove', { zrX: point[0], zrY: point[1] });
+      }
+      // [spec 242] a press without its release, a release on its own
+      else if (step.down !== undefined) {
+        point = resolvePoint(chart, step.down, where);
+        fire(chart, 'mousemove', { zrX: point[0], zrY: point[1] });
+        fire(chart, 'mousedown', { zrX: point[0], zrY: point[1] });
+      }
+      else if (step.up !== undefined) {
+        point = resolvePoint(chart, step.up, where);
+        fire(chart, 'mouseup', { zrX: point[0], zrY: point[1] });
       }
       else if (step.leave) fire(chart, 'mousemove', { zrX: -10, zrY: -10 });
       else throw new OracleError(where + ': an unknown step ' + JSON.stringify(step));

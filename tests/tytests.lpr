@@ -204,6 +204,7 @@ uses
   test.advchart.backwardcompat,
   test.advchart.multiline, test.bgrarandompin,
   test.advchart.jsregexp,
+  test.advchart.graphictip,
   test.subpixel,
   test.advchart.option,
   test.advchart.catalog,

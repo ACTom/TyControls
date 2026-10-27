@@ -113,6 +113,7 @@ type
     procedure TestThePreprocessorShapesTheOption;
     procedure TestATurnedRectIsHitWhereItIsDrawn;
     procedure TestAnImageIsAPatternThroughItsTransform;
+    procedure TestAnImageCropShowsItsSourceRect;
     procedure TestAnUnknownTypeStopsTheUpdate;
     procedure TestADraggableElementFollowsThePointer;
   end;
@@ -547,6 +548,20 @@ begin
   TyChartRegisterElementHandler('log:I', @FChart.OnElement);
   TyChartRegisterElementHandler('log:N', @FChart.OnElement);
   TyChartRegisterElementHandler('log:T', @FChart.OnElement);
+  { [spec 242] the drag case's }
+  TyChartRegisterElementHandler('log:Ddown', @FChart.OnElement);
+  TyChartRegisterElementHandler('log:Dstart', @FChart.OnElement);
+  TyChartRegisterElementHandler('log:Ddrag', @FChart.OnElement);
+  TyChartRegisterElementHandler('log:Dend', @FChart.OnElement);
+  TyChartRegisterElementHandler('log:Dup', @FChart.OnElement);
+  TyChartRegisterElementHandler('log:Benter', @FChart.OnElement);
+  TyChartRegisterElementHandler('log:Bleave', @FChart.OnElement);
+  TyChartRegisterElementHandler('log:Bdrop', @FChart.OnElement);
+  TyChartRegisterElementHandler('log:GCdrag', @FChart.OnElement);
+  TyChartRegisterElementHandler('stop:Sdown', @FChart.OnElement);
+  TyChartRegisterElementHandler('log:Sstart', @FChart.OnElement);
+  TyChartRegisterElementHandler('log:Hstart', @FChart.OnElement);
+  TyChartRegisterElementHandler('log:Hdrag', @FChart.OnElement);
 end;
 
 procedure TAdvChartGraphicTest.RenderNow;
@@ -1073,8 +1088,19 @@ begin
   end
   else if AStep.Find('move') <> nil then
     FChart.Move(p.Integers[0], p.Integers[1])
+  { [spec 242] a press without its release, a release on its own }
+  else if AStep.Find('down') <> nil then
+  begin
+    FChart.Move(p.Integers[0], p.Integers[1]);
+    FChart.Down(p.Integers[0], p.Integers[1]);
+  end
+  else if AStep.Find('up') <> nil then
+    FChart.Up(p.Integers[0], p.Integers[1])
   else if AStep.Find('leave') <> nil then
     FChart.Move(-10, -10);
+  { [spec 242] the oracle paints after every step: a dragged element's
+    transform is made again from its props there }
+  RenderNow;
 end;
 
 procedure TAdvChartGraphicTest.RunStatic(const AIds: array of string; AWithOrder: Boolean);
@@ -1150,7 +1176,7 @@ end;
 
 procedure TAdvChartGraphicTest.TestTheEventsAreUpstreams;
 begin
-  RunStatic(['events'], False);
+  RunStatic(['events', 'drag'], False);
   Finish('the events', 300);
   AssertTrue('chart events compared', FEventsSeen >= 3);
 end;
@@ -1282,6 +1308,54 @@ begin
   AssertEquals('down: 40', 40, el.Style.FillPattern.Matrix[3], 1e-9);
   AssertEquals('placed at x 10', 10, el.Style.FillPattern.Matrix[4], 1e-9);
   AssertEquals('placed at y 20', 20, el.Style.FillPattern.Matrix[5], 1e-9);
+end;
+
+{ [spec 242] brushImage's source rect: the image is 2 x 2 -- red, blue on
+  the first row, green, white on the second -- drawn 100 x 100 on black }
+procedure TAdvChartGraphicTest.TestAnImageCropShowsItsSourceRect;
+var img: string;
+
+  function Px(const ACrop: string; AX, AY: Integer): TBGRAPixel;
+  var bmp: TBGRABitmap;
+  begin
+    NewChart(200, 200);
+    FChart.Option := '{"animation": false, "backgroundColor": "#000000", "graphic": [{"type": "image",'
+      + ' "style": {"image": "' + img + '", "width": 100, "height": 100' + ACrop + '}}]}';
+    bmp := TBGRABitmap.Create(200, 200, BGRA(0, 0, 0, 255));
+    try
+      FChart.Render(bmp.Canvas, Rect(0, 0, 200, 200), 96);
+      Result := bmp.GetPixel(AX, AY);
+    finally
+      bmp.Free;
+    end;
+  end;
+
+  procedure Near(const AWhat: string; AP: TBGRAPixel; AR, AG, AB: Integer);
+  begin
+    AssertTrue(Format('%s: rgb(%d, %d, %d), want about rgb(%d, %d, %d)', [AWhat,
+      AP.red, AP.green, AP.blue, AR, AG, AB]),
+      (Abs(AP.red - AR) <= 40) and (Abs(AP.green - AG) <= 40) and (Abs(AP.blue - AB) <= 40));
+  end;
+
+var el: TTyChartElement;
+begin
+  img := TJSONObject(FRoot).Strings['image'];
+  Near('one source px, the blue one', Px(', "sx": 1, "sy": 0, "sWidth": 1, "sHeight": 1', 50, 50), 0, 0, 255);
+  Near('the green one: sx 0 is `sx || 0`', Px(', "sx": 0, "sy": 1, "sWidth": 1, "sHeight": 1', 50, 50), 0, 160, 0);
+  Near('the first row, its left half red', Px(', "sWidth": 2, "sHeight": 1', 25, 50), 255, 0, 0);
+  Near('and its right half blue', Px(', "sWidth": 2, "sHeight": 1', 75, 50), 0, 0, 255);
+  { sx and sy without the sizes: width - sx and height - sy of the DRAWN
+    size -- 99 source px, the image only the first of them }
+  Near('sx / sy alone: past the image, nothing', Px(', "sx": 1, "sy": 1', 50, 50), 0, 0, 0);
+  { sx nought: no source rect at all, the whole image }
+  Near('sx 0 and sy alone crop nothing', Px(', "sx": 0, "sy": 1', 25, 25), 255, 0, 0);
+  { a size that is no number: drawImage draws nothing }
+  Near('a size no number draws nothing', Px(', "sWidth": "abc", "sHeight": 1', 50, 50), 0, 0, 0);
+  Px(', "sx": 1, "sy": 0, "sWidth": 1, "sHeight": 1', 50, 50);
+  el := FChart.GraphicPaintElement(0);
+  AssertTrue('the source rect is on the pattern', el.Style.FillPattern.HasCrop and el.Style.FillPattern.CropOk);
+  AssertEquals('sx', 1, el.Style.FillPattern.CropX, 0);
+  AssertEquals('sWidth', 1, el.Style.FillPattern.CropW, 0);
 end;
 
 procedure TAdvChartGraphicTest.TestAnUnknownTypeStopsTheUpdate;

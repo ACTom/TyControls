@@ -90,6 +90,10 @@ type
     HasEventData: Boolean;
     EventName: string;
     Info: TJSONData;
+    { [spec 242] setTooltipConfig's item option: the element's `tooltip` as
+      the last update wrote it (owned; nil none) -- every element of the
+      view is a tooltip target, its name the content }
+    TipOpt: TJSONData;
     { element handlers: 'onclick=@Name' }
     Handlers: TStringList;
     { a leave transition's target, flattened ('x', 'style.opacity') }
@@ -250,6 +254,16 @@ type
     ImageSize: TTyGfxImageSize;
   end;
 
+{ [spec 242] Element.drift: the pointer's move (css px; 'horizontal' keeps
+  y, 'vertical' x) onto the global transform, which is then decomposed into
+  the element's own x, y, rotation, scale and skew (decomposeTransform:
+  through the parent's inverse, the origin folded in and set to nought --
+  setLocalTransform's arithmetic, so a turned or scaled element's numbers
+  move in their last bits as upstream's do). The transform is the one the
+  last render left, moved in place: several drifts between renders add up
+  as they do upstream. }
+procedure TyGfxDrift(AEl: TTyGfxEl; ADX, ADY: Double);
+
 { The paint list element a displayable becomes, transform applied, in
   device px; False for nothing to add (a group). A textContent is its own
   element: AEl the text, its transform TyGfxLabelTransform's. }
@@ -268,7 +282,8 @@ uses
   jsonparser,
   tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Scale,
   tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.Color,
-  tyControls.AdvanceChart.PolarBar, tyControls.AdvanceChart.RichStyle;
+  tyControls.AdvanceChart.PolarBar, tyControls.AdvanceChart.RichStyle,
+  tyControls.AdvanceChart.Data;
 
 const
   PI2 = 2 * Pi;
@@ -684,6 +699,7 @@ begin
   FreeAndNil(TextContent);
   FreeAndNil(TextConfig);
   FreeAndNil(Info);
+  FreeAndNil(TipOpt);
   FreeAndNil(Custom);
   FreeAndNil(InnerOptW);
   FreeAndNil(InnerOptH);
@@ -2497,9 +2513,106 @@ begin
   AGrad.R := r * Sqrt(det);
 end;
 
+{ [spec 242] JavaScript's truthiness of a style value }
+function JsTruthy(A: TJSONData): Boolean;
+var v: Double;
+begin
+  Result := False;
+  if A = nil then Exit;
+  case A.JSONType of
+    jtNull: Result := False;
+    jtBoolean: Result := A.AsBoolean;
+    jtNumber:
+      begin
+        v := A.AsFloat;
+        Result := not IsNan(v) and (v <> 0);
+      end;
+    jtString: Result := A.AsString <> '';
+  else
+    Result := True;
+  end;
+end;
+
+{ ToNumber of a style value, as drawImage converts its arguments }
+function CropToNum(A: TJSONData): Double;
+begin
+  Result := NaN;
+  if A = nil then Exit;
+  case A.JSONType of
+    jtNumber: Result := A.AsFloat;
+    jtString: Result := TyJsToNumber(A.AsString);
+    jtNull: Result := 0;
+    jtBoolean: if A.AsBoolean then Result := 1 else Result := 0;
+  end;
+end;
+
+{ `style.sx || 0`, as drawImage reads it }
+function CropNum(A: TJSONData): Double;
+begin
+  if not JsTruthy(A) then Exit(0);
+  Result := CropToNum(A);
+end;
+
 function UniformScale(const AM: TTyMat2D): Double;
 begin
   Result := Sqrt(Abs(AM[0] * AM[3] - AM[1] * AM[2]));
+end;
+
+procedure TyGfxDrift(AEl: TTyGfxEl; ADX, ADY: Double);
+var
+  m, inv, o: TTyMat2D;
+  sx, sy, rot, shear, ox, oy: Double;
+  mask: TFPUExceptionMask;
+begin
+  if AEl = nil then Exit;
+  if AEl.Draggable = 'horizontal' then ADY := 0
+  else if AEl.Draggable = 'vertical' then ADX := 0;
+  mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+  try
+    { `let m = this.transform; if (!m) m = this.transform = identity` }
+    if AEl.HasTransform then m := AEl.Transform else m := TyMatIdentity;
+    m[4] := m[4] + ADX;
+    m[5] := m[5] + ADY;
+    AEl.Transform := m;
+    AEl.HasTransform := True;
+    { decomposeTransform }
+    if (AEl.Parent <> nil) and AEl.Parent.HasTransform then
+    begin
+      if not TyMatInvert(AEl.Parent.Transform, inv) then inv := TyMatIdentity;
+      m := TyMatMul(inv, m);
+    end;
+    ox := AEl.OriginX;
+    oy := AEl.OriginY;
+    if ((ox <> 0) and not IsNan(ox)) or ((oy <> 0) and not IsNan(oy)) then
+    begin
+      o := TyMatIdentity;
+      o[4] := ox;
+      o[5] := oy;
+      m := TyMatMul(m, o);
+      m[4] := m[4] - ox;
+      m[5] := m[5] - oy;
+    end;
+    { setLocalTransform }
+    sx := m[0] * m[0] + m[1] * m[1];
+    sy := m[2] * m[2] + m[3] * m[3];
+    rot := TyJsAtan2(m[1], m[0]);
+    shear := Pi / 2 + rot - TyJsAtan2(m[3], m[2]);
+    sy := Sqrt(sy) * TyJsCos(shear);
+    sx := Sqrt(sx);
+    AEl.SkewX := shear;
+    AEl.SkewY := 0;
+    AEl.Rotation := -rot;
+    AEl.X := m[4];
+    AEl.Y := m[5];
+    AEl.ScaleX := sx;
+    AEl.ScaleY := sy;
+    AEl.OriginX := 0;
+    AEl.OriginY := 0;
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
 end;
 
 function TyGfxPaintElement(AEl: TTyGfxEl; const AMeasurer: ITyTextMeasurer;
@@ -2579,6 +2692,31 @@ begin
           AOut.Style.FillPattern.Repetition := 'no-repeat';
           AOut.Style.FillPattern.HasMatrix := True;
           AOut.Style.FillPattern.UnitImage := True;
+          { [spec 242] brushImage's source rect: sWidth and sHeight both
+            truthy -- `sx || 0`, `sy || 0` and the two; else sx and sy both
+            truthy -- the rest of the DRAWN size past them (width - sx,
+            height - sy), upstream's own arithmetic }
+          if JsTruthy(AEl.Style.Find('sWidth')) and JsTruthy(AEl.Style.Find('sHeight')) then
+          begin
+            AOut.Style.FillPattern.HasCrop := True;
+            AOut.Style.FillPattern.CropX := CropNum(AEl.Style.Find('sx'));
+            AOut.Style.FillPattern.CropY := CropNum(AEl.Style.Find('sy'));
+            AOut.Style.FillPattern.CropW := CropToNum(AEl.Style.Find('sWidth'));
+            AOut.Style.FillPattern.CropH := CropToNum(AEl.Style.Find('sHeight'));
+          end
+          else if JsTruthy(AEl.Style.Find('sx')) and JsTruthy(AEl.Style.Find('sy')) then
+          begin
+            AOut.Style.FillPattern.HasCrop := True;
+            AOut.Style.FillPattern.CropX := CropToNum(AEl.Style.Find('sx'));
+            AOut.Style.FillPattern.CropY := CropToNum(AEl.Style.Find('sy'));
+            AOut.Style.FillPattern.CropW := w - AOut.Style.FillPattern.CropX;
+            AOut.Style.FillPattern.CropH := h - AOut.Style.FillPattern.CropY;
+          end;
+          if AOut.Style.FillPattern.HasCrop then
+            with AOut.Style.FillPattern do
+              CropOk := not (IsNan(CropX) or IsNan(CropY) or IsNan(CropW) or IsNan(CropH)
+                or IsInfinite(CropX) or IsInfinite(CropY) or IsInfinite(CropW)
+                or IsInfinite(CropH));
           { the unit square onto the box, through the transform, in css px }
           AOut.Style.FillPattern.Matrix[0] := m[0] * w / ACtx.Scale;
           AOut.Style.FillPattern.Matrix[1] := m[1] * w / ACtx.Scale;

@@ -1299,6 +1299,8 @@ type
     FGfxDragOn: Boolean;
     FGfxDragId: string;
     FGfxDragX, FGfxDragY: Integer;
+    { [spec 242] what the dragged element was last over (GfxDropAt's key) }
+    FGfxDropKey: string;
     FVmRangeHas: array of Boolean;
     FVmRange0, FVmRange1: TTyDoubleArray;
     FVmSel: TTyStringArray;
@@ -3795,6 +3797,15 @@ type
       stop (no chart event follows) }
     function GfxElementEvent(const AType: string; const ATarget: TTyChartEventTarget;
       AX, AY: Integer): Boolean;
+    function GfxElementEventFrom(const AType: string; AEl: TTyGfxEl;
+      AX, AY: Integer): Boolean;
+    function GfxDropAt(AX, AY: Integer; ADrag: TTyGfxEl; out AEl: TTyGfxEl): string;
+    function IsGfxTipDatum(const ADatum: TTyChartDatumRef): Boolean;
+    function GfxTipEl(const ADatum: TTyChartDatumRef): TTyGfxEl;
+    function GfxTipSpec(const ADatum: TTyChartDatumRef): TTyTooltipSpec;
+    function GfxTipParams(const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
+    function GfxTipText(const ADatum: TTyChartDatumRef; const ASpec: TTyTooltipSpec): string;
+    procedure GfxDragEnd(AX, AY: Integer);
     { zrender's Draggable: a press on a draggable element (or one under a
       draggable group) starts a drag, every move drifts it, a release ends it }
     procedure GfxDragStart(const ATarget: TTyChartEventTarget; AX, AY: Integer);

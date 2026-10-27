@@ -2617,6 +2617,7 @@ var
   img: TBGRABitmap;
   pm: TTyDoubleArray;
   nw, nh, devW: Double;
+  ca, cd, ctx, cty: Double;
 
   procedure PaintPen; forward;
 
@@ -2664,7 +2665,16 @@ var
           devW := 0;
         { for the raster's pixels (#83); the matrix below maps whichever comes back }
         devW := devW * P.DeviceScale;
+        { [spec 242] a source rect: the box shows CropW of the natural px --
+          the whole image at that many device px per natural one }
+        if AElement.Style.FillPattern.HasCrop and AElement.Style.FillPattern.CropOk
+          and (AElement.Style.FillPattern.CropW > 0)
+          and TyChartImageSize(AElement.Style.FillPattern.Image, nw, nh) then
+          devW := devW * nw / AElement.Style.FillPattern.CropW;
         img := TyChartImage(AElement.Style.FillPattern.Image, devW, nw, nh);
+        { drawImage handed a number that is none draws nothing }
+        if AElement.Style.FillPattern.HasCrop and not AElement.Style.FillPattern.CropOk then
+          img := nil;
         if img <> nil then
         begin
           if AElement.Style.FillPattern.HasMatrix then
@@ -2673,7 +2683,26 @@ var
               the image's size }
             SetLength(pm, 6);
             for gi := 0 to 5 do pm[gi] := AElement.Style.FillPattern.Matrix[gi];
-            if AElement.Style.FillPattern.UnitImage then
+            if AElement.Style.FillPattern.UnitImage and AElement.Style.FillPattern.HasCrop then
+            begin
+              { [spec 242] the source rect onto the unit square: an image px
+                u is natural px u * nw / width, the square's (n - CropX) /
+                CropW }
+              with AElement.Style.FillPattern do
+              begin
+                ca := nw / (img.Width * CropW);
+                cd := nh / (img.Height * CropH);
+                ctx := -CropX / CropW;
+                cty := -CropY / CropH;
+              end;
+              pm[4] := pm[0] * ctx + pm[2] * cty + pm[4];
+              pm[5] := pm[1] * ctx + pm[3] * cty + pm[5];
+              pm[0] := pm[0] * ca;
+              pm[1] := pm[1] * ca;
+              pm[2] := pm[2] * cd;
+              pm[3] := pm[3] * cd;
+            end
+            else if AElement.Style.FillPattern.UnitImage then
             begin
               pm[0] := pm[0] / img.Width;
               pm[1] := pm[1] / img.Width;

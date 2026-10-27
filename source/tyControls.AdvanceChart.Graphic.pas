@@ -1672,6 +1672,10 @@ begin
             d := opt.Find('info');
             if d <> nil then el.Info := d.Clone;
           end;
+          { [spec 242] setTooltipConfig: every update, the option's tooltip }
+          FreeAndNil(el.TipOpt);
+          d := opt.Find('tooltip');
+          if d <> nil then el.TipOpt := d.Clone;
           { applyKeyframeAnimation, last [Batch 139] }
           TyGfxApplyKeyframes(el, opt.Find('keyframeAnimation'),
             FAnim.Enabled and (el.Animation <> nil), FAnim.Duration);
