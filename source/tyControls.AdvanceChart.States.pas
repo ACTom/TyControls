@@ -313,6 +313,10 @@ function TyStReadString(const ANodes: array of TJSONObject;
 { the value the first node writes at APath (null falls through), or nil }
 function TyStFind(const ANodes: array of TJSONObject;
   const APath: array of string): TJSONData;
+{ [R5-A] one shadow key's value as the canvas reads it, into AObj (AKey one of the four
+  stkShadow* keys): a number (nought where it is none, a blur below nought), a colour
+  ('#000' where it does not parse) }
+procedure TyStSetShadowKey(var AObj: TTyStObject; AKey: TTyStKey; AData: TJSONData);
 { [R5-A] A STATE'S SHADOW KEYS: those of the four the chain writes under APath (null falls
   through), into AObj -- a key nobody writes stays out of the state, the element keeps its
   own. A value the canvas cannot read is nought (a blur, an offset) or '#000' (a colour). }
@@ -1045,6 +1049,26 @@ begin
       if Trim(AData.AsString) = '' then Result := 0
       else if TryStrToFloat(Trim(AData.AsString), v, fs) then Result := v;
     jtBoolean: if AData.AsBoolean then Result := 1 else Result := 0;
+  end;
+end;
+
+procedure TyStSetShadowKey(var AObj: TTyStObject; AKey: TTyStKey; AData: TJSONData);
+var
+  v: Double;
+  c: TTyChartColor;
+begin
+  if (AData = nil) or (AData.JSONType = jtNull) then Exit;
+  if AKey = stkShadowColor then
+  begin
+    if not ((AData.JSONType = jtString) and TyTryParseChartColor(AData.AsString, c)) then
+      c := $FF000000;
+    TyStSetColor(AObj, stkShadowColor, c);
+  end
+  else
+  begin
+    v := ShadowNumOf(AData);
+    if IsNan(v) or IsInfinite(v) or ((AKey = stkShadowBlur) and (v < 0)) then v := 0;
+    TyStSetNum(AObj, AKey, v);
   end;
 end;
 

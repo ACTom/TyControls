@@ -278,6 +278,9 @@ type
     FillHas, StrokeHas, WidthHas, DashHas: Boolean;
     FillToken, StrokeToken: TTyGeoToken;
     FillInherit: Boolean;
+    { [R5-A] the itemStyle's shadow keys the chain writes (getItemStyle's;
+      a state's are sparse too) }
+    Shadow: TTyStObject;
   end;
 
   { [Batch 148] one state's label (setLabelStyle's state object and
@@ -3796,6 +3799,12 @@ begin
     Result.DashOffsetHas := True;
     Result.DashOffset := d.AsFloat;
   end;
+  { [R5-A] the shadow keys }
+  Result.Shadow := TyStNoObject;
+  TyStSetShadowKey(Result.Shadow, stkShadowBlur, Get('shadowBlur'));
+  TyStSetShadowKey(Result.Shadow, stkShadowOffsetX, Get('shadowOffsetX'));
+  TyStSetShadowKey(Result.Shadow, stkShadowOffsetY, Get('shadowOffsetY'));
+  TyStSetShadowKey(Result.Shadow, stkShadowColor, Get('shadowColor'));
   { fixLineStyle on a line's state object: `stroke = stroke || fill` -- an
     undefined set, which the merge carries -- and `fill = null` }
   if AIsLine and (AState >= 0) then
@@ -4860,6 +4869,39 @@ begin
   Result := FDraw;
 end;
 
+{ [R5-A] a region's shadow at rest: its own keys, zrender's prototype 0, 0, 0 and '#000'
+  under them (what a state's shadow tweens from) }
+procedure GeoRestShadow(var AObj: TTyStObject; const AShadow: TTyStObject);
+const cKeys: array[0..2] of TTyStKey = (stkShadowBlur, stkShadowOffsetX, stkShadowOffsetY);
+var k: Integer;
+begin
+  for k := 0 to 2 do
+    if AShadow.Has[cKeys[k]] then TyStSetNum(AObj, cKeys[k], AShadow.Num[cKeys[k]])
+    else TyStSetNum(AObj, cKeys[k], 0);
+  if AShadow.Has[stkShadowColor] then TyStSetColor(AObj, stkShadowColor, AShadow.Color[stkShadowColor])
+  else TyStSetColor(AObj, stkShadowColor, $FF000000);
+end;
+
+{ [R5-A] a state's shadow keys, those it writes }
+procedure GeoStateShadow(var AObj: TTyStObject; const AShadow: TTyStObject);
+const cKeys: array[0..2] of TTyStKey = (stkShadowBlur, stkShadowOffsetX, stkShadowOffsetY);
+var k: Integer;
+begin
+  for k := 0 to 2 do
+    if AShadow.Has[cKeys[k]] then TyStSetNum(AObj, cKeys[k], AShadow.Num[cKeys[k]]);
+  if AShadow.Has[stkShadowColor] then TyStSetColor(AObj, stkShadowColor, AShadow.Color[stkShadowColor]);
+end;
+
+{ [R5-A] the current shadow onto a region's path }
+procedure GeoWriteShadow(var AEl: TTyChartElement; const C: TTyStObject);
+begin
+  if not C.Has[stkShadowColor] then Exit;
+  AEl.Style.ShadowBlur := C.Num[stkShadowBlur];
+  AEl.Style.ShadowOffsetX := C.Num[stkShadowOffsetX];
+  AEl.Style.ShadowOffsetY := C.Num[stkShadowOffsetY];
+  AEl.Style.ShadowColor := C.Color[stkShadowColor];
+end;
+
 procedure StPaintColour(var AObj: TTyStObject; AKey: TTyStKey;
   ASrc: TTyGeoInkSource; AColour: TTyChartColor);
 begin
@@ -4907,6 +4949,7 @@ begin
       else TyStSetNum(o, stkOpacity, 1);
       TyStSetNum(o, stkZ2, 0);
       TyStSetNum(o, stkIgnore, 0);
+      GeoRestShadow(o, p.Paint.Shadow);
       it.Host.Rest := o;
       it.Host.Cur := o;
       for s := Low(TTyStName) to High(TTyStName) do
@@ -4918,6 +4961,7 @@ begin
         if sp.StrokeHas then StPaintColour(o, stkStroke, sp.StrokeSrc, sp.Stroke);
         if sp.WidthHas then TyStSetNum(o, stkLineWidth, sp.LineWidthLogical);
         if sp.HasOpacity then TyStSetNum(o, stkOpacity, sp.Opacity);
+        GeoStateShadow(o, sp.Shadow);
         it.Host.Decl[s] := o;
       end;
       if p.Lbl.Exists then
@@ -5297,6 +5341,7 @@ begin
         end;
         if np.WidthHas then TyStSetNum(o, stkLineWidth, np.LineWidthLogical);
         if np.HasOpacity then TyStSetNum(o, stkOpacity, np.Opacity);
+        GeoRestShadow(o, np.Shadow);
         for s := Low(TTyStName) to High(TTyStName) do
         begin
           sp := PaintFor(Self, ropt, Ord(s), AInk, False);
@@ -5307,6 +5352,7 @@ begin
           if sp.StrokeHas then StPaintColour(el.Decl[s], stkStroke, sp.StrokeSrc, sp.Stroke);
           if sp.WidthHas then TyStSetNum(el.Decl[s], stkLineWidth, sp.LineWidthLogical);
           if sp.HasOpacity then TyStSetNum(el.Decl[s], stkOpacity, sp.Opacity);
+          GeoStateShadow(el.Decl[s], sp.Shadow);
           el.HasState[s] := True;
         end;
         el.Proxy := True;
@@ -6015,6 +6061,8 @@ var
           end;
         end;
         el.Style.Alpha := c.Num[stkOpacity];
+        { [R5-A] a named shape's option shadow }
+        if look.Styled then GeoWriteShadow(el, c);
         { Path.contain: in the element's own coordinates }
         el.ZrHit.Active := True;
         el.ZrHit.Path := nd.Path;
@@ -6326,6 +6374,7 @@ begin
             if not el.Style.HasFill then lw := JsMax(lw, TyGeoStrokeContain * scale);
           end;
           el.Style.Alpha := c.Num[stkOpacity];
+          GeoWriteShadow(el, c);
           el.Z := AGeo.Spec.Z;
           el.Z2 := Round(c.Num[stkZ2]);
           el.Silent := silentGroup;

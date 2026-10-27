@@ -2969,42 +2969,6 @@ begin
     Result := FTitleRt[AIndex][ALine];
 end;
 
-{ [R5-A] A TITLE FRAME'S CANVAS SHADOW: the frame's fill (its alpha) on a mask, the
-  painter's shadow cast from it -- the frame itself is drawn as it always was }
-procedure TitleShadow(P: TTyPainter; const AFrame: TTyRectF; ARadius: Integer;
-  AFill: TTyColor; const AShadow: TTyChartShadow);
-var
-  st: TTyChartElementStyle;
-  mask: TBGRABitmap;
-  mp: TTyPainter;
-  sc: TTyCanvasScale;
-  r: TRect;
-  s: Integer;
-begin
-  st := Default(TTyChartElementStyle);
-  TyStyleSetShadow(st, AShadow);
-  if (P = nil) or not TyStyleHasShadow(st) or ((AFill shr 24) = 0) then Exit;
-  r := Rect(Round(AFrame.Left), Round(AFrame.Top), Round(AFrame.Right), Round(AFrame.Bottom));
-  if (r.Right <= r.Left) or (r.Bottom <= r.Top) then Exit;
-  s := P.DeviceScale;
-  sc.Scale := s;
-  sc.DeviceUnits := False;
-  mask := TBGRABitmap.Create((r.Right - r.Left) * s, (r.Bottom - r.Top) * s, BGRAPixelTransparent);
-  mp := TTyPainter.Create;
-  try
-    mp.BeginPaintOnScaled(nil, Rect(0, 0, r.Right - r.Left, r.Bottom - r.Top), P.PPI, mask, sc);
-    mp.BeginPath;
-    mp.RoundRectPath(0, 0, r.Right - r.Left, r.Bottom - r.Top, ARadius);
-    mp.FillPath(AFill);
-    mp.EndPaint;
-    P.CastShadowOf(mask, r.Left * s, r.Top * s, TTyColor(AShadow.Color), AShadow.Blur,
-      AShadow.OffsetX, AShadow.OffsetY);
-  finally
-    mp.Free;
-    mask.Free;
-  end;
-end;
-
 procedure TTyCustomAdvanceChart.PaintTitles(APainter: TTyPainter);
 var
   i: Integer;
@@ -3063,7 +3027,7 @@ begin
       theme. }
     { [R5-A] the frame's shadow, under it }
     if FTitleSpecs[i].HasBackground then
-      TitleShadow(APainter, lay.Frame, Round(FTitleSpecs[i].BorderRadii[0]),
+      TyCastFrameShadow(APainter, lay.Frame, Round(FTitleSpecs[i].BorderRadii[0]),
         TTyColor(FTitleSpecs[i].BackgroundColor), FTitleSpecs[i].Shadow);
     if FTitleSpecs[i].HasBackground then
       APainter.FillBackground(

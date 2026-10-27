@@ -319,6 +319,13 @@ const WHOLE = [
       series: [{ type: 'radar', data: [{ value: [5, 6, 7] }] }] } },
   { id: 'calendar', note: "a calendar: the day cells' itemStyle shadow, the split lines' lineStyle shadow",
     option: { calendar: { range: '2017-02', itemStyle: { shadowBlur: 2, shadowColor: '#ff0000' }, splitLine: { lineStyle: { shadowBlur: 3, shadowColor: '#0000ff' } } } } },
+  { id: 'map', maps: true, note: "a map series' regions: itemStyle shadow, region B its own colour; then B highlighted: its emphasis shadow (blur 9)",
+    option: { series: [{ type: 'map', map: 'r5ashadow', itemStyle: { shadowBlur: 4, shadowColor: '#ff0000' },
+      emphasis: { itemStyle: { shadowBlur: 9 } },
+      data: [{ name: 'A', value: 1 }, { name: 'B', value: 2, itemStyle: { shadowColor: '#00ff00' } }] }] },
+    highlight: { seriesIndex: 0, name: 'B' } },
+  { id: 'geo', maps: true, note: "a geo component's regions: its itemStyle shadow",
+    option: { geo: { map: 'r5ashadow', itemStyle: { shadowBlur: 6, shadowColor: '#0000ff', shadowOffsetY: 2 } } } },
   { id: 'visualMap', note: "a continuous visualMap's handles: handleStyle's shadow",
     option: { visualMap: { type: 'continuous', calculable: true, min: 0, max: 10, handleStyle: { shadowBlur: 4, shadowColor: '#ff0000' } },
       xAxis: CAT, yAxis: VAL, series: [{ type: 'bar', data: [1, 2, 3] }] } },
@@ -342,13 +349,28 @@ function wholeShadows(chart) {
   out.sort((a, b) => (JSON.stringify(a) < JSON.stringify(b) ? -1 : 1));
   return out;
 }
+const SQ = [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]];
+const SQ2 = [[[10, 0], [20, 0], [20, 10], [10, 10], [10, 0]]];
+const MAPJSON = { type: 'FeatureCollection', features: [
+  { type: 'Feature', properties: { name: 'A' }, geometry: { type: 'Polygon', coordinates: SQ } },
+  { type: 'Feature', properties: { name: 'B' }, geometry: { type: 'Polygon', coordinates: SQ2 } }] };
 function runWhole(c) {
+  if (c.maps) echarts.registerMap('r5ashadow', MAPJSON);
   const chart = mk(600, 400);
   try {
     chart.setOption(Object.assign({ animation: false }, c.option));
     chart.renderToSVGString();
     refresh(chart);
-    return { id: c.id, note: c.note, option: c.option, shadows: wholeShadows(chart) };
+    const out = { id: c.id, note: c.note, option: c.option, shadows: wholeShadows(chart) };
+    if (c.highlight) {
+      chart.dispatchAction(Object.assign({ type: 'highlight' }, c.highlight));
+      chart.getZr().animation.update();
+      chart.renderToSVGString();
+      refresh(chart);
+      out.highlight = c.highlight;
+      out.highlighted = wholeShadows(chart);
+    }
+    return out;
   } finally {
     chart.dispose();
   }
@@ -472,6 +494,7 @@ function generate() {
     whole: WHOLE.map(runWhole),
     layers: LAYERS.map(runLayers),
     anim: ANIM.map(runAnimCase),
+    maps: [{ name: 'r5ashadow', text: JSON.stringify(MAPJSON) }],
   };
 }
 
@@ -498,6 +521,8 @@ const guards = [
     && num(at('emphasisTween', 801).blur) === 0 },
   { name: 'restTween: from 4 to 12 in #ff0000', ok: num(at('restTween', 0).blur) === 4 && num(at('restTween', 301).blur) === 12
     && at('restTween', 301).color === '#ff0000' },
+  { name: 'map: the regions, B its own colour, then B blur 9', ok: wh('map').length === 2 && out1.whole.find(c => c.id === 'map').highlighted.some(r => num(r.blur) === 9 && r.color === '#00ff00')
+    && wh('geo').length === 1 },
   { name: 'markers: the three blocks', ok: ['#112233', '#223344', '#334455'].every(c => wh('markers').some(r => r.color === c)) },
   { name: 'matrix: background, cells and the divider; the border none', ok: ['#ff0000', '#00ff00', '#0000ff'].every(c => wh('matrix').some(r => r.color === c)) && wh('matrix').length === 3 },
   { name: 'dataZoom: four shadows', ok: ['#ff0000', '#00ff00', '#0000ff', '#ff00ff'].every(c => wh('dataZoom').some(r => r.color === c)) },

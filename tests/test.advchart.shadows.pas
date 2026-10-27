@@ -28,6 +28,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Render,
      tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Large,
      tyControls.AdvanceChart.VisualMap, tyControls.AdvanceChart.VisualMapView,
+     tyControls.AdvanceChart.Geo,
      tyControls.AdvanceChart,
      test.advchart.graphic;
 type
@@ -465,8 +466,38 @@ var
       + IntToHex(PInt64(@AOy)^, 16) + ',' + IntToHex(AColour, 8);
   end;
 
+  procedure Compare(const APhase: string; AWant: TJSONArray);
+  var jj, kk: Integer;
+  begin
+    got.Clear;
+    exp.Clear;
+    for jj := 0 to FChart.List.Count - 1 do
+    begin
+      el := FChart.List.Element(jj);
+      if el.Ignore or (el.Caption.FontSizeLogical > 0) then Continue;
+      if TyStyleHasShadow(el.Style) then
+        got.Add(Key(el.Style.ShadowBlur, el.Style.ShadowOffsetX, el.Style.ShadowOffsetY,
+          el.Style.ShadowColor));
+    end;
+    for kk := 0 to AWant.Count - 1 do
+    begin
+      w := AWant.Objects[kk];
+      if not TyTryParseChartColor(w.Strings['color'], col) then col := $FF000000;
+      exp.Add(Key(FromHex(w.Strings['blur']), FromHex(w.Strings['ox']), FromHex(w.Strings['oy']), col));
+    end;
+    Inc(FCompared);
+    if got.Text <> exp.Text then
+      Bad(Format('%s: shadows here [%s], upstream [%s]', [APhase, StringReplace(got.CommaText, '"', '', [rfReplaceAll]),
+        StringReplace(exp.CommaText, '"', '', [rfReplaceAll])]));
+  end;
+
+var maps: TJSONArray;
 begin
   cases := TJSONObject(FRoot).Arrays['whole'];
+  maps := TJSONObject(FRoot).Arrays['maps'];
+  for k := 0 to maps.Count - 1 do
+    AssertTrue('the map registers', TyChartRegisterMap(maps.Objects[k].Strings['name'],
+      maps.Objects[k].Strings['text']));
   got := TStringList.Create;
   exp := TStringList.Create;
   try
@@ -481,31 +512,18 @@ begin
       NewChart(600, 400);
       FChart.SetOption('{"animation":false,' + Copy(cs.Objects['option'].AsJSON, 2, MaxInt), True);
       RenderNow;
-      got.Clear;
-      exp.Clear;
-      for j := 0 to FChart.List.Count - 1 do
+      Compare('rest', cs.Arrays['shadows']);
+      if cs.Find('highlight') <> nil then
       begin
-        el := FChart.List.Element(j);
-        if el.Ignore or (el.Caption.FontSizeLogical > 0) then Continue;
-        if TyStyleHasShadow(el.Style) then
-          got.Add(Key(el.Style.ShadowBlur, el.Style.ShadowOffsetX, el.Style.ShadowOffsetY,
-            el.Style.ShadowColor));
+        FChart.DispatchAction('{"type":"highlight",' + Copy(cs.Objects['highlight'].AsJSON, 2, MaxInt));
+        RenderNow;
+        Compare('highlighted', cs.Arrays['highlighted']);
       end;
-      want := cs.Arrays['shadows'];
-      for k := 0 to want.Count - 1 do
-      begin
-        w := want.Objects[k];
-        if not TyTryParseChartColor(w.Strings['color'], col) then col := $FF000000;
-        exp.Add(Key(FromHex(w.Strings['blur']), FromHex(w.Strings['ox']), FromHex(w.Strings['oy']), col));
-      end;
-      Inc(FCompared);
-      if got.Text <> exp.Text then
-        Bad(Format('shadows here [%s], upstream [%s]', [StringReplace(got.CommaText, '"', '', [rfReplaceAll]),
-          StringReplace(exp.CommaText, '"', '', [rfReplaceAll])]));
     end;
   finally
     got.Free;
     exp.Free;
+    for k := 0 to maps.Count - 1 do TyChartUnregisterMap(maps.Objects[k].Strings['name']);
   end;
   AssertTrue(Format('charts compared (%d)', [FCompared]), FCompared >= 7);
   if FBad > 0 then

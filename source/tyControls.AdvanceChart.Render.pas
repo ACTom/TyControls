@@ -113,6 +113,11 @@ function TyNormalizeLineDash(const AType: string; AWidth: Double;
 procedure TyRenderRtPieces(P: TTyPainter; const APieces: TTyRtPieceArray;
   AX, AY, ARotationRad, AScale, AAlpha: Double; AHasInk: Boolean;
   AInk: TTyColor);
+{ [R5-A] A FRAME'S CANVAS SHADOW (a title's): the frame's fill, its alpha, on a mask of
+  its own and the painter's shadow cast from it -- the frame itself is drawn as it
+  always was. ARadius as FillBackground takes it. }
+procedure TyCastFrameShadow(P: TTyPainter; const AFrame: TTyRectF; ARadius: Integer;
+  AFill: TTyColor; const AShadow: TTyChartShadow);
 
 { [R2-A] A TURNED TEXT OF SEVERAL LINES as zrender lays a plain block out
   (Text._updatePlainTexts) and its transform turns it: the lines stack in
@@ -2135,6 +2140,41 @@ begin
     end;
     P.CastShadowOf(mask, ox * s, oy * s, AShadow, ABlur, AOffsetX, AOffsetY);
   finally
+    mask.Free;
+  end;
+end;
+
+procedure TyCastFrameShadow(P: TTyPainter; const AFrame: TTyRectF; ARadius: Integer;
+  AFill: TTyColor; const AShadow: TTyChartShadow);
+var
+  st: TTyChartElementStyle;
+  mask: TBGRABitmap;
+  mp: TTyPainter;
+  sc: TTyCanvasScale;
+  r: TRect;
+  s: Integer;
+begin
+  st := Default(TTyChartElementStyle);
+  TyStyleSetShadow(st, AShadow);
+  if (P = nil) or not TyStyleHasShadow(st) or ((AFill shr 24) = 0) then Exit;
+  r := Rect(Round(AFrame.Left), Round(AFrame.Top), Round(AFrame.Right), Round(AFrame.Bottom));
+  if (r.Right <= r.Left) or (r.Bottom <= r.Top) then Exit;
+  s := P.DeviceScale;
+  sc.Scale := s;
+  sc.DeviceUnits := False;
+  mask := TBGRABitmap.Create((r.Right - r.Left) * s, (r.Bottom - r.Top) * s, BGRAPixelTransparent);
+  mp := TTyPainter.Create;
+  try
+    mp.FastStrokes := P.FastStrokes;
+    mp.BeginPaintOnScaled(nil, Rect(0, 0, r.Right - r.Left, r.Bottom - r.Top), P.PPI, mask, sc);
+    mp.BeginPath;
+    mp.RoundRectPath(0, 0, r.Right - r.Left, r.Bottom - r.Top, ARadius);
+    mp.FillPath(AFill);
+    mp.EndPaint;
+    P.CastShadowOf(mask, r.Left * s, r.Top * s, TTyColor(AShadow.Color), AShadow.Blur,
+      AShadow.OffsetX, AShadow.OffsetY);
+  finally
+    mp.Free;
     mask.Free;
   end;
 end;

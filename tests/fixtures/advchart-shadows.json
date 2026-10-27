@@ -3466,6 +3466,94 @@
    ]
   },
   {
+   "id": "map",
+   "note": "a map series' regions: itemStyle shadow, region B its own colour; then B highlighted: its emphasis shadow (blur 9)",
+   "option": {
+    "series": [
+     {
+      "type": "map",
+      "map": "r5ashadow",
+      "itemStyle": {
+       "shadowBlur": 4,
+       "shadowColor": "#ff0000"
+      },
+      "emphasis": {
+       "itemStyle": {
+        "shadowBlur": 9
+       }
+      },
+      "data": [
+       {
+        "name": "A",
+        "value": 1
+       },
+       {
+        "name": "B",
+        "value": 2,
+        "itemStyle": {
+         "shadowColor": "#00ff00"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "shadows": [
+    {
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#00ff00"
+    },
+    {
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#ff0000"
+    }
+   ],
+   "highlight": {
+    "seriesIndex": 0,
+    "name": "B"
+   },
+   "highlighted": [
+    {
+     "blur": "4010000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#ff0000"
+    },
+    {
+     "blur": "4022000000000000",
+     "ox": "0000000000000000",
+     "oy": "0000000000000000",
+     "color": "#00ff00"
+    }
+   ]
+  },
+  {
+   "id": "geo",
+   "note": "a geo component's regions: its itemStyle shadow",
+   "option": {
+    "geo": {
+     "map": "r5ashadow",
+     "itemStyle": {
+      "shadowBlur": 6,
+      "shadowColor": "#0000ff",
+      "shadowOffsetY": 2
+     }
+    }
+   },
+   "shadows": [
+    {
+     "blur": "4018000000000000",
+     "ox": "0000000000000000",
+     "oy": "4000000000000000",
+     "color": "#0000ff"
+    }
+   ]
+  },
+  {
    "id": "visualMap",
    "note": "a continuous visualMap's handles: handleStyle's shadow",
    "option": {
@@ -4167,6 +4255,12 @@
    ]
   }
  ],
+ "maps": [
+  {
+   "name": "r5ashadow",
+   "text": "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"name\":\"A\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[0,0],[10,0],[10,10],[0,10],[0,0]]]}},{\"type\":\"Feature\",\"properties\":{\"name\":\"B\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[10,0],[20,0],[20,10],[10,10],[10,0]]]}}]}"
+  }
+ ],
  "guards": [
   {
    "name": "emphasisTween: 0 at rest, between at 150, 10 from 300, back to 0 from 800",
@@ -4174,6 +4268,10 @@
   },
   {
    "name": "restTween: from 4 to 12 in #ff0000",
+   "ok": true
+  },
+  {
+   "name": "map: the regions, B its own colour, then B blur 9",
    "ok": true
   },
   {
