@@ -202,6 +202,7 @@ uses
   test.advchart.radarlabel,
   test.advchart.pieitemlabel,
   test.advchart.axisemphasis,
+  test.advchart.brushstyle,
   test.advchart.backwardcompat,
   test.advchart.multiline, test.bgrarandompin,
   test.subpixel,

@@ -4486,6 +4486,9 @@ type
     { [R2-I9] FOR TESTS: the hover layer as the next frame brushes it (the
       copies in list order; nil for none) }
     function HoverLayerForTest: TTyPaintList;
+    { [R5-D] FOR TESTS: the brush covers' elements as a build makes them (a
+      new list; the caller frees it) }
+    function BrushCoversForTest: TTyPaintList;
     { [R2-I9] FOR TESTS: how many rows of series ASeriesIndex have a state
       list or are on the hover layer }
     function StRowsInStatesForTest(ASeriesIndex: Integer): Integer;

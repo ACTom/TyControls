@@ -2613,6 +2613,7 @@ procedure TyRenderElement(P: TTyPainter; const AElement: TTyChartElement);
 var
   rule: TTyFillRule;
   gx1, gy1, gx2, gy2, gr: Double;
+  mlim: Double;
   stops: array of TTyGradStop;
   img: TBGRABitmap;
   pm: TTyDoubleArray;
@@ -3144,6 +3145,22 @@ begin
     if AElement.Style.Alpha < 1 then
       P.SetElementAlpha(AElement.Style.Alpha);
     P.SetLineDash(AElement.Style.DashLogical, AElement.Style.DashOffsetLogical);
+    { [R5-D] a cap or a join the element names (the state is restored below) }
+    case AElement.Style.LineCap of
+      1: P.SetLineCap(tlcRound);
+      2: P.SetLineCap(tlcSquare);
+    end;
+    if (AElement.Style.LineJoin <> 0) or (AElement.Style.MiterLimit > 0) then
+    begin
+      if AElement.Style.MiterLimit > 0 then mlim := AElement.Style.MiterLimit
+      else mlim := 10;
+      case AElement.Style.LineJoin of
+        1: P.SetLineJoin(tljRound, mlim);
+        2: P.SetLineJoin(tljBevel, mlim);
+      else
+        P.SetLineJoin(tljMiter, mlim);
+      end;
+    end;
     if (AElement.Shape.Kind = cskLarge) and (P.Bitmap <> nil) and IdentityMatrix
       and LayerFits then
     begin
