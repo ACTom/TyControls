@@ -66,7 +66,10 @@ type
     { Start (or restart) the collapse/expand ease toward ATargetH from the current
       Height. With a window handle a timer eases; headless it snaps immediately. }
     procedure StartHeightAnimation(ATargetH: Integer);
+    procedure ReadExpandedHeight(Reader: TReader);
+    procedure WriteExpandedHeight(Writer: TWriter);
   protected
+    procedure DefineProperties(Filer: TFiler); override;
     { The resolved 'TyExPanelHeader' style — ONLY what that key itself declared, so the
       caller can tell "the theme tinted the band" from "the band inherits the surface".
       Its states are the panel's, except that ':hover' follows the BAND (FHeaderHover):
@@ -327,6 +330,10 @@ var
 begin
   if FCollapsed = AValue then Exit;
   FCollapsed := AValue;
+  { #152: while a form is read, Height is the height the panel was saved at, which for a
+    collapsed panel is its header's: taken for the expanded height, it left nothing to expand
+    to. The expanded height comes from its own stored value (DefineProperties). }
+  if csLoading in ComponentState then Exit;
   if FCollapsed then
   begin
     // Remember the full height so expanding restores it. But if a height animation is still in
@@ -347,6 +354,24 @@ begin
     if Assigned(FOnExpand) then FOnExpand(Self);
   end;
   Invalidate;
+end;
+
+procedure TTyExPanel.DefineProperties(Filer: TFiler);
+begin
+  inherited DefineProperties(Filer);
+  { #152: saved collapsed, a panel is saved at its header's height, so the height it opens to
+    is saved beside it. Not a published property: a 3.0 form only gains a value. }
+  Filer.DefineProperty('ExpandedHeight', @ReadExpandedHeight, @WriteExpandedHeight, FCollapsed);
+end;
+
+procedure TTyExPanel.ReadExpandedHeight(Reader: TReader);
+begin
+  FExpandedHeight := Reader.ReadInteger;
+end;
+
+procedure TTyExPanel.WriteExpandedHeight(Writer: TWriter);
+begin
+  Writer.WriteInteger(FExpandedHeight);
 end;
 
 procedure TTyExPanel.SetHeaderHeight(AValue: Integer);
