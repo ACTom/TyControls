@@ -1424,11 +1424,36 @@ end;
 
 { ==================== magicType ==================== }
 
+{ [R5-D] SERIES MODEL OPTIONS WITH NOTHING WRITTEN: a bar's and a line's
+  `seriesModel.option` (the defaults merged in; type and data left out) as
+  ECharts 6.1 has them -- what MagicType's zrUtil.defaults(newSeriesOpt,
+  seriesModel.option) hands the new series beside the author's keys. Taken
+  from the dist (a bar and a line on a category axis, nothing else written);
+  the theme's colours in them -- the bar's backgroundStyle, its select
+  border colour -- left out: they are the skin's here. }
+const
+  cTbMagicBarDefaults =
+    '{"z":2,"coordinateSystem":"cartesian2d","legendHoverLink":true,"barMinHeight":0,"barMinAng' +
+    'le":0,"large":false,"largeThreshold":400,"progressive":3000,"progressiveChunkMode":"mod","' +
+    'defaultBarGap":"10%","clip":true,"roundCap":false,"showBackground":false,"select":{"itemSt' +
+    'yle":{"borderWidth":2}},"realtimeSort":false,"label":{},"emphasis":{"label":{}}}';
+  cTbMagicLineDefaults =
+    '{"z":3,"coordinateSystem":"cartesian2d","legendHoverLink":true,"clip":true,"label":{"posit' +
+    'ion":"top"},"endLabel":{"show":false,"valueAnimation":true,"distance":8},"lineStyle":{"wid' +
+    'th":2,"type":"solid"},"emphasis":{"scale":true,"label":{}},"step":false,"smooth":false,"sm' +
+    'oothMonotone":null,"symbol":"emptyCircle","symbolSize":6,"symbolRotate":null,"showSymbol":' +
+    'true,"showAllSymbol":"auto","connectNulls":false,"sampling":"none","animationEasing":"line' +
+    'ar","progressive":0,"hoverLayerThreshold":null,"universalTransition":{"divideShape":"clone' +
+    '"},"triggerLineEvent":false,"triggerEvent":false}';
+
 function TyMagicTypeOption(AFeature: TJSONObject; const AType: string;
   const ASeries: TTyMagicSeriesArray; AStatus: TStrings;
   out ACurrentType: string; out ANewTitle: TJSONObject): TJSONObject;
 var
   seriesArr, axisArr: TJSONArray;
+  merged, typeDefaults: TJSONObject;
+  emLabel: TJSONData;
+  defText: string;
   s, last, idx: Integer;
   d, q: TJSONData;
   gen, extra, ttl: TJSONObject;
@@ -1538,7 +1563,56 @@ begin
     if gen <> nil then
     begin
       if extra <> nil then TyTbMerge(gen, extra, True);
-      if ASeries[s].Node <> nil then Defaults(gen, ASeries[s].Node);
+      { [R5-D] zrUtil.defaults(newSeriesOpt, seriesModel.option): the
+        series' option WITH its type's defaults merged in -- a bar turned
+        line keeps z 2, progressive 3000, its select style; a line turned
+        bar keeps z 3, label.position 'top', animationEasing 'linear'
+        [was: the author's keys only] }
+      if ASeries[s].Node <> nil then
+      begin
+        merged := TJSONObject(ASeries[s].Node.Clone);
+        try
+          if ASeries[s].SubType = 'bar' then defText := cTbMagicBarDefaults
+          else if ASeries[s].SubType = 'line' then defText := cTbMagicLineDefaults
+          else defText := '';
+          if defText <> '' then
+          begin
+            typeDefaults := TJSONObject(GetJSON(defText));
+            try
+              TyTbMerge(merged, typeDefaults, False);
+            finally
+              typeDefaults.Free;
+            end;
+            { mergeDefaultAndTheme's defaultEmphasis(option, 'label',
+              ['show']): label and emphasis.label made objects, the label's
+              show copied into emphasis.label where it has none }
+            if not (merged.Find('label') is TJSONObject) then
+            begin
+              if merged.IndexOfName('label') >= 0 then merged.Delete('label');
+              merged.Add('label', TJSONObject.Create);
+            end;
+            if not (merged.Find('emphasis') is TJSONObject) then
+            begin
+              if merged.IndexOfName('emphasis') >= 0 then merged.Delete('emphasis');
+              merged.Add('emphasis', TJSONObject.Create);
+            end;
+            emLabel := TJSONObject(merged.Objects['emphasis']).Find('label');
+            if not (emLabel is TJSONObject) then
+            begin
+              if merged.Objects['emphasis'].IndexOfName('label') >= 0 then
+                merged.Objects['emphasis'].Delete('label');
+              emLabel := TJSONObject.Create;
+              merged.Objects['emphasis'].Add('label', emLabel);
+            end;
+            if (TJSONObject(emLabel).IndexOfName('show') < 0)
+              and (merged.Objects['label'].IndexOfName('show') >= 0) then
+              TJSONObject(emLabel).Add('show', merged.Objects['label'].Find('show').Clone);
+          end;
+          Defaults(gen, merged);
+        finally
+          merged.Free;
+        end;
+      end;
       entries[s] := gen;
       last := s;
     end;

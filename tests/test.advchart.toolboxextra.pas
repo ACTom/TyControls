@@ -62,6 +62,17 @@ type
     procedure TestTheTooltipOffAsUpstream;
   end;
 
+  { [R5-D] tools/advchart-oracle/magictype-defaults.js: the changeMagicType
+    payload's series -- the old series' option with its type's defaults
+    under the generated keys -- after line, bar and stack clicks }
+  TAdvChartMagicTypeDefaultsOracleTest = class(TTestCase)
+  private
+    FPays: TStringList;
+    procedure OnEvent(Sender: TObject; const AEvent: TTyChartEvent);
+  published
+    procedure TestTheNewSeriesKeepTheOldDefaultsAsUpstream;
+  end;
+
 implementation
 
 const
@@ -426,6 +437,172 @@ begin
   RunCase('tooltip-off');
 end;
 
+{ a JSON value with its objects' keys sorted, numbers as %.10g }
+function CanonJ(AData: TJSONData): string;
+var
+  i: Integer;
+  keys: TStringList;
+  o: TJSONObject;
+begin
+  if AData = nil then Exit('undefined');
+  case AData.JSONType of
+    jtNull: Result := 'null';
+    jtBoolean: if AData.AsBoolean then Result := 'true' else Result := 'false';
+    jtNumber: Result := FloatToStrF(AData.AsFloat, ffGeneral, 10, 0, DefaultFormatSettings);
+    jtString: Result := '"' + AData.AsString + '"';
+    jtArray:
+      begin
+        Result := '[';
+        for i := 0 to AData.Count - 1 do
+        begin
+          if i > 0 then Result := Result + ',';
+          Result := Result + CanonJ(AData.Items[i]);
+        end;
+        Result := Result + ']';
+      end;
+    jtObject:
+      begin
+        o := TJSONObject(AData);
+        keys := TStringList.Create;
+        try
+          keys.Sorted := True;
+          for i := 0 to o.Count - 1 do keys.Add(o.Names[i]);
+          Result := '{';
+          for i := 0 to keys.Count - 1 do
+          begin
+            if i > 0 then Result := Result + ',';
+            Result := Result + keys[i] + ':' + CanonJ(o.Find(keys[i]));
+          end;
+          Result := Result + '}';
+        finally
+          keys.Free;
+        end;
+      end;
+  else
+    Result := '?';
+  end;
+end;
+
+procedure TAdvChartMagicTypeDefaultsOracleTest.OnEvent(Sender: TObject;
+  const AEvent: TTyChartEvent);
+begin
+  if AEvent.EventType = 'magictypechanged' then FPays.Add(AEvent.Payload);
+end;
+
+procedure TAdvChartMagicTypeDefaultsOracleTest.TestTheNewSeriesKeepTheOldDefaultsAsUpstream;
+const
+  { the keys the port writes its own way: the data (its store's), the marks
+    (absent rather than []) }
+  cSkip: array[0..3] of string = ('data', 'markPoint', 'markLine', 'seriesIndex');
+var
+  root: TJSONData;
+  sl: TStringList;
+  cs, click, want, gotS: TJSONObject;
+  clicks, wantArr, gotArr: TJSONArray;
+  form: TForm;
+  ctl: TTyStyleController;
+  chart: TTxProbe;
+  bmp: TBGRABitmap;
+  pay: TJSONData;
+  c, s, k, si, bad, compared: Integer;
+  key, report: string;
+  skip: Boolean;
+begin
+  sl := TStringList.Create;
+  try
+    sl.LoadFromFile(FixturePath('advchart-magictype-defaults.json'));
+    root := GetJSON(sl.Text);
+  finally
+    sl.Free;
+  end;
+  FPays := TStringList.Create;
+  form := TForm.CreateNew(nil);
+  ctl := TTyStyleController.Create(nil);
+  bmp := TBGRABitmap.Create(cW, cH, BGRA(255, 255, 255, 255));
+  bad := 0;
+  compared := 0;
+  report := '';
+  try
+    ctl.Mode := 'light';
+    ctl.ThemeName := 'default';
+    cs := TJSONObject(root).Arrays['cases'].Objects[0];
+    chart := TTxProbe.Create(form);
+    chart.Parent := form;
+    chart.Controller := ctl;
+    chart.SetBounds(0, 0, cW, cH);
+    chart.Option := cs.Objects['option'].AsJSON;
+    chart.OnChartEvent := @OnEvent;
+    chart.Render(bmp.Canvas, Rect(0, 0, cW, cH), 96);
+    clicks := cs.Arrays['clicks'];
+    for c := 0 to clicks.Count - 1 do
+    begin
+      click := clicks.Objects[c];
+      FPays.Clear;
+      AssertTrue('the icon ' + click.Strings['icon'],
+        chart.ToolboxClick(0, 'magicType', click.Strings['icon']));
+      chart.Render(bmp.Canvas, Rect(0, 0, cW, cH), 96);
+      AssertEquals(click.Strings['icon'] + ': one magictypechanged', 1, FPays.Count);
+      pay := GetJSON(FPays[0]);
+      try
+        gotArr := TJSONObject(pay).Objects['newOption'].Arrays['series'];
+        wantArr := click.Arrays['series'];
+        for s := 0 to wantArr.Count - 1 do
+        begin
+          want := wantArr.Objects[s];
+          si := want.Integers['seriesIndex'];
+          if (si >= gotArr.Count) or not (gotArr.Items[si] is TJSONObject) then
+          begin
+            Inc(bad);
+            report := report + Format('%s: series %d not in the payload; ', [click.Strings['icon'], si]);
+            Continue;
+          end;
+          gotS := TJSONObject(gotArr.Items[si]);
+          { every key upstream hands the series, and none it does not }
+          for k := 0 to want.Count - 1 do
+          begin
+            key := want.Names[k];
+            skip := False;
+            for si := 0 to High(cSkip) do if cSkip[si] = key then skip := True;
+            si := want.Integers['seriesIndex'];
+            if skip then Continue;
+            Inc(compared);
+            if CanonJ(gotS.Find(key)) <> CanonJ(want.Items[k]) then
+            begin
+              Inc(bad);
+              if bad <= 20 then
+                report := report + Format('%s: series %d %s %s, upstream %s; ',
+                  [click.Strings['icon'], si, key, CanonJ(gotS.Find(key)), CanonJ(want.Items[k])]);
+            end;
+          end;
+          for k := 0 to gotS.Count - 1 do
+          begin
+            key := gotS.Names[k];
+            skip := False;
+            for si := 0 to High(cSkip) do if cSkip[si] = key then skip := True;
+            si := want.Integers['seriesIndex'];
+            if skip or (want.Find(key) <> nil) then Continue;
+            Inc(bad);
+            if bad <= 20 then
+              report := report + Format('%s: series %d %s here, not upstream; ',
+                [click.Strings['icon'], si, key]);
+          end;
+        end;
+      finally
+        pay.Free;
+      end;
+    end;
+  finally
+    bmp.Free;
+    form.Free;
+    ctl.Free;
+    FPays.Free;
+    root.Free;
+  end;
+  AssertTrue('nothing compared', compared > 100);
+  AssertEquals(Format('%d of %d differ: %s', [bad, compared, report]), 0, bad);
+end;
+
 initialization
   RegisterTest(TAdvChartToolboxExtraOracleTest);
+  RegisterTest(TAdvChartMagicTypeDefaultsOracleTest);
 end.
