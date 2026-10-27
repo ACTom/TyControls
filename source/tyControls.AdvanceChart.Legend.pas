@@ -183,6 +183,9 @@ type
       for one (rich, a box), laid out over the legend's textStyle
       (RtLegendNode) -- createTextStyle of the item's textStyle model }
     RtItemNode, RtLegendNode: string;
+    { [R5-F] the item's own `tooltip` as JSON ('' none): its
+      setTooltipConfig option over the legend's tooltip }
+    TooltipJson: string;
   end;
 
   { One row of `legend.data`, or one name the chart offered when there is no
@@ -1202,6 +1205,10 @@ begin
     if (st <> nil) and TyRtNodeWantsBlock(st) then Result.RtItemNode := st.AsJSON
     else Result.RtItemNode := '';
   end;
+  { [R5-F] its own tooltip (an item's; setTooltipConfig's option) }
+  d := AObj.Find('tooltip');
+  if not ALegendLevel and (d <> nil) and (d.JSONType = jtObject) then Result.TooltipJson := d.AsJSON
+  else Result.TooltipJson := '';
   { [R5-F] symbolRotate and symbolKeepAspect, at either level }
   d := AObj.Find('symbolRotate');
   if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'inherit') then

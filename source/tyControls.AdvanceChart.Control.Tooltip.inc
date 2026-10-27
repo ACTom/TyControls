@@ -540,6 +540,123 @@ begin
   end;
 end;
 
+{ [R5-F] A LEGEND ITEM'S COMPONENT TOOLTIP (LegendView._createItem's
+  setTooltipConfig on the hit rect): only where the item's tooltip.show --
+  over the legend's, whose default is false -- says so }
+function TTyCustomAdvanceChart.LgTipItem(const ADatum: TTyChartDatumRef;
+  out ALegend, AItem: Integer): Boolean;
+var
+  n, d, it: TJSONData;
+  own: string;
+  want: Boolean;
+begin
+  Result := False;
+  ALegend := -1;
+  AItem := -1;
+  if ADatum.Kind <> ctkLegend then Exit;
+  if (ADatum.ComponentIndex < 0) or (ADatum.ComponentIndex > High(FLegends)) then Exit;
+  if (ADatum.DataIndex < 0) or (ADatum.DataIndex > High(FLegends[ADatum.ComponentIndex].Items)) then Exit;
+  want := False;
+  n := FOption.ComponentAt('legend', ADatum.ComponentIndex);
+  if n is TJSONObject then
+  begin
+    d := TJSONObject(n).Find('tooltip');
+    if d is TJSONObject then want := JsTruthy(TJSONObject(d).Find('show'));
+  end;
+  own := FLegends[ADatum.ComponentIndex].Items[ADatum.DataIndex].Own.TooltipJson;
+  if own <> '' then
+  begin
+    it := nil;
+    try
+      it := GetJSON(own);
+    except
+      it := nil;
+    end;
+    try
+      if (it is TJSONObject) and (TJSONObject(it).Find('show') <> nil)
+        and (TJSONObject(it).Find('show').JSONType <> jtNull) then
+        want := JsTruthy(TJSONObject(it).Find('show'));
+    finally
+      it.Free;
+    end;
+  end;
+  if not want then Exit;
+  ALegend := ADatum.ComponentIndex;
+  AItem := ADatum.DataIndex;
+  Result := True;
+end;
+
+{ its cascade (_showComponentItemTooltip): the item's own tooltip option,
+  the legend's tooltip (over its model's default {show: false}), then
+  {formatter: the name}, over the global component }
+function TTyCustomAdvanceChart.TipLgSpec(ALegend, AItem: Integer): TTyTooltipSpec;
+var
+  n, tt, it: TJSONData;
+  lvItem, lvLg, lvName: TJSONObject;
+  k: Integer;
+begin
+  lvItem := nil;
+  lvLg := TJSONObject.Create(['show', False]);
+  lvName := nil;
+  it := nil;
+  try
+    n := FOption.ComponentAt('legend', ALegend);
+    tt := nil;
+    if n is TJSONObject then tt := TJSONObject(n).Find('tooltip');
+    if tt is TJSONObject then
+      for k := 0 to tt.Count - 1 do
+        lvLg.Elements[TJSONObject(tt).Names[k]] := tt.Items[k].Clone;
+    if (ALegend <= High(FLegends)) and (AItem >= 0) and (AItem <= High(FLegends[ALegend].Items)) then
+    begin
+      if FLegends[ALegend].Items[AItem].Own.TooltipJson <> '' then
+      begin
+        try
+          it := GetJSON(FLegends[ALegend].Items[AItem].Own.TooltipJson);
+        except
+          it := nil;
+        end;
+        if it is TJSONObject then lvItem := TJSONObject(it.Clone);
+      end;
+      lvName := TJSONObject.Create(['formatter', FLegends[ALegend].Items[AItem].Name]);
+    end;
+    Result := TyTooltipSpecOfLevels(FOption, [lvItem, lvLg, lvName]);
+    Result.Trigger := tttItem;
+  finally
+    it.Free;
+    lvName.Free;
+    lvLg.Free;
+    lvItem.Free;
+  end;
+end;
+
+{ its text: formatTpl over the params' $vars [name] -- `{a}` the name,
+  encodeHTML'd, the first only }
+function TTyCustomAdvanceChart.TipLgText(ALegend, AItem: Integer;
+  const ASpec: TTyTooltipSpec): string;
+var
+  nm: string;
+  p: Integer;
+begin
+  Result := '';
+  if not ASpec.HasFormatter then Exit;
+  if (ALegend > High(FLegends)) or (AItem < 0) or (AItem > High(FLegends[ALegend].Items)) then Exit;
+  nm := FLegends[ALegend].Items[AItem].Name;
+  Result := ASpec.Formatter;
+  p := Pos('{a}', Result);
+  if p > 0 then Result := Copy(Result, 1, p - 1) + '{a0}' + Copy(Result, p + 3, MaxInt);
+  p := Pos('{a0}', Result);
+  if p > 0 then Result := Copy(Result, 1, p - 1) + TyChartEncodeHtml(nm) + Copy(Result, p + 4, MaxInt);
+end;
+
+{ its rect: the item's hit rect (the group's bounding rect) }
+function TTyCustomAdvanceChart.TipLgRect(ALegend, AItem: Integer): TTyRectF;
+begin
+  Result := TyInvalidRectF;
+  if (ALegend < 0) or (ALegend > High(FLegends)) or (AItem < 0)
+    or (AItem > High(FLegends[ALegend].Items)) then Exit;
+  Result := FLegends[ALegend].Items[AItem].Bounds;
+end;
+
 { its text: formatTpl over the params' $vars [name, title] -- `{a}` the
   icon's name, `{b}` its title, each value encodeHTML'd, the first of each
   only (String.replace) }
@@ -2892,6 +3009,7 @@ begin
   end
   else if ASnap.ProxyJson <> '' then Result := TipProxySpec(ASnap.ProxyJson)
   else if ASnap.TbHas then Result := TipTbSpec(ASnap.TbIndex, ASnap.TbIcon)
+  else if ASnap.LgHas then Result := TipLgSpec(ASnap.LgIndex, ASnap.LgItem)
   else Result := TooltipSpecFor(ASnap.Datum);
   { [Batch 153] a manual show: the payload's position before the
     cascade's (positionExpr || model.get('position')); else, for an item
@@ -2956,7 +3074,7 @@ begin
     A component item (a geo region, an axis' text, a matrix cell) has none. }
   if Length(ASnap.Hits) = 0 then
   begin
-    if (ASnap.ProxyJson <> '') or ASnap.TbHas then Exit;
+    if (ASnap.ProxyJson <> '') or ASnap.TbHas or ASnap.LgHas then Exit;
     if not TipTargetValid(ASnap.Datum) or IsGeoDatum(ASnap.Datum)
       or IsAxisTextDatum(ASnap.Datum) or TipIsMatrix(ASnap.Datum)
       or IsGfxTipDatum(ASnap.Datum) then Exit;
@@ -3474,7 +3592,10 @@ begin
             ev.Element := -1
           { [R5-D] or a toolbox's icon: its tooltipConfig }
           else if not TipTargetValid(ADatum) and TbHitAt(AX, AY, ev.TbIndex, ev.TbIcon) then
-            ev.TbHas := True;
+            ev.TbHas := True
+          { [R5-F] or a legend item with one }
+          else if not TipTargetValid(ADatum) and LgTipItem(ADatum, ev.LgIndex, ev.LgItem) then
+            ev.LgHas := True;
         end;
         TipTryShowEvent(ev, True);
       end
@@ -4123,6 +4244,17 @@ begin
     snap.TbHas := True;
     snap.TbIndex := AEv.TbIndex;
     snap.TbIcon := AEv.TbIcon;
+    TipTryShow(snap, TipSpecOf(snap));
+    TipDispatch(TJSONObject.Create(['type', 'showTip', 'from', TipUid]), nil,
+      False, AViaListener);
+    Exit;
+  end;
+  { [R5-F] A LEGEND ITEM'S: the same component item }
+  if AEv.LgHas then
+  begin
+    snap.LgHas := True;
+    snap.LgIndex := AEv.LgIndex;
+    snap.LgItem := AEv.LgItem;
     TipTryShow(snap, TipSpecOf(snap));
     TipDispatch(TJSONObject.Create(['type', 'showTip', 'from', TipUid]), nil,
       False, AViaListener);
@@ -5861,6 +5993,13 @@ begin
   { [R5-D] a showTip proxy, a toolbox icon }
   if FTipSnap.ProxyJson <> '' then
     Result := 'proxy'
+  else if FTipSnap.LgHas then
+  begin
+    Result := 'legend:';
+    if (FTipSnap.LgIndex <= High(FLegends)) and (FTipSnap.LgItem >= 0)
+      and (FTipSnap.LgItem <= High(FLegends[FTipSnap.LgIndex].Items)) then
+      Result := Result + FLegends[FTipSnap.LgIndex].Items[FTipSnap.LgItem].Name;
+  end
   else if FTipSnap.TbHas then
   begin
     Result := 'toolbox:';
@@ -6455,7 +6594,7 @@ begin
   snap := ASnap;
   onAxis := Length(snap.Hits) > 0;
   if not TipTargetValid(snap.Datum) and not onAxis and (snap.ProxyJson = '')
-    and not snap.TbHas then Exit;
+    and not snap.TbHas and not snap.LgHas then Exit;
   { UNDER AN AXIS TRIGGER THERE IS NO CASCADE. Upstream builds the axis
     tooltip's model from the global component and a positioning hint and
     nothing else -- no series level, no data item -- so every option but
@@ -6468,7 +6607,7 @@ begin
     the item trigger is never consulted. }
   if not onAxis and (spec.Trigger <> tttItem) and not IsGeoDatum(snap.Datum)
     and not IsAxisTextDatum(snap.Datum) and not IsGfxTipDatum(snap.Datum)
-    and (snap.ProxyJson = '') and not snap.TbHas then Exit;
+    and (snap.ProxyJson = '') and not snap.TbHas and not snap.LgHas then Exit;
   ink := TooltipInk(spec);
   mkNames := nil;
   mkColours := nil;
@@ -6477,12 +6616,14 @@ begin
   htmlHas := False;
   htmlLines := nil;
   try
-    if (not onAxis) and ((snap.ProxyJson <> '') or snap.TbHas) then
+    if (not onAxis) and ((snap.ProxyJson <> '') or snap.TbHas or snap.LgHas) then
     begin
       { [R5-D] A SHOWTIP PROXY'S TEXT: its formatter as formatTpl leaves it
         (no params), else its content; A TOOLBOX ICON'S over its name and
         title }
       if snap.TbHas then tipText := TipTbText(snap.TbIndex, snap.TbIcon, spec)
+      { [R5-F] a legend item's over its name }
+      else if snap.LgHas then tipText := TipLgText(snap.LgIndex, snap.LgItem, spec)
       else tipText := TipProxyText(snap.ProxyJson, spec);
       AContent.Fmt := tipText;
       if tipText = '' then Exit;
@@ -6825,7 +6966,10 @@ begin
         snap.X + APPI / 96, snap.Y + APPI / 96)
     { [R5-D] a toolbox icon: its rect as getBoundingRect gives it }
     else if (not onAxis) and snap.TbHas then
-      elRect := TipTbIconRect(snap.TbIndex, snap.TbIcon);
+      elRect := TipTbIconRect(snap.TbIndex, snap.TbIcon)
+    { [R5-F] a legend item: its hit rect }
+    else if (not onAxis) and snap.LgHas then
+      elRect := TipLgRect(snap.LgIndex, snap.LgItem);
     if TyRectFIsValid(elRect) then
     begin
       pin.HasRect := True;
