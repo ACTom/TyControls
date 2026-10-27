@@ -557,8 +557,14 @@ begin
   Result.alpha := 255;
 end;
 
+function Within(AGot, A, B: Integer): Boolean;
+begin
+  Result := (AGot >= Min(A, B) - 12) and (AGot <= Max(A, B) + 12);
+end;
+
 procedure TAdvChartEdgesAxesOracleTest.TestAGradientAxisPieceRampsAsUpstreams;
 var
+  lo, hi: TBGRAPixel;
   cs, s: TJSONObject;
   c, k, q: Integer;
   bmp: TBGRABitmap;
@@ -601,13 +607,19 @@ begin
           end;
           px := x1 + (x2 - x1) * f;
           py := y1 + (y2 - y1) * f;
-          { the pixel whose centre is nearest the line's centre point }
+          { the pixel the line's point is in: the ramp across that pixel --
+            from its near corner to its far one (BGRA samples the gradient
+            at the pixel's corner, the canvas at its centre: half a pixel,
+            which on a 6 px box is a sixth of the ramp) -- and 12 levels of
+            antialiasing either side }
           want := RampAt(s.Arrays['stops'], gx1, gy1, gx2, gy2, Floor(px) + 0.5, Floor(py) + 0.5);
+          lo := RampAt(s.Arrays['stops'], gx1, gy1, gx2, gy2, Floor(px), Floor(py));
+          hi := RampAt(s.Arrays['stops'], gx1, gy1, gx2, gy2, Floor(px) + 1, Floor(py) + 1);
           got := bmp.GetPixel(Floor(px), Floor(py));
           Inc(FCompared);
           Inc(samples);
-          if (Abs(Integer(got.red) - want.red) > 12) or (Abs(Integer(got.green) - want.green) > 12)
-            or (Abs(Integer(got.blue) - want.blue) > 12) then
+          if not (Within(got.red, lo.red, hi.red) and Within(got.green, lo.green, hi.green)
+            and Within(got.blue, lo.blue, hi.blue)) then
             Bad(Format('at %d,%d: %d %d %d upstream, %d %d %d here', [Floor(px), Floor(py),
               want.red, want.green, want.blue, got.red, got.green, got.blue]));
         end;
