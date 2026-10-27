@@ -47,6 +47,7 @@ type
   published
     procedure TestExcludingGeoHidesItsViewsAsUpstream;
     procedure TestTheMarkerModelsAreUpstreams;
+    procedure TestAFractionalGeoZOrdersAsUpstream;
   end;
 
   TAdvChartEdgesGeoTest = class(TTestCase)
@@ -271,6 +272,55 @@ begin
   end;
   AssertTrue('compared', FCompared >= 150);
   AssertEquals('marker models: ' + IntToStr(FBad) + ' of ' + IntToStr(FCompared)
+    + ' differ:' + FReport, 0, FBad);
+end;
+
+{ [spec 244] a geo's fractional z orders against a scatter's whole one as
+  zrender's number sort does: the top target at the symbol's centre is the
+  geo or the series as upstream's findHover answers }
+procedure TAdvChartEdgesGeoOracleTest.TestAFractionalGeoZOrdersAsUpstream;
+var
+  root: TJSONData;
+  maps, arr: TJSONArray;
+  i, idx: Integer;
+  c: TJSONObject;
+  got: string;
+  bmp: TBGRABitmap;
+begin
+  root := Fixture('advchart-edges-geo.json');
+  try
+    maps := TJSONObject(root).Arrays['maps'];
+    for i := 0 to maps.Count - 1 do
+      AssertTrue('registered', TyChartRegisterMap(maps.Objects[i].Strings['name'],
+        maps.Objects[i].Strings['text']));
+    arr := TJSONObject(root).Arrays['orders'];
+    AssertTrue('cases', arr.Count >= 4);
+    for i := 0 to arr.Count - 1 do
+    begin
+      c := arr.Objects[i];
+      NewChart(600, 400);
+      FChart.Option := c.Objects['option'].AsJSON;
+      bmp := TBGRABitmap.Create(600, 400, BGRA(255, 255, 255, 255));
+      try
+        FChart.Render(bmp.Canvas, Rect(0, 0, 600, 400), 96);
+      finally
+        bmp.Free;
+      end;
+      idx := FChart.List.TopElementAt(c.Arrays['at'].Integers[0], c.Arrays['at'].Integers[1], 96);
+      got := 'none';
+      if idx >= 0 then
+      begin
+        if FChart.List.Element(idx).Datum.Kind = ctkGeo then got := 'geo'
+        else got := 'series';
+      end;
+      Inc(FCompared);
+      if got <> c.Strings['top'] then
+        Bad(c.Strings['id'] + ': ' + got + ' on top here, upstream ' + c.Strings['top']);
+    end;
+  finally
+    root.Free;
+  end;
+  AssertEquals('fractional z: ' + IntToStr(FBad) + ' of ' + IntToStr(FCompared)
     + ' differ:' + FReport, 0, FBad);
 end;
 

@@ -107,8 +107,37 @@ function readExport(cs) {
   }
 }
 
+// [spec 244] a geo's z as written, fractions and all: zrender sorts its
+// display list by (zlevel, z, z2) as numbers, so a geo at z 2.5 is over a
+// scatter at its default z 2 and one at 1.5 under it. The top target at the
+// symbol's centre (zrender's findHover, the display list from the top) says
+// which.
+const ORDER_CASES = [
+  { id: 'z-over', z: 2.5 }, { id: 'z-under', z: 1.5 }, { id: 'z-neg', z: -0.5 }, { id: 'z-tie', z: 2 },
+];
+function readOrder(oc) {
+  const chart = echarts.init(null, null, { renderer: 'svg', ssr: true, width: W, height: H });
+  try {
+    const option = { animation: false, geo: { map: 'r5gsq', z: oc.z, itemStyle: { areaColor: '#ff0000' } },
+      series: [{ type: 'scatter', coordinateSystem: 'geo', symbolSize: 20, data: [[5, 5]] }] };
+    chart.setOption(clone(option));
+    chart.getZr().storage.getDisplayList(true);
+    const p = chart.convertToPixel({ geoIndex: 0 }, [5, 5]);
+    const hit = chart.getZr().handler.findHover(p[0], p[1]).target;
+    let top = null;
+    for (let e = hit; e && !top; e = e.parent) {
+      if (e.__ecComponentInfo && e.__ecComponentInfo.mainType === 'geo') top = 'geo';
+    }
+    if (!top && hit) top = 'series';
+    return { id: oc.id, z: oc.z, option, at: [Math.round(p[0]), Math.round(p[1])], top };
+  } finally {
+    chart.dispose();
+  }
+}
+
 function generate() {
   const cases = CASES.map(readExport);
+  const orders = ORDER_CASES.map(readOrder);
   const C = id => cases.find(c => c.id === id);
   const guards = [
     { id: 'geo-drawn', ok: C('geo-none').present.includes('geo') },
@@ -116,9 +145,11 @@ function generate() {
       && C('geo-geo').present.includes('series') },
     { id: 'map-series-stays', ok: C('map-series-geo').present.join() === 'series' && C('map-series-geo').excluded.length === 0 },
     { id: 'map-on-geo-hidden', ok: !C('map-on-geo').present.includes('geo') },
+    { id: 'fractional-z-orders', ok: orders[0].top === 'geo' && orders[1].top === 'series' && orders[2].top === 'series'
+      && orders[3].top === 'series' },
   ];
   return { doc: { source: 'tools/advchart-oracle/edges-geo.js against ' + path.basename(DIST) + ' (ECharts ' + echarts.version + ')',
-    maps: MAPS, exports: cases, guards }, bad: guards.filter(g => !g.ok) };
+    maps: MAPS, exports: cases, orders, guards }, bad: guards.filter(g => !g.ok) };
 }
 
 try {

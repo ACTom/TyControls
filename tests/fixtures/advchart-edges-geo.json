@@ -212,6 +212,136 @@
    }
   }
  ],
+ "orders": [
+  {
+   "id": "z-over",
+   "z": 2.5,
+   "option": {
+    "animation": false,
+    "geo": {
+     "map": "r5gsq",
+     "z": 2.5,
+     "itemStyle": {
+      "areaColor": "#ff0000"
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "coordinateSystem": "geo",
+      "symbolSize": 20,
+      "data": [
+       [
+        5,
+        5
+       ]
+      ]
+     }
+    ]
+   },
+   "at": [
+    180,
+    200
+   ],
+   "top": "geo"
+  },
+  {
+   "id": "z-under",
+   "z": 1.5,
+   "option": {
+    "animation": false,
+    "geo": {
+     "map": "r5gsq",
+     "z": 1.5,
+     "itemStyle": {
+      "areaColor": "#ff0000"
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "coordinateSystem": "geo",
+      "symbolSize": 20,
+      "data": [
+       [
+        5,
+        5
+       ]
+      ]
+     }
+    ]
+   },
+   "at": [
+    180,
+    200
+   ],
+   "top": "series"
+  },
+  {
+   "id": "z-neg",
+   "z": -0.5,
+   "option": {
+    "animation": false,
+    "geo": {
+     "map": "r5gsq",
+     "z": -0.5,
+     "itemStyle": {
+      "areaColor": "#ff0000"
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "coordinateSystem": "geo",
+      "symbolSize": 20,
+      "data": [
+       [
+        5,
+        5
+       ]
+      ]
+     }
+    ]
+   },
+   "at": [
+    180,
+    200
+   ],
+   "top": "series"
+  },
+  {
+   "id": "z-tie",
+   "z": 2,
+   "option": {
+    "animation": false,
+    "geo": {
+     "map": "r5gsq",
+     "z": 2,
+     "itemStyle": {
+      "areaColor": "#ff0000"
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "coordinateSystem": "geo",
+      "symbolSize": 20,
+      "data": [
+       [
+        5,
+        5
+       ]
+      ]
+     }
+    ]
+   },
+   "at": [
+    180,
+    200
+   ],
+   "top": "series"
+  }
+ ],
  "guards": [
   {
    "id": "geo-drawn",
@@ -227,6 +357,10 @@
   },
   {
    "id": "map-on-geo-hidden",
+   "ok": true
+  },
+  {
+   "id": "fractional-z-orders",
    "ok": true
   }
  ]

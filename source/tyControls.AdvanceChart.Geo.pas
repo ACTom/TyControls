@@ -191,6 +191,9 @@ type
     Silent: Boolean;
     Clip: Boolean;
     Z, ZLevel: Integer;
+    { [spec 244] the fraction of a z that is not whole: Z is its floor, so
+      (Z, ZFrac) orders as the number zrender sorts by }
+    ZFrac: Double;
     { the box after mergeLayoutParam, a null or absent key climbing to the
       option root as getShallow does }
     Box: TTyRawBox;
@@ -2326,6 +2329,7 @@ var
   k: Integer;
   gs: TTyGraphSpec;
   v: TTyBoxRaw;
+  zv: Double;
 
   function BoxRawOwn(const AKey: string): TTyCalBoxKey;
   var x: TJSONData;
@@ -2382,10 +2386,23 @@ begin
   begin
     { the series' z, MapSeries' 2 by default }
     d := node.Find('z');
-    if (d <> nil) and (d.JSONType = jtNumber) and JsFinite(d.AsFloat) then Result.Z := Trunc(d.AsFloat)
+    if (d <> nil) and (d.JSONType = jtNumber) and JsFinite(d.AsFloat) then
+    begin
+      zv := Max(Double(-100000), Min(Double(100000), d.AsFloat));
+      Result.Z := Floor(zv);
+      Result.ZFrac := zv - Result.Z;
+    end
     else Result.Z := 2;
   end
   else if (d = nil) or JsFalsy(TyJsonToNumber(d)) then Result.Z := 0
+  else if JsFinite(TyJsonToNumber(d)) then
+  begin
+    { [spec 244] the floor and the fraction [was: truncated]; clamped as
+      every z the list keeps (an Integer key) }
+    zv := Max(Double(-100000), Min(Double(100000), TyJsonToNumber(d)));
+    Result.Z := Floor(zv);
+    Result.ZFrac := zv - Result.Z;
+  end
   else Result.Z := Trunc(TyJsonToNumber(d));
   d := Climb(node, root, 'zlevel');
   if (d = nil) or JsFalsy(TyJsonToNumber(d)) then Result.ZLevel := 0
@@ -5947,6 +5964,7 @@ var
     AEl.ZrHit.SvgNode := ANode + 1;
     AEl.ZrHit.SvgLabel := ALabel;
     AEl.Z := AGeo.Spec.Z;
+    AEl.ZFrac := AGeo.Spec.ZFrac;
     AEl.Z2 := Round(AZ2);
     AEl.Silent := AOwnSilent or SilentAt(ANode);
     AEl.Datum := Datum(ANode);
@@ -6515,6 +6533,7 @@ begin
           el.Style.Alpha := c.Num[stkOpacity];
           GeoWriteShadow(el, c);
           el.Z := AGeo.Spec.Z;
+          el.ZFrac := AGeo.Spec.ZFrac;
           el.Z2 := Round(c.Num[stkZ2]);
           el.Silent := silentGroup;
           el.Datum := GroupDatum(g);
@@ -6734,6 +6753,7 @@ begin
         el.Caption.Truncate := False;
         el.Style.Alpha := c.Num[stkOpacity];
         el.Z := AGeo.Spec.Z;
+        el.ZFrac := AGeo.Spec.ZFrac;
         el.Z2 := Round(c.Num[stkZ2]);
         el.Ignore := (c.Num[stkIgnore] <> 0) or (txt = '') or (w <= 0) or (h <= 0);
         { a text is silent on its own or under a silent host }

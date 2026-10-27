@@ -153,7 +153,7 @@ function TyBuildSingles(AOption: TTyChartOption; const AViewport: TTyRectF): TTy
   ARef -- a matrix cell or a calendar day: getLayoutRect of the box there
   (not the shared solver: a cell's edges are fractional), then _adjustAxis.
   A cell of no position or no size: the box far off the canvas
-  (TyBoxNowhere), as a grid's. }
+  (TyBoxNowhere), as a grid's. [spec 244: a cell of no size in one dimension keeps the rect upstream lays out, NaN in that dimension; TySingleResizeIn] }
 procedure TySingleResizeIn(AOption: TTyChartOption; ASingle: TTySingle;
   const ARef: TTyXYWH);
 
@@ -505,8 +505,11 @@ begin
   node := ObjOf(AOption.ComponentAt(TySingleCoordSysName, ASingle.Index));
   box := TyGetLayoutRect(SingleBoxRaw(node, AOption.Root), ARef.X, ARef.Y,
     ARef.W, ARef.H, []);
-  if not TyXYWHIsValid(box) then
-    box := TyXYWH(TyBoxNowhere, TyBoxNowhere, TyBoxNowhereSize, TyBoxNowhereSize);
+  { [spec 244] A CELL OF NO SIZE in one dimension: upstream lays the axis out
+    on that rect as it is -- getLayoutRect's `|| 0` for a position, NaN for
+    the size -- so the dimension that has a size converts as ever and the
+    other is NaN; nothing of it is drawn [was: far off the canvas,
+    TyBoxNowhere, every conversion a finite point there] }
   ASingle.Rect := box;
   SingleAdjustAxis(ASingle);
 end;

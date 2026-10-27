@@ -7516,6 +7516,503 @@
      "axes": []
     }
    ]
+  },
+  {
+   "id": "r5g-graph-box-cartesian",
+   "group": "series",
+   "note": "graphs with coordinateSystemUsage 'box' on a cartesian: one with its default box, one with left / top / width / height and a coord, beside a scatter on the axes",
+   "gallery": null,
+   "option": {
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "grid": {
+     "left": 40,
+     "top": 40,
+     "width": 200,
+     "height": 200
+    },
+    "series": [
+     {
+      "type": "graph",
+      "coordinateSystem": "cartesian2d",
+      "coordinateSystemUsage": "box",
+      "layout": "none",
+      "data": [
+       {
+        "name": "A",
+        "x": 0,
+        "y": 0
+       },
+       {
+        "name": "B",
+        "x": 10,
+        "y": 5
+       },
+       {
+        "name": "C",
+        "x": 4,
+        "y": 12
+       }
+      ],
+      "links": [
+       {
+        "source": "A",
+        "target": "B"
+       },
+       {
+        "source": "B",
+        "target": "C"
+       }
+      ]
+     },
+     {
+      "type": "graph",
+      "coordinateSystem": "cartesian2d",
+      "coordinateSystemUsage": "box",
+      "coord": [
+       3,
+       4
+      ],
+      "layout": "none",
+      "left": 300,
+      "top": 250,
+      "width": 200,
+      "height": 100,
+      "data": [
+       {
+        "name": "A",
+        "x": 0,
+        "y": 0
+       },
+       {
+        "name": "B",
+        "x": 10,
+        "y": 5
+       },
+       {
+        "name": "C",
+        "x": 4,
+        "y": 12
+       }
+      ],
+      "links": [
+       {
+        "source": "A",
+        "target": "B"
+       },
+       {
+        "source": "B",
+        "target": "C"
+       }
+      ]
+     },
+     {
+      "type": "scatter",
+      "data": [
+       [
+        0,
+        0
+       ],
+       [
+        2,
+        2
+       ]
+      ]
+     }
+    ]
+   },
+   "steps": [],
+   "fails": [],
+   "states": [
+    {
+     "tip": null,
+     "matrices": [],
+     "grids": [
+      {
+       "index": 0,
+       "boxed": false,
+       "ref": null,
+       "rect": {
+        "x": "4044000000000000",
+        "y": "4044000000000000",
+        "width": "4069000000000000",
+        "height": "4069000000000000"
+       }
+      }
+     ],
+     "visualMaps": [],
+     "sliders": [],
+     "toolboxes": [],
+     "timelines": [],
+     "thumbnails": [],
+     "radars": [],
+     "singles": [],
+     "parallels": [],
+     "geos": [],
+     "series": [
+      {
+       "seriesIndex": 0,
+       "type": "graph",
+       "boxed": true,
+       "view": {
+        "x": "4069000000000000",
+        "y": "404e000000000000",
+        "width": "4079000000000000",
+        "height": "407e000000000000"
+       },
+       "roam": [
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000"
+       ],
+       "nodes": [
+        {
+         "i": 0,
+         "x": "4069000000000000",
+         "y": "404e000000000000"
+        },
+        {
+         "i": 1,
+         "x": "4082c00000000000",
+         "y": "4070400000000000"
+        },
+        {
+         "i": 2,
+         "x": "4076800000000000",
+         "y": "4080e00000000000"
+        }
+       ]
+      },
+      {
+       "seriesIndex": 1,
+       "type": "graph",
+       "boxed": true,
+       "view": {
+        "x": "4072c00000000000",
+        "y": "406f400000000000",
+        "width": "4069000000000000",
+        "height": "4059000000000000"
+       },
+       "roam": [
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000",
+        "3ff0000000000000",
+        "0000000000000000",
+        "0000000000000000"
+       ],
+       "nodes": [
+        {
+         "i": 0,
+         "x": "4072c00000000000",
+         "y": "406f400000000000"
+        },
+        {
+         "i": 1,
+         "x": "407f400000000000",
+         "y": "40723aaaaaaaaaab"
+        },
+        {
+         "i": 2,
+         "x": "4077c00000000000",
+         "y": "4075e00000000000"
+        }
+       ]
+      },
+      {
+       "seriesIndex": 2,
+       "type": "scatter",
+       "boxed": false
+      }
+     ],
+     "extents": [
+      {
+       "dim": "xAxis",
+       "index": 0,
+       "extent": [
+        "0000000000000000",
+        "4008000000000000"
+       ]
+      },
+      {
+       "dim": "yAxis",
+       "index": 0,
+       "extent": [
+        "0000000000000000",
+        "4010000000000000"
+       ]
+      }
+     ],
+     "calls": [
+      {
+       "finder": {
+        "seriesIndex": 0
+       },
+       "value": [
+        5,
+        5
+       ],
+       "ret": [
+        "4079000000000000",
+        "4070400000000000"
+       ]
+      },
+      {
+       "finder": {
+        "xAxisIndex": 0,
+        "yAxisIndex": 0
+       },
+       "value": [
+        1,
+        1
+       ],
+       "ret": [
+        "405aaaaaaaaaaaab",
+        "4067c00000000000"
+       ]
+      }
+     ],
+     "backs": [],
+     "contains": [],
+     "hovers": [],
+     "axes": []
+    }
+   ]
+  },
+  {
+   "id": "r5g-nowhere-convert",
+   "group": "interact",
+   "note": "a polar and a single axis whose coord names a column and no row (no y, no height): convertToPixel / convertFromPixel / containPixel through each and through a series on each",
+   "gallery": null,
+   "option": {
+    "matrix": {
+     "left": 51,
+     "right": 36,
+     "top": 33,
+     "bottom": 40,
+     "x": {
+      "data": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "y": {
+      "data": [
+       "p",
+       "q",
+       "r",
+       "s",
+       "t",
+       "u"
+      ]
+     }
+    },
+    "polar": {
+     "coordinateSystem": "matrix",
+     "coord": [
+      "b",
+      "zz"
+     ]
+    },
+    "angleAxis": {
+     "type": "value"
+    },
+    "radiusAxis": {
+     "type": "value"
+    },
+    "singleAxis": {
+     "coordinateSystem": "matrix",
+     "coord": [
+      "c",
+      "zz"
+     ],
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "coordinateSystem": "polar",
+      "data": [
+       [
+        1,
+        30
+       ]
+      ]
+     },
+     {
+      "type": "scatter",
+      "coordinateSystem": "singleAxis",
+      "data": [
+       3
+      ]
+     }
+    ]
+   },
+   "steps": [],
+   "fails": [],
+   "states": [
+    {
+     "tip": null,
+     "matrices": [
+      {
+       "index": 0,
+       "rect": {
+        "x": "4049800000000000",
+        "y": "4040800000000000",
+        "width": "4086480000000000",
+        "height": "4080780000000000"
+       }
+      }
+     ],
+     "grids": [],
+     "visualMaps": [],
+     "sliders": [],
+     "toolboxes": [],
+     "timelines": [],
+     "thumbnails": [],
+     "radars": [],
+     "singles": [
+      {
+       "index": 0,
+       "boxed": true,
+       "ref": {
+        "x": "40824e0000000000",
+        "y": "7ff8000000000000",
+        "width": "4066480000000000",
+        "height": "7ff8000000000000"
+       },
+       "rect": {
+        "x": "4082954ccccccccd",
+        "y": "0000000000000000",
+        "width": "40640d999999999a",
+        "height": "7ff8000000000000"
+       }
+      }
+     ],
+     "parallels": [],
+     "geos": [],
+     "series": [
+      {
+       "seriesIndex": 0,
+       "type": "scatter",
+       "boxed": false
+      },
+      {
+       "seriesIndex": 1,
+       "type": "scatter",
+       "boxed": false
+      }
+     ],
+     "extents": [],
+     "calls": [
+      {
+       "finder": {
+        "polarIndex": 0
+       },
+       "value": [
+        1,
+        30
+       ],
+       "ret": [
+        "7ff8000000000000",
+        "7ff8000000000000"
+       ]
+      },
+      {
+       "finder": {
+        "seriesIndex": 0
+       },
+       "value": [
+        1,
+        30
+       ],
+       "ret": [
+        "7ff8000000000000",
+        "7ff8000000000000"
+       ]
+      },
+      {
+       "finder": {
+        "singleAxisIndex": 0
+       },
+       "value": 3,
+       "ret": [
+        "408798b333333334",
+        "7ff8000000000000"
+       ]
+      },
+      {
+       "finder": {
+        "seriesIndex": 1
+       },
+       "value": 3,
+       "ret": [
+        "408798b333333334",
+        "7ff8000000000000"
+       ]
+      }
+     ],
+     "backs": [
+      {
+       "finder": {
+        "polarIndex": 0
+       },
+       "value": [
+        100,
+        100
+       ],
+       "ret": [
+        "7ff8000000000000",
+        "7ff8000000000000"
+       ]
+      },
+      {
+       "finder": {
+        "singleAxisIndex": 0
+       },
+       "value": [
+        100,
+        100
+       ],
+       "ret": [
+        "c022802df53a8648"
+       ]
+      }
+     ],
+     "contains": [
+      {
+       "finder": {
+        "polarIndex": 0
+       },
+       "value": [
+        100,
+        100
+       ],
+       "ret": false
+      },
+      {
+       "finder": {
+        "singleAxisIndex": 0
+       },
+       "value": [
+        100,
+        100
+       ],
+       "ret": false
+      }
+     ],
+     "hovers": [],
+     "axes": []
+    }
+   ]
   }
  ],
  "guards": [
@@ -7601,6 +8098,14 @@
   },
   {
    "name": "geo-no-column: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "r5g-graph-box-cartesian: the recipes hold (R1-R3)",
+   "ok": true
+  },
+  {
+   "name": "r5g-nowhere-convert: the recipes hold (R1-R3)",
    "ok": true
   },
   {

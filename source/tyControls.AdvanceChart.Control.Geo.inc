@@ -202,7 +202,9 @@ begin
     if (FPolars[p] <> nil) and ComponentBoxRef('polar', p, ref) then
     begin
       { a coord naming no cell: no position, far off the canvas (see
-        TyBoxNowhere) }
+        TyBoxNowhere) -- and NaN through every conversion, as upstream's
+        NaN centre and radius answer [spec 244] }
+      FPolars[p].Unplaced := not TyXYWHIsValid(ref);
       if not TyXYWHIsValid(ref) then
         ref := TyXYWH(TyBoxNowhere, TyBoxNowhere, TyBoxNowhereSize, TyBoxNowhereSize);
       TyPolarResize(FOption, FPolars[p], ref);
@@ -435,7 +437,7 @@ begin
       both sides makes the comparison NaN: the one added later goes after) }
     if (Result < 0) or (g.Spec.ZLevel > RoamGeoOf(Result).Spec.ZLevel)
       or ((g.Spec.ZLevel = RoamGeoOf(Result).Spec.ZLevel)
-        and (g.Spec.Z > RoamGeoOf(Result).Spec.Z)) then
+        and (g.Spec.Z + g.Spec.ZFrac > RoamGeoOf(Result).Spec.Z + RoamGeoOf(Result).Spec.ZFrac)) then
     begin
       if i <= High(FGeos) then Result := i
       else Result := cMapRoamBase + i - Length(FGeos);
@@ -454,7 +456,7 @@ begin
   { the components render before the series: on a tie the geo's listener
     is the earlier one }
   if (Result < 0) or (RoamGeoOf(gi).Spec.ZLevel > szl)
-    or ((RoamGeoOf(gi).Spec.ZLevel = szl) and (RoamGeoOf(gi).Spec.Z >= sz)) then
+    or ((RoamGeoOf(gi).Spec.ZLevel = szl) and (RoamGeoOf(gi).Spec.Z + RoamGeoOf(gi).Spec.ZFrac >= sz)) then
   begin
     AGeo := gi;
     Result := -1;
