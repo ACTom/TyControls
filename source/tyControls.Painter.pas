@@ -7481,21 +7481,66 @@ begin
   end;
 end;
 
-{ THE SHADOW LAID: ABuf (AW x AH, 0..1, its top-left at (ALeft, ATop) on ASurf) blurred,
-  through the canvas' clip mask, filled in AColour under nothing but what is drawn next }
+{ [R5-A] THE CELL SIZE A BLUR OF DEVIATION ASigma IS COMPUTED ON (as Skia does for a large
+  sigma): 1 below a deviation of 16; from there the power of two that leaves a deviation of
+  8 to 16. The ink is averaged over s x s cells, blurred there and read back bilinearly --
+  the averaging and the interpolation add a variance of about s^2 / 4 pixels, under 1 % of
+  the blur's own, and the blur costs 1 / s^2 of the full one. }
+function ShadowCellSize(ASigma: Double): Integer;
+begin
+  Result := 1;
+  while ASigma / (2 * Result) >= 8 do Result := Result * 2;
+end;
+
+{ THE SHADOW LAID: ABuf (0..1) blurred, through the canvas' clip mask, filled in AColour under
+  nothing but what is drawn next. The shadow's frame is AW x AH pixels, its top-left at
+  (ALeft, ATop) on ASurf. ACell 0: ABuf is the frame's own pixels (averaged here onto cells
+  when the blur is wide); ACell s > 0: ABuf is already the frame on cells of s x s, ceil(AW / s)
+  x ceil(AH / s) of them, each the mean of its pixels. }
 procedure ShadowComposite(ACtx: TBGRACanvas2D; ASurf: TBGRACustomBitmap;
   var ABuf: array of Single; AW, AH, ALeft, ATop: Integer; ASigma: Double;
-  const AColour: TBGRAPixel; AClip: TGrayscaleMask);
+  const AColour: TBGRAPixel; AClip: TGrayscaleMask; ACell: Integer = 0);
 var
   x0, y0, x1, y1, x, y, w, h: Integer;
   m: TGrayscaleMask;
   row, crow: PByte;
   v: Double;
   mode: TDrawMode;
+  s, lw, lh, ix, iy, jy, fx0: Integer;
+  low: array of Single;
+  line: array of Double;
+  fx, fy, inv: Double;
+  colX0: array of Integer;
+  colF: array of Double;
 begin
   Inc(GShadowsCast);
   if AColour.alpha = 0 then Exit;
-  ShadowBlur(ABuf, AW, AH, ASigma);
+  if ACell > 0 then s := ACell else s := ShadowCellSize(ASigma);
+  lw := (AW + s - 1) div s;
+  lh := (AH + s - 1) div s;
+  if s > 1 then
+  begin
+    SetLength(low, lw * lh);
+    if ACell > 0 then
+      for x := 0 to High(low) do low[x] := ABuf[x]
+    else
+    begin
+      for y := 0 to AH - 1 do
+      begin
+        iy := (y div s) * lw;
+        for x := 0 to AW - 1 do
+        begin
+          v := ABuf[y * AW + x];
+          if v <> 0 then low[iy + x div s] := low[iy + x div s] + v;
+        end;
+      end;
+      inv := 1 / (s * s);
+      for x := 0 to High(low) do low[x] := low[x] * inv;
+    end;
+    ShadowBlur(low, lw, lh, ASigma / s);
+  end
+  else
+    ShadowBlur(ABuf, AW, AH, ASigma);
   x0 := Max(ALeft, 0);
   y0 := Max(ATop, 0);
   x1 := Min(ALeft + AW, ASurf.Width);
@@ -7508,15 +7553,66 @@ begin
   w := x1 - x0;
   h := y1 - y0;
   if (w <= 0) or (h <= 0) then Exit;
+  if s > 1 then
+  begin
+    { each column's cell and weight, once: a pixel's centre at cell coordinate
+      (x + 0.5) / s - 0.5 }
+    SetLength(colX0, w);
+    SetLength(colF, w);
+    for x := 0 to w - 1 do
+    begin
+      fx := (x0 + x - ALeft + 0.5) / s - 0.5;
+      if fx < 0 then fx := 0;
+      ix := Trunc(fx);
+      if ix >= lw - 1 then
+      begin
+        colX0[x] := lw - 1;
+        colF[x] := 0;
+      end
+      else
+      begin
+        colX0[x] := ix;
+        colF[x] := fx - ix;
+      end;
+    end;
+    SetLength(line, lw + 1);
+  end;
   m := TGrayscaleMask.Create(w, h, 0);
   try
     for y := 0 to h - 1 do
     begin
       row := m.ScanLineByte[y];
       if AClip <> nil then crow := AClip.ScanLineByte[y0 + y] + x0 else crow := nil;
+      if s > 1 then
+      begin
+        { the row between its two lines of cells }
+        fy := (y0 + y - ATop + 0.5) / s - 0.5;
+        if fy < 0 then fy := 0;
+        iy := Trunc(fy);
+        if iy >= lh - 1 then
+        begin
+          iy := lh - 1;
+          jy := iy;
+          fy := 0;
+        end
+        else
+        begin
+          jy := iy + 1;
+          fy := fy - iy;
+        end;
+        for ix := 0 to lw - 1 do
+          line[ix] := low[iy * lw + ix] * (1 - fy) + low[jy * lw + ix] * fy;
+        line[lw] := line[lw - 1];
+      end;
       for x := 0 to w - 1 do
       begin
-        v := ABuf[(y0 + y - ATop) * AW + (x0 + x - ALeft)];
+        if s > 1 then
+        begin
+          fx0 := colX0[x];
+          v := line[fx0] + (line[fx0 + 1] - line[fx0]) * colF[x];
+        end
+        else
+          v := ABuf[(y0 + y - ATop) * AW + (x0 + x - ALeft)];
         if crow <> nil then v := v * crow[x] / 255;
         if v <= 0 then Continue;
         if v >= 1 then row[x] := 255 else row[x] := Round(v * 255);
@@ -7544,7 +7640,7 @@ var
   paint: TBGRAPixel;
   sigma, ox, oy, ga, f: Double;
   minx, miny, maxx, maxy: Double;
-  pad, i, x, y, w, h, x0, y0, x1, y1: Integer;
+  pad, i, x, y, w, h, x0, y0, x1, y1, s, lw, lh: Integer;
   mask: TGrayscaleMask;
   buf: array of Single;
   row: PByte;
@@ -7616,30 +7712,44 @@ begin
       poly[i].x := poly[i].x + ox - x0;
       poly[i].y := poly[i].y + oy - y0;
     end;
-  mask := TGrayscaleMask.Create(w, h, 0);
+  { [R5-A] a wide blur: the polygon rasterised on the cells themselves -- a cell's antialiased
+    coverage is the mean of its pixels' (BGRA's pixel centres at whole coordinates: a pixel
+    p lies at cell coordinate (p + 0.5) / s - 0.5); a texture read at the cell's centre }
+  s := ShadowCellSize(sigma);
+  lw := (w + s - 1) div s;
+  lh := (h + s - 1) div s;
+  if s > 1 then
+    for i := 0 to High(poly) do
+      if not isEmptyPointF(poly[i]) then
+      begin
+        poly[i].x := (poly[i].x + 0.5) / s - 0.5;
+        poly[i].y := (poly[i].y + 0.5) / s - 0.5;
+      end;
+  mask := TGrayscaleMask.Create(lw, lh, 0);
   try
     if winding then mask.FillMode := fmWinding else mask.FillMode := fmAlternate;
     mask.FillPolyAntialias(poly, BGRAWhite);
-    SetLength(buf, w * h);
+    SetLength(buf, lw * lh);
     f := paint.alpha / 255 * ga;
-    for y := 0 to h - 1 do
+    for y := 0 to lh - 1 do
     begin
       row := mask.ScanLineByte[y];
-      for x := 0 to w - 1 do
+      for x := 0 to lw - 1 do
       begin
         if row[x] = 0 then Continue;
         if tex <> nil then
-          buf[y * w + x] := row[x] / 255
-            * tex.ScanAt(x + x0 - ox, y + y0 - oy).alpha / 255 * ga
+          buf[y * lw + x] := row[x] / 255
+            * tex.ScanAt((x + 0.5) * s - 0.5 + x0 - ox, (y + 0.5) * s - 0.5 + y0 - oy).alpha
+            / 255 * ga
         else
-          buf[y * w + x] := row[x] / 255 * f;
+          buf[y * lw + x] := row[x] / 255 * f;
       end;
     end;
   finally
     mask.Free;
   end;
   ShadowComposite(ACtx, surf, buf, w, h, x0, y0, sigma, ACtx.getShadowColor,
-    st.clipMaskReadOnly);
+    st.clipMaskReadOnly, s);
 end;
 
 var

@@ -80,6 +80,7 @@ type
     procedure TestTheBlurIsAGaussianOfHalfTheBlur;
     procedure TestAShortBlurIsTheGaussianItself;
     procedure TestTheBoxesAreTheSvgSpecifications;
+    procedure TestAWideBlurIsStillTheGaussian;
     procedure TestTheOffsetIsInDeviceSpace;
     procedure TestTheShapeDrawsAsWithoutOne;
     procedure TestTheShapeIsPinnedAfterItsShadow;
@@ -1009,6 +1010,117 @@ begin
   finally
     p.Free;
     bmp.Free;
+  end;
+end;
+
+{ A WIDE BLUR (a deviation of 16 and more) is blurred on cells of s x s and read back
+  bilinearly: still the Gaussian -- a blur of 64 (deviation 32, cells of 4) along a tall
+  edge, and around a small square, whose shadow is a 2-D Gaussian bump, all its ink kept }
+procedure TAdvChartShadowsTest.TestAWideBlurIsStillTheGaussian;
+var
+  p: TTyPainter;
+  bmp, mask: TBGRABitmap;
+  d, a, want, worst, sum: Double;
+  x, y: Integer;
+begin
+  p := NewLayer(500, 300, bmp);
+  try
+    p.SetShadow(TyRGBA(0, 0, 0, 255), 64, 0, 0);
+    p.BeginPath;
+    p.RectPath(0, -200, 150, 700);
+    p.FillPath(TyRGBA(255, 0, 0, 255));
+    p.EndPaint;
+    worst := 0;
+    for x := 150 to 260 do
+    begin
+      d := x + 0.5 - 150;
+      a := AlphaAt(bmp, x, 150) / 255;
+      want := 1 - Phi(d / 32);
+      worst := Max(worst, Abs(a - want));
+    end;
+    AssertTrue(Format('the edge falls off as a Gaussian of deviation 32 (worst %.4f)', [worst]),
+      worst < 0.02);
+    { smooth: no step of the cells shows between neighbours }
+    worst := 0;
+    for x := 151 to 260 do
+      worst := Max(worst, Abs(AlphaAt(bmp, x, 150) - AlphaAt(bmp, x - 1, 150)));
+    AssertTrue(Format('no step between neighbours (largest %.0f of 255)', [worst]), worst <= 5);
+  finally
+    p.Free;
+    bmp.Free;
+  end;
+  { a 10 x 10 square under a blur of 40 (deviation 20, cells of 2): its ink spread, not lost }
+  p := NewLayer(400, 400, bmp);
+  try
+    p.SetShadow(TyRGBA(0, 0, 0, 255), 40, 0, 120);
+    p.BeginPath;
+    p.RectPath(195, 75, 205, 85);
+    p.FillPath(TyRGBA(255, 0, 0, 255));
+    p.EndPaint;
+    sum := 0;
+    for y := 100 to 399 do
+      for x := 0 to 399 do
+        sum := sum + AlphaAt(bmp, x, y) / 255;
+    { the tail below half a level rounds away: about 5 % }
+    AssertTrue(Format('the ink of the square kept: %.1f of 100', [sum]), (sum > 90) and (sum < 103));
+    want := 100 / (2 * Pi * 20 * 20);
+    a := AlphaAt(bmp, 200, 200) / 255;
+    AssertTrue(Format('the peak a 2-D Gaussian''s: %.4f, want %.4f', [a, want]),
+      Abs(a - want) < 0.006);
+  finally
+    p.Free;
+    bmp.Free;
+  end;
+  { a 40 x 40 square under a blur of 64 (cells of 4), its shadow 220 px down: the bump
+    centred where the square's shadow is -- the cells laid on the pixels' centres -- and
+    smooth down a column as along a row }
+  p := NewLayer(400, 600, bmp);
+  try
+    p.SetShadow(TyRGBA(0, 0, 0, 255), 64, 0, 220);
+    p.BeginPath;
+    p.RectPath(180, 80, 220, 120);
+    p.FillPath(TyRGBA(255, 0, 0, 255));
+    p.EndPaint;
+    sum := 0;
+    d := 0;
+    want := 0;
+    for y := 160 to 599 do
+      for x := 0 to 399 do
+      begin
+        a := AlphaAt(bmp, x, y);
+        sum := sum + a;
+        d := d + a * x;
+        want := want + a * y;
+      end;
+    AssertTrue(Format('the bump''s centre (%.2f, %.2f), the shadow''s (199.5, 319.5)',
+      [d / sum, want / sum]), (Abs(d / sum - 199.5) < 0.4) and (Abs(want / sum - 319.5) < 0.4));
+    worst := 0;
+    for y := 201 to 440 do
+      worst := Max(worst, Abs(AlphaAt(bmp, 200, y) - AlphaAt(bmp, 200, y - 1)));
+    AssertTrue(Format('no step down a column (largest %.0f of 255)', [worst]), worst <= 3);
+  finally
+    p.Free;
+    bmp.Free;
+  end;
+  { the same square as a picture's alpha (a text's glyphs): averaged onto the cells here }
+  mask := TBGRABitmap.Create(20, 20, BGRAPixelTransparent);
+  p := NewLayer(400, 400, bmp);
+  try
+    mask.FillRect(5, 5, 15, 15, BGRA(255, 255, 255, 255), dmSet);
+    p.CastShadowOf(mask, 190, 190, TyRGBA(0, 0, 0, 255), 40, 0, 0);
+    p.EndPaint;
+    sum := 0;
+    for y := 0 to 399 do
+      for x := 0 to 399 do
+        sum := sum + AlphaAt(bmp, x, y) / 255;
+    AssertTrue(Format('a mask''s ink kept: %.1f of 100', [sum]), (sum > 90) and (sum < 103));
+    a := AlphaAt(bmp, 200, 200) / 255;
+    want := 100 / (2 * Pi * 20 * 20);
+    AssertTrue(Format('a mask''s peak: %.4f, want %.4f', [a, want]), Abs(a - want) < 0.006);
+  finally
+    p.Free;
+    bmp.Free;
+    mask.Free;
   end;
 end;
 
