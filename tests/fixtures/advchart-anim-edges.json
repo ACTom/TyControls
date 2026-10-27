@@ -22238,6 +22238,439 @@
    ]
   },
   {
+   "id": "el-rich-count",
+   "group": "elabel",
+   "note": "a rich end label that counts through the enter (the clip's during, 1000 ms linear, up to 120): each frame lays the block out again for the words it has -- the pieces' words and places, the value token wider as it counts past 100",
+   "W": 400,
+   "H": 300,
+   "option": {
+    "animation": true,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "max": 150
+    },
+    "series": [
+     {
+      "type": "line",
+      "showSymbol": false,
+      "data": [
+       10,
+       30,
+       120
+      ],
+      "endLabel": {
+       "show": true,
+       "formatter": "{a|{c}} {b|pts}",
+       "rich": {
+        "a": {
+         "fontSize": 16,
+         "fontWeight": "bold"
+        },
+        "b": {
+         "fontSize": 10,
+         "padding": [
+          0,
+          0,
+          0,
+          4
+         ]
+        }
+       }
+      }
+     }
+    ],
+    "animationDuration": 1000,
+    "animationEasing": "linear",
+    "animationDurationUpdate": 1000,
+    "animationEasingUpdate": "linear"
+   },
+   "probes": [
+    "elab"
+   ],
+   "events": [
+    {
+     "t": 0,
+     "do": "sample",
+     "rec": {
+      "el0/0": {
+       "x": "405d800000000000",
+       "y": "406a355560000000",
+       "text": "{a|10} {b|pts}",
+       "pieces": [
+        {
+         "text": "10",
+         "x": "0000000000000000",
+         "y": "0000000000000000",
+         "align": "left"
+        },
+        {
+         "text": " ",
+         "x": "4031eb851eb851ec",
+         "y": "0000000000000000",
+         "align": "left"
+        },
+        {
+         "text": "pts",
+         "x": "403947ae147ae148",
+         "y": "0000000000000000",
+         "align": "left"
+        }
+       ]
+      }
+     }
+    },
+    {
+     "t": 1,
+     "do": "sample",
+     "rec": {
+      "el0/0": {
+       "x": "405d800000000000",
+       "y": "406a355560000000",
+       "text": "{a|10} {b|pts}",
+       "pieces": [
+        {
+         "text": "10",
+         "x": "0000000000000000",
+         "y": "0000000000000000",
+         "align": "left"
+        },
+        {
+         "text": " ",
+         "x": "4031eb851eb851ec",
+         "y": "0000000000000000",
+         "align": "left"
+        },
+        {
+         "text": "pts",
+         "x": "403947ae147ae148",
+         "y": "0000000000000000",
+         "align": "left"
+        }
+       ]
+      }
+     }
+    },
+    {
+     "t": 16,
+     "do": "sample",
+     "rec": {
+      "el0/0": {
+       "x": "405d800000000000",
+       "y": "406a355560000000",
+       "text": "{a|10} {b|pts}",
+       "pieces": [
+        {
+         "text": "10",
+         "x": "0000000000000000",
+         "y": "0000000000000000",
+         "align": "left"
+        },
+        {
+         "text": " ",
+         "x": "4031eb851eb851ec",
+         "y": "0000000000000000",
+         "align": "left"
+        },
+        {
+         "text": "pts",
+         "x": "403947ae147ae148",
+         "y": "0000000000000000",
+         "align": "left"
+        }
+       ]
+      }
+     }
+    },
+    {
+     "t": 100,
+     "do": "sample",
+     "rec": {
+      "el0/0": {
+       "x": "405d800000000000",
+       "y": "406a355560000000",
+       "text": "{a|10} {b|pts}",
+       "pieces": [
+        {
+         "text": "10",
+         "x": "0000000000000000",
+         "y": "0000000000000000",
+         "align": "left"
+        },
+        {
+         "text": " ",
+         "x": "4031eb851eb851ec",
+         "y": "0000000000000000",
+         "align": "left"
+        },
+        {
+         "text": "pts",
+         "x": "403947ae147ae148",
+         "y": "0000000000000000",
+         "align": "left"
+        }
+       ]
+      }
+     }
+    },
+    {
+     "t": 300,
+     "do": "sample",
+     "rec": {
+      "el0/0": {
+       "x": "4063b33333333333",
+       "y": "40692f7207ced917",
+       "text": "{a|18} {b|pts}",
+       "pieces": [
+        {
+         "text": "18",
+         "x": "0000000000000000",
+         "y": "0000000000000000",
+         "align": "left"
+        },
+        {
+         "text": " ",
+         "x": "4031eb851eb851ec",
+         "y": "0000000000000000",
+         "align": "left"
+        },
+        {
+         "text": "pts",
+         "x": "403947ae147ae148",
+         "y": "0000000000000000",
+         "align": "left"
+        }
+       ]
+      }
+     }
+    },
+    {
+     "t": 500,
+     "do": "sample",
+     "rec": {
+      "el0/0": {
+       "x": "406b400000000000",
+       "y": "4067a00000000000",
+       "text": "{a|30} {b|pts}",
+       "pieces": [
+        {
+         "text": "30",
+         "x": "0000000000000000",
+         "y": "0000000000000000",
+         "align": "left"
+        },
+        {
+         "text": " ",
+         "x": "4031eb851eb851ec",
+         "y": "0000000000000000",
+         "align": "left"
+        },
+        {
+         "text": "pts",
+         "x": "403947ae147ae148",
+         "y": "0000000000000000",
+         "align": "left"
+        }
+       ]
+      }
+     }
+    },
+    {
+     "t": 700,
+     "do": "sample",
+     "rec": {
+      "el0/0": {
+       "x": "4071666666666666",
+       "y": "40609a7ef9db22d2",
+       "text": "{a|84} {b|pts}",
+       "pieces": [
+        {
+         "text": "84",
+         "x": "0000000000000000",
+         "y": "0000000000000000",
+         "align": "left"
+        },
+        {
+         "text": " ",
+         "x": "4031eb851eb851ec",
+         "y": "0000000000000000",
+         "align": "left"
+        },
+        {
+         "text": "pts",
+         "x": "403947ae147ae148",
+         "y": "0000000000000000",
+         "align": "left"
+        }
+       ]
+      }
+     }
+    },
+    {
+     "t": 800,
+     "do": "sample",
+     "rec": {
+      "el0/0": {
+       "x": "407349999999999a",
+       "y": "405a2f7ced916871",
+       "text": "{a|112} {b|pts}",
+       "pieces": [
+        {
+         "text": "112",
+         "x": "0000000000000000",
+         "y": "0000000000000000",
+         "align": "left"
+        },
+        {
+         "text": " ",
+         "x": "403ae147ae147ae2",
+         "y": "0000000000000000",
+         "align": "left"
+        },
+        {
+         "text": "pts",
+         "x": "40411eb851eb851f",
+         "y": "0000000000000000",
+         "align": "left"
+        }
+       ]
+      }
+     }
+    },
+    {
+     "t": 900,
+     "do": "sample",
+     "rec": {
+      "el0/0": {
+       "x": "4073e00000000000",
+       "y": "4058000000000000",
+       "text": "{a|120} {b|pts}",
+       "pieces": [
+        {
+         "text": "120",
+         "x": "0000000000000000",
+         "y": "0000000000000000",
+         "align": "left"
+        },
+        {
+         "text": " ",
+         "x": "403ae147ae147ae2",
+         "y": "0000000000000000",
+         "align": "left"
+        },
+        {
+         "text": "pts",
+         "x": "40411eb851eb851f",
+         "y": "0000000000000000",
+         "align": "left"
+        }
+       ]
+      }
+     }
+    },
+    {
+     "t": 999,
+     "do": "sample",
+     "rec": {
+      "el0/0": {
+       "x": "4073e00000000000",
+       "y": "4058000000000000",
+       "text": "{a|120} {b|pts}",
+       "pieces": [
+        {
+         "text": "120",
+         "x": "0000000000000000",
+         "y": "0000000000000000",
+         "align": "left"
+        },
+        {
+         "text": " ",
+         "x": "403ae147ae147ae2",
+         "y": "0000000000000000",
+         "align": "left"
+        },
+        {
+         "text": "pts",
+         "x": "40411eb851eb851f",
+         "y": "0000000000000000",
+         "align": "left"
+        }
+       ]
+      }
+     }
+    },
+    {
+     "t": 1000,
+     "do": "sample",
+     "rec": {
+      "el0/0": {
+       "x": "4073e00000000000",
+       "y": "4058000000000000",
+       "text": "{a|120} {b|pts}",
+       "pieces": [
+        {
+         "text": "120",
+         "x": "0000000000000000",
+         "y": "0000000000000000",
+         "align": "left"
+        },
+        {
+         "text": " ",
+         "x": "403ae147ae147ae2",
+         "y": "0000000000000000",
+         "align": "left"
+        },
+        {
+         "text": "pts",
+         "x": "40411eb851eb851f",
+         "y": "0000000000000000",
+         "align": "left"
+        }
+       ]
+      }
+     }
+    },
+    {
+     "t": 1001,
+     "do": "sample",
+     "rec": {
+      "el0/0": {
+       "x": "4073e00000000000",
+       "y": "4058000000000000",
+       "text": "{a|120} {b|pts}",
+       "pieces": [
+        {
+         "text": "120",
+         "x": "0000000000000000",
+         "y": "0000000000000000",
+         "align": "left"
+        },
+        {
+         "text": " ",
+         "x": "403ae147ae147ae2",
+         "y": "0000000000000000",
+         "align": "left"
+        },
+        {
+         "text": "pts",
+         "x": "40411eb851eb851f",
+         "y": "0000000000000000",
+         "align": "left"
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
    "id": "es-hover-update",
    "group": "esstate",
    "note": "an effectScatter's symbols grow 10 -> 20 (update, 1000 ms linear); 300 ms in the pointer hovers the second: the state transition animates the symbol path's own scale to emphasis (the new size x 1.1) from where the update has got it -- the update's scale tracks stop (one key, one element), no product of the two",

@@ -79,6 +79,7 @@ type
     procedure TestAPictorialGlyphsEmphasisScaleAsUpstream;
     procedure TestTheContinuousPhasesZOrderAsUpstream;
     procedure TestAnEffectScattersStateOverItsUpdateAsUpstream;
+    procedure TestARichEndLabelsPiecesAsUpstream;
   end;
 
 implementation
@@ -757,6 +758,60 @@ begin
       SameNum(name + ' y', el.Caption.Y, leaf.Find('y'));
       SameRun(name, FChart.AnimFindProxy(s, idx, 'label'), leaf);
     end
+    else if pre = 'el' then
+    begin
+      { [R5-I] a rich end label as this frame lays it out: its text pieces'
+        words, in order, and their places from the first one's (the block's
+        own place is the counting label's, compared by animenter) }
+      if not RoleEl(s, 0, carEndLabel, el) then
+      begin
+        { the end label is no row's: any of the series' }
+        found := False;
+        l := FChart.Frame;
+        if l <> nil then
+          for k := 0 to l.Count - 1 do
+            if (l.Element(k).Anim.Role = carEndLabel) and (l.Element(k).Anim.Series = s) then
+            begin
+              el := l.Element(k);
+              found := True;
+              Break;
+            end;
+        if not found then
+        begin
+          Bad(name + ': no end label drawn');
+          Continue;
+        end;
+      end;
+      gone := leaf.Arrays['pieces'];
+      k := 0;
+      SetLength(ops, 0);
+      for idx := 0 to High(el.Caption.RtPieces) do
+        if el.Caption.RtPieces[idx].Kind = rpkText then
+        begin
+          SetLength(ops, Length(ops) + 1);
+          ops[High(ops)] := idx;
+        end;
+      Inc(FCompared);
+      if Length(ops) <> gone.Count then
+      begin
+        Bad(Format('%s: %d pieces, upstream %d (%s)', [name, Length(ops), gone.Count,
+          leaf.Strings['text']]));
+        Continue;
+      end;
+      for k := 0 to gone.Count - 1 do
+      begin
+        Inc(FCompared);
+        if el.Caption.RtPieces[Round(ops[k])].Text <> gone.Objects[k].Strings['text'] then
+          Bad(Format('%s piece %d: "%s", upstream "%s"', [name, k,
+            el.Caption.RtPieces[Round(ops[k])].Text, gone.Objects[k].Strings['text']]));
+        NearNum(Format('%s piece %d x', [name, k]),
+          el.Caption.RtPieces[Round(ops[k])].X - el.Caption.RtPieces[Round(ops[0])].X,
+          FromHex(gone.Objects[k].Strings['x']) - FromHex(gone.Objects[0].Strings['x']));
+        NearNum(Format('%s piece %d y', [name, k]),
+          el.Caption.RtPieces[Round(ops[k])].Y - el.Caption.RtPieces[Round(ops[0])].Y,
+          FromHex(gone.Objects[k].Strings['y']) - FromHex(gone.Objects[0].Strings['y']));
+      end;
+    end
     else if pre = 'es' then
     begin
       { [R5-I] an effectScatter's symbol as drawn: its half width is the
@@ -960,6 +1015,11 @@ end;
 procedure TAdvChartAnimEdgesOracleTest.TestAPictorialGlyphsEmphasisScaleAsUpstream;
 begin
   RunGroup('pemph', 18);
+end;
+
+procedure TAdvChartAnimEdgesOracleTest.TestARichEndLabelsPiecesAsUpstream;
+begin
+  RunGroup('elabel', 20);
 end;
 
 procedure TAdvChartAnimEdgesOracleTest.TestAnEffectScattersStateOverItsUpdateAsUpstream;

@@ -365,6 +365,21 @@ const PROBES = {
       });
     });
   },
+  // [R5-I] a line's end label as drawn: the text's place and its rich
+  // block's pieces -- each TSpan's words, place (in the text's frame) and
+  // alignment -- as this frame laid them out
+  elab(chart, rec) {
+    chart.getModel().eachSeries(sm => {
+      if (sm.subType !== 'line') return;
+      const v = chart.getViewOfSeriesModel(sm);
+      const pl = v && v._polyline;
+      const t = pl && pl.getTextContent();
+      if (!t || t.ignore || t.invisible) return;
+      const pieces = (t.childrenRef ? t.childrenRef() : []).filter(c => c.type === 'tspan')
+        .map(c => ({ text: String(c.style.text), x: hex(c.style.x), y: hex(c.style.y), align: String(c.style.textAlign || 'left') }));
+      rec['el' + sm.seriesIndex + '/0'] = { x: hex(t.x), y: hex(t.y), text: String(t.style.text), pieces };
+    });
+  },
   // a bar series' rects: the fill they are drawn with now (a state's tween)
   bfill(chart, rec, c) {
     chart.getModel().eachSeries(sm => {
@@ -653,6 +668,14 @@ add('stanim', 'sa-delay-fn', "stateAnimation.delay a function: Clip's start is g
   SA({ duration: 200, easing: 'linear', delay: { $fn: 'idx*100' } }), ['bfill'], SAEV, { rows: [0] });
 add('stanim', 'sa-dur-fn', "stateAnimation.duration a function: not above 0 -- no transition, the state at once",
   SA({ duration: { $fn: 'idx*100' }, easing: 'linear' }), ['bfill'], SAEV, { rows: [0] });
+// ---- a rich end label counting ----
+add('elabel', 'el-rich-count', "a rich end label that counts through the enter (the clip's during, 1000 ms linear, up to 120): each frame lays the block out again for the words it has -- the pieces' words and places, the value token wider as it counts past 100",
+  Object.assign({ animation: true, xAxis: { type: 'category', data: ['a', 'b', 'c'] }, yAxis: { type: 'value', max: 150 },
+    series: [{ type: 'line', showSymbol: false, data: [10, 30, 120],
+      endLabel: { show: true, formatter: '{a|{c}} {b|pts}', rich: { a: { fontSize: 16, fontWeight: 'bold' }, b: { fontSize: 10, padding: [0, 0, 0, 4] } } } }] }, LIN),
+  ['elab'],
+  after([0, 1, 16, 100, 300, 500, 700, 800, 900, 999, 1000, 1001], 0));
+
 // ---- an effectScatter's state over its update ----
 add('esstate', 'es-hover-update', "an effectScatter's symbols grow 10 -> 20 (update, 1000 ms linear); 300 ms in the pointer hovers the second: the state transition animates the symbol path's own scale to emphasis (the new size x 1.1) from where the update has got it -- the update's scale tracks stop (one key, one element), no product of the two",
   Object.assign({ animation: true, xAxis: { type: 'value', min: 0, max: 4 }, yAxis: { type: 'value', min: 0, max: 10 },
