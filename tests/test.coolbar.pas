@@ -130,6 +130,8 @@ type
     procedure TestPerControlApiAndCollectionAreOneState;
     procedure TestEditingTheCollectionRelaysAndNotifies;
     procedure TestFreeingAChildDropsItsBand;
+    { The same for a control nobody owns: only a free notice the bar asked for can tell it. }
+    procedure TestFreeingAnOwnerlessChildDropsItsBand;
     procedure TestFreeingTheBarWhileItsFormLives;
     procedure TestBandDisplayNamePrefersItsCaption;
     procedure TestVerticalPutsTheGripAboveTheBand;
@@ -871,6 +873,22 @@ begin
   b := MakeBand(CB, 10, 0, 80, 30);
   CB.SetBandWidth(b, 80);
   AssertEquals('one band', 1, CB.Bands.Count);
+  b.Free;
+  AssertEquals('the band went with its control', 0, CB.Bands.Count);
+end;
+
+procedure TCoolBarControlTest.TestFreeingAnOwnerlessChildDropsItsBand;
+var CB: TCoolBarAccess; b: TTyPanel;
+begin
+  CB := TCoolBarAccess.Create(FForm);
+  CB.Parent := FForm;
+  CB.Font.PixelsPerInch := 96;
+  b := TTyPanel.Create(nil);
+  b.SetBounds(10, 0, 80, 30);
+  b.Parent := CB;
+  CB.SetBandWidth(b, 80);
+  AssertEquals('one band', 1, CB.Bands.Count);
+  AssertSame('precondition: the band holds the control', TControl(b), CB.Bands[0].Control);
   b.Free;
   AssertEquals('the band went with its control', 0, CB.Bands.Count);
 end;

@@ -986,6 +986,11 @@ var
 begin
   if FControl = AValue then Exit;
   FControl := AValue;
+  { #136: a control with no Owner tells only those who asked that it is freed. The bar asks, and
+    its Notification drops this band; without it the band kept pointing at the freed control. }
+  if (FControl <> nil) and (Collection is TTyCoolBands)
+     and (TTyCoolBands(Collection).OwnerBar <> nil) then
+    FControl.FreeNotification(TTyCoolBands(Collection).OwnerBar);
   { #128: the band's Width and Visible, set before it had a control, go over to the control --
     its extent and its Visible are what the packer reads (see SetWidth / SetVisible). }
   if FControl <> nil then
