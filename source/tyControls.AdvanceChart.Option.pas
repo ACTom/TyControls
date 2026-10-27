@@ -1071,13 +1071,14 @@ var
   var
     start: PChar;
     digits, sig, fracLen, ex: Integer;
-    isInt, neg, expNeg: Boolean;
+    isInt, neg, expNeg, hasExp: Boolean;
     v: Int64;
     s: string;
     qw: QWord;
     i64: Int64;
     f: Double;
     code: Integer;
+    m: QWord;
   begin
     Result := False;
     AValue := nil;
@@ -1087,6 +1088,10 @@ var
     if not (p^ in ['0'..'9']) then Exit;
     v := 0;
     digits := 0;
+    { [R5-G] TyJsonTokenNumber's mantissa on the way past: its first fifteen
+      significant digits, as it accumulates them }
+    m := 0;
+    hasExp := False;
     { TyJsonTokenNumber's count: the digits from the first that is not a
       nought on, the fraction's length, the exponent (capped as it caps) }
     sig := 0;
@@ -1103,6 +1108,7 @@ var
         if digits < 18 then v := v * 10 + (Ord(p^) - Ord('0'));
         Inc(digits);
         Inc(sig);
+        if sig <= 15 then m := m * 10 + QWord(Ord(p^) - Ord('0'));
         Inc(p);
       end;
     isInt := True;
@@ -1113,7 +1119,11 @@ var
       if not (p^ in ['0'..'9']) then Exit;
       while p^ in ['0'..'9'] do
       begin
-        if (sig > 0) or (p^ <> '0') then Inc(sig);
+        if (sig > 0) or (p^ <> '0') then
+        begin
+          Inc(sig);
+          if sig <= 15 then m := m * 10 + QWord(Ord(p^) - Ord('0'));
+        end;
         Inc(fracLen);
         Inc(p);
       end;
@@ -1122,6 +1132,7 @@ var
     if p^ in ['e', 'E'] then
     begin
       isInt := False;
+      hasExp := True;
       Inc(p);
       expNeg := p^ = '-';
       if p^ in ['+', '-'] then Inc(p);
@@ -1166,6 +1177,17 @@ var
       value too (kept where it is the nearest) }
     if not isInt and (sig <= 15) and (ex - fracLen >= -22) and (ex - fracLen <= 22) then
     begin
+      { [R5-G] with no exponent, TyJsonTokenNumber's short path from the
+        digits already read: its power is -fracLen (a fraction has a digit,
+        so it is negative), one IEEE division, the sign after }
+      if not hasExp then
+      begin
+        if sig = 0 then f := 0
+        else f := Double(m) / TyJsPow10(fracLen);
+        if neg then f := -f;
+        AValue := CreateJSON(f);
+        Exit(True);
+      end;
       AValue := CreateJSON(TyJsonTokenNumber(AText, start - base + 1, p - start, 0));
       Exit(True);
     end;

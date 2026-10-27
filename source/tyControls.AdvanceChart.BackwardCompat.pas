@@ -439,6 +439,10 @@ end;
 function CompatEC3CommonStyles(AOpt: TJSONData): TAliasSet;
 begin
   Result := [];
+  { [R5-G] only an object has a property to read: an array item ([x, y]) or a
+    primitive one passes every Prop below as nil, so nothing would change --
+    said once here, not found again by eight lookups per item of a million }
+  if not (AOpt is TJSONObject) then Exit;
   if not Truthy(AOpt) then Exit;
   Result := RemoveEC3NormalStatus(AOpt);
   CompatTextStyle(AOpt, 'label');
