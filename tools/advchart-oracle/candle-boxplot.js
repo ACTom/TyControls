@@ -416,6 +416,8 @@ const CASES = [
   { id: 'k-item-doji', note: "an item's own borderColorDoji: that row's sign 0 and its pen", option: catK({ data: [K5[0], K5[1], K5[2], K5[3],
     { value: K5[4], itemStyle: { borderColorDoji: '#ff00ff' } }] }) },
   { id: 'k-colour-only', note: "a series' color and color0 alone: the borders stay the default's", option: catK({ itemStyle: { color: '#ff0000', color0: '#00ff00' } }) },
+  { id: 'k-border-null', note: "borderColor / borderColor0 written as null (candlestick-brush): no border colour, the pen is the body's",
+    option: catK({ itemStyle: { color: '#00da3c', color0: '#ec0000', borderColor: null, borderColor0: null } }) },
   { id: 'b-colorby-data', note: "colorBy 'data': each box's pen from the palette (written at the root) by its name", option: catB([box(BX, { colorBy: 'data' })],
     { color: ['#aa0000', '#00aa00', '#0000aa', '#aaaa00'] }) },
   { id: 'b-colorby-data-own', note: "colorBy 'data' and one item's own borderColor: that one keeps it, the rest take the palette in raw order",
@@ -659,6 +661,8 @@ function guards(o) {
     && s0('k-colour-only').items[0].style.stroke === '#eb5454');
   guard("an item's own borderColorDoji gives its row sign 0", s0('k-item-doji').items[4].sign === 0
     && s0('k-item-doji').items[4].style.stroke === '#ff00ff');
+  guard("a border written as null is the body's", s0('k-border-null').items[0].style.stroke === '#00da3c'
+    && s0('k-border-null').items[1].style.stroke === '#ec0000');
   const bc = s0('b-colorby-data').items.map(it => it.style.stroke);
   guard("colorBy 'data': each box its own pen", new Set(bc).size === 3);
   guard('an own borderColor keeps', s0('b-colorby-data-own').items[1].style.stroke === '#00aa00');

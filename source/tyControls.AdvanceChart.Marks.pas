@@ -133,6 +133,10 @@ type
     HasDojiBorder: Boolean;
     DojiBorder: TTyChartColor;
     BorderWidthLogical: Double;
+    { [R5-B] a border WRITTEN AS null: no colour, so the pen is the body's
+      (`getBorderColor(sign, itemModel) || style.fill`) -- the default border
+      stays only where the key is absent }
+    UpBorderBody, DownBorderBody: Boolean;
   end;
 
   { [R5-B] ONE ROW'S OWN CANDLE: the item's itemStyle over the series' --
@@ -558,6 +562,13 @@ var
     Result := True;
   end;
 
+  function IsNull(const AKey: string): Boolean;
+  var v: TJSONData;
+  begin
+    v := item.Find(AKey);
+    Result := (v <> nil) and (v.JSONType = jtNull);
+  end;
+
 begin
   Result := ADefaults;
   if AOption = nil then Exit;
@@ -578,8 +589,10 @@ begin
     written colour] }
   ColourAt('color', Result.Up);
   ColourAt('color0', Result.Down);
-  ColourAt('borderColor', Result.UpBorder);
-  ColourAt('borderColor0', Result.DownBorder);
+  if ColourAt('borderColor', Result.UpBorder) then Result.UpBorderBody := False
+  else if IsNull('borderColor') then Result.UpBorderBody := True;
+  if ColourAt('borderColor0', Result.DownBorder) then Result.DownBorderBody := False
+  else if IsNull('borderColor0') then Result.DownBorderBody := True;
   Result.HasDojiBorder := ColourAt('borderColorDoji', Result.DojiBorder);
 
   d := item.Find('borderWidth');
@@ -620,8 +633,12 @@ begin
   Result.Present := True;
   ColourAt('color', Result.Spec.Up);
   ColourAt('color0', Result.Spec.Down);
-  ColourAt('borderColor', Result.Spec.UpBorder);
-  ColourAt('borderColor0', Result.Spec.DownBorder);
+  if ColourAt('borderColor', Result.Spec.UpBorder) then Result.Spec.UpBorderBody := False
+  else if (item.Find('borderColor') <> nil) and (item.Find('borderColor').JSONType = jtNull) then
+    Result.Spec.UpBorderBody := True;
+  if ColourAt('borderColor0', Result.Spec.DownBorder) then Result.Spec.DownBorderBody := False
+  else if (item.Find('borderColor0') <> nil) and (item.Find('borderColor0').JSONType = jtNull) then
+    Result.Spec.DownBorderBody := True;
   { `!!itemModel.get(['itemStyle', 'borderColorDoji'])`: the item's, else
     the series' }
   if ColourAt('borderColorDoji', Result.Spec.DojiBorder) then
@@ -3140,11 +3157,13 @@ begin
     begin
       fill := cs.Up;
       border := cs.UpBorder;
+      if cs.UpBorderBody then border := fill;
     end
     else
     begin
       fill := cs.Down;
       border := cs.DownBorder;
+      if cs.DownBorderBody then border := fill;
     end;
     if (sign = 0) and cs.HasDojiBorder then
       border := cs.DojiBorder;

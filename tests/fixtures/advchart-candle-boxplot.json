@@ -41456,6 +41456,287 @@
    ]
   },
   {
+   "id": "k-border-null",
+   "note": "borderColor / borderColor0 written as null (candlestick-brush): no border colour, the pen is the body's",
+   "option": {
+    "animation": false,
+    "grid": {
+     "left": 60,
+     "right": 40,
+     "top": 40,
+     "bottom": 50,
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 60
+    },
+    "series": [
+     {
+      "type": "candlestick",
+      "name": "K",
+      "data": [
+       [
+        20,
+        34,
+        10,
+        38
+       ],
+       [
+        40,
+        35,
+        30,
+        50
+       ],
+       [
+        31,
+        38,
+        33,
+        44
+       ],
+       [
+        38,
+        15,
+        5,
+        42
+       ],
+       [
+        25,
+        25,
+        20,
+        30
+       ]
+      ],
+      "itemStyle": {
+       "color": "#00da3c",
+       "color0": "#ec0000",
+       "borderColor": null,
+       "borderColor0": null
+      }
+     }
+    ]
+   },
+   "grid": [
+    "404e000000000000",
+    "4044000000000000",
+    "407f400000000000",
+    "4073600000000000"
+   ],
+   "axes": [
+    {
+     "dim": "x",
+     "type": "category",
+     "effective": [
+      "0000000000000000",
+      "4010000000000000"
+     ],
+     "mapping": null
+    },
+    {
+     "dim": "y",
+     "type": "value",
+     "effective": [
+      "0000000000000000",
+      "404e000000000000"
+     ],
+     "mapping": null
+    }
+   ],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "candlestick",
+     "baseDim": "x",
+     "layout": "horizontal",
+     "candleWidth": "4049000000000000",
+     "simple": false,
+     "items": [
+      {
+       "i": 0,
+       "has": true,
+       "ends": [
+        "4055600000000000",
+        "4065caaaaaaaaaab",
+        "4060d00000000000",
+        "4065caaaaaaaaaab",
+        "4060d00000000000",
+        "406ed55555555556",
+        "4055600000000000",
+        "406ed55555555556",
+        "405b600000000000",
+        "4063355555555556",
+        "405b600000000000",
+        "4065caaaaaaaaaab",
+        "405b600000000000",
+        "4072a55555555555",
+        "405b600000000000",
+        "406ed55555555556"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#00da3c",
+        "stroke": "#00da3c",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100,
+       "sign": 1,
+       "simpleBox": false
+      },
+      {
+       "i": 1,
+       "has": true,
+       "ends": [
+        "4067300000000000",
+        "4061eaaaaaaaaaab",
+        "406d500000000000",
+        "4061eaaaaaaaaaab",
+        "406d500000000000",
+        "4065255555555555",
+        "4067300000000000",
+        "4065255555555555",
+        "406a300000000000",
+        "4056eaaaaaaaaaa8",
+        "406a300000000000",
+        "4061eaaaaaaaaaab",
+        "406a300000000000",
+        "4068600000000000",
+        "406a300000000000",
+        "4065255555555555"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#ec0000",
+        "stroke": "#ec0000",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100,
+       "sign": -1,
+       "simpleBox": false
+      },
+      {
+       "i": 2,
+       "has": true,
+       "ends": [
+        "4071d80000000000",
+        "4063355555555556",
+        "4074e80000000000",
+        "4063355555555556",
+        "4074e80000000000",
+        "4067baaaaaaaaaaa",
+        "4071d80000000000",
+        "4067baaaaaaaaaaa",
+        "4073580000000000",
+        "405eaaaaaaaaaaac",
+        "4073580000000000",
+        "4063355555555556",
+        "4073580000000000",
+        "4066700000000000",
+        "4073580000000000",
+        "4067baaaaaaaaaaa"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#00da3c",
+        "stroke": "#00da3c",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100,
+       "sign": 1,
+       "simpleBox": false
+      },
+      {
+       "i": 3,
+       "has": true,
+       "ends": [
+        "4078180000000000",
+        "4063355555555556",
+        "407b280000000000",
+        "4063355555555556",
+        "407b280000000000",
+        "4071080000000000",
+        "4078180000000000",
+        "4071080000000000",
+        "4079980000000000",
+        "4060a00000000000",
+        "4079980000000000",
+        "4063355555555556",
+        "4079980000000000",
+        "407442aaaaaaaaab",
+        "4079980000000000",
+        "4071080000000000"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#ec0000",
+        "stroke": "#ec0000",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100,
+       "sign": -1,
+       "simpleBox": false
+      },
+      {
+       "i": 4,
+       "has": true,
+       "ends": [
+        "407e580000000000",
+        "406b9aaaaaaaaaaa",
+        "4080b40000000000",
+        "406b9aaaaaaaaaaa",
+        "4080b40000000000",
+        "406b9aaaaaaaaaaa",
+        "407e580000000000",
+        "406b9aaaaaaaaaaa",
+        "407fd80000000000",
+        "4068600000000000",
+        "407fd80000000000",
+        "406b9aaaaaaaaaaa",
+        "407fd80000000000",
+        "406ed55555555556",
+        "407fd80000000000",
+        "406b9aaaaaaaaaaa"
+       ],
+       "drawn": true,
+       "clipped": false,
+       "clip": null,
+       "style": {
+        "fill": "#00da3c",
+        "stroke": "#00da3c",
+        "lineWidth": "3ff0000000000000",
+        "opacity": "3ff0000000000000"
+       },
+       "z2": 100,
+       "sign": 1,
+       "simpleBox": false
+      }
+     ]
+    }
+   ]
+  },
+  {
    "id": "b-colorby-data",
    "note": "colorBy 'data': each box's pen from the palette (written at the root) by its name",
    "option": {
@@ -42369,6 +42650,10 @@
   },
   {
    "name": "an item's own borderColorDoji gives its row sign 0",
+   "ok": true
+  },
+  {
+   "name": "a border written as null is the body's",
    "ok": true
   },
   {
