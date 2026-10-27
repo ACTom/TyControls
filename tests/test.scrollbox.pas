@@ -97,6 +97,10 @@ type
     procedure TestViewportLayoutAreaGrowsToTheContent;
     procedure TestViewportLayoutAreaStaysTheViewportWhenContentFits;
     procedure TestViewportOriginIsZeroBeforeAnyScroll;
+    { A freed viewport is let go: the box hosts its children itself again. }
+    procedure TestFreeingTheViewportLetsItGo;
+    { A viewport moved to another parent is let go, and the box no longer sizes it. }
+    procedure TestAViewportMovedAwayIsLetGo;
   end;
 implementation
 
@@ -111,6 +115,7 @@ type
     { The rect the LCL alignment engine hands to child controls. }
     function Frame: Integer;   // the themed border the content area must stay inside
     function ChildArea: TRect;
+    function Host: TWinControl;
   end;
 
 function TScrollBoxAccess.StyleTypeKey: string;
@@ -161,6 +166,11 @@ function TScrollBoxAccess.ChildArea: TRect;
 begin
   Result := GetLogicalClientRect;
   AdjustClientRect(Result);
+end;
+
+function TScrollBoxAccess.Host: TWinControl;
+begin
+  Result := ContentHost;
 end;
 
 { helper: a plain child of a given size at a given position }
@@ -913,6 +923,32 @@ begin
   AssertEquals('没滚动时视口的布局原点就是 0', 0, vp.ChildArea.Top);
   AssertEquals('横向同理', 0, vp.ChildArea.Left);
   AssertEquals('前置条件:还没滚', 0, SB.ScrollY);
+end;
+
+procedure TTyScrollViewportTest.TestFreeingTheViewportLetsItGo;
+var
+  SB: TScrollBoxAccess;
+  vp: TViewportAccess;
+begin
+  SB := MakeBoxWithViewport(FForm, vp, 600, 400);
+  AssertSame('precondition: the viewport hosts the children', TWinControl(vp), SB.Host);
+  vp.Free;
+  AssertSame('the freed viewport is let go', TWinControl(SB), SB.Host);
+  AssertEquals('and the range is measured again without it', 0, SB.ContentWidth);
+end;
+
+procedure TTyScrollViewportTest.TestAViewportMovedAwayIsLetGo;
+var
+  SB: TScrollBoxAccess;
+  vp: TViewportAccess;
+begin
+  SB := MakeBoxWithViewport(FForm, vp, 600, 400);
+  vp.Parent := FForm;
+  vp.SetBounds(5, 6, 70, 80);
+  AssertSame('the moved viewport is let go', TWinControl(SB), SB.Host);
+  SB.UpdateScrollRange;
+  AssertEquals('and the box no longer sizes it', 70, vp.Width);
+  AssertEquals('or places it', 5, vp.Left);
 end;
 
 procedure TTyScrollViewportTest.TestViewportLayoutOriginFollowsTheScrollOffset;
