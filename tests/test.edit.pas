@@ -91,6 +91,9 @@ type
     procedure TestCollapseOnUnshiftedLeft;
     procedure TestCollapseOnUnshiftedRight;
     procedure TestCtrlASelectsAll;
+    { #150: AltGr is Ctrl+Alt on Windows; AltGr with A, C, X, V, Y or Z types a letter on
+      Polish, Czech and other keyboards and must not run the shortcut. }
+    procedure TestAltGrLettersAreNotShortcuts;
     procedure TestMetaASelectsAll;
     // EDIT.3: mouse caret + clipboard
     procedure TestCaretIndexAtXBounds;
@@ -716,6 +719,33 @@ begin
     E.SimulateKeyDown(VK_RIGHT);
     AssertEquals('Caret collapsed to right edge', 2, E.CaretPos);
     AssertEquals('SelLength=0 after collapse right', 0, E.SelLength);
+  finally
+    F.Free;
+  end;
+end;
+
+procedure TEditTest.TestAltGrLettersAreNotShortcuts;
+var
+  F: TCustomForm;
+  E: TTyEditAccess;
+  k: Word;
+begin
+  F := TCustomForm.CreateNew(nil);
+  try
+    E := TTyEditAccess.Create(F);
+    E.Parent := F;
+    E.Text := 'abc';
+    E.SelStart := 3;
+    k := VK_A;
+    E.SimulateKeyDownShiftRef(k, [ssCtrl, ssAlt]);
+    AssertEquals('AltGr+A selects nothing', 0, E.SelLength);
+    AssertEquals('and leaves the key for its letter', VK_A, k);
+    k := VK_V;
+    E.SimulateKeyDownShiftRef(k, [ssCtrl, ssAlt]);
+    AssertEquals('AltGr+V pastes nothing', VK_V, k);
+    k := VK_A;
+    E.SimulateKeyDownShiftRef(k, [ssCtrl]);
+    AssertEquals('Ctrl+A alone still selects all', 3, E.SelLength);
   finally
     F.Free;
   end;
