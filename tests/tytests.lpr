@@ -199,11 +199,7 @@ uses
   test.advchart.textdash,
   test.advchart.authorstyles,
   test.advchart.richimage,
-<<<<<<< HEAD
-  test.advchart.halokeep, test.advchart.faststrokes, test.advchart.shadows, test.advchart.largespeed, test.advchart.parsekeep, test.advchart.speedkeep,
-=======
-  test.advchart.halokeep, test.advchart.faststrokes, test.advchart.shadows, test.advchart.edgesgeo, test.advchart.largespeed, test.advchart.parsekeep,
->>>>>>> d9354bfd4 (fix(advchart): R5-G geo, matrix and merge edges against upstream 6.1)
+  test.advchart.halokeep, test.advchart.faststrokes, test.advchart.shadows, test.advchart.edgesgeo, test.advchart.largespeed, test.advchart.parsekeep, test.advchart.speedkeep,
   test.advchart.hoverlayer,
   test.advchart.radarlabel,
   test.advchart.pieitemlabel,
