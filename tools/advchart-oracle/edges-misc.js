@@ -431,6 +431,16 @@ const ZL_CASES = [
       series: [{ type: 'scatter', zlevel: 1, large: true, largeThreshold: 5, progressive: 4, progressiveThreshold: 5, symbol: 'rect', symbolSize: 30,
         itemStyle: { color: '#0000ff', opacity: 1 }, data: [[1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [6, 6], [7, 7], [8, 8], [5.4, 5], [9, 9]] }] },
     frames: 10, probes: [['point', [315, 205]]] },
+  { id: 'zl-title-mixed', note: 'a title of the default zlevel under a series of 1, with an x axis of 2: the canvases drawn level by level, the title on its own',
+    option: { title: ZTITLE({}), xAxis: Object.assign({ zlevel: 2 }, ZBOX), yAxis: ZBOX, series: [ZSYM({ zlevel: 1 })] }, probes: [['title', 0]] },
+  { id: 'zl-progressive-half', note: 'the large progressive scatter of zlevel 1, half opaque, over the title of 0: a symbol off the title blended once over the white',
+    option: { title: ZTITLE({}), xAxis: ZBOX, yAxis: ZBOX,
+      series: [{ type: 'scatter', zlevel: 1, large: true, largeThreshold: 5, progressive: 4, progressiveThreshold: 5, symbol: 'rect', symbolSize: 30,
+        itemStyle: { color: '#0000ff', opacity: 0.5 }, data: [[1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [6, 6], [7, 7], [8, 8], [5.4, 5], [9, 9]] }] },
+    frames: 10, probes: [['point', [135, 294]]] },
+  { id: 'zl-mask-toolbox', note: 'a toolbox of zlevel 2 over the loading mask (0): its icon is the hover, not the mask',
+    option: { toolbox: { zlevel: 2, left: 280, top: 180, itemSize: 40, feature: { restore: {} } }, xAxis: ZBOX, yAxis: ZBOX,
+      series: [ZSYM({})] }, loading: {}, probes: [['toolboxIcon', 0]] },
 ];
 function zlClassify(chart) {
   const owners = new Map();
@@ -493,7 +503,8 @@ function runZLevels() {
           const el = list[i];
           if (el.ignore || el.invisible || !el.contain || !el.contain(x + 0.5, y + 0.5)) continue;
           if (el.style && el.style.opacity === 0) continue;
-          draw = { comp: owner(el), zlevel: el.zlevel, z: el.z, type: el.type };
+          draw = { comp: owner(el), zlevel: el.zlevel, z: el.z, type: el.type,
+            opacity: el.style && el.style.opacity != null ? el.style.opacity : 1 };
           break;
         }
         const t = chart.getZr().handler.findHover(x + 0.5, y + 0.5).target;

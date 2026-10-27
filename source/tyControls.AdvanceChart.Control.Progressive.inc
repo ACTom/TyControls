@@ -496,6 +496,7 @@ end;
 procedure TTyCustomAdvanceChart.ProgRenderList(APainter: TTyPainter; AList: TTyPaintList;
   APPI: Integer);
 var
+  zs: TTyZBandState;
   i, idx: Integer;
   pe: PTyChartElement;
   any, blitted: Boolean;
@@ -516,12 +517,19 @@ begin
     TyRenderPaintList(APainter, AList);
     Exit;
   end;
-  if not FProgLayerOk or (FProgLayer = nil) or (FProgLayer.Width <> bmp.Width)
-    or (FProgLayer.Height <> bmp.Height) or (FProgLayerPPI <> APPI)
-    or (FProgLayerScale <> APainter.DeviceScale) then
-    ProgLayerBuild(bmp.Width, bmp.Height, APPI, APainter.DeviceScale)
-  else if FProgLayerRegionOn then
-    ProgLayerRegionRedraw;
+  { [R5-J] the layer holds the whole run, whatever band this pass draws:
+    built in a band it lost the chunks of another zlevel for good }
+  zs := TySuspendZBand;
+  try
+    if not FProgLayerOk or (FProgLayer = nil) or (FProgLayer.Width <> bmp.Width)
+      or (FProgLayer.Height <> bmp.Height) or (FProgLayerPPI <> APPI)
+      or (FProgLayerScale <> APainter.DeviceScale) then
+      ProgLayerBuild(bmp.Width, bmp.Height, APPI, APainter.DeviceScale)
+    else if FProgLayerRegionOn then
+      ProgLayerRegionRedraw;
+  finally
+    TyResumeZBand(zs);
+  end;
   blitted := False;
   for i := 0 to AList.Count - 1 do
   begin

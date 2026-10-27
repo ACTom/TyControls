@@ -5764,7 +5764,8 @@
       "comp": "title",
       "zlevel": 2,
       "z": 6,
-      "type": "tspan"
+      "type": "tspan",
+      "opacity": 1
      },
      "hit": {
       "comp": "title",
@@ -5832,7 +5833,8 @@
       "comp": "series",
       "zlevel": 1,
       "z": 2,
-      "type": "path"
+      "type": "path",
+      "opacity": 1
      },
      "hit": {
       "comp": "series",
@@ -5904,7 +5906,8 @@
       "comp": "series",
       "zlevel": 1,
       "z": 2,
-      "type": "rect"
+      "type": "rect",
+      "opacity": 1
      },
      "hit": {
       "comp": "series",
@@ -5922,7 +5925,8 @@
       "comp": "title",
       "zlevel": 1,
       "z": 6,
-      "type": "tspan"
+      "type": "tspan",
+      "opacity": 1
      },
      "hit": {
       "comp": "title",
@@ -5982,7 +5986,8 @@
       "comp": "xAxis",
       "zlevel": 2,
       "z": 0,
-      "type": "line"
+      "type": "line",
+      "opacity": 1
      },
      "hit": {
       "comp": "series",
@@ -6041,7 +6046,8 @@
       "comp": "series",
       "zlevel": 0,
       "z": 2,
-      "type": "rect"
+      "type": "rect",
+      "opacity": 1
      },
      "hit": {
       "comp": "series",
@@ -6111,7 +6117,8 @@
       "comp": "legend",
       "zlevel": 2,
       "z": 4,
-      "type": "rect"
+      "type": "rect",
+      "opacity": 1
      },
      "hit": {
       "comp": "legend",
@@ -6176,7 +6183,8 @@
       "comp": "toolbox",
       "zlevel": 2,
       "z": 6,
-      "type": "rect"
+      "type": "rect",
+      "opacity": 1
      },
      "hit": {
       "comp": "toolbox",
@@ -6232,7 +6240,8 @@
       "comp": "series",
       "zlevel": 1,
       "z": 2,
-      "type": "path"
+      "type": "path",
+      "opacity": 1
      },
      "hit": {
       "comp": "series",
@@ -6250,7 +6259,8 @@
       "comp": "mask",
       "zlevel": 0,
       "z": 10000,
-      "type": "rect"
+      "type": "rect",
+      "opacity": 1
      },
      "hit": {
       "comp": "mask",
@@ -6308,7 +6318,8 @@
       "comp": "mask",
       "zlevel": 2,
       "z": 10000,
-      "type": "rect"
+      "type": "rect",
+      "opacity": 1
      },
      "hit": {
       "comp": "mask",
@@ -6393,7 +6404,8 @@
       "comp": "graphic",
       "zlevel": 2,
       "z": 0,
-      "type": "rect"
+      "type": "rect",
+      "opacity": 1
      },
      "hit": {
       "comp": "graphic",
@@ -6501,11 +6513,256 @@
       "comp": "series",
       "zlevel": 1,
       "z": 2,
-      "type": "path"
+      "type": "path",
+      "opacity": 1
      },
      "hit": {
       "comp": "series",
       "zlevel": 1,
+      "type": "path"
+     }
+    }
+   ]
+  },
+  {
+   "id": "zl-title-mixed",
+   "note": "a title of the default zlevel under a series of 1, with an x axis of 2: the canvases drawn level by level, the title on its own",
+   "option": {
+    "title": {
+     "text": "TITLE",
+     "triggerEvent": true,
+     "left": 250,
+     "top": 175,
+     "textStyle": {
+      "fontSize": 40,
+      "color": "#00c000"
+     },
+     "backgroundColor": "#00ff00",
+     "padding": 10
+    },
+    "xAxis": {
+     "zlevel": 2,
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "symbol": "rect",
+      "symbolSize": 120,
+      "itemStyle": {
+       "color": "#0000ff",
+       "opacity": 1
+      },
+      "data": [
+       [
+        5,
+        5
+       ]
+      ],
+      "zlevel": 1
+     }
+    ]
+   },
+   "loading": null,
+   "frames": 0,
+   "probes": [
+    {
+     "at": [
+      315,
+      205
+     ],
+     "probe": "title",
+     "draw": {
+      "comp": "series",
+      "zlevel": 1,
+      "z": 2,
+      "type": "path",
+      "opacity": 1
+     },
+     "hit": {
+      "comp": "series",
+      "zlevel": 1,
+      "type": "path"
+     }
+    }
+   ]
+  },
+  {
+   "id": "zl-progressive-half",
+   "note": "the large progressive scatter of zlevel 1, half opaque, over the title of 0: a symbol off the title blended once over the white",
+   "option": {
+    "title": {
+     "text": "TITLE",
+     "triggerEvent": true,
+     "left": 250,
+     "top": 175,
+     "textStyle": {
+      "fontSize": 40,
+      "color": "#00c000"
+     },
+     "backgroundColor": "#00ff00",
+     "padding": 10
+    },
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "zlevel": 1,
+      "large": true,
+      "largeThreshold": 5,
+      "progressive": 4,
+      "progressiveThreshold": 5,
+      "symbol": "rect",
+      "symbolSize": 30,
+      "itemStyle": {
+       "color": "#0000ff",
+       "opacity": 0.5
+      },
+      "data": [
+       [
+        1,
+        1
+       ],
+       [
+        2,
+        2
+       ],
+       [
+        3,
+        3
+       ],
+       [
+        4,
+        4
+       ],
+       [
+        5,
+        5
+       ],
+       [
+        6,
+        6
+       ],
+       [
+        7,
+        7
+       ],
+       [
+        8,
+        8
+       ],
+       [
+        5.4,
+        5
+       ],
+       [
+        9,
+        9
+       ]
+      ]
+     }
+    ]
+   },
+   "loading": null,
+   "frames": 10,
+   "probes": [
+    {
+     "at": [
+      135,
+      294
+     ],
+     "probe": "point",
+     "draw": {
+      "comp": "series",
+      "zlevel": 1,
+      "z": 2,
+      "type": "path",
+      "opacity": 0.5
+     },
+     "hit": {
+      "comp": "series",
+      "zlevel": 1,
+      "type": "path"
+     }
+    }
+   ]
+  },
+  {
+   "id": "zl-mask-toolbox",
+   "note": "a toolbox of zlevel 2 over the loading mask (0): its icon is the hover, not the mask",
+   "option": {
+    "toolbox": {
+     "zlevel": 2,
+     "left": 280,
+     "top": 180,
+     "itemSize": 40,
+     "feature": {
+      "restore": {}
+     }
+    },
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "symbol": "rect",
+      "symbolSize": 120,
+      "itemStyle": {
+       "color": "#0000ff",
+       "opacity": 1
+      },
+      "data": [
+       [
+        5,
+        5
+       ]
+      ]
+     }
+    ]
+   },
+   "loading": {},
+   "frames": 0,
+   "probes": [
+    {
+     "at": [
+      317,
+      217
+     ],
+     "probe": "toolboxIcon",
+     "draw": {
+      "comp": "toolbox",
+      "zlevel": 2,
+      "z": 6,
+      "type": "rect",
+      "opacity": 1
+     },
+     "hit": {
+      "comp": "toolbox",
+      "zlevel": 2,
       "type": "path"
      }
     }

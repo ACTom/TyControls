@@ -38,6 +38,15 @@ procedure TyClearZBand;
 { [R5-J] whether an element of zlevel AZ draws in the band set now (every
   one when none is) }
 function TyZBandHas(AZ: Integer): Boolean;
+type
+  TTyZBandState = record
+    IsOn: Boolean;
+    Lo, Hi: Integer;
+  end;
+{ [R5-J] the band set now, cleared -- what is drawn off the canvas (a
+  progressive run's own layer, every element of it) -- and set back }
+function TySuspendZBand: TTyZBandState;
+procedure TyResumeZBand(const AState: TTyZBandState);
 { the highest ZLevel of AList's elements that draw (-MaxInt for none) }
 function TyMaxZLevelOf(AList: TTyPaintList): Integer;
 
@@ -3049,6 +3058,21 @@ end;
 function TyZBandHas(AZ: Integer): Boolean;
 begin
   Result := not GZBandOn or ((AZ > GZBandLo) and (AZ <= GZBandHi));
+end;
+
+function TySuspendZBand: TTyZBandState;
+begin
+  Result.IsOn := GZBandOn;
+  Result.Lo := GZBandLo;
+  Result.Hi := GZBandHi;
+  GZBandOn := False;
+end;
+
+procedure TyResumeZBand(const AState: TTyZBandState);
+begin
+  GZBandOn := AState.IsOn;
+  GZBandLo := AState.Lo;
+  GZBandHi := AState.Hi;
 end;
 
 function TyMaxZLevelOf(AList: TTyPaintList): Integer;

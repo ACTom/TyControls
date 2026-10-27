@@ -781,7 +781,10 @@ var
   chart: TEmProbe;
   bmp: TBGRABitmap;
   draw, hit, got, report, cfg: string;
-  px: TBGRAPixel;
+  px, want: TBGRAPixel;
+  op: Double;
+  ref: TEmProbe;
+  refBmp: TBGRABitmap;
 begin
   cases := TJSONObject(FRoot).Arrays['zlevel'];
   bad := 0;
@@ -827,7 +830,32 @@ begin
         begin
           px := bmp.GetPixel(x, y);
           Inc(n);
-          if not InkIs(draw, px) then
+          { a half-opaque series over the white: blended once -- as the
+            same series drawn at once, not progressively, blends it (BGRA's
+            own blend, not the canvas') [the layer blitted twice is
+            darker] }
+          if (draw = 'series') and (pr.Objects['draw'].Get('opacity', 1.0) < 1) then
+          begin
+            op := pr.Objects['draw'].Get('opacity', 1.0);
+            ref := NewChart(600, 400);
+            ref.Option := StringReplace(chart.Option, '"progressive" : 4', '"progressive" : 0', []);
+            refBmp := TBGRABitmap.Create(600, 400, BGRA(255, 255, 255, 255));
+            try
+              ref.Render(refBmp.Canvas, Rect(0, 0, 600, 400), 96);
+              want := refBmp.GetPixel(x, y);
+            finally
+              refBmp.Free;
+              ref.Free;
+            end;
+            if (want.blue < 200) or (want.red > 230) or (Abs(px.red - want.red) > 2)
+              or (Abs(px.green - want.green) > 2) or (Abs(px.blue - want.blue) > 2) then
+            begin
+              Inc(bad);
+              report := report + LineEnding + Format('%s %s at %d,%d: the series at %g blended once (%d %d %d at once), here %d %d %d',
+                [cs.Strings['id'], pr.Strings['probe'], x, y, op, want.red, want.green, want.blue, px.red, px.green, px.blue]);
+            end;
+          end
+          else if not InkIs(draw, px) then
           begin
             Inc(bad);
             report := report + LineEnding + Format('%s %s at %d,%d: %s drawn on top upstream, here %d %d %d',
