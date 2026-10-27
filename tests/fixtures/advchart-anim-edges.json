@@ -23202,6 +23202,216 @@
    ]
   },
   {
+   "id": "rv-label-clip",
+   "group": "river",
+   "note": "a themeRiver's layers enter under their polygon's growing clip path; each layer's label (the polygon's textContent) is cut by it too",
+   "W": 400,
+   "H": 300,
+   "option": {
+    "animation": true,
+    "animationDuration": 1000,
+    "animationEasing": "linear",
+    "singleAxis": {
+     "type": "time",
+     "top": 40,
+     "bottom": 40
+    },
+    "series": [
+     {
+      "type": "themeRiver",
+      "label": {
+       "show": true
+      },
+      "data": [
+       [
+        "2024-01-01",
+        10,
+        "a"
+       ],
+       [
+        "2024-01-02",
+        20,
+        "a"
+       ],
+       [
+        "2024-01-03",
+        15,
+        "a"
+       ],
+       [
+        "2024-01-01",
+        5,
+        "b"
+       ],
+       [
+        "2024-01-02",
+        8,
+        "b"
+       ],
+       [
+        "2024-01-03",
+        12,
+        "b"
+       ]
+      ]
+     }
+    ]
+   },
+   "probes": [
+    "rvlab"
+   ],
+   "events": [
+    {
+     "t": 0,
+     "do": "sample",
+     "rec": {
+      "rl0/a": {
+       "clip": [
+        "4024000000000000",
+        "404a000000000000",
+        "0000000000000000",
+        "406236db6db6db6e"
+       ],
+       "n": 1
+      },
+      "rl0/b": {
+       "clip": [
+        "4024000000000000",
+        "4062adb6db6db6db",
+        "0000000000000000",
+        "4058a4924924924a"
+       ],
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 1,
+     "do": "sample",
+     "rec": {
+      "rl0/a": {
+       "clip": [
+        "4023eb851eb851ec",
+        "404a000000000000",
+        "3fdd70a3d70a3d71",
+        "406236db6db6db6e"
+       ],
+       "n": 1
+      },
+      "rl0/b": {
+       "clip": [
+        "4023eb851eb851ec",
+        "4062adb6db6db6db",
+        "3fdd70a3d70a3d71",
+        "4058a4924924924a"
+       ],
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 100,
+     "do": "sample",
+     "rec": {
+      "rl0/a": {
+       "clip": [
+        "4018000000000000",
+        "404a000000000000",
+        "4047000000000000",
+        "406236db6db6db6e"
+       ],
+       "n": 1
+      },
+      "rl0/b": {
+       "clip": [
+        "4018000000000000",
+        "4062adb6db6db6db",
+        "4047000000000000",
+        "4058a4924924924a"
+       ],
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 500,
+     "do": "sample",
+     "rec": {
+      "rl0/a": {
+       "clip": [
+        "c024000000000000",
+        "404a000000000000",
+        "406cc00000000000",
+        "406236db6db6db6e"
+       ],
+       "n": 1
+      },
+      "rl0/b": {
+       "clip": [
+        "c024000000000000",
+        "4062adb6db6db6db",
+        "406cc00000000000",
+        "4058a4924924924a"
+       ],
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 999,
+     "do": "sample",
+     "rec": {
+      "rl0/a": {
+       "clip": [
+        "c03df5c28f5c28f6",
+        "404a000000000000",
+        "407cb8a3d70a3d71",
+        "406236db6db6db6e"
+       ],
+       "n": 1
+      },
+      "rl0/b": {
+       "clip": [
+        "c03df5c28f5c28f6",
+        "4062adb6db6db6db",
+        "407cb8a3d70a3d71",
+        "4058a4924924924a"
+       ],
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 1000,
+     "do": "sample",
+     "rec": {
+      "rl0/a": {
+       "clip": null,
+       "n": 0
+      },
+      "rl0/b": {
+       "clip": null,
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 1001,
+     "do": "sample",
+     "rec": {
+      "rl0/a": {
+       "clip": null,
+       "n": 0
+      },
+      "rl0/b": {
+       "clip": null,
+       "n": 0
+      }
+     }
+    }
+   ]
+  },
+  {
    "id": "fn-update",
    "group": "funnel",
    "note": "a merge changes the values (the order changes): each piece updateProps its opacity and its four points, its outer label's style x / y (update timing, its row)",

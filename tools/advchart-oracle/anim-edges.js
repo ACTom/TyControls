@@ -368,6 +368,31 @@ const PROBES = {
       });
     });
   },
+  // a themeRiver's layer labels: the clip their polygon's clip path puts
+  // on them (a textContent takes its host's clip paths),
+  // in the canvas' frame, null for none
+  rvlab(chart, rec) {
+    chart.getModel().eachSeries(sm => {
+      if (sm.subType !== 'themeRiver') return;
+      const view = chart.getViewOfSeriesModel(sm);
+      const ls = view._layersSeries || [];
+      (view._layers || []).forEach((g, k) => {
+        if (!g) return;
+        const poly = g.childAt(0);
+        const t = poly && poly.getTextContent();
+        if (!t || t.ignore || !t.style.text) return;
+        const cp = poly.getClipPath();
+        let clip = null;
+        if (cp) {
+          const m = poly.getComputedTransform();
+          const sh = cp.shape;
+          const dy = m ? m[5] : 0;
+          clip = arr([sh.x, sh.y + dy, sh.width, sh.height]);
+        }
+        rec['rl' + sm.seriesIndex + '/' + ls[k].name] = { clip, n: cp ? nClip(cp) : 0 };
+      });
+    });
+  },
   // a funnel's pieces and their labels
   funnel(chart, rec, c) {
     chart.getModel().eachSeries(sm => {
@@ -597,6 +622,13 @@ const RD = data => ({ animation: true, animationDurationUpdate: 1000, animationE
 add('radar', 'rd-slide', "a radar's points with labels moved off them by labelLayout and a label line: a merge slides the symbols -- the labels ride their symbols; the lines?",
   RD([{ value: [3, 5, 7] }]), ['rsym'],
   [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'merge', option: { series: [{ data: [{ value: [8, 2, 4] }] }] } }, ...after([0, 1, 500, 1001], T1)]);
+
+// ---- a themeRiver's labels under the enter clip ----
+add('river', 'rv-label-clip', "a themeRiver's layers enter under their polygon's growing clip path; each layer's label (the polygon's textContent) is cut by it too",
+  { animation: true, animationDuration: 1000, animationEasing: 'linear', singleAxis: { type: 'time', top: 40, bottom: 40 },
+    series: [{ type: 'themeRiver', label: { show: true }, data: [['2024-01-01', 10, 'a'], ['2024-01-02', 20, 'a'], ['2024-01-03', 15, 'a'],
+      ['2024-01-01', 5, 'b'], ['2024-01-02', 8, 'b'], ['2024-01-03', 12, 'b']] }] },
+  ['rvlab'], after([0, 1, 100, 500, 999, 1000, 1001], 0));
 
 // ---- funnel ----
 const FN = (data, extra, s) => Object.assign({ animation: true,

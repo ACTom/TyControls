@@ -11585,6 +11585,17 @@ begin
       carGraphEdgeLabel]) and not ((pel^.Anim.Role = carLabel) and (pel^.Anim.HostPlus1 > 0)) then
       ViewMap(pel^, vsx, vsy, vx, vy);
     h := pel^.Anim.HostPlus1 - 1;
+    { [R5-I] A themeRiver LAYER'S LABEL is its polygon's textContent: the
+      layer group's clip path, growing in its enter, cuts it too (zrender
+      hands a text its host's clip paths) [was: drawn whole] }
+    if (pel^.Anim.Role = carLabel) and (pel^.Caption.LmHostPlus1 > 0)
+      and (pel^.Caption.LmHostPlus1 - 1 < i)
+      and (ADest.Ref(pel^.Caption.LmHostPlus1 - 1)^.Anim.Role = carRiver)
+      and ADest.Ref(pel^.Caption.LmHostPlus1 - 1)^.HasClip then
+    begin
+      pel^.ClipPaths := [TyShapeRect(ADest.Ref(pel^.Caption.LmHostPlus1 - 1)^.ClipRect)];
+      pel^.ClipCaption := True;
+    end;
     { [R2-I2] a label on a sliding radar symbol: moved with it }
     if (pel^.Anim.Role = carLabel) and (h >= 0) and (h < i) and (h <= High(slideDX))
       and ((slideDX[h] <> 0) or (slideDY[h] <> 0)) then

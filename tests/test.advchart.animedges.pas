@@ -67,6 +67,8 @@ type
     procedure TestStateAnimationsFormsAsUpstream;
     procedure TestAHeatmapsTooltipColumnAsUpstream;
     procedure TestARadarsPointLabelsAsUpstream;
+    procedure TestAThemeRiversLabelsUnderTheClipAsUpstream;
+    procedure TestAThemeRiversLabelIsInkedOnlyInsideTheClip;
   end;
 
 implementation
@@ -391,6 +393,9 @@ var
   c: TTyChartColor;
   tipPos: TTyIntegerArray;
   pts: TTyPointFArray;
+  l: TTyPaintList;
+  found: Boolean;
+  bx: TTyRectF;
 begin
   for i := 0 to ARec.Count - 1 do
   begin
@@ -612,6 +617,50 @@ begin
         end;
       end;
     end
+    else if pre = 'rl' then
+    begin
+      { a themeRiver layer's label: cut to its polygon's clip while it
+        grows, uncut after }
+      l := FChart.Frame;
+      if (l = nil) or (l.Count = 0) then l := FChart.List;
+      found := False;
+      for k := 0 to l.Count - 1 do
+      begin
+        el := l.Element(k);
+        if (el.Anim.Role <> carLabel) or (el.Caption.LmHostPlus1 <= 0)
+          or (el.Caption.LmHostPlus1 > l.Count) then Continue;
+        if (l.Element(el.Caption.LmHostPlus1 - 1).Anim.Role <> carRiver)
+          or (l.Element(el.Caption.LmHostPlus1 - 1).Anim.Series <> s)
+          or (l.Element(el.Caption.LmHostPlus1 - 1).Anim.TwKey <> rest) then Continue;
+        found := True;
+        Break;
+      end;
+      Inc(FCompared);
+      if not found then
+      begin
+        Bad(name + ': no label');
+        Continue;
+      end;
+      if IsNull(leaf.Find('clip')) then
+      begin
+        Inc(FCompared);
+        if Length(el.ClipPaths) > 0 then Bad(name + ': cut, upstream whole');
+      end
+      else
+      begin
+        v := Nums(leaf.Arrays['clip']);
+        Inc(FCompared);
+        if Length(el.ClipPaths) = 0 then Bad(name + ': whole, upstream cut')
+        else
+        begin
+          bx := TyShapeBounds(el.ClipPaths[0]);
+          SameNum(name + ' clip left', bx.Left, v[0]);
+          SameNum(name + ' clip top', bx.Top, v[1]);
+          SameNum(name + ' clip right', bx.Right, v[0] + v[2]);
+          SameNum(name + ' clip bottom', bx.Bottom, v[1] + v[3]);
+        end;
+      end;
+    end
     else if pre = 'vl' then
       { a visual map's handle label: its opacity now (its blur's fade) }
       SameNum(name + ' opacity', FChart.VmHandleLabelOpacity(s, idx), leaf.Find('op'))
@@ -806,6 +855,77 @@ end;
 procedure TAdvChartAnimEdgesOracleTest.TestARadarsPointLabelsAsUpstream;
 begin
   RunGroup('radar', 60);
+end;
+
+procedure TAdvChartAnimEdgesOracleTest.TestAThemeRiversLabelsUnderTheClipAsUpstream;
+begin
+  RunGroup('river', 40);
+end;
+
+{ HAND-WRITTEN: the label's ink in a frame of the enter is cut where the
+  clip is -- none of a long label past the clip's right edge halfway in,
+  there at rest }
+procedure TAdvChartAnimEdgesOracleTest.TestAThemeRiversLabelIsInkedOnlyInsideTheClip;
+var
+  t0: Double;
+  bmp: TBGRABitmap;
+  box: TTyRectF;
+  i, inkEarly, inkRest: Integer;
+  el: TTyChartElement;
+
+  function InkIn(ABmp: TBGRABitmap): Integer;
+  var
+    px: TBGRAPixel;
+    x, y: Integer;
+  begin
+    Result := 0;
+    for y := Max(0, Floor(box.Top)) to Min(ABmp.Height - 1, Ceil(box.Bottom)) do
+      for x := Max(0, Floor(box.Left)) to Min(ABmp.Width - 1, Ceil(box.Right)) do
+      begin
+        px := ABmp.GetPixel(x, y);
+        if (px.red < 200) and (px.green < 200) and (px.blue < 200) then Inc(Result);
+      end;
+  end;
+
+begin
+  NewChart(400, 300);
+  t0 := 1700000000000;
+  FChart.AnimationMode := camAlways;
+  FChart.AnimNow := t0;
+  FChart.SetOption('{"animation":true,"animationDuration":1000,"animationEasing":"linear",'
+    + '"singleAxis":{"type":"time","top":40,"bottom":40},"series":[{"type":"themeRiver",'
+    + '"label":{"show":true,"color":"#000"},"color":["#ffffff","#ffffff"],"data":[["2024-01-01",10,"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],'
+    + '["2024-01-02",20,"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],["2024-01-03",15,"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]]}]}', True);
+  bmp := TBGRABitmap.Create(400, 300, BGRA(255, 255, 255, 255));
+  try
+    FChart.Render(bmp.Canvas, Rect(0, 0, 400, 300), 96);
+    { the label's box, from the list }
+    box := TyRectF(0, 0, 0, 0);
+    for i := 0 to FChart.List.Count - 1 do
+    begin
+      el := FChart.List.Element(i);
+      if (el.Anim.Role = carLabel) and (Copy(el.Caption.Text, 1, 4) = 'aaaa') then
+        box := TyShapeBounds(el.Shape);
+    end;
+    AssertTrue('a label past the clip at 500 ms', box.Right > 260);
+    { the part of it past where the clip has got to at 500 ms (x - 10 +
+      230) }
+    box.Left := 240;
+    FChart.AnimNow := t0 + 500;
+    FChart.AnimTick(t0 + 500);
+    bmp.Fill(BGRA(255, 255, 255, 255));
+    FChart.Render(bmp.Canvas, Rect(0, 0, 400, 300), 96);
+    inkEarly := InkIn(bmp);
+    FChart.AnimNow := t0 + 2000;
+    FChart.AnimTick(t0 + 2000);
+    bmp.Fill(BGRA(255, 255, 255, 255));
+    FChart.Render(bmp.Canvas, Rect(0, 0, 400, 300), 96);
+    inkRest := InkIn(bmp);
+  finally
+    bmp.Free;
+  end;
+  AssertTrue(Format('the label inked at rest (%d)', [inkRest]), inkRest > 20);
+  AssertEquals(Format('none of it past the clip (of %d at rest)', [inkRest]), 0, inkEarly);
 end;
 
 initialization
