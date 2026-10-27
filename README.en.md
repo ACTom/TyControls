@@ -380,7 +380,7 @@ The font is embedded in the unit — nothing to ship or install, and it costs no
 | `TTyNotification` | Corner toast |
 | `TTyIconBrowserDialog` | Icon browser |
 
-The bigger controls have docs of their own (in Chinese): [grid.md](docs/controls/grid.md) (`TTyStringGrid`) · [treeview.md](docs/controls/treeview.md) (`TTyTreeView`) · [ttyform.md](docs/controls/ttyform.md) (`TTyForm`) · [dbgrid.md](docs/controls/dbgrid.md) (`TTyDBGrid`) · [propertygrid.md](docs/controls/propertygrid.md) (`TTyPropertyGrid`) · [terminal.md](docs/controls/terminal.md) (`TTyTerminalView`) · [multitrackbar.md](docs/controls/multitrackbar.md) (the multi-thumb track bars).
+The bigger controls have docs of their own (in Chinese): [grid.md](docs/controls/grid.md) (`TTyStringGrid`) · [treeview.md](docs/controls/treeview.md) (`TTyTreeView`) · [ttyform.md](docs/controls/ttyform.md) (`TTyForm`) · [dbgrid.md](docs/controls/dbgrid.md) (`TTyDBGrid`) · [propertygrid.md](docs/controls/propertygrid.md) (`TTyPropertyGrid`) · [terminal.md](docs/controls/terminal.md) (`TTyTerminalView`) · [multitrackbar.md](docs/controls/multitrackbar.md) (the multi-thumb track bars) · [advancechart.md](docs/controls/advancechart.md) (`TTyAdvanceChart`).
 
 ---
 

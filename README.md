@@ -380,7 +380,7 @@ CharImage1.GlyphName := 'house';
 | `TTyNotification` | 角落通知,自动消失 |
 | `TTyIconBrowserDialog` | 图标浏览器 |
 
-几个大控件的完整能力见各自文档:[grid.md](docs/controls/grid.md)(`TTyStringGrid`)· [treeview.md](docs/controls/treeview.md)(`TTyTreeView`)· [ttyform.md](docs/controls/ttyform.md)(`TTyForm`)· [dbgrid.md](docs/controls/dbgrid.md)(`TTyDBGrid`)· [propertygrid.md](docs/controls/propertygrid.md)(`TTyPropertyGrid`)· [terminal.md](docs/controls/terminal.md)(`TTyTerminalView`)· [multitrackbar.md](docs/controls/multitrackbar.md)(多滑块)。
+几个大控件的完整能力见各自文档:[grid.md](docs/controls/grid.md)(`TTyStringGrid`)· [treeview.md](docs/controls/treeview.md)(`TTyTreeView`)· [ttyform.md](docs/controls/ttyform.md)(`TTyForm`)· [dbgrid.md](docs/controls/dbgrid.md)(`TTyDBGrid`)· [propertygrid.md](docs/controls/propertygrid.md)(`TTyPropertyGrid`)· [terminal.md](docs/controls/terminal.md)(`TTyTerminalView`)· [multitrackbar.md](docs/controls/multitrackbar.md)(多滑块)· [advancechart.md](docs/controls/advancechart.md)(`TTyAdvanceChart`)。
 
 ---
 
