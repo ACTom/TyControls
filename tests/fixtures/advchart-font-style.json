@@ -2882,6 +2882,74 @@
    ]
   },
   {
+   "id": "radar-normal-over-root",
+   "note": "radar axisName 'normal' under the root italic: the name upright, the title italic",
+   "option": {
+    "animation": false,
+    "textStyle": {
+     "fontStyle": "italic"
+    },
+    "title": {
+     "text": "Rt"
+    },
+    "radar": {
+     "indicator": [
+      {
+       "name": "Ia",
+       "max": 5
+      },
+      {
+       "name": "Ib",
+       "max": 5
+      },
+      {
+       "name": "Ic",
+       "max": 5
+      }
+     ],
+     "axisName": {
+      "fontStyle": "normal"
+     }
+    },
+    "series": [
+     {
+      "type": "radar",
+      "data": [
+       {
+        "value": [
+         1,
+         2,
+         3
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "texts": [
+    {
+     "text": "Ia",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Ib",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Ic",
+     "font": "normal normal 12px Microsoft YaHei",
+     "italic": false
+    },
+    {
+     "text": "Rt",
+     "font": "italic bold 18px Microsoft YaHei",
+     "italic": true
+    }
+   ]
+  },
+  {
    "id": "axispointer-root",
    "note": "an axisPointer shown by status under the root textStyle italic: its label takes the root",
    "option": {

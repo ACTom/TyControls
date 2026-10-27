@@ -404,7 +404,8 @@ begin
       tw := 0;
       th := 0;
       { [R5-A] getFont's style: emphasis.iconStyle.textFontStyle, else the
-        root textStyle's }
+        root textStyle's -- which the ink's weight carries already
+        (GlobalInk) }
       wt := ink.FontWeight;
       if FTbSpecs[t].Icons[i].TextFontStyle <> '' then
       begin
@@ -412,9 +413,7 @@ begin
           wt := wt or TyChartFontItalic
         else
           wt := wt and not TyChartFontItalic;
-      end
-      else if (FOption <> nil) and (FOption.Find('textStyle') is TJSONObject) then
-        wt := TyFontStyleOver(TJSONObject(FOption.Find('textStyle')).Find('fontStyle'), wt);
+      end;
       if AMeasurer <> nil then
         AMeasurer.MeasureLine(FTbSpecs[t].Icons[i].Title, ink.FontName,
           Round(fs * s), wt, tw, th);

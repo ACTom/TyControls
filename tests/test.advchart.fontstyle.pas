@@ -69,6 +69,7 @@ type
     procedure TestAFontStyleIsAStringOnly;
     procedure TestAnHtmlTooltipTakesTheStyle;
     procedure TestAToolboxTitleTakesTextFontStyle;
+    procedure TestTheTimelineIntervalMeasuresTheLabelFont;
   end;
 
 implementation
@@ -465,6 +466,40 @@ begin
     [FloatToStr(wi), FloatToStr(wu)]), Abs(wi - wu) >= 1);
   AssertTrue(Format('laid out at the italic width %s, not %s: %s',
     [FloatToStr(wi), FloatToStr(wu), FloatToStr(lw)]), Abs(lw - wi) < 0.5);
+  { A PIE'S LABEL, whose font is the ink's and whose fontStyle is its own }
+  FreeAndNil(FChart);
+  FChart := TFsProbe.Create(FForm);
+  FChart.Parent := FForm;
+  FChart.Controller := FCtl;
+  FChart.AnimationMode := camOff;
+  FChart.SetBounds(0, 0, cW, cH);
+  FChart.Option := '{"animation":false,"textStyle":{"fontFamily":"Times New Roman","fontSize":20},'
+    + '"series":[{"type":"pie","radius":"30%","label":{"fontStyle":"italic"},'
+    + '"data":[{"name":"ffffffffffffffff","value":1}]}]}';
+  bmp := TBitmap.Create;
+  try
+    bmp.SetSize(cW, cH);
+    FChart.RenderWindow(bmp.Canvas, Rect(0, 0, cW, cH), 96);
+  finally
+    bmp.Free;
+  end;
+  found := False;
+  for i := 0 to FChart.List.Count - 1 do
+  begin
+    e := FChart.List.Element(i);
+    if (e.Caption.Text <> 'ffffffffffffffff') or (e.Caption.FontSizeLogical <= 0) then Continue;
+    found := True;
+    lw := e.Shape.Bounds.Right - e.Shape.Bounds.Left;
+    m.MeasureLine(e.Caption.Text, e.Caption.FontName, e.Caption.FontSizeLogical,
+      e.Caption.FontWeight, wi, h);
+    m.MeasureLine(e.Caption.Text, e.Caption.FontName, e.Caption.FontSizeLogical,
+      e.Caption.FontWeight and not TyFontItalic, wu, h);
+  end;
+  AssertTrue('the pie label', found);
+  AssertTrue(Format('pie: the faces differ (%s, %s)', [FloatToStr(wi), FloatToStr(wu)]),
+    Abs(wi - wu) >= 1);
+  AssertTrue(Format('pie: laid out at the italic width %s, not %s: %s',
+    [FloatToStr(wi), FloatToStr(wu), FloatToStr(lw)]), Abs(lw - wi) < 0.5);
 end;
 
 { makeFont joins whatever fontStyle holds; only a string names a face. }
@@ -592,6 +627,38 @@ begin
   AssertEquals('the root italic', 1, Italic('', ',"textStyle":{"fontStyle":"italic"}'));
   AssertEquals('textFontStyle normal over the root', 0,
     Italic(',"emphasis":{"iconStyle":{"textFontStyle":"normal"}}', ',"textStyle":{"fontStyle":"italic"}'));
+end;
+
+{ THE TIMELINE'S CATEGORY INTERVAL measures every label in the label model's
+  font (calculateCategoryInterval with labelModel.getFont(): its style
+  included), whichever state a label is then drawn in: T2 is never measured
+  upright. }
+procedure TAdvChartFontStyleOracleTest.TestTheTimelineIntervalMeasuresTheLabelFont;
+var
+  cases: TJSONArray;
+  c, i, n: Integer;
+  log, mlog: TStringList;
+  parts: TStringArray;
+begin
+  cases := TJSONObject(FRoot).Arrays['cases'];
+  log := TStringList.Create;
+  mlog := TStringList.Create;
+  try
+    for c := 0 to cases.Count - 1 do
+      if cases.Objects[c].Strings['id'] = 'timeline' then Show(cases.Objects[c], log, mlog);
+    n := 0;
+    for i := 0 to mlog.Count - 1 do
+    begin
+      parts := mlog[i].Split([#9]);
+      if parts[0] <> 'T2' then Continue;
+      Inc(n);
+      AssertTrue('T2 measured upright', (StrToIntDef(parts[1], 0) and TyFontItalic) <> 0);
+    end;
+    AssertTrue('T2 measured', n > 0);
+  finally
+    mlog.Free;
+    log.Free;
+  end;
 end;
 
 initialization
