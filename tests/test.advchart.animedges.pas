@@ -61,6 +61,7 @@ type
     procedure TestEachSetOptionRendersAsUpstream;
     procedure TestBarsOnAPolarAsUpstream;
     procedure TestLabelLinesAsUpstream;
+    procedure TestAVisualMapsHandleLabelsFadeAsUpstream;
   end;
 
 implementation
@@ -519,6 +520,9 @@ begin
             leaf.Strings['stroke']]));
       end;
     end
+    else if pre = 'vl' then
+      { a visual map's handle label: its opacity now (its blur's fade) }
+      SameNum(name + ' opacity', FChart.VmHandleLabelOpacity(s, idx), leaf.Find('op'))
     else if pre = 'gh' then
     begin
       { a bar view's leaving elements: the bar ghosts of the series, their
@@ -610,6 +614,9 @@ begin
       FChart.SetOption(ev.Objects['option'].AsJSON, False);
       RenderNow;
     end
+    else if act = 'move' then
+      { the pointer, no paint after it (as an action) }
+      FChart.Move(ev.Integers['x'], ev.Integers['y'])
     else if act = 'mergeq' then
       { the next setOption comes before any paint }
       FChart.SetOption(ev.Objects['option'].AsJSON, False)
@@ -687,6 +694,11 @@ end;
 procedure TAdvChartAnimEdgesOracleTest.TestLabelLinesAsUpstream;
 begin
   RunGroup('guide', 300);
+end;
+
+procedure TAdvChartAnimEdgesOracleTest.TestAVisualMapsHandleLabelsFadeAsUpstream;
+begin
+  RunGroup('vmap', 20);
 end;
 
 initialization

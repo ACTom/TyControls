@@ -21132,6 +21132,260 @@
    ]
   },
   {
+   "id": "vm-blur",
+   "group": "vmap",
+   "note": "the pointer over a continuous visualMap's bar shows the indicator: api.enterBlur on each handle label, whose stateTransition ({duration: 200}) fades it to its blur opacity 0.1; off the bar it fades back",
+   "W": 400,
+   "H": 300,
+   "option": {
+    "animation": true,
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "visualMap": {
+     "type": "continuous",
+     "min": 0,
+     "max": 100,
+     "calculable": true,
+     "left": 10,
+     "bottom": 20,
+     "itemHeight": 100,
+     "itemWidth": 20
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        10
+       ],
+       [
+        2,
+        50
+       ],
+       [
+        3,
+        90
+       ]
+      ]
+     }
+    ]
+   },
+   "probes": [
+    "vmlab"
+   ],
+   "events": [
+    {
+     "t": 2999,
+     "do": "sample",
+     "rec": {
+      "vl0/0": {
+       "op": "3ff0000000000000",
+       "blur": false,
+       "n": 0
+      },
+      "vl0/1": {
+       "op": "3ff0000000000000",
+       "blur": false,
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 3000,
+     "do": "move",
+     "x": 38,
+     "y": 209
+    },
+    {
+     "t": 3000,
+     "do": "sample",
+     "rec": {
+      "vl0/0": {
+       "op": "3ff0000000000000",
+       "blur": true,
+       "n": 1
+      },
+      "vl0/1": {
+       "op": "3ff0000000000000",
+       "blur": true,
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3001,
+     "do": "sample",
+     "rec": {
+      "vl0/0": {
+       "op": "3ff0000000000000",
+       "blur": true,
+       "n": 1
+      },
+      "vl0/1": {
+       "op": "3ff0000000000000",
+       "blur": true,
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3050,
+     "do": "sample",
+     "rec": {
+      "vl0/0": {
+       "op": "3fe8f1a9fbe76c8b",
+       "blur": true,
+       "n": 1
+      },
+      "vl0/1": {
+       "op": "3fe8f1a9fbe76c8b",
+       "blur": true,
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3100,
+     "do": "sample",
+     "rec": {
+      "vl0/0": {
+       "op": "3fe1be76c8b43958",
+       "blur": true,
+       "n": 1
+      },
+      "vl0/1": {
+       "op": "3fe1be76c8b43958",
+       "blur": true,
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3199,
+     "do": "sample",
+     "rec": {
+      "vl0/0": {
+       "op": "3fbbe76c8b439580",
+       "blur": true,
+       "n": 1
+      },
+      "vl0/1": {
+       "op": "3fbbe76c8b439580",
+       "blur": true,
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3200,
+     "do": "sample",
+     "rec": {
+      "vl0/0": {
+       "op": "3fbac083126e9790",
+       "blur": true,
+       "n": 1
+      },
+      "vl0/1": {
+       "op": "3fbac083126e9790",
+       "blur": true,
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3201,
+     "do": "sample",
+     "rec": {
+      "vl0/0": {
+       "op": "3fb9999999999998",
+       "blur": true,
+       "n": 0
+      },
+      "vl0/1": {
+       "op": "3fb9999999999998",
+       "blur": true,
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 4000,
+     "do": "move",
+     "x": 300,
+     "y": 50
+    },
+    {
+     "t": 4000,
+     "do": "sample",
+     "rec": {
+      "vl0/0": {
+       "op": "3fb9999999999998",
+       "blur": false,
+       "n": 1
+      },
+      "vl0/1": {
+       "op": "3fb9999999999998",
+       "blur": false,
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 4001,
+     "do": "sample",
+     "rec": {
+      "vl0/0": {
+       "op": "3fb9999999999998",
+       "blur": false,
+       "n": 1
+      },
+      "vl0/1": {
+       "op": "3fb9999999999998",
+       "blur": false,
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 4100,
+     "do": "sample",
+     "rec": {
+      "vl0/0": {
+       "op": "3fe174bc6a7ef9db",
+       "blur": false,
+       "n": 1
+      },
+      "vl0/1": {
+       "op": "3fe174bc6a7ef9db",
+       "blur": false,
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 4201,
+     "do": "sample",
+     "rec": {
+      "vl0/0": {
+       "op": "3ff0000000000000",
+       "blur": false,
+       "n": 0
+      },
+      "vl0/1": {
+       "op": "3ff0000000000000",
+       "blur": false,
+       "n": 0
+      }
+     }
+    }
+   ]
+  },
+  {
    "id": "fn-update",
    "group": "funnel",
    "note": "a merge changes the values (the order changes): each piece updateProps its opacity and its four points, its outer label's style x / y (update timing, its row)",

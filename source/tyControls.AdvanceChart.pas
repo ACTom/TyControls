@@ -1377,6 +1377,14 @@ type
       pointer where it was last); where the hovered target was found }
     FVmLive: array of TTyVmLive;
     FVmIndBag, FVmLabBag: array of TTyAnimBag;
+    { [R5-I] the handle labels' opacity ('h0', 'h1'): their blur fades
+      (stateTransition {duration: 200}) }
+    FVmBlurBag: array of TTyAnimBag;
+    { [R5-I] a blur's fade waiting for the frame that applies it (api.enterBlur
+      marks the state; the next frame's render applies it, its animator
+      stepping from the frame after): the target per visual map and handle,
+      NaN for none }
+    FVmBlurDue: array of array[0..1] of Double;
     FVmAnim: TTyAnimation;
     { THE GRAPHIC COMPONENT [Batch 122]: its model (the flattened element
       list and the options pending for the view), its view (the elements by
@@ -2416,6 +2424,7 @@ type
     procedure DoHighDownBatch(APayload: TJSONObject);
     function VmLive_: Boolean;
     function VmLiveDraw(AIndex: Integer): TTyVmLiveDraw;
+    procedure VmBlurFlush;
     procedure SolveDataZoomViews(const AMeasurer: ITyTextMeasurer; APPI: Integer);
     procedure SolveMarkers(APPI: Integer);
     function MarkerSeriesColorCss(ASlot: Integer): string;
@@ -4643,6 +4652,9 @@ type
       moved, the drag and hover flags, the hover link's items, the element
       states and the indicator where it is now. Alive False before a render. }
     function VisualMapLive(AIndex: Integer): TTyVmLive;
+    { [R5-I] a continuous visual map's handle label's opacity as drawn now
+      (its blur's fade) }
+    function VmHandleLabelOpacity(AIndex, AHandle: Integer): Double;
     { what the pointer at (AX, AY) is over of a visualMap, as zrender would
       find it: 'vm0.inRange', 'vm0.outOfRange', 'vm0.handle1', 'vm0.label0',
       'vm0.text1', 'vm0.item3.symbol', 'vm0.item3.label', 'vm0.ends0'; ''

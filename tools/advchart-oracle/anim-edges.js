@@ -313,6 +313,15 @@ const PROBES = {
       });
     });
   },
+  // a continuous visualMap's handle labels: their opacity (a blur's fade)
+  vmlab(chart, rec) {
+    const v = chart._componentsViews.find(q => q && q.type === 'visualMap.continuous');
+    const ls = v && v._shapes && v._shapes.handleLabels;
+    if (!ls) return;
+    ls.forEach((lb, h) => {
+      rec['vl0/' + h] = { op: opOf(lb), blur: lb.hoverState === 1, n: nClip(lb) };
+    });
+  },
   // a funnel's pieces and their labels
   funnel(chart, rec, c) {
     chart.getModel().eachSeries(sm => {
@@ -488,6 +497,15 @@ add('guide', 'lg-states', "hovering a slice whose label line has an emphasis lin
     ...after([0, 1, 50, 150, 299, 300, 301], T1),
     { t: T1 + 1000, do: 'act', action: { type: 'downplay', seriesIndex: 0, dataIndex: 1 } }, ...after([0, 1, 150, 301], T1 + 1000)], { rows: [1] });
 
+// ---- visualMap ----
+add('vmap', 'vm-blur', "the pointer over a continuous visualMap's bar shows the indicator: api.enterBlur on each handle label, whose stateTransition ({duration: 200}) fades it to its blur opacity 0.1; off the bar it fades back",
+  { animation: true, xAxis: { type: 'value' }, yAxis: { type: 'value' },
+    visualMap: { type: 'continuous', min: 0, max: 100, calculable: true, left: 10, bottom: 20, itemHeight: 100, itemWidth: 20 },
+    series: [{ type: 'scatter', data: [[1, 10], [2, 50], [3, 90]] }] },
+  ['vmlab'],
+  [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'move', x: 38, y: 209 }, ...after([0, 1, 50, 100, 199, 200, 201], T1),
+    { t: T1 + 1000, do: 'move', x: 300, y: 50 }, ...after([0, 1, 100, 201], T1 + 1000)]);
+
 // ---- funnel ----
 const FN = (data, extra, s) => Object.assign({ animation: true,
   series: [Object.assign({ type: 'funnel', left: 40, width: 260, data }, LIN, s || {})] }, extra || {});
@@ -580,6 +598,7 @@ function runCase(c) {
       else if (ev.do === 'merge' || ev.do === 'mergeq') quiet(() => chart.setOption(materialize(clone(ev.option))));
       else if (ev.do === 'set') quiet(() => chart.setOption(materialize(clone(ev.option)), true));
       else if (ev.do === 'act') quiet(() => chart.dispatchAction(clone(ev.action)));
+      else if (ev.do === 'move') quiet(() => zr(chart).handler.mousemove({ zrX: ev.x, zrY: ev.y, which: 1, preventDefault() {}, stopPropagation() {} }));
       else must(false, 'an event it does not know: ' + ev.do);
       out.events.push(o);
     });

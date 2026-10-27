@@ -2018,6 +2018,8 @@ begin
   if VmLive_ then
   begin
     FVmAnim.Update(ANowMs);
+    { [R5-I] this frame applies the blurs the pointer marked }
+    VmBlurFlush;
     DropStatic;
     InvalidateFrame;
     if not VmLive_ and not FAnimLive then AnimArmTimer;
