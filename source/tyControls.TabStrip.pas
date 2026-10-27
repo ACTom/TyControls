@@ -165,6 +165,7 @@ type
       reconciling their own page/data backing. }
     FTabIndex: Integer;
     FPendingTabIndex: Integer;
+    FApplyingStreamed: Boolean;   { #145: Loaded is applying the saved TabIndex -- no events }
     { Header overflow scroll. FHeaderScroll is the device-px amount the header
       strip is shifted left (>=0). FShowScrollAffordance and the two arrow rects
       are recomputed at the end of RebuildLayout. Kept protected so white-box
@@ -1895,7 +1896,7 @@ begin
     vetoed we keep the old index and commit nothing (no DoSelectTab, no fade, no
     OnChange). }
   Allow := True;
-  if Assigned(FOnChanging) then
+  if Assigned(FOnChanging) and not FApplyingStreamed then
     FOnChanging(Self, Clamped, Allow);
   if not Allow then Exit;
   FTabIndex := Clamped;
@@ -1920,7 +1921,7 @@ begin
     ScrollTabIntoView(FTabIndex);
   end;
   Invalidate;
-  if Assigned(FOnChange) then
+  if Assigned(FOnChange) and not FApplyingStreamed then
     FOnChange(Self);
   { A design-time switch (a designer tab click, a component-editor verb) changed a
     published value behind the IDE's back. TWO pings, because the IDE splits the
@@ -2250,7 +2251,14 @@ begin
     declares it as its default, so -1 is never written. }
   if FPendingTabIndex <> -1 then
   begin
-    SetTabIndex(FPendingTabIndex);
+    { #145: the saved selection is applied, not chosen: no OnChanging -- which could refuse the
+      page the form was saved on -- and no OnChange, both of which ran before FormCreate. }
+    FApplyingStreamed := True;
+    try
+      SetTabIndex(FPendingTabIndex);
+    finally
+      FApplyingStreamed := False;
+    end;
     FPendingTabIndex := -1;
   end;
 end;
