@@ -440,7 +440,8 @@ begin
   if not AProxied and c.Has[stkLineWidth] then
     AEl.Style.StrokeWidthLogical := c.Num[stkLineWidth];
   if not AProxied then StWriteShadow(AEl, c, r);
-  if c.Has[stkSmooth] and not StSameNum(c.Num[stkSmooth], r.Num[stkSmooth]) then
+  { [R5-I] on a proxy the smooth too is the frame's (it tweens) }
+  if not AProxied and c.Has[stkSmooth] and not StSameNum(c.Num[stkSmooth], r.Num[stkSmooth]) then
     AEl.Shape.Cmds := TyLabelLineCmds(AEl.Shape.Points, c.Num[stkSmooth]);
 end;
 
@@ -3160,6 +3161,12 @@ begin
     TyAnimPropPut(Result.Props, 'scaleX', TyAnimNum(rx.Num * AM.Num[stkScale]));
     TyAnimPropPut(Result.Props, 'scaleY', TyAnimNum(ry.Num * AM.Num[stkScale]));
   end;
+  { [R5-I] a label line's smooth }
+  if AM.Has[stkSmooth] and P.HasStKey('shape.smooth') then
+  begin
+    TyAnimPropPut(Result.Props, 'shape.smooth', TyAnimNum(AM.Num[stkSmooth]));
+    Result.HasShape := True;
+  end;
   { PieView: the emphasis shape is r = layout.r + scaleSize }
   if AM.Has[stkR] and P.HasStKey('shape.r') then
   begin
@@ -3321,6 +3328,11 @@ begin
     Seed('style.stroke', StColourValue(AEl.Rest, stkStroke));
     Seed('style.lineWidth', TyAnimNum(AEl.Rest.Num[stkLineWidth]));
     Seed('style.opacity', TyAnimNum(AEl.Rest.Num[stkOpacity]));
+    { [R5-I] a label line's smooth: setLabelLineState gives every state a
+      shape with its smooth, which the state transition tweens as a number
+      [was: written at once] }
+    if AKind = cStPxGuide then
+      Seed('shape.smooth', TyAnimNum(AEl.Rest.Num[stkSmooth]));
     { [R2-I3] the pen's phase, where some state says one: it tweens }
     if AEl.Decl[stnSelect].Has[stkDashOffset] or AEl.Decl[stnEmphasis].Has[stkDashOffset]
       or AEl.Decl[stnBlur].Has[stkDashOffset] then

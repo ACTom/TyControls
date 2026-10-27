@@ -2169,6 +2169,9 @@ type
     function AnimGraphEdgeKeys(ASlot: Integer): TTyStringArray;
     { [R5-I] the polar bars' last shapes into FPolarBars, this render's kept }
     procedure PolarStyleTake;
+    { [R5-I] ... and those of a view the option no longer has: gone (each
+      setOption renders upstream, disposing the views it drops) }
+    procedure PolarStyleTrim;
     procedure AnimRowKeys(AStore: TTyDataStore; out AKeys: TTyStringArray;
       out ARaws: TTyIntegerArray);
     { A FULL UPDATE ANIMATES [Batch 96]: before its layout, the render it

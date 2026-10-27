@@ -805,6 +805,8 @@ end;
 
 procedure TTyCustomAdvanceChart.AfterSetOption(ALazy, ASilent: Boolean);
 begin
+  { [R5-I] the polar bars' elements of a view this option drops are gone }
+  PolarStyleTrim;
   { [R5-C] the update lays every label out again: no drift is kept }
   FLbDrifts := nil;
   FLbDragOn := False;

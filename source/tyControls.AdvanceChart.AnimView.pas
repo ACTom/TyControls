@@ -838,6 +838,11 @@ procedure TyShapeMove(var AShape: TTyChartShape; ADX, ADY: Double);
 { The first APercent of a polyline's length, as zrender's strokePercent draws
   it (PathProxy.rebuildPath). }
 function TyPolylinePrefix(const APoints: TTyPointFArray; APercent: Double): TTyPointFArray;
+{ [R5-I] ... and of a path of moves, lines and cubic curves: PathProxy's
+  _calculateLength (a curve's length over ten chords) and rebuildPath (the
+  segment where the length runs out cut at its share: a line at that point,
+  a curve subdivided there) -- the path built afresh, its data doubles }
+function TyPathCmdsPrefix(const ACmds: TTyPathCmdArray; APercent: Double): TTyPathCmdArray;
 { DataDiffer, one to one (data/DataDiffer.ts _executeOneToOne): the old
   rows in order -- an update with the first new row of the same key, else a
   remove -- then every new row left unmatched, in order, an add. }
@@ -5981,6 +5986,197 @@ begin
   end;
 end;
 
+function TyPathCmdsPrefix(const ACmds: TTyPathCmdArray; APercent: Double): TTyPathCmdArray;
+var
+  lens: TTyDoubleArray;
+  i, n, seg, nOut: Integer;
+  total, shown, acc, l, t, xi, yi, x0, y0, dx, dy: Double;
+  ox, oy: array[0..7] of Double;
+
+  function CubicAt(P0, P1, P2, P3, AT: Double): Double;
+  var onet: Double;
+  begin
+    onet := 1 - AT;
+    Result := onet * onet * (onet * P0 + 3 * AT * P1) + AT * AT * (AT * P3 + 3 * onet * P2);
+  end;
+
+  { curve.cubicLength(..., 10) }
+  function CubicLen(X0_, Y0_, X1, Y1, X2, Y2, X3, Y3: Double): Double;
+  var
+    k: Integer;
+    px, py, x, y, ex, ey, step, tt: Double;
+  begin
+    px := X0_;
+    py := Y0_;
+    Result := 0;
+    step := 1 / 10;
+    for k := 1 to 10 do
+    begin
+      tt := k * step;
+      x := CubicAt(X0_, X1, X2, X3, tt);
+      y := CubicAt(Y0_, Y1, Y2, Y3, tt);
+      ex := x - px;
+      ey := y - py;
+      Result := Result + Sqrt(ex * ex + ey * ey);
+      px := x;
+      py := y;
+    end;
+  end;
+
+  procedure Subdivide(P0, P1, P2, P3, AT: Double; var AOut: array of Double);
+  var p01, p12, p23, p012, p123, p0123: Double;
+  begin
+    p01 := (P1 - P0) * AT + P0;
+    p12 := (P2 - P1) * AT + P1;
+    p23 := (P3 - P2) * AT + P2;
+    p012 := (p12 - p01) * AT + p01;
+    p123 := (p23 - p12) * AT + p12;
+    p0123 := (p123 - p012) * AT + p012;
+    AOut[0] := P0;
+    AOut[1] := p01;
+    AOut[2] := p012;
+    AOut[3] := p0123;
+    AOut[4] := p0123;
+    AOut[5] := p123;
+    AOut[6] := p23;
+    AOut[7] := P3;
+  end;
+
+  procedure Emit(const ACmd: TTyPathCmd);
+  begin
+    if nOut >= Length(Result) then SetLength(Result, nOut * 2 + 4);
+    Result[nOut] := ACmd;
+    Inc(nOut);
+  end;
+
+var c: TTyPathCmd;
+begin
+  n := Length(ACmds);
+  if not (APercent < 1) then Exit(Copy(ACmds, 0, n));
+  Result := nil;
+  nOut := 0;
+  { _calculateLength: a segment of no extent has none (the unit is 0) }
+  SetLength(lens, n);
+  seg := 0;
+  total := 0;
+  xi := 0;
+  yi := 0;
+  x0 := 0;
+  y0 := 0;
+  for i := 0 to n - 1 do
+  begin
+    l := -1;
+    case ACmds[i].Kind of
+      pckMove:
+        begin
+          xi := ACmds[i].X;
+          yi := ACmds[i].Y;
+          x0 := xi;
+          y0 := yi;
+        end;
+      pckLine:
+        begin
+          dx := ACmds[i].X - xi;
+          dy := ACmds[i].Y - yi;
+          if (Abs(dx) > 0) or (Abs(dy) > 0) then
+          begin
+            l := Sqrt(dx * dx + dy * dy);
+            xi := ACmds[i].X;
+            yi := ACmds[i].Y;
+          end;
+        end;
+      pckCurve:
+        begin
+          l := CubicLen(xi, yi, ACmds[i].X1, ACmds[i].Y1, ACmds[i].X2, ACmds[i].Y2,
+            ACmds[i].X, ACmds[i].Y);
+          xi := ACmds[i].X;
+          yi := ACmds[i].Y;
+        end;
+      pckClose:
+        begin
+          dx := x0 - xi;
+          dy := y0 - yi;
+          l := Sqrt(dx * dx + dy * dy);
+          xi := x0;
+          yi := y0;
+        end;
+    end;
+    if l >= 0 then
+    begin
+      lens[seg] := l;
+      Inc(seg);
+      total := total + l;
+    end;
+  end;
+  shown := APercent * total;
+  { `if (!displayedLength) return` }
+  if (shown = 0) or IsNan(shown) then Exit;
+  { rebuildPath }
+  seg := 0;
+  acc := 0;
+  xi := 0;
+  yi := 0;
+  for i := 0 to n - 1 do
+  begin
+    case ACmds[i].Kind of
+      pckMove:
+        begin
+          xi := ACmds[i].X;
+          yi := ACmds[i].Y;
+          Emit(ACmds[i]);
+        end;
+      pckLine:
+        begin
+          if (Abs(ACmds[i].X - xi) > 0) or (Abs(ACmds[i].Y - yi) > 0) then
+          begin
+            l := lens[seg];
+            Inc(seg);
+            if acc + l > shown then
+            begin
+              t := (shown - acc) / l;
+              c := ACmds[i];
+              c.X := xi * (1 - t) + ACmds[i].X * t;
+              c.Y := yi * (1 - t) + ACmds[i].Y * t;
+              Emit(c);
+              Break;
+            end;
+            acc := acc + l;
+            Emit(ACmds[i]);
+            xi := ACmds[i].X;
+            yi := ACmds[i].Y;
+          end;
+        end;
+      pckCurve:
+        begin
+          l := lens[seg];
+          Inc(seg);
+          if acc + l > shown then
+          begin
+            t := (shown - acc) / l;
+            Subdivide(xi, ACmds[i].X1, ACmds[i].X2, ACmds[i].X, t, ox);
+            Subdivide(yi, ACmds[i].Y1, ACmds[i].Y2, ACmds[i].Y, t, oy);
+            c := ACmds[i];
+            c.X1 := ox[1];
+            c.Y1 := oy[1];
+            c.X2 := ox[2];
+            c.Y2 := oy[2];
+            c.X := ox[3];
+            c.Y := oy[3];
+            Emit(c);
+            Break;
+          end;
+          acc := acc + l;
+          Emit(ACmds[i]);
+          xi := ACmds[i].X;
+          yi := ACmds[i].Y;
+        end;
+      pckClose:
+        Emit(ACmds[i]);
+    end;
+  end;
+  SetLength(Result, nOut);
+end;
+
 { Nothing of it drawn and nothing of it hit, in this frame. }
 procedure MakeInkless(var AEl: TTyChartElement);
 begin
@@ -6886,15 +7082,21 @@ begin
           AEl.Shape.Points := pts;
         end;
         a := NumOr(AProxy, 'style.strokePercent', 1);
-        AEl.Shape.Points := TyPolylinePrefix(AEl.Shape.Points, a);
-        { A SMOOTH LINE follows its moving points; drawing in, it is drawn
-          straight [Batch 112] }
+        { A SMOOTH LINE follows its moving points [Batch 112]; [R5-I] drawing
+          in, the first part of its curve (rebuildPath at the percent)
+          [was: a straight prefix] }
+        if Length(AEl.Shape.Cmds) > 0 then
+          AEl.Shape.Cmds := TyLabelLineCmds(AEl.Shape.Points, AEl.Caption.LgSmooth);
         if Length(AEl.Shape.Cmds) > 0 then
         begin
-          if a < 1 then AEl.Shape.Cmds := nil
-          else AEl.Shape.Cmds := TyLabelLineCmds(AEl.Shape.Points, AEl.Caption.LgSmooth);
+          if a < 1 then AEl.Shape.Cmds := TyPathCmdsPrefix(AEl.Shape.Cmds, a);
+          if Length(AEl.Shape.Cmds) < 2 then MakeInkless(AEl);
+        end
+        else
+        begin
+          AEl.Shape.Points := TyPolylinePrefix(AEl.Shape.Points, a);
+          if Length(AEl.Shape.Points) < 2 then MakeInkless(AEl);
         end;
-        if Length(AEl.Shape.Points) < 2 then MakeInkless(AEl);
       end;
     carGaugeDetail:
       ApplyText(AEl, AProxy);
@@ -7257,6 +7459,14 @@ begin
     begin
       if not Off(key, v, rest) then Continue;
       if v.Kind = avkNumber then AEl.Style.StrokeWidthLogical := v.Num;
+    end
+    { [R5-I] a label line's smooth, tweening: its path again at the smooth
+      it has now (buildLabelLinePath) }
+    else if key = 'shape.smooth' then
+    begin
+      if not Off(key, v, rest) then Continue;
+      if (v.Kind = avkNumber) and (Length(AEl.Shape.Points) >= 2) then
+        AEl.Shape.Cmds := TyLabelLineCmds(AEl.Shape.Points, v.Num);
     end
     { [R2-I3] a state's dashOffset, tweening }
     else if key = 'style.lineDashOffset' then

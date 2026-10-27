@@ -282,6 +282,37 @@ const PROBES = {
       });
     });
   },
+  // a pie's label lines: the commands a canvas frame draws of each --
+  // PathProxy.rebuildPath at its strokePercent over the path built afresh
+  // (a plain array: doubles) -- with its smooth and its strokePercent
+  pguide(chart, rec, c) {
+    chart.getModel().eachSeries(sm => {
+      if (sm.subType !== 'pie') return;
+      const data = sm.getData();
+      rowsOf(c, data).forEach(i => {
+        const el = data.getItemGraphicEl(i);
+        const g = el && el.getTextGuideLine();
+        if (!g || g.ignore || g.invisible) return;
+        if (!g.path) g.createPathProxy();
+        const PP = g.path.constructor;
+        const pp = new PP(false);
+        pp.beginPath();
+        g.buildPath(pp, g.shape, false);
+        const cmds = [];
+        const ctx = {
+          moveTo: (x, y) => cmds.push('M', hx(x), hx(y)),
+          lineTo: (x, y) => cmds.push('L', hx(x), hx(y)),
+          bezierCurveTo: (a, b, c2, d, e, f) => cmds.push('C', hx(a), hx(b), hx(c2), hx(d), hx(e), hx(f)),
+          quadraticCurveTo: (a, b, c2, d) => cmds.push('Q', hx(a), hx(b), hx(c2), hx(d)),
+          closePath: () => cmds.push('Z'),
+        };
+        const pc = g.style.strokePercent == null ? 1 : g.style.strokePercent;
+        pp.rebuildPath(ctx, pc);
+        rec['pg' + sm.seriesIndex + '/' + i] = { pc: hx(pc), smooth: hx(+g.shape.smooth || 0), cmds,
+          stroke: String(g.style.stroke), lw: hx(g.style.lineWidth == null ? 1 : g.style.lineWidth), n: nClip(g) };
+      });
+    });
+  },
   // a funnel's pieces and their labels
   funnel(chart, rec, c) {
     chart.getModel().eachSeries(sm => {
@@ -443,6 +474,19 @@ add('polar', 'pol-add', "a merge adds a radial bar: the creator's updateProps (i
   POL(true, { animationDelayUpdate: { $fn: 'idx*100' } }), ['pol'],
   [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'merge', option: { angleAxis: { data: ['a', 'b', 'c', 'd'] }, series: [{ data: [40, 70, 90, 60] }] } },
     ...after([0, 1, 100, 300, 500, 1001, 1301], T1)]);
+
+// ---- label lines ----
+const PIE = (s, extra) => Object.assign({ animation: true, animationDuration: 1000, animationEasing: 'linear',
+  series: [Object.assign({ type: 'pie', radius: '50%', data: [{ name: 'a', value: 40 }, { name: 'b', value: 25 }, { name: 'c', value: 20 },
+    { name: 'd', value: 15 }] }, s || {})] }, extra || {});
+add('guide', 'lg-smooth-in', "a pie's label lines with smooth 0.5 drawing in (LabelManager: strokePercent 0 -> 1, enter timing): a frame draws the first part of the CURVE (PathProxy.rebuildPath: the bezier subdivided where the length runs out), not a straight prefix",
+  PIE({ labelLine: { smooth: 0.5, length: 20, length2: 30, lineStyle: { color: '#336699' } } }), ['pguide'], after([0, 1, 100, 250, 500, 750, 999, 1000, 1001], 0));
+add('guide', 'lg-states', "hovering a slice whose label line has an emphasis lineStyle (colour, width) and smooth: updateStates gives the line the series' stateTransition -- its stroke and width tween (300 ms cubicOut) and its smooth too",
+  PIE({ labelLine: { smooth: 0.2, lineStyle: { color: '#336699' } }, emphasis: { labelLine: { smooth: 0.8, lineStyle: { color: '#ff0000', width: 4 } } } }, { animationDuration: 10 }),
+  ['pguide'],
+  [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'act', action: { type: 'highlight', seriesIndex: 0, dataIndex: 1 } },
+    ...after([0, 1, 50, 150, 299, 300, 301], T1),
+    { t: T1 + 1000, do: 'act', action: { type: 'downplay', seriesIndex: 0, dataIndex: 1 } }, ...after([0, 1, 150, 301], T1 + 1000)], { rows: [1] });
 
 // ---- funnel ----
 const FN = (data, extra, s) => Object.assign({ animation: true,

@@ -15,6 +15,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.Controller,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Anim,
      tyControls.AdvanceChart.AnimView, tyControls.AdvanceChart.AnimOpt, tyControls.AdvanceChart.Shape,
+     tyControls.AdvanceChart.Color,
      tyControls.AdvanceChart.Parallel, tyControls.AdvanceChart.ThemeRiver,
      tyControls.AdvanceChart.Chord, tyControls.AdvanceChart.PolarBar,
      tyControls.AdvanceChart.ZrPath,
@@ -41,6 +42,7 @@ type
     function RoleEl(ASeries, ARow: Integer; ARole: TTyChartAnimRole;
       out AEl: TTyChartElement): Boolean;
     procedure SameRun(const AWhat: string; AProxy: TTyChartAnimProxy; AWant: TJSONObject);
+    procedure SameGuideCmds(const AWhat: string; const AEl: TTyChartElement; AWant: TJSONArray);
     function HIdx100(ADataIndex: Integer; AHasIndex: Boolean;
       const AParams: TTyAnimDelayParams): Double;
     procedure NewChart(AW, AH: Integer);
@@ -58,6 +60,7 @@ type
     procedure TestTheMarkersAsUpstream;
     procedure TestEachSetOptionRendersAsUpstream;
     procedure TestBarsOnAPolarAsUpstream;
+    procedure TestLabelLinesAsUpstream;
   end;
 
 implementation
@@ -226,6 +229,81 @@ begin
   end;
 end;
 
+{ a guide's path as drawn: its commands (move, line, curve) against the
+  ones PathProxy.rebuildPath gave a canvas }
+procedure TAdvChartAnimEdgesOracleTest.SameGuideCmds(const AWhat: string;
+  const AEl: TTyChartElement; AWant: TJSONArray);
+var
+  got: array of string;
+  i, k: Integer;
+
+  procedure Push(const S: string);
+  begin
+    SetLength(got, Length(got) + 1);
+    got[High(got)] := S;
+  end;
+
+  procedure PushN(A: Double);
+  begin
+    Push(HexOf(A));
+  end;
+
+begin
+  got := nil;
+  if Length(AEl.Shape.Cmds) > 0 then
+    for i := 0 to High(AEl.Shape.Cmds) do
+      case AEl.Shape.Cmds[i].Kind of
+        pckMove:
+          begin
+            Push('M');
+            PushN(AEl.Shape.Cmds[i].X);
+            PushN(AEl.Shape.Cmds[i].Y);
+          end;
+        pckLine:
+          begin
+            Push('L');
+            PushN(AEl.Shape.Cmds[i].X);
+            PushN(AEl.Shape.Cmds[i].Y);
+          end;
+        pckCurve:
+          begin
+            Push('C');
+            PushN(AEl.Shape.Cmds[i].X1);
+            PushN(AEl.Shape.Cmds[i].Y1);
+            PushN(AEl.Shape.Cmds[i].X2);
+            PushN(AEl.Shape.Cmds[i].Y2);
+            PushN(AEl.Shape.Cmds[i].X);
+            PushN(AEl.Shape.Cmds[i].Y);
+          end;
+        pckClose: Push('Z');
+      end
+  else if AEl.Style.StrokeWidthLogical > 0 then
+    for i := 0 to High(AEl.Shape.Points) do
+    begin
+      if i = 0 then Push('M') else Push('L');
+      PushN(AEl.Shape.Points[i].X);
+      PushN(AEl.Shape.Points[i].Y);
+    end;
+  Inc(FCompared);
+  if Length(got) <> AWant.Count then
+  begin
+    Bad(Format('%s: %d command items, upstream %d', [AWhat, Length(got), AWant.Count]));
+    Exit;
+  end;
+  for k := 0 to High(got) do
+  begin
+    Inc(FCompared);
+    if (Length(got[k]) = 1) or (Length(AWant.Strings[k]) = 1) then
+    begin
+      if got[k] <> AWant.Strings[k] then
+        Bad(Format('%s item %d: %s, upstream %s', [AWhat, k, got[k], AWant.Strings[k]]));
+    end
+    else if not SameBits(FromHex(got[k]), FromHex(AWant.Strings[k])) then
+      Bad(Format('%s item %d: %s, upstream %s', [AWhat, k, Txt(FromHex(got[k])),
+        Txt(FromHex(AWant.Strings[k]))]));
+  end;
+end;
+
 { a proxy's key, or the rest value where the proxy has none }
 function PNumOr(P: TTyChartAnimProxy; const AKey: string; AOr: Double): Double;
 begin
@@ -282,6 +360,7 @@ var
   got: TTyAnimValue;
   gone: TJSONArray;
   ops: TTyDoubleArray;
+  c: TTyChartColor;
 begin
   for i := 0 to ARec.Count - 1 do
   begin
@@ -418,6 +497,28 @@ begin
         SameNum(name + ' label turn', el.Caption.SecRot, leaf.Find('rot'));
       SameRun(name, p, leaf);
     end
+    else if pre = 'pg' then
+    begin
+      { a pie's label line as a frame draws it: its commands (a curve's
+        first part while it draws in), its stroke and width (a state's
+        tween) }
+      if not RoleEl(s, idx, carGuide, el) then
+      begin
+        Bad(name + ': not drawn');
+        Continue;
+      end;
+      SameGuideCmds(name, el, leaf.Arrays['cmds']);
+      { nothing drawn: no width to speak of }
+      if leaf.Arrays['cmds'].Count > 0 then
+        SameNum(name + ' width', el.Style.StrokeWidthLogical, leaf.Find('lw'));
+      if TyTryParseChartColor(leaf.Strings['stroke'], c) then
+      begin
+        Inc(FCompared);
+        if (el.Style.StrokeColor and $FFFFFF) <> (c and $FFFFFF) then
+          Bad(Format('%s stroke %s, upstream %s', [name, IntToHex(el.Style.StrokeColor, 8),
+            leaf.Strings['stroke']]));
+      end;
+    end
     else if pre = 'gh' then
     begin
       { a bar view's leaving elements: the bar ghosts of the series, their
@@ -518,10 +619,10 @@ begin
       RenderNow;
     end
     else if act = 'act' then
-    begin
-      FChart.DispatchAction(ev.Objects['action'].AsJSON);
-      RenderNow;
-    end
+      { no paint after it: upstream applies an action's states in the frame
+        that follows (its animators step from the one after) -- the next
+        sample's tick and paint are that frame }
+      FChart.DispatchAction(ev.Objects['action'].AsJSON)
     else
       Bad('an event it does not know: ' + act);
   end;
@@ -581,6 +682,11 @@ end;
 procedure TAdvChartAnimEdgesOracleTest.TestBarsOnAPolarAsUpstream;
 begin
   RunGroup('polar', 600);
+end;
+
+procedure TAdvChartAnimEdgesOracleTest.TestLabelLinesAsUpstream;
+begin
+  RunGroup('guide', 300);
 end;
 
 initialization

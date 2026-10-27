@@ -627,6 +627,39 @@ begin
   FPolarStyleMem := mem;
 end;
 
+procedure TTyCustomAdvanceChart.PolarStyleTrim;
+var
+  keys: TTyStringArray;
+  mem: TTyPolarStyleMemArray;
+  m, i: Integer;
+  d, t: TJSONData;
+  alive: Boolean;
+begin
+  if Length(FPolarStyleMem) = 0 then Exit;
+  keys := AnimViewKeys;
+  mem := nil;
+  for m := 0 to High(FPolarStyleMem) do
+  begin
+    alive := False;
+    for i := 0 to High(keys) do
+    begin
+      d := FOption.ComponentAt('series', i);
+      if not (d is TJSONObject) then Continue;
+      t := TJSONObject(d).Find('type');
+      if (t <> nil) and (t.JSONType = jtString)
+        and (keys[i] + #1 + t.AsString = FPolarStyleMem[m].Key) then
+      begin
+        alive := True;
+        Break;
+      end;
+    end;
+    if not alive then Continue;
+    SetLength(mem, Length(mem) + 1);
+    mem[High(mem)] := FPolarStyleMem[m];
+  end;
+  FPolarStyleMem := mem;
+end;
+
 procedure TTyCustomAdvanceChart.AnimRowKeys(AStore: TTyDataStore; out AKeys: TTyStringArray;
   out ARaws: TTyIntegerArray);
 var
