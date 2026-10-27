@@ -40,6 +40,11 @@ type
     { the toolbox's brush and its history [Batch 125]: Start and Stop are
       startValue and endValue (setRawRange in value mode) }
     IsValue: Boolean;
+    { [R5-G] AN API PAYLOAD'S setRawRange, end by end: the JSON of the
+      pairs it wrote -- start / startValue, end / endValue, each pair
+      written whole (a null for the one not given) when either is -- which
+      the dataZoom's settled option takes; '' for every other dispatcher }
+    Overlay: string;
   end;
   TTyDzActionItemArray = array of TTyDzActionItem;
 

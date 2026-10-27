@@ -66,6 +66,8 @@ type
     FColours: Boolean;
     FBmp: TBGRABitmap;
     FSavedSource: TTyDateTimeNameSource;
+    { [R5-G] the timeline slot CheckView and CheckTl read }
+    FViewAt: Integer;
     procedure Miss(const AWhat: string);
     procedure MissAt(const AWhere, AWhat: string);
     procedure SameHex(const AWhat: string; AGot: Double; AWant: TJSONData);
@@ -74,6 +76,7 @@ type
     procedure RenderNow;
     procedure SetClock(AMs: Double);
     procedure CheckState(AState: TJSONObject);
+    procedure CheckTl(AState: TJSONObject);
     procedure CheckView(AView: TJSONData);
     procedure CheckEl(AEl: TTyGfxEl; AIndex: Integer; AWant: TJSONObject);
     procedure CheckBars(ABars: TJSONArray);
@@ -91,6 +94,8 @@ type
     procedure TestPlayAsUpstream;
     procedure TestActionsAndOptionAsUpstream;
     procedure TestAnimationAsUpstream;
+    { [R5-G] tools/advchart-oracle/timeline-multi.js: several timelines }
+    procedure TestSeveralTimelinesAsUpstream;
   end;
 
   { What the oracle does not reach. }
@@ -190,6 +195,12 @@ function FixturePath: string;
 begin
   Result := ExtractFilePath(ParamStr(0)) + 'fixtures' + PathDelim
     + 'advchart-timeline.json';
+end;
+
+function MultiFixturePath: string;
+begin
+  Result := ExtractFilePath(ParamStr(0)) + 'fixtures' + PathDelim
+    + 'advchart-timeline-multi.json';
 end;
 
 function HexNum(AData: TJSONData): Double;
@@ -330,17 +341,28 @@ begin
 end;
 
 { an event's payload with the view's uid as the oracle writes it }
-function EventJson(const APayload: string): TJSONData;
+{ a `from` that is a timeline view's uid: '@view' the first's, '@view<k>'
+  the one in slot k's [R5-G] }
+function EventJson(AChart: TTyAdvanceChart; const APayload: string): TJSONData;
 var
   d: TJSONData;
   f: TJSONData;
+  k: Integer;
+  v: TTyTimelineView;
 begin
   d := GetJSON(APayload);
   if d is TJSONObject then
   begin
     f := TJSONObject(d).Find('from');
     if (f <> nil) and (f.JSONType = jtString) and (Copy(f.AsString, 1, 6) = 'ec_tl_') then
-      TJSONObject(d).Elements['from'] := TJSONString.Create('@view');
+      for k := 0 to AChart.TimelineViewCount - 1 do
+      begin
+        v := AChart.TimelineViewAt(k);
+        if (v = nil) or (v.Uid <> f.AsString) then Continue;
+        if k = 0 then TJSONObject(d).Elements['from'] := TJSONString.Create('@view')
+        else TJSONObject(d).Elements['from'] := TJSONString.Create('@view' + IntToStr(k));
+        Break;
+      end;
   end;
   Result := d;
 end;
@@ -586,7 +608,7 @@ begin
   end;
   SameStr(w + '.states', gotFill, wantFill);
   Inc(FCompared);
-  if FChart.TimelineView.Hover[AIndex] <> (AWant.Integers['hover'] = 2) then
+  if FChart.TimelineViewAt(FViewAt).Hover[AIndex] <> (AWant.Integers['hover'] = 2) then
     Miss(w + '.hover: upstream ' + IntToStr(AWant.Integers['hover']));
   { the bounding rect }
   r := TyGfxRect(AEl, meas);
@@ -672,7 +694,7 @@ var
   end;
 
 begin
-  v := FChart.TimelineView;
+  v := FChart.TimelineViewAt(FViewAt);
   Inc(FCompared);
   if (AView = nil) or (AView.JSONType = jtNull) then
   begin
@@ -717,20 +739,15 @@ begin
   end;
 end;
 
-procedure TAdvChartTimelineOracleTest.CheckState(AState: TJSONObject);
+{ the model, the timer and the view of the timeline in slot FViewAt }
+procedure TAdvChartTimelineOracleTest.CheckTl(AState: TJSONObject);
 var
   d: TJSONData;
   m: TJSONObject;
   v: TTyTimelineView;
-  evs: TJSONArray;
-  i: Integer;
-  got, want: TJSONData;
-  where: string;
-  p: Integer;
   due: Double;
 begin
-  Inc(FStates);
-  v := FChart.TimelineView;
+  v := FChart.TimelineViewAt(FViewAt);
   { the model }
   d := AState.Find('model');
   Inc(FCompared);
@@ -753,7 +770,7 @@ begin
     if v.PlayState <> TyTlTruthy(m.Find('autoPlay')) then Miss('autoPlay');
   end;
   { the timer }
-  due := FChart.TimelineDue;
+  due := FChart.TimelineDueAt(FViewAt);
   d := AState.Find('timer');
   Inc(FCompared);
   if (d = nil) or (d.JSONType = jtNull) then
@@ -762,6 +779,20 @@ begin
   end
   else if IsNan(due) or (due - T0 <> d.AsFloat) then
     Miss(Format('timer: upstream %g, here %g', [d.AsFloat, due - T0]));
+  CheckView(AState.Find('view'));
+end;
+
+procedure TAdvChartTimelineOracleTest.CheckState(AState: TJSONObject);
+var
+  evs, more: TJSONArray;
+  i: Integer;
+  got, want: TJSONData;
+  where: string;
+  p: Integer;
+begin
+  Inc(FStates);
+  FViewAt := 0;
+  CheckTl(AState);
   { the events }
   evs := AState.Arrays['events'];
   Inc(FCompared);
@@ -774,7 +805,7 @@ begin
       p := Pos(#9, FChart.Events[i]);
       SameStr(Format('event[%d].type', [i]), Copy(FChart.Events[i], 1, p - 1),
         evs.Objects[i].Strings['type']);
-      got := EventJson(Copy(FChart.Events[i], p + 1, MaxInt));
+      got := EventJson(FChart, Copy(FChart.Events[i], p + 1, MaxInt));
       want := GetJSON(evs.Objects[i].Strings['payload']);
       try
         Inc(FCompared);
@@ -786,8 +817,21 @@ begin
     end;
   FChart.Events.Clear;
   CheckTree(AState.Find('tree'));
-  CheckView(AState.Find('view'));
   if AState.Find('bars') is TJSONArray then CheckBars(TJSONArray(AState.Find('bars')));
+  { [R5-G] every timeline after the first: its model, timer and view }
+  if AState.Find('more') is TJSONArray then
+  begin
+    more := TJSONArray(AState.Find('more'));
+    Inc(FCompared);
+    if FChart.TimelineViewCount <> more.Count + 1 then
+      Miss(Format('timeline slots: upstream %d, here %d', [more.Count + 1, FChart.TimelineViewCount]));
+    for i := 0 to more.Count - 1 do
+    begin
+      FViewAt := i + 1;
+      CheckTl(more.Objects[i]);
+    end;
+    FViewAt := 0;
+  end;
   { [R3-B] the visualMap models' visuals and the items; the graphic view }
   if AState.Find('vis') is TJSONObject then
     Inc(FCompared, TyMvCheckVis(FChart, FChart.Frame, TJSONObject(AState.Find('vis')), 'vis', @MissAt));
@@ -920,6 +964,21 @@ end;
 procedure TAdvChartTimelineOracleTest.TestAnimationAsUpstream;
 begin
   RunGroup(['anim']);
+end;
+
+procedure TAdvChartTimelineOracleTest.TestSeveralTimelinesAsUpstream;
+var sl: TStringList;
+begin
+  AssertTrue('the fixture is where the suite expects it', FileExists(MultiFixturePath));
+  FreeAndNil(FRoot);
+  sl := TStringList.Create;
+  try
+    sl.LoadFromFile(MultiFixturePath);
+    FRoot := GetJSON(sl.Text);
+  finally
+    sl.Free;
+  end;
+  RunGroup(['multi']);
 end;
 
 { ==================== by hand ==================== }

@@ -122,6 +122,11 @@ type
     FRadiusInverse, FAngleInverse: Boolean;
   public
     RadiusView, AngleView: TTyPolarAxisView;
+    { [spec 244] laid out in a cell of no size (a coord naming no row or no
+      column): upstream's centre has a NaN coordinate and its radius is NaN
+      (min of a NaN size), so every conversion through it is NaN; the port
+      keeps it far off the canvas for drawing and answers NaN }
+    Unplaced: Boolean;
     { Takes ownership of both axes. }
     constructor Create(AIndex: Integer; ARadiusAxis, AAngleAxis: TTyAxis);
     destructor Destroy; override;
@@ -1147,7 +1152,9 @@ begin
     Apply(M, hasM, e1, 0, v.Line.X2, v.Line.Y2);
     v.Line.Value := NaN;
     v.Line.Drawn := True;
-    TyPolarSubPixelLine(v.Line, AxisScaleF(LineWidthIn(node, 'axisLine', 1), APPI));
+    { [R5-G] by the width it is stroked with (the skin's where the option
+      writes none) [was: the option's, else 1] }
+    TyPolarSubPixelLine(v.Line, AxisScaleF(TyAxisSnapWidth(node, 0, AText), APPI));
     v.Spec.Arrows := TyAxisArrows(fr, v.Furn, APPI);
   end;
   marks := TickMarks(AOption, ax, v.Spec, v.Furn, AMeasurer, APPI);
@@ -1158,7 +1165,7 @@ begin
   begin
     len := AxisScaleF(v.Spec.TickLengthLogical, APPI);
     endCoord := -1 * len;
-    w := AxisScaleF(LineWidthIn(node, 'axisTick', 1), APPI);
+    w := AxisScaleF(TyAxisSnapWidth(node, 1, AText), APPI);
     SetLength(v.Ticks, Length(marks));
     for i := 0 to High(marks) do
     begin
@@ -1188,8 +1195,7 @@ begin
     else
       len := AxisScaleF(v.Furn.MinorTickLengthLogical, APPI);
     endCoord := -1 * len;
-    mw := AxisScaleF(LineWidthIn(node, 'minorTick',
-      LineWidthIn(node, 'axisTick', 1)), APPI);
+    mw := AxisScaleF(TyAxisSnapWidth(node, 2, AText), APPI);
     SetLength(v.MinorTicks, Length(minors));
     for i := 0 to High(minors) do
     begin
@@ -1653,6 +1659,7 @@ begin
         r := TyAxisCoordJs(APolar.RadiusAxis, TyAxisParseJson(APolar.RadiusAxis, e0));
         a := TyAxisCoordJs(APolar.AngleAxis, TyAxisParseJson(APolar.AngleAxis, e1));
         pt := APolar.CoordToPoint(r, a);
+        if APolar.Unplaced then pt := TyPointF(NaN, NaN);
         Result := TyConvertXY(pt.X, pt.Y);
       finally
         UnmaskFP(mask);
@@ -1677,6 +1684,11 @@ begin
   mask := MaskFP;
   try
     APolar.PointToData(pt, d);
+    if APolar.Unplaced then
+    begin
+      d[0] := NaN;
+      d[1] := NaN;
+    end;
     Result := TyConvertXY(d[0], d[1]);
   finally
     UnmaskFP(mask);
@@ -1693,7 +1705,7 @@ begin
   pt := TyJsonPoint(APoint);
   mask := MaskFP;
   try
-    Result := APolar.ContainXY(pt.X, pt.Y);
+    Result := (not APolar.Unplaced) and APolar.ContainXY(pt.X, pt.Y);
   finally
     UnmaskFP(mask);
   end;

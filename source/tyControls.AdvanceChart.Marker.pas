@@ -532,11 +532,13 @@ function TyMkNearestRows(AStore: TTyDataStore; ACol: Integer; AAxis: TTyAxis;
   AValue, AMaxDist: Double): TTyIntegerArray;
 var
   i, n: Integer;
-  target, v, coord, diff, dist, minDist, minDiff: Double;
+  target, v, coord, diff, dist, minDist, minDiff, b0, b1: Double;
 begin
   Result := nil;
   if (AStore = nil) or (AAxis = nil) or (ACol < 0) or (ACol >= AStore.DimCount) then
     Exit;
+  { [R5-G] the band once: every row maps through the same one }
+  AAxis.BandExtent(b0, b1);
   { axis.dataToCoord: LOCAL, not global -- a tie between two rows is decided
     by the local difference, and adding the grid's offset to both sides can
     move the last bit of one of them }
@@ -550,7 +552,7 @@ begin
   begin
     v := AStore.Get(ACol, i);
     if IsNan(v) then Continue;
-    coord := AAxis.DataToLocal(v);
+    coord := AAxis.DataToLocalIn(v, b0, b1);
     if IsNan(coord) then Continue;
     diff := target - coord;
     if IsNan(diff) then Continue;

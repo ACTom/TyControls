@@ -1185,7 +1185,9 @@ begin
     Apply(M, hasM, e1, 0, v.Line.X2, v.Line.Y2);
     v.Line.Value := NaN;
     v.Line.Drawn := True;
-    TyPolarSubPixelLine(v.Line, AxisScaleF(LineWidthIn(node, 'axisLine', 1), APPI));
+    { [R5-G] by the width it is stroked with (the skin's where the option
+      writes none) [was: the option's, else 1] }
+    TyPolarSubPixelLine(v.Line, AxisScaleF(TyAxisSnapWidth(node, 0, AText), APPI));
     v.Spec.Arrows := TyAxisArrows(fr, v.Furn, APPI);
   end;
   marks := TyPolarTickMarks(AOption, ax, v.Spec, v.Furn, AMeasurer, APPI);
@@ -1196,7 +1198,7 @@ begin
   begin
     len := AxisScaleF(v.Spec.TickLengthLogical, APPI);
     endCoord := 1 * len;
-    w := AxisScaleF(LineWidthIn(node, 'axisTick', 1), APPI);
+    w := AxisScaleF(TyAxisSnapWidth(node, 1, AText), APPI);
     SetLength(v.Ticks, Length(marks));
     for i := 0 to High(marks) do
     begin
@@ -1226,8 +1228,7 @@ begin
     else
       len := AxisScaleF(v.Furn.MinorTickLengthLogical, APPI);
     endCoord := 1 * len;
-    mw := AxisScaleF(LineWidthIn(node, 'minorTick',
-      LineWidthIn(node, 'axisTick', 1)), APPI);
+    mw := AxisScaleF(TyAxisSnapWidth(node, 2, AText), APPI);
     SetLength(v.MinorTicks, Length(minors));
     for i := 0 to High(minors) do
     begin

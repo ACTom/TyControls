@@ -793,6 +793,15 @@ type
   end;
   TTyStoreKeepArray = array of TTyStoreKeep;
 
+  { [R5-G] WHICH ITEMS OF AN OPTION ARRAY ARE OBJECTS (ObjectRowsOf), kept
+    for the tree they were read off: the array, the option's Generation, the
+    positions in order }
+  TTyObjRowsKeep = record
+    Arr: TJSONArray;
+    Gen: Int64;
+    Rows: TTyIntegerArray;
+  end;
+
   { [spec 242] a custom series' clip on a polar (createPolarClipPath), device
     px: the centre, the radii, the start and end angles (radians, as the
     element clip holds them), clockwise }
@@ -820,6 +829,18 @@ type
     FSingles: TTySingleArray;
     { EVERY themeRiver laid out, index-parallel to FBindings [Batch 118] }
     FRivers: TTyThemeRiverLayoutArray;
+    { [R5-G] the list the series pass drew last (zlevel's second pass) }
+    FZList: TTyPaintList;
+    { [R5-G] a river's boundaryGap as its first layout resolved it, by
+      series index: upstream writes the px back into the model's array, so
+      a resize keeps them; a setOption starts again (AfterSetOption) }
+    FRiverGaps: array of record
+      Has: Boolean;
+      G0, G1: Double;
+      { the series' boundaryGap as written when they were (JSON, '' none):
+        a merge that writes another replaces the array upstream }
+      Key: string;
+    end;
     { THE PARALLELS of the last build, by component index (a hole is nil),
       each parallel series' rows as laid out (index-parallel to FBindings),
       and the active intervals each parallelAxis MODEL keeps -- by component
@@ -869,6 +890,8 @@ type
     FStores: array of TTyDataStore;
     { [R2-I6] the parsed stores kept between builds of one tree, per slot }
     FStoreKeep: TTyStoreKeepArray;
+    { [R5-G] the object items of the large option arrays, for this tree }
+    FObjRows: array of TTyObjRowsKeep;
     { Every bar's width and offset, index-parallel to FBindings. Solved in
       Relayout rather than Rebuild because it needs the FINAL pixel extents:
       the plot rect is shrunk to fit the labels in phase C, and a band measured
@@ -1451,6 +1474,12 @@ type
       slider view's own state, each inside's view range }
     FDzRawHas: array of Boolean;
     FDzRawStart, FDzRawStop: TTyDoubleArray;
+    { [R5-G] an API action's setRawRange, end by end: the pairs written, as
+      JSON ('' none); it takes over from FDzRawHas for that dataZoom }
+    FDzRawOv: TTyStringArray;
+    { [R5-G] the pointer the brush controllers were last handed, CSS px --
+      a parallel panel's onIrrelevantElement asks what is under it }
+    FBrushPtrX, FBrushPtrY: Double;
     FDzInteract: array of TTyDzInteractSpec;
     FDzState: array of TTyDzSliderState;
     FDzInLo, FDzInHi: TTyDoubleArray;
@@ -1525,12 +1554,14 @@ type
     FTooltipAutoRichText: Boolean;
     FResolvedImages: TStringList;
     { THE TIMELINE [Batch 129] -- see its section }
-    FTlView: TTyTimelineView;
+    FTlViews: array of TTyTimelineView;
+    FTlDues: TTyDoubleArray;
     FTlAnim: TTyAnimation;
     FTlUidSeq: Integer;
-    FTlNow, FTlDue: Double;
+    FTlNow: Double;
     FTlTimer: TTimer;
-    FTlDragging, FTlStatesDirty: Boolean;
+    FTlDragAt: Integer;
+    FTlStatesDirty: Boolean;
     { THE BRUSH COMPONENTS [Batch 126] -- see their section. Per component:
       the model from its option, the areas and the painting option the
       model keeps (a merge keeps them, a notMerge does not), the view's
@@ -2340,6 +2371,14 @@ type
     { THE TWO LAYERS, split by what makes them change rather than by what they
       look like. Static is everything the model decides; dynamic is what moves
       while the model stands still. }
+    { [R5-G] ZLEVEL ACROSS THE COMPONENTS DRAWN APART FROM THE LIST: the
+      level they stand on (the root's zlevel, else 0), the top of what the
+      static layer draws (the loading mask's level when it shows over the
+      chart), the list the last series pass drew }
+    function ComponentZLevel: Integer;
+    function ZStaticTop: Integer;
+    procedure PaintAboveComponents(APainter: TTyPainter; AList: TTyPaintList);
+    procedure PaintOverLoading(APainter: TTyPainter);
     procedure PaintStatic(APainter: TTyPainter; const ARect: TRect;
       APPI: Integer; const AMeasurer: ITyTextMeasurer);
     { Every series' marks, in one list, ordered once. }
@@ -2512,20 +2551,27 @@ type
     function TlClock: Double;
     function TlLive: Boolean;
     function TlNode: TJSONObject;
+    function TlNodeOf(AIndex: Integer): TJSONObject;
     function TlCurrentIndex: Double;
-    function TlAnimCfg: TTyTlAnimCfg;
+    function TlCurrentIndexOf(AIndex: Integer): Double;
+    function TlAnimCfg(AIndex: Integer): TTyTlAnimCfg;
     procedure SolveTimeline(APPI: Integer);
     function BuildTimeline(AList: TTyPaintList): Integer;
-    function TlHitAt(AX, AY: Integer; out AEl: Integer): Boolean;
+    function TlView(AIndex: Integer): TTyTimelineView;
+    function TlHitAt(AX, AY: Integer; out ATl, AEl: Integer): Boolean;
+    function TlNextDue(out AAt: Integer): Double;
     procedure TlArmTimer;
     procedure TlTimerFired(Sender: TObject);
-    procedure TlChange(AIndex: Double; AHasIndex: Boolean);
-    procedure TlClick(AEl: Integer);
+    procedure TlChange(ATl: Integer; AIndex: Double; AHasIndex: Boolean);
+    procedure TlPlayClick(ATl: Integer; APlay: Boolean);
+    procedure TlClick(ATl, AEl: Integer);
+    function TlTargetView(const ATarget: TTyChartEventTarget): TTyTimelineView;
     procedure TlMouseOver(const ATarget: TTyChartEventTarget);
     procedure TlMouseOut(const ATarget: TTyChartEventTarget);
     procedure TlApplyStates;
     procedure TlDragStart(const ATarget: TTyChartEventTarget);
-    procedure TlPointerChange(AX, AY: Integer; ATrigger: Boolean);
+    procedure TlPointerChange(ATl: Integer; AX, AY: Integer; ATrigger: Boolean);
+    procedure TlDropViews;
     procedure TlDragMove(AX, AY: Integer);
     procedure TlDragEnd(AX, AY: Integer);
     procedure TlMerge;
@@ -2695,6 +2741,9 @@ type
       window }
     function DzQuery(APayload: TJSONObject): TTyIntegerArray;
     procedure DzItemsOf(AItem: TJSONObject; var AAction: TTyDzAction);
+    { [R5-G] an API payload's setRawRange pairs }
+    procedure DzOverlayPut(AIndex: Integer; const AOverlay: string);
+    procedure DzApplyOv(AIndex: Integer);
     function DzModelId(AIndex: Integer): string;
     function DzPayloadOf(const AAction: TTyDzAction): TJSONObject;
     function DoDataZoomAction(APayload: TJSONObject): Boolean;
@@ -2828,7 +2877,7 @@ type
     function KbComponentKey(AKey: Word; AShift: TShiftState): Boolean;
     procedure KbDataZoomKey(AIndex: Integer; ACmd: TTyKbCommand);
     procedure KbVisualMapKey(AIndex, AHandle: Integer; ACmd: TTyKbCommand);
-    procedure KbTimelineKey(ACmd: TTyKbCommand);
+    procedure KbTimelineKey(ATl: Integer; ACmd: TTyKbCommand);
     { the part's ring, device px; False for nothing to ring }
     function KbPartRect(const AStop: TTyKbStop; APart: Integer; out R: TTyRectF): Boolean;
     { the accessible tree's component nodes [F5] }
@@ -2847,6 +2896,11 @@ type
     { the array RawItemNode reads its items from, nil where it reads none:
       a loop over every row asks for it once [R2-L] }
     function RawItemArray(ASlot: Integer): TJSONArray;
+    { [R5-G] the positions of AArr's items that are objects, ascending -- what
+      a loop over every item that acts on the object items alone visits; for
+      an array of cObjRowsMinItems items and more, kept for the tree's
+      Generation (a tree written to in place is touched: a new one) }
+    function ObjectRowsOf(AArr: TJSONArray): TTyIntegerArray;
     { a row's own colour object -- a gradient or a pattern in the item's
       itemStyle.color -- for the row fills a renderer reads [Batch 105] }
     function RowObjectFill(ASlot, ARaw: Integer; out AColor: TTyOptColor): Boolean;
@@ -3198,6 +3252,8 @@ type
     function HeatmapRadii(ASeriesIndex, APPI: Integer): TTyCornerRadii;
     procedure RippleOf(ASlot: Integer; var AVisual: TTySeriesVisual);
     function MatrixGraphPoints(ASeriesIndex: Integer; AMatrix: TTyMatrix): TTyPointFArray;
+    procedure MatrixGraphNames(ASeriesIndex: Integer; AMatrix: TTyMatrix; AStore: TTyDataStore);
+    procedure MatrixGraphCollect(ASeriesIndex: Integer; AMatrix: TTyMatrix);
     { ---- createBoxLayoutReference [Batch 151, D13 BX1] ----
       The canvas as a refContainer; a host's dataToLayout of a coord (a
       matrix's rect, a calendar day's content rect) -- False when the host
@@ -3253,6 +3309,8 @@ type
     procedure SolveItemCallbacks;
     procedure RadarSymbolCallbacks(ASlot: Integer; var AVisual: TTyRadarVisual);
     function ItemCbOf(ASlot: Integer): TTyItemCallbacks;
+    { [R5-G] a graph series' node items: `data`, else `nodes` }
+    function GraphItemNodesOf(ASeriesIndex: Integer): TJSONArray;
     procedure FreeItemCbs;
     procedure HeatmapItemRadii(ASeriesIndex, APPI: Integer;
       out ARadii: TTyCornerRadiiArray; out AHas: TTyBoolArray);
@@ -4068,6 +4126,8 @@ type
     procedure GfxBuild(APPI: Integer);
     { the elements under the axes }
     procedure GfxPaintUnder(APainter: TTyPainter);
+    { [R5-G] the grids' own rects (`grid.show`): GridView's Rect, z2 -1 }
+    procedure AddGridBackgrounds(AList: TTyPaintList);
     function GfxLive: Boolean;
     { an element's handlers, bubbling up its groups: True when one asked to
       stop (no chart event follows) }
@@ -4320,6 +4380,26 @@ type
       -- highest zlevel, then z, then the lowest series index -- whose roam
       allows it and whose area holds the point. -1 when none does. }
     function RoamSeriesAt(AX, AY: Integer; AZoom: Boolean): Integer;
+    { [R5-G] a sankey's roamTrigger other than 'global': the pointer in the
+      main group's own box (createIsInSelfByPointerCheckerEl) }
+    function SankeySelfAt(ASlot: Integer; AX, AY: Double): Boolean;
+    { [R5-G] the jittered scatters' points as the next build places them:
+      a fresh jitter pass over every scatter slot in build order, with the
+      visual the build hands BuildScatter (the rows' pre-brush visuals);
+      nil for a slot that does not jitter }
+    function JitterReplay(APPI: Integer): TTyPointFArrays;
+    { [R5-G] cursorHelper's onIrrelevantElement for a roam or a panel whose
+      model is series ATargetSeries (-1 none) or parallel ATargetParallel
+      (-1 none), at zlevel ATZL / z ATZ: the topmost element at (AX, AY),
+      device px, belongs to another component with a coordinate system of
+      another model drawn higher (zlevel, then z; equal is relevant) }
+    function ElementIrrelevant(AX, AY: Double; ATargetSeries, ATargetParallel: Integer;
+      ATZ, ATZL: Double): Boolean;
+    { a series roam's: the slot's series at its own z }
+    function SeriesRoamIrrelevant(ASlot: Integer; AX, AY: Double; AZ, AZL: Double): Boolean;
+    { a parallel axis panel's (the pointer the controllers were last handed) }
+    function ParallelIrrelevant(const APanel: TTyBrushPanel; AX, AY: Double): Boolean;
+    function ParallelAxisLineHalf(AAxis: Integer): Double;
     { the same, with the winner's z and zlevel (0 when none) [Batch 150] }
     function RoamSeriesAtZ(AX, AY: Integer; AZoom: Boolean;
       out AZ, AZLevel: Integer): Integer;
@@ -4471,12 +4551,17 @@ type
     { ---- THE TIMELINE [Batch 129] ----
       The first timeline's view as the last render left it (nil without a
       timeline): its elements, their roles and states, the model it read.
-      TimelineNow is the play timer's clock (ms; NaN, the default, is the
+      TimelineNow is the play timers' clock (ms; NaN, the default, is the
       machine's -- and only then does a timer run); TimelineTick fires every
-      play timer due by ANowMs; TimelineDue is the pending one's due instant
-      (NaN for none). }
+      play timer due by ANowMs, in due order; TimelineDue is the first
+      view's pending one's due instant (NaN for none).
+      [R5-G] Every timeline model has a view: TimelineViewAt by the model's
+      slot (nil for a hole), TimelineDueAt its own timer. }
     function TimelineView: TTyTimelineView;
     function TimelineDue: Double;
+    function TimelineViewCount: Integer;
+    function TimelineViewAt(AIndex: Integer): TTyTimelineView;
+    function TimelineDueAt(AIndex: Integer): Double;
     procedure TimelineTick(ANowMs: Double);
     property TimelineNow: Double read FTlNow write FTlNow;
     { ---- THE BRUSH COMPONENTS [Batch 126] ----
@@ -5444,6 +5529,16 @@ function TyAdvChartLayerRegionsForTest: Integer;
   default 4096), and how many builds have taken one. }
 procedure TyAdvChartStoreKeepForTest(AMinRows: Integer);
 function TyAdvChartStoreKeepsForTest: Integer;
+{ [R5-G] The object items of an option array kept for its tree
+  (ObjectRowsOf): the fewest items an array has to have to be kept (-1: none
+  is, the reference; the default 4096), and how many answers came from the
+  kept ones. }
+procedure TyAdvChartObjRowsForTest(AMinItems: Integer);
+function TyAdvChartObjRowsKeptForTest: Integer;
+{ [R5-G] How many series a notMerge option's first sync carried row records
+  for (StCarryApply: the old view's records diffed onto the new rows) --
+  none where the old view kept none. }
+function TyAdvChartStCarryDiffsForTest: Integer;
 
 implementation
 
@@ -5560,6 +5655,32 @@ end;
 function TyAdvChartStoreKeepsForTest: Integer;
 begin
   Result := GStoreKeeps;
+end;
+
+const
+  { [R5-G] an array is read again below this many items: the walk costs
+    less than keeping it }
+  cObjRowsMinItems = 4096;
+  cObjRowsMaxKept = 16;
+
+var
+  GObjRowsMinItems: Integer = cObjRowsMinItems;
+  GObjRowsKept: Integer = 0;
+  GStCarryDiffs: Integer = 0;
+
+function TyAdvChartStCarryDiffsForTest: Integer;
+begin
+  Result := GStCarryDiffs;
+end;
+
+procedure TyAdvChartObjRowsForTest(AMinItems: Integer);
+begin
+  GObjRowsMinItems := AMinItems;
+end;
+
+function TyAdvChartObjRowsKeptForTest: Integer;
+begin
+  Result := GObjRowsKept;
 end;
 
 { ==================== echarts.connect [Batch 141] ==================== }

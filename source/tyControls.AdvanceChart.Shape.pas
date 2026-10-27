@@ -79,6 +79,13 @@ type
     { The point the rotation turns about, DEVICE px. Meaningless when
       RotationRad is zero. }
     RotCX, RotCY: Double;
+    { [R5-G] A PATH REFLECTED (TyMirrorShape) about the vertical line
+      through FlipCX (FlipX) and / or the horizontal one through FlipCY
+      (FlipY), after its turn -- a pictorial glyph's negative scale. Applied
+      at trace time as the turn is; the hit test, by the box, is the same
+      either way. False on every other shape. }
+    FlipX, FlipY: Boolean;
+    FlipCX, FlipCY: Double;
     { A POLYLINE OR POLYGON AS UPSTREAM DRAWS IT, when that is not simply its
       points joined: a smoothed line's curves, and the points upstream drops
       (a segment under 0.7 px). Empty for every shape that has not asked --
@@ -194,10 +201,11 @@ function TyShapePath(const APathData: string; const ABounds: TTyRectF;
   round rect with one radius all come back unchanged, which is the right
   answer rather than a skipped case.
 
-  A PATH DOES NOT. Its geometry is a string the painter fits to a box at draw
-  time and there is no negative box, so a mirrored `path://` glyph comes out
-  upright. Written down rather than worked around: the fix belongs in the
-  path fitting, and inventing a second one here would hide it. }
+  A PATH IS REFLECTED AT TRACE TIME [R5-G]: its geometry is a string the
+  painter fits to a box at draw time, so the shape carries the reflection
+  (FlipX / FlipY about FlipCX / FlipCY) and the trace applies it over the
+  turn -- a mirrored `path://` glyph points the other way as upstream's
+  [was: drawn upright]. }
 function TyMirrorShape(const AShape: TTyChartShape; ACX, ACY: Double;
   AFlipX, AFlipY: Boolean): TTyChartShape;
 
@@ -1023,6 +1031,22 @@ var i: Integer;
 begin
   Result := AShape;
   if not (AFlipX or AFlipY) then Exit;
+  { [R5-G] a path: the reflection rides on the shape, composed with any
+    one it already has }
+  if AShape.Kind = cskPath then
+  begin
+    if AFlipX then
+    begin
+      Result.FlipX := not AShape.FlipX;
+      Result.FlipCX := ACX;
+    end;
+    if AFlipY then
+    begin
+      Result.FlipY := not AShape.FlipY;
+      Result.FlipCY := ACY;
+    end;
+    Exit;
+  end;
   { A FRESH ARRAY, because a dynamic array is assigned by reference and the
     shape handed in is very often the one a caller is still holding. Without
     this, mirroring a glyph turned the ORIGINAL over as well. }

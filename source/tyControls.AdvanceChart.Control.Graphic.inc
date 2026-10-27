@@ -321,6 +321,10 @@ begin
   FGfxUnder.Clear;
   for i := 0 to High(FGfxPaint) do
     if FGfxPaint[i].GfxUnder then FGfxUnder.Add(FGfxPaint[i]);
+  { [R5-G] THE GRIDS' BACKGROUNDS, in the same order: under the axes (their
+    z2 -1 under an axis' 0 at the grid's z 0), the graphic's group ahead of
+    the grids' at an equal z and z2 }
+  AddGridBackgrounds(FGfxUnder);
   for i := 0 to FGfxUnder.Count - 1 do
   begin
     el := FGfxUnder.Element(FGfxUnder.PaintOrder(i));

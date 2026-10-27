@@ -19,7 +19,12 @@ begin
     (createLarge would then read no points), and the polar and calendar
     scatters are left drawn one by one. LINES are batched on any of their
     systems: linesLayout's large branch is dataToPoint [Batch 121] }
-  if (st <> TyLinesSeriesTypeName) and ((FBindings[ASlot].Cart = nil)
+  { [R5-G] a scatter batches on a polar, a calendar and a single axis too
+    (pointsLayout + LargeSymbolDraw know no system) }
+  if (st <> TyLinesSeriesTypeName) and not ((st = 'scatter')
+    and ((FBindings[ASlot].Polar <> nil) or (FBindings[ASlot].CalendarIndex >= 0)
+    or (FBindings[ASlot].Single <> nil)))
+    and ((FBindings[ASlot].Cart = nil)
     or (FBindings[ASlot].Polar <> nil) or (FBindings[ASlot].CalendarIndex >= 0)) then Exit;
   d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
   if not (d is TJSONObject) then Exit;
@@ -28,9 +33,9 @@ begin
     [Batch 119] }
   if not TyLargeIsOn(st, node.Find('large'), node.Find('largeThreshold'),
     FStores[ASlot].Count) and not ((st = 'bar') and ProgOnOf(ASlot)) then Exit;
-  { A path:// SYMBOL stays one element per row: upstream's batch would
-    replay one fitted path, which this port does not model }
-  if (st = 'scatter') and (SymbolFor(ASlot).Kind = tsyPath) then Exit;
+  { [R5-G] a path:// symbol batches too: upstream's batch replays the path
+    createSymbol fitted into a 0 x 0 box -- it draws nothing, and the
+    pointer still finds its rows [was: one element per row] }
   Result := TyLargeKindOfType(st);
 end;
 
@@ -732,6 +737,7 @@ var
   zr, er: TTyXYWH;
   sc: TTyCanvasScale;
   measurer: ITyTextMeasurer;
+  zc, pass: Integer;
 
   procedure Band(ADst: TBGRABitmap; const ABand: TRect);
   begin
@@ -815,20 +821,36 @@ begin
         sc.DeviceUnits := False;
         P.BeginPaintOnScaled(nil, Rect(0, 0, w, h), APPI, nb, sc);
         clip := nb.ClipRect;
-        for i := FProgBlitAt + 1 to FPaintList.Count - 1 do
+        { [R5-G] the two zlevel passes the full paint makes }
+        zc := ComponentZLevel;
+        for pass := 0 to 1 do
         begin
-          idx := FPaintList.PaintOrder(i);
-          pe := FPaintList.Ref(idx);
-          { ProgRenderList's own skips; a run's elements are the layer's }
-          if pe^.Ignore or pe^.ProgHidden or pe^.GfxUnder or (pe^.ProgChunk > 0) then Continue;
-          if TyElementPaintRect(pe^, APPI, er) and not TyZrRectIntersect(er, zr) then Continue;
-          TyRenderElement(P, pe^);
-          nb.ClipRect := clip;
+          if pass = 0 then
+            TySetZBand(-MaxInt, zc)
+          else
+          begin
+            { what the static paint draws over the series, as it draws it }
+            PaintBreakAreas(P);
+            PaintParallels(P, APPI, measurer);
+            PaintTitles(P);
+            if TyMaxZLevelOf(FPaintList) <= zc then Break;
+            TySetZBand(zc, ZStaticTop);
+          end;
+          try
+            for i := FProgBlitAt + 1 to FPaintList.Count - 1 do
+            begin
+              idx := FPaintList.PaintOrder(i);
+              pe := FPaintList.Ref(idx);
+              { ProgRenderList's own skips; a run's elements are the layer's }
+              if pe^.Ignore or pe^.ProgHidden or pe^.GfxUnder or (pe^.ProgChunk > 0) then Continue;
+              if TyElementPaintRect(pe^, APPI, er) and not TyZrRectIntersect(er, zr) then Continue;
+              TyRenderElement(P, pe^);
+              nb.ClipRect := clip;
+            end;
+          finally
+            TyClearZBand;
+          end;
         end;
-        { what the static paint draws over the series, as it draws it }
-        PaintBreakAreas(P);
-        PaintParallels(P, APPI, measurer);
-        PaintTitles(P);
         nb.ClipRect := Rect(0, 0, nb.Width, nb.Height);
         P.EndPaint;
       finally

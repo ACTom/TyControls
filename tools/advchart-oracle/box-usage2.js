@@ -592,6 +592,37 @@ add('component', 'geo-no-column', "geos whose coord names a row and no column (d
       { map: 'bx2sq', coordinateSystem: 'calendar', coord: '2019-01-01' }],
     series: [{ type: 'map', map: 'target_map', coordinateSystem: 'matrix', coordinateSystemUsage: 'box', coord: ['zz', 's'], data: [] }] },
   { calls: [0, 1, 2, 3].map(g => ({ finder: { geoIndex: g }, value: [2, 1.5] })).concat([{ finder: { seriesIndex: 0 }, value: [3, 0.5] }]) });
+// [spec 244] a graph with usage 'box' on a cartesian: a grid has no
+// dataToLayout and a graph takes no centre, so createBoxLayoutReference's
+// refContainer is the canvas -- the graph is a view on it (its box, its
+// nodes' x / y) and the axes do not see its data
+add('series', 'r5g-graph-box-cartesian', "graphs with coordinateSystemUsage 'box' on a cartesian: one with its default box, one with left / top / width / height and a coord, beside a scatter on the axes",
+  { xAxis: { type: 'value' }, yAxis: { type: 'value' }, grid: { left: 40, top: 40, width: 200, height: 200 },
+    series: [
+      { type: 'graph', coordinateSystem: 'cartesian2d', coordinateSystemUsage: 'box', layout: 'none', data: GN, links: GL },
+      { type: 'graph', coordinateSystem: 'cartesian2d', coordinateSystemUsage: 'box', coord: [3, 4], layout: 'none',
+        left: 300, top: 250, width: 200, height: 100, data: GN, links: GL },
+      { type: 'scatter', data: [[0, 0], [2, 2]] }] },
+  { calls: [{ finder: { seriesIndex: 0 }, value: [5, 5] }, { finder: { xAxisIndex: 0, yAxisIndex: 0 }, value: [1, 1] }] });
+
+
+// [spec 244] coordinate systems in a cell of no height (a coord naming a column
+// and no row: no y, no height): upstream lays each out on that rect -- a
+// single axis' getLayoutRect gives a position (`|| 0`) and the width, the
+// height NaN; a polar's centre has a NaN y and its radius is NaN -- and
+// converts through it (a geo there throws in GeoCreator.create, and a grid's
+// answer is an artefact of zrender's NaN transforms: neither is a case)
+add('interact', 'r5g-nowhere-convert', "a polar and a single axis whose coord names a column and no row (no y, no height): convertToPixel / convertFromPixel / containPixel through each and through a series on each",
+  { matrix: MX(),
+    polar: { coordinateSystem: 'matrix', coord: ['b', 'zz'] },
+    angleAxis: { type: 'value' }, radiusAxis: { type: 'value' },
+    singleAxis: { coordinateSystem: 'matrix', coord: ['c', 'zz'], type: 'value' },
+    series: [{ type: 'scatter', coordinateSystem: 'polar', data: [[1, 30]] },
+      { type: 'scatter', coordinateSystem: 'singleAxis', data: [3] }] },
+  { calls: [{ finder: { polarIndex: 0 }, value: [1, 30] }, { finder: { seriesIndex: 0 }, value: [1, 30] },
+    { finder: { singleAxisIndex: 0 }, value: 3 }, { finder: { seriesIndex: 1 }, value: 3 }],
+    backs: [{ finder: { polarIndex: 0 }, value: [100, 100] }, { finder: { singleAxisIndex: 0 }, value: [100, 100] }],
+    contains: [{ finder: { polarIndex: 0 }, value: [100, 100] }, { finder: { singleAxisIndex: 0 }, value: [100, 100] }] });
 
 function load(c) {
   if (!c.gallery) return clone(c.option);

@@ -99,6 +99,11 @@ begin
     SetLength(FDzRawValue, n);
     for i := 0 to n - 1 do FDzRawValue[i] := False;
   end;
+  if Length(FDzRawOv) <> n then
+  begin
+    SetLength(FDzRawOv, n);
+    for i := 0 to n - 1 do FDzRawOv[i] := '';
+  end;
   for i := 0 to n - 1 do
   begin
     FZoomSpecs[i] := TyDataZoomSpecOf(FOption, i, FBuild);
@@ -106,6 +111,8 @@ begin
       both ends read in percent mode }
     if FDzRawHas[i] then
       DzApplyRaw(FZoomSpecs[i], FDzRawValue[i], FDzRawStart[i], FDzRawStop[i]);
+    { [R5-G] an API payload's pairs, end by end }
+    if FDzRawOv[i] <> '' then DzApplyOv(i);
   end;
   { the toolbox's select dataZooms after the author's -- with the windows
     their actions set [Batch 125] }
@@ -1343,14 +1350,19 @@ begin
     for j := 0 to n - 1 do
       if found[j] then
       begin
-        if j <= High(FDzRawHas) then
+        if (j <= High(FDzRawHas)) and (AAction.Items[it].Overlay <> '') then
+          { [R5-G] the payload's pairs over what the settled option holds }
+          DzOverlayPut(j, AAction.Items[it].Overlay)
+        else if j <= High(FDzRawHas) then
         begin
           FDzRawHas[j] := True;
           FDzRawStart[j] := AAction.Items[it].Start;
           FDzRawStop[j] := AAction.Items[it].Stop;
           if j <= High(FDzRawValue) then FDzRawValue[j] := AAction.Items[it].IsValue;
+          if j <= High(FDzRawOv) then FDzRawOv[j] := '';
         end
-        else if (FZoomSpecs[j].SubType = 'select') and (Length(FZoomSpecs[j].Targets) > 0) then
+        else if (FZoomSpecs[j].SubType = 'select') and (Length(FZoomSpecs[j].Targets) > 0)
+          and not IsNan(AAction.Items[it].Start) and not IsNan(AAction.Items[it].Stop) then
           TbSelPut(FZoomSpecs[j].Targets[0].Dim + IntToStr(FZoomSpecs[j].Targets[0].AxisIndex),
             AAction.Items[it].IsValue, AAction.Items[it].Start, AAction.Items[it].Stop);
       end;
@@ -1969,6 +1981,8 @@ procedure TTyCustomAdvanceChart.DzItemsOf(AItem: TJSONObject; var AAction: TTyDz
 var
   idx: TTyIntegerArray;
   k, n, host: Integer;
+  ov: TJSONObject;
+  ovText: string;
   s0, s1, v0, v1: TJSONData;
   isVal: Boolean;
   lo, hi: Double;
@@ -1994,8 +2008,38 @@ begin
   v1 := AItem.Find('endValue');
   { setRawRange: a value end given makes the range a value one }
   isVal := Given(v0) or Given(v1);
+  { [R5-G] setRawRange end by end: each pair written whole when either of
+    it is (a category name stays a string, scale.parse reads it) }
+  ov := TJSONObject.Create;
+  try
+    if Given(s0) or Given(v0) then
+    begin
+      if Given(s0) then ov.Add('start', s0.Clone) else ov.Add('start', TJSONNull.Create);
+      if Given(v0) then ov.Add('startValue', v0.Clone) else ov.Add('startValue', TJSONNull.Create);
+    end;
+    if Given(s1) or Given(v1) then
+    begin
+      if Given(s1) then ov.Add('end', s1.Clone) else ov.Add('end', TJSONNull.Create);
+      if Given(v1) then ov.Add('endValue', v1.Clone) else ov.Add('endValue', TJSONNull.Create);
+    end;
+    if ov.Count > 0 then ovText := ov.AsJSON else ovText := '';
+  finally
+    ov.Free;
+  end;
   for k := 0 to High(idx) do
   begin
+    { [R5-G] an author's dataZoom takes the pairs as written }
+    if (ovText <> '') and (idx[k] <= High(FDzRawHas)) then
+    begin
+      n := Length(AAction.Items);
+      SetLength(AAction.Items, n + 1);
+      AAction.Items[n].DataZoomIndex := idx[k];
+      AAction.Items[n].IsValue := isVal;
+      AAction.Items[n].Start := NaN;
+      AAction.Items[n].Stop := NaN;
+      AAction.Items[n].Overlay := ovText;
+      Continue;
+    end;
     if isVal then
     begin
       lo := Num(v0);
@@ -2029,6 +2073,70 @@ begin
     AAction.Items[n].IsValue := isVal;
     AAction.Items[n].Start := lo;
     AAction.Items[n].Stop := hi;
+  end;
+end;
+
+{ [R5-G] the payload's pairs onto dataZoom AIndex's settled option: what a
+  gesture's window left (both ends) first, then the pairs over it }
+procedure TTyCustomAdvanceChart.DzOverlayPut(AIndex: Integer; const AOverlay: string);
+var
+  base, add: TJSONData;
+  k: Integer;
+begin
+  if Length(FDzRawOv) < Length(FDzRawHas) then SetLength(FDzRawOv, Length(FDzRawHas));
+  if FDzRawOv[AIndex] <> '' then base := GetJSON(FDzRawOv[AIndex])
+  else base := TJSONObject.Create;
+  try
+    if FDzRawHas[AIndex] then
+    begin
+      TJSONObject(base).Clear;
+      if (AIndex <= High(FDzRawValue)) and FDzRawValue[AIndex] then
+      begin
+        TJSONObject(base).Add('start', TJSONNull.Create);
+        TJSONObject(base).Add('startValue', FDzRawStart[AIndex]);
+        TJSONObject(base).Add('end', TJSONNull.Create);
+        TJSONObject(base).Add('endValue', FDzRawStop[AIndex]);
+      end
+      else
+      begin
+        TJSONObject(base).Add('start', FDzRawStart[AIndex]);
+        TJSONObject(base).Add('startValue', TJSONNull.Create);
+        TJSONObject(base).Add('end', FDzRawStop[AIndex]);
+        TJSONObject(base).Add('endValue', TJSONNull.Create);
+      end;
+      FDzRawHas[AIndex] := False;
+    end;
+    add := GetJSON(AOverlay);
+    try
+      for k := 0 to TJSONObject(add).Count - 1 do
+      begin
+        if TJSONObject(base).Find(TJSONObject(add).Names[k]) <> nil then
+          TJSONObject(base).Delete(TJSONObject(add).Names[k]);
+        TJSONObject(base).Add(TJSONObject(add).Names[k], TJSONObject(add).Items[k].Clone);
+      end;
+    finally
+      add.Free;
+    end;
+    FDzRawOv[AIndex] := base.AsJSON;
+  finally
+    base.Free;
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.DzApplyOv(AIndex: Integer);
+var
+  ov: TJSONData;
+  node: TJSONData;
+  rm: TJSONData;
+begin
+  ov := GetJSON(FDzRawOv[AIndex]);
+  try
+    rm := nil;
+    node := FOption.ComponentAt('dataZoom', AIndex);
+    if node is TJSONObject then rm := TJSONObject(node).Find('rangeMode');
+    if ov is TJSONObject then TyDzApplyOverlay(FZoomSpecs[AIndex], TJSONObject(ov), rm);
+  finally
+    ov.Free;
   end;
 end;
 

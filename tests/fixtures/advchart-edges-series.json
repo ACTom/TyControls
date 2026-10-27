@@ -1,0 +1,3378 @@
+{
+ "source": "echarts 6.1.0 (echarts.js)",
+ "cases": [
+  {
+   "id": "po-v",
+   "group": "pictorial-outside",
+   "note": "vertical bars up and down: outside is top for a positive value, bottom for a negative one",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "pictorialBar",
+      "symbol": "rect",
+      "symbolSize": [
+       "60%",
+       "100%"
+      ],
+      "label": {
+       "show": true,
+       "position": "outside"
+      },
+      "data": [
+       5,
+       -3,
+       0,
+       2
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "s": 0,
+     "i": 0,
+     "raw": 0,
+     "word": "top",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "drawn": true,
+     "x": "4062480000000000",
+     "xText": "146.25",
+     "y": "4055600000000000",
+     "yText": "85.5"
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "raw": 1,
+     "word": "bottom",
+     "align": "center",
+     "verticalAlign": "top",
+     "drawn": true,
+     "x": "40702c0000000000",
+     "xText": "258.75",
+     "y": "4072b80000000000",
+     "yText": "299.5"
+    },
+    {
+     "s": 0,
+     "i": 2,
+     "raw": 2,
+     "word": "top",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "drawn": true,
+     "x": "4077340000000000",
+     "xText": "371.25",
+     "y": "406aa00000000000",
+     "yText": "213"
+    },
+    {
+     "s": 0,
+     "i": 3,
+     "raw": 3,
+     "word": "top",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "drawn": true,
+     "x": "407e3c0000000000",
+     "xText": "483.75",
+     "y": "4064400000000000",
+     "yText": "162"
+    }
+   ]
+  },
+  {
+   "id": "po-h",
+   "group": "pictorial-outside",
+   "note": "bars lying down: right for a positive value, left for a negative one",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "series": [
+     {
+      "type": "pictorialBar",
+      "symbol": "rect",
+      "symbolSize": [
+       "60%",
+       "100%"
+      ],
+      "label": {
+       "show": true,
+       "position": "outside"
+      },
+      "data": [
+       5,
+       -3,
+       0,
+       2
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "s": 0,
+     "i": 0,
+     "raw": 0,
+     "word": "right",
+     "align": "left",
+     "verticalAlign": "middle",
+     "drawn": true,
+     "x": "407f400000000000",
+     "xText": "500",
+     "y": "4072020000000000",
+     "yText": "288.125"
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "raw": 1,
+     "word": "left",
+     "align": "right",
+     "verticalAlign": "middle",
+     "drawn": true,
+     "x": "4060400000000000",
+     "xText": "130",
+     "y": "406c0c0000000000",
+     "yText": "224.375"
+    },
+    {
+     "s": 0,
+     "i": 2,
+     "raw": 2,
+     "word": "left",
+     "align": "right",
+     "verticalAlign": "middle",
+     "drawn": true,
+     "x": "4070900000000000",
+     "xText": "265",
+     "y": "4064140000000000",
+     "yText": "160.625"
+    },
+    {
+     "s": 0,
+     "i": 3,
+     "raw": 3,
+     "word": "right",
+     "align": "left",
+     "verticalAlign": "middle",
+     "drawn": true,
+     "x": "4076d00000000000",
+     "xText": "365",
+     "y": "4058380000000000",
+     "yText": "96.875"
+    }
+   ]
+  },
+  {
+   "id": "po-inverse",
+   "group": "pictorial-outside",
+   "note": "an inverse value axis turns the pixel length round",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "inverse": true
+    },
+    "series": [
+     {
+      "type": "pictorialBar",
+      "symbol": "rect",
+      "symbolSize": [
+       "60%",
+       "100%"
+      ],
+      "label": {
+       "show": true,
+       "position": "outside"
+      },
+      "data": [
+       5,
+       -3,
+       2
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "s": 0,
+     "i": 0,
+     "raw": 0,
+     "word": "bottom",
+     "align": "center",
+     "verticalAlign": "top",
+     "drawn": true,
+     "x": "4062480000000000",
+     "xText": "146.25",
+     "y": "4072b80000000000",
+     "yText": "299.5"
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "raw": 1,
+     "word": "top",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "drawn": true,
+     "x": "40702c0000000000",
+     "xText": "258.75",
+     "y": "4055600000000000",
+     "yText": "85.5"
+    },
+    {
+     "s": 0,
+     "i": 2,
+     "raw": 2,
+     "word": "bottom",
+     "align": "center",
+     "verticalAlign": "top",
+     "drawn": true,
+     "x": "4077340000000000",
+     "xText": "371.25",
+     "y": "406be00000000000",
+     "yText": "223"
+    }
+   ]
+  },
+  {
+   "id": "po-bound",
+   "group": "pictorial-outside",
+   "note": "symbolBoundingData sets the bounding length: a negative bound under positive data",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": -6,
+     "max": 6
+    },
+    "series": [
+     {
+      "type": "pictorialBar",
+      "symbol": "rect",
+      "symbolSize": [
+       20,
+       10
+      ],
+      "label": {
+       "show": true,
+       "position": "outside"
+      },
+      "data": [
+       5,
+       3
+      ],
+      "symbolRepeat": true,
+      "symbolBoundingData": -4
+     }
+    ]
+   },
+   "items": [
+    {
+     "s": 0,
+     "i": 0,
+     "raw": 0,
+     "word": "bottom",
+     "align": "center",
+     "verticalAlign": "top",
+     "drawn": true,
+     "x": "4062480000000000",
+     "xText": "146.25",
+     "y": "4073380000000000",
+     "yText": "307.5"
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "raw": 1,
+     "word": "bottom",
+     "align": "center",
+     "verticalAlign": "top",
+     "drawn": true,
+     "x": "40702c0000000000",
+     "xText": "258.75",
+     "y": "4070e00000000000",
+     "yText": "270"
+    }
+   ]
+  },
+  {
+   "id": "po-repeat-zero",
+   "group": "pictorial-outside",
+   "note": "a repeat on a zero bar: no glyph, the label still past the end",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "pictorialBar",
+      "symbol": "rect",
+      "symbolSize": [
+       16,
+       8
+      ],
+      "label": {
+       "show": true,
+       "position": "outside"
+      },
+      "data": [
+       4,
+       0,
+       -4
+      ],
+      "symbolRepeat": true
+     }
+    ]
+   },
+   "items": [
+    {
+     "s": 0,
+     "i": 0,
+     "raw": 0,
+     "word": "top",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "drawn": true,
+     "x": "4062480000000000",
+     "xText": "146.25",
+     "y": "404dfffffffffffe",
+     "yText": "59.999999999999986"
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "raw": 1,
+     "word": "top",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "drawn": true,
+     "x": "40702c0000000000",
+     "xText": "258.75",
+     "y": "4067315555555555",
+     "yText": "185.54166666666666"
+    },
+    {
+     "s": 0,
+     "i": 2,
+     "raw": 2,
+     "word": "bottom",
+     "align": "center",
+     "verticalAlign": "top",
+     "drawn": true,
+     "x": "4077340000000000",
+     "xText": "371.25",
+     "y": "4074500000000000",
+     "yText": "325"
+    }
+   ]
+  },
+  {
+   "id": "po-distance",
+   "group": "pictorial-outside",
+   "note": "the distance moves the label past the end",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "pictorialBar",
+      "symbol": "rect",
+      "symbolSize": [
+       "60%",
+       "100%"
+      ],
+      "label": {
+       "show": true,
+       "position": "outside",
+       "distance": 12
+      },
+      "data": [
+       4,
+       -4
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "s": 0,
+     "i": 0,
+     "raw": 0,
+     "word": "top",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "drawn": true,
+     "x": "4062480000000000",
+     "xText": "146.25",
+     "y": "404a800000000000",
+     "yText": "53"
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "raw": 1,
+     "word": "bottom",
+     "align": "center",
+     "verticalAlign": "top",
+     "drawn": true,
+     "x": "40702c0000000000",
+     "xText": "258.75",
+     "y": "4074c00000000000",
+     "yText": "332"
+    }
+   ]
+  },
+  {
+   "id": "pm-v",
+   "group": "pictorial-mirror",
+   "note": "a triangle on bars up and down: reflected along the value axis on the negative one",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "pictorialBar",
+      "symbol": "path://M0,0L10,0L5,14Z",
+      "symbolSize": [
+       24,
+       24
+      ],
+      "label": {
+       "show": false
+      },
+      "data": [
+       5,
+       -3
+      ],
+      "symbolPosition": "end"
+     }
+    ]
+   },
+   "glyphs": [
+    {
+     "s": 0,
+     "i": 0,
+     "raw": 0,
+     "k": 0,
+     "cx": "4062480000000000",
+     "cxText": "146.25",
+     "cy": "4058a00000000000",
+     "cyText": "98.5",
+     "scaleSign": 1
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "raw": 1,
+     "k": 0,
+     "cx": "40702c0000000000",
+     "cxText": "258.75",
+     "cy": "4071e80000000000",
+     "cyText": "286.5",
+     "scaleSign": -1
+    }
+   ]
+  },
+  {
+   "id": "pm-h",
+   "group": "pictorial-mirror",
+   "note": "bars lying down: reflected across",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "series": [
+     {
+      "type": "pictorialBar",
+      "symbol": "path://M0,0L10,0L5,14Z",
+      "symbolSize": [
+       24,
+       24
+      ],
+      "label": {
+       "show": false
+      },
+      "data": [
+       5,
+       -3
+      ],
+      "symbolPosition": "end"
+     }
+    ]
+   },
+   "glyphs": [
+    {
+     "s": 0,
+     "i": 0,
+     "raw": 0,
+     "k": 0,
+     "cx": "407e300000000000",
+     "cxText": "483",
+     "cy": "4071c20000000000",
+     "cyText": "284.125",
+     "scaleSign": 1
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "raw": 1,
+     "k": 0,
+     "cx": "4062600000000000",
+     "cxText": "147",
+     "cy": "406b8c0000000000",
+     "cyText": "220.375",
+     "scaleSign": -1
+    }
+   ]
+  },
+  {
+   "id": "pm-rotate",
+   "group": "pictorial-mirror",
+   "note": "a turned triangle: the turn and the reflection compose",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "pictorialBar",
+      "symbol": "path://M0,0L10,0L5,14Z",
+      "symbolSize": [
+       24,
+       24
+      ],
+      "label": {
+       "show": false
+      },
+      "data": [
+       5,
+       -3
+      ],
+      "symbolRotate": 30,
+      "symbolPosition": "end"
+     }
+    ]
+   },
+   "glyphs": [
+    {
+     "s": 0,
+     "i": 0,
+     "raw": 0,
+     "k": 0,
+     "cx": "4062080000000000",
+     "cxText": "144.25",
+     "cy": "4058c24c28bd3d9b",
+     "cyText": "99.03589838486225",
+     "scaleSign": 1
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "raw": 1,
+     "k": 0,
+     "cx": "40704c0000000000",
+     "cxText": "260.75",
+     "cy": "4071df6cf5d0b099",
+     "cyText": "285.96410161513774",
+     "scaleSign": -1
+    }
+   ]
+  },
+  {
+   "id": "pm-repeat",
+   "group": "pictorial-mirror",
+   "note": "a repeated triangle on a negative bar",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "pictorialBar",
+      "symbol": "path://M0,0L10,0L5,14Z",
+      "symbolSize": [
+       16,
+       16
+      ],
+      "label": {
+       "show": false
+      },
+      "data": [
+       6,
+       -6
+      ],
+      "symbolRepeat": true
+     }
+    ]
+   },
+   "glyphs": [
+    {
+     "s": 0,
+     "i": 0,
+     "raw": 0,
+     "k": 0,
+     "cx": "4062480000000000",
+     "cxText": "146.25",
+     "cy": "4066baaaaaaaaaab",
+     "cyText": "181.83333333333334",
+     "scaleSign": 1
+    },
+    {
+     "s": 0,
+     "i": 0,
+     "raw": 0,
+     "k": 1,
+     "cx": "4062480000000000",
+     "cxText": "146.25",
+     "cy": "4064680000000001",
+     "cyText": "163.25000000000003",
+     "scaleSign": 1
+    },
+    {
+     "s": 0,
+     "i": 0,
+     "raw": 0,
+     "k": 2,
+     "cx": "4062480000000000",
+     "cxText": "146.25",
+     "cy": "4062155555555555",
+     "cyText": "144.66666666666666",
+     "scaleSign": 1
+    },
+    {
+     "s": 0,
+     "i": 0,
+     "raw": 0,
+     "k": 3,
+     "cx": "4062480000000000",
+     "cxText": "146.25",
+     "cy": "405f855555555555",
+     "cyText": "126.08333333333333",
+     "scaleSign": 1
+    },
+    {
+     "s": 0,
+     "i": 0,
+     "raw": 0,
+     "k": 4,
+     "cx": "4062480000000000",
+     "cxText": "146.25",
+     "cy": "405ae00000000000",
+     "cyText": "107.5",
+     "scaleSign": 1
+    },
+    {
+     "s": 0,
+     "i": 0,
+     "raw": 0,
+     "k": 5,
+     "cx": "4062480000000000",
+     "cxText": "146.25",
+     "cy": "40563aaaaaaaaaab",
+     "cyText": "88.91666666666667",
+     "scaleSign": 1
+    },
+    {
+     "s": 0,
+     "i": 0,
+     "raw": 0,
+     "k": 6,
+     "cx": "4062480000000000",
+     "cxText": "146.25",
+     "cy": "4051955555555555",
+     "cyText": "70.33333333333333",
+     "scaleSign": 1
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "raw": 1,
+     "k": 0,
+     "cx": "40702c0000000000",
+     "cxText": "258.75",
+     "cy": "4069655555555555",
+     "cyText": "203.16666666666666",
+     "scaleSign": -1
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "raw": 1,
+     "k": 1,
+     "cx": "40702c0000000000",
+     "cxText": "258.75",
+     "cy": "406bb80000000000",
+     "cyText": "221.75",
+     "scaleSign": -1
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "raw": 1,
+     "k": 2,
+     "cx": "40702c0000000000",
+     "cxText": "258.75",
+     "cy": "406e0aaaaaaaaaab",
+     "cyText": "240.33333333333334",
+     "scaleSign": -1
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "raw": 1,
+     "k": 3,
+     "cx": "40702c0000000000",
+     "cxText": "258.75",
+     "cy": "40702eaaaaaaaaab",
+     "cyText": "258.9166666666667",
+     "scaleSign": -1
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "raw": 1,
+     "k": 4,
+     "cx": "40702c0000000000",
+     "cxText": "258.75",
+     "cy": "4071580000000000",
+     "cyText": "277.5",
+     "scaleSign": -1
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "raw": 1,
+     "k": 5,
+     "cx": "40702c0000000000",
+     "cxText": "258.75",
+     "cy": "4072815555555555",
+     "cyText": "296.0833333333333",
+     "scaleSign": -1
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "raw": 1,
+     "k": 6,
+     "cx": "40702c0000000000",
+     "cxText": "258.75",
+     "cy": "4073aaaaaaaaaaab",
+     "cyText": "314.6666666666667",
+     "scaleSign": -1
+    }
+   ]
+  },
+  {
+   "id": "rl-series",
+   "group": "radar-line-colour",
+   "note": "the series' lineStyle.color strokes every ring; the areas keep the rows' colours",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372"
+    ],
+    "radar": {
+     "indicator": [
+      {
+       "name": "p",
+       "max": 10
+      },
+      {
+       "name": "q",
+       "max": 10
+      },
+      {
+       "name": "r",
+       "max": 10
+      },
+      {
+       "name": "s",
+       "max": 10
+      }
+     ]
+    },
+    "series": [
+     {
+      "type": "radar",
+      "lineStyle": {
+       "color": "#ff0000",
+       "width": 2
+      },
+      "areaStyle": {},
+      "data": [
+       {
+        "value": [
+         4,
+         5,
+         6,
+         7
+        ]
+       },
+       {
+        "value": [
+         8,
+         2,
+         3,
+         4
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "rows": [
+    {
+     "s": 0,
+     "i": 0,
+     "raw": 0,
+     "rowColour": "#5070dd",
+     "stroke": "#ff0000",
+     "area": "#5070dd"
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "raw": 1,
+     "rowColour": "#b6d634",
+     "stroke": "#ff0000",
+     "area": "#b6d634"
+    }
+   ]
+  },
+  {
+   "id": "rl-item",
+   "group": "radar-line-colour",
+   "note": "an item's own lineStyle.color over the series'",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372"
+    ],
+    "radar": {
+     "indicator": [
+      {
+       "name": "p",
+       "max": 10
+      },
+      {
+       "name": "q",
+       "max": 10
+      },
+      {
+       "name": "r",
+       "max": 10
+      },
+      {
+       "name": "s",
+       "max": 10
+      }
+     ]
+    },
+    "series": [
+     {
+      "type": "radar",
+      "lineStyle": {
+       "color": "#ff0000"
+      },
+      "data": [
+       {
+        "value": [
+         4,
+         5,
+         6,
+         7
+        ],
+        "lineStyle": {
+         "color": "#00aa00"
+        }
+       },
+       {
+        "value": [
+         8,
+         2,
+         3,
+         4
+        ]
+       },
+       {
+        "value": [
+         1,
+         9,
+         2,
+         5
+        ],
+        "lineStyle": {
+         "width": 3
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "rows": [
+    {
+     "s": 0,
+     "i": 0,
+     "raw": 0,
+     "rowColour": "#5070dd",
+     "stroke": "#00aa00",
+     "area": null
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "raw": 1,
+     "rowColour": "#b6d634",
+     "stroke": "#ff0000",
+     "area": null
+    },
+    {
+     "s": 0,
+     "i": 2,
+     "raw": 2,
+     "rowColour": "#505372",
+     "stroke": "#ff0000",
+     "area": null
+    }
+   ]
+  },
+  {
+   "id": "rl-none",
+   "group": "radar-line-colour",
+   "note": "an item's 'none' and an item's own with no series colour",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372"
+    ],
+    "radar": {
+     "indicator": [
+      {
+       "name": "p",
+       "max": 10
+      },
+      {
+       "name": "q",
+       "max": 10
+      },
+      {
+       "name": "r",
+       "max": 10
+      },
+      {
+       "name": "s",
+       "max": 10
+      }
+     ]
+    },
+    "series": [
+     {
+      "type": "radar",
+      "data": [
+       {
+        "value": [
+         4,
+         5,
+         6,
+         7
+        ],
+        "lineStyle": {
+         "color": "none"
+        }
+       },
+       {
+        "value": [
+         8,
+         2,
+         3,
+         4
+        ],
+        "lineStyle": {
+         "color": "#123456"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "rows": [
+    {
+     "s": 0,
+     "i": 0,
+     "raw": 0,
+     "rowColour": "#5070dd",
+     "stroke": "none",
+     "area": null
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "raw": 1,
+     "rowColour": "#b6d634",
+     "stroke": "#123456",
+     "area": null
+    }
+   ]
+  },
+  {
+   "id": "go-own",
+   "group": "graph-item-offset",
+   "note": "a node's own symbolOffset over the series' -- a number pair, a percentage, a null that falls through",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "symbolSize": 20,
+      "symbolOffset": [
+       5,
+       0
+      ],
+      "roam": false,
+      "data": [
+       {
+        "name": "A",
+        "x": 0,
+        "y": 0
+       },
+       {
+        "name": "B",
+        "x": 100,
+        "y": 0,
+        "symbolOffset": [
+         0,
+         "50%"
+        ]
+       },
+       {
+        "name": "C",
+        "x": 0,
+        "y": 100,
+        "symbolOffset": null
+       },
+       {
+        "name": "D",
+        "x": 100,
+        "y": 100,
+        "symbolOffset": [
+         -8,
+         6
+        ]
+       }
+      ],
+      "links": []
+     }
+    ]
+   },
+   "nodes": [
+    {
+     "s": 0,
+     "i": 0,
+     "raw": 0,
+     "offset": "[5,0]",
+     "ax": "4061800000000000",
+     "axText": "140",
+     "ay": "4044000000000000",
+     "ayText": "40",
+     "x": "4062200000000000",
+     "xText": "145",
+     "y": "4044000000000000",
+     "yText": "40"
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "raw": 1,
+     "offset": "[0,\"50%\"]",
+     "ax": "407cc00000000000",
+     "axText": "460",
+     "ay": "4044000000000000",
+     "ayText": "40",
+     "x": "407cc00000000000",
+     "xText": "460",
+     "y": "4049000000000000",
+     "yText": "50"
+    },
+    {
+     "s": 0,
+     "i": 2,
+     "raw": 2,
+     "offset": "[5,0]",
+     "ax": "4061800000000000",
+     "axText": "140",
+     "ay": "4076800000000000",
+     "ayText": "360",
+     "x": "4062200000000000",
+     "xText": "145",
+     "y": "4076800000000000",
+     "yText": "360"
+    },
+    {
+     "s": 0,
+     "i": 3,
+     "raw": 3,
+     "offset": "[-8,6]",
+     "ax": "407cc00000000000",
+     "axText": "460",
+     "ay": "4076800000000000",
+     "ayText": "360",
+     "x": "407c400000000000",
+     "xText": "452",
+     "y": "4076e00000000000",
+     "yText": "366"
+    }
+   ]
+  },
+  {
+   "id": "go-nodes",
+   "group": "graph-item-offset",
+   "note": "the same through `nodes` and a size pair",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "symbolSize": [
+       30,
+       10
+      ],
+      "nodes": [
+       {
+        "name": "A",
+        "x": 0,
+        "y": 0,
+        "symbolOffset": [
+         "10%",
+         "-50%"
+        ]
+       },
+       {
+        "name": "B",
+        "x": 50,
+        "y": 30
+       }
+      ],
+      "links": [
+       {
+        "source": "A",
+        "target": "B"
+       }
+      ]
+     }
+    ]
+   },
+   "nodes": [
+    {
+     "s": 0,
+     "i": 0,
+     "raw": 0,
+     "offset": "[\"10%\",\"-50%\"]",
+     "ax": "404e000000000000",
+     "axText": "60",
+     "ay": "404c000000000000",
+     "ayText": "56",
+     "x": "404f800000000000",
+     "xText": "63",
+     "y": "4049800000000000",
+     "yText": "51"
+    },
+    {
+     "s": 0,
+     "i": 1,
+     "raw": 1,
+     "offset": "null",
+     "ax": "4080e00000000000",
+     "axText": "540",
+     "ay": "4075800000000000",
+     "ayText": "344",
+     "x": "4080e00000000000",
+     "xText": "540",
+     "y": "4075800000000000",
+     "yText": "344"
+    }
+   ]
+  },
+  {
+   "id": "bs-words",
+   "group": "boxplot-sort",
+   "note": "rows with words in them: asc() sorts with NaN comparisons",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "dataset": [
+     {
+      "source": [
+       [
+        3,
+        1,
+        "x",
+        2,
+        9,
+        4
+       ],
+       [
+        5,
+        "a",
+        2,
+        "b",
+        1,
+        7,
+        3
+       ],
+       [
+        "q",
+        8,
+        6,
+        4,
+        2,
+        0
+       ],
+       [
+        2,
+        2,
+        "n",
+        1,
+        1,
+        3,
+        "m",
+        0,
+        5
+       ],
+       [
+        9,
+        1,
+        "x",
+        5,
+        3,
+        2,
+        8
+       ]
+      ]
+     },
+     {
+      "transform": {
+       "type": "boxplot"
+      }
+     }
+    ],
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "boxplot",
+      "datasetIndex": 1
+     }
+    ]
+   },
+   "rows": [
+    [
+     3,
+     1,
+     "x",
+     2,
+     9,
+     4
+    ],
+    [
+     5,
+     "a",
+     2,
+     "b",
+     1,
+     7,
+     3
+    ],
+    [
+     "q",
+     8,
+     6,
+     4,
+     2,
+     0
+    ],
+    [
+     2,
+     2,
+     "n",
+     1,
+     1,
+     3,
+     "m",
+     0,
+     5
+    ],
+    [
+     9,
+     1,
+     "x",
+     5,
+     3,
+     2,
+     8
+    ]
+   ],
+   "boxes": [
+    [
+     {
+      "s": "0"
+     },
+     {
+      "v": "fff8000000000000",
+      "vText": "NaN"
+     },
+     {
+      "v": "4002000000000000",
+      "vText": "2.25"
+     },
+     {
+      "v": "7ff8000000000000",
+      "vText": "NaN"
+     },
+     {
+      "v": "7ff8000000000000",
+      "vText": "NaN"
+     },
+     {
+      "v": "fff8000000000000",
+      "vText": "NaN"
+     }
+    ],
+    [
+     {
+      "s": "1"
+     },
+     {
+      "v": "fff8000000000000",
+      "vText": "NaN"
+     },
+     {
+      "v": "7ff8000000000000",
+      "vText": "NaN"
+     },
+     {
+      "v": "7ff8000000000000",
+      "vText": "NaN"
+     },
+     {
+      "v": "4000000000000000",
+      "vText": "2"
+     },
+     {
+      "v": "fff8000000000000",
+      "vText": "NaN"
+     }
+    ],
+    [
+     {
+      "s": "2"
+     },
+     {
+      "v": "fff8000000000000",
+      "vText": "NaN"
+     },
+     {
+      "v": "3fe0000000000000",
+      "vText": "0.5"
+     },
+     {
+      "v": "4008000000000000",
+      "vText": "3"
+     },
+     {
+      "v": "4016000000000000",
+      "vText": "5.5"
+     },
+     {
+      "v": "4020000000000000",
+      "vText": "8"
+     }
+    ],
+    [
+     {
+      "s": "3"
+     },
+     {
+      "v": "fff8000000000000",
+      "vText": "NaN"
+     },
+     {
+      "v": "7ff8000000000000",
+      "vText": "NaN"
+     },
+     {
+      "v": "3ff0000000000000",
+      "vText": "1"
+     },
+     {
+      "v": "7ff8000000000000",
+      "vText": "NaN"
+     },
+     {
+      "v": "fff8000000000000",
+      "vText": "NaN"
+     }
+    ],
+    [
+     {
+      "s": "4"
+     },
+     {
+      "v": "fff8000000000000",
+      "vText": "NaN"
+     },
+     {
+      "v": "4004000000000000",
+      "vText": "2.5"
+     },
+     {
+      "v": "4014000000000000",
+      "vText": "5"
+     },
+     {
+      "v": "7ff8000000000000",
+      "vText": "NaN"
+     },
+     {
+      "v": "fff8000000000000",
+      "vText": "NaN"
+     }
+    ]
+   ]
+  },
+  {
+   "id": "rs-80",
+   "group": "river-sort",
+   "note": "one layer of 80 rows, some times words: V8 sorts the indices with ties for NaN",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "singleAxis": {
+     "type": "value",
+     "bottom": 30
+    },
+    "series": [
+     {
+      "type": "themeRiver",
+      "data": [
+       [
+        60,
+        7,
+        "L"
+       ],
+       [
+        135,
+        7,
+        "L"
+       ],
+       [
+        176,
+        8,
+        "L"
+       ],
+       [
+        147,
+        4,
+        "L"
+       ],
+       [
+        38,
+        6,
+        "L"
+       ],
+       [
+        41,
+        8,
+        "L"
+       ],
+       [
+        168,
+        2,
+        "L"
+       ],
+       [
+        146,
+        4,
+        "L"
+       ],
+       [
+        73,
+        10,
+        "L"
+       ],
+       [
+        83,
+        5,
+        "L"
+       ],
+       [
+        34,
+        2,
+        "L"
+       ],
+       [
+        75,
+        6,
+        "L"
+       ],
+       [
+        93,
+        8,
+        "L"
+       ],
+       [
+        87,
+        9,
+        "L"
+       ],
+       [
+        61,
+        6,
+        "L"
+       ],
+       [
+        140,
+        2,
+        "L"
+       ],
+       [
+        18,
+        7,
+        "L"
+       ],
+       [
+        139,
+        3,
+        "L"
+       ],
+       [
+        80,
+        5,
+        "L"
+       ],
+       [
+        86,
+        1,
+        "L"
+       ],
+       [
+        26,
+        7,
+        "L"
+       ],
+       [
+        "n/a",
+        3,
+        "L"
+       ],
+       [
+        83,
+        3,
+        "L"
+       ],
+       [
+        95,
+        6,
+        "L"
+       ],
+       [
+        122,
+        7,
+        "L"
+       ],
+       [
+        "n/a",
+        6,
+        "L"
+       ],
+       [
+        102,
+        7,
+        "L"
+       ],
+       [
+        97,
+        10,
+        "L"
+       ],
+       [
+        103,
+        10,
+        "L"
+       ],
+       [
+        2,
+        7,
+        "L"
+       ],
+       [
+        79,
+        9,
+        "L"
+       ],
+       [
+        56,
+        8,
+        "L"
+       ],
+       [
+        98,
+        2,
+        "L"
+       ],
+       [
+        134,
+        9,
+        "L"
+       ],
+       [
+        138,
+        1,
+        "L"
+       ],
+       [
+        17,
+        3,
+        "L"
+       ],
+       [
+        160,
+        4,
+        "L"
+       ],
+       [
+        46,
+        9,
+        "L"
+       ],
+       [
+        86,
+        1,
+        "L"
+       ],
+       [
+        141,
+        9,
+        "L"
+       ],
+       [
+        199,
+        6,
+        "L"
+       ],
+       [
+        61,
+        1,
+        "L"
+       ],
+       [
+        105,
+        7,
+        "L"
+       ],
+       [
+        134,
+        5,
+        "L"
+       ],
+       [
+        183,
+        7,
+        "L"
+       ],
+       [
+        "n/a",
+        6,
+        "L"
+       ],
+       [
+        135,
+        5,
+        "L"
+       ],
+       [
+        137,
+        4,
+        "L"
+       ],
+       [
+        49,
+        4,
+        "L"
+       ],
+       [
+        "n/a",
+        6,
+        "L"
+       ],
+       [
+        140,
+        6,
+        "L"
+       ],
+       [
+        160,
+        4,
+        "L"
+       ],
+       [
+        95,
+        2,
+        "L"
+       ],
+       [
+        68,
+        1,
+        "L"
+       ],
+       [
+        78,
+        1,
+        "L"
+       ],
+       [
+        "n/a",
+        2,
+        "L"
+       ],
+       [
+        "n/a",
+        8,
+        "L"
+       ],
+       [
+        140,
+        4,
+        "L"
+       ],
+       [
+        94,
+        10,
+        "L"
+       ],
+       [
+        19,
+        9,
+        "L"
+       ],
+       [
+        196,
+        3,
+        "L"
+       ],
+       [
+        116,
+        10,
+        "L"
+       ],
+       [
+        146,
+        4,
+        "L"
+       ],
+       [
+        57,
+        6,
+        "L"
+       ],
+       [
+        105,
+        7,
+        "L"
+       ],
+       [
+        54,
+        2,
+        "L"
+       ],
+       [
+        6,
+        2,
+        "L"
+       ],
+       [
+        92,
+        4,
+        "L"
+       ],
+       [
+        125,
+        6,
+        "L"
+       ],
+       [
+        86,
+        5,
+        "L"
+       ],
+       [
+        62,
+        10,
+        "L"
+       ],
+       [
+        122,
+        5,
+        "L"
+       ],
+       [
+        54,
+        1,
+        "L"
+       ],
+       [
+        79,
+        10,
+        "L"
+       ],
+       [
+        6,
+        5,
+        "L"
+       ],
+       [
+        34,
+        9,
+        "L"
+       ],
+       [
+        190,
+        8,
+        "L"
+       ],
+       [
+        156,
+        5,
+        "L"
+       ],
+       [
+        179,
+        4,
+        "L"
+       ],
+       [
+        119,
+        7,
+        "L"
+       ]
+      ]
+     }
+    ]
+   },
+   "layers": [
+    {
+     "name": "L",
+     "indices": [
+      29,
+      35,
+      16,
+      20,
+      10,
+      4,
+      5,
+      37,
+      31,
+      0,
+      14,
+      8,
+      11,
+      30,
+      18,
+      9,
+      22,
+      19,
+      38,
+      13,
+      12,
+      23,
+      27,
+      32,
+      26,
+      28,
+      24,
+      33,
+      1,
+      34,
+      17,
+      15,
+      39,
+      7,
+      3,
+      36,
+      6,
+      2,
+      21,
+      25,
+      66,
+      74,
+      59,
+      75,
+      48,
+      65,
+      72,
+      63,
+      41,
+      70,
+      53,
+      54,
+      73,
+      69,
+      67,
+      58,
+      52,
+      42,
+      64,
+      61,
+      79,
+      68,
+      43,
+      46,
+      47,
+      44,
+      40,
+      45,
+      49,
+      50,
+      62,
+      51,
+      55,
+      56,
+      71,
+      57,
+      77,
+      78,
+      76,
+      60
+     ]
+    }
+   ]
+  },
+  {
+   "id": "li-candle",
+   "group": "legend-icons",
+   "note": "a candlestick's icon: its borderWidth 1 makes the 'auto' pen 2 wide, in the border colour",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "legend": {
+     "top": 4
+    },
+    "series": [
+     {
+      "type": "candlestick",
+      "name": "K",
+      "data": [
+       [
+        2,
+        4,
+        1,
+        5
+       ],
+       [
+        4,
+        3,
+        2,
+        6
+       ]
+      ]
+     }
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    }
+   },
+   "items": [
+    {
+     "name": "K",
+     "icons": [
+      {
+       "type": "path",
+       "fill": "#eb5454",
+       "stroke": "#eb5454",
+       "lineWidth": 2
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "li-candle-colour",
+   "group": "legend-icons",
+   "note": "a candlestick that wrote its colours",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "legend": {
+     "top": 4
+    },
+    "series": [
+     {
+      "type": "candlestick",
+      "name": "K",
+      "itemStyle": {
+       "color": "#ff0000",
+       "borderColor": "#00ff00"
+      },
+      "data": [
+       [
+        2,
+        4,
+        1,
+        5
+       ]
+      ]
+     }
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    }
+   },
+   "items": [
+    {
+     "name": "K",
+     "icons": [
+      {
+       "type": "path",
+       "fill": "#ff0000",
+       "stroke": "#00ff00",
+       "lineWidth": 2
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "li-candle-noborder",
+   "group": "legend-icons",
+   "note": "a candlestick with borderWidth 0: no pen",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "legend": {
+     "top": 4
+    },
+    "series": [
+     {
+      "type": "candlestick",
+      "name": "K",
+      "itemStyle": {
+       "borderWidth": 0
+      },
+      "data": [
+       [
+        2,
+        4,
+        1,
+        5
+       ]
+      ]
+     }
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    }
+   },
+   "items": [
+    {
+     "name": "K",
+     "icons": [
+      {
+       "type": "path",
+       "fill": "#eb5454",
+       "stroke": "#eb5454",
+       "lineWidth": 0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "li-boxplot",
+   "group": "legend-icons",
+   "note": "a boxplot's icon",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "legend": {
+     "top": 4
+    },
+    "series": [
+     {
+      "type": "boxplot",
+      "name": "B",
+      "itemStyle": {
+       "borderColor": "#0000ff",
+       "color": "#ffffff"
+      },
+      "data": [
+       [
+        1,
+        2,
+        3,
+        4,
+        5
+       ]
+      ]
+     }
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    }
+   },
+   "items": [
+    {
+     "name": "B",
+     "icons": [
+      {
+       "type": "path",
+       "fill": "#0000ff",
+       "stroke": "#0000ff",
+       "lineWidth": 2
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "li-others",
+   "group": "legend-icons",
+   "note": "bar, scatter, effectScatter and line icons with their defaults",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "legend": {
+     "top": 4
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Bar",
+      "itemStyle": {
+       "color": "#ff0000"
+      },
+      "data": [
+       1
+      ]
+     },
+     {
+      "type": "scatter",
+      "name": "Sc",
+      "itemStyle": {
+       "color": "#00ff00"
+      },
+      "data": [
+       2
+      ]
+     },
+     {
+      "type": "effectScatter",
+      "name": "Ef",
+      "itemStyle": {
+       "color": "#0000ff"
+      },
+      "data": [
+       3
+      ]
+     },
+     {
+      "type": "line",
+      "name": "Ln",
+      "itemStyle": {
+       "color": "#ff00ff"
+      },
+      "lineStyle": {
+       "color": "#ff00ff"
+      },
+      "data": [
+       4
+      ]
+     }
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    }
+   },
+   "items": [
+    {
+     "name": "Bar",
+     "icons": [
+      {
+       "type": "path",
+       "fill": "#ff0000",
+       "stroke": null,
+       "lineWidth": 0
+      }
+     ]
+    },
+    {
+     "name": "Sc",
+     "icons": [
+      {
+       "type": "path",
+       "fill": "#00ff00",
+       "stroke": null,
+       "lineWidth": 0
+      }
+     ]
+    },
+    {
+     "name": "Ef",
+     "icons": [
+      {
+       "type": "path",
+       "fill": "#0000ff",
+       "stroke": null,
+       "lineWidth": 0
+      }
+     ]
+    },
+    {
+     "name": "Ln",
+     "icons": [
+      {
+       "type": "path",
+       "fill": "#000",
+       "stroke": "#ff00ff",
+       "lineWidth": 2
+      },
+      {
+       "type": "path",
+       "fill": "#fff",
+       "stroke": "#ff00ff",
+       "lineWidth": 2
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "li-graph",
+   "group": "legend-icons",
+   "note": "a graph's icon",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "legend": {
+     "top": 4
+    },
+    "series": [
+     {
+      "type": "graph",
+      "name": "G",
+      "layout": "none",
+      "itemStyle": {
+       "color": "#ff0000"
+      },
+      "data": [
+       {
+        "name": "n",
+        "x": 1,
+        "y": 1
+       }
+      ],
+      "links": []
+     }
+    ]
+   },
+   "items": [
+    {
+     "name": "G",
+     "icons": [
+      {
+       "type": "path",
+       "fill": "#ff0000",
+       "stroke": null,
+       "lineWidth": 0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "li-pictorial",
+   "group": "legend-icons",
+   "note": "a pictorialBar's icon",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "legend": {
+     "top": 4
+    },
+    "series": [
+     {
+      "type": "pictorialBar",
+      "name": "P",
+      "symbol": "rect",
+      "itemStyle": {
+       "color": "#ff0000"
+      },
+      "data": [
+       2
+      ]
+     }
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    }
+   },
+   "items": [
+    {
+     "name": "P",
+     "icons": [
+      {
+       "type": "path",
+       "fill": "#ff0000",
+       "stroke": null,
+       "lineWidth": 0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "pd-neg",
+   "group": "pie-delay",
+   "note": "a pie with negative values: the delay callback is called with the filtered indices",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": true,
+    "animationDelay": "@delayLog",
+    "series": [
+     {
+      "type": "pie",
+      "data": [
+       3,
+       -1,
+       4,
+       -2,
+       5
+      ]
+     }
+    ]
+   },
+   "calls": [
+    0,
+    1,
+    2,
+    0,
+    null,
+    1,
+    null,
+    2,
+    null
+   ]
+  },
+  {
+   "id": "ls-polar",
+   "group": "large-scatter",
+   "note": "a large scatter on a polar: one batch, the ring its soft clip",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "polar": {
+     "radius": [
+      20,
+      140
+     ]
+    },
+    "angleAxis": {
+     "type": "value",
+     "max": 10
+    },
+    "radiusAxis": {
+     "max": 8
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "coordinateSystem": "polar",
+      "large": true,
+      "largeThreshold": 10,
+      "symbolSize": 6,
+      "data": [
+       [
+        0,
+        0
+       ],
+       [
+        1,
+        7
+       ],
+       [
+        2,
+        4
+       ],
+       [
+        3,
+        1
+       ],
+       [
+        4,
+        8
+       ],
+       [
+        5,
+        5
+       ],
+       [
+        6,
+        2
+       ],
+       [
+        7,
+        9
+       ],
+       [
+        8,
+        6
+       ],
+       [
+        9,
+        3
+       ],
+       [
+        0,
+        0
+       ],
+       [
+        1,
+        7
+       ],
+       [
+        2,
+        4
+       ],
+       [
+        3,
+        1
+       ],
+       [
+        4,
+        8
+       ],
+       [
+        5,
+        5
+       ],
+       [
+        6,
+        2
+       ],
+       [
+        7,
+        9
+       ],
+       [
+        8,
+        6
+       ],
+       [
+        9,
+        3
+       ],
+       [
+        0,
+        0
+       ],
+       [
+        1,
+        7
+       ],
+       [
+        2,
+        4
+       ],
+       [
+        3,
+        1
+       ],
+       [
+        4,
+        8
+       ],
+       [
+        5,
+        5
+       ],
+       [
+        6,
+        2
+       ],
+       [
+        7,
+        9
+       ],
+       [
+        8,
+        6
+       ],
+       [
+        9,
+        3
+       ]
+      ]
+     }
+    ]
+   },
+   "points": [
+    "4072c00000000000",
+    "4066800000000000",
+    "4070ab6880000000",
+    "406a5a1960000000",
+    "4074963a60000000",
+    "406e0e6d60000000",
+    "4075234c00000000",
+    "40626d3ea0000000",
+    "406bfd4ba0000000",
+    "4065e8eaa0000000",
+    "4072c00000000000",
+    "4072700000000000",
+    "407949dc00000000",
+    "4064c042a0000000",
+    "406c50dbe0000000",
+    "4058b7dd40000000",
+    "406b36b8e0000000",
+    "40739432c0000000",
+    "407bf69ec0000000",
+    "406efcb960000000",
+    "4072c00000000000",
+    "4066800000000000",
+    "4070ab6880000000",
+    "406a5a1960000000",
+    "4074963a60000000",
+    "406e0e6d60000000",
+    "4075234c00000000",
+    "40626d3ea0000000",
+    "406bfd4ba0000000",
+    "4065e8eaa0000000",
+    "4072c00000000000",
+    "4072700000000000",
+    "407949dc00000000",
+    "4064c042a0000000",
+    "406c50dbe0000000",
+    "4058b7dd40000000",
+    "406b36b8e0000000",
+    "40739432c0000000",
+    "407bf69ec0000000",
+    "406efcb960000000",
+    "4072c00000000000",
+    "4066800000000000",
+    "4070ab6880000000",
+    "406a5a1960000000",
+    "4074963a60000000",
+    "406e0e6d60000000",
+    "4075234c00000000",
+    "40626d3ea0000000",
+    "406bfd4ba0000000",
+    "4065e8eaa0000000",
+    "4072c00000000000",
+    "4072700000000000",
+    "407949dc00000000",
+    "4064c042a0000000",
+    "406c50dbe0000000",
+    "4058b7dd40000000",
+    "406b36b8e0000000",
+    "40739432c0000000",
+    "407bf69ec0000000",
+    "406efcb960000000"
+   ],
+   "clip": "ring",
+   "ink": true
+  },
+  {
+   "id": "ls-calendar",
+   "group": "large-scatter",
+   "note": "a large scatter on a calendar: one batch, no clip",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "calendar": {
+     "range": "2020-01",
+     "cellSize": 20,
+     "left": 40,
+     "top": 40
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "coordinateSystem": "calendar",
+      "large": true,
+      "largeThreshold": 10,
+      "symbolSize": 6,
+      "data": [
+       [
+        "2020-01-01",
+        0
+       ],
+       [
+        "2020-01-02",
+        1
+       ],
+       [
+        "2020-01-03",
+        2
+       ],
+       [
+        "2020-01-04",
+        3
+       ],
+       [
+        "2020-01-05",
+        4
+       ],
+       [
+        "2020-01-06",
+        5
+       ],
+       [
+        "2020-01-07",
+        6
+       ],
+       [
+        "2020-01-08",
+        7
+       ],
+       [
+        "2020-01-09",
+        8
+       ],
+       [
+        "2020-01-10",
+        9
+       ],
+       [
+        "2020-01-11",
+        10
+       ],
+       [
+        "2020-01-12",
+        11
+       ],
+       [
+        "2020-01-13",
+        12
+       ],
+       [
+        "2020-01-14",
+        13
+       ],
+       [
+        "2020-01-15",
+        14
+       ],
+       [
+        "2020-01-16",
+        15
+       ],
+       [
+        "2020-01-17",
+        16
+       ],
+       [
+        "2020-01-18",
+        17
+       ],
+       [
+        "2020-01-19",
+        18
+       ],
+       [
+        "2020-01-20",
+        19
+       ]
+      ]
+     }
+    ]
+   },
+   "points": [
+    "4049000000000000",
+    "405b800000000000",
+    "4049000000000000",
+    "4060400000000000",
+    "4049000000000000",
+    "4062c00000000000",
+    "4049000000000000",
+    "4065400000000000",
+    "4051800000000000",
+    "4049000000000000",
+    "4051800000000000",
+    "4051800000000000",
+    "4051800000000000",
+    "4056800000000000",
+    "4051800000000000",
+    "405b800000000000",
+    "4051800000000000",
+    "4060400000000000",
+    "4051800000000000",
+    "4062c00000000000",
+    "4051800000000000",
+    "4065400000000000",
+    "4056800000000000",
+    "4049000000000000",
+    "4056800000000000",
+    "4051800000000000",
+    "4056800000000000",
+    "4056800000000000",
+    "4056800000000000",
+    "405b800000000000",
+    "4056800000000000",
+    "4060400000000000",
+    "4056800000000000",
+    "4062c00000000000",
+    "4056800000000000",
+    "4065400000000000",
+    "405b800000000000",
+    "4049000000000000",
+    "405b800000000000",
+    "4051800000000000"
+   ],
+   "clip": null,
+   "ink": true
+  },
+  {
+   "id": "ls-single",
+   "group": "large-scatter",
+   "note": "a large scatter on a single axis",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "singleAxis": {
+     "type": "value",
+     "top": 100,
+     "height": 100
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "coordinateSystem": "singleAxis",
+      "large": true,
+      "largeThreshold": 10,
+      "symbolSize": 6,
+      "data": [
+       0,
+       3,
+       6,
+       9,
+       12,
+       15,
+       18,
+       21,
+       24,
+       27,
+       30,
+       33,
+       36,
+       39,
+       42,
+       45,
+       48,
+       51,
+       54,
+       57
+      ]
+     }
+    ]
+   },
+   "points": [
+    "403e000000000000",
+    "4062c00000000000",
+    "404c800000000000",
+    "4062c00000000000",
+    "4055000000000000",
+    "4062c00000000000",
+    "405bc00000000000",
+    "4062c00000000000",
+    "4061400000000000",
+    "4062c00000000000",
+    "4064a00000000000",
+    "4062c00000000000",
+    "4068000000000000",
+    "4062c00000000000",
+    "406b600000000000",
+    "4062c00000000000",
+    "406ec00000000000",
+    "4062c00000000000",
+    "4071100000000000",
+    "4062c00000000000"
+   ],
+   "clip": null,
+   "ink": true
+  },
+  {
+   "id": "ls-path",
+   "group": "large-scatter",
+   "note": "a large path:// scatter: one batch whose path collapsed to its 0 x 0 box -- no ink",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "symbol": "path://M0,0L10,0L5,10Z",
+      "symbolSize": 12,
+      "large": true,
+      "largeThreshold": 10,
+      "data": [
+       [
+        0,
+        0
+       ],
+       [
+        1,
+        7
+       ],
+       [
+        2,
+        4
+       ],
+       [
+        3,
+        1
+       ],
+       [
+        4,
+        8
+       ],
+       [
+        5,
+        5
+       ],
+       [
+        6,
+        2
+       ],
+       [
+        7,
+        9
+       ],
+       [
+        8,
+        6
+       ],
+       [
+        9,
+        3
+       ],
+       [
+        0,
+        0
+       ],
+       [
+        1,
+        7
+       ],
+       [
+        2,
+        4
+       ],
+       [
+        3,
+        1
+       ],
+       [
+        4,
+        8
+       ],
+       [
+        5,
+        5
+       ],
+       [
+        6,
+        2
+       ],
+       [
+        7,
+        9
+       ],
+       [
+        8,
+        6
+       ],
+       [
+        9,
+        3
+       ],
+       [
+        0,
+        0
+       ],
+       [
+        1,
+        7
+       ],
+       [
+        2,
+        4
+       ],
+       [
+        3,
+        1
+       ],
+       [
+        4,
+        8
+       ],
+       [
+        5,
+        5
+       ],
+       [
+        6,
+        2
+       ],
+       [
+        7,
+        9
+       ],
+       [
+        8,
+        6
+       ],
+       [
+        9,
+        3
+       ]
+      ]
+     }
+    ]
+   },
+   "points": [
+    "4056800000000000",
+    "4074000000000000",
+    "4060e00000000000",
+    "4061b00000000000",
+    "4066800000000000",
+    "406b400000000000",
+    "406c200000000000",
+    "4072680000000000",
+    "4070e00000000000",
+    "405d000000000000",
+    "4073b00000000000",
+    "4068100000000000",
+    "4076800000000000",
+    "4070d00000000000",
+    "4079500000000000",
+    "4056a00000000000",
+    "407c200000000000",
+    "4064e00000000000",
+    "407ef00000000000",
+    "406e700000000000",
+    "4056800000000000",
+    "4074000000000000",
+    "4060e00000000000",
+    "4061b00000000000",
+    "4066800000000000",
+    "406b400000000000",
+    "406c200000000000",
+    "4072680000000000",
+    "4070e00000000000",
+    "405d000000000000",
+    "4073b00000000000",
+    "4068100000000000",
+    "4076800000000000",
+    "4070d00000000000",
+    "4079500000000000",
+    "4056a00000000000",
+    "407c200000000000",
+    "4064e00000000000",
+    "407ef00000000000",
+    "406e700000000000",
+    "4056800000000000",
+    "4074000000000000",
+    "4060e00000000000",
+    "4061b00000000000",
+    "4066800000000000",
+    "406b400000000000",
+    "406c200000000000",
+    "4072680000000000",
+    "4070e00000000000",
+    "405d000000000000",
+    "4073b00000000000",
+    "4068100000000000",
+    "4076800000000000",
+    "4070d00000000000",
+    "4079500000000000",
+    "4056a00000000000",
+    "407c200000000000",
+    "4064e00000000000",
+    "407ef00000000000",
+    "406e700000000000"
+   ],
+   "clip": "rect",
+   "ink": false
+  },
+  {
+   "id": "ls-image",
+   "group": "large-scatter",
+   "note": "a large image:// scatter: upstream throws (an image has no buildPath)",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "symbol": "image://data:image/png;base64,iVBORw0KGgo=",
+      "large": true,
+      "largeThreshold": 10,
+      "data": [
+       [
+        0,
+        0
+       ],
+       [
+        1,
+        7
+       ],
+       [
+        2,
+        4
+       ],
+       [
+        3,
+        1
+       ],
+       [
+        4,
+        8
+       ],
+       [
+        5,
+        5
+       ],
+       [
+        6,
+        2
+       ],
+       [
+        7,
+        9
+       ],
+       [
+        8,
+        6
+       ],
+       [
+        9,
+        3
+       ],
+       [
+        0,
+        0
+       ],
+       [
+        1,
+        7
+       ],
+       [
+        2,
+        4
+       ],
+       [
+        3,
+        1
+       ],
+       [
+        4,
+        8
+       ],
+       [
+        5,
+        5
+       ],
+       [
+        6,
+        2
+       ],
+       [
+        7,
+        9
+       ],
+       [
+        8,
+        6
+       ],
+       [
+        9,
+        3
+       ],
+       [
+        0,
+        0
+       ],
+       [
+        1,
+        7
+       ],
+       [
+        2,
+        4
+       ],
+       [
+        3,
+        1
+       ],
+       [
+        4,
+        8
+       ],
+       [
+        5,
+        5
+       ],
+       [
+        6,
+        2
+       ],
+       [
+        7,
+        9
+       ],
+       [
+        8,
+        6
+       ],
+       [
+        9,
+        3
+       ]
+      ]
+     }
+    ]
+   },
+   "throws": true
+  }
+ ],
+ "guards": [
+  "a negative bar hangs its outside label below it",
+  "a negative bar lying down hangs it on the left",
+  "a negative bound puts a positive bar's outside label below",
+  "a zero bar is outside on top",
+  "a zero repeated bar keeps its label",
+  "the up glyph and the down glyph are reflections",
+  "the ring strokes the series line colour, the area the row's",
+  "an item's own line colour",
+  "a none pen",
+  "an item offset moves its node, a null falls through",
+  "V8 sorts a row with words differently from an insertion sort",
+  "the layer is V8's order of its rows",
+  "which a stable merge sort would not give",
+  "a candlestick icon has a 2 px pen",
+  "a polar batch clips by the ring, a calendar one not at all",
+  "a large path:// batch has no ink",
+  "a large image:// scatter throws upstream",
+  "the pie delay is called with the filtered indices only"
+ ]
+}

@@ -1171,9 +1171,16 @@ end;
 
 { the preprocessors' models an option makes: `axisPointer: {}` unless it has
   one (an empty array is none), `grid: {}` with an xAxis and a yAxis and no
-  grid }
+  grid; [spec 244] `markPoint: {}` (markLine, markArea) when the option has
+  none and a series of it writes a truthy one (checkMarkerInSeries: the
+  series a list or a single object) }
 procedure PreprocessorModels(AOption: TJSONObject; var AKeys: TTyOptionKeys);
-var d: TJSONData;
+const
+  cMarkers: array[0..2] of string = ('markPoint', 'markLine', 'markArea');
+var
+  d, s: TJSONData;
+  k, i: Integer;
+  found: Boolean;
 begin
   if AOption = nil then Exit;
   d := AOption.Find('axisPointer');
@@ -1182,6 +1189,26 @@ begin
   if Truthy(AOption.Find('xAxis')) and Truthy(AOption.Find('yAxis'))
     and not Truthy(AOption.Find('grid')) then
     EnsureFirstSlot(AKeys, 'grid');
+  s := AOption.Find('series');
+  for k := 0 to High(cMarkers) do
+  begin
+    { `opt.markPoint = opt.markPoint || {}`: a truthy one the option wrote
+      stands (an empty list too, and it makes no model) }
+    if Truthy(AOption.Find(cMarkers[k])) then Continue;
+    found := False;
+    if s is TJSONArray then
+    begin
+      for i := 0 to s.Count - 1 do
+        if (s.Items[i] is TJSONObject) and Truthy(TJSONObject(s.Items[i]).Find(cMarkers[k])) then
+        begin
+          found := True;
+          Break;
+        end;
+    end
+    else if s is TJSONObject then
+      found := Truthy(TJSONObject(s).Find(cMarkers[k]));
+    if found then EnsureFirstSlot(AKeys, cMarkers[k]);
+  end;
 end;
 
 { the subType a fresh model of this option takes }

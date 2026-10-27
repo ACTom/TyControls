@@ -1352,6 +1352,8 @@ TyAdvChartSeries9 { background: mix(var(--accent), var(--on-surface), 15%); }
    set is small enough to re-check. */
 TyAdvChartAxisLine  { border-color: var(--border); border-width: 1px; }
 TyAdvChartAxisTick  { border-color: var(--border); border-width: 1px; }
+/* [R5-G] a shown grid's border (grid.show): upstream's tokens.color.neutral30 */
+TyAdvChartGridBorder { border-color: #b7b9be; border-width: 1px; }
 /* Muted, not full ink: an axis label is a reference, not content. --muted is
    already alpha over --on-surface, so it follows a dark theme by itself. */
 TyAdvChartAxisLabel { color: var(--muted); font-size: var(--font-size-base); }
@@ -1402,7 +1404,8 @@ TyAdvChartSankeyLink { background: var(--muted); }
 /* The chart's own title and subtitle. Upstream draws them at 18/bold and
    12/regular; the sizes come from the type scale here so a dense skin gets a
    proportionate title instead of an 18px one on 11px axis labels. */
-TyAdvChartTitle { color: var(--on-surface); font-size: var(--font-size-title); font-weight: 700; }
+/* [R5-G] border-color: a title box's default pen (borderWidth above 0) -- upstream's tokens.color.primary */
+TyAdvChartTitle { color: var(--on-surface); font-size: var(--font-size-title); font-weight: 700; border-color: #3c3c41; }
 TyAdvChartSubtitle { color: var(--muted); font-size: var(--font-size-base); }
 /* A label OUTSIDE its mark: the theme's own ink, not anything derived from the
    thing it names. Upstream picks #333 or #ccc by mode; this is the same idea

@@ -1282,6 +1282,7 @@ var
   nodes: array[0..1] of TJSONObject;
   st, d: TJSONData;
   col: TTyChartColor;
+  cs: TTyCandleSpec;
 begin
   if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
   s := FBindings[ASlot].SeriesIndex;
@@ -1298,6 +1299,23 @@ begin
     ASrc.HasStroke := True;
     ASrc.Stroke := TTyChartColor(ActiveController.Model.ResolveStyle(
       GetStyleTypeKey, StyleClass, [tysNormal]).Background.Color);
+  end
+  { [R5-G] A CANDLESTICK'S AND A BOXPLOT'S itemStyle.borderWidth 1 (their
+    defaultOption), so the 'auto' pen is 2: the candle's in its rising
+    border colour, the box's in its visual colour (it draws with the stroke)
+    [was: no pen unless the author wrote a border] }
+  else if t = 'candlestick' then
+  begin
+    cs := CandleVisual(ASlot);
+    ASrc.VisualLineWidth := cs.BorderWidthLogical;
+    ASrc.HasStroke := True;
+    ASrc.Stroke := cs.UpBorder;
+  end
+  else if t = 'boxplot' then
+  begin
+    ASrc.VisualLineWidth := 1;
+    ASrc.HasStroke := True;
+    ASrc.Stroke := TTyChartColor(SeriesColor(s));
   end;
   { the series' itemStyle, then the datum's }
   nodes[0] := StSeriesNode(s);

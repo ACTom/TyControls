@@ -438,12 +438,13 @@ add("G6 V log ['Infinity',5,3]", V(['Infinity', 5, 3], { type: 'log' }));
 add("G7 stack ['Infinity',5,3]+[2,2,2]", stackV([['Infinity', 5, 3], [2, 2, 2]]));
 add("G8 stack [2,2,2]+['Infinity',5,3]", stackV([[2, 2, 2], ['Infinity', 5, 3]]));
 
-// deferred: the border inset (D6), background strips on gap rows (D5),
-// barMinWidth 0 still floors the width at 1 (D7)
-add('V borderWidth 2 [5,-3,0,1e-9]', V(D, null, { itemStyle: { borderColor: '#000', borderWidth: 2 } }), deferred);
-add('V showBackground [5,-,null,3]', V([5, '-', null, 3], null, { showBackground: true }), deferred);
-add('H showBackground [5,-,null,3]', H([5, '-', null, 3], null, { showBackground: true }), deferred);
-add('V barCategoryGap 100% barMinWidth 0 [5,3]', V([5, 3], null, { barCategoryGap: '100%', barMinWidth: 0 }), deferred);
+// once deferred, compared since R5-G (spec 244): the border inset (D6),
+// background strips on gap rows (D5), barMinWidth 0 still floors the width
+// at 1 (D7)
+add('V borderWidth 2 [5,-3,0,1e-9]', V(D, null, { itemStyle: { borderColor: '#000', borderWidth: 2 } }));
+add('V showBackground [5,-,null,3]', V([5, '-', null, 3], null, { showBackground: true }));
+add('H showBackground [5,-,null,3]', H([5, '-', null, 3], null, { showBackground: true }));
+add('V barCategoryGap 100% barMinWidth 0 [5,3]', V([5, 3], null, { barCategoryGap: '100%', barMinWidth: 0 }));
 
 // ---------- run and write ----------
 

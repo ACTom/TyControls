@@ -815,6 +815,14 @@ add('series', 'graph-cells', 'a graph on a matrix: nodes by name, by number, on 
     series: { type: 'graph', coordinateSystem: 'matrix', symbolSize: 12,
       data: [['A1', 'U', 1], ['A32', 'V', 2], [1, 1, 3], ['A3', 'U', 4], [-1, 'V', 5], ['zz', 'U', 6], ['zz', 'qq', '-'], { value: ['A2', 'V', 7], name: 'named' }, ['A1', 'V', '-']],
       links: [{ source: 0, target: 1 }, { source: 1, target: 2, lineStyle: { curveness: 0.3 } }, { source: 2, target: 5 }, { source: 3, target: 7 }] } });
+// [spec 244] a collecting matrix collects a graph's nodes too (createGraphFromNodeEdge
+// parses x and y by the trees' ordinal metas): after the scatter's, a number its own category
+add('series', 'r5g-graph-collect', 'a graph on a collecting matrix (no data in the trees): its nodes x and y collected after a scatter, row by row, a number x a category of its own; an unnamed node named by its x',
+  { matrix: {},
+    series: [{ type: 'scatter', coordinateSystem: 'matrix', data: [['s1', 't1']] },
+      { type: 'graph', coordinateSystem: 'matrix', symbolSize: 12,
+        data: [['a', 'p', 5], { name: 'N', value: ['b', 'q', 3] }, [7, 'q'], ['b', 'p']],
+        links: [{ source: 0, target: 1 }, { source: 2, target: 3 }] }] });
 add('series', 'pie-cells', 'pies in cells: center names, a coord over a percentage center, a range coord, a percentage radius, an unknown name, an explicit data usage',
   { matrix: { x: { data: [{ value: 'G1', children: ['a', 'b'] }, 'c'] }, y: { data: ['p', 'q', 'r'] }, top: 100, bottom: 100 },
     series: [

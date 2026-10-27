@@ -1,0 +1,785 @@
+{
+ "source": "tools/advchart-oracle/edges-merge.js against echarts.js (ECharts 6.1.0)",
+ "notes": [
+  "A state per step: every slot of markPoint, markLine, markArea, grid and axisPointer (null a hole, else {id, name, sub})."
+ ],
+ "cases": [
+  {
+   "id": "init",
+   "note": "a line writes a markPoint, a bar a markLine: two root models; no markArea",
+   "W": 600,
+   "H": 400,
+   "steps": [
+    {
+     "set": {
+      "animation": false,
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c"
+       ]
+      },
+      "yAxis": {
+       "type": "value"
+      },
+      "series": [
+       {
+        "type": "line",
+        "data": [
+         1,
+         3,
+         2
+        ],
+        "markPoint": {
+         "data": [
+          {
+           "type": "max"
+          }
+         ]
+        }
+       },
+       {
+        "type": "bar",
+        "data": [
+         2,
+         1,
+         3
+        ],
+        "markLine": {
+         "data": [
+          {
+           "type": "average"
+          }
+         ]
+        }
+       }
+      ]
+     }
+    }
+   ],
+   "states": [
+    {
+     "markPoint": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ],
+     "markLine": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ],
+     "markArea": [],
+     "grid": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ],
+     "axisPointer": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "root-written",
+   "note": "a root markPoint the author wrote is kept (truthy); a root markLine of null is `null || {}`; a markArea written as an empty list -- truthy -- is kept and makes no model",
+   "W": 600,
+   "H": 400,
+   "steps": [
+    {
+     "set": {
+      "animation": false,
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c"
+       ]
+      },
+      "yAxis": {
+       "type": "value"
+      },
+      "markPoint": {
+       "label": {
+        "show": false
+       }
+      },
+      "markLine": null,
+      "markArea": [],
+      "series": [
+       {
+        "type": "line",
+        "data": [
+         1,
+         3,
+         2
+        ],
+        "markPoint": {
+         "data": [
+          {
+           "type": "max"
+          }
+         ]
+        },
+        "markLine": {
+         "data": [
+          {
+           "type": "average"
+          }
+         ]
+        },
+        "markArea": {
+         "data": [
+          [
+           {
+            "xAxis": "a"
+           },
+           {
+            "xAxis": "b"
+           }
+          ]
+         ]
+        }
+       }
+      ]
+     }
+    }
+   ],
+   "states": [
+    {
+     "markPoint": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ],
+     "markLine": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ],
+     "markArea": [],
+     "grid": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ],
+     "axisPointer": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "falsy",
+   "note": "a series marker of null, false, 0 or an empty string makes no model; an empty object is truthy",
+   "W": 600,
+   "H": 400,
+   "steps": [
+    {
+     "set": {
+      "animation": false,
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c"
+       ]
+      },
+      "yAxis": {
+       "type": "value"
+      },
+      "series": [
+       {
+        "type": "line",
+        "data": [
+         1,
+         3,
+         2
+        ],
+        "markPoint": null,
+        "markLine": false
+       },
+       {
+        "type": "line",
+        "data": [
+         1,
+         3,
+         2
+        ],
+        "markPoint": 0,
+        "markLine": "",
+        "markArea": {}
+       }
+      ]
+     }
+    }
+   ],
+   "states": [
+    {
+     "markPoint": [],
+     "markLine": [],
+     "markArea": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ],
+     "grid": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ],
+     "axisPointer": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "single-series",
+   "note": "the series written as one object, not a list",
+   "W": 600,
+   "H": 400,
+   "steps": [
+    {
+     "set": {
+      "animation": false,
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c"
+       ]
+      },
+      "yAxis": {
+       "type": "value"
+      },
+      "series": {
+       "type": "bar",
+       "data": [
+        1,
+        2,
+        3
+       ],
+       "markArea": {
+        "data": [
+         [
+          {
+           "xAxis": "a"
+          },
+          {
+           "xAxis": "b"
+          }
+         ]
+        ]
+       }
+      }
+     }
+    }
+   ],
+   "states": [
+    {
+     "markPoint": [],
+     "markLine": [],
+     "markArea": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ],
+     "grid": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ],
+     "axisPointer": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "merge",
+   "note": "no markers first; a merge brings a series with a markLine (the model made then); a merge with no series keeps it; notMerge without markers drops every marker model",
+   "W": 600,
+   "H": 400,
+   "steps": [
+    {
+     "set": {
+      "animation": false,
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c"
+       ]
+      },
+      "yAxis": {
+       "type": "value"
+      },
+      "series": [
+       {
+        "type": "line",
+        "data": [
+         1,
+         3,
+         2
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "set": {
+      "series": [
+       {
+        "markLine": {
+         "data": [
+          {
+           "type": "average"
+          }
+         ]
+        }
+       }
+      ]
+     }
+    },
+    {
+     "set": {
+      "title": {
+       "text": "t"
+      }
+     }
+    },
+    {
+     "set": {
+      "animation": false,
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c"
+       ]
+      },
+      "yAxis": {
+       "type": "value"
+      },
+      "series": [
+       {
+        "type": "line",
+        "data": [
+         1,
+         3,
+         2
+        ]
+       }
+      ]
+     },
+     "notMerge": true
+    }
+   ],
+   "states": [
+    {
+     "markPoint": [],
+     "markLine": [],
+     "markArea": [],
+     "grid": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ],
+     "axisPointer": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ]
+    },
+    {
+     "markPoint": [],
+     "markLine": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ],
+     "markArea": [],
+     "grid": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ],
+     "axisPointer": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ]
+    },
+    {
+     "markPoint": [],
+     "markLine": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ],
+     "markArea": [],
+     "grid": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ],
+     "axisPointer": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ]
+    },
+    {
+     "markPoint": [],
+     "markLine": [],
+     "markArea": [],
+     "grid": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ],
+     "axisPointer": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "frames",
+   "note": "a timeline: the base option has no marker, the first frame a markPoint, the second a markArea -- every frame is preprocessed",
+   "W": 600,
+   "H": 400,
+   "steps": [
+    {
+     "set": {
+      "baseOption": {
+       "animation": false,
+       "timeline": {
+        "data": [
+         "f0",
+         "f1"
+        ],
+        "show": false
+       },
+       "xAxis": {
+        "type": "category",
+        "data": [
+         "a",
+         "b",
+         "c"
+        ]
+       },
+       "yAxis": {
+        "type": "value"
+       },
+       "series": [
+        {
+         "type": "line",
+         "data": [
+          1,
+          3,
+          2
+         ]
+        }
+       ]
+      },
+      "options": [
+       {
+        "series": [
+         {
+          "markPoint": {
+           "data": [
+            {
+             "type": "max"
+            }
+           ]
+          }
+         }
+        ]
+       },
+       {
+        "series": [
+         {
+          "markArea": {
+           "data": [
+            [
+             {
+              "xAxis": "a"
+             },
+             {
+              "xAxis": "b"
+             }
+            ]
+           ]
+          }
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "action": {
+      "type": "timelineChange",
+      "currentIndex": 1
+     }
+    }
+   ],
+   "states": [
+    {
+     "markPoint": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ],
+     "markLine": [],
+     "markArea": [],
+     "grid": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ],
+     "axisPointer": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ]
+    },
+    {
+     "markPoint": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ],
+     "markLine": [],
+     "markArea": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ],
+     "grid": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ],
+     "axisPointer": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "media",
+   "note": "media: a unit with a query that holds while the chart is narrow writes a markLine; the default unit (no query, never preprocessed) a markPoint",
+   "W": 400,
+   "H": 400,
+   "steps": [
+    {
+     "set": {
+      "baseOption": {
+       "animation": false,
+       "xAxis": {
+        "type": "category",
+        "data": [
+         "a",
+         "b",
+         "c"
+        ]
+       },
+       "yAxis": {
+        "type": "value"
+       },
+       "series": [
+        {
+         "type": "line",
+         "data": [
+          1,
+          3,
+          2
+         ]
+        }
+       ]
+      },
+      "media": [
+       {
+        "query": {
+         "maxWidth": 500
+        },
+        "option": {
+         "series": [
+          {
+           "markLine": {
+            "data": [
+             {
+              "type": "average"
+             }
+            ]
+           }
+          }
+         ]
+        }
+       },
+       {
+        "option": {
+         "series": [
+          {
+           "markPoint": {
+            "data": [
+             {
+              "type": "max"
+             }
+            ]
+           }
+          }
+         ]
+        }
+       }
+      ]
+     }
+    }
+   ],
+   "states": [
+    {
+     "markPoint": [],
+     "markLine": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ],
+     "markArea": [],
+     "grid": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ],
+     "axisPointer": [
+      {
+       "id": "\u0000series\u00000\u00000",
+       "name": "series\u00000",
+       "sub": ""
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "guards": [
+  {
+   "id": "init-two",
+   "ok": true,
+   "detail": "a model per marker type a series writes"
+  },
+  {
+   "id": "init-id",
+   "ok": true,
+   "detail": "the id and name makeIdAndName gives a preprocessor's model, the same as the grid preprocessor's"
+  },
+  {
+   "id": "falsy",
+   "ok": true,
+   "detail": "falsy markers make no model; {} does"
+  },
+  {
+   "id": "merge",
+   "ok": true,
+   "detail": "made at the merge that brings it, kept, dropped by notMerge"
+  },
+  {
+   "id": "frames",
+   "ok": true,
+   "detail": "every frame is preprocessed"
+  },
+  {
+   "id": "media",
+   "ok": true,
+   "detail": "a media unit with a query is preprocessed"
+  }
+ ]
+}

@@ -115394,6 +115394,143 @@
    "fails": []
   },
   {
+   "id": "r5g-graph-collect",
+   "group": "series",
+   "note": "a graph on a collecting matrix (no data in the trees): its nodes x and y collected after a scatter, row by row, a number x a category of its own; an unnamed node named by its x",
+   "gallery": null,
+   "option": {
+    "matrix": {},
+    "series": [
+     {
+      "type": "scatter",
+      "coordinateSystem": "matrix",
+      "data": [
+       [
+        "s1",
+        "t1"
+       ]
+      ]
+     },
+     {
+      "type": "graph",
+      "coordinateSystem": "matrix",
+      "symbolSize": 12,
+      "data": [
+       [
+        "a",
+        "p",
+        5
+       ],
+       {
+        "name": "N",
+        "value": [
+         "b",
+         "q",
+         3
+        ]
+       },
+       [
+        7,
+        "q"
+       ],
+       [
+        "b",
+        "p"
+       ]
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 2,
+        "target": 3
+       }
+      ]
+     }
+    ]
+   },
+   "matrices": [
+    {
+     "index": 0,
+     "rect": {
+      "x": "4054000000000000",
+      "y": "404e000000000000",
+      "width": "4084000000000000",
+      "height": "407e000000000000"
+     }
+    }
+   ],
+   "custom": [],
+   "graphs": [
+    {
+     "seriesIndex": 1,
+     "nodes": [
+      {
+       "i": 0,
+       "p": [
+        "4079000000000000",
+        "4076800000000000"
+       ]
+      },
+      {
+       "i": 1,
+       "p": [
+        "4080800000000000",
+        "407e000000000000"
+       ]
+      },
+      {
+       "i": 2,
+       "p": [
+        "4084800000000000",
+        "407e000000000000"
+       ]
+      },
+      {
+       "i": 3,
+       "p": [
+        "4080800000000000",
+        "4076800000000000"
+       ]
+      }
+     ],
+     "edges": [
+      {
+       "i": 0,
+       "points": [
+        [
+         "4079000000000000",
+         "4076800000000000"
+        ],
+        [
+         "4080800000000000",
+         "407e000000000000"
+        ]
+       ]
+      },
+      {
+       "i": 1,
+       "points": [
+        [
+         "4084800000000000",
+         "407e000000000000"
+        ],
+        [
+         "4080800000000000",
+         "4076800000000000"
+        ]
+       ]
+      }
+     ]
+    }
+   ],
+   "pies": [],
+   "funnels": [],
+   "fails": []
+  },
+  {
    "id": "pie-cells",
    "group": "series",
    "note": "pies in cells: center names, a coord over a percentage center, a range coord, a percentage radius, an unknown name, an explicit data usage",
@@ -125231,6 +125368,10 @@
   },
   {
    "name": "graph-cells: every record matches its recipe",
+   "ok": true
+  },
+  {
+   "name": "r5g-graph-collect: every record matches its recipe",
    "ok": true
   },
   {

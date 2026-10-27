@@ -155,7 +155,11 @@ const DIST = process.env.ECHARTS_DIST || 'D:/Projects/echarts/dist/echarts.js';
 const echarts = require(DIST);
 const ZRENDER_SRC = process.env.ZRENDER_SRC || 'D:/Projects/zrender/src/core/platform.ts';
 const ROOT = path.resolve(__dirname, '..', '..');
-const OUT = process.env.ORACLE_OUT || path.join(ROOT, 'tests', 'fixtures', 'advchart-timeline.json');
+// [R5-G] TIMELINE_SET=multi (timeline-multi.js): the cases of several
+// timelines, each view recorded, into their own fixture
+const MULTI = process.env.TIMELINE_SET === 'multi';
+const OUT = process.env.ORACLE_OUT || path.join(ROOT, 'tests', 'fixtures',
+  MULTI ? 'advchart-timeline-multi.json' : 'advchart-timeline.json');
 
 class OracleError extends Error {}
 function must(cond, msg) {
@@ -503,12 +507,16 @@ function frame(chart) {
 }
 const raw = (x, y) => ({ zrX: x, zrY: y, which: 1, preventDefault() {}, stopPropagation() {} });
 
-function tlModel(chart) {
-  return chart.getModel().getComponent('timeline') || null;
+function tlModel(chart, k) {
+  return chart.getModel().getComponent('timeline', k || 0) || null;
 }
-function tlView(chart) {
-  const m = tlModel(chart);
+function tlView(chart, k) {
+  const m = tlModel(chart, k);
   return m ? chart.getViewOfComponentModel(m) : null;
+}
+// [R5-G] the timeline slots (componentsMap: a replaceMerge hole is null)
+function tlCount(chart) {
+  return (chart.getModel()._componentsMap.get('timeline') || []).length;
 }
 
 // ---------- reading the view ----------
@@ -583,8 +591,8 @@ function elRec(el, role) {
   }
   return r;
 }
-function viewRec(chart) {
-  const view = tlView(chart);
+function viewRec(chart, k) {
+  const view = tlView(chart, k);
   if (!view || !view._mainGroup || view.group.childCount() === 0) return null;
   const roles = rolesOf(view);
   const els = [];
@@ -600,8 +608,8 @@ function viewRec(chart) {
   return { main: groupRec(view._mainGroup), label: groupRec(view._labelGroup), els };
 }
 // the centre of an element as the pointer must hit it, an integer point
-function centreOf(chart, role) {
-  const view = tlView(chart);
+function centreOf(chart, role, k) {
+  const view = tlView(chart, k);
   const roles = rolesOf(view);
   let el = null;
   roles.forEach((r, e) => { if (r === role) el = e; });
@@ -632,6 +640,13 @@ function runCase(c) {
     const view = tlView(chart);
     const o = JSON.parse(JSON.stringify(e));
     if (has(o, 'from') && view && o.from === view.uid) o.from = '@view';
+    // [R5-G] another timeline's view: '@view<k>'
+    else if (has(o, 'from')) {
+      for (let k = 1; k < tlCount(chart); k++) {
+        const v = tlView(chart, k);
+        if (v && o.from === v.uid) o.from = '@view' + k;
+      }
+    }
     return { type: e.type, payload: JSON.stringify(o) };
   };
   chart.on('timelinechanged', e => EVENTS.push(evRec(e)));
@@ -724,6 +739,25 @@ function runCase(c) {
       titles: (chart.getModel()._componentsMap.get('title') || []).map(t => (t ? t.option.text : null)),
     };
     if (c.vis) st.vis = visOf(chart);
+    // [R5-G] every timeline after the first: its model, its view's timer,
+    // its view
+    if (MULTI) {
+      st.more = [];
+      for (let k = 1; k < tlCount(chart); k++) {
+        const mk2 = tlModel(chart, k);
+        const vk = tlView(chart, k);
+        let tk = null;
+        if (vk && vk._timer) {
+          const q = TIMERS.find(z => z.id === vk._timer);
+          must(q, c.id + ': view ' + k + ' keeps a timer the queue lost');
+          tk = q.due - T0;
+        }
+        st.more.push({
+          model: mk2 ? { currentIndex: mk2.option.currentIndex, autoPlay: mk2.option.autoPlay } : null,
+          timer: tk, view: viewRec(chart, k),
+        });
+      }
+    }
     if (c.gfx) st.gfx = gfxOf(chart);
     EVENTS = [];
     try {
@@ -742,8 +776,13 @@ function runCase(c) {
       TIMERS.sort((a, b) => a.due - b.due || a.id - b.id);
       if (!TIMERS.length || TIMERS[0].due > target) break;
       const t = TIMERS.shift();
-      const view = tlView(chart);
-      must(view && view._timer === t.id, c.id + ': a timer that is not the timeline view\'s fired');
+      // [R5-G] any timeline view's
+      let owner = -1;
+      for (let k = 0; k < tlCount(chart); k++) {
+        const v = tlView(chart, k);
+        if (v && v._timer === t.id) owner = k;
+      }
+      must(owner === 0 || (MULTI && owner > 0), c.id + ': a timer that is not the timeline view\'s fired');
       NOW = t.due;
       HOOK_LOG = [];
       OM_LOG = [];
@@ -772,7 +811,7 @@ function runCase(c) {
       const fired = advance(st.dt || 0);
       // a step aimed at an element: its centre, an integer point
       if (st.at) {
-        const p = centreOf(chart, st.at);
+        const p = centreOf(chart, st.at, st.tl || 0);
         st.x = p[0] + (st.dx || 0);
         st.y = p[1] + (st.dy || 0);
       }
@@ -830,6 +869,7 @@ function runCase(c) {
         rs.h = st.h;
       }
       if (st.at) rs.at = st.at;
+      if (st.tl) rs.tl = st.tl;
       resolved.push(rs);
     }
     return { id: c.id, group: c.group, note: c.note, W: cw, H: ch, colours: !!c.colours, option: c.option,
@@ -1121,6 +1161,151 @@ const CASES = [
 // ---------------------------------------------------------------------------
 // guards
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// [R5-G] several timelines: each model has its own view (layout, ticks,
+// checkpoint, buttons, hover, play timer), and every one of those views'
+// handlers dispatches timelineChange / timelinePlayChange, which the actions
+// apply to ecModel.getComponent('timeline') -- the FIRST model. A view's
+// '+' / '-' and its drag's "no change" test read its OWN model.
+// ---------------------------------------------------------------------------
+const TL1 = { axisType: 'category', data: ['x', 'y', 'z'], top: 10, bottom: null, height: 50, currentIndex: 1 };
+const TL2 = { axisType: 'value', data: [0, 5, 10], orient: 'vertical', left: null, right: 0, top: 70, bottom: 100, width: 60, height: null };
+const STILL = { animation: false };
+const INK = {
+  lineStyle: { color: '#aabbcc', width: 3 }, itemStyle: { color: '#336699', borderColor: '#000000', borderWidth: 1 },
+  checkpointStyle: { color: '#ff0000', borderColor: '#00ff00', borderWidth: 2 },
+  controlStyle: { color: '#123123', borderColor: '#321321' }, label: { color: '#777777' },
+  emphasis: { itemStyle: { color: '#ff8800', borderColor: '#884400' }, label: { color: '#0000ff' }, controlStyle: { color: '#00ffff', borderColor: '#008888' } },
+  progress: { lineStyle: { color: '#444444' }, itemStyle: { color: '#999999' }, label: { color: '#bb0000' } },
+};
+function multi(tls, baseExtra) {
+  const o = bars(tlCat({}), null, baseExtra);
+  o.baseOption.timeline = tls;
+  return o;
+}
+const MULTI_CASES = [
+  { id: 'm-layout', group: 'multi', note: 'three timelines: the bottom one, one on top, a vertical value one on the right', option: multi([tlCat({}), TL1, TL2], STILL), steps: [] },
+  { id: 'm-click', group: 'multi', note: "the other timelines' ticks, labels and buttons change the FIRST model; '+' / '-' from the clicked view's own index", option: multi([tlCat({}), TL1, TL2], STILL),
+    steps: [
+      { kind: 'tap', tl: 1, at: 'tick:2' }, { kind: 'tap', tl: 1, at: 'next', dt: 100 },
+      { kind: 'tap', at: 'next', dt: 100 }, { kind: 'tap', tl: 1, at: 'prev', dt: 100 },
+      { kind: 'tap', tl: 1, at: 'label:2', dt: 100 }, { kind: 'tap', tl: 2, at: 'tick:1', dt: 100 },
+      { kind: 'tap', tl: 2, at: 'next', dt: 100 }, { kind: 'tap', at: 'prev', dt: 100 },
+    ] },
+  { id: 'm-play', group: 'multi', note: "the second timeline's play button plays the first; its own button keeps saying play", option: multi([tlCat({ playInterval: 1000 }), Object.assign({}, TL1, { playInterval: 700 })], STILL),
+    steps: [
+      { kind: 'tap', tl: 1, at: 'play' }, { kind: 'wait', dt: 1000 }, { kind: 'tap', tl: 1, at: 'play', dt: 300 },
+      { kind: 'wait', dt: 1000 }, { kind: 'tap', at: 'stop', dt: 200 }, { kind: 'wait', dt: 1500 },
+    ] },
+  { id: 'm-autoplay', group: 'multi', note: "the second timeline plays by itself: its timer sets the first's index from its own, every time the same", option: multi([tlCat({}), Object.assign({}, TL1, { autoPlay: true, playInterval: 700 })], STILL),
+    steps: [{ kind: 'wait', dt: 700 }, { kind: 'wait', dt: 700 }, { kind: 'wait', dt: 350 }, { kind: 'wait', dt: 350 }] },
+  { id: 'm-autoplay-race', group: 'multi', note: 'both play; the shorter interval fires first, and the render it causes sets every timer again', option: multi([tlCat({ autoPlay: true, playInterval: 1000 }), Object.assign({}, TL1, { autoPlay: true, playInterval: 900, rewind: true })], STILL),
+    steps: [{ kind: 'wait', dt: 900 }, { kind: 'wait', dt: 900 }, { kind: 'wait', dt: 950 }, { kind: 'tap', tl: 1, at: 'stop', dt: 100 }, { kind: 'wait', dt: 1000 }] },
+  { id: 'm-autoplay-same', group: 'multi', note: "both play at the same interval: the first's timer fires first, and the update re-arms the second's", option: multi([tlCat({ autoPlay: true, playInterval: 1000 }), Object.assign({}, TL1, { autoPlay: true, playInterval: 1000 })], STILL),
+    steps: [{ kind: 'wait', dt: 1000 }, { kind: 'wait', dt: 1000 }] },
+  { id: 'm-drag', group: 'multi', note: "the second timeline's checkpoint dragged: realtime against its own index, the release a change", option: multi([tlCat({}), TL1], STILL),
+    steps: [
+      { kind: 'move', tl: 1, at: 'pointer' }, { kind: 'down', tl: 1, at: 'pointer' },
+      { kind: 'move', tl: 1, at: 'tick:0', dt: 30 }, { kind: 'move', tl: 1, at: 'tick:1', dx: 3, dt: 30 },
+      { kind: 'move', tl: 1, at: 'tick:2', dx: -4, dt: 30 }, { kind: 'up', tl: 1, at: 'tick:2', dx: -4, dt: 30 },
+      { kind: 'wait', dt: 400 },
+    ] },
+  { id: 'm-drag-anim', group: 'multi', note: 'with animation: the first checkpoint slides, the dragged one goes back to its own index', option: multi([tlCat({}), TL1]),
+    steps: [
+      { kind: 'tap', tl: 1, at: 'tick:2' }, { kind: 'wait', dt: 100 }, { kind: 'wait', dt: 300 },
+      { kind: 'move', tl: 1, at: 'pointer', dt: 50 }, { kind: 'down', tl: 1, at: 'pointer' },
+      { kind: 'move', tl: 1, at: 'tick:0', dt: 30 }, { kind: 'up', tl: 1, at: 'tick:0', dt: 30 },
+      { kind: 'wait', dt: 100 }, { kind: 'wait', dt: 300 },
+    ] },
+  { id: 'm-hover', group: 'multi', note: 'a hover lifts the hovered timeline only', option: multi([tlCat({ currentIndex: 2 }), TL1], STILL),
+    steps: [{ kind: 'move', tl: 1, at: 'tick:0' }, { kind: 'move', at: 'tick:1', dt: 50 }, { kind: 'move', tl: 1, at: 'next', dt: 50 }, { kind: 'leave', dt: 50 }] },
+  { id: 'm-hidden', group: 'multi', note: 'the first timeline hidden: the second still drives its frames', option: multi([tlCat({ show: false }), TL1], STILL),
+    steps: [{ kind: 'tap', tl: 1, at: 'next' }, { kind: 'tap', tl: 1, at: 'tick:0', dt: 100 }] },
+  { id: 'm-hover-anim', group: 'multi', note: "each view's state transition by its own model: the first's animation off, the second's on", option: multi([tlCat({ animation: false }), TL1]),
+    steps: [{ kind: 'move', tl: 1, at: 'tick:0' }, { kind: 'wait', dt: 100 }, { kind: 'move', at: 'tick:1', dt: 300 }, { kind: 'wait', dt: 100 },
+      { kind: 'move', tl: 1, at: 'pointer', dt: 300 }, { kind: 'down', tl: 1, at: 'pointer' },
+      { kind: 'move', tl: 1, at: 'tick:2', dt: 30 }, { kind: 'up', tl: 1, at: 'tick:2', dt: 30 },
+      { kind: 'wait', dt: 100 }, { kind: 'wait', dt: 300 },
+      { kind: 'move', at: 'pointer', dt: 50 }, { kind: 'down', at: 'pointer' },
+      { kind: 'move', at: 'tick:3', dt: 30 }, { kind: 'up', at: 'tick:3', dt: 30 }, { kind: 'wait', dt: 100 }] },
+  { id: 'm-colours', group: 'multi', colours: true, note: "every colour written: the second's hover tweens by its own animation, the first's (animation off) jumps",
+    option: multi([tlCat(Object.assign({ animation: false }, INK)), Object.assign({}, TL1, INK)]),
+    steps: [{ kind: 'move', tl: 1, at: 'tick:0' }, { kind: 'wait', dt: 100 }, { kind: 'wait', dt: 300 },
+      { kind: 'move', at: 'tick:1' }, { kind: 'wait', dt: 100 }, { kind: 'leave', dt: 300 }, { kind: 'wait', dt: 100 }] },
+  { id: 'm-boxed', group: 'multi', note: 'the second timeline in a matrix cell: its own box reference', option: multi([tlCat({}), Object.assign({}, TL1, { coordinateSystem: 'matrix', coord: ['b', 'v'], top: null, height: 40, left: 0, right: 0, bottom: 0 })],
+    { animation: false, matrix: { x: { data: ['a', 'b'] }, y: { data: ['u', 'v'] }, top: 60, bottom: 100, left: 50, right: 50 } }),
+    steps: [{ kind: 'tap', tl: 1, at: 'tick:0' }] },
+  { id: 'm-replace', group: 'multi', note: 'a notMerge to one timeline takes the second view and its timer', option: multi([tlCat({}), Object.assign({}, TL1, { autoPlay: true, playInterval: 600 })], STILL),
+    steps: [{ kind: 'wait', dt: 600 }, { kind: 'set', option: multi([tlCat({ currentIndex: 1 })], STILL), opts: { notMerge: true }, dt: 100 }, { kind: 'wait', dt: 1200 }] },
+];
+
+function multiGuards(out) {
+  const g = [];
+  const guard = (name, ok) => g.push({ name, ok: !!ok });
+  const cs = id => {
+    const c = out.cases.find(q => q.id === id);
+    must(c, 'no case ' + id);
+    return c;
+  };
+  const elk = (st, k, role) => {
+    const v = k === 0 ? st.view : st.more[k - 1].view;
+    return v && v.els.find(e => e.role === role);
+  };
+  const num = h => Buffer.from(h, 'hex').readDoubleBE(0);
+  out.cases.forEach(c => guard(c.id + ': the raw layer is a subset of getOption everywhere', c.fails.length === 0));
+  const ly = cs('m-layout').states[0];
+  guard('m-layout: three views', ly.view && ly.more.length === 2 && ly.more[0].view && ly.more[1].view);
+  guard('m-layout: the second has its own three ticks', ['tick:0', 'tick:1', 'tick:2'].every(r => elk(ly, 1, r)) && !elk(ly, 1, 'tick:3'));
+  guard('m-layout: the third is vertical', ly.more[1].view.main.rotation === hex(Math.PI / 2));
+  const ck = cs('m-click').states;
+  guard('m-click: a second-timeline tick sets the first', ck[1].model.currentIndex === 2 && ck[1].more[0].model.currentIndex === 1);
+  guard('m-click: the event says the view', JSON.parse(ck[1].events[0].payload).from === '@view1');
+  guard('m-click: next is the second\'s own index + 1', ck[2].model.currentIndex === 2 && ck[2].events.length === 1);
+  guard('m-click: prev is the second\'s own index - 1', ck[4].model.currentIndex === 0);
+  guard('m-click: the third\'s tick', ck[6].model.currentIndex === 1 && JSON.parse(ck[6].events[0].payload).from === '@view2');
+  const pl = cs('m-play').states;
+  guard('m-play: the first plays, the second does not', pl[1].model.autoPlay === true && pl[1].more[0].model.autoPlay !== true && pl[1].timer !== null && pl[1].more[0].timer === null);
+  guard('m-play: the first\'s timer fires', pl[2].fired.length === 1 && pl[2].model.currentIndex === 1);
+  guard('m-play: the second still offers play', !!elk(pl[1], 1, 'play') && !elk(pl[1], 1, 'stop'));
+  guard('m-play: stop', pl[5].model.autoPlay === false && pl[6].fired.length === 0);
+  const ap = cs('m-autoplay').states;
+  guard('m-autoplay: the second\'s timer sets the first to its own + 1', ap[1].fired.length === 1 && ap[1].model.currentIndex === 2 && ap[1].more[0].model.currentIndex === 1);
+  guard('m-autoplay: and again, the same index, an event all the same', ap[2].fired.length === 1 && ap[2].model.currentIndex === 2 && ap[2].events.length === 1);
+  guard('m-autoplay: the second keeps its timer', ap[2].more[0].timer !== null && ap[2].timer === null);
+  const ar = cs('m-autoplay-race').states;
+  guard('m-autoplay-race: the second fires first, rewinding from its own', ar[1].fired.length === 1 && ar[1].model.currentIndex === 0);
+  guard('m-autoplay-race: the first never fires', ar.slice(1, 4).every(s => s.fired.length <= 1) && ar[3].model.currentIndex === 0);
+  const as = cs('m-autoplay-same').states;
+  guard('m-autoplay-same: one fire a second, the first\'s', as[1].fired.length === 1 && as[1].model.currentIndex === 1 && as[2].model.currentIndex === 2);
+  const dg = cs('m-drag').states;
+  guard('m-drag: realtime to tick 0', dg[3].model.currentIndex === 0 && dg[3].events.length === 1);
+  guard('m-drag: back at the second\'s own index: no change', dg[4].events.length === 0);
+  guard('m-drag: the release changes', dg[6].events.length >= 1 && dg[6].model.currentIndex === 2);
+  const da = cs('m-drag-anim').states;
+  guard('m-drag-anim: the first checkpoint slides', elk(da[2], 0, 'pointer').t.x !== elk(da[3], 0, 'pointer').t.x);
+  guard('m-drag-anim: the second goes back to its own tick', elk(da[9], 1, 'pointer').t.x === elk(da[0], 1, 'pointer').t.x);
+  const hv = cs('m-hover').states;
+  guard('m-hover: the second\'s tick lifted', elk(hv[1], 1, 'tick:0').hover === 2 && elk(hv[1], 0, 'tick:0').hover === 0);
+  guard('m-hover: then the first\'s', elk(hv[2], 0, 'tick:1').hover === 2 && elk(hv[2], 1, 'tick:0').hover === 0);
+  const hd = cs('m-hidden').states;
+  guard('m-hidden: no first view, a second', hd[0].view === null && hd[0].more[0].view !== null);
+  guard('m-hidden: the frames follow', hd[1].model.currentIndex === 2 && hd[1].titles[0] === 'F2');
+  const ha = cs('m-hover-anim').states;
+  guard('m-hover-anim: the second\'s tick tweens', elk(ha[1], 1, 'tick:0').style.fill !== elk(ha[2], 1, 'tick:0').style.fill);
+  guard('m-hover-anim: the first\'s jumps', elk(ha[3], 0, 'tick:1').style.fill === elk(ha[4], 0, 'tick:1').style.fill);
+  guard('m-hover-anim: the second\'s checkpoint slides back', elk(ha[9], 1, 'pointer').t.x !== elk(ha[10], 1, 'pointer').t.x);
+  const co = cs('m-colours').states;
+  guard('m-colours: the second\'s tick mid-tween', elk(co[2], 1, 'tick:0').style.fill !== elk(co[3], 1, 'tick:0').style.fill);
+  guard('m-colours: the first\'s at once', elk(co[4], 0, 'tick:1').style.fill === elk(co[5], 0, 'tick:1').style.fill);
+  const bx = cs('m-boxed').states;
+  guard('m-boxed: in its cell, right of the middle', num(bx[0].more[0].view.main.x) > 300);
+  guard('m-boxed: its tick sets the first', bx[1].model.currentIndex === 0);
+  const rp = cs('m-replace').states;
+  guard('m-replace: the second fired', rp[1].fired.length === 1);
+  guard('m-replace: then it is gone', rp[2].more.length === 0 && rp[3].fired.length === 0);
+  return g;
+}
+
 function guards(out) {
   const g = [];
   const guard = (name, ok) => g.push({ name, ok: !!ok });
@@ -1262,9 +1447,9 @@ function generate() {
       'a frame: zr.animation.update(), zr.animation.update(true) at the same instant, the display list refreshed.',
       'TZ=UTC; a time case writes useUTC and epoch-ms data.',
     ],
-    cases: CASES.map(runCase),
+    cases: (MULTI ? MULTI_CASES : CASES).map(runCase),
   };
-  out.guards = guards(out);
+  out.guards = MULTI ? multiGuards(out) : guards(out);
   return out;
 }
 let out1, json1, json2;
