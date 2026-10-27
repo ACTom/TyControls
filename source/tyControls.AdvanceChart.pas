@@ -5429,6 +5429,10 @@ function TyAdvChartStoreKeepsForTest: Integer;
   kept ones. }
 procedure TyAdvChartObjRowsForTest(AMinItems: Integer);
 function TyAdvChartObjRowsKeptForTest: Integer;
+{ [R5-G] How many series a notMerge option's first sync carried row records
+  for (StCarryApply: the old view's records diffed onto the new rows) --
+  none where the old view kept none. }
+function TyAdvChartStCarryDiffsForTest: Integer;
 
 implementation
 
@@ -5556,6 +5560,12 @@ const
 var
   GObjRowsMinItems: Integer = cObjRowsMinItems;
   GObjRowsKept: Integer = 0;
+  GStCarryDiffs: Integer = 0;
+
+function TyAdvChartStCarryDiffsForTest: Integer;
+begin
+  Result := GStCarryDiffs;
+end;
 
 procedure TyAdvChartObjRowsForTest(AMinItems: Integer);
 begin
