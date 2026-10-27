@@ -2938,6 +2938,7 @@ var
     props, oprops: TTyAnimProps;
     opts: TTyAnimCallOpts;
     taken: TFPHashList;
+    ov: TTyDoubleArray;
   begin
     if not AC.Enabled then Exit;
     olds := TFPHashList.Create;
@@ -2970,8 +2971,15 @@ var
         if taken.Find(key) = nil then taken.Add(key, Pointer(1));
         oe := APrev.Elements[PtrInt(v) - 1];
         if Length(oe.Anim.TwVals) <> Length(e.Anim.TwVals) then Continue;
-        { a line that turns straight or curved has nothing to tween between }
-        if (e.Anim.TwKind = 5) and (oe.Anim.G[6] <> e.Anim.G[6]) then Continue;
+        { A LINE THAT TURNS STRAIGHT OR CURVED: setLinePoints writes the
+          control point at once (undefined on the straight side, which
+          updateProps cannot tween from or to), the ends tween }
+        ov := Copy(oe.Anim.TwVals);
+        if (e.Anim.TwKind = 5) and (oe.Anim.G[6] <> e.Anim.G[6]) then
+        begin
+          ov[4] := e.Anim.TwVals[4];
+          ov[5] := e.Anim.TwVals[5];
+        end;
         { a parallel's points are rows ([x, y] each): never the same array
           upstream (isValueSame compares them by reference) }
         if e.Anim.TwKind = 1 then
@@ -2982,7 +2990,7 @@ var
         else
         begin
           props := TyAnimProps([TyAnimProp('tw', TyAnimArr(e.Anim.TwVals))]);
-          oprops := TyAnimProps([TyAnimProp('tw', TyAnimArr(oe.Anim.TwVals))]);
+          oprops := TyAnimProps([TyAnimProp('tw', TyAnimArr(ov))]);
         end;
         p := Take(AOld, oe.Anim.TwRow, ASer, e.Anim.TwRow, TwRoleOf(e.Anim.TwKind),
           oprops, props, True);

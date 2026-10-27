@@ -342,6 +342,11 @@ add('lines', 'ln-curve', "curved lines (curveness 0.3): the control point tweens
   [{ t: T1 - 1, do: 'sample' },
     { t: T1, do: 'merge', option: { series: [{ data: [{ coords: [[3, 1], [9, 6]] }, { coords: [[1, 9], [6, 4]] }] }] } },
     ...after([0, 1, 100, 500, 1001], T1)]);
+add('lines', 'ln-bend', "a merge that bends a straight line and straightens a curved one (an item's curveness 0 <-> 0.4): the shape's control point is undefined on the straight side",
+  LN([{ coords: [[1, 1], [5, 5]] }, { coords: [[2, 8], [8, 2]], lineStyle: { curveness: 0.4 } }]), ['lines'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [{ coords: [[3, 1], [9, 6]], lineStyle: { curveness: 0.4 } }, { coords: [[1, 9], [6, 4]] }] }] } },
+    ...after([0, 1, 100, 500, 1001], T1)]);
 
 // ---------------------------------------------------------------------------
 // running
