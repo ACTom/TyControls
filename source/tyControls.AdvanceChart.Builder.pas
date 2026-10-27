@@ -43,10 +43,48 @@ uses SysUtils, Classes, Math, fpjson,
      tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Scale,
      tyControls.AdvanceChart.Time,
   tyControls.AdvanceChart.Dataset, tyControls.AdvanceChart.Paint,
-     tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Layout;
+     tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Layout,
+     tyControls.AdvanceChart.Color;
 
 type
   TTyAxisArray = array of TTyAxis;
+
+  { THE AUTHOR'S PEN FOR ONE PIECE OF AN AXIS [R5-B]: what the option wrote
+    along upstream's chain for that piece -- getLineStyle's stroke, lineWidth,
+    lineDash, lineDashOffset, lineCap and opacity -- and nothing else. Every
+    field has its own `not written`, because the skin answers field by field:
+    it stands in for the theme's defaults, which upstream merges under the
+    option key by key. }
+  TTyAxisPen = record
+    HasColour: Boolean;
+    { `color: 'none'`: a colour, and no stroke }
+    ColourNone: Boolean;
+    Colour: TTyChartColor;
+    Width: Double;                // NaN = not written
+    Dash: TTyOptDash;             // todNone = not written
+    DashLogical: TTyDoubleArray;  // todExplicit only
+    HasDashOffset: Boolean;
+    DashOffset: Double;
+    Cap: Integer;                 // -1 not written, else Ord(TTyAxisCap)
+    Opacity: Double;              // NaN = not written
+  end;
+
+  { the canvas' lineCap }
+  TTyAxisCap = (acButt, acRound, acSquare);
+
+  { ONE PIECE OF AN AXIS AS IT IS STROKED [R5-B]: the author's pen over the
+    skin. Drawn is false when there is no colour or the width is not above
+    nought (zrender's hasStroke). The dash is in LOGICAL px, a word already
+    turned into lengths against the width (canvas/dashStyle.ts). }
+  TTyAxisStroke = record
+    Drawn: Boolean;
+    Colour: TTyChartColor;
+    WidthLogical: Double;
+    Dash: TTyDoubleArray;
+    DashOffset: Double;
+    Cap: TTyAxisCap;
+    Opacity: Double;
+  end;
 
   { What an axis actually draws, once its TYPE's defaults and the `auto`
     rule have both been applied and the option has had its say.
@@ -165,6 +203,17 @@ type
       area cache works in }
     SplitLineInks, SplitAreaInks: TTyAxisInkArray;
     SplitAreaInkCount: Integer;
+    { THE AUTHOR'S PENS [R5-B], each along upstream's chain for its piece:
+        line       axisLine.lineStyle
+        tick       axisTick.lineStyle, its colour else the line's
+        minorTick  minorTick.lineStyle, else axisTick's OWN keys (getLineStyle
+                   on the axisTick model: `axisTick.width`, not
+                   `axisTick.lineStyle.width`), its colour else the line's
+        split      splitLine.lineStyle (the colour list is SplitLineInks)
+        minorSplit minorSplitLine.lineStyle
+      AreaOpacity: splitArea.areaStyle.opacity, NaN when not written. }
+    LinePen, TickPen, MinorTickPen, SplitPen, MinorSplitPen: TTyAxisPen;
+    AreaOpacity: Double;
   end;
 
   { WHAT UPSTREAM KEEPS ON AN AXIS FROM ONE RENDER TO THE NEXT [Batch 101]:
@@ -422,6 +471,19 @@ function TyAxisArrows(const AFrame: TTyAxisNameFrame;
 function TyAxisFurnitureOf(ANode: TJSONObject; AAxis: TTyAxis;
   AOtherIsValue: Boolean; APolar: Boolean = False;
   ASingle: Boolean = False): TTyAxisFurniture;
+{ [R5-B] the pen AStyle wrote (a lineStyle block, TyReadOptLineStyleOf) }
+function TyAxisPenOf(const AStyle: TTyOptStyle): TTyAxisPen;
+{ [R5-B] zrUtil.defaults: ATop's written fields, ABase's where ATop wrote
+  nothing }
+function TyAxisPenOver(const ATop, ABase: TTyAxisPen): TTyAxisPen;
+{ [R5-B] THE STROKE OF ONE PIECE: the pen's fields where it wrote them, the
+  skin's colour and width elsewhere (ASkinHas false: the skin has no colour
+  for it), ADefaultCap where no cap was written (an axis line's is round --
+  AxisBuilder extends its style with lineCap 'round' -- every other piece's
+  butt), opacity 1 where none was written. }
+function TyAxisStrokeOf(const APen: TTyAxisPen; ASkinHas: Boolean;
+  ASkinColour: TTyChartColor; ASkinWidthLogical: Double;
+  ADefaultCap: TTyAxisCap): TTyAxisStroke;
 { mergeLayoutParam on one direction of a component's box: the option's own
   left / right / width (or top / bottom / height) against the component's
   defaults [Batch 118: the single axis' box, beside the grid's] }
@@ -602,7 +664,6 @@ uses
     the AdvanceChart layer. }
   tyControls.StrConsts, tyControls.AdvanceChart.AxisName, tyControls.AdvanceChart.RichStyle,
   tyControls.AdvanceChart.AxisLabels, tyControls.AdvanceChart.Handlers,
-  tyControls.AdvanceChart.Color,
   tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Marker,
   tyControls.AdvanceChart.Labels, tyControls.AdvanceChart.RichText,
   tyControls.AdvanceChart.Convert, tyControls.AdvanceChart.AxisBreak,
@@ -1894,6 +1955,114 @@ begin
   end;
 end;
 
+function TyAxisPenOf(const AStyle: TTyOptStyle): TTyAxisPen;
+var c: string;
+begin
+  Result := Default(TTyAxisPen);
+  Result.Cap := -1;
+  { an unreadable colour, 'auto': not written -- the skin answers (a
+    gradient or a pattern is held as the solid it degrades to) }
+  if AStyle.Color.Written and not AStyle.Color.IsAuto then
+  begin
+    Result.HasColour := True;
+    Result.ColourNone := AStyle.Color.IsNone;
+    Result.Colour := AStyle.Color.Color;
+  end;
+  Result.Width := AStyle.BorderWidthLogical;
+  Result.Dash := AStyle.Dash;
+  Result.DashLogical := Copy(AStyle.DashLogical, 0, Length(AStyle.DashLogical));
+  Result.HasDashOffset := AStyle.DashOffsetHas;
+  Result.DashOffset := AStyle.DashOffset;
+  c := LowerCase(AStyle.Cap);
+  if c = 'butt' then Result.Cap := Ord(acButt)
+  else if c = 'round' then Result.Cap := Ord(acRound)
+  else if c = 'square' then Result.Cap := Ord(acSquare);
+  Result.Opacity := AStyle.Opacity;
+end;
+
+function TyAxisPenOver(const ATop, ABase: TTyAxisPen): TTyAxisPen;
+begin
+  Result := ATop;
+  if not Result.HasColour then
+  begin
+    Result.HasColour := ABase.HasColour;
+    Result.ColourNone := ABase.ColourNone;
+    Result.Colour := ABase.Colour;
+  end;
+  if IsNan(Result.Width) then Result.Width := ABase.Width;
+  if Result.Dash = todNone then
+  begin
+    Result.Dash := ABase.Dash;
+    Result.DashLogical := Copy(ABase.DashLogical, 0, Length(ABase.DashLogical));
+  end;
+  if not Result.HasDashOffset then
+  begin
+    Result.HasDashOffset := ABase.HasDashOffset;
+    Result.DashOffset := ABase.DashOffset;
+  end;
+  if Result.Cap < 0 then Result.Cap := ABase.Cap;
+  if IsNan(Result.Opacity) then Result.Opacity := ABase.Opacity;
+end;
+
+function TyAxisStrokeOf(const APen: TTyAxisPen; ASkinHas: Boolean;
+  ASkinColour: TTyChartColor; ASkinWidthLogical: Double;
+  ADefaultCap: TTyAxisCap): TTyAxisStroke;
+begin
+  Result := Default(TTyAxisStroke);
+  Result.Drawn := True;
+  if APen.HasColour then
+  begin
+    Result.Colour := APen.Colour;
+    if APen.ColourNone then Result.Drawn := False;
+  end
+  else if ASkinHas then
+    Result.Colour := ASkinColour
+  else
+    Result.Drawn := False;
+  if IsNan(APen.Width) then Result.WidthLogical := ASkinWidthLogical
+  else Result.WidthLogical := APen.Width;
+  { zrender's hasStroke: a width that is not above nought strokes nothing }
+  if not (Result.WidthLogical > 0) then Result.Drawn := False;
+  Result.Dash := TyDashPattern(APen.Dash, APen.DashLogical, Result.WidthLogical);
+  if APen.HasDashOffset then Result.DashOffset := APen.DashOffset;
+  if APen.Cap >= 0 then Result.Cap := TTyAxisCap(APen.Cap)
+  else Result.Cap := ADefaultCap;
+  if IsNan(APen.Opacity) then Result.Opacity := 1
+  else Result.Opacity := APen.Opacity;
+end;
+
+{ THE AUTHOR'S PENS [R5-B] along upstream's chains (AxisBuilder's axisLine,
+  buildAxisMajorTicks and buildAxisMinorTicks, the split builders) }
+procedure PensIn(ANode: TJSONObject; var AFurn: TTyAxisFurniture);
+var
+  lineColour, tickOwn: TTyAxisPen;
+
+  function SubPen(const AKey: string): TTyAxisPen;
+  begin
+    Result := TyAxisPenOf(TyReadOptStyle(ObjOf(FindIn(ANode, AKey)), 'lineStyle'));
+  end;
+
+begin
+  AFurn.LinePen := SubPen('axisLine');
+  { defaults(..., {stroke: axisLine.lineStyle.color}): the colour alone }
+  lineColour := Default(TTyAxisPen);
+  lineColour.Width := NaN;
+  lineColour.Opacity := NaN;
+  lineColour.Cap := -1;
+  lineColour.HasColour := AFurn.LinePen.HasColour;
+  lineColour.ColourNone := AFurn.LinePen.ColourNone;
+  lineColour.Colour := AFurn.LinePen.Colour;
+  AFurn.TickPen := TyAxisPenOver(SubPen('axisTick'), lineColour);
+  { the axisTick MODEL's own keys, not its lineStyle's }
+  tickOwn := TyAxisPenOf(TyReadOptLineStyleOf(ObjOf(FindIn(ANode, 'axisTick'))));
+  AFurn.MinorTickPen := TyAxisPenOver(SubPen('minorTick'),
+    TyAxisPenOver(tickOwn, lineColour));
+  AFurn.SplitPen := SubPen('splitLine');
+  AFurn.MinorSplitPen := SubPen('minorSplitLine');
+  AFurn.AreaOpacity := TyReadOptStyle(ObjOf(FindIn(ANode, 'splitArea')),
+    'areaStyle').Opacity;
+end;
+
 function TyAxisFurnitureOf(ANode: TJSONObject; AAxis: TTyAxis;
   AOtherIsValue: Boolean; APolar: Boolean; ASingle: Boolean): TTyAxisFurniture;
 var
@@ -1909,6 +2078,8 @@ begin
   InksIn(ANode, 'splitLine', 'lineStyle', Result.SplitLineInks, n);
   InksIn(ANode, 'splitArea', 'areaStyle', Result.SplitAreaInks,
     Result.SplitAreaInkCount);
+  { the author's pens [R5-B] }
+  PensIn(ANode, Result);
 
   { THE TICK'S `auto` HAS A SECOND CLAUSE, and it is the reason a plain bar
     chart has no ticks under its categories: a banded category axis suppresses
@@ -3290,6 +3461,7 @@ var
   d: TJSONData;
   st: TJSONObject;
   s: string;
+  pen: TTyAxisPen;
 begin
   ASpec.Inverse := AAxis.Inverse;
   ASpec.NameFontName := AText.NameFontName;
@@ -3302,6 +3474,19 @@ begin
   AuthorFont(ObjOf(FindIn(ANode, 'nameTextStyle')), ASpec.NameFontName,
     ASpec.NameFontSizeLogical, ASpec.NameFontWeight, ASpec.HasNameColour,
     ASpec.NameColour);
+  { ELSE THE LINE'S COLOUR [R5-B]: AxisBuilder fills the name with
+    `textStyleModel.getTextColor() || axisLine.lineStyle.color` -- the
+    author's line colour where the author wrote one, the skin's name ink
+    (the theme's line colour upstream) where not }
+  if not ASpec.HasNameColour then
+  begin
+    pen := TyAxisPenOf(TyReadOptStyle(ObjOf(FindIn(ANode, 'axisLine')), 'lineStyle'));
+    if pen.HasColour and not pen.ColourNone then
+    begin
+      ASpec.HasNameColour := True;
+      ASpec.NameColour := pen.Colour;
+    end;
+  end;
   { THE NAME'S TEXT BLOCK [Batch 86] }
   ASpec.NameRt := AxisRtOf(ObjOf(FindIn(ANode, 'nameTextStyle')), AText.RtGlobal);
   { THE NAME'S WIDTH AND OVERFLOW ARE AxisBuilder's: `overflow: 'truncate'`

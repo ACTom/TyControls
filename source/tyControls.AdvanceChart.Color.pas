@@ -283,6 +283,9 @@ type
       written (getLineStyle's / getItemStyle's lineDashOffset), px }
     DashOffsetHas: Boolean;
     DashOffset: Double;
+    { [R5-B] lineStyle.cap as written ('' when not): 'butt', 'round' or
+      'square' -- getLineStyle's lineCap }
+    Cap: string;
   end;
 
 { Read one style block. AKey is 'itemStyle', 'lineStyle' or 'areaStyle', and
@@ -291,6 +294,13 @@ type
     lineStyle  color width       type        opacity
     areaStyle  color opacity                          -- six keys, no stroke }
 function TyReadOptStyle(ANode: TJSONObject; const AKey: string): TTyOptStyle;
+
+{ [R5-B] A lineStyle's keys read off AObj ITSELF -- color, width, type,
+  dashOffset, opacity, cap -- which is what getLineStyle does on whatever
+  model it is called on: an axis' `axisTick` model is asked this way for
+  its OWN keys (`axisTick.color`, `axisTick.width`) when the minor ticks
+  fall back to it. }
+function TyReadOptLineStyleOf(AObj: TJSONObject): TTyOptStyle;
 
 { The dash a style block asked for, as LENGTHS -- which is what a renderer can
   use and what `todDashed` is not.
@@ -1286,11 +1296,7 @@ begin
   if AKey = 'lineStyle' then
   begin
     { A line has a WIDTH, not a border width, and a `type`, not a borderType. }
-    Result.BorderWidthLogical := NumOr(sub, 'width');
-    Result.Dash := ReadDash(sub, 'type', Result.DashLogical);
-    Result.DashOffset := NumOr(sub, 'dashOffset');
-    Result.DashOffsetHas := not IsNan(Result.DashOffset);
-    if not Result.DashOffsetHas then Result.DashOffset := 0;
+    Result := TyReadOptLineStyleOf(sub);
     Exit;
   end;
   if AKey = 'areaStyle' then
@@ -1303,6 +1309,25 @@ begin
   Result.DashOffset := NumOr(sub, 'borderDashOffset');
   Result.DashOffsetHas := not IsNan(Result.DashOffset);
   if not Result.DashOffsetHas then Result.DashOffset := 0;
+end;
+
+function TyReadOptLineStyleOf(AObj: TJSONObject): TTyOptStyle;
+var d: TJSONData;
+begin
+  Result := Default(TTyOptStyle);
+  Result.BorderWidthLogical := NaN;
+  Result.Opacity := NaN;
+  Result.Dash := todNone;
+  if AObj = nil then Exit;
+  Result.Color := ReadOptColor(AObj, 'color');
+  Result.Opacity := NumOr(AObj, 'opacity');
+  Result.BorderWidthLogical := NumOr(AObj, 'width');
+  Result.Dash := ReadDash(AObj, 'type', Result.DashLogical);
+  Result.DashOffset := NumOr(AObj, 'dashOffset');
+  Result.DashOffsetHas := not IsNan(Result.DashOffset);
+  if not Result.DashOffsetHas then Result.DashOffset := 0;
+  d := AObj.Find('cap');
+  if (d <> nil) and (d.JSONType = jtString) then Result.Cap := d.AsString;
 end;
 
 function TyStyleAccessPath(const ASeriesType: string): string;
