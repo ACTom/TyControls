@@ -3070,6 +3070,7 @@ begin
   else if ASnap.ProxyJson <> '' then Result := TipProxySpec(ASnap.ProxyJson)
   else if ASnap.TbHas then Result := TipTbSpec(ASnap.TbIndex, ASnap.TbIcon)
   else if ASnap.LgHas then Result := TipLgSpec(ASnap.LgIndex, ASnap.LgItem)
+  else if ASnap.TlHas then Result := TipTlSpec(ASnap.TlIndex, ASnap.TlTick)
   else Result := TooltipSpecFor(ASnap.Datum);
   { [Batch 153] a manual show: the payload's position before the
     cascade's (positionExpr || model.get('position')); else, for an item
@@ -3134,7 +3135,7 @@ begin
     A component item (a geo region, an axis' text, a matrix cell) has none. }
   if Length(ASnap.Hits) = 0 then
   begin
-    if (ASnap.ProxyJson <> '') or ASnap.TbHas or ASnap.LgHas then Exit;
+    if (ASnap.ProxyJson <> '') or ASnap.TbHas or ASnap.LgHas or ASnap.TlHas then Exit;
     if not TipTargetValid(ASnap.Datum) or IsGeoDatum(ASnap.Datum)
       or IsAxisTextDatum(ASnap.Datum) or TipIsMatrix(ASnap.Datum)
       or IsGfxTipDatum(ASnap.Datum) then Exit;
@@ -3655,7 +3656,10 @@ begin
             ev.TbHas := True
           { [R5-F] or a legend item with one }
           else if not TipTargetValid(ADatum) and LgTipItem(ADatum, ev.LgIndex, ev.LgItem) then
-            ev.LgHas := True;
+            ev.LgHas := True
+          { [R5-I] or a timeline tick that is a data item }
+          else if not TipTargetValid(ADatum) and TlTipItem(AX, AY, ev.TlIndex, ev.TlTick) then
+            ev.TlHas := True;
         end;
         TipTryShowEvent(ev, True);
       end
@@ -4307,6 +4311,24 @@ begin
     TipTryShow(snap, TipSpecOf(snap));
     TipDispatch(TJSONObject.Create(['type', 'showTip', 'from', TipUid]), nil,
       False, AViaListener);
+    Exit;
+  end;
+  { [R5-I] A TIMELINE TICK'S: a data item of the timeline's
+    (_showSeriesItemTooltip: the trigger asked, a showTip with its data
+    index) }
+  if AEv.TlHas then
+  begin
+    snap.TlHas := True;
+    snap.TlIndex := AEv.TlIndex;
+    snap.TlTick := AEv.TlTick;
+    if TipSpecOf(snap).Trigger <> tttItem then
+    begin
+      TipHideVia(AViaListener);
+      Exit;
+    end;
+    TipTryShow(snap, TipSpecOf(snap));
+    TipDispatch(TJSONObject.Create(['type', 'showTip', 'dataIndexInside', AEv.TlTick,
+      'dataIndex', AEv.TlTick, 'from', TipUid]), nil, False, AViaListener);
     Exit;
   end;
   { [R5-F] A LEGEND ITEM'S: the same component item }
@@ -6060,6 +6082,8 @@ begin
       and (FTipSnap.LgItem <= High(FLegends[FTipSnap.LgIndex].Items)) then
       Result := Result + FLegends[FTipSnap.LgIndex].Items[FTipSnap.LgItem].Name;
   end
+  else if FTipSnap.TlHas then
+    Result := 'timeline:' + IntToStr(FTipSnap.TlTick)
   else if FTipSnap.TbHas then
   begin
     Result := 'toolbox:';
@@ -6654,7 +6678,7 @@ begin
   snap := ASnap;
   onAxis := Length(snap.Hits) > 0;
   if not TipTargetValid(snap.Datum) and not onAxis and (snap.ProxyJson = '')
-    and not snap.TbHas and not snap.LgHas then Exit;
+    and not snap.TbHas and not snap.LgHas and not snap.TlHas then Exit;
   { UNDER AN AXIS TRIGGER THERE IS NO CASCADE. Upstream builds the axis
     tooltip's model from the global component and a positioning hint and
     nothing else -- no series level, no data item -- so every option but
@@ -6676,7 +6700,7 @@ begin
   htmlHas := False;
   htmlLines := nil;
   try
-    if (not onAxis) and ((snap.ProxyJson <> '') or snap.TbHas or snap.LgHas) then
+    if (not onAxis) and ((snap.ProxyJson <> '') or snap.TbHas or snap.LgHas or snap.TlHas) then
     begin
       { [R5-D] A SHOWTIP PROXY'S TEXT: its formatter as formatTpl leaves it
         (no params), else its content; A TOOLBOX ICON'S over its name and
@@ -6684,6 +6708,8 @@ begin
       if snap.TbHas then tipText := TipTbText(snap.TbIndex, snap.TbIcon, spec)
       { [R5-F] a legend item's over its name }
       else if snap.LgHas then tipText := TipLgText(snap.LgIndex, snap.LgItem, spec)
+      { [R5-I] a timeline tick's }
+      else if snap.TlHas then tipText := TipTlText(snap.TlIndex, snap.TlTick, spec)
       else tipText := TipProxyText(snap.ProxyJson, spec);
       AContent.Fmt := tipText;
       if tipText = '' then Exit;

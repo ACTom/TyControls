@@ -629,6 +629,10 @@ type
       and the item (its place in the layout) }
     LgHas: Boolean;
     LgIndex, LgItem: Integer;
+    { [R5-I] a timeline tick as a data item (its ecData's dataModel the
+      timeline): the timeline and the tick's data index }
+    TlHas: Boolean;
+    TlIndex, TlTick: Integer;
     { [F4b] ACROSS A RE-RENDER (TooltipView.render keeps the box up): the
       axes as a dataByCoordSys (JSON) while the build they pointed into is
       gone -- Stale until the next build reads them back by raw row -- and
@@ -703,6 +707,9 @@ type
     { [R5-F] as TTyTipSnap's }
     LgHas: Boolean;
     LgIndex, LgItem: Integer;
+    { [R5-I] as TTyTipSnap's }
+    TlHas: Boolean;
+    TlIndex, TlTick: Integer;
   end;
 
   { [Batch 115] THE RETURN CIRCLE'S LAYOUT, as the virtual root's layout
@@ -3559,6 +3566,13 @@ type
       item's tooltip.show over the legend's, default false), its cascade,
       its text (its rect is its hit element's) }
     function LgTipItem(const ADatum: TTyChartDatumRef; out ALegend, AItem: Integer): Boolean;
+    { [R5-I] a timeline tick as a data item: its params, and whether it is
+      one (its item model's tooltip); the tick under a point }
+    function TlTickData(ATl, AEl: Integer; out AParams: TTyChartCallbackParams;
+      out AModel: TTyEventModel): Boolean;
+    function TlTipItem(AX, AY: Integer; out ATl, ATick: Integer): Boolean;
+    function TipTlSpec(ATl, ATick: Integer): TTyTooltipSpec;
+    function TipTlText(ATl, ATick: Integer; const ASpec: TTyTooltipSpec): string;
     function TipLgSpec(ALegend, AItem: Integer): TTyTooltipSpec;
     function TipLgText(ALegend, AItem: Integer; const ASpec: TTyTooltipSpec): string;
     function TipTbText(ATb, AIcon: Integer; const ASpec: TTyTooltipSpec): string;

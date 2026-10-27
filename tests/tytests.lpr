@@ -213,6 +213,7 @@ uses
   test.advchart.imageshadow,
   test.advchart.legendtooltip,
   test.advchart.animedges,
+  test.advchart.timelinetick,
   test.advchart.axisemphasis,
   test.advchart.brushstyle,
   test.advchart.loadingpointer,
