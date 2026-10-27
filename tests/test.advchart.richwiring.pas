@@ -752,13 +752,19 @@ begin
     w := Str(p.Find('fontWeight'));
     if (w = '') and (Pos('bold', Str(p.Find('font'))) > 0) then w := 'bold';
     if (WeightOf(w) <> WeightOf(Str(style.Find('fontWeight'))))
-      or (dr.BlockWeight = WeightOf(Str(style.Find('fontWeight')))) then
+      or (TyFontWeightOf(dr.BlockWeight) = WeightOf(Str(style.Find('fontWeight')))) then
     begin
       Inc(FCompared);
-      if WeightOf(w) <> q.FontWeight then
+      if WeightOf(w) <> TyFontWeightOf(q.FontWeight) then
         Miss(Format('%s: text %d "%s" weight %s upstream, %d here', [where, i,
-          p.Strings['text'], w, q.FontWeight]));
+          p.Strings['text'], w, TyFontWeightOf(q.FontWeight)]));
     end;
+    { [R5-A] the style: the font's first word, the flag above the weight }
+    Inc(FCompared);
+    if ((Copy(Str(p.Find('font')), 1, 7) = 'italic ') or (Copy(Str(p.Find('font')), 1, 8) = 'oblique '))
+      <> ((q.FontWeight and TyFontItalic) <> 0) then
+      Miss(Format('%s: text %d "%s" font "%s" upstream, italic %s here', [where, i,
+        p.Strings['text'], Str(p.Find('font')), BoolToStr((q.FontWeight and TyFontItalic) <> 0, True)]));
     CheckColour(Format('%s: text %d "%s" fill', [where, i, p.Strings['text']]),
       Str(p.Find('fill')), FillSource(p, 'fill', 'fill'), q.HasFill, q.Fill,
       q.DefaultFill);
