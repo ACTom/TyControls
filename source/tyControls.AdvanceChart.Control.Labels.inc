@@ -637,6 +637,9 @@ type
     TextW, TextH: Double;
     Pieces: TTyRtPieceArray;
     Relaid: Boolean;
+    { [R5-F] the scale a re-laid block was laid out at (a pie label had
+      none of its own) }
+    Scale: Double;
     { [R5-F] the hovered block laid out again under the layout's alignment,
       size and font (the spec at hand) }
     EmphRelay: Boolean;
@@ -664,6 +667,7 @@ var
   styleAV, av: TTyTextAnchorV;
   spec: TTyLabelSpec;
   emp: TTyRtPieceArray;
+  lmText: string;
   fsz: Integer;
   it: TTyLabelLayoutItem;
   px0, py0: Double;
@@ -848,6 +852,7 @@ begin
       refs[r].FontSize := fsz;
       refs[r].Relaid := False;
       refs[r].Pieces := c.RtPieces;
+      refs[r].Scale := c.RtScale;
       { [R5-F] A HOVERED BLOCK whose alignment, size or font the layout
         changed: laid out again with them (an emphasis key over them wins)
         [was: the hovered block kept the alignment it was built with] }
@@ -886,8 +891,10 @@ begin
         overflow cut or wrapped at the width, lines past the height dropped
         under lineOverflow, a box drawn at that size -- laid out again for a
         label of a series (its spec at hand) [was: read, not applied] }
+      { [R5-F] a label placed at x / y (a pie's) too [was: a series label
+        its host places only] }
       sized := ((lo.HasWidth and not IsNan(lo.Width)) or (lo.HasHeight and not IsNan(lo.Height)))
-        and (c.LmKind = 1) and (si <= High(ASpecs));
+        and (c.LmKind >= 1) and (si <= High(ASpecs));
       if sized then
       begin
         spec := ASpecs[si];
@@ -908,9 +915,13 @@ begin
           spec.Rt.Style.Height := lo.Height;
         end;
         spec.Rt.Needed := True;
-        refs[r].Pieces := TyLabelBlockPieces(spec, c.Text, c.LmInkFill,
+        { the label's own text, not what a width cut it to (a pie's) }
+        if c.LmText <> '' then lmText := c.LmText else lmText := c.Text;
+        if c.RtScale <= 0 then c.RtScale := scale;
+        refs[r].Pieces := TyLabelBlockPieces(spec, lmText, c.LmInkFill,
           c.LmInkHasFill, c.LmInkGradient, c.LmInkInside, ah, av, c.RtScale, AMeasurer);
         refs[r].Relaid := True;
+        refs[r].Scale := c.RtScale;
         it.RawLocal := LmBlockRect(refs[r].Pieces, c.RtScale);
       end
       else if Length(c.RtPieces) = 0 then
@@ -1069,6 +1080,7 @@ begin
     if Length(refs[r].Pieces) > 0 then
     begin
       el.Caption.RtPieces := refs[r].Pieces;
+      if refs[r].Scale > 0 then el.Caption.RtScale := refs[r].Scale;
       if refs[r].Relaid then
         el.Caption.RtEmph := TyRtReink(refs[r].Pieces, el.Caption.EmphColour, True,
           el.Caption.EmphStrokeColour, el.Caption.EmphStrokeWidthLogical);

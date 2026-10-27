@@ -4399,6 +4399,567 @@
      ]
     }
    ]
+  },
+  {
+   "id": "pie.width",
+   "note": "pie labels under labelLayout width 30: the pie's default overflow 'truncate' cuts them",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "pie",
+      "radius": "40%",
+      "data": [
+       {
+        "name": "Search Engine",
+        "value": 1048
+       },
+       {
+        "name": "Direct",
+        "value": 735
+       },
+       {
+        "name": "Email",
+        "value": 580
+       },
+       {
+        "name": "Union Ads",
+        "value": 484
+       },
+       {
+        "name": "Video Ads",
+        "value": 300
+       }
+      ],
+      "labelLayout": {
+       "width": 30
+      }
+     }
+    ]
+   },
+   "labels": [
+    {
+     "s": 0,
+     "d": 0,
+     "ignore": false,
+     "texts": [
+      "Se..."
+     ],
+     "rect": [
+      "407a1399695ac16b",
+      "40624d5f605f5a7e",
+      "4038d70a3d70a3d7",
+      "4028000000000000"
+     ],
+     "styleWidth": "403e000000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "ignore": false,
+     "texts": [
+      "Dir..."
+     ],
+     "rect": [
+      "4076c794dcc9e1dc",
+      "4071c4fec021f992",
+      "403951eb851eb852",
+      "4028000000000000"
+     ],
+     "styleWidth": "403e000000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "ignore": false,
+     "texts": [
+      "Em..."
+     ],
+     "rect": [
+      "4063a3d6f02128da",
+      "406eb17647ee95ba",
+      "403c147ae147ae14",
+      "4028000000000000"
+     ],
+     "styleWidth": "403e000000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "ignore": false,
+     "texts": [
+      "Uni..."
+     ],
+     "rect": [
+      "4063213b59116638",
+      "4062ace55110b68b",
+      "403c147ae147ae14",
+      "4028000000000000"
+     ],
+     "styleWidth": "403e000000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 4,
+     "ignore": false,
+     "texts": [
+      "Vid..."
+     ],
+     "rect": [
+      "406a2fc178c67ce5",
+      "4059cea0f4654b02",
+      "403b7ae147ae147b",
+      "4028000000000000"
+     ],
+     "styleWidth": "403e000000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    }
+   ]
+  },
+  {
+   "id": "pie.width.box",
+   "note": "boxed pie labels sized 70 x 24 by the layout",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "pie",
+      "radius": "40%",
+      "data": [
+       {
+        "name": "Search Engine",
+        "value": 1048
+       },
+       {
+        "name": "Direct",
+        "value": 735
+       },
+       {
+        "name": "Email",
+        "value": 580
+       },
+       {
+        "name": "Union Ads",
+        "value": 484
+       },
+       {
+        "name": "Video Ads",
+        "value": 300
+       }
+      ],
+      "label": {
+       "show": true,
+       "backgroundColor": "#eee",
+       "borderColor": "#999",
+       "borderWidth": 1,
+       "padding": 2
+      },
+      "labelLayout": {
+       "width": 70,
+       "height": 24
+      }
+     }
+    ]
+   },
+   "labels": [
+    {
+     "s": 0,
+     "d": 0,
+     "ignore": false,
+     "texts": [
+      "Search En..."
+     ],
+     "rect": [
+      "407a0399695ac16b",
+      "40612d5f605f5a7e",
+      "4053000000000000",
+      "403e000000000000"
+     ],
+     "styleWidth": "4051800000000000",
+     "styleHeight": "4038000000000000",
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "ignore": false,
+     "texts": [
+      "Direct"
+     ],
+     "rect": [
+      "4076b794dcc9e1dc",
+      "407134fec021f992",
+      "4053000000000000",
+      "403e000000000000"
+     ],
+     "styleWidth": "4051800000000000",
+     "styleHeight": "4038000000000000",
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "ignore": false,
+     "texts": [
+      "Email"
+     ],
+     "rect": [
+      "405b8ccc98943d3a",
+      "406d917647ee95ba",
+      "4053000000000000",
+      "403e000000000000"
+     ],
+     "styleWidth": "4051800000000000",
+     "styleHeight": "4038000000000000",
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "ignore": false,
+     "texts": [
+      "Union Ads"
+     ],
+     "rect": [
+      "405a87956a74b7f6",
+      "40618ce55110b68b",
+      "4053000000000000",
+      "403e000000000000"
+     ],
+     "styleWidth": "4051800000000000",
+     "styleHeight": "4038000000000000",
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 4,
+     "ignore": false,
+     "texts": [
+      "Video Ads"
+     ],
+     "rect": [
+      "40643f1da1bc3f74",
+      "40578ea0f4654b02",
+      "4053000000000000",
+      "403e000000000000"
+     ],
+     "styleWidth": "4051800000000000",
+     "styleHeight": "4038000000000000",
+     "draggable": false,
+     "cursor": "pointer"
+    }
+   ]
+  },
+  {
+   "id": "pie.width.rich",
+   "note": "rich pie labels under labelLayout width 45",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "pie",
+      "radius": "40%",
+      "data": [
+       {
+        "name": "Search Engine",
+        "value": 1048
+       },
+       {
+        "name": "Direct",
+        "value": 735
+       },
+       {
+        "name": "Email",
+        "value": 580
+       },
+       {
+        "name": "Union Ads",
+        "value": 484
+       },
+       {
+        "name": "Video Ads",
+        "value": 300
+       }
+      ],
+      "label": {
+       "formatter": "{a|{b}} {c|{c}}",
+       "rich": {
+        "a": {
+         "color": "#333"
+        },
+        "c": {
+         "color": "#999"
+        }
+       }
+      },
+      "labelLayout": {
+       "width": 45
+      }
+     }
+    ]
+   },
+   "labels": [
+    {
+     "s": 0,
+     "d": 0,
+     "ignore": false,
+     "texts": [
+      "Searc...",
+      " ",
+      ""
+     ],
+     "rect": [
+      "407a1399695ac16b",
+      "40624d5f605f5a7e",
+      "404670a3d70a3d71",
+      "4028000000000000"
+     ],
+     "styleWidth": "4046800000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "ignore": false,
+     "texts": [
+      "Direct",
+      " ",
+      "7"
+     ],
+     "rect": [
+      "4076c794dcc9e1dc",
+      "4071c4fec021f992",
+      "4044b33333333333",
+      "4028000000000000"
+     ],
+     "styleWidth": "4046800000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "ignore": false,
+     "texts": [
+      "...",
+      " ",
+      "Email"
+     ],
+     "rect": [
+      "4061b851d168d6ef",
+      "406eb17647ee95ba",
+      "4045b851eb851eb8",
+      "4028000000000000"
+     ],
+     "styleWidth": "4046800000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "ignore": false,
+     "texts": [
+      "",
+      " ",
+      "Union..."
+     ],
+     "rect": [
+      "406107a1bf77cc9f",
+      "4062ace55110b68b",
+      "404670a3d70a3d70",
+      "4028000000000000"
+     ],
+     "styleWidth": "4046800000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 4,
+     "ignore": false,
+     "texts": [
+      "",
+      " ",
+      "Video..."
+     ],
+     "rect": [
+      "40681627df2ce34b",
+      "4059cea0f4654b02",
+      "404623d70a3d70a4",
+      "4028000000000000"
+     ],
+     "styleWidth": "4046800000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    }
+   ]
+  },
+  {
+   "id": "pie.height",
+   "note": "three-line pie labels, lineOverflow 'truncate' under labelLayout height 14",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "pie",
+      "radius": "40%",
+      "data": [
+       {
+        "name": "Search Engine",
+        "value": 1048
+       },
+       {
+        "name": "Direct",
+        "value": 735
+       },
+       {
+        "name": "Email",
+        "value": 580
+       },
+       {
+        "name": "Union Ads",
+        "value": 484
+       },
+       {
+        "name": "Video Ads",
+        "value": 300
+       }
+      ],
+      "label": {
+       "formatter": "{b}\n{c}\n{d}%",
+       "lineOverflow": "truncate"
+      },
+      "labelLayout": {
+       "height": 14
+      }
+     }
+    ]
+   },
+   "labels": [
+    {
+     "s": 0,
+     "d": 0,
+     "ignore": false,
+     "texts": [
+      "Search Engine"
+     ],
+     "rect": [
+      "407a1399695ac16b",
+      "40624d5f605f5a7e",
+      "4053c51eb851eb85",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": "402c000000000000",
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "ignore": false,
+     "texts": [
+      "Direct"
+     ],
+     "rect": [
+      "4076c794dcc9e1dc",
+      "4071c4fec021f992",
+      "403f51eb851eb852",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": "402c000000000000",
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "ignore": false,
+     "texts": [
+      "Email"
+     ],
+     "rect": [
+      "406366664c4a1e9d",
+      "406eb17647ee95ba",
+      "403e000000000000",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": "402c000000000000",
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "ignore": false,
+     "texts": [
+      "Union Ads"
+     ],
+     "rect": [
+      "405f63be60374752",
+      "4062ace55110b68b",
+      "404bc7ae147ae147",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": "402c000000000000",
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 4,
+     "ignore": false,
+     "texts": [
+      "Video Ads"
+     ],
+     "rect": [
+      "4066c0654fd0ba55",
+      "4059cea0f4654b02",
+      "404b7ae147ae147b",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": "402c000000000000",
+     "draggable": false,
+     "cursor": "pointer"
+    }
+   ]
   }
  ]
 }

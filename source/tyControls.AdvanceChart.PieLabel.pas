@@ -308,6 +308,13 @@ function TyBuildPieLabels(const ABinding: TTySeriesBinding;
   APercentPrecision: Integer; const AMeasurer: ITyTextMeasurer;
   APPI: Integer; AList: TTyPaintList): Integer; overload;
 
+{ [R5-F] A PIE LABEL'S STYLE AS THE LABEL LAYOUT LAYS IT OUT AGAIN (its
+  width / height on the style, LABEL_OPTION_TO_STYLE_KEYS): the label's
+  spec in its font and the ink's bands, the pie's default overflow
+  'truncate' on the block whatever else it needs }
+function TyPieLabelLmSpec(const ASpec: TTyPieLabelSpec;
+  const AInk: TTyPieLabelInk): TTyLabelSpec;
+
 { bleedMargin's computed default: ten on a normal chart, two on a small one.
 
   NOT A CONSTANT, and the small case is not hypothetical -- it is exactly what a
@@ -1469,6 +1476,29 @@ begin
     MarginTypes[AIndex], Margins[AIndex]);
 end;
 
+function TyPieLabelLmSpec(const ASpec: TTyPieLabelSpec;
+  const AInk: TTyPieLabelInk): TTyLabelSpec;
+var wt: Integer;
+begin
+  Result := ASpec.Ink;
+  Result.InsideColour[0] := AInk.InsideColour[0];
+  Result.InsideColour[1] := AInk.InsideColour[1];
+  Result.InsideColour[2] := AInk.InsideColour[2];
+  Result.OutsideColour := AInk.OutsideColour;
+  Result.Ground := AInk.Ground;
+  Result.GroundDark := AInk.GroundDark;
+  Result.FontName := AInk.FontName;
+  if ASpec.HasFontSize then Result.FontSizeLogical := ASpec.FontSizeOpt
+  else Result.FontSizeLogical := AInk.FontSizeLogical;
+  if ASpec.HasFontWeight then
+    wt := (AInk.FontWeight and not TyChartFontWeightMask) or ASpec.FontWeightOpt
+  else
+    wt := AInk.FontWeight;
+  Result.FontWeight := TyFontStyleCodeOver(ASpec.FontStyle, wt);
+  if (ASpec.Overflow = tloTruncate) and (Result.Rt.Style.Overflow = rtoNone) then
+    Result.Rt.Style.Overflow := rtoTruncate;
+end;
+
 function TyBuildPieLabels(const ABinding: TTySeriesBinding;
   const ALayout: TTyPieLayout; const ASpec: TTyPieLabelSpec;
   const AInk: TTyPieLabelInk; const AFills: array of TTyChartColor;
@@ -1875,6 +1905,9 @@ begin
       el.Caption.LmInkFill := fill;
       el.Caption.LmInkHasFill := True;
       el.Caption.LmInkInside := sp.Position = tplInside;
+      { [R5-F] its item's spec, where the items have their own: the label
+        layout lays it out again with it }
+      if (row >= 0) and (row <= High(AItems)) then el.Caption.ItemSpec := row + 1;
       el.Silent := False;
       { `row` is the RAW index -- see TyBuildPieMarks for why a pie needs both. }
       el.Datum := TyChartDatum(ABinding.SeriesIndex,

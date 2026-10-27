@@ -3721,6 +3721,8 @@ var
   fv: TTyFunnelVisual;
   rv: TTyRadarVisual;
   pls: TTyPieLabelSpec;
+  pItems: TTyPieLabelSpecArray;
+  pInk: TTyPieLabelInk;
   pn, lo, hi: Integer;
   gv: TTyGaugeVisual;
   gi: TTyGraphInk;
@@ -4094,11 +4096,22 @@ begin
             TyPieLabelSpecDefault);
           pn := 0;
           if FStores[i] <> nil then pn := FStores[i].RawCount;
-          Inc(drawn, TyBuildPieLabels(FBindings[i], FPies[i], pls,
-            TyPieItemLabelSpecs(FOption, FBindings[i].SeriesIndex, pls, pn),
-            PieLabelInk, pv.Fills, FStores[i], SeriesModelName(FBindings[i].SeriesIndex),
+          pItems := TyPieItemLabelSpecs(FOption, FBindings[i].SeriesIndex, pls, pn);
+          pInk := PieLabelInk;
+          Inc(drawn, TyBuildPieLabels(FBindings[i], FPies[i], pls, pItems,
+            pInk, pv.Fills, FStores[i], SeriesModelName(FBindings[i].SeriesIndex),
             FStores[i].DimIndexOf(TyPieValueDim),
             FPieSpecs[i].PercentPrecision, AMeasurer, APPI, list));
+          { [R5-F] the label layout's view of them: the series' and each
+            item's spec, for a width or a height it puts on their style }
+          if Length(specs) <= FBindings[i].SeriesIndex then
+            SetLength(specs, FBindings[i].SeriesIndex + 1);
+          specs[FBindings[i].SeriesIndex] := TyPieLabelLmSpec(pls, pInk);
+          if Length(itemSpecs) <= FBindings[i].SeriesIndex then
+            SetLength(itemSpecs, FBindings[i].SeriesIndex + 1);
+          SetLength(itemSpecs[FBindings[i].SeriesIndex], Length(pItems));
+          for gq := 0 to High(pItems) do
+            itemSpecs[FBindings[i].SeriesIndex][gq] := TyPieLabelLmSpec(pItems[gq], pInk);
           OwnLabelOpacity(i, list, lo, hi);
           StyleOwnGuides(i, list, hi);
         end;
