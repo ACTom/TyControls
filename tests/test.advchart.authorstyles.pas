@@ -31,7 +31,8 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.Color,
      tyControls.AdvanceChart.Single, tyControls.AdvanceChart.Polar,
      tyControls.AdvanceChart.Parallel, tyControls.AdvanceChart.Shape,
-     tyControls.AdvanceChart.Lines, tyControls.AdvanceChart;
+     tyControls.AdvanceChart.Lines, tyControls.AdvanceChart.Legend, tyControls.FontUnits,
+     tyControls.AdvanceChart;
 type
   TAsProbe = class(TTyAdvanceChart)
   public
@@ -68,6 +69,10 @@ type
     procedure TestTheBarBackgroundsAreUpstreams;
     procedure TestTheTreemapCornersAreUpstreams;
     procedure TestTheColorByDataIsUpstreams;
+    procedure TestAGradientPaletteEntryIsTheFill;
+    procedure TestALegendItemsOwnStyleIsUpstreams;
+    procedure TestTheHoveredSelectorIsUpstreams;
+    procedure TestTheHoveredRichLabelIsUpstreams;
   end;
 
   TAdvChartAuthorStylesPaintTest = class(TTestCase)
@@ -298,6 +303,12 @@ begin
   st := ARec.Arrays['styles'].Objects[0];
   src := ARec.Objects['src'];
   Inc(FCompared);
+  { a width that is not above nought strokes nothing (zrender's hasStroke) }
+  if not (st.Floats['lineWidth'] > 0) then
+  begin
+    if AStroke.Drawn then Bad(APart + ': drawn here, upstream''s width is nought');
+    Exit;
+  end;
   if not AStroke.Drawn then
   begin
     Bad(APart + ': not drawn here');
@@ -862,6 +873,414 @@ begin
     end;
   end;
   Finish('colorBy data');
+end;
+
+{ upstream's fill against an element's: a string its solid and no
+  gradient, an object the gradient stop by stop }
+function SameFill(AUp: TJSONData; const AGrad: TTyChartGradient; ASolid: TTyChartColor;
+  out AWhy: string): Boolean;
+var
+  k: Integer;
+  want: TTyChartColor;
+  stops: TJSONArray;
+begin
+  AWhy := '';
+  if AUp is TJSONObject then
+  begin
+    stops := TJSONObject(AUp).Arrays['colorStops'];
+    if (AGrad.Kind <> cgkLinear) or (Length(AGrad.Stops) <> stops.Count) then
+    begin
+      AWhy := 'not the gradient';
+      Exit(False);
+    end;
+    for k := 0 to stops.Count - 1 do
+      if not TyTryParseChartColor(stops.Objects[k].Strings['color'], want)
+        or (AGrad.Stops[k].Color <> want) or (AGrad.Stops[k].Offset <> stops.Objects[k].Floats['offset']) then
+      begin
+        AWhy := Format('stop %d', [k]);
+        Exit(False);
+      end;
+    Exit(True);
+  end;
+  if (AUp = nil) or (AUp.JSONType <> jtString) or not TyTryParseChartColor(AUp.AsString, want) then
+  begin
+    AWhy := 'unreadable upstream';
+    Exit(False);
+  end;
+  if AGrad.Kind <> cgkNone then
+  begin
+    AWhy := 'a gradient here, ' + AUp.AsString + ' upstream';
+    Exit(False);
+  end;
+  Result := ASolid = want;
+  if not Result then AWhy := ColourText(ASolid) + ', upstream ' + AUp.AsString;
+end;
+
+{ a palette entry that is a gradient: a bar's rects, a pie's sectors by
+  datum, a line's polyline and area }
+procedure TAdvChartAuthorStylesOracleTest.TestAGradientPaletteEntryIsTheFill;
+var
+  cases, ser, fills: TJSONArray;
+  c, s: TJSONObject;
+  i, j, k, q, raw, si: Integer;
+  l: TTyPaintList;
+  pe: PTyChartElement;
+  why: string;
+  found, strokeOk, areaOk: Boolean;
+begin
+  cases := TJSONObject(FRoot).Arrays['cases'];
+  for i := 0 to cases.Count - 1 do
+  begin
+    c := cases.Objects[i];
+    if c.Strings['group'] <> 'palgrad' then Continue;
+    NewChart(c);
+    l := FChart.List;
+    ser := c.Arrays['series'];
+    for j := 0 to ser.Count - 1 do
+    begin
+      s := ser.Objects[j];
+      si := s.Integers['seriesIndex'];
+      if s.Strings['type'] = 'line' then
+      begin
+        FWhere := Format('%s line %d', [c.Strings['id'], si]);
+        strokeOk := False;
+        areaOk := False;
+        for q := 0 to l.Count - 1 do
+        begin
+          pe := l.Ref(q);
+          if (pe^.Datum.SeriesIndex <> si) then Continue;
+          if (pe^.Style.StrokeWidthLogical > 0) and not pe^.Style.HasFill
+            and SameFill(s.Find('stroke'), pe^.Style.StrokeGradient, pe^.Style.StrokeColor, why) then
+            strokeOk := True;
+          if pe^.Style.HasFill and SameFill(s.Find('area'), pe^.Style.FillGradient,
+            pe^.Style.FillColor, why) then areaOk := True;
+        end;
+        Inc(FCompared, 2);
+        if not strokeOk then Bad('no line stroked in upstream''s colour');
+        if not areaOk then Bad('no area filled in upstream''s colour');
+        Continue;
+      end;
+      fills := s.Arrays['fills'];
+      for k := 0 to fills.Count - 1 do
+      begin
+        raw := fills.Objects[k].Integers['raw'];
+        FWhere := Format('%s series %d row %d', [c.Strings['id'], si, raw]);
+        found := False;
+        Inc(FCompared);
+        for q := 0 to l.Count - 1 do
+        begin
+          pe := l.Ref(q);
+          if (pe^.Datum.Kind <> ctkSeries) or (pe^.Datum.SeriesIndex <> si)
+            or (pe^.Datum.RawDataIndex <> raw) or not pe^.Style.HasFill then Continue;
+          found := True;
+          if not SameFill(fills.Objects[k].Find('fill'), pe^.Style.FillGradient,
+            pe^.Style.FillColor, why) then Bad('fill: ' + why);
+          Break;
+        end;
+        if not found then Bad('no element');
+      end;
+    end;
+  end;
+  Finish('gradient palette entries');
+end;
+
+{ the colour upstream drew, when the case's option wrote it (else the
+  theme's, which is the skin's here and not compared) }
+function Written(ACase: TJSONObject; const AColour: string; out AWant: TTyChartColor): Boolean;
+begin
+  Result := (AColour <> '') and (Pos('"' + LowerCase(AColour) + '"',
+    LowerCase(ACase.Objects['option'].AsJSON)) > 0)
+    and TyTryParseChartColor(AColour, AWant);
+end;
+
+{ legend.data[i]'s own textStyle, itemStyle, lineStyle and inactive colours:
+  each item's elements -- its hit rect (the legend's datum) and what follows
+  it up to the next -- against upstream's words and icon paths }
+procedure TAdvChartAuthorStylesOracleTest.TestALegendItemsOwnStyleIsUpstreams;
+var
+  cases, items, icons: TJSONArray;
+  c, it, tx, ic: TJSONObject;
+  i, j, k, q, idx, first, last: Integer;
+  l: TTyPaintList;
+  pe: PTyChartElement;
+  lay: TTyLegendLayout;
+  want: TTyChartColor;
+  found: Boolean;
+  w: Double;
+begin
+  cases := TJSONObject(FRoot).Arrays['cases'];
+  for i := 0 to cases.Count - 1 do
+  begin
+    c := cases.Objects[i];
+    if (c.Strings['group'] <> 'legend') or (c.Strings['id'] = 'lg-selector-emph') then Continue;
+    NewChart(c);
+    l := FChart.List;
+    lay := FChart.LegendLayout(0);
+    items := c.Arrays['series'].Objects[0].Arrays['items'];
+    for j := 0 to items.Count - 1 do
+    begin
+      it := items.Objects[j];
+      FWhere := Format('%s %s', [c.Strings['id'], it.Strings['name']]);
+      idx := -1;
+      for k := 0 to High(lay.Items) do
+        if lay.Items[k].Name = it.Strings['name'] then idx := k;
+      Inc(FCompared);
+      if idx < 0 then
+      begin
+        Bad('no such item');
+        Continue;
+      end;
+      { the item's run of elements }
+      first := -1;
+      last := l.Count - 1;
+      for k := 0 to l.Count - 1 do
+      begin
+        pe := l.Ref(k);
+        if pe^.Datum.Kind <> ctkLegend then Continue;
+        if first >= 0 then
+        begin
+          last := k - 1;
+          Break;
+        end;
+        if pe^.Datum.DataIndex = idx then first := k + 1;
+      end;
+      if first < 0 then
+      begin
+        Bad('no hit rect');
+        Continue;
+      end;
+      { the words }
+      tx := it.Objects['text'];
+      found := False;
+      for k := first to last do
+      begin
+        pe := l.Ref(k);
+        if pe^.Caption.Text = '' then Continue;
+        found := True;
+        if Written(c, tx.Strings['fill'], want) and (pe^.Caption.Colour <> want) then
+          Bad(Format('words %s, upstream %s', [ColourText(pe^.Caption.Colour), tx.Strings['fill']]));
+        if TyFontPxOf(pe^.Caption.FontSizeLogical) <> tx.Floats['fontSize'] then
+          if Pos('"fontSize"', c.Objects['option'].AsJSON) > 0 then
+            Bad(Format('words %s px, upstream %s', [Txt(TyFontPxOf(pe^.Caption.FontSizeLogical)),
+              Txt(tx.Floats['fontSize'])]));
+        if (tx.Strings['fontWeight'] = 'bold') <> (pe^.Caption.FontWeight >= 700) then
+          Bad(Format('words weight %d, upstream %s', [pe^.Caption.FontWeight, tx.Strings['fontWeight']]));
+        Break;
+      end;
+      if not found then Bad('no words');
+      { the icon paths: each upstream path with a colour the option wrote is
+        an element of the item's in that colour, its width and opacity }
+      icons := it.Arrays['icons'];
+      for q := 0 to icons.Count - 1 do
+      begin
+        ic := icons.Objects[q];
+        if (ic.Find('stroke').JSONType = jtString) and (ic.Floats['lineWidth'] > 0)
+          and Written(c, ic.Strings['stroke'], want) then
+        begin
+          Inc(FCompared);
+          found := False;
+          w := ic.Floats['lineWidth'];
+          for k := first to last do
+          begin
+            pe := l.Ref(k);
+            if (pe^.Caption.Text = '') and (pe^.Style.StrokeColor = want)
+              and (pe^.Style.StrokeWidthLogical = w) then found := True;
+          end;
+          if not found then
+            Bad(Format('no pen %s at %s', [ic.Strings['stroke'], Txt(w)]));
+        end;
+        if (ic.Find('fill').JSONType = jtString) and Written(c, ic.Strings['fill'], want) then
+        begin
+          Inc(FCompared);
+          found := False;
+          for k := first to last do
+          begin
+            pe := l.Ref(k);
+            if (pe^.Caption.Text = '') and pe^.Style.HasFill and (pe^.Style.FillColor = want) then
+            begin
+              found := True;
+              if Abs(pe^.Style.Alpha - ic.Floats['opacity']) > 1e-12 then
+                Bad(Format('fill %s at opacity %s, upstream %s', [ic.Strings['fill'],
+                  Txt(pe^.Style.Alpha), Txt(ic.Floats['opacity'])]));
+            end;
+          end;
+          if not found then Bad('no fill ' + ic.Strings['fill']);
+        end;
+        { an unselected icon with no pen upstream has none here }
+        if (ic.Floats['lineWidth'] = 0) and (ic.Find('fill').JSONType = jtString)
+          and Written(c, ic.Strings['fill'], want) then
+          for k := first to last do
+          begin
+            pe := l.Ref(k);
+            if (pe^.Caption.Text = '') and pe^.Style.HasFill and (pe^.Style.FillColor = want)
+              and (pe^.Style.StrokeWidthLogical > 0) then
+              Bad('a pen here, none upstream');
+          end;
+      end;
+    end;
+  end;
+  Finish('the legend items');
+end;
+
+{ the selector button's emphasis label: its pieces as laid out hovered --
+  the box's fill and pen, the words' fill, weight and size }
+procedure TAdvChartAuthorStylesOracleTest.TestTheHoveredSelectorIsUpstreams;
+var
+  cases: TJSONArray;
+  c, st: TJSONObject;
+  i, k: Integer;
+  lay: TTyLegendLayout;
+  want: TTyChartColor;
+  sawRect, sawText: Boolean;
+  pc: TTyRtPiece;
+begin
+  cases := TJSONObject(FRoot).Arrays['cases'];
+  for i := 0 to cases.Count - 1 do
+  begin
+    c := cases.Objects[i];
+    if c.Strings['id'] <> 'lg-selector-emph' then Continue;
+    NewChart(c);
+    lay := FChart.LegendLayout(0);
+    st := c.Arrays['series'].Objects[0].Arrays['selectors'].Objects[0];
+    FWhere := c.Strings['id'];
+    Inc(FCompared);
+    if Length(lay.Selector) = 0 then
+    begin
+      Bad('no selector');
+      Continue;
+    end;
+    sawRect := False;
+    sawText := False;
+    for k := 0 to High(lay.Selector[0].EmphPieces) do
+    begin
+      pc := lay.Selector[0].EmphPieces[k];
+        if pc.Kind = rpkRect then
+        begin
+          sawRect := True;
+          if TyTryParseChartColor(st.Strings['backgroundColor'], want)
+            and not (pc.HasFill and (pc.Fill = want)) then
+            Bad(Format('box fill %s, upstream %s', [ColourText(pc.Fill), st.Strings['backgroundColor']]));
+          if TyTryParseChartColor(st.Strings['borderColor'], want)
+            and not (pc.HasStroke and (pc.Stroke = want)) then
+            Bad(Format('box pen %s, upstream %s', [ColourText(pc.Stroke), st.Strings['borderColor']]));
+        end
+        else
+        begin
+          sawText := True;
+          if TyTryParseChartColor(st.Strings['fill'], want) and (pc.Fill <> want) then
+            Bad(Format('words %s, upstream %s', [ColourText(pc.Fill), st.Strings['fill']]));
+          if pc.FontSizePx <> st.Floats['fontSize'] then
+            Bad(Format('words %s px, upstream %s', [Txt(pc.FontSizePx), Txt(st.Floats['fontSize'])]));
+          if (st.Strings['fontWeight'] = 'bold') <> (pc.FontWeight >= 700) then
+            Bad(Format('words weight %d, upstream %s', [pc.FontWeight, st.Strings['fontWeight']]));
+        end;
+    end;
+    if not (sawRect and sawText) then Bad('not a box and its words');
+  end;
+  Finish('the hovered selector');
+end;
+
+{ emphasis.label.rich: each label's pieces at rest and hovered -- the text
+  piece of each `{name|text}` token in upstream's fill, size and weight }
+procedure TAdvChartAuthorStylesOracleTest.TestTheHoveredRichLabelIsUpstreams;
+var
+  cases, labels: TJSONArray;
+  c, lb: TJSONObject;
+  i, j, k, seen: Integer;
+  l: TTyPaintList;
+  pe: PTyChartElement;
+  names, texts: array of string;
+  tok, rest: string;
+  p, q: Integer;
+
+  procedure Check(const APieces: TTyRtPieceArray; AStates: TJSONObject; const AWhich: string);
+  var n, m: Integer; st: TJSONObject; want: TTyChartColor; hit: Boolean;
+  begin
+    for n := 0 to High(names) do
+    begin
+      if AStates.Find(names[n]) = nil then Continue;
+      st := AStates.Objects[names[n]];
+      hit := False;
+      Inc(FCompared);
+      for m := 0 to High(APieces) do
+      begin
+        if (APieces[m].Kind <> rpkText) or (APieces[m].Text <> texts[n]) then Continue;
+        hit := True;
+        if TyTryParseChartColor(st.Strings['fill'], want) and (APieces[m].Fill <> want) then
+          Bad(Format('%s %s: fill %s, upstream %s', [AWhich, names[n],
+            ColourText(APieces[m].Fill), st.Strings['fill']]));
+        if APieces[m].FontSizePx <> st.Floats['fontSize'] then
+          Bad(Format('%s %s: %s px, upstream %s', [AWhich, names[n],
+            Txt(APieces[m].FontSizePx), Txt(st.Floats['fontSize'])]));
+        if (st.Strings['fontWeight'] = 'bold') <> (APieces[m].FontWeight >= 700) then
+          Bad(Format('%s %s: weight %d, upstream %s', [AWhich, names[n],
+            APieces[m].FontWeight, st.Strings['fontWeight']]));
+      end;
+      if not hit then Bad(Format('%s %s: no piece', [AWhich, names[n]]));
+    end;
+  end;
+
+begin
+  cases := TJSONObject(FRoot).Arrays['cases'];
+  for i := 0 to cases.Count - 1 do
+  begin
+    c := cases.Objects[i];
+    if c.Strings['group'] <> 'emphrich' then Continue;
+    NewChart(c);
+    l := FChart.List;
+    labels := c.Arrays['series'].Objects[0].Arrays['labels'];
+    seen := 0;
+    for j := 0 to labels.Count - 1 do
+    begin
+      lb := labels.Objects[j];
+      FWhere := Format('%s label %d', [c.Strings['id'], j]);
+      { the tokens: {name|text} }
+      names := nil;
+      texts := nil;
+      rest := lb.Strings['text'];
+      while True do
+      begin
+        p := Pos('{', rest);
+        q := Pos('}', rest);
+        if (p = 0) or (q < p) then Break;
+        tok := Copy(rest, p + 1, q - p - 1);
+        if Pos('|', tok) > 0 then
+        begin
+          SetLength(names, Length(names) + 1);
+          SetLength(texts, Length(texts) + 1);
+          names[High(names)] := Copy(tok, 1, Pos('|', tok) - 1);
+          texts[High(texts)] := Copy(tok, Pos('|', tok) + 1, MaxInt);
+        end;
+        rest := Copy(rest, q + 1, MaxInt);
+      end;
+      { the j-th label caption with a block }
+      k := 0;
+      pe := nil;
+      while k < l.Count do
+      begin
+        if Length(l.Ref(k)^.Caption.RtEmph) > 0 then
+        begin
+          if seen = j then
+          begin
+            pe := l.Ref(k);
+            Break;
+          end;
+          Inc(seen);
+        end;
+        Inc(k);
+      end;
+      seen := 0;
+      Inc(FCompared);
+      if pe = nil then
+      begin
+        Bad('no label block');
+        Continue;
+      end;
+      Check(pe^.Caption.RtPieces, lb.Objects['normal'], 'at rest');
+      Check(pe^.Caption.RtEmph, lb.Objects['emphasis'], 'hovered');
+    end;
+  end;
+  Finish('the hovered rich label');
 end;
 
 { ==================== on the screen ==================== }

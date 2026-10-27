@@ -1301,6 +1301,102 @@
    ]
   },
   {
+   "id": "cart-split-width-0",
+   "group": "axis",
+   "note": "splitLine width 0: the lines are built and stroke nothing (hasStroke)",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "splitLine": {
+      "lineStyle": {
+       "width": 0
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2,
+       6
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [
+    {
+     "kind": "cartesian",
+     "mainType": "xAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#54555a",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      }
+     }
+    },
+    {
+     "kind": "cartesian",
+     "mainType": "yAxis",
+     "index": 0,
+     "parts": {
+      "split": {
+       "styles": [
+        {
+         "stroke": "#dbdee4",
+         "lineWidth": 0,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "author",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
    "id": "cart-minor-split",
    "group": "axis",
    "note": "minorSplitLine shown with its own colour, width, dotted and opacity",
@@ -4287,6 +4383,799 @@
    ]
   },
   {
+   "id": "pg-series",
+   "group": "palgrad",
+   "note": "a root palette [gradient, '#00aa00']: a bar series takes the gradient, a pie by data every other slice",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "color": [
+     {
+      "type": "linear",
+      "x": 0,
+      "y": 0,
+      "x2": 0,
+      "y2": 1,
+      "colorStops": [
+       {
+        "offset": 0,
+        "color": "#ff0000"
+       },
+       {
+        "offset": 1,
+        "color": "#0000ff"
+       }
+      ]
+     },
+     "#00aa00"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "B",
+      "data": [
+       1,
+       2
+      ]
+     },
+     {
+      "type": "pie",
+      "colorBy": "data",
+      "center": [
+       "80%",
+       "30%"
+      ],
+      "radius": 30,
+      "data": [
+       {
+        "name": "x",
+        "value": 1
+       },
+       {
+        "name": "y",
+        "value": 2
+       },
+       {
+        "name": "z",
+        "value": 3
+       }
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "fills": [
+      {
+       "raw": 0,
+       "fill": {
+        "type": "linear",
+        "x": 0,
+        "y": 0,
+        "x2": 0,
+        "y2": 1,
+        "global": false,
+        "colorStops": [
+         {
+          "offset": 0,
+          "color": "#ff0000"
+         },
+         {
+          "offset": 1,
+          "color": "#0000ff"
+         }
+        ]
+       }
+      },
+      {
+       "raw": 1,
+       "fill": {
+        "type": "linear",
+        "x": 0,
+        "y": 0,
+        "x2": 0,
+        "y2": 1,
+        "global": false,
+        "colorStops": [
+         {
+          "offset": 0,
+          "color": "#ff0000"
+         },
+         {
+          "offset": 1,
+          "color": "#0000ff"
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "seriesIndex": 1,
+     "type": "pie",
+     "fills": [
+      {
+       "raw": 0,
+       "fill": {
+        "type": "linear",
+        "x": 0,
+        "y": 0,
+        "x2": 0,
+        "y2": 1,
+        "global": false,
+        "colorStops": [
+         {
+          "offset": 0,
+          "color": "#ff0000"
+         },
+         {
+          "offset": 1,
+          "color": "#0000ff"
+         }
+        ]
+       }
+      },
+      {
+       "raw": 1,
+       "fill": "#00aa00"
+      },
+      {
+       "raw": 2,
+       "fill": {
+        "type": "linear",
+        "x": 0,
+        "y": 0,
+        "x2": 0,
+        "y2": 1,
+        "global": false,
+        "colorStops": [
+         {
+          "offset": 0,
+          "color": "#ff0000"
+         },
+         {
+          "offset": 1,
+          "color": "#0000ff"
+         }
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "pg-line",
+   "group": "palgrad",
+   "note": "a line series on a gradient palette: its stroke and its area",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "color": [
+     {
+      "type": "linear",
+      "x": 0,
+      "y": 0,
+      "x2": 0,
+      "y2": 1,
+      "colorStops": [
+       {
+        "offset": 0,
+        "color": "#ff0000"
+       },
+       {
+        "offset": 1,
+        "color": "#0000ff"
+       }
+      ]
+     }
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       1,
+       3,
+       2
+      ],
+      "areaStyle": {},
+      "showSymbol": false
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "line",
+     "fills": [],
+     "stroke": {
+      "type": "linear",
+      "x": 0,
+      "y": 0,
+      "x2": 0,
+      "y2": 1,
+      "global": false,
+      "colorStops": [
+       {
+        "offset": 0,
+        "color": "#ff0000"
+       },
+       {
+        "offset": 1,
+        "color": "#0000ff"
+       }
+      ]
+     },
+     "area": {
+      "type": "linear",
+      "x": 0,
+      "y": 0,
+      "x2": 0,
+      "y2": 1,
+      "global": false,
+      "colorStops": [
+       {
+        "offset": 0,
+        "color": "#ff0000"
+       },
+       {
+        "offset": 1,
+        "color": "#0000ff"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "lg-items",
+   "group": "legend",
+   "note": "legend.data[i]'s textStyle, itemStyle, lineStyle and inactive colours over the legend's",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "p",
+      "q"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "A",
+      "data": [
+       1,
+       2
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "B",
+      "data": [
+       2,
+       1
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "C",
+      "data": [
+       1,
+       1
+      ]
+     },
+     {
+      "type": "line",
+      "name": "L",
+      "data": [
+       2,
+       2
+      ]
+     }
+    ],
+    "legend": {
+     "top": 10,
+     "selected": {
+      "C": false
+     },
+     "itemStyle": {
+      "borderColor": "#333333",
+      "borderWidth": 1
+     },
+     "data": [
+      {
+       "name": "A",
+       "textStyle": {
+        "color": "#ff0000",
+        "fontSize": 16,
+        "fontWeight": "bold"
+       },
+       "itemStyle": {
+        "color": "#00ff00",
+        "opacity": 0.5
+       }
+      },
+      {
+       "name": "B",
+       "itemStyle": {
+        "borderColor": "#0000ff",
+        "borderWidth": 3
+       }
+      },
+      {
+       "name": "C",
+       "inactiveColor": "#aaaaaa",
+       "inactiveBorderColor": "#888888",
+       "textStyle": {
+        "color": "#ff0000"
+       }
+      },
+      {
+       "name": "L",
+       "lineStyle": {
+        "color": "#ff00ff",
+        "width": 4
+       }
+      }
+     ]
+    }
+   },
+   "fails": [],
+   "axes": [],
+   "series": [
+    {
+     "items": [
+      {
+       "name": "A",
+       "text": {
+        "fill": "#ff0000",
+        "fontSize": 16,
+        "fontWeight": "bold"
+       },
+       "icons": [
+        {
+         "type": "path",
+         "fill": "#00ff00",
+         "stroke": "#333333",
+         "lineWidth": 1,
+         "opacity": 0.5
+        }
+       ]
+      },
+      {
+       "name": "B",
+       "text": {
+        "fill": "#54555a",
+        "fontSize": 12,
+        "fontWeight": "normal"
+       },
+       "icons": [
+        {
+         "type": "path",
+         "fill": "#b6d634",
+         "stroke": "#0000ff",
+         "lineWidth": 3,
+         "opacity": 1
+        }
+       ]
+      },
+      {
+       "name": "C",
+       "text": {
+        "fill": "#aaaaaa",
+        "fontSize": 12,
+        "fontWeight": "normal"
+       },
+       "icons": [
+        {
+         "type": "path",
+         "fill": "#aaaaaa",
+         "stroke": "#888888",
+         "lineWidth": 0,
+         "opacity": 1
+        }
+       ]
+      },
+      {
+       "name": "L",
+       "text": {
+        "fill": "#54555a",
+        "fontSize": 12,
+        "fontWeight": "normal"
+       },
+       "icons": [
+        {
+         "type": "path",
+         "fill": "#000",
+         "stroke": "#ff00ff",
+         "lineWidth": 4,
+         "opacity": 1
+        },
+        {
+         "type": "path",
+         "fill": "#fff",
+         "stroke": "#ff994d",
+         "lineWidth": 2,
+         "opacity": 1
+        }
+       ]
+      }
+     ],
+     "selectors": []
+    }
+   ]
+  },
+  {
+   "id": "lg-item-inactive-line",
+   "group": "legend",
+   "note": "an unselected line item's own lineStyle.inactiveColor / inactiveWidth",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "p",
+      "q"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "A",
+      "data": [
+       1,
+       2
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "B",
+      "data": [
+       2,
+       1
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "C",
+      "data": [
+       1,
+       1
+      ]
+     },
+     {
+      "type": "line",
+      "name": "L",
+      "data": [
+       2,
+       2
+      ]
+     }
+    ],
+    "legend": {
+     "top": 10,
+     "selected": {
+      "L": false
+     },
+     "data": [
+      "A",
+      {
+       "name": "L",
+       "lineStyle": {
+        "inactiveColor": "#00ffff",
+        "inactiveWidth": 5
+       }
+      }
+     ]
+    }
+   },
+   "fails": [],
+   "axes": [],
+   "series": [
+    {
+     "items": [
+      {
+       "name": "A",
+       "text": {
+        "fill": "#54555a",
+        "fontSize": 12,
+        "fontWeight": "normal"
+       },
+       "icons": [
+        {
+         "type": "path",
+         "fill": "#5070dd",
+         "stroke": null,
+         "lineWidth": 0,
+         "opacity": 1
+        }
+       ]
+      },
+      {
+       "name": "L",
+       "text": {
+        "fill": "#cfd2d7",
+        "fontSize": 12,
+        "fontWeight": "normal"
+       },
+       "icons": [
+        {
+         "type": "path",
+         "fill": "#000",
+         "stroke": "#00ffff",
+         "lineWidth": 5,
+         "opacity": 1
+        },
+        {
+         "type": "path",
+         "fill": "#fff",
+         "stroke": "#cfd2d7",
+         "lineWidth": 2,
+         "opacity": 1
+        }
+       ]
+      }
+     ],
+     "selectors": []
+    }
+   ]
+  },
+  {
+   "id": "lg-selector-emph",
+   "group": "legend",
+   "note": "emphasis.selectorLabel's font and box as well as its colour",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "p",
+      "q"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "A",
+      "data": [
+       1,
+       2
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "B",
+      "data": [
+       2,
+       1
+      ]
+     }
+    ],
+    "legend": {
+     "top": 10,
+     "selector": [
+      "all"
+     ],
+     "emphasis": {
+      "selectorLabel": {
+       "color": "#ff0000",
+       "fontWeight": "bold",
+       "fontSize": 14,
+       "backgroundColor": "#eeeeee",
+       "borderColor": "#0000ff"
+      }
+     }
+    }
+   },
+   "fails": [],
+   "axes": [],
+   "series": [
+    {
+     "items": [
+      {
+       "name": "A",
+       "text": {
+        "fill": "#54555a",
+        "fontSize": 12,
+        "fontWeight": "normal"
+       },
+       "icons": [
+        {
+         "type": "path",
+         "fill": "#5070dd",
+         "stroke": null,
+         "lineWidth": 0,
+         "opacity": 1
+        }
+       ]
+      },
+      {
+       "name": "B",
+       "text": {
+        "fill": "#54555a",
+        "fontSize": 12,
+        "fontWeight": "normal"
+       },
+       "icons": [
+        {
+         "type": "path",
+         "fill": "#b6d634",
+         "stroke": null,
+         "lineWidth": 0,
+         "opacity": 1
+        }
+       ]
+      }
+     ],
+     "selectors": [
+      {
+       "fill": "#ff0000",
+       "fontWeight": "bold",
+       "fontSize": 14,
+       "backgroundColor": "#eeeeee",
+       "borderColor": "#0000ff"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "er-bar",
+   "group": "emphrich",
+   "note": "a bar label's emphasis.label.rich: one token restyled on hover, the other kept",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       6
+      ],
+      "label": {
+       "show": true,
+       "formatter": "{a|X}{b|Y}",
+       "rich": {
+        "a": {
+         "color": "#ff0000",
+         "fontSize": 20
+        },
+        "b": {
+         "color": "#00ff00"
+        }
+       }
+      },
+      "emphasis": {
+       "label": {
+        "rich": {
+         "b": {
+          "color": "#0000ff",
+          "fontWeight": "bold"
+         }
+        }
+       }
+      }
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "labels": [
+      {
+       "i": 0,
+       "text": "{a|X}{b|Y}",
+       "normal": {
+        "a": {
+         "fill": "#ff0000",
+         "fontSize": 20,
+         "fontWeight": "normal"
+        },
+        "b": {
+         "fill": "#00ff00",
+         "fontSize": 12,
+         "fontWeight": "normal"
+        }
+       },
+       "emphasis": {
+        "a": {
+         "fill": "#ff0000",
+         "fontSize": 20,
+         "fontWeight": "normal"
+        },
+        "b": {
+         "fill": "#0000ff",
+         "fontSize": 12,
+         "fontWeight": "bold"
+        }
+       }
+      },
+      {
+       "i": 1,
+       "text": "{a|X}{b|Y}",
+       "normal": {
+        "a": {
+         "fill": "#ff0000",
+         "fontSize": 20,
+         "fontWeight": "normal"
+        },
+        "b": {
+         "fill": "#00ff00",
+         "fontSize": 12,
+         "fontWeight": "normal"
+        }
+       },
+       "emphasis": {
+        "a": {
+         "fill": "#ff0000",
+         "fontSize": 20,
+         "fontWeight": "normal"
+        },
+        "b": {
+         "fill": "#0000ff",
+         "fontSize": 12,
+         "fontWeight": "bold"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
    "id": "tm-radius",
    "group": "treemap",
    "note": "itemStyle.borderRadius 5 on the series, one item its own 1",
@@ -4669,6 +5558,54 @@
   },
   {
    "name": "parallel colorBy 'data'",
+   "ok": true
+  },
+  {
+   "name": "a bar series takes the gradient entry whole",
+   "ok": true
+  },
+  {
+   "name": "a pie by data: the gradient, the colour, the gradient",
+   "ok": true
+  },
+  {
+   "name": "a line's stroke and area are the gradient",
+   "ok": true
+  },
+  {
+   "name": "an item's own text colour, size and weight",
+   "ok": true
+  },
+  {
+   "name": "an item's own icon colour and opacity",
+   "ok": true
+  },
+  {
+   "name": "an item's own border over the legend's",
+   "ok": true
+  },
+  {
+   "name": "an unselected item's own inactive colours",
+   "ok": true
+  },
+  {
+   "name": "a line item's own rule",
+   "ok": true
+  },
+  {
+   "name": "an unselected line item's own inactive rule",
+   "ok": true
+  },
+  {
+   "name": "the hovered selector: font and box",
+   "ok": true
+  },
+  {
+   "name": "the hovered token takes the emphasis keys over its own",
+   "ok": true
+  },
+  {
+   "name": "a token the emphasis does not name keeps its style",
    "ok": true
   },
   {

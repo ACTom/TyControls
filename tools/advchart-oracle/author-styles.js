@@ -96,6 +96,8 @@ add('axis', 'cart-split-type-only', "splitLine type 'dotted' and width 2 alone: 
   catBar(null, { splitLine: { lineStyle: { type: 'dotted', width: 2 } } }));
 add('axis', 'cart-split-numbers', 'splitLine type [5, 10], dashOffset 3, cap round',
   catBar(null, { splitLine: { lineStyle: { type: [5, 10], dashOffset: 3, cap: 'round' } } }));
+add('axis', 'cart-split-width-0', 'splitLine width 0: the lines are built and stroke nothing (hasStroke)',
+  catBar(null, { splitLine: { lineStyle: { width: 0 } } }));
 add('axis', 'cart-minor-split', 'minorSplitLine shown with its own colour, width, dotted and opacity',
   catBar(null, { minorTick: { show: true }, minorSplitLine: { show: true, lineStyle: { color: '#eeeeee', width: 2, type: 'dotted', opacity: 0.8 } } }));
 add('axis', 'cart-area-opacity', 'splitArea areaStyle colours and opacity 0.5',
@@ -178,6 +180,46 @@ add('colorby', 'cb-parallel', "a parallel series, colorBy 'data': each line's st
   color: PAL, parallelAxis: [{ dim: 0 }, { dim: 1 }, { dim: 2 }],
   series: [{ type: 'parallel', colorBy: 'data', data: [[1, 2, 3], { value: [2, 3, 1], lineStyle: { color: '#123456' } },
     [3, 1, 2], [2, 2, 2]] }] });
+
+// ---- a palette entry that is a gradient: the object itself is the fill
+// (the series' and, under colorBy 'data', the datum's), not its first stop
+const GRAD = { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }] };
+add('palgrad', 'pg-series', "a root palette [gradient, '#00aa00']: a bar series takes the gradient, a pie by data every other slice", {
+  color: [GRAD, '#00aa00'], xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: { type: 'value' },
+  series: [{ type: 'bar', name: 'B', data: [1, 2] }, { type: 'pie', colorBy: 'data', center: ['80%', '30%'], radius: 30,
+    data: [{ name: 'x', value: 1 }, { name: 'y', value: 2 }, { name: 'z', value: 3 }] }] });
+add('palgrad', 'pg-line', 'a line series on a gradient palette: its stroke and its area', {
+  color: [GRAD], xAxis: { type: 'category', data: ['a', 'b', 'c'] }, yAxis: { type: 'value' },
+  series: [{ type: 'line', data: [1, 3, 2], areaStyle: {}, showSymbol: false }] });
+
+// ---- a legend item's own style (legend.data[i]: a model whose parent is
+// the legend model), and the selector's whole emphasis label
+const LG_SERIES = [{ type: 'bar', name: 'A', data: [1, 2] }, { type: 'bar', name: 'B', data: [2, 1] },
+  { type: 'bar', name: 'C', data: [1, 1] }, { type: 'line', name: 'L', data: [2, 2] }];
+add('legend', 'lg-items', "legend.data[i]'s textStyle, itemStyle, lineStyle and inactive colours over the legend's", {
+  xAxis: { type: 'category', data: ['p', 'q'] }, yAxis: { type: 'value' }, series: LG_SERIES,
+  legend: { top: 10, selected: { C: false }, itemStyle: { borderColor: '#333333', borderWidth: 1 },
+    data: [{ name: 'A', textStyle: { color: '#ff0000', fontSize: 16, fontWeight: 'bold' }, itemStyle: { color: '#00ff00', opacity: 0.5 } },
+      { name: 'B', itemStyle: { borderColor: '#0000ff', borderWidth: 3 } },
+      { name: 'C', inactiveColor: '#aaaaaa', inactiveBorderColor: '#888888', textStyle: { color: '#ff0000' } },
+      { name: 'L', lineStyle: { color: '#ff00ff', width: 4 } }] } });
+add('legend', 'lg-item-inactive-line', "an unselected line item's own lineStyle.inactiveColor / inactiveWidth", {
+  xAxis: { type: 'category', data: ['p', 'q'] }, yAxis: { type: 'value' }, series: LG_SERIES,
+  legend: { top: 10, selected: { L: false }, data: ['A', { name: 'L', lineStyle: { inactiveColor: '#00ffff', inactiveWidth: 5 } }] } });
+add('legend', 'lg-selector-emph', "emphasis.selectorLabel's font and box as well as its colour", {
+  xAxis: { type: 'category', data: ['p', 'q'] }, yAxis: { type: 'value' }, series: LG_SERIES.slice(0, 2),
+  legend: { top: 10, selector: ['all'], emphasis: { selectorLabel: { color: '#ff0000', fontWeight: 'bold', fontSize: 14,
+    backgroundColor: '#eeeeee', borderColor: '#0000ff' } } } });
+
+// ---- emphasis.label.rich: the hovered label's rich styles, each merged key
+// by key over the normal one when the state is entered (zrender's Text
+// merges `rich` per name; a probe with env.node off and a highlight showed
+// the merged style: the normal keys kept, the emphasis keys over them)
+add('emphrich', 'er-bar', "a bar label's emphasis.label.rich: one token restyled on hover, the other kept", {
+  xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: { type: 'value' },
+  series: [{ type: 'bar', data: [5, 6], label: { show: true, formatter: '{a|X}{b|Y}',
+    rich: { a: { color: '#ff0000', fontSize: 20 }, b: { color: '#00ff00' } } },
+  emphasis: { label: { rich: { b: { color: '#0000ff', fontWeight: 'bold' } } } } }] });
 
 // ---- a treemap's corners (TreemapView: itemStyle.borderRadius on both rects)
 const TM = [{ name: 'a', value: 10, children: [{ name: 'a1', value: 6 }, { name: 'a2', value: 4 }] },
@@ -451,6 +493,92 @@ function readColorBy(chart, fails) {
   return out;
 }
 
+// the fill of each datum's element; a line's polyline stroke and area fill
+function readPalGrad(chart, fails) {
+  const out = [];
+  chart.getModel().eachSeries(s => {
+    const data = s.getData();
+    const rec = { seriesIndex: s.seriesIndex, type: s.subType, fills: [] };
+    if (s.subType === 'line') {
+      chart.getViewOfSeriesModel(s).group.traverse(e => {
+        if (e.type === 'ec-polyline') rec.stroke = plainColour(e.style.stroke);
+        if (e.type === 'ec-polygon') rec.area = plainColour(e.style.fill);
+      });
+    } else {
+      for (let i = 0; i < data.count(); i++) {
+        const el = data.getItemGraphicEl(i);
+        rec.fills.push({ raw: data.getRawIndex(i), fill: el ? plainColour(el.style.fill) : null });
+      }
+    }
+    out.push(rec);
+  });
+  return out;
+}
+
+// each legend item's words and icon paths, by name; each selector button's
+// emphasis state style
+function readLegend(chart, fails) {
+  const lm = chart.getModel().getComponent('legend', 0);
+  const view = chart.getViewOfComponentModel(lm);
+  const items = [];
+  const names = lm.getData().map(m => m.get('name'));
+  const kids = view.getContentGroup().children();
+  must(kids.length === names.length, 'one item group per name');
+  kids.forEach((g, i) => {
+    const rec = { name: names[i], text: null, icons: [] };
+    g.traverse(e => {
+      if (e.type === 'text') {
+        rec.text = { fill: e.style.fill, fontSize: e.style.fontSize == null ? null : e.style.fontSize,
+          fontWeight: e.style.fontWeight == null ? null : String(e.style.fontWeight) };
+      } else if (e.style && e.type !== 'tspan' && e.type !== 'group' && e.style.fill !== 'transparent') {
+        const ef = effective(e.style);
+        rec.icons.push({ type: e.type, fill: e.style.fill == null ? null : e.style.fill, stroke: ef.stroke,
+          lineWidth: ef.lineWidth, opacity: ef.opacity });
+      }
+    });
+    items.push(rec);
+  });
+  const selectors = [];
+  const sg = view.getSelectorGroup ? view.getSelectorGroup() : view._selectorGroup;
+  if (sg) sg.children().forEach(t => {
+    const st = t.states && t.states.emphasis && t.states.emphasis.style;
+    if (!st) return;
+    selectors.push({ fill: st.fill == null ? null : st.fill, fontWeight: st.fontWeight == null ? null : String(st.fontWeight),
+      fontSize: st.fontSize == null ? null : st.fontSize, backgroundColor: st.backgroundColor == null ? null : st.backgroundColor,
+      borderColor: st.borderColor == null ? null : st.borderColor });
+  });
+  return [{ items, selectors }];
+}
+
+// each label's normal rich styles and the emphasis state's, merged as the
+// state merges them
+function readEmphRich(chart, fails) {
+  const out = [];
+  chart.getModel().eachSeries(s => {
+    const data = s.getData();
+    const labels = [];
+    for (let i = 0; i < data.count(); i++) {
+      const el = data.getItemGraphicEl(i);
+      const t = el && el.getTextContent();
+      if (!t) continue;
+      const pick = st => ({ fill: st.fill == null ? null : st.fill, fontSize: st.fontSize == null ? null : st.fontSize,
+        fontWeight: st.fontWeight == null ? null : String(st.fontWeight) });
+      const normal = {};
+      const rich = t.style.rich || {};
+      Object.keys(rich).forEach(n => { normal[n] = pick(rich[n]); });
+      const es = t.states && t.states.emphasis && t.states.emphasis.style;
+      const emph = {};
+      Object.keys(rich).forEach(n => {
+        const over = es && es.rich && es.rich[n] ? es.rich[n] : {};
+        emph[n] = pick(Object.assign({}, rich[n], over));
+      });
+      labels.push({ i, text: t.style.text, normal, emphasis: emph });
+    }
+    out.push({ seriesIndex: s.seriesIndex, labels });
+  });
+  return out;
+}
+
 function runCase(c) {
   const fails = [];
   const option = clone(c.option);
@@ -465,6 +593,9 @@ function runCase(c) {
     else if (c.group === 'barbg') series = readBarBg(chart, fails);
     else if (c.group === 'treemap') series = readTreemap(chart, fails);
     else if (c.group === 'colorby') series = readColorBy(chart, fails);
+    else if (c.group === 'palgrad') series = readPalGrad(chart, fails);
+    else if (c.group === 'legend') series = readLegend(chart, fails);
+    else if (c.group === 'emphrich') series = readEmphRich(chart, fails);
   } finally {
     chart.dispose();
   }
@@ -509,6 +640,29 @@ function guards(out) {
   const cb = id => cs(id).series[0].colors.map(q => q.color);
   guard("lines colorBy 'data'", () => cb('cb-lines').join() === '#aa0000,#123456,#00aa00,#0000aa');
   guard("parallel colorBy 'data'", () => cb('cb-parallel').join() === '#aa0000,#123456,#00aa00,#0000aa');
+  const pg = cs('pg-series').series;
+  guard("a bar series takes the gradient entry whole", () => typeof pg[0].fills[0].fill === 'object');
+  guard("a pie by data: the gradient, the colour, the gradient", () => typeof pg[1].fills[0].fill === 'object'
+    && pg[1].fills[1].fill === '#00aa00' && typeof pg[1].fills[2].fill === 'object');
+  guard("a line's stroke and area are the gradient", () => typeof cs('pg-line').series[0].stroke === 'object'
+    && typeof cs('pg-line').series[0].area === 'object');
+  const li = (id, n) => cs(id).series[0].items.find(q => q.name === n);
+  guard("an item's own text colour, size and weight", () => li('lg-items', 'A').text.fill === '#ff0000'
+    && li('lg-items', 'A').text.fontSize === 16 && li('lg-items', 'A').text.fontWeight === 'bold');
+  guard("an item's own icon colour and opacity", () => li('lg-items', 'A').icons[0].fill === '#00ff00'
+    && li('lg-items', 'A').icons[0].opacity === 0.5);
+  guard("an item's own border over the legend's", () => li('lg-items', 'B').icons[0].stroke === '#0000ff'
+    && li('lg-items', 'B').icons[0].lineWidth === 3);
+  guard("an unselected item's own inactive colours", () => li('lg-items', 'C').text.fill === '#aaaaaa'
+    && li('lg-items', 'C').icons[0].fill === '#aaaaaa' && li('lg-items', 'C').icons[0].stroke === '#888888');
+  guard("a line item's own rule", () => li('lg-items', 'L').icons.some(q => q.stroke === '#ff00ff' && q.lineWidth === 4));
+  guard("an unselected line item's own inactive rule", () => li('lg-item-inactive-line', 'L').icons.some(q => q.stroke === '#00ffff' && q.lineWidth === 5));
+  guard("the hovered selector: font and box", () => cs('lg-selector-emph').series[0].selectors[0].fontWeight === 'bold'
+    && cs('lg-selector-emph').series[0].selectors[0].backgroundColor === '#eeeeee');
+  const er = cs('er-bar').series[0].labels[0];
+  guard('the hovered token takes the emphasis keys over its own', () => er.emphasis.b.fill === '#0000ff'
+    && er.emphasis.b.fontWeight === 'bold' && er.normal.b.fill === '#00ff00');
+  guard('a token the emphasis does not name keeps its style', () => er.emphasis.a.fill === '#ff0000' && er.emphasis.a.fontSize === 20);
   const tm = id => cs(id).series[0].rects;
   guard("a treemap's rects take the radius", () => tm('tm-radius').filter(r => r.r === 5).length > 4 && tm('tm-radius').some(r => r.r === 1));
   guard("a level's radius", () => tm('tm-radius-levels').some(r => r.r === 8) && tm('tm-radius-levels').some(r => Array.isArray(r.r)));

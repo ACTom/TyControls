@@ -619,6 +619,9 @@ begin
   end;
   emph := ObjOf(emph.Find('label'));
   if emph = nil then Exit;
+  { [R5-B] its rich styles: the hovered block is laid out again }
+  if emph.Find('rich') is TJSONObject then ASpec.EmphRtNode := emph.AsJSON
+  else ASpec.EmphRtNode := '';
   s := StrIn(emph, 'color');
   if (s <> '') and (s <> 'inherit') and (s <> 'auto')
     and TyTryParseChartColor(s, c) then

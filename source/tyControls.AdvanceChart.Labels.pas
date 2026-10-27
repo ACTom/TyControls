@@ -168,6 +168,11 @@ type
       the hover's own. }
     EmphHasColour: Boolean;
     EmphColour: TTyChartColor;
+    { [R5-B] the series' emphasis.label as JSON text when it writes `rich`
+      ('' when not): the hovered label is laid out again in its block --
+      each rich style the emphasis names merged key by key over the normal
+      one, zrender's Text state merge -- rather than only re-inked }
+    EmphRtNode: string;
     { A STATE SHOWS WHAT THE NORMAL LABEL HIDES: `select.label.show`,
       `emphasis.label.show` or `blur.label.show` true on the series.
       zrender creates the label when any state shows it (needsCreateText) and
@@ -375,9 +380,51 @@ procedure TyExpandLabels(AList: TTyPaintList; const ASpecs: TTyLabelSpecArray;
 
 implementation
 
-uses tyControls.AdvanceChart.Style, tyControls.AdvanceChart.RichStyle,
+uses fpjson, jsonparser, tyControls.AdvanceChart.Style, tyControls.AdvanceChart.RichStyle,
   tyControls.AdvanceChart.LabelLayout, tyControls.AdvanceChart.Color,
   tyControls.AdvanceChart.JsMath;
+
+{ [R5-B] THE HOVERED BLOCK when emphasis.label writes `rich`: the chain
+  resolved again with the emphasis label first (its rich styles cascade over
+  the normal ones key by key, its own keys over the label's), laid out in
+  the hover's ink; nil when the spec has no emphasis block or no chain }
+function TyLabelEmphPieces(const ASpec: TTyLabelSpec; const AText: string;
+  AHostFill: TTyChartColor; AHostHasFill: Boolean; AEmphInk: TTyChartColor;
+  AEmphStroke: TTyChartColor; AEmphStrokeW: Double;
+  AH: TTyTextAnchorH; AV: TTyTextAnchorV; AScale: Double;
+  const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
+var
+  chain: array of TJSONObject;
+  parsed: array of TJSONData;
+  i: Integer;
+  rt: TTyRtBlockStyle;
+begin
+  Result := nil;
+  if (ASpec.EmphRtNode = '') or (Length(ASpec.RtChain) = 0) then Exit;
+  SetLength(parsed, Length(ASpec.RtChain) + 1);
+  SetLength(chain, Length(parsed));
+  try
+    for i := 0 to High(parsed) do
+    begin
+      parsed[i] := nil;
+      try
+        if i = 0 then parsed[i] := GetJSON(ASpec.EmphRtNode)
+        else parsed[i] := GetJSON(ASpec.RtChain[i - 1]);
+      except
+        parsed[i] := nil;
+      end;
+      if parsed[i] is TJSONObject then chain[i] := TJSONObject(parsed[i])
+      else chain[i] := nil;
+    end;
+    rt := TyRtResolve(chain, ASpec.RtGlobal, TyRtResolveOpt(True));
+  finally
+    for i := 0 to High(parsed) do parsed[i].Free;
+  end;
+  TyRtFinish(rt, ASpec.FontName, ASpec.FontSizeLogical, ASpec.FontWeight,
+    ASpec.RtGlobal, AHostHasFill, AHostFill);
+  Result := TyRtLay(AText, rt, TyRtDefaultOf(True, AEmphInk, AEmphStrokeW > 0,
+    AEmphStroke, True, AH, AV), AScale, AMeasurer);
+end;
 
 function TyLabelBlockPieces(const ASpec: TTyLabelSpec; const AText: string;
   AHostFill: TTyChartColor; AHostHasFill, AHostGradient, AInside: Boolean;
@@ -1310,8 +1357,16 @@ begin
     cap.Caption.RtEmph := nil;
     cap.Caption.RtScale := scale;
     if Length(pieces) > 0 then
-      cap.Caption.RtEmph := TyRtReink(pieces, cap.Caption.EmphColour, True,
-        cap.Caption.EmphStrokeColour, cap.Caption.EmphStrokeWidthLogical);
+    begin
+      { emphasis.label's own rich styles: laid out again [R5-B] }
+      if spec.EmphRtNode <> '' then
+        cap.Caption.RtEmph := TyLabelEmphPieces(autoSpec, host.Caption.Text,
+          hostFill, hostHasFill, cap.Caption.EmphColour, cap.Caption.EmphStrokeColour,
+          cap.Caption.EmphStrokeWidthLogical, ah, av, scale, AMeasurer);
+      if Length(cap.Caption.RtEmph) = 0 then
+        cap.Caption.RtEmph := TyRtReink(pieces, cap.Caption.EmphColour, True,
+          cap.Caption.EmphStrokeColour, cap.Caption.EmphStrokeWidthLogical);
+    end;
     AList.Add(cap);
   end;
 end;

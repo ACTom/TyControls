@@ -812,7 +812,18 @@ begin
   if (ASlot <= High(FVisualRows)) and (ARaw >= 0) and (ARaw <= High(FVisualRows[ASlot]))
     and FVisualRows[ASlot][ARaw].ColorSet then Exit;
   if (ASlot <= High(FDatumAsked)) and (ARaw >= 0) and (ARaw <= High(FDatumAsked[ASlot]))
-    and FDatumAsked[ASlot][ARaw] then Exit;
+    and FDatumAsked[ASlot][ARaw] then
+  begin
+    { [R5-B] its palette entry, when that is a gradient: the object is the
+      fill (dataColorPaletteTask hands it on as it is) }
+    if (FDatumPicks[ASlot][ARaw].Kind = ppkColor)
+      and (FDatumPicks[ASlot][ARaw].Grad.Kind <> cgkNone) then
+    begin
+      Result.Present := True;
+      Result.Gradient := FDatumPicks[ASlot][ARaw].Grad;
+    end;
+    Exit;
+  end;
   item := RawItemNode(ASlot, ARaw);
   if item <> nil then
   begin
@@ -844,12 +855,28 @@ begin
   d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
   if not (d is TJSONObject) then Exit;
   st := TyReadOptStyle(TJSONObject(d), 'itemStyle');
-  if st.Color.IsAuto then Exit;
   if (st.Color.Gradient.Kind <> cgkNone) or st.Color.Pattern.Present then
   begin
     Result.Present := True;
     Result.Gradient := st.Color.Gradient;
     Result.Pattern := st.Color.Pattern;
+    Exit;
+  end;
+  { [R5-B] A PALETTE ENTRY THAT IS A GRADIENT is the series' fill when the
+    fill is the pick's (unwritten or 'auto') }
+  Result := SeriesPaletteObject(FBindings[ASlot].SeriesIndex);
+end;
+
+function TTyCustomAdvanceChart.SeriesPaletteObject(ASeriesIndex: Integer): TTyChartObjFill;
+begin
+  Result := Default(TTyChartObjFill);
+  if (ASeriesIndex < 0) or (ASeriesIndex > High(FSeriesFromPick))
+    or (ASeriesIndex > High(FSeriesPick)) then Exit;
+  if FSeriesFromPick[ASeriesIndex] and (FSeriesPick[ASeriesIndex].Kind = ppkColor)
+    and (FSeriesPick[ASeriesIndex].Grad.Kind <> cgkNone) then
+  begin
+    Result.Present := True;
+    Result.Gradient := FSeriesPick[ASeriesIndex].Grad;
   end;
 end;
 
@@ -916,6 +943,9 @@ begin
       Result[k].PaletteSet := True;
       Result[k].PaletteNone := FDatumPicks[ASlot][k].Kind = ppkNone;
       Result[k].Palette := TTyChartColor(PickColor(FDatumPicks[ASlot][k]));
+      { [R5-B] the entry's gradient }
+      if FDatumPicks[ASlot][k].Kind = ppkColor then
+        Result[k].PaletteGrad := FDatumPicks[ASlot][k].Grad;
     end;
     if objs and FRowObjFills[ASlot][k].ObjSet then
     begin
@@ -2718,6 +2748,9 @@ begin
   AVisual.FillGradient := item.Color.Gradient;
   AVisual.StrokeGradient := item.BorderColor.Gradient;
   AVisual.FillPattern := item.Color.Pattern;
+  { [R5-B] or the palette's gradient, where the fill is the pick's }
+  if not ((item.Color.Gradient.Kind <> cgkNone) or item.Color.Pattern.Present) then
+    AVisual.FillGradient := SeriesPaletteObject(ASlot).Gradient;
 
   { A LINE READS ITS OWN BLOCK FOR THE PEN, and only for the pen. Its
     palette colour came from `itemStyle` -- that is the trap in this whole
@@ -2744,7 +2777,11 @@ begin
     if not IsNan(line.Opacity) then
       AVisual.Alpha := Min(Double(1), Max(Double(0), line.Opacity));
     if line.Color.Gradient.Kind <> cgkNone then
-      AVisual.StrokeGradient := line.Color.Gradient;
+      AVisual.StrokeGradient := line.Color.Gradient
+    { [R5-B] the visual colour a line is stroked with when its lineStyle
+      writes none: the palette's gradient where the fill is that }
+    else if not line.Color.Written and (st = 'line') then
+      AVisual.StrokeGradient := SeriesPaletteObject(ASlot).Gradient;
   end;
 end;
 

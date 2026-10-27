@@ -3092,6 +3092,9 @@ type
     { The four colours a candle falls back on, from the theme, with whatever
       the option wrote laid over them. }
     function CandleVisual(ASlot: Integer): TTyCandleSpec;
+    { [R5-B] the series' palette entry as its fill when that is a gradient
+      and the fill is the pick's; not Present otherwise }
+    function SeriesPaletteObject(ASeriesIndex: Integer): TTyChartObjFill;
     { [R5-B] each raw row's own candle over ASeries, from the items'
       itemStyle (empty when no item wrote one) }
     function CandleRowsOf(ASlot: Integer; const ASeries: TTyCandleSpec): TTyCandleRowArray;

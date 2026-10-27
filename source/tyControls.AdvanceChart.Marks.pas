@@ -157,6 +157,8 @@ type
     { the palette answered undefined: no fill }
     PaletteNone: Boolean;
     Palette: TTyChartColor;
+    { [R5-B] the palette's entry when it is a gradient (Palette its solid) }
+    PaletteGrad: TTyChartGradient;
     ObjSet: Boolean;
     ObjSolid: TTyChartColor;
     ObjGradient: TTyChartGradient;
@@ -1054,7 +1056,8 @@ begin
   if rf.PaletteSet then
   begin
     if rf.PaletteNone then Result.Fill := 0 else Result.Fill := rf.Palette;
-    Result.FillGradient := Default(TTyChartGradient);
+    { [R5-B] a gradient entry is the fill itself }
+    Result.FillGradient := rf.PaletteGrad;
     Result.FillPattern := Default(TTyChartPattern);
   end;
   { A DATUM'S OWN COLOUR THAT IS AN OBJECT replaces whatever the series had,
@@ -2295,8 +2298,12 @@ var
         if spec.HasAreaFill then v.Fill := spec.AreaFill;
         { AND ITS OWN RAMP, which REPLACES the series' rather than adding to
           it: an area that named a gradient is that gradient, whatever the
-          bars beside it are doing. }
-        v.FillGradient := spec.AreaGradient;
+          bars beside it are doing. AN AREA THAT NAMED NO COLOUR is the
+          series' visual colour, a gradient included (LineView: `fill:
+          visualColor` under the areaStyle) [R5-B: the series' gradient was
+          dropped] }
+        if spec.HasAreaFill or (spec.AreaGradient.Kind <> cgkNone) then
+          v.FillGradient := spec.AreaGradient;
         v.FillPattern := Default(TTyChartPattern);
         v.StrokeGradient := Default(TTyChartGradient);
         { A visualMap's gradient, unless the area named its own colour. }
