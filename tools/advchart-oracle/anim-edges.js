@@ -345,6 +345,29 @@ const PROBES = {
         label: data.mapDimensionsAll('defaultedLabel').map(col), value: col(data.mapDimension('value')) };
     });
   },
+  // a radar's symbols: each symbol group's place, its label's anchor on the
+  // canvas and its label line's points
+  rsym(chart, rec) {
+    chart.getModel().eachSeries(sm => {
+      if (sm.subType !== 'radar') return;
+      const data = sm.getData();
+      data.each(i => {
+        const g = data.getItemGraphicEl(i);
+        if (!g) return;
+        const syms = g.childAt(2);
+        if (!syms) return;
+        syms.eachChild((sy, k) => {
+          const path = sy;
+          const t = path && path.getTextContent && path.getTextContent();
+          const gl = path && path.getTextGuideLine && path.getTextGuideLine();
+          const o = { x: hx(sy.x), y: hx(sy.y), n: nClip(sy) };
+          if (t && !t.ignore) { const a = textAt(t); o.lx = hx(a[0]); o.ly = hx(a[1]); }
+          if (gl && !gl.ignore) { o.g = arr(flat(gl.shape.points)); o.gp = hx(gl.style.strokePercent == null ? 1 : gl.style.strokePercent); o.gn = nClip(gl); }
+          rec['rs' + sm.seriesIndex + '/' + i + '.' + k] = o;
+        });
+      });
+    });
+  },
   // a funnel's pieces and their labels
   funnel(chart, rec, c) {
     chart.getModel().eachSeries(sm => {
@@ -566,6 +589,14 @@ add('htip', 'ht-cal', "on a calendar: time and value are the calendar's own dime
 add('htip', 'ht-cal2', "on a calendar with two columns: the value",
   { animation: false, calendar: { range: '2024-01', cellSize: 10 }, visualMap: { min: 0, max: 10, show: false },
     series: [{ type: 'heatmap', coordinateSystem: 'calendar', data: [['2024-01-02', 5], ['2024-01-03', 8]] }] }, ['htip'], ONE);
+
+// ---- a radar's point labels and their lines ----
+const RD = data => ({ animation: true, animationDurationUpdate: 1000, animationEasingUpdate: 'linear',
+  radar: { indicator: [{ name: 'a', max: 10 }, { name: 'b', max: 10 }, { name: 'c', max: 10 }] },
+  series: [{ type: 'radar', symbolSize: 6, label: { show: true }, labelLine: { show: true }, labelLayout: { dx: 15, dy: -10 }, data }] });
+add('radar', 'rd-slide', "a radar's points with labels moved off them by labelLayout and a label line: a merge slides the symbols -- the labels ride their symbols; the lines?",
+  RD([{ value: [3, 5, 7] }]), ['rsym'],
+  [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'merge', option: { series: [{ data: [{ value: [8, 2, 4] }] }] } }, ...after([0, 1, 500, 1001], T1)]);
 
 // ---- funnel ----
 const FN = (data, extra, s) => Object.assign({ animation: true,

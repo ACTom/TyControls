@@ -42,6 +42,8 @@ type
     function RoleEl(ASeries, ARow: Integer; ARole: TTyChartAnimRole;
       out AEl: TTyChartElement): Boolean;
     procedure SameRun(const AWhat: string; AProxy: TTyChartAnimProxy; AWant: TJSONObject);
+    function SubEl(ASeries, ARow, ASub: Integer; ARole: TTyChartAnimRole;
+      out AEl: TTyChartElement): Boolean;
     procedure SameGuideCmds(const AWhat: string; const AEl: TTyChartElement; AWant: TJSONArray);
     function HIdx100(ADataIndex: Integer; AHasIndex: Boolean;
       const AParams: TTyAnimDelayParams): Double;
@@ -64,6 +66,7 @@ type
     procedure TestAVisualMapsHandleLabelsFadeAsUpstream;
     procedure TestStateAnimationsFormsAsUpstream;
     procedure TestAHeatmapsTooltipColumnAsUpstream;
+    procedure TestARadarsPointLabelsAsUpstream;
   end;
 
 implementation
@@ -314,6 +317,28 @@ begin
   else Result := AOr;
 end;
 
+{ the frame's element of a role at a row and sub-place (a radar item's
+  points' labels) }
+function TAdvChartAnimEdgesOracleTest.SubEl(ASeries, ARow, ASub: Integer;
+  ARole: TTyChartAnimRole; out AEl: TTyChartElement): Boolean;
+var
+  l: TTyPaintList;
+  i: Integer;
+begin
+  Result := False;
+  AEl := Default(TTyChartElement);
+  l := FChart.Frame;
+  if (l = nil) or (l.Count = 0) then l := FChart.List;
+  if l = nil then Exit;
+  for i := 0 to l.Count - 1 do
+    if (l.Element(i).Anim.Role = ARole) and (l.Element(i).Anim.Series = ASeries)
+      and (l.Element(i).Anim.Index = ARow) and (l.Element(i).Anim.Sub = ASub) then
+    begin
+      AEl := l.Element(i);
+      Exit(True);
+    end;
+end;
+
 { upstream's clips on the element against the proxy running }
 procedure TAdvChartAnimEdgesOracleTest.SameRun(const AWhat: string;
   AProxy: TTyChartAnimProxy; AWant: TJSONObject);
@@ -365,6 +390,7 @@ var
   ops: TTyDoubleArray;
   c: TTyChartColor;
   tipPos: TTyIntegerArray;
+  pts: TTyPointFArray;
 begin
   for i := 0 to ARec.Count - 1 do
   begin
@@ -553,6 +579,38 @@ begin
       SameNum(name + ' tooltip columns', Length(tipPos), gone.Count);
       for k := 0 to Min(High(tipPos), gone.Count - 1) do
         SameNum(Format('%s tooltip column %d', [name, k]), tipPos[k], gone.Integers[k]);
+    end
+    else if pre = 'rs' then
+    begin
+      { a radar point's label and its line, as a frame draws them }
+      idx := StrToInt(Copy(rest, 1, Pos('.', rest) - 1));
+      k := StrToInt(Copy(rest, Pos('.', rest) + 1, MaxInt));
+      if not IsNull(leaf.Find('lx')) then
+      begin
+        if not SubEl(s, idx, k + 1, carLabel, el) then Bad(name + ': no label drawn')
+        else
+        begin
+          SameNum(name + ' label x', el.Caption.X, leaf.Find('lx'));
+          SameNum(name + ' label y', el.Caption.Y, leaf.Find('ly'));
+        end;
+      end;
+      if not IsNull(leaf.Find('g')) then
+      begin
+        if not SubEl(s, idx, k + 1, carGuide, el) then Bad(name + ': no line drawn')
+        else
+        begin
+          v := Nums(leaf.Arrays['g']);
+          SetLength(pts, Length(v) div 2);
+          for k := 0 to High(pts) do pts[k] := TyPointF(v[2 * k], v[2 * k + 1]);
+          pts := TyPolylinePrefix(pts, WantNum(leaf.Find('gp')));
+          SameNum(name + ' line points', Length(el.Shape.Points), Length(pts));
+          for k := 0 to Min(High(pts), High(el.Shape.Points)) do
+          begin
+            SameNum(Format('%s line point %d x', [name, k]), el.Shape.Points[k].X, pts[k].X);
+            SameNum(Format('%s line point %d y', [name, k]), el.Shape.Points[k].Y, pts[k].Y);
+          end;
+        end;
+      end;
     end
     else if pre = 'vl' then
       { a visual map's handle label: its opacity now (its blur's fade) }
@@ -743,6 +801,11 @@ end;
 procedure TAdvChartAnimEdgesOracleTest.TestAHeatmapsTooltipColumnAsUpstream;
 begin
   RunGroup('htip', 15);
+end;
+
+procedure TAdvChartAnimEdgesOracleTest.TestARadarsPointLabelsAsUpstream;
+begin
+  RunGroup('radar', 60);
 end;
 
 initialization
