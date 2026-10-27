@@ -1,0 +1,469 @@
+{
+ "source": "ECharts 6.1 dist, component/helper/MapDraw.ts, label/labelStyle.ts, zrender Element.updateInnerText",
+ "map": {
+  "name": "r5cGeoLabels",
+  "text": "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"name\":\"Alpha\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[0,0],[10,0],[10,8],[0,8],[0,0]]]}},{\"type\":\"Feature\",\"properties\":{\"name\":\"Beta\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[12,0],[20,0],[20,10],[12,10],[12,0]]]}},{\"type\":\"Feature\",\"properties\":{\"name\":\"Gamma\"},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[0,10],[9,10],[9,18],[0,18],[0,10]]]}}]}"
+ },
+ "cases": [
+  {
+   "id": "plain",
+   "note": "the words alone (the reference)",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "geo": {
+     "map": "r5cGeoLabels",
+     "label": {
+      "show": true
+     }
+    }
+   },
+   "labels": [
+    {
+     "ignore": false,
+     "texts": [
+      "Alpha"
+     ],
+     "rect": [
+      "406b3d3a06d3a06c",
+      "4071ae38e38e38e4",
+      "403ed70a3d70a3d8",
+      "4028000000000000"
+     ],
+     "box": false,
+     "stroke": null,
+     "lineWidth": null
+    },
+    {
+     "ignore": false,
+     "texts": [
+      "Beta"
+     ],
+     "rect": [
+      "4076f947ae147ae1",
+      "407091c71c71c71c",
+      "4038d70a3d70a3d8",
+      "4028000000000000"
+     ],
+     "box": false,
+     "stroke": null,
+     "lineWidth": null
+    },
+    {
+     "ignore": false,
+     "texts": [
+      "Gamma"
+     ],
+     "rect": [
+      "4069a9d0369d036a",
+      "405a471c71c71c70",
+      "40455c28f5c28f5c",
+      "4028000000000000"
+     ],
+     "box": false,
+     "stroke": null,
+     "lineWidth": null
+    }
+   ],
+   "hover": []
+  },
+  {
+   "id": "border",
+   "note": "textBorderColor and textBorderWidth: the text's own stroke",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "geo": {
+     "map": "r5cGeoLabels",
+     "label": {
+      "show": true,
+      "textBorderColor": "#ffffff",
+      "textBorderWidth": 3
+     }
+    }
+   },
+   "labels": [
+    {
+     "ignore": false,
+     "texts": [
+      "Alpha"
+     ],
+     "rect": [
+      "406b0d3a06d3a06c",
+      "40719638e38e38e4",
+      "4040eb851eb851ec",
+      "402e000000000000"
+     ],
+     "box": false,
+     "stroke": "#ffffff",
+     "lineWidth": "4008000000000000"
+    },
+    {
+     "ignore": false,
+     "texts": [
+      "Beta"
+     ],
+     "rect": [
+      "4076e147ae147ae1",
+      "407079c71c71c71c",
+      "403bd70a3d70a3d8",
+      "402e000000000000"
+     ],
+     "box": false,
+     "stroke": "#ffffff",
+     "lineWidth": "4008000000000000"
+    },
+    {
+     "ignore": false,
+     "texts": [
+      "Gamma"
+     ],
+     "rect": [
+      "406979d0369d036a",
+      "4059e71c71c71c70",
+      "4046dc28f5c28f5c",
+      "402e000000000000"
+     ],
+     "box": false,
+     "stroke": "#ffffff",
+     "lineWidth": "4008000000000000"
+    }
+   ],
+   "hover": []
+  },
+  {
+   "id": "box",
+   "note": "a text box: background, border, radius, padding",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "geo": {
+     "map": "r5cGeoLabels",
+     "label": {
+      "show": true,
+      "backgroundColor": "#eeeeee",
+      "borderColor": "#333333",
+      "borderWidth": 1,
+      "borderRadius": 3,
+      "padding": [
+       2,
+       4
+      ]
+     }
+    }
+   },
+   "labels": [
+    {
+     "ignore": false,
+     "texts": [
+      "Alpha"
+     ],
+     "rect": [
+      "406a9d3a06d3a06c",
+      "40717e38e38e38e4",
+      "40446b851eb851ec",
+      "4032000000000000"
+     ],
+     "box": true,
+     "stroke": null,
+     "lineWidth": null
+    },
+    {
+     "ignore": false,
+     "texts": [
+      "Beta"
+     ],
+     "rect": [
+      "4076a947ae147ae1",
+      "407061c71c71c71c",
+      "40416b851eb851ec",
+      "4032000000000000"
+     ],
+     "box": true,
+     "stroke": null,
+     "lineWidth": null
+    },
+    {
+     "ignore": false,
+     "texts": [
+      "Gamma"
+     ],
+     "rect": [
+      "406909d0369d036a",
+      "4059871c71c71c70",
+      "404a5c28f5c28f5c",
+      "4032000000000000"
+     ],
+     "box": true,
+     "stroke": null,
+     "lineWidth": null
+    }
+   ],
+   "hover": []
+  },
+  {
+   "id": "rich",
+   "note": "rich text: a formatter with a styled token",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "geo": {
+     "map": "r5cGeoLabels",
+     "label": {
+      "show": true,
+      "formatter": "{a|{a}}!",
+      "rich": {
+       "a": {
+        "color": "#c23531",
+        "fontSize": 16
+       }
+      }
+     }
+    }
+   },
+   "labels": [
+    {
+     "ignore": false,
+     "texts": [
+      "Alpha",
+      "!"
+     ],
+     "rect": [
+      "406a62fc962fc962",
+      "40718e38e38e38e4",
+      "40463d70a3d70a3e",
+      "4030000000000000"
+     ],
+     "box": false,
+     "stroke": null,
+     "lineWidth": null
+    },
+    {
+     "ignore": false,
+     "texts": [
+      "Beta",
+      "!"
+     ],
+     "rect": [
+      "40769c28f5c28f5c",
+      "407071c71c71c71c",
+      "40423d70a3d70a3e",
+      "4030000000000000"
+     ],
+     "box": false,
+     "stroke": null,
+     "lineWidth": null
+    },
+    {
+     "ignore": false,
+     "texts": [
+      "Gamma",
+      "!"
+     ],
+     "rect": [
+      "406890369d0369d0",
+      "4059c71c71c71c70",
+      "404e28f5c28f5c29",
+      "4030000000000000"
+     ],
+     "box": false,
+     "stroke": null,
+     "lineWidth": null
+    }
+   ],
+   "hover": []
+  },
+  {
+   "id": "distance",
+   "note": "distance 20: the percentage position never reads it",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "geo": {
+     "map": "r5cGeoLabels",
+     "label": {
+      "show": true,
+      "distance": 20
+     }
+    }
+   },
+   "labels": [
+    {
+     "ignore": false,
+     "texts": [
+      "Alpha"
+     ],
+     "rect": [
+      "406b3d3a06d3a06c",
+      "4071ae38e38e38e4",
+      "403ed70a3d70a3d8",
+      "4028000000000000"
+     ],
+     "box": false,
+     "stroke": null,
+     "lineWidth": null
+    },
+    {
+     "ignore": false,
+     "texts": [
+      "Beta"
+     ],
+     "rect": [
+      "4076f947ae147ae1",
+      "407091c71c71c71c",
+      "4038d70a3d70a3d8",
+      "4028000000000000"
+     ],
+     "box": false,
+     "stroke": null,
+     "lineWidth": null
+    },
+    {
+     "ignore": false,
+     "texts": [
+      "Gamma"
+     ],
+     "rect": [
+      "4069a9d0369d036a",
+      "405a471c71c71c70",
+      "40455c28f5c28f5c",
+      "4028000000000000"
+     ],
+     "box": false,
+     "stroke": null,
+     "lineWidth": null
+    }
+   ],
+   "hover": []
+  },
+  {
+   "id": "emph.position",
+   "note": "emphasis.label.position top: a hovered region's label moves above it",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "geo": {
+     "map": "r5cGeoLabels",
+     "label": {
+      "show": true
+     },
+     "emphasis": {
+      "label": {
+       "position": "top",
+       "distance": 6
+      }
+     }
+    }
+   },
+   "labels": [
+    {
+     "ignore": false,
+     "texts": [
+      "Alpha"
+     ],
+     "rect": [
+      "406b3d3a06d3a06c",
+      "4071ae38e38e38e4",
+      "403ed70a3d70a3d8",
+      "4028000000000000"
+     ],
+     "box": false,
+     "stroke": null,
+     "lineWidth": null
+    },
+    {
+     "ignore": false,
+     "texts": [
+      "Beta"
+     ],
+     "rect": [
+      "4076f947ae147ae1",
+      "407091c71c71c71c",
+      "4038d70a3d70a3d8",
+      "4028000000000000"
+     ],
+     "box": false,
+     "stroke": null,
+     "lineWidth": null
+    },
+    {
+     "ignore": false,
+     "texts": [
+      "Gamma"
+     ],
+     "rect": [
+      "4069a9d0369d036a",
+      "405a471c71c71c70",
+      "40455c28f5c28f5c",
+      "4028000000000000"
+     ],
+     "box": false,
+     "stroke": null,
+     "lineWidth": null
+    }
+   ],
+   "hover": [
+    {
+     "payload": {
+      "type": "highlight",
+      "geoIndex": 0,
+      "name": "Alpha"
+     },
+     "labels": [
+      {
+       "ignore": false,
+       "texts": [
+        "Alpha"
+       ],
+       "rect": [
+        "406b3d3a06d3a06c",
+        "4069b0e38e38e38e",
+        "403ed70a3d70a3d8",
+        "4028000000000000"
+       ],
+       "box": false,
+       "stroke": null,
+       "lineWidth": null
+      },
+      {
+       "ignore": false,
+       "texts": [
+        "Beta"
+       ],
+       "rect": [
+        "4076f947ae147ae1",
+        "407091c71c71c71c",
+        "4038d70a3d70a3d8",
+        "4028000000000000"
+       ],
+       "box": false,
+       "stroke": null,
+       "lineWidth": null
+      },
+      {
+       "ignore": false,
+       "texts": [
+        "Gamma"
+       ],
+       "rect": [
+        "4069a9d0369d036a",
+        "405a471c71c71c70",
+        "40455c28f5c28f5c",
+        "4028000000000000"
+       ],
+       "box": false,
+       "stroke": null,
+       "lineWidth": null
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
