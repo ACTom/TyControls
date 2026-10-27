@@ -140,6 +140,7 @@ TyControls 全部控件的逐控件说明（属性 / 事件 / 状态 / 主题变
 | [TTyPreviewBox](previewbox.md) | 可复用预览控件（图片走 TTyImage / 文本走只读 TTyMemo / 占位 / 交出位图·文本自定义） |
 | [TTyImageView](imageview.md) | 图片查看器：平移/缩放（平滑动画）+ 非破坏性 BGRA 滤镜（灰度/模糊/锐化/反相/着色） |
 | [TTyChart](chart.md) | 折线/柱/饼/环形图：设计期系列、自动量程 + nice 刻度、网格、图例、标题、悬停数值 tooltip（BGRA Canvas2D） |
+| [TTyAdvanceChart](advancechart.md) | 照 Apache ECharts 6.1 的 option 画图：二十多种系列、提示框、缩放、视觉映射、工具栏、动画、事件与动作 |
 | [Transitions](transitions.md) | 过渡动画工具（非控件）：滑入（跨平台）/ 淡入（Win）出现动画,基于动画内核 |
 | [TTyHtmlLabel](htmllabel.md) | 迷你 HTML 标签：行内子集（粗/斜/下/删、字体色·字号、链接、`<br>`）+ 自动换行 |
 
