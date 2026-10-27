@@ -199,7 +199,7 @@ uses
   test.advchart.textdash,
   test.advchart.authorstyles,
   test.advchart.richimage,
-  test.advchart.halokeep, test.advchart.faststrokes, test.advchart.shadows, test.advchart.largespeed, test.advchart.parsekeep,
+  test.advchart.halokeep, test.advchart.faststrokes, test.advchart.shadows, test.advchart.largespeed, test.advchart.parsekeep, test.advchart.speedkeep,
   test.advchart.hoverlayer,
   test.advchart.radarlabel,
   test.advchart.pieitemlabel,
