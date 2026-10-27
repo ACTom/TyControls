@@ -1935,6 +1935,14 @@ type
     { [R5-I] each series' markers as last drawn, by series index, kept while
       the legend has it switched off }
     FAnimMarkPark: TTyChartAnimMarkParkArray;
+    { [R5-I] A notMerge's OLD SERIES MODELS, as far as their remove() asks
+      them (isAnimationEnabled): each old series' type, animation and
+      animationThreshold, taken before the option text goes; and, for the
+      snapshot, a root over them with the new option's own two keys (the
+      old model's parent is the global model, whose option is the new
+      one) }
+    FAnimOldLiteSeries: TJSONArray;
+    FAnimOldLiteRoot: TJSONObject;
     { WHAT A SUNBURST'S DATA STILL NAMES [milestone D5-D8]: each row's
       piece as the last render that drew it left it -- a drill removes the
       pieces outside the view from the group, but the data keeps them
@@ -2184,6 +2192,9 @@ type
     { the list and keys of the render an update starts from }
     procedure AnimSnapshot;
     procedure AnimDropPrev;
+    { [R5-I] a setOption's render, done now when another setOption comes
+      before the paint that would arm it: each setOption renders }
+    procedure AnimFlushPending;
     procedure UtStaleHarvest;
     function AnimToOldPoint(AOldSeries: Integer; AX, AY: Double): TTyPointF;
     procedure AnimArmTimer;

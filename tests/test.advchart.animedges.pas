@@ -56,6 +56,7 @@ type
     procedure TestAFunnelsPiecesAndLabelsAsUpstream;
     procedure TestABarClippedPastThePlotAsUpstream;
     procedure TestTheMarkersAsUpstream;
+    procedure TestEachSetOptionRendersAsUpstream;
   end;
 
 implementation
@@ -278,6 +279,8 @@ var
   v: TTyDoubleArray;
   p: TTyChartAnimProxy;
   got: TTyAnimValue;
+  gone: TJSONArray;
+  ops: TTyDoubleArray;
 begin
   for i := 0 to ARec.Count - 1 do
   begin
@@ -382,6 +385,23 @@ begin
       SameNum(name + ' scaleX', PNumOr(p, 'scaleX', el.Anim.G[2]), leaf.Find('sx'));
       SameRun(name, p, leaf);
     end
+    else if pre = 'gh' then
+    begin
+      { a bar view's leaving elements: the bar ghosts of the series, their
+        opacities in order }
+      gone := ARec.Arrays[name];
+      SetLength(ops, 0);
+      for k := 0 to FChart.AnimGhostCount - 1 do
+      begin
+        p := FChart.AnimGhostAt(k);
+        if (p = nil) or p.Gone or (p.Series <> s) or (p.Role <> 'bar') then Continue;
+        SetLength(ops, Length(ops) + 1);
+        ops[High(ops)] := p.Num('style.opacity');
+      end;
+      SameNum(name + ' count', Length(ops), gone.Count);
+      for k := 0 to Min(High(ops), gone.Count - 1) do
+        SameNum(Format('%s %d opacity', [name, k]), ops[k], gone.Objects[k].Find('op'));
+    end
     else if pre = 'fn' then
     begin
       v := Nums(leaf.Arrays['pts']);
@@ -455,6 +475,9 @@ begin
       FChart.SetOption(ev.Objects['option'].AsJSON, False);
       RenderNow;
     end
+    else if act = 'mergeq' then
+      { the next setOption comes before any paint }
+      FChart.SetOption(ev.Objects['option'].AsJSON, False)
     else if act = 'set' then
     begin
       FChart.SetOption(ev.Objects['option'].AsJSON, True);
@@ -514,6 +537,11 @@ end;
 procedure TAdvChartAnimEdgesOracleTest.TestTheMarkersAsUpstream;
 begin
   RunGroup('mark', 150);
+end;
+
+procedure TAdvChartAnimEdgesOracleTest.TestEachSetOptionRendersAsUpstream;
+begin
+  RunGroup('setopt', 300);
 end;
 
 initialization

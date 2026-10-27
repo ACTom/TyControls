@@ -5636,8 +5636,11 @@ begin
       there with the same id and type, and does not ask for a new view. A
       view whose model a replaceMerge removed, whose type changed, or whose
       model is brand new is disposed: gone at once }
-    if APrev.FullUpdate or APrev.Merge then
-      for o := 0 to High(APrev.Series) do
+    { [R5-I] a notMerge's too: a series of the same model id and type is the
+      same view, and one the legend switched off is remove()d on its last
+      model -- the snapshot hands that model in (an old view of no model in
+      the snapshot asks nothing) [was: gone at once] }
+    for o := 0 to High(APrev.Series) do
       begin
         if not APrev.Series[o].Present then Continue;
         done := False;

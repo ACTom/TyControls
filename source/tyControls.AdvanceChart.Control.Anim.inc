@@ -352,6 +352,31 @@ begin
   end;
 end;
 
+{ [R5-I] EACH setOption RENDERS: upstream's setOption (not lazy) lays out,
+  renders and flushes before it returns, so a second setOption before the
+  next frame finds the first one's transitions armed -- a row the first
+  removes fades, the second brings it back as a new one. Here a setOption
+  arms at the paint that follows; one that comes while another waits has
+  that one rendered now (the build and the arming a paint does, nothing
+  drawn), once the chart has been laid out at a size.
+  [Revised in R5-I: several setOptions before a paint armed one transition,
+  from the render before the first to the option after the last.] }
+procedure TTyCustomAdvanceChart.AnimFlushPending;
+var m: ITyTextMeasurer;
+begin
+  if not FAnimPending or FLazyPending or FExporting then Exit;
+  if (FPaintList = nil) or (FLastPPI <= 0) or not AnimAllowed then Exit;
+  ConvertReady;
+  GfxBuild(FLastPPI);
+  m := NewTextMeasurer(FLastPPI);
+  FDrMode := 1;
+  try
+    PaintSeries(nil, m, FLastPPI);
+  finally
+    FDrMode := 0;
+  end;
+end;
+
 procedure TTyCustomAdvanceChart.AnimDropPrev;
 begin
   FAnimPrev := Default(TTyChartAnimPrev);
@@ -652,6 +677,23 @@ begin
   { NOTHING DRAWN BEFORE: the option enters }
   if FPaintList = nil then Exit;
   FAnimPrev.Valid := True;
+  { [R5-I] a notMerge's old models, for the remove() of a view kept but not
+    rendered (the legend switched its series off): their own keys over the
+    new option's root }
+  FreeAndNil(FAnimOldLiteRoot);
+  if not (FAnimFull or FAnimMerge) and (FAnimOldLiteSeries <> nil) then
+  begin
+    FAnimOldLiteRoot := TJSONObject.Create;
+    if FOption.Root is TJSONObject then
+    begin
+      if TJSONObject(FOption.Root).Find('animation') <> nil then
+        FAnimOldLiteRoot.Add('animation', TJSONObject(FOption.Root).Find('animation').Clone);
+      if TJSONObject(FOption.Root).Find('animationThreshold') <> nil then
+        FAnimOldLiteRoot.Add('animationThreshold',
+          TJSONObject(FOption.Root).Find('animationThreshold').Clone);
+    end;
+    FAnimOldLiteRoot.Add('series', FAnimOldLiteSeries.Clone);
+  end;
   FAnimPrev.FullUpdate := FAnimFull;
   FAnimPrev.Merge := FAnimMerge;
   for slot := 0 to High(FBindings) do
@@ -675,6 +717,14 @@ begin
       r.Model := TyAnimSeriesModel(FOption.Root, si, n);
       r.Model.Payload := FAnimPayload;
       r.Model.HasPayload := FAnimHasPayload;
+      r.Enabled := TyAnimIsEnabled(r.Model);
+    end
+    else if FAnimOldLiteRoot <> nil then
+    begin
+      { [R5-I] a notMerge's: the old model as its remove() asks it }
+      n := 0;
+      if (slot <= High(FStores)) and (FStores[slot] <> nil) then n := FStores[slot].Count;
+      r.Model := TyAnimSeriesModel(FAnimOldLiteRoot, si, n);
       r.Enabled := TyAnimIsEnabled(r.Model);
     end;
     if si <= High(FAnimOldViewKeys) then r.ViewKey := FAnimOldViewKeys[si]

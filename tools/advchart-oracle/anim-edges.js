@@ -26,7 +26,9 @@ Ends with process.exit().
 Numbers are the 16 lowercase hex digits of the IEEE double (big-endian; NaN
 7ff8000000000000). A case: id, group, note, W, H, option, probes[], rows
 (the rows a probe reads, where it does not read them all), events[]
-(sample / merge / set (notMerge) / act (dispatchAction) at t ms after T0).
+(sample / merge / mergeq (a merge the port's replay paints nothing after:
+the next setOption comes before any frame) / set (notMerge) / act
+(dispatchAction) at t ms after T0).
 A sample's rec, by probe:
   candle  'cd<s>/<i>' {pts (the eight points, flat), simple, n (clips)}
   funnel  'fn<s>/<i>' {pts (the four points, flat), op, n}; 'fl<s>/<i>'
@@ -246,6 +248,22 @@ const PROBES = {
       }
     });
   },
+  // a bar view's elements its data no longer holds (fading out), by the
+  // view's series index: each one's opacity and clips, in group order
+  ghost(chart, rec) {
+    chart._chartsViews.forEach(v => {
+      if (!v || v.type !== 'bar' || !v.__model) return;
+      const data = v._data;
+      const live = new Set();
+      if (data) data.each(i => { const el = data.getItemGraphicEl(i); if (el) live.add(el); });
+      const gone = [];
+      v.group.eachChild(el => {
+        if (live.has(el) || el.type !== 'rect') return;
+        gone.push({ op: opOf(el), n: nClip(el) });
+      });
+      rec['gh' + v.__model.seriesIndex + '/all'] = gone;
+    });
+  },
   // a funnel's pieces and their labels
   funnel(chart, rec, c) {
     chart.getModel().eachSeries(sm => {
@@ -362,6 +380,26 @@ add('mark', 'mk-legend', "s1 (with a markLine and a markPoint) toggled off by th
   [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'act', action: { type: 'legendToggleSelect', name: 's1' } }, ...after([0, 1001], T1),
     { t: T1 + 2000, do: 'act', action: { type: 'legendToggleSelect', name: 's1' } }, ...after([0, 1, 16, 500, 1001], T1 + 2000)]);
 
+// ---- setOption: notMerge and consecutive calls ----
+const NM = sel => ({ animation: true, legend: sel ? { selected: sel } : {}, xAxis: { type: 'category', data: ['a', 'b', 'c'] },
+  yAxis: { type: 'value', min: 0, max: 40 },
+  series: [Object.assign({ type: 'bar', name: 's0', data: [10, 20, 30] }, LIN), Object.assign({ type: 'bar', name: 's1', data: [15, 25, 35] }, LIN)] });
+add('setopt', 'nm-hide', "a notMerge setOption of the same series with s1 unselected in the legend: s1's view is kept (the same model id) and not rendered -- remove(): BarView._clear fades every bar out (removeElementWithFadeOut: 200 ms cubicOut) on the view's last model",
+  NM(null), ['bar', 'ghost'],
+  [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'set', option: NM({ s1: false }) }, ...after([0, 1, 50, 100, 199, 200, 201], T1)]);
+add('setopt', 'two-merges', "two merges at the same instant: the first drops c, the second brings it back -- each setOption renders: c's old bar fades out (a ghost) and a new one enters from no height (the second render's add: initProps, enter timing)",
+  { animation: true, animationDuration: 600, animationEasing: 'linear', animationDurationUpdate: 1000, animationEasingUpdate: 'linear',
+    xAxis: { type: 'category', data: ['a', 'b', 'c'] }, yAxis: { type: 'value', min: 0, max: 40 }, series: [{ type: 'bar', data: [10, 20, 30] }] },
+  ['bar', 'ghost'],
+  [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'mergeq', option: { series: [{ data: [10, 20] }] } },
+    { t: T1, do: 'merge', option: { series: [{ data: [10, 25, 35] }] } }, ...after([0, 1, 100, 300, 599, 600, 601, 999, 1001], T1)]);
+add('setopt', 'two-merges-move', "two merges at the same instant that move every bar: the second updateProps from where the first's tween stands (its start) -- the same as one",
+  { animation: true, animationDurationUpdate: 1000, animationEasingUpdate: 'linear',
+    xAxis: { type: 'category', data: ['a', 'b', 'c'] }, yAxis: { type: 'value', min: 0, max: 40 }, series: [{ type: 'bar', data: [10, 20, 30] }] },
+  ['bar'],
+  [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'mergeq', option: { series: [{ data: [30, 20, 10] }] } },
+    { t: T1, do: 'merge', option: { series: [{ data: [5, 35, 15] }] } }, ...after([0, 1, 500, 1001], T1)]);
+
 // ---- funnel ----
 const FN = (data, extra, s) => Object.assign({ animation: true,
   series: [Object.assign({ type: 'funnel', left: 40, width: 260, data }, LIN, s || {})] }, extra || {});
@@ -451,7 +489,7 @@ function runCase(c) {
         o.rec = readRec(chart, c);
       }
       else if (ev.do === 'frame') zr(chart).animation.update();
-      else if (ev.do === 'merge') quiet(() => chart.setOption(materialize(clone(ev.option))));
+      else if (ev.do === 'merge' || ev.do === 'mergeq') quiet(() => chart.setOption(materialize(clone(ev.option))));
       else if (ev.do === 'set') quiet(() => chart.setOption(materialize(clone(ev.option)), true));
       else if (ev.do === 'act') quiet(() => chart.dispatchAction(clone(ev.action)));
       else must(false, 'an event it does not know: ' + ev.do);

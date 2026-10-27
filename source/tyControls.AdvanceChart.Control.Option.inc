@@ -90,6 +90,8 @@ end;
 destructor TTyCustomAdvanceChart.Destroy;
 var i: Integer;
 begin
+  FreeAndNil(FAnimOldLiteRoot);
+  FreeAndNil(FAnimOldLiteSeries);
   { dispose: no longer an instance [Batch 141] }
   if GTyCharts <> nil then GTyCharts.Remove(Self);
   { an action still waiting [Batch 153] }
@@ -335,6 +337,8 @@ end;
 procedure TTyCustomAdvanceChart.SetOptionText(const AValue: string);
 begin
   if FOptionText = AValue then Exit;
+  { [R5-I] the setOption before this one renders first }
+  AnimFlushPending;
   { [F3c] a setOption with no transition option }
   FAnimUtHas := False;
   FAnimUtTrans := nil;
@@ -350,6 +354,19 @@ end;
 procedure TTyCustomAdvanceChart.ApplyNotMerge(const AValue: string;
   const AReplace: array of string);
 var i: Integer;
+
+  { [R5-I] a series option's keys its isAnimationEnabled reads }
+  function LiteSeries(AData: TJSONData): TJSONObject;
+  const cKeys: array[0..2] of string = ('type', 'animation', 'animationThreshold');
+  var k: Integer;
+  begin
+    Result := TJSONObject.Create;
+    if not (AData is TJSONObject) then Exit;
+    for k := 0 to High(cKeys) do
+      if TJSONObject(AData).Find(cKeys[k]) <> nil then
+        Result.Add(cKeys[k], TJSONObject(AData).Find(cKeys[k]).Clone);
+  end;
+
 begin
   FOptionText := AValue;
   { [F4b] new models, a new tooltip view: the old one's box, last point and
@@ -368,6 +385,18 @@ begin
     lazy one does [Batch 97] }
   if not FAnimPrev.Valid and not FLazyPending then
   begin
+    { [R5-I] what the old series models' remove() reads }
+    FreeAndNil(FAnimOldLiteSeries);
+    if (FOption.Root is TJSONObject)
+      and (TJSONObject(FOption.Root).Find('series') <> nil) then
+    begin
+      FAnimOldLiteSeries := TJSONArray.Create;
+      if TJSONObject(FOption.Root).Find('series').JSONType = jtArray then
+        for i := 0 to TJSONObject(FOption.Root).Find('series').Count - 1 do
+          FAnimOldLiteSeries.Add(LiteSeries(TJSONObject(FOption.Root).Find('series').Items[i]))
+      else
+        FAnimOldLiteSeries.Add(LiteSeries(TJSONObject(FOption.Root).Find('series')));
+    end;
     FAnimOldViewKeys := AnimViewKeys;
     FAnimOldUtKeys := AnimUtKeys;
   end;
@@ -523,6 +552,8 @@ function TTyCustomAdvanceChart.SetOption(const AJson: string;
   const AOpts: TTySetOptionOpts): Boolean;
 begin
   TbFrame;
+  { [R5-I] the setOption before this one renders first }
+  AnimFlushPending;
   { normalizeSetOptionInput asserts before anything is touched }
   if not FOption.CheckReplaceMerge(AOpts.ReplaceMerge) then Exit(False);
   { THE FIRST OPTION is an init whatever the flag says (echarts.ts:768),
