@@ -3640,13 +3640,28 @@ begin
 end;
 
 procedure TTyCustomTreeView.SetNodeDataSize(AValue: Integer);
+var
+  last: Cardinal;
 begin
   if FNodeDataSize = AValue then Exit;
   { 条目模式征用了数据块的头 4 字节,所以 app 的数据块与 Items 互斥 —— 同一段
     内存两个主人,静默让一边赢就是数据损坏。 }
   if (AValue > 0) and (FItems <> nil) and (FItems.Count > 0) then
     ItemModeConflict('NodeDataSize');
-  // Must be set before any nodes exist (changes the allocation stride).
+  { #137: the size is the allocation stride, so nodes made with the old one cannot take the
+    new one -- GetNodeData read and wrote past their end. As VirtualTreeView does, they are
+    freed (OnFreeNode still sees the old size) and the same number of root nodes is made
+    again, empty. }
+  if (FRoot <> nil) and (FRoot^.ChildCount > 0) and not FItemMode
+     and not (csLoading in ComponentState) then
+  begin
+    last := FRoot^.ChildCount;
+    Clear;
+    FNodeDataSize := AValue;
+    UpdateNodeAllocSize;
+    SetRootNodeCount(last);
+    Exit;
+  end;
   FNodeDataSize := AValue;
   UpdateNodeAllocSize;
 end;
