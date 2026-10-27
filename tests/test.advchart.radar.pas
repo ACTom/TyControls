@@ -570,10 +570,27 @@ begin
   end;
 end;
 
+{ [R5-J] the filled polygons' contours: a merged element (Cmds) holds one
+  per pckMove }
+function BandContours(AList: TTyPaintList): Integer;
+var i, k: Integer; e: TTyChartElement;
+begin
+  Result := 0;
+  for i := 0 to AList.Count - 1 do
+  begin
+    e := AList.Element(i);
+    if (e.Shape.Kind <> cskPolygon) or not e.Style.HasFill or (e.Caption.Text <> '') then Continue;
+    if Length(e.Shape.Cmds) = 0 then Inc(Result)
+    else
+      for k := 0 to High(e.Shape.Cmds) do
+        if e.Shape.Cmds[k].Kind = pckMove then Inc(Result);
+  end;
+end;
+
 procedure TAdvChartRadarRuleTest.TestTheBandsSitBetweenConsecutiveRings;
 var
   r: TTyRadar;
-  i, bands: Integer;
+  i, bands, k, nth, first, last: Integer;
   e: TTyChartElement;
   rIn, rOut, expIn, expOut: Double;
 begin
@@ -595,15 +612,33 @@ begin
     if not e.Style.HasFill then Continue;
     Inc(bands);
   end;
-  AssertEquals('one band per interval', 4, bands);
-  { The bands come first and innermost first, so the last one is the outer. }
-  e := FList.Element(3);
+  { [R5-J] RadarView merges the bands of one colour (mergePath): two
+    colours, two elements, the four bands their contours [was: an element
+    a band] }
+  AssertEquals('one element per colour', 2, bands);
+  AssertEquals('one band per interval', 4, BandContours(FList));
+  { The bands come innermost first within their colour's element, so the
+    outer band, band 3, is the second contour of colour 1. }
+  e := FList.Element(1);
   AssertEquals('the outermost band is a polygon', Ord(cskPolygon),
                Ord(e.Shape.Kind));
+  nth := -1;
+  first := -1;
+  last := -1;
+  for k := 0 to High(e.Shape.Cmds) do
+  begin
+    if e.Shape.Cmds[k].Kind = pckMove then
+    begin
+      Inc(nth);
+      if nth = 1 then first := k;
+    end;
+    if (nth = 1) and (e.Shape.Cmds[k].Kind = pckLine) then last := k;
+  end;
+  AssertTrue('a second contour', (first >= 0) and (last > first));
   expOut := r.RingRadius(4);
   expIn := r.RingRadius(3);
-  rOut := Abs(e.Shape.Points[0].Y - r.CY);
-  rIn := Abs(e.Shape.Points[Length(e.Shape.Points) - 1].Y - r.CY);
+  rOut := Abs(e.Shape.Cmds[first].Y - r.CY);
+  rIn := Abs(e.Shape.Cmds[last].Y - r.CY);
   AssertEquals('its outer edge is the rim', expOut, rOut, 0.001);
   AssertEquals('and its inner edge the ring below it', expIn, rIn, 0.001);
   AssertTrue('which are not the same ring', Abs(expOut - expIn) > 1);
@@ -683,7 +718,9 @@ begin
                3, rings);
   AssertEquals('one spoke per indicator', 5, spokes);
   AssertEquals('and one name each', 5, names);
-  AssertEquals('one band per interval', 3, CountKind(FList, cskPolygon, True));
+  { [R5-J] merged by colour: two elements, three contours }
+  AssertEquals('one element per colour', 2, CountKind(FList, cskPolygon, True));
+  AssertEquals('one band per interval', 3, BandContours(FList));
 end;
 
 procedure TAdvChartRadarRuleTest.TestANameIsPinnedByTheEdgeFacingTheCentre;

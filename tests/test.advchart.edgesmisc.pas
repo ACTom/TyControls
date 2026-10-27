@@ -27,7 +27,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint,
      tyControls.AdvanceChart.Shape,
      tyControls.AdvanceChart.Events, tyControls.AdvanceChart.Measure,
-     tyControls.AdvanceChart.ThemeRiver,
+     tyControls.AdvanceChart.ThemeRiver, tyControls.AdvanceChart.Color,
      tyControls.AdvanceChart;
 type
   TEmProbe = class(TTyAdvanceChart)
@@ -64,6 +64,7 @@ type
     procedure TestAnAppendedItemDrawsItsOwnSymbol;
     procedure TestTheDiagnosticsAreTheOptionsAtOnce;
     procedure TestARiverMergedTheSameGapResolvesItAgain;
+    procedure TestASplitAreaGradientRampsAsUpstreams;
   end;
 
 { a payload as text both sides compare: keys sorted, numbers by value, a
@@ -619,6 +620,106 @@ begin
          FromHex(st.Strings['rectH'])]);
   end;
   AssertEquals('the river''s gaps step by step', '', report);
+end;
+
+{ the linear ramp's colour at (AX, AY): the stops over (X1, Y1)-(X2, Y2) }
+function RampAt(AStops: TJSONArray; X1, Y1, X2, Y2, AX, AY: Double): TBGRAPixel;
+var
+  dx, dy, t, len2, u: Double;
+  k: Integer;
+  c0, c1: TTyChartColor;
+  o0, o1: Double;
+begin
+  dx := X2 - X1;
+  dy := Y2 - Y1;
+  len2 := dx * dx + dy * dy;
+  if len2 = 0 then t := 0
+  else t := ((AX - X1) * dx + (AY - Y1) * dy) / len2;
+  if t < 0 then t := 0;
+  if t > 1 then t := 1;
+  k := 0;
+  while (k < AStops.Count - 2) and (t > AStops.Arrays[k + 1].Floats[0]) do Inc(k);
+  o0 := AStops.Arrays[k].Floats[0];
+  o1 := AStops.Arrays[k + 1].Floats[0];
+  TyTryParseChartColor(AStops.Arrays[k].Strings[1], c0);
+  TyTryParseChartColor(AStops.Arrays[k + 1].Strings[1], c1);
+  if o1 > o0 then u := (t - o0) / (o1 - o0) else u := 0;
+  if u < 0 then u := 0;
+  if u > 1 then u := 1;
+  Result.red := Round(((c0 shr 16) and $FF) * (1 - u) + ((c1 shr 16) and $FF) * u);
+  Result.green := Round(((c0 shr 8) and $FF) * (1 - u) + ((c1 shr 8) and $FF) * u);
+  Result.blue := Round((c0 and $FF) * (1 - u) + (c1 and $FF) * u);
+  Result.alpha := 255;
+end;
+
+function Within(AGot, A, B: Integer): Boolean;
+begin
+  Result := (AGot >= Min(A, B) - 12) and (AGot <= Max(A, B) + 12);
+end;
+
+{ A GRADIENT WRITTEN AS A SPLIT AREA'S COLOUR RAMPS AS THE CANVAS RAMPS IT:
+  over each band's own rect on a cartesian and a single axis (a Rect per
+  band), over the merged bands' box on a polar axis (mergePath) -- the
+  oracle's pixels, which only that area covers, against the ramp across
+  each pixel, 12 levels either side. [Was: every band in the first stop.] }
+procedure TAdvChartEdgesMiscOracleTest.TestASplitAreaGradientRampsAsUpstreams;
+var
+  cases, els, samples: TJSONArray;
+  cs, e: TJSONObject;
+  c, k, q, px, py, bad, n: Integer;
+  chart: TEmProbe;
+  bmp: TBGRABitmap;
+  gx1, gy1, gx2, gy2: Double;
+  want, lo, hi, got: TBGRAPixel;
+  report: string;
+begin
+  cases := TJSONObject(FRoot).Arrays['splitArea'];
+  bad := 0;
+  n := 0;
+  report := '';
+  for c := 0 to cases.Count - 1 do
+  begin
+    cs := cases.Objects[c];
+    chart := NewChart(600, 400);
+    chart.Option := '{"animation":false,' + Copy(cs.Objects['option'].AsJSON, 2, MaxInt);
+    bmp := TBGRABitmap.Create(600, 400, BGRA(255, 255, 255, 255));
+    try
+      chart.Render(bmp.Canvas, Rect(0, 0, 600, 400), 96);
+      els := cs.Arrays['elements'];
+      for k := 0 to els.Count - 1 do
+      begin
+        e := els.Objects[k];
+        gx1 := FromHex(e.Arrays['gradient'].Strings[0]);
+        gy1 := FromHex(e.Arrays['gradient'].Strings[1]);
+        gx2 := FromHex(e.Arrays['gradient'].Strings[2]);
+        gy2 := FromHex(e.Arrays['gradient'].Strings[3]);
+        samples := e.Arrays['samples'];
+        for q := 0 to samples.Count - 1 do
+        begin
+          px := samples.Arrays[q].Integers[0];
+          py := samples.Arrays[q].Integers[1];
+          want := RampAt(e.Arrays['stops'], gx1, gy1, gx2, gy2, px + 0.5, py + 0.5);
+          lo := RampAt(e.Arrays['stops'], gx1, gy1, gx2, gy2, px, py);
+          hi := RampAt(e.Arrays['stops'], gx1, gy1, gx2, gy2, px + 1, py + 1);
+          got := bmp.GetPixel(px, py);
+          Inc(n);
+          if not (Within(got.red, lo.red, hi.red) and Within(got.green, lo.green, hi.green)
+            and Within(got.blue, lo.blue, hi.blue)) then
+          begin
+            Inc(bad);
+            if Length(report) < 3000 then
+              report := report + LineEnding + Format('%s element %d at %d,%d: %d %d %d upstream, %d %d %d here',
+                [cs.Strings['id'], k, px, py, want.red, want.green, want.blue, got.red, got.green, got.blue]);
+          end;
+        end;
+      end;
+    finally
+      bmp.Free;
+    end;
+    chart.Free;
+  end;
+  AssertEquals(IntToStr(bad) + ' of ' + IntToStr(n) + ' pixels off the ramp:' + report, 0, bad);
+  AssertTrue(Format('enough sampled (%d)', [n]), n >= 200);
 end;
 
 initialization

@@ -100,6 +100,10 @@ type
   TTyRadarAreaSpec = record
     Show: Boolean;
     Colours: TTyChartColorArray;
+    { [R5-J] index-parallel to Colours: an entry written as a gradient (its
+      Colours entry the first stop), cgkNone for a colour; empty when none
+      is one }
+    Grads: TTyChartGradientArray;
     { [R5-B] areaStyle.opacity, 1 when not written }
     Opacity: Double;
     { [R5-A] its areaStyle's shadow (getAreaStyle) }
@@ -490,6 +494,67 @@ begin
   SetLength(Result, n);
 end;
 
+{ [R5-J] THE SPLIT AREA'S COLOURS with their gradients: ColoursIn's
+  entries, and a gradient object (in the list or alone) as one more, its
+  first stop the colour; AGrads index-parallel, nil when no entry is one }
+function AreaColoursIn(ANode: TJSONObject; const AKey: string;
+  const ADefault: TTyChartColorArray; out AGrads: TTyChartGradientArray): TTyChartColorArray;
+var
+  d: TJSONData;
+  a: TJSONArray;
+  i, n: Integer;
+  c: TTyChartColor;
+  g: TTyChartGradient;
+  any: Boolean;
+begin
+  AGrads := nil;
+  Result := ADefault;
+  if ANode = nil then Exit;
+  d := ANode.Find(AKey);
+  if d = nil then Exit;
+  if d.JSONType = jtString then
+  begin
+    if TyTryParseChartColor(d.AsString, c) then
+    begin
+      SetLength(Result, 1);
+      Result[0] := c;
+    end;
+    Exit;
+  end;
+  { one gradient, not in a list: [color] upstream }
+  if (d is TJSONObject) and TyTryReadGradient(d, g) then
+  begin
+    SetLength(Result, 1);
+    Result[0] := TyGradientSolid(g);
+    SetLength(AGrads, 1);
+    AGrads[0] := g;
+    Exit;
+  end;
+  if d.JSONType <> jtArray then Exit;
+  a := TJSONArray(d);
+  SetLength(Result, a.Count);
+  SetLength(AGrads, a.Count);
+  n := 0;
+  any := False;
+  for i := 0 to a.Count - 1 do
+    if (a.Items[i].JSONType = jtString)
+      and TyTryParseChartColor(a.Items[i].AsString, c) then
+    begin
+      Result[n] := c;
+      AGrads[n] := Default(TTyChartGradient);
+      Inc(n);
+    end
+    else if TyTryReadGradient(a.Items[i], g) then
+    begin
+      Result[n] := TyGradientSolid(g);
+      AGrads[n] := g;
+      any := True;
+      Inc(n);
+    end;
+  SetLength(Result, n);
+  if any then SetLength(AGrads, n) else AGrads := nil;
+end;
+
 { [R5-G] getLineStyle's lineCap / lineJoin / miterLimit off a lineStyle
   object: a word the canvas knows, a positive number }
 procedure ReadPenEnds(ALs: TJSONObject; var ACap, AJoin: Byte;
@@ -801,8 +866,10 @@ begin
     ts := ObjIn(n2, 'areaStyle');
     if ts <> nil then
     begin
-      Result.SplitArea.Colours := ColoursIn(ts, 'color',
-        Result.SplitArea.Colours);
+      { [R5-J] its gradients too [was: an entry written as a gradient was
+        dropped from the list] }
+      Result.SplitArea.Colours := AreaColoursIn(ts, 'color',
+        Result.SplitArea.Colours, Result.SplitArea.Grads);
       { areaStyle.opacity [R5-B] }
       Result.SplitArea.Opacity := NumIn(ts, 'opacity', Result.SplitArea.Opacity);
       { [R5-A] its shadow (getAreaStyle) }
@@ -1322,6 +1389,19 @@ var
   anchorV: TTyTextAnchorV;
   box: TTyRectF;
   hidden: TTyBoolArray;
+  { [R5-J] the gradient bands: their list index, colour bucket and box }
+  bandEl, bandBucket: TTyIntegerArray;
+  bandBox: array of TTyRectF;
+  gi, nb: Integer;
+  { [R5-J] a polygon radar's bands merged by colour: the contours, the
+    points, the box, the colour }
+  mergeCmds: array of TTyPathCmdArray;
+  mergePts: array of TTyPointFArray;
+  mergeBox: array of TTyRectF;
+  mergeHas: TTyBoolArray;
+  mergeColour: TTyChartColorArray;
+  u: TTyRectF;
+  pe: PTyChartElement;
 
   { [R5-G] the size a scale label is drawn at -- and so measured at: the
     author's fontSize, else the skin's [was: measured at the skin's whatever
@@ -1430,7 +1510,30 @@ begin
   if n = 0 then Exit;
 
   { ---- the bands, innermost first, under everything ---- }
+  { [R5-J] RadarView MERGES THE BANDS OF ONE COLOUR into one path
+    (mergePath) and adds those paths in colour order: a polygon radar's
+    bands of a colour are one element here (its contours in Cmds), so no
+    seam shows between two bands of one colour and a gradient spans their
+    box; a circle radar's rings stay an element each (a sector), the
+    gradient over their union [was: an element per band, a gradient entry
+    dropped from the list] }
+  bandEl := nil;
+  bandBucket := nil;
+  bandBox := nil;
+  mergeCmds := nil;
+  mergePts := nil;
+  mergeBox := nil;
+  mergeHas := nil;
+  mergeColour := nil;
+  nb := Length(spec.SplitArea.Colours);
+  if nb = 0 then nb := 2;
   if spec.SplitArea.Show then
+  begin
+    SetLength(mergeCmds, nb);
+    SetLength(mergePts, nb);
+    SetLength(mergeBox, nb);
+    SetLength(mergeHas, nb);
+    SetLength(mergeColour, nb);
     for k := 0 to ARadar.RingCount - 1 do
     begin
       { BAND k SITS BETWEEN RING k AND RING k+1 and takes colour k. Both
@@ -1441,6 +1544,7 @@ begin
       begin
         if Odd(k) then c := AInk.SplitAreaB else c := AInk.SplitAreaA;
       end;
+      gi := k mod nb;
       rOut := ARadar.RingRadius(k + 1);
       rIn := ARadar.RingRadius(k);
       if Abs(rOut - rIn) < 1e-9 then Continue;
@@ -1448,33 +1552,108 @@ begin
       begin
         el := TyChartElement(TyShapeSector(ARadar.CX, ARadar.CY,
           Min(rIn, rOut), Max(rIn, rOut), 0, 2 * Pi));
-      end
-      else
-      begin
-        outer := RingPoints(ARadar, k + 1);
-        inner := RingPoints(ARadar, k);
-        if (Length(outer) < 3) or (Length(inner) < 3) then Continue;
-        { ONE CONTOUR, out along the outer ring and back along the inner one
-          REVERSED, which is what leaves the hole unfilled under either fill
-          rule. Two separate polygons would paint the hole twice. }
-        SetLength(band, Length(outer) + Length(inner));
-        for i := 0 to High(outer) do band[i] := outer[i];
-        for i := 0 to High(inner) do
-          band[Length(outer) + i] := inner[High(inner) - i];
-        el := TyChartElement(TyShapePolygon(band));
-        el.Style.FillEvenOdd := True;
+        el.Style.HasFill := True;
+        el.Style.FillColor := c;
+        if (gi <= High(spec.SplitArea.Grads)) and (spec.SplitArea.Grads[gi].Kind <> cgkNone) then
+        begin
+          el.Style.FillGradient := spec.SplitArea.Grads[gi];
+          SetLength(bandEl, Length(bandEl) + 1);
+          bandEl[High(bandEl)] := AList.Count;
+          SetLength(bandBucket, Length(bandBucket) + 1);
+          bandBucket[High(bandBucket)] := gi;
+          SetLength(bandBox, Length(bandBox) + 1);
+          bandBox[High(bandBox)] := TyRectF(ARadar.CX - Max(rIn, rOut),
+            ARadar.CY - Max(rIn, rOut), ARadar.CX + Max(rIn, rOut), ARadar.CY + Max(rIn, rOut));
+        end;
+        { areaStyle.opacity [R5-B] }
+        el.Style.Alpha := spec.SplitArea.Opacity;
+        TyStyleSetShadow(el.Style, spec.SplitArea.Shadow);
+        el.Z := AInk.Z;
+        el.Z2 := 0;
+        el.Silent := True;
+        AList.Add(el);
+        Inc(Result);
+        Continue;
       end;
-      el.Style.HasFill := True;
-      el.Style.FillColor := c;
-      { areaStyle.opacity [R5-B] }
-      el.Style.Alpha := spec.SplitArea.Opacity;
-      TyStyleSetShadow(el.Style, spec.SplitArea.Shadow);
-      el.Z := AInk.Z;
-      el.Z2 := 0;
-      el.Silent := True;
-      AList.Add(el);
-      Inc(Result);
+      outer := RingPoints(ARadar, k + 1);
+      inner := RingPoints(ARadar, k);
+      if (Length(outer) < 3) or (Length(inner) < 3) then Continue;
+      { ONE CONTOUR, out along the outer ring and back along the inner one
+        REVERSED, which is what leaves the hole unfilled under either fill
+        rule. Two separate polygons would paint the hole twice. }
+      SetLength(band, Length(outer) + Length(inner));
+      for i := 0 to High(outer) do band[i] := outer[i];
+      for i := 0 to High(inner) do
+        band[Length(outer) + i] := inner[High(inner) - i];
+      { into its colour's path }
+      j := Length(mergeCmds[gi]);
+      SetLength(mergeCmds[gi], j + Length(band) + 1);
+      for i := 0 to High(band) do
+      begin
+        mergeCmds[gi][j + i] := Default(TTyPathCmd);
+        if i = 0 then mergeCmds[gi][j + i].Kind := pckMove
+        else mergeCmds[gi][j + i].Kind := pckLine;
+        mergeCmds[gi][j + i].X := band[i].X;
+        mergeCmds[gi][j + i].Y := band[i].Y;
+      end;
+      mergeCmds[gi][j + Length(band)] := Default(TTyPathCmd);
+      mergeCmds[gi][j + Length(band)].Kind := pckClose;
+      j := Length(mergePts[gi]);
+      SetLength(mergePts[gi], j + Length(band));
+      for i := 0 to High(band) do
+      begin
+        mergePts[gi][j + i] := band[i];
+        if not mergeHas[gi] then
+        begin
+          mergeBox[gi] := TyRectF(band[i].X, band[i].Y, band[i].X, band[i].Y);
+          mergeHas[gi] := True;
+        end;
+        if band[i].X < mergeBox[gi].Left then mergeBox[gi].Left := band[i].X;
+        if band[i].X > mergeBox[gi].Right then mergeBox[gi].Right := band[i].X;
+        if band[i].Y < mergeBox[gi].Top then mergeBox[gi].Top := band[i].Y;
+        if band[i].Y > mergeBox[gi].Bottom then mergeBox[gi].Bottom := band[i].Y;
+      end;
+      mergeColour[gi] := c;
     end;
+  end;
+  { the polygon radar's merged paths, in colour order }
+  for gi := 0 to High(mergeCmds) do
+  begin
+    if Length(mergeCmds[gi]) = 0 then Continue;
+    el := TyChartElement(TyShapePolygon(mergePts[gi]));
+    el.Shape.Cmds := mergeCmds[gi];
+    el.Shape.HasCmdBounds := True;
+    el.Shape.CmdBounds := mergeBox[gi];
+    el.Style.FillEvenOdd := True;
+    el.Style.HasFill := True;
+    el.Style.FillColor := mergeColour[gi];
+    if (gi <= High(spec.SplitArea.Grads)) and (spec.SplitArea.Grads[gi].Kind <> cgkNone) then
+      el.Style.FillGradient := spec.SplitArea.Grads[gi];
+    { areaStyle.opacity [R5-B] }
+    el.Style.Alpha := spec.SplitArea.Opacity;
+    TyStyleSetShadow(el.Style, spec.SplitArea.Shadow);
+    el.Z := AInk.Z;
+    el.Z2 := 0;
+    el.Silent := True;
+    AList.Add(el);
+    Inc(Result);
+  end;
+  { a circle radar's gradient rings: the union of their colour's }
+  for k := 0 to High(bandEl) do
+  begin
+    u := bandBox[k];
+    for i := 0 to High(bandEl) do
+      if bandBucket[i] = bandBucket[k] then
+      begin
+        if bandBox[i].Left < u.Left then u.Left := bandBox[i].Left;
+        if bandBox[i].Top < u.Top then u.Top := bandBox[i].Top;
+        if bandBox[i].Right > u.Right then u.Right := bandBox[i].Right;
+        if bandBox[i].Bottom > u.Bottom then u.Bottom := bandBox[i].Bottom;
+      end;
+    pe := AList.Ref(bandEl[k]);
+    pe^.Style.GradBoxSet := True;
+    pe^.Style.GradBox := TyRectToXYWH(u);
+  end;
 
   { ---- the rings ---- }
   if spec.SplitLine.Show and (spec.SplitLine.WidthLogical > 0) then

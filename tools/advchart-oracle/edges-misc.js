@@ -297,6 +297,97 @@ function runRiverRemerge() {
   }
 }
 
+// ---- splitArea: a gradient written as an area's colour. Cartesian and
+// single axes add one Rect per band (rectCoordAxisBuildSplitArea): the
+// gradient spans each band's own rect; polar axes and the radar merge
+// every band of one colour into one path (mergePath): the gradient spans
+// the merged path's bounding rect. Recorded per filled element of the
+// view: its kind, its box (getBoundingRect -- no stroke, a fill only), the
+// canvas gradient over it (non-global: x * width + x0 ...) with its stops,
+// and pixels inside it that nothing else of the chart covers ----
+const GR_V = { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }] };
+const GR_H = { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: '#00c000' }, { offset: 1, color: '#ffff00' }] };
+const HIDDEN = { showSymbol: false, lineStyle: { opacity: 0 } };
+const SA_CASES = [
+  { id: 'sa-value', note: 'a value y axis, the list [vertical gradient, grey]: every other band its own vertical ramp',
+    option: { xAxis: { type: 'category', data: ['a', 'b', 'c', 'd'], splitArea: { show: false } },
+      yAxis: { type: 'value', splitLine: { show: false }, splitArea: { show: true, areaStyle: { color: [GR_V, '#dddddd'] } } },
+      series: [Object.assign({ type: 'line', data: [10, 50, 30, 80] }, HIDDEN)] }, axes: [['yAxis', 0]] },
+  { id: 'sa-category', note: 'a category x axis, one horizontal gradient: each band its own horizontal ramp',
+    option: { xAxis: { type: 'category', data: ['a', 'b', 'c', 'd'], splitArea: { show: true, areaStyle: { color: GR_H } } },
+      yAxis: { type: 'value', splitLine: { show: false } },
+      series: [Object.assign({ type: 'line', data: [10, 50, 30, 80] }, HIDDEN)] }, axes: [['xAxis', 0]] },
+  { id: 'sa-single', note: 'a single axis, [horizontal gradient, grey]',
+    option: { singleAxis: { type: 'value', min: 0, max: 100, top: 100, bottom: 100, splitLine: { show: false }, splitArea: { show: true, areaStyle: { color: [GR_H, '#dddddd'] } } },
+      series: [{ type: 'scatter', coordinateSystem: 'singleAxis', symbolSize: 0, data: [50] }] }, axes: [['singleAxis', 0]] },
+  { id: 'sa-angle', note: 'a polar angle axis, [vertical gradient, grey]: the bands of each colour merged, one ramp over their box',
+    option: { polar: { radius: ['20%', '70%'] }, angleAxis: { type: 'value', min: 0, max: 360, interval: 60, splitLine: { show: false }, axisLine: { show: false }, axisTick: { show: false }, axisLabel: { show: false },
+      splitArea: { show: true, areaStyle: { color: [GR_V, '#dddddd'] } } }, radiusAxis: { type: 'value', show: false },
+      series: [Object.assign({ type: 'line', coordinateSystem: 'polar', data: [[1, 10]] }, HIDDEN)] }, axes: [['angleAxis', 0]] },
+  { id: 'sa-radius', note: 'a polar radius axis, [horizontal gradient, grey]: the rings of each colour merged',
+    option: { polar: { radius: ['0%', '70%'] }, angleAxis: { type: 'value', show: false }, radiusAxis: { type: 'value', min: 0, max: 100, interval: 20, splitLine: { show: false },
+      axisLine: { show: false }, axisTick: { show: false }, axisLabel: { show: false }, splitArea: { show: true, areaStyle: { color: [GR_H, '#dddddd'] } } },
+      series: [Object.assign({ type: 'line', coordinateSystem: 'polar', data: [[10, 1]] }, HIDDEN)] }, axes: [['radiusAxis', 0]] },
+  { id: 'sa-radar', note: 'a radar (polygon), [vertical gradient, grey]: RadarView merges the bands of one colour',
+    option: { radar: { radius: '70%', splitNumber: 4, axisName: { show: false }, axisLine: { show: false }, splitLine: { show: false },
+      splitArea: { show: true, areaStyle: { color: [GR_V, '#dddddd'] } }, indicator: [{ max: 10 }, { max: 10 }, { max: 10 }, { max: 10 }, { max: 10 }] },
+      series: [{ type: 'radar', symbol: 'none', lineStyle: { opacity: 0 }, data: [{ value: [1, 1, 1, 1, 1] }] }] }, axes: [['radar', 0]] },
+  { id: 'sa-radar-circle', note: 'a radar (circle), one horizontal gradient for every ring',
+    option: { radar: { shape: 'circle', radius: '70%', splitNumber: 4, axisName: { show: false }, axisLine: { show: false }, splitLine: { show: false },
+      splitArea: { show: true, areaStyle: { color: GR_H } }, indicator: [{ max: 10 }, { max: 10 }, { max: 10 }, { max: 10 }] },
+      series: [{ type: 'radar', symbol: 'none', lineStyle: { opacity: 0 }, data: [{ value: [1, 1, 1, 1] }] }] }, axes: [['radar', 0]], rings: true },
+];
+function gradOver(fill, r) {
+  return [fill.x * r.width + r.x, fill.y * r.height + r.y, fill.x2 * r.width + r.x, fill.y2 * r.height + r.y];
+}
+function runSplitAreas() {
+  return SA_CASES.map(def => {
+    const chart = mk();
+    try {
+      chart.setOption(Object.assign({ animation: false }, JSON.parse(JSON.stringify(def.option))));
+      frame(chart);
+      const all = chart.getZr().storage.getDisplayList(true);
+      const els = [];
+      // a circle radar's rings meet inside one merged path; the port draws
+      // a ring an element (no seam upstream, an antialiased one there):
+      // pixels within 1.5 px of a ring are not sampled
+      let nearRing = () => false;
+      if (def.rings) {
+        const rc = chart.getModel().getComponent('radar', 0).coordinateSystem;
+        const radii = rc.getIndicatorAxes()[0].getTicksCoords().map(c => c.coord);
+        nearRing = (x, y) => radii.some(r => Math.abs(Math.hypot(x - rc.cx, y - rc.cy) - r) < 1.5);
+      }
+      for (const [mt, idx] of def.axes) {
+        const view = chart.getViewOfComponentModel(chart.getModel().getComponent(mt, idx));
+        view.group.traverse(el => {
+          if (el.isGroup || !el.style || !el.style.fill || typeof el.style.fill !== 'object' || !el.style.fill.colorStops) return;
+          const r = el.getBoundingRect();
+          const g = gradOver(el.style.fill, r);
+          // pixels whose centre only this element covers, on a grid over its box
+          const samples = [];
+          for (let iy = 1; iy < 8; iy++) {
+            for (let ix = 1; ix < 8; ix++) {
+              const px = Math.floor(r.x + r.width * ix / 8), py = Math.floor(r.y + r.height * iy / 8);
+              let mine = true;
+              for (const [dx, dy] of [[0.5, 0.5], [0, 0], [1, 0], [0, 1], [1, 1]]) {
+                if (!el.contain(px + dx, py + dy) || nearRing(px + dx, py + dy)) mine = false;
+                for (const o of all) if (o !== el && !o.ignore && !o.invisible && o.contain && o.contain(px + dx, py + dy)) mine = false;
+              }
+              if (mine) samples.push([px, py]);
+            }
+          }
+          els.push({ kind: el.type, rect: [hex(r.x), hex(r.y), hex(r.width), hex(r.height)], gradient: g.map(hex),
+            stops: el.style.fill.colorStops.map(s => [s.offset, s.color]), samples });
+        });
+      }
+      return { id: def.id, note: def.note, option: def.option, elements: els };
+    }
+    finally {
+      chart.dispose();
+    }
+  });
+}
+
 function generate() {
   const types = publicTypes();
   return {
@@ -308,6 +399,7 @@ function generate() {
       cases: EVENT_CASES.map(c => runEventCase(c, types.pub)) },
     append: runAppend(),
     river: runRiverRemerge(),
+    splitArea: runSplitAreas(),
   };
 }
 
@@ -356,12 +448,22 @@ const guards = [
   { name: 'river: the same boundaryGap merged again is resolved at the new size; no boundaryGap keeps the px',
     ok: (s => s[1].gap[0] === s[0].gap[0] && s[2].gap[0] !== s[1].gap[0] && s[3].gap[0] === s[2].gap[0] && s[4].gap[0] === s[3].gap[0]
       && s[5].gap[0] === s[4].gap[0] && s[6].gap[0] !== s[5].gap[0])(out1.river.steps) },
+  { name: 'splitArea: a band per gradient Rect on the cartesian and single axes (two of four, four, five of ten)',
+    ok: (c => c('sa-value').elements.length === 2 && c('sa-value').elements.every(e => e.kind === 'rect')
+      && c('sa-category').elements.length === 4 && c('sa-single').elements.length >= 2)(id => out1.splitArea.find(x => x.id === id)) },
+  { name: 'splitArea: one merged path per colour on the polar axes',
+    ok: (c => c('sa-angle').elements.length === 1 && c('sa-angle').elements[0].kind === 'path'
+      && c('sa-radius').elements.length === 1)(id => out1.splitArea.find(x => x.id === id)) },
+  { name: 'splitArea: the radar merges too (one path per gradient colour)',
+    ok: (c => c('sa-radar').elements.length === 1 && c('sa-radar-circle').elements.length === 1)(id => out1.splitArea.find(x => x.id === id)) },
+  { name: 'splitArea: every element has pixels to sample', ok: out1.splitArea.every(c => c.elements.every(e => e.samples.length >= 4)) },
 ];
 out1.guards = guards.map(g => ({ name: g.name, ok: !!g.ok }));
 console.log('public: ' + ev.public.length + ' ' + JSON.stringify(ev.public));
 console.log('connectOnly: ' + JSON.stringify(ev.connectOnly) + ' legacy: ' + JSON.stringify(ev.legacy));
 ev.cases.forEach(c => c.steps.forEach((s, k) => console.log(c.id + ' ' + k + ': ' + JSON.stringify(s.log.filter(l => l[0] === 'plain').map(l => l[1] + ' ' + l[2])))));
 console.log('river: ' + JSON.stringify(out1.river.steps.map(s => [s.what, s.gap, s.rectH])));
+out1.splitArea.forEach(c => console.log(c.id + ': ' + JSON.stringify(c.elements.map(e => [e.kind, e.rect, e.gradient, e.samples.length]))));
 console.log('append: ' + JSON.stringify(out1.append.appended.map(r => r && [r.symbol, r.fill, r.label])));
 const bad = out1.guards.filter(q => !q.ok);
 out1.guards.forEach(q => console.log('guard ' + (q.ok ? 'ok  ' : 'FAIL') + ' ' + q.name));

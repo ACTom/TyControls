@@ -71,6 +71,36 @@ begin
   end;
 end;
 
+{ [R5-J] A SPLIT AREA'S GRADIENT, its path already in the painter: the
+  canvas gradient over ABox -- the band's own rect where the axis adds a
+  Rect per band (cartesian, single), the merged path's box where it merges
+  the bands of one colour (polar) -- at AOpacity (areaStyle.opacity, NaN for
+  none) as the canvas' globalAlpha }
+procedure TyFillAxisGradient(P: TTyPainter; const AGrad: TTyChartGradient;
+  const ABox: TTyXYWH; AOpacity: Double);
+var
+  gx1, gy1, gx2, gy2, gr: Double;
+  stops: array of TTyGradStop;
+  k: Integer;
+begin
+  if (AGrad.Kind = cgkNone) or (Length(AGrad.Stops) = 0) then Exit;
+  TyResolveGradientXYWH(AGrad, ABox, gx1, gy1, gx2, gy2, gr);
+  stops := nil;
+  SetLength(stops, Length(AGrad.Stops));
+  for k := 0 to High(stops) do
+  begin
+    stops[k].Color := TTyColor(AGrad.Stops[k].Color);
+    stops[k].Pos := AGrad.Stops[k].Offset;
+  end;
+  P.SaveState;
+  try
+    if not IsNan(AOpacity) and (AOpacity < 1) then P.SetElementAlpha(Max(0.0, AOpacity));
+    P.FillPathGradient(stops, gx1, gy1, gx2, gy2, gr);
+  finally
+    P.RestoreState;
+  end;
+end;
+
 { a fill's colour at AOpacity more (areaStyle.opacity over a band whose
   colour has an alpha of its own), NaN for none written [R5-B] }
 function TyAxisAreaAlpha(AColour: TTyColor; AOpacity: Double): TTyColor;
@@ -104,6 +134,8 @@ var
   furn: TTyAxisFurniture;
   areaS: TTyStyleSet;
   bandLo, bandHi: Double;
+  { [R5-J] a gradient band's rect }
+  gbox: TTyXYWH;
   { the split colours [Batch 101] }
   ink: Integer;
   areaFill: TTyFill;
@@ -495,6 +527,41 @@ begin
       areaFill.Color := TyAxisAreaAlpha(areaFill.Color, furn.AreaOpacity);
       bandLo := spec^.SplitAreaMarks[i].Coord;
       bandHi := spec^.SplitAreaMarks[i + 1].Coord;
+      { [R5-J] A GRADIENT: rectCoordAxisBuildSplitArea adds a Rect per band,
+        so the ramp spans the band's own rect -- at the band's float edges,
+        the grid's rect across [was: the first stop, every band] }
+      if (Length(spec^.SplitAreaInks) > 0)
+        and (spec^.SplitAreaInks[ink].Grad.Kind <> cgkNone) then
+      begin
+        if ProxArea('area_' + TyJsNumberToString(spec^.SplitAreaMarks[i].Value), areaR) then
+          gbox := TyRectToXYWH(TyRectF(areaR.Left, areaR.Top, areaR.Right, areaR.Bottom))
+        else if horiz then
+        begin
+          gbox.X := bandLo;
+          gbox.Y := APlot.Top;
+          gbox.W := bandHi - bandLo;
+          gbox.H := APlot.Bottom - APlot.Top;
+        end
+        else
+        begin
+          gbox.X := APlot.Left;
+          gbox.Y := bandLo;
+          gbox.W := APlot.Right - APlot.Left;
+          gbox.H := bandHi - bandLo;
+        end;
+        APainter.BeginPath;
+        APainter.MoveTo(gbox.X, gbox.Y);
+        APainter.LineTo(gbox.X + gbox.W, gbox.Y);
+        APainter.LineTo(gbox.X + gbox.W, gbox.Y + gbox.H);
+        APainter.LineTo(gbox.X, gbox.Y + gbox.H);
+        APainter.ClosePath;
+        { a rect of a negative extent (an inverse axis): its box is the
+          normalised one, as the canvas fills it }
+        TyFillAxisGradient(APainter, spec^.SplitAreaInks[ink].Grad,
+          TyRectToXYWH(TyRectF(Min(gbox.X, gbox.X + gbox.W), Min(gbox.Y, gbox.Y + gbox.H),
+            Max(gbox.X, gbox.X + gbox.W), Max(gbox.Y, gbox.Y + gbox.H))), furn.AreaOpacity);
+        Continue;
+      end;
       { where its groupTransition has it now [F3b] }
       if ProxArea('area_' + TyJsNumberToString(spec^.SplitAreaMarks[i].Value), areaR) then
         APainter.FillBackground(areaR, areaFill, 0)
