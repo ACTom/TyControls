@@ -149,6 +149,8 @@ type
   TTyMultiTrackBarBase = class(TTyCustomControl)
   private
     FValues: array of Integer;
+    FDeferChange: Integer;     // > 0 while a descendant rebuilds the thumbs from its items
+    FChangePending: Boolean;   // ... and the values changed meanwhile: OnChange is owed
     FMin, FMax, FMinGap: Integer;
     FSelectedThumb: Integer;
     FOrientation: TTyTrackOrientation;
@@ -307,6 +309,11 @@ type
     procedure DoThumbChange(AIndex: Integer); virtual;
     procedure DoThumbSelect(AIndex: Integer); virtual;
     procedure DoChange; virtual;
+    { #182: around a rebuild of the thumbs from the items, OnChange waits for the end. Fired in
+      the middle, a handler's add, delete or value was swallowed by the rebuild still running:
+      the thumbs fell out of step with the items, and a later removal raised EListError. }
+    procedure BeginDeferChange;
+    procedure EndDeferChange;
     procedure Loaded; override;
 
     { ---- The final classes' data, per thumb and per segment. ---- }
@@ -1209,7 +1216,22 @@ begin
       end;
   if same then Exit;
   Invalidate;
-  DoChange;
+  if FDeferChange > 0 then FChangePending := True else DoChange;
+end;
+
+procedure TTyMultiTrackBarBase.BeginDeferChange;
+begin
+  Inc(FDeferChange);
+end;
+
+procedure TTyMultiTrackBarBase.EndDeferChange;
+begin
+  if FDeferChange > 0 then Dec(FDeferChange);
+  if (FDeferChange = 0) and FChangePending then
+  begin
+    FChangePending := False;
+    DoChange;
+  end;
 end;
 
 function TTyMultiTrackBarBase.ClampThumbValue(AIndex, AValue: Integer): Integer;
@@ -2838,7 +2860,7 @@ end;
 procedure TTyCustomRangeTrackBar.RangesChanged;
 var
   v: array of Integer;
-  i, selID, prev: Integer;
+  i, selID, prev, sel: Integer;
   it: TCollectionItem;
 begin
   if (FRanges = nil) or FSyncing or (csLoading in ComponentState)
@@ -2846,32 +2868,46 @@ begin
     Exit;
   selID := FSelectedID;
   prev := FSelectedThumb;
-  FSyncing := True;
+  sel := -1;
+  BeginDeferChange;
   try
-    { In order first, so each range keeps its own values: the values are paired off by position
-      below, and a range sorted in ahead of others would otherwise take over their values. }
-    SortRangeItems;
-    v := nil;
-    SetLength(v, 2 * FRanges.Count);
-    for i := 0 to FRanges.Count - 1 do
-    begin
-      v[2 * i] := FRanges[i].FLow;
-      v[2 * i + 1] := FRanges[i].FHigh;
+    FSyncing := True;
+    try
+      { In order first, so each range keeps its own values: the values are paired off by position
+        below, and a range sorted in ahead of others would otherwise take over their values. }
+      SortRangeItems;
+      v := nil;
+      SetLength(v, 2 * FRanges.Count);
+      for i := 0 to FRanges.Count - 1 do
+      begin
+        v[2 * i] := FRanges[i].FLow;
+        v[2 * i + 1] := FRanges[i].FHigh;
+      end;
+      { Held aside while the thumbs are rebuilt: a shorter list would drop it with an
+        OnThumbSelect(-1) of its own before the real answer below. }
+      FSelectedThumb := -1;
+      SetThumbValues(v);
+    finally
+      FSyncing := False;
     end;
-    { Held aside while the thumbs are rebuilt: a shorter list would drop it with an
-      OnThumbSelect(-1) of its own before the real answer below. }
-    FSelectedThumb := -1;
-    SetThumbValues(v);
+    { The selection goes with its range to wherever the sort put it, the same end of it; a range
+      that is gone takes the selection along. In place before OnChange, so a handler sees the
+      thumbs and the selection agree; reported after it, as before. }
+    it := nil;
+    if selID >= 0 then it := FRanges.FindItemID(selID);
+    if it <> nil then sel := 2 * it.Index + Ord(FSelectedHigh);
+    if sel >= ThumbCount then sel := -1;
+    FSelectedThumb := sel;
   finally
-    FSyncing := False;
+    EndDeferChange;   // #182: the rebuild is over -- a handler's change goes through in full
   end;
-  FSelectedThumb := prev;
-  { The selection goes with its range to wherever the sort put it, the same end of it -- one
-    OnThumbSelect if that is a new index; a range that is gone takes the selection along. }
-  it := nil;
-  if selID >= 0 then it := FRanges.FindItemID(selID);
-  if it <> nil then SelectedThumb := 2 * it.Index + Ord(FSelectedHigh)
-  else SelectedThumb := -1;
+  { One OnThumbSelect if that is a new index -- unless the handler's own change moved the
+    selection again, which has reported itself. }
+  if (sel <> prev) and (FSelectedThumb = sel) then
+  begin
+    Invalidate;
+    DoThumbSelect(sel);
+  end;
 end;
 
 procedure TTyCustomRangeTrackBar.DoThumbSelect(AIndex: Integer);
@@ -2972,7 +3008,7 @@ end;
 
 function TTyCustomRangeTrackBar.UserAddThumb(AValue: Integer): Integer;
 var
-  n, k, gap, lo, hi, a, b: Integer;
+  n, k, gap, lo, hi, a, b, id: Integer;
   r: TTyTrackRange;
 begin
   Result := -1;
@@ -2998,9 +3034,13 @@ begin
     r := FRanges.Add;
     r.FLow := a;
     r.FHigh := b;
+    id := r.ID;
   finally
     FRanges.EndUpdate;
   end;
+  { #182: found again by its ID -- the OnChange that EndUpdate fires may have deleted it. }
+  r := TTyTrackRange(FRanges.FindItemID(id));
+  if r = nil then Exit;
   Result := 2 * r.Index;
   if Result + 1 >= ThumbCount then Result := -1;
 end;
@@ -3296,7 +3336,7 @@ end;
 
 procedure TTyCustomMultiTrackBar.ThumbsChanged;
 var
-  selID, prev: Integer;
+  selID, prev, sel: Integer;
   it: TCollectionItem;
 begin
   if (FThumbs = nil) or FSyncing or (csLoading in ComponentState)
@@ -3304,24 +3344,35 @@ begin
     Exit;
   selID := FSelectedID;
   prev := FSelectedThumb;
-  FSyncing := True;
+  sel := -1;
+  BeginDeferChange;
   try
-    { In order first, so each thumb's colour, hint and class stay with its value. }
-    SortThumbItems;
-    { Held aside while the thumbs are rebuilt: a shorter list would drop it with an
-      OnThumbSelect(-1) of its own before the real answer below. }
-    FSelectedThumb := -1;
-    PushThumbItems;
+    FSyncing := True;
+    try
+      { In order first, so each thumb's colour, hint and class stay with its value. }
+      SortThumbItems;
+      { Held aside while the thumbs are rebuilt: a shorter list would drop it with an
+        OnThumbSelect(-1) of its own before the real answer below. }
+      FSelectedThumb := -1;
+      PushThumbItems;
+    finally
+      FSyncing := False;
+    end;
+    { The selection goes with its item to wherever the sort put it; an item that is gone takes
+      the selection along. In place before OnChange, reported after it (see RangesChanged). }
+    it := nil;
+    if selID >= 0 then it := FThumbs.FindItemID(selID);
+    if it <> nil then sel := it.Index;
+    if sel >= ThumbCount then sel := -1;
+    FSelectedThumb := sel;
   finally
-    FSyncing := False;
+    EndDeferChange;   // #182: see RangesChanged
   end;
-  FSelectedThumb := prev;
-  { The selection goes with its item to wherever the sort put it -- one OnThumbSelect if that
-    is a new index; an item that is gone takes the selection along. }
-  it := nil;
-  if selID >= 0 then it := FThumbs.FindItemID(selID);
-  if it <> nil then SelectedThumb := it.Index
-  else SelectedThumb := -1;
+  if (sel <> prev) and (FSelectedThumb = sel) then
+  begin
+    Invalidate;
+    DoThumbSelect(sel);
+  end;
 end;
 
 procedure TTyCustomMultiTrackBar.ThumbIndexMoved(AFrom, ATo: Integer);
@@ -3341,16 +3392,20 @@ end;
 function TTyCustomMultiTrackBar.AddUserThumb(AValue: Integer): Integer;
 var
   it: TTyTrackThumbItem;
+  id: Integer;
 begin
   { One change for the collection: added and given its value, then put in order. }
   FThumbs.BeginUpdate;
   try
     it := FThumbs.Add;
     it.FValue := AValue;
+    id := it.ID;
   finally
     FThumbs.EndUpdate;
   end;
-  Result := it.Index;
+  { #182: found again by its ID -- the OnChange that EndUpdate fires may have deleted it. }
+  it := TTyTrackThumbItem(FThumbs.FindItemID(id));
+  if it = nil then Result := -1 else Result := it.Index;
 end;
 
 procedure TTyCustomMultiTrackBar.RemoveThumb(AIndex: Integer);
@@ -3542,6 +3597,7 @@ function TTyCustomGradientTrackBar.AddUserThumb(AValue: Integer): Integer;
 var
   it: TTyTrackThumbItem;
   c: TColor;
+  id: Integer;
 begin
   c := ColorAtValue(AValue);
   { One change for the collection: added with its value and colour, then put in order. }
@@ -3550,10 +3606,13 @@ begin
     it := Thumbs.Add;
     it.Value := AValue;
     it.Color := c;
+    id := it.ID;
   finally
     Thumbs.EndUpdate;
   end;
-  Result := it.Index;
+  { #182: see TTyCustomMultiTrackBar.AddUserThumb }
+  it := TTyTrackThumbItem(Thumbs.FindItemID(id));
+  if it = nil then Result := -1 else Result := it.Index;
 end;
 
 function TTyCustomGradientTrackBar.Gradient: TTyGradStops;
