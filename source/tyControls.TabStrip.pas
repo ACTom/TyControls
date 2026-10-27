@@ -580,6 +580,9 @@ type
 
 implementation
 
+type
+  TTyDialogCharAccess = class(TControl);   // DialogChar is protected
+
 { TTyCustomTabStrip }
 
 constructor TTyCustomTabStrip.Create(AOwner: TComponent);
@@ -627,7 +630,9 @@ end;
 function TTyCustomTabStrip.DialogChar(var Message: TLMKey): Boolean;
 var I: Integer;
 begin
-  if Enabled then   // match the Enabled gate on MouseDown/KeyDown + the sibling controls
+  { #142: IsEnabled, not Enabled -- inside a disabled panel the strip is disabled too, and its
+    tab accelerators went on switching pages. }
+  if IsEnabled and TyShownInForm(Self) then
     for I := 0 to GetTabCount - 1 do
       if GetTabVisibleAt(I)         // a hidden tab shows no label, so no discoverable accel
         and TyIsAccelKey(Message, GetTabCaption(I)) then
@@ -635,7 +640,13 @@ begin
         SetTabIndex(I);
         Exit(True);
       end;
-  Result := inherited DialogChar(Message);
+  { #142: then the children shown, only. TWinControl asks every child, so a page control's
+    hidden pages answered the Alt keys of the controls on them, taking them from the page on
+    screen; LCL asks the active page alone. }
+  for I := 0 to ControlCount - 1 do
+    if Controls[I].Visible and TTyDialogCharAccess(Controls[I]).DialogChar(Message) then
+      Exit(True);
+  Result := False;
 end;
 
 { Default virtual hooks. Subclasses override these to wire real tab data:

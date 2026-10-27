@@ -176,7 +176,7 @@ end;
 
 function TTyCheckBox.DialogChar(var Message: TLMKey): Boolean;
 begin
-  if IsEnabled and TyIsAccelKey(Message, Caption) then
+  if IsEnabled and TyShownInForm(Self) and TyIsAccelKey(Message, Caption) then   { #142 }
   begin
     if CanFocus then SetFocus;
     Click;
@@ -498,7 +498,7 @@ end;
 
 function TTyRadioButton.DialogChar(var Message: TLMKey): Boolean;
 begin
-  if IsEnabled and TyIsAccelKey(Message, Caption) then
+  if IsEnabled and TyShownInForm(Self) and TyIsAccelKey(Message, Caption) then   { #142 }
   begin
     if CanFocus then SetFocus;
     Click;
