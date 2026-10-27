@@ -21386,6 +21386,858 @@
    ]
   },
   {
+   "id": "sa-dur-string",
+   "group": "stanim",
+   "note": "stateAnimation.duration '400': zrender's keyframe takes the string as a number -- a 400 ms tween",
+   "W": 400,
+   "H": 300,
+   "option": {
+    "animation": true,
+    "animationDuration": 10,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       10,
+       20
+      ],
+      "itemStyle": {
+       "color": "#3366cc"
+      },
+      "emphasis": {
+       "itemStyle": {
+        "color": "#ff0000"
+       }
+      },
+      "stateAnimation": {
+       "duration": "400",
+       "easing": "linear"
+      }
+     }
+    ]
+   },
+   "probes": [
+    "bfill"
+   ],
+   "events": [
+    {
+     "t": 2999,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#3366cc",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 3000,
+     "do": "act",
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     }
+    },
+    {
+     "t": 3000,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#3366cc",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3001,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(51,102,204,1)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3050,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(75,89,179,1)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3100,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(101,76,153,1)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3200,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(152,51,102,1)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3300,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(203,25,51,1)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3399,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(253,0,1,1)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3400,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(254,0,0,1)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3401,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(255,0,0,1)",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 4000,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(255,0,0,1)",
+       "n": 0
+      }
+     }
+    }
+   ],
+   "rows": [
+    0
+   ]
+  },
+  {
+   "id": "sa-delay-string",
+   "group": "stanim",
+   "note": "stateAnimation.delay '100': Clip's start is globalTime + '100', a string -- the elapsed time is hugely negative and the tween stays at its start",
+   "W": 400,
+   "H": 300,
+   "option": {
+    "animation": true,
+    "animationDuration": 10,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       10,
+       20
+      ],
+      "itemStyle": {
+       "color": "#3366cc"
+      },
+      "emphasis": {
+       "itemStyle": {
+        "color": "#ff0000"
+       }
+      },
+      "stateAnimation": {
+       "duration": 200,
+       "easing": "linear",
+       "delay": "100"
+      }
+     }
+    ]
+   },
+   "probes": [
+    "bfill"
+   ],
+   "events": [
+    {
+     "t": 2999,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#3366cc",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 3000,
+     "do": "act",
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     }
+    },
+    {
+     "t": 3000,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#3366cc",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3001,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(51,102,204,1)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3050,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(51,102,204,1)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3100,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(51,102,204,1)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3200,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(51,102,204,1)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3300,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(51,102,204,1)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3399,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(51,102,204,1)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3400,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(51,102,204,1)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3401,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(51,102,204,1)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 4000,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(51,102,204,1)",
+       "n": 1
+      }
+     }
+    }
+   ],
+   "rows": [
+    0
+   ]
+  },
+  {
+   "id": "sa-delay-number",
+   "group": "stanim",
+   "note": "stateAnimation.delay 100: the tween waits 100 ms",
+   "W": 400,
+   "H": 300,
+   "option": {
+    "animation": true,
+    "animationDuration": 10,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       10,
+       20
+      ],
+      "itemStyle": {
+       "color": "#3366cc"
+      },
+      "emphasis": {
+       "itemStyle": {
+        "color": "#ff0000"
+       }
+      },
+      "stateAnimation": {
+       "duration": 200,
+       "easing": "linear",
+       "delay": 100
+      }
+     }
+    ]
+   },
+   "probes": [
+    "bfill"
+   ],
+   "events": [
+    {
+     "t": 2999,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#3366cc",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 3000,
+     "do": "act",
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     }
+    },
+    {
+     "t": 3000,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#3366cc",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3001,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(51,102,204,1)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3050,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(51,102,204,1)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3100,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(51,102,204,1)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3200,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(151,51,103,1)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3300,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(253,0,1,1)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3399,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(255,0,0,1)",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 3400,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(255,0,0,1)",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 3401,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(255,0,0,1)",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 4000,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(255,0,0,1)",
+       "n": 0
+      }
+     }
+    }
+   ],
+   "rows": [
+    0
+   ]
+  },
+  {
+   "id": "sa-delay-fn",
+   "group": "stanim",
+   "note": "stateAnimation.delay a function: Clip's start is globalTime plus a function -- not a number",
+   "W": 400,
+   "H": 300,
+   "option": {
+    "animation": true,
+    "animationDuration": 10,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       10,
+       20
+      ],
+      "itemStyle": {
+       "color": "#3366cc"
+      },
+      "emphasis": {
+       "itemStyle": {
+        "color": "#ff0000"
+       }
+      },
+      "stateAnimation": {
+       "duration": 200,
+       "easing": "linear",
+       "delay": {
+        "$fn": "idx*100"
+       }
+      }
+     }
+    ]
+   },
+   "probes": [
+    "bfill"
+   ],
+   "events": [
+    {
+     "t": 2999,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#3366cc",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 3000,
+     "do": "act",
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     }
+    },
+    {
+     "t": 3000,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#3366cc",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3001,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(0,0,0,NaN)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3050,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(0,0,0,NaN)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3100,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(0,0,0,NaN)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3200,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(0,0,0,NaN)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3300,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(0,0,0,NaN)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3399,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(0,0,0,NaN)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3400,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(0,0,0,NaN)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 3401,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(0,0,0,NaN)",
+       "n": 1
+      }
+     }
+    },
+    {
+     "t": 4000,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "rgba(0,0,0,NaN)",
+       "n": 1
+      }
+     }
+    }
+   ],
+   "rows": [
+    0
+   ]
+  },
+  {
+   "id": "sa-dur-fn",
+   "group": "stanim",
+   "note": "stateAnimation.duration a function: not above 0 -- no transition, the state at once",
+   "W": 400,
+   "H": 300,
+   "option": {
+    "animation": true,
+    "animationDuration": 10,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       10,
+       20
+      ],
+      "itemStyle": {
+       "color": "#3366cc"
+      },
+      "emphasis": {
+       "itemStyle": {
+        "color": "#ff0000"
+       }
+      },
+      "stateAnimation": {
+       "duration": {
+        "$fn": "idx*100"
+       },
+       "easing": "linear"
+      }
+     }
+    ]
+   },
+   "probes": [
+    "bfill"
+   ],
+   "events": [
+    {
+     "t": 2999,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#3366cc",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 3000,
+     "do": "act",
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     }
+    },
+    {
+     "t": 3000,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#ff0000",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 3001,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#ff0000",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 3050,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#ff0000",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 3100,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#ff0000",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 3200,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#ff0000",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 3300,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#ff0000",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 3399,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#ff0000",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 3400,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#ff0000",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 3401,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#ff0000",
+       "n": 0
+      }
+     }
+    },
+    {
+     "t": 4000,
+     "do": "sample",
+     "rec": {
+      "bf0/0": {
+       "fill": "#ff0000",
+       "n": 0
+      }
+     }
+    }
+   ],
+   "rows": [
+    0
+   ]
+  },
+  {
    "id": "fn-update",
    "group": "funnel",
    "note": "a merge changes the values (the order changes): each piece updateProps its opacity and its four points, its outer label's style x / y (update timing, its row)",

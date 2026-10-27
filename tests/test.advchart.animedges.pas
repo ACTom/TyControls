@@ -62,6 +62,7 @@ type
     procedure TestBarsOnAPolarAsUpstream;
     procedure TestLabelLinesAsUpstream;
     procedure TestAVisualMapsHandleLabelsFadeAsUpstream;
+    procedure TestStateAnimationsFormsAsUpstream;
   end;
 
 implementation
@@ -520,6 +521,23 @@ begin
             leaf.Strings['stroke']]));
       end;
     end
+    else if pre = 'bf' then
+    begin
+      { a bar's fill as drawn now; a fill that is no colour upstream (a
+        tween to not-a-number) is not compared }
+      if not RoleEl(s, idx, carBar, el) then
+      begin
+        Bad(name + ': not drawn');
+        Continue;
+      end;
+      if TyTryParseChartColor(leaf.Strings['fill'], c) and (Pos('NaN', leaf.Strings['fill']) = 0) then
+      begin
+        Inc(FCompared);
+        if (el.Style.FillColor and $FFFFFF) <> (c and $FFFFFF) then
+          Bad(Format('%s fill %s, upstream %s', [name, IntToHex(el.Style.FillColor, 8),
+            leaf.Strings['fill']]));
+      end;
+    end
     else if pre = 'vl' then
       { a visual map's handle label: its opacity now (its blur's fade) }
       SameNum(name + ' opacity', FChart.VmHandleLabelOpacity(s, idx), leaf.Find('op'))
@@ -699,6 +717,11 @@ end;
 procedure TAdvChartAnimEdgesOracleTest.TestAVisualMapsHandleLabelsFadeAsUpstream;
 begin
   RunGroup('vmap', 20);
+end;
+
+procedure TAdvChartAnimEdgesOracleTest.TestStateAnimationsFormsAsUpstream;
+begin
+  RunGroup('stanim', 40);
 end;
 
 initialization

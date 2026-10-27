@@ -322,6 +322,18 @@ const PROBES = {
       rec['vl0/' + h] = { op: opOf(lb), blur: lb.hoverState === 1, n: nClip(lb) };
     });
   },
+  // a bar series' rects: the fill they are drawn with now (a state's tween)
+  bfill(chart, rec, c) {
+    chart.getModel().eachSeries(sm => {
+      if (sm.subType !== 'bar') return;
+      const data = sm.getData();
+      rowsOf(c, data).forEach(i => {
+        const el = data.getItemGraphicEl(i);
+        if (!el) return;
+        rec['bf' + sm.seriesIndex + '/' + i] = { fill: String(el.style.fill), n: nClip(el) };
+      });
+    });
+  },
   // a funnel's pieces and their labels
   funnel(chart, rec, c) {
     chart.getModel().eachSeries(sm => {
@@ -505,6 +517,22 @@ add('vmap', 'vm-blur', "the pointer over a continuous visualMap's bar shows the 
   ['vmlab'],
   [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'move', x: 38, y: 209 }, ...after([0, 1, 50, 100, 199, 200, 201], T1),
     { t: T1 + 1000, do: 'move', x: 300, y: 50 }, ...after([0, 1, 100, 201], T1 + 1000)]);
+
+// ---- stateAnimation's forms ----
+const SA = sa => ({ animation: true, animationDuration: 10, xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: { type: 'value' },
+  series: [{ type: 'bar', data: [10, 20], itemStyle: { color: '#3366cc' }, emphasis: { itemStyle: { color: '#ff0000' } }, stateAnimation: sa }] });
+const SAEV = [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'act', action: { type: 'highlight', seriesIndex: 0, dataIndex: 0 } },
+  ...after([0, 1, 50, 100, 200, 300, 399, 400, 401, 1000], T1)];
+add('stanim', 'sa-dur-string', "stateAnimation.duration '400': zrender's keyframe takes the string as a number -- a 400 ms tween",
+  SA({ duration: '400', easing: 'linear' }), ['bfill'], SAEV, { rows: [0] });
+add('stanim', 'sa-delay-string', "stateAnimation.delay '100': Clip's start is globalTime + '100', a string -- the elapsed time is hugely negative and the tween stays at its start",
+  SA({ duration: 200, easing: 'linear', delay: '100' }), ['bfill'], SAEV, { rows: [0] });
+add('stanim', 'sa-delay-number', "stateAnimation.delay 100: the tween waits 100 ms",
+  SA({ duration: 200, easing: 'linear', delay: 100 }), ['bfill'], SAEV, { rows: [0] });
+add('stanim', 'sa-delay-fn', "stateAnimation.delay a function: Clip's start is globalTime plus a function -- not a number",
+  SA({ duration: 200, easing: 'linear', delay: { $fn: 'idx*100' } }), ['bfill'], SAEV, { rows: [0] });
+add('stanim', 'sa-dur-fn', "stateAnimation.duration a function: not above 0 -- no transition, the state at once",
+  SA({ duration: { $fn: 'idx*100' }, easing: 'linear' }), ['bfill'], SAEV, { rows: [0] });
 
 // ---- funnel ----
 const FN = (data, extra, s) => Object.assign({ animation: true,

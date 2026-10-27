@@ -3256,12 +3256,22 @@ begin
   d := Find('duration');
   if d = nil then dur := 300
   else if d.JSONType = jtNumber then dur := d.AsFloat
+  { [R5-I] a string: `duration > 0` and the keyframe's time read it as a
+    number (a named function, '@...', is no number) [was: no transition] }
+  else if (d.JSONType = jtString) and (Copy(d.AsString, 1, 1) <> '@') then
+    dur := TyJsToNumber(d.AsString)
   else dur := NaN;
   d := Find('easing');
   if (d <> nil) and (d.JSONType = jtString) then easing := d.AsString
   else easing := 'cubicOut';
   d := Find('delay');
   if (d <> nil) and (d.JSONType = jtNumber) then delay := d.AsFloat
+  { [R5-I] a string that is not empty: Clip starts at globalTime + delay, a
+    string -- the digits run on after the time's and the tween waits for
+    ever at its start [was: no delay] }
+  else if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '')
+    and (Copy(d.AsString, 1, 1) <> '@') and not IsNan(TyJsToNumber('1' + d.AsString)) then
+    delay := Infinity
   else delay := 0;
   { a duration above 0 makes a stateTransition, anything else none }
   if IsNan(dur) or not (dur > 0) then Exit;
