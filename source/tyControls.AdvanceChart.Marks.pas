@@ -279,6 +279,10 @@ type
       just under the symbol's 100. No ripples when showEffectOn is not
       'render'. [Batch 71] }
     RippleShow: Boolean;
+    { [R5-C] showEffectOn anything but 'render': the ripples are built,
+      hidden, and run only while their symbol is emphasised
+      (EffectSymbol's onHoverStateChange) }
+    RippleOnHover: Boolean;
     { A DATA ITEM'S OWN symbol options, by raw row -- the series' spec with
       the item's keys read over it, arrays included (an item's symbolSize
       [w, h] and symbolOffset never reach the override table). [Batch 71] }
@@ -830,6 +834,7 @@ begin
     billions and never finished drawing.] }
   Result.HeatPadPx := 0;
   Result.RippleShow := False;
+  Result.RippleOnHover := False;
   Result.RippleNumber := 0;
   Result.RippleFill := False;
   Result.RippleHasColor := False;
@@ -2528,7 +2533,7 @@ begin
   ink := v.Fill;
   { THE RIPPLES FIRST, under the symbol: the same shape at the same size --
     upstream's first frame, a ripple at half the group's symbol-sized scale }
-  if AVisual.RippleShow then
+  if AVisual.RippleShow or AVisual.RippleOnHover then
   begin
     if AVisual.RippleHasColor then ink := AVisual.RippleColor;
     n := AVisual.RippleNumber;
@@ -2596,6 +2601,13 @@ begin
       rip.Z2 := 99;
       rip.Silent := True;
       rip.Caption.Text := '';
+      { [R5-C] a hover's ripple: none at rest, nothing armed -- the control
+        starts it when its symbol turns to emphasis (G[10] 1) }
+      if AVisual.RippleOnHover then
+      begin
+        rip.Ignore := True;
+        rip.Anim.G[10] := 1;
+      end;
       AList.Add(rip);
       Inc(Result);
     end;

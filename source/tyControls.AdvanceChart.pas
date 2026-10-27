@@ -1744,6 +1744,9 @@ type
     FAnim: TTyAnimation;
     FAnimSet: TTyChartAnimSet;
     FAnimBind: TTyChartAnimProxyArray;
+    { [R5-C] the hover ripples' symbols emphasised at the last sync,
+      'series:row' }
+    FRipHover: TTyStringArray;
     { THE STATE PROXIES by insertion index [Batch 94, AN3b]: the proxy each
       state element's states run on -- its role's, or one of the states'
       own; whether this build's states run through them; and an option
@@ -1967,6 +1970,11 @@ type
       a full update's previous list put back at once, then the element's
       list applied -- with a transition where upstream's would make one }
     procedure StAnimSync;
+    { [R5-C] AN effectScatter'S HOVER RIPPLES (EffectSymbol's
+      onHoverStateChange): a symbol that turned to emphasis since the last
+      sync starts its ripples now, one that turned back stops them; a ripple
+      is drawn while it runs }
+    procedure RippleHoverSync;
     procedure StAnimEl(var AEl: TTyStElement; AListIdx, ASeries, ARaw: Integer;
       const AName: string; AKind: Integer; const ACfg: TTyAnimCfg;
       AHasCfg: Boolean);

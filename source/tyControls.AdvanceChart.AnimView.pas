@@ -707,6 +707,13 @@ type
     function DetachProxy(ASeries, AIndex: Integer; const ARole: string): TTyChartAnimProxy;
     { a proxy of the states' own, keyed as given [Batch 94] }
     function MakeState(ASeries, AIndex: Integer; const ARole: string): TTyChartAnimProxy;
+    { [R5-C] AN effectScatter'S HOVER RIPPLE (G[10] 1): startEffectAnimation
+      for it now -- its proxy made, its two loops started (their first step
+      fixes their start) -- or the proxy it has; and stopEffectAnimation:
+      the proxy freed, its clips off the driver }
+    function StartHoverRipple(const AEl: TTyChartElement): TTyChartAnimProxy;
+    procedure StopHoverRipple(const AEl: TTyChartElement);
+    function HoverRippleOf(const AEl: TTyChartElement): TTyChartAnimProxy;
     { The enter animation of everything in AList that asks for one and has
       no proxy yet, as upstream's views start it. ASeries by series index. }
     procedure Arm(AList: TTyPaintList; const ASeries: TTyChartAnimSeriesArray);
@@ -2686,6 +2693,31 @@ begin
   if AAt < 0 then ;
 end;
 
+function TTyChartAnimSet.StartHoverRipple(const AEl: TTyChartElement): TTyChartAnimProxy;
+var props: TTyAnimProps;
+begin
+  Result := Find(AEl.Anim.Series, KeyIndexOf(AEl), TyChartAnimRoleKey(AEl));
+  if Result <> nil then Exit;
+  Result := Make(AEl.Anim.Series, KeyIndexOf(AEl), TyChartAnimRoleKey(AEl));
+  props := TyAnimProps([Num1('scaleX', 0.5), Num1('scaleY', 0.5),
+    Num1('style.opacity', 1)]);
+  Result.Attr(props);
+  Result.SetFinal(props);
+  StartRipple(Result, AEl);
+end;
+
+function TTyChartAnimSet.HoverRippleOf(const AEl: TTyChartElement): TTyChartAnimProxy;
+begin
+  Result := Find(AEl.Anim.Series, KeyIndexOf(AEl), TyChartAnimRoleKey(AEl));
+end;
+
+procedure TTyChartAnimSet.StopHoverRipple(const AEl: TTyChartElement);
+var p: TTyChartAnimProxy;
+begin
+  p := DetachProxy(AEl.Anim.Series, KeyIndexOf(AEl), TyChartAnimRoleKey(AEl));
+  p.Free;
+end;
+
 procedure TTyChartAnimSet.Arm(AList: TTyPaintList;
   const ASeries: TTyChartAnimSeriesArray);
 var
@@ -2708,6 +2740,8 @@ begin
     if Find(s, KeyIndexOf(el), role) <> nil then Continue;
     { the end label is armed by its clip }
     if el.Anim.Role = carEndLabel then Continue;
+    { [R5-C] a hover's ripple is started by its symbol's emphasis }
+    if (el.Anim.Role = carRipple) and (el.Anim.G[10] <> 0) then Continue;
     ArmOne(AList, i, el, ASeries[s]);
   end;
 end;
@@ -4265,6 +4299,9 @@ var
           { THE RIPPLES RUN ON through an update, unless the symbol's type,
             the period, the scale or the number changed
             (updateEffectAnimation's DIFFICULT_PROPS): then they start over }
+          { [R5-C] a hover's ripple: updateData stops the effect, and only
+            the next turn to emphasis starts it again }
+          if AEl.Anim.G[10] <> 0 then Exit;
           rk := TyChartAnimRoleKey(AEl);
           if (AOldRow >= 0) and OldEl(AOld, AOldRow, rk, oe)
             and (oe.Anim.G[3] = AEl.Anim.G[3]) and (oe.Anim.G[4] = AEl.Anim.G[4])

@@ -3612,14 +3612,20 @@ var
   c: TTyChartColor;
 begin
   AVisual.RippleShow := True;
+  AVisual.RippleOnHover := False;
   AVisual.RippleNumber := 3;
   AVisual.RippleFill := True;
   AVisual.RippleHasColor := False;
   node := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
   if (node = nil) or (node.JSONType <> jtObject) then Exit;
+  { anything but 'render' (null too) is the hover's: EffectSymbol starts the
+    ripples when the symbol turns to emphasis [R5-C: was none at all] }
   d := TJSONObject(node).Find('showEffectOn');
-  if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> 'render') then
+  if (d <> nil) and not ((d.JSONType = jtString) and (d.AsString = 'render')) then
+  begin
     AVisual.RippleShow := False;
+    AVisual.RippleOnHover := True;
+  end;
   re := TJSONObject(node).Find('rippleEffect');
   if (re = nil) or (re.JSONType <> jtObject) then Exit;
   d := TJSONObject(re).Find('number');

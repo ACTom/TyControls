@@ -3338,6 +3338,7 @@ begin
         FAnimStBind[FSt[s].AreaIdx[k]] := FAnimStBind[FSt[s].AreaIdx[0]];
     end;
   end;
+  RippleHoverSync;
   { A TRANSITION BEGAN: the series go to the dynamic layer until it ends
     (an armed option's flush decides that itself) }
   if (FAnim.ClipCount > clips) and not FAnimFlush then
@@ -3346,6 +3347,57 @@ begin
     FAnimContinuous := AnimLoopOnly;
     AnimArmTimer;
   end;
+end;
+
+procedure TTyCustomAdvanceChart.RippleHoverSync;
+var
+  k, j: Integer;
+  pe: PTyChartElement;
+  item: PTyStItem;
+  key: string;
+  seen: TTyStringArray;
+  emph, was, listed: Boolean;
+  p: TTyChartAnimProxy;
+begin
+  if (FPaintList = nil) or (FAnimSet = nil) then Exit;
+  seen := nil;
+  for k := 0 to FPaintList.Count - 1 do
+  begin
+    pe := FPaintList.Ref(k);
+    if (pe^.Anim.Role <> carRipple) or (pe^.Anim.G[10] = 0) then Continue;
+    item := StItemAt(pe^.Anim.Series, pe^.Anim.Index);
+    emph := (item <> nil) and (stnEmphasis in item^.Host.States);
+    key := IntToStr(pe^.Anim.Series) + ':' + IntToStr(pe^.Anim.Index);
+    was := False;
+    for j := 0 to High(FRipHover) do
+      if FRipHover[j] = key then was := True;
+    if emph then
+    begin
+      listed := False;
+      for j := 0 to High(seen) do
+        if seen[j] = key then listed := True;
+      if not listed then
+      begin
+        SetLength(seen, Length(seen) + 1);
+        seen[High(seen)] := key;
+      end;
+    end;
+    { the turn starts or stops it; staying as it was keeps what runs (an
+      update while emphasised has stopped it for good) }
+    if emph and not was then p := FAnimSet.StartHoverRipple(pe^)
+    else if (not emph) and was then
+    begin
+      if k <= High(FAnimBind) then FAnimBind[k] := nil;
+      FAnimSet.StopHoverRipple(pe^);
+      p := nil;
+    end
+    else p := FAnimSet.HoverRippleOf(pe^);
+    pe^.Ignore := p = nil;
+    if (p <> nil) and (Length(FAnimBind) < FPaintList.Count) then
+      SetLength(FAnimBind, FPaintList.Count);
+    if k <= High(FAnimBind) then FAnimBind[k] := p;
+  end;
+  FRipHover := seen;
 end;
 
 function TTyCustomAdvanceChart.StPeerAt(ASeriesIndex, AInnerRow: Integer): PTyStItem;
