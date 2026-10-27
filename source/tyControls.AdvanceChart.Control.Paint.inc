@@ -956,7 +956,14 @@ begin
     LazyUpdateDone;
     { its flush is `rendered` for a bar race [Batch 135] }
     if not FExporting then FRtAfterRelayout := True;
+  end
+  else if FLaidAhead then
+  begin
+    { [R5-J] laid out ahead (DiagReady): the rest of that update here }
+    LazyUpdateDone;
+    if not FExporting then FRtAfterRelayout := True;
   end;
+  FLaidAhead := False;
 
   { THE GRAPHIC COMPONENT, against the canvas; its elements at z 0 and
     under go beneath the axes, as upstream's group joins the root first

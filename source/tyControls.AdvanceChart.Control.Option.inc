@@ -1161,14 +1161,41 @@ begin
     end;
 end;
 
+procedure TTyCustomAdvanceChart.DiagReady;
+var
+  m: ITyTextMeasurer;
+  r: TRect;
+  ppi: Integer;
+begin
+  if not FDirty or (FOption = nil) then Exit;
+  { laid out before: again at that size, as a conversion does }
+  if FLastPPI > 0 then
+  begin
+    ConvertReady;
+    Exit;
+  end;
+  { never: where the first paint will lay it out (Paint: ClientRect,
+    Font.PixelsPerInch) -- that paint then finds it done, and finishes the
+    update (FLaidAhead) }
+  r := ClientRect;
+  if (r.Right <= r.Left) or (r.Bottom <= r.Top) then Exit;
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then Exit;
+  m := NewTextMeasurer(ppi);
+  Relayout(nil, TyRectF(r.Left, r.Top, r.Right, r.Bottom), ppi, m);
+  FLaidAhead := True;
+end;
+
 function TTyCustomAdvanceChart.DiagnosticCount: Integer;
 begin
+  DiagReady;
   if FBuild = nil then Exit(0);
   Result := FBuild.DiagnosticCount;
 end;
 
 function TTyCustomAdvanceChart.Diagnostic(AIndex: Integer): string;
 begin
+  DiagReady;
   if FBuild = nil then Exit('');
   Result := FBuild.Diagnostic(AIndex);
 end;

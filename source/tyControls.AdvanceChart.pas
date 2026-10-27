@@ -2024,6 +2024,10 @@ type
     FRtQueue, FRtQueueInit: TTyStringArray;
     FRtChange, FAnimRtChange: Integer;
     FRtAfterRelayout, FRtFlushing: Boolean;
+    { [R5-J] the option was laid out ahead of the first paint (DiagReady):
+      that paint finishes the update -- the lazy update's `updated`, a bar
+      race's pass -- as a paint that lays out does }
+    FLaidAhead: Boolean;
     FRtLens: TTyDoubleArray;
     { THE AXES' groupTransition [Batch 96]: one proxy per leaf of an axis
       group, by 'xAxis0/anid', on the series' driver; made by a full update's
@@ -3399,6 +3403,10 @@ type
       date, the finder parsed against the option's models, each coordinate
       system asked in upstream's order }
     procedure ConvertReady;
+    { [R5-J] the layout the diagnostics are read from brought up to date:
+      ConvertReady once laid out; never laid out, at the client rect and the
+      PPI the first paint will use, when the control has a size }
+    procedure DiagReady;
     function ConvertDispatch(AFinder, AValue: TJSONData; AFrom: Boolean;
       AOpt: TJSONData = nil): TTyConvertResult;
     { Matrix.convertToPixel / convertFromPixel, the opt's clamp [Batch 147] }
@@ -4424,7 +4432,13 @@ type
     { Everything the option said that could not be honoured -- a misspelled axis
       type, a series naming an axis that does not exist. A chart that silently
       drops what it cannot draw is a chart that lies, so these are readable
-      rather than logged and forgotten. }
+      rather than logged and forgotten.
+      [R5-J] OF THE OPTION AS IT IS NOW: an option set since the last layout
+      is laid out first (at the client size and Font.PixelsPerInch, before
+      the first paint) -- as setOption lays the chart out before it returns.
+      A control of no size yet has no layout to answer from: 0. [Was: the
+      last paint's build -- empty before it, the previous option's after
+      it.] }
     function DiagnosticCount: Integer;
     function Diagnostic(AIndex: Integer): string;
     { Draw the chart to a PNG at its current size.

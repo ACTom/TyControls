@@ -61,6 +61,7 @@ type
     procedure TestChartOnTakesEveryTypeUpstreamPublishes;
     procedure TestTheActionEventsReachChartOnAsUpstream;
     procedure TestAnAppendedItemDrawsItsOwnSymbol;
+    procedure TestTheDiagnosticsAreTheOptionsAtOnce;
   end;
 
 { a payload as text both sides compare: keys sorted, numbers by value, a
@@ -497,6 +498,57 @@ begin
         SymSig(b.List, 0, k));
   finally
     bmp.Free;
+  end;
+end;
+
+{ THE DIAGNOSTICS ARE THE OPTION'S AS SOON AS IT IS SET: before the first
+  paint (laid out where that paint will lay it out, which then finds it
+  done and draws the same), and after a new option on a painted chart --
+  not the previous option's. A control of no size has nothing to answer
+  from. [Was: empty until a paint, the previous option's after one.] }
+procedure TAdvChartEdgesMiscOracleTest.TestTheDiagnosticsAreTheOptionsAtOnce;
+const
+  cBad = '{"animation":false,"xAxis":{},"yAxis":{},"series":[{"type":"bard","data":[1]}]}';
+  cGood = '{"animation":false,"xAxis":{"type":"category","data":["a"]},"yAxis":{},'
+    + '"series":[{"type":"bar","data":[1]}]}';
+var
+  chart, ref: TEmProbe;
+  bmp, bmp2: TBGRABitmap;
+  n, k: Integer;
+  first: string;
+begin
+  bmp := TBGRABitmap.Create(400, 300, BGRA(255, 255, 255, 255));
+  bmp2 := TBGRABitmap.Create(400, 300, BGRA(255, 255, 255, 255));
+  try
+    chart := NewChart(400, 300);
+    chart.Option := cBad;
+    n := chart.DiagnosticCount;
+    AssertTrue('before the first paint', n > 0);
+    first := chart.Diagnostic(0);
+    AssertTrue('a sentence', first <> '');
+    { the paint finds the layout done: the same diagnostics, the same
+      picture as a chart that was never asked }
+    chart.Render(bmp.Canvas, Rect(0, 0, 400, 300), 96);
+    AssertEquals('after the paint', n, chart.DiagnosticCount);
+    AssertEquals('the same sentence', first, chart.Diagnostic(0));
+    ref := NewChart(400, 300);
+    ref.Option := cBad;
+    ref.Render(bmp2.Canvas, Rect(0, 0, 400, 300), 96);
+    for k := 0 to 400 * 300 - 1 do
+      if bmp.GetPixel(k mod 400, k div 400) <> bmp2.GetPixel(k mod 400, k div 400) then
+        Fail('the picture after an early read differs at ' + IntToStr(k));
+    { a new option on the painted chart: its own diagnostics at once }
+    chart.Option := cGood;
+    AssertEquals('the good option has none', 0, chart.DiagnosticCount);
+    chart.Option := cBad;
+    AssertEquals('and the bad one its own again', n, chart.DiagnosticCount);
+    { no size, no layout }
+    ref := NewChart(0, 0);
+    ref.Option := cBad;
+    AssertEquals('no size: nothing to answer from', 0, ref.DiagnosticCount);
+  finally
+    bmp.Free;
+    bmp2.Free;
   end;
 end;
 
