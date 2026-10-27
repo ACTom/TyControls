@@ -2538,6 +2538,13 @@ type
     function  CellKey(ACol, ARow: Integer): string;
     function  GetCells(ACol, ARow: Integer): string;
     procedure SetCells(ACol, ARow: Integer; const AValue: string);
+    { SetCells without the range check (#140): for the grid's own moves -- inserting or deleting
+      rows and columns carries the cells across a count that is changing -- and for undo. }
+    procedure StoreCell(ACol, ARow: Integer; const AValue: string);
+    { #140: raises EListError for a cell outside the columns and RowCount, as LCL raises
+      (grids.pas, TVirtualGrid.GetCells). A write there was stored, and turned up later when rows
+      or columns were added. }
+    procedure CheckCellIndex(ACol, ARow: Integer);
     procedure SetCol(AValue: Integer);
     procedure SetSelectionMode(AValue: TTyGridSelectionMode);
     function  GetCellColor(ACol, ARow: Integer): TTyColor;
@@ -3340,6 +3347,8 @@ type
       现成助手 GridColumn 在 protected 段里,宿主够不着。 }
     property  SelectedColumn: TTyGridColumn read GetSelectedColumn;
     property PickEditor: TTyComboBox read FPickEditor;
+    { A write outside the grid -- a column past Header.Columns, a row past RowCount -- raises
+      EListError, as LCL raises (#140). }
     property Cells[ACol, ARow: Integer]: string read GetCells write SetCells;
     { 一整列 / 一整行,当成 TStrings 交出去 —— LCL 的 Cols[]/Rows[]
       (grids.pas:1794/1798)。`Memo.Lines := Grid.Cols[2]` 与
@@ -9606,7 +9615,9 @@ begin
           Result[n].Col := e.Col;
           Result[n].Row := e.Row;
           Result[n].OldText := GetCells(e.Col, e.Row);
-          Cells[e.Col, e.Row] := e.OldText;
+          { Not range-checked: a column the code removed since is not recorded, and Ctrl+Z
+            must not raise for it. }
+          StoreCell(e.Col, e.Row, e.OldText);
         end;
       gukRowCount:
         begin
@@ -9711,7 +9722,21 @@ begin
   end;
 end;
 
+procedure TTyCustomStringGrid.CheckCellIndex(ACol, ARow: Integer);
+begin
+  if (ACol < 0) or (ACol >= Header.Columns.Count) or (ARow < 0) or (ARow >= RowCount) then
+    raise EListError.CreateFmt(
+      '%s: cell [%d, %d] is outside the grid (%d columns, %d rows)',
+      [ClassName, ACol, ARow, Header.Columns.Count, RowCount]);
+end;
+
 procedure TTyCustomStringGrid.SetCells(ACol, ARow: Integer; const AValue: string);
+begin
+  CheckCellIndex(ACol, ARow);
+  StoreCell(ACol, ARow, AValue);
+end;
+
+procedure TTyCustomStringGrid.StoreCell(ACol, ARow: Integer; const AValue: string);
 var
   k: string;
   e: TTyGridUndoEntry;
@@ -12689,6 +12714,7 @@ var
   k: string;
   a: TTyGridCellAttr;
 begin
+  CheckCellIndex(ACol, ARow);   { #140: as Cells[] }
   if GetObjects(ACol, ARow) = AValue then Exit;   { 见 SetCellColor }
   k := CellKey(ACol, ARow);
   if AValue = nil then
@@ -13276,8 +13302,8 @@ var
   var ov: string;
   begin
     ov := Cells[AOldC, AOldR];
-    Cells[AOldC, AOldR] := '';
-    Cells[ANewC, ANewR] := ov;
+    StoreCell(AOldC, AOldR, '');
+    StoreCell(ANewC, ANewR, ov);
     { 属性(合并跨度等)必须**跟着文字一起搬** —— 从前只搬文字,
       于是在合并块上方插一行,内容跟着走了、合并框留在原地。 }
     FAttrs.MoveEntry(CellKey(AOldC, AOldR), CellKey(ANewC, ANewR));
@@ -13287,7 +13313,7 @@ var
   var
     a: TTyGridCellAttr;
   begin
-    Cells[AC, AR] := '';
+    StoreCell(AC, AR, '');
     { 合并计数是旁挂的汇总,不在属性对象里 —— 丢掉一个合并基准格必须跟着减。
       不减的话 `HasMergedCells` 会一直答"有合并区"而实际一个都没有,
       于是格线绘制永远走那条慢的逐列分段路径,取消合并也清不掉这个状态。 }

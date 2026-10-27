@@ -141,6 +141,10 @@ type
     procedure TestShrinkingTheRowsTakesTheCursorAndTheEditAlong;
     procedure TestTurningReadOnlyOnClosesTheEditor;
     procedure TestUndoKeysLeaveAReadOnlyGridAlone;
+    { #140: a Cells[] or Objects[] write outside the grid raises, as in LCL, and leaves nothing
+      to turn up when rows or columns are added; the grid's own moves and undo do not raise. }
+    procedure TestAWriteOutsideTheGridRaises;
+    procedure TestUndoAfterTheCodeRemovedAColumnDoesNotRaise;
     procedure TestPageKeysPageByTheRowsOnScreen;
     procedure TestAMemoCellCommittedUnchangedIsNotAnEdit;
     procedure TestTheCursorCellStandsOutOfAWiderSelection;
@@ -1539,6 +1543,57 @@ begin
   FGrid.ReadOnly := True;
   FGrid.PressKey(Ord('Z'), [ssCtrl]);
   AssertEquals('Ctrl+Z changes nothing', 'a', FGrid.Cells[0, 0]);
+end;
+
+procedure TGridOptionsTest.TestAWriteOutsideTheGridRaises;
+
+  procedure Expect(ACol, ARow: Integer);
+  var raised: Boolean;
+  begin
+    raised := False;
+    try
+      FGrid.Cells[ACol, ARow] := 'x';
+    except
+      on EListError do raised := True;
+    end;
+    AssertTrue(Format('Cells[%d, %d] := raises', [ACol, ARow]), raised);
+  end;
+
+var
+  raised: Boolean;
+begin
+  Build(2, 3, 80);
+  FGrid.Modified := False;
+  Expect(2, 0);
+  Expect(0, 3);
+  Expect(-1, 0);
+  Expect(0, -1);
+  raised := False;
+  try
+    FGrid.Objects[2, 0] := FGrid;
+  except
+    on EListError do raised := True;
+  end;
+  AssertTrue('Objects[] := too', raised);
+  AssertFalse('nothing written is a change', FGrid.Modified);
+  FGrid.RowCount := 4;
+  (FGrid.Header.Columns.Add as TTyColumn).Width := 80;
+  AssertEquals('nothing was kept past the last row', '', FGrid.Cells[0, 3]);
+  AssertEquals('or past the last column', '', FGrid.Cells[2, 0]);
+  AssertNull('nor an object', FGrid.Objects[2, 0]);
+  FGrid.Cells[2, 3] := 'in';
+  AssertEquals('inside the grid a write goes in', 'in', FGrid.Cells[2, 3]);
+end;
+
+procedure TGridOptionsTest.TestUndoAfterTheCodeRemovedAColumnDoesNotRaise;
+begin
+  Build(3, 3, 80);
+  FGrid.Cells[0, 0] := 'a';
+  FGrid.Cells[2, 0] := 'c';
+  FGrid.Header.Columns.Delete(2);
+  FGrid.Undo;   // the write into the column that went: not a write by the user, no raise
+  FGrid.Undo;
+  AssertEquals('the undo went on to the cell that is still there', '', FGrid.Cells[0, 0]);
 end;
 
 procedure TGridOptionsTest.TestUpDownTheEditorLeavesMoveTheCell;
