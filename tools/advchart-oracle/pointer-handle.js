@@ -337,6 +337,29 @@ const CASES = [
       { op: 'idle', ms: 500 },
     ],
   },
+  // [R5-F] the handle's style beyond its colour: getItemStyle's border, opacity and shadow keys; an image:// icon
+  {
+    id: 'x-styled', note: 'a handle with a border, an opacity and a shadow (blur 6 at (2, 3) in rgba(0,0,0,0.5))', style: true,
+    charts: [{ animation: false, xAxis: { type: 'category', data: CATS, axisPointer: { handle: { show: true, color: '#ff0000',
+      borderColor: '#0000ff', borderWidth: 2, opacity: 0.8, shadowBlur: 6, shadowOffsetX: 2, shadowOffsetY: 3, shadowColor: 'rgba(0,0,0,0.5)' } } },
+      yAxis: { type: 'value' }, series: [LINE] }],
+    steps: [
+      { op: 'idle', ms: 10 },
+      { op: 'drag', handle: { mainType: 'xAxis', index: 0 }, by: [[-20, 0]] },
+      { op: 'idle', ms: 500 },
+    ],
+  },
+  {
+    id: 'x-image', note: 'an image:// handle: the picture in the rect [-1, -1, 2, 2] scaled by size / 2, dragged by it', style: true,
+    charts: [{ animation: false, xAxis: { type: 'category', data: CATS, axisPointer: { handle: { show: true, size: 30,
+      icon: 'image://data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAEklEQVR4nGP4z8DwHxkzkC4AADxAH+HggXe0AAAAAElFTkSuQmCC' } } },
+      yAxis: { type: 'value' }, series: [LINE] }],
+    steps: [
+      { op: 'idle', ms: 10 },
+      { op: 'drag', handle: { mainType: 'xAxis', index: 0 }, by: [[-20, 0], [-20, 0]] },
+      { op: 'idle', ms: 500 },
+    ],
+  },
 ];
 
 // =====================================================================
@@ -360,16 +383,32 @@ function stateOf2(chart, w, cur) {
       const pm = ptr && ptr._axisPointerModel;
       if (!pm || !pm.get(['handle', 'show'])) return;
       const h = ptr._handle;
-      handles.push({ axis: mt + m.componentIndex, status: pm.get('status'), value: pm.get('value'),
+      const rec = { axis: mt + m.componentIndex, status: pm.get('status'), value: pm.get('value'),
         handle: h ? { x: h.x, y: h.y, rotation: h.rotation, scaleX: h.scaleX, scaleY: h.scaleY, fill: h.style.fill,
-          invisible: !!h.invisible } : null });
+          invisible: !!h.invisible } : null };
+      // [R5-F] the style beyond the colour, for the cases that ask
+      if (h && STYLE_CASE) {
+        const st = h.style;
+        rec.handle.type = h.type;
+        rec.handle.image = typeof st.image === 'string' ? st.image : null;
+        rec.handle.stroke = st.stroke == null ? null : String(st.stroke);
+        rec.handle.lineWidth = st.lineWidth == null ? null : st.lineWidth;
+        rec.handle.opacity = st.opacity == null ? null : st.opacity;
+        rec.handle.shadowBlur = st.shadowBlur == null ? null : st.shadowBlur;
+        rec.handle.shadowOffsetX = st.shadowOffsetX == null ? null : st.shadowOffsetX;
+        rec.handle.shadowOffsetY = st.shadowOffsetY == null ? null : st.shadowOffsetY;
+        rec.handle.shadowColor = st.shadowColor == null ? null : String(st.shadowColor);
+      }
+      handles.push(rec);
     });
   }
   let tip = null;
   if (w && w.view) tip = visible(w.view._tooltipContent) ? w.which : null;
   return { cursor: cur.v, tip, handles };
 }
+let STYLE_CASE = false;
 function runCase(def) {
+  STYLE_CASE = !!def.style;
   NOW = CLOCK0;
   TIMERS = [];
   const ch = newChart();

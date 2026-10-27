@@ -121,6 +121,10 @@ function TyRtReink(const APieces: TTyRtPieceArray; AFill: TTyChartColor;
 function TyRtBlockMeasurer(const AInner: ITyTextMeasurer;
   const ABlock: TTyRtBlockStyle; const AGlobal: TTyRtGlobal;
   AScale: Double): ITyTextMeasurer;
+{ [R5-F] the plain measurer a block measurer wraps (AMeasurer itself when it
+  is no block measurer): a site that lays one text out in a block of its own
+  (a legend item's) measures it with the plain one underneath }
+function TyRtInnerMeasurer(const AMeasurer: ITyTextMeasurer): ITyTextMeasurer;
 
 type
   { WHERE THE BOX SITS, not only how big it is: the block measurer answers
@@ -972,7 +976,14 @@ begin
 end;
 
 type
-  TBlockMeasurer = class(TInterfacedObject, ITyTextMeasurer, ITyTextBoxMeasurer)
+  { [R5-F] the plain measurer under a block measurer }
+  ITyRtInnerMeasurer = interface
+    ['{3E8C2B71-6D4F-4A95-B0E2-9F1A7C5D3E64}']
+    function InnerMeasurer: ITyTextMeasurer;
+  end;
+
+  TBlockMeasurer = class(TInterfacedObject, ITyTextMeasurer, ITyTextBoxMeasurer,
+    ITyRtInnerMeasurer)
   private
     FInner: ITyTextMeasurer;
     FBlock: TTyRtBlockStyle;
@@ -981,6 +992,7 @@ type
     function Bounds(const AText, AFontName: string; AFontSizeLogical,
       AWeight: Integer; AH: TTyTextAnchorH; AV: TTyTextAnchorV): TTyXYWH;
   public
+    function InnerMeasurer: ITyTextMeasurer;
     function MeasureBox(const AText, AFontName: string;
       AFontSizeLogical, AWeight: Integer; AH: TTyTextAnchorH;
       AV: TTyTextAnchorV): TTyRectF;
@@ -1050,6 +1062,18 @@ function TyRtBlockMeasurer(const AInner: ITyTextMeasurer;
 begin
   if (AInner = nil) or not ABlock.Needed then Exit(AInner);
   Result := TBlockMeasurer.Create(AInner, ABlock, AGlobal, AScale);
+end;
+
+function TBlockMeasurer.InnerMeasurer: ITyTextMeasurer;
+begin
+  Result := FInner;
+end;
+
+function TyRtInnerMeasurer(const AMeasurer: ITyTextMeasurer): ITyTextMeasurer;
+var inner: ITyRtInnerMeasurer;
+begin
+  Result := AMeasurer;
+  if Supports(AMeasurer, ITyRtInnerMeasurer, inner) then Result := inner.InnerMeasurer;
 end;
 
 end.

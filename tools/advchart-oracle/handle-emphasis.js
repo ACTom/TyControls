@@ -74,11 +74,20 @@ function globalCentre(el) {
   if (el.transform) r.applyTransform(el.transform);
   return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)];
 }
+let SHADOW_CASE = false;
 function styleOf(el) {
   if (!el) return null;
   const s = el.style;
-  return { states: (el.currentStates || []).slice(), fill: val(s.fill), stroke: val(s.stroke), lineWidth: val(s.lineWidth),
+  const r = { states: (el.currentStates || []).slice(), fill: val(s.fill), stroke: val(s.stroke), lineWidth: val(s.lineWidth),
     opacity: val(s.opacity), centre: globalCentre(el) };
+  // [R5-F] the shadow keys, for the cases that ask
+  if (SHADOW_CASE) {
+    r.shadowBlur = val(s.shadowBlur);
+    r.shadowOffsetX = val(s.shadowOffsetX);
+    r.shadowOffsetY = val(s.shadowOffsetY);
+    r.shadowColor = val(s.shadowColor);
+  }
+  return r;
 }
 function record(chart, kind) {
   const m = chart.getModel().getComponent(kind, 0);
@@ -121,6 +130,23 @@ const CASES = [
     option: Object.assign({ dataZoom: [{ type: 'slider', start: 20, end: 80, handleStyle: { color: '#3366cc' } }] }, BASE),
     hovers: ['handle0', 'none'],
   },
+  // [R5-F] the hover's shadow keys over the normal style's, key by key
+  {
+    id: 'dz-shadow', kind: 'dataZoom', shadow: true, note: 'handleStyle casts a shadow (blur 4 at (1, 1)); emphasis.handleStyle '
+      + 'writes another blur and colour: the hovered handle takes them, the offsets kept; the move handle\'s emphasis a shadow of its own',
+    option: Object.assign({ dataZoom: [{ type: 'slider', start: 20, end: 80,
+      handleStyle: { color: '#00ff00', shadowBlur: 4, shadowOffsetX: 1, shadowOffsetY: 1, shadowColor: 'rgba(0,0,0,0.3)' },
+      moveHandleStyle: { color: '#00ffff' },
+      emphasis: { handleStyle: { shadowBlur: 10, shadowColor: '#ff0000' }, moveHandleStyle: { shadowBlur: 6, shadowOffsetY: 2, shadowColor: '#0000ff' } } }] }, BASE),
+    hovers: ['handle0', 'none', 'move', 'none'],
+  },
+  {
+    id: 'vm-shadow', kind: 'visualMap', shadow: true, note: 'a visualMap thumb: emphasis.handleStyle shadow over handleStyle\'s',
+    option: Object.assign({ visualMap: { type: 'continuous', min: 0, max: 10, calculable: true, right: 10, bottom: 20,
+      handleStyle: { borderColor: '#0000ff', borderWidth: 1, shadowBlur: 3, shadowOffsetX: 2, shadowColor: '#00ff00' },
+      emphasis: { handleStyle: { shadowBlur: 8, shadowOffsetY: 4 } } } }, BASE),
+    hovers: ['handle0', 'none'],
+  },
 ];
 function hoverPoint(chart, def, rec, what) {
   if (what === 'none') return [5, 5];
@@ -132,6 +158,7 @@ function hoverPoint(chart, def, rec, what) {
   return rec.handles[what === 'handle0' ? 0 : 1].centre;
 }
 function runCase(def) {
+  SHADOW_CASE = !!def.shadow;
   const chart = echarts.init(null, null, { renderer: 'svg', ssr: true, width: W, height: H });
   chart._ssr = false;
   try {

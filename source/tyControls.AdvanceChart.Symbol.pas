@@ -143,6 +143,12 @@ function TyBuildSymbol(const ASpec: TTySymbolSpec;
   shape either way and is delegated. }
 function TyBuildSymbolInBox(const ASpec: TTySymbolSpec;
   const ABox: TTyRectF): TTyChartShape;
+{ [R5-F] THE SAME AS createSymbol(type, x, y, w, h, color, keepAspect) MAKES
+  IT IN A REAL BOX (a legend icon): a path with KeepAspect is fitted to its
+  own aspect in the box, centred (makePath 'center') rather than stretched
+  over it; everything else as TyBuildSymbolInBox. }
+function TyBuildSymbolInRealBox(const ASpec: TTySymbolSpec;
+  const ABox: TTyRectF): TTyChartShape;
 
 implementation
 
@@ -877,6 +883,30 @@ begin
   spec.WidthPx := w;
   spec.HeightPx := h;
   Result := TyBuildSymbol(spec, ABox.Left + w / 2, ABox.Top + h / 2);
+end;
+
+function TyBuildSymbolInRealBox(const ASpec: TTySymbolSpec;
+  const ABox: TTyRectF): TTyChartShape;
+var
+  fb: TTyXYWH;
+  spec: TTySymbolSpec;
+begin
+  if (ASpec.Kind = tsyPath) and ASpec.KeepAspect and TyRectFIsValid(ABox) then
+  begin
+    { the path fitted to its aspect in the box, centred: its own bounds
+      there are the box it then covers -- fitted in the icon's own frame
+      (the box at the origin, the path's single-precision data) and moved
+      to the box after, as the item's group moves it }
+    fb := TyZrBBox(TyZrMakePathCenter(ASpec.PathData,
+      TyXYWH(0, 0, TyRectFWidth(ABox), TyRectFHeight(ABox))));
+    spec := ASpec;
+    spec.KeepAspect := False;
+    if (fb.W > 0) and (fb.H > 0) and not IsNan(fb.W + fb.H) then
+      Exit(TyBuildSymbolInBox(spec, TyRectF(ABox.Left + fb.X, ABox.Top + fb.Y,
+        ABox.Left + (fb.X + fb.W), ABox.Top + (fb.Y + fb.H))));
+    Exit(TyBuildSymbolInBox(spec, ABox));
+  end;
+  Result := TyBuildSymbolInBox(ASpec, ABox);
 end;
 
 end.

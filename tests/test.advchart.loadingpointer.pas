@@ -122,9 +122,14 @@ type
     procedure TestTheHandleHidesWhatIsUnderIt;
     procedure TestATopSingleAxisHandleAsUpstream;
     procedure TestTheHandleHidesATooltipTarget;
+    { [R5-F] its border, opacity and shadow; an image:// icon }
+    procedure TestAStyledHandleAsUpstream;
+    procedure TestAnImageHandleAsUpstream;
   end;
 
 implementation
+
+uses tyControls.AdvanceChart.Color;
 
 const
   cW = 600;
@@ -860,6 +865,7 @@ var
   parts: TStringList;
   got, opt: TJSONData;
   ps: TTyPointerHandleState;
+  shc: TTyChartColor;
   dt: Double;
 
   procedure Near(const AWhat: string; AGot, AWant, ATol: Double);
@@ -1019,6 +1025,34 @@ begin
           if (not ps.HasFill) or (ps.Fill <> TTyChartColor($FFFF0000)) then
             Bad(Format('fill %x, upstream %s', [ps.Fill, hh.Strings['fill']]));
         end;
+        { [R5-F] the style beyond the colour: the shadow, the opacity, the
+          picture }
+        if hh.Find('shadowBlur') <> nil then
+        begin
+          if hh.Find('shadowBlur').JSONType = jtNumber then
+          begin
+            Near(hw.Strings['axis'] + ' shadowBlur', ps.ShadowBlur, hh.Floats['shadowBlur'], 1e-9);
+            Near(hw.Strings['axis'] + ' shadowOffsetX', ps.ShadowOffsetX, hh.Floats['shadowOffsetX'], 1e-9);
+            Near(hw.Strings['axis'] + ' shadowOffsetY', ps.ShadowOffsetY, hh.Floats['shadowOffsetY'], 1e-9);
+            Inc(FCompared);
+            if (hh.Floats['shadowBlur'] > 0) and TyTryParseChartColor(hh.Strings['shadowColor'], shc)
+              and (shc <> ps.ShadowColor) then
+              Bad(Format('shadow colour %x, upstream %s', [ps.ShadowColor, hh.Strings['shadowColor']]));
+          end
+          else
+          begin
+            Inc(FCompared);
+            if ps.ShadowBlur > 0 then Bad('a shadow here, none upstream');
+          end;
+          if hh.Find('opacity').JSONType = jtNumber then
+            Near(hw.Strings['axis'] + ' opacity', ps.Opacity, hh.Floats['opacity'], 1e-9);
+          Inc(FCompared);
+          if hh.Find('image').JSONType = jtString then
+          begin
+            if ps.Image <> hh.Strings['image'] then Bad('picture ' + ps.Image + ', upstream ' + hh.Strings['image']);
+          end
+          else if ps.Image <> '' then Bad('a picture here, none upstream');
+        end;
       end;
     end;
   finally
@@ -1028,6 +1062,17 @@ begin
   AssertTrue(AId + ': nothing compared', FCompared > 0);
   AssertEquals(Format('%s: %d of %d comparisons differ:%s',
     [AId, FBad, FCompared, FReport]), 0, FBad);
+end;
+
+{ [R5-F] }
+procedure TAdvChartPointerHandleOracleTest.TestAStyledHandleAsUpstream;
+begin
+  RunCase('x-styled');
+end;
+
+procedure TAdvChartPointerHandleOracleTest.TestAnImageHandleAsUpstream;
+begin
+  RunCase('x-image');
 end;
 
 procedure TAdvChartPointerHandleOracleTest.TestACategoryXHandleAsUpstream;

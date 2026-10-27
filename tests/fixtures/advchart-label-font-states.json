@@ -1,0 +1,3722 @@
+{
+ "source": "ECharts 6.1 dist: chart/pie/PieView.ts, pie/labelLayout.ts, chart/funnel, label/labelStyle.ts, zrender Text states",
+ "W": 600,
+ "H": 400,
+ "cases": [
+  {
+   "id": "pie.font",
+   "note": "series label fontSize 20 and bold: the outer labels measured and placed in that font",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "radius": "50%",
+      "data": [
+       {
+        "value": 1548,
+        "name": "CityE"
+       },
+       {
+        "value": 735,
+        "name": "CityC"
+       },
+       {
+        "value": 510,
+        "name": "CityD"
+       },
+       {
+        "value": 434,
+        "name": "CityB"
+       },
+       {
+        "value": 335,
+        "name": "CityA"
+       }
+      ],
+      "label": {
+       "fontSize": 20,
+       "fontWeight": "bold"
+      }
+     }
+    ]
+   },
+   "hl": null,
+   "labels": [
+    {
+     "d": 0,
+     "ignore": false,
+     "text": "CityE",
+     "x": "407bf948e1c9a4c8",
+     "y": "406611124634cf18",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "407bf948e1c9a4c8",
+      "4064d1124634cf18",
+      "4047e66666666666",
+      "4034000000000000"
+     ],
+     "fontSize": "4034000000000000",
+     "fontWeight": "bold",
+     "runs": [
+      {
+       "text": "CityE",
+       "font": "normal bold 20px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": false,
+     "text": "CityC",
+     "x": "406dbf1568c7603e",
+     "y": "40737c75190552e4",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "4067a57bcf2dc6a4",
+      "4072dc75190552e4",
+      "4048666666666666",
+      "4034000000000000"
+     ],
+     "fontSize": "4034000000000000",
+     "fontWeight": "bold",
+     "runs": [
+      {
+       "text": "CityC",
+       "font": "normal bold 20px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": false,
+     "text": "CityD",
+     "x": "40632590a8852387",
+     "y": "406c5a9b043b74c0",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "405a17ee1dd713db",
+      "406b1a9b043b74c0",
+      "4048666666666666",
+      "4034000000000000"
+     ],
+     "fontSize": "4034000000000000",
+     "fontWeight": "bold",
+     "runs": [
+      {
+       "text": "CityD",
+       "font": "normal bold 20px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": false,
+     "text": "CityB",
+     "x": "40653cbeb19be0f2",
+     "y": "4060eaf1507ec000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "405e864a30048eb1",
+      "405f55e2a0fd8000",
+      "4047e66666666666",
+      "4034000000000000"
+     ],
+     "fontSize": "4034000000000000",
+     "fontWeight": "bold",
+     "runs": [
+      {
+       "text": "CityB",
+       "font": "normal bold 20px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 4,
+     "ignore": false,
+     "text": "CityA",
+     "x": "406cf073eca40734",
+     "y": "40567eeca0a19df4",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "4066f6da530a6d9a",
+      "4053feeca0a19df4",
+      "4047e66666666666",
+      "4034000000000000"
+     ],
+     "fontSize": "4034000000000000",
+     "fontWeight": "bold",
+     "runs": [
+      {
+       "text": "CityA",
+       "font": "normal bold 20px Microsoft YaHei"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "pie.font.item",
+   "note": "one item fontSize 24, another fontWeight 600, the rest the default",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "radius": "50%",
+      "data": [
+       {
+        "value": 1548,
+        "name": "CityE"
+       },
+       {
+        "value": 735,
+        "name": "CityC",
+        "label": {
+         "fontSize": 24
+        }
+       },
+       {
+        "value": 510,
+        "name": "CityD"
+       },
+       {
+        "value": 434,
+        "name": "CityB",
+        "label": {
+         "fontWeight": 600
+        }
+       },
+       {
+        "value": 335,
+        "name": "CityA"
+       }
+      ]
+     }
+    ]
+   },
+   "hl": null,
+   "labels": [
+    {
+     "d": 0,
+     "ignore": false,
+     "text": "CityE",
+     "x": "407bf948e1c9a4c8",
+     "y": "406611124634cf18",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "407bf948e1c9a4c8",
+      "406551124634cf18",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityE",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": false,
+     "text": "CityC",
+     "x": "406dbf1568c7603e",
+     "y": "40737c75190552e4",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "40666d29e3a8a7ec",
+      "4072bc75190552e4",
+      "404d47ae147ae148",
+      "4038000000000000"
+     ],
+     "fontSize": "4038000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityC",
+       "font": "normal normal 24px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": false,
+     "text": "CityD",
+     "x": "40632590a8852387",
+     "y": "406c5a9b043b74c0",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "405ef935cbeb8ebc",
+      "406b9a9b043b74c0",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityD",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": false,
+     "text": "CityB",
+     "x": "40653cbeb19be0f2",
+     "y": "4060eaf1507ec000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "4061a6fc223fb7fc",
+      "40602af1507ec000",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "600",
+     "runs": [
+      {
+       "text": "CityB",
+       "font": "normal 600 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 4,
+     "ignore": false,
+     "text": "CityA",
+     "x": "406cf073eca40734",
+     "y": "40567eeca0a19df4",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "40695ab15d47de3e",
+      "4054feeca0a19df4",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityA",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "pie.font.inside",
+   "note": "inside labels at fontSize 16",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "radius": "50%",
+      "data": [
+       {
+        "value": 1548,
+        "name": "CityE"
+       },
+       {
+        "value": 735,
+        "name": "CityC"
+       },
+       {
+        "value": 510,
+        "name": "CityD"
+       },
+       {
+        "value": 434,
+        "name": "CityB"
+       },
+       {
+        "value": 335,
+        "name": "CityA"
+       }
+      ],
+      "label": {
+       "position": "inside",
+       "fontSize": 16
+      }
+     }
+    ]
+   },
+   "hl": null,
+   "labels": [
+    {
+     "d": 0,
+     "ignore": false,
+     "text": "CityE",
+     "x": "4075fe284470f75a",
+     "y": "4067a5eb7ba0211d",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "4074cc3cbf523f08",
+      "4066a5eb7ba0211d",
+      "40431eb851eb851f",
+      "4030000000000000"
+     ],
+     "fontSize": "4030000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityE",
+       "font": "normal normal 16px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": false,
+     "text": "CityC",
+     "x": "4071f8b17486fc94",
+     "y": "406f707dbe04e83a",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "4070c05f8901dddc",
+      "406e707dbe04e83a",
+      "4043851eb851eb85",
+      "4030000000000000"
+     ],
+     "fontSize": "4030000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityC",
+       "font": "normal normal 16px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": false,
+     "text": "CityD",
+     "x": "406f0ecee97dea88",
+     "y": "406a8bb4854a2639",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "406c9e2b1273ad17",
+      "40698bb4854a2639",
+      "4043851eb851eb85",
+      "4030000000000000"
+     ],
+     "fontSize": "4030000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityD",
+       "font": "normal normal 16px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": false,
+     "text": "CityB",
+     "x": "407002ba697bd9ae",
+     "y": "4065466f36e80ccd",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "406da19dc8ba42b8",
+      "4064466f36e80ccd",
+      "40431eb851eb851f",
+      "4030000000000000"
+     ],
+     "fontSize": "4030000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityB",
+       "font": "normal normal 16px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 4,
+     "ignore": false,
+     "text": "CityA",
+     "x": "4071c91408e53dc3",
+     "y": "4062a97dc3113518",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "4070972883c68571",
+      "4061a97dc3113518",
+      "40431eb851eb851f",
+      "4030000000000000"
+     ],
+     "fontSize": "4030000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityA",
+       "font": "normal normal 16px Microsoft YaHei"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "pie.font.root",
+   "note": "the root textStyle's fontSize 15 under no label font",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "radius": "50%",
+      "data": [
+       {
+        "value": 1548,
+        "name": "CityE"
+       },
+       {
+        "value": 735,
+        "name": "CityC"
+       },
+       {
+        "value": 510,
+        "name": "CityD"
+       },
+       {
+        "value": 434,
+        "name": "CityB"
+       },
+       {
+        "value": 335,
+        "name": "CityA"
+       }
+      ]
+     }
+    ],
+    "textStyle": {
+     "fontSize": 15
+    }
+   },
+   "hl": null,
+   "labels": [
+    {
+     "d": 0,
+     "ignore": false,
+     "text": "CityE",
+     "x": "407bf948e1c9a4c8",
+     "y": "406611124634cf18",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "407bf948e1c9a4c8",
+      "406521124634cf18",
+      "4041eccccccccccc",
+      "402e000000000000"
+     ],
+     "fontSize": "402e000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityE",
+       "font": "normal normal 15px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": false,
+     "text": "CityC",
+     "x": "406dbf1568c7603e",
+     "y": "40737c75190552e4",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "40692be235942d0b",
+      "40730475190552e4",
+      "40424ccccccccccc",
+      "402e000000000000"
+     ],
+     "fontSize": "402e000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityC",
+       "font": "normal normal 15px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": false,
+     "text": "CityD",
+     "x": "40632590a8852387",
+     "y": "406c5a9b043b74c0",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "405d24baeaa3e0a8",
+      "406b6a9b043b74c0",
+      "40424ccccccccccc",
+      "402e000000000000"
+     ],
+     "fontSize": "402e000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityD",
+       "font": "normal normal 15px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": false,
+     "text": "CityB",
+     "x": "40653cbeb19be0f2",
+     "y": "4060eaf1507ec000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "4060c18b7e68adbf",
+      "405ff5e2a0fd8000",
+      "4041eccccccccccc",
+      "402e000000000000"
+     ],
+     "fontSize": "402e000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityB",
+       "font": "normal normal 15px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 4,
+     "ignore": false,
+     "text": "CityA",
+     "x": "406cf073eca40734",
+     "y": "40567eeca0a19df4",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "40687540b970d401",
+      "40549eeca0a19df4",
+      "4041eccccccccccc",
+      "402e000000000000"
+     ],
+     "fontSize": "402e000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityA",
+       "font": "normal normal 15px Microsoft YaHei"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "pie.font.over.root",
+   "note": "the root textStyle bold, the label fontSize 18 over it",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "radius": "50%",
+      "data": [
+       {
+        "value": 1548,
+        "name": "CityE"
+       },
+       {
+        "value": 735,
+        "name": "CityC"
+       },
+       {
+        "value": 510,
+        "name": "CityD"
+       },
+       {
+        "value": 434,
+        "name": "CityB"
+       },
+       {
+        "value": 335,
+        "name": "CityA"
+       }
+      ],
+      "label": {
+       "fontSize": 18
+      }
+     }
+    ],
+    "textStyle": {
+     "fontWeight": "bold"
+    }
+   },
+   "hl": null,
+   "labels": [
+    {
+     "d": 0,
+     "ignore": false,
+     "text": "CityE",
+     "x": "407bf948e1c9a4c8",
+     "y": "406611124634cf18",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "407bf948e1c9a4c8",
+      "4064f1124634cf18",
+      "4045828f5c28f5c3",
+      "4032000000000000"
+     ],
+     "fontSize": "4032000000000000",
+     "fontWeight": "bold",
+     "runs": [
+      {
+       "text": "CityE",
+       "font": "normal bold 18px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": false,
+     "text": "CityC",
+     "x": "406dbf1568c7603e",
+     "y": "40737c75190552e4",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "406841a4c4f05600",
+      "4072ec75190552e4",
+      "4045f5c28f5c28f6",
+      "4032000000000000"
+     ],
+     "fontSize": "4032000000000000",
+     "fontWeight": "bold",
+     "runs": [
+      {
+       "text": "CityC",
+       "font": "normal bold 18px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": false,
+     "text": "CityD",
+     "x": "40632590a8852387",
+     "y": "406c5a9b043b74c0",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "405b5040095c3293",
+      "406b3a9b043b74c0",
+      "4045f5c28f5c28f6",
+      "4032000000000000"
+     ],
+     "fontSize": "4032000000000000",
+     "fontWeight": "bold",
+     "runs": [
+      {
+       "text": "CityD",
+       "font": "normal bold 18px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": false,
+     "text": "CityB",
+     "x": "40653cbeb19be0f2",
+     "y": "4060eaf1507ec000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "405fb835b5234702",
+      "405f95e2a0fd8000",
+      "4045828f5c28f5c3",
+      "4032000000000000"
+     ],
+     "fontSize": "4032000000000000",
+     "fontWeight": "bold",
+     "runs": [
+      {
+       "text": "CityB",
+       "font": "normal bold 18px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 4,
+     "ignore": false,
+     "text": "CityA",
+     "x": "406cf073eca40734",
+     "y": "40567eeca0a19df4",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "40678fd01599c9c3",
+      "40543eeca0a19df4",
+      "4045828f5c28f5c3",
+      "4032000000000000"
+     ],
+     "fontSize": "4032000000000000",
+     "fontWeight": "bold",
+     "runs": [
+      {
+       "text": "CityA",
+       "font": "normal bold 18px Microsoft YaHei"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "pie.doughnut",
+   "note": "the gallery's doughnut: the centre label hidden, shown at 40px bold on hover",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "radius": [
+       "40%",
+       "70%"
+      ],
+      "data": [
+       {
+        "value": 1548,
+        "name": "CityE"
+       },
+       {
+        "value": 735,
+        "name": "CityC"
+       },
+       {
+        "value": 510,
+        "name": "CityD"
+       },
+       {
+        "value": 434,
+        "name": "CityB"
+       },
+       {
+        "value": 335,
+        "name": "CityA"
+       }
+      ],
+      "avoidLabelOverlap": false,
+      "label": {
+       "show": false,
+       "position": "center"
+      },
+      "emphasis": {
+       "label": {
+        "show": true,
+        "fontSize": 40,
+        "fontWeight": "bold"
+       }
+      },
+      "labelLine": {
+       "show": false
+      }
+     }
+    ]
+   },
+   "hl": 1,
+   "labels": [
+    {
+     "d": 0,
+     "ignore": true,
+     "text": "CityE",
+     "x": "4072c00000000000",
+     "y": "4069000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "4071da8f5c28f5c3",
+      "4068400000000000",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityE",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": true,
+     "text": "CityC",
+     "x": "4072c00000000000",
+     "y": "4069000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "4071d5c28f5c28f6",
+      "4068400000000000",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityC",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": true,
+     "text": "CityD",
+     "x": "4072c00000000000",
+     "y": "4069000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "4071d5c28f5c28f6",
+      "4068400000000000",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityD",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": true,
+     "text": "CityB",
+     "x": "4072c00000000000",
+     "y": "4069000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "4071da8f5c28f5c3",
+      "4068400000000000",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityB",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 4,
+     "ignore": true,
+     "text": "CityA",
+     "x": "4072c00000000000",
+     "y": "4069000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "4071da8f5c28f5c3",
+      "4068400000000000",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityA",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    }
+   ],
+   "labelsHl": [
+    {
+     "d": 0,
+     "ignore": true,
+     "text": "CityE",
+     "x": "4072c00000000000",
+     "y": "4069000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "4071da8f5c28f5c3",
+      "4068400000000000",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityE",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": false,
+     "text": "CityC",
+     "x": "4072c00000000000",
+     "y": "4069000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "406f666666666666",
+      "4066800000000000",
+      "4058666666666666",
+      "4044000000000000"
+     ],
+     "fontSize": "4044000000000000",
+     "fontWeight": "bold",
+     "runs": [
+      {
+       "text": "CityC",
+       "font": "normal bold 40px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": true,
+     "text": "CityD",
+     "x": "4072c00000000000",
+     "y": "4069000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "4071d5c28f5c28f6",
+      "4068400000000000",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityD",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": true,
+     "text": "CityB",
+     "x": "4072c00000000000",
+     "y": "4069000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "4071da8f5c28f5c3",
+      "4068400000000000",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityB",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 4,
+     "ignore": true,
+     "text": "CityA",
+     "x": "4072c00000000000",
+     "y": "4069000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "4071da8f5c28f5c3",
+      "4068400000000000",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityA",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "pie.emph.outer",
+   "note": "outer labels; emphasis.label fontSize 18: the hovered one larger, where the layout put it",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "radius": "50%",
+      "data": [
+       {
+        "value": 1548,
+        "name": "CityE"
+       },
+       {
+        "value": 735,
+        "name": "CityC"
+       },
+       {
+        "value": 510,
+        "name": "CityD"
+       },
+       {
+        "value": 434,
+        "name": "CityB"
+       },
+       {
+        "value": 335,
+        "name": "CityA"
+       }
+      ],
+      "emphasis": {
+       "label": {
+        "fontSize": 18
+       }
+      }
+     }
+    ]
+   },
+   "hl": 0,
+   "labels": [
+    {
+     "d": 0,
+     "ignore": false,
+     "text": "CityE",
+     "x": "407bf948e1c9a4c8",
+     "y": "406611124634cf18",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "407bf948e1c9a4c8",
+      "406551124634cf18",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityE",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": false,
+     "text": "CityC",
+     "x": "406dbf1568c7603e",
+     "y": "40737c75190552e4",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "406a161fa6380415",
+      "40731c75190552e4",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityC",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": false,
+     "text": "CityD",
+     "x": "40632590a8852387",
+     "y": "406c5a9b043b74c0",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "405ef935cbeb8ebc",
+      "406b9a9b043b74c0",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityD",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": false,
+     "text": "CityB",
+     "x": "40653cbeb19be0f2",
+     "y": "4060eaf1507ec000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "4061a6fc223fb7fc",
+      "40602af1507ec000",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityB",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 4,
+     "ignore": false,
+     "text": "CityA",
+     "x": "406cf073eca40734",
+     "y": "40567eeca0a19df4",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "40695ab15d47de3e",
+      "4054feeca0a19df4",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityA",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    }
+   ],
+   "labelsHl": [
+    {
+     "d": 0,
+     "ignore": false,
+     "text": "CityE",
+     "x": "407bf948e1c9a4c8",
+     "y": "406611124634cf18",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "407bf948e1c9a4c8",
+      "4064f1124634cf18",
+      "4045828f5c28f5c3",
+      "4032000000000000"
+     ],
+     "fontSize": "4032000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityE",
+       "font": "normal normal 18px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": false,
+     "text": "CityC",
+     "x": "406dbf1568c7603e",
+     "y": "40737c75190552e4",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "406a161fa6380415",
+      "40731c75190552e4",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityC",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": false,
+     "text": "CityD",
+     "x": "40632590a8852387",
+     "y": "406c5a9b043b74c0",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "405ef935cbeb8ebc",
+      "406b9a9b043b74c0",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityD",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": false,
+     "text": "CityB",
+     "x": "40653cbeb19be0f2",
+     "y": "4060eaf1507ec000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "4061a6fc223fb7fc",
+      "40602af1507ec000",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityB",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 4,
+     "ignore": false,
+     "text": "CityA",
+     "x": "406cf073eca40734",
+     "y": "40567eeca0a19df4",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "40695ab15d47de3e",
+      "4054feeca0a19df4",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityA",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "pie.emph.item",
+   "note": "an item's own emphasis.label fontSize 22 and colour",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "radius": "50%",
+      "data": [
+       {
+        "value": 1548,
+        "name": "CityE"
+       },
+       {
+        "value": 735,
+        "name": "CityC"
+       },
+       {
+        "value": 510,
+        "name": "CityD",
+        "emphasis": {
+         "label": {
+          "fontSize": 22,
+          "color": "#ff0000"
+         }
+        }
+       },
+       {
+        "value": 434,
+        "name": "CityB"
+       },
+       {
+        "value": 335,
+        "name": "CityA"
+       }
+      ]
+     }
+    ]
+   },
+   "hl": 2,
+   "labels": [
+    {
+     "d": 0,
+     "ignore": false,
+     "text": "CityE",
+     "x": "407bf948e1c9a4c8",
+     "y": "406611124634cf18",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "407bf948e1c9a4c8",
+      "406551124634cf18",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityE",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": false,
+     "text": "CityC",
+     "x": "406dbf1568c7603e",
+     "y": "40737c75190552e4",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "406a161fa6380415",
+      "40731c75190552e4",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityC",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": false,
+     "text": "CityD",
+     "x": "40632590a8852387",
+     "y": "406c5a9b043b74c0",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "405ef935cbeb8ebc",
+      "406b9a9b043b74c0",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityD",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": false,
+     "text": "CityB",
+     "x": "40653cbeb19be0f2",
+     "y": "4060eaf1507ec000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "4061a6fc223fb7fc",
+      "40602af1507ec000",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityB",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 4,
+     "ignore": false,
+     "text": "CityA",
+     "x": "406cf073eca40734",
+     "y": "40567eeca0a19df4",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "40695ab15d47de3e",
+      "4054feeca0a19df4",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityA",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    }
+   ],
+   "labelsHl": [
+    {
+     "d": 0,
+     "ignore": false,
+     "text": "CityE",
+     "x": "407bf948e1c9a4c8",
+     "y": "406611124634cf18",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "407bf948e1c9a4c8",
+      "406551124634cf18",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityE",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": false,
+     "text": "CityC",
+     "x": "406dbf1568c7603e",
+     "y": "40737c75190552e4",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "406a161fa6380415",
+      "40731c75190552e4",
+      "403d47ae147ae148",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityC",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": false,
+     "text": "CityD",
+     "x": "40632590a8852387",
+     "y": "406c5a9b043b74c0",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "4058df9c3251f522",
+      "406afa9b043b74c0",
+      "404ad70a3d70a3d8",
+      "4036000000000000"
+     ],
+     "fontSize": "4036000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityD",
+       "font": "normal normal 22px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": false,
+     "text": "CityB",
+     "x": "40653cbeb19be0f2",
+     "y": "4060eaf1507ec000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "4061a6fc223fb7fc",
+      "40602af1507ec000",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityB",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 4,
+     "ignore": false,
+     "text": "CityA",
+     "x": "406cf073eca40734",
+     "y": "40567eeca0a19df4",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "40695ab15d47de3e",
+      "4054feeca0a19df4",
+      "403cae147ae147ae",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityA",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "pie.emph.item.rich",
+   "note": "an item's emphasis.label.rich over the series' rich",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "radius": "50%",
+      "data": [
+       {
+        "value": 1548,
+        "name": "CityE"
+       },
+       {
+        "value": 735,
+        "name": "CityC",
+        "emphasis": {
+         "label": {
+          "rich": {
+           "a": {
+            "fontSize": 20,
+            "fontWeight": "bold"
+           }
+          }
+         }
+        }
+       },
+       {
+        "value": 510,
+        "name": "CityD"
+       },
+       {
+        "value": 434,
+        "name": "CityB"
+       },
+       {
+        "value": 335,
+        "name": "CityA"
+       }
+      ],
+      "label": {
+       "formatter": "{a|{b}} {c|{c}}",
+       "rich": {
+        "a": {
+         "color": "#333333",
+         "fontSize": 12
+        },
+        "c": {
+         "color": "#999999"
+        }
+       }
+      }
+     }
+    ]
+   },
+   "hl": 1,
+   "labels": [
+    {
+     "d": 0,
+     "ignore": false,
+     "text": "{a|CityE} {c|1548}",
+     "x": "407bf948e1c9a4c8",
+     "y": "406611124634cf18",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "407bf948e1c9a4c8",
+      "406551124634cf18",
+      "404d75c28f5c28f6",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityE",
+       "font": "normal normal 12px Microsoft YaHei"
+      },
+      {
+       "text": " ",
+       "font": "normal normal 12px Microsoft YaHei"
+      },
+      {
+       "text": "1548",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": false,
+     "text": "{a|CityC} {c|735}",
+     "x": "406dbf1568c7603e",
+     "y": "40737c75190552e4",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "4067257bcf2dc6a4",
+      "40731c75190552e4",
+      "404a666666666667",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "735",
+       "font": "normal normal 12px Microsoft YaHei"
+      },
+      {
+       "text": " ",
+       "font": "normal normal 12px Microsoft YaHei"
+      },
+      {
+       "text": "CityC",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": false,
+     "text": "{a|CityD} {c|510}",
+     "x": "40632590a8852387",
+     "y": "406c5a9b043b74c0",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "405917ee1dd713da",
+      "406b9a9b043b74c0",
+      "404a666666666667",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "510",
+       "font": "normal normal 12px Microsoft YaHei"
+      },
+      {
+       "text": " ",
+       "font": "normal normal 12px Microsoft YaHei"
+      },
+      {
+       "text": "CityD",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": false,
+     "text": "{a|CityB} {c|434}",
+     "x": "40653cbeb19be0f2",
+     "y": "4060eaf1507ec000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "405d6cb0966af517",
+      "40602af1507ec000",
+      "404a19999999999a",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "434",
+       "font": "normal normal 12px Microsoft YaHei"
+      },
+      {
+       "text": " ",
+       "font": "normal normal 12px Microsoft YaHei"
+      },
+      {
+       "text": "CityB",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 4,
+     "ignore": false,
+     "text": "{a|CityA} {c|335}",
+     "x": "406cf073eca40734",
+     "y": "40567eeca0a19df4",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "40666a0d863da0ce",
+      "4054feeca0a19df4",
+      "404a19999999999a",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "335",
+       "font": "normal normal 12px Microsoft YaHei"
+      },
+      {
+       "text": " ",
+       "font": "normal normal 12px Microsoft YaHei"
+      },
+      {
+       "text": "CityA",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    }
+   ],
+   "labelsHl": [
+    {
+     "d": 0,
+     "ignore": false,
+     "text": "{a|CityE} {c|1548}",
+     "x": "407bf948e1c9a4c8",
+     "y": "406611124634cf18",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "407bf948e1c9a4c8",
+      "406551124634cf18",
+      "404d75c28f5c28f6",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "CityE",
+       "font": "normal normal 12px Microsoft YaHei"
+      },
+      {
+       "text": " ",
+       "font": "normal normal 12px Microsoft YaHei"
+      },
+      {
+       "text": "1548",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": false,
+     "text": "{a|CityC} {c|735}",
+     "x": "406dbf1568c7603e",
+     "y": "40737c75190552e4",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "4064b4d7f8238934",
+      "4072dc75190552e4",
+      "4052147ae147ae14",
+      "4034000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "735",
+       "font": "normal normal 12px Microsoft YaHei"
+      },
+      {
+       "text": " ",
+       "font": "normal normal 12px Microsoft YaHei"
+      },
+      {
+       "text": "CityC",
+       "font": "normal bold 20px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": false,
+     "text": "{a|CityD} {c|510}",
+     "x": "40632590a8852387",
+     "y": "406c5a9b043b74c0",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "405917ee1dd713da",
+      "406b9a9b043b74c0",
+      "404a666666666667",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "510",
+       "font": "normal normal 12px Microsoft YaHei"
+      },
+      {
+       "text": " ",
+       "font": "normal normal 12px Microsoft YaHei"
+      },
+      {
+       "text": "CityD",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": false,
+     "text": "{a|CityB} {c|434}",
+     "x": "40653cbeb19be0f2",
+     "y": "4060eaf1507ec000",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "405d6cb0966af517",
+      "40602af1507ec000",
+      "404a19999999999a",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "434",
+       "font": "normal normal 12px Microsoft YaHei"
+      },
+      {
+       "text": " ",
+       "font": "normal normal 12px Microsoft YaHei"
+      },
+      {
+       "text": "CityB",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 4,
+     "ignore": false,
+     "text": "{a|CityA} {c|335}",
+     "x": "406cf073eca40734",
+     "y": "40567eeca0a19df4",
+     "align": "right",
+     "verticalAlign": "middle",
+     "rect": [
+      "40666a0d863da0ce",
+      "4054feeca0a19df4",
+      "404a19999999999a",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "335",
+       "font": "normal normal 12px Microsoft YaHei"
+      },
+      {
+       "text": " ",
+       "font": "normal normal 12px Microsoft YaHei"
+      },
+      {
+       "text": "CityA",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "funnel.font",
+   "note": "inside funnel labels at fontSize 16 bold",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "funnel",
+      "left": "10%",
+      "width": "60%",
+      "data": [
+       {
+        "value": 60,
+        "name": "Visit"
+       },
+       {
+        "value": 40,
+        "name": "Inquiry"
+       },
+       {
+        "value": 20,
+        "name": "Order"
+       },
+       {
+        "value": 80,
+        "name": "Click"
+       },
+       {
+        "value": 100,
+        "name": "Show"
+       }
+      ],
+      "label": {
+       "fontSize": 16,
+       "fontWeight": "bold"
+      }
+     }
+    ]
+   },
+   "hl": null,
+   "labels": [
+    {
+     "d": 0,
+     "ignore": false,
+     "text": "Visit",
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "4076300000000000",
+      "4067b00000000000",
+      "403e3d70a3d70a40",
+      "4030000000000000"
+     ],
+     "fontSize": "4030000000000000",
+     "fontWeight": "bold",
+     "runs": [
+      {
+       "text": "Visit",
+       "font": "normal bold 16px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": false,
+     "text": "Inquiry",
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "4073f00000000000",
+      "406e900000000000",
+      "4048147ae147ae18",
+      "4030000000000000"
+     ],
+     "fontSize": "4030000000000000",
+     "fontWeight": "bold",
+     "runs": [
+      {
+       "text": "Inquiry",
+       "font": "normal bold 16px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": false,
+     "text": "Order",
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "4071b00000000000",
+      "4072b80000000000",
+      "40447ae147ae1480",
+      "4030000000000000"
+     ],
+     "fontSize": "4030000000000000",
+     "fontWeight": "bold",
+     "runs": [
+      {
+       "text": "Order",
+       "font": "normal bold 16px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": false,
+     "text": "Click",
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "4078700000000000",
+      "4060d00000000000",
+      "404147ae147ae148",
+      "4030000000000000"
+     ],
+     "fontSize": "4030000000000000",
+     "fontWeight": "bold",
+     "runs": [
+      {
+       "text": "Click",
+       "font": "normal bold 16px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 4,
+     "ignore": false,
+     "text": "Show",
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "407ab00000000000",
+      "4053e00000000000",
+      "4044147ae147ae10",
+      "4030000000000000"
+     ],
+     "fontSize": "4030000000000000",
+     "fontWeight": "bold",
+     "runs": [
+      {
+       "text": "Show",
+       "font": "normal bold 16px Microsoft YaHei"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "funnel.font.outer",
+   "note": "funnel labels on the right at fontSize 14 under a root weight 600",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "funnel",
+      "left": "10%",
+      "width": "60%",
+      "data": [
+       {
+        "value": 60,
+        "name": "Visit"
+       },
+       {
+        "value": 40,
+        "name": "Inquiry"
+       },
+       {
+        "value": 20,
+        "name": "Order"
+       },
+       {
+        "value": 80,
+        "name": "Click"
+       },
+       {
+        "value": 100,
+        "name": "Show"
+       }
+      ],
+      "label": {
+       "position": "right",
+       "fontSize": 14
+      }
+     }
+    ],
+    "textStyle": {
+     "fontWeight": 600
+    }
+   },
+   "hl": null,
+   "labels": [
+    {
+     "d": 0,
+     "ignore": false,
+     "text": "Visit",
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "4076300000000000",
+      "4067d00000000000",
+      "403a75c28f5c28f0",
+      "402c000000000000"
+     ],
+     "fontSize": "402c000000000000",
+     "fontWeight": "600",
+     "runs": [
+      {
+       "text": "Visit",
+       "font": "normal 600 14px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": false,
+     "text": "Inquiry",
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "4073f00000000000",
+      "406eb00000000000",
+      "404511eb851eb850",
+      "402c000000000000"
+     ],
+     "fontSize": "402c000000000000",
+     "fontWeight": "600",
+     "runs": [
+      {
+       "text": "Inquiry",
+       "font": "normal 600 14px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": false,
+     "text": "Order",
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "4071b00000000000",
+      "4072c80000000000",
+      "4041eb851eb851e8",
+      "402c000000000000"
+     ],
+     "fontSize": "402c000000000000",
+     "fontWeight": "600",
+     "runs": [
+      {
+       "text": "Order",
+       "font": "normal 600 14px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": false,
+     "text": "Click",
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "4078700000000000",
+      "4060f00000000000",
+      "403e3d70a3d70a40",
+      "402c000000000000"
+     ],
+     "fontSize": "402c000000000000",
+     "fontWeight": "600",
+     "runs": [
+      {
+       "text": "Click",
+       "font": "normal 600 14px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 4,
+     "ignore": false,
+     "text": "Show",
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "align": "left",
+     "verticalAlign": "middle",
+     "rect": [
+      "407ab00000000000",
+      "4054200000000000",
+      "404191eb851eb850",
+      "402c000000000000"
+     ],
+     "fontSize": "402c000000000000",
+     "fontWeight": "600",
+     "runs": [
+      {
+       "text": "Show",
+       "font": "normal 600 14px Microsoft YaHei"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "funnel.emph",
+   "note": "the gallery's funnel: emphasis.label fontSize 20 on the hovered layer",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "funnel",
+      "left": "10%",
+      "width": "60%",
+      "data": [
+       {
+        "value": 60,
+        "name": "Visit"
+       },
+       {
+        "value": 40,
+        "name": "Inquiry"
+       },
+       {
+        "value": 20,
+        "name": "Order"
+       },
+       {
+        "value": 80,
+        "name": "Click"
+       },
+       {
+        "value": 100,
+        "name": "Show"
+       }
+      ],
+      "label": {
+       "show": true,
+       "position": "inside"
+      },
+      "emphasis": {
+       "label": {
+        "fontSize": 20
+       }
+      }
+     }
+    ]
+   },
+   "hl": 2,
+   "labels": [
+    {
+     "d": 0,
+     "ignore": false,
+     "text": "Visit",
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "406c951eb851eb85",
+      "4067f00000000000",
+      "4036ae147ae147b0",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "Visit",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": false,
+     "text": "Inquiry",
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "406bbe147ae147ae",
+      "406ed00000000000",
+      "40420f5c28f5c290",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "Inquiry",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": false,
+     "text": "Order",
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "406c147ae147ae14",
+      "4072d80000000000",
+      "403eb851eb851eb8",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "Order",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": false,
+     "text": "Click",
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "406c6147ae147ae1",
+      "4061100000000000",
+      "4039eb851eb851e8",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "Click",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 4,
+     "ignore": false,
+     "text": "Show",
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "406c1e147ae147ae",
+      "4054600000000000",
+      "403e1eb851eb8520",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "Show",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    }
+   ],
+   "labelsHl": [
+    {
+     "d": 0,
+     "ignore": false,
+     "text": "Visit",
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "406c951eb851eb85",
+      "4067f00000000000",
+      "4036ae147ae147b0",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "Visit",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": false,
+     "text": "Inquiry",
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "406bbe147ae147ae",
+      "406ed00000000000",
+      "40420f5c28f5c290",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "Inquiry",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": false,
+     "text": "Order",
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "406acccccccccccd",
+      "4072980000000000",
+      "404999999999999c",
+      "4034000000000000"
+     ],
+     "fontSize": "4034000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "Order",
+       "font": "normal normal 20px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": false,
+     "text": "Click",
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "406c6147ae147ae1",
+      "4061100000000000",
+      "4039eb851eb851e8",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "Click",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 4,
+     "ignore": false,
+     "text": "Show",
+     "x": "0000000000000000",
+     "y": "0000000000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "406c1e147ae147ae",
+      "4054600000000000",
+      "403e1eb851eb8520",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "Show",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "bar.emph.font",
+   "note": "bar labels on top; emphasis.label fontSize 20 bold on the hovered bar",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       12,
+       30,
+       18,
+       25
+      ],
+      "label": {
+       "show": true,
+       "position": "top"
+      },
+      "emphasis": {
+       "label": {
+        "fontSize": 20,
+        "fontWeight": "bold"
+       }
+      }
+     }
+    ]
+   },
+   "hl": 1,
+   "labels": [
+    {
+     "d": 0,
+     "ignore": false,
+     "text": "12",
+     "x": "4062480000000000",
+     "y": "406aa00000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "rect": [
+      "406170f5c28f5c29",
+      "4069200000000000",
+      "402ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "12",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": false,
+     "text": "30",
+     "x": "40702c0000000000",
+     "y": "404e000000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "rect": [
+      "406f80f5c28f5c29",
+      "4048000000000000",
+      "402ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "30",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": false,
+     "text": "18",
+     "x": "4077340000000000",
+     "y": "4064400000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "rect": [
+      "4076c87ae147ae14",
+      "4062c00000000000",
+      "402ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "18",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": false,
+     "text": "25",
+     "x": "407e3c0000000000",
+     "y": "4059a00000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "rect": [
+      "407dd07ae147ae14",
+      "4056a00000000000",
+      "402ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "25",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    }
+   ],
+   "labelsHl": [
+    {
+     "d": 0,
+     "ignore": false,
+     "text": "12",
+     "x": "4062480000000000",
+     "y": "406aa00000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "rect": [
+      "406170f5c28f5c29",
+      "4069200000000000",
+      "402ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "12",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": false,
+     "text": "30",
+     "x": "40702c0000000000",
+     "y": "404e000000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "rect": [
+      "406ef1999999999a",
+      "4044000000000000",
+      "4036666666666667",
+      "4034000000000000"
+     ],
+     "fontSize": "4034000000000000",
+     "fontWeight": "bold",
+     "runs": [
+      {
+       "text": "30",
+       "font": "normal bold 20px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": false,
+     "text": "18",
+     "x": "4077340000000000",
+     "y": "4064400000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "rect": [
+      "4076c87ae147ae14",
+      "4062c00000000000",
+      "402ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "18",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": false,
+     "text": "25",
+     "x": "407e3c0000000000",
+     "y": "4059a00000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "rect": [
+      "407dd07ae147ae14",
+      "4056a00000000000",
+      "402ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "25",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "bar.emph.item.rich",
+   "note": "a bar item's own emphasis.label.rich (the series' rich under it)",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       12,
+       {
+        "value": 30,
+        "emphasis": {
+         "label": {
+          "rich": {
+           "a": {
+            "fontSize": 18,
+            "color": "#ff0000"
+           }
+          }
+         }
+        }
+       },
+       18,
+       25
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "formatter": "{a|{c}}",
+       "rich": {
+        "a": {
+         "color": "#333333"
+        }
+       }
+      }
+     }
+    ]
+   },
+   "hl": 1,
+   "labels": [
+    {
+     "d": 0,
+     "ignore": false,
+     "text": "{a|12}",
+     "x": "4062480000000000",
+     "y": "406aa00000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "rect": [
+      "406170f5c28f5c29",
+      "4069200000000000",
+      "402ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "12",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": false,
+     "text": "{a|30}",
+     "x": "40702c0000000000",
+     "y": "404e000000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "rect": [
+      "406f80f5c28f5c29",
+      "4048000000000000",
+      "402ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "30",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": false,
+     "text": "{a|18}",
+     "x": "4077340000000000",
+     "y": "4064400000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "rect": [
+      "4076c87ae147ae14",
+      "4062c00000000000",
+      "402ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "18",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": false,
+     "text": "{a|25}",
+     "x": "407e3c0000000000",
+     "y": "4059a00000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "rect": [
+      "407dd07ae147ae14",
+      "4056a00000000000",
+      "402ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "25",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    }
+   ],
+   "labelsHl": [
+    {
+     "d": 0,
+     "ignore": false,
+     "text": "{a|12}",
+     "x": "4062480000000000",
+     "y": "406aa00000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "rect": [
+      "406170f5c28f5c29",
+      "4069200000000000",
+      "402ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "12",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": false,
+     "text": "{a|30}",
+     "x": "40702c0000000000",
+     "y": "404e000000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "rect": [
+      "406f1570a3d70a3d",
+      "4045000000000000",
+      "403428f5c28f5c2a",
+      "4032000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "30",
+       "font": "normal normal 18px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": false,
+     "text": "{a|18}",
+     "x": "4077340000000000",
+     "y": "4064400000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "rect": [
+      "4076c87ae147ae14",
+      "4062c00000000000",
+      "402ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "18",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": false,
+     "text": "{a|25}",
+     "x": "407e3c0000000000",
+     "y": "4059a00000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "rect": [
+      "407dd07ae147ae14",
+      "4056a00000000000",
+      "402ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "25",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "bar.layout.emph",
+   "note": "labelLayout align left and fontSize 16; emphasis.label bold: the hovered text bold at 16, aligned left",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       12,
+       30,
+       18,
+       25
+      ],
+      "label": {
+       "show": true,
+       "position": "top"
+      },
+      "labelLayout": {
+       "align": "left",
+       "fontSize": 16
+      },
+      "emphasis": {
+       "label": {
+        "fontWeight": "bold"
+       }
+      }
+     }
+    ]
+   },
+   "hl": 2,
+   "labels": [
+    {
+     "d": 0,
+     "ignore": false,
+     "text": "12",
+     "x": "4062480000000000",
+     "y": "406aa00000000000",
+     "align": "left",
+     "verticalAlign": "bottom",
+     "rect": [
+      "4062480000000000",
+      "4068a00000000000",
+      "4031eb851eb851ec",
+      "4030000000000000"
+     ],
+     "fontSize": "4030000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "12",
+       "font": "normal normal 16px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": false,
+     "text": "30",
+     "x": "40702c0000000000",
+     "y": "404e000000000000",
+     "align": "left",
+     "verticalAlign": "bottom",
+     "rect": [
+      "40702c0000000000",
+      "4046000000000000",
+      "4031eb851eb851ec",
+      "4030000000000000"
+     ],
+     "fontSize": "4030000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "30",
+       "font": "normal normal 16px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": false,
+     "text": "18",
+     "x": "4077340000000000",
+     "y": "4064400000000000",
+     "align": "left",
+     "verticalAlign": "bottom",
+     "rect": [
+      "4077340000000000",
+      "4062400000000000",
+      "4031eb851eb851ec",
+      "4030000000000000"
+     ],
+     "fontSize": "4030000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "18",
+       "font": "normal normal 16px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": false,
+     "text": "25",
+     "x": "407e3c0000000000",
+     "y": "4059a00000000000",
+     "align": "left",
+     "verticalAlign": "bottom",
+     "rect": [
+      "407e3c0000000000",
+      "4055a00000000000",
+      "4031eb851eb851ec",
+      "4030000000000000"
+     ],
+     "fontSize": "4030000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "25",
+       "font": "normal normal 16px Microsoft YaHei"
+      }
+     ]
+    }
+   ],
+   "labelsHl": [
+    {
+     "d": 0,
+     "ignore": false,
+     "text": "12",
+     "x": "4062480000000000",
+     "y": "406aa00000000000",
+     "align": "left",
+     "verticalAlign": "bottom",
+     "rect": [
+      "4062480000000000",
+      "4068a00000000000",
+      "4031eb851eb851ec",
+      "4030000000000000"
+     ],
+     "fontSize": "4030000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "12",
+       "font": "normal normal 16px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": false,
+     "text": "30",
+     "x": "40702c0000000000",
+     "y": "404e000000000000",
+     "align": "left",
+     "verticalAlign": "bottom",
+     "rect": [
+      "40702c0000000000",
+      "4046000000000000",
+      "4031eb851eb851ec",
+      "4030000000000000"
+     ],
+     "fontSize": "4030000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "30",
+       "font": "normal normal 16px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": false,
+     "text": "18",
+     "x": "4077340000000000",
+     "y": "4064400000000000",
+     "align": "left",
+     "verticalAlign": "bottom",
+     "rect": [
+      "4077340000000000",
+      "4062400000000000",
+      "4031eb851eb851ec",
+      "4030000000000000"
+     ],
+     "fontSize": "4030000000000000",
+     "fontWeight": "bold",
+     "runs": [
+      {
+       "text": "18",
+       "font": "normal bold 16px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": false,
+     "text": "25",
+     "x": "407e3c0000000000",
+     "y": "4059a00000000000",
+     "align": "left",
+     "verticalAlign": "bottom",
+     "rect": [
+      "407e3c0000000000",
+      "4055a00000000000",
+      "4031eb851eb851ec",
+      "4030000000000000"
+     ],
+     "fontSize": "4030000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "25",
+       "font": "normal normal 16px Microsoft YaHei"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "bar.layout.emph.size",
+   "note": "labelLayout fontSize 16; emphasis.label fontSize 22 over it",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       12,
+       30,
+       18,
+       25
+      ],
+      "label": {
+       "show": true,
+       "position": "top"
+      },
+      "labelLayout": {
+       "fontSize": 16
+      },
+      "emphasis": {
+       "label": {
+        "fontSize": 22
+       }
+      }
+     }
+    ]
+   },
+   "hl": 0,
+   "labels": [
+    {
+     "d": 0,
+     "ignore": false,
+     "text": "12",
+     "x": "4062480000000000",
+     "y": "406aa00000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "rect": [
+      "40612947ae147ae1",
+      "4068a00000000000",
+      "4031eb851eb851ec",
+      "4030000000000000"
+     ],
+     "fontSize": "4030000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "12",
+       "font": "normal normal 16px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": false,
+     "text": "30",
+     "x": "40702c0000000000",
+     "y": "404e000000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "rect": [
+      "406f3947ae147ae1",
+      "4046000000000000",
+      "4031eb851eb851ec",
+      "4030000000000000"
+     ],
+     "fontSize": "4030000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "30",
+       "font": "normal normal 16px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": false,
+     "text": "18",
+     "x": "4077340000000000",
+     "y": "4064400000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "rect": [
+      "4076a4a3d70a3d71",
+      "4062400000000000",
+      "4031eb851eb851ec",
+      "4030000000000000"
+     ],
+     "fontSize": "4030000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "18",
+       "font": "normal normal 16px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": false,
+     "text": "25",
+     "x": "407e3c0000000000",
+     "y": "4059a00000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "rect": [
+      "407daca3d70a3d71",
+      "4055a00000000000",
+      "4031eb851eb851ec",
+      "4030000000000000"
+     ],
+     "fontSize": "4030000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "25",
+       "font": "normal normal 16px Microsoft YaHei"
+      }
+     ]
+    }
+   ],
+   "labelsHl": [
+    {
+     "d": 0,
+     "ignore": false,
+     "text": "12",
+     "x": "4062480000000000",
+     "y": "406aa00000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "rect": [
+      "4060bdc28f5c28f6",
+      "4067e00000000000",
+      "4038a3d70a3d70a4",
+      "4036000000000000"
+     ],
+     "fontSize": "4036000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "12",
+       "font": "normal normal 22px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": false,
+     "text": "30",
+     "x": "40702c0000000000",
+     "y": "404e000000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "rect": [
+      "406f3947ae147ae1",
+      "4046000000000000",
+      "4031eb851eb851ec",
+      "4030000000000000"
+     ],
+     "fontSize": "4030000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "30",
+       "font": "normal normal 16px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": false,
+     "text": "18",
+     "x": "4077340000000000",
+     "y": "4064400000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "rect": [
+      "4076a4a3d70a3d71",
+      "4062400000000000",
+      "4031eb851eb851ec",
+      "4030000000000000"
+     ],
+     "fontSize": "4030000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "18",
+       "font": "normal normal 16px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": false,
+     "text": "25",
+     "x": "407e3c0000000000",
+     "y": "4059a00000000000",
+     "align": "center",
+     "verticalAlign": "bottom",
+     "rect": [
+      "407daca3d70a3d71",
+      "4055a00000000000",
+      "4031eb851eb851ec",
+      "4030000000000000"
+     ],
+     "fontSize": "4030000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "25",
+       "font": "normal normal 16px Microsoft YaHei"
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "guards": [
+  "pie.font: the labels in 20px bold",
+  "pie.font.item: item 1 at 24px, item 3 weight 600, item 0 at 12px",
+  "pie.font.root: 15px",
+  "pie.doughnut: hidden at rest, shown at 40px bold when hovered",
+  "pie.doughnut: the hovered label stays at the centre",
+  "pie.emph.outer: the hovered label is wider, the others as they were",
+  "pie.emph.outer: the anchor is the layout's",
+  "pie.emph.item.rich: the item's token at 20px bold when hovered",
+  "funnel.font: 16px bold",
+  "funnel.emph: the hovered layer at 20px",
+  "bar.emph.font: bold 20px when hovered",
+  "bar.emph.item.rich: the item's token at 18px when hovered",
+  "bar.layout.emph: bold 16px, aligned left, when hovered",
+  "bar.layout.emph.size: 22px over the layout's 16"
+ ]
+}

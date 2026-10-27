@@ -416,12 +416,12 @@ begin
       Continue;
     end;
     { A LINE'S TEMPORARY SYMBOL (LineView.highlight on a row with no
-      symbol) is not built here -- the port has no element for the row; it
-      is left out of the comparison (a deviation, see spec 241) }
+      symbol) is built and in emphasis like any other [R5-F: it was not
+      built, and left out of the comparison] }
     Inc(FCompared);
-    if emph <> ListText(sr.Arrays['e'], sr.Arrays['t']) then
+    if emph <> ListText(sr.Arrays['e']) then
       Bad(Format('%s series %d: emphasis [%s], upstream [%s]', [who, s, emph,
-        ListText(sr.Arrays['e'], sr.Arrays['t'])]));
+        ListText(sr.Arrays['e'])]));
     Inc(FCompared);
     if blur <> ListText(sr.Arrays['b']) then
       Bad(Format('%s series %d: blur [%s], upstream [%s]', [who, s, blur, ListText(sr.Arrays['b'])]));

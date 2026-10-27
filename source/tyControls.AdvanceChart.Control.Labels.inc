@@ -384,8 +384,9 @@ end;
 procedure TTyCustomAdvanceChart.ItemLabelSpecs(ASeriesIndex: Integer; const ABase: TTyLabelSpec;
   out ASpecs: TTyLabelSpecArray; out AHas: TTyBoolArray);
 var
-  node, d, it, lb: TJSONData;
+  node, d, it, lb, em: TJSONData;
   k: Integer;
+  emph: TJSONObject;
 begin
   ASpecs := nil;
   AHas := nil;
@@ -398,14 +399,29 @@ begin
     it := d.Items[k];
     if (it = nil) or (it.JSONType <> jtObject) then Continue;
     lb := TJSONObject(it).Find('label');
-    if (lb = nil) or (lb.JSONType <> jtObject) then Continue;
+    if (lb <> nil) and (lb.JSONType <> jtObject) then lb := nil;
+    { [R5-F] its own emphasis.label, where it lays the text out again: an
+      item of its own too, over the series' label }
+    emph := nil;
+    em := TJSONObject(it).Find('emphasis');
+    if (em <> nil) and (em.JSONType = jtObject) then
+    begin
+      em := TJSONObject(em).Find('label');
+      if (em <> nil) and (em.JSONType = jtObject)
+        and TyLabelEmphWantsBlock(TJSONObject(em)) then emph := TJSONObject(em);
+    end;
+    if (lb = nil) and (emph = nil) then Continue;
     { [R2-L] the tables only once an item has its own: none reads as nil }
     if ASpecs = nil then
     begin
       SetLength(ASpecs, d.Count);
       SetLength(AHas, d.Count);
     end;
-    ASpecs[k] := TyLabelSpecOfNode(TJSONObject(lb), TJSONObject(node), ABase);
+    if lb <> nil then
+      ASpecs[k] := TyLabelSpecOfNode(TJSONObject(lb), TJSONObject(node), ABase)
+    else
+      ASpecs[k] := ABase;
+    if emph <> nil then ASpecs[k].EmphItemNode := emph.AsJSON;
     AHas[k] := True;
   end;
 end;
@@ -621,6 +637,14 @@ type
     TextW, TextH: Double;
     Pieces: TTyRtPieceArray;
     Relaid: Boolean;
+    { [R5-F] the scale a re-laid block was laid out at (a pie label had
+      none of its own) }
+    Scale: Double;
+    { [R5-F] the hovered block laid out again under the layout's alignment,
+      size and font (the spec at hand) }
+    EmphRelay: Boolean;
+    EmphSpec: TTyLabelSpec;
+    EmphOver: TTyLabelEmphOver;
   end;
 var
   scale, ox, oy, cssW, cssH, defX, defY, defRot, defSx, defSy: Double;
@@ -642,6 +666,8 @@ var
   styleAH, ah: TTyTextAnchorH;
   styleAV, av: TTyTextAnchorV;
   spec: TTyLabelSpec;
+  emp: TTyRtPieceArray;
+  lmText: string;
   fsz: Integer;
   it: TTyLabelLayoutItem;
   px0, py0: Double;
@@ -826,14 +852,49 @@ begin
       refs[r].FontSize := fsz;
       refs[r].Relaid := False;
       refs[r].Pieces := c.RtPieces;
+      refs[r].Scale := c.RtScale;
+      { [R5-F] A HOVERED BLOCK whose alignment, size or font the layout
+        changed: laid out again with them (an emphasis key over them wins)
+        [was: the hovered block kept the alignment it was built with] }
+      refs[r].EmphRelay := False;
+      if (c.LmKind = 1) and (si <= High(ASpecs)) then
+      begin
+        spec := ASpecs[si];
+        if (c.ItemSpec > 0) and (si <= High(AItemSpecs))
+          and (c.ItemSpec - 1 <= High(AItemSpecs[si])) then
+          spec := AItemSpecs[si][c.ItemSpec - 1];
+        if ((spec.EmphRtNode <> '') or (spec.EmphItemNode <> ''))
+          and ((ah <> c.AnchorH) or (av <> c.AnchorV) or (fsz <> c.FontSizeLogical)
+            or (lo.HasWidth and not IsNan(lo.Width))
+            or (lo.HasHeight and not IsNan(lo.Height))) then
+        begin
+          refs[r].EmphRelay := True;
+          refs[r].EmphSpec := spec;
+          refs[r].EmphOver := TyLabelEmphOverNone;
+          refs[r].EmphOver.NoStyleAlign := True;
+          if fsz <> c.FontSizeLogical then refs[r].EmphOver.FontSize := fsz;
+          if lo.HasWidth and not IsNan(lo.Width) then
+          begin
+            refs[r].EmphOver.HasWidth := True;
+            refs[r].EmphOver.Width := lo.Width;
+          end;
+          if lo.HasHeight and not IsNan(lo.Height) then
+          begin
+            refs[r].EmphOver.HasHeight := True;
+            refs[r].EmphOver.Height := lo.Height;
+          end;
+        end;
+      end;
       it := Default(TTyLabelLayoutItem);
       { [R5-C] THE LAYOUT'S width / height ON THE LABEL'S STYLE
         (LABEL_OPTION_TO_STYLE_KEYS): the text block sized so -- an
         overflow cut or wrapped at the width, lines past the height dropped
         under lineOverflow, a box drawn at that size -- laid out again for a
         label of a series (its spec at hand) [was: read, not applied] }
+      { [R5-F] a label placed at x / y (a pie's) too [was: a series label
+        its host places only] }
       sized := ((lo.HasWidth and not IsNan(lo.Width)) or (lo.HasHeight and not IsNan(lo.Height)))
-        and (c.LmKind = 1) and (si <= High(ASpecs));
+        and (c.LmKind >= 1) and (si <= High(ASpecs));
       if sized then
       begin
         spec := ASpecs[si];
@@ -854,9 +915,13 @@ begin
           spec.Rt.Style.Height := lo.Height;
         end;
         spec.Rt.Needed := True;
-        refs[r].Pieces := TyLabelBlockPieces(spec, c.Text, c.LmInkFill,
+        { the label's own text, not what a width cut it to (a pie's) }
+        if c.LmText <> '' then lmText := c.LmText else lmText := c.Text;
+        if c.RtScale <= 0 then c.RtScale := scale;
+        refs[r].Pieces := TyLabelBlockPieces(spec, lmText, c.LmInkFill,
           c.LmInkHasFill, c.LmInkGradient, c.LmInkInside, ah, av, c.RtScale, AMeasurer);
         refs[r].Relaid := True;
+        refs[r].Scale := c.RtScale;
         it.RawLocal := LmBlockRect(refs[r].Pieces, c.RtScale);
       end
       else if Length(c.RtPieces) = 0 then
@@ -1015,6 +1080,7 @@ begin
     if Length(refs[r].Pieces) > 0 then
     begin
       el.Caption.RtPieces := refs[r].Pieces;
+      if refs[r].Scale > 0 then el.Caption.RtScale := refs[r].Scale;
       if refs[r].Relaid then
         el.Caption.RtEmph := TyRtReink(refs[r].Pieces, el.Caption.EmphColour, True,
           el.Caption.EmphStrokeColour, el.Caption.EmphStrokeWidthLogical);
@@ -1024,6 +1090,15 @@ begin
     else
       el.Shape := TyShapeRect(TyAnchorBox(el.Caption.X, el.Caption.Y,
         refs[r].TextW, refs[r].TextH, refs[r].AH, refs[r].AV));
+    if refs[r].EmphRelay then
+    begin
+      if el.Caption.RtScale <= 0 then el.Caption.RtScale := scale;
+      emp := TyLabelEmphPiecesOver(refs[r].EmphSpec, el.Caption.Text,
+        el.Caption.LmInkFill, el.Caption.LmInkHasFill, el.Caption.EmphColour,
+        el.Caption.EmphStrokeColour, el.Caption.EmphStrokeWidthLogical,
+        refs[r].AH, refs[r].AV, el.Caption.RtScale, AMeasurer, refs[r].EmphOver);
+      if Length(emp) > 0 then el.Caption.RtEmph := emp;
+    end;
     el.Ignore := items[r].Ignore;
     el.Caption.LmOverlapHidden := items[r].Ignore and not items[r].DefIgnore;
     el.Caption.LmEmphShow := items[r].EmphShow;

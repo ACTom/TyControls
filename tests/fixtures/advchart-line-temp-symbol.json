@@ -1,0 +1,1762 @@
+{
+ "source": "ECharts 6.1 dist: chart/line/LineView.ts highlight / downplay, chart/helper/Symbol.ts",
+ "W": 600,
+ "H": 400,
+ "cases": [
+  {
+   "id": "basic",
+   "note": "showSymbol false: highlight 2 builds the row's symbol in emphasis, downplay 2 takes it away",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "c0",
+      "c1",
+      "c2",
+      "c3",
+      "c4",
+      "c5"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "showSymbol": false,
+      "data": [
+       12,
+       30,
+       18,
+       25,
+       9,
+       21
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "action": null,
+     "symbols": []
+    },
+    {
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 2
+     },
+     "symbols": [
+      {
+       "s": 0,
+       "d": 2,
+       "temp": true,
+       "states": "emphasis",
+       "ignore": false,
+       "rect": [
+        "4071133333333333",
+        "4064566666666666",
+        "4021333333333333",
+        "4021333333333333"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 110,
+       "label": null
+      }
+     ]
+    },
+    {
+     "action": {
+      "type": "downplay",
+      "seriesIndex": 0,
+      "dataIndex": 2
+     },
+     "symbols": []
+    }
+   ]
+  },
+  {
+   "id": "move",
+   "note": "highlight 1, then 4 (1 still highlighted), then downplay 1",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "c0",
+      "c1",
+      "c2",
+      "c3",
+      "c4",
+      "c5"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "showSymbol": false,
+      "data": [
+       12,
+       30,
+       18,
+       25,
+       9,
+       21
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "action": null,
+     "symbols": []
+    },
+    {
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 1
+     },
+     "symbols": [
+      {
+       "s": 0,
+       "d": 1,
+       "temp": true,
+       "states": "emphasis",
+       "ignore": false,
+       "rect": [
+        "4068c66666666666",
+        "404e59999999999a",
+        "4021333333333333",
+        "4021333333333333"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 110,
+       "label": null
+      }
+     ]
+    },
+    {
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 4
+     },
+     "symbols": [
+      {
+       "s": 0,
+       "d": 1,
+       "temp": true,
+       "states": "emphasis",
+       "ignore": false,
+       "rect": [
+        "4068c66666666666",
+        "404e59999999999a",
+        "4021333333333333",
+        "4021333333333333"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 110,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 4,
+       "temp": true,
+       "states": "emphasis",
+       "ignore": false,
+       "rect": [
+        "407a733333333333",
+        "406de66666666666",
+        "4021333333333333",
+        "4021333333333333"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 110,
+       "label": null
+      }
+     ]
+    },
+    {
+     "action": {
+      "type": "downplay",
+      "seriesIndex": 0,
+      "dataIndex": 1
+     },
+     "symbols": [
+      {
+       "s": 0,
+       "d": 4,
+       "temp": true,
+       "states": "emphasis",
+       "ignore": false,
+       "rect": [
+        "407a733333333333",
+        "406de66666666666",
+        "4021333333333333",
+        "4021333333333333"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 110,
+       "label": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "array",
+   "note": "a highlight of [3]: ChartView's, no temporary symbol",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "c0",
+      "c1",
+      "c2",
+      "c3",
+      "c4",
+      "c5"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "showSymbol": false,
+      "data": [
+       12,
+       30,
+       18,
+       25,
+       9,
+       21
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "action": null,
+     "symbols": []
+    },
+    {
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": [
+       3
+      ]
+     },
+     "symbols": []
+    }
+   ]
+  },
+  {
+   "id": "styled",
+   "note": "symbol rect 10, itemStyle colour, emphasis.itemStyle colour and borderWidth, emphasis.scale 2",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "c0",
+      "c1",
+      "c2",
+      "c3",
+      "c4",
+      "c5"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "showSymbol": false,
+      "data": [
+       12,
+       30,
+       18,
+       25,
+       9,
+       21
+      ],
+      "symbol": "rect",
+      "symbolSize": 10,
+      "itemStyle": {
+       "color": "#336699"
+      },
+      "emphasis": {
+       "scale": 2,
+       "itemStyle": {
+        "color": "#ff0000",
+        "borderColor": "#000000",
+        "borderWidth": 2
+       }
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "action": null,
+     "symbols": []
+    },
+    {
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 3
+     },
+     "symbols": [
+      {
+       "s": 0,
+       "d": 3,
+       "temp": true,
+       "states": "emphasis",
+       "ignore": false,
+       "rect": [
+        "4075580000000000",
+        "4058200000000000",
+        "4036000000000000",
+        "4036000000000000"
+       ],
+       "fill": "#ff0000",
+       "stroke": "#000000",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 110,
+       "label": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "styled.shown",
+   "note": "the same with its symbols shown: the own symbol of the row in the same emphasis",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "c0",
+      "c1",
+      "c2",
+      "c3",
+      "c4",
+      "c5"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "showSymbol": true,
+      "data": [
+       12,
+       30,
+       18,
+       25,
+       9,
+       21
+      ],
+      "symbol": "rect",
+      "symbolSize": 10,
+      "itemStyle": {
+       "color": "#336699"
+      },
+      "emphasis": {
+       "scale": 2,
+       "itemStyle": {
+        "color": "#ff0000",
+        "borderColor": "#000000",
+        "borderWidth": 2
+       }
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "action": null,
+     "symbols": [
+      {
+       "s": 0,
+       "d": 0,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "405ea00000000000",
+        "406aa00000000000",
+        "4024000000000000",
+        "4024000000000000"
+       ],
+       "fill": "#336699",
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 1,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "4068b00000000000",
+        "404e000000000000",
+        "4024000000000000",
+        "4024000000000000"
+       ],
+       "fill": "#336699",
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 2,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "4071080000000000",
+        "4064400000000000",
+        "4024000000000000",
+        "4024000000000000"
+       ],
+       "fill": "#336699",
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 3,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "4075b80000000000",
+        "4059a00000000000",
+        "4024000000000000",
+        "4024000000000000"
+       ],
+       "fill": "#336699",
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 4,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "407a680000000000",
+        "406dd00000000000",
+        "4024000000000000",
+        "4024000000000000"
+       ],
+       "fill": "#336699",
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 5,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "407f180000000000",
+        "4061100000000000",
+        "4024000000000000",
+        "4024000000000000"
+       ],
+       "fill": "#336699",
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      }
+     ]
+    },
+    {
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 3
+     },
+     "symbols": [
+      {
+       "s": 0,
+       "d": 0,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "405ea00000000000",
+        "406aa00000000000",
+        "4024000000000000",
+        "4024000000000000"
+       ],
+       "fill": "#336699",
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 1,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "4068b00000000000",
+        "404e000000000000",
+        "4024000000000000",
+        "4024000000000000"
+       ],
+       "fill": "#336699",
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 2,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "4071080000000000",
+        "4064400000000000",
+        "4024000000000000",
+        "4024000000000000"
+       ],
+       "fill": "#336699",
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 3,
+       "temp": false,
+       "states": "emphasis",
+       "ignore": false,
+       "rect": [
+        "4075580000000000",
+        "4058200000000000",
+        "4036000000000000",
+        "4036000000000000"
+       ],
+       "fill": "#ff0000",
+       "stroke": "#000000",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 110,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 4,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "407a680000000000",
+        "406dd00000000000",
+        "4024000000000000",
+        "4024000000000000"
+       ],
+       "fill": "#336699",
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 5,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "407f180000000000",
+        "4061100000000000",
+        "4024000000000000",
+        "4024000000000000"
+       ],
+       "fill": "#336699",
+       "stroke": null,
+       "lineWidth": "3ff0000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "clipped",
+   "note": "yAxis max 20: the row of 30 is outside the clip and gets no symbol; 18 does",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "c0",
+      "c1",
+      "c2",
+      "c3",
+      "c4",
+      "c5"
+     ]
+    },
+    "yAxis": {
+     "max": 20
+    },
+    "series": [
+     {
+      "type": "line",
+      "showSymbol": false,
+      "data": [
+       12,
+       30,
+       18,
+       25,
+       9,
+       21
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "action": null,
+     "symbols": []
+    },
+    {
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 1
+     },
+     "symbols": []
+    },
+    {
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 2
+     },
+     "symbols": [
+      {
+       "s": 0,
+       "d": 2,
+       "temp": true,
+       "states": "emphasis",
+       "ignore": false,
+       "rect": [
+        "4071133333333333",
+        "40558ccccccccccd",
+        "4021333333333333",
+        "4021333333333333"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 110,
+       "label": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "thinned",
+   "note": "showSymbol true over 40 categories in a narrow grid: showAllSymbol auto thins them; a thinned row's highlight builds one",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "grid": {
+     "left": 40,
+     "right": 400
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "c0",
+      "c1",
+      "c2",
+      "c3",
+      "c4",
+      "c5",
+      "c6",
+      "c7",
+      "c8",
+      "c9",
+      "c10",
+      "c11",
+      "c12",
+      "c13",
+      "c14",
+      "c15",
+      "c16",
+      "c17",
+      "c18",
+      "c19",
+      "c20",
+      "c21",
+      "c22",
+      "c23",
+      "c24",
+      "c25",
+      "c26",
+      "c27",
+      "c28",
+      "c29",
+      "c30",
+      "c31",
+      "c32",
+      "c33",
+      "c34",
+      "c35",
+      "c36",
+      "c37",
+      "c38",
+      "c39"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       1,
+       8,
+       2,
+       9,
+       3,
+       10,
+       4,
+       11,
+       5,
+       12,
+       6,
+       13,
+       7,
+       1,
+       8,
+       2,
+       9,
+       3,
+       10,
+       4,
+       11,
+       5,
+       12,
+       6,
+       13,
+       7,
+       1,
+       8,
+       2,
+       9,
+       3,
+       10,
+       4,
+       11,
+       5,
+       12,
+       6,
+       13,
+       7,
+       1
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "action": null,
+     "symbols": [
+      {
+       "s": 0,
+       "d": 0,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "4043000000000000",
+        "4072b00000000000",
+        "4020000000000000",
+        "4020000000000000"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 7,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "4050800000000000",
+        "4060200000000000",
+        "4020000000000000",
+        "4020000000000000"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 14,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "4057800000000000",
+        "4066800000000000",
+        "4020000000000000",
+        "4020000000000000"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 21,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "405e800000000000",
+        "406ce00000000000",
+        "4020000000000000",
+        "4020000000000000"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 28,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "4062c00000000000",
+        "4071a00000000000",
+        "4020000000000000",
+        "4020000000000000"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 35,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "4066400000000000",
+        "405c000000000000",
+        "4020000000000000",
+        "4020000000000000"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      }
+     ]
+    },
+    {
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 1
+     },
+     "symbols": [
+      {
+       "s": 0,
+       "d": 0,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "4043000000000000",
+        "4072b00000000000",
+        "4020000000000000",
+        "4020000000000000"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 1,
+       "temp": true,
+       "states": "emphasis",
+       "ignore": false,
+       "rect": [
+        "4044d9999999999a",
+        "4066766666666666",
+        "4021333333333333",
+        "4021333333333333"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 110,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 7,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "4050800000000000",
+        "4060200000000000",
+        "4020000000000000",
+        "4020000000000000"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 14,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "4057800000000000",
+        "4066800000000000",
+        "4020000000000000",
+        "4020000000000000"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 21,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "405e800000000000",
+        "406ce00000000000",
+        "4020000000000000",
+        "4020000000000000"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 28,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "4062c00000000000",
+        "4071a00000000000",
+        "4020000000000000",
+        "4020000000000000"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 35,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "4066400000000000",
+        "405c000000000000",
+        "4020000000000000",
+        "4020000000000000"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      }
+     ]
+    },
+    {
+     "action": {
+      "type": "downplay",
+      "seriesIndex": 0,
+      "dataIndex": 1
+     },
+     "symbols": [
+      {
+       "s": 0,
+       "d": 0,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "4043000000000000",
+        "4072b00000000000",
+        "4020000000000000",
+        "4020000000000000"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 7,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "4050800000000000",
+        "4060200000000000",
+        "4020000000000000",
+        "4020000000000000"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 14,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "4057800000000000",
+        "4066800000000000",
+        "4020000000000000",
+        "4020000000000000"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 21,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "405e800000000000",
+        "406ce00000000000",
+        "4020000000000000",
+        "4020000000000000"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 28,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "4062c00000000000",
+        "4071a00000000000",
+        "4020000000000000",
+        "4020000000000000"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 35,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "4066400000000000",
+        "405c000000000000",
+        "4020000000000000",
+        "4020000000000000"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      }
+     ]
+    },
+    {
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 2
+     },
+     "symbols": [
+      {
+       "s": 0,
+       "d": 0,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "4043000000000000",
+        "4072b00000000000",
+        "4020000000000000",
+        "4020000000000000"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 2,
+       "temp": true,
+       "states": "emphasis",
+       "ignore": false,
+       "rect": [
+        "4046d9999999999a",
+        "40719b3333333333",
+        "4021333333333333",
+        "4021333333333333"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 110,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 7,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "4050800000000000",
+        "4060200000000000",
+        "4020000000000000",
+        "4020000000000000"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 14,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "4057800000000000",
+        "4066800000000000",
+        "4020000000000000",
+        "4020000000000000"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 21,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "405e800000000000",
+        "406ce00000000000",
+        "4020000000000000",
+        "4020000000000000"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 28,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "4062c00000000000",
+        "4071a00000000000",
+        "4020000000000000",
+        "4020000000000000"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      },
+      {
+       "s": 0,
+       "d": 35,
+       "temp": false,
+       "states": "",
+       "ignore": false,
+       "rect": [
+        "4066400000000000",
+        "405c000000000000",
+        "4020000000000000",
+        "4020000000000000"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 100,
+       "label": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "label",
+   "note": "label.show true, showSymbol false: the temporary symbol carries its label",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "c0",
+      "c1",
+      "c2",
+      "c3",
+      "c4",
+      "c5"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "showSymbol": false,
+      "data": [
+       12,
+       30,
+       18,
+       25,
+       9,
+       21
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "action": null,
+     "symbols": []
+    },
+    {
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 5
+     },
+     "symbols": [
+      {
+       "s": 0,
+       "d": 5,
+       "temp": true,
+       "states": "emphasis",
+       "ignore": false,
+       "rect": [
+        "407f233333333333",
+        "4061266666666666",
+        "4021333333333333",
+        "4021333333333333"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 110,
+       "label": {
+        "text": "21",
+        "shown": true
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "two",
+   "note": "two lines without symbols, the second highlighted at 0 by series index 1",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "c0",
+      "c1",
+      "c2",
+      "c3",
+      "c4",
+      "c5"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "showSymbol": false,
+      "data": [
+       12,
+       30,
+       18,
+       25,
+       9,
+       21
+      ]
+     },
+     {
+      "type": "line",
+      "showSymbol": false,
+      "symbolSize": 8,
+      "data": [
+       5,
+       8,
+       3,
+       9,
+       4,
+       6
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "action": null,
+     "symbols": []
+    },
+    {
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 1,
+      "dataIndex": 0
+     },
+     "symbols": [
+      {
+       "s": 1,
+       "d": 0,
+       "temp": true,
+       "states": "emphasis",
+       "ignore": false,
+       "rect": [
+        "405e866666666666",
+        "407101999999999a",
+        "402599999999999a",
+        "402599999999999a"
+       ],
+       "fill": "#fff",
+       "stroke": "#b6d634",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 110,
+       "label": null
+      }
+     ]
+    },
+    {
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "symbols": [
+      {
+       "s": 0,
+       "d": 0,
+       "temp": true,
+       "states": "emphasis",
+       "ignore": false,
+       "rect": [
+        "405ecccccccccccd",
+        "406ab66666666666",
+        "4021333333333333",
+        "4021333333333333"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 110,
+       "label": null
+      },
+      {
+       "s": 1,
+       "d": 0,
+       "temp": true,
+       "states": "emphasis",
+       "ignore": false,
+       "rect": [
+        "405e866666666666",
+        "407101999999999a",
+        "402599999999999a",
+        "402599999999999a"
+       ],
+       "fill": "#fff",
+       "stroke": "#b6d634",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 110,
+       "label": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "rerender",
+   "note": "a legend toggle of the other line after highlight 2: the render removes the temporary symbol",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "legend": {},
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "c0",
+      "c1",
+      "c2",
+      "c3",
+      "c4",
+      "c5"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "name": "A",
+      "showSymbol": false,
+      "data": [
+       12,
+       30,
+       18,
+       25,
+       9,
+       21
+      ]
+     },
+     {
+      "type": "line",
+      "name": "B",
+      "showSymbol": false,
+      "data": [
+       5,
+       8,
+       3,
+       9,
+       4,
+       6
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "action": null,
+     "symbols": []
+    },
+    {
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 2
+     },
+     "symbols": [
+      {
+       "s": 0,
+       "d": 2,
+       "temp": true,
+       "states": "emphasis",
+       "ignore": false,
+       "rect": [
+        "4071133333333333",
+        "4064566666666666",
+        "4021333333333333",
+        "4021333333333333"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 110,
+       "label": null
+      }
+     ]
+    },
+    {
+     "action": {
+      "type": "legendToggleSelect",
+      "name": "B"
+     },
+     "symbols": []
+    }
+   ]
+  }
+ ],
+ "guards": [
+  "basic: none at rest, the temporary symbol of 2 in emphasis, none after the downplay",
+  "move: 1 and 4 both there, then only 4",
+  "array: none",
+  "styled: the emphasis colour",
+  "clipped: none for 1, one for 2",
+  "thinned: some symbols thinned at rest; 1 is one of them",
+  "label: the temporary symbol's label shows",
+  "two: series 1's own temporary symbol",
+  "rerender: built, then gone after the render"
+ ]
+}

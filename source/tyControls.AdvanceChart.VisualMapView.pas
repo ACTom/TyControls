@@ -79,6 +79,9 @@ type
       2 at (1, 1) in tokens.color.shadow -- a Color of 0 there is the ink's
       Shadow }
     HandleShadow, IndicatorShadow: TTyChartShadow;
+    { [R5-F] the thumbs' shadow in the emphasis state: emphasis.handleStyle's
+      shadow keys over handleStyle's, key by key }
+    HandleEmphShadow: TTyChartShadow;
     BorderWidth: Double;
     Z: Integer;
     { the colours an author may write over the theme's }
@@ -457,7 +460,7 @@ end;
 function TyVisualMapViewSpecOf(AOption: TTyChartOption;
   AIndex: Integer): TTyVmViewSpec;
 var
-  node, ts, hs: TJSONObject;
+  node, ts, hs, eh: TJSONObject;
   d: TJSONData;
   arr: TJSONArray;
   def: TTyRawBox;
@@ -616,6 +619,10 @@ begin
   hs := ObjOf(node.Find('handleStyle'));
   { [R5-A] the thumbs' shadow, and the indicator's over its default }
   if hs <> nil then TyStReadShadow([hs], [], [], Result.HandleShadow);
+  { [R5-F] and the hover's, its shadow keys over the normal ones }
+  eh := ObjOf(node.Find('emphasis'));
+  if eh <> nil then eh := ObjOf(eh.Find('handleStyle'));
+  TyStReadShadow([eh, hs], [], [], Result.HandleEmphShadow);
   Result.IndicatorShadow.Blur := 2;
   Result.IndicatorShadow.OffsetX := 1;
   Result.IndicatorShadow.OffsetY := 1;
@@ -2420,7 +2427,11 @@ begin
       if not IsNan(AView.EmphOpacity) then
         el.Style.Alpha := Max(0, Min(1, AView.EmphOpacity));
     end;
-    TyStyleSetShadow(el.Style, AView.HandleShadow);
+    { [R5-F] the hover's shadow in the emphasis state }
+    if ALive.Has and (h <= 1) and ALive.HandleEmph[h] then
+      TyStyleSetShadow(el.Style, AView.HandleEmphShadow)
+    else
+      TyStyleSetShadow(el.Style, AView.HandleShadow);
     AList.Add(el);
     Inc(Result);
   end;

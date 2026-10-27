@@ -1,0 +1,498 @@
+{
+ "source": "ECharts 6.1.0, zrender 6.1.0; node v22.22.2",
+ "W": 600,
+ "H": 400,
+ "seed": 2463534242,
+ "clock": {
+  "start": 1700000000000,
+  "stepDt": 10
+ },
+ "notes": [
+  "Pointer steps: zrender Handler mousemove / mousedown + mouseup + click / mouseout from outside the canvas; each 10 ms after the last; a frame of every chart after every step.",
+  "TooltipRichContent.getSize answers 80 x 40."
+ ],
+ "cases": [
+  {
+   "id": "lg-tip",
+   "note": "legend.tooltip show: an item's tooltip is its name; off the item it hides",
+   "option": {
+    "tooltip": {},
+    "legend": {
+     "top": 10,
+     "tooltip": {
+      "show": true
+     }
+    },
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Alpha",
+      "data": [
+       3,
+       9,
+       6,
+       8
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "Beta",
+      "data": [
+       2,
+       4,
+       7,
+       5
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "op": "move",
+     "at": [
+      269,
+      22
+     ],
+     "events": [
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": {
+      "tip": {
+       "which": "legend:Alpha",
+       "text": "Alpha",
+       "box": [
+        289,
+        42
+       ]
+      }
+     }
+    },
+    {
+     "op": "move",
+     "at": [
+      334,
+      22
+     ],
+     "events": [
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": {
+      "tip": {
+       "which": "legend:Beta",
+       "text": "Beta",
+       "box": [
+        354,
+        42
+       ]
+      }
+     }
+    },
+    {
+     "op": "move",
+     "at": [
+      5,
+      300
+     ],
+     "events": [
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": {
+      "tip": {
+       "which": "legend:Beta",
+       "text": "Beta",
+       "box": [
+        354,
+        42
+       ]
+      }
+     }
+    },
+    {
+     "op": "idle",
+     "ms": 200,
+     "events": [],
+     "state": {
+      "tip": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "lg-tip-fmt",
+   "note": "legend.tooltip with a template ({a} the name) and a position",
+   "option": {
+    "tooltip": {},
+    "legend": {
+     "top": 10,
+     "tooltip": {
+      "show": true,
+      "formatter": "series {a}!",
+      "position": "bottom"
+     }
+    },
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Alpha",
+      "data": [
+       3,
+       9,
+       6,
+       8
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "Beta",
+      "data": [
+       2,
+       4,
+       7,
+       5
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "op": "move",
+     "at": [
+      334,
+      22
+     ],
+     "events": [
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": {
+      "tip": {
+       "which": "legend:Beta",
+       "text": "series Beta!",
+       "box": [
+        294.42,
+        39
+       ]
+      }
+     }
+    },
+    {
+     "op": "leave",
+     "events": [
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": {
+      "tip": {
+       "which": "legend:Beta",
+       "text": "series Beta!",
+       "box": [
+        294.42,
+        39
+       ]
+      }
+     }
+    },
+    {
+     "op": "idle",
+     "ms": 200,
+     "events": [],
+     "state": {
+      "tip": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "lg-tip-item",
+   "note": "the legend's tooltip off, item Alpha's own on with its own template: Alpha shows, Beta does not",
+   "option": {
+    "tooltip": {},
+    "legend": {
+     "top": 10,
+     "data": [
+      {
+       "name": "Alpha",
+       "tooltip": {
+        "show": true,
+        "formatter": "item {a}"
+       }
+      },
+      "Beta"
+     ]
+    },
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Alpha",
+      "data": [
+       3,
+       9,
+       6,
+       8
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "Beta",
+      "data": [
+       2,
+       4,
+       7,
+       5
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "op": "move",
+     "at": [
+      269,
+      22
+     ],
+     "events": [
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": {
+      "tip": {
+       "which": "legend:Alpha",
+       "text": "item Alpha",
+       "box": [
+        289,
+        42
+       ]
+      }
+     }
+    },
+    {
+     "op": "move",
+     "at": [
+      334,
+      22
+     ],
+     "events": [
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": {
+      "tip": {
+       "which": "legend:Alpha",
+       "text": "item Alpha",
+       "box": [
+        289,
+        42
+       ]
+      }
+     }
+    },
+    {
+     "op": "idle",
+     "ms": 200,
+     "events": [],
+     "state": {
+      "tip": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "lg-tip-off",
+   "note": "no legend tooltip (its default): a hover on an item shows nothing",
+   "option": {
+    "tooltip": {},
+    "legend": {
+     "top": 10
+    },
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "Alpha",
+      "data": [
+       3,
+       9,
+       6,
+       8
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "Beta",
+      "data": [
+       2,
+       4,
+       7,
+       5
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "op": "move",
+     "at": [
+      269,
+      22
+     ],
+     "events": [
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "from": "<view uid>",
+        "dispatchAction": null
+       }
+      ]
+     ],
+     "state": {
+      "tip": null
+     }
+    },
+    {
+     "op": "idle",
+     "ms": 200,
+     "events": [],
+     "state": {
+      "tip": null
+     }
+    }
+   ]
+  }
+ ],
+ "guards": [
+  {
+   "id": "tip-name",
+   "ok": true,
+   "what": "the name by default"
+  },
+  {
+   "id": "tip-move",
+   "ok": true,
+   "what": "the next item"
+  },
+  {
+   "id": "tip-fmt",
+   "ok": true,
+   "what": "the template"
+  },
+  {
+   "id": "tip-item",
+   "ok": true,
+   "what": "the item's own"
+  },
+  {
+   "id": "tip-off",
+   "ok": true,
+   "what": "none by default"
+  }
+ ]
+}

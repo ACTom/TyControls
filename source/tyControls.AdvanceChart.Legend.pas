@@ -173,6 +173,19 @@ type
     HasLineInactiveColour: Boolean;
     LineInactiveColour: TTyChartColor;
     LineInactiveWidth: Double;
+    { [R5-F] symbolRotate: 0 unwritten (the model's 'inherit'), 1 'inherit',
+      2 a number (RotateDeg); symbolKeepAspect where written -- the item's
+      over the legend's }
+    RotateKind: Byte;
+    RotateDeg: Double;
+    HasKeepAspect, KeepAspect: Boolean;
+    { [R5-F] THE ITEM'S OWN TEXT BLOCK: its textStyle as JSON where it asks
+      for one (rich, a box), laid out over the legend's textStyle
+      (RtLegendNode) -- createTextStyle of the item's textStyle model }
+    RtItemNode, RtLegendNode: string;
+    { [R5-F] the item's own `tooltip` as JSON ('' none): its
+      setTooltipConfig option over the legend's tooltip }
+    TooltipJson: string;
   end;
 
   { One row of `legend.data`, or one name the chart offered when there is no
@@ -259,6 +272,9 @@ type
     HasStroke: Boolean;
     Stroke: TTyChartColor;
     VisualLineWidth: Double;
+    { [R5-F] the series' symbolRotate visual (degrees, 0 when none): the
+      icon turns by it under 'inherit' }
+    SymbolRotate: Double;
   end;
   TTyLegendSourceArray = array of TTyLegendSource;
 
@@ -349,6 +365,12 @@ type
     LineWidthLogical: Double;
     { The box createSymbol is handed: itemWidth x itemHeight, scaled. }
     IconBox: TTyRectF;
+    { [R5-F] the icon's turn about the box's centre (degrees) and its
+      keepAspect; the item's own text block (HasRt) }
+    IconRotate: Double;
+    KeepAspect: Boolean;
+    HasRt: Boolean;
+    Rt: TTyRtBlockStyle;
     TextX, TextY: Double;
     TextW, TextH: Double;
     AnchorH: TTyTextAnchorH;
@@ -690,7 +712,7 @@ function TyBuildLegendMarks(const ASpec: TTyLegendSpec;
 
 implementation
 
-uses tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.RichStyle,
+uses jsonparser, tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.RichStyle,
   tyControls.AdvanceChart.States, tyControls.AdvanceChart.MarkerView,
   tyControls.AdvanceChart.Color, tyControls.StrConsts;
 
@@ -1179,6 +1201,28 @@ begin
     Colour(AObj.Find('inactiveColor'), Result.HasInactiveColour, Result.InactiveColour);
     Colour(AObj.Find('inactiveBorderColor'), Result.HasInactiveBorderColour,
       Result.InactiveBorderColour);
+    { [R5-F] its text block where its textStyle asks for one }
+    if (st <> nil) and TyRtNodeWantsBlock(st) then Result.RtItemNode := st.AsJSON
+    else Result.RtItemNode := '';
+  end;
+  { [R5-F] its own tooltip (an item's; setTooltipConfig's option) }
+  d := AObj.Find('tooltip');
+  if not ALegendLevel and (d <> nil) and (d.JSONType = jtObject) then Result.TooltipJson := d.AsJSON
+  else Result.TooltipJson := '';
+  { [R5-F] symbolRotate and symbolKeepAspect, at either level }
+  d := AObj.Find('symbolRotate');
+  if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'inherit') then
+    Result.RotateKind := 1
+  else if (d <> nil) and (d.JSONType = jtNumber) then
+  begin
+    Result.RotateKind := 2;
+    Result.RotateDeg := d.AsFloat;
+  end;
+  d := AObj.Find('symbolKeepAspect');
+  if (d <> nil) and (d.JSONType = jtBoolean) then
+  begin
+    Result.HasKeepAspect := True;
+    Result.KeepAspect := d.AsBoolean;
   end;
   st := ObjOf(AObj.Find('itemStyle'));
   if st <> nil then
@@ -1233,6 +1277,9 @@ begin
   if node <> nil then d := node.Find('data');
   { the legend's own itemStyle / lineStyle, under every item's [R5-B] }
   legendOwn := TyLegendOwnOf(node, TyLegendNoOwn, True);
+  { [R5-F] its textStyle, under an item's own block }
+  if (node <> nil) and (node.Find('textStyle') is TJSONObject) then
+    legendOwn.RtLegendNode := node.Find('textStyle').AsJSON;
 
   if (d <> nil) and (d is TJSONArray) then
   begin
@@ -1746,6 +1793,31 @@ begin
   if AIcon = '' then AIcon := 'roundRect';
 end;
 
+{ [R5-F] an item's text block: its textStyle over the legend's, as free text }
+function LegendItemRt(const AOwn: TTyLegendOwn; const AGlobal: TTyRtGlobal): TTyRtBlockStyle;
+var
+  a, b: TJSONData;
+  ca, cb: TJSONObject;
+begin
+  a := nil;
+  b := nil;
+  try
+    try
+      a := GetJSON(AOwn.RtItemNode);
+      if AOwn.RtLegendNode <> '' then b := GetJSON(AOwn.RtLegendNode);
+    except
+      FreeAndNil(a);
+      FreeAndNil(b);
+    end;
+    if a is TJSONObject then ca := TJSONObject(a) else ca := nil;
+    if b is TJSONObject then cb := TJSONObject(b) else cb := nil;
+    Result := TyRtResolve([ca, cb], AGlobal, TyRtResolveOpt(False));
+  finally
+    a.Free;
+    b.Free;
+  end;
+end;
+
 { The pen an `empty` icon is ringed with: the line's own width where it has
   one, and 2 where it has not. The same fallback the datum mark builders
   make, so a legend's marker and the markers on the line it stands for are
@@ -1763,8 +1835,38 @@ end;
 
   ARulePx is the line series' rule, 0 when there is none; APenPx is the pen a
   ring or a bare stroke is drawn with, which is never 0. Both DEVICE px. }
+{ [R5-F] a local rect turned about (ACX, ACY) by ADeg as zrender's rotation
+  turns it (anticlockwise for a positive angle in the y-down frame), and its
+  axis-aligned bounds: what getBoundingRect through the transform gives }
+function TurnedBounds(const ARect: TTyRectF; ACX, ACY, ADeg: Double): TTyRectF;
+var
+  s, c, x, y, dx, dy: Double;
+  k: Integer;
+  pts: array[0..3] of TTyPointF;
+begin
+  if (ADeg = 0) or IsNan(ADeg) or not TyRectFIsValid(ARect) then Exit(ARect);
+  s := Sin(-DegToRad(ADeg));
+  c := Cos(-DegToRad(ADeg));
+  pts[0] := TyPointF(ARect.Left, ARect.Top);
+  pts[1] := TyPointF(ARect.Right, ARect.Top);
+  pts[2] := TyPointF(ARect.Right, ARect.Bottom);
+  pts[3] := TyPointF(ARect.Left, ARect.Bottom);
+  for k := 0 to 3 do
+  begin
+    dx := pts[k].X - ACX;
+    dy := pts[k].Y - ACY;
+    x := ACX + dx * c - dy * s;
+    y := ACY + dx * s + dy * c;
+    if k = 0 then Result := TyRectF(x, y, x, y)
+    else
+      Result := TyRectF(Min(Result.Left, x), Min(Result.Top, y),
+        Max(Result.Right, x), Max(Result.Bottom, y));
+  end;
+end;
+
 function IconExtent(const AIcon: string; AOwn: Boolean;
-  AIconW, AIconH, ARulePx, APenPx: Double; AStrokePx: Double = 0): TTyRectF;
+  AIconW, AIconH, ARulePx, APenPx: Double; AStrokePx: Double = 0;
+  ARotateDeg: Double = 0; AKeepAspect: Boolean = False): TTyRectF;
 var
   spec: TTySymbolSpec;
   empty: Boolean;
@@ -1798,7 +1900,8 @@ begin
         grow := StrokeGrow(APenPx);
       r := TyRectF((AIconW - size) / 2 - grow, (AIconH - size) / 2 - grow,
                    (AIconW + size) / 2 + grow, (AIconH + size) / 2 + grow);
-      Result := RectUnion(Result, r);
+      { [R5-F] the marker turned about the box's centre }
+      Result := RectUnion(Result, TurnedBounds(r, AIconW / 2, AIconH / 2, ARotateDeg));
     end;
     Exit;
   end;
@@ -1808,7 +1911,9 @@ begin
   spec.Kind := kind;
   spec.Empty := empty;
   spec.PathData := path;
-  sh := TyBuildSymbolInBox(spec, box);
+  { [R5-F] the icon's keepAspect, as it is drawn }
+  spec.KeepAspect := AKeepAspect;
+  sh := TyBuildSymbolInRealBox(spec, box);
   Result := TyShapeBounds(sh);
   if not TyRectFIsValid(Result) then Exit;
   { A filled icon carries no pen at all -- `itemStyle.borderWidth: 'auto'`
@@ -1828,6 +1933,9 @@ begin
     Result := TyRectF(Result.Left - grow, Result.Top - grow,
                       Result.Right + grow, Result.Bottom + grow);
   end;
+  { [R5-F] turned about the box's centre (setOrigin [itemWidth / 2,
+    itemHeight / 2]): the local rect's bounds through the turn }
+  Result := TurnedBounds(Result, AIconW / 2, AIconH / 2, ARotateDeg);
 end;
 
 { boxLayout, layout.ts:74-142 -- the wrap, transcribed including the parts that
@@ -2568,6 +2676,10 @@ var
   textX, ox, oy, mainW, mainH: Double;
   drawn: Integer;
   boxM: ITyTextBoxMeasurer;
+  { [R5-F] the turn wanted, the icon word, the item's measurer }
+  rotWant: Double;
+  iconWord: string;
+  itemM: ITyTextMeasurer;
   tb: TTyRectF;
 begin
   Result := Default(TTyLegendLayout);
@@ -2671,6 +2783,28 @@ begin
     { [R5-B] THE ITEM'S OWN STYLE: its icon's colour, pen, opacity and rule
       over the series' visual, and its words' font over the legend's }
     it.Own := AEntries[i].Own;
+    { [R5-F] ITS TURN: a line's own icon (LineSeries.getLegendIcon) turns its
+      marker by the number, or by the series' symbolRotate under 'inherit';
+      the default icon turns only when the icon word is 'inherit' and the
+      series has a symbol (getDefaultLegendIcon) }
+    if it.Own.RotateKind = 2 then rotWant := it.Own.RotateDeg
+    else rotWant := src.SymbolRotate;
+    iconWord := AEntries[i].Icon;
+    if iconWord = '' then iconWord := ASpec.Icon;
+    if it.OwnIcon then it.IconRotate := rotWant
+    else if (iconWord = 'inherit') and (src.DefaultIcon <> '') then it.IconRotate := rotWant
+    else it.IconRotate := 0;
+    if IsNan(it.IconRotate) or IsInfinite(it.IconRotate) then it.IconRotate := 0;
+    { and its keepAspect, the item's over the legend's }
+    if it.Own.HasKeepAspect then it.KeepAspect := it.Own.KeepAspect
+    else it.KeepAspect := ASpec.KeepAspect;
+    { [R5-F] ITS OWN TEXT BLOCK: its textStyle over the legend's }
+    it.HasRt := False;
+    if it.Own.RtItemNode <> '' then
+    begin
+      it.Rt := LegendItemRt(it.Own, AFont.RtGlobal);
+      it.HasRt := it.Rt.Needed;
+    end;
     if it.Own.HasFill then
     begin
       it.Colour := it.Own.Fill;
@@ -2701,7 +2835,12 @@ begin
         or (it.FontWeight and not TyChartFontWeightMask);
     it.FontWeight := TyFontStyleCodeOver(it.Own.FontStyle, it.FontWeight);
 
-    AMeasurer.MeasureLine(it.Text, it.FontName, it.FontSizeLogical,
+    { [R5-F] an item with a block of its own is measured as that block }
+    if it.HasRt then
+      itemM := TyRtBlockMeasurer(TyRtInnerMeasurer(AMeasurer), it.Rt, AFont.RtGlobal, scale)
+    else
+      itemM := AMeasurer;
+    itemM.MeasureLine(it.Text, it.FontName, it.FontSizeLogical,
       it.FontWeight, it.TextW, it.TextH);
 
     { stroked: unselected always has inactiveBorderColor, selected only the
@@ -2709,10 +2848,11 @@ begin
     if (it.IconPen > 0) and ((not it.Selected) or it.HasStroke) then
       iconR := IconExtent(it.Icon, it.OwnIcon, iw, ih,
         it.LineWidthLogical * scale, RingPen(it.LineWidthLogical) * scale,
-        it.IconPen * scale)
+        it.IconPen * scale, it.IconRotate, it.KeepAspect and not it.OwnIcon)
     else
       iconR := IconExtent(it.Icon, it.OwnIcon, iw, ih,
-        it.LineWidthLogical * scale, RingPen(it.LineWidthLogical) * scale);
+        it.LineWidthLogical * scale, RingPen(it.LineWidthLogical) * scale,
+        0, it.IconRotate, it.KeepAspect and not it.OwnIcon);
 
     { THE WORDS HANG OFF THE ICON'S FAR EDGE, and off its NEAR edge when the
       legend is right-aligned -- where the anchor goes NEGATIVE and the item's
@@ -2735,7 +2875,7 @@ begin
     { A BLOCK'S BOX WHERE IT SITS: a bordered token overhangs the anchor by
       half its stroke, and the overhang on the icon's side is inside the
       item's group already (LegendView.ts _createItem: the group's bounds) }
-    if Supports(AMeasurer, ITyTextBoxMeasurer, boxM) then
+    if Supports(itemM, ITyTextBoxMeasurer, boxM) then
     begin
       tb := boxM.MeasureBox(it.Text, it.FontName, it.FontSizeLogical, it.FontWeight,
         it.AnchorH, tavMiddle);
@@ -2949,9 +3089,13 @@ var
     { [F6a] getDefaultLegendIcon hands createSymbol the legend's
       symbolKeepAspect; a line's own marker (LineSeries.getLegendIcon)
       none }
-    sp.KeepAspect := ASpec.KeepAspect and not it.OwnIcon;
+    sp.KeepAspect := it.KeepAspect and not it.OwnIcon;
+    { [R5-F] turned about its box's centre }
+    sp.RotateDeg := it.IconRotate;
     Result := Blank;
-    Result.Shape := TyBuildSymbolInBox(sp, ABox);
+    { [R5-F] a path kept to its aspect in the real box (getDefaultLegendIcon's
+      createSymbol) [was: stretched over it] }
+    Result.Shape := TyBuildSymbolInRealBox(sp, ABox);
     if AEmpty or (AKind = tsyLine) then
     begin
       Result.Style.StrokeColor := colour;
@@ -3155,10 +3299,11 @@ begin
       el.Caption.AnchorV := tavMiddle;
       { THE BLOCK: the item's ink is its fixed fill and the inherit colour a
         rich style without a colour takes (LegendView.ts:470-480) [Batch 86] }
-      if AFont.Rt.Needed and (AMeasurer <> nil) then
+      if (it.HasRt or AFont.Rt.Needed) and (AMeasurer <> nil) then
       begin
         if APPI > 0 then rtScale := APPI / 96 else rtScale := 1;
-        rtb := AFont.Rt;
+        { [R5-F] the item's own block over the legend's }
+        if it.HasRt then rtb := it.Rt else rtb := AFont.Rt;
         TyRtFinish(rtb, el.Caption.FontName, el.Caption.FontSizeLogical,
           el.Caption.FontWeight, AFont.RtGlobal, True, el.Caption.Colour);
         rtb.Style.HasFill := True;

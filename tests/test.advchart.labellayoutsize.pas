@@ -307,6 +307,26 @@ begin
             el.Shape.Points[k].X, el.Shape.Points[k].Y]));
       end;
     end;
+    { [R5-F] AN UPDATE AFTER THE DRAG (a legend toggle): updateLayoutConfig
+      lays every label out afresh, the drag gone }
+    if cse.Find('then') = nil then Continue;
+    FChart.DispatchAction(cse.Objects['then'].AsJSON);
+    FChart.Render(FBmp.Canvas, Classes.Rect(0, 0, cw, ch), 96);
+    labs := cse.Arrays['labelsThen'];
+    for i := 0 to labs.Count - 1 do
+    begin
+      lb := labs.Objects[i];
+      FName := Format('%s then s%d d%d', [cse.Strings['id'], lb.Integers['s'], lb.Integers['d']]);
+      li := FindLabel(FChart.List, lb.Integers['s'], lb.Integers['d']);
+      Inc(FCompared);
+      if li < 0 then begin Miss('no label'); Continue; end;
+      el := FChart.List.Element(li);
+      if el.Ignore then Continue;
+      b := el.Shape.Bounds;
+      Near('left', b.Left, FromHex(lb.Arrays['rect'].Strings[0]));
+      Near('top', b.Top, FromHex(lb.Arrays['rect'].Strings[1]));
+      Inc(done);
+    end;
   end;
   AssertEquals(IntToStr(FBad) + ' of ' + IntToStr(FCompared)
     + ' disagree with upstream:' + FReport, 0, FBad);

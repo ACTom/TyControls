@@ -167,6 +167,19 @@ begin
   if (d <> nil) and (d.JSONType = jtString) then Result := d.AsString;
 end;
 
+{ [R5-F] a series' symbolRotate as its symbol visual holds it: the number
+  written, 0 where none is }
+function TTyCustomAdvanceChart.SeriesSymbolRotateOf(ASeriesIndex: Integer): Double;
+var n, d: TJSONData;
+begin
+  Result := 0;
+  n := FOption.ComponentAt('series', ASeriesIndex);
+  if not (n is TJSONObject) then Exit;
+  d := TJSONObject(n).Find('symbolRotate');
+  if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then
+    Result := d.AsFloat;
+end;
+
 function TTyCustomAdvanceChart.LegendSources(const AEntries: TTyLegendEntryArray;
   ALegend: Integer): TTyLegendSourceArray;
 var
@@ -201,6 +214,8 @@ begin
       Result[i].DefaultIcon := TyLegendDefaultIcon(FBindings[j].SeriesType,
         SeriesSymbolWord(j));
       Result[i].OwnIcon := TyLegendDrawsOwnIcon(FBindings[j].SeriesType);
+      { [R5-F] its symbolRotate visual }
+      Result[i].SymbolRotate := SeriesSymbolRotateOf(FBindings[j].SeriesIndex);
       { the series' style decal under the legend's own [Batch 131]; an icon
         the series draws itself (a line's) takes it too: getLegendIcon sets
         the legend style on its symbol, decal and all [F4a] }
@@ -324,6 +339,7 @@ begin
           Result[i].DefaultIcon := TyLegendDefaultIcon(
             FBindings[j].SeriesType, SeriesSymbolWord(j));
           Result[i].OwnIcon := TyLegendDrawsOwnIcon(FBindings[j].SeriesType);
+          Result[i].SymbolRotate := SeriesSymbolRotateOf(FBindings[j].SeriesIndex);
           if Result[i].OwnIcon then Result[i].LineWidthLogical := 2
           else LegendBorderOf(j, k, Result[i]);
           found := True;

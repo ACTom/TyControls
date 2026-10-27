@@ -3512,6 +3512,780 @@
      ]
     }
    ]
+  },
+  {
+   "id": "x-styled",
+   "note": "a handle with a border, an opacity and a shadow (blur 6 at (2, 3) in rgba(0,0,0,0.5))",
+   "types": [
+    "updateaxispointer",
+    "showtip",
+    "hidetip",
+    "mouseover",
+    "mouseout"
+   ],
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+       ],
+       "axisPointer": {
+        "handle": {
+         "show": true,
+         "color": "#ff0000",
+         "borderColor": "#0000ff",
+         "borderWidth": 2,
+         "opacity": 0.8,
+         "shadowBlur": 6,
+         "shadowOffsetX": 2,
+         "shadowOffsetY": 3,
+         "shadowColor": "rgba(0,0,0,0.5)"
+        }
+       }
+      },
+      "yAxis": {
+       "type": "value"
+      },
+      "series": [
+       {
+        "type": "line",
+        "data": [
+         3,
+         7,
+         2,
+         5,
+         6
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "idle",
+     "ms": 10,
+     "events": [],
+     "state": [
+      {
+       "cursor": null,
+       "tip": null,
+       "handles": [
+        {
+         "axis": "xAxis0",
+         "status": "show",
+         "value": 4,
+         "handle": {
+          "x": 495,
+          "y": 370,
+          "rotation": 0,
+          "scaleX": 22.5,
+          "scaleY": 22.5,
+          "fill": "#ff0000",
+          "invisible": false,
+          "type": "path",
+          "image": null,
+          "stroke": "#0000ff",
+          "lineWidth": 2,
+          "opacity": 0.8,
+          "shadowBlur": 6,
+          "shadowOffsetX": 2,
+          "shadowOffsetY": 3,
+          "shadowColor": "rgba(0,0,0,0.5)"
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "op": "drag",
+     "points": [
+      [
+       495,
+       370
+      ],
+      [
+       475,
+       370
+      ]
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 4
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 4,
+        "dataIndex": 4,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 4
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 495,
+        "y": 192.5,
+        "tooltipOption": {
+         "verticalAlign": "middle"
+        },
+        "dataIndexInside": 4,
+        "dataIndex": 4,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.category",
+            "axisId": "␀series␀0␀0",
+            "value": 4,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 4,
+              "dataIndex": 4
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 4,
+        "dataIndex": 4,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 4
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 475,
+        "y": 192.5,
+        "tooltipOption": {
+         "verticalAlign": "middle"
+        },
+        "dataIndexInside": 4,
+        "dataIndex": 4,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.category",
+            "axisId": "␀series␀0␀0",
+            "value": 4,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 4,
+              "dataIndex": 4
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 4
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip"
+       }
+      ]
+     ],
+     "state": [
+      {
+       "cursor": "move",
+       "tip": null,
+       "handles": [
+        {
+         "axis": "xAxis0",
+         "status": "show",
+         "value": 4,
+         "handle": {
+          "x": 495,
+          "y": 370,
+          "rotation": 0,
+          "scaleX": 22.5,
+          "scaleY": 22.5,
+          "fill": "#ff0000",
+          "invisible": false,
+          "type": "path",
+          "image": null,
+          "stroke": "#0000ff",
+          "lineWidth": 2,
+          "opacity": 0.8,
+          "shadowBlur": 6,
+          "shadowOffsetX": 2,
+          "shadowOffsetY": 3,
+          "shadowColor": "rgba(0,0,0,0.5)"
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 500,
+     "events": [],
+     "state": [
+      {
+       "cursor": null,
+       "tip": null,
+       "handles": [
+        {
+         "axis": "xAxis0",
+         "status": "show",
+         "value": 4,
+         "handle": {
+          "x": 495,
+          "y": 370,
+          "rotation": 0,
+          "scaleX": 22.5,
+          "scaleY": 22.5,
+          "fill": "#ff0000",
+          "invisible": false,
+          "type": "path",
+          "image": null,
+          "stroke": "#0000ff",
+          "lineWidth": 2,
+          "opacity": 0.8,
+          "shadowBlur": 6,
+          "shadowOffsetX": 2,
+          "shadowOffsetY": 3,
+          "shadowColor": "rgba(0,0,0,0.5)"
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "x-image",
+   "note": "an image:// handle: the picture in the rect [-1, -1, 2, 2] scaled by size / 2, dragged by it",
+   "types": [
+    "updateaxispointer",
+    "showtip",
+    "hidetip",
+    "mouseover",
+    "mouseout"
+   ],
+   "charts": [
+    {
+     "option": {
+      "animation": false,
+      "xAxis": {
+       "type": "category",
+       "data": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+       ],
+       "axisPointer": {
+        "handle": {
+         "show": true,
+         "size": 30,
+         "icon": "image://data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAEklEQVR4nGP4z8DwHxkzkC4AADxAH+HggXe0AAAAAElFTkSuQmCC"
+        }
+       }
+      },
+      "yAxis": {
+       "type": "value"
+      },
+      "series": [
+       {
+        "type": "line",
+        "data": [
+         3,
+         7,
+         2,
+         5,
+         6
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "op": "idle",
+     "ms": 10,
+     "events": [],
+     "state": [
+      {
+       "cursor": null,
+       "tip": null,
+       "handles": [
+        {
+         "axis": "xAxis0",
+         "status": "show",
+         "value": 4,
+         "handle": {
+          "x": 495,
+          "y": 370,
+          "rotation": 0,
+          "scaleX": 15,
+          "scaleY": 15,
+          "fill": "#8292cc",
+          "invisible": false,
+          "type": "image",
+          "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAEklEQVR4nGP4z8DwHxkzkC4AADxAH+HggXe0AAAAAElFTkSuQmCC",
+          "stroke": null,
+          "lineWidth": null,
+          "opacity": 1,
+          "shadowBlur": 0,
+          "shadowOffsetX": 0,
+          "shadowOffsetY": 0,
+          "shadowColor": "#000"
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "op": "drag",
+     "points": [
+      [
+       495,
+       370
+      ],
+      [
+       475,
+       370
+      ],
+      [
+       455,
+       370
+      ]
+     ],
+     "events": [
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 4
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 4,
+        "dataIndex": 4,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 4
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 495,
+        "y": 192.5,
+        "tooltipOption": {
+         "verticalAlign": "middle"
+        },
+        "dataIndexInside": 4,
+        "dataIndex": 4,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.category",
+            "axisId": "␀series␀0␀0",
+            "value": 4,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 4,
+              "dataIndex": 4
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 4,
+        "dataIndex": 4,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 4
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 475,
+        "y": 192.5,
+        "tooltipOption": {
+         "verticalAlign": "middle"
+        },
+        "dataIndexInside": 4,
+        "dataIndex": 4,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.category",
+            "axisId": "␀series␀0␀0",
+            "value": 4,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 4,
+              "dataIndex": 4
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 4
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "seriesIndex": 0,
+        "dataIndexInside": 4,
+        "dataIndex": 4,
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 4
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "showtip",
+       {
+        "type": "showtip",
+        "escapeConnect": true,
+        "x": 455,
+        "y": 192.5,
+        "tooltipOption": {
+         "verticalAlign": "middle"
+        },
+        "dataIndexInside": 4,
+        "dataIndex": 4,
+        "seriesIndex": 0,
+        "dataByCoordSys": [
+         {
+          "coordSysId": "␀series␀0␀0",
+          "coordSysIndex": 0,
+          "coordSysType": "grid",
+          "coordSysMainType": "grid",
+          "dataByAxis": [
+           {
+            "axisDim": "x",
+            "axisIndex": 0,
+            "axisType": "xAxis.category",
+            "axisId": "␀series␀0␀0",
+            "value": 4,
+            "valueLabelOpt": {
+             "precision": "auto"
+            },
+            "seriesDataIndices": [
+             {
+              "seriesIndex": 0,
+              "dataIndexInside": 4,
+              "dataIndex": 4
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ],
+      [
+       0,
+       "updateaxispointer",
+       {
+        "axesInfo": [
+         {
+          "axisDim": "x",
+          "axisIndex": 0,
+          "value": 4
+         }
+        ],
+        "type": "updateaxispointer"
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip",
+        "dispatchAction": null
+       }
+      ],
+      [
+       0,
+       "hidetip",
+       {
+        "type": "hidetip"
+       }
+      ]
+     ],
+     "state": [
+      {
+       "cursor": "default",
+       "tip": null,
+       "handles": [
+        {
+         "axis": "xAxis0",
+         "status": "show",
+         "value": 4,
+         "handle": {
+          "x": 495,
+          "y": 370,
+          "rotation": 0,
+          "scaleX": 15,
+          "scaleY": 15,
+          "fill": "#8292cc",
+          "invisible": false,
+          "type": "image",
+          "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAEklEQVR4nGP4z8DwHxkzkC4AADxAH+HggXe0AAAAAElFTkSuQmCC",
+          "stroke": null,
+          "lineWidth": null,
+          "opacity": 1,
+          "shadowBlur": 0,
+          "shadowOffsetX": 0,
+          "shadowOffsetY": 0,
+          "shadowColor": "#000"
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "op": "idle",
+     "ms": 500,
+     "events": [],
+     "state": [
+      {
+       "cursor": null,
+       "tip": null,
+       "handles": [
+        {
+         "axis": "xAxis0",
+         "status": "show",
+         "value": 4,
+         "handle": {
+          "x": 495,
+          "y": 370,
+          "rotation": 0,
+          "scaleX": 15,
+          "scaleY": 15,
+          "fill": "#8292cc",
+          "invisible": false,
+          "type": "image",
+          "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAEklEQVR4nGP4z8DwHxkzkC4AADxAH+HggXe0AAAAAElFTkSuQmCC",
+          "stroke": null,
+          "lineWidth": null,
+          "opacity": 1,
+          "shadowBlur": 0,
+          "shadowOffsetX": 0,
+          "shadowOffsetY": 0,
+          "shadowColor": "#000"
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
   }
  ],
  "guards": [

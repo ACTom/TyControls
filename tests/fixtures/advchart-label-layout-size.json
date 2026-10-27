@@ -4399,6 +4399,1259 @@
      ]
     }
    ]
+  },
+  {
+   "id": "drag.pie.update",
+   "note": "a pie label dragged, then a legend toggle of another slice: the update lays the labels out afresh, the drag gone",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "legend": {},
+    "series": [
+     {
+      "type": "pie",
+      "radius": "40%",
+      "data": [
+       {
+        "name": "a",
+        "value": 3
+       },
+       {
+        "name": "b",
+        "value": 5
+       },
+       {
+        "name": "c",
+        "value": 2
+       },
+       {
+        "name": "d",
+        "value": 4
+       }
+      ],
+      "labelLayout": {
+       "draggable": true
+      }
+     }
+    ]
+   },
+   "labels": [
+    {
+     "s": 0,
+     "d": 0,
+     "ignore": false,
+     "texts": [
+      "a"
+     ],
+     "rect": [
+      "4078a3b45a08f6a0",
+      "405dee76ef25a503",
+      "401ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": null,
+     "draggable": true,
+     "cursor": "move"
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "ignore": false,
+     "texts": [
+      "b"
+     ],
+     "rect": [
+      "4078a3b45a08f6a1",
+      "4070c462443696bf",
+      "401ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": null,
+     "draggable": true,
+     "cursor": "move"
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "ignore": false,
+     "texts": [
+      "c"
+     ],
+     "rect": [
+      "4067173b7792d283",
+      "406fa768b411ed42",
+      "4018000000000000",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": null,
+     "draggable": true,
+     "cursor": "move"
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "ignore": false,
+     "texts": [
+      "d"
+     ],
+     "rect": [
+      "406700313a222eab",
+      "4060d8974bee12c0",
+      "401ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": null,
+     "draggable": true,
+     "cursor": "move"
+    }
+   ],
+   "guides": [
+    {
+     "s": 0,
+     "d": 0,
+     "ignore": false,
+     "points": [
+      [
+       "4075de112365dd28",
+       "40612e82eb6e2a88"
+      ],
+      [
+       "407673b45a08f6a0",
+       "405f6e76ef25a503"
+      ],
+      [
+       "407853b45a08f6a0",
+       "405f6e76ef25a503"
+      ]
+     ]
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "ignore": false,
+     "points": [
+      [
+       "4075de112365dd29",
+       "407068be8a48eabc"
+      ],
+      [
+       "407673b45a08f6a1",
+       "40712462443696bf"
+      ],
+      [
+       "407853b45a08f6a1",
+       "40712462443696bf"
+      ]
+     ]
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "ignore": false,
+     "points": [
+      [
+       "406dae82eb6e2a89",
+       "406f3c2246cbba52"
+      ],
+      [
+       "406c373b7792d283",
+       "407033b45a08f6a1"
+      ],
+      [
+       "4068773b7792d283",
+       "407033b45a08f6a1"
+      ]
+     ]
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "ignore": false,
+     "points": [
+      [
+       "406dae82eb6e2a88",
+       "4062c3ddb93445af"
+      ],
+      [
+       "406c373b7792d282",
+       "406198974bee12c0"
+      ],
+      [
+       "4068773b7792d282",
+       "406198974bee12c0"
+      ]
+     ]
+    }
+   ],
+   "drift": [
+    {
+     "d": 0,
+     "dx": 40,
+     "dy": 25
+    }
+   ],
+   "labelsAfter": [
+    {
+     "s": 0,
+     "d": 0,
+     "ignore": false,
+     "texts": [
+      "a"
+     ],
+     "rect": [
+      "407b23b45a08f6a0",
+      "4062173b7792d282",
+      "401ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": null,
+     "draggable": true,
+     "cursor": "move"
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "ignore": false,
+     "texts": [
+      "b"
+     ],
+     "rect": [
+      "4078a3b45a08f6a1",
+      "4070c462443696bf",
+      "401ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": null,
+     "draggable": true,
+     "cursor": "move"
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "ignore": false,
+     "texts": [
+      "c"
+     ],
+     "rect": [
+      "4067173b7792d283",
+      "406fa768b411ed42",
+      "4018000000000000",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": null,
+     "draggable": true,
+     "cursor": "move"
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "ignore": false,
+     "texts": [
+      "d"
+     ],
+     "rect": [
+      "406700313a222eab",
+      "4060d8974bee12c0",
+      "401ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": null,
+     "draggable": true,
+     "cursor": "move"
+    }
+   ],
+   "guidesAfter": [
+    {
+     "s": 0,
+     "d": 0,
+     "ignore": false,
+     "points": [
+      [
+       "4075de112365dd28",
+       "40612e82eb6e2a88"
+      ],
+      [
+       "407943b45a08f6a0",
+       "4062d73b7792d282"
+      ],
+      [
+       "407b23b45a08f6a0",
+       "4062d73b7792d282"
+      ]
+     ]
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "ignore": false,
+     "points": [
+      [
+       "4075de112365dd29",
+       "407068be8a48eabc"
+      ],
+      [
+       "407673b45a08f6a1",
+       "40712462443696bf"
+      ],
+      [
+       "407853b45a08f6a1",
+       "40712462443696bf"
+      ]
+     ]
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "ignore": false,
+     "points": [
+      [
+       "406dae82eb6e2a89",
+       "406f3c2246cbba52"
+      ],
+      [
+       "406c373b7792d283",
+       "407033b45a08f6a1"
+      ],
+      [
+       "4068773b7792d283",
+       "407033b45a08f6a1"
+      ]
+     ]
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "ignore": false,
+     "points": [
+      [
+       "406dae82eb6e2a88",
+       "4062c3ddb93445af"
+      ],
+      [
+       "406c373b7792d282",
+       "406198974bee12c0"
+      ],
+      [
+       "4068773b7792d282",
+       "406198974bee12c0"
+      ]
+     ]
+    }
+   ],
+   "then": {
+    "type": "legendToggleSelect",
+    "name": "c"
+   },
+   "labelsThen": [
+    {
+     "s": 0,
+     "d": 0,
+     "ignore": false,
+     "texts": [
+      "a"
+     ],
+     "rect": [
+      "407922cd64049b98",
+      "405fb4ca6fed919e",
+      "401ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": null,
+     "draggable": true,
+     "cursor": "move"
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "ignore": false,
+     "texts": [
+      "b"
+     ],
+     "rect": [
+      "40767967aab563dc",
+      "4071dc350eb9ff74",
+      "401ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": null,
+     "draggable": true,
+     "cursor": "move"
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "ignore": false,
+     "texts": [
+      "d"
+     ],
+     "rect": [
+      "4066003e265697b5",
+      "4062500000000002",
+      "401ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": null,
+     "draggable": true,
+     "cursor": "move"
+    }
+   ],
+   "guidesThen": [
+    {
+     "s": 0,
+     "d": 0,
+     "ignore": false,
+     "points": [
+      [
+       "40764918c003e158",
+       "4061edce7ff83d50"
+      ],
+      [
+       "4076f2cd64049b98",
+       "40609a6537f6c8cf"
+      ],
+      [
+       "4078d2cd64049b98",
+       "40609a6537f6c8cf"
+      ]
+     ]
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "ignore": false,
+     "points": [
+      [
+       "40740b49d31f7c83",
+       "4071546293235ddb"
+      ],
+      [
+       "40744967aab563dc",
+       "40723c350eb9ff74"
+      ],
+      [
+       "40762967aab563dc",
+       "40723c350eb9ff74"
+      ]
+     ]
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "ignore": false,
+     "points": [
+      [
+       "406cd6f99764680a",
+       "4064000000000002"
+      ],
+      [
+       "406b374863c73b8c",
+       "4063100000000002"
+      ],
+      [
+       "4067774863c73b8c",
+       "4063100000000002"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "pie.width",
+   "note": "pie labels under labelLayout width 30: the pie's default overflow 'truncate' cuts them",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "pie",
+      "radius": "40%",
+      "data": [
+       {
+        "name": "Search Engine",
+        "value": 1048
+       },
+       {
+        "name": "Direct",
+        "value": 735
+       },
+       {
+        "name": "Email",
+        "value": 580
+       },
+       {
+        "name": "Union Ads",
+        "value": 484
+       },
+       {
+        "name": "Video Ads",
+        "value": 300
+       }
+      ],
+      "labelLayout": {
+       "width": 30
+      }
+     }
+    ]
+   },
+   "labels": [
+    {
+     "s": 0,
+     "d": 0,
+     "ignore": false,
+     "texts": [
+      "Se..."
+     ],
+     "rect": [
+      "407a1399695ac16b",
+      "40624d5f605f5a7e",
+      "4038d70a3d70a3d7",
+      "4028000000000000"
+     ],
+     "styleWidth": "403e000000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "ignore": false,
+     "texts": [
+      "Dir..."
+     ],
+     "rect": [
+      "4076c794dcc9e1dc",
+      "4071c4fec021f992",
+      "403951eb851eb852",
+      "4028000000000000"
+     ],
+     "styleWidth": "403e000000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "ignore": false,
+     "texts": [
+      "Em..."
+     ],
+     "rect": [
+      "4063a3d6f02128da",
+      "406eb17647ee95ba",
+      "403c147ae147ae14",
+      "4028000000000000"
+     ],
+     "styleWidth": "403e000000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "ignore": false,
+     "texts": [
+      "Uni..."
+     ],
+     "rect": [
+      "4063213b59116638",
+      "4062ace55110b68b",
+      "403c147ae147ae14",
+      "4028000000000000"
+     ],
+     "styleWidth": "403e000000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 4,
+     "ignore": false,
+     "texts": [
+      "Vid..."
+     ],
+     "rect": [
+      "406a2fc178c67ce5",
+      "4059cea0f4654b02",
+      "403b7ae147ae147b",
+      "4028000000000000"
+     ],
+     "styleWidth": "403e000000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    }
+   ]
+  },
+  {
+   "id": "pie.width.box",
+   "note": "boxed pie labels sized 70 x 24 by the layout",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "pie",
+      "radius": "40%",
+      "data": [
+       {
+        "name": "Search Engine",
+        "value": 1048
+       },
+       {
+        "name": "Direct",
+        "value": 735
+       },
+       {
+        "name": "Email",
+        "value": 580
+       },
+       {
+        "name": "Union Ads",
+        "value": 484
+       },
+       {
+        "name": "Video Ads",
+        "value": 300
+       }
+      ],
+      "label": {
+       "show": true,
+       "backgroundColor": "#eee",
+       "borderColor": "#999",
+       "borderWidth": 1,
+       "padding": 2
+      },
+      "labelLayout": {
+       "width": 70,
+       "height": 24
+      }
+     }
+    ]
+   },
+   "labels": [
+    {
+     "s": 0,
+     "d": 0,
+     "ignore": false,
+     "texts": [
+      "Search En..."
+     ],
+     "rect": [
+      "407a0399695ac16b",
+      "40612d5f605f5a7e",
+      "4053000000000000",
+      "403e000000000000"
+     ],
+     "styleWidth": "4051800000000000",
+     "styleHeight": "4038000000000000",
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "ignore": false,
+     "texts": [
+      "Direct"
+     ],
+     "rect": [
+      "4076b794dcc9e1dc",
+      "407134fec021f992",
+      "4053000000000000",
+      "403e000000000000"
+     ],
+     "styleWidth": "4051800000000000",
+     "styleHeight": "4038000000000000",
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "ignore": false,
+     "texts": [
+      "Email"
+     ],
+     "rect": [
+      "405b8ccc98943d3a",
+      "406d917647ee95ba",
+      "4053000000000000",
+      "403e000000000000"
+     ],
+     "styleWidth": "4051800000000000",
+     "styleHeight": "4038000000000000",
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "ignore": false,
+     "texts": [
+      "Union Ads"
+     ],
+     "rect": [
+      "405a87956a74b7f6",
+      "40618ce55110b68b",
+      "4053000000000000",
+      "403e000000000000"
+     ],
+     "styleWidth": "4051800000000000",
+     "styleHeight": "4038000000000000",
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 4,
+     "ignore": false,
+     "texts": [
+      "Video Ads"
+     ],
+     "rect": [
+      "40643f1da1bc3f74",
+      "40578ea0f4654b02",
+      "4053000000000000",
+      "403e000000000000"
+     ],
+     "styleWidth": "4051800000000000",
+     "styleHeight": "4038000000000000",
+     "draggable": false,
+     "cursor": "pointer"
+    }
+   ]
+  },
+  {
+   "id": "pie.width.rich",
+   "note": "rich pie labels under labelLayout width 45",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "pie",
+      "radius": "40%",
+      "data": [
+       {
+        "name": "Search Engine",
+        "value": 1048
+       },
+       {
+        "name": "Direct",
+        "value": 735
+       },
+       {
+        "name": "Email",
+        "value": 580
+       },
+       {
+        "name": "Union Ads",
+        "value": 484
+       },
+       {
+        "name": "Video Ads",
+        "value": 300
+       }
+      ],
+      "label": {
+       "formatter": "{a|{b}} {c|{c}}",
+       "rich": {
+        "a": {
+         "color": "#333"
+        },
+        "c": {
+         "color": "#999"
+        }
+       }
+      },
+      "labelLayout": {
+       "width": 45
+      }
+     }
+    ]
+   },
+   "labels": [
+    {
+     "s": 0,
+     "d": 0,
+     "ignore": false,
+     "texts": [
+      "Searc...",
+      " ",
+      ""
+     ],
+     "rect": [
+      "407a1399695ac16b",
+      "40624d5f605f5a7e",
+      "404670a3d70a3d71",
+      "4028000000000000"
+     ],
+     "styleWidth": "4046800000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "ignore": false,
+     "texts": [
+      "Direct",
+      " ",
+      "7"
+     ],
+     "rect": [
+      "4076c794dcc9e1dc",
+      "4071c4fec021f992",
+      "4044b33333333333",
+      "4028000000000000"
+     ],
+     "styleWidth": "4046800000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "ignore": false,
+     "texts": [
+      "...",
+      " ",
+      "Email"
+     ],
+     "rect": [
+      "4061b851d168d6ef",
+      "406eb17647ee95ba",
+      "4045b851eb851eb8",
+      "4028000000000000"
+     ],
+     "styleWidth": "4046800000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "ignore": false,
+     "texts": [
+      "",
+      " ",
+      "Union..."
+     ],
+     "rect": [
+      "406107a1bf77cc9f",
+      "4062ace55110b68b",
+      "404670a3d70a3d70",
+      "4028000000000000"
+     ],
+     "styleWidth": "4046800000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 4,
+     "ignore": false,
+     "texts": [
+      "",
+      " ",
+      "Video..."
+     ],
+     "rect": [
+      "40681627df2ce34b",
+      "4059cea0f4654b02",
+      "404623d70a3d70a4",
+      "4028000000000000"
+     ],
+     "styleWidth": "4046800000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    }
+   ]
+  },
+  {
+   "id": "pie.height",
+   "note": "three-line pie labels, lineOverflow 'truncate' under labelLayout height 14",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "pie",
+      "radius": "40%",
+      "data": [
+       {
+        "name": "Search Engine",
+        "value": 1048
+       },
+       {
+        "name": "Direct",
+        "value": 735
+       },
+       {
+        "name": "Email",
+        "value": 580
+       },
+       {
+        "name": "Union Ads",
+        "value": 484
+       },
+       {
+        "name": "Video Ads",
+        "value": 300
+       }
+      ],
+      "label": {
+       "formatter": "{b}\n{c}\n{d}%",
+       "lineOverflow": "truncate"
+      },
+      "labelLayout": {
+       "height": 14
+      }
+     }
+    ]
+   },
+   "labels": [
+    {
+     "s": 0,
+     "d": 0,
+     "ignore": false,
+     "texts": [
+      "Search Engine"
+     ],
+     "rect": [
+      "407a1399695ac16b",
+      "40624d5f605f5a7e",
+      "4053c51eb851eb85",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": "402c000000000000",
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "ignore": false,
+     "texts": [
+      "Direct"
+     ],
+     "rect": [
+      "4076c794dcc9e1dc",
+      "4071c4fec021f992",
+      "403f51eb851eb852",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": "402c000000000000",
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "ignore": false,
+     "texts": [
+      "Email"
+     ],
+     "rect": [
+      "406366664c4a1e9d",
+      "406eb17647ee95ba",
+      "403e000000000000",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": "402c000000000000",
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "ignore": false,
+     "texts": [
+      "Union Ads"
+     ],
+     "rect": [
+      "405f63be60374752",
+      "4062ace55110b68b",
+      "404bc7ae147ae147",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": "402c000000000000",
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 4,
+     "ignore": false,
+     "texts": [
+      "Video Ads"
+     ],
+     "rect": [
+      "4066c0654fd0ba55",
+      "4059cea0f4654b02",
+      "404b7ae147ae147b",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": "402c000000000000",
+     "draggable": false,
+     "cursor": "pointer"
+    }
+   ]
+  },
+  {
+   "id": "pie.cut",
+   "note": "long pie labels by the left edge: the pie itself cuts them to the room it has",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "pie",
+      "center": [
+       "14%",
+       "50%"
+      ],
+      "radius": "25%",
+      "data": [
+       {
+        "name": "A rather long slice name",
+        "value": 1048
+       },
+       {
+        "name": "Another long slice name",
+        "value": 735
+       },
+       {
+        "name": "Yet one more long name",
+        "value": 580
+       },
+       {
+        "name": "The last long slice name",
+        "value": 484
+       }
+      ]
+     }
+    ]
+   },
+   "labels": [
+    {
+     "s": 0,
+     "d": 0,
+     "ignore": false,
+     "texts": [
+      "A rather long slice name"
+     ],
+     "rect": [
+      "40664ffb8f93b908",
+      "4064fa97e08489d4",
+      "40603ae147ae147b",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "ignore": false,
+     "texts": [
+      "Another long slice name"
+     ],
+     "rect": [
+      "405e097186e437ce",
+      "40702fd68141332f",
+      "406027ae147ae148",
+      "4028000000000000"
+     ],
+     "styleWidth": null,
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "ignore": false,
+     "texts": [
+      ""
+     ],
+     "rect": [
+      "c02ec66e3cafc196",
+      "40695cdb978bd63d",
+      "0000000000000000",
+      "4028000000000000"
+     ],
+     "styleWidth": "c03963371e57e0cb",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "ignore": false,
+     "texts": [
+      ""
+     ],
+     "rect": [
+      "402fd2c91c5d4100",
+      "406141ab1395dc6d",
+      "0000000000000000",
+      "4028000000000000"
+     ],
+     "styleWidth": "4017a59238ba8200",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    }
+   ]
+  },
+  {
+   "id": "pie.cut.width",
+   "note": "the same under labelLayout width 120: the label is its own text again, cut at 120",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "pie",
+      "center": [
+       "14%",
+       "50%"
+      ],
+      "radius": "25%",
+      "data": [
+       {
+        "name": "A rather long slice name",
+        "value": 1048
+       },
+       {
+        "name": "Another long slice name",
+        "value": 735
+       },
+       {
+        "name": "Yet one more long name",
+        "value": 580
+       },
+       {
+        "name": "The last long slice name",
+        "value": 484
+       }
+      ],
+      "labelLayout": {
+       "width": 120
+      }
+     }
+    ]
+   },
+   "labels": [
+    {
+     "s": 0,
+     "d": 0,
+     "ignore": false,
+     "texts": [
+      "A rather long slice n..."
+     ],
+     "rect": [
+      "40664ffb8f93b908",
+      "4064fa97e08489d4",
+      "405d2147ae147ae1",
+      "4028000000000000"
+     ],
+     "styleWidth": "405e000000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 1,
+     "ignore": false,
+     "texts": [
+      "Another long slice n..."
+     ],
+     "rect": [
+      "405e097186e437ce",
+      "40702fd68141332f",
+      "405cfae147ae147b",
+      "4028000000000000"
+     ],
+     "styleWidth": "405e000000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 2,
+     "ignore": false,
+     "texts": [
+      "Yet one more long ..."
+     ],
+     "rect": [
+      "c05fd63e6b6d0270",
+      "40695cdb978bd63d",
+      "405bfd70a3d70a3d",
+      "4028000000000000"
+     ],
+     "styleWidth": "405e000000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    },
+    {
+     "s": 0,
+     "d": 3,
+     "ignore": false,
+     "texts": [
+      "The last long slice n..."
+     ],
+     "rect": [
+      "c05926ee8a88d2c1",
+      "406141ab1395dc6d",
+      "405d2147ae147ae1",
+      "4028000000000000"
+     ],
+     "styleWidth": "405e000000000000",
+     "styleHeight": null,
+     "draggable": false,
+     "cursor": "pointer"
+    }
+   ]
   }
  ]
 }

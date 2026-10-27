@@ -135,6 +135,9 @@ type
     BorderColour: TTyChartColor;
     BorderWidth: Double;
     Opacity: Double;
+    { [R5-F] getItemStyle's shadow keys (the four _renderHandle lists) }
+    HasShadow: Boolean;
+    Shadow: TTyChartShadow;
   end;
 
 const
@@ -765,6 +768,9 @@ begin
   end;
   Result.BorderWidth := Num('borderWidth', 0);
   Result.Opacity := Num('opacity', 1);
+  { [R5-F] the shadow [was: not read] }
+  Result.HasShadow := TyShadowOfValues(Key('shadowBlur'), Key('shadowOffsetX'),
+    Key('shadowOffsetY'), Key('shadowColor'), Result.Shadow);
 end;
 
 function TyAxisPointerBand(AAtPx, ABandWidthPx, AExtentA, AExtentB: Double;

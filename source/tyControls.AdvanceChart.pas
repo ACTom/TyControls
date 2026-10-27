@@ -236,6 +236,12 @@ type
     HasFill: Boolean;
     Fill: TTyChartColor;
     Dragging: Boolean;
+    { [R5-F] its shadow (blur 0: none), its picture (image://, '' a path)
+      and its opacity }
+    ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
+    ShadowColor: TTyChartColor;
+    Image: string;
+    Opacity: Double;
   end;
 
   { WHAT A SINGLE AXIS' POINTER DRAWS [Batch 118]: its line or shadow rect,
@@ -445,6 +451,14 @@ type
     DataDiffer key and raw index -- upstream keeps the view (same id, same
     type) and its elements by the data diff, and a reused element keeps its
     hoverState and __highByOuter bits }
+  { [R5-F] A LINE'S TEMPORARY SYMBOL (LineView.highlight of one row with no
+    symbol): the series index and the raw row; Pending until the list that
+    builds it enters it in emphasis }
+  TTyLineTemp = record
+    S, Raw: Integer;
+    Pending: Boolean;
+  end;
+
   TTyStCarryKeys = record
     Present: Boolean;
     ViewKey, SeriesType: string;
@@ -611,6 +625,10 @@ type
       toolbox and the icon }
     TbHas: Boolean;
     TbIndex, TbIcon: Integer;
+    { [R5-F] a legend item's (setTooltipConfig on its hit rect): the legend
+      and the item (its place in the layout) }
+    LgHas: Boolean;
+    LgIndex, LgItem: Integer;
     { [F4b] ACROSS A RE-RENDER (TooltipView.render keeps the box up): the
       axes as a dataByCoordSys (JSON) while the build they pointed into is
       gone -- Stale until the next build reads them back by raw row -- and
@@ -682,6 +700,9 @@ type
     OptJson: string;
     TbHas: Boolean;
     TbIndex, TbIcon: Integer;
+    { [R5-F] as TTyTipSnap's }
+    LgHas: Boolean;
+    LgIndex, LgItem: Integer;
   end;
 
   { [Batch 115] THE RETURN CIRCLE'S LAYOUT, as the virtual root's layout
@@ -1200,6 +1221,9 @@ type
     FStCarryHoverSeries, FStCarryHoverRaw: Integer;
     FStGen, FStBuiltGen: Integer;
     FStRerender, FStDirty: Boolean;
+    { [R5-F] the lines' temporary symbols; a render takes them away
+      (LineView.render removes every __temp) }
+    FLineTemps: array of TTyLineTemp;
     { [R2-I9] THE HOVER LAYER: the copies it brushes (the paths on it in
       their hover style, in list order) and whether they are to be found
       again; the storage count the threshold reads (FHlCount, counted again
@@ -3219,6 +3243,8 @@ type
       the legend makes of it is the legend's business. }
     function SeriesSymbolWord(ASlot: Integer): string;
     { What the chart can say about each of a legend's names. }
+    { [R5-F] a series' symbolRotate visual }
+    function SeriesSymbolRotateOf(ASeriesIndex: Integer): Double;
     function LegendSources(const AEntries: TTyLegendEntryArray; ALegend: Integer):
       TTyLegendSourceArray;
     { Specs, entries and selection. Runs in Rebuild. }
@@ -3440,6 +3466,12 @@ type
     function TipProxySpec(const AJson: string): TTyTooltipSpec;
     { [R5-D] a toolbox icon's tooltip cascade and text }
     function TipTbSpec(ATb, AIcon: Integer): TTyTooltipSpec;
+    { [R5-F] a legend item's component tooltip: whether it has one (the
+      item's tooltip.show over the legend's, default false), its cascade,
+      its text (its rect is its hit element's) }
+    function LgTipItem(const ADatum: TTyChartDatumRef; out ALegend, AItem: Integer): Boolean;
+    function TipLgSpec(ALegend, AItem: Integer): TTyTooltipSpec;
+    function TipLgText(ALegend, AItem: Integer; const ASpec: TTyTooltipSpec): string;
     function TipTbText(ATb, AIcon: Integer; const ASpec: TTyTooltipSpec): string;
     function TipTbIconRect(ATb, AIcon: Integer): TTyRectF;
     function TipProxyText(const AJson: string; const ASpec: TTyTooltipSpec): string;
@@ -4096,6 +4128,13 @@ type
     function StHoverAny: Boolean;
     procedure PaintHoverLayer(APainter: TTyPainter);
     function StItemAt(ASeriesIndex, AInnerRow: Integer): PTyStItem;
+    { [R5-F] a line's temporary symbol for an inner row: registered (and the
+      list built again) / taken away; the raw rows of a series'; the new
+      ones of this list entered in emphasis }
+    procedure LineTempAdd(ASeriesIndex, AInnerRow: Integer);
+    function LineTempDrop(ASeriesIndex, AInnerRow: Integer): Boolean;
+    function LineTempRows(ASeriesIndex: Integer): TTyIntegerArray;
+    procedure LineTempsEnter(ASeriesIndex: Integer);
     { [F2b] the row's second dispatcher (a gauge's arc), nil for none }
     function StPeerAt(ASeriesIndex, AInnerRow: Integer): PTyStItem;
     { ---- focus and blur [Batch 90] ---- }
