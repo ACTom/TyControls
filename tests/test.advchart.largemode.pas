@@ -86,7 +86,7 @@ type
     procedure TestTheBatchIsPainted;
     procedure TestTiledCirclesAreSubPathsOfTheirOwn;
     procedure TestLeavingLargeModeBringsTheStatesBack;
-    procedure TestAPathSymbolStaysOneElementPerRow;
+    procedure TestAPathSymbolIsOneBatch;
     procedure TestABatchHasNoEnterAnimation;
     procedure TestAHundredThousandPoints;
   end;
@@ -971,11 +971,14 @@ begin
   AssertTrue('and its element', item.Host.Exists);
 end;
 
-procedure TAdvChartLargeModeTest.TestAPathSymbolStaysOneElementPerRow;
+{ [R5-G] A path:// SYMBOL BATCHES TOO: upstream's LargeSymbolPath replays
+  the path createSymbol fitted into a 0 x 0 box (edges-series.js'
+  ls-path: no ink) -- the port no longer draws it one element per row }
+procedure TAdvChartLargeModeTest.TestAPathSymbolIsOneBatch;
 begin
   Show(Scatter(60, ',"large":true,"largeThreshold":10,"symbol":"path://M0,0L10,0L5,10Z"'));
-  AssertTrue('drawn one by one', FChart.SeriesLargeKind(0) = lgkNone);
-  AssertEquals('an element per row', 60, CountRows(0));
+  AssertTrue('a batch', FChart.SeriesLargeKind(0) = lgkSymbol);
+  AssertEquals('one element', 1, CountLarge(0));
 end;
 
 { UPSTREAM ANIMATES NO LARGE BATCH: BarView's _renderLarge, LargeSymbolDraw
