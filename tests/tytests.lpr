@@ -202,6 +202,7 @@ uses
   test.advchart.halokeep, test.advchart.faststrokes, test.advchart.shadows, test.advchart.edgesgeo, test.advchart.largespeed, test.advchart.parsekeep, test.advchart.speedkeep,
   test.advchart.hoverlayer,
   test.advchart.edgesseries,
+  test.advchart.edgesinteract,
   test.advchart.radarlabel,
   test.advchart.pieitemlabel,
   test.advchart.axisemphasis,

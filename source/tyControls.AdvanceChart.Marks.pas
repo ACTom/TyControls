@@ -4977,6 +4977,24 @@ begin
   for i := 0 to High(Result) do Result[i] := Default(TTyBrushItemLayout);
   { large mode keeps no item layout: nothing is selected }
   if AVisual.Large <> lgkNone then Exit;
+  { [R5-G] A BAR ON A POLAR: barPolar lays every row out as a sector
+    ({cx, cy, r0, r, startAngle, endAngle}), which BarSeries' brushSelector
+    hands to selectors.rect -- no x, y, width or height, so a rect area's
+    BoundingRect.intersect compares not-a-numbers, finds no gap and
+    selects it, and a line or a polygon area does not [was: never
+    selected] }
+  if (PolarOf(ABinding) <> nil) and (ABinding.SeriesType = 'bar') then
+  begin
+    for i := 0 to AStore.Count - 1 do
+    begin
+      Result[i].Kind := blkRect;
+      Result[i].X := NaN;
+      Result[i].Y := NaN;
+      Result[i].W := NaN;
+      Result[i].H := NaN;
+    end;
+    Exit;
+  end;
   if (ABinding.XAxis = nil) or (ABinding.YAxis = nil) then Exit;
   colX := FirstColumnOn(AStore, ABinding.XAxis);
   colY := FirstColumnOn(AStore, ABinding.YAxis);

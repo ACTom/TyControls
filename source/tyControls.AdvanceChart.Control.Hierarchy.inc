@@ -1270,7 +1270,10 @@ begin
         p.Strings['type'] := 'sunburstRootToNode';
         p.Integers['seriesIndex'] := ASeries;
         p.Strings['targetNode'] := HierIdOfRow(slot, hs[k]);
+        { [R5-G] the dispatched action's update runs the brush's stage }
+        FBrushPayload := True;
         DoSunAction(p);
+        FBrushPayload := False;
         EmitUpdated;
       finally
         p.Free;
@@ -1294,7 +1297,10 @@ begin
     p.Strings['type'] := 'sunburstRootToNode';
     p.Integers['seriesIndex'] := ASeries;
     p.Strings['targetNode'] := HierIdOfRow(slot, target);
+    { [R5-G] the dispatched action's update runs the brush's stage }
+    FBrushPayload := True;
     DoSunAction(p);
+    FBrushPayload := False;
     EmitUpdated;
   finally
     p.Free;
@@ -1335,7 +1341,10 @@ begin
     { 'link' opens a window upstream: nothing here }
     Exit;
   try
+    { [R5-G] the dispatched action's update runs the brush's stage }
+    FBrushPayload := True;
     DoTreemapAction(p.Strings['type'], p);
+    FBrushPayload := False;
     EmitUpdated;
   finally
     p.Free;
@@ -1356,7 +1365,10 @@ begin
   else
     p := TreemapViewPayload('treemapZoomToNode', ASeries, HierIdOfRow(slot, row));
   try
+    { [R5-G] the dispatched action's update runs the brush's stage }
+    FBrushPayload := True;
     DoTreemapAction(p.Strings['type'], p);
+    FBrushPayload := False;
     EmitUpdated;
   finally
     p.Free;
@@ -2783,6 +2795,9 @@ begin
     { [F3d] THE ACTION'S UPDATE (update: 'update'): a full update of the
       same option -- the kept nodes slide, the shown ones grow out of their
       parent, the hidden ones shrink into it. [Was: a relayout that snapped.] }
+    { [R5-G] an update with a payload: the brush's visual stage dispatches
+      brushSelect -- the click is treeExpandAndCollapse dispatched }
+    FBrushPayload := True;
     FullUpdate;
     { the dispatch's triggerUpdatedEvent [Batch 97] }
     EmitUpdated;
