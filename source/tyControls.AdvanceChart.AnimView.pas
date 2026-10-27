@@ -7548,6 +7548,18 @@ begin
         cx := AEl.Anim.G[0];
         cy := AEl.Anim.G[1];
       end
+      { [R5-I] a pictorial glyph: about its path's own origin, its place in
+        the bundle (a pin's tip, not its box's centre) }
+      else if AEl.Anim.Role = carPictorialGlyph then
+      begin
+        cx := AEl.Anim.G[0];
+        cy := AEl.Anim.G[1];
+      end
+      else if AEl.Anim.Role = carPictorialClip then
+      begin
+        cx := AEl.Caption.LgG[6] + AEl.Caption.LgG[0];
+        cy := AEl.Caption.LgG[7] + AEl.Caption.LgG[1];
+      end
       else
       begin
         b := TyShapeBounds(AEl.Shape);

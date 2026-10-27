@@ -35,6 +35,9 @@ type
     FChart: TAeProbe;
     FRoot: TJSONData;
     FBad, FCompared, FSamples: Integer;
+    { a pictorial glyph's box at rest, the port's and upstream's }
+    FGlHave: array[0..7] of Boolean;
+    FGlP, FGlU: array[0..7] of TTyRectF;
     FWhere, FReport: string;
     procedure Bad(const AWhat: string);
     procedure SameNum(const AWhat: string; AGot: Double; AWant: TJSONData); overload;
@@ -42,6 +45,7 @@ type
     function RoleEl(ASeries, ARow: Integer; ARole: TTyChartAnimRole;
       out AEl: TTyChartElement): Boolean;
     procedure SameRun(const AWhat: string; AProxy: TTyChartAnimProxy; AWant: TJSONObject);
+    procedure NearNum(const AWhat: string; AGot, AWant: Double);
     function SubEl(ASeries, ARow, ASub: Integer; ARole: TTyChartAnimRole;
       out AEl: TTyChartElement): Boolean;
     procedure SameGuideCmds(const AWhat: string; const AEl: TTyChartElement; AWant: TJSONArray);
@@ -69,6 +73,7 @@ type
     procedure TestARadarsPointLabelsAsUpstream;
     procedure TestAThemeRiversLabelsUnderTheClipAsUpstream;
     procedure TestAThemeRiversLabelIsInkedOnlyInsideTheClip;
+    procedure TestAPictorialGlyphsEmphasisScaleAsUpstream;
   end;
 
 implementation
@@ -310,6 +315,13 @@ begin
       Bad(Format('%s item %d: %s, upstream %s', [AWhat, k, Txt(FromHex(got[k])),
         Txt(FromHex(AWant.Strings[k]))]));
   end;
+end;
+
+procedure TAdvChartAnimEdgesOracleTest.NearNum(const AWhat: string; AGot, AWant: Double);
+begin
+  Inc(FCompared);
+  if not (Abs(AGot - AWant) <= 1e-6) then
+    Bad(Format('%s %s, upstream %s', [AWhat, Txt(AGot), Txt(AWant)]));
 end;
 
 { a proxy's key, or the rest value where the proxy has none }
@@ -661,6 +673,37 @@ begin
         end;
       end;
     end
+    else if pre = 'gl' then
+    begin
+      { a pictorial glyph's box as drawn, against its box at rest (the
+        first sample): how far each edge moved -- the state's scale about the
+        path's origin: its centre across, its top and its bottom. Within a
+        millionth: the box of a curved path, whose extent across the port
+        measures tighter than zrender's arc box }
+      gone := ARec.Arrays[name];
+      for k := 0 to Min(gone.Count - 1, 7) do
+      begin
+        if not SubEl(s, idx, k, carPictorialGlyph, el) then
+        begin
+          Bad(Format('%s path %d: not drawn', [name, k]));
+          Continue;
+        end;
+        v := Nums(gone.Objects[k].Arrays['gb']);
+        bx := TyShapeBounds(el.Shape);
+        if not FGlHave[k] then
+        begin
+          FGlHave[k] := True;
+          FGlP[k] := bx;
+          FGlU[k] := TyRectF(v[0], v[1], v[0] + v[2], v[1] + v[3]);
+        end;
+        NearNum(Format('%s path %d centre x moved', [name, k]),
+          (bx.Left + bx.Right) / 2 - (FGlP[k].Left + FGlP[k].Right) / 2,
+          v[0] + v[2] / 2 - (FGlU[k].Left + FGlU[k].Right) / 2);
+        NearNum(Format('%s path %d top moved', [name, k]), bx.Top - FGlP[k].Top, v[1] - FGlU[k].Top);
+        NearNum(Format('%s path %d bottom moved', [name, k]), bx.Bottom - FGlP[k].Bottom,
+          v[1] + v[3] - FGlU[k].Bottom);
+      end;
+    end
     else if pre = 'vl' then
       { a visual map's handle label: its opacity now (its blur's fade) }
       SameNum(name + ' opacity', FChart.VmHandleLabelOpacity(s, idx), leaf.Find('op'))
@@ -860,6 +903,11 @@ end;
 procedure TAdvChartAnimEdgesOracleTest.TestAThemeRiversLabelsUnderTheClipAsUpstream;
 begin
   RunGroup('river', 40);
+end;
+
+procedure TAdvChartAnimEdgesOracleTest.TestAPictorialGlyphsEmphasisScaleAsUpstream;
+begin
+  RunGroup('pemph', 18);
 end;
 
 { HAND-WRITTEN: the label's ink in a frame of the enter is cut where the

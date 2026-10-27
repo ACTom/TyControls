@@ -393,6 +393,24 @@ const PROBES = {
       });
     });
   },
+  // a pictorial bar's glyphs: each path's box on the canvas (its scale and
+  // turn applied) and its scale
+  pglyph(chart, rec, c) {
+    chart.getModel().eachSeries(sm => {
+      if (sm.subType !== 'pictorialBar') return;
+      const data = sm.getData();
+      rowsOf(c, data).forEach(i => {
+        const bar = data.getItemGraphicEl(i);
+        if (!bar) return;
+        const out = [];
+        bar.__pictorialBundle.eachChild(p => {
+          if (p === bar.__pictorialBarRect) return;
+          out.push({ gb: arr(gbox(p)), sx: hx(p.scaleX), n: nClip(p) });
+        });
+        rec['gl' + sm.seriesIndex + '/' + i] = out;
+      });
+    });
+  },
   // a funnel's pieces and their labels
   funnel(chart, rec, c) {
     chart.getModel().eachSeries(sm => {
@@ -629,6 +647,15 @@ add('river', 'rv-label-clip', "a themeRiver's layers enter under their polygon's
     series: [{ type: 'themeRiver', label: { show: true }, data: [['2024-01-01', 10, 'a'], ['2024-01-02', 20, 'a'], ['2024-01-03', 15, 'a'],
       ['2024-01-01', 5, 'b'], ['2024-01-02', 8, 'b'], ['2024-01-03', 12, 'b']] }] },
   ['rvlab'], after([0, 1, 100, 500, 999, 1000, 1001], 0));
+
+// ---- a pictorial bar's emphasis.scale ----
+add('pemph', 'pe-pin', "pictorial 'pin' glyphs with emphasis.scale 2.5 (truthy): the hovered glyph's emphasis state is its scale times 1.1, about the path's own origin -- the pin's point is not its box's centre",
+  { animation: true, animationDuration: 10, xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: { type: 'value', max: 100 },
+    series: [{ type: 'pictorialBar', symbol: 'pin', symbolSize: [30, 30], symbolPosition: 'end', data: [40, 70],
+      emphasis: { scale: 2.5 }, stateAnimation: { duration: 200, easing: 'linear' } }] },
+  ['pglyph'],
+  [{ t: T1 - 1, do: 'sample' }, { t: T1, do: 'act', action: { type: 'highlight', seriesIndex: 0, dataIndex: 0 } },
+    ...after([0, 1, 100, 201, 300], T1)], { rows: [0] });
 
 // ---- funnel ----
 const FN = (data, extra, s) => Object.assign({ animation: true,

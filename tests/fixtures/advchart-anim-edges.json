@@ -23412,6 +23412,175 @@
    ]
   },
   {
+   "id": "pe-pin",
+   "group": "pemph",
+   "note": "pictorial 'pin' glyphs with emphasis.scale 2.5 (truthy): the hovered glyph's emphasis state is its scale times 1.1, about the path's own origin -- the pin's point is not its box's centre",
+   "W": 400,
+   "H": 300,
+   "option": {
+    "animation": true,
+    "animationDuration": 10,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "max": 100
+    },
+    "series": [
+     {
+      "type": "pictorialBar",
+      "symbol": "pin",
+      "symbolSize": [
+       30,
+       30
+      ],
+      "symbolPosition": "end",
+      "data": [
+       40,
+       70
+      ],
+      "emphasis": {
+       "scale": 2.5
+      },
+      "stateAnimation": {
+       "duration": 200,
+       "easing": "linear"
+      }
+     }
+    ]
+   },
+   "probes": [
+    "pglyph"
+   ],
+   "events": [
+    {
+     "t": 2999,
+     "do": "sample",
+     "rec": {
+      "gl0/0": [
+       {
+        "gb": [
+         "405f800000000000",
+         "40625b6db6db6db7",
+         "4032000000000000",
+         "403a249249249249"
+        ],
+        "sx": "3fb3333333333333",
+        "n": 0
+       }
+      ]
+     }
+    },
+    {
+     "t": 3000,
+     "do": "act",
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     }
+    },
+    {
+     "t": 3000,
+     "do": "sample",
+     "rec": {
+      "gl0/0": [
+       {
+        "gb": [
+         "405f800000000000",
+         "40625b6db6db6db7",
+         "4032000000000000",
+         "403a249249249249"
+        ],
+        "sx": "3fb3333333333333",
+        "n": 2
+       }
+      ]
+     }
+    },
+    {
+     "t": 3001,
+     "do": "sample",
+     "rec": {
+      "gl0/0": [
+       {
+        "gb": [
+         "405f800000000000",
+         "40625b6db6db6db7",
+         "4032000000000000",
+         "403a249249249249"
+        ],
+        "sx": "3fb3333333333333",
+        "n": 2
+       }
+      ]
+     }
+    },
+    {
+     "t": 3100,
+     "do": "sample",
+     "rec": {
+      "gl0/0": [
+       {
+        "gb": [
+         "405f637ced916873",
+         "40623204ae5f60d7",
+         "4032e4189374bc6b",
+         "403b6fda8d04f945"
+        ],
+        "sx": "3fb426809d495183",
+        "n": 2
+       }
+      ]
+     }
+    },
+    {
+     "t": 3201,
+     "do": "sample",
+     "rec": {
+      "gl0/0": [
+       {
+        "gb": [
+         "405f466666666666",
+         "406207c57c57c57c",
+         "4033cccccccccccd",
+         "403cc1d41d41d41d"
+        ],
+        "sx": "3fb51eb851eb851f",
+        "n": 0
+       }
+      ]
+     }
+    },
+    {
+     "t": 3300,
+     "do": "sample",
+     "rec": {
+      "gl0/0": [
+       {
+        "gb": [
+         "405f466666666666",
+         "406207c57c57c57c",
+         "4033cccccccccccd",
+         "403cc1d41d41d41d"
+        ],
+        "sx": "3fb51eb851eb851f",
+        "n": 0
+       }
+      ]
+     }
+    }
+   ],
+   "rows": [
+    0
+   ]
+  },
+  {
    "id": "fn-update",
    "group": "funnel",
    "note": "a merge changes the values (the order changes): each piece updateProps its opacity and its four points, its outer label's style x / y (update timing, its row)",
