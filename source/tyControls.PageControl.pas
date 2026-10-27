@@ -355,6 +355,10 @@ begin
     FTabIndex := High(FPages);
   if AFree and (APage <> nil) then
     APage.Free;
+  { #145: not while the form is torn down. A form being destroyed marks every component it
+    owns csDestroying first, and the pages go before the pager: showing the next page fired
+    its OnShow, and OnChange ran, on a half-destroyed form. }
+  if csDestroying in ComponentState then Exit;
   ShowOnlyPage(FTabIndex);
   TabsChanged;
   if (GetActivePage <> OldActive) and Assigned(OnChange) then
