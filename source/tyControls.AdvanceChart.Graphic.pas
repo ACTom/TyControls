@@ -95,7 +95,7 @@ type
     procedure ApplyLeave(AEl: TTyGfxEl; AOpt: TJSONObject);
     procedure ApplyUpdateTransition(AEl: TTyGfxEl; AOpt: TJSONObject; AIsInit: Boolean);
     procedure UpdateCommonAttrs(AEl: TTyGfxEl; AOpt: TJSONObject; AZ, AZLevel: Double);
-    function ElementCfg(const AType: string; AOpt: TJSONObject): TTyAnimCfg;
+    function ElementCfg(const AType: string; AOpt: TJSONObject; AEl: TTyGfxEl): TTyAnimCfg;
     procedure UpdateProps(AEl: TTyGfxEl; const AProps: TTyAnimProps);
     function UpdateElements(AModel: TTyGfxModel; AZ, AZLevel: Double): Boolean;
     procedure Relocate(AModel: TTyGfxModel; AW, AH: Double;
@@ -779,7 +779,7 @@ begin
   Result.IsNew := True;
 end;
 
-function TTyGfxView.ElementCfg(const AType: string; AOpt: TJSONObject): TTyAnimCfg;
+function TTyGfxView.ElementCfg(const AType: string; AOpt: TJSONObject; AEl: TTyGfxEl): TTyAnimCfg;
 var
   ext: TJSONObject;
   d: TJSONData;
@@ -807,6 +807,9 @@ begin
     if IsNan(Result.Delay) then Result.Delay := 0;
     if dur > 0 then
     begin
+      { [spec 242] config.during: the element's userDuring bound, before
+        the option's own *Animation is laid over the config }
+      if AEl <> nil then Result.During := AEl.DuringCfg;
       Result.SetToFinal := True;
       Result.Scope := AType;
     end;
@@ -836,7 +839,7 @@ begin
   if AEl = nil then Exit;
   if AEl.HasLeaveTo and (AEl.Animation <> nil) then
   begin
-    cfg := ElementCfg('update', AOpt);
+    cfg := ElementCfg('update', AOpt, AEl);
     cfg.Done := @AEl.LeaveDone;
     AEl.Leaving := True;
     AEl.AnimateTo(AEl.LeaveToProps, cfg);
@@ -1304,6 +1307,8 @@ var
   cfg: TTyAnimCfg;
 begin
   from_ := nil;
+  { [spec 242] store.userDuring = elOption.during, every update }
+  AEl.UserDuring := TyGfxDuringSpec(AOpt);
   if not AIsInit and FAnim.Enabled then TyGfxTransitionFrom(AEl, AOpt, from_);
   { the final props, directly }
   TyGfxApplyDirect(AEl, AOpt, False);
@@ -1313,12 +1318,12 @@ begin
     begin
       enter := nil;
       TyGfxEnterFrom(AOpt, enter);
-      cfg := ElementCfg('enter', AOpt);
+      cfg := ElementCfg('enter', AOpt, AEl);
       if cfg.Duration > 0 then AEl.AnimateFrom(enter, cfg);
     end
     else
     begin
-      cfg := ElementCfg('update', AOpt);
+      cfg := ElementCfg('update', AOpt, AEl);
       if cfg.Duration > 0 then AEl.AnimateFrom(from_, cfg);
     end;
   end;

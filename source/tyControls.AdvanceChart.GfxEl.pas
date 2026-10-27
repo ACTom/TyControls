@@ -140,6 +140,14 @@ type
       labelLayoutInnerStore oldLayout is set), so it is not faded in again
       [milestone D5-D8] }
     LabelLaidOut: Boolean;
+    { [spec 242] the `during` the last update wrote (transitionInnerStore's
+      userDuring): a handler reference ('@Name'), '' none }
+    UserDuring: string;
+    { the bound duringCall scopes this element made (owned, freed with it) }
+    DuringScopes: TFPList;
+    { getElementAnimationConfig's config.during: a scope bound to the
+      element and the during it holds now; nil when it holds none }
+    function DuringCfg: TTyAnimDuring;
     constructor Create(AKind: TTyGfxKind; const AType: string);
     destructor Destroy; override;
     function GetAnimProp(const AKey: string): TTyAnimValue; override;
@@ -157,6 +165,44 @@ type
       'shape' a path, 'extra' once written [Batch 139] }
     function HasAnimTarget(const AName: string): Boolean;
   end;
+
+  { [spec 242] customGraphicTransition's TransitionDuringAPI: what a
+    `during` handler reads and writes of the element each frame. A Get
+    answers nil (a NaN for a transform) where upstream answers undefined;
+    a Set takes AValue over (it is the element's from then on) }
+  TTyGfxDuringApi = class
+  private
+    FEl: TTyGfxEl;
+  public
+    constructor Create(AEl: TTyGfxEl);
+    { x, y, rotation, scaleX, scaleY, originX, originY, skewX, skewY,
+      anchorX, anchorY; another key is ignored (NaN) }
+    function SetTransform(const AKey: string; AValue: Double): TTyGfxDuringApi;
+    function GetTransform(const AKey: string): Double;
+    function SetShape(const AKey: string; AValue: TJSONData): TTyGfxDuringApi; overload;
+    function SetShape(const AKey: string; AValue: Double): TTyGfxDuringApi; overload;
+    function GetShape(const AKey: string): TJSONData;
+    { a group has no style: nothing set, nil read }
+    function SetStyle(const AKey: string; AValue: TJSONData): TTyGfxDuringApi; overload;
+    function SetStyle(const AKey: string; AValue: Double): TTyGfxDuringApi; overload;
+    function GetStyle(const AKey: string): TJSONData;
+    function SetExtra(const AKey: string; AValue: TJSONData): TTyGfxDuringApi; overload;
+    function SetExtra(const AKey: string; AValue: Double): TTyGfxDuringApi; overload;
+    function GetExtra(const AKey: string): TJSONData;
+    { a JSON value's number, as the handlers usually want it (nil NaN) }
+    class function Num(AValue: TJSONData): Double;
+    property Element: TTyGfxEl read FEl;
+  end;
+
+  { a graphic or custom element's `during: '@Name'`, called once a frame
+    while an enter, update or leave transition of it runs }
+  TTyGfxDuringHandler = procedure(AApi: TTyGfxDuringApi) of object;
+
+procedure TyChartRegisterDuring(const AName: string; AHandler: TTyGfxDuringHandler);
+procedure TyChartUnregisterDuring(const AName: string);
+function TyChartFindDuring(const ASpec: string; out AHandler: TTyGfxDuringHandler): Boolean;
+{ the handler reference an option's `during` holds, '' none }
+function TyGfxDuringSpec(AOpt: TJSONObject): string;
 
 { the option's type word }
 function TyGfxKindOf(const AType: string): TTyGfxKind;
@@ -753,6 +799,218 @@ begin
   FreeAndNil(Style);
   FreeAndNil(Extra);
   inherited Destroy;
+  { after the animators: none of them calls a scope any more }
+  if DuringScopes <> nil then
+  begin
+    for i := 0 to DuringScopes.Count - 1 do TObject(DuringScopes[i]).Free;
+    FreeAndNil(DuringScopes);
+  end;
+end;
+
+{ ==================== during [spec 242] ==================== }
+
+type
+  { duringCall's bound `this`: the element and the during it was made with }
+  TGfxDuringScope = class
+    El: TTyGfxEl;
+    Spec: string;
+    procedure Call(APercent: Double);
+  end;
+
+  TDuringEntry = class
+    Handler: TTyGfxDuringHandler;
+  end;
+
+var
+  GDurings: TStringList;
+
+{ duringCall: released (never called again) once the element holds another
+  during; else the handler, with the API over the element }
+procedure TGfxDuringScope.Call(APercent: Double);
+var
+  h: TTyGfxDuringHandler;
+  api: TTyGfxDuringApi;
+begin
+  if El = nil then Exit;
+  if El.UserDuring <> Spec then
+  begin
+    El := nil;
+    Spec := '';
+    Exit;
+  end;
+  if not TyChartFindDuring(Spec, h) then Exit;
+  api := TTyGfxDuringApi.Create(El);
+  try
+    h(api);
+  finally
+    api.Free;
+  end;
+end;
+
+function TTyGfxEl.DuringCfg: TTyAnimDuring;
+var
+  s: TGfxDuringScope;
+  i: Integer;
+begin
+  Result := nil;
+  if UserDuring = '' then Exit;
+  if DuringScopes = nil then DuringScopes := TFPList.Create
+  else if AnimatorCount = 0 then
+  begin
+    { nothing runs that could still call the old ones }
+    for i := 0 to DuringScopes.Count - 1 do TObject(DuringScopes[i]).Free;
+    DuringScopes.Clear;
+  end;
+  s := TGfxDuringScope.Create;
+  s.El := Self;
+  s.Spec := UserDuring;
+  DuringScopes.Add(s);
+  Result := @s.Call;
+end;
+
+function DuringName(const ASpec: string): string;
+begin
+  Result := ASpec;
+  if (Result <> '') and (Result[1] = '@') then Delete(Result, 1, 1);
+end;
+
+procedure TyChartRegisterDuring(const AName: string; AHandler: TTyGfxDuringHandler);
+var
+  i: Integer;
+  e: TDuringEntry;
+  nm: string;
+begin
+  nm := DuringName(AName);
+  if nm = '' then Exit;
+  if GDurings = nil then
+  begin
+    GDurings := TStringList.Create;
+    GDurings.CaseSensitive := True;
+    GDurings.OwnsObjects := True;
+  end;
+  i := GDurings.IndexOf(nm);
+  if i >= 0 then
+  begin
+    TDuringEntry(GDurings.Objects[i]).Handler := AHandler;
+    Exit;
+  end;
+  e := TDuringEntry.Create;
+  e.Handler := AHandler;
+  GDurings.AddObject(nm, e);
+end;
+
+procedure TyChartUnregisterDuring(const AName: string);
+var i: Integer;
+begin
+  if GDurings = nil then Exit;
+  i := GDurings.IndexOf(DuringName(AName));
+  if i >= 0 then GDurings.Delete(i);
+end;
+
+function TyChartFindDuring(const ASpec: string; out AHandler: TTyGfxDuringHandler): Boolean;
+var i: Integer;
+begin
+  AHandler := nil;
+  Result := False;
+  if GDurings = nil then Exit;
+  i := GDurings.IndexOf(DuringName(ASpec));
+  if i < 0 then Exit;
+  AHandler := TDuringEntry(GDurings.Objects[i]).Handler;
+  Result := Assigned(AHandler);
+end;
+
+function TyGfxDuringSpec(AOpt: TJSONObject): string;
+var d: TJSONData;
+begin
+  Result := '';
+  if AOpt = nil then Exit;
+  d := AOpt.Find('during');
+  if (d <> nil) and (d.JSONType = jtString) then Result := d.AsString;
+end;
+
+constructor TTyGfxDuringApi.Create(AEl: TTyGfxEl);
+begin
+  inherited Create;
+  FEl := AEl;
+end;
+
+function TTyGfxDuringApi.SetTransform(const AKey: string; AValue: Double): TTyGfxDuringApi;
+begin
+  Result := Self;
+  TyGfxSetTransformProp(FEl, AKey, AValue);
+end;
+
+function TTyGfxDuringApi.GetTransform(const AKey: string): Double;
+var v: TTyAnimValue;
+begin
+  Result := NaN;
+  if not TyGfxIsTransformProp(AKey) then Exit;
+  v := FEl.GetAnimProp(AKey);
+  if v.Kind = avkNumber then Result := v.Num;
+end;
+
+function TTyGfxDuringApi.SetShape(const AKey: string; AValue: TJSONData): TTyGfxDuringApi;
+begin
+  Result := Self;
+  if AValue = nil then AValue := TJSONNull.Create;
+  PutKey(FEl.Shape, AKey, AValue);
+end;
+
+function TTyGfxDuringApi.SetShape(const AKey: string; AValue: Double): TTyGfxDuringApi;
+begin
+  Result := SetShape(AKey, TJSONFloatNumber.Create(AValue));
+end;
+
+function TTyGfxDuringApi.GetShape(const AKey: string): TJSONData;
+begin
+  Result := FEl.Shape.Find(AKey);
+end;
+
+function TTyGfxDuringApi.SetStyle(const AKey: string; AValue: TJSONData): TTyGfxDuringApi;
+begin
+  Result := Self;
+  if FEl.IsGroup then
+  begin
+    AValue.Free;
+    Exit;
+  end;
+  if AValue = nil then AValue := TJSONNull.Create;
+  PutKey(FEl.Style, AKey, AValue);
+end;
+
+function TTyGfxDuringApi.SetStyle(const AKey: string; AValue: Double): TTyGfxDuringApi;
+begin
+  Result := SetStyle(AKey, TJSONFloatNumber.Create(AValue));
+end;
+
+function TTyGfxDuringApi.GetStyle(const AKey: string): TJSONData;
+begin
+  if FEl.IsGroup then Exit(nil);
+  Result := FEl.Style.Find(AKey);
+end;
+
+function TTyGfxDuringApi.SetExtra(const AKey: string; AValue: TJSONData): TTyGfxDuringApi;
+begin
+  Result := Self;
+  if FEl.Extra = nil then FEl.Extra := TJSONObject.Create;
+  if AValue = nil then AValue := TJSONNull.Create;
+  PutKey(FEl.Extra, AKey, AValue);
+end;
+
+function TTyGfxDuringApi.SetExtra(const AKey: string; AValue: Double): TTyGfxDuringApi;
+begin
+  Result := SetExtra(AKey, TJSONFloatNumber.Create(AValue));
+end;
+
+function TTyGfxDuringApi.GetExtra(const AKey: string): TJSONData;
+begin
+  if FEl.Extra = nil then Exit(nil);
+  Result := FEl.Extra.Find(AKey);
+end;
+
+class function TTyGfxDuringApi.Num(AValue: TJSONData): Double;
+begin
+  Result := JsNum(AValue);
 end;
 
 function TTyGfxEl.IsGroup: Boolean;
@@ -3002,5 +3260,8 @@ begin
   if AEl.Cursor <> 'pointer' then AOut.Cursor := AEl.Cursor;
   Result := True;
 end;
+
+finalization
+  FreeAndNil(GDurings);
 
 end.

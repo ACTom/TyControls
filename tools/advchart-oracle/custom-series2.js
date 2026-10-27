@@ -256,6 +256,12 @@ function customInner(el) {
 // ---------------------------------------------------------------------------
 // the renderItems (each mirrored in tests/test.advchart.customseries2.pas)
 // ---------------------------------------------------------------------------
+// [spec 242] `during` handlers a renderItem returns: one function per name,
+// the same across renders (the port's '@durc:NAME', recorded as '<fn>')
+const DURC = {
+  grow: api => { api.setShape('width', 10 + api.getTransform('x') / 20); },
+  arc: api => { const p = api.getExtra('p'); api.setShape('r', 3 + 9 * p); api.setStyle('opacity', p); },
+};
 const RENDER = {
   // a sector per item on a polar: the radius axis' value, the angle's
   // category band (api.size in radians), barLayout (undefined off a cartesian)
@@ -327,6 +333,17 @@ const RENDER = {
     api.visual('visualMeta');
     const p = api.coord([api.value(0), api.value(1)]);
     return { type: 'circle', shape: { cx: p[0], cy: p[1], r: 4 }, style: { fill: api.visual('color') } };
+  },
+  // [spec 242] a `during` on an entering rect (its width follows its x)
+  // and on a circle with an animated extra
+  durRI(params, api) {
+    const p = api.coord([api.value(0), api.value(1)]);
+    if (params.dataIndex === 0) {
+      return { type: 'rect', x: p[0], y: p[1], enterFrom: { x: 0 }, during: DURC.grow,
+        shape: { x: -10, y: -10, width: 20, height: 20 }, style: { fill: api.visual('color') } };
+    }
+    return { type: 'circle', x: p[0], y: p[1], extra: { p: 1, enterFrom: { p: 0 } }, during: DURC.arc,
+      shape: { cx: 0, cy: 0, r: 3 }, style: { fill: '#91cc75' } };
   },
   // entering: the root's and the style's enterFrom with an enterAnimation
   // of its own, a shape's enterFrom on the series' timing, a group scaled in
@@ -863,6 +880,11 @@ add('coords', 'polar-clip', "clip: true on a polar: createPolarClipPath's sector
     radiusAxis: [{ polarIndex: 0, type: 'value', min: 0, max: 10 }, { polarIndex: 1, type: 'value', min: 0, max: 10 }],
     series: [{ type: 'custom', coordinateSystem: 'polar', polarIndex: 0, clip: true, renderItem: '@polarBar', data: [[3, 0], [14, 1], [5, 2], [9, 3]] },
       { type: 'custom', coordinateSystem: 'polar', polarIndex: 1, clip: true, renderItem: '@polarBar', data: [[12, 0], [7, 1]] }] });
+// [spec 242]
+add('anim', 'during', "during on custom elements: getElementAnimationConfig binds it on the enter (the series' timing above 0) and on an update with the default transition ['x', 'y']; a circle's r and opacity follow its extra",
+  { animation: true, xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
+    series: [{ type: 'custom', renderItem: '@durRI', data: [[2, 3], [6, 6]] }] },
+  { samples: SAMPLES, steps: [{ wait: 2000 }, { merge: { series: [{ data: [[5, 7], [3, 2]] }] } }] });
 
 // ---------------------------------------------------------------------------
 // one case

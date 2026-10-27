@@ -357,7 +357,7 @@ type
     procedure Leave(AEl: TTyGfxEl);
     procedure AddTo(AGroup, AEl: TTyGfxEl);
     function NeedRecreate(AEl: TTyGfxEl; AOpt: TJSONObject): Boolean;
-    function ElementCfg(AType: TTyAnimType; AOpt: TJSONObject): TTyAnimCfg;
+    function ElementCfg(AType: TTyAnimType; AOpt: TJSONObject; AEl: TTyGfxEl): TTyAnimCfg;
     procedure ApplyTransition(AEl: TTyGfxEl; AOpt: TJSONObject; AIsInit: Boolean);
     procedure UpdateNormal(AEl: TTyGfxEl; AOpt, ATxCfg: TJSONObject; AIsInit: Boolean);
     procedure UpdateAttachedTx(AEl: TTyGfxEl; AOpt: TJSONObject; AIsInit: Boolean);
@@ -1089,7 +1089,7 @@ end;
   empty object: no duration when the series does not animate), setToFinal and the scope
   only when that duration is above 0, then the option's enterAnimation /
   updateAnimation over it [Batch 124] }
-function TTyCustomView.ElementCfg(AType: TTyAnimType; AOpt: TJSONObject): TTyAnimCfg;
+function TTyCustomView.ElementCfg(AType: TTyAnimType; AOpt: TJSONObject; AEl: TTyGfxEl): TTyAnimCfg;
 var
   timing: TTyAnimTiming;
   ext: TJSONObject;
@@ -1108,6 +1108,8 @@ begin
     Result.Easing := timing.Easing;
     if Result.Duration > 0 then
     begin
+      { [spec 242] config.during, before the option's *Animation }
+      if AEl <> nil then Result.During := AEl.DuringCfg;
       Result.SetToFinal := True;
       Result.Scope := word;
     end;
@@ -1143,6 +1145,8 @@ var
   cfg: TTyAnimCfg;
 begin
   from_ := nil;
+  { [spec 242] store.userDuring = elOption.during }
+  AEl.UserDuring := TyGfxDuringSpec(AOpt);
   if not AIsInit and FAnim.Enabled then TyGfxTransitionFrom(AEl, AOpt, from_);
   TyGfxApplyDirect(AEl, AOpt, True);
   if FAnim.Enabled and (AEl.Animation <> nil) then
@@ -1151,12 +1155,12 @@ begin
     begin
       enter := nil;
       TyGfxEnterFrom(AOpt, enter);
-      cfg := ElementCfg(atEnter, AOpt);
+      cfg := ElementCfg(atEnter, AOpt, AEl);
       if cfg.HasDuration and (cfg.Duration > 0) then AEl.AnimateFrom(enter, cfg);
     end
     else
     begin
-      cfg := ElementCfg(atUpdate, AOpt);
+      cfg := ElementCfg(atUpdate, AOpt, AEl);
       if cfg.HasDuration and (cfg.Duration > 0) then AEl.AnimateFrom(from_, cfg);
     end;
   end;

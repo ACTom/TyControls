@@ -55,6 +55,9 @@ type
     function FreeRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
     function VmDot(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
     function VmMeta(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+    function DurRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+    procedure DurGrow(AApi: TTyGfxDuringApi);
+    procedure DurArc(AApi: TTyGfxDuringApi);
     function EnterRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
     function MoveRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
     function LeaveRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
@@ -287,6 +290,41 @@ begin
   end;
 end;
 
+{ RENDER.durRI [spec 242] }
+function TCu2Mirror.DurRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+var
+  p: TTyDoubleArray;
+  x, y: Double;
+begin
+  Open('durRI', AParams);
+  x := Value(AApi, 0);
+  y := Value(AApi, 1);
+  p := Coord(AApi, x, y);
+  if AParams.DataIndex = 0 then
+    Exit(Done(TJSONObject.Create(['type', 'rect', 'x', Num(p[0]), 'y', Num(p[1]),
+      'enterFrom', TJSONObject.Create(['x', 0]), 'during', '@durc:grow',
+      'shape', TJSONObject.Create(['x', -10, 'y', -10, 'width', 20, 'height', 20]),
+      'style', TJSONObject.Create(['fill', Visual(AApi, 'color')])])));
+  Result := Done(TJSONObject.Create(['type', 'circle', 'x', Num(p[0]), 'y', Num(p[1]),
+    'extra', TJSONObject.Create(['p', 1, 'enterFrom', TJSONObject.Create(['p', 0])]),
+    'during', '@durc:arc',
+    'shape', TJSONObject.Create(['cx', 0, 'cy', 0, 'r', 3]),
+    'style', TJSONObject.Create(['fill', '#91cc75'])]));
+end;
+
+procedure TCu2Mirror.DurGrow(AApi: TTyGfxDuringApi);
+begin
+  AApi.SetShape('width', 10 + AApi.GetTransform('x') / 20);
+end;
+
+procedure TCu2Mirror.DurArc(AApi: TTyGfxDuringApi);
+var q: Double;
+begin
+  q := TTyGfxDuringApi.Num(AApi.GetExtra('p'));
+  AApi.SetShape('r', 3 + 9 * q);
+  AApi.SetStyle('opacity', q);
+end;
+
 { RENDER.vmMeta [spec 242] }
 function TCu2Mirror.VmMeta(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
 var
@@ -504,6 +542,9 @@ begin
   TyChartRegisterRenderItem('free', @m.FreeRI);
   TyChartRegisterRenderItem('vmDot', @m.VmDot);
   TyChartRegisterRenderItem('vmMeta', @m.VmMeta);
+  TyChartRegisterRenderItem('durRI', @m.DurRI);
+  TyChartRegisterDuring('durc:grow', @m.DurGrow);
+  TyChartRegisterDuring('durc:arc', @m.DurArc);
   TyChartRegisterRenderItem('enterRI', @m.EnterRI);
   TyChartRegisterRenderItem('moveRI', @m.MoveRI);
   TyChartRegisterRenderItem('leaveRI', @m.LeaveRI);

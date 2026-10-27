@@ -55,6 +55,12 @@ type
     procedure Up(AX, AY: Integer);
     procedure OnEvent(Sender: TObject; const AEvent: TTyChartEvent);
     function OnElement(Sender: TObject; const AEvent: TTyChartElementEvent): Boolean;
+    { [spec 242] the during case's handlers, as graphic.js' DURINGS }
+    procedure DurGrow(AApi: TTyGfxDuringApi);
+    procedure DurGrow2(AApi: TTyGfxDuringApi);
+    procedure DurArc(AApi: TTyGfxDuringApi);
+    procedure DurTy(AApi: TTyGfxDuringApi);
+    procedure DurGTurn(AApi: TTyGfxDuringApi);
   end;
 
   TAdvChartGraphicTest = class(TTestCase)
@@ -166,6 +172,35 @@ begin
   if not AEvent.HasParams or (AEvent.Params.ComponentType <> 'graphic') then Exit;
   SetLength(Events, Length(Events) + 1);
   Events[High(Events)] := AEvent;
+end;
+
+procedure TGfxProbe.DurGrow(AApi: TTyGfxDuringApi);
+begin
+  AApi.SetShape('width', 20 + AApi.GetTransform('x') / 4);
+end;
+
+procedure TGfxProbe.DurGrow2(AApi: TTyGfxDuringApi);
+begin
+  AApi.SetShape('height', 10 + AApi.GetTransform('x') / 10);
+end;
+
+procedure TGfxProbe.DurArc(AApi: TTyGfxDuringApi);
+var p: Double;
+begin
+  p := TTyGfxDuringApi.Num(AApi.GetExtra('p'));
+  AApi.SetShape('r', 5 + 30 * p);
+  AApi.SetStyle('opacity', p);
+end;
+
+procedure TGfxProbe.DurTy(AApi: TTyGfxDuringApi);
+begin
+  AApi.SetTransform('y', 100 + AApi.GetTransform('x') / 2);
+end;
+
+procedure TGfxProbe.DurGTurn(AApi: TTyGfxDuringApi);
+begin
+  AApi.SetTransform('rotation', AApi.GetTransform('x') / 1000);
+  AApi.SetStyle('opacity', 0.1);
 end;
 
 function TGfxProbe.OnElement(Sender: TObject; const AEvent: TTyChartElementEvent): Boolean;
@@ -563,6 +598,12 @@ begin
   TyChartRegisterElementHandler('log:Sstart', @FChart.OnElement);
   TyChartRegisterElementHandler('log:Hstart', @FChart.OnElement);
   TyChartRegisterElementHandler('log:Hdrag', @FChart.OnElement);
+  { [spec 242] the during case's }
+  TyChartRegisterDuring('dur:grow', @FChart.DurGrow);
+  TyChartRegisterDuring('dur:grow2', @FChart.DurGrow2);
+  TyChartRegisterDuring('dur:arc', @FChart.DurArc);
+  TyChartRegisterDuring('dur:ty', @FChart.DurTy);
+  TyChartRegisterDuring('dur:gturn', @FChart.DurGTurn);
 end;
 
 procedure TAdvChartGraphicTest.RenderNow;
@@ -1194,7 +1235,7 @@ end;
 
 procedure TAdvChartGraphicTest.TestTheTransitionsAreUpstreams;
 var
-  ids: array[0..3] of string = ('enter', 'update', 'relocate', 'leave');
+  ids: array[0..4] of string = ('enter', 'update', 'relocate', 'leave', 'during');
   k, i: Integer;
   c, st: TJSONObject;
   steps, states, samplesMs: TJSONArray;

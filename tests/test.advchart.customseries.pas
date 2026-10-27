@@ -276,6 +276,9 @@ function Rv(A: TJSONData): TJSONData;
 var i: Integer; o: TJSONObject; arr: TJSONArray;
 begin
   if A = nil then Exit(TJSONNull.Create);
+  { [spec 242] a during handler is the oracle's function }
+  if (A.JSONType = jtString) and (Copy(A.AsString, 1, 6) = '@durc:') then
+    Exit(TJSONString.Create('<fn>'));
   case A.JSONType of
     jtNumber: Result := TJSONString.Create(HexOf(A.AsFloat));
     jtObject:

@@ -543,9 +543,24 @@ function resolvePoint(chart, t, where) {
 
 // ---------- handlers ----------
 let LOG = [];
+// [spec 242] `during` handlers ({$fn: 'dur:NAME'}): the same function for
+// the same name across setOption calls, as the port's '@dur:NAME' is
+const DURINGS = {
+  grow: api => { api.setShape('width', 20 + api.getTransform('x') / 4); },
+  grow2: api => { api.setShape('height', 10 + api.getTransform('x') / 10); },
+  arc: api => { const p = api.getExtra('p'); api.setShape('r', 5 + 30 * p); api.setStyle('opacity', p); },
+  ty: api => { api.setTransform('y', 100 + api.getTransform('x') / 2); },
+  gturn: api => { api.setTransform('rotation', api.getTransform('x') / 1000); api.setStyle('opacity', 0.1); },
+};
+const DURING_FNS = {};
 function materialize(v) {
   if (Array.isArray(v)) return v.map(materialize);
   if (v && typeof v === 'object') {
+    if (typeof v.$fn === 'string' && v.$fn.startsWith('dur:')) {
+      const name = v.$fn.slice(4);
+      must(DURINGS[name], 'an unknown during ' + v.$fn);
+      return DURING_FNS[name] || (DURING_FNS[name] = DURINGS[name]);
+    }
     if (typeof v.$fn === 'string') {
       const [kind, name] = v.$fn.split(':');
       must(kind === 'log' || kind === 'stop', 'an unknown $fn ' + v.$fn);
@@ -914,6 +929,24 @@ add('text', 'text-area', "textConfig.layoutRect and autoOverflowArea: a long lab
     { type: 'rect', id: 'nr', shape: { x: 20, y: 320, width: 80, height: 40 }, style: { fill: '#785db0' },
       textContent: { style: { text: 'a layout rect of NaN', fontSize: 12, overflow: 'truncate' } },
       textConfig: { position: 'inside', layoutRect: { x: 30, y: 320 }, autoOverflowArea: true } }] });
+// [spec 242] `during`: getElementAnimationConfig binds the element's
+// userDuring (the last update's option) when the animation config's
+// duration is above 0; zrender calls it after the first animator's frame;
+// an update whose option has no during releases the old one
+add('anim', 'during', "during: a rect whose width follows its entering x, a circle whose r and opacity follow an animated extra, a rect with a during and nothing animating (never called), a rect whose y follows its x and keeps doing so through its leave, a group turned by its x (setStyle on a group does nothing); then an update giving one a new during, one an update with none (released), one removed",
+  { animation: true, graphic: [
+    { type: 'rect', id: 'd1', x: 200, y: 20, enterFrom: { x: 0 }, during: { $fn: 'dur:grow' }, shape: { width: 40, height: 30 }, style: { fill: '#5070dd' } },
+    { type: 'circle', id: 'd2', x: 100, y: 150, extra: { p: 1, enterFrom: { p: 0 } }, during: { $fn: 'dur:arc' }, shape: { r: 5 }, style: { fill: '#b6d634' } },
+    { type: 'rect', id: 'd3', x: 300, y: 200, during: { $fn: 'dur:grow' }, shape: { width: 40, height: 30 }, style: { fill: '#ff994d' } },
+    { type: 'rect', id: 'd4', x: 300, y: 100, enterFrom: { x: 0 }, leaveTo: { x: 0 }, during: { $fn: 'dur:ty' }, shape: { width: 30, height: 30 }, style: { fill: '#0ca8df' } },
+    { type: 'group', id: 'dg', x: 200, y: 250, enterFrom: { x: 100 }, during: { $fn: 'dur:gturn' }, children: [
+      { type: 'rect', id: 'dg.r', shape: { width: 40, height: 20 }, style: { fill: '#fb628b' } }] }] },
+  { W: 400, H: 300, samples: SAMPLES, steps: [
+    { wait: 2000 },
+    { merge: { graphic: [
+      { id: 'd1', x: 50, transition: ['x'], during: { $fn: 'dur:grow2' } },
+      { id: 'd2', extra: { p: 0.2 }, transition: 'extra' },
+      { id: 'd4', $action: 'remove' }] } }] });
 
 // ---------------------------------------------------------------------------
 // running
