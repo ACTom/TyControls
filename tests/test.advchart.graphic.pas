@@ -600,6 +600,12 @@ begin
   TyChartRegisterElementHandler('log:Sstart', @FChart.OnElement);
   TyChartRegisterElementHandler('log:Hstart', @FChart.OnElement);
   TyChartRegisterElementHandler('log:Hdrag', @FChart.OnElement);
+  { [spec 242] the drag-over case's }
+  TyChartRegisterElementHandler('log:Tenter', @FChart.OnElement);
+  TyChartRegisterElementHandler('log:Tleave', @FChart.OnElement);
+  TyChartRegisterElementHandler('log:Tdrop', @FChart.OnElement);
+  TyChartRegisterElementHandler('log:Mstart', @FChart.OnElement);
+  TyChartRegisterElementHandler('log:Mend', @FChart.OnElement);
   { [spec 242] the clip case's }
   TyChartRegisterElementHandler('log:R', @FChart.OnElement);
   TyChartRegisterElementHandler('log:GA', @FChart.OnElement);
@@ -1241,7 +1247,7 @@ end;
 
 procedure TAdvChartGraphicTest.TestTheTextsAreUpstreams;
 begin
-  RunStatic(['texts', 'rich', 'text-hv', 'text-content', 'legacy-text', 'text-area'], False);
+  RunStatic(['texts', 'rich', 'text-hv', 'text-content', 'legacy-text', 'text-area', 'text-apart'], False);
   Finish('the texts', 800);
   AssertTrue('pieces compared', FPieces >= 30);
 end;
@@ -1274,14 +1280,14 @@ end;
 
 procedure TAdvChartGraphicTest.TestTheEventsAreUpstreams;
 begin
-  RunStatic(['events', 'drag', 'clip'], False);
+  RunStatic(['events', 'drag', 'drag-over', 'clip'], False);
   Finish('the events', 300);
   AssertTrue('chart events compared', FEventsSeen >= 3);
 end;
 
 procedure TAdvChartGraphicTest.TestTheTransitionsAreUpstreams;
 var
-  ids: array[0..4] of string = ('enter', 'update', 'relocate', 'leave', 'during');
+  ids: array[0..5] of string = ('enter', 'update', 'relocate', 'leave', 'during', 'during-swap');
   k, i: Integer;
   c, st: TJSONObject;
   steps, states, samplesMs: TJSONArray;
