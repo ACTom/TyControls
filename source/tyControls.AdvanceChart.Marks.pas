@@ -310,6 +310,10 @@ type
     { a data item's own label read over the series', by raw row }
     ItemLabels: TTyLabelSpecArray;
     HasItemLabel: TTyBoolArray;
+    { [R5-F] A LINE'S TEMPORARY SYMBOLS, by raw row: LineView.highlight of
+      one row that has no symbol (showSymbol false, or the category interval
+      thinned it) builds one at the row's point, inside the symbol clip }
+    TempRows: TTyIntegerArray;
     HeatHasRadii: TTyBoolArray;
     { Which store column `{c}` and the default text read. -1 means neither
       has a value to show. }
@@ -2065,6 +2069,15 @@ var
       and (AP.Y >= symbolArea.Y) and (AP.Y <= symbolArea.Y + symbolArea.H);
   end;
 
+  function TempRow(ARow: Integer): Boolean;
+  var j, raw: Integer;
+  begin
+    Result := False;
+    raw := AStore.GetRawIndex(ARow);
+    for j := 0 to High(AVisual.TempRows) do
+      if AVisual.TempRows[j] = raw then Exit(True);
+  end;
+
   function SymbolKept(ARow: Integer): Boolean;
   var
     v: Double;
@@ -2414,6 +2427,17 @@ var
     if spec.ShowSymbol then
       for k := 0 to n - 1 do
         if SymbolKept(rows[k]) and InSymbolArea(pts[k]) then
+        begin
+          if pol <> nil then SymbolCoord(pts[k]);
+          if EmitSymbol(pts[k], rows[k]) then Inc(Result);
+        end;
+    { [R5-F] THE TEMPORARY SYMBOLS of rows a highlight named that have none
+      of their own: where the point is inside the symbol clip (fix #11360),
+      at the row's point, as the shown ones are made }
+    if Length(AVisual.TempRows) > 0 then
+      for k := 0 to n - 1 do
+        if not (spec.ShowSymbol and SymbolKept(rows[k])) and TempRow(rows[k])
+          and InSymbolArea(pts[k]) then
         begin
           if pol <> nil then SymbolCoord(pts[k]);
           if EmitSymbol(pts[k], rows[k]) then Inc(Result);

@@ -957,6 +957,10 @@ begin
           spec := TyChartMergeEmphasis(spec, TyChartReadEmphasis(nodes[0]));
         half := (ph^.Shape.Bounds.Bottom - ph^.Shape.Bounds.Top) / 2;
         if ph^.Shape.Kind in [cskCircle, cskEllipse] then half := ph^.Shape.R1;
+        { [R5-F] THE SYMBOL'S OWN SIZE (Symbol._sizeY), not its shape's:
+          a rect, a triangle, a diamond are polygons, whose Bounds is not
+          set [was: no emphasis scale on any of them] }
+        if ph^.Caption.LgKind = cTyGuideHostSymbol then half := ph^.Caption.LgG[1] / 2;
         { a symbol of no size or a NaN one keeps its size }
         if StPositive(half) then
           TyStSetNum(item^.Host.Decl[stnEmphasis], stkScale,
@@ -2279,6 +2283,9 @@ begin
         else if prev <> [] then TyStUseItemStates(item^, prev);
       end;
     end;
+    { [R5-F] a line's temporary symbols new in this list: in emphasis
+      (LineView.highlight's symbol.highlight) }
+    if FSt[s].IsLine then LineTempsEnter(s);
     { updateSeriesElementSelection, then applyElementStates }
     SelSyncFlags(slot);
     for raw := 0 to High(FSt[s].Rows) do
@@ -3604,6 +3611,82 @@ begin
   if (raw < 0) or (raw > High(FSt[ASeriesIndex].Rows)) then Exit;
   if not FSt[ASeriesIndex].Rows[raw].Host.Exists then Exit;
   Result := @FSt[ASeriesIndex].Rows[raw];
+end;
+
+{ ---- a line's temporary symbols [R5-F] ---- }
+
+procedure TTyCustomAdvanceChart.LineTempAdd(ASeriesIndex, AInnerRow: Integer);
+var slot, raw, i: Integer;
+begin
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Exit;
+  if (AInnerRow < 0) or (AInnerRow >= FStores[slot].Count) then Exit;
+  raw := FStores[slot].GetRawIndex(AInnerRow);
+  for i := 0 to High(FLineTemps) do
+    if (FLineTemps[i].S = ASeriesIndex) and (FLineTemps[i].Raw = raw) then Exit;
+  SetLength(FLineTemps, Length(FLineTemps) + 1);
+  FLineTemps[High(FLineTemps)].S := ASeriesIndex;
+  FLineTemps[High(FLineTemps)].Raw := raw;
+  FLineTemps[High(FLineTemps)].Pending := True;
+  { the element is the list's: built again, the states unchanged }
+  DropStatic;
+  FStDirty := True;
+end;
+
+function TTyCustomAdvanceChart.LineTempDrop(ASeriesIndex, AInnerRow: Integer): Boolean;
+var slot, raw, i, j: Integer;
+begin
+  Result := False;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Exit;
+  if (AInnerRow < 0) or (AInnerRow >= FStores[slot].Count) then Exit;
+  raw := FStores[slot].GetRawIndex(AInnerRow);
+  for i := 0 to High(FLineTemps) do
+    if (FLineTemps[i].S = ASeriesIndex) and (FLineTemps[i].Raw = raw) then
+    begin
+      for j := i to High(FLineTemps) - 1 do FLineTemps[j] := FLineTemps[j + 1];
+      SetLength(FLineTemps, Length(FLineTemps) - 1);
+      DropStatic;
+      FStDirty := True;
+      Exit(True);
+    end;
+end;
+
+function TTyCustomAdvanceChart.LineTempRows(ASeriesIndex: Integer): TTyIntegerArray;
+var i: Integer;
+begin
+  Result := nil;
+  for i := 0 to High(FLineTemps) do
+    if FLineTemps[i].S = ASeriesIndex then
+    begin
+      SetLength(Result, Length(Result) + 1);
+      Result[High(Result)] := FLineTemps[i].Raw;
+    end;
+end;
+
+procedure TTyCustomAdvanceChart.LineTempsEnter(ASeriesIndex: Integer);
+var i, j, poly: Integer;
+begin
+  i := 0;
+  while i <= High(FLineTemps) do
+  begin
+    if (FLineTemps[i].S = ASeriesIndex) and FLineTemps[i].Pending then
+    begin
+      { NONE BUILT (a NaN point, outside the clip): upstream makes none and
+        keeps nothing }
+      if (FLineTemps[i].Raw > High(FSt[ASeriesIndex].Rows))
+        or not FSt[ASeriesIndex].Rows[FLineTemps[i].Raw].Host.Exists then
+      begin
+        for j := i to High(FLineTemps) - 1 do FLineTemps[j] := FLineTemps[j + 1];
+        SetLength(FLineTemps, Length(FLineTemps) - 1);
+        Continue;
+      end;
+      poly := -1;
+      TyStItemEnterEmphasisBy(FSt[ASeriesIndex].Rows[FLineTemps[i].Raw], 0, True, poly);
+      FLineTemps[i].Pending := False;
+    end;
+    Inc(i);
+  end;
 end;
 
 { ---- focus and blur [Batch 90] ---- }
@@ -5947,6 +6030,9 @@ begin
         single := False;
       if single then
       begin
+        { [R5-F] A TEMPORARY SYMBOL is taken away by the downplay, not
+          downplayed (LineView.downplay) }
+        if not isHigh and LineTempDrop(s, inner[0]) then Continue;
         item := StItemAt(s, inner[0]);
         if item <> nil then
         begin
@@ -5956,7 +6042,11 @@ begin
           end
           else if TyStItemLeaveEmphasisBy(item^, 0, True, poly) then
             FStDirty := True;
-        end;
+        end
+        { [R5-F] a row with no symbol gets a temporary one, built in
+          emphasis [was: nothing drawn for it] }
+        else if isHigh then
+          LineTempAdd(s, inner[0]);
         Continue;
       end;
     end;

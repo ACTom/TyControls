@@ -1085,6 +1085,8 @@ begin
   end;
   { a full update: the next sync re-renders the states [Batch 88] }
   Inc(FStGen);
+  { [R5-F] and a line's render removes its temporary symbols }
+  FLineTemps := nil;
   { the legend is rendered anew: its buttons are new elements in no state
     [Batch 98] }
   FLegendSelHoverLegend := -1;
@@ -4211,6 +4213,9 @@ begin
       { [Batch 68: a LINE's default is 3, not 2 -- LineSeries.ts:161 --
         so a line over a bar of the same chart is drawn above it however
         the two are declared.] }
+      { [R5-F] a line's temporary symbols }
+      if FBindings[i].SeriesType = 'line' then
+        v.TempRows := LineTempRows(FBindings[i].SeriesIndex);
       if FBindings[i].SeriesType = 'line' then
         v.Z := SeriesIntIn(FBindings[i].SeriesIndex, 'z', 3)
       else

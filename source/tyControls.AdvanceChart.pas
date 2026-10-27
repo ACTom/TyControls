@@ -445,6 +445,14 @@ type
     DataDiffer key and raw index -- upstream keeps the view (same id, same
     type) and its elements by the data diff, and a reused element keeps its
     hoverState and __highByOuter bits }
+  { [R5-F] A LINE'S TEMPORARY SYMBOL (LineView.highlight of one row with no
+    symbol): the series index and the raw row; Pending until the list that
+    builds it enters it in emphasis }
+  TTyLineTemp = record
+    S, Raw: Integer;
+    Pending: Boolean;
+  end;
+
   TTyStCarryKeys = record
     Present: Boolean;
     ViewKey, SeriesType: string;
@@ -1200,6 +1208,9 @@ type
     FStCarryHoverSeries, FStCarryHoverRaw: Integer;
     FStGen, FStBuiltGen: Integer;
     FStRerender, FStDirty: Boolean;
+    { [R5-F] the lines' temporary symbols; a render takes them away
+      (LineView.render removes every __temp) }
+    FLineTemps: array of TTyLineTemp;
     { [R2-I9] THE HOVER LAYER: the copies it brushes (the paths on it in
       their hover style, in list order) and whether they are to be found
       again; the storage count the threshold reads (FHlCount, counted again
@@ -4096,6 +4107,13 @@ type
     function StHoverAny: Boolean;
     procedure PaintHoverLayer(APainter: TTyPainter);
     function StItemAt(ASeriesIndex, AInnerRow: Integer): PTyStItem;
+    { [R5-F] a line's temporary symbol for an inner row: registered (and the
+      list built again) / taken away; the raw rows of a series'; the new
+      ones of this list entered in emphasis }
+    procedure LineTempAdd(ASeriesIndex, AInnerRow: Integer);
+    function LineTempDrop(ASeriesIndex, AInnerRow: Integer): Boolean;
+    function LineTempRows(ASeriesIndex: Integer): TTyIntegerArray;
+    procedure LineTempsEnter(ASeriesIndex: Integer);
     { [F2b] the row's second dispatcher (a gauge's arc), nil for none }
     function StPeerAt(ASeriesIndex, AInnerRow: Integer): PTyStItem;
     { ---- focus and blur [Batch 90] ---- }
