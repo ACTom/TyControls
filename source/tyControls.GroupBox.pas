@@ -226,7 +226,7 @@ end;
 function TTyCustomGroupBox.DialogChar(var Message: TLMKey): Boolean;
 var pf: TCustomForm;
 begin
-  if IsEnabled and TyIsAccelKey(Message, FCaption) then
+  if IsEnabled and TyShownInForm(Self) and TyIsAccelKey(Message, FCaption) then   { #142 }
   begin
     pf := GetParentForm(Self);
     if pf <> nil then pf.SelectNext(Self, True, True);   // focus the first child after the group box

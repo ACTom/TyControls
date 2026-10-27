@@ -175,7 +175,7 @@ end;
 
 function TTyCustomLabel.DialogChar(var Message: TLMKey): Boolean;
 begin
-  if (FFocusControl <> nil) and TyIsAccelKey(Message, Caption) then
+  if (FFocusControl <> nil) and TyShownInForm(Self) and TyIsAccelKey(Message, Caption) then   { #142 }
   begin
     Click;   // TTyLabel.Click focuses FFocusControl
     Exit(True);
