@@ -287,7 +287,7 @@ end;
 
 procedure TTyCustomAdvanceChart.ProgApplyVisibility(AList: TTyPaintList);
 var
-  k, done, j, shown: Integer;
+  k, done, j, shown, nums: Integer;
   el: TTyChartElement;
   pe: PTyChartElement;
   hid, moved: Boolean;
@@ -315,9 +315,14 @@ begin
       if j > Length(el.Shape.Large.ChunkEnds) then j := Length(el.Shape.Large.ChunkEnds);
       if j < 1 then j := 1;
       shown := el.Shape.Large.ChunkEnds[j - 1];
-      if shown <> el.Shape.Large.Shown then
+      { [R5-J] and the numbers it holds then: a chunk can add a number
+        and no row (a single axis' odd chunk) }
+      if j - 1 <= High(el.Shape.Large.ChunkNums) then nums := el.Shape.Large.ChunkNums[j - 1]
+      else nums := 0;
+      if (shown <> el.Shape.Large.Shown) or (nums <> el.Shape.Large.ShownNums) then
       begin
         el.Shape.Large.Shown := shown;
+        el.Shape.Large.ShownNums := nums;
         TyLargeSetBox(el.Shape.Large);
         el.Shape.Bounds := TyLargeBounds(el.Shape.Large);
         { [spec 242] a lines batch's gradient spans what it holds now }
@@ -455,6 +460,8 @@ begin
         part.Shape.Large.Pts := Copy(el.Shape.Large.Pts, have * 2, (rows - have) * 2);
         part.Shape.Large.Shown := 0;
         part.Shape.Large.ChunkEnds := nil;
+        part.Shape.Large.ChunkNums := nil;
+        part.Shape.Large.ShownNums := 0;
         TyRenderElement(P, part);
       end
       else if (have > 0) and (el.Shape.Kind = cskLarge) and (el.Shape.Large.Kind = lgkLines)
