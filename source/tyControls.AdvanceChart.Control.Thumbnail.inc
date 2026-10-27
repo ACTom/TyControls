@@ -564,7 +564,13 @@ begin
   if s = 0 then Exit;
   if not TyThumbRectContains(FThumbs[k].Content, AX, AY) then Exit;
   TyThumbZoomPayload(FThumbs[k].View, s, AX, AY, z, ox, oy);
-  GraphZoom(FThumbs[k].Target, z, ox, oy);
+  { [R5-J] the thumbnail's dispatch publishes graphroam }
+  FRoamEvSrc := 2;
+  try
+    GraphZoom(FThumbs[k].Target, z, ox, oy);
+  finally
+    FRoamEvSrc := 0;
+  end;
   Result := True;
 end;
 

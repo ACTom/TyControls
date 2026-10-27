@@ -1017,6 +1017,12 @@ begin
         begin
           if SankeyDispatchRoam(rp) then Result := True;
         end
+        { [R5-J] the tree's, registerRoamActionSimply as the graph's and the
+          sankey's [was: not an action the chart took] }
+        else if AType = 'treeRoam' then
+        begin
+          if TreeDispatchRoam(rp) then Result := True;
+        end
         else if GraphDispatchRoam(rp) then Result := True;
       end;
     end;
@@ -1254,9 +1260,19 @@ begin
     else if (t = 'treemapZoomToNode') or (t = 'treemapRootToNode')
       or (t = 'treemapMove') or (t = 'treemapRender') then
       Result := DoTreemapAction(t, p)
-    else if (t = 'dragNode') or (t = 'sankeyRoam') or (t = 'graphRoam') then
-      { [Batch 114] }
+    else if (t = 'dragNode') or (t = 'sankeyRoam') or (t = 'graphRoam')
+      or (t = 'treeRoam') then
+      { [Batch 114] [R5-J: treeRoam] }
       Result := DoViewAction(t, p)
+    { [R5-J] THE GRAPH'S (un)focusNodeAdjacency: registered with a noop
+      handler and an update ('series:focusNodeAdjacency') no 6.x series
+      view answers -- the event, a copy of the payload, and `updated`
+      [was: not an action the chart took] }
+    else if (t = 'focusNodeAdjacency') or (t = 'unfocusNodeAdjacency') then
+    begin
+      EmitPayloadEvent(LowerCase(t), CopyWithType(p, LowerCase(t)));
+      Result := True;
+    end
     { the geo's roam [Batch 150] }
     else if t = 'geoRoam' then
       Result := DoGeoRoamAction(p)

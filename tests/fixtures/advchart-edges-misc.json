@@ -1,0 +1,2618 @@
+{
+ "source": "ECharts 6.1.0",
+ "events": {
+  "public": [
+   "axisareaselected",
+   "axisbreakchanged",
+   "brush",
+   "brushend",
+   "brushselected",
+   "changeaxisorder",
+   "datarangeselected",
+   "dataviewchanged",
+   "datazoom",
+   "downplay",
+   "dragnode",
+   "focusnodeadjacency",
+   "georoam",
+   "geoselectchanged",
+   "geoselected",
+   "geounselected",
+   "globalcursortaken",
+   "graphroam",
+   "hidetip",
+   "highlight",
+   "legendinverseselect",
+   "legendscroll",
+   "legendselectall",
+   "legendselectchanged",
+   "legendselected",
+   "legendunselected",
+   "magictypechanged",
+   "mapselect",
+   "maptoggleselect",
+   "mapunselect",
+   "parallelaxisexpand",
+   "pieselect",
+   "pietoggleselect",
+   "pieunselect",
+   "restore",
+   "sankeyroam",
+   "select",
+   "selectchanged",
+   "showtip",
+   "sunbursthighlight",
+   "sunburstroottonode",
+   "sunburstunhighlight",
+   "timelinechanged",
+   "timelineplaychanged",
+   "toggleselect",
+   "treeexpandandcollapse",
+   "treemapmove",
+   "treemaprender",
+   "treemaproottonode",
+   "treemapzoomtonode",
+   "treeroam",
+   "unfocusnodeadjacency",
+   "unselect",
+   "updateaxispointer"
+  ],
+  "connectOnly": [
+   "collapseaxisbreak",
+   "expandaxisbreak",
+   "toggleaxisbreak"
+  ],
+  "legacy": [
+   "mapselectchanged",
+   "mapselected",
+   "mapunselected",
+   "pieselectchanged",
+   "pieselected",
+   "pieunselected"
+  ],
+  "rendering": [
+   "rendered",
+   "finished",
+   "updated"
+  ],
+  "mouse": [
+   "click",
+   "dblclick",
+   "mouseover",
+   "mouseout",
+   "mousemove",
+   "mousedown",
+   "mouseup",
+   "globalout",
+   "contextmenu"
+  ],
+  "queries": [
+   {
+    "h": "plain",
+    "query": null
+   },
+   {
+    "h": "q1",
+    "query": "series.nosuch"
+   },
+   {
+    "h": "q2",
+    "query": {
+     "seriesIndex": 5
+    }
+   }
+  ],
+  "cases": [
+   {
+    "id": "ev-cartesian",
+    "note": "the toolbox, the dataZoom, the tooltip, the axis pointer and the graph-less adjacency actions on a bar chart",
+    "option": {
+     "animation": false,
+     "tooltip": {
+      "trigger": "axis"
+     },
+     "toolbox": {
+      "feature": {
+       "dataView": {},
+       "magicType": {
+        "type": [
+         "line",
+         "bar"
+        ]
+       },
+       "restore": {}
+      }
+     },
+     "dataZoom": [
+      {
+       "type": "inside"
+      }
+     ],
+     "xAxis": {
+      "type": "category",
+      "data": [
+       "a",
+       "b",
+       "c"
+      ]
+     },
+     "yAxis": {},
+     "series": [
+      {
+       "type": "bar",
+       "id": "s0",
+       "data": [
+        1,
+        2,
+        3
+       ]
+      }
+     ]
+    },
+    "steps": [
+     {
+      "action": {
+       "type": "dataZoom",
+       "start": 10,
+       "end": 60
+      },
+      "log": [
+       [
+        "plain",
+        "datazoom",
+        "{\"type\":\"datazoom\",\"start\":10,\"end\":60}"
+       ],
+       [
+        "q1",
+        "datazoom",
+        "{\"type\":\"datazoom\",\"start\":10,\"end\":60}"
+       ],
+       [
+        "q2",
+        "datazoom",
+        "{\"type\":\"datazoom\",\"start\":10,\"end\":60}"
+       ],
+       [
+        "plain",
+        "brushselected",
+        "{\"type\":\"brushselected\",\"batch\":[]}"
+       ],
+       [
+        "q1",
+        "brushselected",
+        "{\"type\":\"brushselected\",\"batch\":[]}"
+       ],
+       [
+        "q2",
+        "brushselected",
+        "{\"type\":\"brushselected\",\"batch\":[]}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ]
+      ]
+     },
+     {
+      "action": {
+       "type": "restore"
+      },
+      "log": [
+       [
+        "plain",
+        "restore",
+        "{\"type\":\"restore\"}"
+       ],
+       [
+        "q1",
+        "restore",
+        "{\"type\":\"restore\"}"
+       ],
+       [
+        "q2",
+        "restore",
+        "{\"type\":\"restore\"}"
+       ],
+       [
+        "plain",
+        "brushselected",
+        "{\"type\":\"brushselected\",\"batch\":[]}"
+       ],
+       [
+        "q1",
+        "brushselected",
+        "{\"type\":\"brushselected\",\"batch\":[]}"
+       ],
+       [
+        "q2",
+        "brushselected",
+        "{\"type\":\"brushselected\",\"batch\":[]}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ]
+      ]
+     },
+     {
+      "action": {
+       "type": "changeMagicType",
+       "currentType": "line",
+       "newOption": {}
+      },
+      "log": [
+       [
+        "plain",
+        "magictypechanged",
+        "{\"type\":\"magictypechanged\",\"currentType\":\"line\",\"newOption\":{}}"
+       ],
+       [
+        "q1",
+        "magictypechanged",
+        "{\"type\":\"magictypechanged\",\"currentType\":\"line\",\"newOption\":{}}"
+       ],
+       [
+        "q2",
+        "magictypechanged",
+        "{\"type\":\"magictypechanged\",\"currentType\":\"line\",\"newOption\":{}}"
+       ],
+       [
+        "plain",
+        "brushselected",
+        "{\"type\":\"brushselected\",\"batch\":[]}"
+       ],
+       [
+        "q1",
+        "brushselected",
+        "{\"type\":\"brushselected\",\"batch\":[]}"
+       ],
+       [
+        "q2",
+        "brushselected",
+        "{\"type\":\"brushselected\",\"batch\":[]}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ]
+      ]
+     },
+     {
+      "action": {
+       "type": "changeDataView",
+       "newOption": {}
+      },
+      "log": [
+       [
+        "plain",
+        "dataviewchanged",
+        "{\"type\":\"dataviewchanged\",\"newOption\":{}}"
+       ],
+       [
+        "q1",
+        "dataviewchanged",
+        "{\"type\":\"dataviewchanged\",\"newOption\":{}}"
+       ],
+       [
+        "q2",
+        "dataviewchanged",
+        "{\"type\":\"dataviewchanged\",\"newOption\":{}}"
+       ],
+       [
+        "plain",
+        "brushselected",
+        "{\"type\":\"brushselected\",\"batch\":[]}"
+       ],
+       [
+        "q1",
+        "brushselected",
+        "{\"type\":\"brushselected\",\"batch\":[]}"
+       ],
+       [
+        "q2",
+        "brushselected",
+        "{\"type\":\"brushselected\",\"batch\":[]}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ]
+      ]
+     },
+     {
+      "action": {
+       "type": "showTip",
+       "seriesIndex": 0,
+       "dataIndex": 1
+      },
+      "log": [
+       [
+        "plain",
+        "showtip",
+        "{\"type\":\"showtip\",\"seriesIndex\":0,\"dataIndex\":1}"
+       ],
+       [
+        "q1",
+        "showtip",
+        "{\"type\":\"showtip\",\"seriesIndex\":0,\"dataIndex\":1}"
+       ],
+       [
+        "q2",
+        "showtip",
+        "{\"type\":\"showtip\",\"seriesIndex\":0,\"dataIndex\":1}"
+       ],
+       [
+        "plain",
+        "updateaxispointer",
+        "{\"seriesIndex\":0,\"dataIndexInside\":1,\"dataIndex\":1,\"axesInfo\":[{\"axisDim\":\"x\",\"axisIndex\":0,\"value\":1}],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q1",
+        "updateaxispointer",
+        "{\"seriesIndex\":0,\"dataIndexInside\":1,\"dataIndex\":1,\"axesInfo\":[{\"axisDim\":\"x\",\"axisIndex\":0,\"value\":1}],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q2",
+        "updateaxispointer",
+        "{\"seriesIndex\":0,\"dataIndexInside\":1,\"dataIndex\":1,\"axesInfo\":[{\"axisDim\":\"x\",\"axisIndex\":0,\"value\":1}],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "plain",
+        "showtip",
+        "{\"type\":\"showtip\",\"escapeConnect\":true,\"x\":315,\"y\":150,\"dataIndexInside\":1,\"dataIndex\":1,\"seriesIndex\":0,\"dataByCoordSys\":[{\"coordSysId\":\"^series^0^0\",\"coordSysIndex\":0,\"coordSysType\":\"grid\",\"coordSysMainType\":\"grid\",\"dataByAxis\":[{\"axisDim\":\"x\",\"axisIndex\":0,\"axisType\":\"xAxis.category\",\"axisId\":\"^series^0^0\",\"value\":1,\"valueLabelOpt\":{\"precision\":\"auto\"},\"seriesDataIndices\":[{\"seriesIndex\":0,\"dataIndexInside\":1,\"dataIndex\":1}]}]}]}"
+       ],
+       [
+        "q1",
+        "showtip",
+        "{\"type\":\"showtip\",\"escapeConnect\":true,\"x\":315,\"y\":150,\"dataIndexInside\":1,\"dataIndex\":1,\"seriesIndex\":0,\"dataByCoordSys\":[{\"coordSysId\":\"^series^0^0\",\"coordSysIndex\":0,\"coordSysType\":\"grid\",\"coordSysMainType\":\"grid\",\"dataByAxis\":[{\"axisDim\":\"x\",\"axisIndex\":0,\"axisType\":\"xAxis.category\",\"axisId\":\"^series^0^0\",\"value\":1,\"valueLabelOpt\":{\"precision\":\"auto\"},\"seriesDataIndices\":[{\"seriesIndex\":0,\"dataIndexInside\":1,\"dataIndex\":1}]}]}]}"
+       ],
+       [
+        "q2",
+        "showtip",
+        "{\"type\":\"showtip\",\"escapeConnect\":true,\"x\":315,\"y\":150,\"dataIndexInside\":1,\"dataIndex\":1,\"seriesIndex\":0,\"dataByCoordSys\":[{\"coordSysId\":\"^series^0^0\",\"coordSysIndex\":0,\"coordSysType\":\"grid\",\"coordSysMainType\":\"grid\",\"dataByAxis\":[{\"axisDim\":\"x\",\"axisIndex\":0,\"axisType\":\"xAxis.category\",\"axisId\":\"^series^0^0\",\"value\":1,\"valueLabelOpt\":{\"precision\":\"auto\"},\"seriesDataIndices\":[{\"seriesIndex\":0,\"dataIndexInside\":1,\"dataIndex\":1}]}]}]}"
+       ],
+       [
+        "plain",
+        "highlight",
+        "{\"type\":\"highlight\",\"escapeConnect\":true,\"batch\":[{\"seriesIndex\":0,\"dataIndex\":1,\"type\":\"highlight\",\"escapeConnect\":true,\"notBlur\":true,\"batch\":null}]}"
+       ],
+       [
+        "q1",
+        "highlight",
+        "{\"type\":\"highlight\",\"escapeConnect\":true,\"batch\":[{\"seriesIndex\":0,\"dataIndex\":1,\"type\":\"highlight\",\"escapeConnect\":true,\"notBlur\":true,\"batch\":null}]}"
+       ],
+       [
+        "q2",
+        "highlight",
+        "{\"type\":\"highlight\",\"escapeConnect\":true,\"batch\":[{\"seriesIndex\":0,\"dataIndex\":1,\"type\":\"highlight\",\"escapeConnect\":true,\"notBlur\":true,\"batch\":null}]}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ]
+      ]
+     },
+     {
+      "action": {
+       "type": "hideTip"
+      },
+      "log": [
+       [
+        "plain",
+        "hidetip",
+        "{\"type\":\"hidetip\"}"
+       ],
+       [
+        "q1",
+        "hidetip",
+        "{\"type\":\"hidetip\"}"
+       ],
+       [
+        "q2",
+        "hidetip",
+        "{\"type\":\"hidetip\"}"
+       ],
+       [
+        "plain",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"from\":\"<from>\"}"
+       ],
+       [
+        "q1",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"from\":\"<from>\"}"
+       ],
+       [
+        "q2",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"from\":\"<from>\"}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ]
+      ]
+     },
+     {
+      "action": {
+       "type": "updateAxisPointer",
+       "currTrigger": "leave"
+      },
+      "log": [
+       [
+        "plain",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q1",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q2",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "plain",
+        "hidetip",
+        "{\"type\":\"hidetip\"}"
+       ],
+       [
+        "q1",
+        "hidetip",
+        "{\"type\":\"hidetip\"}"
+       ],
+       [
+        "q2",
+        "hidetip",
+        "{\"type\":\"hidetip\"}"
+       ],
+       [
+        "plain",
+        "downplay",
+        "{\"type\":\"downplay\",\"escapeConnect\":true,\"batch\":[{\"seriesIndex\":0,\"dataIndex\":1,\"type\":\"downplay\",\"escapeConnect\":true,\"notBlur\":true,\"batch\":null}]}"
+       ],
+       [
+        "q1",
+        "downplay",
+        "{\"type\":\"downplay\",\"escapeConnect\":true,\"batch\":[{\"seriesIndex\":0,\"dataIndex\":1,\"type\":\"downplay\",\"escapeConnect\":true,\"notBlur\":true,\"batch\":null}]}"
+       ],
+       [
+        "q2",
+        "downplay",
+        "{\"type\":\"downplay\",\"escapeConnect\":true,\"batch\":[{\"seriesIndex\":0,\"dataIndex\":1,\"type\":\"downplay\",\"escapeConnect\":true,\"notBlur\":true,\"batch\":null}]}"
+       ],
+       [
+        "plain",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"from\":\"<from>\"}"
+       ],
+       [
+        "q1",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"from\":\"<from>\"}"
+       ],
+       [
+        "q2",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"from\":\"<from>\"}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ]
+      ]
+     },
+     {
+      "action": {
+       "type": "focusNodeAdjacency",
+       "seriesIndex": 0,
+       "dataIndex": 1
+      },
+      "log": [
+       [
+        "plain",
+        "focusnodeadjacency",
+        "{\"type\":\"focusnodeadjacency\",\"seriesIndex\":0,\"dataIndex\":1}"
+       ],
+       [
+        "q1",
+        "focusnodeadjacency",
+        "{\"type\":\"focusnodeadjacency\",\"seriesIndex\":0,\"dataIndex\":1}"
+       ],
+       [
+        "q2",
+        "focusnodeadjacency",
+        "{\"type\":\"focusnodeadjacency\",\"seriesIndex\":0,\"dataIndex\":1}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ]
+      ]
+     },
+     {
+      "action": {
+       "type": "unfocusNodeAdjacency",
+       "seriesIndex": 0
+      },
+      "log": [
+       [
+        "plain",
+        "unfocusnodeadjacency",
+        "{\"type\":\"unfocusnodeadjacency\",\"seriesIndex\":0}"
+       ],
+       [
+        "q1",
+        "unfocusnodeadjacency",
+        "{\"type\":\"unfocusnodeadjacency\",\"seriesIndex\":0}"
+       ],
+       [
+        "q2",
+        "unfocusnodeadjacency",
+        "{\"type\":\"unfocusnodeadjacency\",\"seriesIndex\":0}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ]
+      ]
+     }
+    ]
+   },
+   {
+    "id": "ev-tree",
+    "note": "a tree: its actions, a node's click (TreeView dispatches treeExpandAndCollapse), a drag and a wheel (its RoamController dispatches treeRoam)",
+    "option": {
+     "animation": false,
+     "series": [
+      {
+       "type": "tree",
+       "id": "s0",
+       "roam": true,
+       "initialTreeDepth": -1,
+       "data": [
+        {
+         "name": "r",
+         "children": [
+          {
+           "name": "a",
+           "children": [
+            {
+             "name": "a1"
+            },
+            {
+             "name": "a2"
+            }
+           ]
+          },
+          {
+           "name": "b",
+           "children": [
+            {
+             "name": "b1"
+            }
+           ]
+          }
+         ]
+        }
+       ],
+       "left": 60,
+       "right": 60,
+       "top": 40,
+       "bottom": 40
+      }
+     ]
+    },
+    "steps": [
+     {
+      "action": {
+       "type": "treeExpandAndCollapse",
+       "seriesIndex": 0,
+       "dataIndex": 2
+      },
+      "log": [
+       [
+        "plain",
+        "treeexpandandcollapse",
+        "{\"type\":\"treeexpandandcollapse\",\"seriesIndex\":0,\"dataIndex\":2}"
+       ],
+       [
+        "q1",
+        "treeexpandandcollapse",
+        "{\"type\":\"treeexpandandcollapse\",\"seriesIndex\":0,\"dataIndex\":2}"
+       ],
+       [
+        "q2",
+        "treeexpandandcollapse",
+        "{\"type\":\"treeexpandandcollapse\",\"seriesIndex\":0,\"dataIndex\":2}"
+       ],
+       [
+        "plain",
+        "brushselected",
+        "{\"type\":\"brushselected\",\"batch\":[]}"
+       ],
+       [
+        "q1",
+        "brushselected",
+        "{\"type\":\"brushselected\",\"batch\":[]}"
+       ],
+       [
+        "q2",
+        "brushselected",
+        "{\"type\":\"brushselected\",\"batch\":[]}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ]
+      ]
+     },
+     {
+      "action": {
+       "type": "treeRoam",
+       "seriesIndex": 0,
+       "dx": 10,
+       "dy": -5
+      },
+      "log": [
+       [
+        "plain",
+        "treeroam",
+        "{\"type\":\"treeroam\",\"seriesIndex\":0,\"dx\":10,\"dy\":-5,\"animation\":{\"duration\":0}}"
+       ],
+       [
+        "q1",
+        "treeroam",
+        "{\"type\":\"treeroam\",\"seriesIndex\":0,\"dx\":10,\"dy\":-5,\"animation\":{\"duration\":0}}"
+       ],
+       [
+        "q2",
+        "treeroam",
+        "{\"type\":\"treeroam\",\"seriesIndex\":0,\"dx\":10,\"dy\":-5,\"animation\":{\"duration\":0}}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ]
+      ]
+     },
+     {
+      "action": {
+       "type": "treeRoam",
+       "zoom": 1.5,
+       "originX": 300,
+       "originY": 200
+      },
+      "log": [
+       [
+        "plain",
+        "treeroam",
+        "{\"type\":\"treeroam\",\"zoom\":1.5,\"originX\":300,\"originY\":200,\"animation\":{\"duration\":0}}"
+       ],
+       [
+        "q1",
+        "treeroam",
+        "{\"type\":\"treeroam\",\"zoom\":1.5,\"originX\":300,\"originY\":200,\"animation\":{\"duration\":0}}"
+       ],
+       [
+        "q2",
+        "treeroam",
+        "{\"type\":\"treeroam\",\"zoom\":1.5,\"originX\":300,\"originY\":200,\"animation\":{\"duration\":0}}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ]
+      ]
+     },
+     {
+      "click": 5,
+      "at": [
+       315,
+       313
+      ],
+      "log": [
+       [
+        "plain",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q1",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q2",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q1",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q2",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "treeexpandandcollapse",
+        "{\"type\":\"treeexpandandcollapse\",\"seriesId\":\"s0\",\"dataIndex\":5}"
+       ],
+       [
+        "q1",
+        "treeexpandandcollapse",
+        "{\"type\":\"treeexpandandcollapse\",\"seriesId\":\"s0\",\"dataIndex\":5}"
+       ],
+       [
+        "q2",
+        "treeexpandandcollapse",
+        "{\"type\":\"treeexpandandcollapse\",\"seriesId\":\"s0\",\"dataIndex\":5}"
+       ],
+       [
+        "plain",
+        "brushselected",
+        "{\"type\":\"brushselected\",\"batch\":[]}"
+       ],
+       [
+        "q1",
+        "brushselected",
+        "{\"type\":\"brushselected\",\"batch\":[]}"
+       ],
+       [
+        "q2",
+        "brushselected",
+        "{\"type\":\"brushselected\",\"batch\":[]}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "select",
+        "{\"type\":\"select\",\"dataType\":\"main\",\"dataIndexInside\":5,\"seriesIndex\":0,\"isFromClick\":true}"
+       ],
+       [
+        "q1",
+        "select",
+        "{\"type\":\"select\",\"dataType\":\"main\",\"dataIndexInside\":5,\"seriesIndex\":0,\"isFromClick\":true}"
+       ],
+       [
+        "q2",
+        "select",
+        "{\"type\":\"select\",\"dataType\":\"main\",\"dataIndexInside\":5,\"seriesIndex\":0,\"isFromClick\":true}"
+       ],
+       [
+        "plain",
+        "selectchanged",
+        "{\"type\":\"selectchanged\",\"selected\":[],\"isFromClick\":true,\"fromAction\":\"select\",\"fromActionPayload\":{\"type\":\"select\",\"dataType\":\"main\",\"dataIndexInside\":5,\"seriesIndex\":0,\"isFromClick\":true},\"escapeConnect\":true}"
+       ],
+       [
+        "q1",
+        "selectchanged",
+        "{\"type\":\"selectchanged\",\"selected\":[],\"isFromClick\":true,\"fromAction\":\"select\",\"fromActionPayload\":{\"type\":\"select\",\"dataType\":\"main\",\"dataIndexInside\":5,\"seriesIndex\":0,\"isFromClick\":true},\"escapeConnect\":true}"
+       ],
+       [
+        "q2",
+        "selectchanged",
+        "{\"type\":\"selectchanged\",\"selected\":[],\"isFromClick\":true,\"fromAction\":\"select\",\"fromActionPayload\":{\"type\":\"select\",\"dataType\":\"main\",\"dataIndexInside\":5,\"seriesIndex\":0,\"isFromClick\":true},\"escapeConnect\":true}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q1",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q2",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q1",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q2",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ]
+      ]
+     },
+     {
+      "drag": [
+       [
+        20,
+        20
+       ],
+       [
+        35,
+        28
+       ],
+       [
+        50,
+        31
+       ]
+      ],
+      "log": [
+       [
+        "plain",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q1",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q2",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q1",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q2",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q1",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q2",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q1",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q2",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "treeroam",
+        "{\"type\":\"treeroam\",\"dx\":15,\"dy\":8,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "q1",
+        "treeroam",
+        "{\"type\":\"treeroam\",\"dx\":15,\"dy\":8,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "q2",
+        "treeroam",
+        "{\"type\":\"treeroam\",\"dx\":15,\"dy\":8,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q1",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q2",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q1",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q2",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "treeroam",
+        "{\"type\":\"treeroam\",\"dx\":15,\"dy\":3,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "q1",
+        "treeroam",
+        "{\"type\":\"treeroam\",\"dx\":15,\"dy\":3,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "q2",
+        "treeroam",
+        "{\"type\":\"treeroam\",\"dx\":15,\"dy\":3,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ]
+      ]
+     },
+     {
+      "wheel": [
+       300,
+       200,
+       120
+      ],
+      "log": [
+       [
+        "plain",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q1",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q2",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q1",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q2",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "treeroam",
+        "{\"type\":\"treeroam\",\"zoom\":1.1,\"originX\":300,\"originY\":200,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "q1",
+        "treeroam",
+        "{\"type\":\"treeroam\",\"zoom\":1.1,\"originX\":300,\"originY\":200,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "q2",
+        "treeroam",
+        "{\"type\":\"treeroam\",\"zoom\":1.1,\"originX\":300,\"originY\":200,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ]
+      ]
+     }
+    ]
+   },
+   {
+    "id": "ev-graph",
+    "note": "a graph (layout none): its roam through the action and through the RoamController's drag and wheel",
+    "option": {
+     "animation": false,
+     "series": [
+      {
+       "type": "graph",
+       "id": "s0",
+       "layout": "none",
+       "roam": true,
+       "symbolSize": 20,
+       "data": [
+        {
+         "name": "a",
+         "x": 0,
+         "y": 0
+        },
+        {
+         "name": "b",
+         "x": 100,
+         "y": 30
+        },
+        {
+         "name": "c",
+         "x": 40,
+         "y": 90
+        }
+       ],
+       "links": [
+        {
+         "source": "a",
+         "target": "b"
+        }
+       ]
+      }
+     ]
+    },
+    "steps": [
+     {
+      "action": {
+       "type": "graphRoam",
+       "dx": 12,
+       "dy": 7
+      },
+      "log": [
+       [
+        "plain",
+        "graphroam",
+        "{\"type\":\"graphroam\",\"dx\":12,\"dy\":7,\"animation\":{\"duration\":0}}"
+       ],
+       [
+        "q1",
+        "graphroam",
+        "{\"type\":\"graphroam\",\"dx\":12,\"dy\":7,\"animation\":{\"duration\":0}}"
+       ],
+       [
+        "q2",
+        "graphroam",
+        "{\"type\":\"graphroam\",\"dx\":12,\"dy\":7,\"animation\":{\"duration\":0}}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ]
+      ]
+     },
+     {
+      "drag": [
+       [
+        300,
+        200
+       ],
+       [
+        315,
+        210
+       ],
+       [
+        330,
+        222
+       ]
+      ],
+      "log": [
+       [
+        "plain",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q1",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q2",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q1",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q2",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q1",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q2",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q1",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q2",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "graphroam",
+        "{\"type\":\"graphroam\",\"dx\":15,\"dy\":10,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "q1",
+        "graphroam",
+        "{\"type\":\"graphroam\",\"dx\":15,\"dy\":10,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "q2",
+        "graphroam",
+        "{\"type\":\"graphroam\",\"dx\":15,\"dy\":10,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q1",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q2",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q1",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q2",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "graphroam",
+        "{\"type\":\"graphroam\",\"dx\":15,\"dy\":12,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "q1",
+        "graphroam",
+        "{\"type\":\"graphroam\",\"dx\":15,\"dy\":12,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "q2",
+        "graphroam",
+        "{\"type\":\"graphroam\",\"dx\":15,\"dy\":12,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ]
+      ]
+     },
+     {
+      "wheel": [
+       300,
+       200,
+       -120
+      ],
+      "log": [
+       [
+        "plain",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q1",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q2",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q1",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q2",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "graphroam",
+        "{\"type\":\"graphroam\",\"zoom\":0.9090909090909091,\"originX\":300,\"originY\":200,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "q1",
+        "graphroam",
+        "{\"type\":\"graphroam\",\"zoom\":0.9090909090909091,\"originX\":300,\"originY\":200,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "q2",
+        "graphroam",
+        "{\"type\":\"graphroam\",\"zoom\":0.9090909090909091,\"originX\":300,\"originY\":200,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ]
+      ]
+     }
+    ]
+   },
+   {
+    "id": "ev-sankey",
+    "note": "a sankey with roam: the RoamController's drag and wheel dispatch sankeyRoam",
+    "option": {
+     "animation": false,
+     "series": [
+      {
+       "type": "sankey",
+       "id": "s0",
+       "roam": true,
+       "left": 100,
+       "right": 100,
+       "top": 80,
+       "bottom": 80,
+       "data": [
+        {
+         "name": "a"
+        },
+        {
+         "name": "b"
+        },
+        {
+         "name": "c"
+        }
+       ],
+       "links": [
+        {
+         "source": "a",
+         "target": "b",
+         "value": 3
+        },
+        {
+         "source": "a",
+         "target": "c",
+         "value": 2
+        }
+       ]
+      }
+     ]
+    },
+    "steps": [
+     {
+      "drag": [
+       [
+        300,
+        200
+       ],
+       [
+        310,
+        210
+       ],
+       [
+        320,
+        214
+       ]
+      ],
+      "log": [
+       [
+        "plain",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q1",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q2",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q1",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q2",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q1",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q2",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q1",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q2",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "sankeyroam",
+        "{\"type\":\"sankeyroam\",\"dx\":10,\"dy\":10,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "q1",
+        "sankeyroam",
+        "{\"type\":\"sankeyroam\",\"dx\":10,\"dy\":10,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "q2",
+        "sankeyroam",
+        "{\"type\":\"sankeyroam\",\"dx\":10,\"dy\":10,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q1",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q2",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q1",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q2",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "sankeyroam",
+        "{\"type\":\"sankeyroam\",\"dx\":10,\"dy\":4,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "q1",
+        "sankeyroam",
+        "{\"type\":\"sankeyroam\",\"dx\":10,\"dy\":4,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "q2",
+        "sankeyroam",
+        "{\"type\":\"sankeyroam\",\"dx\":10,\"dy\":4,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ]
+      ]
+     },
+     {
+      "wheel": [
+       300,
+       200,
+       120
+      ],
+      "log": [
+       [
+        "plain",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q1",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "q2",
+        "updateaxispointer",
+        "{\"axesInfo\":[],\"type\":\"updateaxispointer\"}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q1",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "q2",
+        "hidetip",
+        "{\"type\":\"hidetip\",\"dispatchAction\":null}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ],
+       [
+        "plain",
+        "sankeyroam",
+        "{\"type\":\"sankeyroam\",\"zoom\":1.1,\"originX\":300,\"originY\":200,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "q1",
+        "sankeyroam",
+        "{\"type\":\"sankeyroam\",\"zoom\":1.1,\"originX\":300,\"originY\":200,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "q2",
+        "sankeyroam",
+        "{\"type\":\"sankeyroam\",\"zoom\":1.1,\"originX\":300,\"originY\":200,\"animation\":{\"duration\":0},\"seriesId\":\"s0\"}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ]
+      ]
+     },
+     {
+      "action": {
+       "type": "sankeyRoam",
+       "dx": -8,
+       "dy": 4
+      },
+      "log": [
+       [
+        "plain",
+        "sankeyroam",
+        "{\"type\":\"sankeyroam\",\"dx\":-8,\"dy\":4,\"animation\":{\"duration\":0}}"
+       ],
+       [
+        "q1",
+        "sankeyroam",
+        "{\"type\":\"sankeyroam\",\"dx\":-8,\"dy\":4,\"animation\":{\"duration\":0}}"
+       ],
+       [
+        "q2",
+        "sankeyroam",
+        "{\"type\":\"sankeyroam\",\"dx\":-8,\"dy\":4,\"animation\":{\"duration\":0}}"
+       ],
+       [
+        "plain",
+        "updated",
+        ""
+       ],
+       [
+        "q1",
+        "updated",
+        ""
+       ],
+       [
+        "q2",
+        "updated",
+        ""
+       ]
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ "append": {
+  "W": 400,
+  "H": 300,
+  "head": [
+   [
+    1,
+    2
+   ],
+   {
+    "value": [
+     3,
+     9
+    ],
+    "symbol": "rect",
+    "symbolSize": 16
+   },
+   [
+    5,
+    4
+   ]
+  ],
+  "tail": [
+   [
+    20,
+    3
+   ],
+   {
+    "value": [
+     21,
+     6
+    ],
+    "symbol": "triangle",
+    "symbolSize": [
+     16,
+     10
+    ],
+    "symbolRotate": 30,
+    "itemStyle": {
+     "color": "#ff0000"
+    },
+    "label": {
+     "show": true,
+     "formatter": "M"
+    }
+   },
+   {
+    "value": [
+     24,
+     2
+    ],
+    "symbol": "diamond",
+    "symbolOffset": [
+     4,
+     -2
+    ],
+    "itemStyle": {
+     "opacity": 0.5
+    }
+   }
+  ],
+  "written": [
+   {
+    "symbol": "circle",
+    "sx": "4010000000000000",
+    "sy": "4010000000000000",
+    "rotation": "0000000000000000",
+    "x": "4051800000000000",
+    "y": "4068455555555555",
+    "fill": "#5070dd",
+    "opacity": "3fe999999999999a",
+    "label": null
+   },
+   {
+    "symbol": "rect",
+    "sx": "4020000000000000",
+    "sy": "4020000000000000",
+    "rotation": "0000000000000000",
+    "x": "4056800000000000",
+    "y": "4059f00000000000",
+    "fill": "#5070dd",
+    "opacity": "3fe999999999999a",
+    "label": null
+   },
+   {
+    "symbol": "circle",
+    "sx": "4010000000000000",
+    "sy": "4010000000000000",
+    "rotation": "0000000000000000",
+    "x": "405b800000000000",
+    "y": "40650aaaaaaaaaab",
+    "fill": "#5070dd",
+    "opacity": "3fe999999999999a",
+    "label": null
+   },
+   {
+    "symbol": "circle",
+    "sx": "4010000000000000",
+    "sy": "4010000000000000",
+    "rotation": "0000000000000000",
+    "x": "4070400000000000",
+    "y": "4066a80000000000",
+    "fill": "#5070dd",
+    "opacity": "3fe999999999999a",
+    "label": null
+   },
+   {
+    "symbol": "triangle",
+    "sx": "4020000000000000",
+    "sy": "4014000000000000",
+    "rotation": "3fe0c152382d7365",
+    "x": "4070e00000000000",
+    "y": "4061d00000000000",
+    "fill": "#ff0000",
+    "opacity": "3fe999999999999a",
+    "label": "M"
+   },
+   {
+    "symbol": "diamond",
+    "sx": "4010000000000000",
+    "sy": "4010000000000000",
+    "rotation": "0000000000000000",
+    "x": "4073000000000000",
+    "y": "4068055555555555",
+    "fill": "#5070dd",
+    "opacity": "3fe0000000000000",
+    "label": null
+   }
+  ],
+  "appended": [
+   {
+    "symbol": "circle",
+    "sx": "4010000000000000",
+    "sy": "4010000000000000",
+    "rotation": "0000000000000000",
+    "x": "4051800000000000",
+    "y": "4068455555555555",
+    "fill": "#5070dd",
+    "opacity": "3fe999999999999a",
+    "label": null
+   },
+   {
+    "symbol": "rect",
+    "sx": "4020000000000000",
+    "sy": "4020000000000000",
+    "rotation": "0000000000000000",
+    "x": "4056800000000000",
+    "y": "4059f00000000000",
+    "fill": "#5070dd",
+    "opacity": "3fe999999999999a",
+    "label": null
+   },
+   {
+    "symbol": "circle",
+    "sx": "4010000000000000",
+    "sy": "4010000000000000",
+    "rotation": "0000000000000000",
+    "x": "405b800000000000",
+    "y": "40650aaaaaaaaaab",
+    "fill": "#5070dd",
+    "opacity": "3fe999999999999a",
+    "label": null
+   },
+   {
+    "symbol": "circle",
+    "sx": "4010000000000000",
+    "sy": "4010000000000000",
+    "rotation": "0000000000000000",
+    "x": "4070400000000000",
+    "y": "4066a80000000000",
+    "fill": "#5070dd",
+    "opacity": "3fe999999999999a",
+    "label": null
+   },
+   {
+    "symbol": "triangle",
+    "sx": "4020000000000000",
+    "sy": "4014000000000000",
+    "rotation": "3fe0c152382d7365",
+    "x": "4070e00000000000",
+    "y": "4061d00000000000",
+    "fill": "#ff0000",
+    "opacity": "3fe999999999999a",
+    "label": "M"
+   },
+   {
+    "symbol": "diamond",
+    "sx": "4010000000000000",
+    "sy": "4010000000000000",
+    "rotation": "0000000000000000",
+    "x": "4073000000000000",
+    "y": "4068055555555555",
+    "fill": "#5070dd",
+    "opacity": "3fe0000000000000",
+    "label": null
+   }
+  ],
+  "updated": [
+   {
+    "symbol": "circle",
+    "sx": "4010000000000000",
+    "sy": "4010000000000000",
+    "rotation": "0000000000000000",
+    "x": "4051800000000000",
+    "y": "4068455555555555",
+    "fill": "#5070dd",
+    "opacity": "3fe999999999999a",
+    "label": null
+   },
+   {
+    "symbol": "rect",
+    "sx": "4020000000000000",
+    "sy": "4020000000000000",
+    "rotation": "0000000000000000",
+    "x": "4056800000000000",
+    "y": "4059f00000000000",
+    "fill": "#5070dd",
+    "opacity": "3fe999999999999a",
+    "label": null
+   },
+   {
+    "symbol": "circle",
+    "sx": "4010000000000000",
+    "sy": "4010000000000000",
+    "rotation": "0000000000000000",
+    "x": "405b800000000000",
+    "y": "40650aaaaaaaaaab",
+    "fill": "#5070dd",
+    "opacity": "3fe999999999999a",
+    "label": null
+   },
+   {
+    "symbol": "circle",
+    "sx": "4010000000000000",
+    "sy": "4010000000000000",
+    "rotation": "0000000000000000",
+    "x": "4070400000000000",
+    "y": "4066a80000000000",
+    "fill": "#5070dd",
+    "opacity": "3fe999999999999a",
+    "label": null
+   },
+   {
+    "symbol": "triangle",
+    "sx": "4020000000000000",
+    "sy": "4014000000000000",
+    "rotation": "3fe0c152382d7365",
+    "x": "4070e00000000000",
+    "y": "4061d00000000000",
+    "fill": "#ff0000",
+    "opacity": "3fe999999999999a",
+    "label": "M"
+   },
+   {
+    "symbol": "diamond",
+    "sx": "4010000000000000",
+    "sy": "4010000000000000",
+    "rotation": "0000000000000000",
+    "x": "4073000000000000",
+    "y": "4068055555555555",
+    "fill": "#5070dd",
+    "opacity": "3fe0000000000000",
+    "label": null
+   }
+  ]
+ },
+ "guards": [
+  {
+   "name": "events: the axis breaks' non-refined types are connect-only; axisbreakchanged is public",
+   "ok": true
+  },
+  {
+   "name": "events: the seven the port kept from ChartOn are public",
+   "ok": true
+  },
+  {
+   "name": "events: every legacy select event fires",
+   "ok": true
+  },
+  {
+   "name": "events: no query filters an action event (each fired thrice)",
+   "ok": true
+  },
+  {
+   "name": "events: the datazoom action publishes datazoom then updated",
+   "ok": true
+  },
+  {
+   "name": "events: focusNodeAdjacency on no graph still publishes its event",
+   "ok": true
+  },
+  {
+   "name": "events: the tree action publishes treeexpandandcollapse and one updated",
+   "ok": true
+  },
+  {
+   "name": "events: the tree click publishes treeexpandandcollapse with the seriesId",
+   "ok": true
+  },
+  {
+   "name": "events: the tree drag and wheel publish treeroam",
+   "ok": true
+  },
+  {
+   "name": "events: the graph drag and wheel publish graphroam with payloadDisableAnimation",
+   "ok": true
+  },
+  {
+   "name": "events: the sankey drag and wheel publish sankeyroam",
+   "ok": true
+  },
+  {
+   "name": "append: every appended row is the written one",
+   "ok": true
+  },
+  {
+   "name": "append: the triangle, its rotation, colour and label; the diamond",
+   "ok": true
+  }
+ ]
+}

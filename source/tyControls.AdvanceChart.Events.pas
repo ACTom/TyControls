@@ -91,7 +91,14 @@ function TyEventQueryMatches(const AQuery: TTyEventQuery;
   [Batch 132];
   and parallelaxisexpand, a parallel's axis expansion [Batch 140];
   and `updated`, which every
-  setOption and dispatch ends with [Batch 97]. }
+  setOption and dispatch ends with [Batch 97].
+  [R5-J] EVERY EVENT chart.on HEARS: every action's published event
+  (registerAction's publicEventTypeMap -- the toolbox's restore,
+  magictypechanged and dataviewchanged, datazoom, showtip, hidetip,
+  updateaxispointer, the roams, the legacy select actions' own events,
+  focusnodeadjacency ...); not the axis breaks' expandaxisbreak,
+  collapseaxisbreak and toggleaxisbreak, which only connect hears (their
+  refined event, axisbreakchanged, is the public one). }
 function TyChartEventTypeOf(const AName: string): string;
 { whether a type is one of the action events (no params, a payload) }
 function TyChartEventIsAction(const AType: string): Boolean;
@@ -138,7 +145,7 @@ uses
 const
   cMouseTypes: array[0..8] of string = ('click', 'dblclick', 'mousedown',
     'mouseup', 'mousemove', 'mouseover', 'mouseout', 'globalout', 'contextmenu');
-  cActionTypes: array[0..37] of string = ('select', 'unselect', 'toggleselect',
+  cActionTypes: array[0..59] of string = ('select', 'unselect', 'toggleselect',
     'selectchanged', 'highlight', 'downplay', 'mapselectchanged',
     'pieselectchanged', 'mapselected', 'pieselected', 'mapunselected',
     'pieunselected',
@@ -169,7 +176,19 @@ const
     { the geo's select actions [Batch 148] }
     'geoselectchanged', 'geoselected', 'geounselected',
     { the geo's roam [Batch 150] }
-    'georoam');
+    'georoam',
+    { [R5-J] the rest of the published action events: the toolbox's three,
+      the dataZoom's, the tooltip's and the axis pointer's, a bar race's,
+      the graph's, the tree's and the sankey's roams, the tree's expand and
+      collapse, the graph's (un)focusNodeAdjacency, the sunburst's legacy
+      two, and the legacy select actions' own (pie / map toggleSelect,
+      select, unSelect, lowercased) }
+    'restore', 'magictypechanged', 'dataviewchanged', 'datazoom',
+    'showtip', 'hidetip', 'updateaxispointer', 'changeaxisorder',
+    'graphroam', 'treeroam', 'sankeyroam', 'treeexpandandcollapse',
+    'focusnodeadjacency', 'unfocusnodeadjacency', 'sunbursthighlight',
+    'sunburstunhighlight', 'pietoggleselect', 'pieselect', 'pieunselect',
+    'maptoggleselect', 'mapselect', 'mapunselect');
 
 function TyChartEventIsAction(const AType: string): Boolean;
 var i: Integer;

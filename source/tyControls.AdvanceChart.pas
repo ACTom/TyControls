@@ -1891,6 +1891,13 @@ type
     { [F4b] a view action (graphRoam, sankeyRoam, dragNode) running as an
       action: the roam helpers leave the event and `updated` to it }
     FViewActionDepth: Integer;
+    { [R5-J] who is roaming a graph, a sankey or a tree outside an action:
+      0 the host's own call (GraphRoam ...: no event), 1 the series' own
+      RoamController (its payload: dx / dy or zoom / originX / originY,
+      payloadDisableAnimation's animation, the seriesId), 2 the thumbnail
+      (makeRoamPayload: the seriesId, then dx / dy or zoom / originX /
+      originY) -- the roam's action event is published for 1 and 2 }
+    FRoamEvSrc: Integer;
     { [F4b] zrender's dirty flag: something asked for a repaint since the
       last flush (a paint emits `rendered` only then); the tooltip's and
       the pointer's state as the last paint drew it (their actions ask for a
@@ -3441,6 +3448,12 @@ type
       FGraphNodes / FGraphEdges of ASlot. }
     procedure GraphEdgeLabels(ASlot: Integer; var AInk: TTyGraphInk);
     function DoViewAction(const AType: string; APayload: TJSONObject): Boolean;
+    { [R5-J] a roam's action event, as the dispatch FRoamEvSrc names would
+      publish it (nothing for the host's own call, nor inside an action) }
+    procedure RoamEvent(const AType: string; const APayload: TTyGraphRoamPayload);
+    { [R5-J] a tree node's click: the treeExpandAndCollapse TreeView
+      dispatches -- the flip, the update, its event, `updated` }
+    procedure TreeClickToggle(ASeriesIndex, ADataIndex: Integer);
     { ---- the drill-downs [Batch 115] ---- }
     { a new tree: the view roots, the storage and the animation go }
     procedure HierDrillReset;

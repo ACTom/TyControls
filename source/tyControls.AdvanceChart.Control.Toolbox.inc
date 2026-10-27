@@ -766,6 +766,10 @@ begin
   ApplyNotMerge(FTbBackup);
   FTbHistory := h;
   AfterSetOption(False, True);
+  { [R5-J] the action's update (prepareAndUpdate) runs in the dispatch: its
+    visual stage's brushSelect waits there and is published before the
+    dispatch's `updated` [was: at the next paint, after `updated`] }
+  ConvertReady;
   EmitPayloadEvent('restore', TbEventJson(APayload, 'restore'));
 end;
 
@@ -875,6 +879,9 @@ begin
     SetLength(FTbMagicTitle, Max(Length(FTbMagicTitle), TyToolboxCount(FOption)));
     for t := 0 to High(FTbMagicTitle) do FTbMagicTitle[t] := TyTbJson(d);
   end;
+  { [R5-J] the update in the dispatch, as restore's -- after the title it
+    renders }
+  ConvertReady;
   EmitPayloadEvent('magictypechanged', TbEventJson(APayload, 'magictypechanged'));
 end;
 
@@ -1211,6 +1218,8 @@ begin
       merged.Free;
     end;
   end;
+  { [R5-J] the update in the dispatch, as restore's }
+  ConvertReady;
   EmitPayloadEvent('dataviewchanged', TbEventJson(APayload, 'dataviewchanged'));
 end;
 

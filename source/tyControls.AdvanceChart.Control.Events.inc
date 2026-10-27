@@ -185,7 +185,8 @@ begin
           n := TJSONObject(n).Find('expandAndCollapse');
           { absent is the default, true; anything but JSON true is off }
           if (n = nil) or ((n.JSONType = jtBoolean) and n.AsBoolean) then
-            TreeToggle(d.SeriesIndex, d.DataIndex);
+            { [R5-J] the action TreeView dispatches, its event too }
+            TreeClickToggle(d.SeriesIndex, d.DataIndex);
         end;
       end;
     end;
@@ -287,11 +288,17 @@ begin
     Exit(True);
   end;
   if si < 0 then Exit;
-  if IsTreeSeries(si) then Result := TreeZoom(si, s, MousePos.X, MousePos.Y)
-  else if IsSankeySeries(si) then Result := SankeyZoom(si, s, MousePos.X, MousePos.Y)
-  { [Batch 115] }
-  else if IsTreemapSeries(si) then Result := TreemapWheel(si, s, MousePos.X, MousePos.Y)
-  else Result := GraphZoom(si, s, MousePos.X, MousePos.Y);
+  { [R5-J] the series' RoamController dispatches its roam: the event too }
+  FRoamEvSrc := 1;
+  try
+    if IsTreeSeries(si) then Result := TreeZoom(si, s, MousePos.X, MousePos.Y)
+    else if IsSankeySeries(si) then Result := SankeyZoom(si, s, MousePos.X, MousePos.Y)
+    { [Batch 115] }
+    else if IsTreemapSeries(si) then Result := TreemapWheel(si, s, MousePos.X, MousePos.Y)
+    else Result := GraphZoom(si, s, MousePos.X, MousePos.Y);
+  finally
+    FRoamEvSrc := 0;
+  end;
 end;
 
 function TTyCustomAdvanceChart.SlotOfSeries(ASeriesIndex: Integer): Integer;
@@ -1793,7 +1800,13 @@ begin
           dx, dy, pdx, pdy);
         FThumbDragX := X;
         FThumbDragY := Y;
-        roamed := GraphRoam(FThumbs[FThumbDrag].Target, pdx, pdy);
+        { [R5-J] the thumbnail's dispatch publishes graphroam }
+        FRoamEvSrc := 2;
+        try
+          roamed := GraphRoam(FThumbs[FThumbDrag].Target, pdx, pdy);
+        finally
+          FRoamEvSrc := 0;
+        end;
       end
       else
       begin
@@ -1808,11 +1821,17 @@ begin
     dy := Y - FRoamY;
     FRoamX := X;
     FRoamY := Y;
-    if IsTreeSeries(FRoamSeries) then TreeRoam(FRoamSeries, dx, dy)
-    else if IsSankeySeries(FRoamSeries) then SankeyRoam(FRoamSeries, dx, dy)
-    { a treemap's pan: past 3 px, else the delta is lost [Batch 115] }
-    else if IsTreemapSeries(FRoamSeries) then TreemapPan(FRoamSeries, Round(dx), Round(dy))
-    else roamed := GraphRoam(FRoamSeries, dx, dy);
+    { [R5-J] the series' RoamController dispatches its roam: the event too }
+    FRoamEvSrc := 1;
+    try
+      if IsTreeSeries(FRoamSeries) then TreeRoam(FRoamSeries, dx, dy)
+      else if IsSankeySeries(FRoamSeries) then SankeyRoam(FRoamSeries, dx, dy)
+      { a treemap's pan: past 3 px, else the delta is lost [Batch 115] }
+      else if IsTreemapSeries(FRoamSeries) then TreemapPan(FRoamSeries, Round(dx), Round(dy))
+      else roamed := GraphRoam(FRoamSeries, dx, dy);
+    finally
+      FRoamEvSrc := 0;
+    end;
   end;
   { A NODE DRAG: one 'drag' per move, the delta from the last move [Batch 114] }
   if FGraphDragSlot >= 0 then GraphDragMove(X, Y);
