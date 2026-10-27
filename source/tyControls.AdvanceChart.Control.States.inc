@@ -273,6 +273,51 @@ begin
   AEl.Ignore := c.Num[stkIgnore] <> 0;
 end;
 
+{ [spec 242] A CUSTOM TEXT OR IMAGE: its paint order and ignore, its
+  opacity, and a text's ink where a state's style changes the block's fill
+  or stroke (a rich token's own stays) }
+procedure StWriteGfxText(var AEl: TTyChartElement; const AState: TTyStElement;
+  AProxied: Boolean);
+var
+  c, r: TTyStObject;
+  i: Integer;
+  reFill, reStroke: Boolean;
+begin
+  c := AState.Cur;
+  r := AState.Rest;
+  AEl.Z2 := Round(c.Num[stkZ2]);
+  AEl.Ignore := c.Num[stkIgnore] <> 0;
+  { on a proxy the opacity is the frame's (a Text animates only that); the
+    ink is set at once either way }
+  if not AProxied and not StSameNum(c.Num[stkOpacity], r.Num[stkOpacity]) then
+    AEl.Style.Alpha := c.Num[stkOpacity];
+  reFill := not SameColourKey(c, r, stkFill);
+  reStroke := not SameColourKey(c, r, stkStroke)
+    or not StSameNum(c.Num[stkLineWidth], r.Num[stkLineWidth]);
+  if not (reFill or reStroke) then Exit;
+  AEl.Caption.RtPieces := Copy(AEl.Caption.RtPieces);
+  for i := 0 to High(AEl.Caption.RtPieces) do
+    with AEl.Caption.RtPieces[i] do
+    begin
+      if Kind <> rpkText then Continue;
+      if reFill and not TokenFill then
+      begin
+        HasFill := not c.None[stkFill];
+        Fill := c.Color[stkFill];
+        DefaultFill := False;
+      end;
+      if reStroke and not TokenStroke and TyStHasColour(c, stkStroke) then
+      begin
+        HasStroke := True;
+        Stroke := c.Color[stkStroke];
+        DefaultStroke := False;
+        if c.Has[stkLineWidth] and StPositive(c.Num[stkLineWidth]) then LineWidth := c.Num[stkLineWidth];
+      end
+      else if reStroke and not TokenStroke and c.None[stkStroke] then
+        HasStroke := False;
+    end;
+end;
+
 procedure StWriteLabel(var AEl: TTyChartElement; const AState: TTyStElement;
   AProxied: Boolean);
 var c, r: TTyStObject; dx, dy: Double;
@@ -2082,7 +2127,14 @@ begin
     if FSt[s].Kind = sskCustom then
     begin
       gel := CustomPaintSource(k);
-      if (gel = nil) or not gel.StatePath or (gel.Host <> nil) then Continue;
+      if (gel = nil) or (gel.Host <> nil) then Continue;
+      { [spec 242] a text and an image: parts with states of their own
+        (updateElOnState gives every displayable its states) }
+      if not gel.StatePath then
+      begin
+        if gel.Kind in [gkText, gkImage] then StPush(FSt[s].PartIdx[raw], k);
+        Continue;
+      end;
       if FSt[s].HostIdx[raw] < 0 then FSt[s].HostIdx[raw] := k
       else StPush(FSt[s].PartIdx[raw], k);
       Continue;
@@ -2122,8 +2174,9 @@ begin
     else if FSt[s].Kind = sskLines then
     begin
       { THE LINE HOSTS, the end symbols after it are parts; the effect
-        symbol is no part of the Line group's states [Batch 121] }
-      if pe^.Silent then Continue;
+        symbol is no part of the Line group's states [Batch 121] -- a
+        pointer target since spec 242, still no part }
+      if pe^.Silent or (pe^.Anim.Role = carLinesEffect) then Continue;
       if FSt[s].HostIdx[raw] < 0 then FSt[s].HostIdx[raw] := k
       else StPush(FSt[s].PartIdx[raw], k);
     end
@@ -2470,6 +2523,8 @@ begin
               line as a line }
             if item^.Parts[k].IsPath then
               StWriteHost(el, item^.Parts[k], FStProxied)
+            else if item^.Parts[k].GfxText then
+              StWriteGfxText(el, item^.Parts[k], FStProxied)
             else if item^.Parts[k].IsGuide then
               StWriteGuide(el, item^.Parts[k], FStProxied)
             else
@@ -5942,7 +5997,7 @@ var
 begin
   { [F2b] a large batch's row too: its ECData carries the row its handler
     found (BarView largePathUpdateDataIndex, LargeSymbolDraw) }
-  if not (ATarget.HdKind in [1, 3, 16]) then Exit;
+  if not (ATarget.HdKind in [1, 3, 16, 31]) then Exit;
   s := ATarget.HdSeries;
   slot := SlotOfSeries(s);
   if slot < 0 then Exit;
@@ -5951,7 +6006,10 @@ begin
   { a marker's element is never flagged selected: always select; nor is a
     large batch, nor a gauge's arc (updateSeriesElementSelection reaches
     the item graphic elements only) [F2b] }
-  if (ATarget.HdKind = 1) and not ATarget.HdEdge and not ATarget.HdPeer then
+  { [spec 242] a lines effect symbol is flagged with its row (enterSelect
+    traverses the item's group) }
+  if ((ATarget.HdKind = 1) and not ATarget.HdEdge and not ATarget.HdPeer)
+    or (ATarget.HdKind = 31) then
   begin
     SelEnsure(slot);
     if (s <= High(FSel)) and FSelInit[s] then

@@ -301,7 +301,9 @@ type
     { [F2b] with HdKind 1: the item's second dispatcher (a gauge's progress
       arc), a select dispatcher never flagged selected.
       [F2b] HdKind 16: a row of a large batch -- the row its handler found
-      (HdSeries, HdRow inner): a select dispatcher, no highlight one }
+      (HdSeries, HdRow inner): a select dispatcher, no highlight one.
+      [spec 242] HdKind 31: a lines effect symbol (HdSeries, HdRow its
+      row): a select dispatcher flagged with its row, no highlight one }
     HdPeer: Boolean;
     HdName: string;
     HdLegendSeries: Boolean;
@@ -770,6 +772,15 @@ type
   end;
   TTyStoreKeepArray = array of TTyStoreKeep;
 
+  { [spec 242] a custom series' clip on a polar (createPolarClipPath), device
+    px: the centre, the radii, the start and end angles (radians, as the
+    element clip holds them), clockwise }
+  TTyCuClipSector = record
+    On: Boolean;
+    CX, CY, R0, R1, SA, EA: Double;
+    CW: Boolean;
+  end;
+
   TTyCustomAdvanceChart = class(TTyCustomControl, ITyAccessibleHost)
   private
     FOption: TTyChartOption;
@@ -893,6 +904,14 @@ type
     FFrozen: TTyAxisZoomArray;
     FFrozenKeys: TTyStringArray;
     FFrozenOn: Boolean;
+    { [spec 242] THE SERIES A dataZoom FILTERED at the last update (any mode
+      but 'none'): selectRange / filterSelf / map left them on a store of
+      their own whose count appendData does not move -- so the frame keeps
+      that view, new rows unseen until the next update. FDzTouched is the
+      last SolveDataZooms' marks, FDzFrozenStore the views appendData froze
+      (owned, their category lists borrowed from nothing) }
+    FDzTouched: array of Boolean;
+    FDzFrozenStore: array of TTyDataStore;
     FFlushDue: Boolean;
     { THE INCREMENTAL LAYER (zrender's, for `incremental` elements): every
       shown element of a progressive run painted once, onto a layer of its
@@ -1053,6 +1072,8 @@ type
     FLines: TTyLinesSolvedArray;
     FLinesSpecs: TTyLabelSpecTable;
     FLnSlot: Integer;
+    { [spec 242] the solving lines series' lineStyle.color as a gradient }
+    FLnSeriesGrad: TTyChartGradient;
     FTrailLayer: TBGRABitmap;
     { THE CUSTOM SERIES [Batch 123]: one view per series index (its group
       of item roots and its last data, kept across updates for the merge
@@ -1070,6 +1091,7 @@ type
     FCustomAction: string;
     FCustomClipOn: TTyBoolArray;
     FCustomClip: array of TTyXYWH;
+    FCustomClipSec: array of TTyCuClipSector;
     FCustomSlot: Integer;
     FCustomHandler: TTyChartRenderItem;
     FCustomParams: TTyCustomParams;
@@ -1359,6 +1381,8 @@ type
     FGfxDragOn: Boolean;
     FGfxDragId: string;
     FGfxDragX, FGfxDragY: Integer;
+    { [spec 242] what the dragged element was last over (GfxDropAt's key) }
+    FGfxDropKey: string;
     FVmRangeHas: array of Boolean;
     FVmRange0, FVmRange1: TTyDoubleArray;
     FVmSel: TTyStringArray;
@@ -2808,6 +2832,9 @@ type
     function ProgFrame(AEmit: Boolean): Boolean;
     procedure FrozenCapture;
     function FrozenZooms: TTyAxisZoomArray;
+    function FrozenAxisOf(const AKey: string): TTyAxis;
+    procedure DzFrozenDrop;
+    procedure DzFrozenRestore;
     procedure EmitPlain(const AType: string);
     procedure EmitFlush;
     function ProgIsLayered(const AEl: TTyChartElement): Boolean;
@@ -3983,6 +4010,15 @@ type
       stop (no chart event follows) }
     function GfxElementEvent(const AType: string; const ATarget: TTyChartEventTarget;
       AX, AY: Integer): Boolean;
+    function GfxElementEventFrom(const AType: string; AEl: TTyGfxEl;
+      AX, AY: Integer): Boolean;
+    function GfxDropAt(AX, AY: Integer; ADrag: TTyGfxEl; out AEl: TTyGfxEl): string;
+    function IsGfxTipDatum(const ADatum: TTyChartDatumRef): Boolean;
+    function GfxTipEl(const ADatum: TTyChartDatumRef): TTyGfxEl;
+    function GfxTipSpec(const ADatum: TTyChartDatumRef): TTyTooltipSpec;
+    function GfxTipParams(const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
+    function GfxTipText(const ADatum: TTyChartDatumRef; const ASpec: TTyTooltipSpec): string;
+    procedure GfxDragEnd(AX, AY: Integer);
     { zrender's Draggable: a press on a draggable element (or one under a
       draggable group) starts a drag, every move drifts it, a release ends it }
     procedure GfxDragStart(const ATarget: TTyChartEventTarget; AX, AY: Integer);
@@ -4877,6 +4913,10 @@ type
     function CustomView(ASeriesIndex: Integer): TTyCustomView;
     function CustomPaintSource(AIndex: Integer): TTyGfxEl;
     function CustomClip(ASeriesIndex: Integer; out ARect: TTyXYWH): Boolean;
+    { [spec 242] the sector a polar's clip: true makes (False: none) }
+    function CustomClipSector(ASeriesIndex: Integer; out ASector: TTyCuClipSector): Boolean;
+    { [spec 242] api.visual('visualMeta') of the custom series in ASlot }
+    function CustomVisualMetaJson(ASlot: Integer): TJSONArray;
     { ---- the drill-downs [Batch 115] ---- }
     { upstream's sunburstRootToNode on the sunburst ASeriesIndex: the view
       root becomes ARow (a row of its tree; 0 the root) -- what a click on a

@@ -375,6 +375,11 @@ function TyEncodeOf(AOption: TTyChartOption; ASeriesIndex: Integer;
   ADimCount that no coordinate holds yet. `encode: {y: 2}` on a table reads
   x from 0; `encode: {tooltip: [2]}` leaves x on 0 and y on 1. }
 procedure TyEncodeFillUnclaimed(var AEnc: TTySeriesEncode; ADimCount: Integer);
+{ [spec 242] createDimensions over a default encode: an index past the
+  table's dimensions is no dimension, and a coordinate left with none takes
+  the first one no coordinate holds (the second of two series on a
+  three-column table: x the third column, y the first) }
+procedure TyEncodeDropPast(var AEnc: TTySeriesEncode; ADimCount: Integer);
 
 { A series' own `dimensions`, as a source that names things but holds
   nothing -- what an encode name on series data is looked up against. }
@@ -1794,12 +1799,11 @@ begin
     One(AValue);
 end;
 
-procedure TyEncodeFillUnclaimed(var AEnc: TTySeriesEncode; ADimCount: Integer);
+procedure FillUnclaimed(var AEnc: TTySeriesEncode; ADimCount: Integer);
 var
   i, j, avail: Integer;
   used: Boolean;
 begin
-  if not AEnc.Given then Exit;
   avail := 0;
   for i := 0 to High(AEnc.Columns) do
   begin
@@ -1817,6 +1821,27 @@ begin
       Inc(avail);
     end;
   end;
+end;
+
+procedure TyEncodeFillUnclaimed(var AEnc: TTySeriesEncode; ADimCount: Integer);
+begin
+  if not AEnc.Given then Exit;
+  FillUnclaimed(AEnc, ADimCount);
+end;
+
+procedure TyEncodeDropPast(var AEnc: TTySeriesEncode; ADimCount: Integer);
+var
+  i: Integer;
+  dropped: Boolean;
+begin
+  dropped := False;
+  for i := 0 to High(AEnc.Columns) do
+    if AEnc.Columns[i] >= ADimCount then
+    begin
+      AEnc.Columns[i] := -1;
+      dropped := True;
+    end;
+  if dropped then FillUnclaimed(AEnc, ADimCount);
 end;
 
 function TySeriesDimsSource(AOption: TTyChartOption;
@@ -2027,6 +2052,9 @@ begin
   Result.Given := False;
   Result.Columns[0] := valueDim;
   Result.ItemName := nameDim;
+  { [spec 242] encode.seriesName = [nameDimIndex]: the series is named after
+    the name column }
+  Result.SeriesName := nameDim;
 end;
 
 end.

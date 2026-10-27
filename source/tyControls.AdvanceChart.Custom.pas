@@ -357,7 +357,9 @@ type
     procedure Leave(AEl: TTyGfxEl);
     procedure AddTo(AGroup, AEl: TTyGfxEl);
     function NeedRecreate(AEl: TTyGfxEl; AOpt: TJSONObject): Boolean;
-    function ElementCfg(AType: TTyAnimType; AOpt: TJSONObject): TTyAnimCfg;
+    { [spec 242] doCreateOrUpdateClipPath }
+    procedure UpdateClipPath(AEl: TTyGfxEl; AOpt: TJSONObject; AIsInit: Boolean);
+    function ElementCfg(AType: TTyAnimType; AOpt: TJSONObject; AEl: TTyGfxEl): TTyAnimCfg;
     procedure ApplyTransition(AEl: TTyGfxEl; AOpt: TJSONObject; AIsInit: Boolean);
     procedure UpdateNormal(AEl: TTyGfxEl; AOpt, ATxCfg: TJSONObject; AIsInit: Boolean);
     procedure UpdateAttachedTx(AEl: TTyGfxEl; AOpt: TJSONObject; AIsInit: Boolean);
@@ -1089,7 +1091,7 @@ end;
   empty object: no duration when the series does not animate), setToFinal and the scope
   only when that duration is above 0, then the option's enterAnimation /
   updateAnimation over it [Batch 124] }
-function TTyCustomView.ElementCfg(AType: TTyAnimType; AOpt: TJSONObject): TTyAnimCfg;
+function TTyCustomView.ElementCfg(AType: TTyAnimType; AOpt: TJSONObject; AEl: TTyGfxEl): TTyAnimCfg;
 var
   timing: TTyAnimTiming;
   ext: TJSONObject;
@@ -1108,6 +1110,8 @@ begin
     Result.Easing := timing.Easing;
     if Result.Duration > 0 then
     begin
+      { [spec 242] config.during, before the option's *Animation }
+      if AEl <> nil then Result.During := AEl.DuringCfg;
       Result.SetToFinal := True;
       Result.Scope := word;
     end;
@@ -1143,6 +1147,8 @@ var
   cfg: TTyAnimCfg;
 begin
   from_ := nil;
+  { [spec 242] store.userDuring = elOption.during }
+  AEl.UserDuring := TyGfxDuringSpec(AOpt);
   if not AIsInit and FAnim.Enabled then TyGfxTransitionFrom(AEl, AOpt, from_);
   TyGfxApplyDirect(AEl, AOpt, True);
   if FAnim.Enabled and (AEl.Animation <> nil) then
@@ -1151,12 +1157,12 @@ begin
     begin
       enter := nil;
       TyGfxEnterFrom(AOpt, enter);
-      cfg := ElementCfg(atEnter, AOpt);
+      cfg := ElementCfg(atEnter, AOpt, AEl);
       if cfg.HasDuration and (cfg.Duration > 0) then AEl.AnimateFrom(enter, cfg);
     end
     else
     begin
-      cfg := ElementCfg(atUpdate, AOpt);
+      cfg := ElementCfg(atUpdate, AOpt, AEl);
       if cfg.HasDuration and (cfg.Duration > 0) then AEl.AnimateFrom(from_, cfg);
     end;
   end;
@@ -1205,6 +1211,32 @@ end;
 { processTxInfo for the normal state and doCreateOrUpdateAttachedTx: the
   textConfig and the textContent option -- written, or made from an ec4
   style -- and the textContent updated from it }
+procedure TTyCustomView.UpdateClipPath(AEl: TTyGfxEl; AOpt: TJSONObject; AIsInit: Boolean);
+var
+  d: TJSONData;
+  copt: TJSONObject;
+  clip: TTyGfxEl;
+begin
+  d := AOpt.Find('clipPath');
+  if (d <> nil) and (d.JSONType = jtBoolean) and not d.AsBoolean then
+  begin
+    FreeAndNil(AEl.ClipPath);
+    Exit;
+  end;
+  if not (d is TJSONObject) then Exit;
+  copt := TJSONObject(d);
+  clip := AEl.ClipPath;
+  if (clip <> nil) and NeedRecreate(clip, copt) then clip := nil;
+  if clip = nil then
+  begin
+    clip := CreateEl(copt);
+    if clip = nil then Exit;
+    FreeAndNil(AEl.ClipPath);
+    AEl.ClipPath := clip;
+  end;
+  UpdateNormal(clip, copt, nil, AIsInit);
+end;
+
 procedure TTyCustomView.UpdateAttachedTx(AEl: TTyGfxEl; AOpt: TJSONObject;
   AIsInit: Boolean);
 var
@@ -1481,6 +1513,10 @@ begin
     info.NoMorph := (d <> nil) and (d.JSONType = jtBoolean) and not d.AsBoolean;
   end;
   UpdateAttachedTx(el, AOpt, isInit);
+  { [spec 242] doCreateOrUpdateClipPath: false removes it; an object merges
+    into the one there is (made again when doesElNeedRecreate says so) }
+  UpdateClipPath(el, AOpt, isInit);
+  if FAbort then Exit;
   UpdateNormal(el, AOpt, nil, isInit);
   { info: replaced only when the option says it }
   d := AOpt.Find('info');

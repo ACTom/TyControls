@@ -91,6 +91,13 @@ type
       the decoded image's own size. }
     HasMatrix, UnitImage: Boolean;
     Matrix: TTyMat2D;
+    { [spec 242] A UNIT IMAGE'S SOURCE RECT (zrender's brushImage, sx / sy /
+      sWidth / sHeight): the part of the image, in its natural px, that the
+      unit square shows -- drawImage's nine-argument form. What falls off
+      the image is nothing, as a canvas clips the source. CropOk False:
+      drawImage was handed a number that is none, and draws nothing. }
+    HasCrop, CropOk: Boolean;
+    CropX, CropY, CropW, CropH: Double;
   end;
 
   { A FILL THAT IS AN OBJECT, for a renderer handed colours one per datum
@@ -413,6 +420,9 @@ type
       re-inks, and what a free text whose ink is the skin's takes at paint
       time. [Batch 86] }
     DefaultFill, DefaultStroke: Boolean;
+    { [spec 242] a rich token's fill or stroke of its own: a state's style
+      on the block (a custom text's emphasis fill) leaves it }
+    TokenFill, TokenStroke: Boolean;
   end;
   TTyRtPieceArray = array of TTyRtPiece;
 
@@ -847,6 +857,19 @@ type
     Role: TTyChartAnimRole;
     { the series index, and the datum's view row (-1 for a whole series) }
     Series, Index: Integer;
+    { [spec 242] AN UPDATE'S updateProps of a shape the role does not tween
+      itself: 0 none; 1 a parallel row's polyline (TwVals its points, flat;
+      G[6] its smooth), 2 a themeRiver layer's polygon (its bottoms then its
+      tops, flat; G[4] the group's y), 3 a chord piece's sector (cx, cy, r0,
+      r, startAngle, endAngle; G[2] clockwise; Pts its corner radii), 4 a
+      chord ribbon (s1, s2, its start and end angle, t1, t2, theirs, cx,
+      cy, r; G[2] clockwise), 5 a lines row's line (x1, y1, x2, y2, cpx1,
+      cpy1: G[0..5]; its line, end symbols and label alike). TwRow the
+      proxy's row; TwKey the old element's key where the data diff is not
+      the rows' (a layer's name, a node's or a link's), '' the row map }
+    TwKind, TwRow: Integer;
+    TwKey: string;
+    TwVals: TTyDoubleArray;
     { the role's own numbers -- see AdvanceChart.AnimView for each }
     G: array[0..11] of Double;
     { A LINE'S RUN OR AREA [Batch 90]: which of the series' runs it is,
@@ -913,6 +936,16 @@ type
       NULs + its place -- so a max that moves to another category is a
       symbol removed and a symbol added, not one that slides }
     Key: string;
+    { [spec 242] A GRADIENT IN THE ELEMENT'S OWN FRAME -- a lines end
+      symbol's colour, a lines effect symbol's: LGrad as written (Kind
+      cgkNone: none), LGradBox the element's getBoundingRect in that frame,
+      LGradStroke whether it is the pen's (an empty or a 'line' symbol). A
+      frame that turns, scales or moves the element puts it on the style
+      again, carried by the element's transform (canvas' own way: the
+      gradient lives in the element's coordinates) }
+    LGrad: TTyChartGradient;
+    LGradBox: TTyXYWH;
+    LGradStroke: Boolean;
   end;
 
   { [F6b] zrender's own contain over an element of an SVG map, in the
@@ -1048,6 +1081,12 @@ type
       says so (a geo region and its text). Everything else keeps the
       rule above: the hit test ignores the clip. }
     ClipHits: Boolean;
+    { [spec 242] A GRAPHIC OR CUSTOM ELEMENT'S clipPath, and every clipPath
+      up its parents (and its host's, for a label), as zrender's Storage
+      hands them down: each a filled path in the element's coordinates, the
+      ink cut to all of them (nonzero), and the hit too (isHover asks each
+      clip's contain). Empty everywhere else. }
+    ClipPaths: TTyChartShapeArray;
     { [F6a] zrender's Displayable.cursor, the CSS name the canvas takes
       while the pointer is over the element (Handler.mousemove's
       setCursor): '' is the prototype's 'pointer'. Set where upstream sets
@@ -1885,7 +1924,11 @@ begin
 end;
 
 function TyElementContains(const AEl: TTyChartElement; AX, AY, ASlopPx: Double): Boolean;
+var k: Integer;
 begin
+  { [spec 242] a point outside a clip path is not over the element }
+  for k := 0 to High(AEl.ClipPaths) do
+    if not TyShapeContains(AEl.ClipPaths[k], AX, AY, 0) then Exit(False);
   if AEl.ClipHits and AEl.HasClip
     and not ((AX >= AEl.ClipRect.Left) and (AX <= AEl.ClipRect.Right)
       and (AY >= AEl.ClipRect.Top) and (AY <= AEl.ClipRect.Bottom)) then

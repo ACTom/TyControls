@@ -169,9 +169,12 @@ end;
 
 function TyProgViewIncremental(const AType: string): Boolean;
 begin
-  { [Batch 128] and a parallel series' (ParallelView.incrementalRender) }
+  { [Batch 128] and a parallel series' (ParallelView.incrementalRender);
+    [spec 242] a lines series' (LinesView) and a custom series'
+    (CustomChartView.incrementalRender) }
   Result := (AType = 'scatter') or (AType = 'bar') or (AType = 'candlestick')
-    or (AType = 'heatmap') or (AType = 'parallel');
+    or (AType = 'heatmap') or (AType = 'parallel') or (AType = 'lines')
+    or (AType = 'custom');
 end;
 
 function TyProgHasBlockTask(const AType: string): Boolean;
@@ -296,28 +299,32 @@ begin
   if (th <> nil) and (th.JSONType <> jtNull) then thV := JsNum(th)
   else if (th = nil) and hasOwnTh then thV := ownTh
   else RootOf('progressiveThreshold', 3000, rootOn, thV);
-  if AType = 'scatter' then
+  if (AType = 'scatter') or (AType = 'lines') then
   begin
-    { `this.option.progressive == null`: the large default 5000, else
-      get('progressive') -- which, a scatter having no default, is the
-      root's }
+    { `this.option.progressive == null`: the large default (a scatter's
+      5000, [spec 242] a lines series' 1e4), else get('progressive') --
+      which, the type having no default, is the root's }
     if (prog = nil) or (prog.JSONType = jtNull) then
     begin
       d := nil;
       if ANode <> nil then d := ANode.Find('large');
       if JsTruthy(d) then
       begin
-        n := 5000;
+        if AType = 'lines' then n := 1e4 else n := 5000;
         progOn := True;
       end
       else
         RootOf('progressive', 400, progOn, n);
     end;
+    { the threshold's: 1e4 (a lines series' 2e4) }
     if (th = nil) or (th.JSONType = jtNull) then
     begin
       d := nil;
       if ANode <> nil then d := ANode.Find('large');
-      if JsTruthy(d) then thV := 1e4
+      if JsTruthy(d) then
+      begin
+        if AType = 'lines' then thV := 2e4 else thV := 1e4;
+      end
       else RootOf('progressiveThreshold', 3000, rootOn, thV);
     end;
   end

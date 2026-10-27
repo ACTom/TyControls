@@ -29,8 +29,15 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Progressive, tyControls.AdvanceChart.Events,
      tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Scale,
      tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Builder,
+     tyControls.AdvanceChart.Custom,
      tyControls.AdvanceChart;
 type
+  { [spec 242] the oracle's renderItem '@progDot': a dot at the item's place
+    in its colour }
+  TPgRenderItems = class
+    function ProgDot(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+  end;
+
   TPgProbe = class(TTyAdvanceChart)
   public
     Events: TStringList;
@@ -418,6 +425,8 @@ begin
       lgkBar: if el.Silent then gotKind := 'barBg' else gotKind := 'bar';
       lgkSymbol: gotKind := 'symbol';
       lgkCandle: gotKind := 'candle';
+      { [spec 242] a LargeLinesPath }
+      lgkLines: gotKind := 'lines';
     else
       gotKind := '?';
     end;
@@ -428,6 +437,7 @@ begin
     case g.Kind of
       lgkBar: n := rows * 3;
       lgkSymbol: n := rows * 2;
+      lgkLines: n := TyLargeLinesUsed(g);
     else
       n := rows * 4;
     end;
@@ -482,6 +492,9 @@ begin
       SameHex(what + ' width', g.SymW, er.Arrays['size'].Items[0]);
       SameHex(what + ' height', g.SymH, er.Arrays['size'].Items[1]);
     end
+    else if kind = 'lines' then
+      SameStr(what + ' polyline', BoolToStr(g.LinesPoly, 'true', 'false'),
+        BoolToStr(er.Booleans['poly'], 'true', 'false'))
     else
       SameInt(what + ' sign', g.Sign, er.Integers['sign']);
   end;
@@ -625,7 +638,7 @@ begin
     SameStr('the tooltip', Format('item:%d:%d', [d.SeriesIndex, d.RawDataIndex]), which);
     SameInt('the tooltip row', d.DataIndex, tip.Integers['inner']);
   end;
-  if (t = 'snap') and (ASnap.Find('geom') is TJSONArray) then
+  if ((t = 'snap') or (t = 'update')) and (ASnap.Find('geom') is TJSONArray) then
     CheckGeom(ASnap.Arrays['geom']);
 end;
 
@@ -667,9 +680,18 @@ begin
         FChart.ProgressiveStepCostMs := sn.Floats['cost']
       else if t = 'append' then
       begin
-        if not FChart.AppendData(sn.Integers['seriesIndex'], sn.Arrays['data'].AsJSON) then
+        { [spec 242] upstream's throw: the port refuses }
+        if sn.Find('threw') <> nil then
+        begin
+          if FChart.AppendData(sn.Integers['seriesIndex'], sn.Arrays['data'].AsJSON) then
+            Miss('appendData taken, upstream throws: ' + sn.Strings['threw']);
+        end
+        else if not FChart.AppendData(sn.Integers['seriesIndex'], sn.Arrays['data'].AsJSON) then
           Miss('appendData refused');
       end
+      { [spec 242] setOption of nothing: a full update }
+      else if t = 'update' then
+        FChart.SetOption('{}', False)
       else if (t = 'move') or (t = 'leave') then
       begin
         nowMs := nowMs + 1000;
@@ -846,15 +868,30 @@ begin
   s := Spec('heatmap', '{"progressiveThreshold": "x"}');
   AssertFalse('a threshold that is no number never passes', TyProgRenderOn(s, 'heatmap', 99999));
   AssertFalse('a line view is not incremental', TyProgRenderOn(Spec('line', '{"progressive": 5, "progressiveThreshold": 1}'), 'line', 10));
+  { [spec 242] LinesSeriesModel.getProgressive / getProgressiveThreshold:
+    large 1e4 / 2e4, else get() -- the root's 400 / 3000 }
+  s := Spec('lines', '{}');
+  AssertEquals('lines 400', 400, s.Step);
+  AssertEquals('lines 3000', 3000, Trunc(s.Threshold));
+  s := Spec('lines', '{"large": true}');
+  AssertEquals('large lines 1e4', 10000, s.Step);
+  AssertEquals('large lines 2e4', 20000, Trunc(s.Threshold));
+  AssertFalse('19999 large lines at once', TyProgRenderOn(s, 'lines', 19999));
+  AssertTrue('20000 large lines in chunks', TyProgRenderOn(s, 'lines', 20000));
+  s := Spec('custom', '{}');
+  AssertEquals('custom 400', 400, s.Step);
+  AssertTrue('a custom view is incremental', TyProgRenderOn(s, 'custom', 3000));
 end;
 
 procedure TAdvChartProgressiveTest.TestAppendDataRefusesWhatUpstreamCannotTake;
 var deep: string; i: Integer; d: TJSONData;
 begin
   Show('{"animation": false, "xAxis": {}, "yAxis": {}, "dataset": {"source": [[1, 2], [2, 3]]},' +
-    '"series": [{"type": "scatter", "data": [[1, 2]]}, {"type": "scatter"}]}');
+    '"series": [{"type": "scatter", "data": [[1, 2]]}, {"type": "scatter"},' +
+    ' {"type": "scatter", "seriesLayoutBy": "row"}]}');
   AssertFalse('no such series', FChart.AppendData(5, '[[1, 2]]'));
-  AssertFalse('a dataset series', FChart.AppendData(1, '[[1, 2]]'));
+  { [spec 242] a table laid out by row: upstream throws }
+  AssertFalse('a dataset series laid out by row', FChart.AppendData(2, '[[1, 2]]'));
   AssertFalse('not an array', FChart.AppendData(0, '{"a": 1}'));
   AssertFalse('not JSON', FChart.AppendData(0, '[[1, 2'));
   deep := '';
@@ -872,6 +909,20 @@ begin
   d := GetJSON(FChart.GetOptionJson);
   try
     AssertEquals('the option holds them', 3, TJSONArray(d.FindPath('series[0].data')).Count);
+  finally
+    d.Free;
+  end;
+  { [spec 242] a dataset series: the rows go into the table }
+  AssertTrue('a dataset series', FChart.AppendData(1, '[[7, 8]]'));
+  FChart.ProgressTick;
+  RenderNow;
+  AssertEquals('its store holds them', 3, FChart.SeriesStore(1).Count);
+  d := GetJSON(FChart.GetOptionJson);
+  try
+    if d.FindPath('dataset.source') <> nil then
+      AssertEquals('the table holds them', 3, TJSONArray(d.FindPath('dataset.source')).Count)
+    else
+      AssertEquals('the table holds them', 3, TJSONArray(d.FindPath('dataset[0].source')).Count);
   finally
     d.Free;
   end;
@@ -1029,7 +1080,25 @@ begin
   AssertTrue('a frame stays a frame, not the whole series again', tWorst < 30000);
 end;
 
+{ ==================== the render items [spec 242] ==================== }
+
+function TPgRenderItems.ProgDot(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+var p: TTyDoubleArray;
+begin
+  p := AApi.Coord([AApi.Value(0), AApi.Value(1)]);
+  Result := TJSONObject.Create(['type', 'circle',
+    'shape', TJSONObject.Create(['cx', p[0], 'cy', p[1], 'r', 4]),
+    'style', TJSONObject.Create(['fill', AApi.Visual('color')])]);
+end;
+
+var
+  GPgItems: TPgRenderItems;
+
 initialization
+  GPgItems := TPgRenderItems.Create;
+  TyChartRegisterRenderItem('progDot', @GPgItems.ProgDot);
   RegisterTest(TAdvChartProgressiveOracleTest);
   RegisterTest(TAdvChartProgressiveTest);
+finalization
+  GPgItems.Free;
 end.

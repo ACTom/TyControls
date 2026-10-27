@@ -136,8 +136,11 @@ function TyLargeIndexAt(const AGeom: TTyLargeGeom; AX, AY: Double): Integer;
 { The bounding rect as a rect (a not-a-number one is not valid). }
 function TyLargeBounds(const AGeom: TTyLargeGeom): TTyRectF;
 { The rows the batch holds now: every row, or a growing symbol batch's
-  Shown [Batch 119]. }
+  Shown [Batch 119] -- [spec 242] or a growing lines batch's. }
 function TyLargeRows(const AGeom: TTyLargeGeom): Integer;
+{ [spec 242] the numbers of a lines batch's segs it holds now: every one,
+  or those of a growing batch's Shown rows }
+function TyLargeLinesUsed(const AGeom: TTyLargeGeom): Integer;
 { LargeLinesPath.findDataIndex: the first row whose stroke holds the point,
   -1 for none. A polyline row is tested from its FIRST point to each of the
   others -- upstream never moves x0, y0 along. [Batch 121] }
@@ -149,9 +152,21 @@ implementation
 
 uses tyControls.AdvanceChart.Lines;
 
+function TyLargeLinesUsed(const AGeom: TTyLargeGeom): Integer;
+begin
+  if (AGeom.Shown > 0) and (AGeom.Shown < Length(AGeom.Idx)) then
+    Result := AGeom.Idx[AGeom.Shown]
+  else
+    Result := Length(AGeom.Pts);
+end;
+
 function TyLargeRows(const AGeom: TTyLargeGeom): Integer;
 begin
-  if AGeom.Kind = lgkLines then Exit(Length(AGeom.Idx));
+  if AGeom.Kind = lgkLines then
+  begin
+    if (AGeom.Shown > 0) and (AGeom.Shown < Length(AGeom.Idx)) then Exit(AGeom.Shown);
+    Exit(Length(AGeom.Idx));
+  end;
   case AGeom.Kind of
     lgkBar: Result := Length(AGeom.Pts) div 3;
     lgkSymbol:
@@ -371,7 +386,7 @@ begin
           the height. The stroke is not added. }
         a := Infinity; b := Infinity; c := NegInfinity; d := NegInfinity;
         i := 0;
-        n := Length(AGeom.Pts);
+        n := TyLargeLinesUsed(AGeom);
         while i < n do
         begin
           rx := AGeom.Pts[i];
@@ -427,7 +442,7 @@ var
 begin
   Result := -1;
   segs := AGeom.Pts;
-  n := Length(segs);
+  n := TyLargeLinesUsed(AGeom);
   c := AGeom.LinesCurve;
   lw := AGeom.LineW;
   di := 0;

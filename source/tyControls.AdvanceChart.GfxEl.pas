@@ -90,6 +90,10 @@ type
     HasEventData: Boolean;
     EventName: string;
     Info: TJSONData;
+    { [spec 242] setTooltipConfig's item option: the element's `tooltip` as
+      the last update wrote it (owned; nil none) -- every element of the
+      view is a tooltip target, its name the content }
+    TipOpt: TJSONData;
     { element handlers: 'onclick=@Name' }
     Handlers: TStringList;
     { a leave transition's target, flattened ('x', 'style.opacity') }
@@ -111,6 +115,10 @@ type
     { a textContent's innerTransformable and the host's default style }
     InX, InY, InRot, InOX, InOY: Double;
     DefFill, DefStroke, DefAlign, DefVAlign: string;
+    { [spec 242] textConfig.autoOverflowArea: the default style's
+      overflowRect, the layout rect in the label's own space }
+    HasOverflow: Boolean;
+    OverflowRect: TTyXYWH;
     DefAutoStroke, HasDefault: Boolean;
     { the index the last paint list build gave it }
     Serial: Integer;
@@ -132,6 +140,17 @@ type
       labelLayoutInnerStore oldLayout is set), so it is not faded in again
       [milestone D5-D8] }
     LabelLaidOut: Boolean;
+    { [spec 242] the `during` the last update wrote (transitionInnerStore's
+      userDuring): a handler reference ('@Name'), '' none }
+    UserDuring: string;
+    { the bound duringCall scopes this element made (owned, freed with it) }
+    DuringScopes: TFPList;
+    { [spec 242] el.setClipPath: a path element (owned; nil none) whose
+      transform is its own under this element's }
+    ClipPath: TTyGfxEl;
+    { getElementAnimationConfig's config.during: a scope bound to the
+      element and the during it holds now; nil when it holds none }
+    function DuringCfg: TTyAnimDuring;
     constructor Create(AKind: TTyGfxKind; const AType: string);
     destructor Destroy; override;
     function GetAnimProp(const AKey: string): TTyAnimValue; override;
@@ -149,6 +168,44 @@ type
       'shape' a path, 'extra' once written [Batch 139] }
     function HasAnimTarget(const AName: string): Boolean;
   end;
+
+  { [spec 242] customGraphicTransition's TransitionDuringAPI: what a
+    `during` handler reads and writes of the element each frame. A Get
+    answers nil (a NaN for a transform) where upstream answers undefined;
+    a Set takes AValue over (it is the element's from then on) }
+  TTyGfxDuringApi = class
+  private
+    FEl: TTyGfxEl;
+  public
+    constructor Create(AEl: TTyGfxEl);
+    { x, y, rotation, scaleX, scaleY, originX, originY, skewX, skewY,
+      anchorX, anchorY; another key is ignored (NaN) }
+    function SetTransform(const AKey: string; AValue: Double): TTyGfxDuringApi;
+    function GetTransform(const AKey: string): Double;
+    function SetShape(const AKey: string; AValue: TJSONData): TTyGfxDuringApi; overload;
+    function SetShape(const AKey: string; AValue: Double): TTyGfxDuringApi; overload;
+    function GetShape(const AKey: string): TJSONData;
+    { a group has no style: nothing set, nil read }
+    function SetStyle(const AKey: string; AValue: TJSONData): TTyGfxDuringApi; overload;
+    function SetStyle(const AKey: string; AValue: Double): TTyGfxDuringApi; overload;
+    function GetStyle(const AKey: string): TJSONData;
+    function SetExtra(const AKey: string; AValue: TJSONData): TTyGfxDuringApi; overload;
+    function SetExtra(const AKey: string; AValue: Double): TTyGfxDuringApi; overload;
+    function GetExtra(const AKey: string): TJSONData;
+    { a JSON value's number, as the handlers usually want it (nil NaN) }
+    class function Num(AValue: TJSONData): Double;
+    property Element: TTyGfxEl read FEl;
+  end;
+
+  { a graphic or custom element's `during: '@Name'`, called once a frame
+    while an enter, update or leave transition of it runs }
+  TTyGfxDuringHandler = procedure(AApi: TTyGfxDuringApi) of object;
+
+procedure TyChartRegisterDuring(const AName: string; AHandler: TTyGfxDuringHandler);
+procedure TyChartUnregisterDuring(const AName: string);
+function TyChartFindDuring(const ASpec: string; out AHandler: TTyGfxDuringHandler): Boolean;
+{ the handler reference an option's `during` holds, '' none }
+function TyGfxDuringSpec(AOpt: TJSONObject): string;
 
 { the option's type word }
 function TyGfxKindOf(const AType: string): TTyGfxKind;
@@ -250,6 +307,16 @@ type
     ImageSize: TTyGfxImageSize;
   end;
 
+{ [spec 242] Element.drift: the pointer's move (css px; 'horizontal' keeps
+  y, 'vertical' x) onto the global transform, which is then decomposed into
+  the element's own x, y, rotation, scale and skew (decomposeTransform:
+  through the parent's inverse, the origin folded in and set to nought --
+  setLocalTransform's arithmetic, so a turned or scaled element's numbers
+  move in their last bits as upstream's do). The transform is the one the
+  last render left, moved in place: several drifts between renders add up
+  as they do upstream. }
+procedure TyGfxDrift(AEl: TTyGfxEl; ADX, ADY: Double);
+
 { The paint list element a displayable becomes, transform applied, in
   device px; False for nothing to add (a group). A textContent is its own
   element: AEl the text, its transform TyGfxLabelTransform's. }
@@ -270,7 +337,8 @@ uses
   tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.Color,
   tyControls.AdvanceChart.PolarBar, tyControls.AdvanceChart.RichStyle,
   tyControls.AdvanceChart.States,
-  tyControls.AdvanceChart.Option;
+  tyControls.AdvanceChart.Option,
+  tyControls.AdvanceChart.Data;
 
 const
   PI2 = 2 * Pi;
@@ -288,6 +356,47 @@ function NumOf(A: TJSONData; out AV: Double): Boolean;
 begin
   Result := (A <> nil) and (A.JSONType = jtNumber);
   if Result then AV := A.AsFloat else AV := NaN;
+end;
+
+{ [spec 242] JavaScript's truthiness of a style value }
+function JsTruthy(A: TJSONData): Boolean;
+var v: Double;
+begin
+  Result := False;
+  if A = nil then Exit;
+  case A.JSONType of
+    jtNull: Result := False;
+    jtBoolean: Result := A.AsBoolean;
+    jtNumber:
+      begin
+        v := A.AsFloat;
+        Result := not IsNan(v) and (v <> 0);
+      end;
+    jtString: Result := A.AsString <> '';
+  else
+    Result := True;
+  end;
+end;
+
+{ [spec 242] TyRectApplyMat, but a rect with a NaN in it (a layoutRect
+  missing a key) comes out all NaN instead of tripping the comparisons }
+function ApplyMatNaN(const ARect: TTyXYWH; const AM: TTyMat2D): TTyXYWH;
+begin
+  if IsNan(ARect.X) or IsNan(ARect.Y) or IsNan(ARect.W) or IsNan(ARect.H) then
+  begin
+    Result.X := NaN;
+    Result.Y := NaN;
+    Result.W := NaN;
+    Result.H := NaN;
+  end
+  else
+    Result := TyRectApplyMat(ARect, AM);
+end;
+
+{ [spec 242] a property of an object, nil for anything else }
+function PropOf(A: TJSONData; const AKey: string): TJSONData;
+begin
+  if A is TJSONObject then Result := TJSONObject(A).Find(AKey) else Result := nil;
 end;
 
 { a number as JavaScript reads one out of a shape: a number, a boolean as
@@ -686,6 +795,7 @@ begin
   FreeAndNil(TextContent);
   FreeAndNil(TextConfig);
   FreeAndNil(Info);
+  FreeAndNil(TipOpt);
   FreeAndNil(Custom);
   FreeAndNil(InnerOptW);
   FreeAndNil(InnerOptH);
@@ -693,7 +803,220 @@ begin
   FreeAndNil(Shape);
   FreeAndNil(Style);
   FreeAndNil(Extra);
+  FreeAndNil(ClipPath);
   inherited Destroy;
+  { after the animators: none of them calls a scope any more }
+  if DuringScopes <> nil then
+  begin
+    for i := 0 to DuringScopes.Count - 1 do TObject(DuringScopes[i]).Free;
+    FreeAndNil(DuringScopes);
+  end;
+end;
+
+{ ==================== during [spec 242] ==================== }
+
+type
+  { duringCall's bound `this`: the element and the during it was made with }
+  TGfxDuringScope = class
+    El: TTyGfxEl;
+    Spec: string;
+    procedure Call(APercent: Double);
+  end;
+
+  TDuringEntry = class
+    Handler: TTyGfxDuringHandler;
+  end;
+
+var
+  GDurings: TStringList;
+
+{ duringCall: released (never called again) once the element holds another
+  during; else the handler, with the API over the element }
+procedure TGfxDuringScope.Call(APercent: Double);
+var
+  h: TTyGfxDuringHandler;
+  api: TTyGfxDuringApi;
+begin
+  if El = nil then Exit;
+  if El.UserDuring <> Spec then
+  begin
+    El := nil;
+    Spec := '';
+    Exit;
+  end;
+  if not TyChartFindDuring(Spec, h) then Exit;
+  api := TTyGfxDuringApi.Create(El);
+  try
+    h(api);
+  finally
+    api.Free;
+  end;
+end;
+
+function TTyGfxEl.DuringCfg: TTyAnimDuring;
+var
+  s: TGfxDuringScope;
+  i: Integer;
+begin
+  Result := nil;
+  if UserDuring = '' then Exit;
+  if DuringScopes = nil then DuringScopes := TFPList.Create
+  else if AnimatorCount = 0 then
+  begin
+    { nothing runs that could still call the old ones }
+    for i := 0 to DuringScopes.Count - 1 do TObject(DuringScopes[i]).Free;
+    DuringScopes.Clear;
+  end;
+  s := TGfxDuringScope.Create;
+  s.El := Self;
+  s.Spec := UserDuring;
+  DuringScopes.Add(s);
+  Result := @s.Call;
+end;
+
+function DuringName(const ASpec: string): string;
+begin
+  Result := ASpec;
+  if (Result <> '') and (Result[1] = '@') then Delete(Result, 1, 1);
+end;
+
+procedure TyChartRegisterDuring(const AName: string; AHandler: TTyGfxDuringHandler);
+var
+  i: Integer;
+  e: TDuringEntry;
+  nm: string;
+begin
+  nm := DuringName(AName);
+  if nm = '' then Exit;
+  if GDurings = nil then
+  begin
+    GDurings := TStringList.Create;
+    GDurings.CaseSensitive := True;
+    GDurings.OwnsObjects := True;
+  end;
+  i := GDurings.IndexOf(nm);
+  if i >= 0 then
+  begin
+    TDuringEntry(GDurings.Objects[i]).Handler := AHandler;
+    Exit;
+  end;
+  e := TDuringEntry.Create;
+  e.Handler := AHandler;
+  GDurings.AddObject(nm, e);
+end;
+
+procedure TyChartUnregisterDuring(const AName: string);
+var i: Integer;
+begin
+  if GDurings = nil then Exit;
+  i := GDurings.IndexOf(DuringName(AName));
+  if i >= 0 then GDurings.Delete(i);
+end;
+
+function TyChartFindDuring(const ASpec: string; out AHandler: TTyGfxDuringHandler): Boolean;
+var i: Integer;
+begin
+  AHandler := nil;
+  Result := False;
+  if GDurings = nil then Exit;
+  i := GDurings.IndexOf(DuringName(ASpec));
+  if i < 0 then Exit;
+  AHandler := TDuringEntry(GDurings.Objects[i]).Handler;
+  Result := Assigned(AHandler);
+end;
+
+function TyGfxDuringSpec(AOpt: TJSONObject): string;
+var d: TJSONData;
+begin
+  Result := '';
+  if AOpt = nil then Exit;
+  d := AOpt.Find('during');
+  if (d <> nil) and (d.JSONType = jtString) then Result := d.AsString;
+end;
+
+constructor TTyGfxDuringApi.Create(AEl: TTyGfxEl);
+begin
+  inherited Create;
+  FEl := AEl;
+end;
+
+function TTyGfxDuringApi.SetTransform(const AKey: string; AValue: Double): TTyGfxDuringApi;
+begin
+  Result := Self;
+  TyGfxSetTransformProp(FEl, AKey, AValue);
+end;
+
+function TTyGfxDuringApi.GetTransform(const AKey: string): Double;
+var v: TTyAnimValue;
+begin
+  Result := NaN;
+  if not TyGfxIsTransformProp(AKey) then Exit;
+  v := FEl.GetAnimProp(AKey);
+  if v.Kind = avkNumber then Result := v.Num;
+end;
+
+function TTyGfxDuringApi.SetShape(const AKey: string; AValue: TJSONData): TTyGfxDuringApi;
+begin
+  Result := Self;
+  if AValue = nil then AValue := TJSONNull.Create;
+  PutKey(FEl.Shape, AKey, AValue);
+end;
+
+function TTyGfxDuringApi.SetShape(const AKey: string; AValue: Double): TTyGfxDuringApi;
+begin
+  Result := SetShape(AKey, TJSONFloatNumber.Create(AValue));
+end;
+
+function TTyGfxDuringApi.GetShape(const AKey: string): TJSONData;
+begin
+  Result := FEl.Shape.Find(AKey);
+end;
+
+function TTyGfxDuringApi.SetStyle(const AKey: string; AValue: TJSONData): TTyGfxDuringApi;
+begin
+  Result := Self;
+  if FEl.IsGroup then
+  begin
+    AValue.Free;
+    Exit;
+  end;
+  if AValue = nil then AValue := TJSONNull.Create;
+  PutKey(FEl.Style, AKey, AValue);
+end;
+
+function TTyGfxDuringApi.SetStyle(const AKey: string; AValue: Double): TTyGfxDuringApi;
+begin
+  Result := SetStyle(AKey, TJSONFloatNumber.Create(AValue));
+end;
+
+function TTyGfxDuringApi.GetStyle(const AKey: string): TJSONData;
+begin
+  if FEl.IsGroup then Exit(nil);
+  Result := FEl.Style.Find(AKey);
+end;
+
+function TTyGfxDuringApi.SetExtra(const AKey: string; AValue: TJSONData): TTyGfxDuringApi;
+begin
+  Result := Self;
+  if FEl.Extra = nil then FEl.Extra := TJSONObject.Create;
+  if AValue = nil then AValue := TJSONNull.Create;
+  PutKey(FEl.Extra, AKey, AValue);
+end;
+
+function TTyGfxDuringApi.SetExtra(const AKey: string; AValue: Double): TTyGfxDuringApi;
+begin
+  Result := SetExtra(AKey, TJSONFloatNumber.Create(AValue));
+end;
+
+function TTyGfxDuringApi.GetExtra(const AKey: string): TJSONData;
+begin
+  if FEl.Extra = nil then Exit(nil);
+  Result := FEl.Extra.Find(AKey);
+end;
+
+class function TTyGfxDuringApi.Num(AValue: TJSONData): Double;
+begin
+  Result := JsNum(AValue);
 end;
 
 function TTyGfxEl.IsGroup: Boolean;
@@ -983,7 +1306,8 @@ end;
 
 function AroundZero(V: Double): Boolean; inline;
 begin
-  Result := not ((V > 5e-5) or (V < -5e-5));
+  { isNotAroundZero's comparisons are false for a NaN: around zero }
+  Result := IsNan(V) or not ((V > 5e-5) or (V < -5e-5));
 end;
 
 function TyGfxNeedLocal(AEl: TTyGfxEl): Boolean;
@@ -1905,6 +2229,117 @@ begin
   end;
 end;
 
+{ zrender's adjustTextX / adjustTextY (inverse: back from the box) }
+function AdjX(AX, AW: Double; AAlign: TTyRtAlign; AInverse: Boolean): Double;
+begin
+  Result := AX;
+  if AAlign = rtaRight then
+  begin
+    if AInverse then Result := AX + AW else Result := AX - AW;
+  end
+  else if AAlign = rtaCenter then
+  begin
+    if AInverse then Result := AX + AW / 2 else Result := AX - AW / 2;
+  end;
+end;
+
+function AdjY(AY, AH: Double; AVAlign: TTyRtVAlign; AInverse: Boolean): Double;
+begin
+  Result := AY;
+  if AVAlign = rtvMiddle then
+  begin
+    if AInverse then Result := AY + AH / 2 else Result := AY - AH / 2;
+  end
+  else if AVAlign = rtvBottom then
+  begin
+    if AInverse then Result := AY + AH else Result := AY - AH;
+  end;
+end;
+
+{ a > b as JavaScript answers it: false with a NaN }
+function Gt(A, B: Double): Boolean;
+begin
+  Result := not IsNan(A) and not IsNan(B) and (A > B);
+end;
+
+{ BoundingRect.intersect's one dimension with clamp, into AOut0 / ALen }
+procedure IntersectDim(A0, A1, B0, B1: Double; var AOut0, ALen: Double);
+begin
+  if IsNan(A0) or IsNan(A1) or IsNan(B0) or IsNan(B1) then
+  begin
+    { JavaScript: every comparison false, Math.max / min NaN }
+    AOut0 := NaN;
+    ALen := NaN;
+    Exit;
+  end;
+  if (A1 < B0) or (B1 < A0) then
+  begin
+    if Abs(A1 - B0) < Abs(B1 - A0) then AOut0 := A1 else AOut0 := A0;
+    ALen := 0;
+  end
+  else
+  begin
+    AOut0 := Max(A0, B0);
+    ALen := Min(A1, B1) - AOut0;
+  end;
+end;
+
+function OverflowArea(AEl: TTyGfxEl; var AStyle: TTyRtStyle; var ABaseX, ABaseY: Double): Boolean;
+var
+  al: TTyRtAlign;
+  va: TTyRtVAlign;
+  ov: TTyXYWH;
+  tx, ty, tw, th, ox, oy, ow, oh, padH, padV: Double;
+begin
+  { the block's alignment, else the default's; left / top }
+  al := AStyle.Align;
+  if (al = rtaNone) and (AEl.DefAlign <> '') then al := AlignStr(AEl.DefAlign);
+  va := AStyle.VAlign;
+  if (va = rtvNone) and (AEl.DefVAlign <> '') then va := VAlignStr(AEl.DefVAlign);
+  ov := AEl.OverflowRect;
+  tw := ov.W * 2;
+  th := ov.H * 2;
+  tx := AdjX(ABaseX, tw, al, False);
+  ty := AdjY(ABaseY, th, va, False);
+  { BoundingRect.set: a negative size flipped }
+  if Gt(0, tw) then begin tx := tx + tw; tw := -tw; end;
+  if Gt(0, th) then begin ty := ty + th; th := -th; end;
+  ox := NaN; oy := NaN; ow := NaN; oh := NaN;
+  { an empty or NaN rect on either side: no intersection, all NaN }
+  if not (Gt(ov.X, ov.X + ov.W) or Gt(ov.Y, ov.Y + ov.H) or Gt(tx, tx + tw) or Gt(ty, ty + th)) then
+  begin
+    IntersectDim(ov.X, ov.X + ov.W, tx, tx + tw, ox, ow);
+    IntersectDim(ov.Y, ov.Y + ov.H, ty, ty + th, oy, oh);
+  end;
+  ABaseX := AdjX(ox, ow, al, True);
+  ABaseY := AdjY(oy, oh, va, True);
+  { a NaN anywhere (no intersection: a rect with a NaN or a negative size):
+    upstream lays out an empty line at NaN, which draws nothing -- the port
+    lays out nothing }
+  Result := not (IsNan(ABaseX) or IsNan(ABaseY) or IsNan(ow) or IsNan(oh));
+  if not Result then Exit;
+  if AStyle.HasPadding then
+  begin
+    padH := AStyle.Padding[1] + AStyle.Padding[3];
+    padV := AStyle.Padding[0] + AStyle.Padding[2];
+  end
+  else
+  begin
+    padH := 0;
+    padV := 0;
+  end;
+  if AStyle.WidthKind = rtwNone then
+  begin
+    AStyle.WidthKind := rtwNumber;
+    AStyle.Width := ow - padH;
+  end;
+  if not AStyle.HasHeight then
+  begin
+    AStyle.HasHeight := True;
+    AStyle.Height := oh - padV;
+  end;
+end;
+
 function TyGfxTextLayout(AEl: TTyGfxEl; const AMeasurer: ITyTextMeasurer): TTyRtResult;
 var
   st: TTyRtStyle;
@@ -1965,6 +2400,11 @@ begin
   by := 0;
   if NumOf(AEl.Style.Find('x'), bx) then else bx := 0;
   if NumOf(AEl.Style.Find('y'), by) then else by := 0;
+  { [spec 242] calcInnerTextOverflowArea: a block with no width / height of
+    its own takes the overflow rect's intersection with one twice its size
+    about the anchor, and the anchor moves into it }
+  if (AEl.Host <> nil) and AEl.HasDefault and AEl.HasOverflow then
+    if not OverflowArea(AEl, st, bx, by) then Exit;
   Result := TyRtLayout(TextOf(AEl.Style), st, rich, isRich, def, bx, by, AMeasurer);
 end;
 
@@ -2180,9 +2620,10 @@ var
   d, posD: TJSONData;
   dist, px, py, rox, roy: Double;
   al, va, fill, stroke, pfStr: string;
-  auto, isPath: Boolean;
+  auto, isPath, autoOv: Boolean;
   fillD: TJSONData;
   pfKind: Integer;
+  lm, im: TTyMat2D;
 begin
   tc := AHost.TextContent;
   if tc = nil then Exit;
@@ -2202,10 +2643,26 @@ begin
   va := '';
   posD := cfg.Find('position');
   hasPos := not JNull(posD);
+  { [spec 242] the layout rect: textConfig.layoutRect (copied as written,
+    a missing key NaN), else the host's bounding rect -- through the host's
+    transform unless local }
+  autoOv := JsTruthy(cfg.Find('autoOverflowArea'));
+  if autoOv or hasPos then
+  begin
+    d := cfg.Find('layoutRect');
+    if JsTruthy(d) then
+    begin
+      rect.X := JsNum(PropOf(d, 'x'));
+      rect.Y := JsNum(PropOf(d, 'y'));
+      rect.W := JsNum(PropOf(d, 'width'));
+      rect.H := JsNum(PropOf(d, 'height'));
+    end
+    else
+      rect := TyGfxRect(AHost, AMeasurer);
+    if not local and AHost.HasTransform then rect := ApplyMatNaN(rect, AHost.Transform);
+  end;
   if hasPos then
   begin
-    rect := TyGfxRect(AHost, AMeasurer);
-    if not local and AHost.HasTransform then rect := TyRectApplyMat(rect, AHost.Transform);
     d := cfg.Find('distance');
     if JNull(d) then dist := 5 else dist := JsNum(d);
     TyGfxTextPosition(posD, dist, rect, px, py, al, va);
@@ -2255,6 +2712,16 @@ begin
       if d.Count > 0 then tc.InOX := -JsNum(d.Items[0]) else tc.InOX := NaN;
       if d.Count > 1 then tc.InOY := -JsNum(d.Items[1]) else tc.InOY := NaN;
     end;
+  end;
+  { [spec 242] autoOverflowArea: the layout rect back through the label's
+    own local transform (invert leaves the matrix as it was when it cannot) }
+  tc.HasOverflow := autoOv;
+  if autoOv then
+  begin
+    lm := LocalOf(tc.InX, tc.InY, tc.InRot, tc.ScaleX, tc.ScaleY, tc.InOX, tc.InOY,
+      tc.SkewX, tc.SkewY, tc.AnchorX, tc.AnchorY);
+    if TyMatInvert(lm, im) then lm := im;
+    tc.OverflowRect := ApplyMatNaN(rect, lm);
   end;
   { the colours }
   d := cfg.Find('inside');
@@ -2517,9 +2984,125 @@ begin
   AGrad.R := r * Sqrt(det);
 end;
 
+
+{ ToNumber of a style value, as drawImage converts its arguments }
+function CropToNum(A: TJSONData): Double;
+begin
+  Result := NaN;
+  if A = nil then Exit;
+  case A.JSONType of
+    jtNumber: Result := A.AsFloat;
+    jtString: Result := TyJsToNumber(A.AsString);
+    jtNull: Result := 0;
+    jtBoolean: if A.AsBoolean then Result := 1 else Result := 0;
+  end;
+end;
+
+{ `style.sx || 0`, as drawImage reads it }
+function CropNum(A: TJSONData): Double;
+begin
+  if not JsTruthy(A) then Exit(0);
+  Result := CropToNum(A);
+end;
+
 function UniformScale(const AM: TTyMat2D): Double;
 begin
   Result := Sqrt(Abs(AM[0] * AM[3] - AM[1] * AM[2]));
+end;
+
+procedure TyGfxDrift(AEl: TTyGfxEl; ADX, ADY: Double);
+var
+  m, inv, o: TTyMat2D;
+  sx, sy, rot, shear, ox, oy: Double;
+  mask: TFPUExceptionMask;
+begin
+  if AEl = nil then Exit;
+  if AEl.Draggable = 'horizontal' then ADY := 0
+  else if AEl.Draggable = 'vertical' then ADX := 0;
+  mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+  try
+    { `let m = this.transform; if (!m) m = this.transform = identity` }
+    if AEl.HasTransform then m := AEl.Transform else m := TyMatIdentity;
+    m[4] := m[4] + ADX;
+    m[5] := m[5] + ADY;
+    AEl.Transform := m;
+    AEl.HasTransform := True;
+    { decomposeTransform }
+    if (AEl.Parent <> nil) and AEl.Parent.HasTransform then
+    begin
+      if not TyMatInvert(AEl.Parent.Transform, inv) then inv := TyMatIdentity;
+      m := TyMatMul(inv, m);
+    end;
+    ox := AEl.OriginX;
+    oy := AEl.OriginY;
+    if ((ox <> 0) and not IsNan(ox)) or ((oy <> 0) and not IsNan(oy)) then
+    begin
+      o := TyMatIdentity;
+      o[4] := ox;
+      o[5] := oy;
+      m := TyMatMul(m, o);
+      m[4] := m[4] - ox;
+      m[5] := m[5] - oy;
+    end;
+    { setLocalTransform }
+    sx := m[0] * m[0] + m[1] * m[1];
+    sy := m[2] * m[2] + m[3] * m[3];
+    rot := TyJsAtan2(m[1], m[0]);
+    shear := Pi / 2 + rot - TyJsAtan2(m[3], m[2]);
+    sy := Sqrt(sy) * TyJsCos(shear);
+    sx := Sqrt(sx);
+    AEl.SkewX := shear;
+    AEl.SkewY := 0;
+    AEl.Rotation := -rot;
+    AEl.X := m[4];
+    AEl.Y := m[5];
+    AEl.ScaleX := sx;
+    AEl.ScaleY := sy;
+    AEl.OriginX := 0;
+    AEl.OriginY := 0;
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
+end;
+
+{ [spec 242] Storage._updateAndAddDisplayable's clip paths: every
+  element's own up the chain (a label's host, then the parents), each
+  turned by its own transform under its element's, as a filled path }
+procedure GfxClipPathsOf(AEl: TTyGfxEl; AScale: Double; var AList: TTyChartShapeArray);
+var
+  q, c: TTyGfxEl;
+  need, has: Boolean;
+  t, m: TTyMat2D;
+  cmds: TTyPathCmdArray;
+  pts: TTyPointFArray;
+  sh: TTyChartShape;
+  n: Integer;
+begin
+  q := AEl;
+  while q <> nil do
+  begin
+    c := q.ClipPath;
+    if c <> nil then
+    begin
+      need := TyGfxNeedLocal(c);
+      has := True;
+      if q.HasTransform and need then t := TyMatMul(q.Transform, TyGfxLocalTransform(c))
+      else if q.HasTransform then t := q.Transform
+      else if need then t := TyGfxLocalTransform(c)
+      else has := False;
+      m := DeviceOf(c, has, t, AScale);
+      TyGfxPathCmds(TyGfxPath(c), m, cmds, pts);
+      sh := TyShapePolygon(pts);
+      sh.Cmds := cmds;
+      sh.HitNonZero := True;
+      n := Length(AList);
+      SetLength(AList, n + 1);
+      AList[n] := sh;
+    end;
+    if q.Host <> nil then q := q.Host else q := q.Parent;
+  end;
 end;
 
 function TyGfxPaintElement(AEl: TTyGfxEl; const AMeasurer: ITyTextMeasurer;
@@ -2607,6 +3190,31 @@ begin
           AOut.Style.FillPattern.Repetition := 'no-repeat';
           AOut.Style.FillPattern.HasMatrix := True;
           AOut.Style.FillPattern.UnitImage := True;
+          { [spec 242] brushImage's source rect: sWidth and sHeight both
+            truthy -- `sx || 0`, `sy || 0` and the two; else sx and sy both
+            truthy -- the rest of the DRAWN size past them (width - sx,
+            height - sy), upstream's own arithmetic }
+          if JsTruthy(AEl.Style.Find('sWidth')) and JsTruthy(AEl.Style.Find('sHeight')) then
+          begin
+            AOut.Style.FillPattern.HasCrop := True;
+            AOut.Style.FillPattern.CropX := CropNum(AEl.Style.Find('sx'));
+            AOut.Style.FillPattern.CropY := CropNum(AEl.Style.Find('sy'));
+            AOut.Style.FillPattern.CropW := CropToNum(AEl.Style.Find('sWidth'));
+            AOut.Style.FillPattern.CropH := CropToNum(AEl.Style.Find('sHeight'));
+          end
+          else if JsTruthy(AEl.Style.Find('sx')) and JsTruthy(AEl.Style.Find('sy')) then
+          begin
+            AOut.Style.FillPattern.HasCrop := True;
+            AOut.Style.FillPattern.CropX := CropToNum(AEl.Style.Find('sx'));
+            AOut.Style.FillPattern.CropY := CropToNum(AEl.Style.Find('sy'));
+            AOut.Style.FillPattern.CropW := w - AOut.Style.FillPattern.CropX;
+            AOut.Style.FillPattern.CropH := h - AOut.Style.FillPattern.CropY;
+          end;
+          if AOut.Style.FillPattern.HasCrop then
+            with AOut.Style.FillPattern do
+              CropOk := not (IsNan(CropX) or IsNan(CropY) or IsNan(CropW) or IsNan(CropH)
+                or IsInfinite(CropX) or IsInfinite(CropY) or IsInfinite(CropW)
+                or IsInfinite(CropH));
           { the unit square onto the box, through the transform, in css px }
           AOut.Style.FillPattern.Matrix[0] := m[0] * w / ACtx.Scale;
           AOut.Style.FillPattern.Matrix[1] := m[1] * w / ACtx.Scale;
@@ -2720,7 +3328,12 @@ begin
   AOut.Silent := False;
   { [F6a] the element's own cursor, 'pointer' by the prototype }
   if AEl.Cursor <> 'pointer' then AOut.Cursor := AEl.Cursor;
+  { [spec 242] the clip paths down to it }
+  GfxClipPathsOf(AEl, ACtx.Scale, AOut.ClipPaths);
   Result := True;
 end;
+
+finalization
+  FreeAndNil(GDurings);
 
 end.

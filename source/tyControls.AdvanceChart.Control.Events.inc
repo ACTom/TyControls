@@ -1096,6 +1096,9 @@ begin
           { a gauge's arc is a dispatcher of its own [F2b] }
           Result.HdPeer := el.Anim.Role = carGaugeProgress;
           if d.DataIndex >= 0 then Result.HdKind := 1 else Result.HdKind := 2;
+          { [spec 242] a lines effect symbol: the row's events and tooltip,
+            a click selects (its `selected` is the row's), no emphasis }
+          if el.Anim.Role = carLinesEffect then Result.HdKind := 31;
         end;
       ctkMarkPoint, ctkMarkLine, ctkMarkArea:
         { [R2-B] its own function: the keyboard's marker stop takes it too }
@@ -1462,8 +1465,6 @@ var
 begin
   FEvLastX := AX;
   FEvLastY := AY;
-  { a graphic element dragged [Batch 122] }
-  GfxDragMove(AX, AY);
   { a label dragged [R5-C] }
   LbDragMove(AX, AY);
   { zrender #6198: a hovered element an update removed (a visualMap view
@@ -1519,6 +1520,9 @@ begin
   VmElementEvent('mousemove', t, AX, AY);
   cancel := GfxElementEvent('mousemove', t, AX, AY);
   VmDragMove(AX, AY);
+  { [spec 242] a graphic element dragged: the Handler-level listener the
+    element's handlers can stop, after them [Batch 122: before everything] }
+  if not cancel then GfxDragMove(AX, AY);
   { [Batch 150] zrender's zr-level mousemove: a geo's RoamController pans
     here -- after the out, before echarts' own mousemove (registered
     zrEventfulCallAtLast) and before the over, both of which name what was
@@ -1580,11 +1584,17 @@ begin
   FEvDownArmed := True;
   FEvDownX := AX;
   FEvDownY := AY;
-  GfxDragStart(t, AX, AY);
   if AButton = mbLeft then LbDragStart(t, AX, AY);
   { the timeline's checkpoint is draggable [Batch 129] }
   if AButton = mbLeft then TlDragStart(t);
-  if GfxElementEvent('mousedown', t, AX, AY) then Exit;
+  { [spec 242] the element's handlers first: one that stops the climb stops
+    the Handler-level listeners too -- no drag starts }
+  if GfxElementEvent('mousedown', t, AX, AY) then
+  begin
+    FGfxDragOn := False;
+    Exit;
+  end;
+  GfxDragStart(t, AX, AY);
   if t.HasData then EmitChartEvent('mousedown', t, AX, AY);
 end;
 
@@ -1601,10 +1611,15 @@ begin
   if AButton = mbLeft then VmDragEnd;
   { the timeline's checkpoint: its dragend changes the index [Batch 129] }
   if AButton = mbLeft then TlDragEnd(AX, AY);
-  FGfxDragOn := False;
   FLbDragOn := False;
-  if not GfxElementEvent('mouseup', t, AX, AY) and t.HasData then
-    EmitChartEvent('mouseup', t, AX, AY);
+  { [spec 242] the element's mouseup, then Draggable._dragEnd (dragend,
+    drop), then echarts' -- a handler that stops the climb leaves the drag
+    going, as upstream's Draggable never hears the release }
+  if not GfxElementEvent('mouseup', t, AX, AY) then
+  begin
+    GfxDragEnd(AX, AY);
+    if t.HasData then EmitChartEvent('mouseup', t, AX, AY);
+  end;
   if AButton <> mbLeft then
   begin
     VmApplyStates;

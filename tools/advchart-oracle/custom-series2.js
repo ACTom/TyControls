@@ -256,6 +256,14 @@ function customInner(el) {
 // ---------------------------------------------------------------------------
 // the renderItems (each mirrored in tests/test.advchart.customseries2.pas)
 // ---------------------------------------------------------------------------
+// [spec 242] `during` handlers a renderItem returns: one function per name,
+// the same across renders (the port's '@durc:NAME', recorded as '<fn>')
+const DURC = {
+  grow: api => { api.setShape('width', 10 + api.getTransform('x') / 20); },
+  arc: api => { const p = api.getExtra('p'); api.setShape('r', 3 + 9 * p); api.setStyle('opacity', p); },
+};
+// a 2 x 2 PNG, four colours
+const IMG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFUlEQVR42mP4z8AAQv8ZGBYw/AcBAEcvCZiaeHRuAAAAAElFTkSuQmCC';
 const RENDER = {
   // a sector per item on a polar: the radius axis' value, the angle's
   // category band (api.size in radians), barLayout (undefined off a cartesian)
@@ -320,6 +328,51 @@ const RENDER = {
       info: { sym: sym === undefined ? null : sym } };
     if (st.opacity != null) el.style.opacity = st.opacity;
     return el;
+  },
+  // [spec 242] api.visual('visualMeta'): the series data's list of what
+  // the visualMaps on it give a line's gradient, read once per item
+  vmMeta(params, api) {
+    api.visual('visualMeta');
+    const p = api.coord([api.value(0), api.value(1)]);
+    return { type: 'circle', shape: { cx: p[0], cy: p[1], r: 4 }, style: { fill: api.visual('color') } };
+  },
+  // [spec 242] a `during` on an entering rect (its width follows its x)
+  // and on a circle with an animated extra
+  durRI(params, api) {
+    const p = api.coord([api.value(0), api.value(1)]);
+    if (params.dataIndex === 0) {
+      return { type: 'rect', x: p[0], y: p[1], enterFrom: { x: 0 }, during: DURC.grow,
+        shape: { x: -10, y: -10, width: 20, height: 20 }, style: { fill: api.visual('color') } };
+    }
+    return { type: 'circle', x: p[0], y: p[1], extra: { p: 1, enterFrom: { p: 0 } }, during: DURC.arc,
+      shape: { cx: 0, cy: 0, r: 3 }, style: { fill: '#91cc75' } };
+  },
+  // [spec 242] a text's and an image's states: the text's emphasis fill
+  // and stroke over its block (a rich token's own fill stays), its blur
+  // opacity; a text with no style of its own; an image's emphasis opacity;
+  // z2 lifted by 1 on each
+  textRI(params, api) {
+    const p = api.coord([api.value(0), api.value(1)]);
+    return { type: 'group', x: p[0], y: p[1], focus: 'self', children: [
+      { type: 'rect', shape: { x: -30, y: -15, width: 60, height: 30 }, style: { fill: api.visual('color') } },
+      { type: 'text', style: { text: '{a|rich} plain', x: -30, y: 18, fill: '#333', rich: { a: { fill: '#00f' } } },
+        emphasis: { style: { fill: '#f00', stroke: '#0f0', lineWidth: 1 } }, blur: { style: { opacity: 0.5 } } },
+      { type: 'text', style: { text: 'no style', x: -30, y: 34 } },
+      { type: 'image', style: { image: IMG, x: 32, y: -15, width: 20, height: 20 }, emphasis: { style: { opacity: 0.3 } } }] };
+  },
+  // [spec 242] clipPath on a rect (a circle whose r is the third value) and
+  // on a group (a rect, or false when the third value is 1: removed)
+  clipRI(params, api) {
+    const p = api.coord([api.value(0), api.value(1)]);
+    const k = api.value(2);
+    if (params.dataIndex === 0) {
+      return { type: 'rect', x: p[0], y: p[1], shape: { x: -40, y: -20, width: 80, height: 40 }, style: { fill: api.visual('color') },
+        clipPath: { type: 'circle', shape: { cx: 0, cy: 0, r: 15 + 10 * k } } };
+    }
+    return { type: 'group', x: p[0], y: p[1], clipPath: k ? false : { type: 'rect', shape: { x: -30, y: -15, width: 30, height: 30 } },
+      children: [
+        { type: 'rect', shape: { x: -30, y: -15, width: 60, height: 30 }, style: { fill: '#91cc75' } },
+        { type: 'text', style: { text: 'clipped text', x: -30, y: 0, fontSize: 12 } }] };
   },
   // entering: the root's and the style's enterFrom with an enterAnimation
   // of its own, a shape's enterFrom on the series' timing, a group scaled in
@@ -536,6 +589,11 @@ function elRec(el, key) {
     r.style = textStyleRec(el.style);
     r.pieces = piecesOf(el);
   }
+  // [spec 242] an image: its box and opacity (no shape, no path)
+  else if (el.type === 'image') {
+    const s = el.style;
+    r.image = { x: hexN(s.x), y: hexN(s.y), width: hexN(s.width), height: hexN(s.height), opacity: hex(opac(s)) };
+  }
   else if (!el.isGroup) {
     const s = el.style;
     r.shape = shapeRec(el.shape);
@@ -548,6 +606,13 @@ function elRec(el, key) {
   r.ec = ecd ? { seriesIndex: ecd.seriesIndex == null ? null : ecd.seriesIndex, dataIndex: ecd.dataIndex == null ? null : ecd.dataIndex } : null;
   const inn = customInner(el);
   r.info = inn && inn.info !== undefined ? JSON.stringify(inn.info) : null;
+  // [spec 242] its clipPath, only where it has one
+  const cp = el.getClipPath();
+  if (cp) {
+    cp.getBoundingRect();
+    r.clip = { type: cp.type, transform: cp.transform ? Array.from(cp.transform).map(hex) : null,
+      path: pathData(cp).map(hex) };
+  }
   return r;
 }
 function customSeries(chart) {
@@ -610,14 +675,28 @@ function readClips(chart) {
   return customSeries(chart).map(s => {
     const view = chart.getViewOfSeriesModel(s);
     const cp = view && view.group.getClipPath();
+    // [spec 242] a polar's clip is a sector
+    if (cp && cp.type === 'sector') {
+      const q = cp.shape;
+      return { s: s.seriesIndex, rect: null, sector: [q.cx, q.cy, q.r0, q.r, q.startAngle, q.endAngle].map(hex).concat([!!q.clockwise]) };
+    }
     return { s: s.seriesIndex, rect: cp ? [cp.shape.x, cp.shape.y, cp.shape.width, cp.shape.height].map(hex) : null };
   });
 }
+// [spec 242] a text too: updateElOnState gives every displayable its states
+// (a label, a textContent, is its host's and stays out)
 function readSt(chart) {
-  return keyedTree(chart).filter(q => !q.el.isGroup && q.el.type !== 'text').map(q => {
+  return keyedTree(chart).filter(q => !q.el.isGroup && !/#label$/.test(q.key)).map(q => {
     const s = q.el.style;
-    return { key: q.key, states: (q.el.currentStates || []).slice(), fill: colourOf(s.fill), stroke: colourOf(s.stroke),
+    const r = { key: q.key, states: (q.el.currentStates || []).slice(), fill: colourOf(s.fill), stroke: colourOf(s.stroke),
       lineWidth: hexN(s.lineWidth), opacity: hex(opac(s)), z2: q.el.z2 };
+    // a rich text's runs as drawn: each tspan's fill (a token with its own
+    // fill keeps it through the states)
+    if (q.el.type === 'text' && s.rich) {
+      q.el.update();
+      r.runs = q.el.childrenRef().filter(c => c.type === 'tspan').map(c => ({ text: String(c.style.text), fill: colourOf(c.style.fill) }));
+    }
+    return r;
   });
 }
 
@@ -837,6 +916,40 @@ add('hover', 'tooltip', "tooltipDisabled: on a root, on one child of a group (it
 add('coords', 'none-null', "coordinateSystem null: no coordSys (the key the option has keeps the default out), as 'none'; a hover",
   { series: [{ type: 'custom', coordinateSystem: null, renderItem: '@free', data: [[50, 60, 120], [200, 100, 80], [320, 240, 40]] }] },
   { steps: [{ move: 's0:1' }] });
+// [spec 242]
+add('visual', 'visualmeta', "api.visual('visualMeta'): a continuous visualMap (201 stops, outerColors the end stops), a piecewise one (each finite piece two stops in its colour as written, an open end an outer colour, an end nothing colours ''), a continuous one with a narrower range and an outOfRange colour; the second series none: []",
+  { xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
+    visualMap: [{ type: 'continuous', show: false, seriesIndex: 0, dimension: 2, min: 0, max: 10, inRange: { color: ['#e0ffff', '#006edd'] } },
+      { type: 'piecewise', show: false, seriesIndex: 0, dimension: 1, pieces: [{ min: 0, max: 5, color: 'red' }, { min: 5, color: '#00ff00' }] },
+      { type: 'continuous', show: false, seriesIndex: 0, dimension: 0, min: 2, max: 8, range: [3, 6], inRange: { color: ['#000', '#fff', 'rgba(255,0,0,0.5)'] }, outOfRange: { color: '#999' } }],
+    series: [{ type: 'custom', renderItem: '@vmMeta', data: [[1, 2, 3], [5, 6, 7]] },
+      { type: 'custom', renderItem: '@vmMeta', data: [[8, 8, 8]] }] });
+add('coords', 'polar-clip', "clip: true on a polar: createPolarClipPath's sector (the centre and radii to one decimal, the angles turned) -- a sector past the radius axis' max is cut there; an anticlockwise polar beside it",
+  { polar: [{ radius: [20, '40%'], center: ['30%', '50%'] }, { radius: [10, '35%'], center: ['75%', '50%'] }],
+    angleAxis: [{ polarIndex: 0, type: 'category', data: ['a', 'b', 'c', 'd'], startAngle: 75 }, { polarIndex: 1, type: 'category', data: ['a', 'b', 'c', 'd'], clockwise: false }],
+    radiusAxis: [{ polarIndex: 0, type: 'value', min: 0, max: 10 }, { polarIndex: 1, type: 'value', min: 0, max: 10 }],
+    series: [{ type: 'custom', coordinateSystem: 'polar', polarIndex: 0, clip: true, renderItem: '@polarBar', data: [[3, 0], [14, 1], [5, 2], [9, 3]] },
+      { type: 'custom', coordinateSystem: 'polar', polarIndex: 1, clip: true, renderItem: '@polarBar', data: [[12, 0], [7, 1]] }] });
+// [spec 242] a centre and radii that are no whole px: toFixed(1) shows
+add('coords', 'polar-clip-frac', "clip: true on a polar whose centre and radii fall between px: the clip sector's centre and radii to one decimal",
+  { polar: [{ radius: [13.37, '41.73%'], center: ['31.37%', '47.91%'] }],
+    angleAxis: [{ type: 'category', data: ['a', 'b', 'c', 'd'], startAngle: 60 }],
+    radiusAxis: [{ type: 'value', min: 0, max: 10 }],
+    series: [{ type: 'custom', coordinateSystem: 'polar', clip: true, renderItem: '@polarBar', data: [[13, 0], [4, 1], [11, 2], [8, 3]] }] });
+// [spec 242]
+add('anim', 'during', "during on custom elements: getElementAnimationConfig binds it on the enter (the series' timing above 0) and on an update with the default transition ['x', 'y']; a circle's r and opacity follow its extra",
+  { animation: true, xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
+    series: [{ type: 'custom', renderItem: '@durRI', data: [[2, 3], [6, 6]] }] },
+  { samples: SAMPLES, steps: [{ wait: 2000 }, { merge: { series: [{ data: [[5, 7], [3, 2]] }] } }] });
+add('hover', 'clippath', "clipPath on custom elements: a rect cut to a circle (the pointer outside the circle misses it), a group cut to a rect (its child and text cut, the pointer past the clip misses); then an update growing the circle and giving the group clipPath false (removed: the pointer there hits)",
+  { grid: { left: 60, right: 40, top: 60, bottom: 60 }, xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
+    series: [{ type: 'custom', renderItem: '@clipRI', data: [[3, 5, 0], [7, 5, 0]] }] },
+  { steps: [{ move: [240, 200] }, { move: [210, 200] }, { move: [430, 195] }, { move: [395, 195] }, { leave: true },
+    { merge: { series: [{ data: [[3, 5, 1], [7, 5, 1]] }] } }, { move: [232, 200] }, { move: [430, 195] }, { leave: true }] });
+add('hover', 'text-states', "a custom text's and image's states: hovering an item's rect puts its texts and its image into emphasis (the text's own emphasis fill and stroke on its block, a rich token's fill kept; the image's emphasis opacity; z2 + 1 on each) and blurs the other item's (its text's blur opacity 0.5, the others a tenth)",
+  { grid: { left: 60, right: 40, top: 60, bottom: 60 }, xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
+    series: [{ type: 'custom', renderItem: '@textRI', data: [[3, 5], [7, 5]] }] },
+  { steps: [{ move: [210, 200] }, { leave: true }, { move: [410, 200] }, { leave: true }] });
 
 // ---------------------------------------------------------------------------
 // one case

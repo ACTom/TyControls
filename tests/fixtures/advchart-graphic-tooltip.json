@@ -1,0 +1,794 @@
+{
+ "source": "ECharts 6.1.0, zrender 6.1.0",
+ "W": 600,
+ "H": 400,
+ "measure": {
+  "firstCode": 32,
+  "ratio": [
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fd6666666666666",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fec7ae147ae147b",
+   "3fe570a3d70a3d71",
+   "3fc851eb851eb852",
+   "3fd51eb851eb851f",
+   "3fd51eb851eb851f",
+   "3fd8f5c28f5c28f6",
+   "3fe28f5c28f5c28f",
+   "3fd1eb851eb851ec",
+   "3fd51eb851eb851f",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fe28f5c28f5c28f",
+   "3fe28f5c28f5c28f",
+   "3fe28f5c28f5c28f",
+   "3fe1eb851eb851ec",
+   "3ff051eb851eb852",
+   "3fe570a3d70a3d71",
+   "3fe570a3d70a3d71",
+   "3fe70a3d70a3d70a",
+   "3fe70a3d70a3d70a",
+   "3fe570a3d70a3d71",
+   "3fe3851eb851eb85",
+   "3fe8f5c28f5c28f6",
+   "3fe70a3d70a3d70a",
+   "3fd1eb851eb851ec",
+   "3fe0000000000000",
+   "3fe570a3d70a3d71",
+   "3fe1eb851eb851ec",
+   "3fea8f5c28f5c28f",
+   "3fe70a3d70a3d70a",
+   "3fe8f5c28f5c28f6",
+   "3fe570a3d70a3d71",
+   "3fe8f5c28f5c28f6",
+   "3fe70a3d70a3d70a",
+   "3fe570a3d70a3d71",
+   "3fe3851eb851eb85",
+   "3fe70a3d70a3d70a",
+   "3fe570a3d70a3d71",
+   "3fee147ae147ae14",
+   "3fe570a3d70a3d71",
+   "3fe570a3d70a3d71",
+   "3fe3851eb851eb85",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fde147ae147ae14",
+   "3fe1eb851eb851ec",
+   "3fd51eb851eb851f",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe0000000000000",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fd1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fcc28f5c28f5c29",
+   "3fcc28f5c28f5c29",
+   "3fe0000000000000",
+   "3fcc28f5c28f5c29",
+   "3fea8f5c28f5c28f",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fd51eb851eb851f",
+   "3fe0000000000000",
+   "3fd1eb851eb851ec",
+   "3fe1eb851eb851ec",
+   "3fe0000000000000",
+   "3fe70a3d70a3d70a",
+   "3fe0000000000000",
+   "3fe0000000000000",
+   "3fe0000000000000",
+   "3fd51eb851eb851f",
+   "3fd0a3d70a3d70a4",
+   "3fd51eb851eb851f",
+   "3fe28f5c28f5c28f"
+  ]
+ },
+ "cases": [
+  {
+   "id": "named",
+   "note": "a named element: the content is its name",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "graphic": [
+     {
+      "type": "rect",
+      "id": "a",
+      "shape": {
+       "x": 20,
+       "y": 20,
+       "width": 80,
+       "height": 50
+      },
+      "style": {
+       "fill": "#5070dd"
+      },
+      "name": "Alpha"
+     }
+    ]
+   },
+   "target": "a",
+   "point": [
+    60,
+    45
+   ],
+   "tip": {
+    "text": "Alpha"
+   }
+  },
+  {
+   "id": "unnamed",
+   "note": "no name: an empty box",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "graphic": [
+     {
+      "type": "rect",
+      "id": "a",
+      "shape": {
+       "x": 20,
+       "y": 20,
+       "width": 80,
+       "height": 50
+      },
+      "style": {
+       "fill": "#5070dd"
+      }
+     }
+    ]
+   },
+   "target": "a",
+   "point": [
+    60,
+    45
+   ],
+   "tip": {
+    "text": ""
+   }
+  },
+  {
+   "id": "formatter",
+   "note": "the element's formatter: {a} is the name, {b} is no variable",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "graphic": [
+     {
+      "type": "rect",
+      "id": "a",
+      "shape": {
+       "x": 20,
+       "y": 20,
+       "width": 80,
+       "height": 50
+      },
+      "style": {
+       "fill": "#5070dd"
+      },
+      "name": "Alpha",
+      "tooltip": {
+       "formatter": "I am {b} ({a})"
+      }
+     }
+    ]
+   },
+   "target": "a",
+   "point": [
+    60,
+    45
+   ],
+   "tip": {
+    "text": "I am {b} (Alpha)"
+   }
+  },
+  {
+   "id": "string",
+   "note": "a string tooltip is the formatter",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "graphic": [
+     {
+      "type": "rect",
+      "id": "a",
+      "shape": {
+       "x": 20,
+       "y": 20,
+       "width": 80,
+       "height": 50
+      },
+      "style": {
+       "fill": "#5070dd"
+      },
+      "name": "Alpha",
+      "tooltip": "plain words"
+     }
+    ]
+   },
+   "target": "a",
+   "point": [
+    60,
+    45
+   ],
+   "tip": {
+    "text": "plain words"
+   }
+  },
+  {
+   "id": "show-false",
+   "note": "the element's show false: none",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "graphic": [
+     {
+      "type": "rect",
+      "id": "a",
+      "shape": {
+       "x": 20,
+       "y": 20,
+       "width": 80,
+       "height": 50
+      },
+      "style": {
+       "fill": "#5070dd"
+      },
+      "name": "Alpha",
+      "tooltip": {
+       "show": false
+      }
+     }
+    ]
+   },
+   "target": "a",
+   "point": [
+    60,
+    45
+   ],
+   "tip": null
+  },
+  {
+   "id": "no-component",
+   "note": "no tooltip component: none",
+   "option": {
+    "animation": false,
+    "graphic": [
+     {
+      "type": "rect",
+      "id": "a",
+      "shape": {
+       "x": 20,
+       "y": 20,
+       "width": 80,
+       "height": 50
+      },
+      "style": {
+       "fill": "#5070dd"
+      },
+      "name": "Alpha",
+      "tooltip": {
+       "show": true
+      }
+     }
+    ]
+   },
+   "target": "a",
+   "point": [
+    60,
+    45
+   ],
+   "tip": null
+  },
+  {
+   "id": "global-show-false",
+   "note": "the global show false, the element's true: shown",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "show": false,
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "graphic": [
+     {
+      "type": "rect",
+      "id": "a",
+      "shape": {
+       "x": 20,
+       "y": 20,
+       "width": 80,
+       "height": 50
+      },
+      "style": {
+       "fill": "#5070dd"
+      },
+      "name": "Alpha",
+      "tooltip": {
+       "show": true
+      }
+     }
+    ]
+   },
+   "target": "a",
+   "point": [
+    60,
+    45
+   ],
+   "tip": {
+    "text": "Alpha"
+   }
+  },
+  {
+   "id": "component",
+   "note": "the graphic component's own tooltip under the element's",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "graphic": {
+     "tooltip": {
+      "formatter": "cmp {a}"
+     },
+     "elements": [
+      {
+       "type": "rect",
+       "id": "a",
+       "shape": {
+        "x": 20,
+        "y": 20,
+        "width": 80,
+        "height": 50
+       },
+       "style": {
+        "fill": "#5070dd"
+       },
+       "name": "Alpha"
+      }
+     ]
+    }
+   },
+   "target": "a",
+   "point": [
+    60,
+    45
+   ],
+   "tip": {
+    "text": "cmp Alpha"
+   }
+  },
+  {
+   "id": "group-child",
+   "note": "a group's child: its own config (the first dispatcher), not the group's",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "graphic": [
+     {
+      "type": "group",
+      "id": "g",
+      "name": "grp",
+      "tooltip": {
+       "formatter": "group!"
+      },
+      "children": [
+       {
+        "type": "rect",
+        "id": "k",
+        "shape": {
+         "x": 20,
+         "y": 20,
+         "width": 80,
+         "height": 50
+        },
+        "style": {
+         "fill": "#5070dd"
+        },
+        "name": "kid"
+       }
+      ]
+     }
+    ]
+   },
+   "target": "k",
+   "point": [
+    60,
+    45
+   ],
+   "tip": {
+    "text": "kid"
+   }
+  },
+  {
+   "id": "encoded",
+   "note": "the name HTML-encoded into the template",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "graphic": [
+     {
+      "type": "rect",
+      "id": "a",
+      "shape": {
+       "x": 20,
+       "y": 20,
+       "width": 80,
+       "height": 50
+      },
+      "style": {
+       "fill": "#5070dd"
+      },
+      "name": "A<B",
+      "tooltip": {
+       "formatter": "[{a}]"
+      }
+     }
+    ]
+   },
+   "target": "a",
+   "point": [
+    60,
+    45
+   ],
+   "tip": {
+    "text": "[A&lt;B]"
+   }
+  },
+  {
+   "id": "global-formatter",
+   "note": "the global formatter is never reached: the content level has one",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "formatter": "global {a}",
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "graphic": [
+     {
+      "type": "rect",
+      "id": "a",
+      "shape": {
+       "x": 20,
+       "y": 20,
+       "width": 80,
+       "height": 50
+      },
+      "style": {
+       "fill": "#5070dd"
+      },
+      "name": "Alpha"
+     }
+    ]
+   },
+   "target": "a",
+   "point": [
+    60,
+    45
+   ],
+   "tip": {
+    "text": "Alpha"
+   }
+  },
+  {
+   "id": "text",
+   "note": "a text element: its name",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "graphic": [
+     {
+      "type": "text",
+      "id": "t",
+      "name": "Tee",
+      "x": 100,
+      "y": 100,
+      "style": {
+       "text": "Hello there",
+       "fontSize": 20
+      }
+     }
+    ]
+   },
+   "target": "t",
+   "point": [
+    149,
+    110
+   ],
+   "tip": {
+    "text": "Tee"
+   }
+  },
+  {
+   "id": "label",
+   "note": "a host's textContent: the host's tooltip",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "graphic": [
+     {
+      "type": "rect",
+      "id": "h",
+      "shape": {
+       "x": 200,
+       "y": 200,
+       "width": 80,
+       "height": 50
+      },
+      "style": {
+       "fill": "#5070dd"
+      },
+      "name": "Host",
+      "textContent": {
+       "style": {
+        "text": "label text",
+        "fontSize": 14
+       }
+      },
+      "textConfig": {
+       "position": "bottom"
+      }
+     }
+    ]
+   },
+   "target": null,
+   "point": [
+    240,
+    262
+   ],
+   "tip": {
+    "text": "Host"
+   }
+  },
+  {
+   "id": "silent",
+   "note": "a silent element answers nothing",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "graphic": [
+     {
+      "type": "rect",
+      "id": "a",
+      "shape": {
+       "x": 20,
+       "y": 20,
+       "width": 80,
+       "height": 50
+      },
+      "style": {
+       "fill": "#5070dd"
+      },
+      "name": "Alpha",
+      "silent": true
+     }
+    ]
+   },
+   "target": "a",
+   "point": [
+    60,
+    45
+   ],
+   "tip": null
+  },
+  {
+   "id": "click",
+   "note": "triggerOn 'click': a move shows nothing",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "triggerOn": "click",
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "graphic": [
+     {
+      "type": "rect",
+      "id": "a",
+      "shape": {
+       "x": 20,
+       "y": 20,
+       "width": 80,
+       "height": 50
+      },
+      "style": {
+       "fill": "#5070dd"
+      },
+      "name": "Alpha"
+     }
+    ]
+   },
+   "target": "a",
+   "point": [
+    60,
+    45
+   ],
+   "tip": null
+  },
+  {
+   "id": "number-name",
+   "note": "a numeric name",
+   "option": {
+    "animation": false,
+    "tooltip": {
+     "hideDelay": 0,
+     "position": [
+      5,
+      5
+     ]
+    },
+    "graphic": [
+     {
+      "type": "rect",
+      "id": "a",
+      "shape": {
+       "x": 20,
+       "y": 20,
+       "width": 80,
+       "height": 50
+      },
+      "style": {
+       "fill": "#5070dd"
+      },
+      "name": 42
+     }
+    ]
+   },
+   "target": "a",
+   "point": [
+    60,
+    45
+   ],
+   "tip": {
+    "text": "42"
+   }
+  }
+ ],
+ "guards": [
+  {
+   "name": "the name is the content",
+   "ok": true
+  },
+  {
+   "name": "no name: an empty box",
+   "ok": true
+  },
+  {
+   "name": "{a} is the name",
+   "ok": true
+  },
+  {
+   "name": "a string is the formatter",
+   "ok": true
+  },
+  {
+   "name": "show false: none",
+   "ok": true
+  },
+  {
+   "name": "no component: none",
+   "ok": true
+  },
+  {
+   "name": "the component level",
+   "ok": true
+  },
+  {
+   "name": "a group's child is its own",
+   "ok": true
+  },
+  {
+   "name": "encoded",
+   "ok": true
+  },
+  {
+   "name": "the global formatter is not reached",
+   "ok": true
+  },
+  {
+   "name": "a label is its host's",
+   "ok": true
+  },
+  {
+   "name": "silent: none",
+   "ok": true
+  },
+  {
+   "name": "triggerOn 'click': none on a move",
+   "ok": true
+  }
+ ]
+}

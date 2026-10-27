@@ -26,7 +26,11 @@ unit test.advchart.sampling;
   A LAYOUT POINT upstream keeps the coordinate it could map beside the NaN
   (dataToPoint([x, NaN]) is [x, NaN]); the port writes both NaN. Either is an
   illegal point, which is all anything reads off it, so an illegal point is
-  compared as illegal. }
+  compared as illegal.
+
+  FUNCTION SAMPLERS [spec 242]: the oracle feeds `sampling: '@Name'` as
+  the function of that name; the suite registers the same four (Last, Len,
+  Ends, NaNs) for the length of each test. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -248,7 +252,7 @@ begin
           + TySamplingModeName(mode) + ' here');
       view := IntsOf(st.Arrays['rawIndices']);
       col := HexesOf(st.Arrays['column']);
-      res := TySampleView(mode, view, col, arg);
+      res := TySampleView(mode, view, col, arg, TySamplerHandlerOf(se.Find('samplingOption')));
       if not IsNull(se.Find('sampledStore')) then
         want := IntsOf(se.Objects['sampledStore'].Arrays['indices'])
       else
@@ -946,10 +950,51 @@ begin
   end;
 end;
 
+type
+  { the oracle's FN_SAMPLERS, transcribed }
+  TSmpFns = class
+  public
+    function Last(const AFrame: TTyDoubleArray): Double;
+    function Len(const AFrame: TTyDoubleArray): Double;
+    function Ends(const AFrame: TTyDoubleArray): Double;
+    function NaNs(const AFrame: TTyDoubleArray): Double;
+  end;
+
+function TSmpFns.Last(const AFrame: TTyDoubleArray): Double;
+begin
+  Result := AFrame[High(AFrame)];
+end;
+
+function TSmpFns.Len(const AFrame: TTyDoubleArray): Double;
+begin
+  Result := Length(AFrame);
+end;
+
+function TSmpFns.Ends(const AFrame: TTyDoubleArray): Double;
+begin
+  Result := (AFrame[0] + AFrame[High(AFrame)]) / 2;
+end;
+
+function TSmpFns.NaNs(const AFrame: TTyDoubleArray): Double;
+var i, n: Integer;
+begin
+  n := 0;
+  for i := 0 to High(AFrame) do
+    if IsNan(AFrame[i]) then Inc(n);
+  Result := n;
+end;
+
+var
+  GSmpFns: TSmpFns;
+
 procedure TAdvChartSamplingOracleTest.SetUp;
 var sl: TStringList;
 begin
   inherited SetUp;
+  TyChartRegisterSampler('Last', @GSmpFns.Last);
+  TyChartRegisterSampler('Len', @GSmpFns.Len);
+  TyChartRegisterSampler('Ends', @GSmpFns.Ends);
+  TyChartRegisterSampler('NaNs', @GSmpFns.NaNs);
   FForm := TForm.CreateNew(nil);
   FCtl := TTyStyleController.Create(nil);
   FCtl.Mode := 'light';
@@ -986,6 +1031,10 @@ end;
 
 procedure TAdvChartSamplingOracleTest.TearDown;
 begin
+  TyChartUnregisterSampler('Last');
+  TyChartUnregisterSampler('Len');
+  TyChartUnregisterSampler('Ends');
+  TyChartUnregisterSampler('NaNs');
   FreeAndNil(FRoot);
   FreeAndNil(FMeasure);
   FreeAndNil(FBmp);
@@ -996,5 +1045,8 @@ begin
 end;
 
 initialization
+  GSmpFns := TSmpFns.Create;
   RegisterTest(TAdvChartSamplingOracleTest);
+finalization
+  GSmpFns.Free;
 end.

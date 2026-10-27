@@ -1304,14 +1304,33 @@ var
   nameProp, nm: string;
   src: TTyGeoSource;
   i, k, n0, r: Integer;
-  found: Boolean;
+  found, fromDataset: Boolean;
+  coord: TTyCoordDimArray;
+  enc: TTySeriesEncode;
 begin
   AStore.AddDimension(TyPieValueDim, ddtFloat);
   SetLength(dims, 1);
   dims[0] := Default(TTySeriesDim);
   dims[0].Name := TyPieValueDim;
   dims[0].Kind := ddtFloat;
-  TyFillSeriesStore(FOption, ASlot, dims, AStore);
+  { [spec 242] createSeriesDataSimply over the series' source: with no data
+    of its own, its dataset -- the encode it writes, else
+    makeSeriesEncodeForNameBased's (the first ordinal column the name, the
+    first number column the value) }
+  fromDataset := (ASlot <= High(FSeriesDataset)) and (FSeriesDataset[ASlot] >= 0);
+  if fromDataset then
+  begin
+    SetLength(coord, 1);
+    coord[0].Name := TyPieValueDim;
+    coord[0].Ordinal := False;
+    enc := TyEncodeOf(FOption, FBindings[ASlot].SeriesIndex, FSources[ASlot], coord);
+    if not enc.Given then
+      enc := TyDefaultEncodeNameBased(FSources[ASlot], FSources[ASlot].DimCount);
+    FEncodes[ASlot] := enc;
+    TyFillStoreFromSource(FSources[ASlot], enc, dims, AStore);
+  end
+  else
+    TyFillSeriesStore(FOption, ASlot, dims, AStore);
   node := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
   if not (node is TJSONObject) then Exit;
   nameMap := nil;
@@ -1337,7 +1356,10 @@ begin
         end;
       if found then Continue;
       r := AStore.AppendRow([NaN]);
-      AStore.SetName(r, nm);
+      { [spec 242] appendData's {name} items: a dataset's rows provider
+        reads them by column, so they come out with no name (and the
+        region keeps no row) }
+      if not fromDataset then AStore.SetName(r, nm);
     end;
   finally
     src.Free;
@@ -1560,6 +1582,13 @@ begin
     begin
       Result.Groups[g].HasFill := True;
       Result.Groups[g].Fill := TyVisualToChart(FVisualRows[ASlot][raw].Color);
+    end
+    { [spec 242] no row (a dataset's appended regions have no names):
+      getItemVisual(-1, 'style') is the data's own, the series' colour }
+    else if encoded and (row < 0) then
+    begin
+      Result.Groups[g].HasFill := True;
+      Result.Groups[g].Fill := TTyChartColor(SeriesColor(si));
     end;
     if not AMap then Continue;
     { resetLabelForRegion: the value not a number, or no legend symbol on
@@ -1621,6 +1650,7 @@ end;
 procedure TTyCustomAdvanceChart.SolveMapGeos(APPI: Integer);
 var
   gi, i, g, k, fi, raw, idx: Integer;
+  gx, gy: Double;
   ref: TTyXYWH;
   nameMap, nm2: TJSONObject;
   node, d: TJSONData;
@@ -1680,6 +1710,31 @@ begin
     end;
     FMapGeos[g] := geo;
     geo.SvgMeasure := @GeoSvgMeasure;
+    { [spec 242] setGeoCoords: every series of the group, in order, its
+      `geoCoord` (ECharts 2's) -- each name's coordinate as written }
+    for k := 0 to High(FMapGroups[g].R) do
+    begin
+      node := FOption.ComponentAt('series', FBindings[FMapGroups[g].R[k]].SeriesIndex);
+      d := nil;
+      if node is TJSONObject then d := TJSONObject(node).Find('geoCoord');
+      if not ((d is TJSONObject) or (d is TJSONArray)) then Continue;
+      for fi := 0 to d.Count - 1 do
+      begin
+        if d is TJSONObject then nm := TJSONObject(d).Names[fi]
+        else nm := IntToStr(fi);
+        if d.Items[fi] is TJSONArray then
+        begin
+          if d.Items[fi].Count > 0 then gx := TyJsonToNumber(TJSONArray(d.Items[fi]).Items[0]) else gx := NaN;
+          if d.Items[fi].Count > 1 then gy := TyJsonToNumber(TJSONArray(d.Items[fi]).Items[1]) else gy := NaN;
+        end
+        else
+        begin
+          gx := NaN;
+          gy := NaN;
+        end;
+        geo.AddGeoCoord(nm, gx, gy);
+      end;
+    end;
     for k := 0 to High(FMapRoam) do
       if (FMapRoam[k].Key = FMapGroups[g].Key) and FMapRoam[k].State.Valid then
         geo.SetRoamOption(FMapRoam[k].State.Centre, FMapRoam[k].State.Zoom);

@@ -2485,6 +2485,98 @@ end;
   key of everything it was drawn from, as the chart's own pictures are. }
 procedure TyRenderCaption(P: TTyPainter; const AElement: TTyChartElement); forward;
 
+{ [spec 242] an element's clip paths intersected into the painter's clip }
+procedure ApplyClipPaths(P: TTyPainter; const AElement: TTyChartElement);
+var k: Integer;
+begin
+  for k := 0 to High(AElement.ClipPaths) do
+  begin
+    P.BeginPath;
+    TyTraceShape(P, AElement.ClipPaths[k]);
+    P.ClipPath(tfrNonZero);
+    P.BeginPath;
+  end;
+end;
+
+{ [spec 242] A CLIPPED BLOCK OF TEXT: the painter writes text straight to
+  its bitmap, past the Canvas2D clip, so the block is drawn on a layer the
+  size of the clips' common box and the layer filled in through them }
+procedure RenderClippedCaption(P: TTyPainter; const AElement: TTyChartElement);
+var
+  r, b: TTyRectF;
+  k, x0, y0, x1, y1, bw, bh, ppi: Integer;
+  sc, ox, oy: Double;
+  e: TTyChartElement;
+  bmp: TBGRABitmap;
+  mp: TTyPainter;
+  pm: array[0..5] of Double;
+begin
+  r := TyShapeBounds(AElement.ClipPaths[0]);
+  for k := 1 to High(AElement.ClipPaths) do
+  begin
+    b := TyShapeBounds(AElement.ClipPaths[k]);
+    r.Left := Max(r.Left, b.Left);
+    r.Top := Max(r.Top, b.Top);
+    r.Right := Min(r.Right, b.Right);
+    r.Bottom := Min(r.Bottom, b.Bottom);
+  end;
+  if IsNan(r.Left + r.Top + r.Right + r.Bottom) or not (r.Right > r.Left)
+    or not (r.Bottom > r.Top) then Exit;
+  ppi := Max(1, Round(P.PPI * P.DeviceScale));
+  sc := ppi / 96;
+  x0 := Floor(r.Left * sc);
+  y0 := Floor(r.Top * sc);
+  x1 := Ceil(r.Right * sc);
+  y1 := Ceil(r.Bottom * sc);
+  { never past the target bitmap }
+  if P.Bitmap <> nil then
+  begin
+    x0 := Max(x0, -2);
+    y0 := Max(y0, -2);
+    x1 := Min(x1, Ceil(P.Bitmap.Width * sc / Max(1, P.DeviceScale * P.PPI / 96)) + 2);
+    y1 := Min(y1, Ceil(P.Bitmap.Height * sc / Max(1, P.DeviceScale * P.PPI / 96)) + 2);
+  end;
+  bw := x1 - x0;
+  bh := y1 - y0;
+  if (bw <= 0) or (bh <= 0) or (bw > 8192) or (bh > 8192) then Exit;
+  ox := x0 / sc;
+  oy := y0 / sc;
+  bmp := TBGRABitmap.Create(bw, bh, BGRAPixelTransparent);
+  mp := TTyPainter.Create;
+  try
+    mp.FastStrokes := P.FastStrokes;
+    mp.BeginPaintOn(nil, Rect(0, 0, bw, bh), ppi, bmp);
+    e := AElement;
+    e.ClipPaths := nil;
+    e.Caption.X := e.Caption.X - ox;
+    e.Caption.Y := e.Caption.Y - oy;
+    TyRenderCaption(mp, e);
+    mp.EndPaint;
+    pm[0] := 1 / sc;
+    pm[1] := 0;
+    pm[2] := 0;
+    pm[3] := 1 / sc;
+    pm[4] := ox;
+    pm[5] := oy;
+    P.SaveState;
+    try
+      ApplyClipPaths(P, AElement);
+      P.BeginPath;
+      P.MoveTo(ox, oy);
+      P.LineTo(ox + bw / sc, oy);
+      P.LineTo(ox + bw / sc, oy + bh / sc);
+      P.LineTo(ox, oy + bh / sc);
+      P.ClosePath;
+      P.FillPathPattern(bmp, 'no-repeat', pm, tfrNonZero);
+    finally
+      P.RestoreState;
+    end;
+  finally
+    mp.Free;
+    bmp.Free;
+  end;
+end;
+
 procedure RenderAffineCaption(P: TTyPainter; const AElement: TTyChartElement);
 var
   a: array[0..5] of Double;
@@ -2745,6 +2837,7 @@ var
   img: TBGRABitmap;
   pm: TTyDoubleArray;
   nw, nh, devW: Double;
+  ca, cd, ctx, cty: Double;
 
   procedure PaintPen; forward;
 
@@ -2792,7 +2885,16 @@ var
           devW := 0;
         { for the raster's pixels (#83); the matrix below maps whichever comes back }
         devW := devW * P.DeviceScale;
+        { [spec 242] a source rect: the box shows CropW of the natural px --
+          the whole image at that many device px per natural one }
+        if AElement.Style.FillPattern.HasCrop and AElement.Style.FillPattern.CropOk
+          and (AElement.Style.FillPattern.CropW > 0)
+          and TyChartImageSize(AElement.Style.FillPattern.Image, nw, nh) then
+          devW := devW * nw / AElement.Style.FillPattern.CropW;
         img := TyChartImage(AElement.Style.FillPattern.Image, devW, nw, nh);
+        { drawImage handed a number that is none draws nothing }
+        if AElement.Style.FillPattern.HasCrop and not AElement.Style.FillPattern.CropOk then
+          img := nil;
         if img <> nil then
         begin
           if AElement.Style.FillPattern.HasMatrix then
@@ -2801,7 +2903,26 @@ var
               the image's size }
             SetLength(pm, 6);
             for gi := 0 to 5 do pm[gi] := AElement.Style.FillPattern.Matrix[gi];
-            if AElement.Style.FillPattern.UnitImage then
+            if AElement.Style.FillPattern.UnitImage and AElement.Style.FillPattern.HasCrop then
+            begin
+              { [spec 242] the source rect onto the unit square: an image px
+                u is natural px u * nw / width, the square's (n - CropX) /
+                CropW }
+              with AElement.Style.FillPattern do
+              begin
+                ca := nw / (img.Width * CropW);
+                cd := nh / (img.Height * CropH);
+                ctx := -CropX / CropW;
+                cty := -CropY / CropH;
+              end;
+              pm[4] := pm[0] * ctx + pm[2] * cty + pm[4];
+              pm[5] := pm[1] * ctx + pm[3] * cty + pm[5];
+              pm[0] := pm[0] * ca;
+              pm[1] := pm[1] * ca;
+              pm[2] := pm[2] * cd;
+              pm[3] := pm[3] * cd;
+            end
+            else if AElement.Style.FillPattern.UnitImage then
             begin
               pm[0] := pm[0] / img.Width;
               pm[1] := pm[1] / img.Width;
@@ -3225,6 +3346,8 @@ begin
       if AElement.HasClip then
         P.ClipRect(Rect(Floor(AElement.ClipRect.Left), Floor(AElement.ClipRect.Top),
           Ceil(AElement.ClipRect.Right), Ceil(AElement.ClipRect.Bottom)));
+      { [spec 242] the clip paths }
+      ApplyClipPaths(P, AElement);
       if AElement.Style.Alpha < 1 then
         P.SetElementAlpha(AElement.Style.Alpha);
       PaintImageInto(P, AElement.Shape.Image, AElement.Shape.Points);
@@ -3272,6 +3395,8 @@ begin
       P.ClipPath(tfrNonZero);
       P.BeginPath;
     end;
+    { [spec 242] the clip paths, each intersected in }
+    ApplyClipPaths(P, AElement);
     if AElement.Style.Alpha < 1 then
       P.SetElementAlpha(AElement.Style.Alpha);
     P.SetLineDash(AElement.Style.DashLogical, AElement.Style.DashOffsetLogical);
@@ -3341,7 +3466,11 @@ begin
     straight to the bitmap rather than through the Canvas2D state, so a caption
     drawn inside the block would ignore the alpha and the dash it appears to be
     inside. Drawing it out here makes the bypass visible instead of hidden. }
-  TyRenderCaption(P, AElement);
+  { [spec 242] which is why a clipped one goes through a layer }
+  if (Length(AElement.ClipPaths) > 0) and (Length(AElement.Caption.RtPieces) > 0) then
+    RenderClippedCaption(P, AElement)
+  else
+    TyRenderCaption(P, AElement);
 end;
 
 procedure TyRenderPaintList(P: TTyPainter; AList: TTyPaintList);

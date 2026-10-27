@@ -264,6 +264,7 @@ begin
           begin
             cur := TyEncodeCursorFor(cursors, ds, FSources[i].LayoutBy);
             enc := TyDefaultEncodeAxis(cursors[cur], coord);
+            TyEncodeDropPast(enc, FSources[i].DimCount);
           end;
           if enc.Given then TyEncodeFillUnclaimed(enc, FSources[i].DimCount);
           FEncodes[i] := enc;
@@ -507,6 +508,8 @@ begin
         inside F leaves the write going to freed memory. }
       cur := TyEncodeCursorFor(cursors, ds, FSources[i].LayoutBy);
       enc := TyDefaultEncodeAxis(cursors[cur], coord);
+      { [spec 242] past the table: the first free column }
+      TyEncodeDropPast(enc, FSources[i].DimCount);
     end;
     { A GIVEN ENCODE FILLS WHAT IT LEAVES OUT from the next free columns --
       `encode: {tooltip: [2]}` still draws x from 0 and y from 1. }
@@ -597,6 +600,9 @@ begin
     1000, after the stack (900): the sums are the unzoomed ones, and the
     axis not zoomed is sized from the rows the zoom left. }
   SolveDataZooms;
+  { [spec 242] appendData's frame: a series a dataZoom filtered keeps the
+    view it had }
+  if FStreamRelayout and FFrozenOn then DzFrozenRestore;
   { AFTER THE dataZoom FILTER AND BEFORE THE EXTENTS: upstream's dataSample
     runs at 5000, behind the stack (900) and the filter (1000), and the
     coordinate system is sized from what it leaves. [Batch 102] }
@@ -617,11 +623,20 @@ begin
   RtApplySortInfos;
   { AND THE POLARS' SCALES, the same nice step [Batch 111] -- over the
     series on them, the stacks and the dataZoom windows [Batch 113] }
-  TyPolarApplyExtents(FOption, FPolars, FBindings, FStores, FStacks, FIndex,
-    FAxisZooms);
+  { [spec 242] appendData's frame: theirs as the last update measured too }
+  if (FStreamRelayout or FExporting) and FFrozenOn then
+    TyPolarApplyExtents(FOption, FPolars, FBindings, FStores, FStacks, FIndex,
+      FrozenZooms)
+  else
+    TyPolarApplyExtents(FOption, FPolars, FBindings, FStores, FStacks, FIndex,
+      FAxisZooms);
   { AND THE SINGLES' [Batch 118] }
-  TySingleApplyExtents(FOption, FSingles, FBindings, FStores, FStacks, FIndex,
-    FAxisZooms);
+  if (FStreamRelayout or FExporting) and FFrozenOn then
+    TySingleApplyExtents(FOption, FSingles, FBindings, FStores, FStacks, FIndex,
+      FrozenZooms)
+  else
+    TySingleApplyExtents(FOption, FSingles, FBindings, FStores, FStacks, FIndex,
+      FAxisZooms);
   { AND THE PARALLELS' (Parallel.update) [Batch 128] }
   TyParallelApplyExtents(FOption, FParallels, FBindings, FStores, FStacks, FIndex);
   { LAST, ON THE VIEWS THE FILTERS LEFT: dataColorPaletteTask is a visual
@@ -696,7 +711,8 @@ begin
       { a chord's nodes, colorBy 'data' by default [Batch 120] }
       or (typ = TyChordSeriesTypeName) or (typ = 'boxplot')
       { [R5-B] a heatmap's cells, a lines' rows and a parallel's lines take
-        the per-datum palette too (lines and parallel on their lineStyle) }
+        the per-datum palette too (lines and parallel on their lineStyle)
+        [spec 242: a lines series' rows, the lineStyle's stroke] }
       or (typ = 'heatmap') or (typ = TyLinesSeriesTypeName)
       or (typ = 'parallel')) then Continue;
     cb := TyChartColorByOf(FOption, si, typ);
@@ -854,7 +870,11 @@ begin
   if (ASlot < 0) or (ASlot > High(FBindings)) or (FOption = nil) then Exit;
   d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
   if not (d is TJSONObject) then Exit;
-  st := TyReadOptStyle(TJSONObject(d), 'itemStyle');
+  { [spec 242] a lines series' visual colour is its lineStyle's }
+  if FBindings[ASlot].SeriesType = TyLinesSeriesTypeName then
+    st := TyReadOptStyle(TJSONObject(d), 'lineStyle')
+  else
+    st := TyReadOptStyle(TJSONObject(d), 'itemStyle');
   if (st.Color.Gradient.Kind <> cgkNone) or st.Color.Pattern.Present then
   begin
     Result.Present := True;
@@ -993,7 +1013,8 @@ begin
       labels shrink it -- upstream's Grid.create sizes the axes before the
       data processing and dataSample reads them there. Device pixels are
       upstream's css pixels times its pixel ratio. }
-    TySampleStore(mode, FStores[i], cols[0], Abs(FBindings[i].BaseAxis.PxLength));
+    TySampleStore(mode, FStores[i], cols[0], Abs(FBindings[i].BaseAxis.PxLength),
+      TySamplerHandlerOf(TJSONObject(d).Find('sampling')));
   end;
 end;
 
@@ -1060,6 +1081,7 @@ begin
     FFrozenOn := False;
     FFrozen := nil;
     FFrozenKeys := nil;
+    DzFrozenDrop;
   end;
   { a full update: the next sync re-renders the states [Batch 88] }
   Inc(FStGen);

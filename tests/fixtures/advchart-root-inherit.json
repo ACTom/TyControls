@@ -2822,6 +2822,239 @@
      "getSymbol": "emptyCircle"
     }
    ]
+  },
+  {
+   "group": "climb",
+   "id": "c-label",
+   "note": "a root label {show, formatter} reaches a bar, a line and a scatter (no label defaults); a pie's own default show (true) stands against the root's false where written",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "label": {
+     "show": true,
+     "formatter": "<{c}>"
+    },
+    "grid": {
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "type": "line",
+      "data": [
+       3,
+       2,
+       1
+      ]
+     },
+     {
+      "type": "scatter",
+      "data": [
+       2,
+       2,
+       2
+      ]
+     }
+    ]
+   },
+   "labels": [
+    {
+     "type": "bar",
+     "texts": [
+      "<1>",
+      "<2>",
+      "<3>"
+     ]
+    },
+    {
+     "type": "line",
+     "texts": [
+      "<3>",
+      "<2>",
+      "<1>"
+     ]
+    },
+    {
+     "type": "scatter",
+     "texts": [
+      "<2>",
+      "<2>",
+      "<2>"
+     ]
+    }
+   ]
+  },
+  {
+   "group": "climb",
+   "id": "c-label-own",
+   "note": "the series' own label.show false and an item's own label.show false stand; a series with no label of its own takes the root's show and formatter",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "label": {
+     "show": true,
+     "formatter": "[{b}]"
+    },
+    "grid": {
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       1,
+       2,
+       3
+      ],
+      "label": {
+       "show": false
+      }
+     },
+     {
+      "type": "bar",
+      "data": [
+       3,
+       {
+        "value": 2,
+        "label": {
+         "show": false
+        }
+       },
+       1
+      ]
+     }
+    ]
+   },
+   "labels": [
+    {
+     "type": "bar",
+     "texts": []
+    },
+    {
+     "type": "bar",
+     "texts": [
+      "[a]",
+      "[c]"
+     ]
+    }
+   ]
+  },
+  {
+   "group": "climb",
+   "id": "c-label-pie",
+   "note": "a pie: label.show is a default (true) -- the root's false does not hide it -- but formatter is no default: the root's",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "label": {
+     "show": false,
+     "formatter": "{b}={c}"
+    },
+    "series": [
+     {
+      "type": "pie",
+      "data": [
+       {
+        "name": "x",
+        "value": 1
+       },
+       {
+        "name": "y",
+        "value": 2
+       }
+      ]
+     }
+    ]
+   },
+   "labels": [
+    {
+     "type": "pie",
+     "texts": [
+      "x=1",
+      "y=2"
+     ]
+    }
+   ]
+  },
+  {
+   "group": "climb",
+   "id": "c-label-null",
+   "note": "a series whose label is written null climbs to the root's",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "label": {
+     "show": true
+    },
+    "grid": {
+     "outerBoundsMode": "none"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       1,
+       2,
+       3
+      ],
+      "label": null
+     }
+    ]
+   },
+   "labels": [
+    {
+     "type": "bar",
+     "texts": [
+      "1",
+      "2",
+      "3"
+     ]
+    }
+   ]
   }
  ],
  "guards": [
@@ -2933,5 +3166,106 @@
    "name": "c-symbol: the scatter's symbol is the root's rect, the line's its own",
    "ok": true
   }
+ ],
+ "rootDefaultPaths": [
+  "line:label.position",
+  "line:emphasis.scale",
+  "line:endLabel.show",
+  "line:endLabel.valueAnimation",
+  "line:endLabel.distance",
+  "bar:select.itemStyle.borderColor",
+  "bar:select.itemStyle.borderWidth",
+  "pie:label.rotate",
+  "pie:label.show",
+  "pie:label.overflow",
+  "pie:label.position",
+  "pie:label.alignTo",
+  "pie:label.edgeDistance",
+  "pie:label.distanceToLabelLine",
+  "pie:labelLine.show",
+  "pie:labelLine.length",
+  "pie:labelLine.length2",
+  "pie:labelLine.smooth",
+  "pie:labelLine.minTurnAngle",
+  "pie:labelLine.maxSurfaceAngle",
+  "pie:labelLine.lineStyle.width",
+  "pie:labelLine.lineStyle.type",
+  "pie:labelLayout.hideOverlap",
+  "pie:emphasis.scale",
+  "pie:emphasis.scaleSize",
+  "scatter:emphasis.scale",
+  "scatter:select.itemStyle.borderColor",
+  "radar:label.position",
+  "map:label.show",
+  "map:label.color",
+  "map:emphasis.label.show",
+  "map:emphasis.label.color",
+  "map:emphasis.itemStyle.areaColor",
+  "map:select.label.show",
+  "map:select.label.color",
+  "map:select.itemStyle.color",
+  "tree:label.show",
+  "treemap:label.show",
+  "treemap:label.distance",
+  "treemap:label.padding",
+  "treemap:label.position",
+  "treemap:label.color",
+  "treemap:label.overflow",
+  "treemap:emphasis.upperLabel.show",
+  "treemap:emphasis.upperLabel.position",
+  "treemap:emphasis.upperLabel.overflow",
+  "treemap:emphasis.upperLabel.verticalAlign",
+  "graph:label.show",
+  "graph:label.formatter",
+  "graph:emphasis.scale",
+  "graph:emphasis.label.show",
+  "graph:select.itemStyle.borderColor",
+  "chord:label.show",
+  "chord:label.position",
+  "chord:label.distance",
+  "chord:emphasis.focus",
+  "chord:emphasis.lineStyle.opacity",
+  "funnel:label.show",
+  "funnel:label.position",
+  "funnel:labelLine.show",
+  "funnel:labelLine.length",
+  "funnel:labelLine.lineStyle.width",
+  "funnel:emphasis.label.show",
+  "funnel:select.itemStyle.borderColor",
+  "parallel:label.show",
+  "parallel:emphasis.label.show",
+  "sankey:label.show",
+  "sankey:label.position",
+  "sankey:label.fontSize",
+  "sankey:emphasis.label.show",
+  "sankey:emphasis.lineStyle.opacity",
+  "sankey:select.itemStyle.borderColor",
+  "boxplot:emphasis.scale",
+  "boxplot:emphasis.itemStyle.borderWidth",
+  "boxplot:emphasis.itemStyle.shadowBlur",
+  "boxplot:emphasis.itemStyle.shadowOffsetX",
+  "boxplot:emphasis.itemStyle.shadowOffsetY",
+  "boxplot:emphasis.itemStyle.shadowColor",
+  "candlestick:emphasis.itemStyle.borderWidth",
+  "lines:label.show",
+  "lines:label.position",
+  "heatmap:select.itemStyle.borderColor",
+  "pictorialBar:emphasis.scale",
+  "pictorialBar:select.itemStyle.borderColor",
+  "themeRiver:label.margin",
+  "themeRiver:label.show",
+  "themeRiver:label.position",
+  "themeRiver:label.fontSize",
+  "themeRiver:emphasis.label.show",
+  "sunburst:label.rotate",
+  "sunburst:label.show",
+  "sunburst:label.opacity",
+  "sunburst:label.align",
+  "sunburst:label.position",
+  "sunburst:label.distance",
+  "sunburst:label.silent",
+  "sunburst:emphasis.focus",
+  "sunburst:blur.itemStyle.opacity",
+  "sunburst:blur.label.opacity"
  ]
 }

@@ -25,8 +25,13 @@ unit tyControls.AdvanceChart.DataTransform;
   without it ('filter', not 'echarts:filter'); only a built-in may read raw
   rows (RawItem, RawData).
 
-  WHAT IS NOT HERE: the filter's `reg` operator (a regular expression) --
-  the port refuses the condition, where upstream matches; and `print`.
+  THE FILTER'S `reg` [spec 242]: RegExpEvaluator's `new RegExp(source)`
+  and `test(String(value))` (6.1 tests every value: its `isString(typeof
+  lVal)` is always true), through tyControls.AdvanceChart.JsRegExp -- V8's
+  grammar and matching over UTF-16. A source that is not a string, or one
+  the constructor throws on, is upstream's throw.
+
+  WHAT IS NOT HERE: `print`.
 
   ERRORS: upstream throws out of setOption on every one of them; here the
   dataset (and every dataset reading it) has no table, and the control says
@@ -185,7 +190,7 @@ implementation
 
 uses
   tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Jitter,
-  tyControls.StrConsts;
+  tyControls.StrConsts, tyControls.AdvanceChart.JsRegExp;
 
 { ==================== JavaScript values ==================== }
 
@@ -1404,11 +1409,13 @@ end;
 
 type
   TTyCondKind = (ckConst, ckAnd, ckOr, ckNot, ckRel);
-  TTyRelOp = (roLt, roLte, roGt, roGte, roEq, roNe);
+  TTyRelOp = (roLt, roLte, roGt, roGte, roEq, roNe, roReg);
   TTyRelCmp = record
     Op: TTyRelOp;
     RVal: TTyJsValue;
     RFloat: Double;
+    { roReg: the expression, owned by the condition }
+    Re: TTyJsRegExp;
   end;
 
   TTyCond = class
@@ -1427,6 +1434,7 @@ destructor TTyCond.Destroy;
 var i: Integer;
 begin
   for i := 0 to High(Kids) do Kids[i].Free;
+  for i := 0 to High(Cmps) do Cmps[i].Re.Free;
   inherited Destroy;
 end;
 
@@ -1467,6 +1475,14 @@ function CmpEval(const C: TTyRelCmp; const V: TTyJsValue): Boolean;
 var l: Double; eq: Boolean;
 begin
   case C.Op of
+    roReg:
+      { RegExpEvaluator: test(lVal), every value through String() }
+      try
+        Result := TyJsRegExpTest(C.Re, JsText(V));
+      except
+        on E: ETyJsRegExpError do
+          raise ETyTransformError.CreateFmt(rsTyDsCondRegSlow, [UTF8Encode(C.Re.Source)]);
+      end;
     roEq, roNe:
       begin
         { FilterEqualityComparator: `===`, and failing that, when the types
@@ -1604,7 +1620,19 @@ begin
           raise ETyTransformError.CreateFmt(rsTyDsCondNeedsNumber, [key]);
       end
       else if op = 'reg' then
-        raise ETyTransformError.Create(rsTyDsCondReg)
+      begin
+        { createFilterComparator has none; RegExpEvaluator takes a string
+          (new RegExp) and throws on anything else -- a parser's number too }
+        cmp.Op := roReg;
+        if cmp.RVal.Kind <> jkString then
+          raise ETyTransformError.CreateFmt(rsTyDsCondReg, [JsText(cmp.RVal)]);
+        try
+          cmp.Re := TyJsRegExpCreate(cmp.RVal.Str);
+        except
+          on E: ETyJsRegExpError do
+            raise ETyTransformError.CreateFmt(rsTyDsCondReg, [cmp.RVal.Str]);
+        end;
+      end
       else
         raise ETyTransformError.CreateFmt(rsTyDsCondBadOperator, [key]);
       cmp.RFloat := TyJsNumericOf(cmp.RVal);

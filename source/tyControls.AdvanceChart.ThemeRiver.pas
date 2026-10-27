@@ -113,6 +113,10 @@ function TyThemeRiverLayout(AOption: TTyChartOption; ASeriesIndex: Integer;
 
 { whether a polygon's path draws anything: a command beside its closes }
 function TyRiverPathDraws(const ACmds: TTyPathCmdArray): Boolean;
+{ [spec 242] a layer's polygon in the canvas' frame (the group's y added):
+  the smoothed path for the ink, a ring of the legal bottoms forward and
+  tops back for the hit test }
+function TyRiverLayerShape(const ABottoms, ATops: TTyPointFArray; AGroupY: Double): TTyChartShape;
 
 { ---- the arithmetic, exported for the tests ---- }
 
@@ -180,6 +184,59 @@ begin
         if AData.AsBoolean then Result.Num := 1 else Result.Num := 0;
       end;
   end;
+end;
+
+function TyRiverLayerShape(const ABottoms, ATops: TTyPointFArray; AGroupY: Double): TTyChartShape;
+var
+  cmds: TTyPathCmdArray;
+  pts: TTyPointFArray;
+  j, n, m: Integer;
+  box: TTyXYWH;
+
+  function Legal(const AP: TTyPointF): Boolean;
+  begin
+    Result := not (IsNan(AP.X) or IsNan(AP.Y) or IsInfinite(AP.X) or IsInfinite(AP.Y));
+  end;
+
+begin
+  cmds := TyPolygonPath(ABottoms, ATops, TyThemeRiverSmooth, TyThemeRiverSmooth, '', False);
+  box := TyPathCmdsRect(cmds);
+  if box.W < 0 then
+  begin
+    box.X := box.X + box.W;
+    box.W := -box.W;
+  end;
+  if box.H < 0 then
+  begin
+    box.Y := box.Y + box.H;
+    box.H := -box.H;
+  end;
+  n := Length(ABottoms);
+  SetLength(pts, n + Length(ATops));
+  m := 0;
+  for j := 0 to n - 1 do
+    if Legal(ABottoms[j]) then
+    begin
+      pts[m] := TyPointF(ABottoms[j].X, ABottoms[j].Y + AGroupY);
+      Inc(m);
+    end;
+  for j := High(ATops) downto 0 do
+    if Legal(ATops[j]) then
+    begin
+      pts[m] := TyPointF(ATops[j].X, ATops[j].Y + AGroupY);
+      Inc(m);
+    end;
+  SetLength(pts, m);
+  for j := 0 to High(cmds) do
+  begin
+    cmds[j].Y := cmds[j].Y + AGroupY;
+    cmds[j].Y1 := cmds[j].Y1 + AGroupY;
+    cmds[j].Y2 := cmds[j].Y2 + AGroupY;
+  end;
+  Result := TyShapePolygon(pts);
+  Result.Cmds := cmds;
+  Result.HasCmdBounds := True;
+  Result.CmdBounds := TyRectF(box.X, box.Y + AGroupY, box.X + box.W, box.Y + AGroupY + box.H);
 end;
 
 function TyRiverPathDraws(const ACmds: TTyPathCmdArray): Boolean;

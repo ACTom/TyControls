@@ -49,10 +49,18 @@ unit tyControls.AdvanceChart.Sampling;
   is the frame's first value, NaN or not. The arithmetic runs with the FPU
   traps masked so Infinity and NaN behave as in JavaScript.
 
-  NOT HERE: `sampling` as a function (no JS here; a handler registry could
-  carry it later), and the names Object.prototype lends upstream's sampler
-  table (`'toString'` and its kind are samplers there by accident) -- both
-  read as no sampling.
+  `sampling` AS A FUNCTION [spec 242] is written '@Name': the handler
+  registered under Name (TyChartRegisterSampler) is upstream's function --
+  handed each frame's values (the column as written so far, the last frame
+  shorter) and answering the frame's value, which downSample writes at the
+  frame's middle row as it writes a named sampler's. It runs with the FPU
+  traps masked, as the named samplers do: a division by nought in it is an
+  infinity, as in JavaScript. A '@Name' nobody registered is what upstream
+  sees for a string that names no sampler: no sampling.
+
+  NOT HERE: the names Object.prototype lends upstream's sampler table
+  (`'toString'` and its kind are samplers there by accident) -- read as no
+  sampling.
 
   PURE: SysUtils, Math, fpjson and the AdvanceChart data layer. }
 interface
@@ -62,7 +70,11 @@ uses
 
 type
   TTySamplingMode = (tsmNone, tsmLttb, tsmMinmax, tsmAverage, tsmSum, tsmMax,
-    tsmMin, tsmNearest);
+    tsmMin, tsmNearest, tsmHandler);
+
+  { `sampling: '@Name'`: one frame's values in, the frame's value out --
+    upstream's `sampling` function. [spec 242] }
+  TTySamplerHandler = function(const AFrame: TTyDoubleArray): Double of object;
 
   { What a sampler made of a view: the raw rows kept, in order, and the value
     column (by raw row) after its writes. Wrote: a value sampler ran. }
@@ -72,10 +84,19 @@ type
     Wrote: Boolean;
   end;
 
-{ `sampling` as the series wrote it: one of the seven names, case and all;
-  anything else -- 'none', an unknown name, a boolean, a number, nil -- is
-  tsmNone. }
+{ `sampling` as the series wrote it: one of the seven names, case and all,
+  or '@Name' with a sampler registered under Name (tsmHandler); anything
+  else -- 'none', an unknown name, an unregistered handler, a boolean, a
+  number, nil -- is tsmNone. }
 function TySamplingModeOf(AValue: TJSONData): TTySamplingMode;
+{ the handler '@Name' names; nil for anything else }
+function TySamplerHandlerOf(AValue: TJSONData): TTySamplerHandler;
+
+{ ---- the sampler registry ('@Name') [spec 242] ---- }
+{ Registering a name twice replaces it. }
+procedure TyChartRegisterSampler(const AName: string; AHandler: TTySamplerHandler);
+procedure TyChartUnregisterSampler(const AName: string);
+function TyChartFindSampler(const AName: string; out AHandler: TTySamplerHandler): Boolean;
 function TySamplingModeName(AMode: TTySamplingMode): string;
 
 { Math.round(count / size): NaN for a NaN size, +Infinity for a zero one. }
@@ -90,13 +111,15 @@ function TySamplingApplies(ACount: Integer; ARate: Double): Boolean;
   points too). ARateArg is what upstream hands the method: 1 / rate. A frame
   size below 1 samples nothing (Indices is the view). }
 function TySampleView(AMode: TTySamplingMode; const AView: TTyIntegerArray;
-  const AColumn: TTyDoubleArray; ARateArg: Double): TTySampleResult;
+  const AColumn: TTyDoubleArray; ARateArg: Double;
+  AHandler: TTySamplerHandler = nil): TTySampleResult;
 
 { dataSample's reset over a store: the gate, the rate from ASizePx (the base
   axis' length in device pixels -- css px times the pixel ratio), the sampler
-  on ACol, and the view and values written back. True when it sampled. }
+  on ACol, and the view and values written back. True when it sampled.
+  AHandler: tsmHandler's sampler. }
 function TySampleStore(AMode: TTySamplingMode; AStore: TTyDataStore;
-  ACol: Integer; ASizePx: Double): Boolean;
+  ACol: Integer; ASizePx: Double; AHandler: TTySamplerHandler = nil): Boolean;
 
 implementation
 
@@ -122,7 +145,66 @@ end;
 
 const
   cModeNames: array[TTySamplingMode] of string = ('none', 'lttb', 'minmax',
-    'average', 'sum', 'max', 'min', 'nearest');
+    'average', 'sum', 'max', 'min', 'nearest', '@');
+
+type
+  TTySamplerEntry = record
+    Name: string;
+    Handler: TTySamplerHandler;
+  end;
+
+var
+  GSamplers: array of TTySamplerEntry;
+
+function IndexOfSampler(const AName: string): Integer;
+var i: Integer;
+begin
+  for i := 0 to High(GSamplers) do
+    if GSamplers[i].Name = AName then Exit(i);
+  Result := -1;
+end;
+
+procedure TyChartRegisterSampler(const AName: string; AHandler: TTySamplerHandler);
+var i: Integer;
+begin
+  if AName = '' then Exit;
+  i := IndexOfSampler(AName);
+  if i < 0 then
+  begin
+    i := Length(GSamplers);
+    SetLength(GSamplers, i + 1);
+    GSamplers[i].Name := AName;
+  end;
+  GSamplers[i].Handler := AHandler;
+end;
+
+procedure TyChartUnregisterSampler(const AName: string);
+var i, j: Integer;
+begin
+  i := IndexOfSampler(AName);
+  if i < 0 then Exit;
+  for j := i to High(GSamplers) - 1 do GSamplers[j] := GSamplers[j + 1];
+  SetLength(GSamplers, Length(GSamplers) - 1);
+end;
+
+function TyChartFindSampler(const AName: string; out AHandler: TTySamplerHandler): Boolean;
+var i: Integer;
+begin
+  AHandler := nil;
+  i := IndexOfSampler(AName);
+  Result := (i >= 0) and Assigned(GSamplers[i].Handler);
+  if Result then AHandler := GSamplers[i].Handler;
+end;
+
+function TySamplerHandlerOf(AValue: TJSONData): TTySamplerHandler;
+var s: string;
+begin
+  Result := nil;
+  if (AValue = nil) or (AValue.JSONType <> jtString) then Exit;
+  s := AValue.AsString;
+  if (Length(s) < 2) or (s[1] <> '@') then Exit;
+  TyChartFindSampler(Copy(s, 2, MaxInt), Result);
+end;
 
 function TySamplingModeOf(AValue: TJSONData): TTySamplingMode;
 var
@@ -132,7 +214,8 @@ begin
   Result := tsmNone;
   if (AValue = nil) or (AValue.JSONType <> jtString) then Exit;
   s := AValue.AsString;
-  for m := Succ(tsmNone) to High(TTySamplingMode) do
+  if Assigned(TySamplerHandlerOf(AValue)) then Exit(tsmHandler);
+  for m := Succ(tsmNone) to Pred(tsmHandler) do
     if cModeNames[m] = s then Exit(m);
 end;
 
@@ -161,12 +244,16 @@ end;
 { ---------------- the samplers (dataSample.ts) ---------------- }
 
 function SampleValue(AMode: TTySamplingMode; const AFrame: TTyDoubleArray;
-  ALen: Integer): Double;
+  ALen: Integer; AHandler: TTySamplerHandler): Double;
 var
   i, n: Integer;
   s, v: Double;
 begin
   case AMode of
+    tsmHandler:
+      { the function is handed the frame as long as it is }
+      if Assigned(AHandler) then Result := AHandler(Copy(AFrame, 0, ALen))
+      else Result := NaN;
     tsmAverage:
       begin
         s := 0;
@@ -345,7 +432,8 @@ begin
 end;
 
 function DownSample(AMode: TTySamplingMode; const AView: TTyIntegerArray;
-  var ACol: TTyDoubleArray; AFrame: Integer): TTyIntegerArray;
+  var ACol: TTyDoubleArray; AFrame: Integer;
+  AHandler: TTySamplerHandler): TTyIntegerArray;
 var
   len, n, i, k, at, raw, frame: Integer;
   values: TTyDoubleArray;
@@ -364,7 +452,7 @@ begin
     { read from the column as written so far, as upstream does }
     for k := 0 to frame - 1 do
       values[k] := ACol[AView[i + k]];
-    v := SampleValue(AMode, values, frame);
+    v := SampleValue(AMode, values, frame, AHandler);
     { indexSampler: Math.round(frame / 2), clamped to the last row }
     at := Min(Int64(i) + Trunc(TyJsRound(frame / 2)), len - 1);
     raw := AView[at];
@@ -377,7 +465,8 @@ begin
 end;
 
 function TySampleView(AMode: TTySamplingMode; const AView: TTyIntegerArray;
-  const AColumn: TTyDoubleArray; ARateArg: Double): TTySampleResult;
+  const AColumn: TTyDoubleArray; ARateArg: Double;
+  AHandler: TTySamplerHandler): TTySampleResult;
 var
   mask: TFPUExceptionMask;
   fs: Double;
@@ -388,6 +477,7 @@ begin
   Result.Wrote := False;
   len := Length(AView);
   if (AMode = tsmNone) or (len = 0) then Exit;
+  if (AMode = tsmHandler) and not Assigned(AHandler) then Exit;
   mask := MaskFP;
   try
     { Math.floor(1 / rate), as upstream computes it from what it is handed }
@@ -400,7 +490,7 @@ begin
       tsmLttb: Result.Indices := Lttb(AView, Result.Column, frame);
       tsmMinmax: Result.Indices := MinMax(AView, Result.Column, frame);
     else
-      Result.Indices := DownSample(AMode, AView, Result.Column, frame);
+      Result.Indices := DownSample(AMode, AView, Result.Column, frame, AHandler);
       Result.Wrote := True;
     end;
   finally
@@ -409,7 +499,7 @@ begin
 end;
 
 function TySampleStore(AMode: TTySamplingMode; AStore: TTyDataStore;
-  ACol: Integer; ASizePx: Double): Boolean;
+  ACol: Integer; ASizePx: Double; AHandler: TTySamplerHandler): Boolean;
 var
   view, idx: TTyIntegerArray;
   col: TTyDoubleArray;
@@ -419,6 +509,7 @@ var
 begin
   Result := False;
   if (AMode = tsmNone) or (AStore = nil) then Exit;
+  if (AMode = tsmHandler) and not Assigned(AHandler) then Exit;
   if (ACol < 0) or (ACol >= AStore.DimCount) then Exit;
   n := AStore.Count;
   rate := TySamplingRate(n, ASizePx);
@@ -427,7 +518,7 @@ begin
   for i := 0 to n - 1 do view[i] := AStore.GetRawIndex(i);
   SetLength(col, AStore.RawCount);
   for i := 0 to High(col) do col[i] := AStore.GetByRaw(ACol, i);
-  res := TySampleView(AMode, view, col, 1 / rate);
+  res := TySampleView(AMode, view, col, 1 / rate, AHandler);
   idx := res.Indices;
   if res.Wrote then
     for i := 0 to High(idx) do

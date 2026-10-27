@@ -407,6 +407,8 @@ begin
   if IsGeoDatum(ADatum) then Exit(GeoTipSpec(ADatum));
   { [F4c] an axis' name or label: the axis' cascade }
   if IsAxisTextDatum(ADatum) then Exit(AxisTipSpec(ADatum));
+  { [spec 242] a graphic element's }
+  if IsGfxTipDatum(ADatum) then Exit(GfxTipSpec(ADatum));
   if TipIsMarker(ADatum) then
   begin
     opt := -1;
@@ -2806,7 +2808,7 @@ end;
 function TTyCustomAdvanceChart.TipTargetValid(const ADatum: TTyChartDatumRef): Boolean;
 begin
   Result := TyChartDatumValid(ADatum) or TipIsMarker(ADatum) or TipIsMatrix(ADatum)
-    or IsGeoDatum(ADatum) or IsAxisTextDatum(ADatum);
+    or IsGeoDatum(ADatum) or IsAxisTextDatum(ADatum) or IsGfxTipDatum(ADatum);
 end;
 
 function TTyCustomAdvanceChart.MatrixCellOf(const ADatum: TTyChartDatumRef;
@@ -2956,7 +2958,8 @@ begin
   begin
     if (ASnap.ProxyJson <> '') or ASnap.TbHas then Exit;
     if not TipTargetValid(ASnap.Datum) or IsGeoDatum(ASnap.Datum)
-      or IsAxisTextDatum(ASnap.Datum) or TipIsMatrix(ASnap.Datum) then Exit;
+      or IsAxisTextDatum(ASnap.Datum) or TipIsMatrix(ASnap.Datum)
+      or IsGfxTipDatum(ASnap.Datum) then Exit;
   end;
   spec := TipSpecOf(ASnap);
   if not spec.HasComponent then Exit;
@@ -4144,7 +4147,8 @@ begin
   { a component's tooltip config: _showComponentItemTooltip -- whatever the
     trigger says -- and a showTip from the view; a matrix cell's, a geo
     region's }
-  if TipIsMatrix(AEv.Datum) or IsGeoDatum(AEv.Datum) or IsAxisTextDatum(AEv.Datum) then
+  if TipIsMatrix(AEv.Datum) or IsGeoDatum(AEv.Datum) or IsAxisTextDatum(AEv.Datum)
+    or IsGfxTipDatum(AEv.Datum) then
   begin
     TipTryShow(snap, TipSpecOf(snap));
     TipDispatch(TJSONObject.Create(['type', 'showTip', 'from', TipUid]), nil,
@@ -5828,7 +5832,7 @@ begin
     Result := 'geo:' + IntToStr(FTipSnap.Datum.ComponentIndex) + ':'
       + FGeos[FTipSnap.Datum.ComponentIndex].GroupName(FTipSnap.Datum.DataIndex)
   else if TipIsMarker(FTipSnap.Datum) or TipIsMatrix(FTipSnap.Datum)
-    or IsAxisTextDatum(FTipSnap.Datum) then
+    or IsAxisTextDatum(FTipSnap.Datum) or IsGfxTipDatum(FTipSnap.Datum) then
     Result := cMk[FTipSnap.Datum.Kind] + ':'
       + IntToStr(FTipSnap.Datum.ComponentIndex) + ':'
       + IntToStr(FTipSnap.Datum.DataIndex)
@@ -6422,7 +6426,8 @@ begin
     SHAPE -- if a coordinate system reported axes, the axis path runs and
     the item trigger is never consulted. }
   if not onAxis and (spec.Trigger <> tttItem) and not IsGeoDatum(snap.Datum)
-    and not IsAxisTextDatum(snap.Datum) and (snap.ProxyJson = '') and not snap.TbHas then Exit;
+    and not IsAxisTextDatum(snap.Datum) and not IsGfxTipDatum(snap.Datum)
+    and (snap.ProxyJson = '') and not snap.TbHas then Exit;
   ink := TooltipInk(spec);
   mkNames := nil;
   mkColours := nil;
@@ -6478,6 +6483,25 @@ begin
       tipText := AxisTipText(snap.Datum, spec);
       AContent.Fmt := tipText;
       if tipText = '' then Exit;
+      if html then
+      begin
+        htmlLines := TooltipHtmlLines(tipText, ink);
+        htmlHas := True;
+      end
+      else
+      begin
+        block := TTyTooltipBlock.CreateSection('', True);
+        block.Add(TTyTooltipBlock.CreateNameValue(ttmNone, 0, tipText, False,
+          '', True));
+      end;
+    end
+    else if (not onAxis) and IsGfxTipDatum(snap.Datum) then
+    begin
+      { [spec 242] A GRAPHIC ELEMENT'S: its formatter through formatTpl,
+        else the content -- its name; an element with no name shows an
+        empty box, as upstream's does }
+      tipText := GfxTipText(snap.Datum, spec);
+      AContent.Fmt := tipText;
       if html then
       begin
         htmlLines := TooltipHtmlLines(tipText, ink);
@@ -6780,6 +6804,8 @@ begin
           pin.Params := TyChartOneParams(GeoTipParams(snap.Datum))
         else if IsAxisTextDatum(snap.Datum) then
           pin.Params := TyChartOneParams(AxisTipParams(snap.Datum))
+        else if IsGfxTipDatum(snap.Datum) then
+          pin.Params := TyChartOneParams(GfxTipParams(snap.Datum))
         else pin.Params := TyChartOneParams(TooltipParams(snap.Datum));
         TyTooltipRunPosition(spec, pin, FTipPosAns);
         FTipPosGen := FTipShowGen;
@@ -6838,7 +6864,7 @@ begin
     if frozenPic then borderCol := FTipFrozenBorder
     else if spec.HasBorderColour then borderCol := TTyColor(spec.BorderColour)
     else if not onAxis and not IsGeoDatum(snap.Datum) and not IsAxisTextDatum(snap.Datum)
-      and (DatumColour(snap.Datum) <> 0) then
+      and not IsGfxTipDatum(snap.Datum) and (DatumColour(snap.Datum) <> 0) then
       borderCol := TTyColor(DatumColour(snap.Datum))
     else
       { THE GREY IS THE AXIS TOOLTIP'S ANSWER, not a chart-wide default: a box

@@ -217,6 +217,9 @@ type
     { and the same as an object -- a gradient or a pattern -- which the icon
       is painted with, as upstream's is [Batch 105] }
     Obj: TTyChartObjFill;
+    { [spec 242] the pen's colour as an object (a lines series' gradient
+      lineStyle.color: its icon's stroke inherits the visual's) }
+    StrokeObj: TTyChartObjFill;
     { THE DECAL the icon wears [Batch 131]: the legend's own itemStyle.decal,
       or with none (or 'inherit') the series' style decal -- the datum's for
       a legend of slices }
@@ -370,6 +373,8 @@ type
     FontSizeLogical: Integer;
     FontWeight: Integer;
     Own: TTyLegendOwn;
+    { [spec 242] the pen as a gradient, while selected }
+    StrokeObj: TTyChartObjFill;
   end;
   TTyLegendItemArray = array of TTyLegendItem;
 
@@ -2655,6 +2660,7 @@ begin
       series' stroke too, and any other value keeps the selected width }
     it.HasStroke := src.HasStroke;
     it.Stroke := src.Stroke;
+    it.StrokeObj := src.StrokeObj;
     if src.VisualLineWidth > 0 then it.IconPen := 2 else it.IconPen := 0;
     if (not it.Selected) and ASpec.InactiveBorderAuto then
     begin
@@ -2981,6 +2987,8 @@ var
         else if it.Own.HasInactiveBorderColour then
           Result.Style.StrokeColor := it.Own.InactiveBorderColour
         else Result.Style.StrokeColor := AInk.InactiveBorder;
+        if it.Selected and it.StrokeObj.Present then
+          Result.Style.StrokeGradient := it.StrokeObj.Gradient;
         Result.Style.StrokeWidthLogical := it.IconPen;
       end;
     end;

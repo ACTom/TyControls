@@ -54,6 +54,12 @@ type
     function SingleDot(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
     function FreeRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
     function VmDot(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+    function VmMeta(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+    function DurRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+    function ClipRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+    function TextRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+    procedure DurGrow(AApi: TTyGfxDuringApi);
+    procedure DurArc(AApi: TTyGfxDuringApi);
     function EnterRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
     function MoveRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
     function LeaveRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
@@ -286,6 +292,121 @@ begin
   end;
 end;
 
+{ RENDER.textRI [spec 242] }
+const
+  cTextRIImg = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFUlEQVR42mP4z8AAQv8ZGBYw/AcBAEcvCZiaeHRuAAAAAElFTkSuQmCC';
+
+function TCu2Mirror.TextRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+var
+  p: TTyDoubleArray;
+  x, y: Double;
+begin
+  Open('textRI', AParams);
+  x := Value(AApi, 0);
+  y := Value(AApi, 1);
+  p := Coord(AApi, x, y);
+  Result := Done(TJSONObject.Create(['type', 'group', 'x', Num(p[0]), 'y', Num(p[1]), 'focus', 'self',
+    'children', TJSONArray.Create([
+      TJSONObject.Create(['type', 'rect',
+        'shape', TJSONObject.Create(['x', -30, 'y', -15, 'width', 60, 'height', 30]),
+        'style', TJSONObject.Create(['fill', Visual(AApi, 'color')])]),
+      TJSONObject.Create(['type', 'text',
+        'style', TJSONObject.Create(['text', '{a|rich} plain', 'x', -30, 'y', 18, 'fill', '#333',
+          'rich', TJSONObject.Create(['a', TJSONObject.Create(['fill', '#00f'])])]),
+        'emphasis', TJSONObject.Create(['style', TJSONObject.Create(['fill', '#f00', 'stroke', '#0f0', 'lineWidth', 1])]),
+        'blur', TJSONObject.Create(['style', TJSONObject.Create(['opacity', 0.5])])]),
+      TJSONObject.Create(['type', 'text',
+        'style', TJSONObject.Create(['text', 'no style', 'x', -30, 'y', 34])]),
+      TJSONObject.Create(['type', 'image',
+        'style', TJSONObject.Create(['image', cTextRIImg, 'x', 32, 'y', -15, 'width', 20, 'height', 20]),
+        'emphasis', TJSONObject.Create(['style', TJSONObject.Create(['opacity', 0.3])])])])]));
+end;
+
+{ RENDER.clipRI [spec 242] }
+function TCu2Mirror.ClipRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+var
+  p: TTyDoubleArray;
+  x, y, k: Double;
+  clip: TJSONData;
+begin
+  Open('clipRI', AParams);
+  x := Value(AApi, 0);
+  y := Value(AApi, 1);
+  p := Coord(AApi, x, y);
+  k := Value(AApi, 2);
+  if AParams.DataIndex = 0 then
+    Exit(Done(TJSONObject.Create(['type', 'rect', 'x', Num(p[0]), 'y', Num(p[1]),
+      'shape', TJSONObject.Create(['x', -40, 'y', -20, 'width', 80, 'height', 40]),
+      'style', TJSONObject.Create(['fill', Visual(AApi, 'color')]),
+      'clipPath', TJSONObject.Create(['type', 'circle',
+        'shape', TJSONObject.Create(['cx', 0, 'cy', 0, 'r', Num(15 + 10 * k)])])])));
+  if k <> 0 then clip := TJSONBoolean.Create(False)
+  else
+    clip := TJSONObject.Create(['type', 'rect',
+      'shape', TJSONObject.Create(['x', -30, 'y', -15, 'width', 30, 'height', 30])]);
+  Result := Done(TJSONObject.Create(['type', 'group', 'x', Num(p[0]), 'y', Num(p[1]),
+    'clipPath', clip,
+    'children', TJSONArray.Create([
+      TJSONObject.Create(['type', 'rect',
+        'shape', TJSONObject.Create(['x', -30, 'y', -15, 'width', 60, 'height', 30]),
+        'style', TJSONObject.Create(['fill', '#91cc75'])]),
+      TJSONObject.Create(['type', 'text',
+        'style', TJSONObject.Create(['text', 'clipped text', 'x', -30, 'y', 0, 'fontSize', 12])])])]));
+end;
+
+{ RENDER.durRI [spec 242] }
+function TCu2Mirror.DurRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+var
+  p: TTyDoubleArray;
+  x, y: Double;
+begin
+  Open('durRI', AParams);
+  x := Value(AApi, 0);
+  y := Value(AApi, 1);
+  p := Coord(AApi, x, y);
+  if AParams.DataIndex = 0 then
+    Exit(Done(TJSONObject.Create(['type', 'rect', 'x', Num(p[0]), 'y', Num(p[1]),
+      'enterFrom', TJSONObject.Create(['x', 0]), 'during', '@durc:grow',
+      'shape', TJSONObject.Create(['x', -10, 'y', -10, 'width', 20, 'height', 20]),
+      'style', TJSONObject.Create(['fill', Visual(AApi, 'color')])])));
+  Result := Done(TJSONObject.Create(['type', 'circle', 'x', Num(p[0]), 'y', Num(p[1]),
+    'extra', TJSONObject.Create(['p', 1, 'enterFrom', TJSONObject.Create(['p', 0])]),
+    'during', '@durc:arc',
+    'shape', TJSONObject.Create(['cx', 0, 'cy', 0, 'r', 3]),
+    'style', TJSONObject.Create(['fill', '#91cc75'])]));
+end;
+
+procedure TCu2Mirror.DurGrow(AApi: TTyGfxDuringApi);
+begin
+  AApi.SetShape('width', 10 + AApi.GetTransform('x') / 20);
+end;
+
+procedure TCu2Mirror.DurArc(AApi: TTyGfxDuringApi);
+var q: Double;
+begin
+  q := TTyGfxDuringApi.Num(AApi.GetExtra('p'));
+  AApi.SetShape('r', 3 + 9 * q);
+  AApi.SetStyle('opacity', q);
+end;
+
+{ RENDER.vmMeta [spec 242] }
+function TCu2Mirror.VmMeta(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+var
+  p: TTyDoubleArray;
+  x, y: Double;
+  c: TJSONData;
+begin
+  Open('vmMeta', AParams);
+  Visual(AApi, 'visualMeta').Free;
+  x := Value(AApi, 0);
+  y := Value(AApi, 1);
+  p := Coord(AApi, x, y);
+  c := Visual(AApi, 'color');
+  Result := Done(TJSONObject.Create(['type', 'circle',
+    'shape', TJSONObject.Create(['cx', Num(p[0]), 'cy', Num(p[1]), 'r', Num(4)]),
+    'style', TJSONObject.Create(['fill', c])]));
+end;
+
 { RENDER.enterRI }
 function TCu2Mirror.EnterRI(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
 var
@@ -484,6 +605,12 @@ begin
   TyChartRegisterRenderItem('singleDot', @m.SingleDot);
   TyChartRegisterRenderItem('free', @m.FreeRI);
   TyChartRegisterRenderItem('vmDot', @m.VmDot);
+  TyChartRegisterRenderItem('vmMeta', @m.VmMeta);
+  TyChartRegisterRenderItem('durRI', @m.DurRI);
+  TyChartRegisterRenderItem('clipRI', @m.ClipRI);
+  TyChartRegisterRenderItem('textRI', @m.TextRI);
+  TyChartRegisterDuring('durc:grow', @m.DurGrow);
+  TyChartRegisterDuring('durc:arc', @m.DurArc);
   TyChartRegisterRenderItem('enterRI', @m.EnterRI);
   TyChartRegisterRenderItem('moveRI', @m.MoveRI);
   TyChartRegisterRenderItem('leaveRI', @m.LeaveRI);

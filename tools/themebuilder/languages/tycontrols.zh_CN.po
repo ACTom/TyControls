@@ -1671,8 +1671,14 @@ msgid "\"%s\" compares with a number only"
 msgstr "“%s”只能和数比较"
 
 #: tycontrols.strconsts.rstydscondreg
-msgid "\"reg\" (a regular expression) is not supported"
-msgstr "不支持“reg”（正则表达式）"
+#, object-pascal-format
+msgid "\"reg\" is not a regular expression: %s"
+msgstr "“reg”不是正则表达式：%s"
+
+#: tycontrols.strconsts.rstydscondregslow
+#, object-pascal-format
+msgid "the regular expression in \"reg\" runs too long: %s"
+msgstr "“reg”里的正则表达式运行太久：%s"
 
 #: tycontrols.strconsts.rstydssortempty
 msgid "the sort has no config"
