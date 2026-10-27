@@ -3230,6 +3230,8 @@ type
       the legend makes of it is the legend's business. }
     function SeriesSymbolWord(ASlot: Integer): string;
     { What the chart can say about each of a legend's names. }
+    { [R5-F] a series' symbolRotate visual }
+    function SeriesSymbolRotateOf(ASeriesIndex: Integer): Double;
     function LegendSources(const AEntries: TTyLegendEntryArray; ALegend: Integer):
       TTyLegendSourceArray;
     { Specs, entries and selection. Runs in Rebuild. }
