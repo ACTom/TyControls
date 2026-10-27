@@ -33,6 +33,8 @@ type
   protected
     procedure SetUp; override;
     procedure TearDown; override;
+    procedure CompareByText(Sender: TTyCustomTreeView; Node1, Node2: PTyTreeNode;
+      Column: Integer; var CompareResult: Integer);
   published
     { ① 移植面 }
     procedure TestAddChildBuildsARealTree;
@@ -63,6 +65,13 @@ type
     procedure TestMoveSubTreeBeforeASibling;
     procedure TestMoveSubTreeAfterASibling;
     procedure TestMoveSubTreeCarriesTheChildren;
+    { #141: the user's changes are written back to Items, so the next Items edit -- which
+      makes the nodes again from the items -- keeps them; it undid them all. }
+    procedure TestAnExpandIsWrittenBackAndSurvivesAnItemsEdit;
+    procedure TestACheckIsWrittenBackAndSurvivesAnItemsEdit;
+    procedure TestADragMovesTheItems;
+    procedure TestASortReordersTheItems;
+    procedure TestTheSelectionSurvivesAnItemsEdit;
   end;
 
 implementation
@@ -767,6 +776,90 @@ begin
   AssertEquals('A leads again', 'A', FTree.Items[0].Text);
   AssertEquals('B back behind', 'B', FTree.Items[3].Text);
   AssertEquals('b1 rides back', 'b1', FTree.Items[4].Text);
+end;
+
+procedure TTreeViewItemsTest.CompareByText(Sender: TTyCustomTreeView; Node1, Node2: PTyTreeNode;
+  Column: Integer; var CompareResult: Integer);
+begin
+  CompareResult := CompareStr(Sender.NodeItem[Node1].Text, Sender.NodeItem[Node2].Text);
+end;
+
+procedure TTreeViewItemsTest.TestAnExpandIsWrittenBackAndSurvivesAnItemsEdit;
+var
+  root: TTyTreeNodeItem;
+begin
+  root := FTree.Items.AddChild(nil, 'Root');
+  FTree.Items.AddChild(root, 'Child');
+  AssertFalse('precondition: collapsed', FTree.Expanded[root.Node]);
+  FTree.Expanded[root.Node] := True;
+  AssertTrue('the item says expanded', root.Expanded);
+  FTree.Items.AddChild(nil, 'Other');   // rebuilds every node
+  AssertTrue('the node is still expanded', FTree.Expanded[root.Node]);
+  root.Expanded := False;               // and the item's setter acts again
+  AssertFalse('collapsing through the item works', FTree.Expanded[root.Node]);
+end;
+
+procedure TTreeViewItemsTest.TestACheckIsWrittenBackAndSurvivesAnItemsEdit;
+var
+  a: TTyTreeNodeItem;
+begin
+  FTree.Options := FTree.Options + [toCheckSupport];
+  a := FTree.Items.AddChild(nil, 'A');
+  a.CheckType := ctCheckBox;
+  FTree.CheckState[a.Node] := csChecked;
+  AssertTrue('the item says checked', a.CheckState = csChecked);
+  FTree.Items.AddChild(nil, 'B');
+  AssertTrue('the node is still checked', FTree.CheckState[a.Node] = csChecked);
+end;
+
+procedure TTreeViewItemsTest.TestADragMovesTheItems;
+var
+  a, c: TTyTreeNodeItem;
+  cNode: PTyTreeNode;
+begin
+  a := FTree.Items.AddChild(nil, 'A');
+  FTree.Items.AddChild(nil, 'B');
+  c := FTree.Items.AddChild(nil, 'C');
+  cNode := c.Node;
+  AssertTrue('setup: the move is allowed', FTree.MoveNode(c.Node, a.Node, dmAbove));
+  AssertEquals('the items follow: C first', 'C', FTree.Items[0].Text);
+  AssertEquals('then A', 'A', FTree.Items[1].Text);
+  AssertTrue('the moved node is the same node -- no rebuild behind the app''s back',
+    c.Node = cNode);
+  AssertEquals('and each node still finds its own item', 'C',
+    FTree.NodeItem[FTree.GetFirst].Text);
+  AssertEquals('the second too', 'A',
+    FTree.NodeItem[FTree.GetNextSibling(FTree.GetFirst)].Text);
+  FTree.Items.AddChild(nil, 'D');
+  AssertEquals('an Items edit keeps the order on screen', 'C',
+    FTree.NodeItem[FTree.GetFirst].Text);
+end;
+
+procedure TTreeViewItemsTest.TestASortReordersTheItems;
+begin
+  FTree.Items.AddChild(nil, 'b');
+  FTree.Items.AddChild(nil, 'c');
+  FTree.Items.AddChild(nil, 'a');
+  FTree.OnCompareNodes := @CompareByText;
+  FTree.SortTree(0, sdAscending);
+  AssertEquals('the items follow the sort', 'a', FTree.Items[0].Text);
+  AssertEquals('all of them', 'c', FTree.Items[2].Text);
+  FTree.Items.AddChild(nil, 'z');
+  AssertEquals('an Items edit keeps the sorted order', 'a',
+    FTree.NodeItem[FTree.GetFirst].Text);
+end;
+
+procedure TTreeViewItemsTest.TestTheSelectionSurvivesAnItemsEdit;
+var
+  b: TTyTreeNodeItem;
+begin
+  FTree.Items.AddChild(nil, 'A');
+  b := FTree.Items.AddChild(nil, 'B');
+  FTree.FocusedNode := b.Node;
+  AssertTrue('precondition: B selected', FTree.NodeSelected[b.Node]);
+  FTree.Items.AddChild(nil, 'C');
+  AssertTrue('B is still selected', FTree.NodeSelected[b.Node]);
+  AssertTrue('and focused', FTree.FocusedNode = b.Node);
 end;
 
 initialization
