@@ -45,6 +45,7 @@ type
     FOnItemExit: TNotifyEvent;
     FRebuilding: Boolean;      // re-entrancy guard for RebuildButtons
     FUpdatingIndex: Boolean;   // re-entrancy guard for the child OnChange router
+    FInItemEvent: Integer;     // > 0 while an event relayed from a child runs (see RetireButton)
     procedure SetItems(AValue: TStrings);
     procedure ItemsChanged(Sender: TObject);
     procedure SetColumns(AValue: Integer);
@@ -54,6 +55,7 @@ type
     function GetButton(AIndex: Integer): TTyRadioButton;
     procedure RaiseIndexOutOfBounds(AIndex: Integer);
     procedure ClearButtons;
+    procedure RetireButton(AButton: TTyRadioButton);
     procedure RebuildButtons;
     procedure LayoutButtons;
     procedure ChildChanged(Sender: TObject);
@@ -197,6 +199,9 @@ function TyRadioGroupCellRect(const AClient: TRect; ACount, AColumns, AIndex: In
   ARightToLeft: Boolean = False): TRect;
 
 implementation
+
+uses
+  Forms;
 
 const
   TyRadioRowH = 22;   // logical row height per radio child (matches the radio default)
@@ -404,9 +409,34 @@ begin
       FButtons[i].Controller := AValue;
 end;
 
+{ A child the new Items leave over is freed -- but not on the spot while one of the group's
+  events relayed from a child is running: an Items edit made from OnClick, OnItemClick or a key
+  event runs inside that child's own handler, which carries on once the event returns (#137).
+  Then it is cut loose -- out of the group's list, its events and its radio group -- hidden, and
+  freed once the current message is done. }
+procedure TTyRadioGroup.RetireButton(AButton: TTyRadioButton);
+begin
+  if FInItemEvent = 0 then
+  begin
+    AButton.Free;
+    Exit;
+  end;
+  AButton.OnChange := nil;
+  AButton.OnKeyDown := nil;
+  AButton.OnKeyUp := nil;
+  AButton.OnKeyPress := nil;
+  AButton.OnUTF8KeyPress := nil;
+  AButton.OnEnter := nil;
+  AButton.OnExit := nil;
+  AButton.OnMouseDown := nil;
+  AButton.GroupIndex := High(Integer);   // checking it can no longer uncheck the live ones
+  AButton.Visible := False;
+  Application.ReleaseComponent(AButton);
+end;
+
 procedure TTyRadioGroup.RebuildButtons;
 var
-  prevIndex, newIndex, i: Integer;
+  prevIndex, newIndex, i, oldCount: Integer;
   prevCaption: string;
   hadSel: Boolean;
   rb: TTyRadioButton;
@@ -419,9 +449,23 @@ begin
     prevIndex := GetItemIndex;
     hadSel := (prevIndex >= 0) and (prevIndex <= High(FButtons)) and (FButtons[prevIndex] <> nil);
     if hadSel then prevCaption := FButtons[prevIndex].Caption else prevCaption := '';
-    ClearButtons;
+    { The buttons are reused, as LCL's are; see RetireButton for the ones left over. }
+    oldCount := Length(FButtons);
+    for i := FItems.Count to oldCount - 1 do
+      RetireButton(FButtons[i]);
     SetLength(FButtons, FItems.Count);
-    for i := 0 to FItems.Count - 1 do
+    FUpdatingIndex := True;   // silent: a rebuild is not a user selection change
+    try
+      for i := 0 to High(FButtons) do
+        if i < oldCount then
+        begin
+          FButtons[i].Caption := FItems[i];
+          FButtons[i].Checked := False;
+        end;
+    finally
+      FUpdatingIndex := False;
+    end;
+    for i := oldCount to FItems.Count - 1 do
     begin
       rb := TTyRadioButton.Create(Self);   // owned by Self (freed with the group)
       // INTERNAL helper: never show up in the IDE designer object tree.
@@ -527,10 +571,12 @@ begin
   if not (Sender is TTyRadioButton) then Exit;
   if not TTyRadioButton(Sender).Checked then Exit;   // ignore the uncheck half
   FUpdatingIndex := True;
+  Inc(FInItemEvent);
   try
     UpdateTabStops;
     NotifySelection;
   finally
+    Dec(FInItemEvent);
     FUpdatingIndex := False;
   end;
 end;
@@ -647,41 +693,71 @@ end;
   navigation sees it; then, if the key survived, move the selection. }
 procedure TTyRadioGroup.ItemKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
-  KeyDown(Key, Shift);
-  if Shift * [ssShift, ssAlt, ssCtrl] <> [] then Exit;   // modified arrows are not ours
-  case Key of
-    VK_LEFT:  begin MoveSelection(-1,  0); Key := 0; end;
-    VK_RIGHT: begin MoveSelection( 1,  0); Key := 0; end;
-    VK_UP:    begin MoveSelection( 0, -1); Key := 0; end;
-    VK_DOWN:  begin MoveSelection( 0,  1); Key := 0; end;
+  Inc(FInItemEvent);
+  try
+    KeyDown(Key, Shift);
+    if Shift * [ssShift, ssAlt, ssCtrl] <> [] then Exit;   // modified arrows are not ours
+    case Key of
+      VK_LEFT:  begin MoveSelection(-1,  0); Key := 0; end;
+      VK_RIGHT: begin MoveSelection( 1,  0); Key := 0; end;
+      VK_UP:    begin MoveSelection( 0, -1); Key := 0; end;
+      VK_DOWN:  begin MoveSelection( 0,  1); Key := 0; end;
+    end;
+  finally
+    Dec(FInItemEvent);
   end;
 end;
 
 procedure TTyRadioGroup.ItemKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
-  KeyUp(Key, Shift);
+  Inc(FInItemEvent);
+  try
+    KeyUp(Key, Shift);
+  finally
+    Dec(FInItemEvent);
+  end;
 end;
 
 procedure TTyRadioGroup.ItemKeyPress(Sender: TObject; var Key: char);
 begin
-  KeyPress(Key);
+  Inc(FInItemEvent);
+  try
+    KeyPress(Key);
+  finally
+    Dec(FInItemEvent);
+  end;
 end;
 
 procedure TTyRadioGroup.ItemUTF8KeyPress(Sender: TObject; var UTF8Key: TUTF8Char);
 begin
-  UTF8KeyPress(UTF8Key);
+  Inc(FInItemEvent);
+  try
+    UTF8KeyPress(UTF8Key);
+  finally
+    Dec(FInItemEvent);
+  end;
 end;
 
 { Sender stays the BUTTON, as LCL's does -- the whole point is to know WHICH option the
   keyboard is on, which a Sender of Self would not tell anyone. }
 procedure TTyRadioGroup.ItemEnter(Sender: TObject);
 begin
-  if Assigned(FOnItemEnter) then FOnItemEnter(Sender);
+  Inc(FInItemEvent);
+  try
+    if Assigned(FOnItemEnter) then FOnItemEnter(Sender);
+  finally
+    Dec(FInItemEvent);
+  end;
 end;
 
 procedure TTyRadioGroup.ItemExit(Sender: TObject);
 begin
-  if Assigned(FOnItemExit) then FOnItemExit(Sender);
+  Inc(FInItemEvent);
+  try
+    if Assigned(FOnItemExit) then FOnItemExit(Sender);
+  finally
+    Dec(FInItemEvent);
+  end;
 end;
 
 procedure TTyRadioGroup.SetParent(AParent: TWinControl);

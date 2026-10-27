@@ -29,6 +29,7 @@ type
     FOnItemChange: TCheckGroupItemEvent;
     FOnItemClick: TCheckGroupClicked;
     FRebuilding: Boolean;
+    FInItemEvent: Integer;   // > 0 while an event relayed from a child runs (see RetireCheckBox)
     procedure SetItems(AValue: TStrings);
     procedure ItemsChanged(Sender: TObject);
     procedure SetColumns(AValue: Integer);
@@ -39,6 +40,7 @@ type
     function GetCheckEnabled(AIndex: Integer): Boolean;
     procedure SetCheckEnabled(AIndex: Integer; AValue: Boolean);
     procedure ClearCheckBoxes;
+    procedure RetireCheckBox(ABox: TTyCheckBox);
     procedure RebuildCheckBoxes;
     procedure LayoutCheckBoxes;
     { The row PITCH the grid tiles with, in device pixels -- the same rule, and for the same
@@ -159,6 +161,9 @@ function TyCheckGroupCellRect(const AClientRect: TRect;
   ARightToLeft: Boolean = False): TRect;
 
 implementation
+
+uses
+  Forms;
 
 function TyCheckGroupCellRect(const AClientRect: TRect;
   ACount, AColumns, AIndex, ARowH: Integer;
@@ -281,9 +286,30 @@ begin
   SetLength(FCheckBoxes, 0);
 end;
 
+{ A child the new Items leave over is freed -- but not on the spot while one of the group's
+  events relayed from a child is running: an Items edit made from OnClick, OnItemClick or a key
+  event runs inside that child's own handler, which carries on once the event returns (#137).
+  Then it is cut loose -- out of the group's list, its events and its radio group -- hidden, and
+  freed once the current message is done. }
+procedure TTyCheckGroup.RetireCheckBox(ABox: TTyCheckBox);
+begin
+  if FInItemEvent = 0 then
+  begin
+    ABox.Free;
+    Exit;
+  end;
+  ABox.OnChange := nil;
+  ABox.OnKeyDown := nil;
+  ABox.OnKeyUp := nil;
+  ABox.OnKeyPress := nil;
+  ABox.OnUTF8KeyPress := nil;
+  ABox.Visible := False;
+  Application.ReleaseComponent(ABox);
+end;
+
 procedure TTyCheckGroup.RebuildCheckBoxes;
 var
-  i, n, idx: Integer;
+  i, n, idx, oldCount: Integer;
   oldChecked, oldDisabled: TStringList;
   cb: TTyCheckBox;
 begin
@@ -308,18 +334,29 @@ begin
         if not FCheckBoxes[i].Enabled then oldDisabled.Add(FCheckBoxes[i].Caption);
       end;
 
-    ClearCheckBoxes;
-
+    { The boxes are reused, as LCL's are; see RetireCheckBox for the ones left over. }
     n := FItems.Count;
+    oldCount := Length(FCheckBoxes);
+    for i := n to oldCount - 1 do
+      RetireCheckBox(FCheckBoxes[i]);
     SetLength(FCheckBoxes, n);
     for i := 0 to n - 1 do
     begin
-      cb := TTyCheckBox.Create(Self);      // owned by Self; freed on our Destroy/Clear
-      // Internal helper control: never a designable child in the IDE.
-      cb.ControlStyle := cb.ControlStyle + [csNoDesignVisible];
-      cb.Parent := Self;
+      if i < oldCount then
+      begin
+        cb := FCheckBoxes[i];
+        cb.Checked := False;               // silent: FRebuilding
+        cb.Enabled := True;
+      end
+      else
+      begin
+        cb := TTyCheckBox.Create(Self);    // owned by Self; freed on our Destroy/Clear
+        // Internal helper control: never a designable child in the IDE.
+        cb.ControlStyle := cb.ControlStyle + [csNoDesignVisible];
+        cb.Parent := Self;
+        cb.Controller := Controller;       // follow the group's controller (nil-safe)
+      end;
       cb.Caption := FItems[i];
-      cb.Controller := Controller;         // follow the group's controller (nil-safe)
       idx := oldChecked.IndexOf(FItems[i]);
       if idx >= 0 then
       begin
@@ -402,8 +439,13 @@ begin
     begin
       // Two names, one notification (see OnItemClick). Ours first, so the ordering is
       // stated rather than left to whichever field happens to be declared first.
-      if Assigned(FOnItemChange) then FOnItemChange(Self, i);
-      if Assigned(FOnItemClick) then FOnItemClick(Self, i);
+      Inc(FInItemEvent);
+      try
+        if Assigned(FOnItemChange) then FOnItemChange(Self, i);
+        if Assigned(FOnItemClick) then FOnItemClick(Self, i);
+      finally
+        Dec(FInItemEvent);
+      end;
       Exit;
     end;
 end;
@@ -414,22 +456,42 @@ end;
   through, so a handler that swallows a key really swallows it. }
 procedure TTyCheckGroup.ItemKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
-  KeyDown(Key, Shift);
+  Inc(FInItemEvent);
+  try
+    KeyDown(Key, Shift);
+  finally
+    Dec(FInItemEvent);
+  end;
 end;
 
 procedure TTyCheckGroup.ItemKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
-  KeyUp(Key, Shift);
+  Inc(FInItemEvent);
+  try
+    KeyUp(Key, Shift);
+  finally
+    Dec(FInItemEvent);
+  end;
 end;
 
 procedure TTyCheckGroup.ItemKeyPress(Sender: TObject; var Key: char);
 begin
-  KeyPress(Key);
+  Inc(FInItemEvent);
+  try
+    KeyPress(Key);
+  finally
+    Dec(FInItemEvent);
+  end;
 end;
 
 procedure TTyCheckGroup.ItemUTF8KeyPress(Sender: TObject; var UTF8Key: TUTF8Char);
 begin
-  UTF8KeyPress(UTF8Key);
+  Inc(FInItemEvent);
+  try
+    UTF8KeyPress(UTF8Key);
+  finally
+    Dec(FInItemEvent);
+  end;
 end;
 
 procedure TTyCheckGroup.RaiseIndexOutOfBounds(AIndex: Integer);

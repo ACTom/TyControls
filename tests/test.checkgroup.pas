@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, Types, Forms, Controls, ExtCtrls, LCLType,
   fpcunit, testregistry,
   tyControls.Types, tyControls.Controller, tyControls.Base,
-  tyControls.CheckBox, tyControls.GroupBox, tyControls.CheckGroup;
+  tyControls.CheckBox, tyControls.GroupBox, tyControls.CheckGroup, test.danglingrefs;
 type
   { Exposes protected seams + a handle on the internal children for assertions. }
   TCheckGroupAccess = class(TTyCheckGroup)
@@ -22,7 +22,15 @@ type
     FItemChangeCount: Integer;
     FLastItemChangeIdx: Integer;
     procedure HItemChange(Sender: TObject; AIndex: Integer);
+    procedure HAddItem(Sender: TObject; AIndex: Integer);
+    procedure HDeleteLastItem(Sender: TObject; AIndex: Integer);
   published
+    { #137: an Items edit from OnItemChange frees no check box that is still running its
+      click -- the edit used to free and rebuild every box. }
+    procedure TestAnItemsEditInTheClickFreesNoBoxUnderIt;
+    procedure TestDeletingTheClickedItemInItsClickIsSafe;
+    { The boxes are reused, as LCL's are. }
+    procedure TestAnItemsEditKeepsTheBoxes;
     procedure TestTypeKeyInheritedGroupBox;
     procedure TestDefaultColumns;
     procedure TestColumnsClampToOne;
@@ -90,6 +98,94 @@ begin
         Exit(csNoDesignVisible in TTyCheckBox(Controls[i]).ControlStyle);
       Inc(n);
     end;
+end;
+
+procedure TCheckGroupTest.HAddItem(Sender: TObject; AIndex: Integer);
+begin
+  TTyCheckGroup(Sender).Items.Add('C');
+end;
+
+procedure TCheckGroupTest.HDeleteLastItem(Sender: TObject; AIndex: Integer);
+begin
+  with TTyCheckGroup(Sender).Items do Delete(Count - 1);
+end;
+
+procedure TCheckGroupTest.TestAnItemsEditKeepsTheBoxes;
+var
+  g: TTyCheckGroup;
+  b0: TControl;
+begin
+  g := TTyCheckGroup.Create(nil);
+  try
+    g.Items.Add('A');
+    g.Items.Add('B');
+    b0 := g.Controls[0];
+    b0.Tag := 7;   // marked: a new box can land at the freed one's address
+    g.Items.Add('C');
+    AssertEquals('the first box is the same control', 7, g.Controls[0].Tag);
+    AssertEquals('three boxes', 3, g.ControlCount);
+  finally
+    g.Free;
+  end;
+end;
+
+procedure TCheckGroupTest.TestAnItemsEditInTheClickFreesNoBoxUnderIt;
+var
+  g: TTyCheckGroup;
+  raised: string;
+begin
+  g := TTyCheckGroup.Create(nil);
+  try
+    g.Items.Add('A');
+    g.Items.Add('B');
+    g.OnItemChange := @HAddItem;
+    raised := '';
+    BeginPoison;   // a click going on in a freed box faults every time
+    try
+      try
+        (g.Controls[1] as TTyCheckBox).Click;
+      except
+        on E: Exception do raised := E.ClassName + ': ' + E.Message;
+      end;
+    finally
+      EndPoison;
+    end;
+    AssertEquals('the click goes on in a box that is still there', '', raised);
+    AssertEquals('the item was added', 3, g.Items.Count);
+    AssertTrue('and B is checked', g.Checked[1]);
+  finally
+    g.Free;
+  end;
+end;
+
+procedure TCheckGroupTest.TestDeletingTheClickedItemInItsClickIsSafe;
+var
+  g: TTyCheckGroup;
+  raised: string;
+begin
+  g := TTyCheckGroup.Create(nil);
+  try
+    g.Items.Add('A');
+    g.Items.Add('B');
+    g.Items.Add('C');
+    g.OnItemChange := @HDeleteLastItem;
+    raised := '';
+    BeginPoison;
+    try
+      try
+        (g.Controls[2] as TTyCheckBox).Click;
+      except
+        on E: Exception do raised := E.ClassName + ': ' + E.Message;
+      end;
+    finally
+      EndPoison;
+    end;
+    AssertEquals('the box left over finishes its click', '', raised);
+    AssertEquals('two items are left', 2, g.Items.Count);
+    AssertFalse('neither is checked', g.Checked[0] or g.Checked[1]);
+  finally
+    g.Free;
+  end;
 end;
 
 procedure TCheckGroupAccess.ClickChild(AIndex: Integer);
