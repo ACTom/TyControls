@@ -68,7 +68,7 @@ begin
   FParBrushSkip := -1;
   FBrushTickPrev := NaN;
   FTlNow := NaN;
-  FTlDue := NaN;
+  FTlDragAt := -1;
   { [Batch 140] }
   FParExpNow := NaN;
   FThumbOwner := -1;
@@ -162,7 +162,7 @@ begin
   FreeAndNil(FGfxView);
   { the timeline's too [Batch 129] }
   FreeAndNil(FTlTimer);
-  FreeAndNil(FTlView);
+  TlDropViews;
   FreeAndNil(FTlAnim);
   for i := 0 to High(FCustomViews) do FreeAndNil(FCustomViews[i]);
   FCustomViews := nil;
@@ -472,11 +472,9 @@ begin
   { THE BRUSH COMPONENTS: new models (no areas, no painting option) and new
     views (no covers) [Batch 126] }
   BrushReset;
-  { THE TIMELINE'S VIEW goes with its model: its timer and its checkpoint
-    with it [Batch 129] }
-  FreeAndNil(FTlView);
-  FTlDue := NaN;
-  FTlDragging := False;
+  { THE TIMELINES' VIEWS go with their models: their timers and their
+    checkpoints with them [Batch 129, R5-G] }
+  TlDropViews;
   FTlStatesDirty := False;
   TlArmTimer;
   { new series models: no selection [Batch 88]. AN ELEMENT SURVIVES where

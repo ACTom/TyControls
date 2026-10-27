@@ -1502,12 +1502,14 @@ type
     FTooltipAutoRichText: Boolean;
     FResolvedImages: TStringList;
     { THE TIMELINE [Batch 129] -- see its section }
-    FTlView: TTyTimelineView;
+    FTlViews: array of TTyTimelineView;
+    FTlDues: TTyDoubleArray;
     FTlAnim: TTyAnimation;
     FTlUidSeq: Integer;
-    FTlNow, FTlDue: Double;
+    FTlNow: Double;
     FTlTimer: TTimer;
-    FTlDragging, FTlStatesDirty: Boolean;
+    FTlDragAt: Integer;
+    FTlStatesDirty: Boolean;
     { THE BRUSH COMPONENTS [Batch 126] -- see their section. Per component:
       the model from its option, the areas and the painting option the
       model keeps (a merge keeps them, a notMerge does not), the view's
@@ -2477,20 +2479,27 @@ type
     function TlClock: Double;
     function TlLive: Boolean;
     function TlNode: TJSONObject;
+    function TlNodeOf(AIndex: Integer): TJSONObject;
     function TlCurrentIndex: Double;
-    function TlAnimCfg: TTyTlAnimCfg;
+    function TlCurrentIndexOf(AIndex: Integer): Double;
+    function TlAnimCfg(AIndex: Integer): TTyTlAnimCfg;
     procedure SolveTimeline(APPI: Integer);
     function BuildTimeline(AList: TTyPaintList): Integer;
-    function TlHitAt(AX, AY: Integer; out AEl: Integer): Boolean;
+    function TlView(AIndex: Integer): TTyTimelineView;
+    function TlHitAt(AX, AY: Integer; out ATl, AEl: Integer): Boolean;
+    function TlNextDue(out AAt: Integer): Double;
     procedure TlArmTimer;
     procedure TlTimerFired(Sender: TObject);
-    procedure TlChange(AIndex: Double; AHasIndex: Boolean);
-    procedure TlClick(AEl: Integer);
+    procedure TlChange(ATl: Integer; AIndex: Double; AHasIndex: Boolean);
+    procedure TlPlayClick(ATl: Integer; APlay: Boolean);
+    procedure TlClick(ATl, AEl: Integer);
+    function TlTargetView(const ATarget: TTyChartEventTarget): TTyTimelineView;
     procedure TlMouseOver(const ATarget: TTyChartEventTarget);
     procedure TlMouseOut(const ATarget: TTyChartEventTarget);
     procedure TlApplyStates;
     procedure TlDragStart(const ATarget: TTyChartEventTarget);
-    procedure TlPointerChange(AX, AY: Integer; ATrigger: Boolean);
+    procedure TlPointerChange(ATl: Integer; AX, AY: Integer; ATrigger: Boolean);
+    procedure TlDropViews;
     procedure TlDragMove(AX, AY: Integer);
     procedure TlDragEnd(AX, AY: Integer);
     procedure TlMerge;
@@ -2793,7 +2802,7 @@ type
     function KbComponentKey(AKey: Word; AShift: TShiftState): Boolean;
     procedure KbDataZoomKey(AIndex: Integer; ACmd: TTyKbCommand);
     procedure KbVisualMapKey(AIndex, AHandle: Integer; ACmd: TTyKbCommand);
-    procedure KbTimelineKey(ACmd: TTyKbCommand);
+    procedure KbTimelineKey(ATl: Integer; ACmd: TTyKbCommand);
     { the part's ring, device px; False for nothing to ring }
     function KbPartRect(const AStop: TTyKbStop; APart: Integer; out R: TTyRectF): Boolean;
     { the accessible tree's component nodes [F5] }
@@ -4423,12 +4432,17 @@ type
     { ---- THE TIMELINE [Batch 129] ----
       The first timeline's view as the last render left it (nil without a
       timeline): its elements, their roles and states, the model it read.
-      TimelineNow is the play timer's clock (ms; NaN, the default, is the
+      TimelineNow is the play timers' clock (ms; NaN, the default, is the
       machine's -- and only then does a timer run); TimelineTick fires every
-      play timer due by ANowMs; TimelineDue is the pending one's due instant
-      (NaN for none). }
+      play timer due by ANowMs, in due order; TimelineDue is the first
+      view's pending one's due instant (NaN for none).
+      [R5-G] Every timeline model has a view: TimelineViewAt by the model's
+      slot (nil for a hole), TimelineDueAt its own timer. }
     function TimelineView: TTyTimelineView;
     function TimelineDue: Double;
+    function TimelineViewCount: Integer;
+    function TimelineViewAt(AIndex: Integer): TTyTimelineView;
+    function TimelineDueAt(AIndex: Integer): Double;
     procedure TimelineTick(ANowMs: Double);
     property TimelineNow: Double read FTlNow write FTlNow;
     { ---- THE BRUSH COMPONENTS [Batch 126] ----
