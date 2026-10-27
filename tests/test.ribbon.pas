@@ -3,7 +3,7 @@ unit test.ribbon;
 interface
 uses
   Classes, SysUtils, Types, Controls, Forms, LCLType, fpcunit, testregistry,
-  tyControls.Base, tyControls.Ribbon, tyControls.PopupSurface;
+  tyControls.Base, tyControls.Ribbon, tyControls.PopupSurface, tyControls.Button;
 
 type
   { Cracker for the protected designer-path members (SetDesigning). }
@@ -33,9 +33,70 @@ type
     procedure DefaultAligns;
     procedure APageThatLeavesIsForgotten;
     procedure AMinimisedRibbonReadBackExpandsToABand;
+    { The page keeps its groups in step after the first layout (#136): a freed group leaves the
+      layout, one added later goes last, and one the application hid stays hidden. }
+    procedure APageForgetsAFreedGroup;
+    procedure AGroupAddedLaterGoesLast;
+    procedure AHiddenGroupStaysHidden;
+    procedure AnOverflowedGroupComesBackWithRoom;
+    procedure AGroupHiddenWhileOverflowedStaysHidden;
+    procedure AGroupMovedAwayIsForgotten;
+    { Freed while the overflow fly-out holds it, where the page is not its parent. }
+    procedure AGroupFreedInTheFlyOutIsForgotten;
   end;
 
 implementation
+
+type
+  TRibbonPageAccess = class(TTyRibbonPage)
+  public
+    procedure Lay;
+  end;
+
+procedure TRibbonPageAccess.Lay;
+var
+  r: TRect;
+begin
+  r := Rect(0, 0, Width, Height);
+  AlignControls(nil, r);
+end;
+
+const
+  GroupW = 100;
+  GroupGap = 9;   // the page's inter-group gap at 96 PPI
+
+{ A page AWidth wide with three 100-px groups, laid out once; the groups come back in visual
+  order, the ones that did not fit last. }
+function MakeGroupPage(AForm: TForm; AWidth: Integer; out A, B, C: TTyRibbonGroup;
+  AGroupOwner: TComponent = nil; AOwnGroups: Boolean = True): TRibbonPageAccess;
+var
+  g: array[0..2] of TTyRibbonGroup;
+  i, j: Integer;
+  t: TTyRibbonGroup;
+begin
+  Result := TRibbonPageAccess.Create(AForm);
+  Result.Parent := AForm;
+  Result.Align := alNone;
+  Result.Font.PixelsPerInch := 96;
+  Result.SetBounds(0, 0, AWidth, 100);
+  Result.Visible := True;
+  for i := 0 to 2 do
+  begin
+    if AOwnGroups then g[i] := TTyRibbonGroup.Create(AForm)
+    else g[i] := TTyRibbonGroup.Create(AGroupOwner);
+    g[i].Parent := Result;
+    g[i].Width := GroupW;
+  end;
+  Result.Lay;
+  for i := 1 to 2 do
+    for j := i downto 1 do
+      if (Ord(not g[j].Visible) * 100000 + g[j].Left)
+         < (Ord(not g[j - 1].Visible) * 100000 + g[j - 1].Left) then
+      begin
+        t := g[j]; g[j] := g[j - 1]; g[j - 1] := t;
+      end;
+  A := g[0]; B := g[1]; C := g[2];
+end;
 
 procedure TRibbonTest.HandleChange(Sender: TObject);
 begin
@@ -496,6 +557,175 @@ begin
     fresh.Free;
     back.Free;
     src.Free;
+  end;
+end;
+
+procedure TRibbonTest.APageForgetsAFreedGroup;
+var
+  form: TForm;
+  page: TRibbonPageAccess;
+  a, b, c: TTyRibbonGroup;
+begin
+  form := TForm.CreateNew(nil);
+  try
+    page := MakeGroupPage(form, 600, a, b, c);
+    AssertEquals('precondition: the third group is third', 2 * (GroupW + GroupGap), c.Left);
+    b.Free;
+    page.Lay;
+    AssertEquals('the freed group leaves the layout: the third moves up', GroupW + GroupGap, c.Left);
+    AssertEquals('the first stays first', 0, a.Left);
+  finally
+    form.Free;
+  end;
+end;
+
+procedure TRibbonTest.AGroupAddedLaterGoesLast;
+var
+  form: TForm;
+  page: TRibbonPageAccess;
+  a, b, c, d: TTyRibbonGroup;
+begin
+  form := TForm.CreateNew(nil);
+  try
+    page := MakeGroupPage(form, 600, a, b, c);
+    d := TTyRibbonGroup.Create(form);
+    d.Parent := page;
+    d.Width := GroupW;
+    page.Lay;
+    AssertEquals('the added group goes after the others', 3 * (GroupW + GroupGap), d.Left);
+    AssertEquals('instead of on top of the first', 0, a.Left);
+    AssertTrue('and is shown', d.Visible);
+  finally
+    form.Free;
+  end;
+end;
+
+procedure TRibbonTest.AHiddenGroupStaysHidden;
+var
+  form: TForm;
+  page: TRibbonPageAccess;
+  a, b, c: TTyRibbonGroup;
+begin
+  form := TForm.CreateNew(nil);
+  try
+    page := MakeGroupPage(form, 600, a, b, c);
+    b.Visible := False;
+    page.Lay;
+    AssertFalse('a group the application hid stays hidden', b.Visible);
+    AssertEquals('and takes no room', GroupW + GroupGap, c.Left);
+  finally
+    form.Free;
+  end;
+end;
+
+procedure TRibbonTest.AnOverflowedGroupComesBackWithRoom;
+var
+  form: TForm;
+  page: TRibbonPageAccess;
+  a, b, c: TTyRibbonGroup;
+begin
+  form := TForm.CreateNew(nil);
+  try
+    page := MakeGroupPage(form, 600, a, b, c);
+    page.Width := 250;
+    page.Lay;
+    AssertFalse('precondition: the third group does not fit', c.Visible);
+    page.Width := 600;
+    page.Lay;
+    AssertTrue('with room again it comes back', c.Visible);
+    AssertEquals('in its place', 2 * (GroupW + GroupGap), c.Left);
+  finally
+    form.Free;
+  end;
+end;
+
+procedure TRibbonTest.AGroupHiddenWhileOverflowedStaysHidden;
+var
+  form: TForm;
+  page: TRibbonPageAccess;
+  a, b, c: TTyRibbonGroup;
+begin
+  form := TForm.CreateNew(nil);
+  try
+    page := MakeGroupPage(form, 600, a, b, c);
+    page.Width := 250;
+    page.Lay;
+    AssertFalse('precondition: the third group does not fit', c.Visible);
+    c.Visible := False;   // the application hides it too
+    page.Width := 600;
+    page.Lay;
+    AssertFalse('it stays hidden when room comes back', c.Visible);
+  finally
+    form.Free;
+  end;
+end;
+
+procedure TRibbonTest.AGroupMovedAwayIsForgotten;
+var
+  form: TForm;
+  page: TRibbonPageAccess;
+  a, b, c: TTyRibbonGroup;
+begin
+  form := TForm.CreateNew(nil);
+  try
+    page := MakeGroupPage(form, 600, a, b, c);
+    b.Parent := form;
+    page.Lay;
+    AssertEquals('the group moved away leaves the layout', GroupW + GroupGap, c.Left);
+  finally
+    form.Free;
+  end;
+end;
+
+{ The fly-out is a real window. The console runner never calls Application.Initialize, so
+  CreateHandle fails with 1407 without this; lazy, the pattern test.base uses. }
+var
+  WidgetSetReady: Boolean = False;
+
+procedure NeedWidgetSet;
+begin
+  if WidgetSetReady then Exit;
+  Forms.Application.Initialize;
+  WidgetSetReady := True;
+end;
+
+procedure TRibbonTest.AGroupFreedInTheFlyOutIsForgotten;
+var
+  form: TForm;
+  page: TRibbonPageAccess;
+  a, b, c: TTyRibbonGroup;
+  i: Integer;
+  more: TTyButton;
+  fly: TTyPopupSurface;
+begin
+  NeedWidgetSet;
+  form := TForm.CreateNew(nil);
+  a := nil;
+  b := nil;
+  try
+    { Owned by no one, so only the page's own free notice can tell it. }
+    page := MakeGroupPage(form, 250, a, b, c, nil, False);
+    AssertFalse('precondition: the third group does not fit', c.Visible);
+    more := nil;
+    for i := 0 to page.ControlCount - 1 do
+      if page.Controls[i] is TTyButton then more := TTyButton(page.Controls[i]);
+    AssertNotNull('precondition: the more button is there', more);
+    more.Click;
+    fly := nil;
+    for i := 0 to page.ComponentCount - 1 do
+      if page.Components[i] is TTyPopupSurface then fly := TTyPopupSurface(page.Components[i]);
+    AssertNotNull('precondition: the fly-out was made', fly);
+    AssertSame('precondition: the fly-out holds the third group', TWinControl(fly), c.Parent);
+    c.Free;
+    fly.ClosePopup;
+    page.Width := 600;
+    page.Lay;
+    AssertEquals('the other two are laid out without it', GroupW + GroupGap, b.Left);
+    AssertTrue('and shown', b.Visible);
+  finally
+    form.Free;
+    a.Free;
+    b.Free;
   end;
 end;
 
