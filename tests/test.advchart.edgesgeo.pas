@@ -61,6 +61,7 @@ type
   published
     procedure TestAnSvgImageDrawsThroughTheResolver;
     procedure TestExcludingGeoTakesItsPixelsOnly;
+    procedure TestASymbolLabelHangsByItsPosition;
   end;
 
 implementation
@@ -377,6 +378,51 @@ begin
     a.Free;
     b.Free;
   end;
+end;
+
+{ a map series' symbol label hangs off its anchor as zrender's position
+  table pins it: 'top' (and 'outside') by its bottom centre, 'right' by its
+  left middle, 'inside' by its centre, no position at 'bottom' by its top
+  centre -- the element's box agrees with the caption }
+procedure TAdvChartEdgesGeoTest.TestASymbolLabelHangsByItsPosition;
+const
+  cSq = '{"type":"FeatureCollection","features":['
+    + '{"type":"Feature","properties":{"name":"A"},"geometry":{"type":"Polygon","coordinates":[[[0,0],[10,0],[10,10],[0,10],[0,0]]]}},'
+    + '{"type":"Feature","properties":{"name":"B"},"geometry":{"type":"Polygon","coordinates":[[[10,0],[20,0],[20,10],[10,10],[10,0]]]}},'
+    + '{"type":"Feature","properties":{"name":"C"},"geometry":{"type":"Polygon","coordinates":[[[0,10],[10,10],[10,20],[0,20],[0,10]]]}},'
+    + '{"type":"Feature","properties":{"name":"D"},"geometry":{"type":"Polygon","coordinates":[[[10,10],[20,10],[20,20],[10,20],[10,10]]]}}]}';
+  cOpt = '{"animation":false,"legend":{},"series":[{"type":"map","map":"r5g-sq4","name":"a",'
+    + '"label":{"show":true},"data":[{"name":"A","value":1,"label":{"position":"top"}},'
+    + '{"name":"B","value":2,"label":{"position":"right"}},{"name":"C","value":3,"label":{"position":"outside"}},'
+    + '{"name":"D","value":4,"label":{"position":"inside"}}]},'
+    + '{"type":"map","map":"r5g-sq4","name":"b","label":{"show":true},"data":[{"name":"A","value":5}]}]}';
+  cH: array[0..3] of TTyTextAnchorH = (tahCentre, tahLeft, tahCentre, tahCentre);
+  cV: array[0..3] of TTyTextAnchorV = (tavBottom, tavMiddle, tavBottom, tavMiddle);
+var
+  start, count, k, n: Integer;
+  el: TTyChartElement;
+  bmp: TBGRABitmap;
+begin
+  AssertTrue(TyChartRegisterMap('r5g-sq4', cSq));
+  FChart.Option := cOpt;
+  bmp := TBGRABitmap.Create(400, 300, BGRA(255, 255, 255, 255));
+  try
+    FChart.Render(bmp.Canvas, Rect(0, 0, 400, 300), 96);
+  finally
+    bmp.Free;
+  end;
+  AssertTrue('series a has symbols', FChart.MapSymbolRange(0, start, count));
+  n := 0;
+  for k := start to start + count - 1 do
+  begin
+    el := FChart.List.Element(k);
+    if el.Caption.FontSizeLogical <= 0 then Continue;
+    AssertTrue('four labels', n <= 3);
+    AssertEquals(Format('label %d anchor h', [n]), Ord(cH[n]), Ord(el.Caption.AnchorH));
+    AssertEquals(Format('label %d anchor v', [n]), Ord(cV[n]), Ord(el.Caption.AnchorV));
+    Inc(n);
+  end;
+  AssertEquals('four labels', 4, n);
 end;
 
 initialization

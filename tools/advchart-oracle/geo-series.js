@@ -1087,6 +1087,11 @@ const CASES = [
     note: "a map series on g6 with a data item for H (both styles merge into it) and none for K (two appended K items, each with its own region's style; the region model is the first's)",
     option: opt({ series: [{ type: 'map', map: 'g6', data: [{ name: 'H', value: 1, itemStyle: { borderWidth: 4 } }] }] }),
   },
+  {
+    id: 'r5g-echarts-style-map-bare',
+    note: "a map series on g6 whose data names neither H nor K: each region appends its own item, and the name finds the first -- H's first region's style alone (red, no blue border, no label), K's first",
+    option: opt({ series: [{ type: 'map', map: 'g6', data: [{ name: 'L', value: 2 }] }] }),
+  },
 ];
 
 // ---------- guards ----------
