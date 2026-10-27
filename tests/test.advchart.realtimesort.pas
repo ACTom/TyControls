@@ -607,7 +607,8 @@ begin
 end;
 
 { a racing bar clipped past the extent stays in the list, ignored, at the
-  plot's edge; a bar that does not race is dropped }
+  plot's edge; [R5-I] and so does a bar that does not race (BarView keeps
+  every clipped bar) }
 procedure TAdvChartRealtimeSortTest.TestTheClippedBarIsKeptIgnored;
 var
   el: TTyChartElement;
@@ -641,8 +642,12 @@ begin
   Draw;
   n := 0;
   for i := 0 to FChart.List.Count - 1 do
+    if (FChart.List.Element(i).Anim.Role = carBar) and not FChart.List.Element(i).Ignore then Inc(n);
+  AssertEquals('no race: two shown', 2, n);
+  n := 0;
+  for i := 0 to FChart.List.Count - 1 do
     if FChart.List.Element(i).Anim.Role = carBar then Inc(n);
-  AssertEquals('no race: the clipped ones dropped', 2, n);
+  AssertEquals('no race: the clipped ones kept too', 4, n);
 end;
 
 initialization

@@ -969,7 +969,8 @@ begin
   { A 0 IS A BAR TOO: upstream draws it flat, which paints nothing, and hangs
     its label on it. Dropped, the chart lost the one number that says "none".
     So is a value equal to a pinned min, clipped to the plot's very edge; one
-    clipped PAST itself, wholly off the plot, is not drawn. }
+    clipped PAST itself, wholly off the plot, is not drawn -- [R5-I] kept,
+    ignored, as BarView keeps it. }
   Given('bar', 4, [0, 20, 10, 5]);
   TTyIntervalScale(FBinding.ValueAxis.Scale).SetExtent(TyRange(0, 100));
   v := TySeriesVisual($FF3366CC);
@@ -988,11 +989,13 @@ begin
   TTyIntervalScale(FBinding.ValueAxis.Scale).SetExtent(TyRange(10, 100));
   TyBuildSeriesMarks(FBinding, FStore, TyNoStack, v, FList);
   { 0 and 5 are wholly below a min of 10; 10 touches it }
-  AssertEquals('what is under the min is not drawn', 2, FList.Count);
-  b := TyShapeBounds(FList.Element(1).Shape);
+  AssertEquals('every bar kept', 4, FList.Count);
+  AssertTrue('what is under the min is not drawn', FList.Element(0).Ignore and FList.Element(3).Ignore);
+  AssertFalse('the rest are', FList.Element(1).Ignore or FList.Element(2).Ignore);
+  b := TyShapeBounds(FList.Element(2).Shape);
   AssertEquals('the min itself is a flat bar', 0.0, b.Bottom - b.Top, 0);
   AssertEquals('at the plot''s edge', FCart.GetRect.Bottom, b.Bottom, 1e-9);
-  AssertEquals('with its number', '10', FList.Element(1).Caption.Text);
+  AssertEquals('with its number', '10', FList.Element(2).Caption.Text);
 end;
 
 procedure TAdvChartMarksTest.TestAStackedMinimumIsMeasuredFromTheBarBelow;

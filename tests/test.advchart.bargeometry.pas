@@ -208,6 +208,9 @@ begin
         e := lst.Element(i);
         if e.Datum.IsEdge or (e.Datum.SeriesIndex <> si)
           or (e.Datum.RawDataIndex <> raw) then Continue;
+        { [R5-I] a bar clipped past the plot is kept, ignored -- upstream's
+          hidden one: neither drawn nor hit }
+        if e.Ignore then Continue;
         if pictorial then
         begin
           { the inkless rect is the bar; the glyphs are its picture }

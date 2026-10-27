@@ -1662,13 +1662,12 @@ begin
       paints nothing, and it still carries its label.
       [Revised in batch 36: every bar of no length was dropped, and its label
       with it.] }
-    { A RACING BAR clipped past the plot is not dropped: BarView keeps the
+    { A BAR clipped past the plot is not dropped: BarView keeps the
       element, `ignore` (neither drawn nor hit), at the edge the clip put it
-      on, and the next order may bring it back from there [Batch 135] }
+      on, and the next order -- or the next update -- brings it back from
+      there [Batch 135; R5-I: every bar, racing or not] }
     clipped := (col.Clip or AVisual.RealtimeSort)
       and ClipBarLayout(ABinding.Cart.GetArea, lx, ly, lw, lh);
-    if clipped and not AVisual.RealtimeSort then
-      Continue;
     r := LayoutBox(lx, ly, lw, lh);
 
     { A zero-width column draws nothing rather than an invisible rect that is
@@ -3276,12 +3275,44 @@ begin
     if clipOn then clipKind := TyWhiskerClipOf(area, ce.Ends) else clipKind := wcNone;
     if clipKind = wcFull then Continue;
 
+    { THE ENTER ANIMATION'S NUMBERS: where the open price lands (every
+      point grows out of it, candlestickLayout.ts:128), the body's two
+      ends, the two wick ends, the spine and the body's two sides across
+      it -- the snapped ones [Batch 89; Batch 108]; a simple box's too: its
+      one stroke grows out of the open price as a full box does [R5-I] }
+    anim := Default(TTyChartAnim);
+    anim.Series := ABinding.SeriesIndex;
+    anim.Index := i;
+    anim.G[0] := ce.InitBaseline;
+    if baseHoriz then
+    begin
+      anim.G[1] := ce.Ends[0].Y;
+      anim.G[2] := ce.Ends[3].Y;
+      anim.G[3] := ce.Ends[4].Y;
+      anim.G[4] := ce.Ends[6].Y;
+      anim.G[5] := ce.Ends[4].X;
+      anim.G[6] := ce.Ends[0].X;
+      anim.G[7] := ce.Ends[1].X;
+    end
+    else
+    begin
+      anim.G[1] := ce.Ends[0].X;
+      anim.G[2] := ce.Ends[3].X;
+      anim.G[3] := ce.Ends[4].X;
+      anim.G[4] := ce.Ends[6].X;
+      anim.G[5] := ce.Ends[4].Y;
+      anim.G[6] := ce.Ends[0].Y;
+      anim.G[7] := ce.Ends[1].Y;
+    end;
+
     if simple then
     begin
-      { No body to speak of: one stroke from highest to lowest. }
-      anim := Default(TTyChartAnim);
+      { No body to speak of: one stroke from highest to lowest -- the
+        candle's points all the same, as upstream's NormalBoxPath with
+        __simpleBox (G[8] says so; the frame draws ring[4] to ring[6]) }
+      anim.G[8] := 1;
       before := AList.Count;
-      Wick(ce.Ends[4], ce.Ends[6], carNone);
+      Wick(ce.Ends[4], ce.Ends[6], carCandleWickHigh);
       { [R2-D] THE ONE PATH upstream draws a simple box with (NormalBoxPath,
         __simpleBox: moveTo the high end, lineTo the low end) -- for the
         universal transition }
@@ -3308,34 +3339,6 @@ begin
                    Min(Min(ce.Ends[0].Y, ce.Ends[1].Y), Min(ce.Ends[2].Y, ce.Ends[3].Y)),
                    Max(Max(ce.Ends[0].X, ce.Ends[1].X), Max(ce.Ends[2].X, ce.Ends[3].X)),
                    Max(Max(ce.Ends[0].Y, ce.Ends[1].Y), Max(ce.Ends[2].Y, ce.Ends[3].Y)));
-      { THE ENTER ANIMATION'S NUMBERS: where the open price lands (every
-        point grows out of it, candlestickLayout.ts:128), the body's two
-        ends, the two wick ends, the spine and the body's two sides across
-        it -- the snapped ones [Batch 89; Batch 108] }
-      anim := Default(TTyChartAnim);
-      anim.Series := ABinding.SeriesIndex;
-      anim.Index := i;
-      anim.G[0] := ce.InitBaseline;
-      if baseHoriz then
-      begin
-        anim.G[1] := ce.Ends[0].Y;
-        anim.G[2] := ce.Ends[3].Y;
-        anim.G[3] := ce.Ends[4].Y;
-        anim.G[4] := ce.Ends[6].Y;
-        anim.G[5] := ce.Ends[4].X;
-        anim.G[6] := ce.Ends[0].X;
-        anim.G[7] := ce.Ends[1].X;
-      end
-      else
-      begin
-        anim.G[1] := ce.Ends[0].X;
-        anim.G[2] := ce.Ends[3].X;
-        anim.G[3] := ce.Ends[4].X;
-        anim.G[4] := ce.Ends[6].X;
-        anim.G[5] := ce.Ends[4].Y;
-        anim.G[6] := ce.Ends[0].Y;
-        anim.G[7] := ce.Ends[1].Y;
-      end;
       { THE WICK IS TWO SEGMENTS, not one line behind the body. They look the
         same under an opaque candle and not at all the same under a hollow
         one -- and a hollow candle is how half the world draws a rising bar. }

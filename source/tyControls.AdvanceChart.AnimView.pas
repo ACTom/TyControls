@@ -3127,7 +3127,7 @@ var
   { LabelManager's oldLayout: x / y / rotation from where the last layout
     put the text, at update timing and the row [Batch 92] }
   procedure MoveLabel(var AP: TTyChartAnimProxy; const AOldEl, AEl: TTyChartElement;
-    ASer, ARow: Integer; const AModel: TTyAnimModel);
+    ASer, ARow: Integer; const AModel: TTyAnimModel; AFromNow: Boolean);
   var
     props: TTyAnimProps;
     fx, fy: Double;
@@ -3149,6 +3149,14 @@ var
     begin
       fx := AOldEl.Caption.X;
       fy := AOldEl.Caption.Y;
+    end;
+    { [R5-I] a funnel's text moves its own style x / y from where they are
+      now -- a move in flight goes on from its current place }
+    if AFromNow and (AP <> nil) and (AP.GetAnimProp('x').Kind = avkNumber)
+      and (AP.GetAnimProp('y').Kind = avkNumber) then
+    begin
+      fx := AP.Num('x');
+      fy := AP.Num('y');
     end;
     if AP = nil then AP := Make(ASer, ARow, 'label');
     AP.Attr(TyAnimProps([Num1('x', fx), Num1('y', fy),
@@ -4297,11 +4305,18 @@ var
             ArmOne(AList, AAt, AEl, AC, True);
             Exit;
           end;
-          props := TyAnimProps([Num1('style.opacity', AEl.Style.Alpha)]);
+          { [R5-I] FunnelPiece.updateData: updateProps of the opacity AND
+            the four points (the points were set at once) }
+          props := TyAnimProps([Num1('style.opacity', AEl.Style.Alpha),
+            TyAnimProp('shape.points', GuidePoints(AEl))]);
           hasOld := OldEl(AOld, AOldRow, 'funnel', oe);
-          if hasOld then oprops := TyAnimProps([Num1('style.opacity', oe.Style.Alpha)])
+          if hasOld then oprops := TyAnimProps([Num1('style.opacity', oe.Style.Alpha),
+            TyAnimProp('shape.points', GuidePoints(oe))])
           else oprops := nil;
           p := Take(AOld, AOldRow, s, r, 'funnel', oprops, props, hasOld);
+          { an enter's proxy has no points: the old piece's }
+          if hasOld and (Length(p.GetAnimProp('shape.points').Arr) <> 8) then
+            p.SetAnimProp('shape.points', GuidePoints(oe));
           p.SetFinal(props);
           TyUpdateProps(p, props, AC.Model, TyAnimCallAt(r));
         end;
@@ -4398,8 +4413,15 @@ var
         end;
       carCandleBody, carCandleWickHigh, carCandleWickLow:
         begin
-          { one proxy for the three; an added candle is made final }
-          if (AOldRow < 0) or (Find(s, r, 'candle') <> nil) then Exit;
+          { one proxy for the three; [R5-I] an added candle enters as in a
+            first render (the add branch: createNormalBox with isInit,
+            initProps at the row) -- it was made final }
+          if Find(s, r, 'candle') <> nil then Exit;
+          if AOldRow < 0 then
+          begin
+            ArmOne(AList, AAt, AEl, AC, True);
+            Exit;
+          end;
           ring := CandleRing(AEl, AC.BaseHoriz);
           props := TyAnimProps([TyAnimProp('shape.points', TyAnimArr(ring, 2))]);
           hasOld := OldEl(AOld, AOldRow, 'candle', oe);
@@ -4479,12 +4501,17 @@ var
                 end
                 else if AEl.Caption.ValAnim then
                   CountOn(p, oe, AEl, s, r, 'label', AC.Model)
+                else if (AEl.Anim.HostPlus1 = 0) and (AC.SeriesType = 'funnel') then
+                  { [R5-I] FunnelPiece._updateLabel: updateProps of the
+                    text's style x / y from where it is (update timing, the
+                    row); LabelManager its rotation from the old layout }
+                  MoveLabel(p, oe, AEl, s, r, AC.Model, True)
                 else if (AEl.Anim.HostPlus1 = 0)
                   and ((AC.SeriesType = 'pie') or AEl.Caption.LmFree
                     { a sunburst's in its drill-down [Batch 115], and
                       [R2-C] in any update }
                     or (AC.SeriesType = 'sunburst')) then
-                  MoveLabel(p, oe, AEl, s, r, AC.Model);
+                  MoveLabel(p, oe, AEl, s, r, AC.Model, False);
               end;
               Exit;
             end;
@@ -6538,7 +6565,14 @@ begin
         AEl.Shape.CY := AEl.Anim.G[1] + Sin(a) * AEl.Anim.G[2];
       end;
     carFunnel:
-      AEl.Style.Alpha := AProxy.Num('style.opacity');
+      begin
+        AEl.Style.Alpha := AProxy.Num('style.opacity');
+        { [R5-I] the four points an update tweens }
+        v := AProxy.GetAnimProp('shape.points');
+        if Length(v.Arr) = 8 then
+          AEl.Shape.Points := [TyPointF(v.Arr[0], v.Arr[1]), TyPointF(v.Arr[2], v.Arr[3]),
+            TyPointF(v.Arr[4], v.Arr[5]), TyPointF(v.Arr[6], v.Arr[7])];
+      end;
     carGaugePointer:
       begin
         { the needle's angle is upstream's rotation turned back: the static
@@ -6587,6 +6621,10 @@ begin
               Max(v.Arr[1], v.Arr[5]));
             AEl.Shape := TyShapeRect(r);
           end
+          else if (AEl.Anim.Role = carCandleWickHigh) and (AEl.Anim.G[8] <> 0) then
+            { [R5-I] a simple box: one stroke, the highest to the lowest }
+            AEl.Shape.Points := [TyPointF(v.Arr[8], v.Arr[9]),
+              TyPointF(v.Arr[12], v.Arr[13])]
           else if AEl.Anim.Role = carCandleWickHigh then
             AEl.Shape.Points := [TyPointF(v.Arr[8], v.Arr[9]),
               TyPointF(v.Arr[10], v.Arr[11])]
@@ -6602,6 +6640,9 @@ begin
               v.Arr[3]);
             AEl.Shape := TyShapeRect(r);
           end
+          else if (AEl.Anim.Role = carCandleWickHigh) and (AEl.Anim.G[8] <> 0) then
+            AEl.Shape.Points := [TyPointF(v.Arr[8], v.Arr[9]),
+              TyPointF(v.Arr[12], v.Arr[13])]
           else if AEl.Anim.Role = carCandleWickHigh then
             AEl.Shape.Points := [TyPointF(v.Arr[8], v.Arr[9]),
               TyPointF(v.Arr[10], v.Arr[11])]
@@ -11025,8 +11066,10 @@ begin
     { [R2-D] A CANDLE'S WICKS are in its box's one path upstream
       (NormalBoxPath): while the box morphs or combines they are in its
       frames, not drawn on their own; while its style runs they take its
-      stroke and opacity }
-    if (ASet <> nil) and (pel^.Anim.Role in [carCandleWickHigh, carCandleWickLow]) then
+      stroke and opacity. [R5-I] A simple box's one stroke is the path
+      itself (G[8]), not a wick of it }
+    if (ASet <> nil) and (pel^.Anim.Role in [carCandleWickHigh, carCandleWickLow])
+      and (pel^.Anim.G[8] = 0) then
     begin
       g := ASet.Find(pel^.Anim.Series, pel^.Anim.Index, 'utx0');
       if (g <> nil) and (g.FMorphOn or g.FCombineOn) then
