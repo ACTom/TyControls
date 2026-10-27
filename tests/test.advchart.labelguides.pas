@@ -19,7 +19,7 @@ unit test.advchart.labelguides;
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
-     tyControls.Controller, tyControls.Painter,
+     tyControls.Controller, tyControls.Painter, tyControls.Types,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
      tyControls.AdvanceChart.LabelGuide, tyControls.AdvanceChart.Color,
      tyControls.AdvanceChart.Measure, tyControls.AdvanceChart.Render, tyControls.AdvanceChart,
@@ -66,6 +66,7 @@ type
     procedure TestTheOtherSeriesLinesAsUpstream;
     procedure TestAPieLineInkAndPen;
     procedure TestEndLabelStatesAsUpstream;
+    procedure TestThePenReachesThePainter;
   end;
 
 implementation
@@ -690,6 +691,57 @@ begin
     + ' disagree with upstream:' + FReport, 0, FBad);
   AssertTrue(Format('states compared (%d)', [n]), n >= 8);
   if k = 0 then ;
+end;
+
+{ THE PEN'S ENDS AND CORNERS REACH THE PAINTER: a thick open polyline
+  inks past its ends with a round or a square cap and not with a butt one;
+  a bevel join inks less than a miter at a sharp corner }
+procedure TAdvChartLabelGuidesTest.TestThePenReachesThePainter;
+
+  function Ink(ACap, AJoin: Byte): Integer;
+  var
+    b: TBGRABitmap;
+    p: TTyPainter;
+    el: TTyChartElement;
+    x, y: Integer;
+  begin
+    b := TBGRABitmap.Create(200, 140, BGRA(255, 255, 255, 255));
+    try
+      el := TyChartElement(TyShapePolyline([TyPointF(50, 110), TyPointF(100, 20),
+        TyPointF(150, 110)]));
+      el.Style.HasFill := False;
+      el.Style.StrokeColor := $FF000000;
+      el.Style.StrokeWidthLogical := 16;
+      el.Style.LineCap := ACap;
+      el.Style.LineJoin := AJoin;
+      p := TTyPainter.Create;
+      try
+        p.BeginPaintOn(nil, Rect(0, 0, 200, 140), 96, b);
+        TyRenderElement(p, el);
+        p.EndPaint;
+      finally
+        p.Free;
+      end;
+      { the ink: every pixel's darkness }
+      Result := 0;
+      for y := 0 to b.Height - 1 do
+        for x := 0 to b.Width - 1 do
+          Inc(Result, 255 - b.GetPixel(x, y).red);
+    finally
+      b.Free;
+    end;
+  end;
+
+var butt, rnd, square, miter, bevel: Integer;
+begin
+  butt := Ink(cTyCapButt, cTyJoinMiter);
+  rnd := Ink(cTyCapRound, cTyJoinMiter);
+  square := Ink(cTyCapSquare, cTyJoinMiter);
+  AssertTrue(Format('a round cap inks past a butt one (%d, %d)', [rnd, butt]), rnd > butt + 100 * 255);
+  AssertTrue(Format('a square cap inks past a round one (%d, %d)', [square, rnd]), square > rnd + 20 * 255);
+  miter := Ink(cTyCapButt, cTyJoinMiter);
+  bevel := Ink(cTyCapButt, cTyJoinBevel);
+  AssertTrue(Format('a bevel join inks less than a miter (%d, %d)', [bevel, miter]), bevel < miter - 20 * 255);
 end;
 
 { ---------------- plumbing ---------------- }
