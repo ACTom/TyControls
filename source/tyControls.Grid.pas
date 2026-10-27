@@ -2241,8 +2241,10 @@ type
     { 上一次被拒绝的文本。同一段文本只问宿主一次:单击别的格会先经失焦、再经 MoveCursor
       两条路到达校验,不记住的话宿主的提示框会连弹两次。文本一变就作废。 }
     FRefusedText: string;
-    { What the editor showed when it opened (#140); see EditedText. }
+    { What the editor showed when it opened (#140); see EditedText. Only when it opened on
+      the cell's own value (FEditOpenOnCell), not on a draft a descendant put back. }
     FEditOpenText: string;
+    FEditOpenOnCell: Boolean;
     FRefused: Boolean;
     FOnCanEditCell:  TTyGridCanEditEvent;
     FOnEditChange:   TTyGridEditChangeEvent;
@@ -2567,6 +2569,13 @@ type
       窗体里存着的排序在 Loaded 里种下排序键。 }
     procedure DoHeaderChanged; override;
   protected
+    { #140: True when the editor BeginEdit is opening shows the cell's own value. False when
+      a descendant opens it on a draft of the user's -- the DB grid, on a value its field
+      refused -- which then is a change, written as typed. }
+    function EditorOpensOnTheCell: Boolean; virtual;
+    { #139: Enter in the cell editor goes on to the next row, as Enter on the grid does.
+      False: it only writes the cell, and the cursor stays (the DB grid's record). }
+    function EnterInTheEditorMovesDown: Boolean; virtual;
     function  GetCellText(ACol, ARow: Integer): string; override;
     procedure RenderCells(P: TTyPainter; const M: TTyGridMetrics;
       const AFrame: TTyStyleSet); override;
@@ -16669,7 +16678,21 @@ begin
   if Result and FEditing then FPlacedEditorRect := EditorTargetRect;   { where DoBeginEdit put it }
   if Result and Assigned(FOnGetEditorProp) and (EditorControl <> nil) then
     FOnGetEditorProp(Self, FEditCol, FEditRow, EditorControl);
-  if Result and FEditing and not reopened then FEditOpenText := PendingEditText;   { #140 }
+  if Result and FEditing and not reopened then   { #140 }
+  begin
+    FEditOpenOnCell := EditorOpensOnTheCell;
+    FEditOpenText := PendingEditText;
+  end;
+end;
+
+function TTyCustomStringGrid.EditorOpensOnTheCell: Boolean;
+begin
+  Result := True;
+end;
+
+function TTyCustomStringGrid.EnterInTheEditorMovesDown: Boolean;
+begin
+  Result := True;
 end;
 
 function TTyCustomStringGrid.DoBeginEdit(ACol, ARow: Integer): Boolean;
@@ -16922,7 +16945,7 @@ end;
 function TTyCustomStringGrid.EditedText: string;
 begin
   Result := PendingEditText;
-  if Result = FEditOpenText then Result := GetEditText(FEditCol, FEditRow);
+  if FEditOpenOnCell and (Result = FEditOpenText) then Result := GetEditText(FEditCol, FEditRow);
 end;
 
 function TTyCustomStringGrid.TryEndEdit(ACommit: Boolean): Boolean;
@@ -17221,7 +17244,7 @@ begin
                  begin
                    if HandleAllocated and CanFocus then SetFocus;
                    { #139: and on to the next row, as Enter on the grid itself does. }
-                   MoveCursor(FCol, RowStep(FRow, 1));
+                   if EnterInTheEditorMovesDown then MoveCursor(FCol, RowStep(FRow, 1));
                  end
                  else
                    ReportUnfilledMask;   { #67 }
