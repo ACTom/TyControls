@@ -44,11 +44,14 @@ type
     procedure Bad(const AWhat: string);
     procedure SameInk(const AWhat: string; AGot: TTyChartColor; AWant: TJSONData; AOpacity: Double);
     procedure RunCase(const AId: string);
+    procedure ShadowSame(const AWhat: string; const AEl: TTyChartElement; ARec: TJSONObject);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
   published
     procedure TestWrittenSliderStatesAsUpstream;
+    { [R5-F] emphasis.handleStyle's / moveHandleStyle's shadow keys }
+    procedure TestTheHoverShadowsAsUpstream;
     procedure TestDefaultSliderStatesAsUpstream;
     procedure TestAVisualMapThumbAsUpstream;
     { a mid colour lifts (pure green lifts to itself) }
@@ -182,6 +185,35 @@ begin
     Bad(Format('%s %.8x, upstream %.8x (%s at %g)', [AWhat, AGot, c, AWant.AsString, AOpacity]));
 end;
 
+{ [R5-F] an element's shadow against the style upstream's holds: no blur is
+  no shadow; else blur, offsets and colour }
+procedure TAdvChartHandleEmphasisOracleTest.ShadowSame(const AWhat: string;
+  const AEl: TTyChartElement; ARec: TJSONObject);
+var
+  blur, ox, oy: Double;
+  c: TTyChartColor;
+begin
+  blur := 0;
+  ox := 0;
+  oy := 0;
+  if ARec.Find('shadowBlur').JSONType = jtNumber then blur := ARec.Floats['shadowBlur'];
+  if ARec.Find('shadowOffsetX').JSONType = jtNumber then ox := ARec.Floats['shadowOffsetX'];
+  if ARec.Find('shadowOffsetY').JSONType = jtNumber then oy := ARec.Floats['shadowOffsetY'];
+  Inc(FCompared);
+  if (AEl.Style.ShadowBlur <> blur) or ((blur > 0) and ((AEl.Style.ShadowOffsetX <> ox)
+    or (AEl.Style.ShadowOffsetY <> oy))) then
+    Bad(Format('%s shadow %g at (%g, %g), upstream %g at (%g, %g)', [AWhat, AEl.Style.ShadowBlur,
+      AEl.Style.ShadowOffsetX, AEl.Style.ShadowOffsetY, blur, ox, oy]));
+  if (blur > 0) and (ARec.Find('shadowColor').JSONType = jtString)
+    and TyTryParseChartColor(ARec.Strings['shadowColor'], c) then
+  begin
+    Inc(FCompared);
+    if c <> AEl.Style.ShadowColor then
+      Bad(Format('%s shadow colour %x, upstream %s', [AWhat, AEl.Style.ShadowColor,
+        ARec.Strings['shadowColor']]));
+  end;
+end;
+
 procedure TAdvChartHandleEmphasisOracleTest.RunCase(const AId: string);
 const
   { the colours the oracle's options wrote; a handle ink not among them (or
@@ -245,6 +277,8 @@ begin
         if el.Style.StrokeWidthLogical <> h.Floats['lineWidth'] then
           Bad(Format('handle %d width %g, upstream %g', [k, el.Style.StrokeWidthLogical,
             h.Floats['lineWidth']]));
+        { [R5-F] the shadow, where the case records it }
+        if h.Find('shadowBlur') <> nil then ShadowSame(Format('handle %d', [k]), el, h);
       end;
       if rec.Find('move').JSONType = jtObject then
       begin
@@ -262,6 +296,7 @@ begin
           for i := 0 to High(cAuthor) do if want = cAuthor[i] then authored := True;
           if authored then
             SameInk('the move handle', el.Style.FillColor, mv.Find('fill'), mv.Floats['opacity']);
+          if mv.Find('shadowBlur') <> nil then ShadowSame('the move handle', el, mv);
         end;
       end;
     end;
@@ -271,6 +306,12 @@ begin
   AssertTrue(AId + ': nothing compared', FCompared > 0);
   AssertEquals(Format('%s: %d of %d comparisons differ:%s',
     [AId, FBad, FCompared, FReport]), 0, FBad);
+end;
+
+procedure TAdvChartHandleEmphasisOracleTest.TestTheHoverShadowsAsUpstream;
+begin
+  RunCase('dz-shadow');
+  RunCase('vm-shadow');
 end;
 
 procedure TAdvChartHandleEmphasisOracleTest.TestWrittenSliderStatesAsUpstream;

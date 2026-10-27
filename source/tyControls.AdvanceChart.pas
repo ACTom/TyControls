@@ -236,6 +236,12 @@ type
     HasFill: Boolean;
     Fill: TTyChartColor;
     Dragging: Boolean;
+    { [R5-F] its shadow (blur 0: none), its picture (image://, '' a path)
+      and its opacity }
+    ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
+    ShadowColor: TTyChartColor;
+    Image: string;
+    Opacity: Double;
   end;
 
   { WHAT A SINGLE AXIS' POINTER DRAWS [Batch 118]: its line or shadow rect,

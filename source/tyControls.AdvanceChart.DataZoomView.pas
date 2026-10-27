@@ -81,6 +81,9 @@ type
     { [R5-D] emphasis.handleStyle / emphasis.moveHandleStyle: the hover
       states' styles, written over the normal ones }
     HandleEmph, MoveHandleEmph: TTyDzStyleSpec;
+    { [R5-F] their shadows: emphasis' keys over the normal style's, key by
+      key (the state's style merged over the normal one) }
+    HandleEmphShadow, MoveHandleEmphShadow: TTyChartShadow;
     ShadowArea, ShadowLine: array[0..1] of TTyDzStyleSpec;
     HasText: Boolean;
     TextColour: TTyChartColor;
@@ -484,6 +487,19 @@ begin
       Result.HandleEmph);
     StyleOf(ObjOf(o.Find('moveHandleStyle')), 'color', 'borderColor', 'borderWidth',
       Result.MoveHandleEmph);
+  end;
+  { [R5-F] the hover's shadows over the normal ones }
+  if o <> nil then
+  begin
+    TyStReadShadow([ObjOf(o.Find('handleStyle')), ObjOf(node.Find('handleStyle'))], [], [],
+      Result.HandleEmphShadow);
+    TyStReadShadow([ObjOf(o.Find('moveHandleStyle')), ObjOf(node.Find('moveHandleStyle'))], [], [],
+      Result.MoveHandleEmphShadow);
+  end
+  else
+  begin
+    Result.HandleEmphShadow := Result.Handle.Shadow;
+    Result.MoveHandleEmphShadow := Result.MoveHandle.Shadow;
   end;
   Result.Brush := BlankStyle;
   StyleOf(ObjOf(node.Find('brushStyle')), 'color', 'borderColor', 'borderWidth',
@@ -1518,8 +1534,12 @@ begin
       dzrHandle0, dzrHandle1:
         begin
           el := Blank(role);
-          { [R5-A] handleStyle's shadow on the icon }
-          TyStyleSetShadow(el.Style, ASpec.Handle.Shadow);
+          { [R5-A] handleStyle's shadow on the icon; [R5-F] the hover's in the
+            emphasis state }
+          if ALayout.HandleHover[Ord(role) - Ord(dzrHandle0)] then
+            TyStyleSetShadow(el.Style, ASpec.HandleEmphShadow)
+          else
+            TyStyleSetShadow(el.Style, ASpec.Handle.Shadow);
           { [R5-D] THE EMPHASIS STATE OVER THE NORMAL STYLE: emphasis.handleStyle's
             keys where written; else the default proxy's lift of the normal
             fill, and the model's default border (the theme's); the theme's
@@ -1585,7 +1605,10 @@ begin
               el.Style.StrokeWidthLogical := LineWidthOr(ASpec.MoveHandleEmph,
                 el.Style.StrokeWidthLogical);
           end;
-          TyStyleSetShadow(el.Style, ASpec.MoveHandle.Shadow);
+          if ALayout.MoveHover then
+            TyStyleSetShadow(el.Style, ASpec.MoveHandleEmphShadow)
+          else
+            TyStyleSetShadow(el.Style, ASpec.MoveHandle.Shadow);
           if e.Shape.W > 0 then
           begin
             AList.Add(el);

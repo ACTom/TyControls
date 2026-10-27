@@ -5295,6 +5295,9 @@ var
   icon: string;
   path: TTyZrPath;
   s, x, y, rot: Double;
+  isImage: Boolean;
+  M: TTyMat2D;
+  pts: array[0..3] of TTyPointF;
   p: TTyChartAnimProxy;
   v: Double;
 begin
@@ -5304,10 +5307,16 @@ begin
     or not FHandles[AIndex].Placed then Exit;
   h := TyAxisPointerHandleOf(FOption, FHandles[AIndex].MainType, FHandles[AIndex].Index);
   icon := h.Icon;
-  if Copy(icon, 1, 8) = 'image://' then Exit;
-  if Copy(icon, 1, 7) = 'path://' then Delete(icon, 1, 7);
-  path := TyZrMakePathCenter(icon, TyXYWH(-1, -1, 2, 2));
-  if Length(path) = 0 then Exit;
+  { [R5-F] AN image:// ICON is an image in the rect [-1, -1, 2, 2]
+    (createIcon) [was: none drawn] }
+  isImage := Copy(icon, 1, 8) = 'image://';
+  if isImage then Delete(icon, 1, 8)
+  else
+  begin
+    if Copy(icon, 1, 7) = 'path://' then Delete(icon, 1, 7);
+    path := TyZrMakePathCenter(icon, TyXYWH(-1, -1, 2, 2));
+    if Length(path) = 0 then Exit;
+  end;
   if FLastPPI > 0 then s := FLastPPI / 96 else s := 1;
   x := FHandles[AIndex].X;
   y := FHandles[AIndex].Y;
@@ -5323,7 +5332,27 @@ begin
     v := p.Num('rotation');
     if not IsNan(v) then rot := v;
   end;
-  AEl.Shape := TyMkZrShape(path, TyZrLocal(h.SizeW / 2 * s, h.SizeH / 2 * s, rot, x, y), True);
+  if isImage then
+  begin
+    M := TyZrLocal(h.SizeW / 2 * s, h.SizeH / 2 * s, rot, x, y);
+    TyZrApply(M, -1, -1, pts[0].X, pts[0].Y);
+    TyZrApply(M, 1, -1, pts[1].X, pts[1].Y);
+    TyZrApply(M, 1, 1, pts[2].X, pts[2].Y);
+    TyZrApply(M, -1, 1, pts[3].X, pts[3].Y);
+    AEl.Shape := TyShapePolygon(pts);
+    AEl.Shape.Image := icon;
+  end
+  else
+    AEl.Shape := TyMkZrShape(path, TyZrLocal(h.SizeW / 2 * s, h.SizeH / 2 * s, rot, x, y), True);
+  { [R5-F] its shadow }
+  if h.HasShadow then TyStyleSetShadow(AEl.Style, h.Shadow);
+  if isImage then
+  begin
+    AEl.Style.Alpha := h.Opacity;
+    AEl.Datum := TyChartNoDatum;
+    AEl.Cursor := 'move';
+    Exit(True);
+  end;
   if h.HasColour then
   begin
     AEl.Style.HasFill := True;
@@ -5368,9 +5397,14 @@ begin
     if not HdShape(k, el) then Continue;
     h := TyAxisPointerHandleOf(FOption, FHandles[k].MainType, FHandles[k].Index);
     icon := h.Icon;
-    if Copy(icon, 1, 7) = 'path://' then Delete(icon, 1, 7);
-    path := TyZrMakePathCenter(icon, TyXYWH(-1, -1, 2, 2));
-    bb := TyZrBBox(path);
+    { [R5-F] an image's rect is its box }
+    if Copy(icon, 1, 8) = 'image://' then bb := TyXYWH(-1, -1, 2, 2)
+    else
+    begin
+      if Copy(icon, 1, 7) = 'path://' then Delete(icon, 1, 7);
+      path := TyZrMakePathCenter(icon, TyXYWH(-1, -1, 2, 2));
+      bb := TyZrBBox(path);
+    end;
     M := TyZrLocal(h.SizeW / 2 * s, h.SizeH / 2 * s, FHandles[k].Rotation,
       FHandles[k].X, FHandles[k].Y);
     if not TyMatInvert(M, inv) then Continue;
@@ -5608,6 +5642,13 @@ begin
   begin
     Result.HasFill := el.Style.HasFill;
     Result.Fill := el.Style.FillColor;
+    { [R5-F] its shadow and its picture }
+    Result.ShadowBlur := el.Style.ShadowBlur;
+    Result.ShadowOffsetX := el.Style.ShadowOffsetX;
+    Result.ShadowOffsetY := el.Style.ShadowOffsetY;
+    Result.ShadowColor := el.Style.ShadowColor;
+    Result.Image := el.Shape.Image;
+    Result.Opacity := el.Style.Alpha;
   end;
 end;
 
