@@ -1646,6 +1646,106 @@
      ]
     }
    ]
+  },
+  {
+   "id": "rerender",
+   "note": "a legend toggle of the other line after highlight 2: the render removes the temporary symbol",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "legend": {},
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "c0",
+      "c1",
+      "c2",
+      "c3",
+      "c4",
+      "c5"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "name": "A",
+      "showSymbol": false,
+      "data": [
+       12,
+       30,
+       18,
+       25,
+       9,
+       21
+      ]
+     },
+     {
+      "type": "line",
+      "name": "B",
+      "showSymbol": false,
+      "data": [
+       5,
+       8,
+       3,
+       9,
+       4,
+       6
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "action": null,
+     "symbols": []
+    },
+    {
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 2
+     },
+     "symbols": [
+      {
+       "s": 0,
+       "d": 2,
+       "temp": true,
+       "states": "emphasis",
+       "ignore": false,
+       "rect": [
+        "4071133333333333",
+        "4064566666666666",
+        "4021333333333333",
+        "4021333333333333"
+       ],
+       "fill": "#fff",
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "z": 3,
+       "z2": 110,
+       "label": null
+      }
+     ]
+    },
+    {
+     "action": {
+      "type": "legendToggleSelect",
+      "name": "B"
+     },
+     "symbols": []
+    }
+   ]
   }
  ],
  "guards": [
@@ -1656,6 +1756,7 @@
   "clipped: none for 1, one for 2",
   "thinned: some symbols thinned at rest; 1 is one of them",
   "label: the temporary symbol's label shows",
-  "two: series 1's own temporary symbol"
+  "two: series 1's own temporary symbol",
+  "rerender: built, then gone after the render"
  ]
 }

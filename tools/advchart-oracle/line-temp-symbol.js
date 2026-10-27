@@ -91,6 +91,11 @@ const CASES = [
       series: [{ type: 'line', showSymbol: false, data: [12, 30, 18, 25, 9, 21] },
         { type: 'line', showSymbol: false, symbolSize: 8, data: [5, 8, 3, 9, 4, 6] }] },
     actions: [{ type: 'highlight', seriesIndex: 1, dataIndex: 0 }, HL(0)], series: [0, 1] },
+  { id: 'rerender', note: 'a legend toggle of the other line after highlight 2: the render removes the temporary symbol',
+    option: { animation: false, color: PALETTE, legend: {}, xAxis: { type: 'category', data: cats(6) }, yAxis: {},
+      series: [{ type: 'line', name: 'A', showSymbol: false, data: [12, 30, 18, 25, 9, 21] },
+        { type: 'line', name: 'B', showSymbol: false, data: [5, 8, 3, 9, 4, 6] }] },
+    actions: [HL(2), { type: 'legendToggleSelect', name: 'B' }] },
 ];
 
 function ecData(el) {
@@ -163,6 +168,7 @@ function generate() {
       && !by('thinned').steps[0].symbols.some(x => x.d === 1) && temps('thinned', 1).length === 1 },
     { name: 'label: the temporary symbol\'s label shows', ok: temps('label', 1)[0].label && temps('label', 1)[0].label.shown },
     { name: 'two: series 1\'s own temporary symbol', ok: temps('two', 1).length === 1 && temps('two', 1)[0].s === 1 },
+    { name: 'rerender: built, then gone after the render', ok: temps('rerender', 1).length === 1 && by('rerender').steps[2].symbols.length === 0 },
   ];
   for (const g of guards) must(g.ok, 'guard failed: ' + g.name);
   return { source: 'ECharts 6.1 dist: chart/line/LineView.ts highlight / downplay, chart/helper/Symbol.ts', W, H, cases,
