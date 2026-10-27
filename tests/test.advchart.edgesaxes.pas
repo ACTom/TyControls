@@ -75,6 +75,7 @@ type
     procedure TestAlignTicksAsUpstreams;
     procedure TestAHigherZLevelIsOverTheTitleAndTheMask;
     procedure TestATitlesBoxIsTheAuthors;
+    procedure TestAHigherZLevelIsDrawnOnce;
   end;
 
 implementation
@@ -1320,6 +1321,46 @@ begin
     bmp.Free;
   end;
   FChart.HideLoading;
+end;
+
+{ A HALF-TRANSPARENT symbol of zlevel 1 over the title's red box is the same
+  pixel as over a red ground with no title: drawn once, after the title --
+  not under it as well }
+procedure TAdvChartEdgesAxesOracleTest.TestAHigherZLevelIsDrawnOnce;
+const
+  cOpt = '{"animation":false,%s"xAxis":{"type":"value","min":0,"max":10},'
+    + '"yAxis":{"type":"value","min":0,"max":10},"series":[{"type":"scatter","zlevel":1,"symbolSize":40,'
+    + '"itemStyle":{"color":"#0000ff","opacity":0.5},"data":[[1,9]]}]}';
+  cTitle = '"title":{"text":"TITLE TEXT","left":40,"top":40,"backgroundColor":"#ff0000","padding":20,'
+    + '"textStyle":{"fontSize":20}},';
+var
+  bmp: TBGRABitmap;
+  x, y: Integer;
+  over, ground: TBGRAPixel;
+  zl: TJSONObject;
+begin
+  zl := TJSONObject(FRoot).Objects['zlevel'];
+  x := Round(FromHex(zl.Objects['symbol'].Strings['x']));
+  y := Round(FromHex(zl.Objects['symbol'].Strings['y']));
+  NewChart(600, 400);
+  FChart.Option := Format(cOpt, [cTitle]);
+  bmp := RenderBmp;
+  try
+    over := bmp.GetPixel(x + 6, y);
+  finally
+    bmp.Free;
+  end;
+  NewChart(600, 400);
+  FChart.Option := Format(cOpt, ['"backgroundColor":"#ff0000",']);
+  bmp := RenderBmp;
+  try
+    ground := bmp.GetPixel(x + 6, y);
+  finally
+    bmp.Free;
+  end;
+  AssertTrue(Format('once over the title %d %d %d, over a red ground %d %d %d', [over.red, over.green,
+    over.blue, ground.red, ground.green, ground.blue]),
+    (Abs(over.red - ground.red) <= 2) and (Abs(over.blue - ground.blue) <= 2) and (over.blue > 60));
 end;
 
 { ==================== the title's box ==================== }
