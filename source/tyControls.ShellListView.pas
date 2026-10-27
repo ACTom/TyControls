@@ -891,7 +891,9 @@ procedure TTyShellListView.SetMask(const AValue: string);
 begin
   if FMask = AValue then Exit;
   FMask := AValue;
-  ReloadEntries;
+  { #141: UpdateView, not ReloadEntries -- the selection is kept by path. Kept by row, it moved
+    onto another file, which an open dialog then returned on OK. }
+  UpdateView;
 end;
 
 procedure TTyShellListView.SetMaskCaseSensitivity(AValue: TTyMaskCaseSensitivity);
@@ -901,7 +903,7 @@ begin
   { Two settings can mean the same thing on this host (mcsPlatformDefault is
     mcsCaseInsensitive on Windows), so re-read unconditionally rather than trying
     to be clever about when the effective rule actually changed. }
-  ReloadEntries;
+  UpdateView;   { #141: see SetMask }
 end;
 
 procedure TTyShellListView.SetObjectTypes(AValue: TTyFsObjectTypes);
@@ -912,7 +914,7 @@ begin
     set has to move it too, or the two properties disagree about the same state and
     a 'Show hidden' checkbox bound to ShowHidden reads back a lie. }
   FShowHidden := fotHidden in FObjectTypes;
-  ReloadEntries;
+  UpdateView;   { #141: see SetMask }
 end;
 
 procedure TTyShellListView.SetShowHidden(AValue: Boolean);
@@ -923,7 +925,7 @@ begin
     Include(FObjectTypes, fotHidden)
   else
     Exclude(FObjectTypes, fotHidden);
-  ReloadEntries;
+  UpdateView;   { #141: see SetMask }
 end;
 
 procedure TTyShellListView.SetAutoSizeColumns(AValue: Boolean);

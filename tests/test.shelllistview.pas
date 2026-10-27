@@ -73,6 +73,10 @@ type
     { LoadDirectory then GetItemCount = number of VISIBLE entries (dirs + non-hidden
       files); the hidden entry is excluded by default. }
     procedure TestLoadDirectoryCountIsVisibleEntries;
+    { #141: a filter change keeps the selection on the same file; kept by row, it moved
+      onto another one. }
+    procedure TestAMaskChangeKeepsTheSelectedFile;
+    procedure TestShowHiddenKeepsTheSelectedFile;
     { GetItemText column 0 is the entry Name for every row. }
     procedure TestNameColumnIsEntryName;
     { GetItemText column 2 is the entry TypeName for every row. }
@@ -288,6 +292,25 @@ end;
 { ===========================================================================
   take: count, per-column text, FileAt / SelectedFile
   =========================================================================== }
+
+procedure TShellListViewTest.TestAMaskChangeKeepsTheSelectedFile;
+begin
+  FLV.LoadDirectory(FRoot);
+  FLV.ItemIndex := ItemIndexOfName('large.dat');
+  AssertTrue('precondition: large.dat selected', FLV.ItemIndex >= 0);
+  FLV.Mask := '*.dat';   // the rows before it go, so its row number changes
+  AssertTrue('precondition: its row moved', ItemIndexOfName('large.dat') <> -1);
+  AssertTrue('a file is still selected', FLV.ItemIndex >= 0);
+  AssertEquals('and it is large.dat', 'large.dat', FLV.XGetItemText(FLV.ItemIndex, COL_NAME));
+end;
+
+procedure TShellListViewTest.TestShowHiddenKeepsTheSelectedFile;
+begin
+  FLV.LoadDirectory(FRoot);
+  FLV.ItemIndex := ItemIndexOfName('c.md');
+  FLV.ShowHidden := True;   // '.secret' joins the list, ahead of c.md
+  AssertEquals('the same file is selected', 'c.md', FLV.XGetItemText(FLV.ItemIndex, COL_NAME));
+end;
 
 procedure TShellListViewTest.TestLoadDirectoryCountIsVisibleEntries;
 begin
