@@ -567,6 +567,19 @@ C('h-effect', 'hover', 'the effect symbol is a pointer target: its row\'s events
     data: [{ coords: [[20, 20], [80, 70]], name: 'r0', value: 5 }, { coords: [[20, 80], [80, 30]], name: 'r1', value: 7 }] })] }),
   { clicks: true, steps: [['move', { eff: [0, 0] }], ['move', { off: [300, 380] }], ['move', { eff: [0, 1] }], ['click', { eff: [0, 1] }],
     ['click', { eff: [0, 1] }], ['leave']] });
+// [spec 242] colorBy 'data': dataColorPaletteTask over the lineStyle's
+// stroke -- one scope for every lines series by data, a colour a name (or
+// the raw index), the rows with their own colour and a series with a
+// written colour left alone
+C('r5-colorby-data', 'draw', "colorBy 'data': a colour a name, shared across the two series by data (the scope is the type's), an unnamed row by its index, a row's own colour kept, a written series colour none from the palette; the end symbols and an inherit label take the row's",
+  base({ legend: {}, series: [
+    L({ name: 'a', colorBy: 'data', symbol: ['none', 'arrow'], symbolSize: 10, label: { show: true, color: 'inherit' }, lineStyle: { opacity: 1, width: 2 },
+      data: [{ coords: [[10, 10], [80, 60]], name: 'x', value: 1 }, { coords: [[20, 80], [90, 30]], name: 'y', value: 2 },
+        { coords: [[50, 5], [50, 95]], name: 'x', value: 3 }, { coords: [[5, 50], [95, 40]], value: 4 },
+        { coords: [[5, 20], [40, 5]], name: 'own', lineStyle: { color: '#123456' }, value: 5 }] }),
+    L({ name: 'b', colorBy: 'data', lineStyle: { opacity: 1 }, data: [{ coords: [[60, 90], [95, 70]], name: 'y' }, { coords: [[60, 10], [95, 25]], name: 'z' }] }),
+    L({ name: 'c', colorBy: 'data', lineStyle: { color: '#00aa00', opacity: 1 }, data: [{ coords: [[30, 60], [70, 70]], name: 'q' }] }),
+  ] }), { legend: true, drawn: true });
 
 // =====================================================================
 // the elements

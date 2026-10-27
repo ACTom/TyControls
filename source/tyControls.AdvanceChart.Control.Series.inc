@@ -1738,6 +1738,18 @@ begin
     Result.Stroke := c;
     Result.StrokeGrad := Default(TTyChartGradient);
   end;
+  { [spec 242] colorBy other than 'series': the row's palette colour
+    (dataColorPaletteTask; SolveDatumPalette asked it only for the rows
+    whose colour is the palette's) }
+  if (ASlot <= High(FStores)) and (FStores[ASlot] <> nil) and (ASlot <= High(FDatumAsked)) then
+  begin
+    e := FStores[ASlot].GetRawIndex(ARow);
+    if (e >= 0) and (e <= High(FDatumAsked[ASlot])) and FDatumAsked[ASlot][e] then
+    begin
+      Result.Stroke := TTyChartColor(PickColor(FDatumPicks[ASlot][e]));
+      Result.StrokeGrad := Default(TTyChartGradient);
+    end;
+  end;
   if LnColour(TyLinesItemFind(raw, ['lineStyle', 'color']), c) then
   begin
     Result.Stroke := c;

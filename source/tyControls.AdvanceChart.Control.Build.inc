@@ -707,7 +707,9 @@ begin
       or (typ = TyPieSeriesTypeName) or (typ = 'funnel') or (typ = 'gauge')
       or (typ = 'radar') or (typ = TyThemeRiverSeriesTypeName)
       { a chord's nodes, colorBy 'data' by default [Batch 120] }
-      or (typ = TyChordSeriesTypeName)) then Continue;
+      or (typ = TyChordSeriesTypeName)
+      { [spec 242] a lines series' rows: the lineStyle's stroke }
+      or (typ = TyLinesSeriesTypeName)) then Continue;
     cb := TyChartColorByOf(FOption, si, typ);
     if cb = 'series' then Continue;
     { the scope first, whether or not a row asks: upstream hands every such
