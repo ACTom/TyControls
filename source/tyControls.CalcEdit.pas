@@ -9,7 +9,9 @@ uses
 type
   { Manages a drop-down TTyCalculator for a numeric edit. Owned by the edit; the popup + its
     calculator are created lazily on first open. Seeds the calculator from the edit's Value on
-    open, and writes the calculator's Value back to the edit on '=' or when the popup closes.
+    open, and writes the calculator's Value back to the edit on '=' (or Enter) only -- the
+    calculator accepted, as LCL's TCalcEdit writes back on OK alone (#191). Closed any other
+    way, by Esc or a click elsewhere, it leaves the edit as it was.
     Shared by TTyCalcEdit and TTyCalcCurrencyEdit (both are TTyNumericEdit descendants). }
   TTyCalcDropdown = class(TComponent)
   private
@@ -17,13 +19,15 @@ type
     FPopup: TTyDropdownPopup;
     FCalc: TTyCalculator;
     procedure DoResult(Sender: TObject);   // '=' pressed: apply + close
-    procedure DoClosed(Sender: TObject);    // any close: apply the current value
+    procedure DoClosed(Sender: TObject);    // any close: the focus goes back to the edit
   public
     constructor Create(AEdit: TTyNumericEdit); reintroduce;
     destructor Destroy; override;
     // Open the calculator (or close it if already open), anchored to the edit.
     procedure Toggle;
     function IsOpen: Boolean;
+    { The calculator the drop-down shows; nil before the first open. For tests. }
+    function CalculatorForTest: TTyCalculator;
   end;
 
   { A numeric edit with a trailing button that drops down a TTyCalculator; the calculator's
@@ -128,11 +132,16 @@ begin
   if FPopup <> nil then FPopup.Close;
 end;
 
+function TTyCalcDropdown.CalculatorForTest: TTyCalculator;
+begin
+  Result := FCalc;
+end;
+
 procedure TTyCalcDropdown.DoClosed(Sender: TObject);
 begin
-  { Apply the current value on close — but NOT while in the error state (Value is 0 there, which
-    would silently wipe the field). }
-  if (FCalc <> nil) and not FCalc.IsError then FEdit.Value := FCalc.Value;
+  { #191: nothing is written here. A close that is not '=' -- Esc, a click elsewhere -- is the
+    user putting the calculator away, and Esc first clears it, so writing back set the field
+    to 0. DoResult writes the accepted value. }
   { Return focus to the edit we were editing (not wherever it was before the button click). }
   if FEdit.CanFocus then FEdit.SetFocus;
 end;
