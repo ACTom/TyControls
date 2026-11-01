@@ -519,6 +519,8 @@ var
   S, HD, HS: TTyStyleSet;
   R, hdr, textRect, bandRect: TRect;
   hdrH, chevW, bw, bwLogical: Integer;
+  chevR: TRect;
+  kind: TTyGlyphKind;
   corners, bandCorners: TTyCorners;
 begin
   P := TTyPainter.Create;
@@ -576,8 +578,14 @@ begin
     // filled triangle this used to paint: a solid triangle is the shape the library keeps for
     // STEPPING a value (spin, scroll), and every desktop now draws an expander as an open
     // mark. Through TyDrawChevron, so --glyph-chevron-down / -right replace it as well.
-    TyDrawChevron(P, ActiveController, Rect(hdr.Left, hdr.Top, hdr.Left + (hdr.Bottom - hdr.Top),
-      hdr.Bottom), TyExPanelChevronKind(not FCollapsed), HS.TextColor);
+    chevR := Rect(hdr.Left, hdr.Top, hdr.Left + (hdr.Bottom - hdr.Top), hdr.Bottom);
+    kind := TyExPanelChevronKind(not FCollapsed);
+    if IsRightToLeft then   // #153: at the other end, and a closed one points the reading way
+    begin
+      chevR := TyMirrorRectX(chevR, R.Right);
+      if kind = tgChevronRight then kind := tgChevronLeft;
+    end;
+    TyDrawChevron(P, ActiveController, chevR, kind, HS.TextColor);
 
     // Caption text to the right of the chevron gutter, vertically centered in the band.
     if Caption <> '' then
@@ -587,6 +595,7 @@ begin
       // its ink (font + colour) is the header key's business.
       textRect := Rect(hdr.Left + chevW, hdr.Top,
         hdr.Right - P.Scale(S.Padding.Right), hdr.Bottom);
+      if IsRightToLeft then textRect := TyMirrorRectX(textRect, R.Right);   // #153
       DrawCaption(P, textRect, HS, APPI);   // Alignment & co., as the panel's (#116)
     end;
 

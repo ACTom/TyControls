@@ -43,7 +43,10 @@ procedure TySplitAdvancedItem(const AJoined: string; out ATitle, ASubtitle: stri
   list box rows and a combo's popup rows so the layout lives in one place. }
 procedure TyDrawAdvancedRow(P: TTyPainter; const ARect: TRect; const AJoined: string;
   AImageIndex: Integer; AImages: TCustomImageList; const AStyle: TTyStyleSet;
-  AFontSize: Integer);
+  AFontSize: Integer; ARightToLeft: Boolean = False);
+{ #153: ARightToLeft -- a list row's RtlRowLayout -- puts the image on the right and the text
+  against it, right-aligned. A painter already armed for mirroring turns the row itself (a
+  combo's field), so it passes False. }
 
 type
   { A list box whose rows are image + bold title + dim subtitle. Build it with
@@ -163,11 +166,12 @@ end;
 
 procedure TyDrawAdvancedRow(P: TTyPainter; const ARect: TRect; const AJoined: string;
   AImageIndex: Integer; AImages: TCustomImageList; const AStyle: TTyStyleSet;
-  AFontSize: Integer);
+  AFontSize: Integer; ARightToLeft: Boolean);
 var
   titleText, subText: string;
-  x, sz, rowH, textLeft, midY, pad: Integer;
+  x, sz, rowH, textLeft, textRight, midY, pad: Integer;
   titleR, subR: TRect;
+  al: TAlignment;
   subColor: TTyColor;
   subSize: Integer;
 begin
@@ -175,6 +179,7 @@ begin
   pad := P.Scale(4);
   rowH := ARect.Bottom - ARect.Top;
   x := ARect.Left + pad;
+  textRight := ARect.Right - pad;
 
   // Optional left image: a square sized to the row height minus vertical padding,
   // vertically centered. CachedIndex borrows the collection's render — nothing to free.
@@ -182,10 +187,20 @@ begin
   begin
     sz := rowH - P.Scale(8);
     if sz < P.Scale(8) then sz := P.Scale(8);
-    TyBlitImageScaled(P, AImages, AImageIndex, x, ARect.Top + ((rowH - sz) div 2), sz, False);
-    x := x + sz + pad;
+    if ARightToLeft then
+    begin
+      TyBlitImageScaled(P, AImages, AImageIndex, textRight - sz, ARect.Top + ((rowH - sz) div 2),
+        sz, False);
+      textRight := textRight - sz - pad;
+    end
+    else
+    begin
+      TyBlitImageScaled(P, AImages, AImageIndex, x, ARect.Top + ((rowH - sz) div 2), sz, False);
+      x := x + sz + pad;
+    end;
   end;
   textLeft := x;
+  if ARightToLeft then al := taRightJustify else al := taLeftJustify;
 
   // When there is a subtitle, stack the two lines around the row's vertical center; when
   // there is none, center the single title line in the row.
@@ -198,20 +213,20 @@ begin
   if subText <> '' then
   begin
     midY := ARect.Top + (rowH div 2);
-    titleR := Rect(textLeft, ARect.Top, ARect.Right - pad, midY);
-    subR := Rect(textLeft, midY, ARect.Right - pad, ARect.Bottom);
+    titleR := Rect(textLeft, ARect.Top, textRight, midY);
+    subR := Rect(textLeft, midY, textRight, ARect.Bottom);
     P.DrawText(titleR, titleText, AStyle.FontName, AFontSize,
       700 or (AStyle.FontWeight and not TyFontWeightMask),   // bold over the font's italic etc. (#113)
-      AStyle.TextColor, taLeftJustify, tlCenter, True);
+      AStyle.TextColor, al, tlCenter, True);
     P.DrawText(subR, subText, AStyle.FontName, subSize, AStyle.FontWeight,
-      subColor, taLeftJustify, tlCenter, True);
+      subColor, al, tlCenter, True);
   end
   else
   begin
-    titleR := Rect(textLeft, ARect.Top, ARect.Right - pad, ARect.Bottom);
+    titleR := Rect(textLeft, ARect.Top, textRight, ARect.Bottom);
     P.DrawText(titleR, titleText, AStyle.FontName, AFontSize,
       700 or (AStyle.FontWeight and not TyFontWeightMask),   // bold over the font's italic etc. (#113)
-      AStyle.TextColor, taLeftJustify, tlCenter, True);
+      AStyle.TextColor, al, tlCenter, True);
   end;
 end;
 
@@ -286,7 +301,7 @@ procedure TTyCustomAdvancedListBox.PaintItemContent(P: TTyPainter; const ARowRec
   AIndex: Integer; const AStyle: TTyStyleSet);
 begin
   TyDrawAdvancedRow(P, ARowRect, Items[AIndex], ImageIndexOf(AIndex), FImages, AStyle,
-    ResolveFontSize(AStyle));
+    ResolveFontSize(AStyle), RtlRowLayout);   // #153
 end;
 
 end.

@@ -319,7 +319,7 @@ begin
           its text, its box and its blur are taken at the device scale (#83). }
         TyConfigureTextFont(glowLayer, S.FontName, fontSize, S.FontWeight, P.RasterPPI);
         style := Default(TTextStyle);
-        style.Alignment := FAlignment;
+        style.Alignment := BidiFlipAlignment(FAlignment, IsRightToLeft);   // #153
         style.Layout := FLayout;
         style.SingleLine := True;
         style.Clipping := True;
@@ -352,7 +352,8 @@ begin
 
     // --- Crisp text on top, in the resolved theme colour (never hard-coded). ---
     P.DrawText(ContentRect, dispCap, S.FontName, fontSize, S.FontWeight,
-      S.TextColor, FAlignment, FLayout, False, TyAccelGatePos(mp));
+      S.TextColor, BidiFlipAlignment(FAlignment, IsRightToLeft), FLayout, False,
+      TyAccelGatePos(mp));   // #153: mirrored as TTyLabel is
 
     P.EndPaint;
   finally

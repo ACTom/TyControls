@@ -279,7 +279,20 @@ var
   where it stopped the load with "Unknown property". Nothing is written back. }
 procedure TyDefineRetiredProperties(AFiler: TFiler; const ANames: array of string);
 
+{ #153: AR reflected across a box AWidth wide whose left edge is 0 -- the one move that
+  mirrors a slot already laid out for reading order. Paint and hit test reflect the same
+  finished layout, so they cannot disagree. An empty rect is returned as it is. }
+function TyMirrorRectX(const AR: TRect; AWidth: Integer): TRect;
+
 implementation
+
+function TyMirrorRectX(const AR: TRect; AWidth: Integer): TRect;
+begin
+  Result := AR;
+  if AR.Right <= AR.Left then Exit;
+  Result.Left := AWidth - AR.Right;
+  Result.Right := AWidth - AR.Left;
+end;
 
 type
   { What TyDefineRetiredProperties hands the reader: DefineProperty takes a method. }

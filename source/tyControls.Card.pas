@@ -536,9 +536,10 @@ begin
           lay.Header.Top + bw,
           lay.Header.Right - bw - P.Scale(hpad.Right),
           lay.Header.Bottom - sepT);
+        if IsRightToLeft then textRect := TyMirrorRectX(textRect, R.Right);   // #153
         if textRect.Right > textRect.Left then
           P.DrawText(textRect, FTitle, hs.FontName, ResolveFontSize(hs), hs.FontWeight,
-            hs.TextColor, FTitleAlignment, tlCenter, True);
+            hs.TextColor, BidiFlipAlignment(FTitleAlignment, IsRightToLeft), tlCenter, True);
       end;
     end;
 

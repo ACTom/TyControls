@@ -693,7 +693,8 @@ begin
   DoDropDown;             // BEFORE the window: the hook that may (re)populate the tree
   SyncTreeToSelection;    // ...and after it, so a just-built tree still opens on the value
   sz := DropDownSize;
-  FPopup.Popup(Self, sz.cx, sz.cy);
+  FTree.BiDiMode := BiDiMode;   // #153
+  FPopup.Popup(Self, sz.cx, sz.cy, IsRightToLeft);   // #153: lined up with the field's right edge
   Invalidate;
 end;
 
@@ -831,6 +832,11 @@ begin
     MulDiv(S.Padding.Left, APPI, 96), MulDiv(S.Padding.Top, APPI, 96),
     MulDiv(S.Padding.Right, APPI, 96), MulDiv(S.Padding.Bottom, APPI, 96),
     MulDiv(TyDropZoneWidth(ActiveController), APPI, 96));
+  if IsRightToLeft then   // #153: the chevron and the pick change sides
+  begin
+    Result.TextRect := TyMirrorRectX(Result.TextRect, AWidth);
+    Result.ButtonRect := TyMirrorRectX(Result.ButtonRect, AWidth);
+  end;
 end;
 
 procedure TTyCustomTreeSelect.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -884,7 +890,7 @@ begin
       // Left-aligned + ellipsised, exactly like the combo's field: a pick too long for the
       // field shows 'Engineer…', not a glyph sheared at the clip edge.
       P.DrawText(Lay.TextRect, shown, S.FontName, ResolveFontSize(S), S.FontWeight,
-        ink, taLeftJustify, tlCenter, True);
+        ink, BidiFlipAlignment(taLeftJustify, IsRightToLeft), tlCenter, True);   // #153
 
     if Lay.ButtonRect.Right > Lay.ButtonRect.Left then
       // v3/C5: the drop indicator is theme-overridable (--glyph-dropdown); else the built-in
