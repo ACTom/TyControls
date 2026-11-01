@@ -781,7 +781,7 @@ procedure THdrAccess.PressMove(X: Integer);  begin MouseMove([], X, 10); end;
 procedure THdrAccess.PressUp(X: Integer);    begin MouseUp(mbLeft, [], X, 10); end;
 
 procedure TBarAccess.CallMouseDown(X, Y: Integer); begin MouseDown(mbLeft, [], X, Y); end;
-procedure TBarAccess.CallMouseMove(X, Y: Integer); begin MouseMove([], X, Y); end;
+procedure TBarAccess.CallMouseMove(X, Y: Integer); begin MouseMove([ssLeft], X, Y); end;   // a drag (#147)
 procedure TBarAccess.CallMouseUp(X, Y: Integer);   begin MouseUp(mbLeft, [], X, Y); end;
 function  TBarAccess.CallKeyDown(AKey: Word): Word;
 begin

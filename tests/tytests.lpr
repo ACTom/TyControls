@@ -134,6 +134,7 @@ uses
   test.dial,
   test.valueformat,
   test.retiredprops,
+  test.capturelost,
   test.analogclock,
   test.sparkline,
   test.rating,
