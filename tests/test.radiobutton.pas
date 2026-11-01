@@ -10,6 +10,7 @@ type
   public
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure DoKeyDown(var Key: Word; Shift: TShiftState);
+    procedure DoKeyUp(var Key: Word; Shift: TShiftState);
   end;
 
   TRadioButtonTest = class(TTestCase)
@@ -36,6 +37,11 @@ end;
 procedure TTyRadioButtonAccess.DoKeyDown(var Key: Word; Shift: TShiftState);
 begin
   KeyDown(Key, Shift);
+end;
+
+procedure TTyRadioButtonAccess.DoKeyUp(var Key: Word; Shift: TShiftState);
+begin
+  KeyUp(Key, Shift);
 end;
 
 procedure TRadioButtonTest.TestTypeKey;
@@ -181,8 +187,10 @@ begin
     R := TTyRadioButtonAccess.Create(F); R.Parent := F;
     AssertFalse('starts unchecked', R.Checked);
     K := VK_SPACE; R.DoKeyDown(K, []);
-    AssertTrue('space selected it', R.Checked);
     AssertEquals('space consumed', 0, Integer(K));
+    AssertFalse('#151: held down, not yet', R.Checked);
+    K := VK_SPACE; R.DoKeyUp(K, []);
+    AssertTrue('let go, space selected it', R.Checked);
   finally F.Free; end;
 end;
 

@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-`TTyToggleSwitch` 是 TyControls 库中的主题化开关控件，继承自 `TTyCustomControl`。外观为一个胶囊形（pill）轨道加一个可滑动的圆形旋钮，左侧为 OFF、右侧为 ON。点击或按下空格键触发切换；`Checked` 属性反映当前状态，`OnChange` 在值变化时触发。
+`TTyToggleSwitch` 是 TyControls 库中的主题化开关控件，继承自 `TTyCustomControl`。外观为一个胶囊形（pill）轨道加一个可滑动的圆形旋钮，左侧为 OFF、右侧为 ON。点击或按空格键触发切换（空格键在松开时生效，按住不放也只切换一次）；`Checked` 属性反映当前状态，`OnChange` 在值变化时触发。
 
 ---
 
@@ -49,14 +49,14 @@ TTyToggleSwitch 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状�
 
 #### `procedure Toggle`
 
-将 `Checked` 切换为相反值（等价于 `SetChecked(not FChecked)`）。`Click` 和空格键内部均调用此方法。
+将 `Checked` 切换为相反值（等价于 `SetChecked(not FChecked)`）。`Click` 内部调用此方法，空格键松开时也经 `Click` 走到这里。
 
 ### 交互
 
 | 操作 | 行为 |
 |------|------|
 | 鼠标左键点击 | 调用 `Toggle`，然后触发 `OnClick` |
-| 空格键（`VK_SPACE`） | 调用 `Toggle`，消费按键（`Key := 0`） |
+| 空格键（`VK_SPACE`） | 按下时消费按键（`Key := 0`）并等着；松开时走 `Click`：切换并触发 `OnClick`，和点击一样。按住不放（键盘自动重复）也只切换一次；按着键时焦点移走就不切换 |
 | `Enter` | 不处理，交给窗体的默认按钮，和原生复选框一样 |
 
 ---

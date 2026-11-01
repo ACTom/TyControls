@@ -15,6 +15,7 @@ type
 
   TTyCustomButton = class(TTyCustomControl)
   private
+    FKeyPress: Word;   // the Space or Enter held down on the focused button, 0 = none (#151)
     FBgAnim: TTyAnimator;
     FAnimationsEnabled: Boolean;
     FTimer: TTimer;
@@ -119,6 +120,13 @@ type
     procedure MouseEnter; override;
     procedure MouseLeave; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { #151: Space and Enter act on their key-up, once -- held down, auto-repeat
+      included, they acted on every key-down. The focus leaving with the key down cancels it. }
+    procedure KeyUp(var Key: Word; Shift: TShiftState); override;
+    procedure DoExit; override;
+    { #151: the second press of a quick double click is a click too, as on a native button;
+      OnDblClick still fires. }
+    procedure DblClick; override;
     // VCL-style dialog-key path (CM_DIALOGKEY carries a VK_* CharCode). LCL marks
     // CM_DIALOGKEY "unimplemented" so a real form drives the action methods above,
     // not this handler; it exists so the same routing is exercisable headlessly
@@ -644,11 +652,39 @@ procedure TTyCustomButton.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
+  { Held down it only waits; the key-up clicks. Enter is taken here too, so the button it
+    clicks is the focused one, not the form's default button. }
   if (Key = VK_SPACE) or (Key = VK_RETURN) then
   begin
-    Click;            // Click already guards Enabled and fires OnClick
+    FKeyPress := Key;
     Key := 0;
   end;
+end;
+
+procedure TTyCustomButton.KeyUp(var Key: Word; Shift: TShiftState);
+begin
+  inherited KeyUp(Key, Shift);
+  if (Key <> 0) and (Key = FKeyPress) then
+  begin
+    FKeyPress := 0;
+    Key := 0;
+    Click;            // Click already guards Enabled and fires OnClick
+  end;
+end;
+
+procedure TTyCustomButton.DoExit;
+begin
+  FKeyPress := 0;
+  inherited DoExit;
+end;
+
+procedure TTyCustomButton.DblClick;
+begin
+  { LCL does not mark a double click's press csClicked, so its button-up clicked nothing and
+    the second of two quick clicks was lost. Marked here, the button-up clicks as the first
+    one's did -- inside the control only. }
+  ControlState := ControlState + [csClicked];
+  inherited DblClick;
 end;
 
 function TTyCustomButton.GetStyleTypeKey: string;
