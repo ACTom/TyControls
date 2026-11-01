@@ -130,7 +130,7 @@ uses
   test.enteresc,
   test.keyrepeat,
   test.loadevents,
-  test.keypressfilter, test.savedvalues, test.keyboardreach, test.stylelayout, test.popupmonitor, test.rtlreach, test.onclicklcl,
+  test.keypressfilter, test.savedvalues, test.keyboardreach, test.stylelayout, test.popupmonitor, test.rtlreach, test.onclicklcl, test.spinselect,
   test.analogclock,
   test.sparkline,
   test.rating,
