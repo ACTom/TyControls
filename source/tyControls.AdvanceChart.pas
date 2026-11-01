@@ -406,6 +406,16 @@ type
     Series, Start, Count: Integer;
   end;
 
+  { [R6-B] WHETHER A MAP VIEW'S REGIONS GROUP HOLDS REGIONS (MapDraw's
+    isFirstDraw is !regionsGroup.childAt(0)): a GeoJSON draw fills it with
+    its regions, an SVG draw leaves it as it was (its graphic goes in the
+    svg group). Key the view's (TyGeoViewKey), Gen the build that wrote it. }
+  TTyGeoHeld = record
+    Key: Integer;
+    Held: Boolean;
+    Gen: Integer;
+  end;
+
   TTyStSeries = record
     Kind: TTyStKind;
     IsLine: Boolean;
@@ -1101,6 +1111,11 @@ type
     FMapRoam: array of TTyMapRoam;
     FGeoDraws: array of TTyGeoDrawRange;
     FMapSyms: array of TTyGeoDrawRange;
+    { [R6-B] each map view's regions group as its last draw left it, and
+      the builds counted (a view the last build did not draw is gone: its
+      MapDraw removed) }
+    FGeoHeld: array of TTyGeoHeld;
+    FGeoBuildGen: Integer;
     { a heatmap on a geo's layer, per slot, as the last build made it }
     FHeatLayers: array of TTyHeatLayer;
     { THE TREES, laid out per slot -- an empty record where the slot is no
@@ -2228,6 +2243,8 @@ type
     { [R2-C] the map views the last build drew, and (ANew) the model each
       one's transform group tweens on }
     function AnimGeoViews(ANew: Boolean): TTyChartGeoViewArray;
+    procedure GeoNoteHeld(AGeo: TObject);
+    function GeoHeldOf(AKey: Integer): Boolean;
     { ---- the states on the proxies [Batch 94, AN3b] ---- }
     { after the build and its arming: every state element's proxy found or
       made, seeded with the rest values, given the series' stateTransition,

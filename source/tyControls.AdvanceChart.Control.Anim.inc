@@ -990,10 +990,21 @@ begin
   for k := 0 to High(FGeoDraws) do
   begin
     geo := TTyGeo(FGeoDraws[k].Geo);
-    { MapDraw's isFirstDraw: a view that drew nothing has no group to tween }
-    if (geo = nil) or (FGeoDraws[k].Count <= 0) then Continue;
+    if geo = nil then Continue;
+    { [R6-B] MapDraw's isFirstDraw, !regionsGroup.childAt(0), asked before
+      the draw fills it: the old view tweens only where its regions group
+      holds regions -- a GeoJSON map's, or an SVG map's over a group an
+      earlier GeoJSON draw left filled. An SVG map's own draw is always a
+      first draw: it is set, never tweened. [Was: any view that drew
+      something.] The new view: one that draws something. }
+    if ANew then
+    begin
+      if FGeoDraws[k].Count <= 0 then Continue;
+    end
+    else if not GeoHeldOf(TyGeoViewKey(geo)) then Continue;
+    { the roam is x, y and one scale (viewCoordSysUpdateRoamTrans): it never
+      turns or skews -- what turns in a map is its content's }
     rt := geo.RoamTrans;
-    if (rt.Rotation <> 0) or (rt.SkewX <> 0) or (rt.SkewY <> 0) then Continue;
     r := Default(TTyChartGeoView);
     r.Key := TyGeoViewKey(geo);
     r.X := rt.X;
@@ -1024,6 +1035,54 @@ begin
     SetLength(Result, Length(Result) + 1);
     Result[High(Result)] := r;
   end;
+end;
+
+{ [R6-B] a map view drawn: its regions group as the draw leaves it -- a
+  GeoJSON map's regions (a group per region; a map with none throws in
+  GeoCreator.create, upstream draws nothing), an SVG map's whatever the
+  last build's draw of the view left there (a view the last build did not
+  draw is gone: MapView.remove clears its MapDraw); a view that does not
+  show has none (GeoView.render removes its MapDraw) }
+procedure TTyCustomAdvanceChart.GeoNoteHeld(AGeo: TObject);
+var
+  geo: TTyGeo;
+  key, i, at: Integer;
+  held: Boolean;
+begin
+  geo := TTyGeo(AGeo);
+  if geo = nil then Exit;
+  key := TyGeoViewKey(geo);
+  at := -1;
+  for i := 0 to High(FGeoHeld) do
+    if FGeoHeld[i].Key = key then
+    begin
+      at := i;
+      Break;
+    end;
+  if not (geo.Valid and geo.Spec.Show) then held := False
+  else if geo.IsSvg then
+    held := (at >= 0) and FGeoHeld[at].Held and (FGeoHeld[at].Gen >= FGeoBuildGen - 1)
+  else
+    held := True;
+  if at < 0 then
+  begin
+    at := Length(FGeoHeld);
+    SetLength(FGeoHeld, at + 1);
+    FGeoHeld[at].Key := key;
+  end;
+  FGeoHeld[at].Held := held;
+  FGeoHeld[at].Gen := FGeoBuildGen;
+end;
+
+{ [R6-B] the view's regions group holds regions after the last build's
+  draw of it (a view that build did not draw has none) }
+function TTyCustomAdvanceChart.GeoHeldOf(AKey: Integer): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := 0 to High(FGeoHeld) do
+    if FGeoHeld[i].Key = AKey then
+      Exit(FGeoHeld[i].Held and (FGeoHeld[i].Gen = FGeoBuildGen));
 end;
 
 function TTyCustomAdvanceChart.AnimToOldPoint(AOldSeries: Integer; AX, AY: Double): TTyPointF;

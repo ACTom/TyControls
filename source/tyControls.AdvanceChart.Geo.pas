@@ -6087,8 +6087,16 @@ var
             if TyStHasColour(c, stkStroke) and (c.Num[stkLineWidth] > 0) then
             begin
               el.Caption.StrokeColour := WithAlpha(c.Color[stkStroke], look.StrokeOpacity);
-              el.Caption.StrokeWidthLogical := c.Num[stkLineWidth] * det / scale;
+              { [R6-B] under the whole map the halo is in the text's own
+                units, as the font is (the map scales both) [was: times the
+                map's scale there too -- drawn det times too wide] }
+              if el.Caption.HasAffine then
+                el.Caption.StrokeWidthLogical := c.Num[stkLineWidth]
+              else
+                el.Caption.StrokeWidthLogical := c.Num[stkLineWidth] * det / scale;
             end;
+            { [R6-B] glyphs in the map's own units: a tween scales them }
+            el.Anim.VInk := True;
           end;
           el.Style.Alpha := c.Num[stkOpacity];
           el.ZrHit.Active := True;
@@ -6129,6 +6137,9 @@ var
             el.Style.FillPattern.Matrix[3] := m[3] * nd.St.IH / scale;
             el.Style.FillPattern.Matrix[4] := (m[0] * x + m[2] * y + m[4]) / scale;
             el.Style.FillPattern.Matrix[5] := (m[1] * x + m[3] * y + m[5]) / scale;
+            { [R6-B] the picture in the map's own units (its map logical) }
+            el.Anim.VInk := True;
+            el.Anim.VPx := scale;
           end;
           el.Style.Alpha := c.Num[stkOpacity];
           el.ZrHit.Active := True;
@@ -6166,6 +6177,8 @@ var
             el.Style.StrokeColor := WithAlpha(c.Color[stkStroke], look.StrokeOpacity);
             if look.NoScale then w := lw else w := lw * det / scale;
             el.Style.StrokeWidthLogical := w;
+            { [R6-B] a stroke in the map's own units: a tween scales it }
+            el.Anim.VStroke := not look.NoScale;
             { the dash: the option's (its normal, a state's over it in list
               order) on a named shape, else the SVG's own }
             optDash := look.Styled and look.Opt.DashHas;
@@ -6798,9 +6811,12 @@ begin
   if AList <> nil then n0 := AList.Count else n0 := 0;
   Result := BuildGeoUntagged(AGeo, AInk, AMeasurer, APPI, AList, AApplyStates);
   if (AGeo = nil) or (AList = nil) then Exit;
+  { [R6-B] the roam is x, y and one scale (viewCoordSysUpdateRoamTrans
+    writes nothing else on a fresh transformable): it never turns or skews.
+    What turns or skews in a map is its content's -- an SVG's own
+    transforms -- and rides the group as it is. [Was: a roam that turned or
+    skewed left untagged; there is none.] }
   rt := AGeo.RoamTrans;
-  { a roam that turns or skews is not a scale and a move }
-  if (rt.Rotation <> 0) or (rt.SkewX <> 0) or (rt.SkewY <> 0) then Exit;
   for i := n0 to AList.Count - 1 do
   begin
     el := AList.Element(i);

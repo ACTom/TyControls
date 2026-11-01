@@ -3941,6 +3941,7 @@ begin
     [Batch 152] }
   FGeoDraws := nil;
   FMapSyms := nil;
+  Inc(FGeoBuildGen);
   for i := 0 to High(FGeos) do
   begin
     if FGeos[i] = nil then Continue;
@@ -3958,6 +3959,7 @@ begin
     FGeoDraws[High(FGeoDraws)].Series := -1;
     FGeoDraws[High(FGeoDraws)].Start := n;
     FGeoDraws[High(FGeoDraws)].Count := list.Count - n;
+    GeoNoteHeld(FGeos[i]);
   end;
   furniture := drawn;
   { nothing is large until the loop below says so [Batch 117] }

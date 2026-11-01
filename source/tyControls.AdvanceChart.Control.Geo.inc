@@ -1939,6 +1939,7 @@ begin
     FGeoDraws[High(FGeoDraws)].Series := FBindings[ASlot].SeriesIndex;
     FGeoDraws[High(FGeoDraws)].Start := n;
     FGeoDraws[High(FGeoDraws)].Count := AList.Count - n;
+    GeoNoteHeld(geo);
   end;
   Inc(Result, BuildMapSymbols(ASlot, AMeasurer, APPI, AList));
 end;

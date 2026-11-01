@@ -915,7 +915,8 @@ uses tyControls.AdvanceChart.Labels, tyControls.AdvanceChart.Data, tyControls.Ad
   tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.LabelLayout,
   tyControls.AdvanceChart.Graph, tyControls.AdvanceChart.RichStyle,
   tyControls.AdvanceChart.Parallel,
-  tyControls.AdvanceChart.ThemeRiver, tyControls.AdvanceChart.Chord;
+  tyControls.AdvanceChart.ThemeRiver, tyControls.AdvanceChart.Chord,
+  tyControls.FontUnits;
 
 function UtHostRole(const AEl: TTyChartElement): string; forward;
 
@@ -6353,11 +6354,44 @@ end;
   and the transform now -- a scale about the rest origin and a move -- a
   caption's anchor moved with it (a text that is not local keeps its size) }
 procedure ViewMap(var AEl: TTyChartElement; ASX, ASY, AX, AY: Double);
-var fx, fy, ax0, ay0: Double;
+var fx, fy, ax0, ay0, f: Double; k: Integer;
 begin
   if (AEl.Anim.VSX = 0) or (AEl.Anim.VSY = 0) then Exit;
   fx := ASX / AEl.Anim.VSX;
   fy := ASY / AEl.Anim.VSY;
+  { [R6-B] the line scale of the move: a width in the element's own units
+    grows by sqrt|det| of it, as zrender's canvas draws one }
+  f := Sqrt(Abs(fx * fy));
+  { [R6-B] AN SVG MAP'S TEXT: its glyphs ride the group (a TSpan is a
+    displayable in it, not a label hung on a host) -- its anchor and its
+    box carried, its size and halo scaled, or its whole map carried }
+  if AEl.Anim.VInk and (AEl.Caption.FontSizeLogical > 0) then
+  begin
+    if IsNan(f) or (fx = 0) or (fy = 0) or IsNan(fx) or IsNan(fy) then
+    begin
+      MakeInkless(AEl);
+      Exit;
+    end;
+    AEl.Caption.X := AX + (AEl.Caption.X - AEl.Anim.VX) * fx;
+    AEl.Caption.Y := AY + (AEl.Caption.Y - AEl.Anim.VY) * fy;
+    TyShapeScaleAbout(AEl.Shape, AEl.Anim.VX, AEl.Anim.VY, fx, fy);
+    TyShapeMove(AEl.Shape, AX - AEl.Anim.VX, AY - AEl.Anim.VY);
+    if AEl.Caption.HasAffine then
+    begin
+      AEl.Caption.Affine[0] := AEl.Caption.Affine[0] * fx;
+      AEl.Caption.Affine[1] := AEl.Caption.Affine[1] * fy;
+      AEl.Caption.Affine[2] := AEl.Caption.Affine[2] * fx;
+      AEl.Caption.Affine[3] := AEl.Caption.Affine[3] * fy;
+      AEl.Caption.Affine[4] := AX + (AEl.Caption.Affine[4] - AEl.Anim.VX) * fx;
+      AEl.Caption.Affine[5] := AY + (AEl.Caption.Affine[5] - AEl.Anim.VY) * fy;
+    end
+    else
+    begin
+      AEl.Caption.FontSizeLogical := TyFontSizeFromPx(TyFontPxOf(AEl.Caption.FontSizeLogical) * f);
+      AEl.Caption.StrokeWidthLogical := AEl.Caption.StrokeWidthLogical * f;
+    end;
+    Exit;
+  end;
   if AEl.Caption.FontSizeLogical > 0 then
   begin
     ax0 := AEl.Caption.X;
@@ -6373,6 +6407,30 @@ begin
   end;
   TyShapeScaleAbout(AEl.Shape, AEl.Anim.VX, AEl.Anim.VY, fx, fy);
   TyShapeMove(AEl.Shape, AX - AEl.Anim.VX, AY - AEl.Anim.VY);
+  { [R6-B] an SVG map's stroke that is not strokeNoScale: its width, dash
+    and phase in the map's own units }
+  if AEl.Anim.VStroke then
+  begin
+    AEl.Style.StrokeWidthLogical := AEl.Style.StrokeWidthLogical * f;
+    { the frame's own copy: the list at rest shares the array }
+    AEl.Style.DashLogical := Copy(AEl.Style.DashLogical, 0, Length(AEl.Style.DashLogical));
+    for k := 0 to High(AEl.Style.DashLogical) do
+      AEl.Style.DashLogical[k] := AEl.Style.DashLogical[k] * f;
+    AEl.Style.DashOffsetLogical := AEl.Style.DashOffsetLogical * f;
+  end;
+  { [R6-B] an SVG map's image: its unit square's map (logical: VPx the
+    list's px per one) carried with it }
+  if AEl.Anim.VInk and AEl.Style.FillPattern.HasMatrix and (AEl.Anim.VPx > 0) then
+  begin
+    AEl.Style.FillPattern.Matrix[0] := AEl.Style.FillPattern.Matrix[0] * fx;
+    AEl.Style.FillPattern.Matrix[1] := AEl.Style.FillPattern.Matrix[1] * fy;
+    AEl.Style.FillPattern.Matrix[2] := AEl.Style.FillPattern.Matrix[2] * fx;
+    AEl.Style.FillPattern.Matrix[3] := AEl.Style.FillPattern.Matrix[3] * fy;
+    AEl.Style.FillPattern.Matrix[4] := (AX + (AEl.Style.FillPattern.Matrix[4] * AEl.Anim.VPx
+      - AEl.Anim.VX) * fx) / AEl.Anim.VPx;
+    AEl.Style.FillPattern.Matrix[5] := (AY + (AEl.Style.FillPattern.Matrix[5] * AEl.Anim.VPx
+      - AEl.Anim.VY) * fy) / AEl.Anim.VPx;
+  end;
   if AEl.Caption.HasHostBox then
   begin
     AEl.Caption.HostBox.X := AX + (AEl.Caption.HostBox.X - AEl.Anim.VX) * fx;
