@@ -4273,8 +4273,16 @@ type
       line's polyline bevels unless its lineStyle says, a gauge's pointer lays
       pointer.itemStyle over its item's; a sankey's band reads itemStyle's
       border* keys off its lineStyle; a treemap's rects,
-      a radar's area and an area take none }
-    procedure ApplySeriesPenEnds(AList: TTyPaintList);
+      a radar's area and an area take none.
+      [R6-D] AND THE DASH -- borderType / type, borderDashOffset /
+      dashOffset -- off the same chains; a pie's border joins round unless
+      written (PieSeries' borderJoin), a sunburst's always bevels
+      (SunburstPiece); a gauge's pointer and progress arc and a funnel's
+      bands take the stroke and its width too: the visual style's
+      borderColor ('auto', the series', its palette colour) and borderWidth,
+      an icon pointer's setColor, then pointer.itemStyle /
+      progress.itemStyle over them }
+    procedure ApplySeriesPens(AList: TTyPaintList);
     { [R5-A] A SERIES' blendMode AND zlevel onto its elements: the blend on
       every element its view renders (echarts' updateBlend -- not a label,
       not a label line: they are no child of the view's group), the zlevel on

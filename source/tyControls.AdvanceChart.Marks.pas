@@ -206,6 +206,15 @@ type
     ItemDash: TTyOptDash;
     ItemDashExplicit: TTyDoubleArray;
     ItemDashOffset: Double;
+    { [R6-D] AND ITS PEN, likewise: a line's symbols stroke with the
+      itemStyle's borderColor and borderWidth, not the lineStyle's [was:
+      the lineStyle's colour and width ringed every symbol] }
+    ItemStroke: TTyChartColor;
+    ItemStrokeGradient: TTyChartGradient;
+    ItemStrokeWidthLogical: Double;
+    { [R6-D] whether a width was written (the series' or the item's): a
+      'line' symbol's setColor keeps it, zrender's 1 where none }
+    StrokeWidthSet, ItemStrokeWidthSet: Boolean;
     { The four colours a candle needs, and the pen. A block of its own rather
       than four more fields on the visual: a candlestick is the only series
       whose colour depends on the DATUM's own two numbers, and putting `Up` and
@@ -1200,7 +1209,11 @@ begin
   if AStore.HasOverride(ARow, k) then
   begin
     v := AStore.GetOverride(ARow, k);
-    if (v.Kind = dvkNumber) and not IsNan(v.Num) then Result.StrokeWidthLogical := v.Num;
+    if (v.Kind = dvkNumber) and not IsNan(v.Num) then
+    begin
+      Result.StrokeWidthLogical := v.Num;
+      Result.StrokeWidthSet := True;
+    end;
   end;
   if not AStore.HasOverride(ARow, TyOverrideKey('itemStyle.color')) then Exit;
   v := AStore.GetOverride(ARow, TyOverrideKey('itemStyle.color'));
@@ -1855,9 +1868,19 @@ var
       if sv.FillGradient.Kind <> cgkNone then sv.StrokeGradient := sv.FillGradient;
       sv.FillGradient := Default(TTyChartGradient);
       sv.FillPattern := Default(TTyChartPattern);
-      if sv.StrokeWidthLogical <= 0 then sv.StrokeWidthLogical := 2;
-      if rs.Kind = tsyLine then sv.Fill := 0
-      else sv.Fill := AVisual.EmptyFill;
+      { [R6-D] setColor: an empty symbol's lineWidth is 2 whatever the border
+        says, a line's the border's (zrender's 1 where none) [was: the
+        border's, 2 where none, both] }
+      if rs.Kind = tsyLine then
+      begin
+        if not sv.StrokeWidthSet then sv.StrokeWidthLogical := 1;
+        sv.Fill := 0;
+      end
+      else
+      begin
+        sv.StrokeWidthLogical := 2;
+        sv.Fill := AVisual.EmptyFill;
+      end;
     end;
     el := MarkElement(sh, sv, ABinding.SeriesIndex, ARow);
     { z2 100, as a scatter's (Symbol.ts:85): above the polyline, which a
@@ -2503,6 +2526,11 @@ begin
   symVis.Dash := AVisual.ItemDash;
   symVis.DashExplicit := AVisual.ItemDashExplicit;
   symVis.DashOffset := AVisual.ItemDashOffset;
+  { [R6-D] the itemStyle's pen }
+  symVis.Stroke := AVisual.ItemStroke;
+  symVis.StrokeGradient := AVisual.ItemStrokeGradient;
+  symVis.StrokeWidthLogical := AVisual.ItemStrokeWidthLogical;
+  symVis.StrokeWidthSet := AVisual.ItemStrokeWidthSet;
   baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
   stacked := AStack.Stacked and (AStack.ResultCol >= 0);
   spec := AVisual.Line;
@@ -2725,9 +2753,17 @@ begin
     if v.FillGradient.Kind <> cgkNone then v.StrokeGradient := v.FillGradient;
     v.FillGradient := Default(TTyChartGradient);
     v.FillPattern := Default(TTyChartPattern);
-    if v.StrokeWidthLogical <= 0 then v.StrokeWidthLogical := 2;
-    if rs.Kind = tsyLine then v.Fill := 0
-    else v.Fill := AVisual.EmptyFill;
+    { [R6-D] setColor, as a line's symbol }
+    if rs.Kind = tsyLine then
+    begin
+      if not v.StrokeWidthSet then v.StrokeWidthLogical := 1;
+      v.Fill := 0;
+    end
+    else
+    begin
+      v.StrokeWidthLogical := 2;
+      v.Fill := AVisual.EmptyFill;
+    end;
   end;
   el := MarkElement(shape, v, ABinding.SeriesIndex, ARow);
   el.Z2 := 100 + Round(lift);

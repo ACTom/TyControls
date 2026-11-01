@@ -1363,6 +1363,10 @@ function TyDashPattern(ADash: TTyOptDash; const AExplicit: TTyDoubleArray;
 begin
   Result := nil;
   if ADash in [todNone, todSolid] then Exit;
+  { [R6-D] LENGTHS ARE LENGTHS whatever the width: zrender keeps the style's
+    array and normalises at the stroke, so a border of no width at rest
+    dashes once a state widens it [was: none below a width above nought] }
+  if ADash = todExplicit then Exit(Copy(AExplicit, 0, Length(AExplicit)));
   { NaN fails every comparison, so this rejects it too. }
   if not (AWidthLogical > 0) then Exit;
   case ADash of

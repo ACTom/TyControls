@@ -176,12 +176,12 @@ begin
             radar's symbols carry none) }
           if not (((el.Datum.Kind = ctkSeries) and (el.Datum.SeriesIndex >= 0))
             or ((el.Anim.UtTag = 1) and (el.Anim.Series >= 0))) then Continue;
-          { THREE PENS THE PORT DOES NOT DRAW (a radar's symbols, a gauge's
-            pointer take no border width; a chord's ribbon no lineStyle
-            stroke -- other gaps, see spec 250): their ends as set }
-          unstroked := (el.Anim.Role = carGaugePointer)
-            or ((el.Anim.Role = carNone) and (el.Anim.UtTag = 1) and (el.Anim.Sub > 0))
-            or ((el.Anim.Role = carChord) and el.Datum.IsEdge);
+          { A PEN THE PORT DOES NOT DRAW: a chord's ribbon strokes in its
+            colour word ('source', no colour the canvas takes -- it keeps
+            the last element's there, the port draws none): its ends as
+            set. [R6-D: a radar's symbols and a gauge's pointer draw their
+            border now] }
+          unstroked := (el.Anim.Role = carChord) and el.Datum.IsEdge;
           if not unstroked then
           begin
             if not (el.Style.StrokeWidthLogical > 0) then Continue;

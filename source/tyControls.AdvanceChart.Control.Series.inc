@@ -3215,6 +3215,26 @@ begin
     if (d <> nil) and (d.JSONType = jtNumber) then
       Result.LineWidthLogical := d.AsFloat;
   end;
+  { [R6-D] the symbols' pen: the series' itemStyle border ('auto' its
+    palette colour) and each item's own over it }
+  os := TyReadOptStyle(node, 'itemStyle');
+  Result.Border := os.BorderColor;
+  Result.BorderAuto := TTyChartColor(SeriesPaletteColor(FBindings[ASlot].SeriesIndex));
+  Result.BorderWidthLogical := os.BorderWidthLogical;
+  d := node.Find('data');
+  if d is TJSONArray then
+  begin
+    SetLength(Result.RowBorder, d.Count);
+    SetLength(Result.RowBorderWidth, d.Count);
+    for k := 0 to d.Count - 1 do
+    begin
+      Result.RowBorderWidth[k] := NaN;
+      if not (TJSONArray(d).Items[k] is TJSONObject) then Continue;
+      os := TyReadOptStyle(TJSONObject(TJSONArray(d).Items[k]), 'itemStyle');
+      Result.RowBorder[k] := os.BorderColor;
+      Result.RowBorderWidth[k] := os.BorderWidthLogical;
+    end;
+  end;
   { [R2-B] lineStyle.type, the series' and each item's own (with its width) }
   os := TyReadOptStyle(node, 'lineStyle');
   { [R5-G] its colour: the ring's pen, not the row's colour }
