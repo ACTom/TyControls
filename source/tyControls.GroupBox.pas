@@ -128,9 +128,18 @@ end;
 { TTyGroupBox }
 
 function TTyGroupBox.CapHAtPPI(APPI: Integer): Integer;
+var
+  fh: Integer;
 begin
   // v3/C2: caption-band height is a skin-tunable metric (default 16 logical px).
   Result := MulDiv(ActiveController.Metric('--groupbox-caption-height', 16), APPI, 96);
+  { #146: and tall enough for the caption's font. A fixed band clipped a larger caption,
+    and the children sat under it. }
+  if FCaption <> '' then
+  begin
+    fh := TyFontHeightPx(ResolveFontSize(CurrentStyle), APPI);   // the glyphs' full height
+    if fh > Result then Result := fh;
+  end;
   if Result < 1 then Result := 1;
 end;
 

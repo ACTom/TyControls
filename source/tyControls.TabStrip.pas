@@ -1951,11 +1951,19 @@ end;
 { Density-aware header height. Explicit host/.lfm value wins and is streamed; otherwise
   follow --control-height (TyDensityHeight: 28 classic byte-identical / 38 modern). }
 function TTyCustomTabStrip.GetTabHeight: Integer;
+var
+  fh: Integer;
 begin
   if FTabHeightExplicit then
     Result := FTabHeight
   else
+  begin
     Result := TyDensityHeight(ActiveController, 28);
+    { #146: and tall enough for the tabs' font, which a fixed band clipped (LCL's tab control
+      grows its tabs with the font too) }
+    fh := TyFontHeightPx(ResolveFontSize(PartStyle('TyTab', '', [tysNormal])), 96) + 2;
+    if fh > Result then Result := fh;
+  end;
 end;
 
 procedure TTyCustomTabStrip.SetTabHeight(AValue: Integer);

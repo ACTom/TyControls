@@ -240,6 +240,8 @@ type
     procedure PopupClosed(Sender: TObject);
     procedure DeferredCloseUp(Data: PtrInt);
   protected
+    { #146: the padding and the chevron come from the style: place the editor again. }
+    procedure StyleLayoutChanged; override;
     { #145: a selection the control makes itself -- one a form file held, the rebuild of
       generated items -- is not a change of the user's: between these SelectItem fires no
       OnChange. Nest freely. }
@@ -1493,6 +1495,12 @@ begin
       ACanvas.RestoreHandleState;
     end;
   end;
+end;
+
+procedure TTyComboBox.StyleLayoutChanged;
+begin
+  inherited StyleLayoutChanged;
+  LayoutEditor;
 end;
 
 procedure TTyComboBox.LayoutEditor;

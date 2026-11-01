@@ -1920,6 +1920,9 @@ begin
     cannot (Wayland, no XShape) ForceSquareSurface removes the gaps instead. }
   FPopup.Controller := ActiveController;
   FPanel.Controller := Controller;
+  { #146: the field's variant and overrides reach the panel, as they reach its rows }
+  FPanel.StyleClass := StyleClass;
+  FPanel.StyleOverride := StyleOverride;
   FPanel.ForceSquareSurface := TyIsWayland;
   FPanel.Root := FNodes;
   FPanel.Path := FPath;   // seed the DRAFT from the committed value

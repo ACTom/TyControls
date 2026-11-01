@@ -237,11 +237,18 @@ end;
   --expander-header-height (density pack raises it for modern). Resolved live so a
   density toggle re-heights the header on the next layout. }
 function TTyExPanel.GetHeaderHeight: Integer;
+var
+  fh: Integer;
 begin
   if FHeaderHeightExplicit then
     Result := FHeaderHeight
   else
+  begin
     Result := ActiveController.Metric('--expander-header-height', TyExPanelDefaultHeaderHeight);
+    { #146: and tall enough for the caption's font, which a fixed header clipped }
+    fh := TyFontHeightPx(ResolveFontSize(PartStyle('TyExPanelHeader', StyleClass, [])), 96) + 2;
+    if fh > Result then Result := fh;
+  end;
 end;
 
 function TTyExPanel.ScaledHeaderHeight: Integer;
@@ -375,11 +382,16 @@ begin
 end;
 
 procedure TTyExPanel.SetHeaderHeight(AValue: Integer);
+var
+  was: Integer;
 begin
   if AValue < 1 then AValue := 1;
+  { #146: compared with the height the header HAD -- the theme's, until it is pinned -- not
+    with the field: 26 already in it, under a theme of 32, was a pin that changed nothing. }
+  was := GetHeaderHeight;
   FHeaderHeightExplicit := True;   { host pinned it, even at the fallback value }
-  if FHeaderHeight = AValue then Exit;
   FHeaderHeight := AValue;
+  if was = AValue then Exit;
   // Collapsed height equals the header height, so keep it in step while collapsed
   // (unless an animation is currently in flight driving the height itself).
   if FCollapsed and ((FTimer = nil) or not FTimer.Enabled) then

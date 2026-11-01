@@ -79,6 +79,8 @@ type
     function CheckBoxAt(AIndex: Integer): TTyCheckBox;
     procedure SetParent(AParent: TWinControl); override;
     procedure Resize; override;
+    { #146: the row pitch comes from the theme and the font: place the boxes again. }
+    procedure StyleLayoutChanged; override;
     procedure SetController(AValue: TTyStyleController); override;
     { See TTyRadioGroup.CMBiDiModeChanged: LCL's own handling invalidates and calls
       AdjustSize, neither of which re-runs a layout this control did with SetBounds -- so
@@ -401,6 +403,12 @@ begin
       itemMin := FCheckBoxes[i].Constraints.MinHeight;
   Result := TyGroupRowPitch(
     MulDiv(ActiveController.Metric('--row-height', TyGroupDefaultRowH), ppi, 96), itemMin);
+end;
+
+procedure TTyCheckGroup.StyleLayoutChanged;
+begin
+  inherited StyleLayoutChanged;
+  LayoutCheckBoxes;
 end;
 
 procedure TTyCheckGroup.LayoutCheckBoxes;

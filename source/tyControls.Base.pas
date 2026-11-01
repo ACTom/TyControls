@@ -452,6 +452,10 @@ type
   private
     FFitThemeVer: Cardinal;    // theme version the AutoSize answer was last fitted for (#114)
     FRefittingStyle: Boolean;
+    FStyleLayoutVer: Cardinal; // #146: theme version StyleLayoutChanged last ran for
+    FStyleLayoutDirty: Boolean;// #146: StyleClass, StyleOverride, Controller or Font changed
+    FInStyleLayout: Boolean;
+    procedure CheckStyleLayout;
   protected
     FHover, FPressed: Boolean;
     { Set by a control whose AutoSize answer comes from its style (#114): it re-fits when the
@@ -459,6 +463,13 @@ type
     FFitsToStyle: Boolean;
     FDpiAdjusting: Boolean;
     procedure RefitToStyle;
+    { #146: the theme, StyleClass, StyleOverride, Controller or Font changed, so what the style
+      decides about the layout -- padding, a border, a caption band, a row pitch -- may have
+      moved. Once per change, from Invalidate (a theme switch reaches a control only as that).
+      Default: realign the children. A control that places its own parts overrides it. }
+    procedure StyleLayoutChanged; virtual;
+    { #146: after the children have the new font too (TWinControl tells them last). }
+    procedure FontChanged(Sender: TObject); override;
     procedure SetController(AValue: TTyStyleController); virtual;
     function _AddRef: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function _Release: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
@@ -2450,10 +2461,40 @@ begin
   inherited Destroy;
 end;
 
+procedure TTyCustomControl.CheckStyleLayout;
+var
+  ver: Cardinal;
+begin
+  if FInStyleLayout or ([csLoading, csDestroying] * ComponentState <> []) then Exit;
+  ver := ActiveController.Model.ThemeVersion;
+  if not FStyleLayoutDirty and (ver = FStyleLayoutVer) then Exit;
+  FInStyleLayout := True;
+  try
+    FStyleLayoutDirty := False;
+    FStyleLayoutVer := ver;
+    StyleLayoutChanged;
+  finally
+    FInStyleLayout := False;
+  end;
+end;
+
+procedure TTyCustomControl.StyleLayoutChanged;
+begin
+  if ControlCount > 0 then ReAlign;
+end;
+
+procedure TTyCustomControl.FontChanged(Sender: TObject);
+begin
+  inherited FontChanged(Sender);
+  FStyleLayoutDirty := True;
+  CheckStyleLayout;
+end;
+
 procedure TTyCustomControl.SetStyleClass(const AValue: string);
 begin
   if FStyleClass = AValue then Exit;
   FStyleClass := AValue;
+  FStyleLayoutDirty := True;   // #146
   Invalidate;
 end;
 
@@ -2462,6 +2503,7 @@ begin
   if FStyleOverride = AValue then Exit;
   FStyleOverride := AValue;
   FOvrCacheValid := False;   // force a re-parse on the next CurrentStyle
+  FStyleLayoutDirty := True;   // #146
   Invalidate;
 end;
 
@@ -2472,6 +2514,7 @@ begin
   {$ENDIF}
   inherited Invalidate;
   if FFitsToStyle and AutoSize then RefitToStyle;
+  CheckStyleLayout;
 end;
 
 { #114: an AutoSize answer that comes from the style moves with the theme, and a theme switch
@@ -2559,6 +2602,7 @@ begin
   if FController <> nil then
     FController.FreeNotification(Self);
   ActiveController.RegisterStyleable(Self);
+  FStyleLayoutDirty := True;   // #146
   Invalidate;
 end;
 

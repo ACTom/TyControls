@@ -119,6 +119,8 @@ type
     procedure FocusItem(AIndex: Integer); virtual;
     procedure SetParent(AParent: TWinControl); override;
     procedure DoOnResize; override;
+    { #146: the row pitch comes from the theme and the font: place the radios again. }
+    procedure StyleLayoutChanged; override;
     // Keep the internal radio children on the group's controller so a controller assigned
     // AFTER population still themes them (mirrors TTyCheckGroup.SetController).
     procedure SetController(AValue: TTyStyleController); override;
@@ -771,6 +773,12 @@ procedure TTyRadioGroup.DoOnResize;
 begin
   inherited DoOnResize;
   LayoutButtons;   // reflow the grid when the box is resized
+end;
+
+procedure TTyRadioGroup.StyleLayoutChanged;
+begin
+  inherited StyleLayoutChanged;
+  LayoutButtons;
 end;
 
 procedure TTyRadioGroup.CMBiDiModeChanged(var Message: TLMessage);
