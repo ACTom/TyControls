@@ -112,7 +112,7 @@ type
     procedure TearDown; override;
   published
     procedure TestAHoveredPointerIsLiftedInTheListAndTheArcIsNot;
-    procedure TestTheRoundCapsTakeTheirArcsState;
+    procedure TestARoundCappedArcIsOneSausageAndItsEndsHover;
     procedure TestARadarSymbolStaysOverALiftedRing;
     procedure TestAMarkPointFadesWithinItsEnterAnimation;
     procedure TestAPictorialLabelTakesNoPointer;
@@ -1148,35 +1148,40 @@ begin
   AssertEquals('the pointer left it', '', TyStNamesText(item.Host.States));
 end;
 
-{ A ROUND CAP is a stretch of the arc's own Sausage upstream: the two discs
-  follow the arc's state }
-procedure TAdvChartStatesMiscTest.TestTheRoundCapsTakeTheirArcsState;
+{ A ROUND-CAPPED ARC IS ONE SAUSAGE (GaugeView's ProgressPath) [R6-E]: no
+  disc beside it, and a pointer on a round end -- past the arc's end angle --
+  is on the arc: the whole of it takes the emphasis }
+procedure TAdvChartStatesMiscTest.TestARoundCappedArcIsOneSausageAndItsEndsHover;
 var
-  arc, el: TTyChartElement;
-  ai, k, caps: Integer;
+  arc, arc2, el: TTyChartElement;
+  ai, k: Integer;
   p: TPoint;
-  rest: TTyChartColor;
+  rc, dr, a: Double;
+  item: TTyStItem;
 begin
   NewChart(camOff);
   Load(StringReplace(cGauge, '"progress":{"show":true,"width":14}',
     '"progress":{"show":true,"width":14,"roundCap":true}', []));
   ai := FindRole(carGaugeProgress, 0, 0, arc);
   AssertTrue('the arc', ai >= 0);
-  rest := arc.Style.FillColor;
-  p := SectorMiddle(arc);
-  FChart.Move(p.X, p.Y);
-  Draw;
-  caps := 0;
+  AssertTrue('a sausage', arc.Shape.Sausage);
   for k := 0 to FChart.List.Count - 1 do
   begin
     el := FChart.List.Element(k);
-    if (el.Shape.Kind <> cskCircle) or not el.Silent then Continue;
-    if (k <> ai - 1) and (k <> ai - 2) then Continue;
-    Inc(caps);
-    AssertEquals(Format('cap %d lifted with the arc', [k]),
-      IntToHex(TyChartLiftColor(rest), 8), IntToHex(el.Style.FillColor, 8));
+    AssertFalse(Format('no disc beside it (%d)', [k]), el.Silent and (el.Shape.Kind = cskCircle));
   end;
-  AssertEquals('both caps', 2, caps);
+  dr := (arc.Shape.R1 - arc.Shape.R0) / 2;
+  rc := arc.Shape.R0 + dr;
+  a := arc.Shape.EndRad + 0.6 * dr / rc;
+  p := Point(Round(arc.Shape.CX + Cos(a) * rc), Round(arc.Shape.CY + Sin(a) * rc));
+  FChart.Move(p.X, p.Y);
+  Draw;
+  AssertTrue(FChart.PeerStates(0, 0, item));
+  AssertEquals('the arc in emphasis off its round end', 'emphasis', TyStNamesText(item.Host.States));
+  FindRole(carGaugeProgress, 0, 0, arc2);
+  AssertEquals('lifted, the whole of it', IntToHex(TyChartLiftColor(arc.Style.FillColor), 8),
+    IntToHex(arc2.Style.FillColor, 8));
+  AssertTrue('still one sausage', arc2.Shape.Sausage);
 end;
 
 { RADAR SYMBOLS SIT AT z2 100 (RadarView.ts:67): a hovered ring rises by ten

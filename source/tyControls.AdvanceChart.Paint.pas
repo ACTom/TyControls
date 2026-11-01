@@ -767,7 +767,7 @@ type
     rebuilt on every static render, the proxy only when the option is. }
   TTyChartAnimRole = (carNone, carBar, carSymbol, carLineSymbol, carLineRun,
     carLineArea, carSector, carFunnel, carGaugePointer, carGaugeProgress,
-    carGaugeCap, carRadarLine, carRadarArea, carCandleBody, carCandleWickHigh,
+    carRadarLine, carRadarArea, carCandleBody, carCandleWickHigh,
     carCandleWickLow, carLabel, carGuide,
     { [Batch 92, AN4] a gauge's reading; an effectScatter's symbol and its
       ripples (Sub: which ripple); a markPoint's symbol; a markLine's

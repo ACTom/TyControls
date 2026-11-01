@@ -4936,7 +4936,7 @@ begin
     case pe^.Anim.Role of
       carRipple, carLinesEffect, carLinesFrom, carLinesTo, carPictorialRect,
       carGraphEdgeFrom, carGraphEdgeTo, carRadarArea, carLineArea,
-      carGaugeCap, carGaugeDetail:
+      carGaugeDetail:
         Continue;
       carRadarLine, carTreeEdge, carLinesLine, carParallelLine:
         Take(nodes, ['lineStyle'], True);
