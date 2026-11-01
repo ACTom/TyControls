@@ -663,6 +663,9 @@ type
     VnOn, VnKeep: Boolean;
     VnSer: Integer;
     VnGX, VnGY, VnComp, VnSX, VnSY, VnRot, VnOffX, VnOffY: Double;
+    { [R6-C] A TREE NODE OF A KEPT VIEW: VnGX / VnGY its group's place in the
+      main group (the view's main group over it, TreeView's) }
+    VnTree: Boolean;
   end;
   TTyUtOldSnapArray = array of TTyUtOldSnap;
   { [F3c] per old item, the snaps of its paths in getPathList's order }
@@ -9286,11 +9289,22 @@ begin
     { a tree node's symbol: its proxy's x / y are its group's place in the
       main group, its device place is the layout's }
     carTreeNode:
-      UtSymbolPath(AEl.Caption.LgSymbol, AEl.Caption.LgKeepAspect,
-        NumOr(P, 'scaleX', AEl.Caption.LgG[0] / 2), NumOr(P, 'scaleY', AEl.Caption.LgG[1] / 2),
-        AEl.Caption.LgG[2], AEl.Caption.LgG[3], AEl.Caption.LgG[4],
-        AEl.Caption.LgG[5], AEl.Caption.LgG[6], 1, 1,
-        AData, AHasM, AM, AHasLocal, ALocal);
+      { [R6-C] under a view: the node group's computed transform (the view
+        group, the main group, the node's with its compensation scale --
+        LgFrame) over the path's own, its offset as written [was: the
+        path's alone at its device place, unscaled by the zoom] }
+      if AEl.Caption.LgHasFrame then
+        UtSymbolPath(AEl.Caption.LgSymbol, AEl.Caption.LgKeepAspect,
+          NumOr(P, 'scaleX', AEl.Caption.LgG[0] / 2), NumOr(P, 'scaleY', AEl.Caption.LgG[1] / 2),
+          AEl.Caption.LgG[2], AEl.Caption.LgG[8], AEl.Caption.LgG[9],
+          AEl.Caption.LgFrame[4], AEl.Caption.LgFrame[5], AEl.Caption.LgFrame[0],
+          AEl.Caption.LgFrame[3], AData, AHasM, AM, AHasLocal, ALocal)
+      else
+        UtSymbolPath(AEl.Caption.LgSymbol, AEl.Caption.LgKeepAspect,
+          NumOr(P, 'scaleX', AEl.Caption.LgG[0] / 2), NumOr(P, 'scaleY', AEl.Caption.LgG[1] / 2),
+          AEl.Caption.LgG[2], AEl.Caption.LgG[3], AEl.Caption.LgG[4],
+          AEl.Caption.LgG[5], AEl.Caption.LgG[6], 1, 1,
+          AData, AHasM, AM, AHasLocal, ALocal);
     carRipple:
       UtRipplePath(AEl, NumOr(P, 'scaleX', 0.5), NumOr(P, 'scaleY', 0.5), AData, AHasM, AM);
   end;
@@ -10028,13 +10042,40 @@ end;
   old node's computed transform under that. The new transform is any new
   element's of the series on the view (VSX .. VY); a view with none left
   keeps the old one. }
+{ [R6-C] a tree node's path under a view group (scale ASX / ASY, place AX /
+  AY) over the main group at (AMX, AMY): the node group at (AGX, AGY) with
+  its compensation AComp, the path's own (TreeView's chain, multiplied out
+  as zrender's updateTransform does it) }
+procedure UtTreeNodeUnder(const AEl: TTyChartElement; P: TTyChartAnimProxy;
+  ASX, ASY, AX, AY, AMX, AMY, AGX, AGY, AComp: Double; var S: TTyUtOldSnap);
+var
+  mv, mg, fr: TTyMat2D;
+  hasV, hasG: Boolean;
+begin
+  hasV := TyLabelLocalTransform((ASX * AMX + 0 * AMY) + AX, (0 * AMX + ASY * AMY) + AY,
+    0, 0, 0, ASX, ASY, mv);
+  hasG := TyLabelLocalTransform(AGX, AGY, 0, 0, 0, AComp, AComp, mg);
+  if hasV and hasG then fr := TyGuideMatMul(mv, mg)
+  else if hasV then fr := mv
+  else if hasG then fr := mg
+  else
+  begin
+    fr[0] := 1; fr[1] := 0; fr[2] := 0; fr[3] := 1; fr[4] := 0; fr[5] := 0;
+  end;
+  UtSymbolPath(AEl.Caption.LgSymbol, AEl.Caption.LgKeepAspect,
+    NumOr(P, 'scaleX', AEl.Caption.LgG[0] / 2), NumOr(P, 'scaleY', AEl.Caption.LgG[1] / 2),
+    AEl.Caption.LgG[2], AEl.Caption.LgG[8], AEl.Caption.LgG[9], fr[4], fr[5], fr[0], fr[3],
+    S.Data, S.HasM, S.M, S.HasLocal, S.Local);
+end;
+
 procedure UtRebakeViewNodes(AList: TTyPaintList; const AOldOf: TTyIntegerArray;
   var ASnaps: TTyUtOldSnapArray);
 var
   i, s, k: Integer;
   found: Boolean;
-  el: TTyChartElement;
+  el, nel: TTyChartElement;
   sx, sy, x, y: Double;
+  tmp: TTyUtOldSnap;
 begin
   for i := 0 to High(ASnaps) do
   begin
@@ -10051,16 +10092,38 @@ begin
       begin
         el := AList.Element(k);
         if (el.Anim.Series <> s) or not el.Anim.InView then Continue;
+        { [R6-C] a tree's: a node of the new render, for its main group }
+        if ASnaps[i].VnTree and not ((el.Anim.Role = carTreeNode) and el.Caption.LgHasFrame) then
+          Continue;
         sx := el.Anim.VSX;
         sy := el.Anim.VSY;
         x := el.Anim.VX;
         y := el.Anim.VY;
+        nel := el;
         found := True;
         Break;
       end;
       Break;
     end;
     if not found then Continue;
+    { [R6-C] A TREE NODE the render left in its main group: under the view
+      group's new transform (updateProps with setToFinal) and the main group
+      as the render placed it }
+    if ASnaps[i].VnTree then
+    begin
+      tmp := ASnaps[i];
+      el := Default(TTyChartElement);
+      el.Caption.LgSymbol := tmp.Sym;
+      el.Caption.LgKeepAspect := tmp.VnKeep;
+      el.Caption.LgG[0] := tmp.VnSX * 2;
+      el.Caption.LgG[1] := tmp.VnSY * 2;
+      el.Caption.LgG[2] := tmp.VnRot;
+      el.Caption.LgG[8] := tmp.VnOffX;
+      el.Caption.LgG[9] := tmp.VnOffY;
+      UtTreeNodeUnder(el, nil, sx, sy, x, y, nel.Caption.LgG[10], nel.Caption.LgG[11],
+        tmp.VnGX, tmp.VnGY, tmp.VnComp, ASnaps[i]);
+      Continue;
+    end;
     UtSymbolPath(ASnaps[i].Sym, ASnaps[i].VnKeep, ASnaps[i].VnSX, ASnaps[i].VnSY,
       ASnaps[i].VnRot, ASnaps[i].VnOffX, ASnaps[i].VnOffY,
       x + sx * ASnaps[i].VnGX, y + sy * ASnaps[i].VnGY,
@@ -10126,8 +10189,22 @@ var
   end;
 
   procedure Detach(const AEl: TTyChartElement; P: TTyChartAnimProxy; var S: TTyUtOldSnap);
-  var gx, gy: Double;
+  var
+    gx, gy: Double;
+    vg, tg: TTyChartAnimProxy;
   begin
+    { [R6-C] A TREE NODE: TreeView's dispose leaves it in its groups -- under
+      the view group as it is now (its tween stops with the view) }
+    if (AEl.Anim.Role = carTreeNode) and AEl.Caption.LgHasFrame then
+    begin
+      vg := TTyChartAnimProxy(AOldIndex.Find(KeyOf(AEl.Anim.Series, -1, 'viewGroup')));
+      tg := TTyChartAnimProxy(AOldIndex.Find(KeyOf(AEl.Anim.Series, KeyIndexOf(AEl), 'treeGroup')));
+      UtTreeNodeUnder(AEl, P, NumOr(vg, 'scaleX', AEl.Anim.VSX), NumOr(vg, 'scaleY', AEl.Anim.VSY),
+        NumOr(vg, 'x', AEl.Anim.VX), NumOr(vg, 'y', AEl.Anim.VY), AEl.Caption.LgG[10],
+        AEl.Caption.LgG[11], NumOr(tg, 'x', AEl.Anim.G[5]), NumOr(tg, 'y', AEl.Anim.G[6]),
+        AEl.Caption.LgG[7], S);
+      Exit;
+    end;
     if (AEl.Anim.Role = carSymbol) and (AEl.Anim.G[10] = 1) then
     begin
       { a graph node: its symbol group (the node's place, the compensation
@@ -10175,6 +10252,36 @@ begin
     SetLength(ASnaps, n + 1);
     UtSnapEl(el, sp, op, ASnaps[n]);
     if (not ASnaps[n].Morphing) and Disposed(el.Anim.Series) then Detach(el, sp, ASnaps[n])
+    { [R6-C] A SANKEY NODE OF A KEPT VIEW: the render emptied the main group
+      (mainGroup.removeAll) before the transition -- the node has no parent,
+      no transform }
+    else if (not ASnaps[n].Morphing) and (el.Anim.UtTag = 1)
+      and (el.Anim.Series >= 0) and (el.Anim.Series <= High(APrev.Series))
+      and (APrev.Series[el.Anim.Series].SeriesType = 'sankey') then
+    begin
+      ASnaps[n].HasM := False;
+      for k := 0 to 5 do ASnaps[n].M[k] := 0;
+    end
+    { [R6-C] A TREE NODE OF A KEPT VIEW: baked under the view group's new
+      transform once the new render is known, as a graph node }
+    else if (not ASnaps[n].Morphing) and (el.Anim.Role = carTreeNode)
+      and el.Caption.LgHasFrame then
+    begin
+      ASnaps[n].VnOn := True;
+      ASnaps[n].VnTree := True;
+      ASnaps[n].VnSer := el.Anim.Series;
+      op := TTyChartAnimProxy(AOldIndex.Find(KeyOf(el.Anim.Series, KeyIndexOf(el), 'treeGroup')));
+      ASnaps[n].VnGX := NumOr(op, 'x', el.Anim.G[5]);
+      ASnaps[n].VnGY := NumOr(op, 'y', el.Anim.G[6]);
+      op := TTyChartAnimProxy(AOldIndex.Find(KeyOf(el.Anim.Series, UtRowOf(el), key)));
+      ASnaps[n].VnComp := el.Caption.LgG[7];
+      ASnaps[n].VnSX := NumOr(sp, 'scaleX', el.Caption.LgG[0] / 2);
+      ASnaps[n].VnSY := NumOr(sp, 'scaleY', el.Caption.LgG[1] / 2);
+      ASnaps[n].VnRot := el.Caption.LgG[2];
+      ASnaps[n].VnOffX := el.Caption.LgG[8];
+      ASnaps[n].VnOffY := el.Caption.LgG[9];
+      ASnaps[n].VnKeep := el.Caption.LgKeepAspect;
+    end
     else if (not ASnaps[n].Morphing) and (el.Anim.Role = carSymbol) and el.Anim.InView
       and (el.Anim.G[10] = 1) then
     begin

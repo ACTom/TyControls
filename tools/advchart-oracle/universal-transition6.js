@@ -643,7 +643,9 @@ function chartCases() {
       s(Object.assign(sCart([dsScat({ encode: { x: 'p', y: 'v', itemGroupId: 'grp' } })]), { dataset: { source: DS } }))]);
   // ---- 5. THE VIEW GROUPS ----
   const TREE = (names) => [{ name: 'r', children: names.map(n => ({ name: n, value: VALS[NAMES.indexOf(n)] })) }];
+  // (the node colours written: the port's default tree ink is its skin's)
   const treeS = (names, extra) => Object.assign({ type: 'tree', id: 't', expandAndCollapse: false, symbol: 'circle', symbolSize: 10,
+    itemStyle: { color: '#ffffff', borderColor: '#5070dd', borderWidth: 2 },
     universalTransition: { enabled: true, seriesKey: 'kk' }, data: TREE(names) }, extra || {});
   const kkBar = (names) => ({ type: 'bar', id: 'b', universalTransition: { enabled: true, seriesKey: 'kk' },
     data: names.map(n => ({ name: n, value: VALS[NAMES.indexOf(n)] })) });

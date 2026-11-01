@@ -1858,6 +1858,12 @@ begin
         ASolved.Pos[row].X, ASolved.Pos[row].Y, ASolved.VNS);
       el.Caption.LgG[8] := offX0;
       el.Caption.LgG[9] := offY0;
+      { [R6-C] for a universal transition that bakes the node under the view
+        group as it is then: the node group's compensation scale, and the
+        main group's place under the view }
+      el.Caption.LgG[7] := ASolved.VNS;
+      el.Caption.LgG[10] := ASolved.GX;
+      el.Caption.LgG[11] := ASolved.GY;
     end;
     { [F3d] the update's: G[11] 1 when radial (an edge from here reads the
       place as radialCoordinate does, `|| 0`), Sub the parent's row (0: the
