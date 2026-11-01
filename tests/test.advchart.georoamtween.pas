@@ -781,21 +781,28 @@ end;
   one and a half times as large, so is the gradient }
 procedure TAdvChartGeoRoamTweenTest.TestAGlobalGradientScalesWithTheDensity;
 const
-  cOpt = '{"geo":{"map":"r6hGj","zoom":2,"center":[3,4],"itemStyle":{"areaColor":' +
+  cGrad = '"itemStyle":{"areaColor":' +
     '{"type":"linear","x":10,"y":20,"x2":300,"y2":40,"global":true,' +
     '"colorStops":[{"offset":0,"color":"#f00"},{"offset":1,"color":"#00f"}]}}}}';
+  { under a roam, and with none (no transform on the group) }
+  cOpts: array[0..1] of string = (
+    '{"geo":{"map":"r6hGj","zoom":2,"center":[3,4],' + cGrad,
+    '{"geo":{"map":"r6hGj",' + cGrad);
+  cSpan: array[0..1] of Double = (2 * 290, 290);
 var
-  ppi, i, k: Integer;
+  ppi, i, k, o: Integer;
   l: TTyPaintList;
   e: TTyChartElement;
   got: array[0..1] of array[0..7] of Double;
   b: TTyRectF;
 begin
+  for o := 0 to 1 do
+  begin
   for k := 0 to 1 do
   begin
     if k = 0 then ppi := 96 else ppi := 144;
     FChart.AnimationMode := camOff;
-    FChart.SetOption(cOpt, True);
+    FChart.SetOption(cOpts[o], True);
     RenderAt(ppi);
     l := FChart.List;
     i := 0;
@@ -809,10 +816,11 @@ begin
     got[k][6] := e.Style.FillGradient.X2; got[k][7] := e.Style.FillGradient.Y2;
   end;
   for i := 0 to 7 do
-    AssertEquals(Format('number %d at 144 dpi is 1.5 times its 96 dpi one', [i]),
+    AssertEquals(Format('%d: number %d at 144 dpi is 1.5 times its 96 dpi one', [o, i]),
       got[0][i] * 1.5, got[1][i], 1e-6);
-  { and at 96 dpi it is the option's through the roam: zoom 2 }
-  AssertTrue('the roam carries it', Abs((got[0][6] - got[0][4]) - 2 * 290) < 1e-6);
+  { and at 96 dpi it is the option's through the roam (zoom 2, or none) }
+  AssertTrue(Format('%d: the roam carries it', [o]), Abs((got[0][6] - got[0][4]) - cSpan[o]) < 1e-6);
+  end;
 end;
 
 initialization
