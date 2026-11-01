@@ -2159,6 +2159,7 @@ type
     FFilterPanel:  TTyPanel;      { Popover.Content 只收**一个**控件,得有个容器 }
     FFilterSearch: TTyEdit;
     FFilterSelAll: TTyCheckBox;
+    FSyncingSelectAll: Boolean;   // #188: SyncFilterSelectAll is setting FFilterSelAll
     FFilterOk, FFilterCancel: TTyButton;
     { 全部候选值(Objects 里放该值的行数),与当前勾选集合。
 
@@ -12575,6 +12576,7 @@ procedure TTyStringGrid.FilterSelectAllClick(Sender: TObject);
 var
   i: Integer;
 begin
+  if FSyncingSelectAll then Exit;   // #188: kept in step from SyncFilterSelectAll, not clicked
   for i := 0 to FFilterList.Items.Count - 1 do
     FFilterList.Checked[i] := FFilterSelAll.Checked;
   FilterItemChecked(nil);
@@ -12599,8 +12601,14 @@ begin
   onCount := 0;
   for i := 0 to FFilterList.Items.Count - 1 do
     if FFilterList.Checked[i] then Inc(onCount);
-  FFilterSelAll.Checked := (FFilterList.Items.Count > 0)
-                           and (onCount = FFilterList.Items.Count);
+  { #188: a change of Checked clicks the box, as in LCL; this one follows the list }
+  FSyncingSelectAll := True;
+  try
+    FFilterSelAll.Checked := (FFilterList.Items.Count > 0)
+                             and (onCount = FFilterList.Items.Count);
+  finally
+    FSyncingSelectAll := False;
+  end;
 end;
 
 { 按搜索词重建列表。勾选状态从**值集合**回填,而不是从旧的列表下标 ——

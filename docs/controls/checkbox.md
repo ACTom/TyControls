@@ -63,7 +63,7 @@ TTyCheckBox 继承自 `TTyCustomControl`（`tyControls.Base`）：
 
 | 事件 | 类型 | 触发时机 |
 |------|------|----------|
-| `OnClick` | `TNotifyEvent` | 用户点击控件时（`Checked` 已在此时完成切换） |
+| `OnClick` | `TNotifyEvent` | `State` 每次改变时：用户点击或代码改 `Checked` / `State`，与 LCL 一致（在 `OnChange` 之后，新状态已就位）。读窗体时、受保护的 `ClicksDisabled` 打开时不触发。 |
 | `OnChange` | `TNotifyEvent` | **（API parity 新增）** `Checked` 实际改变时触发（无论交互点击还是程序化 `Checked :=`）；设为当前值不触发。`SetChecked` 在 `FChecked` 变更并 `Invalidate` 后调用。 |
 
 > 除上表外，TTyCheckBox 还暴露**基线事件集**（Tier A 鼠标 / 通用事件 + Tier B 键盘 / 焦点事件，因其为可聚焦的 `TTyCustomControl`）。完整清单见 [../events.md](../events.md)。
@@ -140,9 +140,9 @@ ChkRemember.Enabled := False;
 
 ## 7. 注意事项
 
-- **点击即切换：** `Click` 方法中调用 `SetChecked(not FChecked)`，`OnClick` 触发时 `Checked` 已经是新值，可直接在事件处理器中读取。
+- **点击即切换：** 一次点击切换一次 `State`，状态一变就触发 `OnClick`，只触发一次；`OnClick` 里读到的已是新值。
 - **独立状态：** 每个 `TTyCheckBox` 独立维护自己的 `Checked`，不与其他复选框联动。如需单选互斥行为，应使用 `TTyRadioButton`。
-- **无 OnChange 事件：** 状态变化只通过 `OnClick` 通知，`SetChecked` 直接赋值不触发任何事件。
+- **代码改状态也触发 `OnClick`：** 和 LCL 一样，`Checked :=` / `State :=` 改变了状态就依次触发 `OnChange`、`OnClick`。在一个复选框的 `OnClick` 里去改另一个复选框（比如"全选"联动）时要防来回触发；子类可以临时打开受保护的 `ClicksDisabled`，只发 `OnChange`。
 - **:active 视觉效果（Batch ④）：** `:active` 现同时由"鼠标按下"与"已勾选（`Checked = True`）"触发（`CurrentStates` 重写）。主题规则把方框填成 accent 蓝（`var(--accent)`）、勾号变白（`color: #FFFFFF`），形成 accent 方框 + 白勾；**Caption 标签不受影响**——其文字色由一份剔除了 `tysActive` 的样式解析提供，故标签保持常规前景色。
 - **opacity / shadow 现已生效（v1.1）：** `DrawFrame` 路径现在同样应用于 `TTyCheckBox` 的外层绘制；`opacity` 和 `shadow` 属性可在主题中正常使用（例如 `TyCheckBox:disabled { opacity: 0.5; }`）。
 - **控件整体无背景：** 主题中的 `background` 和 `border` 只作用于小方块本身，控件整体（Caption 文字区域）保持透明，不绘制整体背景框。

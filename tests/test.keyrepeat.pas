@@ -179,7 +179,15 @@ begin
   r := TTyRadioButton.Create(FForm);
   CheckHeldSpace(r);
   AssertTrue('checked', r.Checked);
-  CheckQuickSecondClick(r);
+  { #188: a click on a radio button that is already checked fires nothing, as in LCL. Of two
+    quick clicks the first checks it and clicks; the second reaches it and changes nothing. }
+  r.Checked := False;
+  FClicks := 0;
+  TCrack(r).OnDblClick := @DblClicked;
+  DoubleClick(r);
+  AssertTrue('the first click checked it', r.Checked);
+  AssertEquals('one OnClick: the second click found it checked', 1, FClicks);
+  AssertEquals('and a double click', 1, FDblClicks);
 end;
 
 procedure TKeyRepeatTest.TestToggleSwitch;
