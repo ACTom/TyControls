@@ -25,7 +25,7 @@ unit test.shelllistview;
 interface
 
 uses
-  Classes, SysUtils, Types,
+  Classes, SysUtils, Types, LCLType,
   LazFileUtils, FileUtil,
   fpcunit, testregistry,
   tyControls.Columns,       { TTySortDirection, sdAscending, sdDescending }
@@ -47,6 +47,7 @@ type
     function XOrderAt(ADisplayPos: Integer): Integer;
     { item index -> display position (the inherited ItemToDisplay seam). }
     function XItemToDisplay(AItem: Integer): Integer;
+    procedure XKeyDown(var Key: Word);
   end;
 
   { One controlled temp tree per test, a fresh control per test. Files are named so
@@ -69,6 +70,8 @@ type
     procedure SetUp; override;
     procedure TearDown; override;
   published
+    { #144: Enter opens a folder; on a file with no handler it goes on to the default button. }
+    procedure TestEnterOpensAFolderAndLeavesAFileAlone;
     { ----- take: count, per-column text, FileAt / SelectedFile ----- }
     { LoadDirectory then GetItemCount = number of VISIBLE entries (dirs + non-hidden
       files); the hidden entry is excluded by default. }
@@ -219,6 +222,27 @@ end;
 procedure TShellListViewTest.HandleDirChange(Sender: TObject);
 begin
   Inc(FDirChangeCount);
+end;
+
+procedure TTyShellListViewAccess.XKeyDown(var Key: Word);
+begin
+  KeyDown(Key, []);
+end;
+
+procedure TShellListViewTest.TestEnterOpensAFolderAndLeavesAFileAlone;
+var
+  k: Word;
+begin
+  FLV.LoadDirectory(FRoot);
+  FLV.ItemIndex := ItemIndexOfName('a.txt');
+  k := VK_RETURN;
+  FLV.XKeyDown(k);
+  AssertEquals('a file and no handler: Enter goes on', VK_RETURN, k);
+  FLV.ItemIndex := ItemIndexOfName('dir_a');
+  k := VK_RETURN;
+  FLV.XKeyDown(k);
+  AssertEquals('a folder: Enter is the list''s', 0, k);
+  AssertEquals('and opens it', AppendPathDelim(FRoot) + 'dir_a', FLV.Directory);
 end;
 
 function TShellListViewTest.ItemIndexOfName(const AName: string): Integer;

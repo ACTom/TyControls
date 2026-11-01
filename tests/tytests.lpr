@@ -137,6 +137,7 @@ uses
   test.capturelost,
   test.hiddentimers,
   test.cursorloan,
+  test.enteresc,
   test.analogclock,
   test.sparkline,
   test.rating,

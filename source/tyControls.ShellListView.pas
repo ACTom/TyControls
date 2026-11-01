@@ -139,6 +139,7 @@ type
     { The shell's ordering and activation, as overrides of the base virtuals. }
     function  CompareItems(AItemA, AItemB: Integer): Integer; override;
     procedure DoItemActivate(AIndex: Integer); override;
+    function  ItemActivates(AIndex: Integer): Boolean; override;
     { The five inherited data accessors, all backed by FEntries -- never disk. }
     function GetItemCount: Integer; override;
     function GetItemText(AIndex, AColumn: Integer): string; override;
@@ -895,6 +896,13 @@ procedure TTyCustomShellListView.DoItemActivate(AIndex: Integer);
 begin
   ShellActivate(AIndex);
   inherited DoItemActivate(AIndex);
+end;
+
+function TTyCustomShellListView.ItemActivates(AIndex: Integer): Boolean;
+begin
+  { A folder opens; a file does something only with a handler. }
+  Result := inherited ItemActivates(AIndex) or Assigned(FOnFileActivate)
+    or ((AIndex >= 0) and (AIndex <= High(FEntries)) and FEntries[AIndex].IsDir);
 end;
 
 procedure TTyCustomShellListView.ShellCompare(AIndex1, AIndex2,

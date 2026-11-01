@@ -7783,11 +7783,12 @@ begin
     end;
 
     VK_RETURN:
-    begin
+      { #144: only when it does something -- otherwise on to the form's default button. }
       if (cur <> nil) and Assigned(FOnNodeDblClick) then
+      begin
         FOnNodeDblClick(Self, cur);
-      Key := 0;
-    end;
+        Key := 0;
+      end;
 
     VK_F2:
     begin
