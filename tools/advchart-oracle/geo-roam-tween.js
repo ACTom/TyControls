@@ -219,7 +219,7 @@ const SVG_BOX = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100
     <rect x="20" y="20" width="100" height="40" fill="url(#gb)" stroke="#003300" stroke-width="2"/>
     <rect x="130" y="20" width="60" height="40" fill="url(#gc)" stroke="#000044" stroke-width="1"/>
     <rect name="N" x="40" y="65" width="60" height="25" fill="#cccccc" stroke="#777777" stroke-width="1"/>
-    <circle name="C" cx="80" cy="12" r="10" fill="#eeeeee" stroke="#888888" stroke-width="1"/>
+    <ellipse name="C" cx="80" cy="12" rx="14" ry="8" fill="#eeeeee" stroke="#888888" stroke-width="1"/>
   </g>
   <rect x="5" y="80" width="40" height="15" fill="url(#gb)" stroke="#004400" stroke-width="1" transform="translate(3 2)"/>
   <rect x="0" y="0" width="30" height="20" fill="url(#gb)" stroke="#005555" stroke-width="3" transform="translate(150 75) scale(1.5 0.6)"/>

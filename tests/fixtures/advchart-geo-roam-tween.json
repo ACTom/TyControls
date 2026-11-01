@@ -123,7 +123,7 @@
   },
   {
    "name": "r6svgb",
-   "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"100\" viewBox=\"0 0 200 100\">\n  <defs>\n    <linearGradient id=\"gb\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0.5\"><stop offset=\"0\" stop-color=\"#ff0000\"/><stop offset=\"1\" stop-color=\"#0000ff\"/></linearGradient>\n    <radialGradient id=\"gc\" cx=\"0.3\" cy=\"0.6\" r=\"0.4\"><stop offset=\"0\" stop-color=\"#ffff00\"/><stop offset=\"1\" stop-color=\"#00ff00\"/></radialGradient>\n  </defs>\n  <g transform=\"rotate(30 100 50) skewX(10)\">\n    <rect x=\"20\" y=\"20\" width=\"100\" height=\"40\" fill=\"url(#gb)\" stroke=\"#003300\" stroke-width=\"2\"/>\n    <rect x=\"130\" y=\"20\" width=\"60\" height=\"40\" fill=\"url(#gc)\" stroke=\"#000044\" stroke-width=\"1\"/>\n    <rect name=\"N\" x=\"40\" y=\"65\" width=\"60\" height=\"25\" fill=\"#cccccc\" stroke=\"#777777\" stroke-width=\"1\"/>\n    <circle name=\"C\" cx=\"80\" cy=\"12\" r=\"10\" fill=\"#eeeeee\" stroke=\"#888888\" stroke-width=\"1\"/>\n  </g>\n  <rect x=\"5\" y=\"80\" width=\"40\" height=\"15\" fill=\"url(#gb)\" stroke=\"#004400\" stroke-width=\"1\" transform=\"translate(3 2)\"/>\n  <rect x=\"0\" y=\"0\" width=\"30\" height=\"20\" fill=\"url(#gb)\" stroke=\"#005555\" stroke-width=\"3\" transform=\"translate(150 75) scale(1.5 0.6)\"/>\n  <rect x=\"0\" y=\"0\" width=\"30\" height=\"12\" fill=\"url(#gb)\" stroke=\"#006666\" stroke-width=\"1\" transform=\"translate(120 82) scale(-1 1)\"/>\n</svg>",
+   "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"100\" viewBox=\"0 0 200 100\">\n  <defs>\n    <linearGradient id=\"gb\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0.5\"><stop offset=\"0\" stop-color=\"#ff0000\"/><stop offset=\"1\" stop-color=\"#0000ff\"/></linearGradient>\n    <radialGradient id=\"gc\" cx=\"0.3\" cy=\"0.6\" r=\"0.4\"><stop offset=\"0\" stop-color=\"#ffff00\"/><stop offset=\"1\" stop-color=\"#00ff00\"/></radialGradient>\n  </defs>\n  <g transform=\"rotate(30 100 50) skewX(10)\">\n    <rect x=\"20\" y=\"20\" width=\"100\" height=\"40\" fill=\"url(#gb)\" stroke=\"#003300\" stroke-width=\"2\"/>\n    <rect x=\"130\" y=\"20\" width=\"60\" height=\"40\" fill=\"url(#gc)\" stroke=\"#000044\" stroke-width=\"1\"/>\n    <rect name=\"N\" x=\"40\" y=\"65\" width=\"60\" height=\"25\" fill=\"#cccccc\" stroke=\"#777777\" stroke-width=\"1\"/>\n    <ellipse name=\"C\" cx=\"80\" cy=\"12\" rx=\"14\" ry=\"8\" fill=\"#eeeeee\" stroke=\"#888888\" stroke-width=\"1\"/>\n  </g>\n  <rect x=\"5\" y=\"80\" width=\"40\" height=\"15\" fill=\"url(#gb)\" stroke=\"#004400\" stroke-width=\"1\" transform=\"translate(3 2)\"/>\n  <rect x=\"0\" y=\"0\" width=\"30\" height=\"20\" fill=\"url(#gb)\" stroke=\"#005555\" stroke-width=\"3\" transform=\"translate(150 75) scale(1.5 0.6)\"/>\n  <rect x=\"0\" y=\"0\" width=\"30\" height=\"12\" fill=\"url(#gb)\" stroke=\"#006666\" stroke-width=\"1\" transform=\"translate(120 82) scale(-1 1)\"/>\n</svg>",
    "svg": true
   },
   {
@@ -14505,7 +14505,7 @@
        },
        {
         "key": "s:#660066",
-        "type": "circle",
+        "type": "ellipse",
         "gm": [
          "3ff62b9586ad0a23",
          "3fe9999999999998",
@@ -14532,17 +14532,17 @@
          ]
         },
         "gp": [
-         "4068afacc7999284",
-         "40558536a43c81ec",
+         "406876f493abeb00",
+         "4054e520547f898b",
          "7ff8000000000000",
          "7ff8000000000000",
-         "403419999999999a"
+         "4030428f5c28f5c3"
         ],
         "lb": [
-         "4051620000000000",
-         "3ff8800000000000",
-         "4034f00000000000",
-         "4034f00000000000"
+         "4050620000000000",
+         "400c400000000000",
+         "403cf00000000000",
+         "4030f00000000001"
         ]
        },
        {
@@ -14862,7 +14862,7 @@
        },
        {
         "key": "s:#660066",
-        "type": "circle",
+        "type": "ellipse",
         "gm": [
          "40062b9586ad0a23",
          "3ff9999999999998",
@@ -14889,17 +14889,17 @@
          ]
         },
         "gp": [
-         "40686aff6b3ef471",
-         "403606d36a5619b8",
+         "4067f98f0363a568",
+         "40310620ec6e56b0",
          "7ff8000000000000",
          "7ff8000000000000",
-         "4043a66666666667"
+         "403f9eb851eb8520"
         ],
         "lb": [
-         "4051710000000000",
-         "3ffc400000000000",
-         "4034780000000000",
-         "4034780000000000"
+         "4050710000000000",
+         "400e200000000000",
+         "403c780000000000",
+         "4030780000000001"
         ]
        },
        {
@@ -15448,7 +15448,7 @@
        },
        {
         "key": "s:#660066",
-        "type": "circle",
+        "type": "ellipse",
         "gm": [
          "3ff62b9586ad0a23",
          "3fe9999999999998",
@@ -15475,17 +15475,17 @@
          ]
         },
         "gp": [
-         "4068afacc7999284",
-         "40558536a43c81ec",
+         "406876f493abeb00",
+         "4054e520547f898b",
          "7ff8000000000000",
          "7ff8000000000000",
-         "403419999999999a"
+         "4030428f5c28f5c3"
         ],
         "lb": [
-         "4051620000000000",
-         "3ff8800000000000",
-         "4034f00000000000",
-         "4034f00000000000"
+         "4050620000000000",
+         "400c400000000000",
+         "403cf00000000000",
+         "4030f00000000001"
         ]
        },
        {
@@ -15864,7 +15864,7 @@
        },
        {
         "key": "s:#660066",
-        "type": "circle",
+        "type": "ellipse",
         "gm": [
          "3ff6314279c12e3d",
          "3fe9a027525460a8",
@@ -15891,17 +15891,17 @@
          ]
         },
         "gp": [
-         "4068af9b32c58381",
-         "4055811d2af25b44",
+         "406876d479abd87d",
+         "4054e0dddfbc9f0d",
          "7ff8000000000000",
          "7ff8000000000000",
-         "40341e83e425aee6"
+         "4030467dfe32a066"
         ],
         "lb": [
-         "40516207ac1daa95",
-         "3ff881eb076aa536",
-         "4034efc29f12ab59",
-         "4034efc29f12ab59"
+         "40506207ac1daa95",
+         "400c40f583b5529b",
+         "403cefc29f12ab59",
+         "4030efc29f12ab5a"
         ]
        },
        {
@@ -16280,7 +16280,7 @@
        },
        {
         "key": "s:#660066",
-        "type": "circle",
+        "type": "ellipse",
         "gm": [
          "4000a0b02501c79a",
          "3ff3333333333332",
@@ -16307,17 +16307,17 @@
          ]
         },
         "gp": [
-         "40688d56196c437a",
-         "404b06eb7ed2085a",
+         "40683841cb87c834",
+         "404926a88f9b1f36",
          "7ff8000000000000",
          "7ff8000000000000",
-         "403db33333333333"
+         "4037f0a3d70a3d71"
         ],
         "lb": [
-         "40516c0000000000",
-         "3ffb000000000000",
-         "4034a00000000000",
-         "4034a00000000000"
+         "40506c0000000000",
+         "400d800000000000",
+         "403ca00000000000",
+         "4030a00000000001"
         ]
        },
        {
@@ -16696,7 +16696,7 @@
        },
        {
         "key": "s:#660066",
-        "type": "circle",
+        "type": "ellipse",
         "gm": [
          "40062b9586ad0a23",
          "3ff9999999999998",
@@ -16723,17 +16723,17 @@
          ]
         },
         "gp": [
-         "40686aff6b3ef471",
-         "403606d36a5619b8",
+         "4067f98f0363a568",
+         "40310620ec6e56b0",
          "7ff8000000000000",
          "7ff8000000000000",
-         "4043a66666666667"
+         "403f9eb851eb8520"
         ],
         "lb": [
-         "4051710000000000",
-         "3ffc400000000000",
-         "4034780000000000",
-         "4034780000000000"
+         "4050710000000000",
+         "400e200000000000",
+         "403c780000000000",
+         "4030780000000001"
         ]
        },
        {
