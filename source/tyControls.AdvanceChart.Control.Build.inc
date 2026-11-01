@@ -2888,14 +2888,12 @@ begin
       where none) at lineStyle.width -- lines and parallel read no
       itemStyle at all (visualStyleAccessPath 'lineStyle') [was: an
       itemStyle.borderColor / borderWidth stroked the line where its
-      lineStyle wrote none]. A boxplot's IS its itemStyle. }
-    if st <> 'boxplot' then
-    begin
-      AVisual.Stroke := 0;
-      AVisual.StrokeGradient := Default(TTyChartGradient);
-      AVisual.StrokeWidthLogical := 0;
-      AVisual.StrokeWidthSet := False;
-    end;
+      lineStyle wrote none]. A boxplot strokes with its Whisker pen
+      (BoxplotVisual), none of these. }
+    AVisual.Stroke := 0;
+    AVisual.StrokeGradient := Default(TTyChartGradient);
+    AVisual.StrokeWidthLogical := 0;
+    AVisual.StrokeWidthSet := False;
     if line.Color.Written and not line.Color.IsNone then
     begin
       if line.Color.IsAuto then
@@ -4724,7 +4722,6 @@ var
     p: array of string;
     i: Integer;
     dd: TJSONData;
-    w: Byte;
   begin
     SetLength(p, Length(APath) + 1);
     for i := 0 to High(APath) do p[i] := APath[i];
@@ -4756,12 +4753,25 @@ var
       pe^.Style.DashWord := 0;
       if (dd.JSONType = jtString) and (dd.AsString = 'dashed') then pe^.Style.DashWord := 1
       else if (dd.JSONType = jtString) and (dd.AsString = 'dotted') then pe^.Style.DashWord := 2;
+      pe^.Style.DashLogical := nil;
       if pe^.Style.DashWord <> 0 then
         pe^.Style.DashLogical := TyDashOfWord(pe^.Style.DashWord, pe^.Style.StrokeWidthLogical)
-      else if dd.JSONType in [jtNumber, jtArray] then
-        pe^.Style.DashLogical := TyLineDashOf(dd, 1, w)
-      else
-        pe^.Style.DashLogical := nil;
+      else if (dd.JSONType = jtNumber) and (dd.AsFloat <> 0) and not IsNan(dd.AsFloat) then
+        pe^.Style.DashLogical := TTyDoubleArray.Create(dd.AsFloat)
+      else if dd.JSONType = jtArray then
+      begin
+        { setLineDash takes each entry as a number (Number('4') is 4) }
+        SetLength(pe^.Style.DashLogical, dd.Count);
+        for i := 0 to dd.Count - 1 do
+          case dd.Items[i].JSONType of
+            jtNumber: pe^.Style.DashLogical[i] := dd.Items[i].AsFloat;
+            jtString: pe^.Style.DashLogical[i] := TyJsToNumber(dd.Items[i].AsString);
+            jtBoolean: pe^.Style.DashLogical[i] := Ord(dd.Items[i].AsBoolean);
+            jtNull: pe^.Style.DashLogical[i] := 0;
+          else
+            pe^.Style.DashLogical[i] := NaN;
+          end;
+      end;
     end;
     { and its phase (lineDashOffset), a number }
     if ALine then p[High(p)] := 'dashOffset' else p[High(p)] := 'borderDashOffset';
@@ -4869,7 +4879,8 @@ begin
     joinHas := False;
     { [R6-D] THE DASH AND ITS PHASE where the view's builder does not read
       them: a radar's symbols, a gauge's, a pie's, a funnel's, a boxplot's,
-      a sunburst's, a sankey's, a theme river's, a chord's, a tree's nodes.
+      a sunburst's, a sankey's, a theme river's, a chord's, a tree's (its
+      edges' builder read no `type` that is a number).
       The rest read them themselves -- a graph's nodes, for one, off their
       visual style, which a category named by its name reaches and the
       model chain does not. }
@@ -4877,7 +4888,7 @@ begin
       or (typ = TyFunnelSeriesTypeName) or (typ = 'boxplot') or (typ = TySunburstSeriesTypeName)
       or (typ = TySankeySeriesTypeName) or (typ = TyThemeRiverSeriesTypeName)
       or (typ = TyChordSeriesTypeName)
-      or ((typ = TyTreeSeriesTypeName) and (pe^.Anim.Role <> carTreeEdge));
+      or (typ = TyTreeSeriesTypeName);
     { ---- the edges (a sankey's band speaks itemStyle's keys on its
       lineStyle: curve.useStyle(lineStyleModel.getItemStyle())) ---- }
     if pe^.Datum.IsEdge then

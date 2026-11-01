@@ -19,7 +19,8 @@ unit test.advchart.seriesborders;
   and, for a part, how many elements it has and how many of them stroke. A
   stroke upstream that is a word zrender cannot parse ('source', a chord's
   default colour) is the canvas' to keep the last element's colour for and
-  the port's to draw none: it is not compared. }
+  the port's to draw none: it is not compared; a dash the canvas'
+  setLineDash ignores is solid here. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -158,6 +159,13 @@ begin
   ds := '';
   for i := 0 to High(dash) do
   begin
+    { as drawn: a dash with an entry that is no finite number of nought or
+      more strokes solid (the renderer's setLineDash rule) }
+    if IsNan(dash[i]) or IsInfinite(dash[i]) or (dash[i] < 0) then
+    begin
+      ds := '';
+      Break;
+    end;
     if i > 0 then ds := ds + ',';
     ds := ds + NumText(dash[i]);
   end;
@@ -267,7 +275,10 @@ begin
       for k := 0 to pens.Count - 1 do
         { a word the canvas cannot take strokes with the last element's
           colour there: no pen here }
-        if Copy(pens.Strings[k], 1, 2) <> 'x:' then want := want + ' ' + pens.Strings[k];
+        if Copy(pens.Strings[k], 1, 2) <> 'x:' then
+          { a dash setLineDash does not take: the canvas keeps the last
+            element's there, the port strokes solid }
+          want := want + ' ' + StringReplace(pens.Strings[k], '|ignored|', '|solid|', []);
       have := '';
       for k := 0 to got.Count - 1 do have := have + ' ' + got[k];
       Inc(nCases);

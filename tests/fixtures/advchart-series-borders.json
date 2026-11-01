@@ -1,6 +1,6 @@
 {
  "source": "ECharts 6.1.0 dist (D:/Projects/echarts/dist/echarts.js), node SSR (svg)",
- "note": "R6-D: each case settled (an action, where one, at T1 and settled), `pens` = the sorted set of stroke|width|dash|offset|ends of every stroked path under the series views (lineWidth > 0, a stroke not null nor none) -- of the part `part` names where one is (symbol: a radar item's symbols; pointer / progress: a gauge's; ribbon: a chord's links) -- the stroke #rrggbbaa (color.parse), grad a gradient, x:<word> a word that does not parse; the dash normalizeLineDash'd against the width (solid none); the offset 0 where none; the ends cap/join/miterLimit, butt/miter/10 where none. `seen` the paths of that part, `n` the stroked ones.",
+ "note": "R6-D: each case settled (an action, where one, at T1 and settled), `pens` = the sorted set of stroke|width|dash|offset|ends of every stroked path under the series views (lineWidth > 0, a stroke not null nor none) -- of the part `part` names where one is (symbol: a radar item's symbols; pointer / progress: a gauge's; ribbon: a chord's links) -- the stroke #rrggbbaa (color.parse), grad a gradient, x:<word> a word that does not parse; the dash normalizeLineDash'd against the width (solid none, ignored one setLineDash does not take); the offset 0 where none; the ends cap/join/miterLimit, butt/miter/10 where none. `seen` the paths of that part, `n` the stroked ones.",
  "W": 400,
  "H": 300,
  "charts": [
@@ -845,6 +845,59 @@
    "n": 3,
    "pens": [
     "#000000ff|2|solid|0|butt/miter/10"
+   ]
+  },
+  {
+   "id": "radar.array-row",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "radar": {
+     "indicator": [
+      {
+       "name": "p",
+       "max": 10
+      },
+      {
+       "name": "q",
+       "max": 10
+      },
+      {
+       "name": "r",
+       "max": 10
+      }
+     ]
+    },
+    "series": [
+     {
+      "type": "radar",
+      "data": [
+       [
+        3,
+        5,
+        2
+       ]
+      ],
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 3,
+       "borderType": "dashed",
+       "borderDashOffset": 2
+      }
+     }
+    ]
+   },
+   "part": "symbol",
+   "action": null,
+   "seen": 3,
+   "n": 3,
+   "pens": [
+    "#000000ff|3|12,6|2|butt/miter/10"
    ]
   },
   {
@@ -3028,6 +3081,50 @@
    ]
   },
   {
+   "id": "pie.zero-width-dash",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 0,
+       "borderType": [
+        5,
+        3
+       ]
+      },
+      "emphasis": {
+       "itemStyle": {
+        "borderWidth": 3
+       }
+      },
+      "data": [
+       3
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": {
+    "type": "highlight",
+    "seriesIndex": 0,
+    "dataIndex": 0
+   },
+   "seen": 1,
+   "n": 1,
+   "pens": [
+    "#000000ff|3|5,3|0|butt/round/10"
+   ]
+  },
+  {
    "id": "treemap",
    "option": {
     "animation": false,
@@ -3173,6 +3270,199 @@
    "pens": [
     "#333333ff|4|4|1|butt/miter/10",
     "#aabbccff|2|8,4|2|butt/miter/10"
+   ]
+  },
+  {
+   "id": "tree.number-dash",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "tree",
+      "itemStyle": {
+       "color": "#abc"
+      },
+      "lineStyle": {
+       "color": "#333",
+       "width": 2,
+       "type": 4
+      },
+      "data": [
+       {
+        "name": "r",
+        "children": [
+         {
+          "name": "a"
+         },
+         {
+          "name": "b"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 5,
+   "n": 5,
+   "pens": [
+    "#333333ff|2|4|0|butt/miter/10",
+    "#aabbccff|2|solid|0|butt/miter/10"
+   ]
+  },
+  {
+   "id": "tree.bad-dash",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "tree",
+      "itemStyle": {
+       "color": "#abc"
+      },
+      "lineStyle": {
+       "color": "#333",
+       "width": 2,
+       "type": [
+        {},
+        2
+       ]
+      },
+      "data": [
+       {
+        "name": "r",
+        "children": [
+         {
+          "name": "a"
+         },
+         {
+          "name": "b"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 5,
+   "n": 5,
+   "pens": [
+    "#333333ff|2|ignored|0|butt/miter/10",
+    "#aabbccff|2|solid|0|butt/miter/10"
+   ]
+  },
+  {
+   "id": "tree.negative-dash",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "tree",
+      "itemStyle": {
+       "color": "#abc"
+      },
+      "lineStyle": {
+       "color": "#333",
+       "width": 2,
+       "type": [
+        -2,
+        3
+       ]
+      },
+      "data": [
+       {
+        "name": "r",
+        "children": [
+         {
+          "name": "a"
+         },
+         {
+          "name": "b"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 5,
+   "n": 5,
+   "pens": [
+    "#333333ff|2|ignored|0|butt/miter/10",
+    "#aabbccff|2|solid|0|butt/miter/10"
+   ]
+  },
+  {
+   "id": "tree.string-dash",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "tree",
+      "itemStyle": {
+       "color": "#abc"
+      },
+      "lineStyle": {
+       "color": "#333",
+       "width": 2,
+       "type": [
+        "4",
+        "2"
+       ]
+      },
+      "data": [
+       {
+        "name": "r",
+        "children": [
+         {
+          "name": "a"
+         },
+         {
+          "name": "b"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 5,
+   "n": 5,
+   "pens": [
+    "#333333ff|2|4,2|0|butt/miter/10",
+    "#aabbccff|2|solid|0|butt/miter/10"
    ]
   },
   {

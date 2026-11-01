@@ -21,7 +21,9 @@
 // not null nor 'none' -- as `stroke|width|dash|offset`: the stroke
 // `#rrggbbaa` (zrender's color.parse), 'grad' a gradient, 'x:<word>' a word
 // zrender's parse does not take; the dash normalizeLineDash'd against the
-// width ('solid' none), the offset the style's (0 where none), the ends the
+// width ('solid' none; 'ignored' one setLineDash does not take -- an entry
+// that is no finite number of nought or more), the offset the style's (0
+// where none), the ends the
 // canvas' defaults (butt, miter, 10) where the style has none. `pens` is the
 // sorted set of these, `n` how many stroked paths.
 // Run: node tools/advchart-oracle/series-borders.js -> tests/fixtures/advchart-series-borders.json
@@ -93,6 +95,7 @@ function cases() {
     ['radar.grad', radar({ itemStyle: { borderColor: GRAD, borderWidth: 2 } }), 'symbol'],
     ['radar.empty-grad', radar({ symbol: 'emptyCircle', itemStyle: { borderColor: GRAD, borderWidth: 3 } }), 'symbol'],
     ['radar.size', radar({ symbolSize: 20, itemStyle: { borderColor: '#000', borderWidth: 2 } }), 'symbol'],
+    ['radar.array-row', radar({ itemStyle: IS, data: [[3, 5, 2]] }), 'symbol'],
     ['radar.emphasis', radar({ itemStyle: IS, emphasis: { itemStyle: { borderWidth: 6, borderColor: '#00f', borderType: 'solid' } } }),
       'symbol', HL],
     ['radar.emphasis-rest', radar({ emphasis: { itemStyle: { borderWidth: 6, borderColor: '#00f' } } }), 'symbol', HL],
@@ -156,11 +159,21 @@ function cases() {
     ['sunburst.join', solo({ type: 'sunburst', itemStyle: Object.assign({ borderJoin: 'round' }, IS),
       data: [{ name: 'a', value: 3, children: [{ name: 'b', value: 2 }] }] }), ''],
     ['pie.join', solo({ type: 'pie', itemStyle: Object.assign({ borderJoin: 'miter' }, IS), data: [3, 5, 2] }), ''],
+    ['pie.zero-width-dash', solo({ type: 'pie', itemStyle: { borderColor: '#000', borderWidth: 0, borderType: [5, 3] },
+      emphasis: { itemStyle: { borderWidth: 3 } }, data: [3] }), '', HL],
     ['treemap', solo({ type: 'treemap', breadcrumb: { show: false }, itemStyle: IS,
       data: [{ name: 'a', value: 3 }, { name: 'b', value: 2 }] }), ''],
     ['graph', solo({ type: 'graph', layout: 'none', itemStyle: IS, lineStyle: LS,
       data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 10, y: 10 }], links: [{ source: 'a', target: 'b' }] }), ''],
     ['tree', solo({ type: 'tree', itemStyle: Object.assign({ color: '#abc' }, IS), lineStyle: LS, data: [{ name: 'r', children: [{ name: 'a' }, { name: 'b' }] }] }), ''],
+    ['tree.number-dash', solo({ type: 'tree', itemStyle: { color: '#abc' }, lineStyle: { color: '#333', width: 2, type: 4 },
+      data: [{ name: 'r', children: [{ name: 'a' }, { name: 'b' }] }] }), ''],
+    ['tree.bad-dash', solo({ type: 'tree', itemStyle: { color: '#abc' }, lineStyle: { color: '#333', width: 2, type: [{}, 2] },
+      data: [{ name: 'r', children: [{ name: 'a' }, { name: 'b' }] }] }), ''],
+    ['tree.negative-dash', solo({ type: 'tree', itemStyle: { color: '#abc' }, lineStyle: { color: '#333', width: 2, type: [-2, 3] },
+      data: [{ name: 'r', children: [{ name: 'a' }, { name: 'b' }] }] }), ''],
+    ['tree.string-dash', solo({ type: 'tree', itemStyle: { color: '#abc' }, lineStyle: { color: '#333', width: 2, type: ['4', '2'] },
+      data: [{ name: 'r', children: [{ name: 'a' }, { name: 'b' }] }] }), ''],
     ['sankey', solo({ type: 'sankey', itemStyle: IS, lineStyle: Object.assign({ opacity: 0.5 }, LS),
       data: [{ name: 'a' }, { name: 'b' }], links: [{ source: 'a', target: 'b', value: 3 }] }), ''],
     ['sankey.band', solo({ type: 'sankey', lineStyle: { borderColor: '#000', borderWidth: 2, borderType: 'dashed', borderDashOffset: 1 },
@@ -249,7 +262,9 @@ function run(id, option, part, action) {
       if (!(s.lineWidth > 0) || s.stroke == null || s.stroke === 'none') return;
       n++;
       const dash = normalizeLineDash(s.lineDash, s.lineWidth);
-      set.add([colourOf(s.stroke), String(s.lineWidth), dash ? dash.join(',') : 'solid',
+      // setLineDash ignores a dash with an entry that is no finite number of nought or more
+      const bad = dash && dash.some(v => !(isFinite(Number(v)) && Number(v) >= 0));
+      set.add([colourOf(s.stroke), String(s.lineWidth), bad ? 'ignored' : dash ? dash.map(Number).join(',') : 'solid',
         String(s.lineDashOffset == null ? 0 : s.lineDashOffset),
         [s.lineCap || 'butt', s.lineJoin || 'miter', String(s.miterLimit == null ? 10 : s.miterLimit)].join('/')].join('|'));
     }); });
@@ -286,7 +301,7 @@ function generate() {
       + 'of every stroked path under the series views (lineWidth > 0, a stroke not null nor none) -- of the part `part` names where '
       + 'one is (symbol: a radar item\'s symbols; pointer / progress: a gauge\'s; ribbon: a chord\'s links) -- the stroke #rrggbbaa '
       + '(color.parse), grad a gradient, x:<word> a word that does not parse; the dash normalizeLineDash\'d against the width (solid '
-      + 'none); the offset 0 where none; the ends cap/join/miterLimit, butt/miter/10 where none. `seen` the paths of that part, `n` the stroked ones.', W, H, charts };
+      + 'none, ignored one setLineDash does not take); the offset 0 where none; the ends cap/join/miterLimit, butt/miter/10 where none. `seen` the paths of that part, `n` the stroked ones.', W, H, charts };
 }
 
 let j1, j2;
