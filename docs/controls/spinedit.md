@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-`TTySpinEdit` 是 TyControls 库中的主题化**可内联编辑的整数微调控件**，继承自 `TTyCustomControl`。控件显示一个整数值，右侧有上/下两个小箭头按钮。用户既可以**直接键入数字与前导 `-`**（轻量内联编辑缓冲，无选区/剪贴板），也可以点击箭头按钮、使用上/下方向键、或滚动鼠标滚轮来按 `Increment` 步进改变 `Value`。`Enter` 或失焦时**提交**编辑缓冲（解析 → 夹紧 `[MinValue, MaxValue]` → 写 `Value`）；`Esc` **还原**到当前 `Value`；非法输入（空串或仅 `-`）提交时退回当前 `Value`。值在**区间非空（`MaxValue > MinValue`）时**被夹紧到 `[MinValue, MaxValue]`，`MaxValue <= MinValue` 表示不限制。**通知分两个事件**：`OnChange` 是「编辑框文字变了」（每一次按键 / 删除 / 步进 / 夹紧 / 程序赋值都会触发，与 LCL 各编辑类控件一致），`OnValueChange` 是「提交后的整数值真的动了」。
+`TTySpinEdit` 是 TyControls 库中的主题化**可内联编辑的整数微调控件**，继承自 `TTyCustomControl`。控件显示一个整数值，右侧有上/下两个小箭头按钮。用户既可以**直接键入数字与前导 `-`**（轻量内联编辑缓冲：从键盘拿到焦点时全选当前值，此外没有选区、剪贴板和撤销，见 #190），也可以点击箭头按钮、使用上/下方向键、或滚动鼠标滚轮来按 `Increment` 步进改变 `Value`。`Enter` 或失焦时**提交**编辑缓冲（解析 → 夹紧 `[MinValue, MaxValue]` → 写 `Value`）；`Esc` **还原**到当前 `Value`；非法输入（空串或仅 `-`）提交时退回当前 `Value`。值在**区间非空（`MaxValue > MinValue`）时**被夹紧到 `[MinValue, MaxValue]`，`MaxValue <= MinValue` 表示不限制。**通知分两个事件**：`OnChange` 是「编辑框文字变了」（每一次按键 / 删除 / 步进 / 夹紧 / 程序赋值都会触发，与 LCL 各编辑类控件一致），`OnValueChange` 是「提交后的整数值真的动了」。
 
 ---
 
@@ -84,13 +84,13 @@ function TySpinDownButtonRect(const ALocal: TRect; APPI: Integer): TRect;
 
 | 操作 | 行为 |
 |------|------|
-| 数字键 `0`–`9` | 在光标处插入数字字符，更新内联编辑缓冲，触发 `OnChange`，重绘 |
+| 数字键 `0`–`9` | 在光标处插入数字字符，更新内联编辑缓冲，触发 `OnChange`，重绘。值处于全选时（Tab 等从键盘拿到焦点之后），先清掉原值再插入，和 LCL 的 `AutoSelect` 一样；点击进入时不全选，光标留在点的位置 |
 | `-` | 仅在光标位于位置 0 且缓冲中尚无 `-` 时插入（允许键入负数），其余位置忽略 |
-| `←` | 光标左移一码点（到达缓冲开头后停止） |
-| `→` | 光标右移一码点（到达缓冲末尾后停止） |
+| `←` | 光标左移一码点（到达缓冲开头后停止）；全选时取消全选，光标到开头 |
+| `→` | 光标右移一码点（到达缓冲末尾后停止）；全选时取消全选，光标到末尾 |
 | `Home` | 光标移到缓冲开头 |
 | `End` | 光标移到缓冲末尾 |
-| `Backspace` | 删除光标前一码点（真的删掉了才触发 `OnChange`；光标在开头时什么都不做也不通知） |
+| `Backspace` | 删除光标前一码点（真的删掉了才触发 `OnChange`；光标在开头时什么都不做也不通知）。全选时清空整个值；`Delete` 同样 |
 | `Delete` | 删除光标后一码点（同上） |
 | `Enter` | **提交**：将缓冲解析为整数（`StrToIntDef`，无法解析时退回当前 `Value`）→ 夹紧 `[MinValue, MaxValue]` → 写入 `Value`（若值移动则触发 `OnValueChange`）→ 回填缓冲（文字变了就触发 `OnChange`）→ 触发 `OnEditingDone`（只读时不触发）。按键不吃掉，照常交给窗体的默认按钮，和原生编辑框一样 |
 | `Esc` | **还原**：缓冲和当前 `Value` 不一样时，丢弃编辑缓冲，重新同步到当前 `Value`（`SyncBufferToValue`），重绘，并吃掉这个键；`Value` 不动所以不触发 `OnValueChange`，但显示文字被改回去了，触发 `OnChange`。没有可还原的内容时，`Esc` 交给窗体的取消按钮 |
