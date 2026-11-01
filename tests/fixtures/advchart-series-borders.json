@@ -1,6 +1,6 @@
 {
  "source": "ECharts 6.1.0 dist (D:/Projects/echarts/dist/echarts.js), node SSR (svg)",
- "note": "R6-D: each case settled (an action, where one, at T1 and settled), `pens` = the sorted set of stroke|width|dash|offset|ends of every stroked path under the series views (lineWidth > 0, a stroke not null nor none) -- of the part `part` names where one is (symbol: a radar item's symbols; pointer / progress: a gauge's; ribbon: a chord's links) -- the stroke #rrggbbaa (color.parse), grad a gradient, x:<word> a word that does not parse; the dash normalizeLineDash'd against the width (solid none, ignored one setLineDash does not take); the offset 0 where none; the ends cap/join/miterLimit, butt/miter/10 where none. `seen` the paths of that part, `n` the stroked ones.",
+ "note": "R6-D: each case settled (an action, where one, at T1 and settled), `pens` = the sorted set of stroke|width|dash|offset|ends of every stroked path under the series views (lineWidth > 0, a stroke not null nor none) -- of the part `part` names where one is (symbol: a radar item's symbols; pointer / progress: a gauge's; ribbon: a chord's links) -- the stroke #rrggbbaa (color.parse), grad a gradient, x:<word> a word that does not parse; the dash normalizeLineDash'd against the width (solid none, ignored one setLineDash does not take); the offset 0 where none; the ends cap/join/miterLimit, butt/miter/10 where none. `seen` the paths of that part, `n` the stroked ones. R6-E: a pen whose path scales with it (no strokeNoScale, a scaling transform: a pictorial glyph) as drawn, its width, dash and offset times sqrt|det| to four places; the offset as the canvas takes it (Number); part track: the bands of a gauge axis line; `shapes` each path of the part as type|cx|cy|r0|r|clockwise start|sweep (sector, sausage), circle|cx|cy|r, rect|x|y|w|h (canvas frame); `fills` the fills of the part; `hits` [x, y, the part findHover finds there, empty another path, - none]; `at`: sampled at T0 + at, animating.",
  "W": 400,
  "H": 300,
  "charts": [
@@ -3802,7 +3802,9 @@
    "seen": 6,
    "n": 3,
    "pens": [
-    "#000000ff|3|12,6|2|butt/miter/10"
+    "#000000ff|0.4905|1.9622,0.9811|0.327|butt/miter/10",
+    "#000000ff|0.6008|2.4032,1.2016|0.4005|butt/miter/10",
+    "#000000ff|0.7756|3.1025,1.5512|0.5171|butt/miter/10"
    ]
   },
   {
@@ -3939,6 +3941,2978 @@
    "n": 3,
    "pens": [
     "#000000ff|3|12,6|2|butt/miter/10"
+   ]
+  },
+  {
+   "id": "gauge.round",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "progress": {
+       "show": true,
+       "roundCap": true,
+       "width": 14,
+       "itemStyle": {
+        "borderColor": "#000",
+        "borderWidth": 3
+       }
+      }
+     }
+    ]
+   },
+   "part": "progress",
+   "action": null,
+   "seen": 1,
+   "n": 1,
+   "pens": [
+    "#000000ff|3|solid|0|butt/miter/10"
+   ],
+   "shapes": [
+    "sausage|200|150|98.5|112.5|2.3562|1.885"
+   ],
+   "hits": [
+    [
+     156,
+     54,
+     "progress"
+    ],
+    [
+     128,
+     228,
+     "progress"
+    ],
+    [
+     96,
+     133,
+     "progress"
+    ],
+    [
+     162,
+     52,
+     "-"
+    ]
+   ]
+  },
+  {
+   "id": "gauge.round-dash",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "progress": {
+       "show": true,
+       "roundCap": true,
+       "width": 14,
+       "itemStyle": {
+        "borderColor": "#000",
+        "borderWidth": "3",
+        "borderType": "dashed",
+        "borderDashOffset": "2",
+        "borderMiterLimit": "4"
+       }
+      }
+     }
+    ]
+   },
+   "part": "progress",
+   "action": null,
+   "seen": 1,
+   "n": 1,
+   "pens": [
+    "#000000ff|3|12,6|2|butt/miter/4"
+   ],
+   "shapes": [
+    "sausage|200|150|98.5|112.5|2.3562|1.885"
+   ]
+  },
+  {
+   "id": "gauge.round-two",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       },
+       {
+        "value": 70
+       }
+      ],
+      "progress": {
+       "show": true,
+       "roundCap": true,
+       "width": 14,
+       "itemStyle": {
+        "borderColor": "#000",
+        "borderWidth": 3
+       },
+       "overlap": false
+      }
+     }
+    ]
+   },
+   "part": "progress",
+   "action": null,
+   "seen": 2,
+   "n": 2,
+   "pens": [
+    "#000000ff|3|solid|0|butt/miter/10"
+   ],
+   "shapes": [
+    "sausage|200|150|102.5|107.5|2.3562|3.2987",
+    "sausage|200|150|107.5|112.5|2.3562|1.885"
+   ],
+   "hits": [
+    [
+     151,
+     51,
+     "progress"
+    ],
+    [
+     123,
+     229,
+     "progress"
+    ],
+    [
+     91,
+     133,
+     "progress"
+    ],
+    [
+     153,
+     50,
+     "progress"
+    ],
+    [
+     286,
+     90,
+     "progress"
+    ],
+    [
+     127,
+     225,
+     "progress"
+    ],
+    [
+     132,
+     70,
+     "progress"
+    ],
+    [
+     287,
+     91,
+     "progress"
+    ]
+   ]
+  },
+  {
+   "id": "gauge.round-ccw",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "clockwise": false,
+      "progress": {
+       "show": true,
+       "roundCap": true,
+       "width": 14,
+       "itemStyle": {
+        "borderColor": "#000",
+        "borderWidth": 3,
+        "borderType": "dashed",
+        "borderDashOffset": 2
+       }
+      }
+     }
+    ]
+   },
+   "part": "progress",
+   "action": null,
+   "seen": 1,
+   "n": 1,
+   "pens": [
+    "#000000ff|3|12,6|2|butt/miter/10"
+   ],
+   "shapes": [
+    "sausage|200|150|98.5|112.5|1.7279|0.6283"
+   ],
+   "hits": [
+    [
+     188,
+     255,
+     "progress"
+    ],
+    [
+     122,
+     222,
+     "progress"
+    ],
+    [
+     152,
+     244,
+     "progress"
+    ],
+    [
+     194,
+     255,
+     "-"
+    ]
+   ]
+  },
+  {
+   "id": "gauge.round-emphasis",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "progress": {
+       "show": true,
+       "roundCap": true,
+       "width": 14,
+       "itemStyle": {
+        "borderColor": "#000",
+        "borderWidth": 3
+       }
+      },
+      "emphasis": {
+       "itemStyle": {
+        "borderWidth": 6,
+        "borderColor": "#00f"
+       }
+      }
+     }
+    ]
+   },
+   "part": "progress",
+   "action": {
+    "type": "highlight",
+    "seriesIndex": 0,
+    "dataIndex": 0
+   },
+   "seen": 1,
+   "n": 1,
+   "pens": [
+    "#000000ff|3|solid|0|butt/miter/10"
+   ],
+   "shapes": [
+    "sausage|200|150|98.5|112.5|2.3562|1.885"
+   ]
+  },
+  {
+   "id": "gauge.round-grow",
+   "option": {
+    "animation": true,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "progress": {
+       "show": true,
+       "roundCap": true,
+       "width": 14,
+       "itemStyle": {
+        "borderColor": "#000",
+        "borderWidth": 3
+       }
+      }
+     }
+    ]
+   },
+   "part": "progress",
+   "action": null,
+   "seen": 1,
+   "n": 1,
+   "pens": [
+    "#000000ff|3|solid|0|butt/miter/10"
+   ],
+   "at": 300,
+   "shapes": [
+    "sausage|200|150|98.5|112.5|2.3562|0.2036"
+   ]
+  },
+  {
+   "id": "gauge.round-track",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "axisLine": {
+       "roundCap": true
+      }
+     }
+    ]
+   },
+   "part": "track",
+   "action": null,
+   "seen": 1,
+   "n": 0,
+   "pens": [],
+   "shapes": [
+    "sausage|200|150|102.5|112.5|2.3562|4.7124"
+   ]
+  },
+  {
+   "id": "gauge.round-stops",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "axisLine": {
+       "roundCap": true,
+       "lineStyle": {
+        "width": 12,
+        "shadowBlur": 4,
+        "shadowColor": "#000",
+        "color": [
+         [
+          0.3,
+          "#f00"
+         ],
+         [
+          0.7,
+          "#0f0"
+         ],
+         [
+          1,
+          "#00f"
+         ]
+        ]
+       }
+      }
+     }
+    ]
+   },
+   "part": "track",
+   "action": null,
+   "seen": 3,
+   "n": 0,
+   "pens": [],
+   "shapes": [
+    "sausage|200|150|100.5|112.5|2.3562|1.4137",
+    "sausage|200|150|100.5|112.5|3.7699|1.885",
+    "sausage|200|150|100.5|112.5|5.6549|1.4137"
+   ]
+  },
+  {
+   "id": "gauge.track",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "axisLine": {
+       "lineStyle": {
+        "color": [
+         [
+          0.4,
+          "#f00"
+         ],
+         [
+          1,
+          "#00f"
+         ]
+        ]
+       }
+      }
+     }
+    ]
+   },
+   "part": "track",
+   "action": null,
+   "seen": 2,
+   "n": 0,
+   "pens": [],
+   "shapes": [
+    "sector|200|150|102.5|112.5|2.3562|1.885",
+    "sector|200|150|102.5|112.5|4.2412|2.8274"
+   ]
+  },
+  {
+   "id": "polarbar.round",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "polar": {},
+    "radiusAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "angleAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "coordinateSystem": "polar",
+      "roundCap": true,
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 3,
+       "borderType": "dashed",
+       "borderDashOffset": 2
+      },
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 3,
+   "n": 3,
+   "pens": [
+    "#000000ff|3|12,6|2|butt/miter/10"
+   ],
+   "shapes": [
+    "sausage|200|150|44|76|4.7124|6.2832",
+    "sausage|200|150|4|36|4.7124|3.7699",
+    "sausage|200|150|84|116|4.7124|2.5133"
+   ]
+  },
+  {
+   "id": "radar.str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "radar": {
+     "indicator": [
+      {
+       "name": "p",
+       "max": 10
+      },
+      {
+       "name": "q",
+       "max": 10
+      },
+      {
+       "name": "r",
+       "max": 10
+      }
+     ]
+    },
+    "series": [
+     {
+      "type": "radar",
+      "data": [
+       {
+        "value": [
+         3,
+         5,
+         2
+        ]
+       }
+      ],
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "3",
+       "borderType": "dashed",
+       "borderDashOffset": "2",
+       "borderMiterLimit": "4"
+      }
+     }
+    ]
+   },
+   "part": "symbol",
+   "action": null,
+   "seen": 3,
+   "n": 3,
+   "pens": [
+    "#000000ff|3|12,6|2|butt/miter/4"
+   ]
+  },
+  {
+   "id": "gauge.str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "3",
+       "borderType": "dashed",
+       "borderDashOffset": "2",
+       "borderMiterLimit": "4"
+      }
+     }
+    ]
+   },
+   "part": "pointer",
+   "action": null,
+   "seen": 1,
+   "n": 1,
+   "pens": [
+    "#000000ff|3|12,6|2|butt/miter/4"
+   ]
+  },
+  {
+   "id": "gauge.pointer-str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "pointer": {
+       "itemStyle": {
+        "borderColor": "#000",
+        "borderWidth": "3",
+        "borderType": "dashed",
+        "borderDashOffset": "2",
+        "borderMiterLimit": "4"
+       }
+      }
+     }
+    ]
+   },
+   "part": "pointer",
+   "action": null,
+   "seen": 1,
+   "n": 1,
+   "pens": [
+    "#000000ff|3|12,6|2|butt/miter/4"
+   ]
+  },
+  {
+   "id": "gauge.progress-str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "progress": {
+       "show": true,
+       "itemStyle": {
+        "borderColor": "#000",
+        "borderWidth": "3",
+        "borderType": "dashed",
+        "borderDashOffset": "2",
+        "borderMiterLimit": "4"
+       }
+      }
+     }
+    ]
+   },
+   "part": "progress",
+   "action": null,
+   "seen": 1,
+   "n": 1,
+   "pens": [
+    "#000000ff|3|12,6|2|butt/miter/4"
+   ]
+  },
+  {
+   "id": "chord.str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "chord",
+      "data": [
+       {
+        "name": "a"
+       },
+       {
+        "name": "b"
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "b",
+        "value": 3
+       }
+      ],
+      "lineStyle": {
+       "color": "#000",
+       "width": "4",
+       "type": "dotted",
+       "dashOffset": "1",
+       "miterLimit": "4"
+      }
+     }
+    ]
+   },
+   "part": "ribbon",
+   "action": null,
+   "seen": 1,
+   "n": 1,
+   "pens": [
+    "#000000ff|4|4|1|butt/miter/4"
+   ]
+  },
+  {
+   "id": "bar.str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "3",
+       "borderType": "dashed",
+       "borderDashOffset": "2",
+       "borderMiterLimit": "4"
+      },
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 3,
+   "n": 3,
+   "pens": [
+    "#000000ff|3|12,6|2|butt/miter/4"
+   ],
+   "shapes": [
+    "rect|177|66.5|66|152",
+    "rect|277|159.5|66|59",
+    "rect|77|128.5|66|90"
+   ]
+  },
+  {
+   "id": "line.str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "symbol": "circle",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "3",
+       "borderType": "dashed",
+       "borderDashOffset": "2",
+       "borderMiterLimit": "4"
+      },
+      "lineStyle": {
+       "color": "#333",
+       "width": "4",
+       "type": "dotted",
+       "dashOffset": "1",
+       "miterLimit": "4"
+      },
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 4,
+   "n": 4,
+   "pens": [
+    "#000000ff|3|12,6|2|butt/miter/4",
+    "#333333ff|4|4|1|butt/bevel/4"
+   ]
+  },
+  {
+   "id": "scatter.str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "3",
+       "borderType": "dashed",
+       "borderDashOffset": "2",
+       "borderMiterLimit": "4"
+      },
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 3,
+   "n": 3,
+   "pens": [
+    "#000000ff|3|12,6|2|butt/miter/4"
+   ]
+  },
+  {
+   "id": "scatter.empty-str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "symbol": "emptyCircle",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "3",
+       "borderType": "dashed",
+       "borderDashOffset": "2",
+       "borderMiterLimit": "4"
+      },
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 3,
+   "n": 3,
+   "pens": [
+    "#5470c6ff|2|8,4|2|butt/miter/4"
+   ]
+  },
+  {
+   "id": "escatter.str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "effectScatter",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "3",
+       "borderType": "dashed",
+       "borderDashOffset": "2",
+       "borderMiterLimit": "4"
+      },
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 12,
+   "n": 3,
+   "pens": [
+    "#000000ff|3|12,6|2|butt/miter/4"
+   ]
+  },
+  {
+   "id": "pie.str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "3",
+       "borderType": "dashed",
+       "borderDashOffset": "2",
+       "borderMiterLimit": "4"
+      },
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 3,
+   "n": 3,
+   "pens": [
+    "#000000ff|3|12,6|2|butt/round/4"
+   ]
+  },
+  {
+   "id": "funnel.str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "funnel",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "3",
+       "borderType": "dashed",
+       "borderDashOffset": "2",
+       "borderMiterLimit": "4"
+      },
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 3,
+   "n": 3,
+   "pens": [
+    "#000000ff|3|12,6|2|butt/round/4"
+   ]
+  },
+  {
+   "id": "candle.str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "candlestick",
+      "itemStyle": {
+       "borderColor0": "#444",
+       "borderColor": "#000",
+       "borderWidth": "3",
+       "borderType": "dashed",
+       "borderDashOffset": "2",
+       "borderMiterLimit": "4"
+      },
+      "data": [
+       [
+        2,
+        4,
+        1,
+        5
+       ],
+       [
+        3,
+        2,
+        1,
+        4
+       ]
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 2,
+   "n": 2,
+   "pens": [
+    "#000000ff|3|12,6|2|butt/miter/4",
+    "#444444ff|3|12,6|2|butt/miter/4"
+   ]
+  },
+  {
+   "id": "boxplot.str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "boxplot",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "3",
+       "borderType": "dashed",
+       "borderDashOffset": "2",
+       "borderMiterLimit": "4"
+      },
+      "data": [
+       [
+        1,
+        2,
+        3,
+        4,
+        5
+       ],
+       [
+        2,
+        3,
+        4,
+        5,
+        6
+       ]
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 2,
+   "n": 2,
+   "pens": [
+    "#000000ff|3|12,6|2|butt/miter/4"
+   ]
+  },
+  {
+   "id": "heatmap.str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "visualMap": {
+     "show": false,
+     "min": 0,
+     "max": 5
+    },
+    "series": [
+     {
+      "type": "heatmap",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "3",
+       "borderType": "dashed",
+       "borderDashOffset": "2",
+       "borderMiterLimit": "4"
+      },
+      "data": [
+       [
+        0,
+        0,
+        1
+       ],
+       [
+        1,
+        1,
+        3
+       ]
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 2,
+   "n": 2,
+   "pens": [
+    "#000000ff|3|12,6|2|butt/miter/4"
+   ]
+  },
+  {
+   "id": "sunburst.str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "sunburst",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "3",
+       "borderType": "dashed",
+       "borderDashOffset": "2",
+       "borderMiterLimit": "4"
+      },
+      "data": [
+       {
+        "name": "a",
+        "value": 3,
+        "children": [
+         {
+          "name": "b",
+          "value": 2
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 2,
+   "n": 2,
+   "pens": [
+    "#000000ff|3|12,6|2|butt/bevel/4"
+   ]
+  },
+  {
+   "id": "treemap.str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "treemap",
+      "breadcrumb": {
+       "show": false
+      },
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "3",
+       "borderType": "dashed",
+       "borderDashOffset": "2",
+       "borderMiterLimit": "4"
+      },
+      "data": [
+       {
+        "name": "a",
+        "value": 3
+       },
+       {
+        "name": "b",
+        "value": 2
+       }
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 5,
+   "n": 0,
+   "pens": [],
+   "shapes": [
+    "rect|20|50|360|200",
+    "rect|235.4|53|141.6|194",
+    "rect|238.4|56|135.6|188",
+    "rect|23|53|212.4|194",
+    "rect|26|56|206.4|188"
+   ]
+  },
+  {
+   "id": "graph.str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "3",
+       "borderType": "dashed",
+       "borderDashOffset": "2",
+       "borderMiterLimit": "4"
+      },
+      "lineStyle": {
+       "color": "#333",
+       "width": "4",
+       "type": "dotted",
+       "dashOffset": "1",
+       "miterLimit": "4"
+      },
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 10
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "b"
+       }
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 3,
+   "n": 3,
+   "pens": [
+    "#000000ff|3|12,6|2|butt/miter/4",
+    "#333333ff|4|4|1|butt/miter/4"
+   ]
+  },
+  {
+   "id": "tree.str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "tree",
+      "itemStyle": {
+       "color": "#abc",
+       "borderColor": "#000",
+       "borderWidth": "3",
+       "borderType": "dashed",
+       "borderDashOffset": "2",
+       "borderMiterLimit": "4"
+      },
+      "lineStyle": {
+       "color": "#333",
+       "width": "4",
+       "type": "dotted",
+       "dashOffset": "1",
+       "miterLimit": "4"
+      },
+      "data": [
+       {
+        "name": "r",
+        "children": [
+         {
+          "name": "a"
+         },
+         {
+          "name": "b"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 5,
+   "n": 5,
+   "pens": [
+    "#333333ff|4|4|1|butt/miter/4",
+    "#aabbccff|2|8,4|2|butt/miter/4"
+   ]
+  },
+  {
+   "id": "sankey.str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "sankey",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "3",
+       "borderType": "dashed",
+       "borderDashOffset": "2",
+       "borderMiterLimit": "4"
+      },
+      "lineStyle": {
+       "opacity": 0.5,
+       "color": "#333",
+       "width": "4",
+       "type": "dotted",
+       "dashOffset": "1",
+       "miterLimit": "4"
+      },
+      "data": [
+       {
+        "name": "a"
+       },
+       {
+        "name": "b"
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "b",
+        "value": 3
+       }
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 3,
+   "n": 2,
+   "pens": [
+    "#000000ff|3|12,6|2|butt/miter/4"
+   ]
+  },
+  {
+   "id": "sankey.band-str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "sankey",
+      "lineStyle": {
+       "borderColor": "#000",
+       "borderWidth": "2",
+       "borderType": "dashed",
+       "borderDashOffset": "1",
+       "borderMiterLimit": "4"
+      },
+      "data": [
+       {
+        "name": "a"
+       },
+       {
+        "name": "b"
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "b",
+        "value": 3
+       }
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 3,
+   "n": 1,
+   "pens": [
+    "#000000ff|2|8,4|1|butt/miter/4"
+   ]
+  },
+  {
+   "id": "parallel.str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "parallelAxis": [
+     {
+      "dim": 0
+     },
+     {
+      "dim": 1
+     }
+    ],
+    "series": [
+     {
+      "type": "parallel",
+      "lineStyle": {
+       "color": "#333",
+       "width": "4",
+       "type": "dotted",
+       "dashOffset": "1",
+       "miterLimit": "4"
+      },
+      "data": [
+       [
+        1,
+        2
+       ],
+       [
+        3,
+        4
+       ]
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 2,
+   "n": 2,
+   "pens": [
+    "#333333ff|4|4|1|butt/miter/4"
+   ]
+  },
+  {
+   "id": "lines.str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "lines",
+      "coordinateSystem": "cartesian2d",
+      "lineStyle": {
+       "color": "#333",
+       "width": "4",
+       "type": "dotted",
+       "dashOffset": "1",
+       "miterLimit": "4"
+      },
+      "data": [
+       {
+        "coords": [
+         [
+          0,
+          0
+         ],
+         [
+          5,
+          5
+         ]
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 1,
+   "n": 1,
+   "pens": [
+    "#333333ff|4|4|1|butt/miter/4"
+   ]
+  },
+  {
+   "id": "pict.str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "pictorialBar",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "3",
+       "borderType": "dashed",
+       "borderDashOffset": "2",
+       "borderMiterLimit": "4"
+      },
+      "symbol": "rect",
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 6,
+   "n": 3,
+   "pens": [
+    "#000000ff|0.4905|1.9622,0.9811|0.327|butt/miter/4",
+    "#000000ff|0.6008|2.4032,1.2016|0.4005|butt/miter/4",
+    "#000000ff|0.7756|3.1025,1.5512|0.5171|butt/miter/4"
+   ]
+  },
+  {
+   "id": "river.str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "singleAxis": {
+     "type": "time"
+    },
+    "series": [
+     {
+      "type": "themeRiver",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "3",
+       "borderType": "dashed",
+       "borderDashOffset": "2",
+       "borderMiterLimit": "4"
+      },
+      "data": [
+       [
+        "2015/11/08",
+        3,
+        "a"
+       ],
+       [
+        "2015/11/09",
+        4,
+        "a"
+       ]
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 1,
+   "n": 1,
+   "pens": [
+    "#000000ff|3|12,6|2|butt/miter/4"
+   ]
+  },
+  {
+   "id": "chord.nodes-str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "chord",
+      "data": [
+       {
+        "name": "a"
+       },
+       {
+        "name": "b"
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "b",
+        "value": 3
+       }
+      ],
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "3",
+       "borderType": "dashed",
+       "borderDashOffset": "2",
+       "borderMiterLimit": "4"
+      }
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 3,
+   "n": 2,
+   "pens": [
+    "#000000ff|3|12,6|2|butt/miter/4"
+   ]
+  },
+  {
+   "id": "polarbar.str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "polar": {},
+    "angleAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "radiusAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "coordinateSystem": "polar",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "3",
+       "borderType": "dashed",
+       "borderDashOffset": "2",
+       "borderMiterLimit": "4"
+      },
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 3,
+   "n": 3,
+   "pens": [
+    "#000000ff|3|12,6|2|butt/miter/4"
+   ]
+  },
+  {
+   "id": "bar.w\"0\"",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "0"
+      },
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 2,
+   "n": 0,
+   "pens": [],
+   "shapes": [
+    "rect|175.5|65|69|155",
+    "rect|75.5|127|69|93"
+   ]
+  },
+  {
+   "id": "gauge.w\"0\"",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "0"
+      }
+     }
+    ]
+   },
+   "part": "pointer",
+   "action": null,
+   "seen": 1,
+   "n": 0,
+   "pens": []
+  },
+  {
+   "id": "line.w\"0\"",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "symbol": "circle",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "0"
+      },
+      "lineStyle": {
+       "width": "0"
+      },
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 4,
+   "n": 0,
+   "pens": []
+  },
+  {
+   "id": "scatter.w\"0\"",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "0"
+      },
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 2,
+   "n": 0,
+   "pens": []
+  },
+  {
+   "id": "pie.w\"0\"",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "0"
+      },
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 2,
+   "n": 0,
+   "pens": []
+  },
+  {
+   "id": "bar.w\"abc\"",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "abc"
+      },
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 0,
+   "n": 0,
+   "pens": [],
+   "shapes": []
+  },
+  {
+   "id": "gauge.w\"abc\"",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "abc"
+      }
+     }
+    ]
+   },
+   "part": "pointer",
+   "action": null,
+   "seen": 1,
+   "n": 0,
+   "pens": []
+  },
+  {
+   "id": "line.w\"abc\"",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "symbol": "circle",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "abc"
+      },
+      "lineStyle": {
+       "width": "abc"
+      },
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 4,
+   "n": 0,
+   "pens": []
+  },
+  {
+   "id": "scatter.w\"abc\"",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "abc"
+      },
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 2,
+   "n": 0,
+   "pens": []
+  },
+  {
+   "id": "pie.w\"abc\"",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": "abc"
+      },
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 2,
+   "n": 0,
+   "pens": []
+  },
+  {
+   "id": "bar.w\"\"",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": ""
+      },
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 2,
+   "n": 0,
+   "pens": [],
+   "shapes": [
+    "rect|175.5|65|69|155",
+    "rect|75.5|127|69|93"
+   ]
+  },
+  {
+   "id": "gauge.w\"\"",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": ""
+      }
+     }
+    ]
+   },
+   "part": "pointer",
+   "action": null,
+   "seen": 1,
+   "n": 0,
+   "pens": []
+  },
+  {
+   "id": "line.w\"\"",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "symbol": "circle",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": ""
+      },
+      "lineStyle": {
+       "width": ""
+      },
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 4,
+   "n": 0,
+   "pens": []
+  },
+  {
+   "id": "scatter.w\"\"",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": ""
+      },
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 2,
+   "n": 0,
+   "pens": []
+  },
+  {
+   "id": "pie.w\"\"",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": ""
+      },
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 2,
+   "n": 0,
+   "pens": []
+  },
+  {
+   "id": "bar.item-abc",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 3
+      },
+      "data": [
+       3,
+       {
+        "value": 5,
+        "itemStyle": {
+         "borderWidth": "abc"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 1,
+   "n": 1,
+   "pens": [
+    "#000000ff|3|solid|0|butt/miter/10"
+   ],
+   "shapes": [
+    "rect|77|128.5|66|90"
+   ]
+  },
+  {
+   "id": "line.item-str",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "symbol": "circle",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 3
+      },
+      "data": [
+       3,
+       {
+        "value": 5,
+        "itemStyle": {
+         "borderWidth": "1"
+        }
+       },
+       {
+        "value": 2,
+        "itemStyle": {
+         "borderWidth": ""
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 4,
+   "n": 3,
+   "pens": [
+    "#000000ff|1|solid|0|butt/miter/10",
+    "#000000ff|3|solid|0|butt/miter/10",
+    "#5470c6ff|2|solid|0|butt/bevel/10"
+   ]
+  },
+  {
+   "id": "bar.miter-empty",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderMiterLimit": "",
+       "borderDashOffset": "",
+       "borderType": [
+        4,
+        2
+       ]
+      },
+      "data": [
+       3
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 1,
+   "n": 1,
+   "pens": [
+    "#000000ff|2|4,2|0|butt/miter/10"
+   ]
+  },
+  {
+   "id": "gauge.pointer-miter",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "pointer": {
+       "itemStyle": {
+        "borderColor": "#000",
+        "borderWidth": "2",
+        "borderMiterLimit": "6",
+        "borderDashOffset": "3",
+        "borderType": [
+         4,
+         2
+        ]
+       }
+      }
+     }
+    ]
+   },
+   "part": "pointer",
+   "action": null,
+   "seen": 1,
+   "n": 1,
+   "pens": [
+    "#000000ff|2|4,2|3|butt/miter/6"
+   ]
+  },
+  {
+   "id": "pict.empty",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "pictorialBar",
+      "symbol": "emptyCircle",
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 4,
+   "n": 0,
+   "pens": [],
+   "fills": [
+    "#00000000",
+    "#5470c6ff"
+   ]
+  },
+  {
+   "id": "pict.empty-border",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "pictorialBar",
+      "symbol": "emptyCircle",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2
+      },
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 4,
+   "n": 2,
+   "pens": [
+    "#000000ff|0.4005|solid|0|butt/miter/10",
+    "#000000ff|0.5171|solid|0|butt/miter/10"
+   ],
+   "fills": [
+    "#00000000",
+    "#5470c6ff"
+   ]
+  },
+  {
+   "id": "pict.empty-size",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "pictorialBar",
+      "symbol": "emptyRect",
+      "symbolSize": [
+       20,
+       20
+      ],
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 40,
+       "borderType": [
+        20,
+        10
+       ],
+       "borderDashOffset": 10
+      },
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 4,
+   "n": 2,
+   "pens": [
+    "#000000ff|2|1,0.5|0.5|butt/miter/10"
+   ],
+   "fills": [
+    "#00000000",
+    "#5470c6ff"
+   ]
+  },
+  {
+   "id": "pict.line",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "pictorialBar",
+      "symbol": "line",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 30
+      },
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 4,
+   "n": 2,
+   "pens": [
+    "#000000ff|6.008|solid|0|butt/miter/10",
+    "#000000ff|7.7562|solid|0|butt/miter/10"
+   ],
+   "fills": [
+    "#00000000",
+    "#5470c6ff"
+   ]
+  },
+  {
+   "id": "pict.line-rest",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "pictorialBar",
+      "symbol": "line",
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 4,
+   "n": 0,
+   "pens": [],
+   "fills": [
+    "#00000000",
+    "#5470c6ff"
+   ]
+  },
+  {
+   "id": "pict.repeat",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "pictorialBar",
+      "symbol": "emptyRect",
+      "symbolRepeat": true,
+      "symbolSize": [
+       16,
+       8
+      ],
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 25
+      },
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 12,
+   "n": 10,
+   "pens": [
+    "#000000ff|0.7071|solid|0|butt/miter/10"
+   ],
+   "fills": [
+    "#00000000",
+    "#5470c6ff"
+   ]
+  },
+  {
+   "id": "pict.empty-emphasis",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "pictorialBar",
+      "symbol": "emptyCircle",
+      "symbolSize": [
+       20,
+       20
+      ],
+      "emphasis": {
+       "itemStyle": {
+        "borderColor": "#00f",
+        "borderWidth": 60
+       }
+      },
+      "data": [
+       3,
+       5
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": {
+    "type": "highlight",
+    "seriesIndex": 0,
+    "dataIndex": 0
+   },
+   "seen": 4,
+   "n": 1,
+   "pens": [
+    "#0000ffff|3|solid|0|butt/miter/10"
+   ],
+   "fills": [
+    "#00000000",
+    "#5470c6ff",
+    "#5c7bd9ff"
+   ]
+  },
+  {
+   "id": "pict.empty-item",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "pictorialBar",
+      "symbol": "emptyTriangle",
+      "symbolSize": [
+       20,
+       20
+      ],
+      "data": [
+       3,
+       {
+        "value": 5,
+        "itemStyle": {
+         "color": "#0f0",
+         "borderColor": "#f00",
+         "borderWidth": 20
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "part": "",
+   "action": null,
+   "seen": 4,
+   "n": 1,
+   "pens": [
+    "#ff0000ff|1|solid|0|butt/miter/10"
+   ],
+   "fills": [
+    "#00000000",
+    "#00ff00ff",
+    "#5470c6ff"
    ]
   }
  ]

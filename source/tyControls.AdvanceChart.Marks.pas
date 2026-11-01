@@ -215,6 +215,10 @@ type
     { [R6-D] whether a width was written (the series' or the item's): a
       'line' symbol's setColor keeps it, zrender's 1 where none }
     StrokeWidthSet, ItemStrokeWidthSet: Boolean;
+    { [R6-E] the border width written (the item's over the series') is no
+      number: a bar's layout is then not-a-number (getLineWidth) and the
+      bar is not drawn }
+    StrokeWidthNaN: Boolean;
     { The four colours a candle needs, and the pen. A block of its own rather
       than four more fields on the visual: a candlestick is the only series
       whose colour depends on the DATUM's own two numbers, and putting `Up` and
@@ -630,9 +634,10 @@ begin
   else if IsNull('borderColor0') then Result.DownBorderBody := True;
   Result.HasDojiBorder := ColourAt('borderColorDoji', Result.DojiBorder);
 
+  { [R6-E] a numeric string is its number }
   d := item.Find('borderWidth');
-  if (d <> nil) and (d.JSONType = jtNumber) then
-    Result.BorderWidthLogical := Max(Double(0), Min(Double(64), d.AsFloat));
+  if (d <> nil) and (d.JSONType <> jtNull) then
+    Result.BorderWidthLogical := Max(Double(0), Min(Double(64), TyOptPenWidth(d)));
 end;
 
 function TyCandleRowOf(const ASeries: TTyCandleSpec; AItem: TJSONObject): TTyCandleRow;
@@ -679,8 +684,8 @@ begin
   if ColourAt('borderColorDoji', Result.Spec.DojiBorder) then
     Result.Spec.HasDojiBorder := True;
   d := item.Find('borderWidth');
-  if (d <> nil) and (d.JSONType = jtNumber) then
-    Result.Spec.BorderWidthLogical := Max(Double(0), Min(Double(64), d.AsFloat));
+  if (d <> nil) and (d.JSONType <> jtNull) then
+    Result.Spec.BorderWidthLogical := Max(Double(0), Min(Double(64), TyOptPenWidth(d)));
   d := item.Find('opacity');
   if (d <> nil) and (d.JSONType = jtNumber) then Result.Opacity := d.AsFloat;
 end;
@@ -1056,6 +1061,18 @@ end;
 
   A row that names an unreadable colour keeps the series' -- the same rule
   the series level follows. }
+{ [R6-E] Number() of an item's own value as the store keeps it: a number,
+  a string's Number, a boolean 1 or 0 }
+function OverrideNumber(const AValue: TTyDataValue): Double;
+begin
+  case AValue.Kind of
+    dvkNumber, dvkBool: Result := AValue.Num;
+    dvkText: Result := TyJsToNumber(AValue.Text);
+  else
+    Result := NaN;
+  end;
+end;
+
 function RowVisualEarly(const AVisual: TTySeriesVisual; AStore: TTyDataStore;
   ARow: Integer): TTySeriesVisual;
 var v: TTyDataValue; c: TTyChartColor; raw: Integer; vr: TTyVisualRow;
@@ -1134,7 +1151,12 @@ begin
   if AStore.HasOverride(ARow, TyOverrideKey('itemStyle.borderDashOffset')) then
   begin
     v := AStore.GetOverride(ARow, TyOverrideKey('itemStyle.borderDashOffset'));
-    if v.Kind = dvkNumber then Result.DashOffset := v.Num;
+    { [R6-E] a numeric string its number }
+    if v.Kind <> dvkNone then
+    begin
+      Result.DashOffset := OverrideNumber(v);
+      if IsNan(Result.DashOffset) or IsInfinite(Result.DashOffset) then Result.DashOffset := 0;
+    end;
   end;
   { [R2-I3] AND ITS OWN borderType (getItemStyle's lineDash, the item's key
     over the series'): a word, a number, or a short array the store keeps
@@ -1165,9 +1187,10 @@ begin
     for k := 0 to n - 1 do
     begin
       v := AStore.GetOverride(ARow, TyOverrideKey('itemStyle.borderType.' + IntToStr(k)));
-      { a dash entry that is not a number contributes nothing (ReadDash) }
-      if v.Kind = dvkNumber then Result.DashExplicit[k] := v.Num
-      else Result.DashExplicit[k] := 0;
+      { [R6-E] setLineDash takes each entry as a number (Number('4') is 4,
+        a word not one: no dash) }
+      if v.Kind = dvkNone then Result.DashExplicit[k] := 0
+      else Result.DashExplicit[k] := OverrideNumber(v);
     end;
     Result.Dash := todExplicit;
   end;
@@ -1209,9 +1232,14 @@ begin
   if AStore.HasOverride(ARow, k) then
   begin
     v := AStore.GetOverride(ARow, k);
-    if (v.Kind = dvkNumber) and not IsNan(v.Num) then
+    { [R6-E] as the canvas takes it: a numeric string its number, one that
+      is no number nought [was: a number only] }
+    if v.Kind <> dvkNone then
     begin
-      Result.StrokeWidthLogical := v.Num;
+      Result.StrokeWidthLogical := OverrideNumber(v);
+      Result.StrokeWidthNaN := IsNan(Result.StrokeWidthLogical);
+      if IsNan(Result.StrokeWidthLogical) or IsInfinite(Result.StrokeWidthLogical) then
+        Result.StrokeWidthLogical := 0;
       Result.StrokeWidthSet := True;
     end;
   end;
@@ -1702,6 +1730,11 @@ begin
       height -- so the stroke's outer edge is where the bar's edge was.
       [Batch 93: found by the legend fixture's bordered bars.] }
     rv := RowVisual(AVisual, AStore, i);
+    { [R6-E] a border width that is no number ('abc'): getLineWidth's
+      Math.min is not-a-number, so is the layout, and the bar is not drawn
+      (isValidLayout) -- nor its label }
+    if rv.StrokeWidthNaN and ((rv.Stroke <> 0) or (rv.StrokeGradient.Kind <> cgkNone)) then
+      Continue;
     if (rv.StrokeWidthLogical > 0) and (rv.Stroke <> 0) then
     begin
       fix := Min(rv.StrokeWidthLogical * AVisual.PxScale, Min(Abs(lw), Abs(lh)));
@@ -2091,8 +2124,11 @@ var
       Exit;
     end;
     area := ABinding.Cart.GetArea;
+    { `lineStyle.width || 0` (createGridClipPath): the default 2 where none
+      is written [R6-E: was 2 for a written nought too] }
     lw := AVisual.StrokeWidthLogical;
-    if lw <= 0 then lw := 2;
+    if (lw <= 0) and not AVisual.StrokeWidthSet then lw := 2;
+    if lw < 0 then lw := 0;
     x := area.X - lw / 2;
     y := area.Y - lw / 2;
     w := area.W + lw;
@@ -2450,7 +2486,9 @@ var
       { A LINE IS A STROKE, so the ramp moves across with the colour. }
       v.FillGradient := Default(TTyChartGradient);
       v.FillPattern := Default(TTyChartPattern);
-      if v.StrokeWidthLogical <= 0 then v.StrokeWidthLogical := 2;
+      { [R6-E] the default 2 only where no width is written: a written
+        nought (or '' or 'abc') strokes nothing [was: 2] }
+      if (v.StrokeWidthLogical <= 0) and not v.StrokeWidthSet then v.StrokeWidthLogical := 2;
       if v.Stroke = 0 then v.Stroke := AVisual.Fill;
       if (v.StrokeGradient.Kind = cgkNone)
         and (AVisual.FillGradient.Kind <> cgkNone) then

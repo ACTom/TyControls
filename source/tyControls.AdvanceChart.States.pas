@@ -1203,8 +1203,19 @@ end;
 
 procedure ReadNum(const ANodes: array of TJSONObject; const AState, ABlock,
   AName: string; AKey: TTyStKey; var AObj: TTyStObject);
-var v: Double; has: Boolean;
+var v: Double; has: Boolean; d: TJSONData;
 begin
+  { [R6-E] a pen's width and phase as the canvas takes them: a numeric
+    string its number, one that is no finite number nought }
+  if AKey in [stkLineWidth, stkDashOffset] then
+  begin
+    if AState = '' then d := TyStFind(ANodes, [ABlock, AName])
+    else d := TyStFind(ANodes, [AState, ABlock, AName]);
+    if d = nil then Exit;
+    if AKey = stkLineWidth then v := TyOptPenWidth(d) else v := TyOptPenOffset(d);
+    if not IsNan(v) then TyStSetNum(AObj, AKey, v);
+    Exit;
+  end;
   if AState = '' then v := TyStReadNumber(ANodes, [ABlock, AName], has)
   else v := TyStReadNumber(ANodes, [AState, ABlock, AName], has);
   if has and not IsNan(v) then TyStSetNum(AObj, AKey, v);

@@ -284,6 +284,10 @@ type
       at all, not even a colour. }
     BorderColor: TTyOptColor;
     BorderWidthLogical: Double;   // NaN = not written
+    { [R6-E] the width is written and its Number is not a number ('abc'):
+      it strokes nothing (BorderWidthLogical 0), and a bar's getLineWidth
+      (`borderWidth || 0` in a Math.min) makes its layout not-a-number }
+    BorderWidthNaN: Boolean;
     Opacity: Double;              // NaN = not written
     Dash: TTyOptDash;
     DashLogical: TTyDoubleArray;  // todExplicit only
@@ -356,6 +360,31 @@ function TyDashWord(ADash: TTyOptDash): Byte;
   'dotted' [w]; a number a list of one; a list as it is. AWord: 1 'dashed',
   2 'dotted', 0 else. }
 function TyLineDashOf(AType: TJSONData; ALineWidth: Double; out AWord: Byte): TTyDoubleArray;
+{ [R6-E] A PEN'S NUMBERS AS THE CANVAS TAKES THEM. getItemStyle and
+  getLineStyle hand the value on as written and zrender passes it to the
+  canvas, which converts it: a numeric string is its number.
+  TyOptJsNumber: JavaScript's Number() of an option value (nil, undefined,
+  not a number; null nought; a boolean 1 or 0; a string's Number; an array
+  its join's; an object not a number).
+  TyOptPenWidth: a width (borderWidth, a line's width) -- not-a-number
+  where nothing is written (nil, null: the model's get falls through it),
+  else its Number, and nought where that is no finite number: zrender's
+  pathHasStroke is `lineWidth > 0`, so 'abc' and '' stroke nothing, and an
+  infinite width the canvas does not take (it keeps the last element's;
+  none here).
+  TyOptPenOffset: a dash's phase (borderDashOffset, dashOffset) --
+  not-a-number where nothing is written, else its Number, nought where that
+  is no finite number (the canvas does not take one and keeps the last
+  element's; nought here).
+  TyOptMiterLimit: a miter limit (borderMiterLimit, miterLimit) --
+  not-a-number where nothing is written, else the limit the canvas strokes
+  with: `style.miterLimit || 10`, and the canvas refuses a limit that is no
+  number above nought (it keeps the last element's; 10 here). }
+function TyOptJsNumber(AData: TJSONData): Double;
+function TyOptPenWidth(AData: TJSONData): Double;
+function TyOptPenOffset(AData: TJSONData): Double;
+function TyOptMiterLimit(AData: TJSONData): Double;
+
 { [R5-D] lineCap: 1 'round', 2 'square', 0 else ('butt'); lineJoin: 1
   'round', 2 'bevel', 0 else ('miter') }
 function TyLineCapOf(AData: TJSONData): Byte;
@@ -1108,6 +1137,71 @@ end;
 
 { ==================== the style blocks ==================== }
 
+function TyOptJsNumber(AData: TJSONData): Double;
+begin
+  Result := NaN;
+  if AData = nil then Exit;
+  case AData.JSONType of
+    jtNull: Result := 0;
+    jtBoolean: if AData.AsBoolean then Result := 1 else Result := 0;
+    jtNumber: Result := AData.AsFloat;
+    jtString: Result := TyJsToNumber(AData.AsString);
+    { String([]) is '', String([x]) is String(x); two or more join with a
+      comma, which no number holds }
+    jtArray:
+      if AData.Count = 0 then Result := 0
+      else if (AData.Count = 1) and (AData.Items[0].JSONType <> jtObject) then
+      begin
+        if AData.Items[0].JSONType = jtNull then Result := 0
+        else Result := TyOptJsNumber(AData.Items[0]);
+      end;
+  end;
+end;
+
+function TyOptPenWidth(AData: TJSONData): Double;
+begin
+  if (AData = nil) or (AData.JSONType = jtNull) then Exit(NaN);
+  Result := TyOptJsNumber(AData);
+  if IsNan(Result) or IsInfinite(Result) then Result := 0;
+end;
+
+function TyOptPenOffset(AData: TJSONData): Double;
+begin
+  if (AData = nil) or (AData.JSONType = jtNull) then Exit(NaN);
+  Result := TyOptJsNumber(AData);
+  if IsNan(Result) or IsInfinite(Result) then Result := 0;
+end;
+
+function TyOptMiterLimit(AData: TJSONData): Double;
+begin
+  if (AData = nil) or (AData.JSONType = jtNull) then Exit(NaN);
+  Result := TyOptJsNumber(AData);
+  { (NaN first: a comparison with it raises here) }
+  if IsNan(Result) or IsInfinite(Result) or (Result <= 0) then Result := 10;
+end;
+
+{ a pen key under ANode: TyOptPenWidth / TyOptPenOffset of its value }
+function PenWidthIn(ANode: TJSONObject; const AKey: string): Double;
+begin
+  if ANode = nil then Exit(NaN);
+  Result := TyOptPenWidth(ANode.Find(AKey));
+end;
+
+function WidthNaNIn(ANode: TJSONObject; const AKey: string): Boolean;
+var d: TJSONData;
+begin
+  Result := False;
+  if ANode = nil then Exit;
+  d := ANode.Find(AKey);
+  Result := (d <> nil) and (d.JSONType <> jtNull) and IsNan(TyOptJsNumber(d));
+end;
+
+function PenOffsetIn(ANode: TJSONObject; const AKey: string): Double;
+begin
+  if ANode = nil then Exit(NaN);
+  Result := TyOptPenOffset(ANode.Find(AKey));
+end;
+
 function NumIn(ANode: TJSONObject; const AKey: string;
   ADefault: Double): Double;
 var d: TJSONData;
@@ -1480,9 +1574,11 @@ begin
       upstream, so reading one here would invent a behaviour. }
     Exit;
   Result.BorderColor := ReadOptColor(sub, 'borderColor');
-  Result.BorderWidthLogical := NumOr(sub, 'borderWidth');
+  { [R6-E] a numeric string is its number [was: not written] }
+  Result.BorderWidthLogical := PenWidthIn(sub, 'borderWidth');
+  Result.BorderWidthNaN := WidthNaNIn(sub, 'borderWidth');
   Result.Dash := ReadDash(sub, 'borderType', Result.DashLogical);
-  Result.DashOffset := NumOr(sub, 'borderDashOffset');
+  Result.DashOffset := PenOffsetIn(sub, 'borderDashOffset');
   Result.DashOffsetHas := not IsNan(Result.DashOffset);
   if not Result.DashOffsetHas then Result.DashOffset := 0;
 end;
@@ -1504,9 +1600,10 @@ begin
   Result.Color := ReadOptColor(AObj, 'color');
   Result.Opacity := NumOr(AObj, 'opacity');
   Result.BorderColor := ReadOptColor(AObj, 'borderColor');
-  Result.BorderWidthLogical := NumOr(AObj, 'borderWidth');
+  Result.BorderWidthLogical := PenWidthIn(AObj, 'borderWidth');
+  Result.BorderWidthNaN := WidthNaNIn(AObj, 'borderWidth');
   Result.Dash := ReadDash(AObj, 'borderType', Result.DashLogical);
-  Result.DashOffset := NumOr(AObj, 'borderDashOffset');
+  Result.DashOffset := PenOffsetIn(AObj, 'borderDashOffset');
   Result.DashOffsetHas := not IsNan(Result.DashOffset);
   if not Result.DashOffsetHas then Result.DashOffset := 0;
 end;
@@ -1521,9 +1618,9 @@ begin
   if AObj = nil then Exit;
   Result.Color := ReadOptColor(AObj, 'color');
   Result.Opacity := NumOr(AObj, 'opacity');
-  Result.BorderWidthLogical := NumOr(AObj, 'width');
+  Result.BorderWidthLogical := PenWidthIn(AObj, 'width');
   Result.Dash := ReadDash(AObj, 'type', Result.DashLogical);
-  Result.DashOffset := NumOr(AObj, 'dashOffset');
+  Result.DashOffset := PenOffsetIn(AObj, 'dashOffset');
   Result.DashOffsetHas := not IsNan(Result.DashOffset);
   if not Result.DashOffsetHas then Result.DashOffset := 0;
   d := AObj.Find('cap');

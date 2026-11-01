@@ -825,7 +825,9 @@ begin
     else
       el.Style.StrokeColor := AInk.Border;
     d := ChainFind(ASolved, row, 'itemStyle', 'borderWidth');
-    if (d <> nil) and (d.JSONType = jtNumber) then w := d.AsFloat else w := 1;
+    { [R6-E] a numeric string is its number }
+    if d <> nil then w := TyOptPenWidth(d) else w := 1;
+    if IsNan(w) then w := 1;
     el.Style.StrokeWidthLogical := w;
     d := ChainFind(ASolved, row, 'itemStyle', 'opacity');
     if (d <> nil) and (d.JSONType = jtNumber) then el.Style.Alpha := d.AsFloat

@@ -2364,7 +2364,9 @@ begin
       Result.HasCurveness := True;
       Result.Curveness := d.AsFloat;
     end;
-    Result.LineWidthLogical := NumIn(sub, 'width', Result.LineWidthLogical);
+    { [R6-E] a numeric string is its number }
+    if not IsNan(TyOptPenWidth(sub.Find('width'))) then
+      Result.LineWidthLogical := TyOptPenWidth(sub.Find('width'));
     Result.LineOpacity := NumIn(sub, 'opacity', Result.LineOpacity);
     { `type`, the dash [Batch 114] }
     Result.LineDash := TyReadOptStyle(node, 'lineStyle').Dash;
@@ -3130,7 +3132,8 @@ begin
   if (d <> nil) and (d.JSONType <> jtNull) then
   begin
     AEdge.HasOwnWidth := True;
-    AEdge.OwnWidth := JsNum(d);
+    { [R6-E] a numeric string is its number }
+    AEdge.OwnWidth := TyOptPenWidth(d);
   end;
   d := AStyle.Find('opacity');
   if (d <> nil) and (d.JSONType <> jtNull) then
@@ -3170,10 +3173,10 @@ begin
   { [R2-I2] the edge's own phase over the series' (edgeVisual extends the
     series' style with the item's getLineStyle, key by key) }
   d := AStyle.Find('dashOffset');
-  if (d <> nil) and (d.JSONType = jtNumber) then
+  if (d <> nil) and (d.JSONType <> jtNull) then
   begin
     AEdge.HasOwnDashOffset := True;
-    AEdge.OwnDashOffset := d.AsFloat;
+    AEdge.OwnDashOffset := TyOptPenOffset(d);
   end;
 end;
 

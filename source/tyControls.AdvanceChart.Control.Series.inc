@@ -1885,7 +1885,9 @@ begin
   Result.DashWord := TyDashWord(dash);
   { [R2-I2] its phase, the row's else the series' }
   d := TyLinesFind(raw, ANode, ['lineStyle', 'dashOffset']);
-  if (d <> nil) and (d.JSONType = jtNumber) then Result.DashOffset := d.AsFloat;
+  { [R6-E] as the canvas takes it: a numeric string its number }
+  if d <> nil then Result.DashOffset := TyOptPenOffset(d);
+  if IsNan(Result.DashOffset) then Result.DashOffset := 0;
   { THE END SYMBOLS (linesVisual): the series' pair, the row's own where it
     is truthy -- a size of 0 keeps the series' }
   syms := LnNode(ANode, ['symbol']);
@@ -2441,15 +2443,16 @@ begin
     end;
     { the series' style }
     base := TTyChartColor(SeriesColor(si));
-    d := LnNode(node, ['lineStyle', 'width']);
-    if (d <> nil) and (d.JSONType = jtNumber) then lsWidth := d.AsFloat else lsWidth := 1;
+    { [R6-E] the pen as the canvas takes it: a numeric string its number }
+    lsWidth := TyOptPenWidth(LnNode(node, ['lineStyle', 'width']));
+    if IsNan(lsWidth) then lsWidth := 1;
     d := LnNode(node, ['lineStyle', 'type']);
     if d = nil then dashWord := 'solid' else dashWord := DashText(d);
     LnDashOf(d, dash, expl);
     if d = nil then dash := todSolid;
     { [R2-I2] the phase }
-    d := LnNode(node, ['lineStyle', 'dashOffset']);
-    if (d <> nil) and (d.JSONType = jtNumber) then dashOff := d.AsFloat else dashOff := 0;
+    dashOff := TyOptPenOffset(LnNode(node, ['lineStyle', 'dashOffset']));
+    if IsNan(dashOff) then dashOff := 0;
     d := LnNode(node, ['lineStyle', 'opacity']);
     if (d <> nil) and (d.JSONType = jtNumber) then opN := d.AsFloat else opN := 0.45;
     d := LnNode(node, ['activeOpacity']);
@@ -2509,10 +2512,10 @@ begin
         if item <> nil then
         begin
           d := LnNode(item, ['lineStyle', 'dashOffset']);
-          if (d <> nil) and (d.JSONType = jtNumber) then row.DashOffset := d.AsFloat;
+          if not IsNan(TyOptPenOffset(d)) then row.DashOffset := TyOptPenOffset(d);
           if LnColour(LnNode(item, ['lineStyle', 'color']), ic) then c := ic;
           d := LnNode(item, ['lineStyle', 'width']);
-          if (d <> nil) and (d.JSONType = jtNumber) then w := d.AsFloat;
+          if not IsNan(TyOptPenWidth(d)) then w := TyOptPenWidth(d);
           d := LnNode(item, ['lineStyle', 'type']);
           if d <> nil then
           begin
