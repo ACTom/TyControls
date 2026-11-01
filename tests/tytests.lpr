@@ -128,6 +128,7 @@ uses
   test.hiddentimers,
   test.cursorloan,
   test.enteresc,
+  test.keyrepeat,
   test.analogclock,
   test.sparkline,
   test.rating,

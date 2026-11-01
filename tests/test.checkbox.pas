@@ -11,6 +11,7 @@ type
   public
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure DoKeyDown(var Key: Word; Shift: TShiftState);
+    procedure DoKeyUp(var Key: Word; Shift: TShiftState);
     function States: TTyStateSet;
     { CalculatePreferredSize is protected; the AutoSize tests must ask it DIRECTLY.
       Going through Width would measure nothing: LCL's AutoSizeDelayed suppresses every
@@ -151,6 +152,11 @@ end;
 procedure TTyCheckBoxAccess.DoKeyDown(var Key: Word; Shift: TShiftState);
 begin
   KeyDown(Key, Shift);
+end;
+
+procedure TTyCheckBoxAccess.DoKeyUp(var Key: Word; Shift: TShiftState);
+begin
+  KeyUp(Key, Shift);
 end;
 
 function TTyCheckBoxAccess.States: TTyStateSet;
@@ -396,8 +402,10 @@ begin
     C := TTyCheckBoxAccess.Create(F); C.Parent := F;
     AssertFalse('starts unchecked', C.Checked);
     K := VK_SPACE; C.DoKeyDown(K, []);
-    AssertTrue('space checked it', C.Checked);
     AssertEquals('space consumed', 0, Integer(K));
+    AssertFalse('#151: held down, not yet', C.Checked);
+    K := VK_SPACE; C.DoKeyUp(K, []);
+    AssertTrue('let go, space checked it', C.Checked);
   finally F.Free; end;
 end;
 

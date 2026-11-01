@@ -13,6 +13,7 @@ type
     function ExposedCurrentStates: TTyStateSet;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure SimulateKeyDown(var Key: Word);
+    procedure SimulateKeyUp(var Key: Word);
     // Expose the protected preferred-size calculation (what AutoSize resizes to).
     procedure CallPreferred(out AW, AH: Integer);
     // Expose the protected caption measurement the size floor is derived from.
@@ -120,6 +121,11 @@ begin
   inherited RenderTo(ACanvas, ARect, APPI);
 end;
 
+procedure TTyToggleSwitchProbe.SimulateKeyUp(var Key: Word);
+begin
+  KeyUp(Key, []);
+end;
+
 procedure TTyToggleSwitchProbe.SimulateKeyDown(var Key: Word);
 var
   Shift: TShiftState;
@@ -210,8 +216,11 @@ begin
     AssertFalse('probe starts unchecked', Probe.Checked);
     Key := VK_SPACE;
     Probe.SimulateKeyDown(Key);
-    AssertTrue('Checked after VK_SPACE', Probe.Checked);
     AssertEquals('Key should be set to 0 (consumed)', 0, Integer(Key));
+    AssertFalse('#151: held down, not yet', Probe.Checked);
+    Key := VK_SPACE;
+    Probe.SimulateKeyUp(Key);
+    AssertTrue('Checked after VK_SPACE is let go', Probe.Checked);
   finally
     Probe.Free;
   end;

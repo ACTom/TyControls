@@ -7,6 +7,7 @@ uses
 type
   TTyCheckBox = class(TTyCustomControl)
   private
+    FSpaceDown: Boolean;   // Space held down on it; it clicks on the key-up (#151)
     FState: TCheckBoxState;
     FAllowGrayed: Boolean;
     FAlignment: TLeftRight;
@@ -51,6 +52,13 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { #151: Space acts on its key-up, once -- held down, auto-repeat included, it
+      acted on every key-down. The focus leaving with the key down cancels it. }
+    procedure KeyUp(var Key: Word; Shift: TShiftState); override;
+    procedure DoExit; override;
+    { #151: the second press of a quick double click is a click too, as on a native button;
+      OnDblClick still fires. }
+    procedure DblClick; override;
     function DialogChar(var Message: TLMKey): Boolean; override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -94,6 +102,7 @@ type
 
   TTyRadioButton = class(TTyCustomControl)
   private
+    FSpaceDown: Boolean;   // Space held down on it; it clicks on the key-up (#151)
     FChecked: Boolean;
     FGroupIndex: Integer;
     FAlignment: TLeftRight;
@@ -121,6 +130,13 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { #151: Space acts on its key-up, once -- held down, auto-repeat included, it
+      acted on every key-down. The focus leaving with the key down cancels it. }
+    procedure KeyUp(var Key: Word; Shift: TShiftState); override;
+    procedure DoExit; override;
+    { #151: the second press of a quick double click is a click too, as on a native button;
+      OnDblClick still fires. }
+    procedure DblClick; override;
     function DialogChar(var Message: TLMKey): Boolean; override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -239,9 +255,35 @@ begin
   inherited KeyDown(Key, Shift);
   if Key = VK_SPACE then
   begin
-    Click;
+    FSpaceDown := True;   // the key-up clicks
     Key := 0;
   end;
+end;
+
+procedure TTyCheckBox.KeyUp(var Key: Word; Shift: TShiftState);
+begin
+  inherited KeyUp(Key, Shift);
+  if (Key = VK_SPACE) and FSpaceDown then
+  begin
+    FSpaceDown := False;
+    Key := 0;
+    Click;
+  end;
+end;
+
+procedure TTyCheckBox.DoExit;
+begin
+  FSpaceDown := False;
+  inherited DoExit;
+end;
+
+procedure TTyCheckBox.DblClick;
+begin
+  { LCL does not mark a double click's press csClicked, so its button-up clicked nothing and
+    the second of two quick clicks was lost. Marked here, the button-up clicks as the first
+    one's did -- inside the control only. }
+  ControlState := ControlState + [csClicked];
+  inherited DblClick;
 end;
 
 procedure TTyCheckBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -566,9 +608,35 @@ begin
   inherited KeyDown(Key, Shift);
   if Key = VK_SPACE then
   begin
-    Click;
+    FSpaceDown := True;   // the key-up clicks
     Key := 0;
   end;
+end;
+
+procedure TTyRadioButton.KeyUp(var Key: Word; Shift: TShiftState);
+begin
+  inherited KeyUp(Key, Shift);
+  if (Key = VK_SPACE) and FSpaceDown then
+  begin
+    FSpaceDown := False;
+    Key := 0;
+    Click;
+  end;
+end;
+
+procedure TTyRadioButton.DoExit;
+begin
+  FSpaceDown := False;
+  inherited DoExit;
+end;
+
+procedure TTyRadioButton.DblClick;
+begin
+  { LCL does not mark a double click's press csClicked, so its button-up clicked nothing and
+    the second of two quick clicks was lost. Marked here, the button-up clicks as the first
+    one's did -- inside the control only. }
+  ControlState := ControlState + [csClicked];
+  inherited DblClick;
 end;
 
 procedure TTyRadioButton.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);

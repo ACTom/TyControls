@@ -15,6 +15,7 @@ function TyToggleKnobX(ATrackWidthDev, AMarginDev, AKnobSideDev: Integer;
 type
   TTyToggleSwitch = class(TTyCustomControl)
   private
+    FSpaceDown: Boolean;   // Space held down on it; it toggles on the key-up (#151)
     FChecked: Boolean;
     FCaption: TCaption;
     FOnChange: TNotifyEvent;
@@ -62,6 +63,13 @@ type
     procedure Invalidate; override;
     procedure Paint; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { #151: Space acts on its key-up, once -- held down, auto-repeat included, it
+      acted on every key-down. The focus leaving with the key down cancels it. }
+    procedure KeyUp(var Key: Word; Shift: TShiftState); override;
+    procedure DoExit; override;
+    { #151: the second press of a quick double click is a click too, as on a native button;
+      OnDblClick still fires. }
+    procedure DblClick; override;
     // Steppable animation seam (no wall-clock): advance the knob slide by AMs
     // and return True iff the eased progress changed. Tests drive this directly
     // via an access subclass; the lazy TTimer drives it at runtime.
@@ -362,9 +370,35 @@ begin
     it; it toggled the switch and was swallowed. }
   if Key = VK_SPACE then
   begin
-    Toggle;
+    FSpaceDown := True;   // the key-up toggles
     Key := 0;
   end;
+end;
+
+procedure TTyToggleSwitch.KeyUp(var Key: Word; Shift: TShiftState);
+begin
+  inherited KeyUp(Key, Shift);
+  if (Key = VK_SPACE) and FSpaceDown then
+  begin
+    FSpaceDown := False;
+    Key := 0;
+    Click;   // toggles and fires OnClick, as a click and the check box's Space do
+  end;
+end;
+
+procedure TTyToggleSwitch.DoExit;
+begin
+  FSpaceDown := False;
+  inherited DoExit;
+end;
+
+procedure TTyToggleSwitch.DblClick;
+begin
+  { LCL does not mark a double click's press csClicked, so its button-up clicked nothing and
+    the second of two quick clicks was lost. Marked here, the button-up clicks as the first
+    one's did -- inside the control only. }
+  ControlState := ControlState + [csClicked];
+  inherited DblClick;
 end;
 
 procedure TTyToggleSwitch.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);

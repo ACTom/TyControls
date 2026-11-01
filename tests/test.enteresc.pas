@@ -24,6 +24,7 @@ type
     procedure NodeActivated(Sender: TTyTreeView; Node: PTyTreeNode);
     procedure CalcResult(Sender: TObject);
     function Press(C: TWinControl; AKey: Word): Word;
+    procedure Up(C: TWinControl; AKey: Word);
     procedure TypeChar(C: TWinControl; const AChar: string);
   protected
     procedure SetUp; override;
@@ -91,6 +92,14 @@ function TEnterEscTest.Press(C: TWinControl; AKey: Word): Word;
 begin
   Result := AKey;
   TCrack(C).KeyDown(Result, []);
+end;
+
+procedure TEnterEscTest.Up(C: TWinControl; AKey: Word);
+var
+  k: Word;
+begin
+  k := AKey;
+  TCrack(C).KeyUp(k, []);
 end;
 
 procedure TEnterEscTest.TypeChar(C: TWinControl; const AChar: string);
@@ -191,8 +200,9 @@ begin
   s.Parent := FForm;
   AssertEquals('Enter goes on to the default button', VK_RETURN, Press(s, VK_RETURN));
   AssertFalse('and toggles nothing', s.Checked);
-  AssertEquals('Space toggles', 0, Press(s, VK_SPACE));
-  AssertTrue('toggled', s.Checked);
+  AssertEquals('Space is the switch''s', 0, Press(s, VK_SPACE));
+  Up(s, VK_SPACE);
+  AssertTrue('and toggles it, on the key-up (#151)', s.Checked);
 end;
 
 initialization
