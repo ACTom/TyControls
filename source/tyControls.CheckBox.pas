@@ -12,12 +12,17 @@ type
     FAllowGrayed: Boolean;
     FAlignment: TLeftRight;
     FRefitting: Boolean;   // guards the AutoSize re-fit in Invalidate against re-entry
+    FClicksDisabled: Boolean;
     FOnChange: TNotifyEvent;
     function GetChecked: Boolean;
     procedure SetState(const AValue: TCheckBoxState);
     procedure SetChecked(const AValue: Boolean);
     procedure SetAlignment(const AValue: TLeftRight);
   protected
+    { #188: as LCL's -- while it is on, a change of State fires OnChange but not OnClick. For
+      code that keeps a box in step with something else (a data field, a select-all box) and
+      must not run the box's click handler doing it. }
+    property ClicksDisabled: Boolean read FClicksDisabled write FClicksDisabled;
     function GetStyleTypeKey: string; override;
     function CurrentStates: TTyStateSet; override;
     { 控件真正需要的宽度:主题 padding + 指示框 + 间距 + 量出来的标题 —— 也就是 RenderTo
@@ -161,11 +166,14 @@ type
     FGroupIndex: Integer;
     FAlignment: TLeftRight;
     FRefitting: Boolean;   // guards the AutoSize re-fit in Invalidate against re-entry
+    FClicksDisabled: Boolean;
     FOnChange: TNotifyEvent;
     procedure SetChecked(const AValue: Boolean);
     procedure SetAlignment(const AValue: TLeftRight);
     procedure UncheckSiblings;
   protected
+    { #188: as TTyCustomCheckBox.ClicksDisabled. }
+    property ClicksDisabled: Boolean read FClicksDisabled write FClicksDisabled;
     function GetStyleTypeKey: string; override;
     function CurrentStates: TTyStateSet; override;
     { 与 TTyCheckBox.CalculatePreferredSize 同理,只是指示器读的是 --radio-size /
@@ -379,6 +387,10 @@ begin
   FState := AValue;
   Invalidate;
   if Assigned(FOnChange) then FOnChange(Self);
+  { #188: OnClick on every change of State, the user's or the code's, as LCL's DoClickOnChange
+    (customcheckbox.inc) -- not only for a click. Not while the form is read or torn down. }
+  if not FClicksDisabled and ([csLoading, csDestroying] * ComponentState = []) then
+    inherited Click;
 end;
 
 procedure TTyCustomCheckBox.SetChecked(const AValue: Boolean);
@@ -394,6 +406,8 @@ end;
 procedure TTyCustomCheckBox.Click;
 begin
   if not IsEnabled then Exit;
+  { The click changes State, and the change clicks (SetState): OnClick fires once, with the
+    new state in place. }
   if FAllowGrayed then
     case FState of
       cbUnchecked: SetState(cbChecked);
@@ -402,7 +416,6 @@ begin
     end
   else
     SetChecked(FState <> cbChecked);
-  inherited Click;
 end;
 
 procedure TTyCustomCheckBox.KeyDown(var Key: Word; Shift: TShiftState);
@@ -714,6 +727,10 @@ begin
                              // SetChecked, so it fires ITS OnChange + Invalidates
   Invalidate;
   if Assigned(FOnChange) then FOnChange(Self);
+  { #188: OnClick when it becomes checked, from a click or from code, as LCL's
+    TRadioButton.DoClickOnChange; the one unchecked by it fires only OnChange. }
+  if FChecked and not FClicksDisabled and not (csDestroying in ComponentState) then
+    inherited Click;
 end;
 
 procedure TTyCustomRadioButton.UncheckSiblings;
@@ -735,8 +752,9 @@ end;
 procedure TTyCustomRadioButton.Click;
 begin
   if not IsEnabled then Exit;
+  { Becoming checked clicks (SetChecked); one already checked does not change, so a click on
+    it fires nothing, as in LCL. }
   SetChecked(True);
-  inherited Click;
 end;
 
 procedure TTyCustomRadioButton.KeyDown(var Key: Word; Shift: TShiftState);

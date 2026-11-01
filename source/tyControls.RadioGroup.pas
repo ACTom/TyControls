@@ -127,6 +127,9 @@ type
       a real-window check during development proved that the request lands. }
     procedure FocusItem(AIndex: Integer); virtual;
     procedure SetParent(AParent: TWinControl); override;
+    { #188: a click on the frame, the caption or an empty area is not a choice. OnClick fires
+      when ItemIndex changes (NotifySelection), as LCL's. }
+    procedure Click; override;
     procedure DoOnResize; override;
     { #146: the row pitch comes from the theme and the font: place the radios again. }
     procedure StyleLayoutChanged; override;
@@ -897,6 +900,11 @@ begin
   inherited SetParent(AParent);
   // Once we have a parent (and thus a valid ClientRect), re-place the children.
   LayoutButtons;
+end;
+
+procedure TTyCustomRadioGroup.Click;
+begin
+  // nothing: see the declaration
 end;
 
 procedure TTyCustomRadioGroup.DoOnResize;

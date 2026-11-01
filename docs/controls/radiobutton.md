@@ -62,7 +62,7 @@ TTyRadioButton 继承自 `TTyCustomControl`（`tyControls.Base`）：
 
 | 事件 | 类型 | 触发时机 |
 |------|------|----------|
-| `OnClick` | `TNotifyEvent` | 用户点击控件时（`Checked` 已在此时设为 `True`，同组其他按钮已取消选中） |
+| `OnClick` | `TNotifyEvent` | 变为选中时：用户点击或代码设 `Checked := True`，与 LCL 一致（同组其他按钮已取消选中，`OnChange` 已发）。被取消选中的那个不触发；点一个已经选中的也不触发。 |
 | `OnChange` | `TNotifyEvent` | **（API parity 新增）** `Checked` 实际改变时触发。选中某个单选钮时：被取消选中的**同组兄弟**各自经过自己的 `SetChecked(False)`，因此**各自触发**其 `OnChange`；随后被选中的本钮再触发自己的 `OnChange`。设为当前值不触发。 |
 
 > 除上表外，TTyRadioButton 还暴露**基线事件集**（Tier A + Tier B，因其为可聚焦的 `TTyCustomControl`）。完整清单见 [../events.md](../events.md)。
@@ -188,7 +188,7 @@ G2B.Caption := '蓝色';
 - **按 Parent × GroupIndex 分组互斥：** `UncheckSiblings` 方法遍历 `Parent.Controls`，仅将与自身 `GroupIndex` 相同的 `TTyRadioButton` 兄弟控件的 `Checked` 设为 `False`。**分组边界由 `Parent` 与 `GroupIndex` 共同决定**。若要在同一父容器下实现两个独立单选组，只需为每组设置不同的 `GroupIndex`（或将它们分别放在两个不同容器内）。
 - **点击只能选中，不能取消：** `Click` 方法始终调用 `SetChecked(True)`，点击已选中项不会取消选中。若需要"可取消"的单选行为，需自行扩展。
 - **`SetChecked(False)` 不触发互斥：** 直接通过代码将 `Checked` 设为 `False` 时，不会触发 `UncheckSiblings`，因为互斥逻辑只在 `SetChecked` 中 `FChecked = True` 时执行。
-- **OnClick 事件时序：** `Click` 先调用 `SetChecked(True)`（同步完成互斥），再调用 `inherited Click`（触发 `OnClick`），因此在 `OnClick` 处理器中读取 `Checked` 已为最终值，同组其他按钮也已完成取消。
+- **OnClick 事件时序：** 变为选中时先取消同组其他按钮（各自只发 `OnChange`），再发本按钮的 `OnChange`、`OnClick`，所以 `OnClick` 里读到的已是最终状态。已经选中的按钮再被点击，状态不变，什么都不触发。
 - **opacity / shadow 现已生效（v1.1）：** `DrawFrame` 路径现在同样应用于 `TTyRadioButton` 的外层绘制；`opacity` 和 `shadow` 属性可在主题中正常使用。
 - **控件整体无背景：** 主题中的 `background` 和 `border` 只作用于圆圈本身，控件整体保持透明。
 - **同单元注意：** `TTyCheckBox` 和 `TTyRadioButton` 定义在同一单元 `tyControls.CheckBox` 中，`uses` 一次即可同时使用两者。
