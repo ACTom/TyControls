@@ -1609,17 +1609,6 @@ end;
 
 { ==================== labels ==================== }
 
-{ [R6-A] whether a node's `label` writes a distance }
-function LabelWritesDistance(ANode: TJSONObject): Boolean;
-var lb: TJSONObject;
-begin
-  Result := False;
-  if ANode = nil then Exit;
-  lb := ObjIn(ANode, 'label');
-  Result := (lb <> nil) and (lb.Find('distance') <> nil)
-    and (lb.Find('distance').JSONType = jtNumber);
-end;
-
 function TyTreemapLabelSpecs(const ASolved: TTyTreemapSolved;
   const ASeriesSpec: TTyLabelSpec): TTyLabelSpecArray;
 var
@@ -1637,11 +1626,9 @@ begin
     it := ItemOf(ASolved, row);
     if it <> nil then base := TyLabelSpecOfNode(ObjIn(it, 'label'), ASolved.Series, base);
     { [R6-A] the states' textConfig along the node's model chain: its item,
-      its level, the series -- over the normal label's distance, which is
-      TreemapSeries' 0 unless one of them writes it }
+      its level, the series (the placement reads the normal distance
+      itself, PlaceOf) }
     TyLabelReadStateCfg([it, lv, ASolved.Series], base);
-    if not LabelWritesDistance(it) and not LabelWritesDistance(lv)
-      and not LabelWritesDistance(ASolved.Series) then base.DistanceLogical := 0;
     { the mark places and cuts the words itself }
     base.OffsetXLogical := 0;
     base.OffsetYLogical := 0;
