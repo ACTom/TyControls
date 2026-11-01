@@ -8110,6 +8110,371 @@
    ]
   },
   {
+   "id": "bar.layout.cut",
+   "note": "labelLayout width 30 on 'value {c}' labels, overflow truncate; emphasis.label position right: the cut words",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       12,
+       30,
+       18,
+       25
+      ],
+      "label": {
+       "show": true,
+       "position": "top",
+       "formatter": "value {c}",
+       "overflow": "truncate"
+      },
+      "labelLayout": {
+       "width": 30
+      },
+      "emphasis": {
+       "label": {
+        "position": "right"
+       }
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "type": "highlight",
+     "seriesIndex": 0,
+     "dataIndex": 2
+    }
+   ],
+   "states": [
+    [
+     {
+      "d": 0,
+      "ignore": false,
+      "text": "value 12",
+      "x": "4062480000000000",
+      "y": "406aa00000000000",
+      "m": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000"
+      ],
+      "align": "center",
+      "verticalAlign": "bottom",
+      "rect": [
+       "4060b0f5c28f5c29",
+       "4069200000000000",
+       "403970a3d70a3d71",
+       "4028000000000000"
+      ],
+      "fill": "#333",
+      "inside": false,
+      "fontSize": "4028000000000000"
+     },
+     {
+      "d": 1,
+      "ignore": false,
+      "text": "value 30",
+      "x": "40702c0000000000",
+      "y": "404e000000000000",
+      "m": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000"
+      ],
+      "align": "center",
+      "verticalAlign": "bottom",
+      "rect": [
+       "406ec0f5c28f5c29",
+       "4048000000000000",
+       "403970a3d70a3d71",
+       "4028000000000000"
+      ],
+      "fill": "#333",
+      "inside": false,
+      "fontSize": "4028000000000000"
+     },
+     {
+      "d": 2,
+      "ignore": false,
+      "text": "value 18",
+      "x": "4077340000000000",
+      "y": "4064400000000000",
+      "m": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000"
+      ],
+      "align": "center",
+      "verticalAlign": "bottom",
+      "rect": [
+       "4076687ae147ae14",
+       "4062c00000000000",
+       "403970a3d70a3d71",
+       "4028000000000000"
+      ],
+      "fill": "#333",
+      "inside": false,
+      "fontSize": "4028000000000000"
+     },
+     {
+      "d": 3,
+      "ignore": false,
+      "text": "value 25",
+      "x": "407e3c0000000000",
+      "y": "4059a00000000000",
+      "m": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000"
+      ],
+      "align": "center",
+      "verticalAlign": "bottom",
+      "rect": [
+       "407d707ae147ae14",
+       "4056a00000000000",
+       "403970a3d70a3d71",
+       "4028000000000000"
+      ],
+      "fill": "#333",
+      "inside": false,
+      "fontSize": "4028000000000000"
+     }
+    ],
+    [
+     {
+      "d": 0,
+      "ignore": false,
+      "text": "value 12",
+      "x": "4062480000000000",
+      "y": "406aa00000000000",
+      "m": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000"
+      ],
+      "align": "center",
+      "verticalAlign": "bottom",
+      "rect": [
+       "4060b0f5c28f5c29",
+       "4069200000000000",
+       "403970a3d70a3d71",
+       "4028000000000000"
+      ],
+      "fill": "#333",
+      "inside": false,
+      "fontSize": "4028000000000000"
+     },
+     {
+      "d": 1,
+      "ignore": false,
+      "text": "value 30",
+      "x": "40702c0000000000",
+      "y": "404e000000000000",
+      "m": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000"
+      ],
+      "align": "center",
+      "verticalAlign": "bottom",
+      "rect": [
+       "406ec0f5c28f5c29",
+       "4048000000000000",
+       "403970a3d70a3d71",
+       "4028000000000000"
+      ],
+      "fill": "#333",
+      "inside": false,
+      "fontSize": "4028000000000000"
+     },
+     {
+      "d": 2,
+      "ignore": false,
+      "text": "value 18",
+      "x": "4079f10000000000",
+      "y": "406e700000000000",
+      "m": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000"
+      ],
+      "align": "left",
+      "verticalAlign": "middle",
+      "rect": [
+       "4079f10000000000",
+       "406db00000000000",
+       "403970a3d70a3d71",
+       "4028000000000000"
+      ],
+      "fill": "#333",
+      "inside": false,
+      "fontSize": "4028000000000000"
+     },
+     {
+      "d": 3,
+      "ignore": false,
+      "text": "value 25",
+      "x": "407e3c0000000000",
+      "y": "4059a00000000000",
+      "m": [
+       "3ff0000000000000",
+       "0000000000000000",
+       "0000000000000000",
+       "3ff0000000000000"
+      ],
+      "align": "center",
+      "verticalAlign": "bottom",
+      "rect": [
+       "407d707ae147ae14",
+       "4056a00000000000",
+       "403970a3d70a3d71",
+       "4028000000000000"
+      ],
+      "fill": "#333",
+      "inside": false,
+      "fontSize": "4028000000000000"
+     }
+    ]
+   ]
+  },
+  {
+   "id": "graph.edge.arrow",
+   "note": "arrows at both ends; emphasis.edgeLabel position insideBottomRight: the end arrow's turned rect",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "edgeSymbol": [
+       "arrow",
+       "arrow"
+      ],
+      "edgeSymbolSize": 14,
+      "edgeLabel": {
+       "show": true
+      },
+      "emphasis": {
+       "edgeLabel": {
+        "position": "insideBottomRight"
+       }
+      },
+      "data": [
+       {
+        "name": "a",
+        "x": 100,
+        "y": 100
+       },
+       {
+        "name": "b",
+        "x": 400,
+        "y": 260
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "b"
+       }
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "type": "highlight",
+     "seriesIndex": 0,
+     "dataType": "edge",
+     "dataIndex": 0
+    }
+   ],
+   "states": [
+    [
+     {
+      "d": 0,
+      "ignore": false,
+      "text": "a > b",
+      "x": "4072d78787878788",
+      "y": "4068a7c3c3c3c3c4",
+      "m": [
+       "3fec3c3c3c3c3c3d",
+       "3fde1e1e1e1e1e1d",
+       "bfde1e1e1e1e1e1d",
+       "3fec3c3c3c3c3c3d"
+      ],
+      "align": "center",
+      "verticalAlign": "bottom",
+      "rect": [
+       "4072181818181819",
+       "406688be57f18b25",
+       "403d939393939390",
+       "403759c0268cf358"
+      ],
+      "fill": "#333",
+      "inside": false,
+      "fontSize": "4028000000000000"
+     }
+    ],
+    [
+     {
+      "d": 0,
+      "ignore": false,
+      "text": "a > b",
+      "x": "4080ab9b9b9b9b9c",
+      "y": "407481ffffffffff",
+      "m": [
+       "3fec3c3c3c3c3c3d",
+       "3fde1e1e1e1e1e1d",
+       "bfde1e1e1e1e1e1d",
+       "3fec3c3c3c3c3c3d"
+      ],
+      "align": "center",
+      "verticalAlign": "bottom",
+      "rect": [
+       "40804be3e3e3e3e4",
+       "4073727d4a16e3b0",
+       "403d9393939393a0",
+       "403759c0268cf350"
+      ],
+      "fill": "#333",
+      "inside": false,
+      "fontSize": "4028000000000000"
+     }
+    ]
+   ],
+   "edges": true
+  },
+  {
    "id": "tree.radial",
    "note": "radial tree; emphasis.label position top",
    "option": {
