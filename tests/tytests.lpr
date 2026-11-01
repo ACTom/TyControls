@@ -136,6 +136,7 @@ uses
   test.retiredprops,
   test.capturelost,
   test.hiddentimers,
+  test.cursorloan,
   test.analogclock,
   test.sparkline,
   test.rating,
