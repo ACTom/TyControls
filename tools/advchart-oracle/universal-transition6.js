@@ -661,6 +661,12 @@ function chartCases() {
       series: [{ type: 'scatter', id: 's', symbolSize: 16, universalTransition: { enabled: true, seriesKey: 'k' },
         encode: { x: 0, y: 1, itemGroupId: 0 }, data: [[0, 2], [1, 3], [0, 4], [1, 5]] }] }),
       s(gCart([gBars()]))]);
+  add('enc.partial-x', 'symbols on a category axis whose encode writes y alone: x takes the first dimension nobody holds '
+    + '(the group dimension does not hold it), so the group is that coordinate -- the category\'s name',
+    [s({ color: PALETTE, xAxis: { type: 'category', data: ['A', 'B'] }, yAxis: { type: 'value', min: 0, max: 10 },
+      series: [{ type: 'scatter', id: 's', symbolSize: 16, universalTransition: { enabled: true, seriesKey: 'k' },
+        encode: { y: 1, itemGroupId: 0 }, data: [[0, 2], [1, 3], [0, 4], [1, 5]] }] }),
+      s(gCart([gBars()]))]);
   add('enc.dataset-child', 'a dataset\'s child group column drilling down from bars (childGroupId -> groupId)',
     [s(gCart([gBars({ data: [{ name: 'A', value: 6, childGroupId: 'A' }, { name: 'B', value: 9, childGroupId: 'B' }] })])),
       s(Object.assign(sCart([dsScat({ encode: { x: 'p', y: 'v', itemGroupId: 'grp' } })]), { dataset: { source: DS } }))]);
@@ -791,6 +797,8 @@ function guards(charts) {
   must(oldG('enc.own-ordinal-empty', 's') === 'x,,x,', 'enc.own-ordinal-empty: ' + oldG('enc.own-ordinal-empty', 's'));
   must(combs(byId('enc.own-ordinal-empty')).length === 1, 'enc.own-ordinal-empty: not one combining');
   must(oldG('enc.category-index', 's') === 'A,B,A,B', 'enc.category-index: ' + oldG('enc.category-index', 's'));
+  must(oldG('enc.partial-x', 's') === 'A,B,A,B', 'enc.partial-x: ' + oldG('enc.partial-x', 's'));
+  must(combs(byId('enc.partial-x')).length === 2, 'enc.partial-x: not two combining');
   for (const id of ['enc.dataset', 'enc.dataset-row', 'enc.dataset-time', 'enc.own-time', 'enc.category-index']) {
     must(combs(byId(id)).length === 2, id + ': not two combining');
   }

@@ -609,18 +609,31 @@ var
     else Result := TyParseDataValue(v, ddtFloat);
   end;
 
-  { the store's coordinate dimension that reads column ADim; -1 none }
+  { the store's coordinate dimension that reads column ADim; -1 none --
+    [R6-C] a coordinate the series' own encode leaves out takes the next
+    dimension no coordinate holds (createDimensions; the group's own
+    dimension holds none), as the store was filled }
   function StoreDimOf(ADim: Integer): Integer;
   var
     k, col: Integer;
     nm: string;
-    anyEnc: Boolean;
+    coord: TTyCoordDimArray;
+    enc: TTySeriesEncode;
   begin
     Result := -1;
     if st = nil then Exit;
-    anyEnc := False;
-    for k := 0 to st.DimCount - 1 do
-      if EncDim(st.DimName(k)) >= 0 then anyEnc := True;
+    enc := Default(TTySeriesEncode);
+    if not useSrc then
+    begin
+      SetLength(coord, st.DimCount);
+      for k := 0 to st.DimCount - 1 do
+      begin
+        coord[k].Name := st.DimName(k);
+        coord[k].Ordinal := st.DimType(k) = ddtOrdinal;
+      end;
+      enc := TyEncodeOf(FOption, ASeries, TySeriesDimsSource(FOption, ASeries), coord);
+      if enc.Given then TyEncodeFillUnclaimed(enc, Width);
+    end;
     for k := 0 to st.DimCount - 1 do
     begin
       nm := st.DimName(k);
@@ -628,8 +641,8 @@ var
         and (nm <> 'single') then Continue;
       if useSrc and (slot <= High(FEncodes)) and (k <= High(FEncodes[slot].Columns)) then
         col := FEncodes[slot].Columns[k]
-      else if anyEnc then
-        col := EncDim(nm)
+      else if enc.Given and (k <= High(enc.Columns)) then
+        col := enc.Columns[k]
       else
         col := k;
       if col = ADim then Exit(k);
