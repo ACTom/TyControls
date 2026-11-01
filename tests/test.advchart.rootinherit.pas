@@ -18,7 +18,7 @@ interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
-     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
+     tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option, tyControls.AdvanceChart.OptionMerge,
      tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
      tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.Builder,
      tyControls.AdvanceChart.Single, tyControls.AdvanceChart.Parallel,
@@ -58,6 +58,7 @@ type
     procedure Verdict(AMinimum: Integer);
     procedure Load(ACase: TJSONObject);
     procedure Draw(ACase: TJSONObject);
+    procedure SameLabels(ASeries: Integer; AWant: TJSONArray);
     function Cases(const AGroup: string): TJSONArray;
   protected
     procedure SetUp; override;
@@ -71,6 +72,8 @@ type
     procedure TestTheDiagnosticsKnowTheRootKeys;
     procedure TestTheRootReachesFurtherDownTheChain;
     procedure TestTheClimbNeedsAnObjectRoot;
+    procedure TestTheRootDefaultsAreTheDists;
+    procedure TestTheRootKeysAreNoneOfGetOption;
   end;
 
 implementation
@@ -696,6 +699,13 @@ begin
         if Length(sel) <> cs.Arrays['selected'].Count then
           Miss(Format('%d selected here, %d upstream', [Length(sel), cs.Arrays['selected'].Count]));
       end;
+      { [spec 242] each series' labels that draw, in data order }
+      if cs.Find('labels') <> nil then
+      begin
+        items := cs.Arrays['labels'];
+        for s := 0 to items.Count - 1 do
+          SameLabels(s, items.Objects[s].Arrays['texts']);
+      end;
       { a treemap's z }
       if cs.Strings['id'] = 'c-treemap-z' then
       begin
@@ -934,6 +944,101 @@ end;
 
 { the climb reads the root only when it is an object: none (no option) or
   an option that is no object leaves a null or missing key as it was }
+{ [spec 242] series ASeries' label texts that draw (one a data index, in
+  data order) against upstream's }
+procedure TAdvChartRootInheritOracleTest.SameLabels(ASeries: Integer; AWant: TJSONArray);
+var
+  i, k, best: Integer;
+  got, want: string;
+  seen: array of Boolean;
+  e: TTyChartElement;
+begin
+  got := '';
+  seen := nil;
+  repeat
+    best := -1;
+    for i := 0 to FChart.List.Count - 1 do
+    begin
+      e := FChart.List.Element(i);
+      if (e.Datum.SeriesIndex <> ASeries) or e.Ignore or (e.Caption.Text = '')
+        or (e.Datum.DataIndex < 0) then Continue;
+      if (e.Datum.DataIndex <= High(seen)) and seen[e.Datum.DataIndex] then Continue;
+      if (best < 0) or (e.Datum.DataIndex < FChart.List.Element(best).Datum.DataIndex) then
+        best := i;
+    end;
+    if best >= 0 then
+    begin
+      e := FChart.List.Element(best);
+      if e.Datum.DataIndex > High(seen) then SetLength(seen, e.Datum.DataIndex + 1);
+      seen[e.Datum.DataIndex] := True;
+      if got <> '' then got := got + '|';
+      got := got + e.Caption.Text;
+    end;
+  until best < 0;
+  want := '';
+  for k := 0 to AWant.Count - 1 do
+  begin
+    if want <> '' then want := want + '|';
+    want := want + AWant.Strings[k];
+  end;
+  Inc(FCompared);
+  if got <> want then Miss(Format('series %d labels "%s", upstream "%s"', [ASeries, got, want]));
+end;
+
+{ [spec 242] the port's table of the defaults the root's object keys do not
+  reach is the dist's }
+procedure TAdvChartRootInheritOracleTest.TestTheRootDefaultsAreTheDists;
+var
+  want: TJSONArray;
+  got: TTyStringArray;
+  i: Integer;
+begin
+  want := TJSONObject(FRoot).Arrays['rootDefaultPaths'];
+  got := TyRootDefaultPaths;
+  AssertEquals('as many', want.Count, Length(got));
+  for i := 0 to want.Count - 1 do
+    AssertEquals(Format('path %d', [i]), want.Strings[i], got[i]);
+end;
+
+{ [spec 242] what the root's keys put into the series is no part of
+  getOption, and a merge works on the series' own option }
+procedure TAdvChartRootInheritOracleTest.TestTheRootKeysAreNoneOfGetOption;
+var
+  opt: TTyChartOption;
+  d: TJSONData;
+  rep: TTyMergeReport;
+begin
+  opt := TTyChartOption.Create;
+  try
+    AssertTrue(opt.SetOptionText('{"label": {"show": true, "formatter": "x"},' +
+      ' "series": [{"type": "bar", "data": [1]}, {"type": "pie", "label": {"color": "red"}, "data": [1]},' +
+      ' {"type": "bar", "label": null, "data": [1]}]}'));
+    AssertTrue('the bar takes the root''s label', opt.Find('series[0].label.show') <> nil);
+    AssertTrue('the pie its formatter', opt.Find('series[1].label.formatter') <> nil);
+    AssertTrue('not its show (a default)', opt.Find('series[1].label.show') = nil);
+    d := GetJSON(opt.OptionJson);
+    try
+      AssertTrue('getOption: no label on the bar', d.FindPath('series[0].label') = nil);
+      AssertEquals('getOption: the pie''s own label', '{ "color" : "red" }',
+        d.FindPath('series[1].label').AsJSON);
+      AssertTrue('getOption: the null kept', d.FindPath('series[2].label').JSONType = jtNull);
+    finally
+      d.Free;
+    end;
+    { a merge over the series' own: the root's new formatter reaches it }
+    AssertTrue(opt.MergeOptionText('{"label": {"formatter": "y"}}', nil, rep));
+    AssertEquals('the merged root reaches the bar', 'y', opt.Find('series[0].label.formatter').AsString);
+    d := GetJSON(opt.OptionJson);
+    try
+      AssertTrue('getOption after the merge: still none on the bar', d.FindPath('series[0].label') = nil);
+    finally
+      d.Free;
+    end;
+  finally
+    opt.Free;
+  end;
+end;
+
 procedure TAdvChartRootInheritOracleTest.TestTheClimbNeedsAnObjectRoot;
 var
   box: TTyRawBox;

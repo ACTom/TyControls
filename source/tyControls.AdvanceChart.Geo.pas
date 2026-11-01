@@ -191,6 +191,9 @@ type
     Silent: Boolean;
     Clip: Boolean;
     Z, ZLevel: Integer;
+    { [spec 244] the fraction of a z that is not whole: Z is its floor, so
+      (Z, ZFrac) orders as the number zrender sorts by }
+    ZFrac: Double;
     { the box after mergeLayoutParam, a null or absent key climbing to the
       option root as getShallow does }
     Box: TTyRawBox;
@@ -278,6 +281,9 @@ type
     FillHas, StrokeHas, WidthHas, DashHas: Boolean;
     FillToken, StrokeToken: TTyGeoToken;
     FillInherit: Boolean;
+    { [R5-A] the itemStyle's shadow keys the chain writes (getItemStyle's;
+      a state's are sparse too) }
+    Shadow: TTyStObject;
   end;
 
   { [Batch 148] one state's label (setLabelStyle's state object and
@@ -304,6 +310,12 @@ type
     OffX, OffY: Double;
     HasRotate: Boolean;
     RotationRad: Double;
+    { [R5-C] the state's own position word (createTextConfig: a word on the
+      region's rect, its distance -- the state's, else 5), Ord of the label
+      unit's TTyLabelPosition }
+    HasPosition: Boolean;
+    Position: Integer;
+    Distance: Double;
   end;
 
   TTyGeoLabel = record
@@ -345,6 +357,16 @@ type
     RotationRad: Double;
     Silent: Boolean;
     States: array[TTyStName] of TTyGeoLabelState;
+    { [R5-C] THE TEXT'S BLOCK -- rich, a box, a size, a line height, an
+      overflow, a text shadow -- the label's keys down the region's chain
+      (JSON, '' none); its own stroke (textBorderColor / Width) for the one
+      run; the layout rect through the transform (a state's position word
+      places on it) }
+    BlockJson: string;
+    HasTextBorder: Boolean;
+    TextBorderColour: TTyChartColor;
+    TextBorderWidth: Double;
+    TrRect: TTyXYWH;
   end;
 
   { One compound path. Subs and Drawn are local -- before the roam -- in
@@ -517,6 +539,12 @@ type
     { [Batch 148] the root option's keys a region model's chain reaches
       (itemStyle, label, emphasis, select, blur), a copy }
     FRoot: TJSONObject;
+    { [spec 242] addGeoCoord's map: a map series' `geoCoord` (ECharts 2),
+      name to coordinate, the last one set for a name winning }
+    FNameCoords: array of record
+      Name: string;
+      X, Y: Double;
+    end;
     { the region options, merged with their echartsStyle, by name (owned) }
     FOptNames: TTyStringArray;
     FOpts: array of TJSONObject;
@@ -620,6 +648,9 @@ type
     { getRegion / getGeoCoord }
     function RegionByName(const AName: string): TTyGeoRegion;
     function GeoCoord(const AName: string; out APt: TTyGeoPt): Boolean;
+    { [spec 242] addGeoCoord: a name's coordinate, asked before the
+      region's centre (setGeoCoords from a map series' geoCoord) }
+    procedure AddGeoCoord(const AName: string; AX, AY: Double);
     { dataToPoint of a coordinate pair, through the projection and the
       overall (ANoRoam: the raw) matrix; False is upstream's undefined }
     function PointOf(AX, AY: Double; out APx: TTyPointF;
@@ -862,6 +893,7 @@ uses
   tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Convert,
   tyControls.AdvanceChart.Calendar,
   tyControls.AdvanceChart.Labels, tyControls.AdvanceChart.OptionMerge,
+  tyControls.AdvanceChart.RichStyle, jsonparser,
   tyControls.AdvanceChart.Scale;
 
 const
@@ -2297,6 +2329,7 @@ var
   k: Integer;
   gs: TTyGraphSpec;
   v: TTyBoxRaw;
+  zv: Double;
 
   function BoxRawOwn(const AKey: string): TTyCalBoxKey;
   var x: TJSONData;
@@ -2353,10 +2386,23 @@ begin
   begin
     { the series' z, MapSeries' 2 by default }
     d := node.Find('z');
-    if (d <> nil) and (d.JSONType = jtNumber) and JsFinite(d.AsFloat) then Result.Z := Trunc(d.AsFloat)
+    if (d <> nil) and (d.JSONType = jtNumber) and JsFinite(d.AsFloat) then
+    begin
+      zv := Max(Double(-100000), Min(Double(100000), d.AsFloat));
+      Result.Z := Floor(zv);
+      Result.ZFrac := zv - Result.Z;
+    end
     else Result.Z := 2;
   end
   else if (d = nil) or JsFalsy(TyJsonToNumber(d)) then Result.Z := 0
+  else if JsFinite(TyJsonToNumber(d)) then
+  begin
+    { [spec 244] the floor and the fraction [was: truncated]; clamped as
+      every z the list keeps (an Integer key) }
+    zv := Max(Double(-100000), Min(Double(100000), TyJsonToNumber(d)));
+    Result.Z := Floor(zv);
+    Result.ZFrac := zv - Result.Z;
+  end
   else Result.Z := Trunc(TyJsonToNumber(d));
   d := Climb(node, root, 'zlevel');
   if (d = nil) or JsFalsy(TyJsonToNumber(d)) then Result.ZLevel := 0
@@ -3171,11 +3217,36 @@ begin
   if FSource <> nil then Result := FSource.RegionByName(AName);
 end;
 
+procedure TTyGeo.AddGeoCoord(const AName: string; AX, AY: Double);
+var i: Integer;
+begin
+  for i := 0 to High(FNameCoords) do
+    if FNameCoords[i].Name = AName then
+    begin
+      FNameCoords[i].X := AX;
+      FNameCoords[i].Y := AY;
+      Exit;
+    end;
+  i := Length(FNameCoords);
+  SetLength(FNameCoords, i + 1);
+  FNameCoords[i].Name := AName;
+  FNameCoords[i].X := AX;
+  FNameCoords[i].Y := AY;
+end;
+
 function TTyGeo.GeoCoord(const AName: string; out APt: TTyGeoPt): Boolean;
-var r: TTyGeoRegion;
+var r: TTyGeoRegion; i: Integer;
 begin
   APt.X := NaN;
   APt.Y := NaN;
+  { `this._nameCoordMap.get(name) || region.getCenter()` }
+  for i := 0 to High(FNameCoords) do
+    if FNameCoords[i].Name = AName then
+    begin
+      APt.X := FNameCoords[i].X;
+      APt.Y := FNameCoords[i].Y;
+      Exit(True);
+    end;
   r := RegionByName(AName);
   Result := r <> nil;
   if Result then APt := r.GetCenter;
@@ -3373,7 +3444,8 @@ begin
   if AOpt <> nil then
   begin
     { echartsStyle: every region of the name merges into the one entry, the
-      first one's keys winning -- so the first region's style }
+      first one's keys winning -- the first region's style here, the later
+      ones' further keys by TTyGeo.RegionOpt [spec 244] }
     for i := 0 to High(AGeo.Source.Regions) do
       if AGeo.Source.Regions[i].Name = nm then
       begin
@@ -3796,6 +3868,12 @@ begin
     Result.DashOffsetHas := True;
     Result.DashOffset := d.AsFloat;
   end;
+  { [R5-A] the shadow keys }
+  Result.Shadow := TyStNoObject;
+  TyStSetShadowKey(Result.Shadow, stkShadowBlur, Get('shadowBlur'));
+  TyStSetShadowKey(Result.Shadow, stkShadowOffsetX, Get('shadowOffsetX'));
+  TyStSetShadowKey(Result.Shadow, stkShadowOffsetY, Get('shadowOffsetY'));
+  TyStSetShadowKey(Result.Shadow, stkShadowColor, Get('shadowColor'));
   { fixLineStyle on a line's state object: `stroke = stroke || fill` -- an
     undefined set, which the merge carries -- and `fill = null` }
   if AIsLine and (AState >= 0) then
@@ -4002,6 +4080,7 @@ begin
     Exit;
   end;
   if ADraw.HasTrans then tr := RectApply(P.Lbl.Layout, ADraw.Trans) else tr := P.Lbl.Layout;
+  P.Lbl.TrRect := tr;
   P.Lbl.AnchorX := tr.X + P.Lbl.PctX / 100 * tr.W;
   P.Lbl.AnchorY := tr.Y + P.Lbl.PctY / 100 * tr.H;
 end;
@@ -4069,6 +4148,7 @@ var
   s: TTyStName;
   st: TTyGeoLabelState;
   c: TTyChartColor;
+  known: Boolean;
 
   { [Batch 152] a map series' DataFormatMixin.getFormattedLabel(dataIndex,
     status): the state's own formatter up the item's chain (the normal
@@ -4175,6 +4255,46 @@ var
     else Result := AGeo.Chain(ARegion, [AState, 'label', AKey], tok);
   end;
 
+  { [R5-C] the normal label's keys down the chain into one object: what
+    the text block reads (the rich engine), and the text's own stroke }
+  procedure ReadBlock;
+  const
+    cKeys: array[0..24] of string = ('rich', 'backgroundColor', 'borderColor',
+      'borderWidth', 'borderRadius', 'borderType', 'borderDashOffset', 'padding',
+      'width', 'height', 'lineHeight', 'overflow', 'ellipsis', 'lineOverflow',
+      'textBorderColor', 'textBorderWidth', 'textBorderType', 'textShadowColor',
+      'textShadowBlur', 'textShadowOffsetX', 'textShadowOffsetY', 'align',
+      'verticalAlign', 'richInheritPlainLabel', 'shadowColor');
+  var
+    o: TJSONObject;
+    k: Integer;
+    x: TJSONData;
+    t: TTyGeoToken;
+  begin
+    o := TJSONObject.Create;
+    try
+      for k := 0 to High(cKeys) do
+      begin
+        x := AGeo.Chain(ARegion, ['label', cKeys[k]], t);
+        if x <> nil then o.Add(cKeys[k], x.Clone);
+      end;
+      if TyRtNodeWantsBlock(o) then Result.BlockJson := o.AsJSON;
+      x := o.Find('textBorderColor');
+      if (x <> nil) and (x.JSONType = jtString)
+        and TyTryParseChartColor(x.AsString, Result.TextBorderColour) then
+      begin
+        x := o.Find('textBorderWidth');
+        if (x <> nil) and (x.JSONType = jtNumber) and (x.AsFloat > 0) then
+        begin
+          Result.HasTextBorder := True;
+          Result.TextBorderWidth := x.AsFloat;
+        end;
+      end;
+    finally
+      o.Free;
+    end;
+  end;
+
 begin
   Result := Default(TTyGeoLabel);
   isMap := (AGeo.Kind = gkMapSeries) and AGeo.Data.Active and (AGroup >= 0)
@@ -4212,6 +4332,8 @@ begin
   end
   else
     Result.FontWeight := AInk.LabelFontWeight;
+  { [R5-A] its fontStyle in the weight's flags }
+  Result.FontWeight := TyFontStyleOver(Get('', 'fontStyle'), Result.FontWeight);
   d := Get('', 'fontFamily');
   if (d <> nil) and (d.JSONType = jtString) then
   begin
@@ -4241,6 +4363,7 @@ begin
     Result.RotationRad := TyJsonToNumber(d) * cJsPi / 180;
   end;
   Result.Silent := Truthy(Get('', 'silent'));
+  ReadBlock;
   for s := Low(TTyStName) to High(TTyStName) do
   begin
     st := Default(TTyGeoLabelState);
@@ -4284,7 +4407,17 @@ begin
     if d <> nil then
     begin
       st.HasFontWeight := True;
-      st.FontWeight := TyFontWeightOf(d, AInk.LabelFontWeight);
+      { the normal text's style flags under the state's weight [R5-A] }
+      st.FontWeight := TyFontWeightOf(d, (AInk.LabelFontWeight and TyChartFontWeightMask)
+        or (Result.FontWeight and not TyChartFontWeightMask));
+    end;
+    { [R5-A] a state's own fontStyle over the weight it draws in }
+    d := Get(cStateWord[s], 'fontStyle');
+    if (d <> nil) and (d.JSONType = jtString) then
+    begin
+      if not st.HasFontWeight then st.FontWeight := Result.FontWeight;
+      st.HasFontWeight := True;
+      st.FontWeight := TyFontStyleOver(d, st.FontWeight);
     end;
     d := Get(cStateWord[s], 'fontFamily');
     if (d <> nil) and (d.JSONType = jtString) then
@@ -4310,6 +4443,16 @@ begin
     begin
       st.HasRotate := True;
       st.RotationRad := TyJsonToNumber(d) * cJsPi / 180;
+    end;
+    { [R5-C] createTextConfig: a state's position word, on the region's rect }
+    d := Get(cStateWord[s], 'position');
+    if (d <> nil) and (d.JSONType = jtString) then
+    begin
+      st.Position := Ord(TyLabelPositionOf(d.AsString, known));
+      st.HasPosition := known;
+      d := Get(cStateWord[s], 'distance');
+      if (d <> nil) and (d.JSONType = jtNumber) then st.Distance := d.AsFloat
+      else st.Distance := 5;
     end;
     Result.States[s] := st;
   end;
@@ -4532,6 +4675,15 @@ begin
   if entry <> nil then Result := TJSONObject(entry.Clone)
   else Result := TJSONObject.Create(['name', nm]);
   if style <> nil then MergeAbsent(Result, style);
+  { [spec 244] AN AUTHOR'S ENTRY TAKES EVERY REGION OF ITS NAME: getFilledRegions
+    merges each region's echartsStyle into that one object in turn
+    (zrUtil.merge, not overwriting) -- the first region's keys win, a later
+    region adds the keys the earlier ones did not write }
+  if entry <> nil then
+    for i := 0 to High(FSource.Regions) do
+      if (FSource.Regions[i].Name = nm)
+        and (Own(FSource.Regions[i].Properties, 'echartsStyle') is TJSONObject) then
+        MergeAbsent(Result, TJSONObject(Own(FSource.Regions[i].Properties, 'echartsStyle')));
   n := Length(FOptNames);
   SetLength(FOptNames, n + 1);
   SetLength(FOpts, n + 1);
@@ -4860,6 +5012,39 @@ begin
   Result := FDraw;
 end;
 
+{ [R5-A] a region's shadow at rest: its own keys, zrender's prototype 0, 0, 0 and '#000'
+  under them (what a state's shadow tweens from) }
+procedure GeoRestShadow(var AObj: TTyStObject; const AShadow: TTyStObject);
+const cKeys: array[0..2] of TTyStKey = (stkShadowBlur, stkShadowOffsetX, stkShadowOffsetY);
+var k: Integer;
+begin
+  for k := 0 to 2 do
+    if AShadow.Has[cKeys[k]] then TyStSetNum(AObj, cKeys[k], AShadow.Num[cKeys[k]])
+    else TyStSetNum(AObj, cKeys[k], 0);
+  if AShadow.Has[stkShadowColor] then TyStSetColor(AObj, stkShadowColor, AShadow.Color[stkShadowColor])
+  else TyStSetColor(AObj, stkShadowColor, $FF000000);
+end;
+
+{ [R5-A] a state's shadow keys, those it writes }
+procedure GeoStateShadow(var AObj: TTyStObject; const AShadow: TTyStObject);
+const cKeys: array[0..2] of TTyStKey = (stkShadowBlur, stkShadowOffsetX, stkShadowOffsetY);
+var k: Integer;
+begin
+  for k := 0 to 2 do
+    if AShadow.Has[cKeys[k]] then TyStSetNum(AObj, cKeys[k], AShadow.Num[cKeys[k]]);
+  if AShadow.Has[stkShadowColor] then TyStSetColor(AObj, stkShadowColor, AShadow.Color[stkShadowColor]);
+end;
+
+{ [R5-A] the current shadow onto a region's path }
+procedure GeoWriteShadow(var AEl: TTyChartElement; const C: TTyStObject);
+begin
+  if not C.Has[stkShadowColor] then Exit;
+  AEl.Style.ShadowBlur := C.Num[stkShadowBlur];
+  AEl.Style.ShadowOffsetX := C.Num[stkShadowOffsetX];
+  AEl.Style.ShadowOffsetY := C.Num[stkShadowOffsetY];
+  AEl.Style.ShadowColor := C.Color[stkShadowColor];
+end;
+
 procedure StPaintColour(var AObj: TTyStObject; AKey: TTyStKey;
   ASrc: TTyGeoInkSource; AColour: TTyChartColor);
 begin
@@ -4907,6 +5092,7 @@ begin
       else TyStSetNum(o, stkOpacity, 1);
       TyStSetNum(o, stkZ2, 0);
       TyStSetNum(o, stkIgnore, 0);
+      GeoRestShadow(o, p.Paint.Shadow);
       it.Host.Rest := o;
       it.Host.Cur := o;
       for s := Low(TTyStName) to High(TTyStName) do
@@ -4918,6 +5104,7 @@ begin
         if sp.StrokeHas then StPaintColour(o, stkStroke, sp.StrokeSrc, sp.Stroke);
         if sp.WidthHas then TyStSetNum(o, stkLineWidth, sp.LineWidthLogical);
         if sp.HasOpacity then TyStSetNum(o, stkOpacity, sp.Opacity);
+        GeoStateShadow(o, sp.Shadow);
         it.Host.Decl[s] := o;
       end;
       if p.Lbl.Exists then
@@ -5297,6 +5484,7 @@ begin
         end;
         if np.WidthHas then TyStSetNum(o, stkLineWidth, np.LineWidthLogical);
         if np.HasOpacity then TyStSetNum(o, stkOpacity, np.Opacity);
+        GeoRestShadow(o, np.Shadow);
         for s := Low(TTyStName) to High(TTyStName) do
         begin
           sp := PaintFor(Self, ropt, Ord(s), AInk, False);
@@ -5307,6 +5495,7 @@ begin
           if sp.StrokeHas then StPaintColour(el.Decl[s], stkStroke, sp.StrokeSrc, sp.Stroke);
           if sp.WidthHas then TyStSetNum(el.Decl[s], stkLineWidth, sp.LineWidthLogical);
           if sp.HasOpacity then TyStSetNum(el.Decl[s], stkOpacity, sp.Opacity);
+          GeoStateShadow(el.Decl[s], sp.Shadow);
           el.HasState[s] := True;
         end;
         el.Proxy := True;
@@ -5775,6 +5964,7 @@ var
     AEl.ZrHit.SvgNode := ANode + 1;
     AEl.ZrHit.SvgLabel := ALabel;
     AEl.Z := AGeo.Spec.Z;
+    AEl.ZFrac := AGeo.Spec.ZFrac;
     AEl.Z2 := Round(AZ2);
     AEl.Silent := AOwnSilent or SilentAt(ANode);
     AEl.Datum := Datum(ANode);
@@ -5921,7 +6111,10 @@ var
           SetLength(pts, 4);
           for k := 0 to 3 do pts[k] := q[k];
           el := TyChartElement(TyShapePolygon(pts));
-          if not nd.Invisible and (Copy(nd.St.Image, 1, 5) = 'data:') and (nd.St.IW > 0) and (nd.St.IH > 0) then
+          { [spec 244] ANY SOURCE, not only a data: URI: the chart's images
+            are its resolver's (image://, OnResolveImage), ready at once --
+            upstream's picture once the image has loaded [was: data: only] }
+          if not nd.Invisible and (nd.St.Image <> '') and (nd.St.IW > 0) and (nd.St.IH > 0) then
           begin
             el.Style.HasFill := True;
             el.Style.FillColor := 0;
@@ -6015,6 +6208,8 @@ var
           end;
         end;
         el.Style.Alpha := c.Num[stkOpacity];
+        { [R5-A] a named shape's option shadow }
+        if look.Styled then GeoWriteShadow(el, c);
         { Path.contain: in the element's own coordinates }
         el.ZrHit.Active := True;
         el.ZrHit.Path := nd.Path;
@@ -6203,6 +6398,16 @@ var
   dashLogical: TTyDoubleArray;
   txt, fam: string;
   fsz, fwt: Integer;
+  { [R5-C] a state's position word; a text block }
+  hasPosWord: Boolean;
+  posWord: Integer;
+  posDist, lblX, lblY, tb: Double;
+  lah: TTyTextAnchorH;
+  lav: TTyTextAnchorV;
+  pieces: TTyRtPieceArray;
+  block: TTyRtBlockStyle;
+  bj: TJSONData;
+  ink: TTyChartColor;
 
   function Tx(AX, AY: Double): TTyGeoPt;
   begin
@@ -6326,7 +6531,9 @@ begin
             if not el.Style.HasFill then lw := JsMax(lw, TyGeoStrokeContain * scale);
           end;
           el.Style.Alpha := c.Num[stkOpacity];
+          GeoWriteShadow(el, c);
           el.Z := AGeo.Spec.Z;
+          el.ZFrac := AGeo.Spec.ZFrac;
           el.Z2 := Round(c.Num[stkZ2]);
           el.Silent := silentGroup;
           el.Datum := GroupDatum(g);
@@ -6402,6 +6609,9 @@ begin
         offX := 0;
         offY := 0;
         rot := 0;
+        hasPosWord := False;
+        posWord := 0;
+        posDist := 0;
         hasOff := p.Lbl.HasOffset;
         if p.Lbl.HasOffset then
         begin
@@ -6423,6 +6633,27 @@ begin
             offY := p.Lbl.States[s].OffY;
           end;
           if p.Lbl.States[s].HasRotate then rot := p.Lbl.States[s].RotationRad;
+          if p.Lbl.States[s].HasPosition then
+          begin
+            hasPosWord := True;
+            posWord := p.Lbl.States[s].Position;
+            posDist := p.Lbl.States[s].Distance;
+          end;
+        end;
+        { [R5-C] A STATE'S POSITION WORD: calculateTextPosition on the
+          region's rect through the transform, at the state's distance --
+          the place; the alignment stays the style's centre / middle (a
+          style's align wins over the one the position implies) }
+        lah := tahCentre;
+        lav := tavMiddle;
+        lblX := p.Lbl.AnchorX;
+        lblY := p.Lbl.AnchorY;
+        if hasPosWord and not p.Lbl.Inside then
+        begin
+          TyLabelAnchorXYWH(p.Lbl.TrRect, TTyLabelPosition(posWord), posDist * scale,
+            0, 0, lblX, lblY, lah, lav);
+          lah := tahCentre;
+          lav := tavMiddle;
         end;
         { updateInnerText: innerTransformable at the position plus the
           offset, its origin minus the offset, turned by the rotation --
@@ -6432,15 +6663,15 @@ begin
         offY := offY * scale;
         if hasOff then
         begin
-          ax := p.Lbl.AnchorX + offX;
-          ay := p.Lbl.AnchorY + offY;
+          ax := lblX + offX;
+          ay := lblY + offY;
           ox := -offX;
           oy := -offY;
         end
         else
         begin
-          ax := p.Lbl.AnchorX;
-          ay := p.Lbl.AnchorY;
+          ax := lblX;
+          ay := lblY;
           ox := 0;
           oy := 0;
         end;
@@ -6466,10 +6697,49 @@ begin
         ay := m5 + (oy + ay);
         w := 0;
         h := 0;
+        pieces := nil;
         if txt <> '' then AMeasurer.MeasureLine(txt, fam, fsz, fwt, w, h);
-        box := TyAnchorBox(ax, ay, w, h, tahCentre, tavMiddle);
+        if TyStHasColour(c, stkFill) then ink := c.Color[stkFill] else ink := 0;
+        { [R5-C] A TEXT BLOCK (rich, a box, a size...): the rich engine's
+          pieces about the anchor, the region's ink as the default }
+        if (p.Lbl.BlockJson <> '') and (txt <> '') then
+        begin
+          bj := GetJSON(p.Lbl.BlockJson);
+          try
+            block := TyRtResolve([TJSONObject(bj)], Default(TTyRtGlobal), TyRtResolveOpt(False));
+          finally
+            bj.Free;
+          end;
+          TyRtFinish(block, fam, fsz, fwt, Default(TTyRtGlobal), False, 0);
+          pieces := TyRtLay(txt, block, TyRtDefaultOf(ink <> 0, ink, False, 0, False,
+            lah, lav), scale, AMeasurer);
+        end;
+        if Length(pieces) > 0 then
+          box := TyRtDeviceBox(pieces, ax, ay, rot, scale)
+        else
+        begin
+          box := TyAnchorBox(ax, ay, w, h, lah, lav);
+          { the text's own stroke is in its rect (a TSpan's bounding rect
+            grows by its line width) }
+          if p.Lbl.HasTextBorder then
+          begin
+            tb := p.Lbl.TextBorderWidth * scale;
+            box := TyRectF(box.Left - tb / 2, box.Top - tb / 2, box.Right + tb / 2,
+              box.Bottom + tb / 2);
+          end;
+        end;
         el := TyChartElement(TyShapeRect(box));
         el.Caption.Text := txt;
+        if Length(pieces) > 0 then
+        begin
+          el.Caption.RtPieces := pieces;
+          el.Caption.RtScale := scale;
+        end
+        else if p.Lbl.HasTextBorder then
+        begin
+          el.Caption.StrokeColour := p.Lbl.TextBorderColour;
+          el.Caption.StrokeWidthLogical := p.Lbl.TextBorderWidth;
+        end;
         el.Caption.FontName := fam;
         el.Caption.FontSizeLogical := fsz;
         el.Caption.FontWeight := fwt;
@@ -6477,12 +6747,13 @@ begin
         else el.Caption.Colour := 0;
         el.Caption.X := ax;
         el.Caption.Y := ay;
-        el.Caption.AnchorH := tahCentre;
-        el.Caption.AnchorV := tavMiddle;
+        el.Caption.AnchorH := lah;
+        el.Caption.AnchorV := lav;
         el.Caption.RotationRad := rot;
         el.Caption.Truncate := False;
         el.Style.Alpha := c.Num[stkOpacity];
         el.Z := AGeo.Spec.Z;
+        el.ZFrac := AGeo.Spec.ZFrac;
         el.Z2 := Round(c.Num[stkZ2]);
         el.Ignore := (c.Num[stkIgnore] <> 0) or (txt = '') or (w <= 0) or (h <= 0);
         { a text is silent on its own or under a silent host }

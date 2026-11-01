@@ -78,7 +78,8 @@ type
     procedure TestExportBackgroundAsUpstream;
     procedure TestExcludedViewsAreAbsentInThePixels;
     procedure TestExportPutsTheWindowBack;
-    procedure TestExportLeavesTheHoverOut;
+    procedure TestExportKeepsThePointersStateAsUpstream;
+    procedure TestAWebPOrThePngACanvasGives;
     procedure TestEncodings;
     procedure TestLoadingPixelsInTheThemesColours;
     procedure TestLoadingCfgColoursAndHide;
@@ -776,25 +777,90 @@ begin
   end;
 end;
 
-procedure TAdvChartExportLoadingTest.TestExportLeavesTheHoverOut;
+{ [R5-D] tools/advchart-oracle/export-hover.js: getDataURL draws the
+  storage as it stands -- the axis pointer's shadow and the bar the axis
+  highlighted (an item hover's emphasis too) are in the export; the box is
+  html and is not.
+  [Was TestExportLeavesTheHoverOut: the export left the pointer's state out
+  -- the port's own rule, not upstream's.] }
+procedure TAdvChartExportLoadingTest.TestExportKeepsThePointersStateAsUpstream;
 var
   a, b: TBGRABitmap;
   pt: TPoint;
+  root: TJSONData;
+  sl: TStringList;
+  cs, after: TJSONObject;
+  band, bar: TBGRAPixel;
+begin
+  sl := TStringList.Create;
+  try
+    sl.LoadFromFile(ExtractFilePath(ParamStr(0)) + 'fixtures' + PathDelim
+      + 'advchart-export-hover.json');
+    root := GetJSON(sl.Text);
+  finally
+    sl.Free;
+  end;
+  try
+    cs := TJSONObject(root).Arrays['cases'].Objects[0];
+    after := cs.Objects['after'];
+    AssertTrue('upstream exports the pointer', after.Booleans['pointer']);
+    AssertEquals('upstream exports the highlighted bar', 1,
+      after.Arrays['emphasis'].Integers[0]);
+    NewChart(cW, cH);
+    Load(cs.Objects['option'].AsJSON);
+    a := FChart.RenderToBitmap('');
+    pt := BarCentre(0, 1);
+    FChart.Hover(pt.X, pt.Y);
+    Draw;
+    b := FChart.RenderToBitmap('');
+    try
+      { the band above the bar: the shadow's ink }
+      band := b.GetPixel(pt.X, 70);
+      AssertTrue('the shadow band is in the export',
+        (band.red <> a.GetPixel(pt.X, 70).red) or (band.green <> a.GetPixel(pt.X, 70).green));
+      { the bar itself: its emphasis }
+      bar := b.GetPixel(pt.X, pt.Y);
+      AssertTrue('the highlighted bar is in the export',
+        (bar.red <> a.GetPixel(pt.X, pt.Y).red) or (bar.green <> a.GetPixel(pt.X, pt.Y).green)
+        or (bar.blue <> a.GetPixel(pt.X, pt.Y).blue));
+    finally
+      a.Free;
+      b.Free;
+    end;
+  finally
+    root.Free;
+  end;
+end;
+
+{ [R5-D] type 'webp': toDataURL('image/webp') -- a WebP where libwebp can be
+  loaded (BGRABitmap's writer), else the PNG a canvas answers with for a
+  type it cannot make, its data URL saying which. A file named .webp asks
+  for one the same way. }
+procedure TAdvChartExportLoadingTest.TestAWebPOrThePngACanvasGives;
+var
+  url, raw, fn: string;
+  bytes: TBytes;
+  isWebp: Boolean;
 begin
   NewChart(cW, cH);
-  Load('{"animation":false,"tooltip":{"trigger":"axis"},'
-    + '"xAxis":{"type":"category","data":["a","b","c"]},"yAxis":{"type":"value"},'
-    + '"series":[{"type":"bar","data":[3,5,2]}]}');
-  a := FChart.RenderToBitmap('');
-  pt := BarCentre(0, 1);
-  FChart.Hover(pt.X, pt.Y);
-  Draw;
-  b := FChart.RenderToBitmap('');
+  Load(OPT_PLAIN);
+  url := FChart.GetDataURL('{"type":"webp"}');
+  isWebp := Copy(url, 1, 23) = 'data:image/webp;base64,';
+  AssertTrue('a WebP or a PNG: ' + Copy(url, 1, 30),
+    isWebp or (Copy(url, 1, 22) = 'data:image/png;base64,'));
+  raw := DecodeStringBase64(Copy(url, Pos(',', url) + 1, MaxInt));
+  if isWebp then
+    AssertTrue('RIFF ... WEBP', (Copy(raw, 1, 4) = 'RIFF') and (Copy(raw, 9, 4) = 'WEBP'))
+  else
+    AssertTrue('a whole PNG', (Length(raw) > 8) and (raw[1] = #$89) and (Copy(raw, 2, 3) = 'PNG'));
+  bytes := FChart.SaveToBytes('{"type":"webp"}');
+  AssertEquals('the same image as the URL', Length(raw), Length(bytes));
+  fn := GetTempDir + 'r5d_export_test.webp';
   try
-    AssertEquals('a hover is the window''s, not the export''s', 0, DiffCount(a, b));
+    FChart.SaveToFile(fn, '');
+    AssertTrue('the file', FileExists(fn));
   finally
-    a.Free;
-    b.Free;
+    DeleteFile(fn);
   end;
 end;
 

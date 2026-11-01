@@ -72,6 +72,19 @@
 //     symbols [{states, fill, opacity hex}], label {states, opacity hex} |
 //     null}], legend [{name, icon, fill, stroke, opacity hex}] (legend cases)
 //
+// [spec 242] Cases flagged `drawn` add to each label record (items and
+// frames) `drawn` {x, y, rotation, origin [x, y]} -- the text's
+// innerTransformable, where textConfig's rotation and offset land -- and
+// `ink` (the text's own fill, else its default style's: what it is painted
+// in). Cases flagged `grad` add to each item `grad` {line, bbox, symbols[],
+// effect, effectBox} (a gradient as {type, x, y, x2, y2, r, global, stops [[offset
+// hex, colour]]}, null for a plain colour; bbox the line path's
+// getBoundingRect) and to each legend icon `fillGrad`. `effect.delay:
+// '@Name'` is fed as FN[Name] (the Pascal suite registers the same timings).
+// Steps may be ['click', at] (mousedown, mouseup and click there; the
+// chart's click events are logged too), and `at` may be {eff: [s, k]} (the
+// effect symbol's own place, rounded).
+//
 // Self-checks (recipes; each must run): R1 every laid-out point is
 // recomputed from the option through the coordinate system's dataToPoint
 // (and the control point by linesLayout's formula); R2 every effect symbol
@@ -195,6 +208,36 @@ function canvasLike(chart) {
 }
 
 const raw = (x, y) => ({ zrX: x, zrY: y, which: 1, preventDefault() {}, stopPropagation() {} });
+
+// [spec 242] effect.delay as '@Name': the functions fed for the names
+const FN = {
+  Lag: idx => idx * 700 + 100,
+  Half: idx => 2000 / (idx + 1),
+};
+function withFns(option) {
+  const o = JSON.parse(JSON.stringify(option));
+  const fix = e => { if (e && typeof e.delay === 'string' && e.delay[0] === '@' && FN[e.delay.slice(1)]) e.delay = FN[e.delay.slice(1)]; };
+  for (const s of [].concat(o.series || [])) {
+    fix(s.effect);
+    for (const d of s.data || []) if (d && typeof d === 'object' && !Array.isArray(d)) fix(d.effect);
+  }
+  return o;
+}
+// the case being recorded (its flags decide the extra fields)
+let CUR = null;
+function gradRec(g) {
+  if (!g || typeof g !== 'object' || !g.colorStops) return null;
+  return { type: g.type, x: hexOr(g.x, 0), y: hexOr(g.y, 0), x2: hexOr(g.x2, 0), y2: hexOr(g.y2, 0), r: hexOr(g.r, 0),
+    global: !!g.global, stops: g.colorStops.map(s => [hex(s.offset), colourOf(s.color)]) };
+}
+function drawnRec(tc) {
+  const it = tc.innerTransformable;
+  return { x: hex(it.x), y: hex(it.y), rotation: hex(it.rotation || 0), origin: [hex(it.originX || 0), hex(it.originY || 0)] };
+}
+function inkOf(tc) {
+  const f = tc.style.fill != null ? tc.style.fill : (tc._defaultStyle && tc._defaultStyle.fill);
+  return colourOf(f);
+}
 
 let ecKey = null;
 function ecData(el) {
@@ -467,6 +510,77 @@ C('h-poly', 'hover', 'hovering a polyline and its tooltip',
   base({ series: [L({ name: 'P', polyline: true, data: [{ coords: [[10, 20], [40, 60], [80, 30]], name: 'route', value: 3 }] })] }),
   { steps: [['move', { line: [0, 0, 0.5] }], ['leave']] });
 
+// ---- [spec 242] ----
+C('r5-coord-string', 'draw', "a coordinate written as one string off a geo (after a first pair, as the dev build asserts): Cartesian2D.dataToPoint reads data[0] and data[1], its first two characters -- 'CA' is (C, A) on two category axes, 'Q' a letter and undefined",
+  Object.assign(base({ series: [
+    L({ data: [{ coords: [['A', 'B'], 'CA'] }, { coords: [['C', 'C'], 'Q'] }, { coords: [['A', 'C'], 'BB'] }] }),
+  ] }), { xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'category', data: ['A', 'B', 'C'] } }));
+C('r5-coord-string-value', 'draw', "a string coordinate on value axes: '34' is (3, 4), 'ab' no numbers (not drawn)",
+  base({ series: [L({ data: [{ coords: [[10, 20], '34'] }, { coords: [[5, 5], 'ab'] }] })] }));
+C('r5-label-rotate', 'draw', "label rotate and offset (textConfig over Line.beforeUpdate): end turned 30, middle -20, insideStartTop 0, start with an offset, insideEndBottom turned 90 with an offset, middle offset only, a curve turned 45, an offset of one number, a rotate that is a word",
+  base({ series: [L({ label: { show: true, rotate: 30 }, data: [
+    { coords: [[10, 10], [80, 60]], value: 1 },
+    { coords: [[20, 80], [50, 60]], label: { position: 'middle', rotate: -20 }, value: 2 },
+    { coords: [[50, 10], [90, 40]], label: { position: 'insideStartTop', rotate: 0 }, value: 3 },
+    { coords: [[90, 50], [60, 55]], label: { position: 'start', rotate: null, offset: [10, -5] }, value: 4 },
+    { coords: [[10, 45], [40, 60]], label: { position: 'insideEndBottom', rotate: 90, offset: [4, 4] }, value: 5 },
+    { coords: [[55, 85], [95, 70]], label: { position: 'middle', rotate: null, offset: [0, -8] }, value: 6 },
+    { coords: [[30, 30], [70, 20]], lineStyle: { curveness: 0.3 }, label: { position: 'insideMiddleTop', rotate: 45 }, value: 7 },
+    { coords: [[5, 95], [35, 90]], label: { offset: 6 }, value: 8 },
+    { coords: [[60, 95], [95, 95]], label: { rotate: 'abc' }, value: 9 },
+  ] })] }), { drawn: true });
+C('r5-label-rotate-enter', 'enter', 'the enter animation with turned and offset labels: the turn and the offset hold every frame',
+  Object.assign(base({ series: [L({ label: { show: true, position: 'middle', rotate: 15, offset: [3, -3] }, data: [
+    { coords: [[10, 10], [80, 60]], value: 1 },
+    { coords: [[90, 20], [30, 70]], lineStyle: { curveness: -0.2 }, label: { position: 'insideStart', rotate: -60 }, value: 2 },
+  ] })] }), { animation: true }), { drawn: true, samples: SAMPLES_ENTER });
+C('r5-delay-fn', 'effect', "effect.delay as '@Name': the series' (idx * 700 + 100) and an item's own (2000 / (idx + 1)); one item writes a number; a name with no function",
+  base({ series: [LE({ effect: { show: true, period: 2, delay: '@Lag', trailLength: 0 }, data: [
+    { coords: [[10, 10], [80, 60]] },
+    { coords: [[20, 80], [70, 30]] },
+    { coords: [[50, 5], [50, 95]], effect: { delay: '@Half' } },
+    { coords: [[5, 50], [95, 50]], effect: { delay: 333 } },
+  ] }), LE({ effect: { show: true, period: 1, delay: '@Nobody', trailLength: 0 }, data: [{ coords: [[10, 90], [90, 90]] }] })] }),
+  { samples: [0, 100, 250, 800, 1500, 2000, 2500, 3100, 4500] });
+C('r5-gradient', 'draw', 'a gradient line colour: the series a linear one, an item a radial one, an item a global linear one; the end symbols, the effect and the legend icon take it; the label stays the outside ink',
+  base({ legend: {}, series: [L({ name: 'g', symbol: ['circle', 'arrow'], symbolSize: 12, effect: { show: true, trailLength: 0 }, label: { show: true },
+    lineStyle: { width: 3, opacity: 1, curveness: 0.2, color: { type: 'linear', x: 0, y: 0, x2: 1, y2: 1,
+      colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 0.5, color: 'rgba(0, 128, 0, 0.5)' }, { offset: 1, color: '#0000ff' }] } },
+    data: [
+      { coords: [[10, 10], [80, 60]], value: 1 },
+      { coords: [[20, 80], [70, 30]], lineStyle: { curveness: 0, color: { type: 'radial', x: 0.5, y: 0.5, r: 0.5,
+        colorStops: [{ offset: 0, color: '#ffcc00' }, { offset: 1, color: '#333333' }] } }, value: 2 },
+      { coords: [[30, 90], [95, 90]], lineStyle: { color: { type: 'linear', x: 100, y: 0, x2: 500, y2: 0, global: true,
+        colorStops: [{ offset: 0, color: '#00ffff' }, { offset: 1, color: '#ff00ff' }] } }, value: 3 },
+    ] })] }), { grad: true, legend: true, drawn: true });
+C('r5-plain-ink', 'draw', "a plain line colour: the label is the outside ink (#333 in the light theme), not the line's colour",
+  base({ series: [L({ lineStyle: { color: '#00aa00' }, label: { show: true }, data: [{ coords: [[10, 10], [80, 60]], value: 1 },
+    { coords: [[20, 80], [70, 30]], label: { position: 'middle', color: 'inherit' }, value: 2 },
+    { coords: [[30, 90], [95, 90]], label: { color: '#123456' }, value: 3 }] })] }), { drawn: true });
+C("r5-large-gradient", "large", "a large batch in a gradient colour: over the batch's own bounding rect",
+  base({ series: [L({ large: true, largeThreshold: 3, lineStyle: { opacity: 1, width: 2, color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+    colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }] } },
+    data: [{ coords: [[10, 10], [80, 60]] }, { coords: [[20, 80], [90, 30]] }, { coords: [[50, 5], [50, 95]] }, { coords: [[5, 50], [95, 40]] }] })] }),
+  { grad: true });
+C('h-effect', 'hover', 'the effect symbol is a pointer target: its row\'s events and tooltip, no emphasis; a click selects the row (selectedMode single)',
+  base({ series: [LE({ name: 'E', selectedMode: 'single', effect: { show: true, symbolSize: 14, delay: 0, period: 4, trailLength: 0 },
+    data: [{ coords: [[20, 20], [80, 70]], name: 'r0', value: 5 }, { coords: [[20, 80], [80, 30]], name: 'r1', value: 7 }] })] }),
+  { clicks: true, steps: [['move', { eff: [0, 0] }], ['move', { off: [300, 380] }], ['move', { eff: [0, 1] }], ['click', { eff: [0, 1] }],
+    ['click', { eff: [0, 1] }], ['leave']] });
+// [spec 242] colorBy 'data': dataColorPaletteTask over the lineStyle's
+// stroke -- one scope for every lines series by data, a colour a name (or
+// the raw index), the rows with their own colour and a series with a
+// written colour left alone
+C('r5-colorby-data', 'draw', "colorBy 'data': a colour a name, shared across the two series by data (the scope is the type's), an unnamed row by its index, a row's own colour kept, a written series colour none from the palette; the end symbols and an inherit label take the row's",
+  base({ legend: {}, series: [
+    L({ name: 'a', colorBy: 'data', symbol: ['none', 'arrow'], symbolSize: 10, label: { show: true, color: 'inherit' }, lineStyle: { opacity: 1, width: 2 },
+      data: [{ coords: [[10, 10], [80, 60]], name: 'x', value: 1 }, { coords: [[20, 80], [90, 30]], name: 'y', value: 2 },
+        { coords: [[50, 5], [50, 95]], name: 'x', value: 3 }, { coords: [[5, 50], [95, 40]], value: 4 },
+        { coords: [[5, 20], [40, 5]], name: 'own', lineStyle: { color: '#123456' }, value: 5 }] }),
+    L({ name: 'b', colorBy: 'data', lineStyle: { opacity: 1 }, data: [{ coords: [[60, 90], [95, 70]], name: 'y' }, { coords: [[60, 10], [95, 25]], name: 'z' }] }),
+    L({ name: 'c', colorBy: 'data', lineStyle: { color: '#00aa00', opacity: 1 }, data: [{ coords: [[30, 60], [70, 70]], name: 'q' }] }),
+  ] }), { legend: true, drawn: true });
+
 // =====================================================================
 // the elements
 // =====================================================================
@@ -518,10 +632,15 @@ function anchorOf(tc) {
 function labelRec(inner) {
   const tc = inner.getTextContent && inner.getTextContent();
   if (!tc) return null;
-  return { text: String(tc.style.text == null ? '' : tc.style.text), x: hex(tc.x), y: hex(tc.y), rotation: hex(tc.rotation || 0),
+  const r = { text: String(tc.style.text == null ? '' : tc.style.text), x: hex(tc.x), y: hex(tc.y), rotation: hex(tc.rotation || 0),
     origin: [hex(tc.originX || 0), hex(tc.originY || 0)], anchor: anchorOf(tc),
     align: tc.style.align || null, verticalAlign: tc.style.verticalAlign || null, ignore: !!tc.ignore,
     opacity: hexOr(tc.style.opacity, 1), fill: colourOf(tc.style.fill) };
+  if (CUR && CUR.drawn) {
+    r.drawn = drawnRec(tc);
+    r.ink = inkOf(tc);
+  }
+  return r;
 }
 function clipOf(sym) {
   const a = sym.animators && sym.animators[0];
@@ -536,7 +655,7 @@ function effectRec(sym) {
     x: hex(sym.x), y: hex(sym.y), rotation: hex(sym.rotation || 0), scaleX: hex(sym.scaleX), scaleY: hex(sym.scaleY),
     ignore: !!sym.ignore, fill: colourOf(sym.style.fill), stroke: colourOf(sym.style.stroke),
     shadowColor: colourOf(sym.style.shadowColor), opacity: hexOr(sym.style.opacity, 1),
-    life: c ? hex(c._life) : null, delay: c ? hex(c._delay) : null, loop: c ? !!c.loop : null,
+    life: c ? hex(c._life) : null, delay: c ? (typeof c._delay === 'number' ? hex(c._delay) : 'str:' + String(c._delay)) : null, loop: c ? !!c.loop : null,
     t: sym.__t == null ? null : hex(sym.__t),
   };
 }
@@ -567,14 +686,24 @@ function itemRec(sm, idx) {
   }
   r.label = labelRec(inner);
   r.effect = effectRec(effect);
+  if (CUR && CUR.grad) {
+    r.grad = { line: gradRec(line.style.stroke), bbox: rectRec(line.getBoundingRect()), symbols: [],
+      effect: effect ? gradRec(effect.style.fill) : null, effectBox: effect ? rectRec(effect.getBoundingRect()) : null };
+    for (const nm of ['fromSymbol', 'toSymbol']) {
+      const sym = inner.childOfName(nm);
+      if (sym) r.grad.symbols.push({ fill: gradRec(sym.style.fill), stroke: gradRec(sym.style.stroke), bbox: rectRec(sym.getBoundingRect()) });
+    }
+  }
   return r;
 }
 function largeRec(el) {
-  return {
+  const r = {
     segs: hexes(el.shape.segs), polyline: !!el.shape.polyline, curveness: hexOr(el.shape.curveness, 0),
     bbox: rectRec(el.getBoundingRect()), style: styleRec(el.style), z2: el.z2,
     startIndex: el.__startIndex == null ? null : el.__startIndex,
   };
+  if (CUR && CUR.grad) r.grad = gradRec(el.style.stroke);
+  return r;
 }
 function seriesRecords(chart, cfg) {
   const out = [];
@@ -879,6 +1008,15 @@ function resolveAt(chart, at, where) {
     const p = pointOnLine(line, end === 'from' ? 0.02 : 0.98);
     return search(p[0], p[1], (x, y) => hoverTarget(chart, x, y) === sym, where);
   }
+  if (at.eff) {
+    const [s, k] = at.eff;
+    const el = seriesModel(chart, s).getData().getItemGraphicEl(k);
+    const sym = partsOf(el).effect;
+    must(sym && !sym.ignore, where + ': no effect symbol to point at');
+    const p = [Math.round(sym.x), Math.round(sym.y)];
+    must(hoverTarget(chart, p[0], p[1]) === sym, where + ': the effect symbol is not under its own place');
+    return p;
+  }
   if (at.seg) {
     const [s, k, j, t] = at.seg;
     const el = largeEls(chart, seriesModel(chart, s))[0];
@@ -980,9 +1118,11 @@ function legendRec(chart) {
     if (el.type === 'text' && el.parent) {
       const icon = el.parent.childAt(0);
       if (icon && icon.shape && icon.shape.symbolType) {
-        out.push({ name: String(el.style.text), selected: m.isSelected(String(el.style.text)),
+        const lr = { name: String(el.style.text), selected: m.isSelected(String(el.style.text)),
           icon: icon.shape.symbolType, fill: colourOf(icon.style.fill),
-          stroke: colourOf(icon.style.stroke), opacity: hexOr(icon.style.opacity, 1), lineWidth: hexOr(icon.style.lineWidth, 1) });
+          stroke: colourOf(icon.style.stroke), opacity: hexOr(icon.style.opacity, 1), lineWidth: hexOr(icon.style.lineWidth, 1) };
+        if (CUR && CUR.grad) { lr.fillGrad = gradRec(icon.style.fill); lr.strokeGrad = gradRec(icon.style.stroke); }
+        out.push(lr);
       }
     }
   });
@@ -997,11 +1137,12 @@ function recordCase(c) {
   NOW = T0;
   TIMERS = [];
   SHADOW.clear();
+  CUR = c;
   const chart = newChart();
   const cfg = canvasLike(chart);
   try {
     const where = c.id;
-    for (const t of ['mouseover', 'mousemove', 'mouseout']) {
+    for (const t of c.clicks ? ['mouseover', 'mousemove', 'mouseout', 'click'] : ['mouseover', 'mousemove', 'mouseout']) {
       chart.on(t, e => {
         if (!LOG) return;
         const di = e.dataIndex;
@@ -1010,7 +1151,7 @@ function recordCase(c) {
       });
     }
     const opt = JSON.parse(JSON.stringify(c.option));
-    chart.setOption(JSON.parse(JSON.stringify(c.option)));
+    chart.setOption(withFns(c.option));
     const zr = chart.getZr();
     zr.storage.getDisplayList(true);
     checkLayout(chart, where);
@@ -1057,6 +1198,15 @@ function recordCase(c) {
         else if (s[0] === 'leave') {
           zr.handler.mouseout(raw(-1, -1));
         }
+        else if (s[0] === 'click') {
+          const at = resolveAt(chart, s[1], where + ' step ' + i);
+          st.x = at[0];
+          st.y = at[1];
+          zr.handler.mousemove(raw(at[0], at[1]));
+          zr.handler.mousedown(raw(at[0], at[1]));
+          zr.handler.mouseup(raw(at[0], at[1]));
+          zr.handler.click(raw(at[0], at[1]));
+        }
         else if (s[0] === 'action') {
           st.payload = s[1];
           chart.dispatchAction(JSON.parse(JSON.stringify(s[1])));
@@ -1083,6 +1233,7 @@ function recordCase(c) {
       legend: legend0, frames, steps };
   }
   finally {
+    CUR = null;
     chart.dispose();
   }
 }
@@ -1114,6 +1265,7 @@ function frameItems(chart) {
       const tc = inner.getTextContent && inner.getTextContent();
       r.label = tc ? { x: hex(tc.x), y: hex(tc.y), rotation: hex(tc.rotation || 0), anchor: anchorOf(tc), align: tc.style.align || null,
         verticalAlign: tc.style.verticalAlign || null, opacity: hexOr(tc.style.opacity, 1) } : null;
+      if (tc && CUR && CUR.drawn) r.label.drawn = drawnRec(tc);
       if (sm.get(['effect', 'show'])) {
         const sym = el.childAt(0) && el.childAt(0).isGroup ? el.childAt(1) : null;
         r.effect = sym ? { present: true, x: hex(sym.x), y: hex(sym.y), rotation: hex(sym.rotation || 0),

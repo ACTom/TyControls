@@ -121,7 +121,8 @@ function TyBuildSunburstMarks(ASeriesIndex: Integer; const ASolved: TTySunburstS
 
 implementation
 
-uses tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Handlers;
+uses tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Handlers,
+  tyControls.AdvanceChart.LabelGuide;
 
 const
   cRadian = Pi / 180;
@@ -760,7 +761,7 @@ var
   c: TTyChartColor;
   show: Boolean;
   prm: TTyChartCallbackParams;
-  vals: TTyDoubleArray;
+  vals, pieceCorners: TTyDoubleArray;
   vk: Integer;
 begin
   Result := 0;
@@ -792,8 +793,14 @@ begin
       Continue;
     s0 := Min(nd.StartRad, nd.EndRad);
     s1 := Max(nd.StartRad, nd.EndRad);
+    pieceCorners := Corners(ASolved, row, nd.R0, nd.R);
     el := TyChartElement(TyShapeSector(ASolved.CX, ASolved.CY, nd.R0, nd.R, s0, s1,
-      Corners(ASolved, row, nd.R0, nd.R)));
+      pieceCorners));
+    { [R5-C] a label line's host: the piece's Sector as roundSector builds
+      it (its angles in the layout's order), in the node's colour }
+    TyGuideStampSector(el.Caption, ASolved.CX, ASolved.CY, nd.R0, nd.R, nd.StartRad,
+      nd.EndRad, ASolved.Clockwise, pieceCorners);
+    el.Caption.LgColor := nd.Fill;
     el.Style.HasFill := True;
     if (row = 0) and not ASolved.HasRootFill then el.Style.FillColor := AInk.RootFill
     else el.Style.FillColor := nd.Fill;

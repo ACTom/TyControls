@@ -64,6 +64,8 @@ const FNS = {
   'idx*50': idx => idx * 50,
   'idx*30': idx => idx * 30,
   'dur:600+idx*100': idx => 600 + idx * 100,
+  // [R5-C] a label formatter: the value, rounded, with a prefix
+  'endfmt': p => 'v' + Math.round(p.value),
 };
 function materialize(v) {
   if (Array.isArray(v)) return v.map(materialize);
@@ -715,6 +717,95 @@ function an4Cases() {
   out.push(pointerCase('axisPointer.rootOff',
     'root animation false: the tooltip pointer keeps its own animation \'auto\' and still slides',
     ptrBar(null, { animation: false }), { x: 150, y: 150 }, [{ at: 0, x: 270, y: 150 }]));
+  // ---- [R5-D] a polar's pointer: PolarAxisPointer's shapes under the same
+  // determineAnimation (a category band in degrees on the angle axis, in px
+  // on the radius) and updateProps -- the line's ends, the circle's r, the
+  // sector's angles or radii tween as numbers ----
+  const CATS6 = ['A', 'B', 'C', 'D', 'E', 'F'];
+  const polarBar = (tip, angle, radius) => ({
+    tooltip: Object.assign({ trigger: 'axis' }, tip || {}), polar: {},
+    angleAxis: angle, radiusAxis: radius,
+    series: [{ type: 'bar', coordinateSystem: 'polar', emphasis: { disabled: true }, data: [3, 5, 2, 4, 6, 1] }] });
+  out.push(pointerCase('polarPointer.angleLine',
+    'a category angle axis (bands of 60 degrees): the radial line slides A -> C, its two ends tweened as numbers',
+    polarBar(null, { type: 'category', data: CATS6 }, { type: 'value' }), { x: 230, y: 98 }, [{ at: 0, x: 230, y: 202 }]));
+  out.push(pointerCase('polarPointer.angleShadow',
+    'the shadow sector slides A -> C (startAngle / endAngle)',
+    polarBar({ axisPointer: { type: 'shadow' } }, { type: 'category', data: CATS6 }, { type: 'value' }),
+    { x: 230, y: 98 }, [{ at: 0, x: 230, y: 202 }]));
+  out.push(pointerCase('polarPointer.radiusLine',
+    'a category radius axis (bands of 20 px): the circle grows A -> D (r)',
+    polarBar(null, { type: 'value' }, { type: 'category', data: CATS6 }), { x: 210, y: 150 }, [{ at: 0, x: 270, y: 150 }]));
+  out.push(pointerCase('polarPointer.radiusShadow',
+    'the ring slides A -> D (r0 / r)',
+    polarBar({ axisPointer: { type: 'shadow' } }, { type: 'value' }, { type: 'category', data: CATS6 }),
+    { x: 210, y: 150 }, [{ at: 0, x: 270, y: 150 }]));
+  out.push(pointerCase('polarPointer.off',
+    'animation false on the polar pointer: it jumps',
+    polarBar({ axisPointer: { animation: false } }, { type: 'category', data: CATS6 }, { type: 'value' }),
+    { x: 230, y: 98 }, [{ at: 0, x: 230, y: 202 }]));
+  // ---- [R5-I] the cartesian pointer's label: updateLabelEl tweens its x / y
+  // (the box's top-left, after the align and the container's confine) with
+  // the pointer's timing; its text and size change at once ----
+  const ptrLabel = cats => ptrBar({ axisPointer: { label: { show: true, padding: [5, 7, 5, 7], backgroundColor: '#123456' } } },
+    { xAxis: { type: 'category', data: cats } });
+  out.push(pointerCase('axisPointer.label',
+    "a shown label, B -> D: the box's left slides from B's box to D's (a narrower text), not with the line",
+    ptrLabel(['A', 'BBBBBBBBBBBB', 'C', 'D', 'E']), { x: 150, y: 150 }, [{ at: 0, x: 270, y: 150 }]));
+  out.push(pointerCase('axisPointer.labelEdge',
+    "B -> E with E's label wide enough to be confined at the container's right edge: the box slides to the confined place",
+    ptrLabel(['A', 'B', 'C', 'D', 'EEEEEEEEEEEEEEEEEEEEEEEEEEEEEE']), { x: 150, y: 150 }, [{ at: 0, x: 330, y: 150 }]));
+  // [R5-I] the pointer's model: an axis collected for its own show (no
+  // tooltip) reads its block over the axisPointer component's and the
+  // root's -- no exponentialOut, the root's cubicInOut; a tooltip axis'
+  // volatile layer copies no animationDelayUpdate (the tooltip's is unread,
+  // the axisPointer component's is)
+  out.push(pointerCase('axisPointer.ownNoTip',
+    "no tooltip, the x axis' own axisPointer shown: the slide eases cubicInOut (the root's default), not the tooltip's exponentialOut",
+    { xAxis: { type: 'category', data: CATS5, axisPointer: { show: true } }, yAxis: { type: 'value' },
+      series: [{ type: 'bar', emphasis: { disabled: true }, data: [5, 20, 36, 10, -8] }] },
+    { x: 150, y: 150 }, [{ at: 0, x: 270, y: 150 }]));
+  out.push(pointerCase('axisPointer.tipDelay',
+    "tooltip.axisPointer animationDelayUpdate 300 is not read; the axisPointer component's 100 is",
+    ptrBar({ axisPointer: { animationDelayUpdate: 300 } }, { axisPointer: { animationDelayUpdate: 100 } }),
+    { x: 150, y: 150 }, [{ at: 0, x: 270, y: 150 }]));
+  // ---- [R5-C] endLabel leftovers ----
+  out.push(enterCase('line-endlabel.step',
+    "endLabel on a step 'end' line: the label rides the stepped polyline (getPointOn), the values the layout's points",
+    { xAxis: { type: 'category', data: CATS6 }, yAxis: { type: 'value' },
+      series: [{ type: 'line', step: 'end', showSymbol: false, endLabel: { show: true },
+        data: [120, 132, 101, 134, 90, 230] }] }));
+  out.push(enterCase('line-endlabel.single',
+    'endLabel on a line of one point: no polyline to speak of, the label at the point, the value as it is',
+    { xAxis: { type: 'category', data: CATS6 }, yAxis: { type: 'value' },
+      series: [{ type: 'line', endLabel: { show: true }, data: [120] }] }));
+  out.push(enterCase('line-endlabel.array',
+    'endLabel on [x, y] items on a value axis: the y value counts (interpolateRawValues on the arrays)',
+    { xAxis: { type: 'value' }, yAxis: { type: 'value' },
+      series: [{ type: 'line', showSymbol: false, endLabel: { show: true },
+        data: [[0, 120], [1, 132], [3, 101], [4, 134], [5, 90]] }] }));
+  out.push(enterCase('line-endlabel.rich',
+    'a rich endLabel, no count: its block rides the clip',
+    { xAxis: { type: 'category', data: CATS6 }, yAxis: { type: 'value' },
+      series: [{ type: 'line', showSymbol: false,
+        endLabel: { show: true, valueAnimation: false, formatter: '{a|{c}} pts', rich: { a: { fontSize: 16, color: '#c23531' } } },
+        data: [120, 132, 101, 134, 90, 230] }] }));
+  out.push(enterCase('line-endlabel.richcount',
+    'a rich endLabel that counts: the block laid out again at each value',
+    { xAxis: { type: 'category', data: CATS6 }, yAxis: { type: 'value' },
+      series: [{ type: 'line', showSymbol: false,
+        endLabel: { show: true, formatter: '{a|{c}}', rich: { a: { fontSize: 15 } } },
+        data: [120, 132, 101, 134, 90, 230] }] }));
+  out.push(enterCase('line-endlabel.fn',
+    'endLabel with a formatter function: it is called with the interpolated value',
+    { xAxis: { type: 'category', data: CATS6 }, yAxis: { type: 'value' },
+      series: [{ type: 'line', showSymbol: false, endLabel: { show: true, formatter: { $fn: 'endfmt' } },
+        data: [120, 132, 101, 134, 90, 230] }] }));
+  out.push(enterCase('line-endlabel.emph',
+    'endLabel.show false, emphasis.endLabel.show true: the label is there, hidden at rest',
+    { xAxis: { type: 'category', data: CATS6 }, yAxis: { type: 'value' },
+      series: [{ type: 'line', showSymbol: false, endLabel: { show: false }, emphasis: { endLabel: { show: true } },
+        data: [120, 132, 101, 134, 90, 230] }] }));
   return out;
 }
 
@@ -742,6 +833,9 @@ function generate() {
   g.push({ id: 'pointer-off-still', ok: byId('axisPointer.off').clips.every(n => n === 0) });
   g.push({ id: 'pointer-dense-still', ok: byId('axisPointer.dense').clips.every(n => n === 0) });
   g.push({ id: 'pointer-value-snaps', ok: byId('axisPointer.valueSnap').clips.some(n => n > 0) });
+  g.push({ id: 'polar-pointer-slides', ok: ['polarPointer.angleLine', 'polarPointer.angleShadow', 'polarPointer.radiusLine',
+    'polarPointer.radiusShadow'].every(id => byId(id).clips.some(n => n > 0)) });
+  g.push({ id: 'polar-pointer-off-still', ok: byId('polarPointer.off').clips.every(n => n === 0) });
   // markLine animation false: still; the markPoint of the series whose animation is off: still; the other's pops in
   const offEls = byId('bar-markers.off').elements;
   g.push({ id: 'markers-off-still', ok: offEls.filter(e => e.owner.startsWith('markLine')).every(e => !e.animators)

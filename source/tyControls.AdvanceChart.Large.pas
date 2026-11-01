@@ -68,6 +68,11 @@ type
     { symbol: the soft clip (getArea(0.1)) points outside are not drawn in }
     SoftOn: Boolean;
     Soft: TTyXYWH;
+    { [R5-G] on a polar the soft clip is Polar.getArea(0.1): the ring
+      between RingR0 and RingR1 about RingCX / RingCY (the angles do not
+      matter, a ten-thousandth either way on the squares) }
+    SoftRing: Boolean;
+    RingCX, RingCY, RingR0, RingR1: Double;
     { candle: the sign this path draws, and the width its stroke answers
       within -- max(lineWidth, strokeContainThreshold 5) }
     Sign: Integer;
@@ -88,6 +93,12 @@ type
     Shown: Integer;
     ChunkFirst: Integer;
     ChunkEnds: TTyIntegerArray;
+    { [R5-J] a symbol batch's NUMBERS after each of its chunks, and those
+      it holds now (0: every one) -- a single axis' chunk is
+      Float32Array(count), an odd count's x dangling, so a batch's numbers
+      are not always twice its rows }
+    ChunkNums: TTyIntegerArray;
+    ShownNums: Integer;
     { LINES [Batch 121]: Pts holds the segs -- [x0, y0, x1, y1] per row, or
       [count, x, y, ...] per row on a polyline (LinesPoly); Idx the offset of
       each row's first number; the series' curveness (a straight row is a
@@ -116,6 +127,9 @@ function TyLargeIsOn(const AType: string; ALarge, AThreshold: TJSONData;
 { Math.fround }
 function TyLargeF32(AX: Double): Double;
 
+{ [R5-G] the soft clip's contain: the rect, or on a polar the ring }
+function TyLargeSoftContains(const AGeom: TTyLargeGeom; AX, AY: Double): Boolean;
+
 { The bounding rect zrender answers for the element, into AGeom.Box. }
 procedure TyLargeSetBox(var AGeom: TTyLargeGeom);
 
@@ -136,8 +150,14 @@ function TyLargeIndexAt(const AGeom: TTyLargeGeom; AX, AY: Double): Integer;
 { The bounding rect as a rect (a not-a-number one is not valid). }
 function TyLargeBounds(const AGeom: TTyLargeGeom): TTyRectF;
 { The rows the batch holds now: every row, or a growing symbol batch's
-  Shown [Batch 119]. }
+  Shown [Batch 119] -- [spec 242] or a growing lines batch's. }
 function TyLargeRows(const AGeom: TTyLargeGeom): Integer;
+{ [R5-J] the numbers a symbol batch holds now: its typed array's length --
+  every number, or a growing batch's ShownNums }
+function TyLargeSymbolNumbers(const AGeom: TTyLargeGeom): Integer;
+{ [spec 242] the numbers of a lines batch's segs it holds now: every one,
+  or those of a growing batch's Shown rows }
+function TyLargeLinesUsed(const AGeom: TTyLargeGeom): Integer;
 { LargeLinesPath.findDataIndex: the first row whose stroke holds the point,
   -1 for none. A polyline row is tested from its FIRST point to each of the
   others -- upstream never moves x0, y0 along. [Batch 121] }
@@ -149,9 +169,27 @@ implementation
 
 uses tyControls.AdvanceChart.Lines;
 
+function TyLargeLinesUsed(const AGeom: TTyLargeGeom): Integer;
+begin
+  if (AGeom.Shown > 0) and (AGeom.Shown < Length(AGeom.Idx)) then
+    Result := AGeom.Idx[AGeom.Shown]
+  else
+    Result := Length(AGeom.Pts);
+end;
+
+function TyLargeSymbolNumbers(const AGeom: TTyLargeGeom): Integer;
+begin
+  Result := Length(AGeom.Pts);
+  if (AGeom.ShownNums > 0) and (AGeom.ShownNums < Result) then Result := AGeom.ShownNums;
+end;
+
 function TyLargeRows(const AGeom: TTyLargeGeom): Integer;
 begin
-  if AGeom.Kind = lgkLines then Exit(Length(AGeom.Idx));
+  if AGeom.Kind = lgkLines then
+  begin
+    if (AGeom.Shown > 0) and (AGeom.Shown < Length(AGeom.Idx)) then Exit(AGeom.Shown);
+    Exit(Length(AGeom.Idx));
+  end;
   case AGeom.Kind of
     lgkBar: Result := Length(AGeom.Pts) div 3;
     lgkSymbol:
@@ -163,6 +201,25 @@ begin
   else
     Result := 0;
   end;
+end;
+
+function TyLargeSoftContains(const AGeom: TTyLargeGeom; AX, AY: Double): Boolean;
+var
+  dx, dy, d2, lo, hi: Double;
+begin
+  if not AGeom.SoftOn then Exit(True);
+  if AGeom.SoftRing then
+  begin
+    lo := Min(AGeom.RingR0, AGeom.RingR1);
+    hi := Max(AGeom.RingR0, AGeom.RingR1);
+    dx := AX - AGeom.RingCX;
+    dy := AY - AGeom.RingCY;
+    d2 := dx * dx + dy * dy;
+    Result := (hi <> lo) and (d2 - 1e-4 <= hi * hi) and (d2 + 1e-4 >= lo * lo);
+  end
+  else
+    Result := (AX >= AGeom.Soft.X) and (AX <= AGeom.Soft.X + AGeom.Soft.W)
+      and (AY >= AGeom.Soft.Y) and (AY <= AGeom.Soft.Y + AGeom.Soft.H);
 end;
 
 function TyLargeKindOfType(const AType: string): TTyLargeKind;
@@ -326,13 +383,26 @@ begin
         { LargeSymbolPath.getBoundingRect: the points' extremes grown by the
           symbol's own size -- not the hit box's 4 px floor }
         a := Infinity; b := Infinity; c := NegInfinity; d := NegInfinity;
-        n := TyLargeRows(AGeom);
-        for i := 0 to n - 1 do
+        { [R5-J] over the typed array's numbers, two at a time: an odd
+          count's last x reads an undefined y, which Math.min / max make
+          NaN [was: whole pairs only] }
+        n := TyLargeSymbolNumbers(AGeom);
+        i := 0;
+        while i < n do
         begin
-          a := JsMin(AGeom.Pts[i * 2], a);
-          c := JsMax(AGeom.Pts[i * 2], c);
-          b := JsMin(AGeom.Pts[i * 2 + 1], b);
-          d := JsMax(AGeom.Pts[i * 2 + 1], d);
+          a := JsMin(AGeom.Pts[i], a);
+          c := JsMax(AGeom.Pts[i], c);
+          if i + 1 < n then
+          begin
+            b := JsMin(AGeom.Pts[i + 1], b);
+            d := JsMax(AGeom.Pts[i + 1], d);
+          end
+          else
+          begin
+            b := NaN;
+            d := NaN;
+          end;
+          Inc(i, 2);
         end;
         AGeom.Box.X := JsAdd(a, -AGeom.SymW / 2);
         AGeom.Box.Y := JsAdd(b, -AGeom.SymH / 2);
@@ -371,7 +441,7 @@ begin
           the height. The stroke is not added. }
         a := Infinity; b := Infinity; c := NegInfinity; d := NegInfinity;
         i := 0;
-        n := Length(AGeom.Pts);
+        n := TyLargeLinesUsed(AGeom);
         while i < n do
         begin
           rx := AGeom.Pts[i];
@@ -427,7 +497,7 @@ var
 begin
   Result := -1;
   segs := AGeom.Pts;
-  n := Length(segs);
+  n := TyLargeLinesUsed(AGeom);
   c := AGeom.LinesCurve;
   lw := AGeom.LineW;
   di := 0;

@@ -654,7 +654,8 @@ resourcestring
   rsTyDsCondNoOperator = 'a filter condition has no operator';
   rsTyDsCondBadOperator = '"%s" is not a filter operator';
   rsTyDsCondNeedsNumber = '"%s" compares with a number only';
-  rsTyDsCondReg = '"reg" (a regular expression) is not supported';
+  rsTyDsCondReg = '"reg" is not a regular expression: %s';
+  rsTyDsCondRegSlow = 'the regular expression in "reg" runs too long: %s';
   rsTyDsSortEmpty = 'the sort has no config';
   rsTyDsSortNoDimension = 'a sort key has no dimension';
   rsTyDsSortOrder = 'a sort key''s order must be "asc" or "desc"';

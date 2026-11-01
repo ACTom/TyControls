@@ -165,8 +165,13 @@ var
     if not TyGfxPaintElement(AEl, meas, ctx, pe) then Exit;
     pe.Silent := ASilent;
     pe.Datum := TyChartComponentDatum(ctkGraphic, 0, n);
-    { zlevel over z, as zrender sorts; z and z2 whole }
-    pe.Z := Round(AEl.ZLevel) * 100000 + Round(AEl.Z);
+    { zlevel over z, as zrender sorts; z and z2 whole -- [R5-J] the zlevel
+      the element's own, so the canvases are drawn and searched in their
+      order with the series' and the components' [was: folded into z, the
+      element on canvas 0] }
+    if IsNan(AEl.ZLevel) or IsInfinite(AEl.ZLevel) then pe.ZLevel := 0
+    else pe.ZLevel := Round(Max(Double(-100000), Min(Double(100000), AEl.ZLevel)));
+    pe.Z := Round(AEl.Z);
     pe.Z2 := Round(AEl.Z2);
     pe.GfxUnder := (AEl.ZLevel = 0) and (AEl.Z <= 0);
     SetLength(FGfxPaint, n + 1);
@@ -248,6 +253,71 @@ begin
   Walk(FGfxView.Root, False);
 end;
 
+{ ==================== a graphic element as a tooltip target [spec 242] ==================== }
+
+{ GraphicView gives every element a tooltip config (setTooltipConfig: the
+  content its name, the formatter params {componentType 'graphic', name,
+  graphicIndex}, $vars ['name']); TooltipView shows it through
+  _showComponentItemTooltip -- the element's tooltip (a string a
+  formatter), the graphic component's, a level whose formatter is the
+  content, the global component. A label is its host's. }
+function TTyCustomAdvanceChart.IsGfxTipDatum(const ADatum: TTyChartDatumRef): Boolean;
+begin
+  Result := (ADatum.Kind = ctkGraphic) and (FGfxView <> nil) and (ADatum.DataIndex >= 0)
+    and (ADatum.DataIndex <= High(FGfxPaintEl)) and (FGfxPaintEl[ADatum.DataIndex] <> nil);
+end;
+
+function TTyCustomAdvanceChart.GfxTipEl(const ADatum: TTyChartDatumRef): TTyGfxEl;
+begin
+  Result := nil;
+  if not IsGfxTipDatum(ADatum) then Exit;
+  Result := FGfxPaintEl[ADatum.DataIndex];
+  if Result.Host <> nil then Result := Result.Host;
+end;
+
+function TTyCustomAdvanceChart.GfxTipSpec(const ADatum: TTyChartDatumRef): TTyTooltipSpec;
+var el: TTyGfxEl;
+begin
+  el := GfxTipEl(ADatum);
+  if el = nil then Exit(TyTooltipSpecOf(FOption, -1, -1));
+  Result := TyTooltipSpecOfItem(FOption, 'graphic', 0, el.TipOpt, TipContentName(el.Name));
+end;
+
+function TTyCustomAdvanceChart.GfxTipParams(const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
+var el: TTyGfxEl;
+begin
+  Result := TyChartBlankParams;
+  el := GfxTipEl(ADatum);
+  if el = nil then Exit;
+  Result.ComponentType := 'graphic';
+  Result.ComponentIndex := 0;
+  Result.Name := el.Name;
+end;
+
+{ a handler with the params, a template through formatTpl ($vars ['name']:
+  the first a-placeholder the name, encoded), else the content (the name) }
+function TTyCustomAdvanceChart.GfxTipText(const ADatum: TTyChartDatumRef;
+  const ASpec: TTyTooltipSpec): string;
+var
+  el: TTyGfxEl;
+  tpl: string;
+  params: TTyChartParams;
+begin
+  Result := '';
+  el := GfxTipEl(ADatum);
+  if el = nil then Exit;
+  if not ASpec.HasFormatter then Exit(TipContentName(el.Name));
+  if TyChartIsHandlerRef(ASpec.Formatter) then
+  begin
+    SetLength(params, 1);
+    params[0] := GfxTipParams(ADatum);
+    TyChartResolveText(ASpec.Formatter, params, Result);
+    Exit;
+  end;
+  tpl := TyJsReplaceFirst(ASpec.Formatter, '{a}', '{a0}');
+  Result := TyJsReplaceFirst(tpl, '{a0}', GeoEncodeHtml(el.Name));
+end;
+
 procedure TTyCustomAdvanceChart.GfxPaintUnder(APainter: TTyPainter);
 var
   i: Integer;
@@ -256,6 +326,10 @@ begin
   FGfxUnder.Clear;
   for i := 0 to High(FGfxPaint) do
     if FGfxPaint[i].GfxUnder then FGfxUnder.Add(FGfxPaint[i]);
+  { [R5-G] THE GRIDS' BACKGROUNDS, in the same order: under the axes (their
+    z2 -1 under an axis' 0 at the grid's z 0), the graphic's group ahead of
+    the grids' at an equal z and z2 }
+  AddGridBackgrounds(FGfxUnder);
   for i := 0 to FGfxUnder.Count - 1 do
   begin
     el := FGfxUnder.Element(FGfxUnder.PaintOrder(i));
@@ -265,15 +339,24 @@ end;
 
 function TTyCustomAdvanceChart.GfxElementEvent(const AType: string;
   const ATarget: TTyChartEventTarget; AX, AY: Integer): Boolean;
+begin
+  Result := False;
+  if (ATarget.HdKind <> 8) or (FGfxView = nil) then Exit;
+  Result := GfxElementEventFrom(AType, FGfxView.Find(ATarget.HdName), AX, AY);
+end;
+
+{ dispatchToElement from an element of the view: its on<type> handler, then
+  its parents', a true answer stopping the climb }
+function TTyCustomAdvanceChart.GfxElementEventFrom(const AType: string;
+  AEl: TTyGfxEl; AX, AY: Integer): Boolean;
 var
   el: TTyGfxEl;
   spec: string;
   ev: TTyChartElementEvent;
 begin
   Result := False;
-  if (ATarget.HdKind <> 8) or (FGfxView = nil) then Exit;
-  el := FGfxView.Find(ATarget.HdName);
-  if el = nil then Exit;
+  el := AEl;
+  if (el = nil) or (FGfxView = nil) then Exit;
   ev := Default(TTyChartElementEvent);
   ev.EventType := AType;
   ev.TargetId := el.Id;
@@ -301,6 +384,7 @@ procedure TTyCustomAdvanceChart.GfxDragStart(const ATarget: TTyChartEventTarget;
 var el: TTyGfxEl;
 begin
   FGfxDragOn := False;
+  FGfxDropKey := '';
   if (ATarget.HdKind <> 8) or (FGfxView = nil) then Exit;
   el := FGfxView.Find(ATarget.HdName);
   while (el <> nil) and (el <> FGfxView.Root) and (el.Draggable = '') do el := el.Parent;
@@ -309,13 +393,75 @@ begin
   FGfxDragId := el.Id;
   FGfxDragX := AX;
   FGfxDragY := AY;
+  { [spec 242] Draggable._dragStart: 'dragstart' to the dragged element }
+  GfxElementEventFrom('dragstart', el, AX, AY);
+end;
+
+{ [spec 242] what the pointer is over with the dragged element itself left
+  out (findHover's exclude: that one displayable, not its label nor its
+  children), as a key -- 'g:<id>' a graphic element (a label is its host's),
+  '#<index>' any other element, '' nothing -- and the graphic element }
+function TTyCustomAdvanceChart.GfxDropAt(AX, AY: Integer; ADrag: TTyGfxEl;
+  out AEl: TTyGfxEl): string;
+var
+  k, idx: Integer;
+  pe: PTyChartElement;
+  was: array of Boolean;
+  gel: TTyGfxEl;
+begin
+  Result := '';
+  AEl := nil;
+  if (FPaintList = nil) or not FPaintListValid then Exit;
+  SetLength(was, FPaintList.Count);
+  for k := 0 to FPaintList.Count - 1 do
+  begin
+    pe := FPaintList.Ref(k);
+    was[k] := pe^.Silent;
+    if (pe^.Datum.Kind = ctkGraphic) and (pe^.Datum.DataIndex >= 0)
+      and (pe^.Datum.DataIndex <= High(FGfxPaintEl))
+      and (FGfxPaintEl[pe^.Datum.DataIndex] = ADrag) then
+      pe^.Silent := True;
+  end;
+  try
+    idx := ListHitAt(AX, AY);
+  finally
+    for k := 0 to FPaintList.Count - 1 do FPaintList.Ref(k)^.Silent := was[k];
+  end;
+  if idx < 0 then Exit;
+  pe := FPaintList.Ref(idx);
+  if (pe^.Datum.Kind = ctkGraphic) and (pe^.Datum.DataIndex >= 0)
+    and (pe^.Datum.DataIndex <= High(FGfxPaintEl)) then
+  begin
+    gel := FGfxPaintEl[pe^.Datum.DataIndex];
+    if gel.Host <> nil then gel := gel.Host;
+    AEl := gel;
+    Result := 'g:' + gel.Id;
+  end
+  else
+    Result := '#' + IntToStr(idx);
+end;
+
+{ [spec 242] Draggable._dragEnd: 'dragend' to the dragged element, 'drop'
+  to what it was last over }
+procedure TTyCustomAdvanceChart.GfxDragEnd(AX, AY: Integer);
+var el: TTyGfxEl;
+begin
+  if FGfxDragOn and (FGfxView <> nil) then
+  begin
+    el := FGfxView.Find(FGfxDragId);
+    if el <> nil then GfxElementEventFrom('dragend', el, AX, AY);
+    if (FGfxDropKey <> '') and (Copy(FGfxDropKey, 1, 2) = 'g:') then
+      GfxElementEventFrom('drop', FGfxView.Find(Copy(FGfxDropKey, 3, MaxInt)), AX, AY);
+  end;
+  FGfxDragOn := False;
+  FGfxDropKey := '';
 end;
 
 procedure TTyCustomAdvanceChart.GfxDragMove(AX, AY: Integer);
 var
-  el: TTyGfxEl;
-  dx, dy, scale, vx, vy: Double;
-  inv: TTyMat2D;
+  el, drop: TTyGfxEl;
+  dx, dy, scale: Double;
+  key, last: string;
 begin
   if not FGfxDragOn or (FGfxView = nil) then Exit;
   el := FGfxView.Find(FGfxDragId);
@@ -329,23 +475,25 @@ begin
   dy := (AY - FGfxDragY) / scale;
   FGfxDragX := AX;
   FGfxDragY := AY;
-  if (dx = 0) and (dy = 0) then Exit;
-  { Element.drift: 'horizontal' keeps y, 'vertical' keeps x }
-  if el.Draggable = 'horizontal' then dy := 0
-  else if el.Draggable = 'vertical' then dx := 0;
-  { the move in the parent's frame }
-  vx := dx;
-  vy := dy;
-  if (el.Parent <> nil) and el.Parent.HasTransform
-    and TyMatInvert(el.Parent.Transform, inv) then
-  begin
-    vx := inv[0] * dx + inv[2] * dy;
-    vy := inv[1] * dx + inv[3] * dy;
-  end;
-  el.X := el.X + vx;
-  el.Y := el.Y + vy;
+  { [spec 242] Draggable._drag: drift (decomposeTransform), 'drag' to the
+    element, then what it is over now -- 'dragleave' to the last one,
+    'dragenter' to the new -- every move, a move of nought too }
+  TyGfxDrift(el, dx, dy);
+  GfxElementEventFrom('drag', el, AX, AY);
+  { findHover over the list as drawn (the others where they stand), before
+    the frame is dropped for the moved element }
+  key := GfxDropAt(AX, AY, el, drop);
   DropStatic;
   InvalidateFrame;
+  last := FGfxDropKey;
+  FGfxDropKey := key;
+  if key <> 'g:' + el.Id then
+  begin
+    if (last <> '') and (key <> last) and (Copy(last, 1, 2) = 'g:') then
+      GfxElementEventFrom('dragleave', FGfxView.Find(Copy(last, 3, MaxInt)), AX, AY);
+    if (key <> '') and (key <> last) and (drop <> nil) then
+      GfxElementEventFrom('dragenter', drop, AX, AY);
+  end;
 end;
 
 function TTyCustomAdvanceChart.GraphicView: TTyGfxView;
@@ -385,6 +533,16 @@ begin
   Result := nil;
   if (AIndex >= 0) and (AIndex <= High(FCustomPaintEls)) then
     Result := FCustomPaintEls[AIndex];
+end;
+
+function TTyCustomAdvanceChart.CustomClipSector(ASeriesIndex: Integer;
+  out ASector: TTyCuClipSector): Boolean;
+var slot: Integer;
+begin
+  ASector := Default(TTyCuClipSector);
+  slot := SlotOfSeries(ASeriesIndex);
+  Result := (slot >= 0) and (slot <= High(FCustomClipSec)) and FCustomClipSec[slot].On;
+  if Result then ASector := FCustomClipSec[slot];
 end;
 
 function TTyCustomAdvanceChart.CustomClip(ASeriesIndex: Integer; out ARect: TTyXYWH): Boolean;
@@ -1643,6 +1801,10 @@ begin
     Result := Lookup(ItemNode(r), Node, ['itemStyle', 'borderColor']);
     if Result <> nil then Result := Result.Clone;
   end
+  else if AType = 'visualMeta' then
+    { [spec 242] the series data's visualMeta: every continuous or piecewise
+      visualMap on it, in component order -- [] where none is }
+    Result := Chart.CustomVisualMetaJson(Slot)
   else if AType = 'decal' then
   begin
     { the item's decal visual, through getItemVisual's fallback to the
@@ -1728,6 +1890,30 @@ end;
 function TTyChartCustomApi.GetDevicePixelRatio: Double;
 begin
   Result := Scale;
+end;
+
+{ [spec 242] visualEncoding's visualMeta list of a series as JSON:
+  {stops: [{value, color}], outerColors, dimension} each }
+function TTyCustomAdvanceChart.CustomVisualMetaJson(ASlot: Integer): TJSONArray;
+var
+  k, s: Integer;
+  m: TTyVisualMeta;
+  o: TJSONObject;
+  stops: TJSONArray;
+begin
+  Result := TJSONArray.Create;
+  if (ASlot < 0) or (ASlot > High(FVisualMetas)) then Exit;
+  for k := 0 to High(FVisualMetas[ASlot]) do
+  begin
+    m := FVisualMetas[ASlot][k];
+    stops := TJSONArray.Create;
+    for s := 0 to High(m.Stops) do
+      stops.Add(TJSONObject.Create(['value', m.Stops[s].Value, 'color', m.Stops[s].ColorText]));
+    o := TJSONObject.Create(['stops', stops,
+      'outerColors', TJSONArray.Create([m.Outer0Text, m.Outer1Text]),
+      'dimension', m.Dimension]);
+    Result.Add(o);
+  end;
 end;
 
 { the style visual's fill of a row: the item's own itemStyle colour, the
@@ -1940,6 +2126,8 @@ begin
   FCustomClip := nil;
   SetLength(FCustomClipOn, Length(FBindings));
   SetLength(FCustomClip, Length(FBindings));
+  FCustomClipSec := nil;
+  SetLength(FCustomClipSec, Length(FBindings));
   for i := 0 to High(FBindings) do
   begin
     if FBindings[i].SeriesType <> TyCustomSeriesType then Continue;
@@ -2215,6 +2403,23 @@ begin
       end;
       FCustomClipOn[i] := True;
       FCustomClip[i] := TyXYWH(x, y, cw, ch);
+    end
+    { [spec 242] createPolarClipPath: a sector over the polar's area -- the
+      centre and the radii to one decimal, the angle extent turned to
+      radians, clockwise its angle axis' inverse -- device px, as the
+      elements are }
+    else if (sys = cusPolar) and CuTruthy(node.Find('clip')) then
+    begin
+      FCustomClipSec[i].On := True;
+      pol.AxisExtent(pol.RadiusAxis, r0, r1);
+      FCustomClipSec[i].CX := TyJsToFixed(pol.CX, 1);
+      FCustomClipSec[i].CY := TyJsToFixed(pol.CY, 1);
+      FCustomClipSec[i].R0 := TyJsToFixed(Min(r0, r1), 1);
+      FCustomClipSec[i].R1 := TyJsToFixed(Max(r0, r1), 1);
+      pol.AxisExtent(pol.AngleAxis, r0, r1);
+      FCustomClipSec[i].SA := -r0 * (Pi / 180);
+      FCustomClipSec[i].EA := -r1 * (Pi / 180);
+      FCustomClipSec[i].CW := pol.AngleInverse;
     end;
   end;
   { THE FLUSH: upstream's setOption ends with a synchronous update that
@@ -2382,6 +2587,18 @@ var
       pe.HasClip := True;
       pe.ClipRect := clip;
     end;
+    { [spec 242] a polar's sector }
+    if (ASlot <= High(FCustomClipSec)) and FCustomClipSec[ASlot].On then
+    begin
+      pe.HasClipSector := True;
+      pe.ClipCX := FCustomClipSec[ASlot].CX;
+      pe.ClipCY := FCustomClipSec[ASlot].CY;
+      pe.ClipR0 := FCustomClipSec[ASlot].R0;
+      pe.ClipR1 := FCustomClipSec[ASlot].R1;
+      pe.ClipSA := FCustomClipSec[ASlot].SA;
+      pe.ClipEA := FCustomClipSec[ASlot].EA;
+      pe.ClipCW := FCustomClipSec[ASlot].CW;
+    end;
     { [F3c] AN ITEM'S PATH as getPathList finds it (no text, no image, not
       invisible, not `morph: false`), for the universal transition }
     if (AEl.Kind in [gkRect, gkCircle, gkEllipse, gkRing, gkSector, gkArc, gkPolygon,
@@ -2524,7 +2741,9 @@ var
     info := nil;
     if (gel <> nil) and (gel.Custom is TTyCustomElInfo) then info := TTyCustomElInfo(gel.Custom);
     AEl.Exists := True;
-    AEl.IsPath := True;
+    { [spec 242] a text or an image is no Path: no colour lift }
+    AEl.IsPath := (gel = nil) or gel.StatePath;
+    AEl.GfxText := not AEl.IsPath;
     AEl.Proxy := True;
     AEl.LiftOne := True;
     for n := Low(TTyStName) to High(TTyStName) do

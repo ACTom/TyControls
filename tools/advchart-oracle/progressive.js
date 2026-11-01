@@ -172,6 +172,9 @@ function newChart() {
   const chart = echarts.init(null, null, { renderer: 'svg', ssr: true, width: W, height: H });
   chart._ssr = false;
   chart.getZr().painter.type = 'canvas';
+  // [spec 242] LinesView clears its canvas layer (motion blur): a layer
+  // that clears nothing
+  chart.getZr().painter.getLayer = function () { return { clear() {} }; };
   const sch = chart._scheduler;
   const orig = sch.performSeriesTasks;
   sch.performSeriesTasks = function (m) {
@@ -325,6 +328,17 @@ C('cd-large-mod', 'chunk', 'large candles, 10 rows by 4, mod: three paths a chun
   base(Object.assign({}, catX(10), { series: [{ type: 'candlestick', large: true, largeThreshold: 5, progressive: 4, progressiveThreshold: 5, data: ohlc(10, 23) }] })), F(5));
 C('sc-mod', 'chunk', 'a scatter asked for mod: its layout walks start..end, only the restart remains',
   base(Object.assign({}, XY, { series: [scatter(10, { progressive: 4, progressiveThreshold: 5, progressiveChunkMode: 'mod' })] })), F(5));
+// [R5-J, spec 244b] a large scatter on a single axis, progressive: each
+// chunk's pointsLayout array is Float32Array(count * 1) yet written two
+// numbers a row -- its first count / 2 points, an odd count's x dangling --
+// and LargeSymbolDraw.incrementalUpdate concatenates the arrays, read in
+// pairs again (a dangling x pairs with the next chunk's first number)
+for (const by of [4, 3]) {
+  C('sg-large-' + by, 'chunk', 'a large scatter on a single axis by ' + by + ' rows, 13 rows: every chunk holds its first rows / 2 points' + (by % 2 ? ', the dangling x pairing with the next chunk' : ''),
+    base({ singleAxis: { type: 'value', min: 0, max: 100, top: 150, bottom: 150 },
+      series: [{ type: 'scatter', coordinateSystem: 'singleAxis', large: true, largeThreshold: 5, progressive: by, progressiveThreshold: 5, symbolSize: 6,
+        data: [5, 12, 20, 27, 33, 41, 48, 55, 61, 68, 74, 83, 91] }] }), F(6).concat([['snap']]));
+}
 
 // --- the frame budget
 C('sc-cost-04', 'budget', 'a step costs 0.4 ms: three chunks a frame',
@@ -393,6 +407,63 @@ C('hv-bar', 'hover', 'a progressive bar by 4, mod, the pointer on rows of the se
   base(Object.assign({}, catX(12), { series: [{ type: 'bar', large: true, progressive: 4, progressiveThreshold: 5, data: vals(12, 5, 90, 83) }] })),
   [['frame'], ['move', { row: [0, 1] }], ['frame'], ['move', { row: [0, 1] }], ['move', { row: [0, 4] }], ['leave'], ['frame']]);
 
+// [spec 242] appendData on a series reading a dataset: the provider pushes
+// the rows into the dataset's own table; the series takes them at the next
+// frame, another series on the table only at the next full update; a table
+// laid out by row throws
+const DS3 = [['x', 'a', 'b'], [10, 5, 40], [20, 15, 35], [30, 25, 30], [40, 35, 25], [50, 45, 20], [60, 40, 15], [70, 30, 10], [80, 20, 5]];
+C('ap-ds', 'append', 'two scatters on one dataset (x with a, x with b); rows appended through the first go into the table: the first draws them at the frame, the second at the next update; one is past the extent',
+  base(Object.assign({}, XY, { dataset: { source: DS3 }, series: [{ type: 'scatter', symbolSize: 6 }, { type: 'scatter', symbolSize: 6 }] })),
+  [['append', 0, [[15, 10, 45], [90, 50, 1], [35, 20, 33]]], ['frame'], ['frame'], ['snap'], ['update'], ['frame'], ['snap']]);
+C('ap-ds-obj', 'append', 'a scatter on a dataset of objects: the appended objects go into the table',
+  base(Object.assign({}, XY, { dataset: { source: [{ x: 10, y: 5 }, { x: 20, y: 30 }, { x: 40, y: 20 }] }, series: [{ type: 'scatter', symbolSize: 6 }] })),
+  [['append', 0, [{ x: 30, y: 10 }, { x: 15, y: 25 }]], ['frame'], ['frame'], ['snap']]);
+C('ap-ds-row', 'append', 'a dataset laid out by row: appendData throws, nothing changes',
+  base(Object.assign({}, XY, { dataset: { source: [[10, 20, 30], [5, 15, 25]] }, series: [{ type: 'scatter', symbolSize: 6, seriesLayoutBy: 'row' }] })),
+  [['append', 0, [[40, 10]]], ['frame'], ['frame'], ['snap']]);
+// [spec 242] the coordinate systems in the frame after appendData: a polar's
+// extents are not measured again (the appended points place on the old
+// ones); a dataZoom's processor runs again over the new rows (a value
+// window from percentages follows the new extent); a calendar places the
+// new days
+C('ap-polar', 'append', 'a scatter on a polar (value radius, value angle): rows past both extents appended; the frame places them on the old extents; the next update measures again',
+  base({ polar: {}, radiusAxis: { type: 'value' }, angleAxis: { type: 'value' },
+    series: [{ type: 'scatter', coordinateSystem: 'polar', symbolSize: 6, data: [[10, 20], [20, 60], [30, 100]] }] }),
+  [['append', 0, [[50, 150], [15, 40]]], ['frame'], ['frame'], ['snap'], ['update'], ['snap']]);
+C('ap-dz', 'append', 'a scatter under an inside dataZoom of 25% to 75% of x (filter): rows past the extent appended; the frame filters by the window over the new extent; the next update too',
+  base(Object.assign({}, XY, { dataZoom: [{ type: 'inside', xAxisIndex: 0, start: 25, end: 75 }],
+    series: [{ type: 'scatter', symbolSize: 6, data: [[0, 5], [20, 10], [40, 15], [60, 20], [80, 25], [100, 30]] }] })),
+  [['append', 0, [[200, 12], [120, 22], [150, 8]]], ['frame'], ['frame'], ['snap'], ['update'], ['snap']]);
+// [spec 242] the lines' and the custom series' incremental views
+(function () {
+  const ln = [];
+  for (let i = 0; i < 10; i++) ln.push({ coords: [[i * 9, (i * 7) % 50], [100 - i * 8, (i * 13) % 50]] });
+  C('pr-lines', 'switch', 'a lines series, progressive 3 / threshold 5, 10 rows: its lines drawn chunk by chunk (LinesView.incrementalRender)',
+    base(Object.assign({}, XY, { series: [{ type: 'lines', coordinateSystem: 'cartesian2d', progressive: 3, progressiveThreshold: 5, data: ln }] })),
+    F(5).concat([['snap']]));
+  C('pr-lines-under', 'switch', 'the same under its threshold (20): at once',
+    base(Object.assign({}, XY, { series: [{ type: 'lines', coordinateSystem: 'cartesian2d', progressive: 3, progressiveThreshold: 20, data: ln }] })),
+    F(2));
+  C('pr-lines-large', 'switch', 'large lines, progressive 3 / threshold 5: the segs of a chunk concatenated onto the batch while that holds under 2e4 numbers (LargeLineDraw.incrementalUpdate)',
+    base(Object.assign({}, XY, { series: [{ type: 'lines', coordinateSystem: 'cartesian2d', large: true, largeThreshold: 5,
+      progressive: 3, progressiveThreshold: 5, lineStyle: { opacity: 1 }, data: ln }] })),
+    F(5).concat([['snap']]));
+  const big = [];
+  for (let i = 0; i < 5001; i++) big.push({ coords: [[i % 97, i % 41], [(i * 7) % 100, (i * 3) % 50]] });
+  C('pr-lines-large-split', 'switch', 'large lines by 2500 rows (1e4 numbers): the second chunk joins the first batch, the third starts its own',
+    base(Object.assign({}, XY, { series: [{ type: 'lines', coordinateSystem: 'cartesian2d', large: true, largeThreshold: 5,
+      progressive: 2500, progressiveThreshold: 5, data: big }] })),
+    F(4).concat([['snap']]));
+  C('pr-custom', 'switch', 'a custom series, progressive 4 / threshold 5, 10 items: its items made chunk by chunk (CustomView.incrementalRender)',
+    base(Object.assign({}, XY, { series: [{ type: 'custom', renderItem: '@progDot', progressive: 4, progressiveThreshold: 5,
+      data: pts(10, 97, [0, 100], [0, 50]) }] })),
+    F(5).concat([['snap']]));
+})();
+C('ap-cal', 'append', 'a scatter on a calendar: days appended in the range and out of it',
+  base({ calendar: { range: '2024-01', cellSize: 20, left: 60, top: 60 },
+    series: [{ type: 'scatter', coordinateSystem: 'calendar', symbolSize: 6, data: [['2024-01-03', 1], ['2024-01-10', 2]] }] }),
+  [['append', 0, [['2024-01-20', 3], ['2024-02-05', 4]]], ['frame'], ['frame'], ['snap']]);
+
 // =====================================================================
 // recording
 // =====================================================================
@@ -401,6 +472,8 @@ function largeKind(el) {
   if (el.type === 'largeBar') return el.silent ? 'barBg' : 'bar';
   if (el.type === 'largeCandlestickBox') return 'candle';
   if (typeof el.findDataIndex === 'function' && el.symbolProxy) return 'symbol';
+  // [spec 242] a LargeLinesPath
+  if (typeof el.findDataIndex === 'function' && el.shape && el.shape.segs != null) return 'lines';
   return null;
 }
 function largeEls(chart, sm) {
@@ -412,6 +485,24 @@ function largeEls(chart, sm) {
 // {el, d, data}; a progressive candle box has no ECData at all
 // (_incrementalRenderNormal never calls setItemGraphicEl), so its row is
 // read back off its x through the base axis and `data` is false
+// [spec 242] a custom series' renderItem written '@progDot': a dot at the
+// item's place in its colour (the port's test registers the same)
+const RENDER_ITEMS = {
+  progDot(params, api) {
+    const p = api.coord([api.value(0), api.value(1)]);
+    return { type: 'circle', shape: { cx: p[0], cy: p[1], r: 4 }, style: { fill: api.visual('color') } };
+  },
+};
+function withRenderItems(opt) {
+  (opt.series || []).forEach(s => {
+    if (typeof s.renderItem === 'string' && s.renderItem[0] === '@') {
+      must(RENDER_ITEMS[s.renderItem.slice(1)], 'no renderItem ' + s.renderItem);
+      s.renderItem = RENDER_ITEMS[s.renderItem.slice(1)];
+    }
+  });
+  return opt;
+}
+
 function owners(chart, sm) {
   const out = [];
   const seen = new Set();
@@ -460,8 +551,9 @@ function bboxOf(el) {
 }
 function elRec(el) {
   const kind = largeKind(el);
-  const p = el.shape.points;
-  const r = { kind, z2: el.z2, silent: !!el.silent, si: el.startIndex == null ? null : el.startIndex, n: p.length };
+  const p = kind === 'lines' ? el.shape.segs : el.shape.points;
+  const si = kind === 'lines' ? el.__startIndex : el.startIndex;
+  const r = { kind, z2: el.z2, silent: !!el.silent, si: si == null ? null : si, n: p.length };
   const hs = hexes(p);
   if (p.length > 600) r.fnv = fnv(hs);
   else r.pts = hs;
@@ -478,6 +570,9 @@ function elRec(el) {
   }
   else if (kind === 'symbol') {
     r.size = el.shape.size.map(hex);
+  }
+  else if (kind === 'lines') {
+    r.poly = !!el.shape.polyline;
   }
   else {
     r.sign = el.__sign;
@@ -600,7 +695,7 @@ function recordCase(c) {
     let lastWhich = null;
     let lastInner = null;
     const opt = JSON.parse(JSON.stringify(c.option));
-    chart.setOption(JSON.parse(JSON.stringify(c.option)));
+    chart.setOption(withRenderItems(JSON.parse(JSON.stringify(c.option))));
     chart.getZr().storage.getDisplayList(true);
     const view = (() => {
       const m = chart.getModel().getComponent('tooltip', 0);
@@ -648,8 +743,22 @@ function recordCase(c) {
         snap(i, 'cost', { cost: st[1] });
       }
       else if (st[0] === 'append') {
-        chart.appendData({ seriesIndex: st[1], data: JSON.parse(JSON.stringify(st[2])) });
-        snap(i, 'append', { seriesIndex: st[1], data: st[2] });
+        // [spec 242] a throw (a dataset laid out by row) is recorded
+        let threw = null;
+        try {
+          chart.appendData({ seriesIndex: st[1], data: JSON.parse(JSON.stringify(st[2])) });
+        }
+        catch (e) {
+          threw = String(e.message);
+        }
+        snap(i, 'append', threw === null ? { seriesIndex: st[1], data: st[2] } : { seriesIndex: st[1], data: st[2], threw });
+      }
+      // [spec 242] a full update (setOption of nothing) after the appends
+      else if (st[0] === 'update') {
+        chart.setOption({});
+        chart.getZr().storage.getDisplayList(true);
+        const s = snap(i, 'update');
+        s.geom = geomRec(chart);
       }
       else if (st[0] === 'snap') {
         const s = snap(i, 'snap');

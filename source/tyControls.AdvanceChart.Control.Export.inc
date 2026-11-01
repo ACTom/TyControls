@@ -76,6 +76,7 @@ begin
   FExporting := True;
   FExportBare := bg.Kind <> ebkTheme;
   FExportExclude := AOpts.Exclude;
+  FExportSameView := (w = Width) and (h = Height) and (ppi = ppi0);
   try
     StApplyChanged;
     P.BeginPaintOn(nil, R, ppi, Result);
@@ -103,6 +104,7 @@ begin
     P.EndPaint;
   finally
     FExportExclude := [];
+    FExportSameView := False;
     P.Free;
     { and back: FExporting stays on through the window's own layout below,
       so that render arms, binds and steps nothing either }
@@ -138,14 +140,42 @@ begin
   end;
 end;
 
-procedure TTyCustomAdvanceChart.WriteExport(AStream: TStream; ABmp: TBGRABitmap;
-  AType: TTyExportImageType);
+function TTyCustomAdvanceChart.WriteExport(AStream: TStream; ABmp: TBGRABitmap;
+  AType: TTyExportImageType): TTyExportImageType;
 var
   jpg: TBGRABitmap;
   writer: TFPWriterJPEG;
+  webp: TBGRAWriterWebP;
+  ms: TMemoryStream;
 begin
-  if AType <> eitJpeg then
+  Result := AType;
+  if AType = eitWebp then
   begin
+    { toDataURL('image/webp'): a lossy WebP at the canvas' default quality,
+      0.80, its alpha kept -- where the library is there; else the PNG a
+      canvas answers with for a type it cannot make. Written to memory
+      first: a failure leaves the stream as it was. }
+    ms := TMemoryStream.Create;
+    webp := TBGRAWriterWebP.Create;
+    try
+      try
+        webp.Lossless := False;
+        webp.QualityPercent := 80;
+        TFPCustomImage(ABmp).SaveToStream(ms, webp);
+        ms.Position := 0;
+        AStream.CopyFrom(ms, ms.Size);
+        Exit;
+      except
+        Result := eitPng;
+      end;
+    finally
+      webp.Free;
+      ms.Free;
+    end;
+  end;
+  if Result <> eitJpeg then
+  begin
+    Result := eitPng;
     ABmp.SaveToStreamAsPng(AStream);
     Exit;
   end;
@@ -224,6 +254,7 @@ begin
   begin
     ext := LowerCase(ExtractFileExt(AFileName));
     if (ext = '.jpg') or (ext = '.jpeg') then o.ImageType := eitJpeg;
+    if ext = '.webp' then o.ImageType := eitWebp;
   end;
   bmp := RenderExport(o);
   if bmp = nil then Exit;
@@ -245,22 +276,21 @@ var
   bmp: TBGRABitmap;
   ms: TMemoryStream;
   raw: RawByteString;
+  wrote: TTyExportImageType;
 begin
   ExportOptsOrRaise(AOptsJson, o);
   bmp := RenderExport(o);
   if bmp = nil then Exit('data:,');
   ms := TMemoryStream.Create;
   try
-    WriteExport(ms, bmp, o.ImageType);
+    wrote := WriteExport(ms, bmp, o.ImageType);
     SetLength(raw, ms.Size);
     if ms.Size > 0 then Move(ms.Memory^, raw[1], ms.Size);
   finally
     ms.Free;
     bmp.Free;
   end;
-  if o.ImageType = eitJpeg then Result := 'data:image/jpeg;base64,'
-  else Result := 'data:image/png;base64,';
-  Result := Result + EncodeStringBase64(raw);
+  Result := TyExportUrlHead(wrote) + EncodeStringBase64(raw);
 end;
 
 procedure TTyCustomAdvanceChart.SaveToPng(const AFileName: string);
@@ -316,6 +346,8 @@ begin
   if (AName <> '') and (AName <> 'default') then Exit;
   FLoadCfg := cfg;
   FLoadShown := True;
+  { [R5-G] an element over the mask's zlevel leaves the static layer }
+  if TyMaxZLevelOf(FPaintList) > ZStaticTop then StaticDrop;
   if FLoadCfg.ShowSpinner then
   begin
     if FLoadAnim = nil then FLoadAnim := NewAnimDriver;
@@ -332,11 +364,80 @@ end;
 procedure TTyCustomAdvanceChart.HideLoading;
 begin
   if not FLoadShown and (FLoadArc = nil) then Exit;
+  { [R5-G] and comes back to it }
+  if FLoadShown and (TyMaxZLevelOf(FPaintList) > ZStaticTop) then StaticDrop;
   LoadDrop;
   FLoadShown := False;
   FLoadGeoValid := False;
   AnimArmTimer;
   InvalidateFrame;
+end;
+
+{ [R5-D] THE MASK OVER THE POINTER: default.ts' mask is a Rect over the
+  whole canvas, z 10000, not silent -- zrender's Handler finds it before
+  anything of its layer and below, so no element of the chart (zlevel 0) is
+  hovered, pressed, clicked or tipped while it shows, and the cursor is its
+  default 'pointer'. The zr-level listeners hear everything as before: the
+  axis pointer's, the RoamControllers' (a pan, an inside dataZoom), the
+  brush's. Under the chart (zlevel below 0) it masks nothing. }
+function TTyCustomAdvanceChart.LoadMasks: Boolean;
+begin
+  Result := FLoadShown and (FLoadCfg.ZLevel >= 0)
+    and not (csDesigning in ComponentState);
+end;
+
+function TTyCustomAdvanceChart.MaskZLevel: Integer;
+var v: Double;
+begin
+  v := FLoadCfg.ZLevel;
+  if IsNan(v) or IsInfinite(v) then Result := 0
+  else Result := Round(Max(Double(-100000), Min(Double(100000), v)));
+  { as the static layer draws it (ZStaticTop): never under the components
+    drawn apart from the list -- they are the static layer's, the mask the
+    dynamic layer's over it }
+  Result := Max(ZBase, Result);
+end;
+
+function TTyCustomAdvanceChart.MaskOver(AZ: Integer): Boolean;
+begin
+  Result := LoadMasks and (AZ <= MaskZLevel);
+end;
+
+function TTyCustomAdvanceChart.HitIn(AZ: Integer): Boolean;
+begin
+  Result := not FHitBandOn or ((AZ > FHitLo) and (AZ <= FHitHi));
+end;
+
+function TTyCustomAdvanceChart.HitLevels: TTyIntegerArray;
+var
+  k, t: Integer;
+  lv: TTyIntegerArray;
+
+  procedure Add(AZ: Integer);
+  var i, j: Integer;
+  begin
+    i := 0;
+    while (i <= High(Result)) and (Result[i] < AZ) do Inc(i);
+    if (i <= High(Result)) and (Result[i] = AZ) then Exit;
+    SetLength(Result, Length(Result) + 1);
+    for j := High(Result) downto i + 1 do Result[j] := Result[j - 1];
+    Result[i] := AZ;
+  end;
+
+begin
+  Result := nil;
+  if (FPaintList <> nil) and FPaintListValid then
+    for k := 0 to FPaintList.Count - 1 do
+      if not FPaintList.Ref(k)^.Ignore then Add(FPaintList.Ref(k)^.ZLevel);
+  lv := ApartLevels;
+  for k := 0 to High(lv) do Add(lv[k]);
+  if FOption <> nil then
+  begin
+    for t := 0 to FOption.ComponentCount('toolbox') - 1 do Add(ModelZLevel('toolbox', t));
+    for t := 0 to FOption.ComponentCount('timeline') - 1 do Add(ModelZLevel('timeline', t));
+    for t := 0 to FOption.ComponentCount('visualMap') - 1 do Add(ModelZLevel('visualMap', t));
+  end;
+  if LoadMasks then Add(MaskZLevel);
 end;
 
 function TTyCustomAdvanceChart.LoadingGeometry(out AGeo: TTyLoadingGeometry): Boolean;
@@ -389,6 +490,11 @@ begin
   if FLoadCfg.HasFontSize then fontSize := FLoadCfg.FontSizeLogical;
   weight := st.FontWeight;
   if FLoadCfg.HasFontWeight then weight := FLoadCfg.FontWeight;
+  { [R5-A] the cfg's fontStyle, 'normal' by default }
+  if FLoadCfg.FontStyle = TyFontStyleItalicCode then
+    weight := TyFontStyleCodeOver(TyFontStyleItalicCode, weight)
+  else
+    weight := TyFontStyleCodeOver(TyFontStyleUpright, weight);
   if APPI > 0 then s := APPI / 96 else s := 1;
   devW := ARect.Right - ARect.Left;
   devH := ARect.Bottom - ARect.Top;

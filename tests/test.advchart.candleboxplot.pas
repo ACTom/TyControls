@@ -263,7 +263,8 @@ begin
   if lower = '#eb5454' then begin AWant := Theme('TyAdvChartCandleUp'); Exit(True); end;
   if lower = '#47b262' then begin AWant := Theme('TyAdvChartCandleDown'); Exit(True); end;
   if lower = '#fff' then begin AWant := Theme('TyAdvChart'); Exit(True); end;
-  { the palette: a stroke not written is the series colour }
+  { the palette: a stroke not written is the series colour (a colorBy
+    'data' case writes its palette, so its colours are the option's) }
   if not AFill then
   begin
     AWant := FChart.PaletteSeriesColour(ASeries);

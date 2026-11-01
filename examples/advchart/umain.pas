@@ -17,10 +17,11 @@ unit umain;
   kindly than the library does.
 
   WHY TyOptDiagnose AND NOT Chart.DiagnosticCount. The control's own
-  diagnostics come from its build, and the build is only made during a PAINT --
-  so reading them straight after assigning Option gives the PREVIOUS chart's
-  answer. TyOptDiagnose parses the text itself and is independent of when the
-  control last drew.
+  diagnostics are what its build could not draw -- a series it cannot place,
+  an axis that is not there; they follow the option at once (the chart lays
+  itself out when asked). TyOptDiagnose says more: the keys the option tree
+  does not know and the values outside their lists, positioned in the text,
+  as the option editor shows them.
 
   The theme switcher earns its place twice over for a chart: the axis domain
   resolves eight theme keys, so switching a skin is what proves the chart is

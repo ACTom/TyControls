@@ -1471,6 +1471,9 @@ begin
     path's scale draws it (zrender recomputes it every frame) }
   ACaption.HasFixedPos := True;
   ACaption.FixedPos := Ord(pos);
+  { [R5-C] upstream places it by the symbol's textConfig (with an origin),
+    its style's verticalAlign 'middle' }
+  ACaption.FixedByConfig := 2;
   ACaption.FixedDist := d;
   ACaption.FixedInside := TyLabelIsInside(pos);
   { the author's align wins over the side's; the vertical is always middle }
@@ -1502,7 +1505,7 @@ var
     where every node and edge starts (TreeView.updateNode's sourceOldLayout:
     the parent's first place, which is the root's) -- and the frame a local
     point goes to the canvas by }
-  rootX, rootY, hw, hh: Double;
+  rootX, rootY, hw, hh, offX0, offY0: Double;
   k: Integer;
   kids: TTyIntegerArray;
 
@@ -1734,6 +1737,9 @@ begin
     if ItemObj(ASolved, row) <> nil then sym := TySymbolSpecOf(ItemObj(ASolved, row), sym);
     sym := TySymbolResolveOffset(sym);
     if sym.Kind = tsyNone then Continue;
+    { the path's offset in its group's frame [R5-C] }
+    offX0 := sym.OffsetX;
+    offY0 := sym.OffsetY;
     { Symbol's _sizeX / _sizeY, before the view's scale [F3a] }
     hw := sym.WidthPx / 2;
     hh := sym.HeightPx / 2;
@@ -1841,6 +1847,18 @@ begin
     el.Caption.LgG[4] := sym.OffsetY;
     el.Caption.LgG[5] := ASolved.Pos[row].PX;
     el.Caption.LgG[6] := ASolved.Pos[row].PY;
+    { [R5-C] AND A LABEL LINE'S HOST: the symbol path in the node's colour
+      (the visual's -- a hollow node's ring); under a view in its group,
+      the main group over it }
+    el.Caption.LgKind := cTyGuideHostSymbol;
+    el.Caption.LgColor := colour;
+    if ASolved.HasView then
+    begin
+      TyGuideStampFrame(el.Caption, ASolved.VMX, ASolved.VMY, ASolved.VZ, ASolved.VZ,
+        ASolved.Pos[row].X, ASolved.Pos[row].Y, ASolved.VNS);
+      el.Caption.LgG[8] := offX0;
+      el.Caption.LgG[9] := offY0;
+    end;
     { [F3d] the update's: G[11] 1 when radial (an edge from here reads the
       place as radialCoordinate does, `|| 0`), Sub the parent's row (0: the
       virtual root), the view group's transform }

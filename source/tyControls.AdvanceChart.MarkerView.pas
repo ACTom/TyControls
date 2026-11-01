@@ -93,6 +93,10 @@ type
   TTyMkLinePic = record
     { the line's index in the block's Lines }
     Item: Integer;
+    { [R5-I] the lineData id LineDraw's diff pairs the lines by: the merged
+      item's name, a repeat with its count; no name 'e' + two NULs + its
+      place }
+    Id: string;
     { False when an end point holds NaN: nothing is drawn }
     Drawn: Boolean;
     X1, Y1, X2, Y2: Double;
@@ -105,6 +109,9 @@ type
     DashOffset, Opacity: Double;
     LineCap, LineJoin: string;
     Z2: Double;
+    { [R5-A] the lineStyle's shadow (Line.ts' line.useStyle(lineStyle)); its
+      end symbols take none }
+    Shadow: TTyChartShadow;
     FromSym, ToSym: TTyMkSymbolPic;
     Lbl: TTyMkLabelPic;
     { [R2-I3] the label as the hover lays it out (Present False: as at
@@ -257,6 +264,8 @@ type
     StyleFill, StyleStroke: string;
     StyleLineWidth, StyleOpacity, StyleDashOffset: Double;
     StyleDash: TJSONData;
+    { [R5-A] the itemStyle's shadow (SymbolDraw's visual style) }
+    StyleShadow: TTyChartShadow;
     { what the painter strokes: width and dash in the path's own units }
     PaintStroke: Boolean;
     PaintWidth: Double;
@@ -307,6 +316,8 @@ type
     LineWidth, Opacity, DashOffset: Double;
     Dash: TJSONData;
     LineCap, LineJoin: string;
+    { [R5-A] the itemStyle's shadow (MarkAreaView's polygon.useStyle) }
+    Shadow: TTyChartShadow;
     Lbl: TTyMkPtLabelPic;
     { [R2-I1] the label under the emphasis textConfig (Present False: the
       state says no place of its own) }
@@ -344,6 +355,7 @@ procedure TyMkLineAt(const AG: array of Double; APercent: Double;
 implementation
 
 uses Classes, tyControls.AdvanceChart.RichStyle, tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Scale,
+     tyControls.AdvanceChart.States,
      tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Labels,
      tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.Option;
 
@@ -474,6 +486,13 @@ begin
     if AOwnOnly or not JNull(Result) then Break;
   end;
   if JNull(Result) then Result := nil;
+end;
+
+{ [R5-A] a style block's shadow through the levels, key by key }
+function MkShadow(const L: TMkLevels): TTyChartShadow;
+begin
+  TyStShadowOfValues(Chain(L, 'shadowBlur'), Chain(L, 'shadowOffsetX'),
+    Chain(L, 'shadowOffsetY'), Chain(L, 'shadowColor'), Result);
 end;
 
 function Sub(const L: TMkLevels; const AKey: string): TMkLevels;
@@ -1039,6 +1058,9 @@ var
   L: TTyMkLine;
   pic: TTyMkLinePic;
   s: Double;
+  seen: TStringList;
+  nm0: string;
+  idx0: Integer;
 
   procedure RunZ2(A: Double);
   begin
@@ -1485,6 +1507,7 @@ var
     if d <> nil then P.LineCap := JsStringOf(d) else P.LineCap := 'butt';
     d := Chain(LS, 'join');
     if d <> nil then P.LineJoin := JsStringOf(d) else P.LineJoin := '';
+    P.Shadow := MkShadow(LS);
     P.Stroke := stroke;
     d := Chain(itemLv, 'z2');
     if d <> nil then P.Z2 := NumOf(d) else P.Z2 := 0;
@@ -1619,20 +1642,53 @@ begin
   maxZ2 := NegInfinity;
   n := 0;
   SetLength(Result, ABlock.Count);
-  for i := 0 to High(ABlock.Lines) do
-  begin
-    L := ABlock.Lines[i];
-    if not L.Survived then Continue;
-    pic := Default(TTyMkLinePic);
-    pic.Item := i;
-    pic.Drawn := not (IsNan(L.From.Point.X) or IsNan(L.From.Point.Y)
-      or IsNan(L.To_.Point.X) or IsNan(L.To_.Point.Y));
-    if pic.Drawn then Picture(pic);
-    if n < Length(Result) then
+  seen := TStringList.Create;
+  try
+    seen.Sorted := True;
+    seen.Duplicates := dupIgnore;
+    seen.CaseSensitive := True;
+    seen.UseLocale := False;
+    for i := 0 to High(ABlock.Lines) do
     begin
-      Result[n] := pic;
-      Inc(n);
+      L := ABlock.Lines[i];
+      if not L.Survived then Continue;
+      pic := Default(TTyMkLinePic);
+      pic.Item := i;
+      { [R5-I] SeriesData's makeIdFromName over lineData: the merged item's
+        name, a repeat with its count; no name 'e' + two NULs + its place }
+      case L.LineName.Kind of
+        mvkStr: nm0 := L.LineName.Str;
+        mvkNum: nm0 := TyChartValueText(L.LineName.Num);
+      else
+        nm0 := #0;
+      end;
+      if nm0 <> #0 then
+      begin
+        idx0 := seen.IndexOf(nm0);
+        if idx0 < 0 then
+        begin
+          seen.AddObject(nm0, TObject(PtrInt(1)));
+          pic.Id := nm0;
+        end
+        else
+        begin
+          seen.Objects[idx0] := TObject(PtrInt(PtrInt(seen.Objects[idx0]) + 1));
+          pic.Id := nm0 + '__ec__' + IntToStr(PtrInt(seen.Objects[idx0]));
+        end;
+      end
+      else
+        pic.Id := 'e'#0#0 + IntToStr(L.DataIndex);
+      pic.Drawn := not (IsNan(L.From.Point.X) or IsNan(L.From.Point.Y)
+        or IsNan(L.To_.Point.X) or IsNan(L.To_.Point.Y));
+      if pic.Drawn then Picture(pic);
+      if n < Length(Result) then
+      begin
+        Result[n] := pic;
+        Inc(n);
+      end;
     end;
+  finally
+    seen.Free;
   end;
   SetLength(Result, n);
 end;
@@ -1928,7 +1984,7 @@ var
     x, y, w, h: Double;
     ah: TTyTextAnchorH;
     av: TTyTextAnchorV;
-    fs: Integer;
+    fs, wt: Integer;
     pieces: TTyRtPieceArray;
   begin
     { [R2-I5] an empty one too where a state has words [was: nothing] }
@@ -1957,22 +2013,27 @@ var
     w := 0;
     h := 0;
     { an empty text's box is its anchor (no line to measure) }
+    { [R5-A] THE WEIGHT AND THE STYLE BEFORE THE MEASURE: what is drawn is
+      what is measured }
+    wt := AInk.FontWeight;
+    if (B.FontWeight <> nil) and (B.FontWeight <> GTextDefaults.Find('fontWeight')) then
+    begin
+      if (B.FontWeight.JSONType = jtString) and ((B.FontWeight.AsString = 'bold')
+        or (B.FontWeight.AsString = 'bolder')) then
+        wt := (wt and not TyChartFontWeightMask) or 700
+      else if B.FontWeight.JSONType = jtNumber then
+        wt := (wt and not TyChartFontWeightMask) or Round(B.FontWeight.AsFloat);
+    end;
+    wt := TyFontStyleOver(B.FontStyle, wt);
     if (AMeasurer <> nil) and (B.Text <> '') then
-      AMeasurer.MeasureLine(B.Text, AInk.FontName, fs, AInk.FontWeight, w, h);
+      AMeasurer.MeasureLine(B.Text, AInk.FontName, fs, wt, w, h);
     el := Blank(B.Z2);
     el.Ignore := B.Hidden;
     el.Shape := TyShapeRect(TyAnchorBox(x, y, w, h, ah, av));
     el.Caption.Text := B.Text;
     el.Caption.FontName := AInk.FontName;
     el.Caption.FontSizeLogical := fs;
-    el.Caption.FontWeight := AInk.FontWeight;
-    if (B.FontWeight <> nil) and (B.FontWeight <> GTextDefaults.Find('fontWeight')) then
-    begin
-      if (B.FontWeight.JSONType = jtString) and ((B.FontWeight.AsString = 'bold')
-        or (B.FontWeight.AsString = 'bolder')) then el.Caption.FontWeight := 700
-      else if B.FontWeight.JSONType = jtNumber then
-        el.Caption.FontWeight := Round(B.FontWeight.AsFloat);
-    end;
+    el.Caption.FontWeight := wt;
     { the author's colours as written; upstream's default ink is the skin's }
     if (B.StyleFill <> '') and Colour(B.InkFill, c) then el.Caption.Colour := c
     else el.Caption.Colour := AInk.Text;
@@ -2025,6 +2086,8 @@ var
     e.Anim.Role := ARole;
     e.Anim.Series := AHostSeries;
     e.Anim.Index := ABlock.Lines[P.Item].DataIndex;
+    { [R5-I] what an update pairs the line by }
+    e.Anim.Key := P.Id;
     e.Anim.G[0] := P.X1;
     e.Anim.G[1] := P.Y1;
     e.Anim.G[2] := P.X2;
@@ -2077,6 +2140,7 @@ begin
       el.Style.DashWord := APics[i].DashWord;
       el.Style.DashOffsetLogical := APics[i].DashOffset;
       el.Style.Alpha := Max(0.0, Min(1.0, APics[i].Opacity));
+      TyStyleSetShadow(el.Style, APics[i].Shadow);
       { THE POINTER'S RIBBON: zrender's Path.contain widens a stroke with no
         fill to its strokeContainThreshold, 5 -- a 1 px line is hit within
         2.5 px of it, not only on it }
@@ -2900,6 +2964,7 @@ var
     P.StyleDash := Chain(IS_, 'borderType');
     d := Chain(IS_, 'borderDashOffset');
     if d <> nil then P.StyleDashOffset := NumOf(d);
+    P.StyleShadow := MkShadow(IS_);
     if P.Empty then
     begin
       P.StyleStroke := fill;
@@ -3195,7 +3260,7 @@ end;
 function EmitLabel(const B: TTyMkPtLabelPic; const ABlock: TTyMkBlock;
   const AInk: TTyMkInk; const AMeasurer: ITyTextMeasurer; AList: TTyPaintList): Integer;
 var
-  fs: Integer;
+  fs, wt: Integer;
   el: TTyChartElement;
   c, defFill, defStroke: TTyChartColor;
   hasDefStroke: Boolean;
@@ -3241,8 +3306,20 @@ begin
     w := 0;
     h := 0;
     { an empty text's box is its anchor (no line to measure) }
+    { [R5-A] THE WEIGHT AND THE STYLE BEFORE THE MEASURE: what is drawn is
+      what is measured }
+    wt := AInk.FontWeight;
+    if (B.FontWeight <> nil) and (B.FontWeight <> GTextDefaults.Find('fontWeight')) then
+    begin
+      if (B.FontWeight.JSONType = jtString) and ((B.FontWeight.AsString = 'bold')
+        or (B.FontWeight.AsString = 'bolder')) then
+        wt := (wt and not TyChartFontWeightMask) or 700
+      else if B.FontWeight.JSONType = jtNumber then
+        wt := (wt and not TyChartFontWeightMask) or Round(B.FontWeight.AsFloat);
+    end;
+    wt := TyFontStyleOver(B.FontStyle, wt);
     if (AMeasurer <> nil) and (B.Text <> '') then
-      AMeasurer.MeasureLine(B.Text, AInk.FontName, fs, AInk.FontWeight, w, h);
+      AMeasurer.MeasureLine(B.Text, AInk.FontName, fs, wt, w, h);
     el := Default(TTyChartElement);
     el.Z := Trunc(ABlock.Z);
     el.Z2 := Round(B.Z2);
@@ -3254,14 +3331,7 @@ begin
     el.Caption.Text := B.Text;
     el.Caption.FontName := AInk.FontName;
     el.Caption.FontSizeLogical := fs;
-    el.Caption.FontWeight := AInk.FontWeight;
-    if (B.FontWeight <> nil) and (B.FontWeight <> GTextDefaults.Find('fontWeight')) then
-    begin
-      if (B.FontWeight.JSONType = jtString) and ((B.FontWeight.AsString = 'bold')
-        or (B.FontWeight.AsString = 'bolder')) then el.Caption.FontWeight := 700
-      else if B.FontWeight.JSONType = jtNumber then
-        el.Caption.FontWeight := Round(B.FontWeight.AsFloat);
-    end;
+    el.Caption.FontWeight := wt;
     { the author's colour as written; upstream's default ink is the skin's --
       the three inside bands by the same luminance cut, the outside colour
       and the ground's halo otherwise }
@@ -3454,6 +3524,7 @@ begin
     end;
     if not IsNan(APics[i].StyleOpacity) then
       el.Style.Alpha := Max(0.0, Min(1.0, APics[i].StyleOpacity));
+    TyStyleSetShadow(el.Style, APics[i].StyleShadow);
     if (APics[i].ScaleX <> 0) and (APics[i].ScaleY <> 0) then
     begin
       { IT POPS IN: SymbolDraw's symbol, scale 0 -> size / 2 about the
@@ -3663,6 +3734,7 @@ begin
       if d <> nil then P.LineCap := JsStringOf(d) else P.LineCap := 'butt';
       d := Chain(IS_, 'borderJoin');
       if d <> nil then P.LineJoin := JsStringOf(d) else P.LineJoin := '';
+      P.Shadow := MkShadow(IS_);
       hasStroke := ((P.Stroke <> '') or (P.StrokeData <> nil)) and (P.Stroke <> 'none')
         and (P.LineWidth > 0);
       hasFill := P.HasFill and (P.Fill <> 'none');
@@ -3833,6 +3905,7 @@ begin
     el.Style.GradBox := APics[i].GradBox;
     if not IsNan(APics[i].Opacity) then
       el.Style.Alpha := Max(0.0, Min(1.0, APics[i].Opacity));
+    TyStyleSetShadow(el.Style, APics[i].Shadow);
     AList.Add(el);
     Inc(Result);
     at := AList.Count;

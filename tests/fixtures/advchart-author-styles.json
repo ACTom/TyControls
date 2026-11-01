@@ -1,0 +1,5620 @@
+{
+ "source": "D:/Projects/echarts/dist/echarts.js",
+ "version": "6.1.0",
+ "notes": [
+  "parts: the styles of the elements of the axis view, matched against the transcribed recipes.",
+  "src 'author': the option wrote the value along upstream's chain; 'theme': the theme's default (the skin in the port).",
+  "lineDash as the style holds it: a word ('dashed', 'dotted', 'solid'), a list, or null; the canvas normalises a word against the width."
+ ],
+ "cases": [
+  {
+   "id": "cart-line-colour",
+   "group": "axis",
+   "note": "axisLine.lineStyle.color on a category x axis with ticks and a name: the ticks, the arrows and the name follow it",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ],
+     "name": "Cat",
+     "boundaryGap": false,
+     "axisLine": {
+      "symbol": [
+       "none",
+       "arrow"
+      ],
+      "lineStyle": {
+       "color": "#c23531"
+      }
+     }
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2,
+       6
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [
+    {
+     "kind": "cartesian",
+     "mainType": "xAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#c23531",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "arrow": {
+       "styles": [
+        {
+         "fill": "#c23531",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "fill": "author"
+       }
+      },
+      "tick": {
+       "styles": [
+        {
+         "stroke": "#c23531",
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "minorTick": {
+       "styles": [
+        {
+         "stroke": "#c23531",
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "name": {
+       "styles": [
+        {
+         "fill": "#c23531"
+        }
+       ],
+       "src": {
+        "fill": "author"
+       }
+      }
+     }
+    },
+    {
+     "kind": "cartesian",
+     "mainType": "yAxis",
+     "index": 0,
+     "parts": {
+      "split": {
+       "styles": [
+        {
+         "stroke": "#dbdee4",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "cart-line-full",
+   "group": "axis",
+   "note": "axisLine.lineStyle width 3, dashed, opacity 0.5, cap butt, dashOffset 2 on a value y axis shown",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "name": "Val",
+     "axisLine": {
+      "show": true,
+      "symbol": "arrow",
+      "lineStyle": {
+       "color": "#2f4554",
+       "width": 3,
+       "type": "dashed",
+       "opacity": 0.5,
+       "cap": "butt",
+       "dashOffset": 2
+      }
+     },
+     "axisTick": {
+      "show": true
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2,
+       6
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [
+    {
+     "kind": "cartesian",
+     "mainType": "xAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#54555a",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      }
+     }
+    },
+    {
+     "kind": "cartesian",
+     "mainType": "yAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#2f4554",
+         "lineWidth": 3,
+         "lineDash": "dashed",
+         "lineDashOffset": 2,
+         "lineCap": "butt",
+         "opacity": 0.5
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "author",
+        "lineDash": "author",
+        "lineDashOffset": "author",
+        "lineCap": "author",
+        "opacity": "author"
+       }
+      },
+      "arrow": {
+       "styles": [
+        {
+         "fill": "#2f4554",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "fill": "author"
+       }
+      },
+      "tick": {
+       "styles": [
+        {
+         "stroke": "#2f4554",
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "minorTick": {
+       "styles": [
+        {
+         "stroke": "#2f4554",
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "split": {
+       "styles": [
+        {
+         "stroke": "#dbdee4",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "name": {
+       "styles": [
+        {
+         "fill": "#2f4554"
+        }
+       ],
+       "src": {
+        "fill": "author"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "cart-tick-own",
+   "group": "axis",
+   "note": "axisTick.lineStyle's own colour, width, [3, 2] and opacity over the line's colour",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ],
+     "boundaryGap": false,
+     "axisLine": {
+      "lineStyle": {
+       "color": "#c23531"
+      }
+     },
+     "axisTick": {
+      "lineStyle": {
+       "color": "#0000ff",
+       "width": 2,
+       "type": [
+        3,
+        2
+       ],
+       "opacity": 0.6
+      }
+     }
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2,
+       6
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [
+    {
+     "kind": "cartesian",
+     "mainType": "xAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#c23531",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "tick": {
+       "styles": [
+        {
+         "stroke": "#0000ff",
+         "lineWidth": 2,
+         "lineDash": [
+          3,
+          2
+         ],
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 0.6
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "author",
+        "lineDash": "author",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "author"
+       }
+      }
+     }
+    },
+    {
+     "kind": "cartesian",
+     "mainType": "yAxis",
+     "index": 0,
+     "parts": {
+      "split": {
+       "styles": [
+        {
+         "stroke": "#dbdee4",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "cart-minor-own",
+   "group": "axis",
+   "note": "minorTick.lineStyle written; the y axis' line shown in its own colour",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLine": {
+      "show": true,
+      "lineStyle": {
+       "color": "#61a0a8"
+      }
+     },
+     "axisTick": {
+      "show": true,
+      "lineStyle": {
+       "width": 2
+      }
+     },
+     "minorTick": {
+      "show": true,
+      "lineStyle": {
+       "color": "#00aa00",
+       "width": 2,
+       "type": "dotted"
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2,
+       6
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [
+    {
+     "kind": "cartesian",
+     "mainType": "xAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#54555a",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      }
+     }
+    },
+    {
+     "kind": "cartesian",
+     "mainType": "yAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#61a0a8",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "tick": {
+       "styles": [
+        {
+         "stroke": "#61a0a8",
+         "lineWidth": 2,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "author",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "minorTick": {
+       "styles": [
+        {
+         "stroke": "#00aa00",
+         "lineWidth": 2,
+         "lineDash": "dotted",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "author",
+        "lineDash": "author",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "split": {
+       "styles": [
+        {
+         "stroke": "#dbdee4",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "cart-minor-follows-line",
+   "group": "axis",
+   "note": "minorTick with no lineStyle: the line's colour, not axisTick.lineStyle's (getLineStyle on the axisTick model reads its own keys)",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLine": {
+      "show": true,
+      "lineStyle": {
+       "color": "#d48265"
+      }
+     },
+     "axisTick": {
+      "show": true,
+      "lineStyle": {
+       "color": "#0000ff",
+       "width": 3
+      }
+     },
+     "minorTick": {
+      "show": true
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2,
+       6
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [
+    {
+     "kind": "cartesian",
+     "mainType": "xAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#54555a",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      }
+     }
+    },
+    {
+     "kind": "cartesian",
+     "mainType": "yAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#d48265",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "tick": {
+       "styles": [
+        {
+         "stroke": "#0000ff",
+         "lineWidth": 3,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "author",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "minorTick": {
+       "styles": [
+        {
+         "stroke": "#d48265",
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "split": {
+       "styles": [
+        {
+         "stroke": "#dbdee4",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "cart-minor-tick-keys",
+   "group": "axis",
+   "note": "axisTick.color / width written on the axisTick itself: the minor ticks read them",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "axisLine": {
+      "show": true
+     },
+     "axisTick": {
+      "show": true,
+      "color": "#ff00ff",
+      "width": 2
+     },
+     "minorTick": {
+      "show": true
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2,
+       6
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [
+    {
+     "kind": "cartesian",
+     "mainType": "xAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#54555a",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      }
+     }
+    },
+    {
+     "kind": "cartesian",
+     "mainType": "yAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#54555a",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "tick": {
+       "styles": [
+        {
+         "stroke": "#54555a",
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "minorTick": {
+       "styles": [
+        {
+         "stroke": "#ff00ff",
+         "lineWidth": 2,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "author",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "split": {
+       "styles": [
+        {
+         "stroke": "#dbdee4",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "cart-split-full",
+   "group": "axis",
+   "note": "splitLine width 2, dashed, opacity 0.5 and a list of two colours",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "splitLine": {
+      "lineStyle": {
+       "color": [
+        "#aaaaaa",
+        "#cccccc"
+       ],
+       "width": 2,
+       "type": "dashed",
+       "opacity": 0.5
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2,
+       6
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [
+    {
+     "kind": "cartesian",
+     "mainType": "xAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#54555a",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      }
+     }
+    },
+    {
+     "kind": "cartesian",
+     "mainType": "yAxis",
+     "index": 0,
+     "parts": {
+      "split": {
+       "styles": [
+        {
+         "stroke": "#aaaaaa",
+         "lineWidth": 2,
+         "lineDash": "dashed",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 0.5
+        },
+        {
+         "stroke": "#cccccc",
+         "lineWidth": 2,
+         "lineDash": "dashed",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 0.5
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "author",
+        "lineDash": "author",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "author"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "cart-split-type-only",
+   "group": "axis",
+   "note": "splitLine type 'dotted' and width 2 alone: the skin's colour",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "splitLine": {
+      "lineStyle": {
+       "type": "dotted",
+       "width": 2
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2,
+       6
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [
+    {
+     "kind": "cartesian",
+     "mainType": "xAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#54555a",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      }
+     }
+    },
+    {
+     "kind": "cartesian",
+     "mainType": "yAxis",
+     "index": 0,
+     "parts": {
+      "split": {
+       "styles": [
+        {
+         "stroke": "#dbdee4",
+         "lineWidth": 2,
+         "lineDash": "dotted",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "author",
+        "lineDash": "author",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "cart-split-numbers",
+   "group": "axis",
+   "note": "splitLine type [5, 10], dashOffset 3, cap round",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "splitLine": {
+      "lineStyle": {
+       "type": [
+        5,
+        10
+       ],
+       "dashOffset": 3,
+       "cap": "round"
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2,
+       6
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [
+    {
+     "kind": "cartesian",
+     "mainType": "xAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#54555a",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      }
+     }
+    },
+    {
+     "kind": "cartesian",
+     "mainType": "yAxis",
+     "index": 0,
+     "parts": {
+      "split": {
+       "styles": [
+        {
+         "stroke": "#dbdee4",
+         "lineWidth": 1,
+         "lineDash": [
+          5,
+          10
+         ],
+         "lineDashOffset": 3,
+         "lineCap": "round",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "author",
+        "lineDashOffset": "author",
+        "lineCap": "author",
+        "opacity": "theme"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "cart-split-width-0",
+   "group": "axis",
+   "note": "splitLine width 0: the lines are built and stroke nothing (hasStroke)",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "splitLine": {
+      "lineStyle": {
+       "width": 0
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2,
+       6
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [
+    {
+     "kind": "cartesian",
+     "mainType": "xAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#54555a",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      }
+     }
+    },
+    {
+     "kind": "cartesian",
+     "mainType": "yAxis",
+     "index": 0,
+     "parts": {
+      "split": {
+       "styles": [
+        {
+         "stroke": "#dbdee4",
+         "lineWidth": 0,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "author",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "cart-minor-split",
+   "group": "axis",
+   "note": "minorSplitLine shown with its own colour, width, dotted and opacity",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "minorTick": {
+      "show": true
+     },
+     "minorSplitLine": {
+      "show": true,
+      "lineStyle": {
+       "color": "#eeeeee",
+       "width": 2,
+       "type": "dotted",
+       "opacity": 0.8
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2,
+       6
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [
+    {
+     "kind": "cartesian",
+     "mainType": "xAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#54555a",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      }
+     }
+    },
+    {
+     "kind": "cartesian",
+     "mainType": "yAxis",
+     "index": 0,
+     "parts": {
+      "tick": {
+       "styles": [
+        {
+         "stroke": "#54555a",
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "minorTick": {
+       "styles": [
+        {
+         "stroke": "#54555a",
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "split": {
+       "styles": [
+        {
+         "stroke": "#dbdee4",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "minorSplit": {
+       "styles": [
+        {
+         "stroke": "#eeeeee",
+         "lineWidth": 2,
+         "lineDash": "dotted",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 0.8
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "author",
+        "lineDash": "author",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "author"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "cart-area-opacity",
+   "group": "axis",
+   "note": "splitArea areaStyle colours and opacity 0.5",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "splitArea": {
+      "show": true,
+      "areaStyle": {
+       "color": [
+        "rgba(250,250,250,0.3)",
+        "rgba(200,200,200,0.3)"
+       ],
+       "opacity": 0.5
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2,
+       6
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [
+    {
+     "kind": "cartesian",
+     "mainType": "xAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#54555a",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      }
+     }
+    },
+    {
+     "kind": "cartesian",
+     "mainType": "yAxis",
+     "index": 0,
+     "parts": {
+      "split": {
+       "styles": [
+        {
+         "stroke": "#dbdee4",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "area": {
+       "styles": [
+        {
+         "fill": "rgba(250,250,250,0.3)",
+         "opacity": 0.5
+        },
+        {
+         "fill": "rgba(200,200,200,0.3)",
+         "opacity": 0.5
+        }
+       ],
+       "src": {
+        "fill": "author",
+        "opacity": "author"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "cart-area-opacity-only",
+   "group": "axis",
+   "note": "splitArea areaStyle opacity alone: the theme's colours at that opacity",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ],
+     "splitArea": {
+      "show": true,
+      "areaStyle": {
+       "opacity": 0.5
+      }
+     }
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2,
+       6
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [
+    {
+     "kind": "cartesian",
+     "mainType": "xAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#54555a",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "area": {
+       "styles": [
+        {
+         "fill": "rgba(234,237,245,0.5)",
+         "opacity": 0.5
+        },
+        {
+         "fill": "rgba(255,255,255,0)",
+         "opacity": 0.5
+        }
+       ],
+       "src": {
+        "fill": "theme",
+        "opacity": "author"
+       }
+      }
+     }
+    },
+    {
+     "kind": "cartesian",
+     "mainType": "yAxis",
+     "index": 0,
+     "parts": {
+      "split": {
+       "styles": [
+        {
+         "stroke": "#dbdee4",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "cart-name-own",
+   "group": "axis",
+   "note": "nameTextStyle.color over the line's colour",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ],
+     "name": "Cat",
+     "axisLine": {
+      "lineStyle": {
+       "color": "#c23531"
+      }
+     },
+     "nameTextStyle": {
+      "color": "#00ff00"
+     }
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2,
+       6
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [
+    {
+     "kind": "cartesian",
+     "mainType": "xAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#c23531",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "name": {
+       "styles": [
+        {
+         "fill": "#00ff00"
+        }
+       ],
+       "src": {
+        "fill": "author"
+       }
+      }
+     }
+    },
+    {
+     "kind": "cartesian",
+     "mainType": "yAxis",
+     "index": 0,
+     "parts": {
+      "split": {
+       "styles": [
+        {
+         "stroke": "#dbdee4",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "cart-name-root-text",
+   "group": "axis",
+   "note": "a root textStyle colour and the line's colour: which one the name takes",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ],
+     "name": "Cat",
+     "axisLine": {
+      "lineStyle": {
+       "color": "#c23531"
+      }
+     }
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2,
+       6
+      ]
+     }
+    ],
+    "textStyle": {
+     "color": "#123456"
+    }
+   },
+   "fails": [],
+   "axes": [
+    {
+     "kind": "cartesian",
+     "mainType": "xAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#c23531",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "name": {
+       "styles": [
+        {
+         "fill": "#123456"
+        }
+       ],
+       "src": {
+        "fill": "author"
+       }
+      }
+     }
+    },
+    {
+     "kind": "cartesian",
+     "mainType": "yAxis",
+     "index": 0,
+     "parts": {
+      "split": {
+       "styles": [
+        {
+         "stroke": "#dbdee4",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "cart-dark",
+   "group": "axis",
+   "note": "the candlestick-sh-2015 look: both axes in #8392A5, no split lines, y line shown",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ],
+     "axisLine": {
+      "lineStyle": {
+       "color": "#8392A5"
+      }
+     }
+    },
+    "yAxis": {
+     "type": "value",
+     "scale": true,
+     "axisLine": {
+      "show": true,
+      "lineStyle": {
+       "color": "#8392A5"
+      }
+     },
+     "splitLine": {
+      "show": false
+     }
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2,
+       6
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [
+    {
+     "kind": "cartesian",
+     "mainType": "xAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#8392A5",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      }
+     }
+    },
+    {
+     "kind": "cartesian",
+     "mainType": "yAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#8392A5",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "cart-line-gradient-free",
+   "group": "axis",
+   "note": "axisLine.lineStyle.color 'rgba(0,0,0,0.3)' with width 2: an alpha colour on the line, its arrows and ticks",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ],
+     "boundaryGap": false,
+     "axisLine": {
+      "symbol": "arrow",
+      "lineStyle": {
+       "color": "rgba(0,0,0,0.3)",
+       "width": 2
+      }
+     }
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2,
+       6
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [
+    {
+     "kind": "cartesian",
+     "mainType": "xAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "rgba(0,0,0,0.3)",
+         "lineWidth": 2,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "author",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "arrow": {
+       "styles": [
+        {
+         "fill": "rgba(0,0,0,0.3)",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "fill": "author"
+       }
+      },
+      "tick": {
+       "styles": [
+        {
+         "stroke": "rgba(0,0,0,0.3)",
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "minorTick": {
+       "styles": [
+        {
+         "stroke": "rgba(0,0,0,0.3)",
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      }
+     }
+    },
+    {
+     "kind": "cartesian",
+     "mainType": "yAxis",
+     "index": 0,
+     "parts": {
+      "split": {
+       "styles": [
+        {
+         "stroke": "#dbdee4",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "single-full",
+   "group": "axis",
+   "note": "a single axis: line, tick, split line, split area and name in the author styles",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "singleAxis": {
+     "type": "value",
+     "name": "S",
+     "top": 50,
+     "height": 100,
+     "axisLine": {
+      "lineStyle": {
+       "color": "#c23531",
+       "width": 2,
+       "type": "dashed"
+      }
+     },
+     "axisTick": {
+      "lineStyle": {
+       "width": 2,
+       "opacity": 0.5
+      }
+     },
+     "splitLine": {
+      "lineStyle": {
+       "width": 2,
+       "type": "dotted",
+       "opacity": 0.6
+      }
+     },
+     "splitArea": {
+      "show": true,
+      "areaStyle": {
+       "opacity": 0.4
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "coordinateSystem": "singleAxis",
+      "data": [
+       1,
+       3,
+       7
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [
+    {
+     "kind": "single",
+     "mainType": "singleAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#c23531",
+         "lineWidth": 2,
+         "lineDash": "dashed",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "author",
+        "lineDash": "author",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "tick": {
+       "styles": [
+        {
+         "stroke": "#c23531",
+         "lineWidth": 2,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 0.5
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "author",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "author"
+       }
+      },
+      "split": {
+       "styles": [
+        {
+         "stroke": "#dbdee4",
+         "lineWidth": 2,
+         "lineDash": "dotted",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 0.6
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "author",
+        "lineDash": "author",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "author"
+       }
+      },
+      "area": {
+       "styles": [
+        {
+         "fill": "rgba(234,237,245,0.5)",
+         "opacity": 0.4
+        },
+        {
+         "fill": "rgba(255,255,255,0)",
+         "opacity": 0.4
+        }
+       ],
+       "src": {
+        "fill": "theme",
+        "opacity": "author"
+       }
+      },
+      "name": {
+       "styles": [
+        {
+         "fill": "#c23531"
+        }
+       ],
+       "src": {
+        "fill": "author"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "polar-full",
+   "group": "axis",
+   "note": "angle and radius axes: line, tick, minor tick, split line, minor split line and area in the author styles",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "polar": {},
+    "angleAxis": {
+     "type": "value",
+     "axisLine": {
+      "lineStyle": {
+       "color": "#c23531",
+       "width": 2,
+       "type": "dashed",
+       "opacity": 0.7
+      }
+     },
+     "axisTick": {
+      "lineStyle": {
+       "width": 2
+      }
+     },
+     "minorTick": {
+      "show": true
+     },
+     "splitLine": {
+      "lineStyle": {
+       "type": "dotted",
+       "width": 2
+      }
+     },
+     "minorSplitLine": {
+      "show": true,
+      "lineStyle": {
+       "color": "#dddddd",
+       "type": "dashed"
+      }
+     },
+     "splitArea": {
+      "show": true,
+      "areaStyle": {
+       "opacity": 0.5
+      }
+     }
+    },
+    "radiusAxis": {
+     "type": "value",
+     "name": "R",
+     "axisLine": {
+      "symbol": "arrow",
+      "lineStyle": {
+       "color": "#2f4554",
+       "width": 3
+      }
+     },
+     "axisTick": {
+      "lineStyle": {
+       "color": "#0000ff"
+      }
+     },
+     "minorTick": {
+      "show": true,
+      "lineStyle": {
+       "width": 2
+      }
+     },
+     "splitLine": {
+      "lineStyle": {
+       "color": [
+        "#aaaaaa",
+        "#bbbbbb"
+       ],
+       "opacity": 0.5
+      }
+     },
+     "splitArea": {
+      "show": true,
+      "areaStyle": {
+       "color": [
+        "#eeeeee",
+        "#f6f6f6"
+       ],
+       "opacity": 0.6
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "line",
+      "coordinateSystem": "polar",
+      "data": [
+       [
+        1,
+        30
+       ],
+       [
+        3,
+        120
+       ],
+       [
+        5,
+        250
+       ]
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [
+    {
+     "kind": "angle",
+     "mainType": "angleAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#c23531",
+         "lineWidth": 2,
+         "lineDash": "dashed",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 0.7
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "author",
+        "lineDash": "author",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "author"
+       }
+      },
+      "tick": {
+       "styles": [
+        {
+         "stroke": "#c23531",
+         "lineWidth": 2,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "author",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "minorTick": {
+       "styles": [
+        {
+         "stroke": "#c23531",
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "split": {
+       "styles": [
+        {
+         "stroke": "#dbdee4",
+         "lineWidth": 2,
+         "lineDash": "dotted",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "theme",
+        "lineWidth": "author",
+        "lineDash": "author",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "minorSplit": {
+       "styles": [
+        {
+         "stroke": "#dddddd",
+         "lineWidth": 1,
+         "lineDash": "dashed",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "theme",
+        "lineDash": "author",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "area": {
+       "styles": [
+        {
+         "fill": "rgba(234,237,245,0.5)",
+         "opacity": 0.5
+        },
+        {
+         "fill": "rgba(255,255,255,0)",
+         "opacity": 0.5
+        }
+       ],
+       "src": {
+        "fill": "theme",
+        "opacity": "author"
+       }
+      }
+     }
+    },
+    {
+     "kind": "radius",
+     "mainType": "radiusAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#2f4554",
+         "lineWidth": 3,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "author",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "arrow": {
+       "styles": [
+        {
+         "fill": "#2f4554",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "fill": "author"
+       }
+      },
+      "tick": {
+       "styles": [
+        {
+         "stroke": "#0000ff",
+         "lineWidth": 1,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "minorTick": {
+       "styles": [
+        {
+         "stroke": "#2f4554",
+         "lineWidth": 2,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "author",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "split": {
+       "styles": [
+        {
+         "stroke": "#aaaaaa",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 0.5
+        },
+        {
+         "stroke": "#bbbbbb",
+         "lineWidth": 1,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 0.5
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "theme",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "author"
+       }
+      },
+      "area": {
+       "styles": [
+        {
+         "fill": "#eeeeee",
+         "opacity": 0.6
+        },
+        {
+         "fill": "#f6f6f6",
+         "opacity": 0.6
+        }
+       ],
+       "src": {
+        "fill": "author",
+        "opacity": "author"
+       }
+      },
+      "name": {
+       "styles": [
+        {
+         "fill": "#2f4554"
+        }
+       ],
+       "src": {
+        "fill": "author"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "parallel-full",
+   "group": "axis",
+   "note": "parallelAxisDefault's axisLine colour and width, an axis' own tick style and name colour",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "parallel": {
+     "parallelAxisDefault": {
+      "axisLine": {
+       "lineStyle": {
+        "color": "#c23531",
+        "width": 2
+       }
+      },
+      "axisTick": {
+       "lineStyle": {
+        "width": 2
+       }
+      }
+     }
+    },
+    "parallelAxis": [
+     {
+      "dim": 0,
+      "name": "A"
+     },
+     {
+      "dim": 1,
+      "name": "B",
+      "axisLine": {
+       "lineStyle": {
+        "type": "dashed",
+        "opacity": 0.5
+       }
+      },
+      "axisTick": {
+       "lineStyle": {
+        "color": "#0000ff"
+       }
+      },
+      "nameTextStyle": {
+       "color": "#00aa00"
+      }
+     }
+    ],
+    "series": [
+     {
+      "type": "parallel",
+      "data": [
+       [
+        1,
+        2
+       ],
+       [
+        3,
+        4
+       ]
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [
+    {
+     "kind": "parallel",
+     "mainType": "parallelAxis",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#c23531",
+         "lineWidth": 2,
+         "lineDash": "solid",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "author",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "tick": {
+       "styles": [
+        {
+         "stroke": "#c23531",
+         "lineWidth": 2,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "author",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "name": {
+       "styles": [
+        {
+         "fill": "#c23531"
+        }
+       ],
+       "src": {
+        "fill": "author"
+       }
+      }
+     }
+    },
+    {
+     "kind": "parallel",
+     "mainType": "parallelAxis",
+     "index": 1,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#c23531",
+         "lineWidth": 2,
+         "lineDash": "dashed",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 0.5
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "author",
+        "lineDash": "author",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "author"
+       }
+      },
+      "tick": {
+       "styles": [
+        {
+         "stroke": "#0000ff",
+         "lineWidth": 2,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "author",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "name": {
+       "styles": [
+        {
+         "fill": "#00aa00"
+        }
+       ],
+       "src": {
+        "fill": "author"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "radar-full",
+   "group": "axis",
+   "note": "a radar: line, ticks, split line and split area in the author styles",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "radar": {
+     "indicator": [
+      {
+       "name": "a",
+       "max": 10
+      },
+      {
+       "name": "b",
+       "max": 10
+      },
+      {
+       "name": "c",
+       "max": 10
+      }
+     ],
+     "axisLine": {
+      "lineStyle": {
+       "color": "#c23531",
+       "width": 2,
+       "type": "dashed",
+       "opacity": 0.7
+      }
+     },
+     "axisTick": {
+      "show": true,
+      "lineStyle": {
+       "width": 2
+      }
+     },
+     "splitLine": {
+      "lineStyle": {
+       "color": [
+        "#aaaaaa",
+        "#bbbbbb"
+       ],
+       "width": 2,
+       "type": "dotted",
+       "opacity": 0.5
+      }
+     },
+     "splitArea": {
+      "areaStyle": {
+       "opacity": 0.5
+      }
+     }
+    },
+    "series": [
+     {
+      "type": "radar",
+      "data": [
+       {
+        "value": [
+         3,
+         5,
+         7
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [
+    {
+     "kind": "radar",
+     "mainType": "radar",
+     "index": 0,
+     "parts": {
+      "line": {
+       "styles": [
+        {
+         "stroke": "#c23531",
+         "lineWidth": 2,
+         "lineDash": "dashed",
+         "lineDashOffset": 0,
+         "lineCap": "round",
+         "opacity": 0.7
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "author",
+        "lineDash": "author",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "author"
+       }
+      },
+      "tick": {
+       "styles": [
+        {
+         "stroke": "#c23531",
+         "lineWidth": 2,
+         "lineDash": null,
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 1
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "author",
+        "lineDash": "theme",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "theme"
+       }
+      },
+      "split": {
+       "styles": [
+        {
+         "stroke": "#aaaaaa",
+         "lineWidth": 2,
+         "lineDash": "dotted",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 0.5
+        },
+        {
+         "stroke": "#bbbbbb",
+         "lineWidth": 2,
+         "lineDash": "dotted",
+         "lineDashOffset": 0,
+         "lineCap": "butt",
+         "opacity": 0.5
+        }
+       ],
+       "src": {
+        "stroke": "author",
+        "lineWidth": "author",
+        "lineDash": "author",
+        "lineDashOffset": "theme",
+        "lineCap": "theme",
+        "opacity": "author"
+       }
+      },
+      "area": {
+       "styles": [
+        {
+         "fill": "rgba(234,237,245,0.5)",
+         "opacity": 0.5
+        },
+        {
+         "fill": "rgba(255,255,255,0)",
+         "opacity": 0.5
+        }
+       ],
+       "src": {
+        "fill": "theme",
+        "opacity": "author"
+       }
+      },
+      "name": {
+       "styles": [
+        {
+         "fill": "#54555a"
+        }
+       ],
+       "src": {
+        "fill": "theme"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "bg-default",
+   "group": "barbg",
+   "note": "showBackground with no backgroundStyle: the theme's strip",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2,
+       6
+      ],
+      "showBackground": true
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "items": [
+      {
+       "i": 0,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": "rgba(180, 180, 180, 0.2)",
+        "stroke": null,
+        "lineWidth": 0,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      },
+      {
+       "i": 1,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": "rgba(180, 180, 180, 0.2)",
+        "stroke": null,
+        "lineWidth": 0,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      },
+      {
+       "i": 2,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": "rgba(180, 180, 180, 0.2)",
+        "stroke": null,
+        "lineWidth": 0,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      },
+      {
+       "i": 3,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": "rgba(180, 180, 180, 0.2)",
+        "stroke": null,
+        "lineWidth": 0,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      },
+      {
+       "i": 4,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": "rgba(180, 180, 180, 0.2)",
+        "stroke": null,
+        "lineWidth": 0,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "bg-colour",
+   "group": "barbg",
+   "note": "backgroundStyle.color",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2,
+       6
+      ],
+      "showBackground": true,
+      "backgroundStyle": {
+       "color": "rgba(220, 30, 30, 0.3)"
+      }
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "items": [
+      {
+       "i": 0,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": "rgba(220, 30, 30, 0.3)",
+        "stroke": null,
+        "lineWidth": 0,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      },
+      {
+       "i": 1,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": "rgba(220, 30, 30, 0.3)",
+        "stroke": null,
+        "lineWidth": 0,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      },
+      {
+       "i": 2,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": "rgba(220, 30, 30, 0.3)",
+        "stroke": null,
+        "lineWidth": 0,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      },
+      {
+       "i": 3,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": "rgba(220, 30, 30, 0.3)",
+        "stroke": null,
+        "lineWidth": 0,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      },
+      {
+       "i": 4,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": "rgba(220, 30, 30, 0.3)",
+        "stroke": null,
+        "lineWidth": 0,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "bg-border",
+   "group": "barbg",
+   "note": "a border colour, width, dashed type and phase; an opacity",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2,
+       6
+      ],
+      "showBackground": true,
+      "backgroundStyle": {
+       "color": "#eeeeee",
+       "borderColor": "#333333",
+       "borderWidth": 2,
+       "borderType": "dashed",
+       "borderDashOffset": 1,
+       "opacity": 0.6
+      }
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "items": [
+      {
+       "i": 0,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": "#eeeeee",
+        "stroke": "#333333",
+        "lineWidth": 2,
+        "lineDash": "dashed",
+        "lineDashOffset": 1,
+        "opacity": 0.6
+       }
+      },
+      {
+       "i": 1,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": "#eeeeee",
+        "stroke": "#333333",
+        "lineWidth": 2,
+        "lineDash": "dashed",
+        "lineDashOffset": 1,
+        "opacity": 0.6
+       }
+      },
+      {
+       "i": 2,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": "#eeeeee",
+        "stroke": "#333333",
+        "lineWidth": 2,
+        "lineDash": "dashed",
+        "lineDashOffset": 1,
+        "opacity": 0.6
+       }
+      },
+      {
+       "i": 3,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": "#eeeeee",
+        "stroke": "#333333",
+        "lineWidth": 2,
+        "lineDash": "dashed",
+        "lineDashOffset": 1,
+        "opacity": 0.6
+       }
+      },
+      {
+       "i": 4,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": "#eeeeee",
+        "stroke": "#333333",
+        "lineWidth": 2,
+        "lineDash": "dashed",
+        "lineDashOffset": 1,
+        "opacity": 0.6
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "bg-border-no-width",
+   "group": "barbg",
+   "note": "a border colour with no width: no pen (the default borderWidth 0)",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2,
+       6
+      ],
+      "showBackground": true,
+      "backgroundStyle": {
+       "borderColor": "#333333"
+      }
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "items": [
+      {
+       "i": 0,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": "rgba(180, 180, 180, 0.2)",
+        "stroke": "#333333",
+        "lineWidth": 0,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      },
+      {
+       "i": 1,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": "rgba(180, 180, 180, 0.2)",
+        "stroke": "#333333",
+        "lineWidth": 0,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      },
+      {
+       "i": 2,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": "rgba(180, 180, 180, 0.2)",
+        "stroke": "#333333",
+        "lineWidth": 0,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      },
+      {
+       "i": 3,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": "rgba(180, 180, 180, 0.2)",
+        "stroke": "#333333",
+        "lineWidth": 0,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      },
+      {
+       "i": 4,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": "rgba(180, 180, 180, 0.2)",
+        "stroke": "#333333",
+        "lineWidth": 0,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "bg-radius",
+   "group": "barbg",
+   "note": "borderRadius [6, 6, 0, 0] with a colour",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2,
+       6
+      ],
+      "showBackground": true,
+      "backgroundStyle": {
+       "color": "#dddddd",
+       "borderRadius": [
+        6,
+        6,
+        0,
+        0
+       ]
+      }
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "items": [
+      {
+       "i": 0,
+       "type": "rect",
+       "r": [
+        6,
+        6,
+        0,
+        0
+       ],
+       "style": {
+        "fill": "#dddddd",
+        "stroke": null,
+        "lineWidth": 0,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      },
+      {
+       "i": 1,
+       "type": "rect",
+       "r": [
+        6,
+        6,
+        0,
+        0
+       ],
+       "style": {
+        "fill": "#dddddd",
+        "stroke": null,
+        "lineWidth": 0,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      },
+      {
+       "i": 2,
+       "type": "rect",
+       "r": [
+        6,
+        6,
+        0,
+        0
+       ],
+       "style": {
+        "fill": "#dddddd",
+        "stroke": null,
+        "lineWidth": 0,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      },
+      {
+       "i": 3,
+       "type": "rect",
+       "r": [
+        6,
+        6,
+        0,
+        0
+       ],
+       "style": {
+        "fill": "#dddddd",
+        "stroke": null,
+        "lineWidth": 0,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      },
+      {
+       "i": 4,
+       "type": "rect",
+       "r": [
+        6,
+        6,
+        0,
+        0
+       ],
+       "style": {
+        "fill": "#dddddd",
+        "stroke": null,
+        "lineWidth": 0,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "bg-gradient",
+   "group": "barbg",
+   "note": "a linear gradient colour",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2,
+       6
+      ],
+      "showBackground": true,
+      "backgroundStyle": {
+       "color": {
+        "type": "linear",
+        "x": 0,
+        "y": 0,
+        "x2": 0,
+        "y2": 1,
+        "colorStops": [
+         {
+          "offset": 0,
+          "color": "#ff0000"
+         },
+         {
+          "offset": 1,
+          "color": "#0000ff"
+         }
+        ]
+       }
+      }
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "items": [
+      {
+       "i": 0,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": {
+         "type": "linear",
+         "x": 0,
+         "y": 0,
+         "x2": 0,
+         "y2": 1,
+         "global": false,
+         "colorStops": [
+          {
+           "offset": 0,
+           "color": "#ff0000"
+          },
+          {
+           "offset": 1,
+           "color": "#0000ff"
+          }
+         ]
+        },
+        "stroke": null,
+        "lineWidth": 0,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      },
+      {
+       "i": 1,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": {
+         "type": "linear",
+         "x": 0,
+         "y": 0,
+         "x2": 0,
+         "y2": 1,
+         "global": false,
+         "colorStops": [
+          {
+           "offset": 0,
+           "color": "#ff0000"
+          },
+          {
+           "offset": 1,
+           "color": "#0000ff"
+          }
+         ]
+        },
+        "stroke": null,
+        "lineWidth": 0,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      },
+      {
+       "i": 2,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": {
+         "type": "linear",
+         "x": 0,
+         "y": 0,
+         "x2": 0,
+         "y2": 1,
+         "global": false,
+         "colorStops": [
+          {
+           "offset": 0,
+           "color": "#ff0000"
+          },
+          {
+           "offset": 1,
+           "color": "#0000ff"
+          }
+         ]
+        },
+        "stroke": null,
+        "lineWidth": 0,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      },
+      {
+       "i": 3,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": {
+         "type": "linear",
+         "x": 0,
+         "y": 0,
+         "x2": 0,
+         "y2": 1,
+         "global": false,
+         "colorStops": [
+          {
+           "offset": 0,
+           "color": "#ff0000"
+          },
+          {
+           "offset": 1,
+           "color": "#0000ff"
+          }
+         ]
+        },
+        "stroke": null,
+        "lineWidth": 0,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      },
+      {
+       "i": 4,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": {
+         "type": "linear",
+         "x": 0,
+         "y": 0,
+         "x2": 0,
+         "y2": 1,
+         "global": false,
+         "colorStops": [
+          {
+           "offset": 0,
+           "color": "#ff0000"
+          },
+          {
+           "offset": 1,
+           "color": "#0000ff"
+          }
+         ]
+        },
+        "stroke": null,
+        "lineWidth": 0,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "bg-none",
+   "group": "barbg",
+   "note": "color 'none': no fill",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       3,
+       8,
+       2,
+       6
+      ],
+      "showBackground": true,
+      "backgroundStyle": {
+       "color": "none",
+       "borderColor": "#333333",
+       "borderWidth": 1
+      }
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "items": [
+      {
+       "i": 0,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": "none",
+        "stroke": "#333333",
+        "lineWidth": 1,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      },
+      {
+       "i": 1,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": "none",
+        "stroke": "#333333",
+        "lineWidth": 1,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      },
+      {
+       "i": 2,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": "none",
+        "stroke": "#333333",
+        "lineWidth": 1,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      },
+      {
+       "i": 3,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": "none",
+        "stroke": "#333333",
+        "lineWidth": 1,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      },
+      {
+       "i": 4,
+       "type": "rect",
+       "r": 0,
+       "style": {
+        "fill": "none",
+        "stroke": "#333333",
+        "lineWidth": 1,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 1
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "bg-polar",
+   "group": "barbg",
+   "note": "a bar on a polar, its background sector in the author style",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "polar": {},
+    "angleAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ]
+    },
+    "radiusAxis": {
+     "type": "value",
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "bar",
+      "coordinateSystem": "polar",
+      "data": [
+       5,
+       3,
+       8,
+       2,
+       6
+      ],
+      "showBackground": true,
+      "backgroundStyle": {
+       "color": "#eeddcc",
+       "borderColor": "#333333",
+       "borderWidth": 1,
+       "opacity": 0.8
+      }
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "items": [
+      {
+       "i": 0,
+       "type": "sector",
+       "r": 0,
+       "style": {
+        "fill": "#eeddcc",
+        "stroke": "#333333",
+        "lineWidth": 1,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 0.8
+       }
+      },
+      {
+       "i": 1,
+       "type": "sector",
+       "r": 0,
+       "style": {
+        "fill": "#eeddcc",
+        "stroke": "#333333",
+        "lineWidth": 1,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 0.8
+       }
+      },
+      {
+       "i": 2,
+       "type": "sector",
+       "r": 0,
+       "style": {
+        "fill": "#eeddcc",
+        "stroke": "#333333",
+        "lineWidth": 1,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 0.8
+       }
+      },
+      {
+       "i": 3,
+       "type": "sector",
+       "r": 0,
+       "style": {
+        "fill": "#eeddcc",
+        "stroke": "#333333",
+        "lineWidth": 1,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 0.8
+       }
+      },
+      {
+       "i": 4,
+       "type": "sector",
+       "r": 0,
+       "style": {
+        "fill": "#eeddcc",
+        "stroke": "#333333",
+        "lineWidth": 1,
+        "lineDash": "solid",
+        "lineDashOffset": 0,
+        "opacity": 0.8
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "cb-lines",
+   "group": "colorby",
+   "note": "lines, colorBy 'data': each line's stroke; one its own lineStyle colour",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "color": [
+     "#aa0000",
+     "#00aa00",
+     "#0000aa",
+     "#aaaa00",
+     "#00aaaa",
+     "#aa00aa",
+     "#555555"
+    ],
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "lines",
+      "coordinateSystem": "cartesian2d",
+      "colorBy": "data",
+      "data": [
+       {
+        "coords": [
+         [
+          1,
+          1
+         ],
+         [
+          9,
+          1
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1,
+          3
+         ],
+         [
+          9,
+          3
+         ]
+        ],
+        "lineStyle": {
+         "color": "#123456"
+        }
+       },
+       {
+        "coords": [
+         [
+          1,
+          5
+         ],
+         [
+          9,
+          5
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          1,
+          7
+         ],
+         [
+          9,
+          7
+         ]
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "lines",
+     "drawType": "stroke",
+     "colors": [
+      {
+       "raw": 0,
+       "color": "#aa0000"
+      },
+      {
+       "raw": 1,
+       "color": "#123456"
+      },
+      {
+       "raw": 2,
+       "color": "#00aa00"
+      },
+      {
+       "raw": 3,
+       "color": "#0000aa"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "cb-parallel",
+   "group": "colorby",
+   "note": "a parallel series, colorBy 'data': each line's stroke; one its own",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "color": [
+     "#aa0000",
+     "#00aa00",
+     "#0000aa",
+     "#aaaa00",
+     "#00aaaa",
+     "#aa00aa",
+     "#555555"
+    ],
+    "parallelAxis": [
+     {
+      "dim": 0
+     },
+     {
+      "dim": 1
+     },
+     {
+      "dim": 2
+     }
+    ],
+    "series": [
+     {
+      "type": "parallel",
+      "colorBy": "data",
+      "data": [
+       [
+        1,
+        2,
+        3
+       ],
+       {
+        "value": [
+         2,
+         3,
+         1
+        ],
+        "lineStyle": {
+         "color": "#123456"
+        }
+       },
+       [
+        3,
+        1,
+        2
+       ],
+       [
+        2,
+        2,
+        2
+       ]
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "parallel",
+     "drawType": "stroke",
+     "colors": [
+      {
+       "raw": 0,
+       "color": "#aa0000"
+      },
+      {
+       "raw": 1,
+       "color": "#123456"
+      },
+      {
+       "raw": 2,
+       "color": "#00aa00"
+      },
+      {
+       "raw": 3,
+       "color": "#0000aa"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "pg-series",
+   "group": "palgrad",
+   "note": "a root palette [gradient, '#00aa00']: a bar series takes the gradient, a pie by data every other slice",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "color": [
+     {
+      "type": "linear",
+      "x": 0,
+      "y": 0,
+      "x2": 0,
+      "y2": 1,
+      "colorStops": [
+       {
+        "offset": 0,
+        "color": "#ff0000"
+       },
+       {
+        "offset": 1,
+        "color": "#0000ff"
+       }
+      ]
+     },
+     "#00aa00"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "B",
+      "data": [
+       1,
+       2
+      ]
+     },
+     {
+      "type": "pie",
+      "colorBy": "data",
+      "center": [
+       "80%",
+       "30%"
+      ],
+      "radius": 30,
+      "data": [
+       {
+        "name": "x",
+        "value": 1
+       },
+       {
+        "name": "y",
+        "value": 2
+       },
+       {
+        "name": "z",
+        "value": 3
+       }
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "bar",
+     "fills": [
+      {
+       "raw": 0,
+       "fill": {
+        "type": "linear",
+        "x": 0,
+        "y": 0,
+        "x2": 0,
+        "y2": 1,
+        "global": false,
+        "colorStops": [
+         {
+          "offset": 0,
+          "color": "#ff0000"
+         },
+         {
+          "offset": 1,
+          "color": "#0000ff"
+         }
+        ]
+       }
+      },
+      {
+       "raw": 1,
+       "fill": {
+        "type": "linear",
+        "x": 0,
+        "y": 0,
+        "x2": 0,
+        "y2": 1,
+        "global": false,
+        "colorStops": [
+         {
+          "offset": 0,
+          "color": "#ff0000"
+         },
+         {
+          "offset": 1,
+          "color": "#0000ff"
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "seriesIndex": 1,
+     "type": "pie",
+     "fills": [
+      {
+       "raw": 0,
+       "fill": {
+        "type": "linear",
+        "x": 0,
+        "y": 0,
+        "x2": 0,
+        "y2": 1,
+        "global": false,
+        "colorStops": [
+         {
+          "offset": 0,
+          "color": "#ff0000"
+         },
+         {
+          "offset": 1,
+          "color": "#0000ff"
+         }
+        ]
+       }
+      },
+      {
+       "raw": 1,
+       "fill": "#00aa00"
+      },
+      {
+       "raw": 2,
+       "fill": {
+        "type": "linear",
+        "x": 0,
+        "y": 0,
+        "x2": 0,
+        "y2": 1,
+        "global": false,
+        "colorStops": [
+         {
+          "offset": 0,
+          "color": "#ff0000"
+         },
+         {
+          "offset": 1,
+          "color": "#0000ff"
+         }
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "pg-line",
+   "group": "palgrad",
+   "note": "a line series on a gradient palette: its stroke and its area",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "color": [
+     {
+      "type": "linear",
+      "x": 0,
+      "y": 0,
+      "x2": 0,
+      "y2": 1,
+      "colorStops": [
+       {
+        "offset": 0,
+        "color": "#ff0000"
+       },
+       {
+        "offset": 1,
+        "color": "#0000ff"
+       }
+      ]
+     }
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "line",
+      "data": [
+       1,
+       3,
+       2
+      ],
+      "areaStyle": {},
+      "showSymbol": false
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "line",
+     "fills": [],
+     "stroke": {
+      "type": "linear",
+      "x": 0,
+      "y": 0,
+      "x2": 0,
+      "y2": 1,
+      "global": false,
+      "colorStops": [
+       {
+        "offset": 0,
+        "color": "#ff0000"
+       },
+       {
+        "offset": 1,
+        "color": "#0000ff"
+       }
+      ]
+     },
+     "area": {
+      "type": "linear",
+      "x": 0,
+      "y": 0,
+      "x2": 0,
+      "y2": 1,
+      "global": false,
+      "colorStops": [
+       {
+        "offset": 0,
+        "color": "#ff0000"
+       },
+       {
+        "offset": 1,
+        "color": "#0000ff"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "lg-items",
+   "group": "legend",
+   "note": "legend.data[i]'s textStyle, itemStyle, lineStyle and inactive colours over the legend's",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "p",
+      "q"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "A",
+      "data": [
+       1,
+       2
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "B",
+      "data": [
+       2,
+       1
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "C",
+      "data": [
+       1,
+       1
+      ]
+     },
+     {
+      "type": "line",
+      "name": "L",
+      "data": [
+       2,
+       2
+      ]
+     }
+    ],
+    "legend": {
+     "top": 10,
+     "selected": {
+      "C": false
+     },
+     "itemStyle": {
+      "borderColor": "#333333",
+      "borderWidth": 1
+     },
+     "data": [
+      {
+       "name": "A",
+       "textStyle": {
+        "color": "#ff0000",
+        "fontSize": 16,
+        "fontWeight": "bold"
+       },
+       "itemStyle": {
+        "color": "#00ff00",
+        "opacity": 0.5
+       }
+      },
+      {
+       "name": "B",
+       "itemStyle": {
+        "borderColor": "#0000ff",
+        "borderWidth": 3
+       }
+      },
+      {
+       "name": "C",
+       "inactiveColor": "#aaaaaa",
+       "inactiveBorderColor": "#888888",
+       "textStyle": {
+        "color": "#ff0000"
+       }
+      },
+      {
+       "name": "L",
+       "lineStyle": {
+        "color": "#ff00ff",
+        "width": 4
+       }
+      }
+     ]
+    }
+   },
+   "fails": [],
+   "axes": [],
+   "series": [
+    {
+     "items": [
+      {
+       "name": "A",
+       "text": {
+        "fill": "#ff0000",
+        "fontSize": 16,
+        "fontWeight": "bold"
+       },
+       "icons": [
+        {
+         "type": "path",
+         "fill": "#00ff00",
+         "stroke": "#333333",
+         "lineWidth": 1,
+         "opacity": 0.5
+        }
+       ]
+      },
+      {
+       "name": "B",
+       "text": {
+        "fill": "#54555a",
+        "fontSize": 12,
+        "fontWeight": "normal"
+       },
+       "icons": [
+        {
+         "type": "path",
+         "fill": "#b6d634",
+         "stroke": "#0000ff",
+         "lineWidth": 3,
+         "opacity": 1
+        }
+       ]
+      },
+      {
+       "name": "C",
+       "text": {
+        "fill": "#aaaaaa",
+        "fontSize": 12,
+        "fontWeight": "normal"
+       },
+       "icons": [
+        {
+         "type": "path",
+         "fill": "#aaaaaa",
+         "stroke": "#888888",
+         "lineWidth": 0,
+         "opacity": 1
+        }
+       ]
+      },
+      {
+       "name": "L",
+       "text": {
+        "fill": "#54555a",
+        "fontSize": 12,
+        "fontWeight": "normal"
+       },
+       "icons": [
+        {
+         "type": "path",
+         "fill": "#000",
+         "stroke": "#ff00ff",
+         "lineWidth": 4,
+         "opacity": 1
+        },
+        {
+         "type": "path",
+         "fill": "#fff",
+         "stroke": "#ff994d",
+         "lineWidth": 2,
+         "opacity": 1
+        }
+       ]
+      }
+     ],
+     "selectors": []
+    }
+   ]
+  },
+  {
+   "id": "lg-item-inactive-line",
+   "group": "legend",
+   "note": "an unselected line item's own lineStyle.inactiveColor / inactiveWidth",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "p",
+      "q"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "A",
+      "data": [
+       1,
+       2
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "B",
+      "data": [
+       2,
+       1
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "C",
+      "data": [
+       1,
+       1
+      ]
+     },
+     {
+      "type": "line",
+      "name": "L",
+      "data": [
+       2,
+       2
+      ]
+     }
+    ],
+    "legend": {
+     "top": 10,
+     "selected": {
+      "L": false
+     },
+     "data": [
+      "A",
+      {
+       "name": "L",
+       "lineStyle": {
+        "inactiveColor": "#00ffff",
+        "inactiveWidth": 5
+       }
+      }
+     ]
+    }
+   },
+   "fails": [],
+   "axes": [],
+   "series": [
+    {
+     "items": [
+      {
+       "name": "A",
+       "text": {
+        "fill": "#54555a",
+        "fontSize": 12,
+        "fontWeight": "normal"
+       },
+       "icons": [
+        {
+         "type": "path",
+         "fill": "#5070dd",
+         "stroke": null,
+         "lineWidth": 0,
+         "opacity": 1
+        }
+       ]
+      },
+      {
+       "name": "L",
+       "text": {
+        "fill": "#cfd2d7",
+        "fontSize": 12,
+        "fontWeight": "normal"
+       },
+       "icons": [
+        {
+         "type": "path",
+         "fill": "#000",
+         "stroke": "#00ffff",
+         "lineWidth": 5,
+         "opacity": 1
+        },
+        {
+         "type": "path",
+         "fill": "#fff",
+         "stroke": "#cfd2d7",
+         "lineWidth": 2,
+         "opacity": 1
+        }
+       ]
+      }
+     ],
+     "selectors": []
+    }
+   ]
+  },
+  {
+   "id": "lg-selector-emph",
+   "group": "legend",
+   "note": "emphasis.selectorLabel's font and box as well as its colour",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "p",
+      "q"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "name": "A",
+      "data": [
+       1,
+       2
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "B",
+      "data": [
+       2,
+       1
+      ]
+     }
+    ],
+    "legend": {
+     "top": 10,
+     "selector": [
+      "all"
+     ],
+     "emphasis": {
+      "selectorLabel": {
+       "color": "#ff0000",
+       "fontWeight": "bold",
+       "fontSize": 14,
+       "backgroundColor": "#eeeeee",
+       "borderColor": "#0000ff"
+      }
+     }
+    }
+   },
+   "fails": [],
+   "axes": [],
+   "series": [
+    {
+     "items": [
+      {
+       "name": "A",
+       "text": {
+        "fill": "#54555a",
+        "fontSize": 12,
+        "fontWeight": "normal"
+       },
+       "icons": [
+        {
+         "type": "path",
+         "fill": "#5070dd",
+         "stroke": null,
+         "lineWidth": 0,
+         "opacity": 1
+        }
+       ]
+      },
+      {
+       "name": "B",
+       "text": {
+        "fill": "#54555a",
+        "fontSize": 12,
+        "fontWeight": "normal"
+       },
+       "icons": [
+        {
+         "type": "path",
+         "fill": "#b6d634",
+         "stroke": null,
+         "lineWidth": 0,
+         "opacity": 1
+        }
+       ]
+      }
+     ],
+     "selectors": [
+      {
+       "fill": "#ff0000",
+       "fontWeight": "bold",
+       "fontSize": 14,
+       "backgroundColor": "#eeeeee",
+       "borderColor": "#0000ff"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "er-bar",
+   "group": "emphrich",
+   "note": "a bar label's emphasis.label.rich: one token restyled on hover, the other kept",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       6
+      ],
+      "label": {
+       "show": true,
+       "formatter": "{a|X}{b|Y}",
+       "rich": {
+        "a": {
+         "color": "#ff0000",
+         "fontSize": 20
+        },
+        "b": {
+         "color": "#00ff00"
+        }
+       }
+      },
+      "emphasis": {
+       "label": {
+        "rich": {
+         "b": {
+          "color": "#0000ff",
+          "fontWeight": "bold"
+         }
+        }
+       }
+      }
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "labels": [
+      {
+       "i": 0,
+       "text": "{a|X}{b|Y}",
+       "normal": {
+        "a": {
+         "fill": "#ff0000",
+         "fontSize": 20,
+         "fontWeight": "normal"
+        },
+        "b": {
+         "fill": "#00ff00",
+         "fontSize": 12,
+         "fontWeight": "normal"
+        }
+       },
+       "emphasis": {
+        "a": {
+         "fill": "#ff0000",
+         "fontSize": 20,
+         "fontWeight": "normal"
+        },
+        "b": {
+         "fill": "#0000ff",
+         "fontSize": 12,
+         "fontWeight": "bold"
+        }
+       }
+      },
+      {
+       "i": 1,
+       "text": "{a|X}{b|Y}",
+       "normal": {
+        "a": {
+         "fill": "#ff0000",
+         "fontSize": 20,
+         "fontWeight": "normal"
+        },
+        "b": {
+         "fill": "#00ff00",
+         "fontSize": 12,
+         "fontWeight": "normal"
+        }
+       },
+       "emphasis": {
+        "a": {
+         "fill": "#ff0000",
+         "fontSize": 20,
+         "fontWeight": "normal"
+        },
+        "b": {
+         "fill": "#0000ff",
+         "fontSize": 12,
+         "fontWeight": "bold"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "tm-radius",
+   "group": "treemap",
+   "note": "itemStyle.borderRadius 5 on the series, one item its own 1",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "series": [
+     {
+      "type": "treemap",
+      "roam": false,
+      "nodeClick": false,
+      "breadcrumb": {
+       "show": false
+      },
+      "itemStyle": {
+       "borderRadius": 5,
+       "gapWidth": 2,
+       "borderWidth": 1
+      },
+      "data": [
+       {
+        "name": "a",
+        "value": 10,
+        "children": [
+         {
+          "name": "a1",
+          "value": 6
+         },
+         {
+          "name": "a2",
+          "value": 4
+         }
+        ]
+       },
+       {
+        "name": "b",
+        "value": 6,
+        "children": [
+         {
+          "name": "b1",
+          "value": 6,
+          "itemStyle": {
+           "borderRadius": 1
+          }
+         }
+        ]
+       },
+       {
+        "name": "c",
+        "value": 4
+       }
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "rects": [
+      {
+       "x": 20,
+       "y": 50,
+       "width": 560,
+       "height": 300,
+       "r": 5
+      },
+      {
+       "x": 21,
+       "y": 51,
+       "width": 278,
+       "height": 298,
+       "r": 5
+      },
+      {
+       "x": 22,
+       "y": 52,
+       "width": 164.8,
+       "height": 296,
+       "r": 5
+      },
+      {
+       "x": 23,
+       "y": 53,
+       "width": 162.8,
+       "height": 294,
+       "r": 5
+      },
+      {
+       "x": 188.8,
+       "y": 52,
+       "width": 109.19999999999999,
+       "height": 296,
+       "r": 5
+      },
+      {
+       "x": 189.8,
+       "y": 53,
+       "width": 107.19999999999999,
+       "height": 294,
+       "r": 5
+      },
+      {
+       "x": 301,
+       "y": 51,
+       "width": 166,
+       "height": 298,
+       "r": 5
+      },
+      {
+       "x": 302,
+       "y": 52,
+       "width": 164,
+       "height": 296,
+       "r": 1
+      },
+      {
+       "x": 303,
+       "y": 53,
+       "width": 162,
+       "height": 294,
+       "r": 1
+      },
+      {
+       "x": 469,
+       "y": 51,
+       "width": 110,
+       "height": 298,
+       "r": 5
+      },
+      {
+       "x": 470,
+       "y": 52,
+       "width": 108,
+       "height": 296,
+       "r": 5
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "tm-radius-levels",
+   "group": "treemap",
+   "note": "levels' borderRadius [4, 0], an array on the second level",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "series": [
+     {
+      "type": "treemap",
+      "roam": false,
+      "nodeClick": false,
+      "breadcrumb": {
+       "show": false
+      },
+      "levels": [
+       {
+        "itemStyle": {
+         "borderRadius": 8,
+         "borderWidth": 4,
+         "gapWidth": 4
+        }
+       },
+       {
+        "itemStyle": {
+         "borderRadius": [
+          4,
+          0
+         ],
+         "gapWidth": 1
+        }
+       }
+      ],
+      "data": [
+       {
+        "name": "a",
+        "value": 10,
+        "children": [
+         {
+          "name": "a1",
+          "value": 6
+         },
+         {
+          "name": "a2",
+          "value": 4
+         }
+        ]
+       },
+       {
+        "name": "b",
+        "value": 6,
+        "children": [
+         {
+          "name": "b1",
+          "value": 6,
+          "itemStyle": {
+           "borderRadius": 1
+          }
+         }
+        ]
+       },
+       {
+        "name": "c",
+        "value": 4
+       }
+      ]
+     }
+    ]
+   },
+   "fails": [],
+   "axes": [],
+   "series": [
+    {
+     "seriesIndex": 0,
+     "rects": [
+      {
+       "x": 20,
+       "y": 50,
+       "width": 560,
+       "height": 300,
+       "r": 8
+      },
+      {
+       "x": 24,
+       "y": 54,
+       "width": 274,
+       "height": 292,
+       "r": [
+        4,
+        0
+       ]
+      },
+      {
+       "x": 24,
+       "y": 54,
+       "width": 164,
+       "height": 292,
+       "r": 0
+      },
+      {
+       "x": 24,
+       "y": 54,
+       "width": 164,
+       "height": 292,
+       "r": 0
+      },
+      {
+       "x": 189,
+       "y": 54,
+       "width": 109,
+       "height": 292,
+       "r": 0
+      },
+      {
+       "x": 189,
+       "y": 54,
+       "width": 109,
+       "height": 292,
+       "r": 0
+      },
+      {
+       "x": 302,
+       "y": 54,
+       "width": 162.79999999999998,
+       "height": 292,
+       "r": [
+        4,
+        0
+       ]
+      },
+      {
+       "x": 302,
+       "y": 54,
+       "width": 162.79999999999998,
+       "height": 292,
+       "r": 1
+      },
+      {
+       "x": 302,
+       "y": 54,
+       "width": 162.79999999999998,
+       "height": 292,
+       "r": 1
+      },
+      {
+       "x": 468.79999999999995,
+       "y": 54,
+       "width": 107.20000000000005,
+       "height": 292,
+       "r": [
+        4,
+        0
+       ]
+      },
+      {
+       "x": 468.79999999999995,
+       "y": 54,
+       "width": 107.20000000000005,
+       "height": 292,
+       "r": [
+        4,
+        0
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "guards": [
+  {
+   "name": "no case fails its recipes",
+   "ok": true
+  },
+  {
+   "name": "the ticks follow the line's colour",
+   "ok": true
+  },
+  {
+   "name": "the arrows follow the line's colour",
+   "ok": true
+  },
+  {
+   "name": "the name follows the line's colour",
+   "ok": true
+  },
+  {
+   "name": "the axis line has a round cap unless written",
+   "ok": true
+  },
+  {
+   "name": "a minor tick takes the line's colour, not axisTick.lineStyle's",
+   "ok": true
+  },
+  {
+   "name": "a minor tick reads axisTick's own color / width",
+   "ok": true
+  },
+  {
+   "name": "a split line list draws one style per colour",
+   "ok": true
+  },
+  {
+   "name": "nameTextStyle's colour wins",
+   "ok": true
+  },
+  {
+   "name": "the angle axis' line has no round cap",
+   "ok": true
+  },
+  {
+   "name": "a background strip per bar",
+   "ok": true
+  },
+  {
+   "name": "backgroundStyle.color is the fill",
+   "ok": true
+  },
+  {
+   "name": "a border with a width is a pen",
+   "ok": true
+  },
+  {
+   "name": "a border with no width is width 0",
+   "ok": true
+  },
+  {
+   "name": "a polar bar's background is a sector",
+   "ok": true
+  },
+  {
+   "name": "a gradient fill stays a gradient",
+   "ok": true
+  },
+  {
+   "name": "lines colorBy 'data'",
+   "ok": true
+  },
+  {
+   "name": "parallel colorBy 'data'",
+   "ok": true
+  },
+  {
+   "name": "a bar series takes the gradient entry whole",
+   "ok": true
+  },
+  {
+   "name": "a pie by data: the gradient, the colour, the gradient",
+   "ok": true
+  },
+  {
+   "name": "a line's stroke and area are the gradient",
+   "ok": true
+  },
+  {
+   "name": "an item's own text colour, size and weight",
+   "ok": true
+  },
+  {
+   "name": "an item's own icon colour and opacity",
+   "ok": true
+  },
+  {
+   "name": "an item's own border over the legend's",
+   "ok": true
+  },
+  {
+   "name": "an unselected item's own inactive colours",
+   "ok": true
+  },
+  {
+   "name": "a line item's own rule",
+   "ok": true
+  },
+  {
+   "name": "an unselected line item's own inactive rule",
+   "ok": true
+  },
+  {
+   "name": "the hovered selector: font and box",
+   "ok": true
+  },
+  {
+   "name": "the hovered token takes the emphasis keys over its own",
+   "ok": true
+  },
+  {
+   "name": "a token the emphasis does not name keeps its style",
+   "ok": true
+  },
+  {
+   "name": "a treemap's rects take the radius",
+   "ok": true
+  },
+  {
+   "name": "a level's radius",
+   "ok": true
+  }
+ ]
+}

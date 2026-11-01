@@ -1,0 +1,1018 @@
+{
+ "source": "ECharts 6.1 dist: label/labelGuideHelper.ts setLabelLineStyle, zrender Displayable states",
+ "W": 600,
+ "H": 400,
+ "cases": [
+  {
+   "id": "pie.emph.full",
+   "note": "a pie's emphasis.labelLine.lineStyle with every key: the hovered line takes them, the others keep theirs",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "radius": "50%",
+      "data": [
+       {
+        "value": 1548,
+        "name": "CityE"
+       },
+       {
+        "value": 735,
+        "name": "CityC"
+       },
+       {
+        "value": 510,
+        "name": "CityD"
+       },
+       {
+        "value": 434,
+        "name": "CityB"
+       },
+       {
+        "value": 335,
+        "name": "CityA"
+       }
+      ],
+      "emphasis": {
+       "labelLine": {
+        "lineStyle": {
+         "color": "#ff0000",
+         "width": 3,
+         "opacity": 0.5,
+         "type": "dashed",
+         "dashOffset": 2,
+         "cap": "round",
+         "join": "bevel",
+         "miterLimit": 3
+        }
+       }
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "action": null,
+     "lines": [
+      {
+       "d": 0,
+       "ignore": false,
+       "stroke": "#5070dd",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "solid",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 1,
+       "ignore": false,
+       "stroke": "#b6d634",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "solid",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 2,
+       "ignore": false,
+       "stroke": "#505372",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "solid",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 3,
+       "ignore": false,
+       "stroke": "#ff994d",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "solid",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 4,
+       "ignore": false,
+       "stroke": "#0ca8df",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "solid",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      }
+     ]
+    },
+    {
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 1
+     },
+     "lines": [
+      {
+       "d": 0,
+       "ignore": false,
+       "stroke": "#5070dd",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "solid",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 1,
+       "ignore": false,
+       "stroke": "#ff0000",
+       "lineWidth": "4008000000000000",
+       "opacity": "3fe0000000000000",
+       "lineDash": "dashed",
+       "lineDashOffset": "4000000000000000",
+       "lineCap": "round",
+       "lineJoin": "bevel",
+       "miterLimit": "4008000000000000"
+      },
+      {
+       "d": 2,
+       "ignore": false,
+       "stroke": "#505372",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "solid",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 3,
+       "ignore": false,
+       "stroke": "#ff994d",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "solid",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 4,
+       "ignore": false,
+       "stroke": "#0ca8df",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "solid",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      }
+     ]
+    },
+    {
+     "action": {
+      "type": "downplay",
+      "seriesIndex": 0,
+      "dataIndex": 1
+     },
+     "lines": [
+      {
+       "d": 0,
+       "ignore": false,
+       "stroke": "#5070dd",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "solid",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 1,
+       "ignore": false,
+       "stroke": "#b6d634",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "solid",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 2,
+       "ignore": false,
+       "stroke": "#505372",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "solid",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 3,
+       "ignore": false,
+       "stroke": "#ff994d",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "solid",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 4,
+       "ignore": false,
+       "stroke": "#0ca8df",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "solid",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "pie.emph.partial",
+   "note": "the normal line dotted and 2 wide, the emphasis only its colour and dash offset: the rest kept",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "radius": "50%",
+      "data": [
+       {
+        "value": 1548,
+        "name": "CityE"
+       },
+       {
+        "value": 735,
+        "name": "CityC"
+       },
+       {
+        "value": 510,
+        "name": "CityD"
+       },
+       {
+        "value": 434,
+        "name": "CityB"
+       },
+       {
+        "value": 335,
+        "name": "CityA"
+       }
+      ],
+      "labelLine": {
+       "lineStyle": {
+        "type": "dotted",
+        "width": 2
+       }
+      },
+      "emphasis": {
+       "labelLine": {
+        "lineStyle": {
+         "color": "#00aa00",
+         "dashOffset": 4
+        }
+       }
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "action": null,
+     "lines": [
+      {
+       "d": 0,
+       "ignore": false,
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "dotted",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 1,
+       "ignore": false,
+       "stroke": "#b6d634",
+       "lineWidth": "4000000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "dotted",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 2,
+       "ignore": false,
+       "stroke": "#505372",
+       "lineWidth": "4000000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "dotted",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 3,
+       "ignore": false,
+       "stroke": "#ff994d",
+       "lineWidth": "4000000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "dotted",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 4,
+       "ignore": false,
+       "stroke": "#0ca8df",
+       "lineWidth": "4000000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "dotted",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      }
+     ]
+    },
+    {
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 0
+     },
+     "lines": [
+      {
+       "d": 0,
+       "ignore": false,
+       "stroke": "#00aa00",
+       "lineWidth": "4000000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "dotted",
+       "lineDashOffset": "4010000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 1,
+       "ignore": false,
+       "stroke": "#b6d634",
+       "lineWidth": "4000000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "dotted",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 2,
+       "ignore": false,
+       "stroke": "#505372",
+       "lineWidth": "4000000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "dotted",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 3,
+       "ignore": false,
+       "stroke": "#ff994d",
+       "lineWidth": "4000000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "dotted",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 4,
+       "ignore": false,
+       "stroke": "#0ca8df",
+       "lineWidth": "4000000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "dotted",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "pie.emph.solid",
+   "note": "the normal line dashed, the emphasis one solid with a dash array",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "radius": "50%",
+      "data": [
+       {
+        "value": 1548,
+        "name": "CityE"
+       },
+       {
+        "value": 735,
+        "name": "CityC"
+       },
+       {
+        "value": 510,
+        "name": "CityD"
+       },
+       {
+        "value": 434,
+        "name": "CityB"
+       },
+       {
+        "value": 335,
+        "name": "CityA"
+       }
+      ],
+      "labelLine": {
+       "lineStyle": {
+        "type": "dashed"
+       }
+      },
+      "emphasis": {
+       "labelLine": {
+        "lineStyle": {
+         "type": [
+          6,
+          2
+         ]
+        }
+       }
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "action": null,
+     "lines": [
+      {
+       "d": 0,
+       "ignore": false,
+       "stroke": "#5070dd",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "dashed",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 1,
+       "ignore": false,
+       "stroke": "#b6d634",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "dashed",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 2,
+       "ignore": false,
+       "stroke": "#505372",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "dashed",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 3,
+       "ignore": false,
+       "stroke": "#ff994d",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "dashed",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 4,
+       "ignore": false,
+       "stroke": "#0ca8df",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "dashed",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      }
+     ]
+    },
+    {
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 2
+     },
+     "lines": [
+      {
+       "d": 0,
+       "ignore": false,
+       "stroke": "#5070dd",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "dashed",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 1,
+       "ignore": false,
+       "stroke": "#b6d634",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "dashed",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 2,
+       "ignore": false,
+       "stroke": "#505372",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": [
+        "4018000000000000",
+        "4000000000000000"
+       ],
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 3,
+       "ignore": false,
+       "stroke": "#ff994d",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "dashed",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 4,
+       "ignore": false,
+       "stroke": "#0ca8df",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "dashed",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "pie.select",
+   "note": "select.labelLine.lineStyle: cap and join on the selected slice",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "series": [
+     {
+      "type": "pie",
+      "radius": "50%",
+      "data": [
+       {
+        "value": 1548,
+        "name": "CityE"
+       },
+       {
+        "value": 735,
+        "name": "CityC"
+       },
+       {
+        "value": 510,
+        "name": "CityD"
+       },
+       {
+        "value": 434,
+        "name": "CityB"
+       },
+       {
+        "value": 335,
+        "name": "CityA"
+       }
+      ],
+      "selectedMode": "single",
+      "select": {
+       "labelLine": {
+        "lineStyle": {
+         "cap": "square",
+         "join": "round",
+         "width": 2
+        }
+       }
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "action": null,
+     "lines": [
+      {
+       "d": 0,
+       "ignore": false,
+       "stroke": "#5070dd",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "solid",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 1,
+       "ignore": false,
+       "stroke": "#b6d634",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "solid",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 2,
+       "ignore": false,
+       "stroke": "#505372",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "solid",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 3,
+       "ignore": false,
+       "stroke": "#ff994d",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "solid",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 4,
+       "ignore": false,
+       "stroke": "#0ca8df",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "solid",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      }
+     ]
+    },
+    {
+     "action": {
+      "type": "select",
+      "seriesIndex": 0,
+      "dataIndex": 3
+     },
+     "lines": [
+      {
+       "d": 0,
+       "ignore": false,
+       "stroke": "#5070dd",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "solid",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 1,
+       "ignore": false,
+       "stroke": "#b6d634",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "solid",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 2,
+       "ignore": false,
+       "stroke": "#505372",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "solid",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 3,
+       "ignore": false,
+       "stroke": "#ff994d",
+       "lineWidth": "4000000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "solid",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "square",
+       "lineJoin": "round",
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 4,
+       "ignore": false,
+       "stroke": "#0ca8df",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": "solid",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "scatter.emph",
+   "note": "a scatter's label line (the label manager's) with emphasis.labelLine.lineStyle",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "xAxis": {},
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "symbolSize": 10,
+      "data": [
+       [
+        1,
+        2
+       ],
+       [
+        3,
+        5
+       ],
+       [
+        6,
+        1
+       ]
+      ],
+      "label": {
+       "show": true,
+       "position": "right",
+       "distance": 20
+      },
+      "labelLine": {
+       "show": true
+      },
+      "labelLayout": {
+       "dx": 30,
+       "dy": -20
+      },
+      "emphasis": {
+       "labelLine": {
+        "lineStyle": {
+         "type": "dotted",
+         "opacity": 0.4,
+         "cap": "round",
+         "width": 2
+        }
+       }
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "action": null,
+     "lines": [
+      {
+       "d": 0,
+       "ignore": false,
+       "stroke": "#5070dd",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": null,
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 1,
+       "ignore": false,
+       "stroke": "#5070dd",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": null,
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 2,
+       "ignore": false,
+       "stroke": "#5070dd",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": null,
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      }
+     ]
+    },
+    {
+     "action": {
+      "type": "highlight",
+      "seriesIndex": 0,
+      "dataIndex": 1
+     },
+     "lines": [
+      {
+       "d": 0,
+       "ignore": false,
+       "stroke": "#5070dd",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": null,
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 1,
+       "ignore": false,
+       "stroke": "#5070dd",
+       "lineWidth": "4000000000000000",
+       "opacity": "3fd999999999999a",
+       "lineDash": "dotted",
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "round",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      },
+      {
+       "d": 2,
+       "ignore": false,
+       "stroke": "#5070dd",
+       "lineWidth": "3ff0000000000000",
+       "opacity": "3ff0000000000000",
+       "lineDash": null,
+       "lineDashOffset": "0000000000000000",
+       "lineCap": "butt",
+       "lineJoin": null,
+       "miterLimit": "4024000000000000"
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "guards": [
+  "pie.emph.full: the hovered line in every key",
+  "pie.emph.full: another line untouched",
+  "pie.emph.full: back after the downplay",
+  "pie.emph.partial: the normal dash kept, the offset the emphasis one",
+  "pie.select: square caps on the selected line",
+  "scatter.emph: the hovered line dotted"
+ ]
+}

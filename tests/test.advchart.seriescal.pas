@@ -261,7 +261,10 @@ begin
             or (e.Datum.DataIndex > High(symAt)) then Continue;
           if (e.Caption.FontSizeLogical > 0) and (e.Caption.Text <> '') then
             capAt[e.Datum.DataIndex] := k
-          else if e.Z2 = 99 then
+          { [R5-I] a ripple built hidden for its symbol's hover
+            (showEffectOn 'emphasis', R5-C) is none at rest: not drawn,
+            not hit -- upstream makes it when the hover comes }
+          else if (e.Z2 = 99) and not e.Ignore then
             Inc(ripCount[e.Datum.DataIndex])
           else
             symAt[e.Datum.DataIndex] := k;

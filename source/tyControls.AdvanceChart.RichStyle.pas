@@ -121,6 +121,10 @@ function TyRtReink(const APieces: TTyRtPieceArray; AFill: TTyChartColor;
 function TyRtBlockMeasurer(const AInner: ITyTextMeasurer;
   const ABlock: TTyRtBlockStyle; const AGlobal: TTyRtGlobal;
   AScale: Double): ITyTextMeasurer;
+{ [R5-F] the plain measurer a block measurer wraps (AMeasurer itself when it
+  is no block measurer): a site that lays one text out in a block of its own
+  (a legend item's) measures it with the plain one underneath }
+function TyRtInnerMeasurer(const AMeasurer: ITyTextMeasurer): ITyTextMeasurer;
 
 type
   { WHERE THE BOX SITS, not only how big it is: the block measurer answers
@@ -475,8 +479,14 @@ begin
       S.OwnFontFamily := True;
       S.FontFamily := StrOf(d);
     end;
-    s_ := StrOf(Get(AOwn, 'fontStyle'));
-    S.FontItalic := (s_ = 'italic') or (s_ = 'oblique');
+    { [R5-A] a string only, as makeFont joins it: any word but 'italic' or
+      'oblique' is upright; anything else is not written }
+    d := Get(AOwn, 'fontStyle');
+    if (d <> nil) and (d.JSONType = jtString) then
+    begin
+      S.OwnFontStyle := True;
+      S.FontItalic := TyFontStyleIsItalic(d.AsString);
+    end;
   end;
   if ColourRead(WithGlobal('textShadowColor'), c) = crColour then
   begin
@@ -560,6 +570,15 @@ begin
     if NumOf(Get(AOwn, 'borderDashOffset'), x) then S.BorderDashOffset := x;
     d := Get(AOwn, 'borderType');
     if (d <> nil) and (d.JSONType <> jtNull) then S.BorderDash := TyDashTextOf(d);
+    { [R5-A] the box's shadow }
+    if NumOf(Get(AOwn, 'shadowBlur'), x) then S.BoxShadowBlur := x;
+    if NumOf(Get(AOwn, 'shadowOffsetX'), x) then S.BoxShadowOffsetX := x;
+    if NumOf(Get(AOwn, 'shadowOffsetY'), x) then S.BoxShadowOffsetY := x;
+    if ColourRead(Get(AOwn, 'shadowColor'), c) = crColour then
+    begin
+      S.HasBoxShadowColor := True;
+      S.BoxShadowColor := c;
+    end;
   end;
 end;
 
@@ -694,8 +713,10 @@ var
   gfam: string;
 begin
   bpx := PxOfLogical(ASizeLogical);
-  { a skin that names no weight means the normal one }
-  if AWeight <= 0 then AWeight := 400;
+  { a skin that names no weight means the normal one -- the weight, not the
+    style flags above it [R5-A] }
+  if (AWeight and TyChartFontWeightMask) <= 0 then
+    AWeight := (AWeight and not TyChartFontWeightMask) or 400;
   { A GLOBAL THAT KNOWS NO FONT (a site whose root side was read without the
     skin's) is the block's }
   gfam := AGlobal.FontFamily;
@@ -706,7 +727,8 @@ begin
     gfam := AFamily;
   end;
   gw := AGlobal.FontWeight;
-  if gw <= 0 then gw := 400;
+  if (gw and TyChartFontWeightMask) <= 0 then
+    gw := (gw and not TyChartFontWeightMask) or 400;
   ABlock.Style.FontFamily := AFamily;
   ABlock.Style.FontSizePx := bpx;
   ABlock.Style.FontWeight := AWeight;
@@ -726,6 +748,17 @@ begin
     if not s.OwnFontWeight then
       if ABlock.InheritPlain then s.FontWeight := AWeight
       else s.FontWeight := gw;
+    { [R5-A] THE STYLE, a font part of its own: the token's, else the
+      block's (or the global one's, as the other parts) }
+    s.FontWeight := s.FontWeight and not TyChartFontItalic;
+    if s.OwnFontStyle then
+    begin
+      if s.FontItalic then s.FontWeight := s.FontWeight or TyChartFontItalic;
+    end
+    else if ABlock.InheritPlain then
+      s.FontWeight := s.FontWeight or (AWeight and TyChartFontItalic)
+    else
+      s.FontWeight := s.FontWeight or (gw and TyChartFontItalic);
     if s.FontSizePx <= 0 then s.FontSizePx := bpx;
     Bind(s, AHasInherit, AInherit);
     ABlock.Rich[k].Style := s;
@@ -943,7 +976,14 @@ begin
 end;
 
 type
-  TBlockMeasurer = class(TInterfacedObject, ITyTextMeasurer, ITyTextBoxMeasurer)
+  { [R5-F] the plain measurer under a block measurer }
+  ITyRtInnerMeasurer = interface
+    ['{3E8C2B71-6D4F-4A95-B0E2-9F1A7C5D3E64}']
+    function InnerMeasurer: ITyTextMeasurer;
+  end;
+
+  TBlockMeasurer = class(TInterfacedObject, ITyTextMeasurer, ITyTextBoxMeasurer,
+    ITyRtInnerMeasurer)
   private
     FInner: ITyTextMeasurer;
     FBlock: TTyRtBlockStyle;
@@ -952,6 +992,7 @@ type
     function Bounds(const AText, AFontName: string; AFontSizeLogical,
       AWeight: Integer; AH: TTyTextAnchorH; AV: TTyTextAnchorV): TTyXYWH;
   public
+    function InnerMeasurer: ITyTextMeasurer;
     function MeasureBox(const AText, AFontName: string;
       AFontSizeLogical, AWeight: Integer; AH: TTyTextAnchorH;
       AV: TTyTextAnchorV): TTyRectF;
@@ -1021,6 +1062,18 @@ function TyRtBlockMeasurer(const AInner: ITyTextMeasurer;
 begin
   if (AInner = nil) or not ABlock.Needed then Exit(AInner);
   Result := TBlockMeasurer.Create(AInner, ABlock, AGlobal, AScale);
+end;
+
+function TBlockMeasurer.InnerMeasurer: ITyTextMeasurer;
+begin
+  Result := FInner;
+end;
+
+function TyRtInnerMeasurer(const AMeasurer: ITyTextMeasurer): ITyTextMeasurer;
+var inner: ITyRtInnerMeasurer;
+begin
+  Result := AMeasurer;
+  if Supports(AMeasurer, ITyRtInnerMeasurer, inner) then Result := inner.InnerMeasurer;
 end;
 
 end.

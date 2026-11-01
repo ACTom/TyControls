@@ -289,6 +289,10 @@ procedure TAdvChartActionsBatchOracleTest.OnEvent(Sender: TObject;
 begin
   if Sender <> FChart then Exit;
   if FListen.IndexOf(AEvent.EventType) < 0 then Exit;
+  { [R5-D] the axis pointer's own highlight / downplay batches (notBlur)
+    are not recorded upstream either }
+  if ((AEvent.EventType = 'highlight') or (AEvent.EventType = 'downplay'))
+    and (Pos('"notBlur":true', AEvent.Payload) > 0) then Exit;
   FLog.Add(AEvent.EventType + #9 + AEvent.Payload);
   { the case's handler, registered after the listeners: it hears the event
     after they do }

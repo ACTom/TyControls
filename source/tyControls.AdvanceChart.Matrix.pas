@@ -163,6 +163,11 @@ type
     Loc: array[0..1] of Integer;
     HasText: Boolean;
     Value, TipName: string;
+    { [spec 244] a value written as a number: the event's `value` is that
+      number (upstream hands the option's value as it is), Value its
+      String() }
+    HasNum: Boolean;
+    Num: Double;
     HasName: Boolean;
     Name: string;
   end;
@@ -374,7 +379,7 @@ implementation
 uses Classes, tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Calendar,
   tyControls.AdvanceChart.RichStyle, tyControls.AdvanceChart.GfxEl,
   tyControls.AdvanceChart.AnimAxis, tyControls.AdvanceChart.JsMath,
-  tyControls.AdvanceChart.Handlers;
+  tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.States;
 
 { ==================== small readers ==================== }
 
@@ -2004,6 +2009,8 @@ type
     { a fill that is an object: a gradient or an image [Batch 149] }
     Grad: TTyChartGradient;
     Pat: TTyChartPattern;
+    { [R5-A] its shadow: getItemStyle's / getLineStyle's }
+    Shadow: TTyChartShadow;
   end;
 
 var
@@ -2079,6 +2086,8 @@ begin
     Result.Dash := TyDashPattern(a.Dash, a.DashLogical, Result.LineWidth)
   else if b.Dash <> todNone then
     Result.Dash := TyDashPattern(b.Dash, b.DashLogical, Result.LineWidth);
+  { [R5-A] the cell's own over its parent's, key by key }
+  TyStReadShadow([ACell, AParent], [AKey], [], Result.Shadow);
 end;
 
 { a dimension's dividerLineStyle: width 1 in AStroke by default }
@@ -2097,6 +2106,8 @@ begin
   Result.Dash := nil;
   if a.Dash <> todNone then
     Result.Dash := TyDashPattern(a.Dash, a.DashLogical, Result.LineWidth);
+  { [R5-A] getLineStyle's shadow }
+  TyStReadShadow([ADimNode], ['dividerLineStyle'], [], Result.Shadow);
 end;
 
 function AdjX(AX, AW: Double; AAlign: TTyRtAlign; AInverse: Boolean): Double;
@@ -2251,6 +2262,7 @@ var
     else el.Style.StrokeWidthLogical := S.LineWidth;
     el.Style.DashLogical := S.Dash;
     el.Style.Alpha := S.Opacity;
+    TyStyleSetShadow(el.Style, S.Shadow);
     el.Z := z;
     el.Z2 := AZ2;
     el.Silent := ASilent;
@@ -2273,6 +2285,7 @@ var
     else el.Style.StrokeWidthLogical := S.LineWidth;
     el.Style.DashLogical := S.Dash;
     el.Style.Alpha := S.Opacity;
+    TyStyleSetShadow(el.Style, S.Shadow);
     el.Z := z;
     el.Z2 := AZ2;
     el.Silent := True;
@@ -2353,6 +2366,8 @@ var
     if fam = '' then fam := AGlobal.FontFamily;
     size := TyOptFontSize(ChainGet(chain, 'fontSize'), AGlobal.FontSizeLogical);
     weight := TyFontWeightOf(ChainGet(chain, 'fontWeight'), AGlobal.FontWeight);
+    { [R5-A] the chain's fontStyle, else the global one's (in AGlobal's weight) }
+    weight := TyFontStyleOver(ChainGet(chain, 'fontStyle'), weight);
     TyRtFinish(rt, fam, size, weight, AGlobal, False, 0);
     { the label's colour is always written upstream (the token); the skin's
       where the option wrote none }
@@ -2532,6 +2547,8 @@ var
     info := NewInfo(ATarget, ALocX, ALocY);
     AMatrix.FCellInfos[info].HasText := AHasText;
     AMatrix.FCellInfos[info].Value := AText;
+    AMatrix.FCellInfos[info].HasNum := AHasText and (AValue <> nil) and (AValue.JSONType = jtNumber);
+    if AMatrix.FCellInfos[info].HasNum then AMatrix.FCellInfos[info].Num := AValue.AsFloat;
     s := CellStyleOf(ACell, AParent, 'itemStyle', AStroke, ANoStroke);
     { z2: the cell's, its parent's, else special for a cell with its own
       itemStyle }
@@ -2675,6 +2692,9 @@ begin
   bg.Stroke := 0;
   bg.LineWidth := 0;
   if not IsNan(bs.Opacity) then bg.Opacity := bs.Opacity else bg.Opacity := 1;
+  { [R5-A] the background casts backgroundStyle's shadow, the border none
+    (MatrixView: getItemStyle without the shadow keys for it) }
+  if node <> nil then TyStReadShadow([node], ['backgroundStyle'], [], bg.Shadow);
   AddRect(AMatrix.Rect, bg, TyMatrixZ2Background);
   border := Default(TCellStyle);
   border.HasFill := False;

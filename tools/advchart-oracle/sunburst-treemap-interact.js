@@ -760,6 +760,13 @@ const CASES = [
     W: 600, H: 400, option: tm({ animation: true, leafDepth: 1 }, { animation: true }),
     steps: [{ tick: 5000 }, { click: { tm: 1 } }, { tick: 16 }, { tick: 150 }, { click: { tm: 2 } }, { tick: 300 }, { tick: 450 },
       { click: { crumb: 0 } }, { tick: 16 }, { tick: 250 }, { tick: 300 }, { tick: 400 }] },
+  // [R5-I] an action while the transition runs: renderNode's lasts are the elements' values now -- the
+  // second transition starts where the first has got to; the first's wrap, its animators aborted by the
+  // second's start, sets _state back to 'ready'
+  { id: 'tm-anim-midway', group: 'tm-anim', note: "zoomToNode a1, then 150 ms in treemapZoomToNode b2 by action: every kept rect and group tweens on from where it is now, not from where the first transition was sending it; _state reads 'ready' through the second",
+    W: 600, H: 400, option: tm({ animation: true }, { animation: true }),
+    steps: [{ tick: 5000 }, { action: { type: 'treemapZoomToNode', targetNode: 'a1' } }, { tick: 16 }, { tick: 134 },
+      { action: { type: 'treemapZoomToNode', targetNode: 'b2' } }, { tick: 16 }, { tick: 200 }, { tick: 300 }, { tick: 400 }, { tick: 400 }] },
   // [R2-H] a drill while the first render's labels still fade in (LabelManager, enter timing): the treemap is not
   // 'animating' (its own transition is the update's), so the click drills
   { id: 'tm-anim-early', group: 'tm-anim', note: 'zoomToNode 100 ms into the first render, its labels still fading in: the click drills; the kept labels\' fade and the transition',

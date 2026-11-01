@@ -68,11 +68,13 @@ begin
   FParBrushSkip := -1;
   FBrushTickPrev := NaN;
   FTlNow := NaN;
-  FTlDue := NaN;
+  FTlDragAt := -1;
   { [Batch 140] }
   FParExpNow := NaN;
   FThumbOwner := -1;
   FThumbDrag := -1;
+  { [R5-D] no handle dragged }
+  FHdDrag := -1;
   { an instance from now on [Batch 141] }
   FConnectStatus := -1;
   { the init options' defaults [Batch 142] }
@@ -88,6 +90,8 @@ end;
 destructor TTyCustomAdvanceChart.Destroy;
 var i: Integer;
 begin
+  FreeAndNil(FAnimOldLiteRoot);
+  FreeAndNil(FAnimOldLiteSeries);
   { dispose: no longer an instance [Batch 141] }
   if GTyCharts <> nil then GTyCharts.Remove(Self);
   { an action still waiting [Batch 153] }
@@ -100,6 +104,8 @@ begin
   DropBuild;
   { [R2-I6] the kept stores borrow nothing; after the build all the same }
   StoreKeepDrop;
+  { [spec 242] nor do appendData's frozen views }
+  DzFrozenDrop;
   FreeAndNil(FPaintList);
   FreeAndNil(FHoverList);
   FreeGeoSel;
@@ -158,7 +164,7 @@ begin
   FreeAndNil(FGfxView);
   { the timeline's too [Batch 129] }
   FreeAndNil(FTlTimer);
-  FreeAndNil(FTlView);
+  TlDropViews;
   FreeAndNil(FTlAnim);
   for i := 0 to High(FCustomViews) do FreeAndNil(FCustomViews[i]);
   FCustomViews := nil;
@@ -331,6 +337,8 @@ end;
 procedure TTyCustomAdvanceChart.SetOptionText(const AValue: string);
 begin
   if FOptionText = AValue then Exit;
+  { [R5-I] the setOption before this one renders first }
+  AnimFlushPending;
   { [F3c] a setOption with no transition option }
   FAnimUtHas := False;
   FAnimUtTrans := nil;
@@ -346,8 +354,23 @@ end;
 procedure TTyCustomAdvanceChart.ApplyNotMerge(const AValue: string;
   const AReplace: array of string);
 var i: Integer;
+
+  { [R5-I] a series option's keys its isAnimationEnabled reads }
+  function LiteSeries(AData: TJSONData): TJSONObject;
+  const cKeys: array[0..2] of string = ('type', 'animation', 'animationThreshold');
+  var k: Integer;
+  begin
+    Result := TJSONObject.Create;
+    if not (AData is TJSONObject) then Exit;
+    for k := 0 to High(cKeys) do
+      if TJSONObject(AData).Find(cKeys[k]) <> nil then
+        Result.Add(cKeys[k], TJSONObject(AData).Find(cKeys[k]).Clone);
+  end;
+
 begin
   FOptionText := AValue;
+  { [R5-G] new series models: no river keeps the gaps an old one wrote }
+  FRiverGaps := nil;
   { [F4b] new models, a new tooltip view: the old one's box, last point and
     the axisPointer models' state go with it }
   TipForget;
@@ -364,6 +387,18 @@ begin
     lazy one does [Batch 97] }
   if not FAnimPrev.Valid and not FLazyPending then
   begin
+    { [R5-I] what the old series models' remove() reads }
+    FreeAndNil(FAnimOldLiteSeries);
+    if (FOption.Root is TJSONObject)
+      and (TJSONObject(FOption.Root).Find('series') <> nil) then
+    begin
+      FAnimOldLiteSeries := TJSONArray.Create;
+      if TJSONObject(FOption.Root).Find('series').JSONType = jtArray then
+        for i := 0 to TJSONObject(FOption.Root).Find('series').Count - 1 do
+          FAnimOldLiteSeries.Add(LiteSeries(TJSONObject(FOption.Root).Find('series').Items[i]))
+      else
+        FAnimOldLiteSeries.Add(LiteSeries(TJSONObject(FOption.Root).Find('series')));
+    end;
     FAnimOldViewKeys := AnimViewKeys;
     FAnimOldUtKeys := AnimUtKeys;
   end;
@@ -375,6 +410,9 @@ begin
   FThumbOwner := -1;
   FThumbDrag := -1;
   FThumbFresh := True;
+  { [R5-D] new axisPointer models: the handles' values and places go }
+  FHandles := nil;
+  FHdDrag := -1;
   { the state records the reused elements keep, while the old option and
     its stores are still there [Batch 96] }
   StCarryTake(AnimViewKeys);
@@ -435,6 +473,7 @@ begin
   FSankeyRoam := nil;
   { nor a zoom: the dataZooms are new models, read from what was written }
   FDzRawHas := nil;
+  FDzRawOv := nil;
   FDzRawStart := nil;
   FDzRawStop := nil;
   FDzRawValue := nil;
@@ -463,11 +502,9 @@ begin
   { THE BRUSH COMPONENTS: new models (no areas, no painting option) and new
     views (no covers) [Batch 126] }
   BrushReset;
-  { THE TIMELINE'S VIEW goes with its model: its timer and its checkpoint
-    with it [Batch 129] }
-  FreeAndNil(FTlView);
-  FTlDue := NaN;
-  FTlDragging := False;
+  { THE TIMELINES' VIEWS go with their models: their timers and their
+    checkpoints with them [Batch 129, R5-G] }
+  TlDropViews;
   FTlStatesDirty := False;
   TlArmTimer;
   { new series models: no selection [Batch 88]. AN ELEMENT SURVIVES where
@@ -516,6 +553,8 @@ function TTyCustomAdvanceChart.SetOption(const AJson: string;
   const AOpts: TTySetOptionOpts): Boolean;
 begin
   TbFrame;
+  { [R5-I] the setOption before this one renders first }
+  AnimFlushPending;
   { normalizeSetOptionInput asserts before anything is touched }
   if not FOption.CheckReplaceMerge(AOpts.ReplaceMerge) then Exit(False);
   { THE FIRST OPTION is an init whatever the flag says (echarts.ts:768),
@@ -767,6 +806,11 @@ end;
 
 procedure TTyCustomAdvanceChart.AfterSetOption(ALazy, ASilent: Boolean);
 begin
+  { [R5-I] the polar bars' elements of a view this option drops are gone }
+  PolarStyleTrim;
+  { [R5-C] the update lays every label out again: no drift is kept }
+  FLbDrifts := nil;
+  FLbDragOn := False;
   { the update renders every parallelAxis view [Batch 130] }
   FParBrushSkip := -1;
   { restorePipelines: the next update's pipelines have no context yet; rows
@@ -876,6 +920,9 @@ end;
 
 procedure TTyCustomAdvanceChart.MergeBefore(const AMainType: string; AIndex: Integer;
   ANode, ANew: TJSONObject);
+var
+  ovd: TJSONData;
+  k: Integer;
 begin
   { [R3-B] a brush's replaceVisualOption [Batch 127] is the merge's own now
     (OptionMerge, every merge -- a frame's and a media unit's too) }
@@ -900,6 +947,25 @@ begin
     and end, their values cleared. A merge that writes this dataZoom's range
     lands on it, so it goes into the tree first and leaves the side state. }
   if AMainType <> 'dataZoom' then Exit;
+  { [R5-G] an API payload's pairs, as setRawRange wrote them }
+  if (AIndex >= 0) and (AIndex <= High(FDzRawOv)) and (FDzRawOv[AIndex] <> '')
+    and not ((ANew.Find('start') = nil) and (ANew.Find('end') = nil)
+    and (ANew.Find('startValue') = nil) and (ANew.Find('endValue') = nil)
+    and (ANew.Find('rangeMode') = nil)) then
+  begin
+    ovd := GetJSON(FDzRawOv[AIndex]);
+    try
+      for k := 0 to TJSONObject(ovd).Count - 1 do
+      begin
+        if ANode.Find(TJSONObject(ovd).Names[k]) <> nil then
+          ANode.Delete(TJSONObject(ovd).Names[k]);
+        ANode.Add(TJSONObject(ovd).Names[k], TJSONObject(ovd).Items[k].Clone);
+      end;
+    finally
+      ovd.Free;
+    end;
+    FDzRawOv[AIndex] := '';
+  end;
   if (AIndex < 0) or (AIndex > High(FDzRawHas)) or not FDzRawHas[AIndex] then Exit;
   if (ANew.Find('start') = nil) and (ANew.Find('end') = nil)
     and (ANew.Find('startValue') = nil) and (ANew.Find('endValue') = nil)
@@ -972,10 +1038,19 @@ begin
         if s <= High(FSelInit) then FSelInit[s] := False;
         if s <= High(FSankeyRoam) then FSankeyRoam[s] := Default(TTyGraphRoamState);
         if s <= High(FSankeyLocal) then FSankeyLocal[s] := nil;
+        { [R5-J] a river's written-back gaps are the model's }
+        if s <= High(FRiverGaps) then FRiverGaps[s].Has := False;
         Continue;
       end;
       if fate = mfMerged then
       begin
+        { [R5-J] A MERGE THAT WRITES boundaryGap, whatever it writes: the
+          model's array is replaced by the new one (zrUtil.merge clones an
+          array over), which the next layout parses at its own size -- the
+          same text written again too [was: the px kept while the text was
+          the same] }
+        if (s <= High(FRiverGaps)) and (opt <> nil) and (opt.Find('boundaryGap') <> nil) then
+          FRiverGaps[s].Has := False;
         if s <= High(FGraphRoam) then MergeRoamOverride(FGraphRoam[s], s, opt);
         { a sankey's roam as a graph's; its dragNode positions live in the
           node items, which a merge that writes the node list replaces
@@ -1012,8 +1087,15 @@ begin
     i := Length(FDzRawValue);
     SetLength(FDzRawValue, n);
     for s := i to n - 1 do FDzRawValue[s] := False;
+    i := Length(FDzRawOv);
+    SetLength(FDzRawOv, n);
+    for s := i to n - 1 do FDzRawOv[s] := '';
     for s := 0 to n - 1 do
-      if not (AReport.Slots[si].Fate[s] in [mfKept, mfMerged]) then FDzRawHas[s] := False;
+      if not (AReport.Slots[si].Fate[s] in [mfKept, mfMerged]) then
+      begin
+        FDzRawHas[s] := False;
+        FDzRawOv[s] := '';
+      end;
   end;
 
   { ---- by visualMap [Batch 116]: every merge visits it (it follows the
@@ -1121,14 +1203,41 @@ begin
     end;
 end;
 
+procedure TTyCustomAdvanceChart.DiagReady;
+var
+  m: ITyTextMeasurer;
+  r: TRect;
+  ppi: Integer;
+begin
+  if not FDirty or (FOption = nil) then Exit;
+  { laid out before: again at that size, as a conversion does }
+  if FLastPPI > 0 then
+  begin
+    ConvertReady;
+    Exit;
+  end;
+  { never: where the first paint will lay it out (Paint: ClientRect,
+    Font.PixelsPerInch) -- that paint then finds it done, and finishes the
+    update (FLaidAhead) }
+  r := ClientRect;
+  if (r.Right <= r.Left) or (r.Bottom <= r.Top) then Exit;
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then Exit;
+  m := NewTextMeasurer(ppi);
+  Relayout(nil, TyRectF(r.Left, r.Top, r.Right, r.Bottom), ppi, m);
+  FLaidAhead := True;
+end;
+
 function TTyCustomAdvanceChart.DiagnosticCount: Integer;
 begin
+  DiagReady;
   if FBuild = nil then Exit(0);
   Result := FBuild.DiagnosticCount;
 end;
 
 function TTyCustomAdvanceChart.Diagnostic(AIndex: Integer): string;
 begin
+  DiagReady;
   if FBuild = nil then Exit('');
   Result := FBuild.Diagnostic(AIndex);
 end;

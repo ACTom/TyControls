@@ -35,6 +35,17 @@ begin
   FPressArmed := True;
   FGraphDragSlot := -1;
   FSankeyDragSlot := -1;
+  { [R5-D] AN AXIS POINTER'S HANDLE (z 50, draggable): zrender's Draggable
+    takes the press -- its onmousedown dispatches at once -- and nothing
+    under it hears it }
+  FHdDrag := HdAt(X, Y);
+  if FHdDrag >= 0 then
+  begin
+    FHdDragX := X;
+    FHdDragY := Y;
+    HdDragMove(FHdDrag, 0, 0);
+    Exit;
+  end;
   { A BREADCRUMB ITEM: its own click [Batch 115]; [R2-B] where it is the
     element under the pointer, not under what is drawn over it }
   FCrumbPressed := CrumbOfElement(el, FCrumbPressSeries, FCrumbPressIndex);
@@ -120,6 +131,8 @@ begin
     { dragend [Batch 114] }
     GraphDragEnd;
     FSankeyDragSlot := -1;
+    { [R5-D] a handle's dragend: onto the value, a hideTip }
+    if FHdDrag >= 0 then HdDragEnd;
     { the target under the release, before anything moves }
     d := HitTestAt(X, Y, el);
     cap := (el >= 0) and (FPaintList <> nil)
@@ -172,7 +185,8 @@ begin
           n := TJSONObject(n).Find('expandAndCollapse');
           { absent is the default, true; anything but JSON true is off }
           if (n = nil) or ((n.JSONType = jtBoolean) and n.AsBoolean) then
-            TreeToggle(d.SeriesIndex, d.DataIndex);
+            { [R5-J] the action TreeView dispatches, its event too }
+            TreeClickToggle(d.SeriesIndex, d.DataIndex);
         end;
       end;
     end;
@@ -183,11 +197,22 @@ begin
   end;
   { ParallelView's mouseup hears every button [Batch 140] }
   if (Button <> mbLeft) and not (csDesigning in ComponentState) then ParExpUp(X, Y);
-  if not (csDesigning in ComponentState) then EventUp(Button, X, Y);
-  { the click through the pointer's listener, after the chart's own
-    [Batch 153] }
+  FEvClickDue := False;
+  FEvClickDefer := True;
+  try
+    if not (csDesigning in ComponentState) then EventUp(Button, X, Y);
+  finally
+    FEvClickDefer := False;
+  end;
+  { the click through the pointer's listener [Batch 153] -- [R5-D] before
+    the chart's own click event, which is called at last }
   if zrClick and not (csDesigning in ComponentState) then
     PtrListener('click', X, Y, d, el);
+  if FEvClickDue then
+  begin
+    FEvClickDue := False;
+    EmitChartEvent('click', FEvClickT, FEvClickX, FEvClickY);
+  end;
   inherited MouseUp(Button, Shift, X, Y);
 end;
 
@@ -202,6 +227,8 @@ begin
   FThumbDrag := -1;
   GraphDragEnd;
   FSankeyDragSlot := -1;
+  { [R5-D] a handle's drag ends as a release would end it }
+  if FHdDrag >= 0 then HdDragEnd;
   FPressArmed := False;
   { a visualMap drag ends as a release would end it [Batch 116] }
   VmDragEnd;
@@ -261,11 +288,17 @@ begin
     Exit(True);
   end;
   if si < 0 then Exit;
-  if IsTreeSeries(si) then Result := TreeZoom(si, s, MousePos.X, MousePos.Y)
-  else if IsSankeySeries(si) then Result := SankeyZoom(si, s, MousePos.X, MousePos.Y)
-  { [Batch 115] }
-  else if IsTreemapSeries(si) then Result := TreemapWheel(si, s, MousePos.X, MousePos.Y)
-  else Result := GraphZoom(si, s, MousePos.X, MousePos.Y);
+  { [R5-J] the series' RoamController dispatches its roam: the event too }
+  FRoamEvSrc := 1;
+  try
+    if IsTreeSeries(si) then Result := TreeZoom(si, s, MousePos.X, MousePos.Y)
+    else if IsSankeySeries(si) then Result := SankeyZoom(si, s, MousePos.X, MousePos.Y)
+    { [Batch 115] }
+    else if IsTreemapSeries(si) then Result := TreemapWheel(si, s, MousePos.X, MousePos.Y)
+    else Result := GraphZoom(si, s, MousePos.X, MousePos.Y);
+  finally
+    FRoamEvSrc := 0;
+  end;
 end;
 
 function TTyCustomAdvanceChart.SlotOfSeries(ASeriesIndex: Integer): Integer;
@@ -319,18 +352,62 @@ begin
   Result := HitTestAt(AX, AY, ignored);
 end;
 
+{ [R5-J] canvas by canvas from the highest, as EventTargetAt }
 function TTyCustomAdvanceChart.HitTestAt(AX, AY: Integer;
   out AElement: Integer): TTyChartDatumRef;
+var
+  lv: TTyIntegerArray;
+  i: Integer;
+  blocked: Boolean;
+begin
+  lv := HitLevels;
+  if Length(lv) <= 1 then Exit(HitTestIn(AX, AY, AElement, blocked));
+  for i := High(lv) downto 0 do
+  begin
+    FHitBandOn := True;
+    FHitLo := lv[i] - 1;
+    FHitHi := lv[i];
+    try
+      Result := HitTestIn(AX, AY, AElement, blocked);
+    finally
+      FHitBandOn := False;
+    end;
+    if (AElement >= 0) or blocked then Exit;
+  end;
+  Result := TyChartNoDatum;
+  AElement := -1;
+end;
+
+function TTyCustomAdvanceChart.HitTestIn(AX, AY: Integer; out AElement: Integer;
+  out ABlocked: Boolean): TTyChartDatumRef;
 var
   idx, slot, row, bb, bi: Integer;
   bp: TTyBrushPiece;
 begin
   Result := TyChartNoDatum;
   AElement := -1;
+  ABlocked := False;
   if (FPaintList = nil) or not FPaintListValid then Exit;
+  { [R5-D] the loading mask over everything -- [R5-J] on its own canvas }
+  if LoadMasks and HitIn(MaskZLevel) then
+  begin
+    ABlocked := True;
+    Exit;
+  end;
   { A BRUSH COVER over the item is the target: nothing beneath it is
-    hovered or pressed [Batch 126] }
-  if BrushPieceAt(AX, AY, bb, bi, bp) then Exit;
+    hovered or pressed [Batch 126] -- [R5-J] on zlevel 0 }
+  if HitIn(0) and BrushPieceAt(AX, AY, bb, bi, bp) then
+  begin
+    ABlocked := True;
+    Exit;
+  end;
+  { [R5-D] an axis pointer's handle (z 50) over the series -- [R5-J] the
+    axes' level }
+  if HitIn(ComponentZLevel) and (HdAt(AX, AY) >= 0) then
+  begin
+    ABlocked := True;
+    Exit;
+  end;
   { IN MOTION, WHAT IS DRAWN IS WHAT IS HIT: the frame keeps the list's
     insertion indices, so the element named is the list's [Batch 89] }
   { and AT REST ON A STATE PROXY, where the list keeps the rest values (a
@@ -845,7 +922,38 @@ begin
   Result.Model := SeriesEventModel(ASeries);
 end;
 
+{ [R5-J] THE POINTER FINDS THE TOP CANVAS FIRST: zrender's handler walks
+  the display list sorted by zlevel, then z. Where everything stands on one
+  zlevel the search is the one it always was; else canvas by canvas from
+  the highest, each with the order of its own -- a title of zlevel 2 over a
+  series of 1, a series of 1 over the loading mask of 0 [was: the
+  components apart from the list first, the mask over everything] }
 function TTyCustomAdvanceChart.EventTargetAt(AX, AY: Integer): TTyChartEventTarget;
+var
+  lv: TTyIntegerArray;
+  i: Integer;
+  blocked: Boolean;
+begin
+  lv := HitLevels;
+  if Length(lv) <= 1 then Exit(EventTargetIn(AX, AY, blocked));
+  for i := High(lv) downto 0 do
+  begin
+    FHitBandOn := True;
+    FHitLo := lv[i] - 1;
+    FHitHi := lv[i];
+    try
+      Result := EventTargetIn(AX, AY, blocked);
+    finally
+      FHitBandOn := False;
+    end;
+    if (Result.Id <> 0) or blocked then Exit;
+  end;
+  Result := Default(TTyChartEventTarget);
+  Result.Params := TyChartBlankParams;
+end;
+
+function TTyCustomAdvanceChart.EventTargetIn(AX, AY: Integer;
+  out ABlocked: Boolean): TTyChartEventTarget;
 var
   i, k, g, a, q, idx, slot: Integer;
   lay: TTyTitleLayout;
@@ -913,9 +1021,17 @@ var
 begin
   Result := Default(TTyChartEventTarget);
   Result.Params := TyChartBlankParams;
+  ABlocked := False;
+  { [R5-D] the loading mask: no ECData, no event -- [R5-J] on its own
+    canvas: nothing under it is found }
+  if LoadMasks and HitIn(MaskZLevel) then
+  begin
+    ABlocked := True;
+    Exit;
+  end;
   { THE BRUSH'S COVERS, z 10000 over everything [Batch 126]: no data, only
-    zrender's Draggable }
-  if BrushPieceAt(AX, AY, k, q, piece) then
+    zrender's Draggable -- [R5-J] its controller's group: zlevel 0 }
+  if HitIn(0) and BrushPieceAt(AX, AY, k, q, piece) then
   begin
     Result.Id := -((Int64(9) shl 44) + (Int64(k) shl 36)
       + Int64(BrushCtlOf(k).Covers[q].Serial) * 16 + Ord(piece));
@@ -926,13 +1042,23 @@ begin
     Exit;
   end;
   { A BREAK AREA THAT EXPANDS ON A CLICK, zigzagZ (100) over the rest: no
-    data, only its group's click [Batch 132] }
-  if BreakAreaAt(AX, AY, k, q) then
+    data, only its group's click [Batch 132] -- [R5-J] the axes' level }
+  if HitIn(ComponentZLevel) and BreakAreaAt(AX, AY, k, q) then
   begin
     Result.Id := -((Int64(10) shl 44) + Int64(k) * 1000 + q);
     Result.HdKind := 12;
     Result.HdSeries := k;
     Result.HdRow := q;
+    Exit;
+  end;
+  { [R5-D] AN AXIS POINTER'S HANDLE (z 50): a target without ECData -- no
+    event -- its cursor 'move' }
+  if HitIn(ComponentZLevel) then k := HdAt(AX, AY) else k := -1;
+  if k >= 0 then
+  begin
+    Result.Id := -((Int64(17) shl 44) + k);
+    Result.HdKind := 17;
+    Result.HdRow := k;
     Exit;
   end;
   { THE TITLES, over everything but the tooltip: the text and the subtext are
@@ -941,6 +1067,8 @@ begin
   begin
     lay := FTitles[i];
     if not lay.Valid then Continue;
+    { [R5-J] on its own zlevel's canvas, the mask over a lower one }
+    if not HitIn(ModelZLevel('title', i)) or MaskOver(ModelZLevel('title', i)) then Continue;
     for k := 0 to 1 do
     begin
       if (k = 1) and not lay.HasSub then Continue;
@@ -985,14 +1113,19 @@ begin
     Result.HdGen := FTbGen;
     Exit;
   end;
-  { THE TIMELINE, z 4 [Batch 129]: no data, only its elements' own
-    handlers; HdRow the element, HdGen the render that made it }
-  if TlHitAt(AX, AY, q) then
+  { THE TIMELINES, z 4 [Batch 129]: no data, only their elements' own
+    handlers; HdRow the element, HdGen the render that made it, HdSeries
+    the timeline's slot [R5-G] }
+  if TlHitAt(AX, AY, k, q) then
   begin
-    Result.Id := -(10000000 + Int64(q));
+    if k = 0 then Result.Id := -(10000000 + Int64(q))
+    else Result.Id := -((Int64(19) shl 44) + (Int64(k) shl 30) + q);
     Result.HdKind := 10;
+    Result.HdSeries := k;
     Result.HdRow := q;
-    Result.HdGen := FTlView.Gen;
+    Result.HdGen := TlView(k).Gen;
+    { [R5-I] a tick that is a data item: the timeline's params }
+    if TlTickData(k, q, Result.Params, Result.Model) then Result.HasData := True;
     Exit;
   end;
   { THE visualMaps, over the series (z 4) [Batch 116]: no data, only their
@@ -1054,6 +1187,9 @@ begin
           { a gauge's arc is a dispatcher of its own [F2b] }
           Result.HdPeer := el.Anim.Role = carGaugeProgress;
           if d.DataIndex >= 0 then Result.HdKind := 1 else Result.HdKind := 2;
+          { [spec 242] a lines effect symbol: the row's events and tooltip,
+            a click selects (its `selected` is the row's), no emphasis }
+          if el.Anim.Role = carLinesEffect then Result.HdKind := 31;
         end;
       ctkMarkPoint, ctkMarkLine, ctkMarkArea:
         { [R2-B] its own function: the keyboard's marker stop takes it too }
@@ -1139,6 +1275,12 @@ begin
           Result.Params.TargetType := mxInfo.Target;
           if mxInfo.HasName then Result.Params.Name := mxInfo.Name;
           if mxInfo.HasText then Result.Params.ValueText := mxInfo.Value;
+          { [spec 244] a number stays a number }
+          if mxInfo.HasNum then
+          begin
+            SetLength(Result.Params.Values, 1);
+            Result.Params.Values[0] := mxInfo.Num;
+          end;
           SetLength(Result.Params.Coord, 2);
           Result.Params.Coord[0] := mxInfo.Loc[0];
           Result.Params.Coord[1] := mxInfo.Loc[1];
@@ -1195,6 +1337,8 @@ begin
       if a < gb.XAxisCount then axObj := gb.XAxis(a)
       else axObj := gb.YAxis(a - gb.XAxisCount);
       if axObj = nil then Continue;
+      { [R5-J] on its own zlevel's canvas }
+      if not HitIn(AxisModelZLevel(axObj)) or MaskOver(AxisModelZLevel(axObj)) then Continue;
       mainT := axObj.MainType;
       if mainT = '' then mainT := axObj.Dim + 'Axis';
       if not TriggersEvent(FOption.ComponentAt(mainT, axObj.ComponentIndex)) then Continue;
@@ -1420,8 +1564,8 @@ var
 begin
   FEvLastX := AX;
   FEvLastY := AY;
-  { a graphic element dragged [Batch 122] }
-  GfxDragMove(AX, AY);
+  { a label dragged [R5-C] }
+  LbDragMove(AX, AY);
   { zrender #6198: a hovered element an update removed (a visualMap view
     rebuilt) is looked for again where it was hovered [Batch 116] }
   if (FEvHover.Id <> 0) and (FEvHover.HdKind = 7)
@@ -1433,7 +1577,7 @@ begin
     FEvHover := EventTargetAt(FEvHoverX, FEvHoverY);
   { and a timeline element [Batch 129] }
   if (FEvHover.Id <> 0) and (FEvHover.HdKind = 10)
-    and ((FTlView = nil) or (FEvHover.HdGen <> FTlView.Gen)) then
+    and (TlTargetView(FEvHover) = nil) then
     FEvHover := EventTargetAt(FEvHoverX, FEvHoverY);
   { and a geo region a render replaced [Batch 148] }
   if (FEvHover.Id <> 0) and (FEvHover.HdKind = 14) and (GeoOfTarget(FEvHover) = nil) then
@@ -1441,6 +1585,10 @@ begin
   { and a breadcrumb item a solve replaced [F2a] }
   if (FEvHover.Id <> 0) and (FEvHover.HdKind = 15) and (FEvHover.HdGen <> FTmCrumbGen) then
     FEvHover := EventTargetAt(FEvHoverX, FEvHoverY);
+  { [R5-D] and the loading mask, gone }
+  if FEvHoverMask and not LoadMasks then
+    FEvHover := EventTargetAt(FEvHoverX, FEvHoverY);
+  FEvHoverMask := False;
   if FEvPreset then t := FEvPresetT
   else t := EventTargetAt(AX, AY);
   FEvPreset := False;
@@ -1471,6 +1619,9 @@ begin
   VmElementEvent('mousemove', t, AX, AY);
   cancel := GfxElementEvent('mousemove', t, AX, AY);
   VmDragMove(AX, AY);
+  { [spec 242] a graphic element dragged: the Handler-level listener the
+    element's handlers can stop, after them [Batch 122: before everything] }
+  if not cancel then GfxDragMove(AX, AY);
   { [Batch 150] zrender's zr-level mousemove: a geo's RoamController pans
     here -- after the out, before echarts' own mousemove (registered
     zrEventfulCallAtLast) and before the over, both of which name what was
@@ -1489,6 +1640,10 @@ begin
   FEvHover := t;
   FEvHoverX := AX;
   FEvHoverY := AY;
+  { [R5-D] over the canvas while the mask shows, the mask is what is
+    hovered }
+  FEvHoverMask := LoadMasks and (t.Id = 0) and (AX >= FLastRect.Left)
+    and (AY >= FLastRect.Top) and (AX <= FLastRect.Right) and (AY <= FLastRect.Bottom);
 end;
 
 procedure TTyCustomAdvanceChart.EventOver;
@@ -1528,10 +1683,17 @@ begin
   FEvDownArmed := True;
   FEvDownX := AX;
   FEvDownY := AY;
-  GfxDragStart(t, AX, AY);
+  if AButton = mbLeft then LbDragStart(t, AX, AY);
   { the timeline's checkpoint is draggable [Batch 129] }
   if AButton = mbLeft then TlDragStart(t);
-  if GfxElementEvent('mousedown', t, AX, AY) then Exit;
+  { [spec 242] the element's handlers first: one that stops the climb stops
+    the Handler-level listeners too -- no drag starts }
+  if GfxElementEvent('mousedown', t, AX, AY) then
+  begin
+    FGfxDragOn := False;
+    Exit;
+  end;
+  GfxDragStart(t, AX, AY);
   if t.HasData then EmitChartEvent('mousedown', t, AX, AY);
 end;
 
@@ -1548,9 +1710,15 @@ begin
   if AButton = mbLeft then VmDragEnd;
   { the timeline's checkpoint: its dragend changes the index [Batch 129] }
   if AButton = mbLeft then TlDragEnd(AX, AY);
-  FGfxDragOn := False;
-  if not GfxElementEvent('mouseup', t, AX, AY) and t.HasData then
-    EmitChartEvent('mouseup', t, AX, AY);
+  FLbDragOn := False;
+  { [spec 242] the element's mouseup, then Draggable._dragEnd (dragend,
+    drop), then echarts' -- a handler that stops the climb leaves the drag
+    going, as upstream's Draggable never hears the release }
+  if not GfxElementEvent('mouseup', t, AX, AY) then
+  begin
+    GfxDragEnd(AX, AY);
+    if t.HasData then EmitChartEvent('mouseup', t, AX, AY);
+  end;
   if AButton <> mbLeft then
   begin
     VmApplyStates;
@@ -1570,7 +1738,7 @@ begin
     is downplay, legendToggleSelect, highlight [Batch 93] }
   if t.HdKind = 8 then TbClick(t.HdSeries, t.HdRow)
   { [Batch 129] a timeline element's onclick }
-  else if t.HdKind = 10 then TlClick(t.HdRow)
+  else if t.HdKind = 10 then TlClick(t.HdSeries, t.HdRow)
   { a break area's group, a break label's text: expandAxisBreak [Batch 132] }
   else if t.HdKind = 12 then BreakAreaClickAt(t.HdSeries, t.HdRow)
   else if t.HdKind = 13 then BreakExpandClick(t.HdSeries, t.HdRow)
@@ -1602,7 +1770,17 @@ begin
   { ECHARTS' OWN CLICK HANDLER FIRST: an item click dispatches select or
     unselect, whatever selectedMode says [Batch 88] }
   StClickSelect(t);
-  if t.HasData then EmitChartEvent('click', t, AX, AY);
+  { [R5-D] THE CHART'S click WAITS for the zr-level click listeners -- the
+    pointer's global one among them: echarts' mouse event handlers are
+    zrEventfulCallAtLast (MouseUp emits it) [was: here, before them] }
+  if FEvClickDefer then
+  begin
+    FEvClickDue := t.HasData;
+    FEvClickT := t;
+    FEvClickX := AX;
+    FEvClickY := AY;
+  end
+  else if t.HasData then EmitChartEvent('click', t, AX, AY);
   VmApplyStates;
   TlApplyStates;
 end;
@@ -1705,7 +1883,13 @@ begin
           dx, dy, pdx, pdy);
         FThumbDragX := X;
         FThumbDragY := Y;
-        roamed := GraphRoam(FThumbs[FThumbDrag].Target, pdx, pdy);
+        { [R5-J] the thumbnail's dispatch publishes graphroam }
+        FRoamEvSrc := 2;
+        try
+          roamed := GraphRoam(FThumbs[FThumbDrag].Target, pdx, pdy);
+        finally
+          FRoamEvSrc := 0;
+        end;
       end
       else
       begin
@@ -1720,11 +1904,17 @@ begin
     dy := Y - FRoamY;
     FRoamX := X;
     FRoamY := Y;
-    if IsTreeSeries(FRoamSeries) then TreeRoam(FRoamSeries, dx, dy)
-    else if IsSankeySeries(FRoamSeries) then SankeyRoam(FRoamSeries, dx, dy)
-    { a treemap's pan: past 3 px, else the delta is lost [Batch 115] }
-    else if IsTreemapSeries(FRoamSeries) then TreemapPan(FRoamSeries, Round(dx), Round(dy))
-    else roamed := GraphRoam(FRoamSeries, dx, dy);
+    { [R5-J] the series' RoamController dispatches its roam: the event too }
+    FRoamEvSrc := 1;
+    try
+      if IsTreeSeries(FRoamSeries) then TreeRoam(FRoamSeries, dx, dy)
+      else if IsSankeySeries(FRoamSeries) then SankeyRoam(FRoamSeries, dx, dy)
+      { a treemap's pan: past 3 px, else the delta is lost [Batch 115] }
+      else if IsTreemapSeries(FRoamSeries) then TreemapPan(FRoamSeries, Round(dx), Round(dy))
+      else roamed := GraphRoam(FRoamSeries, dx, dy);
+    finally
+      FRoamEvSrc := 0;
+    end;
   end;
   { A NODE DRAG: one 'drag' per move, the delta from the last move [Batch 114] }
   if FGraphDragSlot >= 0 then GraphDragMove(X, Y);
@@ -1776,6 +1966,15 @@ begin
     then the last showTip or hideTip. The box's own state machine
     [Batch 100] takes them as requests: a show now or after showDelay, a
     hide after hideDelay. }
+  { [R5-D] zrender's Draggable on a pointer's handle: its drift -- the
+    handle along the axis and a throttled dispatch -- before the global
+    listener hears the move }
+  if FHdDrag >= 0 then
+  begin
+    HdDragMove(FHdDrag, X - FHdDragX, Y - FHdDragY);
+    FHdDragX := X;
+    FHdDragY := Y;
+  end;
   PtrListener('mousemove', X, Y, FTipDatum, FTipElement);
   { zrender's Draggable on a brush cover -- the hover above was found before
     it moved -- then the brush controllers' own mousemove [Batch 126] }
@@ -1845,6 +2044,8 @@ begin
   Result := 'default';
   if ATarget.Id = 0 then Exit;
   Result := 'pointer';
+  { [R5-D] a pointer's handle }
+  if ATarget.HdKind = 17 then Exit('move');
   case ATarget.HdKind of
     { a brush cover's piece: its own (move, the eight resizes) }
     9:
@@ -1936,13 +2137,12 @@ begin
     s := DzScale;
     x := (AX - FLastRect.Left) / s;
     y := (AY - FLastRect.Top) / s;
-    for g := 0 to FBuild.GridCount - 1 do
+    { [R5-D] and the polars' and single axes' }
+    for g := 0 to DzRecCount - 1 do
       if DzControlType(g) >= 1 then
       begin
-        node := nil;
-        if FOption <> nil then
-          node := FOption.ComponentAt('grid', FBuild.Grid(g).ComponentIndex);
-        Consider(NumOr(node, 'zlevel', 0), NumOr(node, 'z', 0), g, DzGridContains(g, x, y));
+        node := DzRecNode(g);
+        Consider(NumOr(node, 'zlevel', 0), NumOr(node, 'z', 0), g, DzRecContains(g, x, y));
       end;
   end;
   { the geos' }
@@ -1961,7 +2161,8 @@ begin
     sp := FGraphSpecs[i];
     if not (sp.Roam in [grmPan, grmBoth]) then Continue;
     Consider(sp.ZLevel, sp.Z, 100000 + FBindings[i].SeriesIndex,
-      sp.RoamGlobal or FGraphs[i].ContainTrigger(AX, AY));
+      (sp.RoamGlobal or FGraphs[i].ContainTrigger(AX, AY))
+      and not SeriesRoamIrrelevant(i, AX, AY, sp.Z, sp.ZLevel));
   end;
   for i := 0 to High(FTreeViews) do
   begin
@@ -1969,7 +2170,8 @@ begin
     sp := FTreeSpecs[i];
     if not (sp.Roam in [grmPan, grmBoth]) then Continue;
     Consider(sp.ZLevel, sp.Z, 100000 + FBindings[i].SeriesIndex,
-      sp.RoamGlobal or FTreeViews[i].ContainTrigger(AX, AY));
+      (sp.RoamGlobal or FTreeViews[i].ContainTrigger(AX, AY))
+      and not SeriesRoamIrrelevant(i, AX, AY, sp.Z, sp.ZLevel));
   end;
   for i := 0 to High(FSankeyViews) do
   begin
@@ -1977,7 +2179,8 @@ begin
     sp := FSankeySpecs[i];
     if not (sp.Roam in [grmPan, grmBoth]) then Continue;
     Consider(sp.ZLevel, sp.Z, 100000 + FBindings[i].SeriesIndex,
-      sp.RoamGlobal or FSankeyViews[i].ContainTrigger(AX, AY));
+      (sp.RoamGlobal or SankeySelfAt(i, AX, AY))
+      and not SeriesRoamIrrelevant(i, AX, AY, sp.Z, sp.ZLevel));
   end;
   for i := 0 to High(FTreemaps) do
   begin
@@ -2032,7 +2235,7 @@ begin
     if (gg <> nil) and gg.Valid and gg.Spec.Show and (gg.Spec.Roam in [grmPan, grmBoth]) then Exit;
   end;
   if (FBuild <> nil) and (Length(FDzState) > 0) then
-    for i := 0 to FBuild.GridCount - 1 do
+    for i := 0 to DzRecCount - 1 do
       if DzControlType(i) >= 1 then Exit;
   Result := False;
 end;
@@ -2066,6 +2269,9 @@ begin
       c := 'grab';
   end;
   if FTbCursor <> '' then c := FTbCursor;
+  { [R5-D] the loading mask's own cursor, unless a pan holds the pointer --
+    [R5-J] or something of a higher zlevel is hovered over it }
+  if LoadMasks and (FEvHover.Id = 0) and (c <> 'grabbing') then c := 'pointer';
   ApplyCursorName(c);
 end;
 
@@ -2109,6 +2315,9 @@ begin
     c := 'grab'
   else
     c := TargetCursor(t);
+  { [R5-D] released on the loading mask: its own cursor }
+  if LoadMasks and (t.Id = 0) and (AX >= FLastRect.Left) and (AY >= FLastRect.Top)
+    and (AX <= FLastRect.Right) and (AY <= FLastRect.Bottom) then c := 'pointer';
   ApplyCursorName(c);
 end;
 

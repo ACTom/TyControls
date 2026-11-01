@@ -79,6 +79,19 @@ type
     FGeneration: Int64;
     FMemoNodes: array of TJSONData;
     FMemoLists: array of TTyStringArray;
+    { [spec 242] THE ROOT'S OBJECT KEYS UNDER EVERY SERIES: what RootFill put
+      into the series' nodes (a key of an object: the value it had, owned,
+      nil where it had none), taken out again by RootUnfill around every
+      change of the tree and every getOption; FFillDepth counts the nested
+      calls (the outermost unfills and fills) }
+    FFills: array of record
+      Parent: TJSONObject;
+      Key: string;
+      Old: TJSONData;
+    end;
+    FFillDepth: Integer;
+    procedure RootUnfill;
+    procedure RootFill;
     procedure DropMerged;
     { LegendModel.init: `selected` made after the keys it was given -- at
       the init, so a media merge in the same setOption lands after it }
@@ -219,14 +232,49 @@ type
     property Error: TTyOptionError read FError;
   end;
 
+{ [spec 242] the leaves each series type's defaults hold under the root's
+  object keys ('pie:label.show' ...), as the ECharts 6.1 dist has them }
+function TyRootDefaultPaths: TTyStringArray;
+
 { Does this text look like it contains a JS function value? Used to turn
   fcl-json's correct-but-bare "unexpected token" into a message that says what to
   write instead. Exported so the design-time editor can warn BEFORE parsing. }
 function TyOptionTextHasFunction(const AText: string): Boolean;
 
 { A fontWeight as a label reads one: 'bold' and 'bolder' 700, 'normal' 400,
-  a number rounded into 1..1000; anything else leaves ADefault. }
+  a number rounded into 1..1000; anything else leaves ADefault. The style
+  flags above ADefault's weight (TyChartFontItalic) stay: a weight replaces
+  the weight, not the font's style. }
 function TyFontWeightOf(AData: TJSONData; ADefault: Integer): Integer;
+
+const
+  { [R5-A] tyControls.Types' TyFontItalic: the italic flag above a font
+    weight, which the painter's font set-ups read (#92). Declared again here
+    -- that unit uses Graphics. A chart text's weight carries its fontStyle in
+    it, so the measurer and the painter both get the face. }
+  TyChartFontItalic = $10000;
+  TyChartFontWeightMask = $FFFF;
+
+{ [R5-A] A fontStyle over a weight, as a canvas reads the font string makeFont
+  builds from it: 'italic', or 'oblique' (with or without its angle), sets
+  the italic flag; any other string ('normal' among them) clears it; a value
+  that is not a string -- absent, null, a number -- leaves AWeight as it is,
+  the next level down (the root textStyle, the theme) deciding. }
+function TyFontStyleOver(AData: TJSONData; AWeight: Integer): Integer;
+{ whether a fontStyle word names a slanted face: 'italic', 'oblique ...' }
+function TyFontStyleIsItalic(const AText: string): Boolean;
+
+const
+  { [R5-A] A fontStyle AS A SITE KEEPS IT before it knows the weight it lays
+    it over (a gauge's or a calendar's text, whose weight is the skin's
+    unless written): not written, upright, italic }
+  TyFontStyleUnset = 0;
+  TyFontStyleUpright = 1;
+  TyFontStyleItalicCode = 2;
+
+function TyFontStyleCode(AData: TJSONData): Byte;
+{ AWeight under the kept fontStyle: unset leaves it }
+function TyFontStyleCodeOver(ACode: Byte; AWeight: Integer): Integer;
 
 { A fontSize as zrender's parseFontSize takes it, as a logical size in CSS px
   (tyControls.FontUnits): a number, a string of a number ('14'), or a string
@@ -341,17 +389,54 @@ begin
 end;
 
 function TyFontWeightOf(AData: TJSONData; ADefault: Integer): Integer;
+var flags: Integer;
 begin
   Result := ADefault;
   if AData = nil then Exit;
+  flags := ADefault and not TyChartFontWeightMask;
   if AData.JSONType = jtString then
   begin
-    if (AData.AsString = 'bold') or (AData.AsString = 'bolder') then Result := 700
-    else if AData.AsString = 'normal' then Result := 400;
+    if (AData.AsString = 'bold') or (AData.AsString = 'bolder') then Result := 700 or flags
+    else if AData.AsString = 'normal' then Result := 400 or flags;
   end
   else if (AData.JSONType = jtNumber) and not IsNan(AData.AsFloat)
     and (AData.AsFloat >= 1) and (AData.AsFloat <= 1000) then
-    Result := Round(AData.AsFloat);
+    Result := Round(AData.AsFloat) or flags;
+end;
+
+function TyFontStyleIsItalic(const AText: string): Boolean;
+var s: string;
+begin
+  s := LowerCase(Trim(AText));
+  Result := (s = 'italic') or (Copy(s, 1, 7) = 'oblique');
+end;
+
+function TyFontStyleCode(AData: TJSONData): Byte;
+begin
+  Result := TyFontStyleUnset;
+  if (AData = nil) or (AData.JSONType <> jtString) then Exit;
+  if TyFontStyleIsItalic(AData.AsString) then Result := TyFontStyleItalicCode
+  else Result := TyFontStyleUpright;
+end;
+
+function TyFontStyleCodeOver(ACode: Byte; AWeight: Integer): Integer;
+begin
+  case ACode of
+    TyFontStyleUpright: Result := AWeight and not TyChartFontItalic;
+    TyFontStyleItalicCode: Result := AWeight or TyChartFontItalic;
+  else
+    Result := AWeight;
+  end;
+end;
+
+function TyFontStyleOver(AData: TJSONData; AWeight: Integer): Integer;
+begin
+  Result := AWeight;
+  if (AData = nil) or (AData.JSONType <> jtString) then Exit;
+  if TyFontStyleIsItalic(AData.AsString) then
+    Result := AWeight or TyChartFontItalic
+  else
+    Result := AWeight and not TyChartFontItalic;
 end;
 
 function TyOptionTextHasFunction(const AText: string): Boolean;
@@ -417,7 +502,12 @@ begin
 end;
 
 destructor TTyChartOption.Destroy;
+var i: Integer;
 begin
+  { what the root's keys put in goes with the tree; the values they stood
+    in for are the records' }
+  for i := 0 to High(FFills) do FFills[i].Old.Free;
+  FFills := nil;
   FreeAndNil(FRoot);
   DropMerged;
   FreeAndNil(FMedia);
@@ -495,10 +585,15 @@ function TTyChartOption.MediaRecheck(ABefore: TTyMergeBeforeComponent;
   AAfter: TTyMergePassEvent): Boolean;
 var i: Integer;
 begin
-  { the options the last call merged in go: this one's reports are new }
-  for i := 0 to High(FMediaMerged) do FMediaMerged[i].Free;
-  FMediaMerged := nil;
-  Result := MergeMedia([], ABefore, AAfter);
+  RootUnfill;
+  try
+    { the options the last call merged in go: this one's reports are new }
+    for i := 0 to High(FMediaMerged) do FMediaMerged[i].Free;
+    FMediaMerged := nil;
+    Result := MergeMedia([], ABefore, AAfter);
+  finally
+    RootFill;
+  end;
 end;
 
 function TTyChartOption.MergeFrame(const AReplaceMerge: array of string;
@@ -546,9 +641,14 @@ function TTyChartOption.TimelineReset(const AReplaceMerge: array of string;
   ABefore: TTyMergeBeforeComponent; AAfter: TTyMergePassEvent): Boolean;
 var i: Integer;
 begin
-  for i := 0 to High(FMediaMerged) do FMediaMerged[i].Free;
-  FMediaMerged := nil;
-  Result := MergeFrame(AReplaceMerge, ABefore, AAfter);
+  RootUnfill;
+  try
+    for i := 0 to High(FMediaMerged) do FMediaMerged[i].Free;
+    FMediaMerged := nil;
+    Result := MergeFrame(AReplaceMerge, ABefore, AAfter);
+  finally
+    RootFill;
+  end;
 end;
 
 procedure TTyChartOption.ClearError;
@@ -569,6 +669,9 @@ end;
 
 procedure TTyChartOption.Clear;
 begin
+  { the tree goes: what the root put in is taken out first (nested: done) }
+  RootUnfill;
+  if FFillDepth > 0 then Dec(FFillDepth);
   Touch;
   FreeAndNil(FRoot);
   DropMerged;
@@ -968,13 +1071,14 @@ var
   var
     start: PChar;
     digits, sig, fracLen, ex: Integer;
-    isInt, neg, expNeg: Boolean;
+    isInt, neg, expNeg, hasExp: Boolean;
     v: Int64;
     s: string;
     qw: QWord;
     i64: Int64;
     f: Double;
     code: Integer;
+    m: QWord;
   begin
     Result := False;
     AValue := nil;
@@ -984,6 +1088,10 @@ var
     if not (p^ in ['0'..'9']) then Exit;
     v := 0;
     digits := 0;
+    { [R5-G] TyJsonTokenNumber's mantissa on the way past: its first fifteen
+      significant digits, as it accumulates them }
+    m := 0;
+    hasExp := False;
     { TyJsonTokenNumber's count: the digits from the first that is not a
       nought on, the fraction's length, the exponent (capped as it caps) }
     sig := 0;
@@ -1000,6 +1108,7 @@ var
         if digits < 18 then v := v * 10 + (Ord(p^) - Ord('0'));
         Inc(digits);
         Inc(sig);
+        if sig <= 15 then m := m * 10 + QWord(Ord(p^) - Ord('0'));
         Inc(p);
       end;
     isInt := True;
@@ -1010,7 +1119,11 @@ var
       if not (p^ in ['0'..'9']) then Exit;
       while p^ in ['0'..'9'] do
       begin
-        if (sig > 0) or (p^ <> '0') then Inc(sig);
+        if (sig > 0) or (p^ <> '0') then
+        begin
+          Inc(sig);
+          if sig <= 15 then m := m * 10 + QWord(Ord(p^) - Ord('0'));
+        end;
         Inc(fracLen);
         Inc(p);
       end;
@@ -1019,6 +1132,7 @@ var
     if p^ in ['e', 'E'] then
     begin
       isInt := False;
+      hasExp := True;
       Inc(p);
       expNeg := p^ = '-';
       if p^ in ['+', '-'] then Inc(p);
@@ -1063,6 +1177,17 @@ var
       value too (kept where it is the nearest) }
     if not isInt and (sig <= 15) and (ex - fracLen >= -22) and (ex - fracLen <= 22) then
     begin
+      { [R5-G] with no exponent, TyJsonTokenNumber's short path from the
+        digits already read: its power is -fracLen (a fraction has a digit,
+        so it is negative), one IEEE division, the sign after }
+      if not hasExp then
+      begin
+        if sig = 0 then f := 0
+        else f := Double(m) / TyJsPow10(fracLen);
+        if neg then f := -f;
+        AValue := CreateJSON(f);
+        Exit(True);
+      end;
       AValue := CreateJSON(TyJsonTokenNumber(AText, start - base + 1, p - start, 0));
       Exit(True);
     end;
@@ -1898,6 +2023,8 @@ var
   baseRep: TTyMergeReport;
 begin
   Result := False;
+  RootUnfill;
+  try
   Touch;
   if Trim(AText) = '' then
   begin
@@ -1964,6 +2091,9 @@ begin
   MergeFrame(AReplaceMerge, nil, AAfter);
   MergeMedia(AReplaceMerge, nil, AAfter);
   Result := True;
+  finally
+    RootFill;
+  end;
 end;
 
 function TTyChartOption.MergeOptionText(const AText: string;
@@ -2002,6 +2132,8 @@ var
   err: string;
 begin
   AReport := Default(TTyMergeReport);
+  RootUnfill;
+  try
   Touch;
   if not CheckReplaceMerge(AReplaceMerge) then Exit(False);
   { THE FIRST setOption is an init whatever its flag says }
@@ -2045,6 +2177,9 @@ begin
   MergeFrame(AReplaceMerge, ABefore, AAfter);
   MergeMedia(AReplaceMerge, ABefore, AAfter);
   Result := True;
+  finally
+    RootFill;
+  end;
 end;
 
 function TTyChartOption.KeyOf(const AMainType: string; AIndex: Integer;
@@ -2084,8 +2219,258 @@ end;
 
 function TTyChartOption.OptionJson: string;
 begin
-  Result := TyOptionToJson(FRoot);
+  { upstream's getOption: the series' own options, nothing of the root's }
+  RootUnfill;
+  try
+    Result := TyOptionToJson(FRoot);
+  finally
+    RootFill;
+  end;
 end;
+
+{ ==================== the root's object keys [spec 242] ==================== }
+
+const
+  { Model.get / getModel climb from a series' option (its defaults merged
+    in) to the root: these keys of the root reach every series where the
+    series' own option and its type's defaults hold nothing. The style
+    keys (itemStyle, lineStyle, areaStyle) do not take part: the series'
+    visual reads them with ignoreParent. }
+  cRootObjectKeys: array[0..6] of string = ('label', 'labelLine', 'labelLayout',
+    'emphasis', 'select', 'blur', 'endLabel');
+  { the leaves each series type's defaultOption holds under those keys --
+    from the ECharts 6.1 dist (tools/advchart-oracle/root-inherit.js records
+    them; the suite holds this table to that record) }
+  cRootDefaultPaths: array[0..98] of string = (
+    'line:label.position',
+    'line:emphasis.scale',
+    'line:endLabel.show',
+    'line:endLabel.valueAnimation',
+    'line:endLabel.distance',
+    'bar:select.itemStyle.borderColor',
+    'bar:select.itemStyle.borderWidth',
+    'pie:label.rotate',
+    'pie:label.show',
+    'pie:label.overflow',
+    'pie:label.position',
+    'pie:label.alignTo',
+    'pie:label.edgeDistance',
+    'pie:label.distanceToLabelLine',
+    'pie:labelLine.show',
+    'pie:labelLine.length',
+    'pie:labelLine.length2',
+    'pie:labelLine.smooth',
+    'pie:labelLine.minTurnAngle',
+    'pie:labelLine.maxSurfaceAngle',
+    'pie:labelLine.lineStyle.width',
+    'pie:labelLine.lineStyle.type',
+    'pie:labelLayout.hideOverlap',
+    'pie:emphasis.scale',
+    'pie:emphasis.scaleSize',
+    'scatter:emphasis.scale',
+    'scatter:select.itemStyle.borderColor',
+    'radar:label.position',
+    'map:label.show',
+    'map:label.color',
+    'map:emphasis.label.show',
+    'map:emphasis.label.color',
+    'map:emphasis.itemStyle.areaColor',
+    'map:select.label.show',
+    'map:select.label.color',
+    'map:select.itemStyle.color',
+    'tree:label.show',
+    'treemap:label.show',
+    'treemap:label.distance',
+    'treemap:label.padding',
+    'treemap:label.position',
+    'treemap:label.color',
+    'treemap:label.overflow',
+    'treemap:emphasis.upperLabel.show',
+    'treemap:emphasis.upperLabel.position',
+    'treemap:emphasis.upperLabel.overflow',
+    'treemap:emphasis.upperLabel.verticalAlign',
+    'graph:label.show',
+    'graph:label.formatter',
+    'graph:emphasis.scale',
+    'graph:emphasis.label.show',
+    'graph:select.itemStyle.borderColor',
+    'chord:label.show',
+    'chord:label.position',
+    'chord:label.distance',
+    'chord:emphasis.focus',
+    'chord:emphasis.lineStyle.opacity',
+    'funnel:label.show',
+    'funnel:label.position',
+    'funnel:labelLine.show',
+    'funnel:labelLine.length',
+    'funnel:labelLine.lineStyle.width',
+    'funnel:emphasis.label.show',
+    'funnel:select.itemStyle.borderColor',
+    'parallel:label.show',
+    'parallel:emphasis.label.show',
+    'sankey:label.show',
+    'sankey:label.position',
+    'sankey:label.fontSize',
+    'sankey:emphasis.label.show',
+    'sankey:emphasis.lineStyle.opacity',
+    'sankey:select.itemStyle.borderColor',
+    'boxplot:emphasis.scale',
+    'boxplot:emphasis.itemStyle.borderWidth',
+    'boxplot:emphasis.itemStyle.shadowBlur',
+    'boxplot:emphasis.itemStyle.shadowOffsetX',
+    'boxplot:emphasis.itemStyle.shadowOffsetY',
+    'boxplot:emphasis.itemStyle.shadowColor',
+    'candlestick:emphasis.itemStyle.borderWidth',
+    'lines:label.show',
+    'lines:label.position',
+    'heatmap:select.itemStyle.borderColor',
+    'pictorialBar:emphasis.scale',
+    'pictorialBar:select.itemStyle.borderColor',
+    'themeRiver:label.margin',
+    'themeRiver:label.show',
+    'themeRiver:label.position',
+    'themeRiver:label.fontSize',
+    'themeRiver:emphasis.label.show',
+    'sunburst:label.rotate',
+    'sunburst:label.show',
+    'sunburst:label.opacity',
+    'sunburst:label.align',
+    'sunburst:label.position',
+    'sunburst:label.distance',
+    'sunburst:label.silent',
+    'sunburst:emphasis.focus',
+    'sunburst:blur.itemStyle.opacity',
+    'sunburst:blur.label.opacity');
+
+function TyRootDefaultPaths: TTyStringArray;
+var i: Integer;
+begin
+  Result := nil;
+  SetLength(Result, Length(cRootDefaultPaths));
+  for i := 0 to High(cRootDefaultPaths) do Result[i] := cRootDefaultPaths[i];
+end;
+
+{ a default leaf at APath of the series type, or under it }
+function DefaultAtOrUnder(const AType, APath: string): Boolean;
+var
+  i: Integer;
+  pre, full: string;
+begin
+  pre := AType + ':' + APath;
+  for i := 0 to High(cRootDefaultPaths) do
+  begin
+    full := cRootDefaultPaths[i];
+    if (full = pre) or (Copy(full, 1, Length(pre) + 1) = pre + '.') then Exit(True);
+  end;
+  Result := False;
+end;
+
+procedure TTyChartOption.RootUnfill;
+var
+  i, idx: Integer;
+begin
+  Inc(FFillDepth);
+  if FFillDepth <> 1 then Exit;
+  for i := High(FFills) downto 0 do
+  begin
+    idx := FFills[i].Parent.IndexOfName(FFills[i].Key);
+    if idx >= 0 then
+    begin
+      if FFills[i].Old = nil then FFills[i].Parent.Delete(idx)
+      else FFills[i].Parent.Items[idx] := FFills[i].Old;
+    end
+    else
+      FFills[i].Old.Free;
+  end;
+  FFills := nil;
+end;
+
+procedure TTyChartOption.RootFill;
+
+  procedure Note(AParent: TJSONObject; const AKey: string; AOld: TJSONData);
+  var n: Integer;
+  begin
+    n := Length(FFills);
+    SetLength(FFills, n + 1);
+    FFills[n].Parent := AParent;
+    FFills[n].Key := AKey;
+    FFills[n].Old := AOld;
+  end;
+
+  { AValue at AParent[AKey]: what was there (a null) kept to put back }
+  procedure Put(AParent: TJSONObject; const AKey: string; AValue: TJSONData);
+  var idx: Integer;
+  begin
+    idx := AParent.IndexOfName(AKey);
+    if idx >= 0 then
+    begin
+      Note(AParent, AKey, TJSONNull.Create);
+      AParent.Items[idx] := AValue;
+    end
+    else
+    begin
+      AParent.Add(AKey, AValue);
+      Note(AParent, AKey, nil);
+    end;
+  end;
+
+  { the root's ARoot at AParent[AKey] (APath under the series): a leaf where
+    the series and its type's defaults hold none, an object key by key }
+  procedure FillAt(AParent: TJSONObject; const AKey: string; ARoot: TJSONData;
+    const AType, APath: string);
+  var
+    own: TJSONData;
+    k: Integer;
+    obj: TJSONObject;
+  begin
+    own := AParent.Find(AKey);
+    if (own <> nil) and (own.JSONType <> jtNull) then
+    begin
+      { the series' own: an object takes the root's keys under it, a leaf is
+        the series' }
+      if (own is TJSONObject) and (ARoot is TJSONObject) then
+        for k := 0 to ARoot.Count - 1 do
+          FillAt(TJSONObject(own), TJSONObject(ARoot).Names[k], ARoot.Items[k],
+            AType, APath + '.' + TJSONObject(ARoot).Names[k]);
+      Exit;
+    end;
+    { none here: the root's, unless the defaults hold something here }
+    if not DefaultAtOrUnder(AType, APath) then
+    begin
+      Put(AParent, AKey, ARoot.Clone);
+      Exit;
+    end;
+    if not (ARoot is TJSONObject) then Exit;
+    obj := TJSONObject.Create;
+    Put(AParent, AKey, obj);
+    for k := 0 to ARoot.Count - 1 do
+      FillAt(obj, TJSONObject(ARoot).Names[k], ARoot.Items[k], AType,
+        APath + '.' + TJSONObject(ARoot).Names[k]);
+  end;
+
+var
+  i, s: Integer;
+  rv, node, d: TJSONData;
+  tp: string;
+begin
+  if FFillDepth > 0 then Dec(FFillDepth);
+  if FFillDepth <> 0 then Exit;
+  if not (FRoot is TJSONObject) then Exit;
+  for i := 0 to High(cRootObjectKeys) do
+  begin
+    rv := TJSONObject(FRoot).Find(cRootObjectKeys[i]);
+    if (rv = nil) or (rv.JSONType = jtNull) then Continue;
+    for s := 0 to ComponentCount('series') - 1 do
+    begin
+      node := ComponentAt('series', s);
+      if not (node is TJSONObject) then Continue;
+      d := TJSONObject(node).Find('type');
+      if (d <> nil) and (d.JSONType = jtString) then tp := d.AsString else tp := '';
+      FillAt(TJSONObject(node), cRootObjectKeys[i], rv, tp, cRootObjectKeys[i]);
+    end;
+  end;
+end;
+
 
 { Split one path step into a name and an optional index: 'series[0]' -> 'series',
   0. AIndex is -1 when the step carries no subscript. }

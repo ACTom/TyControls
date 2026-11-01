@@ -70,6 +70,16 @@ type
 
   TTyPieLabelSpec = record
     Show: Boolean;
+    { [R5-A] the label's fontStyle as written (TyFontStyleCode): the item's
+      over the series', laid over the ink's weight }
+    FontStyle: Byte;
+    { [R5-F] THE LABEL'S OWN FONT, the item's over the series' (null falls
+      through): fontSize in the FontUnits encoding (TyOptFontSize), fontWeight
+      the weight alone -- over the root textStyle's and the theme's, which
+      the ink brings. [Was: the pie measured and drew every label in the
+      theme's font, whatever the label said.] }
+    HasFontSize, HasFontWeight: Boolean;
+    FontSizeOpt, FontWeightOpt: Integer;
     { A STATE SHOWS IT [F2b]: `emphasis`, `select` or `blur` .label.show
       true on the series. zrender creates the text when any state shows it
       (labelStyle.setLabelStyle needsCreateText) and the pie's layout places
@@ -297,6 +307,13 @@ function TyBuildPieLabels(const ABinding: TTySeriesBinding;
   AStore: TTyDataStore; const ASeriesName: string; AValueDim,
   APercentPrecision: Integer; const AMeasurer: ITyTextMeasurer;
   APPI: Integer; AList: TTyPaintList): Integer; overload;
+
+{ [R5-F] A PIE LABEL'S STYLE AS THE LABEL LAYOUT LAYS IT OUT AGAIN (its
+  width / height on the style, LABEL_OPTION_TO_STYLE_KEYS): the label's
+  spec in its font and the ink's bands, the pie's default overflow
+  'truncate' on the block whatever else it needs }
+function TyPieLabelLmSpec(const ASpec: TTyPieLabelSpec;
+  const AInk: TTyPieLabelInk): TTyLabelSpec;
 
 { bleedMargin's computed default: ten on a normal chart, two on a small one.
 
@@ -540,6 +557,19 @@ begin
   if ANode.Find('backgroundColor') = nil then R.Ink.HasBackground := hadBg;
   d := ANode.Find('show');
   if (d <> nil) and (d.JSONType = jtBoolean) then R.Show := d.AsBoolean;
+  if TyFontStyleCode(ANode.Find('fontStyle')) <> TyFontStyleUnset then
+    R.FontStyle := TyFontStyleCode(ANode.Find('fontStyle'));
+  { [R5-F] its fontSize and fontWeight }
+  if TyOptFontSize(ANode.Find('fontSize'), 0) > 0 then
+  begin
+    R.HasFontSize := True;
+    R.FontSizeOpt := TyOptFontSize(ANode.Find('fontSize'), 0);
+  end;
+  if TyFontWeightOf(ANode.Find('fontWeight'), 0) > 0 then
+  begin
+    R.HasFontWeight := True;
+    R.FontWeightOpt := TyFontWeightOf(ANode.Find('fontWeight'), 0);
+  end;
 
   s := StrIn(ANode, 'alignTo');
   if s = 'labelLine' then R.AlignTo := tpaLabelLine
@@ -736,6 +766,17 @@ begin
     r := ASeries;
     lab := ObjOf(it.Find('label'));
     PieReadLabelNode(lab, series, r);
+    { [R5-F] the item's label first in the chain the hovered block is laid
+      out over, and its own emphasis label over the series' }
+    if lab <> nil then
+    begin
+      SetLength(r.Ink.RtChain, Length(ASeries.Ink.RtChain) + 1);
+      r.Ink.RtChain[0] := lab.AsJSON;
+      for n := 0 to High(ASeries.Ink.RtChain) do
+        r.Ink.RtChain[n + 1] := ASeries.Ink.RtChain[n];
+    end;
+    if TyLabelEmphWantsBlock(EmphLabelOf(it)) then
+      r.Ink.EmphItemNode := EmphLabelOf(it).AsJSON;
     { the block over the item's chain, the item's label first }
     if (lab <> nil) and (TyRtNodeWantsBlock(lab)
       or ((slab <> nil) and TyRtNodeWantsBlock(slab))) then
@@ -1354,8 +1395,6 @@ type
   TPieFit = class
   public
     Measurer: ITyTextMeasurer;
-    FontName: string;
-    FontSize, FontWeight: Integer;
     Scale: Double;
     Words: array of string;
     Fills: array of TTyChartColor;
@@ -1423,8 +1462,10 @@ begin
     if Scale = 1 then Exit(b);
     Exit(TyXYWH(b.X * Scale, b.Y * Scale, b.W * Scale, b.H * Scale));
   end;
+  { [R5-F] in the label's own font }
   TyPiePlainFit(Words[AIndex], AHasWidth, AWidth, Truncs[AIndex], Ellipses[AIndex],
-    Measurer, FontName, FontSize, FontWeight, cw);
+    Measurer, Lbls[AIndex].FontName, Lbls[AIndex].FontSizeLogical,
+    Lbls[AIndex].FontWeight, cw);
   Result := PiePlainRaw(cw, LineH[AIndex]);
 end;
 
@@ -1433,6 +1474,29 @@ begin
   Result := TyPieLabelGlobalRect(Raw(AIndex, AItem.HasWidth, AItem.Width),
     AItem.LabelX, AItem.LabelY, OffXs[AIndex], OffYs[AIndex], Rots[AIndex],
     MarginTypes[AIndex], Margins[AIndex]);
+end;
+
+function TyPieLabelLmSpec(const ASpec: TTyPieLabelSpec;
+  const AInk: TTyPieLabelInk): TTyLabelSpec;
+var wt: Integer;
+begin
+  Result := ASpec.Ink;
+  Result.InsideColour[0] := AInk.InsideColour[0];
+  Result.InsideColour[1] := AInk.InsideColour[1];
+  Result.InsideColour[2] := AInk.InsideColour[2];
+  Result.OutsideColour := AInk.OutsideColour;
+  Result.Ground := AInk.Ground;
+  Result.GroundDark := AInk.GroundDark;
+  Result.FontName := AInk.FontName;
+  if ASpec.HasFontSize then Result.FontSizeLogical := ASpec.FontSizeOpt
+  else Result.FontSizeLogical := AInk.FontSizeLogical;
+  if ASpec.HasFontWeight then
+    wt := (AInk.FontWeight and not TyChartFontWeightMask) or ASpec.FontWeightOpt
+  else
+    wt := AInk.FontWeight;
+  Result.FontWeight := TyFontStyleCodeOver(ASpec.FontStyle, wt);
+  if (ASpec.Overflow = tloTruncate) and (Result.Rt.Style.Overflow = rtoNone) then
+    Result.Rt.Style.Overflow := rtoTruncate;
 end;
 
 function TyBuildPieLabels(const ABinding: TTySeriesBinding;
@@ -1487,12 +1551,15 @@ var
   sp: TTyPieLabelSpec;
   lbl: TTyLabelSpec;
   rich: Boolean;
+  ov: TTyLabelEmphOver;
+  emp: TTyRtPieceArray;
 
   { The three bands and the outside ink, packed into the shape the shared
     chooser wants. A pie has no use for the rest of a label spec -- its
     geometry came from somewhere else entirely -- so only the colour fields
     are filled in. }
   function LblOf(const S: TTyPieLabelSpec): TTyLabelSpec;
+  var wt: Integer;
   begin
     Result := S.Ink;
     Result.InsideColour[0] := AInk.InsideColour[0];
@@ -1502,8 +1569,15 @@ var
     Result.Ground := AInk.Ground;
     Result.GroundDark := AInk.GroundDark;
     Result.FontName := AInk.FontName;
-    Result.FontSizeLogical := AInk.FontSizeLogical;
-    Result.FontWeight := AInk.FontWeight;
+    { [R5-F] the label's own size and weight over the ink's (the root
+      textStyle's, the theme's); the ink's style flags stay under a weight }
+    if S.HasFontSize then Result.FontSizeLogical := S.FontSizeOpt
+    else Result.FontSizeLogical := AInk.FontSizeLogical;
+    if S.HasFontWeight then
+      wt := (AInk.FontWeight and not TyChartFontWeightMask) or S.FontWeightOpt
+    else
+      wt := AInk.FontWeight;
+    Result.FontWeight := TyFontStyleCodeOver(S.FontStyle, wt);
     { THE PIE'S DEFAULT OVERFLOW IS 'truncate', and it is the label style's:
       a block cuts under any width -- the author's or the solver's -- unless
       the label wrote another overflow (the block reads only what was
@@ -1537,9 +1611,6 @@ begin
   fit := TPieFit.Create;
   try
     fit.Measurer := AMeasurer;
-    fit.FontName := AInk.FontName;
-    fit.FontSize := AInk.FontSizeLogical;
-    fit.FontWeight := AInk.FontWeight;
     fit.Scale := scale;
 
     { ---- every label placed, and the solver's list: the outer and centre
@@ -1580,8 +1651,8 @@ begin
       w := 0;
       h := 0;
       if words <> '' then
-        AMeasurer.MeasureLine(words, AInk.FontName, AInk.FontSizeLogical,
-          AInk.FontWeight, w, h);
+        AMeasurer.MeasureLine(words, lbl.FontName, lbl.FontSizeLogical,
+          lbl.FontWeight, w, h);
 
       labs[nl].Sector := i;
       labs[nl].Place := place;
@@ -1730,8 +1801,8 @@ begin
       else
       begin
         drawn := TyPiePlainFit(words, hasWidth, width, sp.Overflow = tloTruncate,
-          sp.Ellipsis, AMeasurer, AInk.FontName, AInk.FontSizeLogical,
-          AInk.FontWeight, cw);
+          sp.Ellipsis, AMeasurer, lbl.FontName, lbl.FontSizeLogical,
+          lbl.FontWeight, cw);
         if not hasWidth then cw := labs[k].W;
       end;
       { [R2-I3] A LABEL THE SOLVER'S WIDTH CUT TO NOTHING IS STILL A TEXT:
@@ -1754,9 +1825,9 @@ begin
       el := TyChartElement(TyShapeRect(box));
       el.Caption.Text := drawn;
       if drawn <> words then el.Caption.LmText := words;
-      el.Caption.FontName := AInk.FontName;
-      el.Caption.FontSizeLogical := AInk.FontSizeLogical;
-      el.Caption.FontWeight := AInk.FontWeight;
+      el.Caption.FontName := lbl.FontName;
+      el.Caption.FontSizeLogical := lbl.FontSizeLogical;
+      el.Caption.FontWeight := lbl.FontWeight;
       TyLabelInk(lbl, fill, True, False, sp.Position = tplInside, ink, stroke,
         strokeW);
       TyLabelStampEmphasis(lbl, fill, True, False, sp.Position = tplInside,
@@ -1776,6 +1847,25 @@ begin
             place.Y, place.RotationRad, el.Caption.RtScale));
           el.Caption.RtEmph := TyRtReink(el.Caption.RtPieces, el.Caption.EmphColour,
             True, el.Caption.EmphStrokeColour, el.Caption.EmphStrokeWidthLogical);
+        end;
+      end;
+      { [R5-F] THE HOVER'S FONT, BOX OR RICH STYLES (the item's emphasis label
+        over the series'): the label laid out again where the layout put it,
+        under the solver's width -- zrender merges the state's style over the
+        normal one [was: a pie label only changed its ink on hover] }
+      if (lbl.EmphRtNode <> '') or (lbl.EmphItemNode <> '') then
+      begin
+        ov := TyLabelEmphOverNone;
+        ov.HasWidth := hasWidth;
+        ov.Width := width / scale;
+        ov.TruncDefault := sp.Overflow = tloTruncate;
+        emp := TyLabelEmphPiecesOver(lbl, words, fill, True, el.Caption.EmphColour,
+          el.Caption.EmphStrokeColour, el.Caption.EmphStrokeWidthLogical,
+          place.AnchorH, tavMiddle, scale, AMeasurer, ov);
+        if Length(emp) > 0 then
+        begin
+          el.Caption.RtScale := scale;
+          el.Caption.RtEmph := emp;
         end;
       end;
       el.Caption.Colour := ink;
@@ -1815,6 +1905,9 @@ begin
       el.Caption.LmInkFill := fill;
       el.Caption.LmInkHasFill := True;
       el.Caption.LmInkInside := sp.Position = tplInside;
+      { [R5-F] its item's spec, where the items have their own: the label
+        layout lays it out again with it }
+      if (row >= 0) and (row <= High(AItems)) then el.Caption.ItemSpec := row + 1;
       el.Silent := False;
       { `row` is the RAW index -- see TyBuildPieMarks for why a pie needs both. }
       el.Datum := TyChartDatum(ABinding.SeriesIndex,

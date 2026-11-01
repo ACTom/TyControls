@@ -195,6 +195,9 @@ type
   TTyVisualStop = record
     Value: Double;
     Color: TTyVisualColor;
+    { [spec 242] the colour as the visual holds it (TTyVisualRow.ColorText,
+      else the rgba() text of Color): what api.visual('visualMeta') lists }
+    ColorText: string;
   end;
   TTyVisualStopArray = array of TTyVisualStop;
 
@@ -203,6 +206,10 @@ type
     VisualMap: Integer;
     Stops: TTyVisualStopArray;
     Outer0, Outer1: TTyVisualColor;
+    { [spec 242] outerColors as upstream's list holds them: a stop's text,
+      'transparent' for a continuous one with no stops, '' for a piecewise
+      end nothing coloured }
+    Outer0Text, Outer1Text: string;
     { upstream's dimension index, and the coordinate it feeds ('x', 'y' or
       '' when it feeds none) }
     Dimension: Integer;
@@ -2878,6 +2885,13 @@ begin
   Result[n] := AE1;
 end;
 
+{ [spec 242] a stop's colour as the visual holds it }
+function StopText(const ARow: TTyVisualRow): string;
+begin
+  if ARow.ColorText <> '' then Result := ARow.ColorText
+  else Result := TyVisualCss(ARow.Color);
+end;
+
 { PiecewiseModel.getVisualMeta: none for categories; else the piece list
   supplemented with [-Infinity, first low] and [last high, Infinity], every
   gap an outOfRange pair, each interval coloured at its representative value
@@ -2916,17 +2930,25 @@ var
     row.Color := ASeriesColor;
     TyVisualApply(ASpec, AState, rv, row, True);
     if IsInfinite(ALo) and (ALo < 0) then
-      Result.Outer0 := row.Color
+    begin
+      Result.Outer0 := row.Color;
+      Result.Outer0Text := StopText(row);
+    end
     else if IsInfinite(AHi) and (AHi > 0) then
-      Result.Outer1 := row.Color
+    begin
+      Result.Outer1 := row.Color;
+      Result.Outer1Text := StopText(row);
+    end
     else
     begin
       k := Length(Result.Stops);
       SetLength(Result.Stops, k + 2);
       Result.Stops[k].Value := ALo;
       Result.Stops[k].Color := row.Color;
+      Result.Stops[k].ColorText := StopText(row);
       Result.Stops[k + 1].Value := AHi;
       Result.Stops[k + 1].Color := row.Color;
+      Result.Stops[k + 1].ColorText := StopText(row);
     end;
   end;
 
@@ -2937,6 +2959,8 @@ begin
   { outerColors ['', '']: nothing }
   Result.Outer0 := TyVisualUndefined;
   Result.Outer1 := TyVisualUndefined;
+  Result.Outer0Text := '';
+  Result.Outer1Text := '';
   if ASpec.IsCategory then Exit;
   lows := nil;
   highs := nil;
@@ -2981,6 +3005,7 @@ var
     SetLength(Result.Stops, n + 1);
     Result.Stops[n].Value := AValue;
     Result.Stops[n].Color := row.Color;
+    Result.Stops[n].ColorText := StopText(row);
   end;
 
 begin
@@ -3032,11 +3057,15 @@ begin
   begin
     Result.Outer0 := Result.Stops[0].Color;
     Result.Outer1 := Result.Stops[High(Result.Stops)].Color;
+    Result.Outer0Text := Result.Stops[0].ColorText;
+    Result.Outer1Text := Result.Stops[High(Result.Stops)].ColorText;
   end
   else
   begin
     Result.Outer0 := TyVisualRgba(0, 0, 0, 0);
     Result.Outer1 := TyVisualRgba(0, 0, 0, 0);
+    Result.Outer0Text := 'transparent';
+    Result.Outer1Text := 'transparent';
   end;
 end;
 

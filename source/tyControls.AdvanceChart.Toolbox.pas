@@ -43,7 +43,8 @@ unit tyControls.AdvanceChart.Toolbox;
 interface
 uses SysUtils, Classes, Math, fpjson, jsonparser,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
-     tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.ZrPath;
+     tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.ZrPath,
+     tyControls.AdvanceChart.Paint;
 
 const
   { the built-in icons (the features' getDefaultOption) }
@@ -85,6 +86,9 @@ type
   end;
 
   { An ItemStyle as getItemStyle reads it (the keys the toolbox draws by). }
+  { [R5-D] four sides or four corners }
+  TTyTbFour = array[0..3] of Double;
+
   TTyTbItemStyle = record
     HasStroke: Boolean;
     Stroke: TTyTbColour;
@@ -94,6 +98,13 @@ type
     LineWidth: Double;
     HasOpacity: Boolean;
     Opacity: Double;
+    { [R5-D] getItemStyle's line keys as written (JSON; '' not): borderType,
+      borderDashOffset, borderCap, borderJoin, borderMiterLimit }
+    DashJson, DashOffsetJson, CapJson, JoinJson, MiterJson: string;
+    { [R5-A] getItemStyle's shadow keys, each where the chain writes it }
+    HasShadowBlur, HasShadowOffsetX, HasShadowOffsetY, HasShadowColor: Boolean;
+    ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
+    ShadowColor: TTyChartColor;
   end;
 
   { The render-time adjustment of a horizontal toolbox's title. }
@@ -119,6 +130,10 @@ type
     TextAlign: string;
     TextFontSize: Double;
     TextFontWeight, TextFontFamily, TextFontStyle: string;
+    { [R5-D] the title's box: textBorderRadius (four corners, CSS px) and
+      textPadding (top, right, bottom, left), as zrender reads them }
+    TextRadius: TTyTbFour;
+    TextPadding: TTyTbFour;
     { iconStatus 'emphasis' when rendered }
     Status: Boolean;
     { ---- the layout ---- }
@@ -185,6 +200,11 @@ procedure TyTbMerge(ATarget, ASource: TJSONObject; AOverwrite: Boolean);
 { The style an icon is drawn with: its normal style, or the emphasis state
   over it }
 function TyTbStyleOf(const AIcon: TTyTbIcon; AEmphasised: Boolean): TTyTbItemStyle;
+{ [R5-D] a style's line keys onto an element's style, against its width }
+procedure TyTbLineOnto(const AStyle: TTyTbItemStyle; ALineWidth: Double;
+  var AEl: TTyChartElementStyle);
+{ [R5-A] an icon style's canvas shadow }
+function TyTbShadowOf(const AStyle: TTyTbItemStyle): TTyChartShadow;
 { The rect getBoundingRect gives the icon in its normal or emphasis state }
 function TyToolboxIconRect(const ASpec: TTyToolboxSpec; const AIcon: TTyTbIcon;
   AEmphasised: Boolean): TTyXYWH;
@@ -322,7 +342,8 @@ function TyTbJson(AData: TJSONData): string;
 implementation
 
 uses tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Scale,
-     tyControls.AdvanceChart.DataZoom, tyControls.AdvanceChart.OptionMerge;
+     tyControls.AdvanceChart.DataZoom, tyControls.AdvanceChart.OptionMerge,
+     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.States;
 
 { ==================== JavaScript's arithmetic ====================
   A degenerate icon (a path with no height, say) is NaN all the way
@@ -508,7 +529,7 @@ end;
 
 { getItemStyle over a chain of iconStyle models }
 function ItemStyleOf(AFirst, ASecond: TJSONObject; const APath: array of string): TTyTbItemStyle;
-var d: TJSONData;
+var d: TJSONData; o: TTyStObject;
 begin
   Result := Default(TTyTbItemStyle);
   d := GetChain(AFirst, ASecond, PathPlus(APath, 'borderColor'));
@@ -527,6 +548,56 @@ begin
   if d <> nil then Result.HasLineWidth := NumOf(d, Result.LineWidth);
   d := GetChain(AFirst, ASecond, PathPlus(APath, 'opacity'));
   if d <> nil then Result.HasOpacity := NumOf(d, Result.Opacity);
+  { [R5-D] the line keys, each where it is not null }
+  d := GetChain(AFirst, ASecond, PathPlus(APath, 'borderType'));
+  if (d <> nil) and (d.JSONType <> jtNull) then Result.DashJson := d.AsJSON;
+  d := GetChain(AFirst, ASecond, PathPlus(APath, 'borderDashOffset'));
+  if (d <> nil) and (d.JSONType <> jtNull) then Result.DashOffsetJson := d.AsJSON;
+  d := GetChain(AFirst, ASecond, PathPlus(APath, 'borderCap'));
+  if (d <> nil) and (d.JSONType <> jtNull) then Result.CapJson := d.AsJSON;
+  d := GetChain(AFirst, ASecond, PathPlus(APath, 'borderJoin'));
+  if (d <> nil) and (d.JSONType <> jtNull) then Result.JoinJson := d.AsJSON;
+  d := GetChain(AFirst, ASecond, PathPlus(APath, 'borderMiterLimit'));
+  if (d <> nil) and (d.JSONType <> jtNull) then Result.MiterJson := d.AsJSON;
+  o := TyStNoObject;
+  TyStReadShadowKeys([AFirst, ASecond], APath, o);
+  Result.HasShadowBlur := o.Has[stkShadowBlur];
+  Result.ShadowBlur := o.Num[stkShadowBlur];
+  Result.HasShadowOffsetX := o.Has[stkShadowOffsetX];
+  Result.ShadowOffsetX := o.Num[stkShadowOffsetX];
+  Result.HasShadowOffsetY := o.Has[stkShadowOffsetY];
+  Result.ShadowOffsetY := o.Num[stkShadowOffsetY];
+  Result.HasShadowColor := o.Has[stkShadowColor];
+  Result.ShadowColor := o.Color[stkShadowColor];
+end;
+
+{ [R5-D] zrender's padding / a radius of a written value: a number all four,
+  a list of one to four as css reads it; anything else nought }
+procedure FourOf(AData: TJSONData; var A: TTyTbFour);
+var
+  i, n: Integer;
+  v: array[0..3] of Double;
+begin
+  for i := 0 to 3 do A[i] := 0;
+  if AData = nil then Exit;
+  if AData.JSONType = jtNumber then
+  begin
+    for i := 0 to 3 do A[i] := AData.AsFloat;
+    Exit;
+  end;
+  if not (AData is TJSONArray) then Exit;
+  n := AData.Count;
+  if (n < 1) or (n > 4) then Exit;
+  for i := 0 to n - 1 do
+    if AData.Items[i].JSONType = jtNumber then v[i] := AData.Items[i].AsFloat
+    else v[i] := 0;
+  case n of
+    1: for i := 0 to 3 do A[i] := v[0];
+    2: begin A[0] := v[0]; A[2] := v[0]; A[1] := v[1]; A[3] := v[1]; end;
+    3: begin A[0] := v[0]; A[1] := v[1]; A[3] := v[1]; A[2] := v[2]; end;
+  else
+    for i := 0 to 3 do A[i] := v[i];
+  end;
 end;
 
 { ==================== the model ==================== }
@@ -923,6 +994,11 @@ begin
         if t <> nil then icon.TextFontFamily := StrOf(t);
         t := GetChain(fm, tb, ['emphasis', 'iconStyle', 'textFontStyle']);
         if t <> nil then icon.TextFontStyle := StrOf(t);
+        { [R5-D] the title's box }
+        FourOf(GetChain(fm, tb, ['emphasis', 'iconStyle', 'textBorderRadius']), icon.TextRadius);
+        FourOf(GetChain(fm, tb, ['emphasis', 'iconStyle', 'textPadding']), icon.TextPadding);
+        t := GetChain(fm, tb, ['emphasis', 'iconStyle', 'textFontWeight']);
+        if (t <> nil) and (t.JSONType = jtNumber) then icon.TextFontWeight := t.AsJSON;
         if AStatus <> nil then
           icon.Status := AStatus.Values[name + '|' + icon.Name] = 'emphasis';
         SetLength(Result.Icons, n + 1);
@@ -956,6 +1032,97 @@ begin
   if AEmph.HasFill then Result.Fill := AEmph.Fill;
   if AEmph.HasLineWidth then Result.LineWidth := AEmph.LineWidth;
   if AEmph.HasOpacity then Result.Opacity := AEmph.Opacity;
+  { [R5-D] }
+  if AEmph.DashJson <> '' then Result.DashJson := AEmph.DashJson;
+  if AEmph.DashOffsetJson <> '' then Result.DashOffsetJson := AEmph.DashOffsetJson;
+  if AEmph.CapJson <> '' then Result.CapJson := AEmph.CapJson;
+  if AEmph.JoinJson <> '' then Result.JoinJson := AEmph.JoinJson;
+  if AEmph.MiterJson <> '' then Result.MiterJson := AEmph.MiterJson;
+  if AEmph.HasShadowBlur then
+  begin
+    Result.HasShadowBlur := True;
+    Result.ShadowBlur := AEmph.ShadowBlur;
+  end;
+  if AEmph.HasShadowOffsetX then
+  begin
+    Result.HasShadowOffsetX := True;
+    Result.ShadowOffsetX := AEmph.ShadowOffsetX;
+  end;
+  if AEmph.HasShadowOffsetY then
+  begin
+    Result.HasShadowOffsetY := True;
+    Result.ShadowOffsetY := AEmph.ShadowOffsetY;
+  end;
+  if AEmph.HasShadowColor then
+  begin
+    Result.HasShadowColor := True;
+    Result.ShadowColor := AEmph.ShadowColor;
+  end;
+end;
+
+procedure TyTbLineOnto(const AStyle: TTyTbItemStyle; ALineWidth: Double;
+  var AEl: TTyChartElementStyle);
+var
+  d: TJSONData;
+  w: Byte;
+
+  function Parse(const AText: string): TJSONData;
+  begin
+    Result := nil;
+    if AText = '' then Exit;
+    try
+      Result := GetJSON(AText);
+    except
+      Result := nil;
+    end;
+  end;
+
+begin
+  d := Parse(AStyle.DashJson);
+  try
+    AEl.DashLogical := TyLineDashOf(d, ALineWidth, w);
+    AEl.DashWord := w;
+  finally
+    d.Free;
+  end;
+  d := Parse(AStyle.DashOffsetJson);
+  try
+    if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then
+      AEl.DashOffsetLogical := d.AsFloat;
+  finally
+    d.Free;
+  end;
+  d := Parse(AStyle.CapJson);
+  try
+    AEl.LineCap := TyLineCapOf(d);
+  finally
+    d.Free;
+  end;
+  d := Parse(AStyle.JoinJson);
+  try
+    AEl.LineJoin := TyLineJoinOf(d);
+  finally
+    d.Free;
+  end;
+  d := Parse(AStyle.MiterJson);
+  try
+    if (d <> nil) and (d.JSONType = jtNumber) and (d.AsFloat > 0) then
+      AEl.MiterLimit := d.AsFloat;
+  finally
+    d.Free;
+  end;
+end;
+
+function TyTbShadowOf(const AStyle: TTyTbItemStyle): TTyChartShadow;
+begin
+  Result := Default(TTyChartShadow);
+  if not (AStyle.HasShadowBlur or AStyle.HasShadowOffsetX or AStyle.HasShadowOffsetY
+    or AStyle.HasShadowColor) then Exit;
+  if AStyle.HasShadowBlur then Result.Blur := AStyle.ShadowBlur;
+  if AStyle.HasShadowOffsetX then Result.OffsetX := AStyle.ShadowOffsetX;
+  if AStyle.HasShadowOffsetY then Result.OffsetY := AStyle.ShadowOffsetY;
+  if AStyle.HasShadowColor then Result.Color := AStyle.ShadowColor
+  else Result.Color := $FF000000;
 end;
 
 function TyTbStyleOf(const AIcon: TTyTbIcon; AEmphasised: Boolean): TTyTbItemStyle;
@@ -1305,11 +1472,36 @@ end;
 
 { ==================== magicType ==================== }
 
+{ [R5-D] SERIES MODEL OPTIONS WITH NOTHING WRITTEN: a bar's and a line's
+  `seriesModel.option` (the defaults merged in; type and data left out) as
+  ECharts 6.1 has them -- what MagicType's zrUtil.defaults(newSeriesOpt,
+  seriesModel.option) hands the new series beside the author's keys. Taken
+  from the dist (a bar and a line on a category axis, nothing else written);
+  the theme's colours in them -- the bar's backgroundStyle, its select
+  border colour -- left out: they are the skin's here. }
+const
+  cTbMagicBarDefaults =
+    '{"z":2,"coordinateSystem":"cartesian2d","legendHoverLink":true,"barMinHeight":0,"barMinAng' +
+    'le":0,"large":false,"largeThreshold":400,"progressive":3000,"progressiveChunkMode":"mod","' +
+    'defaultBarGap":"10%","clip":true,"roundCap":false,"showBackground":false,"select":{"itemSt' +
+    'yle":{"borderWidth":2}},"realtimeSort":false,"label":{},"emphasis":{"label":{}}}';
+  cTbMagicLineDefaults =
+    '{"z":3,"coordinateSystem":"cartesian2d","legendHoverLink":true,"clip":true,"label":{"posit' +
+    'ion":"top"},"endLabel":{"show":false,"valueAnimation":true,"distance":8},"lineStyle":{"wid' +
+    'th":2,"type":"solid"},"emphasis":{"scale":true,"label":{}},"step":false,"smooth":false,"sm' +
+    'oothMonotone":null,"symbol":"emptyCircle","symbolSize":6,"symbolRotate":null,"showSymbol":' +
+    'true,"showAllSymbol":"auto","connectNulls":false,"sampling":"none","animationEasing":"line' +
+    'ar","progressive":0,"hoverLayerThreshold":null,"universalTransition":{"divideShape":"clone' +
+    '"},"triggerLineEvent":false,"triggerEvent":false}';
+
 function TyMagicTypeOption(AFeature: TJSONObject; const AType: string;
   const ASeries: TTyMagicSeriesArray; AStatus: TStrings;
   out ACurrentType: string; out ANewTitle: TJSONObject): TJSONObject;
 var
   seriesArr, axisArr: TJSONArray;
+  merged, typeDefaults: TJSONObject;
+  emLabel: TJSONData;
+  defText: string;
   s, last, idx: Integer;
   d, q: TJSONData;
   gen, extra, ttl: TJSONObject;
@@ -1419,7 +1611,56 @@ begin
     if gen <> nil then
     begin
       if extra <> nil then TyTbMerge(gen, extra, True);
-      if ASeries[s].Node <> nil then Defaults(gen, ASeries[s].Node);
+      { [R5-D] zrUtil.defaults(newSeriesOpt, seriesModel.option): the
+        series' option WITH its type's defaults merged in -- a bar turned
+        line keeps z 2, progressive 3000, its select style; a line turned
+        bar keeps z 3, label.position 'top', animationEasing 'linear'
+        [was: the author's keys only] }
+      if ASeries[s].Node <> nil then
+      begin
+        merged := TJSONObject(ASeries[s].Node.Clone);
+        try
+          if ASeries[s].SubType = 'bar' then defText := cTbMagicBarDefaults
+          else if ASeries[s].SubType = 'line' then defText := cTbMagicLineDefaults
+          else defText := '';
+          if defText <> '' then
+          begin
+            typeDefaults := TJSONObject(GetJSON(defText));
+            try
+              TyTbMerge(merged, typeDefaults, False);
+            finally
+              typeDefaults.Free;
+            end;
+            { mergeDefaultAndTheme's defaultEmphasis(option, 'label',
+              ['show']): label and emphasis.label made objects, the label's
+              show copied into emphasis.label where it has none }
+            if not (merged.Find('label') is TJSONObject) then
+            begin
+              if merged.IndexOfName('label') >= 0 then merged.Delete('label');
+              merged.Add('label', TJSONObject.Create);
+            end;
+            if not (merged.Find('emphasis') is TJSONObject) then
+            begin
+              if merged.IndexOfName('emphasis') >= 0 then merged.Delete('emphasis');
+              merged.Add('emphasis', TJSONObject.Create);
+            end;
+            emLabel := TJSONObject(merged.Objects['emphasis']).Find('label');
+            if not (emLabel is TJSONObject) then
+            begin
+              if merged.Objects['emphasis'].IndexOfName('label') >= 0 then
+                merged.Objects['emphasis'].Delete('label');
+              emLabel := TJSONObject.Create;
+              merged.Objects['emphasis'].Add('label', emLabel);
+            end;
+            if (TJSONObject(emLabel).IndexOfName('show') < 0)
+              and (merged.Objects['label'].IndexOfName('show') >= 0) then
+              TJSONObject(emLabel).Add('show', merged.Objects['label'].Find('show').Clone);
+          end;
+          Defaults(gen, merged);
+        finally
+          merged.Free;
+        end;
+      end;
       entries[s] := gen;
       last := s;
     end;

@@ -167,6 +167,19 @@ begin
   if (d <> nil) and (d.JSONType = jtString) then Result := d.AsString;
 end;
 
+{ [R5-F] a series' symbolRotate as its symbol visual holds it: the number
+  written, 0 where none is }
+function TTyCustomAdvanceChart.SeriesSymbolRotateOf(ASeriesIndex: Integer): Double;
+var n, d: TJSONData;
+begin
+  Result := 0;
+  n := FOption.ComponentAt('series', ASeriesIndex);
+  if not (n is TJSONObject) then Exit;
+  d := TJSONObject(n).Find('symbolRotate');
+  if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then
+    Result := d.AsFloat;
+end;
+
 function TTyCustomAdvanceChart.LegendSources(const AEntries: TTyLegendEntryArray;
   ALegend: Integer): TTyLegendSourceArray;
 var
@@ -201,6 +214,8 @@ begin
       Result[i].DefaultIcon := TyLegendDefaultIcon(FBindings[j].SeriesType,
         SeriesSymbolWord(j));
       Result[i].OwnIcon := TyLegendDrawsOwnIcon(FBindings[j].SeriesType);
+      { [R5-F] its symbolRotate visual }
+      Result[i].SymbolRotate := SeriesSymbolRotateOf(FBindings[j].SeriesIndex);
       { the series' style decal under the legend's own [Batch 131]; an icon
         the series draws itself (a line's) takes it too: getLegendIcon sets
         the legend style on its symbol, decal and all [F4a] }
@@ -324,6 +339,7 @@ begin
           Result[i].DefaultIcon := TyLegendDefaultIcon(
             FBindings[j].SeriesType, SeriesSymbolWord(j));
           Result[i].OwnIcon := TyLegendDrawsOwnIcon(FBindings[j].SeriesType);
+          Result[i].SymbolRotate := SeriesSymbolRotateOf(FBindings[j].SeriesIndex);
           if Result[i].OwnIcon then Result[i].LineWidthLogical := 2
           else LegendBorderOf(j, k, Result[i]);
           found := True;
@@ -586,6 +602,7 @@ begin
   AFont.SizeLogical := TyOptFontSize(TJSONObject(st).Find('fontSize'),
     AFont.SizeLogical);
   AFont.Weight := TyFontWeightOf(TJSONObject(st).Find('fontWeight'), AFont.Weight);
+  AFont.Weight := TyFontStyleOver(TJSONObject(st).Find('fontStyle'), AFont.Weight);
   d := TJSONObject(st).Find('color');
   if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, col) then
     AInk.Text := col;
@@ -667,6 +684,10 @@ begin
   fam := st.FontName;
   size := ResolveFontSize(st);
   weight := st.FontWeight;
+  { [R5-A] the root's fontStyle (no default of its own shuts it out) }
+  hasCol := False;
+  gcol := 0;
+  GlobalTextOver(fam, size, weight, hasCol, gcol, []);
   if sel <> nil then
   begin
     d := sel.Find('fontFamily');
@@ -674,6 +695,7 @@ begin
       fam := d.AsString;
     size := TyOptFontSize(sel.Find('fontSize'), size);
     weight := TyFontWeightOf(sel.Find('fontWeight'), weight);
+    weight := TyFontStyleOver(sel.Find('fontStyle'), weight);
   end;
   ink := TTyChartColor(st.TextColor);
   inkH := TTyChartColor(stH.TextColor);
@@ -689,6 +711,11 @@ begin
   defs := TJSONObject(GetJSON('{"padding":[3,5,3,5],"borderWidth":1,"borderRadius":10}'));
   try
     Result.SelBlock := TyRtResolve([sel, defs], g, TyRtResolveOpt(False));
+    { THE HOVERED BUTTON: setLabelStyle's emphasis state is the whole of
+      emphasis.selectorLabel over the normal one -- its font, its box (the
+      background, the border, the padding, the radius) as well as its colour
+      [R5-B: the colour alone] }
+    Result.SelEmphBlock := TyRtResolve([em, sel, defs], g, TyRtResolveOpt(False));
   finally
     defs.Free;
   end;
@@ -697,11 +724,26 @@ begin
     Result.SelBlock.Style.HasBorderColor := True;
     Result.SelBlock.Style.BorderColor := TTyChartColor(st.BorderColor);
   end;
+  if not (Result.SelEmphBlock.Style.HasBorderColor
+    or Result.SelEmphBlock.Style.BorderColorInherit) then
+  begin
+    Result.SelEmphBlock.Style.HasBorderColor := True;
+    Result.SelEmphBlock.Style.BorderColor := Result.SelBlock.Style.BorderColor;
+  end;
   Result.SelBlock.Needed := True;
-  Result.SelEmphBlock := Result.SelBlock;
+  Result.SelEmphBlock.Needed := True;
   TyRtFinish(Result.SelBlock, fam, size, weight, g, True, ink);
+  { the hovered font: emphasis.selectorLabel's own keys over the normal's }
+  if em <> nil then
+  begin
+    d := em.Find('fontFamily');
+    if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '') then
+      fam := d.AsString;
+    size := TyOptFontSize(em.Find('fontSize'), size);
+    weight := TyFontWeightOf(em.Find('fontWeight'), weight);
+    weight := TyFontStyleOver(em.Find('fontStyle'), weight);
+  end;
   TyRtFinish(Result.SelEmphBlock, fam, size, weight, g, True, inkH);
-  { emphasis.selectorLabel is only a colour: the state changes the fill }
   Result.SelEmphBlock.Style.HasFill := True;
   Result.SelEmphBlock.Style.FillNone := False;
   Result.SelEmphBlock.Style.Fill := inkH;
@@ -722,6 +764,7 @@ begin
       Result.PageFontName := d.AsString;
     Result.PageFontSize := TyOptFontSize(pts.Find('fontSize'), Result.PageFontSize);
     Result.PageFontWeight := TyFontWeightOf(pts.Find('fontWeight'), Result.PageFontWeight);
+    Result.PageFontWeight := TyFontStyleOver(pts.Find('fontStyle'), Result.PageFontWeight);
   end;
 end;
 
@@ -759,7 +802,7 @@ end;
 function TTyCustomAdvanceChart.BuildLegends(APPI: Integer;
   AList: TTyPaintList; const AMeasurer: ITyTextMeasurer): Integer;
 var
-  i, hov, k: Integer;
+  i, hov, k, lt, lk: Integer;
   lay: TTyLegendLayout;
   dx, dy: Double;
   ink: TTyLegendInk;
@@ -767,8 +810,14 @@ var
 begin
   Result := 0;
   if Length(FLegends) = 0 then Exit;
+  lk := -1;
+  lt := 0;
   for i := 0 to High(FLegends) do
   begin
+    { [R5-J] the elements the last one added take its zlevel }
+    if lk >= 0 then LevelTail(AList, lt, 'legend', lk);
+    lt := AList.Count;
+    lk := i;
     ink := LegendInk;
     fnt := LegendFont;
     LegendTextOf(i, fnt, ink);
@@ -802,6 +851,7 @@ begin
     Inc(Result, TyBuildLegendMarks(FLegendSpecs[i], lay, ink, fnt,
       APPI, AList, i, AMeasurer, hov));
   end;
+  if lk >= 0 then LevelTail(AList, lt, 'legend', lk);
 end;
 
 function TTyCustomAdvanceChart.LegendSelectedText(AIndex: Integer): string;
@@ -1239,6 +1289,7 @@ var
   nodes: array[0..1] of TJSONObject;
   st, d: TJSONData;
   col: TTyChartColor;
+  cs: TTyCandleSpec;
 begin
   if (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
   s := FBindings[ASlot].SeriesIndex;
@@ -1255,6 +1306,23 @@ begin
     ASrc.HasStroke := True;
     ASrc.Stroke := TTyChartColor(ActiveController.Model.ResolveStyle(
       GetStyleTypeKey, StyleClass, [tysNormal]).Background.Color);
+  end
+  { [R5-G] A CANDLESTICK'S AND A BOXPLOT'S itemStyle.borderWidth 1 (their
+    defaultOption), so the 'auto' pen is 2: the candle's in its rising
+    border colour, the box's in its visual colour (it draws with the stroke)
+    [was: no pen unless the author wrote a border] }
+  else if t = 'candlestick' then
+  begin
+    cs := CandleVisual(ASlot);
+    ASrc.VisualLineWidth := cs.BorderWidthLogical;
+    ASrc.HasStroke := True;
+    ASrc.Stroke := cs.UpBorder;
+  end
+  else if t = 'boxplot' then
+  begin
+    ASrc.VisualLineWidth := 1;
+    ASrc.HasStroke := True;
+    ASrc.Stroke := TTyChartColor(SeriesColor(s));
   end;
   { the series' itemStyle, then the datum's }
   nodes[0] := StSeriesNode(s);
@@ -1281,4 +1349,34 @@ begin
   end;
   { MapSeries.getLegendIcon: the border is no border [Batch 152] }
   if t = TyMapSeriesTypeName then ASrc.HasStroke := False;
+  { [spec 242] A LINES SERIES DRAWS WITH ITS STROKE (visualDrawType
+    'stroke'): the visual style is its lineStyle -- the icon's pen is the
+    visual's stroke, 2 wide where lineStyle.width is above nought; a
+    gradient colour paints the pen too }
+  if t = TyLinesSeriesTypeName then
+  begin
+    ASrc.HasStroke := True;
+    ASrc.Stroke := TTyChartColor(SeriesColor(s));
+    ASrc.VisualLineWidth := 0;
+    ASrc.StrokeObj := Default(TTyChartObjFill);
+    if nodes[0] <> nil then
+    begin
+      st := nodes[0].Find('lineStyle');
+      if st is TJSONObject then
+      begin
+        d := TJSONObject(st).Find('width');
+        if (d <> nil) and (d.JSONType = jtNumber) then ASrc.VisualLineWidth := d.AsFloat;
+        d := TJSONObject(st).Find('color');
+        if (d <> nil) and (d.JSONType = jtString) then
+        begin
+          if TyTryParseChartColor(d.AsString, col) then ASrc.Stroke := col;
+        end
+        else if TyTryReadGradient(d, ASrc.StrokeObj.Gradient) then
+        begin
+          ASrc.StrokeObj.Present := True;
+          ASrc.Stroke := TyGradientSolid(ASrc.StrokeObj.Gradient);
+        end;
+      end;
+    end;
+  end;
 end;

@@ -91,6 +91,13 @@ type
       the decoded image's own size. }
     HasMatrix, UnitImage: Boolean;
     Matrix: TTyMat2D;
+    { [spec 242] A UNIT IMAGE'S SOURCE RECT (zrender's brushImage, sx / sy /
+      sWidth / sHeight): the part of the image, in its natural px, that the
+      unit square shows -- drawImage's nine-argument form. What falls off
+      the image is nothing, as a canvas clips the source. CropOk False:
+      drawImage was handed a number that is none, and draws nothing. }
+    HasCrop, CropOk: Boolean;
+    CropX, CropY, CropW, CropH: Double;
   end;
 
   { A FILL THAT IS AN OBJECT, for a renderer handed colours one per datum
@@ -170,7 +177,43 @@ type
     { [R2-F] the dash's phase, LOGICAL px: zrender's lineDashOffset }
     DashOffsetLogical: Double;
     Alpha: Double;                    // 0..1; 1 = opaque
+    { [R5-D] zrender's lineCap / lineJoin / miterLimit where a builder sets
+      them (a brush cover's): 0 is the canvas default -- 'butt', 'miter' --
+      and a MiterLimit of 0 is the default 10 }
+    LineCap: Byte;                    // 0 butt, 1 round, 2 square
+    LineJoin: Byte;                   // 0 miter, 1 round, 2 bevel
+    MiterLimit: Double;
+    { [R5-A] THE SHADOW, zrender's style.shadowBlur / shadowOffsetX / shadowOffsetY
+      (LOGICAL px) and shadowColor: cast by the fill and by the stroke, each its own, under
+      them (the canvas' shadow; the painter's SetShadow). Drawn where the colour has alpha
+      and any of the three is not nought -- the zero value is none. A decal over the fill
+      casts none (zrender's decal element nulls it). }
+    ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
+    ShadowColor: TTyChartColor;
+    { [R5-A] zrender's style.blend, the canvas' globalCompositeOperation: a
+      series' blendMode on every element its view renders (echarts'
+      updateBlend) -- '' source over }
+    Blend: string;
   end;
+
+  { [R5-A] A SHADOW AS A STYLE HOLDS IT: shadowBlur, shadowOffsetX / Y (LOGICAL px) and
+    shadowColor -- zrender's four common style keys, read off a model by getItemStyle,
+    getLineStyle or getAreaStyle. The zero value is none. }
+  TTyChartShadow = record
+    Blur, OffsetX, OffsetY: Double;
+    Color: TTyChartColor;
+  end;
+
+const
+  { [R5-C] TTyChartElementStyle.LineCap / LineJoin }
+  cTyCapButt = 0;
+  cTyCapRound = 1;
+  cTyCapSquare = 2;
+  cTyJoinMiter = 0;
+  cTyJoinRound = 1;
+  cTyJoinBevel = 2;
+
+type
 
   { Which datum an element belongs to. Both -1 together means "none" -- one
     place decides that, so the two can never disagree. }
@@ -294,12 +337,23 @@ type
     ShadowColor: TTyChartColor;
     HasShadowColor: Boolean;
     ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
+    { [R5-A] THE BOX'S SHADOW (TEXT_PROPS_BOX' shadowBlur / shadowColor /
+      shadowOffsetX / Y): the rect or the picture of the box casts it, in
+      shadowColor -- 'transparent' when none (Text.ts _renderBackground) }
+    BoxShadowBlur, BoxShadowOffsetX, BoxShadowOffsetY: Double;
+    HasBoxShadowColor: Boolean;
+    BoxShadowColor: TTyChartColor;
     { WHICH FONT PARTS THE STYLE NAMED ITSELF. A rich style's missing parts
       are filled from the block's font (or the global one, with
       richInheritPlainLabel off) by TyRtFinish, once the site knows the
       font it draws the block in; the engine reads only the four values.
       [Batch 86] }
     OwnFontFamily, OwnFontSize, OwnFontWeight: Boolean;
+    { [R5-A] the style wrote a fontStyle string of its own (FontItalic its
+      reading); where it did not, TyRtFinish hands it the block's or the
+      global one, as the other parts. The italic a text DRAWS is the
+      TyChartFontItalic flag in its FontWeight. }
+    OwnFontStyle: Boolean;
     { `'inherit'` (or `'auto'`) colours, and a free text's "no colour at all
       takes the inherit colour" -- bound by TyRtFinish to the site's inherit
       colour (a bar's visual colour, a legend item's), or dropped when there
@@ -366,6 +420,9 @@ type
       re-inks, and what a free text whose ink is the skin's takes at paint
       time. [Batch 86] }
     DefaultFill, DefaultStroke: Boolean;
+    { [spec 242] a rich token's fill or stroke of its own: a state's style
+      on the block (a custom text's emphasis fill) leaves it }
+    TokenFill, TokenStroke: Boolean;
   end;
   TTyRtPieceArray = array of TTyRtPiece;
 
@@ -501,6 +558,13 @@ type
     HasFixedPos: Boolean;
     FixedPos: Integer;
     FixedDist: Double;
+    { [R5-C] HOW UPSTREAM PLACES THE LABEL a fixed anchor stands for: 0 the
+      label's own x / y and style (a pie's, a sunburst's: free under a
+      labelLayout, its alignment in its style); 1 the host's textConfig
+      position (a sankey node's: attached, the alignment the position's,
+      none in the style); 2 the same with the style's verticalAlign set (a
+      radial tree's: textConfig with an origin, verticalAlign 'middle') }
+    FixedByConfig: Byte;
     { ... and what the host's box is made of: the path's half width at rest
       (its scale on the canvas) and the stroke's half margin around it --
       strokeNoScale divides the line width by the line scale, so the margin
@@ -645,16 +709,26 @@ type
     LmInkFill: TTyChartColor;
     LmInkHasFill, LmInkGradient, LmInkInside: Boolean;
     LmFree, LmOverlapHidden, LmEmphShow: Boolean;
+    { [R5-C] the layout's draggable: the label takes the pointer to be
+      dragged (zrender's Draggable), its cursor 'move' }
+    LmDraggable: Boolean;
     LmHasM: Boolean;
     LmM: TTyMat2D;
     { ==== WHAT A LABEL LINE READS [Batch 112] ====
       On a HOST, how updateLabelLinePoints measures it (AdvanceChart.LabelGuide):
-        LgKind    0 nothing, 1 a symbol, 2 a rect;
+        LgKind    0 nothing, 1 a symbol, 2 a rect, 3 a sector [R5-C];
         LgSymbol  the symbol's zrender type ('circle', 'path://...') and
                   LgKeepAspect (symbolKeepAspect);
         LgG       a symbol's width, height, symbolRotate (degrees), offset x
                   and y, and the point x and y; a rect's x, y, width and height
-                  (the signed layout) and its four corner radii.
+                  (the signed layout) and its four corner radii; a sector's
+                  cx, cy, r0, r, startAngle, endAngle, 1 clockwise, the
+                  number of corner radii given (0..4) and they [R5-C];
+        LgHasFrame / LgFrame  [R5-C] the host's parent group's computed
+                  transform where the host sits in one (a view's group, a
+                  node's group): the host's own shape is in that frame and
+                  its computed transform is the frame times its own (a
+                  symbol's point is then nought).
       On a LINE, LgSmooth: the smooth its normal state draws (its Cmds hold
       the curves; a state may straighten it). }
     LgKind: Integer;
@@ -663,7 +737,9 @@ type
     LgColor: TTyChartColor;
     LgSymbol: string;
     LgKeepAspect: Boolean;
-    LgG: array[0..7] of Double;
+    LgG: array[0..11] of Double;
+    LgHasFrame: Boolean;
+    LgFrame: TTyMat2D;
     LgSmooth: Double;
   end;
 
@@ -781,6 +857,19 @@ type
     Role: TTyChartAnimRole;
     { the series index, and the datum's view row (-1 for a whole series) }
     Series, Index: Integer;
+    { [spec 242] AN UPDATE'S updateProps of a shape the role does not tween
+      itself: 0 none; 1 a parallel row's polyline (TwVals its points, flat;
+      G[6] its smooth), 2 a themeRiver layer's polygon (its bottoms then its
+      tops, flat; G[4] the group's y), 3 a chord piece's sector (cx, cy, r0,
+      r, startAngle, endAngle; G[2] clockwise; Pts its corner radii), 4 a
+      chord ribbon (s1, s2, its start and end angle, t1, t2, theirs, cx,
+      cy, r; G[2] clockwise), 5 a lines row's line (x1, y1, x2, y2, cpx1,
+      cpy1: G[0..5]; its line, end symbols and label alike). TwRow the
+      proxy's row; TwKey the old element's key where the data diff is not
+      the rows' (a layer's name, a node's or a link's), '' the row map }
+    TwKind, TwRow: Integer;
+    TwKey: string;
+    TwVals: TTyDoubleArray;
     { the role's own numbers -- see AdvanceChart.AnimView for each }
     G: array[0..11] of Double;
     { A LINE'S RUN OR AREA [Batch 90]: which of the series' runs it is,
@@ -847,6 +936,16 @@ type
       NULs + its place -- so a max that moves to another category is a
       symbol removed and a symbol added, not one that slides }
     Key: string;
+    { [spec 242] A GRADIENT IN THE ELEMENT'S OWN FRAME -- a lines end
+      symbol's colour, a lines effect symbol's: LGrad as written (Kind
+      cgkNone: none), LGradBox the element's getBoundingRect in that frame,
+      LGradStroke whether it is the pen's (an empty or a 'line' symbol). A
+      frame that turns, scales or moves the element puts it on the style
+      again, carried by the element's transform (canvas' own way: the
+      gradient lives in the element's coordinates) }
+    LGrad: TTyChartGradient;
+    LGradBox: TTyXYWH;
+    LGradStroke: Boolean;
   end;
 
   { [F6b] zrender's own contain over an element of an SVG map, in the
@@ -982,6 +1081,15 @@ type
       says so (a geo region and its text). Everything else keeps the
       rule above: the hit test ignores the clip. }
     ClipHits: Boolean;
+    { [spec 242] A GRAPHIC OR CUSTOM ELEMENT'S clipPath, and every clipPath
+      up its parents (and its host's, for a label), as zrender's Storage
+      hands them down: each a filled path in the element's coordinates, the
+      ink cut to all of them (nonzero), and the hit too (isHover asks each
+      clip's contain). Empty everywhere else. }
+    ClipPaths: TTyChartShapeArray;
+    { [R5-I] the caption is cut to ClipPaths too, whatever it is (a
+      themeRiver layer's label under the layer's clip); else only a block's }
+    ClipCaption: Boolean;
     { [F6a] zrender's Displayable.cursor, the CSS name the canvas takes
       while the pointer is over the element (Handler.mousemove's
       setCursor): '' is the prototype's 'pointer'. Set where upstream sets
@@ -998,6 +1106,14 @@ type
     ZrHit: TTyZrHit;
     { [R2-I3] a marker label's emphasis twin (none, or one) }
     EmphTwin: TTyEmphTwinArray;
+    { [R5-A] zrender's zlevel: a layer of its own, painted over every lower
+      one whatever the z -- the first key of the order. A series' (and its
+      labels'), a marker's; 0, the zero value, for everything else }
+    ZLevel: Integer;
+    { [spec 244] the part of a z that is not whole, the second key after Z
+      (Z its floor): a geo's z of 2.5 sorts over a series' 2 and under a 3,
+      as zrender sorts the number. 0, the zero value, for everything else }
+    ZFrac: Double;
   end;
   PTyChartElement = ^TTyChartElement;
 
@@ -1115,6 +1231,15 @@ type
 procedure TyPaintListRepairForTest(AOn: Boolean);
 function TyPaintListRepairsForTest: Integer;
 
+{ [R5-J] A ZLEVEL BAND FOR THE HIT TEST: while one is set, the list's hit
+  tests (HitTestElement, TyCoarseHitTest) consider only an element whose
+  ZLevel is above ALo and at most AHi -- the pointer searched canvas by
+  canvas, the highest first, as zrender's handler walks the sorted display
+  list. TyClearHitBand: every element again. }
+procedure TySetHitBand(ALo, AHi: Integer);
+procedure TyClearHitBand;
+function TyHitBandHas(AZ: Integer): Boolean;
+
 function TyChartNoDatum: TTyChartDatumRef;
 function TyChartDatum(ASeries, AData: Integer): TTyChartDatumRef; overload;
 { When the two spaces disagree -- a pie, whose sectors skip the rows a
@@ -1142,6 +1267,10 @@ procedure TySymbolHitSlop(var AEl: TTyChartElement);
 { A style with nothing switched on: no fill, no stroke, fully opaque. Callers
   turn on what they want rather than remembering to turn off what they do not. }
 function TyChartStyle: TTyChartElementStyle;
+{ [R5-A] the element's style casts a shadow: a colour with alpha and a blur or an offset }
+function TyStyleHasShadow(const AStyle: TTyChartElementStyle): Boolean;
+{ [R5-A] AShadow onto a style, all four keys }
+procedure TyStyleSetShadow(var AStyle: TTyChartElementStyle; const AShadow: TTyChartShadow);
 { An element carrying a shape, silent and datum-less until the caller says
   otherwise -- so a decoration that forgets to set Silent is at worst inert,
   never a thing that steals hovers from the data. }
@@ -1152,6 +1281,11 @@ function TyChartElement(const AShape: TTyChartShape): TTyChartElement;
   of the text shares it. [Batch 86] }
 procedure TyRtPoint(AX, AY, ARotationRad, AScale, ALX, ALY: Double;
   out AGX, AGY: Double);
+
+{ [R5-C] a lineCap / lineJoin word as zrender's canvas takes it (anything
+  else leaves the canvas' default: butt, miter) }
+function TyCapOfWord(const S: string): Byte;
+function TyJoinOfWord(const S: string): Byte;
 
 { The one colour a gradient degrades to where only one will do -- a legend
   swatch, a tooltip marker. Upstream's own rule: the FIRST stop, not an
@@ -1243,6 +1377,20 @@ begin
   end;
 end;
 
+function TyCapOfWord(const S: string): Byte;
+begin
+  if S = 'round' then Result := cTyCapRound
+  else if S = 'square' then Result := cTyCapSquare
+  else Result := cTyCapButt;
+end;
+
+function TyJoinOfWord(const S: string): Byte;
+begin
+  if S = 'round' then Result := cTyJoinRound
+  else if S = 'bevel' then Result := cTyJoinBevel
+  else Result := cTyJoinMiter;
+end;
+
 function TyChartNoDatum: TTyChartDatumRef;
 begin
   Result.SeriesIndex := -1;
@@ -1314,6 +1462,20 @@ begin
   Result.FillEvenOdd := False;
   Result.DashLogical := nil;
   Result.Alpha := 1;
+end;
+
+procedure TyStyleSetShadow(var AStyle: TTyChartElementStyle; const AShadow: TTyChartShadow);
+begin
+  AStyle.ShadowBlur := AShadow.Blur;
+  AStyle.ShadowOffsetX := AShadow.OffsetX;
+  AStyle.ShadowOffsetY := AShadow.OffsetY;
+  AStyle.ShadowColor := AShadow.Color;
+end;
+
+function TyStyleHasShadow(const AStyle: TTyChartElementStyle): Boolean;
+begin
+  Result := ((AStyle.ShadowColor shr 24) <> 0)
+    and ((AStyle.ShadowBlur > 0) or (AStyle.ShadowOffsetX <> 0) or (AStyle.ShadowOffsetY <> 0));
 end;
 
 function TyChartElement(const AShape: TTyChartShape): TTyChartElement;
@@ -1456,7 +1618,9 @@ begin
   for k := FJrN - 1 downto 0 do
   begin
     { [R2-I6] an element whose place in the order moves }
-    if (FItems[FJrIdx[k]].Z <> FJrOld[k].Z) or (FItems[FJrIdx[k]].Z2 <> FJrOld[k].Z2) then
+    if (FItems[FJrIdx[k]].Z <> FJrOld[k].Z) or (FItems[FJrIdx[k]].Z2 <> FJrOld[k].Z2)
+      or (FItems[FJrIdx[k]].ZLevel <> FJrOld[k].ZLevel)
+      or (FItems[FJrIdx[k]].ZFrac <> FJrOld[k].ZFrac) then
       MarkOrderDirty(FJrIdx[k]);
     FItems[FJrIdx[k]] := FJrOld[k];
   end;
@@ -1518,7 +1682,8 @@ begin
     FJrTainted := True;
   { [R2-I6] the order moves only where z or z2 does [was: sorted again
     after any write] }
-  if (FItems[AIndex].Z <> AElement.Z) or (FItems[AIndex].Z2 <> AElement.Z2) then
+  if (FItems[AIndex].Z <> AElement.Z) or (FItems[AIndex].Z2 <> AElement.Z2)
+    or (FItems[AIndex].ZLevel <> AElement.ZLevel) or (FItems[AIndex].ZFrac <> AElement.ZFrac) then
     MarkOrderDirty(AIndex);
   FItems[AIndex] := AElement;
 end;
@@ -1636,8 +1801,14 @@ end;
 
 function TTyPaintList.Less(A, B: Integer): Boolean;
 begin
+  { [R5-A] the layer first: zrender paints each zlevel's canvas over the
+    lower ones }
+  if FItems[A].ZLevel <> FItems[B].ZLevel then
+    Exit(FItems[A].ZLevel < FItems[B].ZLevel);
   if FItems[A].Z <> FItems[B].Z then
     Exit(FItems[A].Z < FItems[B].Z);
+  if FItems[A].ZFrac <> FItems[B].ZFrac then
+    Exit(FItems[A].ZFrac < FItems[B].ZFrac);
   if FItems[A].Z2 <> FItems[B].Z2 then
     Exit(FItems[A].Z2 < FItems[B].Z2);
   { The insertion index makes the order TOTAL.
@@ -1772,7 +1943,11 @@ begin
 end;
 
 function TyElementContains(const AEl: TTyChartElement; AX, AY, ASlopPx: Double): Boolean;
+var k: Integer;
 begin
+  { [spec 242] a point outside a clip path is not over the element }
+  for k := 0 to High(AEl.ClipPaths) do
+    if not TyShapeContains(AEl.ClipPaths[k], AX, AY, 0) then Exit(False);
   if AEl.ClipHits and AEl.HasClip
     and not ((AX >= AEl.ClipRect.Left) and (AX <= AEl.ClipRect.Right)
       and (AY >= AEl.ClipRect.Top) and (AY <= AEl.ClipRect.Bottom)) then
@@ -1780,6 +1955,27 @@ begin
   if AEl.ZrHit.Active then Result := TyZrHitContains(AEl.ZrHit, AX, AY)
   else if AEl.PathHit.Active then Result := TyPathHitContains(AEl.PathHit, AX, AY)
   else Result := TyShapeContains(AEl.Shape, AX, AY, ASlopPx);
+end;
+
+var
+  GHitBandOn: Boolean = False;
+  GHitBandLo, GHitBandHi: Integer;
+
+procedure TySetHitBand(ALo, AHi: Integer);
+begin
+  GHitBandOn := True;
+  GHitBandLo := ALo;
+  GHitBandHi := AHi;
+end;
+
+procedure TyClearHitBand;
+begin
+  GHitBandOn := False;
+end;
+
+function TyHitBandHas(AZ: Integer): Boolean;
+begin
+  Result := not GHitBandOn or ((AZ > GHitBandLo) and (AZ <= GHitBandHi));
 end;
 
 function TTyPaintList.HitTestElement(AX, AY: Double; APPI: Integer;
@@ -1798,6 +1994,8 @@ begin
   begin
     idx := FOrder[i];
     if FItems[idx].Silent or FItems[idx].Ignore or FItems[idx].ProgHidden then Continue;
+    { [R5-J] the canvas searched now }
+    if GHitBandOn and not TyHitBandHas(FItems[idx].ZLevel) then Continue;
     if (FItems[idx].HitStrokeBand > 0) and (FItems[idx].Shape.Kind = cskRect) then
     begin
       { the outline's band: inside the rect grown by half the band, not

@@ -1017,6 +1017,12 @@ begin
         begin
           if SankeyDispatchRoam(rp) then Result := True;
         end
+        { [R5-J] the tree's, registerRoamActionSimply as the graph's and the
+          sankey's [was: not an action the chart took] }
+        else if AType = 'treeRoam' then
+        begin
+          if TreeDispatchRoam(rp) then Result := True;
+        end
         else if GraphDispatchRoam(rp) then Result := True;
       end;
     end;
@@ -1245,15 +1251,28 @@ begin
     else if t = 'sunburstRootToNode' then
       { [Batch 115] }
       Result := DoSunAction(p)
+    { [R5-D] the two legacy ones }
+    else if (t = 'sunburstHighlight') or (t = 'sunburstUnhighlight') then
+      Result := DoSunLegacy(p, t = 'sunburstHighlight')
     { [F3d] the tree's expand and collapse }
     else if t = 'treeExpandAndCollapse' then
       Result := DoTreeToggleAction(p)
     else if (t = 'treemapZoomToNode') or (t = 'treemapRootToNode')
       or (t = 'treemapMove') or (t = 'treemapRender') then
       Result := DoTreemapAction(t, p)
-    else if (t = 'dragNode') or (t = 'sankeyRoam') or (t = 'graphRoam') then
-      { [Batch 114] }
+    else if (t = 'dragNode') or (t = 'sankeyRoam') or (t = 'graphRoam')
+      or (t = 'treeRoam') then
+      { [Batch 114] [R5-J: treeRoam] }
       Result := DoViewAction(t, p)
+    { [R5-J] THE GRAPH'S (un)focusNodeAdjacency: registered with a noop
+      handler and an update ('series:focusNodeAdjacency') no 6.x series
+      view answers -- the event, a copy of the payload, and `updated`
+      [was: not an action the chart took] }
+    else if (t = 'focusNodeAdjacency') or (t = 'unfocusNodeAdjacency') then
+    begin
+      EmitPayloadEvent(LowerCase(t), CopyWithType(p, LowerCase(t)));
+      Result := True;
+    end
     { the geo's roam [Batch 150] }
     else if t = 'geoRoam' then
       Result := DoGeoRoamAction(p)
@@ -1838,6 +1857,7 @@ begin
   begin
     ext := LowerCase(ExtractFileExt(AFileName));
     if (ext = '.jpg') or (ext = '.jpeg') then o.ImageType := eitJpeg;
+    if ext = '.webp' then o.ImageType := eitWebp;
   end;
   bmp := RenderConnectedToBitmap(AOptsJson);
   if bmp = nil then Exit;
@@ -1859,20 +1879,19 @@ var
   bmp: TBGRABitmap;
   ms: TMemoryStream;
   raw: RawByteString;
+  wrote: TTyExportImageType;
 begin
   ExportOptsOrRaise(AOptsJson, o);
   bmp := RenderConnectedToBitmap(AOptsJson);
   if bmp = nil then Exit('data:,');
   ms := TMemoryStream.Create;
   try
-    WriteExport(ms, bmp, o.ImageType);
+    wrote := WriteExport(ms, bmp, o.ImageType);
     SetLength(raw, ms.Size);
     if ms.Size > 0 then Move(ms.Memory^, raw[1], ms.Size);
   finally
     ms.Free;
     bmp.Free;
   end;
-  if o.ImageType = eitJpeg then Result := 'data:image/jpeg;base64,'
-  else Result := 'data:image/png;base64,';
-  Result := Result + EncodeStringBase64(raw);
+  Result := TyExportUrlHead(wrote) + EncodeStringBase64(raw);
 end;

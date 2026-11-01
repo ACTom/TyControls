@@ -99,6 +99,14 @@ Beyond the baseline, these events are published per control:
 | `TTyCustomTabStrip` (`TTyTabSet` / `TTyPageControl`) | `OnChanging` | `TTyTabChangingEvent` | Before a tab switch; `(Sender; ANewIndex: Integer; var AllowChange: Boolean)` — set `AllowChange := False` to veto |
 | `TTyCustomTabStrip` (same) | `OnReorder` | `TTyTabReorderEvent` | Once, after a drag reorder; `(Sender; AFromIndex, AToIndex: Integer)` |
 | `TTyProgressBar` | `OnChange` | `TNotifyEvent` | After `Position` / `Min` / `Max` actually changed |
+| `TTyAdvanceChart` | `OnChartEvent` | `TTyChartEventHandler` | Every mouse and action event of the chart, unfiltered; `(Sender; const AEvent: TTyChartEvent)`. To register by type and query use `ChartOn` / `ChartOff` (ECharts' `chart.on` / `chart.off`) |
+| `TTyAdvanceChart` | `OnDataZoom` | `TTyDataZoomEvent` | Every dataZoom action, from a drag, the wheel, the toolbox or code; `(Sender; const AAction: TTyDzAction)` |
+| `TTyAdvanceChart` | `OnGraphRoam` / `OnTreeRoam` / `OnSankeyRoam` | `TTyGraphRoamEvent` | After a graph / tree / sankey pans or zooms; `(Sender; const APayload: TTyGraphRoamPayload)` |
+| `TTyAdvanceChart` | `OnTreeExpandAndCollapse` | `TTyTreeToggleEvent` | A tree node expands or collapses; `(Sender; ASeriesIndex, ADataIndex: Integer)` |
+| `TTyAdvanceChart` | `OnToolboxSaveAsImage` | `TTyToolboxSaveEvent` | The toolbox's "save as image" is clicked; set `AHandled := True` to skip the save dialog |
+| `TTyAdvanceChart` | `OnDataViewContent` / `OnDataViewApply` | `TTyDataViewContentEvent` / `TTyDataViewApplyEvent` | When the data view opens / when Refresh is clicked, in place of the option's `optionToContent` / `contentToOption` |
+| `TTyAdvanceChart` | `OnResolveImage` | `TTyChartResolveImageEvent` | The option names a picture the chart cannot fetch itself (a URL and so on); `(Sender; const AUrl: string; var AImage: TBGRABitmap)` |
+| `TTyAdvanceChart` | `OnTooltipHtml` | `TTyChartTooltipHtmlEvent` | A tooltip is about to draw some HTML: read it your way; unhandled, the built-in reading runs |
 
 > **`TTyForm` uses the standard `TForm` lifecycle events.** `TTyForm` *is* a `TForm`, so `OnCloseQuery` / `OnClose` / `OnShow` / `OnActivate` / `WindowState` are the standard published form events. See [controls/ttyform.md](controls/ttyform.md).
 

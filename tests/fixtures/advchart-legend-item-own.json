@@ -1,0 +1,1470 @@
+{
+ "source": "ECharts 6.1 dist: component/legend/LegendView.ts _createItem, chart/line/LineSeries.ts getLegendIcon",
+ "W": 600,
+ "H": 400,
+ "cases": [
+  {
+   "id": "rotate.line.inherit",
+   "note": "a line's own icon: its marker turned by the series' symbolRotate under the default 'inherit'",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "legend": {
+     "top": 10
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "name": "A",
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ],
+      "symbol": "triangle",
+      "symbolRotate": 30
+     },
+     {
+      "type": "line",
+      "name": "B",
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ],
+      "symbol": "rect"
+     }
+    ]
+   },
+   "items": [
+    {
+     "name": "A",
+     "hit": [
+      "40700f5c28f5c28f",
+      "402e000000000000",
+      "4043851eb851eb85",
+      "402e9956090a9c13"
+     ],
+     "icons": [
+      {
+       "rotation": "0000000000000000",
+       "rect": [
+        "40700f5c28f5c28f",
+        "4035a6558242a704",
+        "403b000000000000",
+        "4000000000000000"
+       ]
+      },
+      {
+       "rotation": "3fe0c152382d7365",
+       "rect": [
+        "40706cf6d0d1981f",
+        "402e000000000000",
+        "402e9956090a9c00",
+        "402e9956090a9c14"
+       ]
+      }
+     ],
+     "text": {
+      "rect": [
+       "4071ff5c28f5c28f",
+       "4030a6558242a704",
+       "4020147ae147ae14",
+       "4028000000000000"
+      ],
+      "runs": [
+       {
+        "text": "A",
+        "font": "normal normal 12px Microsoft YaHei",
+        "fill": "#54555a"
+       }
+      ]
+     }
+    },
+    {
+     "name": "B",
+     "hit": [
+      "4073000000000000",
+      "4030a6558242a704",
+      "4043851eb851eb85",
+      "4028000000000000"
+     ],
+     "icons": [
+      {
+       "rotation": "0000000000000000",
+       "rect": [
+        "4073000000000000",
+        "4035a6558242a704",
+        "403b000000000000",
+        "4000000000000000"
+       ]
+      },
+      {
+       "rotation": "0000000000000000",
+       "rect": [
+        "40737e6666666666",
+        "40310cbbe8a90d6b",
+        "4026666666666668",
+        "4026666666666668"
+       ]
+      }
+     ],
+     "text": {
+      "rect": [
+       "4074f00000000000",
+       "4030a6558242a704",
+       "4020147ae147ae14",
+       "4028000000000000"
+      ],
+      "runs": [
+       {
+        "text": "B",
+        "font": "normal normal 12px Microsoft YaHei",
+        "fill": "#54555a"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "rotate.legend",
+   "note": "legend symbolRotate 45: a line marker turned by it",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "legend": {
+     "top": 10,
+     "symbolRotate": 45
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "name": "A",
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ],
+      "symbol": "triangle",
+      "symbolRotate": 30
+     },
+     {
+      "type": "line",
+      "name": "B",
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ],
+      "symbol": "diamond"
+     }
+    ]
+   },
+   "items": [
+    {
+     "name": "A",
+     "hit": [
+      "40700f5c28f5c28f",
+      "402e000000000000",
+      "4043851eb851eb85",
+      "402fadaa8f7eed53"
+     ],
+     "icons": [
+      {
+       "rotation": "0000000000000000",
+       "rect": [
+        "40700f5c28f5c28f",
+        "4035eb6aa3dfbb54",
+        "403b000000000000",
+        "4000000000000000"
+       ]
+      },
+      {
+       "rotation": "3fe921fb54442d18",
+       "rect": [
+        "407068a57eb7c6da",
+        "402e000000000001",
+        "402fadaa8f7eed40",
+        "402fadaa8f7eed53"
+       ]
+      }
+     ],
+     "text": {
+      "rect": [
+       "4071ff5c28f5c28f",
+       "4030eb6aa3dfbb54",
+       "4020147ae147ae14",
+       "4028000000000000"
+      ],
+      "runs": [
+       {
+        "text": "A",
+        "font": "normal normal 12px Microsoft YaHei",
+        "fill": "#54555a"
+       }
+      ]
+     }
+    },
+    {
+     "name": "B",
+     "hit": [
+      "4073000000000000",
+      "402e000000000000",
+      "4043851eb851eb85",
+      "402fadaa8f7eed53"
+     ],
+     "icons": [
+      {
+       "rotation": "0000000000000000",
+       "rect": [
+        "4073000000000000",
+        "4035eb6aa3dfbb54",
+        "403b000000000000",
+        "4000000000000000"
+       ]
+      },
+      {
+       "rotation": "3fe921fb54442d18",
+       "rect": [
+        "4073594955c2044b",
+        "402e000000000001",
+        "402fadaa8f7eed40",
+        "402fadaa8f7eed53"
+       ]
+      }
+     ],
+     "text": {
+      "rect": [
+       "4074f00000000000",
+       "4030eb6aa3dfbb54",
+       "4020147ae147ae14",
+       "4028000000000000"
+      ],
+      "runs": [
+       {
+        "text": "B",
+        "font": "normal normal 12px Microsoft YaHei",
+        "fill": "#54555a"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "rotate.item",
+   "note": "an item's own symbolRotate 90 over the legend's 20",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "legend": {
+     "top": 10,
+     "symbolRotate": 20,
+     "data": [
+      {
+       "name": "A",
+       "symbolRotate": 90
+      },
+      "B"
+     ]
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "name": "A",
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ],
+      "symbol": "triangle"
+     },
+     {
+      "type": "line",
+      "name": "B",
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ],
+      "symbol": "triangle"
+     }
+    ]
+   },
+   "items": [
+    {
+     "name": "A",
+     "hit": [
+      "40700f5c28f5c28f",
+      "40302d76a29a75be",
+      "4043851eb851eb85",
+      "4028000000000000"
+     ],
+     "icons": [
+      {
+       "rotation": "0000000000000000",
+       "rect": [
+        "40700f5c28f5c28f",
+        "40352d76a29a75be",
+        "403b000000000000",
+        "4000000000000000"
+       ]
+      },
+      {
+       "rotation": "3ff921fb54442d18",
+       "rect": [
+        "40708dc28f5c28f5",
+        "403093dd0900dc24",
+        "4026666666666680",
+        "4026666666666668"
+       ]
+      }
+     ],
+     "text": {
+      "rect": [
+       "4071ff5c28f5c28f",
+       "40302d76a29a75be",
+       "4020147ae147ae14",
+       "4028000000000000"
+      ],
+      "runs": [
+       {
+        "text": "A",
+        "font": "normal normal 12px Microsoft YaHei",
+        "fill": "#54555a"
+       }
+      ]
+     }
+    },
+    {
+     "name": "B",
+     "hit": [
+      "4073000000000000",
+      "402e000000000000",
+      "4043851eb851eb85",
+      "402cb5da8a69d6f8"
+     ],
+     "icons": [
+      {
+       "rotation": "0000000000000000",
+       "rect": [
+        "4073000000000000",
+        "40352d76a29a75be",
+        "403b000000000000",
+        "4000000000000000"
+       ]
+      },
+      {
+       "rotation": "3fd657184ae74487",
+       "rect": [
+        "4073652895d658a4",
+        "402e000000000001",
+        "402cb5da8a69d700",
+        "402cb5da8a69d6f7"
+       ]
+      }
+     ],
+     "text": {
+      "rect": [
+       "4074f00000000000",
+       "40302d76a29a75be",
+       "4020147ae147ae14",
+       "4028000000000000"
+      ],
+      "runs": [
+       {
+        "text": "B",
+        "font": "normal normal 12px Microsoft YaHei",
+        "fill": "#54555a"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "rotate.bar",
+   "note": "a bar's default icon is not turned, whatever the legend says",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "legend": {
+     "top": 10,
+     "symbolRotate": 45
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "name": "A",
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "B",
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "name": "A",
+     "hit": [
+      "40701f5c28f5c28f",
+      "402e000000000000",
+      "4043051eb851eb85",
+      "402c000000000000"
+     ],
+     "icons": [
+      {
+       "rotation": "0000000000000000",
+       "rect": [
+        "40701f5c28f5c28f",
+        "402e000000000000",
+        "4039000000000000",
+        "402c000000000000"
+       ]
+      }
+     ],
+     "text": {
+      "rect": [
+       "4071ff5c28f5c28f",
+       "4030000000000000",
+       "4020147ae147ae14",
+       "4028000000000000"
+      ],
+      "runs": [
+       {
+        "text": "A",
+        "font": "normal normal 12px Microsoft YaHei",
+        "fill": "#54555a"
+       }
+      ]
+     }
+    },
+    {
+     "name": "B",
+     "hit": [
+      "4073000000000000",
+      "402e000000000000",
+      "4043051eb851eb85",
+      "402c000000000000"
+     ],
+     "icons": [
+      {
+       "rotation": "0000000000000000",
+       "rect": [
+        "4073000000000000",
+        "402e000000000000",
+        "4039000000000000",
+        "402c000000000000"
+       ]
+      }
+     ],
+     "text": {
+      "rect": [
+       "4074e00000000000",
+       "4030000000000000",
+       "4020147ae147ae14",
+       "4028000000000000"
+      ],
+      "runs": [
+       {
+        "text": "B",
+        "font": "normal normal 12px Microsoft YaHei",
+        "fill": "#54555a"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "rotate.scatter.inherit",
+   "note": "icon 'inherit' on a scatter: the default icon policy turns it by the series' symbolRotate",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "legend": {
+     "top": 10,
+     "icon": "inherit"
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "name": "A",
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ],
+      "symbol": "rect",
+      "symbolRotate": 20
+     },
+     {
+      "type": "scatter",
+      "name": "B",
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ],
+      "symbol": "triangle",
+      "symbolRotate": -30
+     }
+    ]
+   },
+   "items": [
+    {
+     "name": "A",
+     "hit": [
+      "407003a293ea7508",
+      "403075861d8e6091",
+      "4043d71407a584fc",
+      "4035b4c98a89e068"
+     ],
+     "icons": [
+      {
+       "rotation": "3fd657184ae74487",
+       "rect": [
+        "407003a293ea7508",
+        "403075861d8e6092",
+        "403c47d53d4e65e0",
+        "4035b4c98a89e066"
+       ]
+      }
+     ],
+     "text": {
+      "rect": [
+       "4071fde13dd4e837",
+       "40354feae2d350c5",
+       "4020147ae147ae14",
+       "4028000000000000"
+      ],
+      "runs": [
+       {
+        "text": "A",
+        "font": "normal normal 12px Microsoft YaHei",
+        "fill": "#54555a"
+       }
+      ]
+     }
+    },
+    {
+     "name": "B",
+     "hit": [
+      "4072fe8514df25a8",
+      "402e000000000000",
+      "4043eec2b9b32a7e",
+      "40389fd5c5a6a18a"
+     ],
+     "icons": [
+      {
+       "rotation": "bfe0c152382d7365",
+       "rect": [
+        "4072fe8514df25a8",
+        "402e000000000000",
+        "403ca6900584fbe0",
+        "40389fd5c5a6a18a"
+       ]
+      }
+     ],
+     "text": {
+      "rect": [
+       "4074fbb9950b4d87",
+       "40354feae2d350c5",
+       "4020147ae147ae14",
+       "4028000000000000"
+      ],
+      "runs": [
+       {
+        "text": "B",
+        "font": "normal normal 12px Microsoft YaHei",
+        "fill": "#54555a"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "rotate.scatter.item",
+   "note": "an item's symbolRotate 60 with icon 'inherit' on a scatter",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "legend": {
+     "top": 10,
+     "icon": "inherit",
+     "data": [
+      {
+       "name": "A",
+       "symbolRotate": 60
+      },
+      "B"
+     ]
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "name": "A",
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ],
+      "symbol": "triangle",
+      "symbolRotate": 20
+     },
+     {
+      "type": "scatter",
+      "name": "B",
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ],
+      "symbol": "triangle"
+     }
+    ]
+   },
+   "items": [
+    {
+     "name": "A",
+     "hit": [
+      "407020dcd1df2809",
+      "402e000000000000",
+      "4042ed1429bb93e8",
+      "403ca6900584fbe5"
+     ],
+     "icons": [
+      {
+       "rotation": "3ff0c152382d7365",
+       "rect": [
+        "407020dcd1df2809",
+        "402dfffffffffffe",
+        "40389fd5c5a6a190",
+        "403ca6900584fbe5"
+       ]
+      }
+     ],
+     "text": {
+      "rect": [
+       "4071fddb800c5d15",
+       "4037534802c27df3",
+       "4020147ae147ae14",
+       "4028000000000000"
+      ],
+      "runs": [
+       {
+        "text": "A",
+        "font": "normal normal 12px Microsoft YaHei",
+        "fill": "#54555a"
+       }
+      ]
+     }
+    },
+    {
+     "name": "B",
+     "hit": [
+      "4072fe7f57169a86",
+      "4036534802c27df3",
+      "4043051eb851eb85",
+      "402c000000000000"
+     ],
+     "icons": [
+      {
+       "rotation": "0000000000000000",
+       "rect": [
+        "4072fe7f57169a86",
+        "4036534802c27df3",
+        "4039000000000000",
+        "402c000000000000"
+       ]
+      }
+     ],
+     "text": {
+      "rect": [
+       "4074de7f57169a86",
+       "4037534802c27df3",
+       "4020147ae147ae14",
+       "4028000000000000"
+      ],
+      "runs": [
+       {
+        "text": "B",
+        "font": "normal normal 12px Microsoft YaHei",
+        "fill": "#54555a"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "keep.item",
+   "note": "a path icon: the legend keeps the aspect, an item does not",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "legend": {
+     "top": 10,
+     "icon": "path://M0,0L10,0L10,30L0,30Z",
+     "data": [
+      {
+       "name": "A",
+       "symbolKeepAspect": false
+      },
+      "B"
+     ]
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "name": "A",
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "B",
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "name": "A",
+     "hit": [
+      "407070b17e75c28f",
+      "402e000000000000",
+      "4043051eb851eb85",
+      "402c000000000000"
+     ],
+     "icons": [
+      {
+       "rotation": "0000000000000000",
+       "rect": [
+        "407070b17e75c28f",
+        "402e000000000000",
+        "4039000000000000",
+        "402c000000000000"
+       ]
+      }
+     ],
+     "text": {
+      "rect": [
+       "407250b17e75c28f",
+       "4030000000000000",
+       "4020147ae147ae14",
+       "4028000000000000"
+      ],
+      "runs": [
+       {
+        "text": "A",
+        "font": "normal normal 12px Microsoft YaHei",
+        "fill": "#54555a"
+       }
+      ]
+     }
+    },
+    {
+     "name": "B",
+     "hit": [
+      "4073515555800000",
+      "402e000000000000",
+      "403bdf92c0a3d70a",
+      "402c000000000000"
+     ],
+     "icons": [
+      {
+       "rotation": "0000000000000000",
+       "rect": [
+        "4073515555800000",
+        "402e000000000000",
+        "4012aaaa80000000",
+        "402c000000000000"
+       ]
+      }
+     ],
+     "text": {
+      "rect": [
+       "40748eaaaa800000",
+       "4030000000000000",
+       "4020147ae147ae14",
+       "4028000000000000"
+      ],
+      "runs": [
+       {
+        "text": "B",
+        "font": "normal normal 12px Microsoft YaHei",
+        "fill": "#54555a"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "rich.item",
+   "note": "legend formatter '{x|{name}} !', an item's own textStyle.rich x",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "legend": {
+     "top": 10,
+     "formatter": "{x|{name}} !",
+     "data": [
+      {
+       "name": "Alpha",
+       "textStyle": {
+        "rich": {
+         "x": {
+          "color": "#ff0000",
+          "fontSize": 18,
+          "fontWeight": "bold"
+         }
+        }
+       }
+      },
+      "Beta"
+     ]
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "name": "Alpha",
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "Beta",
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "name": "Alpha",
+     "hit": [
+      "406ae6b851eb851f",
+      "402e000000000000",
+      "4054beb851eb851f",
+      "4032000000000000"
+     ],
+     "icons": [
+      {
+       "rotation": "0000000000000000",
+       "rect": [
+        "406ae6b851eb851f",
+        "4031000000000000",
+        "4039000000000000",
+        "402c000000000000"
+       ]
+      }
+     ],
+     "text": {
+      "rect": [
+       "406ea6b851eb851f",
+       "402e000000000000",
+       "404a7d70a3d70a3e",
+       "4032000000000000"
+      ],
+      "runs": [
+       {
+        "text": "Alpha",
+        "font": "normal bold 18px Microsoft YaHei",
+        "fill": "#ff0000"
+       },
+       {
+        "text": " !",
+        "font": "normal normal 12px Microsoft YaHei",
+        "fill": "#54555a"
+       }
+      ]
+     }
+    },
+    {
+     "name": "Beta",
+     "hit": [
+      "4073230a3d70a3d7",
+      "4031000000000000",
+      "4053a66666666666",
+      "402c000000000000"
+     ],
+     "icons": [
+      {
+       "rotation": "0000000000000000",
+       "rect": [
+        "4073230a3d70a3d7",
+        "4031000000000000",
+        "4039000000000000",
+        "402c000000000000"
+       ]
+      }
+     ],
+     "text": {
+      "rect": [
+       "4075030a3d70a3d7",
+       "4032000000000000",
+       "40484ccccccccccc",
+       "4028000000000000"
+      ],
+      "runs": [
+       {
+        "text": "{x|Beta} !",
+        "font": "normal normal 12px Microsoft YaHei",
+        "fill": "#54555a"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "rich.item.over",
+   "note": "the legend's rich x, an item's x over it (its size only)",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "legend": {
+     "top": 10,
+     "formatter": "{x|{name}}",
+     "textStyle": {
+      "rich": {
+       "x": {
+        "color": "#0000ff",
+        "fontSize": 14
+       }
+      }
+     },
+     "data": [
+      {
+       "name": "Alpha",
+       "textStyle": {
+        "rich": {
+         "x": {
+          "fontSize": 20
+         }
+        }
+       }
+      },
+      "Beta"
+     ]
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "name": "Alpha",
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "Beta",
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "name": "Alpha",
+     "hit": [
+      "406c39eb851eb852",
+      "402e000000000000",
+      "405459999999999a",
+      "4034000000000000"
+     ],
+     "icons": [
+      {
+       "rotation": "0000000000000000",
+       "rect": [
+        "406c39eb851eb852",
+        "4032000000000000",
+        "4039000000000000",
+        "402c000000000000"
+       ]
+      }
+     ],
+     "text": {
+      "rect": [
+       "406ff9eb851eb852",
+       "402e000000000000",
+       "4049b33333333334",
+       "4034000000000000"
+      ],
+      "runs": [
+       {
+        "text": "Alpha",
+        "font": "normal normal 20px Microsoft YaHei",
+        "fill": "#0000ff"
+       }
+      ]
+     }
+    },
+    {
+     "name": "Beta",
+     "hit": [
+      "4073b35c28f5c290",
+      "4032000000000000",
+      "404d7d70a3d70a3e",
+      "402c000000000000"
+     ],
+     "icons": [
+      {
+       "rotation": "0000000000000000",
+       "rect": [
+        "4073b35c28f5c290",
+        "4032000000000000",
+        "4039000000000000",
+        "402c000000000000"
+       ]
+      }
+     ],
+     "text": {
+      "rect": [
+       "4075935c28f5c290",
+       "4032000000000000",
+       "403cfae147ae147c",
+       "402c000000000000"
+      ],
+      "runs": [
+       {
+        "text": "Beta",
+        "font": "normal normal 14px Microsoft YaHei",
+        "fill": "#0000ff"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "box.item",
+   "note": "an item's textStyle box (backgroundColor, padding, borderRadius)",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "legend": {
+     "top": 10,
+     "data": [
+      "Alpha",
+      {
+       "name": "Beta",
+       "textStyle": {
+        "backgroundColor": "#eeeeee",
+        "padding": [
+         4,
+         8
+        ],
+        "borderRadius": 3,
+        "borderColor": "#999999",
+        "borderWidth": 1
+       }
+      },
+      "Gamma"
+     ]
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "name": "Alpha",
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "Beta",
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ]
+     },
+     {
+      "type": "bar",
+      "name": "Gamma",
+      "data": [
+       3,
+       5,
+       2,
+       4
+      ]
+     }
+    ]
+   },
+   "items": [
+    {
+     "name": "Alpha",
+     "hit": [
+      "4067a9999999999a",
+      "4033000000000000",
+      "404e6b851eb851ec",
+      "402c000000000000"
+     ],
+     "icons": [
+      {
+       "rotation": "0000000000000000",
+       "rect": [
+        "4067a9999999999a",
+        "4033000000000000",
+        "4039000000000000",
+        "402c000000000000"
+       ]
+      }
+     ],
+     "text": {
+      "rect": [
+       "406b69999999999a",
+       "4034000000000000",
+       "403ed70a3d70a3d8",
+       "4028000000000000"
+      ],
+      "runs": [
+       {
+        "text": "Alpha",
+        "font": "normal normal 12px Microsoft YaHei",
+        "fill": "#54555a"
+       }
+      ]
+     }
+    },
+    {
+     "name": "Beta",
+     "hit": [
+      "4070223d70a3d70a",
+      "402e000000000000",
+      "4051f5c28f5c28f6",
+      "4036000000000000"
+     ],
+     "icons": [
+      {
+       "rotation": "0000000000000000",
+       "rect": [
+        "4070223d70a3d70a",
+        "4033000000000000",
+        "4039000000000000",
+        "402c000000000000"
+       ]
+      }
+     ],
+     "text": {
+      "rect": [
+       "4071f23d70a3d70a",
+       "402e000000000000",
+       "40456b851eb851ec",
+       "4036000000000000"
+      ],
+      "runs": [
+       {
+        "text": "Beta",
+        "font": "normal normal 12px Microsoft YaHei",
+        "fill": "#54555a"
+       }
+      ]
+     }
+    },
+    {
+     "name": "Gamma",
+     "hit": [
+      "40751fae147ae148",
+      "4033000000000000",
+      "40522e147ae147ae",
+      "402c000000000000"
+     ],
+     "icons": [
+      {
+       "rotation": "0000000000000000",
+       "rect": [
+        "40751fae147ae148",
+        "4033000000000000",
+        "4039000000000000",
+        "402c000000000000"
+       ]
+      }
+     ],
+     "text": {
+      "rect": [
+       "4076ffae147ae148",
+       "4034000000000000",
+       "40455c28f5c28f5c",
+       "4028000000000000"
+      ],
+      "runs": [
+       {
+        "text": "Gamma",
+        "font": "normal normal 12px Microsoft YaHei",
+        "fill": "#54555a"
+       }
+      ]
+     }
+    }
+   ]
+  }
+ ],
+ "guards": [
+  "rotate.line.inherit: the marker at 30, the rule level",
+  "rotate.legend: 45 for both",
+  "rotate.item: 90 for A, 20 for B",
+  "rotate.bar: not turned",
+  "rotate.scatter.inherit: 20 and -30",
+  "rotate.scatter.item: 60 for A",
+  "keep.item: the two icons differ",
+  "rich.item: Alpha in 18px bold red",
+  "rich.item.over: Alpha at 20, Beta at 14, both blue",
+  "box.item: Beta's hit rect taller than Alpha's"
+ ]
+}

@@ -35,7 +35,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Anim, tyControls.AdvanceChart.RichText,
      tyControls.AdvanceChart.Color, tyControls.AdvanceChart.JsMath,
      tyControls.AdvanceChart.Scale,
-     tyControls.AdvanceChart.GfxEl, tyControls.AdvanceChart.Custom,
+     tyControls.AdvanceChart.GfxEl, tyControls.AdvanceChart.Custom, tyControls.AdvanceChart.Layout,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
@@ -133,6 +133,7 @@ type
     function KeyOf(AEl: TTyGfxEl): string;
     function Keyed: TStringList;
     function PathsOfItem(ASeries, ARaw: Integer): TTyIntegerArray;
+    procedure CheckTextInk(const AKey: string; const AEl: TTyChartElement; AWant: TJSONObject);
     procedure CheckPieces(const AWhat: string; const APieces: TTyRtPieceArray;
       AWant: TJSONArray);
     procedure CheckTextStyle(const AWhat: string; AEl: TTyGfxEl; AWant: TJSONObject);
@@ -276,6 +277,9 @@ function Rv(A: TJSONData): TJSONData;
 var i: Integer; o: TJSONObject; arr: TJSONArray;
 begin
   if A = nil then Exit(TJSONNull.Create);
+  { [spec 242] a during handler is the oracle's function }
+  if (A.JSONType = jtString) and (Copy(A.AsString, 1, 6) = '@durc:') then
+    Exit(TJSONString.Create('<fn>'));
   case A.JSONType of
     jtNumber: Result := TJSONString.Create(HexOf(A.AsFloat));
     jtObject:
@@ -1360,19 +1364,30 @@ end;
 { the paint list entries of an item's paths, in list order }
 function TCuOracleBase.PathsOfItem(ASeries, ARaw: Integer): TTyIntegerArray;
 var
-  k: Integer;
+  k, i, host: Integer;
   e: TTyChartElement;
   gel: TTyGfxEl;
 begin
   Result := nil;
+  host := -1;
   for k := 0 to FChart.List.Count - 1 do
   begin
     e := FChart.List.Element(k);
     gel := FChart.CustomPaintSource(k);
-    if (gel = nil) or not gel.StatePath or (gel.Host <> nil) then Continue;
+    if (gel = nil) or (gel.Host <> nil) then Continue;
+    { [spec 242] a text and an image are parts too }
+    if not gel.StatePath and not (gel.Kind in [gkText, gkImage]) then Continue;
     if (e.Datum.SeriesIndex <> ASeries) or (e.Datum.RawDataIndex <> ARaw) then Continue;
+    if (host < 0) and gel.StatePath then host := Length(Result);
     SetLength(Result, Length(Result) + 1);
     Result[High(Result)] := k;
+  end;
+  { the first path hosts, the rest are parts in their order }
+  if host > 0 then
+  begin
+    k := Result[host];
+    for i := host downto 1 do Result[i] := Result[i - 1];
+    Result[0] := k;
   end;
 end;
 
@@ -1533,6 +1548,30 @@ begin
     for i := 0 to Min(Length(path), want.Count) - 1 do
       Same(Format('path[%d]', [i]), path[i], want.Items[i]);
   end;
+  { [spec 242] the clip path: its type, its transform under the element's,
+    its path }
+  d := AWant.Find('clip');
+  if not (d is TJSONObject) then SameBool('no clip', AEl.ClipPath = nil, True)
+  else if AEl.ClipPath = nil then Bad('no clip')
+  else
+  begin
+    SameStr('clip type', AEl.ClipPath.ZrType, TJSONObject(d).Get('type', ''));
+    if AEl.HasTransform and TyGfxNeedLocal(AEl.ClipPath) then
+      SameMatrix('clip transform', True, TyMatMul(AEl.Transform,
+        TyGfxLocalTransform(AEl.ClipPath)), TJSONObject(d).Find('transform'))
+    else if AEl.HasTransform then
+      SameMatrix('clip transform', True, AEl.Transform, TJSONObject(d).Find('transform'))
+    else if TyGfxNeedLocal(AEl.ClipPath) then
+      SameMatrix('clip transform', True, TyGfxLocalTransform(AEl.ClipPath),
+        TJSONObject(d).Find('transform'))
+    else
+      SameMatrix('clip transform', False, AEl.Transform, TJSONObject(d).Find('transform'));
+    want := TJSONObject(d).Arrays['path'];
+    path := PathData(TyGfxPath(AEl.ClipPath));
+    SameInt('clip path length', Length(path), want.Count);
+    for i := 0 to Min(Length(path), want.Count) - 1 do
+      Same(Format('clip path[%d]', [i]), path[i], want.Items[i]);
+  end;
   st := nil;
   if AWant.Find('style') is TJSONObject then st := AWant.Objects['style'];
   if st <> nil then
@@ -1649,16 +1688,48 @@ end;
 
 procedure TCuOracleBase.CheckClips(AWant: TJSONArray);
 var
-  i: Integer;
+  i, k, n: Integer;
   w: TJSONObject;
   r: TTyXYWH;
-  has: Boolean;
+  has, hasSec: Boolean;
+  sec: TTyCuClipSector;
+  e: TTyChartElement;
 begin
   for i := 0 to AWant.Count - 1 do
   begin
     w := AWant.Objects[i];
     has := FChart.CustomClip(w.Integers['s'], r);
     SameBool(Format('clip %d', [w.Integers['s']]), has, not IsNull(w.Find('rect')));
+    { [spec 242] a polar's sector }
+    hasSec := FChart.CustomClipSector(w.Integers['s'], sec);
+    SameBool(Format('sector clip %d', [w.Integers['s']]), hasSec, w.Find('sector') <> nil);
+    if hasSec and (w.Find('sector') <> nil) then
+    begin
+      Same('clip.cx', sec.CX, w.Arrays['sector'].Items[0]);
+      Same('clip.cy', sec.CY, w.Arrays['sector'].Items[1]);
+      Same('clip.r0', sec.R0, w.Arrays['sector'].Items[2]);
+      Same('clip.r', sec.R1, w.Arrays['sector'].Items[3]);
+      Same('clip.startAngle', sec.SA, w.Arrays['sector'].Items[4]);
+      Same('clip.endAngle', sec.EA, w.Arrays['sector'].Items[5]);
+      SameBool('clip.clockwise', sec.CW, w.Arrays['sector'].Booleans[6]);
+    end;
+    { the series' painted elements carry it }
+    n := 0;
+    for k := 0 to FChart.List.Count - 1 do
+    begin
+      if FChart.CustomPaintSource(k) = nil then Continue;
+      e := FChart.List.Element(k);
+      if e.Datum.SeriesIndex <> w.Integers['s'] then Continue;
+      Inc(n);
+      SameBool(Format('element %d sector clip', [k]), e.HasClipSector, hasSec);
+      if hasSec and e.HasClipSector then
+      begin
+        AssertTrue(Format('element %d clip cx', [k]), e.ClipCX = sec.CX);
+        AssertTrue(Format('element %d clip r', [k]), e.ClipR1 = sec.R1);
+        AssertTrue(Format('element %d clip endAngle', [k]), e.ClipEA = sec.EA);
+      end;
+    end;
+    if hasSec then AssertTrue('a sector-clipped series paints', n > 0);
     if has and not IsNull(w.Find('rect')) then
     begin
       Same('clip.x', r.X, w.Arrays['rect'].Items[0]);
@@ -1666,6 +1737,56 @@ begin
       Same('clip.w', r.W, w.Arrays['rect'].Items[2]);
       Same('clip.h', r.H, w.Arrays['rect'].Items[3]);
     end;
+  end;
+end;
+
+{ [spec 242] a text's block ink: the first piece no rich token inks, its
+  fill (none where it is the default's) and stroke against the style's }
+procedure TCuOracleBase.CheckTextInk(const AKey: string; const AEl: TTyChartElement;
+  AWant: TJSONObject);
+var
+  i, k: Integer;
+  p: TTyRtPiece;
+  found: Boolean;
+  runs: TJSONArray;
+begin
+  found := False;
+  for i := 0 to High(AEl.Caption.RtPieces) do
+    if (AEl.Caption.RtPieces[i].Kind = rpkText) and not AEl.Caption.RtPieces[i].TokenFill then
+    begin
+      p := AEl.Caption.RtPieces[i];
+      found := True;
+      Break;
+    end;
+  if not found then
+  begin
+    Bad(AKey + ': no block text piece');
+    Exit;
+  end;
+  SameRgba(AKey + ' fill', p.HasFill and not p.DefaultFill, p.Fill, AWant.Find('fill'));
+  SameRgba(AKey + ' stroke', p.HasStroke and not p.DefaultStroke, p.Stroke, AWant.Find('stroke'));
+  if not IsNull(AWant.Find('stroke')) then
+    Same(AKey + ' lineWidth', p.LineWidth, AWant.Find('lineWidth'));
+  { [spec 242] a rich text's runs as drawn, in order: each one's fill (a
+    token's own fill kept through the state) }
+  if AWant.Find('runs') is TJSONArray then
+  begin
+    runs := AWant.Arrays['runs'];
+    k := 0;
+    for i := 0 to High(AEl.Caption.RtPieces) do
+    begin
+      p := AEl.Caption.RtPieces[i];
+      if (p.Kind <> rpkText) or (p.Text = '') then Continue;
+      if k >= runs.Count then
+      begin
+        Bad(AKey + ': more runs than upstream''s');
+        Break;
+      end;
+      SameStr(Format('%s run %d text', [AKey, k]), p.Text, runs.Objects[k].Strings['text']);
+      SameRgba(Format('%s run %d fill', [AKey, k]), p.HasFill, p.Fill, runs.Objects[k].Find('fill'));
+      Inc(k);
+    end;
+    if k < runs.Count then Bad(Format('%s: %d runs, upstream %d', [AKey, k, runs.Count]));
   end;
 end;
 
@@ -1741,11 +1862,21 @@ begin
         end;
       SameStr(key + ' states', names, StringReplace(StringReplace(w.Arrays['states'].AsJSON,
         '"', '', [rfReplaceAll]), '[', '', [rfReplaceAll]).Replace(']', '').Replace(' ', ''));
-      SameRgba(key + ' fill', e.Style.HasFill, e.Style.FillColor, w.Find('fill'));
-      SameRgba(key + ' stroke', (e.Style.StrokeWidthLogical > 0) and (e.Style.StrokeColor <> 0),
-        e.Style.StrokeColor, w.Find('stroke'));
-      if not IsNull(w.Find('stroke')) then
-        Same(key + ' lineWidth', e.Style.StrokeWidthLogical, w.Find('lineWidth'));
+      if gel.Kind = gkText then
+        CheckTextInk(key, e, w)
+      else if gel.Kind = gkImage then
+      begin
+        SameBool(key + ' no fill', IsNull(w.Find('fill')), True);
+        SameBool(key + ' no stroke', IsNull(w.Find('stroke')), True);
+      end
+      else
+      begin
+        SameRgba(key + ' fill', e.Style.HasFill, e.Style.FillColor, w.Find('fill'));
+        SameRgba(key + ' stroke', (e.Style.StrokeWidthLogical > 0) and (e.Style.StrokeColor <> 0),
+          e.Style.StrokeColor, w.Find('stroke'));
+        if not IsNull(w.Find('stroke')) then
+          Same(key + ' lineWidth', e.Style.StrokeWidthLogical, w.Find('lineWidth'));
+      end;
       Same(key + ' opacity', e.Style.Alpha, w.Find('opacity'));
       SameInt(key + ' z2', e.Z2, w.Integers['z2']);
     end;

@@ -146,8 +146,56 @@ begin
   DropStaticKeepList;
   FZrDirty := True;
   inherited Invalidate;
+  { [R5-J] the gesture's dispatch publishes its event first }
+  RoamEvent('graphroam', APayload);
   { the dispatch's triggerUpdatedEvent [Batch 97] }
   if FViewActionDepth = 0 then EmitUpdated;
+end;
+
+{ createIsInSelfByPointerCheckerEl(mainGroup): the main group's
+  getBoundingRect -- the union of its children's, a node rect's and a band's
+  (bbox.fromCubic), each with its pen where it strokes (Path.getBoundingRect:
+  the line width, at least 4 where there is no fill) -- through its global
+  transform, closed on every side. A sankey's transform only scales and
+  moves, so the union of the drawn shapes' boxes is that rect. }
+function TTyCustomAdvanceChart.SankeySelfAt(ASlot: Integer; AX, AY: Double): Boolean;
+var
+  k, si: Integer;
+  pe: PTyChartElement;
+  b, u: TTyRectF;
+  any: Boolean;
+  w, sc: Double;
+begin
+  Result := False;
+  if (FPaintList = nil) or (ASlot < 0) or (ASlot > High(FBindings)) then Exit;
+  si := FBindings[ASlot].SeriesIndex;
+  if FPaintListPPI > 0 then sc := FPaintListPPI / 96 else sc := 1;
+  any := False;
+  u := TyRectF(0, 0, 0, 0);
+  for k := 0 to FPaintList.Count - 1 do
+  begin
+    pe := FPaintList.Ref(k);
+    if (pe^.Datum.Kind <> ctkSeries) or (pe^.Datum.SeriesIndex <> si) then Continue;
+    { a label is the host's text, not a child of the group }
+    if pe^.Caption.FontSizeLogical > 0 then Continue;
+    if pe^.Ignore then Continue;
+    if pe^.Shape.HasCmdBounds then b := pe^.Shape.CmdBounds
+    else b := TyShapeBounds(pe^.Shape);
+    if not TyRectFIsValid(b) then Continue;
+    if (pe^.Style.StrokeWidthLogical > 0) and ((pe^.Style.StrokeColor shr 24) <> 0) then
+    begin
+      w := pe^.Style.StrokeWidthLogical;
+      if not pe^.Style.HasFill then w := Max(w, Double(4));
+      w := w * sc;
+      b := TyRectF(b.Left - w / 2, b.Top - w / 2, b.Right + w / 2, b.Bottom + w / 2);
+    end;
+    if not any then u := b
+    else u := TyRectF(Min(u.Left, b.Left), Min(u.Top, b.Top),
+      Max(u.Right, b.Right), Max(u.Bottom, b.Bottom));
+    any := True;
+  end;
+  if not any then Exit;
+  Result := (AX >= u.Left) and (AX <= u.Right) and (AY >= u.Top) and (AY <= u.Bottom);
 end;
 
 function TTyCustomAdvanceChart.RoamSeriesAt(AX, AY: Integer; AZoom: Boolean): Integer;
@@ -177,6 +225,8 @@ begin
     else ok := sp.Roam in [grmPan, grmBoth];
     if not ok then Continue;
     if not (sp.RoamGlobal or FGraphs[i].ContainTrigger(AX, AY)) then Continue;
+    { [R5-G] RoamController._checkPointer: onIrrelevantElement first }
+    if SeriesRoamIrrelevant(i, AX, AY, sp.Z, sp.ZLevel) then Continue;
     { HIGHER zlevel, THEN HIGHER z; A TIE GOES TO THE ONE FOUND FIRST. }
     if (best < 0) or (sp.ZLevel > bs.ZLevel)
       or ((sp.ZLevel = bs.ZLevel) and (sp.Z > bs.Z))
@@ -196,6 +246,7 @@ begin
     else ok := sp.Roam in [grmPan, grmBoth];
     if not ok then Continue;
     if not (sp.RoamGlobal or FTreeViews[i].ContainTrigger(AX, AY)) then Continue;
+    if SeriesRoamIrrelevant(i, AX, AY, sp.Z, sp.ZLevel) then Continue;
     if (best < 0) or (sp.ZLevel > bs.ZLevel)
       or ((sp.ZLevel = bs.ZLevel) and (sp.Z > bs.Z))
       or ((sp.ZLevel = bs.ZLevel) and (sp.Z = bs.Z)
@@ -206,7 +257,7 @@ begin
     end;
   end;
   { AND THE SANKEYS [Batch 114]: roamTrigger 'global' by default; any other
-    word takes the view's area here (upstream: the main group's own box) }
+    word takes the main group's own box [R5-G: was the view's area] }
   for i := 0 to High(FSankeyViews) do
   begin
     if FSankeyViews[i] = nil then Continue;
@@ -214,7 +265,8 @@ begin
     if AZoom then ok := sp.Roam in [grmZoom, grmBoth]
     else ok := sp.Roam in [grmPan, grmBoth];
     if not ok then Continue;
-    if not (sp.RoamGlobal or FSankeyViews[i].ContainTrigger(AX, AY)) then Continue;
+    if not (sp.RoamGlobal or SankeySelfAt(i, AX, AY)) then Continue;
+    if SeriesRoamIrrelevant(i, AX, AY, sp.Z, sp.ZLevel) then Continue;
     if (best < 0) or (sp.ZLevel > bs.ZLevel)
       or ((sp.ZLevel = bs.ZLevel) and (sp.Z > bs.Z))
       or ((sp.ZLevel = bs.ZLevel) and (sp.Z = bs.Z)
@@ -247,6 +299,7 @@ begin
         and (AY - FTreemaps[i].Box.Y >= FTreemaps[i].Nodes[0].Y)
         and (AY - FTreemaps[i].Box.Y <= FTreemaps[i].Nodes[0].Y + FTreemaps[i].Nodes[0].H);
     if not ok then Continue;
+    if SeriesRoamIrrelevant(i, AX, AY, sp.Z, sp.ZLevel) then Continue;
     if (best < 0) or (sp.ZLevel > bs.ZLevel)
       or ((sp.ZLevel = bs.ZLevel) and (sp.Z > bs.Z))
       or ((sp.ZLevel = bs.ZLevel) and (sp.Z = bs.Z)
@@ -458,11 +511,13 @@ begin
     FSankeyLocal[si][ADataIndex].HasY := AHasY;
     FSankeyLocal[si][ADataIndex].Y := ALocalY;
     Result := True;
-    { the action's event, 'dragnode', with the payload }
+    { the action's event, 'dragnode', with the payload -- SankeyView's
+      {type, seriesId, dataIndex, localX, localY}: the model's id
+      [R5-G: was seriesIndex] }
     ev := TJSONObject.Create;
     try
       ev.Strings['type'] := 'dragNode';
-      ev.Integers['seriesIndex'] := si;
+      ev.Strings['seriesId'] := SeriesModelId(si);
       ev.Integers['dataIndex'] := ADataIndex;
       if AHasX then ev.Floats['localX'] := ALocalX;
       if AHasY then ev.Floats['localY'] := ALocalY;
@@ -593,6 +648,8 @@ begin
   { the series group's transform changes; everything on the canvas follows
     it -- laid out again here, as the tree's roam is }
   Invalidate;
+  { [R5-J] the gesture's dispatch publishes its event first }
+  RoamEvent('sankeyroam', APayload);
   if FViewActionDepth = 0 then EmitUpdated;
 end;
 
@@ -640,6 +697,7 @@ begin
 end;
 
 procedure TTyCustomAdvanceChart.HierDrillReset;
+var k: Integer;
 begin
   { [R2-C] the treemaps as last drawn, for the merge's transition from the
     old tree (the first reset since a render keeps them) }
@@ -648,6 +706,9 @@ begin
     FTmOld := FTmPrev;
     FTmOldHave := FTmHave;
     FTmOldKeys := FTmViewKeys;
+    { [R5-I] and where their elements are now, before the proxies go }
+    SetLength(FTmOldNow, Length(FTmAnim));
+    for k := 0 to High(FTmAnim) do FTmOldNow[k] := TmNowOf(k);
   end;
   FSunRoot := nil;
   FSunVirt := nil;
@@ -814,6 +875,49 @@ begin
   finally
     FHierDrill := nil;
   end;
+end;
+
+{ [R5-D] THE LEGACY SUNBURST ACTIONS (sunburstAction.ts): sunburstHighlight
+  (update 'none') clones its payload, writes into the clone the dataIndex
+  of the node retrieveTargetInfo finds -- targetNode, else targetNodeId --
+  in every sunburst series the payload queries (the last one found wins;
+  none found: no dataIndex, the whole series), and dispatches the clone
+  as a `highlight`; sunburstUnhighlight (update 'updateView') dispatches its
+  clone as a `downplay`. The dispatch waits for this action (IN_EC_CYCLE):
+  the action's own event, a copy of the payload, comes first. }
+function TTyCustomAdvanceChart.DoSunLegacy(APayload: TJSONObject; AHigh: Boolean): Boolean;
+var
+  clone: TJSONObject;
+  slots: TTyIntegerArray;
+  k, slot, row: Integer;
+begin
+  Result := True;
+  clone := TJSONObject(APayload.Clone);
+  if AHigh then
+  begin
+    slots := HierQuery(clone, TySunburstSeriesTypeName);
+    for k := 0 to High(slots) do
+    begin
+      slot := slots[k];
+      if (slot > High(FSunbursts)) or not FSunbursts[slot].Valid then Continue;
+      row := HierTarget(slot, clone);
+      if row < 0 then Continue;
+      { payload.dataIndex = node.dataIndex }
+      clone.Elements['dataIndex'] := TJSONIntegerNumber.Create(row);
+    end;
+    clone.Strings['type'] := 'highlight';
+  end
+  else
+  begin
+    { updateView }
+    FullUpdate;
+    clone.Strings['type'] := 'downplay';
+  end;
+  if AHigh then
+    EmitPayloadEvent('sunbursthighlight', CopyWithType(APayload, 'sunbursthighlight'))
+  else
+    EmitPayloadEvent('sunburstunhighlight', CopyWithType(APayload, 'sunburstunhighlight'));
+  TipDispatch(clone, nil, False, False);
 end;
 
 function TTyCustomAdvanceChart.DoTreemapAction(const AType: string; APayload: TJSONObject;
@@ -1096,7 +1200,8 @@ end;
 function TTyCustomAdvanceChart.TreemapAnimating(ASeriesIndex: Integer): Boolean;
 begin
   Result := (ASeriesIndex >= 0) and (ASeriesIndex <= High(FTmAnim))
-    and (FTmAnim[ASeriesIndex].Wrap <> nil) and FTmAnim[ASeriesIndex].Wrap.Live;
+    and (FTmAnim[ASeriesIndex].Wrap <> nil) and FTmAnim[ASeriesIndex].Wrap.Live
+    and not FTmAnim[ASeriesIndex].Wrap.Ready;
 end;
 
 function TTyCustomAdvanceChart.TreemapAnimProxy(ASeriesIndex, ARow: Integer;
@@ -1179,7 +1284,10 @@ begin
         p.Strings['type'] := 'sunburstRootToNode';
         p.Integers['seriesIndex'] := ASeries;
         p.Strings['targetNode'] := HierIdOfRow(slot, hs[k]);
+        { [R5-G] the dispatched action's update runs the brush's stage }
+        FBrushPayload := True;
         DoSunAction(p);
+        FBrushPayload := False;
         EmitUpdated;
       finally
         p.Free;
@@ -1203,7 +1311,10 @@ begin
     p.Strings['type'] := 'sunburstRootToNode';
     p.Integers['seriesIndex'] := ASeries;
     p.Strings['targetNode'] := HierIdOfRow(slot, target);
+    { [R5-G] the dispatched action's update runs the brush's stage }
+    FBrushPayload := True;
     DoSunAction(p);
+    FBrushPayload := False;
     EmitUpdated;
   finally
     p.Free;
@@ -1244,7 +1355,10 @@ begin
     { 'link' opens a window upstream: nothing here }
     Exit;
   try
+    { [R5-G] the dispatched action's update runs the brush's stage }
+    FBrushPayload := True;
     DoTreemapAction(p.Strings['type'], p);
+    FBrushPayload := False;
     EmitUpdated;
   finally
     p.Free;
@@ -1265,7 +1379,10 @@ begin
   else
     p := TreemapViewPayload('treemapZoomToNode', ASeries, HierIdOfRow(slot, row));
   try
+    { [R5-G] the dispatched action's update runs the brush's stage }
+    FBrushPayload := True;
     DoTreemapAction(p.Strings['type'], p);
+    FBrushPayload := False;
     EmitUpdated;
   finally
     p.Free;
@@ -1401,6 +1518,48 @@ begin
   end;
   FreeAndNil(FTmAnim[ASeries].Wrap);
   FTmAnim[ASeries] := Default(TTyTmAnim);
+end;
+
+function TTyCustomAdvanceChart.TmNowOf(ASeries: Integer): TTyTmNow;
+var
+  r, j: Integer;
+  p: TTyChartAnimProxy;
+
+  function N(AKey: string): Double;
+  begin
+    Result := p.Num(AKey);
+  end;
+
+begin
+  Result := Default(TTyTmNow);
+  if (ASeries < 0) or (ASeries > High(FTmAnim)) then Exit;
+  Result.Live := (FTmAnim[ASeries].Wrap <> nil) and FTmAnim[ASeries].Wrap.Live;
+  SetLength(Result.GHas, Length(FTmAnim[ASeries].Groups));
+  SetLength(Result.GX, Length(FTmAnim[ASeries].Groups));
+  SetLength(Result.GY, Length(FTmAnim[ASeries].Groups));
+  for r := 0 to High(FTmAnim[ASeries].Groups) do
+  begin
+    p := FTmAnim[ASeries].Groups[r];
+    if p = nil then Continue;
+    Result.GX[r] := N('x');
+    Result.GY[r] := N('y');
+    Result.GHas[r] := not (IsNan(Result.GX[r]) or IsNan(Result.GY[r]));
+  end;
+  SetLength(Result.Rects, Length(FTmAnim[ASeries].Rects));
+  for r := 0 to High(FTmAnim[ASeries].Rects) do
+    for j := 0 to 1 do
+    begin
+      p := FTmAnim[ASeries].Rects[r][j];
+      if p = nil then Continue;
+      Result.Rects[r][j].X := N('shape.x');
+      Result.Rects[r][j].Y := N('shape.y');
+      Result.Rects[r][j].W := N('shape.width');
+      Result.Rects[r][j].H := N('shape.height');
+      Result.Rects[r][j].Opacity := N('style.opacity');
+      Result.Rects[r][j].Has := not (IsNan(Result.Rects[r][j].X) or IsNan(Result.Rects[r][j].Y)
+        or IsNan(Result.Rects[r][j].W) or IsNan(Result.Rects[r][j].H));
+      if IsNan(Result.Rects[r][j].Opacity) then Result.Rects[r][j].Opacity := 1;
+    end;
 end;
 
 procedure TTyCustomAdvanceChart.TmAnimDropAll;
@@ -1539,6 +1698,8 @@ var
   { [R2-C] old -> new rows of a new tree }
   o2n: TTyIntegerArray;
   no: Integer;
+  { [R5-I] the old rows' elements where they are now }
+  now_: TTyTmNow;
 
   function Was(const AArr: TTyBoolArray; ARow: Integer): Boolean;
   begin
@@ -1566,9 +1727,36 @@ var
     tasks[High(tasks)].Props := AProps;
   end;
 
+  { [R5-I] an old row's element where it is now: its proxy's values where
+    the last transition left one, else its last solve }
+  function NowRect(ARow, AKind: Integer): Boolean;
+  begin
+    Result := (ARow >= 0) and (ARow <= High(now_.Rects)) and now_.Rects[ARow][AKind - 1].Has;
+  end;
+
+  function OldGroupAt(ARow: Integer): TTyAnimProps;
+  begin
+    if (ARow >= 0) and (ARow <= High(now_.GHas)) and now_.GHas[ARow] then
+      Result := TyAnimProps([TmNum('x', now_.GX[ARow]), TmNum('y', now_.GY[ARow])])
+    else
+      Result := TyAnimProps([TmNum('x', TmOr0(AOld.Nodes[ARow].X)),
+        TmNum('y', TmOr0(AOld.Nodes[ARow].Y))]);
+  end;
+
+  function OldOpacity(ARow, AKind: Integer): Double;
+  begin
+    if NowRect(ARow, AKind) then Result := now_.Rects[ARow][AKind - 1].Opacity
+    else Result := 1;
+  end;
+
   function OldShape(ARow, AKind: Integer): TTyAnimProps;
   var bw: Double;
   begin
+    if NowRect(ARow, AKind) then
+      Exit(TyAnimProps([TmNum('shape.x', now_.Rects[ARow][AKind - 1].X),
+        TmNum('shape.y', now_.Rects[ARow][AKind - 1].Y),
+        TmNum('shape.width', now_.Rects[ARow][AKind - 1].W),
+        TmNum('shape.height', now_.Rects[ARow][AKind - 1].H)]));
     if AKind = 1 then
       Result := TyAnimProps([TmNum('shape.x', 0), TmNum('shape.y', 0),
         TmNum('shape.width', AOld.Nodes[ARow].W), TmNum('shape.height', AOld.Nodes[ARow].H)])
@@ -1645,8 +1833,7 @@ var
     if Was(AOldHave.Group, OldOf(ARow)) then
     begin
       q := TmProxy(FAnim, si, ARow, 'tmGroup');
-      q.Attr(TyAnimProps([TmNum('x', TmOr0(AOld.Nodes[OldOf(ARow)].X)),
-        TmNum('y', TmOr0(AOld.Nodes[OldOf(ARow)].Y))]));
+      q.Attr(OldGroupAt(OldOf(ARow)));
       A.Groups[ARow] := q;
       Task(q, TyAnimProps([TmNum('x', TmOr0(TS^.Nodes[ARow].X)), TmNum('y', TmOr0(TS^.Nodes[ARow].Y))]));
     end
@@ -1670,15 +1857,27 @@ var
       q := TmProxy(FAnim, si, ARow, 'tmRect');
       if ((c = 1) and Was(AOldHave.Bg, OldOf(ARow))) or ((c = 2) and Was(AOldHave.Ct, OldOf(ARow))) then
       begin
-        { kept: from its old shape }
-        q.Attr(With1(OldShape(OldOf(ARow), c), 'style.opacity', 1));
+        { kept: from its old shape -- [R5-I] where it is now }
+        q.Attr(With1(OldShape(OldOf(ARow), c), 'style.opacity', OldOpacity(OldOf(ARow), c)));
         if c = 1 then
         begin
           lastHas[ARow] := True;
-          lastW[ARow] := AOld.Nodes[OldOf(ARow)].W;
-          lastH[ARow] := AOld.Nodes[OldOf(ARow)].H;
+          if NowRect(OldOf(ARow), 1) then
+          begin
+            lastW[ARow] := now_.Rects[OldOf(ARow)][0].W;
+            lastH[ARow] := now_.Rects[OldOf(ARow)][0].H;
+          end
+          else
+          begin
+            lastW[ARow] := AOld.Nodes[OldOf(ARow)].W;
+            lastH[ARow] := AOld.Nodes[OldOf(ARow)].H;
+          end;
         end;
-        Task(q, NewShape(ARow, c));
+        { [R5-I] one still fading in fades on to 1 with this transition }
+        if OldOpacity(OldOf(ARow), c) < 1 then
+          Task(q, With1(NewShape(ARow, c), 'style.opacity', 1))
+        else
+          Task(q, NewShape(ARow, c));
       end
       else if (pr >= 0) and ((not reRoot) or drill) then
       begin
@@ -1722,6 +1921,15 @@ begin
     oldLabels := FTmAnim[si].Labels;
     FTmAnim[si].Labels := nil;
   end;
+  { [R5-I] where the old elements are now: a drill's own proxies, a merge's
+    taken when the setOption came [was: their last solve -- a transition
+    still running started over from where the one before was going] }
+  if AMap <> nil then
+  begin
+    if si <= High(FTmOldNow) then now_ := FTmOldNow[si] else now_ := Default(TTyTmNow);
+  end
+  else
+    now_ := TmNowOf(si);
   TmAnimDrop(si);
   try
   if not AnimAllowed then Exit;
@@ -1774,6 +1982,7 @@ begin
     if (v.Kind = aokString) and (v.Str <> '') then easing := v.Str else easing := 'cubicOut';
     A.Wrap := TTyTmWrap.Create;
     A.Wrap.Live := True;
+    A.Wrap.Ready := now_.Live;
     cfg := TyAnimCfg(dur, 0, easing);
     cfg.SetToFinal := True;
     cfg.Done := @A.Wrap.Hit;
@@ -1811,7 +2020,7 @@ begin
         if kind = 0 then
         begin
           p := TmProxy(FAnim, si, row, 'tmGroup');
-          p.Attr(TyAnimProps([TmNum('x', TmOr0(AOld.Nodes[row].X)), TmNum('y', TmOr0(AOld.Nodes[row].Y))]));
+          p.Attr(OldGroupAt(row));
           { [R2-C] a new tree's deleted group, by its old row }
           if AMap <> nil then A.OldGroups[row] := p
           else
@@ -1844,7 +2053,7 @@ begin
         A.Ghosts[High(A.Ghosts)].El := el;
         A.Ghosts[High(A.Ghosts)].LabelEl := lel;
         p := TmProxy(FAnim, si, row, 'tmGhost');
-        p.Attr(With1(OldShape(row, kind), 'style.opacity', 1));
+        p.Attr(With1(OldShape(row, kind), 'style.opacity', OldOpacity(row, kind)));
         A.Ghosts[High(A.Ghosts)].P := p;
         if (row <= High(oldLabels)) and (oldLabels[row][2 - kind] <> nil) then
         begin
@@ -1891,6 +2100,16 @@ begin
     for k := 0 to High(tasks) do
       if (tasks[k].P = nil) or (Length(tasks[k].Props) = 0) then A.Wrap.Hit
       else tasks[k].P.AnimateTo(tasks[k].Props, cfg);
+    { [R5-I] A TRANSITION TAKEN OVER while it ran: its wrap's animators,
+      aborted by this one's start, finish it -- its renderFinally makes
+      invisible what it had moved out of the canvas, after this render has
+      shown it again where its new place is in view }
+    if now_.Live then
+      for row := 0 to no - 1 do
+        if AOld.Nodes[row].DrawInvisible and (NewOf(row) >= 0)
+          and (Was(have.Bg, NewOf(row)) or Was(have.Ct, NewOf(row)))
+          and not TS^.Nodes[NewOf(row)].Invisible then
+          TS^.Nodes[NewOf(row)].RectsHidden := True;
     { THE ELEMENTS MOVED OUT OF THE CANVAS are drawn until the end, in their
       old visual (processInvisible sets none) }
     for row := 0 to nn - 1 do
@@ -2002,6 +2221,7 @@ var
   m: ITyTextMeasurer;
   el: TTyChartElement;
   sx, sy, sw, sh, op, lx, ly, ox0, oy0: Double;
+  gx, gy, gdx, gdy: Double;
   p: TTyChartAnimProxy;
   wtext: string;
   spec: TTyLabelSpec;
@@ -2176,11 +2396,23 @@ var
     end;
   end;
 
-  procedure Place(var AEl: TTyChartElement; ARow: Integer);
+  { [R5-I] the rect at bounds of this frame, its corners clamped to them
+    again (roundRect's buildPath, each time it draws) [was: the corners
+    clamped to the rest's bounds -- a shrinking rect drew them too big] }
+  procedure Reshape(var AEl: TTyChartElement; const ABounds: TTyRectF;
+    const ARadii: TTyDoubleArray);
+  begin
+    if AEl.Shape.Kind = cskRoundRect then
+      AEl.Shape := TyTreemapRectShape(ABounds, ARadii)
+    else
+      AEl.Shape.Bounds := ABounds;
+  end;
+
+  procedure Place(var AEl: TTyChartElement; ARow: Integer; const ARadii: TTyDoubleArray);
   begin
     Compose(ARow);
-    AEl.Shape.Bounds := TyRectF(sx + T[ARow].TX, sy + T[ARow].TY,
-      (sx + sw) + T[ARow].TX, (sy + sh) + T[ARow].TY);
+    Reshape(AEl, TyRectF(sx + T[ARow].TX, sy + T[ARow].TY,
+      (sx + sw) + T[ARow].TX, (sy + sh) + T[ARow].TY), ARadii);
     AEl.Style.Alpha := op;
   end;
 
@@ -2231,7 +2463,7 @@ begin
         sub := el.Anim.Sub;
         if (row < 0) or (row >= nn) or (sub < 0) or (sub > 1) then Continue;
         RectOf(A^.Rects[row][sub], el);
-        Place(el, row);
+        Place(el, row, TS^.Nodes[row].Radii);
         AFrame.SetElement(i, el);
       end
       else if (el.Anim.Role = carLabel) and (el.Datum.SeriesIndex = si) then
@@ -2274,14 +2506,19 @@ begin
       if A^.Map <> nil then
       begin
         { [R2-C] a merge's deleted rect, under the old tree's groups; its
-          words ride the rect's corner (the old option is gone: they are
-          not cut again) }
+          words ride the rect's corner -- [R5-I] a content's are cut again
+          to the rect it has, as a drill's are (the inputs held on the old
+          node) [was: not cut again, the old option being gone] }
         if (row < 0) or (row > High(OT)) then Continue;
         OCompose(row);
         ox0 := el.Shape.Bounds.Left;
         oy0 := el.Shape.Bounds.Top;
-        el.Shape.Bounds := TyRectF(sx + OT[row].TX, sy + OT[row].TY,
-          (sx + sw) + OT[row].TX, (sy + sh) + OT[row].TY);
+        if row <= High(A^.Old.Nodes) then
+          Reshape(el, TyRectF(sx + OT[row].TX, sy + OT[row].TY,
+            (sx + sw) + OT[row].TX, (sy + sh) + OT[row].TY), A^.Old.Nodes[row].Radii)
+        else
+          el.Shape.Bounds := TyRectF(sx + OT[row].TX, sy + OT[row].TY,
+            (sx + sw) + OT[row].TX, (sy + sh) + OT[row].TY);
         el.Style.Alpha := op;
         AFrame.Add(el);
         if A^.Ghosts[i].HasLabel then
@@ -2289,7 +2526,35 @@ begin
           ox0 := el.Shape.Bounds.Left - ox0;
           oy0 := el.Shape.Bounds.Top - oy0;
           el := A^.Ghosts[i].LabelEl;
-          if A^.Stepped then
+          if (A^.Ghosts[i].Kind = 1) and (row <= High(A^.Old.Nodes))
+            and A^.Old.Nodes[row].LabelPlace.Has then
+          begin
+            if m = nil then m := NewTextMeasurer(FLastPPI);
+            gx := el.Caption.X;
+            gy := el.Caption.Y;
+            gdx := el.Caption.X - el.Caption.FixedX;
+            gdy := el.Caption.Y - el.Caption.FixedY;
+            if TyTreemapLabelAt(A^.Old, row, FTreemapInks[slot].Label_, m,
+              sx * 1 + OT[row].TX, sy * 1 + OT[row].TY, sw, sh, wtext, lx, ly)
+              and (wtext <> '') then
+            begin
+              el.Caption.Text := wtext;
+              { not dirty yet: the words cut, where they were }
+              if A^.Stepped then
+              begin
+                el.Caption.X := lx + gdx;
+                el.Caption.Y := ly + gdy;
+              end
+              else
+              begin
+                el.Caption.X := gx;
+                el.Caption.Y := gy;
+              end;
+            end
+            else
+              el.Ignore := True;
+          end
+          else if A^.Stepped then
           begin
             el.Caption.X := el.Caption.X + ox0;
             el.Caption.Y := el.Caption.Y + oy0;
@@ -2299,7 +2564,8 @@ begin
         end;
         Continue;
       end;
-      Place(el, row);
+      if row <= High(A^.Old.Nodes) then Place(el, row, A^.Old.Nodes[row].Radii)
+      else Place(el, row, nil);
       AFrame.Add(el);
       if A^.Ghosts[i].HasLabel then
       begin
@@ -2619,7 +2885,9 @@ begin
   if FLastPPI <= 0 then
   begin
     Invalidate;
-    EmitUpdated;
+    RoamEvent('treeroam', APayload);
+    { [R5-J] an action's `updated` is the dispatch's }
+    if FViewActionDepth = 0 then EmitUpdated;
     Exit;
   end;
   m := NewTextMeasurer(FLastPPI);
@@ -2630,8 +2898,11 @@ begin
   TipResetQuiet;
   FZrDirty := True;
   inherited Invalidate;
-  { the dispatch's triggerUpdatedEvent [Batch 97] }
-  EmitUpdated;
+  { [R5-J] the gesture's dispatch publishes its event first }
+  RoamEvent('treeroam', APayload);
+  { the dispatch's triggerUpdatedEvent [Batch 97] -- [R5-J] an action's is
+    the dispatch's }
+  if FViewActionDepth = 0 then EmitUpdated;
 end;
 
 function TTyCustomAdvanceChart.TreeRoam(ASeriesIndex: Integer; ADX, ADY: Double): Boolean;
@@ -2692,6 +2963,9 @@ begin
     { [F3d] THE ACTION'S UPDATE (update: 'update'): a full update of the
       same option -- the kept nodes slide, the shown ones grow out of their
       parent, the hidden ones shrink into it. [Was: a relayout that snapped.] }
+    { [R5-G] an update with a payload: the brush's visual stage dispatches
+      brushSelect -- the click is treeExpandAndCollapse dispatched }
+    FBrushPayload := True;
     FullUpdate;
     { the dispatch's triggerUpdatedEvent [Batch 97] }
     EmitUpdated;
@@ -2713,7 +2987,78 @@ begin
   for k := 0 to High(slots) do
     if TreeFlip(slots[k], di) then Result := True;
   FullUpdate;
+  { [R5-J] the action's event, a copy of its payload; `updated` is the
+    dispatch's [was: no event, and `updated` twice] }
+  EmitPayloadEvent('treeexpandandcollapse',
+    CopyWithType(APayload, 'treeexpandandcollapse'));
+end;
+
+procedure TTyCustomAdvanceChart.TreeClickToggle(ASeriesIndex, ADataIndex: Integer);
+var
+  ev: TJSONObject;
+  i: Integer;
+  any: Boolean;
+begin
+  any := False;
+  for i := 0 to High(FBindings) do
+    if (FBindings[i].SeriesIndex = ASeriesIndex) and TreeFlip(i, ADataIndex) then
+      any := True;
+  { a row TreeFlip refuses (TreeToggle's rule) does nothing }
+  if not any then Exit;
+  { TreeView's click: dispatchAction({type: 'treeExpandAndCollapse',
+    seriesId, dataIndex}) -- the update (with its payload: the brush's
+    visual stage dispatches brushSelect), the event, `updated` }
+  FBrushPayload := True;
+  FullUpdate;
+  ev := TJSONObject.Create;
+  try
+    ev.Strings['type'] := 'treeexpandandcollapse';
+    ev.Strings['seriesId'] := SeriesModelId(ASeriesIndex);
+    ev.Integers['dataIndex'] := ADataIndex;
+    EmitPayloadEvent('treeexpandandcollapse', ev.AsJSON, ev);
+  finally
+    ev.Free;
+  end;
   EmitUpdated;
+end;
+
+procedure TTyCustomAdvanceChart.RoamEvent(const AType: string;
+  const APayload: TTyGraphRoamPayload);
+var
+  ev, anim: TJSONObject;
+begin
+  if (FRoamEvSrc = 0) or (FViewActionDepth > 0) then Exit;
+  ev := TJSONObject.Create;
+  try
+    ev.Strings['type'] := AType;
+    { makeRoamPayload: the id before the params }
+    if (FRoamEvSrc = 2) and (APayload.SeriesIndex >= 0) then
+      ev.Strings['seriesId'] := SeriesModelId(APayload.SeriesIndex);
+    if APayload.HasPan then
+    begin
+      ev.Floats['dx'] := APayload.DX;
+      ev.Floats['dy'] := APayload.DY;
+    end;
+    if APayload.HasZoom then
+    begin
+      ev.Floats['zoom'] := APayload.Zoom;
+      ev.Floats['originX'] := APayload.OriginX;
+      ev.Floats['originY'] := APayload.OriginY;
+    end;
+    { roamHelper: defaults({type}, extra), payloadDisableAnimation, then
+      `${mainType}Id` }
+    if FRoamEvSrc = 1 then
+    begin
+      anim := TJSONObject.Create;
+      anim.Add('duration', 0);
+      ev.Add('animation', anim);
+      if APayload.SeriesIndex >= 0 then
+        ev.Strings['seriesId'] := SeriesModelId(APayload.SeriesIndex);
+    end;
+    EmitPayloadEvent(AType, VmJsJson(ev), ev);
+  finally
+    ev.Free;
+  end;
 end;
 
 function TTyCustomAdvanceChart.TreeExpanded(ASeriesIndex, ADataIndex: Integer): Boolean;
@@ -2906,6 +3251,7 @@ begin
     else
       TmAnimDrop(si);
     if si <= High(FTmOld) then FTmOld[si] := Default(TTyTreemapSolved);
+    if si <= High(FTmOldNow) then FTmOldNow[si] := Default(TTyTmNow);
     if Length(FTmView) <= si then
     begin
       k := Length(FTmView);
@@ -2934,6 +3280,7 @@ begin
   FTmOld := nil;
   FTmOldHave := nil;
   FTmOldKeys := nil;
+  FTmOldNow := nil;
   FTmViewKeys := keys;
 end;
 
@@ -3297,6 +3644,7 @@ begin
     FGraphNodeScale[i] := 1;
     if FBindings[i].SeriesType <> TyGraphSeriesTypeName then Continue;
     TyGraphItemCallbacks := ItemCbOf(i);
+    TyGraphItemNodes := GraphItemNodesOf(FBindings[i].SeriesIndex);
     if not FBindings[i].Resolved then Continue;
     { A GRAPH THE LEGEND SWITCHED OFF IS NOT LAID OUT AT ALL -- upstream's
       legendFilter takes the series out before any layout runs -- and for a
@@ -3359,6 +3707,9 @@ begin
       and (FBindings[i].MatrixIndex <= High(FMatrices))
       and (FMatrices[FBindings[i].MatrixIndex] <> nil) and (store <> nil) then
     begin
+      { [spec 244] its nodes' names and tooltip as the matrix' dimensions
+        give them }
+      MatrixGraphNames(si, FMatrices[FBindings[i].MatrixIndex], store);
       solved := TyGraphSolveAtPoints(FOption, si, store,
         MatrixGraphPoints(si, FMatrices[FBindings[i].MatrixIndex]));
       FGraphLaidOut[i] := True;
@@ -3402,6 +3753,7 @@ begin
   end;
   finally
     TyGraphItemCallbacks := nil;
+    TyGraphItemNodes := nil;
   end;
   { [F3d] the edges' keys for the next update }
   SetLength(FGraphEdgeKeys, Length(FBindings));
@@ -3659,6 +4011,8 @@ begin
     if (AInk.Frame.SX = 0) or IsNan(AInk.Frame.SX) then AInk.Frame.InvScale := 1
     else AInk.Frame.InvScale := 1 / AInk.Frame.SX;
   end;
+  AInk.NodeScale := 1;
+  if ASlot <= High(FGraphNodeScale) then AInk.NodeScale := FGraphNodeScale[ASlot];
   if n = 0 then Exit;
   sNode := nil;
   d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);

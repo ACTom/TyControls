@@ -79,6 +79,9 @@ begin
   FAxisZooms := nil;
   FZoomWindows := nil;
   FZoomHost := nil;
+  { [spec 242] which series a filter touches this time }
+  FDzTouched := nil;
+  SetLength(FDzTouched, Length(FStores));
   if FBuild = nil then Exit;
   n := TyDataZoomCount(FOption);
   SetLength(FZoomSpecs, n);
@@ -96,6 +99,11 @@ begin
     SetLength(FDzRawValue, n);
     for i := 0 to n - 1 do FDzRawValue[i] := False;
   end;
+  if Length(FDzRawOv) <> n then
+  begin
+    SetLength(FDzRawOv, n);
+    for i := 0 to n - 1 do FDzRawOv[i] := '';
+  end;
   for i := 0 to n - 1 do
   begin
     FZoomSpecs[i] := TyDataZoomSpecOf(FOption, i, FBuild);
@@ -103,6 +111,8 @@ begin
       both ends read in percent mode }
     if FDzRawHas[i] then
       DzApplyRaw(FZoomSpecs[i], FDzRawValue[i], FDzRawStart[i], FDzRawStop[i]);
+    { [R5-G] an API payload's pairs, end by end }
+    if FDzRawOv[i] <> '' then DzApplyOv(i);
   end;
   { the toolbox's select dataZooms after the author's -- with the windows
     their actions set [Batch 125] }
@@ -204,6 +214,7 @@ begin
         else
           cols := TyAxisDataDims(FStores[si], ax, FBindings[si], Default(TTySeriesStack));
         if Length(cols) = 0 then Continue;
+        if si <= High(FDzTouched) then FDzTouched[si] := True;
         case spec.FilterMode of
           dzfFilter:
             begin
@@ -240,6 +251,34 @@ begin
   end;
 end;
 
+procedure TTyCustomAdvanceChart.DzFrozenDrop;
+var i: Integer;
+begin
+  for i := 0 to High(FDzFrozenStore) do FreeAndNil(FDzFrozenStore[i]);
+  FDzFrozenStore := nil;
+end;
+
+{ the frozen views back in place of the stores this frame built, each
+  borrowing this build's category lists where the new store borrows one }
+procedure TTyCustomAdvanceChart.DzFrozenRestore;
+var
+  s, k: Integer;
+  metas: array of TTyOrdinalMeta;
+begin
+  for s := 0 to Min(High(FDzFrozenStore), High(FStores)) do
+  begin
+    if (FDzFrozenStore[s] = nil) or (FStores[s] = nil) then Continue;
+    metas := nil;
+    SetLength(metas, FStores[s].DimCount);
+    for k := 0 to High(metas) do
+      if FStores[s].BorrowsMeta(k) then metas[k] := FStores[s].OrdinalMeta(k)
+      else metas[k] := nil;
+    if FDzFrozenStore[s].DimCount <> FStores[s].DimCount then Continue;
+    FStores[s].Free;
+    FStores[s] := FDzFrozenStore[s].CloneWith(metas);
+  end;
+end;
+
 function TTyCustomAdvanceChart.DataZoomInk(const ASpec: TTyDzSliderSpec): TTyDzInk;
 var
   model: TTyStyleModel;
@@ -254,6 +293,7 @@ begin
   GlobalInk(Result.FontName, Result.FontSizeLogical, Result.FontWeight,
     Result.Text, [ttpSize, ttpWeight, ttpFamily]);
   if ASpec.FontSize > 0 then Result.FontSizeLogical := ASpec.FontSize;
+  Result.FontWeight := TyFontStyleCodeOver(ASpec.FontStyle, Result.FontWeight);
   Result.Filler := TTyChartColor(
     model.ResolveStyle('TyAdvChartDataZoomFiller', '', []).Background.Color);
   Result.Frame := TTyChartColor(
@@ -513,15 +553,20 @@ end;
 
 function TTyCustomAdvanceChart.BuildDataZooms(AList: TTyPaintList): Integer;
 var
-  k: Integer;
+  k, lt: Integer;
   scale: Double;
 begin
   Result := 0;
   if FLastPPI > 0 then scale := FLastPPI / 96 else scale := 1;
   for k := 0 to High(FDzLayouts) do
     if (k <= High(FDzViews)) and FDzLayouts[k].Valid then
+    begin
+      lt := AList.Count;
       Inc(Result, TyBuildDzSliderMarks(FDzLayouts[k], FDzViews[k],
         DataZoomInk(FDzViews[k]), FLastRect.Left, FLastRect.Top, scale, AList));
+      { [R5-J] its own zlevel, else the root's }
+      LevelTail(AList, lt, 'dataZoom', k);
+    end;
 end;
 
 { ==================== dataZoom interaction ==================== }
@@ -593,10 +638,10 @@ begin
       FDzInHi[i] := FZoomWindows[rep].Percent[1];
     end;
   end;
-  if (FBuild <> nil) and (Length(FDzRoamThrottle) <> FBuild.GridCount) then
+  if Length(FDzRoamThrottle) <> DzRecCount then
   begin
-    SetLength(FDzRoamThrottle, FBuild.GridCount);
-    SetLength(FDzRoamBatch, FBuild.GridCount);
+    SetLength(FDzRoamThrottle, DzRecCount);
+    SetLength(FDzRoamBatch, DzRecCount);
   end;
 end;
 
@@ -658,13 +703,101 @@ begin
   end;
 end;
 
+{ [R5-D] THE ROAM RECORDS. installDataZoomRoamProcessor makes one
+  coordSysRecord per coordinate system an inside dataZoom's axes live in --
+  a grid, a polar, a singleAxis (its axis model is its own coordinate
+  system model) -- each with its own RoamController, throttle and
+  containPoint. Here: the grids first, then the polars, then the singles.
+  [was: grids only -- an inside on a polar or a single axis never roamed] }
+function TTyCustomAdvanceChart.DzRecCount: Integer;
+begin
+  Result := 0;
+  if FBuild <> nil then Result := FBuild.GridCount;
+  Result := Result + Length(FPolars) + Length(FSingles);
+end;
+
+function TTyCustomAdvanceChart.DzRecInsides(ARec: Integer): TTyIntegerArray;
+var
+  ng, i, t, k: Integer;
+  ax: TTyAxis;
+  hit: Boolean;
+begin
+  Result := nil;
+  ng := 0;
+  if FBuild <> nil then ng := FBuild.GridCount;
+  if ARec < ng then Exit(DzGridInsides(ARec));
+  k := ARec - ng;
+  for i := 0 to Min(High(FZoomSpecs), High(FDzInteract)) do
+  begin
+    if (FZoomSpecs[i].SubType <> 'inside') or FZoomSpecs[i].NoTarget then Continue;
+    hit := False;
+    for t := 0 to High(FZoomSpecs[i].Targets) do
+    begin
+      ax := DzAxis(FZoomSpecs[i].Targets[t].Dim, FZoomSpecs[i].Targets[t].AxisIndex);
+      if ax = nil then Continue;
+      if k <= High(FPolars) then
+        hit := (FPolars[k] <> nil)
+          and ((ax = FPolars[k].RadiusAxis) or (ax = FPolars[k].AngleAxis))
+      else if k - Length(FPolars) <= High(FSingles) then
+        hit := (FSingles[k - Length(FPolars)] <> nil)
+          and (ax = FSingles[k - Length(FPolars)].Axis);
+      if hit then Break;
+    end;
+    if hit then
+    begin
+      SetLength(Result, Length(Result) + 1);
+      Result[High(Result)] := i;
+    end;
+  end;
+end;
+
+{ containPoint of the record's system: AX, AY in CSS px from the chart's
+  corner (a polar and a single work in the control's pixels) }
+function TTyCustomAdvanceChart.DzRecContains(ARec: Integer; AX, AY: Double): Boolean;
+var
+  ng, k: Integer;
+  s, dx, dy: Double;
+begin
+  Result := False;
+  ng := 0;
+  if FBuild <> nil then ng := FBuild.GridCount;
+  if ARec < ng then Exit(DzGridContains(ARec, AX, AY));
+  s := DzScale;
+  dx := FLastRect.Left + AX * s;
+  dy := FLastRect.Top + AY * s;
+  k := ARec - ng;
+  if k <= High(FPolars) then
+    Result := (FPolars[k] <> nil) and FPolars[k].ContainXY(dx, dy)
+  else if k - Length(FPolars) <= High(FSingles) then
+    Result := (FSingles[k - Length(FPolars)] <> nil)
+      and FSingles[k - Length(FPolars)].ContainXY(dx, dy);
+end;
+
+{ the record's component node (its z and zlevel) }
+function TTyCustomAdvanceChart.DzRecNode(ARec: Integer): TJSONData;
+var ng, k: Integer;
+begin
+  Result := nil;
+  if FOption = nil then Exit;
+  ng := 0;
+  if FBuild <> nil then ng := FBuild.GridCount;
+  if ARec < ng then Exit(FOption.ComponentAt('grid', FBuild.Grid(ARec).ComponentIndex));
+  k := ARec - ng;
+  if k <= High(FPolars) then
+  begin
+    if FPolars[k] <> nil then Result := FOption.ComponentAt('polar', FPolars[k].Index);
+  end
+  else if (k - Length(FPolars) <= High(FSingles)) and (FSingles[k - Length(FPolars)] <> nil) then
+    Result := FOption.ComponentAt('singleAxis', FSingles[k - Length(FPolars)].Index);
+end;
+
 { mergeControllerParams: the strongest of the insides -- 2 zooms and moves,
   1 moves only (zoomLock), 0 disabled -- or -1 for no controller }
 function TTyCustomAdvanceChart.DzControlType(AGrid: Integer): Integer;
 var ins: TTyIntegerArray; k, v: Integer;
 begin
   Result := -1;
-  ins := DzGridInsides(AGrid);
+  ins := DzRecInsides(AGrid);
   for k := 0 to High(ins) do
   begin
     if FDzInteract[ins[k]].Disabled then v := 0
@@ -740,7 +873,8 @@ var
 
   function Hit(ARole: TTyDzRole): Boolean;
   begin
-    Result := DzHits(i, ARole, AX, AY);
+    { [R5-J] a slider under the loading mask is not found }
+    Result := not MaskOver(ModelZLevel('dataZoom', i)) and DzHits(i, ARole, AX, AY);
     if Result then
     begin
       res.Kind := dtkSlider;
@@ -752,6 +886,8 @@ var
 begin
   Result := Default(TTyDzTarget);
   res := Default(TTyDzTarget);
+  { [R5-D] a slider is under the loading mask -- [R5-J] one of a zlevel
+    above the mask's is not (Slider below) }
   s := DzScale;
   if (AX < 0) or (AY < 0) or (AX > (FLastRect.Right - FLastRect.Left) / s)
     or (AY > (FLastRect.Bottom - FLastRect.Top) / s) then Exit;
@@ -1005,10 +1141,56 @@ var
   mn, mx: Double;
   moved: Boolean;
   items: TTyDzActionItemArray;
+  ng, pk, sk: Integer;
+  pol: TTyPolar;
+  sgl: TTySingle;
+  sc, e0, e1, oRad, oA, nRad, nA: Double;
+  srect: TTyXYWH;
+  isRadius: Boolean;
+
+  { getDirectionInfo.polar: pointToCoord of the old point (the zoom's is
+    [0, 0] as it is) and of the new one; the radius' px or the angle's
+    degrees over the axis' extent }
+  function PolarDir(AOld: Boolean): TTyDzDirection;
+  begin
+    if AOld then
+      pol.PointToCoord(FLastRect.Left + AOldX * sc, FLastRect.Top + AOldY * sc, oRad, oA)
+    else
+    begin
+      oRad := 0;
+      oA := 0;
+    end;
+    pol.PointToCoord(FLastRect.Left + ANewX * sc, FLastRect.Top + ANewY * sc, nRad, nA);
+    if isRadius then
+    begin
+      pol.AxisExtent(pol.RadiusAxis, e0, e1);
+      Result.Pixel := nRad - oRad;
+      if pol.RadiusInverse then Result.Signal := 1 else Result.Signal := -1;
+    end
+    else
+    begin
+      pol.AxisExtent(pol.AngleAxis, e0, e1);
+      Result.Pixel := nA - oA;
+      if pol.AngleInverse then Result.Signal := -1 else Result.Signal := 1;
+    end;
+    Result.PixelLength := e1 - e0;
+    Result.PixelStart := e0;
+  end;
+
 begin
   Result := False;
   items := nil;
-  ins := DzGridInsides(AGrid);
+  ins := DzRecInsides(AGrid);
+  ng := 0;
+  if FBuild <> nil then ng := FBuild.GridCount;
+  pol := nil;
+  sgl := nil;
+  sc := DzScale;
+  pk := AGrid - ng;
+  sk := pk - Length(FPolars);
+  if (AGrid >= ng) and (pk <= High(FPolars)) then pol := FPolars[pk]
+  else if (AGrid >= ng) and (sk >= 0) and (sk <= High(FSingles)) then sgl := FSingles[sk];
+  if (AGrid >= ng) and (pol = nil) and (sgl = nil) then Exit;
   for k := 0 to High(ins) do
   begin
     d := ins[k];
@@ -1017,31 +1199,52 @@ begin
     else setting := FDzInteract[d].MoveOnMouseWheel;
     if not TyDzBehaviour(setting, ssShift in AShift, ssCtrl in AShift,
       ssAlt in AShift, ssMeta in AShift) then Continue;
-    { the dataZoom's first target axis on this grid }
+    { the dataZoom's first target axis on this grid (polar, single) }
     axis := nil;
     for t := 0 to High(FZoomSpecs[d].Targets) do
     begin
       ax := DzAxis(FZoomSpecs[d].Targets[t].Dim, FZoomSpecs[d].Targets[t].AxisIndex);
-      if (ax <> nil) and (ax.GridIndex = FBuild.Grid(AGrid).ComponentIndex) then
+      if ax = nil then Continue;
+      if ((pol <> nil) and ((ax = pol.RadiusAxis) or (ax = pol.AngleAxis)))
+        or ((sgl <> nil) and (ax = sgl.Axis))
+        or ((pol = nil) and (sgl = nil) and (ax.GridIndex = FBuild.Grid(AGrid).ComponentIndex)) then
       begin
         axis := ax;
         Break;
       end;
     end;
     if axis = nil then Continue;
+    isRadius := (pol <> nil) and (axis = pol.RadiusAxis);
+    { getDirectionInfo.singleAxis: a grid's x / y by the orient, over the
+      single's rect }
+    if sgl <> nil then
+    begin
+      srect := sgl.Rect;
+      srect := TyXYWH((srect.X - FLastRect.Left) / sc, (srect.Y - FLastRect.Top) / sc,
+        srect.W / sc, srect.H / sc);
+    end;
     r[0] := FDzInLo[d];
     r[1] := FDzInHi[d];
     if AKind = 'zoom' then
     begin
-      dir := TyDzDirectionInfo(axis.Dim = 'x', axis.Inverse, DzGridRect(AGrid),
-        0, 0, ANewX, ANewY);
+      if pol <> nil then dir := PolarDir(False)
+      else if sgl <> nil then
+        dir := TyDzDirectionInfo(sgl.OrientHorizontal, axis.Inverse, srect, 0, 0, ANewX, ANewY)
+      else
+        dir := TyDzDirectionInfo(axis.Dim = 'x', axis.Inverse, DzGridRect(AGrid),
+          0, 0, ANewX, ANewY);
       DzSpans(d, mn, mx);
       moved := TyDzInsideZoom(r, dir, AScale, mn, mx);
     end
     else
     begin
-      dir := TyDzDirectionInfo(axis.Dim = 'x', axis.Inverse, DzGridRect(AGrid),
-        AOldX, AOldY, ANewX, ANewY);
+      if pol <> nil then dir := PolarDir(True)
+      else if sgl <> nil then
+        dir := TyDzDirectionInfo(sgl.OrientHorizontal, axis.Inverse, srect,
+          AOldX, AOldY, ANewX, ANewY)
+      else
+        dir := TyDzDirectionInfo(axis.Dim = 'x', axis.Inverse, DzGridRect(AGrid),
+          AOldX, AOldY, ANewX, ANewY);
       if AKind = 'pan' then moved := TyDzInsideMove(r, TyDzPanDelta(r, dir))
       else moved := TyDzInsideMove(r, TyDzScrollMoveDelta(r, dir, AScroll));
     end;
@@ -1070,9 +1273,14 @@ var
   rate: Double;
   a: TTyDzAction;
 begin
-  ins := DzGridInsides(AGrid);
+  ins := DzRecInsides(AGrid);
   rate := 100;
   if Length(ins) > 0 then rate := FDzInteract[ins[0]].Throttle;
+  if Length(FDzRoamThrottle) < DzRecCount then
+  begin
+    SetLength(FDzRoamThrottle, DzRecCount);
+    SetLength(FDzRoamBatch, DzRecCount);
+  end;
   FDzRoamBatch[AGrid] := AItems;
   if TyDzThrottleCall(FDzRoamThrottle[AGrid], DzClock, rate) then
   begin
@@ -1148,14 +1356,19 @@ begin
     for j := 0 to n - 1 do
       if found[j] then
       begin
-        if j <= High(FDzRawHas) then
+        if (j <= High(FDzRawHas)) and (AAction.Items[it].Overlay <> '') then
+          { [R5-G] the payload's pairs over what the settled option holds }
+          DzOverlayPut(j, AAction.Items[it].Overlay)
+        else if j <= High(FDzRawHas) then
         begin
           FDzRawHas[j] := True;
           FDzRawStart[j] := AAction.Items[it].Start;
           FDzRawStop[j] := AAction.Items[it].Stop;
           if j <= High(FDzRawValue) then FDzRawValue[j] := AAction.Items[it].IsValue;
+          if j <= High(FDzRawOv) then FDzRawOv[j] := '';
         end
-        else if (FZoomSpecs[j].SubType = 'select') and (Length(FZoomSpecs[j].Targets) > 0) then
+        else if (FZoomSpecs[j].SubType = 'select') and (Length(FZoomSpecs[j].Targets) > 0)
+          and not IsNan(AAction.Items[it].Start) and not IsNan(AAction.Items[it].Stop) then
           TbSelPut(FZoomSpecs[j].Targets[0].Dim + IntToStr(FZoomSpecs[j].Targets[0].AxisIndex),
             AAction.Items[it].IsValue, AAction.Items[it].Start, AAction.Items[it].Stop);
       end;
@@ -1496,7 +1709,7 @@ begin
         if FDzPanGrid >= 0 then
         begin
           FDzCursor := 'grabbing';
-          if FDzPanGrid < FBuild.GridCount then
+          if FDzPanGrid < DzRecCount then
           begin
             ct := FDzPanGrid;
             dx := FDzPanX;
@@ -1505,14 +1718,14 @@ begin
             FDzPanY := y;
             { preventDefaultMouseMove: every inside of the grid must allow it }
             Result := True;
-            for i in DzGridInsides(ct) do
+            for i in DzRecInsides(ct) do
               if not FDzInteract[i].PreventDefaultMouseMove then Result := False;
             DzRoam(ct, 'pan', AShift, dx, dy, x, y, 1, 0);
           end;
         end
         else if t.Kind = dtkNone then
-          for g := 0 to FBuild.GridCount - 1 do
-            if (DzControlType(g) >= 1) and DzGridContains(g, x, y) then
+          for g := 0 to DzRecCount - 1 do
+            if (DzControlType(g) >= 1) and DzRecContains(g, x, y) then
             begin
               FDzCursor := 'grab';
               Break;
@@ -1558,8 +1771,8 @@ begin
           that moves }
         FDzPanGrid := -1;
         if FDzDrag.Kind = dtkNone then
-          for g := 0 to FBuild.GridCount - 1 do
-            if (DzControlType(g) >= 1) and DzGridContains(g, x, y) then
+          for g := 0 to DzRecCount - 1 do
+            if (DzControlType(g) >= 1) and DzRecContains(g, x, y) then
             begin
               FDzPanGrid := g;
               FDzPanX := x;
@@ -1600,14 +1813,14 @@ begin
     dpWheel:
       begin
         if AZrDelta = 0 then Exit;
-        for g := 0 to FBuild.GridCount - 1 do
+        for g := 0 to DzRecCount - 1 do
         begin
           if DzControlType(g) < 2 then Continue;
-          if not DzGridContains(g, x, y) then Continue;
+          if not DzRecContains(g, x, y) then Continue;
           { stopped whether or not anything zooms }
           Result := True;
           DzRoam(g, 'zoom', AShift, 0, 0, x, y, TyDzWheelScale(AZrDelta), 0);
-          if (g < FBuild.GridCount) then
+          if (g < DzRecCount) then
             DzRoam(g, 'scrollMove', AShift, 0, 0, x, y, 1, TyDzScrollDelta(AZrDelta));
         end;
       end;
@@ -1774,6 +1987,8 @@ procedure TTyCustomAdvanceChart.DzItemsOf(AItem: TJSONObject; var AAction: TTyDz
 var
   idx: TTyIntegerArray;
   k, n, host: Integer;
+  ov: TJSONObject;
+  ovText: string;
   s0, s1, v0, v1: TJSONData;
   isVal: Boolean;
   lo, hi: Double;
@@ -1799,8 +2014,38 @@ begin
   v1 := AItem.Find('endValue');
   { setRawRange: a value end given makes the range a value one }
   isVal := Given(v0) or Given(v1);
+  { [R5-G] setRawRange end by end: each pair written whole when either of
+    it is (a category name stays a string, scale.parse reads it) }
+  ov := TJSONObject.Create;
+  try
+    if Given(s0) or Given(v0) then
+    begin
+      if Given(s0) then ov.Add('start', s0.Clone) else ov.Add('start', TJSONNull.Create);
+      if Given(v0) then ov.Add('startValue', v0.Clone) else ov.Add('startValue', TJSONNull.Create);
+    end;
+    if Given(s1) or Given(v1) then
+    begin
+      if Given(s1) then ov.Add('end', s1.Clone) else ov.Add('end', TJSONNull.Create);
+      if Given(v1) then ov.Add('endValue', v1.Clone) else ov.Add('endValue', TJSONNull.Create);
+    end;
+    if ov.Count > 0 then ovText := ov.AsJSON else ovText := '';
+  finally
+    ov.Free;
+  end;
   for k := 0 to High(idx) do
   begin
+    { [R5-G] an author's dataZoom takes the pairs as written }
+    if (ovText <> '') and (idx[k] <= High(FDzRawHas)) then
+    begin
+      n := Length(AAction.Items);
+      SetLength(AAction.Items, n + 1);
+      AAction.Items[n].DataZoomIndex := idx[k];
+      AAction.Items[n].IsValue := isVal;
+      AAction.Items[n].Start := NaN;
+      AAction.Items[n].Stop := NaN;
+      AAction.Items[n].Overlay := ovText;
+      Continue;
+    end;
     if isVal then
     begin
       lo := Num(v0);
@@ -1834,6 +2079,70 @@ begin
     AAction.Items[n].IsValue := isVal;
     AAction.Items[n].Start := lo;
     AAction.Items[n].Stop := hi;
+  end;
+end;
+
+{ [R5-G] the payload's pairs onto dataZoom AIndex's settled option: what a
+  gesture's window left (both ends) first, then the pairs over it }
+procedure TTyCustomAdvanceChart.DzOverlayPut(AIndex: Integer; const AOverlay: string);
+var
+  base, add: TJSONData;
+  k: Integer;
+begin
+  if Length(FDzRawOv) < Length(FDzRawHas) then SetLength(FDzRawOv, Length(FDzRawHas));
+  if FDzRawOv[AIndex] <> '' then base := GetJSON(FDzRawOv[AIndex])
+  else base := TJSONObject.Create;
+  try
+    if FDzRawHas[AIndex] then
+    begin
+      TJSONObject(base).Clear;
+      if (AIndex <= High(FDzRawValue)) and FDzRawValue[AIndex] then
+      begin
+        TJSONObject(base).Add('start', TJSONNull.Create);
+        TJSONObject(base).Add('startValue', FDzRawStart[AIndex]);
+        TJSONObject(base).Add('end', TJSONNull.Create);
+        TJSONObject(base).Add('endValue', FDzRawStop[AIndex]);
+      end
+      else
+      begin
+        TJSONObject(base).Add('start', FDzRawStart[AIndex]);
+        TJSONObject(base).Add('startValue', TJSONNull.Create);
+        TJSONObject(base).Add('end', FDzRawStop[AIndex]);
+        TJSONObject(base).Add('endValue', TJSONNull.Create);
+      end;
+      FDzRawHas[AIndex] := False;
+    end;
+    add := GetJSON(AOverlay);
+    try
+      for k := 0 to TJSONObject(add).Count - 1 do
+      begin
+        if TJSONObject(base).Find(TJSONObject(add).Names[k]) <> nil then
+          TJSONObject(base).Delete(TJSONObject(add).Names[k]);
+        TJSONObject(base).Add(TJSONObject(add).Names[k], TJSONObject(add).Items[k].Clone);
+      end;
+    finally
+      add.Free;
+    end;
+    FDzRawOv[AIndex] := base.AsJSON;
+  finally
+    base.Free;
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.DzApplyOv(AIndex: Integer);
+var
+  ov: TJSONData;
+  node: TJSONData;
+  rm: TJSONData;
+begin
+  ov := GetJSON(FDzRawOv[AIndex]);
+  try
+    rm := nil;
+    node := FOption.ComponentAt('dataZoom', AIndex);
+    if node is TJSONObject then rm := TJSONObject(node).Find('rangeMode');
+    if ov is TJSONObject then TyDzApplyOverlay(FZoomSpecs[AIndex], TJSONObject(ov), rm);
+  finally
+    ov.Free;
   end;
 end;
 
@@ -1943,6 +2252,7 @@ begin
   s := DzScale;
   x := (AX - FLastRect.Left) / s;
   y := (AY - FLastRect.Top) / s;
-  for g := 0 to FBuild.GridCount - 1 do
-    if (DzControlType(g) >= 1) and DzGridContains(g, x, y) then Exit(True);
+  { [R5-D] every roam record: a polar's and a single axis' too }
+  for g := 0 to DzRecCount - 1 do
+    if (DzControlType(g) >= 1) and DzRecContains(g, x, y) then Exit(True);
 end;

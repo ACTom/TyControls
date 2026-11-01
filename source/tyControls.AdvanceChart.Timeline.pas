@@ -216,10 +216,62 @@ function TyTlJsNum(A: TJSONData): Double;
 
 implementation
 
-uses tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Scale,
+uses
+  { [R5-I] first: nothing of theirs is to stand over the units below }
+  tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Style,
+  tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Scale,
   tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Layout,
   tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.Time,
-  tyControls.AdvanceChart.AxisLabels, tyControls.FontUnits;
+  tyControls.AdvanceChart.AxisLabels, tyControls.FontUnits,
+  tyControls.AdvanceChart.Option;
+
+{ [R5-I] createEmphasisDefaultState over a path's emphasis style (a JSON
+  style object): 'inherit' takes the normal fill; no fill of its own
+  (none written, or null all the way up) lifts the normal one
+  (liftColor); else no stroke of its own lifts the normal stroke }
+procedure TyTlEmphasisDefault(AStyle: TJSONObject; const AFill, AStroke: TTyAnimValue);
+
+  function Has(const AV: TTyAnimValue): Boolean;
+  begin
+    Result := (AV.Kind = avkString) and (AV.Str <> 'none');
+  end;
+
+  function HasJ(AD: TJSONData): Boolean;
+  begin
+    Result := (AD <> nil) and (AD.JSONType <> jtNull)
+      and not ((AD.JSONType = jtString) and (AD.AsString = 'none'));
+  end;
+
+  function Lifted(const AText: string): string;
+  var c: TTyChartColor; fs: TFormatSettings;
+  begin
+    if not TyTryParseChartColor(AText, c) then Exit(AText);
+    c := TyChartLiftColor(c);
+    fs := DefaultFormatSettings;
+    fs.DecimalSeparator := '.';
+    Result := Format('rgba(%d,%d,%d,%s)', [(c shr 16) and $FF, (c shr 8) and $FF, c and $FF,
+      TyJsNumberToString(((c shr 24) and $FF) / 255)], fs);
+  end;
+
+var d: TJSONData;
+begin
+  if not (Has(AFill) or Has(AStroke)) then Exit;
+  d := AStyle.Find('fill');
+  if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'inherit') then
+  begin
+    if AFill.Kind = avkString then AStyle.Strings['fill'] := AFill.Str;
+  end
+  else if not HasJ(d) and Has(AFill) then
+  begin
+    if d <> nil then AStyle.Delete('fill');
+    AStyle.Add('fill', Lifted(AFill.Str));
+  end
+  else if not HasJ(AStyle.Find('stroke')) and Has(AStroke) then
+  begin
+    if AStyle.Find('stroke') <> nil then AStyle.Delete('stroke');
+    AStyle.Add('stroke', Lifted(AStroke.Str));
+  end;
+end;
 
 const
   { a DOUBLE: a bare real literal is a Single in FPC }
@@ -756,8 +808,9 @@ const
     'shadowBlur', 'shadowOffsetX', 'shadowOffsetY');
 var
   d, g: TJSONData;
-  i: Integer;
+  i, k: Integer;
   s: string;
+  rich, tok: TJSONObject;
 
   function Glob(const AKey: string): TJSONData;
   begin
@@ -830,6 +883,25 @@ begin
   end;
   d := ChainGet(AChain, 'borderType');
   if d <> nil then Result.Add('borderDash', d.Clone);
+  { [R5-C] setTextStyleCommon's rich: every name the chain's rich objects
+    write, each token's own text style (createTextStyle of the token's
+    model, no global) [was: not read] }
+  rich := nil;
+  for i := 0 to High(AChain) do
+  begin
+    if AChain[i] = nil then Continue;
+    d := AChain[i].Find('rich');
+    if not (d is TJSONObject) then Continue;
+    for k := 0 to TJSONObject(d).Count - 1 do
+    begin
+      if not (TJSONObject(d).Items[k] is TJSONObject) then Continue;
+      if rich = nil then rich := TJSONObject.Create;
+      if rich.IndexOfName(TJSONObject(d).Names[k]) >= 0 then Continue;
+      tok := TextStyleOf([TJSONObject(TJSONObject(d).Items[k])], nil);
+      rich.Add(TJSONObject(d).Names[k], tok);
+    end;
+  end;
+  if rich <> nil then Result.Add('rich', rich);
 end;
 
 { a style object as a state's flattened props under 'style.' }
@@ -1075,6 +1147,7 @@ var
   widths, heights: TTyDoubleArray;
   fontPx, interval: Double;
   fontName: string;
+  fontWt: Integer;
   w, h: Double;
   props: TTyAnimProps;
   cfg: TTyAnimCfg;
@@ -1086,7 +1159,7 @@ var
   end;
 
   function LabelOf(AValue: Double; AIndex: Integer): string;
-  var fmt: TJSONData; lab: string; tf: TTyTimeLabelFormatter;
+  var fmt: TJSONData; lab: string; tf: TTyTimeLabelFormatter; prm: TTyChartCallbackParams;
   begin
     fmt := lbl.Find('formatter');
     if not NotNull(fmt) then fmt := nil;
@@ -1094,8 +1167,19 @@ var
     begin
       { leveledFormat: a string a template for every unit; else the
         dictionary's entry of the value's own unit }
+      { [R5-C] a named formatter answers the template (leveledFormat) }
       if (fmt <> nil) and (fmt.JSONType = jtString) and TyChartIsHandlerRef(fmt.AsString) then
-        fmt := nil;
+      begin
+        prm := TyChartBlankParams;
+        prm.ComponentType := 'timeline';
+        SetLength(prm.Values, 1);
+        prm.Values[0] := AValue;
+        prm.ValueText := TyChartValueText(AValue);
+        prm.DataIndex := AIndex;
+        prm.HasLevel := True;
+        prm.Level := 0;
+        Exit(TyFormatTime(AValue, TyChartRunHandler(fmt.AsString, TyChartOneParams(prm)), AUseUTC));
+      end;
       tf := TyTimeLabelFormatterOf(fmt);
       Exit(TyTimeLeveledLabel(tf, AValue, TyTimeUnitOf(AValue, AUseUTC), 0, AUseUTC));
     end;
@@ -1112,6 +1196,28 @@ var
       lab := TyJsAddCommas(TyJsToFixedStr(AValue, TyGetPrecision(AValue)));
     if (fmt <> nil) and (fmt.JSONType = jtString) and not TyChartIsHandlerRef(fmt.AsString) then
       Result := TyJsReplaceFirst(fmt.AsString, '{value}', lab)
+    else if (fmt <> nil) and (fmt.JSONType = jtString) then
+    begin
+      { [R5-C] makeLabelFormatter's function: the raw value (a category's
+        name) and the index -- a category's tick value from the extent's
+        start, else the label's place [was: not called] }
+      prm := TyChartBlankParams;
+      prm.ComponentType := 'timeline';
+      if FAxisType = 'category' then
+      begin
+        prm.Name := lab;
+        prm.ValueText := lab;
+        prm.DataIndex := Trunc(AValue);
+      end
+      else
+      begin
+        SetLength(prm.Values, 1);
+        prm.Values[0] := AValue;
+        prm.ValueText := TyChartValueText(AValue);
+        prm.DataIndex := AIndex;
+      end;
+      Result := TyChartRunHandler(fmt.AsString, TyChartOneParams(prm));
+    end
     else
       Result := lab;
   end;
@@ -1659,6 +1765,10 @@ begin
     st := ItemStyleOf([Sub(Sub(t, 'emphasis'), 'itemStyle'),
       Sub(Sub(fo, 'emphasis'), 'itemStyle')], False);
     try
+      { [R5-I] enableHoverEmphasis: the default state over it -- an emphasis
+        colour written as null all the way up lifts the tick's own [was:
+        the tick kept its colour] }
+      TyTlEmphasisDefault(st, el.StyleValue('fill'), el.StyleValue('stroke'));
       StyleProps(st, FEmph[n]);
       FHasEmph[n] := True;
     finally
@@ -1725,6 +1835,10 @@ begin
           d := ChainGet([lbl], 'fontFamily');
           if d = nil then d := gtext.Find('fontFamily');
           fontName := StrOf(d);
+          { [R5-A] and its style: getFont's first part }
+          d := ChainGet([lbl], 'fontStyle');
+          if d = nil then d := gtext.Find('fontStyle');
+          fontWt := TyFontStyleOver(d, 400);
           SetLength(widths, nData);
           SetLength(heights, nData);
           n := 0;
@@ -1736,7 +1850,7 @@ begin
             h := 0;
             if AMeasurer <> nil then
               AMeasurer.MeasureLine(LabelOf(i, i), fontName, TyFontSizeFromPx(fontPx),
-                400, w, h);
+                fontWt, w, h);
             widths[n] := w;
             heights[n] := h;
             Inc(n);

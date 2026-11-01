@@ -741,6 +741,12 @@ add({ id: 'sf-highlight-edge', group: 'focus-sankey', note: "the highlight actio
   steps: [{ action: { type: 'highlight', seriesIndex: 0, dataType: 'edge', dataIndex: 2 } },
     { action: { type: 'downplay', seriesIndex: 0, dataType: 'edge', dataIndex: 2 } },
     { action: { type: 'highlight', seriesIndex: 0, dataType: 'edge', dataIndex: [1, 5] } }] });
+// [R5-F] dataType 'edge' and no index: ChartView.highlight's toggleHighlight over the whole edge data
+add({ id: 'sf-highlight-edge-all', group: 'focus-sankey', note: "highlight {dataType: 'edge'} with no index lights every link (ChartView's toggleHighlight over the edge data); downplay the same",
+  option: sankeyFocus('none'),
+  steps: [{ action: { type: 'highlight', seriesIndex: 0, dataType: 'edge' } },
+    { action: { type: 'downplay', seriesIndex: 0, dataType: 'edge' } },
+    { action: { type: 'highlight', seriesIndex: 0, dataType: 'node' } }] });
 add({ id: 'sf-colour-words', group: 'focus-sankey', note: "state lineStyle colours 'target' (emphasis) and 'source' (blur) take the end nodes' colours",
   option: sankeyFocus('adjacency', { emphasis: { focus: 'adjacency', lineStyle: { color: 'target' } }, blur: { lineStyle: { color: 'source' } } }),
   lazyFocus: true });

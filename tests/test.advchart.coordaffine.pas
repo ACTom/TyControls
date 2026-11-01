@@ -467,6 +467,9 @@ begin
           e := lst.Element(i);
           if e.Datum.IsEdge or (e.Datum.SeriesIndex <> si)
             or (e.Datum.RawDataIndex <> k) then Continue;
+          { [R5-I] a bar clipped past the plot is kept, ignored -- upstream's
+            hidden one: neither drawn nor hit }
+          if e.Ignore then Continue;
           if e.Caption.FontSizeLogical > 0 then Continue;
           if (typ = 'pictorialBar')
             and (e.Style.HasFill or (e.Style.StrokeWidthLogical > 0)) then Continue;

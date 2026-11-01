@@ -693,6 +693,20 @@ begin
   for k := 0 to 3 do Result.Radius[k] := S.Radius[k];
   if S.HasOpacity then Result.Opacity := S.Opacity else Result.Opacity := AOpacityFallback;
   Result.Drawn := Result.HasFill or Result.HasStroke;
+  { [R5-A] the box's canvas shadow: style.shadowBlur || 0, the offsets alike,
+    shadowColor || 'transparent' -- where the text style names none its
+    prototype's '#000' }
+  if (not S.HasBoxShadowColor) or ((S.BoxShadowColor shr 24) <> 0) then
+  begin
+    if (not IsNan(S.BoxShadowBlur)) and (S.BoxShadowBlur > 0) then
+      Result.ShadowBlur := S.BoxShadowBlur;
+    if not IsNan(S.BoxShadowOffsetX) then Result.ShadowOffsetX := S.BoxShadowOffsetX;
+    if not IsNan(S.BoxShadowOffsetY) then Result.ShadowOffsetY := S.BoxShadowOffsetY;
+    if S.HasBoxShadowColor then Result.ShadowColor := S.BoxShadowColor
+    else Result.ShadowColor := $FF000000;
+    Result.HasShadow := (Result.ShadowBlur > 0) or (Result.ShadowOffsetX <> 0)
+      or (Result.ShadowOffsetY <> 0);
+  end;
   { [R2-F] a picture: a ZRImage of the box after the rect -- which is made
     only for a lineHeight or a border, and then takes the opacity (the
     common style is the rect's), the picture keeping its own 1 }
@@ -769,6 +783,8 @@ var
     p.W := tk.ContentWidth;
     p.H := tk.ContentHeight;
     useDefaultFill := False;
+    p.TokenFill := found and ts.HasFill;
+    p.TokenStroke := found and ts.HasStroke;
     if found and ts.HasFill then
     begin
       p.HasFill := not ts.FillNone;

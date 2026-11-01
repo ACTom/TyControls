@@ -77,6 +77,9 @@ type
     BorderRadiusLogical: Double;
     HasPadding: Boolean;
     PadLeft, PadTop, PadRight, PadBottom: Double;
+    { [R5-A] the label's fontStyle (TyFontStyleCode): the nearest block's,
+      else the root textStyle's }
+    FontStyle: Byte;
   end;
 
   TTyAxisPointerSpec = record
@@ -104,7 +107,44 @@ type
       `show` triggers the tooltip with. A tooltip axis is handed its own
       (the trigger), so this is not read for one. }
     TriggerTooltip: Boolean;
+    { [R5-D] `triggerEmphasis` as the axis' own model says it, default true:
+      whether the rows the shown pointer stands on are highlighted
+      (axisTrigger.dispatchHighDownActually). Like triggerTooltip it is not
+      one of the fields the tooltip hands its axes, so tooltip.axisPointer's
+      is never read: the axis block, then the root component. }
+    TriggerEmphasis: Boolean;
   end;
+
+{ [R5-D] axisPointerModel.getModel('handle'): the axis' own
+  axisPointer.handle over the axisPointer component's, key by key, over
+  AxisPointerModel's defaults (show false, the default icon, size 45, margin
+  50, throttle 40). getItemStyle's keys: color (unwritten: the skin's
+  accent, upstream's accent40), borderColor, borderWidth, opacity. }
+type
+  TTyAxisPointerHandle = record
+    Show: Boolean;
+    Icon: string;
+    SizeW, SizeH: Double;
+    Margin: Double;
+    Throttle: Double;
+    HasColour: Boolean;
+    Colour: TTyChartColor;
+    { a colour written as 'none' (or one that does not parse): no fill }
+    NoFill: Boolean;
+    HasBorderColour: Boolean;
+    BorderColour: TTyChartColor;
+    BorderWidth: Double;
+    Opacity: Double;
+    { [R5-F] getItemStyle's shadow keys (the four _renderHandle lists) }
+    HasShadow: Boolean;
+    Shadow: TTyChartShadow;
+  end;
+
+const
+  TyAxisPointerHandleIcon = 'M10.7,11.9v-1.3H9.3v1.3c-4.9,0.3-8.8,4.4-8.8,9.4c0,5,3.9,9.1,8.8,9.4h1.3c4.9-0.3,8.8-4.4,8.8-9.4C19.5,16.3,15.6,12.2,10.7,11.9z M13.3,24.4H6.7v-1.2h6.6z M13.3,22H6.7v-1.2h6.6z M13.3,19.6H6.7v-1.2h6.6z';
+
+function TyAxisPointerHandleOf(AOption: TTyChartOption;
+  const AAxisMainType: string; AAxisIndex: Integer): TTyAxisPointerHandle;
 
 { The resolved spec for one axis.
 
@@ -120,7 +160,8 @@ type
   other axis as well. }
 function TyAxisPointerSpecOf(AOption: TTyChartOption;
   const AAxisMainType: string; AAxisIndex: Integer; AAxisIsCategory: Boolean;
-  AFromTooltip, ATriggerTooltip, ACross: Boolean): TTyAxisPointerSpec;
+  AFromTooltip, ATriggerTooltip, ACross: Boolean;
+  ACoordTip: TJSONObject = nil): TTyAxisPointerSpec;
 
 { `label.precision` the way upstream's round reads it: 'auto'; a number; a
   string Number() reads ('3' is three, '' is nought); true and false as one
@@ -130,13 +171,22 @@ function TyLabelPrecisionOf(AData: TJSONData): TTyLabelPrecision;
 
 { The type the TOOLTIP asked for, read on its own -- which is how a caller
   learns it said 'cross' before that word is rewritten away per axis. }
-function TyTooltipAxisPointerType(AOption: TTyChartOption): TTyAxisPointerType;
+function TyTooltipAxisPointerType(AOption: TTyChartOption;
+  ACoordTip: TJSONObject = nil): TTyAxisPointerType;
 
 { Which axis an 'axis' trigger points at: 'x', 'y', or '' for auto.
   `tooltip.axisPointer.axis`, default 'auto'. }
-function TyTooltipAxisPointerAxis(AOption: TTyChartOption): string;
+function TyTooltipAxisPointerAxis(AOption: TTyChartOption;
+  ACoordTip: TJSONObject = nil): string;
 { The same on a polar: 'radius', 'angle', or '' for auto [Batch 111] }
-function TyTooltipPolarPointerAxis(AOption: TTyChartOption): string;
+function TyTooltipPolarPointerAxis(AOption: TTyChartOption;
+  ACoordTip: TJSONObject = nil): string;
+{ [R5-D] ACoordTip IN ALL FOUR: the coordinate system's own `tooltip`
+  (grid, polar, singleAxis -- nil for none). collectAxesInfo reads
+  coordSysModel.getModel('tooltip', globalTooltipModel), so every key of it
+  is asked first and the global tooltip's only where it is missing or null
+  -- `axisPointer.type` / `axis`, and the fields makeAxisPointerModel copies
+  (a whole lineStyle at the first level that has one). }
 
 { The band a shadow covers, CLAMPED TO THE AXIS EXTENT rather than centred and
   overflowing -- so the band at the first or last category is HALF WIDTH, and
@@ -274,6 +324,8 @@ begin
     ASpec.HasPrecision := True;
     ASpec.Precision := TyLabelPrecisionOf(d);
   end;
+  if Claim(lbl, 'fontStyle', ASeen, 'label.') then
+    ASpec.FontStyle := TyFontStyleCode(lbl.Find('fontStyle'));
   if Claim(lbl, 'margin', ASeen, 'label.') then
   begin
     d := lbl.Find('margin');
@@ -403,6 +455,9 @@ begin
     root; never the tooltip's (not one of the nine fields) }
   if (ALevel <> apnTooltip) and Claim(ANode, 'triggerTooltip', ASeen) then
     ASpec.TriggerTooltip := PtrTruthy(ANode.Find('triggerTooltip'));
+  { [R5-D] triggerEmphasis the same way }
+  if (ALevel <> apnTooltip) and Claim(ANode, 'triggerEmphasis', ASeen) then
+    ASpec.TriggerEmphasis := PtrTruthy(ANode.Find('triggerEmphasis'));
   if Claim(ANode, 'type', ASeen) then
   begin
     d := ANode.Find('type');
@@ -476,10 +531,24 @@ begin
   if d is TJSONObject then Result := TJSONObject(d);
 end;
 
-function TyTooltipAxisPointerType(AOption: TTyChartOption): TTyAxisPointerType;
+{ [R5-D] tooltip.axisPointer.<AKey>: the coordinate system's, else the
+  global tooltip's (Model.get falls to the parent on null) }
+function TipPointerKey(AOption: TTyChartOption; ACoordTip: TJSONObject;
+  const AKey: string): TJSONData;
+var ap: TJSONObject;
+begin
+  Result := nil;
+  ap := PointerNodeIn(ACoordTip);
+  if ap <> nil then Result := ap.Find(AKey);
+  if (Result <> nil) and (Result.JSONType <> jtNull) then Exit;
+  Result := nil;
+  ap := PointerNodeIn(TooltipNode(AOption));
+  if ap <> nil then Result := ap.Find(AKey);
+end;
+
+function TyTooltipAxisPointerType(AOption: TTyChartOption;
+  ACoordTip: TJSONObject): TTyAxisPointerType;
 var
-  tip: TJSONObject;
-  ap: TJSONObject;
   d: TJSONData;
 begin
   { THE TOOLTIP'S OWN DEFAULT IS 'line' AND IT WINS AT RUNTIME. Both upstream
@@ -489,44 +558,32 @@ begin
     per-axis-kind default table anywhere in 6.1: every shadow in an ECharts
     bar demo was written by its author. }
   Result := aptLine;
-  tip := TooltipNode(AOption);
-  if tip = nil then Exit;
-  ap := PointerNodeIn(tip);
-  if ap = nil then Exit;
-  d := ap.Find('type');
+  d := TipPointerKey(AOption, ACoordTip, 'type');
   if (d <> nil) and (d.JSONType = jtString) then
     Result := PointerTypeOf(d.AsString);
 end;
 
-function TyTooltipAxisPointerAxis(AOption: TTyChartOption): string;
+function TyTooltipAxisPointerAxis(AOption: TTyChartOption;
+  ACoordTip: TJSONObject): string;
 var
-  tip, ap: TJSONObject;
   d: TJSONData;
   s: string;
 begin
   Result := '';
-  tip := TooltipNode(AOption);
-  if tip = nil then Exit;
-  ap := PointerNodeIn(tip);
-  if ap = nil then Exit;
-  d := ap.Find('axis');
+  d := TipPointerKey(AOption, ACoordTip, 'axis');
   if (d = nil) or (d.JSONType <> jtString) then Exit;
   s := d.AsString;
   if (s = 'x') or (s = 'y') then Result := s;
 end;
 
-function TyTooltipPolarPointerAxis(AOption: TTyChartOption): string;
+function TyTooltipPolarPointerAxis(AOption: TTyChartOption;
+  ACoordTip: TJSONObject): string;
 var
-  tip, ap: TJSONObject;
   d: TJSONData;
   s: string;
 begin
   Result := '';
-  tip := TooltipNode(AOption);
-  if tip = nil then Exit;
-  ap := PointerNodeIn(tip);
-  if ap = nil then Exit;
-  d := ap.Find('axis');
+  d := TipPointerKey(AOption, ACoordTip, 'axis');
   if (d = nil) or (d.JSONType <> jtString) then Exit;
   s := d.AsString;
   if (s = 'radius') or (s = 'angle') then Result := s;
@@ -534,7 +591,8 @@ end;
 
 function TyAxisPointerSpecOf(AOption: TTyChartOption;
   const AAxisMainType: string; AAxisIndex: Integer; AAxisIsCategory: Boolean;
-  AFromTooltip, ATriggerTooltip, ACross: Boolean): TTyAxisPointerSpec;
+  AFromTooltip, ATriggerTooltip, ACross: Boolean;
+  ACoordTip: TJSONObject): TTyAxisPointerSpec;
 var
   seen: TTyStringArray;
   tip: TJSONObject;
@@ -546,6 +604,7 @@ begin
   Result.LineDash := todDashed;
   Result.LabelSpec.MarginLogical := 3;
   Result.TriggerTooltip := True;
+  Result.TriggerEmphasis := True;
   { [R2-I7] THE ROOT COMPONENT'S DEFAULT IS A SHOWN LABEL. Only the volatile
     tooltip layer turns it off (below); an axis collected for its own `show`
     reads the root's `label.show: true`. }
@@ -571,6 +630,10 @@ begin
       arm at the border shade and the other at a darker one, both dashed. }
     if ACross and not ATriggerTooltip then penKey := 'crossStyle'
     else penKey := 'lineStyle';
+    { [R5-D] the coordinate system's tooltip first: each field the first
+      level that has it }
+    if ACoordTip <> nil then
+      MergePointerNode(PointerNodeIn(ACoordTip), penKey, apnTooltip, Result, seen);
     if tip <> nil then
       MergePointerNode(PointerNodeIn(tip), penKey, apnTooltip, Result, seen);
   end;
@@ -582,6 +645,12 @@ begin
   else
     MergePointerNode(PointerNodeIn(AOption.Root), 'lineStyle', apnAll,
       Result, seen);
+  { [R5-A] the label's text style falls to the root textStyle (labelStyle's
+    global one): its fontStyle where no block wrote one }
+  if (Result.LabelSpec.FontStyle = TyFontStyleUnset) and (AOption.Root is TJSONObject)
+    and (TJSONObject(AOption.Root).Find('textStyle') is TJSONObject) then
+    Result.LabelSpec.FontStyle := TyFontStyleCode(TJSONObject(TJSONObject(
+      AOption.Root).Find('textStyle')).Find('fontStyle'));
 
   if not AFromTooltip then Exit;
 
@@ -608,6 +677,100 @@ begin
     rather than nudging it. An explicit `label.show` survives either way. }
   if not Result.LabelSpec.ShowWritten then
     Result.LabelSpec.Show := ACross;
+end;
+
+function TyAxisPointerHandleOf(AOption: TTyChartOption;
+  const AAxisMainType: string; AAxisIndex: Integer): TTyAxisPointerHandle;
+var
+  own, root: TJSONObject;
+
+  function HandleIn(AAp: TJSONObject): TJSONObject;
+  var d: TJSONData;
+  begin
+    Result := nil;
+    if AAp = nil then Exit;
+    d := AAp.Find('handle');
+    if d is TJSONObject then Result := TJSONObject(d);
+  end;
+
+  { Model.get through the parent: the axis' key, else the component's }
+  function Key(const AName: string): TJSONData;
+  begin
+    Result := nil;
+    if own <> nil then Result := own.Find(AName);
+    if (Result <> nil) and (Result.JSONType <> jtNull) then Exit;
+    Result := nil;
+    if root <> nil then Result := root.Find(AName);
+    if (Result <> nil) and (Result.JSONType = jtNull) then Result := nil;
+  end;
+
+  function Num(const AName: string; ADefault: Double): Double;
+  var d: TJSONData;
+  begin
+    Result := ADefault;
+    d := Key(AName);
+    if d is TJSONNumber then Result := d.AsFloat;
+  end;
+
+var
+  d: TJSONData;
+  c: TTyChartColor;
+begin
+  Result := Default(TTyAxisPointerHandle);
+  Result.Icon := TyAxisPointerHandleIcon;
+  Result.SizeW := 45;
+  Result.SizeH := 45;
+  Result.Margin := 50;
+  Result.Throttle := 40;
+  Result.Opacity := 1;
+  if AOption = nil then Exit;
+  own := HandleIn(PointerNodeIn(AOption.ComponentAt(AAxisMainType, AAxisIndex)));
+  root := HandleIn(PointerNodeIn(AOption.Root));
+  d := Key('show');
+  Result.Show := (d <> nil) and (((d.JSONType = jtBoolean) and d.AsBoolean)
+    or ((d.JSONType = jtNumber) and (d.AsFloat <> 0))
+    or ((d.JSONType = jtString) and (d.AsString <> '')));
+  d := Key('icon');
+  if (d <> nil) and (d.JSONType = jtString) then Result.Icon := d.AsString;
+  { size: a number, or [w, h] }
+  d := Key('size');
+  if d is TJSONNumber then
+  begin
+    Result.SizeW := d.AsFloat;
+    Result.SizeH := d.AsFloat;
+  end
+  else if (d is TJSONArray) and (d.Count >= 2) then
+  begin
+    if TJSONArray(d).Items[0] is TJSONNumber then Result.SizeW := TJSONArray(d).Items[0].AsFloat;
+    if TJSONArray(d).Items[1] is TJSONNumber then Result.SizeH := TJSONArray(d).Items[1].AsFloat;
+  end;
+  Result.Margin := Num('margin', 50);
+  { `handleModel.get('throttle') || 0` }
+  Result.Throttle := Num('throttle', 40);
+  if IsNan(Result.Throttle) then Result.Throttle := 0;
+  d := Key('color');
+  if (d <> nil) and (d.JSONType = jtString) then
+  begin
+    if TyTryParseChartColor(d.AsString, c) and not TyChartColorIsNone(d.AsString) then
+    begin
+      Result.HasColour := True;
+      Result.Colour := c;
+    end
+    else
+      Result.NoFill := True;
+  end;
+  d := Key('borderColor');
+  if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c)
+    and not TyChartColorIsNone(d.AsString) then
+  begin
+    Result.HasBorderColour := True;
+    Result.BorderColour := c;
+  end;
+  Result.BorderWidth := Num('borderWidth', 0);
+  Result.Opacity := Num('opacity', 1);
+  { [R5-F] the shadow [was: not read] }
+  Result.HasShadow := TyShadowOfValues(Key('shadowBlur'), Key('shadowOffsetX'),
+    Key('shadowOffsetY'), Key('shadowColor'), Result.Shadow);
 end;
 
 function TyAxisPointerBand(AAtPx, ABandWidthPx, AExtentA, AExtentB: Double;

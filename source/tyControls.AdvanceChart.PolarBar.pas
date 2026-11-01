@@ -86,8 +86,29 @@ type
     Valid: TTyBoolArray;
     Corners: TTyPolarCornerSpecArray;
     Labels: TTyPolarLabelAskArray;
+    { [R5-I] WHAT updateStyle READS OFF THE ELEMENT, per view row: its shape
+      as the last render left it (the update sets the new one after
+      updateStyle, so the percentage corners and the label's automatic turn
+      are the old layout's) -- HasStyle False where the row had no element
+      before (a new one: its own layout). Filled by the control. }
+    StyleRows: TTyPolarSectorArray;
+    HasStyle: TTyBoolArray;
   end;
   TTyPolarBarLayoutArray = array of TTyPolarBarLayout;
+
+  { [R5-I] A POLAR BAR SERIES' ELEMENTS AS A RENDER LEFT THEM, for the next
+    one's updateStyle: its view's key (the view id and type), each view
+    row's getId, the element's shape (clipped as built) and whether the row
+    had one }
+  TTyPolarStyleMem = record
+    Key: string;
+    { the series index it had (its proxies' key) }
+    Series: Integer;
+    RowKeys: TTyStringArray;
+    Rows: TTyPolarSectorArray;
+    Has: TTyBoolArray;
+  end;
+  TTyPolarStyleMemArray = array of TTyPolarStyleMem;
 
 { barLayoutPolar over every polar axis a bar series stands on: one entry
   per binding slot, Solved only for a bar on a polar. }

@@ -558,8 +558,10 @@ function readClips(chart) {
     return { s: s.seriesIndex, rect: cp ? [cp.shape.x, cp.shape.y, cp.shape.width, cp.shape.height].map(hex) : null };
   });
 }
+// [spec 242] a text too: updateElOnState gives every displayable its states
+// (a label, a textContent, is its host's and stays out)
 function readSt(chart) {
-  return keyedTree(chart).filter(q => !q.el.isGroup && q.el.type !== 'text').map(q => {
+  return keyedTree(chart).filter(q => !q.el.isGroup && !/#label$/.test(q.key)).map(q => {
     const s = q.el.style;
     return { key: q.key, states: (q.el.currentStates || []).slice(), fill: colourOf(s.fill), stroke: colourOf(s.stroke),
       lineWidth: hexN(s.lineWidth), opacity: hex(opac(s)), z2: q.el.z2 };

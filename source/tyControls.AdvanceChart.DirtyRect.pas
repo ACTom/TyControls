@@ -566,6 +566,8 @@ begin
     idx := AList.PaintOrder(i);
     el := AList.Element(idx);
     if el.Silent or el.Ignore or el.ProgHidden then Continue;
+    { [R5-J] the canvas searched now }
+    if not TyHitBandHas(el.ZLevel) then Continue;
     if el.Shape.Kind = cskLarge then Continue;
     if not TyElementCoarseBox(el, APPI, box) then Continue;
     if not TyZrRectIntersect(box, pr) then Continue;

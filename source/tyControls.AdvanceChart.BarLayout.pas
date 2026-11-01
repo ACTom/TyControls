@@ -632,6 +632,11 @@ var
         "leave what is there" would keep the earlier value and quietly draw a
         wider bar than the chart being copied. }
       v := SizeIn(ClimbView(node, AOption, 'barMinWidth'), 'barMinWidth');
+      { [R5-G] `|| 1`: a NUMBER 0 is falsy and takes the default (the string
+        '0' is truthy and is nought) [was: barMinWidth 0 floored nothing] }
+      if v.Present and not v.Percent and (v.Value = 0)
+        and (ClimbView(node, AOption, 'barMinWidth').Find('barMinWidth').JSONType = jtNumber) then
+        v := NoSize;
       if v.Present then
         cols[m].MinWidth := Resolve(v, band)
       else if (si >= 0) and (si <= High(ALarge)) and ALarge[si] then

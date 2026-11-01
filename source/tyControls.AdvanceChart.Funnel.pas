@@ -152,6 +152,14 @@ type
     HasFormatter: Boolean;
     { The ink options, read by the shared reader. }
     Ink: TTyLabelSpec;
+    { [R5-A] the label's fontStyle as written (TyFontStyleCode), over the
+      ink's weight }
+    FontStyle: Byte;
+    { [R5-F] its fontSize (the FontUnits encoding) and fontWeight (the
+      weight alone) as written, over the ink's [was: the theme's font
+      whatever the label said] }
+    HasFontSize, HasFontWeight: Boolean;
+    FontSizeOpt, FontWeightOpt: Integer;
   end;
 
   { What the words are drawn with. Resolved by the control, like every other
@@ -782,6 +790,18 @@ begin
     lbl := TJSONObject(d);
     d := lbl.Find('show');
     if (d <> nil) and (d.JSONType = jtBoolean) then Result.Show := d.AsBoolean;
+    if TyFontStyleCode(lbl.Find('fontStyle')) <> TyFontStyleUnset then
+      Result.FontStyle := TyFontStyleCode(lbl.Find('fontStyle'));
+    if TyOptFontSize(lbl.Find('fontSize'), 0) > 0 then
+    begin
+      Result.HasFontSize := True;
+      Result.FontSizeOpt := TyOptFontSize(lbl.Find('fontSize'), 0);
+    end;
+    if TyFontWeightOf(lbl.Find('fontWeight'), 0) > 0 then
+    begin
+      Result.HasFontWeight := True;
+      Result.FontWeightOpt := TyFontWeightOf(lbl.Find('fontWeight'), 0);
+    end;
     d := lbl.Find('position');
     if (d <> nil) and (d.JSONType = jtString) then
     begin
@@ -939,11 +959,24 @@ var
   auto: TTyLabelSpec;
   ink, stroke: TTyChartColor;
   strokeW: Double;
+  fName: string;
+  fSize, fWeight: Integer;
+  emp: TTyRtPieceArray;
 begin
   Result := 0;
   if (AList = nil) or (AStore = nil) or not ALayout.Valid then Exit;
   { built when a state shows it, ignored at rest [F2b] }
   if not (ASpec.Show or ASpec.StateShow) then Exit;
+  { [R5-F] the label's own size and weight over the ink's (the root
+    textStyle's, the theme's); its style flags stay under a weight }
+  fName := AInk.FontName;
+  if ASpec.HasFontSize then fSize := ASpec.FontSizeOpt
+  else fSize := AInk.FontSizeLogical;
+  if ASpec.HasFontWeight then
+    fWeight := (AInk.FontWeight and not TyChartFontWeightMask) or ASpec.FontWeightOpt
+  else
+    fWeight := AInk.FontWeight;
+  fWeight := TyFontStyleCodeOver(ASpec.FontStyle, fWeight);
   lineLen := ASpec.LineLengthLogical * APPI / 96;
   percents := TyFunnelPercents(ALayout);
 
@@ -1099,8 +1132,7 @@ begin
       end;
     end;
 
-    AMeasurer.MeasureLine(words, AInk.FontName, AInk.FontSizeLogical,
-      AInk.FontWeight, w, h);
+    AMeasurer.MeasureLine(words, fName, fSize, fWeight, w, h);
     if (w <= 0) or (h <= 0) then Continue;
     case anchorH of
       tahCentre: box.Left := textX - w / 2;
@@ -1117,9 +1149,9 @@ begin
 
     el := TyChartElement(TyShapeRect(box));
     el.Caption.Text := words;
-    el.Caption.FontName := AInk.FontName;
-    el.Caption.FontSizeLogical := AInk.FontSizeLogical;
-    el.Caption.FontWeight := AInk.FontWeight;
+    el.Caption.FontName := fName;
+    el.Caption.FontSizeLogical := fSize;
+    el.Caption.FontWeight := fWeight;
     { INSIDE IS THREE BANDS BY LUMINANCE, not a light/dark pair -- and the
       order reads backwards until you see why: on a mid-dark band you want
       maximum contrast, but on a nearly black one the brightest ink glares.
@@ -1143,9 +1175,9 @@ begin
     { THE BLOCK, where the label's style needs one [Batch 86] }
     if auto.Rt.Needed then
     begin
-      auto.FontName := AInk.FontName;
-      auto.FontSizeLogical := AInk.FontSizeLogical;
-      auto.FontWeight := AInk.FontWeight;
+      auto.FontName := fName;
+      auto.FontSizeLogical := fSize;
+      auto.FontWeight := fWeight;
       el.Caption.RtScale := APPI / 96;
       el.Caption.RtPieces := TyLabelBlockPieces(auto, words, fill, fill <> 0,
         False, inside, anchorH, tavMiddle, el.Caption.RtScale, AMeasurer);
@@ -1155,6 +1187,22 @@ begin
           0, el.Caption.RtScale));
         el.Caption.RtEmph := TyRtReink(el.Caption.RtPieces, el.Caption.EmphColour,
           True, el.Caption.EmphStrokeColour, el.Caption.EmphStrokeWidthLogical);
+      end;
+    end;
+    { [R5-F] the hover's font, box or rich styles: laid out again about its
+      place [was: only its ink changed] }
+    if auto.EmphRtNode <> '' then
+    begin
+      auto.FontName := fName;
+      auto.FontSizeLogical := fSize;
+      auto.FontWeight := fWeight;
+      emp := TyLabelEmphPiecesOver(auto, words, fill, fill <> 0, el.Caption.EmphColour,
+        el.Caption.EmphStrokeColour, el.Caption.EmphStrokeWidthLogical, anchorH,
+        tavMiddle, APPI / 96, AMeasurer, TyLabelEmphOverNone);
+      if Length(emp) > 0 then
+      begin
+        el.Caption.RtScale := APPI / 96;
+        el.Caption.RtEmph := emp;
       end;
     end;
     el.Caption.Colour := ink;

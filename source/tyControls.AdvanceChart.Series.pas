@@ -1229,8 +1229,14 @@ begin
       centre is taken from, and the axes its coord widens. With no pair the
       series is on the canvas. }
     usage := TyMatrixUsageOf(node, b.SeriesType);
-    if (usage = 'box') and TyCanvasOnHostType(b.SeriesType) then
+    { [spec 244] A GRAPH WITH A BOX USAGE on a cartesian is a view on the
+      canvas: createBoxLayoutReference finds no dataToLayout on a grid and
+      no centre to take, so its refContainer is the canvas -- its box and
+      its nodes' x / y as on no coordinate system; its coord widens the
+      axes as a pie's does [was: bound as a graph on axes] }
+    if (usage = 'box') and (TyCanvasOnHostType(b.SeriesType) or (b.SeriesType = 'graph')) then
     begin
+      if b.SeriesType = 'graph' then b.CoordSysName := 'view';
       if (xi >= 0) and (yi >= 0) then
       begin
         b.BoxCart := ABuild.CartesianAt(xi, yi);

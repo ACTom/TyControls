@@ -95,8 +95,10 @@ type
     procedure ApplyLeave(AEl: TTyGfxEl; AOpt: TJSONObject);
     procedure ApplyUpdateTransition(AEl: TTyGfxEl; AOpt: TJSONObject; AIsInit: Boolean);
     procedure UpdateCommonAttrs(AEl: TTyGfxEl; AOpt: TJSONObject; AZ, AZLevel: Double);
-    function ElementCfg(const AType: string; AOpt: TJSONObject): TTyAnimCfg;
+    function ElementCfg(const AType: string; AOpt: TJSONObject; AEl: TTyGfxEl): TTyAnimCfg;
     procedure UpdateProps(AEl: TTyGfxEl; const AProps: TTyAnimProps);
+    { [spec 242] GraphicView's clipPath of an element }
+    function UpdateClipPath(AEl: TTyGfxEl; AOpt: TJSONObject; const AAction: string): Boolean;
     function UpdateElements(AModel: TTyGfxModel; AZ, AZLevel: Double): Boolean;
     procedure Relocate(AModel: TTyGfxModel; AW, AH: Double;
       const AMeasurer: ITyTextMeasurer);
@@ -672,6 +674,11 @@ begin
         CopyTransitionInfo(opt, exist[i], 'shape');
         CopyTransitionInfo(opt, exist[i], 'style');
         CopyTransitionInfo(opt, exist[i], 'extra');
+        { [spec 242] newElOption.clipPath = existElOption.clipPath }
+        if exist[i].Find('clipPath') <> nil then
+          PutKey(opt, 'clipPath', exist[i].Find('clipPath').Clone)
+        else
+          DropKey(opt, 'clipPath');
         copy_.Free;
       end
       else
@@ -779,7 +786,7 @@ begin
   Result.IsNew := True;
 end;
 
-function TTyGfxView.ElementCfg(const AType: string; AOpt: TJSONObject): TTyAnimCfg;
+function TTyGfxView.ElementCfg(const AType: string; AOpt: TJSONObject; AEl: TTyGfxEl): TTyAnimCfg;
 var
   ext: TJSONObject;
   d: TJSONData;
@@ -807,6 +814,9 @@ begin
     if IsNan(Result.Delay) then Result.Delay := 0;
     if dur > 0 then
     begin
+      { [spec 242] config.during: the element's userDuring bound, before
+        the option's own *Animation is laid over the config }
+      if AEl <> nil then Result.During := AEl.DuringCfg;
       Result.SetToFinal := True;
       Result.Scope := AType;
     end;
@@ -836,7 +846,7 @@ begin
   if AEl = nil then Exit;
   if AEl.HasLeaveTo and (AEl.Animation <> nil) then
   begin
-    cfg := ElementCfg('update', AOpt);
+    cfg := ElementCfg('update', AOpt, AEl);
     cfg.Done := @AEl.LeaveDone;
     AEl.Leaving := True;
     AEl.AnimateTo(AEl.LeaveToProps, cfg);
@@ -1304,6 +1314,8 @@ var
   cfg: TTyAnimCfg;
 begin
   from_ := nil;
+  { [spec 242] store.userDuring = elOption.during, every update }
+  AEl.UserDuring := TyGfxDuringSpec(AOpt);
   if not AIsInit and FAnim.Enabled then TyGfxTransitionFrom(AEl, AOpt, from_);
   { the final props, directly }
   TyGfxApplyDirect(AEl, AOpt, False);
@@ -1313,12 +1325,12 @@ begin
     begin
       enter := nil;
       TyGfxEnterFrom(AOpt, enter);
-      cfg := ElementCfg('enter', AOpt);
+      cfg := ElementCfg('enter', AOpt, AEl);
       if cfg.Duration > 0 then AEl.AnimateFrom(enter, cfg);
     end
     else
     begin
-      cfg := ElementCfg('update', AOpt);
+      cfg := ElementCfg('update', AOpt, AEl);
       if cfg.Duration > 0 then AEl.AnimateFrom(from_, cfg);
     end;
   end;
@@ -1647,6 +1659,10 @@ begin
             AttrText(tc, tcOpt);
           end;
         end;
+        { [spec 242] the clip path: merged into the one there is while its
+          type stays, else a new one; then its own transition and keyframes }
+        if (el <> nil) and (ObjOf(opt, 'clipPath') <> nil) and Truthy(opt.Find('clipPath')) then
+          if not UpdateClipPath(el, ObjOf(opt, 'clipPath'), action) then Exit(False);
         if el <> nil then
         begin
           { setTextConfig: extended }
@@ -1672,6 +1688,10 @@ begin
             d := opt.Find('info');
             if d <> nil then el.Info := d.Clone;
           end;
+          { [spec 242] setTooltipConfig: every update, the option's tooltip }
+          FreeAndNil(el.TipOpt);
+          d := opt.Find('tooltip');
+          if d <> nil then el.TipOpt := d.Clone;
           { applyKeyframeAnimation, last [Batch 139] }
           TyGfxApplyKeyframes(el, opt.Find('keyframeAnimation'),
             FAnim.Enabled and (el.Animation <> nil), FAnim.Duration);
@@ -1683,6 +1703,44 @@ begin
   finally
     list.Free;
   end;
+end;
+
+function TTyGfxView.UpdateClipPath(AEl: TTyGfxEl; AOpt: TJSONObject;
+  const AAction: string): Boolean;
+var
+  tp: string;
+  isInit: Boolean;
+  clip: TTyGfxEl;
+begin
+  Result := True;
+  tp := StrOf(AOpt.Find('type'));
+  clip := nil;
+  isInit := False;
+  if AAction = 'merge' then
+  begin
+    isInit := (AEl.ClipPath = nil) or (AEl.ClipPath.GType <> tp);
+    if not isInit then clip := AEl.ClipPath;
+  end
+  else if AAction = 'replace' then
+    isInit := True
+  else
+    Exit;
+  if isInit then
+  begin
+    clip := TyGfxCreate(tp);
+    if clip = nil then
+    begin
+      FError := 'graphic type ' + tp + ' can not be found';
+      Exit(False);
+    end;
+    clip.Animation := FAnimation;
+    FreeAndNil(AEl.ClipPath);
+    AEl.ClipPath := clip;
+  end;
+  { applyUpdateTransition(clipPath, clipPathOption, ...) }
+  ApplyUpdateTransition(clip, AOpt, isInit);
+  TyGfxApplyKeyframes(clip, AOpt.Find('keyframeAnimation'),
+    FAnim.Enabled and (clip.Animation <> nil), FAnim.Duration);
 end;
 
 procedure TTyGfxView.UpdateProps(AEl: TTyGfxEl; const AProps: TTyAnimProps);

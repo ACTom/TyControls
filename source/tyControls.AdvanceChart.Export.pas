@@ -9,10 +9,12 @@ unit tyControls.AdvanceChart.Export;
   `excludeComponents`,
   each read for its JavaScript truthiness, as upstream reads them:
 
-    type               'jpeg' is a JPEG; anything else -- 'png', 'svg',
-                       'jpg', unset -- is what a canvas answers
-                       toDataURL('image/' + type) with when it cannot make
-                       that type: a PNG.
+    type               'jpeg' is a JPEG; [R5-D] 'webp' a WebP where the
+                       libwebp library can be loaded (BGRABitmap's writer),
+                       else -- as a canvas without it -- a PNG; anything
+                       else -- 'png', 'svg', 'jpg', unset -- is what a
+                       canvas answers toDataURL('image/' + type) with when
+                       it cannot make that type: a PNG.
     pixelRatio         `opts.pixelRatio || devicePixelRatio`. Upstream's
                        ratio is per CSS px; the port's CSS px is its logical
                        px (device px * 96 / PPI), so the image is
@@ -65,10 +67,15 @@ type
     { [Batch 128] }
     cvParallelAxis,
     { [Batch 145] }
-    cvMatrix);
+    cvMatrix,
+    { [R5-G] the grid's own view: its background rect (`grid.show`) }
+    cvGrid,
+    { [spec 244] the geo component's view (GeoView): a map series' own
+      geo is its series view's, and `'series'` hides nothing }
+    cvGeo);
   TTyChartViews = set of TTyChartView;
 
-  TTyExportImageType = (eitPng, eitJpeg);
+  TTyExportImageType = (eitPng, eitJpeg, eitWebp);
 
   { WHAT THE IMAGE IS CLEARED WITH:
       ebkTheme     nothing was chosen: the skin's ground, the frame the
@@ -133,13 +140,27 @@ function TyExportBackgroundOf(AData: TJSONData): TTyExportBg;
 procedure TyExportImageSize(AWidth, AHeight, APPI: Integer; ARatio: Double;
   out AW, AH, AOutPPI: Integer);
 
+{ [R5-D] the data URL's head for an image of AType }
+function TyExportUrlHead(AType: TTyExportImageType): string;
+
 implementation
+
+function TyExportUrlHead(AType: TTyExportImageType): string;
+begin
+  case AType of
+    eitJpeg: Result := 'data:image/jpeg;base64,';
+    eitWebp: Result := 'data:image/webp;base64,';
+  else
+    Result := 'data:image/png;base64,';
+  end;
+end;
+
 
 const
   ViewNames: array[TTyChartView] of string = ('title', 'legend', 'xAxis',
     'yAxis', 'visualMap', 'dataZoom', 'markPoint', 'markLine', 'markArea',
     'radar', 'calendar', 'angleAxis', 'radiusAxis', 'singleAxis', 'series', 'toolbox', 'brush',
-    'timeline', 'parallelAxis', 'matrix');
+    'timeline', 'parallelAxis', 'matrix', 'grid', 'geo');
 
 function TyChartViewOf(const AMainType: string; out AView: TTyChartView): Boolean;
 var v: TTyChartView;
@@ -232,6 +253,9 @@ begin
     if TyJsTruthy(d) then AOpts.HasType := True;
     if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'jpeg') then
       AOpts.ImageType := eitJpeg;
+    { [R5-D] }
+    if (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'webp') then
+      AOpts.ImageType := eitWebp;
     d := o.Find('pixelRatio');
     if (d <> nil) and (d.JSONType = jtNumber) then
     begin

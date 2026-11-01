@@ -375,6 +375,11 @@ function TyEncodeOf(AOption: TTyChartOption; ASeriesIndex: Integer;
   ADimCount that no coordinate holds yet. `encode: {y: 2}` on a table reads
   x from 0; `encode: {tooltip: [2]}` leaves x on 0 and y on 1. }
 procedure TyEncodeFillUnclaimed(var AEnc: TTySeriesEncode; ADimCount: Integer);
+{ [spec 242] createDimensions over a default encode: an index past the
+  table's dimensions is no dimension, and a coordinate left with none takes
+  the first one no coordinate holds (the second of two series on a
+  three-column table: x the third column, y the first) }
+procedure TyEncodeDropPast(var AEnc: TTySeriesEncode; ADimCount: Integer);
 
 { A series' own `dimensions`, as a source that names things but holds
   nothing -- what an encode name on series data is looked up against. }
@@ -604,24 +609,50 @@ begin
   else Result := A;
 end;
 
-{ asc(): Array.prototype.sort with (a, b) => a - b, which is STABLE -- a
-  comparison that is not-a-number counts as equal. An insertion sort keeps
-  equal samples (a -0 beside a 0) in the order they came. }
-procedure SortAsc(var A: TTyDoubleArray);
-var i, j: Integer; t, d: Double;
+type
+  { (a, b) => a - b over the samples, a not-a-number difference a tie }
+  TAscCompare = class
+    Vals: TTyDoubleArray;
+    function Compare(A, B: Integer): Integer;
+  end;
+
+function TAscCompare.Compare(A, B: Integer): Integer;
+var d: Double;
 begin
-  for i := 1 to High(A) do
-  begin
-    t := A[i];
-    j := i - 1;
-    while j >= 0 do
-    begin
-      d := A[j] - t;
-      if IsNan(d) or not (d > 0) then Break;
-      A[j + 1] := A[j];
-      Dec(j);
-    end;
-    A[j + 1] := t;
+  d := Vals[A] - Vals[B];
+  if IsNan(d) then Result := 0
+  else if d < 0 then Result := -1
+  else if d > 0 then Result := 1
+  else Result := 0;
+end;
+
+{ asc(): Array.prototype.sort with (a, b) => a - b -- V8's TimSort
+  (TyJsArraySort), so a sample that is no number lands where V8 leaves it:
+  its comparisons are ties, and the binary insertion and the runs place it
+  [R5-G: was a linear insertion sort, the same order only while every
+  comparison is a number] }
+procedure SortAsc(var A: TTyDoubleArray);
+var
+  cmp: TAscCompare;
+  idx: TTyIntegerArray;
+  i: Integer;
+  mask: TFPUExceptionMask;
+begin
+  if Length(A) < 2 then Exit;
+  idx := nil;
+  SetLength(idx, Length(A));
+  for i := 0 to High(idx) do idx[i] := i;
+  cmp := TAscCompare.Create;
+  mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+  try
+    cmp.Vals := Copy(A);
+    TyJsArraySort(idx, @cmp.Compare);
+    for i := 0 to High(idx) do A[i] := cmp.Vals[idx[i]];
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+    cmp.Free;
   end;
 end;
 
@@ -1794,12 +1825,11 @@ begin
     One(AValue);
 end;
 
-procedure TyEncodeFillUnclaimed(var AEnc: TTySeriesEncode; ADimCount: Integer);
+procedure FillUnclaimed(var AEnc: TTySeriesEncode; ADimCount: Integer);
 var
   i, j, avail: Integer;
   used: Boolean;
 begin
-  if not AEnc.Given then Exit;
   avail := 0;
   for i := 0 to High(AEnc.Columns) do
   begin
@@ -1817,6 +1847,27 @@ begin
       Inc(avail);
     end;
   end;
+end;
+
+procedure TyEncodeFillUnclaimed(var AEnc: TTySeriesEncode; ADimCount: Integer);
+begin
+  if not AEnc.Given then Exit;
+  FillUnclaimed(AEnc, ADimCount);
+end;
+
+procedure TyEncodeDropPast(var AEnc: TTySeriesEncode; ADimCount: Integer);
+var
+  i: Integer;
+  dropped: Boolean;
+begin
+  dropped := False;
+  for i := 0 to High(AEnc.Columns) do
+    if AEnc.Columns[i] >= ADimCount then
+    begin
+      AEnc.Columns[i] := -1;
+      dropped := True;
+    end;
+  if dropped then FillUnclaimed(AEnc, ADimCount);
 end;
 
 function TySeriesDimsSource(AOption: TTyChartOption;
@@ -2027,6 +2078,9 @@ begin
   Result.Given := False;
   Result.Columns[0] := valueDim;
   Result.ItemName := nameDim;
+  { [spec 242] encode.seriesName = [nameDimIndex]: the series is named after
+    the name column }
+  Result.SeriesName := nameDim;
 end;
 
 end.

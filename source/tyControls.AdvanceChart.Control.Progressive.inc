@@ -19,7 +19,12 @@ begin
     (createLarge would then read no points), and the polar and calendar
     scatters are left drawn one by one. LINES are batched on any of their
     systems: linesLayout's large branch is dataToPoint [Batch 121] }
-  if (st <> TyLinesSeriesTypeName) and ((FBindings[ASlot].Cart = nil)
+  { [R5-G] a scatter batches on a polar, a calendar and a single axis too
+    (pointsLayout + LargeSymbolDraw know no system) }
+  if (st <> TyLinesSeriesTypeName) and not ((st = 'scatter')
+    and ((FBindings[ASlot].Polar <> nil) or (FBindings[ASlot].CalendarIndex >= 0)
+    or (FBindings[ASlot].Single <> nil)))
+    and ((FBindings[ASlot].Cart = nil)
     or (FBindings[ASlot].Polar <> nil) or (FBindings[ASlot].CalendarIndex >= 0)) then Exit;
   d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
   if not (d is TJSONObject) then Exit;
@@ -28,9 +33,9 @@ begin
     [Batch 119] }
   if not TyLargeIsOn(st, node.Find('large'), node.Find('largeThreshold'),
     FStores[ASlot].Count) and not ((st = 'bar') and ProgOnOf(ASlot)) then Exit;
-  { A path:// SYMBOL stays one element per row: upstream's batch would
-    replay one fitted path, which this port does not model }
-  if (st = 'scatter') and (SymbolFor(ASlot).Kind = tsyPath) then Exit;
+  { [R5-G] a path:// symbol batches too: upstream's batch replays the path
+    createSymbol fitted into a 0 x 0 box -- it draws nothing, and the
+    pointer still finds its rows [was: one element per row] }
   Result := TyLargeKindOfType(st);
 end;
 
@@ -282,7 +287,7 @@ end;
 
 procedure TTyCustomAdvanceChart.ProgApplyVisibility(AList: TTyPaintList);
 var
-  k, done, j, shown: Integer;
+  k, done, j, shown, nums: Integer;
   el: TTyChartElement;
   pe: PTyChartElement;
   hid, moved: Boolean;
@@ -297,22 +302,32 @@ begin
     else done := MaxInt;
     hid := pe^.ProgChunk > done;
     moved := hid <> pe^.ProgHidden;
-    if not moved and not ((pe^.Shape.Kind = cskLarge) and (pe^.Shape.Large.Kind = lgkSymbol)
+    if not moved and not ((pe^.Shape.Kind = cskLarge)
+      and (pe^.Shape.Large.Kind in [lgkSymbol, lgkLines])
       and (Length(pe^.Shape.Large.ChunkEnds) > 0)) then Continue;
     el := pe^;
-    { A GROWING SCATTER BATCH holds the rows of its chunks drawn so far }
-    if (el.Shape.Kind = cskLarge) and (el.Shape.Large.Kind = lgkSymbol)
+    { A GROWING SCATTER BATCH holds the rows of its chunks drawn so far;
+      [spec 242] a growing lines batch too }
+    if (el.Shape.Kind = cskLarge) and (el.Shape.Large.Kind in [lgkSymbol, lgkLines])
       and (Length(el.Shape.Large.ChunkEnds) > 0) then
     begin
       j := done - el.Shape.Large.ChunkFirst;
       if j > Length(el.Shape.Large.ChunkEnds) then j := Length(el.Shape.Large.ChunkEnds);
       if j < 1 then j := 1;
       shown := el.Shape.Large.ChunkEnds[j - 1];
-      if shown <> el.Shape.Large.Shown then
+      { [R5-J] and the numbers it holds then: a chunk can add a number
+        and no row (a single axis' odd chunk) }
+      if j - 1 <= High(el.Shape.Large.ChunkNums) then nums := el.Shape.Large.ChunkNums[j - 1]
+      else nums := 0;
+      if (shown <> el.Shape.Large.Shown) or (nums <> el.Shape.Large.ShownNums) then
       begin
         el.Shape.Large.Shown := shown;
+        el.Shape.Large.ShownNums := nums;
         TyLargeSetBox(el.Shape.Large);
         el.Shape.Bounds := TyLargeBounds(el.Shape.Large);
+        { [spec 242] a lines batch's gradient spans what it holds now }
+        if (el.Shape.Large.Kind = lgkLines) and el.Style.GradBoxSet then
+          el.Style.GradBox := TyRectToXYWH(el.Shape.Bounds);
         moved := True;
       end;
     end;
@@ -445,6 +460,20 @@ begin
         part.Shape.Large.Pts := Copy(el.Shape.Large.Pts, have * 2, (rows - have) * 2);
         part.Shape.Large.Shown := 0;
         part.Shape.Large.ChunkEnds := nil;
+        part.Shape.Large.ChunkNums := nil;
+        part.Shape.Large.ShownNums := 0;
+        TyRenderElement(P, part);
+      end
+      else if (have > 0) and (el.Shape.Kind = cskLarge) and (el.Shape.Large.Kind = lgkLines)
+        and (have < Length(el.Shape.Large.Idx)) then
+      begin
+        { [spec 242] LargeLinesPath's _off: only the segs the batch grew by }
+        part := el;
+        part.Shape.Large.Pts := Copy(el.Shape.Large.Pts, el.Shape.Large.Idx[have],
+          TyLargeLinesUsed(el.Shape.Large) - el.Shape.Large.Idx[have]);
+        part.Shape.Large.Shown := 0;
+        part.Shape.Large.ChunkEnds := nil;
+        TyLargeLinesIndex(part.Shape.Large);
         TyRenderElement(P, part);
       end
       else
@@ -467,6 +496,7 @@ end;
 procedure TTyCustomAdvanceChart.ProgRenderList(APainter: TTyPainter; AList: TTyPaintList;
   APPI: Integer);
 var
+  zs: TTyZBandState;
   i, idx: Integer;
   pe: PTyChartElement;
   any, blitted: Boolean;
@@ -487,12 +517,19 @@ begin
     TyRenderPaintList(APainter, AList);
     Exit;
   end;
-  if not FProgLayerOk or (FProgLayer = nil) or (FProgLayer.Width <> bmp.Width)
-    or (FProgLayer.Height <> bmp.Height) or (FProgLayerPPI <> APPI)
-    or (FProgLayerScale <> APainter.DeviceScale) then
-    ProgLayerBuild(bmp.Width, bmp.Height, APPI, APainter.DeviceScale)
-  else if FProgLayerRegionOn then
-    ProgLayerRegionRedraw;
+  { [R5-J] the layer holds the whole run, whatever band this pass draws:
+    built in a band it lost the chunks of another zlevel for good }
+  zs := TySuspendZBand;
+  try
+    if not FProgLayerOk or (FProgLayer = nil) or (FProgLayer.Width <> bmp.Width)
+      or (FProgLayer.Height <> bmp.Height) or (FProgLayerPPI <> APPI)
+      or (FProgLayerScale <> APainter.DeviceScale) then
+      ProgLayerBuild(bmp.Width, bmp.Height, APPI, APainter.DeviceScale)
+    else if FProgLayerRegionOn then
+      ProgLayerRegionRedraw;
+  finally
+    TyResumeZBand(zs);
+  end;
   blitted := False;
   for i := 0 to AList.Count - 1 do
   begin
@@ -502,7 +539,9 @@ begin
     if pe^.Ignore or pe^.ProgHidden or pe^.GfxUnder then Continue;
     if pe^.ProgChunk > 0 then
     begin
-      if not blitted then
+      { [R5-J] the run's layer in its zlevel's band only [was: blitted with
+        the first band whatever the run's zlevel] }
+      if not blitted and TyZBandHas(pe^.ZLevel) then
       begin
         { [R2-L] what is under the layer, and the layer, as they stand here }
         if FProgCap and (FProgLayer <> nil) then
@@ -715,6 +754,7 @@ var
   zr, er: TTyXYWH;
   sc: TTyCanvasScale;
   measurer: ITyTextMeasurer;
+  zc, pass: Integer;
 
   procedure Band(ADst: TBGRABitmap; const ABand: TRect);
   begin
@@ -733,6 +773,10 @@ begin
   if FExporting or FAnimLive or FAnimContinuous or (Length(FAnimBind) > 0)
     or (Length(FAnimStBind) > 0) or TmAnimAny or FDrPrepDone then Exit;
   if (FPaintList = nil) or not FPaintListValid or not FProgReuse then Exit;
+  { [R5-J] the levels drawn canvas by canvas, or the run's layer blitted
+    over the components (its zlevel above theirs): what is under the layer
+    is no one capture }
+  if FZMixed or (ProgRunZLevel > ZBase) then Exit;
   if (FProgWork = nil) or (FProgUnder = nil) or (FProgSeen = nil) or (FProgLayer = nil)
     or not FProgLayerOk then Exit;
   if (FProgLayer.Width <> FProgWork.Width) or (FProgLayer.Height <> FProgWork.Height)
@@ -798,20 +842,36 @@ begin
         sc.DeviceUnits := False;
         P.BeginPaintOnScaled(nil, Rect(0, 0, w, h), APPI, nb, sc);
         clip := nb.ClipRect;
-        for i := FProgBlitAt + 1 to FPaintList.Count - 1 do
+        { [R5-G] the two zlevel passes the full paint makes }
+        zc := ZBase;
+        for pass := 0 to 1 do
         begin
-          idx := FPaintList.PaintOrder(i);
-          pe := FPaintList.Ref(idx);
-          { ProgRenderList's own skips; a run's elements are the layer's }
-          if pe^.Ignore or pe^.ProgHidden or pe^.GfxUnder or (pe^.ProgChunk > 0) then Continue;
-          if TyElementPaintRect(pe^, APPI, er) and not TyZrRectIntersect(er, zr) then Continue;
-          TyRenderElement(P, pe^);
-          nb.ClipRect := clip;
+          if pass = 0 then
+            TySetZBand(-MaxInt, zc)
+          else
+          begin
+            { what the static paint draws over the series, as it draws it }
+            PaintBreakAreas(P);
+            PaintParallels(P, APPI, measurer);
+            PaintTitles(P);
+            if TyMaxZLevelOf(FPaintList) <= zc then Break;
+            TySetZBand(zc, ZStaticTop);
+          end;
+          try
+            for i := FProgBlitAt + 1 to FPaintList.Count - 1 do
+            begin
+              idx := FPaintList.PaintOrder(i);
+              pe := FPaintList.Ref(idx);
+              { ProgRenderList's own skips; a run's elements are the layer's }
+              if pe^.Ignore or pe^.ProgHidden or pe^.GfxUnder or (pe^.ProgChunk > 0) then Continue;
+              if TyElementPaintRect(pe^, APPI, er) and not TyZrRectIntersect(er, zr) then Continue;
+              TyRenderElement(P, pe^);
+              nb.ClipRect := clip;
+            end;
+          finally
+            TyClearZBand;
+          end;
         end;
-        { what the static paint draws over the series, as it draws it }
-        PaintBreakAreas(P);
-        PaintParallels(P, APPI, measurer);
-        PaintTitles(P);
         nb.ClipRect := Rect(0, 0, nb.Width, nb.Height);
         P.EndPaint;
       finally
@@ -985,6 +1045,12 @@ begin
   FFrozen := nil;
   FFrozenKeys := nil;
   FFrozenOn := True;
+  { [spec 242] the views a dataZoom filtered, as they are }
+  DzFrozenDrop;
+  SetLength(FDzFrozenStore, Length(FStores));
+  for g := 0 to Min(High(FDzTouched), High(FStores)) do
+    if FDzTouched[g] and (FStores[g] <> nil) then
+      FDzFrozenStore[g] := FStores[g].CloneWith([]);
   if FBuild = nil then Exit;
   for g := 0 to FBuild.GridCount - 1 do
   begin
@@ -992,19 +1058,34 @@ begin
     for a := 0 to gb.XAxisCount - 1 do Take(gb.XAxis(a));
     for a := 0 to gb.YAxisCount - 1 do Take(gb.YAxis(a));
   end;
+  { [spec 242] a polar's and a single axis' too: the frame updates no
+    coordinate system }
+  for g := 0 to High(FPolars) do
+    if FPolars[g] <> nil then
+    begin
+      Take(FPolars[g].RadiusAxis);
+      Take(FPolars[g].AngleAxis);
+    end;
+  for g := 0 to High(FSingles) do
+    if FSingles[g] <> nil then Take(FSingles[g].Axis);
 end;
 
-function TTyCustomAdvanceChart.FrozenZooms: TTyAxisZoomArray;
+{ [spec 242] an axis of this build by its frozen key: a grid's, a polar's
+  or a single axis' }
+function TTyCustomAdvanceChart.FrozenAxisOf(const AKey: string): TTyAxis;
 var
-  j, g, a, k, hit: Integer;
+  g, a: Integer;
   gb: TTyGridBuild;
-  ax, cand: TTyAxis;
-begin
-  Result := Copy(FAxisZooms);
-  if FBuild = nil then Exit;
-  for j := 0 to High(FFrozen) do
+  cand: TTyAxis;
+
+  function Is_(AAxis: TTyAxis): Boolean;
   begin
-    ax := nil;
+    Result := (AAxis <> nil) and (AAxis.MainType + ':' + IntToStr(AAxis.ComponentIndex) = AKey);
+  end;
+
+begin
+  Result := nil;
+  if FBuild <> nil then
     for g := 0 to FBuild.GridCount - 1 do
     begin
       gb := FBuild.Grid(g);
@@ -1012,10 +1093,29 @@ begin
       begin
         if a < gb.XAxisCount then cand := gb.XAxis(a)
         else cand := gb.YAxis(a - gb.XAxisCount);
-        if (cand <> nil) and (cand.MainType + ':' + IntToStr(cand.ComponentIndex) = FFrozenKeys[j]) then
-          ax := cand;
+        if Is_(cand) then Exit(cand);
       end;
     end;
+  for g := 0 to High(FPolars) do
+    if FPolars[g] <> nil then
+    begin
+      if Is_(FPolars[g].RadiusAxis) then Exit(FPolars[g].RadiusAxis);
+      if Is_(FPolars[g].AngleAxis) then Exit(FPolars[g].AngleAxis);
+    end;
+  for g := 0 to High(FSingles) do
+    if (FSingles[g] <> nil) and Is_(FSingles[g].Axis) then Exit(FSingles[g].Axis);
+end;
+
+function TTyCustomAdvanceChart.FrozenZooms: TTyAxisZoomArray;
+var
+  j, k, hit: Integer;
+  ax: TTyAxis;
+begin
+  Result := Copy(FAxisZooms);
+  if FBuild = nil then Exit;
+  for j := 0 to High(FFrozen) do
+  begin
+    ax := FrozenAxisOf(FFrozenKeys[j]);
     if ax = nil then Continue;
     hit := -1;
     for k := 0 to High(Result) do
@@ -1102,8 +1202,8 @@ end;
 function TTyCustomAdvanceChart.AppendData(ASeriesIndex: Integer;
   const ADataJson: string): Boolean;
 var
-  d, node, arr: TJSONData;
-  nLine, nCol, k: Integer;
+  d, node, arr, dsNode: TJSONData;
+  nLine, nCol, k, ds: Integer;
 begin
   Result := False;
   if (FOption = nil) or not (FOption.Root is TJSONObject) then Exit;
@@ -1111,10 +1211,28 @@ begin
   if TyJsonNestingExceeds(ADataJson, TyOptionMaxNesting, nLine, nCol) then Exit;
   node := FOption.ComponentAt('series', ASeriesIndex);
   if not (node is TJSONObject) then Exit;
-  { THE SERIES' OWN ARRAY: upstream's provider pushes into it; a series
-    reading a dataset is not taken (upstream would push into the table) }
+  { THE SERIES' OWN ARRAY: upstream's provider pushes into it }
   arr := TJSONObject(node).Find('data');
-  if not (arr is TJSONArray) then Exit;
+  if not (arr is TJSONArray) then
+  begin
+    { [spec 242] A SERIES READING A DATASET: the provider pushes the rows
+      into the dataset's own table -- every series on it takes them at the
+      next frame (they share the store); a table laid out by row throws
+      upstream ("Do not support appendData when set seriesLayoutBy: row"),
+      and a transform's output is no table of the option's (refused) }
+    if arr <> nil then Exit;
+    ds := TySeriesDatasetIndex(FOption, ASeriesIndex);
+    if ds < 0 then Exit;
+    dsNode := TJSONObject(node).Find('seriesLayoutBy');
+    if (dsNode <> nil) and (dsNode.JSONType = jtString) and (dsNode.AsString = 'row') then Exit;
+    dsNode := FOption.ComponentAt('dataset', ds);
+    if not (dsNode is TJSONObject) then Exit;
+    if (TJSONObject(dsNode).Find('transform') <> nil)
+      or (TJSONObject(dsNode).Find('fromDatasetIndex') <> nil)
+      or (TJSONObject(dsNode).Find('fromDatasetId') <> nil) then Exit;
+    arr := TJSONObject(dsNode).Find('source');
+    if not (arr is TJSONArray) then Exit;
+  end;
   try
     d := GetJSON(NulSafeJson(ADataJson));
     NulRestore(d);

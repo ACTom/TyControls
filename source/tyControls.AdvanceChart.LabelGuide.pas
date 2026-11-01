@@ -68,6 +68,8 @@ const
   cTyGuideHostNone = 0;
   cTyGuideHostSymbol = 1;
   cTyGuideHostRect = 2;
+  { [R5-C] a Sector (roundSector's path): a sunburst piece, a polar bar }
+  cTyGuideHostSector = 3;
 
 { ---- the projections (labelGuideHelper.ts), each answering the distance
   and the point it found ---- }
@@ -145,6 +147,19 @@ function TyGuideSymbolHost(const AType: string; AKeepAspect: Boolean; AW, AH,
   four radii is }
 function TyGuideRectHost(AX, AY, AW, AH: Double;
   const ARadii: array of Double): TTyGuideHost;
+{ [R5-C] a Sector as roundSector builds it: AClockwise as the shape holds
+  it, ACorners its cornerRadius as given (none, one to four numbers) }
+procedure TyGuideStampSector(var ACaption: TTyElementCaption; ACX, ACY, AR0, AR,
+  AStart, AEnd: Double; AClockwise: Boolean; const ACorners: array of Double);
+function TyGuideSectorHost(ACX, ACY, AR0, AR, AStart, AEnd: Double;
+  AClockwise: Boolean; const ACorners: TTyDoubleArray): TTyGuideHost;
+{ [R5-C] A HOST IN A GROUP: the frame its shape is in -- a view's group
+  (translation AVX, AVY, scale AVSX, AVSY) times a node's group (at AGX, AGY,
+  scaled AGS) -- as zrender composes them (no transform where a group needs
+  none). A symbol's own offset, in the node group's frame, goes to
+  LgG[8..9]: its point is then the frame's. }
+procedure TyGuideStampFrame(var ACaption: TTyElementCaption; AVX, AVY, AVSX,
+  AVSY, AGX, AGY, AGS: Double);
 { the host a caption describes (its Lg* fields); False for none }
 function TyGuideHostOf(const ACaption: TTyElementCaption;
   out AHost: TTyGuideHost): Boolean;
@@ -153,7 +168,8 @@ implementation
 
 uses
   tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Data,
-  tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.LabelLayout;
+  tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.LabelLayout,
+  tyControls.AdvanceChart.PolarBar;
 
 const
   PI2 = 2 * Pi;
@@ -1051,21 +1067,95 @@ begin
   Result.Data := TyGuidePathData(path);
 end;
 
+procedure TyGuideStampSector(var ACaption: TTyElementCaption; ACX, ACY, AR0, AR,
+  AStart, AEnd: Double; AClockwise: Boolean; const ACorners: array of Double);
+var k: Integer;
+begin
+  ACaption.LgKind := cTyGuideHostSector;
+  ACaption.LgG[0] := ACX;
+  ACaption.LgG[1] := ACY;
+  ACaption.LgG[2] := AR0;
+  ACaption.LgG[3] := AR;
+  ACaption.LgG[4] := AStart;
+  ACaption.LgG[5] := AEnd;
+  ACaption.LgG[6] := Ord(AClockwise);
+  ACaption.LgG[7] := Min(Length(ACorners), 4);
+  for k := 0 to Min(High(ACorners), 3) do ACaption.LgG[8 + k] := ACorners[k];
+end;
+
+procedure TyGuideStampFrame(var ACaption: TTyElementCaption; AVX, AVY, AVSX,
+  AVSY, AGX, AGY, AGS: Double);
+var
+  mv, mg: TTyMat2D;
+  hasV, hasG: Boolean;
+begin
+  hasV := TyLabelLocalTransform(AVX, AVY, 0, 0, 0, AVSX, AVSY, mv);
+  hasG := TyLabelLocalTransform(AGX, AGY, 0, 0, 0, AGS, AGS, mg);
+  ACaption.LgHasFrame := hasV or hasG;
+  if hasV and hasG then ACaption.LgFrame := TyGuideMatMul(mv, mg)
+  else if hasV then ACaption.LgFrame := mv
+  else ACaption.LgFrame := mg;
+end;
+
+function TyGuideSectorHost(ACX, ACY, AR0, AR, AStart, AEnd: Double;
+  AClockwise: Boolean; const ACorners: TTyDoubleArray): TTyGuideHost;
+var s: TTyPolarSector;
+begin
+  Result := Default(TTyGuideHost);
+  s.CX := ACX;
+  s.CY := ACY;
+  s.R0 := AR0;
+  s.R := AR;
+  s.SA := AStart;
+  s.EA := AEnd;
+  s.CW := AClockwise;
+  Result.IsPath := True;
+  Result.Data := TyGuidePathData(TyZrSectorPath(s, ACorners));
+end;
+
 function TyGuideHostOf(const ACaption: TTyElementCaption;
   out AHost: TTyGuideHost): Boolean;
+var
+  corners: TTyDoubleArray;
+  k, n: Integer;
 begin
   AHost := Default(TTyGuideHost);
   case ACaption.LgKind of
     cTyGuideHostSymbol:
-      AHost := TyGuideSymbolHost(ACaption.LgSymbol, ACaption.LgKeepAspect,
-        ACaption.LgG[0], ACaption.LgG[1], ACaption.LgG[2], ACaption.LgG[3],
-        ACaption.LgG[4], ACaption.LgG[5], ACaption.LgG[6]);
+      if ACaption.LgHasFrame then
+        { in a node's group: its own offset, the group at the point }
+        AHost := TyGuideSymbolHost(ACaption.LgSymbol, ACaption.LgKeepAspect,
+          ACaption.LgG[0], ACaption.LgG[1], ACaption.LgG[2], ACaption.LgG[8],
+          ACaption.LgG[9], 0, 0)
+      else
+        AHost := TyGuideSymbolHost(ACaption.LgSymbol, ACaption.LgKeepAspect,
+          ACaption.LgG[0], ACaption.LgG[1], ACaption.LgG[2], ACaption.LgG[3],
+          ACaption.LgG[4], ACaption.LgG[5], ACaption.LgG[6]);
     cTyGuideHostRect:
       AHost := TyGuideRectHost(ACaption.LgG[0], ACaption.LgG[1], ACaption.LgG[2],
         ACaption.LgG[3], [ACaption.LgG[4], ACaption.LgG[5], ACaption.LgG[6],
         ACaption.LgG[7]]);
+    cTyGuideHostSector:
+      begin
+        n := Round(ACaption.LgG[7]);
+        if n < 0 then n := 0;
+        if n > 4 then n := 4;
+        SetLength(corners, n);
+        for k := 0 to n - 1 do corners[k] := ACaption.LgG[8 + k];
+        AHost := TyGuideSectorHost(ACaption.LgG[0], ACaption.LgG[1], ACaption.LgG[2],
+          ACaption.LgG[3], ACaption.LgG[4], ACaption.LgG[5], ACaption.LgG[6] <> 0,
+          corners);
+      end;
   else
     Exit(False);
+  end;
+  { [R5-C] IN A GROUP: the frame times the host's own (zrender's
+    updateTransform, the parent's computed transform on the left) }
+  if ACaption.LgHasFrame then
+  begin
+    if AHost.HasM then AHost.M := TyGuideMatMul(ACaption.LgFrame, AHost.M)
+    else AHost.M := ACaption.LgFrame;
+    AHost.HasM := True;
   end;
   Result := True;
 end;

@@ -273,10 +273,30 @@ begin
     Result := Result or FTbLive[ATb][AIcon].HoverEmph;
 end;
 
+{ [R5-D] a font weight as written: a word or a number, the CSS weight
+  (TyFontWeightOf's reading); ADefault for what it cannot read }
+function TbFontWeight(const AText: string; ADefault: Integer): Integer;
+var d: TJSONData;
+begin
+  Result := ADefault;
+  d := nil;
+  try
+    try
+      if (AText <> '') and (AText[1] in ['0'..'9']) then d := GetJSON(AText)
+      else d := TJSONString.Create(AText);
+    except
+      d := nil;
+    end;
+    if d <> nil then Result := TyFontWeightOf(d, ADefault);
+  finally
+    d.Free;
+  end;
+end;
+
 function TTyCustomAdvanceChart.BuildToolboxes(AList: TTyPaintList;
   const AMeasurer: ITyTextMeasurer): Integer;
 var
-  t, i: Integer;
+  t, i, lt, lk: Integer;
   ink: TTyTbInk;
   s, ox, oy, tw, th, l, tp: Double;
   el: TTyChartElement;
@@ -288,6 +308,13 @@ var
   rad: array of Double;
   fs: Integer;
   pr: TTyRectF;
+  { [R5-D] the title's font and box }
+  fname: string;
+  fw: Integer;
+  pad, r4: TTyTbFour;
+  bx, by, bw, bh: Double;
+  bg: TTyChartColor;
+  box: TTyChartElement;
 
   function Blank: TTyChartElement;
   begin
@@ -302,8 +329,14 @@ begin
   Result := 0;
   ink := TbInk;
   s := TbScale;
+  lk := -1;
+  lt := 0;
   for t := 0 to High(FTbLayouts) do
   begin
+    { [R5-J] the elements the last one added take its zlevel }
+    if lk >= 0 then LevelTail(AList, lt, 'toolbox', lk);
+    lt := AList.Count;
+    lk := t;
     if (t > High(FTbSpecs)) or not FTbLayouts[t].Valid then Continue;
     { a group a degenerate icon placed at NaN draws nothing at all }
     if IsNan(FTbLayouts[t].GroupX) or IsNan(FTbLayouts[t].GroupY) then Continue;
@@ -375,6 +408,9 @@ begin
       begin
         el.Style.StrokeColor := c;
         el.Style.StrokeWidthLogical := sty.LineWidth;
+        { [R5-D] borderType, borderDashOffset, borderCap, borderJoin,
+          borderMiterLimit (strokeNoScale: against the icon's own width) }
+        TyTbLineOnto(sty, sty.LineWidth, el.Style);
       end;
       if sty.HasFill and TbColour(sty.Fill, 0, c) and (sty.Fill.Kind = tbcText) then
       begin
@@ -383,6 +419,8 @@ begin
       end;
       if sty.HasOpacity and not IsNan(sty.Opacity) then
         el.Style.Alpha := Max(0, Min(1, sty.Opacity));
+      { [R5-A] the icon style's shadow }
+      TyStyleSetShadow(el.Style, TyTbShadowOf(sty));
       AList.Add(el);
       Inc(Result);
     end;
@@ -399,15 +437,32 @@ begin
       el.Z2 := 1;
       fs := ink.FontSizeLogical;
       if FTbSpecs[t].Icons[i].TextFontSize > 0 then fs := Round(FTbSpecs[t].Icons[i].TextFontSize);
+      { [R5-D] the title's own font: textFontFamily, textFontWeight,
+        textFontStyle where written [was: the skin's] }
+      fname := ink.FontName;
+      if FTbSpecs[t].Icons[i].TextFontFamily <> '' then fname := FTbSpecs[t].Icons[i].TextFontFamily;
+      fw := ink.FontWeight;
+      if FTbSpecs[t].Icons[i].TextFontWeight <> '' then
+        fw := TbFontWeight(FTbSpecs[t].Icons[i].TextFontWeight, fw);
+      { [R5-A] getFont's style: emphasis.iconStyle.textFontStyle, else the
+        root textStyle's -- which the ink's weight carries already
+        (GlobalInk); a weight written keeps it (TyFontWeightOf) }
+      if FTbSpecs[t].Icons[i].TextFontStyle <> '' then
+      begin
+        if TyFontStyleIsItalic(FTbSpecs[t].Icons[i].TextFontStyle) then
+          fw := fw or TyChartFontItalic
+        else
+          fw := fw and not TyChartFontItalic;
+      end;
       tw := 0;
       th := 0;
       if AMeasurer <> nil then
-        AMeasurer.MeasureLine(FTbSpecs[t].Icons[i].Title, ink.FontName,
-          Round(fs * s), ink.FontWeight, tw, th);
+        AMeasurer.MeasureLine(FTbSpecs[t].Icons[i].Title, fname,
+          Round(fs * s), fw, tw, th);
       el.Caption.Text := FTbSpecs[t].Icons[i].Title;
-      el.Caption.FontName := ink.FontName;
+      el.Caption.FontName := fname;
       el.Caption.FontSizeLogical := fs;
-      el.Caption.FontWeight := ink.FontWeight;
+      el.Caption.FontWeight := fw;
       { textFill, else the emphasis fill, else its stroke }
       sty := TyTbStyleOf(FTbSpecs[t].Icons[i], True);
       if FTbSpecs[t].Icons[i].TextFill.Kind = tbcText then
@@ -426,6 +481,58 @@ begin
       if place.VAlign = 'middle' then el.Caption.AnchorV := tavMiddle
       else if place.VAlign = 'bottom' then el.Caption.AnchorV := tavBottom
       else el.Caption.AnchorV := tavTop;
+      { [R5-D] THE BOX: zrender lays the text's box out -- its content (the
+        text's width, a line as high as the font) and textPadding around it
+        -- on the anchor, the text inside it; textBackgroundColor fills it
+        with textBorderRadius' corners }
+      pad := FTbSpecs[t].Icons[i].TextPadding;
+      if (pad[0] <> 0) or (pad[1] <> 0) or (pad[2] <> 0) or (pad[3] <> 0)
+        or (FTbSpecs[t].Icons[i].TextBg.Kind = tbcText) then
+      begin
+        bw := tw + s * (pad[1] + pad[3]);
+        bh := s * (fs + pad[0] + pad[2]);
+        case el.Caption.AnchorH of
+          tahCentre: bx := el.Caption.X - bw / 2;
+          tahRight: bx := el.Caption.X - bw;
+        else
+          bx := el.Caption.X;
+        end;
+        case el.Caption.AnchorV of
+          tavMiddle: by := el.Caption.Y - bh / 2;
+          tavBottom: by := el.Caption.Y - bh;
+        else
+          by := el.Caption.Y;
+        end;
+        { the text at the content's own place in the box }
+        case el.Caption.AnchorH of
+          tahCentre: el.Caption.X := el.Caption.X + s * (pad[3] - pad[1]) / 2;
+          tahRight: el.Caption.X := el.Caption.X - s * pad[1];
+        else
+          el.Caption.X := el.Caption.X + s * pad[3];
+        end;
+        case el.Caption.AnchorV of
+          tavMiddle: el.Caption.Y := el.Caption.Y + s * (pad[0] - pad[2]) / 2;
+          tavBottom: el.Caption.Y := el.Caption.Y - s * pad[2];
+        else
+          el.Caption.Y := el.Caption.Y + s * pad[0];
+        end;
+        if (FTbSpecs[t].Icons[i].TextBg.Kind = tbcText)
+          and TbColour(FTbSpecs[t].Icons[i].TextBg, 0, bg) and ((bg shr 24) <> 0) then
+        begin
+          box := Blank;
+          box.Z2 := 1;
+          r4 := FTbSpecs[t].Icons[i].TextRadius;
+          if (r4[0] > 0) or (r4[1] > 0) or (r4[2] > 0) or (r4[3] > 0) then
+            box.Shape := TyShapeRoundRect(TyRectF(bx, by, bx + bw, by + bh),
+              [s * r4[0], s * r4[1], s * r4[2], s * r4[3]])
+          else
+            box.Shape := TyShapeRect(TyRectF(bx, by, bx + bw, by + bh));
+          box.Style.HasFill := True;
+          box.Style.FillColor := bg;
+          AList.Add(box);
+          Inc(Result);
+        end;
+      end;
       case el.Caption.AnchorH of
         tahCentre: l := el.Caption.X - tw / 2;
         tahRight: l := el.Caption.X - tw;
@@ -460,6 +567,26 @@ begin
     AList.Add(el);
     Inc(Result);
   end;
+  if lk >= 0 then LevelTail(AList, lt, 'toolbox', lk);
+end;
+
+{ [R5-D] an icon's rect in the control (device px), as its path's
+  getBoundingRect gives it in the state it is in }
+function TTyCustomAdvanceChart.TipTbIconRect(ATb, AIcon: Integer): TTyRectF;
+var
+  r: TTyXYWH;
+  s, ox, oy: Double;
+begin
+  Result := TyInvalidRectF;
+  if (ATb < 0) or (ATb > High(FTbSpecs)) or (ATb > High(FTbLayouts))
+    or (AIcon < 0) or (AIcon > High(FTbSpecs[ATb].Icons)) then Exit;
+  TbIconOrigin(ATb, AIcon, ox, oy);
+  if IsNan(ox) or IsNan(oy) then Exit;
+  r := TyToolboxIconRect(FTbSpecs[ATb], FTbSpecs[ATb].Icons[AIcon], TbEmphasised(ATb, AIcon));
+  if IsNan(r.X) or IsNan(r.Y) or IsNan(r.W) or IsNan(r.H) then Exit;
+  s := TbScale;
+  Result := TyRectF(FLastRect.Left + s * (ox + r.X), FLastRect.Top + s * (oy + r.Y),
+    FLastRect.Left + s * (ox + r.X + r.W), FLastRect.Top + s * (oy + r.Y + r.H));
 end;
 
 function TTyCustomAdvanceChart.TbHitAt(AX, AY: Integer; out ATb, AIcon: Integer): Boolean;
@@ -472,6 +599,8 @@ begin
   ATb := -1;
   AIcon := -1;
   if csDesigning in ComponentState then Exit;
+  { [R5-D] under the loading mask -- [R5-J] a toolbox of a higher zlevel
+    is over it, and the search by canvas takes its own (below) }
   s := TbScale;
   x := (AX - FLastRect.Left) / s;
   y := (AY - FLastRect.Top) / s;
@@ -480,6 +609,8 @@ begin
     or (y > (FLastRect.Bottom - FLastRect.Top) / s) then Exit;
   for t := High(FTbLayouts) downto 0 do
   begin
+    { [R5-J] its zlevel: under the mask, or not the canvas searched }
+    if MaskOver(ModelZLevel('toolbox', t)) or not HitIn(ModelZLevel('toolbox', t)) then Continue;
     if (t > High(FTbSpecs)) or not FTbLayouts[t].Valid then Continue;
     for i := High(FTbSpecs[t].Icons) downto 0 do
     begin
@@ -644,6 +775,10 @@ begin
   ApplyNotMerge(FTbBackup);
   FTbHistory := h;
   AfterSetOption(False, True);
+  { [R5-J] the action's update (prepareAndUpdate) runs in the dispatch: its
+    visual stage's brushSelect waits there and is published before the
+    dispatch's `updated` [was: at the next paint, after `updated`] }
+  ConvertReady;
   EmitPayloadEvent('restore', TbEventJson(APayload, 'restore'));
 end;
 
@@ -753,6 +888,9 @@ begin
     SetLength(FTbMagicTitle, Max(Length(FTbMagicTitle), TyToolboxCount(FOption)));
     for t := 0 to High(FTbMagicTitle) do FTbMagicTitle[t] := TyTbJson(d);
   end;
+  { [R5-J] the update in the dispatch, as restore's -- after the title it
+    renders }
+  ConvertReady;
   EmitPayloadEvent('magictypechanged', TbEventJson(APayload, 'magictypechanged'));
 end;
 
@@ -1089,6 +1227,8 @@ begin
       merged.Free;
     end;
   end;
+  { [R5-J] the update in the dispatch, as restore's }
+  ConvertReady;
   EmitPayloadEvent('dataviewchanged', TbEventJson(APayload, 'dataviewchanged'));
 end;
 

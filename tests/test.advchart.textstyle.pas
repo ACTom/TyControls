@@ -260,10 +260,17 @@ begin
   Inc(FCompared);
   if Str(T.Find('fontWeight')) <> Str(b.Find('fontWeight')) then
   begin
-    if WeightOf(Str(T.Find('fontWeight'))) <> AWeight then
+    if WeightOf(Str(T.Find('fontWeight'))) <> TyFontWeightOf(AWeight) then
       Miss(Format('%s "%s": weight %s upstream, %d here',
-        [AWhat, T.Strings['text'], Str(T.Find('fontWeight')), AWeight]));
+        [AWhat, T.Strings['text'], Str(T.Find('fontWeight')), TyFontWeightOf(AWeight)]));
   end;
+  { [R5-A] THE STYLE, everywhere: italic upstream is the flag above the
+    weight here, and upright is no flag }
+  Inc(FCompared);
+  if (Str(T.Find('fontStyle')) = 'italic') <> ((AWeight and TyFontItalic) <> 0) then
+    Miss(Format('%s "%s": fontStyle %s upstream, italic %s here',
+      [AWhat, T.Strings['text'], Str(T.Find('fontStyle')),
+       BoolToStr((AWeight and TyFontItalic) <> 0, True)]));
   Inc(FCompared);
   if Str(T.Find('fontFamily')) <> Str(b.Find('fontFamily')) then
   begin

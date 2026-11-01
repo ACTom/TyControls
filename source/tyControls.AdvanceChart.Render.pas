@@ -27,6 +27,35 @@ procedure TyTraceShape(P: TTyPainter; const AShape: TTyChartShape);
 { Draw one element: its shape, filled and/or stroked per its style. }
 procedure TyRenderElement(P: TTyPainter; const AElement: TTyChartElement);
 
+{ [R5-G] A ZLEVEL BAND for what a paint list draws: while one is set,
+  TyRenderElement draws only an element whose ZLevel is above ALo and at
+  most AHi -- zrender's canvas per zlevel, the elements of the chart drawn
+  in two passes with the components (axes, titles, the loading mask) that
+  the port draws apart from the list between them. TyClearZBand: every
+  element again. }
+procedure TySetZBand(ALo, AHi: Integer);
+procedure TyClearZBand;
+{ [R5-J] whether an element of zlevel AZ draws in the band set now (every
+  one when none is) }
+function TyZBandHas(AZ: Integer): Boolean;
+type
+  TTyZBandState = record
+    IsOn: Boolean;
+    Lo, Hi: Integer;
+  end;
+{ [R5-J] the band set now, cleared -- what is drawn off the canvas (a
+  progressive run's own layer, every element of it) -- and set back }
+function TySuspendZBand: TTyZBandState;
+procedure TyResumeZBand(const AState: TTyZBandState);
+{ the highest ZLevel of AList's elements that draw (-MaxInt for none) }
+function TyMaxZLevelOf(AList: TTyPaintList): Integer;
+
+{ [R5-C] the pen an element's style strokes with: its cap, its join, its
+  miter limit (zrender's 10 where the style says nothing) }
+function TyStyleLineCap(const AStyle: TTyChartElementStyle): TTyLineCap;
+function TyStyleLineJoin(const AStyle: TTyChartElementStyle): TTyLineJoin;
+function TyStyleMiterLimit(const AStyle: TTyChartElementStyle): Double;
+
 var
   { A LARGE BATCH IS PAINTED IN TILES this many device px square; 0 paints
     it as the one path [Batch 117]. }
@@ -113,6 +142,11 @@ function TyNormalizeLineDash(const AType: string; AWidth: Double;
 procedure TyRenderRtPieces(P: TTyPainter; const APieces: TTyRtPieceArray;
   AX, AY, ARotationRad, AScale, AAlpha: Double; AHasInk: Boolean;
   AInk: TTyColor);
+{ [R5-A] A FRAME'S CANVAS SHADOW (a title's): the frame's fill, its alpha, on a mask of
+  its own and the painter's shadow cast from it -- the frame itself is drawn as it
+  always was. ARadius as FillBackground takes it. }
+procedure TyCastFrameShadow(P: TTyPainter; const AFrame: TTyRectF; ARadius: Integer;
+  AFill: TTyColor; const AShadow: TTyChartShadow);
 
 { [R2-A] A TURNED TEXT OF SEVERAL LINES as zrender lays a plain block out
   (Text._updatePlainTexts) and its transform turns it: the lines stack in
@@ -146,6 +180,12 @@ procedure TyAdvChartHaloCacheForTest(AOn: Boolean);
   mask's origin at (0, 0) -- per contour its point count, then its points
   x, y in turn. }
 function TyTraceMaskOutlineForTest(AMask: TBGRABitmap; AScale: Integer): TTyDoubleArray;
+{ [R5-G] FOR THE TESTS: the traces kept by the mask's ink (TraceMaskOutline)
+  -- switched off (everything kept dropped) or on again (ACollide: every box
+  under one hash, so only the whole comparison tells them apart), and how
+  many traces were answered from them. }
+procedure TyAdvChartTraceKeepForTest(AOn: Boolean; ACollide: Boolean = False);
+function TyAdvChartTraceKeptHitsForTest: Integer;
 
 { [R2-L] BGRA's ABmp.FillRectAntialias(x, y, x2, y2, AColor) -- pixel-centred,
   in the bitmap's antialiasing draw mode -- byte for byte, the same brush
@@ -175,6 +215,31 @@ uses base64, Generics.Collections, tyControls.AdvanceChart.Large,
 var
   GDecalCache: TStringList = nil;
   GLargeFastPaths: Integer = 0;
+
+function TyStyleLineCap(const AStyle: TTyChartElementStyle): TTyLineCap;
+begin
+  case AStyle.LineCap of
+    cTyCapRound: Result := tlcRound;
+    cTyCapSquare: Result := tlcSquare;
+  else
+    Result := tlcButt;
+  end;
+end;
+
+function TyStyleLineJoin(const AStyle: TTyChartElementStyle): TTyLineJoin;
+begin
+  case AStyle.LineJoin of
+    cTyJoinRound: Result := tljRound;
+    cTyJoinBevel: Result := tljBevel;
+  else
+    Result := tljMiter;
+  end;
+end;
+
+function TyStyleMiterLimit(const AStyle: TTyChartElementStyle): Double;
+begin
+  if AStyle.MiterLimit > 0 then Result := AStyle.MiterLimit else Result := 10;
+end;
 
 function TyAdvChartLargeFastPathsForTest: Integer;
 begin
@@ -941,8 +1006,7 @@ begin
         x := AGeom.Pts[ARow * 2];
         y := AGeom.Pts[ARow * 2 + 1];
         if Bad(x) or Bad(y) then Exit;
-        if AGeom.SoftOn and not ((x >= AGeom.Soft.X) and (x <= AGeom.Soft.X + AGeom.Soft.W)
-          and (y >= AGeom.Soft.Y) and (y <= AGeom.Soft.Y + AGeom.Soft.H)) then Exit;
+        if not TyLargeSoftContains(AGeom, x, y) then Exit;
         AX0 := x - AGeom.SymW / 2;
         AX1 := x + AGeom.SymW / 2;
         AY0 := y - AGeom.SymH / 2;
@@ -1021,15 +1085,16 @@ begin
         x := AGeom.Pts[ARow * 2];
         y := AGeom.Pts[ARow * 2 + 1];
         if Bad(x) or Bad(y) then Exit;
-        if AGeom.SoftOn and not ((x >= AGeom.Soft.X) and (x <= AGeom.Soft.X + AGeom.Soft.W)
-          and (y >= AGeom.Soft.Y) and (y <= AGeom.Soft.Y + AGeom.Soft.H)) then Exit;
+        if not TyLargeSoftContains(AGeom, x, y) then Exit;
         w := AGeom.SymW;
         h := AGeom.SymH;
         if AGeom.Boost then
           P.RectPath(x - w / 2, y - h / 2, x - w / 2 + w, y - h / 2 + h)
         { [F6a] a picture in a large batch: LargeSymbolPath builds through
-          the symbol's path, and an image has none -- nothing }
-        else if not (ASpec.Kind in [tsyNone, tsyImage]) then
+          the symbol's path, and an image has none -- nothing. [R5-G] Nor a
+          path://: createSymbol fits it into the proxy's 0 x 0 box once and
+          buildPath replays that collapsed path at every point -- no ink }
+        else if not (ASpec.Kind in [tsyNone, tsyImage, tsyPath]) then
         begin
           sub := TyBuildSymbolInBox(ASpec, TyRectF(x - w / 2, y - h / 2,
             x - w / 2 + w, y - h / 2 + h));
@@ -1192,9 +1257,22 @@ begin
         of it already rotated and the fill and the stroke that follow know
         nothing about it. }
       begin
+        if (AShape.RotationRad <> 0) or AShape.FlipX or AShape.FlipY then
+          P.SaveState;
+        { [R5-G] the reflection outside the turn: the path is turned, then
+          reflected (a pictorial glyph's scale sign over its rotation) }
+        if AShape.FlipX or AShape.FlipY then
+        begin
+          P.Translate(AShape.FlipCX, AShape.FlipCY);
+          if AShape.FlipX then
+          begin
+            if AShape.FlipY then P.ScaleBy(-1, -1) else P.ScaleBy(-1, 1);
+          end
+          else P.ScaleBy(1, -1);
+          P.Translate(-AShape.FlipCX, -AShape.FlipCY);
+        end;
         if AShape.RotationRad <> 0 then
         begin
-          P.SaveState;
           P.Translate(AShape.RotCX, AShape.RotCY);
           P.RotateBy(AShape.RotationRad);
           P.Translate(-AShape.RotCX, -AShape.RotCY);
@@ -1205,7 +1283,8 @@ begin
                            Round(AShape.Bounds.Right), Round(AShape.Bounds.Bottom)))
         else
           P.SvgPath(AShape.PathData);
-        if AShape.RotationRad <> 0 then P.RestoreState;
+        if (AShape.RotationRad <> 0) or AShape.FlipX or AShape.FlipY then
+          P.RestoreState;
       end;
   end;
 end;
@@ -1307,6 +1386,66 @@ var
   GHaloTraces: Integer = 0;
   GTraceWork: TTraceWork = nil;
 
+type
+  { [R5-G] A TRACE KEPT BY WHAT IT WAS TRACED FROM: the padded alpha of the
+    ink's box, where that box stands in the mask and the scale -- all the
+    trace reads -- and the outline it made. }
+  TTyTraceKept = class
+  public
+    X0, Y0, AW, AH, Scale: Integer;
+    Al: array of Byte;
+    Pts: array of Double;
+    Starts: array of Integer;
+    Contours: Integer;
+    Next: TTyTraceKept;    // another box with the same hash
+  end;
+
+const
+  TraceKeptMaxCount = 8192;
+  TraceKeptMaxBytes = 32 * 1024 * 1024;
+
+var
+  GTraceKept: specialize TDictionary<QWord, TTyTraceKept> = nil;
+  GTraceKeptCount: Integer = 0;
+  GTraceKeptBytes: Int64 = 0;
+  GTraceKeptHits: Integer = 0;
+  GTraceKeptOff: Boolean = False;
+  GTraceKeptCollide: Boolean = False;
+
+procedure DropTraceKept;
+var
+  t, n, nx: TTyTraceKept;
+begin
+  if GTraceKept <> nil then
+  begin
+    for t in GTraceKept.Values do
+    begin
+      n := t;
+      while n <> nil do
+      begin
+        nx := n.Next;
+        n.Free;
+        n := nx;
+      end;
+    end;
+    GTraceKept.Clear;
+  end;
+  GTraceKeptCount := 0;
+  GTraceKeptBytes := 0;
+end;
+
+procedure TyAdvChartTraceKeepForTest(AOn: Boolean; ACollide: Boolean);
+begin
+  DropTraceKept;
+  GTraceKeptOff := not AOn;
+  GTraceKeptCollide := ACollide;
+end;
+
+function TyAdvChartTraceKeptHitsForTest: Integer;
+begin
+  Result := GTraceKeptHits;
+end;
+
 { THE GLYPHS' OUTLINES from their coverage: marching squares over the mask's
   alpha at half coverage, each crossing placed by linear interpolation
   between the pixel centres, the segments chained into closed contours. A
@@ -1344,6 +1483,12 @@ var
   b0, b1, b2, b3: Boolean;
   kTop, kRight, kBottom, kLeft: Integer;
   o: TTyHaloOutline;
+  rowOr: LongWord;
+  px: PLongWord;
+  keep: Boolean;
+  hk: QWord;
+  kt, kFirst: TTyTraceKept;
+  ab: PByte;
 
   function A(AX, AY: Integer): Double;
   begin
@@ -1410,6 +1555,18 @@ begin
   for y := 0 to h - 1 do
   begin
     row := AMask.ScanLine[y];
+    { [R5-G] a row with no pixel at half coverage is passed at a glance: the
+      alpha byte's top bit is set exactly where the alpha is 128 or more, and
+      the OR of the row's pixels has it set exactly where one of them does --
+      most of a turned label's square mask is such rows }
+    px := PLongWord(row);
+    rowOr := 0;
+    for x := 0 to w - 1 do
+    begin
+      rowOr := rowOr or px^;
+      Inc(px);
+    end;
+    if rowOr and (LongWord($80) shl TBGRAPixel_AlphaShift) = 0 then Continue;
     for x := 0 to w - 1 do
     begin
       if row^.alpha >= 128 then
@@ -1453,6 +1610,49 @@ begin
       for x := x0 to x1 + 1 do
         if (x >= 0) and (x < w) then
           al[(y - y0) * aw + (x - x0)] := row[x].alpha;
+    end;
+    { [R5-G] THE SAME INK TRACED BEFORE: everything below reads the padded
+      alpha, the box's place (x0, y0) and the scale and nothing else, so a
+      box met again -- a label moved along its tween, its glyphs landing on
+      the pixels they landed on in an earlier frame -- takes that trace's
+      outline, a copy }
+    keep := not ownWork and not GTraceKeptOff;
+    kFirst := nil;
+    hk := 0;
+    if keep then
+    begin
+      {$push}{$R-}{$Q-}
+      hk := QWord($CBF29CE484222325);
+      hk := (hk xor QWord(LongWord(x0))) * QWord($100000001B3);
+      hk := (hk xor QWord(LongWord(y0))) * QWord($100000001B3);
+      hk := (hk xor QWord(LongWord(aw))) * QWord($100000001B3);
+      hk := (hk xor QWord(LongWord(ah))) * QWord($100000001B3);
+      hk := (hk xor QWord(LongWord(AScale))) * QWord($100000001B3);
+      ab := al;
+      for i := 0 to aw * ah - 1 do
+      begin
+        hk := (hk xor ab^) * QWord($100000001B3);
+        Inc(ab);
+      end;
+      {$pop}
+      if GTraceKeptCollide then hk := 0;
+      if (GTraceKept <> nil) and GTraceKept.TryGetValue(hk, kFirst) then
+      begin
+        kt := kFirst;
+        while kt <> nil do
+        begin
+          if (kt.X0 = x0) and (kt.Y0 = y0) and (kt.AW = aw) and (kt.AH = ah)
+            and (kt.Scale = AScale) and CompareMem(@kt.Al[0], al, aw * ah) then
+          begin
+            o.Pts := Copy(kt.Pts);
+            o.Starts := Copy(kt.Starts);
+            o.Contours := kt.Contours;
+            Inc(GTraceKeptHits);
+            Exit;
+          end;
+          kt := kt.Next;
+        end;
+      end;
     end;
     { every slot empty; a crossing is written before it is read }
     FillDWord(adj^, nKeys * 2, LongWord(-1));
@@ -1508,6 +1708,12 @@ begin
     SetLength(used, nSeg);
     for i := 0 to nSeg - 1 do used[i] := False;
     nPts := 0;
+    { [R5-G] room for every point at once: a contour of s segments has at
+      most s + 1 points, so all of them at most twice the segments; and a
+      start per contour, one contour per segment at most -- both cut to size
+      below, as they always were }
+    SetLength(o.Pts, 4 * nSeg);
+    SetLength(o.Starts, nSeg + 1);
     for i := 0 to nSeg - 1 do
     begin
       if used[i] then Continue;
@@ -1528,10 +1734,37 @@ begin
         if segA[seg] = key then key := segB[seg] else key := segA[seg];
       end;
       Inc(o.Contours);
-      SetLength(o.Starts, o.Contours + 1);
       o.Starts[o.Contours] := nPts;
     end;
+    SetLength(o.Starts, o.Contours + 1);
     SetLength(o.Pts, 2 * nPts);
+    { [R5-G] kept by its ink, within bounds }
+    if keep then
+    begin
+      if GTraceKept = nil then
+        GTraceKept := specialize TDictionary<QWord, TTyTraceKept>.Create;
+      if (GTraceKeptCount >= TraceKeptMaxCount) or (GTraceKeptBytes + aw * ah
+        + 8 * Length(o.Pts) + 4 * Length(o.Starts) > TraceKeptMaxBytes) then
+      begin
+        DropTraceKept;
+        kFirst := nil;
+      end;
+      kt := TTyTraceKept.Create;
+      kt.X0 := x0;
+      kt.Y0 := y0;
+      kt.AW := aw;
+      kt.AH := ah;
+      kt.Scale := AScale;
+      SetLength(kt.Al, aw * ah);
+      Move(al^, kt.Al[0], aw * ah);
+      kt.Pts := Copy(o.Pts);
+      kt.Starts := Copy(o.Starts);
+      kt.Contours := o.Contours;
+      kt.Next := kFirst;
+      GTraceKept.AddOrSetValue(hk, kt);
+      Inc(GTraceKeptCount);
+      Inc(GTraceKeptBytes, aw * ah + 8 * Length(o.Pts) + 4 * Length(o.Starts));
+    end;
   finally
     if ownWork then wk.Free;
   end;
@@ -2087,6 +2320,93 @@ begin
   end;
 end;
 
+{ [R5-A] A TEXT'S CANVAS SHADOW: its halo (where it has one) and its glyphs drawn as
+  DrawTextRotated and HaloRotated put them, on a mask of their own round the anchor, and
+  the painter's shadow cast from that -- blurred, moved, in AShadow -- under where they
+  will be drawn. ABlur and the offsets css px (the canvas' shadow is in device space:
+  no transform reaches it) }
+procedure RtTextShadow(P: TTyPainter; const AText, AFont: string; ASize, AWeight: Integer;
+  AX, AY, ARotationRad: Double; AH: TAlignment; AV: TTextLayout; AHasInk: Boolean;
+  AInk: TTyColor; AHasHalo: Boolean; AHalo: TTyColor; AHaloWidth: Double;
+  const ADash: string; ADashOffset: Double; AShadow: TTyColor;
+  ABlur, AOffsetX, AOffsetY: Double);
+var
+  sz: TSize;
+  r, ox, oy, mw, mh, s: Integer;
+  mx, my: Double;
+  mp: TTyPainter;
+  mask: TBGRABitmap;
+  sc: TTyCanvasScale;
+begin
+  if (P = nil) or (P.Bitmap = nil) or not (AHasInk or AHasHalo) then Exit;
+  sz := P.MeasureText(AText, AFont, ASize, AWeight);
+  { round the anchor, any turn: the text's diagonal, and the stroke }
+  r := sz.cx + sz.cy + Ceil(AHaloWidth * P.PPI / 96) + 4;
+  ox := Floor(AX) - r;
+  oy := Floor(AY) - r;
+  mw := 2 * r + 2;
+  mh := 2 * r + 2;
+  mx := AX - ox;
+  my := AY - oy;
+  s := P.DeviceScale;
+  sc.Scale := s;
+  sc.DeviceUnits := False;
+  mask := TBGRABitmap.Create(mw * s, mh * s, BGRAPixelTransparent);
+  try
+    mp := TTyPainter.Create;
+    try
+      mp.FastStrokes := P.FastStrokes;
+      mp.BeginPaintOnScaled(nil, Rect(0, 0, mw, mh), P.PPI, mask, sc);
+      if AHasHalo then
+        HaloRotated(mp, AText, AFont, ASize, AWeight, mx, my, ARotationRad, AH, AV,
+          AHalo, AHaloWidth, ADash, ADashOffset);
+      if AHasInk then
+        mp.DrawTextRotated(AText, AFont, ASize, AWeight, AInk, mx, my, ARotationRad, AH, AV);
+      mp.EndPaint;
+    finally
+      mp.Free;
+    end;
+    P.CastShadowOf(mask, ox * s, oy * s, AShadow, ABlur, AOffsetX, AOffsetY);
+  finally
+    mask.Free;
+  end;
+end;
+
+procedure TyCastFrameShadow(P: TTyPainter; const AFrame: TTyRectF; ARadius: Integer;
+  AFill: TTyColor; const AShadow: TTyChartShadow);
+var
+  st: TTyChartElementStyle;
+  mask: TBGRABitmap;
+  mp: TTyPainter;
+  sc: TTyCanvasScale;
+  r: TRect;
+  s: Integer;
+begin
+  st := Default(TTyChartElementStyle);
+  TyStyleSetShadow(st, AShadow);
+  if (P = nil) or not TyStyleHasShadow(st) or ((AFill shr 24) = 0) then Exit;
+  r := Rect(Round(AFrame.Left), Round(AFrame.Top), Round(AFrame.Right), Round(AFrame.Bottom));
+  if (r.Right <= r.Left) or (r.Bottom <= r.Top) then Exit;
+  s := P.DeviceScale;
+  sc.Scale := s;
+  sc.DeviceUnits := False;
+  mask := TBGRABitmap.Create((r.Right - r.Left) * s, (r.Bottom - r.Top) * s, BGRAPixelTransparent);
+  mp := TTyPainter.Create;
+  try
+    mp.FastStrokes := P.FastStrokes;
+    mp.BeginPaintOnScaled(nil, Rect(0, 0, r.Right - r.Left, r.Bottom - r.Top), P.PPI, mask, sc);
+    mp.BeginPath;
+    mp.RoundRectPath(0, 0, r.Right - r.Left, r.Bottom - r.Top, ARadius);
+    mp.FillPath(AFill);
+    mp.EndPaint;
+    P.CastShadowOf(mask, r.Left * s, r.Top * s, TTyColor(AShadow.Color), AShadow.Blur,
+      AShadow.OffsetX, AShadow.OffsetY);
+  finally
+    mp.Free;
+    mask.Free;
+  end;
+end;
+
 procedure TyRenderRtPieces(P: TTyPainter; const APieces: TTyRtPieceArray;
   AX, AY, ARotationRad, AScale, AAlpha: Double; AHasInk: Boolean;
   AInk: TTyColor);
@@ -2094,7 +2414,7 @@ var
   i, dx, dy, reach: Integer;
   pc: TTyRtPiece;
   a, gx, gy, r, rr, s: Double;
-  ink, halo, shade: TTyColor;
+  ink, halo: TTyColor;
   hasInk: Boolean;
   k: Integer;
   radii: array[0..3] of Double;
@@ -2146,6 +2466,10 @@ begin
       try
         if a < 1 then P.SetElementAlpha(a);
         BorderDash;
+        { [R5-A] the box's shadow, under its border and its fill each }
+        if pc.HasShadow and ((pc.ShadowColor shr 24) <> 0) then
+          P.SetShadow(TTyColor(pc.ShadowColor), pc.ShadowBlur, pc.ShadowOffsetX,
+            pc.ShadowOffsetY);
         P.Translate(AX, AY);
         if ARotationRad <> 0 then P.RotateBy(-ARotationRad);
         for k := 0 to 3 do radii[k] := pc.Radius[k] * AScale;
@@ -2186,18 +2510,18 @@ begin
       hasInk := True;
       ink := AInk;
     end;
-    { THE SHADOW, unblurred: the painter has no blur for glyphs, so what
-      survives of a text shadow is its offset copy. zrender sets none at all
-      without a blur (Text.ts:611, 850), whatever the offsets say }
-    if pc.HasShadow and ((pc.ShadowOffsetX <> 0) or (pc.ShadowOffsetY <> 0))
-      and ((pc.ShadowColor shr 24) <> 0) then
-    begin
-      shade := CaptionInk(pc.ShadowColor, a);
-      P.DrawTextRotated(TyInkText(pc.Text), pc.FontFamily,
-        TyFontSizeFromPx(pc.FontSizePx), pc.FontWeight, shade,
-        gx + pc.ShadowOffsetX * AScale, gy + pc.ShadowOffsetY * AScale,
-        ARotationRad, RtAlign(pc.TextAlign), tlCenter);
-    end;
+    { [R5-A] THE SHADOW, the TSpan's canvas shadow: zrender sets one only for
+      a textShadowBlur above nought (Text.ts:611, 850 -- whatever the offsets
+      say), in textShadowColor ('transparent' when none), blurred, under the
+      halo and the glyphs -- cast from them as they are drawn, their ink and
+      opacity. [Was: an unblurred copy at the offset.] }
+    if pc.HasShadow and (pc.ShadowBlur > 0) and ((pc.ShadowColor shr 24) <> 0) then
+      RtTextShadow(P, TyInkText(pc.Text), pc.FontFamily,
+        TyFontSizeFromPx(pc.FontSizePx), pc.FontWeight, gx, gy, ARotationRad,
+        RtAlign(pc.TextAlign), tlCenter, hasInk, CaptionInk(ink, a),
+        pc.HasStroke and (pc.LineWidth > 0) and ((pc.Stroke shr 24) <> 0),
+        CaptionInk(pc.Stroke, a), pc.LineWidth, pc.LineDash, pc.LineDashOffset,
+        TTyColor(pc.ShadowColor), pc.ShadowBlur, pc.ShadowOffsetX, pc.ShadowOffsetY);
     { THE HALO FIRST -- a text's stroke is painted under its fill -- as the
       one-run caption dilates it }
     if pc.HasStroke and (pc.LineWidth > 0) and ((pc.Stroke shr 24) <> 0) then
@@ -2357,6 +2681,112 @@ end;
   through the map as a picture (PaintImageInto). The picture is kept under a
   key of everything it was drawn from, as the chart's own pictures are. }
 procedure TyRenderCaption(P: TTyPainter; const AElement: TTyChartElement); forward;
+
+{ [spec 242] an element's clip paths intersected into the painter's clip }
+{ [R5-G] A CLIP RECT OFF THE PIXEL GRID: the integer rect the painter clips
+  to holds the half pixel outside it, so the exact rect goes in as a path too
+  -- a canvas' clip(), coverage at its fractional edges (a line's clip is
+  getArea grown by half the line width, its y not rounded: Line.ts) }
+procedure ClipRectExact(P: TTyPainter; const AR: TTyRectF);
+begin
+  if (Frac(AR.Left) = 0) and (Frac(AR.Top) = 0) and (Frac(AR.Right) = 0)
+    and (Frac(AR.Bottom) = 0) then Exit;
+  P.BeginPath;
+  P.RectPath(AR.Left, AR.Top, AR.Right, AR.Bottom);
+  P.ClipPath(tfrNonZero);
+  P.BeginPath;
+end;
+
+procedure ApplyClipPaths(P: TTyPainter; const AElement: TTyChartElement);
+var k: Integer;
+begin
+  for k := 0 to High(AElement.ClipPaths) do
+  begin
+    P.BeginPath;
+    TyTraceShape(P, AElement.ClipPaths[k]);
+    P.ClipPath(tfrNonZero);
+    P.BeginPath;
+  end;
+end;
+
+{ [spec 242] A CLIPPED BLOCK OF TEXT: the painter writes text straight to
+  its bitmap, past the Canvas2D clip, so the block is drawn on a layer the
+  size of the clips' common box and the layer filled in through them }
+procedure RenderClippedCaption(P: TTyPainter; const AElement: TTyChartElement);
+var
+  r, b: TTyRectF;
+  k, x0, y0, x1, y1, bw, bh, ppi: Integer;
+  sc, ox, oy: Double;
+  e: TTyChartElement;
+  bmp: TBGRABitmap;
+  mp: TTyPainter;
+  pm: array[0..5] of Double;
+begin
+  r := TyShapeBounds(AElement.ClipPaths[0]);
+  for k := 1 to High(AElement.ClipPaths) do
+  begin
+    b := TyShapeBounds(AElement.ClipPaths[k]);
+    r.Left := Max(r.Left, b.Left);
+    r.Top := Max(r.Top, b.Top);
+    r.Right := Min(r.Right, b.Right);
+    r.Bottom := Min(r.Bottom, b.Bottom);
+  end;
+  if IsNan(r.Left + r.Top + r.Right + r.Bottom) or not (r.Right > r.Left)
+    or not (r.Bottom > r.Top) then Exit;
+  ppi := Max(1, Round(P.PPI * P.DeviceScale));
+  sc := ppi / 96;
+  x0 := Floor(r.Left * sc);
+  y0 := Floor(r.Top * sc);
+  x1 := Ceil(r.Right * sc);
+  y1 := Ceil(r.Bottom * sc);
+  { never past the target bitmap }
+  if P.Bitmap <> nil then
+  begin
+    x0 := Max(x0, -2);
+    y0 := Max(y0, -2);
+    x1 := Min(x1, Ceil(P.Bitmap.Width * sc / Max(1, P.DeviceScale * P.PPI / 96)) + 2);
+    y1 := Min(y1, Ceil(P.Bitmap.Height * sc / Max(1, P.DeviceScale * P.PPI / 96)) + 2);
+  end;
+  bw := x1 - x0;
+  bh := y1 - y0;
+  if (bw <= 0) or (bh <= 0) or (bw > 8192) or (bh > 8192) then Exit;
+  ox := x0 / sc;
+  oy := y0 / sc;
+  bmp := TBGRABitmap.Create(bw, bh, BGRAPixelTransparent);
+  mp := TTyPainter.Create;
+  try
+    mp.FastStrokes := P.FastStrokes;
+    mp.BeginPaintOn(nil, Rect(0, 0, bw, bh), ppi, bmp);
+    e := AElement;
+    e.ClipPaths := nil;
+    e.Caption.X := e.Caption.X - ox;
+    e.Caption.Y := e.Caption.Y - oy;
+    TyRenderCaption(mp, e);
+    mp.EndPaint;
+    pm[0] := 1 / sc;
+    pm[1] := 0;
+    pm[2] := 0;
+    pm[3] := 1 / sc;
+    pm[4] := ox;
+    pm[5] := oy;
+    P.SaveState;
+    try
+      ApplyClipPaths(P, AElement);
+      P.BeginPath;
+      P.MoveTo(ox, oy);
+      P.LineTo(ox + bw / sc, oy);
+      P.LineTo(ox + bw / sc, oy + bh / sc);
+      P.LineTo(ox, oy + bh / sc);
+      P.ClosePath;
+      P.FillPathPattern(bmp, 'no-repeat', pm, tfrNonZero);
+    finally
+      P.RestoreState;
+    end;
+  finally
+    mp.Free;
+    bmp.Free;
+  end;
+end;
 
 procedure RenderAffineCaption(P: TTyPainter; const AElement: TTyChartElement);
 var
@@ -2609,14 +3039,65 @@ begin
   Result.EndRad := en;
 end;
 
+var
+  GZBandOn: Boolean = False;
+  GZBandLo, GZBandHi: Integer;
+
+procedure TySetZBand(ALo, AHi: Integer);
+begin
+  GZBandOn := True;
+  GZBandLo := ALo;
+  GZBandHi := AHi;
+end;
+
+procedure TyClearZBand;
+begin
+  GZBandOn := False;
+end;
+
+function TyZBandHas(AZ: Integer): Boolean;
+begin
+  Result := not GZBandOn or ((AZ > GZBandLo) and (AZ <= GZBandHi));
+end;
+
+function TySuspendZBand: TTyZBandState;
+begin
+  Result.IsOn := GZBandOn;
+  Result.Lo := GZBandLo;
+  Result.Hi := GZBandHi;
+  GZBandOn := False;
+end;
+
+procedure TyResumeZBand(const AState: TTyZBandState);
+begin
+  GZBandOn := AState.IsOn;
+  GZBandLo := AState.Lo;
+  GZBandHi := AState.Hi;
+end;
+
+function TyMaxZLevelOf(AList: TTyPaintList): Integer;
+var i: Integer; pe: PTyChartElement;
+begin
+  Result := -MaxInt;
+  if AList = nil then Exit;
+  for i := 0 to AList.Count - 1 do
+  begin
+    pe := AList.Ref(i);
+    if pe^.Ignore or pe^.GfxUnder then Continue;
+    if pe^.ZLevel > Result then Result := pe^.ZLevel;
+  end;
+end;
+
 procedure TyRenderElement(P: TTyPainter; const AElement: TTyChartElement);
 var
   rule: TTyFillRule;
   gx1, gy1, gx2, gy2, gr: Double;
+  mlim: Double;
   stops: array of TTyGradStop;
   img: TBGRABitmap;
   pm: TTyDoubleArray;
   nw, nh, devW: Double;
+  ca, cd, ctx, cty: Double;
 
   procedure PaintPen; forward;
 
@@ -2664,7 +3145,16 @@ var
           devW := 0;
         { for the raster's pixels (#83); the matrix below maps whichever comes back }
         devW := devW * P.DeviceScale;
+        { [spec 242] a source rect: the box shows CropW of the natural px --
+          the whole image at that many device px per natural one }
+        if AElement.Style.FillPattern.HasCrop and AElement.Style.FillPattern.CropOk
+          and (AElement.Style.FillPattern.CropW > 0)
+          and TyChartImageSize(AElement.Style.FillPattern.Image, nw, nh) then
+          devW := devW * nw / AElement.Style.FillPattern.CropW;
         img := TyChartImage(AElement.Style.FillPattern.Image, devW, nw, nh);
+        { drawImage handed a number that is none draws nothing }
+        if AElement.Style.FillPattern.HasCrop and not AElement.Style.FillPattern.CropOk then
+          img := nil;
         if img <> nil then
         begin
           if AElement.Style.FillPattern.HasMatrix then
@@ -2673,7 +3163,26 @@ var
               the image's size }
             SetLength(pm, 6);
             for gi := 0 to 5 do pm[gi] := AElement.Style.FillPattern.Matrix[gi];
-            if AElement.Style.FillPattern.UnitImage then
+            if AElement.Style.FillPattern.UnitImage and AElement.Style.FillPattern.HasCrop then
+            begin
+              { [spec 242] the source rect onto the unit square: an image px
+                u is natural px u * nw / width, the square's (n - CropX) /
+                CropW }
+              with AElement.Style.FillPattern do
+              begin
+                ca := nw / (img.Width * CropW);
+                cd := nh / (img.Height * CropH);
+                ctx := -CropX / CropW;
+                cty := -CropY / CropH;
+              end;
+              pm[4] := pm[0] * ctx + pm[2] * cty + pm[4];
+              pm[5] := pm[1] * ctx + pm[3] * cty + pm[5];
+              pm[0] := pm[0] * ca;
+              pm[1] := pm[1] * ca;
+              pm[2] := pm[2] * cd;
+              pm[3] := pm[3] * cd;
+            end
+            else if AElement.Style.FillPattern.UnitImage then
             begin
               pm[0] := pm[0] / img.Width;
               pm[1] := pm[1] / img.Width;
@@ -2742,6 +3251,9 @@ var
   var tile: TBGRABitmap; di: Integer;
   begin
     if not (AElement.Style.Decal.Present and AElement.Style.HasFill) then Exit;
+    { [R5-A] the decal element casts no shadow (Path.ts: decalElStyle.shadowColor
+      = null), its pen neither }
+    if TyStyleHasShadow(AElement.Style) then P.ClearShadow;
     { the fill rule here too: a large batch reaches this without PaintTraced }
     if AElement.Style.FillEvenOdd then rule := tfrEvenOdd else rule := tfrNonZero;
     { the tile made for the raster -- upstream's dpr: the PPI's and the device
@@ -3084,6 +3596,8 @@ var
 
 begin
   if P = nil then Exit;
+  { [R5-G] outside the band a list render is held to }
+  if GZBandOn and ((AElement.ZLevel <= GZBandLo) or (AElement.ZLevel > GZBandHi)) then Exit;
   { [F6a] A PICTURE: the image in its corners, with the element's alpha and
     clip, and nothing else of the style -- zrender's Image draws no path
     (a symbol's colour never reaches it) }
@@ -3092,10 +3606,21 @@ begin
     P.SaveState;
     try
       if AElement.HasClip then
+      begin
         P.ClipRect(Rect(Floor(AElement.ClipRect.Left), Floor(AElement.ClipRect.Top),
           Ceil(AElement.ClipRect.Right), Ceil(AElement.ClipRect.Bottom)));
+        ClipRectExact(P, AElement.ClipRect);
+      end;
+      { [spec 242] the clip paths }
+      ApplyClipPaths(P, AElement);
       if AElement.Style.Alpha < 1 then
         P.SetElementAlpha(AElement.Style.Alpha);
+      { [R5-F] ITS SHADOW, cast from the picture's own alpha: zrender's canvas
+        draws an Image with the context's shadow bound (brushImage after
+        bindContextStyle) [was: a picture cast none] }
+      if TyStyleHasShadow(AElement.Style) then
+        P.SetShadow(TTyColor(AElement.Style.ShadowColor), AElement.Style.ShadowBlur,
+          AElement.Style.ShadowOffsetX, AElement.Style.ShadowOffsetY);
       PaintImageInto(P, AElement.Shape.Image, AElement.Shape.Points);
     finally
       P.RestoreState;
@@ -3131,7 +3656,9 @@ begin
            AElement.ClipRadius]);
         P.ClipPath(tfrNonZero);
         P.BeginPath;
-      end;
+      end
+      else
+        ClipRectExact(P, AElement.ClipRect);
     end;
     { A POLAR LINE'S SECTOR, traced as zrender's arc takes it [Batch 113] }
     if AElement.HasClipSector then
@@ -3141,11 +3668,39 @@ begin
       P.ClipPath(tfrNonZero);
       P.BeginPath;
     end;
+    { [spec 242] the clip paths, each intersected in }
+    ApplyClipPaths(P, AElement);
     if AElement.Style.Alpha < 1 then
       P.SetElementAlpha(AElement.Style.Alpha);
     P.SetLineDash(AElement.Style.DashLogical, AElement.Style.DashOffsetLogical);
+    { [R5-D] a cap or a join the element names (the state is restored below) }
+    case AElement.Style.LineCap of
+      1: P.SetLineCap(tlcRound);
+      2: P.SetLineCap(tlcSquare);
+    end;
+    if (AElement.Style.LineJoin <> 0) or (AElement.Style.MiterLimit > 0) then
+    begin
+      if AElement.Style.MiterLimit > 0 then mlim := AElement.Style.MiterLimit
+      else mlim := 10;
+      case AElement.Style.LineJoin of
+        1: P.SetLineJoin(tljRound, mlim);
+        2: P.SetLineJoin(tljBevel, mlim);
+      else
+        P.SetLineJoin(tljMiter, mlim);
+      end;
+    end;
+    { [R5-A] THE SHADOW, under the fill and under the pen, each its own (the canvas') --
+      a large batch's too, as the one path upstream's large symbol draws: through the
+      path below, not the layers or the tiles }
+    if TyStyleHasShadow(AElement.Style) then
+      P.SetShadow(TTyColor(AElement.Style.ShadowColor), AElement.Style.ShadowBlur,
+        AElement.Style.ShadowOffsetX, AElement.Style.ShadowOffsetY);
+    { [R5-A] the series' blendMode: each fill and each stroke composited so
+      -- a large batch as its one path, as upstream's }
+    if AElement.Style.Blend <> '' then P.SetBlendMode(AElement.Style.Blend);
     if (AElement.Shape.Kind = cskLarge) and (P.Bitmap <> nil) and IdentityMatrix
-      and LayerFits then
+      and LayerFits and not TyStyleHasShadow(AElement.Style)
+      and (AElement.Style.Blend = '') then
     begin
       if AElement.Style.HasFill then PaintLargeOnLayer(False);
       if AElement.Style.StrokeWidthLogical > 0 then PaintLargeOnLayer(True);
@@ -3153,7 +3708,8 @@ begin
       PaintDecal;
     end
     else if (AElement.Shape.Kind = cskLarge) and (TyLargeTilePx > 0) and (P.Bitmap <> nil)
-      and IdentityMatrix then
+      and IdentityMatrix and not TyStyleHasShadow(AElement.Style)
+      and (AElement.Style.Blend = '') then
     begin
       PaintLargeInTiles;
       PaintDecal;
@@ -3172,6 +3728,8 @@ begin
       PaintDecal;
     end;
   finally
+    { [R5-A] the composite operation is no part of the saved state }
+    if AElement.Style.Blend <> '' then P.SetBlendMode('');
     { Restore even if a trace raised: the canvas state is shared, and leaking a
       dash or an alpha onto the next element is the defect the state stack
       exists to prevent. }
@@ -3181,7 +3739,13 @@ begin
     straight to the bitmap rather than through the Canvas2D state, so a caption
     drawn inside the block would ignore the alpha and the dash it appears to be
     inside. Drawing it out here makes the bypass visible instead of hidden. }
-  TyRenderCaption(P, AElement);
+  { [spec 242] which is why a clipped one goes through a layer }
+  if (Length(AElement.ClipPaths) > 0) and ((Length(AElement.Caption.RtPieces) > 0)
+    { [R5-I] a themeRiver layer's label under the layer's growing clip }
+    or AElement.ClipCaption) then
+    RenderClippedCaption(P, AElement)
+  else
+    TyRenderCaption(P, AElement);
 end;
 
 procedure TyRenderPaintList(P: TTyPainter; AList: TTyPaintList);
@@ -3207,5 +3771,7 @@ finalization
   FreeAndNil(GHaloOutlines);
   FreeAndNil(GHaloMask);
   FreeAndNil(GTraceWork);
+  DropTraceKept;
+  FreeAndNil(GTraceKept);
 
 end.

@@ -46,7 +46,8 @@ setOption instant), notes[], cases[], guards[].
 
 A case: id, group, note, W, H, option (as run), steps[] (each: {merge
 option} | {notMerge option} | {resize [w, h]} | {click id} | {move id} |
-{leave} | {down id} | {up id} | {wait ms}), throws (the setOption threw: its
+{leave} | {down id} (a move there and a press) | {up id} (a release) |
+{wait ms}; an id may be a point [x, y]), throws (the setOption threw: its
 message), states[] (index-parallel to [after the first setOption, after step
 1, ...]), anim (animation cases: samplesMs).
 
@@ -357,6 +358,16 @@ function elRec(el, parentId) {
   const ecd = ecDataOf(el);
   r.eventData = !!(ecd && ecd.eventData);
   r.info = ecd && ecd.eventData && ecd.eventData.info !== undefined ? JSON.stringify(ecd.eventData.info) : null;
+  // [spec 242] its clipPath, only where it has one (the transform as the
+  // Storage leaves it: under the element's)
+  const cp = el.getClipPath();
+  if (cp) {
+    // the path as its shape is now (getBoundingRect rebuilds a changed one;
+    // the SVG painter does not touch a clip's own proxy)
+    cp.getBoundingRect();
+    r.clip = { type: cp.type, transform: cp.transform ? Array.from(cp.transform).map(hex) : null,
+      shape: shapeRec(cp.shape), path: pathData(cp).map(hex) };
+  }
   return r;
 }
 function readEls(chart) {
@@ -542,9 +553,24 @@ function resolvePoint(chart, t, where) {
 
 // ---------- handlers ----------
 let LOG = [];
+// [spec 242] `during` handlers ({$fn: 'dur:NAME'}): the same function for
+// the same name across setOption calls, as the port's '@dur:NAME' is
+const DURINGS = {
+  grow: api => { api.setShape('width', 20 + api.getTransform('x') / 4); },
+  grow2: api => { api.setShape('height', 10 + api.getTransform('x') / 10); },
+  arc: api => { const p = api.getExtra('p'); api.setShape('r', 5 + 30 * p); api.setStyle('opacity', p); },
+  ty: api => { api.setTransform('y', 100 + api.getTransform('x') / 2); },
+  gturn: api => { api.setTransform('rotation', api.getTransform('x') / 1000); api.setStyle('opacity', 0.1); },
+};
+const DURING_FNS = {};
 function materialize(v) {
   if (Array.isArray(v)) return v.map(materialize);
   if (v && typeof v === 'object') {
+    if (typeof v.$fn === 'string' && v.$fn.startsWith('dur:')) {
+      const name = v.$fn.slice(4);
+      must(DURINGS[name], 'an unknown during ' + v.$fn);
+      return DURING_FNS[name] || (DURING_FNS[name] = DURINGS[name]);
+    }
     if (typeof v.$fn === 'string') {
       const [kind, name] = v.$fn.split(':');
       must(kind === 'log' || kind === 'stop', 'an unknown $fn ' + v.$fn);
@@ -852,6 +878,144 @@ add('order', 'forms-frame', "the preprocessor on a timeline frame: the first fra
     options: [{ graphic: [{ type: 'rect', id: 'fa', left: 10, top: 10, shape: { width: 30, height: 30 }, style: { fill: '#5070dd' } },
       { type: 'circle', id: 'fb', left: 60, top: 10, shape: { r: 15 }, style: { fill: '#b6d634' } }] }, {}] });
 
+// ---- [spec 242] dragging
+add('event', 'drag', "dragging (zrender's Draggable): a turned, scaled rect with an origin dragged over another rect -- onmousedown, ondragstart, ondrag every move (drift: the transform moved and decomposed, the origin folded in), ondragenter / ondragleave / ondrop on what it is over, ondragend; a child dragged horizontally inside a turned, scaled group; a rect whose onmousedown stops the climb (no drag at all); a group dragged by its child, the events to the group",
+  { graphic: [
+    { type: 'rect', id: 'D', x: 60, y: 60, rotation: 0.3, scaleX: 1.5, originX: 10, originY: 5, draggable: true,
+      onmousedown: { $fn: 'log:Ddown' }, ondragstart: { $fn: 'log:Dstart' }, ondrag: { $fn: 'log:Ddrag' }, ondragend: { $fn: 'log:Dend' },
+      onmouseup: { $fn: 'log:Dup' }, shape: { width: 60, height: 40 }, style: { fill: '#5070dd' } },
+    { type: 'rect', id: 'B', ondragenter: { $fn: 'log:Benter' }, ondragleave: { $fn: 'log:Bleave' }, ondrop: { $fn: 'log:Bdrop' },
+      shape: { x: 250, y: 150, width: 100, height: 80 }, style: { fill: '#b6d634' } },
+    { type: 'group', id: 'G', x: 380, y: 280, rotation: 0.5, scaleX: 2, children: [
+      { type: 'rect', id: 'GC', draggable: 'horizontal', ondrag: { $fn: 'log:GCdrag' }, shape: { width: 30, height: 20 }, style: { fill: '#ff994d' } }] },
+    { type: 'rect', id: 'S', draggable: true, onmousedown: { $fn: 'stop:Sdown' }, ondragstart: { $fn: 'log:Sstart' },
+      shape: { x: 480, y: 30, width: 50, height: 50 }, style: { fill: '#0ca8df' } },
+    { type: 'group', id: 'H', x: 40, y: 300, draggable: 'vertical', ondragstart: { $fn: 'log:Hstart' }, ondrag: { $fn: 'log:Hdrag' }, children: [
+      { type: 'rect', id: 'HC', shape: { width: 50, height: 30 }, style: { fill: '#ffd10a' } }] }] },
+  { steps: [
+    { down: 'D' }, { move: [150, 120] }, { move: [300, 190] }, { move: [305, 192] }, { move: [420, 120] }, { up: [420, 120] },
+    { down: 'GC' }, { move: [430, 330] }, { up: [430, 330] },
+    { down: 'S' }, { move: [450, 100] }, { up: [450, 100] },
+    { down: 'HC' }, { move: [90, 280] }, { up: [90, 280] }] });
+// [spec 242] the dragged element drawn over its target: findHover leaves the
+// dragged one out, so what lies under it hears dragenter / dragleave / drop
+add('event', 'drag-over', "a rect dragged over one drawn below it (findHover excludes the dragged element): the one below hears dragenter, dragleave, dragenter again and the drop",
+  { graphic: [
+    { type: 'rect', id: 'T', ondragenter: { $fn: 'log:Tenter' }, ondragleave: { $fn: 'log:Tleave' }, ondrop: { $fn: 'log:Tdrop' },
+      shape: { x: 200, y: 150, width: 120, height: 90 }, style: { fill: '#b6d634' } },
+    { type: 'rect', id: 'M', draggable: true, ondragstart: { $fn: 'log:Mstart' }, ondragend: { $fn: 'log:Mend' },
+      shape: { x: 40, y: 40, width: 60, height: 40 }, style: { fill: '#5070dd' } }] },
+  { steps: [
+    { down: 'M' }, { move: [250, 190] }, { move: [100, 190] }, { move: [260, 200] }, { up: [260, 200] }] });
+add('event', 'drag-under', "a rect pressed where it lies over another and moved a little: the one under it is what it is over from the first move (dragenter), and the drop's",
+  { graphic: [
+    { type: 'rect', id: 'U', ondragenter: { $fn: 'log:Uenter' }, ondragleave: { $fn: 'log:Uleave' }, ondrop: { $fn: 'log:Udrop' },
+      shape: { x: 20, y: 20, width: 160, height: 120 }, style: { fill: '#b6d634' } },
+    { type: 'rect', id: 'V', draggable: true, shape: { x: 50, y: 40, width: 60, height: 40 }, style: { fill: '#5070dd' } }] },
+  { steps: [
+    { down: 'V' }, { move: [85, 62] }, { move: [90, 64] }, { up: [90, 64] }] });
+// [spec 242] Element.updateInnerText's layoutRect (the rect a position is
+// worked out against, the host's local space, through its transform unless
+// local) and autoOverflowArea (that rect, back through the label's own
+// transform, is the text's overflowRect: calcInnerTextOverflowArea gives a
+// block with no width / height of its own the intersection's size and moves
+// its anchor into it)
+add('text', 'text-area', "textConfig.layoutRect and autoOverflowArea: a long label truncated to its host, one broken into lines and cut by lineOverflow, a rich one, a layoutRect placing 'insideTopLeft' inside a part of the host, the two together, a label turned a quarter, a turned host, a local label in a scaled host, a label of its own width (kept), a layoutRect with no position and no autoOverflowArea (nothing), autoOverflowArea with no position (the label's own x / y), a padded box, a right-aligned label",
+  { graphic: [
+    { type: 'rect', id: 'tr', shape: { x: 20, y: 20, width: 90, height: 40 }, style: { fill: '#5070dd' },
+      textContent: { style: { text: 'a label much longer than its host', fontSize: 12, overflow: 'truncate' } }, textConfig: { position: 'inside', autoOverflowArea: true } },
+    { type: 'rect', id: 'br', shape: { x: 140, y: 20, width: 80, height: 30 }, style: { fill: '#b6d634' },
+      textContent: { style: { text: 'broken into several lines here', fontSize: 12, overflow: 'break', lineOverflow: 'truncate' } }, textConfig: { position: 'inside', autoOverflowArea: true } },
+    { type: 'rect', id: 'ri', shape: { x: 250, y: 20, width: 100, height: 50 }, style: { fill: '#ff994d' },
+      textContent: { style: { text: '{a|rich} label that is too long', fontSize: 12, overflow: 'truncate', rich: { a: { fontSize: 16, fill: '#fff' } } } },
+      textConfig: { position: 'inside', autoOverflowArea: true } },
+    { type: 'rect', id: 'lr', shape: { x: 380, y: 20, width: 160, height: 80 }, style: { fill: '#0ca8df' },
+      textContent: { style: { text: 'in the right half', fontSize: 12 } }, textConfig: { position: 'insideTopLeft', layoutRect: { x: 460, y: 30, width: 70, height: 40 } } },
+    { type: 'rect', id: 'lra', shape: { x: 20, y: 120, width: 160, height: 60 }, style: { fill: '#fb628b' },
+      textContent: { style: { text: 'cut to the layout rect not the host', fontSize: 12, overflow: 'truncate' } },
+      textConfig: { position: 'inside', layoutRect: { x: 30, y: 125, width: 70, height: 50 }, autoOverflowArea: true } },
+    { type: 'rect', id: 'q', shape: { x: 220, y: 110, width: 30, height: 120 }, style: { fill: '#785db0' },
+      textContent: { style: { text: 'turned a quarter and cut', fontSize: 12, overflow: 'truncate' } },
+      textConfig: { position: 'inside', rotation: Math.PI / 2, autoOverflowArea: true } },
+    { type: 'rect', id: 'th', x: 300, y: 130, rotation: 0.4, shape: { width: 90, height: 36 }, style: { fill: '#3fbe95' },
+      textContent: { style: { text: 'a turned host truncating', fontSize: 12, overflow: 'truncate' } }, textConfig: { position: 'inside', autoOverflowArea: true } },
+    { type: 'rect', id: 'lo', x: 430, y: 130, scaleX: 2, scaleY: 1.5, shape: { width: 50, height: 30 }, style: { fill: '#ffd10a' },
+      textContent: { style: { text: 'local in a scaled host', fontSize: 12, overflow: 'truncate' } }, textConfig: { position: 'inside', local: true, autoOverflowArea: true } },
+    { type: 'rect', id: 'ow', shape: { x: 20, y: 250, width: 60, height: 30 }, style: { fill: '#5070dd' },
+      textContent: { style: { text: 'its own width wins', width: 120, fontSize: 12, overflow: 'truncate' } }, textConfig: { position: 'inside', autoOverflowArea: true } },
+    { type: 'rect', id: 'np', shape: { x: 120, y: 250, width: 60, height: 30 }, style: { fill: '#b6d634' },
+      textContent: { x: 125, y: 255, style: { text: 'no position no area', fontSize: 12, overflow: 'truncate' } }, textConfig: { layoutRect: { x: 0, y: 0, width: 10, height: 10 } } },
+    { type: 'rect', id: 'ao', shape: { x: 220, y: 250, width: 60, height: 30 }, style: { fill: '#ff994d' },
+      textContent: { x: 230, y: 260, style: { text: 'area with no position', fontSize: 12, overflow: 'truncate' } }, textConfig: { autoOverflowArea: true } },
+    { type: 'rect', id: 'pb', shape: { x: 320, y: 250, width: 100, height: 40 }, style: { fill: '#0ca8df' },
+      textContent: { style: { text: 'a padded box that is long', fontSize: 12, overflow: 'truncate', padding: [2, 6], backgroundColor: '#eee' } },
+      textConfig: { position: 'inside', autoOverflowArea: true } },
+    { type: 'rect', id: 'ra', shape: { x: 450, y: 250, width: 80, height: 40 }, style: { fill: '#fb628b' },
+      textContent: { style: { text: 'right aligned and long', fontSize: 12, overflow: 'truncate', align: 'right' } },
+      textConfig: { position: 'insideRight', autoOverflowArea: true } },
+    { type: 'rect', id: 'nr', shape: { x: 20, y: 320, width: 80, height: 40 }, style: { fill: '#785db0' },
+      textContent: { style: { text: 'a layout rect of NaN', fontSize: 12, overflow: 'truncate' } },
+      textConfig: { position: 'inside', layoutRect: { x: 30, y: 320 }, autoOverflowArea: true } }] });
+// [spec 242] a label whose own place lies off its host: the two intervals do
+// not meet, BoundingRect.intersect's clamp puts the area at the near end
+// with no size
+add('text', 'text-apart', "autoOverflowArea with the label placed off its host (its own x / y, no position): apart along x, apart along y, apart on both -- the area clamped to the host's near edge, nought wide or high",
+  { graphic: [
+    { type: 'rect', id: 'ax', shape: { x: 20, y: 20, width: 60, height: 30 }, style: { fill: '#5070dd' },
+      textContent: { x: 300, y: 30, style: { text: 'off to the right', fontSize: 12, backgroundColor: '#eee', padding: 2 } }, textConfig: { autoOverflowArea: true } },
+    { type: 'rect', id: 'ay', shape: { x: 20, y: 120, width: 60, height: 30 }, style: { fill: '#b6d634' },
+      textContent: { x: 30, y: 320, style: { text: 'far below', fontSize: 12, backgroundColor: '#eee' } }, textConfig: { autoOverflowArea: true } },
+    { type: 'rect', id: 'axl', shape: { x: 400, y: 120, width: 60, height: 30 }, style: { fill: '#ff994d' },
+      textContent: { x: 100, y: 130, style: { text: 'off to the left', fontSize: 12, align: 'right', backgroundColor: '#eee' } }, textConfig: { autoOverflowArea: true } }] });
+// [spec 242] `during`: getElementAnimationConfig binds the element's
+// userDuring (the last update's option) when the animation config's
+// duration is above 0; zrender calls it after the first animator's frame;
+// an update whose option has no during releases the old one
+add('anim', 'during', "during: a rect whose width follows its entering x, a circle whose r and opacity follow an animated extra, a rect with a during and nothing animating (never called), a rect whose y follows its x and keeps doing so through its leave, a group turned by its x (setStyle on a group does nothing); then an update giving one a new during, one an update with none (released), one removed",
+  { animation: true, graphic: [
+    { type: 'rect', id: 'd1', x: 200, y: 20, enterFrom: { x: 0 }, during: { $fn: 'dur:grow' }, shape: { width: 40, height: 30 }, style: { fill: '#5070dd' } },
+    { type: 'circle', id: 'd2', x: 100, y: 150, extra: { p: 1, enterFrom: { p: 0 } }, during: { $fn: 'dur:arc' }, shape: { r: 5 }, style: { fill: '#b6d634' } },
+    { type: 'rect', id: 'd3', x: 300, y: 200, during: { $fn: 'dur:grow' }, shape: { width: 40, height: 30 }, style: { fill: '#ff994d' } },
+    { type: 'rect', id: 'd4', x: 300, y: 100, enterFrom: { x: 0 }, leaveTo: { x: 0 }, during: { $fn: 'dur:ty' }, shape: { width: 30, height: 30 }, style: { fill: '#0ca8df' } },
+    { type: 'group', id: 'dg', x: 200, y: 250, enterFrom: { x: 100 }, during: { $fn: 'dur:gturn' }, children: [
+      { type: 'rect', id: 'dg.r', shape: { width: 40, height: 20 }, style: { fill: '#fb628b' } }] }] },
+  { W: 400, H: 300, samples: SAMPLES, steps: [
+    { wait: 2000 },
+    { merge: { graphic: [
+      { id: 'd1', x: 50, transition: ['x'], during: { $fn: 'dur:grow2' } },
+      { id: 'd2', extra: { p: 0.2 }, transition: 'extra' },
+      { id: 'd4', $action: 'remove' }] } }] });
+// [spec 242] duringCall releases a scope once the element holds another
+// during: the enter still running after the merge calls nobody
+add('anim', 'during-swap', "during swapped while the enter runs: 400 ms into a rect's enter a merge gives it another during (no transition of its own) and another rect none -- the enter's frames call neither the old during nor the new",
+  { animation: true, graphic: [
+    { type: 'rect', id: 's1', x: 200, y: 20, enterFrom: { x: 0 }, during: { $fn: 'dur:grow' }, shape: { width: 40, height: 30 }, style: { fill: '#5070dd' } },
+    { type: 'rect', id: 's2', x: 200, y: 120, enterFrom: { x: 0 }, during: { $fn: 'dur:grow' }, shape: { width: 40, height: 30 }, style: { fill: '#b6d634' } }] },
+  { W: 400, H: 300, samples: [0, 100, 200, 400], steps: [
+    { merge: { graphic: [{ id: 's1', during: { $fn: 'dur:grow2' } }, { id: 's2', style: { fill: '#ff994d' } }] } }] });
+// [spec 242] clipPath: setClipPath on the element, its transform under the
+// element's; a group's cuts its children and their labels; isHover asks each
+// clip's contain; a merge with the same type updates it, another type makes
+// a new one, a replace makes a new one
+add('event', 'clip', "clipPath: a rect cut to a circle (a click outside the circle misses it), a turned group cut to a rect of its own x (its child and the child's label cut, a click outside the clip misses), a polygon cut to a sector; then a merge growing the circle (the same click now hits), a merge giving the polygon a rect clip instead, a replace of the rect with a new element and a new clip",
+  { graphic: [
+    { type: 'rect', id: 'r', x: 20, y: 20, shape: { width: 200, height: 100 }, style: { fill: '#5070dd' }, onclick: { $fn: 'log:R' },
+      clipPath: { type: 'circle', shape: { cx: 50, cy: 50, r: 40 } } },
+    { type: 'group', id: 'g', x: 300, y: 50, rotation: 0.3, clipPath: { type: 'rect', x: 10, shape: { x: 0, y: 0, width: 80, height: 60 } }, children: [
+      { type: 'rect', id: 'g.a', shape: { width: 150, height: 120 }, style: { fill: '#ff994d' }, onclick: { $fn: 'log:GA' },
+        textContent: { style: { text: 'a label cut by the clip', fontSize: 14 } }, textConfig: { position: 'inside' } }] },
+    { type: 'polygon', id: 'p', shape: { points: [[20, 200], [200, 200], [110, 300]] }, style: { fill: '#b6d634' }, onclick: { $fn: 'log:P' },
+      clipPath: { type: 'sector', shape: { cx: 110, cy: 250, r: 60, r0: 20, startAngle: 0, endAngle: 3 } } }] },
+  { steps: [
+    { click: [30, 30] }, { click: [70, 70] }, { click: [423, 43] }, { click: [347, 67] }, { click: [110, 215] }, { click: [110, 280] },
+    { merge: { graphic: [{ id: 'r', clipPath: { shape: { r: 80 } } }] } },
+    { click: [30, 30] },
+    { merge: { graphic: [{ id: 'p', clipPath: { type: 'rect', shape: { x: 100, y: 200, width: 30, height: 100 } } }] } },
+    { click: [110, 215] }, { click: [60, 210] },
+    { merge: { graphic: [{ id: 'r', $action: 'replace', type: 'rect', x: 20, y: 20, shape: { width: 100, height: 60 }, style: { fill: '#0ca8df' },
+      onclick: { $fn: 'log:R' }, clipPath: { type: 'ellipse', shape: { cx: 50, cy: 30, rx: 50, ry: 10 } } }] } },
+    { click: [70, 35] }, { click: [70, 50] }] });
+
 // ---------------------------------------------------------------------------
 // running
 // ---------------------------------------------------------------------------
@@ -936,6 +1100,16 @@ function runCase(c) {
       else if (step.move !== undefined) {
         point = resolvePoint(chart, step.move, where);
         fire(chart, 'mousemove', { zrX: point[0], zrY: point[1] });
+      }
+      // [spec 242] a press without its release, a release on its own
+      else if (step.down !== undefined) {
+        point = resolvePoint(chart, step.down, where);
+        fire(chart, 'mousemove', { zrX: point[0], zrY: point[1] });
+        fire(chart, 'mousedown', { zrX: point[0], zrY: point[1] });
+      }
+      else if (step.up !== undefined) {
+        point = resolvePoint(chart, step.up, where);
+        fire(chart, 'mouseup', { zrX: point[0], zrY: point[1] });
       }
       else if (step.leave) fire(chart, 'mousemove', { zrX: -10, zrY: -10 });
       else throw new OracleError(where + ': an unknown step ' + JSON.stringify(step));

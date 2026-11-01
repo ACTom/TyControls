@@ -564,7 +564,8 @@ var
   var jj: Integer;
   begin
     if R = nil then Exit;
-    { an invisible element is not drawn }
+    { an invisible element is not drawn: none, or [R5-I] one with no ink
+      (a rect hidden in view keeps its hit area and its words) }
     if (not AGhost) and R.Booleans['inv'] then
     begin
       at := FindIn(lst, si, ARow, kind);
@@ -572,10 +573,13 @@ var
       if at >= 0 then
       begin
         seen[at] := True;
-        Miss(AWhat + ': invisible upstream, drawn here');
+        if lst.Element(at).Style.HasFill or (lst.Element(at).Style.StrokeWidthLogical > 0) then
+          Miss(AWhat + ': invisible upstream, drawn here');
       end;
-      Exit;
-    end;
+      if (ASub <> 1) or (at < 0) then Exit;
+    end
+    else
+    begin
     at := FindIn(lst, si, ARow, kind);
     Inc(FCompared);
     if at < 0 then
@@ -616,6 +620,7 @@ var
           Miss(Format('%s: fill %s upstream, %.8x here', [AWhat, StrOr(R, 'fill'),
             el.Style.FillColor]));
       end;
+    end;
     end;
     { a content's words: as they are cut now, at the rect's anchor }
     if ASub <> 1 then Exit;

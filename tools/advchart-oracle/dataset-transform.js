@@ -31,7 +31,8 @@ counts, flags, strings and option values are plain JSON.
 Top level: source, version, W, H, notes[], cases[], guards[].
 
 A case: id, group, note, option (as run), deviation (absent, or the name of
-  a rule the port does not follow -- 'reg'), and
+  a rule the port does not follow -- none since spec 242 made `reg` one the
+  port follows), and
   datasets[] one per dataset, in order, after prepareSource() was called on
     each in turn (dataset k's call prepares its upstream first):
       {k, error: the message upstream threw | null,
@@ -403,7 +404,7 @@ add('filter', 'f-keyed', 'keyed columns: rows made of the columns, no names',
 add('filter', 'f-null-row', 'a null row: every cell undefined',
   { dataset: [{ source: [['a', 'b'], [1, 2], null, [3, 4], [5]] }, { transform: filt({ dimension: 'b', ne: 2 }) }] });
 add('filter', 'f-empty', 'an empty table', { dataset: [{ source: [] }, { transform: filt({ dimension: 0, gt: 1 }) }] });
-add('filter', 'f-reg', 'reg: the port does not have it', two(filt({ dimension: 'tag', reg: '^[ab]$' })), { deviation: 'reg' });
+add('filter', 'f-reg', 'reg: a regular expression over the words', two(filt({ dimension: 'tag', reg: '^[ab]$' })));
 
 // ---- sort
 add('sort', 's-asc', 'asc: the null last (incomparable max)', two(sort({ dimension: 'sales', order: 'asc' })));
@@ -582,6 +583,36 @@ R('r-error', 'a series over a transform that throws: upstream refuses the option
   { dataset: [ds(), { transform: { type: 'nope' } }], xAxis: { type: 'category' }, yAxis: {},
     series: [{ type: 'bar', datasetIndex: 1 }] });
 
+// ---- reg [spec 242]: RegExpEvaluator -- new RegExp(source), test(String(value))
+const ODD = [['k', 'v'], ['n1', 1e21], ['n2', 1e-7], ['n3', -0], ['n4', 0.1 + 0.2], ['b1', true], ['b2', false],
+  ['o', { a: 1 }], ['l', [1, [2, null], 'x']], ['z', null], ['u'], ['s', 'line\nend'], ['p', '\u00e9t\u00e9'],
+  ['q', '\ud83d\ude00'], ['w', ' 30 '], ['ls', 'a\u2028b']];
+add('filter', 'f-reg-num', 'reg over numbers: String(2011), and the string 2013', two(filt({ dimension: 'year', reg: '^201[13]$' })));
+add('filter', 'f-reg-float', 'reg over floats and a null: String(41.1), String(null)', two(filt({ dimension: 'sales', reg: '\\.[19]$|^null$' })));
+add('filter', 'f-reg-case', 'reg is case-sensitive: B is not b', two(filt({ dimension: 'tag', reg: 'b' })));
+add('filter', 'f-reg-trim', "parser 'trim' on the cell and on the source", two(filt({ dimension: 'price', reg: ' ^30$ ', parser: 'trim' })));
+add('filter', 'f-reg-and', 'reg with gt in one condition, and under not',
+  two(filt({ and: [{ dimension: 'sales', gt: 40, reg: '[05]' }, { not: { dimension: 'product', reg: '^T' } }] })));
+add('filter', 'f-reg-odd', 'reg over odd cells: 1e+21, 1e-7, 0 for minus nought, 0.30000000000000004, true, [object Object], the joined list, null, undefined',
+  { dataset: [{ source: ODD }, { transform: filt({ dimension: 'v', reg: 'e[-+]|^0$|00004$|^true$|object|^1,2,,x$|^null$|^undefined$' }) }] });
+add('filter', 'f-reg-unicode', 'reg over UTF-16: the dot is one unit and crosses no line end, \\s is Unicode',
+  { dataset: [{ source: ODD }, { transform: filt({ or: [{ dimension: 'v', reg: '^.t.$' }, { dimension: 'v', reg: '^..$' },
+    { dimension: 'v', reg: '^line.end$|^a.b$' }, { dimension: 'v', reg: '^\\s30\\s$' }] }) }] });
+add('filter', 'f-reg-annexb', 'Annex B: a lone brace, \\8, an octal, a back reference',
+  { dataset: [{ source: [['k', 'v'], ['a', 'x{'], ['b', '8'], ['c', '\n'], ['d', 'abab'], ['e', 'ab']] },
+    { transform: filt({ dimension: 'v', reg: '^x{$|^\\8$|^\\12$|^(ab)\\1$' }) }] });
+add('filter', 'f-reg-keyed', 'reg over object rows', { dataset: [{ source: clone(OBJ) }, { transform: filt({ dimension: 'product', reg: '^(?:M|W)' }) }] });
+add('filter', 'f-reg-empty', "reg '': everything passes", two(filt({ dimension: 'tag', reg: '' })));
+E('e-reg-bad', 'a source new RegExp throws on', two(filt({ dimension: 'tag', reg: '[' })));
+E('e-reg-quant', 'nothing to repeat', two(filt({ dimension: 'tag', reg: '*a' })));
+E('e-reg-number', 'a number is not a regular expression', two(filt({ dimension: 'year', reg: 2011 })));
+E('e-reg-null', 'null is not one either', two(filt({ dimension: 'year', reg: null })));
+E('e-reg-parser', "parser 'number' turns the source into a number", two(filt({ dimension: 'price', reg: '^1', parser: 'number' })));
+E('e-reg-name', 'a named reference to no group', two(filt({ dimension: 'tag', reg: '(?<a>x)\\k<b>' })));
+R('r-reg', 'a bar over a reg filter',
+  { dataset: [ds(), { transform: filt({ dimension: 'product', reg: '^[A-M]' }) }], xAxis: { type: 'category' }, yAxis: {},
+    series: [{ type: 'bar', datasetIndex: 1, encode: { x: 'product', y: 'sales' }, label: { show: true } }] });
+
 // ---------------------------------------------------------------------------
 // guards: expectations read off the source
 // ---------------------------------------------------------------------------
@@ -619,6 +650,10 @@ function guards(o) {
   guard('keyed columns: array rows out', res('f-keyed', 1).format === 'arrayRows' && res('f-keyed', 1).rows.length === 3);
   guard('a null row passes ne', res('f-null-row', 1).rows.some(r => r === null));
   guard('reg runs upstream', names('f-reg', 1).length === 6);
+  guard('reg over numbers: String(2011) and the string 2013', JSON.stringify(names('f-reg-num', 1)) === JSON.stringify(['Tofu', 'Cheese', 'Biscuit', 'Tea']));
+  guard('reg is case-sensitive', names('f-reg-case', 1).indexOf('Coffee') < 0 && names('f-reg-case', 1).length === 3);
+  guard('reg over odd cells', names('f-reg-odd', 1).length === 9);
+  guard('a bad source throws', err('e-reg-bad', 1) !== null && err('e-reg-number', 1) !== null && err('e-reg-parser', 1) !== null);
   const sales = id => col(id, 1, 2).map(h => (h === null ? null : num(h)));
   guard('asc: ascending, the null last', JSON.stringify(sales('s-asc')) === JSON.stringify([24.1, 33.3, 41.1, 53.9, 55.2, 66, 72.4, 86.5, null]));
   guard('desc: descending, the null last', sales('s-desc')[0] === 86.5 && sales('s-desc')[8] === null);

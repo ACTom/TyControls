@@ -153,7 +153,7 @@ function TyBuildSingles(AOption: TTyChartOption; const AViewport: TTyRectF): TTy
   ARef -- a matrix cell or a calendar day: getLayoutRect of the box there
   (not the shared solver: a cell's edges are fractional), then _adjustAxis.
   A cell of no position or no size: the box far off the canvas
-  (TyBoxNowhere), as a grid's. }
+  (TyBoxNowhere), as a grid's. [spec 244: a cell of no size in one dimension keeps the rect upstream lays out, NaN in that dimension; TySingleResizeIn] }
 procedure TySingleResizeIn(AOption: TTyChartOption; ASingle: TTySingle;
   const ARef: TTyXYWH);
 
@@ -207,6 +207,11 @@ function TySinglePointerShape(ASingle: TTySingle; APixel, ABandWidth: Double;
 procedure TySinglePointerLabelAnchor(ASingle: TTySingle; AOption: TTyChartOption;
   AValue, AMarginPx: Double; out AX, AY: Double; out AH: TTyTextAnchorH;
   out AV: TTyTextAnchorV);
+{ [R5-D] SingleAxisPointer.getHandleTransform: getTransformedPosition with
+  layout(axisModel, {labelInside: false}) and labelMargin = the handle's
+  margin; the turn the layout's, + pi where the label direction is negative }
+procedure TySingleHandlePlace(ASingle: TTySingle; AOption: TTyChartOption;
+  AValue, AMarginPx: Double; out AX, AY, ARotation: Double);
 
 { ---- the conversions ---- }
 
@@ -500,8 +505,11 @@ begin
   node := ObjOf(AOption.ComponentAt(TySingleCoordSysName, ASingle.Index));
   box := TyGetLayoutRect(SingleBoxRaw(node, AOption.Root), ARef.X, ARef.Y,
     ARef.W, ARef.H, []);
-  if not TyXYWHIsValid(box) then
-    box := TyXYWH(TyBoxNowhere, TyBoxNowhere, TyBoxNowhereSize, TyBoxNowhereSize);
+  { [spec 244] A CELL OF NO SIZE in one dimension: upstream lays the axis out
+    on that rect as it is -- getLayoutRect's `|| 0` for a position, NaN for
+    the size -- so the dimension that has a size converts as ever and the
+    other is NaN; nothing of it is drawn [was: far off the canvas,
+    TyBoxNowhere, every conversion a finite point there] }
   ASingle.Rect := box;
   SingleAdjustAxis(ASingle);
 end;
@@ -938,11 +946,11 @@ begin
       Apply(M, hasM, fr.Ext1, 0, v.Line.X2, v.Line.Y2);
       v.Line.Value := NaN;
       v.Line.Drawn := True;
-      TySingleSubPixelLine(v.Line, AxisScaleF(LineWidthIn(node, 'axisLine', 1), APPI));
+      TySingleSubPixelLine(v.Line, AxisScaleF(TyAxisSnapWidth(node, 0, AText), APPI));
       v.Spec.Arrows := TyAxisArrows(fr, v.Furn, APPI);
       { cut at the breaks (axisLine.breakLine) [F4a] }
       TyAxisBreakLineOf(v.Spec, ax, AOption,
-        AxisScaleF(LineWidthIn(node, 'axisLine', 1), APPI));
+        AxisScaleF(TyAxisSnapWidth(node, 0, AText), APPI));
     end;
     marks := TickMarks(AOption, ax, v.Spec, v.Furn.TickInterval,
       v.Furn.AlignWithLabel, labelIv);
@@ -954,7 +962,8 @@ begin
     begin
       len := AxisScaleF(v.Spec.TickLengthLogical, APPI);
       endCoord := tickDir * len;
-      w := AxisScaleF(LineWidthIn(node, 'axisTick', 1), APPI);
+      { [R5-G] by the width it is stroked with }
+      w := AxisScaleF(TyAxisSnapWidth(node, 1, AText), APPI);
       SetLength(v.Ticks, Length(marks));
       for i := 0 to High(marks) do
       begin
@@ -984,8 +993,7 @@ begin
       else
         len := AxisScaleF(v.Furn.MinorTickLengthLogical, APPI);
       endCoord := tickDir * len;
-      mw := AxisScaleF(LineWidthIn(node, 'minorTick',
-        LineWidthIn(node, 'axisTick', 1)), APPI);
+      mw := AxisScaleF(TyAxisSnapWidth(node, 2, AText), APPI);
       SetLength(v.MinorTicks, Length(minors));
       for i := 0 to High(minors) do
       begin
@@ -1006,7 +1014,7 @@ begin
     begin
       lineMarks := TickMarks(AOption, ax, v.Spec, v.Furn.SplitLineInterval,
         v.Furn.SplitLineAlign, labelIv, True);
-      w := AxisScaleF(LineWidthIn(node, 'splitLine', 1), APPI);
+      w := AxisScaleF(TyAxisSnapWidth(node, 3, AText), APPI);
       SetLength(v.SplitLines, Length(lineMarks));
       for i := 0 to High(lineMarks) do
       begin
@@ -1206,6 +1214,36 @@ begin
     AX := M[0] * c + M[2] * t + M[4];
     AY := M[1] * c + M[3] * t + M[5];
     TyInnerTextLayout(fr.Rotation, 0, dir, AH, AV);
+  finally
+    UnmaskFP(mask);
+  end;
+end;
+
+procedure TySingleHandlePlace(ASingle: TTySingle; AOption: TTyChartOption;
+  AValue, AMarginPx: Double; out AX, AY, ARotation: Double);
+var
+  fr: TTyAxisNameFrame;
+  M: TTyMat2D;
+  c, t: Double;
+  dir: Integer;
+  mask: TFPUExceptionMask;
+begin
+  AX := NaN;
+  AY := NaN;
+  ARotation := 0;
+  if ASingle = nil then Exit;
+  fr := FrameOf(ASingle, AOption);
+  { labelInside false: the direction from the position alone }
+  dir := TySingleDirection(ASingle, AOption, '');
+  mask := MaskFP;
+  try
+    c := ASingle.Axis.DataToLocal(AValue);
+    t := 0 + dir * AMarginPx;
+    M := TyMatLocal(fr.PosX, fr.PosY, fr.Rotation);
+    AX := M[0] * c + M[2] * t + M[4];
+    AY := M[1] * c + M[3] * t + M[5];
+    ARotation := fr.Rotation;
+    if dir < 0 then ARotation := ARotation + Pi;
   finally
     UnmaskFP(mask);
   end;

@@ -1,0 +1,382 @@
+{
+ "source": "ECharts 6.1.0",
+ "cases": [
+  {
+   "id": "bar-line",
+   "note": "a bar (with a label and an item style written) and a line: line, then bar, then stack",
+   "option": {
+    "animation": false,
+    "toolbox": {
+     "feature": {
+      "magicType": {
+       "type": [
+        "line",
+        "bar",
+        "stack"
+       ]
+      }
+     }
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "name": "B",
+      "label": {
+       "show": true
+      },
+      "itemStyle": {
+       "color": "#ff0000"
+      },
+      "data": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "type": "line",
+      "name": "L",
+      "label": {
+       "show": true
+      },
+      "data": [
+       3,
+       1,
+       2
+      ]
+     }
+    ]
+   },
+   "clicks": [
+    {
+     "icon": "line",
+     "series": [
+      {
+       "type": "line",
+       "data": [
+        1,
+        2,
+        3
+       ],
+       "markPoint": [],
+       "markLine": [],
+       "name": "B",
+       "label": {
+        "show": true
+       },
+       "itemStyle": {
+        "color": "#ff0000"
+       },
+       "z": 2,
+       "coordinateSystem": "cartesian2d",
+       "legendHoverLink": true,
+       "barMinHeight": 0,
+       "barMinAngle": 0,
+       "large": false,
+       "largeThreshold": 400,
+       "progressive": 3000,
+       "progressiveChunkMode": "mod",
+       "defaultBarGap": "10%",
+       "clip": true,
+       "roundCap": false,
+       "showBackground": false,
+       "select": {
+        "itemStyle": {
+         "borderWidth": 2
+        }
+       },
+       "realtimeSort": false,
+       "emphasis": {
+        "label": {
+         "show": true
+        }
+       },
+       "seriesIndex": 0
+      }
+     ]
+    },
+    {
+     "icon": "bar",
+     "series": [
+      {
+       "type": "bar",
+       "data": [
+        1,
+        2,
+        3
+       ],
+       "markPoint": [],
+       "markLine": [],
+       "name": "B",
+       "label": {
+        "show": true,
+        "position": "top"
+       },
+       "itemStyle": {
+        "color": "#ff0000"
+       },
+       "z": 2,
+       "coordinateSystem": "cartesian2d",
+       "legendHoverLink": true,
+       "barMinHeight": 0,
+       "barMinAngle": 0,
+       "large": false,
+       "largeThreshold": 400,
+       "progressive": 3000,
+       "progressiveChunkMode": "mod",
+       "defaultBarGap": "10%",
+       "clip": true,
+       "roundCap": false,
+       "showBackground": false,
+       "select": {
+        "itemStyle": {
+         "borderWidth": 2
+        }
+       },
+       "realtimeSort": false,
+       "emphasis": {
+        "label": {
+         "show": true
+        },
+        "scale": true
+       },
+       "endLabel": {
+        "show": false,
+        "valueAnimation": true,
+        "distance": 8
+       },
+       "lineStyle": {
+        "width": 2,
+        "type": "solid"
+       },
+       "step": false,
+       "smooth": false,
+       "smoothMonotone": null,
+       "symbol": "emptyCircle",
+       "symbolSize": 6,
+       "symbolRotate": null,
+       "showSymbol": true,
+       "showAllSymbol": "auto",
+       "connectNulls": false,
+       "sampling": "none",
+       "animationEasing": "linear",
+       "hoverLayerThreshold": null,
+       "universalTransition": {
+        "divideShape": "clone"
+       },
+       "triggerLineEvent": false,
+       "triggerEvent": false,
+       "seriesIndex": 0
+      },
+      {
+       "type": "bar",
+       "data": [
+        3,
+        1,
+        2
+       ],
+       "markPoint": [],
+       "markLine": [],
+       "name": "L",
+       "label": {
+        "show": true,
+        "position": "top"
+       },
+       "z": 3,
+       "coordinateSystem": "cartesian2d",
+       "legendHoverLink": true,
+       "clip": true,
+       "endLabel": {
+        "show": false,
+        "valueAnimation": true,
+        "distance": 8
+       },
+       "lineStyle": {
+        "width": 2,
+        "type": "solid"
+       },
+       "emphasis": {
+        "scale": true,
+        "label": {
+         "show": true
+        }
+       },
+       "step": false,
+       "smooth": false,
+       "smoothMonotone": null,
+       "symbol": "emptyCircle",
+       "symbolSize": 6,
+       "symbolRotate": null,
+       "showSymbol": true,
+       "showAllSymbol": "auto",
+       "connectNulls": false,
+       "sampling": "none",
+       "animationEasing": "linear",
+       "progressive": 0,
+       "hoverLayerThreshold": null,
+       "universalTransition": {
+        "divideShape": "clone"
+       },
+       "triggerLineEvent": false,
+       "triggerEvent": false,
+       "seriesIndex": 1
+      }
+     ]
+    },
+    {
+     "icon": "stack",
+     "series": [
+      {
+       "stack": "__ec_magicType_stack__",
+       "type": "bar",
+       "data": [
+        1,
+        2,
+        3
+       ],
+       "markPoint": [],
+       "markLine": [],
+       "name": "B",
+       "label": {
+        "show": true,
+        "position": "top"
+       },
+       "itemStyle": {
+        "color": "#ff0000"
+       },
+       "z": 2,
+       "coordinateSystem": "cartesian2d",
+       "legendHoverLink": true,
+       "barMinHeight": 0,
+       "barMinAngle": 0,
+       "large": false,
+       "largeThreshold": 400,
+       "progressive": 3000,
+       "progressiveChunkMode": "mod",
+       "defaultBarGap": "10%",
+       "clip": true,
+       "roundCap": false,
+       "showBackground": false,
+       "select": {
+        "itemStyle": {
+         "borderWidth": 2
+        }
+       },
+       "realtimeSort": false,
+       "emphasis": {
+        "label": {
+         "show": true
+        },
+        "scale": true
+       },
+       "endLabel": {
+        "show": false,
+        "valueAnimation": true,
+        "distance": 8
+       },
+       "lineStyle": {
+        "width": 2,
+        "type": "solid"
+       },
+       "step": false,
+       "smooth": false,
+       "smoothMonotone": null,
+       "symbol": "emptyCircle",
+       "symbolSize": 6,
+       "symbolRotate": null,
+       "showSymbol": true,
+       "showAllSymbol": "auto",
+       "connectNulls": false,
+       "sampling": "none",
+       "animationEasing": "linear",
+       "hoverLayerThreshold": null,
+       "universalTransition": {
+        "divideShape": "clone"
+       },
+       "triggerLineEvent": false,
+       "triggerEvent": false,
+       "seriesIndex": 0
+      },
+      {
+       "stack": "__ec_magicType_stack__",
+       "type": "bar",
+       "data": [
+        3,
+        1,
+        2
+       ],
+       "markPoint": [],
+       "markLine": [],
+       "name": "L",
+       "label": {
+        "show": true,
+        "position": "top"
+       },
+       "z": 3,
+       "coordinateSystem": "cartesian2d",
+       "legendHoverLink": true,
+       "clip": true,
+       "endLabel": {
+        "show": false,
+        "valueAnimation": true,
+        "distance": 8
+       },
+       "lineStyle": {
+        "width": 2,
+        "type": "solid"
+       },
+       "emphasis": {
+        "scale": true,
+        "label": {
+         "show": true
+        }
+       },
+       "step": false,
+       "smooth": false,
+       "smoothMonotone": null,
+       "symbol": "emptyCircle",
+       "symbolSize": 6,
+       "symbolRotate": null,
+       "showSymbol": true,
+       "showAllSymbol": "auto",
+       "connectNulls": false,
+       "sampling": "none",
+       "animationEasing": "linear",
+       "progressive": 0,
+       "hoverLayerThreshold": null,
+       "universalTransition": {
+        "divideShape": "clone"
+       },
+       "triggerLineEvent": false,
+       "triggerEvent": false,
+       "barMinHeight": 0,
+       "barMinAngle": 0,
+       "large": false,
+       "largeThreshold": 400,
+       "progressiveChunkMode": "mod",
+       "defaultBarGap": "10%",
+       "roundCap": false,
+       "showBackground": false,
+       "select": {
+        "itemStyle": {
+         "borderWidth": 2
+        }
+       },
+       "realtimeSort": false,
+       "seriesIndex": 1
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

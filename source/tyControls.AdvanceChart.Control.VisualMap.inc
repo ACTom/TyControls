@@ -234,6 +234,7 @@ begin
   GlobalInk(Result.FontName, Result.FontSizeLogical, Result.FontWeight,
     Result.Text, [ttpSize, ttpWeight, ttpFamily]);
   if AView.FontSize > 0 then Result.FontSizeLogical := AView.FontSize;
+  Result.FontWeight := TyFontStyleCodeOver(AView.FontStyle, Result.FontWeight);
   if AView.HasText_ then Result.Text := AView.TextColour;
   if AView.HasBorder then Result.Border := AView.BorderColour
   else Result.Border := TTyChartColor(
@@ -244,6 +245,8 @@ begin
   if AView.HasHandleStroke then Result.HandleStroke := AView.HandleStroke
   else Result.HandleStroke := TTyChartColor(
     model.ResolveStyle('TyAdvChartVisualMapHandle', '', []).BorderColor);
+  { [R5-A] the indicator's default shadow colour }
+  Result.Shadow := StShadowInk;
 end;
 
 procedure TTyCustomAdvanceChart.SolveVisualMapViews(const AMeasurer: ITyTextMeasurer;
@@ -274,14 +277,19 @@ begin
 end;
 
 function TTyCustomAdvanceChart.BuildVisualMaps(AList: TTyPaintList): Integer;
-var k: Integer;
+var k, lt: Integer;
 begin
   Result := 0;
   for k := 0 to High(FVisualLayouts) do
     if (k <= High(FVisualViews)) and FVisualLayouts[k].Valid then
+    begin
+      lt := AList.Count;
       Inc(Result, TyBuildVisualMapMarks(FVisualLayouts[k], FVisualViews[k],
         VisualMapInk(FVisualViews[k]), FLastRect.Left, FLastRect.Top, AList,
         VmLiveDraw(k)));
+      { [R5-J] its own zlevel, else the root's }
+      LevelTail(AList, lt, 'visualMap', k);
+    end;
 end;
 
 function TTyCustomAdvanceChart.VisualMapLayout(AIndex: Integer): TTyVisualMapLayout;
@@ -525,10 +533,12 @@ begin
   begin
     if i <= High(FVmIndBag) then FreeAndNil(FVmIndBag[i]);
     if i <= High(FVmLabBag) then FreeAndNil(FVmLabBag[i]);
+    if i <= High(FVmBlurBag) then FreeAndNil(FVmBlurBag[i]);
   end;
   SetLength(FVmLive, ACount);
   SetLength(FVmIndBag, ACount);
   SetLength(FVmLabBag, ACount);
+  SetLength(FVmBlurBag, ACount);
   SetLength(FVmRangeHas, ACount);
   SetLength(FVmRange0, ACount);
   SetLength(FVmRange1, ACount);
@@ -538,6 +548,7 @@ begin
     FVmLive[i] := Default(TTyVmLive);
     FVmIndBag[i] := nil;
     FVmLabBag[i] := nil;
+    FVmBlurBag[i] := nil;
     FVmRangeHas[i] := False;
     FVmSel[i] := '';
   end;
@@ -585,6 +596,7 @@ begin
   L := FVisualLayouts[AIndex];
   FreeAndNil(FVmIndBag[AIndex]);
   FreeAndNil(FVmLabBag[AIndex]);
+  FreeAndNil(FVmBlurBag[AIndex]);
   if not L.Valid then
   begin
     FVmLive[AIndex].Alive := False;
@@ -635,6 +647,11 @@ begin
   FVmLabBag[AIndex].Animation := FVmAnim;
   FVmLabBag[AIndex].Attr(TyAnimProps([TyAnimProp('style.x', TyAnimNum(0)),
     TyAnimProp('style.y', TyAnimNum(0))]));
+  { [R5-I] the handle labels' opacity, for their blur's fade }
+  FVmBlurBag[AIndex] := TTyAnimBag.Create;
+  FVmBlurBag[AIndex].Animation := FVmAnim;
+  FVmBlurBag[AIndex].Attr(TyAnimProps([TyAnimProp('h0', TyAnimNum(1)),
+    TyAnimProp('h1', TyAnimNum(1))]));
 end;
 
 { ContinuousView.dispose: _clearHoverLinkToSeries dispatches its downplay
@@ -652,6 +669,7 @@ begin
   FVmLive[AIndex] := Default(TTyVmLive);
   FreeAndNil(FVmIndBag[AIndex]);
   FreeAndNil(FVmLabBag[AIndex]);
+  FreeAndNil(FVmBlurBag[AIndex]);
   if FVmDragVm = AIndex then FVmDragVm := -1;
   if hadLinks then
   begin
@@ -686,8 +704,12 @@ begin
   Result := False;
   AIndex := -1;
   APart := 0;
+  { [R5-D] under the loading mask -- [R5-J] by its zlevel, as the canvas
+    searched }
   for k := High(FVisualLayouts) downto 0 do
   begin
+    if MaskOver(ModelZLevel('visualMap', k)) or not HitIn(ModelZLevel('visualMap', k)) then
+      Continue;
     L := FVisualLayouts[k];
     if (not L.Valid) or (k > High(FVisualViews)) then Continue;
     gx := AX - VmGroupX(k);
@@ -1394,7 +1416,7 @@ var
   sid: string;
   d: TJSONData;
 begin
-  if not (ATarget.HdKind in [1, 3]) or ATarget.HdEdge then Exit;
+  if not (ATarget.HdKind in [1, 3, 31]) or ATarget.HdEdge then Exit;
   for k := 0 to High(FVisualLayouts) do
   begin
     if not (VmContinuous(k) and FVisualViews[k].HoverLink) then Continue;
@@ -1429,8 +1451,9 @@ end;
   style back. }
 procedure TTyCustomAdvanceChart.VmApplyStates;
 var
-  k, h: Integer;
+  k, h, i: Integer;
   want, anyChange: Boolean;
+  o: Double;
 begin
   anyChange := False;
   for k := 0 to High(FVmLive) do
@@ -1441,7 +1464,13 @@ begin
       want := FVmLive[k].ThumbHover[h] = 2;
       if want <> FVmLive[k].ThumbEmph[h] then
       begin
-        if want then FVmLive[k].ThumbSaved[h] := FVmLive[k].ThumbFill[h]
+        if want then
+        begin
+          FVmLive[k].ThumbSaved[h] := FVmLive[k].ThumbFill[h];
+          { [R5-D] the state's own colour (emphasis.handleStyle.color) }
+          if (k <= High(FVisualViews)) and FVisualViews[k].HasEmphFill then
+            FVmLive[k].ThumbFill[h] := TyVisualFromChart(FVisualViews[k].EmphFill);
+        end
         else FVmLive[k].ThumbFill[h] := FVmLive[k].ThumbSaved[h];
         FVmLive[k].ThumbEmph[h] := want;
         anyChange := True;
@@ -1453,6 +1482,30 @@ begin
         else FVmLive[k].Labels[h] := FVmLive[k].LabelsSaved[h];
         FVmLive[k].LabelBlurOn[h] := want;
         anyChange := True;
+        { [R5-I] the label's stateTransition ({duration: 200}, no easing):
+          its opacity to the blur's 0.1, or back to its own, from where it
+          is [was: switched at once] }
+        if (k <= High(FVmBlurBag)) and (FVmBlurBag[k] <> nil) then
+        begin
+          if want then o := 0.1 else o := 1;
+          if AnimAllowed then
+          begin
+            { the next frame applies it }
+            if Length(FVmBlurDue) <> Length(FVmBlurBag) then
+            begin
+              SetLength(FVmBlurDue, Length(FVmBlurBag));
+              for i := 0 to High(FVmBlurDue) do
+              begin
+                FVmBlurDue[i][0] := NaN;
+                FVmBlurDue[i][1] := NaN;
+              end;
+            end;
+            FVmBlurDue[k][h] := o;
+            AnimArmTimer;
+          end
+          else
+            FVmBlurBag[k].Attr(TyAnimProps([TyAnimProp('h' + IntToStr(h), TyAnimNum(o))]));
+        end;
       end;
     end;
   end;
@@ -1721,8 +1774,40 @@ begin
 end;
 
 function TTyCustomAdvanceChart.VmLive_: Boolean;
+var k: Integer;
 begin
   Result := (FVmAnim <> nil) and (FVmAnim.ClipCount > 0);
+  { [R5-I] a blur's fade waiting for its frame }
+  if not Result then
+    for k := 0 to High(FVmBlurDue) do
+      if not IsNan(FVmBlurDue[k][0]) or not IsNan(FVmBlurDue[k][1]) then Exit(True);
+end;
+
+{ [R5-I] the blur fades the last frame marked: their animators, which step
+  from the next frame on }
+procedure TTyCustomAdvanceChart.VmBlurFlush;
+var k, h: Integer;
+begin
+  for k := 0 to Math.Min(High(FVmBlurDue), High(FVmBlurBag)) do
+    for h := 0 to 1 do
+    begin
+      if IsNan(FVmBlurDue[k][h]) then Continue;
+      if FVmBlurBag[k] <> nil then
+        FVmBlurBag[k].AnimateTo(TyAnimProps([TyAnimProp('h' + IntToStr(h),
+          TyAnimNum(FVmBlurDue[k][h]))]), TyAnimCfg(200, 0, ''));
+      FVmBlurDue[k][h] := NaN;
+    end;
+end;
+
+function TTyCustomAdvanceChart.VmHandleLabelOpacity(AIndex, AHandle: Integer): Double;
+begin
+  Result := 1;
+  if (AIndex < 0) or (AIndex > High(FVmLive)) or (AHandle < 0) or (AHandle > 1) then Exit;
+  if FVmLive[AIndex].LabelBlurOn[AHandle] then Result := 0.1;
+  { [R5-I] where its fade has got to }
+  if (AIndex <= High(FVmBlurBag)) and (FVmBlurBag[AIndex] <> nil)
+    and (FVmBlurBag[AIndex].GetAnimProp('h' + IntToStr(AHandle)).Kind = avkNumber) then
+    Result := FVmBlurBag[AIndex].Num('h' + IntToStr(AHandle));
 end;
 
 function TTyCustomAdvanceChart.VmLiveDraw(AIndex: Integer): TTyVmLiveDraw;
@@ -1738,9 +1823,9 @@ begin
   for h := 0 to 1 do
   begin
     Result.HandleFill[h] := FVmLive[AIndex].ThumbFill[h];
+    Result.HandleEmph[h] := FVmLive[AIndex].ThumbEmph[h];
     Result.Labels[h] := FVmLive[AIndex].Labels[h];
-    if FVmLive[AIndex].LabelBlurOn[h] then Result.LabelOpacity[h] := 0.1
-    else Result.LabelOpacity[h] := 1;
+    Result.LabelOpacity[h] := VmHandleLabelOpacity(AIndex, h);
   end;
   Result.IndVisible := FVmLive[AIndex].IndVisible and (FVmIndBag[AIndex] <> nil);
   if Result.IndVisible then

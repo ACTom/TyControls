@@ -237,6 +237,49 @@ add('climb', 'c-hoverlink', "legendHoverLink: a type with no default reads the r
 add('climb', 'c-symbol', "a root symbol reaches a scatter (no default) but not a line; symbolRotate reaches both",
   Object.assign({ animation: false, symbol: 'rect', symbolRotate: 30 }, CAT2,
     { series: [{ type: 'scatter', data: [1, 2, 3] }, { type: 'line', data: [3, 2, 1] }] }), ['symbols']);
+// [spec 242] THE ROOT'S OBJECT KEYS: getModel('label') climbs to the root's
+// label where the series (its defaults merged in) and the item hold nothing
+add('climb', 'c-label', "a root label {show, formatter} reaches a bar, a line and a scatter (no label defaults); a pie's own default show (true) stands against the root's false where written",
+  Object.assign({ animation: false, label: { show: true, formatter: '<{c}>' } }, CAT2,
+    { series: [{ type: 'bar', data: [1, 2, 3] }, { type: 'line', data: [3, 2, 1] }, { type: 'scatter', data: [2, 2, 2] }] }), ['labels']);
+add('climb', 'c-label-own', "the series' own label.show false and an item's own label.show false stand; a series with no label of its own takes the root's show and formatter",
+  Object.assign({ animation: false, label: { show: true, formatter: '[{b}]' } }, CAT2,
+    { series: [{ type: 'bar', data: [1, 2, 3], label: { show: false } },
+      { type: 'bar', data: [3, { value: 2, label: { show: false } }, 1] }] }), ['labels']);
+add('climb', 'c-label-pie', "a pie: label.show is a default (true) -- the root's false does not hide it -- but formatter is no default: the root's",
+  { animation: false, label: { show: false, formatter: '{b}={c}' }, series: [{ type: 'pie', data: [{ name: 'x', value: 1 }, { name: 'y', value: 2 }] }] },
+  ['labels']);
+add('climb', 'c-label-null', "a series whose label is written null climbs to the root's",
+  Object.assign({ animation: false, label: { show: true } }, CAT2,
+    { series: [{ type: 'bar', data: [1, 2, 3], label: null }] }), ['labels']);
+
+// [spec 242] the leaves each series type's defaultOption holds under the
+// root's object keys (label, labelLine, labelLayout, emphasis, select, blur,
+// endLabel): where the root's do not reach -- the port's table must be this
+function rootDefaultPaths() {
+  const KEYS = ['label', 'labelLine', 'labelLayout', 'emphasis', 'select', 'blur', 'endLabel'];
+  const walk = (o, pre, out) => {
+    for (const k of Object.keys(o)) {
+      const v = o[k];
+      const p = pre + '.' + k;
+      if (v != null && typeof v === 'object' && !Array.isArray(v)) walk(v, p, out);
+      else if (v != null) out.push(p);
+    }
+    return out;
+  };
+  const out = [];
+  for (const C of echarts.ComponentModel.getClassesByMainType('series')) {
+    const t = C.type.replace('series.', '');
+    if (t.startsWith('__')) continue;
+    const d = C.defaultOption || {};
+    for (const k of KEYS) {
+      if (d[k] == null) continue;
+      const ps = typeof d[k] === 'object' ? walk(d[k], k, []) : [k];
+      for (const p of ps) out.push(t + ':' + p);
+    }
+  }
+  return out;
+}
 
 // ---------- reading ----------
 function boxOf(model) {
@@ -381,6 +424,21 @@ function readCase(c) {
         rec.zs = els.map(e => e.z);
       } else if (what === 'hoverLink') {
         rec.hoverLink = ec.getSeries().map(sm => ({ type: sm.subType, get: rawRec(sm.get('legendHoverLink')) }));
+      } else if (what === 'labels') {
+        // each series' shown labels, in data order: the text of every item's
+        // label that draws
+        rec.labels = ec.getSeries().map(sm => {
+          const data = sm.getData();
+          const texts = [];
+          data.each(i => {
+            const el = data.getItemGraphicEl(i);
+            // a symbol's label is on its path (the group's first child)
+            let t = el && el.getTextContent ? el.getTextContent() : null;
+            if (!t && el && el.childAt && el.childAt(0) && el.childAt(0).getTextContent) t = el.childAt(0).getTextContent();
+            if (t && !t.ignore && !t.invisible && t.style && t.style.text != null && String(t.style.text) !== '') texts.push(String(t.style.text));
+          });
+          return { type: sm.subType, texts };
+        });
       } else if (what === 'symbols') {
         rec.symbols = ec.getSeries().map(sm => {
           const el = sm.getData().getItemGraphicEl(0);
@@ -444,7 +502,8 @@ function guards(recs) {
 
 function generate() {
   const recs = CASES.map(readCase);
-  return { source: 'ECharts ' + echarts.version + ', zrender ' + echarts.zrender.version, W, H, cases: recs, guards: guards(recs) };
+  return { source: 'ECharts ' + echarts.version + ', zrender ' + echarts.zrender.version, W, H, cases: recs, guards: guards(recs),
+    rootDefaultPaths: rootDefaultPaths() };
 }
 
 let out1, json1, json2;

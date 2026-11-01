@@ -56,11 +56,18 @@ type
     FontSizeLogical: Integer;
     HasFontWeight: Boolean;
     FontWeight: Integer;
+    { [R5-A] fontStyle as written (TyFontStyleCode); unset is the default's
+      'normal' (loading/default.ts) }
+    FontStyle: Byte;
     { '' is the theme's family }
     FontFamily: string;
     ShowSpinner: Boolean;
     SpinnerRadius: Double;
     LineWidth: Double;
+    { [R5-D] zlevel, 0 unset: the effect's layer. The chart is zlevel 0
+      here, so one of 0 or more is over it -- its mask the hover target over
+      everything -- and one below 0 is under it and masks nothing }
+    ZLevel: Double;
   end;
 
   { resize()'s answers, CSS px }
@@ -219,8 +226,13 @@ begin
       ACfg.FontWeight := TyFontWeightOf(d, 0);
       ACfg.HasFontWeight := ACfg.FontWeight > 0;
     end;
+    ACfg.FontStyle := TyFontStyleCode(o.Find('fontStyle'));
     d := o.Find('fontFamily');
     if (d <> nil) and (d.JSONType = jtString) then ACfg.FontFamily := d.AsString;
+    { [R5-D] zlevel: a number; anything else is no layer above 0 }
+    d := o.Find('zlevel');
+    if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat) then
+      ACfg.ZLevel := d.AsFloat;
     d := o.Find('showSpinner');
     if (d <> nil) and (d.JSONType <> jtNull) then ACfg.ShowSpinner := TyJsTruthy(d);
     ACfg.SpinnerRadius := NumberOr(o.Find('spinnerRadius'), TyLoadingDefaultRadius);

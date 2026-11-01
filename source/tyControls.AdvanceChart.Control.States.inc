@@ -54,6 +54,8 @@ begin
   TyStSetNum(Result, stkLineWidth, AEl.Style.StrokeWidthLogical);
   TyStSetNum(Result, stkSmooth, AEl.Caption.LgSmooth);
   TyStSetNum(Result, stkOpacity, AEl.Style.Alpha);
+  { [R5-F] the pen's phase at rest }
+  TyStSetNum(Result, stkDashOffset, AEl.Style.DashOffsetLogical);
   TyStSetNum(Result, stkZ2, AEl.Z2);
   TyStSetNum(Result, stkX, 0);
   TyStSetNum(Result, stkY, 0);
@@ -134,6 +136,25 @@ begin
     and TyAnimGradientOfValue(StColourValue(AObj, AKey), AGrad);
 end;
 
+{ [R5-A] A STATE'S SHADOW onto an element: the four keys where they differ from rest }
+procedure StWriteShadow(var AEl: TTyChartElement; const C, R: TTyStObject);
+begin
+  if not StSameNum(C.Num[stkShadowBlur], R.Num[stkShadowBlur]) then
+    AEl.Style.ShadowBlur := C.Num[stkShadowBlur];
+  if not StSameNum(C.Num[stkShadowOffsetX], R.Num[stkShadowOffsetX]) then
+    AEl.Style.ShadowOffsetX := C.Num[stkShadowOffsetX];
+  if not StSameNum(C.Num[stkShadowOffsetY], R.Num[stkShadowOffsetY]) then
+    AEl.Style.ShadowOffsetY := C.Num[stkShadowOffsetY];
+  if C.Has[stkShadowColor] and (C.Color[stkShadowColor] <> R.Color[stkShadowColor]) then
+    AEl.Style.ShadowColor := C.Color[stkShadowColor]
+  { a shadow the state brings on an element that had none: its colour,
+    the prototype's '#000' where it says none }
+  else if C.Has[stkShadowColor] and (AEl.Style.ShadowColor = 0)
+    and ((AEl.Style.ShadowBlur > 0) or (AEl.Style.ShadowOffsetX <> 0)
+      or (AEl.Style.ShadowOffsetY <> 0)) then
+    AEl.Style.ShadowColor := C.Color[stkShadowColor];
+end;
+
 { THE CURRENT VALUES ONTO A MARK. A colour a state did not change is left as
   the build drew it -- a gradient stays a gradient; a lifted colour over a
   gradient fill leaves the gradient too (the port does not lift a ramp). }
@@ -209,6 +230,7 @@ begin
   if AEl.Style.DashWord <> 0 then
     AEl.Style.DashLogical := TyDashOfWord(AEl.Style.DashWord, AEl.Style.StrokeWidthLogical);
   if not StSameNum(c.Num[stkOpacity], r.Num[stkOpacity]) then AEl.Style.Alpha := c.Num[stkOpacity];
+  StWriteShadow(AEl, c, r);
   AEl.Z2 := Round(c.Num[stkZ2]);
   StShiftShape(AEl.Shape, c.Num[stkX] - r.Num[stkX], c.Num[stkY] - r.Num[stkY]);
   if (AEl.Shape.Kind = cskSector) and not StSameNum(c.Num[stkR], r.Num[stkR]) then
@@ -247,9 +269,55 @@ begin
     AEl.Style.StrokeWidthLogical := c.Num[stkLineWidth];
   if not StSameNum(c.Num[stkOpacity], r.Num[stkOpacity]) then
     AEl.Style.Alpha := c.Num[stkOpacity];
+  StWriteShadow(AEl, c, r);
   AEl.Z2 := AEl.Z2 + Round(c.Num[stkZ2] - r.Num[stkZ2]);
   StShiftShape(AEl.Shape, c.Num[stkX] - r.Num[stkX], c.Num[stkY] - r.Num[stkY]);
   AEl.Ignore := c.Num[stkIgnore] <> 0;
+end;
+
+{ [spec 242] A CUSTOM TEXT OR IMAGE: its paint order and ignore, its
+  opacity, and a text's ink where a state's style changes the block's fill
+  or stroke (a rich token's own stays) }
+procedure StWriteGfxText(var AEl: TTyChartElement; const AState: TTyStElement;
+  AProxied: Boolean);
+var
+  c, r: TTyStObject;
+  i: Integer;
+  reFill, reStroke: Boolean;
+begin
+  c := AState.Cur;
+  r := AState.Rest;
+  AEl.Z2 := Round(c.Num[stkZ2]);
+  AEl.Ignore := c.Num[stkIgnore] <> 0;
+  { on a proxy the opacity is the frame's (a Text animates only that); the
+    ink is set at once either way }
+  if not AProxied and not StSameNum(c.Num[stkOpacity], r.Num[stkOpacity]) then
+    AEl.Style.Alpha := c.Num[stkOpacity];
+  reFill := not SameColourKey(c, r, stkFill);
+  reStroke := not SameColourKey(c, r, stkStroke)
+    or not StSameNum(c.Num[stkLineWidth], r.Num[stkLineWidth]);
+  if not (reFill or reStroke) then Exit;
+  AEl.Caption.RtPieces := Copy(AEl.Caption.RtPieces);
+  for i := 0 to High(AEl.Caption.RtPieces) do
+    with AEl.Caption.RtPieces[i] do
+    begin
+      if Kind <> rpkText then Continue;
+      if reFill and not TokenFill then
+      begin
+        HasFill := not c.None[stkFill];
+        Fill := c.Color[stkFill];
+        DefaultFill := False;
+      end;
+      if reStroke and not TokenStroke and TyStHasColour(c, stkStroke) then
+      begin
+        HasStroke := True;
+        Stroke := c.Color[stkStroke];
+        DefaultStroke := False;
+        if c.Has[stkLineWidth] and StPositive(c.Num[stkLineWidth]) then LineWidth := c.Num[stkLineWidth];
+      end
+      else if reStroke and not TokenStroke and c.None[stkStroke] then
+        HasStroke := False;
+    end;
 end;
 
 procedure StWriteLabel(var AEl: TTyChartElement; const AState: TTyStElement;
@@ -289,12 +357,75 @@ begin
   end;
 end;
 
+{ [R5-F] a label line's state style: the state model's labelLine.lineStyle
+  along ANodes (each node's [AState, 'labelLine']) as getLineStyle reads it }
+procedure StGuideStateStyle(const ANodes: array of TJSONObject; const AState: string;
+  var AObj: TTyStObject);
+var
+  subs: array of TJSONObject;
+  i: Integer;
+  d: TJSONData;
+  bolder: Boolean;
+  st: TTyStObject;
+  k: TTyStKey;
+begin
+  SetLength(subs, Length(ANodes));
+  for i := 0 to High(ANodes) do
+  begin
+    subs[i] := nil;
+    if ANodes[i] = nil then Continue;
+    d := TyStFind([ANodes[i]], [AState, 'labelLine']);
+    if d is TJSONObject then subs[i] := TJSONObject(d);
+  end;
+  st := TyStReadStyle(subs, '', 'lineStyle', bolder);
+  for k := Low(TTyStKey) to High(TTyStKey) do
+    if st.Has[k] then
+    begin
+      AObj.Has[k] := True;
+      AObj.Num[k] := st.Num[k];
+      AObj.Color[k] := st.Color[k];
+      AObj.None[k] := st.None[k];
+      AObj.GradJson[k] := st.GradJson[k];
+    end;
+  d := TyStFind(subs, ['lineStyle', 'cap']);
+  if d <> nil then AObj.CapWord := 1 + TyLineCapOf(d);
+  d := TyStFind(subs, ['lineStyle', 'join']);
+  if d <> nil then AObj.JoinWord := 1 + TyLineJoinOf(d);
+  d := TyStFind(subs, ['lineStyle', 'miterLimit']);
+  if (d <> nil) and (d.JSONType = jtNumber) then
+  begin
+    AObj.HasMiter := True;
+    AObj.Miter := d.AsFloat;
+  end;
+end;
+
 procedure StWriteGuide(var AEl: TTyChartElement; const AState: TTyStElement;
   AProxied: Boolean);
-var c, r: TTyStObject;
+var c, r: TTyStObject; n: TTyStName;
 begin
   c := AState.Cur;
   r := AState.Rest;
+  { [R5-F] the state's dash, set at its start against the width it draws,
+    proxy or not; its cap, join and miter limit, the later state's over the
+    earlier one's (useStates merges in order) }
+  if c.Has[stkDash] then
+  begin
+    if c.Has[stkLineWidth] and StPositive(c.Num[stkLineWidth]) then
+      AEl.Style.DashLogical := TyStDashOf(c, c.Num[stkLineWidth])
+    else
+      AEl.Style.DashLogical := TyStDashOf(c, AEl.Style.StrokeWidthLogical);
+    AEl.Style.DashWord := TyDashWord(TTyOptDash(Round(c.Num[stkDash])));
+  end;
+  for n := Low(TTyStName) to High(TTyStName) do
+    if n in AState.States then
+    begin
+      if AState.Decl[n].CapWord > 0 then AEl.Style.LineCap := AState.Decl[n].CapWord - 1;
+      if AState.Decl[n].JoinWord > 0 then AEl.Style.LineJoin := AState.Decl[n].JoinWord - 1;
+      if AState.Decl[n].HasMiter then AEl.Style.MiterLimit := AState.Decl[n].Miter;
+    end;
+  if not AProxied and c.Has[stkDashOffset]
+    and not StSameNum(c.Num[stkDashOffset], r.Num[stkDashOffset]) then
+    AEl.Style.DashOffsetLogical := c.Num[stkDashOffset];
   if not AProxied then
     StShiftShape(AEl.Shape, c.Num[stkX] - r.Num[stkX], c.Num[stkY] - r.Num[stkY]);
   AEl.Z2 := Round(c.Num[stkZ2]);
@@ -308,7 +439,9 @@ begin
   if not AProxied and c.Has[stkStroke] then AEl.Style.StrokeColor := c.Color[stkStroke];
   if not AProxied and c.Has[stkLineWidth] then
     AEl.Style.StrokeWidthLogical := c.Num[stkLineWidth];
-  if c.Has[stkSmooth] and not StSameNum(c.Num[stkSmooth], r.Num[stkSmooth]) then
+  if not AProxied then StWriteShadow(AEl, c, r);
+  { [R5-I] on a proxy the smooth too is the frame's (it tweens) }
+  if not AProxied and c.Has[stkSmooth] and not StSameNum(c.Num[stkSmooth], r.Num[stkSmooth]) then
     AEl.Shape.Cmds := TyLabelLineCmds(AEl.Shape.Points, c.Num[stkSmooth]);
 end;
 
@@ -520,6 +653,12 @@ begin
   end;
 end;
 
+function TTyCustomAdvanceChart.StShadowInk: TTyChartColor;
+begin
+  Result := TTyChartColor(ActiveController.Model.ResolveStyle('TyAdvChartShadow',
+    '', []).TextColor);
+end;
+
 procedure TTyCustomAdvanceChart.StDeclareItem(ASlot, ARaw: Integer;
   AList: TTyPaintList; APPI: Integer);
 var
@@ -686,10 +825,11 @@ var
       TyStSetNum(obj, stkIgnore, Ord(labIgn or not stShow));
       TyStSetNum(obj, stkSmooth,
         TyLabelLineSmoothOf(TyStFind(nodes, [cStNames[n], 'labelLine', 'smooth'])));
-      txt := TyStReadString(nodes, [cStNames[n], 'labelLine', 'lineStyle', 'color'], has);
-      if has and TyTryParseChartColor(txt, c) then TyStSetColor(obj, stkStroke, c);
-      ss := TyStReadNumber(nodes, [cStNames[n], 'labelLine', 'lineStyle', 'width'], has);
-      if has and not IsNan(ss) then TyStSetNum(obj, stkLineWidth, ss);
+      { [R5-F] THE STATE'S WHOLE lineStyle (setLabelLineState's
+        getLineStyle): colour, width, opacity, dash, its phase, the shadow
+        [R5-A], and the cap, join and miter limit [was: the colour and the
+        width alone] }
+      StGuideStateStyle(nodes, cStNames[n], obj);
       AG.Decl[n] := obj;
     end;
     TyStSetNum(AG.Decl[stnSelect], stkX, dx);
@@ -810,6 +950,19 @@ begin
     emphasis.itemStyle); its shadow is not drawn here [Batch 108] }
   if (FSt[s].Kind = sskBox) and not item^.Host.Decl[stnEmphasis].Has[stkLineWidth] then
     TyStSetNum(item^.Host.Decl[stnEmphasis], stkLineWidth, 2);
+  { [R5-A] and its shadow, BoxplotSeries' emphasis.itemStyle: a blur of 5 at
+    (1, 1) in tokens.color.shadow, key by key under what is declared }
+  if FSt[s].Kind = sskBox then
+  begin
+    if not item^.Host.Decl[stnEmphasis].Has[stkShadowBlur] then
+      TyStSetNum(item^.Host.Decl[stnEmphasis], stkShadowBlur, 5);
+    if not item^.Host.Decl[stnEmphasis].Has[stkShadowOffsetX] then
+      TyStSetNum(item^.Host.Decl[stnEmphasis], stkShadowOffsetX, 1);
+    if not item^.Host.Decl[stnEmphasis].Has[stkShadowOffsetY] then
+      TyStSetNum(item^.Host.Decl[stnEmphasis], stkShadowOffsetY, 1);
+    if not item^.Host.Decl[stnEmphasis].Has[stkShadowColor] then
+      TyStSetColor(item^.Host.Decl[stnEmphasis], stkShadowColor, StShadowInk);
+  end;
   { a sunburst blurs to 0.2 unless told (SunburstSeries.ts:274-279) [Batch 90] }
   if (FSt[s].Kind = sskSunburst) and not item^.Host.Decl[stnBlur].Has[stkOpacity] then
     TyStSetNum(item^.Host.Decl[stnBlur], stkOpacity, 0.2);
@@ -869,6 +1022,10 @@ begin
           spec := TyChartMergeEmphasis(spec, TyChartReadEmphasis(nodes[0]));
         half := (ph^.Shape.Bounds.Bottom - ph^.Shape.Bounds.Top) / 2;
         if ph^.Shape.Kind in [cskCircle, cskEllipse] then half := ph^.Shape.R1;
+        { [R5-F] THE SYMBOL'S OWN SIZE (Symbol._sizeY), not its shape's:
+          a rect, a triangle, a diamond are polygons, whose Bounds is not
+          set [was: no emphasis scale on any of them] }
+        if ph^.Caption.LgKind = cTyGuideHostSymbol then half := ph^.Caption.LgG[1] / 2;
         { a symbol of no size or a NaN one keeps its size }
         if StPositive(half) then
           TyStSetNum(item^.Host.Decl[stnEmphasis], stkScale,
@@ -2039,7 +2196,14 @@ begin
     if FSt[s].Kind = sskCustom then
     begin
       gel := CustomPaintSource(k);
-      if (gel = nil) or not gel.StatePath or (gel.Host <> nil) then Continue;
+      if (gel = nil) or (gel.Host <> nil) then Continue;
+      { [spec 242] a text and an image: parts with states of their own
+        (updateElOnState gives every displayable its states) }
+      if not gel.StatePath then
+      begin
+        if gel.Kind in [gkText, gkImage] then StPush(FSt[s].PartIdx[raw], k);
+        Continue;
+      end;
       if FSt[s].HostIdx[raw] < 0 then FSt[s].HostIdx[raw] := k
       else StPush(FSt[s].PartIdx[raw], k);
       Continue;
@@ -2079,8 +2243,9 @@ begin
     else if FSt[s].Kind = sskLines then
     begin
       { THE LINE HOSTS, the end symbols after it are parts; the effect
-        symbol is no part of the Line group's states [Batch 121] }
-      if pe^.Silent then Continue;
+        symbol is no part of the Line group's states [Batch 121] -- a
+        pointer target since spec 242, still no part }
+      if pe^.Silent or (pe^.Anim.Role = carLinesEffect) then Continue;
       if FSt[s].HostIdx[raw] < 0 then FSt[s].HostIdx[raw] := k
       else StPush(FSt[s].PartIdx[raw], k);
     end
@@ -2183,6 +2348,9 @@ begin
         else if prev <> [] then TyStUseItemStates(item^, prev);
       end;
     end;
+    { [R5-F] a line's temporary symbols new in this list: in emphasis
+      (LineView.highlight's symbol.highlight) }
+    if FSt[s].IsLine then LineTempsEnter(s);
     { updateSeriesElementSelection, then applyElementStates }
     SelSyncFlags(slot);
     for raw := 0 to High(FSt[s].Rows) do
@@ -2340,6 +2508,17 @@ begin
         Break;
       end;
     if (o < 0) or (o > High(FStCarry)) then Continue;
+    { [R5-G] NO RECORD TO CARRY -- the old view hosted no row (a large
+      batch: R2-L keeps none) -- carries nothing: every update below would
+      find no old record and go on. What it left was this series' rows
+      sized to the store, blank, which the sync then drops again where no
+      element hosts a row (and blank is what it makes of an absent record
+      where one does); a million rows of it and a diff of a million keys
+      made a notMerge option over a large series ten times slower to draw
+      than the same option on a new chart. }
+    if Length(FStCarry[o].Rows) > 0 then
+    begin
+    Inc(GStCarryDiffs);
     AnimRowKeys(FStores[slot], keys, raws);
     cmds := TyDataDiff(FStCarryKeys[o].Keys, keys);
     if Length(FSt[s].Rows) < FStores[slot].RawCount then
@@ -2360,6 +2539,7 @@ begin
         FStCarryHoverSeries := -2 - s;
         FStCarryHoverRaw := newRaw;
       end;
+    end;
     end;
     { a line's polyline and area are kept with the view }
     FSt[s].Run := FStCarry[o].Run;
@@ -2427,6 +2607,8 @@ begin
               line as a line }
             if item^.Parts[k].IsPath then
               StWriteHost(el, item^.Parts[k], FStProxied)
+            else if item^.Parts[k].GfxText then
+              StWriteGfxText(el, item^.Parts[k], FStProxied)
             else if item^.Parts[k].IsGuide then
               StWriteGuide(el, item^.Parts[k], FStProxied)
             else
@@ -2456,12 +2638,16 @@ begin
       end;
     end;
     if FSt[s].Run.Host.Exists and (FSt[s].Run.Host.States <> []) then
+    begin
       for k := 0 to High(FSt[s].RunIdx) do
       begin
         el := AList.Element(FSt[s].RunIdx[k]);
         StWriteHost(el, FSt[s].Run.Host, FStProxied);
         AList.SetElement(FSt[s].RunIdx[k], el);
       end;
+      { [R5-C] the polyline's text, its end label, in the polyline's state }
+      StWriteEndLabel(AList, s, FSt[s].Run.Host.States);
+    end;
     if FSt[s].Area.Host.Exists and (FSt[s].Area.Host.States <> []) then
       for k := 0 to High(FSt[s].AreaIdx) do
       begin
@@ -2923,6 +3109,13 @@ begin
     Result := TyAnimColorValue(AObj.Color[AKey], AObj.Lifted[AKey]);
 end;
 
+{ [R5-A] some state of the element declares AKey }
+function StAnyDecl(const AEl: TTyStElement; AKey: TTyStKey): Boolean;
+begin
+  Result := AEl.Decl[stnSelect].Has[AKey] or AEl.Decl[stnEmphasis].Has[AKey]
+    or AEl.Decl[stnBlur].Has[AKey];
+end;
+
 { A MERGED STATE OBJECT as the proxy's keys: the style keys, and the place,
   the scale and the radius where the proxy carries them }
 function StAnimStateOf(const AEl: TTyStElement; const AM: TTyStObject;
@@ -2959,6 +3152,15 @@ begin
       TyAnimPropPut(Result.Props, 'style.lineDashOffset', TyAnimNum(AM.Num[stkDashOffset]));
     if AM.Has[stkOpacity] then
       TyAnimPropPut(Result.Props, 'style.opacity', TyAnimNum(AM.Num[stkOpacity]));
+    { [R5-A] the shadow, where the state says it }
+    if AM.Has[stkShadowBlur] and P.HasStKey('style.shadowBlur') then
+      TyAnimPropPut(Result.Props, 'style.shadowBlur', TyAnimNum(AM.Num[stkShadowBlur]));
+    if AM.Has[stkShadowOffsetX] and P.HasStKey('style.shadowOffsetX') then
+      TyAnimPropPut(Result.Props, 'style.shadowOffsetX', TyAnimNum(AM.Num[stkShadowOffsetX]));
+    if AM.Has[stkShadowOffsetY] and P.HasStKey('style.shadowOffsetY') then
+      TyAnimPropPut(Result.Props, 'style.shadowOffsetY', TyAnimNum(AM.Num[stkShadowOffsetY]));
+    if AM.Has[stkShadowColor] and P.HasStKey('style.shadowColor') then
+      TyAnimPropPut(Result.Props, 'style.shadowColor', StColourValue(AM, stkShadowColor));
   end;
   if AM.Has[stkX] and P.HasStKey('x') then
     TyAnimPropPut(Result.Props, 'x', TyAnimNum(AM.Num[stkX]));
@@ -2970,6 +3172,12 @@ begin
   begin
     TyAnimPropPut(Result.Props, 'scaleX', TyAnimNum(rx.Num * AM.Num[stkScale]));
     TyAnimPropPut(Result.Props, 'scaleY', TyAnimNum(ry.Num * AM.Num[stkScale]));
+  end;
+  { [R5-I] a label line's smooth }
+  if AM.Has[stkSmooth] and P.HasStKey('shape.smooth') then
+  begin
+    TyAnimPropPut(Result.Props, 'shape.smooth', TyAnimNum(AM.Num[stkSmooth]));
+    Result.HasShape := True;
   end;
   { PieView: the emphasis shape is r = layout.r + scaleSize }
   if AM.Has[stkR] and P.HasStKey('shape.r') then
@@ -3048,12 +3256,22 @@ begin
   d := Find('duration');
   if d = nil then dur := 300
   else if d.JSONType = jtNumber then dur := d.AsFloat
+  { [R5-I] a string: `duration > 0` and the keyframe's time read it as a
+    number (a named function, '@...', is no number) [was: no transition] }
+  else if (d.JSONType = jtString) and (Copy(d.AsString, 1, 1) <> '@') then
+    dur := TyJsToNumber(d.AsString)
   else dur := NaN;
   d := Find('easing');
   if (d <> nil) and (d.JSONType = jtString) then easing := d.AsString
   else easing := 'cubicOut';
   d := Find('delay');
   if (d <> nil) and (d.JSONType = jtNumber) then delay := d.AsFloat
+  { [R5-I] a string that is not empty: Clip starts at globalTime + delay, a
+    string -- the digits run on after the time's and the tween waits for
+    ever at its start [was: no delay] }
+  else if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '')
+    and (Copy(d.AsString, 1, 1) <> '@') and not IsNan(TyJsToNumber('1' + d.AsString)) then
+    delay := Infinity
   else delay := 0;
   { a duration above 0 makes a stateTransition, anything else none }
   if IsNan(dur) or not (dur > 0) then Exit;
@@ -3095,7 +3313,11 @@ begin
       paths their enter turns and grows }
     carGaugePointer, carGaugeProgress, carRadarLine, carRadarArea,
     { and a graph edge's label, the text its fade runs on }
-    carGraphEdgeLabel]) then
+    carGraphEdgeLabel,
+    { [R5-I] an effectScatter's symbol path: the scale its update tweens is
+      the key its state tweens -- one stops the other [was: a proxy of the
+      states' own, its factor over the update's] }
+    carEffectSymbol]) then
     p := role
   else
   begin
@@ -3132,10 +3354,24 @@ begin
     Seed('style.stroke', StColourValue(AEl.Rest, stkStroke));
     Seed('style.lineWidth', TyAnimNum(AEl.Rest.Num[stkLineWidth]));
     Seed('style.opacity', TyAnimNum(AEl.Rest.Num[stkOpacity]));
+    { [R5-I] a label line's smooth: setLabelLineState gives every state a
+      shape with its smooth, which the state transition tweens as a number
+      [was: written at once] }
+    if AKind = cStPxGuide then
+      Seed('shape.smooth', TyAnimNum(AEl.Rest.Num[stkSmooth]));
     { [R2-I3] the pen's phase, where some state says one: it tweens }
     if AEl.Decl[stnSelect].Has[stkDashOffset] or AEl.Decl[stnEmphasis].Has[stkDashOffset]
       or AEl.Decl[stnBlur].Has[stkDashOffset] then
       Seed('style.lineDashOffset', TyAnimNum(AEl.Rest.Num[stkDashOffset]));
+    { [R5-A] the shadow's keys, where some state says one }
+    if StAnyDecl(AEl, stkShadowBlur) then
+      Seed('style.shadowBlur', TyAnimNum(AEl.Rest.Num[stkShadowBlur]));
+    if StAnyDecl(AEl, stkShadowOffsetX) then
+      Seed('style.shadowOffsetX', TyAnimNum(AEl.Rest.Num[stkShadowOffsetX]));
+    if StAnyDecl(AEl, stkShadowOffsetY) then
+      Seed('style.shadowOffsetY', TyAnimNum(AEl.Rest.Num[stkShadowOffsetY]));
+    if StAnyDecl(AEl, stkShadowColor) then
+      Seed('style.shadowColor', StColourValue(AEl.Rest, stkShadowColor));
     if isPie and (AKind in [cStPxPath, cStPxGuide]) then
     begin
       Seed('x', TyAnimNum(0));
@@ -3201,8 +3437,9 @@ begin
     layer] }
   want := TyStNamesText(TyStLayerStates(AEl));
   if want = p.CurrentStates then Exit;
-  { no timer, no transition }
-  noAnim := not AnimAllowed;
+  { no timer, no transition; [R5-I] nor after a layout that snapped
+    (updateStates' useStates(prevStates) with the transition nulled) }
+  noAnim := not AnimAllowed or FStSnapNow;
   if want = '' then p.ClearStates(noAnim)
   else
   begin
@@ -3227,9 +3464,14 @@ var
   hasCfg: Boolean;
   hostP: TTyChartAnimProxy;
 begin
+  { [R5-I] the snap's states, this sync's alone }
+  FStSnapNow := FStSnapPut;
+  FStSnapPut := False;
   if not FStProxied or (FPaintList = nil) then Exit;
   if FAnim = nil then FAnim := NewAnimDriver;
   if FAnimSet = nil then FAnimSet := TTyChartAnimSet.Create(FAnim);
+  FAnimSet.OnEndLabelText := @EndLabelTextOf;
+  FAnimSet.OnEndLabelPieces := @EndLabelPiecesOf;
   SetLength(FAnimStBind, FPaintList.Count);
   for k := 0 to High(FAnimStBind) do FAnimStBind[k] := nil;
   clips := FAnim.ClipCount;
@@ -3338,6 +3580,7 @@ begin
         FAnimStBind[FSt[s].AreaIdx[k]] := FAnimStBind[FSt[s].AreaIdx[0]];
     end;
   end;
+  RippleHoverSync;
   { A TRANSITION BEGAN: the series go to the dynamic layer until it ends
     (an armed option's flush decides that itself) }
   if (FAnim.ClipCount > clips) and not FAnimFlush then
@@ -3346,6 +3589,104 @@ begin
     FAnimContinuous := AnimLoopOnly;
     AnimArmTimer;
   end;
+end;
+
+procedure TTyCustomAdvanceChart.StWriteEndLabel(AList: TTyPaintList; ASeries: Integer;
+  AStates: TTyStNames);
+var
+  k: Integer;
+  pe: PTyChartElement;
+  node, st, en: TJSONObject;
+  d: TJSONData;
+  shown, has: Boolean;
+  stName: string;
+  c: TTyChartColor;
+begin
+  node := StSeriesNode(ASeries);
+  if node = nil then Exit;
+  { the state that wins: emphasis over blur over select (the order the
+    states go on) }
+  if stnEmphasis in AStates then stName := 'emphasis'
+  else if stnBlur in AStates then stName := 'blur'
+  else if stnSelect in AStates then stName := 'select'
+  else Exit;
+  en := nil;
+  d := node.Find('endLabel');
+  if d is TJSONObject then en := TJSONObject(d);
+  shown := (en <> nil) and TyOptTruthy(en.Find('show'));
+  st := nil;
+  d := node.Find(stName);
+  if d is TJSONObject then
+  begin
+    d := TJSONObject(d).Find('endLabel');
+    if d is TJSONObject then st := TJSONObject(d);
+  end;
+  { setLabelStyle: a state's show, else the normal one }
+  has := (st <> nil) and (st.Find('show') <> nil) and (st.Find('show').JSONType <> jtNull);
+  if has then shown := TyOptTruthy(st.Find('show'));
+  for k := 0 to AList.Count - 1 do
+  begin
+    pe := AList.Ref(k);
+    if (pe^.Anim.Role <> carEndLabel) or (pe^.Anim.Series <> ASeries) then Continue;
+    pe^.Ignore := not shown;
+    if st <> nil then
+    begin
+      d := st.Find('color');
+      if (d <> nil) and (d.JSONType = jtString) and TyTryParseChartColor(d.AsString, c) then
+        pe^.Caption.Colour := c;
+    end;
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.RippleHoverSync;
+var
+  k, j: Integer;
+  pe: PTyChartElement;
+  item: PTyStItem;
+  key: string;
+  seen: TTyStringArray;
+  emph, was, listed: Boolean;
+  p: TTyChartAnimProxy;
+begin
+  if (FPaintList = nil) or (FAnimSet = nil) then Exit;
+  seen := nil;
+  for k := 0 to FPaintList.Count - 1 do
+  begin
+    pe := FPaintList.Ref(k);
+    if (pe^.Anim.Role <> carRipple) or (pe^.Anim.G[10] = 0) then Continue;
+    item := StItemAt(pe^.Anim.Series, pe^.Anim.Index);
+    emph := (item <> nil) and (stnEmphasis in item^.Host.States);
+    key := IntToStr(pe^.Anim.Series) + ':' + IntToStr(pe^.Anim.Index);
+    was := False;
+    for j := 0 to High(FRipHover) do
+      if FRipHover[j] = key then was := True;
+    if emph then
+    begin
+      listed := False;
+      for j := 0 to High(seen) do
+        if seen[j] = key then listed := True;
+      if not listed then
+      begin
+        SetLength(seen, Length(seen) + 1);
+        seen[High(seen)] := key;
+      end;
+    end;
+    { the turn starts or stops it; staying as it was keeps what runs (an
+      update while emphasised has stopped it for good) }
+    if emph and not was then p := FAnimSet.StartHoverRipple(pe^)
+    else if (not emph) and was then
+    begin
+      if k <= High(FAnimBind) then FAnimBind[k] := nil;
+      FAnimSet.StopHoverRipple(pe^);
+      p := nil;
+    end
+    else p := FAnimSet.HoverRippleOf(pe^);
+    pe^.Ignore := p = nil;
+    if (p <> nil) and (Length(FAnimBind) < FPaintList.Count) then
+      SetLength(FAnimBind, FPaintList.Count);
+    if k <= High(FAnimBind) then FAnimBind[k] := p;
+  end;
+  FRipHover := seen;
 end;
 
 function TTyCustomAdvanceChart.StPeerAt(ASeriesIndex, AInnerRow: Integer): PTyStItem;
@@ -3376,6 +3717,82 @@ begin
   if (raw < 0) or (raw > High(FSt[ASeriesIndex].Rows)) then Exit;
   if not FSt[ASeriesIndex].Rows[raw].Host.Exists then Exit;
   Result := @FSt[ASeriesIndex].Rows[raw];
+end;
+
+{ ---- a line's temporary symbols [R5-F] ---- }
+
+procedure TTyCustomAdvanceChart.LineTempAdd(ASeriesIndex, AInnerRow: Integer);
+var slot, raw, i: Integer;
+begin
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Exit;
+  if (AInnerRow < 0) or (AInnerRow >= FStores[slot].Count) then Exit;
+  raw := FStores[slot].GetRawIndex(AInnerRow);
+  for i := 0 to High(FLineTemps) do
+    if (FLineTemps[i].S = ASeriesIndex) and (FLineTemps[i].Raw = raw) then Exit;
+  SetLength(FLineTemps, Length(FLineTemps) + 1);
+  FLineTemps[High(FLineTemps)].S := ASeriesIndex;
+  FLineTemps[High(FLineTemps)].Raw := raw;
+  FLineTemps[High(FLineTemps)].Pending := True;
+  { the element is the list's: built again, the states unchanged }
+  DropStatic;
+  FStDirty := True;
+end;
+
+function TTyCustomAdvanceChart.LineTempDrop(ASeriesIndex, AInnerRow: Integer): Boolean;
+var slot, raw, i, j: Integer;
+begin
+  Result := False;
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Exit;
+  if (AInnerRow < 0) or (AInnerRow >= FStores[slot].Count) then Exit;
+  raw := FStores[slot].GetRawIndex(AInnerRow);
+  for i := 0 to High(FLineTemps) do
+    if (FLineTemps[i].S = ASeriesIndex) and (FLineTemps[i].Raw = raw) then
+    begin
+      for j := i to High(FLineTemps) - 1 do FLineTemps[j] := FLineTemps[j + 1];
+      SetLength(FLineTemps, Length(FLineTemps) - 1);
+      DropStatic;
+      FStDirty := True;
+      Exit(True);
+    end;
+end;
+
+function TTyCustomAdvanceChart.LineTempRows(ASeriesIndex: Integer): TTyIntegerArray;
+var i: Integer;
+begin
+  Result := nil;
+  for i := 0 to High(FLineTemps) do
+    if FLineTemps[i].S = ASeriesIndex then
+    begin
+      SetLength(Result, Length(Result) + 1);
+      Result[High(Result)] := FLineTemps[i].Raw;
+    end;
+end;
+
+procedure TTyCustomAdvanceChart.LineTempsEnter(ASeriesIndex: Integer);
+var i, j, poly: Integer;
+begin
+  i := 0;
+  while i <= High(FLineTemps) do
+  begin
+    if (FLineTemps[i].S = ASeriesIndex) and FLineTemps[i].Pending then
+    begin
+      { NONE BUILT (a NaN point, outside the clip): upstream makes none and
+        keeps nothing }
+      if (FLineTemps[i].Raw > High(FSt[ASeriesIndex].Rows))
+        or not FSt[ASeriesIndex].Rows[FLineTemps[i].Raw].Host.Exists then
+      begin
+        for j := i to High(FLineTemps) - 1 do FLineTemps[j] := FLineTemps[j + 1];
+        SetLength(FLineTemps, Length(FLineTemps) - 1);
+        Continue;
+      end;
+      poly := -1;
+      TyStItemEnterEmphasisBy(FSt[ASeriesIndex].Rows[FLineTemps[i].Raw], 0, True, poly);
+      FLineTemps[i].Pending := False;
+    end;
+    Inc(i);
+  end;
 end;
 
 { ---- focus and blur [Batch 90] ---- }
@@ -4170,6 +4587,8 @@ var
     if h and TyTryParseChartColor(t, col) then TyStSetColor(Result, stkStroke, col);
     v := TyStReadNumber(nodes, [cStNames[AState], 'itemStyle', 'strokeWidth'], h);
     if h and not IsNan(v) then TyStSetNum(Result, stkLineWidth, v);
+    { [R5-A] getStateItemStyle's shadow keys }
+    TyStReadShadowKeys(nodes, [cStNames[AState], 'itemStyle'], Result);
   end;
 
   procedure Declare(var AEl: TTyStElement; const AFrom: TTyChartElement);
@@ -5573,6 +5992,19 @@ var
     end;
   end;
 
+  { [R5-F] whether the payload names an item at all (queryDataIndex finds
+    an index, a list or a name to look for) }
+  function PayloadNamesItem: Boolean;
+  var x: TJSONData;
+  begin
+    x := APayload.Find('dataIndexInside');
+    if (x <> nil) and (x.JSONType <> jtNull) then Exit(True);
+    x := APayload.Find('dataIndex');
+    if (x <> nil) and (x.JSONType <> jtNull) then Exit(True);
+    x := APayload.Find('name');
+    Result := (x <> nil) and (x.JSONType <> jtNull);
+  end;
+
   { which field queryDataIndex reads, and whether it is a list }
   function QueryIsArray: Boolean;
   var x: TJSONData;
@@ -5694,6 +6126,15 @@ begin
     { a sankey's links by their own indices [Batch 114] }
     if EdgeQuery(s, inner) then
     begin
+      { [R5-F] NO INDEX AT ALL: ChartView's toggleHighlight over the whole
+        edge data -- every link [was: none] }
+      if not PayloadNamesItem then
+      begin
+        for raw := 0 to High(FSt[s].EdgeRows) do
+          if TyStItemDispatches(FSt[s].EdgeRows[raw]) then
+            Apply(FSt[s].EdgeRows[raw], False, -1);
+        Continue;
+      end;
       for k := 0 to High(inner) do
         if (inner[k] >= 0) and (inner[k] <= High(FSt[s].EdgeRows))
           and TyStItemDispatches(FSt[s].EdgeRows[inner[k]]) then
@@ -5717,6 +6158,9 @@ begin
         single := False;
       if single then
       begin
+        { [R5-F] A TEMPORARY SYMBOL is taken away by the downplay, not
+          downplayed (LineView.downplay) }
+        if not isHigh and LineTempDrop(s, inner[0]) then Continue;
         item := StItemAt(s, inner[0]);
         if item <> nil then
         begin
@@ -5726,7 +6170,11 @@ begin
           end
           else if TyStItemLeaveEmphasisBy(item^, 0, True, poly) then
             FStDirty := True;
-        end;
+        end
+        { [R5-F] a row with no symbol gets a temporary one, built in
+          emphasis [was: nothing drawn for it] }
+        else if isHigh then
+          LineTempAdd(s, inner[0]);
         Continue;
       end;
     end;
@@ -5767,7 +6215,7 @@ var
 begin
   { [F2b] a large batch's row too: its ECData carries the row its handler
     found (BarView largePathUpdateDataIndex, LargeSymbolDraw) }
-  if not (ATarget.HdKind in [1, 3, 16]) then Exit;
+  if not (ATarget.HdKind in [1, 3, 16, 31]) then Exit;
   s := ATarget.HdSeries;
   slot := SlotOfSeries(s);
   if slot < 0 then Exit;
@@ -5776,7 +6224,10 @@ begin
   { a marker's element is never flagged selected: always select; nor is a
     large batch, nor a gauge's arc (updateSeriesElementSelection reaches
     the item graphic elements only) [F2b] }
-  if (ATarget.HdKind = 1) and not ATarget.HdEdge and not ATarget.HdPeer then
+  { [spec 242] a lines effect symbol is flagged with its row (enterSelect
+    traverses the item's group) }
+  if ((ATarget.HdKind = 1) and not ATarget.HdEdge and not ATarget.HdPeer)
+    or (ATarget.HdKind = 31) then
   begin
     SelEnsure(slot);
     if (s <= High(FSel)) and FSelInit[s] then
@@ -6070,6 +6521,18 @@ begin
     AElement.Style.StrokeWidthLogical := st.Num[cskLineWidth];
   if TyChartStyleHas(st, cskOpacity) then
     AElement.Style.Alpha := st.Num[cskOpacity];
+  { [R5-A] the declared shadow, key by key; a shadow brought on an element of
+    none in zrender's '#000' unless it names its colour }
+  if TyChartStyleHas(st, cskShadowBlur) then
+    AElement.Style.ShadowBlur := Max(Double(0), st.Num[cskShadowBlur]);
+  if TyChartStyleHas(st, cskShadowOffsetX) then
+    AElement.Style.ShadowOffsetX := st.Num[cskShadowOffsetX];
+  if TyChartStyleHas(st, cskShadowOffsetY) then
+    AElement.Style.ShadowOffsetY := st.Num[cskShadowOffsetY];
+  if TyChartStyleHas(st, cskShadowColor) then
+    AElement.Style.ShadowColor := st.Color[cskShadowColor]
+  else if AElement.Style.ShadowColor = 0 then
+    AElement.Style.ShadowColor := $FF000000;
   { A GRADIENT IS NOT LIFTED. Upstream lifts a colour, and a ramp has no single
     colour to lift -- so a gradient-filled mark keeps its ramp and gains only
     whatever the option declared. }
@@ -6146,8 +6609,14 @@ begin
     { AN AXIS TRIGGER HIGHLIGHTS THE WHOLE COLUMN. Upstream calls it
       triggerEmphasis and has it on by default: the rows the tooltip is
       describing are the rows that light up, which is what ties the two
-      together. }
+      together.
+      [R5-D] Only an axis whose model says triggerEmphasis; and a row the
+      states draw is lit by the highlight action updateAxisPointer
+      dispatched (dispatchHighDownActually), so it is in emphasis already
+      and skipped below -- what is lifted here is a row no state machine
+      speaks for. }
     for i := 0 to High(AHits) do
+      if AHits[i].Spec.TriggerEmphasis then
       for k := 0 to High(AHits[i].Slots) do
       begin
         slot := AHits[i].Slots[k];

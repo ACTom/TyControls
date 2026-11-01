@@ -1390,6 +1390,8 @@ begin
     '   set is small enough to re-check. */' + LineEnding +
     'TyAdvChartAxisLine  { border-color: var(--border); border-width: 1px; }' + LineEnding +
     'TyAdvChartAxisTick  { border-color: var(--border); border-width: 1px; }' + LineEnding +
+    '/* [R5-G] a shown grid''s border (grid.show): upstream''s tokens.color.neutral30 */' + LineEnding +
+    'TyAdvChartGridBorder { border-color: #b7b9be; border-width: 1px; }' + LineEnding +
     '/* Muted, not full ink: an axis label is a reference, not content. --muted is' + LineEnding +
     '   already alpha over --on-surface, so it follows a dark theme by itself. */' + LineEnding +
     'TyAdvChartAxisLabel { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
@@ -1440,7 +1442,8 @@ begin
     '/* The chart''s own title and subtitle. Upstream draws them at 18/bold and' + LineEnding +
     '   12/regular; the sizes come from the type scale here so a dense skin gets a' + LineEnding +
     '   proportionate title instead of an 18px one on 11px axis labels. */' + LineEnding +
-    'TyAdvChartTitle { color: var(--on-surface); font-size: var(--font-size-title); font-weight: 700; }' + LineEnding +
+    '/* [R5-G] border-color: a title box''s default pen (borderWidth above 0) -- upstream''s tokens.color.primary */' + LineEnding +
+    'TyAdvChartTitle { color: var(--on-surface); font-size: var(--font-size-title); font-weight: 700; border-color: #3c3c41; }' + LineEnding +
     'TyAdvChartSubtitle { color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
     '/* A label OUTSIDE its mark: the theme''s own ink, not anything derived from the' + LineEnding +
     '   thing it names. Upstream picks #333 or #ccc by mode; this is the same idea' + LineEnding +
@@ -1657,6 +1660,10 @@ begin
     'TyAdvChartCandleDown { background: var(--success); }' + LineEnding +
     'TyAdvChartAxisPointer { border-color: var(--border); border-width: 1px; }' + LineEnding +
     'TyAdvChartAxisPointerShadow { background: alpha(var(--on-surface), 0.10); }' + LineEnding +
+    '/* [R5-A] upstream''s tokens.color.shadow (light and dark alike): the colour of' + LineEnding +
+    '   the shadows a series or a component casts by default -- a boxplot''s' + LineEnding +
+    '   emphasis, a continuous visualMap''s indicator */' + LineEnding +
+    'TyAdvChartShadow { color: rgba(0, 0, 0, 0.2); }' + LineEnding +
     'TyAdvChartAxisPointerLabel {' + LineEnding +
     '  background: var(--accent);' + LineEnding +
     '  color: var(--on-accent);' + LineEnding +
