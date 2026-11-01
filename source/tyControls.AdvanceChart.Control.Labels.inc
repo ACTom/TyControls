@@ -413,7 +413,9 @@ begin
       if (em <> nil) and (em.JSONType = jtObject)
         and TyLabelEmphWantsBlock(TJSONObject(em)) then emph := TJSONObject(em);
     end;
-    if (lb = nil) and (emph = nil) then Continue;
+    { [R6-A] or a state's textConfig of its own }
+    if (lb = nil) and (emph = nil)
+      and not TyLabelNodeWritesStateCfg(TJSONObject(it)) then Continue;
     { [R2-L] the tables only once an item has its own: none reads as nil }
     if ASpecs = nil then
     begin
@@ -425,6 +427,8 @@ begin
     else
       ASpecs[k] := ABase;
     if emph <> nil then ASpecs[k].EmphItemNode := emph.AsJSON;
+    { [R6-A] the states' textConfig along the item's model chain }
+    TyLabelReadStateCfg([TJSONObject(it), TJSONObject(node)], ASpecs[k]);
     AHas[k] := True;
   end;
 end;
@@ -678,6 +682,138 @@ var
   pav: TTyTextAnchorV;
   sized: Boolean;
   ddx, ddy: Double;
+  drifted: Boolean;
+
+  { [R6-A] THE STATES' TWINS UNDER THE LAYOUT, laid out again:
+    updateLayoutConfig gives the host's textConfig the layout's offset
+    [dx || 0, dy || 0], its rotation where it writes one, and no position
+    where it puts the label at an x / y of its own (or where it was
+    dragged: the label stands where it is); the layout's align,
+    verticalAlign, fontSize, width and height are the label's style. A
+    state's textConfig goes over that as anywhere (updateInnerText): a
+    state position puts the label on its host's rect, a shift or an x / y
+    of the layout's no matter. }
+  procedure RebuildTwins(AR: Integer; var AEl: TTyChartElement; ADrifted: Boolean);
+  var
+    tin: TTyLabelTwinIn;
+    tw: TTyEmphTwin;
+    twins: TTyEmphTwinArray;
+    sp: TTyLabelSpec;
+    lo2: TTyChartLabelLayout;
+    cfg: TTyLabelStateCfg;
+    code: Byte;
+    hi2, si2, n2: Integer;
+  begin
+    hi2 := AEl.Caption.LmHostPlus1 - 1;
+    si2 := AEl.Datum.SeriesIndex;
+    if (hi2 < 0) or (hi2 >= AList.Count) or (si2 < 0) or (si2 > High(ASpecs)) then
+    begin
+      AEl.EmphTwin := nil;
+      Exit;
+    end;
+    sp := ASpecs[si2];
+    if (AEl.Caption.ItemSpec > 0) and (si2 <= High(AItemSpecs))
+      and (AEl.Caption.ItemSpec - 1 <= High(AItemSpecs[si2])) then
+      sp := AItemSpecs[si2][AEl.Caption.ItemSpec - 1];
+    lo2 := refs[AR].Layout;
+    sp.FontSizeLogical := refs[AR].FontSize;
+    if (lo2.HasWidth and not IsNan(lo2.Width)) or (lo2.HasHeight and not IsNan(lo2.Height)) then
+    begin
+      sp.Rt.Style.Align := rtaNone;
+      sp.Rt.Style.VAlign := rtvNone;
+      if lo2.HasWidth and not IsNan(lo2.Width) then
+      begin
+        sp.Rt.Style.WidthKind := rtwNumber;
+        sp.Rt.Style.Width := lo2.Width;
+      end;
+      if lo2.HasHeight and not IsNan(lo2.Height) then
+      begin
+        sp.Rt.Style.HasHeight := True;
+        sp.Rt.Style.Height := lo2.Height;
+      end;
+      sp.Rt.Needed := True;
+    end
+    else if sp.Rt.Needed then
+    begin
+      sp.Rt.Style.Align := rtaNone;
+      sp.Rt.Style.VAlign := rtvNone;
+    end;
+    tin := Default(TTyLabelTwinIn);
+    tin.Spec := sp;
+    tin.Normal := TyLabelStateCfgNormal(sp);
+    tin.Normal.OffsetXLogical := 0;
+    tin.Normal.OffsetYLogical := 0;
+    if lo2.HasDx and not IsNan(lo2.Dx) then tin.Normal.OffsetXLogical := lo2.Dx;
+    if lo2.HasDy and not IsNan(lo2.Dy) then tin.Normal.OffsetYLogical := lo2.Dy;
+    tin.Normal.RotationRad := items[AR].Rotation;
+    tin.Normal.HasPosition := not items[AR].Free and not ADrifted;
+    tin.Host := AList.Element(hi2);
+    tin.Base := AEl.Caption;
+    tin.Text := AEl.Caption.Text;
+    if AEl.Caption.LmText <> '' then tin.Text := AEl.Caption.LmText;
+    if tin.Host.Caption.HasHostBox then
+    begin
+      tin.HBox := tin.Host.Caption.HostBox;
+      tin.HasBox := True;
+    end
+    else if tin.Host.Caption.HasSymBox then
+    begin
+      tin.HBox := tin.Host.Caption.SymBox;
+      tin.HasBox := True;
+    end
+    else
+      tin.Bounds := TyRectF(AEl.Caption.LmHostRect.X, AEl.Caption.LmHostRect.Y,
+        AEl.Caption.LmHostRect.X + AEl.Caption.LmHostRect.W,
+        AEl.Caption.LmHostRect.Y + AEl.Caption.LmHostRect.H);
+    tin.W := refs[AR].TextW;
+    tin.H := refs[AR].TextH;
+    if AEl.Caption.RtScale > 0 then tin.Scale := AEl.Caption.RtScale else tin.Scale := scale;
+    tin.HostFill := AEl.Caption.LmInkFill;
+    tin.HostHasFill := AEl.Caption.LmInkHasFill;
+    { where it stands with no position: label.x / y (the layout's), or where
+      it was dragged to }
+    if ADrifted then
+    begin
+      tin.FreeX := AEl.Caption.X;
+      tin.FreeY := AEl.Caption.Y;
+      tin.Normal.OffsetXLogical := 0;
+      tin.Normal.OffsetYLogical := 0;
+    end
+    else
+    begin
+      tin.FreeX := items[AR].LabelX;
+      tin.FreeY := items[AR].LabelY;
+    end;
+    tin.FreeAH := refs[AR].AH;
+    tin.FreeAV := refs[AR].AV;
+    tin.FreeInside := AEl.Caption.LmInkInside;
+    tin.StyleHasAH := AEl.Caption.LmStyleHasAH;
+    tin.StyleAH := AEl.Caption.LmStyleAH;
+    tin.StyleHasAV := AEl.Caption.LmStyleHasAV;
+    tin.StyleAV := AEl.Caption.LmStyleAV;
+    if lo2.HasAlign then
+    begin
+      tin.StyleHasAH := True;
+      tin.StyleAH := LmAlignOf(lo2.Align);
+    end;
+    if lo2.HasVerticalAlign then
+    begin
+      tin.StyleHasAV := True;
+      tin.StyleAV := LmVAlignOf(lo2.VerticalAlign);
+    end;
+    twins := nil;
+    for code := TyTwinEmphasis to TyTwinSelectBlur do
+      if TyLabelStateCfgOf(sp, code, cfg) and TyLabelLayTwin(tin, code, cfg, AMeasurer, tw) then
+      begin
+        { the layout's own size, not the twin's spec's }
+        tw.Caption.FontSizeLogical := refs[AR].FontSize;
+        n2 := Length(twins);
+        SetLength(twins, n2 + 1);
+        twins[n2] := tw;
+      end;
+    AEl.EmphTwin := twins;
+  end;
+
 begin
   if (AList = nil) or (FOption = nil) or (AMeasurer = nil) then Exit;
   if APPI > 0 then scale := APPI / 96 else scale := 1;
@@ -1050,9 +1186,11 @@ begin
     { [R5-C] A DRAGGED LABEL the layout placed: its drift on its transform
       (Element.drift), its line routed again from where it is now; one its
       host places by its position is put back there by updateInnerText }
+    drifted := False;
     if items[r].Free and refs[r].Layout.Draggable
       and LbDriftOf(el.Datum.SeriesIndex, el.Datum.DataIndex, ddx, ddy) then
     begin
+      drifted := True;
       if not hasM then
       begin
         m[0] := 1; m[1] := 0; m[2] := 0; m[3] := 1; m[4] := 0; m[5] := 0;
@@ -1111,6 +1249,9 @@ begin
       el.Caption.LmFree := True;
       el.Anim.HostPlus1 := 0;
     end;
+    { [R6-A] the states' twins, under the layout }
+    if (el.Caption.LmKind = 1) and (Length(el.EmphTwin) > 0) then
+      RebuildTwins(r, el, drifted);
     AList.SetElement(refs[r].El, el);
     if refs[r].Guide >= 0 then
     begin

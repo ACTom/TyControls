@@ -828,6 +828,22 @@ procedure TyShapeScaleAbout(var AShape: TTyChartShape; ACX, ACY, AFX, AFY: Doubl
   a radial tree's turned one on its box scaled by AScale about its node }
 procedure TyLabelRideScale(var ALabel: TTyChartElement; const AHostRest,
   AHostNow: TTyChartElement; AScale: Double);
+{ [R6-A] HALF THE STROKE A HOST'S RECT IS GROWN BY for the label hung on it
+  (Path.getBoundingRect: the line width, at least five with no fill), device
+  px at AScale -- none on a host that keeps a label box of its own }
+function TyLabelHostInflate(const AHost: TTyChartElement; AScale: Double): Double;
+{ [R6-A] WHERE A PIE LABEL'S STATE POSITION PUTS ITS ANCHOR on ASector as
+  given (its centre, its radius -- the frame's or the state's target -- and
+  its pen), from the twin AEl.EmphTwin[ATwin] }
+function TyPieTwinAnchor(const AEl: TTyChartElement; ATwin: Integer;
+  const ASector: TTyChartElement; ACX, ACY, AR, AScale: Double;
+  out AX, AY: Double): Boolean;
+{ [R6-A] A LABEL ON A HOST A STATE GAVE ANOTHER STROKE: placed again on the
+  host's rect as the state draws it -- grown by AInflNow where it was by
+  AInflRest (a selected bar's border of 2, a hovered symbol's border) --
+  its scale too, as TyLabelRideScale's }
+procedure TyLabelRideStroke(var ALabel: TTyChartElement; const AHostRest,
+  AHostNow: TTyChartElement; AInflRest, AInflNow: Double);
 { ... turned by ARad about (ACX, ACY), zrender's sense (anticlockwise on the
   screen for a positive angle): points and commands turn, a path's draw-time
   turn grows and its box moves, a circle's or an ellipse's centre turns (an
@@ -7944,6 +7960,65 @@ begin
   Result.H := (box.H - 2 * infl) * AScale + 2 * infl;
 end;
 
+function TyPieTwinAnchor(const AEl: TTyChartElement; ATwin: Integer;
+  const ASector: TTyChartElement; ACX, ACY, AR, AScale: Double;
+  out AX, AY: Double): Boolean;
+var
+  rect: TTyXYWH;
+  infl, atX, atY: Double;
+  ah: TTyTextAnchorH;
+  av: TTyTextAnchorV;
+begin
+  AX := NaN;
+  AY := NaN;
+  Result := (ATwin >= 0) and (ATwin <= High(AEl.EmphTwin)) and AEl.EmphTwin[ATwin].HasPos;
+  if not Result then Exit;
+  rect := TySectorPathRect(ACX, ACY, ASector.Anim.G[2], AR, ASector.Anim.G[4],
+    ASector.Anim.G[5], ASector.Anim.G[7] = 0);
+  infl := TyLabelHostInflate(ASector, AScale);
+  rect.X := rect.X - infl;
+  rect.Y := rect.Y - infl;
+  rect.W := rect.W + 2 * infl;
+  rect.H := rect.H + 2 * infl;
+  atX := AEl.EmphTwin[ATwin].LabelAtX;
+  atY := AEl.EmphTwin[ATwin].LabelAtY;
+  if AEl.EmphTwin[ATwin].LabelAtXPct then atX := atX * rect.W;
+  if AEl.EmphTwin[ATwin].LabelAtYPct then atY := atY * rect.H;
+  TyLabelAnchorXYWH(rect, TTyLabelPosition(AEl.EmphTwin[ATwin].LabelPos),
+    AEl.EmphTwin[ATwin].LabelDist, atX, atY, AX, AY, ah, av);
+end;
+
+function TyLabelHostInflate(const AHost: TTyChartElement; AScale: Double): Double;
+var sw: Double;
+begin
+  Result := 0;
+  if AHost.Caption.HasHostBox then Exit;
+  if (AHost.Style.StrokeWidthLogical > 0) and (AHost.Style.StrokeColor <> 0) then
+  begin
+    sw := AHost.Style.StrokeWidthLogical;
+    if not AHost.Style.HasFill then sw := Max(sw, 5.0);
+    Result := sw * AScale / 2;
+  end;
+end;
+
+procedure TyLabelRideStroke(var ALabel: TTyChartElement; const AHostRest,
+  AHostNow: TTyChartElement; AInflRest, AInflNow: Double);
+var
+  lab: TTyChartElement;
+  x0, y0, x1, y1: Double;
+begin
+  if (ALabel.Anim.HostPlus1 <= 0) or ALabel.Anim.RideTree then Exit;
+  if AHostNow.Caption.HasHostBox then Exit;
+  lab := Default(TTyChartElement);
+  lab.Anim := ALabel.Anim;
+  lab.Anim.LabelInflate := AInflRest;
+  AnchorOn(AHostRest, lab, x0, y0);
+  lab.Anim.LabelInflate := AInflNow;
+  AnchorOn(AHostNow, lab, x1, y1);
+  if IsNan(x0) or IsNan(y0) or IsNan(x1) or IsNan(y1) then Exit;
+  MoveCaption(ALabel, RideSnap(x1 - x0), RideSnap(y1 - y0));
+end;
+
 procedure TyLabelRideScale(var ALabel: TTyChartElement; const AHostRest,
   AHostNow: TTyChartElement; AScale: Double);
 var
@@ -11486,6 +11561,8 @@ var
   pel: PTyChartElement;
   x0, y0, x1, y1, dx, dy, vsx, vsy, vx, vy: Double;
   moved, viewMoves, edgeDone: Boolean;
+  lab1: TTyChartElement;
+  hs: PTyChartElement;
   g, bp, hostP: TTyChartAnimProxy;
   hostRow, hostSer: Integer;
   extras: array of TTyChartElement;
@@ -11750,10 +11827,22 @@ begin
       and (((h <= High(ABind)) and (ABind[h] <> nil)
         and (not ABind[h].AtFinal or (ASource.Ref(h)^.Anim.Role = carTreeNode)))
         { [F3d] or its host carried by its roam group }
-        or viewMoves) then
+        or viewMoves
+        { [R6-A] or its host's pen as the frame draws it not the one the list
+          laid it out by (a state's border tweening) }
+        or ((pel^.Anim.HostPlus1 > 0) and (pel^.Caption.RtScale > 0)
+          and not ADest.Ref(h)^.Caption.HasHostBox
+          and not SameValue(TyLabelHostInflate(ADest.Ref(h)^, pel^.Caption.RtScale),
+            pel^.Anim.LabelInflate, 1e-12))) then
     begin
       AnchorOn(ASource.Ref(h)^, pel^, x0, y0);
-      AnchorOn(ADest.Ref(h)^, pel^, x1, y1);
+      { [R6-A] on the host's rect as the frame draws it: its pen too (a
+        state's border tweening grows it, Path.getBoundingRect) }
+      lab1 := pel^;
+      if (pel^.Anim.HostPlus1 > 0) and (pel^.Caption.RtScale > 0)
+        and not ADest.Ref(h)^.Caption.HasHostBox then
+        lab1.Anim.LabelInflate := TyLabelHostInflate(ADest.Ref(h)^, pel^.Caption.RtScale);
+      AnchorOn(ADest.Ref(h)^, lab1, x1, y1);
       dx := x1 - x0;
       dy := y1 - y0;
       moved := (not IsNan(dx)) and (not IsNan(dy)) and ((dx <> 0) or (dy <> 0));
@@ -11765,6 +11854,21 @@ begin
           pel^.Shape.Bounds.Right + dx, pel^.Shape.Bounds.Bottom + dy);
       end;
     end;
+  end;
+  { [R6-A] A PIE LABEL UNDER A STATE POSITION: on its slice as the frame
+    draws it (updateInnerText every frame), the move from the anchor the
+    list placed it by }
+  for i := 0 to ADest.Count - 1 do
+  begin
+    pel := ADest.Ref(i);
+    if (pel^.Anim.Role <> carLabel) or (pel^.Anim.PieHostPlus1 <= 0)
+      or (pel^.Anim.PieHostPlus1 > ADest.Count) then Continue;
+    hs := ADest.Ref(pel^.Anim.PieHostPlus1 - 1);
+    if hs^.Shape.Kind <> cskSector then Continue;
+    if TyPieTwinAnchor(pel^, pel^.Anim.PieTwin, hs^, hs^.Shape.CX, hs^.Shape.CY,
+      hs^.Shape.R1, pel^.Anim.PieScale, x1, y1) then
+      MoveCaption(pel^, pel^.Anim.PieLX + (x1 - pel^.Anim.PieAX) - pel^.Caption.X,
+        pel^.Anim.PieLY + (y1 - pel^.Anim.PieAY) - pel^.Caption.Y);
   end;
   for i := 0 to nx - 1 do ADest.Add(extras[i]);
   { [R2-I5] THE FRAME'S BRUSH: a dash written as a word against the width the

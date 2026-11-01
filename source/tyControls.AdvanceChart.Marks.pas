@@ -4351,6 +4351,7 @@ begin
       { textConfig.inside: true for 'middle', else 'inside' in the word }
       el.Caption.SecInside := (ask.Word = 'middle')
         or ((not ask.IsArray) and (Pos('inside', word) > 0));
+      el.Caption.SecMiddle := ask.Word = 'middle';
     end;
     AList.Add(el);
     Inc(Result);

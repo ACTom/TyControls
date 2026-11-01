@@ -1398,14 +1398,57 @@ function guards(cases) {
     g('state-dash-from-no-border', n0 && numAt(n0, 'dash', 1) === '[6,3]' && numAt(n0, 'dash', 450) === '[6,3]'
       && numAt(n0, 'dash', 1600) === 'null', n0 && [numAt(n0, 'dash', 1), numAt(n0, 'dash', 450), numAt(n0, 'dash', 1600)].join(' '));
   }
+  // [R6-A]
+  {
+    const c = byId(cases, 'scatter-emph-position-rides');
+    const l = elRow(c, 0, 1, 'label');
+    g('emph-position-at-once-and-rides', l && numAt(l, 'tx', 16) !== numAt(l, 'tx', 450)
+      && numAt(l, 'ty', 16) === numAt(l, 'ty', 450) && numAt(l, 'ty', 16) !== numAt(l, 'ty', 1600),
+      l && [numAt(l, 'tx', 16), numAt(l, 'tx', 450), numAt(l, 'ty', 16), numAt(l, 'ty', 1600)].join(' '));
+  }
+  {
+    const c = byId(cases, 'bar-emph-border-label-rides');
+    const l = elRow(c, 0, 1, 'label');
+    g('border-label-rides', l && numAt(l, 'ty', 16) !== numAt(l, 'ty', 150) && numAt(l, 'ty', 150) !== numAt(l, 'ty', 450),
+      l && [numAt(l, 'ty', 16), numAt(l, 'ty', 150), numAt(l, 'ty', 450)].join(' '));
+    const p = byId(cases, 'pie-emph-position-rides');
+    const q = elRow(p, 0, 1, 'label');
+    g('pie-position-rides-radius', q && numAt(q, 'tx', 16) !== numAt(q, 'tx', 150) && numAt(q, 'tx', 150) !== numAt(q, 'tx', 450),
+      q && [numAt(q, 'tx', 16), numAt(q, 'tx', 150), numAt(q, 'tx', 450)].join(' '));
+  }
   // every case comes to rest
   for (const c of cases) g('settled-' + c.id, c.clips[c.clips.length - 1] === 0, c.id + ' ' + c.clips.join(','));
   return out;
 }
 
+// [R6-A] a state's textConfig on a series label: zrender applies it at once
+// (Element._applyStateObj, no transition) and updateInnerText lays the label
+// out by it on the host as drawn every frame -- the label jumps to the
+// emphasis position and rides the symbol's scale there
+const R6A = [
+  { id: 'scatter-emph-position-rides', labelPlace: true, note: "[R6-A] a scatter's top label, emphasis.label position "
+    + 'right: over point 1 at 0 it stands right of the symbol at once and rides its scale; out at 500 it is back on top',
+    option: { color: [C0], xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
+      series: [{ type: 'scatter', symbolSize: 20, itemStyle: { opacity: 1 }, label: { show: true, position: 'top', formatter: 'p{c}' },
+        emphasis: { label: { position: 'right' } }, data: [[2, 3], [5, 6], [8, 4]] }] },
+    events: [over(0, ['item', 0, 1]), out(500)] },
+  { id: 'bar-emph-border-label-rides', labelPlace: true, note: "[R6-A] bar labels on top; emphasis border #000 at 6: "
+    + "the bar's rect grows with the border as it tweens, its label rides it up (Path.getBoundingRect). Over bar 1 at 0, out at 500",
+    option: { color: [C0], xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'bar', label: { show: true, position: 'top' },
+        emphasis: { itemStyle: { borderColor: '#000', borderWidth: 6 } }, data: [10, 20, 30] }] },
+    events: [over(0, ['item', 0, 1]), out(500)] },
+  { id: 'pie-emph-position-rides', labelPlace: true, note: "[R6-A] a pie's outer labels; emphasis.label position inside: "
+    + "the hovered label on its slice's rect, which grows with the slice's radius as it tweens. Over slice 1 at 0, out at 500",
+    option: { color: [C0, C1, '#fac858', '#ee6666'], series: [{ type: 'pie', radius: '50%',
+      emphasis: { label: { position: 'inside' } },
+      data: [{ value: 40, name: 'a' }, { value: 30, name: 'b' }, { value: 20, name: 'c' }, { value: 10, name: 'd' }] }] },
+    events: [over(0, ['item', 0, 1]), out(500)] },
+];
+
 function generate() {
   const cases = [];
-  for (const c of GAUGE.concat(RADAR, MARKERS, LARGE, LABELS, PICTORIAL, R2B, R2I1, R2I3, R2I4, R2I5, R2I6, R2V)) {
+  for (const c of GAUGE.concat(RADAR, MARKERS, LARGE, LABELS, PICTORIAL, R2B, R2I1, R2I3, R2I4, R2I5, R2I6, R2V, R6A)) {
     if (process.env.ORACLE_CASE && !process.env.ORACLE_CASE.split('|').some(p => c.id.startsWith(p))) continue;
     const r = runCase(c);
     cases.push({ id: c.id, note: c.note, option: c.option, events: r.events, published: r.published,
