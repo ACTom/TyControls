@@ -1,6 +1,6 @@
 {
  "source": "ECharts 6.1.0 dist (D:/Projects/echarts/dist/echarts.js) + zrender 6.1.0, node SSR (svg), controlled clock",
- "note": "R6-C: steps of setOption or dispatchAction (the first at T0; a next one after the previous ran out, T + 10000, or `after` ms into it; notMerge unless `merge`), recorded at the last T + samples. Each element: an item path of a new series (id s<series>/<dataIndex>/<path>) or another path of its view (s<series>/x/<k>); morph[i] = __morphT >= 0 and not combining, d[i] the replaced buildPath's PathProxy data (codes M1 L2 C3 Q4 A5 Z6 R7); comb[i] = __isCombineMorphing, pieces = its childrenRef() in order; style = fill (a colour, or a gradient: type, x / y / x2 / y2 or r, global, stops [offset, colour]), stroke, lineWidth, opacity, shadowBlur, shadowOffsetX, shadowOffsetY, shadowColor, fillOpacity, strokeOpacity, lineDashOffset (the prototype's where not own) -- a key the same at every sample written once. hits: at the samples a case names, findHover at the middle of each combining child's box, rounded (where the child contains it): whether the child is the target, the ecData its parents reach. orders: the display list's item paths and children (<id>#<k>) in order. display: every path drawn under a series view (digest, opacity, a child or not). oldGroups / newGroups: getGroupId and the child group per item of every series (the dist's SeriesData). oldRest / newRest: every item path at rest. Every number is the hex of its double.",
+ "note": "R6-C: steps of setOption or dispatchAction (the first at T0; a next one after the previous ran out, T + 10000, or `after` ms into it; notMerge unless `merge`), recorded at the last T + samples. Each element: an item path of a new series (id s<series>/<dataIndex>/<path>) or another path of its view (s<series>/x/<k>); morph[i] = __morphT >= 0 and not combining, d[i] the replaced buildPath's PathProxy data (codes M1 L2 C3 Q4 A5 Z6 R7); comb[i] = __isCombineMorphing, pieces = its childrenRef() in order; style = fill (a colour, or a gradient: type, x / y / x2 / y2 or r, global, stops [offset, colour]), stroke, lineWidth, opacity, shadowBlur, shadowOffsetX, shadowOffsetY, shadowColor, fillOpacity, strokeOpacity, lineDashOffset, miterLimit (the prototype's where not own) -- a key the same at every sample written once. hits: at the samples a case names, findHover at the middle of each combining child's box, rounded (where the child contains it): whether the child is the target, the ecData its parents reach. orders: the display list's item paths and children (<id>#<k>) in order. display: every path drawn under a series view (digest, opacity, a child or not). oldGroups / newGroups: getGroupId and the child group per item of every series (the dist's SeriesData). oldRest / newRest: every item path at rest. Every number is the hex of its double.",
  "W": 400,
  "H": 300,
  "seed": 2463534242,
@@ -121,7 +121,8 @@
       ],
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -223,7 +224,8 @@
       ],
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -325,7 +327,8 @@
       ],
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -427,7 +430,8 @@
       ],
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -597,7 +601,8 @@
       "shadowColor": "rgba(255,0,0,0.8)",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -684,7 +689,8 @@
       "shadowColor": "rgba(255,0,0,0.8)",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -771,7 +777,8 @@
       "shadowColor": "rgba(255,0,0,0.8)",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -858,7 +865,8 @@
       "shadowColor": "rgba(255,0,0,0.8)",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -1047,7 +1055,8 @@
       ],
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -1149,7 +1158,8 @@
       ],
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -1251,7 +1261,8 @@
       ],
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -1353,7 +1364,8 @@
       ],
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -1549,7 +1561,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -1652,7 +1665,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -1755,7 +1769,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -1858,7 +1873,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -2174,7 +2190,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -2397,7 +2414,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -2620,7 +2638,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -2843,7 +2862,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -3159,7 +3179,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -3382,7 +3403,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -3605,7 +3627,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -3828,7 +3851,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -4024,7 +4048,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -4127,7 +4152,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -4230,7 +4256,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -4333,7 +4360,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -4513,7 +4541,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -4600,7 +4629,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -4687,7 +4717,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -4774,7 +4805,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -4944,7 +4976,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -5031,7 +5064,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -5118,7 +5152,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -5205,7 +5240,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -5377,7 +5413,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -5464,7 +5501,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -5551,7 +5589,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -5638,7 +5677,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -5858,7 +5898,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -5985,7 +6026,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -6112,7 +6154,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -6239,7 +6282,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -6412,7 +6456,8 @@
        "3fe3333333333333","3fe333333a126b29","3fe333a126b29a92","3fe3404ea4a8c155","3fe39c0ebedfa440","3fe495182a9930be","3fe999999999999a","3fecb923a29c779a","3fef972474538ef3","3feffffff920c80a","3ff0000000000000","3ff0000000000000",
        "3ff0000000000000","3ff0000000000000","3ff0000000000000"
       ],
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -6505,7 +6550,8 @@
        "3fe3333333333333","3fe333333a126b29","3fe333a126b29a92","3fe3404ea4a8c155","3fe39c0ebedfa440","3fe495182a9930be","3fe999999999999a","3fecb923a29c779a","3fef972474538ef3","3feffffff920c80a","3ff0000000000000","3ff0000000000000",
        "3ff0000000000000","3ff0000000000000","3ff0000000000000"
       ],
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -6598,7 +6644,8 @@
        "3fe3333333333333","3fe333333a126b29","3fe333a126b29a92","3fe3404ea4a8c155","3fe39c0ebedfa440","3fe495182a9930be","3fe999999999999a","3fecb923a29c779a","3fef972474538ef3","3feffffff920c80a","3ff0000000000000","3ff0000000000000",
        "3ff0000000000000","3ff0000000000000","3ff0000000000000"
       ],
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -6691,7 +6738,8 @@
        "3fe3333333333333","3fe333333a126b29","3fe333a126b29a92","3fe3404ea4a8c155","3fe39c0ebedfa440","3fe495182a9930be","3fe999999999999a","3fecb923a29c779a","3fef972474538ef3","3feffffff920c80a","3ff0000000000000","3ff0000000000000",
        "3ff0000000000000","3ff0000000000000","3ff0000000000000"
       ],
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -6820,7 +6868,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3fd999999999999a",
       "strokeOpacity": "3fe3333333333333",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -6903,7 +6952,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3fd999999999999a",
       "strokeOpacity": "3fe3333333333333",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -6986,7 +7036,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3fd999999999999a",
       "strokeOpacity": "3fe3333333333333",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -7069,7 +7120,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3fd999999999999a",
       "strokeOpacity": "3fe3333333333333",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -7214,7 +7266,8 @@
       "lineDashOffset": [
        "4018000000000000","4017fffff31d7712","4017ff31d7711e2e","4017e76c8b439581","40173b645a1cac08","40156872b020c49c","4008000000000000","3ff89374bc6a7ef8","3fc89374bc6a7f00","3e89c511dc000000","0000000000000000","0000000000000000",
        "0000000000000000","0000000000000000","0000000000000000"
-      ]
+      ],
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -7313,7 +7366,8 @@
       "lineDashOffset": [
        "4018000000000000","4017fffff31d7712","4017ff31d7711e2e","4017e76c8b439581","40173b645a1cac08","40156872b020c49c","4008000000000000","3ff89374bc6a7ef8","3fc89374bc6a7f00","3e89c511dc000000","0000000000000000","0000000000000000",
        "0000000000000000","0000000000000000","0000000000000000"
-      ]
+      ],
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -7412,7 +7466,8 @@
       "lineDashOffset": [
        "4018000000000000","4017fffff31d7712","4017ff31d7711e2e","4017e76c8b439581","40173b645a1cac08","40156872b020c49c","4008000000000000","3ff89374bc6a7ef8","3fc89374bc6a7f00","3e89c511dc000000","0000000000000000","0000000000000000",
        "0000000000000000","0000000000000000","0000000000000000"
-      ]
+      ],
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -7511,6 +7566,481 @@
       "lineDashOffset": [
        "4018000000000000","4017fffff31d7712","4017ff31d7711e2e","4017e76c8b439581","40173b645a1cac08","40156872b020c49c","4008000000000000","3ff89374bc6a7ef8","3fc89374bc6a7f00","3e89c511dc000000","0000000000000000","0000000000000000",
        "0000000000000000","0000000000000000","0000000000000000"
+      ],
+      "miterLimit": "4024000000000000"
+     },
+     "snap": {
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "rotation": "0000000000000000",
+      "shape.cx": "4069000000000000",
+      "shape.cy": "4062c00000000000",
+      "shape.r0": "0000000000000000",
+      "shape.r": "4056800000000000",
+      "shape.startAngle": "4022905f7583cfda",
+      "shape.endAngle": "4025fdbbe9bba774",
+      "shape.cornerRadius": "0000000000000000",
+      "shape.angle": "3ffb6ae3a1bebcd4"
+     },
+     "anim": [2,2,2,2,2,2,2,2,2,2,0,0,0,0,0]
+    }
+   ],
+   "newRest": [
+    {
+     "id": "s0/0/0",
+     "type": "sector",
+     "d": [
+      "3ff0000000000000","4068ffffffffffff","404e000000000000","4014000000000000","4069000000000000","4062c00000000000","4056800000000000","4056800000000000","4012d97c7f3321d2","3ff6d91306c99d5c","0000000000000000","3ff0000000000000",
+      "4000000000000000","4069000000000000","4062c00000000000","4018000000000000"
+     ],
+     "m": null
+    },
+    {
+     "id": "s0/1/0",
+     "type": "sector",
+     "d": [
+      "3ff0000000000000","40721157c6bde3c4","406126221db4a872","4014000000000000","4069000000000000","4062c00000000000","4056800000000000","4056800000000000","40188fc13ff03534","400247426bd47de0","0000000000000000","3ff0000000000000",
+      "4000000000000000","4069000000000000","4062c00000000000","4018000000000000"
+     ],
+     "m": null
+    },
+    {
+     "id": "s0/2/0",
+     "type": "sector",
+     "d": [
+      "3ff0000000000000","4062eaf4568e230e","406c36cf67997ca2","4014000000000000","4069000000000000","4062c00000000000","4056800000000000","4056800000000000","400122ce4452f2db","3feb6ae3a1bebcd4","0000000000000000","3ff0000000000000",
+      "4000000000000000","4069000000000000","4062c00000000000","4018000000000000"
+     ],
+     "m": null
+    },
+    {
+     "id": "s0/3/0",
+     "type": "sector",
+     "d": [
+      "3ff0000000000000","405bbaa0e50870f1","406459dde24b5791","4014000000000000","4069000000000000","4062c00000000000","4056800000000000","4056800000000000","4007fd872b9c3d4f","3ffb6ae3a1bebcd2","0000000000000000","3ff0000000000000",
+      "4000000000000000","4069000000000000","4062c00000000000","4018000000000000"
+     ],
+     "m": null
+    }
+   ],
+   "oldGroups": [{"seriesIndex":0,"id":"k","filtered":false,"groups":["A","B","C","D"],"childGroups":[null,null,null,null]}],
+   "newGroups": [{"seriesIndex":0,"id":"k","filtered":false,"groups":["A","B","C","D"],"childGroups":[null,null,null,null]}],
+   "oldRest": [
+    {"id":"s0/0/0","type":"rect","d":["401c000000000000","4052280000000000","406b600000000000","4048e00000000000","c057b80000000000"],"m":null},
+    {"id":"s0/1/0","type":"rect","d":["401c000000000000","4062740000000000","406b600000000000","4048e00000000000","c063200000000000"],"m":null},
+    {"id":"s0/2/0","type":"rect","d":["401c000000000000","406bd40000000000","406b600000000000","4048e00000000000","c04c100000000000"],"m":null},
+    {"id":"s0/3/0","type":"rect","d":["401c000000000000","40729a0000000000","406b600000000000","4048e00000000000","c05c900000000000"],"m":null}
+   ]
+  },
+  {
+   "id": "style.miter-pie",
+   "note": "bars whose border has a miter limit of 4 into slices with a border: miterLimit tweens to the prototype's 10",
+   "steps": [
+    {
+     "option": {
+      "color": ["#5070dd","#b6d634","#505372","#ff994d","#0ca8df","#ffd10a","#fb628b","#785db0","#3fbe95"],
+      "xAxis": {"type":"category","data":["A","B","C","D"]},
+      "yAxis": {"type":"value"},
+      "series": [{"type":"bar","id":"k","data":[{"name":"A","value":5},{"name":"B","value":8},{"name":"C","value":3},{"name":"D","value":6}],"universalTransition":true,"itemStyle":{"borderColor":"#ff994d","borderWidth":2,"borderMiterLimit":4}}]
+     },
+     "after": null,
+     "merge": false
+    },
+    {
+     "option": {
+      "color": ["#5070dd","#b6d634","#505372","#ff994d","#0ca8df","#ffd10a","#fb628b","#785db0","#3fbe95"],
+      "series": [
+       {"type":"pie","id":"k","radius":"60%","label":{"show":false},"data":[{"name":"A","value":5},{"name":"B","value":8},{"name":"C","value":3},{"name":"D","value":6}],"universalTransition":true,"itemStyle":{"borderColor":"#ffffff","borderWidth":1}}
+      ]
+     },
+     "after": null,
+     "merge": false
+    }
+   ],
+   "samples": [0,1,16,50,100,150,250,300,400,499,500,501,750,1000,1500],
+   "resolved": [{"seriesIndex":0,"type":"pie","id":"k","ut":true,"animation":true,"count":4}],
+   "clips": [8,8,8,8,8,8,8,8,8,8,0,0,0,0,0],
+   "elements": [
+    {
+     "id": "s0/0/0",
+     "series": 0,
+     "type": "sector",
+     "seriesType": "pie",
+     "item": true,
+     "dataIndex": 0,
+     "path": 0,
+     "present": null,
+     "morph": [true,true,true,true,true,true,true,true,true,true,false,false,false,false,false],
+     "d": [
+      [
+       "3ff0000000000000","4052280000000000","405f080000000000","4000000000000000","405e980000000000","405f080000000000","4000000000000000","405e980000000000","406b600000000000","4000000000000000","4052280000000000","406b600000000000",
+       "4000000000000000","4052280000000000","405f080000000000"
+      ],
+      [
+       "3ff0000000000000","405228001118925a","405f07fff764ae88","4008000000000000","40522800141980bc","405f07fff764ae88","405e980010329da9","405f07fff87f3369","405e980012544028","405f07fffa57fefc","4008000000000000","405e98001475e2a7",
+       "405f07fffc30ca8e","405e980015f2a518","406b5ffff905fdc0","405e980016601342","406b5ffffa828b22","4000000000000000","405228001118925a","406b5ffffb5e96ca","4000000000000000","405228001118925a","405f07fff764ae88"
+      ],
+      [
+       "3ff0000000000000","405229118925944b","405f07764ae88f29","4008000000000000","40522941980bbb8a","405f07764ae88f29","405e990329da8727","405f0787f336a11e","405e9925440279e9","405f07a57fefc9d3","4008000000000000","405e99475e2a6caa",
+       "405f07c30ca8f288","405e995f2a517ade","406b5f905fdbfe68","405e996601340fe8","406b5fa828b22be8","4000000000000000","405229118925944b","406b5fb5e96ca6d9","4000000000000000","405229118925944b","405f07764ae88f29"
+      ],
+      [
+       "3ff0000000000000","4052489ba5e353f8","405ef795810624dd","4008000000000000","40524e5644920cad","405ef795810624dd","405eb6e50ac5717f","405ef9b05dc8a7e6","405ebaf5c1fd9152","405efd3626d142ac","4008000000000000","405ebf067935b125",
+       "405f00bbefd9dd72","405ec1dcb6f3921e","406b52b175652d5a","405ec2ad6fb94f6b","406b55874df15cd5","4000000000000000","4052489ba5e353f8","406b572b020c49ba","4000000000000000","4052489ba5e353f8","405ef795810624dd"
+      ],
+      [
+       "3ff0000000000000","40532cdd2f1a9fbf","405e84ac083126ea","4008000000000000","40535ab22490656b","405e84ac083126ea","405f8f28562b8bfa","405e9582ee453f2d","405fafae0fec8a92","405eb1b1368a155c","4008000000000000","405fd033c9ad892a",
+       "405ecddf7eceeb8b","405fe6e5b79c90f1","406af58bab296ad4","405fed6b7dca7b5d","406b0c3a6f8ae6ac","4000000000000000","40532cdd2f1a9fbf","406b195810624dd3","4000000000000000","40532cdd2f1a9fbf","405e84ac083126ea"
+      ],
+      [
+       "3ff0000000000000","4055986a7ef9db23","405d4cc49ba5e354","4008000000000000","405633193b675649","405d4cc49ba5e354","4060ed1411697c35","405d8599e429b537","406123f5badf29d5","405de4b618120816","4008000000000000","40615ad76454d775",
+       "405e43d24bfa5af4","40618123a5d83496","4069f8b761abc88d","40618c256445b02d","406a45453874ca83","4000000000000000","4055986a7ef9db23","406a7189374bc6a8","4000000000000000","4055986a7ef9db23","405d4cc49ba5e354"
+      ],
+      [
+       "3ff0000000000000","40610a0000000000","4057040000000000","4008000000000000","4062700fbda81852","4057040000000000","4066d6eb2134358e","40580b1dcaf9fb1a","4067d4ffdc67fa8f","4059c370f42d8db6","4008000000000000","4068d314979bbf90",
+       "405b7bc41d612052","40698462aa772c58","4064e0a652672538","4069b757c6bde3c4","406643110eda5439","4000000000000000","40610a0000000000","4067100000000000","4000000000000000","40610a0000000000","4057040000000000"
+      ],
+      [
+       "3ff0000000000000","4064ec8b43958106","40531a9fbe76c8b5","4008000000000000","40670156e90e9afa","40531a9fbe76c8b5","406a8534e9ba3b36","4054a22423c9fcd0","406bff47791dcad9","40573158340a7092","4008000000000000","406d795a08815a7c",
+       "4059c08c444ae453","406e812e767c14ee","4061b4ef4b82f3cc","406ecd019651da16","4063c44ea15d7316","4000000000000000","4064ec8b43958106","4064f53f7ced9169","4000000000000000","4064ec8b43958106","40531a9fbe76c8b5"
+      ],
+      [
+       "3ff0000000000000","40687d916872b020","404f06a7ef9db22f","4008000000000000","406b32c66907fdf0","404f06a7ef9db22f","406de6421752a520","405180b8a7aeb70a","406fd228b0d9afd6","4054d530b1d10613","4008000000000000","4070df07a5305d46",
+       "405829a8bbf3551c","40718aa93c90081c","405d9781f349bf37","4071bbfce74b44ed","406179e7ae29c1c7","4000000000000000","40687d916872b021","406306a7ef9db22e","4000000000000000","40687d916872b020","404f06a7ef9db22f"
+      ],
+      [
+       "3ff0000000000000","4068fffff773b6d2","404e00001136a2ee","4008000000000000","406bcc1f71437048","404e00001136a2ee","406e61d63a4f1c48","40510e3b9d74c2cc","40702effd7d2ea85","40547ee1ee031c71","4008000000000000","40712d14927e46e6",
+       "4057ef883e917617","4071de62a4fa8312","405cc2995790995f","40721157c125def4","4061262223321d4f","4000000000000000","4068fffff773b6d4","4062c00004a16936","4000000000000000","4068fffff773b6d2","404e00001136a2ee"
+      ],
+      null,
+      null,
+      null,
+      null,
+      null
+     ],
+     "style": {
+      "fill": "#5070dd",
+      "stroke": [
+       "rgba(255,153,77,1)","rgba(255,153,77,1)","rgba(255,153,77,1)","rgba(255,153,77,1)","rgba(255,156,82,1)","rgba(255,164,96,1)","rgba(255,204,166,1)","rgba(255,228,209,1)","rgba(255,251,249,1)","rgba(255,254,254,1)","rgba(255,255,255,1)",
+       "rgba(255,255,255,1)","rgba(255,255,255,1)","rgba(255,255,255,1)","rgba(255,255,255,1)"
+      ],
+      "lineWidth": [
+       "4000000000000000","3ffffffff768fa0c","3fffff768fa0bec9","3fffef9db22d0e56","3fff7ced916872b0","3ffe45a1cac08312","3ff8000000000000","3ff4189374bc6a7f","3ff083126e978d50","3ff00000089705f4","3ff0000000000000","3ff0000000000000",
+       "3ff0000000000000","3ff0000000000000","3ff0000000000000"
+      ],
+      "opacity": "3ff0000000000000",
+      "shadowBlur": "0000000000000000",
+      "shadowOffsetX": "0000000000000000",
+      "shadowOffsetY": "0000000000000000",
+      "shadowColor": "#000",
+      "fillOpacity": "3ff0000000000000",
+      "strokeOpacity": "3ff0000000000000",
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": [
+       "4010000000000000","401000000ce288ee","401000ce288ee1d2","4010189374bc6a7f","4010c49ba5e353f8","4012978d4fdf3b64","401c000000000000","4020ed916872b021","40239db22d0e5604","4023fffff98ebb89","4024000000000000","4024000000000000",
+       "4024000000000000","4024000000000000","4024000000000000"
+      ]
+     },
+     "snap": {
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "rotation": "0000000000000000",
+      "shape.cx": "4069000000000000",
+      "shape.cy": "4062c00000000000",
+      "shape.r0": "0000000000000000",
+      "shape.r": "4056800000000000",
+      "shape.startAngle": "4012d97c7f3321d2",
+      "shape.endAngle": "40188fc140e58929",
+      "shape.cornerRadius": "0000000000000000",
+      "shape.angle": "3ff6d91306c99d5c"
+     },
+     "anim": [2,2,2,2,2,2,2,2,2,2,0,0,0,0,0]
+    },
+    {
+     "id": "s0/1/0",
+     "series": 0,
+     "type": "sector",
+     "seriesType": "pie",
+     "item": true,
+     "dataIndex": 1,
+     "path": 0,
+     "present": null,
+     "morph": [true,true,true,true,true,true,true,true,true,true,false,false,false,false,false],
+     "d": [
+      [
+       "3ff0000000000000","4068ac0000000000","4050800000000000","4000000000000000","4068ac0000000000","406b600000000000","4000000000000000","4062740000000000","406b600000000000","4000000000000000","4062740000000000","4050800000000000",
+       "4000000000000000","4068ac0000000000","4050800000000000"
+      ],
+      [
+       "3ff0000000000000","4068ac0006767845","40508000085e1772","4008000000000000","4068ac0008c99c28","405080000d26dc74","4068ac000248152d","406b60000021cd90","4068abffffe3b2ab","406b60000274f174","4008000000000000","4068abfffed8f5d1",
+       "406b600003782b6d","4062740000d069f6","406b600001f98829","406273ffff5d11de","406b6000020ec41f","4000000000000000","40627400057858f7","405080000c973d36","4000000000000000","4068ac0006767845","40508000085e1772"
+      ],
+      [
+       "3ff0000000000000","4068ac67676645df","40508085e22602ad","4008000000000000","4068ac8c98d5f02c","405080d2700786a4","4068ac24829293e3","406b60021cde0319","4068abfe3ba1c14d","406b60274e4dbd88","4008000000000000","4068abed8f7cb6c8",
+       "406b603781934431","4062740d06e58aca","406b601f9808d668","406273f5d15ce07a","406b6020eb4afaf8","4000000000000000","4062745784609162","405080c973d6ce1e","4000000000000000","4068ac67676645df","40508085e22602ad"
+      ],
+      [
+       "3ff0000000000000","4068b853393762af","40508ff83349cd9a","4008000000000000","4068bcbf6c96e883","4050991df61785ac","4068b05e981a343c","406b60408cd94eac","4068abcbb6b15c47","406b64acc03abfa5","4008000000000000","4068a9cdb5f86ad4",
+       "406b6699e7e7a6de","4062758e843f761c","406b63c27eee1620","406272ca226461ae","406b63e9377769b2","4000000000000000","40627e6aa593b76c","40509803e0df69eb","4000000000000000","4068b853393762af","40508ff83349cd9a"
+      ],
+      [
+       "3ff0000000000000","40690e818974c9a0","4051004c84258bee","4008000000000000","4069313cf49da9af","40514ab6633edc3a","4068cff2d5019a6c","406b620b5694c7e4","4068aabde564ce69","406b84c6c1ccb8ff","4008000000000000","40689a8919a548dc",
+       "406b93e79c4d1ba6","406280aca7b65a4a","406b7db38b7f6a00","40626a850652996a","406b7e85919c4af0","4000000000000000","4062c6648499a08c","4051401c0efb6b61","4000000000000000","40690e818974c9a0","4051004c84258bee"
+      ],
+      [
+       "3ff0000000000000","4069f78d4ff718a5","405235f36db74882","4008000000000000","406a66a526f64009","40533c00507d0a67","40692e5c6b9e70ae","406b6775047defd0","4068ab55fa02b934","406bd68cdbad4840","4008000000000000","40687243d35b5a48",
+       "406c06f0752fea40","4062a0de19c4322d","406bc0d8294fd930","4062560c55291e20","406bc00a7867ed32","4000000000000000","40638183a38be059","405307ad0f84aa7f","4000000000000000","4069f78d4ff718a5","405235f36db74882"
+      ],
+      [
+       "3ff0000000000000","406e9155f8939be1","4058de1c3e39dc9a","4008000000000000","406ff03c0cf16cd1","405e717e8d2c44cf","406bd5a8aeb728b2","406baff4726a29b0","40690bf786085c1a","406d0eda8760326b","4008000000000000","4067d51a4353dbd1",
+       "406da7b2006fa53d","40637c84c9862d35","406cd5606abaa824","40622d7e3cdfb150","406c7d50585e751b","4000000000000000","4066900a85869808","405be8df3e14b5a9","4000000000000000","406e9155f8939be1","4058de1c3e39dc9a"
+      ],
+      [
+       "3ff0000000000000","4070aaa38db8ed16","405d58916b022c8a","4008000000000000","40715b8efde52bc7","4063158994fb59c4","406e0db6921c0d24","406c26b9a0e184b5","4069a475b0b7ec7c","406d889081d38071","4008000000000000","4067b896a7731c48",
+       "406e22afe0953058","406439d10932e4de","406d4eae0450a894","4062612801592d1c","406c810cf6ad2638","4000000000000000","4067ecc1d0bfd788","4060754ff9050fc8","4000000000000000","4070aaa38db8ed16","405d58916b022c8a"
+      ],
+      [
+       "3ff0000000000000","4071e54769bef8b1","4060d52ed7a968d2","4008000000000000","40726222f62837a6","4066c47ab46276c0","407032c69d8e277e","406cdf1f696a7024","406a76415bd03116","406dd8d682a94148","4008000000000000","4067e07e057188d7",
+       "406e459b5e265471","40650fe3ad08a3bb","406da3117596346c","4062d488a0454a7a","406c43e85d9e595a","4000000000000000","4068e1d1f9c9c018","40627c390f61265e","4000000000000000","4071e54769bef8b1","4060d52ed7a968d2"
+      ],
+      [
+       "3ff0000000000000","40721157c3dc8e85","4061262218628d7d","4008000000000000","4072828640ccc94a","40674c85fa7dc431","40706020e3ad8a75","406d0052923432a8","406a99dde294e7fe","406de2af8c76da26","4008000000000000","4067ec1b3aee0bff",
+       "406e454880ee1636","406531c901cba442","406dad5f6c4d18ae","4062eaf4574d5ed5","406c36cf69f29d2e","4000000000000000","4068fffffe0e93cc","4062bffffb9d148c","4000000000000000","40721157c3dc8e85","4061262218628d7d"
+      ],
+      null,
+      null,
+      null,
+      null,
+      null
+     ],
+     "style": {
+      "fill": [
+       "rgba(80,112,221,1)","rgba(80,112,220,1)","rgba(80,112,220,1)","rgba(80,112,220,1)","rgba(83,115,215,1)","rgba(91,123,202,1)","rgba(131,163,136,1)","rgba(155,187,95,1)","rgba(178,210,57,1)","rgba(181,213,52,1)","rgba(182,214,52,1)",
+       "rgba(182,214,52,1)","rgba(182,214,52,1)","rgba(182,214,52,1)","rgba(182,214,52,1)"
+      ],
+      "stroke": [
+       "rgba(255,153,77,1)","rgba(255,153,77,1)","rgba(255,153,77,1)","rgba(255,153,77,1)","rgba(255,156,82,1)","rgba(255,164,96,1)","rgba(255,204,166,1)","rgba(255,228,209,1)","rgba(255,251,249,1)","rgba(255,254,254,1)","rgba(255,255,255,1)",
+       "rgba(255,255,255,1)","rgba(255,255,255,1)","rgba(255,255,255,1)","rgba(255,255,255,1)"
+      ],
+      "lineWidth": [
+       "4000000000000000","3ffffffff768fa0c","3fffff768fa0bec9","3fffef9db22d0e56","3fff7ced916872b0","3ffe45a1cac08312","3ff8000000000000","3ff4189374bc6a7f","3ff083126e978d50","3ff00000089705f4","3ff0000000000000","3ff0000000000000",
+       "3ff0000000000000","3ff0000000000000","3ff0000000000000"
+      ],
+      "opacity": "3ff0000000000000",
+      "shadowBlur": "0000000000000000",
+      "shadowOffsetX": "0000000000000000",
+      "shadowOffsetY": "0000000000000000",
+      "shadowColor": "#000",
+      "fillOpacity": "3ff0000000000000",
+      "strokeOpacity": "3ff0000000000000",
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": [
+       "4010000000000000","401000000ce288ee","401000ce288ee1d2","4010189374bc6a7f","4010c49ba5e353f8","4012978d4fdf3b64","401c000000000000","4020ed916872b021","40239db22d0e5604","4023fffff98ebb89","4024000000000000","4024000000000000",
+       "4024000000000000","4024000000000000","4024000000000000"
+      ]
+     },
+     "snap": {
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "rotation": "0000000000000000",
+      "shape.cx": "4069000000000000",
+      "shape.cy": "4062c00000000000",
+      "shape.r0": "0000000000000000",
+      "shape.r": "4056800000000000",
+      "shape.startAngle": "40188fc140e58929",
+      "shape.endAngle": "4020d9b13b67e40d",
+      "shape.cornerRadius": "0000000000000000",
+      "shape.angle": "400247426bd47de3"
+     },
+     "anim": [2,2,2,2,2,2,2,2,2,2,0,0,0,0,0]
+    },
+    {
+     "id": "s0/2/0",
+     "series": 0,
+     "type": "sector",
+     "seriesType": "pie",
+     "item": true,
+     "dataIndex": 2,
+     "path": 0,
+     "present": null,
+     "morph": [true,true,true,true,true,true,true,true,true,true,false,false,false,false,false],
+     "d": [
+      [
+       "3ff0000000000000","4071060000000000","406b600000000000","4000000000000000","406bd40000000000","406b600000000000","4000000000000000","406bd40000000000","40645c0000000000","4000000000000000","4071060000000000","40645c0000000000",
+       "4000000000000000","4071060000000000","406b600000000000"
+      ],
+      [
+       "3ff0000000000000","407105fffc196cae","406b600000d1a08a","4008000000000000","407105fffbacfd8b","406b600000989f58","406bd3fff9e9874f","406b5fffff256e18","406bd3fff93fdc4e","406b5ffffe9ab178","4008000000000000","406bd3fff896314c",
+       "406b5ffffe0ff4d7","406bd3fff938ed10","40645c0001256244","406bd3fff8d5fd20","40645c00005c27d6","4000000000000000","407105fffd756b28","40645bfffebe74c9","4000000000000000","407105fffc196cae","406b600000d1a08a"
+      ],
+      [
+       "3ff0000000000000","407105c196b161b6","406b600d19dcc763","4008000000000000","407105bacfc3f691","406b600989a50f8e","406bd39e987379f8","406b5ff256ff9f3c","406bd393fddaccfe","406b5fe9ab18f9c9","4008000000000000","406bd38963422004",
+       "406b5fe0ff325456","406bd3938e793d51","40645c12560b0a65","406bd38d5f9c278b","40645c05c25383f6","4000000000000000","407105d756c5c986","40645bebe77c8684","4000000000000000","407105c196b161b6","406b600d19dcc763"
+      ],
+      [
+       "3ff0000000000000","4070fe8f0188ea55","406b618f3543fabf","4008000000000000","4070fdc040b59881","406b6121f5e7e63f","406bc8636e39572b","406b5e5f89f00111","406bc72025b86531","406b5d56834b59bf","4008000000000000","406bc5dcdd377336",
+       "406b5c4d7ca6b26c","406bc7115c8b2a2a","40645e2f39e24601","406bc65522d80718","40645caf2d48180a","4000000000000000","40710127635e53aa","4064599b62c97de2","4000000000000000","4070fe8f0188ea55","406b618f3543fabf"
+      ],
+      [
+       "3ff0000000000000","4070ca63d471d1e0","406b6c56895f51c4","4008000000000000","4070c3f1b643dd53","406b68cf7ddde66e","406b771a20e76d4b","406b5314406ae3fa","406b6d129ce8f2fc","406b4ab56059de86","4008000000000000","406b630b18ea78ad",
+       "406b42568048d912","406b6c4526059d6d","40646d655430a3af","406b667e6df3dd99","40646157ceefe240","4000000000000000","4070df4a58c48808","406449017316e553","4000000000000000","4070ca63d471d1e0","406b6c56895f51c4"
+      ],
+      [
+       "3ff0000000000000","40703c1a1cf19858","406b885cb413abe6","4008000000000000","4070267eeefe6136","406b7b6be1af0734","406a9a680c6a1f00","406b353efa5e64cd","406a793dd047dbc2","406b1831f5b70cac","4008000000000000","406a581394259883",
+       "406afb24f10fb48c","406a736e27691eca","406495ef8665aa39","406a60e98356126b","40646ccdb6f938e3","4000000000000000","407083e3e6a8d724","40641d49490d636e","4000000000000000","40703c1a1cf19858","406b885cb413abe6"
+      ],
+      [
+       "3ff0000000000000","406a9e98bc694696","406bfa1869613a3a","4008000000000000","4069df69fc7fcf46","406ba610415b1d6e","406624fbd271d3ea","406aae1352e399ee","40659d204dcd378e","406a15bd09d9bcd5","4008000000000000","40651544c9289b32",
+       "40697d66c0cfdfbc","40653a43240a6f6f","4065513fd3c88a4a","4064fc92422dd6de","406489bbe5c68bfe","4000000000000000","406d6e81d3c5726e","40635cdf6cc6258c","4000000000000000","406a9e98bc694696","406bfa1869613a3a"
+      ],
+      [
+       "3ff0000000000000","4066e3f6fb7e0cc2","406c2455a8d6e199","4008000000000000","4065d1e55b5318a8","406b91e081a35e19","406359e73e7f5ed8","406a6922858a625f","4062a1b32d6445b8","406977a453a00483","4008000000000000","4061e97f1c492c98",
+       "4068862621b5a6a7","4061cf1a24486228","4065ae3cc26797a7","40618a4f7b737056","40647f335869c436","4000000000000000","406b40563637003c","4063033fdb89ebd3","4000000000000000","4066e3f6fb7e0cc2","406c2455a8d6e199"
+      ],
+      [
+       "3ff0000000000000","40636ad931ed85b7","406c3601d9846838","4008000000000000","4062148b92eea210","406b5eda8e473b48","4060c4c6a4993088","406a336f1ef2ab14","405fd79934b27bb0","4068e928e1d4f54e","4008000000000000","405e25a520329650",
+       "40679ee2a4b73f88","405d227b91844abf","4065efaaaa508d52","405ca75d7a4aa428","4064601358fd75d1","4000000000000000","4069479ff70d3831","4062c6dbce5fe6ca","4000000000000000","40636ad931ed85b7","406c3601d9846838"
+      ],
+      [
+       "3ff0000000000000","4062eaf45ef18d29","406c36cf678fb2a8","4008000000000000","40618b967dfbebea","406b5500212b5aa8","406065e5eb34124a","406a2c7966a41220","405f12613ea81121","4068d50bab985030","4008000000000000","405d58f6a6e7fdaf",
+       "40677d9df08c8e3f","405c318298f1ba14","4065f749305f2dfb","405bbaa0f4de080a","406459dde3c87937","4000000000000000","4069000004b0cdd7","4062c000006f4db6","4000000000000000","4062eaf45ef18d29","406c36cf678fb2a8"
+      ],
+      null,
+      null,
+      null,
+      null,
+      null
+     ],
+     "style": {
+      "fill": [
+       "rgba(80,112,221,1)","rgba(80,111,220,1)","rgba(80,111,220,1)","rgba(80,111,220,1)","rgba(80,111,217,1)","rgba(80,108,209,1)","rgba(80,97,167,1)","rgba(80,90,141,1)","rgba(80,83,117,1)","rgba(80,83,114,1)","rgba(80,83,114,1)",
+       "rgba(80,83,114,1)","rgba(80,83,114,1)","rgba(80,83,114,1)","rgba(80,83,114,1)"
+      ],
+      "stroke": [
+       "rgba(255,153,77,1)","rgba(255,153,77,1)","rgba(255,153,77,1)","rgba(255,153,77,1)","rgba(255,156,82,1)","rgba(255,164,96,1)","rgba(255,204,166,1)","rgba(255,228,209,1)","rgba(255,251,249,1)","rgba(255,254,254,1)","rgba(255,255,255,1)",
+       "rgba(255,255,255,1)","rgba(255,255,255,1)","rgba(255,255,255,1)","rgba(255,255,255,1)"
+      ],
+      "lineWidth": [
+       "4000000000000000","3ffffffff768fa0c","3fffff768fa0bec9","3fffef9db22d0e56","3fff7ced916872b0","3ffe45a1cac08312","3ff8000000000000","3ff4189374bc6a7f","3ff083126e978d50","3ff00000089705f4","3ff0000000000000","3ff0000000000000",
+       "3ff0000000000000","3ff0000000000000","3ff0000000000000"
+      ],
+      "opacity": "3ff0000000000000",
+      "shadowBlur": "0000000000000000",
+      "shadowOffsetX": "0000000000000000",
+      "shadowOffsetY": "0000000000000000",
+      "shadowColor": "#000",
+      "fillOpacity": "3ff0000000000000",
+      "strokeOpacity": "3ff0000000000000",
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": [
+       "4010000000000000","401000000ce288ee","401000ce288ee1d2","4010189374bc6a7f","4010c49ba5e353f8","4012978d4fdf3b64","401c000000000000","4020ed916872b021","40239db22d0e5604","4023fffff98ebb89","4024000000000000","4024000000000000",
+       "4024000000000000","4024000000000000","4024000000000000"
+      ]
+     },
+     "snap": {
+      "x": "0000000000000000",
+      "y": "0000000000000000",
+      "scaleX": "3ff0000000000000",
+      "scaleY": "3ff0000000000000",
+      "rotation": "0000000000000000",
+      "shape.cx": "4069000000000000",
+      "shape.cy": "4062c00000000000",
+      "shape.r0": "0000000000000000",
+      "shape.r": "4056800000000000",
+      "shape.startAngle": "4020d9b13b67e40d",
+      "shape.endAngle": "4022905f7583cfda",
+      "shape.cornerRadius": "0000000000000000",
+      "shape.angle": "3feb6ae3a1bebcd4"
+     },
+     "anim": [2,2,2,2,2,2,2,2,2,2,0,0,0,0,0]
+    },
+    {
+     "id": "s0/3/0",
+     "series": 0,
+     "type": "sector",
+     "seriesType": "pie",
+     "item": true,
+     "dataIndex": 3,
+     "path": 0,
+     "present": null,
+     "morph": [true,true,true,true,true,true,true,true,true,true,false,false,false,false,false],
+     "d": [
+      [
+       "3ff0000000000000","40729a0000000000","406b600000000000","4000000000000000","40729a0000000000","405a300000000000","4000000000000000","4075b60000000000","405a300000000000","4000000000000000","4075b60000000000","406b600000000000",
+       "4000000000000000","40729a0000000000","406b600000000000"
+      ],
+      [
+       "3ff0000000000000","407299fff9b9320e","406b5ffffc7acd2c","4008000000000000","407299fff8fccee6","406b5ffff97c7b01","407299fffacf04da","405a2ffffb113ca2","407299fffc4e2df0","405a2ffff81fb002","4008000000000000","407299fffc6f378e",
+       "405a2ffff7deb6ae","4075b5fffae605ff","405a2ffff9c048f8","4075b5fffb090952","405a2ffff992c787","4000000000000000","4075b5fffac39ea7","406b5ffffadd1a1f","4000000000000000","407299fff9b9320e","406b5ffffc7acd2c"
+      ],
+      [
+       "3ff0000000000000","4072999b93207d3c","406b5fc7acb0a0d7","4008000000000000","4072998fcd2e9b68","406b5f97c74e6f4a","407299acf036752f","405a2fb113d96028","407299c4e2e79859","405a2f81fc11c468","4008000000000000","407299c6f3843dcd",
+       "405a2f7dec92d6a8","4075b5ae60624d0a","405a2f9c04ae43ec","4075b5b090996bc0","405a2f992caec864","4000000000000000","4075b5ac3a183508","406b5fadd1d9abb4","4000000000000000","4072999b93207d3c","406b5fc7acb0a0d7"
+      ],
+      [
+       "3ff0000000000000","40728e0741f5fe0b","406b59489daa270b","4008000000000000","40728ca0db22e6d7","406b5392129e4b36","40729018d71ed26e","405a2697afc905c4","407292f41ca5fd91","405a20fe147a3b10","4008000000000000","407293332a3b1c3d",
+       "405a208278097e30","4075ac4514a3e9c8","405a24153942eaae","4075ac87e3cb08d4","405a23bec3a9a00c","4000000000000000","4075ac0413e88c59","406b5634d32c8aaa","4000000000000000","40728e0741f5fe0b","406b59489daa270b"
+      ],
+      [
+       "3ff0000000000000","40723a39c6096c30","406b2a29c9f44dfc","4008000000000000","40722f3a21a263b7","406afc437450b628","40724ab445be6f7b","4059e4c933bd165e","407261a7709a3002","4059b8caa20dded3","4008000000000000","407263a204fa2b14",
+       "4059b4ff87e85738","4075682a7e6ae03b","4059d0c2605d8fc8","40756a4277bc6caf","4059ce2188ac743a","4000000000000000","40756644e7d5edfc","406b11d36e2347f4","4000000000000000","40723a39c6096c30","406b2a29c9f44dfc"
+      ],
+      [
+       "3ff0000000000000","407156c1de79cb48","406aa953eb04f73c","4008000000000000","4071337f2c081ac0","406a0cb01b213437","40718db782ebd074","4059328664f09d72","4071dc096affab80","4058a57b9aecac66","4008000000000000","4071e2ca32be9039",
+       "4058995256ad90e7","4074af5ff15cc2a5","4058ef7342c16b7e","4074b67de48125d1","4058e741ce9c398e","4000000000000000","4074aa31037db782","406a59cf7d344fd0","4000000000000000","407156c1de79cb48","406aa953eb04f73c"
+      ],
+      [
+       "3ff0000000000000","40698417d92fd756","4067fae5cca08c5d","4008000000000000","406899291bf67c9d","406503198740158a","406b609c388d94af","40559e6f1ba24786","406e58687f37a41f","4053c891a063bee9","4008000000000000","406e99ebc02331a6",
+       "4053a00e2603311c","4070f77f972c9100","405479ff0a133c16","4071195cde16d71e","4054648ab978b326","4000000000000000","4070fb03b5781b5d","4066ce095423fc8e","4000000000000000","40698417d92fd756","4067fae5cca08c5d"
+      ],
+      [
+       "3ff0000000000000","4063d2b01c3f17b6","40663d0145b9369b","4008000000000000","4062ccb6e0e42e24","4061baf992d733f9","406678a4a5a544c2","4053612e875a7c64","406afaac5a7be409","4051553c0fc16031","4008000000000000","406b5e2d9d47fef3",
+       "4051280ed0c14e74","406d4fa3b2d35f7c","4051c5f129ea4dd2","406db558a1a7788c","4051b58c14c87ff4","4000000000000000","406d88b6d7301ca0","4064c10dc9a19cdc","4000000000000000","4063d2b01c3f17b6","40663d0145b9369b"
+      ],
+      [
+       "3ff0000000000000","405d3775a500bb39","4064971c97204fbc","4008000000000000","405b6299e129f378","405d4ac374852289","4061e7e5685529c7","40514c381e0ae64b","4067d9a047c70678","404eeeb8b2d17655","4008000000000000","40685cd5e4b9496b",
+       "404e9dde2f3c0d14","406911ed7a324c56","404eafa025d610fc","406996ad9f7c536b","404eaa498427f2e6","4000000000000000","40698fac0c90f132","4062fde50d8accc8","4000000000000000","405d3775a500bb39","4064971c97204fbc"
+      ],
+      [
+       "3ff0000000000000","405bbaa0fdfc5ee1","406459dde650e55b","4008000000000000","4059f5e70c4e88f0","405c66f4081f0196","40613fbe3db18175","4050ff5adc2a565e","40676622229ddc3c","404e7541d3703917","4008000000000000","4067ede22249fed2",
+       "404e272f7d78b3ed","406876daaaa191ec","404e00000c016a2d","40690000072e0e56","404e00000b2175d7","4000000000000000","406900000967406f","4062c0000408e91e","4000000000000000","405bbaa0fdfc5ee1","406459dde650e55b"
+      ],
+      null,
+      null,
+      null,
+      null,
+      null
+     ],
+     "style": {
+      "fill": [
+       "rgba(80,112,221,1)","rgba(80,112,220,1)","rgba(80,112,220,1)","rgba(80,112,220,1)","rgba(85,113,216,1)","rgba(98,116,205,1)","rgba(167,132,149,1)","rgba(210,142,113,1)","rgba(249,151,81,1)","rgba(254,152,77,1)","rgba(255,153,77,1)",
+       "rgba(255,153,77,1)","rgba(255,153,77,1)","rgba(255,153,77,1)","rgba(255,153,77,1)"
+      ],
+      "stroke": [
+       "rgba(255,153,77,1)","rgba(255,153,77,1)","rgba(255,153,77,1)","rgba(255,153,77,1)","rgba(255,156,82,1)","rgba(255,164,96,1)","rgba(255,204,166,1)","rgba(255,228,209,1)","rgba(255,251,249,1)","rgba(255,254,254,1)","rgba(255,255,255,1)",
+       "rgba(255,255,255,1)","rgba(255,255,255,1)","rgba(255,255,255,1)","rgba(255,255,255,1)"
+      ],
+      "lineWidth": [
+       "4000000000000000","3ffffffff768fa0c","3fffff768fa0bec9","3fffef9db22d0e56","3fff7ced916872b0","3ffe45a1cac08312","3ff8000000000000","3ff4189374bc6a7f","3ff083126e978d50","3ff00000089705f4","3ff0000000000000","3ff0000000000000",
+       "3ff0000000000000","3ff0000000000000","3ff0000000000000"
+      ],
+      "opacity": "3ff0000000000000",
+      "shadowBlur": "0000000000000000",
+      "shadowOffsetX": "0000000000000000",
+      "shadowOffsetY": "0000000000000000",
+      "shadowColor": "#000",
+      "fillOpacity": "3ff0000000000000",
+      "strokeOpacity": "3ff0000000000000",
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": [
+       "4010000000000000","401000000ce288ee","401000ce288ee1d2","4010189374bc6a7f","4010c49ba5e353f8","4012978d4fdf3b64","401c000000000000","4020ed916872b021","40239db22d0e5604","4023fffff98ebb89","4024000000000000","4024000000000000",
+       "4024000000000000","4024000000000000","4024000000000000"
       ]
      },
      "snap": {
@@ -7672,7 +8202,8 @@
       ],
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -7737,7 +8268,8 @@
       ],
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -7802,7 +8334,8 @@
       ],
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -7867,7 +8400,8 @@
       ],
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -7960,7 +8494,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -8051,7 +8586,8 @@
         ],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -8128,7 +8664,8 @@
         ],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -8205,7 +8742,8 @@
         ],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       }
      ]
@@ -8231,7 +8769,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -8322,7 +8861,8 @@
         ],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -8399,7 +8939,8 @@
         ],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -8476,7 +9017,8 @@
         ],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       }
      ]
@@ -8597,7 +9139,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -8697,7 +9240,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -8783,7 +9327,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -8869,7 +9414,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       }
      ]
@@ -8895,7 +9441,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -8995,7 +9542,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -9081,7 +9629,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -9167,7 +9716,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       }
      ]
@@ -9274,7 +9824,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -9317,7 +9868,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -9360,7 +9912,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -9403,7 +9956,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -9525,7 +10079,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -9568,7 +10123,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -9611,7 +10167,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -9654,7 +10211,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -9823,7 +10381,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -9910,7 +10469,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -10000,7 +10560,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -10090,7 +10651,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -10217,7 +10779,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -10260,7 +10823,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -10303,7 +10867,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -10346,7 +10911,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -10468,7 +11034,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -10505,7 +11072,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -10542,7 +11110,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -10579,7 +11148,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -10619,7 +11189,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -10662,7 +11233,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -10705,7 +11277,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -10748,7 +11321,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -10880,7 +11454,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -10917,7 +11492,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -10954,7 +11530,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -10991,7 +11568,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -11031,7 +11609,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -11074,7 +11653,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -11117,7 +11697,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -11160,7 +11741,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -11289,7 +11871,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -11328,7 +11911,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -11367,7 +11951,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -11406,7 +11991,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -11519,7 +12105,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -11607,7 +12194,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -11681,7 +12269,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -11755,7 +12344,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       }
      ]
@@ -11781,7 +12371,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -11869,7 +12460,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -11943,7 +12535,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -12017,7 +12610,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       }
      ]
@@ -12181,7 +12775,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -12269,7 +12864,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -12343,7 +12939,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -12417,7 +13014,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       }
      ]
@@ -12443,7 +13041,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -12531,7 +13130,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -12605,7 +13205,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -12679,7 +13280,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       }
      ]
@@ -12942,7 +13544,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -13030,7 +13633,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -13104,7 +13708,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -13178,7 +13783,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       }
      ]
@@ -13204,7 +13810,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -13292,7 +13899,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -13366,7 +13974,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -13440,7 +14049,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       }
      ]
@@ -13600,7 +14210,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -13692,7 +14303,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -13784,7 +14396,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -13876,7 +14489,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -13968,7 +14582,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -14060,7 +14675,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -14174,7 +14790,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -14214,7 +14831,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -14332,7 +14950,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -14420,7 +15039,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -14494,7 +15114,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -14568,7 +15189,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       }
      ]
@@ -14594,7 +15216,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -14682,7 +15305,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -14756,7 +15380,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -14830,7 +15455,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       }
      ]
@@ -14933,7 +15559,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -15021,7 +15648,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -15095,7 +15723,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       }
      ]
@@ -15121,7 +15750,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -15209,7 +15839,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -15283,7 +15914,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       }
      ]
@@ -15382,7 +16014,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -15470,7 +16103,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -15544,7 +16178,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       }
      ]
@@ -15570,7 +16205,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -15658,7 +16294,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -15732,7 +16369,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       }
      ]
@@ -15822,7 +16460,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -15910,7 +16549,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -15984,7 +16624,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       }
      ]
@@ -16010,7 +16651,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -16114,7 +16756,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -16202,7 +16845,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -16276,7 +16920,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       }
      ]
@@ -16302,7 +16947,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -16390,7 +17036,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       },
       {
@@ -16464,7 +17111,8 @@
         "shadowColor": ["#000","#000","#000","#000","#000","#000","#000","#000","#000","#000",null,null,null,null,null],
         "fillOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
         "strokeOpacity": ["3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000","3ff0000000000000",null,null,null,null,null],
-        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null]
+        "lineDashOffset": ["0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000","0000000000000000",null,null,null,null,null],
+        "miterLimit": ["4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000","4024000000000000",null,null,null,null,null]
        }
       }
      ]
@@ -16612,7 +17260,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -16704,7 +17353,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -16796,7 +17446,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -16888,7 +17539,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -16980,7 +17632,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -17072,7 +17725,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -17210,7 +17864,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -17246,7 +17901,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -17282,7 +17938,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -17423,7 +18080,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -17523,7 +18181,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -17674,7 +18333,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -17710,7 +18370,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -17746,7 +18407,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -17887,7 +18549,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -17987,7 +18650,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -18136,7 +18800,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -18172,7 +18837,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -18208,7 +18874,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -18349,7 +19016,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -18449,7 +19117,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -18590,7 +19259,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -18626,7 +19296,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -18662,7 +19333,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -18809,7 +19481,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -18909,7 +19582,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -19076,7 +19750,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -19176,7 +19851,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -19276,7 +19952,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -19376,7 +20053,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -19557,7 +20235,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -19657,7 +20336,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -19757,7 +20437,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -19857,7 +20538,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -19942,7 +20624,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -19979,7 +20662,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -20016,7 +20700,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -20105,7 +20790,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -20278,7 +20964,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -20362,7 +21049,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -20449,7 +21137,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -20536,7 +21225,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -20697,7 +21387,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -20781,7 +21472,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -20868,7 +21560,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -20955,7 +21648,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -21078,7 +21772,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -21115,7 +21810,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -21152,7 +21848,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",
@@ -21241,7 +21938,8 @@
       "shadowColor": "#000",
       "fillOpacity": "3ff0000000000000",
       "strokeOpacity": "3ff0000000000000",
-      "lineDashOffset": "0000000000000000"
+      "lineDashOffset": "0000000000000000",
+      "miterLimit": "4024000000000000"
      },
      "snap": {
       "x": "0000000000000000",

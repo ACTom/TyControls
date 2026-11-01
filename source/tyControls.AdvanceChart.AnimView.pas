@@ -9400,9 +9400,13 @@ begin
     Put('style.strokeOpacity', TyAnimNum(AEl.Style.StrokeOpacity))
   else if not AOwn then
     Put('style.strokeOpacity', TyAnimNum(1));
-  { [R6-C] the pen's phase (the prototype's 0) }
+  { [R6-C] the pen's phase and its miter limit (the prototype's 0 and 10) }
   if (not AOwn) or (AEl.Style.DashOffsetLogical <> 0) then
     Put('style.lineDashOffset', TyAnimNum(AEl.Style.DashOffsetLogical));
+  if AEl.Style.MiterLimit > 0 then
+    Put('style.miterLimit', TyAnimNum(AEl.Style.MiterLimit))
+  else if not AOwn then
+    Put('style.miterLimit', TyAnimNum(10));
 end;
 
 { the style keys drawn over an element while their animator runs }
@@ -9485,6 +9489,12 @@ begin
   end;
   v := P.GetAnimProp('style.lineDashOffset');
   if v.Kind = avkNumber then AEl.Style.DashOffsetLogical := v.Num;
+  { (the canvas' 10 is the zero value) }
+  v := P.GetAnimProp('style.miterLimit');
+  if v.Kind = avkNumber then
+  begin
+    if v.Num = 10 then AEl.Style.MiterLimit := 0 else AEl.Style.MiterLimit := v.Num;
+  end;
 end;
 
 procedure TyUtApply(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);

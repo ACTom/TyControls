@@ -716,7 +716,17 @@ begin
         Miss(Format('%s: lineWidth %s, upstream %s', [AId, FloatToStr(AFe.Style.StrokeWidthLogical),
           FloatToStr(FromHex(sv.AsString))]), AOnce + 'lw');
     end;
-    { lineDashOffset, where it strokes }
+    { lineDashOffset and miterLimit, where it strokes (a limit of nought is
+      the canvas' 10) }
+    sv := SampleOf(AStyle.Find('miterLimit'), ASample);
+    if (sv <> nil) and (sv.JSONType = jtString) then
+    begin
+      Inc(FCompared);
+      Inc(FStyleKeys);
+      if AFe.Style.MiterLimit > 0 then v := AFe.Style.MiterLimit else v := 10;
+      if Hex(v) <> sv.AsString then
+        Miss(Format('%s: miterLimit %g, upstream %g', [AId, v, FromHex(sv.AsString)]), AOnce + 'ml');
+    end;
     sv := SampleOf(AStyle.Find('lineDashOffset'), ASample);
     if (sv <> nil) and (sv.JSONType = jtString) then
     begin
