@@ -101,6 +101,7 @@ type
     FButtonWidthPPI: Integer;
     FTitleAlignment: TAlignment;
     FEngine: TTyChromeEngine;
+    FTopEdgeCursor: TTyCursorLoan;   // crSizeNS over the top resize zone (#154)
     { The bar's own per-button switches (published ShowMinimize/ShowMaximize/ShowClose) and the
       set of buttons the WINDOW offers (an associated TTyForm derives it from BorderIcons +
       Resizable and pushes it through OfferedButtons; a standalone bar offers all three). A
@@ -237,6 +238,7 @@ type
     FDragStart: TPoint;        // GLOBAL cursor pos at drag start (screen coords)
     FDragFormStart: TPoint;    // form Left/Top at drag start
     FResizing: Boolean;
+    FEdgeCursor: TTyCursorLoan;      // the form's resize cursor over its edges (#154)
     FResizeHit: TTyBorderHit;
     FResizeStartBounds: TRect;
     FResizeStartMouse: TPoint;
@@ -1767,11 +1769,9 @@ begin
   inherited MouseMove(Shift, X, Y);
   {$IFDEF LCLWin32}
   // Show the N-S resize cursor over the top hot-zone (matches the MouseDown top-resize above).
-  if (FEngine <> nil) and not (csDesigning in ComponentState)
-     and FEngine.FormResizable and not FEngine.Maximized and (Y < FEngine.BorderZonePx) then
-    Cursor := crSizeNS
-  else
-    Cursor := crDefault;
+  TyLendCursor(Self, FTopEdgeCursor, (FEngine <> nil) and not (csDesigning in ComponentState)
+    and FEngine.FormResizable and not FEngine.Maximized and (Y < FEngine.BorderZonePx),
+    crSizeNS);   { #154: the bar's own Cursor given back off the zone }
   {$ENDIF}
   if (FEngine <> nil) and not (csDesigning in ComponentState) then
     FEngine.TitleBarMouseMove(Shift, X, Y);
@@ -2033,6 +2033,7 @@ end;
 
 procedure TTyChromeEngine.FormMouseMove(Shift: TShiftState; X, Y: Integer);
 var
+  hit: TTyBorderHit;
   M: TPoint;
   DX, DY: Integer;
   B: TRect;
@@ -2045,8 +2046,11 @@ begin
     so we leave it alone and fall through to the resize-drag logic below. }
   if not FResizing then
   begin
-    FForm.Cursor := TyResizeCursor(TyResizeHitFor(ManualResizeEnabled,
-      Rect(0, 0, FForm.Width, FForm.Height), Point(X, Y), BorderZonePx));
+    { #154: lent, and given back off the edges -- every move wrote crDefault over the form's
+      own Cursor, which on Win32 (no edge zone of ours) was every move over the form. }
+    hit := TyResizeHitFor(ManualResizeEnabled, Rect(0, 0, FForm.Width, FForm.Height),
+      Point(X, Y), BorderZonePx);
+    TyLendCursor(FForm, FEdgeCursor, hit <> bhNone, TyResizeCursor(hit));
     Exit;
   end;
   M := FForm.ClientToScreen(Point(X, Y));
@@ -2089,8 +2093,8 @@ end;
 
 procedure TTyChromeEngine.ClearResizeCursor;
 begin
-  if (FForm <> nil) and not FResizing and (FForm.Cursor <> crDefault) then
-    FForm.Cursor := crDefault;
+  if (FForm <> nil) and not FResizing then
+    TyLendCursor(FForm, FEdgeCursor, False, crDefault);   { #154: the form's own back }
 end;
 
 procedure TTyChromeEngine.NoteInstalledPPI(APPI: Integer);

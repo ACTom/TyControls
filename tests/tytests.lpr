@@ -126,6 +126,7 @@ uses
   test.valueformat,
   test.capturelost,
   test.hiddentimers,
+  test.cursorloan,
   test.analogclock,
   test.sparkline,
   test.rating,

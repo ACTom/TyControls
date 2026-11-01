@@ -136,6 +136,7 @@ type
     FSortRows: Boolean;               // Sorted: the root rows in key order (#124)
     FKeyOptions: TTyKeyOptions;
     FDraggingSplit: Boolean;
+    FSplitCursor: TTyCursorLoan;      // crHSplit over the key/value divider (#154)
     FImages: TCustomImageList;
     FOnValueChanged: TTyValueEditEvent;
     FOnKeyChanged: TTyValueEditEvent;      // a keyEdit rename committed
@@ -1862,7 +1863,7 @@ begin
     SetKeyColumnWidth(Round((X - ContentLeftDp) * 96 / Font.PixelsPerInch));
     Exit;
   end;
-  if OverSplit(X) then Cursor := crHSplit else Cursor := crDefault;
+  TyLendCursor(Self, FSplitCursor, OverSplit(X), crHSplit);   { #154: the own Cursor given back }
   inherited MouseMove(Shift, X, Y);
 end;
 

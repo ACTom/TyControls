@@ -720,6 +720,19 @@ function TyShownInForm(AControl: TControl): Boolean;
   part a control resolves with states of its own, which would otherwise never look disabled. }
 function TyStatesUnlessDisabled(AControl: TControl; const AStates: TTyStateSet): TTyStateSet;
 
+type
+  { #154: a cursor a control shows for a while over part of itself -- a divider, a resize
+    edge -- is lent: what Cursor held before is kept here and given back, so a Cursor the
+    application or the designer set is not lost on the next mouse move. }
+  TTyCursorLoan = record
+    Saved: TCursor;
+    Lent: Boolean;
+  end;
+
+{ AOn: AControl shows AWith, its own cursor kept in ALoan. Not AOn: it gets its own back. }
+procedure TyLendCursor(AControl: TControl; var ALoan: TTyCursorLoan; AOn: Boolean;
+  AWith: TCursor);
+
 { Shared font-size resolution for every ty control (windowed AND graphic — the label family
   each carried its own copy). Priority:
     1. the typeKey's own theme font-size (AStyle.FontSize);
@@ -2805,6 +2818,25 @@ end;
 function TyStatesUnlessDisabled(AControl: TControl; const AStates: TTyStateSet): TTyStateSet;
 begin
   if (AControl = nil) or AControl.IsEnabled then Result := AStates else Result := [tysDisabled];
+end;
+
+procedure TyLendCursor(AControl: TControl; var ALoan: TTyCursorLoan; AOn: Boolean;
+  AWith: TCursor);
+begin
+  if AOn then
+  begin
+    if not ALoan.Lent then
+    begin
+      ALoan.Saved := AControl.Cursor;
+      ALoan.Lent := True;
+    end;
+    if AControl.Cursor <> AWith then AControl.Cursor := AWith;
+  end
+  else if ALoan.Lent then
+  begin
+    ALoan.Lent := False;
+    AControl.Cursor := ALoan.Saved;
+  end;
 end;
 
 function TyShownInForm(AControl: TControl): Boolean;

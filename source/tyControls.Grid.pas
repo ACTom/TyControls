@@ -857,6 +857,7 @@ type
       那个只在正文格上有值,而列头带上根本不是格 —— 合成一个的话,
       鼠标移到列头会把正文里的 hover 一起点亮。 }
     FHoverHeaderCol:   Integer;
+    FHoverCursor:      TTyCursorLoan;   { the hover cursor, lent from Cursor (#154) }
     { 正被**按住**的列头段(-1 = 没有)。goHeaderPushedLook 的状态源。
       与 FHoverHeaderCol 分开:鼠标停在一段上和把它按下去是两回事,按下的那段
       要压过 hover 的观感。也与 FDragCol 分开:后者只在 hoDrag + coDraggable
@@ -2113,6 +2114,15 @@ type
     FOnGetCellHint: TTyGridGetCellHintEvent;
     FHintCol: Integer;
     FHintRow: Integer;
+    { #154: a cell hint borrows Hint and ShowHint; these are the grid's own, given back off the
+      hinted cells and when the mouse leaves -- they were overwritten for good. }
+    FHintLent: Boolean;
+    FOwnHint: string;
+    FOwnShowHint: Boolean;
+    FOwnParentShowHint: Boolean;
+    procedure LendCellHint(const AText: string);
+    procedure GiveHintBack;
+  private
     FRowTopsCache: TTyIntArray;
     FRowTopsValid: Boolean;
     FAggregates: TStringList;      { 列索引 -> 聚合方式序号 }
@@ -2478,6 +2488,8 @@ type
     function  HoverIsHyperlink(X, Y: Integer): Boolean; override;
     function  DoDrawCell(P: TTyPainter; ACol, ARow: Integer): Boolean; override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    { #154: the borrowed Hint and ShowHint given back. }
+    procedure MouseLeave; override;
     function  RowHeightOf(ARow: Integer): Integer; override;
     function  RowTops: TTyIntArray; override;
     procedure InvalidateRowMetrics; override;
@@ -5048,7 +5060,7 @@ begin
   else if HoverIsHyperlink(X, Y) then
     want := crHandPoint;
 
-  if Cursor <> want then Cursor := want;
+  TyLendCursor(Self, FHoverCursor, want <> crDefault, want);   { #154: the own Cursor given back }
 end;
 
 procedure TTyCustomGrid.UpdateHoverCell(X, Y: Integer);
@@ -5081,6 +5093,7 @@ end;
 procedure TTyCustomGrid.CMMouseLeave(var Msg: TLMessage);
 begin
   inherited;
+  TyLendCursor(Self, FHoverCursor, False, crDefault);
   if (FHoverCol >= 0) or (FHoverRow >= 0) or (FHoverHeaderCol >= 0) then
   begin
     FHoverCol := -1;
@@ -11489,6 +11502,14 @@ begin
   FOnDrawCell(Self, ACol, ARow, r, P, Result);
 end;
 
+procedure TTyStringGrid.MouseLeave;
+begin
+  inherited MouseLeave;
+  FHintCol := -1;
+  FHintRow := -1;
+  GiveHintBack;
+end;
+
 procedure TTyStringGrid.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   hit: TTyGridHit;
@@ -11549,8 +11570,7 @@ begin
     begin
       FHintCol := -1;
       FHintRow := -1;
-      Hint := '';
-      ShowHint := False;
+      GiveHintBack;
     end;
     Exit;
   end;
@@ -11569,8 +11589,7 @@ begin
     begin
       FHintCol := -1;
       FHintRow := -1;
-      Hint := '';
-      ShowHint := False;
+      GiveHintBack;
     end;
     Exit;
   end;
@@ -11586,8 +11605,34 @@ begin
   cmt := GetCellComment(hit.Col, hit.Row);
   if cmt <> '' then txt := cmt;
   if Assigned(FOnGetCellHint) then FOnGetCellHint(Self, hit.Col, hit.Row, txt);
-  Hint := txt;
-  ShowHint := txt <> '';
+  LendCellHint(txt);
+end;
+
+procedure TTyStringGrid.LendCellHint(const AText: string);
+begin
+  if AText = '' then
+  begin
+    GiveHintBack;   // no cell hint: the grid's own shows, as in LCL
+    Exit;
+  end;
+  if not FHintLent then
+  begin
+    FOwnHint := Hint;
+    FOwnShowHint := ShowHint;
+    FOwnParentShowHint := ParentShowHint;
+    FHintLent := True;
+  end;
+  Hint := AText;
+  ShowHint := True;
+end;
+
+procedure TTyStringGrid.GiveHintBack;
+begin
+  if not FHintLent then Exit;
+  FHintLent := False;
+  Hint := FOwnHint;
+  ShowHint := FOwnShowHint;
+  ParentShowHint := FOwnParentShowHint;   // ShowHint := took it off
 end;
 
 { goTruncCellHints:这一格的文字放得下就答空串,放不下就答**全文**。
