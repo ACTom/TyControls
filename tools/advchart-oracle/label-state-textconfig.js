@@ -67,6 +67,10 @@ const PALETTE = ['#5070dd', '#b6d634', '#505372', '#ff994d', '#0ca8df', '#ffd10a
 const HL = d => ({ type: 'highlight', seriesIndex: 0, dataIndex: d });
 const DP = d => ({ type: 'downplay', seriesIndex: 0, dataIndex: d });
 const SEL = d => ({ type: 'select', seriesIndex: 0, dataIndex: d });
+// zrender's Draggable on a label: drift(dx, dy), then its 'drag' handler
+const DRAG = (d, dx, dy) => ({ drag: d, dx, dy });
+const EHL = d => ({ type: 'highlight', seriesIndex: 0, dataType: 'edge', dataIndex: d });
+const EDP = d => ({ type: 'downplay', seriesIndex: 0, dataType: 'edge', dataIndex: d });
 
 function bar(series, root) {
   return Object.assign({ animation: false, color: PALETTE,
@@ -134,6 +138,62 @@ const CASES = [
   { id: 'scatter.hollow.stroke', note: 'an unfilled symbol bordered 1, label right; emphasis border 8: the rect grows by the width, at least 5 with no fill',
     option: scatter({ itemStyle: { color: 'none', borderColor: '#000000', borderWidth: 1 }, label: { show: true, position: 'right' },
       emphasis: { scale: false, itemStyle: { borderWidth: 8 } } }), steps: [HL(1)] },
+  // ---- R6-A2: labels a Line group or a curve carries ----
+  { id: 'graph.edge', edges: true, note: 'graph edge labels (middle); emphasis.edgeLabel position top, distance 8: on the Line group\'s box',
+    option: { animation: false, series: [{ type: 'graph', layout: 'none', edgeLabel: { show: true },
+      emphasis: { edgeLabel: { position: 'top', distance: 8 } },
+      data: [{ name: 'a', x: 100, y: 100 }, { name: 'b', x: 400, y: 300 }, { name: 'c', x: 100, y: 300 }],
+      links: [{ source: 'a', target: 'b' }, { source: 'b', target: 'c' }] }] },
+    steps: [EHL(0), EDP(0), EHL(1)] },
+  { id: 'graph.edge.symbols', edges: true, note: 'edge symbols circle / arrow, emphasis lineStyle width 6; emphasis.edgeLabel position insideTopLeft',
+    option: { animation: false, series: [{ type: 'graph', layout: 'none', edgeSymbol: ['circle', 'arrow'], edgeSymbolSize: 12,
+      edgeLabel: { show: true }, emphasis: { lineStyle: { width: 6 }, edgeLabel: { position: 'insideTopLeft' } },
+      data: [{ name: 'a', x: 100, y: 100 }, { name: 'b', x: 400, y: 300 }], links: [{ source: 'a', target: 'b' }] }] },
+    steps: [EHL(0)] },
+  { id: 'graph.edge.word', edges: true, note: "emphasis.edgeLabel position 'end' (a Line word calculateTextPosition does not know): the box's corner",
+    option: { animation: false, series: [{ type: 'graph', layout: 'none', edgeLabel: { show: true },
+      emphasis: { edgeLabel: { position: 'end' } },
+      data: [{ name: 'a', x: 100, y: 100 }, { name: 'b', x: 400, y: 300 }], links: [{ source: 'a', target: 'b' }] }] },
+    steps: [EHL(0)] },
+  { id: 'graph.edge.item', edges: true, note: "a link's own emphasis.label offset over the series' emphasis.edgeLabel position bottom",
+    option: { animation: false, series: [{ type: 'graph', layout: 'none', edgeLabel: { show: true },
+      emphasis: { edgeLabel: { position: 'bottom' } },
+      data: [{ name: 'a', x: 100, y: 100 }, { name: 'b', x: 400, y: 300 }, { name: 'c', x: 100, y: 300 }],
+      links: [{ source: 'a', target: 'b', emphasis: { label: { offset: [10, 4] } } }, { source: 'b', target: 'c' }] }] },
+    steps: [EHL(0)] },
+  { id: 'lines', note: 'lines labels (end); emphasis.label position top',
+    option: { animation: false, xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
+      series: [{ type: 'lines', coordinateSystem: 'cartesian2d', label: { show: true, formatter: 'L' }, emphasis: { label: { position: 'top' } },
+        data: [{ coords: [[1, 1], [5, 5]] }, { coords: [[6, 2], [9, 8]] }] }] }, steps: [HL(0)] },
+  { id: 'sankey.edge', edges: true, note: 'sankey edge labels; emphasis.edgeLabel position top: on the curve\'s rect',
+    option: { animation: false, series: [{ type: 'sankey', edgeLabel: { show: true }, emphasis: { edgeLabel: { position: 'top' } },
+      data: [{ name: 'a' }, { name: 'b' }, { name: 'c' }],
+      links: [{ source: 'a', target: 'b', value: 5 }, { source: 'a', target: 'c', value: 3 }] }] }, steps: [EHL(1)] },
+  { id: 'bar.word', note: "emphasis.label position 'foo' (no zrender name)",
+    option: bar({ emphasis: { label: { position: 'foo' } } }), steps: [HL(1)] },
+  { id: 'bar.layout.x', note: 'labelLayout x 100: the label at x 100; emphasis.label position bottom',
+    option: bar({ labelLayout: { x: 100 }, emphasis: { label: { position: 'bottom' } } }), steps: [HL(1)] },
+  { id: 'bar.layout.align', note: 'labelLayout align left, fontSize 16; emphasis.label position insideBottom',
+    option: bar({ labelLayout: { align: 'left', fontSize: 16 }, emphasis: { label: { position: 'insideBottom' } } }), steps: [HL(2)] },
+  { id: 'bar.layout.size', note: 'labelLayout width 40 height 20; emphasis.label position right',
+    option: bar({ labelLayout: { width: 40, height: 20 }, emphasis: { label: { position: 'right' } } }), steps: [HL(0)] },
+  { id: 'bar.layout.shift', note: 'labels on narrow bars overlapping, labelLayout moveOverlap shiftX; emphasis.label position bottom',
+    option: bar({ data: [12, 13, 12.5, 13.2], label: { show: true, position: 'top', formatter: 'value {c}' },
+      labelLayout: { moveOverlap: 'shiftX' }, emphasis: { label: { position: 'bottom' } } }), steps: [HL(1)] },
+  { id: 'bar.layout.drag', note: 'labelLayout x 100, draggable; label 1 dragged by (20, 30), then hovered: emphasis.label position bottom puts it on its bar',
+    option: bar({ labelLayout: { x: 100, draggable: true }, emphasis: { label: { position: 'bottom' } } }),
+    steps: [DRAG(1, 20, 30), HL(1), DP(1)] },
+  { id: 'bar.layout.drag.off', note: 'the same with emphasis.label offset [6, 6] alone: hovered where it was dragged, offset',
+    option: bar({ labelLayout: { x: 100, draggable: true }, emphasis: { label: { offset: [6, 6] } } }),
+    steps: [DRAG(1, 20, 30), HL(1), DP(1)] },
+  { id: 'tree.radial', note: 'radial tree; emphasis.label position top',
+    option: { animation: false, series: [{ type: 'tree', layout: 'radial', symbolSize: 14, expandAndCollapse: false,
+      data: [{ name: 'root', children: [{ name: 'A', children: [{ name: 'A1' }, { name: 'A2' }] }, { name: 'B' }, { name: 'C' }] }],
+      emphasis: { label: { position: 'top', distance: 6 } } }] }, steps: [HL(2), DP(2), HL(3)] },
+  { id: 'graph.circular', note: 'circular graph, rotateLabel; emphasis.label position inside',
+    option: { animation: false, series: [{ type: 'graph', layout: 'circular', circular: { rotateLabel: true }, symbolSize: 20,
+      label: { show: true, position: 'right' }, emphasis: { scale: false, label: { position: 'top' } },
+      data: [{ name: 'a' }, { name: 'b' }, { name: 'c' }, { name: 'd' }, { name: 'e' }], links: [] }] }, steps: [HL(1), DP(1), HL(3)] },
   // ---- the other series that lay their labels out on a host ----
   { id: 'pie.outer', note: 'pie outer labels; emphasis.label position inside',
     option: { animation: false, color: PALETTE, series: [{ type: 'pie', radius: '50%', data: [
@@ -221,9 +281,10 @@ function insideOf(t) {
   return tc.inside == null ? (typeof tc.position === 'string' && tc.position.indexOf('inside') >= 0) : !!tc.inside;
 }
 
-function readLabels(chart) {
+function readLabels(chart, edges) {
   const sm = chart.getModel().getSeriesByIndex(0);
-  const data = sm.getData();
+  // a graph's or a sankey's links: the edge data's elements
+  const data = edges ? sm.getEdgeData() : sm.getData();
   const labels = [];
   data.each(idx => {
     const t = labelOf(data.getItemGraphicEl(idx));
@@ -257,12 +318,19 @@ function runCase(c) {
     chart.setOption(clone(c.option));
     chart._onframe();
     chart.renderToSVGString();
-    const rec = { id: c.id, note: c.note, option: clone(c.option), steps: clone(c.steps || []), states: [readLabels(chart)] };
+    const rec = { id: c.id, note: c.note, option: clone(c.option), steps: clone(c.steps || []), states: [readLabels(chart, c.edges)] };
+    if (c.edges) rec.edges = true;
     for (const s of (c.steps || [])) {
-      chart.dispatchAction(clone(s));
+      if (s.drag != null) {
+        const t = labelOf(chart.getModel().getSeriesByIndex(0).getData().getItemGraphicEl(s.drag));
+        must(t && t.draggable, 'the label is draggable');
+        t.drift(s.dx, s.dy);
+        t.trigger('drag');
+      }
+      else chart.dispatchAction(clone(s));
       chart._onframe();
       chart.renderToSVGString();
-      rec.states.push(readLabels(chart));
+      rec.states.push(readLabels(chart, c.edges));
     }
     return rec;
   } finally {
@@ -290,6 +358,20 @@ function generate() {
       ok: lab('pie.outer', 1, 1).x !== lab('pie.outer', 0, 1).x && lab('pie.outer', 1, 1).align === lab('pie.outer', 0, 1).align },
     { name: "bar.select.stroke: the selected bar's border lifts its label by one", ok: Y('bar.select.stroke', 0, 1) - Y('bar.select.stroke', 1, 1) === 1 },
     { name: 'polar: hovered, still inside (#eee)', ok: lab('polar', 1, 1).inside && lab('polar', 1, 1).fill === '#eee' },
+    { name: "graph.edge: hovered, on the Line group's box, beforeUpdate's alignment kept",
+      ok: Y('graph.edge', 1, 0) < Y('graph.edge', 0, 0) - 100 && lab('graph.edge', 1, 0).align === lab('graph.edge', 0, 0).align
+        && lab('graph.edge', 1, 0).verticalAlign === lab('graph.edge', 0, 0).verticalAlign },
+    { name: "graph.edge.word: a word calculateTextPosition does not know: the box's corner", ok: X('graph.edge.word', 1, 0) < 100 },
+    { name: "bar.word: 'foo' on a bar: its rect's top-left, aligned left / top",
+      ok: lab('bar.word', 1, 1).align === 'left' && lab('bar.word', 1, 1).verticalAlign === 'top' },
+    { name: "bar.layout.x: the state position over the layout's x", ok: X('bar.layout.x', 1, 1) !== 100 && X('bar.layout.x', 0, 1) === 100 },
+    { name: "bar.layout.drag: hovered on its bar, back where it was dragged after", ok: X('bar.layout.drag', 2, 1) !== X('bar.layout.drag', 1, 1)
+      && X('bar.layout.drag', 3, 1) === X('bar.layout.drag', 1, 1) && X('bar.layout.drag', 1, 1) === 120 },
+    { name: "graph.circular: the labels turned; the emphasis position is the side's (rotateNodeLabel)",
+      ok: lab('graph.circular', 0, 0).m[1] !== hex(0) && JSON.stringify(by('graph.circular').states[0]) === JSON.stringify(by('graph.circular').states[1]) },
+    { name: 'tree.radial: hovered, moved, its turn kept', ok: X('tree.radial', 1, 2) !== X('tree.radial', 0, 2)
+      && lab('tree.radial', 1, 2).m[0] === lab('tree.radial', 0, 2).m[0] },
+    { name: "sankey.edge: hovered, on the curve's rect top", ok: lab('sankey.edge', 1, 1).verticalAlign === 'bottom' && !lab('sankey.edge', 1, 1).inside },
   ];
   if (!process.env.ORACLE_NOGUARD) for (const g of guards) must(g.ok, 'guard failed: ' + g.name);
   return { source: 'ECharts 6.1 dist: label/labelStyle.ts createTextConfig, zrender Element._applyStateObj / updateInnerText, label/LabelManager.ts',

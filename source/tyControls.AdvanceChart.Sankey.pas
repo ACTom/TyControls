@@ -1536,6 +1536,10 @@ begin
     base.OffsetXLogical := 0;
     base.OffsetYLogical := 0;
     base.Overflow := tloNone;
+    { [R6-A] the states' textConfig: [state].edgeLabel of the link, its
+      source's level, the series }
+    TyLabelReadStateCfgKeyed([ASolved.Edges[i].Item, lv, ASolved.Series],
+      ['edgeLabel', 'edgeLabel', 'edgeLabel'], base);
     Result[i] := base;
   end;
 end;

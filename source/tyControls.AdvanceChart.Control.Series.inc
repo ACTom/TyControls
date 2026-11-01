@@ -1913,6 +1913,8 @@ begin
   ASpec := LabelSpecFor(ASlot);
   own := TyLinesItemFind(raw, ['label']);
   if own is TJSONObject then ASpec := TyLabelSpecOfNode(TJSONObject(own), ANode, ASpec);
+  { [R6-A] the states' textConfig, the row's over the series' }
+  TyLabelReadStateCfg([raw.Item, ANode], ASpec);
   ASpec.Position := tlpInside;
   ASpec.OffsetXLogical := 0;
   ASpec.OffsetYLogical := 0;

@@ -4048,6 +4048,9 @@ begin
     spec.OffsetXLogical := 0;
     spec.OffsetYLogical := 0;
     spec.Overflow := tloNone;
+    { [R6-A] the states' textConfig: the link's [state].label over the
+      series' [state].edgeLabel }
+    TyLabelReadStateCfgKeyed([item, sNode], ['label', 'edgeLabel'], spec);
     AInk.EdgeLabelSpecs[i] := spec;
     AInk.EdgeLabelShow[i] := spec.Show;
     { `position || 'middle'`; `distance`, a pair or one for both (default 5) }

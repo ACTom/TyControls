@@ -342,6 +342,10 @@ function TyBuildLinesMarks(const ASolved: TTyLinesSolved; AEmptyFill: TTyChartCo
 procedure TyLinesFrameLine(var AEl: TTyChartElement; APercent: Double);
 procedure TyLinesFrameSymbol(var AEl: TTyChartElement; APercent: Double);
 procedure TyLinesFrameLabel(var AEl: TTyChartElement; APercent: Double);
+{ [R6-A] a lines row's label under a state's rotation / offset }
+function TyLinesLabelState(const AEl: TTyChartElement; AHasRot: Boolean;
+  ARot: Double; AHasOff: Boolean; AOffX, AOffY: Double;
+  out AX, AY, ARotOut, ABuX, ABuY: Double): Boolean;
 { the effect symbol where its run left it; AGone: its clip finished and the
   symbol was removed }
 procedure TyLinesFrameEffect(var AEl: TTyChartElement; const AE: TTyLinesEffect;
@@ -1792,6 +1796,54 @@ begin
     pd, AEl.Anim.G[8] * APercent, AEl.Anim.G[9] * APercent, at.X, at.Y, AEl.Anim.G[11]);
   { [spec 242] the symbol is scaled by the percent: its gradient too }
   PlaceLocalGrad(AEl, APercent, APercent, AEl.Anim.G[11], at.X, at.Y);
+end;
+
+{ [R6-A] A LINES ROW'S LABEL UNDER A STATE'S rotation / offset (where
+  AHasRot / AHasOff, else its own), at percent 1: where it is drawn, its
+  turn, and label.x / y before the offset }
+function TyLinesLabelState(const AEl: TTyChartElement; AHasRot: Boolean;
+  ARot: Double; AHasOff: Boolean; AOffX, AOffY: Double;
+  out AX, AY, ARotOut, ABuX, ABuY: Double): Boolean;
+var
+  g: TTyLinesGeom;
+  x, y, ox, oy, lr, lox, loy: Double;
+  hasRot, hasOff: Boolean;
+  ah: TTyTextAnchorH;
+  av: TTyTextAnchorV;
+begin
+  g := GeomOfG(AEl);
+  hasRot := (Length(AEl.Anim.Vals) >= 5) and (AEl.Anim.Vals[0] <> 0);
+  hasOff := (Length(AEl.Anim.Vals) >= 5) and (AEl.Anim.Vals[2] <> 0);
+  lr := 0;
+  lox := 0;
+  loy := 0;
+  if Length(AEl.Anim.Vals) >= 5 then
+  begin
+    lr := AEl.Anim.Vals[1];
+    lox := AEl.Anim.Vals[3];
+    loy := AEl.Anim.Vals[4];
+  end;
+  if AHasRot then
+  begin
+    hasRot := True;
+    lr := ARot;
+  end;
+  if AHasOff then
+  begin
+    hasOff := True;
+    lox := AOffX;
+    loy := AOffY;
+  end;
+  TyLinesLabelPlace(g, 1, TTyLinesLabelPos(Round(AEl.Anim.G[7])), AEl.Anim.G[8],
+    AEl.Anim.G[9], hasRot, lr, hasOff, lox, loy, x, y, ox, oy, ARotOut, AX, AY, ah, av);
+  ABuX := x;
+  ABuY := y;
+  if hasOff then
+  begin
+    ABuX := x - lox;
+    ABuY := y - loy;
+  end;
+  Result := not (IsNan(AX) or IsNan(AY) or IsNan(ABuX) or IsNan(ABuY));
 end;
 
 procedure TyLinesFrameLabel(var AEl: TTyChartElement; APercent: Double);

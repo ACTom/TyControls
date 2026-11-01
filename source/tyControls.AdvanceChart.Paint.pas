@@ -571,6 +571,10 @@ type
       stays while the path scales, and goes when the scale is nought
       (Path.getBoundingRect) }
     FixedHalfW, FixedInfl: Double;
+    { [R6-A] a circular graph's rotateLabel: the label turned by -RingRad
+      about its symbol's rect, on its left (RingLeft) or right }
+    RingTurn, RingLeft: Boolean;
+    RingRad: Double;
     { A POLAR BAR'S LABEL [Batch 113, C4]: the sector calculates its own
       text position (sectorLabel.ts) -- SecAnchor: one of the sector
       positions, its anchor and the alignment it implies; else a built-in
@@ -891,6 +895,11 @@ type
       array form's two numbers and whether each is a fraction, and how far
       the host's stroke grew the rect, all device px. }
     HostPlus1: Integer;
+    { [R6-A] A PIE LABEL UNDER A STATE POSITION: its slice's list index + 1
+      (0 none) and the anchor the list placed it by -- a frame places it
+      again on the slice as the frame draws it (the radius tweening) }
+    PieHostPlus1, PieTwin: Integer;
+    PieAX, PieAY, PieLX, PieLY, PieScale: Double;
     { A COMBINING ELEMENT'S CHILD in a frame: its index + 1 (0 for the
       element itself) [Batch 137] }
     UtPiece: Integer;
@@ -999,6 +1008,12 @@ type
       words under that state's position and distance (Caption.X / Y and
       the alignment) }
     Anchored: Boolean;
+    { [R6-A] A LINE'S LABEL (a graph edge's, a lines row's), laid out when
+      the state is written on the Line group's box (the line grown by the
+      state's width, its end symbols): HasPos, LabelPos / LabelAt* and
+      LabelDist (LOGICAL px, in the group's units) the position, HasOff /
+      OffX / OffY (device px) and HasRot / Rot the states' own }
+    LineBox: Boolean;
     HasPos, HasOff, HasRot: Boolean;
     OffX, OffY, Rot: Double;
   end;

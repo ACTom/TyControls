@@ -57,6 +57,11 @@ procedure TyLabelReadInk(ALabel, ASeries: TJSONObject; var ASpec: TTyLabelSpec);
   specific first (a data item, its series): getShallow, the first node
   whose key is not null; a position that is not truthy is none }
 procedure TyLabelReadStateCfg(const ANodes: array of TJSONObject; var ASpec: TTyLabelSpec);
+{ [R6-A] the same where each node names its label key -- a graph link's
+  `label` over its series' `edgeLabel` (GraphSeries' customizeGetParent), a
+  sankey's `edgeLabel' throughout }
+procedure TyLabelReadStateCfgKeyed(const ANodes: array of TJSONObject;
+  const AKeys: array of string; var ASpec: TTyLabelSpec);
 { [R6-A] whether a host option node's [state].label writes any of the four }
 function TyLabelNodeWritesStateCfg(ANode: TJSONObject): Boolean;
 
@@ -573,19 +578,26 @@ const
   cStateCfgStates: array[0..2] of string = ('emphasis', 'blur', 'select');
   cStateCfgKeys: array[0..3] of string = ('position', 'distance', 'offset', 'rotate');
 
+var
+  { the label key of each node StateCfgFind walks ('' for 'label') }
+  StateCfgKeys: array of string;
+
 { [state].label.AKey along ANodes: the first that is not null }
 function StateCfgFind(const ANodes: array of TJSONObject; const AState,
   AKey: string): TJSONData;
 var
   i: Integer;
   st: TJSONObject;
+  lk: string;
 begin
   Result := nil;
   for i := 0 to High(ANodes) do
   begin
     if ANodes[i] = nil then Continue;
+    lk := 'label';
+    if (i <= High(StateCfgKeys)) and (StateCfgKeys[i] <> '') then lk := StateCfgKeys[i];
     st := ObjOf(ANodes[i].Find(AState));
-    if st <> nil then st := ObjOf(st.Find('label'));
+    if st <> nil then st := ObjOf(st.Find(lk));
     if st = nil then Continue;
     Result := st.Find(AKey);
     if (Result <> nil) and (Result.JSONType <> jtNull) then Exit;
@@ -601,6 +613,19 @@ begin
   for k := 0 to High(cStateCfgStates) do
     for j := 0 to High(cStateCfgKeys) do
       if StateCfgFind([ANode], cStateCfgStates[k], cStateCfgKeys[j]) <> nil then Exit(True);
+end;
+
+procedure TyLabelReadStateCfgKeyed(const ANodes: array of TJSONObject;
+  const AKeys: array of string; var ASpec: TTyLabelSpec);
+var k: Integer;
+begin
+  SetLength(StateCfgKeys, Length(AKeys));
+  for k := 0 to High(AKeys) do StateCfgKeys[k] := AKeys[k];
+  try
+    TyLabelReadStateCfg(ANodes, ASpec);
+  finally
+    StateCfgKeys := nil;
+  end;
 end;
 
 procedure TyLabelReadStateCfg(const ANodes: array of TJSONObject; var ASpec: TTyLabelSpec);
@@ -642,13 +667,17 @@ begin
       s := d.AsString;
       if s = 'outside' then s := 'top';
       pos := TyLabelPositionOf(s, known);
-      { a name zrender does not know is left to the normal one, as the
-        normal label's is }
-      if known then
+      c.HasPosition := True;
+      c.Position := pos;
+      c.Outside := d.AsString = 'outside';
+      { a name zrender does not know: calculateTextPosition's switch has no
+        default -- the rect's top-left corner, aligned left / top, the array
+        form's [0, 0] }
+      if not known then
       begin
-        c.HasPosition := True;
-        c.Position := pos;
-        c.Outside := d.AsString = 'outside';
+        c.Position := tlpAt;
+        c.AtX := 0;
+        c.AtY := 0;
       end;
     end;
     d := StateCfgFind(ANodes, cStateCfgStates[k], 'distance');

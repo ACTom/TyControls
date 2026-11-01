@@ -31,6 +31,7 @@ type
     Measurer: ITyTextMeasurer;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     function List: TTyPaintList;
+    procedure Drag(AX, AY, ADX, ADY: Integer);
   end;
 
   TAdvChartLabelStateTextConfigOracleTest = class(TTestCase)
@@ -41,6 +42,8 @@ type
     FRoot, FMeasure: TJSONData;
     FBmp: TBGRABitmap;
     FBad, FCompared, FMoved, FTurned: Integer;
+    { the case reads a graph's or a sankey's links }
+    FEdges: Boolean;
     FReport, FName: string;
     procedure Miss(const AWhat: string);
     procedure Close(const AWhat: string; AGot: Double; const AHex: string);
@@ -76,6 +79,13 @@ end;
 function TLscProbe.List: TTyPaintList;
 begin
   Result := SeriesList;
+end;
+
+procedure TLscProbe.Drag(AX, AY, ADX, ADY: Integer);
+begin
+  MouseDown(mbLeft, [ssLeft], AX, AY);
+  MouseMove([ssLeft], AX + ADX, AY + ADY);
+  MouseUp(mbLeft, [], AX + ADX, AY + ADY);
 end;
 
 function FromHex(const AHex: string): Double;
@@ -202,6 +212,7 @@ begin
     if ((FChart.List.Element(i).Anim.Role = carLabel)
         or (FChart.List.Element(i).Caption.LmKind > 0))
       and (FChart.List.Element(i).Datum.SeriesIndex = 0)
+      and (FChart.List.Element(i).Datum.IsEdge = FEdges)
       and (FChart.List.Element(i).Datum.DataIndex = AD) then
     begin
       AEl := FChart.List.Element(i);
@@ -306,8 +317,13 @@ var
   id: string;
   steps, states: TJSONArray;
   k: Integer;
+  el: TTyChartElement;
 begin
   id := ACase.Strings['id'];
+  { TY_LSC_ONLY=id,id...: those cases alone (to read one case's report) }
+  if (GetEnvironmentVariable('TY_LSC_ONLY') <> '')
+    and (Pos(',' + id + ',', ',' + GetEnvironmentVariable('TY_LSC_ONLY') + ',') = 0) then Exit;
+  FEdges := ACase.Find('edges') <> nil;
   NewChart;
   FChart.Option := ACase.Objects['option'].AsJSON;
   AssertEquals(id + ': the option parses', '', FChart.OptionError);
@@ -318,7 +334,16 @@ begin
   CompareLabels(states.Arrays[0], nil);
   for k := 0 to steps.Count - 1 do
   begin
-    FChart.DispatchAction(steps.Objects[k].AsJSON);
+    { a drag: pressed in the label, moved by (dx, dy) -- zrender's drift }
+    if steps.Objects[k].Find('drag') <> nil then
+    begin
+      if Find(steps.Objects[k].Integers['drag'], el) then
+        FChart.Drag(Round((el.Shape.Bounds.Left + el.Shape.Bounds.Right) / 2),
+          Round((el.Shape.Bounds.Top + el.Shape.Bounds.Bottom) / 2),
+          steps.Objects[k].Integers['dx'], steps.Objects[k].Integers['dy']);
+    end
+    else
+      FChart.DispatchAction(steps.Objects[k].AsJSON);
     FChart.Render(FBmp.Canvas, Classes.Rect(0, 0, cW, cH), 96);
     FName := Format('%s step %d', [id, k + 1]);
     CompareLabels(states.Arrays[k + 1], states.Arrays[0]);

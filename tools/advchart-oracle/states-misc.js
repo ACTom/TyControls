@@ -1406,6 +1406,16 @@ function guards(cases) {
       && numAt(l, 'ty', 16) === numAt(l, 'ty', 450) && numAt(l, 'ty', 16) !== numAt(l, 'ty', 1600),
       l && [numAt(l, 'tx', 16), numAt(l, 'tx', 450), numAt(l, 'ty', 16), numAt(l, 'ty', 1600)].join(' '));
   }
+  {
+    const c = byId(cases, 'bar-emph-border-label-rides');
+    const l = elRow(c, 0, 1, 'label');
+    g('border-label-rides', l && numAt(l, 'ty', 16) !== numAt(l, 'ty', 150) && numAt(l, 'ty', 150) !== numAt(l, 'ty', 450),
+      l && [numAt(l, 'ty', 16), numAt(l, 'ty', 150), numAt(l, 'ty', 450)].join(' '));
+    const p = byId(cases, 'pie-emph-position-rides');
+    const q = elRow(p, 0, 1, 'label');
+    g('pie-position-rides-radius', q && numAt(q, 'tx', 16) !== numAt(q, 'tx', 150) && numAt(q, 'tx', 150) !== numAt(q, 'tx', 450),
+      q && [numAt(q, 'tx', 16), numAt(q, 'tx', 150), numAt(q, 'tx', 450)].join(' '));
+  }
   // every case comes to rest
   for (const c of cases) g('settled-' + c.id, c.clips[c.clips.length - 1] === 0, c.id + ' ' + c.clips.join(','));
   return out;
@@ -1421,6 +1431,18 @@ const R6A = [
     option: { color: [C0], xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
       series: [{ type: 'scatter', symbolSize: 20, itemStyle: { opacity: 1 }, label: { show: true, position: 'top', formatter: 'p{c}' },
         emphasis: { label: { position: 'right' } }, data: [[2, 3], [5, 6], [8, 4]] }] },
+    events: [over(0, ['item', 0, 1]), out(500)] },
+  { id: 'bar-emph-border-label-rides', labelPlace: true, note: "[R6-A] bar labels on top; emphasis border #000 at 6: "
+    + "the bar's rect grows with the border as it tweens, its label rides it up (Path.getBoundingRect). Over bar 1 at 0, out at 500",
+    option: { color: [C0], xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'bar', label: { show: true, position: 'top' },
+        emphasis: { itemStyle: { borderColor: '#000', borderWidth: 6 } }, data: [10, 20, 30] }] },
+    events: [over(0, ['item', 0, 1]), out(500)] },
+  { id: 'pie-emph-position-rides', labelPlace: true, note: "[R6-A] a pie's outer labels; emphasis.label position inside: "
+    + "the hovered label on its slice's rect, which grows with the slice's radius as it tweens. Over slice 1 at 0, out at 500",
+    option: { color: [C0, C1, '#fac858', '#ee6666'], series: [{ type: 'pie', radius: '50%',
+      emphasis: { label: { position: 'inside' } },
+      data: [{ value: 40, name: 'a' }, { value: 30, name: 'b' }, { value: 20, name: 'c' }, { value: 10, name: 'd' }] }] },
     events: [over(0, ['item', 0, 1]), out(500)] },
 ];
 
