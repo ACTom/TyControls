@@ -951,7 +951,9 @@ procedure TTySpinEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
 begin
   if not IsEnabled then Exit;
   inherited UTF8KeyPress(UTF8Key);
+  if not TyAskKeyPress(Self, UTF8Key) then Exit;   { #150: OnKeyPress before it goes in }
   InsertEditChar(UTF8Key);
+  if TyKeyPressAsked(UTF8Key) then UTF8Key := '';
   Invalidate;
 end;
 
