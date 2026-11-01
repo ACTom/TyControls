@@ -698,6 +698,16 @@ begin
         Miss(Format('%s: lineWidth %s, upstream %s', [AId, FloatToStr(AFe.Style.StrokeWidthLogical),
           FloatToStr(FromHex(sv.AsString))]), AOnce + 'lw');
     end;
+    { lineDashOffset, where it strokes }
+    sv := SampleOf(AStyle.Find('lineDashOffset'), ASample);
+    if (sv <> nil) and (sv.JSONType = jtString) then
+    begin
+      Inc(FCompared);
+      Inc(FStyleKeys);
+      if Hex(AFe.Style.DashOffsetLogical) <> sv.AsString then
+        Miss(Format('%s: lineDashOffset %g, upstream %g', [AId, AFe.Style.DashOffsetLogical,
+          FromHex(sv.AsString)]), AOnce + 'ldo');
+    end;
     { strokeOpacity, where it strokes }
     sv := SampleOf(AStyle.Find('strokeOpacity'), ASample);
     if (sv <> nil) and (sv.JSONType = jtString) then

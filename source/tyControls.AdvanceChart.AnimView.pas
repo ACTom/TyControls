@@ -9400,6 +9400,9 @@ begin
     Put('style.strokeOpacity', TyAnimNum(AEl.Style.StrokeOpacity))
   else if not AOwn then
     Put('style.strokeOpacity', TyAnimNum(1));
+  { [R6-C] the pen's phase (the prototype's 0) }
+  if (not AOwn) or (AEl.Style.DashOffsetLogical <> 0) then
+    Put('style.lineDashOffset', TyAnimNum(AEl.Style.DashOffsetLogical));
 end;
 
 { the style keys drawn over an element while their animator runs }
@@ -9480,6 +9483,8 @@ begin
     AEl.Style.HasStrokeOpacity := v.Num <> 1;
     AEl.Style.StrokeOpacity := v.Num;
   end;
+  v := P.GetAnimProp('style.lineDashOffset');
+  if v.Kind = avkNumber then AEl.Style.DashOffsetLogical := v.Num;
 end;
 
 procedure TyUtApply(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
@@ -9545,6 +9550,7 @@ begin
   AEl.Style.ShadowColor := 0;
   AEl.Style.HasFillOpacity := False;
   AEl.Style.HasStrokeOpacity := False;
+  AEl.Style.DashOffsetLogical := 0;
   UtApplyStyle(AEl, APiece);
   AEl.Anim.UtPiece := AK + 1;
 end;

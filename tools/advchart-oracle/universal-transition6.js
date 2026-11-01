@@ -209,7 +209,8 @@ function styleOf(el) {
   return { fill: colourOf(s.fill), stroke: colourOf(s.stroke), lineWidth: num(s.lineWidth), opacity: num(s.opacity),
     shadowBlur: num(s.shadowBlur), shadowOffsetX: num(s.shadowOffsetX), shadowOffsetY: num(s.shadowOffsetY),
     shadowColor: s.shadowColor == null ? null : String(s.shadowColor),
-    fillOpacity: num(s.fillOpacity), strokeOpacity: num(s.strokeOpacity) };
+    fillOpacity: num(s.fillOpacity), strokeOpacity: num(s.strokeOpacity),
+    lineDashOffset: num(s.lineDashOffset) };
 }
 const SNAP_KEYS = ['x', 'y', 'scaleX', 'scaleY', 'rotation'];
 function snapOf(el) {
@@ -557,6 +558,10 @@ function chartCases() {
     [s(cart([customS('opRect')])), s(cart([barS()]))]);
   add('style.bar-opacity-custom', 'bars into the custom rect: no own key on the old side, 0.4 and 0.6 from the start',
     [s(cart([barS()])), s(cart([customS('opRect')]))]);
+  add('style.dash-pie', 'bars with a dashed border shifted by 6 (borderDashOffset) into slices with a solid border: '
+    + 'lineDashOffset tweens to the prototype\'s 0',
+    [s(cart([barS({ itemStyle: { borderColor: '#ff994d', borderWidth: 2, borderType: 'dashed', borderDashOffset: 6 } })])),
+      s(solo(pieS({ itemStyle: { borderColor: '#ffffff', borderWidth: 1 } })))]);
   add('style.same-bar', 'the same bars (one element each): the saved old style\'s shadow and gradient tween to the new',
     [s(cart([barS({ itemStyle: Object.assign({ color: lin(['#ff0000', '#0000ff']) }, SH1) })])),
       s(cart([barS({ itemStyle: { color: lin(['#00ff00', '#ffff00']) } })]))]);
@@ -717,6 +722,7 @@ function guards(charts) {
   must(itemsOf(byId('style.bar-opacity-custom')).every(e => e.style.fillOpacity === hex(0.4) && e.style.strokeOpacity === hex(0.6)),
     'style.bar-opacity-custom: not 0.4 / 0.6 throughout');
   must(morphs(byId('style.same-bar')).length === 0, 'style.same-bar: a morph');
+  must(tweens(byId('style.dash-pie'), 'lineDashOffset').length === 4, 'style.dash-pie: lineDashOffset does not tween');
   must(tweens(byId('style.same-bar'), 'shadowBlur').length === 4, 'style.same-bar: the shadow does not tween');
   must(combs(byId('style.combine-shadow')).length === 2, 'style.combine-shadow: not two combining');
   must(combs(byId('style.combine-shadow')).every(e => e.pieces.every(p => Array.isArray(p.style.shadowBlur))),
@@ -800,7 +806,7 @@ function generate() {
       + 'and not combining, d[i] the replaced buildPath\'s PathProxy data (codes M1 L2 C3 Q4 A5 Z6 R7); comb[i] = '
       + '__isCombineMorphing, pieces = its childrenRef() in order; style = fill (a colour, or a gradient: type, x / y / x2 / y2 '
       + 'or r, global, stops [offset, colour]), stroke, lineWidth, opacity, shadowBlur, shadowOffsetX, shadowOffsetY, '
-      + 'shadowColor, fillOpacity, strokeOpacity (the prototype\'s where not own) -- a key the same at every sample written '
+      + 'shadowColor, fillOpacity, strokeOpacity, lineDashOffset (the prototype\'s where not own) -- a key the same at every sample written '
       + 'once. hits: at the samples a case names, findHover at the middle of each combining child\'s box, rounded (where the child '
       + 'contains it): whether the child is the target, the ecData its parents reach. orders: the display list\'s item paths '
       + 'and children (<id>#<k>) in order. display: every path drawn under a series view (digest, opacity, a child or not). '
