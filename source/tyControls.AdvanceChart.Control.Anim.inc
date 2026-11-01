@@ -423,6 +423,319 @@ begin
       if (t <> nil) and (t.JSONType = jtString) then typ := t.AsString;
     end;
     Result[i] := TyUtSeriesKeysOf(own, FOption.Root, typ, FOption.ComponentId('series', i));
+    AnimUtEncoded(i, Result[i]);
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.AnimUtEncoded(ASeries: Integer; var AKeys: TTyUtSeriesKeys);
+var
+  node, encObj: TJSONObject;
+  slot: Integer;
+  useSrc: Boolean;
+  src: TTyChartSource;
+  data, dims: TJSONArray;
+  st: TTyDataStore;
+
+  { a cell's value of item AItem's dimension ADim (its own data) }
+  function OwnCell(AItem: TJSONData; ADim: Integer): TJSONData;
+  var v: TJSONData;
+  begin
+    Result := nil;
+    if AItem = nil then Exit;
+    v := AItem;
+    if v is TJSONObject then v := TJSONObject(v).Find('value');
+    if v is TJSONArray then
+    begin
+      if ADim < v.Count then Result := v.Items[ADim];
+    end
+    else if ADim = 0 then
+      Result := v;
+  end;
+
+  function Cell(ARow, ADim: Integer): TJSONData;
+  begin
+    if useSrc then Result := TySourceCell(src, ARow, ADim)
+    else if (data <> nil) and (ARow < data.Count) then Result := OwnCell(data.Items[ARow], ADim)
+    else Result := nil;
+  end;
+
+  function RowCount: Integer;
+  begin
+    if useSrc then Result := TySourceRowCount(src)
+    else if data <> nil then Result := data.Count
+    else Result := 0;
+  end;
+
+  { the dimension count: the declared ones, else the first row's width }
+  function Width: Integer;
+  var v: TJSONData;
+  begin
+    Result := 0;
+    if dims <> nil then Result := dims.Count;
+    if useSrc then
+    begin
+      if src.DimCount > Result then Result := src.DimCount;
+    end
+    else if (data <> nil) and (data.Count > 0) then
+    begin
+      v := data.Items[0];
+      if v is TJSONObject then v := TJSONObject(v).Find('value');
+      if (v is TJSONArray) and (v.Count > Result) then Result := v.Count;
+    end;
+  end;
+
+  { a dimension name the series' `dimensions` declare, else its source's }
+  function DimByName(const AName: string): Integer;
+  var
+    i: Integer;
+    nm: string;
+    def, c: TJSONData;
+  begin
+    Result := -1;
+    if dims <> nil then
+    begin
+      for i := 0 to dims.Count - 1 do
+      begin
+        def := dims.Items[i];
+        nm := '';
+        if def is TJSONObject then
+        begin
+          c := TJSONObject(def).Find('name');
+          if (c <> nil) and (c.JSONType = jtString) then nm := c.AsString;
+        end
+        else if def.JSONType = jtString then nm := def.AsString;
+        if (nm <> '') and (nm = AName) then Exit(i);
+      end;
+      Exit;
+    end;
+    if useSrc then Result := TySourceDimIndexOf(src, AName);
+  end;
+
+  { encode[AKey]'s first entry as a dimension; -1 none }
+  function EncDim(const AKey: string): Integer;
+  var e: TJSONData;
+  begin
+    Result := -1;
+    if encObj = nil then Exit;
+    e := encObj.Find(AKey);
+    if e is TJSONArray then
+    begin
+      if e.Count = 0 then Exit;
+      e := e.Items[0];
+    end;
+    if e = nil then Exit;
+    case e.JSONType of
+      jtString: Result := DimByName(e.AsString);
+      jtNumber:
+        if (Frac(e.AsFloat) = 0) and (e.AsFloat >= 0) and (e.AsFloat < Width) then
+          Result := Trunc(e.AsFloat);
+    end;
+    if Result >= Width then Result := -1;
+  end;
+
+  { the type the series' `dimensions` (or its dataset's) declare ('' none) }
+  function DeclaredType(ADim: Integer): string;
+  var tp: TJSONData;
+  begin
+    Result := '';
+    if (dims <> nil) and (ADim < dims.Count) then
+    begin
+      if dims.Items[ADim] is TJSONObject then
+      begin
+        tp := TJSONObject(dims.Items[ADim]).Find('type');
+        if (tp <> nil) and (tp.JSONType = jtString) then Result := tp.AsString;
+      end;
+      Exit;
+    end;
+    if useSrc and (ADim <= High(src.Dims)) then Result := src.Dims[ADim].DimType;
+  end;
+
+  { guessOrdinal over the first five rows: the first that tells decides }
+  function GuessOrdinal(ADim: Integer): Boolean;
+  var
+    i: Integer;
+    c: TJSONData;
+    x: Double;
+  begin
+    Result := False;
+    if useSrc then Exit(TySourceDimIsOrdinal(src, ADim));
+    if data = nil then Exit;
+    for i := 0 to Min(data.Count, 5) - 1 do
+    begin
+      c := data.Items[i];
+      if c is TJSONObject then c := TJSONObject(c).Find('value');
+      if not (c is TJSONArray) then Exit;
+      if ADim >= c.Count then Continue;
+      c := c.Items[ADim];
+      case c.JSONType of
+        jtNumber, jtBoolean: Exit(False);
+        jtString:
+          begin
+            if c.AsString = '' then Exit(True);
+            x := TyParseNumberText(c.AsString);
+            if not IsNan(x) and not IsInfinite(x) then Exit(False);
+            if c.AsString <> '-' then Exit(True);
+          end;
+      end;
+    end;
+  end;
+
+  { a JSON value + '' }
+  function JsText(C: TJSONData): string;
+  begin
+    if C = nil then Exit('undefined');
+    case C.JSONType of
+      jtString: Result := C.AsString;
+      jtNumber: Result := TyJsNumberToString(C.AsFloat);
+      jtBoolean: if C.AsBoolean then Result := 'true' else Result := 'false';
+      jtNull: Result := 'null';
+    else
+      Result := C.AsJSON;
+    end;
+  end;
+
+  { parseDataValue of a cell to a number (a time one through parseDate) }
+  function Parsed(C: TJSONData; ATime: Boolean): Double;
+  var v: TTyDataValue;
+  begin
+    v := TyDataNone;
+    if C <> nil then
+      case C.JSONType of
+        jtNumber: v := TyDataNum(C.AsFloat);
+        jtString: v := TyDataText(C.AsString);
+        jtBoolean: if C.AsBoolean then v := TyDataBool(True) else v := TyDataBool(False);
+      end;
+    if ATime then Result := TyParseDataValue(v, ddtTime)
+    else Result := TyParseDataValue(v, ddtFloat);
+  end;
+
+  { the store's coordinate dimension that reads column ADim; -1 none }
+  function StoreDimOf(ADim: Integer): Integer;
+  var
+    k, col: Integer;
+    nm: string;
+    anyEnc: Boolean;
+  begin
+    Result := -1;
+    if st = nil then Exit;
+    anyEnc := False;
+    for k := 0 to st.DimCount - 1 do
+      if EncDim(st.DimName(k)) >= 0 then anyEnc := True;
+    for k := 0 to st.DimCount - 1 do
+    begin
+      nm := st.DimName(k);
+      if (nm <> 'x') and (nm <> 'y') and (nm <> 'angle') and (nm <> 'radius')
+        and (nm <> 'single') then Continue;
+      if useSrc and (slot <= High(FEncodes)) and (k <= High(FEncodes[slot].Columns)) then
+        col := FEncodes[slot].Columns[k]
+      else if anyEnc then
+        col := EncDim(nm)
+      else
+        col := k;
+      if col = ADim then Exit(k);
+    end;
+  end;
+
+  { the group string of every raw row for encode[AVisual]; False: none }
+  function Groups(const AVisual: string; out AByRaw: TTyStringArray;
+    out ADefault: string): Boolean;
+  var
+    dim, sd, r, n, ord_: Integer;
+    tp, nm: string;
+    x: Double;
+    c: TJSONData;
+  begin
+    AByRaw := nil;
+    ADefault := '';
+    dim := EncDim(AVisual);
+    Result := dim >= 0;
+    if not Result then Exit;
+    n := RowCount;
+    SetLength(AByRaw, n);
+    tp := DeclaredType(dim);
+    sd := -1;
+    if tp = '' then sd := StoreDimOf(dim);
+    if tp = '' then
+      if (sd < 0) and GuessOrdinal(dim) then tp := 'ordinal';
+    for r := 0 to n - 1 do
+    begin
+      if sd >= 0 then
+      begin
+        { THE STORE'S: an axis coordinate's value as it parsed it -- a
+          category through the axis' ordinalMeta (`categories[v] || v + ''`) }
+        x := st.GetByRaw(sd, r);
+        if (st.DimType(sd) = ddtOrdinal) and not IsNan(x) and (Frac(x) = 0)
+          and (x >= 0) and (x < st.CategoryCount(sd)) then
+        begin
+          ord_ := Trunc(x);
+          nm := st.CategoryAt(sd, ord_);
+          if nm = '' then nm := TyJsNumberToString(x);
+          AByRaw[r] := '=' + nm;
+        end
+        else
+          AByRaw[r] := '=' + TyJsNumberToString(x);
+        Continue;
+      end;
+      c := Cell(r, dim);
+      if tp = 'ordinal' then AByRaw[r] := '=' + JsText(c)
+      else if tp = 'time' then AByRaw[r] := '=' + TyJsNumberToString(Parsed(c, True))
+      else if tp = 'int' then
+      begin
+        x := Parsed(c, False);
+        { an Int32Array cell }
+        if IsNan(x) or IsInfinite(x) then x := 0
+        else
+        begin
+          x := Int(x);
+          x := x - JsFloor(x / 4294967296.0) * 4294967296.0;
+          if x >= 2147483648.0 then x := x - 4294967296.0;
+        end;
+        AByRaw[r] := '=' + TyJsNumberToString(x);
+      end
+      else
+        AByRaw[r] := '=' + TyJsNumberToString(Parsed(c, False));
+    end;
+    { a row past the data: the dimension's nothing }
+    if tp = 'ordinal' then ADefault := '=undefined'
+    else ADefault := '=NaN';
+  end;
+
+var
+  e: TJSONData;
+  byRaw: TTyStringArray;
+  def: string;
+begin
+  if FOption = nil then Exit;
+  e := FOption.ComponentAt('series', ASeries);
+  if not (e is TJSONObject) then Exit;
+  node := TJSONObject(e);
+  e := node.Find('encode');
+  if not (e is TJSONObject) then Exit;
+  encObj := TJSONObject(e);
+  if (encObj.Find('itemGroupId') = nil) and (encObj.Find('itemChildGroupId') = nil) then Exit;
+  slot := SlotOfSeries(ASeries);
+  useSrc := (slot >= 0) and (slot <= High(FSeriesDataset)) and (FSeriesDataset[slot] >= 0)
+    and (slot <= High(FSources)) and FSources[slot].Valid;
+  if useSrc then src := FSources[slot] else src := Default(TTyChartSource);
+  data := nil;
+  e := node.Find('data');
+  if e is TJSONArray then data := TJSONArray(e);
+  dims := nil;
+  e := node.Find('dimensions');
+  if e is TJSONArray then dims := TJSONArray(e);
+  st := nil;
+  if (slot >= 0) and (slot <= High(FStores)) then st := FStores[slot];
+  if Groups('itemGroupId', byRaw, def) then
+  begin
+    AKeys.GroupsByRaw := byRaw;
+    AKeys.GroupsOwnByRaw := Copy(byRaw, 0, Length(byRaw));
+    AKeys.GroupDefault := def;
+    AKeys.GroupOwnDefault := def;
+  end;
+  if Groups('itemChildGroupId', byRaw, def) then
+  begin
+    AKeys.ChildByRaw := byRaw;
+    AKeys.ChildDefault := def;
   end;
 end;
 
@@ -1177,6 +1490,8 @@ begin
     if slot <= High(FGraphEdgeKeys) then r.EdgeKeys := FGraphEdgeKeys[slot];
     { the groups of its rows [Batch 137] and their child groups [Batch 138] }
     utk := TyUtSeriesKeysOf(r.Model.Own, FOption.Root, t, FOption.ComponentId('series', si));
+    { [R6-C] an encoded group dimension as the store reads it }
+    AnimUtEncoded(si, utk);
     r.UtGroupIds := TyUtRowGroups(utk, r.Raws);
     r.UtChildGroupIds := TyUtRowChildGroups(utk, r.Raws);
     { [F3c] the model id, the groups a transition option reads, and

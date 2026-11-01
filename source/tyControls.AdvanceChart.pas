@@ -2258,6 +2258,12 @@ type
     { the series' universal transition keys now, as FAnimOldUtKeys keeps
       them [Batch 136, 137] }
     function AnimUtKeys: TTyUtSeriesKeysArray;
+    { [R6-C] the encoded group dimensions (itemGroupId, itemChildGroupId) of
+      series ASeries read as its data has them: from its dataset (either
+      layout) or its own items, through the store where the dimension is an
+      axis coordinate (a time column's parsed ms, a category's name) --
+      AKeys' groups replaced where an encode names one }
+    procedure AnimUtEncoded(ASeries: Integer; var AKeys: TTyUtSeriesKeys);
     { [F3c] the pending transition option's `to` names series ASeries
       (series:beforeupdate's __universalTransitionEnabled) }
     function AnimUtNamed(ASeries: Integer): Boolean;
