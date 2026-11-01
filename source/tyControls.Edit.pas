@@ -2388,7 +2388,9 @@ begin
     Exit;
   end;
   inherited UTF8KeyPress(UTF8Key);
+  if not TyAskKeyPress(Self, UTF8Key) then Exit;   { #150: OnKeyPress before it goes in }
   InjectKey(UTF8Key);
+  if TyKeyPressAsked(UTF8Key) then UTF8Key := '';
 end;
 
 { Insert a FULL input-method commit (Qt6 path). LCL's UTF8KeyPress caps a commit at TUTF8Char

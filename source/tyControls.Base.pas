@@ -604,6 +604,15 @@ type
 procedure TyLendCursor(AControl: TControl; var ALoan: TTyCursorLoan; AOn: Boolean;
   AWith: TCursor);
 
+{ #150: for a control that puts typed characters in itself, in UTF8KeyPress. LCL calls that
+  first and KeyPress after, so OnKeyPress came too late to stop a character (Key := #0) or
+  change it. Asked here first, the way LCL's DoKeyPress asks -- a form's key preview, then
+  OnKeyPress. False: stopped, and AUTF8Key is ''. Only a printable ASCII character is asked,
+  as LCL sends KeyPress for those; once the control has taken it, it clears AUTF8Key
+  (TyKeyPressAsked says when), so LCL does not ask again. }
+function TyAskKeyPress(AControl: TWinControl; var AUTF8Key: TUTF8Char): Boolean;
+function TyKeyPressAsked(const AUTF8Key: TUTF8Char): Boolean;
+
 { Shared font-size resolution for every ty control (windowed AND graphic — the label family
   each carried its own copy). Priority:
     1. the typeKey's own theme font-size (AStyle.FontSize);
@@ -2796,6 +2805,31 @@ end;
 function TyStatesUnlessDisabled(AControl: TControl; const AStates: TTyStateSet): TTyStateSet;
 begin
   if (AControl = nil) or AControl.IsEnabled then Result := AStates else Result := [tysDisabled];
+end;
+
+type
+  TTyKeyPressAccess = class(TWinControl);
+
+function TyKeyPressAsked(const AUTF8Key: TUTF8Char): Boolean;
+begin
+  Result := (Length(AUTF8Key) = 1) and (AUTF8Key[1] >= #32) and (AUTF8Key[1] <= #126);
+end;
+
+function TyAskKeyPress(AControl: TWinControl; var AUTF8Key: TUTF8Char): Boolean;
+var
+  m: TLMKey;
+begin
+  Result := True;
+  if not TyKeyPressAsked(AUTF8Key) then Exit;
+  FillChar(m, SizeOf(m), 0);
+  m.Msg := CN_CHAR;
+  m.CharCode := Ord(AUTF8Key[1]);
+  if TTyKeyPressAccess(AControl).DoKeyPress(m) or (m.CharCode = 0) then
+  begin
+    AUTF8Key := '';
+    Exit(False);
+  end;
+  AUTF8Key := Char(m.CharCode);
 end;
 
 procedure TyLendCursor(AControl: TControl; var ALoan: TTyCursorLoan; AOn: Boolean;

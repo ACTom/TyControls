@@ -521,6 +521,8 @@ type
     procedure DoExit; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
+    { The typing half of UTF8KeyPress, once the key events have had their say. }
+    procedure TypeKey(var UTF8Key: TUTF8Char);
     function  DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
                 MousePos: TPoint): Boolean; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState;
@@ -2511,12 +2513,22 @@ begin
 end;
 
 procedure TTyCustomDateTimePicker.UTF8KeyPress(var UTF8Key: TUTF8Char);
+begin
+  if not IsEnabled then Exit;
+  inherited UTF8KeyPress(UTF8Key);
+  if not TyAskKeyPress(Self, UTF8Key) then Exit;   { #150: OnKeyPress before it goes in }
+  try
+    TypeKey(UTF8Key);
+  finally
+    if TyKeyPressAsked(UTF8Key) then UTF8Key := '';
+  end;
+end;
+
+procedure TTyCustomDateTimePicker.TypeKey(var UTF8Key: TUTF8Char);
 var
   OldVal:   TDateTime;
   AutoAdv:  Boolean;
 begin
-  if not IsEnabled then Exit;
-  inherited UTF8KeyPress(UTF8Key);
   if FReadOnly then Exit;
   if IsInert then Exit;
   { A / P set AM / PM directly when the meridiem field is selected. Without this the

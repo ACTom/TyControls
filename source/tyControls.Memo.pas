@@ -742,6 +742,8 @@ type
     // Input handlers. Both early-Exit when not IsEnabled (v1.5 policy); when
     // disabled, KeyDown does NOT consume Key so navigation falls through.
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
+    { The typing half of UTF8KeyPress, once the key events have had their say. }
+    procedure InsertTyped(const UTF8Key: TUTF8Char);
     // Qt6: own input-method commit interceptor (custom controls otherwise get the String[7]-truncated
     // commit). No-op off Qt.
     procedure InitializeWnd; override;
@@ -5067,7 +5069,6 @@ var
   imeFull: string;
 begin
   if not IsEnabled then Exit;          // v1.5 policy: ignore input when disabled
-  if FReadOnly then Exit;            // ReadOnly: block printable typing
   { GTK3: the backend truncated this commit into a TUTF8Char on its way here. The whole
     string is still pending in the widgetset, so take it and insert THAT instead. Returns ''
     on every other widgetset and whenever nothing was truncated, so the normal path below is
@@ -5079,7 +5080,20 @@ begin
     UTF8Key := '';   // consumed: stop the truncated copy being inserted as well
     Exit;
   end;
+  { #150: OnUTF8KeyPress, then OnKeyPress, before the character goes in -- ReadOnly too: it
+    blocks the typing, not the events (both were skipped, and OnKeyPress came after). }
   inherited UTF8KeyPress(UTF8Key);
+  if not TyAskKeyPress(Self, UTF8Key) then Exit;
+  try
+    InsertTyped(UTF8Key);
+  finally
+    if TyKeyPressAsked(UTF8Key) then UTF8Key := '';
+  end;
+end;
+
+procedure TTyCustomMemo.InsertTyped(const UTF8Key: TUTF8Char);
+begin
+  if FReadOnly then Exit;            // ReadOnly: block printable typing
   // Printable codepoints only; control chars (Enter/Tab/etc.) are handled in
   // KeyDown or ignored here.
   if (UTF8Key = '') or (UTF8Key[1] < #32) then Exit;
