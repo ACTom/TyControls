@@ -135,6 +135,7 @@ uses
   test.valueformat,
   test.retiredprops,
   test.capturelost,
+  test.hiddentimers,
   test.analogclock,
   test.sparkline,
   test.rating,

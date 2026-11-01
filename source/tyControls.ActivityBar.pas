@@ -164,6 +164,9 @@ end;
 
 procedure TTyCustomActivityBar.HandleTimer(Sender: TObject);
 begin
+  { #149: hidden since the last tick, taken off its parent, or in the designer: stop. }
+  UpdateRunning;
+  if not FTimer.Enabled then Exit;
   AdvanceAnimation(FTimer.Interval);
   Invalidate;
 end;
@@ -173,7 +176,11 @@ begin
   { A graphic control paints onto its parent; "has a window to march into" means the parent
     handle is allocated. Headless render tests parent to an unshown form (no handle) -> the
     timer stays off and the bar is static, keeping exact-pixel tests stable. }
-  if FActive and (Parent <> nil) and Parent.HandleAllocated then
+  { #149: and only while it can be seen, and not in the form designer -- hidden, in a hidden
+    panel or on a hidden form, it repainted for nothing. The tick stops it (HandleTimer);
+    shown again, it is painted, and Paint starts it here. }
+  if FActive and (Parent <> nil) and Parent.HandleAllocated and IsVisible
+     and not (csDesigning in ComponentState) then
   begin
     EnsureTimer;
     FTimer.Enabled := True;

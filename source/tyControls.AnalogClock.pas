@@ -37,6 +37,7 @@ type
     procedure SetShowSeconds(const AValue: Boolean);
     procedure SetShowTicks(const AValue: Boolean);
     procedure SetRunning(const AValue: Boolean);
+    function IsTimeStored: Boolean;
     procedure EnsureTimer;
     procedure HandleTimer(Sender: TObject);
     procedure UpdateRunning;
@@ -96,7 +97,9 @@ type
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property Time;
+    { Saved only for a stopped clock (#149): a running one sets it from the system clock every
+      second, so the saved value was never used, and the form changed on every save. }
+    property Time stored IsTimeStored;
     property ShowSeconds;
     property ShowTicks;
     property Running;
@@ -158,6 +161,9 @@ end;
 
 procedure TTyCustomAnalogClock.HandleTimer(Sender: TObject);
 begin
+  { #149: hidden since the last tick, taken off its parent, or in the designer: stop. }
+  UpdateRunning;
+  if not FTimer.Enabled then Exit;
   FTime := Now;
   Invalidate;
 end;
@@ -167,7 +173,11 @@ begin
   { A graphic control paints onto its parent; "has a window to run into" means the
     parent handle is allocated. Headless render tests parent to an unshown form (no
     handle) -> the timer never runs, so Time stays put and pixels are stable. }
-  if FRunning and (Parent <> nil) and Parent.HandleAllocated then
+  { #149: and only while it can be seen, and not in the form designer -- hidden, in a hidden
+    panel or on a hidden form, it repainted for nothing. The tick stops it (HandleTimer);
+    shown again, it is painted, and Paint starts it here. }
+  if FRunning and (Parent <> nil) and Parent.HandleAllocated and IsVisible
+     and not (csDesigning in ComponentState) then
   begin
     EnsureTimer;
     FTimer.Enabled := True;
@@ -195,6 +205,11 @@ begin
   if FShowTicks = AValue then Exit;
   FShowTicks := AValue;
   Invalidate;
+end;
+
+function TTyCustomAnalogClock.IsTimeStored: Boolean;
+begin
+  Result := not FRunning;
 end;
 
 procedure TTyCustomAnalogClock.SetRunning(const AValue: Boolean);
