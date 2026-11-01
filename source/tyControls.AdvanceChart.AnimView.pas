@@ -11608,8 +11608,11 @@ begin
       else if (dx <> 0) or (dy <> 0) then MoveSymbol(pel^, dx, dy);
     end;
     { A COMBINING ELEMENT IS DRAWN AS ITS CHILDREN [Batch 137]: the first in
-      its place, the others after the list, silent (insertion indices kept);
-      a child has its own style -- the element's states are not its }
+      its place, the others after the list (insertion indices kept); a child
+      has its own style -- the element's states are not its. [R6-C] Each one
+      is hit and painted at the host's place, as Storage's childrenRef has
+      it, and names the host's datum [was: the others silent, painted after
+      everything of their z] }
     if (bp <> nil) and bp.FCombineOn and (Length(bp.FPieces) > 0) then
     begin
       for k := 1 to High(bp.FPieces) do
@@ -11617,7 +11620,7 @@ begin
         if nx >= Length(extras) then SetLength(extras, nx * 2 + 8);
         extras[nx] := pel^;
         UtPieceApply(extras[nx], bp.FPieces[k], k);
-        extras[nx].Silent := True;
+        extras[nx].Anim.PieceOf := i + 1;
         Inc(nx);
       end;
       UtPieceApply(pel^, bp.FPieces[0], 0);
@@ -11798,6 +11801,23 @@ begin
       if g.Gone then Continue;
       { [R5-I] a removed pictorial bar's bundle: it only moves its paths }
       if g.Role = 'pbundle' then Continue;
+      { [R6-C] A HOST LEAVING WHILE IT COMBINES draws its children, not
+        itself: its fade is the host's opacity, which no child reads -- they
+        go on morphing with their own style until the host is removed
+        [was: the host's own path, fading] }
+      if g.FCombineOn and (Length(g.FPieces) > 0) then
+      begin
+        for k := 0 to High(g.FPieces) do
+        begin
+          el := g.FGhost;
+          UtPieceApply(el, g.FPieces[k], k);
+          { nothing leaving is hit }
+          el.Silent := True;
+          el.Caption.Text := '';
+          ADest.Add(el);
+        end;
+        Continue;
+      end;
       ApplyGhost(el, g);
       { [R5-I] a removed pictorial bar's path, or one shrinking in a kept
         column: where its own move (and a removed bar's bundle's) has got

@@ -897,6 +897,11 @@ type
     { A COMBINING ELEMENT'S CHILD in a frame: its index + 1 (0 for the
       element itself) [Batch 137] }
     UtPiece: Integer;
+    { [R6-C] A CHILD ADDED AFTER THE FRAME'S LIST: its host's insertion index
+      + 1 (0, the zero value, for any other element). It paints and is hit
+      at the host's place (Storage puts childrenRef where the host would
+      be), and a hit on it names the host }
+    PieceOf: Integer;
     { A LABEL LabelManager never fades: its host set disableLabelAnimation
       (a treemap's breadcrumb) [F3a] }
     NoFade: Boolean;
@@ -1806,6 +1811,7 @@ begin
 end;
 
 function TTyPaintList.Less(A, B: Integer): Boolean;
+var pa, pb: Integer;
 begin
   { [R5-A] the layer first: zrender paints each zlevel's canvas over the
     lower ones }
@@ -1817,6 +1823,16 @@ begin
     Exit(FItems[A].ZFrac < FItems[B].ZFrac);
   if FItems[A].Z2 <> FItems[B].Z2 then
     Exit(FItems[A].Z2 < FItems[B].Z2);
+  { [R6-C] a combining host's child added after the list sorts at its
+    host's place, after the host and the children before it }
+  if (FItems[A].Anim.PieceOf > 0) or (FItems[B].Anim.PieceOf > 0) then
+  begin
+    pa := A;
+    pb := B;
+    if FItems[A].Anim.PieceOf > 0 then pa := FItems[A].Anim.PieceOf - 1;
+    if FItems[B].Anim.PieceOf > 0 then pb := FItems[B].Anim.PieceOf - 1;
+    if pa <> pb then Exit(pa < pb);
+  end;
   { The insertion index makes the order TOTAL.
 
     Note honestly that it is REDUNDANT today: MergeSortOrder is stable (its merge
