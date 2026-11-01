@@ -124,6 +124,7 @@ uses
   test.levelmeter,
   test.dial,
   test.valueformat,
+  test.capturelost,
   test.analogclock,
   test.sparkline,
   test.rating,

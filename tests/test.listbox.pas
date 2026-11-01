@@ -87,7 +87,7 @@ end;
 
 procedure TScrollBarAccess.CallMouseMove(X, Y: Integer);
 begin
-  MouseMove([], X, Y);
+  MouseMove([ssLeft], X, Y);   // the button is held: a move without it ends the drag (#147)
 end;
 
 procedure TScrollBarAccess.CallMouseUp(Btn: TMouseButton; X, Y: Integer);

@@ -67,6 +67,9 @@ type
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    { #147: the mouse capture taken away mid-drag ends the drag. }
+    procedure CaptureChanged; override;
+    procedure EndDragLost;
     procedure MouseLeave; override;
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean; override;
@@ -611,6 +614,8 @@ var
 begin
   if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
+  { #147: no button held -- the button-up went elsewhere (see CaptureChanged). }
+  if FDragging and not (ssLeft in Shift) then EndDragLost;
   if FDragging then
   begin
     if FOrientation = toVertical then DragTo(Y) else DragTo(X);
@@ -635,6 +640,21 @@ begin
     FDragging := False;
     Invalidate;
   end;
+end;
+
+procedure TTyTrackBar.CaptureChanged;
+begin
+  inherited CaptureChanged;
+  { #147: the capture taken away mid-drag -- a modal dialog opened from OnChange, a switch to
+    another window, another control taking it: the button-up goes elsewhere, so the drag ends
+    here. LCL lets go of the capture just before MouseUp too, which ends a drag the same way. }
+  if FDragging then EndDragLost;
+end;
+
+procedure TTyTrackBar.EndDragLost;
+begin
+  FDragging := False;
+  Invalidate;
 end;
 
 procedure TTyTrackBar.MouseLeave;

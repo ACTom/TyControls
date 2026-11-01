@@ -58,6 +58,8 @@ type
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    { #147: the mouse capture taken away mid-drag ends the drag. }
+    procedure CaptureChanged; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     { Where the focus goes after a click on the bar: see the implementation (#55). }
     procedure FocusAfterClick;
@@ -1001,8 +1003,23 @@ procedure TTyScrollBar.MouseMove(Shift: TShiftState; X, Y: Integer);
 begin
   if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
+  { #147: no button held -- the button-up went elsewhere (see CaptureChanged). }
+  if FDragging and not (ssLeft in Shift) then
+  begin
+    EndThumbDrag;
+    if HandleAllocated then MouseCapture := False;
+  end;
   if FDragging then
     DragThumbTo(PosAlong(X, Y));
+end;
+
+procedure TTyScrollBar.CaptureChanged;
+begin
+  inherited CaptureChanged;
+  { #147: the capture taken away mid-drag -- a modal dialog opened from OnChange, a switch to
+    another window, another control taking it: the button-up goes elsewhere, so the drag ends
+    here. LCL lets go of the capture just before MouseUp too, which ends a drag the same way. }
+  if FDragging then EndThumbDrag;   { as MouseUp: the position reached, scEndScroll }
 end;
 
 procedure TTyScrollBar.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
