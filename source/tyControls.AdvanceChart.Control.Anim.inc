@@ -842,8 +842,33 @@ begin
     if si < 0 then Continue;
     { A SERIES THE LEGEND SWITCHED OFF drew nothing: switched back on it
       enters, its view having kept no data (BarView._clear nulls _data)
-      [Batch 96] }
-    if FBindings[slot].Hidden then Continue;
+      [Batch 96]. [R6-C] The universal transition's store keeps it all the
+      same (ecModel.getSeries()), its rows with no element }
+    if FBindings[slot].Hidden then
+    begin
+      if si > High(FAnimPrev.Series) then SetLength(FAnimPrev.Series, si + 1);
+      r := Default(TTyChartAnimSeries);
+      r.UtStored := True;
+      r.SeriesType := FBindings[slot].SeriesType;
+      if (slot <= High(FStores)) and (FStores[slot] <> nil) then
+        AnimRowKeys(FStores[slot], r.Keys, r.Raws);
+      if (si <= High(FAnimOldUtKeys)) and (FAnimOldUtKeys[si].Key <> '') then
+      begin
+        r.UtKeyList := FAnimOldUtKeys[si].List;
+        r.UtKey := FAnimOldUtKeys[si].Key;
+        r.UtKeyItems := FAnimOldUtKeys[si].Items;
+        r.UtDivide := FAnimOldUtKeys[si].Divide;
+        r.UtGroupIds := TyUtRowGroups(FAnimOldUtKeys[si], r.Raws);
+        r.UtChildGroupIds := TyUtRowChildGroups(FAnimOldUtKeys[si], r.Raws);
+        r.UtModelId := FAnimOldUtKeys[si].ModelId;
+        r.UtGroupOwn := TyUtRowGroupsOwn(FAnimOldUtKeys[si], r.Raws);
+        r.UtDataGroup := FAnimOldUtKeys[si].DataGroup;
+      end
+      else
+        r.UtStored := False;
+      FAnimPrev.Series[si] := r;
+      Continue;
+    end;
     if si > High(FAnimPrev.Series) then SetLength(FAnimPrev.Series, si + 1);
     r := Default(TTyChartAnimSeries);
     r.Present := True;
@@ -920,11 +945,10 @@ begin
         park[si] := FAnimMarkPark[si];
       if not park[si].Present or (Length(park[si].Elements) = 0) then Continue;
       if si > High(FAnimPrev.Series) then SetLength(FAnimPrev.Series, si + 1);
-      r := Default(TTyChartAnimSeries);
-      r.MarksOnly := True;
-      r.ViewKey := park[si].ViewKey;
-      r.SeriesType := park[si].SeriesType;
-      FAnimPrev.Series[si] := r;
+      { [R6-C] over what the store keeps of it }
+      FAnimPrev.Series[si].MarksOnly := True;
+      FAnimPrev.Series[si].ViewKey := park[si].ViewKey;
+      FAnimPrev.Series[si].SeriesType := park[si].SeriesType;
       for k := 0 to High(park[si].Elements) do
       begin
         SetLength(FAnimPrev.Elements, n + 1);

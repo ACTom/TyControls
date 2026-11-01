@@ -415,6 +415,12 @@ type
       its series index are its markers as they were last drawn, which a
       marker of the series shown again updates from }
     MarksOnly: Boolean;
+    { [R6-C] AN OLD SERIES THE LEGEND HAS SWITCHED OFF, in the universal
+      transition's store all the same: upstream saves ecModel.getSeries(),
+      the filtered ones too, and their data has no element (restoreData made
+      it anew) -- Present is False, the keys and the groups are its rows',
+      and an item of a new series paired with one of them fades in }
+    UtStored: Boolean;
     Model: TTyAnimModel;
     { isAnimationEnabled: `animation` and the threshold }
     Enabled: Boolean;
@@ -11222,7 +11228,8 @@ var
   begin
     Result := -1;
     for k2 := 0 to High(APrev.Series) do
-      if APrev.Series[k2].Present and (Length(APrev.Series[k2].Keys) < cUtDataLimit)
+      if (APrev.Series[k2].Present or APrev.Series[k2].UtStored)
+        and (Length(APrev.Series[k2].Keys) < cUtDataLimit)
         and (APrev.Series[k2].UtKey = AKey) then
         Result := k2;
   end;
@@ -11234,7 +11241,8 @@ var
     Result := -1;
     AListKey := '';
     for k2 := 0 to High(APrev.Series) do
-      if APrev.Series[k2].Present and (Length(APrev.Series[k2].Keys) < cUtDataLimit)
+      if (APrev.Series[k2].Present or APrev.Series[k2].UtStored)
+        and (Length(APrev.Series[k2].Keys) < cUtDataLimit)
         and APrev.Series[k2].UtKeyList then
         for m := 0 to High(APrev.Series[k2].UtKeyItems) do
           if APrev.Series[k2].UtKeyItems[m] = AKey then
@@ -11300,7 +11308,8 @@ var
     begin
       hit := -1;
       for k2 := 0 to High(APrev.Series) do
-        if APrev.Series[k2].Present and (Length(APrev.Series[k2].Keys) < cUtDataLimit)
+        if (APrev.Series[k2].Present or APrev.Series[k2].UtStored)
+          and (Length(APrev.Series[k2].Keys) < cUtDataLimit)
           and TyUtFinderMatches(AItem.From[f], k2, APrev.Series[k2].UtModelId) then
         begin
           hit := k2;
@@ -11327,7 +11336,7 @@ var
       SetLength(toG, Length(toG) + 1);
       { globalStore.oldDataGroupIds[idx]: the old series' at the new one's
         index -- none there is undefined }
-      if (hit <= High(APrev.Series)) and APrev.Series[hit].Present then
+      if (hit <= High(APrev.Series)) and (APrev.Series[hit].Present or APrev.Series[hit].UtStored) then
         toG[High(toG)] := TyUtRowGroupsWith(ASeries[hit].UtGroupOwn, APrev.Series[hit].UtDataGroup)
       else
         toG[High(toG)] := TyUtRowGroupsWith(ASeries[hit].UtGroupOwn, '');
