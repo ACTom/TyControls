@@ -164,6 +164,7 @@ var
 begin
   FFilter := AValue;
   FUpdating := True;
+  BeginQuietChange;   { #145: writing Filter fires no event, as the documentation says }
   try
     { TyFsParseFilter is crash-safe: '' -> empty array; a malformed / odd-segment
       string yields a spec whose Patterns is ''. }
@@ -184,6 +185,7 @@ begin
     else
       ItemIndex := -1;
   finally
+    EndQuietChange;
     FUpdating := False;
   end;
   { A new filter string is a new active mask even though FilterIndex may not have
@@ -219,6 +221,17 @@ begin
   if AValue = FFilterIndex then
     Exit;
   FFilterIndex := AValue;
+  { #145: read from the form file, it is the saved state, not a change: no event at all. }
+  if csLoading in ComponentState then
+  begin
+    BeginQuietChange;
+    try
+      if Length(FSpecs) > 0 then SelectModel(FFilterIndex - 1);
+    finally
+      EndQuietChange;
+    end;
+    Exit;
+  end;
   { Setting ItemIndex goes through SelectItem (fires base OnChange only, never DoSelect),
     so OnFilterChange is not double-fired here. }
   if Length(FSpecs) > 0 then

@@ -846,7 +846,10 @@ begin
     for i := 1 to Length(s) do
       if (not IsLiteralAtSpec(FSpec, i)) and (s[i] = FSpaceChar) then s[i] := AValue;
     FSpaceChar := AValue;
-    Commit(s, caret);
+    { #145: the program's change, not a keystroke: the by-code writer, so it leaves Modified
+      alone (Commit is the keystroke path and marked it). }
+    SetTextInternal(s, True);
+    CaretPos := caret;
     Exit;
   end;
   raw := RawText;             // read the value under the OLD placeholder

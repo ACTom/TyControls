@@ -320,6 +320,7 @@ begin
     Exit;
   FDirectory := p2;
   FUpdating := True;
+  BeginQuietChange;   { #145: writing Directory fires no event, as the documentation says }
   try
     FPlaces := TyLookInPlaces(p2);
     Items.Clear;
@@ -337,6 +338,7 @@ begin
       end;
     ItemIndex := sel;
   finally
+    EndQuietChange;
     FUpdating := False;
   end;
   Invalidate;

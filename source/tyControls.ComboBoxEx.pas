@@ -731,7 +731,15 @@ procedure TTyComboBoxEx.Loaded;
 begin
   inherited Loaded;
   if (FLoadedItemIndex >= 0) and (FLoadedItemIndex < Items.Count) and (ItemIndex < 0) then
-    ItemIndex := FLoadedItemIndex;
+  begin
+    { #145: the form file's selection, not a change of the user's -- no OnChange. }
+    BeginQuietChange;
+    try
+      ItemIndex := FLoadedItemIndex;
+    finally
+      EndQuietChange;
+    end;
+  end;
 end;
 
 procedure TTyComboBoxEx.AddItem(const S: string; AImageIndex: Integer);

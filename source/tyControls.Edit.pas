@@ -672,6 +672,10 @@ begin
   // end. (FSuspendUndo gates undo-pushes for the same composite ops; OnChange
   // reuses the same "inside a composite" signal so it fires exactly once.)
   if FSuspendUndo then Exit;
+  { #145: not while the form is read or torn down, as LCL's TextChanged asks
+    (customedit.inc:614): the Text a form file holds, a numeric edit reformatting on the blur
+    its destruction causes, a mask's SpaceChar fired OnChange and marked the edit Modified. }
+  if ComponentState * [csLoading, csDestroying] <> [] then Exit;
   { Dirty-flag bookkeeping sits HERE, at the one point every completed edit passes through, and
     reads the by-code flag exactly as LCL's Change does (include/customedit.inc:613-616). Inside
     a composite op the inner mutators exit above, so a paste-over-selection dirties once. }
