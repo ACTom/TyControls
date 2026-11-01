@@ -6407,6 +6407,17 @@ begin
   end;
   TyShapeScaleAbout(AEl.Shape, AEl.Anim.VX, AEl.Anim.VY, fx, fy);
   TyShapeMove(AEl.Shape, AX - AEl.Anim.VX, AY - AEl.Anim.VY);
+  { [R6-B] a map's global gradient (in the list's px: the path's own units
+    through its transform at rest) carried with the group }
+  if (AEl.Anim.GeoView <> 0) and (AEl.Style.FillGradient.Kind <> cgkNone)
+    and AEl.Style.FillGradient.Global then
+  begin
+    AEl.Style.FillGradient.X := AX + (AEl.Style.FillGradient.X - AEl.Anim.VX) * fx;
+    AEl.Style.FillGradient.Y := AY + (AEl.Style.FillGradient.Y - AEl.Anim.VY) * fy;
+    AEl.Style.FillGradient.X2 := AX + (AEl.Style.FillGradient.X2 - AEl.Anim.VX) * fx;
+    AEl.Style.FillGradient.Y2 := AY + (AEl.Style.FillGradient.Y2 - AEl.Anim.VY) * fy;
+    AEl.Style.FillGradient.R := AEl.Style.FillGradient.R * f;
+  end;
   { [R6-B] an SVG map's stroke that is not strokeNoScale: its width, dash
     and phase in the map's own units }
   if AEl.Anim.VStroke then

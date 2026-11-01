@@ -1142,6 +1142,31 @@ begin
   Result[3] := 1; Result[4] := 0; Result[5] := 0;
 end;
 
+{ [R6-B] A GLOBAL GRADIENT WRITTEN FOR A MAP'S PATH: zrender takes its
+  numbers in the path's own units and the canvas draws them under the
+  path's global transform (the roam group's, and an SVG's own) -- here in
+  the list's px: the points times AScale (the own units' list px per one)
+  through M, the radius times AScale and sqrt|det M| (a circle for canvas'
+  ellipse, as an SVG's own gradient). A gradient on the element's box is
+  left as it is. [Was: the option's numbers as list px, the roam never
+  applied.] }
+function GradThrough(const AG: TTyChartGradient; const M: TTyMat2D;
+  AScale: Double): TTyChartGradient;
+var x, y: Double;
+begin
+  Result := AG;
+  if (AG.Kind = cgkNone) or not AG.Global then Exit;
+  x := AG.X * AScale;
+  y := AG.Y * AScale;
+  Result.X := M[0] * x + M[2] * y + M[4];
+  Result.Y := M[1] * x + M[3] * y + M[5];
+  x := AG.X2 * AScale;
+  y := AG.Y2 * AScale;
+  Result.X2 := M[0] * x + M[2] * y + M[4];
+  Result.Y2 := M[1] * x + M[3] * y + M[5];
+  Result.R := AG.R * AScale * Sqrt(Abs(M[0] * M[3] - M[2] * M[1]));
+end;
+
 { Transformable.setLocalTransform, which decomposeTransform ends in }
 function TyGeoDecompose(const M: TTyMat2D): TTyGeoTrans;
 var sx, sy, rot, shear: Double;
@@ -6165,7 +6190,9 @@ var
             el.Style.FillColor := WithAlpha(c.Color[stkFill], look.FillOpacity);
             if not st.Merged.Has[stkFill] then
             begin
-              if look.HasOptGrad then el.Style.FillGradient := look.OptGrad
+              { [R6-B] the option's global gradient in the shape's own
+                units, under its global transform (as its own SVG one) }
+              if look.HasOptGrad then el.Style.FillGradient := GradThrough(look.OptGrad, m, 1)
               else if look.FillGrad >= 0 then el.Style.FillGradient := SvgGradient(look.FillGrad, ANode, m);
             end;
             { [R2-F] the series' decal over the fill (a state's style keeps it:
@@ -6510,7 +6537,15 @@ begin
           el.Style.HasFill := TyStHasColour(c, stkFill);
           el.Style.FillColor := c.Color[stkFill];
           if el.Style.HasFill and not it.Host.Merged.Has[stkFill] then
-            el.Style.FillGradient := p.Paint.FillGradient;
+          begin
+            { [R6-B] a global one in the region's own units (after the raw
+              transform: CSS px, the list's px over APPI / 96), under the
+              roam }
+            if dr.HasTrans then
+              el.Style.FillGradient := GradThrough(p.Paint.FillGradient, dr.Trans, scale)
+            else
+              el.Style.FillGradient := GradThrough(p.Paint.FillGradient, MatIdentity, scale);
+          end;
           { [R2-F] MapDraw's applyOptionStyleForRegion: the data's decal on
             the normal style, which no state's style takes away }
           if AGeo.Data.Active and (g <= High(AGeo.Data.Groups)) then

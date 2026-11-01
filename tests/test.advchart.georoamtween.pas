@@ -52,6 +52,7 @@ type
     procedure RenderNow;
     function Drawn: TTyPaintList;
     procedure CheckGroup(const AName: string; AKey: Integer; AGroup: TJSONObject);
+    procedure CheckGrad(const AWhat: string; const AEl: TTyChartElement; ARec: TJSONObject);
     procedure CheckRegions(const AName: string; AKey: Integer; AEls: TJSONArray);
     procedure CheckEl(const AName: string; AKey: Integer; AEl: TJSONObject);
     procedure CheckSample(ARec: TJSONObject);
@@ -65,6 +66,7 @@ type
     procedure TestAGeoJsonRegionKeepsItsScreenWidthThroughTheTween;
     procedure TestTheSvgContentRidesTheTweenOfASwitchedMap;
     procedure TestAViewMadeAnewIsSetAtOnce;
+    procedure TestAGlobalGradientRidesTheRoam;
   end;
 
   { [R6-B] what the oracle cannot say: the same at another density }
@@ -79,6 +81,7 @@ type
     procedure TearDown; override;
   published
     procedure TestAnImageRidesTheTweenAtAnyDensity;
+    procedure TestAGlobalGradientScalesWithTheDensity;
   end;
 
 implementation
@@ -298,6 +301,47 @@ begin
   end;
 end;
 
+{ [R6-B] A GLOBAL GRADIENT FILL: zrender's numbers are in the element's own
+  units and the canvas draws them under its global transform -- the port's
+  in the list's px: the points through gm, a radius times sqrt|det gm| (the
+  port's circle for canvas' ellipse, as an SVG's own gradient at rest) }
+procedure TAdvChartGeoRoamTweenOracleTest.CheckGrad(const AWhat: string;
+  const AEl: TTyChartElement; ARec: TJSONObject);
+var
+  gr: TJSONObject;
+  v, gm: TJSONArray;
+  g: array[0..5] of Double;
+  k: Integer;
+  x, y: Double;
+begin
+  if IsNull(ARec.Find('grad')) then Exit;
+  gr := ARec.Objects['grad'];
+  if not gr.Booleans['global'] then Exit;
+  v := gr.Arrays['v'];
+  gm := ARec.Arrays['gm'];
+  for k := 0 to 5 do g[k] := WantNum(gm.Items[k]);
+  Inc(FCompared);
+  if (AEl.Style.FillGradient.Kind = cgkNone) or not AEl.Style.FillGradient.Global then
+  begin
+    Bad(AWhat + ': no global gradient');
+    Exit;
+  end;
+  x := WantNum(v.Items[0]);
+  y := WantNum(v.Items[1]);
+  NearVal(AWhat + ' gradient x', AEl.Style.FillGradient.X, g[0] * x + g[2] * y + g[4], 1e-6);
+  NearVal(AWhat + ' gradient y', AEl.Style.FillGradient.Y, g[1] * x + g[3] * y + g[5], 1e-6);
+  if gr.Strings['type'] = 'radial' then
+    NearVal(AWhat + ' gradient r', AEl.Style.FillGradient.R,
+      WantNum(v.Items[4]) * Sqrt(Abs(g[0] * g[3] - g[2] * g[1])), 1e-6)
+  else
+  begin
+    x := WantNum(v.Items[2]);
+    y := WantNum(v.Items[3]);
+    NearVal(AWhat + ' gradient x2', AEl.Style.FillGradient.X2, g[0] * x + g[2] * y + g[4], 1e-6);
+    NearVal(AWhat + ' gradient y2', AEl.Style.FillGradient.Y2, g[1] * x + g[3] * y + g[5], 1e-6);
+  end;
+end;
+
 { A GEOJSON MAP'S REGIONS: the region paths the port draws for the view, in
   its order -- the regions group's (a region's group per name, in the order
   of first appearance, its compound paths in order) -- against upstream's
@@ -346,6 +390,7 @@ begin
     e := els[i];
     r := ups[i];
     what := AName + ' ' + r.Strings['key'];
+    CheckGrad(what, e, r);
     b := TyShapeBounds(e.Shape);
     if not IsNull(r.Find('bb')) then
     begin
@@ -429,12 +474,17 @@ begin
   e := hit;
   if Copy(key, 1, 2) = 's:' then
   begin
-    b := TyShapeBounds(e.Shape);
-    bb := AEl.Arrays['bb'];
-    NearVal(what + ' left', b.Left, WantNum(bb.Items[0]), 1e-6);
-    NearVal(what + ' top', b.Top, WantNum(bb.Items[1]), 1e-6);
-    NearVal(what + ' right', b.Right, WantNum(bb.Items[2]), 1e-6);
-    NearVal(what + ' bottom', b.Bottom, WantNum(bb.Items[3]), 1e-6);
+    CheckGrad(what, e, AEl);
+    { a circle's box is not its points' (none recorded) }
+    if not IsNull(AEl.Find('bb')) then
+    begin
+      b := TyShapeBounds(e.Shape);
+      bb := AEl.Arrays['bb'];
+      NearVal(what + ' left', b.Left, WantNum(bb.Items[0]), 1e-6);
+      NearVal(what + ' top', b.Top, WantNum(bb.Items[1]), 1e-6);
+      NearVal(what + ' right', b.Right, WantNum(bb.Items[2]), 1e-6);
+      NearVal(what + ' bottom', b.Bottom, WantNum(bb.Items[3]), 1e-6);
+    end;
     NearVal(what + ' stroke', e.Style.StrokeWidthLogical, WantNum(AEl.Find('sw')), 1e-9);
     if not IsNull(AEl.Find('dash')) then
     begin
@@ -598,6 +648,11 @@ begin
   RunCases(['gj-to-svg', 'gj-to-svg-midway', 'gj-to-svg-flip'], 800);
 end;
 
+procedure TAdvChartGeoRoamTweenOracleTest.TestAGlobalGradientRidesTheRoam;
+begin
+  RunCases(['gj-grad', 'gj-to-svgu'], 200);
+end;
+
 procedure TAdvChartGeoRoamTweenOracleTest.TestAViewMadeAnewIsSetAtOnce;
 begin
   RunCases(['gj-hide-svg', 'map-legend-gone'], 150);
@@ -704,6 +759,46 @@ begin
     end;
     AssertEquals(Format('%d dpi: the image is drawn once', [ppi]), 1, found);
   end;
+end;
+
+{ A GEOJSON REGION'S GLOBAL GRADIENT AT REST UNDER A ROAM: its numbers are
+  the region's own units -- CSS px after the raw transform, the list's px
+  times APPI / 96 -- through the roam: at 144 dpi, where the region is drawn
+  one and a half times as large, so is the gradient }
+procedure TAdvChartGeoRoamTweenTest.TestAGlobalGradientScalesWithTheDensity;
+const
+  cOpt = '{"geo":{"map":"r6hGj","zoom":2,"center":[3,4],"itemStyle":{"areaColor":' +
+    '{"type":"linear","x":10,"y":20,"x2":300,"y2":40,"global":true,' +
+    '"colorStops":[{"offset":0,"color":"#f00"},{"offset":1,"color":"#00f"}]}}}}';
+var
+  ppi, i, k: Integer;
+  l: TTyPaintList;
+  e: TTyChartElement;
+  got: array[0..1] of array[0..7] of Double;
+  b: TTyRectF;
+begin
+  for k := 0 to 1 do
+  begin
+    if k = 0 then ppi := 96 else ppi := 144;
+    FChart.AnimationMode := camOff;
+    FChart.SetOption(cOpt, True);
+    RenderAt(ppi);
+    l := FChart.List;
+    i := 0;
+    while (i < l.Count) and not ((l.Element(i).Style.FillGradient.Kind <> cgkNone)
+      and l.Element(i).Style.FillGradient.Global) do Inc(i);
+    AssertTrue(Format('%d dpi: the region has its global gradient', [ppi]), i < l.Count);
+    e := l.Element(i);
+    b := TyShapeBounds(e.Shape);
+    got[k][0] := b.Left; got[k][1] := b.Top; got[k][2] := b.Right; got[k][3] := b.Bottom;
+    got[k][4] := e.Style.FillGradient.X; got[k][5] := e.Style.FillGradient.Y;
+    got[k][6] := e.Style.FillGradient.X2; got[k][7] := e.Style.FillGradient.Y2;
+  end;
+  for i := 0 to 7 do
+    AssertEquals(Format('number %d at 144 dpi is 1.5 times its 96 dpi one', [i]),
+      got[0][i] * 1.5, got[1][i], 1e-6);
+  { and at 96 dpi it is the option's through the roam: zoom 2 }
+  AssertTrue('the roam carries it', Abs((got[0][6] - got[0][4]) - 2 * 290) < 1e-6);
 end;
 
 initialization

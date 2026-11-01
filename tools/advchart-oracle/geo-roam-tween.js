@@ -193,7 +193,22 @@ const SVG_TURN = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://ww
   </g>
   <text x="150" y="95" font-size="10" fill="#660000" stroke="#007700" stroke-width="0.4" transform="rotate(-10 150 95)">Up</text>
 </svg>`;
-const MAPS = [{ name: 'r6gj', text: GJ, svg: false }, { name: 'r6svg', text: SVG_TURN, svg: true }];
+// [R6-B gradients] an SVG map with its own userSpaceOnUse gradients (global:
+// in the element's own units, under its transform) and a named rect the
+// option paints with a global gradient, all under the same turn and skew
+const SVG_GRAD = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100" viewBox="0 0 200 100">
+  <defs>
+    <linearGradient id="gu" gradientUnits="userSpaceOnUse" x1="20" y1="0" x2="120" y2="10"><stop offset="0" stop-color="#ff0000"/><stop offset="1" stop-color="#0000ff"/></linearGradient>
+    <radialGradient id="gr" gradientUnits="userSpaceOnUse" cx="150" cy="50" r="30"><stop offset="0" stop-color="#ffff00"/><stop offset="1" stop-color="#00ff00"/></radialGradient>
+  </defs>
+  <g transform="rotate(20 100 50) skewX(15)">
+    <rect x="20" y="20" width="100" height="40" fill="url(#gu)" stroke="#003300" stroke-width="1"/>
+    <circle cx="150" cy="50" r="25" fill="url(#gr)" stroke="#000044" stroke-width="1"/>
+    <rect name="N" x="40" y="65" width="60" height="25" fill="#cccccc" stroke="#777777" stroke-width="1"/>
+  </g>
+</svg>`;
+const MAPS = [{ name: 'r6gj', text: GJ, svg: false }, { name: 'r6svg', text: SVG_TURN, svg: true },
+  { name: 'r6svgu', text: SVG_GRAD, svg: true }];
 function registerMaps() {
   for (const m of MAPS) {
     if (m.svg) echarts.registerMap(m.name, { svg: m.text });
@@ -275,6 +290,12 @@ function elRec(el, key) {
     r.fs = hex(parseFloat(px[1]) * d);
   }
   if (el.type === 'image') r.img = [s.x || 0, s.y || 0, s.width, s.height].map(hex);
+  // [R6-B gradients] a gradient fill as zrender holds it: global ones are in
+  // the element's own units (the canvas draws them under gm)
+  const f = s.fill;
+  if (f && typeof f === 'object' && f.colorStops) {
+    r.grad = { type: String(f.type), global: !!f.global, v: [f.x, f.y, f.x2, f.y2, f.r].map(hx) };
+  }
   return r;
 }
 function drawRec(md, rec, prefix, resType) {
@@ -388,6 +409,22 @@ add('map-legend-gone', "a map series on the GeoJSON map: the legend hides it (Ma
     { t: T1 + 20, do: 'action', action: { type: 'legendSelect', name: 'm' } }, ...after([21], T1),
     { t: T1 + 100, do: 'merge', option: { series: [{ zoom: 2, center: [100, 50] }] } }, ...after([100, 101, 500], T1)]);
 
+// [R6-B gradients]
+const GLIN = { type: 'linear', x: 0, y: 0, x2: 300, y2: 40, global: true,
+  colorStops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000ff' }] };
+const GRAD = { type: 'radial', x: 200, y: 150, r: 80, global: true,
+  colorStops: [{ offset: 0, color: '#ffff00' }, { offset: 1, color: '#00ff00' }] };
+add('gj-grad', "a GeoJSON geo at zoom 2 whose areaColor is a global linear gradient, region B's a global radial one: the gradient is in the region path's own units (after the raw transform), the canvas draws it under the roam group -- at rest already through zoom 2; a merge writes zoom 3 and the gradient tweens with the group",
+  Object.assign({ animation: true, geo: { map: 'r6gj', roam: true, zoom: 2, center: [10, 8], itemStyle: { areaColor: GLIN, borderColor: '#223344', borderWidth: 1 },
+    regions: [{ name: 'B', itemStyle: { areaColor: GRAD } }] } }, LIN),
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { geo: { zoom: 3, center: [12, 6] } } }, ...after([0, 1, 250, 500, 999, 1000], T1)]);
+add('gj-to-svgu', "a GeoJSON geo switched to the SVG map with its own userSpaceOnUse gradients and a named rect painted with a global gradient by the option, zoom 2: the group tweens and every global gradient rides it (under gm, through the content's own turn and skew)",
+  Object.assign({ animation: true, geo: { map: 'r6gj', roam: true,
+    regions: [{ name: 'N', itemStyle: { areaColor: GLIN, borderColor: '#550055', borderWidth: 1 } }] } }, LIN),
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { geo: { map: 'r6svgu', zoom: 2, center: [100, 50] } } }, ...after([0, 1, 250, 500, 999, 1000], T1)]);
+
 // ---------------------------------------------------------------------------
 // running
 // ---------------------------------------------------------------------------
@@ -483,6 +520,18 @@ function guards(out) {
     const s = cs('gj-to-svg-midway').events.filter(q => q.do === 'sample' && q.t === T1 + 300);
     return s.length === 2 && s[1].rec['geo0/group'].scaleX === s[0].rec['geo0/group'].scaleX
       && s[1].rec['geo0/group'].n === 1;
+  })());
+  // [R6-B gradients]
+  guard('a global gradient rides gm: GeoJSON regions and the switched SVG', (() => {
+    const a = el('gj-grad', T1 - 1, 'geo0', 'r:A:0');
+    const b = el('gj-grad', T1 - 1, 'geo0', 'r:B:0');
+    const s = el('gj-to-svgu', T1 + 500, 'geo0', 's:#003300');
+    const c = el('gj-to-svgu', T1 + 500, 'geo0', 's:#000044');
+    const nn = el('gj-to-svgu', T1 + 500, 'geo0', 's:#550055');
+    return a && a.grad && a.grad.global && a.grad.type === 'linear' && n(a.gm[0]) === 2
+      && b && b.grad && b.grad.type === 'radial' && s && s.grad && s.grad.global
+      && c && c.grad && c.grad.type === 'radial' && c.grad.global && nn && nn.grad && nn.grad.global
+      && n(s.gm[2]) !== 0 && rec('gj-to-svgu', T1 + 500, 'geo0/group').n === 1;
   })());
   return g;
 }
