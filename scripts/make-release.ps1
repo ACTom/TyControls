@@ -162,10 +162,10 @@ if ($Opm) {
   $json = $json.Replace('@VERSION@', $lpkVersion)
   $utf8 = New-Object System.Text.UTF8Encoding($false)
   [IO.File]::WriteAllText((Join-Path $opmDir 'TyControls.json'), $json, $utf8)
-  { Rewritten whole from the template's package list, not patched in place: a package added
-    since the last release (tycontrols_db in 4.0) is offered as an update the moment the release
-    that contains it is out -- and not before, since OPM reads this file from main and an entry
-    ahead of its release would point at a zip that does not have the package. }
+  # Rewritten whole from the template's package list, not patched in place: a package added
+  # since the last release (tycontrols_db in 4.0) is offered as an update the moment the release
+  # that contains it is out -- and not before, since OPM reads this file from main and an entry
+  # ahead of its release would point at a zip that does not have the package.
   $upd = Join-Path $root 'update_TyControls.json'
   $names = @([regex]::Matches($json, '"Name"\s*:\s*"([^"]+\.lpk)"') | ForEach-Object { $_.Groups[1].Value })
   if ($names.Count -eq 0) { throw 'the OPM template names no package' }
