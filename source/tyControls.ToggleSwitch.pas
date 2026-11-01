@@ -2,8 +2,9 @@ unit tyControls.ToggleSwitch;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType, ExtCtrls,
-  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Animation;
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages, ExtCtrls,
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Animation,
+  tyControls.Accel;
 
 { Pure knob-X geometry (device pixels). Progress is clamped to [0,1]:
     OffX = AMarginDev (knob at left margin)
@@ -63,6 +64,11 @@ type
     procedure Invalidate; override;
     procedure Paint; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { #142: the caption's underlined letter toggles it, as a check box's does; '&' was drawn
+      as is. }
+    function DialogChar(var Message: TLMKey): Boolean; override;
+    { The caption as drawn: '&' marks taken out. }
+    function DisplayCaption: string;
     { #151: Space acts on its key-up, once -- held down, auto-repeat included, it
       acted on every key-down. The focus leaving with the key down cancels it. }
     procedure KeyUp(var Key: Word; Shift: TShiftState); override;
@@ -141,6 +147,7 @@ begin
   FKnobAnim.Easing := teEaseOutCubic;
   Height := TyDensityHeight(ActiveController, 24);   { classic 24 / modern --control-height }
   Width := MulDiv(Height, 44, 24);                   { keep the 44:24 pill aspect at any density }
+  TyAccelRegister(Self);   // repaint when Alt shows the underline
 end;
 
 destructor TTyToggleSwitch.Destroy;
@@ -148,7 +155,26 @@ begin
   // FTimer is owned by Self (would be freed by DestroyComponents), but free it
   // explicitly first so the OnTimer callback can never fire mid-teardown.
   FreeAndNil(FTimer);
+  TyAccelUnregister(Self);
   inherited Destroy;
+end;
+
+function TTyToggleSwitch.DisplayCaption: string;
+var
+  mp: Integer;
+begin
+  TyParseMnemonic(FCaption, Result, mp);
+end;
+
+function TTyToggleSwitch.DialogChar(var Message: TLMKey): Boolean;
+begin
+  if IsEnabled and TyShownInForm(Self) and TyIsAccelKey(Message, FCaption) then
+  begin
+    if CanFocus then SetFocus;
+    Click;
+    Exit(True);
+  end;
+  Result := inherited DialogChar(Message);
 end;
 
 function TTyToggleSwitch.GetStyleTypeKey: string;
@@ -248,7 +274,7 @@ begin
     AHeight := sz.cy;
     // 空标题时 RenderTo 一个字都不画,所以宽度是 0,不是某个占位字符串的宽度。
     if FCaption <> '' then
-      AWidth := P.MeasureText(FCaption, S.FontName, fs, S.FontWeight).cx;
+      AWidth := P.MeasureText(DisplayCaption, S.FontName, fs, S.FontWeight).cx;
     P.EndPaint;   // nil canvas -> 不 blit,只释放度量位图
   finally
     P.Free;
@@ -411,6 +437,8 @@ var
   SwitchW, Gap: Integer;
   KnobRect: TRect;
   KnobFill: TTyFill;
+  dispCap: string;
+  mp: Integer;
 begin
   P := TTyPainter.Create;
   try
@@ -501,8 +529,9 @@ begin
       FillSharpBackdrop(P, Rect(R.Right, FullR.Top, FullR.Right, FullR.Bottom));
       Gap := P.Scale(TyCheckBoxGap);
       CaptionRect := Rect(R.Right + Gap, FullR.Top, FullR.Right, FullR.Bottom);
-      P.DrawText(CaptionRect, FCaption, S.FontName, ResolveFontSize(S),
-        S.FontWeight, S.TextColor, taLeftJustify, tlCenter, True);
+      TyParseMnemonic(FCaption, dispCap, mp);
+      P.DrawText(CaptionRect, dispCap, S.FontName, ResolveFontSize(S),
+        S.FontWeight, S.TextColor, taLeftJustify, tlCenter, True, TyAccelGatePos(mp));
     end;
 
     P.EndPaint;

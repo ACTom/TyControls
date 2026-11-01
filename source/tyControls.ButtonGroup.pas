@@ -2,7 +2,7 @@ unit tyControls.ButtonGroup;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Accel;
 type
   { TTyButtonGroup — a horizontal SEGMENTED button bar: N adjacent cells, each a
@@ -34,6 +34,8 @@ type
       Multi-select: toggles that segment (always fires OnSelectionChange on a valid
       segment). A hit outside any segment is a no-op. Exposed to tests as a seam. }
     procedure SelectAt(AX: Integer);
+    { What a click on segment seg does: select it, or toggle it in MultiSelect. }
+    procedure SelectSegment(seg: Integer);
     { The widest item caption and the reference line height, in DEVICE px at APPI, measured
       with AStyle's font. Mnemonic markers are stripped first — they are drawn as an underline,
       not as a character, so measuring them would over-reserve. }
@@ -77,6 +79,8 @@ type
     procedure Invalidate; override;
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    { #142: the underlined letter of a segment picks it, as a click does. }
+    function DialogChar(var Message: TLMKey): Boolean; override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
   public
@@ -332,11 +336,28 @@ begin
 end;
 
 procedure TTyButtonGroup.SelectAt(AX: Integer);
-var
-  seg: Integer;
 begin
-  seg := TySegmentAt(AX, Width, FItems.Count);
-  if seg < 0 then Exit;
+  SelectSegment(TySegmentAt(AX, Width, FItems.Count));
+end;
+
+function TTyButtonGroup.DialogChar(var Message: TLMKey): Boolean;
+var
+  i: Integer;
+begin
+  if IsEnabled and TyShownInForm(Self) then
+    for i := 0 to FItems.Count - 1 do
+      if TyIsAccelKey(Message, FItems[i]) then
+      begin
+        if CanFocus then SetFocus;
+        SelectSegment(i);
+        Exit(True);
+      end;
+  Result := inherited DialogChar(Message);
+end;
+
+procedure TTyButtonGroup.SelectSegment(seg: Integer);
+begin
+  if (seg < 0) or (seg >= FItems.Count) then Exit;
   if FMultiSelect then
   begin
     EnsureSelectedLen;
