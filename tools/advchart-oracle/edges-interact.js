@@ -18,6 +18,9 @@ Upstream's own answers for fix batch R5-G, the interaction part (spec section
                    dispatched action's update runs the brush's visual stage,
                    so a brushselected event comes; the events in order
                    (brushselected, updated)
+  api-brush        the same fold dispatched from the API
+                   (treeExpandAndCollapse, no click): its update runs the
+                   brush's visual stage too -- the events in order
 
   node tools/advchart-oracle/edges-interact.js
 
@@ -114,6 +117,9 @@ add('gesture-brush', 'gb-treemap', 'a click that zooms a treemap', { animation: 
 add('gesture-brush', 'gb-tree', 'a click that collapses a tree node', { animation: false,
   brush: {},
   series: [{ type: 'tree', symbolSize: 14, initialTreeDepth: -1, data: [{ name: 'r', children: clone(hier) }] }] }, { pick: 'tree' });
+add('api-brush', 'ab-tree', 'treeExpandAndCollapse dispatched from the API folds node A', { animation: false,
+  brush: {},
+  series: [{ type: 'tree', symbolSize: 14, initialTreeDepth: -1, data: [{ name: 'r', children: clone(hier) }] }] }, { pick: 'A' });
 
 function seriesOf(chart, type) {
   let r = null;
@@ -214,6 +220,18 @@ const RUN = {
     fire(chart, 'click', pt[0], pt[1]);
     frame(chart);
     return { click: pt, events: ev };
+  },
+  'api-brush': (chart, c) => {
+    const d = seriesOf(chart, 'tree').getData();
+    let di = -1;
+    d.each(i => { if (di < 0 && d.getName(i) === c.pick) di = i; });
+    must(di >= 0, 'no node ' + c.pick);
+    const ev = [];
+    chart.on('brushselected', () => ev.push('brushselected'));
+    chart.on('updated', () => ev.push('updated'));
+    chart.dispatchAction({ type: 'treeExpandAndCollapse', seriesIndex: 0, dataIndex: di });
+    frame(chart);
+    return { dataIndex: di, events: ev };
   }
 };
 
@@ -247,6 +265,7 @@ function guards(out) {
   guard('a lineX selects none', byId('pb-linex').selected.every(s => s.dataIndex.length === 0));
   for (const id of ['gb-sunburst', 'gb-treemap', 'gb-tree'])
     guard(id + ' brings a brushselected', byId(id).events.indexOf('brushselected') >= 0);
+  guard('the fold from the API brings one too', byId('ab-tree').events.filter(e => e === 'brushselected').length === 1);
   return g;
 }
 

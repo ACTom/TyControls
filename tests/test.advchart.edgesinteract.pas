@@ -8,7 +8,8 @@ unit test.advchart.edgesinteract;
   group's own box); what a global brush area selects among bars on a polar
   (a rect or a polygon every one, a lineX none); and that a click which
   drills a sunburst, zooms a treemap or folds a tree brings a brushselected
-  event. The replay drives the control's own pointer and actions. }
+  event, and so does the same fold dispatched from the API (TreeToggle, no
+  click). The replay drives the control's own pointer and actions. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -51,6 +52,7 @@ type
     procedure TestASelfRectTriggerIsTheGroupsOwnBox;
     procedure TestABrushSelectsPolarBarsAsUpstream;
     procedure TestADrillingClickRunsTheBrush;
+    procedure TestAFoldFromTheApiRunsTheBrush;
   end;
 
 implementation
@@ -333,6 +335,28 @@ begin
       Bad(Format('%d brushselected upstream, %d here', [n, FChart.BrushSel]));
   end;
   Finish('the drilling clicks');
+end;
+
+{ treeExpandAndCollapse dispatched with no click: TreeToggle is that
+  action's update with its payload, so the brush's visual stage runs }
+procedure TAdvChartEdgesInteractOracleTest.TestAFoldFromTheApiRunsTheBrush;
+var
+  c: TJSONObject;
+  k, n: Integer;
+begin
+  c := CaseOf('ab-tree');
+  Load(c);
+  FChart.ChartOn('brushselected', @FChart.OnBrush);
+  FChart.BrushSel := 0;
+  AssertTrue(FWhere + ' the fold', FChart.TreeToggle(0, c.Integers['dataIndex']));
+  RenderNow;
+  n := 0;
+  for k := 0 to c.Arrays['events'].Count - 1 do
+    if c.Arrays['events'].Strings[k] = 'brushselected' then Inc(n);
+  Inc(FCompared);
+  if FChart.BrushSel <> n then
+    Bad(Format('%d brushselected upstream, %d here', [n, FChart.BrushSel]));
+  Finish('the fold from the API');
 end;
 
 initialization
