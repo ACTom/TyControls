@@ -660,7 +660,7 @@ implementation
 // Rounded popup corners use the CROSS-PLATFORM LCLIntf SetWindowRgn/CreateRoundRectRgn (the
 // win32/gtk2/qt widgetsets all implement them) — no Windows unit needed. (Rect()/Point() call
 // sites remain qualified Types.* — harmless now that the Windows POINT=TPOINT shadow is gone.)
-uses Math, Themes, LCLVersion, BGRABitmap, BGRABitmapTypes;
+uses Math, Themes, LCLVersion, BGRABitmap, BGRABitmapTypes, tyControls.Popup;
 
 type
   { Reaches TMenuItem's protected InitiateActions / DoDrawItem / DoMeasureItem. Those three
@@ -1792,15 +1792,12 @@ function TTyMenuPopup.ComputeBounds(const AAnchor: TRect;
 var
   L, T: Integer;
   wa: TRect;
-  mon: TMonitor;
 begin
   // Clamp/flip against the WORK AREA of the monitor the anchor sits on, NOT the global virtual
   // desktop. With multiple monitors (GTK2 reports positions in the global coordinate space), comparing
   // a global anchor.Y against a single Screen.Height mis-flipped a low menu upward and could place the
   // popup on the wrong monitor. The anchor's-monitor work area fixes both.
-  wa := Types.Rect(0, 0, Screen.Width, Screen.Height);   // fallback (headless / no monitor info)
-  mon := Screen.MonitorFromPoint(Types.Point((AAnchor.Left + AAnchor.Right) div 2, AAnchor.Top));
-  if mon <> nil then wa := mon.WorkareaRect;
+  wa := TyPopupWorkArea(AAnchor);   // #148: the one place every pop-up asks (primary when none)
 
   { MIRRORING: a cascade grows toward the reading end, so a mirrored submenu opens to the
     LEFT of its parent row and flips right only when it would run off the screen -- the same
