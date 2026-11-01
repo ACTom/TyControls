@@ -2740,6 +2740,9 @@ function TTyPopupMenu.ResolveRightToLeft: Boolean;
 var
   c: TComponent;
 begin
+  { #153: a BiDiMode set on the menu is the menu's (setting one turns ParentBiDiMode off, as
+    on a control). Left to its parent, it reads the control it was raised on. }
+  if not ParentBiDiMode then Exit(IsRightToLeft);
   c := PopupComponent;
   if not (c is TControl) then c := Owner;
   Result := (c is TControl) and TControl(c).IsRightToLeft;

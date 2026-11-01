@@ -252,11 +252,11 @@ begin
     ShadowRect := Rect(ContentRect.Left + dx, ContentRect.Top + dy,
       ContentRect.Right + dx, ContentRect.Bottom + dy);
     P.DrawText(ShadowRect, Caption, S.FontName, fontSize, S.FontWeight,
-      FShadowColor, FAlignment, FLayout, False);
+      FShadowColor, BidiFlipAlignment(FAlignment, IsRightToLeft), FLayout, False);   // #153
 
     // 2) main pass: caption at the normal position, in the theme text colour.
     P.DrawText(ContentRect, Caption, S.FontName, fontSize, S.FontWeight,
-      S.TextColor, FAlignment, FLayout, False);
+      S.TextColor, BidiFlipAlignment(FAlignment, IsRightToLeft), FLayout, False);
 
     P.EndPaint;
   finally

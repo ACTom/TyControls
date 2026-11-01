@@ -2,7 +2,7 @@ unit tyControls.FontComboBox;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Graphics, Forms,
+  Classes, SysUtils, Types, Graphics, Forms, Controls,
   tyControls.Types, tyControls.Painter, tyControls.StyleModel, tyControls.Base,
   tyControls.ListBox, tyControls.ComboBox;
 
@@ -10,7 +10,9 @@ uses
   padding; AFontSize is the caller's resolved size. Shared by the font combo's popup list
   and TTyFontListBox. }
 procedure TyDrawFontRow(P: TTyPainter; const ARect: TRect; const AFontName: string;
-  const AStyle: TTyStyleSet; AFontSize: Integer);
+  const AStyle: TTyStyleSet; AFontSize: Integer; ARightToLeft: Boolean = False);
+{ #153: ARightToLeft -- the row's RtlRowLayout -- right-aligns the name, the leading padding
+  on the right. }
 
 type
   { The drop-down list for TTyFontComboBox: each row is drawn IN ITS OWN font (the row's
@@ -70,13 +72,20 @@ begin
 end;
 
 procedure TyDrawFontRow(P: TTyPainter; const ARect: TRect; const AFontName: string;
-  const AStyle: TTyStyleSet; AFontSize: Integer);
+  const AStyle: TTyStyleSet; AFontSize: Integer; ARightToLeft: Boolean);
 begin
-  P.DrawText(
-    Rect(ARect.Left + P.Scale(AStyle.Padding.Left), ARect.Top,
-         ARect.Right - P.Scale(AStyle.Padding.Right), ARect.Bottom),
-    AFontName, AFontName, AFontSize, AStyle.FontWeight, AStyle.TextColor,
-    taLeftJustify, tlCenter, True);
+  if ARightToLeft then
+    P.DrawText(
+      Rect(ARect.Left + P.Scale(AStyle.Padding.Right), ARect.Top,
+           ARect.Right - P.Scale(AStyle.Padding.Left), ARect.Bottom),
+      AFontName, AFontName, AFontSize, AStyle.FontWeight, AStyle.TextColor,
+      taRightJustify, tlCenter, True)
+  else
+    P.DrawText(
+      Rect(ARect.Left + P.Scale(AStyle.Padding.Left), ARect.Top,
+           ARect.Right - P.Scale(AStyle.Padding.Right), ARect.Bottom),
+      AFontName, AFontName, AFontSize, AStyle.FontWeight, AStyle.TextColor,
+      taLeftJustify, tlCenter, True);
 end;
 
 { TTyFontPopupList }
@@ -91,7 +100,7 @@ begin
     inherited from TTyComboPopupList. }
   if TyComboCollectRowOwnerDraw(Self, ARowRect, AIndex) then Exit;
   // Font name = the row's own text -> draw it in that very family (WYSIWYG).
-  TyDrawFontRow(P, ARowRect, Items[AIndex], AStyle, ResolveFontSize(AStyle));
+  TyDrawFontRow(P, ARowRect, Items[AIndex], AStyle, ResolveFontSize(AStyle), RtlRowLayout);   // #153
 end;
 
 { TTyFontComboBox }
@@ -138,7 +147,8 @@ procedure TTyFontComboBox.PaintFieldContent(P: TTyPainter; const ATextRect: TRec
 begin
   if (ItemIndex >= 0) and (ItemIndex < Items.Count) then
     P.DrawText(ATextRect, Items[ItemIndex], Items[ItemIndex], ResolveFontSize(AStyle),
-      AStyle.FontWeight, AStyle.TextColor, taLeftJustify, tlCenter, True)
+      AStyle.FontWeight, AStyle.TextColor, BidiFlipAlignment(taLeftJustify, IsRightToLeft),
+      tlCenter, True)   // #153
   else
     inherited PaintFieldContent(P, ATextRect, AStyle);
 end;

@@ -152,6 +152,16 @@ does **not** move to the right edge. That is correct, and it is asserted by
   | `TTyCustomGrid`, `TTyDrawGrid`, `TTyStringGrid` | the whole column axis: column 0 sits against the **right** edge and the columns pack leftwards; the row-header gutter and its row numbers move to the right; frozen columns pin to the right and a `FixedColsRight` band moves to the left; the horizontal bar's `Position = Min` is the right end; a resize grip is a column's **left** edge and dragging it left widens the column; header captions, cell text, the sort triangle, the filter funnel, the tree chevron and its indent, rating stars, the ellipsis button, the comment mark, the pick-list arrow, the progress fill and the fill handle all change ends; `←`/`→` follow the eye while `Home`/`End` stay logical. **Every hit test follows the paint out of the same function**, so a click lands in the cell that was drawn under it. See `docs/controls/grid.md` for what does *not* move |
   | `TTyListView` and `TTyShellListView` | in report mode the whole column axis: column 0 sits against the **right** edge, the header cells and the grid rules follow it, a resize grip is a column's **left** edge and dragging it left widens the column, the sort triangle and any column icon move to each cell's reading start, and the row's check box and icon move with them while the caption steps aside. In the four flow styles (icon, small icon, tile, list) the cells tile from the **right**, and a `lvsList` column packs its first track against the right edge; grouped layouts reflect with them. Marquee selection follows the cells. `←`/`→` follow the eye — `→` steps to the item drawn to its right, i.e. the *earlier* one — while `Home`/`End`/`PageUp`/`PageDown` stay logical |
   | `TTyTreeView` and `TTyShellTreeView` | the column axis exactly as the list view's, plus the chrome inside the main cell: the indent grows **leftwards** from the cell's right edge, and the expander, check box, icon and caption follow it in that order. The **connecting tree lines move with the indent** — ancestor guides, the elbow and its stub all come out of one function, because a tree whose nodes mirror and whose lines do not is worse than one that does neither. The inline editor lands on the caption rather than across the chrome. `←`/`→` **swap**: `←` expands a node and `→` collapses it, because the children are drawn towards the left |
+  | `TTyComboBox` and its descendants | the chevron takes the **left** edge and answers there, the field text reads to the right edge, an editable field's editor moves with it, and the drop-down hangs from the anchor's right edge with its rows read right to left. The advanced and font combos mirror their field too; the colour box and `TTyComboBoxEx` keep their swatch or image before the text inside the text zone |
+  | `TTyCascader`, `TTyTreeSelect` | the chevron takes the **left** edge, the value reads to the right edge, and the drop-down hangs from the anchor's right edge (the cascader's columns inside it keep their left-to-right order) |
+  | `TTyDropDownButton`, `TTyMenuButton` | the arrow zone takes the **left** edge and the click answers there; the menu drops from the button's right edge |
+  | `TTyAdvancedListBox`, `TTyFontListBox`, `TTyOfficeListBox` | the rows as the list box's: the image goes to the right end, the text reads to the right edge, an Office header too |
+  | `TTyExPanel` | the header: the chevron goes to the right end and a closed one points left, the caption reads to the right edge |
+  | `TTyCard` | the title reads to the right edge |
+  | `TTyPaintPanel` | the caption (what `OnPaintSurface` draws is the application's and is not mirrored) |
+  | `TTyGlowLabel`, `TTyShadowLabel` | the caption, as `TTyLabel`'s |
+  | `TTyHtmlLabel` | each line runs from the right edge, and a link answers where it is drawn |
+  | `TTyAlert` | the status glyph goes to the right, the text reads to the right edge, and the close button takes the **left** end and answers there |
   | `TTyDateTimePicker` | the whole field: the button column (chevron or spin arrows) takes the **left** edge, the text box takes what is left, the check box moves to the text box's reading start at its **right**, and the drop-down calendar hangs from the anchor's right. The spin halves do **not** turn over — up/down is an axis the reading direction does not reach. `←`/`→` **swap**, because they step between *fields* (year → month → day) and not between characters; `Home`/`End` stay logical. All four slot groups and both hit tests come out of one `TyDateTimeRects` record, reflected once at the end, so the paint and the click cannot take different sides. The digits themselves are not reordered — see below |
 
   **The vertical scroll bar moving to the left edge is the loudest signal a
@@ -214,12 +224,14 @@ does **not** move to the right edge. That is correct, and it is asserted by
   documentation can give instead — the same call §6.3 of the scoping document makes
   for `Divider.LeftIndent` and `Columns[].Left`.
 
-  A **menu takes its direction from its host**, not from itself: a `TPopupMenu` is
-  a component with no `BiDiMode`, and the popup window is a `TForm.CreateNew` of
-  ours that inherits nothing. `TTyMenuBar` hands its own `IsRightToLeft` down;
-  `TTyPopupMenu` reads the control the menu was raised on (LCL records it in
-  `PopupComponent`), falling back to `Owner`. The direction then propagates the
-  whole way down a submenu cascade.
+  A **menu takes its direction from its host** unless it is given one. LCL's `TMenu`
+  publishes `BiDiMode` and `ParentBiDiMode`; the popup window is a `TForm.CreateNew`
+  of ours that inherits nothing. `TTyMenuBar` hands its own `IsRightToLeft` down.
+  With `ParentBiDiMode` on (the default), `TTyPopupMenu` reads the control the menu
+  was raised on (LCL records it in `PopupComponent`), falling back to `Owner`; set
+  the menu's own `BiDiMode`, which turns `ParentBiDiMode` off as it does on a
+  control, and the menu reads that. The direction then propagates the whole way down
+  a submenu cascade.
 
   **A shared drop-down takes its alignment edge from its host.** `TyPopupRect` grew an
   `ARightToLeft` argument that moves which edge of the popup meets the anchor — right
@@ -251,18 +263,18 @@ does **not** move to the right edge. That is correct, and it is asserted by
     **left** — the *reordering* inside a line is right (see the entry on
     bidirectional carets below), but the block itself does not move to the right
     edge and the scroll bar does not change sides;
-  - a `TTyDropDownButton` keeps its arrow zone on the **right**, a
-    `TTyButtonGroup` keeps its segments in left-to-right order, and `TTyRibbon`
+  - a `TTyButtonGroup` keeps its segments in left-to-right order, and `TTyRibbon`
     keeps its whole tab band left-to-right even though it *is* a
-    `TTyCustomTabStrip` — all three deliberately, because each reads a click's x
+    `TTyCustomTabStrip` — both deliberately, because each reads a click's x
     back through a hit test its paint would have moved away from, and that is the
     "drawn on the right, answers on the left" defect this library has already
     shipped three times. The ribbon declines in one line
     (`TTyRibbon.HeaderRightToLeft`); its File tab, collapse chevron, KeyTip chips
     and two `X >= HeaderLeftInset` gestures all have to move in the same commit
-    that deletes it. All three are pinned by `tests/test.rtl.pas`
+    that deletes it. Both are pinned by `tests/test.rtl.pas`
     (`TRtlExclusionTest`), which asserts paint and hit test still agree, so
-    mirroring either one alone turns red.
+    mirroring either one alone turns red. (`TTyDropDownButton` was the third; its
+    arrow and its hit test now change sides together, and the same test pins that.)
 
   Two things inside a mirrored grid also decline, for the same reason and pinned
   the same way. Its **vertical scroll bar stays on the right edge**: the grid

@@ -274,7 +274,20 @@ var
     nil outside the IDE. Callers gate on csDesigning themselves. }
   TyDesignerRefreshValuesProc: procedure = nil;
 
+{ #153: AR reflected across a box AWidth wide whose left edge is 0 -- the one move that
+  mirrors a slot already laid out for reading order. Paint and hit test reflect the same
+  finished layout, so they cannot disagree. An empty rect is returned as it is. }
+function TyMirrorRectX(const AR: TRect; AWidth: Integer): TRect;
+
 implementation
+
+function TyMirrorRectX(const AR: TRect; AWidth: Integer): TRect;
+begin
+  Result := AR;
+  if AR.Right <= AR.Left then Exit;
+  Result.Left := AWidth - AR.Right;
+  Result.Right := AWidth - AR.Left;
+end;
 
 function TyRGB(R, G, B: Byte): TTyColor;
 begin

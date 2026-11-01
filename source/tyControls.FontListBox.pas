@@ -94,7 +94,7 @@ end;
 procedure TTyFontListBox.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
   AIndex: Integer; const AStyle: TTyStyleSet);
 begin
-  TyDrawFontRow(P, ARowRect, Items[AIndex], AStyle, ResolveFontSize(AStyle));
+  TyDrawFontRow(P, ARowRect, Items[AIndex], AStyle, ResolveFontSize(AStyle), RtlRowLayout);   // #153
 end;
 
 function TTyFontListBox.GetSelectedFont: string;

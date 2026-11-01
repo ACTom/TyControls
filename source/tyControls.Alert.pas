@@ -565,6 +565,15 @@ begin
     APainter.Scale(ActiveController.Metric(TyAlertTextGapVar, TyAlertTextGap)),
     APainter.Scale(ActiveController.Metric(TyAlertCloseGapVar, TyAlertCloseGap)),
     APainter.Scale(ActiveController.Metric(TyAlertCloseSizeVar, TyAlertCloseSize)));
+  { #153: mirrored, the glyph, the text and the close button change sides; the painter is
+    armed in RenderTo, so the text's alignment follows }
+  if IsRightToLeft then
+  begin
+    Result.IconRect := TyMirrorRectX(Result.IconRect, AWidth);
+    Result.MessageRect := TyMirrorRectX(Result.MessageRect, AWidth);
+    Result.DescriptionRect := TyMirrorRectX(Result.DescriptionRect, AWidth);
+    Result.CloseRect := TyMirrorRectX(Result.CloseRect, AWidth);
+  end;
 end;
 
 function TTyAlert.LayoutFor(AWidth, AHeight, APPI: Integer): TTyAlertLayout;
@@ -720,7 +729,9 @@ begin
     // A (0,0)-local rect: the painter builds a (W x H) bitmap and blits it at
     // ARect.Left/Top, so a non-zero ARect origin would shift the banner.
     R := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
-    P.BeginPaint(ACanvas, ARect, APPI);
+    { #153: mirrored, the glyph, the text and the close button change sides; the layout is
+      written for reading order and the painter turns it }
+    P.BeginPaint(ACanvas, ARect, APPI, IsRightToLeft);
     S := AlertStyle;
     if not (tpBackground in S.Present) then
     begin
