@@ -1446,9 +1446,25 @@ const R6A = [
     events: [over(0, ['item', 0, 1]), out(500)] },
 ];
 
+// [R6-D] the border a radar's symbols and a gauge's pointer and progress arc take at rest, and its state
+const R6D = [
+  { id: 'radar-border-hover', dash: true, dashOff: true, note: "[R6-D] the symbols' border at rest (itemStyle #000 at 2, "
+    + "dashed, phase 1), emphasis border #ee6666 at 5, phase 4: hover a symbol of the first item at 0, out at 500",
+    option: radar({ itemStyle: { borderColor: '#000000', borderWidth: 2, borderType: 'dashed', borderDashOffset: 1 },
+      emphasis: { itemStyle: { borderColor: C3, borderWidth: 5, borderDashOffset: 4 } } }),
+    events: [over(0, ['rsym', 0, 0, 1]), out(500)] },
+  { id: 'gauge-border-hover', dash: true, dashOff: true, note: "[R6-D] the pointer's and the arc's border at rest (itemStyle "
+    + "#000 at 2, dotted, phase 1; pointer.itemStyle #333, progress.itemStyle at 3), emphasis border #ee6666 at 4: hover the "
+    + 'pointer at 0, the arc at 500, out at 1000',
+    option: gauge({ itemStyle: { borderColor: '#000000', borderWidth: 2, borderType: 'dotted', borderDashOffset: 1 },
+      pointer: { width: 10, itemStyle: { borderColor: '#333333' } }, progress: { show: true, width: 14, itemStyle: { borderWidth: 3 } },
+      emphasis: { itemStyle: { borderColor: C3, borderWidth: 4 } } }),
+    events: [over(0, ['gp', 0, 0]), over(500, ['gq', 0, 0]), out(1000)] },
+];
+
 function generate() {
   const cases = [];
-  for (const c of GAUGE.concat(RADAR, MARKERS, LARGE, LABELS, PICTORIAL, R2B, R2I1, R2I3, R2I4, R2I5, R2I6, R2V, R6A)) {
+  for (const c of GAUGE.concat(RADAR, MARKERS, LARGE, LABELS, PICTORIAL, R2B, R2I1, R2I3, R2I4, R2I5, R2I6, R2V, R6A, R6D)) {
     if (process.env.ORACLE_CASE && !process.env.ORACLE_CASE.split('|').some(p => c.id.startsWith(p))) continue;
     const r = runCase(c);
     cases.push({ id: c.id, note: c.note, option: c.option, events: r.events, published: r.published,

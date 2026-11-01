@@ -212,6 +212,16 @@ uses base64, Generics.Collections, tyControls.AdvanceChart.Large,
   tyControls.AdvanceChart.Symbol, tyControls.AdvanceChart.Decal, tyControls.AdvanceChart.Images,
   tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.GfxEl;
 
+{ [R6-D] a dash the canvas' setLineDash takes: every entry a finite number
+  of nought or more }
+function TyDashIsDrawable(const ADash: TTyDoubleArray): Boolean;
+var i: Integer;
+begin
+  Result := True;
+  for i := 0 to High(ADash) do
+    if IsNan(ADash[i]) or IsInfinite(ADash[i]) or (ADash[i] < 0) then Exit(False);
+end;
+
 var
   GDecalCache: TStringList = nil;
   GLargeFastPaths: Integer = 0;
@@ -3684,7 +3694,13 @@ begin
     ApplyClipPaths(P, AElement);
     if AElement.Style.Alpha < 1 then
       P.SetElementAlpha(AElement.Style.Alpha);
-    P.SetLineDash(AElement.Style.DashLogical, AElement.Style.DashOffsetLogical);
+    { [R6-D] setLineDash takes no entry that is not a finite number of
+      nought or more: the canvas ignores the call (its last dash stays --
+      the port strokes solid) [was: a NaN entry raised in the pen] }
+    if TyDashIsDrawable(AElement.Style.DashLogical) then
+      P.SetLineDash(AElement.Style.DashLogical, AElement.Style.DashOffsetLogical)
+    else
+      P.SetLineDash([], 0);
     { [R5-D] a cap or a join the element names (the state is restored below) }
     case AElement.Style.LineCap of
       1: P.SetLineCap(tlcRound);
