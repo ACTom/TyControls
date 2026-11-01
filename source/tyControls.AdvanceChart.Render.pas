@@ -3109,6 +3109,12 @@ var
       rule := tfrEvenOdd
     else
       rule := tfrNonZero;
+    { [R6-C] fillOpacity: zrender's brushPath sets globalAlpha to the
+      opacity times it before the fill (and times strokeOpacity before the
+      pen, PaintPen) }
+    if AElement.Style.HasFillOpacity then
+      P.SetElementAlpha(Max(0.0, Min(1.0, AElement.Style.Alpha))
+        * Max(0.0, Min(1.0, AElement.Style.FillOpacity)));
     if AElement.Style.HasFill then
     begin
       if AElement.Style.FillGradient.Kind <> cgkNone then
@@ -3217,6 +3223,12 @@ var
   procedure PaintPen;
   var gi: Integer;
   begin
+    { [R6-C] strokeOpacity over the opacity -- and back from a fill's }
+    if AElement.Style.HasStrokeOpacity then
+      P.SetElementAlpha(Max(0.0, Min(1.0, AElement.Style.Alpha))
+        * Max(0.0, Min(1.0, AElement.Style.StrokeOpacity)))
+    else if AElement.Style.HasFillOpacity then
+      P.SetElementAlpha(Max(0.0, Min(1.0, AElement.Style.Alpha)));
     if AElement.Style.StrokeWidthLogical > 0 then
     begin
       if AElement.Style.StrokeGradient.Kind <> cgkNone then

@@ -812,6 +812,11 @@ function TyAnimLiftGradient(const AValue: TTyAnimValue): TTyAnimValue;
   rounded to a byte); False for a value that is no gradient or has no stop }
 function TyAnimGradientOfValue(const AValue: TTyAnimValue;
   out AGrad: TTyChartGradient): Boolean;
+{ [R6-C] ... and the other way: a gradient the painter draws as the value a
+  track interpolates (TyAnimGradientOfValue reads it back) -- its geometry,
+  `global` (NaN where it is not), each stop's offset and colour (alpha a
+  byte over 255); a fresh object (no raw text) }
+function TyAnimGradientValue(const AGrad: TTyChartGradient): TTyAnimValue;
 { ADest := ASource with every bound element applied and every following label
   moved with its host, then every ghost still leaving. Insertion indices are
   kept, so a hit on the frame names the same element as a hit on the list
@@ -7341,6 +7346,33 @@ begin
   Result := True;
 end;
 
+function TyAnimGradientValue(const AGrad: TTyChartGradient): TTyAnimValue;
+var i: Integer;
+begin
+  Result := Default(TTyAnimValue);
+  Result.Kind := avkGradient;
+  if AGrad.Kind = cgkRadial then
+  begin
+    Result.Stride := 3;
+    Result.Arr := TTyDoubleArray.Create(AGrad.X, AGrad.Y, AGrad.R);
+  end
+  else
+  begin
+    Result.Stride := 4;
+    Result.Arr := TTyDoubleArray.Create(AGrad.X, AGrad.Y, AGrad.X2, AGrad.Y2);
+  end;
+  if AGrad.Global then Result.Num := 1 else Result.Num := NaN;
+  SetLength(Result.Stops, Length(AGrad.Stops) * 5);
+  for i := 0 to High(AGrad.Stops) do
+  begin
+    Result.Stops[i * 5] := AGrad.Stops[i].Offset;
+    Result.Stops[i * 5 + 1] := (AGrad.Stops[i].Color shr 16) and $FF;
+    Result.Stops[i * 5 + 2] := (AGrad.Stops[i].Color shr 8) and $FF;
+    Result.Stops[i * 5 + 3] := AGrad.Stops[i].Color and $FF;
+    Result.Stops[i * 5 + 4] := ((AGrad.Stops[i].Color shr 24) and $FF) / 255;
+  end;
+end;
+
 { a colour value as the canvas paints it: AOk False for null or 'none' }
 function StColourOf(const AV: TTyAnimValue; out AColor: TTyChartColor): Boolean;
 begin
@@ -9277,10 +9309,13 @@ end;
 { THE STYLE KEYS a universal transition reads and draws: the style object's
   OWN keys of the element that was (AOwn), or the values the element that is
   answers for them -- its own or the path style's defaults (fill '#000',
-  stroke null, lineWidth 1, opacity 1). Only the four the painter draws.
-  A key is own: a fill (a plain colour); a stroke (a colour); a line width
-  above nought; an opacity off 1 -- and always a scatter symbol's, whose
-  itemStyle.opacity (0.8) is written }
+  stroke null, lineWidth 1, opacity 1; shadowBlur, shadowOffsetX / Y 0,
+  shadowColor '#000', fillOpacity and strokeOpacity 1).
+  A key is own: a fill (a plain colour, or a gradient); a stroke (a colour,
+  or a gradient); a line width above nought; an opacity off 1 -- and always
+  a scatter symbol's, whose itemStyle.opacity (0.8) is written; [R6-C] a
+  shadow number off nought, a shadow colour the style holds; a fillOpacity /
+  strokeOpacity the style writes }
 function UtStyleProps(const AEl: TTyChartElement; AOwn: Boolean): TTyAnimProps;
 var
   n: Integer;
@@ -9310,9 +9345,15 @@ begin
     Put('style.fill', TyAnimStr('none'))
   else if AEl.Style.HasFill and (AEl.Style.FillGradient.Kind = cgkNone) then
     Put('style.fill', TyAnimColorValue(AEl.Style.FillColor, False))
+  { [R6-C] a gradient: its stops interpolate against another of its type }
+  else if AEl.Style.HasFill and (Length(AEl.Style.FillGradient.Stops) > 0) then
+    Put('style.fill', TyAnimGradientValue(AEl.Style.FillGradient))
   else if not AOwn then
     Put('style.fill', TyAnimStr('#000'));
-  if ((AEl.Style.StrokeColor shr 24) and $FF) > 0 then
+  if (AEl.Style.StrokeGradient.Kind <> cgkNone) and (Length(AEl.Style.StrokeGradient.Stops) > 0)
+    and (AEl.Style.StrokeWidthLogical > 0) then
+    Put('style.stroke', TyAnimGradientValue(AEl.Style.StrokeGradient))
+  else if ((AEl.Style.StrokeColor shr 24) and $FF) > 0 then
     Put('style.stroke', TyAnimColorValue(AEl.Style.StrokeColor, False));
   if AEl.Style.StrokeWidthLogical > 0 then
     Put('style.lineWidth', TyAnimNum(AEl.Style.StrokeWidthLogical))
@@ -9320,6 +9361,25 @@ begin
     Put('style.lineWidth', TyAnimNum(1));
   if (not AOwn) or (AEl.Style.Alpha <> 1) or (AEl.Anim.Role = carSymbol) then
     Put('style.opacity', TyAnimNum(AEl.Style.Alpha));
+  { [R6-C] the shadow's four keys and the two opacities }
+  if (not AOwn) or (AEl.Style.ShadowBlur <> 0) then
+    Put('style.shadowBlur', TyAnimNum(AEl.Style.ShadowBlur));
+  if (not AOwn) or (AEl.Style.ShadowOffsetX <> 0) then
+    Put('style.shadowOffsetX', TyAnimNum(AEl.Style.ShadowOffsetX));
+  if (not AOwn) or (AEl.Style.ShadowOffsetY <> 0) then
+    Put('style.shadowOffsetY', TyAnimNum(AEl.Style.ShadowOffsetY));
+  if AEl.Style.ShadowColor <> 0 then
+    Put('style.shadowColor', TyAnimColorValue(AEl.Style.ShadowColor, False))
+  else if not AOwn then
+    Put('style.shadowColor', TyAnimStr('#000'));
+  if AEl.Style.HasFillOpacity then
+    Put('style.fillOpacity', TyAnimNum(AEl.Style.FillOpacity))
+  else if not AOwn then
+    Put('style.fillOpacity', TyAnimNum(1));
+  if AEl.Style.HasStrokeOpacity then
+    Put('style.strokeOpacity', TyAnimNum(AEl.Style.StrokeOpacity))
+  else if not AOwn then
+    Put('style.strokeOpacity', TyAnimNum(1));
 end;
 
 { the style keys drawn over an element while their animator runs }
@@ -9327,6 +9387,7 @@ procedure UtApplyStyle(var AEl: TTyChartElement; P: TTyChartAnimProxy);
 var
   v: TTyAnimValue;
   c: TTyChartColor;
+  g: TTyChartGradient;
 begin
   v := P.GetAnimProp('style.fill');
   if v.Kind = avkString then
@@ -9339,6 +9400,13 @@ begin
     end
     else
       AEl.Style.HasFill := False;
+  end
+  { [R6-C] a gradient, as its track has it now }
+  else if TyAnimGradientOfValue(v, g) then
+  begin
+    AEl.Style.HasFill := True;
+    AEl.Style.FillColor := TyGradientSolid(g);
+    AEl.Style.FillGradient := g;
   end;
   v := P.GetAnimProp('style.stroke');
   if v.Kind = avkString then
@@ -9352,12 +9420,46 @@ begin
     end
     else
       AEl.Style.StrokeColor := 0;
+  end
+  else if TyAnimGradientOfValue(v, g) then
+  begin
+    AEl.Style.StrokeColor := TyGradientSolid(g);
+    AEl.Style.StrokeGradient := g;
+    if not (AEl.Style.StrokeWidthLogical > 0) then
+      AEl.Style.StrokeWidthLogical := NumOr(P, 'style.lineWidth', 1);
   end;
   v := P.GetAnimProp('style.lineWidth');
   if v.Kind = avkNumber then AEl.Style.StrokeWidthLogical := v.Num;
   v := P.GetAnimProp('style.opacity');
   { nought draws nothing, and is hit all the same, as upstream's }
   if v.Kind = avkNumber then AEl.Style.Alpha := v.Num;
+  { [R6-C] the shadow: its numbers, and its colour as it tweens (a shadow
+    with no colour of its own draws in the prototype's '#000') }
+  v := P.GetAnimProp('style.shadowBlur');
+  if v.Kind = avkNumber then AEl.Style.ShadowBlur := v.Num;
+  v := P.GetAnimProp('style.shadowOffsetX');
+  if v.Kind = avkNumber then AEl.Style.ShadowOffsetX := v.Num;
+  v := P.GetAnimProp('style.shadowOffsetY');
+  if v.Kind = avkNumber then AEl.Style.ShadowOffsetY := v.Num;
+  v := P.GetAnimProp('style.shadowColor');
+  if v.Kind = avkString then
+  begin
+    if StColourOf(v, c) then AEl.Style.ShadowColor := c
+    else AEl.Style.ShadowColor := 0;
+  end;
+  { [R6-C] fillOpacity / strokeOpacity: the canvas' globalAlpha for each }
+  v := P.GetAnimProp('style.fillOpacity');
+  if v.Kind = avkNumber then
+  begin
+    AEl.Style.HasFillOpacity := v.Num <> 1;
+    AEl.Style.FillOpacity := v.Num;
+  end;
+  v := P.GetAnimProp('style.strokeOpacity');
+  if v.Kind = avkNumber then
+  begin
+    AEl.Style.HasStrokeOpacity := v.Num <> 1;
+    AEl.Style.StrokeOpacity := v.Num;
+  end;
 end;
 
 procedure TyUtApply(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
@@ -9416,6 +9518,13 @@ begin
   AEl.Style.StrokeGradient := Default(TTyChartGradient);
   AEl.Style.StrokeWidthLogical := 0;
   AEl.Style.Alpha := 1;
+  { [R6-C] its shadow and its two opacities too }
+  AEl.Style.ShadowBlur := 0;
+  AEl.Style.ShadowOffsetX := 0;
+  AEl.Style.ShadowOffsetY := 0;
+  AEl.Style.ShadowColor := 0;
+  AEl.Style.HasFillOpacity := False;
+  AEl.Style.HasStrokeOpacity := False;
   UtApplyStyle(AEl, APiece);
   AEl.Anim.UtPiece := AK + 1;
 end;
@@ -9525,7 +9634,8 @@ begin
       if v.Kind = avkNumber then S.LineWidth := v.Num;
     end
     else if S.Style[k].Key = 'style.fill' then
-      S.HasFill := (v.Kind = avkString) and StColourOf(v, c)
+      { [R6-C] a gradient fills too }
+      S.HasFill := ((v.Kind = avkString) and StColourOf(v, c)) or (v.Kind = avkGradient)
     else if S.Style[k].Key = 'style.stroke' then
       S.HasStroke := (v.Kind = avkString) and StColourOf(v, c);
   end;

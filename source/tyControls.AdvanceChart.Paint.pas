@@ -190,6 +190,12 @@ type
       casts none (zrender's decal element nulls it). }
     ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
     ShadowColor: TTyChartColor;
+    { [R6-C] zrender's style.fillOpacity / strokeOpacity where a style writes
+      them (a custom series' or a graphic element's path): the canvas'
+      globalAlpha for the fill, for the pen, over Alpha. Has* False is 1 --
+      the zero value draws as before }
+    HasFillOpacity, HasStrokeOpacity: Boolean;
+    FillOpacity, StrokeOpacity: Double;
     { [R5-A] zrender's style.blend, the canvas' globalCompositeOperation: a
       series' blendMode on every element its view renders (echarts'
       updateBlend) -- '' source over }
