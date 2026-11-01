@@ -207,8 +207,24 @@ const SVG_GRAD = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="10
     <rect name="N" x="40" y="65" width="60" height="25" fill="#cccccc" stroke="#777777" stroke-width="1"/>
   </g>
 </svg>`;
+// [R6-B box gradients] objectBoundingBox gradients (the SVG's default
+// units) on shapes that turn and skew, one on a shape that only moves, and a
+// named rect the option paints with a box gradient
+const SVG_BOX = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100" viewBox="0 0 200 100">
+  <defs>
+    <linearGradient id="gb" x1="0" y1="0" x2="1" y2="0.5"><stop offset="0" stop-color="#ff0000"/><stop offset="1" stop-color="#0000ff"/></linearGradient>
+    <radialGradient id="gc" cx="0.3" cy="0.6" r="0.4"><stop offset="0" stop-color="#ffff00"/><stop offset="1" stop-color="#00ff00"/></radialGradient>
+  </defs>
+  <g transform="rotate(30 100 50) skewX(10)">
+    <rect x="20" y="20" width="100" height="40" fill="url(#gb)" stroke="#003300" stroke-width="2"/>
+    <rect x="130" y="20" width="50" height="50" fill="url(#gc)" stroke="#000044" stroke-width="1"/>
+    <rect name="N" x="40" y="65" width="60" height="25" fill="#cccccc" stroke="#777777" stroke-width="1"/>
+    <circle name="C" cx="80" cy="12" r="10" fill="#eeeeee" stroke="#888888" stroke-width="1"/>
+  </g>
+  <rect x="5" y="80" width="40" height="15" fill="url(#gb)" stroke="#004400" stroke-width="1" transform="translate(3 2)"/>
+</svg>`;
 const MAPS = [{ name: 'r6gj', text: GJ, svg: false }, { name: 'r6svg', text: SVG_TURN, svg: true },
-  { name: 'r6svgu', text: SVG_GRAD, svg: true }];
+  { name: 'r6svgu', text: SVG_GRAD, svg: true }, { name: 'r6svgb', text: SVG_BOX, svg: true }];
 function registerMaps() {
   for (const m of MAPS) {
     if (m.svg) echarts.registerMap(m.name, { svg: m.text });
@@ -298,6 +314,32 @@ function elRec(el, key) {
   }
   return r;
 }
+// [R6-B box gradients] a case asks for gp: where the canvas puts a box
+// gradient -- getCanvasGradient over el.getBoundingRect() (the path's own
+// box, grown by the stroke), drawn under gm -- in canvas px: the two points
+// (a radial's centre) through gm, a radial's radius r * min(w, h) times
+// sqrt|det gm| (canvas draws an ellipse; the circle of the same area)
+let WANT_GP = false;
+function gpOf(el, r) {
+  if (!WANT_GP || !r.grad || r.grad.global) return;
+  const f = el.style.fill;
+  const b = el.getBoundingRect();
+  const m = r.gm.map(num);
+  const P = (fx, fy) => {
+    const x = fx * b.width + b.x;
+    const y = fy * b.height + b.y;
+    return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
+  };
+  const a = P(f.x == null ? 0 : f.x, f.y == null ? 0 : f.y);
+  if (f.type === 'radial') {
+    r.gp = [a[0], a[1], NaN, NaN, (f.r == null ? 0.5 : f.r) * Math.min(b.width, b.height) * detOf(m)].map(hex);
+  }
+  else {
+    const c = P(f.x2 == null ? 1 : f.x2, f.y2 == null ? 0 : f.y2);
+    r.gp = [a[0], a[1], c[0], c[1], NaN].map(hex);
+  }
+  r.lb = [b.x, b.y, b.width, b.height].map(hex);
+}
 function drawRec(md, rec, prefix, resType) {
   const tg = md._transformGroup;
   rec[prefix + '/group'] = { x: hex(tg.x), y: hex(tg.y), scaleX: hex(tg.scaleX), scaleY: hex(tg.scaleY),
@@ -323,6 +365,7 @@ function drawRec(md, rec, prefix, resType) {
       else return;
     }
     const r = elRec(el, key);
+    gpOf(el, r);
     // a leftover: the other resource's graphic, kept from an earlier draw
     if ((key.startsWith('r:')) !== (resType === 'geoJSON')) r.stale = true;
     els.push(r);
@@ -432,6 +475,22 @@ add('gj-to-svgu', "a GeoJSON geo switched to the SVG map with its own userSpaceO
   [{ t: T1 - 1, do: 'sample' },
     { t: T1, do: 'merge', option: { geo: { map: 'r6svgu', zoom: 2, center: [100, 50] } } }, ...after([0, 1, 250, 500, 999, 1000], T1)]);
 
+// [R6-B box gradients] at rest and in the switch's tween
+const GRBOX = { type: 'radial', x: 0.3, y: 0.7, r: 0.6,
+  colorStops: [{ offset: 0, color: '#ffffff' }, { offset: 1, color: '#000000' }] };
+add('svg-box-grad', "an SVG map whose objectBoundingBox gradients sit on shapes that turn and skew (and one that only moves), and a named rect the option paints with a box gradient: the canvas takes the fractions on the path's own box (grown by the stroke) and draws them under gm -- turned and skewed with the shape; a merge writes zoom 2 (an SVG map: set at once)",
+  Object.assign({ animation: true, geo: { map: 'r6svgb', roam: true,
+    regions: [{ name: 'N', itemStyle: { areaColor: GBOX, borderColor: '#550055', borderWidth: 1 } },
+      { name: 'C', itemStyle: { areaColor: GRBOX, borderColor: '#660066', borderWidth: 1.5 } }] } }, LIN),
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { geo: { zoom: 2, center: [100, 50] } } }, ...after([0], T1)], { gp: true });
+add('gj-to-svgb', "a GeoJSON geo switched to that SVG map with zoom 2: the group tweens and the box gradients turn with their shapes in every frame",
+  Object.assign({ animation: true, geo: { map: 'r6gj', roam: true,
+    regions: [{ name: 'N', itemStyle: { areaColor: GBOX, borderColor: '#550055', borderWidth: 1 } },
+      { name: 'C', itemStyle: { areaColor: GRBOX, borderColor: '#660066', borderWidth: 1.5 } }] } }, LIN),
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { geo: { map: 'r6svgb', zoom: 2, center: [100, 50] } } }, ...after([0, 1, 500, 1000], T1)], { gp: true });
+
 // ---------------------------------------------------------------------------
 // running
 // ---------------------------------------------------------------------------
@@ -440,6 +499,7 @@ function runCase(c) {
   const chart = mk(c.W, c.H);
   try {
     const out = { id: c.id, note: c.note, W: c.W, H: c.H, option: clone(c.option), events: [] };
+    if (c.gp) out.gp = true;
     quiet(() => chart.setOption(clone(c.option)));
     c.events.forEach(ev => {
       NOW = T0 + ev.t;
@@ -447,7 +507,9 @@ function runCase(c) {
       if (ev.do === 'sample') {
         zr(chart).animation.update();
         refresh(chart);
+        WANT_GP = !!c.gp;
         o.rec = readRec(chart);
+        WANT_GP = false;
       }
       else if (ev.do === 'merge') quiet(() => chart.setOption(clone(ev.option)));
       else if (ev.do === 'action') quiet(() => chart.dispatchAction(clone(ev.action)));
@@ -539,6 +601,16 @@ function guards(out) {
       && b && b.grad && b.grad.type === 'radial' && s && s.grad && s.grad.global
       && c && c.grad && c.grad.type === 'radial' && c.grad.global && nn && nn.grad && nn.grad.global
       && n(s.gm[2]) !== 0 && rec('gj-to-svgu', T1 + 500, 'geo0/group').n === 1;
+  })());
+  // [R6-B box gradients]
+  guard('a box gradient turns with its shape: gp is not on the drawn outline box', (() => {
+    const e = el('svg-box-grad', T1 - 1, 'geo0', 's:#003300');
+    const u = el('svg-box-grad', T1 - 1, 'geo0', 's:#004400');
+    return e && e.gp && !e.grad.global && n(e.gm[1]) !== 0 && n(e.gp[3]) !== n(e.gp[1])
+      && u && u.gp && n(u.gm[1]) === 0 && n(u.gm[2]) === 0
+      && el('svg-box-grad', T1 - 1, 'geo0', 's:#000044').grad.type === 'radial'
+      && el('svg-box-grad', T1 - 1, 'geo0', 's:#550055').gp && el('svg-box-grad', T1 - 1, 'geo0', 's:#660066').nsc
+      && rec('gj-to-svgb', T1 + 500, 'geo0/group').n === 1;
   })());
   return g;
 }

@@ -1167,6 +1167,35 @@ begin
   Result.R := AG.R * AScale * Sqrt(Abs(M[0] * M[3] - M[2] * M[1]));
 end;
 
+{ [R6-B] A BOX GRADIENT ON A PATH THAT TURNS, SKEWS OR FLIPS: zrender's
+  getCanvasGradient takes the fractions on el.getBoundingRect() -- the
+  path's own box (ABox, grown by the stroke) -- and the canvas draws them
+  under the path's transform M, so the ramp turns with the shape. The
+  renderer resolves a box gradient on the drawn outline's box (upright):
+  here it becomes the global one the canvas draws -- the points through M,
+  a radial's radius r * min(w, h) times sqrt|det M| (a circle for canvas'
+  ellipse). [Was: the fractions on the upright box of what is drawn.] }
+function GradOnBox(const AG: TTyChartGradient; const ABox: TTyXYWH;
+  const M: TTyMat2D): TTyChartGradient;
+  procedure Through(AFX, AFY: Double; out AX, AY: Double);
+  var x, y: Double;
+  begin
+    x := AFX * ABox.W + ABox.X;
+    y := AFY * ABox.H + ABox.Y;
+    AX := M[0] * x + M[2] * y + M[4];
+    AY := M[1] * x + M[3] * y + M[5];
+  end;
+begin
+  Result := AG;
+  if (AG.Kind = cgkNone) or AG.Global then Exit;
+  Result.Global := True;
+  Through(AG.X, AG.Y, Result.X, Result.Y);
+  if AG.Kind = cgkRadial then
+    Result.R := AG.R * Min(ABox.W, ABox.H) * Sqrt(Abs(M[0] * M[3] - M[2] * M[1]))
+  else
+    Through(AG.X2, AG.Y2, Result.X2, Result.Y2);
+end;
+
 { Transformable.setLocalTransform, which decomposeTransform ends in }
 function TyGeoDecompose(const M: TTyMat2D): TTyGeoTrans;
 var sx, sy, rot, shear: Double;
@@ -6194,6 +6223,27 @@ var
                 units, under its global transform (as its own SVG one) }
               if look.HasOptGrad then el.Style.FillGradient := GradThrough(look.OptGrad, m, 1)
               else if look.FillGrad >= 0 then el.Style.FillGradient := SvgGradient(look.FillGrad, ANode, m);
+              { [R6-B] a box gradient on a shape that turns, skews or flips:
+                on its own box, through m (on an upright one the drawn
+                outline's box is the same) }
+              if (el.Style.FillGradient.Kind <> cgkNone) and not el.Style.FillGradient.Global
+                and not ((m[1] = 0) and (m[2] = 0) and (m[0] > 0) and (m[3] > 0)) then
+              begin
+                r := TyGsNodeRect(AGeo.FSvg, ANode, strokes);
+                { a strokeNoScale stroke grows that box by its width over the
+                  line scale: a frame that scales the shape changes it }
+                if look.NoScale then
+                begin
+                  el.Anim.VGradNS := True;
+                  el.Anim.VGradFrac := el.Style.FillGradient;
+                  for k := 0 to 3 do el.Anim.VGradL[k] := m[k];
+                  el.Anim.VGradW0 := nd.Box.W;
+                  el.Anim.VGradH0 := nd.Box.H;
+                  el.Anim.VGradG := (r.W - nd.Box.W) / 2;
+                  el.Anim.VGradLS := SvgLineScale(hasM, m);
+                end;
+                el.Style.FillGradient := GradOnBox(el.Style.FillGradient, r, m);
+              end;
             end;
             { [R2-F] the series' decal over the fill (a state's style keeps it:
               getFixedItemStyle has none to put over it) }

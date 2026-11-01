@@ -6354,7 +6354,10 @@ end;
   and the transform now -- a scale about the rest origin and a move -- a
   caption's anchor moved with it (a text that is not local keeps its size) }
 procedure ViewMap(var AEl: TTyChartElement; ASX, ASY, AX, AY: Double);
-var fx, fy, ax0, ay0, f: Double; k: Integer;
+var
+  fx, fy, ax0, ay0, f: Double;
+  k: Integer;
+  ga, gb, gc, gd, gdet, gls, gg, gdl, gx, gy: Double;
 begin
   if (AEl.Anim.VSX = 0) or (AEl.Anim.VSY = 0) then Exit;
   fx := ASX / AEl.Anim.VSX;
@@ -6417,6 +6420,35 @@ begin
     AEl.Style.FillGradient.X2 := AX + (AEl.Style.FillGradient.X2 - AEl.Anim.VX) * fx;
     AEl.Style.FillGradient.Y2 := AY + (AEl.Style.FillGradient.Y2 - AEl.Anim.VY) * fy;
     AEl.Style.FillGradient.R := AEl.Style.FillGradient.R * f;
+    { [R6-B] a box gradient turned with a strokeNoScale shape: its box grew
+      by the stroke over the line scale at rest -- by the line scale now in
+      this frame (getLineScale over the transform now: one within 1e-10 of
+      a unit diagonal), the points on the box shifted with it }
+    if AEl.Anim.VGradNS then
+    begin
+      ga := AEl.Anim.VGradL[0] * fx;
+      gb := AEl.Anim.VGradL[1] * fy;
+      gc := AEl.Anim.VGradL[2] * fx;
+      gd := AEl.Anim.VGradL[3] * fy;
+      gdet := Sqrt(Abs(ga * gd - gc * gb));
+      if (Abs(ga - 1) > 1e-10) and (Abs(gd - 1) > 1e-10) then gls := gdet else gls := 1;
+      if gls > 1e-10 then gg := AEl.Anim.VGradG * AEl.Anim.VGradLS / gls else gg := 0;
+      gdl := gg - AEl.Anim.VGradG;
+      gx := (2 * AEl.Anim.VGradFrac.X - 1) * gdl;
+      gy := (2 * AEl.Anim.VGradFrac.Y - 1) * gdl;
+      AEl.Style.FillGradient.X := AEl.Style.FillGradient.X + ga * gx + gc * gy;
+      AEl.Style.FillGradient.Y := AEl.Style.FillGradient.Y + gb * gx + gd * gy;
+      if AEl.Anim.VGradFrac.Kind = cgkRadial then
+        AEl.Style.FillGradient.R := AEl.Anim.VGradFrac.R
+          * Min(AEl.Anim.VGradW0 + 2 * gg, AEl.Anim.VGradH0 + 2 * gg) * gdet
+      else
+      begin
+        gx := (2 * AEl.Anim.VGradFrac.X2 - 1) * gdl;
+        gy := (2 * AEl.Anim.VGradFrac.Y2 - 1) * gdl;
+        AEl.Style.FillGradient.X2 := AEl.Style.FillGradient.X2 + ga * gx + gc * gy;
+        AEl.Style.FillGradient.Y2 := AEl.Style.FillGradient.Y2 + gb * gx + gd * gy;
+      end;
+    end;
   end;
   { [R6-B] an SVG map's stroke that is not strokeNoScale: its width, dash
     and phase in the map's own units }

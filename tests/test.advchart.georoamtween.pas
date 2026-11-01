@@ -27,7 +27,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.Controller, tyControls.FontUnits,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Anim,
      tyControls.AdvanceChart.AnimView, tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.Geo,
-     tyControls.AdvanceChart.Color,
+     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.Render,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax,
      test.advchart.graphic;
@@ -67,6 +67,7 @@ type
     procedure TestTheSvgContentRidesTheTweenOfASwitchedMap;
     procedure TestAViewMadeAnewIsSetAtOnce;
     procedure TestAGlobalGradientRidesTheRoam;
+    procedure TestABoxGradientTurnsWithItsShape;
   end;
 
   { [R6-B] what the oracle cannot say: the same at another density }
@@ -309,14 +310,47 @@ procedure TAdvChartGeoRoamTweenOracleTest.CheckGrad(const AWhat: string;
   const AEl: TTyChartElement; ARec: TJSONObject);
 var
   gr: TJSONObject;
-  v, gm: TJSONArray;
+  v, gm, gp: TJSONArray;
   g: array[0..5] of Double;
   k: Integer;
-  x, y: Double;
+  x, y, x1, y1, x2, y2, r: Double;
 begin
   if IsNull(ARec.Find('grad')) then Exit;
   gr := ARec.Objects['grad'];
   v := gr.Arrays['v'];
+  { [R6-B] WHERE A BOX GRADIENT LANDS: upstream's points on the canvas (the
+    fractions on the path's own box, grown by the stroke, through gm) --
+    the port's as the renderer resolves them (a global one as it stands,
+    else against the element's gradient box) }
+  if not IsNull(ARec.Find('gp')) then
+  begin
+    gp := ARec.Arrays['gp'];
+    Inc(FCompared);
+    if AEl.Style.FillGradient.Kind = cgkNone then
+    begin
+      Bad(AWhat + ': no gradient');
+      Exit;
+    end;
+    if AEl.Style.FillGradient.Global then
+    begin
+      x1 := AEl.Style.FillGradient.X; y1 := AEl.Style.FillGradient.Y;
+      x2 := AEl.Style.FillGradient.X2; y2 := AEl.Style.FillGradient.Y2;
+      r := AEl.Style.FillGradient.R;
+    end
+    else
+      TyResolveGradientXYWH(AEl.Style.FillGradient, TyElementGradientBox(AEl, 96),
+        x1, y1, x2, y2, r);
+    NearVal(AWhat + ' gradient lands x', x1, WantNum(gp.Items[0]), 1e-6);
+    NearVal(AWhat + ' gradient lands y', y1, WantNum(gp.Items[1]), 1e-6);
+    if gr.Strings['type'] = 'radial' then
+      NearVal(AWhat + ' gradient lands r', r, WantNum(gp.Items[4]), 1e-6)
+    else
+    begin
+      NearVal(AWhat + ' gradient lands x2', x2, WantNum(gp.Items[2]), 1e-6);
+      NearVal(AWhat + ' gradient lands y2', y2, WantNum(gp.Items[3]), 1e-6);
+    end;
+    Exit;
+  end;
   { a gradient on the path's box: its fractions as written, every frame }
   if not gr.Booleans['global'] then
   begin
@@ -665,6 +699,11 @@ end;
 procedure TAdvChartGeoRoamTweenOracleTest.TestAGlobalGradientRidesTheRoam;
 begin
   RunCases(['gj-grad', 'gj-grad-box', 'gj-to-svgu'], 250);
+end;
+
+procedure TAdvChartGeoRoamTweenOracleTest.TestABoxGradientTurnsWithItsShape;
+begin
+  RunCases(['svg-box-grad', 'gj-to-svgb'], 150);
 end;
 
 procedure TAdvChartGeoRoamTweenOracleTest.TestAViewMadeAnewIsSetAtOnce;
