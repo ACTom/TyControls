@@ -66,6 +66,33 @@ function Add-Tree {
   }
 }
 
+# Compress-Archive stores entry names with '\' (Microsoft.PowerShell.Archive, still in 1.2.6):
+# Windows unzippers read that as a separator, but unzip and OPM on Linux/macOS take it as part of
+# the file name and extract a flat "TyControls\CHANGELOG.md". The zip spec says '/', so the
+# entries are written by hand. $Dir's own name is the archive's root folder, as with
+# Compress-Archive -Path $Dir.
+function New-Zip {
+  param([string]$Dir, [string]$Zip)
+  Add-Type -AssemblyName System.IO.Compression
+  $base = Split-Path $Dir -Parent
+  $fs = [IO.File]::Open($Zip, [IO.FileMode]::CreateNew)
+  try {
+    $archive = New-Object IO.Compression.ZipArchive($fs, [IO.Compression.ZipArchiveMode]::Create)
+    try {
+      Get-ChildItem -LiteralPath $Dir -Recurse -File | Sort-Object FullName | ForEach-Object {
+        $name = $_.FullName.Substring($base.Length).TrimStart('\', '/').Replace('\', '/')
+        $entry = $archive.CreateEntry($name, [IO.Compression.CompressionLevel]::Optimal)
+        $entry.LastWriteTime = $_.LastWriteTime
+        $out = $entry.Open()
+        try {
+          $in = [IO.File]::OpenRead($_.FullName)
+          try { $in.CopyTo($out) } finally { $in.Dispose() }
+        } finally { $out.Dispose() }
+      }
+    } finally { $archive.Dispose() }
+  } finally { $fs.Dispose() }
+}
+
 function Add-File {
   param([string]$Rel)
   $src = Join-Path $root $Rel
@@ -113,7 +140,7 @@ Add-Tree 'examples' @('.pas', '.lpr', '.lpi', '.lfm', '.ico', '.tycss', '.inc', 
 
 # --- zip -------------------------------------------------------------------
 Write-Host '-- zipping'
-Compress-Archive -Path $stage -DestinationPath $zip -CompressionLevel Optimal
+New-Zip $stage $zip
 
 # --- OPM (final releases) ----------------------------------------------------
 if ($Opm) {
@@ -124,7 +151,7 @@ if ($Opm) {
   $pkgRoot = Join-Path $opmDir 'TyControls'
   Copy-Item $stage $pkgRoot -Recurse
   $opmZip = Join-Path $opmDir 'TyControls.zip'
-  Compress-Archive -Path $pkgRoot -DestinationPath $opmZip -CompressionLevel Optimal
+  New-Zip $pkgRoot $opmZip
   Remove-Item $pkgRoot -Recurse -Force
   $lpkVersion = "$version.0"   # the .lpk's Major.Minor.Release.Build
   # RepositoryDate is a TDateTime: days since 1899-12-30, which is what ToOADate counts
