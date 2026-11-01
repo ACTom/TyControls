@@ -44,6 +44,10 @@ type
     procedure Resize; override;
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { #144: Enter has an expression to evaluate or a host waiting for the result; Esc has
+      something to clear. Otherwise the keys are the form's. }
+    function EnterHasWork: Boolean;
+    function EscapeHasWork: Boolean;
   public
     constructor Create(AOwner: TComponent); override;
     procedure PressKey(ACmd: Char);
@@ -498,18 +502,31 @@ begin
     case ch of
       '0'..'9', '.', '+', '-', '*', '/', '=':
         begin PressKey(ch); UTF8Key := ''; Exit; end;
-      #13: begin PressKey('='); UTF8Key := ''; Exit; end;
+      #13: if EnterHasWork then begin PressKey('='); UTF8Key := ''; Exit; end;
     end;
   end;
   inherited UTF8KeyPress(UTF8Key);
 end;
 
+function TTyCalculator.EnterHasWork: Boolean;
+begin
+  { An expression to evaluate, or a host waiting for the result (the drop-down closes on it). }
+  Result := ((FExpr <> '') and not FError) or Assigned(FOnResult);
+end;
+
+function TTyCalculator.EscapeHasWork: Boolean;
+begin
+  Result := (FExpr <> '') or FError or ((FResult <> '') and (FResult <> '0'));
+end;
+
 procedure TTyCalculator.KeyDown(var Key: Word; Shift: TShiftState);
 begin
+  { #144: Enter and Esc only when they do something here -- otherwise they go on to the
+    form's default and cancel buttons, which they never reached. }
   case Key of
     VK_BACK:   begin PressKey('B'); Key := 0; Exit; end;
-    VK_ESCAPE: begin PressKey('C'); Key := 0; Exit; end;
-    VK_RETURN: begin PressKey('='); Key := 0; Exit; end;
+    VK_ESCAPE: if EscapeHasWork then begin PressKey('C'); Key := 0; Exit; end;
+    VK_RETURN: if EnterHasWork then begin PressKey('='); Key := 0; Exit; end;
   end;
   inherited KeyDown(Key, Shift);
 end;

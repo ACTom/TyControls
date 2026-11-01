@@ -358,7 +358,9 @@ procedure TTyToggleSwitch.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
-  if (Key = VK_SPACE) or (Key = VK_RETURN) then
+  { #144: Space only. Enter goes on to the form's default button, as a native check box lets
+    it; it toggled the switch and was swallowed. }
+  if Key = VK_SPACE then
   begin
     Toggle;
     Key := 0;

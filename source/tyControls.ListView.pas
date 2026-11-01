@@ -497,6 +497,9 @@ type
     { Same reasoning for activation: a shell list navigates folders and fires
       OnFileActivate for files, which it used to do by owning OnItemActivate. }
     procedure DoItemActivate(AIndex: Integer); virtual;
+    { #144: whether activating AIndex does anything -- Enter is taken only then, and goes on
+      to the form's default button otherwise. True with an OnItemActivate handler. }
+    function  ItemActivates(AIndex: Integer): Boolean; virtual;
     function  DisplayToItem(APos: Integer): Integer;   { display pos -> item index, -1 if out of range }
     function  ItemToDisplay(AItem: Integer): Integer;  { item index -> display pos, -1 if out of range }
     { How far a flow cell's icon+label shift right to clear the checkbox. lvsIcon overlays
@@ -1938,6 +1941,11 @@ end;
 { ---------------------------------------------------------------------------
   Sorting
   --------------------------------------------------------------------------- }
+
+function TTyListView.ItemActivates(AIndex: Integer): Boolean;
+begin
+  Result := Assigned(FOnItemActivate);
+end;
 
 procedure TTyListView.DoItemActivate(AIndex: Integer);
 begin
@@ -4242,9 +4250,9 @@ begin
     Key := 0;
     Exit;
   end;
-  if Key = VK_RETURN then
+  if (Key = VK_RETURN) and (FItemIndex >= 0) and ItemActivates(FItemIndex) then
   begin
-    if FItemIndex >= 0 then DoItemActivate(FItemIndex);
+    DoItemActivate(FItemIndex);
     Key := 0;
     Exit;
   end;

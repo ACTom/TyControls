@@ -92,8 +92,8 @@ function TySpinDownButtonRect(const ALocal: TRect; APPI: Integer): TRect;
 | `End` | 光标移到缓冲末尾 |
 | `Backspace` | 删除光标前一码点（真的删掉了才触发 `OnChange`；光标在开头时什么都不做也不通知） |
 | `Delete` | 删除光标后一码点（同上） |
-| `Enter` | **提交**：将缓冲解析为整数（`StrToIntDef`，无法解析时退回当前 `Value`）→ 夹紧 `[MinValue, MaxValue]` → 写入 `Value`（若值移动则触发 `OnValueChange`）→ 回填缓冲（文字变了就触发 `OnChange`） |
-| `Esc` | **还原**：丢弃编辑缓冲，重新同步到当前 `Value`（`SyncBufferToValue`），重绘；`Value` 不动所以不触发 `OnValueChange`，但显示文字被改回去了，触发 `OnChange` |
+| `Enter` | **提交**：将缓冲解析为整数（`StrToIntDef`，无法解析时退回当前 `Value`）→ 夹紧 `[MinValue, MaxValue]` → 写入 `Value`（若值移动则触发 `OnValueChange`）→ 回填缓冲（文字变了就触发 `OnChange`）→ 触发 `OnEditingDone`（只读时不触发）。按键不吃掉，照常交给窗体的默认按钮，和原生编辑框一样 |
+| `Esc` | **还原**：缓冲和当前 `Value` 不一样时，丢弃编辑缓冲，重新同步到当前 `Value`（`SyncBufferToValue`），重绘，并吃掉这个键；`Value` 不动所以不触发 `OnValueChange`，但显示文字被改回去了，触发 `OnChange`。没有可还原的内容时，`Esc` 交给窗体的取消按钮 |
 | `↑`（Up） | `Value += Increment`（到达 `MaxValue` 后停止），同步回填缓冲，消费按键 |
 | `↓`（Down） | `Value -= Increment`（到达 `MinValue` 后停止），同步回填缓冲，消费按键 |
 | 鼠标移到上 / 下箭头上 | 光标变成普通箭头（文字区仍是 I 形）；指针下那一半显示悬停底色（`ReadOnly` 时不显示） |

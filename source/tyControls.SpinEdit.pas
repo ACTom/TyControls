@@ -117,6 +117,8 @@ type
     procedure DoValueChange; virtual;
     // Edit-buffer helpers
     procedure SyncBufferToValue;
+    { The typed text is not the value's (#144): Esc has something to put back. }
+    function BufferDiffers: Boolean;
     procedure CommitEdit;
     procedure InsertEditChar(const C: TUTF8Char);
     procedure EditBackspace;
@@ -736,6 +738,11 @@ begin
   Invalidate;
 end;
 
+function TTySpinEdit.BufferDiffers: Boolean;
+begin
+  if FValueEmpty then Result := FEditText <> '' else Result := FEditText <> ValueToStr(FValue);
+end;
+
 procedure TTySpinEdit.SyncBufferToValue;
 var
   Old: string;
@@ -960,8 +967,21 @@ begin
         if not FReadOnly then StepValue(-FIncrement);
         Key := 0;
       end;
-    VK_RETURN: begin CommitEdit; Key := 0; end;
-    VK_ESCAPE: begin SyncBufferToValue; Invalidate; Key := 0; end;
+    { #144: Enter commits and goes on to the form's default button, as a native edit's does
+      (and is an EditingDone, as there); Esc goes on to the cancel button unless it has a
+      typed value to put back. Both were swallowed. }
+    VK_RETURN:
+      begin
+        CommitEdit;
+        if not FReadOnly then EditingDone;
+      end;
+    VK_ESCAPE:
+      if BufferDiffers then
+      begin
+        SyncBufferToValue;
+        Invalidate;
+        Key := 0;
+      end;
     VK_BACK:   begin EditBackspace; Invalidate; Key := 0; end;
     VK_DELETE: begin EditDelete; Invalidate; Key := 0; end;
     VK_LEFT:   begin if FCaret > 0 then Dec(FCaret); ResetCaretBlink; Invalidate; Key := 0; end;

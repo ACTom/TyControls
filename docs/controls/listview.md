@@ -257,7 +257,7 @@ LV.SmallImages := ImgList;                                        // 或 LV.Head
 | `OnSelectItem(Sender; AIndex: Integer; ASelected: Boolean)` | 某一项的选中状态**翻转**了:被选上 → `ASelected = True`,被放开 → `False`。**一次操作会为每一个翻转的项各触发一次** |
 | `OnChanging(Sender; AIndex; AChange: TTyItemChange; var AAllowChange: Boolean)` | 选择变化**之前**触发,置 `AAllowChange := False` 即否决——控件不动选择位,后续的 `OnChange` / `OnSelectItem` 也都不发 |
 | `OnChange(Sender; AIndex: Integer; AChange: TTyItemChange)` | 变化**之后**触发,说明是哪一项、变的是什么 |
-| `OnItemActivate` | 双击 / Enter |
+| `OnItemActivate` | 双击 / Enter(没挂这个事件时,Enter 交给窗体的默认按钮) |
 
 `TTyItemChange = (ctText, ctImage, ctState)`——与 LCL 的 `TItemChange` 逐值对应,所以从 `TListView`
 处理器里搬过来的 `case AChange of` 不用改就能编译。`ctImage` 是为这份对齐而声明的,**内建数据路径
@@ -285,7 +285,7 @@ LV.SmallImages := ImgList;                                        // 或 LV.Head
   **双击分隔线** = `AutoFitColumn(该列)`,把列宽调到刚好容纳内容。
 
 > **自适应宽度只采样前 500 行。** 资源管理器会量遍所有行,但 BGRA 的文字测量对一个 10 万行的虚拟列表来说太慢了。普通列表(行数不超过 500)因此是**精确**贴合;超出的部分按前 500 个显示行估算。宽度里还预留了排序箭头的位置(不管当前是否按该列排序),所以点击表头排序时列宽不会跳。
-- **键盘**:方向键二维网格导航(图标模式下 ↑↓ 跨行、←→ 跨列;列表模式相反);`Home` / `End`;`PageUp` / `PageDown`;`Ctrl+A` 全选;`Space` 切换选中;`Enter` 触发 `OnItemActivate`;直接敲字母做**首字母定位**(按屏幕上看到的顺序查找,重复敲同一字母循环到下一个匹配)。
+- **键盘**:方向键二维网格导航(图标模式下 ↑↓ 跨行、←→ 跨列;列表模式相反);`Home` / `End`;`PageUp` / `PageDown`;`Ctrl+A` 全选;`Space` 切换选中;`Enter` 触发 `OnItemActivate`(没挂时交给窗体的默认按钮);直接敲字母做**首字母定位**(按屏幕上看到的顺序查找,重复敲同一字母循环到下一个匹配)。
 
 ---
 

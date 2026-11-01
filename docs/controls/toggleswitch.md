@@ -57,6 +57,7 @@ TTyToggleSwitch 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状�
 |------|------|
 | 鼠标左键点击 | 调用 `Toggle`，然后触发 `OnClick` |
 | 空格键（`VK_SPACE`） | 调用 `Toggle`，消费按键（`Key := 0`） |
+| `Enter` | 不处理，交给窗体的默认按钮，和原生复选框一样 |
 
 ---
 

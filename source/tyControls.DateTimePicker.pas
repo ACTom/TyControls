@@ -2298,14 +2298,21 @@ begin
     (datetimepicker.pas:3725-3730 -> UndoChanges). ReadOnly has nothing to revert. }
   if Key = VK_ESCAPE then
   begin
+    { #144: closing the drop-down is the key's whole use; otherwise it reverts and goes on to
+      the form's cancel button, as LCL's picker lets it (it was swallowed). }
     if (FPopup <> nil) and FPopup.IsOpen then
-      CloseDropDown
+    begin
+      CloseDropDown;
+      Key := 0;
+    end
     else if not FReadOnly then
-      UndoChanges
+    begin
+      UndoChanges;
+      EditingDone;
+    end
     else
       FDigitBuffer := '';
     Invalidate;
-    Key := 0;
     Exit;
   end;
 
@@ -2408,7 +2415,8 @@ begin
           FinalizeBuffer(OldVal, False)
         else
           CommitAndFire(OldVal);
-        Key := 0;
+        { #144: an EditingDone, and on to the form's default button, as LCL's picker does. }
+        if not FReadOnly then EditingDone;
       end;
   end;
 end;

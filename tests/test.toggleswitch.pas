@@ -45,7 +45,8 @@ type
     procedure TestSetSameValueNoChange;
     procedure TestClickCallsToggle;
     procedure TestSpaceKeyToggle;
-    procedure TestEnterTogglesChecked;
+    { #144: Enter is the form's default button's, as on a native check box. }
+    procedure TestEnterGoesOnToTheDefaultButton;
     procedure TestCurrentStatesContainsActiveWhenChecked;
     procedure TestCurrentStatesNoActiveWhenUnchecked;
     procedure TestDisabledIgnoresToggle;
@@ -216,7 +217,7 @@ begin
   end;
 end;
 
-procedure TTyToggleSwitchTest.TestEnterTogglesChecked;
+procedure TTyToggleSwitchTest.TestEnterGoesOnToTheDefaultButton;
 var
   F: TCustomForm;
   T: TTyToggleSwitchAccess;
@@ -229,8 +230,8 @@ begin
     AssertFalse('off', T.Checked);
     K := VK_RETURN;
     T.DoKeyDown(K, []);
-    AssertTrue('enter toggled on', T.Checked);
-    AssertEquals('enter consumed', 0, K);
+    AssertFalse('Enter toggles nothing', T.Checked);
+    AssertEquals('and is left for the default button', VK_RETURN, K);
   finally
     F.Free;
   end;
