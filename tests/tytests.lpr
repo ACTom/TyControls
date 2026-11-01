@@ -125,6 +125,7 @@ uses
   test.dial,
   test.valueformat,
   test.capturelost,
+  test.hiddentimers,
   test.analogclock,
   test.sparkline,
   test.rating,
