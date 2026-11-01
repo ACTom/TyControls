@@ -709,6 +709,10 @@ function chartCases() {
     [s(solo(sankeyS(NAMES))), s(cart([kkBar(NAMES)]))]);
   add('view.sankey-zoom-bar', 'a zoomed sankey (its view group scaled) into bars',
     [s(solo(sankeyS(NAMES, { roam: true, zoom: 1.5, center: ['40%', '50%'] }))), s(cart([kkBar(NAMES)]))]);
+  add('view.sankey-zoom-bar.inflight', '200 ms into a merge that zooms the sankey (its view group tweening), every node to '
+    + 'bars: the nodes start under the group where its tween is',
+    [s(solo(sankeyS(NAMES, { roam: true }))), s({ series: [{ id: 'sk', zoom: 1.5, center: ['40%', '50%'] }] }, null, true),
+      Object.assign(s(cart([kkBar(NAMES)])), { after: 200 })]);
   add('view.sankey-zoom-bar.kept', 'a zoomed sankey keeping A, C and D at another zoom while B goes to a bar',
     [s(solo(sankeyS(NAMES, { roam: true, zoom: 1.5, center: ['40%', '50%'] }))),
       s(cart([sankeyS(['A', 'C', 'D'], { roam: true, zoom: 1.2, center: ['40%', '50%'] }), kkBar(['B'])]))]);
@@ -812,7 +816,8 @@ function guards(charts) {
     'view.sankey-zoom-bar.kept']) {
     must(morphs(byId(id)).filter(e => e.seriesType === 'bar').length >= 1, id + ': no bar morphs');
   }
-  for (const id of ['view.tree-bar', 'view.tree-bar.inflight', 'view.sankey-bar', 'view.sankey-zoom-bar']) {
+  for (const id of ['view.tree-bar', 'view.tree-bar.inflight', 'view.sankey-bar', 'view.sankey-zoom-bar',
+    'view.sankey-zoom-bar.inflight']) {
     must(morphs(byId(id)).length === 4, id + ': not four morphs');
   }
   {

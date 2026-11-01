@@ -3842,7 +3842,8 @@ var
     props: TTyAnimProps;
     vp: TTyChartAnimProxy;
   begin
-    if (AC.SeriesType <> 'graph') and (AC.SeriesType <> 'tree') then Exit;
+    { [R6-C] a sankey's view group too (SankeyView._updateViewCoordSys) }
+    if (AC.SeriesType <> 'graph') and (AC.SeriesType <> 'tree') and (AC.SeriesType <> 'sankey') then Exit;
     hasN := False;
     for j := 0 to AList.Count - 1 do
     begin
@@ -8702,6 +8703,10 @@ end;
 function UtKeepsElement(const ASeries: TTyChartAnimSeries; const AEl: TTyChartElement): Boolean;
 begin
   if ASeries.SeriesType = 'map' then Exit(False);
+  { [R6-C] a sankey's too (SankeyView.render: mainGroup.removeAll) -- a
+    merge that keeps it morphs every node onto its new self, under no
+    transform while it runs }
+  if ASeries.SeriesType = 'sankey' then Exit(False);
   if (ASeries.SeriesType = 'custom') and (ASeries.UtOn or ASeries.UtNamed) then Exit(False);
   Result := True;
 end;
@@ -10200,7 +10205,7 @@ var
 
   procedure Detach(const AEl: TTyChartElement; P: TTyChartAnimProxy; var S: TTyUtOldSnap);
   var
-    gx, gy: Double;
+    gx, gy, gsx, gsy: Double;
     vg, tg: TTyChartAnimProxy;
   begin
     { [R6-C] A TREE NODE: TreeView's dispose leaves it in its groups -- under
@@ -10236,7 +10241,47 @@ var
     end
     else if AEl.Anim.Role = carMapRegion then
       { a region: no roam }
-      S.HasM := False;
+      S.HasM := False
+    { [R6-C] A SANKEY NODE: SankeyView's dispose leaves it in its groups --
+      under the view group as its tween has it now: mul(group, translate) }
+    else if (AEl.Anim.UtTag = 1) and AEl.Anim.InView and (Length(AEl.Anim.UtBase) >= 8) then
+    begin
+      vg := TTyChartAnimProxy(AOldIndex.Find(KeyOf(AEl.Anim.Series, -1, 'viewGroup')));
+      if vg = nil then Exit;
+      gsx := NumOr(vg, 'scaleX', AEl.Anim.VSX);
+      gsy := NumOr(vg, 'scaleY', AEl.Anim.VSY);
+      gx := NumOr(vg, 'x', AEl.Anim.VX);
+      gy := NumOr(vg, 'y', AEl.Anim.VY);
+      { needLocalTransform: a group around the identity is none }
+      if (Abs(gx) < 5e-5) and (Abs(gy) < 5e-5) and (Abs(gsx - 1) < 5e-5) and (Abs(gsy - 1) < 5e-5) then
+      begin
+        S.HasM := AEl.Anim.UtBase[7] <> 0;
+        S.M[0] := 1;
+        S.M[1] := 0;
+        S.M[2] := 0;
+        S.M[3] := 1;
+        S.M[4] := AEl.Anim.UtBase[5];
+        S.M[5] := AEl.Anim.UtBase[6];
+        if not S.HasM then S.M[4] := 0;
+        if not S.HasM then S.M[5] := 0;
+        Exit;
+      end;
+      S.HasM := True;
+      S.M[0] := gsx;
+      S.M[1] := 0;
+      S.M[2] := 0;
+      S.M[3] := gsy;
+      if AEl.Anim.UtBase[7] <> 0 then
+      begin
+        S.M[4] := gsx * AEl.Anim.UtBase[5] + 0 * AEl.Anim.UtBase[6] + gx;
+        S.M[5] := 0 * AEl.Anim.UtBase[5] + gsy * AEl.Anim.UtBase[6] + gy;
+      end
+      else
+      begin
+        S.M[4] := gx;
+        S.M[5] := gy;
+      end;
+    end;
   end;
 
 begin
