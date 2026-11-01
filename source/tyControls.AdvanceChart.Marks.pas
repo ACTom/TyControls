@@ -4083,20 +4083,12 @@ begin
     if mirror then sym.RotateDeg := -spec.RotateDeg
     else sym.RotateDeg := spec.RotateDeg;
 
+    { [R6-E] THE GLYPH IS THE ITEM'S VISUAL STYLE AND NOTHING ELSE:
+      updateCommon's path.useStyle(symbolMeta.style), no setColor -- an
+      `empty` symbol is filled with the colour and stroked only with a
+      border, a `line` symbol (no area to fill) only with a border [was: the
+      scatter's rule, hollow in the colour at 2] }
     v := RowVisual(AVisual, AStore, i);
-    { AN `empty` SYMBOL IS STROKED, NOT FILLED, and a line symbol is stroked
-      too -- the same rule the scatter follows, because the colour is the pen
-      in both. }
-    if sym.Empty or (sym.Kind = tsyLine) then
-    begin
-      v.Stroke := v.Fill;
-      if v.FillGradient.Kind <> cgkNone then v.StrokeGradient := v.FillGradient;
-      v.FillGradient := Default(TTyChartGradient);
-      v.FillPattern := Default(TTyChartPattern);
-      if v.StrokeWidthLogical <= 0 then v.StrokeWidthLogical := 2;
-      if sym.Kind = tsyLine then v.Fill := 0
-      else v.Fill := AVisual.EmptyFill;
-    end;
 
     n := run.Count;
     for k := 0 to n - 1 do
@@ -4119,8 +4111,12 @@ begin
         shape := TyMirrorShape(shape, pt.X, pt.Y, not baseHoriz, baseHoriz);
       el := MarkElement(shape, v, ABinding.SeriesIndex, i);
       { a glyph is createSymbol's, not Symbol.ts': the item's style keeps
-        its decal, an empty glyph's white fill too [F4a] }
+        its decal [F4a] }
       el.Style.Decal := RowDecal(AVisual, AStore, i);
+      { [R6-E] its pen is in the glyph's frame -- the pattern size, scaled
+        to the glyph's box -- as the canvas strokes a path whose
+        strokeNoScale useStyle dropped }
+      el.Style.PenScale := Sqrt(Abs(glyphW / spec.PatternSize * glyphH / spec.PatternSize));
       el.HasClip := spec.Clip or col.Clip;
       el.ClipRect := clipRect;
       { THE ENTER ANIMATION [F3a]. A symbolClip's glyphs are set where they
