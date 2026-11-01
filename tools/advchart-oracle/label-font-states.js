@@ -126,6 +126,14 @@ const CASES = [
     option: bar({ labelLayout: { align: 'left', fontSize: 16 }, emphasis: { label: { fontWeight: 'bold' } } }), hl: 2 },
   { id: 'bar.layout.emph.size', note: 'labelLayout fontSize 16; emphasis.label fontSize 22 over it',
     option: bar({ labelLayout: { fontSize: 16 }, emphasis: { label: { fontSize: 22 } } }), hl: 0 },
+  // ---- [R5-L] a label only the emphasis writes: the series has no label (no
+  // position: the emphasis state's textConfig is a known difference) ----
+  { id: 'bar.emph.only', note: 'no series label; emphasis.label shows it (inside, the default) at fontSize 20 bold',
+    option: bar({ label: undefined, emphasis: { label: { show: true, fontSize: 20, fontWeight: 'bold' } } }), hl: 1 },
+  { id: 'scatter.emph.only', note: 'a scatter with no label; emphasis.label shows it at fontSize 15 (backward-compat scatter-alias, modern spelling)',
+    option: { animation: false, color: PALETTE, xAxis: { type: 'value' }, yAxis: { type: 'value' },
+      series: [{ type: 'scatter', symbolSize: 20, data: [[1, 1], [2, 3], [3, 2]],
+        emphasis: { scale: false, label: { show: true, color: '#ff0000', fontSize: 15 } } }] }, hl: 1 },
 ];
 
 function runsOf(t) {
@@ -143,7 +151,9 @@ function readLabels(chart) {
   data.each(idx => {
     const el = data.getItemGraphicEl(idx);
     if (!el) return;
-    const t = el.getTextContent();
+    let t = el.getTextContent();
+    // a scatter's symbol is a group: the label hangs off its path [R5-L]
+    if (!t && el.childAt && el.childAt(0) && el.childAt(0).getTextContent) t = el.childAt(0).getTextContent();
     if (!t) return;
     const m = t.getComputedTransform();
     const ds = t._defaultStyle || {};
@@ -209,6 +219,9 @@ function generate() {
     { name: 'bar.emph.item.rich: the item\'s token at 18px when hovered', ok: /18px/.test(font('bar.emph.item.rich', 1, true)) },
     { name: 'bar.layout.emph: bold 16px, aligned left, when hovered', ok: /bold 16px/.test(font('bar.layout.emph', 2, true)) && lab('bar.layout.emph', 2, true).align === 'left' },
     { name: 'bar.layout.emph.size: 22px over the layout\'s 16', ok: /22px/.test(font('bar.layout.emph.size', 0, true)) && /16px/.test(font('bar.layout.emph.size', 0)) },
+    { name: 'bar.emph.only: hidden at rest, bold 20px when hovered',
+      ok: lab('bar.emph.only', 1).ignore && /bold 20px/.test(font('bar.emph.only', 1, true)) },
+    { name: 'scatter.emph.only: 15px when hovered', ok: /15px/.test(font('scatter.emph.only', 1, true)) },
   ];
   if (!process.env.ORACLE_NOGUARD) for (const g of guards) must(g.ok, 'guard failed: ' + g.name);
   return { source: 'ECharts 6.1 dist: chart/pie/PieView.ts, pie/labelLayout.ts, chart/funnel, label/labelStyle.ts, zrender Text states',

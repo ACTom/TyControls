@@ -3701,6 +3701,436 @@
      ]
     }
    ]
+  },
+  {
+   "id": "bar.emph.only",
+   "note": "no series label; emphasis.label shows it (inside, the default) at fontSize 20 bold",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b",
+      "c",
+      "d"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       12,
+       30,
+       18,
+       25
+      ],
+      "emphasis": {
+       "label": {
+        "show": true,
+        "fontSize": 20,
+        "fontWeight": "bold"
+       }
+      }
+     }
+    ]
+   },
+   "hl": 1,
+   "labels": [
+    {
+     "d": 0,
+     "ignore": true,
+     "text": "12",
+     "x": "4062480000000000",
+     "y": "4070d00000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "406170f5c28f5c29",
+      "4070700000000000",
+      "402ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "12",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": true,
+     "text": "30",
+     "x": "40702c0000000000",
+     "y": "4068100000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "406f80f5c28f5c29",
+      "4067500000000000",
+      "402ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "30",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": true,
+     "text": "18",
+     "x": "4077340000000000",
+     "y": "406e700000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "4076c87ae147ae14",
+      "406db00000000000",
+      "402ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "18",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": true,
+     "text": "25",
+     "x": "407e3c0000000000",
+     "y": "406ab80000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "407dd07ae147ae14",
+      "4069f80000000000",
+      "402ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "25",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    }
+   ],
+   "labelsHl": [
+    {
+     "d": 0,
+     "ignore": true,
+     "text": "12",
+     "x": "4062480000000000",
+     "y": "4070d00000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "406170f5c28f5c29",
+      "4070700000000000",
+      "402ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "12",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": false,
+     "text": "30",
+     "x": "40702c0000000000",
+     "y": "4068100000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "406ef1999999999a",
+      "4066d00000000000",
+      "4036666666666667",
+      "4034000000000000"
+     ],
+     "fontSize": "4034000000000000",
+     "fontWeight": "bold",
+     "runs": [
+      {
+       "text": "30",
+       "font": "normal bold 20px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": true,
+     "text": "18",
+     "x": "4077340000000000",
+     "y": "406e700000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "4076c87ae147ae14",
+      "406db00000000000",
+      "402ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "18",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 3,
+     "ignore": true,
+     "text": "25",
+     "x": "407e3c0000000000",
+     "y": "406ab80000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "407dd07ae147ae14",
+      "4069f80000000000",
+      "402ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "25",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "scatter.emph.only",
+   "note": "a scatter with no label; emphasis.label shows it at fontSize 15 (backward-compat scatter-alias, modern spelling)",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5070dd",
+     "#b6d634",
+     "#505372",
+     "#ff994d",
+     "#0ca8df",
+     "#ffd10a",
+     "#fb628b",
+     "#785db0",
+     "#3fbe95"
+    ],
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "symbolSize": 20,
+      "data": [
+       [
+        1,
+        1
+       ],
+       [
+        2,
+        3
+       ],
+       [
+        3,
+        2
+       ]
+      ],
+      "emphasis": {
+       "scale": false,
+       "label": {
+        "show": true,
+        "color": "#ff0000",
+        "fontSize": 15
+       }
+      }
+     }
+    ]
+   },
+   "hl": 1,
+   "labels": [
+    {
+     "d": 0,
+     "ignore": true,
+     "text": "1",
+     "x": "406e000000000000",
+     "y": "406d600000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "406d947ae147ae14",
+      "406ca00000000000",
+      "401ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "1",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": true,
+     "text": "3",
+     "x": "4078600000000000",
+     "y": "4050400000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "40782a3d70a3d70a",
+      "404d800000000000",
+      "401ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "3",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": true,
+     "text": "2",
+     "x": "4080e00000000000",
+     "y": "4062c00000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "4080c51eb851eb85",
+      "4062000000000000",
+      "401ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "2",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    }
+   ],
+   "labelsHl": [
+    {
+     "d": 0,
+     "ignore": true,
+     "text": "1",
+     "x": "406e000000000000",
+     "y": "406d600000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "406d947ae147ae14",
+      "406ca00000000000",
+      "401ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "1",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 1,
+     "ignore": false,
+     "text": "3",
+     "x": "4078600000000000",
+     "y": "4050400000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "40781ccccccccccd",
+      "404cc00000000000",
+      "4020cccccccccccd",
+      "402e000000000000"
+     ],
+     "fontSize": "402e000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "3",
+       "font": "normal normal 15px Microsoft YaHei"
+      }
+     ]
+    },
+    {
+     "d": 2,
+     "ignore": true,
+     "text": "2",
+     "x": "4080e00000000000",
+     "y": "4062c00000000000",
+     "align": "center",
+     "verticalAlign": "middle",
+     "rect": [
+      "4080c51eb851eb85",
+      "4062000000000000",
+      "401ae147ae147ae2",
+      "4028000000000000"
+     ],
+     "fontSize": "4028000000000000",
+     "fontWeight": "normal",
+     "runs": [
+      {
+       "text": "2",
+       "font": "normal normal 12px Microsoft YaHei"
+      }
+     ]
+    }
+   ]
   }
  ],
  "guards": [
@@ -3717,6 +4147,8 @@
   "bar.emph.font: bold 20px when hovered",
   "bar.emph.item.rich: the item's token at 18px when hovered",
   "bar.layout.emph: bold 16px, aligned left, when hovered",
-  "bar.layout.emph.size: 22px over the layout's 16"
+  "bar.layout.emph.size: 22px over the layout's 16",
+  "bar.emph.only: hidden at rest, bold 20px when hovered",
+  "scatter.emph.only: 15px when hovered"
  ]
 }
