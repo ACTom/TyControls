@@ -220,6 +220,8 @@ type
     procedure SetOfferedButtons(AValue: TTyCaptionButtonFlags);
     procedure SetCaption(const AValue: TCaption);
     procedure SetButtonWidth(AValue: Integer);
+    procedure ReadButtonWidthPinned(Reader: TReader);
+    procedure WriteButtonWidthPinned(Writer: TWriter);
     procedure SetTitleAlignment(AValue: TAlignment);
     { Device-px caption-button width: an explicit ButtonWidth wins; otherwise the theme's
       --caption-button-width metric (logical, DPI-scaled); otherwise TyTitleButtonWidth. }
@@ -249,6 +251,9 @@ type
     procedure SetShowMaximize(AValue: Boolean);
     procedure SetShowClose(AValue: Boolean);
   protected
+    { #152: a ButtonWidth set to 46 on purpose is saved with 'ButtonWidthPinned', as a
+      ButtonWidth = 46 alone is what every form 3.0.0..3.0.3 wrote and reads as no pin. }
+    procedure DefineProperties(Filer: TFiler); override;
     procedure LayoutButtons;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Resize; override;
@@ -412,7 +417,10 @@ type
     property TitleAlignment;
     property Align;
     property Anchors;
-    property ButtonWidth;
+    { #152: saved only when set, so a bar that never was follows the skin's
+      --caption-button-width. It was always saved, and the 46 a bar starts with came back as a
+      pin under every skin. }
+    property ButtonWidth stored FButtonWidthExplicit;
     property ShowMinimize;
     property ShowMaximize;
     property ShowClose;
@@ -1555,6 +1563,12 @@ end;
 
 procedure TTyCustomTitleBar.SetButtonWidth(AValue: Integer);
 begin
+  { 3.0.0..3.0.3 wrote the starting 46 into every form; read back, it is not a pin. }
+  if (csLoading in ComponentState) and (AValue = TyTitleButtonWidth) and not FButtonWidthExplicit then
+  begin
+    FButtonWidth := AValue;
+    Exit;
+  end;
   FButtonWidthExplicit := True;   // an explicit set pins the width, overriding the theme metric
   { a6256: stamp the PPI the pin was taken at, so a later monitor change can derive from
     (value, PPI) instead of multiplying the field. Stamped even when the value is unchanged
@@ -1566,6 +1580,25 @@ begin
   FButtonWidth := AValue;
   LayoutButtons;
   Invalidate;
+end;
+
+procedure TTyCustomTitleBar.DefineProperties(Filer: TFiler);
+begin
+  inherited DefineProperties(Filer);
+  Filer.DefineProperty('ButtonWidthPinned', @ReadButtonWidthPinned, @WriteButtonWidthPinned,
+    FButtonWidthExplicit and (FButtonWidth = TyTitleButtonWidth));
+end;
+
+procedure TTyCustomTitleBar.ReadButtonWidthPinned(Reader: TReader);
+begin
+  if not Reader.ReadBoolean then Exit;
+  FButtonWidthExplicit := True;      // read after ButtonWidth, which let the 46 through unpinned
+  SetButtonWidth(FButtonWidth);      // the pin, with its PPI stamp
+end;
+
+procedure TTyCustomTitleBar.WriteButtonWidthPinned(Writer: TWriter);
+begin
+  Writer.WriteBoolean(True);
 end;
 
 function TTyCustomTitleBar.EffectiveButtonWidthPx: Integer;

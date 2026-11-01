@@ -396,8 +396,11 @@ type
     property UseCellDisplay: Boolean
       read FUseCellDisplay write FUseCellDisplay default False;
     { 这一列用什么编辑器。设过之后优先级高于 DefaultEditorKind,低于 OnGetEditorKind。 }
+    { #152: saved whenever it was set, gekText included -- that one is the default, so it was
+      never written, and a column set to text under a DefaultEditorKind of something else came
+      back following the grid. }
     property EditorKind: TTyGridEditorKind read FEditorKind write SetEditorKind
-      default gekText;
+      stored FUseEditorKind nodefault;
     { 整列只读。 }
     property ReadOnly: Boolean read FReadOnly write FReadOnly default False;
     { gekPickList 的候选项(不接 OnGetPickList 时用这个)。 }
@@ -782,7 +785,7 @@ type
     画树线与图标,网格里没有任何代码读它,4.0 起不再发布。 }
   TTyGridHeader = class(TTyCustomHeader)
   published
-    property Height;
+    property Height stored IsHeightStored nodefault;   // #152
     property Columns;
     property SortColumn;
     property SortDirection;

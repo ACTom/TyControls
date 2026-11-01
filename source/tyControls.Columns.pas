@@ -106,8 +106,15 @@ type
     FLeft:             Integer;
     { cached visual position — kept in sync by AdjustPosition }
     FPosition:         Cardinal;
+    { #152: what was written while the collection updated, for EndUpdate. }
+    FPendingPosition:  Cardinal;
+    FHasPendingPosition: Boolean;
+    FPendingWidth:     Integer;
+    FHasPendingWidth:  Boolean;
 
     procedure SetWidth(AValue: Integer);
+    procedure ApplyWidth(AValue: Integer);
+    function  GetPosition: Cardinal;
     procedure SetMinWidth(AValue: Integer);
     procedure SetMaxWidth(AValue: Integer);
     procedure SetPosition(AValue: Cardinal);
@@ -150,7 +157,11 @@ type
     property Width:            Integer              read FWidth            write SetWidth            default 100;
     property MinWidth:         Integer              read FMinWidth         write SetMinWidth         default 10;
     property MaxWidth:         Integer              read FMaxWidth         write SetMaxWidth         default 10000;
-    property Position:         Cardinal             read FPosition         write SetPosition;
+    { #152: written while the collection updates -- a form file is read inside BeginUpdate /
+      EndUpdate -- Position and Width wait for EndUpdate. Read column by column, a saved
+      Position past the columns read so far was clamped (2, 1, 0 came back 2, 0, 1), and a
+      Width outside 10..10000 was clamped before its own MinWidth and MaxWidth were read. }
+    property Position:         Cardinal             read GetPosition       write SetPosition;
     property Alignment:        TAlignment           read FAlignment        write SetAlignment        default taLeftJustify;
     property CaptionAlignment: TAlignment           read FCaptionAlignment write SetCaptionAlignment default taLeftJustify;
     property Text:             TCaption               read FText             write SetText;
@@ -218,6 +229,8 @@ type
     FNewColumnWidth: TTyColumnWidthQuery;
 
     procedure RebuildPositionMap;
+    { #152: the Width and Position written while the collection updated. }
+    procedure ApplyPending;
     procedure DoChange;
     function  GetColumn(AIndex: Integer): TTyColumn;
     procedure SetColumn(AIndex: Integer; AValue: TTyColumn);
@@ -227,6 +240,7 @@ type
   public
     constructor Create; overload;
     constructor Create(AOwnerHeader: TTyCustomHeader); overload;
+    procedure EndUpdate; override;
     { Lets an owner (the grid) supply its own TTyColumn descendant, so grid-only
       column properties don't have to be pushed down into the shared TTyColumn
       that ListView/TreeView also use. Nil = plain TTyColumn. }
@@ -396,6 +410,8 @@ type
       band to follow the density axis reads this: while False, size the band from
       the '--header-height' token (classic 22 / modern 36); while True, honour the pin. }
     property HeightIsExplicit: Boolean read FHeightExplicit;
+    { #152: for the publishing subclasses -- an explicit Height is saved, 22 included }
+    function IsHeightStored: Boolean;
     { False when the owner streams the sort under its own names and keeps these two in step
       with them -- TTyListView's SortColumn / SortDirection (#125) -- so a form file carries
       the sort once, under the names it always had. }
@@ -436,7 +452,8 @@ type
   { The header ListView and TreeView publish. }
   TTyHeader = class(TTyCustomHeader)
   published
-    property Height;
+    { #152: saved whenever it was set, 22 included (the default, so it was never written). }
+    property Height stored IsHeightStored nodefault;
     property Columns;
     property MainColumn;
     property SortColumn;
@@ -721,6 +738,21 @@ end;
 
 procedure TTyColumn.SetWidth(AValue: Integer);
 begin
+  if (Collection <> nil) and (GetOwnerColumns.UpdateCount > 0) then
+  begin
+    FPendingWidth := AValue;
+    FHasPendingWidth := True;
+  end;
+  ApplyWidth(AValue);
+end;
+
+function TTyColumn.GetPosition: Cardinal;
+begin
+  if FHasPendingPosition then Result := FPendingPosition else Result := FPosition;
+end;
+
+procedure TTyColumn.ApplyWidth(AValue: Integer);
+begin
   { Clamp to [MinWidth, MaxWidth] }
   AValue := Max(FMinWidth, Min(FMaxWidth, AValue));
   if FWidth = AValue then Exit;
@@ -739,7 +771,7 @@ begin
   FMinWidth := AValue;
   { Re-clamp width if needed }
   if FWidth < FMinWidth then
-    SetWidth(FMinWidth);
+    ApplyWidth(FMinWidth);
 end;
 
 procedure TTyColumn.SetMaxWidth(AValue: Integer);
@@ -748,11 +780,17 @@ begin
   if FMaxWidth = AValue then Exit;
   FMaxWidth := AValue;
   if FWidth > FMaxWidth then
-    SetWidth(FMaxWidth);
+    ApplyWidth(FMaxWidth);
 end;
 
 procedure TTyColumn.SetPosition(AValue: Cardinal);
 begin
+  if (Collection <> nil) and (GetOwnerColumns.UpdateCount > 0) then
+  begin
+    FPendingPosition := AValue;   // EndUpdate places it
+    FHasPendingPosition := True;
+    Exit;
+  end;
   if FPosition = AValue then Exit;
   if Collection <> nil then
     GetOwnerColumns.AdjustPosition(Self, AValue);
@@ -1077,6 +1115,59 @@ begin
     col := Items[colIndex] as TTyColumn;
     if coVisible in col.FOptions then
       Inc(Result, col.FWidth);
+  end;
+end;
+
+function TTyCustomHeader.IsHeightStored: Boolean;
+begin
+  Result := FHeightExplicit;
+end;
+
+procedure TTyColumns.EndUpdate;
+begin
+  inherited EndUpdate;
+  if UpdateCount = 0 then ApplyPending;
+end;
+
+procedure TTyColumns.ApplyPending;
+var
+  moves: array of TTyColumn;
+  i, j, n, w: Integer;
+  c: TTyColumn;
+begin
+  for i := 0 to Count - 1 do
+  begin
+    c := Items[i];
+    if c.FHasPendingWidth then
+    begin
+      w := c.FPendingWidth;
+      c.FHasPendingWidth := False;
+      c.ApplyWidth(w);   // against the MinWidth and MaxWidth it has now
+    end;
+  end;
+  { In rising order of where they go, each column moved there lands exactly there: the ones
+    already placed sit below it and are not shifted. Placed one by one as they were read,
+    a later move shifted an earlier one off its place. }
+  n := 0;
+  SetLength(moves, Count);
+  for i := 0 to Count - 1 do
+    if Items[i].FHasPendingPosition then
+    begin
+      c := Items[i];
+      j := n;
+      while (j > 0) and (moves[j - 1].FPendingPosition > c.FPendingPosition) do
+      begin
+        moves[j] := moves[j - 1];
+        Dec(j);
+      end;
+      moves[j] := c;
+      Inc(n);
+    end;
+  for i := 0 to n - 1 do
+  begin
+    w := Integer(moves[i].FPendingPosition);
+    moves[i].FHasPendingPosition := False;
+    AdjustPosition(moves[i], w);
   end;
 end;
 
