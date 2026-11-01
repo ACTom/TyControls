@@ -94,7 +94,7 @@ function TyCardLayout(const AClient: TRect; AHeaderH, AActionsH: Integer): TTyCa
 - **分隔线**取该带的 `border-color` / `border-width`(`border-width: 0` 或未设 `border-color` 即无分隔线),以直角填充带绘制:它只是一条边,直角才能在任何圆角下都保持锐利。
 - **标题文字**取 `TyCardHeader` 的 `color` / `font-*`;水平留白取 `TyCardHeader` 自己的 `padding`,**未设时回落到卡片的 `padding`**——所以默认状态下标题与主体内容左对齐。
 
-**带高:** 取自主题 metric `--card-header-height` / `--card-actions-height`(未定义时用上面的兜底常量),随 DPI 缩放。**刻意不做成 published 属性**:卡片的比例本身就是皮肤的一部分(同 `TTyGroupBox` 的 `--groupbox-caption-height`);单张卡片要破例用 `StyleOverride`。
+**带高:** 取自主题 metric `--card-header-height` / `--card-actions-height`(未定义时用上面的兜底常量),随 DPI 缩放;标题的字体放不下时，标题条随字体长高。**刻意不做成 published 属性**:卡片的比例本身就是皮肤的一部分(同 `TTyGroupBox` 的 `--groupbox-caption-height`);单张卡片要破例用 `StyleOverride`。
 
 所有可见值均主题驱动,控件代码中无任何硬编码颜色 / 尺寸 / 圆角。
 

@@ -24,7 +24,7 @@
 | 标题栏 typeKey | `TyExPanelHeader`（**自有子部件键**，支持 `:hover`） |
 | 基类 | `TTyCustomPanel`（继承自 `TTyCustomControl` → `TCustomControl`） |
 | 默认尺寸 | 200 × 140（逻辑像素） |
-| 默认标题栏高度 | 26 逻辑像素（常量 `TyExPanelDefaultHeaderHeight`） |
+| 默认标题栏高度 | 26 逻辑像素（常量 `TyExPanelDefaultHeaderHeight`）；没设 `HeaderHeight` 时，标题的字体放不下就随字体长高 |
 | 客户区顶边内缩 | 一个标题栏高度（`AdjustClientRect` 实现，随 DPI 缩放） |
 
 ```pascal
