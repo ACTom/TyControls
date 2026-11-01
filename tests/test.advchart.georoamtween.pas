@@ -316,8 +316,22 @@ var
 begin
   if IsNull(ARec.Find('grad')) then Exit;
   gr := ARec.Objects['grad'];
-  if not gr.Booleans['global'] then Exit;
   v := gr.Arrays['v'];
+  { a gradient on the path's box: its fractions as written, every frame }
+  if not gr.Booleans['global'] then
+  begin
+    Inc(FCompared);
+    if (AEl.Style.FillGradient.Kind = cgkNone) or AEl.Style.FillGradient.Global then
+    begin
+      Bad(AWhat + ': no box gradient');
+      Exit;
+    end;
+    NearVal(AWhat + ' box gradient x', AEl.Style.FillGradient.X, WantNum(v.Items[0]), 0);
+    NearVal(AWhat + ' box gradient y', AEl.Style.FillGradient.Y, WantNum(v.Items[1]), 0);
+    NearVal(AWhat + ' box gradient x2', AEl.Style.FillGradient.X2, WantNum(v.Items[2]), 0);
+    NearVal(AWhat + ' box gradient y2', AEl.Style.FillGradient.Y2, WantNum(v.Items[3]), 0);
+    Exit;
+  end;
   gm := ARec.Arrays['gm'];
   for k := 0 to 5 do g[k] := WantNum(gm.Items[k]);
   Inc(FCompared);
@@ -650,7 +664,7 @@ end;
 
 procedure TAdvChartGeoRoamTweenOracleTest.TestAGlobalGradientRidesTheRoam;
 begin
-  RunCases(['gj-grad', 'gj-to-svgu'], 200);
+  RunCases(['gj-grad', 'gj-grad-box', 'gj-to-svgu'], 250);
 end;
 
 procedure TAdvChartGeoRoamTweenOracleTest.TestAViewMadeAnewIsSetAtOnce;

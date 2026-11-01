@@ -419,6 +419,13 @@ add('gj-grad', "a GeoJSON geo at zoom 2 whose areaColor is a global linear gradi
     regions: [{ name: 'B', itemStyle: { areaColor: GRAD } }] } }, LIN),
   [{ t: T1 - 1, do: 'sample' },
     { t: T1, do: 'merge', option: { geo: { zoom: 3, center: [12, 6] } } }, ...after([0, 1, 250, 500, 999, 1000], T1)]);
+const GBOX = { type: 'linear', x: 0, y: 0, x2: 1, y2: 1,
+  colorStops: [{ offset: 0, color: '#ff00ff' }, { offset: 1, color: '#00ffff' }] };
+add('gj-grad-box', "a GeoJSON geo whose areaColor is a gradient on the path's own box (not global) and region B's a global radial one: a merge writes zoom 3 -- the box gradient keeps its fractions (the canvas takes them on the path's box), the global one rides the group",
+  Object.assign({ animation: true, geo: { map: 'r6gj', roam: true, itemStyle: { areaColor: GBOX, borderColor: '#223344', borderWidth: 1 },
+    regions: [{ name: 'B', itemStyle: { areaColor: GRAD } }] } }, LIN),
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { geo: { zoom: 3, center: [12, 6] } } }, ...after([0, 500, 1000], T1)]);
 add('gj-to-svgu', "a GeoJSON geo switched to the SVG map with its own userSpaceOnUse gradients and a named rect painted with a global gradient by the option, zoom 2: the group tweens and every global gradient rides it (under gm, through the content's own turn and skew)",
   Object.assign({ animation: true, geo: { map: 'r6gj', roam: true,
     regions: [{ name: 'N', itemStyle: { areaColor: GLIN, borderColor: '#550055', borderWidth: 1 } }] } }, LIN),
