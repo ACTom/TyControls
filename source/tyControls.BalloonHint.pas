@@ -77,7 +77,10 @@ type
     { Everything ShowAt decides before it puts the window up: measure, size the pointer, place.
       APointerPx is the pointer's half-base and height, device px. }
     function PlaceAt(const ATargetScreen: TRect; APPI, AScreenW, AScreenH: Integer;
-      out APointerPx: Integer): TTyBalloonPlacement;
+      out APointerPx: Integer): TTyBalloonPlacement; overload;
+    { #148: inside AWorkArea, the work area of the target's monitor }
+    function PlaceAt(const ATargetScreen: TRect; APPI: Integer; const AWorkArea: TRect;
+      out APointerPx: Integer): TTyBalloonPlacement; overload;
     { Paint the balloon -- body, pointer, icon, title, description -- into an AW x AH
       window-local area. The window's Paint is this plus the shape. }
     procedure RenderTo(ACanvas: TCanvas; AW, AH, APPI: Integer;
@@ -111,7 +114,12 @@ type
   margins falls back to it (TyPopoverTipMargin, the rule the popover's arrow follows). }
 function TyBalloonPlacement(const ATargetScreen: TRect;
   ABodyW, ABodyH, APointerH, AScreenW, AScreenH: Integer;
-  ACornerInset: Integer = 0): TTyBalloonPlacement;
+  ACornerInset: Integer = 0): TTyBalloonPlacement; overload;
+{ #148: the same, inside AWorkArea -- the work area of the target's monitor, which need not
+  start at 0, 0. }
+function TyBalloonPlacement(const ATargetScreen: TRect;
+  ABodyW, ABodyH, APointerH: Integer; const AWorkArea: TRect;
+  ACornerInset: Integer = 0): TTyBalloonPlacement; overload;
 
 const
   { The pointer's HALF-BASE and its height in one number, logical px -- so the wedge is always
@@ -126,7 +134,7 @@ implementation
 
 uses
   Math, BGRABitmapTypes, BGRACanvas2D, tyControls.QtWS, tyControls.PlatformWS,
-  tyControls.Popover;
+  tyControls.Popover, tyControls.Popup;
 
 const
   CGapLogical     = 3;   // gap between title and description, logical px
@@ -138,18 +146,27 @@ const
 function TyBalloonPlacement(const ATargetScreen: TRect;
   ABodyW, ABodyH, APointerH, AScreenW, AScreenH: Integer;
   ACornerInset: Integer): TTyBalloonPlacement;
+begin
+  Result := TyBalloonPlacement(ATargetScreen, ABodyW, ABodyH, APointerH,
+    Rect(0, 0, AScreenW, AScreenH), ACornerInset);
+end;
+
+function TyBalloonPlacement(const ATargetScreen: TRect;
+  ABodyW, ABodyH, APointerH: Integer; const AWorkArea: TRect;
+  ACornerInset: Integer): TTyBalloonPlacement;
 var
   cx, bodyLeft, belowTop, roomBelow, margin: Integer;
 begin
   cx := (ATargetScreen.Left + ATargetScreen.Right) div 2;
   belowTop := ATargetScreen.Bottom + APointerH;
-  roomBelow := AScreenH - belowTop;
+  roomBelow := AWorkArea.Bottom - belowTop;
   // Prefer below; flip above only when below doesn't fit but above does.
-  Result.Below := (roomBelow >= ABodyH) or (ATargetScreen.Top - APointerH - ABodyH < 0);
+  Result.Below := (roomBelow >= ABodyH)
+    or (ATargetScreen.Top - APointerH - ABodyH < AWorkArea.Top);
 
   bodyLeft := cx - ABodyW div 2;
-  if bodyLeft + ABodyW > AScreenW then bodyLeft := AScreenW - ABodyW;
-  if bodyLeft < 0 then bodyLeft := 0;
+  if bodyLeft + ABodyW > AWorkArea.Right then bodyLeft := AWorkArea.Right - ABodyW;
+  if bodyLeft < AWorkArea.Left then bodyLeft := AWorkArea.Left;
 
   if Result.Below then
   begin
@@ -346,6 +363,12 @@ end;
 
 function TTyBalloonHint.PlaceAt(const ATargetScreen: TRect;
   APPI, AScreenW, AScreenH: Integer; out APointerPx: Integer): TTyBalloonPlacement;
+begin
+  Result := PlaceAt(ATargetScreen, APPI, Rect(0, 0, AScreenW, AScreenH), APointerPx);
+end;
+
+function TTyBalloonHint.PlaceAt(const ATargetScreen: TRect; APPI: Integer;
+  const AWorkArea: TRect; out APointerPx: Integer): TTyBalloonPlacement;
 var
   bodyW, bodyH: Integer;
 begin
@@ -353,7 +376,7 @@ begin
   MeasureBody(APPI, bodyW, bodyH);
   APointerPx := MulDiv(ArrowSizeLogical, APPI, 96);
   Result := TyBalloonPlacement(ATargetScreen, bodyW, bodyH, APointerPx,
-    AScreenW, AScreenH, CornerInsetPx(bodyW, bodyH, APPI));
+    AWorkArea, CornerInsetPx(bodyW, bodyH, APPI));
 end;
 
 procedure TTyBalloonHint.MeasureBody(APPI: Integer; out ABodyW, ABodyH: Integer);
@@ -551,7 +574,7 @@ begin
   FWin.FOwnerHint := Self;
 
   ppi := Screen.PixelsPerInch; if ppi <= 0 then ppi := 96;
-  pl := PlaceAt(ATargetScreen, ppi, Screen.Width, Screen.Height, pointerPx);
+  pl := PlaceAt(ATargetScreen, ppi, TyPopupWorkArea(ATargetScreen), pointerPx);   // #148
   FWin.FPointerH := pointerPx;
   FWin.FPlacement := pl;
 

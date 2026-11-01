@@ -391,7 +391,8 @@ implementation
 
 uses
   BGRABitmapTypes, BGRACanvas2D,
-  tyControls.PlatformWS;   // TyIsWayland — the shape gate; TyMaskPopupWindow — Qt's child masks
+  tyControls.PlatformWS,   // TyIsWayland — the shape gate; TyMaskPopupWindow — Qt's child masks
+  tyControls.Popup;        // TyPopupWorkArea (#148)
 
 // ---------------------------------------------------------------------------
 // Pure rules / geometry
@@ -1149,7 +1150,7 @@ begin
   if csDesigning in ComponentState then Exit;   // a popover is a runtime gesture, not a preview
   ppi := Screen.PixelsPerInch;
   if ppi <= 0 then ppi := 96;
-  geo := BeginShowing(AAnchorScreen, Screen.WorkAreaRect, ppi);
+  geo := BeginShowing(AAnchorScreen, TyPopupWorkArea(AAnchorScreen), ppi);   // #148: its monitor
   TyRaisePopupWindow(FWin);   // macOS: above a modal dialog it opens in (#104)
   FWin.Show;
   FWin.BringToFront;
