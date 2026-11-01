@@ -139,6 +139,7 @@ uses
   test.cursorloan,
   test.enteresc,
   test.keyrepeat,
+  test.loadevents,
   test.analogclock,
   test.sparkline,
   test.rating,

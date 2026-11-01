@@ -616,17 +616,29 @@ end;
 
 procedure TTyCustomColorBox.SetColorList;
 var
-  keep: TColor;
+  keep, was: TColor;
+  reading: Boolean;
 begin
-  if FSelectedWaits then
+  reading := FSelectedWaits;
+  if reading then
     keep := FStreamedSelected             // Loaded, with a streamed colour still to find
   else
     keep := GetSelected;                  // the COLOUR survives; its row index does not
-  TyBuildColorPalette(Items, FPaletteStyle);
-  if cbCustomColors in FPaletteStyle then
-    DoGetColors;
-  ItemIndex := TySelectColorIndexIn(Items, keep, FPaletteStyle);
+  was := GetSelected;
+  { #145: the rebuild moves the row index, which fired OnChange on every Style change and
+    from Loaded. It is quiet; a colour the new palette no longer holds is a change, and is
+    reported once -- but not while the form is read. }
+  BeginQuietChange;
+  try
+    TyBuildColorPalette(Items, FPaletteStyle);
+    if cbCustomColors in FPaletteStyle then
+      DoGetColors;
+    ItemIndex := TySelectColorIndexIn(Items, keep, FPaletteStyle);
+  finally
+    EndQuietChange;
+  end;
   Invalidate;
+  if not reading and (GetSelected <> was) and Assigned(OnChange) then OnChange(Self);
 end;
 
 procedure TTyCustomColorBox.DoGetColors;

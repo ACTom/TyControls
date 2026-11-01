@@ -585,11 +585,14 @@ end;
 
 procedure TTyCustomSpinEdit.DoChange;
 begin
+  { #145: not while the form is read or torn down. }
+  if ComponentState * [csLoading, csDestroying] <> [] then Exit;
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
 procedure TTyCustomSpinEdit.DoValueChange;
 begin
+  if ComponentState * [csLoading, csDestroying] <> [] then Exit;
   if Assigned(FOnValueChange) then FOnValueChange(Self);
 end;
 
@@ -1060,7 +1063,7 @@ end;
 procedure TTyCustomSpinEdit.DoExit;
 begin
   inherited DoExit;
-  CommitEdit;
+  CommitEdit;   // on a dying form it reports nothing (#145, DoChange / DoValueChange)
   if FBlinkTimer <> nil then FBlinkTimer.Enabled := False;
   FCaretVisible := True;
   Invalidate;

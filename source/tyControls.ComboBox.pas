@@ -112,6 +112,7 @@ type
 
   TTyCustomComboBox = class(TTyCustomControl)
   private
+    FQuietChange: Integer;   // > 0: SelectItem fires no OnChange (#145)
     FItems: TStringList;
     FItemIndex: Integer;
     { An ItemIndex read from a form file before the Items it points into; Loaded applies it.
@@ -249,6 +250,11 @@ type
   protected
     { #130: reads past the values a 3.x form holds for properties no longer published. }
     procedure DefineProperties(Filer: TFiler); override;
+    { #145: a selection the control makes itself -- one a form file held, the rebuild of
+      generated items -- is not a change of the user's: between these SelectItem fires no
+      OnChange. Nest freely. }
+    procedure BeginQuietChange;
+    procedure EndQuietChange;
   protected
     { Guard: tick at last CloseUp. Click reopens only if > 200ms have passed.
       Mirrored from FPopup.CloseUpTick (via PopupClosed) so test subclasses can
@@ -1911,8 +1917,19 @@ begin
   if FStyle = csSimple then
     SyncEmbeddedSelection;
   Invalidate;
-  if not FChangeMuted then
+  { Nor for an ItemIndex the form file holds (#145). }
+  if not FChangeMuted and (FQuietChange = 0) and not (csLoading in ComponentState) then
     Change;
+end;
+
+procedure TTyCustomComboBox.BeginQuietChange;
+begin
+  Inc(FQuietChange);
+end;
+
+procedure TTyCustomComboBox.EndQuietChange;
+begin
+  if FQuietChange > 0 then Dec(FQuietChange);
 end;
 
 { Lazily create the popup helper and the list box (both live for the combo's
