@@ -17,6 +17,9 @@ type
     procedure TestGetNodeDataNilWhenNoDataSize;
     procedure TestNodeDataRoundTrips;
     procedure TestNodeDataSizeChangesAllocStride;
+    { #137: changing NodeDataSize with nodes in the tree remakes them at the new size; the old
+      nodes had no room for it, and GetNodeData read and wrote past their end. }
+    procedure TestNodeDataSizeChangeRemakesTheNodes;
   end;
 
   { A2: TotalCount / TotalHeight aggregates }
@@ -519,6 +522,27 @@ begin
     // Both should be at offset TreeNodeSize from their node pointer
     AssertEquals('node1 data offset', PtrUInt(p1), PtrUInt(n1) + TreeNodeSize);
     AssertEquals('node2 data offset', PtrUInt(p2), PtrUInt(n2) + TreeNodeSize);
+  finally
+    t.Free;
+  end;
+end;
+
+procedure TTreeStoreTest.TestNodeDataSizeChangeRemakesTheNodes;
+var
+  t: TTyTreeView;
+  n: PTyTreeNode;
+begin
+  t := TTyTreeView.Create(nil);
+  try
+    t.NodeDataSize := 4;
+    n := t.AddChild(nil);
+    t.AddChild(nil);
+    PInteger(t.GetNodeData(n))^ := 7;
+    t.NodeDataSize := 64;
+    AssertEquals('the same number of root nodes', 2, Integer(t.RootNodeCount));
+    n := t.GetFirst;
+    AssertTrue('a node has room for the new size', MemSize(n) >= TreeNodeSize + 64);
+    AssertEquals('and starts with empty data', 0, PInteger(t.GetNodeData(n))^);
   finally
     t.Free;
   end;

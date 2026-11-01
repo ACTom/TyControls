@@ -584,6 +584,11 @@ end;
 
 procedure TTyCustomDBCalendar.Accepted;
 begin
+  { #184: accepting the day shown on a NULL field (a click on it, Enter, Space) is an edit. The
+    day did not move, so nothing had marked the link modified, and a new record kept its date
+    NULL however often the user picked it. }
+  if (FDataLink.Field <> nil) and FLoaded.IsNull then
+    TyDBUserChanged(FDataLink, FInUserEdit);
   if FDataLink.Editing then
     FDataLink.UpdateRecord;
 end;

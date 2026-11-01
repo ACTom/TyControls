@@ -20,7 +20,7 @@ uses
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Base, tyControls.Controller, tyControls.StyleModel,
   tyControls.Painter, tyControls.TrackBar, tyControls.BuiltinThemes,
-  tyControls.MultiTrackBar;
+  tyControls.MultiTrackBar, test.danglingrefs;
 
 type
   { Opens the protected seams: the whole-set setter, Normalize and the read-a-form pair, the
@@ -226,11 +226,17 @@ type
     FBar: TTyRangeTrackBar;
     FSeen: string;
     procedure ReadTheRangeInTheEvent(Sender: TObject; AIndex: Integer);
+    procedure DeleteBeyondTwo(Sender: TObject);
+    procedure DeleteTheForty(Sender: TObject);
     function Values: string;
     function RangesText(ABar: TTyRangeTrackBar): string;
   protected
     procedure SetUp; override;
   published
+    { #182: a range the OnChange handler deletes is gone after the add, the thumbs are the ends
+      of the ranges left, and the freed range is not read. }
+    procedure TestADeleteInOnChangeKeepsTheRangesInStep;
+    procedure TestTheSelectedRangeDeletedInOnChangeIsReportedOnce;
     procedure TestDefaults;
     procedure TestTheTypeKeyHangsOnTheTrackBars;
     procedure TestLowValueAndHighValueAreTheFirstRange;
@@ -263,9 +269,16 @@ type
     function Centre(AIndex: Integer): TPoint;
     function HintAt(const P: TPoint): string;
     procedure Selected(Sender: TObject; AIndex: Integer);
+    procedure DeleteBeyondFour(Sender: TObject);
+    procedure DeleteTheSeventy(Sender: TObject);
   protected
     procedure SetUp; override;
   published
+    { #182: a change made in OnChange takes effect, after the rebuild that fired it, and the
+      thumbs stay in step with the items; a range as wide as Integer paints. }
+    procedure TestADeleteInOnChangeKeepsTheThumbsInStep;
+    procedure TestTheSelectedThumbDeletedInOnChangeIsReportedOnce;
+    procedure TestAFullIntegerRangePaints;
     procedure TestDefaults;
     procedure TestTheTypeKeyHangsOnTheTrackBars;
     procedure TestAValueMovesThroughTheModel;
@@ -627,6 +640,7 @@ type
     procedure EditColor(Sender: TObject; AIndex: Integer; var AColor: TColor;
       var AHandled: Boolean);
     procedure TakeClick(Sender: TObject; AValue: Integer; var AHandled: Boolean);
+    procedure DeleteBeyondThree(Sender: TObject);
     { A stop with no colour of its own (Color clDefault) at AValue. }
     procedure AddPlainStop(AValue: Integer);
     procedure SetStops(const AValues: array of Integer; const AColors: array of TColor);
@@ -644,6 +658,8 @@ type
   protected
     procedure SetUp; override;
   published
+    { #182: a stop the OnChange handler deletes is gone after the add, and not read. }
+    procedure TestADeleteInOnChangeKeepsTheStopsInStep;
     procedure TestDefaults;
     procedure TestTheTypeKeyHangsOnTheTrackBar;
     procedure TestTheTrackIsTheGradientFill;
@@ -2312,6 +2328,68 @@ begin
   FSeen := '';
 end;
 
+procedure TTyRangeTrackBarTest.DeleteBeyondTwo(Sender: TObject);
+begin
+  if FBar.Ranges.Count > 2 then FBar.Ranges.Delete(FBar.Ranges.Count - 1);
+end;
+
+procedure TTyRangeTrackBarTest.TestADeleteInOnChangeKeepsTheRangesInStep;
+var
+  r: TTyTrackRange;
+  added: Integer;
+begin
+  FBar.Ranges.Clear;
+  r := FBar.Ranges.Add;
+  r.Low := 10;
+  r.High := 20;
+  r := FBar.Ranges.Add;
+  r.Low := 40;
+  r.High := 50;
+  FBar.OnChange := @DeleteBeyondTwo;
+  BeginPoison;   // the new range is freed by the handler: a read of it faults
+  try
+    added := TRangeAccess(FBar).UserAddThumb(80);
+  finally
+    EndPoison;
+  end;
+  AssertEquals('the handler''s delete took effect', 2, FBar.Ranges.Count);
+  AssertEquals('and the thumbs are the ends of the ranges', 4, FBar.ThumbCount);
+  AssertEquals('the deleted range is not reported as added', -1, added);
+end;
+
+procedure TTyRangeTrackBarTest.DeleteTheForty(Sender: TObject);
+var
+  i: Integer;
+begin
+  FLog := FLog + 'C ';
+  for i := FBar.Ranges.Count - 1 downto 0 do
+    if FBar.Ranges[i].Low = 40 then FBar.Ranges.Delete(i);
+end;
+
+{ The new range sorts in first and moves the selected end from 3 to 5; the handler then deletes
+  its range. Its own rebuild reports the selection gone -- the add's move to 5, stale by then, is
+  not reported after it. }
+procedure TTyRangeTrackBarTest.TestTheSelectedRangeDeletedInOnChangeIsReportedOnce;
+var
+  r: TTyTrackRange;
+begin
+  FBar.Ranges.Clear;
+  r := FBar.Ranges.Add;
+  r.Low := 10;
+  r.High := 20;
+  r := FBar.Ranges.Add;
+  r.Low := 40;
+  r.High := 50;
+  FBar.SelectedThumb := 3;   // the high end of 40..50
+  FBar.OnThumbSelect := @ThumbSelected;
+  FBar.OnChange := @DeleteTheForty;
+  FLog := '';
+  TRangeAccess(FBar).UserAddThumb(2);
+  AssertEquals('0,7,10,20', Values);
+  AssertEquals('nothing selected', -1, FBar.SelectedThumb);
+  AssertEquals('the add, the delete, the selection gone -- once', 'C C S-1 ', FLog);
+end;
+
 function TTyRangeTrackBarTest.Values: string;
 begin
   Result := ValuesOf(FBar);
@@ -2771,6 +2849,72 @@ begin
   info.HintStr := FBar.Hint;
   FBar.Perform(CM_HINTSHOW, 0, LParam(PtrUInt(@info)));
   Result := info.HintStr;
+end;
+
+procedure TTyMultiTrackBarTest.DeleteBeyondFour(Sender: TObject);
+begin
+  if FBar.Thumbs.Count > 4 then FBar.Thumbs.Delete(FBar.Thumbs.Count - 1);
+end;
+
+procedure TTyMultiTrackBarTest.TestADeleteInOnChangeKeepsTheThumbsInStep;
+var
+  i, added: Integer;
+begin
+  FBar.Thumbs.Clear;
+  for i := 0 to 3 do FBar.Thumbs.Add.Value := 10 + 20 * i;
+  FBar.OnChange := @DeleteBeyondFour;
+  BeginPoison;   // the new item is freed by the handler: a read of it faults
+  try
+    added := TMultiAccess(FBar).UserAddThumb(95);
+  finally
+    EndPoison;
+  end;
+  AssertEquals('the handler''s delete took effect', 4, FBar.Thumbs.Count);
+  AssertEquals('and the thumbs are the items', FBar.Thumbs.Count, FBar.ThumbCount);
+  AssertEquals('the deleted thumb is not reported as added', -1, added);
+end;
+
+procedure TTyMultiTrackBarTest.DeleteTheSeventy(Sender: TObject);
+var
+  i: Integer;
+begin
+  FLog := FLog + 'C ';
+  for i := FBar.Thumbs.Count - 1 downto 0 do
+    if FBar.Thumbs[i].Value = 70 then FBar.Thumbs.Delete(i);
+end;
+
+{ The add moves the selected thumb from 3 to 4; the handler then deletes it. Its own rebuild
+  reports the selection gone -- the add's move to 4, stale by then, is not reported after it. }
+procedure TTyMultiTrackBarTest.TestTheSelectedThumbDeletedInOnChangeIsReportedOnce;
+var
+  i: Integer;
+begin
+  FBar.Thumbs.Clear;
+  for i := 0 to 3 do FBar.Thumbs.Add.Value := 10 + 20 * i;
+  FBar.SelectedThumb := 3;   // the thumb at 70
+  FBar.OnThumbSelect := @Selected;
+  FBar.OnChange := @DeleteTheSeventy;
+  FLog := '';
+  TMultiAccess(FBar).UserAddThumb(5);
+  AssertEquals('5,10,30,50', Values);
+  AssertEquals('nothing selected', -1, FBar.SelectedThumb);
+  AssertEquals('the add, the delete, the selection gone -- once', 'C C S-1 ', FLog);
+end;
+
+procedure TTyMultiTrackBarTest.TestAFullIntegerRangePaints;
+var
+  bmp: TBitmap;
+begin
+  FBar.Min := 0;
+  FBar.Max := High(Integer);
+  bmp := TBitmap.Create;
+  try
+    bmp.SetSize(400, 24);
+    TMultiAccess(FBar).RenderTo(bmp.Canvas, Rect(0, 0, 400, 24), 96);   // used to never return
+  finally
+    bmp.Free;
+  end;
+  AssertTrue('the paint finished', True);
 end;
 
 procedure TTyMultiTrackBarTest.TestDefaults;
@@ -6744,6 +6888,30 @@ begin
 end;
 
 { TTyGradientTrackBarTest }
+
+procedure TTyGradientTrackBarTest.DeleteBeyondThree(Sender: TObject);
+begin
+  if FBar.Thumbs.Count > 3 then FBar.Thumbs.Delete(FBar.Thumbs.Count - 1);
+end;
+
+{ #182: see TTyMultiTrackBarTest.TestADeleteInOnChangeKeepsTheThumbsInStep }
+procedure TTyGradientTrackBarTest.TestADeleteInOnChangeKeepsTheStopsInStep;
+var
+  i, added: Integer;
+begin
+  FBar.Thumbs.Clear;
+  for i := 0 to 2 do FBar.Thumbs.Add.Value := 10 + 30 * i;
+  FBar.OnChange := @DeleteBeyondThree;
+  BeginPoison;   // the new stop is freed by the handler: a read of it faults
+  try
+    added := FBar.UserAddThumb(95);
+  finally
+    EndPoison;
+  end;
+  AssertEquals('the handler''s delete took effect', 3, FBar.Thumbs.Count);
+  AssertEquals('and the thumbs are the stops', 3, FBar.ThumbCount);
+  AssertEquals('the deleted stop is not reported as added', -1, added);
+end;
 
 procedure TTyGradientTrackBarTest.SetUp;
 begin

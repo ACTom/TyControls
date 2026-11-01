@@ -365,7 +365,7 @@ function TTyCustomButton.DialogChar(var Message: TLMKey): Boolean;
 begin
   { No mnemonic parsing means no mnemonic: a button showing 'AT&T' literally must not also
     answer Alt+T, or the escape hatch would only fix half the bug. }
-  if IsEnabled and FShowAccelChar and TyIsAccelKey(Message, Caption) then
+  if IsEnabled and FShowAccelChar and TyShownInForm(Self) and TyIsAccelKey(Message, Caption) then
   begin
     Click;
     Exit(True);

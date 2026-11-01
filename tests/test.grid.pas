@@ -10,7 +10,8 @@ uses
   tyControls.Types, tyControls.Controller, tyControls.Columns, tyControls.Grid, tyControls.ComboBox,
   tyControls.Painter, tyControls.ImageCollection, tyControls.Edit, StdCtrls,
   tyControls.DateTimePicker, tyControls.CalcEdit,
-  tyControls.Grid.Layout, tyControls.Panel;
+  tyControls.Grid.Layout, tyControls.Panel,
+  tyControls.Popover;      // the filter drop-down's popover (TestFilterDropDownDoesNotAnimate)
 
 type
   TTyGridControlTest = class(TTestCase)
@@ -267,6 +268,9 @@ type
     procedure TestValidCharsBlocksIllegalKeys;
     procedure TestEnterAdvancesDownAndTabAdvancesByCell;
     procedure TestHostEditLinkTakesOverTheCell;
+    { #140: a host editor's value is committed when the focus leaves the grid -- it was
+      dropped, as a refused edit is. }
+    procedure TestAHostEditorIsCommittedWhenTheFocusLeaves;
     procedure TestHeaderGroupBandStacksAboveColumnHeader;
     procedure TestHeaderGroupBandIsNotALeafHeaderForHitTesting;
     procedure TestSecondarySortKeyBreaksTies;
@@ -348,6 +352,7 @@ type
     procedure TestClickingFilterRowOpensAnEditorThatFilters;
     procedure TestFilterEditorSitsInTheBandThatIsPainted;
     procedure TestFilterDropDownIsLaidOutInLogicalPx;
+    procedure TestFilterDropDownDoesNotAnimate;
     procedure TestCsvStreamRoundTrip;
     procedure TestClearContentsRangeIsUndoable;
     procedure TestRangeLimitedExport;
@@ -1541,6 +1546,8 @@ type
   TStrGridAccess = class(TTyStringGrid)
   public
     procedure ClickAt(X, Y: Integer);
+    { The focus leaving the whole grid. }
+    procedure LeaveGrid;
     function  PressKey(AKey: Word): Boolean;
     procedure PressKey(AKey: Word; AShift: TShiftState);
     procedure DoRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -2176,6 +2183,11 @@ end;
 procedure TStrGridAccess.DoRender(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   RenderTo(ACanvas, ARect, APPI);
+end;
+
+procedure TStrGridAccess.LeaveGrid;
+begin
+  DoExit;
 end;
 
 procedure TStrGridAccess.ClickAt(X, Y: Integer);
@@ -5582,6 +5594,27 @@ begin
   G.PressKeyShift(VK_TAB);
   AssertEquals('Shift+Tab 折回上一行行尾(列)', 3, G.Col);
   AssertEquals('Shift+Tab 折回上一行行尾(行)', 1, G.Row);
+end;
+
+procedure TTyStringGridTest.TestAHostEditorIsCommittedWhenTheFocusLeaves;
+var
+  G: TStrGridAccess;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  G.RowCount := 4;
+  G.Cells[2, 1] := 'old';
+  FProbeLink := TProbeEditLink.Create;
+  try
+    G.OnCreateEditLink := @HookCreateEditLink;
+    AssertTrue('setup: editing through the link', G.BeginEdit(2, 1));
+    TProbeEditLink(FProbeLink).SetValue('new');
+    G.LeaveGrid;
+    AssertFalse('the edit ended', G.Editing);
+    AssertEquals('with the value committed', 'new', G.Cells[2, 1]);
+  finally
+    { The grid released the link's editor; the link object itself is the test's. }
+    FreeAndNil(FProbeLink);
+  end;
 end;
 
 { 宿主 EditLink 接管整格:内建编辑器一概不出场,提交时取 EditLink 的值。 }
@@ -10854,6 +10887,20 @@ begin
     hi.Free;
     lo.Free;
   end;
+end;
+
+{ 列头筛选下拉的弹层不做淡出:FilterPopupClosed 挂在 OnHide 上,读的是 FFilterCol /
+  FFilterAccepted 此刻的值。TTyPopover 默认开动画、OnHide 等淡出播完才来,那期间再点
+  另一列的漏斗,迟到的 OnHide 会把上一列「确定」的结果丢掉。面板的 Owner 就是那个弹层。 }
+procedure TTyStringGridTest.TestFilterDropDownDoesNotAnimate;
+var
+  G: TStrGridAccess;
+  pop: TTyPopover;
+begin
+  G := MakeStrGrid(FForm, FCtl);
+  AssertTrue('the panel belongs to the popover', G.FilterDropDownPanelForTest.Owner is TTyPopover);
+  pop := TTyPopover(G.FilterDropDownPanelForTest.Owner);
+  AssertFalse('its OnHide must stay synchronous: no fade', pop.AnimationsEnabled);
 end;
 
 { P3.6:删一列要撤得回来 —— 连**那一列的全部身份**一起。

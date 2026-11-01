@@ -4,7 +4,8 @@ interface
 uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Controller, tyControls.Popover;
+  tyControls.Types, tyControls.Controller, tyControls.Popover,
+  test.danglingrefs;   // BeginPoison / EndPoison: freeing a popover mid-animation
 
 type
   { Pure-rules tests: every function here takes plain integers / enums, so they run with no
@@ -45,6 +46,13 @@ type
     procedure TestFrameSizeSpendsNoGapWithoutContent;
     procedure TestArrowPointsPerSide;
     procedure TestArrowPointsNoneWithoutArrow;
+    procedure TestTipMarginAddsTheCornerInset;
+    procedure TestPlaceKeepsTheTipOffTheCorners;
+    procedure TestLayoutKeepsTheArrowOffTheCorners;
+    procedure TestMoveOffsetComesFromTheFarSide;
+    procedure TestFlyoutLiesInsideAlongEachEdge;
+    procedure TestFlyoutIsKeptOnTheWorkArea;
+    procedure TestFlyoutSlidesOutOfItsEdge;
   end;
 
   { Headless component behaviour: typeKeys, defaults, theme-driven measurement + placement,
@@ -57,7 +65,9 @@ type
     FForm: TForm;
     FPanel: TWinControl;   // the "container the designer filled" this popover hosts
     FHidden: Integer;      // OnHide fire count
+    FShown: Integer;       // OnShow fire count
     procedure HandleHide(Sender: TObject);
+    procedure HandleShow(Sender: TObject);
     function NewPopover: TTyPopover;   // wired to the test controller + the test panel
   protected
     procedure SetUp; override;
@@ -92,6 +102,32 @@ type
     procedure TestGradientBodyDrawsNoArrow;
     procedure TestTitleBandFillsItsThemeBackground;
     procedure TestNoThemedBackgroundDrawsNothing;
+    procedure TestGeometryKeepsTheTipOnTheStraightRun;
+    procedure TestBorderlessInsetIsTheRadiusAlone;
+    procedure TestRoundedCornerBesideTheArrowStaysACurve;
+    procedure TestArrowSidesCarryTheBorder;
+    procedure TestStyleOverrideRestylesOneInstance;
+    procedure TestClearingStyleOverrideReturnsToTheTheme;
+    procedure TestStyleOverrideRetunesThisPopoversTokens;
+    procedure TestStyleOverrideTextReachesTheTitleAndNothingElse;
+    procedure TestAnimationDefaults;
+    procedure TestShowFadesAndMovesIn;
+    procedure TestHideFadesOutThenFiresOnHide;
+    procedure TestAnimationsOffIsTheUnanimatedPopover;
+    procedure TestNoEffectsOrZeroTimesIsTheUnanimatedPopover;
+    procedure TestFadeOnlyAndMoveOnly;
+    procedure TestTimesComeFromOptionsThenTheTheme;
+    procedure TestShowDuringTheFadeOutTurnsItBack;
+    procedure TestShowElsewhereDuringTheFadeOutFinishesItFirst;
+    procedure TestAnimationsOffMidFadeFinishesNow;
+    procedure TestFreeingMidFadeSendsTheContentHome;
+    procedure TestFreeingWhileUpDoesNotStartAFade;
+    procedure TestFlyoutDefaults;
+    procedure TestFlyoutSpansTheTargetEdge;
+    procedure TestFlyoutHasNoArrow;
+    procedure TestFlyoutIgnoresPlacementAndOffBringsTheBubbleBack;
+    procedure TestFlyoutStretchesTheContentAlongTheEdge;
+    procedure TestFlyoutMovesInFromItsEdge;
   end;
 
 implementation
@@ -146,6 +182,15 @@ type
       ATipLocal, APPI: Integer);
     function TitleInk: TTyColor;
     function PopoverStyle: TTyStyleSet;
+    function TitleStyle: TTyStyleSet;
+    procedure ArmShowAnimation(const AGeometry: TTyPopoverGeometry; APPI: Integer);
+    function TurnBackHide(const AAnchorScreen, AWorkArea: TRect; APPI: Integer): Boolean;
+    function CanDriveAnimation: Boolean; override;
+    function Win: TForm;
+  public
+    { The headless runner cannot put the window on screen, so it answers "the window is up"
+      for the hide animation by this switch. Off (the default) = what a hidden window says. }
+    Drive: Boolean;
   end;
 
 function TPopAccess.BeginShowing(const AAnchorScreen, AWorkArea: TRect;
@@ -168,6 +213,31 @@ end;
 function TPopAccess.PopoverStyle: TTyStyleSet;
 begin
   Result := inherited PopoverStyle;
+end;
+
+function TPopAccess.TitleStyle: TTyStyleSet;
+begin
+  Result := inherited TitleStyle;
+end;
+
+procedure TPopAccess.ArmShowAnimation(const AGeometry: TTyPopoverGeometry; APPI: Integer);
+begin
+  inherited ArmShowAnimation(AGeometry, APPI);
+end;
+
+function TPopAccess.TurnBackHide(const AAnchorScreen, AWorkArea: TRect; APPI: Integer): Boolean;
+begin
+  Result := inherited TurnBackHide(AAnchorScreen, AWorkArea, APPI);
+end;
+
+function TPopAccess.CanDriveAnimation: Boolean;
+begin
+  Result := Drive;
+end;
+
+function TPopAccess.Win: TForm;
+begin
+  Result := PopupWindow;
 end;
 
 { ============================== TTyPopoverRulesTest ============================== }
@@ -640,6 +710,117 @@ begin
   AssertFalse('degenerate frame, no points', TyPopoverArrowPoints(L, psvBottom, tip, b1, b2));
 end;
 
+procedure TTyPopoverRulesTest.TestTipMarginAddsTheCornerInset;
+begin
+  // The base stays a half-base PLUS the corner's curve in from each end of the edge...
+  AssertEquals('half-base + corner', 14, TyPopoverTipMargin(224, 8, 6));
+  AssertEquals('no corner: the old rule', 8, TyPopoverTipMargin(224, 8, 0));
+  // ...unless the edge cannot hold both margins: then the old rule is all that is left.
+  AssertEquals('too short for both margins', 8, TyPopoverTipMargin(27, 8, 6));
+  AssertEquals('exactly long enough', 14, TyPopoverTipMargin(28, 8, 6));
+end;
+
+procedure TTyPopoverRulesTest.TestPlaceKeepsTheTipOffTheCorners;
+var
+  g: TTyPopoverGeometry;
+begin
+  // TestTipClampedIntoFrame's frame, but with a 6px corner: the tip slides in past the curve
+  // as well as the half-base, at both ends of the edge.
+  g := TyPopoverPlace(Rect(0, 100, 16, 124), 224, 128,
+    Rect(0, 0, 200, 1040), ppBottom, 4, 8, 6);
+  AssertEquals('frame hugs the work area left', 0, g.Frame.Left);
+  AssertEquals('tip clamped past the corner', 14, g.TipX);
+  g := TyPopoverPlace(Rect(1900, 100, 1920, 124), 224, 128,
+    Rect(0, 0, 1920, 1040), ppBottom, 4, 8, 6);
+  AssertEquals('and at the far end', g.Frame.Right - 14, g.TipX);
+  // The horizontal axis follows the same rule.
+  g := TyPopoverPlace(Rect(100, 0, 180, 10), 224, 128,
+    Rect(0, 0, 1920, 1040), ppRight, 4, 8, 6);
+  AssertEquals('beside: tip clamped past the corner', g.Frame.Top + 14, g.TipY);
+end;
+
+procedure TTyPopoverRulesTest.TestLayoutKeepsTheArrowOffTheCorners;
+var
+  L: TTyPopoverLayout;
+begin
+  // A tip asked for at the very corner: the wedge's base starts after the 6px curve.
+  L := TyPopoverLayout(224, 128, psvBottom, 0, True, False, 12, 10, 12, 10, 16, 6, 8, 6);
+  AssertEquals('apex past the corner', 14, L.ArrowTip.X);
+  AssertEquals('base starts where the straight run does', 6, L.ArrowRect.Left);
+  L := TyPopoverLayout(224, 128, psvBottom, 224, True, False, 12, 10, 12, 10, 16, 6, 8, 6);
+  AssertEquals('base ends where the straight run does', 224 - 6, L.ArrowRect.Right);
+  // No inset: exactly the old clamp.
+  L := TyPopoverLayout(224, 128, psvBottom, 0, True, False, 12, 10, 12, 10, 16, 6, 8);
+  AssertEquals('old rule without an inset', 8, L.ArrowTip.X);
+end;
+
+procedure TTyPopoverRulesTest.TestMoveOffsetComesFromTheFarSide;
+var
+  dx, dy: Integer;
+begin
+  // The popup travels TOWARDS its anchor: it starts on the side away from it.
+  TyPopoverMoveOffset(psvBottom, 8, dx, dy);
+  AssertTrue('below: starts lower', (dx = 0) and (dy = 8));
+  TyPopoverMoveOffset(psvTop, 8, dx, dy);
+  AssertTrue('above: starts higher', (dx = 0) and (dy = -8));
+  TyPopoverMoveOffset(psvRight, 8, dx, dy);
+  AssertTrue('right: starts further right', (dx = 8) and (dy = 0));
+  TyPopoverMoveOffset(psvLeft, 8, dx, dy);
+  AssertTrue('left: starts further left', (dx = -8) and (dy = 0));
+  TyPopoverMoveOffset(psvBottom, -3, dx, dy);
+  AssertTrue('a negative distance is none', (dx = 0) and (dy = 0));
+end;
+
+procedure TTyPopoverRulesTest.TestFlyoutLiesInsideAlongEachEdge;
+var
+  T, W, R: TRect;
+begin
+  // Target 100..500 x 100..400 on a big work area; a 60 px thick panel inside each edge,
+  // spanning that edge's whole length.
+  T := Rect(100, 100, 500, 400);
+  W := Rect(0, 0, 1920, 1040);
+  R := TyFlyoutPlace(T, 60, fpaTop, W);
+  AssertTrue('top: along the top edge, inside', EqualRect(Rect(100, 100, 500, 160), R));
+  R := TyFlyoutPlace(T, 60, fpaBottom, W);
+  AssertTrue('bottom: along the bottom edge, inside', EqualRect(Rect(100, 340, 500, 400), R));
+  R := TyFlyoutPlace(T, 60, fpaLeft, W);
+  AssertTrue('left: along the left edge, inside', EqualRect(Rect(100, 100, 160, 400), R));
+  R := TyFlyoutPlace(T, 60, fpaRight, W);
+  AssertTrue('right: along the right edge, inside', EqualRect(Rect(440, 100, 500, 400), R));
+  AssertTrue('the side it reports: below the top edge', TyFlyoutSide(fpaTop) = psvBottom);
+  AssertTrue('above the bottom edge', TyFlyoutSide(fpaBottom) = psvTop);
+  AssertTrue('right of the left edge', TyFlyoutSide(fpaLeft) = psvRight);
+  AssertTrue('left of the right edge', TyFlyoutSide(fpaRight) = psvLeft);
+end;
+
+procedure TTyPopoverRulesTest.TestFlyoutIsKeptOnTheWorkArea;
+var
+  R: TRect;
+begin
+  // A target hanging off the work area's right/bottom: the panel slides back on, whole; it is
+  // pinned to its edge, so it never flips to another one.
+  R := TyFlyoutPlace(Rect(1800, 1000, 2000, 1100), 60, fpaTop, Rect(0, 0, 1920, 1040));
+  AssertTrue('slid left and up onto the work area', EqualRect(Rect(1720, 980, 1920, 1040), R));
+  // Longer than the work area: it hugs the reading (left) edge.
+  R := TyFlyoutPlace(Rect(-100, 10, 2100, 300), 60, fpaTop, Rect(0, 0, 1920, 1040));
+  AssertEquals('wider than the work area: hugs the left', 0, R.Left);
+  AssertEquals('keeps its length', 2200, R.Right - R.Left);
+end;
+
+procedure TTyPopoverRulesTest.TestFlyoutSlidesOutOfItsEdge;
+var
+  dx, dy: Integer;
+begin
+  TyFlyoutMoveOffset(fpaTop, 8, dx, dy);
+  AssertTrue('top: starts higher, slides down', (dx = 0) and (dy = -8));
+  TyFlyoutMoveOffset(fpaBottom, 8, dx, dy);
+  AssertTrue('bottom: starts lower, slides up', (dx = 0) and (dy = 8));
+  TyFlyoutMoveOffset(fpaLeft, 8, dx, dy);
+  AssertTrue('left: starts further left', (dx = -8) and (dy = 0));
+  TyFlyoutMoveOffset(fpaRight, 8, dx, dy);
+  AssertTrue('right: starts further right', (dx = 8) and (dy = 0));
+end;
+
 { ============================ TTyPopoverComponentTest ============================ }
 
 procedure TTyPopoverComponentTest.SetUp;
@@ -652,6 +833,7 @@ begin
   FPanel.SetBounds(CPanelL, CPanelT, CContentW, CContentH);
   FPanel.Visible := False;
   FHidden := 0;
+  FShown := 0;
 end;
 
 procedure TTyPopoverComponentTest.TearDown;
@@ -663,6 +845,11 @@ end;
 procedure TTyPopoverComponentTest.HandleHide(Sender: TObject);
 begin
   Inc(FHidden);
+end;
+
+procedure TTyPopoverComponentTest.HandleShow(Sender: TObject);
+begin
+  Inc(FShown);
 end;
 
 function TTyPopoverComponentTest.NewPopover: TTyPopover;
@@ -1390,6 +1577,862 @@ begin
   finally
     P.Free;
     Bmp.Free;
+  end;
+end;
+
+const
+  { D4 fixtures: a rounded body with an opaque 4px border (StrokeBorder centres on an inset
+    line, so a 1px border is a ~50% blend that proves nothing), lime fill, blue border, on
+    the clRed sentinel ground. }
+  CRoundBordered = 'TyPopover { background: #00FF00; color: #111111; border-radius: 8px;'
+    + ' border: 4px solid #0000FF; padding: 10px 12px; font-size: 12px; }';
+  CRoundBorderless = 'TyPopover { background: #00FF00; color: #111111; border-radius: 8px;'
+    + ' padding: 10px 12px; font-size: 12px; }';
+  CSquareBordered = 'TyPopover { background: #00FF00; color: #111111; border-radius: 0px;'
+    + ' border: 4px solid #0000FF; padding: 10px 12px; font-size: 12px; }';
+
+function IsSentinel(const APx: TBGRAPixel): Boolean;
+begin
+  Result := (APx.red > 200) and (APx.green < 60) and (APx.blue < 60);
+end;
+
+function IsBorderBlue(const APx: TBGRAPixel): Boolean;
+begin
+  Result := (APx.blue > 150) and (APx.green < 120) and (APx.red < 120);
+end;
+
+{ Paint P into a fresh AW x AH sentinel ground and hand back a readable copy. }
+function RenderOnSentinel(P: TPopAccess; AW, AH: Integer; ASide: TTyPopoverSide;
+  ATipLocal: Integer): TBGRABitmap;
+var
+  Bmp: TBitmap;
+begin
+  Bmp := TBitmap.Create;
+  try
+    Bmp.PixelFormat := pf32bit;
+    Bmp.SetSize(AW, AH);
+    Bmp.Canvas.Brush.Color := clRed;
+    Bmp.Canvas.FillRect(0, 0, AW, AH);
+    P.RenderTo(Bmp.Canvas, Rect(0, 0, AW, AH), ASide, ATipLocal, 96);
+    Result := TBGRABitmap.Create(Bmp);
+  finally
+    Bmp.Free;
+  end;
+end;
+
+{ TestGeometryKeepsTheTipOnTheStraightRun
+  The anchor sits at the work area's far left, so the frame hugs that edge and the tip is
+  clamped. With an 8px corner and a 4px border it must come to rest a half-base (8) + the
+  corner (8) + the border (4) in -- the wedge's base then starts where the outline's straight
+  run does. Placement and layout agree on it. }
+procedure TTyPopoverComponentTest.TestGeometryKeepsTheTipOnTheStraightRun;
+var
+  P: TTyPopover;
+  g: TTyPopoverGeometry;
+  L: TTyPopoverLayout;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap,
+    CRoundBordered));
+  P := NewPopover;
+  try
+    g := P.GeometryIn(Rect(0, 100, 10, 124), Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    AssertEquals('frame hugs the work area', 0, g.Frame.Left);
+    AssertEquals('tip = half-base + corner + border in', 8 + 8 + 4, g.TipX - g.Frame.Left);
+    L := P.LayoutIn(g.Frame.Right - g.Frame.Left, g.Frame.Bottom - g.Frame.Top, g.Side, 0, 96);
+    AssertEquals('the layout clamps to the same place', 20, L.ArrowTip.X);
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyPopoverComponentTest.TestBorderlessInsetIsTheRadiusAlone;
+var
+  P: TTyPopover;
+  g: TTyPopoverGeometry;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap,
+    CRoundBorderless));
+  P := NewPopover;
+  try
+    g := P.GeometryIn(Rect(0, 100, 10, 124), Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    AssertEquals('no border: half-base + corner', 8 + 8, g.TipX - g.Frame.Left);
+  finally
+    P.Free;
+  end;
+end;
+
+{ TestRoundedCornerBesideTheArrowStaysACurve
+  Asked for a tip at the very corner (0), a wedge whose base started inside the 8px curve
+  sent the outline back along the top edge: the stroke drew a border bar straight across the
+  rounded corner. Pixel (1,9) is just inside the body's top edge (y=8) and well outside the
+  corner's arc, so on a correct balloon it is the sentinel ground -- neither border nor fill. }
+procedure TTyPopoverComponentTest.TestRoundedCornerBesideTheArrowStaysACurve;
+var
+  P: TPopAccess;
+  R: TBGRABitmap;
+  Px: TBGRAPixel;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap,
+    CRoundBordered));
+  P := TPopAccess(NewPopover);
+  try
+    R := RenderOnSentinel(P, 224, 128, psvBottom, 0);
+    try
+      Px := R.GetPixel(1, 9);
+      AssertTrue(Format('the corner outside the curve is untouched (got %d,%d,%d)',
+        [Px.red, Px.green, Px.blue]), IsSentinel(Px));
+      // And the balloon is still there: the body's middle is the fill.
+      Px := R.GetPixel(112, 64);
+      AssertTrue('the body still paints', (Px.green > 180) and (Px.red < 120));
+    finally
+      R.Free;
+    end;
+  finally
+    P.Free;
+  end;
+end;
+
+{ TestArrowSidesCarryTheBorder
+  One outline: the two slanted sides of the wedge are stroked with the border colour (which a
+  wedge pasted onto a box never had), while the base under the apex stays fill. }
+procedure TTyPopoverComponentTest.TestArrowSidesCarryTheBorder;
+var
+  P: TPopAccess;
+  R: TBGRABitmap;
+  Px: TBGRAPixel;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap,
+    CSquareBordered));
+  P := TPopAccess(NewPopover);
+  try
+    R := RenderOnSentinel(P, 224, 128, psvBottom, 112);
+    try
+      // The stroke's centreline runs (104,10)-(112,2)-(120,10): both pixels sit on it.
+      Px := R.GetPixel(106, 8);
+      AssertTrue(Format('left slant is border (got %d,%d,%d)', [Px.red, Px.green, Px.blue]),
+        IsBorderBlue(Px));
+      Px := R.GetPixel(118, 8);
+      AssertTrue(Format('right slant is border (got %d,%d,%d)', [Px.red, Px.green, Px.blue]),
+        IsBorderBlue(Px));
+      Px := R.GetPixel(112, 9);
+      AssertTrue(Format('the base under the apex is fill (got %d,%d,%d)',
+        [Px.red, Px.green, Px.blue]), (Px.green > 180) and (Px.blue < 120));
+    finally
+      R.Free;
+    end;
+  finally
+    P.Free;
+  end;
+end;
+
+const
+  { D2: the theme's popover is a square blue card; the override makes one instance a rounded
+    lime one with a 4px magenta border. All three colours are far from each other and from
+    the clRed sentinel. }
+  CThemeBlueSquare = 'TyPopover { background: #3B82F6; color: #111111; border-radius: 0px;'
+    + ' padding: 10px 12px; font-size: 12px; }';
+  COverrideLime = 'background: #00FF00; border: 4px solid #FF00FF; border-radius: 12px;';
+
+function IsThemeBlue(const APx: TBGRAPixel): Boolean;
+begin
+  Result := (APx.blue > 180) and (APx.red < 120) and (APx.green < 170);
+end;
+
+function IsLime(const APx: TBGRAPixel): Boolean;
+begin
+  Result := (APx.green > 180) and (APx.red < 120) and (APx.blue < 120);
+end;
+
+function IsMagenta(const APx: TBGRAPixel): Boolean;
+begin
+  Result := (APx.red > 180) and (APx.blue > 180) and (APx.green < 100);
+end;
+
+{ TestStyleOverrideRestylesOneInstance
+  cx's Color / BorderColor / Rounded / RoundRadius, the library's way: two popovers on one
+  theme, one with a StyleOverride. Each paints its own fill, border and corner. }
+procedure TTyPopoverComponentTest.TestStyleOverrideRestylesOneInstance;
+var
+  Plain, Styled: TPopAccess;
+  R1, R2: TBGRABitmap;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap,
+    CThemeBlueSquare));
+  Plain := TPopAccess(NewPopover);
+  Styled := TPopAccess(NewPopover);
+  R1 := nil;
+  R2 := nil;
+  try
+    Styled.StyleOverride := COverrideLime;
+    R1 := RenderOnSentinel(Plain, 224, 128, psvBottom, 112);
+    R2 := RenderOnSentinel(Styled, 224, 128, psvBottom, 112);
+    AssertTrue('the plain one keeps the theme fill', IsThemeBlue(R1.GetPixel(112, 64)));
+    AssertTrue('the styled one takes its own fill', IsLime(R2.GetPixel(112, 64)));
+    // Row 9 is inside the body's top edge (y=8): border on the styled one, fill on the plain.
+    AssertTrue('the styled one has its own border', IsMagenta(R2.GetPixel(60, 9)));
+    AssertTrue('the plain one has none', IsThemeBlue(R1.GetPixel(60, 9)));
+    // (2,10) is inside a square corner but outside a 12px rounded one.
+    AssertTrue('square corner on the plain one', IsThemeBlue(R1.GetPixel(2, 10)));
+    AssertTrue('rounded corner on the styled one', IsSentinel(R2.GetPixel(2, 10)));
+  finally
+    R1.Free;
+    R2.Free;
+    Plain.Free;
+    Styled.Free;
+  end;
+end;
+
+procedure TTyPopoverComponentTest.TestClearingStyleOverrideReturnsToTheTheme;
+var
+  P: TPopAccess;
+  R: TBGRABitmap;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap,
+    CThemeBlueSquare));
+  P := TPopAccess(NewPopover);
+  try
+    P.StyleOverride := COverrideLime;
+    R := RenderOnSentinel(P, 224, 128, psvBottom, 112);
+    try
+      AssertTrue('overridden', IsLime(R.GetPixel(112, 64)));
+    finally
+      R.Free;
+    end;
+    // A new text is a new look, not the cached old one.
+    P.StyleOverride := 'background: #FF00FF;';
+    R := RenderOnSentinel(P, 224, 128, psvBottom, 112);
+    try
+      AssertTrue('the new override, not the cached one', IsMagenta(R.GetPixel(112, 64)));
+    finally
+      R.Free;
+    end;
+    P.StyleOverride := '';
+    R := RenderOnSentinel(P, 224, 128, psvBottom, 112);
+    try
+      AssertTrue('cleared: the theme again', IsThemeBlue(R.GetPixel(112, 64)));
+      AssertTrue('and its square corner', IsThemeBlue(R.GetPixel(2, 10)));
+    finally
+      R.Free;
+    end;
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyPopoverComponentTest.TestStyleOverrideRetunesThisPopoversTokens;
+var
+  Plain, Tuned: TTyPopover;
+begin
+  // The '--popover-*' tokens are per-instance too: only the tuned popover's strip grows.
+  FCtl.LoadThemeCss(ThemeCss);
+  Plain := NewPopover;
+  Tuned := NewPopover;
+  try
+    Tuned.StyleOverride := '--popover-arrow-size: 14px;';
+    AssertEquals('the tuned strip', 14 + CPadT + CContentH + CPadB,
+      Tuned.MeasureFrameAtPPI(96).cy);
+    AssertEquals('the other keeps the theme''s', TyPopoverArrowSize + CPadT + CContentH + CPadB,
+      Plain.MeasureFrameAtPPI(96).cy);
+    Tuned.StyleOverride := '--popover-offset: 20px;';
+    AssertEquals('the offset token too', 144,
+      Tuned.GeometryIn(Rect(100, 100, 180, 124), Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96).Frame.Top);
+  finally
+    Plain.Free;
+    Tuned.Free;
+  end;
+end;
+
+{ TestStyleOverrideTextReachesTheTitleAndNothingElse
+  The headline is the only text a popover draws, so the override's colour reaches it even
+  though the theme gives TyPopoverTitle a colour of its own; its background does NOT (laid on
+  the title band too, a gradient would restart inside the band). }
+procedure TTyPopoverComponentTest.TestStyleOverrideTextReachesTheTitleAndNothingElse;
+var
+  P: TPopAccess;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    'TyPopoverTitle { color: #10B981; }'));
+  P := TPopAccess(NewPopover);
+  try
+    P.Title := 'Confirm';
+    P.StyleOverride := 'color: #FF0000; background: #000080; font-weight: 300;';
+    AssertEquals('the override colours the title', Int64(TyRGB($FF, $00, $00)),
+      Int64(P.TitleInk));
+    AssertEquals('and sets its weight', 300, P.TitleStyle.FontWeight);
+    AssertFalse('but lays no band behind it', tpBackground in P.TitleStyle.Present);
+    AssertEquals('the body takes the background', Int64(TyRGB($00, $00, $80)),
+      Int64(P.PopoverStyle.Background.Color));
+  finally
+    P.Free;
+  end;
+end;
+
+const
+  { D1: the animation tokens, pinned (round numbers so every frame is arithmetic). }
+  CAnimRoot = ':root { --popover-show-duration: 160; --popover-hide-duration: 80;'
+    + ' --popover-move-distance: 8px; }';
+  CAnchor: TRect = (Left: 100; Top: 100; Right: 180; Bottom: 124);
+  CWork: TRect = (Left: CWorkL; Top: CWorkT; Right: CWorkR; Bottom: CWorkB);
+
+procedure TTyPopoverComponentTest.TestAnimationDefaults;
+var
+  P: TTyPopover;
+begin
+  P := TTyPopover.Create(nil);
+  try
+    AssertTrue('animates by default', P.AnimationsEnabled);
+    AssertTrue('fades by default', P.AnimationOptions.FadeEffect);
+    AssertTrue('moves by default', P.AnimationOptions.MoveEffect);
+    AssertEquals('show time follows the theme', -1, P.AnimationOptions.ShowingAnimationTime);
+    AssertEquals('hide time follows the theme', -1, P.AnimationOptions.HidingAnimationTime);
+    P.AnimationOptions.ShowingAnimationTime := -7;
+    AssertEquals('any negative time means the theme''s', -1,
+      P.AnimationOptions.ShowingAnimationTime);
+    AssertFalse('nothing running', P.Animating);
+  finally
+    P.Free;
+  end;
+end;
+
+{ TestShowFadesAndMovesIn
+  Armed before the window goes up: transparent, and MoveEffect's distance BELOW where it lands
+  (it sits below its anchor, so it rises in). Stepped 16 ms at a time over the pinned 160 ms
+  the opacity only climbs and the frame only rises, and the end is the placement, opaque, with
+  the window off the layered path again. The midpoint is the ease-out curve's: 1-(1-t)^3. }
+procedure TTyPopoverComponentTest.TestShowFadesAndMovesIn;
+var
+  P: TPopAccess;
+  g: TTyPopoverGeometry;
+  i, lastA, lastTop: Integer;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    CAnimRoot));
+  P := TPopAccess(NewPopover);
+  try
+    g := P.BeginShowing(CAnchor, CWork, 96);
+    P.ArmShowAnimation(g, 96);
+    AssertTrue('animating', P.Animating);
+    AssertTrue('fading', P.Win.AlphaBlend);
+    AssertEquals('starts transparent', 0, P.Win.AlphaBlendValue);
+    AssertEquals('starts the move distance below', g.Frame.Top + 8, P.Win.Top);
+    AssertEquals('no sideways move', g.Frame.Left, P.Win.Left);
+    lastA := 0;
+    lastTop := P.Win.Top;
+    for i := 1 to 4 do
+    begin
+      AssertTrue('a frame changed', P.AdvanceAnimation(20));
+      AssertTrue('opacity only climbs', P.Win.AlphaBlendValue >= lastA);
+      AssertTrue('the frame only rises', P.Win.Top <= lastTop);
+      lastA := P.Win.AlphaBlendValue;
+      lastTop := P.Win.Top;
+    end;
+    // 80 of 160 ms: eased 1 - 0.5^3 = 0.875.
+    AssertEquals('midpoint opacity', Round(255 * 0.875), P.Win.AlphaBlendValue);
+    AssertEquals('midpoint position', g.Frame.Top + Round(8 * 0.125), P.Win.Top);
+    for i := 1 to 4 do P.AdvanceAnimation(20);
+    AssertFalse('done', P.Animating);
+    AssertFalse('off the layered path again', P.Win.AlphaBlend);
+    AssertEquals('opaque', 255, P.Win.AlphaBlendValue);
+    AssertEquals('settled on the placement', g.Frame.Top, P.Win.Top);
+    AssertEquals('settled on the placement (x)', g.Frame.Left, P.Win.Left);
+    AssertTrue('still up', P.Showing);
+  finally
+    P.Free;
+  end;
+end;
+
+{ TestHideFadesOutThenFiresOnHide
+  Hide on a popup that is up: Showing drops at once, but the content stays in the window and
+  fades with it; OnHide fires once, when the fade ends, with the content back home. The frame
+  does not move back out (DevExpress's hide is a fade only). }
+procedure TTyPopoverComponentTest.TestHideFadesOutThenFiresOnHide;
+var
+  P: TPopAccess;
+  g: TTyPopoverGeometry;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    CAnimRoot));
+  P := TPopAccess(NewPopover);
+  try
+    P.Drive := True;
+    P.OnHide := @HandleHide;
+    g := P.BeginShowing(CAnchor, CWork, 96);
+    P.ArmShowAnimation(g, 96);
+    P.AdvanceAnimation(160);
+    AssertFalse('shown and settled', P.Animating);
+    P.Hide;
+    AssertFalse('Showing drops at once', P.Showing);
+    AssertTrue('fading out', P.Animating);
+    AssertEquals('no OnHide yet', 0, FHidden);
+    AssertTrue('the content fades with the window', FPanel.Parent <> FForm);
+    AssertTrue('on the layered path', P.Win.AlphaBlend);
+    P.AdvanceAnimation(40);
+    // 40 of 80 ms back down: eased 0.875 of the way from 0, i.e. alpha 223.
+    AssertEquals('half way out', Round(255 * 0.875), P.Win.AlphaBlendValue);
+    P.Hide;
+    AssertEquals('a second Hide mid-fade adds nothing', 0, FHidden);
+    P.AdvanceAnimation(40);
+    AssertFalse('done', P.Animating);
+    AssertEquals('OnHide once, at the end', 1, FHidden);
+    AssertSame('the content is home', FForm, FPanel.Parent);
+    AssertFalse('and hidden again, as it was', FPanel.Visible);
+    AssertFalse('opacity reset', P.Win.AlphaBlend);
+    AssertEquals('it faded where it stood', g.Frame.Top, P.Win.Top);
+  finally
+    P.Free;
+  end;
+end;
+
+{ TestAnimationsOffIsTheUnanimatedPopover
+  The switch off: the window is never touched -- no AlphaBlend, bounds exactly the placement
+  -- there is nothing to step, and Hide is immediate: OnHide and the content's return happen
+  inside the call, as before the popover could animate. Drive is on, so it is the switch and
+  not a missing window that keeps it still. }
+procedure TTyPopoverComponentTest.TestAnimationsOffIsTheUnanimatedPopover;
+var
+  P: TPopAccess;
+  g: TTyPopoverGeometry;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    CAnimRoot));
+  P := TPopAccess(NewPopover);
+  try
+    P.Drive := True;
+    P.OnHide := @HandleHide;
+    P.AnimationsEnabled := False;
+    g := P.BeginShowing(CAnchor, CWork, 96);
+    P.ArmShowAnimation(g, 96);
+    AssertFalse('not animating', P.Animating);
+    AssertFalse('never layered', P.Win.AlphaBlend);
+    AssertEquals('opacity untouched', 255, P.Win.AlphaBlendValue);
+    AssertTrue('exactly the placement', EqualRect(g.Frame, P.Win.BoundsRect));
+    AssertFalse('nothing to step', P.AdvanceAnimation(16));
+    P.Hide;
+    AssertEquals('OnHide inside the call', 1, FHidden);
+    AssertSame('content home inside the call', FForm, FPanel.Parent);
+    AssertFalse('not animating', P.Animating);
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyPopoverComponentTest.TestNoEffectsOrZeroTimesIsTheUnanimatedPopover;
+var
+  P: TPopAccess;
+  g: TTyPopoverGeometry;
+  pass: Integer;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    CAnimRoot));
+  for pass := 0 to 1 do
+  begin
+    FHidden := 0;
+    P := TPopAccess(NewPopover);
+    try
+      P.Drive := True;
+      P.OnHide := @HandleHide;
+      if pass = 0 then
+      begin
+        P.AnimationOptions.FadeEffect := False;
+        P.AnimationOptions.MoveEffect := False;
+      end
+      else
+      begin
+        P.AnimationOptions.ShowingAnimationTime := 0;
+        P.AnimationOptions.HidingAnimationTime := 0;
+      end;
+      g := P.BeginShowing(CAnchor, CWork, 96);
+      P.ArmShowAnimation(g, 96);
+      AssertFalse(Format('pass %d: not animating', [pass]), P.Animating);
+      AssertFalse(Format('pass %d: never layered', [pass]), P.Win.AlphaBlend);
+      AssertTrue(Format('pass %d: exactly the placement', [pass]),
+        EqualRect(g.Frame, P.Win.BoundsRect));
+      P.Hide;
+      AssertEquals(Format('pass %d: OnHide inside the call', [pass]), 1, FHidden);
+      AssertSame(Format('pass %d: content home', [pass]), FForm, FPanel.Parent);
+    finally
+      P.Free;
+    end;
+  end;
+end;
+
+procedure TTyPopoverComponentTest.TestFadeOnlyAndMoveOnly;
+var
+  P: TPopAccess;
+  g: TTyPopoverGeometry;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    CAnimRoot));
+  P := TPopAccess(NewPopover);
+  try
+    // Move only: never layered, but it starts below and rises.
+    P.Drive := True;
+    P.OnHide := @HandleHide;
+    P.AnimationOptions.FadeEffect := False;
+    g := P.BeginShowing(CAnchor, CWork, 96);
+    P.ArmShowAnimation(g, 96);
+    AssertTrue('animating', P.Animating);
+    AssertFalse('no fade', P.Win.AlphaBlend);
+    AssertEquals('but the move', g.Frame.Top + 8, P.Win.Top);
+    P.AdvanceAnimation(160);
+    AssertEquals('settled', g.Frame.Top, P.Win.Top);
+    // The hide is a fade; with no fade there is nothing to play: immediate.
+    P.Hide;
+    AssertEquals('immediate OnHide', 1, FHidden);
+  finally
+    P.Free;
+  end;
+  P := TPopAccess(NewPopover);
+  try
+    // Fade only: transparent at the placement itself.
+    P.AnimationOptions.MoveEffect := False;
+    g := P.BeginShowing(CAnchor, CWork, 96);
+    P.ArmShowAnimation(g, 96);
+    AssertEquals('transparent', 0, P.Win.AlphaBlendValue);
+    AssertTrue('where it lands', EqualRect(g.Frame, P.Win.BoundsRect));
+  finally
+    P.Free;
+  end;
+end;
+
+{ TestTimesComeFromOptionsThenTheTheme
+  The pinned theme says 160 ms. Without an option the show is still running at 144 ms and done
+  at 160; ShowingAnimationTime = 32 is done at 32; a StyleOverride token is this popover's own
+  theme value. }
+procedure TTyPopoverComponentTest.TestTimesComeFromOptionsThenTheTheme;
+var
+  P: TPopAccess;
+  g: TTyPopoverGeometry;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    CAnimRoot));
+  P := TPopAccess(NewPopover);
+  try
+    g := P.BeginShowing(CAnchor, CWork, 96);
+    P.ArmShowAnimation(g, 96);
+    P.AdvanceAnimation(144);
+    AssertTrue('the theme''s 160 ms: still running at 144', P.Animating);
+    P.AdvanceAnimation(16);
+    AssertFalse('done at 160', P.Animating);
+    P.AnimationOptions.ShowingAnimationTime := 32;
+    P.ArmShowAnimation(g, 96);
+    P.AdvanceAnimation(31);
+    AssertTrue('the option''s 32 ms: running at 31', P.Animating);
+    P.AdvanceAnimation(1);
+    AssertFalse('done at 32', P.Animating);
+    P.AnimationOptions.ShowingAnimationTime := -1;
+    P.StyleOverride := '--popover-show-duration: 48; --popover-move-distance: 20px;';
+    P.ArmShowAnimation(g, 96);
+    AssertEquals('the override''s move distance', g.Frame.Top + 20, P.Win.Top);
+    P.AdvanceAnimation(47);
+    AssertTrue('the override''s 48 ms: running at 47', P.Animating);
+    P.AdvanceAnimation(1);
+    AssertFalse('done at 48', P.Animating);
+  finally
+    P.Free;
+  end;
+end;
+
+{ TestShowDuringTheFadeOutTurnsItBack
+  A Show for the same place while the popup is fading out: it turns round from the opacity it
+  had reached -- no jump to 0, no flash to 255 -- and since it never went away there is no
+  OnHide (and the content never left). }
+procedure TTyPopoverComponentTest.TestShowDuringTheFadeOutTurnsItBack;
+var
+  P: TPopAccess;
+  g: TTyPopoverGeometry;
+  a: Integer;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    CAnimRoot));
+  P := TPopAccess(NewPopover);
+  try
+    P.Drive := True;
+    P.OnHide := @HandleHide;
+    g := P.BeginShowing(CAnchor, CWork, 96);
+    P.ArmShowAnimation(g, 96);
+    P.AdvanceAnimation(160);
+    P.Hide;
+    P.AdvanceAnimation(40);
+    a := P.Win.AlphaBlendValue;
+    AssertTrue('part way out', (a > 0) and (a < 255));
+    AssertTrue('turned back', P.TurnBackHide(CAnchor, CWork, 96));
+    AssertTrue('up again', P.Showing);
+    AssertEquals('from where it was: no jump', a, P.Win.AlphaBlendValue);
+    P.AdvanceAnimation(16);
+    AssertTrue('and climbing', P.Win.AlphaBlendValue > a);
+    P.AdvanceAnimation(160);
+    AssertFalse('settled', P.Animating);
+    AssertFalse('opaque again', P.Win.AlphaBlend);
+    AssertEquals('the dismissal never completed: no OnHide', 0, FHidden);
+    AssertTrue('the content never left', FPanel.Parent <> FForm);
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyPopoverComponentTest.TestShowElsewhereDuringTheFadeOutFinishesItFirst;
+var
+  P: TPopAccess;
+  g: TTyPopoverGeometry;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    CAnimRoot));
+  P := TPopAccess(NewPopover);
+  try
+    P.Drive := True;
+    P.OnHide := @HandleHide;
+    g := P.BeginShowing(CAnchor, CWork, 96);
+    P.ArmShowAnimation(g, 96);
+    P.AdvanceAnimation(160);
+    P.Hide;
+    P.AdvanceAnimation(40);
+    // Somewhere else: the old dismissal completes first (its OnHide, its content home), and
+    // the caller goes on to a fresh show.
+    AssertFalse('not turned back', P.TurnBackHide(Rect(600, 400, 680, 424), CWork, 96));
+    AssertEquals('the old dismissal''s OnHide', 1, FHidden);
+    AssertSame('its content home', FForm, FPanel.Parent);
+    AssertFalse('nothing running', P.Animating);
+    AssertFalse('opacity reset', P.Win.AlphaBlend);
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyPopoverComponentTest.TestAnimationsOffMidFadeFinishesNow;
+var
+  P: TPopAccess;
+  g: TTyPopoverGeometry;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    CAnimRoot));
+  P := TPopAccess(NewPopover);
+  try
+    P.Drive := True;
+    P.OnHide := @HandleHide;
+    g := P.BeginShowing(CAnchor, CWork, 96);
+    P.ArmShowAnimation(g, 96);
+    P.AdvanceAnimation(160);
+    P.Hide;
+    P.AdvanceAnimation(20);
+    P.AnimationsEnabled := False;
+    AssertFalse('finished at once', P.Animating);
+    AssertEquals('its OnHide', 1, FHidden);
+    AssertSame('content home', FForm, FPanel.Parent);
+    AssertFalse('not left half transparent', P.Win.AlphaBlend);
+  finally
+    P.Free;
+  end;
+end;
+
+{ TestFreeingMidFadeSendsTheContentHome
+  The popover is freed while its fade-out runs on a REAL timer. The content goes home (it
+  belongs to the form), OnHide does not fire (a component going away is not a dismissal), and
+  nothing reads the freed popover afterwards: its memory is poisoned and the message queue is
+  pumped past a timer tick, so a timer left running into it would fault. }
+procedure TTyPopoverComponentTest.TestFreeingMidFadeSendsTheContentHome;
+var
+  P: TPopAccess;
+  g: TTyPopoverGeometry;
+  t0: QWord;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    ':root { --popover-show-duration: 160; --popover-hide-duration: 5000; }'));
+  P := TPopAccess(NewPopover);
+  P.Drive := True;
+  P.OnHide := @HandleHide;
+  g := P.BeginShowing(CAnchor, CWork, 96);
+  P.ArmShowAnimation(g, 96);
+  P.AdvanceAnimation(160);
+  P.Hide;
+  AssertTrue('fading', P.Animating);
+  BeginPoison;
+  try
+    P.Free;
+    t0 := GetTickCount64;
+    repeat
+      Application.ProcessMessages;
+      Sleep(5);
+    until GetTickCount64 - t0 > 80;
+  finally
+    EndPoison;
+  end;
+  AssertSame('the content is home', FForm, FPanel.Parent);
+  AssertEquals('original bounds', CPanelL, FPanel.Left);
+  AssertEquals('destroying is not a dismissal: no OnHide', 0, FHidden);
+end;
+
+{ TestFreeingWhileUpDoesNotStartAFade
+  Freed while up (and with a window that could fade): the destructor's Hide must not start a
+  fade-out that outlives the component -- the content goes home inside the Free. }
+procedure TTyPopoverComponentTest.TestFreeingWhileUpDoesNotStartAFade;
+var
+  P: TPopAccess;
+  g: TTyPopoverGeometry;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    CAnimRoot));
+  P := TPopAccess(NewPopover);
+  P.Drive := True;
+  g := P.BeginShowing(CAnchor, CWork, 96);
+  P.ArmShowAnimation(g, 96);
+  P.AdvanceAnimation(40);
+  AssertTrue('mid-show', P.Animating);
+  P.Free;
+  AssertSame('the content is home', FForm, FPanel.Parent);
+  AssertFalse('hidden again, as it was', FPanel.Visible);
+end;
+
+const
+  { D3: a target well inside the work area. }
+  CTarget: TRect = (Left: 100; Top: 100; Right: 500; Bottom: 400);
+
+procedure TTyPopoverComponentTest.TestFlyoutDefaults;
+var
+  P: TTyPopover;
+begin
+  P := TTyPopover.Create(nil);
+  try
+    AssertFalse('the bubble by default', P.FlyoutPanel.Active);
+    AssertTrue('top edge by default, as DevExpress''s', P.FlyoutPanel.Align = fpaTop);
+  finally
+    P.Free;
+  end;
+end;
+
+{ TestFlyoutSpansTheTargetEdge
+  Each edge: the panel lies inside the target along it, as long as that edge, as thick as the
+  content's designed size in its padding -- with no arrow strip in the thickness. }
+procedure TTyPopoverComponentTest.TestFlyoutSpansTheTargetEdge;
+var
+  P: TTyPopover;
+  g: TTyPopoverGeometry;
+  thickV, thickH: Integer;
+begin
+  FCtl.LoadThemeCss(ThemeCss);
+  P := NewPopover;
+  try
+    P.FlyoutPanel.Active := True;
+    thickV := CPadT + CContentH + CPadB;   // 120
+    thickH := CPadL + CContentW + CPadR;   // 224
+    P.FlyoutPanel.Align := fpaTop;
+    g := P.GeometryIn(CTarget, Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    AssertTrue('top', EqualRect(Rect(100, 100, 500, 100 + thickV), g.Frame));
+    AssertFalse('never flips', g.Flipped);
+    P.FlyoutPanel.Align := fpaBottom;
+    g := P.GeometryIn(CTarget, Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    AssertTrue('bottom', EqualRect(Rect(100, 400 - thickV, 500, 400), g.Frame));
+    P.FlyoutPanel.Align := fpaLeft;
+    g := P.GeometryIn(CTarget, Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    AssertTrue('left', EqualRect(Rect(100, 100, 100 + thickH, 400), g.Frame));
+    P.FlyoutPanel.Align := fpaRight;
+    g := P.GeometryIn(CTarget, Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    AssertTrue('right', EqualRect(Rect(500 - thickH, 100, 500, 400), g.Frame));
+    // The length follows the target, not the content.
+    P.FlyoutPanel.Align := fpaTop;
+    g := P.GeometryIn(Rect(100, 100, 900, 400), Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    AssertEquals('a wider target, a longer panel', 800, g.Frame.Right - g.Frame.Left);
+  finally
+    P.Free;
+  end;
+end;
+
+{ TestFlyoutHasNoArrow
+  ShowArrow stays True, yet the flyout has no arrow: no strip in the layout, and the frame's
+  top rows -- where a bubble's strip would be -- are the body's fill, not the ground. }
+procedure TTyPopoverComponentTest.TestFlyoutHasNoArrow;
+var
+  P: TPopAccess;
+  L: TTyPopoverLayout;
+  R: TBGRABitmap;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap,
+    CThemeBlueSquare));
+  P := TPopAccess(NewPopover);
+  try
+    P.FlyoutPanel.Active := True;
+    AssertTrue('ShowArrow itself untouched', P.ShowArrow);
+    L := P.LayoutIn(400, 120, TyFlyoutSide(fpaTop), 200, 96);
+    AssertTrue('no arrow box', L.ArrowRect.Right <= L.ArrowRect.Left);
+    AssertTrue('the body is the frame', EqualRect(Rect(0, 0, 400, 120), L.BodyRect));
+    R := RenderOnSentinel(P, 400, 120, TyFlyoutSide(fpaTop), 200);
+    try
+      AssertTrue('body where a strip would be', IsThemeBlue(R.GetPixel(20, 3)));
+      AssertTrue('and under where an apex would be', IsThemeBlue(R.GetPixel(200, 1)));
+    finally
+      R.Free;
+    end;
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyPopoverComponentTest.TestFlyoutIgnoresPlacementAndOffBringsTheBubbleBack;
+var
+  P: TTyPopover;
+  bubble, a, b, back: TTyPopoverGeometry;
+begin
+  FCtl.LoadThemeCss(ThemeCss);
+  P := NewPopover;
+  try
+    bubble := P.GeometryIn(CTarget, Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    P.FlyoutPanel.Active := True;
+    a := P.GeometryIn(CTarget, Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    P.Placement := ppTopRight;
+    b := P.GeometryIn(CTarget, Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    AssertTrue('Placement does not move a flyout', EqualRect(a.Frame, b.Frame));
+    P.Placement := ppBottom;
+    P.FlyoutPanel.Active := False;
+    back := P.GeometryIn(CTarget, Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    AssertTrue('off again: the bubble, exactly', EqualRect(bubble.Frame, back.Frame));
+    AssertTrue('on the same side', bubble.Side = back.Side);
+    AssertEquals('pointing at the same place', bubble.TipX, back.TipX);
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyPopoverComponentTest.TestFlyoutStretchesTheContentAlongTheEdge;
+var
+  P: TPopAccess;
+begin
+  FCtl.LoadThemeCss(ThemeCss);
+  P := TPopAccess(NewPopover);
+  try
+    P.FlyoutPanel.Active := True;
+    P.BeginShowing(CTarget, Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    AssertEquals('stretched to the edge, inside the padding', 400 - CPadL - CPadR, FPanel.Width);
+    AssertEquals('its designed thickness', CContentH, FPanel.Height);
+    AssertEquals('no strip above it', CPadT, FPanel.Top);
+    P.Hide;
+    AssertEquals('and home at its own size', CContentW, FPanel.Width);
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TTyPopoverComponentTest.TestFlyoutMovesInFromItsEdge;
+var
+  P: TPopAccess;
+  g: TTyPopoverGeometry;
+begin
+  FCtl.LoadThemeCss(ThemeCss(TyPopoverArrowSize, TyPopoverOffset, TyPopoverTitleGap, CBody,
+    CAnimRoot));
+  P := TPopAccess(NewPopover);
+  try
+    P.FlyoutPanel.Active := True;
+    P.FlyoutPanel.Align := fpaTop;
+    g := P.BeginShowing(CTarget, Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    P.ArmShowAnimation(g, 96);
+    AssertEquals('starts out of the top edge', g.Frame.Top - 8, P.Win.Top);
+    P.AdvanceAnimation(160);
+    AssertEquals('lands on the edge', g.Frame.Top, P.Win.Top);
+    P.FlyoutPanel.Align := fpaRight;
+    g := P.GeometryIn(CTarget, Rect(CWorkL, CWorkT, CWorkR, CWorkB), 96);
+    P.ArmShowAnimation(g, 96);
+    AssertEquals('starts out of the right edge', g.Frame.Left + 8, P.Win.Left);
+  finally
+    P.Free;
   end;
 end;
 

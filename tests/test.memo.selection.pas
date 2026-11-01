@@ -37,6 +37,7 @@ type
     procedure ProbeMouseDown(X, Y: Integer);
     procedure ProbeMouseMove(X, Y: Integer);
     procedure ProbeMouseUp(X, Y: Integer);
+    procedure ProbeKeyDown(var Key: Word; AShift: TShiftState);
   end;
 
   { Clipboard probe: routes the virtual clipboard hooks to an in-memory string so
@@ -97,6 +98,13 @@ type
     procedure TestEnterReplacesSelection;
     procedure TestBackspaceDeletesSelectionNotPrevChar;
     procedure TestBackspaceNoSelectionStillNoopAtOrigin;
+    { #137: a change through Lines leaves no selection behind. The anchor used to stay on the
+      old text, and the next keystroke raised EStringListError or deleted new text. }
+    procedure TestLinesClearLeavesNoSelection;
+    procedure TestLinesDeleteLeavesNoSelection;
+    procedure TestAssigningLinesLeavesNoSelection;
+    { #150: AltGr (Ctrl+Alt on Windows) with A types a letter; it is no select-all. }
+    procedure TestAltGrAIsNotSelectAll;
     // --- T3: selection-band rendering per visible line + caret gating ---
     procedure TestSelectionBandSingleLine;
     procedure TestSelectionBandFullInteriorLine;
@@ -152,6 +160,8 @@ type
     procedure TestSetCaretFiresSelectionChange;
     procedure TestNoOpCaretSetDoesNotFire;
     procedure TestShiftSelectFiresSelectionChange;
+    { A change through Lines that moves the caret is a selection change too. }
+    procedure TestLinesClearFiresSelectionChange;
   end;
 
 implementation
@@ -275,6 +285,11 @@ end;
 procedure TTyMemoSelProbe.ProbeMouseUp(X, Y: Integer);
 begin
   MouseUp(mbLeft, [], X, Y);
+end;
+
+procedure TTyMemoSelProbe.ProbeKeyDown(var Key: Word; AShift: TShiftState);
+begin
+  KeyDown(Key, AShift);
 end;
 
 { TTyMemoClipboardProbe }
@@ -575,6 +590,66 @@ begin
   AssertEquals('caret line 0', 0, FMemo.ProbeCaretLine);
   AssertEquals('caret col 2', 2, FMemo.ProbeCaretCol);
   AssertEquals('OnChange fired once', 1, FChangeCount);
+end;
+
+procedure TTyMemoSelectionTest.TestLinesClearLeavesNoSelection;
+begin
+  SetUpMemo;
+  LoadLines(['aaaa', 'bbbb', 'cccc']);
+  { Caret first: placing it collapses the selection. The anchor is left past what Clear
+    leaves, which is what broke. }
+  FMemo.ProbeSetCaret(0, 0);
+  FMemo.ProbeSetAnchor(2, 4);
+  AssertTrue('precondition: a selection', FMemo.ProbeHasSelection);
+  FMemo.Lines.Clear;
+  AssertFalse('no selection is left', FMemo.ProbeHasSelection);
+  FMemo.InjectChar('x');
+  AssertEquals('typing goes into the empty memo', 'x', FMemo.ProbeLine(0));
+  AssertEquals('one line', 1, FMemo.ProbeLineCount);
+end;
+
+procedure TTyMemoSelectionTest.TestLinesDeleteLeavesNoSelection;
+begin
+  SetUpMemo;
+  LoadLines(['aaaa', 'bbbb', 'cccc']);
+  FMemo.ProbeSetCaret(1, 0);
+  FMemo.ProbeSetAnchor(2, 4);
+  AssertTrue('precondition: a selection', FMemo.ProbeHasSelection);
+  FMemo.Lines.Delete(2);
+  AssertFalse('no selection is left', FMemo.ProbeHasSelection);
+  FMemo.InjectChar('x');
+  AssertEquals('the character goes in at the caret', 'xbbbb', FMemo.ProbeLine(1));
+  AssertEquals('and deletes nothing', 'aaaa', FMemo.ProbeLine(0));
+  AssertEquals('two lines', 2, FMemo.ProbeLineCount);
+end;
+
+procedure TTyMemoSelectionTest.TestAltGrAIsNotSelectAll;
+var
+  k: Word;
+begin
+  SetUpMemo;
+  LoadLines(['abc', 'def']);
+  FMemo.ProbeSetCaret(1, 3);
+  k := VK_A;
+  FMemo.ProbeKeyDown(k, [ssCtrl, ssAlt]);
+  AssertFalse('AltGr+A selects nothing', FMemo.ProbeHasSelection);
+  AssertEquals('and leaves the key for its letter', VK_A, k);
+  k := VK_A;
+  FMemo.ProbeKeyDown(k, [ssCtrl]);
+  AssertTrue('Ctrl+A alone still selects all', FMemo.ProbeHasSelection);
+end;
+
+procedure TTyMemoSelectionTest.TestAssigningLinesLeavesNoSelection;
+begin
+  SetUpMemo;
+  LoadLines(['aaaa', 'bbbb', 'cccc']);
+  FMemo.ProbeSetCaret(0, 0);
+  FMemo.ProbeSetAnchor(2, 4);
+  AssertTrue('precondition: a selection', FMemo.ProbeHasSelection);
+  LoadLines(['x']);   // Lines := ...
+  AssertFalse('no selection is left', FMemo.ProbeHasSelection);
+  FMemo.InjectChar('y');
+  AssertEquals('the character goes in at the caret', 'yx', FMemo.ProbeLine(0));
 end;
 
 procedure TTyMemoSelectionTest.TestEnterReplacesSelection;
@@ -1433,6 +1508,16 @@ begin
   FSelChangeCount := 0;
   FMemo.ProbeSetCaret(0, 3);
   AssertEquals('SetCaret to a new position fires OnSelectionChange', 1, FSelChangeCount);
+end;
+
+procedure TTyMemoSelectionChangeTest.TestLinesClearFiresSelectionChange;
+begin
+  SetUpMemo;
+  LoadLines(['abcde']);
+  FMemo.ProbeSetCaret(0, 3);
+  FSelChangeCount := 0;
+  FMemo.Lines.Clear;
+  AssertEquals('the caret moved back to the start: one OnSelectionChange', 1, FSelChangeCount);
 end;
 
 { Re-setting the caret to the SAME position is a no-op and must NOT fire. }

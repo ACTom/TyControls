@@ -577,6 +577,16 @@ procedure TyApplyControlFont(var AStyle: TTyStyleSet; AControl: TControl;
   control that sizes some text of its own -- a dial's figure, a gauge's value -- and keeps its
   own default unless the author set a size (#113). }
 function TyControlFontSize(AControl: TControl): Integer;
+{ A shortcut chord: Ctrl, or Cmd on macOS, but not Alt (#150). Windows reports AltGr as
+  Ctrl+Alt, and AltGr with A, C, X, V, Y or Z types a letter on Polish, Czech, Hungarian and
+  other keyboards -- taken for Ctrl, it selected all, copied, cut, pasted or undid instead.
+  LCL's native edits take Ctrl+Alt for no shortcut either. }
+function TyIsShortcutShift(AShift: TShiftState): Boolean;
+{ AControl and every parent up to its form are Visible (#142): what an accelerator asks, as
+  LCL's buttons ask CanFocus. A control on a hidden page or in a hidden panel cannot be what
+  the user meant, and took the key from the visible control with the same one. The form's own
+  visibility is not asked, so the answer is the same before the form shows. }
+function TyShownInForm(AControl: TControl): Boolean;
 { AStates, or [tysDisabled] when AControl -- or one of its parents -- is disabled (#118): for a
   part a control resolves with states of its own, which would otherwise never look disabled. }
 function TyStatesUnlessDisabled(AControl: TControl; const AStates: TTyStateSet): TTyStateSet;
@@ -2773,6 +2783,26 @@ end;
 function TyStatesUnlessDisabled(AControl: TControl; const AStates: TTyStateSet): TTyStateSet;
 begin
   if (AControl = nil) or AControl.IsEnabled then Result := AStates else Result := [tysDisabled];
+end;
+
+function TyShownInForm(AControl: TControl): Boolean;
+var
+  c: TControl;
+begin
+  Result := False;
+  c := AControl;
+  { Up to the top-level parent -- the form -- whose own Visible is not asked. }
+  while (c <> nil) and (c.Parent <> nil) do
+  begin
+    if not c.Visible then Exit;
+    c := c.Parent;
+  end;
+  Result := True;
+end;
+
+function TyIsShortcutShift(AShift: TShiftState): Boolean;
+begin
+  Result := ((ssCtrl in AShift) or (ssMeta in AShift)) and not (ssAlt in AShift);
 end;
 
 function TyControlFontSize(AControl: TControl): Integer;

@@ -38,7 +38,7 @@ These controls have no natural size to fit their content to, so `AutoSize` leave
 
 ## Properties no longer published
 
-These properties can never act on the control that publishes them, and from 4.0 on they are not published (3.0 only hid them in the Object Inspector). A 3.x form that sets one of them reports `Unknown property` when 4.0 loads it: skip the property when the IDE opens the form, or delete those lines from the `.lfm`.
+These properties can never act on the control that publishes them, and from 4.0 on they are not published (3.0 only hid them in the Object Inspector). A 3.x form that sets one of them still loads in 4.0: the value is dropped, and the line is gone from the `.lfm` the next time the form is saved.
 
 | Control | Properties | Why |
 |---------|-----------|-----|

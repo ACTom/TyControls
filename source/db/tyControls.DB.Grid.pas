@@ -363,6 +363,12 @@ type
     procedure LinkColumns;
     procedure CMGetDataLink(var Message: TLMessage); message CM_GETDATALINK;
   protected
+    { The editor opened again on a value the field refused holds the user's draft, not the
+      field's value: writing it is the point. }
+    function EditorOpensOnTheCell: Boolean; override;
+    { Enter in the editor writes the field and leaves the record where it is; Enter on the
+      grid goes to the next record. }
+    function EnterInTheEditorMovesDown: Boolean; override;
     { --- what the data link reports --- }
     procedure LinkActiveChanged; virtual;
     procedure LinkDataSetChanged; virtual;
@@ -2331,6 +2337,16 @@ begin
     w := InplaceEditor;
     if (w <> nil) and w.HandleAllocated and w.CanFocus then w.SetFocus;
   end;
+end;
+
+function TTyCustomDBGrid.EditorOpensOnTheCell: Boolean;
+begin
+  Result := not FHoldingText;
+end;
+
+function TTyCustomDBGrid.EnterInTheEditorMovesDown: Boolean;
+begin
+  Result := False;
 end;
 
 procedure TTyCustomDBGrid.ReopenEditor;

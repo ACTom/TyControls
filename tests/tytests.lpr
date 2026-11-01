@@ -132,6 +132,8 @@ uses
   test.meter,
   test.levelmeter,
   test.dial,
+  test.valueformat,
+  test.retiredprops,
   test.analogclock,
   test.sparkline,
   test.rating,

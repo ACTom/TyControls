@@ -258,6 +258,11 @@ function TyClampRadius(ARadius, AHalf: Integer): Integer;
   `border-style: none` behave identically everywhere. }
 function TyBorderVisible(const AStyle: TTyStyleSet): Boolean;
 function EmptyStyleSet: TTyStyleSet;
+{ A number through a control's ValueFormat. An integer specifier (%d, %u, %x) gets the value
+  rounded -- '%d%%' is how a percentage is usually written -- and any other the value as it
+  is. A format that still cannot take a number gives FloatToStr: this runs in Paint, where an
+  exception would leave the control unpainted on every repaint (#138). }
+function TyFormatValue(const AFormat: string; AValue: Double): string;
 
 var
   { IDE bridge, the OwnerFormDesignerModifiedProc pattern: the designtime package points
@@ -269,7 +274,36 @@ var
     nil outside the IDE. Callers gate on csDesigning themselves. }
   TyDesignerRefreshValuesProc: procedure = nil;
 
+{ #130: properties 3.x published that 4.0 no longer does. A class lists them from its
+  DefineProperties, and a form saved by 3.x still loads: each value is read past and dropped,
+  where it stopped the load with "Unknown property". Nothing is written back. }
+procedure TyDefineRetiredProperties(AFiler: TFiler; const ANames: array of string);
+
 implementation
+
+type
+  { What TyDefineRetiredProperties hands the reader: DefineProperty takes a method. }
+  TTyRetiredPropertySink = class
+    procedure Skip(AReader: TReader);
+  end;
+
+var
+  GRetiredSink: TTyRetiredPropertySink;
+
+procedure TTyRetiredPropertySink.Skip(AReader: TReader);
+begin
+  AReader.Driver.SkipValue;
+end;
+
+procedure TyDefineRetiredProperties(AFiler: TFiler; const ANames: array of string);
+var
+  i: Integer;
+begin
+  if not (AFiler is TReader) then Exit;   // nothing is written
+  if GRetiredSink = nil then GRetiredSink := TTyRetiredPropertySink.Create;
+  for i := 0 to High(ANames) do
+    AFiler.DefineProperty(ANames[i], @GRetiredSink.Skip, nil, False);
+end;
 
 function TyRGB(R, G, B: Byte): TTyColor;
 begin
@@ -388,4 +422,41 @@ begin
   Result.Opacity := 1.0;
 end;
 
+function TyFormatValue(const AFormat: string; AValue: Double): string;
+var
+  i, n: Integer;
+  kind: Char;
+begin
+  { The type of the first argument specifier: '%', then index, flags, width and precision. }
+  kind := #0;
+  i := 1;
+  n := Length(AFormat);
+  while i <= n do
+  begin
+    if AFormat[i] = '%' then
+    begin
+      Inc(i);
+      if (i <= n) and (AFormat[i] = '%') then
+      begin
+        Inc(i);
+        Continue;
+      end;
+      while (i <= n) and (AFormat[i] in ['0'..'9', ':', '-', '.', '*']) do Inc(i);
+      if i <= n then kind := UpCase(AFormat[i]);
+      Break;
+    end;
+    Inc(i);
+  end;
+  try
+    if kind in ['D', 'U', 'X'] then
+      Result := Format(AFormat, [Int64(Round(AValue))])
+    else
+      Result := Format(AFormat, [AValue]);
+  except
+    on Exception do Result := FloatToStr(AValue);
+  end;
+end;
+
+finalization
+  FreeAndNil(GRetiredSink);
 end.

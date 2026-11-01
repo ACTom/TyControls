@@ -22,6 +22,9 @@ type
     procedure TestRadioButtonShadowLocalRectAtOffset;
     procedure TestSpaceSelectsRadio;
     procedure TestGroupIndexSeparatesGroups;
+    { #145: a radio button read from a form checked in another group leaves group 0 alone --
+      Checked is read before GroupIndex -- and fires no OnChange while loading. }
+    procedure TestLoadingAGroupedRadioLeavesGroupZeroAlone;
   end;
 implementation
 
@@ -214,6 +217,56 @@ begin
     AssertEquals('default height', 22, R.Height);
   finally
     R.Free;
+  end;
+end;
+
+type
+  TRadioLoadProbe = class(TTyRadioButton)
+  public
+    Changes: Integer;
+    procedure BeginLoad;
+    procedure EndLoad;
+    procedure Changed(Sender: TObject);
+  end;
+
+procedure TRadioLoadProbe.BeginLoad;
+begin
+  Loading;
+end;
+
+procedure TRadioLoadProbe.EndLoad;
+begin
+  Loaded;
+end;
+
+procedure TRadioLoadProbe.Changed(Sender: TObject);
+begin
+  Inc(Changes);
+end;
+
+procedure TRadioButtonTest.TestLoadingAGroupedRadioLeavesGroupZeroAlone;
+var
+  f: TForm;
+  r0: TTyRadioButton;
+  r1: TRadioLoadProbe;
+begin
+  f := TForm.CreateNew(nil);
+  try
+    r0 := TTyRadioButton.Create(f);
+    r0.Parent := f;
+    r0.Checked := True;                 // group 0
+    r1 := TRadioLoadProbe.Create(f);
+    r1.Parent := f;
+    r1.OnChange := @r1.Changed;
+    r1.BeginLoad;
+    r1.Checked := True;                 // read first ...
+    r1.GroupIndex := 1;                 // ... its group after it
+    r1.EndLoad;
+    AssertTrue('the group-0 radio button is still checked', r0.Checked);
+    AssertTrue('and so is the loaded one', r1.Checked);
+    AssertEquals('no OnChange while loading', 0, r1.Changes);
+  finally
+    f.Free;
   end;
 end;
 

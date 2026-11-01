@@ -44,6 +44,8 @@ type
     procedure TestADisplayOnlyPropertyChangeLeavesModifiedAlone;
     procedure TestModifiedStillClearedByAProgrammaticValueWrite;
     procedure TestNumericAndSpinAgreeAfterTheirOwnReformat;
+    { #159: malformed text keeps the last value; it became 0 on blur. }
+    procedure TestMalformedTextKeepsTheLastValue;
   end;
 implementation
 
@@ -117,6 +119,46 @@ begin
     c.MaxValue := 100;   // enables clamping (Max > Min)
     c.Value := 500;
     AssertEquals('clamped to max', 100.0, c.Value, 1e-9);
+  finally c.Free; end;
+end;
+
+procedure TNumericEditTest.TestMalformedTextKeepsTheLastValue;
+
+  procedure TypeOver(c: TNumericFocusProbe; const S: string);
+  var
+    i: Integer;
+  begin
+    c.SelectAll;
+    for i := 1 to Length(S) do c.InjectKey(S[i]);
+  end;
+
+var c: TNumericFocusProbe;
+begin
+  c := TNumericFocusProbe.Create(nil);
+  try
+    c.Value := 5;
+    c.SimulateEnter;
+    TypeOver(c, '1.2.3');
+    AssertEquals('precondition: the malformed text is in', '1.2.3', c.Text);
+    c.SimulateExit;
+    AssertEquals('the blur puts back the last value, not 0', '5.00', c.Text);
+    AssertEquals('and Value says so', 5, c.Value, 0);
+    c.SimulateEnter;
+    TypeOver(c, '-');
+    c.SimulateExit;
+    AssertEquals('a lone minus is no number either', '5.00', c.Text);
+    c.SimulateEnter;
+    TypeOver(c, '7');
+    c.SimulateExit;                   // the field now shows 7
+    c.SimulateEnter;
+    TypeOver(c, '1..');
+    c.SimulateExit;
+    AssertEquals('the last value shown, not the last one set', '7.00', c.Text);
+    c.SimulateEnter;
+    c.SelectAll;
+    c.ClearSelection;
+    c.SimulateExit;
+    AssertEquals('an emptied field is 0, as before', '0.00', c.Text);
   finally c.Free; end;
 end;
 

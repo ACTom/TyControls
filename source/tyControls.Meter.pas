@@ -302,7 +302,7 @@ begin
 
     if FShowValue then
       P.DrawText(Rect(R.Left, R.Bottom - P.Scale(22), R.Right, R.Bottom),
-        Format(FValueFormat, [FValue]), Font.Name, 11, 700, faceS.TextColor,
+        TyFormatValue(FValueFormat, FValue), Font.Name, 11, 700, faceS.TextColor,
         taCenter, tlCenter, False);
     P.EndPaint;
   finally

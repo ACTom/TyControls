@@ -45,6 +45,7 @@ type
     PickName: string;         // what the "font dialog" picks
     PickSize: Integer;
     PickStyle: TFontStyles;
+    SeenStyle: TFontStyles;   // the style the "font dialog" was opened on
     PickColor: TColor;        // what the "colour dialog" picks
     procedure ClickValue(AFlat: Integer);
     procedure Press(AKey: Word; AShift: TShiftState = []);
@@ -76,6 +77,7 @@ type
     procedure TestFontDialogOnALeafRowAsks;
     procedure TestFontDialogWithChildrenAsksOnceForTheWholeFont;
     procedure TestFontDialogWithChildrenAllowedMovesTheChildren;
+    procedure TestStyleLeavesNamedAfterTheSetElements;
     procedure TestSetRowValueAsks;
     procedure TestValuesAndValueFromIndexAsk;
   end;
@@ -127,6 +129,7 @@ function TVetoValueList.ExecuteFontDialog(AFont: TFont): Boolean;
 var f: TFont;
 begin
   { What a user clicking through the dialog leaves behind: a different face, size and style. }
+  SeenStyle := AFont.Style;
   f := TFont.Create;
   try
     f.Assign(AFont);
@@ -469,6 +472,28 @@ begin
   AssertEquals('the bold leaf followed', 'True', bold.Value);
   AssertEquals('the font row re-summarised', 'Courier New, 14 Bold', font.Value);
   AssertTrue('and the changes were reported', FChanged > 0);
+end;
+
+{ #183: style leaves keyed by the set's own element names -- fsBold, as the property grid names
+  them -- are read into the font the dialog opens on, and follow its answer. They were neither:
+  a bold font opened regular and OK wrote it back regular. }
+procedure TValueListCommitHookTest.TestStyleLeavesNamedAfterTheSetElements;
+var font, style, b, it: TTyValueRow;
+begin
+  font := FVle.AddRow('Font', 'Arial, 10');
+  font.EditorKind := vekFont;
+  style := font.AddChild('Style', '[fsBold]');
+  b := style.AddChild('fsBold', 'True');
+  b.EditorKind := vekBoolean;
+  it := style.AddChild('fsItalic', 'False');
+  it.EditorKind := vekBoolean;
+  FVle.UpdateRows;
+  FVle.Allow := True;
+  FVle.PickStyle := [fsItalic];
+  FVle.InvokeRowDialog(0);
+  AssertTrue('the dialog opened on a bold font', fsBold in FVle.SeenStyle);
+  AssertEquals('bold followed the answer', 'False', b.Value);
+  AssertEquals('so did italic', 'True', it.Value);
 end;
 
 { ---- programmatic writes ---- }

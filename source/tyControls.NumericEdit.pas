@@ -32,6 +32,8 @@ type
     FPendingValue: Double;
     FHasPendingValue: Boolean;
     FEmptyAllowed: Boolean;
+    { #159: the last value the field showed -- what malformed text reads as. }
+    FLastValue: Double;
     function GetValue: Double;
     procedure SetValue(const AValue: Double);
     procedure SetDecimals(const AValue: Integer);
@@ -41,6 +43,8 @@ type
     function ClampVal(AValue: Double): Double;
     function AcceptsChar(C: Char): Boolean;   // digits, the sign, the separator with decimals
   protected
+    { #130: reads past the values a 3.x form holds for properties no longer published. }
+    procedure DefineProperties(Filer: TFiler); override;
     // Re-derive the displayed text from the current value (AGroup = grouped display form).
     // Protected so a subclass can refresh after changing a display-affecting property.
     procedure Reformat(AGroup: Boolean);
@@ -150,6 +154,17 @@ type
 
 implementation
 
+uses
+  tyControls.Types;
+
+procedure TTyCustomNumericEdit.DefineProperties(Filer: TFiler);
+begin
+  inherited DefineProperties(Filer);
+  { #130: CharCase was published on every numeric edit (TTyNumericEdit, TTyCurrencyEdit,
+    TTyCalcEdit, TTyFloatSpinEdit, TTyTrackEdit and the DB ones). }
+  TyDefineRetiredProperties(Filer, ['CharCase']);
+end;
+
 function TyFormatNumber(AValue: Double; ADecimals: Integer;
   AThousands, ADecimalSep: Char; AUseThousands: Boolean): string;
 var
@@ -246,14 +261,24 @@ begin
 end;
 
 function TTyCustomNumericEdit.GetValue: Double;
+var
+  s: string;
 begin
   if FHasPendingValue then Exit(FPendingValue);   // still loading: what was streamed in
   { The decoration comes off first, as text, before the character filter: a symbol such as
     'Fr.', 'kr.' or 'US$1' carries characters the filter keeps, and 'Fr.1,234.50' filtered
     whole is '.1234.50' -- not a number, so the value read 0, and the next reformat (focusing
     the field is one) wrote that 0 back. }
-  if not TyParseNumber(StripDecoration(Text), FThousands, FDecimalSep, Result) then Result := 0;
-  Result := ClampVal(Result);
+  s := StripDecoration(Text);
+  if TyParseNumber(s, FThousands, FDecimalSep, Result) then
+    Result := ClampVal(Result)
+  else if Trim(s) = '' then
+    Result := ClampVal(0)       { an emptied field is 0, as it always was }
+  else
+    { #159: malformed text such as '1.2.3' or '-' is no number: the field keeps the last
+      value it showed, as LCL's spin edits go back to theirs. It read 0, and the reformat on
+      blur wrote that 0 over the user's value. }
+    Result := FLastValue;
 end;
 
 procedure TTyCustomNumericEdit.SetValue(const AValue: Double);
@@ -269,7 +294,8 @@ begin
     FHasPendingValue := True;
     Exit;
   end;
-  Text := Formatted(ClampVal(AValue), not Focused);
+  FLastValue := ClampVal(AValue);
+  Text := Formatted(FLastValue, not Focused);
 end;
 
 procedure TTyCustomNumericEdit.Loaded;
@@ -307,6 +333,7 @@ begin
     currency symbol ...), so a text parsed then would be parsed under the defaults: 'Fr.1,234.50'
     read before CurrencySymbol = 'Fr.' came out 0. }
   if csLoading in ComponentState then Exit;
+  FLastValue := AValue;
   WasModified := Modified;
   Text := Formatted(AValue, AGroup);
   Modified := WasModified;

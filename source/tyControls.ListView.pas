@@ -283,6 +283,10 @@ type
     FSavedCursor:      TCursor;
     FCursorOverridden: Boolean;
     FSelected:    array of Boolean;
+    { #141: the collection item at each row when the rows were last counted (not in OwnerData
+      mode). The state above is kept by row number; this is how it follows its item when items
+      are inserted, deleted or moved -- it stayed on the row number, so on other data. }
+    FRowItems:    array of TObject;
     { order maps (private only) }
     FOrder:   array of Integer;   { display pos -> item index }
     FRank:    array of Integer;   { item index -> display pos }
@@ -350,6 +354,7 @@ type
     FOnGroupCollapsed: TTyListGroupEvent;
 
     procedure ItemsCollectionChanged(Sender: TObject);
+    procedure ForgetRowItem(AItem: TObject);
     procedure ItemsCollectionNotify(Sender: TObject; AItem: TCollectionItem;
       AAction: TCollectionNotification);
     function  GetColumns: TTyColumns;
@@ -649,6 +654,7 @@ type
     { Call after the app mutated its own store in OwnerData mode: resizes the order /
       rank / selection arrays, clamps focus/anchor/hot, re-sorts while SortColumn is set. }
     procedure ItemsChanged;
+    procedure RemapRowsToItems;
 
     procedure Sort;
 
@@ -2178,6 +2184,7 @@ var
   cnt: Integer;
 begin
   if FUpdateCount > 0 then Exit;
+  if FOwnerData then SetLength(FRowItems, 0) else RemapRowsToItems;
   cnt := GetItemCount;
   { Rule 5: if the row being edited vanished (Clear / shorter ItemCount / deletion), CANCEL the
     edit — never commit into a row that no longer exists. }
@@ -2215,8 +2222,61 @@ begin
       Delete twice and every Clear once -- an inconsistency the host cannot compensate for.
       cnExtracting is the one path every removal takes, and it still runs BEFORE the item
       leaves the list, which is what keeps the index and the Data payload valid. }
-    cnExtracting: DoDeletion(AItem.Index);
+    cnExtracting:
+      begin
+        ForgetRowItem(AItem);
+        DoDeletion(AItem.Index);
+      end;
   end;
+end;
+
+procedure TTyCustomListView.ForgetRowItem(AItem: TObject);
+var
+  i: Integer;
+begin
+  for i := 0 to High(FRowItems) do
+    if FRowItems[i] = AItem then
+    begin
+      FRowItems[i] := nil;
+      Exit;
+    end;
+end;
+
+procedure TTyCustomListView.RemapRowsToItems;
+var
+  i, n, r: Integer;
+  sel: array of Boolean;
+
+  function NewRow(ARow: Integer): Integer;
+  begin
+    Result := -1;
+    if (ARow >= 0) and (ARow <= High(FRowItems)) and (FRowItems[ARow] <> nil) then
+      Result := TCollectionItem(FRowItems[ARow]).Index;
+  end;
+
+begin
+  n := FItems.Count;
+  if Length(FRowItems) > 0 then
+  begin
+    SetLength(sel, n);
+    for i := 0 to High(FSelected) do
+      if FSelected[i] then
+      begin
+        r := NewRow(i);
+        if r >= 0 then sel[r] := True;
+      end;
+    FSelected := sel;
+    if (FEditor <> nil) and (FEditItem >= 0) then
+    begin
+      r := NewRow(FEditItem);
+      if r < 0 then EndEdit(False) else FEditItem := r;   { rule 5: never into a row that went }
+    end;
+    FItemIndex := NewRow(FItemIndex);
+    FAnchor := NewRow(FAnchor);
+    FHot := NewRow(FHot);
+  end;
+  SetLength(FRowItems, n);
+  for i := 0 to n - 1 do FRowItems[i] := FItems.Items[i];
 end;
 
 procedure TTyCustomListView.DoInsert(AIndex: Integer);
@@ -2436,7 +2496,9 @@ begin
     FireSelectionDelta(before);
   end
   else if AValue then
-    SetSingleSelection(AIndex);
+    SetSingleSelection(AIndex)
+  else if AIndex = FItemIndex then
+    SetSingleSelection(-1);   { #141: unselecting the one selected row clears it, as in LCL }
 end;
 
 { ---------------------------------------------------------------------------

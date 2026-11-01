@@ -284,7 +284,7 @@ begin
       pct := TyGaugeFraction(FPosition, FMin, FMax) * 100;
       { A sixth of the ring, turned back into a LOGICAL size: the ring is device px and
         DrawText scales what it is given. See TTyGauge.DrawValueText. }
-      P.DrawText(R, Format(FValueFormat, [pct]), Font.Name,
+      P.DrawText(R, TyFormatValue(FValueFormat, pct), Font.Name,
         Math.Max(9, MulDiv((R.Bottom - R.Top) div 6, 96, P.PPI)), 700, trackS.TextColor,
         taCenter, tlCenter, False);
     end;

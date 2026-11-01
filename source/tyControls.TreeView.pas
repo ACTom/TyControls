@@ -476,6 +476,7 @@ type
     { A3: multi-select count + range anchor }
     FSelectionCount: Integer;
     FRangeAnchor:    PTyTreeNode;
+    FSyncingItems:   Boolean;   { #141: the items are being put in the nodes' order -- no rebuild }
     { C3: paint-related fields }
     FHotNode:              PTyTreeNode;   // node under cursor (HotTrack); nil = none
     FOnGetText:            TTyTreeGetTextEvent;
@@ -749,6 +750,11 @@ type
     procedure ItemStateChanged(AItem: TTyTreeNodeItem);
     procedure RebuildFromItems;
     procedure ApplyItemToNode(AItem: TTyTreeNodeItem);
+    { #141: the other way -- the user's change to the nodes written back to the items, so the
+      next Items edit, which makes the nodes again from the items, does not undo it. }
+    procedure ItemFollowsNode(Node: PTyTreeNode);
+    procedure ItemsFollowNodeChecks;
+    procedure ItemsFollowNodeOrder;
     procedure StampItemRef(ANode: PTyTreeNode; AItemIndex: Integer);
     function  GetNodeItem(Node: PTyTreeNode): TTyTreeNodeItem;
     function  GetNodeText(Node: PTyTreeNode): string;
@@ -839,6 +845,13 @@ type
     procedure DoGetImageIndex(Node: PTyTreeNode; AKind: TTyVTImageKind; AColumn: Integer;
       var AGhosted: Boolean; var AIndex: Integer); virtual;
     procedure DoTreeChange(Node: PTyTreeNode); virtual;
+    { A node is about to be freed: its data and its item are still readable. Fires OnFreeNode. }
+    procedure DoFreeNode(Node: PTyTreeNode); virtual;
+    { Items were turned into nodes again (RebuildFromItems): every node before it is gone. }
+    procedure DoItemsRebuilt; virtual;
+    { True while RebuildFromItems replaces the nodes -- a node freed now comes back, as the
+      same item's new node, once DoItemsRebuilt runs. }
+    function  RebuildingItems: Boolean;
     { LCL parity: the veto gate in front of every selection/focus move (LCL's
       CanChange, include/treeview.inc). Returns False when a handler cleared Allowed. }
     function  DoChanging(Node: PTyTreeNode): Boolean; virtual;
@@ -2774,6 +2787,7 @@ begin
 
   { ── toAutoTristateTracking ── }
   ApplyAutoTristate(Node);
+  ItemsFollowNodeChecks;   { #141 }
 
   { ── OnChecked + repaint ── }
   if Assigned(FOnChecked) then FOnChecked(Self, Node);
@@ -2942,6 +2956,7 @@ begin
   if Node^.CheckState = AValue then Exit;
   Node^.CheckState := AValue;
   ApplyAutoTristate(Node);   { #73: from code too, not only a click }
+  ItemsFollowNodeChecks;     { #141 }
   Invalidate;
 end;
 
@@ -3633,13 +3648,28 @@ begin
 end;
 
 procedure TTyCustomTreeView.SetNodeDataSize(AValue: Integer);
+var
+  last: Cardinal;
 begin
   if FNodeDataSize = AValue then Exit;
   { 条目模式征用了数据块的头 4 字节,所以 app 的数据块与 Items 互斥 —— 同一段
     内存两个主人,静默让一边赢就是数据损坏。 }
   if (AValue > 0) and (FItems <> nil) and (FItems.Count > 0) then
     ItemModeConflict('NodeDataSize');
-  // Must be set before any nodes exist (changes the allocation stride).
+  { #137: the size is the allocation stride, so nodes made with the old one cannot take the
+    new one -- GetNodeData read and wrote past their end. As VirtualTreeView does, they are
+    freed (OnFreeNode still sees the old size) and the same number of root nodes is made
+    again, empty. }
+  if (FRoot <> nil) and (FRoot^.ChildCount > 0) and not FItemMode
+     and not (csLoading in ComponentState) then
+  begin
+    last := FRoot^.ChildCount;
+    Clear;
+    FNodeDataSize := AValue;
+    UpdateNodeAllocSize;
+    SetRootNodeCount(last);
+    Exit;
+  end;
   FNodeDataSize := AValue;
   UpdateNodeAllocSize;
 end;
@@ -3752,6 +3782,7 @@ end;
 procedure TTyCustomTreeView.ItemsStructureChanged;
 begin
   if csLoading in ComponentState then Exit;   { 到 Loaded 再一次性物化 }
+  if FSyncingItems then Exit;                 { the nodes are already in this order (#141) }
   RebuildFromItems;
 end;
 
@@ -3774,6 +3805,78 @@ begin
     ToggleNode(AItem.Node, AItem.Expanded);
 end;
 
+procedure TTyCustomTreeView.ItemFollowsNode(Node: PTyTreeNode);
+var
+  it: TTyTreeNodeItem;
+begin
+  if FRebuildingItems then Exit;   { the items are what the nodes are being made from }
+  it := GetNodeItem(Node);
+  if it <> nil then it.FExpanded := nsExpanded in Node^.States;
+end;
+
+procedure TTyCustomTreeView.ItemsFollowNodeChecks;
+var
+  i: Integer;
+begin
+  if FRebuildingItems or (not FItemMode) or (FItems = nil) then Exit;
+  { All of them: a check can change its parents' and children's (toAutoTristateTracking). }
+  for i := 0 to FItems.Count - 1 do
+    if FItems[i].FNode <> nil then FItems[i].FCheckState := FItems[i].FNode^.CheckState;
+end;
+
+procedure TTyCustomTreeView.ItemsFollowNodeOrder;
+var
+  order: array of TTyTreeNodeItem;
+  levels: array of Integer;
+  n, i: Integer;
+
+  procedure Walk(AParent: PTyTreeNode; ALevel: Integer);
+  var
+    c: PTyTreeNode;
+    it: TTyTreeNodeItem;
+  begin
+    c := AParent^.FirstChild;
+    while c <> nil do
+    begin
+      it := GetNodeItem(c);
+      if (it <> nil) and (n < Length(order)) then
+      begin
+        order[n] := it;
+        levels[n] := ALevel;
+        Inc(n);
+      end;
+      Walk(c, ALevel + 1);
+      c := c^.NextSibling;
+    end;
+  end;
+
+begin
+  if FRebuildingItems or (not FItemMode) or (FItems = nil) then Exit;
+  { The items are a flat list in the tree's order with a Level each, so a moved or sorted
+    node moves its item, and its subtree's, to where the node now stands. Read the order first,
+    by the stamped index, then move: moving changes the indexes the stamps hold. }
+  SetLength(order, FItems.Count);
+  SetLength(levels, FItems.Count);
+  n := 0;
+  Walk(FRoot, 0);
+  FSyncingItems := True;
+  FItems.BeginUpdate;
+  try
+    for i := 0 to n - 1 do
+    begin
+      order[i].FLevel := levels[i];
+      { A drop ON a collapsed node expands it without SetExpanded. }
+      order[i].FExpanded := nsExpanded in order[i].FNode^.States;
+      if order[i].Index <> i then order[i].Index := i;
+    end;
+  finally
+    FItems.EndUpdate;
+    FSyncingItems := False;
+  end;
+  for i := 0 to FItems.Count - 1 do
+    StampItemRef(FItems[i].FNode, i);
+end;
+
 { 物化:把扁平的(Level, Text)序列变成记录树。
 
   进出模式都在这里,所以"这棵树现在归谁"只有一个决定点:
@@ -3783,6 +3886,8 @@ var
   i, lvl: Integer;
   it: TTyTreeNodeItem;
   node: PTyTreeNode;
+  keepSel: array of Boolean;
+  keepFocus, keepAnchor, keepX, keepY: Integer;
   { stack[k] = 当前 Level k 上最后建出来的节点,即 Level k+1 的父亲。 }
   stack: array of PTyTreeNode;
 begin
@@ -3811,6 +3916,22 @@ begin
   if FNodeDataSize > 0 then ItemModeConflict('NodeDataSize');
   if FPendingConflict <> '' then Exit;   { csLoading 期间发现的冲突,留到 Loaded 抛 }
 
+  { #141: the selection, the focus, the range anchor and the scroll position belong to items
+    that outlive the rebuild. Read them from the old nodes the items still point at, before
+    Clear frees them, and put them on the new nodes below; an item added since has no node. }
+  SetLength(keepSel, FItems.Count);
+  keepFocus := -1;
+  keepAnchor := -1;
+  for i := 0 to FItems.Count - 1 do
+  begin
+    node := FItems[i].FNode;
+    keepSel[i] := FItemMode and (node <> nil) and (nsSelected in node^.States);
+    if FItemMode and (node <> nil) and (node = FFocusedNode) then keepFocus := i;
+    if FItemMode and (node <> nil) and (node = FRangeAnchor) then keepAnchor := i;
+  end;
+  keepX := FOffsetX;
+  keepY := FOffsetY;
+
   FRebuildingItems := True;
   try
     FItemMode := True;
@@ -3834,10 +3955,32 @@ begin
     { 展开态要在整棵树建好之后再施加:展开一个节点要它的孩子已经在位。 }
     for i := 0 to FItems.Count - 1 do
       ApplyItemToNode(FItems[i]);
+    for i := 0 to High(keepSel) do
+      if keepSel[i] then InternalSetSelected(FItems[i].FNode, True);
+    if keepFocus >= 0 then FFocusedNode := FItems[keepFocus].FNode;
+    if keepAnchor >= 0 then FRangeAnchor := FItems[keepAnchor].FNode;
   finally
     FRebuildingItems := False;
   end;
+  FOffsetX := keepX;
+  FOffsetY := keepY;          { clamped to the new content by the layout below }
   InvalidateTreeLayout;
+  DoItemsRebuilt;
+end;
+
+procedure TTyCustomTreeView.DoFreeNode(Node: PTyTreeNode);
+begin
+  if Assigned(FOnFreeNode) then
+    FOnFreeNode(Self, Node);
+end;
+
+procedure TTyCustomTreeView.DoItemsRebuilt;
+begin
+end;
+
+function TTyCustomTreeView.RebuildingItems: Boolean;
+begin
+  Result := FRebuildingItems;
 end;
 
 procedure TTyCustomTreeView.AdjustTotalCount(Node: PTyTreeNode; Delta: Integer);
@@ -4076,8 +4219,7 @@ begin
     dh := 0;
 
   // Fire OnFreeNode so app can release managed fields in the data blob
-  if Assigned(FOnFreeNode) then
-    FOnFreeNode(Self, Node);
+  DoFreeNode(Node);
 
   // Unlink from siblings
   if Node^.PrevSibling <> nil then
@@ -4333,6 +4475,7 @@ begin
   if newParent <> oldParent then
     ReindexSiblings(newParent);
 
+  ItemsFollowNodeOrder;   { #141: a drag in Items mode moves the items too }
   InvalidateTreeLayout;
   Result := True;
 end;
@@ -4676,6 +4819,7 @@ begin
 
     if Assigned(FOnCollapsed) then FOnCollapsed(Self, Node);
   end;
+  ItemFollowsNode(Node);   { #141 }
   InvalidateTreeLayout;
 end;
 
@@ -7854,6 +7998,7 @@ begin
     Node^.LastChild   := prev;
   end;
   { ChildCount/TotalCount/TotalHeight are unchanged (same set of children) }
+  if not FSorting then ItemsFollowNodeOrder;   { #141; SortTree does it once, at the end }
 end;
 
 { ── E3 ── header-click sort wiring ──────────────────────────────────────── }
@@ -7944,6 +8089,7 @@ begin
       before comparing.  (Sorting the root here, NOT a separate Sort(FRoot) call
       first — that double-sorted the root level.) }
     SortTreeNode(Self, FRoot, Column, ADirection);
+    ItemsFollowNodeOrder;   { #141 }
     { Record the key so HeaderChanged does NOT re-sort on a width/reorder change. }
     FSortedColumn    := Column;
     FSortedDirection := ADirection;

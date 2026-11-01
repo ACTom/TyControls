@@ -66,6 +66,33 @@ function Add-Tree {
   }
 }
 
+# Compress-Archive stores entry names with '\' (Microsoft.PowerShell.Archive, still in 1.2.6):
+# Windows unzippers read that as a separator, but unzip and OPM on Linux/macOS take it as part of
+# the file name and extract a flat "TyControls\CHANGELOG.md". The zip spec says '/', so the
+# entries are written by hand. $Dir's own name is the archive's root folder, as with
+# Compress-Archive -Path $Dir.
+function New-Zip {
+  param([string]$Dir, [string]$Zip)
+  Add-Type -AssemblyName System.IO.Compression
+  $base = Split-Path $Dir -Parent
+  $fs = [IO.File]::Open($Zip, [IO.FileMode]::CreateNew)
+  try {
+    $archive = New-Object IO.Compression.ZipArchive($fs, [IO.Compression.ZipArchiveMode]::Create)
+    try {
+      Get-ChildItem -LiteralPath $Dir -Recurse -File | Sort-Object FullName | ForEach-Object {
+        $name = $_.FullName.Substring($base.Length).TrimStart('\', '/').Replace('\', '/')
+        $entry = $archive.CreateEntry($name, [IO.Compression.CompressionLevel]::Optimal)
+        $entry.LastWriteTime = $_.LastWriteTime
+        $out = $entry.Open()
+        try {
+          $in = [IO.File]::OpenRead($_.FullName)
+          try { $in.CopyTo($out) } finally { $in.Dispose() }
+        } finally { $out.Dispose() }
+      }
+    } finally { $archive.Dispose() }
+  } finally { $fs.Dispose() }
+}
+
 function Add-File {
   param([string]$Rel)
   $src = Join-Path $root $Rel
@@ -113,7 +140,7 @@ Add-Tree 'examples' @('.pas', '.lpr', '.lpi', '.lfm', '.ico', '.tycss', '.inc', 
 
 # --- zip -------------------------------------------------------------------
 Write-Host '-- zipping'
-Compress-Archive -Path $stage -DestinationPath $zip -CompressionLevel Optimal
+New-Zip $stage $zip
 
 # --- OPM (final releases) ----------------------------------------------------
 if ($Opm) {
@@ -124,7 +151,7 @@ if ($Opm) {
   $pkgRoot = Join-Path $opmDir 'TyControls'
   Copy-Item $stage $pkgRoot -Recurse
   $opmZip = Join-Path $opmDir 'TyControls.zip'
-  Compress-Archive -Path $pkgRoot -DestinationPath $opmZip -CompressionLevel Optimal
+  New-Zip $pkgRoot $opmZip
   Remove-Item $pkgRoot -Recurse -Force
   $lpkVersion = "$version.0"   # the .lpk's Major.Minor.Release.Build
   # RepositoryDate is a TDateTime: days since 1899-12-30, which is what ToOADate counts
@@ -135,10 +162,10 @@ if ($Opm) {
   $json = $json.Replace('@VERSION@', $lpkVersion)
   $utf8 = New-Object System.Text.UTF8Encoding($false)
   [IO.File]::WriteAllText((Join-Path $opmDir 'TyControls.json'), $json, $utf8)
-  { Rewritten whole from the template's package list, not patched in place: a package added
-    since the last release (tycontrols_db in 4.0) is offered as an update the moment the release
-    that contains it is out -- and not before, since OPM reads this file from main and an entry
-    ahead of its release would point at a zip that does not have the package. }
+  # Rewritten whole from the template's package list, not patched in place: a package added
+  # since the last release (tycontrols_db in 4.0) is offered as an update the moment the release
+  # that contains it is out -- and not before, since OPM reads this file from main and an entry
+  # ahead of its release would point at a zip that does not have the package.
   $upd = Join-Path $root 'update_TyControls.json'
   $names = @([regex]::Matches($json, '"Name"\s*:\s*"([^"]+\.lpk)"') | ForEach-Object { $_.Groups[1].Value })
   if ($names.Count -eq 0) { throw 'the OPM template names no package' }

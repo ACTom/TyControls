@@ -283,9 +283,17 @@ type
     FOverflowFrom: Integer;                     // FVisualGroups index where the overflow set begins
     FInLayout: Boolean;
     FCaptured: Boolean;
+    FMovingGroups: Boolean;                     // the overflow fly-out is borrowing or returning groups
     procedure SetCaption(const AValue: TCaption);
     procedure SetContext(const AValue: string);
     procedure CaptureGroups;
+    { Keep FVisualGroups in step with the groups the page really has: a group freed, moved away
+      or added after the capture. The capture is taken once, so without these a freed group was
+      still laid out and painted, and an added one sat on top of the first. }
+    procedure AdoptGroup(AGroup: TTyCustomRibbonGroup);
+    procedure DropGroup(AGroup: TComponent);
+    { Show or hide a group on the page's own account (see TTyCustomRibbonGroup.FOverflowed). }
+    procedure PageShowGroup(AGroup: TTyCustomRibbonGroup; AVisible, AOverflowed: Boolean);
     procedure LayoutOverflow;
     procedure EnsureMoreButton;
     procedure MoreClick(Sender: TObject);
@@ -300,6 +308,9 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure AlignControls(AControl: TControl; var ARect: TRect); override;
+    procedure InsertControl(AControl: TControl; Index: Integer); override;
+    procedure RemoveControl(AControl: TControl); override;
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
     constructor Create(AOwner: TComponent); override;
     property Caption: TCaption read FCaption write SetCaption;
@@ -377,6 +388,10 @@ type
     FShowCaption: Boolean;
     FShowDialogLauncher: Boolean;
     FOnDialogLauncher: TTyRibbonLauncherEvent;
+    { True while the page keeps this group hidden for lack of room. Such a group comes back
+      when room does; a group the application hid stays hidden. }
+    FOverflowed: Boolean;
+    FPageSetsVisible: Boolean;
     procedure SetCaption(const AValue: TCaption);
     procedure SetShowCaption(AValue: Boolean);
     procedure SetShowDialogLauncher(AValue: Boolean);
@@ -389,6 +404,7 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    procedure SetVisible(Value: Boolean); override;
   public
     constructor Create(AOwner: TComponent); override;
     { Size the group's width to its content: the rightmost edge of any hosted command control
@@ -1429,7 +1445,11 @@ begin
   j := 0;
   for i := 0 to ControlCount - 1 do
     if Controls[i] is TTyCustomRibbonGroup then
-    begin FVisualGroups[j] := TTyCustomRibbonGroup(Controls[i]); Inc(j); end;
+    begin
+      FVisualGroups[j] := TTyCustomRibbonGroup(Controls[i]);
+      FVisualGroups[j].FreeNotification(Self);   // freed later, even from the fly-out: DropGroup
+      Inc(j);
+    end;
   // Insertion sort by current Left -> stable left-to-right (visual) order.
   for i := 1 to n - 1 do
   begin
@@ -1460,24 +1480,43 @@ procedure TTyCustomRibbonPage.LayoutOverflow;
 var
   i, n, x, moreW, visCount, bandH, total, gap: Integer;
   widths: array of Integer;
+  shown: array of TTyCustomRibbonGroup;   // the groups the application has not hidden, in visual order
+  g: TTyCustomRibbonGroup;
 begin
   if FInLayout then Exit;
   if (FPopup <> nil) and FPopup.Visible then Exit;   // groups are in the popup; don't touch
   if not FCaptured then CaptureGroups;
-  n := Length(FVisualGroups);
-  if n = 0 then Exit;
+  if Length(FVisualGroups) = 0 then
+  begin
+    if FMoreBtn <> nil then FMoreBtn.Visible := False;
+    Exit;
+  end;
   FInLayout := True;
   try
     bandH := ClientHeight;
     moreW := MulDiv(30, Font.PixelsPerInch, 96);
     gap := MulDiv(9, Font.PixelsPerInch, 96);   // inter-group gap; the page draws the divider in it
+    { A group the application hid takes no room and is left hidden; one this layout hid for lack
+      of room is still a candidate. }
+    SetLength(shown, Length(FVisualGroups));
+    n := 0;
+    for i := 0 to High(FVisualGroups) do
+    begin
+      g := FVisualGroups[i];
+      g.Align := alNone;   // page owns the layout from here
+      if g.Visible or g.FOverflowed then
+      begin
+        shown[n] := g;
+        Inc(n);
+      end;
+    end;
     SetLength(widths, n);
     total := 0;
     { widths[i] is each group's FOOTPRINT = its own width + the trailing gap. This layout sets
       alNone + explicit bounds (bypassing BorderSpacing), so the gap has to be added here, and
       it leaves the band the page paints the group dividers into (DrawGroupDividers). }
     for i := 0 to n - 1 do
-    begin widths[i] := FVisualGroups[i].Width + gap; Inc(total, widths[i]); end;
+    begin widths[i] := shown[i].Width + gap; Inc(total, widths[i]); end;
     if total <= ClientWidth then
     begin
       visCount := n;
@@ -1490,18 +1529,22 @@ begin
     end;
     x := 0;
     for i := 0 to n - 1 do
-    begin
-      FVisualGroups[i].Align := alNone;   // page owns the layout from here
       if i < visCount then
       begin
-        FVisualGroups[i].SetBounds(x, 0, widths[i] - gap, bandH);   // real width (footprint - gap)
-        FVisualGroups[i].Visible := True;
-        Inc(x, widths[i]);                                          // advance by the footprint
+        shown[i].SetBounds(x, 0, widths[i] - gap, bandH);   // real width (footprint - gap)
+        PageShowGroup(shown[i], True, False);
+        Inc(x, widths[i]);                                  // advance by the footprint
       end
       else
-        FVisualGroups[i].Visible := False;
-    end;
-    FOverflowFrom := visCount;
+        PageShowGroup(shown[i], False, True);
+    { Where the fly-out starts taking groups (MoreClick). }
+    FOverflowFrom := Length(FVisualGroups);
+    for i := 0 to High(FVisualGroups) do
+      if FVisualGroups[i].FOverflowed then
+      begin
+        FOverflowFrom := i;
+        Break;
+      end;
     if visCount < n then
     begin
       FMoreBtn.SetBounds(x, 0, moreW, bandH);
@@ -1517,6 +1560,7 @@ procedure TTyCustomRibbonPage.MoreClick(Sender: TObject);
 var
   i, x, bandH: Integer;
   tl: TPoint;
+  g: TTyCustomRibbonGroup;
 begin
   if (FOverflowFrom < 0) or (FOverflowFrom >= Length(FVisualGroups)) then Exit;
   if FPopup = nil then
@@ -1527,13 +1571,20 @@ begin
   end;
   bandH := ClientHeight;
   x := 0;
-  for i := FOverflowFrom to High(FVisualGroups) do
-  begin
-    FVisualGroups[i].Parent := FPopup;   // move the overflow groups into the flyout
-    FVisualGroups[i].Align := alNone;
-    FVisualGroups[i].SetBounds(x, 0, FVisualGroups[i].Width, bandH);
-    FVisualGroups[i].Visible := True;
-    Inc(x, FVisualGroups[i].Width);
+  FMovingGroups := True;
+  try
+    for i := FOverflowFrom to High(FVisualGroups) do
+    begin
+      g := FVisualGroups[i];
+      if not g.FOverflowed then Continue;   // one the application hid stays hidden
+      g.Parent := FPopup;                   // move the overflow groups into the flyout
+      g.Align := alNone;
+      g.SetBounds(x, 0, g.Width, bandH);
+      PageShowGroup(g, True, True);         // shown in the fly-out, still overflowed on the page
+      Inc(x, g.Width);
+    end;
+  finally
+    FMovingGroups := False;
   end;
   if x <= 0 then Exit;
   tl := FMoreBtn.ClientToScreen(Point(0, FMoreBtn.Height));
@@ -1543,14 +1594,78 @@ end;
 procedure TTyCustomRibbonPage.OverflowPopupClosed(Sender: TObject);
 var
   i: Integer;
+  g: TTyCustomRibbonGroup;
 begin
-  for i := FOverflowFrom to High(FVisualGroups) do
-    if FVisualGroups[i] <> nil then
+  FMovingGroups := True;
+  try
+    for i := 0 to High(FVisualGroups) do
     begin
-      FVisualGroups[i].Parent := Self;      // restore to the page (still overflowing -> hidden)
-      FVisualGroups[i].Visible := False;
+      g := FVisualGroups[i];
+      if g.Parent <> FPopup then Continue;
+      g.Parent := Self;                     // restore to the page (still overflowing -> hidden)
+      if g.FOverflowed then PageShowGroup(g, False, True);
     end;
+  finally
+    FMovingGroups := False;
+  end;
   LayoutOverflow;
+end;
+
+procedure TTyCustomRibbonPage.AdoptGroup(AGroup: TTyCustomRibbonGroup);
+var
+  i: Integer;
+begin
+  for i := 0 to High(FVisualGroups) do
+    if FVisualGroups[i] = AGroup then Exit;
+  SetLength(FVisualGroups, Length(FVisualGroups) + 1);   // a group added later goes last
+  FVisualGroups[High(FVisualGroups)] := AGroup;
+  AGroup.FreeNotification(Self);
+end;
+
+procedure TTyCustomRibbonPage.DropGroup(AGroup: TComponent);
+var
+  i, j: Integer;
+begin
+  for i := 0 to High(FVisualGroups) do
+    if FVisualGroups[i] = AGroup then
+    begin
+      for j := i to High(FVisualGroups) - 1 do
+        FVisualGroups[j] := FVisualGroups[j + 1];
+      SetLength(FVisualGroups, Length(FVisualGroups) - 1);
+      if i < FOverflowFrom then Dec(FOverflowFrom);
+      Exit;
+    end;
+end;
+
+procedure TTyCustomRibbonPage.PageShowGroup(AGroup: TTyCustomRibbonGroup; AVisible, AOverflowed: Boolean);
+begin
+  AGroup.FOverflowed := AOverflowed;
+  AGroup.FPageSetsVisible := True;
+  try
+    AGroup.Visible := AVisible;
+  finally
+    AGroup.FPageSetsVisible := False;
+  end;
+end;
+
+procedure TTyCustomRibbonPage.InsertControl(AControl: TControl; Index: Integer);
+begin
+  inherited InsertControl(AControl, Index);
+  { Before the capture the group is picked up with the others (CaptureGroups). }
+  if (AControl is TTyCustomRibbonGroup) and FCaptured and not FMovingGroups then
+    AdoptGroup(TTyCustomRibbonGroup(AControl));
+end;
+
+procedure TTyCustomRibbonPage.RemoveControl(AControl: TControl);
+begin
+  if not FMovingGroups then DropGroup(AControl);
+  inherited RemoveControl(AControl);
+end;
+
+procedure TTyCustomRibbonPage.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if Operation = opRemove then DropGroup(AComponent);
 end;
 
 // ===========================================================================
@@ -1585,6 +1700,12 @@ begin
   FShowCaption := AValue;
   Realign;      // the reserved caption band changed -> re-lay hosted controls
   Invalidate;
+end;
+
+procedure TTyCustomRibbonGroup.SetVisible(Value: Boolean);
+begin
+  if not FPageSetsVisible then FOverflowed := False;   // the application's say: it sticks
+  inherited SetVisible(Value);
 end;
 
 procedure TTyCustomRibbonGroup.SetShowDialogLauncher(AValue: Boolean);

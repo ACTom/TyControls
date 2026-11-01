@@ -67,6 +67,7 @@ type
     procedure TestFontStyleElementWritesTheFont;
     procedure TestTheFontDialogWritesTheWholeFont;
     procedure TestACancelledFontDialogWritesNothing;
+    procedure TestTheFontDialogStartsFromTheButtonsFont;
     procedure TestConstraintsExpandAndWrite;
   end;
 
@@ -428,6 +429,32 @@ begin
   AssertEquals('the font row', 'Courier New, 15', FGrid.RowAt('Font').Value);
   AssertEquals('the size row', '15', FGrid.RowAt('Font.Size').Value);
   AssertEquals('the style row', '[fsBold,fsItalic]', FGrid.RowAt('Font.Style').Value);
+end;
+
+{ #183: OK after changing only the size keeps the rest of the font. The dialog opened on a font
+  put together from the rows -- regular whatever the button's style, with the default CharSet,
+  Pitch, Quality and Orientation -- and OK wrote all of that back. }
+procedure TPropertyGridButtonTest.TestTheFontDialogStartsFromTheButtonsFont;
+begin
+  FButton.Font.Style := [fsBold, fsUnderline];
+  FButton.Font.CharSet := RUSSIAN_CHARSET;
+  FButton.Font.Pitch := fpFixed;
+  FButton.Font.Quality := fqNonAntialiased;
+  FButton.Font.Orientation := 900;
+  FGrid.Refresh;
+  FGrid.FontSizeAnswer := 15;
+  FGrid.ClickValue(FGrid.RowAt('Font'));
+  FGrid.Editor.ClickEllipsis;
+  AssertEquals('the dialog opened', 1, FGrid.FontDialogs);
+  AssertTrue('on the button''s style', FGrid.FontSeen.Style = [fsBold, fsUnderline]);
+  AssertEquals('and its character set', RUSSIAN_CHARSET, FGrid.FontSeen.CharSet);
+  AssertEquals('the new size', 15, FButton.Font.Size);
+  AssertEquals('face kept', 'Arial', FButton.Font.Name);
+  AssertTrue('bold and underline kept', FButton.Font.Style = [fsBold, fsUnderline]);
+  AssertEquals('character set kept', RUSSIAN_CHARSET, FButton.Font.CharSet);
+  AssertTrue('pitch kept', FButton.Font.Pitch = fpFixed);
+  AssertTrue('quality kept', FButton.Font.Quality = fqNonAntialiased);
+  AssertEquals('orientation kept', 900, FButton.Font.Orientation);
 end;
 
 procedure TPropertyGridButtonTest.TestACancelledFontDialogWritesNothing;

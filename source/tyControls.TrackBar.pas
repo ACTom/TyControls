@@ -327,8 +327,27 @@ procedure TyDrawTrackTicks(APainter: TTyPainter; const ARect: TRect; const AT: T
   one, i.e. a theme's TyTrackThumb:focus rule resolved -- the outline as a ring inside AR,
   outline-offset in from the thumb's edge (positive = inward, as the control focus rings). }
 procedure TyDrawTrackThumb(APainter: TTyPainter; const AR: TRect; const AStyle: TTyStyleSet);
+{ The step between automatic ticks over a track ALenPx long (#187): Frequency, widened to a
+  multiple of it once the ticks would stand closer than 2 px. With Frequency 1 a range of a
+  million drew a million ticks on every paint, and at High(Integer) the counter wrapped and
+  the paint never ended. Int64, so a caller can count with it without wrapping either. }
+function TyTrackAutoTickStride(AMin, AMax, AFrequency, ALenPx: Integer): Int64;
 
 implementation
+
+function TyTrackAutoTickStride(AMin, AMax, AFrequency, ALenPx: Integer): Int64;
+var
+  ticks, maxTicks: Int64;
+begin
+  Result := AFrequency;
+  if (AFrequency <= 0) or (AMax <= AMin) then Exit;
+  maxTicks := ALenPx div 2;
+  if maxTicks < 2 then maxTicks := 2;
+  ticks := (Int64(AMax) - AMin) div AFrequency + 1;
+  if ticks > maxTicks then
+    Result := Int64(AFrequency) * ((ticks + maxTicks - 1) div maxTicks);
+end;
+
 
 function TyTrackThumbOffset(AMainLen, AThumbLen, AMin, AMax, APos: Integer; AInvert: Boolean): Integer;
 var travel, span, eff: Integer;
@@ -437,7 +456,8 @@ type
 function TrackTickCentres(const AT: TTyTrackTicks): TTrackTickAtArray;
 var
   arr: TTrackTickAtArray;
-  n, i, V: Integer;
+  n, i: Integer;
+  V, stride: Int64;
 
   procedure Add(AV: Integer);
   begin
@@ -465,11 +485,14 @@ begin
     end
     else if AT.Frequency > 0 then
     begin
+      { #187/#182: thinned once the ticks would stand closer than 2 px, and counted in Int64 so
+        the counter cannot wrap at High(Integer). }
+      stride := TyTrackAutoTickStride(AT.Min, AT.Max, AT.Frequency, AT.MainLen);
       V := AT.Min;
       while V <= AT.Max do
       begin
-        Add(V);
-        Inc(V, AT.Frequency);
+        Add(Integer(V));
+        Inc(V, stride);
       end;
     end;
   end;

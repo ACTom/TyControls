@@ -327,7 +327,7 @@ begin
   if fs <= 0 then
     fs := Math.Max(9, MulDiv((R.Bottom - R.Top) div 6, 96, P.PPI));
   vs := CurrentStyle;   // the theme's face, the font's style flags under the bold
-  P.DrawText(R, Format(FValueFormat, [FValue]), vs.FontName, fs,
+  P.DrawText(R, TyFormatValue(FValueFormat, FValue), vs.FontName, fs,
     700 or (vs.FontWeight and not TyFontWeightMask), AColor, taCenter, tlCenter, False);
 end;
 

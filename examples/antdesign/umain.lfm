@@ -973,7 +973,7 @@ object MainForm: TMainForm
           end
           object CardFloat: TTyCard
             Left = 538
-            Height = 348
+            Height = 468
             Top = 294
             Width = 515
             TabOrder = 3
@@ -1029,6 +1029,86 @@ object MainForm: TMainForm
               Caption = 'TTyNotification is a corner toast: non-intrusive, dismisses itself (the Duration=0 one stays until you close it, and it sits in the bottom-right corner — toasts sharing a corner stack in it). TTyPopover is an overlay that can host controls: the two buttons inside it are real, and it stays open when you click away because its content is a question.'
               Layout = tlTop
               WordWrap = True
+            end
+            object ChkPopAnim: TTyCheckBox
+              Left = 12
+              Height = 26
+              Top = 300
+              Width = 220
+              TabOrder = 5
+              TabStop = True
+              State = cbChecked
+              Checked = True
+              OnChange = PopAnimChange
+              Caption = 'Animate the popovers'
+            end
+            object BtnPopAccent: TTyButton
+              Left = 12
+              Height = 38
+              Top = 336
+              Width = 150
+              TabOrder = 6
+              OnClick = PopAccentClick
+              Caption = 'Accent popover'
+            end
+            object BtnPopFlyout: TTyButton
+              Left = 172
+              Height = 38
+              Top = 336
+              Width = 150
+              TabOrder = 7
+              OnClick = PopFlyoutClick
+              Caption = 'Flyout panel'
+            end
+            object LblPopMore: TTyLabel
+              Left = 12
+              Height = 66
+              Top = 384
+              Width = 491
+              Caption = 'The accent popover differs from the others only by its StyleOverride. The flyout panel has no arrow: it lies inside this card along its bottom edge, as long as that edge. Untick the box and both appear and go at once.'
+              Layout = tlTop
+              WordWrap = True
+            end
+            object PopAccentBox: TTyPanel
+              Left = 220
+              Height = 60
+              Top = 300
+              Width = 280
+              TabOrder = 8
+              StyleOverride = 'background: var(--accent); border-width: 0;'
+              object LblPopAccent: TTyLabel
+                Left = 10
+                Height = 44
+                Top = 8
+                Width = 260
+                Caption = 'Fill, ink and square corners come from this popover''s own StyleOverride.'
+                Layout = tlTop
+                WordWrap = True
+                StyleOverride = 'color: var(--on-accent);'
+              end
+            end
+            object FlyBox: TTyPanel
+              Left = 12
+              Height = 46
+              Top = 384
+              Width = 420
+              TabOrder = 9
+              object LblFly: TTyLabel
+                Left = 10
+                Height = 24
+                Top = 12
+                Width = 300
+                Caption = 'A flyout panel: no arrow, the width of its edge.'
+              end
+              object BtnFlyClose: TTyButton
+                Left = 320
+                Height = 32
+                Top = 6
+                Width = 80
+                TabOrder = 0
+                OnClick = FlyCloseClick
+                Caption = 'Close'
+              end
             end
             object PopBox: TTyPanel
               Left = 12
@@ -1465,6 +1545,24 @@ object MainForm: TMainForm
     OnShow = PopShow
     OnHide = PopHide
     Left = 480
+    Top = 500
+  end
+  object PopAccent: TTyPopover
+    Target = BtnPopAccent
+    Content = PopAccentBox
+    Placement = ppTop
+    Title = 'Accent popover'
+    StyleOverride = 'background: var(--accent); color: var(--on-accent); border-width: 0; border-radius: 0;'
+    Left = 520
+    Top = 500
+  end
+  object PopFlyout: TTyPopover
+    Target = CardFloat
+    Content = FlyBox
+    Title = 'Flyout panel'
+    FlyoutPanel.Active = True
+    FlyoutPanel.Align = fpaBottom
+    Left = 560
     Top = 500
   end
   object UserMenu: TTyPopupMenu

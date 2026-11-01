@@ -165,6 +165,7 @@ type
       reconciling their own page/data backing. }
     FTabIndex: Integer;
     FPendingTabIndex: Integer;
+    FApplyingStreamed: Boolean;   { #145: Loaded is applying the saved TabIndex -- no events }
     { Header overflow scroll. FHeaderScroll is the device-px amount the header
       strip is shifted left (>=0). FShowScrollAffordance and the two arrow rects
       are recomputed at the end of RebuildLayout. Kept protected so white-box
@@ -578,6 +579,9 @@ type
 
 implementation
 
+type
+  TTyDialogCharAccess = class(TControl);   // DialogChar is protected
+
 { TTyCustomTabStrip }
 
 constructor TTyCustomTabStrip.Create(AOwner: TComponent);
@@ -625,7 +629,9 @@ end;
 function TTyCustomTabStrip.DialogChar(var Message: TLMKey): Boolean;
 var I: Integer;
 begin
-  if Enabled then   // match the Enabled gate on MouseDown/KeyDown + the sibling controls
+  { #142: IsEnabled, not Enabled -- inside a disabled panel the strip is disabled too, and its
+    tab accelerators went on switching pages. }
+  if IsEnabled and TyShownInForm(Self) then
     for I := 0 to GetTabCount - 1 do
       if GetTabVisibleAt(I)         // a hidden tab shows no label, so no discoverable accel
         and TyIsAccelKey(Message, GetTabCaption(I)) then
@@ -633,7 +639,13 @@ begin
         SetTabIndex(I);
         Exit(True);
       end;
-  Result := inherited DialogChar(Message);
+  { #142: then the children shown, only. TWinControl asks every child, so a page control's
+    hidden pages answered the Alt keys of the controls on them, taking them from the page on
+    screen; LCL asks the active page alone. }
+  for I := 0 to ControlCount - 1 do
+    if Controls[I].Visible and TTyDialogCharAccess(Controls[I]).DialogChar(Message) then
+      Exit(True);
+  Result := False;
 end;
 
 { Default virtual hooks. Subclasses override these to wire real tab data:
@@ -1895,7 +1907,7 @@ begin
     vetoed we keep the old index and commit nothing (no DoSelectTab, no fade, no
     OnChange). }
   Allow := True;
-  if Assigned(FOnChanging) then
+  if Assigned(FOnChanging) and not FApplyingStreamed then
     FOnChanging(Self, Clamped, Allow);
   if not Allow then Exit;
   FTabIndex := Clamped;
@@ -1920,7 +1932,7 @@ begin
     ScrollTabIntoView(FTabIndex);
   end;
   Invalidate;
-  if Assigned(FOnChange) then
+  if Assigned(FOnChange) and not FApplyingStreamed then
     FOnChange(Self);
   { A design-time switch (a designer tab click, a component-editor verb) changed a
     published value behind the IDE's back. TWO pings, because the IDE splits the
@@ -2250,7 +2262,14 @@ begin
     declares it as its default, so -1 is never written. }
   if FPendingTabIndex <> -1 then
   begin
-    SetTabIndex(FPendingTabIndex);
+    { #145: the saved selection is applied, not chosen: no OnChanging -- which could refuse the
+      page the form was saved on -- and no OnChange, both of which ran before FormCreate. }
+    FApplyingStreamed := True;
+    try
+      SetTabIndex(FPendingTabIndex);
+    finally
+      FApplyingStreamed := False;
+    end;
     FPendingTabIndex := -1;
   end;
 end;

@@ -451,6 +451,7 @@ type
     procedure MenuDownClick(Sender: TObject);
   protected
     function CanCommitValue(ARow: TTyValueRow; var AText: string): Boolean; override;
+    procedure SeedEditFont(ARow: TTyValueRow; AFont: TFont); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     { A right click (or the menu key) on a collection or item row shows the built-in menu: Add
       Item, Delete Item, Move Up, Move Down. Only while PopupMenu is not assigned -- the
@@ -2210,6 +2211,10 @@ begin
     for i := 0 to n - 1 do
       if fresh[i] <> FSelected[i] then same := False;
   if same then Exit;
+  { #183: an edit in progress is written to the object it was made on before that object leaves
+    the grid, as LCL's object inspector does (SetSelection calls ValueEditExit first). It was
+    thrown away: a click on a control that takes no focus never gave the editor its OnExit. }
+  if EditingRow >= 0 then EndEdit(True);
   for i := 0 to High(FSelected) do
     if FSelected[i] is TComponent then TComponent(FSelected[i]).RemoveFreeNotification(Self);
   FSelected := fresh;
@@ -2743,6 +2748,32 @@ begin
       if FRows.PropertyOfIn(ANode, k, inst, nm) then FOnPropertyChanged(Self, inst, nm);
     end;
   Result := gen = FBuildCount;
+end;
+
+procedure TTyCustomPropertyGrid.SeedEditFont(ARow: TTyValueRow; AFont: TFont);
+var
+  nd: TTyPropertyNode;
+  inst, cur: TObject;
+begin
+  { #183: the font the object holds, whole, as LCL's font property editor starts from it
+    (graphpropedits.pas, FontDialog.Font := TFont(GetObjectValue)). Seeded from the rows, a
+    bold font opened regular and its CharSet, Pitch, Quality and Orientation were dropped. }
+  nd := nil;
+  if FRows <> nil then nd := FRows.NodeOf(ARow);
+  if (nd <> nil) and (nd.Kind = pnkFont) and (nd.PropInfo <> nil) then
+  begin
+    inst := nd.Instance;
+    if inst <> nil then
+    begin
+      cur := GetObjectProp(inst, nd.PropInfo);
+      if cur is TFont then
+      begin
+        AFont.Assign(TFont(cur));
+        Exit;
+      end;
+    end;
+  end;
+  inherited SeedEditFont(ARow, AFont);
 end;
 
 function TTyCustomPropertyGrid.CanCommitValue(ARow: TTyValueRow; var AText: string): Boolean;

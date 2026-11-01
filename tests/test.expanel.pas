@@ -15,6 +15,11 @@ type
     procedure SetUp; override;
     procedure TearDown; override;
   published
+    { #152: a panel saved collapsed opens, after reading, to the height it had. }
+    procedure TestAPanelSavedCollapsedOpensToItsHeight;
+    { A form saved before the expanded height was stored: reading Collapsed at the header's
+      height must not make that the height to open to. }
+    procedure TestAnOldCollapsedPanelStillOpens;
     // typeKey / defaults
     procedure TestTypeKeyIsTyExPanel;
     procedure TestDefaults;
@@ -100,6 +105,63 @@ begin
 end;
 
 { TTyExPanelTest }
+
+procedure TTyExPanelTest.TestAPanelSavedCollapsedOpensToItsHeight;
+var
+  ms: TMemoryStream;
+  q: TTyExPanel;
+begin
+  FPanel.Height := 200;
+  FPanel.Collapsed := True;
+  AssertTrue('precondition: collapsed to its header', FPanel.Height < 200);
+  ms := TMemoryStream.Create;
+  try
+    ms.WriteComponent(FPanel);
+    ms.Position := 0;
+    q := TTyExPanel.Create(FForm);
+    q.Parent := FForm;
+    q.Font.PixelsPerInch := 96;
+    ms.ReadComponent(q);
+    AssertTrue('read back collapsed', q.Collapsed);
+    AssertEquals('at its header''s height', FPanel.Height, q.Height);
+    q.Collapsed := False;
+    AssertEquals('and it opens to the height it had', 200, q.Height);
+  finally
+    ms.Free;
+  end;
+end;
+
+type
+  TExPanelLoadProbe = class(TTyExPanel)
+  public
+    procedure BeginLoad;
+    procedure EndLoad;
+  end;
+
+procedure TExPanelLoadProbe.BeginLoad;
+begin
+  Loading;
+end;
+
+procedure TExPanelLoadProbe.EndLoad;
+begin
+  Loaded;
+end;
+
+procedure TTyExPanelTest.TestAnOldCollapsedPanelStillOpens;
+var
+  q: TExPanelLoadProbe;
+begin
+  q := TExPanelLoadProbe.Create(FForm);
+  q.Parent := FForm;
+  q.Font.PixelsPerInch := 96;
+  q.BeginLoad;
+  q.Height := 26;          // saved collapsed, at its header's height
+  q.Collapsed := True;     // and no stored expanded height
+  q.EndLoad;
+  q.Collapsed := False;
+  AssertTrue('it opens past its header', q.Height > 26);
+end;
 
 procedure TTyExPanelTest.SetUp;
 begin

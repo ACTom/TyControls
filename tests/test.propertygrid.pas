@@ -72,6 +72,7 @@ type
     procedure TestASetterThatMovesAnotherPropertyRefreshesItsRow;
     procedure TestASetterThatRaisesLeavesTheRowAlone;
     procedure TestReadOnlyRowDoesNotOpen;
+    procedure TestAnEditInProgressIsWrittenBeforeTheSelectionMoves;
   end;
 
 implementation
@@ -272,6 +273,28 @@ procedure TPropertyGridEditTest.TearDown;
 begin
   FForm.Free;
   FObj.Free;
+end;
+
+{ #183: what the user is typing goes to the object it was typed on when the grid is handed
+  another one -- it was thrown away. A click on a control that takes no focus (a graphic control
+  on the designed form) never gave the editor its OnExit. }
+procedure TPropertyGridEditTest.TestAnEditInProgressIsWrittenBeforeTheSelectionMoves;
+var other: TPGBasic;
+begin
+  other := TPGBasic.Create;
+  try
+    FGrid.ClickValue(FGrid.RowAt('Alpha'));
+    AssertTrue('the editor opened', FGrid.EditingRow >= 0);
+    FGrid.Editor.TypeText('typed');
+    FGrid.SelectedObject := other;
+    AssertEquals('the first object took it', 'typed', FObj.Alpha);
+    AssertEquals('not the one shown now', 'start', other.Alpha);
+    AssertEquals('the editor is closed', -1, FGrid.EditingRow);
+    AssertEquals('the row reads the new object', 'start', FGrid.RowAt('Alpha').Value);
+  finally
+    FGrid.SelectedObject := nil;
+    other.Free;
+  end;
 end;
 
 procedure TPropertyGridEditTest.TestTypedIntegerIsWritten;

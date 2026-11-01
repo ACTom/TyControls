@@ -348,6 +348,9 @@ type
 
 implementation
 
+uses
+  tyControls.Base;   // TyIsShortcutShift
+
 { ------------------------------------------------------------------ compiling a mask --- }
 
 function UpCh(c: Char): Char;
@@ -1124,13 +1127,13 @@ begin
       display string, and without a placeholder there is no such string to start from.
       The short form keeps the paths it always had (FilterInsert for paste, the base class
       for cut). }
-    if InPlace and (Key = VK_V) and ((ssCtrl in Shift) or (ssMeta in Shift)) then
+    if InPlace and (Key = VK_V) and TyIsShortcutShift(Shift) then   { #150 }
     begin
       if not ReadOnly then PasteInPlace(ReadClipboardText);
       Key := 0;
       Exit;
     end;
-    if InPlace and (Key = VK_X) and ((ssCtrl in Shift) or (ssMeta in Shift)) then
+    if InPlace and (Key = VK_X) and TyIsShortcutShift(Shift) then   { #150 }
     begin
       if HasSelection then
       begin

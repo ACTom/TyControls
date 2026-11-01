@@ -68,6 +68,10 @@ type
     { A1 regression: non-zero origin ARect must not displace thumb relative to track }
     procedure TestOffsetOriginThumbPositionConsistent;
     procedure TestFrequencyDrawsTicks;
+    { #187: the automatic ticks are thinned once they would stand closer than 2 px, so a huge
+      range neither draws a tick per value nor wraps its counter. }
+    procedure TestTheTickStrideWidensForAHugeRange;
+    procedure TestAHugeRangeDrawsThinnedTicks;
   end;
 
   TTyTrackBarAnimationTest = class(TTestCase)
@@ -694,6 +698,69 @@ procedure TTyTrackBarPixelTest.TestFrequencyDrawsTicks;
 begin
   AssertFalse('no ticks when Frequency=0', HasTickInk(0));
   AssertTrue('ticks present when Frequency=20', HasTickInk(20));
+end;
+
+procedure TTyTrackBarPixelTest.TestTheTickStrideWidensForAHugeRange;
+begin
+  AssertEquals('ticks that fit keep the frequency', 5, TyTrackAutoTickStride(0, 100, 5, 200));
+  AssertEquals('a million values over 200 px', 10001, TyTrackAutoTickStride(0, 1000000, 1, 200));
+  AssertEquals('a multiple of the frequency', 0, TyTrackAutoTickStride(0, 1000, 3, 100) mod 3);
+  AssertTrue('the whole Integer range does not overflow',
+    TyTrackAutoTickStride(Low(Integer), High(Integer), 1, 200) > 0);
+end;
+
+procedure TTyTrackBarPixelTest.TestAHugeRangeDrawsThinnedTicks;
+var
+  Ctl: TTyStyleController;
+  T: TTyTrackBarProbe;
+  bmp: TBitmap;
+  reread: TBGRABitmap;
+  x, y, inked: Integer;
+  px: TBGRAPixel;
+  hit: Boolean;
+begin
+  Ctl := TTyStyleController.Create(nil);
+  T := TTyTrackBarProbe.Create(nil);
+  bmp := TBitmap.Create;
+  try
+    Ctl.LoadThemeCss(
+      'TyTrackBar { background: #FFFFFF; color: #000000; border-width: 0px; border-radius: 0px; }' +
+      'TyTrackThumb { background: #FFFFFF; border-radius: 0px; }');
+    T.Controller := Ctl;
+    T.Orientation := toHorizontal;
+    T.Min := 0;
+    T.Max := 1000000;
+    T.Frequency := 1;
+    T.Font.PixelsPerInch := 96;
+    T.SetBounds(0, 0, 160, 40);
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(160, 40);
+    bmp.Canvas.Brush.Color := clWhite;
+    bmp.Canvas.FillRect(0, 0, 160, 40);
+    T.RenderTo(bmp.Canvas, Rect(0, 0, 160, 40), 96);
+    reread := TBGRABitmap.Create(bmp);
+    try
+      inked := 0;
+      for x := 0 to 159 do
+      begin
+        hit := False;
+        for y := 30 to 39 do
+        begin
+          px := reread.GetPixel(x, y);
+          if (px.red < 200) or (px.green < 200) or (px.blue < 200) then hit := True;
+        end;
+        if hit then Inc(inked);
+      end;
+    finally
+      reread.Free;
+    end;
+    AssertTrue('ticks are drawn', inked > 0);
+    AssertTrue(Format('but not one per pixel (%d of 160 columns)', [inked]), inked <= 96);
+  finally
+    bmp.Free;
+    T.Free;
+    Ctl.Free;
+  end;
 end;
 
 { TTyTrackBarAnimationTest }
