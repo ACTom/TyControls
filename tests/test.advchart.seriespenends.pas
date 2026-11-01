@@ -187,7 +187,7 @@ begin
             if not (el.Style.StrokeWidthLogical > 0) then Continue;
             if ((el.Style.StrokeColor shr 24) = 0) and (el.Style.StrokeGradient.Kind = cgkNone) then Continue;
           end;
-          if (id = 'gauge') and (el.Anim.Role <> carGaugePointer) then Continue;
+          if ((id = 'gauge') or (id = 'gauge.pointer')) and (el.Anim.Role <> carGaugePointer) then Continue;
           if el.Style.MiterLimit > 0 then ml := el.Style.MiterLimit else ml := 10;
           got.Add(CapWord(el.Style.LineCap) + '/' + JoinWord(el.Style.LineJoin) + '/'
             + FloatToStr(ml));

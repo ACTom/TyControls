@@ -4254,7 +4254,8 @@ type
       getLineStyle's (cap, join, miterLimit), from the same model chains as
       the shadows -- and the views' own: a funnel's polygon joins round, a
       line's polyline bevels unless its lineStyle says, a gauge's pointer lays
-      pointer.itemStyle over its item's; a sankey's bands, a treemap's rects,
+      pointer.itemStyle over its item's; a sankey's band reads itemStyle's
+      border* keys off its lineStyle; a treemap's rects,
       a radar's area and an area take none }
     procedure ApplySeriesPenEnds(AList: TTyPaintList);
     { [R5-A] A SERIES' blendMode AND zlevel onto its elements: the blend on

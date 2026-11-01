@@ -69,10 +69,15 @@ function cases() {
     ['tree', solo({ type: 'tree', itemStyle: IS, lineStyle: LS, data: [{ name: 'r', children: [{ name: 'a' }, { name: 'b' }] }] })],
     ['sankey', solo({ type: 'sankey', itemStyle: IS, lineStyle: Object.assign({ opacity: 0.5 }, LS),
       data: [{ name: 'a' }, { name: 'b' }], links: [{ source: 'a', target: 'b', value: 3 }] })],
+    ['sankey.border', solo({ type: 'sankey', lineStyle: { borderColor: '#000', borderWidth: 2, borderCap: 'round',
+      borderJoin: 'bevel', borderMiterLimit: 3, cap: 'square', join: 'round', miterLimit: 5 },
+      data: [{ name: 'a' }, { name: 'b' }], links: [{ source: 'a', target: 'b', value: 3 }] })],
     ['parallel', { animation: false, parallelAxis: [{ dim: 0 }, { dim: 1 }], series: [{ type: 'parallel', lineStyle: LS, data: [[1, 2], [3, 4]] }] }],
     ['lines', { animation: false, xAxis: { type: 'value' }, yAxis: { type: 'value' },
       series: [{ type: 'lines', coordinateSystem: 'cartesian2d', lineStyle: LS, data: [{ coords: [[0, 0], [5, 5]] }] }] }],
     ['gauge', solo({ type: 'gauge', itemStyle: IS, data: [{ value: 40 }] })],
+    ['gauge.pointer', solo({ type: 'gauge', itemStyle: IS, pointer: { itemStyle: { borderJoin: 'round', borderMiterLimit: 6 } },
+      data: [{ value: 40 }] })],
     ['pict', cart({ type: 'pictorialBar', itemStyle: IS, symbol: 'rect', data: [3, 5, 2] })],
     ['river', { animation: false, singleAxis: { type: 'time' }, series: [{ type: 'themeRiver', itemStyle: IS,
       data: [['2015/11/08', 3, 'a'], ['2015/11/09', 4, 'a']] }] }],
@@ -98,7 +103,7 @@ function run(id, option) {
       if (!(e instanceof Path) || e.ignore || e.invisible) return;
       const s = e.style;
       if (!(s.lineWidth > 0) || s.stroke == null || s.stroke === 'none') return;
-      if (id === 'gauge' && e.type !== 'pointer') return;
+      if ((id === 'gauge' || id === 'gauge.pointer') && e.type !== 'pointer') return;
       n++;
       set.add([s.lineCap || 'butt', s.lineJoin || 'miter', String(s.miterLimit == null ? 10 : s.miterLimit)].join('/'));
     }));
@@ -121,6 +126,9 @@ function generate() {
   must(by('sankey').ends.join() === 'round/bevel/3', 'sankey: ' + by('sankey').ends);
   must(by('parallel').ends.join() === 'square/round/5', 'parallel: ' + by('parallel').ends);
   must(by('gauge').ends.join() === 'round/bevel/3', 'gauge: ' + by('gauge').ends);
+  // a band speaks itemStyle's keys on its lineStyle (curve.useStyle(lineStyleModel.getItemStyle()))
+  must(by('sankey.border').ends.join() === 'round/bevel/3', 'sankey.border: ' + by('sankey.border').ends);
+  must(by('gauge.pointer').ends.join() === 'round/round/6', 'gauge.pointer: ' + by('gauge.pointer').ends);
   must(charts.every(c => c.stroked > 0), 'a case strokes nothing');
   return { source: 'ECharts 6.1.0 dist (' + DIST.replace(/\\/g, '/') + '), node SSR (svg)',
     note: 'R6-C: each case at rest, `ends` = the sorted set of lineCap/lineJoin/miterLimit of every stroked path under the '

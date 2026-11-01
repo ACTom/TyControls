@@ -4744,10 +4744,15 @@ begin
     sNode := StSeriesNode(s);
     if sNode = nil then Continue;
     joinHas := False;
-    { ---- the edges (a sankey's bands take none) ---- }
+    { ---- the edges (a sankey's band speaks itemStyle's keys on its
+      lineStyle: curve.useStyle(lineStyleModel.getItemStyle())) ---- }
     if pe^.Datum.IsEdge then
     begin
-      if typ = TySankeySeriesTypeName then Continue;
+      if typ = TySankeySeriesTypeName then
+      begin
+        Take(StEdgeNodes(s, pe^.Datum.DataIndex), ['lineStyle'], False);
+        Continue;
+      end;
       if pe^.Silent and (typ = TyGraphSeriesTypeName) then Continue;
       if typ = TyGraphSeriesTypeName then
         e := StGraphEdgeOfRow(slot, pe^.Datum.DataIndex)

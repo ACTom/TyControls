@@ -638,6 +638,46 @@
    ]
   },
   {
+   "id": "sankey.border",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "sankey",
+      "lineStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderCap": "round",
+       "borderJoin": "bevel",
+       "borderMiterLimit": 3,
+       "cap": "square",
+       "join": "round",
+       "miterLimit": 5
+      },
+      "data": [
+       {
+        "name": "a"
+       },
+       {
+        "name": "b"
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "b",
+        "value": 3
+       }
+      ]
+     }
+    ]
+   },
+   "stroked": 1,
+   "ends": [
+    "round/bevel/3"
+   ]
+  },
+  {
    "id": "parallel",
    "option": {
     "animation": false,
@@ -743,6 +783,39 @@
    "stroked": 1,
    "ends": [
     "round/bevel/3"
+   ]
+  },
+  {
+   "id": "gauge.pointer",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "gauge",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderCap": "round",
+       "borderJoin": "bevel",
+       "borderMiterLimit": 3
+      },
+      "pointer": {
+       "itemStyle": {
+        "borderJoin": "round",
+        "borderMiterLimit": 6
+       }
+      },
+      "data": [
+       {
+        "value": 40
+       }
+      ]
+     }
+    ]
+   },
+   "stroked": 1,
+   "ends": [
+    "round/round/6"
    ]
   },
   {
