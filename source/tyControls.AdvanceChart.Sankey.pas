@@ -1007,6 +1007,9 @@ begin
     if lv <> nil then base := TyLabelSpecOfNode(ObjIn(lv, 'label'), ASolved.Series, base);
     if ASolved.Nodes[i].Item <> nil then
       base := TyLabelSpecOfNode(ObjIn(ASolved.Nodes[i].Item, 'label'), ASolved.Series, base);
+    { [R6-A] the states' textConfig along the node's model chain: its item,
+      its level, the series }
+    TyLabelReadStateCfg([ASolved.Nodes[i].Item, lv, ASolved.Series], base);
     { the mark places the words itself }
     base.OffsetXLogical := 0;
     base.OffsetYLogical := 0;

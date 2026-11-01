@@ -320,15 +320,152 @@ begin
     end;
 end;
 
+{ [R6-A] THE TWIN OF A SERIES LABEL FOR THE STATES IT IS IN: the states
+  whose label writes a textConfig key, select's first and emphasis' (else
+  blur's) over it (echarts.ts applyElementStates); -1 none }
+function StLabelTwinOf(const AEl: TTyChartElement; AStates: TTyStNames): Integer;
+var sel, emph, blur: Boolean;
+begin
+  Result := -1;
+  if Length(AEl.EmphTwin) = 0 then Exit;
+  sel := (stnSelect in AStates) and (TyEmphTwinAt(AEl.EmphTwin, TyTwinSelect) >= 0);
+  emph := (stnEmphasis in AStates) and (TyEmphTwinAt(AEl.EmphTwin, TyTwinEmphasis) >= 0);
+  blur := not (stnEmphasis in AStates) and (stnBlur in AStates)
+    and (TyEmphTwinAt(AEl.EmphTwin, TyTwinBlur) >= 0);
+  if sel and emph then Result := TyEmphTwinAt(AEl.EmphTwin, TyTwinSelectEmphasis)
+  else if sel and blur then Result := TyEmphTwinAt(AEl.EmphTwin, TyTwinSelectBlur)
+  else if sel then Result := TyEmphTwinAt(AEl.EmphTwin, TyTwinSelect)
+  else if emph then Result := TyEmphTwinAt(AEl.EmphTwin, TyTwinEmphasis)
+  else if blur then Result := TyEmphTwinAt(AEl.EmphTwin, TyTwinBlur);
+end;
+
+{ [R6-A] the label laid out as the twin lays it out: its place, alignment,
+  turn, box, ink (normal and hovered) and block, and what the frame lays
+  it out on its host by }
+procedure StLabelTwinApply(var AEl: TTyChartElement; const ATwin: TTyEmphTwin);
+begin
+  AEl.Caption.X := ATwin.Caption.X;
+  AEl.Caption.Y := ATwin.Caption.Y;
+  AEl.Caption.AnchorH := ATwin.Caption.AnchorH;
+  AEl.Caption.AnchorV := ATwin.Caption.AnchorV;
+  AEl.Caption.RotationRad := ATwin.Caption.RotationRad;
+  AEl.Caption.Colour := ATwin.Caption.Colour;
+  AEl.Caption.StrokeColour := ATwin.Caption.StrokeColour;
+  AEl.Caption.StrokeWidthLogical := ATwin.Caption.StrokeWidthLogical;
+  AEl.Caption.HasEmph := ATwin.Caption.HasEmph;
+  AEl.Caption.EmphColour := ATwin.Caption.EmphColour;
+  AEl.Caption.EmphStrokeColour := ATwin.Caption.EmphStrokeColour;
+  AEl.Caption.EmphStrokeWidthLogical := ATwin.Caption.EmphStrokeWidthLogical;
+  AEl.Caption.RtPieces := ATwin.Caption.RtPieces;
+  AEl.Caption.RtEmph := ATwin.Caption.RtEmph;
+  AEl.Caption.LmInkInside := ATwin.Caption.LmInkInside;
+  AEl.Shape := ATwin.Shape;
+  if ATwin.HasRide then
+  begin
+    AEl.Anim.LabelPos := ATwin.LabelPos;
+    AEl.Anim.LabelDist := ATwin.LabelDist;
+    AEl.Anim.LabelAtX := ATwin.LabelAtX;
+    AEl.Anim.LabelAtY := ATwin.LabelAtY;
+    AEl.Anim.LabelAtXPct := ATwin.LabelAtXPct;
+    AEl.Anim.LabelAtYPct := ATwin.LabelAtYPct;
+  end;
+end;
+
+{ [R6-A] A PIE LABEL UNDER A STATE'S textConfig, after the label is
+  written: updateInnerText lays it out on its slice's rect as the state
+  draws it -- the emphasis radius (shape.r, the target where it tweens) and
+  the select move -- where the states write a position, else it stands at
+  label.x / y; the states' offset over the label's, their turn over the
+  layout's; the alignment and the ink are the label's own (the layout sets
+  the style's align and verticalAlign, and textConfig.inside) }
+procedure StPieLabelTwin(var AEl: TTyChartElement; const AHostRest, AHostNow: TTyChartElement;
+  const AHost, ALab: TTyStElement; AClockwise: Boolean; AScale: Double);
+var
+  tw: Integer;
+  t: TTyEmphTwin;
+  rr, mx, my, ax, ay, offX, offY, rot, atX, atY, infl: Double;
+  rect: TTyXYWH;
+  ah: TTyTextAnchorH;
+  av: TTyTextAnchorV;
+  m: TTyMat2D;
+begin
+  tw := StLabelTwinOf(AEl, ALab.States);
+  if (tw < 0) or not AEl.EmphTwin[tw].Defer then Exit;
+  t := AEl.EmphTwin[tw];
+  if t.HasPos then
+  begin
+    mx := AHost.Cur.Num[stkX] - AHost.Rest.Num[stkX];
+    my := AHost.Cur.Num[stkY] - AHost.Rest.Num[stkY];
+    rr := AHostRest.Anim.G[3];
+    if AHost.Cur.Has[stkR] then rr := AHost.Cur.Num[stkR];
+    rect := TySectorPathRect(AHostRest.Anim.G[0] + mx, AHostRest.Anim.G[1] + my,
+      AHostRest.Anim.G[2], rr, AHostRest.Anim.G[4], AHostRest.Anim.G[5], AClockwise);
+    infl := TyLabelHostInflate(AHostNow, AScale);
+    rect.X := rect.X - infl;
+    rect.Y := rect.Y - infl;
+    rect.W := rect.W + 2 * infl;
+    rect.H := rect.H + 2 * infl;
+    atX := t.LabelAtX;
+    atY := t.LabelAtY;
+    if t.LabelAtXPct then atX := atX * rect.W;
+    if t.LabelAtYPct then atY := atY * rect.H;
+    TyLabelAnchorXYWH(rect, TTyLabelPosition(t.LabelPos), t.LabelDist, atX, atY,
+      ax, ay, ah, av);
+  end
+  else
+  begin
+    ax := AEl.Caption.LmBaseX + (ALab.Cur.Num[stkX] - ALab.Rest.Num[stkX]);
+    ay := AEl.Caption.LmBaseY + (ALab.Cur.Num[stkY] - ALab.Rest.Num[stkY]);
+  end;
+  if t.HasOff then
+  begin
+    offX := t.OffX;
+    offY := t.OffY;
+  end
+  else
+  begin
+    offX := AEl.Caption.LmOffX;
+    offY := AEl.Caption.LmOffY;
+  end;
+  if t.HasRot then rot := t.Rot else rot := AEl.Caption.RotationRad;
+  if not TyLabelLocalTransform(ax + offX, ay + offY, -offX, -offY, rot, 1, 1, m) then Exit;
+  StShiftShape(AEl.Shape, m[4] - AEl.Caption.X, m[5] - AEl.Caption.Y);
+  AEl.Caption.X := m[4];
+  AEl.Caption.Y := m[5];
+  AEl.Caption.RotationRad := rot;
+  if Length(AEl.Caption.RtPieces) > 0 then
+    AEl.Shape := TyShapeRect(TyRtDeviceBox(AEl.Caption.RtPieces, AEl.Caption.X,
+      AEl.Caption.Y, rot, AEl.Caption.RtScale));
+end;
+
 procedure StWriteLabel(var AEl: TTyChartElement; const AState: TTyStElement;
-  AProxied: Boolean);
-var c, r: TTyStObject; dx, dy: Double;
+  AProxied: Boolean; ATwin: Boolean = False);
+var c, r: TTyStObject; dx, dy: Double; tw: Integer;
 begin
   c := AState.Cur;
   r := AState.Rest;
+  { [R6-A] A SERIES LABEL UNDER A STATE'S textConfig: laid out as its twin
+    at once, proxy or not -- zrender applies a state's textConfig without a
+    transition and updateInnerText lays the text out by it }
+  tw := -1;
+  if ATwin then tw := StLabelTwinOf(AEl, AState.States);
+  { a pie's is laid out on its slice as written (StPieLabelTwin) }
+  if (tw >= 0) and AEl.EmphTwin[tw].Defer then tw := -1;
+  if tw >= 0 then
+  begin
+    StLabelTwinApply(AEl, AEl.EmphTwin[tw]);
+    if not AProxied then
+    begin
+      dx := c.Num[stkX] - r.Num[stkX];
+      dy := c.Num[stkY] - r.Num[stkY];
+      AEl.Caption.X := AEl.Caption.X + dx;
+      AEl.Caption.Y := AEl.Caption.Y + dy;
+      StShiftShape(AEl.Shape, dx, dy);
+    end;
+  end
   { on a proxy the place and the opacity are the frame's; the ink is not
     animated (a Text's style animates its opacity only) [Batch 94] }
-  if not AProxied then
+  else if not AProxied then
   begin
     dx := c.Num[stkX] - r.Num[stkX];
     dy := c.Num[stkY] - r.Num[stkY];
@@ -2566,27 +2703,43 @@ var
   s, raw, k: Integer;
   el, hostRest, hostNow: TTyChartElement;
   item: PTyStItem;
-  scaled: Boolean;
+  scaled, stroked: Boolean;
+  inflRest, inflNow, ps: Double;
+  pieSlot: Integer;
 begin
+  if FLastPPI > 0 then ps := FLastPPI / 96 else ps := 1;
   for s := 0 to High(FSt) do
   begin
     if FSt[s].Kind = sskNone then Continue;
     { a map region's elements are the geo's to write [Batch 152] }
     if FSt[s].Kind = sskMap then Continue;
+    pieSlot := -1;
+    if FSt[s].Kind = sskPie then pieSlot := SlotOfSeries(s);
     for raw := 0 to High(FSt[s].HostIdx) do
     begin
       if FSt[s].HostIdx[raw] < 0 then Continue;
       item := @FSt[s].Rows[raw];
       scaled := False;
+      stroked := False;
+      inflRest := 0;
+      inflNow := 0;
       if item^.Host.States <> [] then
       begin
         el := AList.Element(FSt[s].HostIdx[raw]);
         { [R2-B] a symbol its state scales, before and after }
         scaled := not FStProxied and item^.Host.Cur.Has[stkScale]
           and not StSameNum(item^.Host.Cur.Num[stkScale], 1);
-        if scaled then hostRest := el;
+        hostRest := el;
         StWriteHost(el, item^.Host, FStProxied);
-        if scaled then hostNow := el;
+        hostNow := el;
+        { [R6-A] and one its state gives another stroke: the rect its label
+          hangs on grows by it (Path.getBoundingRect) }
+        if not FStProxied and (FSt[s].LabelIdx[raw] >= 0) then
+        begin
+          inflRest := TyLabelHostInflate(hostRest, ps);
+          inflNow := TyLabelHostInflate(hostNow, ps);
+          stroked := not SameValue(inflRest, inflNow, 1e-12);
+        end;
         AList.SetElement(FSt[s].HostIdx[raw], el);
         { the rest of the same path: the host's changes [Batch 90] }
         if raw <= High(FSt[s].FollowIdx) then
@@ -2612,21 +2765,27 @@ begin
             else if item^.Parts[k].IsGuide then
               StWriteGuide(el, item^.Parts[k], FStProxied)
             else
-              StWriteLabel(el, item^.Parts[k], FStProxied);
+              StWriteLabel(el, item^.Parts[k], FStProxied, True);
             AList.SetElement(FSt[s].PartIdx[raw][k], el);
           end;
       if (FSt[s].LabelIdx[raw] >= 0) and item^.Label_.Exists
         and (item^.Label_.States <> []) then
       begin
         el := AList.Element(FSt[s].LabelIdx[raw]);
-        StWriteLabel(el, item^.Label_, FStProxied);
+        StWriteLabel(el, item^.Label_, FStProxied, True);
         { [R2-B] A LABEL ON A SCALED SYMBOL rides it: updateInnerText lays it
           out on the path as drawn, its emphasis scale too (a graph's or a
           tree's node, a scatter's or a line's symbol). On a proxy the frame
           does it, from the scale as it is then. [Was: only a radial tree's,
           and only through the enter animation.] }
-        if scaled then
+        if stroked and not el.Anim.RideTree then
+          TyLabelRideStroke(el, hostRest, hostNow, inflRest, inflNow)
+        else if scaled then
           TyLabelRideScale(el, hostRest, hostNow, item^.Host.Cur.Num[stkScale]);
+        { [R6-A] a pie label under a state's textConfig }
+        if (pieSlot >= 0) and (pieSlot <= High(FPies)) and (item^.Host.States <> []) then
+          StPieLabelTwin(el, hostRest, hostNow, item^.Host, item^.Label_,
+            FPies[pieSlot].Clockwise, ps);
         AList.SetElement(FSt[s].LabelIdx[raw], el);
       end;
       if (FSt[s].GuideIdx[raw] >= 0) and item^.Guide.Exists

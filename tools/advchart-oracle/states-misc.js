@@ -1398,14 +1398,35 @@ function guards(cases) {
     g('state-dash-from-no-border', n0 && numAt(n0, 'dash', 1) === '[6,3]' && numAt(n0, 'dash', 450) === '[6,3]'
       && numAt(n0, 'dash', 1600) === 'null', n0 && [numAt(n0, 'dash', 1), numAt(n0, 'dash', 450), numAt(n0, 'dash', 1600)].join(' '));
   }
+  // [R6-A]
+  {
+    const c = byId(cases, 'scatter-emph-position-rides');
+    const l = elRow(c, 0, 1, 'label');
+    g('emph-position-at-once-and-rides', l && numAt(l, 'tx', 16) !== numAt(l, 'tx', 450)
+      && numAt(l, 'ty', 16) === numAt(l, 'ty', 450) && numAt(l, 'ty', 16) !== numAt(l, 'ty', 1600),
+      l && [numAt(l, 'tx', 16), numAt(l, 'tx', 450), numAt(l, 'ty', 16), numAt(l, 'ty', 1600)].join(' '));
+  }
   // every case comes to rest
   for (const c of cases) g('settled-' + c.id, c.clips[c.clips.length - 1] === 0, c.id + ' ' + c.clips.join(','));
   return out;
 }
 
+// [R6-A] a state's textConfig on a series label: zrender applies it at once
+// (Element._applyStateObj, no transition) and updateInnerText lays the label
+// out by it on the host as drawn every frame -- the label jumps to the
+// emphasis position and rides the symbol's scale there
+const R6A = [
+  { id: 'scatter-emph-position-rides', labelPlace: true, note: "[R6-A] a scatter's top label, emphasis.label position "
+    + 'right: over point 1 at 0 it stands right of the symbol at once and rides its scale; out at 500 it is back on top',
+    option: { color: [C0], xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
+      series: [{ type: 'scatter', symbolSize: 20, itemStyle: { opacity: 1 }, label: { show: true, position: 'top', formatter: 'p{c}' },
+        emphasis: { label: { position: 'right' } }, data: [[2, 3], [5, 6], [8, 4]] }] },
+    events: [over(0, ['item', 0, 1]), out(500)] },
+];
+
 function generate() {
   const cases = [];
-  for (const c of GAUGE.concat(RADAR, MARKERS, LARGE, LABELS, PICTORIAL, R2B, R2I1, R2I3, R2I4, R2I5, R2I6, R2V)) {
+  for (const c of GAUGE.concat(RADAR, MARKERS, LARGE, LABELS, PICTORIAL, R2B, R2I1, R2I3, R2I4, R2I5, R2I6, R2V, R6A)) {
     if (process.env.ORACLE_CASE && !process.env.ORACLE_CASE.split('|').some(p => c.id.startsWith(p))) continue;
     const r = runCase(c);
     cases.push({ id: c.id, note: c.note, option: c.option, events: r.events, published: r.published,

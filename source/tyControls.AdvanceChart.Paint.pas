@@ -586,6 +586,9 @@ type
     SecAV: TTyTextAnchorV;
     SecRot: Double;
     SecInside: Boolean;
+    { [R6-A] the normal position is 'middle': textConfig.inside, which a
+      state's position does not undo }
+    SecMiddle: Boolean;
     { the sector position (Ord of PolarBar's TTySectorTextPos) and its
       distance, device px -- a label following its bar through the enter
       animation is placed again on the bar as drawn }
@@ -980,6 +983,24 @@ type
       own style and words. An emphasis twin, where there is one, comes
       first. }
     State: Byte;
+    { [R6-A] A SERIES LABEL'S: what the frame lays it out on its host by
+      under that state (TTyChartAnim.LabelPos ...), HasRide where it says }
+    HasRide: Boolean;
+    LabelPos: Integer;
+    LabelDist, LabelAtX, LabelAtY: Double;
+    LabelAtXPct, LabelAtYPct: Boolean;
+    { [R6-A] A PIE LABEL'S, laid out when the state is written, on its
+      slice as that state draws it (PieView nulls the normal position: the
+      label stands at label.x / y unless a state writes one): HasPos the
+      position LabelPos at LabelDist (device px), HasOff the offset, HasRot
+      the turn, each where the states write it }
+    Defer: Boolean;
+    { [R6-A] A TREEMAP NODE'S, on its host: where the treemap places the
+      words under that state's position and distance (Caption.X / Y and
+      the alignment) }
+    Anchored: Boolean;
+    HasPos, HasOff, HasRot: Boolean;
+    OffX, OffY, Rot: Double;
   end;
   TTyEmphTwinArray = array of TTyEmphTwin;
 
@@ -1314,6 +1335,10 @@ const
   TyTwinEmphasis = 0;
   TyTwinBlur = 1;
   TyTwinSelect = 2;
+  { [R6-A] a series label's select-and-hover pairs: select's textConfig and
+    then emphasis' (or blur's) over it }
+  TyTwinSelectEmphasis = 3;
+  TyTwinSelectBlur = 4;
 
 { [R2-I5] the index of ATwins' twin for the state AState (TyTwin...), -1
   where the state has none }

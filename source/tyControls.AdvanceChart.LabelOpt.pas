@@ -51,6 +51,15 @@ function TyLabelSpecOfNode(ANode, ASeries: TJSONObject;
   -- ASeries is the series node, whose `emphasis.label` is read. }
 procedure TyLabelReadInk(ALabel, ASeries: TJSONObject; var ASpec: TTyLabelSpec);
 
+{ [R6-A] THE STATES' textConfig (ASpec.StateCfg): for emphasis, blur and
+  select, what [state].label writes of position, distance, offset and
+  rotate along ANodes -- the option nodes of the host's model chain, most
+  specific first (a data item, its series): getShallow, the first node
+  whose key is not null; a position that is not truthy is none }
+procedure TyLabelReadStateCfg(const ANodes: array of TJSONObject; var ASpec: TTyLabelSpec);
+{ [R6-A] whether a host option node's [state].label writes any of the four }
+function TyLabelNodeWritesStateCfg(ANode: TJSONObject): Boolean;
+
 { [R5-F] WHETHER AN emphasis.label LAYS ITS TEXT OUT AGAIN: it writes (not
   null) rich, a font key (fontSize, fontWeight, fontStyle, fontFamily) or
   one the block reads (TyRtNodeWantsBlock's) -- zrender's state style
@@ -281,6 +290,8 @@ begin
     normal label is an object, laid the hover out in the emphasis font and
     `emphasis.label` alone did not.] }
   if ObjOf(series.Find('label')) = nil then TyLabelReadInk(nil, series, Result);
+  { [R6-A] the states' textConfig, the series' }
+  TyLabelReadStateCfg([series], Result);
   { textBorderType: retrieve2(the label's, the global textStyle's) [F4c] }
   if (Result.BorderType = '') and (AOption.Root is TJSONObject) then
   begin
@@ -556,6 +567,113 @@ begin
     series' label, the root textStyle) }
   Result.FontWeight := TyFontStyleOver(node.Find('fontStyle'), Result.FontWeight);
   ResolveBlock(node, Result);
+end;
+
+const
+  cStateCfgStates: array[0..2] of string = ('emphasis', 'blur', 'select');
+  cStateCfgKeys: array[0..3] of string = ('position', 'distance', 'offset', 'rotate');
+
+{ [state].label.AKey along ANodes: the first that is not null }
+function StateCfgFind(const ANodes: array of TJSONObject; const AState,
+  AKey: string): TJSONData;
+var
+  i: Integer;
+  st: TJSONObject;
+begin
+  Result := nil;
+  for i := 0 to High(ANodes) do
+  begin
+    if ANodes[i] = nil then Continue;
+    st := ObjOf(ANodes[i].Find(AState));
+    if st <> nil then st := ObjOf(st.Find('label'));
+    if st = nil then Continue;
+    Result := st.Find(AKey);
+    if (Result <> nil) and (Result.JSONType <> jtNull) then Exit;
+    Result := nil;
+  end;
+end;
+
+function TyLabelNodeWritesStateCfg(ANode: TJSONObject): Boolean;
+var k, j: Integer;
+begin
+  Result := False;
+  if ANode = nil then Exit;
+  for k := 0 to High(cStateCfgStates) do
+    for j := 0 to High(cStateCfgKeys) do
+      if StateCfgFind([ANode], cStateCfgStates[k], cStateCfgKeys[j]) <> nil then Exit(True);
+end;
+
+procedure TyLabelReadStateCfg(const ANodes: array of TJSONObject; var ASpec: TTyLabelSpec);
+var
+  k: Integer;
+  d: TJSONData;
+  arr: TJSONArray;
+  c: TTyLabelStateCfg;
+  s: string;
+  known: Boolean;
+  pos: TTyLabelPosition;
+begin
+  for k := 0 to High(cStateCfgStates) do
+  begin
+    c := Default(TTyLabelStateCfg);
+    { `getShallow('position') || null`: a truthy one; 'outside' the host's
+      defaultOutsidePosition; the array form as the normal label's }
+    d := StateCfgFind(ANodes, cStateCfgStates[k], 'position');
+    if d is TJSONArray then
+    begin
+      arr := TJSONArray(d);
+      c.HasPosition := True;
+      c.Position := tlpAt;
+      if arr.Count > 0 then
+      begin
+        PercentOf(arr.Items[0], 1, c.AtX);
+        c.AtXIsPercent := IsPercentText(arr.Items[0]);
+      end;
+      if arr.Count > 1 then
+      begin
+        PercentOf(arr.Items[1], 1, c.AtY);
+        c.AtYIsPercent := IsPercentText(arr.Items[1]);
+      end;
+    end
+    else if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '') then
+    begin
+      c.HasPosWord := True;
+      c.PosWord := d.AsString;
+      s := d.AsString;
+      if s = 'outside' then s := 'top';
+      pos := TyLabelPositionOf(s, known);
+      { a name zrender does not know is left to the normal one, as the
+        normal label's is }
+      if known then
+      begin
+        c.HasPosition := True;
+        c.Position := pos;
+        c.Outside := d.AsString = 'outside';
+      end;
+    end;
+    d := StateCfgFind(ANodes, cStateCfgStates[k], 'distance');
+    if (d <> nil) and (d.JSONType = jtNumber) then
+    begin
+      c.HasDistance := True;
+      c.DistanceLogical := d.AsFloat;
+    end;
+    d := StateCfgFind(ANodes, cStateCfgStates[k], 'offset');
+    if d is TJSONArray then
+    begin
+      arr := TJSONArray(d);
+      c.HasOffset := True;
+      if arr.Count > 0 then PercentOf(arr.Items[0], 0, c.OffsetXLogical);
+      if arr.Count > 1 then PercentOf(arr.Items[1], 0, c.OffsetYLogical);
+    end;
+    { `labelRotate *= Math.PI / 180`, clamped as the normal label's }
+    d := StateCfgFind(ANodes, cStateCfgStates[k], 'rotate');
+    if (d <> nil) and (d.JSONType = jtNumber) then
+    begin
+      c.HasRotation := True;
+      c.RotationRad := Max(Double(-360), Min(Double(360), d.AsFloat)) * (Pi / 180);
+    end;
+    ASpec.StateCfg[k] := c;
+  end;
 end;
 
 function TyLabelEmphWantsBlock(AEmph: TJSONObject): Boolean;

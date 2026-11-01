@@ -209,6 +209,7 @@ uses
   test.advchart.radarlabel,
   test.advchart.pieitemlabel,
   test.advchart.labelfontstates,
+  test.advchart.labelstatecfg,
   test.advchart.linetempsymbol,
   test.advchart.labellinestates,
   test.advchart.legenditemown,

@@ -828,6 +828,16 @@ procedure TyShapeScaleAbout(var AShape: TTyChartShape; ACX, ACY, AFX, AFY: Doubl
   a radial tree's turned one on its box scaled by AScale about its node }
 procedure TyLabelRideScale(var ALabel: TTyChartElement; const AHostRest,
   AHostNow: TTyChartElement; AScale: Double);
+{ [R6-A] HALF THE STROKE A HOST'S RECT IS GROWN BY for the label hung on it
+  (Path.getBoundingRect: the line width, at least five with no fill), device
+  px at AScale -- none on a host that keeps a label box of its own }
+function TyLabelHostInflate(const AHost: TTyChartElement; AScale: Double): Double;
+{ [R6-A] A LABEL ON A HOST A STATE GAVE ANOTHER STROKE: placed again on the
+  host's rect as the state draws it -- grown by AInflNow where it was by
+  AInflRest (a selected bar's border of 2, a hovered symbol's border) --
+  its scale too, as TyLabelRideScale's }
+procedure TyLabelRideStroke(var ALabel: TTyChartElement; const AHostRest,
+  AHostNow: TTyChartElement; AInflRest, AInflNow: Double);
 { ... turned by ARad about (ACX, ACY), zrender's sense (anticlockwise on the
   screen for a positive angle): points and commands turn, a path's draw-time
   turn grows and its box moves, a circle's or an ellipse's centre turns (an
@@ -7841,6 +7851,37 @@ begin
   Result.Y := cy + ((box.Y + infl) - cy) * AScale - infl;
   Result.W := (box.W - 2 * infl) * AScale + 2 * infl;
   Result.H := (box.H - 2 * infl) * AScale + 2 * infl;
+end;
+
+function TyLabelHostInflate(const AHost: TTyChartElement; AScale: Double): Double;
+var sw: Double;
+begin
+  Result := 0;
+  if AHost.Caption.HasHostBox then Exit;
+  if (AHost.Style.StrokeWidthLogical > 0) and (AHost.Style.StrokeColor <> 0) then
+  begin
+    sw := AHost.Style.StrokeWidthLogical;
+    if not AHost.Style.HasFill then sw := Max(sw, 5.0);
+    Result := sw * AScale / 2;
+  end;
+end;
+
+procedure TyLabelRideStroke(var ALabel: TTyChartElement; const AHostRest,
+  AHostNow: TTyChartElement; AInflRest, AInflNow: Double);
+var
+  lab: TTyChartElement;
+  x0, y0, x1, y1: Double;
+begin
+  if (ALabel.Anim.HostPlus1 <= 0) or ALabel.Anim.RideTree then Exit;
+  if AHostNow.Caption.HasHostBox then Exit;
+  lab := Default(TTyChartElement);
+  lab.Anim := ALabel.Anim;
+  lab.Anim.LabelInflate := AInflRest;
+  AnchorOn(AHostRest, lab, x0, y0);
+  lab.Anim.LabelInflate := AInflNow;
+  AnchorOn(AHostNow, lab, x1, y1);
+  if IsNan(x0) or IsNan(y0) or IsNan(x1) or IsNan(y1) then Exit;
+  MoveCaption(ALabel, RideSnap(x1 - x0), RideSnap(y1 - y0));
 end;
 
 procedure TyLabelRideScale(var ALabel: TTyChartElement; const AHostRest,

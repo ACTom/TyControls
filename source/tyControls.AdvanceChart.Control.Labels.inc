@@ -413,7 +413,9 @@ begin
       if (em <> nil) and (em.JSONType = jtObject)
         and TyLabelEmphWantsBlock(TJSONObject(em)) then emph := TJSONObject(em);
     end;
-    if (lb = nil) and (emph = nil) then Continue;
+    { [R6-A] or a state's textConfig of its own }
+    if (lb = nil) and (emph = nil)
+      and not TyLabelNodeWritesStateCfg(TJSONObject(it)) then Continue;
     { [R2-L] the tables only once an item has its own: none reads as nil }
     if ASpecs = nil then
     begin
@@ -425,6 +427,8 @@ begin
     else
       ASpecs[k] := ABase;
     if emph <> nil then ASpecs[k].EmphItemNode := emph.AsJSON;
+    { [R6-A] the states' textConfig along the item's model chain }
+    TyLabelReadStateCfg([TJSONObject(it), TJSONObject(node)], ASpecs[k]);
     AHas[k] := True;
   end;
 end;
@@ -625,6 +629,64 @@ begin
       and (AList.Element(i).Anim.Index = AIndex) then
       Exit(i);
   Result := -1;
+end;
+
+{ [R6-A] whether the label layout put a label somewhere else than its
+  expansion did: its place, alignment, turn, size or block }
+function LmLaidAnew(const AWas, ANow: TTyChartElement): Boolean;
+begin
+  Result := not SameValue(AWas.Caption.X, ANow.Caption.X, 1e-9)
+    or not SameValue(AWas.Caption.Y, ANow.Caption.Y, 1e-9)
+    or (AWas.Caption.AnchorH <> ANow.Caption.AnchorH)
+    or (AWas.Caption.AnchorV <> ANow.Caption.AnchorV)
+    or (AWas.Caption.RotationRad <> ANow.Caption.RotationRad)
+    or (AWas.Caption.FontSizeLogical <> ANow.Caption.FontSizeLogical)
+    or (Pointer(AWas.Caption.RtPieces) <> Pointer(ANow.Caption.RtPieces))
+    or ANow.Caption.LmFree;
+end;
+
+{ [R6-A] the series label's twins laid out again under a layout's offset
+  and turn (the states' own over them) }
+procedure LmRelayTwins(var AEl: TTyChartElement; const ALo: TTyChartLabelLayout;
+  AScale: Double);
+var
+  k: Integer;
+  ox, oy, rot, dx, dy: Double;
+  m: TTyMat2D;
+begin
+  for k := 0 to High(AEl.EmphTwin) do
+    with AEl.EmphTwin[k] do
+    begin
+      if not HasRide then Continue;
+      if HasOff then
+      begin
+        ox := OffX;
+        oy := OffY;
+      end
+      else
+      begin
+        ox := 0;
+        oy := 0;
+        if ALo.HasDx and not IsNan(ALo.Dx) and (ALo.Dx <> 0) then ox := ALo.Dx * AScale;
+        if ALo.HasDy and not IsNan(ALo.Dy) and (ALo.Dy <> 0) then oy := ALo.Dy * AScale;
+      end;
+      if HasRot then rot := Rot
+      else if ALo.HasRotate then rot := TyLabelLayoutRad(ALo.Rotate)
+      else rot := Caption.RotationRad;
+      if not TyLabelLocalTransform(Caption.LmBaseX + ox, Caption.LmBaseY + oy, -ox, -oy,
+        rot, 1, 1, m) then Continue;
+      dx := m[4] - Caption.X;
+      dy := m[5] - Caption.Y;
+      Caption.X := m[4];
+      Caption.Y := m[5];
+      Caption.RotationRad := rot;
+      if Length(Caption.RtPieces) > 0 then
+        Shape := TyShapeRect(TyRtDeviceBox(Caption.RtPieces, Caption.X, Caption.Y,
+          rot, Caption.RtScale))
+      else
+        Shape := TyShapeRect(TyRectF(Shape.Bounds.Left + dx, Shape.Bounds.Top + dy,
+          Shape.Bounds.Right + dx, Shape.Bounds.Bottom + dy));
+    end;
 end;
 
 procedure TTyCustomAdvanceChart.LayoutSeriesLabels(AList: TTyPaintList;
@@ -1110,6 +1172,23 @@ begin
     begin
       el.Caption.LmFree := True;
       el.Anim.HostPlus1 := 0;
+    end;
+    { [R6-A] THE STATES' TWINS UNDER THE LAYOUT: updateLayoutConfig sets
+      the host's textConfig offset to [dx || 0, dy || 0] and its rotation to
+      the layout's where it says one, and a state's textConfig goes over
+      that -- laid out again from their anchors. A layout that put the
+      label at an x / y of its own, moved it off an overlap, or aligned,
+      sized or laid out its block anew: the twins go (not followed). }
+    if (el.Caption.LmKind = 1) and (Length(el.EmphTwin) > 0) then
+    begin
+      if not items[r].Free and (refs[r].Layout.X.Kind = cpvAbsent)
+        and (refs[r].Layout.Y.Kind = cpvAbsent) and not refs[r].Layout.HasAlign
+        and not refs[r].Layout.HasVerticalAlign and not refs[r].Layout.HasFontSize
+        and not refs[r].Layout.HasWidth and not refs[r].Layout.HasHeight
+        and (TyLabelMoveOf(refs[r].Layout) = tlmNone) and not refs[r].Relaid then
+        LmRelayTwins(el, refs[r].Layout, scale)
+      else if LmLaidAnew(AList.Ref(refs[r].El)^, el) then
+        el.EmphTwin := nil;
     end;
     AList.SetElement(refs[r].El, el);
     if refs[r].Guide >= 0 then
