@@ -1142,6 +1142,60 @@ begin
   Result[3] := 1; Result[4] := 0; Result[5] := 0;
 end;
 
+{ [R6-B] A GLOBAL GRADIENT WRITTEN FOR A MAP'S PATH: zrender takes its
+  numbers in the path's own units and the canvas draws them under the
+  path's global transform (the roam group's, and an SVG's own) -- here in
+  the list's px: the points times AScale (the own units' list px per one)
+  through M, the radius times AScale and sqrt|det M| (a circle for canvas'
+  ellipse, as an SVG's own gradient). A gradient on the element's box is
+  left as it is. [Was: the option's numbers as list px, the roam never
+  applied.] }
+function GradThrough(const AG: TTyChartGradient; const M: TTyMat2D;
+  AScale: Double): TTyChartGradient;
+var x, y: Double;
+begin
+  Result := AG;
+  if (AG.Kind = cgkNone) or not AG.Global then Exit;
+  x := AG.X * AScale;
+  y := AG.Y * AScale;
+  Result.X := M[0] * x + M[2] * y + M[4];
+  Result.Y := M[1] * x + M[3] * y + M[5];
+  x := AG.X2 * AScale;
+  y := AG.Y2 * AScale;
+  Result.X2 := M[0] * x + M[2] * y + M[4];
+  Result.Y2 := M[1] * x + M[3] * y + M[5];
+  Result.R := AG.R * AScale * Sqrt(Abs(M[0] * M[3] - M[2] * M[1]));
+end;
+
+{ [R6-B] A BOX GRADIENT ON AN SVG MAP'S PATH: zrender's
+  getCanvasGradient takes the fractions on el.getBoundingRect() -- the
+  path's own box (ABox, grown by the stroke) -- and the canvas draws them
+  under the path's transform M, so the ramp turns with the shape. The
+  renderer resolves a box gradient on the drawn outline's box (upright):
+  here it becomes the global one the canvas draws -- the points through M,
+  a radial's radius r * min(w, h) times sqrt|det M| (a circle for canvas'
+  ellipse). [Was: the fractions on the upright box of what is drawn.] }
+function GradOnBox(const AG: TTyChartGradient; const ABox: TTyXYWH;
+  const M: TTyMat2D): TTyChartGradient;
+  procedure Through(AFX, AFY: Double; out AX, AY: Double);
+  var x, y: Double;
+  begin
+    x := AFX * ABox.W + ABox.X;
+    y := AFY * ABox.H + ABox.Y;
+    AX := M[0] * x + M[2] * y + M[4];
+    AY := M[1] * x + M[3] * y + M[5];
+  end;
+begin
+  Result := AG;
+  if (AG.Kind = cgkNone) or AG.Global then Exit;
+  Result.Global := True;
+  Through(AG.X, AG.Y, Result.X, Result.Y);
+  if AG.Kind = cgkRadial then
+    Result.R := AG.R * Min(ABox.W, ABox.H) * Sqrt(Abs(M[0] * M[3] - M[2] * M[1]))
+  else
+    Through(AG.X2, AG.Y2, Result.X2, Result.Y2);
+end;
+
 { Transformable.setLocalTransform, which decomposeTransform ends in }
 function TyGeoDecompose(const M: TTyMat2D): TTyGeoTrans;
 var sx, sy, rot, shear: Double;
@@ -6087,8 +6141,16 @@ var
             if TyStHasColour(c, stkStroke) and (c.Num[stkLineWidth] > 0) then
             begin
               el.Caption.StrokeColour := WithAlpha(c.Color[stkStroke], look.StrokeOpacity);
-              el.Caption.StrokeWidthLogical := c.Num[stkLineWidth] * det / scale;
+              { [R6-B] under the whole map the halo is in the text's own
+                units, as the font is (the map scales both) [was: times the
+                map's scale there too -- drawn det times too wide] }
+              if el.Caption.HasAffine then
+                el.Caption.StrokeWidthLogical := c.Num[stkLineWidth]
+              else
+                el.Caption.StrokeWidthLogical := c.Num[stkLineWidth] * det / scale;
             end;
+            { [R6-B] glyphs in the map's own units: a tween scales them }
+            el.Anim.VInk := True;
           end;
           el.Style.Alpha := c.Num[stkOpacity];
           el.ZrHit.Active := True;
@@ -6129,6 +6191,9 @@ var
             el.Style.FillPattern.Matrix[3] := m[3] * nd.St.IH / scale;
             el.Style.FillPattern.Matrix[4] := (m[0] * x + m[2] * y + m[4]) / scale;
             el.Style.FillPattern.Matrix[5] := (m[1] * x + m[3] * y + m[5]) / scale;
+            { [R6-B] the picture in the map's own units (its map logical) }
+            el.Anim.VInk := True;
+            el.Anim.VPx := scale;
           end;
           el.Style.Alpha := c.Num[stkOpacity];
           el.ZrHit.Active := True;
@@ -6154,8 +6219,31 @@ var
             el.Style.FillColor := WithAlpha(c.Color[stkFill], look.FillOpacity);
             if not st.Merged.Has[stkFill] then
             begin
-              if look.HasOptGrad then el.Style.FillGradient := look.OptGrad
+              { [R6-B] the option's global gradient in the shape's own
+                units, under its global transform (as its own SVG one) }
+              if look.HasOptGrad then el.Style.FillGradient := GradThrough(look.OptGrad, m, 1)
               else if look.FillGrad >= 0 then el.Style.FillGradient := SvgGradient(look.FillGrad, ANode, m);
+              { [R6-B] a box gradient on its own box, through m: turned,
+                skewed or flipped with the shape, the stroke's growth of the
+                box through m too (on unequal scales not the same as on the
+                drawn outline) }
+              if (el.Style.FillGradient.Kind <> cgkNone) and not el.Style.FillGradient.Global then
+              begin
+                r := TyGsNodeRect(AGeo.FSvg, ANode, strokes);
+                { a strokeNoScale stroke grows that box by its width over the
+                  line scale: a frame that scales the shape changes it }
+                if look.NoScale then
+                begin
+                  el.Anim.VGradNS := True;
+                  el.Anim.VGradFrac := el.Style.FillGradient;
+                  for k := 0 to 3 do el.Anim.VGradL[k] := m[k];
+                  el.Anim.VGradW0 := nd.Box.W;
+                  el.Anim.VGradH0 := nd.Box.H;
+                  el.Anim.VGradG := (r.W - nd.Box.W) / 2;
+                  el.Anim.VGradLS := SvgLineScale(hasM, m);
+                end;
+                el.Style.FillGradient := GradOnBox(el.Style.FillGradient, r, m);
+              end;
             end;
             { [R2-F] the series' decal over the fill (a state's style keeps it:
               getFixedItemStyle has none to put over it) }
@@ -6166,6 +6254,8 @@ var
             el.Style.StrokeColor := WithAlpha(c.Color[stkStroke], look.StrokeOpacity);
             if look.NoScale then w := lw else w := lw * det / scale;
             el.Style.StrokeWidthLogical := w;
+            { [R6-B] a stroke in the map's own units: a tween scales it }
+            el.Anim.VStroke := not look.NoScale;
             { the dash: the option's (its normal, a state's over it in list
               order) on a named shape, else the SVG's own }
             optDash := look.Styled and look.Opt.DashHas;
@@ -6497,7 +6587,15 @@ begin
           el.Style.HasFill := TyStHasColour(c, stkFill);
           el.Style.FillColor := c.Color[stkFill];
           if el.Style.HasFill and not it.Host.Merged.Has[stkFill] then
-            el.Style.FillGradient := p.Paint.FillGradient;
+          begin
+            { [R6-B] a global one in the region's own units (after the raw
+              transform: CSS px, the list's px over APPI / 96), under the
+              roam }
+            if dr.HasTrans then
+              el.Style.FillGradient := GradThrough(p.Paint.FillGradient, dr.Trans, scale)
+            else
+              el.Style.FillGradient := GradThrough(p.Paint.FillGradient, MatIdentity, scale);
+          end;
           { [R2-F] MapDraw's applyOptionStyleForRegion: the data's decal on
             the normal style, which no state's style takes away }
           if AGeo.Data.Active and (g <= High(AGeo.Data.Groups)) then
@@ -6798,9 +6896,12 @@ begin
   if AList <> nil then n0 := AList.Count else n0 := 0;
   Result := BuildGeoUntagged(AGeo, AInk, AMeasurer, APPI, AList, AApplyStates);
   if (AGeo = nil) or (AList = nil) then Exit;
+  { [R6-B] the roam is x, y and one scale (viewCoordSysUpdateRoamTrans
+    writes nothing else on a fresh transformable): it never turns or skews.
+    What turns or skews in a map is its content's -- an SVG's own
+    transforms -- and rides the group as it is. [Was: a roam that turned or
+    skewed left untagged; there is none.] }
   rt := AGeo.RoamTrans;
-  { a roam that turns or skews is not a scale and a move }
-  if (rt.Rotation <> 0) or (rt.SkewX <> 0) or (rt.SkewY <> 0) then Exit;
   for i := n0 to AList.Count - 1 do
   begin
     el := AList.Element(i);

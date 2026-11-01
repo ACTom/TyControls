@@ -910,6 +910,26 @@ type
       VSX .. VY its roam transform at rest, the 'geoView' proxy (series -1,
       index the key) the transform now }
     GeoView: Integer;
+    { [R6-B] AN SVG MAP'S ELEMENT drawn in the map's own units: what a frame
+      carries with the group's points also scales with it -- VStroke its
+      stroke's width, dash and offset (a shape that is not strokeNoScale:
+      no option style), VInk a text's glyphs and halo (or its whole map),
+      an image's pattern. A GeoJSON region and a named SVG shape are
+      strokeNoScale (MapDraw's applyOptionStyleForRegion): neither is set,
+      their width stays on the screen. VPx the list's px per logical px the
+      image's pattern map is in (APPI / 96). }
+    VStroke, VInk: Boolean;
+    VPx: Double;
+    { [R6-B] A BOX GRADIENT TURNED WITH AN SVG SHAPE WHOSE STROKE IS
+      strokeNoScale: the box zrender takes it on grows by the stroke over the
+      line scale, which a frame changes -- VGradFrac the gradient as written
+      (its fractions), VGradL the shape's transform at rest (its linear
+      part), VGradW0 / VGradH0 its own box ungrown, VGradG the growth per
+      side at rest, VGradLS the line scale at rest }
+    VGradNS: Boolean;
+    VGradFrac: TTyChartGradient;
+    VGradL: array[0..3] of Double;
+    VGradW0, VGradH0, VGradG, VGradLS: Double;
     LabelPos: Integer;
     LabelDist, LabelAtX, LabelAtY, LabelInflate: Double;
     LabelAtXPct, LabelAtYPct: Boolean;

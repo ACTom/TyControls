@@ -228,6 +228,7 @@ uses
   test.advchart.effecthover,
   test.advchart.labellayoutsize,
   test.advchart.geolabels,
+  test.advchart.georoamtween,
   test.advchart.timelinelabels,
   test.advchart.multiline, test.bgrarandompin,
   test.advchart.jsregexp,
