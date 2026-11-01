@@ -107,6 +107,10 @@ type
       under the series group's roam transform. Identity until SetSankeyFrame
       says otherwise; HasT alone gives [1 0 0 1 TX TY]. [Batch 114] }
     M0, M3, M4, M5: Double;
+    { [R6-C] THE SERIES' VIEW GROUP itself [VSX 0 0 VSY VX VY] (the view's
+      overall transform; identity until SetSankeyFrame): what a setOption
+      that changes the zoom / center tweens }
+    VSX, VSY, VX, VY: Double;
   end;
 
   TTySankeyInk = record
@@ -555,6 +559,8 @@ begin
   Result.SeriesIndex := ASeriesIndex;
   Result.M0 := 1;
   Result.M3 := 1;
+  Result.VSX := 1;
+  Result.VSY := 1;
   S := @Result;
   node := AOption.ComponentAt('series', ASeriesIndex);
   if (node = nil) or (node.JSONType <> jtObject) then Exit;
@@ -1206,6 +1212,10 @@ end;
 procedure TySankeyFrame(var ASolved: TTySankeySolved; AOSX, AOSY, AOX, AOY: Double);
 var groupHas: Boolean;
 begin
+  ASolved.VSX := AOSX;
+  ASolved.VSY := AOSY;
+  ASolved.VX := AOX;
+  ASolved.VY := AOY;
   groupHas := not (Around0(AOX) and Around0(AOY) and Around0(AOSX - 1)
     and Around0(AOSY - 1));
   if not groupHas then
@@ -1722,7 +1732,9 @@ begin
   else
     TyZrRect(path, AX, AY, AW, AH);
   AEl.Anim.UtData := TyGuidePathData(path);
-  AEl.Anim.UtBase := TTyDoubleArray.Create(1, AX, AY, AW, AH);
+  { [R6-C] and the main group's translate under the view (5..7: TX, TY,
+    HasT), for a node read under the view group as its tween has it }
+  AEl.Anim.UtBase := TTyDoubleArray.Create(1, AX, AY, AW, AH, S.TX, S.TY, Ord(S.HasT));
   AEl.Anim.UtHasM := (S.M0 <> 1) or (S.M3 <> 1) or (S.M4 <> 0) or (S.M5 <> 0);
   if AEl.Anim.UtHasM then
   begin
@@ -2149,6 +2161,12 @@ begin
       tagged.Anim.G[5] := ASolved.M3;
       tagged.Anim.G[6] := ASolved.M4;
       tagged.Anim.G[7] := ASolved.M5;
+      { [R6-C] under the series' view group, which an update tweens }
+      tagged.Anim.InView := True;
+      tagged.Anim.VSX := ASolved.VSX;
+      tagged.Anim.VSY := ASolved.VSY;
+      tagged.Anim.VX := ASolved.VX;
+      tagged.Anim.VY := ASolved.VY;
       AList.SetElement(k, tagged);
     end;
   finally

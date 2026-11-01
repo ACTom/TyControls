@@ -573,6 +573,7 @@ option 编辑器：
 - CSS 光标名转成 LCL 的光标，对不上的（`copy`、`zoom-in` 等）用宿主自己的光标。
 - 矩形树图的 `nodeClick: 'link'` 不打开浏览器。
 - `geoRoam` 动作的载荷里有坏值时，那几个键忽略（ECharts 会把视图弄坏）。
+- 离场动画中的图形不响应鼠标（ECharts 里它们在淡出期间还能被点到、悬停）。
 
 ### 工具栏与导出
 
@@ -600,12 +601,6 @@ option 编辑器：
 
 - 换皮肤时，进行中的悬停、选中等状态过渡直接跳到终值（ECharts 换主题会接着播完）。
 - `stateAnimation.delay` 不能写成函数。
-- universal transition 还有几处没做：
-  - 样式只过渡填充、描边、线宽和透明度，阴影、`fillOpacity`、`strokeOpacity` 和渐变不过渡；
-  - 被图例关掉的旧系列不参与过渡；
-  - 几个图形合并成一个时，只有第一段能点到；离场途中画的是合并后的整体，不是各段；
-  - 维度编码不读 dataset、`seriesLayoutBy: 'row'` 和 time 列；
-  - 按视图分组的过渡只支持关系图节点。
 - 树图里保留下来的节点没了子节点时，ECharts 会留下一段没人删的连线，这里不留。
 - `AnimationMode` 为 `camAuto` 时，控件不在屏幕上的那段时间里派发的动作，动画最多晚一帧开始；`camAlways` 和 ECharts 同帧。
 - lines 拖尾的 `motionBlur` 只模糊 lines 系列自己。

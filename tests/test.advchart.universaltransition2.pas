@@ -915,8 +915,9 @@ var
   p: TTyChartAnimProxy;
 begin
   { bars2-pie: each slice is drawn as two children while it combines -- the
-    first in its place, the second after the list and silent -- and as its
-    sector once it is done }
+    first in its place, the second after the list -- and as its sector once
+    it is done. [R6-C] Both are hit, the second at its host's place
+    (PieceOf) [was: the second silent] }
   cs := Fix.Arrays['charts'];
   c := nil;
   for i := 0 to cs.Count - 1 do
@@ -937,7 +938,12 @@ begin
       AssertTrue(Format('slice %d child %d drawn', [i, k]), at >= 0);
       AssertTrue('a path', (frm.Element(at).Shape.Kind = cskPolygon)
         and (frm.Element(at).Shape.Cmds[0].Kind = pckMove));
-      AssertEquals(Format('slice %d child %d silent', [i, k]), k > 1, frm.Element(at).Silent);
+      AssertFalse(Format('slice %d child %d silent', [i, k]), frm.Element(at).Silent);
+      if k > 1 then
+        AssertEquals(Format('slice %d child %d at its host''s place', [i, k]),
+          FindEl(frm, 0, i, carSector, 1) + 1, frm.Element(at).Anim.PieceOf)
+      else
+        AssertEquals(Format('slice %d child %d in its place', [i, k]), 0, frm.Element(at).Anim.PieceOf);
     end;
   end;
   FChart.AnimTick(t1 + 2000);

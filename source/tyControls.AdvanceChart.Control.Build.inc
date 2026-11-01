@@ -4519,6 +4519,7 @@ begin
     { the shadows, on the marks and the lines, before the states take their
       rest values [R5-A] }
     if drawn > 0 then ApplySeriesShadows(list);
+    if drawn > 0 then ApplySeriesPenEnds(list);
     { A SILENT SERIES TAKES NO POINTER: nothing of it -- marks, labels -- is
       hit, hovered or clicked (upstream's series `silent`) [Batch 84] }
     if drawn > 0 then SilenceSeries(list);
@@ -4677,6 +4678,141 @@ begin
         Take(nodes, ['lineStyle'])
       else
         Take(nodes, ['itemStyle']);
+    end;
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.ApplySeriesPenEnds(AList: TTyPaintList);
+var
+  k, s, slot, raw, e: Integer;
+  pe: PTyChartElement;
+  typ: string;
+  nodes: TTyStNodeArray;
+  sNode: TJSONObject;
+  joinHas: Boolean;
+
+  { the three keys of a block under APath (an item style's border* ones,
+    a line style's own), each from the first node that writes it; a word
+    the canvas does not know and a limit that is no number above nought are
+    the canvas' to ignore }
+  procedure Take(const ANodes: TTyStNodeArray; const APath: array of string; ALine: Boolean);
+  var
+    p: array of string;
+    i: Integer;
+    dd: TJSONData;
+  begin
+    SetLength(p, Length(APath) + 1);
+    for i := 0 to High(APath) do p[i] := APath[i];
+    if ALine then p[High(p)] := 'cap' else p[High(p)] := 'borderCap';
+    dd := TyStFind(ANodes, p);
+    if (dd <> nil) and (dd.JSONType = jtString) then pe^.Style.LineCap := TyCapOfWord(dd.AsString);
+    if ALine then p[High(p)] := 'join' else p[High(p)] := 'borderJoin';
+    dd := TyStFind(ANodes, p);
+    if (dd <> nil) and (dd.JSONType = jtString) then
+    begin
+      pe^.Style.LineJoin := TyJoinOfWord(dd.AsString);
+      joinHas := True;
+    end;
+    if ALine then p[High(p)] := 'miterLimit' else p[High(p)] := 'borderMiterLimit';
+    dd := TyStFind(ANodes, p);
+    if (dd <> nil) and (dd.JSONType = jtNumber) and (dd.AsFloat > 0) and not IsInfinite(dd.AsFloat) then
+    begin
+      if dd.AsFloat = 10 then pe^.Style.MiterLimit := 0 else pe^.Style.MiterLimit := dd.AsFloat;
+    end;
+  end;
+
+  function SeriesOnly: TTyStNodeArray;
+  begin
+    Result := nil;
+    SetLength(Result, 1);
+    Result[0] := sNode;
+  end;
+
+begin
+  if (AList = nil) or (FOption = nil) then Exit;
+  for k := 0 to AList.Count - 1 do
+  begin
+    pe := AList.Ref(k);
+    if pe^.Caption.FontSizeLogical > 0 then Continue;
+    if pe^.Datum.Kind <> ctkSeries then Continue;
+    s := pe^.Datum.SeriesIndex;
+    if s < 0 then Continue;
+    slot := SlotOfSeries(s);
+    if (slot < 0) or (slot > High(FBindings)) then Continue;
+    typ := FBindings[slot].SeriesType;
+    { a custom series' and a map's are their elements' own; a treemap's
+      rects are drawn from its own keys }
+    if (typ = TyCustomSeriesType) or (typ = 'map') or (typ = TyTreemapSeriesTypeName) then Continue;
+    sNode := StSeriesNode(s);
+    if sNode = nil then Continue;
+    joinHas := False;
+    { ---- the edges (a sankey's band speaks itemStyle's keys on its
+      lineStyle: curve.useStyle(lineStyleModel.getItemStyle())) ---- }
+    if pe^.Datum.IsEdge then
+    begin
+      if typ = TySankeySeriesTypeName then
+      begin
+        Take(StEdgeNodes(s, pe^.Datum.DataIndex), ['lineStyle'], False);
+        Continue;
+      end;
+      if pe^.Silent and (typ = TyGraphSeriesTypeName) then Continue;
+      if typ = TyGraphSeriesTypeName then
+        e := StGraphEdgeOfRow(slot, pe^.Datum.DataIndex)
+      else
+        e := pe^.Datum.RawDataIndex;
+      Take(StEdgeNodes(s, e), ['lineStyle'], True);
+      Continue;
+    end;
+    { ---- a line's polyline (no row): bevelled unless its lineStyle says ---- }
+    if pe^.Datum.DataIndex < 0 then
+    begin
+      if typ = 'line' then
+      begin
+        if pe^.Shape.Kind = cskPolyline then
+        begin
+          Take(SeriesOnly, ['lineStyle'], True);
+          if not joinHas then pe^.Style.LineJoin := cTyJoinBevel;
+        end;
+      end
+      else if pe^.Shape.Kind = cskLarge then
+        Take(SeriesOnly, ['itemStyle'], False);
+      Continue;
+    end;
+    { ---- the row ---- }
+    if typ = TySankeySeriesTypeName then raw := pe^.Datum.DataIndex
+    else if (slot <= High(FStores)) and (FStores[slot] <> nil) then
+      raw := FStores[slot].GetRawIndex(pe^.Datum.DataIndex)
+    else
+      raw := pe^.Datum.RawDataIndex;
+    nodes := StNodes(s, raw);
+    if pe^.IsGuide then
+    begin
+      Take(nodes, ['labelLine', 'lineStyle'], True);
+      Continue;
+    end;
+    case pe^.Anim.Role of
+      carRipple, carLinesEffect, carLinesFrom, carLinesTo, carPictorialRect,
+      carGraphEdgeFrom, carGraphEdgeTo, carRadarArea, carLineArea, carGaugeProgress,
+      carGaugeCap, carGaugeDetail:
+        Continue;
+      carRadarLine, carTreeEdge, carLinesLine, carParallelLine:
+        Take(nodes, ['lineStyle'], True);
+      carGaugePointer:
+        begin
+          Take(nodes, ['itemStyle'], False);
+          Take(nodes, ['pointer', 'itemStyle'], False);
+        end;
+    else
+      if typ = TyGaugeSeriesTypeName then Continue;
+      if (typ = TySankeySeriesTypeName) and pe^.Silent then Continue;
+      if (typ = TyLinesSeriesTypeName) or (typ = TyParallelSeriesTypeName) then
+        Take(nodes, ['lineStyle'], True)
+      else
+      begin
+        Take(nodes, ['itemStyle'], False);
+        { FunnelView: polygon.style.lineJoin = 'round' }
+        if typ = TyFunnelSeriesTypeName then pe^.Style.LineJoin := cTyJoinRound;
+      end;
     end;
   end;
 end;

@@ -2275,6 +2275,12 @@ type
     { the series' universal transition keys now, as FAnimOldUtKeys keeps
       them [Batch 136, 137] }
     function AnimUtKeys: TTyUtSeriesKeysArray;
+    { [R6-C] the encoded group dimensions (itemGroupId, itemChildGroupId) of
+      series ASeries read as its data has them: from its dataset (either
+      layout) or its own items, through the store where the dimension is an
+      axis coordinate (a time column's parsed ms, a category's name) --
+      AKeys' groups replaced where an encode names one }
+    procedure AnimUtEncoded(ASeries: Integer; var AKeys: TTyUtSeriesKeys);
     { [F3c] the pending transition option's `to` names series ASeries
       (series:beforeupdate's __universalTransitionEnabled) }
     function AnimUtNamed(ASeries: Integer): Boolean;
@@ -4260,6 +4266,15 @@ type
       line its labelLine.lineStyle -- of which the four shadow keys. A gauge's
       parts take theirs in its builder. }
     procedure ApplySeriesShadows(AList: TTyPaintList);
+    { [R6-C] THE PEN'S ENDS onto a series' elements: getItemStyle's lineCap /
+      lineJoin / miterLimit (borderCap, borderJoin, borderMiterLimit),
+      getLineStyle's (cap, join, miterLimit), from the same model chains as
+      the shadows -- and the views' own: a funnel's polygon joins round, a
+      line's polyline bevels unless its lineStyle says, a gauge's pointer lays
+      pointer.itemStyle over its item's; a sankey's band reads itemStyle's
+      border* keys off its lineStyle; a treemap's rects,
+      a radar's area and an area take none }
+    procedure ApplySeriesPenEnds(AList: TTyPaintList);
     { [R5-A] A SERIES' blendMode AND zlevel onto its elements: the blend on
       every element its view renders (echarts' updateBlend -- not a label,
       not a label line: they are no child of the view's group), the zlevel on

@@ -2229,12 +2229,19 @@ begin
   sz := CoarseSize;
   if (lo > -MaxInt) or (hi < MaxInt) then TySetHitBand(lo, hi);
   try
-    if sz <= 0 then Exit(L.HitTestElement(AX, AY, FPaintListPPI));
-    Result := L.HitTestElement(AX, AY, FPaintListPPI, False);
-    if Result < 0 then Result := TyCoarseHitTest(L, AX, AY, FPaintListPPI, sz);
+    if sz <= 0 then Result := L.HitTestElement(AX, AY, FPaintListPPI)
+    else
+    begin
+      Result := L.HitTestElement(AX, AY, FPaintListPPI, False);
+      if Result < 0 then Result := TyCoarseHitTest(L, AX, AY, FPaintListPPI, sz);
+    end;
   finally
     TyClearHitBand;
   end;
+  { [R6-C] a combining host's child past the list: the host is the one hit
+    (its ecData, the child's parent's) }
+  if (Result >= 0) and (Result < L.Count) and (L.Element(Result).Anim.PieceOf > 0) then
+    Result := L.Element(Result).Anim.PieceOf - 1;
 end;
 
 function TTyCustomAdvanceChart.LastRepaintFull: Boolean;
