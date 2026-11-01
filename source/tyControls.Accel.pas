@@ -30,8 +30,19 @@ procedure TyAccelUnregister(AControl: TControl);
   treats CharCode as the translated character — the correctness the menu's DialogChar fix established). }
 function TyIsAccelKey(const Message: TLMKey; const ACaption: string): Boolean;
 
+{ #142: where AMnemonicPos -- a position in AText, as TyParseMnemonic gives it -- falls once
+  AText is wrapped into ALines: the line ALine, at APos in it (ALine -1 and APos 0 when it
+  falls in none, e.g. on a space the wrap dropped). The lines are AText's own pieces, in
+  order. }
+procedure TyAccelPosInLines(const AText: string; AMnemonicPos: Integer; ALines: TStrings;
+  out ALine, APos: Integer);
+
+{ Exposed for tests: the Alt state TyAccelGatePos follows, set directly. The next poll of the
+  Alt key sets it again. }
+procedure TyAccelSetShowing(AShowing: Boolean);
+
 implementation
-uses SysUtils, Forms, ExtCtrls, LCLType, LCLIntf, LCLProc;   // Forms: IsAccel + KeyDataToShiftState
+uses SysUtils, StrUtils, Forms, ExtCtrls, LCLType, LCLIntf, LCLProc;   // Forms: IsAccel + KeyDataToShiftState
 
 type
   { Host for the poll timer's OnTimer. We POLL Alt (not Application.AddOnUserInputHandler) because
@@ -114,6 +125,35 @@ begin
   GRegistry.Remove(AControl);
   if (GTimer <> nil) and (GRegistry.Count = 0) then
     GTimer.Enabled := False;   // pause polling when no controls remain
+end;
+
+procedure TyAccelPosInLines(const AText: string; AMnemonicPos: Integer; ALines: TStrings;
+  out ALine, APos: Integer);
+var
+  i, from, at: Integer;
+begin
+  ALine := -1;
+  APos := 0;
+  if AMnemonicPos <= 0 then Exit;
+  from := 1;
+  for i := 0 to ALines.Count - 1 do
+  begin
+    if ALines[i] = '' then Continue;
+    at := PosEx(ALines[i], AText, from);
+    if at = 0 then Continue;
+    if (AMnemonicPos >= at) and (AMnemonicPos < at + Length(ALines[i])) then
+    begin
+      ALine := i;
+      APos := AMnemonicPos - at + 1;
+      Exit;
+    end;
+    from := at + Length(ALines[i]);
+  end;
+end;
+
+procedure TyAccelSetShowing(AShowing: Boolean);
+begin
+  GShowing := AShowing;
 end;
 
 function TyIsAccelKey(const Message: TLMKey; const ACaption: string): Boolean;
