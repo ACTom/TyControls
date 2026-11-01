@@ -533,8 +533,12 @@ begin
       NearVal(what + ' right', b.Right, WantNum(bb.Items[2]), 1e-6);
       NearVal(what + ' bottom', b.Bottom, WantNum(bb.Items[3]), 1e-6);
     end;
-    NearVal(what + ' stroke', e.Style.StrokeWidthLogical, WantNum(AEl.Find('sw')), 1e-9);
-    if not IsNull(AEl.Find('dash')) then
+    { getLineScale's shortcut (a diagonal entry within 1e-10 of one): the
+      stroke not made up for -- the port's draws the width it means (spec
+      249, accepted) }
+    if not AEl.Get('quirk', False) then
+      NearVal(what + ' stroke', e.Style.StrokeWidthLogical, WantNum(AEl.Find('sw')), 1e-9);
+    if not IsNull(AEl.Find('dash')) and not AEl.Get('quirk', False) then
     begin
       dash := AEl.Arrays['dash'];
       Inc(FCompared);
@@ -703,7 +707,7 @@ end;
 
 procedure TAdvChartGeoRoamTweenOracleTest.TestABoxGradientTurnsWithItsShape;
 begin
-  RunCases(['svg-box-grad', 'gj-to-svgb'], 150);
+  RunCases(['svg-box-grad', 'gj-to-svgb', 'gj-to-svgq'], 200);
 end;
 
 procedure TAdvChartGeoRoamTweenOracleTest.TestAViewMadeAnewIsSetAtOnce;

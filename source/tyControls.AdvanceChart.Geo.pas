@@ -1167,7 +1167,7 @@ begin
   Result.R := AG.R * AScale * Sqrt(Abs(M[0] * M[3] - M[2] * M[1]));
 end;
 
-{ [R6-B] A BOX GRADIENT ON A PATH THAT TURNS, SKEWS OR FLIPS: zrender's
+{ [R6-B] A BOX GRADIENT ON AN SVG MAP'S PATH: zrender's
   getCanvasGradient takes the fractions on el.getBoundingRect() -- the
   path's own box (ABox, grown by the stroke) -- and the canvas draws them
   under the path's transform M, so the ramp turns with the shape. The
@@ -6223,11 +6223,11 @@ var
                 units, under its global transform (as its own SVG one) }
               if look.HasOptGrad then el.Style.FillGradient := GradThrough(look.OptGrad, m, 1)
               else if look.FillGrad >= 0 then el.Style.FillGradient := SvgGradient(look.FillGrad, ANode, m);
-              { [R6-B] a box gradient on a shape that turns, skews or flips:
-                on its own box, through m (on an upright one the drawn
-                outline's box is the same) }
-              if (el.Style.FillGradient.Kind <> cgkNone) and not el.Style.FillGradient.Global
-                and not ((m[1] = 0) and (m[2] = 0) and (m[0] > 0) and (m[3] > 0)) then
+              { [R6-B] a box gradient on its own box, through m: turned,
+                skewed or flipped with the shape, the stroke's growth of the
+                box through m too (on unequal scales not the same as on the
+                drawn outline) }
+              if (el.Style.FillGradient.Kind <> cgkNone) and not el.Style.FillGradient.Global then
               begin
                 r := TyGsNodeRect(AGeo.FSvg, ANode, strokes);
                 { a strokeNoScale stroke grows that box by its width over the

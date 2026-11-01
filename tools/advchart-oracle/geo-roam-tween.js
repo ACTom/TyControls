@@ -217,14 +217,23 @@ const SVG_BOX = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100
   </defs>
   <g transform="rotate(30 100 50) skewX(10)">
     <rect x="20" y="20" width="100" height="40" fill="url(#gb)" stroke="#003300" stroke-width="2"/>
-    <rect x="130" y="20" width="50" height="50" fill="url(#gc)" stroke="#000044" stroke-width="1"/>
+    <rect x="130" y="20" width="60" height="40" fill="url(#gc)" stroke="#000044" stroke-width="1"/>
     <rect name="N" x="40" y="65" width="60" height="25" fill="#cccccc" stroke="#777777" stroke-width="1"/>
     <circle name="C" cx="80" cy="12" r="10" fill="#eeeeee" stroke="#888888" stroke-width="1"/>
   </g>
   <rect x="5" y="80" width="40" height="15" fill="url(#gb)" stroke="#004400" stroke-width="1" transform="translate(3 2)"/>
+  <rect x="0" y="0" width="30" height="20" fill="url(#gb)" stroke="#005555" stroke-width="3" transform="translate(150 75) scale(1.5 0.6)"/>
+  <rect x="0" y="0" width="30" height="12" fill="url(#gb)" stroke="#006666" stroke-width="1" transform="translate(120 82) scale(-1 1)"/>
+</svg>`;
+// a named rect whose transform keeps one diagonal entry at one: on a view
+// with no raw scale and no roam its line scale is getLineScale's shortcut 1
+const SVG_Q = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100" viewBox="0 0 200 100">
+  <rect x="0" y="0" width="200" height="100" fill="#f4f4f4"/>
+  <rect name="Q" x="0" y="0" width="40" height="20" fill="#cccccc" stroke="#777777" stroke-width="1" transform="matrix(1 0.3 0 2 20 10)"/>
 </svg>`;
 const MAPS = [{ name: 'r6gj', text: GJ, svg: false }, { name: 'r6svg', text: SVG_TURN, svg: true },
-  { name: 'r6svgu', text: SVG_GRAD, svg: true }, { name: 'r6svgb', text: SVG_BOX, svg: true }];
+  { name: 'r6svgu', text: SVG_GRAD, svg: true }, { name: 'r6svgb', text: SVG_BOX, svg: true },
+  { name: 'r6svgq', text: SVG_Q, svg: true }];
 function registerMaps() {
   for (const m of MAPS) {
     if (m.svg) echarts.registerMap(m.name, { svg: m.text });
@@ -339,6 +348,8 @@ function gpOf(el, r) {
     r.gp = [a[0], a[1], c[0], c[1], NaN].map(hex);
   }
   r.lb = [b.x, b.y, b.width, b.height].map(hex);
+  // getLineScale's shortcut: a strokeNoScale stroke not made up for
+  if (r.nsc && num(r.ls) === 1 && Math.abs(detOf(m) - 1) > 1e-12) r.quirk = true;
 }
 function drawRec(md, rec, prefix, resType) {
   const tg = md._transformGroup;
@@ -490,6 +501,11 @@ add('gj-to-svgb', "a GeoJSON geo switched to that SVG map with zoom 2: the group
       { name: 'C', itemStyle: { areaColor: GRBOX, borderColor: '#660066', borderWidth: 1.5 } }] } }, LIN),
   [{ t: T1 - 1, do: 'sample' },
     { t: T1, do: 'merge', option: { geo: { map: 'r6svgb', zoom: 2, center: [100, 50] } } }, ...after([0, 1, 500, 1000], T1)], { gp: true });
+add('gj-to-svgq', "a GeoJSON geo laid out on exactly the SVG's size (no raw scale) switched to an SVG map with a named rect under matrix(1 0.3 0 2 ...) painted with a box gradient, zoom 2: in the tween's first frame the rect's transform has m[0] = 1, getLineScale is 1 -- the stroke's growth of the box the gradient is on is not made up for (quirk: true; its stroke is the documented shortcut, not compared)",
+  Object.assign({ animation: true, geo: { map: 'r6gj', roam: true, left: 0, top: 0, width: 200, height: 100,
+    regions: [{ name: 'Q', itemStyle: { areaColor: GBOX, borderColor: '#550055', borderWidth: 1 } }] } }, LIN),
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { geo: { map: 'r6svgq', zoom: 2, center: ['50%', '50%'] } } }, ...after([0, 1, 500, 1000], T1)], { gp: true });
 
 // ---------------------------------------------------------------------------
 // running
@@ -610,7 +626,8 @@ function guards(out) {
       && u && u.gp && n(u.gm[1]) === 0 && n(u.gm[2]) === 0
       && el('svg-box-grad', T1 - 1, 'geo0', 's:#000044').grad.type === 'radial'
       && el('svg-box-grad', T1 - 1, 'geo0', 's:#550055').gp && el('svg-box-grad', T1 - 1, 'geo0', 's:#660066').nsc
-      && rec('gj-to-svgb', T1 + 500, 'geo0/group').n === 1;
+      && rec('gj-to-svgb', T1 + 500, 'geo0/group').n === 1
+      && el('gj-to-svgq', T1, 'geo0', 's:#550055').quirk && !el('gj-to-svgq', T1 + 500, 'geo0', 's:#550055').quirk;
   })());
   return g;
 }
