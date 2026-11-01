@@ -363,6 +363,10 @@ add('gj-to-svg-midway', "the same switch, and 300 ms in a second merge writes zo
     { t: T1, do: 'merge', option: { geo: { map: 'r6svg', zoom: 2, center: [100, 50] } } }, ...after([0, 300], T1),
     { t: T1 + 300, do: 'merge', option: { geo: { zoom: 0.75, center: [80, 40] } } },
     ...after([300, 301, 500, 800, 1299, 1300, 1301], T1)]);
+add('gj-to-svg-flip', "the switch with zoom -1.5 (no scaleLimit: the zoom stays negative): the group's scaleX and scaleY tween from 1 through 0 to -1.5 -- an unnamed stroke is lineWidth * sqrt|det| on the screen, thin to nothing and wide again, never negative",
+  Object.assign({ animation: true, geo: { map: 'r6gj', roam: true, regions: REGIONS } }, LIN),
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { geo: { map: 'r6svg', zoom: -1.5, center: [100, 50] } } }, ...after([0, 1, 200, 600, 999, 1000], T1)]);
 add('svg-to-gj', "a geo component on the SVG map: a merge switches it to the GeoJSON map with zoom 2 -- the regions group is empty when the draw asks (it is filled after): a first draw, set at once (the SVG's graphic stays in the svg group: upstream's leftover)",
   Object.assign({ animation: true, geo: { map: 'r6svg', roam: true, regions: REGIONS } }, LIN),
   [{ t: T1 - 1, do: 'sample' },

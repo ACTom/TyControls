@@ -1075,14 +1075,14 @@ begin
 end;
 
 { [R6-B] the view's regions group holds regions after the last build's
-  draw of it (a view that build did not draw has none) }
+  draw of it -- asked only of a view in FGeoDraws, which that same build
+  noted (GeoNoteHeld) }
 function TTyCustomAdvanceChart.GeoHeldOf(AKey: Integer): Boolean;
 var i: Integer;
 begin
   Result := False;
   for i := 0 to High(FGeoHeld) do
-    if FGeoHeld[i].Key = AKey then
-      Exit(FGeoHeld[i].Held and (FGeoHeld[i].Gen = FGeoBuildGen));
+    if FGeoHeld[i].Key = AKey then Exit(FGeoHeld[i].Held);
 end;
 
 function TTyCustomAdvanceChart.AnimToOldPoint(AOldSeries: Integer; AX, AY: Double): TTyPointF;

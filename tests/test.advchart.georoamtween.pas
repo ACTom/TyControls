@@ -595,7 +595,7 @@ end;
 
 procedure TAdvChartGeoRoamTweenOracleTest.TestTheSvgContentRidesTheTweenOfASwitchedMap;
 begin
-  RunCases(['gj-to-svg', 'gj-to-svg-midway'], 600);
+  RunCases(['gj-to-svg', 'gj-to-svg-midway', 'gj-to-svg-flip'], 800);
 end;
 
 procedure TAdvChartGeoRoamTweenOracleTest.TestAViewMadeAnewIsSetAtOnce;
