@@ -11,6 +11,8 @@ round (spec section 244).
                 than the axis' host dataZoom allows: _onBrush's setBatch runs
                 sliderMove with getMinMaxSpan's minValueSpan / maxValueSpan
                 -- the window after the release
+                (a fractional minValueSpan: the end widened, then rounded
+                to the select's precision, so the span can pass it)
   irrelevant    onIrrelevantElement: a drag that starts on a series drawn
                 higher over a graph's roam area or over a parallel axis'
                 panel does not start that roam or that area select; one that
@@ -118,6 +120,8 @@ const tbOpt = (dz) => ({ animation: false, toolbox: { feature: { dataZoom: { yAx
   series: [{ type: 'scatter', data: Array.from({ length: 21 }, (_, i) => [i * 5, (i * 7) % 11]) }] });
 add('tb-span', 'tb-min', 'a select narrower than minValueSpan 30', tbOpt({ minValueSpan: 30 }), { drag: [[300, 150], [330, 200]] });
 add('tb-span', 'tb-max', 'a select wider than maxValueSpan 20', tbOpt({ maxValueSpan: 20 }), { drag: [[150, 150], [400, 200]] });
+add('tb-span', 'tb-min-round', 'minValueSpan 30.04: the end widened, then rounded to the precision of the select -- the span is not the minValueSpan',
+  tbOpt({ minValueSpan: 30.04 }), { drag: [[302, 150], [332, 200]] });
 add('tb-span', 'tb-minpct', 'a percent minSpan 40 over the data extent', tbOpt({ minSpan: 40 }), { drag: [[300, 150], [330, 200]] });
 
 add('irrelevant', 'ir-graph', 'a graph that roams under a scatter drawn higher: a drag from the scatter is not the graph\'s',
@@ -273,6 +277,8 @@ function guards(out) {
   guard('an end left out keeps the option\'s value end', byId('dz-keep').after[0].value.text[1] === '6');
   const tmin = byId('tb-min').after.value.text;
   guard('the select is widened to minValueSpan', Number(tmin[1]) - Number(tmin[0]) >= 30 - 1e-9);
+  const tround = byId('tb-min-round').after.value.text;
+  guard('the widened end is rounded after the clamp', Number(tround[1]) - Number(tround[0]) > 30.04 + 1e-9);
   const tmax = byId('tb-max').after.value.text;
   guard('the select is narrowed to maxValueSpan', Number(tmax[1]) - Number(tmax[0]) <= 20 + 1e-9);
   const ig = byId('ir-graph').results;

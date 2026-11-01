@@ -958,6 +958,161 @@
    }
   },
   {
+   "id": "tb-min-round",
+   "group": "tb-span",
+   "note": "minValueSpan 30.04: the end widened, then rounded to the precision of the select -- the span is not the minValueSpan",
+   "W": 600,
+   "H": 400,
+   "option": {
+    "animation": false,
+    "toolbox": {
+     "feature": {
+      "dataZoom": {
+       "yAxisIndex": "none"
+      }
+     }
+    },
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 100
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "dataZoom": [
+     {
+      "type": "slider",
+      "xAxisIndex": 0,
+      "minValueSpan": 30.04
+     }
+    ],
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        0,
+        0
+       ],
+       [
+        5,
+        7
+       ],
+       [
+        10,
+        3
+       ],
+       [
+        15,
+        10
+       ],
+       [
+        20,
+        6
+       ],
+       [
+        25,
+        2
+       ],
+       [
+        30,
+        9
+       ],
+       [
+        35,
+        5
+       ],
+       [
+        40,
+        1
+       ],
+       [
+        45,
+        8
+       ],
+       [
+        50,
+        4
+       ],
+       [
+        55,
+        0
+       ],
+       [
+        60,
+        7
+       ],
+       [
+        65,
+        3
+       ],
+       [
+        70,
+        10
+       ],
+       [
+        75,
+        6
+       ],
+       [
+        80,
+        2
+       ],
+       [
+        85,
+        9
+       ],
+       [
+        90,
+        5
+       ],
+       [
+        95,
+        1
+       ],
+       [
+        100,
+        8
+       ]
+      ]
+     }
+    ]
+   },
+   "drag": [
+    [
+     302,
+     150
+    ],
+    [
+     332,
+     200
+    ]
+   ],
+   "after": {
+    "value": {
+     "hex": [
+      "40478ccccccccccd",
+      "40534ccccccccccd"
+     ],
+     "text": [
+      "47.1",
+      "77.2"
+     ]
+    },
+    "percent": {
+     "hex": [
+      "40478ccccccccccd",
+      "40534ccccccccccd"
+     ],
+     "text": [
+      "47.1",
+      "77.2"
+     ]
+    }
+   }
+  },
+  {
    "id": "tb-minpct",
    "group": "tb-span",
    "note": "a percent minSpan 40 over the data extent",
@@ -1696,6 +1851,7 @@
   "a category name moves the window",
   "an end left out keeps the option's value end",
   "the select is widened to minValueSpan",
+  "the widened end is rounded after the clamp",
   "the select is narrowed to maxValueSpan",
   "a drag from the higher scatter does not roam the graph; from blank it does",
   "a scatter at an equal z does not refuse the roam",
