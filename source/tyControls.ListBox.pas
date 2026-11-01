@@ -973,6 +973,10 @@ begin
   EnsureSelectedLen;
   // Clean slate on any mode switch so stale multi-select bits never resurface.
   for i := 0 to High(FSelected) do FSelected[i] := False;
+  { #152: ...but the row the single selection holds stays selected. A form file reads
+    ItemIndex before MultiSelect, and the saved selection was wiped as the form loaded. }
+  if FMultiSelect and (FItemIndex >= 0) and (FItemIndex <= High(FSelected)) then
+    FSelected[FItemIndex] := True;
   Invalidate;
 end;
 

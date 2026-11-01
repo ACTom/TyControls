@@ -120,6 +120,7 @@ type
     FNodes:        array of TTyShellNodeInfo;   { node-data index -> path + kind }
     FRoots:        TTyFsRootArray;    { the places seeded by PopulateRoots (for their Display) }
     FRoot:         string;            { '' = the machine places; else the one scoped directory }
+    FStreamedDirectory: string;       { #152: a form file's Directory, selected in Loaded }
     FObjectTypes:  TTyFsObjectTypes;  { what an enumeration keeps; default [fotFolders] }
     FShowHidden:   Boolean;           { a view of the fotHidden bit in FObjectTypes }
     FFileSortType: TTyFsFileSortType;
@@ -199,6 +200,7 @@ type
     { Nils a link whose partner is being freed -- otherwise the next selection
       walks a dead pointer. }
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    procedure Loaded; override;
     { The shell behaviour, as OVERRIDES of the base's virtuals.
 
       These five used to be handlers wired to the PUBLISHED OnGetText / OnInitNode /
@@ -1347,8 +1349,25 @@ begin
   Invalidate;
 end;
 
+procedure TTyShellTreeView.Loaded;
+begin
+  inherited Loaded;
+  if FStreamedDirectory <> '' then
+  begin
+    SelectPath(FStreamedDirectory);   // no raise: a stale saved path just selects nothing
+    FStreamedDirectory := '';
+  end;
+end;
+
 procedure TTyShellTreeView.SetDirectory(const AValue: string);
 begin
+  { #152: a form file reads Directory before Root, which then rebuilt the tree and dropped
+    the selection. Kept for Loaded, where Root is in. }
+  if csLoading in ComponentState then
+  begin
+    FStreamedDirectory := AValue;
+    Exit;
+  end;
   if SelectPath(AValue) then Exit;
   { '' is not a failed selection, it is an absent one. }
   if FLastPathError in [speNone, speEmptyPath] then Exit;

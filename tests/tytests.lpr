@@ -130,7 +130,7 @@ uses
   test.enteresc,
   test.keyrepeat,
   test.loadevents,
-  test.keypressfilter,
+  test.keypressfilter, test.savedvalues,
   test.analogclock,
   test.sparkline,
   test.rating,
