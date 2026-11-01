@@ -6972,8 +6972,9 @@ begin
 
   if not IsEnabled then Exit;
 
-  { Request keyboard focus so arrow-key navigation works after click }
-  if CanSetFocus then SetFocus;
+  { Request keyboard focus so arrow-key navigation works after click. #143: a tab stop's
+    only, as TTyCustomControl.MouseDown asks. }
+  if TabStop and CanSetFocus then SetFocus;
 
   { D2: header hit test — intercept before node hit-test }
   if GetHeaderHitAt(X, Y, headerPart, headerCol) then

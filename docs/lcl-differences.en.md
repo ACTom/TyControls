@@ -25,7 +25,7 @@ TyControls keeps LCL's property names and meanings wherever it can, so most code
 
 - **Pixel properties are logical pixels** (pixels at 96 PPI). Widths, heights, paddings, `BorderWidth` and the like are scaled by the control to its own PPI; there is nothing to convert by hand on high-DPI screens.
 - **`TTyScrollBar.Position` can reach `Max`.** LCL's scroll bar stops at `Max - PageSize + 1`.
-- **A control with `TabStop = False` does not take focus when clicked**; the keyboard focus stays where it was.
+- **A control with `TabStop = False` does not take focus when clicked**; the keyboard focus stays where it was. Text boxes, memos and the other typed fields (numbers, dates and times) are the exception: you click into one to type in it.
 - **`TTyTrackBar` raises `Position` on PageUp**, as Qt does; Win32 does the opposite.
 - **`TTyTreeView.AutoExpand` follows Delphi**: the node that gets the focus expands, and the one it left collapses. In LCL it means "expand a node when a child is added to it".
 - **`TTyTitleBar` looks the same when disabled.** It stands for the window itself, and a window does not grey out; to show that a window cannot be used, disable what is in it.

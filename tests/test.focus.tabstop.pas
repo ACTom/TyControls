@@ -139,7 +139,8 @@ type
     procedure CommitMemoTextOnExit(Sender: TObject);
     { Build AClass on the visible form, park focus on FPark, click it, and report where
       focus ended up. Frees the control before returning. }
-    function ClickAndReportFocus(AClass: TTyCtlClass; out AMoved: Boolean): string;
+    function ClickAndReportFocus(AClass: TTyCtlClass; out AMoved: Boolean;
+      ATabStopOff: Boolean = False): string;
     { #59: a grid whose one column edits in a pick list (apple, banana, cherry), the cells
       of rows 1 and 2 holding apple and banana. }
     function NewPickListGrid: TTyStringGrid;
@@ -165,6 +166,7 @@ type
   published
     procedure TestAClickActuallyLandsFocusOnEveryFocusableControl;
     procedure TestTheGuardIsNotVacuousForANonFocusableControl;
+    procedure TestAClickLeavesTheFocusAloneWhenTabStopIsOff;
     procedure TestClickThenArrowWalksAClickableStepsRail;
     procedure TestFreeingAFocusedEditWhoseExitWritesTextDoesNotRaise;
     { #137: the same for TTyMemo, whose destructor freed its lines first. }
@@ -230,7 +232,7 @@ begin
     { already focusable before this pass — listed so a regression shows up as a failure,
       and because several of them only got their DECLARED default fixed in it }
     TTyEdit, TTyListBox, TTyCheckBox, TTySegmented, TTyTreeView, TTyListView,
-    TTyCalculator, TTyToggleSwitch, TTyMenuBar, TTyRibbonBackstage,
+    TTyCalculator, TTyToggleSwitch, TTyRibbonBackstage,
 
     { ===== the extension: the 47 focusable families the tables used to miss ==========
       Everything above this line was written by the click-focus sweep, which listed the
@@ -329,6 +331,10 @@ begin
     TTyRadioGroup, TTyToolGroupPanel, TTyEmpty,
     { bars / chrome }
     TTyToolBar, TTyStatusBar, TTyRibbonGroup, TTyRibbonQuickAccess, TTySplitter,
+    { #143: a menu bar takes no focus, as a native one takes none. It used to, on every click,
+      and had no keys of its own: the editor lost the focus and the Edit menu's commands then
+      acted on the bar. Its menus open by click, Alt with their letter, and F10. }
+    TTyMenuBar,
     { a composite whose interaction lives entirely in its children }
     TTyTransfer,
     { a status rail, inert until Clickable is switched on (which sets TabStop) }
@@ -764,7 +770,7 @@ begin
 end;
 
 function TTyClickFocusTest.ClickAndReportFocus(AClass: TTyCtlClass;
-  out AMoved: Boolean): string;
+  out AMoved: Boolean; ATabStopOff: Boolean): string;
 var
   c: TTyCustomControl;
   before, after: TWinControl;
@@ -788,6 +794,7 @@ begin
       ribbon backstage overlay). CanFocus is False while hidden, so probing them as-built
       would assert on visibility, not on the focus chain. }
     c.Visible := True;
+    if ATabStopOff then c.TabStop := False;
     c.HandleNeeded;
     Forms.Application.ProcessMessages;
 
@@ -867,7 +874,7 @@ begin
     TTyButtonGroup, TTyColorGrid, TTyDrawGrid, TTyStringGrid, TTyHeaderControl,
     TTyHSColorPicker, TTyLColorPicker, TTyImageView,
     TTyEdit, TTyListBox, TTyCheckBox, TTySegmented, TTyTreeView, TTyListView,
-    TTyCalculator, TTyToggleSwitch, TTyMenuBar, TTyRibbonBackstage,
+    TTyCalculator, TTyToggleSwitch, TTyRibbonBackstage,
     { The numeric edit family, added with the teardown fix above. All five were run one at
       a time before being listed. TTyCurrencyEdit and TTyCalcCurrencyEdit are the two that
       actually exercise the fix at their default value -- the other three hold "0.00"/"0",
@@ -930,6 +937,40 @@ begin
   AssertNothingRaised('TTyPanel');
   AssertFalse('a click on a TTyPanel must NOT move focus -- it is not a tab stop. '
     + 'If this passes, ClickAndReportFocus is not measuring the click at all.', moved);
+end;
+
+{ #143: TabStop = False keeps a click from taking the focus, on every control the roster
+  clicks and on the ones that focused themselves in their own MouseDown (the lists, the tab
+  strips, the list group panel, the gallery). docs/lcl-differences.md says so, and the base
+  class did; those did not ask. A text box is the exception the document names: a click
+  into one is how the user types in it, as in a native edit. }
+procedure TTyClickFocusTest.TestAClickLeavesTheFocusAloneWhenTabStopIsOff;
+var
+  list: TTyCtlClassArray;
+  i, n: Integer;
+  moved: Boolean;
+  landed: string;
+begin
+  list := ClickProbeControls;
+  n := Length(list);
+  SetLength(list, n + 5);
+  list[n] := TTyListGroupPanel;
+  list[n + 1] := TTyRibbonGallery;
+  list[n + 2] := TTyTabSet;
+  list[n + 3] := TTyPageControl;
+  list[n + 4] := TTyMenuBar;
+  for i := 0 to High(list) do
+  begin
+    { the text-entry families: a click into one is how the user types in it }
+    if list[i].InheritsFrom(TTyCustomEdit) or list[i].InheritsFrom(TTyCustomSpinEdit)
+       or list[i].InheritsFrom(TTyCustomMemo) or list[i].InheritsFrom(TTyCustomDateTimePicker) then
+      Continue;
+    landed := ClickAndReportFocus(list[i], moved, True);
+    AssertNothingRaised(list[i].ClassName);
+    AssertFalse(list[i].ClassName + ': TabStop is off, so a click must leave the focus where '
+      + 'it was. Focus ended on: ' + landed, moved);
+    AssertEquals(list[i].ClassName + ': still on the park edit', 'TTyEdit', landed);
+  end;
 end;
 
 { THE ROOT GUARD for the defect that used to hang this file, aimed at the ROOT and not at

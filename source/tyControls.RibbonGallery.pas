@@ -100,6 +100,9 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    { #143: Left/Up and Right/Down pick the previous and the next item, Home and End the
+      first and the last; Alt+Down and F4 open the gallery, or close it. }
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
@@ -559,6 +562,36 @@ begin
     FIconFont := nil;
 end;
 
+procedure TTyCustomRibbonGallery.KeyDown(var Key: Word; Shift: TShiftState);
+var
+  n, cur: Integer;
+begin
+  inherited KeyDown(Key, Shift);
+  if (Key = 0) or not IsEnabled then Exit;
+  if ((Key = VK_DOWN) and (Shift * [ssCtrl, ssAlt, ssShift] = [ssAlt]))
+     or ((Key = VK_F4) and (Shift * [ssCtrl, ssAlt, ssShift] = [])) then
+  begin
+    if IsDroppedDown then CloseUp else DropDown;
+    Key := 0;
+    Exit;
+  end;
+  n := FItems.Count;
+  if (n = 0) or (Shift * [ssCtrl, ssAlt] <> []) then Exit;
+  cur := FItemIndex;
+  case Key of
+    VK_LEFT, VK_UP:
+      if cur < 0 then cur := n - 1 else if cur > 0 then Dec(cur);
+    VK_RIGHT, VK_DOWN:
+      if cur < 0 then cur := 0 else if cur < n - 1 then Inc(cur);
+    VK_HOME: cur := 0;
+    VK_END: cur := n - 1;
+  else
+    Exit;
+  end;
+  Key := 0;
+  SelectAt(cur);
+end;
+
 procedure TTyCustomRibbonGallery.SelectAt(AIndex: Integer);
 var
   NewIndex: Integer;
@@ -771,7 +804,7 @@ begin
   else if hit >= 0 then
     SelectAt(hit);
   try
-    if CanFocus then SetFocus;
+    if TabStop and CanFocus then SetFocus;   { #143: a click focuses only a tab stop, as TTyCustomControl.MouseDown does }
   except
     // ignore focus errors in headless/test environments
   end;

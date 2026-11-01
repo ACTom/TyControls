@@ -140,7 +140,7 @@ uses
   test.enteresc,
   test.keyrepeat,
   test.loadevents,
-  test.keypressfilter, test.savedvalues,
+  test.keypressfilter, test.savedvalues, test.keyboardreach,
   test.analogclock,
   test.sparkline,
   test.rating,

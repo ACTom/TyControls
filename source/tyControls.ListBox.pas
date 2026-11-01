@@ -1537,7 +1537,7 @@ begin
       end;
     end;
     try
-      if CanFocus then
+      if TabStop and CanFocus then   { #143: a click focuses only a tab stop, as TTyCustomControl.MouseDown does }
         SetFocus;
     except
       // Ignore focus errors in headless/test environments

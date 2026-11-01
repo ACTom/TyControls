@@ -132,6 +132,7 @@ end;
 ## 交互
 
 - **鼠标**:点选单元格;拖列头分隔条改列宽;滚轮纵向滚动(一格三行)
+- **`TTyDrawGrid` 的键盘**:它没有光标，按键滚动视图 —— 方向键滚一行或一列,`PageUp` / `PageDown` 滚一页,`Home` / `End` 到首列 / 末列,`Ctrl+Home` / `Ctrl+End` 到首行 / 末行。以下是 `TTyStringGrid` 的
 - **键盘**:方向键 / `Home` / `End` / `PageUp` / `PageDown` 移动光标;`F2` 开始编辑。`PageUp` / `PageDown` 一次翻「完整可见的行数减一」(与 LCL 的 `TStringGrid` 相同):从屏幕顶行按 `PageDown` 先落到这一屏最后一个完整可见的行,之后每页留一行重叠;一屏放不下两整行时仍移一行。`PageRowStep` 给出这个步长
 - **区域多选**:`Shift+方向键` 或 `Shift+点击` 拉出矩形选区;普通方向键/点击收回一格
 - **排序**:列头选项加上 `hoHeaderClickAutoSort` 后,点列头即 升序 → 降序 → 取消。排序在**松开**时触发:按在分隔线上(改宽)、把列拖走、或松开在别的地方,都不算点了列头

@@ -1998,6 +1998,11 @@ type
     procedure DefineProperties(Filer: TFiler); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    { #143: a draw grid has no cursor either, so the keys scroll it: the arrows by a row or a
+      column, Page Up/Down by a page, Home/End to the first or last column, Ctrl+Home/End to
+      the first or last row. TTyStringGrid moves its cursor with them instead (FReportsClicks
+      is off there). }
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
   protected
     { 取一个单元格要显示的文本。派生类可改写以接自己的存储。 }
     function GetCellText(ACol, ARow: Integer): string; virtual;
@@ -8741,6 +8746,25 @@ begin
     Invalidate;
   end;
   if Assigned(OnClickCell) then OnClickCell(Self, hit.Col, hit.Row);
+end;
+
+procedure TTyCustomDrawGrid.KeyDown(var Key: Word; Shift: TShiftState);
+begin
+  inherited KeyDown(Key, Shift);
+  if not FReportsClicks or (Key = 0) or not IsEnabled or (ssAlt in Shift) then Exit;
+  case Key of
+    VK_UP:    TopRow := TopRow - 1;
+    VK_DOWN:  TopRow := TopRow + 1;
+    VK_LEFT:  LeftCol := ColumnStep(LeftCol, ArrowColStep(-1));
+    VK_RIGHT: LeftCol := ColumnStep(LeftCol, ArrowColStep(1));
+    VK_PRIOR: TopRow := TopRow - PageRowStep;
+    VK_NEXT:  TopRow := TopRow + PageRowStep;
+    VK_HOME:  if ssCtrl in Shift then TopRow := 0 else LeftCol := FirstVisibleCol;
+    VK_END:   if ssCtrl in Shift then TopRow := DisplayRowCount - 1 else LeftCol := LastVisibleCol;
+  else
+    Exit;
+  end;
+  Key := 0;
 end;
 
 procedure TTyCustomDrawGrid.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
