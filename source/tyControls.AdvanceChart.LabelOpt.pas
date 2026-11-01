@@ -271,6 +271,16 @@ begin
   series := ObjOf(AOption.ComponentAt('series', ASlot));
   if series = nil then Exit;
   Result := TyLabelSpecOfNode(ObjOf(series.Find('label')), series, ABase);
+  { [R5-L] A SERIES THAT WRITES NO label STILL HAS ITS emphasis.label:
+    getLabelStatesModels takes [state, 'label'] off the item model whether
+    or not `label` is written (labelStyle.ts:316-318), and the state's text
+    style is createTextStyle of it (labelStyle.ts:265) -- its ink, and the
+    font or box that lays the hovered text out again. The node reader stops
+    at a missing node, so it is read here. [Was: only a series with a
+    `label` of its own read it -- the old `label.emphasis` spelling, whose
+    normal label is an object, laid the hover out in the emphasis font and
+    `emphasis.label` alone did not.] }
+  if ObjOf(series.Find('label')) = nil then TyLabelReadInk(nil, series, Result);
   { textBorderType: retrieve2(the label's, the global textStyle's) [F4c] }
   if (Result.BorderType = '') and (AOption.Root is TJSONObject) then
   begin
