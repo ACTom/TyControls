@@ -713,6 +713,11 @@ function chartCases() {
     + 'bars: the nodes start under the group where its tween is',
     [s(solo(sankeyS(NAMES, { roam: true }))), s({ series: [{ id: 'sk', zoom: 1.5, center: ['40%', '50%'] }] }, null, true),
       Object.assign(s(cart([kkBar(NAMES)])), { after: 200 })]);
+  add('view.sankey-zoom-bar.inflight-plain', 'the same with the sankey\'s own transition off (its seriesKey kk still '
+    + 'batches it): the merge morphs nothing, the disposed nodes start under the group where its tween is',
+    [s(solo(sankeyS(NAMES, { roam: true, universalTransition: { enabled: false, seriesKey: 'kk' } }))),
+      s({ series: [{ id: 'sk', zoom: 1.5, center: ['40%', '50%'] }] }, null, true),
+      Object.assign(s(cart([kkBar(NAMES)])), { after: 200 })]);
   add('view.sankey-zoom-bar.kept', 'a zoomed sankey keeping A, C and D at another zoom while B goes to a bar',
     [s(solo(sankeyS(NAMES, { roam: true, zoom: 1.5, center: ['40%', '50%'] }))),
       s(cart([sankeyS(['A', 'C', 'D'], { roam: true, zoom: 1.2, center: ['40%', '50%'] }), kkBar(['B'])]))]);
@@ -817,7 +822,7 @@ function guards(charts) {
     must(morphs(byId(id)).filter(e => e.seriesType === 'bar').length >= 1, id + ': no bar morphs');
   }
   for (const id of ['view.tree-bar', 'view.tree-bar.inflight', 'view.sankey-bar', 'view.sankey-zoom-bar',
-    'view.sankey-zoom-bar.inflight']) {
+    'view.sankey-zoom-bar.inflight', 'view.sankey-zoom-bar.inflight-plain']) {
     must(morphs(byId(id)).length === 4, id + ': not four morphs');
   }
   {
