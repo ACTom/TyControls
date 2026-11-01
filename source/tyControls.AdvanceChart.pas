@@ -4249,6 +4249,14 @@ type
       line its labelLine.lineStyle -- of which the four shadow keys. A gauge's
       parts take theirs in its builder. }
     procedure ApplySeriesShadows(AList: TTyPaintList);
+    { [R6-C] THE PEN'S ENDS onto a series' elements: getItemStyle's lineCap /
+      lineJoin / miterLimit (borderCap, borderJoin, borderMiterLimit),
+      getLineStyle's (cap, join, miterLimit), from the same model chains as
+      the shadows -- and the views' own: a funnel's polygon joins round, a
+      line's polyline bevels unless its lineStyle says, a gauge's pointer lays
+      pointer.itemStyle over its item's; a sankey's bands, a treemap's rects,
+      a radar's area and an area take none }
+    procedure ApplySeriesPenEnds(AList: TTyPaintList);
     { [R5-A] A SERIES' blendMode AND zlevel onto its elements: the blend on
       every element its view renders (echarts' updateBlend -- not a label,
       not a label line: they are no child of the view's group), the zlevel on
