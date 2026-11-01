@@ -40,7 +40,7 @@ uses tyControls.Menu;
 | `Align` | `TAlign` | — | 停靠对齐方式（继承自 `TControl`）。示例中用 `alTop` 贴在标题栏下方随窗体拉伸。 |
 | `Anchors` | `TAnchors` | — | 锚点布局（继承自 `TControl`）。 |
 
-> **构造默认值：** `TTyMenuBar.Create` 中设 `TabStop := True`、`Height := 28`，并调用 `TyAccelRegister(Self)` 注册共享 Alt 状态（Alt 键按下/松开时重绘菜单栏以显示助记符下划线）。
+> **构造默认值：** `TTyMenuBar.Create` 中设 `Height := 28`，并调用 `TyAccelRegister(Self)` 注册共享 Alt 状态（Alt 键按下/松开时重绘菜单栏以显示助记符下划线）。`TabStop` 默认 `False`：和原生菜单栏一样，点击菜单栏不拿走焦点，焦点留在用户正在编辑的控件上，"编辑"菜单里的命令作用于它。
 
 ### 3.2 TTyPopupMenu —— 自有 published 属性
 
@@ -263,6 +263,7 @@ end;
 - **只渲染可见项：** `TyBuildMenuRows` 跳过 `Visible = False` 的项；菜单栏顶层单元格同样只计可见顶层项（`VisibleTopItem`）。设 `Visible := False` 可动态隐藏项。
 - **`AutoSizeWidth` 受 `Align` 制约：** 仅当 `Align` **不是** `alTop`/`alBottom` 时才收缩到内容宽度——那两种对齐下 LCL 强制拉伸到父宽度，自适应会被覆盖。默认 `False`（声明了 `default False`，值为 `False` 时不写入 `.lfm`/`.dfm`）。
 - **Alt+助记符打开顶层菜单：** `DialogChar` 仅在**恰好按下 Alt**（无 Ctrl/Shift）时匹配顶层项助记符打开其下拉；纯字母键经窗体级 DialogChar 广播不会误开菜单。助记符下划线仅在按住 Alt 时显示。
+- **F10 打开第一个菜单：** 焦点在菜单栏所在窗体的任一控件上时，按 `F10` 打开第一个能打开的顶层菜单（跳过禁用项和没有子项的顶层命令），之后同弹出层键盘导航。`F10` 是最后才问的：焦点控件、窗体快捷键和 `KeyPreview` 先处理，程序自己给 `F10` 安排了用途时不受影响。`Shift+F10` 不打开菜单。
 - **弹出层键盘导航：** 下拉/子菜单打开后，方向键上下移动高亮（跳过分隔线与禁用项、两端回绕）、`Home`/`End` 跳首末可选项、`Enter`/`Space` 激活、`→` 在子菜单行上展开子菜单（否则在根下拉上切到相邻顶层）、`←` 折叠子菜单回父级（根下拉上则切到上一顶层）、`Esc` 关闭当前层。裸字母/数字键跳转到匹配助记符的行并激活。
 - **子菜单悬停自动展开：** 高亮停在子菜单行上超过 `TyMenuHoverOpenDelay`（350ms）自动展开该子菜单；移到非子菜单行会折叠已展开的同级子菜单。
 - **自绘（`OwnerDraw`）的边界：**

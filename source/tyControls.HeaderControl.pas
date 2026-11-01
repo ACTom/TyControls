@@ -118,6 +118,7 @@ type
   private
     FSections: TTyHeaderSectionArray;
     FHotIndex: Integer;             // section under the mouse (-1 none)
+    FKeyIndex: Integer;             // #143: the keyboard's section (-1 none yet)
     FResizing: Boolean;
     FResizeIndex: Integer;          // section whose shared edge is being dragged (its right, or its left when mirrored)
     FResizeStartX: Integer;         // device X where the drag began
@@ -171,6 +172,10 @@ type
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
+    { #143: Left and Right move to the next section shown on that side (mirrored too), Home
+      and End to the first and the last; the section is drawn hovered. Space clicks it, as a
+      click on it does: its sort turns, and OnSectionClick. }
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
   public
     constructor Create(AOwner: TComponent); override;
     { Append a section; returns its index. }
@@ -446,6 +451,7 @@ begin
   inherited Create(AOwner);
   FFitsToStyle := True;   // AutoSize follows the theme (#114)
   FHotIndex := -1;
+  FKeyIndex := -1;
   FResizeIndex := -1;
   Width := 300;
   Height := TyDensityHeight(ActiveController, TyHeaderDefaultHeight);
@@ -800,7 +806,8 @@ begin
       if cellRect.Right <= cellRect.Left then Continue;
 
       // Hover fill for the hot section.
-      if (i = FHotIndex) and (tpBackground in hotStyle.Present) then
+      if ((i = FHotIndex) or ((FHotIndex < 0) and Focused and (i = FKeyIndex)))
+         and (tpBackground in hotStyle.Present) then
         P.FillBackground(cellRect, hotStyle.Background, 0)
       else if tpBackground in secStyle.Present then
         P.FillBackground(cellRect, secStyle.Background, 0);
@@ -988,8 +995,72 @@ begin
   hit := TyHeaderSectionAtX(widths, ClientRect, X, IsRightToLeft);
   if hit >= 0 then
   begin
+    FKeyIndex := hit;   // the keyboard goes on from the section the user clicked
     ToggleSort(hit);
     SectionClick(hit);
+  end;
+end;
+
+{ The first section shown past AFrom, stepping by AStep; -1 when there is none. }
+function TyHeaderNextShown(const AWidths: TIntegerDynArray; AFrom, AStep: Integer): Integer;
+begin
+  Result := AFrom + AStep;
+  while (Result >= 0) and (Result <= High(AWidths)) do
+  begin
+    if AWidths[Result] > 0 then Exit;
+    Inc(Result, AStep);
+  end;
+  Result := -1;
+end;
+
+procedure TTyHeaderControl.KeyDown(var Key: Word; Shift: TShiftState);
+var
+  widths: TIntegerDynArray;
+  cur, i, step: Integer;
+begin
+  inherited KeyDown(Key, Shift);
+  if (Key = 0) or not IsEnabled or (Shift * [ssCtrl, ssAlt] <> []) then Exit;
+  widths := DeviceWidths;   // a hidden section is 0 wide
+  cur := FKeyIndex;
+  if (cur > High(widths)) or ((cur >= 0) and (widths[cur] <= 0)) then cur := -1;
+  case Key of
+    VK_LEFT, VK_RIGHT:
+      begin
+        { Left goes to the section on the left, which mirrored is the next one }
+        if (Key = VK_RIGHT) <> IsRightToLeft then step := 1 else step := -1;
+        if cur >= 0 then i := TyHeaderNextShown(widths, cur, step)
+        else if step > 0 then i := TyHeaderNextShown(widths, -1, 1)
+        else i := TyHeaderNextShown(widths, Length(widths), -1);
+        if i >= 0 then cur := i;
+      end;
+    VK_HOME:
+      begin
+        i := TyHeaderNextShown(widths, -1, 1);
+        if i >= 0 then cur := i;
+      end;
+    VK_END:
+      begin
+        i := TyHeaderNextShown(widths, Length(widths), -1);
+        if i >= 0 then cur := i;
+      end;
+    VK_SPACE:
+      begin
+        if cur < 0 then cur := TyHeaderNextShown(widths, -1, 1);
+        if cur >= 0 then
+        begin
+          FKeyIndex := cur;
+          ToggleSort(cur);
+          SectionClick(cur);
+        end;
+      end;
+  else
+    Exit;
+  end;
+  Key := 0;
+  if cur <> FKeyIndex then
+  begin
+    FKeyIndex := cur;
+    Invalidate;
   end;
 end;
 

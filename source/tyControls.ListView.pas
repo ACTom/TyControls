@@ -3907,7 +3907,7 @@ begin
   inherited MouseDown(Button, Shift, X, Y);
   if Button <> mbLeft then Exit;
   try
-    if CanFocus then SetFocus;
+    if TabStop and CanFocus then SetFocus;   { #143: a click focuses only a tab stop, as TTyCustomControl.MouseDown does }
   except
     { headless / test environments may reject focus }
   end;
