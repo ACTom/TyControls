@@ -415,9 +415,20 @@ begin
         Result.Position := pos;
         { remembered, so a bar can say which side its outside is }
         Result.Outside := d.AsString = 'outside';
+      end
+      else if s <> '' then
+      begin
+        { [R6-A] A NAME ZRENDER DOES NOT KNOW: calculateTextPosition's switch
+          has no default, so the anchor stays at the rect's top-left with the
+          text aligned left / top -- the array form's [0, 0]. Not tlpNone,
+          which draws nothing. [Was: left at the base position.] }
+        Result.Position := tlpAt;
+        Result.AtX := 0;
+        Result.AtY := 0;
+        Result.AtXIsPercent := False;
+        Result.AtYIsPercent := False;
+        Result.Outside := False;
       end;
-      { An unknown name is left at the base position rather than adopted as
-        tlpNone: tlpNone means "draw nothing", and upstream draws something. }
     end;
   end;
 

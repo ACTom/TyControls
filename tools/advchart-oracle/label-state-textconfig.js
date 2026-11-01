@@ -194,6 +194,19 @@ const CASES = [
       edgeLabel: { show: true }, emphasis: { edgeLabel: { position: 'insideBottomRight' } },
       data: [{ name: 'a', x: 100, y: 100 }, { name: 'b', x: 400, y: 260 }], links: [{ source: 'a', target: 'b' }] }] },
     steps: [EHL(0)] },
+  // ---- a normal position zrender does not know: the rect's top-left (calculateTextPosition has no default) ----
+  { id: 'normal.word.bar', note: "label.position 'foo' on bars: each bar's rect top-left, aligned left / top",
+    option: bar({ label: { show: true, position: 'foo' } }), steps: [] },
+  { id: 'normal.word.scatter', note: "label.position 'nowhere' on symbols, emphasis.label distance 9 (a key over it)",
+    option: scatter({ label: { show: true, position: 'nowhere' }, emphasis: { scale: false, label: { distance: 9 } } }), steps: [HL(1)] },
+  { id: 'normal.word.empty', note: "label.position '' is none: `'' || 'inside'`, the middle",
+    option: scatter({ label: { show: true, position: '' } }), steps: [] },
+  { id: 'normal.word.heatmap', note: "label.position 'centre' (a misspelling) on heatmap cells",
+    option: { animation: false, xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: { type: 'category', data: ['x', 'y'] },
+      visualMap: { show: false, min: 0, max: 10 },
+      series: [{ type: 'heatmap', data: [[0, 0, 1], [0, 1, 5], [1, 0, 7], [1, 1, 9]], label: { show: true, position: 'centre' } }] }, steps: [] },
+  { id: 'normal.word.treemap', note: "label.position 'foo' on treemap nodes",
+    option: { animation: false, series: [{ type: 'treemap', label: { position: 'foo' }, data: [{ name: 'a', value: 6 }, { name: 'b', value: 4 }] }] }, steps: [] },
   { id: 'tree.radial', note: 'radial tree; emphasis.label position top',
     option: { animation: false, series: [{ type: 'tree', layout: 'radial', symbolSize: 14, expandAndCollapse: false,
       data: [{ name: 'root', children: [{ name: 'A', children: [{ name: 'A1' }, { name: 'A2' }] }, { name: 'B' }, { name: 'C' }] }],
@@ -379,6 +392,9 @@ function generate() {
       ok: lab('graph.circular', 0, 0).m[1] !== hex(0) && JSON.stringify(by('graph.circular').states[0]) === JSON.stringify(by('graph.circular').states[1]) },
     { name: 'tree.radial: hovered, moved, its turn kept', ok: X('tree.radial', 1, 2) !== X('tree.radial', 0, 2)
       && lab('tree.radial', 1, 2).m[0] === lab('tree.radial', 0, 2).m[0] },
+    { name: "normal.word.*: a normal position zrender does not know: every label at its rect's top-left, left / top",
+      ok: ['normal.word.bar', 'normal.word.scatter', 'normal.word.heatmap', 'normal.word.treemap'].every(id =>
+        by(id).states[0].every(l => l.align === 'left' && l.verticalAlign === 'top')) && X('normal.word.scatter', 0, 0) === 230 },
     { name: "sankey.edge: hovered, on the curve's rect top", ok: lab('sankey.edge', 1, 1).verticalAlign === 'bottom' && !lab('sankey.edge', 1, 1).inside },
   ];
   if (!process.env.ORACLE_NOGUARD) for (const g of guards) must(g.ok, 'guard failed: ' + g.name);

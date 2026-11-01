@@ -1705,6 +1705,14 @@ begin
   Result.FontWeight := spec.FontWeight;
 end;
 
+{ [R6-A] whether zrender's calculateTextPosition knows the word }
+function TyTmKnownPosition(const AWord: string): Boolean;
+var known: Boolean;
+begin
+  TyLabelPositionOf(AWord, known);
+  Result := known;
+end;
+
 function PlaceWith(const APlace: TTyTmLabelPlace; const AText: string;
   ARX0, ARY0, ACW, ACH: Double;
   const AMeasurer: ITyTextMeasurer; out AWords: string; out ALX, ALY: Double;
@@ -1768,10 +1776,17 @@ begin
     rx := rx + (cw - dist); ry := ry + (ch - dist);
     AAH := tahRight; AAV := tavBottom;
   end
-  else
+  else if TyTmKnownPosition(ps) then
   begin
     rx := rx + cw / 2;
     ry := ry + ch / 2;
+  end
+  else
+  begin
+    { [R6-A] a name zrender does not know: the rect's top-left, aligned
+      left / top (calculateTextPosition has no default) }
+    AAH := tahLeft;
+    AAV := tavTop;
   end;
   if Around0(rx) and Around0(ry) then
   begin
