@@ -55,8 +55,10 @@ type
   TUt6Mirror = class
   public
     function OpRect(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
-    { the test's own: the same column at opacity 0.4 }
+    { the test's own: the same column at opacity 0.4; one whose fill alone
+      has an opacity, under a wide pen }
     function AlphaRect(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+    function FillOpRect(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
   end;
 
   TAdvChartUniversalTransition6Test = class(TTestCase)
@@ -259,6 +261,20 @@ begin
     'style', TJSONObject.Create(['fill', AApi.Visual('color'), 'opacity', Num(0.4)])]);
 end;
 
+{ a column whose fill alone has an opacity (0.4), its pen 4 px wide and
+  full (the test's own) }
+function TUt6Mirror.FillOpRect(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+var p, b: TTyDoubleArray;
+begin
+  p := AApi.Coord([AApi.Value(0), AApi.Value(1)]);
+  b := AApi.Coord([AApi.Value(0), 0]);
+  Result := TJSONObject.Create(['type', 'rect',
+    'shape', TJSONObject.Create(['x', Num(p[0] - 8), 'y', Num(p[1]), 'width', 16,
+      'height', Num(b[1] - p[1])]),
+    'style', TJSONObject.Create(['fill', AApi.Visual('color'), 'fillOpacity', Num(0.4),
+      'stroke', '#ff994d', 'lineWidth', 4])]);
+end;
+
 { ==================== plumbing ==================== }
 
 procedure TAdvChartUniversalTransition6Test.SetUp;
@@ -291,12 +307,14 @@ begin
   FMirror := TUt6Mirror.Create;
   TyChartRegisterRenderItem('opRect', @FMirror.OpRect);
   TyChartRegisterRenderItem('alphaRect', @FMirror.AlphaRect);
+  TyChartRegisterRenderItem('fillOpRect', @FMirror.FillOpRect);
 end;
 
 procedure TAdvChartUniversalTransition6Test.TearDown;
 begin
   TyChartUnregisterRenderItem('opRect');
   TyChartUnregisterRenderItem('alphaRect');
+  TyChartUnregisterRenderItem('fillOpRect');
   FreeAndNil(FSeen);
   FChart := nil;
   FreeAndNil(FForm);
@@ -1181,7 +1199,9 @@ end;
 
 { FILLOPACITY IS DRAWN: zrender's brushPath fills with globalAlpha =
   opacity x fillOpacity -- the custom rect's fill at fillOpacity 0.4 is the
-  same ink as the same rect at opacity 0.4 (inside it, away from its pen) }
+  same ink as the same rect at opacity 0.4 (inside it, away from its pen);
+  and strokes with opacity x strokeOpacity -- a pen with none of its own is
+  full, whatever the fill's (outside the rect, where the pen alone is) }
 procedure TAdvChartUniversalTransition6Test.TestTheOpacitiesAreDrawn;
 var
   c: TJSONObject;
@@ -1209,6 +1229,19 @@ begin
     [px.red, px.green, px.blue, ref.red, ref.green, ref.blue]),
     (Abs(px.red - ref.red) <= 1) and (Abs(px.green - ref.green) <= 1)
     and (Abs(px.blue - ref.blue) <= 1));
+  { the pen, 4 px about x 89.5: pixel 88 is its outer half alone }
+  NewChart;
+  FChart.Option := '{"color":["#5070dd"],"xAxis":{"type":"category","data":["A","B","C","D"]},'
+    + '"yAxis":{"type":"value"},"series":[{"type":"custom","renderItem":"@fillOpRect",'
+    + '"data":[{"name":"A","value":[0,5]},{"name":"B","value":[1,8]},{"name":"C","value":[2,3]},'
+    + '{"name":"D","value":[3,6]}]}]}';
+  FChart.SetBounds(0, 0, cW, cH);
+  FChart.AnimTick(Fix.Objects['clock'].Floats['T0'] + 6000);
+  Draw;
+  px := FBmp.GetPixel(88, 171);
+  AssertTrue(Format('the pen at full alpha: (%d, %d, %d), want (255, 153, 77)',
+    [px.red, px.green, px.blue]), (Abs(px.red - 255) <= 2) and (Abs(px.green - 153) <= 2)
+    and (Abs(px.blue - 77) <= 2));
 end;
 
 initialization

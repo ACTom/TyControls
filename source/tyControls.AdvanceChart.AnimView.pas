@@ -9543,14 +9543,8 @@ begin
   AEl.Style.StrokeGradient := Default(TTyChartGradient);
   AEl.Style.StrokeWidthLogical := 0;
   AEl.Style.Alpha := 1;
-  { [R6-C] its shadow and its two opacities too }
-  AEl.Style.ShadowBlur := 0;
-  AEl.Style.ShadowOffsetX := 0;
-  AEl.Style.ShadowOffsetY := 0;
-  AEl.Style.ShadowColor := 0;
-  AEl.Style.HasFillOpacity := False;
-  AEl.Style.HasStrokeOpacity := False;
-  AEl.Style.DashOffsetLogical := 0;
+  { (its shadow, its two opacities and its dash phase are always in its bag:
+    the host's UtStyleProps answers every one) }
   UtApplyStyle(AEl, APiece);
   AEl.Anim.UtPiece := AK + 1;
 end;

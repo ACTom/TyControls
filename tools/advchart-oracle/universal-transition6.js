@@ -578,6 +578,9 @@ function chartCases() {
     yAxis: { type: 'value', min: 0, max: 10 }, series });
   add('style.combine-shadow', 'shadowed symbols combining into bars: each child\'s shadow from its symbol\'s',
     [s(sCart([scatS({ itemStyle: SH1 })])), s(gCart([gBars()]))]);
+  add('style.combine-grad', 'symbols filled with a gradient combining into bars filled with another: each child\'s stops '
+    + 'interpolated', [s(sCart([scatS({ itemStyle: { color: lin(['#ff0000', '#0000ff']) } })])),
+      s(gCart([gBars({ itemStyle: { color: lin(['#00ff00', '#ffff00']) } })]))]);
   // ---- 2. AN OLD SERIES THE LEGEND SWITCHED OFF ----
   const barN = (id, name, vals) => Object.assign({ type: 'bar', id, name, data: items(vals) }, UT);
   const two = () => cart([barN('a', 'sa', VALS), barN('b', 'sb', [2, 4, 6, 8])], { legend: {} });
@@ -587,6 +590,15 @@ function chartCases() {
   add('filtered.selected-pie', 'the same with legend.selected switching b off from the start',
     [s(Object.assign(two(), { legend: { selected: { sb: false } } })), s(pieB())]);
   add('filtered.shown-pie', 'the control: b shown, its bars morph into the slices', [s(two()), s(pieB())]);
+  add('filtered.toggled-pie-marked', 'b, with a markPoint, switched off by the legend, then a pie of id b: its slices fade in '
+    + 'all the same', [s(cart([barN('a', 'sa', VALS), Object.assign(barN('b', 'sb', [2, 4, 6, 8]),
+      { markPoint: { data: [{ type: 'max' }] } })], { legend: {} })), act({ type: 'legendToggleSelect', name: 'sb' }), s(pieB())]);
+  add('filtered.merge-marked', 'b (seriesKey kb, a markPoint) switched off, then a merge adding a pie of seriesKey kb: b stays '
+    + 'off (and keeps its markers), its items in the store have no element, the slices fade in',
+    [s(cart([barN('a', 'sa', VALS), Object.assign(barN('b', 'sb', [2, 4, 6, 8]), { universalTransition: { enabled: true, seriesKey: 'kb' },
+      markPoint: { data: [{ type: 'max' }] } })], { legend: {} })), act({ type: 'legendToggleSelect', name: 'sb' }),
+      s({ series: [{ id: 'a' }, { id: 'b' }, pieS({ id: 'p', center: ['75%', '50%'], radius: '25%',
+        universalTransition: { enabled: true, seriesKey: 'kb' } }, items([2, 4, 6, 8]))] }, null, true)]);
   add('filtered.kept-a', 'a kept and shown, b switched off and turned into a pie',
     [s(two()), act({ type: 'legendToggleSelect', name: 'sb' }),
       s({ color: PALETTE, xAxis: { type: 'category', data: NAMES }, yAxis: {},
@@ -613,6 +625,9 @@ function chartCases() {
   add('enc.dataset-back', 'and the bars back into the dataset\'s symbols (one to many by the group)',
     [s(gCart([gBars()])), s(Object.assign(sCart([dsScat()]), { dataset: { source: DS } }))]);
   const DSROW = [DS.map(r => r[0]), DS.map(r => r[1]), DS.map(r => r[2])];
+  add('enc.dataset-renamed', 'the series\' own dimensions over the dataset\'s (a, b, c): grp names no dimension, so the '
+    + 'groups are the ids and nothing pairs', [s(Object.assign(sCart([dsScat({ dimensions: ['a', 'b', 'c'],
+      encode: { x: 0, y: 1, itemGroupId: 'grp' } })]), { dataset: { source: DS } })), s(gCart([gBars()]))]);
   add('enc.dataset-row', 'the same dataset laid out by row (seriesLayoutBy: \'row\')',
     [s(Object.assign(sCart([dsScat({ seriesLayoutBy: 'row' })]), { dataset: { source: DSROW } })), s(gCart([gBars()]))]);
   const DAYS = ['2017-02-01', '2017-02-04'];
@@ -666,6 +681,10 @@ function chartCases() {
   add('view.tree-bar.kept.inflight', '200 ms into a merge that zooms the tree\'s view (its group tweening), the tree keeps A and D '
     + 'at another zoom', [s(solo(treeS(NAMES))), s({ series: [Object.assign({ id: 't' }, Z15)] }, null, true),
       Object.assign(s(cart([treeS(['A', 'D'], Z12), kkBar(['B', 'C'])])), { after: 200 })]);
+  add('view.tree-bar.kept.slide', '200 ms into a merge that gives the zoomed tree C and D (its nodes sliding to their new '
+    + 'places), the tree keeps A and D while B and C go to bars: the old nodes leave from where they slide',
+    [s(solo(treeS(['A', 'B', 'C'], Z15))), s(solo(treeS(NAMES, Z15)), null, true),
+      Object.assign(s(cart([treeS(['A', 'D'], Z15), kkBar(['B', 'C'])])), { after: 200 })]);
   add('view.tree-bar', 'every node of a zoomed tree to bars (the tree\'s view disposed: its nodes stay in their groups)',
     [s(solo(treeS(NAMES, Z15))), s(cart([kkBar(NAMES)]))]);
   add('view.tree-bar.inflight', '200 ms into the zoom, every node to bars (the group where its tween is)',
@@ -727,12 +746,17 @@ function guards(charts) {
   must(combs(byId('style.combine-shadow')).length === 2, 'style.combine-shadow: not two combining');
   must(combs(byId('style.combine-shadow')).every(e => e.pieces.every(p => Array.isArray(p.style.shadowBlur))),
     'style.combine-shadow: a child\'s shadow does not tween');
+  must(combs(byId('style.combine-grad')).length === 2
+    && combs(byId('style.combine-grad')).every(e => e.pieces.every(p => Array.isArray(p.style.fill))),
+    'style.combine-grad: a child\'s gradient does not tween');
   // 2. the switched-off series
-  for (const id of ['filtered.toggled-pie', 'filtered.selected-pie', 'filtered.toggled-scatter']) {
+  for (const id of ['filtered.toggled-pie', 'filtered.selected-pie', 'filtered.toggled-scatter', 'filtered.toggled-pie-marked']) {
     must(byId(id).oldGroups.find(g => g.id === 'b').filtered, id + ': b not filtered');
     must(morphs(byId(id)).length === 0 && fades(byId(id)).length === 4, id + ': not four fading in');
   }
   must(fades(byId('filtered.kept-a')).length === 4, 'filtered.kept-a: not four fading in');
+  must(fades(byId('filtered.merge-marked')).length === 4 && morphs(byId('filtered.merge-marked')).length === 0,
+    'filtered.merge-marked: not four fading in');
   must(morphs(byId('filtered.shown-pie')).length === 4, 'filtered.shown-pie: not four morphs');
   // 3. the children
   for (const id of ['sub.hit', 'sub.hit-pie']) {
@@ -767,9 +791,12 @@ function guards(charts) {
     must(combs(byId(id)).length === 2, id + ': not two combining');
   }
   must(morphs(byId('enc.dataset-back')).length === 6, 'enc.dataset-back: not six morphs');
+  must(combs(byId('enc.dataset-renamed')).length === 0 && morphs(byId('enc.dataset-renamed')).length === 0,
+    'enc.dataset-renamed: something pairs');
   must(morphs(byId('enc.dataset-child')).length === 6, 'enc.dataset-child: not six morphs');
   // 5. the view groups
-  for (const id of ['view.tree-bar.kept', 'view.tree-bar.kept.same', 'view.tree-bar.kept.inflight', 'view.sankey-bar.kept',
+  for (const id of ['view.tree-bar.kept', 'view.tree-bar.kept.same', 'view.tree-bar.kept.inflight', 'view.tree-bar.kept.slide',
+    'view.sankey-bar.kept',
     'view.sankey-zoom-bar.kept']) {
     must(morphs(byId(id)).filter(e => e.seriesType === 'bar').length >= 1, id + ': no bar morphs');
   }

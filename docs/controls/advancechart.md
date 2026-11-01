@@ -599,12 +599,6 @@ option 编辑器：
 
 - 换皮肤时，进行中的悬停、选中等状态过渡直接跳到终值（ECharts 换主题会接着播完）。
 - `stateAnimation.delay` 不能写成函数。
-- universal transition 还有几处没做：
-  - 样式只过渡填充、描边、线宽和透明度，阴影、`fillOpacity`、`strokeOpacity` 和渐变不过渡；
-  - 被图例关掉的旧系列不参与过渡；
-  - 几个图形合并成一个时，只有第一段能点到；离场途中画的是合并后的整体，不是各段；
-  - 维度编码不读 dataset、`seriesLayoutBy: 'row'` 和 time 列；
-  - 按视图分组的过渡只支持关系图节点。
 - 树图里保留下来的节点没了子节点时，ECharts 会留下一段没人删的连线，这里不留。
 - `AnimationMode` 为 `camAuto` 时，控件不在屏幕上的那段时间里派发的动作，动画最多晚一帧开始；`camAlways` 和 ECharts 同帧。
 - geo 的旋转、斜切漫游不做过渡，过渡途中区域的描边宽度不跟着缩放。
