@@ -64,6 +64,9 @@ type
       disabled while the pointer is already over it keeps promising a drag. }
     procedure CMEnabledChanged(var Message: TLMessage); message CM_ENABLEDCHANGED;
     procedure Loaded; override;      // re-derive the cursor after Align streams in
+    { #174: as LCL's TCustomSplitter -- alClient is refused (a splitter has a side), and turning
+      between a vertical and a horizontal bar keeps its thickness on the new axis. }
+    procedure SetAlign(Value: TAlign); override;
     procedure MouseEnter; override;  // re-derive the cursor when Align was set at RUNTIME (code-created)
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
@@ -321,17 +324,33 @@ end;
   clamp, one veto, one answer. False = no target, or the handler refused. }
 function TTySplitter.NegotiateSize(ADelta: Integer; out ANewSize: Integer): Boolean;
 var
-  maxSize: Integer;
+  maxSize, minPx, i: Integer;
   accept: Boolean;
+  c: TControl;
 begin
   Result := False;
   ANewSize := FStartSize;
   if FTarget = nil then Exit;
-  if Vertical then maxSize := Parent.ClientWidth - Width else maxSize := Parent.ClientHeight - Height;
+  { #174: the room is what the other bars and panes aligned on this axis leave, and the pane on
+    the far side keeps MinSize too, as VCL's TSplitter: the drag ran under them, and MinSize
+    only guarded the near side. }
+  minPx := MulDiv(FMinSize, Font.PixelsPerInch, 96);
+  if Vertical then maxSize := Parent.ClientWidth else maxSize := Parent.ClientHeight;
+  Dec(maxSize, minPx);
+  for i := 0 to Parent.ControlCount - 1 do
+  begin
+    c := Parent.Controls[i];
+    if not c.Visible then Continue;
+    if Vertical and (c.Align in [alLeft, alRight]) then Dec(maxSize, c.Width)
+    else if (not Vertical) and (c.Align in [alTop, alBottom]) then Dec(maxSize, c.Height);
+  end;
+  if (Vertical and (FTarget.Align in [alLeft, alRight]))
+     or ((not Vertical) and (FTarget.Align in [alTop, alBottom])) then
+    Inc(maxSize, AxisSize(FTarget));
+  if maxSize < 0 then maxSize := 0;
   { AutoSnap must reach the shared negotiator, or the band previews a size the release
     will not honour -- the preview and the commit have to come from one clamp. }
-  ANewSize := TySplitterNewSize(Align, FStartSize, ADelta,
-    MulDiv(FMinSize, Font.PixelsPerInch, 96), maxSize, FAutoSnap);
+  ANewSize := TySplitterNewSize(Align, FStartSize, ADelta, minPx, maxSize, FAutoSnap);
   accept := True;
   if Assigned(FOnCanResize) then FOnCanResize(Self, ANewSize, accept);
   Result := accept;
@@ -480,6 +499,34 @@ begin
     P.EndPaint;
   finally
     P.Free;
+  end;
+end;
+
+procedure TTySplitter.SetAlign(Value: TAlign);
+var
+  oldW, oldH: Integer;
+  wasSide, wasVertical: Boolean;
+begin
+  if Value = alClient then Exit;
+  if Value = Align then Exit;
+  { Only a turn from one side to another swaps the thickness -- from alNone the bounds already
+    are the bar's, as LCL keeps its resize anchor across alNone. }
+  wasSide := Align in [alLeft, alRight, alTop, alBottom];
+  wasVertical := Vertical;
+  oldW := Width;
+  oldH := Height;
+  DisableAlign;
+  try
+    inherited SetAlign(Value);
+    UpdateCursor;
+    { The .lfm holds the right size already. }
+    if not (csLoading in ComponentState) and wasSide and (wasVertical <> Vertical)
+       and (Value in [alLeft, alRight, alTop, alBottom]) then
+    begin
+      if Vertical then Width := oldH else Height := oldW;
+    end;
+  finally
+    EnableAlign;
   end;
 end;
 

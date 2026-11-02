@@ -2,7 +2,7 @@ unit tyControls.Card;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.StyleModel;
 
 const
@@ -85,6 +85,8 @@ type
     { The strips' hairline separators, for the card whose rect is AR on APainter. One
       definition for the card's own paint and for its chrome layer (ITyChromeHost). }
     procedure PaintSeparators(APainter: TTyPainter; const AR: TRect);
+    procedure CMMouseEnter(var Message: TLMessage); message CM_MOUSEENTER;
+    procedure CMMouseLeave(var Message: TLMessage); message CM_MOUSELEAVE;
   protected
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -506,6 +508,31 @@ end;
 procedure TTyCard.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+end;
+
+{ #174: the pointer on the card's content is still on the card. LCL tells a parent that its child
+  was entered or left (LParam = the child), but only a message of the control's own makes
+  MouseEnter / MouseLeave -- so the :hover lift went off the moment the pointer reached a control
+  on the card. Going from the card onto a child: the card's own leave, then the child's enter,
+  passed up here, in one go. }
+procedure TTyCard.CMMouseEnter(var Message: TLMessage);
+begin
+  inherited;
+  if (Message.LParam <> 0) and not FHover then
+  begin
+    FHover := True;
+    Invalidate;
+  end;
+end;
+
+procedure TTyCard.CMMouseLeave(var Message: TLMessage);
+begin
+  inherited;
+  if (Message.LParam <> 0) and FHover then
+  begin
+    FHover := False;
+    Invalidate;
+  end;
 end;
 
 end.

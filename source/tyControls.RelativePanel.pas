@@ -482,32 +482,53 @@ var
   items: TTyRelativeItemArray;
   positions: TTyRelativePosArray;
   cr: TRect;
-  i, n: Integer;
+  i, n, m, a: Integer;
   rec: PRelChildRec;
   ctl: TControl;
+  slot: array of Integer;    { FItems index -> items index, -1 when not laid out }
+  recOf: array of PRelChildRec;
 begin
   if FInLayout then Exit;
   if FItems = nil then Exit;
   n := FItems.Count;
   if n = 0 then Exit;
 
-  // Build the solver input from the ruled children. Each item's id = its index in FItems;
-  // the anchor id = the index of the anchor's rec (or -1 when the anchor is nil / not a
+  { #174: only the children that are ours now. A control with rules that moved to another parent
+    went on being placed by them, in the other parent; its rules stay, and apply again if it
+    comes back. A rule anchored to it has no sibling meanwhile. }
+  SetLength(slot, n);
+  m := 0;
+  for i := 0 to n - 1 do
+    if PRelChildRec(FItems[i])^.Control.Parent = Self then
+    begin
+      slot[i] := m;
+      Inc(m);
+    end
+    else
+      slot[i] := -1;
+  if m = 0 then Exit;
+
+  // Build the solver input from the ruled children. Each item's id = its index in items;
+  // the anchor id = the item of the anchor's rec (or -1 when the anchor is nil / not a
   // ruled child of ours — the solver then treats it as no sibling).
-  SetLength(items, n);
+  SetLength(items, m);
+  SetLength(recOf, m);
   for i := 0 to n - 1 do
   begin
+    if slot[i] < 0 then Continue;
     rec := PRelChildRec(FItems[i]);
     ctl := rec^.Control;
-    items[i].Id := i;
-    items[i].W := ctl.Width;
-    items[i].H := ctl.Height;
-    items[i].Rules := rec^.Rules;
+    recOf[slot[i]] := rec;
+    items[slot[i]].Id := slot[i];
+    items[slot[i]].W := ctl.Width;
+    items[slot[i]].H := ctl.Height;
+    items[slot[i]].Rules := rec^.Rules;
+    items[slot[i]].AnchorId := -1;
     if rec^.Anchor <> nil then
-      items[i].AnchorId := FItems.IndexOf(FindRec(rec^.Anchor))
-    else
-      items[i].AnchorId := -1;
-    if items[i].AnchorId < 0 then items[i].AnchorId := -1;
+    begin
+      a := FItems.IndexOf(FindRec(rec^.Anchor));
+      if a >= 0 then items[slot[i]].AnchorId := slot[a];
+    end;
   end;
 
   cr := ContentRect;
@@ -518,10 +539,9 @@ begin
 
   FInLayout := True;
   try
-    for i := 0 to n - 1 do
+    for i := 0 to m - 1 do
     begin
-      rec := PRelChildRec(FItems[i]);
-      ctl := rec^.Control;
+      ctl := recOf[i]^.Control;
       // Keep each child's own Width/Height; only place its Left/Top.
       ctl.SetBounds(positions[i].Left, positions[i].Top, ctl.Width, ctl.Height);
     end;

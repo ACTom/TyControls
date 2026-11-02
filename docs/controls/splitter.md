@@ -28,10 +28,10 @@ uses tyControls.Splitter;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `MinSize` | `Integer` | `30` | 被调整面板允许的最小轴向尺寸；`SetMinSize` 写入时将负值夹到 `0`（已定义 `default 30`，参与 DFM 差量存储）。**它是不是一道拖不过去的地板，取决于 `AutoSnap`** |
+| `MinSize` | `Integer` | `30` | 被调整面板允许的最小轴向尺寸；`SetMinSize` 写入时将负值夹到 `0`（已定义 `default 30`，参与 DFM 差量存储）。**它是不是一道拖不过去的地板，取决于 `AutoSnap`**。另一侧（通常是 `alClient` 的那块）同样保留 `MinSize`，拖动的上限还要扣掉同一轴上其余停靠的面板（与 VCL 的 `TSplitter` 相同） |
 | `AutoSnap` | `Boolean` | `True` | 拖过 `MinSize` 时把面板**收起到 0**，而不是钉在 `MinSize` 上。关掉它，面板就再没有任何手势能关闭——`MinSize` 成了一道拖不过去的地板，"把侧栏拖没"这件事做不到。LCL 也是默认开（`extctrls.pp` 的 `AutoSnap` 默认 `True`） |
 | `ResizeStyle` | `TResizeStyle` | `rsUpdate` | 拖动反馈方式，**四个取值全部生效**：`rsUpdate` = 拖动过程中实时更新目标尺寸；`rsLine` / `rsPattern` = 延迟到松开鼠标才应用一次，拖动过程中画一条实时预览带（前者实心，后者虚线）；`rsNone` = 延迟应用且不画任何预览（已定义 `default rsUpdate`） |
-| `Align` | `TAlign` | `alLeft` | 停靠方向，**决定分隔条方向与光标**（见第 5 节）；本控件把默认值重定义为 `alLeft`（已定义 `default alLeft`） |
+| `Align` | `TAlign` | `alLeft` | 停靠方向，**决定分隔条方向与光标**（见第 5 节）；本控件把默认值重定义为 `alLeft`（已定义 `default alLeft`）。与 LCL 一样不接受 `alClient`；在竖条与横条之间切换时，原来的厚度换到新的那条轴上 |
 | `Anchors` | `TAnchors` | `[akLeft, akTop]` | 随父控件调整大小时的锚点 |
 
 > 构造函数中默认设置 `Align := alLeft`、`Width := 5`、`Height := 100`，并调用 `UpdateCursor` 初始化光标。

@@ -52,7 +52,7 @@ uses tyControls.ExPanel;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Collapsed` | `Boolean` | `False` | 是否折叠。写入 `True` 时记住当前 `Height` 到 `ExpandedHeight` 并将高度收缩到标题栏高度（触发 `OnCollapse`）；写入 `False` 时恢复到 `ExpandedHeight`（触发 `OnExpand`）。值未变化时为 no-op（不触发事件）。 |
+| `Collapsed` | `Boolean` | `False` | 是否折叠。写入 `True` 时记住当前 `Height` 到 `ExpandedHeight` 并将高度收缩到标题栏高度（触发 `OnCollapse`）；写入 `False` 时恢复到 `ExpandedHeight`（触发 `OnExpand`）。值未变化时为 no-op（不触发事件）。折叠期间主体里的子控件退出 Tab 顺序；折叠时焦点若在主体里，会移到面板之后的下一个控件，免得按键落进看不见的控件。 |
 | `HeaderHeight` | `Integer` | `26` | 标题栏高度（逻辑像素，最小 1）。改变后会重新计算主体区内缩并重绘；若当前处于折叠态（且无动画进行中），控件高度同步跟随。 |
 | `AnimationDuration` | `Integer` | `160` | 折叠/展开动画时长（毫秒）。`0` = 瞬间跳变（不启动定时器）。运行时由 `TTimer` 逐帧驱动，headless 环境下始终跳变。 |
 | `OnExpand` | `TNotifyEvent` | `nil` | 从折叠切换到展开时触发。 |
@@ -64,7 +64,7 @@ uses tyControls.ExPanel;
 
 | 属性 | 类型 | 说明 |
 |------|------|------|
-| `ExpandedHeight` | `Integer` | 完整（展开）高度。折叠时它是展开将要恢复到的高度；构造时以初始 `Height` 播种，折叠瞬间以当前 `Height` 更新。可读写。 |
+| `ExpandedHeight` | `Integer` | 完整（展开）高度。折叠时它是展开将要恢复到的高度；构造时以初始 `Height` 播种，折叠瞬间以当前 `Height` 更新。可读写。与 `Height` 一样是设备像素，DPI 变化时跟着缩放。 |
 
 ### 常量
 
