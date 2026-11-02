@@ -118,6 +118,10 @@ function cases() {
       [IT(0, 0)]],
     ['pie.round', solo({ type: 'pie', radius: [40, 100], label: { show: false }, data: [1, 2, 3],
       itemStyle: B(10, { borderRadius: 12 }) }), [IT(0, 0)]],
+    ['pie.round-plain', solo({ type: 'pie', radius: [40, 100], label: { show: false }, data: [1, 2, 3],
+      itemStyle: { borderRadius: 20 } }), [IT(0, 0)]],
+    ['pie.infinite', solo({ type: 'pie', radius: [40, 100], label: { show: false }, data: [1, 2, 3],
+      itemStyle: B('Infinity') }), [PT(200, 150, 120)]],
     ['pie.clear', solo({ type: 'pie', radius: [40, 100], label: { show: false }, data: [1, 2, 3],
       itemStyle: B(2, { color: 'transparent' }) }), [IT(0, 1)]],
     ['sunburst.b10', solo({ type: 'sunburst', radius: [20, 120], label: { show: false },
@@ -138,6 +142,8 @@ function cases() {
     ['line.w1', cart({ type: 'line', symbol: 'none', data: [5, 5, 7], lineStyle: { width: 1 } }), [POLY(0)]],
     ['line.w0', cart({ type: 'line', data: [5, 5, 7], symbolSize: 16, lineStyle: { width: 0 }, itemStyle: B(12) }),
       [POLY(0), IT(0, 1)]],
+    ['line.infinite', cart({ type: 'line', symbol: 'none', data: [5, 5, 7], lineStyle: { width: 'Infinity' } }),
+      [PT(200, 150, 120)]],
     ['line.smooth', cart({ type: 'line', symbol: 'none', smooth: true, data: [2, 8, 3], lineStyle: { width: 8 } }),
       [POLY(0)]],
     ['line.area', cart({ type: 'line', symbol: 'none', data: [5, 5, 7], areaStyle: {}, lineStyle: { width: 2 } }),
@@ -170,6 +176,7 @@ function cases() {
     ['scatter.triangle', sc('triangle', 30, B(12)), [IT(0, 1)]],
     ['scatter.diamond', sc('diamond', 30, B(12)), [IT(0, 1)]],
     ['scatter.pin', sc('pin', 30, B(12)), [IT(0, 1)], 2],
+    ['scatter.pin-big', sc('pin', 90, {}), [IT(0, 1)], 2],
     ['scatter.arrow', sc('arrow', 30, B(12)), [IT(0, 1)]],
     ['scatter.empty', sc('emptyCircle', 20, {}), [IT(0, 1)]],
     ['scatter.empty-b10', sc('emptyRect', 20, B(10)), [IT(0, 1)]],
@@ -338,10 +345,10 @@ function run(id, option, aims, tol) {
 function generate() {
   const charts = cases().map(([id, o, aims, tol]) => run(id, o, aims, tol));
   const by = id => charts.find(c => c.id === id);
-  // every case hits its aim somewhere, but the silent one and the infinite pen
+  // every case hits its aim somewhere, but the silent one and the infinite pens
   charts.forEach(c => {
     const any = c.rays.some(r => r.seq.split(' ').some(p => p[0] === 's'));
-    must(any === !['bar.silent', 'scatter.infinite'].includes(c.id), c.id + ': hits ' + any);
+    must(any === !['bar.silent', 'scatter.infinite', 'pie.infinite', 'line.infinite'].includes(c.id), c.id + ': hits ' + any);
   });
   // a bar whose 1000 px border took all of its width is hit over most of the grid
   must(by('bar.b1000').rays[4].seq === 's0/1*' + by('bar.b1000').rays[4].n, 'bar.b1000: ' + by('bar.b1000').rays[4].seq);
