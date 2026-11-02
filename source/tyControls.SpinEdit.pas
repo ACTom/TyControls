@@ -748,6 +748,11 @@ begin
   V := AValue;
   if V < 0 then V := 0;
   if V > L then V := L;
+  if FAllSelected then
+  begin
+    FAllSelected := False;   // #189: placing the caret lets the selected value go, as SelStart does
+    Invalidate;
+  end;
   if FCaret = V then Exit;
   FCaret := V;
   ResetCaretBlink;
@@ -1094,11 +1099,10 @@ begin
     VK_BACK:   begin EditBackspace; Invalidate; Key := 0; end;
     VK_DELETE: begin EditDelete; Invalidate; Key := 0; end;
     { #189: moving the caret lets the selected value go; Left and Home from it go to the start,
-      Right and End to the end, as in an edit }
+      Right and End to the end -- where the caret of the selected value is -- as in an edit }
     VK_LEFT:   begin if FAllSelected then FCaret := 0 else if FCaret > 0 then Dec(FCaret);
                  FAllSelected := False; ResetCaretBlink; Invalidate; Key := 0; end;
-    VK_RIGHT:  begin if FAllSelected then FCaret := UTF8Length(FEditText)
-                 else if FCaret < UTF8Length(FEditText) then Inc(FCaret);
+    VK_RIGHT:  begin if FCaret < UTF8Length(FEditText) then Inc(FCaret);
                  FAllSelected := False; ResetCaretBlink; Invalidate; Key := 0; end;
     VK_HOME:   begin FCaret := 0; FAllSelected := False; ResetCaretBlink; Invalidate; Key := 0; end;
     VK_END:    begin FCaret := UTF8Length(FEditText); FAllSelected := False; ResetCaretBlink; Invalidate; Key := 0; end;
