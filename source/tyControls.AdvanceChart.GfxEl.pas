@@ -3280,6 +3280,16 @@ begin
           AOut.Style.StrokeColor := TyGradientSolid(AOut.Style.StrokeGradient);
           AOut.Style.StrokeWidthLogical := lw * us / ACtx.Scale;
         end;
+        { [R7-P] THE PEN UNDER THE ELEMENT'S TRANSFORM: the canvas strokes
+          in the space it maps, so an unequal scaleX / scaleY (or a skew,
+          from a group's) stretches the pen -- the transform's shape on the
+          round pen of the width above; a strokeNoScale one's is the
+          transform over its line scale [was: a round pen] }
+        if AEl.HasTransform then
+        begin
+          if TyGfxStrokeNoScale(AEl) then TyStyleNoScalePen(AOut.Style, AEl.Transform)
+          else TyStyleSetPenShape(AOut.Style, m);
+        end;
       end;
       { [R6-C] fillOpacity / strokeOpacity: the canvas' globalAlpha for the
         fill and for the pen, over the opacity (brushPath) }

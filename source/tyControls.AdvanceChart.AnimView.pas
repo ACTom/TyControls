@@ -6444,6 +6444,7 @@ procedure ViewMap(var AEl: TTyChartElement; ASX, ASY, AX, AY: Double);
 var
   fx, fy, ax0, ay0, f: Double;
   k: Integer;
+  pm, pl: TTyMat2D;
   ga, gb, gc, gd, gdet, gls, gg, gdl, gx, gy: Double;
 begin
   if (AEl.Anim.VSX = 0) or (AEl.Anim.VSY = 0) then Exit;
@@ -6497,6 +6498,25 @@ begin
   end;
   TyShapeScaleAbout(AEl.Shape, AEl.Anim.VX, AEl.Anim.VY, fx, fy);
   TyShapeMove(AEl.Shape, AX - AEl.Anim.VX, AY - AEl.Anim.VY);
+  { [R7-P] A PEN IN THE GROUP'S FRAME under a move that scales unequally:
+    its map goes through (fx, fy), its size kept apart (the width's own
+    rule below) -- a node's or an SVG shape's, strokeNoScale or not }
+  if (AEl.Style.StrokeWidthLogical > 0) and not SameBitsD(fx, fy) and (f > 0) then
+  begin
+    if AEl.Style.HasPenMap then pm := AEl.Style.PenMap
+    else
+    begin
+      pm := Default(TTyMat2D);
+      pm[0] := 1;
+      pm[3] := 1;
+    end;
+    pl := Default(TTyMat2D);
+    pl[0] := fx * pm[0] / f;
+    pl[1] := fy * pm[1] / f;
+    pl[2] := fx * pm[2] / f;
+    pl[3] := fy * pm[3] / f;
+    TyStyleSetPenMap(AEl.Style, pl);
+  end;
   { [R6-B] a map's global gradient (in the list's px: the path's own units
     through its transform at rest) carried with the group }
   if (AEl.Anim.GeoView <> 0) and (AEl.Style.FillGradient.Kind <> cgkNone)
@@ -6777,6 +6797,9 @@ begin
         if AEl.ZrHit.Active and AEl.ZrHit.StyleWidth then
           TyGraphEdgeZrHit(AEl, q1, q2, qc, cv, APercent, now_.Anim.G[7],
             now_.Anim.G[8], now_.Anim.G[9], now_.Anim.G[10]);
+        { [R7-P] the pen under this frame's view scale }
+        if AEl.Anim.InView then
+          TyStyleViewPen(AEl.Style, now_.Anim.G[7], now_.Anim.G[8]);
         if not (APercent > 0) then MakeInkless(AEl);
       end;
     carGraphEdgeFrom, carGraphEdgeTo:
@@ -6831,6 +6854,12 @@ begin
           determinant (the port's round pen) }
         if (AEl.Style.StrokeWidthLogical > 0) and ((s <> 1) or (rn <> 1)) then
           AEl.Style.PenScale := Abs(s) * Sqrt(Abs(rn));
+        { [R7-P] and its shape: this frame's turn under this frame's view
+          scale (the uniform scales come out of it) -- a view tweening
+          between equal and unequal scales too }
+        if AEl.Anim.InView and (AEl.Style.StrokeWidthLogical > 0) and not IsNan(rot) then
+          TyStyleSetPenShape(AEl.Style, TyGraphEdgeSymbolMap(rot * Pi / 180, 1,
+            now_.Anim.G[7], now_.Anim.G[8]));
         d := TyGraphEdgeDev(now_, TyPointF(x, y));
         TyShapeMove(AEl.Shape, d.X - d1.X, d.Y - d1.Y);
       end;
@@ -7064,6 +7093,22 @@ begin
           if (AEl.Anim.G[6] <> 0) and (AProxy.GetAnimProp('rotation').Kind = avkNumber) then
             TyShapeRotateAbout(AEl.Shape, AEl.Anim.G[0], AEl.Anim.G[1],
               AProxy.Num('rotation') - AEl.Anim.G[5]);
+        end;
+        { [R7-P] ITS PEN IS IN ITS FRAME (no strokeNoScale): the scale and
+          the turn it has now -- the size the root of the scale's
+          determinant, the shape the frame's over it [was: the rest's
+          pen all along, a growing glyph's as thick as the grown one's] }
+        if (AEl.Style.StrokeWidthLogical > 0) and not ((fx = 0) or (fy = 0) or IsNan(fx)
+          or IsNan(fy)) and (AEl.Anim.G[2] <> 0) and (AEl.Anim.G[3] <> 0) then
+        begin
+          if AProxy.GetAnimProp('x').Kind = avkNumber then
+            a := NumOr(AProxy, 'rotation', AEl.Anim.G[5])
+          else if (AEl.Anim.G[6] <> 0) and (AProxy.GetAnimProp('rotation').Kind = avkNumber) then
+            a := AProxy.Num('rotation')
+          else
+            a := AEl.Anim.G[5];
+          AEl.Style.PenScale := Sqrt(Abs(AEl.Anim.G[2] * fx * AEl.Anim.G[3] * fy));
+          TyStyleSetPenShape(AEl.Style, TyZrLocal(AEl.Anim.G[2] * fx, AEl.Anim.G[3] * fy, a, 0, 0));
         end;
       end;
     carPictorialClip:

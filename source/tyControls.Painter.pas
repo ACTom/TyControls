@@ -555,6 +555,15 @@ type
       AOffsetLogical: Double); overload;
     procedure SetLineCap(ACap: TTyLineCap);
     procedure SetLineJoin(AJoin: TTyLineJoin; AMiterLimit: Double = 10);
+    { [R7-P] THE PEN'S OWN LINEAR MAP, as a canvas transform puts one on a
+      stroke: every stroke that follows draws its pen as (x, y) -> (AA x +
+      AC y, AB x + AD y) times a round pen of the width it is given -- an
+      elliptical pen where the map scales unequally or skews -- its caps,
+      joins and miters made in the map's own space and a dash measured along
+      the path taken back through it (BGRA's stroke matrix, on top of the one
+      in force). Kept in the canvas state: SaveState / RestoreState scope it.
+      The fast strokes leave such a pen to the polygon fill. }
+    procedure SetPenMatrix(AA, AB, AC, AD: Double);
 
     { ---- state stack, transform, clip, per-element alpha ---- }
     { Saves transform + clip + stroke state + element alpha together. Anything
@@ -5394,7 +5403,7 @@ var
   pts, pen, dash: ArrayOfTPointF;
   sm, m, mi: TAffineMatrix;
   hasZero, on, open, flat: Boolean;
-  dir: TPointF;
+  dir, co: TPointF;
   dashes: array of ArrayOfTPointF;
 
   procedure Put(const AP: TPointF);
@@ -5562,6 +5571,13 @@ begin
     nd := 0;
     s := e + 1;
   end;
+  { [R7-P] THE PATH'S POINTS ARE THE CANVAS' OWN, its pixel offset in them
+    (BGRA adds -0.5 to every point it is handed where coordinates are not
+    pixel-centred): handed back with the transform reset, that offset is
+    taken out first, or every phased dash and the path put back sat half a
+    pixel up and to the left [was: added twice] }
+  if ACtx.pixelCenteredCoordinates then co := PointF(0, 0)
+  else co := PointF(0.5, 0.5);
   ACtx.save;
   try
     ACtx.resetTransform;
@@ -5569,8 +5585,8 @@ begin
     for i := 0 to High(dashes) do
     begin
       dash := m * dashes[i];
-      ACtx.moveTo(dash[0]);
-      for j := 1 to High(dash) do ACtx.lineTo(dash[j]);
+      ACtx.moveTo(dash[0] + co);
+      for j := 1 to High(dash) do ACtx.lineTo(dash[j] + co);
     end;
     ACtx.lineStyle(psSolid);
     if Length(dashes) > 0 then CtxStroke(ACtx);
@@ -5581,11 +5597,11 @@ begin
       if isEmptyPointF(pts[i]) then open := False
       else if not open then
       begin
-        ACtx.moveTo(pts[i]);
+        ACtx.moveTo(pts[i] + co);
         open := True;
       end
       else
-        ACtx.lineTo(pts[i]);
+        ACtx.lineTo(pts[i] + co);
   finally
     ACtx.restore;
   end;
@@ -5683,6 +5699,13 @@ begin
   else
     FBmp.Canvas2D.lineCapLCL := pecFlat;
   end;
+end;
+
+procedure TTyPainter.SetPenMatrix(AA, AB, AC, AD: Double);
+begin
+  if FBmp = nil then Exit;
+  FBmp.Canvas2D.strokeMatrix := FBmp.Canvas2D.strokeMatrix
+    * AffineMatrix(AA, AC, 0, AB, AD, 0);
 end;
 
 procedure TTyPainter.SetLineJoin(AJoin: TTyLineJoin; AMiterLimit: Double);

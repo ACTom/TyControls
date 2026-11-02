@@ -3187,15 +3187,29 @@ begin
   end;
 end;
 
+procedure RenderElementAsStyled(P: TTyPainter; const AElement: TTyChartElement;
+  APen: Boolean; const APenMap: TTyMat2D); forward;
 procedure RenderElementAsStyled(P: TTyPainter; const AElement: TTyChartElement); forward;
 
 { [R6-E] a pen in the shape's own frame (PenScale) drawn at its scale: the
   width, the lengths of its dash and its phase }
+{ [R7-P] a pen the shape's transform stretches (PenMap): the style's width,
+  dash and phase stroked through the map, PenScale folded into it
+  (TyStylePenOf) }
 procedure TyRenderElement(P: TTyPainter; const AElement: TTyChartElement);
 var
   el: TTyChartElement;
   k: Integer;
+  pm: TTyMat2D;
 begin
+  if TyStylePenOf(AElement.Style, pm) then
+  begin
+    el := AElement;
+    el.Style.PenScale := 0;
+    el.Style.HasPenMap := False;
+    RenderElementAsStyled(P, el, True, pm);
+    Exit;
+  end;
   if (AElement.Style.PenScale <= 0) or (AElement.Style.PenScale = 1)
     or IsNan(AElement.Style.PenScale) or IsInfinite(AElement.Style.PenScale) then
   begin
@@ -3216,6 +3230,12 @@ begin
 end;
 
 procedure RenderElementAsStyled(P: TTyPainter; const AElement: TTyChartElement);
+begin
+  RenderElementAsStyled(P, AElement, False, Default(TTyMat2D));
+end;
+
+procedure RenderElementAsStyled(P: TTyPainter; const AElement: TTyChartElement;
+  APen: Boolean; const APenMap: TTyMat2D);
 var
   rule: TTyFillRule;
   gx1, gy1, gx2, gy2, gr: Double;
@@ -3842,6 +3862,8 @@ begin
         P.SetLineJoin(tljMiter, mlim);
       end;
     end;
+    { [R7-P] the pen through its map (the state is restored below) }
+    if APen then P.SetPenMatrix(APenMap[0], APenMap[1], APenMap[2], APenMap[3]);
     { [R5-A] THE SHADOW, under the fill and under the pen, each its own (the canvas') --
       a large batch's too, as the one path upstream's large symbol draws: through the
       path below, not the layers or the tiles }

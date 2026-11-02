@@ -6081,6 +6081,7 @@ var
     box, r: TTyXYWH;
     k: Integer;
     sn: TTyStName;
+    mlog: TTyMat2D;
     dash: TTyOptDash;
     dashLogical: TTyDoubleArray;
     optDash: Boolean;
@@ -6254,6 +6255,21 @@ var
             el.Style.StrokeColor := WithAlpha(c.Color[stkStroke], look.StrokeOpacity);
             if look.NoScale then w := lw else w := lw * det / scale;
             el.Style.StrokeWidthLogical := w;
+            { [R7-P] the pen under the shape's global transform: its shape
+              on that round pen -- the transform over its line scale where
+              the option styles it (strokeNoScale) -- stretched where the
+              SVG or the geo's aspectScale scales unequally [was: round] }
+            if hasM then
+            begin
+              if look.NoScale then
+              begin
+                mlog := m;
+                for k := 0 to 5 do mlog[k] := m[k] / scale;
+                TyStyleNoScalePen(el.Style, mlog);
+              end
+              else
+                TyStyleSetPenShape(el.Style, m);
+            end;
             { [R6-B] a stroke in the map's own units: a tween scales it }
             el.Anim.VStroke := not look.NoScale;
             { the dash: the option's (its normal, a state's over it in list

@@ -214,6 +214,24 @@ type
       scale, where the canvas strokes a stretched pen. 0, the zero value,
       and 1 are none. }
     PenScale: Double;
+    { [R7-P] THE PEN STRETCHED WITH THE SHAPE. The canvas strokes a path in
+      the space its transform maps, so where that transform scales x and y
+      unequally (or skews) the pen is the transform's linear part times a
+      round pen -- an elliptical one -- and a dash is measured along the path
+      in that space: a symbol of symbolSize [w, h] (Symbol.ts scales its unit
+      path by half the size, strokeNoScale dividing the width by the line
+      scale), a graph under a view whose scaleY is not its scaleX, a graphic
+      element's own scaleX / scaleY, a pictorial glyph, an SVG map's shape.
+      HasPenMap with PenMap (x' = PenMap[0] x + PenMap[2] y, y' = PenMap[1] x
+      + PenMap[3] y; [4], [5] unread): the pen drawn is PenMap times a round
+      pen of the width above (times PenScale where there is one), the dash
+      and its phase lengths in the same space. Set only where the map is no
+      turn and uniform scale (TyStyleSetPenMap), which a round pen draws
+      alike -- False, the zero value, is the round pen. The hit test asks
+      the same pen (a symbol's own frame, a ZrHit's local path, or the path
+      taken back through the map). }
+    HasPenMap: Boolean;
+    PenMap: TTyMat2D;
     { [R7-F] WHAT THE HIT TEST ASKS OF THE STYLE that the paint cannot tell:
       zrender's hasFill() is `fill != null && fill !== 'none'` and its
       hasStroke() `stroke != null && stroke !== 'none' && lineWidth > 0`,
@@ -1486,6 +1504,29 @@ function TyZrHitContains(const AHit: TTyZrHit; AX, AY: Double): Boolean;
   leaves out. Moved here from the marks so a graph's and a tree's node take
   it too [they had a fixed 4 px of slop]. }
 procedure TySymbolHitSlop(var AEl: TTyChartElement);
+{ [R7-P] zrender's Path.getLineScale over a transform's linear part: the
+  square root of |det|, 1 where either diagonal entry (A0, A3) is 1 }
+function TyZrLineScaleOf(A0, A1, A2, A3: Double): Double;
+{ [R7-P] THE PEN MAP onto a style (TTyChartElementStyle.PenMap): AL the
+  linear map the canvas puts on the round pen of the style's width. Kept
+  only where AL is no turn and uniform scale (nor a mirror of one) -- a
+  round pen is the same there -- and finite; else HasPenMap goes off. }
+procedure TyStyleSetPenMap(var AStyle: TTyChartElementStyle; const AL: TTyMat2D);
+{ [R7-P] A strokeNoScale PATH under its whole transform AM (its unit or
+  own path to the canvas): the canvas' pen is AM over its line scale
+  (TyZrLineScaleOf) times a round pen of the style's lineWidth }
+procedure TyStyleNoScalePen(var AStyle: TTyChartElementStyle; const AM: TTyMat2D);
+{ [R7-P] THE SHAPE OF THE PEN AL puts on a path whose style's width (with
+  PenScale) already holds the round pen's size -- the root of |det AL|
+  times the width: AL over that root }
+procedure TyStyleSetPenShape(var AStyle: TTyChartElementStyle; const AL: TTyMat2D);
+{ [R7-P] a strokeNoScale path's pen under a graph view's scale (ASX, ASY):
+  diag(ASX, ASY) over its line scale }
+procedure TyStyleViewPen(var AStyle: TTyChartElementStyle; ASX, ASY: Double);
+{ [R7-P] THE PEN THE RENDERER DRAWS: AE the map onto a round pen of the
+  style's StrokeWidthLogical -- PenMap times PenScale (where it is one).
+  False where it is round (no map): the width times PenScale as before. }
+function TyStylePenOf(const AStyle: TTyChartElementStyle; out AE: TTyMat2D): Boolean;
 { A style with nothing switched on: no fill, no stroke, fully opaque. Callers
   turn on what they want rather than remembering to turn off what they do not. }
 function TyChartStyle: TTyChartElementStyle;
@@ -2178,6 +2219,84 @@ begin
   end;
 end;
 
+function TyZrLineScaleOf(A0, A1, A2, A3: Double): Double;
+begin
+  if (Abs(A0 - 1) > 1e-10) and (Abs(A3 - 1) > 1e-10) then
+    Result := Sqrt(Abs(A0 * A3 - A2 * A1))
+  else
+    Result := 1;
+end;
+
+procedure TyStyleSetPenMap(var AStyle: TTyChartElementStyle; const AL: TTyMat2D);
+var n: Double; k: Integer;
+begin
+  AStyle.HasPenMap := False;
+  AStyle.PenMap := Default(TTyMat2D);
+  for k := 0 to 3 do
+    if IsNan(AL[k]) or IsInfinite(AL[k]) then Exit;
+  n := Max(Max(Abs(AL[0]), Abs(AL[1])), Max(Abs(AL[2]), Abs(AL[3])));
+  if not (n > 0) then Exit;
+  { a turn and a scale, or a mirror of one: the same round pen }
+  if (Abs(AL[0] - AL[3]) <= 1e-9 * n) and (Abs(AL[1] + AL[2]) <= 1e-9 * n) then Exit;
+  if (Abs(AL[0] + AL[3]) <= 1e-9 * n) and (Abs(AL[1] - AL[2]) <= 1e-9 * n) then Exit;
+  AStyle.HasPenMap := True;
+  for k := 0 to 3 do AStyle.PenMap[k] := AL[k];
+end;
+
+procedure TyStyleNoScalePen(var AStyle: TTyChartElementStyle; const AM: TTyMat2D);
+var ls: Double; L: TTyMat2D;
+begin
+  ls := TyZrLineScaleOf(AM[0], AM[1], AM[2], AM[3]);
+  if not (ls > 1e-10) or IsNan(ls) or IsInfinite(ls) then
+  begin
+    AStyle.HasPenMap := False;
+    Exit;
+  end;
+  L := Default(TTyMat2D);
+  L[0] := AM[0] / ls;
+  L[1] := AM[1] / ls;
+  L[2] := AM[2] / ls;
+  L[3] := AM[3] / ls;
+  TyStyleSetPenMap(AStyle, L);
+end;
+
+procedure TyStyleSetPenShape(var AStyle: TTyChartElementStyle; const AL: TTyMat2D);
+var d: Double; L: TTyMat2D;
+begin
+  d := Sqrt(Abs(AL[0] * AL[3] - AL[1] * AL[2]));
+  if not (d > 0) or IsInfinite(d) then
+  begin
+    AStyle.HasPenMap := False;
+    Exit;
+  end;
+  L := Default(TTyMat2D);
+  L[0] := AL[0] / d;
+  L[1] := AL[1] / d;
+  L[2] := AL[2] / d;
+  L[3] := AL[3] / d;
+  TyStyleSetPenMap(AStyle, L);
+end;
+
+procedure TyStyleViewPen(var AStyle: TTyChartElementStyle; ASX, ASY: Double);
+var M: TTyMat2D;
+begin
+  M := Default(TTyMat2D);
+  M[0] := ASX;
+  M[3] := ASY;
+  TyStyleNoScalePen(AStyle, M);
+end;
+
+function TyStylePenOf(const AStyle: TTyChartElementStyle; out AE: TTyMat2D): Boolean;
+var ps: Double; k: Integer;
+begin
+  AE := Default(TTyMat2D);
+  Result := AStyle.HasPenMap;
+  if not Result then Exit;
+  ps := AStyle.PenScale;
+  if (ps <= 0) or IsNan(ps) or IsInfinite(ps) then ps := 1;
+  for k := 0 to 3 do AE[k] := AStyle.PenMap[k] * ps;
+end;
+
 procedure TySymbolHitSlop(var AEl: TTyChartElement);
 const
   cSymbolTargetLogical = 4;
@@ -2365,6 +2484,163 @@ begin
     Result := SymbolPathHit(AEl.Shape.HitSym, lx, ly, e, 0, AFill);
 end;
 
+{ [R7-P] a zrender path's points through the linear map AM (no move):
+  lines, quadratics and cubics exactly; a rect as its four sides; an arc
+  as cubics of at most a quarter turn on its ellipse, then mapped }
+function MapZrPath(const APath: TTyZrPath; const AM: TTyMat2D): TTyZrPath;
+var
+  i, k, n, seg: Integer;
+  v: array[0..7] of Double;
+  x, y, cx, cy, rx, ry, a0, da, psi, cp, sp, t0, t1, kk, c0, s0, c1, s1: Double;
+  p: array[0..5] of Double;
+
+  procedure Put(var AX, AY: Double);
+  var px, py: Double;
+  begin
+    px := AX;
+    py := AY;
+    AX := AM[0] * px + AM[2] * py;
+    AY := AM[1] * px + AM[3] * py;
+  end;
+
+  function Pt(ATh: Double; out AY: Double): Double;
+  var ex, ey: Double;
+  begin
+    ex := rx * Cos(ATh);
+    ey := ry * Sin(ATh);
+    Result := cx + ex * cp - ey * sp;
+    AY := cy + ex * sp + ey * cp;
+  end;
+
+begin
+  Result := nil;
+  for i := 0 to High(APath) do
+  begin
+    for k := 0 to 7 do v[k] := APath[i].V[k];
+    case APath[i].Cmd of
+      zrM:
+        begin
+          Put(v[0], v[1]);
+          TyZrMoveTo(Result, v[0], v[1]);
+        end;
+      zrL:
+        begin
+          Put(v[0], v[1]);
+          TyZrLineTo(Result, v[0], v[1]);
+        end;
+      zrQ:
+        begin
+          Put(v[0], v[1]);
+          Put(v[2], v[3]);
+          TyZrQuad(Result, v[0], v[1], v[2], v[3]);
+        end;
+      zrC:
+        begin
+          Put(v[0], v[1]);
+          Put(v[2], v[3]);
+          Put(v[4], v[5]);
+          TyZrCubic(Result, v[0], v[1], v[2], v[3], v[4], v[5]);
+        end;
+      zrR:
+        begin
+          p[0] := v[0]; p[1] := v[1];
+          p[2] := v[0] + v[2]; p[3] := v[1] + v[3];
+          x := p[0]; y := p[1]; Put(x, y); TyZrMoveTo(Result, x, y);
+          x := p[2]; y := p[1]; Put(x, y); TyZrLineTo(Result, x, y);
+          x := p[2]; y := p[3]; Put(x, y); TyZrLineTo(Result, x, y);
+          x := p[0]; y := p[3]; Put(x, y); TyZrLineTo(Result, x, y);
+          TyZrClose(Result);
+        end;
+      zrA:
+        begin
+          cx := v[0]; cy := v[1]; rx := v[2]; ry := v[3];
+          a0 := v[4]; da := v[5]; psi := v[6];
+          cp := Cos(psi);
+          sp := Sin(psi);
+          { the pen goes to the arc's start (PathProxy's arc lines to it) }
+          x := Pt(a0, y);
+          Put(x, y);
+          if Length(Result) = 0 then TyZrMoveTo(Result, x, y)
+          else TyZrLineTo(Result, x, y);
+          n := Ceil(Abs(da) / (Pi / 2) - 1e-12);
+          if n < 1 then n := 1;
+          for seg := 0 to n - 1 do
+          begin
+            t0 := a0 + da * seg / n;
+            t1 := a0 + da * (seg + 1) / n;
+            kk := 4 / 3 * Tan((t1 - t0) / 4);
+            c0 := Cos(t0); s0 := Sin(t0);
+            c1 := Cos(t1); s1 := Sin(t1);
+            { on the unit circle, then the ellipse's radii, its turn, its centre }
+            p[0] := c0 - kk * s0; p[1] := s0 + kk * c0;
+            p[2] := c1 + kk * s1; p[3] := s1 - kk * c1;
+            p[4] := c1; p[5] := s1;
+            for k := 0 to 2 do
+            begin
+              x := rx * p[2 * k];
+              y := ry * p[2 * k + 1];
+              p[2 * k] := cx + x * cp - y * sp;
+              p[2 * k + 1] := cy + x * sp + y * cp;
+              Put(p[2 * k], p[2 * k + 1]);
+            end;
+            TyZrCubic(Result, p[0], p[1], p[2], p[3], p[4], p[5]);
+          end;
+        end;
+      zrZ: TyZrClose(Result);
+    end;
+  end;
+end;
+
+{ [R7-P] THE STROKE OF A PEN STRETCHED BY ITS MAP (TTyChartElementStyle.
+  PenMap): the canvas' pen region is the map's image of a round pen's band
+  about the path the map takes back, so the path and the point go back
+  through the map's inverse and containStroke asks AWidthPx there -- within
+  its stroked rect first, as Path.contain. False where the shape has no
+  path in the device's frame (a turned or mirrored path shape: the drawn
+  outline's round pen answers, StrokedHit) -- AAsked False then. }
+function PenMapStrokeHit(const AEl: TTyChartElement; AWidthPx, AX, AY: Double;
+  out AAsked: Boolean): Boolean;
+var
+  E, inv: TTyMat2D;
+  det, lx, ly: Double;
+  path: TTyZrPath;
+  box: TTyXYWH;
+  old: TFPUExceptionMask;
+begin
+  Result := False;
+  AAsked := False;
+  { the map's shape alone: AWidthPx holds PenScale already }
+  if not AEl.Style.HasPenMap then Exit;
+  E := AEl.Style.PenMap;
+  if (AEl.Shape.Kind = cskPath) and ((AEl.Shape.RotationRad <> 0) or AEl.Shape.FlipX
+    or AEl.Shape.FlipY) then Exit;
+  if AEl.Shape.Kind in [cskSector, cskLarge] then Exit;
+  det := E[0] * E[3] - E[1] * E[2];
+  if (det = 0) or IsNan(det) or IsInfinite(det) then Exit;
+  path := TyZrShapePath(AEl.Shape);
+  if Length(path) = 0 then Exit;
+  AAsked := True;
+  if not (AWidthPx > 0) then Exit;
+  inv := Default(TTyMat2D);
+  inv[0] := E[3] / det;
+  inv[1] := -E[1] / det;
+  inv[2] := -E[2] / det;
+  inv[3] := E[0] / det;
+  path := MapZrPath(path, inv);
+  lx := inv[0] * AX + inv[2] * AY;
+  ly := inv[1] * AX + inv[3] * AY;
+  old := GetExceptionMask;
+  SetExceptionMask(old + [exInvalidOp, exZeroDivide, exOverflow, exUnderflow, exPrecision]);
+  try
+    box := TyZrBBox(path);
+    if not ((lx >= box.X - AWidthPx / 2) and (lx <= box.X - AWidthPx / 2 + (box.W + AWidthPx))
+      and (ly >= box.Y - AWidthPx / 2) and (ly <= box.Y - AWidthPx / 2 + (box.H + AWidthPx))) then Exit;
+  finally
+    TyZrRestoreFpu(old);
+  end;
+  Result := TyZrContainStroke(path, AWidthPx, lx, ly);
+end;
+
 { Path.contain of a stroked shape: the fill (grown by the pad), then the
   stroke -- an open line has no fill to ask }
 function StrokedHit(const AShape: TTyChartShape; AHasFill: Boolean;
@@ -2470,6 +2746,7 @@ function TyElementHit(const AEl: TTyChartElement; AX, AY: Double; APPI: Integer;
 var
   k: Integer;
   s, w, pad, padArea, c, sn, dx, dy, lx, ly, r: Double;
+  asked: Boolean;
 begin
   if AEl.HitNone then Exit(False);
   for k := 0 to High(AEl.ClipPaths) do
@@ -2509,6 +2786,13 @@ begin
   if pad > 0 then padArea := AEl.HitSlopLogical * s + pad;
   { [R7-F] a symbol in its own frame, upstream's own outline }
   if AEl.Shape.HitSym <> '' then Exit(SymbolHit(AEl, w, padArea, s, ElFills(AEl), AX, AY));
+  { [R7-P] a pen the map stretches: its stroke in the map's own space }
+  if (w > 0) and AEl.Style.HasPenMap and not AEl.HitUpright then
+  begin
+    if ElFills(AEl) and ShapeArea(AEl.Shape, AX, AY, padArea) then Exit(True);
+    Result := PenMapStrokeHit(AEl, w, AX, AY, asked);
+    if asked then Exit;
+  end;
   if w > 0 then
   begin
     { the slop the builder gave the element stood for the stroke and is not

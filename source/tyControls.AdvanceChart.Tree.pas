@@ -1790,6 +1790,8 @@ begin
         ASolved.Pos[row].PY + sym.OffsetY));
     if (shape.Kind = cskRect) and not TyRectFIsValid(shape.Bounds) then Continue;
     el := TyChartElement(shape);
+    { [R7-P] its pen through the unit path's transform (strokeNoScale) }
+    TyStyleNoScalePen(el.Style, TySymbolUnitFrame(sym, ASolved.Pos[row].PX, ASolved.Pos[row].PY));
     { [R2-J3] the series' colour callback under the chain's own colour }
     cbColour := AInk.NodeColour;
     if (AInk.ItemCb <> nil) and not AInk.ItemCb.ColOf(row, cbColour) then

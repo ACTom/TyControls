@@ -166,6 +166,11 @@ function TyBuildSymbolInRealBox(const ASpec: TTySymbolSpec;
   HitM, the rest (a line, a path, a picture) keep the drawn geometry }
 procedure TySymbolHitFrame(var AShape: TTyChartShape; const ASpec: TTySymbolSpec;
   ACX, ACY: Double);
+{ [R7-P] THE TRANSFORM Symbol.ts PUTS ON THE UNIT PATH: half the size on
+  each axis, symbolRotate (zrender's sense), the point and the offset --
+  every kind's (the HitM TySymbolHitFrame gives a built-in one). Its
+  strokeNoScale pen is this over its line scale (TyStyleNoScalePen). }
+function TySymbolUnitFrame(const ASpec: TTySymbolSpec; ACX, ACY: Double): TTyMat2D;
 
 { [R7-O] A SYMBOL UNDER A WHOLE LINEAR MAP: what a symbol draws when the
   groups above it scale unequally -- a graph's edge symbol (Line.ts scales
@@ -901,6 +906,12 @@ begin
     Result := TyShapePolyline(L.Pts)
   else
     Result := TyShapePolygon(L.Pts);
+end;
+
+function TySymbolUnitFrame(const ASpec: TTySymbolSpec; ACX, ACY: Double): TTyMat2D;
+begin
+  Result := TyZrLocal(ASpec.WidthPx / 2, ASpec.HeightPx / 2,
+    DegToRad(ASpec.RotateDeg), ACX + ASpec.OffsetX, ACY + ASpec.OffsetY);
 end;
 
 procedure TySymbolHitFrame(var AShape: TTyChartShape; const ASpec: TTySymbolSpec;

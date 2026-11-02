@@ -97,6 +97,14 @@ A sample's rec, by probe:
          'g<s>/nsym<i>' the node's path: {m, type, rect, label: {x, y,
          align, vAlign} (the text's transform, the alignment it is drawn
          with) or null}.
+  ppen   [R7-P] per pictorial bar series s and data index i, each glyph k
+         of its bundle: 'pp<s>:<i>/<k>' {m, lw, stroked, sns, ls}.
+  gpen   [R7-P] per graph series s, the pens of its paths as the canvas
+         draws them: 'g<s>/edge<i>/pen' the line, '/fpen', '/tpen' its end
+         symbols, 'g<s>/npen<i>' the node's path -- each {m (the whole
+         global transform), lw (lineWidth, 1 where none), stroked
+         (hasStroke), sns (strokeNoScale), ls (getLineScale)}: the pen is
+         m's linear part times a round pen of lw (over ls where sns).
 
 Guards (any failure: nothing is written, exit 1): named discriminating facts
 and the whole fixture generated twice, byte-identical.
@@ -460,6 +468,39 @@ const PROBES = {
       });
     });
   },
+  // [R7-P] the pens of a graph's paths as the canvas draws them: each one's
+  // whole global transform, its lineWidth, strokeNoScale and line scale --
+  // the canvas' pen is m's linear part times a round pen of lineWidth (over
+  // the line scale where strokeNoScale)
+  gpen(chart, rec) {
+    chart.getModel().eachSeries(sm => {
+      if (sm.subType !== 'graph') return;
+      const key = 'g' + sm.seriesIndex;
+      const penOf = el => {
+        const m = el.transform || [1, 0, 0, 1, el.x, el.y];
+        return { m: arr(m), lw: hx(el.style.lineWidth == null ? 1 : el.style.lineWidth), stroked: !!el.hasStroke(),
+          sns: !!el.style.strokeNoScale, ls: hx(el.getLineScale()) };
+      };
+      const edata = sm.getEdgeData();
+      edata.each(i => {
+        const g = edata.getItemGraphicEl(i);
+        if (!g) return;
+        const line = g.childOfName('line');
+        if (line && !line.ignore && !line.invisible) rec[key + '/edge' + i + '/pen'] = penOf(line);
+        for (const nm of ['fromSymbol', 'toSymbol']) {
+          const sym = g.childOfName(nm);
+          if (!sym || sym.ignore || sym.invisible) continue;
+          rec[key + '/edge' + i + '/' + (nm === 'fromSymbol' ? 'fpen' : 'tpen')] = penOf(sym);
+        }
+      });
+      const data = sm.getData();
+      data.each(i => {
+        const el = data.getItemGraphicEl(i);
+        if (!el) return;
+        rec[key + '/npen' + i] = penOf(el.childAt(0));
+      });
+    });
+  },
   tree(chart, rec) {
     chart.getModel().eachSeries(sm => {
       if (sm.subType !== 'tree') return;
@@ -527,6 +568,25 @@ const PROBES = {
           k++;
         });
         rec[key + '/count'] = k;
+      });
+    });
+  },
+  // [R7-P] a pictorial glyph's pen as the canvas draws it (the glyph's own
+  // frame, no strokeNoScale): its whole global transform and lineWidth
+  ppen(chart, rec) {
+    chart.getModel().eachSeries(sm => {
+      if (sm.subType !== 'pictorialBar') return;
+      const data = sm.getData();
+      data.each(i => {
+        const bar = data.getItemGraphicEl(i);
+        if (!bar || !bar.__pictorialBundle) return;
+        let k = 0;
+        bar.__pictorialBundle.eachChild(p => {
+          const m = p.transform || [1, 0, 0, 1, p.x, p.y];
+          rec['pp' + sm.seriesIndex + ':' + i + '/' + k] = { m: arr(m), lw: hx(p.style.lineWidth == null ? 1 : p.style.lineWidth),
+            stroked: !!p.hasStroke(), sns: !!p.style.strokeNoScale, ls: hx(p.getLineScale()) };
+          k++;
+        });
       });
     });
   },
@@ -642,6 +702,26 @@ add('graphSquash', 'graph-squash-tween', "[R7-O] scaleX 4, scaleY 2; a merge nar
   ['graph', 'gsym'],
   [{ t: T1 - 1, do: 'sample' },
     { t: T1, do: 'merge', option: { series: [{ data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 50 }, { name: 'c', x: 100, y: 0 }] }] } },
+    ...after([0, 1, 100, 500, 999, 1000, 1001], T1)]);
+
+// [R7-P] the pens under a view whose scaleY is not its scaleX, in motion
+const PEN_NODES = [{ name: 'a', x: 0, y: 0, symbol: 'rect', symbolSize: [10, 16], symbolRotate: 30 },
+  { name: 'b', x: 100, y: 100, symbolSize: 12 }, { name: 'c', x: 100, y: 0, symbol: 'emptyCircle', symbolSize: [14, 8] }];
+const PEN_GRAPH = more => Object.assign({ type: 'graph', layout: 'none', left: 0, top: 0, width: 400, height: 200,
+  edgeSymbol: ['emptyCircle', 'arrow'], edgeSymbolSize: [8, 14], itemStyle: { borderColor: '#333', borderWidth: 2 },
+  lineStyle: { width: 2, type: 'dashed', opacity: 1 }, data: PEN_NODES,
+  links: [{ source: 'a', target: 'c' }, { source: 'a', target: 'b', lineStyle: { curveness: 0.3 } }, { source: 'c', target: 'b' }] }, LIN, more || {});
+add('graphPen', 'graph-pen-tween', "[R7-P] scaleX 4, scaleY 2; a merge narrows the extent's height (b to y 50), so the main group's scaleY tweens to 4 (1000 ms linear): the edges' pen (strokeNoScale under the group), the nodes' (an oblong, a turned oblong) and the end symbols' (their own frame) in every frame",
+  { animation: true, series: [PEN_GRAPH()] },
+  ['gpen'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [PEN_NODES[0], Object.assign({}, PEN_NODES[1], { y: 50 }), PEN_NODES[2]] }] } },
+    ...after([0, 1, 100, 500, 999, 1000, 1001], T1)]);
+add('graphPen', 'graph-pen-move', "[R7-P] scaleX 4, scaleY 2; a merge moves a node (c to 60, 40; 1000 ms linear): the edges turn, their end symbols' pens with them; the extent is kept (a and b stay its corners)",
+  { animation: true, series: [PEN_GRAPH()] },
+  ['gpen'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [PEN_NODES[0], PEN_NODES[1], Object.assign({}, PEN_NODES[2], { x: 60, y: 40 })] }] } },
     ...after([0, 1, 100, 500, 999, 1000, 1001], T1)]);
 
 add('graph', 'graph-move', "layout none: a merge moves two nodes and adds one with an edge; the kept nodes slide (no row), the kept edges' shapes tween at their rows, the new node pops in, the new edge draws out; curved edges (curveness 0.3) with a from-arrow and labels (insideEndTop: beforeUpdate turns them with the tangent); 300 ms cubicInOut, the default update timing",
@@ -805,6 +885,25 @@ add('radial', 'radial-delay', "a radial tree entering with animationDelay (idx) 
     animationDuration: 1000, animationEasing: 'linear', animationDelay: { $fn: 'idx*30' } }] },
   ['tree'],
   [...[0, 1, 16, 100, 200, 250, 500, 999, 1000, 1300].map(t => ({ t, do: 'sample' }))]);
+
+// [R7-P] a pictorial glyph's pen in motion: oblong glyphs popping in (scaled
+// from nothing, a repeated one turned from 0) and a merge that changes the
+// glyph's size unequally
+add('pictorialPen', 'pict-pen-enter', "[R7-P] oblong glyphs entering (1000 ms linear): repeated rects [30, 12] turned 30 degrees (each turns from 0 as it grows), a single triangle [20, 40] on a negative value (mirrored), both with a border -- the pen grows and turns with the glyph",
+  { animation: true, animationDuration: 1000, animationEasing: 'linear',
+    xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: { type: 'value', min: -10, max: 10 },
+    series: [{ type: 'pictorialBar', data: [
+      { value: 6, symbol: 'rect', symbolSize: [30, 12], symbolRepeat: true, symbolRotate: 30, itemStyle: { borderColor: '#000', borderWidth: 40 } },
+      { value: -5, symbol: 'triangle', symbolSize: [20, 40], itemStyle: { borderColor: '#000', borderWidth: 60 } }] }] },
+  ['ppen'],
+  [...[0, 1, 100, 500, 999, 1000, 1001].map(t => ({ t, do: 'sample' }))]);
+add('pictorialPen', 'pict-pen-update', "[R7-P] a merge reshapes a single glyph (symbolSize [40, 10] to [10, 40], 1000 ms linear): its scale tweens unequally, its pen with it",
+  { animation: true, xAxis: { type: 'category', data: ['a'] }, yAxis: { type: 'value', min: 0, max: 10 },
+    series: [Object.assign({ type: 'pictorialBar', symbol: 'rect', symbolSize: [40, 10], symbolPosition: 'center',
+      itemStyle: { borderColor: '#000', borderWidth: 60 }, data: [6] }, LIN)] },
+  ['ppen'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ symbolSize: [10, 40] }] } }, ...after([0, 1, 100, 500, 999, 1000, 1001], T1)]);
 
 // ---- a data item's array symbolSize ----
 add('pictorial', 'pict-item-size', "a data item's array symbolSize -- [20, '100%'] (the percent of the bar's length, symbolRepeat off), ['50%', 12] repeated (the percent of the category's width), [16] (one number, the second NaN), and a row's array symbolOffset [5, '-50%'] -- read from the item's own visual (visual/symbol.ts getShallow), not the series'",
