@@ -677,6 +677,8 @@ type
   published
     procedure TestOpeningASubmenuClicksItsItem;
     procedure TestTheBarFollowsItsMenu;
+    procedure TestTheBarFollowsItsMenuWhenIdle;
+    procedure TestABarDropDownClicksItsItem;
     procedure TestATallMenuFitsTheScreenAndScrolls;
     procedure TestAutoLineReductionDropsSpareLines;
     procedure TestTheDropDownButtonOpensFromTheKeyboard;
@@ -764,6 +766,48 @@ begin
     bar.CheckMenuChanged;
     AssertTrue(Format('a top item hidden at run time leaves the bar (%d < %d)', [bar.Width, w0]),
       bar.Width < w0);
+  finally
+    bar.Free;
+    mm.Free;
+  end;
+end;
+
+procedure TMenu175Test.TestTheBarFollowsItsMenuWhenIdle;
+var bar: TMenuBar175; mm: TMainMenu; w0: Integer;
+begin
+  mm := TMainMenu.Create(nil);
+  bar := TMenuBar175.Create(nil);
+  try
+    mm.Items.Add(NewItem('&File', 0, False, True, nil, 0, ''));
+    mm.Items.Add(NewItem('&Edit', 0, False, True, nil, 0, ''));
+    bar.Align := alNone;
+    bar.Menu := mm;
+    bar.AutoSizeWidth := True;
+    w0 := bar.Width;
+    mm.Items[1].Visible := False;
+    Forms.Application.Idle(False);
+    AssertTrue('the application going idle is when the bar catches up', bar.Width < w0);
+  finally
+    bar.Free;
+    mm.Free;
+  end;
+end;
+
+procedure TMenu175Test.TestABarDropDownClicksItsItem;
+var bar: TMenuBar175; mm: TMainMenu; top: TMenuItem;
+begin
+  FClicks := 0;
+  mm := TMainMenu.Create(nil);
+  bar := TMenuBar175.Create(nil);
+  try
+    top := NewItem('&Recent', 0, False, True, nil, 0, '');
+    top.Add(NewItem('(empty)', 0, False, True, nil, 0, ''));
+    top.OnClick := @FillOnClick;
+    mm.Items.Add(top);
+    bar.Menu := mm;
+    bar.OpenTopForTest(0);
+    AssertEquals('a drop-down opening clicks its top item', 1, FClicks);
+    AssertEquals('which filled it', 3, top.Count);
   finally
     bar.Free;
     mm.Free;
