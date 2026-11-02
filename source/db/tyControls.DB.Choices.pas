@@ -527,6 +527,9 @@ type
     procedure SetDataField(const AValue: string);
     procedure SetDataSource(AValue: TDataSource);
     procedure SetReadOnly(AValue: Boolean);
+    function GetAllowHalf: Boolean;
+    { The base control's, then the field shown again at the new precision. }
+    procedure SetAllowHalf(AValue: Boolean);
     { The base control's ReadOnly := ours, or the field cannot be changed (LCL's
       TDBDateTimePicker.CheckField does the same with CanModify), or no edit could begin --
       AutoEdit off and the record not being edited (TyDBEditCanBegin). }
@@ -550,6 +553,7 @@ type
     property DataField: string read GetDataField write SetDataField;
     property DataSource: TDataSource read GetDataSource write SetDataSource;
     property ReadOnly: Boolean read GetReadOnly write SetReadOnly default False;
+    property AllowHalf: Boolean read GetAllowHalf write SetAllowHalf default False;
     property Value stored False;
   end;
 
@@ -1367,6 +1371,18 @@ procedure TTyCustomDBRating.SetReadOnly(AValue: Boolean);
 begin
   FDataLink.ReadOnly := AValue;
   SyncReadOnly;
+end;
+
+function TTyCustomDBRating.GetAllowHalf: Boolean;
+begin
+  Result := TTyCustomRating(Self).AllowHalf;
+end;
+
+procedure TTyCustomDBRating.SetAllowHalf(AValue: Boolean);
+begin
+  if AValue = AllowHalf then Exit;
+  TTyCustomRating(Self).AllowHalf := AValue;
+  if FDataLink.Field <> nil then DataChange(Self);
 end;
 
 procedure TTyCustomDBRating.SyncReadOnly;

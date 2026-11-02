@@ -98,7 +98,7 @@ TranslateUnitResourceStringsEx('', LangDir, 'tycontrols_db', 'tyControls.DB.StrC
 - **`TTyDBCheckBox`**：布尔字段走 `AsBoolean`。其他字段按 `ValueChecked` / `ValueUnchecked` 匹配字段文本：可以用 `;` 分隔多个词（如 `'Y;Yes'`），比较不分大小写，写回时用第一个词。默认值和 LCL 一样是 `BoolToStr(True)` / `BoolToStr(False)`，即 `'-1'` / `'0'`。
 - **`TTyDBToggleSwitch`**：值的对应规则同复选框，没有灰态。
 - **`TTyDBRadioGroup`、`TTyDBSegmented`**：第 i 项对应 `Values[i]`，`Values` 这一行为空时用 `Items[i]` 本身（照 LCL）。按 `Field.Text` 找到对应项选中，写回 `Field.Text`。字段值不在列表里就什么都不选（`ItemIndex = -1`）。程序改了 `Items`（比如打开数据集之后才填），会按字段的值重新选中。public 的 `Value` 可以直接读写当前值。单选组只能从子按钮的选择变化知道用户点了什么，所以程序设 `ItemIndex` / `Value` 也会改字段，这一点和 LCL 的 `TDBRadioGroup` 相同。
-- **`TTyDBRating`**：数值字段，`AsFloat`。`AllowHalf` 关着时只显示、只写整星：字段里的 3.5 显示成 4，用户改了才写回。
+- **`TTyDBRating`**：数值字段，`AsFloat`。`AllowHalf` 关着时只显示、只写整星：字段里的 3.5 显示成 4，用户改了才写回。绑定之后改 `AllowHalf`，按新的精度重新显示字段的值。
 
 ### 列表
 

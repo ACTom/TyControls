@@ -146,6 +146,7 @@ type
     procedure TestReadOnlyFollowsTheControlAndTheField;
     procedure TestStarsResolveLikeTheBaseControls;
     procedure TestWithoutAutoEditTheStarsDoNotMove;
+    procedure TestAllowHalfChangedShowsTheFieldAgain;
   end;
 
 implementation
@@ -891,6 +892,24 @@ begin
   AssertEquals('written', 5, BoundField.AsFloat, 0);
   FFix.DS.Post;
   AssertTrue('posted: read-only again', TTyCustomRating(FCtl).ReadOnly);
+end;
+
+{ #184: AllowHalf changed on a bound rating shows the field again at the new precision, half
+  up as a load rounds -- not the base control's rounding of what it showed before. }
+procedure TDBRatingTest.TestAllowHalfChangedShowsTheFieldAgain;
+begin
+  Stars.AllowHalf := False;
+  Bind('Stars');
+  AssertEquals('3.5 in whole stars', '4.0', Shown);
+  Stars.AllowHalf := True;
+  AssertEquals('the field''s half star', '3.5', Shown);
+  FFix.DS.Edit;
+  BoundField.AsFloat := 2.5;
+  FFix.DS.Post;
+  AssertEquals('2.5 with halves', '2.5', Shown);
+  Stars.AllowHalf := False;
+  AssertEquals('2.5 in whole stars: half up, as a load', '3.0', Shown);
+  AssertBrowsing('changing AllowHalf');
 end;
 
 initialization
