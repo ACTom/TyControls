@@ -165,7 +165,7 @@ function TyCheckGroupCellRect(const AClientRect: TRect;
 implementation
 
 uses
-  Forms;
+  Forms, tyControls.Types;
 
 function TyCheckGroupCellRect(const AClientRect: TRect;
   ACount, AColumns, AIndex, ARowH: Integer;
@@ -311,30 +311,36 @@ end;
 
 procedure TTyCheckGroup.RebuildCheckBoxes;
 var
-  i, n, idx, oldCount: Integer;
-  oldChecked, oldDisabled: TStringList;
+  i, n, oldCount: Integer;
+  oldCaps: array of string;
+  wasChecked, wasDisabled: array of Boolean;
+  carry: TTyItemCarry;
   cb: TTyCheckBox;
 begin
   if FRebuilding then Exit;   // guard against re-entrancy (child churn shouldn't recurse)
   FRebuilding := True;
-  oldChecked := TStringList.Create;
-  oldDisabled := TStringList.Create;
   try
-    // Snapshot the CHECKED items BY IDENTITY (caption), not by raw slot index — so a mid-list
-    // edit (delete/insert), not just an append, preserves each user check on its OWN item
-    // instead of migrating it onto whatever slides into that index. Duplicate captions are
-    // consumed one-for-one (Delete below) so N checked "A"s restore onto the first N "A"s.
-    oldChecked.CaseSensitive := True;
-    // CheckEnabled rides along on the same identity rule: a per-item greying that survived
-    // only until the next Items edit would be a knob that works in the demo and not in the
-    // app. The DISABLED ones are what is recorded, because enabled is the resting state.
-    oldDisabled.CaseSensitive := True;
+    { Each item keeps its check across an Items edit, and CheckEnabled with it -- a per-item
+      greying that survived only until the next edit would be a knob that works in the demo and
+      not in the app. #171: an item is found by its caption, so a mid-list insert or delete does
+      not move a check onto another item, and a renamed one by its place; by caption alone a
+      rename unchecked it. Duplicate captions pair off in order. See TyCarryItems. }
+    SetLength(oldCaps, Length(FCheckBoxes));
+    SetLength(wasChecked, Length(FCheckBoxes));
+    SetLength(wasDisabled, Length(FCheckBoxes));
     for i := 0 to High(FCheckBoxes) do
+    begin
+      oldCaps[i] := '';
+      wasChecked[i] := False;
+      wasDisabled[i] := False;
       if FCheckBoxes[i] <> nil then
       begin
-        if FCheckBoxes[i].Checked then oldChecked.Add(FCheckBoxes[i].Caption);
-        if not FCheckBoxes[i].Enabled then oldDisabled.Add(FCheckBoxes[i].Caption);
+        oldCaps[i] := FCheckBoxes[i].Caption;
+        wasChecked[i] := FCheckBoxes[i].Checked;
+        wasDisabled[i] := not FCheckBoxes[i].Enabled;
       end;
+    end;
+    carry := TyCarryItems(oldCaps, FItems);
 
     { The boxes are reused, as LCL's are; see RetireCheckBox for the ones left over. }
     n := FItems.Count;
@@ -359,18 +365,8 @@ begin
         cb.Controller := Controller;       // follow the group's controller (nil-safe)
       end;
       cb.Caption := FItems[i];
-      idx := oldChecked.IndexOf(FItems[i]);
-      if idx >= 0 then
-      begin
-        cb.Checked := True;
-        oldChecked.Delete(idx);            // consume so duplicate captions match one-for-one
-      end;
-      idx := oldDisabled.IndexOf(FItems[i]);
-      if idx >= 0 then
-      begin
-        cb.Enabled := False;
-        oldDisabled.Delete(idx);
-      end;
+      if (carry[i] >= 0) and wasChecked[carry[i]] then cb.Checked := True;
+      if (carry[i] >= 0) and wasDisabled[carry[i]] then cb.Enabled := False;
       cb.OnChange := @ChildChanged;        // wired AFTER the initial Checked set above,
                                            // so restoring state does not fire OnItemChange
       { Focus lives on the child, never on the group, so the group's own key events can
@@ -384,8 +380,6 @@ begin
 
     LayoutCheckBoxes;
   finally
-    oldDisabled.Free;
-    oldChecked.Free;
     FRebuilding := False;
   end;
   Invalidate;

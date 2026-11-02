@@ -206,7 +206,7 @@ function TyRadioGroupCellRect(const AClient: TRect; ACount, AColumns, AIndex: In
 implementation
 
 uses
-  Forms;
+  Forms, tyControls.Types;
 
 const
   TyRadioRowH = 22;   // logical row height per radio child (matches the radio default)
@@ -442,18 +442,24 @@ end;
 procedure TTyRadioGroup.RebuildButtons;
 var
   prevIndex, newIndex, i, oldCount: Integer;
-  prevCaption: string;
-  hadSel: Boolean;
+  oldCaps: array of string;
+  carry: TTyItemCarry;
+  hadSel, lost: Boolean;
   rb: TTyRadioButton;
 begin
   if FRebuilding then Exit;
+  lost := False;
   FRebuilding := True;
   try
-    // Remember the selection by IDENTITY (caption), not raw index — so a mid-list Items edit
-    // (delete/insert) doesn't migrate the selection onto a different item.
+    { #171: the selection stays on its item -- found by its caption, so a mid-list insert or
+      delete does not move it onto another item, and a renamed one by its place, which was lost
+      when the selection was kept by caption alone. See TyCarryItems. }
     prevIndex := GetItemIndex;
     hadSel := (prevIndex >= 0) and (prevIndex <= High(FButtons)) and (FButtons[prevIndex] <> nil);
-    if hadSel then prevCaption := FButtons[prevIndex].Caption else prevCaption := '';
+    SetLength(oldCaps, Length(FButtons));
+    for i := 0 to High(FButtons) do
+      if FButtons[i] <> nil then oldCaps[i] := FButtons[i].Caption else oldCaps[i] := '';
+    carry := TyCarryItems(oldCaps, FItems);
     { The buttons are reused, as LCL's are; see RetireButton for the ones left over. }
     oldCount := Length(FButtons);
     for i := FItems.Count to oldCount - 1 do
@@ -497,7 +503,10 @@ begin
     // Re-apply the previous selection to the SAME item if it survived the edit.
     if hadSel then
     begin
-      newIndex := FItems.IndexOf(prevCaption);
+      newIndex := -1;
+      for i := 0 to High(carry) do
+        if carry[i] = prevIndex then newIndex := i;
+      lost := newIndex < 0;
       if (newIndex >= 0) and (newIndex < Length(FButtons)) then
       begin
         FUpdatingIndex := True;   // silent: a rebuild is not a user selection change
@@ -515,6 +524,9 @@ begin
     group goes back to N tab stops the moment Items changes. }
   UpdateTabStops;
   Invalidate;
+  { #171: restoring the selection is not a choice, but the selected item gone is a change of
+    ItemIndex, and it is told -- it went to -1 with no event. }
+  if lost and not (csLoading in ComponentState) then NotifySelection;
 end;
 
 procedure TTyRadioGroup.LayoutButtons;

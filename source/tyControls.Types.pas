@@ -279,6 +279,18 @@ var
   finished layout, so they cannot disagree. An empty rect is returned as it is. }
 function TyMirrorRectX(const AR: TRect; AWidth: Integer): TRect;
 
+type
+  TTyItemCarry = array of Integer;
+
+{ #171: which of the items before an Items edit each item after it is -- Result[new] = old, or
+  -1 for one that is new. An item is first known by its caption (the first unused one the same,
+  so duplicates pair off in order): an insert or a delete leaves every other item what it was.
+  An item whose caption matches none is a renamed one when the old item at its place matched
+  none either, and is taken for it. The radio, check and button groups carry their selection
+  across an edit with this: by caption alone a rename lost it, by index alone an insert moved
+  it onto the next item. }
+function TyCarryItems(const AOld: array of string; ANew: TStrings): TTyItemCarry;
+
 implementation
 
 function TyMirrorRectX(const AR: TRect; AWidth: Integer): TRect;
@@ -439,6 +451,34 @@ begin
   except
     on Exception do Result := FloatToStr(AValue);
   end;
+end;
+
+
+function TyCarryItems(const AOld: array of string; ANew: TStrings): TTyItemCarry;
+var
+  used: array of Boolean;
+  i, j: Integer;
+begin
+  SetLength(Result, ANew.Count);
+  SetLength(used, Length(AOld));
+  for j := 0 to High(used) do used[j] := False;
+  for i := 0 to ANew.Count - 1 do
+  begin
+    Result[i] := -1;
+    for j := 0 to High(AOld) do
+      if not used[j] and (AOld[j] = ANew[i]) then
+      begin
+        Result[i] := j;
+        used[j] := True;
+        Break;
+      end;
+  end;
+  for i := 0 to ANew.Count - 1 do
+    if (Result[i] < 0) and (i <= High(AOld)) and not used[i] then
+    begin
+      Result[i] := i;
+      used[i] := True;
+    end;
 end;
 
 end.

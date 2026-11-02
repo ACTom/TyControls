@@ -6,7 +6,7 @@
 
 与单选组（RadioGroup）不同，组内的复选框是**互相独立**的——没有互斥关系，可任意组合勾选。典型用途：多选偏好设置（如“通知方式：邮件 / 短信 / 推送”）、功能开关面板、标签过滤器等。
 
-自动生成的复选框是**内部辅助控件**：它们由本控件拥有（owned）、带 `csNoDesignVisible` 标志，因此**不会泄漏到 IDE 设计器**中作为可选中的独立子控件。`Items` 变化时整组子控件重建，并**按索引保留原有的勾选状态**（仍在范围内的项保持原状态，新增项默认未勾选）。
+自动生成的复选框是**内部辅助控件**：它们由本控件拥有（owned）、带 `csNoDesignVisible` 标志，因此**不会泄漏到 IDE 设计器**中作为可选中的独立子控件。`Items` 变化时整组子控件重建，每一项的勾选状态留在**原来那一项**上（新增项默认未勾选），规则见下文《注意事项》第 2 条。
 
 ---
 
@@ -46,7 +46,7 @@ uses tyControls.CheckGroup;
 |------|------|------|
 | `Checked[AIndex]` | `property Checked[AIndex: Integer]: Boolean`（**索引属性，可读写**） | 读/写第 `AIndex` 个复选框的勾选状态。**越界读写一律抛 `EListError`**，消息形如 `TTyCheckGroup Index 7 out of bounds 0 .. 2`（类名 + 越界下标 + 最大合法下标，与 LCL 同形）。编程写入**不**触发 `OnItemChange`（该事件只报告用户操作）。 |
 | `Buttons[AIndex]` | `property Buttons[AIndex: Integer]: TTyCheckBox`（**索引属性，只读**） | 交出第 `AIndex` 个**托管复选框本身**，用来触及本控件没有再暴露的逐项属性——单项的 `Hint`、`PopupMenu`、`Font`、`Enabled`，或额外挂一个事件。越界抛 `EListError`，与 `Checked[]` 同形。对应 LCL `TCustomCheckGroup.Buttons[]`（`extctrls.pp:901`，public；`include/customcheckgroup.inc:321-326` 同样越界抛异常）。**分组仍然拥有子控件的生命周期与布局**：不要通过这个句柄给它换父容器或释放它。 |
-| `CheckEnabled[AIndex]` | `property CheckEnabled[AIndex: Integer]: Boolean`（**索引属性，可读写**） | 单独禁用/启用某一项，其余保持可用——就是"这个选项你当前的版本没有"那种置灰。越界读写都抛 `EListError`。对应 LCL（`extctrls.pp:904`、`include/customcheckgroup.inc:288-301`）。**能扛过 `Items` 编辑**：重建时按**标题**（而不是槽位下标）恢复，和 `Checked[]` 用的是同一条身份规则——否则这就是个"demo 里能用、app 里活不过下一次列表改动"的旋钮。 |
+| `CheckEnabled[AIndex]` | `property CheckEnabled[AIndex: Integer]: Boolean`（**索引属性，可读写**） | 单独禁用/启用某一项，其余保持可用——就是"这个选项你当前的版本没有"那种置灰。越界读写都抛 `EListError`。对应 LCL（`extctrls.pp:904`、`include/customcheckgroup.inc:288-301`）。**能扛过 `Items` 编辑**：和 `Checked[]` 同一条规则跟着原来那一项走（插入、删除、改名都不丢）——否则这就是个"demo 里能用、app 里活不过下一次列表改动"的旋钮。 |
 | `Count` | `function Count: Integer` | 子复选框数量（`= Items.Count`）。 |
 | `CheckedCount` | `function CheckedCount: Integer` | 当前处于勾选状态的项数。 |
 
@@ -94,7 +94,7 @@ uses tyControls.CheckGroup;
 ### 子控件生命周期
 
 - 每个子复选框由本控件 `Create(Self)` 拥有，标记 `csNoDesignVisible`（IDE 设计器中不可见、不可选中）。
-- `Items` 变化时：先快照当前勾选状态 → `FreeAndNil` 释放旧子控件 → 按新 `Items` 创建新子控件 → 按索引恢复勾选状态 → 重新布局。整个过程有**重入守卫**（`FRebuilding`），子控件状态变动不会递归重建。
+- `Items` 变化时：先快照当前勾选状态 → `FreeAndNil` 释放旧子控件 → 按新 `Items` 创建新子控件 → 按原来那一项恢复勾选与 `CheckEnabled` → 重新布局。整个过程有**重入守卫**（`FRebuilding`），子控件状态变动不会递归重建。
 - 本控件销毁时，子控件随 owner 一并释放（析构中先清空内部数组，避免悬垂引用）。
 
 ---
@@ -168,11 +168,11 @@ Feats.Items.CommaText := '自动保存,拼写检查,深色模式,行号,自动�
 ## 8. 注意事项
 
 1. **子复选框独立无互斥：** 与单选组不同，勾选一项不会取消其它项——各项完全独立。若需要互斥，请改用单选组（RadioGroup）。
-2. **`Items` 变化会重建整组子控件：** 增删改任一项都会释放并重建全部子复选框；勾选状态**按索引**保留（仍在范围内的项保持原状态，新增项默认未勾选，被删项状态丢弃）。若需精确的“按内容”迁移，请在赋值前后自行记录/恢复。
+2. **`Items` 变化会重建整组子控件：** 增删改任一项都会释放并重建全部子复选框；勾选状态留在**原来那一项**上：先按**标题**认项（插入、删除一项，其余各项还是原来那一项），标题对不上的新项若所在位置上的旧项也已不在新列表里，就当作那一项改了名，接过它的状态；重复标题按先后一一配对。新增项默认未勾选，被删项的状态丢弃。
 3. **子控件不进设计器：** 内部复选框带 `csNoDesignVisible`，不会作为可选中的子控件出现在 IDE 设计器里。请通过 `Items` 编辑标题，通过 `Checked[]` 读写状态；要触及单项的其它属性（`Hint` / `PopupMenu` / `Enabled` / `Font`），用 `Buttons[i]`。
 4. **网格填充顺序改了（3.0 起的破坏性变更）：** 本控件原先**硬编码列优先**（先竖着填满第 0 列），且没有任何开关。LCL 的 `TCustomCheckGroup` 默认是行优先（`ColumnLayout = clHorizontalThenVertical`，`extctrls.pp:906`），于是同一份 .lfm 在 Lazarus 里和在这里排出来的**选项顺序不一样**——6 项 2 列，那边读作 `1 2 / 3 4 / 5 6`，这边读作 `1 4 / 2 5 / 3 6`，而且既不报错也没有别的迹象。现在默认与 LCL 一致，旧顺序仍可通过 `ColumnLayout := clVerticalThenHorizontal` 取回。**迁移**：单列分组（也就是默认的 `Columns = 1`）完全不受影响；只有多列分组需要看一眼，想保持原样就加这一行。
 5. **越界访问抛异常（3.0 起的行为变更）：** `Checked[]`、`Buttons[]`、`CheckEnabled[]` 无论读写，下标越界都抛 `EListError` 并写明类名、越界下标与最大合法下标——与 LCL 的 `TCustomCheckGroup` 一致（`include/customcheckgroup.inc:173-177`、`:313-338`）。以前是越界读返回 `False`、越界写静默丢弃，而"不存在的项"和"用户没勾的项"读起来一模一样，填充顺序错了或差一都会被这层静默盖住。用 `Count` / `CheckedCount` 先问范围。
-6. **`CheckEnabled[]` 按标题存活：** 逐项禁用的状态在 `Items` 重建时**按标题**恢复，与 `Checked[]` 同一条身份规则；否则改一次列表就会把置灰全部丢掉。
+6. **`CheckEnabled[]` 跟着项走：** 逐项禁用的状态在 `Items` 重建时与 `Checked[]` 同一条规则恢复；否则改一次列表就会把置灰全部丢掉。
 7. **`Controller` 传播：** 给本控件设 `Controller` 会同步应用到所有内部子复选框，整组主题保持一致。
 8. **一次点击就会同时勾选并聚焦：** 本控件**不**在子控件之间轮换 `TabStop`——每个子复选框都保持 `TabStop = True`，所以 `TTyCustomControl.MouseDown` 里那道 `TabStop` 焦点闸门总是放行。`TTyRadioGroup` 需要额外修一处"点一下只挪圆点、焦点环不动"，正是因为它按平台惯例只让选中项当 Tab 位（见 [TTyRadioGroup 注意事项 §8](radiogroup.md#8-注意事项)）；这里不存在那个前提，因此也不存在那个缺陷——实测确认过，不是推断。代价是一个 N 项的复选组在 Tab 序里占 N 站，这与 LCL 的 `TCheckGroup` 一致（各项彼此独立，本来就没有"当前项"可言）。
 8. **复用 `TyGroupBox` 主题：** 外框走 `TyGroupBox` 令牌，子复选框走 `TyCheckBox` 令牌；`.tycss` 中不新增 `TyCheckGroup` 规则。请确保主题为 `TyGroupBox` 声明了 `background`（用于遮盖标题处边框线，见 [TTyGroupBox 注意事项](groupbox.md#7-注意事项)）。
