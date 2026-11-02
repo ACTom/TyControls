@@ -368,7 +368,7 @@ begin
     if (f = nil) or f.IsNull then
       DateTime := TyNullDate
     else
-      DateTime := f.AsDateTime;   // clamped to MinDate..MaxDate, as typed
+      SetDateTimeJumpMinMax(f.AsDateTime);   // shown as it is, even outside MinDate..MaxDate (LCL)
     { The field is the value Escape and focus come back to, even when the value did not
       move; and a half-typed field belongs to the record that was showing. }
     ConfirmChanges;

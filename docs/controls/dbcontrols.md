@@ -109,7 +109,7 @@ TranslateUnitResourceStringsEx('', LangDir, 'tycontrols_db', 'tyControls.DB.StrC
 ### 其他
 
 - **`TTyDBImage`**：blob 字段里存图片文件本身的格式（PNG、BMP、JPEG……）。默认在前面加一个扩展名头，格式和 LCL 的 `TDBImage` 一样，两边写的数据可以互相读；`WriteHeader` 为 False 时不加。读的时候有头用头，没有就按内容识别；`OnDBImageRead` / `OnDBImageWrite` 让程序读写自己的头。程序给 `Picture` 赋值、`LoadFromFile`、`Clear` 都算用户的改动，马上写进记录，清空的图写成 NULL。`AutoDisplay`、`QuickDraw`（和 LCL 一样不起作用）、`PictureLoaded`、`LoadPicture` 照 LCL。
-- **`TTyDBDateTimePicker`**：`AsDateTime` 装载；日期字段只写日期部分，时间字段只写时间部分。不能改时下拉日历也打不开。在编辑中按 Esc 回到**字段**的值，而不是获得焦点时的值。
+- **`TTyDBDateTimePicker`**：`AsDateTime` 装载；字段里的值超出 `MinDate`..`MaxDate` 时照原样显示（照 LCL），用户不改就不写回；用户改了其中任何一段，整个值按范围收拢再写回。日期字段只写日期部分，时间字段只写时间部分。不能改时下拉日历也打不开。在编辑中按 Esc 回到**字段**的值，而不是获得焦点时的值。
 - **`TTyDBCalendar`**：显示字段的日期，超出 `MinDate`..`MaxDate` 时按范围显示，不抛异常。用户点某一天、用方向键或 PageUp/PageDown 换了日子都算编辑；点选确认、按 Enter / 空格、离开控件或别处 `Post` 时写回。日期时间字段保留原来的时刻。翻月不算编辑。
 - **`TTyDBNavigator`**：一排十个按钮（首条、上一条、下一条、末条、插入、删除、编辑、保存、取消、刷新），类型和名字都用 LCL `DBCtrls` 里的：`VisibleButtons`（默认全部）、`Direction`（横排 / 竖排）、`Hints`、`ShowButtonHints`、`Images`（`Images[Ord(按钮)]` 优先于内置图标）、`ConfirmDelete`（默认 True）、`BeforeAction`、`OnClick`，所以给 `TDBNavigator` 写的窗体属性读进来含义相同。按钮的可用规则照 LCL；刷新在数据集打开且不在编辑中时可用。删除确认是主题化的消息框，经 protected virtual `ConfirmDeleteRecord` 调用，子类可以换掉。从右往左的布局里首条按钮在右边。默认尺寸 241 × 25。
 
