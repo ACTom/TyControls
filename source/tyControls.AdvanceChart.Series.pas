@@ -2194,12 +2194,14 @@ begin
       Without it the axis is sized from the largest single value while the
       chart draws the sum of them, and every stack taller than its biggest
       member runs off the top of the plot. Nothing raises. }
-    if (si <= High(AStacks)) and AStacks[si].Stacked
-      and (AStacks[si].ResultCol >= 0) and (AAxis = ABindings[si].ValueAxis) then
-    begin
-      SetLength(cols, 1);
-      cols[0] := AStacks[si].ResultCol;
-    end;
+    { [spec 255] the stacked column alone is swapped (getDataDimensionsOnAxis
+      maps each of the axis' dimensions through getStackedDimension): a value
+      coordinate written as a list keeps its other columns, and one whose
+      stacked column it does not draw spans the totals all the same }
+    if (si <= High(AStacks)) and (AStacks[si].PileResultCol >= 0)
+      and (AAxis = ABindings[si].ValueAxis) then
+      for c := 0 to High(cols) do
+        if cols[c] = AStacks[si].PileCol then cols[c] := AStacks[si].PileResultCol;
     for c := 0 to High(cols) do
     begin
       if cols[c] < 0 then Continue;

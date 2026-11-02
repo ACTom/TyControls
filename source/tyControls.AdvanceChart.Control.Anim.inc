@@ -511,26 +511,46 @@ var
     if useSrc then Result := TySourceDimIndexOf(src, AName);
   end;
 
-  { encode[AKey]'s first entry as a dimension; -1 none }
+  { one entry of encode[AKey] as a dimension; -1 none }
+  function EncEntry(AItem: TJSONData): Integer;
+  begin
+    Result := -1;
+    if AItem = nil then Exit;
+    case AItem.JSONType of
+      jtString: Result := DimByName(AItem.AsString);
+      jtNumber:
+        if (Frac(AItem.AsFloat) = 0) and (AItem.AsFloat >= 0) and (AItem.AsFloat < Width) then
+          Result := Trunc(AItem.AsFloat);
+    end;
+    if Result >= Width then Result := -1;
+  end;
+
+  { the dimension encode[AKey] gives slot 0 (getGroupIdDimension's
+    `otherDims.itemGroupId === 0`): its first entry, unless that reaches
+    nothing or is named again further on [spec 255: was the first entry
+    alone, a dimension named again included]; -1 none }
   function EncDim(const AKey: string): Integer;
-  var e: TJSONData;
+  var
+    e: TJSONData;
+    ent: TTyIntegerArray;
+    q: Integer;
   begin
     Result := -1;
     if encObj = nil then Exit;
     e := encObj.Find(AKey);
+    if e = nil then Exit;
+    ent := nil;
     if e is TJSONArray then
     begin
-      if e.Count = 0 then Exit;
-      e := e.Items[0];
+      SetLength(ent, e.Count);
+      for q := 0 to e.Count - 1 do ent[q] := EncEntry(e.Items[q]);
+    end
+    else
+    begin
+      SetLength(ent, 1);
+      ent[0] := EncEntry(e);
     end;
-    if e = nil then Exit;
-    case e.JSONType of
-      jtString: Result := DimByName(e.AsString);
-      jtNumber:
-        if (Frac(e.AsFloat) = 0) and (e.AsFloat >= 0) and (e.AsFloat < Width) then
-          Result := Trunc(e.AsFloat);
-    end;
-    if Result >= Width then Result := -1;
+    Result := TyEncodeFirstSlot(ent);
   end;
 
   { the type the series' `dimensions` (or its dataset's) declare ('' none) }
@@ -615,7 +635,7 @@ var
     dimension holds none), as the store was filled }
   function StoreDimOf(ADim: Integer): Integer;
   var
-    k, col: Integer;
+    k, col, n: Integer;
     nm: string;
     coord: TTyCoordDimArray;
     enc: TTySeriesEncode;
@@ -625,13 +645,17 @@ var
     enc := Default(TTySeriesEncode);
     if not useSrc then
     begin
-      SetLength(coord, st.DimCount);
-      for k := 0 to st.DimCount - 1 do
+      { the coordinates: the store's columns up to its first extra one of an
+        encode list [spec 255] }
+      n := 0;
+      while (n < st.DimCount) and not TyIsSpreadDim(st.DimName(n)) do Inc(n);
+      SetLength(coord, n);
+      for k := 0 to n - 1 do
       begin
         coord[k].Name := st.DimName(k);
         coord[k].Ordinal := st.DimType(k) = ddtOrdinal;
       end;
-      enc := TyEncodeOf(FOption, ASeries, TySeriesDimsSource(FOption, ASeries), coord);
+      enc := TyEncodeOf(FOption, ASeries, TySeriesDimsSource(FOption, ASeries), coord, Width);
       if enc.Given then TyEncodeFillUnclaimed(enc, Width);
     end;
     for k := 0 to st.DimCount - 1 do

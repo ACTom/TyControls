@@ -368,6 +368,8 @@ type
     FTipPos, FLabelPos: array of Integer;
     FHasTipPos, FHasLabelPos: Boolean;
     FRawWidth: Integer;
+    FNameFallback: Integer;       // 0 the first ordinal column, -1 none, k + 1 column k
+    FCollectOrder: array of Integer; // the columns collected first, column by column; nil: none
     FOvrHead: array of Integer;   // per raw row, -1 = no overrides
     FOvr: array of TOvr;
     FOvrCount: Integer;
@@ -504,6 +506,21 @@ type
       author wrote, and a node written as a bare number is keyed by its
       position -- a link to 'Mon' finds nothing upstream either. }
     function GetItemName(AIndex: Integer): string;
+    { [spec 255] WHICH COLUMN NAMES A ROW THAT HAS NO NAME OF ITS OWN: 0 (the
+      default) the first ordinal one; -1 none -- an encode that names an
+      itemName list takes the category's name away (injectOrdinalMeta's
+      hasNameEncode); k + 1 column k -- the category column first in the
+      SOURCE's order, which an extra entry of a coordinate's list can be. }
+    property NameFallback: Integer read FNameFallback write FNameFallback;
+    { [spec 255] TWO COLUMNS ON ONE CATEGORY LIST collect its names column
+      by column in the source's order (the store fills a dimension at a
+      time): the columns a filler hands every row of to PreCollect before it
+      appends any, in that order. nil: none. }
+    procedure SetCollectOrder(const AOrder: array of Integer);
+    function CollectOrder: TTyIntegerArray;
+    { one cell of an ordinal column parsed for its category -- collected
+      into the list -- and dropped }
+    procedure PreCollect(ADim: Integer; const AValue: TTyDataValue);
     { The same name in RAW space. FilterSelf hands its predicate a raw
       index -- it is deciding which raw rows survive, so it cannot speak
       the view's language -- and a predicate that wants to test the name
@@ -1886,7 +1903,7 @@ begin
 end;
 
 function TTyDataStore.DimsOfCoord(const ACoord: string): TTyIntegerArray;
-var i, n: Integer;
+var i, n, k: Integer;
 begin
   Result := nil;
   if ACoord = '' then Exit;
@@ -1899,13 +1916,21 @@ begin
       Inc(n);
     end;
   SetLength(Result, n);
-  if n > 0 then Exit;
-  { NOTHING WAS MAPPED, so the coordinate is the column of that name -- which
-    is every store the port built before a series needed more than one. }
+  { THE COLUMN OF THAT NAME FEEDS IT TOO, in its place, when nothing gave it
+    a coordinate of its own: a coordinate written as a list keeps its first
+    entry there and the rest in extra columns [spec 255]. Nothing mapped,
+    it is the one column -- every store the port built before a series
+    needed more than one. }
   i := DimIndexOf(ACoord);
-  if i < 0 then Exit;
-  SetLength(Result, 1);
-  Result[0] := i;
+  if (i < 0) or (FDims[i].Coord <> '') then Exit;
+  SetLength(Result, n + 1);
+  k := n;
+  while (k > 0) and (Result[k - 1] > i) do
+  begin
+    Result[k] := Result[k - 1];
+    Dec(k);
+  end;
+  Result[k] := i;
 end;
 
 procedure TTyDataStore.SetDimCoord(ADim: Integer; const ACoord: string);
@@ -2204,6 +2229,24 @@ begin
   if AValue > FDims[ADim].RawMax then FDims[ADim].RawMax := AValue;
 end;
 
+procedure TTyDataStore.SetCollectOrder(const AOrder: array of Integer);
+var i: Integer;
+begin
+  SetLength(FCollectOrder, Length(AOrder));
+  for i := 0 to High(AOrder) do FCollectOrder[i] := AOrder[i];
+end;
+
+function TTyDataStore.CollectOrder: TTyIntegerArray;
+begin
+  Result := Copy(FCollectOrder, 0, Length(FCollectOrder));
+end;
+
+procedure TTyDataStore.PreCollect(ADim: Integer; const AValue: TTyDataValue);
+begin
+  if (ADim < 0) or (ADim > High(FDims)) or (FDims[ADim].Kind <> ddtOrdinal) then Exit;
+  ParseCell(ADim, AValue);
+end;
+
 function TTyDataStore.AppendRow(const AValues: array of TTyDataValue): Integer;
 var
   i: Integer;
@@ -2425,6 +2468,9 @@ var i: Integer;
 begin
   Result := GetName(AIndex);
   if Result <> '' then Exit;
+  if FNameFallback < 0 then Exit;
+  if (FNameFallback > 0) and (FNameFallback <= Length(FDims)) then
+    Exit(GetOrdinalText(FNameFallback - 1, AIndex));
   for i := 0 to High(FDims) do
     if FDims[i].Kind = ddtOrdinal then
       Exit(GetOrdinalText(i, AIndex));

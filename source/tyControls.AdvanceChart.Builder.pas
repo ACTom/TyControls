@@ -541,6 +541,8 @@ type
       field would have every column of every store silently claiming to read
       element 0. The awkward numbering is what makes the default safe. }
     SourceSlot: Integer;
+    { (-1: no element at all -- an encode that names the coordinate but
+      reaches nothing for it [spec 255]) }
     { WHICH COORDINATE THIS COLUMN FEEDS, when that is not its own name --
       handed straight to TTyDataStore.SetDimCoord. Empty for every ordinary
       column, which is every column of every series that puts one number on
@@ -630,6 +632,34 @@ function TyFillSeriesStoreArray(AOption: TTyChartOption; ASeriesIndex: Integer;
 function TyFillStoreFromSource(const ASource: TTyChartSource;
   const AEncode: TTySeriesEncode; const ADims: TTySeriesDimArray;
   AStore: TTyDataStore): Integer;
+
+const
+  { [spec 255] the name an extra column of a coordinate's encode list goes
+    by in a store: never one a source can collide with }
+  TyEncodeSpreadPrefix = '__ty_spread_';
+
+{ [spec 255] Whether a store column is an extra entry of a coordinate's
+  encode list (TySpreadEncode). }
+function TyIsSpreadDim(const AName: string): Boolean;
+{ [spec 255] Each column's encode key and place: a column feeding another
+  coordinate (a candlestick's open ... highest on y, a custom series' second
+  x) answers to that coordinate's key, at its place among the columns that
+  do; any other to its own name. }
+procedure TyCoordKeys(const ADims: TTySeriesDimArray; var ACoord: TTyCoordDimArray);
+{ [spec 255] A COORDINATE WRITTEN AS A LIST HOLDS EVERY DIMENSION IT REACHES:
+  each extra entry of AEnc becomes a column of its coordinate's kind and
+  category list, feeding that coordinate (SetDimCoord), read from its source
+  dimension -- appended to ADims, to AEnc.Columns and, when AStore is given,
+  to the store. }
+procedure TySpreadEncode(var AEnc: TTySeriesEncode; var ADims: TTySeriesDimArray;
+  AStore: TTyDataStore);
+{ [spec 255] What the encode decides about a store before it is filled:
+  which column names a row with no name (an itemName list takes the
+  category's away -- AFromSource only, a dataset's; an extra category column
+  first in the source names it) and, when an extra column shares a category
+  list, the order a row's columns are parsed in -- the source's. }
+procedure TyEncodeStoreOrder(const AEnc: TTySeriesEncode;
+  const ADims: TTySeriesDimArray; AStore: TTyDataStore; AFromSource: Boolean);
 
 { Which component of a family this option node names.
 
@@ -2559,6 +2589,175 @@ begin
   Result := TyFillSeriesStoreArray(AOption, ASeriesIndex, TJSONArray(d), ADims, AStore);
 end;
 
+function TyIsSpreadDim(const AName: string): Boolean;
+begin
+  Result := Pos(TyEncodeSpreadPrefix, AName) = 1;
+end;
+
+{ [spec 255] the names upstream gives the positions of a coordinate written
+  as a list when nobody named them: the coordinate's name on each, the
+  duplicates numbered in the source's order (removeDuplicates: x, x0, x1) --
+  the first entry is not always the first of them }
+procedure NameSpreadPositions(AStore: TTyDataStore; const ADims: TTySeriesDimArray);
+var
+  k, j, q, t, n: Integer;
+  key: string;
+  pos: TTyIntegerArray;
+  seen: TTyStringArray;
+  dup: Boolean;
+begin
+  seen := nil;
+  for k := 0 to High(ADims) do
+  begin
+    if not TyIsSpreadDim(ADims[k].Name) then Continue;
+    key := ADims[k].Coord;
+    dup := False;
+    for q := 0 to High(seen) do if seen[q] = key then dup := True;
+    if dup then Continue;
+    SetLength(seen, Length(seen) + 1);
+    seen[High(seen)] := key;
+    pos := nil;
+    for j := 0 to High(ADims) do
+      if ((ADims[j].Coord = key) and TyIsSpreadDim(ADims[j].Name))
+        or ((ADims[j].Coord = '') and (ADims[j].Name = key)) then
+        if AStore.RawDimPos(j) >= 0 then
+        begin
+          n := Length(pos);
+          SetLength(pos, n + 1);
+          pos[n] := AStore.RawDimPos(j);
+          while (n > 0) and (pos[n - 1] > pos[n]) do
+          begin
+            t := pos[n - 1];
+            pos[n - 1] := pos[n];
+            pos[n] := t;
+            Dec(n);
+          end;
+        end;
+    for j := 0 to High(pos) do
+      if j = 0 then AStore.SetRawDimName(pos[j], key)
+      else AStore.SetRawDimName(pos[j], key + IntToStr(j - 1));
+  end;
+end;
+
+procedure TyCoordKeys(const ADims: TTySeriesDimArray; var ACoord: TTyCoordDimArray);
+var k, j, n: Integer;
+begin
+  for k := 0 to High(ACoord) do
+  begin
+    ACoord[k].Key := '';
+    ACoord[k].Index := 0;
+    if (k > High(ADims)) or (ADims[k].Coord = '') then Continue;
+    n := 0;
+    for j := 0 to k - 1 do
+      if ADims[j].Coord = ADims[k].Coord then Inc(n);
+    ACoord[k].Key := ADims[k].Coord;
+    ACoord[k].Index := n;
+  end;
+end;
+
+procedure TySpreadEncode(var AEnc: TTySeriesEncode; var ADims: TTySeriesDimArray;
+  AStore: TTyDataStore);
+var
+  e, c, n, k, j, shift: Integer;
+  dim: TTySeriesDim;
+  key: string;
+begin
+  if Length(AEnc.ExtraDim) = 0 then Exit;
+  n := Length(ADims);
+  { a row index put in front of every item (a whisker box's) moves the
+    item's elements one place on }
+  shift := 1;
+  for j := 0 to n - 1 do
+    if ADims[j].FromRowIndex and (ADims[j].Kind = ddtOrdinal) then shift := 0;
+  SetLength(AEnc.Columns, n);
+  SetLength(AEnc.Explicit, n);
+  for e := 0 to High(AEnc.ExtraDim) do
+  begin
+    c := AEnc.ExtraCoord[e];
+    if (c < 0) or (c >= n) then Continue;
+    if AEnc.ExtraDim[e] + shift < 1 then Continue;
+    dim := ADims[c];
+    key := dim.Coord;
+    if key = '' then key := dim.Name;
+    dim.Name := TyEncodeSpreadPrefix + key + '_' + IntToStr(AEnc.ExtraIndex[e]);
+    dim.Coord := key;
+    dim.FromRowIndex := False;
+    dim.SourceSlot := AEnc.ExtraDim[e] + shift;
+    k := Length(ADims);
+    SetLength(ADims, k + 1);
+    ADims[k] := dim;
+    SetLength(AEnc.Columns, k + 1);
+    SetLength(AEnc.Explicit, k + 1);
+    AEnc.Columns[k] := AEnc.ExtraDim[e];
+    AEnc.Explicit[k] := True;
+    if AStore <> nil then
+    begin
+      j := AStore.AddDimension(dim.Name, dim.Kind);
+      AStore.SetDimCoord(j, key);
+      if dim.Axis <> nil then AStore.UseOrdinalMeta(j, dim.Axis.Categories);
+    end;
+  end;
+end;
+
+procedure TyEncodeStoreOrder(const AEnc: TTySeriesEncode;
+  const ADims: TTySeriesDimArray; AStore: TTyDataStore; AFromSource: Boolean);
+var
+  k, j, t, best, n: Integer;
+  pos, order: TTyIntegerArray;
+  shared: Boolean;
+begin
+  if AStore = nil then Exit;
+  if AFromSource and AEnc.Given and AEnc.HasNameEncode then
+    AStore.NameFallback := -1;
+  if Length(AEnc.ExtraDim) = 0 then Exit;
+  { where each column reads in the source }
+  SetLength(pos, Length(ADims));
+  for k := 0 to High(ADims) do
+  begin
+    pos[k] := -1;
+    if AFromSource then
+    begin
+      if k <= High(AEnc.Columns) then pos[k] := AEnc.Columns[k];
+    end
+    else if ADims[k].FromRowIndex or (ADims[k].SourceSlot < 0) then pos[k] := -1
+    else if ADims[k].SourceSlot > 0 then pos[k] := ADims[k].SourceSlot - 1
+    else pos[k] := k;
+  end;
+  { THE ROW'S NAME, with no itemName written: the category column first in
+    the source (injectOrdinalMeta's firstCategoryDimIndex) }
+  if not (AFromSource and AEnc.HasNameEncode) then
+  begin
+    best := -1;
+    for k := 0 to High(ADims) do
+      if (ADims[k].Kind = ddtOrdinal) and (ADims[k].Axis <> nil) and (pos[k] >= 0)
+        and ((best < 0) or (pos[k] < pos[best])) then best := k;
+    if best >= 0 then AStore.NameFallback := best + 1;
+  end;
+  { TWO COLUMNS ON ONE CATEGORY LIST collect its names column by column in
+    the source's order }
+  shared := False;
+  for k := 0 to High(ADims) do
+    if TyIsSpreadDim(ADims[k].Name) and (ADims[k].Axis <> nil) then shared := True;
+  if not shared then Exit;
+  order := nil;
+  for k := 0 to High(ADims) do
+  begin
+    if (ADims[k].Kind <> ddtOrdinal) or (ADims[k].Axis = nil) or (pos[k] < 0) then Continue;
+    n := Length(order);
+    SetLength(order, n + 1);
+    order[n] := k;
+    j := n;
+    while (j > 0) and (pos[order[j - 1]] > pos[order[j]]) do
+    begin
+      t := order[j - 1];
+      order[j - 1] := order[j];
+      order[j] := t;
+      Dec(j);
+    end;
+  end;
+  AStore.SetCollectOrder(order);
+end;
+
 function TyFillSeriesStoreArray(AOption: TTyChartOption; ASeriesIndex: Integer;
   AArray: TJSONArray; const ADims: TTySeriesDimArray; AStore: TTyDataStore): Integer;
 var
@@ -2566,10 +2765,11 @@ var
   d: TJSONData;
   arr: TJSONArray;
   row: array of TTyDataValue;
-  i, k, src, catDim, raw, pos: Integer;
+  i, k, src, catDim, raw, pos, q: Integer;
   item, v, cell: TJSONData;
   useIndex, prepend: Boolean;
   txt: string;
+  order: TTyIntegerArray;
 begin
   Result := 0;
   if (AOption = nil) or (AStore = nil) or (Length(ADims) = 0) or (AArray = nil) then Exit;
@@ -2593,6 +2793,8 @@ begin
     begin
       if prepend then pos := 0 else pos := -1;
     end
+    else if ADims[k].SourceSlot < 0 then
+      pos := -1
     else if ADims[k].SourceSlot > 0 then
     begin
       pos := ADims[k].SourceSlot - 1;
@@ -2606,7 +2808,10 @@ begin
       makes a candlestick's tooltip rows. }
     if ADims[k].FromRowIndex and prepend then
       AStore.SetRawDimDisplay(pos, 'base');
-    if (ADims[k].Coord <> '') and (pos >= 0) and (ADims[k].Name <> '') then
+    { a column a type names (a candlestick's open) displays as it; an extra
+      entry of an encode list has no display name [spec 255] }
+    if (ADims[k].Coord <> '') and (pos >= 0) and (ADims[k].Name <> '')
+      and not TyIsSpreadDim(ADims[k].Name) then
       AStore.SetRawDimDisplay(pos, ADims[k].Name);
   end;
   { THE NAMES `{@name}` FINDS: the series' own `dimensions` when it has them
@@ -2626,6 +2831,7 @@ begin
     for k := 0 to High(ADims) do
       if (AStore.RawDimPos(k) >= 0) and (ADims[k].Name <> '') then
         AStore.SetRawDimName(AStore.RawDimPos(k), ADims[k].Name);
+    NameSpreadPositions(AStore, ADims);
     { EVERY OTHER POSITION THE DATA HAS gets a generated name, in order --
       `value`, then `value0`, `value1`, ... skipping any already taken --
       which is how `{@value}` finds a scatter's third number. }
@@ -2644,6 +2850,30 @@ begin
     end;
   end;
 
+  { [spec 255] columns sharing a category list: collected first, a column
+    at a time }
+  order := AStore.CollectOrder;
+  for q := 0 to High(order) do
+  begin
+    k := order[q];
+    if (k < 0) or (k > High(ADims)) or ADims[k].FromRowIndex or (useIndex and (k = catDim))
+      or (ADims[k].SourceSlot < 0) then
+      Continue;
+    src := k;
+    if ADims[k].SourceSlot > 0 then src := ADims[k].SourceSlot - 1;
+    for i := 0 to arr.Count - 1 do
+    begin
+      v := UnwrapItem(arr.Items[i]);
+      if (v <> nil) and (v is TJSONArray) then
+      begin
+        if src < TJSONArray(v).Count then cell := TJSONArray(v).Items[src]
+        else cell := nil;
+        AStore.PreCollect(k, CellValue(cell));
+      end
+      else
+        AStore.PreCollect(k, CellValue(v));
+    end;
+  end;
   for i := 0 to arr.Count - 1 do
   begin
     item := arr.Items[i];
@@ -2656,6 +2886,12 @@ begin
           the store-wide guess says the items are not arrays and this is the
           first category column. Every other column still reads the item. }
         row[k] := TyDataNum(i);
+        Continue;
+      end;
+      { [spec 255] an encode that reaches no element for it: nothing }
+      if ADims[k].SourceSlot < 0 then
+      begin
+        row[k] := TyDataNone;
         Continue;
       end;
       src := k;
@@ -2690,7 +2926,8 @@ function TyFillStoreFromSource(const ASource: TTyChartSource;
   AStore: TTyDataStore): Integer;
 var
   row: array of TTyDataValue;
-  i, k, n, col, raw: Integer;
+  i, k, n, col, raw, q: Integer;
+  order: TTyIntegerArray;
   cell: TJSONData;
   nm: string;
   named: Boolean;
@@ -2723,7 +2960,32 @@ begin
     if (not named) and (col >= 0) and (ADims[k].Name <> '') then
       AStore.SetRawDimName(col, ADims[k].Name);
   end;
+  if not named then NameSpreadPositions(AStore, ADims);
+  { [spec 255] A COLUMN A TYPE NAMES (a candlestick's open ... highest)
+    displays as it where the table names that dimension nothing
+    (createDimensions' sysDimItemDimsDef) -- not a custom series' second x
+    (x1, its coordinate's name numbered) nor an extra entry of a list }
+  for k := 0 to High(ADims) do
+  begin
+    col := -1;
+    if k <= High(AEncode.Columns) then col := AEncode.Columns[k];
+    if (col >= 0) and (ADims[k].Coord <> '') and (ADims[k].Name <> '')
+      and not TyIsSpreadDim(ADims[k].Name) and (Pos(ADims[k].Coord, ADims[k].Name) <> 1)
+      and (TySourceDimName(ASource, col) = '') then
+      AStore.SetRawDimDisplay(col, ADims[k].Name);
+  end;
 
+  { [spec 255] columns sharing a category list: collected first, a column
+    at a time }
+  order := AStore.CollectOrder;
+  for q := 0 to High(order) do
+  begin
+    k := order[q];
+    col := -1;
+    if (k >= 0) and (k <= High(AEncode.Columns)) then col := AEncode.Columns[k];
+    if col < 0 then Continue;
+    for i := 0 to n - 1 do AStore.PreCollect(k, CellValue(TySourceCell(ASource, i, col)));
+  end;
   for i := 0 to n - 1 do
   begin
     for k := 0 to High(ADims) do

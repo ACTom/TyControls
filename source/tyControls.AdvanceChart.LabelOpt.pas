@@ -932,7 +932,10 @@ begin
       for i := 0 to High(lp) do
       begin
         if i > 0 then valueText := valueText + ' ';
-        if TTyDataStore.RawCell(it, lp[i], cell) then
+        { [spec 255] a place of encode.label no dimension reached is
+          retrieveRawValue with no dimension: the whole raw item }
+        if lp[i] < 0 then valueText := valueText + TyRawItemText(it)
+        else if TTyDataStore.RawCell(it, lp[i], cell) then
           valueText := valueText + TyJsValueText(cell, '');
       end;
     end

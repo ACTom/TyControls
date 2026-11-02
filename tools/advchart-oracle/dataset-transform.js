@@ -278,6 +278,34 @@ function readsOut(chart) {
   return out;
 }
 
+// [spec 255] each cartesian axis' scale extent, where a case asks
+function extentsOut(chart) {
+  const out = [];
+  for (const dim of ['x', 'y']) {
+    chart.getModel().eachComponent(dim + 'Axis', (comp, index) => {
+      const e = comp.axis.scale.getExtent();
+      out.push({ dim, index, extent: [hex(e[0]), hex(e[1])] });
+    });
+  }
+  return out;
+}
+
+// [spec 255] each scatter item's symbol size, where a case asks
+function sizesOut(chart) {
+  const out = [];
+  chart.getModel().eachSeries(s => {
+    if (s.subType !== 'scatter') return;
+    const data = s.getData();
+    const sizes = [];
+    for (let i = 0; i < data.count(); i++) {
+      const v = data.getItemVisual(i, 'symbolSize');
+      sizes.push(typeof v === 'number' ? hex(v) : null);
+    }
+    out.push({ index: s.seriesIndex, sizes });
+  });
+  return out;
+}
+
 function runCase(c) {
   const option = clone(c.option);
   const rec = { id: c.id, group: c.group, note: c.note, option };
@@ -300,6 +328,8 @@ function runCase(c) {
       return rec;
     }
     if (c.reads && rec.render && !rec.render.error) rec.reads = readsOut(chart);
+    if (c.ext && rec.render && !rec.render.error) rec.extents = extentsOut(chart);
+    if (c.ext && rec.render && !rec.render.error) rec.sizes = sizesOut(chart);
     rec.datasets = datasetsOut(chart);
     return rec;
   } finally {
@@ -660,6 +690,61 @@ add('render', 'r-encode-empty-list', 'encode x []: the same', pvg({ source: clon
 add('render', 'r-encode-null', 'encode x null: the same', pvg({ source: clone(PVG) }, { encode: { x: null, y: 'p' } }), RD);
 add('render', 'r-encode-negative', 'encode x -1: no dimension for x', pvg({ source: clone(PVG) }, { encode: { x: -1, y: 'p' } }), RD);
 
+// ---- [spec 255] a coordinate written as a list: every entry is resolved
+// (createDimensions), a dimension at the last place a list names it, a gap
+// where an entry reaches none -- a name nobody has, an index past the
+// dimensions, a dimension named again further on or by a later
+// coordinate. mapDimension reads place 0 (a gap: nothing drawn); the axis
+// spans every entry (getDataDimensionsOnAxis); a coordinate whose list
+// reaches nothing is filled from the next free dimension, the others' extra
+// entries held; the stack adds up the first value dimension in the table,
+// which the series draws only when it is the one mapDimension reads.
+const PVGW = [['p', 'v', 'g', 'w'], [1, 6, 'A', 9], [2, 7, 'B', 4], [3, 8, 'A', 2]];
+const EX = { reads: true, ext: true };
+const lsc = (series, dataset) => ({ dataset: dataset || { source: clone(PVGW) }, xAxis: { type: 'value' }, yAxis: { type: 'value' },
+  series: [Object.assign({ type: 'scatter', label: { show: true } }, series)] });
+const L = (id, note, option, more) => add('render', id, note, option, more || EX);
+// (a stacked series' dimensions carry a NUL in their names: no reads)
+const EXT = { ext: true };
+L('r-list-gap-first', "x ['nope', 1]: place 0 a gap, nothing drawn; the x axis spans v", lsc({ encode: { x: ['nope', 1], y: 0 } }));
+L('r-list-two', 'x [0, 3]: x reads p, the axis spans p and w, the label w', lsc({ encode: { x: [0, 3], y: 1 } }));
+L('r-list-mixed', "x ['w', 1]: a name and an index", lsc({ encode: { x: ['w', 1], y: 0 } }));
+L('r-list-dup', 'x [1, 1]: named twice, place 0 a gap', lsc({ encode: { x: [1, 1], y: 0 } }));
+L('r-list-past', 'x 5: an index past the dimensions reaches none -- x takes the first free one', lsc({ encode: { x: 5, y: 1 } }));
+L('r-list-past-first', 'x [5, 1]: a gap, then v', lsc({ encode: { x: [5, 1], y: 0 } }));
+L('r-list-both', 'x 1, y 1: the later coordinate keeps the dimension, x has none', lsc({ encode: { x: 1, y: 1 } }));
+L('r-list-fill', 'x [3, 0], y unwritten: y takes v, the first nobody holds', lsc({ encode: { x: [3, 0] } }));
+L('r-list-dims-empty', "the series' dimensions []: two dimensions, so x [0, 3] keeps p alone", lsc({ dimensions: [], encode: { x: [0, 3], y: 1 } }));
+// (variation round: with dimensions written the fill stops at their count)
+L('r-list-dims-empty-fill', "the series' dimensions [] over p v w g: x [0, 1] holds both dimensions, y has none",
+  lsc({ dimensions: [], encode: { x: [0, 1] } }, { source: [['p', 'v', 'w', 'g'], [1, 6, 9, 'A'], [2, 7, 4, 'B'], [3, 8, 2, 'A']] }));
+L('r-list-own', 'own data x [0, 2]: the axis spans both', { xAxis: { type: 'value' }, yAxis: { type: 'value' },
+  series: [{ type: 'scatter', label: { show: true }, data: [[1, 6, 9], [2, 7, 4]], encode: { x: [0, 2], y: 1 } }] });
+L('r-list-own-names', "own data, dimensions a b c: x ['nope', 'c'] a gap", { xAxis: { type: 'value' }, yAxis: { type: 'value' },
+  series: [{ type: 'scatter', dimensions: ['a', 'b', 'c'], label: { show: true }, data: [[1, 6, 9], [2, 7, 4]], encode: { x: ['nope', 'c'], y: 'b' } }] });
+L('r-list-cat', "category x [2, 0]: the category list collects p, then g -- a dimension at a time, in the table's order",
+  { dataset: { source: clone(PVGW) }, xAxis: { type: 'category' }, yAxis: { type: 'value' },
+    series: [{ type: 'line', encode: { x: [2, 0], y: 1 }, label: { show: true } }] });
+L('r-list-stack-second', 'a stack: y [3, 1] adds up v (first in the table) but draws w; the second bar stacks on v',
+  { dataset: { source: clone(PVGW) }, xAxis: { type: 'category' }, yAxis: { type: 'value' },
+    series: [{ type: 'bar', stack: 's', encode: { x: 2, y: [3, 1] } }, { type: 'bar', stack: 's', encode: { x: 2, y: 0 } }] }, EXT);
+L('r-list-stack-first', 'a stack: y [1, 3] adds up v and draws it; the axis spans w too',
+  { dataset: { source: clone(PVGW) }, xAxis: { type: 'category' }, yAxis: { type: 'value' },
+    series: [{ type: 'bar', stack: 's', encode: { x: 2, y: [1, 3] } }, { type: 'bar', stack: 's', encode: { x: 2, y: 0 } }] }, EXT);
+L('r-list-both-rev', 'y 1, x 1 written in that order: y still keeps it -- the coordinate system applies its own lists again, in its order',
+  lsc({ encode: { y: 1, x: 1 } }));
+L('r-list-other-loses', 'x 0, y 1, value 1: y keeps v over the key no coordinate system asks for', lsc({ encode: { x: 0, y: 1, value: 1 } }));
+L('r-list-stack-upper', 'a stack: the upper series y [3, 1] adds v onto the lower one and draws w; the axis spans that total',
+  { dataset: { source: clone(PVGW) }, xAxis: { type: 'category' }, yAxis: { type: 'value' },
+    series: [{ type: 'bar', stack: 's', encode: { x: 2, y: 0 } }, { type: 'bar', stack: 's', encode: { x: 2, y: [3, 1] } }] }, EXT);
+L('r-list-stack-by', 'a stack by category: x [2, 0] stacks by p, the first category dimension in the table',
+  { dataset: { source: clone(PVGW) }, xAxis: { type: 'category' }, yAxis: { type: 'value' },
+    series: [{ type: 'bar', stack: 's', encode: { x: [2, 0], y: 1 } }, { type: 'bar', stack: 's', encode: { x: 0, y: 3 } }] }, EXT);
+L('r-list-polar', 'polar radius [0, 3]', { dataset: { source: clone(PVGW) }, polar: {}, angleAxis: {}, radiusAxis: {},
+  series: [{ type: 'scatter', coordinateSystem: 'polar', encode: { radius: [0, 3], angle: 1 }, label: { show: true } }] });
+L('r-list-pie', 'pie value [w, v]: the sectors are w', { dataset: { source: clone(PVGW) },
+  series: [{ type: 'pie', encode: { itemName: 'g', value: ['w', 'v'] }, label: { show: true } }] });
+
 // ---------------------------------------------------------------------------
 // guards: expectations read off the source
 // ---------------------------------------------------------------------------
@@ -761,6 +846,17 @@ function guards(o) {
     guard('encode: ' + id + ' fills x from v', rd(id).x === 'v' && rv(id) === '[[6,1],[7,2],[8,3]]');
   }
   guard('encode: x -1 maps x to nothing', rd('r-encode-negative').x === undefined);
+  const ext = (id, dim) => cs(id).extents.find(e => e.dim === dim).extent.map(num).join();
+  guard('list: a gap at place 0 maps x to nothing, the axis spans v', rd('r-list-gap-first').x === undefined
+    && ext('r-list-gap-first', 'x') === '0,8');
+  guard('list: x [0, 3] reads p, spans p and w', rd('r-list-two').x === 'p' && ext('r-list-two', 'x') === '0,10'
+    && cs('r-list-two').render.series[0].labels[0].text === '9');
+  guard('list: x 1, y 1 leaves x nothing', rd('r-list-both').x === undefined && rd('r-list-both').y === 'v');
+  guard('list: x [3, 0] fills y with v', rd('r-list-fill').y === 'v');
+  guard('list: an index past the dimensions is filled', rd('r-list-past').x === 'p');
+  guard("list: the categories in the table's order", JSON.stringify(cs('r-list-cat').render.axes[0].categories)
+    === JSON.stringify(['1', '2', '3', 'A', 'B']));
+  guard('list: the stack spans the totals of v and w', ext('r-list-stack-second', 'y') === '0,12');
   return g;
 }
 
