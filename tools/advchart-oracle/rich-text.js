@@ -755,6 +755,28 @@ const R7M_TREEMAP_CASES = [
     option: opt({ series: [{ type: 'treemap', top: 10, bottom: 60, breadcrumb: { show: false },
       label: { color: '#333333', padding: 10, lineHeight: 30, textShadowColor: '#888888', textShadowBlur: 2 }, data: TM_DATA }] }) },
 ];
+// ---- [R7-M] a graph's edge label in a view scaled unequally (layout
+// 'none', the nodes' extent not the view's aspect): Line.beforeUpdate scales
+// the label by 1 / every ancestor's scaleX only, so under the main group's
+// scaleX / scaleY it is drawn squashed -- and turned along a slanted edge,
+// sheared ----
+const GRAPH_NODES = [{ name: 'Ga', x: 0, y: 0 }, { name: 'Gb', x: 100, y: 100 }, { name: 'Gc', x: 100, y: 0 }, { name: 'Gd', x: 0, y: 100 }];
+const GRAPH_EDGE_LBL = { show: true, color: '#333333', formatter: 'edge' };
+const R7M_GRAPH_CASES = [
+  { name: 'graph-edge-scale', looks: true, note: "layout 'none', 400 x 200 over a 100 x 100 extent (scaleX 4, scaleY 2): edge labels plain, boxed and rich on a level, an upright and a slanted edge",
+    option: opt({ series: [{ type: 'graph', layout: 'none', left: 0, top: 0, width: 400, height: 200, label: { show: false },
+      lineStyle: { color: '#888888', opacity: 1 }, edgeLabel: GRAPH_EDGE_LBL, data: GRAPH_NODES,
+      links: [{ source: 'Ga', target: 'Gc' },
+        { source: 'Ga', target: 'Gb', label: { backgroundColor: '#eeeeee', borderColor: '#aa0000', borderWidth: 1, padding: [2, 4], borderRadius: 3 } },
+        { source: 'Gc', target: 'Gb', label: { formatter: '{a|up}{b|right}', rich: { a: { color: '#aa0000', backgroundColor: '#dddddd' }, b: { color: '#0000aa' } } } },
+        { source: 'Gd', target: 'Gb', label: { position: 'end', backgroundColor: '#eeeeee' } }] }] }) },
+  { name: 'graph-edge-scale-curve', looks: true, note: "the same view taller than wide (scaleX 1, scaleY 3): a curved edge's label insideStartTop with a halo, a rotate of its own, an end label",
+    option: opt({ series: [{ type: 'graph', layout: 'none', left: 100, top: 20, width: 100, height: 300, label: { show: false },
+      lineStyle: { color: '#888888', opacity: 1, curveness: 0.3 }, edgeLabel: GRAPH_EDGE_LBL, data: GRAPH_NODES,
+      links: [{ source: 'Ga', target: 'Gb', label: { position: 'insideStartTop', textBorderColor: '#ffffff', textBorderWidth: 2 } },
+        { source: 'Gc', target: 'Gd', label: { rotate: 30, backgroundColor: '#eeeeee' } },
+        { source: 'Ga', target: 'Gd', label: { position: 'start', formatter: 'from' } }] }] }) },
+];
 const R7H_CASES = [
   { name: 'word-width-plain', looks: true, note: "series labels: width '50%' with a plate (centred: laid out at NaN), 'auto' truncated (nothing kept), 'abc' with break and padding (no wrap)",
     option: sLabel([null, { width: 'auto', overflow: 'truncate', formatter: 'truncated away' },
@@ -1022,6 +1044,7 @@ const cases = [
   ...R7L_EXTREME_CASES,
   ...R7M_COMPONENT_CASES,
   ...R7M_TREEMAP_CASES,
+  ...R7M_GRAPH_CASES,
 ];
 
 // ---------- running upstream ----------

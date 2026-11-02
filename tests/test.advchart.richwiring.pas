@@ -121,6 +121,7 @@ type
     procedure TestAZeroRadiusRoundedPlateRunsToItsJoinedEdge;
     procedure TestARadiusArrayIsTruthy;
     procedure TestALabelWhollyAtNaNStandsWhereItsSpansAreBounded;
+    procedure TestAnUnequalViewDrawsTheEdgeLabelSquashed;
   end;
 
   { device px at a PPI from a measurer that answers CSS px }
@@ -427,6 +428,9 @@ begin
       E.Caption.FontWeight, True, E.Caption.Colour, E.Caption.StrokeWidthLogical > 0,
       E.Caption.StrokeColour, E.Caption.StrokeWidthLogical, E.Caption.AnchorH,
       E.Caption.AnchorV, E.Caption.X, E.Caption.Y, E.Caption.RotationRad);
+    { [R7-M] drawn under a whole map }
+    Result.D.HasAffine := E.Caption.HasAffine;
+    for k := 0 to 5 do Result.D.Affine[k] := E.Caption.Affine[k];
     { [R7-B] what the one run draws besides: the element's alpha, the halo's
       dash and phase }
     for k := 0 to High(Result.D.Pieces) do
@@ -451,6 +455,9 @@ begin
   Result.D.Y := E.Caption.Y;
   Result.D.RotationRad := E.Caption.RotationRad;
   Result.D.Scale := E.Caption.RtScale;
+  { [R7-M] drawn under a whole map }
+  Result.D.HasAffine := E.Caption.HasAffine;
+  for k := 0 to 5 do Result.D.Affine[k] := E.Caption.Affine[k];
   Result.BlockPx := TyFontPxOf(E.Caption.FontSizeLogical);
   Result.BlockWeight := E.Caption.FontWeight;
 end;
@@ -831,11 +838,11 @@ begin
         for k := 0 to 3 do
         begin
           case k of
-            0: TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, q.X, q.Y, gx, gy);
-            1: TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, q.X + q.W, q.Y, gx, gy);
-            2: TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, q.X + q.W, q.Y + q.H, gx, gy);
+            0: TyRtDrawnPoint(dr.D, q.X, q.Y, gx, gy);
+            1: TyRtDrawnPoint(dr.D, q.X + q.W, q.Y, gx, gy);
+            2: TyRtDrawnPoint(dr.D, q.X + q.W, q.Y + q.H, gx, gy);
           else
-            TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, q.X, q.Y + q.H, gx, gy);
+            TyRtDrawnPoint(dr.D, q.X, q.Y + q.H, gx, gy);
           end;
           Inc(FCompared);
           if not (Near(gx, Hex(corners.Objects[k].Find('x')))
@@ -913,7 +920,7 @@ begin
         Str(p.Find('textAlign')), AlignWord(q.TextAlign)]));
     if geometry then
     begin
-      TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, q.X, q.Y, gx, gy);
+      TyRtDrawnPoint(dr.D, q.X, q.Y, gx, gy);
       Inc(FCompared);
       if not (Near(gx, Hex(p.Find('gx'))) and Near(gy, Hex(p.Find('gy')))) then
         Miss(Format('%s: text %d "%s" at %s,%s upstream, %g,%g here', [where, i,
@@ -1015,11 +1022,11 @@ begin
     for k := 0 to 3 do
     begin
       case k of
-        0: TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, bb.X, bb.Y, gx, gy);
-        1: TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, bb.X + bb.W, bb.Y, gx, gy);
-        2: TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, bb.X + bb.W, bb.Y + bb.H, gx, gy);
+        0: TyRtDrawnPoint(dr.D, bb.X, bb.Y, gx, gy);
+        1: TyRtDrawnPoint(dr.D, bb.X + bb.W, bb.Y, gx, gy);
+        2: TyRtDrawnPoint(dr.D, bb.X + bb.W, bb.Y + bb.H, gx, gy);
       else
-        TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, bb.X, bb.Y + bb.H, gx, gy);
+        TyRtDrawnPoint(dr.D, bb.X, bb.Y + bb.H, gx, gy);
       end;
       Inc(FCompared);
       if not (Near(gx, Hex(corners.Objects[k].Find('x')))
@@ -1098,8 +1105,10 @@ begin
     halo's three labels and title, [R7-L] label-opacity-scatter's two plain
     labels, label-opacity-root's one, label-opacity-item's end label at its
     own 0.7, label-opacity-hier's treemap label, [R7-M] calendar-label-
-    numstr's seven day words and its year -- and no others }
-  AssertEquals('texts drawn as one run', 40, FOneRun);
+    numstr's seven day words and its year, graph-edge-scale's level edge
+    label, graph-edge-scale-curve's haloed one and its 'from' -- and no
+    others }
+  AssertEquals('texts drawn as one run', 43, FOneRun);
   AssertTrue(Format('only %d compared', [FCompared]), FCompared >= 3000);
 end;
 
@@ -1782,6 +1791,55 @@ begin
     AssertTrue('as tall as a line', e.Caption.RtPieces[0].H > 5);
   end;
   AssertTrue('the label is there', seen);
+end;
+
+{ [R7-M] A GRAPH'S EDGE LABEL IN A VIEW SCALED UNEQUALLY IS DRAWN SQUASHED:
+  the view's scaleX 4 and scaleY 2 leave the label at half its height
+  (Line.beforeUpdate's 1 / scaleX), its plate too -- the pixels, not only
+  the geometry the oracle cases compare. A level edge: no turn, so the
+  plate is an upright rect half as tall as it is unsquashed. }
+procedure TAdvChartRichWiringOracleTest.TestAnUnequalViewDrawsTheEdgeLabelSquashed;
+var
+  x, y, top, bottom, left, right: Integer;
+  c: TBGRAPixel;
+begin
+  FBmp.Fill(BGRAWhite);
+  FChart.Option := '{"animation":false,"series":[{"type":"graph","layout":"none",'
+    + '"left":100,"top":100,"width":400,"height":200,"symbolSize":1,'
+    + '"itemStyle":{"color":"#ffffff"},"label":{"show":false},'
+    + '"lineStyle":{"width":1,"color":"#ffffff","opacity":1},'
+    + '"edgeLabel":{"show":true,"formatter":"xx","color":"#ff0000",'
+    + '"backgroundColor":"#ff0000","padding":4},'
+    + '"data":[{"name":"a","x":0,"y":0},{"name":"b","x":100,"y":0},'
+    + '{"name":"c","x":0,"y":100}],"links":[{"source":"a","target":"b"}]}]}';
+  FChart.SetBounds(0, 0, 600, 400);
+  FChart.Render(FBmp.Canvas, Rect(0, 0, 600, 400), 96);
+  top := MaxInt;
+  bottom := -1;
+  left := MaxInt;
+  right := -1;
+  for y := 0 to 399 do
+    for x := 0 to 599 do
+    begin
+      c := FBmp.GetPixel(x, y);
+      if (c.red > 200) and (c.green < 80) and (c.blue < 80) then
+      begin
+        if y < top then top := y;
+        if y > bottom then bottom := y;
+        if x < left then left := x;
+        if x > right then right := x;
+      end;
+    end;
+  AssertTrue('the plate is drawn', bottom >= 0);
+  { 12 px of words and 8 of padding, halved; as wide as written }
+  AssertTrue(Format('half as tall: rows %d..%d', [top, bottom]),
+    (bottom - top + 1 >= 8) and (bottom - top + 1 <= 12));
+  AssertTrue(Format('as wide: columns %d..%d', [left, right]),
+    right - left + 1 >= 18);
+  { above the line at y 100, the anchor 2.5 px over it (distance 5 / 4 in
+    the data, times 2) }
+  AssertTrue(Format('above the line: bottom row %d', [bottom]),
+    (bottom >= 95) and (bottom <= 99));
 end;
 
 initialization
