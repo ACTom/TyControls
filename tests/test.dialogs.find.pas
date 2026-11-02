@@ -5,8 +5,8 @@ unit test.dialogs.find;
 interface
 
 uses
-  Classes, SysUtils, Dialogs, Forms, fpcunit, testregistry,
-  tyControls.CheckBox, tyControls.Button, tyControls.Dialogs.Find;
+  Classes, SysUtils, Dialogs, Forms, Controls, LCLType, fpcunit, testregistry,
+  tyControls.CheckBox, tyControls.Button, tyControls.StrConsts, tyControls.Dialogs.Find;
 
 type
   TFindMapTest = class(TTestCase)
@@ -68,12 +68,25 @@ type
     BuildForm returns the form without Show, so assert the handlers landed on it. }
   TFindEventForwardTest = class(TTestCase)
   private
+    FSender: TObject;
+    FShows, FCloses, FCanCloses, FReplaces, FFinds: Integer;
     procedure HandleShow(Sender: TObject);
     procedure HandleClose(Sender: TObject; var CloseAction: TCloseAction);
     procedure HandleCanClose(Sender: TObject; var CanClose: Boolean);
+    procedure HandleReplace(Sender: TObject);
+    procedure HandleFind(Sender: TObject);
   published
     procedure TestFindForwardsEvents;
     procedure TestReplaceInheritsAndForwardsEvents;
+    { #179: OnCanClose and OnClose hear of the Close button, Esc and CloseDialog. }
+    procedure TestEveryCloseFiresOnCanCloseAndOnClose;
+    { #179: Enter is Find Next's, in the replace dialog too, and only after the focused control. }
+    procedure TestEnterIsFindNextsInTheReplaceDialog;
+  end;
+
+  TFindFormAcc = class(TTyFindForm)
+  public
+    procedure Press(AKey: Word);
   end;
 
 implementation
@@ -296,14 +309,41 @@ end;
 
 { TFindEventForwardTest }
 
+procedure TFindFormAcc.Press(AKey: Word);
+var k: Word;
+begin
+  k := AKey;
+  KeyDown(k, []);
+end;
+
 procedure TFindEventForwardTest.HandleShow(Sender: TObject);
-begin end;
+begin
+  FSender := Sender;
+  Inc(FShows);
+end;
 
 procedure TFindEventForwardTest.HandleClose(Sender: TObject; var CloseAction: TCloseAction);
-begin end;
+begin
+  FSender := Sender;
+  Inc(FCloses);
+  CloseAction := caFree;   // the dialog keeps its window all the same
+end;
 
 procedure TFindEventForwardTest.HandleCanClose(Sender: TObject; var CanClose: Boolean);
-begin end;
+begin
+  FSender := Sender;
+  Inc(FCanCloses);
+end;
+
+procedure TFindEventForwardTest.HandleReplace(Sender: TObject);
+begin
+  Inc(FReplaces);
+end;
+
+procedure TFindEventForwardTest.HandleFind(Sender: TObject);
+begin
+  Inc(FFinds);
+end;
 
 procedure TFindEventForwardTest.TestFindForwardsEvents;
 var dlg: TTyFindDialog; frm: TTyFindForm;
@@ -314,10 +354,14 @@ begin
     dlg.OnClose := @HandleClose;
     dlg.OnCanClose := @HandleCanClose;
     frm := dlg.BuildForm;   // build + forward, NO Show
-    AssertTrue('OnShow forwarded to form', frm.OnShow = TNotifyEvent(@HandleShow));
-    AssertTrue('OnClose forwarded to form', frm.OnClose = TCloseEvent(@HandleClose));
-    AssertTrue('OnCanClose -> form.OnCloseQuery',
-      frm.OnCloseQuery = TCloseQueryEvent(@HandleCanClose));
+    { #179: the handlers get the dialog as Sender, as LCL's do, not the form inside it. }
+    FSender := nil;
+    frm.OnShow(frm);
+    AssertSame('OnShow reaches the handler with the dialog', TObject(dlg), FSender);
+    FSender := nil;
+    frm.Close;
+    AssertSame('OnCanClose and OnClose too', TObject(dlg), FSender);
+    AssertEquals('both ran', 2, FCanCloses + FCloses);
   finally dlg.Free; end;
 end;
 
@@ -331,9 +375,63 @@ begin
     dlg.OnShow := @HandleShow;
     dlg.OnCanClose := @HandleCanClose;
     frm := dlg.BuildForm;
-    AssertTrue('inherited OnShow forwarded', frm.OnShow = TNotifyEvent(@HandleShow));
-    AssertTrue('inherited OnCanClose -> OnCloseQuery',
-      frm.OnCloseQuery = TCloseQueryEvent(@HandleCanClose));
+    FSender := nil;
+    frm.OnShow(frm);
+    AssertSame('inherited OnShow reaches the handler with the dialog', TObject(dlg), FSender);
+    FSender := nil;
+    frm.Close;
+    AssertSame('inherited OnCanClose too', TObject(dlg), FSender);
+  finally dlg.Free; end;
+end;
+
+procedure TFindEventForwardTest.TestEveryCloseFiresOnCanCloseAndOnClose;
+var
+  dlg: TTyFindDialog;
+  frm: TTyFindForm;
+  i: Integer;
+  closeBtn: TTyButton;
+begin
+  dlg := TTyFindDialog.Create(nil);
+  try
+    dlg.OnClose := @HandleClose;
+    dlg.OnCanClose := @HandleCanClose;
+    frm := dlg.BuildForm;
+    closeBtn := nil;
+    for i := 0 to frm.ButtonCount - 1 do
+      if frm.Buttons[i].Caption = rsMsgBtnClose then closeBtn := frm.Buttons[i];
+    AssertNotNull('setup: the Close button', closeBtn);
+    closeBtn.Click;
+    AssertEquals('the Close button asks OnCanClose', 1, FCanCloses);
+    AssertEquals('and fires OnClose', 1, FCloses);
+    TFindFormAcc(frm).Press(VK_ESCAPE);
+    AssertEquals('Esc too', 2, FCanCloses);
+    AssertEquals('Esc fires OnClose', 2, FCloses);
+    dlg.CloseDialog;
+    AssertEquals('and CloseDialog', 3, FCanCloses);
+    AssertEquals('CloseDialog fires OnClose', 3, FCloses);
+    AssertSame('an OnClose asking caFree leaves the dialog its window', TObject(frm),
+      TObject(dlg.BuildForm));
+  finally dlg.Free; end;
+end;
+
+procedure TFindEventForwardTest.TestEnterIsFindNextsInTheReplaceDialog;
+var
+  dlg: TTyReplaceDialog;
+  frm: TTyFindForm;
+  k: Word;
+begin
+  dlg := TTyReplaceDialog.Create(nil);
+  try
+    dlg.OnReplace := @HandleReplace;
+    dlg.OnFind := @HandleFind;
+    frm := dlg.BuildForm;
+    AssertNotNull('setup: there is a default button', frm.DefaultControl);
+    AssertEquals('it is Find Next, as LCL''s', rsDlgFindNext,
+      (frm.DefaultControl as TTyButton).Caption);
+    k := VK_RETURN;
+    TFindFormAcc(frm).KeyDown(k, []);
+    AssertEquals('the key preview leaves Enter to the focused control', VK_RETURN, k);
+    AssertEquals('and replaces nothing', 0, FReplaces);
   finally dlg.Free; end;
 end;
 

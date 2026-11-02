@@ -445,7 +445,7 @@ begin
   // component's Caption is honoured.
   d := TyBuildPickerFontDialog(FCaption, FFont);
   try
-    TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);
+    TyForwardDialogEvents(Self, d, FOnShow, FOnClose, FOnCanClose);
     Result := (d.ShowModal = mrOK);
     if Result then d.WriteTo(FFont);
   finally d.Free; end;

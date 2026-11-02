@@ -743,7 +743,7 @@ begin
   // OnShow/OnClose/OnCanClose forward onto the form before ShowModal.
   d := TyBuildColorDialog(FCaption, FColor);
   try
-    TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);
+    TyForwardDialogEvents(Self, d, FOnShow, FOnClose, FOnCanClose);
     Result := (d.ShowModal = mrOK);
     if Result then FColor := d.CurrentColor;
   finally d.Free; end;

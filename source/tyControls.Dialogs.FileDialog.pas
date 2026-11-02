@@ -1058,7 +1058,7 @@ begin
     d.PreviewAllowsText := PreviewAllowsText;   { virtual: image-only vs image+text }
     d.OnPreview := FOnPreview;                  { custom-render hook (PreviewMode only) }
     d.FileName := FFileName;   { seed AFTER InitialDir so a path-bearing name wins }
-    TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);
+    TyForwardDialogEvents(Self, d, FOnShow, FOnClose, FOnCanClose);
     Result := (d.ShowModal = mrOK);
     if Result then
     begin

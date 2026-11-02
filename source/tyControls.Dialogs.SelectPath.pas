@@ -555,7 +555,7 @@ begin
   d := TyBuildSelectPathDialog(FCaption, FRoot);
   try
     d.Directory := FDirectory;              // pre-select the current directory (in)
-    TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);
+    TyForwardDialogEvents(Self, d, FOnShow, FOnClose, FOnCanClose);
     Result := (d.ShowModal = mrOK);
     if Result then FDirectory := d.Directory;   // chosen directory (out)
   finally d.Free; end;

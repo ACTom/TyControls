@@ -824,7 +824,7 @@ begin
   d := TyBuildIconBrowserDialog(FCaption, FIconFont);
   try
     d.GlyphName := FGlyphName;
-    TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);
+    TyForwardDialogEvents(Self, d, FOnShow, FOnClose, FOnCanClose);
     Result := (d.ShowModal = mrOK);
     if Result then FGlyphName := d.GlyphName;
   finally

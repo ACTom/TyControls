@@ -293,7 +293,7 @@ var d: TTyAboutForm;
 begin
   d := TyBuildAboutDialog(FTitle, FAppName, FVersion, FDescription, FCopyright, FLicense, FHomepage);
   try
-    TyForwardDialogEvents(d, FOnShow, FOnClose, FOnCanClose);
+    TyForwardDialogEvents(Self, d, FOnShow, FOnClose, FOnCanClose);
     d.ShowModal;
   finally
     d.Free;
