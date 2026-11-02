@@ -91,7 +91,9 @@ A sample's rec, by probe:
          hex numbers), type (shape.symbolType; null for a path:// icon),
          box [x, y, w, h] (the shape's box, createSymbol's), rect [x, y, w,
          h] (getBoundingRect: the path's own rect grown by its pen),
-         stroked, filled (hasStroke / hasFill), lw, sns (strokeNoScale)};
+         stroked, filled (hasStroke / hasFill), lw, sns (strokeNoScale),
+         cbox [minX, minY, maxX, maxY] a path:// icon's outline on the
+         canvas, sampled 256 steps a curve};
          'g<s>/nsym<i>' the node's path: {m, type, rect, label: {x, y,
          align, vAlign} (the text's transform, the alignment it is drawn
          with) or null}.
@@ -283,6 +285,55 @@ function paint(v) {
 // ---------------------------------------------------------------------------
 // the global transform's translation and scale (after the frame's update):
 // wx, wy, ws
+// [R7-O] a path's outline through the element's transform, sampled finely
+// (256 steps a curve or an arc): its box [minX, minY, maxX, maxY]
+function sampledBox(el) {
+  const pp = new PathProxy(false);
+  pp.beginPath();
+  el.buildPath(pp, el.shape, false);
+  const d = Array.from(pp.data.slice(0, pp.len()));
+  const m = el.transform || [1, 0, 0, 1, el.x, el.y];
+  const b = [Infinity, Infinity, -Infinity, -Infinity];
+  const put = (x, y) => {
+    const X = m[0] * x + m[2] * y + m[4];
+    const Y = m[1] * x + m[3] * y + m[5];
+    b[0] = Math.min(b[0], X); b[1] = Math.min(b[1], Y); b[2] = Math.max(b[2], X); b[3] = Math.max(b[3], Y);
+  };
+  const N = 256;
+  let i = 0, x0 = 0, y0 = 0;
+  while (i < d.length) {
+    const c = d[i++];
+    if (c === 1 || c === 2) { x0 = d[i]; y0 = d[i + 1]; put(x0, y0); i += 2; }
+    else if (c === 3) {
+      for (let k = 1; k <= N; k++) {
+        const t = k / N, u = 1 - t;
+        put(u * u * u * x0 + 3 * u * u * t * d[i] + 3 * u * t * t * d[i + 2] + t * t * t * d[i + 4],
+          u * u * u * y0 + 3 * u * u * t * d[i + 1] + 3 * u * t * t * d[i + 3] + t * t * t * d[i + 5]);
+      }
+      x0 = d[i + 4]; y0 = d[i + 5]; i += 6;
+    }
+    else if (c === 4) {
+      for (let k = 1; k <= N; k++) {
+        const t = k / N, u = 1 - t;
+        put(u * u * x0 + 2 * u * t * d[i] + t * t * d[i + 2], u * u * y0 + 2 * u * t * d[i + 1] + t * t * d[i + 3]);
+      }
+      x0 = d[i + 2]; y0 = d[i + 3]; i += 4;
+    }
+    else if (c === 5) {
+      const [cx, cy, rx, ry, th, dth, psi] = d.slice(i, i + 7);
+      for (let k = 0; k <= N; k++) {
+        const a = th + dth * k / N;
+        put(cx + rx * Math.cos(a) * Math.cos(psi) - ry * Math.sin(a) * Math.sin(psi),
+          cy + rx * Math.cos(a) * Math.sin(psi) + ry * Math.sin(a) * Math.cos(psi));
+      }
+      i += 8;
+    }
+    else if (c === 6) { /* close */ }
+    else if (c === 7) { put(d[i], d[i + 1]); put(d[i] + d[i + 2], d[i + 1] + d[i + 3]); i += 4; }
+    else must(false, 'a path command ' + c);
+  }
+  return b;
+}
 const glob = (o, el) => {
   const m = el.transform || [1, 0, 0, 1, el.x, el.y];
   o.wx = hx(m[4]);
@@ -388,6 +439,8 @@ const PROBES = {
             box: sh.symbolType ? arr([sh.x, sh.y, sh.width, sh.height]) : null,
             rect: rectOf(sym), stroked: !!sym.hasStroke(), filled: !!sym.hasFill(),
             lw: hx(sym.style.lineWidth), sns: !!sym.style.strokeNoScale };
+          // a path:// icon (no symbolType): its outline's box on the canvas, sampled
+          if (!sh.symbolType) rec[key + '/edge' + i + '/' + (nm === 'fromSymbol' ? 'fm' : 'tm')].cbox = arr(sampledBox(sym));
         }
       });
       const data = sm.getData();
@@ -561,13 +614,13 @@ add('graphSquash', 'graph-squash-sym', "[R7-O] layout none, 400 x 200 over a 100
   [{ t: T1 - 1, do: 'sample' },
     { t: T1, do: 'merge', option: { series: [{ data: [SQ_NODES[0], SQ_NODES[1], Object.assign({}, SQ_NODES[2], { x: 80, y: 30 }),
       Object.assign({}, SQ_NODES[3], { x: 20, y: 90 })] }] } }, ...after([0, 1, 100, 500, 999, 1000, 1001], T1)]);
-add('graphSquash', 'graph-squash-tall', "[R7-O] the same view taller than wide (100 x 300 over 100 x 100: scaleX 1, scaleY 3): pin, roundRect, a path:// icon and an emptyRect at the ends of straight and curved edges",
+add('graphSquash', 'graph-squash-tall', "[R7-O] the same view taller than wide (100 x 300 over 100 x 100: scaleX 1, scaleY 3): pin, roundRect, a path:// icon (a quadratic bulging past its ends) and an emptyRect at the ends of straight and curved edges",
   { animation: false,
     series: [{ type: 'graph', layout: 'none', left: 100, top: 0, width: 100, height: 300, symbolSize: 8,
       edgeSymbol: ['pin', 'roundRect'], edgeSymbolSize: [12, 10],
       data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }, { name: 'c', x: 100, y: 0 }, { name: 'd', x: 0, y: 100 }],
       links: [{ source: 'a', target: 'b' }, { source: 'c', target: 'd', lineStyle: { curveness: 0.4 } },
-        { source: 'a', target: 'c', symbol: ['path://M0,0 Q10,0 10,10 L0,10 Z', 'emptyRect'], symbolSize: [12, 10] },
+        { source: 'a', target: 'c', symbol: ['path://M0,10 Q5,-10 10,10 Z', 'emptyRect'], symbolSize: [12, 10] },
         { source: 'd', target: 'b', lineStyle: { curveness: -0.3 }, symbol: ['emptyRoundRect', 'pin'] }] }] },
   ['gsym'],
   [{ t: 0, do: 'sample' }]);

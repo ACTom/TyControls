@@ -1310,6 +1310,27 @@ begin
         bx := leaf.Arrays['box'];
         MappedOutline(name, el, tp, WantNum(bx.Items[0]), WantNum(bx.Items[1]),
           WantNum(bx.Items[2]), WantNum(bx.Items[3]), m);
+      end
+      else if leaf.Find('cbox') is TJSONArray then
+      begin
+        { a path:// icon: its outline's box, sampled upstream, against the
+          drawn commands' (a twentieth of a pixel) }
+        bx := leaf.Arrays['cbox'];
+        Inc(FCompared);
+        if not el.Shape.HasCmdBounds then
+          Bad(name + ': upstream draws a mapped path, the port another shape')
+        else
+          for k := 0 to 3 do
+          begin
+            case k of
+              0: ps := el.Shape.CmdBounds.Left;
+              1: ps := el.Shape.CmdBounds.Top;
+              2: ps := el.Shape.CmdBounds.Right;
+            else
+              ps := el.Shape.CmdBounds.Bottom;
+            end;
+            NearNum(Format('%s box[%d]', [name, k]), ps, bx.Items[k], 0.05);
+          end;
       end;
       { the pen: the symbol's own (no strokeNoScale), its width as the
         style holds it, stretched with the map -- the port's round pen the

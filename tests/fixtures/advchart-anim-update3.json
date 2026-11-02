@@ -12334,7 +12334,7 @@
   {
    "id": "graph-squash-tall",
    "group": "graphSquash",
-   "note": "[R7-O] the same view taller than wide (100 x 300 over 100 x 100: scaleX 1, scaleY 3): pin, roundRect, a path:// icon and an emptyRect at the ends of straight and curved edges",
+   "note": "[R7-O] the same view taller than wide (100 x 300 over 100 x 100: scaleX 1, scaleY 3): pin, roundRect, a path:// icon (a quadratic bulging past its ends) and an emptyRect at the ends of straight and curved edges",
    "W": 400,
    "H": 300,
    "ring": false,
@@ -12396,7 +12396,7 @@
         "source": "a",
         "target": "c",
         "symbol": [
-         "path://M0,0 Q10,0 10,10 L0,10 Z",
+         "path://M0,10 Q5,-10 10,10 Z",
          "emptyRect"
         ],
         "symbolSize": [
@@ -12555,7 +12555,13 @@
        "stroked": false,
        "filled": true,
        "lw": "3ff0000000000000",
-       "sns": false
+       "sns": false,
+       "cbox": [
+        "4058800000000000",
+        "c032000000000000",
+        "405b800000000000",
+        "4032000000000000"
+       ]
       },
       "g0/edge2/tm": {
        "m": [

@@ -495,10 +495,10 @@ function r7iCases() {
       links: [{ source: 'a', target: 'c' }, { source: 'a', target: 'b' },
         { source: 'c', target: 'd', lineStyle: { curveness: 0.3 }, symbol: ['diamond', 'emptyRect'], symbolSize: 20 }] }),
     [PT(340, 21, 40), PT(56, 21, 30), PT(340, 165, 40), PT(345, 30, 30), PT(60, 165, 30)]],
-    // a two-pixel empty circle at the end of an upright edge, squashed: its frame's diagonal holds a one (the pen in the
-    // symbol's own frame is not strokeNoScale -- no getLineScale rule)
+    // a four-pixel empty circle at the ends of an upright edge, scaleX 2, scaleY 1: its unit frame's diagonal holds a one
+    // (the pen in the symbol's own frame is not strokeNoScale -- no getLineScale rule); the line of no width takes no pointer
     ['r7o.graph-tiny-ends-squash', solo({ type: 'graph', layout: 'none', left: 100, top: 20, width: 100, height: 100, symbolSize: 0,
-      edgeSymbol: ['emptyCircle', 'emptyCircle'], edgeSymbolSize: 2, lineStyle: { width: 1, opacity: 1, color: '#000' },
+      edgeSymbol: ['emptyCircle', 'emptyCircle'], edgeSymbolSize: 4, lineStyle: { width: 0, opacity: 1, color: '#000' },
       data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 0, y: 100 }, { name: 'c', x: 50, y: 50 }],
       links: [{ source: 'a', target: 'b' }] }),
     [PT(100, 20, 8), PT(100, 120, 8)]],
