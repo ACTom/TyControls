@@ -1,7 +1,7 @@
 unit test.valuelisteditor;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, LCLType, fpcunit, testregistry,
+uses Classes, SysUtils, LCLType, fpcunit, testregistry, TypInfo,
   tyControls.ValueListEditor;
 type
   { Drive the input paths to test the numeric filter headlessly. }
@@ -20,6 +20,7 @@ type
     procedure OnEditDialogRow(Sender: TObject; ARow: TTyValueRow);
     function MakeWH: TTyValueListEditor;   // Width=100, Height=50
   published
+    procedure TestTheRowsAreWhatTheFormFileKeeps;   // #167
     procedure TestInsertAndRead;
     procedure TestSetValueFromIndexFiresEvent;
     procedure TestSetValueFromIndexNoEventWhenUnchanged;
@@ -468,6 +469,50 @@ begin
     AssertEquals('vekDialog row entered edit', 7, e.EditingRow);
     AssertTrue('vekDialog inline text is read-only', e.InlineEditor.ReadOnly);
   finally e.Free; end;
+end;
+
+
+{ #167: the rows are what the form file keeps, one Key=Value line each under Items -- Items
+  held the view's keys, came back as blank rows, and AddRow wiped them. }
+procedure TValueListEditorTest.TestTheRowsAreWhatTheFormFileKeeps;
+var
+  a, b: TTyValueListEditor;
+  ms: TMemoryStream;
+  txt: TStringStream;
+begin
+  a := TTyValueListEditor.Create(nil);
+  b := TTyValueListEditor.Create(nil);
+  ms := TMemoryStream.Create;
+  txt := TStringStream.Create('');
+  try
+    a.AddRow('Name', 'Bob');
+    a.AddRow('Age', '7');
+    AssertFalse('the view''s key list is not what is written', IsStoredProp(a, 'Items'));
+    ms.WriteComponent(a);
+    ms.Position := 0;
+    ObjectBinaryToText(ms, txt);
+    AssertTrue('a row is a Key=Value line: ' + txt.DataString, Pos('''Name=Bob''', txt.DataString) > 0);
+    { Read back from a form file's text -- the editor root above would also carry its own inline
+      editor, which a form never writes (its owner is the list, not the form). }
+    txt.Free;
+    txt := TStringStream.Create('object Vle: TTyValueListEditor' + LineEnding +
+      '  Items.Strings = (' + LineEnding + '    ''Name=Bob''' + LineEnding +
+      '    ''Age=7''' + LineEnding + '  )' + LineEnding + 'end' + LineEnding);
+    ms.Clear;
+    ObjectTextToBinary(txt, ms);
+    ms.Position := 0;
+    ms.ReadComponent(b);
+    AssertEquals('read back as rows', 2, b.RowCount);
+    AssertEquals('their keys', 'Name', b.Keys[0]);
+    AssertEquals('their values', 'Bob', b.Values['Name']);
+    b.AddRow('X', '1');
+    AssertEquals('and AddRow keeps them', 3, b.RowCount);
+  finally
+    txt.Free;
+    ms.Free;
+    b.Free;
+    a.Free;
+  end;
 end;
 
 initialization

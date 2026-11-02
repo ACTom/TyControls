@@ -39,6 +39,8 @@ type
     procedure TestHeaderClickToggles;
     procedure TestItemClickSelects;
     procedure TestDoubleClickFiresOnItemDblClick;
+    procedure TestEveryClickOnAnItemIsAnItemClick;   // #167
+    procedure TestTheSelectionFollowsItsItem;        // #167
     procedure TestRailCharTakesTheFirstGlyph;
     procedure TestCollapsedGroupHasNoItemHits;
     procedure TestWheelScrollsWhenOverflow;
@@ -851,6 +853,57 @@ begin
   AssertTrue('fixture: the content overflows', A.ScrollOffset > 0);
   AssertEquals('the trigger band comes off the scroll viewport',
     28, B.ScrollOffset - A.ScrollOffset);
+end;
+
+procedure TTyListGroupPanelTest.TestEveryClickOnAnItemIsAnItemClick;
+var
+  P: TPanelAccess;
+  probe: TItemProbe;
+begin
+  P := TPanelAccess.Create(FForm);
+  P.Parent := FForm;
+  P.Font.PixelsPerInch := 96;
+  P.SetBounds(0, 0, 200, 300);
+  P.AddGroup('G0');
+  P.AddItem(0, 'x'); P.AddItem(0, 'y');
+  P.Expanded[0] := True;
+  probe := TItemProbe.Create;
+  try
+    P.OnItemClick := @probe.Handle;
+    // Layout: header 0..26, item0 26..50, item1 50..74.
+    P.DoMouseDown(40, 60);
+    AssertEquals('setup: a click', 1, probe.Count);
+    P.DoMouseDown(40, 60);
+    AssertEquals('a click on the selected item is one too', 2, probe.Count);
+    P.DoDblClick(40, 60);
+    AssertEquals('the second press of a double-click is not', 2, probe.Count);
+  finally
+    P.OnItemClick := nil;
+    probe.Free;
+  end;
+end;
+
+procedure TTyListGroupPanelTest.TestTheSelectionFollowsItsItem;
+var
+  P: TTyListGroupPanel;
+  g: TTyListGroup;
+begin
+  P := TTyListGroupPanel.Create(FForm);
+  P.Parent := FForm;
+  P.AddGroup('G0');
+  P.AddItem(0, 'x');
+  P.AddGroup('G1');
+  P.AddItem(1, 'z');
+  P.SelectItem(1, 0);
+  g := TTyListGroup(P.Groups.Insert(0));
+  g.Caption := 'New';
+  AssertEquals('a group put in above moves the selection with its item', 2, P.SelectedGroup);
+  AssertEquals('item', 0, P.SelectedItem);
+  TTyListGroupItem(P.Groups[2].Items.Insert(0)).Caption := 'w';
+  AssertEquals('so does an item put in above it', 1, P.SelectedItem);
+  AssertEquals('it is still z', 'z', P.ItemCaption(P.SelectedGroup, P.SelectedItem));
+  P.Groups[2].Items[1].Free;
+  AssertEquals('gone, nothing is selected', -1, P.SelectedGroup);
 end;
 
 initialization

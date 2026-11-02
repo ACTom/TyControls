@@ -17,7 +17,7 @@ uses
   tyControls.Dialogs, tyControls.Dialogs.About, tyControls.Dialogs.IconBrowser,
   tyControls.Dialogs.SelectPath, tyControls.Dialogs.FileDialog,
   tyControls.ShellComboBox, tyControls.ShellListView, tyControls.ShellTreeView,
-  tyControls.FilterComboBox, tyControls.CharImage, tyControls.GlyphButtons,
+  tyControls.FilterComboBox, tyControls.CharImage, tyControls.GlyphButtons, tyControls.ValueListEditor,
   tyControls.AdvanceChart, tyControls.ToolWindows, tyControls.DB.Lists, DBPropEdits,
   tyControls.ComboBox, tyControls.AdvancedComboBox, tyControls.CheckComboBox,
   tyControls.OfficeComboBox,
@@ -903,6 +903,8 @@ begin
   RegisterPropertyEditor(TypeInfo(TTyComboBoxStyle), TTyCustomFilterComboBox, 'Style', TTyPickOnlyComboStyleEditor);
   RegisterPropertyEditor(TypeInfo(TTyComboBoxStyle), TTyCustomOfficeComboBox, 'Style', TTyPickOnlyComboStyleEditor);
   RegisterPropertyEditor(TypeInfo(TTyComboBoxStyle), TTyCustomShellComboBox, 'Style', TTyPickOnlyComboStyleEditor);
+  { #167: a value list editor's rows are its own model; Items is the view's flat key list. }
+  RegisterPropertyEditor(TypeInfo(TStrings), TTyValueListEditor, 'Items', THiddenPropertyEditor);
   { #163: the filter and look-in combos make their rows from Filter and Directory. }
   RegisterPropertyEditor(TypeInfo(TStringList), TTyFilterComboBox, 'Items', THiddenPropertyEditor);
   RegisterPropertyEditor(TypeInfo(TStringList), TTyShellComboBox, 'Items', THiddenPropertyEditor);

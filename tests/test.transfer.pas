@@ -48,6 +48,7 @@ type
     procedure TestApplyMoveAppendsAfterExistingTarget;
     procedure TestApplyMoveOfNothingIsANoOp;
     procedure TestMoveIsRightwardAndIsAll;
+    procedure TestApplyMoveTakesTheObjectsAlong;   // #167
   end;
 
   { Headless control behaviour: typeKey, the data model, the panes' bounds, the rail's
@@ -1530,6 +1531,25 @@ begin
     AssertTrue(Format('the >> mark spans about two marks, not collapsed stubs (all=%d, one=%d)',
       [wAll, wOne]), wAll * 10 >= wOne * 18);
   finally Bmp.Free; T.Free; end;
+end;
+
+{ #167: a row's object goes with it -- the move took the strings only. }
+procedure TTyTransferRulesTest.TestApplyMoveTakesTheObjectsAlong;
+var src, dst: TStringList;
+begin
+  src := TStringList.Create;
+  dst := TStringList.Create;
+  try
+    src.AddObject('a', TObject(PtrInt(11)));
+    src.AddObject('b', TObject(PtrInt(22)));
+    TyTransferApplyMove(src, dst, [1]);
+    AssertEquals('setup: moved', 'b', dst[0]);
+    AssertEquals('with its object', 22, PtrInt(dst.Objects[0]));
+    AssertEquals('and the one left keeps its own', 11, PtrInt(src.Objects[0]));
+  finally
+    src.Free;
+    dst.Free;
+  end;
 end;
 
 initialization

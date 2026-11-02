@@ -244,6 +244,9 @@ type
     FExpandedWidth: Integer;       // captured by a runtime collapse; 0 = never collapsed
     FOnGroupToggle: TTyListGroupToggleEvent;
     FOnItemClick: TTyListGroupItemEvent;
+    { #167: the selected group's and item's collection IDs -- they stay with the objects when
+      rows go in or out, where the indexes do not, and never dangle as a reference would. }
+    FSelGroupID, FSelItemID: Integer;
     FOnItemDblClick: TTyListGroupItemEvent;
     FOnCollapsedChange: TNotifyEvent;
     procedure SetCollapsed(AValue: Boolean);
@@ -722,12 +725,26 @@ begin
 end;
 
 procedure TTyCustomListGroupPanel.GroupsChanged;
+var g, i: Integer;
 begin
-  if (FSelGroup >= GroupCount)
-    or ((FSelGroup >= 0) and (FSelItem >= ItemCount(FSelGroup))) then
+  { #167: the selection follows its item -- a group or an item put in above it left it on
+    the old index, i.e. on another item. Gone, it is cleared. }
+  if FSelGroup >= 0 then
   begin
     FSelGroup := -1;
     FSelItem := -1;
+    for g := 0 to FGroups.Count - 1 do
+      if FGroups[g].ID = FSelGroupID then
+      begin
+        for i := 0 to FGroups[g].Items.Count - 1 do
+          if FGroups[g].Items[i].ID = FSelItemID then
+          begin
+            FSelGroup := g;
+            FSelItem := i;
+            Break;
+          end;
+        Break;
+      end;
   end;
   ClearHover;
   ClampScroll;
@@ -1127,6 +1144,11 @@ begin
   if (FSelGroup = AGroupIndex) and (FSelItem = AItemIndex) then Exit;
   FSelGroup := AGroupIndex;
   FSelItem := AItemIndex;
+  if valid then
+  begin
+    FSelGroupID := FGroups[AGroupIndex].ID;
+    FSelItemID := FGroups[AGroupIndex].Items[AItemIndex].ID;
+  end;
   Invalidate;
   if valid and Assigned(FOnItemClick) then FOnItemClick(Self, AGroupIndex, AItemIndex);
 end;
@@ -1184,9 +1206,18 @@ begin
       ToggleGroup(hit.GroupIndex)
     else
     begin
-      SelectItem(hit.GroupIndex, hit.ItemIndex);
+      { #167: every click on an item is an OnItemClick -- on the selected one too, which
+        SelectItem (no change, no event) passed over. The second press of a double-click is
+        the OnItemDblClick, as LCL's controls have no second click there. }
+      if (hit.GroupIndex = FSelGroup) and (hit.ItemIndex = FSelItem) then
+      begin
+        if not (ssDouble in Shift) and Assigned(FOnItemClick) then
+          FOnItemClick(Self, hit.GroupIndex, hit.ItemIndex);
+      end
+      else
+        SelectItem(hit.GroupIndex, hit.ItemIndex);
       { ssDouble, not a timer (the Edit/Memo lesson): the widgetset already decided
-        this press is the pair's second. SelectItem above was a no-op re-select. }
+        this press is the pair's second. }
       if (ssDouble in Shift) and Assigned(FOnItemDblClick) then
         FOnItemDblClick(Self, hit.GroupIndex, hit.ItemIndex);
     end;
