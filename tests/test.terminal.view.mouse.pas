@@ -80,6 +80,7 @@ type
     procedure TestTheDragTimerStopsWhenTheButtonIsUp;
     procedure TestPrimaryOutlivesTheSelection;
     procedure TestSelectLinesIsClampedAndOrdered;
+    procedure TestNothingClearedIsNoChange;
   end;
 
 implementation
@@ -1058,6 +1059,30 @@ begin
   V.SelectLines(3, 1);
   AssertEquals('swapped: rows 1 to 3', 'line-1' + LineEnding + 'line-2' + LineEnding + 'line-3',
     V.SelectionText);
+end;
+
+{ #185: OnSelectionChange is for a change. With no selection, a screen switch, a new row
+  count, a program taking the mouse, Reset and ClearSelection change nothing; a second
+  SelectAll neither. }
+procedure TTyTerminalViewMouseTests.TestNothingClearedIsNoChange;
+begin
+  V.WriteSync('hello');
+  FChanges := 0;
+  V.WriteSync(#27'[?1049h');
+  V.WriteSync(#27'[?1049l');
+  F.SizeTo(20, 6);
+  AssertEquals('6 rows', 6, V.Rows);
+  V.WriteSync(#27'[?1000h');
+  V.WriteSync(#27'[?1000l');
+  V.Reset;
+  V.ClearSelection;
+  AssertEquals('nothing was selected: no change', 0, FChanges);
+  V.SelectAll;
+  AssertEquals('select all', 1, FChanges);
+  V.SelectAll;
+  AssertEquals('select all again: no change', 1, FChanges);
+  V.ClearSelection;
+  AssertEquals('cleared', 2, FChanges);
 end;
 
 initialization

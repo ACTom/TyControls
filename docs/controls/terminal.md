@@ -139,7 +139,7 @@ uses tyControls.Terminal;
 | `OnBell(Sender)` | BEL。 |
 | `OnOsc(Sender, AIdent, AData)` | 没有处理器接的 OSC（例如 OSC 7 当前目录）。 |
 | `OnShortcutQuery(Sender, Key, Shift, var APassToApplication)` | 控件要吞一个键之前先问宿主；置 `True` 就不吞，交给窗体。见 §5。 |
-| `OnSelectionChange(Sender)` | 选区变了（包括被清掉）。 |
+| `OnSelectionChange(Sender)` | 选区变了（包括被清掉）。没有选区时的「清掉」、已经全选时再全选不算变，不发。 |
 | `OnLinkActivate(Sender, AUri, AFromOsc8)` | 用户 Ctrl+单击（macOS Cmd+单击）了一条链接。控件什么都不打开，打不打开由宿主定。见 §8。 |
 | `OnOsc52(Sender, AWrite, ASelection, var AText, var AAllow)` | 程序要写或读剪贴板，宿主可以改文字、可以拒绝。见 §9。 |
 | `OnClaimedInput(Sender, AData)` | 数据流处理器接管期间，用户的按键、粘贴、滚轮翻成的方向键（已经编好的字节）不发给程序，改从这里来。宿主拿它做取消（比如连按五次 Ctrl+X）。`ReadOnly` 时不发。见 §12。 |

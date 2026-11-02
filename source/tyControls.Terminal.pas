@@ -298,6 +298,8 @@ type
     FCopyOnSelect: Boolean;
     FWordSeparators: string;
     FOnSelectionChange: TNotifyEvent;
+    { #185: 选区服务照上游清空、全选都报一次变化;没变的那次不转给 OnSelectionChange }
+    FSelChangeMuted: Boolean;
     { 链接:识别网址、非 http(s) 的 OSC 8 算不算链接;悬停的那条(按着链接键时)、按下时的
       那条、指针在不在控件里、上次悬停用的修饰键 }
     FDetectUrls, FAllowNonHttpLinks: Boolean;

@@ -5,6 +5,7 @@
 
 procedure TTyCustomTerminalView.SelectionChanged(Sender: TObject);
 begin
+  if FSelChangeMuted then Exit;
   if Assigned(FOnSelectionChange) then FOnSelectionChange(Self);
 end;
 
@@ -205,14 +206,28 @@ end;
 procedure TTyCustomTerminalView.SelectAll;
 begin
   SyncSelectionTrim;
-  FSelection.SelectAll;
+  { 已经是全选:选区没变,不报(上游的 selectAll 每次都报) }
+  FSelChangeMuted := FSelection.Model.IsSelectAllActive;
+  try
+    FSelection.SelectAll;
+  finally
+    FSelChangeMuted := False;
+  end;
 end;
 
 procedure TTyCustomTerminalView.ClearSelection;
 begin
   KeepPrimary;
   StopDragTimer;
-  FSelection.Clear;
+  { 没有选区时照样清(按下了还没拖出选区的起点也要清掉),只是不报变化:换屏、改行数、
+    程序要鼠标、Reset 都走这里(上游的 clearSelection 每次都报) }
+  SyncSelectionTrim;
+  FSelChangeMuted := not FSelection.HasSelection;
+  try
+    FSelection.Clear;
+  finally
+    FSelChangeMuted := False;
+  end;
 end;
 
 { 宿主给的数钳进缓冲:列 0..Cols、行 0..最后一行、长度 0..到缓冲末尾(上游不查;长度
