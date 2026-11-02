@@ -345,6 +345,26 @@ function matrixOut(chart) {
   return out;
 }
 
+// [R7-K] each slider's data shadow, read off the view -- also when
+// setOption threw: the components render before the series do
+// (echarts.ts render: renderComponents, then renderSeries), so a series
+// view that throws leaves the sliders drawn. {index, seriesIndex (the
+// series _dataShadowInfo took) | null, drawn, area, line (the polygon's and
+// the polyline's points, sliderGroup-local, hex) | null}
+function shadowOut(chart) {
+  const out = [];
+  chart._componentsViews.forEach(view => {
+    if (!view || view.type !== 'dataZoom.slider' || !view.dataZoomModel) return;
+    const info = view._dataShadowInfo;
+    const segs = (view._displayables && view._displayables.dataShadowSegs) || [];
+    const drawn = segs.length > 0;
+    const pts = p => (p ? p.map(q => q.map(hex)) : null);
+    out.push({ index: view.dataZoomModel.componentIndex, seriesIndex: info ? info.series.seriesIndex : null, drawn,
+      area: drawn ? pts(view._shadowPolygonPts) : null, line: drawn ? pts(view._shadowPolylinePts) : null });
+  });
+  return out;
+}
+
 function runCase(c) {
   const option = clone(c.option);
   const rec = { id: c.id, group: c.group, note: c.note, option };
@@ -381,6 +401,7 @@ function runCase(c) {
       rec.legend = leg ? leg.getData().map(d => String(d.get('name'))) : null;
       rec.aria = attrs['aria-label'] == null ? null : attrs['aria-label'];
     }
+    if (c.shadow) rec.shadow = shadowOut(chart);
     rec.datasets = datasetsOut(chart);
     return rec;
   } finally {
@@ -851,6 +872,25 @@ L('r-list-dz-gap-weak', "the same, 'weakFilter'", dzg('weakFilter'), EXT);
 L('r-list-dz-gap-empty', "the same, 'empty'", dzg('empty'), EXT);
 L('r-list-dz-gap-slider', "a slider over x ['nope', 3]: its data shadow reads no dimension, upstream throws", Object.assign(dzg('filter'),
   { dataZoom: [{ start: 20, end: 60 }] }), {});
+// [R7-K] a series refused for a short value list still casts a slider's
+// data shadow: the slider renders before the boxplot's view throws, its
+// _dataShadowInfo reads the series model and the first y dimension. A
+// candlestick throws earlier (candlestickVisual), nothing is rendered:
+// its four-place twin is what the same first dimension draws.
+const kdz = (series, src, dz) => Object.assign(kds(series, src), { dataZoom: [Object.assign({ type: 'slider' }, dz || {})] });
+const SH = { shadow: true };
+L('r-list-box-four-shadow', 'a boxplot y [1, 2, 3, 4] under a slider with showDataShadow: upstream throws in the view, the slider already cast its shadow from the boxplot',
+  kdz([{ type: 'boxplot', encode: { x: 0, y: [1, 2, 3, 4] } }], BR, { showDataShadow: true }), SH);
+L('r-list-box-five-shadow', 'the same with all five: the same shadow', kdz([{ type: 'boxplot', encode: { x: 0, y: [1, 2, 3, 4, 5] } }], BR,
+  { showDataShadow: true }), SH);
+L('r-list-box-four-auto', 'a boxplot y [1, 2, 3, 4] under a slider, showDataShadow auto: a boxplot casts none', kdz([{ type: 'boxplot',
+  encode: { x: 0, y: [1, 2, 3, 4] } }], BR), SH);
+L('r-list-box-four-line-shadow', 'the short boxplot, then a line on f, showDataShadow: the shadow is still the boxplot (the first that casts one)',
+  kdz([{ type: 'boxplot', encode: { x: 0, y: [1, 2, 3, 4] } }, { type: 'line', encode: { x: 0, y: 5 } }], BR, { showDataShadow: true }), SH);
+L('r-list-candle-two-shadow', 'a candlestick y [1, 2] under a slider: upstream throws in the visual stage, nothing rendered', kdz([{ type: 'candlestick',
+  encode: { x: 0, y: [1, 2] } }]), SH);
+L('r-list-candle-four-shadow', 'its twin y [1, 2, 3, 4]: the shadow of the same first dimension', kdz([{ type: 'candlestick',
+  encode: { x: 0, y: [1, 2, 3, 4] } }]), SH);
 // aria's data.getValues is in the dimensions' order: an element no
 // coordinate reads as it is (a guessed category its text), a gap at place 0
 // no dimension
@@ -1031,6 +1071,16 @@ function guards(o) {
     && /sign/.test(thrown('r-list-candle-own') || '') && /sign/.test(thrown('r-list-candle-line') || ''));
   guard('short: a boxplot y [1, 2, 3, 4] throws', /ends/.test(thrown('r-list-box-four') || '') && !cs('r-list-box-five').render.error);
   guard('short: a gap in four places throws nothing', !cs('r-list-candle-gap').render.error);
+  const sh = id => cs(id).shadow[0];
+  guard('short: a boxplot y [1, 2, 3, 4] throws, its slider cast the shadow of the five-place twin',
+    /ends/.test(thrown('r-list-box-four-shadow') || '') && !cs('r-list-box-five-shadow').render.error
+    && sh('r-list-box-four-shadow').drawn && sh('r-list-box-four-shadow').seriesIndex === 0
+    && JSON.stringify(sh('r-list-box-four-shadow')) === JSON.stringify(sh('r-list-box-five-shadow'))
+    && JSON.stringify(sh('r-list-box-four-line-shadow')) === JSON.stringify(sh('r-list-box-four-shadow')));
+  guard('short: showDataShadow auto casts none from a boxplot', !sh('r-list-box-four-auto').drawn && sh('r-list-box-four-auto').seriesIndex === null);
+  guard('short: a candlestick y [1, 2] under a slider renders nothing; its twin casts a shadow',
+    /sign/.test(thrown('r-list-candle-two-shadow') || '') && cs('r-list-candle-two-shadow').shadow.length === 0
+    && sh('r-list-candle-four-shadow').drawn && sh('r-list-candle-four-shadow').seriesIndex === 0);
   guard('short: the gaps draw nothing, the full lists draw', cs('r-list-candle-gap').drawn[0].els.every(e => !e)
     && cs('r-list-box-gap').drawn[0].els.every(e => !e) && cs('r-list-candle-four').drawn[0].els.every(e => e)
     && cs('r-list-box-five').drawn[0].els.every(e => e));
