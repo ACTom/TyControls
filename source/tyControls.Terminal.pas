@@ -3409,6 +3409,11 @@ begin
       end;
     end;
   end;
+  { #185: 只读时发出去的字节 Core 都挡掉(上游 disableStdin 挡在 triggerDataEvent 里):只会
+    被发的键就不吞，Tab 照常移焦点，Enter / Esc 到得了对话框的按钮(同只读的 TMemo);本地
+    动作照常 }
+  if (act = kaSend) and ReadOnly then
+    act := kaNone;
   { 没有动作:Key 原样往下走(窗体快捷键、Tab 导航照常) }
   if act = kaNone then Exit;
   { 有动作:先问宿主要不要放行给窗体 }
@@ -3419,8 +3424,6 @@ begin
   case act of
     kaSend:
       begin
-        { ReadOnly 不在这里判断:Core 把 OnData 挡掉(上游 disableStdin 同样挡在
-          triggerDataEvent 里),本地动作照常 }
         FCore.Input(r.Key, True);
         NoteActivity;
       end;

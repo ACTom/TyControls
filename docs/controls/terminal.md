@@ -48,7 +48,7 @@ uses tyControls.Terminal;
 | `MacOptionIsMeta` | `Boolean` | `False` | macOS 上 Option 当 Meta（发 `ESC` 前缀），否则 Option 打第三层字符。 |
 | `AlternateScroll` | `Boolean` | `True` | 没有滚回（备用屏）且程序没要鼠标事件时，滚轮发上下方向键。 |
 | `DrawBoldTextInBrightColors` | `Boolean` | `True` | 粗体的调色板颜色 0–7 画成 8–15。 |
-| `ReadOnly` | `Boolean` | `False` | 不往外发字节（按键、粘贴、输入法都不发）；本地翻页照常。转给 Core。 |
+| `ReadOnly` | `Boolean` | `False` | 不往外发字节（按键、粘贴、输入法都不发）；本地翻页、复制照常。转给 Core。只会被发出去的键（Tab、方向键、Enter、Esc、功能键、Ctrl+字母）这时不吞，交给窗体：Tab 移走焦点，Enter、Esc 到得了对话框的默认 / 取消按钮，同只读的 `TMemo`。 |
 | `ConvertEol` | `Boolean` | `False` | LF 当 CR LF。转给 Core。 |
 | `TabStopWidth` | `Integer` | `8` | 默认制表位间隔。转给 Core。 |
 | `ScrollOnUserInput` | `Boolean` | `True` | 键入、粘贴时滚到底。转给 Core。 |
@@ -186,6 +186,7 @@ end;
 
 - Shift+Home / Shift+End 是本地的「到顶 / 到底」，所以不发给程序——PSReadLine、nano 里用它们选到行首 / 行尾的，在这个终端里做不到（xterm.js 不劫持这两个键，这是有意的不同）。
 - Ctrl+C 永远发给程序（`03`），不是复制。
+- `ReadOnly` 时什么都不发，所以只会被发出去的键都不吞，交给窗体；上面的本地动作照常。
 - Alt+字母发 `ESC` + 字母。macOS 上 Option 默认打第三层字符（`MacOptionIsMeta = False`）；设成 `True` 才发 `ESC` 前缀。
 - Windows 上 AltGr（等于 Ctrl+Alt）打的是布局上的字符，不发 `ESC`。
 - Windows 上 Alt+F4（关窗口）和 Alt+Space（系统菜单）不编码，交给窗口，和 Windows Terminal 一样。F10、Shift+F10 照常发给程序。

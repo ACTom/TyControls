@@ -83,6 +83,7 @@ type
     { #185 }
     procedure TestWindowKeysAreLeftToWindows;
     procedure TestAnAltCodeCharacterIsTyped;
+    procedure TestReadOnlyLeavesTheKeysItWouldOnlySend;
   end;
 
 implementation
@@ -873,6 +874,34 @@ begin
   Press(Ord('B'), [ssCtrl, ssShift]);
   TypeIt('B');
   AssertEquals('Ctrl held: dropped', '', Hex);
+end;
+
+{ #185: a read-only terminal sends nothing, so the keys it would only send are not
+  swallowed: Tab moves the focus on, Enter and Esc reach the dialog's buttons. Its own
+  actions (paging, copy) still take their keys. }
+procedure TTyTerminalViewInputTests.TestReadOnlyLeavesTheKeysItWouldOnlySend;
+var
+  k: Word;
+  buf: TTyTerminalBuffer;
+begin
+  Lines(100);
+  buf := F.View.Core.Buffer;
+  F.View.ReadOnly := True;
+  AssertEquals('Tab', VK_TAB, Press(VK_TAB));
+  AssertEquals('Shift+Tab', VK_TAB, Press(VK_TAB, [ssShift]));
+  AssertEquals('Enter', VK_RETURN, Press(VK_RETURN));
+  AssertEquals('Esc', VK_ESCAPE, Press(VK_ESCAPE));
+  AssertEquals('Up', VK_UP, Press(VK_UP));
+  AssertEquals('F5', VK_F5, Press(VK_F5));
+  AssertEquals('Ctrl+C', Ord('C'), Press(Ord('C'), [ssCtrl]));
+  AssertEquals('nothing sent', '', Hex);
+  k := Press(VK_PRIOR, [ssShift]);
+  AssertEquals('Shift+PgUp still pages', buf.YBase - 4, buf.YDisp);
+  AssertEquals('and takes its key', 0, k);
+  AssertEquals('Ctrl+Shift+C still copies (takes its key)', 0, Press(Ord('C'), [ssCtrl, ssShift]));
+  F.View.ReadOnly := False;
+  AssertEquals('writable: Tab is the program''s', 0, Press(VK_TAB));
+  AssertEquals('09', Hex);
 end;
 
 initialization
