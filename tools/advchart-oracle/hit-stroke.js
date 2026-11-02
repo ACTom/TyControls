@@ -56,6 +56,20 @@
 // wide across its upright sides, thin across its level ones; rounded, turned
 // and mirrored), a graphic element's own scaleX / scaleY (a rect's pen, and a
 // strokeNoScale polyline's under scaleY 1, whose line scale is 1).
+// R7-R adds (r7r.*): strokeContainThreshold in the element's own frame -- a
+// thin unfilled graphic element (or a custom series' one) under its own or a
+// group's scale takes its pen to at least 5 of ITS units (a band 10 px wide
+// at scale 2, 15 across a scaleX 3), a strokeNoScale one to 5 over its line
+// scale (5 px at a uniform scale; at a turned scale 2 whose diagonal holds a
+// one the line scale is 1: 10 px, and the pen is drawn 2 wide); an oblong path:// symbol
+// (the path covering the unit box, then scaled: stretched) turned or plain,
+// filled or not, and a pictorial bar's turned and mirrored path:// glyph,
+// their pens in their own frame; a graph's end symbols sized [w, h] per end
+// (edgeSymbolSize [[w1, h1], [w2, h2]], an edge's own symbolSize so) on a
+// view scaled alike and on a squashed one -- createSymbol's real box (a
+// circle's radius min(w, h) / 2, a roundRect's corner min(w, h) / 4, a pin's
+// head of the width); a lines series' effect symbol with a border (its pen
+// in its own frame, scaled by effect.symbolSize), filled and not.
 // R7-O adds (r7o.*): a graph edge's end symbols, which take the pointer as
 // the edge's (setItemGraphicEl writes its ECData onto every child of the
 // Line group) -- an arrow, an empty circle (its pen lineWidth 2 in its own
@@ -417,6 +431,12 @@ const RENDER = {
     const c = api.coord([api.value(0), api.value(1)]);
     return { type: 'rect', shape: { x: c[0], y: c[1] - 20, width: 200, height: 40 }, style: { fill: '#c00' } };
   },
+  // [R7-R] a thin unfilled polyline scaled 2 from the item's point
+  cuthin: function (params, api) {
+    const c = api.coord([api.value(0), api.value(1)]);
+    return { type: 'polyline', x: c[0], y: c[1], scaleX: 2, scaleY: 2,
+      shape: { points: [[0, 0], [30, -20], [60, 0]] }, style: { fill: null, stroke: '#000', lineWidth: 1 } };
+  },
 };
 function r7iCases() {
   return [
@@ -530,6 +550,85 @@ function r7iCases() {
     ['r7p.graphic-noscale', { animation: false, graphic: [{ type: 'polyline', x: 100, y: 160, scaleX: 4, scaleY: 1,
       shape: { points: [[0, 0], [25, -30], [50, 0]] }, style: { fill: null, stroke: '#000', lineWidth: 6, strokeNoScale: true } }] },
       [PT(200, 145, 90)]],
+    // [R7-R] strokeContainThreshold in the element's own frame
+    ['r7r.graphic-thin', { animation: false, graphic: [{ type: 'rect', x: 140, y: 120, scaleX: 2, scaleY: 2,
+      shape: { x: 0, y: 0, width: 40, height: 30 }, style: { fill: null, stroke: '#000', lineWidth: 1 } }] },
+      [PT(180, 150, 70)]],
+    ['r7r.graphic-thin-oblong', { animation: false, graphic: [{ type: 'rect', x: 140, y: 120, scaleX: 3, scaleY: 1,
+      shape: { x: 0, y: 0, width: 30, height: 60 }, style: { fill: null, stroke: '#000', lineWidth: 1 } }] },
+      [PT(185, 150, 80)]],
+    ['r7r.graphic-thin-noscale', { animation: false, graphic: [{ type: 'polyline', x: 100, y: 160, scaleX: 3, scaleY: 3,
+      shape: { points: [[0, 0], [25, -30], [50, 0]] }, style: { fill: null, stroke: '#000', lineWidth: 1, strokeNoScale: true } }] },
+      [PT(175, 115, 90)]],
+    ['r7r.graphic-noscale-quirk', { animation: false, graphic: [{ type: 'polyline', x: 150, y: 120, scaleX: 2, scaleY: 2,
+      rotation: Math.PI / 3, shape: { points: [[0, 0], [40, 0], [40, 30]] },
+      style: { fill: null, stroke: '#000', lineWidth: 1, strokeNoScale: true } }] },
+      // up across the first segment's middle (zrender's line containStroke
+      // takes the segment's box grown by the width in the element's own
+      // frame: near a turned segment's ends that box is turned too)
+      [Object.assign(PT(170, 200, 160), { dirs: [6] })]],
+    ['r7r.graphic-group-thin', { animation: false, graphic: [{ type: 'group', x: 100, y: 80, scaleX: 2, scaleY: 2,
+      children: [{ type: 'rect', shape: { x: 15, y: 10, width: 50, height: 40 },
+        style: { fill: null, stroke: '#000', lineWidth: 1 } }] }] },
+      [PT(180, 140, 70)]],
+    ['r7r.custom-thin', vv({ type: 'custom', renderItem: '@cuthin', data: [[3, 5]] }), [IT(0, 0)]],
+    // [R7-R] an oblong path:// symbol: covering the unit box, then scaled
+    ['r7r.path-oblong', sc('path://M0 0L10 0L5 10Z', [40, 16], B(6), { data: [[5, 5]] }), [IT(0, 0)]],
+    ['r7r.path-oblong-turned', sc('path://M0 0L10 0L5 10Z', [40, 16], B(6), { symbolRotate: 30, data: [[5, 5]] }),
+      [IT(0, 0)]],
+    ['r7r.path-oblong-none', sc('path://M0 0L10 0L5 10Z', [40, 16], B(1, { color: 'none' }), { symbolRotate: -50,
+      data: [[5, 5]] }), [IT(0, 0)]],
+    ['r7r.path-oblong-keep', sc('path://M0 0L20 0L10 10Z', [40, 30], B(4), { symbolKeepAspect: true, symbolRotate: 20,
+      data: [[5, 5]] }), [IT(0, 0)]],
+    ['r7r.pictorial-path', cart({ type: 'pictorialBar', symbol: 'path://M0 0L10 0L5 10Z', symbolSize: [40, 16],
+      symbolRotate: 30, symbolRepeat: false, symbolPosition: 'center', data: [4, -6, 8], itemStyle: B(60) },
+      { yAxis: { type: 'value', min: -10, max: 10 } }), [IT(0, 1), IT(0, 0)]],
+    // a horizontal bar's glyph: a negative value mirrors it across x
+    ['r7r.pictorial-path-horiz', Object.assign(cart({ type: 'pictorialBar', symbol: 'path://M0 0L10 0L5 10Z',
+      symbolSize: [16, 40], symbolRotate: 30, symbolRepeat: false, symbolPosition: 'center', data: [4, -6, 8], itemStyle: B(60) }),
+    { xAxis: { type: 'value', min: -10, max: 10 }, yAxis: { type: 'category', data: N } }), [IT(0, 1), IT(0, 0)]],
+    // a glyph's path covers its box whatever symbolKeepAspect says (createPath
+    // hands createSymbol none)
+    ['r7r.pictorial-path-keep', cart({ type: 'pictorialBar', symbol: 'path://M0 0L20 0L10 10Z', symbolSize: [40, 16],
+      symbolKeepAspect: true, symbolRepeat: false, symbolPosition: 'center', data: [4, 6, 8], itemStyle: B(60) }),
+    [IT(0, 1)]],
+    // the same stretch on a graph's, a radar's and a tree's symbols
+    ['r7r.graph-node-path', solo({ type: 'graph', layout: 'none', symbol: 'path://M0 0L10 0L5 10Z', symbolSize: [40, 16],
+      itemStyle: B(4), data: GRAPH_NODES, links: GRAPH_LINKS, lineStyle: { width: 1, opacity: 1 } }), [IT(0, 2)]],
+    ['r7r.radar-path', RAD({ symbol: 'path://M0 0L10 0L5 10Z', symbolSize: [30, 12], itemStyle: B(4),
+      lineStyle: { width: 1 } }), [PT(200, 62, 30)]],
+    ['r7r.tree-path', solo({ type: 'tree', data: [TREE], symbol: 'path://M0 0L10 0L5 10Z', symbolSize: [30, 12],
+      label: { show: false }, expandAndCollapse: false, itemStyle: B(4), lineStyle: { width: 1 } }), [PT(200, 150, 200)]],
+    // [R7-R] a graph's end symbols sized [w, h] per end
+    ['r7r.graph-ends-oblong', solo({ type: 'graph', layout: 'none', left: 50, top: 20, width: 260, height: 260, symbolSize: 10,
+      edgeSymbol: ['circle', 'rect'], edgeSymbolSize: [[20, 10], [12, 24]], lineStyle: { width: 1, opacity: 1 },
+      data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }, { name: 'c', x: 100, y: 0 }],
+      links: [{ source: 'a', target: 'c' }, { source: 'a', target: 'b', symbol: ['roundRect', 'pin'] },
+        { source: 'c', target: 'b', symbol: ['emptyRect', 'square'], symbolSize: [[8, 30], [24, 12]] }] }),
+    [PT(300, 21, 40), PT(56, 21, 30), PT(300, 270, 40), PT(310, 31, 30), PT(56, 26, 30)]],
+    ['r7r.graph-ends-oblong-squash', solo({ type: 'graph', layout: 'none', left: 50, top: 20, width: 300, height: 150,
+      symbolSize: 10, edgeSymbol: ['circle', 'rect'], edgeSymbolSize: [[20, 10], [12, 24]], lineStyle: { width: 1, opacity: 1 },
+      data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }, { name: 'c', x: 100, y: 0 }],
+      links: [{ source: 'a', target: 'c' }, { source: 'a', target: 'b', symbol: ['roundRect', 'pin'] },
+        { source: 'c', target: 'b', lineStyle: { curveness: 0.3 }, symbol: ['emptyRect', 'arrow'],
+          symbolSize: [[8, 30], 0] }] }),
+    [PT(340, 21, 40), PT(56, 21, 30), PT(340, 165, 40), PT(345, 30, 30), PT(60, 26, 30)]],
+    // [R7-R] a lines series' end symbols sized [w, h]: the real box's square,
+    // roundRect, pin and circle, turned along the line
+    ['r7r.lines-ends-oblong', vv({ type: 'lines', coordinateSystem: 'cartesian2d', lineStyle: { width: 1, opacity: 1 },
+      symbol: ['square', 'pin'], symbolSize: [[30, 12], [14, 34]], data: [{ coords: [[2, 3], [8, 7]] },
+        { coords: [[2, 8], [8, 6]], symbol: ['roundRect', 'circle'], symbolSize: [[36, 14], [12, 30]] },
+        { coords: [[4, 1], [7, 9]], symbol: ['path://M0 0L10 0L5 10Z', 'path://M0 0L10 0L5 10Z'],
+          symbolSize: [[30, 12], [12, 30]] }] }),
+    [PT(120, 173, 40), PT(300, 111, 40), PT(120, 96, 40), PT(300, 127, 40), PT(180, 204, 40), PT(270, 80, 40)]],
+    // [R7-R] a lines series' effect symbol with a border, where its clip's
+    // first step put it (a delay of 0): filled, and filled with 'none'
+    ['r7r.lines-effect', vv({ type: 'lines', coordinateSystem: 'cartesian2d', lineStyle: { width: 1, opacity: 1 },
+      effect: { show: true, symbol: 'rect', symbolSize: [24, 10], borderColor: '#000', borderWidth: 0.4, trailLength: 0,
+        delay: 0, period: 4 }, data: [{ coords: [[2, 5], [8, 7]] }] }), [PT(120, 142, 30)], { t: 0 }],
+    ['r7r.lines-effect-none', vv({ type: 'lines', coordinateSystem: 'cartesian2d', lineStyle: { width: 0, opacity: 1 },
+      effect: { show: true, symbol: 'triangle', symbolSize: [8, 4], color: 'none', borderColor: '#000', borderWidth: 0.1,
+        trailLength: 0, delay: 0, period: 4 }, data: [{ coords: [[2, 5], [8, 5]] }] }), [PT(120, 142, 50)], { t: 0 }],
   ].map(c => c.length > 3 ? c : c.concat([{}]));
 }
 function withRender(option) {
@@ -685,7 +784,8 @@ function generate() {
     'inf.effect', 'inf.pictorial', 'inf.graph-node', 'r7i.scatter-out',
     'r7i.thumb-window',
     // a graphic element is no series' (x)
-    'r7p.graphic-scaled', 'r7p.graphic-noscale'];
+    'r7p.graphic-scaled', 'r7p.graphic-noscale', 'r7r.graphic-thin', 'r7r.graphic-thin-oblong',
+    'r7r.graphic-thin-noscale', 'r7r.graphic-noscale-quirk', 'r7r.graphic-group-thin'];
   charts.forEach(c => {
     const any = c.rays.some(r => r.seq.split(' ').some(p => p[0] === 's'));
     must(any === !MISS.includes(c.id), c.id + ': hits ' + any);

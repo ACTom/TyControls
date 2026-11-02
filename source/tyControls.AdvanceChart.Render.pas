@@ -1290,10 +1290,12 @@ begin
           P.RotateBy(AShape.RotationRad);
           P.Translate(-AShape.RotCX, -AShape.RotCY);
         end;
+        { [R7-R] stretched over the box (PathCover) or fitted to it }
         if TyRectFIsValid(AShape.Bounds) then
           P.SvgPathIn(AShape.PathData,
                       Rect(Round(AShape.Bounds.Left), Round(AShape.Bounds.Top),
-                           Round(AShape.Bounds.Right), Round(AShape.Bounds.Bottom)))
+                           Round(AShape.Bounds.Right), Round(AShape.Bounds.Bottom)),
+                      not AShape.PathCover)
         else
           P.SvgPath(AShape.PathData);
         if (AShape.RotationRad <> 0) or AShape.FlipX or AShape.FlipY then

@@ -704,6 +704,26 @@ add('graphSquash', 'graph-squash-tween', "[R7-O] scaleX 4, scaleY 2; a merge nar
     { t: T1, do: 'merge', option: { series: [{ data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 50 }, { name: 'c', x: 100, y: 0 }] }] } },
     ...after([0, 1, 100, 500, 999, 1000, 1001], T1)]);
 
+// [R7-R] end symbols sized [w, h] per end: createSymbol's real box (a circle of min(w, h) / 2, a square of min(w, h)
+// from the corner, a roundRect's corners min(w, h) / 4, a pin's head of the width), on a view scaled alike and on one
+// whose scaleY is not its scaleX
+const OB_LINKS = [{ source: 'a', target: 'c' }, { source: 'c', target: 'b', symbol: ['square', 'pin'] },
+  { source: 'a', target: 'b', symbol: ['roundRect', 'path://M0 0L10 0L5 10Z'] },
+  { source: 'd', target: 'c', lineStyle: { curveness: 0.3 }, symbol: ['emptyCircle', 'emptyRect'], symbolSize: [[30, 8], [8, 26]] }];
+const OB_NODES = [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }, { name: 'c', x: 100, y: 0 }, { name: 'd', x: 0, y: 100 }];
+add('graphSquash', 'graph-oblong-ends', "[R7-R] layout none, 200 x 200 over a 100 x 100 extent (scaled alike): edgeSymbolSize [[24, 10], [10, 22]] circle / rect, square / pin, roundRect / path://, a curved link's own [[30, 8], [8, 26]] emptyCircle / emptyRect",
+  { animation: false,
+    series: [{ type: 'graph', layout: 'none', left: 100, top: 50, width: 200, height: 200, symbolSize: 8,
+      edgeSymbol: ['circle', 'rect'], edgeSymbolSize: [[24, 10], [10, 22]], data: OB_NODES, links: OB_LINKS }] },
+  ['gsym'],
+  [{ t: 0, do: 'sample' }]);
+add('graphSquash', 'graph-oblong-squash', "[R7-R] the same ends on 400 x 200 over a 100 x 100 extent (scaleX 4, scaleY 2): turned in the group's units, scaled by 1 / scaleX, squashed after the turn",
+  { animation: false,
+    series: [{ type: 'graph', layout: 'none', left: 0, top: 50, width: 400, height: 200, symbolSize: 8,
+      edgeSymbol: ['circle', 'rect'], edgeSymbolSize: [[24, 10], [10, 22]], data: OB_NODES, links: OB_LINKS }] },
+  ['gsym'],
+  [{ t: 0, do: 'sample' }]);
+
 // [R7-P] the pens under a view whose scaleY is not its scaleX, in motion
 const PEN_NODES = [{ name: 'a', x: 0, y: 0, symbol: 'rect', symbolSize: [10, 16], symbolRotate: 30 },
   { name: 'b', x: 100, y: 100, symbolSize: 12 }, { name: 'c', x: 100, y: 0, symbol: 'emptyCircle', symbolSize: [14, 8] }];

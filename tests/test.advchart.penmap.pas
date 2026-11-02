@@ -123,10 +123,10 @@ begin
   FChart.Render(FBmp.Canvas, Rect(0, 0, AW, AH), 96);
 end;
 
-{ #aN00xx (N 0 to b): a colour a case wrote for one of its elements }
+{ #aN00xx (N 0 to c): a colour a case wrote for one of its elements }
 function Ours(const S: string): Boolean;
 begin
-  Result := (Length(S) = 7) and (Copy(S, 1, 2) = '#a') and (S[3] in ['0'..'9', 'a', 'b'])
+  Result := (Length(S) = 7) and (Copy(S, 1, 2) = '#a') and (S[3] in ['0'..'9', 'a', 'b', 'c'])
     and (Copy(S, 4, 2) = '00');
 end;
 

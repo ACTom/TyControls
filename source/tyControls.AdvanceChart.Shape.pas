@@ -86,6 +86,12 @@ type
       either way. False on every other shape. }
     FlipX, FlipY: Boolean;
     FlipCX, FlipCY: Double;
+    { [R7-R] A PATH STRETCHED OVER ITS BOX (makePath 'cover'): a path://
+      symbol that keeps no aspect, which Symbol.ts builds in the unit box and
+      scales by half the size on each axis -- an oblong one is stretched.
+      False, the zero value, fits the path to the box keeping its aspect,
+      centred (makePath 'center'), as before. }
+    PathCover: Boolean;
     { A POLYLINE OR POLYGON AS UPSTREAM DRAWS IT, when that is not simply its
       points joined: a smoothed line's curves, and the points upstream drops
       (a segment under 0.7 px). Empty for every shape that has not asked --
@@ -135,6 +141,11 @@ type
       the whole frame's sqrt|det|, never the one zrender gives a frame with
       a diagonal entry of one. False, the zero value, is strokeNoScale. }
     HitPenInFrame: Boolean;
+    { [R7-R] HitSym's path in a REAL BOX (createSymbol(HitSym, -HitBoxW /
+      2, -HitBoxH / 2, HitBoxW, HitBoxH): a Line's end symbol sized [w, h]),
+      HitM then that box's frame to device px. 0, the zero value: the unit
+      box, as Symbol.ts makes it. }
+    HitBoxW, HitBoxH: Double;
   end;
   { [spec 242] an element's clip paths }
   TTyChartShapeArray = array of TTyChartShape;

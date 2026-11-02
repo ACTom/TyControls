@@ -51,6 +51,9 @@ type
     past the grid's right edge }
   TCuClip = class
     function CuClip(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+    { [R7-R] hit-stroke.js' RENDER.cuthin: a thin unfilled polyline scaled 2
+      from the item's point }
+    function CuThin(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
   end;
 
   TAdvChartHitStrokeTest = class(TTestCase)
@@ -74,6 +77,7 @@ type
     procedure TestAGraphCurveHitAsItIsDrawnToAPercent;
     procedure TestATurnedRoundRectAndEllipseDrawAsUpstream;
     procedure TestThePadTopsThePenUpToFour;
+    procedure TestAnOblongPathSymbolIsDrawnStretched;
   end;
 
 implementation
@@ -120,11 +124,22 @@ begin
     'style', TJSONObject.Create(['fill', '#c00'])]);
 end;
 
+function TCuClip.CuThin(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+var c: TTyDoubleArray;
+begin
+  c := AApi.Coord([AApi.Value(0), AApi.Value(1)]);
+  Result := TJSONObject.Create(['type', 'polyline', 'x', c[0], 'y', c[1], 'scaleX', 2, 'scaleY', 2,
+    'shape', TJSONObject.Create(['points', TJSONArray.Create([TJSONArray.Create([0, 0]),
+      TJSONArray.Create([30, -20]), TJSONArray.Create([60, 0])])]),
+    'style', TJSONObject.Create(['fill', TJSONNull.Create, 'stroke', '#000', 'lineWidth', 1])]);
+end;
+
 procedure TAdvChartHitStrokeTest.SetUp;
 begin
   inherited SetUp;
   FCu := TCuClip.Create;
   TyChartRegisterRenderItem('cuclip', @FCu.CuClip);
+  TyChartRegisterRenderItem('cuthin', @FCu.CuThin);
   FForm := TForm.CreateNew(nil);
   FCtl := TTyStyleController.Create(nil);
   FCtl.Mode := 'light';
@@ -141,6 +156,7 @@ begin
   FreeAndNil(FBmp);
   FreeAndNil(FMeasure);
   TyChartUnregisterRenderItem('cuclip');
+  TyChartUnregisterRenderItem('cuthin');
   FreeAndNil(FCu);
   inherited TearDown;
 end;
@@ -622,6 +638,52 @@ begin
     TyElementHit(el, el.Shape.CX + 13.8, el.Shape.CY + 0.1, 96, False));
   AssertTrue('0.8 px off, without the pad',
     TyElementHit(el, el.Shape.CX + 10.8, el.Shape.CY + 0.1, 96, False));
+end;
+
+{ [R7-R] AN OBLONG path:// SYMBOL AS THE CANVAS DRAWS IT: Symbol.ts makes
+  the path in the unit box ('cover' -- or, with symbolKeepAspect, fitted to
+  its own aspect in the unit square) and scales it by half the size on each
+  axis. A 2:1 rectangle path at symbolSize [80, 20], filled, no border:
+  stretched over the whole 80 x 20 box; with symbolKeepAspect a 2:1 band of
+  the unit square, 80 x 10 [was: fitted into the 80 x 20 box keeping its
+  aspect, 40 x 20]. }
+procedure TAdvChartHitStrokeTest.TestAnOblongPathSymbolIsDrawnStretched;
+var
+  bmp: TBGRABitmap;
+  k: Integer;
+
+  function Ink(AX0, AY0, ADX, ADY, AN: Integer): Integer;
+  var j: Integer;
+  begin
+    Result := 0;
+    for j := 0 to AN - 1 do
+      if bmp.GetPixel(AX0 + ADX * j, AY0 + ADY * j).green < 128 then Inc(Result);
+  end;
+
+const
+  cOpt = '{"animation":false,"grid":{"left":0,"right":0,"top":0,"bottom":0},'
+    + '"xAxis":{"show":false,"type":"value","min":0,"max":10},'
+    + '"yAxis":{"show":false,"type":"value","min":0,"max":10},'
+    + '"series":[{"type":"scatter","symbol":"path://M0 0L20 0L20 10L0 10Z","symbolSize":[80,20],%s'
+    + '"itemStyle":{"color":"#000"},"data":[[5,5]]}]}';
+begin
+  for k := 0 to 1 do
+  begin
+    if k = 0 then bmp := Picture(Format(cOpt, ['']))
+    else bmp := Picture(Format(cOpt, ['"symbolKeepAspect":true,']));
+    try
+      AssertTrue(Format('%d: 80 px across (%d)', [k, Ink(140, 150, 1, 0, 120)]),
+        Abs(Ink(140, 150, 1, 0, 120) - 80) <= 2);
+      if k = 0 then
+        AssertTrue(Format('20 px down (%d)', [Ink(200, 120, 0, 1, 60)]),
+          Abs(Ink(200, 120, 0, 1, 60) - 20) <= 2)
+      else
+        AssertTrue(Format('kept aspect: 10 px down (%d)', [Ink(200, 120, 0, 1, 60)]),
+          Abs(Ink(200, 120, 0, 1, 60) - 10) <= 2);
+    finally
+      bmp.Free;
+    end;
+  end;
 end;
 
 initialization

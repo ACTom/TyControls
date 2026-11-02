@@ -1744,6 +1744,16 @@ var
   eff: TTyLinesEffect;
   sizes, syms: TJSONData;
 
+  { [R7-R] an effect key as the model gets it: the row's, else the
+    series' -- a null written on the row falls through to the series' }
+  function EffKey(const AKey: string): TJSONData;
+  begin
+    Result := TyLinesItemFind(raw, ['effect', AKey]);
+    if (Result <> nil) and (Result.JSONType = jtNull) then Result := nil;
+    if Result = nil then Result := TyLinesFind(Default(TTyLinesRaw), ANode, ['effect', AKey]);
+    if (Result <> nil) and (Result.JSONType = jtNull) then Result := nil;
+  end;
+
   function Pair(AData: TJSONData; AIndex: Integer): TJSONData;
   begin
     if AData is TJSONArray then
@@ -1981,6 +1991,7 @@ begin
   Result.EffColor := Result.Stroke;
   Result.EffGrad := Result.StrokeGrad;
   d := TyLinesFind(raw, ANode, ['effect', 'color']);
+  Result.EffColorNone := (d <> nil) and (d.JSONType = jtString) and (d.AsString = 'none');
   if LnColour(d, c) then
   begin
     Result.EffColor := c;
@@ -1993,6 +2004,43 @@ begin
   end;
   d := TyLinesFind(raw, ANode, ['effect', 'opacity']);
   if d = nil then Result.EffOpacity := 1 else Result.EffOpacity := TyLinesJsNum(d);
+  { [R7-R] THE REST OF effect.getItemStyle(['color']): each key the row's,
+    else the series' (a null falls through, the model's get) }
+  d := EffKey('borderColor');
+  if LnColour(d, c) then
+  begin
+    Result.EffStrokeSet := True;
+    Result.EffStroke := c;
+  end
+  else if TyTryReadGradient(d, grad) then
+  begin
+    Result.EffStrokeSet := True;
+    Result.EffStrokeGrad := grad;
+    Result.EffStroke := TyGradientSolid(grad);
+  end;
+  Result.EffLineWidth := TyOptPenWidth(EffKey('borderWidth'));
+  LnDashOf(EffKey('borderType'), dash, expl);
+  if IsNan(Result.EffLineWidth) then
+    Result.EffDash := TyDashPattern(dash, expl, 1)
+  else
+    Result.EffDash := TyDashPattern(dash, expl, Result.EffLineWidth);
+  Result.EffDashWord := TyDashWord(dash);
+  Result.EffDashOffset := TyOptPenOffset(EffKey('borderDashOffset'));
+  if IsNan(Result.EffDashOffset) then Result.EffDashOffset := 0;
+  Result.EffCap := TyLineCapOf(EffKey('borderCap'));
+  Result.EffJoin := TyLineJoinOf(EffKey('borderJoin'));
+  Result.EffMiter := TyOptMiterLimit(EffKey('borderMiterLimit'));
+  if IsNan(Result.EffMiter) then Result.EffMiter := 0;
+  { setStyle('shadowColor', color) first: the effect's colour unless the
+    effect writes its own (a gradient colour is no colour the canvas takes) }
+  d := EffKey('shadowColor');
+  Result.EffShadowSet := TyShadowOfValues(EffKey('shadowBlur'), EffKey('shadowOffsetX'),
+    EffKey('shadowOffsetY'), d, Result.EffShadow);
+  if Result.EffShadowSet and (d = nil) then
+  begin
+    if Result.EffGrad.Kind <> cgkNone then Result.EffShadow.Color := 0
+    else Result.EffShadow.Color := Result.EffColor;
+  end;
   d := TyLinesFind(raw, ANode, ['effect', 'period']);
   if d = nil then Result.EffPeriod := 4 * 1000 else Result.EffPeriod := TyLinesJsNum(d) * 1000;
   d := TyLinesFind(raw, ANode, ['effect', 'loop']);

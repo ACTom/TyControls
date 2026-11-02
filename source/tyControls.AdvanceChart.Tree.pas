@@ -1777,7 +1777,7 @@ begin
       sym.OffsetX := vs * sym.OffsetX;
       sym.OffsetY := vs * sym.OffsetY;
     end;
-    shape := TyBuildSymbol(sym, ASolved.Pos[row].PX, ASolved.Pos[row].PY);
+    shape := TyBuildSymbolUnit(sym, ASolved.Pos[row].PX, ASolved.Pos[row].PY);
     { [R7-F] hit in its own frame, as Symbol.ts' path }
     TySymbolHitFrame(shape, sym, ASolved.Pos[row].PX, ASolved.Pos[row].PY);
     { A NODE OF NO SIZE is still an element: it paints nothing and carries

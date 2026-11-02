@@ -1895,9 +1895,14 @@ begin
     cskPath:
       begin
         b := AShape.Bounds;
+        { [R7-R] stretched over the box where the shape says so }
         if TyRectFIsValid(b) and (AShape.PathData <> '') then
-          Result := TyZrMakePathCenter(AShape.PathData,
-            XYWH(b.Left, b.Top, b.Right - b.Left, b.Bottom - b.Top));
+          if AShape.PathCover then
+            Result := TyZrMakePathCover(AShape.PathData,
+              XYWH(b.Left, b.Top, b.Right - b.Left, b.Bottom - b.Top))
+          else
+            Result := TyZrMakePathCenter(AShape.PathData,
+              XYWH(b.Left, b.Top, b.Right - b.Left, b.Bottom - b.Top));
       end;
     cskRect:
       begin

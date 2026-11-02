@@ -419,6 +419,29 @@ C('e-roundtrip', 'effect', 'roundTrip: __t runs to 2 over twice the period and t
     { coords: [[10, 10], [80, 60]] },
     { coords: [[20, 80], [90, 30]], lineStyle: { curveness: 0.3 } },
   ] })] }), { samples: SAMPLES_DENSE });
+// [R7-R] the effect symbol's own style: effect.getItemStyle(['color']) set
+// over it (borderColor / borderWidth / borderType / borderDashOffset /
+// borderCap / borderJoin / borderMiterLimit, the shadow, opacity), then
+// symbolPathSetColor -- an empty one stroked in the colour at 2 over the
+// ground (the border overridden), a 'line' stroked in the colour at the
+// border width (zrender's 1 unwritten), the rest filled; a border written
+// without a width is zrender's 1. Its pen is in its own frame: the frames
+// carry it with the scale (the rect / roundRect / line trail's scaleY)
+C('r7r-effect-pen', 'effect', "[R7-R] the effect symbol's pen: a dashed rect trail with a shadow, an empty circle whose border the colour overrides, a 'line' at the border width, a triangle with a border colour alone (zrender's 1), a roundRect with cap, join and miter; the series' border under an item's own",
+  base({ series: [LE({ effect: { show: true, period: 2, trailLength: 0, borderColor: '#203040', borderWidth: 0.3 }, data: [
+    { coords: [[10, 10], [80, 60]], effect: { symbol: 'rect', symbolSize: [6, 3], borderType: 'dashed', borderDashOffset: 2,
+      shadowBlur: 4, shadowOffsetX: 1, opacity: 0.6 } },
+    { coords: [[20, 80], [90, 30]], lineStyle: { curveness: 0.3 }, effect: { symbol: 'emptyCircle', symbolSize: [8, 4], color: '#00a0ff',
+      shadowBlur: 3, shadowColor: '#ff0000' } },
+    { coords: [[50, 5], [50, 95]], effect: { symbol: 'line', symbolSize: [2, 5], color: '#008800', borderWidth: 0.6 } },
+    { coords: [[90, 90], [15, 20]], effect: { symbol: 'roundRect', symbolSize: [7, 4], borderCap: 'round', borderJoin: 'bevel',
+      borderMiterLimit: 3, borderType: [1, 2] } },
+  ] }), LE({ effect: { show: true, period: 2, trailLength: 0, symbol: 'triangle', symbolSize: [10, 6], borderColor: '#405060' },
+    data: [{ coords: [[5, 50], [95, 40]] }] }),
+  // a polyline's (EffectPolyline makes the same symbol)
+  LE({ polyline: true, effect: { show: true, period: 2, trailLength: 0, symbol: 'rect', symbolSize: [5, 2],
+    borderColor: '#607080', borderWidth: 0.5, borderType: 'dotted' },
+    data: [{ coords: [[10, 30], [40, 60], [70, 20]] }] })] }), { samples: [0, 16, 300, 700, 1000, 1500, 1999, 2000, 2100], pen: true });
 C('e-item', 'effect', "an item's own effect: period 1.5 and a diamond; an item's effect.show false is ignored (the series decides)",
   base({ series: [LE({ effect: { show: true }, data: [
     { coords: [[10, 10], [80, 60]], effect: { period: 1.5, symbol: 'diamond', symbolSize: 7 } },
@@ -657,10 +680,23 @@ function clipOf(sym) {
   const c = a && a.getClip ? a.getClip() : null;
   return c;
 }
+// [R7-R] a case flagged pen: the effect symbol's pen as its style holds it
+// (effect.getItemStyle(['color']) set over it, then symbolPathSetColor) --
+// in the symbol's own frame, which its scaleX / scaleY and rotation map
+function effPenRec(sym) {
+  const s = sym.style;
+  const dash = s.lineDash == null ? null : (Array.isArray(s.lineDash) ? s.lineDash.map(hex) : String(s.lineDash));
+  return { fill: colourOf(s.fill), stroke: colourOf(s.stroke), lineWidth: hexOr(s.lineWidth, 1), lineDash: dash,
+    lineDashOffset: hexOr(s.lineDashOffset, 0), lineCap: s.lineCap || null, lineJoin: s.lineJoin || null,
+    miterLimit: s.miterLimit == null ? null : hex(+s.miterLimit), shadowBlur: hexOr(s.shadowBlur, 0),
+    shadowOffsetX: hexOr(s.shadowOffsetX, 0), shadowOffsetY: hexOr(s.shadowOffsetY, 0),
+    shadowColor: colourOf(s.shadowColor), opacity: hexOr(s.opacity, 1), hasStroke: !!sym.hasStroke(),
+    hasFill: !!sym.hasFill() };
+}
 function effectRec(sym) {
   if (!sym) return null;
   const c = clipOf(sym);
-  return {
+  const r = {
     symbolType: sym.shape.symbolType, z2: sym.z2,
     x: hex(sym.x), y: hex(sym.y), rotation: hex(sym.rotation || 0), scaleX: hex(sym.scaleX), scaleY: hex(sym.scaleY),
     ignore: !!sym.ignore, fill: colourOf(sym.style.fill), stroke: colourOf(sym.style.stroke),
@@ -668,6 +704,8 @@ function effectRec(sym) {
     life: c ? hex(c._life) : null, delay: c ? (typeof c._delay === 'number' ? hex(c._delay) : 'str:' + String(c._delay)) : null, loop: c ? !!c.loop : null,
     t: sym.__t == null ? null : hex(sym.__t),
   };
+  if (CUR && CUR.pen) r.pen = effPenRec(sym);
+  return r;
 }
 function itemRec(sm, idx) {
   const data = sm.getData();
@@ -1281,6 +1319,7 @@ function frameItems(chart) {
         r.effect = sym ? { present: true, x: hex(sym.x), y: hex(sym.y), rotation: hex(sym.rotation || 0),
           scaleX: hex(sym.scaleX), scaleY: hex(sym.scaleY), ignore: !!sym.ignore, t: sym.__t == null ? null : hex(sym.__t) }
           : { present: false };
+        if (sym && CUR && CUR.pen) r.effect.pen = effPenRec(sym);
       }
       else r.effect = null;
       out.push(r);

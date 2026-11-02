@@ -196,6 +196,29 @@ type
       reads (convertToColorString) }
     StrokeGrad: TTyChartGradient;
     EffGrad: TTyChartGradient;
+    { [R7-R] THE EFFECT SYMBOL'S OWN STYLE, effect.getItemStyle(['color'])
+      set over it (each key the row's effect, else the series'): its border
+      (EffStrokeSet where a colour or a gradient is written -- 'none' and
+      what does not parse stroke nothing), its width in the symbol's own
+      frame (EffLineWidth; not-a-number where unwritten: zrender's 1), the
+      dash (EffDash in that frame, EffDashWord the word it was written as),
+      its phase, cap, join and miter limit (0: the canvas' defaults), the
+      shadow (EffShadowSet where any of its keys is written; its colour the
+      effect's colour unless shadowColor is) }
+    EffStrokeSet: Boolean;
+    EffStroke: TTyChartColor;
+    EffStrokeGrad: TTyChartGradient;
+    EffLineWidth: Double;
+    EffDash: TTyDoubleArray;
+    EffDashWord: Byte;
+    EffDashOffset: Double;
+    EffCap, EffJoin: Byte;
+    EffMiter: Double;
+    EffShadowSet: Boolean;
+    EffShadow: TTyChartShadow;
+    { [R7-R] effect.color written 'none': truthy, so it is the colour --
+      setColor fills (or strokes) with 'none', which is none }
+    EffColorNone: Boolean;
     { [spec 242] the label's textConfig: `rotate` (degrees, as radians) and
       `offset` where written -- applied over what Line.beforeUpdate sets }
     LabelHasRot: Boolean;
@@ -1314,7 +1337,7 @@ end;
   picture either way and take the turn }
 function EndSymbolShape(AKind: TTySymbolKind; AEmpty: Boolean; const APath: string;
   AW, AH, AX, AY, ARotRad: Double): TTyChartShape;
-var spec: TTySymbolSpec;
+var spec: TTySymbolSpec; rot: Double;
 begin
   spec := TySymbolDefault('scatter');
   spec.Kind := AKind;
@@ -1327,8 +1350,18 @@ begin
   if AKind = tsyCircle then
     Exit(TyBuildSymbolInBox(spec, TyRectF(AX - AW / 2, AY - AH / 2,
       AX - AW / 2 + AW, AY - AH / 2 + AH)));
+  { [R7-R] AN OBLONG BOX IS ANOTHER PICTURE for a square (its side min(w,
+    h) from the box's corner), a roundRect (corners of min(w, h) / 4) and a
+    pin (a head three fifths of the width): the real box's path, turned
+    [was: the unit box's, stretched] }
+  if (AW <> AH) and (AKind in [tsySquare, tsyRoundRect, tsyPin]) then
+  begin
+    if IsNan(ARotRad) then rot := 0 else rot := ARotRad;
+    Exit(TyBuildSymbolMappedBox(spec, AX, AY, TyZrLocal(1, 1, rot, 0, 0)));
+  end;
   if not IsNan(ARotRad) then spec.RotateDeg := RadToDeg(ARotRad);
-  Result := TyBuildSymbol(spec, AX, AY);
+  { [R7-R] a path:// one stretched over its box (no keepAspect) }
+  Result := TyBuildSymbolUnit(spec, AX, AY);
 end;
 
 { The effect symbol: createSymbol(type, -0.5, -0.5, 1, 1) scaled by (sx, sy),
@@ -1345,7 +1378,8 @@ begin
   spec.OffsetX := 0;
   spec.OffsetY := 0;
   if not IsNan(ARotRad) then spec.RotateDeg := RadToDeg(ARotRad);
-  Result := TyBuildSymbol(spec, AX, AY);
+  { [R7-R] a path:// one stretched over its box (no keepAspect) }
+  Result := TyBuildSymbolUnit(spec, AX, AY);
 end;
 
 function LinePoints(const AG: TTyLinesGeom; APoly: Boolean; APercent: Double;
@@ -1721,18 +1755,71 @@ begin
           sym.Anim.Pts[e * 2 + 1] := g.Pts[e].Y;
         end;
       end;
-      { symbolPathSetColor: a 'line' stroked in the colour, the rest filled }
-      if TySymbolKindOf(ink.EffName, em, pd) = tsyLine then
+      { [R7-R] ITS OWN STYLE: effect.getItemStyle(['color']) over
+        createSymbol's -- the border, its width, dash, phase, cap, join and
+        miter limit, the shadow (in the effect's colour unless written),
+        the opacity -- then symbolPathSetColor: an empty one stroked in the
+        colour at 2 over the ground (its border overridden), a 'line'
+        stroked in the colour at the border's width (zrender's 1 where none
+        is written; its fill stays zrender's '#000'), the rest filled with
+        the colour and stroked by the border. The pen is in the symbol's own
+        frame, scaled with it (TyLinesFrameEffect) [was: a 'line' stroked 1
+        px on the canvas, an empty one filled, every border dropped] }
+      kind := TySymbolKindOf(ink.EffName, em, pd);
+      if ink.EffStrokeSet then
       begin
-        sym.Style.HasFill := False;
+        sym.Style.StrokeColor := ink.EffStroke;
+        sym.Style.StrokeGradient := ink.EffStrokeGrad;
+        if IsNan(ink.EffLineWidth) then sym.Style.StrokeWidthLogical := 1
+        else sym.Style.StrokeWidthLogical := ink.EffLineWidth;
+      end;
+      if em then
+      begin
+        sym.Style.HasFill := True;
+        sym.Style.FillColor := AEmptyFill;
         sym.Style.StrokeColor := ink.EffColor;
-        sym.Style.StrokeWidthLogical := 1;
+        sym.Style.StrokeGradient := Default(TTyChartGradient);
+        sym.Style.StrokeWidthLogical := 2;
+      end
+      else if kind = tsyLine then
+      begin
+        sym.Style.HasFill := True;
+        sym.Style.FillColor := TTyChartColor($FF000000);
+        sym.Style.StrokeColor := ink.EffColor;
+        sym.Style.StrokeGradient := Default(TTyChartGradient);
+        if IsNan(ink.EffLineWidth) then sym.Style.StrokeWidthLogical := 1
+        else sym.Style.StrokeWidthLogical := ink.EffLineWidth;
       end
       else
       begin
         sym.Style.HasFill := True;
         sym.Style.FillColor := ink.EffColor;
       end;
+      { a colour of 'none': no fill where it fills, no pen where it strokes }
+      if ink.EffColorNone then
+      begin
+        if em or (kind = tsyLine) then sym.Style.StrokeWidthLogical := 0
+        else
+        begin
+          sym.Style.HasFill := False;
+          sym.Style.HitNoFill := True;
+        end;
+      end;
+      if not (sym.Style.StrokeWidthLogical > 0) then sym.Style.StrokeWidthLogical := 0;
+      if sym.Style.StrokeWidthLogical > 0 then
+      begin
+        sym.Style.DashLogical := Copy(ink.EffDash, 0, Length(ink.EffDash));
+        sym.Style.DashWord := ink.EffDashWord;
+        if sym.Style.DashWord <> 0 then
+          sym.Style.DashLogical := TyDashOfWord(sym.Style.DashWord, sym.Style.StrokeWidthLogical);
+        sym.Style.DashOffsetLogical := ink.EffDashOffset;
+        sym.Style.LineCap := ink.EffCap;
+        sym.Style.LineJoin := ink.EffJoin;
+        sym.Style.MiterLimit := ink.EffMiter;
+      end;
+      if ink.EffShadowSet then TyStyleSetShadow(sym.Style, ink.EffShadow);
+      { the frame's device px per css px: the pen's own frame is css px }
+      sym.Anim.Vals := TTyDoubleArray.Create(ASolved.Scale);
       sym.Style.Alpha := ink.EffOpacity;
       sym.Z := ASolved.Z;
       sym.Z2 := TyLinesEffectZ2;
@@ -1741,7 +1828,8 @@ begin
       begin
         sym.Anim.LGrad := ink.EffGrad;
         sym.Anim.LGradBox := TyZrBBox(TyZrSymbol(ink.EffName, -0.5, -0.5, 1, 1));
-        sym.Anim.LGradStroke := TySymbolKindOf(ink.EffName, em, pd) = tsyLine;
+        { [R7-R] an empty one's pen too }
+        sym.Anim.LGradStroke := em or (TySymbolKindOf(ink.EffName, em, pd) = tsyLine);
       end;
       { [spec 242] A POINTER TARGET: setItemGraphicEl writes the row onto
         every element of the item's group, the effect symbol too -- its
@@ -1782,7 +1870,7 @@ end;
 
 procedure TyLinesFrameEffect(var AEl: TTyChartElement; const AE: TTyLinesEffect;
   AGone: Boolean);
-var sh: TTyChartShape;
+var sh: TTyChartShape; L: TTyMat2D; ds: Double;
 begin
   if AGone or AE.Ignore or IsNan(AE.X) or IsNan(AE.Y) then
   begin
@@ -1793,6 +1881,18 @@ begin
   sh := EffectShape(AEl.Anim.Mono, AE.ScaleX, AE.ScaleY, AE.X, AE.Y, AE.Rotation);
   AEl.Shape := sh;
   AEl.Ignore := False;
+  { [R7-R] THE PEN IN THE SYMBOL'S OWN FRAME: its scale (the trail's
+    scaleY too) and its turn, not strokeNoScale -- the root of the scale's
+    determinant its size, the map over that root its shape, frame by frame }
+  if AEl.Style.StrokeWidthLogical > 0 then
+  begin
+    ds := 1;
+    if (Length(AEl.Anim.Vals) > 0) and (AEl.Anim.Vals[0] > 0) then ds := AEl.Anim.Vals[0];
+    if IsNan(AE.Rotation) then L := TyZrLocal(AE.ScaleX / ds, AE.ScaleY / ds, 0, 0, 0)
+    else L := TyZrLocal(AE.ScaleX / ds, AE.ScaleY / ds, AE.Rotation, 0, 0);
+    AEl.Style.PenScale := Sqrt(Abs(L[0] * L[3] - L[1] * L[2]));
+    TyStyleSetPenShape(AEl.Style, L);
+  end;
   { [spec 242] its gradient where the symbol is now }
   if IsNan(AE.Rotation) then PlaceLocalGrad(AEl, AE.ScaleX, AE.ScaleY, 0, AE.X, AE.Y)
   else PlaceLocalGrad(AEl, AE.ScaleX, AE.ScaleY, AE.Rotation, AE.X, AE.Y);
