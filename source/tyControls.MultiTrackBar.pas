@@ -3985,7 +3985,7 @@ end;
 
 procedure TTyCustomGradientTrackBar.EditStopColor(AIndex: Integer);
 var
-  c, old: TColor;
+  c, old, offered: TColor;
   handled: Boolean;
 begin
   if (AIndex < 0) or (AIndex >= Thumbs.Count) then Exit;
@@ -3994,11 +3994,13 @@ begin
   { No colour of its own: start from the one the gradient shows there. }
   if c = clDefault then c := ColorAtValue(Thumbs[AIndex].Value);
   if c = clDefault then c := clBlack;
+  offered := c;
   handled := False;
   if Assigned(FOnEditStopColor) then FOnEditStopColor(Self, AIndex, c, handled);
   if not handled and not ExecuteColorDialog(c) then Exit;
-  { The handler may have removed stops. }
-  if (AIndex >= Thumbs.Count) or (c = old) then Exit;
+  { The handler may have removed stops. Handled with AColor as it came (#182): nothing changes
+    -- a stop of no colour of its own does not take the one it was offered. }
+  if (AIndex >= Thumbs.Count) or (c = old) or (handled and (c = offered)) then Exit;
   Thumbs[AIndex].Color := c;
   Invalidate;
   DoChange;

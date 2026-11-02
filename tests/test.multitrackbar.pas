@@ -693,6 +693,8 @@ type
     procedure TestANewStopChangesNothingOnTheTrack;
     procedure TestADoubleClickEditsTheStopsColour;
     procedure TestOnEditStopColorHandledOpensNoDialog;
+    { #182: handled with AColor left as it came, a stop of no colour of its own keeps none. }
+    procedure TestOnEditStopColorHandledUnchangedChangesNothing;
     procedure TestStopsCrossAndAreRemovedDownToTwo;
     procedure TestStopsRoundTripThroughAFormFile;
   end;
@@ -7746,6 +7748,27 @@ begin
   AssertEquals('edit:0:$000000 C ', FLog);
   AssertEquals('dialog:$00FFFF ', FBar.Log);
   AssertEquals('0:$0000FF;100:$FF0000', StopsText);
+end;
+
+procedure TTyGradientTrackBarTest.TestOnEditStopColorHandledUnchangedChangesNothing;
+begin
+  AddPlainStop(50);
+  AssertEquals('setup', '0:$000000;50:def;100:$FFFFFF', StopsText);
+  FBar.OnChange := @Changed;
+  FBar.OnEditStopColor := @EditColor;
+  FHandleEdit := True;
+  FLog := '';
+  Click(Centre(1), True);
+  AssertEquals('asked with the colour the gradient has there, no change', 'edit:1:$808080 ',
+    FLog);
+  AssertEquals('handled, AColor untouched: the stop still has no colour', '0:$000000;50:def;100:$FFFFFF',
+    StopsText);
+  AssertEquals('no dialog', '', FBar.Log);
+  { Untouched on a coloured stop: nothing either. }
+  FLog := '';
+  Click(Centre(0), True);
+  AssertEquals('edit:0:$000000 ', FLog);
+  AssertEquals('0:$000000;50:def;100:$FFFFFF', StopsText);
 end;
 
 procedure TTyGradientTrackBarTest.TestStopsCrossAndAreRemovedDownToTwo;
