@@ -587,7 +587,7 @@ begin
   FWin.SetBounds(winRect.Left, winRect.Top,
     winRect.Right - winRect.Left, winRect.Bottom - winRect.Top);
   TyRaisePopupWindow(FWin);   // macOS: above a modal dialog it opens in (#104)
-  FWin.Show;
+  TyShowPassive(FWin);        // #178: a hint does not take the focus from what it points at
   FWin.SetBounds(winRect.Left, winRect.Top,
     winRect.Right - winRect.Left, winRect.Bottom - winRect.Top);
   FWin.Invalidate;

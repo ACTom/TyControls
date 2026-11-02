@@ -112,6 +112,11 @@ procedure TyClearPopupWindowMask(AForm: TCustomForm; AContentCtl: TWinControl);
 { Win32: toggle WS_EX_NOACTIVATE so a passive popup (autocomplete dropdown) never steals focus. No-op
   elsewhere. Call before Show. }
 procedure TySetPopupNoActivate(AForm: TCustomForm; ANoActivate: Boolean);
+{ #178: show AForm -- a balloon hint, a toast -- without taking the keyboard focus. It is shown
+  passive where the platform can (WS_EX_NOACTIVATE), and where the show took the focus anyway the
+  form and the control that had it get it back, so typing goes on where it was. ABringToFront
+  raises it first. }
+procedure TyShowPassive(AForm: TCustomForm; ABringToFront: Boolean = False);
 { macOS: give AForm, a popup about to be shown, a window level above the application's other
   windows on screen. fsStayOnTop puts it at the floating level, and a modal dialog sits above
   that, so a drop-down, menu or popover opened in one showed behind it (#104). The popup keeps
@@ -616,6 +621,24 @@ begin
   {$IFDEF LCLCocoa}
   TyCocoaApplyAppearance(AForm, AShadow, ADark);
   {$ENDIF}
+end;
+
+
+procedure TyShowPassive(AForm: TCustomForm; ABringToFront: Boolean);
+var
+  wasForm: TCustomForm;
+  wasControl: TWinControl;
+begin
+  wasForm := Screen.ActiveCustomForm;
+  wasControl := Screen.ActiveControl;
+  TySetPopupNoActivate(AForm, True);
+  AForm.Show;
+  if ABringToFront then AForm.BringToFront;
+  if (wasForm = nil) or (wasForm = AForm) then Exit;
+  if Screen.ActiveCustomForm = wasForm then Exit;
+  if wasForm.CanFocus then wasForm.SetFocus;
+  if (wasControl <> nil) and (wasControl <> Screen.ActiveControl) and wasControl.CanFocus then
+    wasControl.SetFocus;
 end;
 
 end.
