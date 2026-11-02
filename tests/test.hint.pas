@@ -71,6 +71,8 @@ begin
     AssertTrue(Format('MaxWidth holds it to 120 (%d)', [wrapped.Right - wrapped.Left]),
       wrapped.Right - wrapped.Left <= 120);
     AssertTrue('on more lines', wrapped.Bottom - wrapped.Top > one.Bottom - one.Top);
+    AssertTrue(Format('filling the width it was given, not a word a line (%d)',
+      [wrapped.Right - wrapped.Left]), wrapped.Right - wrapped.Left > 70);
     wrapped := w.CalcHintRect(120, '提示文字没有空格也要能在最大宽度处折行显示出来才行', nil);
     AssertTrue(Format('CJK wraps too (%d)', [wrapped.Right - wrapped.Left]),
       wrapped.Right - wrapped.Left <= 120);
