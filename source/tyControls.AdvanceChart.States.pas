@@ -79,6 +79,13 @@ type
       that knows no gradient; Lifted with it is liftColor's gradient -- every
       stop lifted (util/color.ts liftColor) }
     GradJson: array[TTyStKey] of string;
+    { [R6-F] A NUMBER KEY WRITTEN AS SOMETHING ELSE (a width or a phase:
+      'abc', true, [5], '3'): the value as written, JSON text ('' a plain
+      number). Num is what the canvas makes of it; a transition's track
+      takes the value itself -- interpolated where it reads as a number,
+      and where it does not a discrete track, which animateTo's animator
+      sets to its end at once }
+    RawJson: array[TTyStKey] of string;
     { [R5-F] A STATE'S lineCap / lineJoin / miterLimit (a label line's
       getLineStyle): no animation props, set when the state is entered.
       CapWord / JoinWord 0 unwritten, else 1 + the cTyCap / cTyJoin value }
@@ -435,6 +442,7 @@ procedure TyStSetNum(var AObj: TTyStObject; AKey: TTyStKey; AValue: Double);
 begin
   AObj.Has[AKey] := True;
   AObj.Num[AKey] := AValue;
+  AObj.RawJson[AKey] := '';
 end;
 
 procedure TyStSetColor(var AObj: TTyStObject; AKey: TTyStKey; AColor: TTyChartColor);
@@ -479,6 +487,7 @@ begin
   ADst.None[AKey] := ASrc.None[AKey];
   ADst.Lifted[AKey] := ASrc.Lifted[AKey];
   ADst.GradJson[AKey] := ASrc.GradJson[AKey];
+  ADst.RawJson[AKey] := ASrc.RawJson[AKey];
 end;
 
 function TyStOverlay(const ABase, ATop: TTyStObject): TTyStObject;
@@ -1319,7 +1328,12 @@ begin
     else d := TyStFind(ANodes, [AState, ABlock, AName]);
     if d = nil then Exit;
     if AKey = stkLineWidth then v := TyOptPenWidth(d) else v := TyOptPenOffset(d);
-    if not IsNan(v) then TyStSetNum(AObj, AKey, v);
+    if not IsNan(v) then
+    begin
+      TyStSetNum(AObj, AKey, v);
+      { [R6-F] and as written, where that is no number }
+      if d.JSONType <> jtNumber then AObj.RawJson[AKey] := d.AsJSON;
+    end;
     Exit;
   end;
   if AState = '' then v := TyStReadNumber(ANodes, [ABlock, AName], has)
