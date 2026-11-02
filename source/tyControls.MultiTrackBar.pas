@@ -379,8 +379,12 @@ type
     { The thumb the keyboard drives: the selected one if it is enabled, else the first enabled
       thumb; -1 = none. }
     function KeyThumb: Integer;
-    { The next enabled thumb after AFrom (before it, AForward = False); -1 = none. }
+    { The next enabled thumb after AFrom (before it, AForward = False); -1 = none. AFrom may
+      be -1 or ThumbCount, just outside the thumbs. }
     function NextEnabledThumb(AFrom: Integer; AForward: Boolean): Integer;
+    { Where Tab (AForward) or Shift+Tab goes: the next enabled thumb from the selected one; with
+      none selected (#182), the first enabled thumb, or the last for Shift+Tab. -1 = none. }
+    function TabThumb(AForward: Boolean): Integer;
     { The modifier keys and mouse buttons held now. CM_WANTSPECIALKEY and CM_ENTER carry none,
       so Shift+Tab is told from Tab, and a click from a key, by asking the keyboard and the
       mouse; virtual so a test can hold them without either. }
@@ -2441,13 +2445,24 @@ var
   j: Integer;
 begin
   Result := -1;
-  if AFrom < 0 then Exit;
+  if AFrom < -1 then Exit;
   j := AFrom;
   repeat
     if AForward then Inc(j) else Dec(j);
     if (j < 0) or (j > High(FValues)) then Exit;
   until ThumbEnabled(j);
   Result := j;
+end;
+
+function TTyMultiTrackBarBase.TabThumb(AForward: Boolean): Integer;
+begin
+  if (FSelectedThumb >= 0) and (FSelectedThumb < Length(FValues))
+     and ThumbEnabled(FSelectedThumb) then
+    Result := NextEnabledThumb(FSelectedThumb, AForward)
+  else if AForward then
+    Result := NextEnabledThumb(-1, True)
+  else
+    Result := NextEnabledThumb(Length(FValues), False);
 end;
 
 function TTyMultiTrackBarBase.KeyThumb: Integer;
@@ -2714,7 +2729,7 @@ begin
   inherited KeyDown(Key, Shift);
   if (Key = VK_TAB) and (Shift - [ssShift] = []) then
   begin
-    nxt := NextEnabledThumb(KeyThumb, not (ssShift in Shift));
+    nxt := TabThumb(not (ssShift in Shift));
     if nxt >= 0 then
     begin
       SelectedThumb := nxt;
@@ -2764,7 +2779,7 @@ begin
   if (Message.CharCode = VK_TAB) and Enabled then
   begin
     sh := KeyShiftState;
-    if (sh * [ssCtrl, ssAlt, ssMeta] = []) and (NextEnabledThumb(KeyThumb, not (ssShift in sh)) >= 0) then
+    if (sh * [ssCtrl, ssAlt, ssMeta] = []) and (TabThumb(not (ssShift in sh)) >= 0) then
     begin
       Message.Result := 1;
       Exit;

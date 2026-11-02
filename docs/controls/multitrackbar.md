@@ -479,7 +479,7 @@ end;
 | `PageUp` / `PageDown` | 加 / 减 `PageSize` |
 | `Home` / `End` | 到它能去的最小 / 最大值（邻居 ± `MinGap`，或 `Min` / `Max`） |
 | `Delete` | 开了 `AllowUserThumbs` / `AllowUserRanges` 时删除选中的滑块（区间控件删它所在的区间），先问 `OnThumbRemoving`。 |
-| `Tab` / `Shift+Tab` | 在可用滑块之间前后切换；到了最后一个（往回时是第一个）再按，焦点才离开控件。 |
+| `Tab` / `Shift+Tab` | 在可用滑块之间前后切换；到了最后一个（往回时是第一个）再按，焦点才离开控件。没有选中的滑块时，`Tab` 选中第一个可用滑块，`Shift+Tab` 选中最后一个。 |
 | 用 Tab 进入控件 | 选中第一个可用滑块；用 `Shift+Tab` 进入时选中最后一个。点击进入时由点击决定。 |
 | 滚轮 | 键盘滑块上滚加 `LineSize`、下滚减，同 `TTyTrackBar`；`OnMouseWheel` 里置 `Handled` 可以拦下。 |
 

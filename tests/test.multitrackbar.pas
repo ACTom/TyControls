@@ -2159,8 +2159,18 @@ begin
   AssertEquals('Shift+Tab goes back', 0, FBar.SelectedThumb);
   AssertEquals('before the first: Shift+Tab goes to the form', 0, FBar.WantsKey(VK_TAB));
   FBar.HoldShift := False;
+  { #182: none selected (a Delete, a click that selected nothing): Tab selects the first
+    enabled thumb rather than skip it, Shift+Tab the last one rather than leave. }
   FBar.SelectedThumb := -1;
-  AssertEquals('none selected: Tab starts after the first enabled thumb', 1, FBar.WantsKey(VK_TAB));
+  AssertEquals('none selected: Tab has a thumb to go to', 1, FBar.WantsKey(VK_TAB));
+  AssertEquals(0, FBar.Key(VK_TAB));
+  AssertEquals('the first enabled thumb, not the one after it', 0, FBar.SelectedThumb);
+  FBar.SelectedThumb := -1;
+  FBar.HoldShift := True;
+  AssertEquals('none selected: Shift+Tab has one too', 1, FBar.WantsKey(VK_TAB));
+  AssertEquals(0, FBar.Key(VK_TAB, [ssShift]));
+  AssertEquals('the last enabled thumb', 2, FBar.SelectedThumb);
+  FBar.HoldShift := False;
   AssertEquals('other special keys are the form''s', 0, FBar.WantsKey(VK_RETURN));
 end;
 
