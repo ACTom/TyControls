@@ -296,7 +296,7 @@ else
 - 做完之后行会重建,展开的项跟着项走,当前行落在新加的或移动的那一项上;删了就落在原位置的下一项,没有就上一项,再没有就是集合行。
 - 删除不弹确认框。要确认的话在 `OnCollectionChanging` 里自己问。
 - 选了多个对象、表格 `ReadOnly`、设计期,都不能增删。`ReadOnly` 和设计期连那三个公开方法也拦:调了什么都不做,`AddCollectionItem` 返回 nil。
-- 内置菜单只在表格的 `PopupMenu` 没设时出现。应用有自己的菜单时,用 `SelectedRow` 和 `RowPath` 拿到当前行的路径,再调上面三个公开方法,效果完全一样。
+- 内置菜单只在表格的 `PopupMenu` 没设时出现。应用有自己的菜单时,用 `SelectedRow` 和 `RowPath` 拿到当前行的路径,再调上面三个公开方法,效果完全一样。右键点到哪一行,那一行就先成为当前行,再弹出菜单,不管弹的是哪个菜单。
 
 ```pascal
 OnCollectionChanging(Sender; ACollection: TCollection; AAction: TTyCollectionAction;

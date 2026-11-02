@@ -463,7 +463,8 @@ type
     function CanCommitValue(ARow: TTyValueRow; var AText: string): Boolean; override;
     procedure SeedEditFont(ARow: TTyValueRow; AFont: TFont); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
-    { A right click (or the menu key) on a collection or item row shows the built-in menu: Add
+    { A right click makes the row under the mouse the current one, whichever menu then shows.
+      A right click (or the menu key) on a collection or item row shows the built-in menu: Add
       Item, Delete Item, Move Up, Move Down. Only while PopupMenu is not assigned -- the
       application's own menu wins, and it can do the same through the public methods. }
     procedure DoContextPopup(MousePos: TPoint; var Handled: Boolean); override;
@@ -3231,6 +3232,14 @@ var
   isItem: Boolean;
   at: TPoint;
 begin
+  { The row clicked becomes the current one before any menu shows (#183): the application's own
+    PopupMenu acts on SelectedRow, as the built-in menu does on the row it was opened on, and
+    OnContextPopup may read it too. }
+  if (FRows <> nil) and not ((MousePos.X = -1) and (MousePos.Y = -1)) then
+  begin
+    flat := RowAtY(MousePos.Y);
+    if (flat >= 0) and (flat < DisplayRowCount) and (flat <> ItemIndex) then ItemIndex := flat;
+  end;
   inherited DoContextPopup(MousePos, Handled);   // OnContextPopup first; it may take it
   if Handled or (PopupMenu <> nil) or (FRows = nil) then Exit;
   if (MousePos.X = -1) and (MousePos.Y = -1) then
@@ -3239,7 +3248,6 @@ begin
   begin
     flat := RowAtY(MousePos.Y);
     if (flat < 0) or (flat >= DisplayRowCount) then Exit;
-    if flat <> ItemIndex then ItemIndex := flat;   // the row clicked becomes the current one
   end;
   r := FlatRowAt(flat);
   nd := FRows.NodeOf(r);

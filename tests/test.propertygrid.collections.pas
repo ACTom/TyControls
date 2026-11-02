@@ -58,6 +58,7 @@ type
     procedure TestTheApplicationsMenuWinsAndThePublicMethodsDoTheSame;
     procedure TestAPathThatIsNoCollectionRaises;
     procedure TestReadOnlyRefusesThePublicMethodsToo;
+    procedure TestARightClickMakesTheRowCurrentUnderTheApplicationsMenu;
     { a real host }
     procedure TestAStringGridsColumnsFollow;
   end;
@@ -426,6 +427,19 @@ begin
   AssertEquals('nothing deleted or moved', 'first,second', Captions);
   FGrid.ReadOnly := False;
   AssertNotNull('and once it is not ReadOnly, they work', FGrid.AddCollectionItem('Items'));
+end;
+
+{ #183: the application's menu deletes RowPath(SelectedRow), as doc section 8 says; the row it
+  acts on is the one right-clicked, as with the built-in menu. }
+procedure TPropertyGridCollectionsTest.TestARightClickMakesTheRowCurrentUnderTheApplicationsMenu;
+begin
+  FGrid.PopupMenu := TPopupMenu.Create(FForm);
+  FGrid.Select(FGrid.RowAt('Items.[0]'));
+  AssertFalse('the application''s menu is left to show itself',
+    FGrid.RightClick(FGrid.RowAt('Items.[1]')));
+  AssertEquals('the row clicked is current', 'Items[1]', FGrid.RowPath(FGrid.SelectedRow));
+  FGrid.DeleteCollectionItem(FGrid.RowPath(FGrid.SelectedRow));
+  AssertEquals('so the item clicked is the one deleted', 'first', Captions);
 end;
 
 procedure TPropertyGridCollectionsTest.TestAPathThatIsNoCollectionRaises;
