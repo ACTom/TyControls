@@ -143,6 +143,7 @@ type
     procedure TestRefusedStepFiresNoValueChange;
     procedure TestRefusedSpinButtonDoesNotStep;
     procedure TestOldValuePutBackAfterAWriteIsWritten;
+    procedure TestLockedEditorTakesNoKeyAndStartsNoEdit;
   end;
 
 implementation
@@ -810,6 +811,23 @@ begin
   AssertEquals('one step back: the old value', IntToStr(CFixQtys[1]), Spin.Text);
   FCtl.EditingDone;
   AssertEquals('EditingDone writes it', CFixQtys[1], BoundField.AsInteger);
+end;
+
+{ #184: as the float spin edit. Expected red until #190 moves the spin edit onto TTyCustomEdit:
+  the key overrides of TTyCustomDBSpinEdit are rewritten there. }
+procedure TDBSpinEditTest.TestLockedEditorTakesNoKeyAndStartsNoEdit;
+begin
+  Spin.EditorEnabled := False;
+  Bind('Qty');
+  EnterControl;
+  Key(VK_END);
+  TypeText('5');
+  Key(VK_BACK);
+  Key(VK_DELETE);
+  AssertEquals('nothing typed', IntToStr(CFixQtys[1]), Spin.Text);
+  AssertBrowsing('keys into a locked editor');
+  Key(VK_UP);
+  AssertTrue('the arrows still edit', FFix.DS.State = dsEdit);
 end;
 
 initialization
