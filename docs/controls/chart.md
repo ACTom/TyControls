@@ -47,9 +47,9 @@ uses tyControls.Chart;
 |------|------|--------|------|
 | `ChartType` | `TTyChartType` | `ctLine` | `(ctLine, ctBar, ctPie, ctDonut)`。一图一类型（不混合）。`ctDonut` **追加在枚举末尾**，已有 `.lfm` 的序数不受影响。 |
 | `Series` | `TTyChartSeries` | 空 | 系列集合（设计期可编辑）。每项：`Name` / `Color`（`clDefault` = 按调色板循环）/ `Values`（逗号分隔数值，`.` 小数点）。 |
-| `Categories` | `TStrings` | 空 | X 轴分类（折线 / 柱）；饼 / 环形下是**扇区名**（图例即取此）。缺失时回退为 1-based 序号。 |
+| `Categories` | `TStrings` | 空 | X 轴分类（折线 / 柱）；饼 / 环形下是**扇区名**。缺失时回退为 1-based 序号。 |
 | `Title` | `string` | `''` | 标题，占据内容区顶部一条 20 逻辑像素的带。 |
-| `ShowLegend` | `Boolean` | `True` | 底部图例条。**关掉会把这条空间还给数据区**，不是只停止绘制。 |
+| `ShowLegend` | `Boolean` | `True` | 底部图例条。**关掉会把这条空间还给数据区**，不是只停止绘制。折线 / 柱的图例列各个系列；饼 / 环形的图例列**实际画出来的扇区**——第一个系列里大于 0 的每个值一项，名字取对应的 `Categories`（缺了就是序号），色块与扇区同色。 |
 | `ShowGrid` | `Boolean` | `True` | 水平网格线（折线 / 柱）。 |
 | `ShowValues` | `Boolean` | `False` | 常驻数值标注（柱 / 折线为数值，饼 / 环形为百分比）。与 tooltip 相互独立。 |
 | `ShowTooltip` | `Boolean` | `True` | 悬停 tooltip 总开关。关掉时**立即**抹掉屏上已显示的 tooltip，不等下次鼠标移动。 |

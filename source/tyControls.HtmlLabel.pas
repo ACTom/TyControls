@@ -15,7 +15,7 @@ unit tyControls.HtmlLabel;
   measurement and a live window). }
 interface
 uses
-  Classes, SysUtils, StrUtils, Types, Math, Controls, Graphics, LCLType, LMessages,
+  Classes, SysUtils, StrUtils, Types, Math, Controls, Graphics, LCLType, LMessages, LazUTF8,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base,
   tyControls.Controller, tyControls.StyleModel;
@@ -461,6 +461,30 @@ var
     if rh > curLineH then curLineH := rh;
   end;
 
+  { #181: a CJK glyph is a wrap point of its own, as TyWrapTextCJK has it for TTyLabel. CJK
+    text has no spaces, so a run of it went out as one token and never wrapped. }
+  procedure PlaceWord(const AWord: string);
+  var
+    p, n, cl, start: Integer;
+  begin
+    p := 1;
+    n := Length(AWord);
+    start := 1;
+    while p <= n do
+    begin
+      cl := UTF8CodepointSize(@AWord[p]);
+      if cl < 1 then cl := 1;
+      if TyIsCJKCodepoint(UTF8CodepointToUnicode(@AWord[p], cl)) then
+      begin
+        if p > start then PlaceToken(Copy(AWord, start, p - start), False);
+        PlaceToken(Copy(AWord, p, cl), False);
+        start := p + cl;
+      end;
+      Inc(p, cl);
+    end;
+    if start <= n then PlaceToken(Copy(AWord, start, n - start + 1), False);
+  end;
+
 begin
   AExtW := 0;
   AExtH := 0;
@@ -510,7 +534,7 @@ begin
           kk := jj;
           while (jj <= sLen) and not ((run.Text[jj] = ' ') or (run.Text[jj] = #9)
                 or (run.Text[jj] = #10) or (run.Text[jj] = #13)) do Inc(jj);
-          PlaceToken(Copy(run.Text, kk, jj - kk), False);
+          PlaceWord(Copy(run.Text, kk, jj - kk));
         end;
       end;
     end;

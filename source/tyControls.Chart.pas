@@ -337,6 +337,10 @@ type
     { The export core: the chart rendered opaque at AWidth x AHeight (caller frees). }
     function RenderExportBitmap(AWidth, AHeight: Integer): TBGRABitmap;
   protected
+    { #181: what the legend lists, in order -- each name with its swatch colour in Objects. For
+      a pie or donut that is the SLICES the disc draws (the first series' values above zero,
+      named by CategoryLabel); for the rest, the series. DrawLegend draws exactly these. }
+    procedure LegendEntries(ARadial: Boolean; AEntries: TStrings);
     function GetStyleTypeKey: string; override;   // 'TyPanel' (the tooltip is 'TyChartTooltip')
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
@@ -1354,34 +1358,49 @@ begin
   Inc(ATop, h);
 end;
 
+procedure TTyChart.LegendEntries(ARadial: Boolean; AEntries: TStrings);
+var
+  i: Integer;
+  vals: TDoubleArray;
+begin
+  AEntries.Clear;
+  if ARadial then
+  begin
+    { #181: the slices, not the Categories -- the two counts differ whenever the first series
+      has more or fewer values than there are categories, and a slice of 0 or less is not
+      drawn. Each keeps the index the disc and the tooltip give it, so the colours agree. }
+    if FSeries.Count = 0 then Exit;
+    vals := FSeries.Items[0].ValueArray;
+    for i := 0 to High(vals) do
+      if vals[i] > 0 then
+        AEntries.AddObject(CategoryLabel(i), TObject(PtrInt(SliceColor(i))));
+  end
+  else
+    for i := 0 to FSeries.Count - 1 do
+      AEntries.AddObject(SeriesDisplayName(i),
+        TObject(PtrInt(SeriesColor(FSeries.Items[i], i))));
+end;
+
 procedure TTyChart.DrawLegend(P: TTyPainter; const S: TTyStyleSet; const ARect: TRect; ARadial: Boolean);
 var
-  i, x, sw, gap, tw, cnt, boxSz: Integer;
+  i, x, sw, gap, tw, boxSz: Integer;
   nm: string;
   cy: Integer;
   swatch: TColor;
+  entries: TStringList;
 begin
   boxSz := P.Scale(10);
   gap := P.Scale(6);
   sw := P.Scale(14);
   x := ARect.Left;
   cy := (ARect.Top + ARect.Bottom) div 2;
-  if ARadial then
-    cnt := FCategories.Count   // a radial legend lists the SLICES, which are the categories
-  else
-    cnt := FSeries.Count;
-  for i := 0 to cnt - 1 do
+  entries := TStringList.Create;
+  try
+  LegendEntries(ARadial, entries);
+  for i := 0 to entries.Count - 1 do
   begin
-    if ARadial then
-    begin
-      nm := FCategories[i];
-      swatch := SliceColor(i);
-    end
-    else
-    begin
-      nm := SeriesDisplayName(i);
-      swatch := SeriesColor(FSeries.Items[i], i);
-    end;
+    nm := entries[i];
+    swatch := TColor(PtrInt(entries.Objects[i]));
     P.Bitmap.FillRect(P.Dev(Rect(x, cy - boxSz div 2, x + boxSz, cy + boxSz div 2)),
       ColorToBGRA(swatch), dmSet);   // layer px (#83)
     Inc(x, boxSz + P.Scale(4));
@@ -1390,6 +1409,9 @@ begin
       nm, S.FontName, TextUnit(9), S.FontWeight, S.TextColor, taLeftJustify, tlCenter, False);
     Inc(x, tw + sw + gap);
     if x > ARect.Right then Break;
+  end;
+  finally
+    entries.Free;
   end;
 end;
 

@@ -37,7 +37,7 @@ uses tyControls.LinkLabel;
 | `URL` | `string` | `''` | 点击时打开的目标地址。 |
 | `AutoOpen` | `Boolean` | `True` | 为 `True` 且 `URL` 非空时,`Click` 中调用 `OpenURL(URL)` 打开链接;为 `False` 时仅触发 `OnClick`,不自动打开。 |
 | `Alignment` | `TAlignment` | `taLeftJustify` | 文字**水平**对齐;下划线随对齐方式定位。 |
-| `Layout` | `TTextLayout` | `tlCenter` | 文字**垂直**对齐。 |
+| `Layout` | `TTextLayout` | `tlCenter` | 文字**垂直**对齐;下划线跟着文字走，始终在文字下方。 |
 | `Enabled` | `Boolean` | `True` | 为 `False` 时触发 `:disabled` 主题状态(降低不透明度)。 |
 | `Font` | `TFont` | 系统默认 | 传递 PPI 给渲染器;字体族与字号优先由主题控制。 |
 | `Align` | `TAlign` | `alNone` | 父容器内停靠方式。 |

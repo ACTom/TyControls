@@ -38,10 +38,10 @@ uses tyControls.LevelMeter;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Min` / `Max` | `Double` | `0` / `100` | 量程。 |
+| `Min` / `Max` | `Double` | `0` / `100` | 量程。改了之后 `Value` 若落到量程外，会被重新夹回 `[Min,Max]`。 |
 | `Value` | `Double` | `0` | 当前值;夹紧后缓动到新的填充位置。 |
 | `Orientation` | `TTyLevelOrientation` | `loHorizontal` | `loHorizontal` 左→右填充;`loVertical` 下→上填充。 |
-| `Segments` | `Integer` | `0` | `0` = 连续平滑填充;`>0` = 该数量的等分离散段,点亮到 `ceil(比例*段数)` 段。 |
+| `Segments` | `Integer` | `0` | `0` = 连续平滑填充;`>0` = 该数量的等分离散段,点亮到 `ceil(比例*段数)` 段。轨道放不下这么多段时(每段至少 1 像素加一道间隙),按放得下的段数画,不会溢出轨道。 |
 | `PeakHold` | `Boolean` | `False` | `True` 时记住历史最高值,并画一根细峰值标记线(仅当更高值到来时上移;或调用 `ResetPeak`)。 |
 | `ShowValue` | `Boolean` | `False` | 是否在轨道上居中叠加数值文字。 |
 | `ValueFormat` | `string` | `'%.0f'` | 数值 `Format` 格式串。 |

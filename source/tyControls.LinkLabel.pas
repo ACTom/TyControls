@@ -268,8 +268,9 @@ procedure TTyLinkLabel.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Inte
 var
   P: TTyPainter;
   S: TTyStyleSet;
-  ContentRect, UnderR: TRect;
+  ContentRect, UnderR, TextR: TRect;
   fontSize, weight, tw: Integer;
+  ts: TSize;
   col: TTyColor;
   fill: TTyFill;
 begin
@@ -291,8 +292,21 @@ begin
     // 1px accent underline spanning the measured caption width.
     if Caption <> '' then
     begin
-      tw := P.MeasureText(Caption, S.FontName, fontSize, weight).cx;
-      UnderR := TyLinkUnderlineRect(ContentRect, tw, P.Scale(3), FAlignment);
+      ts := P.MeasureText(Caption, S.FontName, fontSize, weight);
+      tw := ts.cx;
+      { #181: under the text where Layout put it -- the line box DrawText laid it in -- not at
+        the bottom of the control, which only matched the text when the two were one height. }
+      TextR := ContentRect;
+      case FLayout of
+        tlTop:    TextR.Bottom := TextR.Top + ts.cy;
+        tlCenter: begin
+                    TextR.Top := TextR.Top + ((ContentRect.Bottom - ContentRect.Top) - ts.cy) div 2;
+                    TextR.Bottom := TextR.Top + ts.cy;
+                  end;
+      else
+        TextR.Top := TextR.Bottom - ts.cy;
+      end;
+      UnderR := TyLinkUnderlineRect(TextR, tw, P.Scale(3), FAlignment);
       if (UnderR.Right > UnderR.Left) then
       begin
         fill := Default(TTyFill);

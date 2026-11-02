@@ -30,9 +30,9 @@ uses tyControls.Badge, tyControls.Button;   // 后者提供 bpTopRight 等枚举
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Target` | `TControl` | `nil` | 挂载目标。赋值会把角标**移动到该控件上**:窗口化目标 → 角标认它当 `Parent`,落在其 client 矩形的角上(与内置角标同一位置);无窗口目标(不能当 Parent)→ 角标成为它的**兄弟**,吸附到其 `BoundsRect` 的角。`nil` = 独立使用,由用户自行摆放。目标被释放时自动解绑。 |
+| `Target` | `TControl` | `nil` | 挂载目标。赋值会把角标**移动到该控件上**:窗口化目标 → 角标认它当 `Parent`,落在其 client 矩形的角上(与内置角标同一位置);无窗口目标(不能当 Parent)→ 角标成为它的**兄弟**,吸附到其 `BoundsRect` 的角。`nil` = 独立使用,由用户自行摆放。目标被释放时自动解绑。目标隐藏时角标跟着不画(无窗口目标也一样),目标再显示就回来。 |
 | `Value` | `Integer` | `0` | 计数。> 99 显示 `99+`(TTyButton 规则);负数不夹紧(内置角标也不夹)。`0` 时默认隐藏。 |
-| `ShowZero` | `Boolean` | `False` | 计数为 0 时是否仍然显示。 |
+| `ShowZero` | `Boolean` | `False` | 计数为 0 时是否仍然显示。不显示时也不接收点击（独立使用时，鼠标穿透到下面的控件）。 |
 | `Dot` | `Boolean` | `False` | 画一颗纯圆点(直径取 `--badge-dot-size`)而非数字:表示"有东西"但不给数。是否显示仍由 `Value` / `ShowZero` 决定。 |
 | `Position` | `TTyBadgePosition` | `bpBottomRight` | 位于目标的哪个角(内缩量与内置角标一致)。默认值**与 `TTyButton.BadgePosition` 相同**。独立使用时该属性无效(没有宿主的角可吸附)。 |
 

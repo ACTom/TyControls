@@ -249,6 +249,10 @@ begin
     // 1) shadow pass: same text, offset by the (scaled) shadow offset, in ShadowColor.
     dx := P.Scale(FShadowOffsetX);
     dy := P.Scale(FShadowOffsetY);
+    { #181: the text keeps clear of the side its shadow is thrown to -- the run
+      CalculatePreferredSize reserves. A negative offset threw it past the left edge, where the
+      clip took it; a right-aligned caption lost a positive one the same way. }
+    if dx < 0 then Dec(ContentRect.Left, dx) else Dec(ContentRect.Right, dx);
     ShadowRect := Rect(ContentRect.Left + dx, ContentRect.Top + dy,
       ContentRect.Right + dx, ContentRect.Bottom + dy);
     P.DrawText(ShadowRect, Caption, S.FontName, fontSize, S.FontWeight,

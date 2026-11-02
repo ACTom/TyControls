@@ -35,7 +35,7 @@ uses tyControls.GlowLabel;
 | `Alignment` | `TAlignment` | `taLeftJustify` | 文字**水平**对齐(左 / 右 / 居中)。 |
 | `Layout` | `TTextLayout` | `tlCenter` | 文字**垂直**对齐(顶 / 居中 / 底)。 |
 | `GlowColor` | `TTyColor` | `TyRGBA(255,255,255,200)` | 光晕颜色($AARRGGBB);默认为半透明白色柔光。**建议带 alpha**,以便叠加时自然堆积。 |
-| `GlowRadius` | `Integer` | `4` | 光晕高斯模糊半径(逻辑像素,绘制时按 PPI 缩放);setter 夹紧到 `0..64`,`0` 表示不模糊。 |
+| `GlowRadius` | `Integer` | `4` | 光晕高斯模糊半径(逻辑像素,绘制时按 PPI 缩放);setter 夹紧到 `0..64`,`0` 表示不模糊。文字两侧各留出一个半径的空间给光晕(`AutoSize` 预留的宽度正是这么多),所以左侧光晕不会被裁掉;控件比这窄时只留得下多少留多少，不挤占文字。 |
 | `Enabled` | `Boolean` | `True` | 为 `False` 时触发 `:disabled` 主题状态(通常降低不透明度,连同光晕一起变淡)。 |
 | `Font` | `TFont` | 系统默认 | 传递 PPI 给渲染器;字体族 / 大小优先由主题控制。 |
 
