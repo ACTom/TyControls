@@ -31,6 +31,9 @@ type
   end;
 
   TNumericEditTest = class(TTestCase)
+  private
+    FChanges: Integer;
+    procedure CountChange(Sender: TObject);
   published
     procedure TestFormat;
     procedure TestParse;
@@ -46,8 +49,49 @@ type
     procedure TestNumericAndSpinAgreeAfterTheirOwnReformat;
     { #159: malformed text keeps the last value; it became 0 on blur. }
     procedure TestMalformedTextKeepsTheLastValue;
+    { #159: the regrouping on focus and blur is no change -- no OnChange, no undo step --
+      unless the number itself moved. }
+    procedure TestTheFocusReformatIsNoChange;
   end;
 implementation
+
+procedure TNumericEditTest.CountChange(Sender: TObject);
+begin
+  Inc(FChanges);
+end;
+
+procedure TNumericEditTest.TestTheFocusReformatIsNoChange;
+var c: TNumericFocusProbe;
+begin
+  c := TNumericFocusProbe.Create(nil);
+  try
+    c.Decimals := 0;
+    c.Value := 1234;
+    c.OnChange := @CountChange;
+    FChanges := 0;
+    c.SimulateEnter;
+    AssertEquals('setup: the grouping comes off', '1234', c.Text);
+    AssertEquals('focusing the field is no change', 0, FChanges);
+    c.SimulateExit;
+    AssertEquals('setup: and goes back on', '1,234', c.Text);
+    AssertEquals('nor is leaving it', 0, FChanges);
+    c.Undo;
+    AssertTrue('and neither left an undo step', c.Text <> '1234');
+    { The number itself moving is a change: clamped on the blur. }
+    c.MinValue := 0;
+    c.MaxValue := 100;
+    c.Value := 50;
+    c.SimulateEnter;
+    c.SelectAll;
+    c.InjectKey('5');
+    c.InjectKey('0');
+    c.InjectKey('0');
+    FChanges := 0;
+    c.SimulateExit;
+    AssertEquals('setup: clamped', '100', c.Text);
+    AssertEquals('a clamped value is a change', 1, FChanges);
+  finally c.Free; end;
+end;
 
 procedure TNumericFocusProbe.SimulateEnter;
 begin

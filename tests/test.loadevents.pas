@@ -202,13 +202,17 @@ var
 begin
   c := TTyCurrencyEdit.Create(FForm);
   c.Parent := FForm;
-  c.Value := 12;
+  c.MaxValue := 10;
+  c.Value := 5;
   c.OnChange := @Changed;
   TCrack(c).DoEnter;
+  c.Text := '50';
   FChanges := 0;
   TCrack(c).DoExit;
-  AssertTrue('setup: the blur reformats, with an OnChange', FChanges > 0);
+  { A blur that only regroups is no change (#159); one that clamps the number is. }
+  AssertTrue('setup: the blur clamps, with an OnChange', FChanges > 0);
   TCrack(c).DoEnter;
+  c.Text := '50';
   FChanges := 0;
   TCompCrack(c).Destroying;
   TCrack(c).DoExit;

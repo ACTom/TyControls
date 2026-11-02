@@ -22,7 +22,7 @@ uses
   Classes, SysUtils, Types, Graphics, Controls, LCLType, TypInfo,
   fpcunit, testregistry,
   tyControls.Types, tyControls.Painter, tyControls.StyleModel,
-  tyControls.SpinEdit, tyControls.FloatSpinEdit;
+  tyControls.SpinEdit, tyControls.FloatSpinEdit, tyControls.TextMenu;
 
 type
   { Reaches the protected input dispatch, the trailing-zone geometry and RenderTo. Declared
@@ -53,6 +53,8 @@ type
     // A probe sized and laid out the same way every geometry test needs it.
     function NewProbe: TFloatSpinProbe;
   published
+    { #159: a locked editor offers no Cut, Paste or Undo in its menu. }
+    procedure EditorEnabledFalseOffersNoEditsInTheMenu;
     { --- the reason the control exists --- }
     procedure ValueKeepsItsFraction;
     procedure AFractionalIncrementIsNotTruncated;
@@ -852,6 +854,24 @@ begin
   finally
     p.Free;
   end;
+end;
+
+{ #159: the context menu greys Cut, Paste and Undo when the field says it is read-only; with
+  EditorEnabled = False the editor is locked too, so the menu must not offer them. }
+procedure TFloatSpinEditTest.EditorEnabledFalseOffersNoEditsInTheMenu;
+var
+  e: TTyFloatSpinEdit;
+  acts: ITyTextEditActions;
+begin
+  e := TTyFloatSpinEdit.Create(nil);
+  try
+    acts := e as ITyTextEditActions;
+    AssertFalse('setup: an open editor is not read-only', acts.TeIsReadOnly);
+    e.EditorEnabled := False;
+    AssertTrue('a locked one reads read-only to the menu', acts.TeIsReadOnly);
+    AssertFalse('and ReadOnly itself is untouched', e.ReadOnly);
+    acts := nil;
+  finally e.Free; end;
 end;
 
 initialization

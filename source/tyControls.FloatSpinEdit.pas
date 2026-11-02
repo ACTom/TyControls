@@ -65,6 +65,11 @@ type
     { The last net for EditorEnabled: every insertion in TTyEdit — typing, paste and an IME
       commit — funnels through here. }
     function FilterInsert(const AText: string): string; override;
+  public
+    { #159: a locked editor reads read-only to the context menu, so it offers no Cut, Paste or
+      Undo -- which went straight to the text, past the keyboard gate. }
+    function TeIsReadOnly: Boolean; override;
+  protected
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -287,6 +292,11 @@ begin
     through the published Text setter, whose contract is to CLEAR Modified. Restoring it here
     is what keeps an enable-Save handler correct after a click on the up button. }
   Modified := True;
+end;
+
+function TTyFloatSpinEdit.TeIsReadOnly: Boolean;
+begin
+  Result := inherited TeIsReadOnly or not FEditorEnabled;
 end;
 
 function TTyFloatSpinEdit.FilterInsert(const AText: string): string;
