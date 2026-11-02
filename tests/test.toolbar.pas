@@ -2785,6 +2785,7 @@ type
     procedure TestADropdownMenuKnowsItsButton;
     procedure TestNewHotImagesRepaintTheTools;
     procedure TestTheGripWorksOnlyOnTheWindowsEdge;
+    procedure TestAGripNotShownIsNotDrawn;
     procedure TestABandHostHasNoCaption;
     procedure TestABandsControlIsTheBarsChild;
     procedure TestABandKeepsToItsMinAndMaxWidth;
@@ -2907,6 +2908,36 @@ begin
   sb.SizeGrip := True;
   FForm.BorderStyle := bsSingle;
   AssertFalse('a window that cannot be resized shows no grip', sb.GripShown);
+end;
+
+procedure TBars176Test.TestAGripNotShownIsNotDrawn;
+var sb: TStatus176; a, b: TBitmap; x, y, d: Integer;
+begin
+  FForm.BorderStyle := bsSizeable;
+  sb := TStatus176.Create(FForm);
+  sb.Parent := FForm;
+  sb.Align := alNone;
+  sb.SetBounds(0, 0, FForm.ClientWidth, 22);   // at the top: no grip
+  sb.SimplePanel := True;
+  sb.SimpleText := '';
+  a := TBitmap.Create;
+  b := TBitmap.Create;
+  try
+    a.SetSize(sb.Width, sb.Height);
+    b.SetSize(sb.Width, sb.Height);
+    sb.SizeGrip := True;
+    sb.RenderTo(a.Canvas, Rect(0, 0, sb.Width, sb.Height), 96);
+    sb.SizeGrip := False;
+    sb.RenderTo(b.Canvas, Rect(0, 0, sb.Width, sb.Height), 96);
+    d := 0;
+    for y := 0 to sb.Height - 1 do
+      for x := sb.Width - 24 to sb.Width - 1 do
+        if a.Canvas.Pixels[x, y] <> b.Canvas.Pixels[x, y] then Inc(d);
+    AssertEquals('a grip that is not shown is not drawn either', 0, d);
+  finally
+    a.Free;
+    b.Free;
+  end;
 end;
 
 procedure TBars176Test.TestABandHostHasNoCaption;
