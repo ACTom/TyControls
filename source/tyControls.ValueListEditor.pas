@@ -250,6 +250,14 @@ type
     procedure Resize; override;
     procedure Paint; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    { #167: the rows are what the form file keeps. The inherited Items is the view's flat key
+      list, so it was saved but was no row model: 'Name=Bob' lines came back as blank rows and
+      AddRow wiped them. The root rows are written in Items' own format, one 'Key=Value' line
+      each, and those lines read back -- older form files' too -- become rows. }
+    procedure DefineProperties(Filer: TFiler); override;
+    procedure WriteRowLines(Writer: TWriter);
+    function RowLines: TStringList;
+    procedure Loaded; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -538,6 +546,7 @@ begin
   { #164: its typing and dragging are its own -- the editors and the divider. }
   FTypeToFind := False;
   FDragSelect := False;
+  FItemsStreamed := False;   // #167: the rows are written instead (DefineProperties)
   FEditFlat := -1;
   FEditCol := 1;      // the value column: what an edit meant before the key became editable
   FColorDlgRow := nil;
@@ -710,6 +719,86 @@ begin
 end;
 
 { ---- data API (root rows) ---- }
+
+function TTyValueListEditor.RowLines: TStringList;
+var i: Integer;
+begin
+  Result := TStringList.Create;
+  for i := 0 to High(FRoot) do
+    Result.Add(FRoot[i].Key + '=' + FRoot[i].Value);
+end;
+
+procedure TTyValueListEditor.WriteRowLines(Writer: TWriter);
+var
+  lines: TStringList;
+  i: Integer;
+begin
+  lines := RowLines;
+  try
+    Writer.WriteListBegin;
+    for i := 0 to lines.Count - 1 do Writer.WriteString(lines[i]);
+    Writer.WriteListEnd;
+  finally
+    lines.Free;
+  end;
+end;
+
+procedure TTyValueListEditor.DefineProperties(Filer: TFiler);
+var
+  mine, theirs: TStringList;
+  has: Boolean;
+begin
+  inherited DefineProperties(Filer);
+  mine := RowLines;
+  try
+    has := mine.Count > 0;
+    if Filer.Ancestor is TTyValueListEditor then
+    begin
+      theirs := TTyValueListEditor(Filer.Ancestor).RowLines;
+      try
+        has := not mine.Equals(theirs);
+      finally
+        theirs.Free;
+      end;
+    end;
+  finally
+    mine.Free;
+  end;
+  { Write-only under Items' own name: reading, the path walks into the published Items, whose
+    lines Loaded turns into rows -- so a form file still opens in a version without this. }
+  Filer.DefineProperty('Items.Strings', nil, @WriteRowLines, has);
+end;
+
+procedure TTyValueListEditor.Loaded;
+var
+  lines: TStringList;
+  i, p: Integer;
+  vr: TTyValueRow;
+begin
+  inherited Loaded;
+  if (Items.Count = 0) or (Length(FRoot) > 0) then Exit;
+  lines := TStringList.Create;
+  try
+    lines.Assign(Items);
+    for i := 0 to lines.Count - 1 do
+    begin
+      vr := TTyValueRow.Create;
+      p := Pos('=', lines[i]);
+      if p > 0 then
+      begin
+        vr.Key := Copy(lines[i], 1, p - 1);
+        vr.Value := Copy(lines[i], p + 1, MaxInt);
+      end
+      else
+        vr.Key := lines[i];
+      SetLength(FRoot, Length(FRoot) + 1);
+      FRoot[High(FRoot)] := vr;
+    end;
+  finally
+    lines.Free;
+  end;
+  RebuildFlat;
+end;
 
 function TTyValueListEditor.AddRow(const AKey, AValue: string): TTyValueRow;
 begin

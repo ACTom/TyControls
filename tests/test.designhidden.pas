@@ -122,6 +122,8 @@ begin
   AssertEquals('TTyFilterComboBox.Items', 'THiddenPropertyEditor', EditorFor('TTyFilterComboBox', 'Items'));
   AssertEquals('TTyShellComboBox.Items', 'THiddenPropertyEditor', EditorFor('TTyShellComboBox', 'Items'));
   AssertEquals('a plain combo keeps its rows', '', EditorFor('TTyComboBox', 'Items'));
+  { #167: and a value list editor's Items is the view's key list, not its rows. }
+  AssertEquals('TTyValueListEditor.Items', 'THiddenPropertyEditor', EditorFor('TTyValueListEditor', 'Items'));
 end;
 
 procedure TDesignHiddenTest.TestTheTextInputsHideChildSizing;
