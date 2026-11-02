@@ -61356,6 +61356,158 @@
    "datasets": []
   },
   {
+   "id": "r-list-aria-scalar",
+   "group": "render",
+   "note": "bare numbers on a category axis: the description is the ordinal and the value of each row",
+   "option": {
+    "animation": false,
+    "aria": {
+     "enabled": true
+    },
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "a",
+      "b"
+     ]
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "bar",
+      "data": [
+       5,
+       8
+      ]
+     }
+    ]
+   },
+   "render": {
+    "rect": [
+     "4056800000000000",
+     "4050400000000000",
+     "407c200000000000",
+     "406fe00000000000"
+    ],
+    "axes": [
+     {
+      "dim": "x",
+      "index": 0,
+      "categories": [
+       "a",
+       "b"
+      ]
+     },
+     {
+      "dim": "y",
+      "index": 0,
+      "categories": null
+     }
+    ],
+    "series": [
+     {
+      "index": 0,
+      "type": "bar",
+      "count": 2,
+      "items": [
+       [
+        "405f380000000000",
+        "4074000000000000",
+        "4063680000000000",
+        "c063ec0000000000"
+       ],
+       [
+        "4075de0000000000",
+        "4074000000000000",
+        "4063680000000000",
+        "c06fe00000000000"
+       ]
+      ],
+      "labels": []
+     }
+    ]
+   },
+   "legend": null,
+   "aria": "This is a chart with type Bar chart.The data is as follows: the data for a is 0, 5, the data for b is 1, 8. ",
+   "datasets": []
+  },
+  {
+   "id": "r-list-aria-short",
+   "group": "render",
+   "note": "own data, a row shorter than the others: NaN where it has no element",
+   "option": {
+    "animation": false,
+    "aria": {
+     "enabled": true
+    },
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "data": [
+       [
+        1,
+        2,
+        3
+       ],
+       [
+        4,
+        5
+       ]
+      ]
+     }
+    ]
+   },
+   "render": {
+    "rect": [
+     "4056800000000000",
+     "4050400000000000",
+     "407c200000000000",
+     "406fe00000000000"
+    ],
+    "axes": [
+     {
+      "dim": "x",
+      "index": 0,
+      "categories": null
+     },
+     {
+      "dim": "y",
+      "index": 0,
+      "categories": null
+     }
+    ],
+    "series": [
+     {
+      "index": 0,
+      "type": "scatter",
+      "count": 2,
+      "items": [
+       [
+        "4069500000000000",
+        "406b400000000000"
+       ],
+       [
+        "4080e00000000000",
+        "4050400000000000"
+       ]
+      ],
+      "labels": []
+     }
+    ]
+   },
+   "legend": null,
+   "aria": "This is a chart with type Scatter plot.The data is as follows: 1, 2, 3, 4, 5, NaN. ",
+   "datasets": []
+  },
+  {
    "id": "r-list-aria-swap",
    "group": "render",
    "note": "own data x 1, y 0: the description in the order of the elements",

@@ -859,6 +859,10 @@ L('r-list-aria-own-gap', "own data x ['nope', 1], y 0: the description 1, 2, 7 -
   series: [{ type: 'scatter', encode: { x: ['nope', 1], y: 0 }, data: [[1, 2, 7], [3, 4, 8]] }] }, { meta: true });
 L('r-list-aria-own-text', 'own data, a third element of text: the description lists it as written', { aria: { enabled: true },
   xAxis: { type: 'value' }, yAxis: { type: 'value' }, series: [{ type: 'scatter', data: [[1, 2, 'A'], [3, 4, 'B']] }] }, { meta: true });
+L('r-list-aria-scalar', 'bare numbers on a category axis: the description is the ordinal and the value of each row', { aria: { enabled: true },
+  xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: { type: 'value' }, series: [{ type: 'bar', data: [5, 8] }] }, { meta: true });
+L('r-list-aria-short', 'own data, a row shorter than the others: NaN where it has no element', { aria: { enabled: true },
+  xAxis: { type: 'value' }, yAxis: { type: 'value' }, series: [{ type: 'scatter', data: [[1, 2, 3], [4, 5]] }] }, { meta: true });
 L('r-list-aria-swap', 'own data x 1, y 0: the description in the order of the elements', { aria: { enabled: true },
   xAxis: { type: 'value' }, yAxis: { type: 'value' }, series: [{ type: 'scatter', encode: { x: 1, y: 0 }, data: [[1, 2, 7], [3, 4, 8]] }] },
   { meta: true });

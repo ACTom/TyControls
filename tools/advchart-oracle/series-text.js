@@ -1025,7 +1025,7 @@ label("encode list: pie value [v, w]: '{b}|{c}|{d}|{@w}'", pv({ itemName: 'g', v
 label('encode list: funnel value [v, w]: the name', pv({ itemName: 'g', value: ['v', 'w'] }, null, 'funnel'));
 label("encode list: funnel value ['nope', 'w']: the names, though nothing has a width", pv({ itemName: 'g', value: ['nope', 'w'] }, null, 'funnel'));
 lTip('encode list: pie value [v, w]: draws v, tips w', pv({ itemName: 'g', value: ['v', 'w'] }), 1);
-lTip('encode list: pie value [w, v]', pv({ itemName: 'g', value: ['w', 'v'] }), 2);
+lTip('encode list: pie value [w, v], the third row', pv({ itemName: 'g', value: ['w', 'v'] }), 2);
 lTip('encode list: funnel value [v, w]: tips w', pv({ itemName: 'g', value: ['v', 'w'] }, null, 'funnel'), 1);
 lTip("encode list: funnel value ['nope', 'w']: tips w", pv({ itemName: 'g', value: ['nope', 'w'] }, null, 'funnel'), 1);
 itemTip("encode list: pie value ['nope', 'w']: no sector, the tooltip w", pv({ itemName: 'g', value: ['nope', 'w'] }), 0, 1, null,

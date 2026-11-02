@@ -806,17 +806,20 @@ var
   i: Integer;
   got, want: string;
 begin
-  if not (ACase.Find('legend') is TJSONArray) then Exit;
-  want := '';
-  for i := 0 to ACase.Arrays['legend'].Count - 1 do
-    want := want + ACase.Arrays['legend'].Strings[i] + '|';
-  got := '';
-  if AChart.LegendLayoutCount > 0 then
+  { (no legend: null, nothing to compare -- the description all the same) }
+  if ACase.Find('legend') is TJSONArray then
   begin
-    lay := AChart.LegendLayout(0);
-    for i := 0 to High(lay.Items) do got := got + lay.Items[i].Name + '|';
+    want := '';
+    for i := 0 to ACase.Arrays['legend'].Count - 1 do
+      want := want + ACase.Arrays['legend'].Strings[i] + '|';
+    got := '';
+    if AChart.LegendLayoutCount > 0 then
+    begin
+      lay := AChart.LegendLayout(0);
+      for i := 0 to High(lay.Items) do got := got + lay.Items[i].Name + '|';
+    end;
+    ATest.SameStr('legend', got, want);
   end;
-  ATest.SameStr('legend', got, want);
   if ACase.Find('aria') is TJSONString then
     ATest.SameStr('aria', AChart.AriaDescription, ACase.Strings['aria']);
 end;
