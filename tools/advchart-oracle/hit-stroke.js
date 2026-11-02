@@ -458,11 +458,13 @@ function r7iCases() {
     ['r7i.custom-clip', vv({ type: 'custom', clip: true, renderItem: '@cuclip', data: [[6, 5]] }), [PT(310, 135, 120)]],
     ['r7i.custom-noclip', vv({ type: 'custom', renderItem: '@cuclip', data: [[6, 5]] }), [PT(310, 135, 120)]],
     // a theme river layer's and a sankey's group clip while they enter
-    // (removeClipPath once done)
+    // (removeClipPath once done); the river's rays level only -- its smoothed
+    // edges stand a step or two off upstream's on a slant, at rest too, which
+    // is not the clip
     ['r7i.river-anim', ANIM(solo({ type: 'themeRiver', label: { show: false }, data: [[0, 3, 'a'], [1, 4, 'a'],
       [2, 3, 'a'], [0, 2, 'b'], [1, 2, 'b'], [2, 3, 'b']] },
     { singleAxis: { type: 'value', min: 0, max: 2, top: 40, bottom: 40, axisLabel: { show: false } } })),
-    [PT(200, 150, 150)], { t: 300 }],
+    [Object.assign(PT(200, 150, 150), { dirs: [0, 4] })], { t: 300 }],
     ['r7i.sankey-anim', ANIM(solo({ type: 'sankey', label: { show: false }, data: [{ name: 'a' }, { name: 'b' }],
       links: [{ source: 'a', target: 'b', value: 3 }], lineStyle: { opacity: 0.5 } })), [PT(200, 150, 200)], { t: 300 }],
   ].map(c => c.length > 3 ? c : c.concat([{}]));
