@@ -41,6 +41,7 @@ type
     procedure TestASubComponentIsExpandedNotReferenced;
     { #183 }
     procedure TestAltRightAndAltLeftOpenAndCloseARow;
+    procedure TestCtrlEnterRunsTheDialogOfADialogRow;
   end;
 
   { A real control on a real form: Font, Constraints, Anchors, PopupMenu. }
@@ -100,6 +101,24 @@ begin
   FGrid.Select(FGrid.RowAt('Items.[1]'));
   FGrid.Press(VK_RIGHT, [ssAlt]);
   AssertTrue('a collection item too', FGrid.RowAt('Items.[1]').Expanded);
+end;
+
+{ LCL's object inspector: Ctrl+Enter runs the dialog of a dialog property (ToggleRow ->
+  DoCallEdit, objectinspector.pp). On the row, and in its read-only inline text as well. }
+procedure TPropertyGridObjectsTest.TestCtrlEnterRunsTheDialogOfADialogRow;
+begin
+  FGrid.StringsAccept := True;
+  FGrid.StringsAnswer := 'k';
+  FGrid.Select(FGrid.RowAt('Lines'));
+  FGrid.Press(VK_RETURN, [ssCtrl]);
+  AssertEquals('the dialog ran', 1, FGrid.StringsDialogs);
+  AssertEquals('and wrote the list', 'k', Trim(FHolder.Lines.Text));
+  FGrid.StringsAnswer := 'm';
+  FGrid.Press(VK_F2);
+  AssertTrue('F2 opened the row''s text', FGrid.EditingRow >= 0);
+  FGrid.Editor.PressKey(VK_RETURN, [ssCtrl]);
+  AssertEquals('Ctrl+Enter in it runs the dialog', 2, FGrid.StringsDialogs);
+  AssertEquals('written', 'm', Trim(FHolder.Lines.Text));
 end;
 
 procedure TPropertyGridObjectsTest.SetUp;

@@ -1977,6 +1977,13 @@ end;
 
 procedure TTyCustomValueListEditor.EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
+  { Ctrl+Enter in the read-only text of a font or dialog row: its '…' (#183). }
+  if (Key = VK_RETURN) and (Shift = [ssCtrl]) and FEditor.ShowEllipsis and (FEditFlat >= 0) then
+  begin
+    Key := 0;
+    InvokeRowDialog(FEditFlat);
+    Exit;
+  end;
   case Key of
     VK_RETURN: begin EndEdit(True,  True); Key := 0; end;
     VK_ESCAPE: begin EndEdit(False, True); Key := 0; end;
@@ -2282,6 +2289,16 @@ begin
   begin
     SetExpanded(FFlatRow[ItemIndex], Key = VK_RIGHT);
     Key := 0;
+    Exit;
+  end;
+  { #183: Ctrl+Enter runs the dialog of a font or dialog row, as in LCL's object inspector
+    (objectinspector.pp: Ctrl+Enter -> ToggleRow -> DoCallEdit). }
+  if (Key = VK_RETURN) and (Shift = [ssCtrl]) and (ItemIndex >= 0)
+    and (ItemIndex <= High(FFlatRow)) and not FReadOnly
+    and (FFlatRow[ItemIndex].EditorKind in [vekFont, vekDialog]) then
+  begin
+    Key := 0;
+    InvokeRowDialog(ItemIndex);
     Exit;
   end;
   { A heading has nothing to edit: Enter opens or closes it instead. }

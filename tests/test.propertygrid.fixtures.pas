@@ -306,7 +306,7 @@ type
   TPGEditAccess = class(TTyValueEdit)
   public
     procedure TypeText(const AText: string);
-    procedure PressKey(AKey: Word);
+    procedure PressKey(AKey: Word; AShift: TShiftState = []);
     procedure ClickEllipsis;
   end;
 
@@ -617,11 +617,11 @@ begin
   end;
 end;
 
-procedure TPGEditAccess.PressKey(AKey: Word);
+procedure TPGEditAccess.PressKey(AKey: Word; AShift: TShiftState);
 var k: Word;
 begin
   k := AKey;
-  KeyDown(k, []);
+  KeyDown(k, AShift);
 end;
 
 procedure TPGEditAccess.ClickEllipsis;
