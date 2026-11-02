@@ -30,6 +30,24 @@ begin
     TyStSetGradient(ARest, AKey, d.AsJSON, ARest.Color[AKey]);
 end;
 
+{ [R6-F] A WIDTH OR A PHASE AT REST WRITTEN AS NO NUMBER ('abc', true): the
+  value as written, where the element strokes what the canvas makes of it --
+  a state's track from it is then discrete, set at its end at once }
+procedure StRestRaw(var ARest: TTyStObject; const ANodes: array of TJSONObject;
+  const APath: array of string; AKey: TTyStKey);
+var d: TJSONData; v: Double;
+begin
+  if not ARest.Has[AKey] or IsNan(ARest.Num[AKey]) then Exit;
+  d := TyStFind(ANodes, APath);
+  if (d = nil) or (d.JSONType = jtNumber) then Exit;
+  if AKey = stkLineWidth then v := TyOptPenWidth(d) else v := TyOptPenOffset(d);
+  if IsNan(v) then Exit;
+  { the element strokes it -- or strokes nothing for it, where the rest
+    holds zrender's default 1 (StRestOf) }
+  if (v = ARest.Num[AKey]) or ((AKey = stkLineWidth) and (v <= 0) and (ARest.Num[AKey] = 1)) then
+    ARest.RawJson[AKey] := d.AsJSON;
+end;
+
 { a label's: its anchor (the Text's own x / y), its paint order, whether it
   shows; its fill stays absent -- the automatic ink is the port's }
 function StLabelRestOf(const AEl: TTyChartElement): TTyStObject;
@@ -1332,6 +1350,17 @@ begin
       StRestGradient(item^.Host.Rest, nodes, ['itemStyle', 'color'], stkFill);
     if ph^.Style.StrokeGradient.Kind <> cgkNone then
       StRestGradient(item^.Host.Rest, nodes, ['itemStyle', 'borderColor'], stkStroke);
+  end;
+  { [R6-F] a width or a phase at rest written as no number }
+  if blk = 'itemStyle' then
+  begin
+    StRestRaw(item^.Host.Rest, nodes, ['itemStyle', 'borderWidth'], stkLineWidth);
+    StRestRaw(item^.Host.Rest, nodes, ['itemStyle', 'borderDashOffset'], stkDashOffset);
+  end
+  else
+  begin
+    StRestRaw(item^.Host.Rest, nodes, [blk, 'width'], stkLineWidth);
+    StRestRaw(item^.Host.Rest, nodes, [blk, 'dashOffset'], stkDashOffset);
   end;
   if FSt[s].Kind = sskCandle then StDeclareCandle(ASlot, ARaw, nodes, item^.Host);
   { a boxplot's emphasis border is 2 wide unless declared (BoxplotSeries.ts
@@ -3540,6 +3569,25 @@ begin
     Result := TyAnimColorValue(AObj.Color[AKey], AObj.Lifted[AKey]);
 end;
 
+{ [R6-F] a number key of a state object as the engine takes it: the number,
+  or the value as the option wrote it where that is no number -- a track
+  from a number to 'abc' (or true, or [5]) is discrete, set at its end at
+  once; one to '3' interpolates (Animator.addKeyframe) }
+function StNumValue(const AObj: TTyStObject; AKey: TTyStKey): TTyAnimValue;
+var d: TJSONData;
+begin
+  if AObj.RawJson[AKey] = '' then Exit(TyAnimNum(AObj.Num[AKey]));
+  d := GetJSON(AObj.RawJson[AKey]);
+  try
+    { an object is no number, no colour, no gradient: its track is
+      discrete as well (String({}) is no number) }
+    if d.JSONType = jtObject then Result := TyAnimStr('[object Object]')
+    else Result := TyGfxAnimOf(d);
+  finally
+    d.Free;
+  end;
+end;
+
 { [R5-A] some state of the element declares AKey }
 function StAnyDecl(const AEl: TTyStElement; AKey: TTyStKey): Boolean;
 begin
@@ -3576,11 +3624,12 @@ begin
       TyAnimPropPut(Result.Props, 'style.fill', StColourValue(AM, stkFill));
     if AM.Has[stkStroke] and P.HasStKey('style.stroke') then
       TyAnimPropPut(Result.Props, 'style.stroke', StColourValue(AM, stkStroke));
+    { [R6-F] as written where that is no number }
     if AM.Has[stkLineWidth] and P.HasStKey('style.lineWidth') then
-      TyAnimPropPut(Result.Props, 'style.lineWidth', TyAnimNum(AM.Num[stkLineWidth]));
+      TyAnimPropPut(Result.Props, 'style.lineWidth', StNumValue(AM, stkLineWidth));
     { [R2-I3] the pen's phase }
     if AM.Has[stkDashOffset] and P.HasStKey('style.lineDashOffset') then
-      TyAnimPropPut(Result.Props, 'style.lineDashOffset', TyAnimNum(AM.Num[stkDashOffset]));
+      TyAnimPropPut(Result.Props, 'style.lineDashOffset', StNumValue(AM, stkDashOffset));
     if AM.Has[stkOpacity] then
       TyAnimPropPut(Result.Props, 'style.opacity', TyAnimNum(AM.Num[stkOpacity]));
     { [R5-A] the shadow, where the state says it }
@@ -3783,7 +3832,7 @@ begin
       tweens as a path's (setLabelLineState's style) [was: a line's stroke
       was no key of its proxy, the state's was written at once] }
     Seed('style.stroke', StColourValue(AEl.Rest, stkStroke));
-    Seed('style.lineWidth', TyAnimNum(AEl.Rest.Num[stkLineWidth]));
+    Seed('style.lineWidth', StNumValue(AEl.Rest, stkLineWidth));
     Seed('style.opacity', TyAnimNum(AEl.Rest.Num[stkOpacity]));
     { [R5-I] a label line's smooth: setLabelLineState gives every state a
       shape with its smooth, which the state transition tweens as a number
@@ -3793,7 +3842,7 @@ begin
     { [R2-I3] the pen's phase, where some state says one: it tweens }
     if AEl.Decl[stnSelect].Has[stkDashOffset] or AEl.Decl[stnEmphasis].Has[stkDashOffset]
       or AEl.Decl[stnBlur].Has[stkDashOffset] then
-      Seed('style.lineDashOffset', TyAnimNum(AEl.Rest.Num[stkDashOffset]));
+      Seed('style.lineDashOffset', StNumValue(AEl.Rest, stkDashOffset));
     { [R5-A] the shadow's keys, where some state says one }
     if StAnyDecl(AEl, stkShadowBlur) then
       Seed('style.shadowBlur', TyAnimNum(AEl.Rest.Num[stkShadowBlur]));

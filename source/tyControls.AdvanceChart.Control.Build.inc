@@ -2846,6 +2846,7 @@ begin
     AVisual.StrokeWidthLogical := item.BorderWidthLogical;
   AVisual.StrokeWidthSet := not IsNan(item.BorderWidthLogical);
   AVisual.StrokeWidthNaN := item.BorderWidthNaN;
+  AVisual.StrokeWidthInf := item.BorderWidthInf;
   { THE PEN'S DASH, carried as the option wrote it -- see TTySeriesVisual. }
   AVisual.Dash := item.Dash;
   AVisual.DashExplicit := item.DashLogical;
@@ -2908,6 +2909,7 @@ begin
       none }
     AVisual.StrokeWidthSet := not IsNan(line.BorderWidthLogical);
     AVisual.StrokeWidthNaN := False;
+    AVisual.StrokeWidthInf := 0;
     { AND IT REPLACES the itemStyle one rather than adding to it: for a shape
       drawn with a stroke, lineStyle IS the pen. `lineStyle: {}` with no type
       leaves todNone, which answers solid -- so a line series that writes only
@@ -4724,67 +4726,14 @@ var
     the canvas' to ignore }
   procedure Take(const ANodes: TTyStNodeArray; const APath: array of string; ALine: Boolean);
   var
-    p: array of string;
-    i: Integer;
-    dd: TJSONData;
-    v: Double;
+    jh: Boolean;
   begin
-    SetLength(p, Length(APath) + 1);
-    for i := 0 to High(APath) do p[i] := APath[i];
-    if ALine then p[High(p)] := 'cap' else p[High(p)] := 'borderCap';
-    dd := TyStFind(ANodes, p);
-    if (dd <> nil) and (dd.JSONType = jtString) then pe^.Style.LineCap := TyCapOfWord(dd.AsString);
-    if ALine then p[High(p)] := 'join' else p[High(p)] := 'borderJoin';
-    dd := TyStFind(ANodes, p);
-    if (dd <> nil) and (dd.JSONType = jtString) then
-    begin
-      pe^.Style.LineJoin := TyJoinOfWord(dd.AsString);
-      joinHas := True;
-    end;
-    if ALine then p[High(p)] := 'miterLimit' else p[High(p)] := 'borderMiterLimit';
-    { [R6-E] as the canvas takes it: `|| 10`, a numeric string its number, a
-      limit it refuses the default [was: a number only] }
-    v := TyOptMiterLimit(TyStFind(ANodes, p));
-    if not IsNan(v) then
-    begin
-      if v = 10 then pe^.Style.MiterLimit := 0 else pe^.Style.MiterLimit := v;
-    end;
-    { [R6-D] the dash (getItemStyle's / getLineStyle's lineDash), for the
-      views whose builders do not read it (dashOn): a word
-      stays a word, measured against the width it draws at; a number or
-      an array is lengths; 'solid' and any other value none }
-    if not dashOn then Exit;
-    if ALine then p[High(p)] := 'type' else p[High(p)] := 'borderType';
-    dd := TyStFind(ANodes, p);
-    if dd <> nil then
-    begin
-      pe^.Style.DashWord := 0;
-      if (dd.JSONType = jtString) and (dd.AsString = 'dashed') then pe^.Style.DashWord := 1
-      else if (dd.JSONType = jtString) and (dd.AsString = 'dotted') then pe^.Style.DashWord := 2;
-      pe^.Style.DashLogical := nil;
-      if pe^.Style.DashWord <> 0 then
-        pe^.Style.DashLogical := TyDashOfWord(pe^.Style.DashWord, pe^.Style.StrokeWidthLogical)
-      else if (dd.JSONType = jtNumber) and (dd.AsFloat <> 0) and not IsNan(dd.AsFloat) then
-        pe^.Style.DashLogical := TTyDoubleArray.Create(dd.AsFloat)
-      else if dd.JSONType = jtArray then
-      begin
-        { setLineDash takes each entry as a number (Number('4') is 4) }
-        SetLength(pe^.Style.DashLogical, dd.Count);
-        for i := 0 to dd.Count - 1 do
-          case dd.Items[i].JSONType of
-            jtNumber: pe^.Style.DashLogical[i] := dd.Items[i].AsFloat;
-            jtString: pe^.Style.DashLogical[i] := TyJsToNumber(dd.Items[i].AsString);
-            jtBoolean: pe^.Style.DashLogical[i] := Ord(dd.Items[i].AsBoolean);
-            jtNull: pe^.Style.DashLogical[i] := 0;
-          else
-            pe^.Style.DashLogical[i] := NaN;
-          end;
-      end;
-    end;
-    { and its phase (lineDashOffset), as the canvas takes it }
-    if ALine then p[High(p)] := 'dashOffset' else p[High(p)] := 'borderDashOffset';
-    v := TyOptPenOffset(TyStFind(ANodes, p));
-    if not IsNan(v) then pe^.Style.DashOffsetLogical := v;
+    { the ends always; [R6-D] the dash (getItemStyle's / getLineStyle's
+      lineDash) and its phase only for the views whose builders do not read
+      them (dashOn) [R6-F: TyStTakePenKeys, shared with a gauge's parts] }
+    if dashOn then TyStTakePenKeys(pe^.Style, ANodes, APath, ALine, [spkEnds, spkDash], jh)
+    else TyStTakePenKeys(pe^.Style, ANodes, APath, ALine, [spkEnds], jh);
+    if jh then joinHas := True;
   end;
 
   { [R6-D] THE STROKE AND ITS WIDTH under APath (getItemStyle's borderColor
@@ -4968,17 +4917,23 @@ begin
                 pe^.Style.StrokeWidthLogical := 2;
               end;
             end;
+          { [R6-F] and the opacity: the item's visual style's (its itemStyle
+            over the series'), pointer.itemStyle's / progress.itemStyle's
+            over it [was: not read] }
+          TyStTakeOpacity(pe^.Style, nodes, ['itemStyle']);
           if pe^.Anim.Role = carGaugePointer then
           begin
             TakePen(nodes, ['pointer', 'itemStyle'], False);
             Take(nodes, ['itemStyle'], False);
             Take(nodes, ['pointer', 'itemStyle'], False);
+            TyStTakeOpacity(pe^.Style, nodes, ['pointer', 'itemStyle']);
           end
           else
           begin
             TakePen(nodes, ['progress', 'itemStyle'], False);
             Take(nodes, ['itemStyle'], False);
             Take(nodes, ['progress', 'itemStyle'], False);
+            TyStTakeOpacity(pe^.Style, nodes, ['progress', 'itemStyle']);
           end;
           { the pen is in the path's reach (Path.contain: containStroke) --
             half its width off a line, its whole width off an arc (zrender's

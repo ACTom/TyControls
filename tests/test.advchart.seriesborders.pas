@@ -33,7 +33,17 @@ unit test.advchart.seriesborders;
   path count where it has shapes, and every element of a gauge's progress
   (its round caps too) or track is of the part, with or without a datum.
   A pictorial glyph's pen is drawn in the glyph's frame upstream: the
-  oracle writes it times the line scale to four places, and so does this. }
+  oracle writes it times the line scale to four places, and so does this.
+
+  [R6-F] And `looks` -- each element of the part as opacity|shadowBlur|
+  shadowOffsetX|shadowOffsetY|shadowColor (the colour where a shadow is
+  cast) -- compared with the elements' Alpha and shadow; `cHits` what
+  HitTestAt finds at a bar's centre and a pixel either side ('bar' a series
+  element, '-' none); the gauge parts `line` (its split lines or ticks),
+  `anchor` and `box` (the one other silent path a case shows: the anchor, a
+  title's or a reading's plate) and `words` (a title's or a reading's
+  words). A pen whose width is Infinity is the canvas' to refuse and the
+  port's to draw none: not compared. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -70,6 +80,8 @@ type
     procedure TestARoundCappedArcStrokesOneOutline;
     procedure TestThePenNumbersAsTheCanvasTakesThem;
     procedure TestAPictorialGlyphStrokesInItsOwnFrame;
+    procedure TestAPlateStrokesUnderItsFill;
+    procedure TestAGaugeTickDashIsMeasuredAtItsWidth;
   end;
 
 implementation
@@ -188,8 +200,14 @@ begin
     Result := LowerCase(Format('#%.2x%.2x%.2x%.2x', [(c shr 16) and $FF, (c shr 8) and $FF,
       c and $FF, c shr 24]));
   end;
-  if AEl.Style.DashWord <> 0 then
+  { [R6-F] a word's lengths as the renderer takes them -- the element's
+    own, which RenderElementAsStyled strokes (the word is measured again
+    only for a pen in a shape's frame) [was: the word measured here, blind
+    to lengths the builder left measured against another width] }
+  if (AEl.Style.DashWord <> 0) and ScaledPen(AEl) then
     dash := TyDashOfWord(AEl.Style.DashWord, AEl.Style.StrokeWidthLogical * ps)
+  else if AEl.Style.DashWord <> 0 then
+    dash := Copy(AEl.Style.DashLogical, 0, Length(AEl.Style.DashLogical))
   else
   begin
     dash := Copy(AEl.Style.DashLogical, 0, Length(AEl.Style.DashLogical));
@@ -241,8 +259,32 @@ begin
   else if AEl.Anim.Role = carGaugeProgress then Result := 'progress'
   else if (AEl.Anim.Role = carChord) and AEl.Datum.IsEdge then Result := 'ribbon'
   { a gauge's track: its silent bands (and their caps) }
-  else if (AEl.Anim.Role = carNone) and AEl.Silent and (AEl.Shape.Kind in [cskSector, cskCircle])
-    and (AEl.Caption.Text = '') then Result := 'track';
+  else if (AEl.Anim.Role = carNone) and AEl.Silent and (AEl.Shape.Kind = cskSector)
+    and (AEl.Caption.Text = '') then Result := 'track'
+  { [R6-F] a gauge's split line or tick (TickElement), its words, and any
+    other silent path of its own (its anchor, a title's or a reading's
+    plate: a case shows one) }
+  else if (AEl.Anim.Role in [carNone, carGaugeDetail]) and (AEl.Caption.Text <> '')
+    and (AEl.Caption.FontSizeLogical > 0) then Result := 'words'
+  else if (AEl.Anim.Role = carNone) and AEl.Silent and (AEl.Shape.Kind = cskPolyline)
+    and (Length(AEl.Shape.Points) = 2) and not AEl.Style.HasFill then Result := 'line'
+  else if (AEl.Anim.Role = carNone) and AEl.Silent and (AEl.Caption.Text = '') then
+    Result := 'plain';
+end;
+
+{ [R6-F] opacity|shadowBlur|shadowOffsetX|shadowOffsetY|shadowColor, the
+  colour where a shadow is cast }
+function LooksOf(const AEl: TTyChartElement): string;
+var c: Cardinal;
+begin
+  Result := NumText(AEl.Style.Alpha) + '|' + NumText(AEl.Style.ShadowBlur) + '|'
+    + NumText(AEl.Style.ShadowOffsetX) + '|' + NumText(AEl.Style.ShadowOffsetY) + '|';
+  if (AEl.Style.ShadowBlur > 0) or (AEl.Style.ShadowOffsetX <> 0) or (AEl.Style.ShadowOffsetY <> 0) then
+  begin
+    c := Cardinal(AEl.Style.ShadowColor);
+    Result := Result + LowerCase(Format('#%.2x%.2x%.2x%.2x', [(c shr 16) and $FF, (c shr 8) and $FF,
+      c and $FF, c shr 24]));
+  end;
 end;
 
 { the oracle's type|cx|cy|r0|r|start|sweep, circle|cx|cy|r, rect|x|y|w|h }
@@ -290,7 +332,7 @@ var
   i, k, seen, n, nBad, nCases, nParts, hitEl: Integer;
   lst: TTyPaintList;
   el: TTyChartElement;
-  got, shapes, fills, clips: TStringList;
+  got, shapes, fills, clips, looks: TStringList;
   want, have, id, bad, part, p, s: string;
   act, more: TJSONData;
   arr: TJSONArray;
@@ -334,6 +376,11 @@ begin
   fills.CaseSensitive := True;
   fills.Sorted := True;
   fills.Duplicates := dupIgnore;
+  looks := TStringList.Create;
+  looks.UseLocale := False;
+  looks.CaseSensitive := True;
+  looks.Sorted := True;
+  looks.Duplicates := dupIgnore;
   nBad := 0;
   nCases := 0;
   nParts := 0;
@@ -378,6 +425,7 @@ begin
       shapes.Clear;
       fills.Clear;
       clips.Clear;
+      looks.Clear;
       seen := 0;
       n := 0;
       for k := 0 to lst.Count - 1 do
@@ -390,13 +438,18 @@ begin
             + BoolToStr(el.Ignore, True) + ' pen ' + PenOf(el) + ' ut ' + IntToStr(el.Anim.UtTag)
             + ' sub ' + IntToStr(el.Anim.Sub) + ' text "' + el.Caption.Text + '"');
         if el.Ignore or el.IsGuide or (el.Anim.Role = carLabel) then Continue;
-        if el.Caption.FontSizeLogical > 0 then Continue;
         p := PartOf(el);
+        { [R6-F] the one other silent path of a gauge a case shows }
+        if (p = 'plain') and ((part = 'anchor') or (part = 'box')) then p := part;
+        if (el.Caption.FontSizeLogical > 0) and not ((part = 'words') and (p = 'words')) then Continue;
         if not (((el.Datum.Kind = ctkSeries) and (el.Datum.SeriesIndex >= 0))
           or ((el.Anim.UtTag = 1) and (el.Anim.Series >= 0))
-          or ((part <> '') and (p = part) and ((p = 'track') or (p = 'progress')))) then Continue;
+          or ((part <> '') and (p = part) and ((p = 'track') or (p = 'progress') or (p = 'line')
+            or (p = 'anchor') or (p = 'box') or (p = 'words')))) then Continue;
         if (part <> '') and (p <> part) then Continue;
         Inc(seen);
+        looks.Add(LooksOf(el));
+        if p = 'words' then Continue;
         shapes.Add(ShapeText(el));
         s := FillText(el);
         if s <> '' then fills.Add(s);
@@ -414,7 +467,7 @@ begin
       for k := 0 to pens.Count - 1 do
         { a word the canvas cannot take strokes with the last element's
           colour there: no pen here }
-        if Copy(pens.Strings[k], 1, 2) <> 'x:' then
+        if (Copy(pens.Strings[k], 1, 2) <> 'x:') and (Pos('|Infinity|', pens.Strings[k]) = 0) then
           { a dash setLineDash does not take: the canvas keeps the last
             element's there, the port strokes solid }
           want := want + ' ' + StringReplace(pens.Strings[k], '|ignored|', '|solid|', []);
@@ -445,6 +498,29 @@ begin
         want := want + ' clip' + ArrText(arr, False);
         have := have + ' clip' + SetText(clips);
       end;
+      arr := c.Find('looks') as TJSONArray;
+      if arr <> nil then
+      begin
+        want := want + ' looks' + ArrText(arr, False);
+        have := have + ' looks' + SetText(looks);
+      end;
+      arr := c.Find('cHits') as TJSONArray;
+      if arr <> nil then
+      begin
+        want := want + ' cHits';
+        have := have + ' cHits';
+        for k := 0 to arr.Count - 1 do
+        begin
+          FChart.HitTestAt(TJSONArray(arr.Items[k]).Integers[0], TJSONArray(arr.Items[k]).Integers[1], hitEl);
+          if hitEl < 0 then p := '-'
+          else if FChart.SeriesList.Element(hitEl).Datum.Kind = ctkSeries then p := 'bar'
+          else p := 'other';
+          want := want + Format(' %d,%d=%s', [TJSONArray(arr.Items[k]).Integers[0],
+            TJSONArray(arr.Items[k]).Integers[1], TJSONArray(arr.Items[k]).Strings[2]]);
+          have := have + Format(' %d,%d=%s', [TJSONArray(arr.Items[k]).Integers[0],
+            TJSONArray(arr.Items[k]).Integers[1], p]);
+        end;
+      end;
       arr := c.Find('hits') as TJSONArray;
       if arr <> nil then
       begin
@@ -472,6 +548,7 @@ begin
     shapes.Free;
     fills.Free;
     clips.Free;
+    looks.Free;
     fix.Free;
   end;
   AssertTrue('cases', nCases >= 40);
@@ -568,6 +645,80 @@ begin
   c := FBmp.GetPixel(Round(b.Right - 4), Round((b.Top + b.Bottom) / 2));
   AssertTrue(Format('fill inside its edge (%d %d %d)', [c.red, c.green, c.blue]),
     (c.red > 200) and (c.green < 60) and (c.blue < 60));
+end;
+
+{ [R6-F] A SPLIT LINE'S DASH WORD IN THE LIST: 'dashed' at width 3 is
+  [12, 6] on the element itself -- the list is what is painted wherever no
+  animation frame stands (AnimFrame hands it over as it is), and a frame
+  measures the word again, so the pens' comparison, which reads the frame,
+  cannot tell lengths measured against another width }
+procedure TAdvChartSeriesBordersTest.TestAGaugeTickDashIsMeasuredAtItsWidth;
+var
+  k, n: Integer;
+  el: TTyChartElement;
+begin
+  FChart := TBorderProbe.Create(FForm);
+  FChart.Parent := FForm;
+  FChart.Controller := FCtl;
+  FChart.SetBounds(0, 0, cW, cH);
+  FChart.Option := '{"animation":false,"series":[{"type":"gauge","pointer":{"show":false},'
+    + '"axisLine":{"show":false},"axisTick":{"show":false},"axisLabel":{"show":false},'
+    + '"detail":{"show":false},"title":{"show":false},"splitLine":{"show":true,'
+    + '"lineStyle":{"color":"#ff0000","width":3,"type":"dashed"}},"data":[{"value":40}]}]}';
+  AssertEquals('parses', '', FChart.OptionError);
+  Draw;
+  n := 0;
+  for k := 0 to FChart.SeriesList.Count - 1 do
+  begin
+    el := FChart.SeriesList.Element(k);
+    if PartOf(el) <> 'line' then Continue;
+    Inc(n);
+    AssertEquals('the dash''s two lengths', 2, Length(el.Style.DashLogical));
+    AssertEquals('dash', 12, el.Style.DashLogical[0], 1e-9);
+    AssertEquals('gap', 6, el.Style.DashLogical[1], 1e-9);
+  end;
+  AssertEquals('the split lines', 11, n);
+end;
+
+{ [R6-F] A READING'S PLATE WITH A FILL AND A BORDER, drawn: zrender's
+  _renderBackground strokes it first at twice the width and fills over it
+  (strokeFirst) -- the border shows its own 4 px outside the plate, and the
+  fill reaches the plate's edge (stroked over the fill at 8 the inner half
+  would be black; at 4 the outer half would be 2 px) }
+procedure TAdvChartSeriesBordersTest.TestAPlateStrokesUnderItsFill;
+var
+  k: Integer;
+  el, plate: TTyChartElement;
+  b: TTyRectF;
+  c: TBGRAPixel;
+  my: Integer;
+begin
+  FChart := TBorderProbe.Create(FForm);
+  FChart.Parent := FForm;
+  FChart.Controller := FCtl;
+  FChart.SetBounds(0, 0, cW, cH);
+  FChart.Option := '{"animation":false,"series":[{"type":"gauge","pointer":{"show":false},'
+    + '"axisLine":{"show":false},"axisTick":{"show":false},"splitLine":{"show":false},'
+    + '"axisLabel":{"show":false},"title":{"show":false},"progress":{"show":false},'
+    + '"detail":{"show":true,"offsetCenter":[0,0],"color":"#ff0000","backgroundColor":"#ff0000",'
+    + '"borderColor":"#000000","borderWidth":4,"width":120,"height":40},"data":[{"value":40}]}]}';
+  AssertEquals('parses', '', FChart.OptionError);
+  Draw;
+  plate := Default(TTyChartElement);
+  for k := 0 to FChart.SeriesList.Count - 1 do
+  begin
+    el := FChart.SeriesList.Element(k);
+    if el.Style.HasFill and (el.Style.StrokeWidthLogical > 0) and (el.Caption.Text = '') then plate := el;
+  end;
+  AssertTrue('the plate', plate.Style.StrokeFirst);
+  b := TyShapeBounds(plate.Shape);
+  my := Round((b.Top + b.Bottom) / 2);
+  c := FBmp.GetPixel(Round(b.Left + 2), my);
+  AssertTrue(Format('the fill at the edge (%d %d %d)', [c.red, c.green, c.blue]),
+    (c.red > 200) and (c.green < 60) and (c.blue < 60));
+  c := FBmp.GetPixel(Round(b.Left - 3), my);
+  AssertTrue(Format('the border outside it (%d %d %d)', [c.red, c.green, c.blue]),
+    (c.red < 60) and (c.green < 60) and (c.blue < 60));
 end;
 
 { [R6-E] A PEN'S NUMBERS: a numeric string is its number (the canvas

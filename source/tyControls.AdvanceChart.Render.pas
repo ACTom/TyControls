@@ -3147,6 +3147,14 @@ var
       rule := tfrEvenOdd
     else
       rule := tfrNonZero;
+    { [R6-F] strokeFirst: the pen, then the fill over it (at the fill's
+      alpha again) }
+    if AElement.Style.StrokeFirst then
+    begin
+      PaintPen;
+      if AElement.Style.HasStrokeOpacity and not AElement.Style.HasFillOpacity then
+        P.SetElementAlpha(Max(0.0, Min(1.0, AElement.Style.Alpha)));
+    end;
     { [R6-C] fillOpacity: zrender's brushPath sets globalAlpha to the
       opacity times it before the fill (and times strokeOpacity before the
       pen, PaintPen) }
@@ -3254,7 +3262,7 @@ var
       else
         P.FillPath(TTyColor(AElement.Style.FillColor), rule);
     end;
-    PaintPen;
+    if not AElement.Style.StrokeFirst then PaintPen;
   end;
 
   { the pen of the path just traced }

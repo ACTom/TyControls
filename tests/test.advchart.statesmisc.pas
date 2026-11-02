@@ -35,6 +35,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.JsMath,
      tyControls.AdvanceChart.Anim, tyControls.AdvanceChart.AnimView,
      tyControls.AdvanceChart.States, tyControls.AdvanceChart.Events, tyControls.AdvanceChart,
+     tyControls.AdvanceChart.Data,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TSmProbe = class(TTyAdvanceChart)
@@ -75,6 +76,9 @@ type
     FFactored, FDrawnOpacities: Integer;
     { [r2v] label lines' pens as drawn against their state proxies }
     FDrawnPens: Integer;
+    { [R6-F] widths upstream holds as no number ('abc', true: a discrete
+      track's value), against the proxies' }
+    FPenWords: Integer;
     FReport: string;
     FSeen, FTally: TStringList;
     procedure Miss(const AWhere: string; const AOnce: string = '');
@@ -580,7 +584,23 @@ end;
 function NumOf(AV: TJSONData): Double;
 begin
   if IsHex16(AV) then Result := FromHex(AV.AsString)
+  { [R6-F] a value that is no number (a phase of 'abc'): the canvas' }
+  else if AV.JSONType in [jtString, jtBoolean] then Result := TyOptPenOffset(AV)
   else Result := AV.AsFloat;
+end;
+
+{ [R6-F] a pen's number off a proxy value as the canvas takes it (a
+  boolean's, a string's JS Number; no finite number nought) }
+function PenNumOfValue(const AV: TTyAnimValue): Double;
+begin
+  case AV.Kind of
+    avkNumber: Exit(AV.Num);
+    avkBool: Result := AV.Num;
+    avkString: Result := TyJsToNumber(AV.Str);
+  else
+    Result := NaN;
+  end;
+  if IsNan(Result) or IsInfinite(Result) then Result := 0;
 end;
 
 procedure TAdvChartStatesMiscOracleTest.CompareMarker(const AWhere: string;
@@ -817,6 +837,19 @@ begin
     end;
     Inc(FKeysCompared);
     if Tracked(AEl, key) then Inc(FTrackedCompared);
+    { [R6-F] A WIDTH UPSTREAM HOLDS AS NO NUMBER -- a state's 'abc' or true,
+      which its discrete track sets at once (animateTo allows no discrete
+      animation) -- or a rest's: what the canvas makes of it, against the
+      proxy's value as the port draws it [was: not compared, and the port
+      tweened to it as nought] }
+    if (key = 'style.lineWidth') and not IsHex16(fv) and (fv.JSONType in [jtString, jtBoolean]) then
+    begin
+      Inc(FPenWords);
+      if Abs(PenNumOfValue(v) - TyOptPenWidth(fv)) > 1e-12 then
+        Miss(Format('%s %s %s: %s, upstream %s', [AWhere, id, key, ValText(v), fv.AsJSON]),
+          AWhere + id + key + 'w');
+      Continue;
+    end;
     { [R2-I1] A LABEL'S OPACITY ON A PROXY IT SHARES WITH ITS FADE is a
       factor over the label's own (the host's style.opacity, handed over as
       defaultOpacity): upstream's is the factor times that rest [was: the
@@ -1001,10 +1034,11 @@ begin
     [FKeysCompared, FTrackedCompared, FEventsCompared, FMarksCompared, FPlaces, FOrders])
     + Format(', dashes %d, factored label opacities %d, drawn label opacities %d',
       [FDashes, FFactored, FDrawnOpacities])
-    + Format(', dash phases %d, drawn label-line pens %d', [FDashOffs, FDrawnPens]),
+    + Format(', dash phases %d, drawn label-line pens %d', [FDashOffs, FDrawnPens])
+    + Format(', widths that are no number %d', [FPenWords]),
     (FTrackedCompared > 500) and (FEventsCompared > 40) and (FMarksCompared > 100)
     and (FPlaces > 100) and (FOrders > 100) and (FDashes > 50) and (FFactored > 200)
-    and (FDashOffs > 50) and (FDrawnPens > 200)
+    and (FDashOffs > 50) and (FDrawnPens > 200) and (FPenWords > 20)
     and (FDrawnOpacities > 1000));
 end;
 

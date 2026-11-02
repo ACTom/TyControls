@@ -1418,6 +1418,23 @@ function guards(cases) {
   }
   // every case comes to rest
   for (const c of cases) g('settled-' + c.id, c.clips[c.clips.length - 1] === 0, c.id + ' ' + c.clips.join(','));
+  // [R6-F] a width or a phase that is no number: the state's track is
+  // discrete, set at its end on the hover's own frame and back on the leave's
+  {
+    const c = byId(cases, 'bar-width-word-hover');
+    const a = elRow(c, 0, 0, 'host');
+    const b = elRow(c, 1, 1, 'host');
+    const w = (el, ms) => numAt(el, 'style.lineWidth', ms);
+    g('width-word-at-once', a && b && w(a, 0) === 'abc' && w(a, 450) === 'abc' && w(a, 500) === '3'
+      && w(b, 800) === true && w(b, 1200) === '3' && numAt(b, 'dashOff', 800) === 'abc' && numAt(b, 'dashOff', 1200) === '2',
+      a && b && [w(a, 0), w(a, 500), w(b, 800), w(b, 1200), numAt(b, 'dashOff', 800)].join(' '));
+    const s = byId(cases, 'scatter-width-word-rest');
+    const p = elRow(s, 0, 1, 'host');
+    const q = elRow(s, 1, 0, 'host');
+    g('rest-width-word-at-once', p && q && w(p, 0) === '4' && w(p, 500) === 'abc' && w(q, 0) === true
+      && w(q, 800) === '4' && w(q, 1200) === true,
+      p && q && [w(p, 0), w(p, 500), w(q, 0), w(q, 800), w(q, 1200)].join(' '));
+  }
   return out;
 }
 
@@ -1462,9 +1479,34 @@ const R6D = [
     events: [over(0, ['gp', 0, 0]), over(500, ['gq', 0, 0]), out(1000)] },
 ];
 
+// [R6-F] a state's width that is no number: the state transition's track
+// from a number to it (or from it to a number) is discrete, and animateTo's
+// animator does not allow discrete animation -- the final value is set at
+// the transition's start (Animator.start: setFinished)
+const R6F = [
+  { id: 'bar-width-word-hover', dash: true, dashOff: true, note: "[R6-F] series 0: bars bordered #000 at 3, emphasis "
+    + "borderWidth 'abc'; series 1: bars bordered #000 at 3 dashed, phase 2, emphasis borderWidth true and "
+    + "borderDashOffset 'abc'. Hover bar 0 of series 0 at 0, out at 500, bar 1 of series 1 at 800, out at 1200",
+    option: { color: [C0, C1], xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 3 },
+        emphasis: { itemStyle: { borderWidth: 'abc' } }, data: [10, 20, 30] },
+      { type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 3, borderType: 'dashed', borderDashOffset: 2 },
+        emphasis: { itemStyle: { borderWidth: true, borderDashOffset: 'abc' } }, data: [12, 22, 32] }] },
+    events: [over(0, ['item', 0, 0]), out(500), over(800, ['item', 1, 1]), out(1200)] },
+  { id: 'scatter-width-word-rest', dash: true, note: "[R6-F] scatter points bordered #000 at 'abc' at rest, emphasis "
+    + 'borderWidth 4; series 1 at true at rest, emphasis borderWidth 4. Hover point 1 of series 0 at 0, out at 500, '
+    + 'point 0 of series 1 at 800, out at 1200',
+    option: { color: [C0, C1], xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'scatter', symbolSize: 20, itemStyle: { borderColor: '#000', borderWidth: 'abc' },
+        emphasis: { scale: false, itemStyle: { borderWidth: 4 } }, data: [10, 20, 30] },
+      { type: 'scatter', symbolSize: 20, itemStyle: { borderColor: '#000', borderWidth: true },
+        emphasis: { scale: false, itemStyle: { borderWidth: 4 } }, data: [15, 25, 35] }] },
+    events: [over(0, ['item', 0, 1]), out(500), over(800, ['item', 1, 0]), out(1200)] },
+];
+
 function generate() {
   const cases = [];
-  for (const c of GAUGE.concat(RADAR, MARKERS, LARGE, LABELS, PICTORIAL, R2B, R2I1, R2I3, R2I4, R2I5, R2I6, R2V, R6A, R6D)) {
+  for (const c of GAUGE.concat(RADAR, MARKERS, LARGE, LABELS, PICTORIAL, R2B, R2I1, R2I3, R2I4, R2I5, R2I6, R2V, R6A, R6D, R6F)) {
     if (process.env.ORACLE_CASE && !process.env.ORACLE_CASE.split('|').some(p => c.id.startsWith(p))) continue;
     const r = runCase(c);
     cases.push({ id: c.id, note: c.note, option: c.option, events: r.events, published: r.published,

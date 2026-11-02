@@ -39,6 +39,16 @@
 // leaves without the strokeNoScale createPath gave it) records the width,
 // the dash and the offset as drawn -- times the transform's line scale
 // sqrt|det| -- and the ends as the canvas takes them: `style.x || default`.
+//
+// Round 6 R6-F adds, on its own cases only: `looks` -- each path of the part
+// as `opacity|shadowBlur|shadowOffsetX|shadowOffsetY|shadowColor` (the
+// colour only where a shadow is cast), the sorted set; `cHits` what zr's
+// findHover finds at each rect of the part's centre and a pixel either side
+// of it; the gauge parts `line` (its split lines and ticks: a case shows one
+// of them), `anchor`, `box` (a title's or a reading's background rect, a
+// child of its Text) and `words` (a title's or a reading's TSpans: looks
+// only); and a pen's width there as Number has it ('Infinity' one the
+// canvas refuses).
 // Run: node tools/advchart-oracle/series-borders.js -> tests/fixtures/advchart-series-borders.json
 'use strict';
 const fs = require('fs');
@@ -89,6 +99,12 @@ const HL = { type: 'highlight', seriesIndex: 0, dataIndex: 0 };
 const ISS = { borderColor: '#000', borderWidth: '3', borderType: 'dashed', borderDashOffset: '2', borderMiterLimit: '4' };
 const LSS = { color: '#333', width: '4', type: 'dotted', dashOffset: '1', miterLimit: '4' };
 const RC = { show: true, roundCap: true, width: 14, itemStyle: { borderColor: '#000', borderWidth: 3 } };
+// R6-F: a gauge with one part shown
+const GH = { axisLine: { show: false }, splitLine: { show: false }, axisTick: { show: false }, axisLabel: { show: false },
+  pointer: { show: false }, anchor: { show: false }, title: { show: false }, detail: { show: false } };
+const gOnly = (o) => gauge(Object.assign({}, GH, o));
+const LK = { looks: true };
+const SHD = { shadowBlur: 3, shadowColor: '#000', shadowOffsetX: 1 };
 
 // [id, option, part ('' every path, 'symbol' a radar's symbols, 'pointer',
 //  'progress', 'ribbon' a chord's links), action]
@@ -312,6 +328,69 @@ function cases() {
     ['line.w0-clip', cart({ type: 'line', symbol: 'none', areaStyle: {}, lineStyle: { width: 0 }, data: [3, 5, 2] }), '', null,
       { clip: true }],
     ['line.w4-clip', cart({ type: 'line', symbol: 'none', lineStyle: { width: 4 }, data: [3, 5, 2] }), '', null, { clip: true }],
+    // ==== R6-F ====
+    // ---- a gauge's parts: the lineStyle / itemStyle keys getLineStyle and getItemStyle hand over ----
+    ['gauge.track-opacity', gOnly({ axisLine: { lineStyle: { opacity: 0.5, color: [[0.4, '#f00'], [1, '#00f']] } } }), 'track',
+      null, LK],
+    ['gauge.track-round-opacity', gOnly({ axisLine: { roundCap: true, lineStyle: Object.assign({ opacity: 0.3, color: [[1, '#0f0']] },
+      SHD) } }), 'track', null, LK],
+    ['gauge.track-pen-keys', gOnly({ axisLine: { lineStyle: { color: [[1, '#f00']], type: 'dashed', dashOffset: 2, cap: 'round',
+      join: 'round', miterLimit: 4, opacity: 0.7 } } }), 'track', null, LK],
+    ['gauge.track-default-opacity', gOnly({ axisLine: { lineStyle: { opacity: 0.4 } } }), 'track', null, LK],
+    ['gauge.split-looks', gOnly({ splitLine: { show: true, lineStyle: Object.assign({ color: '#f00', width: 3, opacity: 0.4,
+      type: 'dashed', dashOffset: 2, cap: 'round', join: 'bevel', miterLimit: 5 }, SHD) } }), 'line', null, LK],
+    ['gauge.split-auto-dash', gOnly({ axisLine: { show: false, lineStyle: { color: [[0.5, '#f00'], [1, '#00f']] } },
+      splitLine: { show: true, lineStyle: { color: 'auto', width: 2, type: [4, 2], opacity: 0.8 } } }), 'line', null, LK],
+    ['gauge.tick-looks', gOnly({ axisTick: { show: true, lineStyle: { color: '#00f', width: 2, type: 'dotted', dashOffset: 1,
+      cap: 'square', opacity: 0.6, shadowBlur: 2, shadowColor: '#f00' } } }), 'line', null, LK],
+    ['gauge.tick-str', gOnly({ axisTick: { show: true, splitNumber: 2, lineStyle: { color: '#00f', width: '2', type: 'dashed',
+      dashOffset: '1', miterLimit: '3' } } }), 'line', null, LK],
+    ['gauge.pointer-looks', gOnly({ pointer: { show: true, itemStyle: { opacity: 0.8, shadowBlur: 2, shadowColor: '#000' } },
+      itemStyle: { color: '#0f0', opacity: 0.5 } }), 'pointer', null, LK],
+    ['gauge.pointer-item-opacity', gOnly({ pointer: { show: true }, itemStyle: { color: '#0f0' },
+      data: [{ value: 40, itemStyle: { opacity: 0.3 } }, { value: 70, pointer: { itemStyle: { opacity: 0.6 } } }] }), 'pointer',
+      null, LK],
+    ['gauge.pointer-icon-opacity', gOnly({ pointer: { show: true, icon: 'emptyCircle', itemStyle: { opacity: 0.4 } },
+      itemStyle: { color: '#0f0', borderWidth: 2 } }), 'pointer', null, LK],
+    ['gauge.progress-looks', gOnly({ progress: { show: true, itemStyle: { opacity: 0.7 } }, itemStyle: { color: '#f00', opacity: 0.4 } }),
+      'progress', null, LK],
+    ['gauge.progress-item-opacity', gOnly({ progress: { show: true, overlap: false }, itemStyle: { color: '#f00' },
+      data: [{ value: 40, itemStyle: { opacity: 0.3 } }, { value: 70, progress: { itemStyle: { opacity: 0.6 } } }] }), 'progress',
+      null, LK],
+    ['gauge.anchor-looks', gOnly({ anchor: { show: true, size: 20, itemStyle: Object.assign({ color: '#f00', borderColor: '#000',
+      borderWidth: 2, borderType: 'dashed', borderDashOffset: 1, borderCap: 'round', borderJoin: 'round', borderMiterLimit: 3,
+      opacity: 0.5 }, SHD) } }), 'anchor', null, LK],
+    ['gauge.anchor-rect', gOnly({ anchor: { show: true, icon: 'rect', size: 16, itemStyle: { color: '#ff0', borderColor: '#000',
+      borderWidth: 3, borderType: [3, 1] } } }), 'anchor', null, LK],
+    ['gauge.detail-box', gOnly({ detail: Object.assign({ show: true, backgroundColor: '#ff0', borderColor: '#000', borderWidth: 2,
+      borderType: 'dashed', borderDashOffset: 3, borderRadius: 4, opacity: 0.5 }, SHD) }), 'box', null, LK],
+    ['gauge.detail-border-only', gOnly({ detail: { show: true, borderColor: '#000', borderWidth: 2, borderType: 'dotted' } }), 'box',
+      null, LK],
+    ['gauge.title-box', gOnly({ title: Object.assign({ show: true, backgroundColor: '#ff0', borderColor: '#000', borderWidth: 1,
+      borderType: [2, 2], opacity: 0.6 }, SHD), data: [{ value: 40, name: 'Speed' }] }), 'box', null, LK],
+    ['gauge.title-words', gOnly({ title: { show: true, opacity: 0.4 }, data: [{ value: 40, name: 'Speed' }] }), 'words', null, LK],
+    ['gauge.detail-words', gOnly({ detail: { show: true, opacity: 0.3 } }), 'words', null, LK],
+    // ---- a bar's border width that is no finite number: getLineWidth's Math.min ----
+    ['bar.w-infinity', cart({ type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 'Infinity' }, data: [3, 5] }), '', null,
+      { shapes: true, cHits: true }],
+    ['bar.w-1e999', cart({ type: 'bar', itemStyle: { borderColor: '#000', borderWidth: '1e999' }, data: [3, 5] }), '', null,
+      { shapes: true }],
+    ['bar.w-infinity-h', { animation: false, color: PAL, yAxis: { type: 'category', data: N }, xAxis: {},
+      series: [{ type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 'Infinity' }, data: [3, 5] }] }, '', null,
+      { shapes: true, cHits: true }],
+    ['bar.w-infinity-item', cart({ type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 2 },
+      data: [3, { value: 5, itemStyle: { borderWidth: 'Infinity' } }] }), '', null, { shapes: true, cHits: true }],
+    ['bar.w-infinity-no-colour', cart({ type: 'bar', itemStyle: { borderWidth: 'Infinity' }, data: [3, 5] }), '', null,
+      { shapes: true }],
+    ['bar.w-huge', cart({ type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 1000 }, data: [3, 5] }), '', null,
+      { shapes: true }],
+    ['bar.w-neg-infinity', cart({ type: 'bar', itemStyle: { borderColor: '#000', borderWidth: '-Infinity' }, data: [3, 5] }), '',
+      null, { shapes: true }],
+    ['bar.w-neg', cart({ type: 'bar', itemStyle: { borderColor: '#000', borderWidth: -2 }, data: [3, 5] }), '', null,
+      { shapes: true }],
+    ['polarbar.w-infinity', { animation: false, color: PAL, polar: {}, angleAxis: { type: 'category', data: N }, radiusAxis: {},
+      series: [{ type: 'bar', coordinateSystem: 'polar', itemStyle: { borderColor: '#000', borderWidth: 'Infinity' }, data: [3, 5, 2] }] },
+      '', null, { shapes: true }],
   ];
 }
 
@@ -343,6 +422,9 @@ function partsOf(chart, view) {
     (view._progressEls || []).forEach(e => e && m.set(e, 'progress'));
     // the axis line's bands: the view's own sectors / sausages
     view.group.traverse(e => { if ((e.type === 'sector' || e.type === 'sausage') && !m.has(e)) m.set(e, 'track'); });
+    // R6-F: its split lines and ticks, its anchor (the one other path of its own)
+    view.group.traverse(e => { if (e.type === 'line' && !m.has(e)) m.set(e, 'line'); });
+    view.group.traverse(e => { if (e instanceof Path && !m.has(e)) m.set(e, 'anchor'); });
   }
   if (view.type === 'chord') view.group.traverse(e => { if (e instanceof Path && e.type !== 'sector') m.set(e, 'ribbon'); });
   return m;
@@ -396,6 +478,28 @@ function capPoints(e) {
     at((s.startAngle + s.endAngle) / 2, rc), at(s.endAngle + sgn * 1.5 * dr / rc, rc)];
 }
 
+// R6-F: a gauge's titles' and readings' children -- the background rect
+// (box) and the lines of words (words) zrender's Text made
+function textParts(view, part) {
+  const out = [];
+  if (view.type !== 'gauge') return out;
+  (view._titleEls || []).concat(view._detailEls || []).forEach(t => {
+    if (!t || !t.parent || t.ignore || t.invisible) return;
+    (t.childrenRef ? t.childrenRef() : []).forEach(c => {
+      if (part === 'box' && c instanceof Path) out.push(c);
+      if (part === 'words' && c.type === 'tspan') out.push(c);
+    });
+  });
+  return out;
+}
+function looksOf(e) {
+  const s = e.style;
+  const o = s.opacity == null ? 1 : s.opacity;
+  const b = s.shadowBlur || 0, x = s.shadowOffsetX || 0, y = s.shadowOffsetY || 0;
+  const cast = b > 0 || x !== 0 || y !== 0;
+  return [String(o), String(b), String(x), String(y), cast ? colourOf(s.shadowColor) : ''].join('|');
+}
+
 function settle(chart, start) {
   const zr = chart.getZr();
   for (let t = 16; t <= 5000; t += 250) {
@@ -434,11 +538,19 @@ function run(id, option, part, action, more) {
     let n = 0;
     let seen = 0;
     let parts = new Map();
-    (chart._chartsViews || []).forEach(v => { const pv = partsOf(chart, v); pv.forEach((p, e) => parts.set(e, p)); v.group.traverse(e => {
+    const looks = new Set();
+    (chart._chartsViews || []).forEach(v => { const pv = partsOf(chart, v); pv.forEach((p, e) => parts.set(e, p));
+      const visit = e => {
+      if (part === 'words') {
+        seen++;
+        looks.add(looksOf(e));
+        return;
+      }
       if (!(e instanceof Path) || e.ignore || e.invisible) return;
-      if (part && pv.get(e) !== part) return;
+      if (part && part !== 'box' && pv.get(e) !== part) return;
       seen++;
       partEls.push(e);
+      if (more.looks) looks.add(looksOf(e));
       if (more.shapes) shapes.push(shapeOf(e));
       if (more.fills && e.style.fill != null && e.style.fill !== 'none') fills.add(colourOf(e.style.fill));
       const s = e.style;
@@ -450,7 +562,7 @@ function run(id, option, part, action, more) {
       const bad = dash && dash.some(v => !(isFinite(Number(v)) && Number(v) >= 0));
       const off = s.lineDashOffset == null ? 0 : s.lineDashOffset;
       if (ls === 1) {
-        set.add([colourOf(s.stroke), String(s.lineWidth), bad ? 'ignored' : dash ? dash.map(Number).join(',') : 'solid',
+        set.add([colourOf(s.stroke), R6F_IDS.has(id) ? String(Number(s.lineWidth)) : String(s.lineWidth), bad ? 'ignored' : dash ? dash.map(Number).join(',') : 'solid',
           String(Number(off)),
           [s.lineCap || 'butt', s.lineJoin || 'miter', String(s.miterLimit || 10)].join('/')].join('|'));
       }
@@ -458,9 +570,13 @@ function run(id, option, part, action, more) {
         set.add([colourOf(s.stroke), r4(s.lineWidth * ls), bad ? 'ignored' : dash ? dash.map(v => r4(v * ls)).join(',') : 'solid',
           r4(off * ls), [s.lineCap || 'butt', s.lineJoin || 'miter', String(s.miterLimit || 10)].join('/')].join('|'));
       }
-    }); });
+      };
+      if (part === 'box' || part === 'words') textParts(v, part).forEach(visit);
+      else v.group.traverse(visit);
+    });
     const rec = { id, option, part, action: action || null, seen, n, pens: Array.from(set).sort() };
     if (more.at != null) rec.at = more.at;
+    if (more.looks) rec.looks = Array.from(looks).sort();
     if (more.shapes) rec.shapes = shapes.sort();
     if (more.fills) rec.fills = Array.from(fills).sort();
     // the clip path of a line's group (createGridClipPath), x|y|w|h
@@ -470,6 +586,19 @@ function run(id, option, part, action, more) {
         const c = e.getClipPath && e.getClipPath();
         if (c && c.shape) rec.clip.push(['rect', r2(+c.shape.x), r2(+c.shape.y), r2(+c.shape.width), r2(+c.shape.height)].join('|'));
       }));
+    }
+    // R6-F: at each rect's centre and a pixel either side of it, in the canvas' frame
+    if (more.cHits) {
+      const handler = chart.getZr().handler;
+      rec.cHits = [];
+      partEls.forEach(e => { if (e.type === 'rect') {
+        const b = shapeOf(e).split('|').map(Number);
+        const cx = Math.round(b[1] + b[3] / 2), cy = Math.round(b[2] + b[4] / 2);
+        [[cx, cy], [cx - 1, cy], [cx + 1, cy]].forEach(q => {
+          const h = handler.findHover(q[0], q[1]).target;
+          rec.cHits.push([q[0], q[1], h ? (h === e ? 'bar' : 'other') : '-']);
+        });
+      } });
     }
     if (more.hits) {
       const handler = chart.getZr().handler;
@@ -488,8 +617,12 @@ function run(id, option, part, action, more) {
   }
 }
 
+// the R6-F cases: their pens' widths as Number has them
+let R6F_IDS = new Set();
 function generate() {
-  const charts = cases().map(([id, o, part, act, more]) => run(id, o, part, act, more));
+  const all = cases();
+  R6F_IDS = new Set(all.slice(all.findIndex(c => c[0] === 'gauge.track-opacity')).map(c => c[0]));
+  const charts = all.map(([id, o, part, act, more]) => run(id, o, part, act, more));
   const by = id => charts.find(c => c.id === id);
   const pens = id => by(id).pens.join(' ');
   // guards: what upstream does that the port did not
@@ -522,8 +655,19 @@ function generate() {
   must(pens('pict.empty-size') === '#000000ff|2|1,0.5|0.5|butt/miter/10', 'pict.empty-size: ' + pens('pict.empty-size'));
   // a line written at nought: its clip is not grown (lineStyle.width || 0); the default 2 grows it by 1 a side
   must(by('line.w0-clip').clip[0] !== by('line.clip').clip[0], 'line clips: ' + by('line.w0-clip').clip + ' ' + by('line.clip').clip);
+  // R6-F: a gauge's own parts take their style blocks' opacity, dash and ends; a reading's plate with a
+  // fill (its default rgba(0,0,0,0) is one) strokes first at twice the width
+  must(by('gauge.track-opacity').looks.join(' ') === '0.5|0|0|0|', 'gauge.track-opacity: ' + by('gauge.track-opacity').looks);
+  must(pens('gauge.split-looks') === '#ff0000ff|3|12,6|2|round/bevel/5', 'gauge.split-looks: ' + pens('gauge.split-looks'));
+  must(pens('gauge.detail-border-only') === '#000000ff|4|4|0|butt/miter/10', 'gauge.detail-border-only: '
+    + pens('gauge.detail-border-only'));
+  // an infinite border takes all of a bar's width (Math.min), its bounding rect NaN: never hit; a negative one grows it
+  must(by('bar.w-infinity').shapes.every(s => s.split('|')[3] === '0') && by('bar.w-infinity').cHits.every(h => h[2] === '-'),
+    'bar.w-infinity: ' + by('bar.w-infinity').shapes + ' ' + JSON.stringify(by('bar.w-infinity').cHits));
+  must(by('bar.w-neg').shapes.join(' ') === 'rect|174.5|65|71|155 rect|74.5|126|71|94', 'bar.w-neg: ' + by('bar.w-neg').shapes);
   // R6-E: a bar whose border width is a word: getLineWidth's Math.min is NaN, the layout NaN -- no bar
-  const NO_PATH = ['bar.w"abc"'];
+  // R6-F: and one whose border width is -Infinity: its layout's x is -Infinity
+  const NO_PATH = ['bar.w"abc"', 'bar.w-neg-infinity'];
   must(charts.every(c => c.seen > 0 || NO_PATH.includes(c.id)), 'a case has no path: '
     + charts.filter(c => c.seen === 0 && !NO_PATH.includes(c.id)).map(c => c.id));
   return { source: 'ECharts 6.1.0 dist (' + DIST.replace(/\\/g, '/') + '), node SSR (svg)',

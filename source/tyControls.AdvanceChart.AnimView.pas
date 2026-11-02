@@ -6236,6 +6236,27 @@ end;
 
 { a key the proxy holds, as a number; AOr where it holds none (or there is
   no proxy: a sunburst's first render makes none [Batch 138]) }
+{ [R6-F] a pen's number off a proxy's value, as the canvas takes it: a
+  number as it is; a boolean, a string's or an array's JS Number -- one that
+  is no finite number nought (a state's width 'abc', which its discrete
+  track sets at once). False: no value }
+function PenNumOf(const AValue: TTyAnimValue; out ANum: Double): Boolean;
+begin
+  Result := True;
+  case AValue.Kind of
+    avkNumber: begin ANum := AValue.Num; Exit; end;
+    avkBool: ANum := AValue.Num;
+    avkString: ANum := TyJsToNumber(AValue.Str);
+    avkArray:
+      if Length(AValue.Arr) = 0 then ANum := 0
+      else if (Length(AValue.Arr) = 1) and (AValue.Stride = 0) then ANum := AValue.Arr[0]
+      else ANum := NaN;
+  else
+    Exit(False);
+  end;
+  if IsNan(ANum) or IsInfinite(ANum) then ANum := 0;
+end;
+
 function NumOr(P: TTyChartAnimProxy; const AKey: string; AOr: Double): Double;
 var v: TTyAnimValue;
 begin
@@ -7556,7 +7577,7 @@ var
   v, rest, vx, vy, rx, ry: TTyAnimValue;
   c: TTyChartColor;
   g: TTyChartGradient;
-  fx, fy, cx, cy: Double;
+  fx, fy, cx, cy, pn: Double;
   b: TTyRectF;
 
   { the role's branch draws a key its proxy rests at a layout value of }
@@ -7569,6 +7590,18 @@ var
   begin
     AV := AProxy.GetAnimProp(AKey);
     Result := AProxy.StRestOf(AKey, ARest) and not StSameValue(AV, ARest);
+  end;
+
+  { [R6-F] a pen's number off its rest, as the canvas takes the two: a
+    value that is no number ('abc') against a number is no colour against
+    no colour to StSameValue, the same }
+  function OffPen(const AKey: string; out AV: TTyAnimValue; out ANum: Double): Boolean;
+  var r: TTyAnimValue; rn: Double;
+  begin
+    AV := AProxy.GetAnimProp(AKey);
+    Result := AProxy.StRestOf(AKey, r) and PenNumOf(AV, ANum)
+      and not (PenNumOf(r, rn) and ((IsNan(ANum) and IsNan(rn))
+        or (not IsNan(ANum) and not IsNan(rn) and (ANum = rn))));
   end;
 
 begin
@@ -7619,8 +7652,8 @@ begin
     end
     else if key = 'style.lineWidth' then
     begin
-      if not Off(key, v, rest) then Continue;
-      if v.Kind = avkNumber then AEl.Style.StrokeWidthLogical := v.Num;
+      { [R6-F] a value that is no number as the canvas takes it }
+      if OffPen(key, v, pn) then AEl.Style.StrokeWidthLogical := pn;
     end
     { [R5-I] a label line's smooth, tweening: its path again at the smooth
       it has now (buildLabelLinePath) }
@@ -7633,8 +7666,7 @@ begin
     { [R2-I3] a state's dashOffset, tweening }
     else if key = 'style.lineDashOffset' then
     begin
-      if not Off(key, v, rest) then Continue;
-      if v.Kind = avkNumber then AEl.Style.DashOffsetLogical := v.Num;
+      if OffPen(key, v, pn) then AEl.Style.DashOffsetLogical := pn;
     end
     { [R5-A] a state's shadow, tweening }
     else if key = 'style.shadowBlur' then

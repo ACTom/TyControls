@@ -70,6 +70,10 @@ type
     { [R6-E] every band a Sausage (GaugeView's MainPath), one path with its
       round ends [was: a sector and two discs] }
     RoundCap: Boolean;
+    { [R6-F] the rest of getLineStyle(['color', 'width']) the bands draw
+      with: their opacity (Alpha; the dash and the ends are a pen's, and a
+      band has none) [was: not read] }
+    Keys: TTyChartElementStyle;
     WidthLogical: Double;
     { Empty means the author wrote nothing, and the theme's own track colour
       covers the whole dial. Upstream's default is a literal grey; a literal
@@ -84,6 +88,10 @@ type
     Show: Boolean;
     { [R5-A] its lineStyle's shadow (getLineStyle) }
     Shadow: TTyChartShadow;
+    { [R6-F] the rest of its lineStyle's getLineStyle: opacity (Alpha), the
+      dash (a word kept as a word) and its phase, cap / join / miterLimit
+      [was: not read] }
+    Keys: TTyChartElementStyle;
     { `'20%'` is twenty per cent of the gauge RADIUS; a bare number is logical
       px. Upstream types splitLine.length as a number and then parses a percent
       out of it anyway -- the declaration is what is wrong, not the code. }
@@ -166,6 +174,10 @@ type
     Border: TTyChartColor;
     { [R5-A] its itemStyle's shadow }
     Shadow: TTyChartShadow;
+    { [R6-F] the rest of its itemStyle's getItemStyle: opacity (Alpha),
+      borderType and borderDashOffset, borderCap / borderJoin /
+      borderMiterLimit [was: not read] }
+    Keys: TTyChartElementStyle;
   end;
 
   { title and detail. One record: they differ in their defaults and in the
@@ -200,6 +212,19 @@ type
     HasBorder: Boolean;
     Border: TTyChartColor;
     BorderRadiusLogical: Double;
+    { [R6-F] the rest of what createTextStyle hands the box (zrender Text's
+      _renderBackground): `opacity` -- the words' and the plate's (Alpha;
+      HasOpacity written) -- the plate's borderType and borderDashOffset,
+      and its shadow (TEXT_PROPS_BOX' shadowColor / shadowBlur /
+      shadowOffsetX / shadowOffsetY) [was: not read] }
+    HasOpacity: Boolean;
+    Keys: TTyChartElementStyle;
+    BoxShadow: TTyChartShadow;
+    { [R6-F] the plate's rect has a fill: a backgroundColor that is truthy and
+      not 'none' -- the reading's default 'rgba(0,0,0,0)' is one. A stroked
+      plate with a fill strokes first at twice the width (zrender: "making
+      shadow looks better"), so the fill covers the inner half }
+    PlateFilled: Boolean;
     { buAuto means "as wide as the words". }
     Width, Height: TTyBoxValue;
     { top, right, bottom, left -- LOGICAL px, CSS order. }
@@ -533,6 +558,8 @@ procedure ReadTick(ANode: TJSONObject; const AKey: string;
   var ATick: TTyGaugeTick; AHasSubSplit: Boolean);
 var
   n, ls: TJSONObject;
+  v: Double;
+  jh: Boolean;
 begin
   n := ObjIn(ANode, AKey);
   if n = nil then Exit;
@@ -545,8 +572,14 @@ begin
   ls := ObjIn(n, 'lineStyle');
   if ls = nil then Exit;
   TyStReadShadow([ls], [], [], ATick.Shadow);
-  ATick.WidthLogical := NumIn(ls, 'width', ATick.WidthLogical);
+  { [R6-E] a pen's width as the canvas takes it: a numeric string its
+    number, one that is no finite number none [was: a number only] }
+  v := TyOptPenWidth(ls.Find('width'));
+  if not IsNan(v) then ATick.WidthLogical := v;
   ReadColour(ls, 'color', ATick.Auto, ATick.HasColour, ATick.Colour);
+  { [R6-F] its opacity, dash, phase and ends }
+  TyStTakeOpacity(ATick.Keys, [ls], []);
+  TyStTakePenKeys(ATick.Keys, [ls], [], True, [spkEnds, spkDash], jh);
 end;
 
 procedure ReadText(ANode: TJSONObject; const AKey: string;
@@ -554,6 +587,9 @@ procedure ReadText(ANode: TJSONObject; const AKey: string;
 var
   n: TJSONObject;
   v: Double;
+  jh: Boolean;
+  d: TJSONData;
+  sh: TTyChartShadow;
 begin
   n := ObjIn(ANode, AKey);
   if n = nil then Exit;
@@ -627,6 +663,22 @@ begin
   ReadColour(n, 'borderColor', AText.Auto, AText.HasBorder, AText.Border);
   AText.BorderRadiusLogical := NumIn(n, 'borderRadius',
     AText.BorderRadiusLogical);
+  { [R6-F] the words' and the plate's opacity, the plate's dash and phase
+    (borderType, borderDashOffset: no ends -- TEXT_PROPS_BOX has none), its
+    shadow, and whether its rect has a fill }
+  if TyStTakeOpacity(AText.Keys, [n], []) then AText.HasOpacity := True;
+  TyStTakePenKeys(AText.Keys, [n], [], False, [spkDash], jh);
+  if TyStReadShadow([n], [], [], sh) then AText.BoxShadow := sh;
+  d := n.Find('backgroundColor');
+  if d <> nil then
+    case d.JSONType of
+      jtString: AText.PlateFilled := (d.AsString <> '') and (d.AsString <> 'none');
+      jtObject, jtArray: AText.PlateFilled := True;
+      jtNumber: AText.PlateFilled := (d.AsFloat <> 0) and not IsNan(d.AsFloat);
+      jtBoolean: AText.PlateFilled := d.AsBoolean;
+    else
+      AText.PlateFilled := False;
+    end;
   AText.Width := TyBoxValueOf(n, 'width', AText.Width);
   AText.Height := TyBoxValueOf(n, 'height', AText.Height);
   ReadPadding(n, 'padding', AText.Padding);
@@ -644,6 +696,7 @@ end;
 function TyGaugeTextDefault: TTyGaugeText;
 begin
   Result := Default(TTyGaugeText);
+  Result.Keys := TyChartStyle;
   Result.Show := True;
   Result.OffsetX := TyBoxPx(0);
   Result.OffsetY := TyBoxPx(0);
@@ -668,6 +721,10 @@ begin
 
   Result.AxisLine.Show := True;
   Result.AxisLine.RoundCap := False;
+  Result.AxisLine.Keys := TyChartStyle;
+  Result.SplitLine.Keys := TyChartStyle;
+  Result.AxisTick.Keys := TyChartStyle;
+  Result.Anchor.Keys := TyChartStyle;
   Result.AxisLine.WidthLogical := 10;
 
   Result.SplitLine.Show := True;
@@ -722,6 +779,8 @@ begin
   Result.Detail.Padding[1] := 10;
   Result.Detail.Padding[2] := 5;
   Result.Detail.Padding[3] := 10;
+  { [R6-F] the reading's backgroundColor 'rgba(0,0,0,0)' (GaugeSeries) }
+  Result.Detail.PlateFilled := True;
 
   Result.Progress.Show := False;
   Result.Progress.Overlap := True;
@@ -771,7 +830,7 @@ var
   d: TJSONData;
   s: string;
   v: Double;
-  ignoreAuto: Boolean;
+  ignoreAuto, jh: Boolean;
 begin
   Result := TyGaugeSpecDefault;
   ignoreAuto := False;
@@ -802,6 +861,8 @@ begin
     if ls <> nil then
     begin
       TyStReadShadow([ls], [], [], Result.AxisLine.Shadow);
+      { [R6-F] the bands' opacity }
+      TyStTakeOpacity(Result.AxisLine.Keys, [ls], []);
       Result.AxisLine.WidthLogical := NumIn(ls, 'width',
         Result.AxisLine.WidthLogical);
       Result.AxisLine.Stops := ReadStops(ls);
@@ -911,10 +972,14 @@ begin
         is taken and dropped. }
       ReadColour(ls, 'color', ignoreAuto, Result.Anchor.HasFill,
         Result.Anchor.Fill);
-      Result.Anchor.BorderWidthLogical := NumIn(ls, 'borderWidth',
-        Result.Anchor.BorderWidthLogical);
+      { [R6-E] a numeric string is its number [was: a number only] }
+      v := TyOptPenWidth(ls.Find('borderWidth'));
+      if not IsNan(v) then Result.Anchor.BorderWidthLogical := v;
       ReadColour(ls, 'borderColor', ignoreAuto, Result.Anchor.HasBorder,
         Result.Anchor.Border);
+      { [R6-F] its opacity, dash, phase and ends }
+      TyStTakeOpacity(Result.Anchor.Keys, [ls], []);
+      TyStTakePenKeys(Result.Anchor.Keys, [ls], [], False, [spkEnds, spkDash], jh);
     end;
   end;
 
@@ -1241,6 +1306,23 @@ begin
   Result.Silent := True;
 end;
 
+{ [R6-F] a part's own pen keys onto its element: the opacity, the dash (a
+  word measured against the width the element strokes at), its phase and
+  the ends }
+procedure TakeKeys(var AStyle: TTyChartElementStyle; const AKeys: TTyChartElementStyle);
+begin
+  AStyle.Alpha := AKeys.Alpha;
+  AStyle.DashWord := AKeys.DashWord;
+  if AKeys.DashWord <> 0 then
+    AStyle.DashLogical := TyDashOfWord(AKeys.DashWord, AStyle.StrokeWidthLogical)
+  else
+    AStyle.DashLogical := Copy(AKeys.DashLogical, 0, Length(AKeys.DashLogical));
+  AStyle.DashOffsetLogical := AKeys.DashOffsetLogical;
+  AStyle.LineCap := AKeys.LineCap;
+  AStyle.LineJoin := AKeys.LineJoin;
+  AStyle.MiterLimit := AKeys.MiterLimit;
+end;
+
 function TickElement(AX1, AY1, AX2, AY2: Double; AColour: TTyChartColor;
   AWidthLogical: Double; AZ: Integer): TTyChartElement;
 begin
@@ -1291,6 +1373,8 @@ begin
         Inc(Result);
         { [R5-A] the band casts the lineStyle's shadow }
         TyStyleSetShadow(AList.Ref(trackAt)^.Style, ASpec.AxisLine.Shadow);
+        { [R6-F] at the lineStyle's opacity }
+        AList.Ref(trackAt)^.Style.Alpha := ASpec.AxisLine.Keys.Alpha;
       end;
     end
     else
@@ -1325,9 +1409,12 @@ begin
         AList.Add(bands[i]);
         Inc(Result);
       end;
-      { [R5-A] every band casts the lineStyle's shadow }
+      { [R5-A] every band casts the lineStyle's shadow; [R6-F] at its opacity }
       for i := trackAt to AList.Count - 1 do
+      begin
         TyStyleSetShadow(AList.Ref(i)^.Style, ASpec.AxisLine.Shadow);
+        AList.Ref(i)^.Style.Alpha := ASpec.AxisLine.Keys.Alpha;
+      end;
     end;
   end;
 
@@ -1377,6 +1464,8 @@ begin
         el := TickElement(x1, y1, x2, y2, AVisual.SplitLine,
           ASpec.SplitLine.WidthLogical, AVisual.Z);
       TyStyleSetShadow(el.Style, ASpec.SplitLine.Shadow);
+      { [R6-F] its lineStyle's opacity, dash, phase and ends }
+      TakeKeys(el.Style, ASpec.SplitLine.Keys);
       AList.Add(el);
       Inc(Result);
     end;
@@ -1500,6 +1589,8 @@ begin
           el := TickElement(x1, y1, x2, y2, AVisual.Tick,
             ASpec.AxisTick.WidthLogical, AVisual.Z);
         TyStyleSetShadow(el.Style, ASpec.AxisTick.Shadow);
+        { [R6-F] its lineStyle's opacity, dash, phase and ends }
+        TakeKeys(el.Style, ASpec.AxisTick.Keys);
         AList.Add(el);
         Inc(Result);
       end;
@@ -1613,7 +1704,17 @@ begin
     begin
       el.Style.StrokeColor := AText.Border;
       el.Style.StrokeWidthLogical := AText.BorderWidthLogical;
+      { [R6-F] a rect with a fill strokes first at twice the width (Text's
+        _renderBackground) [was: over the fill at the width] }
+      if AText.PlateFilled then
+      begin
+        el.Style.StrokeWidthLogical := 2 * AText.BorderWidthLogical;
+        el.Style.StrokeFirst := True;
+      end;
     end;
+    { [R6-F] the text's opacity, the plate's dash, phase and shadow }
+    TakeKeys(el.Style, AText.Keys);
+    TyStyleSetShadow(el.Style, AText.BoxShadow);
     el.Z := AZ;
     el.Z2 := AZ2;
     el.Silent := True;
@@ -1636,6 +1737,8 @@ begin
   el.Caption.AnchorV := tavMiddle;
   el.Caption.RotationRad := 0;
   el.Caption.Truncate := False;
+  { [R6-F] the words at the text's opacity }
+  if AText.HasOpacity then el.Style.Alpha := AText.Keys.Alpha;
   el.Z := AZ;
   el.Z2 := AZ2;
   el.Silent := True;
@@ -1785,6 +1888,8 @@ begin
     if ASpec.Anchor.ShowAbove then el.Z2 := 1 else el.Z2 := 0;
     el.Silent := True;
     TyStyleSetShadow(el.Style, ASpec.Anchor.Shadow);
+    { [R6-F] its itemStyle's opacity, dash, phase and ends }
+    TakeKeys(el.Style, ASpec.Anchor.Keys);
     AList.Add(el);
     Inc(Result);
   end;
