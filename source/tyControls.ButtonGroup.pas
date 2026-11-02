@@ -2,7 +2,7 @@ unit tyControls.ButtonGroup;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Accel;
 type
   { TTyButtonGroup — a horizontal SEGMENTED button bar: N adjacent cells, each a
@@ -23,6 +23,7 @@ type
     FItemIndexWaits: Boolean;
     FSelected: array of Boolean;   // multi-select bit-set (kept sized to Items.Count)
     FHoverSeg: Integer;            // -1 = none; tracked in MouseMove for :hover styling
+    FKeySeg: Integer;              // #143: MultiSelect's keyboard segment, -1 = none yet
     FRefitting: Boolean;           // guards the AutoSize re-fit in Invalidate against re-entry
     FOnSelectionChange: TNotifyEvent;
     procedure SetItems(AValue: TStrings);
@@ -40,6 +41,8 @@ type
       Multi-select: toggles that segment (always fires OnSelectionChange on a valid
       segment). A hit outside any segment is a no-op. Exposed to tests as a seam. }
     procedure SelectAt(AX: Integer);
+    { What a click on segment seg does: select it, or toggle it in MultiSelect. }
+    procedure SelectSegment(seg: Integer);
     { The widest item caption and the reference line height, in DEVICE px at APPI, measured
       with AStyle's font. Mnemonic markers are stripped first — they are drawn as an underline,
       not as a character, so measuring them would over-reserve. }
@@ -83,6 +86,12 @@ type
     procedure Invalidate; override;
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    { #142: the underlined letter of a segment picks it, as a click does. }
+    function DialogChar(var Message: TLMKey): Boolean; override;
+    { #143: Left/Up and Right/Down step, Home and End go to the ends. One choice: they pick
+      the segment. MultiSelect: they move the keyboard's segment, drawn hovered, and Space
+      toggles it. }
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
   public
@@ -243,6 +252,7 @@ begin
   FMultiSelect := False;
   FItemIndex := -1;
   FHoverSeg := -1;
+  FKeySeg := -1;
   Width := 240;
   Height := TyDensityHeight(ActiveController, 30);
 end;
@@ -295,6 +305,7 @@ begin
   for i := 0 to High(FSelected) do FSelected[i] := False;
   FItemIndex := -1;
   if FHoverSeg >= FItems.Count then FHoverSeg := -1;
+  if FKeySeg >= FItems.Count then FKeySeg := -1;
   // 条目变了(数量、文字)→ 要的宽度也变了,AutoSize 的分段条必须重新贴合。
   // 这是本控件的"标题改变"钩子(标题住在 Items 里,不在 TControl.Caption 上),所以
   // 下限也得先跟着走一遍(对应 TTyButton.TextChanged 里的那一步)——顺序要紧:
@@ -421,11 +432,29 @@ begin
 end;
 
 procedure TTyCustomButtonGroup.SelectAt(AX: Integer);
-var
-  seg: Integer;
 begin
-  seg := TySegmentAt(AX, Width, FItems.Count);
-  if seg < 0 then Exit;
+  SelectSegment(TySegmentAt(AX, Width, FItems.Count));
+end;
+
+function TTyCustomButtonGroup.DialogChar(var Message: TLMKey): Boolean;
+var
+  i: Integer;
+begin
+  if IsEnabled and TyShownInForm(Self) then
+    for i := 0 to FItems.Count - 1 do
+      if TyIsAccelKey(Message, FItems[i]) then
+      begin
+        if CanFocus then SetFocus;
+        SelectSegment(i);
+        Exit(True);
+      end;
+  Result := inherited DialogChar(Message);
+end;
+
+procedure TTyCustomButtonGroup.SelectSegment(seg: Integer);
+begin
+  if (seg < 0) or (seg >= FItems.Count) then Exit;
+  FKeySeg := seg;   // the keyboard goes on from the segment the user picked
   if FMultiSelect then
   begin
     EnsureSelectedLen;
@@ -435,6 +464,44 @@ begin
   end
   else
     SetItemIndex(seg);                        // single: fires only when index changes
+end;
+
+procedure TTyCustomButtonGroup.KeyDown(var Key: Word; Shift: TShiftState);
+var
+  n, cur: Integer;
+begin
+  inherited KeyDown(Key, Shift);
+  if (Key = 0) or not IsEnabled or (FItems.Count = 0) or (Shift * [ssCtrl, ssAlt] <> []) then
+    Exit;
+  n := FItems.Count;
+  if FMultiSelect then cur := FKeySeg else cur := FItemIndex;
+  if (cur < 0) or (cur >= n) then cur := -1;
+  case Key of
+    VK_LEFT, VK_UP:
+      if cur < 0 then cur := n - 1 else if cur > 0 then Dec(cur);
+    VK_RIGHT, VK_DOWN:
+      if cur < 0 then cur := 0 else if cur < n - 1 then Inc(cur);
+    VK_HOME: cur := 0;
+    VK_END: cur := n - 1;
+    VK_SPACE:
+      begin
+        if not FMultiSelect then Exit;   // one choice: the arrows already picked it
+        if cur < 0 then cur := 0;
+        SelectSegment(cur);
+        Key := 0;
+        Exit;
+      end;
+  else
+    Exit;
+  end;
+  Key := 0;
+  if FMultiSelect then
+  begin
+    FKeySeg := cur;
+    Invalidate;
+  end
+  else
+    SetItemIndex(cur);
 end;
 
 procedure TTyCustomButtonGroup.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -609,7 +676,9 @@ begin
       else
       begin
         if IsSelected(i) then Include(segStates, tysSelected);
-        if i = FHoverSeg then Include(segStates, tysHover);
+        if (i = FHoverSeg)
+           or (FMultiSelect and (FHoverSeg < 0) and Focused and (i = FKeySeg)) then
+          Include(segStates, tysHover);
         if segStates = [] then Include(segStates, tysNormal);
       end;
 

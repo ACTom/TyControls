@@ -977,9 +977,10 @@ end;
 
   Read off the machine:
   - the font combo box's Text is the first installed font ('@Fixedsys' on one Windows machine,
-    something else on the next). The font boxes' Items are filled from the same fonts but no
-    longer written at all (#26), so their rows left this table;
-  - the shell tree's root nodes are the drives.
+    something else on the next), and so is the font list box's SelectedFont, which keeps the
+    chosen family by name (#152). The font boxes' Items are filled from the same fonts but no
+    longer written at all (#26), so their rows left this table, and so did the shell tree's
+    root count, the drives, which it no longer publishes (#192).
   Read off the locale:
   - the numeric edits format their zero with the locale's decimal separator ('0.00' / '0,00');
     the track edit's has no decimals, so it is compared;
@@ -996,7 +997,7 @@ end;
 const
   CMachineValues: array[0..9, 0..2] of string = (
     ('TTyFontComboBox', 'Text', '<from the machine>'),
-    ('TTyShellTreeView', 'RootNodeCount', '<from the machine>'),
+    ('TTyFontListBox', 'SelectedFont', '<from the machine>'),
     ('TTyNumericEdit', 'Text', '<from the locale>'),
     ('TTyCurrencyEdit', 'Text', '<from the locale>'),
     ('TTyCalcEdit', 'Text', '<from the locale>'),

@@ -32,7 +32,25 @@ uses
 // ---------------------------------------------------------------------------
 function TyPopupRect(const AAnchorScreen: TRect;
   AContentW, AContentH, AScreenH: Integer;
-  ARightToLeft: Boolean = False): TRect;
+  ARightToLeft: Boolean = False): TRect; overload;
+
+{ #148: the same, inside AWorkArea -- the work area of the monitor the anchor is on. It flips
+  above when the work area has no room below, and moves sideways to stay in it. The one above
+  reads a screen whose top-left is 0, 0 and is only that tall: on a monitor left of or above
+  the primary one, or of another size, a drop-down opened partly off screen or flipped the
+  wrong way. }
+function TyPopupRect(const AAnchorScreen: TRect; AContentW, AContentH: Integer;
+  const AWorkArea: TRect; ARightToLeft: Boolean = False): TRect; overload;
+
+{ #148: the work area of the monitor AAnchorScreen is on, the nearest one when it is on none,
+  or the primary screen when there is no monitor to ask. Drop-downs, the balloon hint and the
+  popover are placed against it, as the menus are. }
+function TyMonitorWorkArea(const AAnchorScreen: TRect): TRect;
+
+var
+  { What the pop-ups ask for that work area: TyMonitorWorkArea. A test stands up a second
+    monitor with it. }
+  TyPopupWorkArea: function(const AAnchorScreen: TRect): TRect = @TyMonitorWorkArea;
 
 // ---------------------------------------------------------------------------
 // TTyDropdownPopup — borderless popup-window host.
@@ -151,12 +169,29 @@ end;
 function TyPopupRect(const AAnchorScreen: TRect;
   AContentW, AContentH, AScreenH: Integer;
   ARightToLeft: Boolean): TRect;
+begin
+  { no sideways bound: what this one always did }
+  Result := TyPopupRect(AAnchorScreen, AContentW, AContentH,
+    Types.Rect(-MaxInt div 2, 0, MaxInt div 2, AScreenH), ARightToLeft);
+end;
+
+function TyMonitorWorkArea(const AAnchorScreen: TRect): TRect;
+var
+  mon: TMonitor;
+begin
+  Result := Types.Rect(0, 0, Screen.Width, Screen.Height);   // no monitor to ask
+  mon := Screen.MonitorFromRect(AAnchorScreen, mdNearest);
+  if mon <> nil then Result := mon.WorkareaRect;
+end;
+
+function TyPopupRect(const AAnchorScreen: TRect; AContentW, AContentH: Integer;
+  const AWorkArea: TRect; ARightToLeft: Boolean): TRect;
 var
   belowTop: Integer;
 begin
   belowTop := AAnchorScreen.Bottom;
-  if (belowTop + AContentH > AScreenH) and
-     (AAnchorScreen.Top - AContentH >= 0) then
+  if (belowTop + AContentH > AWorkArea.Bottom) and
+     (AAnchorScreen.Top - AContentH >= AWorkArea.Top) then
   begin
     // Flip above: not enough room below, and there IS room above.
     Result.Top    := AAnchorScreen.Top - AContentH;
@@ -178,6 +213,12 @@ begin
     Result.Left  := AAnchorScreen.Left;
     Result.Right := AAnchorScreen.Left + AContentW;
   end;
+  { on the anchor's monitor sideways too: the far edge first, so a pop-up wider than the work
+    area keeps its start edge in it }
+  if Result.Right > AWorkArea.Right then
+    OffsetRect(Result, AWorkArea.Right - Result.Right, 0);
+  if Result.Left < AWorkArea.Left then
+    OffsetRect(Result, AWorkArea.Left - Result.Left, 0);
 end;
 
 // ---------------------------------------------------------------------------
@@ -253,8 +294,8 @@ begin
     AnchorTL.X + AAnchor.Width, AnchorTL.Y + AAnchor.Height);
 
   // Compute drop/flip rect.
-  FRect := TyPopupRect(AnchorScreen, AContentWidth, AContentHeight, Screen.Height,
-             FRightToLeft);
+  FRect := TyPopupRect(AnchorScreen, AContentWidth, AContentHeight,
+             TyPopupWorkArea(AnchorScreen), FRightToLeft);   // #148: its monitor
   PopupW := FRect.Right - FRect.Left;
   PopupH := FRect.Bottom - FRect.Top;
 
@@ -313,8 +354,8 @@ begin
   AnchorTL := FAnchor.ClientToScreen(Types.Point(0, 0));
   AnchorScreen := Types.Rect(AnchorTL.X, AnchorTL.Y,
     AnchorTL.X + FAnchor.Width, AnchorTL.Y + FAnchor.Height);
-  FRect := TyPopupRect(AnchorScreen, AContentWidth, AContentHeight, Screen.Height,
-             FRightToLeft);
+  FRect := TyPopupRect(AnchorScreen, AContentWidth, AContentHeight,
+             TyPopupWorkArea(AnchorScreen), FRightToLeft);   // #148: its monitor
   W := FRect.Right - FRect.Left;
   H := FRect.Bottom - FRect.Top;
   FForm.SetBounds(FRect.Left, FRect.Top, W, H);

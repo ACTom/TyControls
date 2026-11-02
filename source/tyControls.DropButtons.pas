@@ -439,6 +439,9 @@ begin
   // Far end = the CONTROL edge, not the content edge: the right padding carries no ink but
   // it is still the arrow end of the button, and stopping at the content edge would only
   // move the dead strip from the left of the chevron to its right.
+  { #153: mirrored, the button draws its arrow on the left (TTyButton's painter turns the
+    layout), so that is where the arrow answers }
+  if IsRightToLeft then AX := Width - 1 - AX;
   Result := (zoneLeft >= 0) and (AX >= zoneLeft) and (AX < Width);
 end;
 
@@ -453,7 +456,10 @@ begin
   // callers stop after recording the intent above; only pop for real when mapped.
   if HandleAllocated then
   begin
-    p := ClientToScreen(Point(0, Height));
+    FDropDownMenu.PopupComponent := Self;   // #153: the menu reads its way from the button
+    { #153: mirrored, from the right edge -- a right-to-left menu lines its right edge up there }
+    if IsRightToLeft then p := ClientToScreen(Point(Width, Height))
+    else p := ClientToScreen(Point(0, Height));
     FDropDownMenu.PopUp(p.X, p.Y);
   end;
 end;
@@ -522,13 +528,20 @@ begin
 
   arrowRect := Rect(zoneLeft, AContentRect.Top, AContentRect.Right, AContentRect.Bottom);
   captionRect := Rect(AContentRect.Left, AContentRect.Top, zoneLeft, AContentRect.Bottom);
+  { #153: mirrored, the arrow zone goes to the left -- the same reflection IsInArrowZone
+    reads the click through, so the arrow answers where it is drawn }
+  if IsRightToLeft then
+  begin
+    arrowRect := TyMirrorRectX(arrowRect, Width);
+    captionRect := TyMirrorRectX(captionRect, Width);
+  end;
 
   // Caption in the left sub-rect (base class centres it there).
   inherited DrawContent(APainter, captionRect, AStyle);
 
   // 1px vertical divider between caption and arrow zone, in the themed border colour,
   // inset a few px top/bottom so it reads as a hairline. Canvas2D anti-aliases it.
-  divX := arrowRect.Left;
+  if IsRightToLeft then divX := arrowRect.Right - 1 else divX := arrowRect.Left;
   ctx := APainter.Bitmap.Canvas2D;
   ctx.beginPath;
   ctx.moveTo(divX + 0.5, arrowRect.Top + APainter.Scale(3));
@@ -548,6 +561,7 @@ begin
     tests/test.dropbuttons.pas is unaffected. }
   chevronRect := Rect(zoneLeft, AContentRect.Top,
     AContentRect.Right + APainter.Scale(AStyle.Padding.Right), AContentRect.Bottom);
+  if IsRightToLeft then chevronRect := TyMirrorRectX(chevronRect, Width);
   TyDrawDropChevron(APainter, ActiveController, chevronRect, AStyle.TextColor);
 end;
 
@@ -605,7 +619,9 @@ begin
   if not FRequestedPopup then Exit;
   if HandleAllocated then
   begin
-    p := ClientToScreen(Point(0, Height));
+    FDropDownMenu.PopupComponent := Self;   // #153
+    if IsRightToLeft then p := ClientToScreen(Point(Width, Height))
+    else p := ClientToScreen(Point(0, Height));
     FDropDownMenu.PopUp(p.X, p.Y);
   end;
 end;

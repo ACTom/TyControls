@@ -622,7 +622,8 @@ implementation
 
 uses
   BGRABitmapTypes, BGRACanvas2D,
-  tyControls.PlatformWS;   // TyIsWayland — the shape gate; TyMaskPopupWindow — Qt's child masks
+  tyControls.PlatformWS,   // TyIsWayland — the shape gate; TyMaskPopupWindow — Qt's child masks
+  tyControls.Popup;        // TyPopupWorkArea (#148)
 
 // ---------------------------------------------------------------------------
 // Pure rules / geometry
@@ -1598,9 +1599,9 @@ begin
   ppi := Screen.PixelsPerInch;
   if ppi <= 0 then ppi := 96;
   // Still fading out from the last Hide: turn round in place, or finish that dismissal first.
-  if FHiding and TurnBackHide(AAnchorScreen, Screen.WorkAreaRect, ppi) then Exit;
+  if FHiding and TurnBackHide(AAnchorScreen, TyPopupWorkArea(AAnchorScreen), ppi) then Exit;
   wasShowing := FShowing;
-  geo := BeginShowing(AAnchorScreen, Screen.WorkAreaRect, ppi);
+  geo := BeginShowing(AAnchorScreen, TyPopupWorkArea(AAnchorScreen), ppi);   // #148: its monitor
   if not wasShowing then
     ArmShowAnimation(geo, ppi)   // before Show: the first frame on screen is the animation's
   else if FAnimActive then

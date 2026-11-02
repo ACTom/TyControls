@@ -25,12 +25,14 @@ TyControls keeps LCL's property names and meanings wherever it can, so most code
 
 - **Pixel properties are logical pixels** (pixels at 96 PPI). Widths, heights, paddings, `BorderWidth` and the like are scaled by the control to its own PPI; there is nothing to convert by hand on high-DPI screens.
 - **`TTyScrollBar.Position` can reach `Max`.** LCL's scroll bar stops at `Max - PageSize + 1`.
-- **A control with `TabStop = False` does not take focus when clicked**; the keyboard focus stays where it was.
+- **A control with `TabStop = False` does not take focus when clicked**; the keyboard focus stays where it was. Text boxes, memos and the other typed fields (numbers, dates and times) are the exception: you click into one to type in it.
 - **`TTyTrackBar` raises `Position` on PageUp**, as Qt does; Win32 does the opposite.
 - **`TTyTreeView.AutoExpand` follows Delphi**: the node that gets the focus expands, and the one it left collapses. In LCL it means "expand a node when a child is added to it".
 - **`TTyTitleBar` looks the same when disabled.** It stands for the window itself, and a window does not grey out; to show that a window cannot be used, disable what is in it.
 - **A form's own `Font` does not override the theme.** The whole window takes its font from the theme; change the theme or use `StyleOverride`. A font set on a control itself still applies.
 - **`TTyScrollPanel.AutoPan` is driven by the host.** Call `AutoPanTo` from `OnDragOver` while dragging and `StopAutoPan` when the drag ends.
+- **`TTyColorDialog.Color` is a `TTyColor` (`$AARRGGBB`, with alpha), not a `TColor`.** `clRed` assigned to it is a transparent blue; use `LCLColor` to read and write a `TColor`.
+- **`Delete` in a `TTyDateTimePicker` clears the whole date to NULL**, as `N` does (LCL knows only `N`). Set `NullInputAllowed := False` to keep the user from clearing it.
 
 ## Controls `AutoSize` does not apply to
 
@@ -46,5 +48,11 @@ These properties can never act on the control that publishes them, and from 4.0 
 | `TTyAdvancedComboBox`, `TTyCheckComboBox`, `TTyColorBox`, `TTyColorComboBox`, `TTyFilterComboBox`, `TTyOfficeComboBox`, `TTyShellComboBox` | `MaxLength`, `CharCase`, `ReadOnly` | Pick-only: there is no text to edit |
 | `TTyDrawGrid` | `HideSelectionWhenInactive`, `FadeUnfocusedSelection`, `MinEditorWidth` | No selection and no built-in cell editor; still published on `TTyStringGrid` |
 | A grid's `Header` | `MainColumn` | A grid has no main column; still published on the headers of `TTyListView` and `TTyTreeView` |
+| `TTyShellListView` | `OwnerData`, `ItemCount`, `Items`, `OnGetItemText`, `OnGetItemImage`, `OnGetItemGroup` | It lists the folder itself; still published on `TTyListView` |
+| `TTyShellTreeView` | `NodeDataSize`, `RootNodeCount`, `Items`, `OnInitChildren` | It builds its nodes from the file system; still published on `TTyTreeView` |
+| `TTyDBLookupListBox` | `MultiSelect`, `ExtendedSelect` | A lookup list holds one key (LCL does not publish them either); still published on `TTyDBListBox` |
+| The text inputs: `TTyEdit`, `TTyMaskEdit`, `TTyComboEdit`, `TTyURLEdit`, the numeric edits, `TTyMemo`, `TTySpinEdit`, `TTyDateTimePicker` and their DB versions | `ChildSizing` | No children to size |
+| `TTyMultiTrackBar`, `TTyGradientTrackBar` | `ChildSizing` | No children to size |
+| `TTyTerminalView` | `ChildSizing` | The terminal places its scroll bar itself; with it set, the bar covered the last columns |
 
 The `Style` of these pick-only combo boxes (except `TTyColorBox` and `TTyColorComboBox`) is still published, but the Object Inspector lists only the pick-only styles; an editable style is replaced by its pick-only counterpart anyway.

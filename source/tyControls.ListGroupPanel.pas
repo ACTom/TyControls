@@ -236,6 +236,8 @@ type
     FHoverGroup: Integer;   // -1 = none
     FHoverItem: Integer;    // -1 = none
     FScrollOffset: Integer; // device px content is shifted UP by (>=0)
+    FKeyGroup: Integer;     // #143: the keyboard's row -- a header (FKeyItem = -1) or an item;
+    FKeyItem: Integer;      //       -1, -1 = none yet
     FCollapsed: Boolean;
     FShowCollapseTrigger: Boolean;
     FCollapsedWidth: Integer;      // logical px fallback for the width token
@@ -274,6 +276,9 @@ type
     procedure ClampScroll;
     procedure SetSelGroup(AValue: Integer);
     procedure SetSelItem(AValue: Integer);
+    { #143: the row of AParts the keyboard is on (its own, else the selected item); -1 none. }
+    function KeyPartIndex(const AParts: TTyListGroupParts): Integer;
+    procedure ScrollIntoView(const AContentRect: TRect);
     procedure ClearHover;
     function GroupExpanded(AGroup: Integer): Boolean;
     procedure SetGroupExpanded(AGroup: Integer; AValue: Boolean);
@@ -285,6 +290,11 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    { #143: Up and Down walk the rows, headers and the items of open groups, Home and End go
+      to the ends; an item the keyboard reaches is selected, as a click selects it. Left goes
+      from an item to its header and closes an open one, Right opens a closed header and goes
+      on to its first item, Space opens or closes a header. }
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean; override;
@@ -690,6 +700,8 @@ begin
   FHoverGroup := -1;
   FHoverItem := -1;
   FScrollOffset := 0;
+  FKeyGroup := -1;
+  FKeyItem := -1;
   FCollapsedWidth := TyListGroupDefaultCollapsedWidth;
   TabStop := True;
   Width := 200;
@@ -774,6 +786,79 @@ begin
   bw := MulDiv(CurrentStyle.BorderWidth, Font.PixelsPerInch, 96);
   Result := contentH - (Height - 2 * bw - EffTriggerHPx(Font.PixelsPerInch));
   if Result < 0 then Result := 0;
+end;
+
+function TTyCustomListGroupPanel.KeyPartIndex(const AParts: TTyListGroupParts): Integer;
+var
+  i: Integer;
+begin
+  for i := 0 to High(AParts) do
+    if (AParts[i].GroupIndex = FKeyGroup) and (AParts[i].ItemIndex = FKeyItem) then Exit(i);
+  if FSelGroup >= 0 then
+    for i := 0 to High(AParts) do
+      if (AParts[i].Kind = lgpItem) and (AParts[i].GroupIndex = FSelGroup)
+         and (AParts[i].ItemIndex = FSelItem) then Exit(i);
+  Result := -1;
+end;
+
+procedure TTyCustomListGroupPanel.ScrollIntoView(const AContentRect: TRect);
+var
+  bw, viewH: Integer;
+begin
+  bw := MulDiv(CurrentStyle.BorderWidth, Font.PixelsPerInch, 96);
+  viewH := Height - 2 * bw - EffTriggerHPx(Font.PixelsPerInch);
+  if AContentRect.Top < FScrollOffset then
+    FScrollOffset := AContentRect.Top
+  else if AContentRect.Bottom > FScrollOffset + viewH then
+    FScrollOffset := AContentRect.Bottom - viewH;
+  ClampScroll;
+end;
+
+procedure TTyCustomListGroupPanel.KeyDown(var Key: Word; Shift: TShiftState);
+var
+  parts: TTyListGroupParts;
+  cur: Integer;
+begin
+  inherited KeyDown(Key, Shift);
+  if (Key = 0) or not IsEnabled or (Shift * [ssCtrl, ssAlt] <> []) then Exit;
+  parts := BuildLayout;
+  if Length(parts) = 0 then Exit;
+  cur := KeyPartIndex(parts);
+  case Key of
+    VK_UP:
+      if cur < 0 then cur := High(parts) else if cur > 0 then Dec(cur);
+    VK_DOWN:
+      if cur < 0 then cur := 0 else if cur < High(parts) then Inc(cur);
+    VK_HOME: cur := 0;
+    VK_END: cur := High(parts);
+    VK_LEFT:
+      if cur >= 0 then
+        if parts[cur].Kind = lgpItem then
+        begin
+          while (cur > 0) and (parts[cur].Kind = lgpItem) do Dec(cur);   // its header
+        end
+        else if GroupExpanded(parts[cur].GroupIndex) then
+          ToggleGroup(parts[cur].GroupIndex);
+    VK_RIGHT:
+      if (cur >= 0) and (parts[cur].Kind = lgpHeader) then
+        if not GroupExpanded(parts[cur].GroupIndex) then
+          ToggleGroup(parts[cur].GroupIndex)
+        else if (cur < High(parts)) and (parts[cur + 1].Kind = lgpItem) then
+          Inc(cur);
+    VK_SPACE:
+      if (cur >= 0) and (parts[cur].Kind = lgpHeader) then
+        ToggleGroup(parts[cur].GroupIndex);
+  else
+    Exit;
+  end;
+  Key := 0;
+  if cur < 0 then Exit;
+  { a header that opened or closed moved the rows below it, not itself }
+  FKeyGroup := parts[cur].GroupIndex;
+  FKeyItem := parts[cur].ItemIndex;
+  if parts[cur].Kind = lgpItem then SelectItem(FKeyGroup, FKeyItem);
+  ScrollIntoView(parts[cur].Rect);
+  Invalidate;
 end;
 
 procedure TTyCustomListGroupPanel.ClampScroll;
@@ -1080,7 +1165,7 @@ begin
   begin
     Collapsed := not Collapsed;
     try
-      if CanFocus then SetFocus;
+      if TabStop and CanFocus then SetFocus;   { #143: a click focuses only a tab stop, as TTyCustomControl.MouseDown does }
     except
       // headless / no-handle: ignore
     end;
@@ -1091,6 +1176,8 @@ begin
   hit := TyListGroupHitTest(parts, Point(X, Y - bw + FScrollOffset));
   if hit.Hit then
   begin
+    FKeyGroup := hit.GroupIndex;   // the keyboard goes on from the row the user clicked
+    FKeyItem := hit.ItemIndex;
     if hit.Kind = lgpHeader then
       ToggleGroup(hit.GroupIndex)
     else
@@ -1103,7 +1190,7 @@ begin
     end;
   end;
   try
-    if CanFocus then SetFocus;
+    if TabStop and CanFocus then SetFocus;   { #143: a click focuses only a tab stop, as TTyCustomControl.MouseDown does }
   except
     // headless / no-handle: ignore
   end;
@@ -1226,8 +1313,10 @@ begin
 
       if parts[i].Kind = lgpHeader then
       begin
-        hovered := (FHoverGroup = parts[i].GroupIndex) and (FHoverItem = -1)
-          and (FHoverKind = lgpHeader);
+        hovered := ((FHoverGroup = parts[i].GroupIndex) and (FHoverItem = -1)
+          and (FHoverKind = lgpHeader))
+          or ((FHoverGroup < 0) and Focused and (FKeyItem = -1)
+              and (FKeyGroup = parts[i].GroupIndex));
         states := [];
         if GroupExpanded(parts[i].GroupIndex) then Include(states, tysSelected)
         else if hovered then Include(states, tysHover)

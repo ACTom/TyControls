@@ -127,7 +127,12 @@ type
       a real-window check during development proved that the request lands. }
     procedure FocusItem(AIndex: Integer); virtual;
     procedure SetParent(AParent: TWinControl); override;
+    { #188: a click on the frame, the caption or an empty area is not a choice. OnClick fires
+      when ItemIndex changes (NotifySelection), as LCL's. }
+    procedure Click; override;
     procedure DoOnResize; override;
+    { #146: the row pitch comes from the theme and the font: place the radios again. }
+    procedure StyleLayoutChanged; override;
     // Keep the internal radio children on the group's controller so a controller assigned
     // AFTER population still themes them (mirrors TTyCheckGroup.SetController).
     procedure SetController(AValue: TTyCustomStyleController); override;
@@ -897,10 +902,21 @@ begin
   LayoutButtons;
 end;
 
+procedure TTyCustomRadioGroup.Click;
+begin
+  // nothing: see the declaration
+end;
+
 procedure TTyCustomRadioGroup.DoOnResize;
 begin
   inherited DoOnResize;
   LayoutButtons;   // reflow the grid when the box is resized
+end;
+
+procedure TTyCustomRadioGroup.StyleLayoutChanged;
+begin
+  inherited StyleLayoutChanged;
+  LayoutButtons;
 end;
 
 procedure TTyCustomRadioGroup.CMBiDiModeChanged(var Message: TLMessage);

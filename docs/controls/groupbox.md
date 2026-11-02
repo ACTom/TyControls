@@ -16,7 +16,7 @@
 | typeKey | `TyGroupBox` |
 | 基类 | `TTyCustomControl`（继承自 `TCustomControl`） |
 | 默认尺寸 | 185 × 105（逻辑像素） |
-| 客户区顶边内缩 | 16 逻辑像素（`AdjustClientRect` 实现） |
+| 客户区顶边内缩 | 16 逻辑像素（`AdjustClientRect` 实现）；标题的字体放不下时随字体长高 |
 
 ```pascal
 uses tyControls.GroupBox;

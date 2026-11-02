@@ -299,6 +299,9 @@ end;
 
 procedure TTyCustomSplitter.UpdateCursor;
 begin
+  { #154: only while Cursor is one this derives -- a cursor the application or the designer
+    chose is theirs, and was overwritten on every hover. }
+  if (Cursor <> crDefault) and (Cursor <> crHSplit) and (Cursor <> crVSplit) then Exit;
   { A disabled splitter must not advertise a drag it will refuse. It kept showing the
     resize cursor, so the pointer promised a drag over a control that ignores MouseDown --
     the user pulls, nothing moves, and there is nothing on screen saying why. LCL

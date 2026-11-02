@@ -397,6 +397,10 @@ type
   private
     FFitThemeVer: Cardinal;    // theme version the AutoSize answer was last fitted for (#114)
     FRefittingStyle: Boolean;
+    FStyleLayoutVer: Cardinal; // #146: theme version StyleLayoutChanged last ran for
+    FStyleLayoutDirty: Boolean;// #146: StyleClass, StyleOverride, Controller or Font changed
+    FInStyleLayout: Boolean;
+    procedure CheckStyleLayout;
   protected
     FHover, FPressed: Boolean;
     { Set by a control whose AutoSize answer comes from its style (#114): it re-fits when the
@@ -404,6 +408,13 @@ type
     FFitsToStyle: Boolean;
     FDpiAdjusting: Boolean;
     procedure RefitToStyle;
+    { #146: the theme, StyleClass, StyleOverride, Controller or Font changed, so what the style
+      decides about the layout -- padding, a border, a caption band, a row pitch -- may have
+      moved. Once per change, from Invalidate (a theme switch reaches a control only as that).
+      Default: realign the children. A control that places its own parts overrides it. }
+    procedure StyleLayoutChanged; virtual;
+    { #146: after the children have the new font too (TWinControl tells them last). }
+    procedure FontChanged(Sender: TObject); override;
     procedure SetController(AValue: TTyCustomStyleController); virtual;
     function _AddRef: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
     function _Release: Integer; {$IFDEF WINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
@@ -590,6 +601,28 @@ function TyShownInForm(AControl: TControl): Boolean;
 { AStates, or [tysDisabled] when AControl -- or one of its parents -- is disabled (#118): for a
   part a control resolves with states of its own, which would otherwise never look disabled. }
 function TyStatesUnlessDisabled(AControl: TControl; const AStates: TTyStateSet): TTyStateSet;
+
+type
+  { #154: a cursor a control shows for a while over part of itself -- a divider, a resize
+    edge -- is lent: what Cursor held before is kept here and given back, so a Cursor the
+    application or the designer set is not lost on the next mouse move. }
+  TTyCursorLoan = record
+    Saved: TCursor;
+    Lent: Boolean;
+  end;
+
+{ AOn: AControl shows AWith, its own cursor kept in ALoan. Not AOn: it gets its own back. }
+procedure TyLendCursor(AControl: TControl; var ALoan: TTyCursorLoan; AOn: Boolean;
+  AWith: TCursor);
+
+{ #150: for a control that puts typed characters in itself, in UTF8KeyPress. LCL calls that
+  first and KeyPress after, so OnKeyPress came too late to stop a character (Key := #0) or
+  change it. Asked here first, the way LCL's DoKeyPress asks -- a form's key preview, then
+  OnKeyPress. False: stopped, and AUTF8Key is ''. Only a printable ASCII character is asked,
+  as LCL sends KeyPress for those; once the control has taken it, it clears AUTF8Key
+  (TyKeyPressAsked says when), so LCL does not ask again. }
+function TyAskKeyPress(AControl: TWinControl; var AUTF8Key: TUTF8Char): Boolean;
+function TyKeyPressAsked(const AUTF8Key: TUTF8Char): Boolean;
 
 { Shared font-size resolution for every ty control (windowed AND graphic — the label family
   each carried its own copy). Priority:
@@ -2383,10 +2416,40 @@ begin
   inherited Destroy;
 end;
 
+procedure TTyCustomControl.CheckStyleLayout;
+var
+  ver: Cardinal;
+begin
+  if FInStyleLayout or ([csLoading, csDestroying] * ComponentState <> []) then Exit;
+  ver := ActiveController.Model.ThemeVersion;
+  if not FStyleLayoutDirty and (ver = FStyleLayoutVer) then Exit;
+  FInStyleLayout := True;
+  try
+    FStyleLayoutDirty := False;
+    FStyleLayoutVer := ver;
+    StyleLayoutChanged;
+  finally
+    FInStyleLayout := False;
+  end;
+end;
+
+procedure TTyCustomControl.StyleLayoutChanged;
+begin
+  if ControlCount > 0 then ReAlign;
+end;
+
+procedure TTyCustomControl.FontChanged(Sender: TObject);
+begin
+  inherited FontChanged(Sender);
+  FStyleLayoutDirty := True;
+  CheckStyleLayout;
+end;
+
 procedure TTyCustomControl.SetStyleClass(const AValue: string);
 begin
   if FStyleClass = AValue then Exit;
   FStyleClass := AValue;
+  FStyleLayoutDirty := True;   // #146
   Invalidate;
 end;
 
@@ -2395,6 +2458,7 @@ begin
   if FStyleOverride = AValue then Exit;
   FStyleOverride := AValue;
   FOvrCacheValid := False;   // force a re-parse on the next CurrentStyle
+  FStyleLayoutDirty := True;   // #146
   Invalidate;
 end;
 
@@ -2413,6 +2477,7 @@ begin
   {$ENDIF}
   inherited Invalidate;
   if FFitsToStyle and AutoSize then RefitToStyle;
+  CheckStyleLayout;   // #146
   { 替本控件画了一截框的子控件跟着重画。为什么挂在 Invalidate 上、而不是挂在「获得焦点」
     「悬停」这几个事件上:框会变的理由有一长串(焦点、悬停、按下、禁用、StyleClass、
     StyleOverride、换 controller),它们**全部**以一句 Invalidate 收尾,这是唯一不会漏掉
@@ -2515,6 +2580,7 @@ begin
   if FController <> nil then
     FController.FreeNotification(Self);
   ActiveController.RegisterStyleable(Self);
+  FStyleLayoutDirty := True;   // #146
   Invalidate;
 end;
 
@@ -2783,6 +2849,50 @@ end;
 function TyStatesUnlessDisabled(AControl: TControl; const AStates: TTyStateSet): TTyStateSet;
 begin
   if (AControl = nil) or AControl.IsEnabled then Result := AStates else Result := [tysDisabled];
+end;
+
+type
+  TTyKeyPressAccess = class(TWinControl);
+
+function TyKeyPressAsked(const AUTF8Key: TUTF8Char): Boolean;
+begin
+  Result := (Length(AUTF8Key) = 1) and (AUTF8Key[1] >= #32) and (AUTF8Key[1] <= #126);
+end;
+
+function TyAskKeyPress(AControl: TWinControl; var AUTF8Key: TUTF8Char): Boolean;
+var
+  m: TLMKey;
+begin
+  Result := True;
+  if not TyKeyPressAsked(AUTF8Key) then Exit;
+  FillChar(m, SizeOf(m), 0);
+  m.Msg := CN_CHAR;
+  m.CharCode := Ord(AUTF8Key[1]);
+  if TTyKeyPressAccess(AControl).DoKeyPress(m) or (m.CharCode = 0) then
+  begin
+    AUTF8Key := '';
+    Exit(False);
+  end;
+  AUTF8Key := Char(m.CharCode);
+end;
+
+procedure TyLendCursor(AControl: TControl; var ALoan: TTyCursorLoan; AOn: Boolean;
+  AWith: TCursor);
+begin
+  if AOn then
+  begin
+    if not ALoan.Lent then
+    begin
+      ALoan.Saved := AControl.Cursor;
+      ALoan.Lent := True;
+    end;
+    if AControl.Cursor <> AWith then AControl.Cursor := AWith;
+  end
+  else if ALoan.Lent then
+  begin
+    ALoan.Lent := False;
+    AControl.Cursor := ALoan.Saved;
+  end;
 end;
 
 function TyShownInForm(AControl: TControl): Boolean;

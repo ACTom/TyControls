@@ -15,7 +15,7 @@ unit tyControls.HtmlLabel;
   measurement and a live window). }
 interface
 uses
-  Classes, SysUtils, StrUtils, Types, Math, Controls, Graphics, LCLType,
+  Classes, SysUtils, StrUtils, Types, Math, Controls, Graphics, LCLType, LMessages,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Base,
   tyControls.Controller, tyControls.StyleModel;
@@ -74,6 +74,8 @@ type
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
       WithThemeSpace: Boolean); override;
     procedure DoSetBounds(ALeft, ATop, AWidth, AHeight: Integer); override;
+    { #153: the layout runs the other way }
+    procedure CMBiDiModeChanged(var Message: TLMessage); message CM_BIDIMODECHANGED;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -595,9 +597,25 @@ begin
       if FLayout[ii].Rect.Right > maxRight then maxRight := FLayout[ii].Rect.Right;
     end;
     AExtW := maxRight - AContentLeft;
+    { #153: mirrored, each line runs from the right edge: the fragments change sides within the
+      content box. Paint and LinkAt both read FLayout, so the links answer where they are drawn. }
+    if IsRightToLeft then
+      for ii := 0 to nf - 1 do
+      begin
+        h := FLayout[ii].Rect.Right - FLayout[ii].Rect.Left;
+        FLayout[ii].Rect.Left := AContentLeft + AContentWidth - (FLayout[ii].Rect.Right - AContentLeft);
+        FLayout[ii].Rect.Right := FLayout[ii].Rect.Left + h;
+      end;
   finally
     bmp.Free;
   end;
+end;
+
+procedure TTyCustomHtmlLabel.CMBiDiModeChanged(var Message: TLMessage);
+begin
+  inherited;
+  SetLength(FLayout, 0);
+  Invalidate;
 end;
 
 procedure TTyCustomHtmlLabel.EnsureLayout;

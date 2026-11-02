@@ -25,12 +25,14 @@ TyControls 的属性名和语义尽量与 LCL 一致，从 Lazarus 移植的代�
 
 - **像素属性都是逻辑像素**(96 PPI 下的像素)。宽度、高度、内边距、`BorderWidth` 等由控件按自己的 PPI 缩放，高 DPI 下不用手工换算。
 - **`TTyScrollBar.Position` 可以到达 `Max`。** LCL 的滚动条最大只到 `Max - PageSize + 1`。
-- **`TabStop = False` 的控件点击时不获得焦点**,键盘焦点留在原来的控件上。
+- **`TabStop = False` 的控件点击时不获得焦点**,键盘焦点留在原来的控件上。文本框、多行文本框和数值、日期时间这类输入字段除外：点进去就是为了输入。
 - **`TTyTrackBar` 按 PageUp 增大 `Position`**,与 Qt 一致，与 Win32 相反。
 - **`TTyTreeView.AutoExpand` 沿用 Delphi 的语义**:焦点移到哪个节点就展开哪个，离开的节点收起。LCL 的含义是"给节点添加子节点时展开它"。
 - **`TTyTitleBar` 禁用后外观不变。** 它代表窗口本身，窗口不会变灰;要表示"窗口不可用"请禁用窗口里的内容。
 - **窗体自己的 `Font` 不覆盖主题。** 整个窗口的字体来自主题;要换字体，改主题或用 `StyleOverride`。控件自己设置的字体照常生效。
 - **`TTyScrollPanel.AutoPan` 需要宿主驱动。** 拖动经过时在 `OnDragOver` 里调用 `AutoPanTo`,拖动结束时调用 `StopAutoPan`。
+- **`TTyColorDialog.Color` 是 `TTyColor`(`$AARRGGBB`,带透明度),不是 `TColor`。** 直接把 `clRed` 赋给它，得到的是一个透明的蓝色;要按 `TColor` 读写，用 `LCLColor`。
+- **在 `TTyDateTimePicker` 里按 `Delete` 会把整个日期清成 NULL**,和 `N` 键一样(LCL 只认 `N`)。不想让用户清空，设 `NullInputAllowed := False`。
 
 ## `AutoSize` 不起作用的控件
 
@@ -46,5 +48,11 @@ TyControls 的属性名和语义尽量与 LCL 一致，从 Lazarus 移植的代�
 | `TTyAdvancedComboBox`、`TTyCheckComboBox`、`TTyColorBox`、`TTyColorComboBox`、`TTyFilterComboBox`、`TTyOfficeComboBox`、`TTyShellComboBox` | `MaxLength`、`CharCase`、`ReadOnly` | 只能选、不能输入，没有可编辑的文字 |
 | `TTyDrawGrid` | `HideSelectionWhenInactive`、`FadeUnfocusedSelection`、`MinEditorWidth` | 没有选区，也没有内置的单元格编辑器;`TTyStringGrid` 照常发布 |
 | 网格的 `Header` | `MainColumn` | 网格没有主列;`TTyListView`、`TTyTreeView` 的表头照常发布 |
+| `TTyShellListView` | `OwnerData`、`ItemCount`、`Items`、`OnGetItemText`、`OnGetItemImage`、`OnGetItemGroup` | 列表内容由它自己从文件夹读;`TTyListView` 照常发布 |
+| `TTyShellTreeView` | `NodeDataSize`、`RootNodeCount`、`Items`、`OnInitChildren` | 节点由它自己从文件系统建;`TTyTreeView` 照常发布 |
+| `TTyDBLookupListBox` | `MultiSelect`、`ExtendedSelect` | 查找列表只存一个键(LCL 也不发布);`TTyDBListBox` 照常发布 |
+| 文本输入控件:`TTyEdit`、`TTyMaskEdit`、`TTyComboEdit`、`TTyURLEdit`、数值框、`TTyMemo`、`TTySpinEdit`、`TTyDateTimePicker` 及它们的 DB 版本 | `ChildSizing` | 没有要排的子控件 |
+| `TTyMultiTrackBar`、`TTyGradientTrackBar` | `ChildSizing` | 没有要排的子控件 |
+| `TTyTerminalView` | `ChildSizing` | 滚动条由终端自己摆;设了它，滚动条会盖到最后几列上 |
 
 上面这些只能选的组合框(`TTyColorBox`、`TTyColorComboBox` 除外)的 `Style` 仍然发布，但对象查看器的下拉列表里只列出只能选的样式;可编辑的样式设上去也会被换成对应的只能选样式。

@@ -642,6 +642,10 @@ type
     { rows still to paint (a frame that ran out of its rasterizing budget leaves some) }
     function RowsLeftToPaint: Boolean;
     property ScrollBar: TTyScrollBar read FScrollBar;
+    { #192: the terminal sizes its scroll bar itself, and ChildSizing moved it over the last
+      columns. 4.0 does not publish ChildSizing; a form saved by 3.x that sets it opens, and the
+      value is read past (TTyRetiredPaths). }
+    procedure ReadState(Reader: TReader); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -769,7 +773,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -909,6 +912,18 @@ const
   FloodCycleMs = 50;             { 输出一直排着时,解析加绘制一轮这么久(约 20 帧每秒) }
 
 { ---- 构造与析构 --------------------------------------------------------------------- }
+
+procedure TTyCustomTerminalView.ReadState(Reader: TReader);
+var
+  retired: TTyRetiredPaths;
+begin
+  retired := TTyRetiredPaths.Create(Reader, Self, ['ChildSizing']);
+  try
+    inherited ReadState(Reader);
+  finally
+    retired.Free;
+  end;
+end;
 
 constructor TTyCustomTerminalView.Create(AOwner: TComponent);
 begin

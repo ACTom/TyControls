@@ -455,11 +455,12 @@ begin
     AssertFalse('normal: restore greyed', Item(b, TyWindowMenuRestoreIndex).Enabled);
     f.Engine.ToggleMaximize;
     AssertTrue('engine maximize happened', f.Engine.Maximized);
-    AssertEquals('WindowState stays wsNormal under the engine maximize',
-      Ord(wsNormal), Ord(f.WindowState));
+    AssertEquals('WindowState says wsMaximized under the engine maximize (#193)',
+      Ord(wsMaximized), Ord(f.WindowState));
     AssertTrue('maximized: restore enabled', Item(b, TyWindowMenuRestoreIndex).Enabled);
     AssertFalse('maximized: maximize greyed', Item(b, TyWindowMenuMaximizeIndex).Enabled);
     f.Engine.ToggleMaximize;
+    AssertEquals('restored: WindowState wsNormal again', Ord(wsNormal), Ord(f.WindowState));
     AssertFalse('restored: restore greyed again', Item(b, TyWindowMenuRestoreIndex).Enabled);
     AssertTrue('restored: maximize enabled again', Item(b, TyWindowMenuMaximizeIndex).Enabled);
   finally

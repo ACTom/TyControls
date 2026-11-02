@@ -87,7 +87,7 @@ end;
 
 procedure TScrollBarAccess.CallMouseMove(X, Y: Integer);
 begin
-  MouseMove([], X, Y);
+  MouseMove([ssLeft], X, Y);   // the button is held: a move without it ends the drag (#147)
 end;
 
 procedure TScrollBarAccess.CallMouseUp(Btn: TMouseButton; X, Y: Integer);
@@ -874,8 +874,9 @@ begin
   AssertEquals('single-select Space not consumed', VK_SPACE, Integer(LA.PressKey(VK_SPACE, [])));
   // multi-select: Space toggles row and consumes key (Key = 0)
   LA.MultiSelect := True; LA.ItemIndex := 0;
+  AssertTrue('setup: the single selection carried over (#152)', LA.Selected[0]);
   AssertEquals('multi-select Space consumed', 0, Integer(LA.PressKey(VK_SPACE, [])));
-  AssertTrue('multi Space toggled row 0 on', LA.Selected[0]);
+  AssertFalse('multi Space toggled row 0 off', LA.Selected[0]);
 end;
 
 { TestSortedSortsAndKeepsSelection

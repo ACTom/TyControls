@@ -396,8 +396,11 @@ type
     property UseCellDisplay: Boolean
       read FUseCellDisplay write FUseCellDisplay default False;
     { 这一列用什么编辑器。设过之后优先级高于 DefaultEditorKind,低于 OnGetEditorKind。 }
+    { #152: saved whenever it was set, gekText included -- that one is the default, so it was
+      never written, and a column set to text under a DefaultEditorKind of something else came
+      back following the grid. }
     property EditorKind: TTyGridEditorKind read FEditorKind write SetEditorKind
-      default gekText;
+      stored FUseEditorKind nodefault;
     { 整列只读。 }
     property ReadOnly: Boolean read FReadOnly write FReadOnly default False;
     { gekPickList 的候选项(不接 OnGetPickList 时用这个)。 }
@@ -869,6 +872,7 @@ type
       那个只在正文格上有值,而列头带上根本不是格 —— 合成一个的话,
       鼠标移到列头会把正文里的 hover 一起点亮。 }
     FHoverHeaderCol:   Integer;
+    FHoverCursor:      TTyCursorLoan;   { the hover cursor, lent from Cursor (#154) }
     { 正被**按住**的列头段(-1 = 没有)。goHeaderPushedLook 的状态源。
       与 FHoverHeaderCol 分开:鼠标停在一段上和把它按下去是两回事,按下的那段
       要压过 hover 的观感。也与 FDragCol 分开:后者只在 hoDrag + coDraggable
@@ -1994,6 +1998,11 @@ type
     procedure DefineProperties(Filer: TFiler); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    { #143: a draw grid has no cursor either, so the keys scroll it: the arrows by a row or a
+      column, Page Up/Down by a page, Home/End to the first or last column, Ctrl+Home/End to
+      the first or last row. TTyStringGrid moves its cursor with them instead (FReportsClicks
+      is off there). }
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
   protected
     { 取一个单元格要显示的文本。派生类可改写以接自己的存储。 }
     function GetCellText(ACol, ARow: Integer): string; virtual;
@@ -2292,6 +2301,15 @@ type
     FOnGetCellHint: TTyGridGetCellHintEvent;
     FHintCol: Integer;
     FHintRow: Integer;
+    { #154: a cell hint borrows Hint and ShowHint; these are the grid's own, given back off the
+      hinted cells and when the mouse leaves -- they were overwritten for good. }
+    FHintLent: Boolean;
+    FOwnHint: string;
+    FOwnShowHint: Boolean;
+    FOwnParentShowHint: Boolean;
+    procedure LendCellHint(const AText: string);
+    procedure GiveHintBack;
+  private
     FRowTopsCache: TTyIntArray;
     FRowTopsValid: Boolean;
     FAggregates: TStringList;      { 列索引 -> 聚合方式序号 }
@@ -2320,6 +2338,7 @@ type
     FFilterPanel:  TTyPanel;      { Popover.Content 只收**一个**控件,得有个容器 }
     FFilterSearch: TTyEdit;
     FFilterSelAll: TTyCheckBox;
+    FSyncingSelectAll: Boolean;   // #188: SyncFilterSelectAll is setting FFilterSelAll
     FFilterOk, FFilterCancel: TTyButton;
     { 全部候选值(Objects 里放该值的行数),与当前勾选集合。
 
@@ -2694,6 +2713,8 @@ type
     function  HoverIsHyperlink(X, Y: Integer): Boolean; override;
     function  DoDrawCell(P: TTyPainter; ACol, ARow: Integer): Boolean; override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
+    { #154: the borrowed Hint and ShowHint given back. }
+    procedure MouseLeave; override;
     function  RowHeightOf(ARow: Integer): Integer; override;
     function  RowTops: TTyIntArray; override;
     procedure InvalidateRowMetrics; override;
@@ -5515,7 +5536,7 @@ begin
   else if HoverIsHyperlink(X, Y) then
     want := crHandPoint;
 
-  if Cursor <> want then Cursor := want;
+  TyLendCursor(Self, FHoverCursor, want <> crDefault, want);   { #154: the own Cursor given back }
 end;
 
 procedure TTyCustomGrid.UpdateHoverCell(X, Y: Integer);
@@ -5548,6 +5569,7 @@ end;
 procedure TTyCustomGrid.CMMouseLeave(var Msg: TLMessage);
 begin
   inherited;
+  TyLendCursor(Self, FHoverCursor, False, crDefault);
   if (FHoverCol >= 0) or (FHoverRow >= 0) or (FHoverHeaderCol >= 0) then
   begin
     FHoverCol := -1;
@@ -8725,6 +8747,25 @@ begin
     Invalidate;
   end;
   if Assigned(OnClickCell) then OnClickCell(Self, hit.Col, hit.Row);
+end;
+
+procedure TTyCustomDrawGrid.KeyDown(var Key: Word; Shift: TShiftState);
+begin
+  inherited KeyDown(Key, Shift);
+  if not FReportsClicks or (Key = 0) or not IsEnabled or (ssAlt in Shift) then Exit;
+  case Key of
+    VK_UP:    TopRow := TopRow - 1;
+    VK_DOWN:  TopRow := TopRow + 1;
+    VK_LEFT:  LeftCol := ColumnStep(LeftCol, ArrowColStep(-1));
+    VK_RIGHT: LeftCol := ColumnStep(LeftCol, ArrowColStep(1));
+    VK_PRIOR: TopRow := TopRow - PageRowStep;
+    VK_NEXT:  TopRow := TopRow + PageRowStep;
+    VK_HOME:  if ssCtrl in Shift then TopRow := 0 else LeftCol := FirstVisibleCol;
+    VK_END:   if ssCtrl in Shift then TopRow := DisplayRowCount - 1 else LeftCol := LastVisibleCol;
+  else
+    Exit;
+  end;
+  Key := 0;
 end;
 
 procedure TTyCustomDrawGrid.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -12042,6 +12083,14 @@ begin
   FOnDrawCell(Self, ACol, ARow, r, P, Result);
 end;
 
+procedure TTyCustomStringGrid.MouseLeave;
+begin
+  inherited MouseLeave;
+  FHintCol := -1;
+  FHintRow := -1;
+  GiveHintBack;
+end;
+
 procedure TTyCustomStringGrid.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   hit: TTyGridHit;
@@ -12102,8 +12151,7 @@ begin
     begin
       FHintCol := -1;
       FHintRow := -1;
-      Hint := '';
-      ShowHint := False;
+      GiveHintBack;
     end;
     Exit;
   end;
@@ -12122,8 +12170,7 @@ begin
     begin
       FHintCol := -1;
       FHintRow := -1;
-      Hint := '';
-      ShowHint := False;
+      GiveHintBack;
     end;
     Exit;
   end;
@@ -12139,8 +12186,34 @@ begin
   cmt := GetCellComment(hit.Col, hit.Row);
   if cmt <> '' then txt := cmt;
   if Assigned(FOnGetCellHint) then FOnGetCellHint(Self, hit.Col, hit.Row, txt);
-  Hint := txt;
-  ShowHint := txt <> '';
+  LendCellHint(txt);
+end;
+
+procedure TTyCustomStringGrid.LendCellHint(const AText: string);
+begin
+  if AText = '' then
+  begin
+    GiveHintBack;   // no cell hint: the grid's own shows, as in LCL
+    Exit;
+  end;
+  if not FHintLent then
+  begin
+    FOwnHint := Hint;
+    FOwnShowHint := ShowHint;
+    FOwnParentShowHint := ParentShowHint;
+    FHintLent := True;
+  end;
+  Hint := AText;
+  ShowHint := True;
+end;
+
+procedure TTyCustomStringGrid.GiveHintBack;
+begin
+  if not FHintLent then Exit;
+  FHintLent := False;
+  Hint := FOwnHint;
+  ShowHint := FOwnShowHint;
+  ParentShowHint := FOwnParentShowHint;   // ShowHint := took it off
 end;
 
 { goTruncCellHints:这一格的文字放得下就答空串,放不下就答**全文**。
@@ -13069,6 +13142,7 @@ procedure TTyCustomStringGrid.FilterSelectAllClick(Sender: TObject);
 var
   i: Integer;
 begin
+  if FSyncingSelectAll then Exit;   // #188: kept in step from SyncFilterSelectAll, not clicked
   for i := 0 to FFilterList.Items.Count - 1 do
     FFilterList.Checked[i] := FFilterSelAll.Checked;
   FilterItemChecked(nil);
@@ -13093,8 +13167,14 @@ begin
   onCount := 0;
   for i := 0 to FFilterList.Items.Count - 1 do
     if FFilterList.Checked[i] then Inc(onCount);
-  FFilterSelAll.Checked := (FFilterList.Items.Count > 0)
-                           and (onCount = FFilterList.Items.Count);
+  { #188: a change of Checked clicks the box, as in LCL; this one follows the list }
+  FSyncingSelectAll := True;
+  try
+    FFilterSelAll.Checked := (FFilterList.Items.Count > 0)
+                             and (onCount = FFilterList.Items.Count);
+  finally
+    FSyncingSelectAll := False;
+  end;
 end;
 
 { 按搜索词重建列表。勾选状态从**值集合**回填,而不是从旧的列表下标 ——

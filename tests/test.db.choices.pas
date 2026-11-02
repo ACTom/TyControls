@@ -75,7 +75,7 @@ type
     procedure AssertFieldHoldsEdit; override;
     function Switch: TTyDBToggleSwitch;
   published
-    procedure TestSpaceAndEnterToggleAndWrite;
+    procedure TestSpaceTogglesAndWrites;
     procedure TestRefusedKeysAndClickDoNotFlip;
     procedure TestWordListsMap;
   end;
@@ -258,7 +258,7 @@ end;
 
 procedure TDBCheckBoxTest.UserEditUnguarded;
 begin
-  Key(VK_SPACE);
+  Press(VK_SPACE);
 end;
 
 procedure TDBCheckBoxTest.AssertFieldHoldsEdit;
@@ -319,7 +319,7 @@ begin
   Box.OnChange := @CountChange;
   Box.OnClick := @CountClick;
   ClickCenter(FCtl);
-  Key(VK_SPACE);
+  Press(VK_SPACE);
   AssertEquals('the state', 'checked', Shown);
   AssertEquals('it never flipped: no OnChange', 0, FChanges);
   AssertEquals('and no OnClick', 0, FClicks);
@@ -390,7 +390,7 @@ end;
 
 procedure TDBToggleSwitchTest.UserEditUnguarded;
 begin
-  Key(VK_SPACE);
+  Press(VK_SPACE);
 end;
 
 procedure TDBToggleSwitchTest.AssertFieldHoldsEdit;
@@ -399,17 +399,20 @@ begin
   AssertFalse('the field, as a boolean', BoundField.AsBoolean);
 end;
 
-{ M12: the base switch toggles on Space and Enter in its KeyDown, without Click. }
-procedure TDBToggleSwitchTest.TestSpaceAndEnterToggleAndWrite;
+{ M12: the key that toggles the base switch writes the field. It is Space, on the key-up, and
+  through Click (#151); Enter goes on to the form's default button (#144). }
+procedure TDBToggleSwitchTest.TestSpaceTogglesAndWrites;
 begin
   Bind('Active');
   EnterControl;
-  Key(VK_SPACE);
+  Press(VK_SPACE);
   AssertEquals('Space', 'off', Shown);
   AssertTrue('an edit', FFix.DS.State = dsEdit);
   AssertFalse('written', BoundField.AsBoolean);
-  Key(VK_RETURN);
-  AssertEquals('Enter', 'on', Shown);
+  Press(VK_RETURN);
+  AssertEquals('Enter is the form''s: no toggle', 'off', Shown);
+  Press(VK_SPACE);
+  AssertEquals('Space again', 'on', Shown);
   AssertTrue('written', BoundField.AsBoolean);
   FFix.DS.Post;
   AssertTrue('posted', BoundField.AsBoolean);
@@ -421,7 +424,7 @@ begin
   Bind('Active');
   Switch.OnChange := @CountChange;
   EnterControl;
-  Key(VK_SPACE);
+  Press(VK_SPACE);
   Key(VK_RETURN);
   ClickCenter(FCtl);
   AssertEquals('the switch', 'on', Shown);

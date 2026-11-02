@@ -81,7 +81,7 @@ type
   TButtonAccess      = class(TTyButton) public procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer); end;
   TGlyphBtnAccess    = class(TTyGlyphButton) public procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer); end;
   TColorBtnAccess    = class(TTyColorButton) public procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer); end;
-  TDropBtnAccess     = class(TTyDropDownButton) public procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer); function ArrowW(APPI: Integer): Integer; end;
+  TDropBtnAccess     = class(TTyDropDownButton) public procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer); function ArrowW(APPI: Integer): Integer; function ArrowHit(AX: Integer): Boolean; end;
   { The header strip additionally needs its mouse handlers reachable: it is the first control
     in this programme whose HIT TEST mirrors, so a paint-only probe would miss the half that
     matters. }
@@ -609,7 +609,7 @@ type
     somebody makes on purpose, with the hit test in the same commit. }
   TRtlExclusionTest = class(TTestCase)
   published
-    procedure DropDownArrowStaysWhereItsHitTestSaysItIs;
+    procedure DropDownArrowAndItsHitTestChangeSidesTogether;
     procedure ButtonGroupSegmentsAreNotMirroredWhileSegmentAtReadsRawX;
     procedure ValueListEditorIsNotMirroredWhileItsSplitterIsHitTestedTwice;
     procedure RibbonDeclinesToMirrorTheHeaderBandItInherits;
@@ -773,6 +773,7 @@ procedure TGlyphBtnAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: I
 procedure TColorBtnAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);   begin inherited RenderTo(ACanvas, ARect, APPI); end;
 procedure TDropBtnAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);    begin inherited RenderTo(ACanvas, ARect, APPI); end;
 function  TDropBtnAccess.ArrowW(APPI: Integer): Integer;     begin Result := ArrowZoneWidth(APPI); end;
+function  TDropBtnAccess.ArrowHit(AX: Integer): Boolean;     begin Result := IsInArrowZone(AX); end;
 procedure THdrAccess.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);        begin inherited RenderTo(ACanvas, ARect, APPI); end;
 { Y is fixed at 10 (any row inside a 26px strip behaves alike -- the strip has no vertical
   hit zones at all), so the probes take only the x that is actually under test. }
@@ -781,7 +782,7 @@ procedure THdrAccess.PressMove(X: Integer);  begin MouseMove([], X, 10); end;
 procedure THdrAccess.PressUp(X: Integer);    begin MouseUp(mbLeft, [], X, 10); end;
 
 procedure TBarAccess.CallMouseDown(X, Y: Integer); begin MouseDown(mbLeft, [], X, Y); end;
-procedure TBarAccess.CallMouseMove(X, Y: Integer); begin MouseMove([], X, Y); end;
+procedure TBarAccess.CallMouseMove(X, Y: Integer); begin MouseMove([ssLeft], X, Y); end;   // a drag (#147)
 procedure TBarAccess.CallMouseUp(X, Y: Integer);   begin MouseUp(mbLeft, [], X, Y); end;
 function  TBarAccess.CallKeyDown(AKey: Word): Word;
 begin
@@ -5897,7 +5898,7 @@ end;
   So the arrow stays on the right for now, and this test pins BOTH halves together: whoever
   mirrors it has to move the paint and the hit test in the same commit, because moving either
   one alone turns this red. }
-procedure TRtlExclusionTest.DropDownArrowStaysWhereItsHitTestSaysItIs;
+procedure TRtlExclusionTest.DropDownArrowAndItsHitTestChangeSidesTogether;
 var
   Ctl: TTyStyleController;
   Form: TForm;
@@ -5926,15 +5927,13 @@ begin
     try
       ChannelSpanX(shot, chGreen, l, r);
       AssertTrue('the divider and chevron drew', l >= 0);
-      AssertTrue('the arrow zone is still painted on the right', l > 80);
+      AssertTrue('#153: mirrored, the arrow zone is painted on the left', r < 80);
     finally
       shot.Free;
     end;
     { And the hit test agrees with the paint, which is the point. }
-    AssertTrue('a click near the right edge still opens the drop-down',
-      TyDropArrowHit(158, 160, B.ArrowW(96)));
-    AssertTrue('and a click near the left edge is still the primary action',
-      not TyDropArrowHit(2, 160, B.ArrowW(96)));
+    AssertTrue('a click near the left edge opens the drop-down', B.ArrowHit(2));
+    AssertTrue('and a click near the right edge is the primary action', not B.ArrowHit(158));
   finally
     host.Free;
     Form.Free;

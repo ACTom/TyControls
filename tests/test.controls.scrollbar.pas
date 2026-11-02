@@ -204,7 +204,7 @@ begin
 end;
 procedure TScrollAccess.CallMouseMove(X, Y: Integer);
 begin
-  MouseMove([], X, Y);
+  MouseMove([ssLeft], X, Y);   // a drag: the button is held (#147 ends a drag without it)
 end;
 procedure TScrollAccess.CallMouseUp(Btn: TMouseButton; X, Y: Integer);
 begin

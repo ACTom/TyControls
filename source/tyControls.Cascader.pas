@@ -1977,6 +1977,10 @@ begin
     cannot (Wayland, no XShape) ForceSquareSurface removes the gaps instead. }
   FPopup.Controller := ActiveController;
   FPanel.Controller := Controller;
+  { #146: the field's variant and overrides reach the panel, as they reach its rows }
+  FPanel.StyleClass := StyleClass;
+  FPanel.StyleOverride := StyleOverride;
+  FPanel.BiDiMode := BiDiMode;   // #153
   FPanel.ForceSquareSurface := TyIsWayland;
   FPanel.Root := FNodes;
   FPanel.Path := FPath;   // seed the DRAFT from the committed value
@@ -2009,7 +2013,7 @@ begin
   sz := FPanel.TyPanelSize(FDropDownRows, Font.PixelsPerInch);
   // Unlike a combo box's, the panel is WIDER than its field: pass the panel's own measured
   // width, not Width.
-  FPopup.Popup(Self, sz.cx, sz.cy);
+  FPopup.Popup(Self, sz.cx, sz.cy, IsRightToLeft);   // #153: lined up with the field's right edge
   DoDropDown;
 end;
 
@@ -2176,13 +2180,18 @@ begin
       P.Scale(S.Padding.Left), P.Scale(S.Padding.Top),
       P.Scale(S.Padding.Right), P.Scale(S.Padding.Bottom),
       P.Scale(ButtonZoneLogical));
+    if IsRightToLeft then   // #153: the chevron and the path change sides
+    begin
+      Lay.TextRect := TyMirrorRectX(Lay.TextRect, R.Right);
+      Lay.ButtonRect := TyMirrorRectX(Lay.ButtonRect, R.Right);
+    end;
 
     shown := GetPathText;
     if (shown <> '') and (Lay.TextRect.Right > Lay.TextRect.Left) then
       // Ellipsised: a field narrower than its path shows '华东 / 浙江 / 杭…', not a glyph
       // sheared at the clip edge.
       P.DrawText(Lay.TextRect, shown, S.FontName, ResolveFontSize(S), S.FontWeight,
-        S.TextColor, taLeftJustify, tlCenter, True);
+        S.TextColor, BidiFlipAlignment(taLeftJustify, IsRightToLeft), tlCenter, True);
 
     // v3/C5: the dropdown indicator is theme-overridable (--glyph-dropdown, the token every
     // drop field shares through TyDrawDropChevron — one theme rule retunes them all); else the

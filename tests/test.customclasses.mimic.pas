@@ -839,7 +839,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -912,7 +911,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -2187,7 +2185,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -2409,7 +2406,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -2699,7 +2695,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -2774,7 +2769,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -2854,7 +2848,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -2924,7 +2917,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -3344,8 +3336,6 @@ type
     property Controller;
     property Items;
     property ItemIndex;
-    property MultiSelect;
-    property ExtendedSelect;
     property Sorted;
     property ItemHeight;
     property ScrollWidth;
@@ -3393,7 +3383,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -3467,7 +3456,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -3594,7 +3582,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -3873,7 +3860,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -4060,7 +4046,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -4435,7 +4420,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -4714,7 +4698,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -5446,7 +5429,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -6624,7 +6606,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -6695,7 +6676,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -6960,7 +6940,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -7072,7 +7051,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -9150,9 +9128,6 @@ type
     property Controller;
     property ViewStyle;
     property RowHeight;
-    property OwnerData;
-    property ItemCount;
-    property Items;
     property Header;
     property ShowColumnHeaders;
     property GridLines;
@@ -9170,8 +9145,6 @@ type
     property GroupView;
     property Groups;
     property ScrollBarAutoHide;
-    property OnGetItemText;
-    property OnGetItemImage;
     property OnGetItemState;
     property OnCompare;
     property OnColumnClick;
@@ -9184,7 +9157,6 @@ type
     property OnDeletion;
     property OnEditing;
     property OnEdited;
-    property OnGetItemGroup;
     property OnGroupCollapsed;
     property Align;
     property Anchors;
@@ -9257,10 +9229,7 @@ type
     property Controller;
     property Options;
     property Header;
-    property Items;
-    property NodeDataSize;
     property DefaultNodeHeight;
-    property RootNodeCount;
     property Indent;
     property Images;
     property EmptyListMessage;
@@ -9280,7 +9249,6 @@ type
     property Anchors;
     property OnFreeNode;
     property OnInitNode;
-    property OnInitChildren;
     property OnExpanding;
     property OnExpanded;
     property OnCollapsing;
@@ -9523,7 +9491,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -10188,7 +10155,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -11022,7 +10988,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -11331,7 +11296,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;

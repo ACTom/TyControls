@@ -172,7 +172,7 @@ begin
   begin
     imgs := TTyCustomAdvancedComboBox(Owner).ImagesRef;
     TyDrawAdvancedRow(P, ARowRect, Items[AIndex], PtrInt(Items.Objects[AIndex]) - 1,
-      imgs, AStyle, ResolveFontSize(AStyle));
+      imgs, AStyle, ResolveFontSize(AStyle), RtlRowLayout);   // #153
   end
   else
     inherited PaintItemContent(P, ARowRect, AIndex, AStyle);
@@ -251,7 +251,7 @@ begin
   begin
     titleOnly := TitleOf(ItemIndex);
     TyDrawAdvancedRow(P, ATextRect, titleOnly, ImageIndexOf(ItemIndex), FImages, AStyle,
-      ResolveFontSize(AStyle));
+      ResolveFontSize(AStyle), IsRightToLeft);   // #153: the field's slot is already mirrored
   end
   else
     inherited PaintFieldContent(P, ATextRect, AStyle);

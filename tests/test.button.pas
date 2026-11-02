@@ -12,6 +12,7 @@ type
   public
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure DoKeyDown(var Key: Word; Shift: TShiftState);
+    procedure DoKeyUp(var Key: Word; Shift: TShiftState);
     // Drive the CM_DIALOGKEY handler headlessly: build a TCMDialogKey carrying
     // ACharCode and dispatch it, exercising the same routing a real form would.
     procedure DispatchDialogKey(ACharCode: Word);
@@ -96,6 +97,11 @@ end;
 procedure TTyButtonAccess.DoKeyDown(var Key: Word; Shift: TShiftState);
 begin
   KeyDown(Key, Shift);
+end;
+
+procedure TTyButtonAccess.DoKeyUp(var Key: Word; Shift: TShiftState);
+begin
+  KeyUp(Key, Shift);
 end;
 
 procedure TTyButtonAccess.DispatchDialogKey(ACharCode: Word);
@@ -217,9 +223,12 @@ begin
   try
     B := TTyButtonAccess.Create(F); B.Parent := F; B.OnClick := @HandleClick;
     K := VK_SPACE; B.DoKeyDown(K, []);
-    AssertEquals('space fired click', 1, FClicked);
     AssertEquals('space consumed', 0, K);
+    AssertEquals('#151: held down, space has not clicked yet', 0, FClicked);
+    K := VK_SPACE; B.DoKeyUp(K, []);
+    AssertEquals('let go, space fired click', 1, FClicked);
     K := VK_RETURN; B.DoKeyDown(K, []);
+    K := VK_RETURN; B.DoKeyUp(K, []);
     AssertEquals('enter fired click', 2, FClicked);
   finally F.Free; end;
 end;

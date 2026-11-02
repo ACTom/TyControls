@@ -85,7 +85,7 @@ TranslateUnitResourceStringsEx('', LangDir, 'tycontrols_db', 'tyControls.DB.StrC
 ### 文本
 
 - **`TTyDBEdit`**：获得焦点并且可以编辑时显示 `Field.Text`，其余时候显示 `Field.DisplayText`（比如带 `DisplayFormat` 的数值字段，没焦点时显示格式化后的样子）。写回 `Field.Text := Text`。字符串字段、`MaxLength` 为 0 时取字段的 `Size`；对齐方式跟字段的 `Alignment`。
-- **`TTyDBMaskEdit`**：`CustomEditMask` 为 False（默认，照 LCL）时用字段的 `EditMask`，为 True 时用控件自己的 `EditMask`。字段的掩码解析不了（比如本库不认的 `#`）就不套掩码，不报错。
+- **`TTyDBMaskEdit`**：`CustomEditMask` 为 False（默认，照 LCL）时用字段的 `EditMask`，为 True 时用控件自己的 `EditMask`。字段的掩码解析不了（比如一个可编辑位都没有）就不套掩码，不报错。
 - **`TTyDBMemo`**：备注（blob）字段用 `AsString` 装载，字段有 `OnGetText` / `OnSetText` 时用 `Text`。`AutoDisplay` 为 False 时先显示 `(字段名)` 这样的占位，按 Enter（或调用 `LoadMemo`）才装载，适合一屏显示很多大文本的场合。
 - **`TTyDBText`**：只读，显示 `Field.DisplayText`。设计期没绑字段时显示自己的 `Name`，运行时为空。
 

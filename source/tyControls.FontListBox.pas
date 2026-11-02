@@ -14,10 +14,16 @@ type
   TTyCustomFontListBox = class(TTyCustomListBox)
   private
     FFixedPitchOnly: Boolean;
+    FStreamedFont: string;   // #152: the family a form file names, found in Loaded
     function GetSelectedFont: string;
     procedure SetSelectedFont(const AValue: string);
     procedure SetFixedPitchOnly(AValue: Boolean);
+    procedure ReadSelectedFont(Reader: TReader);
+    procedure WriteSelectedFont(Writer: TWriter);
   protected
+    { #152: the chosen family is saved by NAME, as 'SelectedFont'. ItemIndex alone was a row
+      number, and another machine's list put another font there. }
+    procedure DefineProperties(Filer: TFiler); override;
     procedure PaintItemContent(P: TTyPainter; const ARowRect: TRect; AIndex: Integer;
       const AStyle: TTyStyleSet); override;
     procedure Loaded; override;
@@ -121,9 +127,32 @@ begin
   { This machine's fonts again, for a form that still carries another machine's list, with the
     chosen family found by NAME: its row number is different on every machine, and a family this
     machine lacks leaves nothing selected rather than whatever font now sits at that row. }
-  keep := SelectedFont;
+  if FStreamedFont <> '' then keep := FStreamedFont else keep := SelectedFont;
+  FStreamedFont := '';
   TyGetFontFamilies(Items, FFixedPitchOnly);
   ItemIndex := Items.IndexOf(keep);
+end;
+
+procedure TTyCustomFontListBox.DefineProperties(Filer: TFiler);
+var
+  has: Boolean;
+begin
+  inherited DefineProperties(Filer);
+  if Filer.Ancestor is TTyCustomFontListBox then
+    has := SelectedFont <> TTyCustomFontListBox(Filer.Ancestor).SelectedFont
+  else
+    has := SelectedFont <> '';
+  Filer.DefineProperty('SelectedFont', @ReadSelectedFont, @WriteSelectedFont, has);
+end;
+
+procedure TTyCustomFontListBox.ReadSelectedFont(Reader: TReader);
+begin
+  FStreamedFont := Reader.ReadString;
+end;
+
+procedure TTyCustomFontListBox.WriteSelectedFont(Writer: TWriter);
+begin
+  Writer.WriteString(SelectedFont);
 end;
 
 procedure TTyCustomFontListBox.RefreshFonts;
@@ -163,7 +192,7 @@ end;
 procedure TTyCustomFontListBox.PaintItemContent(P: TTyPainter; const ARowRect: TRect;
   AIndex: Integer; const AStyle: TTyStyleSet);
 begin
-  TyDrawFontRow(P, ARowRect, Items[AIndex], AStyle, ResolveFontSize(AStyle));
+  TyDrawFontRow(P, ARowRect, Items[AIndex], AStyle, ResolveFontSize(AStyle), RtlRowLayout);   // #153
 end;
 
 function TTyCustomFontListBox.GetSelectedFont: string;

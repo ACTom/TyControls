@@ -87,11 +87,16 @@ type
     procedure StepValue(ADelta: Integer);
     procedure SpinStep(ADir: Integer);
     function SpinHitAt(X, Y: Integer): Integer;
+    function ClearSelectedValue: Boolean;
   protected
     // Inline edit buffer (lightweight, no selection/clipboard). Protected so
     // headless access subclasses (tests) can reach the buffer + helpers.
     FEditText: string;
     FCaret: Integer;      // codepoint index 0..UTF8Length(FEditText)
+    { #189: the whole value is selected, as LCL's AutoSelect leaves it when the focus comes from
+      the keyboard: the first key typed replaces it, Backspace or Delete clears it, and moving
+      the caret or clicking in the field lets it go. The buffer has no other selection (#190). }
+    FAllSelected: Boolean;
     FMeasureBmp: TBGRABitmap;  // lazy; used only for text measurement
     // Blinking caret (Task 10). FCaretVisible defaults True; the timer is created
     // lazily and started ONLY when HandleAllocated, so headless tests never blink
@@ -117,6 +122,8 @@ type
     procedure DoValueChange; virtual;
     // Edit-buffer helpers
     procedure SyncBufferToValue;
+    { The typed text is not the value's (#144): Esc has something to put back. }
+    function BufferDiffers: Boolean;
     procedure CommitEdit;
     procedure InsertEditChar(const C: TUTF8Char);
     procedure EditBackspace;
@@ -148,6 +155,9 @@ type
       form author's. }
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
       WithThemeSpace: Boolean); override;
+    { #192: a text input has no children to size, so 4.0 does not publish ChildSizing; a form saved
+      by 3.x that sets it opens, and the value is read past (TTyRetiredPaths). }
+    procedure ReadState(Reader: TReader); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -245,7 +255,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -502,6 +511,18 @@ end;
 
 { TTyCustomSpinEdit }
 
+procedure TTyCustomSpinEdit.ReadState(Reader: TReader);
+var
+  retired: TTyRetiredPaths;
+begin
+  retired := TTyRetiredPaths.Create(Reader, Self, ['ChildSizing']);
+  try
+    inherited ReadState(Reader);
+  finally
+    retired.Free;
+  end;
+end;
+
 constructor TTyCustomSpinEdit.Create(AOwner: TComponent);
 begin
   { Before inherited, and freed after it in Destroy: anything the LCL routes here while the
@@ -568,6 +589,11 @@ end;
 procedure TTyCustomSpinEdit.DoEnter;
 begin
   inherited DoEnter;
+  { #189: Tab (or any focus that is not a click in the field) selects the value, as LCL's
+    TCustomEdit.DoEnter does under AutoSelect; a click puts the caret where it was. }
+  FAllSelected := (FEditText <> '') and not (csLButtonDown in ControlState);
+  if FAllSelected then FCaret := UTF8Length(FEditText);
+  Invalidate;
   ResetCaretBlink;
   if HandleAllocated then
   begin
@@ -583,11 +609,14 @@ end;
 
 procedure TTyCustomSpinEdit.DoChange;
 begin
+  { #145: not while the form is read or torn down. }
+  if ComponentState * [csLoading, csDestroying] <> [] then Exit;
   if Assigned(FOnChange) then FOnChange(Self);
 end;
 
 procedure TTyCustomSpinEdit.DoValueChange;
 begin
+  if ComponentState * [csLoading, csDestroying] <> [] then Exit;
   if Assigned(FOnValueChange) then FOnValueChange(Self);
 end;
 
@@ -733,6 +762,11 @@ begin
   V := AValue;
   if V < 0 then V := 0;
   if V > L then V := L;
+  if FAllSelected then
+  begin
+    FAllSelected := False;   // #189: placing the caret lets the selected value go, as SelStart does
+    Invalidate;
+  end;
   if FCaret = V then Exit;
   FCaret := V;
   ResetCaretBlink;
@@ -800,6 +834,11 @@ begin
   if FMaxLength = V then Exit;
   FMaxLength := V;
   Invalidate;
+end;
+
+function TTyCustomSpinEdit.BufferDiffers: Boolean;
+begin
+  if FValueEmpty then Result := FEditText <> '' else Result := FEditText <> ValueToStr(FValue);
 end;
 
 procedure TTyCustomSpinEdit.SyncBufferToValue;
@@ -890,6 +929,13 @@ begin
   if FReadOnly or (not FEditorEnabled) then Exit;
   // Accept digits 0..9 always; accept '-' only at position 0 and when no '-' yet.
   if C = '' then Exit;
+  { #189: a digit or a sign typed over the selected value replaces it; another key leaves it }
+  if FAllSelected and ( ((Length(C)=1) and (C[1] in ['0'..'9'])) or (C = '-') ) then
+  begin
+    FAllSelected := False;
+    FEditText := '';
+    FCaret := 0;
+  end;
   if not ( ((Length(C)=1) and (C[1] in ['0'..'9']))
            or ((C = '-') and (FCaret = 0) and (Pos('-', FEditText) = 0)) ) then Exit;
   L := UTF8Length(FEditText);
@@ -906,12 +952,27 @@ begin
   DoChange;                   // a typed character is a text change (the path that used to be silent)
 end;
 
+{ #189: Backspace or Delete over the selected value clears it. }
+function TTyCustomSpinEdit.ClearSelectedValue: Boolean;
+begin
+  Result := FAllSelected;
+  if not Result then Exit;
+  FAllSelected := False;
+  FEditText := '';
+  FCaret := 0;
+  FValueEmpty := False;
+  FModified := True;
+  ResetCaretBlink;
+  DoChange;
+end;
+
 procedure TTyCustomSpinEdit.EditBackspace;
 var
   Before, After: string;
   L: Integer;
 begin
   if FReadOnly or (not FEditorEnabled) then Exit;
+  if ClearSelectedValue then Exit;
   if FCaret = 0 then Exit;
   L := UTF8Length(FEditText);
   Before := UTF8Copy(FEditText, 1, FCaret - 1);
@@ -930,6 +991,7 @@ var
   L: Integer;
 begin
   if FReadOnly or (not FEditorEnabled) then Exit;
+  if ClearSelectedValue then Exit;
   L := UTF8Length(FEditText);
   if FCaret >= L then Exit;
   Before := UTF8Copy(FEditText, 1, FCaret);
@@ -967,6 +1029,11 @@ begin
     TextR := Rect(R.Left + P.Scale(S.Padding.Left), R.Top + P.Scale(S.Padding.Top),
       R.Right - BtnW - P.Scale(S.Padding.Right), R.Bottom - P.Scale(S.Padding.Bottom));
     EffSize := ResolveFontSize(S);   // same size feeds DrawText and CaretPixelX (caret alignment)
+    { #189: the selected value under its band, the band an edit's selection draws }
+    if FAllSelected and Focused and (FEditText <> '') then
+      P.FillBackground(Rect(CaretPixelX(0, APPI), TextR.Top,
+        CaretPixelX(UTF8Length(FEditText), APPI), TextR.Bottom),
+        ActiveController.Model.ResolveStyle('TyTextSelection', '', []).Background, 0);
     if (FEditText = '') and (FTextHint <> '') then
       // Same muted ink and same rule as the sibling TTyEdit (Edit.pas:1719-1723).
       P.DrawText(TextR, FTextHint, S.FontName, EffSize, S.FontWeight,
@@ -1007,7 +1074,9 @@ procedure TTyCustomSpinEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
 begin
   if not IsEnabled then Exit;
   inherited UTF8KeyPress(UTF8Key);
+  if not TyAskKeyPress(Self, UTF8Key) then Exit;   { #150: OnKeyPress before it goes in }
   InsertEditChar(UTF8Key);
+  if TyKeyPressAsked(UTF8Key) then UTF8Key := '';
   Invalidate;
 end;
 
@@ -1026,21 +1095,38 @@ begin
         if not FReadOnly then StepValue(-FIncrement);
         Key := 0;
       end;
-    VK_RETURN: begin CommitEdit; Key := 0; end;
-    VK_ESCAPE: begin SyncBufferToValue; Invalidate; Key := 0; end;
+    { #144: Enter commits and goes on to the form's default button, as a native edit's does
+      (and is an EditingDone, as there); Esc goes on to the cancel button unless it has a
+      typed value to put back. Both were swallowed. }
+    VK_RETURN:
+      begin
+        CommitEdit;
+        if not FReadOnly then EditingDone;
+      end;
+    VK_ESCAPE:
+      if BufferDiffers then
+      begin
+        SyncBufferToValue;
+        Invalidate;
+        Key := 0;
+      end;
     VK_BACK:   begin EditBackspace; Invalidate; Key := 0; end;
     VK_DELETE: begin EditDelete; Invalidate; Key := 0; end;
-    VK_LEFT:   begin if FCaret > 0 then Dec(FCaret); ResetCaretBlink; Invalidate; Key := 0; end;
-    VK_RIGHT:  begin if FCaret < UTF8Length(FEditText) then Inc(FCaret); ResetCaretBlink; Invalidate; Key := 0; end;
-    VK_HOME:   begin FCaret := 0; ResetCaretBlink; Invalidate; Key := 0; end;
-    VK_END:    begin FCaret := UTF8Length(FEditText); ResetCaretBlink; Invalidate; Key := 0; end;
+    { #189: moving the caret lets the selected value go; Left and Home from it go to the start,
+      Right and End to the end -- where the caret of the selected value is -- as in an edit }
+    VK_LEFT:   begin if FAllSelected then FCaret := 0 else if FCaret > 0 then Dec(FCaret);
+                 FAllSelected := False; ResetCaretBlink; Invalidate; Key := 0; end;
+    VK_RIGHT:  begin if FCaret < UTF8Length(FEditText) then Inc(FCaret);
+                 FAllSelected := False; ResetCaretBlink; Invalidate; Key := 0; end;
+    VK_HOME:   begin FCaret := 0; FAllSelected := False; ResetCaretBlink; Invalidate; Key := 0; end;
+    VK_END:    begin FCaret := UTF8Length(FEditText); FAllSelected := False; ResetCaretBlink; Invalidate; Key := 0; end;
   end;
 end;
 
 procedure TTyCustomSpinEdit.DoExit;
 begin
   inherited DoExit;
-  CommitEdit;
+  CommitEdit;   // on a dying form it reports nothing (#145, DoChange / DoValueChange)
   if FBlinkTimer <> nil then FBlinkTimer.Enabled := False;
   FCaretVisible := True;
   Invalidate;
@@ -1078,6 +1164,7 @@ begin
       if CanFocus then SetFocus;
     except
     end;
+    if SpinHitAt(X, Y) = 0 then FAllSelected := False;   // #189: a click in the field
   end;
 end;
 

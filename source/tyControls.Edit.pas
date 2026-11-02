@@ -285,6 +285,9 @@ type
     { True while ActionChange runs; RealSetText ignores the write then. Read by descendants
       that route Caption through a setter of their own (TTyCustomMaskEdit). }
     property InActionChange: Boolean read FInActionChange;
+    { #192: a text input has no children to size, so 4.0 does not publish ChildSizing; a form saved
+      by 3.x that sets it opens, and the value is read past (TTyRetiredPaths). }
+    procedure ReadState(Reader: TReader); override;
   protected
     { #114: what AutoSize asks for -- see the body. }
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
@@ -485,7 +488,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -552,6 +554,18 @@ begin
   if AReserve <= 0 then Exit(Rect(0, 0, 0, 0));
   Result := Rect(ABox.Right - AReserve, ABox.Top + APadTop,
                  ABox.Right, ABox.Bottom - APadBottom);
+end;
+
+procedure TTyCustomEdit.ReadState(Reader: TReader);
+var
+  retired: TTyRetiredPaths;
+begin
+  retired := TTyRetiredPaths.Create(Reader, Self, ['ChildSizing']);
+  try
+    inherited ReadState(Reader);
+  finally
+    retired.Free;
+  end;
 end;
 
 constructor TTyCustomEdit.Create(AOwner: TComponent);
@@ -755,6 +769,10 @@ begin
   // end. (FSuspendUndo gates undo-pushes for the same composite ops; OnChange
   // reuses the same "inside a composite" signal so it fires exactly once.)
   if FSuspendUndo then Exit;
+  { #145: not while the form is read or torn down, as LCL's TextChanged asks
+    (customedit.inc:614): the Text a form file holds, a numeric edit reformatting on the blur
+    its destruction causes, a mask's SpaceChar fired OnChange and marked the edit Modified. }
+  if ComponentState * [csLoading, csDestroying] <> [] then Exit;
   { Dirty-flag bookkeeping sits HERE, at the one point every completed edit passes through, and
     reads the by-code flag exactly as LCL's Change does (include/customedit.inc:613-616). Inside
     a composite op the inner mutators exit above, so a paste-over-selection dirties once. }
@@ -2384,7 +2402,9 @@ begin
     Exit;
   end;
   inherited UTF8KeyPress(UTF8Key);
+  if not TyAskKeyPress(Self, UTF8Key) then Exit;   { #150: OnKeyPress before it goes in }
   InjectKey(UTF8Key);
+  if TyKeyPressAsked(UTF8Key) then UTF8Key := '';
 end;
 
 { Insert a FULL input-method commit (Qt6 path). LCL's UTF8KeyPress caps a commit at TUTF8Char

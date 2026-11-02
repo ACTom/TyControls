@@ -601,6 +601,8 @@ begin
   g.Log := '';
   k := VK_SPACE;
   TRadioKeys(g.Buttons[1]).KeyDown(k, []);
+  k := VK_SPACE;
+  TRadioKeys(g.Buttons[1]).KeyUp(k, []);   // #151: Space acts on the key-up
   AssertEquals('precondition: Space selected it', 1, g.ItemIndex);
   AssertEquals('a key: hook, then event', 'SE', g.Log);
 end;

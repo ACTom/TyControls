@@ -679,6 +679,7 @@ procedure TDBSpinEditTest.TestTypedDigitsAreWrittenOnEnter;
 begin
   Bind('Qty');
   EnterControl;
+  Key(VK_END);   // the focus from the keyboard selected the value (#189)
   TypeText('5');
   AssertEquals('typed after the 7', '75', Spin.Text);
   AssertTrue('typing edits', FFix.DS.State = dsEdit);

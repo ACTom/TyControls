@@ -314,8 +314,11 @@ begin
     end;
     { Ellipsis and wrapping are the two halves of "the caption does not fit": wrapping ON
       means the text may use more lines, so it must NOT also be cut at one. }
+    { #153: a painter armed for mirroring turns the alignment itself; one that is not -- a
+      TTyPaintPanel's, whose owner-draw is the app's and stays unturned -- gets it turned here }
     P.DrawText(ARect, Disp, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
-      AStyle.TextColor, FAlignment, VerticalAlignmentToTextLayout[FVerticalAlignment],
+      AStyle.TextColor, BidiFlipAlignment(FAlignment, IsRightToLeft and not P.RightToLeft),
+      VerticalAlignmentToTextLayout[FVerticalAlignment],
       not FWordWrap,
       TyAccelGatePos(MnPos), False, FWordWrap, TyLineHeight(ActiveController));
   end;

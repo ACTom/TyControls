@@ -59,7 +59,7 @@ uses tyControls.RadioGroup;
 | 事件 | 类型 | 触发时机 |
 |------|------|----------|
 | `OnSelectionChanged` | `TNotifyEvent` | **`ItemIndex` 发生改变时**触发，不论改变来自用户点击还是程序化赋值。只有 `Items` 重建时的选中恢复**不会**触发本事件（重建不是一次选择）。一次用户手势（点击 → 目标选中 + 兄弟取消，共触发多个子控件的 `OnChange`）只会汇聚为**一次** `OnSelectionChanged`。 |
-| `OnClick` | `TNotifyEvent` | 与 `OnSelectionChanged` **同时同条件**触发（先 `OnSelectionChanged` 后 `OnClick`）。这是为从 Lazarus 移植的代码准备的：`TCustomRadioGroup` 把选择变化报在 `OnClick` 上，而 `TControl` 原生的 `OnClick` 只在**分组框本身**被点到时才发——本控件的表面被子控件铺满，那等于永不触发。 |
+| `OnClick` | `TNotifyEvent` | 与 `OnSelectionChanged` **同时同条件**触发（先 `OnSelectionChanged` 后 `OnClick`），也就是只在选择变了时触发，与 LCL 的 `TCustomRadioGroup` 一致。点到边框、标题或空白处不触发。 |
 | `OnItemEnter` | `TNotifyEvent` | 焦点**进入某一个选项**时触发，`Sender` 是**那个 `TTyRadioButton`**，不是分组框——重点就在于知道键盘现在停在哪一项上。逐项帮助文字、状态栏提示、跟着键盘走的预览面板都挂在这里。对应 LCL `extctrls.pp:779`，`Sender` 约定一致（`include/radiogroup.inc:147-155`）。 |
 | `OnItemExit` | `TNotifyEvent` | 焦点**离开某一个选项**时触发，`Sender` 同样是那个子控件。对应 LCL `extctrls.pp:780`。 |
 

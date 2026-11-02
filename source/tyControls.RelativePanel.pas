@@ -445,11 +445,16 @@ begin
 end;
 
 procedure TTyCustomRelativePanel.SetSpacing(AValue: Integer);
+var
+  was: Integer;
 begin
   if AValue < 0 then AValue := 0;
+  { #146: compared with the spacing in use -- the theme's, until it is pinned -- not with the
+    field, whose 8 under a theme of another --spacing made Spacing := 8 change nothing. }
+  was := GetSpacing;
   FSpacingExplicit := True;   { even if the value equals the fallback, the host meant to pin it }
-  if FSpacing = AValue then Exit;
   FSpacing := AValue;
+  if was = AValue then Exit;
   PerformLayout;
 end;
 

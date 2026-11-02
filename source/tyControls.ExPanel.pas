@@ -312,11 +312,18 @@ end;
   --expander-header-height (density pack raises it for modern). Resolved live so a
   density toggle re-heights the header on the next layout. }
 function TTyCustomExPanel.GetHeaderHeight: Integer;
+var
+  fh: Integer;
 begin
   if FHeaderHeightExplicit then
     Result := FHeaderHeight
   else
+  begin
     Result := ActiveController.Metric('--expander-header-height', TyExPanelDefaultHeaderHeight);
+    { #146: and tall enough for the caption's font, which a fixed header clipped }
+    fh := TyFontHeightPx(ResolveFontSize(PartStyle('TyExPanelHeader', StyleClass, [])), 96) + 2;
+    if fh > Result then Result := fh;
+  end;
 end;
 
 function TTyCustomExPanel.ScaledHeaderHeight: Integer;
@@ -450,11 +457,16 @@ begin
 end;
 
 procedure TTyCustomExPanel.SetHeaderHeight(AValue: Integer);
+var
+  was: Integer;
 begin
   if AValue < 1 then AValue := 1;
+  { #146: compared with the height the header HAD -- the theme's, until it is pinned -- not
+    with the field: 26 already in it, under a theme of 32, was a pin that changed nothing. }
+  was := GetHeaderHeight;
   FHeaderHeightExplicit := True;   { host pinned it, even at the fallback value }
-  if FHeaderHeight = AValue then Exit;
   FHeaderHeight := AValue;
+  if was = AValue then Exit;
   // Collapsed height equals the header height, so keep it in step while collapsed
   // (unless an animation is currently in flight driving the height itself).
   if FCollapsed and ((FTimer = nil) or not FTimer.Enabled) then
@@ -507,6 +519,8 @@ var
   S, HD, HS: TTyStyleSet;
   R, hdr, textRect, bandRect: TRect;
   hdrH, chevW, bw, bwLogical: Integer;
+  chevR: TRect;
+  kind: TTyGlyphKind;
   corners, bandCorners: TTyCorners;
 begin
   P := TTyPainter.Create;
@@ -564,8 +578,14 @@ begin
     // filled triangle this used to paint: a solid triangle is the shape the library keeps for
     // STEPPING a value (spin, scroll), and every desktop now draws an expander as an open
     // mark. Through TyDrawChevron, so --glyph-chevron-down / -right replace it as well.
-    TyDrawChevron(P, ActiveController, Rect(hdr.Left, hdr.Top, hdr.Left + (hdr.Bottom - hdr.Top),
-      hdr.Bottom), TyExPanelChevronKind(not FCollapsed), HS.TextColor);
+    chevR := Rect(hdr.Left, hdr.Top, hdr.Left + (hdr.Bottom - hdr.Top), hdr.Bottom);
+    kind := TyExPanelChevronKind(not FCollapsed);
+    if IsRightToLeft then   // #153: at the other end, and a closed one points the reading way
+    begin
+      chevR := TyMirrorRectX(chevR, R.Right);
+      if kind = tgChevronRight then kind := tgChevronLeft;
+    end;
+    TyDrawChevron(P, ActiveController, chevR, kind, HS.TextColor);
 
     // Caption text to the right of the chevron gutter, vertically centered in the band.
     if Caption <> '' then
@@ -575,6 +595,7 @@ begin
       // its ink (font + colour) is the header key's business.
       textRect := Rect(hdr.Left + chevW, hdr.Top,
         hdr.Right - P.Scale(S.Padding.Right), hdr.Bottom);
+      if IsRightToLeft then textRect := TyMirrorRectX(textRect, R.Right);   // #153
       DrawCaption(P, textRect, HS, APPI);   // Alignment & co., as the panel's (#116)
     end;
 

@@ -7,16 +7,22 @@ uses
 type
   TTyCustomCheckBox = class(TTyCustomControl)
   private
+    FSpaceDown: Boolean;   // Space held down on it; it clicks on the key-up (#151)
     FState: TCheckBoxState;
     FAllowGrayed: Boolean;
     FAlignment: TLeftRight;
     FRefitting: Boolean;   // guards the AutoSize re-fit in Invalidate against re-entry
+    FClicksDisabled: Boolean;
     FOnChange: TNotifyEvent;
     function GetChecked: Boolean;
     procedure SetState(const AValue: TCheckBoxState);
     procedure SetChecked(const AValue: Boolean);
     procedure SetAlignment(const AValue: TLeftRight);
   protected
+    { #188: as LCL's -- while it is on, a change of State fires OnChange but not OnClick. For
+      code that keeps a box in step with something else (a data field, a select-all box) and
+      must not run the box's click handler doing it. }
+    property ClicksDisabled: Boolean read FClicksDisabled write FClicksDisabled;
     function GetStyleTypeKey: string; override;
     function CurrentStates: TTyStateSet; override;
     { 控件真正需要的宽度:主题 padding + 指示框 + 间距 + 量出来的标题 —— 也就是 RenderTo
@@ -51,6 +57,13 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { #151: Space acts on its key-up, once -- held down, auto-repeat included, it
+      acted on every key-down. The focus leaving with the key down cancels it. }
+    procedure KeyUp(var Key: Word; Shift: TShiftState); override;
+    procedure DoExit; override;
+    { #151: the second press of a quick double click is a click too, as on a native button;
+      OnDblClick still fires. }
+    procedure DblClick; override;
     function DialogChar(var Message: TLMKey): Boolean; override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -148,15 +161,19 @@ type
 
   TTyCustomRadioButton = class(TTyCustomControl)
   private
+    FSpaceDown: Boolean;   // Space held down on it; it clicks on the key-up (#151)
     FChecked: Boolean;
     FGroupIndex: Integer;
     FAlignment: TLeftRight;
     FRefitting: Boolean;   // guards the AutoSize re-fit in Invalidate against re-entry
+    FClicksDisabled: Boolean;
     FOnChange: TNotifyEvent;
     procedure SetChecked(const AValue: Boolean);
     procedure SetAlignment(const AValue: TLeftRight);
     procedure UncheckSiblings;
   protected
+    { #188: as TTyCustomCheckBox.ClicksDisabled. }
+    property ClicksDisabled: Boolean read FClicksDisabled write FClicksDisabled;
     function GetStyleTypeKey: string; override;
     function CurrentStates: TTyStateSet; override;
     { 与 TTyCheckBox.CalculatePreferredSize 同理,只是指示器读的是 --radio-size /
@@ -175,6 +192,13 @@ type
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { #151: Space acts on its key-up, once -- held down, auto-repeat included, it
+      acted on every key-down. The focus leaving with the key down cancels it. }
+    procedure KeyUp(var Key: Word; Shift: TShiftState); override;
+    procedure DoExit; override;
+    { #151: the second press of a quick double click is a click too, as on a native button;
+      OnDblClick still fires. }
+    procedure DblClick; override;
     function DialogChar(var Message: TLMKey): Boolean; override;
   public
     constructor Create(AOwner: TComponent); override;
@@ -363,6 +387,10 @@ begin
   FState := AValue;
   Invalidate;
   if Assigned(FOnChange) then FOnChange(Self);
+  { #188: OnClick on every change of State, the user's or the code's, as LCL's DoClickOnChange
+    (customcheckbox.inc) -- not only for a click. Not while the form is read or torn down. }
+  if not FClicksDisabled and ([csLoading, csDestroying] * ComponentState = []) then
+    inherited Click;
 end;
 
 procedure TTyCustomCheckBox.SetChecked(const AValue: Boolean);
@@ -378,6 +406,8 @@ end;
 procedure TTyCustomCheckBox.Click;
 begin
   if not IsEnabled then Exit;
+  { The click changes State, and the change clicks (SetState): OnClick fires once, with the
+    new state in place. }
   if FAllowGrayed then
     case FState of
       cbUnchecked: SetState(cbChecked);
@@ -386,7 +416,6 @@ begin
     end
   else
     SetChecked(FState <> cbChecked);
-  inherited Click;
 end;
 
 procedure TTyCustomCheckBox.KeyDown(var Key: Word; Shift: TShiftState);
@@ -395,9 +424,35 @@ begin
   inherited KeyDown(Key, Shift);
   if Key = VK_SPACE then
   begin
-    Click;
+    FSpaceDown := True;   // the key-up clicks
     Key := 0;
   end;
+end;
+
+procedure TTyCustomCheckBox.KeyUp(var Key: Word; Shift: TShiftState);
+begin
+  inherited KeyUp(Key, Shift);
+  if (Key = VK_SPACE) and FSpaceDown then
+  begin
+    FSpaceDown := False;
+    Key := 0;
+    Click;
+  end;
+end;
+
+procedure TTyCustomCheckBox.DoExit;
+begin
+  FSpaceDown := False;
+  inherited DoExit;
+end;
+
+procedure TTyCustomCheckBox.DblClick;
+begin
+  { LCL does not mark a double click's press csClicked, so its button-up clicked nothing and
+    the second of two quick clicks was lost. Marked here, the button-up clicks as the first
+    one's did -- inside the control only. }
+  ControlState := ControlState + [csClicked];
+  inherited DblClick;
 end;
 
 procedure TTyCustomCheckBox.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -672,6 +727,10 @@ begin
                              // SetChecked, so it fires ITS OnChange + Invalidates
   Invalidate;
   if Assigned(FOnChange) then FOnChange(Self);
+  { #188: OnClick when it becomes checked, from a click or from code, as LCL's
+    TRadioButton.DoClickOnChange; the one unchecked by it fires only OnChange. }
+  if FChecked and not FClicksDisabled and not (csDestroying in ComponentState) then
+    inherited Click;
 end;
 
 procedure TTyCustomRadioButton.UncheckSiblings;
@@ -693,8 +752,9 @@ end;
 procedure TTyCustomRadioButton.Click;
 begin
   if not IsEnabled then Exit;
+  { Becoming checked clicks (SetChecked); one already checked does not change, so a click on
+    it fires nothing, as in LCL. }
   SetChecked(True);
-  inherited Click;
 end;
 
 procedure TTyCustomRadioButton.KeyDown(var Key: Word; Shift: TShiftState);
@@ -703,9 +763,35 @@ begin
   inherited KeyDown(Key, Shift);
   if Key = VK_SPACE then
   begin
-    Click;
+    FSpaceDown := True;   // the key-up clicks
     Key := 0;
   end;
+end;
+
+procedure TTyCustomRadioButton.KeyUp(var Key: Word; Shift: TShiftState);
+begin
+  inherited KeyUp(Key, Shift);
+  if (Key = VK_SPACE) and FSpaceDown then
+  begin
+    FSpaceDown := False;
+    Key := 0;
+    Click;
+  end;
+end;
+
+procedure TTyCustomRadioButton.DoExit;
+begin
+  FSpaceDown := False;
+  inherited DoExit;
+end;
+
+procedure TTyCustomRadioButton.DblClick;
+begin
+  { LCL does not mark a double click's press csClicked, so its button-up clicked nothing and
+    the second of two quick clicks was lost. Marked here, the button-up clicks as the first
+    one's did -- inside the control only. }
+  ControlState := ControlState + [csClicked];
+  inherited DblClick;
 end;
 
 procedure TTyCustomRadioButton.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);

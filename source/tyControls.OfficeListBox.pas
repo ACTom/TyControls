@@ -112,7 +112,8 @@ procedure TyDrawOfficeHeaderBand(P: TTyPainter; const ARowRect: TRect; const S: 
 { The same with the band's style already resolved -- the list passes its PartStyle, so the
   header text takes the list's font (#113). }
 procedure TyDrawOfficeHeaderBand(P: TTyPainter; const ARowRect: TRect; const S: string;
-  const AStyle: TTyStyleSet; AController: TTyCustomStyleController); overload;
+  const AStyle: TTyStyleSet; AController: TTyCustomStyleController;
+  ARightToLeft: Boolean = False); overload;   // #153: right-aligned, the pad on the right
 
 implementation
 
@@ -125,8 +126,9 @@ begin
 end;
 
 procedure TyDrawOfficeHeaderBand(P: TTyPainter; const ARowRect: TRect; const S: string;
-  const AStyle: TTyStyleSet; AController: TTyCustomStyleController);
+  const AStyle: TTyStyleSet; AController: TTyCustomStyleController; ARightToLeft: Boolean);
 var
+  al: TAlignment;
   hs: TTyStyleSet;
   textR: TRect;
   band: TTyColor;
@@ -144,10 +146,19 @@ begin
       ARowRect.Right - ARowRect.Left, ARowRect.Bottom - ARowRect.Top);
   end;
   // Bold header text, left-aligned with a small left pad.
-  textR := Rect(ARowRect.Left + P.Scale(6), ARowRect.Top, ARowRect.Right, ARowRect.Bottom);
+  if ARightToLeft then
+  begin
+    textR := Rect(ARowRect.Left, ARowRect.Top, ARowRect.Right - P.Scale(6), ARowRect.Bottom);
+    al := taRightJustify;
+  end
+  else
+  begin
+    textR := Rect(ARowRect.Left + P.Scale(6), ARowRect.Top, ARowRect.Right, ARowRect.Bottom);
+    al := taLeftJustify;
+  end;
   // Bold over whatever italic/underline the font carries (#113).
   P.DrawText(textR, S, hs.FontName, TyResolveFontSize(hs, True, 0, AController),
-    700 or (hs.FontWeight and not TyFontWeightMask), hs.TextColor, taLeftJustify, tlCenter, True);
+    700 or (hs.FontWeight and not TyFontWeightMask), hs.TextColor, al, tlCenter, True);
 end;
 
 { TTyCustomOfficeListBox }
@@ -173,7 +184,7 @@ procedure TTyCustomOfficeListBox.PaintItemContent(P: TTyPainter; const ARowRect:
 begin
   if IsHeader(AIndex) then
     TyDrawOfficeHeaderBand(P, ARowRect, Items[AIndex], PartStyle('TyGroupBox', '', []),
-      ActiveController)
+      ActiveController, RtlRowLayout)   // #153
   else
     inherited PaintItemContent(P, ARowRect, AIndex, AStyle);
 end;

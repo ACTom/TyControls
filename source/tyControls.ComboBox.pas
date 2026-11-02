@@ -2,7 +2,7 @@ unit tyControls.ComboBox;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Graphics, Forms, StdCtrls, LCLType, LCLIntf,
+  Classes, SysUtils, Types, Controls, Graphics, Forms, StdCtrls, LCLType, LCLIntf, LMessages,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
   tyControls.ListBox, tyControls.Popup, tyControls.Edit;
 function TyComboTypeAheadMatch(AItems: TStrings; AStart: Integer; const APrefix: string): Integer;
@@ -112,6 +112,7 @@ type
 
   TTyCustomComboBox = class(TTyCustomControl)
   private
+    FQuietChange: Integer;   // > 0: SelectItem fires no OnChange (#145)
     FItems: TStringList;
     FItemIndex: Integer;
     { An ItemIndex read from a form file before the Items it points into; Loaded applies it.
@@ -223,7 +224,6 @@ type
     { The strip the FIELD keeps in csSimple, in device px: the themed field height (the
       same TyDensityHeight(...) number Create sizes the whole control by elsewhere). }
     function FieldZoneHeight(APPI: Integer): Integer;
-    function PointInChevron(const P: TPoint): Boolean;
     { Re-locate FItemIndex from the currently-selected text after the item list
       has been reordered (e.g. by sorting). Keeps the SAME item selected. }
     procedure ResyncIndexFromText;
@@ -249,6 +249,17 @@ type
   protected
     { #130: reads past the values a 3.x form holds for properties no longer published. }
     procedure DefineProperties(Filer: TFiler); override;
+    { #146: the padding and the chevron come from the style: place the editor again. }
+    procedure StyleLayoutChanged; override;
+    { #153: the chevron and the editor change sides when the field is mirrored }
+    procedure CMBiDiModeChanged(var Message: TLMessage); message CM_BIDIMODECHANGED;
+    { Is client point P on the drop chevron -- the right end, or the left one mirrored. }
+    function PointInChevron(const P: TPoint): Boolean;
+    { #145: a selection the control makes itself -- one a form file held, the rebuild of
+      generated items -- is not a change of the user's: between these SelectItem fires no
+      OnChange. Nest freely. }
+    procedure BeginQuietChange;
+    procedure EndQuietChange;
   protected
     { Guard: tick at last CloseUp. Click reopens only if > 200ms have passed.
       Mirrored from FPopup.CloseUpTick (via PopupClosed) so test subclasses can
@@ -1641,6 +1652,19 @@ begin
   end;
 end;
 
+procedure TTyCustomComboBox.CMBiDiModeChanged(var Message: TLMessage);
+begin
+  inherited;
+  LayoutEditor;
+  Invalidate;
+end;
+
+procedure TTyCustomComboBox.StyleLayoutChanged;
+begin
+  inherited StyleLayoutChanged;
+  LayoutEditor;
+end;
+
 procedure TTyCustomComboBox.LayoutEditor;
 var
   BtnW, PPI, PadL, PadT, PadR, PadB, BottomY: Integer;
@@ -1670,9 +1694,14 @@ begin
   PadT := MulDiv(S.Padding.Top,    PPI, 96);
   PadR := MulDiv(S.Padding.Right,  PPI, 96);
   PadB := MulDiv(S.Padding.Bottom, PPI, 96);
-  FEditor.SetBounds(PadL, PadT,
-    ClientWidth - BtnW - PadL - PadR,
-    BottomY - PadT - PadB);
+  if IsRightToLeft then   // #153: the chevron on the left, the leading padding on the right
+    FEditor.SetBounds(BtnW + PadR, PadT,
+      ClientWidth - BtnW - PadL - PadR,
+      BottomY - PadT - PadB)
+  else
+    FEditor.SetBounds(PadL, PadT,
+      ClientWidth - BtnW - PadL - PadR,
+      BottomY - PadT - PadB);
 end;
 
 procedure TTyCustomComboBox.EditorChange(Sender: TObject);
@@ -1763,7 +1792,10 @@ function TTyCustomComboBox.PointInChevron(const P: TPoint): Boolean;
 var BtnW: Integer;
 begin
   BtnW := MulDiv(ButtonWidthLogical, Font.PixelsPerInch, 96);
-  Result := P.X >= ClientWidth - BtnW;
+  if IsRightToLeft then
+    Result := P.X < BtnW   // #153: mirrored, the chevron is on the left
+  else
+    Result := P.X >= ClientWidth - BtnW;
 end;
 
 procedure TTyCustomComboBox.ResyncIndexFromText;
@@ -1911,8 +1943,19 @@ begin
   if FStyle = csSimple then
     SyncEmbeddedSelection;
   Invalidate;
-  if not FChangeMuted then
+  { Nor for an ItemIndex the form file holds (#145). }
+  if not FChangeMuted and (FQuietChange = 0) and not (csLoading in ComponentState) then
     Change;
+end;
+
+procedure TTyCustomComboBox.BeginQuietChange;
+begin
+  Inc(FQuietChange);
+end;
+
+procedure TTyCustomComboBox.EndQuietChange;
+begin
+  if FQuietChange > 0 then Dec(FQuietChange);
 end;
 
 { Lazily create the popup helper and the list box (both live for the combo's
@@ -1966,6 +2009,7 @@ begin
   { Sync controller every DropDown so DPI/theme changes take effect. }
   FPopupList.Controller := Self.Controller;
   FPopup.Controller     := Self.Controller;
+  FPopupList.BiDiMode   := BiDiMode;   // #153: the rows read the field's way
 
   { Sync items and selection — detach OnChange to prevent recursion. }
   FPopupList.OnChange := nil;
@@ -1981,7 +2025,7 @@ begin
   { Size: height = min(DropDownCount, Items.Count) rows (+ frame chrome). }
   PopupH := ComputePopupHeight(Font.PixelsPerInch);
 
-  FPopup.Popup(Self, ComputePopupWidth(Font.PixelsPerInch), PopupH);
+  FPopup.Popup(Self, ComputePopupWidth(Font.PixelsPerInch), PopupH, IsRightToLeft);   // #153
   DoDropDown;   // popup actually opened
 end;
 
@@ -1999,6 +2043,7 @@ begin
 
   FPopupList.Controller := Self.Controller;
   FPopup.Controller     := Self.Controller;
+  FPopupList.BiDiMode   := BiDiMode;   // #153
 
   { Populate from the filtered subset. No selection is forced — the field text
     drives the match; picking a row is what commits a selection. }
@@ -2029,7 +2074,7 @@ begin
   begin
     FShowingPopup := True;
     try
-      FPopup.Popup(Self, PopupW, PopupH);
+      FPopup.Popup(Self, PopupW, PopupH, IsRightToLeft);   // #153
       if FEditor.HandleAllocated and FEditor.CanFocus then FEditor.SetFocus;
     finally
       FShowingPopup := False;
@@ -2308,6 +2353,14 @@ begin
     // the right edge stops at the chevron button zone.
     TextR := Types.Rect(R.Left + P.Scale(S.Padding.Left), R.Top + P.Scale(S.Padding.Top),
       R.Right - BtnW, R.Bottom - P.Scale(S.Padding.Bottom));
+    { #153: mirrored, the chevron and the text change sides -- one reflection of the finished
+      slots, the one PointInChevron and LayoutEditor make too. Not an armed painter: a
+      descendant lays its swatch or image out inside TextR itself. }
+    if IsRightToLeft then
+    begin
+      BtnR := TyMirrorRectX(BtnR, R.Right);
+      TextR := TyMirrorRectX(TextR, R.Right);
+    end;
     if not FieldOwnerDraw then
       PaintFieldContent(P, TextR, S);
     // v3/C5: the dropdown indicator is theme-overridable (--glyph-dropdown, which TyDrawDropChevron
@@ -2345,7 +2398,7 @@ begin
   // Default: the selected item's text (unchanged from the old inline draw).
   if FText <> '' then
     P.DrawText(ATextRect, FText, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
-      AStyle.TextColor, taLeftJustify, tlCenter, True)
+      AStyle.TextColor, BidiFlipAlignment(taLeftJustify, IsRightToLeft), tlCenter, True)   // #153
   else
     PaintTextHint(P, ATextRect, AStyle);
 end;
@@ -2359,7 +2412,7 @@ begin
   if (FTextHint = '') or TyComboStyleHasEditBox(FStyle) then Exit;
   HintColor := ActiveController.Model.ResolveStyle('TyTextHint', '', []).TextColor;
   P.DrawText(ATextRect, FTextHint, AStyle.FontName, ResolveFontSize(AStyle),
-    AStyle.FontWeight, HintColor, taLeftJustify, tlCenter, True);
+    AStyle.FontWeight, HintColor, BidiFlipAlignment(taLeftJustify, IsRightToLeft), tlCenter, True);
 end;
 
 function TTyCustomComboBox.CreatePopupList: TTyCustomListBox;

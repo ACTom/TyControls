@@ -175,9 +175,12 @@ end;
 
 function TTyCustomLabel.DialogChar(var Message: TLMKey): Boolean;
 begin
-  if (FFocusControl <> nil) and TyShownInForm(Self) and TyIsAccelKey(Message, Caption) then   { #142 }
+  { #142: the key focuses FocusControl, as LCL's label does -- it went through Click, which
+    fired the label's own OnClick too. }
+  if (FFocusControl <> nil) and TyShownInForm(Self) and TyIsAccelKey(Message, Caption)
+     and FFocusControl.CanFocus then
   begin
-    Click;   // TTyLabel.Click focuses FFocusControl
+    FFocusControl.SetFocus;
     Exit(True);
   end;
   Result := inherited DialogChar(Message);
@@ -422,6 +425,7 @@ var
   Meas: TBitmap;
   Lines: TStringList;
   lineH, i, availW, fontSize, contentH, blockH, yOff, mp: Integer;
+  accLine, accPos, ap: Integer;
   dispCap: string;
 begin
   P := TTyPainter.Create;
@@ -469,6 +473,9 @@ begin
           lineH := TyNaturalLineHeight(Meas.Canvas);
         availW := ContentRect.Right - ContentRect.Left;
         WrapText(dispCap, availW, Meas.Canvas, Lines);
+        { #142: the underline goes on the line the mnemonic fell on -- wrapped, it was never
+          drawn. }
+        TyAccelPosInLines(dispCap, mp, Lines, accLine, accPos);
         // Position the whole wrapped block per Layout (native vertically anchors
         // the block, not each line): compute a one-off vertical offset, then draw
         // each wrapped line top-anchored within its single-line rect.
@@ -485,8 +492,9 @@ begin
           LineRect := Rect(ContentRect.Left, ContentRect.Top + yOff + i * lineH,
             ContentRect.Right, ContentRect.Top + yOff + (i + 1) * lineH);
           if LineRect.Top >= ContentRect.Bottom then Break;
+          if i = accLine then ap := TyAccelGatePos(accPos) else ap := 0;
           P.DrawText(LineRect, Lines[i], S.FontName, fontSize, S.FontWeight,
-            S.TextColor, FAlignment, tlCenter, False);
+            S.TextColor, FAlignment, tlCenter, False, ap);
         end;
       finally
         Lines.Free;

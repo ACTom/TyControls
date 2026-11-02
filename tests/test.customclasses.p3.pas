@@ -1242,7 +1242,9 @@ begin
   own.Parent := FForm;
   CheckSameTypeKey(third, own);
   CheckFreshDefaults(TThirdMenuBar, ['Menu', 'AutoSizeWidth']);
-  AssertTrue('T-e: a menu bar is a tab stop, the mimic too', TThirdMenuBar.Create(FForm).TabStop);
+  { #143: the menu bar takes no focus from Tab -- F10 and the accelerators reach it }
+  AssertFalse('T-e: a menu bar is no tab stop, the mimic neither', TThirdMenuBar.Create(FForm).TabStop);
+  AssertEquals('T-e: as the library''s own', own.TabStop, TThirdMenuBar.Create(FForm).TabStop);
 end;
 
 { Purpose is read-only (the designer's caption for the surface): published, never streamed. }

@@ -91,6 +91,8 @@ type
     function Link: TFieldDataLink;
     function BoundField: TField;
     procedure Key(AKey: Word; AShift: TShiftState = []);
+    { The key down and up again: a check box or a switch acts on the key-up (#151). }
+    procedure Press(AKey: Word);
     procedure TypeText(const S: string);
     procedure EnterControl;
     procedure LeaveControl;
@@ -154,7 +156,8 @@ type
   published
     procedure TestFieldEditMaskIsApplied;
     procedure TestMaskedEditWritesTheMaskedValue;
-    procedure TestHashMaskIsNotAppliedAndDoesNotRaise;
+    procedure TestHashMaskIsApplied;
+    procedure TestUnparsableMaskIsNotAppliedAndDoesNotRaise;
     procedure TestCustomEditMaskKeepsTheControlsMask;
     procedure TestChangingTheMaskKeepsShowingTheField;
     procedure TestOldValuePutBackAfterAWriteIsWritten;
@@ -316,6 +319,15 @@ begin
   AssertTrue('keys go to a windowed control', FCtl is TWinControl);
   k := AKey;
   TInputAccess(FCtl).KeyDown(k, AShift);
+end;
+
+procedure TDBControlTestBase.Press(AKey: Word);
+var
+  k: Word;
+begin
+  Key(AKey);
+  k := AKey;
+  TInputAccess(FCtl).KeyUp(k, []);
 end;
 
 procedure TDBControlTestBase.TypeText(const S: string);
@@ -863,11 +875,29 @@ begin
   AssertEquals('the literal is kept (;1;)', '867-5309', FFix.DS.FieldByName('Kind').AsString);
 end;
 
-{ '#' is a code the library's mask refuses (MaskEdit.pas): a field carrying it gets no mask
-  rather than an exception out of DataChange -- which would abort the scroll that loaded it. }
-procedure TDBMaskEditTest.TestHashMaskIsNotAppliedAndDoesNotRaise;
+{ #193: '#' is LCL's optional digit or sign, so a field mask with it -- one written for LCL's
+  TDBEdit -- is applied, sign and all. }
+procedure TDBMaskEditTest.TestHashMaskIsApplied;
 begin
-  FFix.DS.FieldByName('Kind').EditMask := '##-##';
+  PutKind('-123');
+  FFix.DS.FieldByName('Kind').EditMask := '#000;1;_';
+  Bind('Kind');
+  AssertEquals('the field''s mask', '#000;1;_', Ed.EditMask);
+  AssertEquals('the value, sign and all', '-123', Ed.Text);
+  EnterControl;
+  Key(VK_A, [ssCtrl]);
+  TypeText('+4x56');
+  AssertEquals('typed through the mask', '+456', Ed.Text);
+  Commit;
+  AssertEquals('written', '+456', FFix.DS.FieldByName('Kind').AsString);
+end;
+
+{ A mask with no slot is one the library's mask refuses (MaskEdit.pas): a field carrying it
+  gets no mask rather than an exception out of DataChange -- which would abort the scroll that
+  loaded it. }
+procedure TDBMaskEditTest.TestUnparsableMaskIsNotAppliedAndDoesNotRaise;
+begin
+  FFix.DS.FieldByName('Kind').EditMask := '--';
   Bind('Kind');
   AssertEquals('no mask', '', Ed.EditMask);
   AssertEquals('the value shows as it is', CFixKinds[1], Ed.Text);

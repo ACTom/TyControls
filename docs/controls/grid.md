@@ -92,7 +92,7 @@ end;
 | `gekSlider` | 滑动条,范围同上。编辑时自带数值读数,拖到哪儿一眼看得见 |
 | `gekRating` | **不弹编辑器** —— 点第几颗星就是几分(与勾选框同一种手感);光标停在格上时直接敲 0–5 也行,0 清空,敲完按 Enter / ↓ 去下一行 |
 | `gekMemo` | 多行文本,编辑器向下撑开 |
-| `gekMask` | 掩码输入,掩码取列的 `EditMask` —— 交给 [`TTyMaskEdit`](maskedit.md) 解释,**写法就是 LCL / Delphi 的掩码语言**(`0` 必填数字、`9` 可选数字、`L` 字母……);`#` 会被拒,详见 [maskedit.md 3.3](maskedit.md#33-与-lcl-的两处故意不同)。必填位还空着就不让提交,改没改过都一样(原值没填满、空格子也算):编辑器留着、不写回,按 Enter、↑↓ 或点别的格时报掩码框自己的那条错误,跟 `OnValidateCell` 拒绝一样;按 Esc 放弃,格子保持原样 |
+| `gekMask` | 掩码输入,掩码取列的 `EditMask` —— 交给 [`TTyMaskEdit`](maskedit.md) 解释,**写法就是 LCL / Delphi 的掩码语言**(`0` 必填数字、`9` 可选数字、`#` 可选的数字或正负号、`L` 字母……),详见 [maskedit.md 3](maskedit.md#3-掩码语言)。必填位还空着就不让提交,改没改过都一样(原值没填满、空格子也算):编辑器留着、不写回,按 Enter、↑↓ 或点别的格时报掩码框自己的那条错误,跟 `OnValidateCell` 拒绝一样;按 Esc 放弃,格子保持原样 |
 | `gekTime` | 只选时间 |
 | `gekPassword` | 输入时打点 |
 | `gekCalculator` | 带计算器的数值输入 |
@@ -132,6 +132,7 @@ end;
 ## 交互
 
 - **鼠标**:点选单元格;拖列头分隔条改列宽;滚轮纵向滚动(一格三行)
+- **`TTyDrawGrid` 的键盘**:它没有光标，按键滚动视图 —— 方向键滚一行或一列,`PageUp` / `PageDown` 滚一页,`Home` / `End` 到首列 / 末列,`Ctrl+Home` / `Ctrl+End` 到首行 / 末行。以下是 `TTyStringGrid` 的
 - **键盘**:方向键 / `Home` / `End` / `PageUp` / `PageDown` 移动光标;`F2` 开始编辑。`PageUp` / `PageDown` 一次翻「完整可见的行数减一」(与 LCL 的 `TStringGrid` 相同):从屏幕顶行按 `PageDown` 先落到这一屏最后一个完整可见的行,之后每页留一行重叠;一屏放不下两整行时仍移一行。`PageRowStep` 给出这个步长
 - **区域多选**:`Shift+方向键` 或 `Shift+点击` 拉出矩形选区;普通方向键/点击收回一格
 - **排序**:列头选项加上 `hoHeaderClickAutoSort` 后,点列头即 升序 → 降序 → 取消。排序在**松开**时触发:按在分隔线上(改宽)、把列拖走、或松开在别的地方,都不算点了列头

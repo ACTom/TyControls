@@ -436,6 +436,10 @@ type
     { Deferred OpenTop(FPendingTop): keyboard rotation must not free FPopup synchronously
       while the dropdown view's KeyDown is on the stack (rotating onto a childless top frees it). }
     procedure DeferredOpenTop(Data: PtrInt);
+    { #143: F10 opens the first menu, as it does a native menu bar's. Asked last -- after the
+      focused control, the form's shortcuts and its key preview had the key -- so a program
+      that gives F10 a job of its own keeps it, and only for a key pressed in the bar's form. }
+    procedure AppKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     function AccelPos(AIndex: Integer): Integer;   // gated mnemonic pos via the shared facility
   protected
     function GetStyleTypeKey: string; override;
@@ -485,11 +489,10 @@ type
     function PopupForTest: TTyMenuPopup;
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
-    { The constructor turns this on (the bar walks its top cells with the arrow keys);
-      declaring the default to match is what lets a host turn it OFF in the .lfm — against
-      the inherited `default False` that value is dropped as "already the default" and the
-      constructor's True wins again at run time. }
-    property TabStop default True;
+    { #143: off, as a native menu bar takes no focus. A click, Alt with a menu's letter and
+      F10 open the menus; the focus stays in the control the user was editing, so the Edit
+      menu's commands act on it. The bar has no keys of its own to take the focus for. }
+    property TabStop default False;
     { The associated LCL data model. Setting it (re)builds the rendered top cells;
       freeing it nils this reference (FreeNotification). TTyForm.MenuBar reads this
       for the non-mac shortcut dispatch and the mac global-bar handoff (Task 6). }
@@ -657,7 +660,7 @@ implementation
 // Rounded popup corners use the CROSS-PLATFORM LCLIntf SetWindowRgn/CreateRoundRectRgn (the
 // win32/gtk2/qt widgetsets all implement them) — no Windows unit needed. (Rect()/Point() call
 // sites remain qualified Types.* — harmless now that the Windows POINT=TPOINT shadow is gone.)
-uses Math, Themes, LCLVersion, BGRABitmap, BGRABitmapTypes;
+uses Math, Themes, LCLVersion, BGRABitmap, BGRABitmapTypes, tyControls.Popup;
 
 type
   { Reaches TMenuItem's protected InitiateActions / DoDrawItem / DoMeasureItem. Those three
@@ -1789,15 +1792,12 @@ function TTyMenuPopup.ComputeBounds(const AAnchor: TRect;
 var
   L, T: Integer;
   wa: TRect;
-  mon: TMonitor;
 begin
   // Clamp/flip against the WORK AREA of the monitor the anchor sits on, NOT the global virtual
   // desktop. With multiple monitors (GTK2 reports positions in the global coordinate space), comparing
   // a global anchor.Y against a single Screen.Height mis-flipped a low menu upward and could place the
   // popup on the wrong monitor. The anchor's-monitor work area fixes both.
-  wa := Types.Rect(0, 0, Screen.Width, Screen.Height);   // fallback (headless / no monitor info)
-  mon := Screen.MonitorFromPoint(Types.Point((AAnchor.Left + AAnchor.Right) div 2, AAnchor.Top));
-  if mon <> nil then wa := mon.WorkareaRect;
+  wa := TyPopupWorkArea(AAnchor);   // #148: the one place every pop-up asks (primary when none)
 
   { MIRRORING: a cascade grows toward the reading end, so a mirrored submenu opens to the
     LEFT of its parent row and flips right only when it would run off the screen -- the same
@@ -2217,19 +2217,20 @@ end;
 constructor TTyCustomMenuBar.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  TabStop := True;
   FMenu := nil;
   FOpenIndex := -1;
   FHotIndex := -1;
   FPopup := nil;
   FPendingTop := -1;
   TyAccelRegister(Self);   // shared Alt-state: repaint the bar when Alt is pressed/released
+  if Assigned(Application) then Application.AddOnKeyDownHandler(@AppKeyDown, False);
   Height := TyDensityHeight(ActiveController, 28);
 end;
 
 destructor TTyCustomMenuBar.Destroy;
 begin
   TyAccelUnregister(Self);
+  if Assigned(Application) then Application.RemoveAllHandlersOfObject(Self);
   Application.RemoveAsyncCalls(Self);   // cancel any pending DeferredOpenTop
   StopHoverPoll;
   FreeAndNil(FPopup);
@@ -2634,6 +2635,29 @@ begin
   Application.QueueAsyncCall(@DeferredOpenTop, 0);
 end;
 
+procedure TTyCustomMenuBar.AppKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+var
+  i: Integer;
+  mi: TMenuItem;
+begin
+  if (Key <> VK_F10) or (Shift * [ssShift, ssCtrl, ssAlt, ssMeta] <> []) then Exit;
+  if (csDesigning in ComponentState) or (FMenu = nil) or (FOpenIndex >= 0) then Exit;
+  if not (IsVisible and IsEnabled) then Exit;
+  if not (Sender is TControl) or (GetParentForm(TControl(Sender)) <> GetParentForm(Self)) then
+    Exit;
+  for i := 0 to TopCount - 1 do
+  begin
+    mi := VisibleTopItem(i);
+    { a menu, not a top command: F10 opens, it does not click }
+    if (mi <> nil) and mi.Enabled and (mi.Count > 0) then
+    begin
+      OpenTop(i);
+      Key := 0;
+      Exit;
+    end;
+  end;
+end;
+
 procedure TTyCustomMenuBar.DeferredOpenTop(Data: PtrInt);
 begin
   if FPendingTop >= 0 then OpenTop(FPendingTop);
@@ -2809,6 +2833,9 @@ function TTyPopupMenu.ResolveRightToLeft: Boolean;
 var
   c: TComponent;
 begin
+  { #153: a BiDiMode set on the menu is the menu's (setting one turns ParentBiDiMode off, as
+    on a control). Left to its parent, it reads the control it was raised on. }
+  if not ParentBiDiMode then Exit(IsRightToLeft);
   c := PopupComponent;
   if not (c is TControl) then c := Owner;
   Result := (c is TControl) and TControl(c).IsRightToLeft;

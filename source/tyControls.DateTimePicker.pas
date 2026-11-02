@@ -521,6 +521,8 @@ type
     procedure DoExit; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
+    { The typing half of UTF8KeyPress, once the key events have had their say. }
+    procedure TypeKey(var UTF8Key: TUTF8Char);
     function  DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
                 MousePos: TPoint): Boolean; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState;
@@ -529,6 +531,9 @@ type
       popup isn't immediately deactivated by the mouse-up that follows MouseDown. }
     procedure Click; override;
 
+    { #192: a text input has no children to size, so 4.0 does not publish ChildSizing; a form saved
+      by 3.x that sets it opens, and the value is read past (TTyRetiredPaths). }
+    procedure ReadState(Reader: TReader); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor  Destroy; override;
@@ -656,7 +661,6 @@ type
       130px width could not do. }
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -1391,6 +1395,18 @@ begin
 end;
 
 { ── TTyDateTimePicker ────────────────────────────────────────────────────── }
+
+procedure TTyCustomDateTimePicker.ReadState(Reader: TReader);
+var
+  retired: TTyRetiredPaths;
+begin
+  retired := TTyRetiredPaths.Create(Reader, Self, ['ChildSizing']);
+  try
+    inherited ReadState(Reader);
+  finally
+    retired.Free;
+  end;
+end;
 
 procedure TTyCustomDateTimePicker.SetOptions(const AValue: TTyDateTimePickerOptions);
 begin
@@ -2387,14 +2403,21 @@ begin
     (datetimepicker.pas:3725-3730 -> UndoChanges). ReadOnly has nothing to revert. }
   if Key = VK_ESCAPE then
   begin
+    { #144: closing the drop-down is the key's whole use; otherwise it reverts and goes on to
+      the form's cancel button, as LCL's picker lets it (it was swallowed). }
     if (FPopup <> nil) and FPopup.IsOpen then
-      CloseDropDown
+    begin
+      CloseDropDown;
+      Key := 0;
+    end
     else if not FReadOnly then
-      UndoChanges
+    begin
+      UndoChanges;
+      EditingDone;
+    end
     else
       FDigitBuffer := '';
     Invalidate;
-    Key := 0;
     Exit;
   end;
 
@@ -2497,18 +2520,29 @@ begin
           FinalizeBuffer(OldVal, False)
         else
           CommitAndFire(OldVal);
-        Key := 0;
+        { #144: an EditingDone, and on to the form's default button, as LCL's picker does. }
+        if not FReadOnly then EditingDone;
       end;
   end;
 end;
 
 procedure TTyCustomDateTimePicker.UTF8KeyPress(var UTF8Key: TUTF8Char);
+begin
+  if not IsEnabled then Exit;
+  inherited UTF8KeyPress(UTF8Key);
+  if not TyAskKeyPress(Self, UTF8Key) then Exit;   { #150: OnKeyPress before it goes in }
+  try
+    TypeKey(UTF8Key);
+  finally
+    if TyKeyPressAsked(UTF8Key) then UTF8Key := '';
+  end;
+end;
+
+procedure TTyCustomDateTimePicker.TypeKey(var UTF8Key: TUTF8Char);
 var
   OldVal:   TDateTime;
   AutoAdv:  Boolean;
 begin
-  if not IsEnabled then Exit;
-  inherited UTF8KeyPress(UTF8Key);
   if FReadOnly then Exit;
   if IsInert then Exit;
   { A / P set AM / PM directly when the meridiem field is selected. Without this the

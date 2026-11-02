@@ -228,11 +228,20 @@ begin
 end;
 
 function TTyCustomCard.HeaderHAtPPI(APPI: Integer): Integer;
+var
+  fh: Integer;
 begin
   // Strip heights are a skin decision (a card's proportions ARE its look), so they
   // come from theme metrics rather than published sizes — same pattern as TTyGroupBox's
   // --groupbox-caption-height.
   Result := MulDiv(ActiveController.Metric('--card-header-height', TyCardHeaderHeight), APPI, 96);
+  { #146: and tall enough for the title's font, which a fixed strip clipped }
+  if FTitle <> '' then
+  begin
+    fh := TyFontHeightPx(ResolveFontSize(PartStyle('TyCardHeader', StyleClass, [])), APPI)
+      + MulDiv(2, APPI, 96);
+    if fh > Result then Result := fh;
+  end;
   if Result < 1 then Result := 1;
 end;
 
@@ -527,9 +536,10 @@ begin
           lay.Header.Top + bw,
           lay.Header.Right - bw - P.Scale(hpad.Right),
           lay.Header.Bottom - sepT);
+        if IsRightToLeft then textRect := TyMirrorRectX(textRect, R.Right);   // #153
         if textRect.Right > textRect.Left then
           P.DrawText(textRect, FTitle, hs.FontName, ResolveFontSize(hs), hs.FontWeight,
-            hs.TextColor, FTitleAlignment, tlCenter, True);
+            hs.TextColor, BidiFlipAlignment(FTitleAlignment, IsRightToLeft), tlCenter, True);
       end;
     end;
 

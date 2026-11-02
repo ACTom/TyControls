@@ -27,6 +27,8 @@ type
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    { #147: the mouse capture taken away mid-drag ends the drag. }
+    procedure CaptureChanged; override;
   public
     constructor Create(AOwner: TComponent); override;
     procedure SetHSV(H, S, V: Single);
@@ -50,6 +52,8 @@ type
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    { #147: the mouse capture taken away mid-drag ends the drag. }
+    procedure CaptureChanged; override;
   public
     constructor Create(AOwner: TComponent); override;
     property Hue: Single read FHue write SetHue;
@@ -275,7 +279,21 @@ procedure TTyHSVSquare.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y:
 begin inherited MouseDown(Button, Shift, X, Y); if Button = mbLeft then begin FDragging := True; ApplyXY(X, Y); end; end;
 
 procedure TTyHSVSquare.MouseMove(Shift: TShiftState; X, Y: Integer);
-begin inherited MouseMove(Shift, X, Y); if FDragging then ApplyXY(X, Y); end;
+begin
+  inherited MouseMove(Shift, X, Y);
+  { #147: no button held -- the button-up went elsewhere (see CaptureChanged). }
+  if FDragging and not (ssLeft in Shift) then FDragging := False;
+  if FDragging then ApplyXY(X, Y);
+end;
+
+procedure TTyHSVSquare.CaptureChanged;
+begin
+  inherited CaptureChanged;
+  { #147: the capture taken away mid-drag -- a modal dialog opened from OnChange, a switch to
+    another window, another control taking it: the button-up goes elsewhere, so the drag ends
+    here. LCL lets go of the capture just before MouseUp too, which ends a drag the same way. }
+  FDragging := False;
+end;
 
 procedure TTyHSVSquare.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin inherited MouseUp(Button, Shift, X, Y); if Button = mbLeft then FDragging := False; end;
@@ -329,7 +347,21 @@ procedure TTyHueBar.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: In
 begin inherited MouseDown(Button, Shift, X, Y); if Button = mbLeft then begin FDragging := True; ApplyY(Y); end; end;
 
 procedure TTyHueBar.MouseMove(Shift: TShiftState; X, Y: Integer);
-begin inherited MouseMove(Shift, X, Y); if FDragging then ApplyY(Y); end;
+begin
+  inherited MouseMove(Shift, X, Y);
+  { #147: no button held -- the button-up went elsewhere (see CaptureChanged). }
+  if FDragging and not (ssLeft in Shift) then FDragging := False;
+  if FDragging then ApplyY(Y);
+end;
+
+procedure TTyHueBar.CaptureChanged;
+begin
+  inherited CaptureChanged;
+  { #147: the capture taken away mid-drag -- a modal dialog opened from OnChange, a switch to
+    another window, another control taking it: the button-up goes elsewhere, so the drag ends
+    here. LCL lets go of the capture just before MouseUp too, which ends a drag the same way. }
+  FDragging := False;
+end;
 
 procedure TTyHueBar.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin inherited MouseUp(Button, Shift, X, Y); if Button = mbLeft then FDragging := False; end;

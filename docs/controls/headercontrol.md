@@ -42,6 +42,9 @@
 | 点击某一节的**主体**(非边界) | 循环切换该节排序 none → asc → desc → asc,并触发 `OnSectionClick` |
 | 在**节边界**附近按下并拖动 | 调整该边界所属那一节的宽度(正序是边界左侧那一节;镜像后是右侧那一节。使用 `MouseCapture`)。按下发 `OnSectionTrack(tsTrackBegin)`,拖动中每次变宽发 `tsTrackMove`,松手先发 `tsTrackEnd`、再**只发一次** `OnSectionResize` |
 | 鼠标移到边界 | 光标变为水平调整光标(`crHSplit`);移开后**还原为调用方自己设的 `Cursor`**,不再被抹成 `crDefault` |
+| `←` / `→` | 移到那一侧下一个显示的节(跳过隐藏的节;镜像后 `←` 是下一节),以悬停样式显示 |
+| `Home` / `End` | 第一个 / 最后一个显示的节 |
+| `Space` | 等同点击当前节:切换排序并触发 `OnSectionClick` |
 
 排序是**单列排序**:某一节开始排序时,会清除其余各节的排序状态。
 

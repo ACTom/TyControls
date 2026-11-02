@@ -120,6 +120,7 @@ type
     FNodes:        array of TTyShellNodeInfo;   { node-data index -> path + kind }
     FRoots:        TTyFsRootArray;    { the places seeded by PopulateRoots (for their Display) }
     FRoot:         string;            { '' = the machine places; else the one scoped directory }
+    FStreamedDirectory: string;       { #152: a form file's Directory, selected in Loaded }
     FObjectTypes:  TTyFsObjectTypes;  { what an enumeration keeps; default [fotFolders] }
     FShowHidden:   Boolean;           { a view of the fotHidden bit in FObjectTypes }
     FFileSortType: TTyFsFileSortType;
@@ -199,6 +200,7 @@ type
     { Nils a link whose partner is being freed -- otherwise the next selection
       walks a dead pointer. }
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    procedure Loaded; override;
     { The shell behaviour, as OVERRIDES of the base's virtuals.
 
       These five used to be handlers wired to the PUBLISHED OnGetText / OnInitNode /
@@ -219,6 +221,10 @@ type
       GetPathFromNode is the public, LCL-shaped one. Protected so a subclass/test
       can observe the node<->path mapping. }
     function  NodePath(Node: PTyTreeNode): string;
+    { #192: Items, NodeDataSize, RootNodeCount and OnInitChildren -- the tree builds its nodes from
+      the file system itself. 4.0 does not publish them; a value a form saved by 3.x holds is read
+      past. }
+    procedure DefineProperties(Filer: TFiler); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor  Destroy; override;
@@ -453,10 +459,7 @@ type
     property Controller;
     property Options;
     property Header;
-    property Items;
-    property NodeDataSize;
     property DefaultNodeHeight;
-    property RootNodeCount;
     property Indent;
     property Images;
     property EmptyListMessage;
@@ -476,7 +479,6 @@ type
     property Anchors;
     property OnFreeNode;
     property OnInitNode;
-    property OnInitChildren;
     property OnExpanding;
     property OnExpanded;
     property OnCollapsing;
@@ -522,9 +524,18 @@ type
 
 implementation
 
+uses
+  tyControls.Types;
+
 { ---------------------------------------------------------------------------
   Lifecycle
   --------------------------------------------------------------------------- }
+
+procedure TTyCustomShellTreeView.DefineProperties(Filer: TFiler);
+begin
+  inherited DefineProperties(Filer);
+  TyDefineRetiredProperties(Filer, ['Items', 'NodeDataSize', 'RootNodeCount', 'OnInitChildren']);
+end;
 
 constructor TTyCustomShellTreeView.Create(AOwner: TComponent);
 begin
@@ -1472,8 +1483,25 @@ begin
   Invalidate;
 end;
 
+procedure TTyCustomShellTreeView.Loaded;
+begin
+  inherited Loaded;
+  if FStreamedDirectory <> '' then
+  begin
+    SelectPath(FStreamedDirectory);   // no raise: a stale saved path just selects nothing
+    FStreamedDirectory := '';
+  end;
+end;
+
 procedure TTyCustomShellTreeView.SetDirectory(const AValue: string);
 begin
+  { #152: a form file reads Directory before Root, which then rebuilt the tree and dropped
+    the selection. Kept for Loaded, where Root is in. }
+  if csLoading in ComponentState then
+  begin
+    FStreamedDirectory := AValue;
+    Exit;
+  end;
   if SelectPath(AValue) then Exit;
   { '' is not a failed selection, it is an absent one. }
   if FLastPathError in [speNone, speEmptyPath] then Exit;

@@ -13,8 +13,9 @@ type
   { Raised for a mask this control cannot honour. See TTyMaskEdit.Mask. }
   ETyMaskError = class(Exception);
 
-  { What a slot accepts, before '>' / '<' case forcing is applied. }
-  TTyMaskKind = (mkDigit, mkLetter, mkAlnum, mkAny, mkHex, mkBin);
+  { What a slot accepts, before '>' / '<' case forcing is applied. mkDigitSign is '#':
+    a digit, '+', '-' or a space. }
+  TTyMaskKind = (mkDigit, mkLetter, mkAlnum, mkAny, mkHex, mkBin, mkDigitSign);
   { The '>' / '<' region a slot sits in ('<>' turns forcing back off). }
   TTyMaskCase = (mcAsTyped, mcUpper, mcLower);
 
@@ -41,9 +42,9 @@ type
     Reject:       string;       // '' = usable
   end;
 
-{ Compile AMask. This is LCL/Delphi's mask language (maskedit.pp), with the two
-  deliberate departures documented on TTyMaskEdit.Mask -- '#' is refused, and ':' / '/'
-  are ordinary literals rather than locale separators. }
+{ Compile AMask. This is LCL/Delphi's mask language (maskedit.pp), with the one
+  deliberate departure documented on TTyMaskEdit.Mask -- ':' / '/' are ordinary literals
+  rather than locale separators. }
 function TyMaskParse(const AMask: string): TTyMaskSpec;
 { '' when AMask is usable, otherwise the reason it is not. Setting Mask raises
   ETyMaskError with this text; call it first to check a mask without raising. }
@@ -77,7 +78,7 @@ function TyMaskConforms(const AMask, AText: string; ABlank: Char = #0): Boolean;
   ';1;' save field. A misaligned literal ends the recovery. }
 function TyMaskExtract(const AMask, AText: string; ABlank: Char = #0): string;
 { Mask code of the (AFilledCount+1)-th editable slot, or #0 when all slots are filled.
-  The code returned is the canonical spelling of that slot ('0'/'9', 'L'/'l', 'A'/'a',
+  The code returned is the canonical spelling of that slot ('0'/'9', '#', 'L'/'l', 'A'/'a',
   'C'/'c', 'H'/'h', 'B'/'b'); a '>' / '<' region is not expressible in one character. }
 function TyMaskNextSlot(const AMask: string; AFilledCount: Integer): Char;
 { Caret index (0-based, into the string TyMaskApply produces) that AFilledCount filled
@@ -86,7 +87,7 @@ function TyMaskNextSlot(const AMask: string; AFilledCount: Integer): Char;
   two stopped being the same place. }
 function TyMaskCaretSlot(const AMask: string; AFilledCount: Integer): Integer;
 { True when every REQUIRED slot in AMask is filled by AText and every literal lines up.
-  Optional slots ('9', 'l', 'a', 'c', 'h', 'b') may be blank and still be complete --
+  Optional slots ('9', '#', 'l', 'a', 'c', 'h', 'b') may be blank and still be complete --
   that is what makes them optional. ABlank never counts as filled. }
 function TyMaskIsComplete(const AMask, AText: string; ABlank: Char = #0): Boolean;
 { Number of display positions the mask occupies (literals included). }
@@ -217,6 +218,7 @@ type
       control used to speak. Slot codes, required on the left, optional on the right:
 
         0 / 9   a digit
+            #   a digit, '+', '-' or a space -- optional only, as in LCL
         L / l   a letter
         A / a   a letter or a digit
         C / c   any character except the placeholder
@@ -228,18 +230,15 @@ type
       ';save;blank' sets MaskSavesLiterals and SpaceChar. EVERY other character is a fixed
       literal, auto-inserted between slots.
 
-      TWO DELIBERATE DEPARTURES, both of which would otherwise be silent:
+      ONE DELIBERATE DEPARTURE, which would otherwise be silent: ':' and '/' stay
+      ordinary literals. In LCL they render the locale's time and date separator, but Text
+      here IS the display string and is published and streamed, so a locale-dependent
+      literal would make one .lfm mean two different strings on two machines. Write the
+      separator you want.
 
-        * '#' is REFUSED. It is the one code the two languages disagree about: here it
-          used to mean a required digit, in LCL/Delphi it means an optional digit-or-sign.
-          Reinterpreting it would quietly turn every existing '##/##/####' into a mask
-          IsComplete and ValidateEdit wave through EMPTY -- a validator going silent,
-          which is the single failure a masked edit exists to prevent. Write '0' for the
-          old meaning, '9' for an optional digit, '\#' for a literal '#'.
-        * ':' and '/' stay ordinary literals. In LCL they render the locale's time and
-          date separator, but Text here IS the display string and is published and
-          streamed, so a locale-dependent literal would make one .lfm mean two different
-          strings on two machines. Write the separator you want.
+      '#' is LCL's too (#193). This control's old three-code dialect, before 3.0, read it
+      as a REQUIRED digit, and 3.0.0 to 3.0.3 refused it; a mask kept from that dialect
+      now passes validation with those slots empty. Write '0' for a required digit.
 
       '!' is accepted and has nothing left to do: it asks LCL to trim leading rather than
       trailing blanks from the data, and MaskedValue already contains no blanks at either
@@ -299,7 +298,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -468,20 +466,9 @@ begin
             inDown := True;
             inUp := False;
           end;
-        '#':
-          begin
-            Result.Cells := nil;
-            Result.Reject := Format('mask "%s" uses "#". In this control''s former ' +
-              'three-code mask language "#" was a REQUIRED digit; in LCL/Delphi''s ' +
-              'language, which this control now speaks, it is an OPTIONAL digit or sign. ' +
-              'Reading it the new way would silently turn a required field into one that ' +
-              'IsComplete and ValidateEdit pass while it is empty, so it is refused ' +
-              'rather than reinterpreted. Write "0" for a required digit, "9" for an ' +
-              'optional one, or "\#" for a literal "#".', [AMask]);
-            Exit;
-          end;
         '0': Slot(mkDigit,  True);
         '9': Slot(mkDigit,  False);
+        '#': Slot(mkDigitSign, False);   // LCL has no required form of it
         'L': Slot(mkLetter, True);
         'l': Slot(mkLetter, False);
         'A': Slot(mkAlnum,  True);
@@ -503,9 +490,10 @@ begin
   begin
     Result.Cells := nil;
     Result.Reject := Format('mask "%s" has no editable slot, so the field could never ' +
-      'accept input. The slot codes are 0/9 (digit), L/l (letter), A/a (alphanumeric), ' +
-      'C/c (any character), H/h (hex) and B/b (binary) -- upper case required, lower ' +
-      'case optional. Use Mask := '''' for an unmasked edit.', [AMask]);
+      'accept input. The slot codes are 0/9 (digit), # (digit or sign, optional), ' +
+      'L/l (letter), A/a (alphanumeric), C/c (any character), H/h (hex) and B/b ' +
+      '(binary) -- upper case required, lower case optional. Use Mask := '''' for an ' +
+      'unmasked edit.', [AMask]);
   end;
 end;
 
@@ -541,6 +529,8 @@ begin
     mkAlnum:  Result := ACh in ['A'..'Z', 'a'..'z', '0'..'9'];
     mkHex:    Result := ACh in ['0'..'9', 'A'..'F', 'a'..'f'];
     mkBin:    Result := ACh in ['0', '1'];
+    { The space is LCL's too (maskedit.pp CanInsertChar: "yes Delphi allows a space here"). }
+    mkDigitSign: Result := ACh in ['0'..'9', '+', '-', ' '];
     mkAny:    Result := ACh >= ' ';
   else
     Result := False;
@@ -563,6 +553,7 @@ begin
     mkAny:    if ACell.Required then Result := 'C' else Result := 'c';
     mkHex:    if ACell.Required then Result := 'H' else Result := 'h';
     mkBin:    if ACell.Required then Result := 'B' else Result := 'b';
+    mkDigitSign: Result := '#';
   else
     Result := #0;
   end;
@@ -922,7 +913,10 @@ begin
     for i := 1 to Length(s) do
       if (not IsLiteralAtSpec(FSpec, i)) and (s[i] = FSpaceChar) then s[i] := AValue;
     FSpaceChar := AValue;
-    Commit(s, caret);
+    { #145: the program's change, not a keystroke: the by-code writer, so it leaves Modified
+      alone (Commit is the keystroke path and marked it). }
+    SetTextInternal(s, True);
+    CaretPos := caret;
     Exit;
   end;
   raw := RawText;             // read the value under the OLD placeholder
