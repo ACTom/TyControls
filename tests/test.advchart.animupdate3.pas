@@ -76,6 +76,9 @@ type
     procedure ProbeState(ARec: TJSONObject);
     procedure ProbeLabels(ARec: TJSONObject);
     procedure ProbeGraphSym(ARec: TJSONObject);
+    procedure ProbeGraphPen(ARec: TJSONObject);
+    procedure ProbePictPen(ARec: TJSONObject);
+    procedure SamePen(const AName: string; const AEl: TTyChartElement; ALeaf: TJSONObject);
     procedure MappedOutline(const AWhat: string; const AEl: TTyChartElement;
       const AType: string; AX, AY, AW, AH: Double; const M: TTyMat2D);
     procedure CheckSample(const AProbes: TJSONArray; ARec: TJSONObject);
@@ -94,6 +97,8 @@ type
     procedure TestATreeToggleIsTheAction;
     procedure TestARenderEndsTheLabelsFadesAsUpstream;
     procedure TestASquashedViewsSymbolsAsUpstream;
+    procedure TestASquashedViewsPensAsUpstream;
+    procedure TestAPictorialGlyphsPenInMotionAsUpstream;
   end;
 
 implementation
@@ -1393,6 +1398,128 @@ begin
   end;
 end;
 
+{ [R7-P] THE PENS IN A FRAME: every stroked path of a graph -- an edge's
+  line, its end symbols, a node -- its canvas pen (the global transform's
+  linear part times a round pen of lineWidth, over the line scale where
+  strokeNoScale) against the pen the renderer draws for the frame's element
+  (TyStylePenOf, else the width times PenScale): the same ellipse }
+procedure TAdvChartAnimUpdate3OracleTest.ProbeGraphPen(ARec: TJSONObject);
+var
+  i, s, slash, idx, k: Integer;
+  name, rest, sub: string;
+  leaf: TJSONObject;
+  el: TTyChartElement;
+  role: TTyChartAnimRole;
+  m: TTyMat2D;
+begin
+  for i := 0 to ARec.Count - 1 do
+  begin
+    name := ARec.Names[i];
+    if (Length(name) < 2) or (name[1] <> 'g') or not (name[2] in ['0'..'9']) then Continue;
+    slash := Pos('/', name);
+    s := StrToInt(Copy(name, 2, slash - 2));
+    rest := Copy(name, slash + 1, MaxInt);
+    sub := '';
+    if Pos('/', rest) > 0 then
+    begin
+      sub := Copy(rest, Pos('/', rest) + 1, MaxInt);
+      rest := Copy(rest, 1, Pos('/', rest) - 1);
+    end;
+    if sub = 'pen' then role := carGraphEdge
+    else if sub = 'fpen' then role := carGraphEdgeFrom
+    else if sub = 'tpen' then role := carGraphEdgeTo
+    else if (sub = '') and (Copy(rest, 1, 4) = 'npen') then role := carSymbol
+    else Continue;
+    leaf := TJSONObject(ARec.Items[i]);
+    if not leaf.Booleans['stroked'] then Continue;
+    if role = carSymbol then idx := StrToInt(Copy(rest, 5, MaxInt))
+    else idx := StrToInt(Copy(rest, 5, MaxInt));
+    for k := 0 to 5 do m[k] := WantNum(leaf.Arrays['m'].Items[k]);
+    if (m[0] = 0) and (m[1] = 0) and (m[2] = 0) and (m[3] = 0) then Continue;
+    Inc(FCompared);
+    if not FrameEl(s, idx, role, el) then
+    begin
+      Bad(name + ': upstream strokes it, the frame has no element');
+      Continue;
+    end;
+    SamePen(name, el, leaf);
+  end;
+end;
+
+{ [R7-P] the canvas' pen of a recorded path (m's linear part times a round
+  pen of lw, over ls where sns) against the pen the renderer draws for AEl }
+procedure TAdvChartAnimUpdate3OracleTest.SamePen(const AName: string;
+  const AEl: TTyChartElement; ALeaf: TJSONObject);
+var
+  k: Integer;
+  m, E: TTyMat2D;
+  lw, w, ps, n: Double;
+  gu, gp: array[0..2] of Double;
+
+  procedure Gram(const A: TTyMat2D; AW: Double; var G: array of Double);
+  begin
+    G[0] := (A[0] * A[0] + A[2] * A[2]) * AW * AW;
+    G[1] := (A[0] * A[1] + A[2] * A[3]) * AW * AW;
+    G[2] := (A[1] * A[1] + A[3] * A[3]) * AW * AW;
+  end;
+
+begin
+  for k := 0 to 5 do m[k] := WantNum(ALeaf.Arrays['m'].Items[k]);
+  lw := WantNum(ALeaf.Find('lw'));
+  if ALeaf.Booleans['sns'] then lw := lw / WantNum(ALeaf.Find('ls'));
+  Gram(m, lw, gu);
+  if TyStylePenOf(AEl.Style, E) then w := AEl.Style.StrokeWidthLogical
+  else
+  begin
+    E := Default(TTyMat2D);
+    E[0] := 1;
+    E[3] := 1;
+    ps := AEl.Style.PenScale;
+    if (ps <= 0) or IsNan(ps) or IsInfinite(ps) then ps := 1;
+    w := AEl.Style.StrokeWidthLogical * ps;
+  end;
+  Gram(E, w, gp);
+  n := Max(Abs(gu[0]), Abs(gu[2]));
+  if (Abs(gu[0] - gp[0]) > 1e-9 * n) or (Abs(gu[1] - gp[1]) > 1e-9 * n)
+    or (Abs(gu[2] - gp[2]) > 1e-9 * n) then
+    Bad(Format('%s: pen E E^T %.6g %.6g %.6g, upstream %.6g %.6g %.6g',
+      [AName, gp[0], gp[1], gp[2], gu[0], gu[1], gu[2]]));
+end;
+
+{ [R7-P] a pictorial glyph's pen in a frame: each recorded glyph of a bundle
+  (pp<s>:<i>/<k>) against the frame's glyph k of that row }
+procedure TAdvChartAnimUpdate3OracleTest.ProbePictPen(ARec: TJSONObject);
+var
+  i, s, row, colon, slash, k, j: Integer;
+  name: string;
+  leaf: TJSONObject;
+  el: TTyChartElement;
+  m: TTyMat2D;
+begin
+  for i := 0 to ARec.Count - 1 do
+  begin
+    name := ARec.Names[i];
+    if Copy(name, 1, 2) <> 'pp' then Continue;
+    colon := Pos(':', name);
+    slash := Pos('/', name);
+    s := StrToInt(Copy(name, 3, colon - 3));
+    row := StrToInt(Copy(name, colon + 1, slash - colon - 1));
+    k := StrToInt(Copy(name, slash + 1, MaxInt));
+    leaf := TJSONObject(ARec.Items[i]);
+    if not leaf.Booleans['stroked'] then Continue;
+    for j := 0 to 5 do m[j] := WantNum(leaf.Arrays['m'].Items[j]);
+    { a glyph of no scale yet draws nothing }
+    if (m[0] = 0) and (m[1] = 0) and (m[2] = 0) and (m[3] = 0) then Continue;
+    Inc(FCompared);
+    if not FrameEl(s, row, carPictorialGlyph, el, k) then
+    begin
+      Bad(name + ': upstream strokes the glyph, the frame has none');
+      Continue;
+    end;
+    SamePen(name, el, leaf);
+  end;
+end;
+
 procedure TAdvChartAnimUpdate3OracleTest.CheckSample(const AProbes: TJSONArray;
   ARec: TJSONObject);
 var i: Integer;
@@ -1406,6 +1533,8 @@ begin
     { [R7-N] the edge labels' maps: read by the graph probe }
     else if AProbes.Strings[i] = 'gl' then
     else if AProbes.Strings[i] = 'gsym' then ProbeGraphSym(ARec)
+    else if AProbes.Strings[i] = 'gpen' then ProbeGraphPen(ARec)
+    else if AProbes.Strings[i] = 'ppen' then ProbePictPen(ARec)
     else Bad('a probe the test does not know: ' + AProbes.Strings[i]);
 end;
 
@@ -1523,6 +1652,14 @@ begin
   RunGroup('graphSquash', 500);
 end;
 
+{ [R7-P] the same view's pens in motion: an edge's (strokeNoScale under the
+  group), a node's, an end symbol's (its own frame) as the canvas draws them
+  while the group's ratio tweens and while the edges turn }
+procedure TAdvChartAnimUpdate3OracleTest.TestASquashedViewsPensAsUpstream;
+begin
+  RunGroup('graphPen', 100);
+end;
+
 procedure TAdvChartAnimUpdate3OracleTest.TestTheTreeExpandsAndCollapsesAsUpstream;
 begin
   RunGroup('tree', 2000);
@@ -1531,6 +1668,13 @@ end;
 procedure TAdvChartAnimUpdate3OracleTest.TestTheRadialLabelsFollowTheirNodesAsUpstream;
 begin
   RunGroup('radial', 500);
+end;
+
+{ [R7-P] a pictorial glyph's pen in motion: growing and turning with the
+  glyph as it pops in, reshaped with its scale on an update }
+procedure TAdvChartAnimUpdate3OracleTest.TestAPictorialGlyphsPenInMotionAsUpstream;
+begin
+  RunGroup('pictorialPen', 20);
 end;
 
 procedure TAdvChartAnimUpdate3OracleTest.TestAnItemsArraySymbolSizeAsUpstream;

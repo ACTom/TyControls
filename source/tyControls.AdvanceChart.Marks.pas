@@ -2000,6 +2000,9 @@ var
       end;
     end;
     el := MarkElement(sh, sv, ABinding.SeriesIndex, ARow);
+    { [R7-P] its pen through the unit path's transform (strokeNoScale):
+      stretched where the symbol's size is not square }
+    TyStyleNoScalePen(el.Style, TySymbolUnitFrame(rs, AP.X, AP.Y));
     { z2 100, as a scatter's (Symbol.ts:85): above the polyline, which a
       hover lifts by ten [Batch 88: it was the series' z2, and the hovered
       line's polyline then covered every other symbol] }
@@ -2823,6 +2826,8 @@ begin
     begin
       rip := MarkElement(shape, v, ABinding.SeriesIndex, ARow);
       rip.Style.Alpha := 1;
+      { [R7-P] the ripple's path is the symbol's, scaled with it (strokeNoScale) }
+      TyStyleNoScalePen(rip.Style, TySymbolUnitFrame(rs, AP.X, AP.Y));
       { IT LOOPS: scale 0.5 -> rippleScale / 2 and opacity 1 -> 0 over the
         period, ripple i of n started i / n of a period early, plus
         idx / count ms (EffectSymbol.ts:77-119) [Batch 92, AN4] }
@@ -2900,6 +2905,8 @@ begin
     end;
   end;
   el := MarkElement(shape, v, ABinding.SeriesIndex, ARow);
+  { [R7-P] its pen through the unit path's transform (strokeNoScale) }
+  TyStyleNoScalePen(el.Style, TySymbolUnitFrame(rs, AP.X, AP.Y));
   el.Z2 := 100 + Round(lift);
   SymbolHitSlop(el);
   { A SCATTER SYMBOL POPS IN: its path scales from nought to half its size
@@ -4279,6 +4286,11 @@ begin
         to the glyph's box -- as the canvas strokes a path whose
         strokeNoScale useStyle dropped }
       el.Style.PenScale := Sqrt(Abs(glyphW / spec.PatternSize * glyphH / spec.PatternSize));
+      { [R7-P] and its shape: the glyph's own scale on each axis, turned --
+        an oblong glyph's pen is stretched with it (the mirror along the
+        value axis leaves a round pen's image alone) }
+      TyStyleSetPenShape(el.Style, TyZrLocal(glyphW / spec.PatternSize,
+        glyphH / spec.PatternSize, DegToRad(spec.RotateDeg), 0, 0));
       el.HasClip := spec.Clip or col.Clip;
       el.ClipRect := clipRect;
       { THE ENTER ANIMATION [F3a]. A symbolClip's glyphs are set where they

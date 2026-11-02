@@ -51,6 +51,11 @@
 //          zr.animation.update() and the timers -- what the pointer finds
 //          that far into the entering animation
 // A custom series' renderItem is written '@name' and run as RENDER[name].
+// R7-P adds (r7p.*): pens a transform stretches -- a pictorial glyph's
+// (the pattern size scaled to an oblong glyph: the pen in the glyph's frame,
+// wide across its upright sides, thin across its level ones; rounded, turned
+// and mirrored), a graphic element's own scaleX / scaleY (a rect's pen, and a
+// strokeNoScale polyline's under scaleY 1, whose line scale is 1).
 // R7-O adds (r7o.*): a graph edge's end symbols, which take the pointer as
 // the edge's (setItemGraphicEl writes its ECData onto every child of the
 // Line group) -- an arrow, an empty circle (its pen lineWidth 2 in its own
@@ -509,6 +514,22 @@ function r7iCases() {
       links: [{ source: 'a', target: 'c' }, { source: 'a', target: 'b' }] })),
     [PT(56, 21, 30), PT(170, 21, 30), PT(150, 70, 30)], { t: 400 }],
     ['r7o.scatter-arrow-barbs', sc('arrow', 40, {}, { data: [[5, 5]] }), [PT(210, 178, 40), PT(210, 175, 40)]],
+    // [R7-P] a pen the element's transform stretches: a pictorial glyph's (its
+    // pattern size scaled to the glyph, the pen with it), a graphic element's
+    // own scaleX / scaleY (strokeNoScale or not)
+    ['r7p.pictorial-oblong', cart({ type: 'pictorialBar', symbol: 'rect', symbolSize: [60, 16], symbolRepeat: false,
+      symbolPosition: 'center', data: [4, 6, 8], itemStyle: B(100) }), [IT(0, 1)]],
+    ['r7p.pictorial-turned', cart({ type: 'pictorialBar', symbol: 'triangle', symbolSize: [24, 60], symbolRotate: 30,
+      symbolRepeat: false, symbolPosition: 'center', data: [4, -6, 8], itemStyle: B(120) },
+      { yAxis: { type: 'value', min: -10, max: 10 } }), [IT(0, 1)]],
+    ['r7p.pictorial-round', cart({ type: 'pictorialBar', symbol: 'roundRect', symbolSize: [60, 16], symbolRepeat: false,
+      symbolPosition: 'center', data: [4, 6, 8], itemStyle: B(100) }), [IT(0, 1)]],
+    ['r7p.graphic-scaled', { animation: false, graphic: [{ type: 'rect', x: 140, y: 120, scaleX: 3, scaleY: 1,
+      shape: { x: 0, y: 0, width: 40, height: 60 }, style: { fill: null, stroke: '#000', lineWidth: 6 } }] },
+      [PT(200, 150, 90)]],
+    ['r7p.graphic-noscale', { animation: false, graphic: [{ type: 'polyline', x: 100, y: 160, scaleX: 4, scaleY: 1,
+      shape: { points: [[0, 0], [25, -30], [50, 0]] }, style: { fill: null, stroke: '#000', lineWidth: 6, strokeNoScale: true } }] },
+      [PT(200, 145, 90)]],
   ].map(c => c.length > 3 ? c : c.concat([{}]));
 }
 function withRender(option) {
@@ -662,7 +683,9 @@ function generate() {
     'inf.sunburst', 'inf.funnel', 'inf.heatmap', 'inf.themeriver', 'inf.candle', 'inf.boxplot', 'inf.sankey',
     'inf.lines', 'inf.parallel', 'inf.polarbar', 'inf.gauge-progress', 'inf.gauge-pointer', 'inf.chord',
     'inf.effect', 'inf.pictorial', 'inf.graph-node', 'r7i.scatter-out',
-    'r7i.thumb-window'];
+    'r7i.thumb-window',
+    // a graphic element is no series' (x)
+    'r7p.graphic-scaled', 'r7p.graphic-noscale'];
   charts.forEach(c => {
     const any = c.rays.some(r => r.seq.split(' ').some(p => p[0] === 's'));
     must(any === !MISS.includes(c.id), c.id + ': hits ' + any);

@@ -6905,13 +6905,19 @@ var
           tsyPin: e.Shape.HitSym := 'pin';
           tsyArrow: e.Shape.HitSym := 'arrow';
         end;
-        { the pen stretched with the frame: one number, the root of the
-          map's determinant (the port's round pen) }
-        e.Style.PenScale := Sqrt(Abs(L[0] * L[3] - L[1] * L[2]));
       end
       else
         TySymbolHitFrame(e.Shape, s, at.X, at.Y);
       e.Shape.HitPenInFrame := e.Shape.HitSym <> '';
+    end;
+    { the pen stretched with the frame: the root of the map's determinant
+      its size, [R7-P] the map over that root its shape -- the canvas' pen
+      squashed and sheared as the symbol is [was: a round pen of that
+      size; a 'line' symbol's not scaled at all] }
+    if sq then
+    begin
+      e.Style.PenScale := Sqrt(Abs(L[0] * L[3] - L[1] * L[2]));
+      TyStyleSetPenShape(e.Style, L);
     end;
     e.Datum := TyChartEdgeDatum(ASeriesIndex, AEdges[edgeAt].Row);
     { it rides the line's percent (Line.beforeUpdate) [F3a] }
@@ -7045,6 +7051,11 @@ begin
     el.Style.StrokeColor := EdgeColour(i);
     { THE EDGE'S OWN width, opacity and type over the series' [Batch 114] }
     el.Style.StrokeWidthLogical := TyGraphEdgeWidth(ASpec, AEdges[i]);
+    { [R7-P] ECLinePath is strokeNoScale under the view's (scaleX, scaleY):
+      where the two differ the canvas' pen is that scale over its line
+      scale -- unequal across and along [was: a round pen of the width] }
+    if AInk.HasFrame and AEdges[i].HasEnds and (AInk.Frame.SX <> AInk.Frame.SY) then
+      TyStyleViewPen(el.Style, AInk.Frame.SX, AInk.Frame.SY);
     el.Style.Alpha := TyGraphEdgeOpacity(ASpec, AEdges[i]);
     el.Style.DashLogical := TyGraphEdgeDash(ASpec, AEdges[i]);
     { [R2-I4] the word, measured again where a state tweens the width }
@@ -7175,6 +7186,19 @@ begin
     fill := 0;
     if (i >= 0) and (i <= High(AInk.NodeFills)) then fill := AInk.NodeFills[i];
     el := TyChartElement(shape);
+    { [R7-P] its pen through the unit path's whole transform (strokeNoScale):
+      the view's unequal scale, a turn under it, an oblong size }
+    if nodeTurn and (symX <> symY) and (sym.Kind <> tsyImage) then
+    begin
+      lm := Default(TTyMat2D);
+      lm[0] := nm[0] * hw;
+      lm[1] := nm[1] * hw;
+      lm[2] := nm[2] * hh;
+      lm[3] := nm[3] * hh;
+      TyStyleNoScalePen(el.Style, lm);
+    end
+    else
+      TyStyleNoScalePen(el.Style, TySymbolUnitFrame(sym, ANodes[i].PX, ANodes[i].PY));
     el.Style.HasFill := fill <> 0;
     el.Style.FillColor := fill;
     NodeBorder(el, sym, i, fill);

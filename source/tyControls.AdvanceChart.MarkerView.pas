@@ -3521,6 +3521,9 @@ begin
       { [R2-I5] a word, measured again against the width a state draws }
       el.Style.DashWord := DashWordOf(APics[i].StyleDash);
       el.Style.DashOffsetLogical := APics[i].StyleDashOffset;
+      { [R7-P] its pen through the unit path's transform (strokeNoScale):
+        stretched where the symbol's size is not square }
+      if APics[i].HasGlobal then TyStyleNoScalePen(el.Style, APics[i].Global);
     end;
     if not IsNan(APics[i].StyleOpacity) then
       el.Style.Alpha := Max(0.0, Min(1.0, APics[i].StyleOpacity));

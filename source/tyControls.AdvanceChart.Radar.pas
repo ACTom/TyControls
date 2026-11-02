@@ -2263,6 +2263,8 @@ begin
         { [R7-F] hit in its own frame, as RadarView's createSymbol }
         TySymbolHitFrame(sym, rowSym, pts[i].X, pts[i].Y);
         el := TyChartElement(sym);
+        { [R7-P] its pen through the unit path's transform (strokeNoScale) }
+        TyStyleNoScalePen(el.Style, TySymbolUnitFrame(rowSym, pts[i].X, pts[i].Y));
         el.Style.HasFill := True;
         { [R6-D] the item's visual style first (useStyle(itemStyle)): its
           border's colour and width, zrender's 1 where none is written }
