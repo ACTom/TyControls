@@ -179,12 +179,13 @@ begin
     // Origin-normalised frame rect, exactly as TTyPanel.RenderTo builds it.
     FrameRect := Rect(0, 0, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
     DrawFrame(P, FrameRect, S);
-    // Inset content by the theme padding (same scaling as the base).
+    // Inset content by the theme padding and by BorderWidth, as TTyPanel insets its caption
+    // (#115; same scaling as the base).
     ContentRect := Rect(
-      FrameRect.Left   + P.Scale(S.Padding.Left),
-      FrameRect.Top    + P.Scale(S.Padding.Top),
-      FrameRect.Right  - P.Scale(S.Padding.Right),
-      FrameRect.Bottom - P.Scale(S.Padding.Bottom)
+      FrameRect.Left   + P.Scale(S.Padding.Left + BorderWidth),
+      FrameRect.Top    + P.Scale(S.Padding.Top + BorderWidth),
+      FrameRect.Right  - P.Scale(S.Padding.Right + BorderWidth),
+      FrameRect.Bottom - P.Scale(S.Padding.Bottom + BorderWidth)
     );
     // Optional caption first, drawn as TTyPanel draws it (#116), so the owner-draw handler
     // paints on top.

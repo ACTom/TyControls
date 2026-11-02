@@ -644,6 +644,7 @@ var
   oldW, oldH: Integer;
   oldV, oldH2: Boolean;
   lead, barLen: Integer;
+  pad, portW, portH: Integer;
 begin
   thick := ScrollbarThick;
   oldW := FContentW;
@@ -675,25 +676,33 @@ begin
     range against Width/Height put the maximum offset one border-width too far, so scrolling to
     the end laid the last row exactly on the bottom border line. }
   bw := FrameInset;
+  { #115: a viewport keeps the box's BorderWidth as a gutter inside the frame and the bars, as
+    the children the box hosts itself get it from AdjustClientRect -- so it is that much
+    smaller, and the range is measured against it. Without a viewport this is 0. }
+  if FContent <> nil then pad := BorderInsetPx else pad := 0;
   viewW := Width - 2 * bw;
   viewH := Height - 2 * bw;
   if viewW < 0 then viewW := 0;
   if viewH < 0 then viewH := 0;
-  wantV := TyScrollNeeded(FContentH, viewH);
-  wantH := TyScrollNeeded(FContentW, viewW - Ord(wantV) * thick);
-  wantV := TyScrollNeeded(FContentH, viewH - Ord(wantH) * thick);
+  wantV := TyScrollNeeded(FContentH, viewH - 2 * pad);
+  wantH := TyScrollNeeded(FContentW, viewW - 2 * pad - Ord(wantV) * thick);
+  wantV := TyScrollNeeded(FContentH, viewH - 2 * pad - Ord(wantH) * thick);
 
   viewW := Width - 2 * bw - Ord(wantV) * thick;
   viewH := Height - 2 * bw - Ord(wantH) * thick;
   if viewW < 0 then viewW := 0;
   if viewH < 0 then viewH := 0;
+  portW := viewW - 2 * pad;   // the viewport: what the content scrolls in
+  portH := viewH - 2 * pad;
+  if portW < 0 then portW := 0;
+  if portH < 0 then portH := 0;
   { LeadingInset cannot be used yet -- it reads FVScrollBar.Visible, and this pass is what
     DECIDES that. Same number, from the decision instead of from the outcome. }
   if IsRightToLeft and wantV then lead := thick else lead := 0;
 
   // 3) Clamp the offset to the (possibly reduced) viewport, moving content if needed.
-  ScrollContentTo(TyClampScroll(FScrollX, FContentW, viewW),
-                  TyClampScroll(FScrollY, FContentH, viewH));
+  ScrollContentTo(TyClampScroll(FScrollX, FContentW, portW),
+                  TyClampScroll(FScrollY, FContentH, portH));
 
   // 4) Dock + configure the vertical bar.
   if wantV then
@@ -721,12 +730,12 @@ begin
     else
       FVBarRect := Bounds(Width - thick, 0, thick, barLen);
     FVScrollBar.BoundsRect := FVBarRect;
-    vMax := TyScrollMax(FContentH, viewH);
+    vMax := TyScrollMax(FContentH, portH);
     FSyncing := True;
     try
       FVScrollBar.Min := 0;
       FVScrollBar.Max := vMax;
-      FVScrollBar.PageSize := TyScrollThumbPage(viewH, FContentH);
+      FVScrollBar.PageSize := TyScrollThumbPage(portH, FContentH);
       FVScrollBar.Position := FScrollY;
     finally
       FSyncing := False;
@@ -750,12 +759,12 @@ begin
     if barLen < 0 then barLen := 0;
     FHBarRect := Bounds(lead, Height - thick, barLen, thick);
     FHScrollBar.BoundsRect := FHBarRect;
-    hMax := TyScrollMax(FContentW, viewW);
+    hMax := TyScrollMax(FContentW, portW);
     FSyncing := True;
     try
       FHScrollBar.Min := 0;
       FHScrollBar.Max := hMax;
-      FHScrollBar.PageSize := TyScrollThumbPage(viewW, FContentW);
+      FHScrollBar.PageSize := TyScrollThumbPage(portW, FContentW);
       FHScrollBar.Position := FScrollX;
     finally
       FSyncing := False;
@@ -770,7 +779,7 @@ begin
     was computed from. }
   if FContent <> nil then
   begin
-    FContent.SetBounds(bw + lead, bw, viewW, viewH);
+    FContent.SetBounds(bw + lead + pad, bw + pad, portW, portH);
     { The extent can change without the offset moving (a child grew, a row was added), and
       the viewport's layout area is derived from it -- so push here too, not only from
       ScrollContentTo. }

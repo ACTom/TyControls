@@ -476,8 +476,9 @@ begin
       newH := bands * bandH + (bands - 1) * spacing;
       // Breathing room below the last band, plus the frame strip on BOTH edges -- the bands now
       // start at the content top, so the frame has to be paid for twice or the bar would be one
-      // inset too short and the bottom stroke would land back under the last band.
-      Inc(newH, 2 * spacing + 2 * FrameInsetPx);
+      // inset too short and the bottom stroke would land back under the last band. BorderWidth
+      // is paid for on both edges too: the bands start inside it (#115).
+      Inc(newH, 2 * spacing + 2 * (FrameInsetPx + BorderInsetPx));
       if Height <> newH then
         Height := newH;   // re-lays via a fresh AlignControls once FInLayout clears
     end;

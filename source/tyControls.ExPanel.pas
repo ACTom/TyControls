@@ -518,7 +518,7 @@ var
   P: TTyPainter;
   S, HD, HS: TTyStyleSet;
   R, hdr, textRect, bandRect: TRect;
-  hdrH, chevW, bw, bwLogical: Integer;
+  hdrH, chevW, bw, bwLogical, bwi: Integer;
   chevR: TRect;
   kind: TTyGlyphKind;
   corners, bandCorners: TTyCorners;
@@ -578,7 +578,10 @@ begin
     // filled triangle this used to paint: a solid triangle is the shape the library keeps for
     // STEPPING a value (spin, scroll), and every desktop now draws an expander as an open
     // mark. Through TyDrawChevron, so --glyph-chevron-down / -right replace it as well.
-    chevR := Rect(hdr.Left, hdr.Top, hdr.Left + (hdr.Bottom - hdr.Top), hdr.Bottom);
+    // BorderWidth moves the header's chevron and caption in from the sides (#115); the band
+    // itself stays the top of the frame.
+    bwi := P.Scale(BorderWidth);
+    chevR := Rect(hdr.Left + bwi, hdr.Top, hdr.Left + bwi + (hdr.Bottom - hdr.Top), hdr.Bottom);
     kind := TyExPanelChevronKind(not FCollapsed);
     if IsRightToLeft then   // #153: at the other end, and a closed one points the reading way
     begin
@@ -593,8 +596,8 @@ begin
       chevW := hdr.Bottom - hdr.Top;   // gutter width == band height (matches chevron center)
       // Right inset stays the PANEL's padding: the band's box is the panel's box, and only
       // its ink (font + colour) is the header key's business.
-      textRect := Rect(hdr.Left + chevW, hdr.Top,
-        hdr.Right - P.Scale(S.Padding.Right), hdr.Bottom);
+      textRect := Rect(hdr.Left + bwi + chevW, hdr.Top,
+        hdr.Right - P.Scale(S.Padding.Right + BorderWidth), hdr.Bottom);
       if IsRightToLeft then textRect := TyMirrorRectX(textRect, R.Right);   // #153
       DrawCaption(P, textRect, HS, APPI);   // Alignment & co., as the panel's (#116)
     end;
