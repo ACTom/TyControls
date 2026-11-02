@@ -29,7 +29,7 @@ uses tyControls.CheckBox;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Checked` | `Boolean` | `False` | 复选框当前勾选状态；赋值会触发重绘（已定义 `default False`，可参与 DFM 差量存储） |
+| `Checked` | `Boolean` | `False` | 复选框当前勾选状态；赋值会触发重绘（已定义 `default False`，可参与 DFM 差量存储）。挂了 `Action` 时跟着动作的 `Checked` 走（与 LCL 的 `TButtonActionLink` 相同：两边一致时才联动，动作推过来的状态不会再执行一次动作） |
 | `Caption` | `string` | `''` | 复选框右侧显示的文字标签 |
 | `Alignment` | `TLeftRight` | `taRightJustify` | **（API parity 新增）** 指示框在标题的哪一侧。**这个名字在 LCL 里说的不是标题对齐**：`taRightJustify`（默认）= 指示框在左、标题在右（一直以来的样子）；`taLeftJustify` = 指示框挪到**右边**，标题靠着它右对齐。类型 `TLeftRight` 是 `TAlignment` 的子界（只有 `taLeftJustify` / `taRightJustify`），来自 FPC 的 `classesh.inc`。对应 LCL 的 `TCustomCheckBox.Alignment`（`stdctrls.pp:1358`，LCL 靠 `BS_RIGHTBUTTON` 实现，见 `include/customcheckbox.inc:269-274`）。两种摆法宽度完全一样，所以 `AutoSize` / 尺寸下限不受影响。用途：右侧选项列表，以及 RTL 语言的常规顺序。 |
 | `Enabled` | `Boolean` | `True` | 为 `False` 时触发 `:disabled`，控件不响应交互 |

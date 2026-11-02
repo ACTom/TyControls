@@ -5,7 +5,8 @@ uses
   Classes, SysUtils, StdCtrls, TypInfo, fpcunit, testregistry, Forms, Controls, Graphics, LCLType,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.CheckBox,
-  tyControls.ToolBar, test.captionfit;
+  tyControls.ToolBar, test.captionfit,
+  ActnList, tyControls.ToggleSwitch, tyControls.GlyphButtons;
 type
   TTyCheckBoxAccess = class(TTyCheckBox)
   public
@@ -1476,7 +1477,168 @@ begin
   end;
 end;
 
+
+type
+  { #172: an action drives Checked and GroupIndex on the check box, the radio button, the
+    toggle switch and the speed button; the switch shows the action's caption and runs it from
+    the keyboard. }
+  TActionCheck172Test = class(TTestCase)
+  private
+    FForm: TForm;
+    FAct: TAction;
+    FRuns: Integer;
+    procedure Run(Sender: TObject);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestAnActionChecksTheCheckBox;
+    procedure TestAnActionChecksAndGroupsTheRadioButton;
+    procedure TestAnActionDrivesTheToggleSwitch;
+    procedure TestTheSwitchRunsItsActionFromTheKeyboard;
+    procedure TestANewSwitchHasNoCaption;
+    procedure TestAnActionDrivesTheSpeedButton;
+    procedure TestAControlThatWentItsOwnWayIsLeftAlone;
+  end;
+
+  TSwitch172Access = class(TTyToggleSwitch);
+
+procedure TActionCheck172Test.Run(Sender: TObject);
+begin
+  Inc(FRuns);
+end;
+
+procedure TActionCheck172Test.SetUp;
+begin
+  FForm := TForm.CreateNew(nil);
+  FAct := TAction.Create(FForm);
+  FAct.ActionList := TActionList.Create(FForm);   // a grouped action unchecks the rest of its list
+  FAct.Caption := 'Act';
+  FAct.OnExecute := @Run;
+  FRuns := 0;
+end;
+
+procedure TActionCheck172Test.TearDown;
+begin
+  FreeAndNil(FForm);
+end;
+
+procedure TActionCheck172Test.TestAnActionChecksTheCheckBox;
+var cb: TTyCheckBox;
+begin
+  cb := TTyCheckBox.Create(FForm);
+  cb.Parent := FForm;
+  FAct.Checked := True;
+  cb.Action := FAct;
+  AssertTrue('the action''s Checked when it is assigned', cb.Checked);
+  FAct.Checked := False;
+  AssertFalse('and when it changes', cb.Checked);
+  FAct.Checked := True;
+  AssertTrue('back', cb.Checked);
+  AssertEquals('pushing its state does not run the action', 0, FRuns);
+end;
+
+procedure TActionCheck172Test.TestAnActionChecksAndGroupsTheRadioButton;
+var rb: TTyRadioButton;
+begin
+  rb := TTyRadioButton.Create(FForm);
+  rb.Parent := FForm;
+  FAct.GroupIndex := 3;
+  rb.Action := FAct;
+  AssertEquals('the action''s GroupIndex', 3, rb.GroupIndex);
+  FAct.Checked := True;
+  AssertTrue('its Checked', rb.Checked);
+  FAct.GroupIndex := 4;
+  AssertEquals('a new GroupIndex too', 4, rb.GroupIndex);
+  AssertEquals('pushing its state does not run the action', 0, FRuns);
+end;
+
+procedure TActionCheck172Test.TestAnActionDrivesTheToggleSwitch;
+var ts: TTyToggleSwitch;
+begin
+  ts := TTyToggleSwitch.Create(FForm);
+  ts.Parent := FForm;
+  ts.Action := FAct;
+  AssertEquals('the action''s caption shows', 'Act', ts.Caption);
+  FAct.Caption := 'Wi-Fi';
+  AssertEquals('and follows it', 'Wi-Fi', ts.Caption);
+  FAct.Checked := True;
+  AssertTrue('the action''s Checked', ts.Checked);
+  FAct.Checked := False;
+  AssertFalse('both ways', ts.Checked);
+  AssertEquals('pushing its state does not run the action', 0, FRuns);
+end;
+
+procedure TActionCheck172Test.TestTheSwitchRunsItsActionFromTheKeyboard;
+var ts: TSwitch172Access; k: Word;
+begin
+  ts := TSwitch172Access.Create(FForm);
+  ts.Parent := FForm;
+  FAct.AutoCheck := True;
+  ts.Action := FAct;
+  k := VK_SPACE;
+  ts.KeyDown(k, []);
+  k := VK_SPACE;
+  ts.KeyUp(k, []);
+  AssertTrue('Space toggles it', ts.Checked);
+  AssertEquals('and runs the action, as a click does', 1, FRuns);
+  AssertTrue('whose AutoCheck follows', FAct.Checked);
+  ts.Click;
+  AssertFalse('a click toggles back', ts.Checked);
+  AssertFalse('and so does the action', FAct.Checked);
+end;
+
+procedure TActionCheck172Test.TestANewSwitchHasNoCaption;
+var ts: TTyToggleSwitch;
+begin
+  ts := TTyToggleSwitch.Create(FForm);
+  ts.Name := 'Switch1';
+  AssertEquals('a named switch does not take its Name as caption', '', ts.Caption);
+  ts.Caption := 'On';
+  AssertEquals('Caption is the control''s', 'On', TSwitch172Access(ts).Text);
+end;
+
+procedure TActionCheck172Test.TestAnActionDrivesTheSpeedButton;
+var sb, sb2: TTySpeedButton;
+begin
+  sb := TTySpeedButton.Create(FForm);
+  sb.Parent := FForm;
+  sb.AllowAllUp := True;
+  FAct.GroupIndex := 2;
+  sb.Action := FAct;
+  AssertEquals('the action''s GroupIndex', 2, sb.GroupIndex);
+  FAct.Checked := True;
+  AssertTrue('its Checked is Down', sb.Down);
+  FAct.Checked := False;
+  AssertFalse('up again', sb.Down);
+  sb2 := TTySpeedButton.Create(FForm);
+  sb2.Parent := FForm;
+  sb2.GroupIndex := 2;
+  sb2.Down := True;            // the group's pressed one
+  sb.AllowAllUp := False;
+  AssertFalse('setup: sb is up', sb.Down);
+  FAct.Checked := True;
+  AssertFalse('a button that cannot come up again is not linked, as in LCL', sb.Down);
+  AssertTrue('the group keeps its pressed one', sb2.Down);
+end;
+
+procedure TActionCheck172Test.TestAControlThatWentItsOwnWayIsLeftAlone;
+var cb: TTyCheckBox;
+begin
+  cb := TTyCheckBox.Create(FForm);
+  cb.Parent := FForm;
+  cb.Action := FAct;
+  cb.Checked := True;          // the user's, not the action's
+  FAct.Checked := True;        // the action catches up: now they agree again
+  FAct.Checked := False;
+  AssertFalse('agreeing again, it follows', cb.Checked);
+  cb.Checked := True;
+  FAct.Caption := 'x';         // some other change of the action
+  AssertTrue('a change that is not Checked leaves its Checked alone', cb.Checked);
+end;
+
 initialization
+  RegisterTest(TActionCheck172Test);
   RegisterTest(TCheckBoxTest);
   RegisterTest(TCheckBoxTriStateTest);
   RegisterTest(TCheckBoxAutoSizeTest);

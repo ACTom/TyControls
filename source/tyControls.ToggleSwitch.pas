@@ -14,18 +14,16 @@ function TyToggleKnobX(ATrackWidthDev, AMarginDev, AKnobSideDev: Integer;
   AProgress: Single): Integer;
 
 type
-  TTyToggleSwitch = class(TTyCustomControl)
+  TTyToggleSwitch = class(TTyCustomControl, ITyActionCheckable)
   private
     FSpaceDown: Boolean;   // Space held down on it; it toggles on the key-up (#151)
     FChecked: Boolean;
-    FCaption: TCaption;
     FOnChange: TNotifyEvent;
     FKnobAnim: TTyAnimator;
     FAnimationsEnabled: Boolean;
     FTimer: TTimer;
     FRefitting: Boolean;   // guards the AutoSize re-fit in Invalidate against re-entry
     procedure SetChecked(const AValue: Boolean);
-    procedure SetCaption(const AValue: TCaption);
     procedure EnsureTimer;
     procedure HandleTimer(Sender: TObject);
     function GetKnobAnimProgress: Single;
@@ -58,6 +56,18 @@ type
       Constraints 时会挡住这里的重算(见 tyControls.Base.pas)。没有它,一次 100%->250%
       把系数应用了两遍,来回三趟宽度还会继续往上爬。 }
     procedure DoUpdateSizeConstraints; override;
+    { #172: the caption is the control's own Caption -- a field of its own hid it, and an
+      action's caption never showed. A new one re-fits AutoSize and the size floor. }
+    procedure TextChanged; override;
+    { #172: ITyActionCheckable -- an action's Checked and GroupIndex drive it. }
+    function ActionCheckable: Boolean;
+    function GetActionChecked: Boolean;
+    procedure SetActionChecked(AValue: Boolean);
+    function HasActionGroupIndex: Boolean;
+    function GetActionGroupIndex: Integer;
+    procedure SetActionGroupIndex(AValue: Integer);
+    function GetActionLinkClass: TControlActionLinkClass; override;
+    procedure ActionChange(Sender: TObject; CheckDefaults: Boolean); override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     { A theme switch reaches every control as a bare Invalidate, and the new theme's font
       changes the width the caption needs — so an AutoSize switch must re-fit here too. }
@@ -105,7 +115,7 @@ type
     property Checked: Boolean read FChecked write SetChecked default False;
     // Optional text label drawn to the RIGHT of the switch (TToggleBox parity).
     // Empty (the default) renders the bare switch unchanged.
-    property Caption: TCaption read FCaption write SetCaption;
+    property Caption;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     { The constructor turns this on (Space toggles a focused switch); declaring the default
       to match is what lets a host turn it OFF in the .lfm — against the inherited
@@ -137,6 +147,9 @@ end;
 constructor TTyToggleSwitch.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  { A switch dropped on a form starts bare, as it did with a caption of its own: the control's
+    Caption would take its Name. }
+  ControlStyle := ControlStyle - [csSetCaption];
   TabStop := True;
   FChecked := False;
   FAnimationsEnabled := True;
@@ -163,12 +176,12 @@ function TTyToggleSwitch.DisplayCaption: string;
 var
   mp: Integer;
 begin
-  TyParseMnemonic(FCaption, Result, mp);
+  TyParseMnemonic(Caption, Result, mp);
 end;
 
 function TTyToggleSwitch.DialogChar(var Message: TLMKey): Boolean;
 begin
-  if IsEnabled and TyShownInForm(Self) and TyIsAccelKey(Message, FCaption) then
+  if IsEnabled and TyShownInForm(Self) and TyIsAccelKey(Message, Caption) then
   begin
     if CanFocus then SetFocus;
     Click;
@@ -211,12 +224,10 @@ begin
     FOnChange(Self);
 end;
 
-procedure TTyToggleSwitch.SetCaption(const AValue: TCaption);
+procedure TTyToggleSwitch.TextChanged;
 begin
-  if FCaption = AValue then Exit;
-  FCaption := AValue;
+  inherited TextChanged;
   // 新标题要的宽度变了,所以 AutoSize 的开关必须重新贴合,地板也得跟着换。
-  // (标题是本控件自己的字段,不走 TControl.Caption,所以钩子在这里而不是 TextChanged。)
   UpdateSizeConstraints;
   if AutoSize then
   begin
@@ -273,7 +284,7 @@ begin
     sz := P.MeasureText('Ag', S.FontName, fs, S.FontWeight);
     AHeight := sz.cy;
     // 空标题时 RenderTo 一个字都不画,所以宽度是 0,不是某个占位字符串的宽度。
-    if FCaption <> '' then
+    if Caption <> '' then
       AWidth := P.MeasureText(DisplayCaption, S.FontName, fs, S.FontWeight).cx;
     P.EndPaint;   // nil canvas -> 不 blit,只释放度量位图
   finally
@@ -302,7 +313,7 @@ begin
     这个矩形 —— 少算一个像素就是吃掉标题最后一个字。所以这里必须把间隙和标题都算进来。
     (TyToggleSwitch 的绘制路径不使用 padding 令牌 —— 主题也没给它 —— 所以预留里也没有
     padding:预留必须等于绘制,多算和少算一样是撒谎。) }
-  if FCaption <> '' then
+  if Caption <> '' then
     Inc(PreferredWidth, MulDiv(TyCheckBoxGap, ppi, 96) + tw);
   if PreferredWidth < 1 then PreferredWidth := 1;
   { 只管宽度 —— 0 是 LCL 的"这个轴上没有意见",高度就留给排版方。开关同时提议高度,就会和
@@ -317,7 +328,7 @@ var
   ppi, tw, th, prefW, prefH: Integer;
 begin
   if csDestroying in ComponentState then Exit;
-  if FCaption = '' then
+  if Caption = '' then
   begin
     { 没有标题就没有会被裁掉的墨迹:药丸是照客户区画的(RenderTo 里 R = FullR),给多大画
       多大,滑块也是从高度推的 —— 一个 20x14 的裸开关画出来仍然是一个完整的小开关,没有
@@ -460,7 +471,7 @@ begin
     TyFillParentBg(Self, P, FullR, S);
 
     DevH := R.Bottom - R.Top;
-    if FCaption <> '' then
+    if Caption <> '' then
     begin
       // Natural switch width keeps the default 44:24 aspect (→ exactly 44 dev-px
       // at the 24px default height), purely height-derived so it is theme-safe.
@@ -521,7 +532,7 @@ begin
 
     // Caption: drawn to the RIGHT of the switch zone, vertically centred, using
     // the same style tokens captioned controls use (font/size/weight/text-color).
-    if FCaption <> '' then
+    if Caption <> '' then
     begin
       // The caption strip sits OUTSIDE the narrowed track rect, so DrawFrame never
       // composited a backdrop there. On an image theme fill it with the form's photo
@@ -529,7 +540,7 @@ begin
       FillSharpBackdrop(P, Rect(R.Right, FullR.Top, FullR.Right, FullR.Bottom));
       Gap := P.Scale(TyCheckBoxGap);
       CaptionRect := Rect(R.Right + Gap, FullR.Top, FullR.Right, FullR.Bottom);
-      TyParseMnemonic(FCaption, dispCap, mp);
+      TyParseMnemonic(Caption, dispCap, mp);
       P.DrawText(CaptionRect, dispCap, S.FontName, ResolveFontSize(S),
         S.FontWeight, S.TextColor, taLeftJustify, tlCenter, True, TyAccelGatePos(mp));
     end;
@@ -543,6 +554,48 @@ end;
 procedure TTyToggleSwitch.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+end;
+
+
+{ #172: an action's Checked drives the switch. }
+function TTyToggleSwitch.ActionCheckable: Boolean;
+begin
+  Result := True;
+end;
+
+function TTyToggleSwitch.GetActionChecked: Boolean;
+begin
+  Result := FChecked;
+end;
+
+procedure TTyToggleSwitch.SetActionChecked(AValue: Boolean);
+begin
+  Checked := AValue;   { Checked does not click: OnChange only }
+end;
+
+function TTyToggleSwitch.HasActionGroupIndex: Boolean;
+begin
+  Result := False;
+end;
+
+function TTyToggleSwitch.GetActionGroupIndex: Integer;
+begin
+  Result := 0;
+end;
+
+procedure TTyToggleSwitch.SetActionGroupIndex(AValue: Integer);
+begin
+end;
+
+function TTyToggleSwitch.GetActionLinkClass: TControlActionLinkClass;
+begin
+  Result := TTyCheckActionLink;
+end;
+
+procedure TTyToggleSwitch.ActionChange(Sender: TObject; CheckDefaults: Boolean);
+begin
+  inherited ActionChange(Sender, CheckDefaults);
+  TyApplyActionChecked(Self, Sender, CheckDefaults);
 end;
 
 end.

@@ -57,7 +57,7 @@ uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Button, tyControls.Controller, tyControls.IconFont,
-  tyControls.ImageCollection;
+  tyControls.ImageCollection, tyControls.Base;
 
 const
   { Sentinel GlyphColor meaning "use the resolved theme TextColor". A fully
@@ -316,7 +316,7 @@ type
     GroupIndex. AllowAllUp lets a click on the already-down button toggle it back
     up (so the whole group can be up). Inherits the resting :selected state via
     Down. }
-  TTySpeedButton = class(TTyGlyphButtonBase)
+  TTySpeedButton = class(TTyGlyphButtonBase, ITyActionCheckable)
   private
     FGroupIndex: Integer;
     FAllowAllUp: Boolean;
@@ -340,6 +340,15 @@ type
       say otherwise. With its own key a skin can state the flat resting frame
       once, for every speed button, wherever it sits. }
     function GetStyleTypeKey: string; override;
+    { #172: ITyActionCheckable -- an action's Checked and GroupIndex drive it. }
+    function ActionCheckable: Boolean;
+    function GetActionChecked: Boolean;
+    procedure SetActionChecked(AValue: Boolean);
+    function HasActionGroupIndex: Boolean;
+    function GetActionGroupIndex: Integer;
+    procedure SetActionGroupIndex(AValue: Integer);
+    function GetActionLinkClass: TControlActionLinkClass; override;
+    procedure ActionChange(Sender: TObject; CheckDefaults: Boolean); override;
   public
     constructor Create(AOwner: TComponent); override;
     { Radio/toggle grouping. GroupIndex = 0 keeps the plain button behaviour
@@ -1059,6 +1068,50 @@ begin
     end;
   end;
   inherited Click;   // fire OnClick / ModalResult after the group state settles
+end;
+
+
+{ #172: an action's Checked and GroupIndex drive the speed button, as LCL's
+  TSpeedButtonActionLink: GroupIndex always, Down only when it can stay down and come up again. }
+function TTySpeedButton.ActionCheckable: Boolean;
+begin
+  Result := (FGroupIndex <> 0) and FAllowAllUp;
+end;
+
+function TTySpeedButton.GetActionChecked: Boolean;
+begin
+  Result := Down;
+end;
+
+procedure TTySpeedButton.SetActionChecked(AValue: Boolean);
+begin
+  Down := AValue;   { Down does not click }
+end;
+
+function TTySpeedButton.HasActionGroupIndex: Boolean;
+begin
+  Result := True;
+end;
+
+function TTySpeedButton.GetActionGroupIndex: Integer;
+begin
+  Result := FGroupIndex;
+end;
+
+procedure TTySpeedButton.SetActionGroupIndex(AValue: Integer);
+begin
+  GroupIndex := AValue;
+end;
+
+function TTySpeedButton.GetActionLinkClass: TControlActionLinkClass;
+begin
+  Result := TTyCheckActionLink;
+end;
+
+procedure TTySpeedButton.ActionChange(Sender: TObject; CheckDefaults: Boolean);
+begin
+  inherited ActionChange(Sender, CheckDefaults);
+  TyApplyActionChecked(Self, Sender, CheckDefaults);
 end;
 
 end.

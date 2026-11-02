@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages, StdCtrls,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller, tyControls.Accel;
 type
-  TTyCheckBox = class(TTyCustomControl)
+  TTyCheckBox = class(TTyCustomControl, ITyActionCheckable)
   private
     FSpaceDown: Boolean;   // Space held down on it; it clicks on the key-up (#151)
     FState: TCheckBoxState;
@@ -23,6 +23,15 @@ type
       code that keeps a box in step with something else (a data field, a select-all box) and
       must not run the box's click handler doing it. }
     property ClicksDisabled: Boolean read FClicksDisabled write FClicksDisabled;
+    { #172: ITyActionCheckable -- an action's Checked and GroupIndex drive it. }
+    function ActionCheckable: Boolean;
+    function GetActionChecked: Boolean;
+    procedure SetActionChecked(AValue: Boolean);
+    function HasActionGroupIndex: Boolean;
+    function GetActionGroupIndex: Integer;
+    procedure SetActionGroupIndex(AValue: Integer);
+    function GetActionLinkClass: TControlActionLinkClass; override;
+    procedure ActionChange(Sender: TObject; CheckDefaults: Boolean); override;
     function GetStyleTypeKey: string; override;
     function CurrentStates: TTyStateSet; override;
     { 控件真正需要的宽度:主题 padding + 指示框 + 间距 + 量出来的标题 —— 也就是 RenderTo
@@ -105,7 +114,7 @@ type
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
   end;
 
-  TTyRadioButton = class(TTyCustomControl)
+  TTyRadioButton = class(TTyCustomControl, ITyActionCheckable)
   private
     FSpaceDown: Boolean;   // Space held down on it; it clicks on the key-up (#151)
     FChecked: Boolean;
@@ -121,6 +130,15 @@ type
   protected
     { #188: as TTyCheckBox.ClicksDisabled. }
     property ClicksDisabled: Boolean read FClicksDisabled write FClicksDisabled;
+    { #172: ITyActionCheckable -- an action's Checked and GroupIndex drive it. }
+    function ActionCheckable: Boolean;
+    function GetActionChecked: Boolean;
+    procedure SetActionChecked(AValue: Boolean);
+    function HasActionGroupIndex: Boolean;
+    function GetActionGroupIndex: Integer;
+    procedure SetActionGroupIndex(AValue: Integer);
+    function GetActionLinkClass: TControlActionLinkClass; override;
+    procedure ActionChange(Sender: TObject; CheckDefaults: Boolean); override;
     function GetStyleTypeKey: string; override;
     function CurrentStates: TTyStateSet; override;
     { 与 TTyCheckBox.CalculatePreferredSize 同理,只是指示器读的是 --radio-size /
@@ -862,6 +880,107 @@ begin
       FRefitting := False;
     end;
   end;
+end;
+
+
+{ #172: an action's Checked drives the check box -- its Checked, as LCL's TButtonActionLink
+  drives a TCheckBox. }
+function TTyCheckBox.ActionCheckable: Boolean;
+begin
+  Result := True;
+end;
+
+function TTyCheckBox.GetActionChecked: Boolean;
+begin
+  Result := Checked;
+end;
+
+procedure TTyCheckBox.SetActionChecked(AValue: Boolean);
+var
+  was: Boolean;
+begin
+  was := FClicksDisabled;
+  FClicksDisabled := True;
+  try
+    Checked := AValue;
+  finally
+    FClicksDisabled := was;
+  end;
+end;
+
+function TTyCheckBox.HasActionGroupIndex: Boolean;
+begin
+  Result := False;
+end;
+
+function TTyCheckBox.GetActionGroupIndex: Integer;
+begin
+  Result := 0;
+end;
+
+procedure TTyCheckBox.SetActionGroupIndex(AValue: Integer);
+begin
+end;
+
+function TTyCheckBox.GetActionLinkClass: TControlActionLinkClass;
+begin
+  Result := TTyCheckActionLink;
+end;
+
+procedure TTyCheckBox.ActionChange(Sender: TObject; CheckDefaults: Boolean);
+begin
+  inherited ActionChange(Sender, CheckDefaults);
+  TyApplyActionChecked(Self, Sender, CheckDefaults);
+end;
+
+{ #172: an action's Checked and GroupIndex drive the radio button. }
+function TTyRadioButton.ActionCheckable: Boolean;
+begin
+  Result := True;
+end;
+
+function TTyRadioButton.GetActionChecked: Boolean;
+begin
+  Result := FChecked;
+end;
+
+procedure TTyRadioButton.SetActionChecked(AValue: Boolean);
+var
+  was: Boolean;
+begin
+  was := FClicksDisabled;
+  FClicksDisabled := True;
+  try
+    Checked := AValue;
+  finally
+    FClicksDisabled := was;
+  end;
+end;
+
+function TTyRadioButton.HasActionGroupIndex: Boolean;
+begin
+  Result := True;
+end;
+
+function TTyRadioButton.GetActionGroupIndex: Integer;
+begin
+  Result := FGroupIndex;
+end;
+
+procedure TTyRadioButton.SetActionGroupIndex(AValue: Integer);
+begin
+  GroupIndex := AValue;
+end;
+
+function TTyRadioButton.GetActionLinkClass: TControlActionLinkClass;
+begin
+  Result := TTyCheckActionLink;
+end;
+
+procedure TTyRadioButton.ActionChange(Sender: TObject; CheckDefaults: Boolean);
+begin
+  inherited ActionChange(Sender, CheckDefaults);
+  TyApplyActionChecked(Self, Sender, CheckDefaults);
 end;
 
 end.
