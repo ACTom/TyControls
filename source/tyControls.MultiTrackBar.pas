@@ -426,6 +426,10 @@ type
     { Cross axis only, as TTyTrackBar: the thumb, the ticks and their labels. }
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
       WithThemeSpace: Boolean); override;
+    { #182: something CalculatePreferredSize reads has changed -- a switch, a size a paint
+      measured, the theme: LCL asks again, and AutoSize re-fits. }
+    procedure PreferredSizeChanged;
+    procedure StyleLayoutChanged; override;
 
     { ---- The switches (off here; each final class publishes the ones it offers). ---- }
     { A thumb the user moves is not stopped by its neighbours: it goes past them and the
@@ -1955,6 +1959,7 @@ procedure TTyMultiTrackBarBase.SetTickMarks(const AValue: TTyTrackTickMark);
 begin
   if FTickMarks = AValue then Exit;
   FTickMarks := AValue;
+  PreferredSizeChanged;
   Invalidate;
 end;
 
@@ -1980,6 +1985,7 @@ begin
   if FTickLabels = AValue then Exit;
   FTickLabels := AValue;
   if not FTickLabels then FTickLabelPx := 0;
+  PreferredSizeChanged;
   Invalidate;
 end;
 
@@ -2026,6 +2032,18 @@ end;
 function TTyMultiTrackBarBase.ThumbEnabled(AIndex: Integer): Boolean;
 begin
   Result := True;
+end;
+
+procedure TTyMultiTrackBarBase.PreferredSizeChanged;
+begin
+  InvalidatePreferredSize;
+  AdjustSize;
+end;
+
+procedure TTyMultiTrackBarBase.StyleLayoutChanged;
+begin
+  inherited StyleLayoutChanged;
+  PreferredSizeChanged;
 end;
 
 function TTyMultiTrackBarBase.ThumbColor(AIndex: Integer): TColor;
@@ -2083,6 +2101,7 @@ begin
     FValueAreaPx := 0;
     FValueTextPx := 0;
   end;
+  PreferredSizeChanged;
   Invalidate;
 end;
 
@@ -2226,6 +2245,7 @@ var
   c: TColor;
   vs, vw: TSize;
   dflt, segDflt: Boolean;
+  oldLabelPx, oldTextPx: Integer;
 
   procedure DrawThumb(AIndex: Integer);
   var
@@ -2272,6 +2292,8 @@ begin
     P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
     DrawFrame(P, R, S);
+    oldLabelPx := FTickLabelPx;
+    oldTextPx := FValueTextPx;
 
     TW := TyTrackThumbLen(APPI);
     { The readout strip, measured as TTyTrackBar measures it: as wide as the wider of Min and
@@ -2384,6 +2406,8 @@ begin
   finally
     P.Free;
   end;
+  { #182: the label strip and the readout are measured here: a new size is a new answer. }
+  if (FTickLabelPx <> oldLabelPx) or (FValueTextPx <> oldTextPx) then PreferredSizeChanged;
 end;
 
 procedure TTyMultiTrackBarBase.PaintGroove(APainter: TTyPainter; const AGroove: TRect;

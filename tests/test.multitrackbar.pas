@@ -145,6 +145,10 @@ type
     procedure TestSegmentSpansRunBetweenTheThumbCentres;
     procedure TestSegmentSpanOutsideTheSegmentsIsFalse;
     procedure TestPreferredCrossSizeIsTheTrackBars;
+    { #182: what LCL holds as the preferred size (AutoSize's answer) is asked again when
+      TickLabels, ShowValue or TickMarks change, and when a paint has measured a different
+      label strip or readout: it never stays the answer from before. }
+    procedure TestThePreferredSizeHeldIsAskedAgain;
   end;
 
   TTyMultiTrackPaintTest = class(TMultiTrackPaintBase)
@@ -1355,6 +1359,59 @@ begin
   AssertTrue('no thumbs: one segment, the whole groove', FBar.SegmentSpan(0, 96, lo, hi));
   AssertEquals(0, lo);
   AssertEquals(CLen, hi);
+end;
+
+procedure TTyMultiTrackGeometryTest.TestThePreferredSizeHeldIsAskedAgain;
+
+  function Held: Integer;
+  var
+    w, h: Integer;
+  begin
+    w := 0;
+    h := 0;
+    FBar.GetPreferredSize(w, h, True, False);
+    Result := h;
+  end;
+
+  function Fresh: Integer;
+  var
+    w, h: Integer;
+  begin
+    FBar.PreferredSize(w, h);
+    Result := h;
+  end;
+
+var
+  before: Integer;
+  b: TBGRABitmap;
+begin
+  FBar.Put([30, 70]);
+  FBar.AutoSize := True;
+  FBar.Frequency := 25;
+  before := Held;
+  FBar.TickLabels := True;
+  AssertEquals('before a paint the label strip is not known yet', before, Held);
+  b := Shot(False); b.Free;      // the label strip is measured when the bar paints
+  AssertTrue('setup: the labels make it thicker', Fresh > before);
+  AssertEquals('the label strip measured: asked again', Fresh, Held);
+  FBar.TickMarks := ttmBoth;
+  AssertEquals('labels on both sides: asked again', Fresh, Held);
+  before := Held;
+  FBar.TickLabels := False;
+  AssertTrue('labels off: thinner', Fresh < before);
+  AssertEquals('labels off: asked again', Fresh, Held);
+  FBar.ShowValue := True;
+  before := Held;
+  b := Shot(False); b.Free;
+  AssertTrue('setup: the readout makes it thicker', Fresh > before);
+  AssertEquals('the readout measured: asked again', Fresh, Held);
+  FBar.ShowValue := False;
+  AssertEquals('the readout off: asked again', Fresh, Held);
+  { A theme whose padding is not the one before. }
+  before := Held;
+  FCtl.LoadThemeCss(CPaintCss + 'TyTrackBar { padding: 10px 0; }');
+  AssertTrue('setup: the padding makes it thicker', Fresh > before);
+  AssertEquals('the theme changed: asked again', Fresh, Held);
 end;
 
 procedure TTyMultiTrackGeometryTest.TestPreferredCrossSizeIsTheTrackBars;
