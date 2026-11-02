@@ -42,6 +42,8 @@ type
     FRoot, FMeasure: TJSONData;
     FBmp: TBGRABitmap;
     FBad, FCompared, FMoved, FTurned: Integer;
+    { [R7-N] labels compared under a squashed view's whole map }
+    FSquashed: Integer;
     { the case reads a graph's or a sankey's links }
     FEdges: Boolean;
     FReport, FName: string;
@@ -151,6 +153,7 @@ begin
   FCompared := 0;
   FMoved := 0;
   FTurned := 0;
+  FSquashed := 0;
   FReport := '';
 end;
 
@@ -273,8 +276,24 @@ begin
       { the turn: zrender's [cos, -sin, sin, cos] }
       m := lb.Arrays['m'];
       if FromHex(m.Strings[1]) <> 0 then Inc(FTurned);
-      Close('m0', Cos(el.Caption.RotationRad), m.Strings[0]);
-      Close('m1', -Sin(el.Caption.RotationRad), m.Strings[1]);
+      { [R7-N] a label squashed under its view (a graph edge's, scaleY not
+        scaleX): the whole map it is drawn under, its place and its turn
+        the state's }
+      if el.Caption.HasAffine then
+      begin
+        Close('m0', el.Caption.Affine[0] / el.Caption.RtScale, m.Strings[0]);
+        Close('m1', el.Caption.Affine[1] / el.Caption.RtScale, m.Strings[1]);
+        Close('m2', el.Caption.Affine[2] / el.Caption.RtScale, m.Strings[2]);
+        Close('m3', el.Caption.Affine[3] / el.Caption.RtScale, m.Strings[3]);
+        Close('affine x', el.Caption.Affine[4], lb.Strings['x']);
+        Close('affine y', el.Caption.Affine[5], lb.Strings['y']);
+        Inc(FSquashed);
+      end
+      else
+      begin
+        Close('m0', Cos(el.Caption.RotationRad), m.Strings[0]);
+        Close('m1', -Sin(el.Caption.RotationRad), m.Strings[1]);
+      end;
       Str('align', AlignName(el.Caption.AnchorH), lb.Strings['align']);
       Str('verticalAlign', VAlignName(el.Caption.AnchorV), lb.Strings['verticalAlign']);
       { the box, where it is not turned (a turned one-run caption keeps its
@@ -363,6 +382,8 @@ begin
   AssertTrue(Format('enough was compared (%d)', [FCompared]), FCompared > 1000);
   AssertTrue(Format('labels a state moved (%d)', [FMoved]), FMoved >= 15);
   AssertTrue(Format('labels a state turned (%d)', [FTurned]), FTurned >= 2);
+  { graph.edge.squash: two labels at rest, then after each of three steps }
+  AssertEquals('labels compared under a squashed map', 8, FSquashed);
 end;
 
 initialization

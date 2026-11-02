@@ -496,6 +496,11 @@ var
   fsx, fsy, fx, fy, theta: Double;
   q1, q2, qc: TTyPointF;
   lx, ly: array[0..3] of Double;
+  { [R7-N] a graph's view scaled unequally: the box in the group's own
+    units (the Line group's getBoundingRect), the anchor taken there and
+    through the group }
+  sq: Boolean;
+  lineScale, cxl, cyl: Double;
 
   { zrender's BoundingRect.union of r into box }
   procedure Union;
@@ -554,6 +559,32 @@ var
         lx1 := lx0;
       end;
       b := TyRectF(lx0 * fsx + fx, ly0 * fsy + fy, lx1 * fsx + fx, ly1 * fsy + fy);
+      { [R7-N] in the group's units: the path's rect grown by its pen over
+        the line scale (strokeNoScale: Path.getLineScale, the root of the
+        global transform's determinant where both scales are not one) }
+      if sq then
+      begin
+        r := TyXYWH(lx0, ly0, lx1 - lx0, ly1 - ly0);
+        if (AEl2.Style.StrokeColor <> 0) and (AWidth > 0) then
+        begin
+          g := AWidth;
+          if g < 5 then g := 5;
+          g := g * AScale;
+          if (Abs(fsx - 1) > 1e-10) and (Abs(fsy - 1) > 1e-10) then
+            lineScale := Sqrt(Abs(fsx * fsy))
+          else
+            lineScale := 1;
+          if lineScale > 1e-10 then
+          begin
+            r.X := r.X - g / lineScale / 2;
+            r.Y := r.Y - g / lineScale / 2;
+            r.W := r.W + g / lineScale;
+            r.H := r.H + g / lineScale;
+          end;
+        end;
+        Union;
+        Exit;
+      end;
     end;
     r := TyXYWH(b.Left, b.Top, b.Right - b.Left, b.Bottom - b.Top);
     if (AEl2.Style.StrokeColor <> 0) and (AWidth > 0) then
@@ -647,6 +678,11 @@ var
     r.Y := Min(Min(ly[0], ly[1]), Min(ly[2], ly[3]));
     r.W := Max(Max(lx[0], lx[1]), Max(lx[2], lx[3])) - r.X;
     r.H := Max(Max(ly[0], ly[1]), Max(ly[2], ly[3])) - r.Y;
+    { [R7-N] in the group's units: the symbol is scaled by 1 / scaleX
+      (Line.beforeUpdate's invScale) about its place in the group }
+    if sq then
+      r := TyXYWH((cx2 - fx) / fsx + (r.X - cx2) / fsx, (cy2 - fy) / fsy + (r.Y - cy2) / fsx,
+        r.W / fsx, r.H / fsx);
     Union;
   end;
 
@@ -673,6 +709,7 @@ begin
     fx := 0;
     fy := 0;
     theta := 0;
+    sq := False;
     if AGraph then
     begin
       fsx := AHostNow.Anim.G[7];
@@ -681,6 +718,7 @@ begin
       fy := AHostNow.Anim.G[10];
       TyGraphEdgeLine(AHostNow, q1, q2, qc, cv);
       theta := ArcTan2(q2.Y - q1.Y, q2.X - q1.X);
+      sq := (fsx > 0) and (fsy > 0) and (fsx <> fsy);
     end;
     w := AHostNow.Style.StrokeWidthLogical;
     if AHost.Cur.Has[stkLineWidth] then w := AHost.Cur.Num[stkLineWidth];
@@ -692,6 +730,23 @@ begin
         if not pe^.Ignore then TakeSymbol(pe^);
       end;
     if not has then Exit;
+    if sq then
+    begin
+      { [R7-N] the position in the group's units (the distance, an absolute
+        point as written), then through the group }
+      atX := t.LabelAtX;
+      atY := t.LabelAtY;
+      if t.LabelAtXPct then atX := t.LabelAtX * box.W;
+      if t.LabelAtYPct then atY := t.LabelAtY * box.H;
+      TyLabelAnchorXYWH(box, TTyLabelPosition(t.LabelPos), t.LabelDist, atX, atY,
+        cxl, cyl, ah, av);
+      cx := fsx * cxl + fx;
+      cy := fsy * cyl + fy;
+      x := x + (cx - bx);
+      y := y + (cy - by);
+    end
+    else
+    begin
     atX := t.LabelAtX * fs;
     atY := t.LabelAtY * fs;
     if t.LabelAtXPct then atX := t.LabelAtX * box.W;
@@ -700,11 +755,14 @@ begin
     TyLabelAnchorXYWH(box, TTyLabelPosition(t.LabelPos), dist, atX, atY, cx, cy, ah, av);
     x := x + (cx - bx);
     y := y + (cy - by);
+    end;
   end;
   StShiftShape(AEl.Shape, x - AEl.Caption.X, y - AEl.Caption.Y);
   AEl.Caption.X := x;
   AEl.Caption.Y := y;
   AEl.Caption.RotationRad := rot;
+  { [R7-N] a squashed edge label: its map at the state's place and turn }
+  TyCaptionAffineSync(AEl.Caption);
 end;
 
 procedure StWriteLabel(var AEl: TTyChartElement; const AState: TTyStElement;
@@ -761,6 +819,8 @@ begin
       AEl.Caption.RtPieces := TyRtReink(AEl.Caption.RtPieces, c.Color[stkFill],
         False, AEl.Caption.StrokeColour, AEl.Caption.StrokeWidthLogical);
   end;
+  { [R7-N] a squashed label where the state (or its frame) put it }
+  TyCaptionAffineSync(AEl.Caption);
 end;
 
 { [R5-F] a label line's state style: the state model's labelLine.lineStyle

@@ -80,6 +80,12 @@ type
     { [R5-A] the label's fontStyle (TyFontStyleCode): the nearest block's,
       else the root textStyle's }
     FontStyle: Byte;
+    { [R7-N] THE LABEL MODEL AS createTextStyle READS IT: every key of the
+      levels' `label` blocks, the first level to write one (not null)
+      winning it, and `rich` per style name and key -- the model chain's
+      getShallow and getModel(['rich', name]). JSON text, '' when no level
+      wrote a label. }
+    Json: string;
   end;
 
   TTyAxisPointerSpec = record
@@ -200,6 +206,8 @@ function TyAxisPointerBand(AAtPx, ABandWidthPx, AExtentA, AExtentB: Double;
 
 implementation
 
+uses jsonparser;
+
 { ---- reading one axisPointer block ---- }
 
 type
@@ -285,6 +293,69 @@ begin
   Result := True;
 end;
 
+{ [R7-N] one level's `label` into the merged label model (AJson): a key
+  the merge does not hold yet is this level's, a null claims nothing, and
+  `rich` merges per style name and key }
+procedure MergeLabelJson(ALabel: TJSONObject; var AJson: string);
+var
+  m, mr, src, dst, one: TJSONObject;
+  d, parsed: TJSONData;
+  i, j, k: Integer;
+  key, name: string;
+begin
+  if (ALabel = nil) or (ALabel.Count = 0) then Exit;
+  m := nil;
+  try
+    if AJson <> '' then
+    begin
+      parsed := GetJSON(AJson);
+      if parsed is TJSONObject then m := TJSONObject(parsed)
+      else
+      begin
+        parsed.Free;
+        m := TJSONObject.Create;
+      end;
+    end
+    else
+      m := TJSONObject.Create;
+    for i := 0 to ALabel.Count - 1 do
+    begin
+      key := ALabel.Names[i];
+      d := ALabel.Items[i];
+      if d.JSONType = jtNull then Continue;
+      if (key = 'rich') and (d is TJSONObject) then
+      begin
+        if m.Find('rich') = nil then m.Add('rich', TJSONObject.Create);
+        if not (m.Find('rich') is TJSONObject) then Continue;
+        mr := TJSONObject(m.Find('rich'));
+        src := TJSONObject(d);
+        for j := 0 to src.Count - 1 do
+        begin
+          name := src.Names[j];
+          if not (src.Items[j] is TJSONObject) then
+          begin
+            if (mr.Find(name) = nil) and (src.Items[j].JSONType <> jtNull) then
+              mr.Add(name, src.Items[j].Clone);
+            Continue;
+          end;
+          one := TJSONObject(src.Items[j]);
+          if mr.Find(name) = nil then mr.Add(name, TJSONObject.Create);
+          if not (mr.Find(name) is TJSONObject) then Continue;
+          dst := TJSONObject(mr.Find(name));
+          for k := 0 to one.Count - 1 do
+            if (one.Items[k].JSONType <> jtNull) and (dst.Find(one.Names[k]) = nil) then
+              dst.Add(one.Names[k], one.Items[k].Clone);
+        end;
+        Continue;
+      end;
+      if m.Find(key) = nil then m.Add(key, d.Clone);
+    end;
+    AJson := m.AsJSON;
+  finally
+    m.Free;
+  end;
+end;
+
 procedure ReadLabel(ANode: TJSONObject; var ASpec: TTyAxisPointerLabelSpec;
   var ASeen: TTyStringArray);
 var
@@ -299,6 +370,7 @@ begin
   d := ANode.Find('label');
   if not (d is TJSONObject) then Exit;
   lbl := TJSONObject(d);
+  MergeLabelJson(lbl, ASpec.Json);
 
   if Claim(lbl, 'show', ASeen, 'label.') then
   begin

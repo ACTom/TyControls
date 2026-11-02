@@ -2528,12 +2528,12 @@ begin
     style replaces it }
   if AInk.HasOpacity then op := AInk.Opacity else op := 1;
   for h := 0 to High(ALayout.Texts) do Text(ALayout.Texts[h], op);
+  { [R7-N] a live handle label at the opacity its state (and its blur's
+    fade between 0.1 and its own) gives it [was: its own only where the
+    fade was at 1] }
   for h := 0 to High(ALayout.Handles) do
     if ALive.Has and (h <= 1) then
-    begin
-      if ALive.LabelOpacity[h] <> 1 then Text(ALive.Labels[h], ALive.LabelOpacity[h])
-      else Text(ALive.Labels[h], op);
-    end
+      Text(ALive.Labels[h], ALive.LabelOpacity[h])
     else Text(ALayout.Handles[h].Label_, op);
   if ALive.Has and ALive.IndLabelVisible then Text(ALive.IndLabel, op);
 end;

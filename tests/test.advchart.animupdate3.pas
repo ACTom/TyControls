@@ -450,7 +450,7 @@ end;
 { ---- a graph: the view group, the nodes, the ghosts, the edges ---- }
 procedure TAdvChartAnimUpdate3OracleTest.ProbeGraph(ARec: TJSONObject);
 var
-  i, s, idx, slash: Integer;
+  i, s, idx, slash, k: Integer;
   name, rest, sub: string;
   leaf: TJSONObject;
   p: TTyChartAnimProxy;
@@ -611,6 +611,20 @@ begin
       begin
         NearNum(name + ' drawn x', el.Caption.X, leaf.Find('wx'), 1e-6);
         NearNum(name + ' drawn y', el.Caption.Y, leaf.Find('wy'), 1e-6);
+      end
+      { [R7-N] THE FRAME: a squashed label's whole map as it is drawn -- the
+        place, the turn and scaleY / scaleX of this frame }
+      else if sub = 'lm' then
+      begin
+        Inc(FCompared);
+        if not FrameEl(s, idx, carGraphEdgeLabel, el) then
+          Bad(name + ': upstream draws the label, the frame has none')
+        else if not el.Caption.HasAffine then
+          Bad(name + ': upstream squashes the label, the frame draws it unsquashed')
+        else
+          for k := 0 to 5 do
+            NearNum(Format('%s m%d', [name, k]), el.Caption.Affine[k],
+              leaf.Arrays['m'].Items[k], 1e-9);
       end
       { [R2-H] THE FRAME: an end symbol point by point, where the line has
         drawn out (at percent 0 its scale is 0: nothing to draw) }
@@ -1028,6 +1042,8 @@ begin
     else if AProbes.Strings[i] = 'pictorial' then ProbePictorial(ARec)
     else if AProbes.Strings[i] = 'state' then ProbeState(ARec)
     else if AProbes.Strings[i] = 'labels' then ProbeLabels(ARec)
+    { [R7-N] the edge labels' maps: read by the graph probe }
+    else if AProbes.Strings[i] = 'gl' then
     else Bad('a probe the test does not know: ' + AProbes.Strings[i]);
 end;
 

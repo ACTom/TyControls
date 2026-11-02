@@ -2416,6 +2416,71 @@ var
     AEl.Style.Alpha := op;
   end;
 
+  { [R7-N] A LABEL ON ITS CELL IN THIS FRAME: TreemapView's beforeUpdate
+    gives the text the content rect as it is now, less the padding, every
+    frame -- the block laid out at the box's anchor (ABX / ABY, before the
+    padding) by its alignment, hung where the words' anchor (ALX / ALY) is
+    [was: the rest's block carried to the frame's place] }
+  procedure Plate(var ALabel: TTyChartElement; const ASolved: TTyTreemapSolved;
+    const ASpec: TTyLabelSpec; const AWords: string; ABX, ABY, ABW, ABH: Double;
+    ABAH: TTyTextAnchorH; ABAV: TTyTextAnchorV; ALX, ALY: Double);
+  var
+    auto: TTyLabelSpec;
+    sc: Double;
+    pieces: TTyRtPieceArray;
+  begin
+    sc := ASolved.Scale;
+    if not (sc > 0) then sc := 1;
+    auto := ASpec;
+    auto.Rt.Style.Align := rtaNone;
+    auto.Rt.Style.VAlign := rtvNone;
+    ALabel.Caption.FixedBoxX := ABX;
+    ALabel.Caption.FixedBoxY := ABY;
+    ALabel.Caption.FixedBoxW := ABW / sc;
+    ALabel.Caption.FixedBoxH := ABH / sc;
+    ALabel.Caption.FixedBoxAH := ABAH;
+    ALabel.Caption.FixedBoxAV := ABAV;
+    TyLabelFixBox(auto, ALabel.Caption);
+    pieces := TyLabelBlockPieces(auto, AWords, ALabel.Caption.LmInkFill,
+      ALabel.Caption.LmInkHasFill, ALabel.Caption.LmInkGradient,
+      ALabel.Caption.LmInkInside, ABAH, ABAV, sc, m);
+    TyRtShiftPieces(pieces, (ABX - ALX) / sc, (ABY - ALY) / sc);
+    ALabel.Caption.RtPieces := pieces;
+  end;
+
+  { [R7-N] the same where the label has a block on its cell: the words, the
+    place and the plate of this frame; False where it has none }
+  function PlateWords(var ALabel: TTyChartElement; const ASolved: TTyTreemapSolved;
+    ARow: Integer; const ASpec: TTyLabelSpec; AX0, AY0, ACW, ACH, ADX, ADY: Double;
+    AMove: Boolean): Boolean;
+  var
+    bx, by, bw, bh, plx, ply: Double;
+    bah: TTyTextAnchorH;
+    bav: TTyTextAnchorV;
+    hasBox: Boolean;
+    words: string;
+  begin
+    Result := False;
+    if not ALabel.Caption.HasFixedBox or (Length(ALabel.Caption.RtPieces) = 0) then Exit;
+    TyTreemapLabelAt(ASolved, ARow, ASpec, m, AX0, AY0, ACW, ACH, words, plx, ply,
+      hasBox, bx, by, bw, bh, bah, bav);
+    if not hasBox then Exit;
+    Result := True;
+    ALabel.Caption.Text := words;
+    if AMove then
+    begin
+      ALabel.Caption.X := plx + ADX;
+      ALabel.Caption.Y := ply + ADY;
+      Plate(ALabel, ASolved, ASpec, words, bx, by, bw, bh, bah, bav, plx, ply);
+    end
+    else
+      { not dirty yet: the plate of this frame, about where the words were }
+      Plate(ALabel, ASolved, ASpec, words, bx - plx + (ALabel.Caption.X - ADX),
+        by - ply + (ALabel.Caption.Y - ADY), bw, bh, bah, bav,
+        ALabel.Caption.X - ADX, ALabel.Caption.Y - ADY);
+    ALabel.Ignore := Length(ALabel.Caption.RtPieces) = 0;
+  end;
+
   procedure Words(var ALabel: TTyChartElement; const ASolved: TTyTreemapSolved; ARow: Integer);
   var dx, dy: Double;
   begin
@@ -2427,6 +2492,8 @@ var
     Compose(ARow);
     dx := ALabel.Caption.X - ALabel.Caption.FixedX;
     dy := ALabel.Caption.Y - ALabel.Caption.FixedY;
+    if PlateWords(ALabel, ASolved, ARow, spec, sx * 1 + T[ARow].TX, sy * 1 + T[ARow].TY,
+      sw, sh, dx, dy, True) then Exit;
     if TyTreemapLabelAt(ASolved, ARow, spec, m, sx * 1 + T[ARow].TX, sy * 1 + T[ARow].TY,
       sw, sh, wtext, lx, ly) and (wtext <> '') then
     begin
@@ -2534,7 +2601,11 @@ begin
             gy := el.Caption.Y;
             gdx := el.Caption.X - el.Caption.FixedX;
             gdy := el.Caption.Y - el.Caption.FixedY;
-            if TyTreemapLabelAt(A^.Old, row, FTreemapInks[slot].Label_, m,
+            { [R7-N] a label on its cell: its plate this frame's }
+            if PlateWords(el, A^.Old, row, FTreemapInks[slot].Label_,
+              sx * 1 + OT[row].TX, sy * 1 + OT[row].TY, sw, sh, gdx, gdy,
+              A^.Stepped) then
+            else if TyTreemapLabelAt(A^.Old, row, FTreemapInks[slot].Label_, m,
               sx * 1 + OT[row].TX, sy * 1 + OT[row].TY, sw, sh, wtext, lx, ly)
               and (wtext <> '') then
             begin

@@ -411,6 +411,11 @@ type
 procedure TyLabelAffineOf(AX, AY, ARot, AScale, AYScale: Double;
   out A: TTyAffine6);
 function TyRtAffineBox(const ABox: TTyXYWH; const A: TTyAffine6): TTyRectF;
+{ [R7-N] A SQUASHED CAPTION'S MAP MADE AGAIN from where it is now (its X, Y
+  and turn, a frame's or a state's): Line.beforeUpdate keeps the words
+  squashed by FixedYScale in every frame, at the place and the turn the
+  line gives them then. A caption with no such map is left as it is. }
+procedure TyCaptionAffineSync(var ACaption: TTyElementCaption);
 function TyAnchorTextRect(AW, AH: Double; AAH: TTyTextAnchorH;
   AAV: TTyTextAnchorV): TTyXYWH;
 
@@ -667,6 +672,21 @@ begin
   A[3] := AScale * AYScale * c;
   A[4] := AX;
   A[5] := AY;
+end;
+
+procedure TyCaptionAffineSync(var ACaption: TTyElementCaption);
+var
+  aff: TTyAffine6;
+  k: Integer;
+  sc: Double;
+begin
+  if not ACaption.HasAffine or not (ACaption.FixedYScale > 0)
+    or (ACaption.FixedYScale = 1) then Exit;
+  sc := ACaption.RtScale;
+  if not (sc > 0) then sc := 1;
+  TyLabelAffineOf(ACaption.X, ACaption.Y, ACaption.RotationRad, sc,
+    ACaption.FixedYScale, aff);
+  for k := 0 to 5 do ACaption.Affine[k] := aff[k];
 end;
 
 function TyRtAffineBox(const ABox: TTyXYWH; const A: TTyAffine6): TTyRectF;

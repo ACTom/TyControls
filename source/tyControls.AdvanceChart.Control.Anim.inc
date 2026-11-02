@@ -2694,7 +2694,7 @@ begin
       props := PtrProps(hit, at);
       { [R5-I] updateLabelEl: the label's x / y with the pointer's timing
         [was: the label drawn about the line where it had got to] }
-      if PtrLabelAt(hit, at, lx, ly) then
+      if PtrLabelAt(hit, lx, ly) then
       begin
         SetLength(props, Length(props) + 2);
         props[High(props) - 1] := TyAnimProp('label.x', TyAnimNum(lx));
@@ -2844,13 +2844,13 @@ begin
   end;
 end;
 
-function TTyCustomAdvanceChart.PtrLabelAt(const AHit: TTyAxisHit; AAt: Double;
+function TTyCustomAdvanceChart.PtrLabelAt(const AHit: TTyAxisHit;
   out AX, AY: Double): Boolean;
 var
   labelS: TTyStyleSet;
   txt: string;
   m: ITyTextMeasurer;
-  box: TRect;
+  lbl: TTyPtrLabel;
 begin
   Result := False;
   AX := NaN;
@@ -2863,14 +2863,11 @@ begin
   txt := PointerDrawLabelText(AHit, PointerValue(AHit));
   if txt = '' then Exit;
   m := NewTextMeasurer(FLastPPI);
-  if not PointerLabelBox(AHit, AAt, txt, Rect(Round(FLastRect.Left), Round(FLastRect.Top),
-    Round(FLastRect.Right), Round(FLastRect.Bottom)), FLastPPI, m, labelS, box) then Exit;
-  AX := box.Left;
-  AY := box.Top;
-  Result := True;
+  Result := PtrCartesianLabelPlace(AHit, txt, Round(FLastRect.Right) - Round(FLastRect.Left),
+    Round(FLastRect.Bottom) - Round(FLastRect.Top), FLastPPI, m, lbl, AX, AY);
 end;
 
-procedure TTyCustomAdvanceChart.PtrLabelNow(const AHit: TTyAxisHit; var ABox: TRect);
+procedure TTyCustomAdvanceChart.PtrLabelNow(const AHit: TTyAxisHit; var AX, AY: Double);
 var
   k: Integer;
   p: TTyChartAnimProxy;
@@ -2888,7 +2885,10 @@ begin
     lx := p.Num('label.x');
     ly := p.Num('label.y');
     if not (IsNan(lx) or IsNan(ly)) then
-      OffsetRect(ABox, Round(lx) - ABox.Left, Round(ly) - ABox.Top);
+    begin
+      AX := lx;
+      AY := ly;
+    end;
     Exit;
   end;
 end;

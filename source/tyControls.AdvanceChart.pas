@@ -269,6 +269,33 @@ type
     X, Y, W, H: Double;
   end;
 
+  { [R7-N] AN AXIS POINTER'S LABEL AS THE LAST PAINT DREW IT: its axis
+    (Owner, the axis' mainType and component index), its words, and the
+    block -- pieces in CSS px hung at D.X / D.Y (device px), D.Scale device
+    px to a CSS px -- at the element's Alpha. }
+  TTyPtrLabelDrawn = record
+    Owner: string;
+    Text: string;
+    D: TTyRtDrawn;
+    Alpha: Double;
+    FontSizeLogical, FontWeight: Integer;
+  end;
+  TTyPtrLabelDrawnArray = array of TTyPtrLabelDrawn;
+
+  { [R7-N] AN AXIS POINTER LABEL'S TEXT STYLE as buildLabelElOption makes
+    it: createTextStyle(labelModel, {text, font, fill, padding,
+    backgroundColor}), finished in the label's font (getFont: its own parts,
+    the root textStyle's, the skin's), the element's opacity (its own, else
+    the root textStyle's) apart; Scale device px to a CSS px. }
+  TTyPtrLabel = record
+    Block: TTyRtBlockStyle;
+    Global: TTyRtGlobal;
+    Scale, Alpha: Double;
+    Ink: TTyColor;
+    FontName: string;
+    FontSizeLogical, FontWeight: Integer;
+  end;
+
   { A TREE NODE EXPANDED OR COLLAPSED, as upstream's
     `treeexpandandcollapse` action reports it: from a click and from the API
     alike. [Batch 81] }
@@ -1873,6 +1900,8 @@ type
     FTipBorderPainted: TTyColor;
     { [R2-I8] each axis' BaseAxisPointer memo: see PointerDrawLabelText }
     FPtrMemo: array of TTyPtrMemoEntry;
+    { [R7-N] the pointer labels the last PaintAxisPointers drew }
+    FPtrLabelsDrawn: TTyPtrLabelDrawnArray;
     { [R2-I8] one per updateAxisPointer action: render() runs on an action,
       not on a paint }
     FPtrUpdGen: Integer;
@@ -2375,16 +2404,20 @@ type
       place; and the shape / label as its proxy has them now }
     function PtrPolarProps(const AHit: TTyAxisHit; out AProps: TTyAnimProps): Boolean;
     procedure PtrPolarNow(const AHit: TTyAxisHit; var ADraw: TTyPolarPointerDraw);
-    { [R5-I] a cartesian pointer's label box with its value's line at AAt
-      (buildLabelElOption: the text's size and padding, the axis' side, the
-      container's confine); False where no label is drawn }
-    function PointerLabelBox(const AHit: TTyAxisHit; AAt: Double; const AText: string;
-      const ARect: TRect; APPI: Integer; const AMeasurer: ITyTextMeasurer;
-      const ALabelS: TTyStyleSet; out ABox: TRect): Boolean;
-    { its top-left at rest with the line at AAt, for the pointer's proxy }
-    function PtrLabelAt(const AHit: TTyAxisHit; AAt: Double; out AX, AY: Double): Boolean;
-    { the box where its slide has got to }
-    procedure PtrLabelNow(const AHit: TTyAxisHit; var ABox: TRect);
+    { [R5-I] a cartesian pointer's label place at rest
+      (buildCartesianSingleLabelElOption: getTransformedPosition on the
+      axis' layout with the label's margin, innerTextLayout's align, then
+      buildLabelElOption's box and the container's confine) -- [R7-N] the
+      box's top-left, device px, and the label's style; False where no
+      label is drawn [was: the box laid out by the skin, about the plot's
+      edge, in whole pixels] }
+    function PtrCartesianLabelPlace(const AHit: TTyAxisHit; const AText: string;
+      AViewW, AViewH: Double; APPI: Integer; const AMeasurer: ITyTextMeasurer;
+      out AL: TTyPtrLabel; out AX, AY: Double): Boolean;
+    { its top-left at rest, for the pointer's proxy }
+    function PtrLabelAt(const AHit: TTyAxisHit; out AX, AY: Double): Boolean;
+    { the place where its slide has got to }
+    procedure PtrLabelNow(const AHit: TTyAxisHit; var AX, AY: Double);
     procedure PtrAnimDrop;
     function PtrKeyOf(AAxis: TTyAxis): string;
     function PtrModelOf(const AHit: TTyAxisHit; out AOwn: TJSONObject): TTyAnimModel;
@@ -4242,6 +4275,20 @@ type
     function SinglePointerGeometry(const AHit: TTyAxisHit; const ARect: TRect;
       const AMeasurer: ITyTextMeasurer; APPI: Integer;
       out ADraw: TTySinglePointerDraw): Boolean;
+    { [R7-N] the axis pointers' labels as the last paint drew them }
+    function PointerLabelsDrawn: TTyPtrLabelDrawnArray;
+    { [R7-N] an axis pointer label's text style (buildLabelElOption) }
+    function PtrLabelStyle(const AHit: TTyAxisHit; APPI: Integer): TTyPtrLabel;
+    { [R7-N] the box buildLabelElOption places: the plain text's bounding
+      rect in the label's font, grown by the padding -- device px }
+    function PtrLabelBoxSize(const AL: TTyPtrLabel; const AText: string;
+      const AMeasurer: ITyTextMeasurer; out AW, AH: Double): Boolean;
+    { [R7-N] the label's text laid out in its block, hung at (AX, AY) device
+      px, drawn (APainter nil: only laid out) and logged for
+      PointerLabelsDrawn }
+    procedure PtrLabelPaint(APainter: TTyPainter; const AHit: TTyAxisHit;
+      const AText: string; AX, AY: Double; const AL: TTyPtrLabel;
+      const AMeasurer: ITyTextMeasurer);
     { WHAT THE TOOLTIP WOULD SAY, in four answerable pieces rather than one
       procedure that draws. PROTECTED for the same reason RenderTo is: a
       headless test has no window and no pointer, and a content rule tested
@@ -5021,6 +5068,10 @@ type
     { [R5-I] a continuous visual map's handle label's opacity as drawn now
       (its blur's fade) }
     function VmHandleLabelOpacity(AIndex, AHandle: Integer): Double;
+    { [R7-N] a continuous visual map's words' own opacity (textStyle's,
+      else the root textStyle's, else 1): a handle label's normal state, which
+      its blur leaves and comes back to }
+    function VmLabelOwnOpacity(AIndex: Integer): Double;
     { what the pointer at (AX, AY) is over of a visualMap, as zrender would
       find it: 'vm0.inRange', 'vm0.outOfRange', 'vm0.handle1', 'vm0.label0',
       'vm0.text1', 'vm0.item3.symbol', 'vm0.item3.label', 'vm0.ends0'; ''
@@ -5832,6 +5883,8 @@ uses
     rest of the AdvanceChart family keeps, invisible to a host. }
   tyControls.StrConsts,
   tyControls.AdvanceChart.RichStyle, tyControls.AdvanceChart.RichText, tyControls.AdvanceChart.JsMath,
+  { [R7-N] innerTextLayout for a cartesian pointer's label }
+  tyControls.AdvanceChart.AxisName,
   tyControls.AdvanceChart.LinePath, tyControls.AdvanceChart.LabelGuide,
   BGRABitmapTypes, FPImage, FPWriteJPEG, base64,
   { [R5-D] the WebP export, libwebp loaded when it is asked for }

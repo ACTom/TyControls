@@ -279,7 +279,16 @@ function TyTreemapPairRows(const AOld, ANew: TTyTreemapSolved): TTyIntegerArray;
   position table, as a frame of the drill-down places it [Batch 115]. }
 function TyTreemapLabelAt(const ASolved: TTyTreemapSolved; ARow: Integer;
   const ASpec: TTyLabelSpec; const AMeasurer: ITyTextMeasurer;
-  AX0, AY0, ACW, ACH: Double; out AText: string; out ALX, ALY: Double): Boolean;
+  AX0, AY0, ACW, ACH: Double; out AText: string; out ALX, ALY: Double): Boolean; overload;
+{ [R7-N] ... and the label's box in that frame (TreemapView's beforeUpdate
+  runs every frame): the anchor before the padding (ABX / ABY, device px),
+  its alignment, and the content rect less the padding (ABW / ABH, device
+  px). AHasBox False where the row keeps no place of its own. }
+function TyTreemapLabelAt(const ASolved: TTyTreemapSolved; ARow: Integer;
+  const ASpec: TTyLabelSpec; const AMeasurer: ITyTextMeasurer;
+  AX0, AY0, ACW, ACH: Double; out AText: string; out ALX, ALY: Double;
+  out AHasBox: Boolean; out ABX, ABY, ABW, ABH: Double; out ABAH: TTyTextAnchorH;
+  out ABAV: TTyTextAnchorV): Boolean; overload;
 { The colour visual: APalette into levels[0] unless a level has a colour;
   ABorder is the series' default border colour. }
 procedure TyTreemapColour(var ASolved: TTyTreemapSolved;
@@ -1890,6 +1899,43 @@ function PlaceLabel(const ASolved: TTyTreemapSolved; ARow: Integer;
 begin
   Result := PlaceWith(PlaceOf(ASolved, ARow, spec), AText, ARX0, ARY0, ACW, ACH,
     AMeasurer, AWords, ALX, ALY, AAH, AAV);
+end;
+
+function TyTreemapLabelAt(const ASolved: TTyTreemapSolved; ARow: Integer;
+  const ASpec: TTyLabelSpec; const AMeasurer: ITyTextMeasurer;
+  AX0, AY0, ACW, ACH: Double; out AText: string; out ALX, ALY: Double;
+  out AHasBox: Boolean; out ABX, ABY, ABW, ABH: Double; out ABAH: TTyTextAnchorH;
+  out ABAV: TTyTextAnchorV): Boolean;
+var
+  ah: TTyTextAnchorH;
+  av: TTyTextAnchorV;
+  mask: TFPUExceptionMask;
+begin
+  AText := '';
+  ALX := 0;
+  ALY := 0;
+  AHasBox := False;
+  ABX := 0;
+  ABY := 0;
+  ABW := 0;
+  ABH := 0;
+  ABAH := tahLeft;
+  ABAV := tavTop;
+  Result := False;
+  if (AMeasurer = nil) or (ARow < 0) or (ARow > High(ASolved.Nodes))
+    or not ASolved.Nodes[ARow].HasLabelRaw or not ASolved.Nodes[ARow].LabelPlace.Has then
+    Exit;
+  mask := GetExceptionMask;
+  SetExceptionMask(mask + [exInvalidOp, exOverflow, exZeroDivide, exPrecision]);
+  try
+    Result := PlaceWith(ASolved.Nodes[ARow].LabelPlace, ASolved.Nodes[ARow].LabelRaw,
+      AX0, AY0, JsMax(ACW, 0), JsMax(ACH, 0), AMeasurer, AText, ALX, ALY, ah, av,
+      ABX, ABY, ABW, ABH, ABAH, ABAV);
+    AHasBox := True;
+  finally
+    ClearExceptions(False);
+    SetExceptionMask(mask);
+  end;
 end;
 
 function TyTreemapLabelAt(const ASolved: TTyTreemapSolved; ARow: Integer;
