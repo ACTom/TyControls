@@ -2189,7 +2189,6 @@ type
     FPlacedEditorRect: TRect;   { where EditorFollowCell last put the editor }
     FGestureRefused: Boolean;   { this press was refused: its moves and release go nowhere }
     FPressOnToggle: Boolean;    { #168: this press toggled a tree node -- its double-click edits nothing }
-    FEditorOpening: Boolean;    { #168: BeginEdit is seeding an editor -- no OnEditChange for that }
     FSelChanges: Cardinal;      { #168: bumped by every SelectionChanged }
     FScrollHintWnd: TWinControl;   { #168: OnScrollHint's text while the thumb is dragged (a THintWindow) }
     FFillDragging: Boolean;
@@ -16304,7 +16303,7 @@ procedure TTyStringGrid.AnyEditorChanged(Sender: TObject);
 begin
   { #168:每一种编辑器的改动都是 OnEditChange —— 从前只有文本框那一个(文本、数字、密码)
     接了线。文字取 PendingEditText,与提交时读的同一个口径。 }
-  if FEditing and not FEditorOpening and Assigned(FOnEditChange) then
+  if FEditing and Assigned(FOnEditChange) then
     FOnEditChange(Self, FEditCol, FEditRow, PendingEditText);
 end;
 
@@ -16407,12 +16406,7 @@ begin
   { Back to the cell already being edited: the editor keeps what the user typed, and what it
     showed when it opened. }
   reopened := FEditing and (ACol = FEditCol) and (ARow = FEditRow);
-  FEditorOpening := True;   { #168:编辑器开的时候填进去的值不是用户的改动 }
-  try
-    Result := DoBeginEdit(ACol, ARow);
-  finally
-    FEditorOpening := False;
-  end;
+  Result := DoBeginEdit(ACol, ARow);
   if Result and FEditing then FPlacedEditorRect := EditorTargetRect;   { where DoBeginEdit put it }
   if Result and Assigned(FOnGetEditorProp) and (EditorControl <> nil) then
     FOnGetEditorProp(Self, FEditCol, FEditRow, EditorControl);
