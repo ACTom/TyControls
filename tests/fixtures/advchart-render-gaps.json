@@ -4708,6 +4708,115 @@
    ]
   },
   {
+   "id": "pict.one-unit-turned",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "pictorialBar",
+      "symbol": "rect",
+      "symbolSize": [
+       400,
+       200
+      ],
+      "data": [
+       4,
+       6,
+       8
+      ],
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 7
+      },
+      "symbolPatternSize": 400,
+      "symbolPosition": "end",
+      "symbolRotate": 90
+     }
+    ]
+   },
+   "items": [
+    {
+     "vlw": "4013cc8a99af5453",
+     "repeat": null,
+     "glyphs": [
+      [
+       "3c91a62633145c07",
+       "bff0000000000000",
+       "3fe0000000000000",
+       "3c81a62633145c07",
+       "405b800000000000",
+       "4070479915335ea9"
+      ]
+     ],
+     "rect": [
+      "4052e00000000000",
+      "406b800000000000",
+      "4051400000000000",
+      "c04f000000000000"
+     ]
+    },
+    {
+     "vlw": "4013cc8a99af5453",
+     "repeat": null,
+     "glyphs": [
+      [
+       "3c91a62633145c07",
+       "bff0000000000000",
+       "3fe0000000000000",
+       "3c81a62633145c07",
+       "406a400000000000",
+       "406caf322a66bd52"
+      ]
+     ],
+     "rect": [
+      "4065f00000000000",
+      "406b800000000000",
+      "4051400000000000",
+      "c057400000000000"
+     ]
+    },
+    {
+     "vlw": "4013cc8a99af5453",
+     "repeat": null,
+     "glyphs": [
+      [
+       "3c91a62633145c07",
+       "bff0000000000000",
+       "3fe0000000000000",
+       "3c81a62633145c07",
+       "4073600000000000",
+       "4068cf322a66bd52"
+      ]
+     ],
+     "rect": [
+      "4071380000000000",
+      "406b800000000000",
+      "4051400000000000",
+      "c05f000000000000"
+     ]
+    }
+   ]
+  },
+  {
    "id": "pict.near-unit",
    "option": {
     "animation": false,
@@ -8091,7 +8200,7 @@
      "own": "angleAxis0",
      "part": "path off",
      "x": 290,
-     "y": 199,
+     "y": 200,
      "code": "-",
      "cursor": ""
     },
@@ -8244,7 +8353,7 @@
      "own": "angleAxis0",
      "part": "path off",
      "x": 290,
-     "y": 199,
+     "y": 200,
      "code": "-",
      "cursor": ""
     },
@@ -8400,7 +8509,7 @@
      "own": "angleAxis0",
      "part": "path off",
      "x": 290,
-     "y": 199,
+     "y": 200,
      "code": "-",
      "cursor": ""
     },
@@ -8564,7 +8673,7 @@
      "own": "angleAxis0",
      "part": "path off",
      "x": 290,
-     "y": 199,
+     "y": 200,
      "code": "-",
      "cursor": ""
     },
@@ -8634,6 +8743,115 @@
     }
    ],
    "ties": 1
+  },
+  {
+   "id": "polar.tie-tick",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "polar": {
+     "radius": [
+      20,
+      100
+     ]
+    },
+    "angleAxis": {
+     "type": "value",
+     "max": 10,
+     "axisTick": {
+      "inside": true
+     }
+    },
+    "radiusAxis": {
+     "type": "category",
+     "data": [
+      "A"
+     ]
+    },
+    "series": [
+     {
+      "type": "bar",
+      "coordinateSystem": "polar",
+      "z": 0,
+      "barCategoryGap": "0%",
+      "data": [
+       10
+      ]
+     }
+    ]
+   },
+   "probes": [
+    {
+     "own": "angleAxis0",
+     "part": "tspan",
+     "x": 200,
+     "y": 36,
+     "code": "-",
+     "cursor": ""
+    },
+    {
+     "own": "angleAxis0",
+     "part": "tspan",
+     "x": 267,
+     "y": 57,
+     "code": "-",
+     "cursor": ""
+    },
+    {
+     "own": "angleAxis0",
+     "part": "tspan",
+     "x": 306,
+     "y": 111,
+     "code": "-",
+     "cursor": ""
+    },
+    {
+     "own": "angleAxis0",
+     "part": "path",
+     "x": 200,
+     "y": 53,
+     "code": "s0/0",
+     "cursor": "pointer"
+    },
+    {
+     "own": "angleAxis0",
+     "part": "path off",
+     "x": 199,
+     "y": 53,
+     "code": "s0/0",
+     "cursor": "pointer"
+    },
+    {
+     "own": "angleAxis0",
+     "part": "path silent",
+     "x": 200,
+     "y": 90,
+     "code": "s0/0",
+     "cursor": "pointer"
+    },
+    {
+     "own": "radiusAxis0",
+     "part": "line:line silent",
+     "x": 201,
+     "y": 90,
+     "code": "s0/0",
+     "cursor": "pointer"
+    },
+    {
+     "own": "radiusAxis0",
+     "part": "tspan",
+     "x": 188,
+     "y": 90,
+     "code": "s0/0",
+     "cursor": "pointer"
+    }
+   ],
+   "ties": 3
   },
   {
    "id": "parallel.default",
@@ -9308,6 +9526,439 @@
     }
    ],
    "ties": 0
+  }
+ ],
+ "frames": [
+  {
+   "id": "frame.graph-zoom",
+   "option": {
+    "animation": true,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "symbolSize": 10,
+      "data": [
+       {
+        "name": "a",
+        "x": 100,
+        "y": 150
+       },
+       {
+        "name": "b",
+        "x": 300,
+        "y": 150
+       },
+       {
+        "name": "c",
+        "x": 300,
+        "y": 60
+       },
+       {
+        "name": "d",
+        "x": 160,
+        "y": 61.3
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "b"
+       },
+       {
+        "source": "b",
+        "target": "c"
+       },
+       {
+        "source": "c",
+        "target": "d"
+       }
+      ],
+      "lineStyle": {
+       "opacity": 1
+      },
+      "zoom": 1.6
+     }
+    ],
+    "animationDuration": 1000,
+    "animationEasing": "linear",
+    "animationDurationUpdate": 1000
+   },
+   "T0": 1700000000000,
+   "samples": [
+    {
+     "t": 300,
+     "els": [
+      {
+       "percent": "3fd3333333333333",
+       "lw": "3ff0000000000000",
+       "straight": true,
+       "pts": [
+        [
+         "c04bfffffffffff8",
+         "4070a7ae147ae149"
+        ],
+        [
+         "405866666666666c",
+         "4070a7ae147ae149"
+        ]
+       ]
+      },
+      {
+       "percent": "3fd3333333333333",
+       "lw": "3ff0000000000000",
+       "straight": true,
+       "pts": [
+        [
+         "407c947ae147ae18",
+         "4070933333333334"
+        ],
+        [
+         "407c947ae147ae18",
+         "4068828f5c28f5c4"
+        ]
+       ]
+      },
+      {
+       "percent": "3fd3333333333333",
+       "lw": "3ff0000000000000",
+       "straight": true,
+       "pts": [
+        [
+         "407c800000000002",
+         "404166666666666a"
+        ],
+        [
+         "4075c7ae147ae14a",
+         "4041e631f8a09032"
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "t": 700,
+     "els": [
+      {
+       "percent": "3fe6666666666666",
+       "lw": "3ff0000000000000",
+       "straight": true,
+       "pts": [
+        [
+         "c04bfffffffffff8",
+         "4070a7ae147ae149"
+        ],
+        [
+         "4072e66666666668",
+         "4070a7ae147ae149"
+        ]
+       ]
+      },
+      {
+       "percent": "3fe6666666666666",
+       "lw": "3ff0000000000000",
+       "straight": true,
+       "pts": [
+        [
+         "407c947ae147ae18",
+         "4070933333333334"
+        ],
+        [
+         "407c947ae147ae18",
+         "4059fae147ae147f"
+        ]
+       ]
+      },
+      {
+       "percent": "3fe6666666666666",
+       "lw": "3ff0000000000000",
+       "straight": true,
+       "pts": [
+        [
+         "407c800000000002",
+         "404166666666666a"
+        ],
+        [
+         "4069a3d70a3d70a8",
+         "40429096bb98c7e6"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "frame.graph-cartesian",
+   "option": {
+    "animation": true,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "graph",
+      "coordinateSystem": "cartesian2d",
+      "symbolSize": 10,
+      "data": [
+       [
+        1,
+        5.03
+       ],
+       [
+        9,
+        5.03
+       ],
+       [
+        9,
+        2
+       ]
+      ],
+      "links": [
+       {
+        "source": 0,
+        "target": 1
+       },
+       {
+        "source": 1,
+        "target": 2
+       }
+      ],
+      "lineStyle": {
+       "opacity": 1
+      }
+     }
+    ],
+    "animationDuration": 1000,
+    "animationEasing": "linear",
+    "animationDurationUpdate": 1000
+   },
+   "T0": 1700000000000,
+   "samples": [
+    {
+     "t": 300,
+     "els": [
+      {
+       "percent": "3fd3333333333333",
+       "lw": "3ff0000000000000",
+       "straight": true,
+       "pts": [
+        [
+         "4056800000000000",
+         "4061d00000000000"
+        ],
+        [
+         "4064400000000000",
+         "4061d00000000000"
+        ]
+       ]
+      },
+      {
+       "percent": "3fd3333333333333",
+       "lw": "3ff0000000000000",
+       "straight": true,
+       "pts": [
+        [
+         "4074a80000000000",
+         "4061c11eb851eb85"
+        ],
+        [
+         "4074a80000000000",
+         "406383fbe76c8b43"
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "t": 700,
+     "els": [
+      {
+       "percent": "3fe6666666666666",
+       "lw": "3ff0000000000000",
+       "straight": true,
+       "pts": [
+        [
+         "4056800000000000",
+         "4061d00000000000"
+        ],
+        [
+         "4070200000000000",
+         "4061d00000000000"
+        ]
+       ]
+      },
+      {
+       "percent": "3fe6666666666666",
+       "lw": "3ff0000000000000",
+       "straight": true,
+       "pts": [
+        [
+         "4074a80000000000",
+         "4061c11eb851eb85"
+        ],
+        [
+         "4074a80000000000",
+         "4065dd22d0e56041"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "frame.lines",
+   "option": {
+    "animation": true,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "xAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "yAxis": {
+     "type": "value",
+     "min": 0,
+     "max": 10
+    },
+    "series": [
+     {
+      "type": "lines",
+      "coordinateSystem": "cartesian2d",
+      "lineStyle": {
+       "opacity": 1,
+       "width": 1
+      },
+      "data": [
+       {
+        "coords": [
+         [
+          1,
+          5.03
+         ],
+         [
+          9,
+          5.03
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          4.03,
+          1
+         ],
+         [
+          4.03,
+          9
+         ]
+        ]
+       }
+      ]
+     }
+    ],
+    "animationDuration": 1000,
+    "animationEasing": "linear",
+    "animationDurationUpdate": 1000
+   },
+   "T0": 1700000000000,
+   "samples": [
+    {
+     "t": 300,
+     "els": [
+      {
+       "percent": "3fd3333333333333",
+       "lw": "3ff0000000000000",
+       "straight": true,
+       "pts": [
+        [
+         "4056800000000000",
+         "4061d00000000000"
+        ],
+        [
+         "4064400000000000",
+         "4061d00000000000"
+        ]
+       ]
+      },
+      {
+       "percent": "3fd3333333333333",
+       "lw": "3ff0000000000000",
+       "straight": true,
+       "pts": [
+        [
+         "4066b00000000000",
+         "4069900000000000"
+        ],
+        [
+         "4066b00000000000",
+         "4064e99999999999"
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "t": 700,
+     "els": [
+      {
+       "percent": "3fe6666666666666",
+       "lw": "3ff0000000000000",
+       "straight": true,
+       "pts": [
+        [
+         "4056800000000000",
+         "4061d00000000000"
+        ],
+        [
+         "4070200000000000",
+         "4061d00000000000"
+        ]
+       ]
+      },
+      {
+       "percent": "3fe6666666666666",
+       "lw": "3ff0000000000000",
+       "straight": true,
+       "pts": [
+        [
+         "4066b00000000000",
+         "4069900000000000"
+        ],
+        [
+         "4066b00000000000",
+         "405d6ccccccccccd"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
   }
  ]
 }

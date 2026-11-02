@@ -26,6 +26,11 @@
 //             not know, an object, a number other than 0 -- whatever the pen
 //             draws. A polar bar's layout never is. Per item: the shape (hex),
 //             null where the item has no element.
+//   frames    a line's enter animation (shape.percent, linear over 1000 ms)
+//             sampled at 300 and 700 ms on a replaced clock
+//             (zr.animation.update()): each ec-line's percent, lineWidth and
+//             the buildPath points through its transform -- the snap is
+//             before the percent, every frame.
 //   axishit   what zrender's findHover finds on each part of an axis
 //             (AxisBuilder: line and ticks silent, labels and name
 //             isLabelSilent -- silent, or neither triggerEvent nor
@@ -200,6 +205,51 @@ function subpixelRun(id, option, move) {
   }
 }
 
+// ==================== frames ====================
+// a line's enter (shape.percent from 0, linear over 1000 ms): every frame
+// is built with the snap, before the percent
+const anim = o => Object.assign({}, o, { animation: true, animationDuration: 1000, animationEasing: 'linear',
+  animationDurationUpdate: 1000 });
+function frameCases() {
+  return [
+    ['frame.graph-zoom', anim(graph({ zoom: 1.6 }))],
+    ['frame.graph-cartesian', anim(vv({ type: 'graph', coordinateSystem: 'cartesian2d', symbolSize: 10,
+      data: [[1, 5.03], [9, 5.03], [9, 2]], links: [{ source: 0, target: 1 }, { source: 1, target: 2 }],
+      lineStyle: { opacity: 1 } }))],
+    ['frame.lines', anim(lines([[[1, 5.03], [9, 5.03]], [[4.03, 1], [4.03, 9]]], { width: 1 }))],
+  ];
+}
+const FRAME_T = [300, 700];
+function frameRun(id, option) {
+  NOW = T_BASE;
+  rngState = SEED;
+  const chart = echarts.init(null, null, { renderer: 'svg', ssr: true, width: W, height: H });
+  chart._ssr = false;
+  try {
+    chart.setOption(JSON.parse(JSON.stringify(option)));
+    chart.getZr().storage.getDisplayList(true);
+    const samples = FRAME_T.map(t => {
+      NOW = T_BASE + t;
+      chart.getZr().animation.update();
+      const els = [];
+      chart.getZr().storage.getDisplayList(true).forEach(el => {
+        if (el.type !== 'ec-line') return;
+        const calls = callsOf(el);
+        const m = globalM(el);
+        const pts = [];
+        calls.forEach(c => { if (c[0] === 'moveTo' || c[0] === 'lineTo') pts.push(apply(m, c[1], c[2])); });
+        els.push({ percent: hex(el.shape.percent), lw: hex(el.style.lineWidth),
+          straight: calls.length === 2 && calls[1][0] === 'lineTo', pts: pts.map(p => [hex(p[0]), hex(p[1])]) });
+      });
+      return { t, els };
+    });
+    return { id, option, T0: T_BASE, samples };
+  }
+  finally {
+    chart.dispose();
+  }
+}
+
 // ==================== pictorial ====================
 const cart = (s, more) => Object.assign({ animation: false, color: PAL, xAxis: { type: 'category', data: N },
   yAxis: { type: 'value', min: 0, max: 10 }, series: Array.isArray(s) ? s : [s] }, more || {});
@@ -233,6 +283,9 @@ function pictorialCases() {
     // one scale exactly 1: getLineScale answers 1 (both diagonal terms must be off 1)
     ['pict.one-unit-axis', cart(pict({ symbolSize: [400, 200], symbolPatternSize: 400, symbolPosition: 'end' }, B(7)))],
     // both scales within 5e-5 of 1: no transform at all (needLocalTransform)
+    // ... and turned a quarter: the turn moves the diagonal off 1, so the line scale is the determinant's
+    ['pict.one-unit-turned', cart(pict({ symbolSize: [400, 200], symbolPatternSize: 400, symbolPosition: 'end',
+      symbolRotate: 90 }, B(7)))],
     ['pict.near-unit', cart(pict({ symbolSize: [400.004, 400.008], symbolPatternSize: 400, symbolPosition: 'end' }, B(7)))],
   ];
 }
@@ -369,7 +422,8 @@ function probeOf(el) {
   }
   return apply(m, p[0], p[1]);
 }
- // 2.5 px off the middle of a path's first segment, square to it
+ // 1.5 px off the middle of a path's first segment, square to it (inside
+// strokeContainThreshold's 2.5, outside half a width of 1)
 function offProbe(el) {
   const calls = callsOf(el);
   if (calls.length < 2 || calls[0][0] !== 'moveTo' || calls[1][0] !== 'lineTo') return null;
@@ -377,7 +431,7 @@ function offProbe(el) {
   const len = Math.sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0));
   if (!(len > 0)) return null;
   const m = globalM(el);
-  return apply(m, (x0 + x1) / 2 - (y1 - y0) / len * 2.5, (y0 + y1) / 2 + (x1 - x0) / len * 2.5);
+  return apply(m, (x0 + x1) / 2 - (y1 - y0) / len * 1.5, (y0 + y1) / 2 + (x1 - x0) / len * 1.5);
 }
 const AXIS_TYPES = ['xAxis', 'yAxis', 'singleAxis', 'angleAxis', 'radiusAxis', 'parallelAxis', 'radar'];
 function axishitCases() {
@@ -420,6 +474,10 @@ function axishitCases() {
     // a series at the axis' own z (0) over an angle label: a tie, the series drawn later wins
     ['polar.tie', Object.assign(pol({ triggerEvent: true }), { series: [{ type: 'bar', coordinateSystem: 'polar',
       data: [4, 6, 8] }, { type: 'scatter', coordinateSystem: 'polar', z: 0, symbolSize: 80, data: [[10, 'A']] }] })],
+    // a bar at z 0, z2 0 under an angle axis' inward ticks (z 0, z2 0): the tie goes to the bar
+    ['polar.tie-tick', { animation: false, color: PAL, polar: { radius: [20, 100] },
+      angleAxis: { type: 'value', max: 10, axisTick: { inside: true } }, radiusAxis: { type: 'category', data: ['A'] },
+      series: [{ type: 'bar', coordinateSystem: 'polar', z: 0, barCategoryGap: '0%', data: [10] }] }],
     ['parallel.default', par()],
     ['parallel.trigger', par({ triggerEvent: true })],
     ['radar.default', rad()],
@@ -479,7 +537,7 @@ function axishitRun(id, option) {
       if (![[-off, -off], [off, -off], [-off, off], [off, off]].every(o =>
         codeOf(handler.findHover(x + o[0], y + o[1]).target) === code)) { n0++; return; }
       probes.push({ own, part, x, y, code, cursor: t ? (t.cursor || '') : '' });
-      // a path that answers, 2 px off its line too (an angle axis' ticks:
+      // a path that answers, 1.5 px off its line too (an angle axis' ticks:
       // half their width, not strokeContainThreshold)
       if (!el.silent && el.type !== 'text' && el.type !== 'tspan') {
         const off = offProbe(el);
@@ -507,6 +565,13 @@ function generate() {
   const pictorial = pictorialCases().map(([id, o]) => pictorialRun(id, o));
   const inset = insetCases().map(([id, o]) => insetRun(id, o));
   const axishit = axishitCases().map(([id, o]) => axishitRun(id, o));
+  const frames = frameCases().map(([id, o]) => frameRun(id, o));
+  // every frame sample is part way through (a percent strictly between 0 and 1)
+  frames.forEach(c => c.samples.forEach(sm => sm.els.forEach(e => {
+    bits.setUint32(0, parseInt(e.percent.slice(0, 8), 16)); bits.setUint32(4, parseInt(e.percent.slice(8), 16));
+    const p = bits.getFloat64(0);
+    must(p > 0 && p < 1, c.id + ' t=' + sm.t + ': percent ' + p);
+  })));
   const sp = id => subpixel.find(c => c.id === id);
   // guards: the graphic component does not carry subPixelOptimize; every other case has its elements
   must(sp('graphic.line').els.length === 0, 'graphic.line: ' + sp('graphic.line').els.length);
@@ -522,7 +587,7 @@ function generate() {
     note: 'R7-G: subpixel (elements built with subPixelOptimize: buildPath calls, global transform, points through it), '
       + 'pictorial (valueLineWidth, repeat, glyph transforms, bar rect), inset (bar shapes by getLineWidth), axishit '
       + '(findHover on every axis part: sS/D, e:targetType, x, -; and the cursor). Doubles as IEEE-754 hex.',
-    W, H, subpixel, pictorial, inset, axishit };
+    W, H, subpixel, pictorial, inset, axishit, frames };
 }
 
 let j1, j2;

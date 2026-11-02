@@ -38,6 +38,7 @@ type
     function CodeAt(AX, AY: Integer): string;
     function HoverCodeAt(AX, AY: Integer): string;
     function CursorAt(AX, AY: Integer): string;
+    function Frame: TTyPaintList;
   end;
 
   TAdvChartRenderGapsTest = class(TTestCase)
@@ -57,6 +58,7 @@ type
     procedure TearDown; override;
   published
     procedure TestLinesAndGraphEdgesSnapAsUpstream;
+    procedure TestEveryEnterFrameIsSnapped;
     procedure TestThePointerLineIsOnTheHalfPixel;
     procedure TestTheTitleFrameSnapsInItsGroup;
     procedure TestTheTitleFrameIsDrawnSnapped;
@@ -116,6 +118,13 @@ function TRenderGapsProbe.CursorAt(AX, AY: Integer): string;
 begin
   MouseMove([], AX, AY);
   Result := CursorName;
+end;
+
+{ the list a frame of motion is drawn from (the list itself at rest) }
+function TRenderGapsProbe.Frame: TTyPaintList;
+begin
+  Result := AnimFrame;
+  if Result = nil then Result := SeriesList;
 end;
 
 function LoadJson(const AName: string): TJSONData;
@@ -281,6 +290,90 @@ begin
     AssertEquals(id + ': every line of the fixture drawn', els.Count, n);
   end;
   AssertEquals('compared', 19, nCmp);
+  AssertEquals(bad, 0, nBad);
+end;
+
+{ A line's enter: shape.percent from 0 (linear, 1000 ms) -- Line.buildPath
+  snaps the shape's ends first and then cuts it at the percent, every frame.
+  At 300 and 700 ms each straight line's two points in the frame, to the
+  bit: a graph's edges under a zoom and on axes, a lines series'. }
+procedure TAdvChartRenderGapsTest.TestEveryEnterFrameIsSnapped;
+var
+  cs, samples, els, pts: TJSONArray;
+  c, sm, e: TJSONObject;
+  i, j, k, n, nCmp, nBad: Integer;
+  id, bad: string;
+  t0, t: Double;
+  L: TTyPaintList;
+  el: TTyChartElement;
+  isGraph: Boolean;
+begin
+  cs := Section('frames');
+  nCmp := 0;
+  nBad := 0;
+  bad := '';
+  for i := 0 to cs.Count - 1 do
+  begin
+    c := cs.Objects[i];
+    id := c.Strings['id'];
+    isGraph := Pos('frame.graph', id) = 1;
+    t0 := c.Floats['T0'];
+    FreeAndNil(FChart);
+    FChart := TRenderGapsProbe.Create(FForm);
+    FChart.Parent := FForm;
+    FChart.Controller := FCtl;
+    FChart.Measurer := TPtToPxMeasurer.Create(TZrSsrMeasurer.Create(
+      TJSONObject(FMeasure).Objects['ratios'].Arrays['ratio'],
+      TJSONObject(FMeasure).Objects['ratios'].Integers['firstCode']));
+    FChart.SetBounds(0, 0, cW, cH);
+    FChart.AnimationMode := camAlways;
+    FChart.AnimNow := t0;
+    FChart.SetOption(c.Objects['option'].AsJSON, True);
+    AssertEquals(id + ' parses', '', FChart.OptionError);
+    FChart.Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
+    samples := c.Arrays['samples'];
+    for j := 0 to samples.Count - 1 do
+    begin
+      sm := samples.Objects[j];
+      t := t0 + sm.Floats['t'];
+      FChart.AnimNow := t;
+      FChart.AnimTick(t);
+      FChart.Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
+      els := sm.Arrays['els'];
+      L := FChart.Frame;
+      n := 0;
+      for k := 0 to L.Count - 1 do
+      begin
+        el := L.Element(k);
+        if (el.Datum.Kind <> ctkSeries) or (el.Datum.SeriesIndex <> 0) then Continue;
+        if el.Shape.Kind <> cskPolyline then Continue;
+        if isGraph <> el.Datum.IsEdge then Continue;
+        if (not isGraph) and (el.Anim.Role <> carLinesLine) then Continue;
+        if (el.Datum.DataIndex < 0) or (el.Datum.DataIndex >= els.Count) then Continue;
+        e := els.Objects[el.Datum.DataIndex];
+        Inc(n);
+        if not e.Booleans['straight'] then Continue;
+        pts := e.Arrays['pts'];
+        Inc(nCmp);
+        if (Length(el.Shape.Points) <> 2)
+          or (HexOf(el.Shape.Points[0].X) <> pts.Arrays[0].Strings[0])
+          or (HexOf(el.Shape.Points[0].Y) <> pts.Arrays[0].Strings[1])
+          or (HexOf(el.Shape.Points[1].X) <> pts.Arrays[1].Strings[0])
+          or (HexOf(el.Shape.Points[1].Y) <> pts.Arrays[1].Strings[1]) then
+        begin
+          Inc(nBad);
+          if Length(bad) < 2000 then
+            bad := bad + Format('%s t=%g #%d: (%g,%g)-(%g,%g), upstream (%g,%g)-(%g,%g); ',
+              [id, sm.Floats['t'], el.Datum.DataIndex, el.Shape.Points[0].X, el.Shape.Points[0].Y,
+               el.Shape.Points[High(el.Shape.Points)].X, el.Shape.Points[High(el.Shape.Points)].Y,
+               HexAt(pts.Arrays[0], 0), HexAt(pts.Arrays[0], 1),
+               HexAt(pts.Arrays[1], 0), HexAt(pts.Arrays[1], 1)]);
+        end;
+      end;
+      AssertEquals(Format('%s t=%g: every line in the frame', [id, sm.Floats['t']]), els.Count, n);
+    end;
+  end;
+  AssertEquals('compared', 14, nCmp);
   AssertEquals(bad, 0, nBad);
 end;
 
