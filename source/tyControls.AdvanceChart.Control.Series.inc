@@ -3612,9 +3612,6 @@ begin
     else Result.StrokeWidthLogical := bst.BorderWidthLogical;
     { [R7-C] an infinite width: never hit }
     Result.StrokeWidthInf := bst.BorderWidthInf;
-    { [R7-F] a clear colour strokes for the pointer }
-    Result.StrokeClear := ((bst.BorderColor.Color shr 24) = 0)
-      and (bst.BorderColor.Gradient.Kind = cgkNone) and not bst.BorderColor.Pattern.Present;
   end;
   { [R7-F] A SLICE WHOSE FILL IS 'none' (the series', or its own) has no
     inside for the pointer; a colour of its own or a visualMap's is a fill }
