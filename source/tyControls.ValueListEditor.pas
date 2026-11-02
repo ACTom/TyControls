@@ -2273,6 +2273,17 @@ begin
       Exit;
     end;
   end;
+  { #183: Alt+Right opens the current row, Alt+Left closes it, as in LCL's object inspector
+    (objectinspector.pp, HandleStandardKeys) -- without them a row's children were reachable by
+    the mouse alone. }
+  if ((Key = VK_RIGHT) or (Key = VK_LEFT)) and (Shift = [ssAlt]) and (ItemIndex >= 0)
+    and (ItemIndex <= High(FFlatRow)) and FFlatRow[ItemIndex].HasChildren
+    and (FFlatRow[ItemIndex].Expanded <> (Key = VK_RIGHT)) then
+  begin
+    SetExpanded(FFlatRow[ItemIndex], Key = VK_RIGHT);
+    Key := 0;
+    Exit;
+  end;
   { A heading has nothing to edit: Enter opens or closes it instead. }
   if (Key = VK_RETURN) and (Shift = []) and (ItemIndex >= 0) and (ItemIndex <= High(FFlatRow))
     and FFlatRow[ItemIndex].Heading and (FEditFlat < 0) then

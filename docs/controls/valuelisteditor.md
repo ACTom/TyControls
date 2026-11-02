@@ -98,7 +98,7 @@ uses tyControls.ValueListEditor;
 
 - **点值列** → 按该行 `EditorKind` 编辑:文本(可选中/复制,数字类型限数字)/ 布尔·枚举·颜色下拉 / 字体·自定义先进入可编辑文本、**点尾部"…"** 才弹对话框;**点键列** → 选中该行(开了 `keyEdit` 则**同时进入改名**)。选中行按 **F2 / Enter** 也进入编辑。
 - **`KeyOptions` 开出来的手势**(默认全关,见 §7):**点键列 / Shift+F2** 改键名(`keyEdit`)、**Insert** 在当前位置插空行(`keyAdd`)、**Ctrl+Delete** 删当前根行(`keyDelete`)。
-- **点键列前的 chevron** → 展开/收起子行。**层级无上限**(如 `Font → Style → Bold`)。
+- **点键列前的 chevron** → 展开/收起子行;选中行按 **Alt+→ / Alt+←** 也一样(和 Lazarus 的对象查看器一致)。**层级无上限**(如 `Font → Style → Bold`)。
 - **拖分隔条**(光标变 ↔)→ 调整键/值列宽。
 - 编辑中:**Enter** / 点别处 / 失焦 → 提交;**Esc** → 取消。`ReadOnly` 行 / 全局 `ReadOnly` 不可编辑。
 - **颜色 / 字体 / 自定义对话框全部用控件库自带的**(`TySelectColor` / `TTyFontDialog` / 你在 `OnEditRow` 里调 `TySelectDirectory` 等),不弹原生对话框。

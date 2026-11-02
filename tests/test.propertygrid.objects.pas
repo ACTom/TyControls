@@ -39,6 +39,8 @@ type
     procedure TestACancelledStringsDialogWritesNothing;
     procedure TestACycleStopsAtTheDepthLimit;
     procedure TestASubComponentIsExpandedNotReferenced;
+    { #183 }
+    procedure TestAltRightAndAltLeftOpenAndCloseARow;
   end;
 
   { A real control on a real form: Font, Constraints, Anchors, PopupMenu. }
@@ -80,6 +82,25 @@ type
 implementation
 
 { ================================================================ fixtures }
+
+{ ---- #183: the keyboard and the '…' ---- }
+
+{ LCL's object inspector: Alt+Right expands the current row, Alt+Left collapses it
+  (objectinspector.pp, HandleStandardKeys). }
+procedure TPropertyGridObjectsTest.TestAltRightAndAltLeftOpenAndCloseARow;
+begin
+  FGrid.Select(FGrid.RowAt('Inner'));
+  AssertFalse('closed to start', FGrid.RowAt('Inner').Expanded);
+  FGrid.Press(VK_RIGHT, [ssAlt]);
+  AssertTrue('Alt+Right opens it', FGrid.RowAt('Inner').Expanded);
+  AssertTrue('its rows are on display', Pos('Level', FGrid.ShownKeys) > 0);
+  AssertSame('the current row stays', FGrid.RowAt('Inner'), FGrid.CurrentRow);
+  FGrid.Press(VK_LEFT, [ssAlt]);
+  AssertFalse('Alt+Left closes it', FGrid.RowAt('Inner').Expanded);
+  FGrid.Select(FGrid.RowAt('Items.[1]'));
+  FGrid.Press(VK_RIGHT, [ssAlt]);
+  AssertTrue('a collection item too', FGrid.RowAt('Items.[1]').Expanded);
+end;
 
 procedure TPropertyGridObjectsTest.SetUp;
 begin
