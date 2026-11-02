@@ -51,6 +51,7 @@ type
   published
     procedure TestTheLabelsAndNamesAsUpstream;
     procedure TestALabelLayoutAtNaNLeavesTheHostsTrapsAlone;
+    procedure TestTheAxisMaskHandsTheTrapsBackClean;
   end;
 
 implementation
@@ -262,6 +263,27 @@ begin
   AssertEquals('the case ran clean', 0, FBad);
   AssertEquals('the host''s division by zero after the axes', 'EZeroDivide',
     DivideByZero);
+end;
+
+{ TyMaskJs / TyUnmaskJs, which every axis path at NaN goes through: a NaN
+  compared under the mask leaves the SSE invalid flag set, and the unmask
+  clears it -- else the host's next division by zero reads EInvalidOp }
+procedure TAdvChartAxisStringSizeOracleTest.TestTheAxisMaskHandsTheTrapsBackClean;
+var
+  mask: TFPUExceptionMask;
+  a, b: Double;
+  lt: Boolean;
+begin
+  a := NaN;
+  b := 1;
+  mask := TyMaskJs;
+  try
+    lt := a < b;
+  finally
+    TyUnmaskJs(mask);
+  end;
+  AssertFalse('NaN < 1 as JS has it', lt);
+  AssertEquals('the host''s division by zero', 'EZeroDivide', DivideByZero);
 end;
 
 initialization

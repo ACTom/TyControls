@@ -452,9 +452,9 @@ const sized = n => pts(n, 7, 13).map((p, i) => ({ value: p, symbolSize: 4 + (i %
 const WORD_PTS = [[2, 5], [5, 5], [8, 5], [5, 8], [5, 2]];
 const WORD_ROW = (k, label) => WORD_PTS.map((p, i) => (i === k ? { value: p, label } : p));
 const WORD_COL = (k, label) => [[5, 2], [5, 5], [5, 8], [2, 5], [8, 5]].map((p, i) => (i === k ? { value: p, label } : p));
-function wordScatter(data, layout) {
+function wordScatter(data, layout, formatter) {
   return { animation: false, xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
-    series: [{ type: 'scatter', label: { show: true, formatter: 'L{c}' }, labelLayout: layout, data }] };
+    series: [{ type: 'scatter', label: { show: true, formatter: formatter || 'L{c}' }, labelLayout: layout, data }] };
 }
 
 const CASES = [
@@ -632,6 +632,10 @@ const CASES = [
     option: wordScatter(WORD_COL(1, { height: '50%', backgroundColor: '#eee' }), { moveOverlap: 'shiftY' }) },
   { id: 'string.width.shiftX.hide', note: "shiftX then hideOverlap",
     option: wordScatter(WORD_ROW(2, { width: '50%', backgroundColor: '#eee' }), { moveOverlap: 'shiftX', hideOverlap: true }) },
+  { id: 'string.width.shiftX.order', note: "shiftX over x keys 348, 303, NaN, 307.5 in list order: V8's run (348, 303) reversed and its binary insertion put 307.5 before 348, so two labels move",
+    option: wordScatter([[6, 5], [5, 5], { value: [4, 5], label: { width: '50%', backgroundColor: '#eee' } }, [5.1, 5]], { moveOverlap: 'shiftX' }) },
+  { id: 'string.width.shiftX.squeeze', note: "shiftX pushing long labels past the right edge, one at NaN among them: a NaN gap makes the gaps' total NaN and the squeeze stops",
+    option: wordScatter([[9, 5], { value: [9.3, 5], label: { width: '50%', backgroundColor: '#eee' } }, [9.6, 5], [10, 5]].map(d => d), { moveOverlap: 'shiftX' }, 'a long label {c}') },
   { id: 'string.numwidth.hide', note: "a numeric string width '120' with a plate: its rect runs to x + '1200'",
     option: wordScatter(WORD_ROW(2, { width: '120', backgroundColor: '#eee' }), { hideOverlap: true }) },
 ];

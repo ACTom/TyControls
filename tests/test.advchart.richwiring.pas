@@ -116,6 +116,7 @@ type
     procedure TestARoundedPlateRunsToItsJoinedEdge;
     procedure TestAZeroRadiusRoundedPlateRunsToItsJoinedEdge;
     procedure TestARadiusArrayIsTruthy;
+    procedure TestALabelWhollyAtNaNStandsWhereItsSpansAreBounded;
   end;
 
   { device px at a PPI from a measurer that answers CSS px }
@@ -1696,6 +1697,40 @@ begin
     end;
   end;
   AssertTrue('both labels drawn', seenArray and seenZero);
+end;
+
+{ [R7-L] a centred rich label whose width is '50%' and which has no plate
+  lays every token out at NaN: nothing is drawn, but zrender bounds its
+  TSpans at style.x || 0, so the label is still there for the label layout
+  and the pointer -- one undrawn rect, the size of its words }
+procedure TAdvChartRichWiringOracleTest.TestALabelWhollyAtNaNStandsWhereItsSpansAreBounded;
+var
+  k: Integer;
+  e: TTyChartElement;
+  seen: Boolean;
+begin
+  { label-layout.js' string.width.rich: no plate, no token box, so its box
+    is the TSpan's at 0 }
+  FChart.Option := '{"animation":false,"xAxis":{"type":"value","min":0,"max":10},'
+    + '"yAxis":{"type":"value","min":0,"max":10},"series":[{"type":"scatter",'
+    + '"label":{"show":true,"formatter":"L{c}"},"data":[[2,5],{"value":[8,5],'
+    + '"label":{"width":"50%","formatter":"{a|L{c}}","rich":{"a":{"color":"#333"}}}}]}]}';
+  FChart.SetBounds(0, 0, 600, 400);
+  FChart.Render(FBmp.Canvas, Rect(0, 0, 600, 400), 96);
+  seen := False;
+  for k := 0 to FChart.List.Count - 1 do
+  begin
+    e := FChart.List.Element(k);
+    { the label, not its host's caption it was expanded from }
+    if (e.Caption.Text <> '{a|L8,5}') or (e.Caption.LmKind = 0) then Continue;
+    seen := True;
+    AssertEquals('one piece', 1, Length(e.Caption.RtPieces));
+    AssertTrue('a placeholder', e.Caption.RtPieces[0].Placeholder);
+    AssertFalse('not drawn', e.Caption.RtPieces[0].Drawn);
+    AssertTrue('as wide as its words', e.Caption.RtPieces[0].W > 10);
+    AssertTrue('as tall as a line', e.Caption.RtPieces[0].H > 5);
+  end;
+  AssertTrue('the label is there', seen);
 end;
 
 initialization
