@@ -308,6 +308,8 @@ type
     procedure UpdateData(Sender: TObject); override;
     { A pick from the list is written into the record at once. }
     procedure Change; override;
+    { The user's pick; with no field to write, ScrollListDataset moves ListSource to it. }
+    procedure DoSelect; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure Loaded; override;
   public
@@ -581,6 +583,21 @@ begin
   end
   else
     ALink.Field.Clear;
+end;
+
+{ A lookup control with no field to write (the master/detail idiom): ScrollListDataset moves
+  ListSource's dataset to the row the user picked, as LCL's controls do for an unbound pick
+  (TDBLookup.UpdateData, which is not called here: its write-back reads the control's dataset
+  whenever the data source is open, field or no field). }
+procedure ScrollUnboundList(ALink: TFieldDataLink; ALookup: TDBLookup; AIndex: Integer);
+var
+  ds: TDataSet;
+begin
+  if (ALink.Field <> nil) or not ALookup.ScrollListDataset or (AIndex < 0)
+    or (ALookup.ListSource = nil) then Exit;
+  ds := ALookup.ListSource.DataSet;
+  if (ds <> nil) and ds.Active then
+    ds.Locate(ALookup.KeyField, ALookup.GetKeyValue(AIndex), []);
 end;
 
 { ================================================================== TTyCustomDBComboBox == }
@@ -1111,6 +1128,12 @@ begin
   if FDataLink.Editing then FDataLink.UpdateRecord;
 end;
 
+procedure TTyCustomDBLookupComboBox.DoSelect;
+begin
+  ScrollUnboundList(FDataLink, FLookup, ItemIndex);
+  inherited DoSelect;
+end;
+
 procedure TTyCustomDBLookupComboBox.KeyDown(var Key: Word; Shift: TShiftState);
 begin
   if NullKeyPressed(FDataLink, NullValueKey, Key, Shift, FInUserEdit) then
@@ -1282,8 +1305,11 @@ end;
 procedure TTyCustomDBLookupListBox.DoSelectionChange(AUser: Boolean);
 begin
   inherited DoSelectionChange(AUser);
-  if AUser and not FLoading and (FDataLink <> nil) and FDataLink.Editing then
-    FDataLink.UpdateRecord;
+  if not AUser or FLoading or (FDataLink = nil) then Exit;
+  if FDataLink.Editing then
+    FDataLink.UpdateRecord
+  else
+    ScrollUnboundList(FDataLink, FLookup, ItemIndex);
 end;
 
 procedure TTyCustomDBLookupListBox.KeyDown(var Key: Word; Shift: TShiftState);

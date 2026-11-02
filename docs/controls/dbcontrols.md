@@ -104,7 +104,7 @@ TranslateUnitResourceStringsEx('', LangDir, 'tycontrols_db', 'tyControls.DB.StrC
 
 - **`TTyDBComboBox`**：显示 `Field.Text`（选中文字相同的那一项），写回控件的文字。`csDropDown` 下打字立刻进入编辑。程序设 `ItemIndex` 或 `Text` 也算编辑，和给 `TTyDBEdit` 设 `Text` 一样。组合框自己的 `ReadOnly` 只管得到可编辑的输入框，`csDropDownList` 下从列表选的改动会被改回去。
 - **`TTyDBListBox`**：选中 `Items.IndexOf(Field.Text)` 那一项，写回选中项的文字。程序设 `ItemIndex` 不算编辑。
-- **`TTyDBLookupComboBox`、`TTyDBLookupListBox`**：显示 `ListSource` 各行的 `ListField`，把选中行的 `KeyField` 写进 `DataField`；`DataField` 本身是查找字段（`fkLookup`）时用字段自己的定义。选中就写进记录。其他照 LCL：`ListFieldIndex`、`LookupCache`、`ScrollListDataset`、`KeyValue`（public，选中行的键；设它只选中行、不改字段，用于不绑 `DataSource` 当普通列表用的场合）、`EmptyValue` / `DisplayEmpty`（列表第一行放一个代表 `EmptyValue` 的空项）、`NullValueKey`（一个快捷键，按下就把字段清成 NULL，0 表示不用）。查找表增删行，列表跟着变。
+- **`TTyDBLookupComboBox`、`TTyDBLookupListBox`**：显示 `ListSource` 各行的 `ListField`，把选中行的 `KeyField` 写进 `DataField`；`DataField` 本身是查找字段（`fkLookup`）时用字段自己的定义。选中就写进记录。其他照 LCL：`ListFieldIndex`、`LookupCache`、`ScrollListDataset`（不绑 `DataSource` 时也有效：用户选哪一行，`ListSource` 的数据集就移到哪一行，可以拿来做主从表）、`KeyValue`（public，选中行的键；设它只选中行、不改字段，用于不绑 `DataSource` 当普通列表用的场合）、`EmptyValue` / `DisplayEmpty`（列表第一行放一个代表 `EmptyValue` 的空项）、`NullValueKey`（一个快捷键，按下就把字段清成 NULL，0 表示不用）。查找表增删行，列表跟着变。
 
 ### 其他
 

@@ -103,6 +103,7 @@ type
     procedure TestNullValueKeyIsRefusedWhenNotEditable;
     procedure TestListFollowsTheLookupTable;
     procedure TestLookupFieldBringsItsOwnDefinition;
+    procedure TestScrollListDatasetMovesTheListWhenUnbound;
   end;
 
   TDBLookupComboBoxTest = class(TDBLookupTestBase)
@@ -636,6 +637,22 @@ begin
     src.Free;
     ds.Free;
   end;
+end;
+
+{ #184: LCL's master/detail idiom -- a lookup control with no DataSource, ScrollListDataset on:
+  every pick moves the list's dataset to the picked row (TDBLookup.UpdateData's Locate, which
+  LCL calls for an unbound control on each pick). }
+procedure TDBLookupTestBase.TestScrollListDatasetMovesTheListWhenUnbound;
+begin
+  SetOrdProp(FCtl, 'ScrollListDataset', 1);
+  SetKeyValueOf(1);
+  AssertEquals('precondition: Cities on Paris', 'Paris', FFix.Cities.FieldByName('Name').AsString);
+  EnterControl;
+  Key(VK_DOWN);
+  AssertEquals('picked', 'Tokyo', Shown);
+  AssertEquals('Cities moved with the pick', 'Tokyo', FFix.Cities.FieldByName('Name').AsString);
+  Key(VK_DOWN);
+  AssertEquals('and again', 'Lima', FFix.Cities.FieldByName('Name').AsString);
 end;
 
 { ========================================================= TDBLookupComboBoxTest ========= }
