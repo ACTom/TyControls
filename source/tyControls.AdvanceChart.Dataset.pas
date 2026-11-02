@@ -97,6 +97,10 @@ type
     { How many dimensions the table has, which is not always Length(Dims): a
       table with no names still has columns. }
     DimCount: Integer;
+    { [spec 255] a table of lines whose `dimensions` are written: upstream
+      counts those (dimensionsDetectedCount is their length, [] none), not
+      the line's cells -- what an encode index is held against }
+    DimsWritten: Boolean;
   end;
 
   { Which source dimensions feed one series' coordinates.
@@ -111,15 +115,43 @@ type
       -1, which asks for no mapping. An unwritten one takes the next unclaimed
       dimension (TyEncodeFillUnclaimed). }
     Explicit: array of Boolean;
-    { `encode.tooltip` and `encode.label`, every entry resolved (unresolved
-      ones dropped) -- upstream's defaultedTooltip / defaultedLabel when
-      non-empty. }
+    { `encode.tooltip` and `encode.label` as createDimensions leaves them
+      (summarizeDimensions' encode.tooltip / encode.label): each dimension at
+      the LAST place the list names it, -1 for a place nothing reached -- a
+      name the table does not have, or a dimension named again further on.
+      `[1, 'b', 3]` is (1, -1, 3), `[1, 3, 1]` is (-1, 3, 1). A tooltip skips
+      a gap but counts it; a label prints the whole raw item there.
+      [spec 255: was every entry resolved, the unresolved ones dropped] }
     Tooltip, Labels: array of Integer;
-    { `itemName` and `seriesName`: where a row's own name and the series' own
-      name come from. -1 for neither. Only the FIRST entry of each is used --
-      upstream reads slot 0 and ignores the rest. }
+    { `itemName`: the dimension the list names FIRST and not again
+      (SeriesData's `otherDims.itemName === 0`), -1 for none. `['nope', 'g']`
+      names none. HasNameEncode: the list reached any dimension at all, which
+      takes the category's name away from the rows (injectOrdinalMeta's
+      hasNameEncode) [spec 255]. }
     ItemName: Integer;
+    HasNameEncode: Boolean;
+    { A DEFAULT encode's series name dimension, -1 for none; a written one is
+      SeriesNames: every dimension the list reaches, in its order, gaps
+      dropped -- the series is named their display names joined by a space
+      (getSeriesAutoName) [spec 255: was the first entry alone]. }
     SeriesName: Integer;
+    SeriesNames: array of Integer;
+    { [spec 255] A COORDINATE WRITTEN AS A LIST holds every dimension it
+      reaches: entry 0 is Columns' (-1 when it reached none -- mapDimension
+      answers nothing then), and every one past the coordinate system's own
+      columns is an extra one here: ExtraDim the source dimension, ExtraCoord
+      the column of the coordinate it belongs to, ExtraIndex its place in the
+      list. They size the axis, can be the series' label and the stacked
+      dimension, and collect categories. }
+    ExtraCoord, ExtraDim, ExtraIndex: array of Integer;
+    { Per source dimension: some coordinate of the encode -- written in it,
+      not a tooltip, label or name -- holds it, so no unwritten coordinate is
+      filled from it. }
+    Claimed: array of Boolean;
+    { The dimensions a key no coordinate system asks for holds (`value` on a
+      scatter, any other word): coordinates all the same, so the label may
+      be one of them. }
+    Others: array of Integer;
   end;
 
   { One coordinate of a series, as this unit needs it: what it is called and
@@ -129,6 +161,11 @@ type
   TTyCoordDim = record
     Name: string;
     Ordinal: Boolean;
+    { [spec 255] the encode key this column answers to and its place in that
+      key's list: a candlestick's open, close, lowest and highest are 'y' 0
+      to 3. '' (and 0) is the column's own name. }
+    Key: string;
+    Index: Integer;
   end;
   TTyCoordDimArray = array of TTyCoordDim;
 
@@ -363,12 +400,22 @@ function TySeriesDatasetIndex(AOption: TTyChartOption;
 { `series.encode`, resolved against a source. Answers Given = False when the
   series carries no `encode` at all -- which is the signal to run a defaulter.
 
-  A VALUE MAY BE AN INDEX, A NAME, OR A LIST OF EITHER, and only the first
-  entry of a list reaches a coordinate. A name that matches nothing leaves the
-  coordinate unclaimed rather than raising. }
+  A VALUE MAY BE AN INDEX, A NAME, OR A LIST OF EITHER, and every entry of a
+  list is resolved, as createDimensions resolves them [spec 255: was the
+  first entry alone]. An entry reaches a dimension when it is a name the
+  source has or a whole index below the dimension count -- Max(the source's,
+  ADimCount, the coordinates', 1); one that reaches none is a gap. A
+  coordinate whose list reaches nothing is not written (the next free
+  dimension fills it); a lone negative number asks for no mapping. }
 function TyEncodeOf(AOption: TTyChartOption; ASeriesIndex: Integer;
   const ASource: TTyChartSource;
-  const ACoordDims: TTyCoordDimArray): TTySeriesEncode;
+  const ACoordDims: TTyCoordDimArray; ADimCount: Integer = -1): TTySeriesEncode;
+
+{ [spec 255] The dimension a visual encode list (itemName, itemGroupId,
+  itemChildGroupId) gives slot 0 -- its first entry, unless that entry is
+  -1 or its dimension is named again further on (the last place wins) --
+  from the entries resolved, -1 for each that reaches nothing. }
+function TyEncodeFirstSlot(const AEntries: array of Integer): Integer;
 
 { upstream's createDimensions for a GIVEN encode: every coordinate not
   written in it takes, in coordinate order, the first dimension below
@@ -380,6 +427,10 @@ procedure TyEncodeFillUnclaimed(var AEnc: TTySeriesEncode; ADimCount: Integer);
   the first one no coordinate holds (the second of two series on a
   three-column table: x the third column, y the first) }
 procedure TyEncodeDropPast(var AEnc: TTySeriesEncode; ADimCount: Integer);
+
+{ [spec 255] The dimensions createDimensions counts for a source:
+  `dimensions` written on a table of lines, their number; else DimCount. }
+function TySourceEncodeDimCount(const ASource: TTyChartSource): Integer;
 
 { A series' own `dimensions`, as a source that names things but holds
   nothing -- what an encode name on series data is looked up against. }
@@ -1446,6 +1497,7 @@ begin
     if Result.StartIndex < 0 then Result.StartIndex := 0;
 
     Result.DimCount := FirstLineLength(Result.Data, Result.LayoutBy);
+    Result.DimsWritten := dimsGiven;
     { THE NAMES COME OFF THE HEADER LINE ONLY WHEN THERE IS EXACTLY ONE HEADER
       ROW. `sourceHeader: 2` skips two rows and names nothing, which reads like
       an oversight and is what the code does. }
@@ -1781,56 +1833,69 @@ begin
   Result.SeriesName := -1;
 end;
 
-{ One `encode` value, resolved to a source dimension.
-
-  A NUMBER IS AN INDEX AND A STRING IS A NAME -- including a string that looks
-  like a number, which is looked up as a name and not parsed. A list hands back
-  its first entry, because only slot 0 reaches a coordinate. }
-function EncodeValue(AValue: TJSONData;
-  const ASource: TTyChartSource): Integer;
-var arr: TJSONArray;
+{ [spec 255] One entry of an encode list, resolved: a string a name the
+  source has, a number an index -- a whole one from nought below ADimCount;
+  -1 for anything else. A NUMBER IS AN INDEX AND A STRING IS A NAME,
+  including a string that looks like a number. (Upstream throws on a
+  negative or a fractional index in a list of several -- getResultItem
+  answers undefined -- and here it reaches nothing.) }
+function EncodeEntry(AItem: TJSONData; const ASource: TTyChartSource;
+  ADimCount: Integer): Integer;
+var v: Double;
 begin
   Result := -1;
-  if AValue = nil then Exit;
-  if AValue is TJSONArray then
+  if AItem = nil then Exit;
+  if AItem.JSONType = jtString then
+    Result := TySourceDimIndexOf(ASource, AItem.AsString)
+  else if AItem.JSONType = jtNumber then
   begin
-    arr := TJSONArray(AValue);
-    if arr.Count = 0 then Exit;
-    Exit(EncodeValue(arr.Items[0], ASource));
+    v := AItem.AsFloat;
+    if (Frac(v) = 0) and (v >= 0) and (v < MaxInt) then Result := Trunc(v);
   end;
-  if AValue.JSONType = jtNumber then Exit(TyRoundOpt(AValue.AsFloat));
-  if AValue.JSONType = jtString then Exit(TySourceDimIndexOf(ASource, AValue.AsString));
+  { past the dimensions: none (`resultDimIdx < dimCount`) }
+  if Result >= ADimCount then Result := -1;
 end;
 
-{ Every entry of an encode value, resolved: a number an index, a string a
-  name; an entry that resolves to nothing, or a negative index, dropped. }
-function EncodeList(AValue: TJSONData;
-  const ASource: TTyChartSource): TTyIntegerArray;
-var
-  arr: TJSONArray;
-  i, v: Integer;
-
-  procedure One(AItem: TJSONData);
-  begin
-    v := -1;
-    if AItem = nil then Exit;
-    if AItem.JSONType = jtNumber then v := TyRoundOpt(AItem.AsFloat)
-    else if AItem.JSONType = jtString then v := TySourceDimIndexOf(ASource, AItem.AsString);
-    if v < 0 then Exit;
-    SetLength(Result, Length(Result) + 1);
-    Result[High(Result)] := v;
-  end;
-
+{ normalizeToArray, each entry resolved: a list its entries, null none, any
+  other value one; the trailing gaps dropped -- validDataDims is as long as
+  its last entry that reached a dimension }
+function EncodeEntries(AValue: TJSONData; const ASource: TTyChartSource;
+  ADimCount: Integer): TTyIntegerArray;
+var i, n: Integer;
 begin
   Result := nil;
-  if AValue = nil then Exit;
+  if (AValue = nil) or (AValue.JSONType = jtNull) then Exit;
   if AValue is TJSONArray then
   begin
-    arr := TJSONArray(AValue);
-    for i := 0 to arr.Count - 1 do One(arr.Items[i]);
+    SetLength(Result, AValue.Count);
+    for i := 0 to AValue.Count - 1 do
+      Result[i] := EncodeEntry(AValue.Items[i], ASource, ADimCount);
   end
   else
-    One(AValue);
+  begin
+    SetLength(Result, 1);
+    Result[0] := EncodeEntry(AValue, ASource, ADimCount);
+  end;
+  n := Length(Result);
+  while (n > 0) and (Result[n - 1] < 0) do Dec(n);
+  SetLength(Result, n);
+end;
+
+function TySourceEncodeDimCount(const ASource: TTyChartSource): Integer;
+begin
+  if ASource.DimsWritten then Result := Length(ASource.Dims)
+  else Result := ASource.DimCount;
+end;
+
+function TyEncodeFirstSlot(const AEntries: array of Integer): Integer;
+var i: Integer;
+begin
+  Result := -1;
+  if Length(AEntries) = 0 then Exit;
+  Result := AEntries[0];
+  if Result < 0 then Exit;
+  for i := 1 to High(AEntries) do
+    if AEntries[i] = Result then Exit(-1);
 end;
 
 procedure FillUnclaimed(var AEnc: TTySeriesEncode; ADimCount: Integer);
@@ -1843,8 +1908,10 @@ begin
   begin
     if (i <= High(AEnc.Explicit)) and AEnc.Explicit[i] then Continue;
     if AEnc.Columns[i] >= 0 then Continue;
+    { a dimension any written coordinate holds is taken, an extra entry of
+      a list and a key no coordinate system asks for among them [spec 255] }
     repeat
-      used := False;
+      used := (avail <= High(AEnc.Claimed)) and AEnc.Claimed[avail];
       for j := 0 to High(AEnc.Columns) do
         if AEnc.Columns[j] = avail then used := True;
       if used then Inc(avail);
@@ -1892,11 +1959,21 @@ end;
 
 function TyEncodeOf(AOption: TTyChartOption; ASeriesIndex: Integer;
   const ASource: TTyChartSource;
-  const ACoordDims: TTyCoordDimArray): TTySeriesEncode;
+  const ACoordDims: TTyCoordDimArray; ADimCount: Integer): TTySeriesEncode;
+const
+  cVisual: array[0..6] of string = ('tooltip', 'label', 'itemName', 'itemId',
+    'itemGroupId', 'itemChildGroupId', 'seriesName');
 var
   node, enc: TJSONObject;
   d: TJSONData;
-  i: Integer;
+  i, j, k, n, dimCount, vk, keyCount: Integer;
+  key: string;
+  keys: array of string;
+  lists: array of TTyIntegerArray;
+  noMap, isSys, done: array of Boolean;
+  owner, slot: TTyIntegerArray;
+  vis: array[0..6] of TTyIntegerArray;
+  entries: TTyIntegerArray;
 
   { createDimensions' `false`: a lone number below nought (normalizeToArray
     of it, one entry, no string) asks for no mapping }
@@ -1906,6 +1983,82 @@ var
     Result := (AValue.JSONType = jtNumber) and (AValue.AsFloat < 0);
   end;
 
+  function KeyOf(const ACoord: TTyCoordDim): string;
+  begin
+    if ACoord.Key <> '' then Result := ACoord.Key else Result := ACoord.Name;
+  end;
+
+  function KeyIndex(const AKey: string): Integer;
+  var q: Integer;
+  begin
+    for q := 0 to keyCount - 1 do
+      if keys[q] = AKey then Exit(q);
+    Result := keyCount;
+    Inc(keyCount);
+    SetLength(keys, keyCount);
+    SetLength(lists, keyCount);
+    SetLength(noMap, keyCount);
+    SetLength(isSys, keyCount);
+    SetLength(done, keyCount);
+    keys[Result] := AKey;
+    lists[Result] := nil;
+    noMap[Result] := False;
+    isSys[Result] := False;
+    done[Result] := False;
+  end;
+
+  function VisualIndex(const AKey: string): Integer;
+  var q: Integer;
+  begin
+    for q := 0 to High(cVisual) do
+      if cVisual[q] = AKey then Exit(q);
+    Result := -1;
+  end;
+
+  { applyDim: the dimension now feeds that key at that place -- the last
+    application wins }
+  procedure Assign(ADim, AKey, AIndex: Integer);
+  begin
+    owner[ADim] := AKey;
+    slot[ADim] := AIndex;
+  end;
+
+  { summarizeDimensions' encode[key]: each dimension at its place, -1 a gap }
+  function ListOf(AKey: Integer): TTyIntegerArray;
+  var q, m: Integer;
+  begin
+    Result := nil;
+    m := 0;
+    for q := 0 to dimCount - 1 do
+      if (owner[q] = AKey) and (slot[q] + 1 > m) then m := slot[q] + 1;
+    SetLength(Result, m);
+    for q := 0 to m - 1 do Result[q] := -1;
+    for q := 0 to dimCount - 1 do
+      if owner[q] = AKey then Result[slot[q]] := q;
+  end;
+
+  function VisualList(AVis: Integer): TTyIntegerArray;
+  var q, m: Integer;
+  begin
+    Result := nil;
+    m := 0;
+    for q := 0 to dimCount - 1 do
+      if vis[AVis][q] + 1 > m then m := vis[AVis][q] + 1;
+    SetLength(Result, m);
+    for q := 0 to m - 1 do Result[q] := -1;
+    for q := 0 to dimCount - 1 do
+      if vis[AVis][q] >= 0 then Result[vis[AVis][q]] := q;
+  end;
+
+  procedure Push(var A: TTyIntegerArray; AValue: Integer);
+  begin
+    SetLength(A, Length(A) + 1);
+    A[High(A)] := AValue;
+  end;
+
+var
+  fin, cols: TTyIntegerArray;
+  first: Integer;
 begin
   Result := NewEncode(Length(ACoordDims));
   if AOption = nil then Exit;
@@ -1919,32 +2072,125 @@ begin
     series of a dataset leaves y to fall back positionally rather than to the
     column the first two series' counter would have handed it. }
   Result.Given := True;
+  dimCount := Max(Max(TySourceEncodeDimCount(ASource), ADimCount), Max(Length(ACoordDims), 1));
+  SetLength(owner, dimCount);
+  SetLength(slot, dimCount);
+  SetLength(Result.Claimed, dimCount);
+  for i := 0 to dimCount - 1 do
+  begin
+    owner[i] := -1;
+    slot[i] := -1;
+    Result.Claimed[i] := False;
+  end;
+  for vk := 0 to High(cVisual) do
+  begin
+    SetLength(vis[vk], dimCount);
+    for i := 0 to dimCount - 1 do vis[vk][i] := -1;
+  end;
+  keyCount := 0;
+  keys := nil;
+  { THE INDEX FIRST: KeyIndex grows the arrays it is subscripted into }
   for i := 0 to High(ACoordDims) do
   begin
-    d := enc.Find(ACoordDims[i].Name);
-    if d <> nil then
-    begin
-      Result.Columns[i] := EncodeValue(d, ASource);
-      { WRITTEN IS REACHING A DIMENSION, or asking for none: a value that
-        reaches none -- a name the table does not have, [], null -- leaves
-        the coordinate to the next free dimension, as one not written
-        (createDimensions: its validDataDims are empty) [was: none] }
-      Result.Explicit[i] := (Result.Columns[i] >= 0) or NoMapping(d);
-    end;
+    k := KeyIndex(KeyOf(ACoordDims[i]));
+    isSys[k] := True;
   end;
-  Result.Tooltip := EncodeList(enc.Find('tooltip'), ASource);
-  Result.Labels := EncodeList(enc.Find('label'), ASource);
-  d := enc.Find('itemName');
-  if d <> nil then Result.ItemName := EncodeValue(d, ASource);
-  d := enc.Find('seriesName');
-  if d <> nil then Result.SeriesName := EncodeValue(d, ASource);
-  { `value` is a pie's word for the number it draws, and it lands on the one
-    coordinate a pie has. }
-  if (Length(ACoordDims) = 1) and (Result.Columns[0] < 0) then
+
+  { THE ENCODE, key by key in its own order (encodeDefMap.each): every entry
+    a dimension reaches feeds that key at its place; a visual key (tooltip,
+    label, the names) marks the dimension's otherDims instead and holds
+    nothing }
+  for i := 0 to enc.Count - 1 do
   begin
-    d := enc.Find('value');
-    if d <> nil then Result.Columns[0] := EncodeValue(d, ASource);
+    key := enc.Names[i];
+    d := enc.Items[i];
+    vk := VisualIndex(key);
+    if vk >= 0 then
+    begin
+      if NoMapping(d) then Continue;
+      entries := EncodeEntries(d, ASource, dimCount);
+      for j := 0 to High(entries) do
+        if entries[j] >= 0 then vis[vk][entries[j]] := j;
+      Continue;
+    end;
+    k := KeyIndex(key);
+    if NoMapping(d) then
+    begin
+      noMap[k] := True;
+      Continue;
+    end;
+    lists[k] := EncodeEntries(d, ASource, dimCount);
+    for j := 0 to High(lists[k]) do
+      if lists[k][j] >= 0 then
+      begin
+        Assign(lists[k][j], k, j);
+        Result.Claimed[lists[k][j]] := True;
+      end;
   end;
+
+  { THE COORDINATE SYSTEM'S OWN, in its order: each list applied again, so a
+    dimension two of them name ends on the later one (x: 1, y: 1 leaves x
+    with nothing) and one a coordinate and another key both name on the
+    coordinate }
+  for i := 0 to High(ACoordDims) do
+  begin
+    k := KeyIndex(KeyOf(ACoordDims[i]));
+    if done[k] then Continue;
+    done[k] := True;
+    if noMap[k] then Continue;
+    for j := 0 to High(lists[k]) do
+      if lists[k][j] >= 0 then Assign(lists[k][j], k, j);
+  end;
+
+  { WRITTEN IS REACHING A DIMENSION, or asking for none: a list that reaches
+    none -- a name the table does not have, [], null -- leaves the
+    coordinate to the next free dimension, as one not written
+    (createDimensions: its validDataDims are empty). A list that reached
+    one keeps what the dimensions say now, a gap included. }
+  for i := 0 to High(ACoordDims) do
+  begin
+    k := KeyIndex(KeyOf(ACoordDims[i]));
+    Result.Explicit[i] := noMap[k] or (Length(lists[k]) > 0);
+    if noMap[k] or (Length(lists[k]) = 0) then Continue;
+    fin := ListOf(k);
+    if (ACoordDims[i].Index >= 0) and (ACoordDims[i].Index <= High(fin)) then
+      Result.Columns[i] := fin[ACoordDims[i].Index];
+  end;
+  { the entries past the coordinate system's columns: extra columns of the
+    key's first one }
+  for k := 0 to keyCount - 1 do
+  begin
+    if not isSys[k] or noMap[k] or (Length(lists[k]) = 0) then Continue;
+    first := -1;
+    n := 0;
+    for i := 0 to High(ACoordDims) do
+      if KeyOf(ACoordDims[i]) = keys[k] then
+      begin
+        if first < 0 then first := i;
+        if ACoordDims[i].Index + 1 > n then n := ACoordDims[i].Index + 1;
+      end;
+    fin := ListOf(k);
+    for j := n to High(fin) do
+      if fin[j] >= 0 then
+      begin
+        Push(Result.ExtraCoord, first);
+        Push(Result.ExtraDim, fin[j]);
+        Push(Result.ExtraIndex, j);
+      end;
+  end;
+  { a key nobody's coordinate system asks for holds its dimensions all the
+    same }
+  for i := 0 to dimCount - 1 do
+    if (owner[i] >= 0) and not isSys[owner[i]] then Push(Result.Others, i);
+
+  Result.Tooltip := VisualList(0);
+  Result.Labels := VisualList(1);
+  cols := VisualList(2);
+  Result.HasNameEncode := Length(cols) > 0;
+  if Length(cols) > 0 then Result.ItemName := cols[0];
+  cols := VisualList(6);
+  for j := 0 to High(cols) do
+    if cols[j] >= 0 then Push(Result.SeriesNames, cols[j]);
 end;
 
 function TyEncodeCursorFor(var AList: TTyEncodeCursorArray;

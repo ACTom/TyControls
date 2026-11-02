@@ -253,6 +253,7 @@ begin
         ds := FSeriesDataset[i];
         if ds >= 0 then
         begin
+          coord := nil;
           SetLength(coord, Length(dims));
           for k := 0 to High(dims) do
           begin
@@ -407,6 +408,7 @@ begin
           { A PIE NAMES ITS DATA RATHER THAN PLOTTING IT, so its default
             encode is the other one: a NAME dimension and a VALUE dimension,
             guessed from the table rather than counted off it. }
+          coord := nil;
           SetLength(coord, 1);
           coord[0].Name := typeInfo.Dims[0];
           coord[0].Ordinal := False;
@@ -483,11 +485,14 @@ begin
     if ds < 0 then
     begin
       SeriesDataEncode(i, dims, enc);
+      { [spec 255] a coordinate's list past its own column: extra columns }
+      if enc.Given then TySpreadEncode(enc, dims, st);
       { [R2-I6] the store the last build of this tree parsed, when it is
         the same recipe on the same lists }
       sig := StoreKeepSig(i, 0, -1, dims, enc);
       if StoreKeepTake(i, sig, dims) then Continue;
       StoreKeepPre(dims, pre);
+      if enc.Given then TyEncodeStoreOrder(enc, dims, st, False);
       TyFillSeriesStore(FOption, i, dims, st);
       ResolveTextDims(enc, st, TySeriesDimsSource(FOption, FBindings[i].SeriesIndex));
       HeatmapTipDims(i, enc, st);
@@ -498,12 +503,16 @@ begin
       axis under it is a category one. The second is what chooses between the
       two ways of handing a table out, and it is not the same question as
       which axis is horizontal. }
+    coord := nil;
     SetLength(coord, Length(dims));
     for k := 0 to High(dims) do
     begin
       coord[k].Name := dims[k].Name;
       coord[k].Ordinal := dims[k].Kind = ddtOrdinal;
     end;
+    { [spec 255] a column feeding another coordinate answers to its key: a
+      candlestick's y list fills open, close, lowest, highest in order }
+    TyCoordKeys(dims, coord);
     enc := TyEncodeOf(FOption, FBindings[i].SeriesIndex, FSources[i], coord);
     { THE CURSOR IS SHARED AND IT ADVANCES, which is why this has to happen
       inside the one loop that walks the series in order. Three bars on one
@@ -523,12 +532,19 @@ begin
     end;
     { A GIVEN ENCODE FILLS WHAT IT LEAVES OUT from the next free columns --
       `encode: {tooltip: [2]}` still draws x from 0 and y from 1. }
-    if enc.Given then TyEncodeFillUnclaimed(enc, FSources[i].DimCount);
+    { (up to the dimensions upstream counts: a table's written `dimensions`,
+      at least the coordinates' [spec 255]) }
+    if enc.Given then
+      TyEncodeFillUnclaimed(enc, Max(TySourceEncodeDimCount(FSources[i]), Length(coord)));
+    { [spec 255] every entry of a coordinate's list past its own column is a
+      column too: the axis spans it, it may be the label }
+    TySpreadEncode(enc, dims, st);
     FEncodes[i] := enc;
     { [R2-I6] kept, as above }
     sig := StoreKeepSig(i, 1, ds, dims, enc);
     if StoreKeepTake(i, sig, dims) then Continue;
     StoreKeepPre(dims, pre);
+    TyEncodeStoreOrder(enc, dims, st, True);
     TyFillStoreFromSource(FSources[i], enc, dims, st);
     ResolveTextDims(enc, st, FSources[i]);
     HeatmapTipDims(i, enc, st);
@@ -3282,7 +3298,7 @@ function TTyCustomAdvanceChart.SeriesNameOf(ASlot: Integer): string;
 var
   d: TJSONData;
   node: TJSONObject;
-  i, ds: Integer;
+  i, ds, k, dd: Integer;
 begin
   Result := '';
   if FOption = nil then Exit;
@@ -3316,6 +3332,20 @@ begin
     ds := -1;
     if i <= High(FSeriesDataset) then ds := FSeriesDataset[i];
     if (ds < 0) or (i > High(FSources)) then Exit;
+    { [spec 255] A WRITTEN seriesName LIST: every dimension it reaches that
+      has a display name, joined by a space (getSeriesAutoName) }
+    if Length(FEncodes[i].SeriesNames) > 0 then
+    begin
+      for k := 0 to High(FEncodes[i].SeriesNames) do
+      begin
+        dd := FEncodes[i].SeriesNames[k];
+        if (dd < 0) or (dd > High(FSources[i].Dims)) then Continue;
+        if FSources[i].Dims[dd].DisplayName = '' then Continue;
+        if Result <> '' then Result := Result + ' ';
+        Result := Result + FSources[i].Dims[dd].DisplayName;
+      end;
+      Exit;
+    end;
     if FEncodes[i].SeriesName < 0 then Exit;
     Exit(TySourceDimName(FSources[i], FEncodes[i].SeriesName));
   end;
@@ -3329,8 +3359,8 @@ procedure TTyCustomAdvanceChart.SeriesDataEncode(ASlot: Integer;
   var ADims: TTySeriesDimArray; out AEnc: TTySeriesEncode);
 var
   coord: TTyCoordDimArray;
-  k: Integer;
-  plain: Boolean;
+  k, dimW: Integer;
+  plain, prepend: Boolean;
   node: TJSONObject;
   d: TJSONData;
 begin
@@ -3344,23 +3374,50 @@ begin
     coord[k].Name := ADims[k].Name;
     coord[k].Ordinal := ADims[k].Kind = ddtOrdinal;
   end;
-  { A NAME IN `encode` IS ONE OF THE SERIES' OWN `dimensions`. }
-  AEnc := TyEncodeOf(FOption, FBindings[ASlot].SeriesIndex,
-    TySeriesDimsSource(FOption, FBindings[ASlot].SeriesIndex), coord);
-  if (not AEnc.Given) or not plain then Exit;
-  { EVERY COORDINATE `encode` DOES NOT NAME takes the next element nobody
-    holds, up to the width item 0 declares. }
+  TyCoordKeys(ADims, coord);
   node := nil;
   d := FOption.ComponentAt('series', FBindings[ASlot].SeriesIndex);
   if d is TJSONObject then node := TJSONObject(d);
   d := nil;
   if node <> nil then d := node.Find('data');
+  { the dimensions upstream counts: the declared ones and item 0's width
+    [spec 255: an index past the declared ones was read all the same] }
+  dimW := 0;
+  if (d <> nil) and (d is TJSONArray) then dimW := TySeriesDetectedDimCount(TJSONArray(d));
+  { A NAME IN `encode` IS ONE OF THE SERIES' OWN `dimensions`. }
+  AEnc := TyEncodeOf(FOption, FBindings[ASlot].SeriesIndex,
+    TySeriesDimsSource(FOption, FBindings[ASlot].SeriesIndex), coord, dimW);
+  if not AEnc.Given then Exit;
+  if not plain then
+  begin
+    { [spec 255] A WHISKER BOX'S VALUE LIST, in its order: `y: [1, 4, 3, 2]`
+      puts open on element 1 and close on 4 -- past a row index put in front,
+      the index is element 0. A custom series spreads its own. }
+    if FBindings[ASlot].SeriesType = TyCustomSeriesType then Exit;
+    prepend := False;
+    for k := 0 to High(ADims) do
+      if ADims[k].FromRowIndex and (ADims[k].Kind = ddtOrdinal) then prepend := True;
+    for k := 0 to High(ADims) do
+      if (k <= High(AEnc.Columns)) and AEnc.Explicit[k] and (AEnc.Columns[k] >= 0)
+        and not ADims[k].FromRowIndex then
+      begin
+        if not prepend then ADims[k].SourceSlot := AEnc.Columns[k] + 1
+        else if AEnc.Columns[k] >= 1 then ADims[k].SourceSlot := AEnc.Columns[k];
+      end;
+    Exit;
+  end;
+  { EVERY COORDINATE `encode` DOES NOT NAME takes the next element nobody
+    holds, up to the width item 0 declares. }
   if (d <> nil) and (d is TJSONArray) then
-    TyEncodeFillUnclaimed(AEnc, TySeriesDetectedDimCount(TJSONArray(d)));
+    TyEncodeFillUnclaimed(AEnc, dimW);
   for k := 0 to High(ADims) do
-    if (k <= High(AEnc.Columns)) and (AEnc.Columns[k] >= 0)
-      and not ADims[k].FromRowIndex then
-      ADims[k].SourceSlot := AEnc.Columns[k] + 1;
+    if (k <= High(AEnc.Columns)) and not ADims[k].FromRowIndex then
+    begin
+      if AEnc.Columns[k] >= 0 then ADims[k].SourceSlot := AEnc.Columns[k] + 1
+      { WRITTEN AND REACHING NOTHING -- a gap at place 0, x: -1 -- reads no
+        element [spec 255: was its own position] }
+      else if AEnc.Explicit[k] then ADims[k].SourceSlot := -1;
+    end;
 end;
 
 function TTyCustomAdvanceChart.SeriesModelName(ASeriesIndex: Integer): string;
@@ -5262,7 +5319,8 @@ begin
   Result := Result + '|e' + BoolToStr(AEnc.Given, '1', '0') + Ints(AEnc.Columns) + ';';
   for k := 0 to High(AEnc.Explicit) do Result := Result + BoolToStr(AEnc.Explicit[k], '1', '0');
   Result := Result + ';' + Ints(AEnc.Tooltip) + ';' + Ints(AEnc.Labels) + ';'
-    + IntToStr(AEnc.ItemName) + ';' + IntToStr(AEnc.SeriesName);
+    + IntToStr(AEnc.ItemName) + ';' + IntToStr(AEnc.SeriesName) + ';'
+    + BoolToStr(AEnc.HasNameEncode, '1', '0') + Ints(AEnc.Others);
 end;
 
 procedure TTyCustomAdvanceChart.StoreKeepPre(const ADims: TTySeriesDimArray;

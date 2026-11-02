@@ -1236,6 +1236,9 @@ begin
     if n > 0 then
       for i := 0 to n - 1 do
       begin
+        { [spec 255] a place of the list no dimension reached: counted, not
+          shown (each() skips the hole) }
+        if pos[i] < 0 then Continue;
         if not TTyDataStore.RawCell(raw, pos[i], c) then c := Default(TTyDataValue);
         Put(pos[i], c);
       end

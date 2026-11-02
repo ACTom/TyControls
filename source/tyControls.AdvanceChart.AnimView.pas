@@ -939,6 +939,7 @@ procedure TyUtApply(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
 implementation
 
 uses tyControls.AdvanceChart.Labels, tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Color,
+  tyControls.AdvanceChart.Dataset,
   tyControls.AdvanceChart.LinePath, tyControls.AdvanceChart.JsMath,
   tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.MarkerView,
   tyControls.AdvanceChart.LabelGuide, tyControls.AdvanceChart.PolarBar,
@@ -8369,6 +8370,39 @@ var
   i, width: Integer;
   nm, s: string;
   told: Boolean;
+  ent: TTyIntegerArray;
+
+  { one entry: a name the series' dimensions declare, a whole index below
+    the width; -1 none }
+  function PosOf(AItem: TJSONData): Integer;
+  var q: Integer;
+  begin
+    Result := -1;
+    if AItem = nil then Exit;
+    case AItem.JSONType of
+      jtString:
+        begin
+          if dims = nil then Exit;
+          nm := AItem.AsString;
+          for q := 0 to dims.Count - 1 do
+          begin
+            def := dims.Items[q];
+            if def is TJSONObject then
+            begin
+              c := TJSONObject(def).Find('name');
+              if (c <> nil) and (c.JSONType = jtString) then s := c.AsString else s := '';
+            end
+            else if def.JSONType = jtString then s := def.AsString
+            else s := '';
+            if (s <> '') and (s = nm) then Exit(q);
+          end;
+        end;
+      jtNumber:
+        if (Frac(AItem.AsFloat) = 0) and (AItem.AsFloat >= 0) and (AItem.AsFloat < width) then
+          Result := Trunc(AItem.AsFloat);
+    end;
+  end;
+
 begin
   Result := False;
   APos := -1;
@@ -8376,11 +8410,6 @@ begin
   enc := AOwn.Find('encode');
   if not (enc is TJSONObject) then Exit;
   e := TJSONObject(enc).Find(AVisual);
-  if e is TJSONArray then
-  begin
-    if e.Count = 0 then Exit;
-    e := e.Items[0];
-  end;
   if e = nil then Exit;
   dims := AOwn.Find('dimensions');
   if not (dims is TJSONArray) then dims := nil;
@@ -8394,32 +8423,21 @@ begin
     v := UtItemValue(data.Items[0]);
     if (v is TJSONArray) and (v.Count > width) then width := v.Count;
   end;
-  case e.JSONType of
-    jtString:
-      begin
-        if dims = nil then Exit;
-        nm := e.AsString;
-        for i := 0 to dims.Count - 1 do
-        begin
-          def := dims.Items[i];
-          if def is TJSONObject then
-          begin
-            c := TJSONObject(def).Find('name');
-            if (c <> nil) and (c.JSONType = jtString) then s := c.AsString else s := '';
-          end
-          else if def.JSONType = jtString then s := def.AsString
-          else s := '';
-          if (s <> '') and (s = nm) then
-          begin
-            APos := i;
-            Break;
-          end;
-        end;
-      end;
-    jtNumber:
-      if (Frac(e.AsFloat) = 0) and (e.AsFloat >= 0) and (e.AsFloat < width) then
-        APos := Trunc(e.AsFloat);
+  { the dimension the list gives slot 0: its first entry, unless that
+    reaches nothing or is named again further on [spec 255: was the first
+    entry alone] }
+  ent := nil;
+  if e is TJSONArray then
+  begin
+    SetLength(ent, e.Count);
+    for i := 0 to e.Count - 1 do ent[i] := PosOf(e.Items[i]);
+  end
+  else
+  begin
+    SetLength(ent, 1);
+    ent[0] := PosOf(e);
   end;
+  APos := TyEncodeFirstSlot(ent);
   if (APos < 0) or (APos >= width) then Exit;
   Result := True;
   { a declared type }

@@ -42,6 +42,19 @@ begin
       if (t = ddtOrdinal) or (t = ddtTime) then Continue;
       if p > best then best := p;
     end;
+    { [spec 255] a key no coordinate system asks for is a coordinate too
+      (`value` on a scatter): its dimension may be the last, typed as the
+      source declares or guesses it }
+    for k := 0 to High(AEnc.Others) do
+    begin
+      p := AEnc.Others[k];
+      if (p >= 0) and (p <= High(ASource.Dims))
+        and ((ASource.Dims[p].DimType = 'time') or (ASource.Dims[p].DimType = 'ordinal')) then
+        Continue;
+      if (p <= High(ASource.Dims)) and (ASource.Dims[p].DimType = '')
+        and TySourceDimIsOrdinal(ASource, p) then Continue;
+      if p > best then best := p;
+    end;
     if best >= 0 then
     begin
       SetLength(lab, 1);
@@ -58,8 +71,11 @@ begin
   if Length(AEnc.Tooltip) > 0 then tip := Copy(AEnc.Tooltip)
   else
   begin
+    { (an extra entry of an encode list is no column of the type's
+      [spec 255]) }
     for k := 0 to AStore.DimCount - 1 do
       if (AStore.DimCoord(k) <> '') and (AStore.RawDimPos(k) >= 0)
+        and not TyIsSpreadDim(AStore.DimName(k))
         and (TySourceDimName(ASource, AStore.RawDimPos(k)) = '') then
         AddSorted(tip, AStore.RawDimPos(k));
     if Length(tip) = 0 then tip := Copy(lab);

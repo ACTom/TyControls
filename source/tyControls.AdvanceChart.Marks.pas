@@ -2922,8 +2922,10 @@ begin
     Asking the store rather than assuming index 2 keeps this right for a series
     bound to the second y axis. }
   sizeCol := -1;
+  { (an extra column of an encode list feeds an axis: no size [spec 255]) }
   for i := 0 to AStore.DimCount - 1 do
-    if (i <> AColX) and (i <> AColY) and (AStore.DimType(i) = ddtFloat) then
+    if (i <> AColX) and (i <> AColY) and (AStore.DimType(i) = ddtFloat)
+      and (AStore.DimCoord(i) = '') then
     begin
       sizeCol := i;
       Break;
@@ -5189,7 +5191,8 @@ begin
   sizeCol := -1;
   if not large then
     for i := 0 to AStore.DimCount - 1 do
-      if (i <> colX) and (i <> colY) and (AStore.DimType(i) = ddtFloat) then
+      if (i <> colX) and (i <> colY) and (AStore.DimType(i) = ddtFloat)
+        and (AStore.DimCoord(i) = '') then
       begin
         sizeCol := i;
         Break;

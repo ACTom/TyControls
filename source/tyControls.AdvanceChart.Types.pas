@@ -39,6 +39,15 @@ type
     { the binding slot of the series this one is stacked on -- the one
       before it in the stack (upstream's stackedOnSeries) -- or -1 }
     OnSlot: Integer;
+    { [spec 255] THE COLUMN THE STACK ADDED UP and the one holding its
+      totals, -1 for none -- whether or not the series draws them. A value
+      coordinate written as a list stacks the dimension first in the
+      source (enableDataStack's stackedDimInfo), which need not be the one
+      the series draws: then Stacked is False, the series draws its own
+      values, the next member stacks on these totals, and the axis spans
+      them in that column's place. }
+    PileCol: Integer;
+    PileResultCol: Integer;
   end;
   TTySeriesStackArray = array of TTySeriesStack;
 
@@ -324,6 +333,8 @@ begin
   Result.ResultCol := -1;
   Result.OverCol := -1;
   Result.OnSlot := -1;
+  Result.PileCol := -1;
+  Result.PileResultCol := -1;
 end;
 
 function TyRangeSpan(const AR: TTyRange): Double;
