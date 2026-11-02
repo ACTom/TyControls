@@ -389,9 +389,14 @@ type
       so Shift+Tab is told from Tab, and a click from a key, by asking the keyboard and the
       mouse; virtual so a test can hold them without either. }
     function KeyShiftState: TShiftState; virtual;
-    { Entered from the keyboard: the first enabled thumb (Shift held: the last) is selected,
-      whatever was selected before -- a forward Tab that landed on the last thumb would
-      otherwise leave again at once. Entered with a mouse button down: left to the press. }
+    { #182: the Tab key is down now -- the focus came in by Tab or Shift+Tab, not from code
+      (SetFocus, the form's ActiveControl). Virtual for the same reason. }
+    function TabHeld: Boolean; virtual;
+    { Entered by Tab: the first enabled thumb (Shift+Tab: the last) is selected, whatever was
+      selected before -- a forward Tab that landed on the last thumb would otherwise leave
+      again at once. Entered with a mouse button down: left to the press. Entered from code
+      (SetFocus, ActiveControl): the selection stays, and only with none is the near end
+      picked. }
     procedure DoEnter; override;
     { The wheel steps the thumb the keyboard drives (selecting it) by LineSize, wheel-up
       increasing, as TTyTrackBar's; an OnMouseWheel* handler that handles it stops the step. }
@@ -2485,13 +2490,22 @@ begin
   if GetKeyState(VK_MBUTTON) < 0 then Include(Result, ssMiddle);
 end;
 
+function TTyMultiTrackBarBase.TabHeld: Boolean;
+begin
+  Result := GetKeyState(VK_TAB) < 0;
+end;
+
 procedure TTyMultiTrackBarBase.DoEnter;
 var
   sh: TShiftState;
   i: Integer;
 begin
   sh := KeyShiftState;
-  if sh * [ssLeft, ssRight, ssMiddle] = [] then
+  { #182: given from code with a thumb selected, the focus keeps it: only Tab and Shift+Tab
+    start at the near end. }
+  if (sh * [ssLeft, ssRight, ssMiddle] = [])
+     and (TabHeld or (FSelectedThumb < 0) or (FSelectedThumb > High(FValues))
+       or not ThumbEnabled(FSelectedThumb)) then
   begin
     { The near end for the direction the focus came from: the last enabled thumb for
       Shift+Tab, else the first. }

@@ -34,9 +34,11 @@ type
     function ThumbHint(AIndex: Integer): string; override;
     function SegmentStyle(AIndex: Integer; out ATypeKey, AStyleClass: string): Boolean; override;
     function KeyShiftState: TShiftState; override;
+    function TabHeld: Boolean; override;
   public
     HoldShift: Boolean;             // what KeyShiftState reports for Shift
     HoldMouse: Boolean;             // ... and for the left mouse button
+    HoldTab: Boolean;               // what TabHeld reports
     { What Focused answers: a test form is never shown, so the bar never really has the focus. }
     FakeFocus: Boolean;
     Off: array of Boolean;          // thumb i disabled
@@ -780,6 +782,11 @@ function TMultiProbe.KeyShiftState: TShiftState;
 begin
   if HoldShift then Result := [ssShift] else Result := [];
   if HoldMouse then Include(Result, ssLeft);
+end;
+
+function TMultiProbe.TabHeld: Boolean;
+begin
+  Result := HoldTab;
 end;
 
 function TMultiProbe.Focused: Boolean;
@@ -2182,6 +2189,7 @@ begin
   FBar.Off[3] := True;
   FBar.SelectedThumb := 2;
   FLog := '';
+  FBar.HoldTab := True;
   FBar.Enter;
   AssertEquals('Tab in: the first enabled thumb, not the one selected before', 1,
     FBar.SelectedThumb);
@@ -2199,6 +2207,23 @@ begin
   AssertEquals('entered by a click: the press picks, the focus does not', 2, FBar.SelectedThumb);
   AssertEquals('', FLog);
   FBar.HoldMouse := False;
+  { #182: the focus given from code (SetFocus, the form's ActiveControl) with no Tab held keeps
+    the selection, whatever modifier happens to be down. }
+  FBar.HoldTab := False;
+  FBar.SelectedThumb := 2;
+  FLog := '';
+  FBar.Enter;
+  AssertEquals('SetFocus from code: the selection stays', 2, FBar.SelectedThumb);
+  FBar.HoldShift := True;
+  FBar.Enter;
+  AssertEquals('Shift held meanwhile: still', 2, FBar.SelectedThumb);
+  FBar.HoldShift := False;
+  AssertEquals('nothing reported', '', FLog);
+  FBar.SelectedThumb := -1;
+  FBar.Enter;
+  AssertEquals('nothing selected: the near end, as for Tab', 1, FBar.SelectedThumb);
+  FBar.HoldTab := True;
+  FBar.SelectedThumb := 2;
   FBar.Off[1] := True;
   FBar.Off[2] := True;
   FBar.Enter;
@@ -4970,6 +4995,7 @@ begin
   FBar.Key(VK_TAB);
   AssertEquals('the last thumb is a Tab stop too', 3, FBar.SelectedThumb);
   FBar.SelectedThumb := 2;
+  FBar.HoldTab := True;
   FBar.Enter;
   AssertEquals('entering from the keyboard starts on it', 0, FBar.SelectedThumb);
   AssertEquals('none of it moved a thumb', '20,40,60,80', Values);
