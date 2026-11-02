@@ -124,6 +124,12 @@ type
 
 implementation
 
+uses
+  Forms;
+
+type
+  TPageFocusAccess = class(TWinControl);   { FindNextControl is protected }
+
 function TTyPageControl.GetStyleTypeKey: string;
 begin
   Result := 'TyPageControl';
@@ -243,6 +249,12 @@ procedure TTyPageControl.SetActivePage(AValue: TTyTabSheet);
 var
   I: Integer;
 begin
+  { #173: nil is no page, as in LCL -- it was ignored. }
+  if AValue = nil then
+  begin
+    ActivePageIndex := -1;
+    Exit;
+  end;
   for I := 0 to High(FPages) do
     if FPages[I] = AValue then
     begin
@@ -272,8 +284,27 @@ begin
 end;
 
 procedure TTyPageControl.DoSelectTab(AIndex: Integer);
+var
+  frm: TCustomForm;
+  was, c: TWinControl;
 begin
+  { #173: the focus was on the page going away -- it goes into the new page, to its first control
+    that takes it (the page control itself when there is none), as LCL's
+    MaybeSelectFirstControlOnPage. A switch from code or an accelerator dropped it with the
+    hidden page. Focus on the tabs themselves stays there, and focus outside is not taken. }
+  frm := GetParentForm(Self);
+  was := nil;
+  if frm <> nil then was := frm.ActiveControl;
   ShowOnlyPage(AIndex);
+  if (was = nil) or (was = Self) or not ContainsControl(was) then Exit;
+  if csDesigning in ComponentState then Exit;
+  c := nil;
+  if (AIndex >= 0) and (AIndex <= High(FPages)) and (FPages[AIndex] <> nil) then
+    c := TPageFocusAccess(FPages[AIndex]).FindNextControl(nil, True, True, False);
+  if (c <> nil) and c.CanFocus then
+    c.SetFocus
+  else if CanFocus then
+    SetFocus;
 end;
 
 procedure TTyPageControl.DoReorderTabs(AFromIndex, AToIndex: Integer);
@@ -290,14 +321,16 @@ begin
   else
     for I := AFromIndex downto AToIndex + 1 do FPages[I] := FPages[I - 1];
   FPages[AToIndex] := Moved;
-  { Re-show whatever page NOW sits at the selected index.
-
-    The selection is pinned to the POSITION, not to the moved tab (the same rule
-    TTyTabSet.DoReorderTabs documents) -- but only the header was following that rule.
-    Visible is a property of the page OBJECT, and nothing re-assigned it after the array was
-    permuted, so dragging a tab past the selected one left the highlighted tab and the shown
-    page disagreeing: the header said "B" and the body still showed A, until the next tab
-    click resynced them. }
+  { #173: the selection follows its page, as LCL's ActivePage does: MovePage, TabSheet.PageIndex
+    and a tab drag move the page, not the choice. It was pinned to the position, so moving a
+    page changed the active page with no OnChanging and no OnChange. The page shown is the same
+    page, so nothing is announced. }
+  if FTabIndex = AFromIndex then
+    FTabIndex := AToIndex
+  else if (AFromIndex < FTabIndex) and (FTabIndex <= AToIndex) then
+    Dec(FTabIndex)
+  else if (AToIndex <= FTabIndex) and (FTabIndex < AFromIndex) then
+    Inc(FTabIndex);
   ShowOnlyPage(FTabIndex);
 end;
 

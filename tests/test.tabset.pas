@@ -5,7 +5,7 @@ uses
   Classes, SysUtils, Types, Controls, Forms, Graphics, LCLProc, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.TabStrip, tyControls.TabSet,
-  tyControls.PageControl;
+  tyControls.PageControl, ComCtrls;
 type
   TTabSetTest = class(TTestCase)
   private
@@ -264,7 +264,8 @@ begin
     t.RemoveTabForTest(1);
     AssertEquals('tabs', 2, t.Tabs.Count);
     AssertEquals('numerically unchanged', 1, t.TabIndex);
-    AssertFalse('OnChange did not fire (deliberate no-notify)', FChanged);
+    { #173: the index is the same, the tab is another -- a change of the selection. }
+    AssertTrue('OnChange fired', FChanged);
   finally t.Free; end;
 end;
 
@@ -479,8 +480,128 @@ begin
   end;
 end;
 
+
+type
+  { #173: the tab set keeps its selection on its tab across Tabs edits, a drag and a close, and
+    tells when the selected tab goes; AutoSize follows TabPosition and MultiLine. }
+  TTabSet173Test = class(TTestCase)
+  private
+    FT: TTyTabSet;
+    FChanges: Integer;
+    procedure Changed(Sender: TObject);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestTheSelectionStaysOnItsTabAcrossAnEdit;
+    procedure TestTheSelectedTabDeletedIsTold;
+    procedure TestTheSelectedTabClosedIsTold;
+    procedure TestADragKeepsTheSelectedTab;
+    procedure TestAutoSizeFollowsASideBand;
+    procedure TestAutoSizeFollowsFoldedRows;
+  end;
+
+  TTabSet173Access = class(TTyTabSet);
+
+procedure TTabSet173Test.Changed(Sender: TObject);
+begin
+  Inc(FChanges);
+end;
+
+procedure TTabSet173Test.SetUp;
+begin
+  FT := TTyTabSet.Create(nil);
+  FT.Tabs.AddStrings(['A', 'B', 'C']);
+  FChanges := 0;
+end;
+
+procedure TTabSet173Test.TearDown;
+begin
+  FreeAndNil(FT);
+end;
+
+procedure TTabSet173Test.TestTheSelectionStaysOnItsTabAcrossAnEdit;
+begin
+  FT.TabIndex := 2;
+  FT.OnChange := @Changed;
+  FT.Tabs[2] := 'C2';
+  AssertEquals('a rename keeps it', 2, FT.TabIndex);
+  AssertEquals('silently', 0, FChanges);
+  FT.Tabs.Delete(0);
+  AssertEquals('a delete before it: the selection stays on C2', 1, FT.TabIndex);
+  AssertEquals('setup: that tab', 'C2', FT.Tabs[FT.TabIndex]);
+  AssertEquals('TabIndex moved, which is told', 1, FChanges);
+  FT.Tabs.Insert(0, 'Z');
+  AssertEquals('an insert before it', 'C2', FT.Tabs[FT.TabIndex]);
+end;
+
+procedure TTabSet173Test.TestTheSelectedTabDeletedIsTold;
+begin
+  FT.TabIndex := 1;
+  FT.OnChange := @Changed;
+  FT.Tabs.Delete(1);
+  AssertEquals('the one now at its place is selected', 1, FT.TabIndex);
+  AssertEquals('which is C', 'C', FT.Tabs[FT.TabIndex]);
+  AssertEquals('and that is told', 1, FChanges);
+  FT.Tabs.Delete(1);
+  AssertEquals('the last gone: the one before', 0, FT.TabIndex);
+  AssertEquals('told again', 2, FChanges);
+  FT.Tabs.Clear;
+  AssertEquals('none left', -1, FT.TabIndex);
+  AssertEquals('told', 3, FChanges);
+end;
+
+procedure TTabSet173Test.TestTheSelectedTabClosedIsTold;
+begin
+  FT.TabIndex := 1;
+  FT.OnChange := @Changed;
+  FT.RemoveTabForTest(1);
+  AssertEquals('the next one takes the index', 1, FT.TabIndex);
+  AssertEquals('another tab selected is told', 1, FChanges);
+end;
+
+procedure TTabSet173Test.TestADragKeepsTheSelectedTab;
+begin
+  FT.TabIndex := 0;
+  FT.OnChange := @Changed;
+  TTabSet173Access(FT).DoReorderTabs(0, 2);
+  AssertEquals('the dragged selected tab stays selected', 2, FT.TabIndex);
+  AssertEquals('it is A', 'A', FT.Tabs[FT.TabIndex]);
+  TTabSet173Access(FT).DoReorderTabs(0, 2);
+  AssertEquals('another tab dragged past it: A moves over', 1, FT.TabIndex);
+  AssertEquals('still A', 'A', FT.Tabs[FT.TabIndex]);
+  AssertEquals('the same tab, nothing to tell', 0, FChanges);
+end;
+
+procedure TTabSet173Test.TestAutoSizeFollowsASideBand;
+var w, h: Integer;
+begin
+  FT.Tabs.Add('A much longer caption');
+  FT.TabPosition := tpLeft;
+  w := 0; h := 0;
+  TTabSet173Access(FT).CalculatePreferredSize(w, h, True);
+  AssertTrue(Format('a side band asks for its width (%d)', [w]), w > 0);
+  AssertEquals('the band is the widest tab', FT.BandThicknessPx, w);
+  AssertEquals('and leaves the height alone', 0, h);
+end;
+
+procedure TTabSet173Test.TestAutoSizeFollowsFoldedRows;
+var w, h, one: Integer;
+begin
+  FT.Width := 120;
+  w := 0; one := 0;
+  TTabSet173Access(FT).CalculatePreferredSize(w, one, True);
+  FT.Tabs.AddStrings(['Delta', 'Echo', 'Foxtrot', 'Golf', 'Hotel']);
+  FT.MultiLine := True;
+  AssertTrue('setup: folded', FT.RowCount > 1);
+  w := 0; h := 0;
+  TTabSet173Access(FT).CalculatePreferredSize(w, h, True);
+  AssertTrue(Format('folded rows ask for all of them (%d > %d)', [h, one]), h > one);
+end;
+
 initialization
   RegisterClasses([TTyTabSet]);   // the streaming reader instantiates by class name
+  RegisterTest(TTabSet173Test);
   RegisterTest(TTabSetTest);
   RegisterTest(TTabSetBodyTest);
 end.

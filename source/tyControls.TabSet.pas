@@ -11,8 +11,10 @@ type
     { Backed by a TStringList (for its OnChange), but typed TStrings so the
       published Tabs field-read property matches its declared type. }
     FTabs: TStrings;
+    FTabCaps: array of string;   { #173: Tabs as they were, to keep the selection on its tab }
     procedure SetTabs(AValue: TStrings);
     procedure TabsListChanged(Sender: TObject);
+    procedure SnapTabs;
   protected
     { #114: what AutoSize asks for -- see the body. }
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
@@ -72,10 +74,20 @@ begin
   ppi := Font.PixelsPerInch;
   if ppi <= 0 then ppi := 96;
   S := PartStyle('TyTab', '', [tysNormal]);
+  { #173: a side band asks for its width -- the widest tab -- and leaves the height to the form;
+    folded rows ask for all of them. AutoSize sized every band as one row across the top. }
+  if BandIsVertical then
+  begin
+    PreferredWidth := BandThicknessPx;
+    PreferredHeight := 0;
+    Exit;
+  end;
   PreferredWidth := 0;
   PreferredHeight := MulDiv(TabHeight, ppi, 96);
   h := TyFieldPreferredHeight(S, ResolveFontSize(S), ppi);
   if h > PreferredHeight then PreferredHeight := h;
+  if HeaderMultiLine and (BandThicknessPx > PreferredHeight) then
+    PreferredHeight := BandThicknessPx;
 end;
 
 destructor TTyTabSet.Destroy;
@@ -119,12 +131,20 @@ end;
 
 procedure TTyTabSet.DoReorderTabs(AFrom, ATo: Integer);
 begin
-  // Selection stays pinned to the POSITION, not the moved tab (matches TTyPageControl.DoReorderTabs — FTabIndex unadjusted).
+  { #173: the selection follows its tab, as TTyPageControl's follows its page -- pinned to the
+    position, a drag past the selected tab selected another one with no OnChange. }
   if (AFrom >= 0) and (AFrom < FTabs.Count) and (ATo >= 0) and (ATo < FTabs.Count) then
   begin
     TStringList(FTabs).OnChange := nil;
     FTabs.Move(AFrom, ATo);
     TStringList(FTabs).OnChange := @TabsListChanged;
+    SnapTabs;
+    if FTabIndex = AFrom then
+      FTabIndex := ATo
+    else if (AFrom < FTabIndex) and (FTabIndex <= ATo) then
+      Dec(FTabIndex)
+    else if (ATo <= FTabIndex) and (FTabIndex < AFrom) then
+      Inc(FTabIndex);
     TabsChanged;
   end;
 end;
@@ -140,13 +160,22 @@ begin
   TStringList(FTabs).OnChange := nil;
   FTabs.Delete(AIndex);
   TStringList(FTabs).OnChange := @TabsListChanged;
+  SnapTabs;
   if FTabs.Count = 0 then want := -1
   else if want > FTabs.Count - 1 then want := FTabs.Count - 1;
   if want <> FTabIndex then
     SetTabIndex(want)
   else
-    // Removing the selected tab (not last): TabIndex is numerically unchanged, so — for a caption-only strip keyed on index — we intentionally do NOT fire OnChange (only the underlying caption changed). Repaint only.
+  begin
     TabsChanged;
+    { #173: the selected tab closed (not the last): the index is the same, the tab is another --
+      a change of the selection, and told. }
+    if AIndex = FTabIndex then
+    begin
+      DoSelectTab(FTabIndex);
+      NotifyTabChange;
+    end;
+  end;
   { A vetoing OnChanging handler makes SetTabIndex return without updating
     FTabIndex; the tab data is already gone, so clamp to keep the invariant.
     (When FTabs.Count = 0 this yields -1, which is correct.) }
@@ -159,11 +188,55 @@ begin
   FTabs.Assign(AValue);
 end;
 
-procedure TTyTabSet.TabsListChanged(Sender: TObject);
+procedure TTyTabSet.SnapTabs;
+var
+  i: Integer;
 begin
-  // Only the upper bound is clamped. A direct Tabs.Delete BELOW the selection shifts the highlight by one (bare TStringList.OnChange carries no index) — the close-button path goes through RemoveTabData which handles it; direct Tabs edits below the selection are a known, uncommon desync.
-  if FTabIndex > FTabs.Count - 1 then FTabIndex := FTabs.Count - 1;
+  SetLength(FTabCaps, FTabs.Count);
+  for i := 0 to FTabs.Count - 1 do FTabCaps[i] := FTabs[i];
+end;
+
+procedure TTyTabSet.TabsListChanged(Sender: TObject);
+var
+  carry: TTyItemCarry;
+  i, want: Integer;
+  gone: Boolean;
+begin
+  { #173: the selection stays on its tab across a Tabs edit -- found by its caption, a renamed one
+    by its place (TyCarryItems), so a Delete or an Insert before it no longer moves the highlight
+    onto another tab. The selected tab gone, the one now at its place (or the last) is selected.
+    Either way the selection changed, and OnChange says so: it was clamped, or left on another
+    tab, without a word. }
+  carry := TyCarryItems(FTabCaps, FTabs);
+  SnapTabs;
+  if csLoading in ComponentState then
+  begin
+    TabsChanged;
+    Exit;
+  end;
+  want := FTabIndex;
+  gone := False;
+  if FTabIndex >= 0 then
+  begin
+    want := -1;
+    for i := 0 to High(carry) do
+      if carry[i] = FTabIndex then want := i;
+    if want < 0 then
+    begin
+      gone := True;
+      want := FTabIndex;
+      if want > FTabs.Count - 1 then want := FTabs.Count - 1;
+    end;
+  end;
+  if (want = FTabIndex) and not gone then
+  begin
+    TabsChanged;
+    Exit;
+  end;
+  FTabIndex := want;   { no OnChanging: a tab that is gone cannot be kept }
+  DoSelectTab(FTabIndex);
   TabsChanged;
+  NotifyTabChange;
 end;
 
 function TTyTabSet.TabCountForTest: Integer; begin Result := GetTabCount; end;

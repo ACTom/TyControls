@@ -54,10 +54,10 @@ uses tyControls.TabSet;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Tabs` | `TStrings` | `[]`（空列表） | 页签标题列表。内部由 `TStringList` 支撑（以获得其 `OnChange`），但声明类型为 `TStrings`。写入时调用 `Assign` 复制内容；列表变化（增删改）触发重绘并把 `TabIndex` 上界夹紧到 `Count-1`。 |
+| `Tabs` | `TStrings` | `[]`（空列表） | 页签标题列表。内部由 `TStringList` 支撑（以获得其 `OnChange`），但声明类型为 `TStrings`。写入时调用 `Assign` 复制内容；列表变化（增删改）触发重绘，选中留在**原来那个页签**上：先按标题认，标题对不上的新项若所在位置上的旧项也已不在列表里，就当作改了名。所以在选中项前面增删一项，`TabIndex` 跟着挪；选中的页签被删掉（或被关闭按钮关掉），就选它位置上的那一个（没有就选最后一个）。`TabIndex` 变了、或选中的已不是原来那个页签，都会触发 `OnChange`。拖拽重排时选中同样跟着页签走。 |
 | `TabIndex` | `Integer` | `-1` | 当前选中页签索引；`-1` 表示无选中。写入等价于调用 `SetTabIndex`（夹紧、触发 `OnChanging` 否决钩子、`DoSelectTab`、`OnChange`）。声明了 `default -1`。 |
 | `TabPosition` | `TTabPosition` | `tpTop` | 标签条贴哪条边。在标签头引擎上是 `public`，在 `TTyTabSet` 与 `TTyPageControl` 上才 published（`TTyRibbon` 是同一引擎的第三个子类，它的 File 页签与 KeyTip 角标钉死在顶边）。`tpLeft` 的纯页签条正是"侧边栏"那个形态，也是本属性在这个控件上最主要的用途。**侧边标签不旋转文字**，条带宽度取最宽的标题——完整规则与和 LCL 的分歧见 [`pagecontrol.md` §6](pagecontrol.md)。 |
-| `MultiLine` | `Boolean` | `False` | 页签放不下时**折行**填满整条带，而不是留溢出箭头横向滚动。打开后**溢出箭头一定消失**、滚动偏移归零——两者互斥。条带厚度变成 `RowCount ×` 一行。纯页签条是最适合折行的形态：它没有页面体来跟它抢空间，多出来的行只花掉控件自己的高度。published 的位置与 `TabPosition` 同理。完整规则见 [`pagecontrol.md` §6](pagecontrol.md)。 |
+| `MultiLine` | `Boolean` | `False` | 页签放不下时**折行**填满整条带，而不是留溢出箭头横向滚动。打开后**溢出箭头一定消失**、滚动偏移归零——两者互斥。条带厚度变成 `RowCount ×` 一行（`AutoSize` 时控件要的就是这么高；`tpLeft` / `tpRight` 时要的是条带的宽度）。纯页签条是最适合折行的形态：它没有页面体来跟它抢空间，多出来的行只花掉控件自己的高度。published 的位置与 `TabPosition` 同理。完整规则见 [`pagecontrol.md` §6](pagecontrol.md)。 |
 | `RaggedRight` | `Boolean` | `False` | `MultiLine` 打开时，每行是否保持自然宽度、行尾留白。**默认 `False` = 拉伸铺满整行**（LCL 的极性：`TCS_RAGGEDRIGHT` 是属性为 `True` 时才设的样式位）。余数逐像素发到行内各页签上，所以行尾正好落在条带边缘。 |
 | `RowCount` | `Integer` | — | **只读**（public，不 published）。折出来的行数：无页签 0，`MultiLine` 关着恒 1。行数是布局的结果不是输入。 |
 

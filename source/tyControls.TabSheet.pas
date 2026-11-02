@@ -133,6 +133,19 @@ implementation
 uses
   tyControls.PageControl;   // for TTyPageControl in SetParent (one-way: impl only)
 
+type
+  TTabStripAccess = class(TTyCustomTabStrip);
+
+{ #173: a tab's label or icon changed -- the strip re-measures, and on a side band or folded rows
+  lays the pages out again. It only repainted. }
+procedure TabLabelChanged(AParent: TWinControl);
+begin
+  if AParent is TTyCustomTabStrip then
+    TTabStripAccess(AParent).TabsChanged
+  else if AParent <> nil then
+    AParent.Invalidate;
+end;
+
 constructor TTyTabSheet.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
@@ -184,14 +197,14 @@ begin
   // it can be served is how a streamed ImageIndex would vanish before the page has a pager.
   FImageIndexPending := True;
   ResolveImageIndex;
-  if Parent <> nil then Parent.Invalidate;
+  TabLabelChanged(Parent);
 end;
 
 procedure TTyTabSheet.SetImageName(const AValue: string);
 begin
   if FImageName = AValue then Exit;
   FImageName := AValue;
-  if Parent <> nil then Parent.Invalidate;
+  TabLabelChanged(Parent);
 end;
 
 procedure TTyTabSheet.ResolveImageIndex;
@@ -221,8 +234,7 @@ procedure TTyTabSheet.TextChanged;
 begin
   inherited TextChanged;
   { The tab LABEL changed, so it is the host header that has to re-lay, not us. }
-  if Parent <> nil then
-    Parent.Invalidate;
+  TabLabelChanged(Parent);
 end;
 
 procedure TTyTabSheet.SetParent(AParent: TWinControl);

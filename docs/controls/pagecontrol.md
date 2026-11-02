@@ -29,14 +29,14 @@
 
 | 成员 | 类型 | 说明 |
 |---|---|---|
-| `ActivePageIndex` | `Integer`（published, 默认 -1） | 当前活动页零基索引；-1 表示无；赋值裁剪越界；真变化才触发 `OnChange`；随 `.lfm` 往返（载入期写入的值在 `Loaded` 应用） |
-| `ActivePage` | `TTyTabSheet`（published） | 当前活动页（读/写；写入即切到该页）。与 `TPageControl` 一致已 published：设计器与 `.lfm` 从此能按**页引用**指定显示哪一页——按索引指定的话，一旦有人重排页签，索引就悄悄指向了另一页。二者指的是同一个选择，`ActivePageIndex` 保留给更方便用索引的代码 |
+| `ActivePageIndex` | `Integer`（published, 默认 -1） | 当前活动页零基索引；-1 表示无；赋值裁剪越界；真变化才触发 `OnChange`；随 `.lfm` 往返（载入期写入的值在 `Loaded` 应用）。切页时如果焦点在旧页里，它移到新页第一个能接焦点的控件（新页上没有就落在页控件本身），与 LCL 相同；焦点在页签条上或在页控件外面时不动 |
+| `ActivePage` | `TTyTabSheet`（published） | 当前活动页（读/写；写入即切到该页）。与 `TPageControl` 一致已 published：设计器与 `.lfm` 从此能按**页引用**指定显示哪一页——按索引指定的话，一旦有人重排页签，索引就悄悄指向了另一页。二者指的是同一个选择，`ActivePageIndex` 保留给更方便用索引的代码。写 `nil` 等于 `ActivePageIndex := -1` |
 | `Pages[i]` | `TTyTabSheet`（public, 只读 indexed） | 第 i 页；越界返回 `nil` |
 | `PageCount` | `Integer` | 页数 |
 | `AddPage(caption)` / `AddTab(caption)` | `: TTyTabSheet` | 追加一页（`Owner` = 控件的 Owner，即窗体；`Parent` = 控件），返回该页；首次追加自动选中 |
 | `AddTabSheet` | `: TTyTabSheet` | LCL 的写法与签名（`TPageControl.AddTabSheet`）：不带 caption 参数，返回新页。这是现有 Delphi / Lazarus 代码里建页最常见的一种写法，也是本类此前唯一不认的一种。caption 留空而不是自动生成 `TabSheet1`——LCL 也留空，凭空造一个标签只会变成宿主还得注意去清掉的文字 |
 | `RemovePage(i)` | 方法 | 移除并释放第 i 页，自动修正活动页 |
-| `MovePage(from, to)` | 方法 | 把某页（连同它的页签）从一个位置挪到另一个位置。重排原语一直存在，但只是个由页签拖拽驱动的 **protected** 钩子，应用代码根本无从排序页面。两端都会裁剪，越界或原地不动直接忽略。`TTyTabSheet.PageIndex` 的公开入口 |
+| `MovePage(from, to)` | 方法 | 把某页（连同它的页签）从一个位置挪到另一个位置。重排原语一直存在，但只是个由页签拖拽驱动的 **protected** 钩子，应用代码根本无从排序页面。两端都会裁剪，越界或原地不动直接忽略。`TTyTabSheet.PageIndex` 的公开入口。活动页跟着页走（与 LCL 的 `ActivePage` 一致）：挪的是活动页，`ActivePageIndex` 跟到它的新位置；活动页还是同一页，所以不触发 `OnChanging` / `OnChange` |
 | `IndexOfPageAt(X, Y)` / `IndexOfPageAt(P)` | `: Integer` | 某点落在哪一**页**上，无则 -1。与 `IndexOfTabAt` 问的是不同的问题：那个问页签头，这个问页面体，所以落在页签条上不算页命中，反之亦然。只有活动页有像素，因此最多只有一个索引会应答 |
 | `TabHeight` | `Integer`（不设时跟随主题：经典 28 / 现代 38） | 页签头条带逻辑高度（按 PPI 缩放）。`0` = **完全不要条带**（页面铺满控件，由宿主自己驱动切页）；`TyTabHeightAuto`（-1，含任意负值）= 交回主题的 `--control-height`。详见 §注意事项 |
 | `TabPosition` | `TTabPosition`（published, 默认 `tpTop`） | 标签条贴在哪条边：`tpTop` / `tpBottom` / `tpLeft` / `tpRight`。LCL 的类型与 LCL 的四个取值，所以移植过来的 `TabPosition := tpBottom` 直接编译、`.lfm` 直接流入。**与 LCL 的一处刻意分歧见 §6「侧边标签不旋转文字」** |
@@ -44,7 +44,7 @@
 | `RaggedRight` | `Boolean`（published, 默认 False） | `MultiLine` 打开时，一行内的页签是否保持自然宽度、行尾留白。**默认 False = 拉伸铺满整行**——这是 LCL 的极性（`TCS_RAGGEDRIGHT` 这个样式位是属性为 **True** 时才设的，不设它 comctl32 才拉伸）。`MultiLine` 关着时无效 |
 | `RowCount` | `Integer`（public, **只读**） | 折出来的行数：无页签时 0，`MultiLine` 关着时恒 1。行数是布局的**结果**不是输入，所以没有 setter；也正因为没有 setter 才不能 published（`TWriter.WriteProperty` 会跳过无 setter 的属性，对象检查器则报"无法读取"） |
 | `TabsClosable` | `Boolean`（默认 False） | 页签头是否显示关闭 × |
-| `Images` | `TTyVirtualImageList`（published, 默认 nil） | 页签图标的来源，按各页的 `ImageIndex` 取。类型是 `TTyVirtualImageList` 而不是 LCL 的 `TCustomImageList`：本库的虚拟列表按需渲染、因而**不是** `TCustomImageList` 的后代，属性若写成 LCL 类型，能赋进去的就只剩下 `TTyPainter` 一个都画不出来的那些（`TTyHeader.Images` 正是为此改的类型）。赋值会注册 `FreeNotification`，列表先被释放时引用自动置 nil |
+| `Images` | `TTyVirtualImageList`（published, 默认 nil） | 页签图标的来源，按各页的 `ImageIndex` 取。类型是 `TTyVirtualImageList` 而不是 LCL 的 `TCustomImageList`：本库的虚拟列表按需渲染、因而**不是** `TCustomImageList` 的后代，属性若写成 LCL 类型，能赋进去的就只剩下 `TTyPainter` 一个都画不出来的那些（`TTyHeader.Images` 正是为此改的类型）。赋值会注册 `FreeNotification`，列表先被释放时引用自动置 nil。列表自己发出的变化（换图、删图、挪图）同样会重新量页签并重画 |
 | `ImagesWidth` | `Integer`（published, 默认 0） | 图标渲染边长（逻辑像素）。`0` = 跟随主题令牌 `--tab-icon-size`（默认 16），密度换挡时图标跟着走；非 0 = 钉死。LCL 的 `ImagesWidth` 是从多分辨率列表里**挑一档**，本库的虚拟列表要多大画多大，所以这里是一个尺寸请求。负值按 0 处理 |
 | `OnGetImageIndex` | `procedure(Sender; AIndex; var AImageIndex)` | 图标索引的**最终决定权**。在读过该页自己的 `ImageIndex` **之后**触发，`AImageIndex` 以那个值作**种子**——所以处理器看得见自己在覆盖什么，没有处理器时逐页的值原样生效。与 `TTyTreeView.OnGetImageIndex` 同一条优先级规则（控件级列表 → 逐项覆盖 → 事件最后），不另立第三套 |
 | `AnimationsEnabled` | `Boolean`（默认 True） | 切页时活动页签头是否交叉淡入（无窗口句柄时直接定格，保证 headless 测试稳定） |
@@ -94,7 +94,7 @@ PageCtrl.ActivePage := Pg;           // 切到该页
 ## 6. 标签头能力（继承自 TTyCustomTabStrip）
 
 - **横向滚动**：标签头溢出时显示左右箭头；`ScrollTabIntoView`/`SetHeaderScroll`/`TyMaxHeaderScroll` 等几何 API（设备像素）供测试与自定义命中。
-- **拖拽重排**：按住页签头拖动可重排页顺序，提交后触发 `OnReorder(从, 到)`。选中项钉在**位置**上而不是跟着被拖的那一页走；此前只有页签头遵守这条规则，`Visible` 属于页对象、数组重排后没有任何东西重新赋值它，于是把一页拖过选中页会让"高亮的页签"和"显示的页面"对不上，直到下一次点击才恢复。现在 `DoReorderTabs` 末尾重新应用 `ShowOnlyPage`。
+- **拖拽重排**：按住页签头拖动可重排页顺序，提交后触发 `OnReorder(从, 到)`。选中跟着**页**走（与 `MovePage` 相同）：拖的是活动页，它到哪儿选中就到哪儿；拖别的页越过它，`ActivePageIndex` 跟着让位。从前选中钉在**位置**上，拖一页越过选中页就悄悄换了活动页，而且不发 `OnChanging` / `OnChange`。
 
 ### 带 LCL 名字的几何 / 命中 / 滚动成员
 
@@ -124,10 +124,10 @@ PageCtrl.ActivePage := Pg;           // 切到该页
   - **`RaggedRight = False`（默认）把每一行拉伸铺满**，余数逐个像素发下去而不是丢掉：只用 `extra div n`，一行最多会差 n-1 个像素到不了条带边缘，在有页签边框的皮肤上就是每行行尾一个看得见的缺口。只有一个页签的那一行同样被拉成整条带宽（comctl32 也是如此，这正是多行标签看起来"两端对齐"的原因）。
   - **左/右条带的"多行"是多列**：主轴竖着走，折行就是开一列新的，条带宽度变成 `RowCount ×` 最宽标题盒。同一段代码、同一句话——这是布局本来就是一维的结果，也是这一点上我们与 comctl32（`TCS_MULTILINE` + `TCS_VERTICAL`）**一致**的地方。
   - **命中/拖拽落点在折行下比较两个轴**：命中原来只比主轴（单行时每个页签的次轴范围就是整条带，与两轴等价），折行后两个页签会占同一段主轴，只比主轴会让第 1 行整行**画得出来却点不到**。拖拽落点从"第一个中点在指针之后"变成 `(行, 主轴中点)` 的**字典序**比较；指针的行会被**钳进条带**，所以 `RowCount = 1` 时字典序精确退化成原来那条规则（不是近似）。
-  - **不做「选中行重排」，因此也不提供 `ScrollOpposite`（与 LCL 的刻意分歧）**：Delphi/comctl32 在 `MultiLine` 下点了非贴近页面体那一行的页签时会**重排行**，把被选中的那一行挪到贴着页面体，`TCS_SCROLLOPPOSITE` 决定其余的行往哪边走。本库不这么做，理由不是省事：那个重排会把"选中"从一个**渲染状态**变成**布局输入**，而本控件有一件 comctl32 从来没有的事——**拖拽重排**。拖拽时选中钉在**位置**上，所以一次跨行的重排会改变"哪一行被选中"，行随即重排，页签在指针底下**换了位置**；这正是本控件历来最容易出问题的那条缝。代价是：`tpTop` 下只有最后一行的页签会与页面体的框融成一体，活动页签在别的行里靠填色区分。若将来要做，`ScrollOpposite` 必须与行重排在**同一次改动**里落地，否则就是一个 published 却什么都不做的属性。
+  - **不做「选中行重排」，因此也不提供 `ScrollOpposite`（与 LCL 的刻意分歧）**：Delphi/comctl32 在 `MultiLine` 下点了非贴近页面体那一行的页签时会**重排行**，把被选中的那一行挪到贴着页面体，`TCS_SCROLLOPPOSITE` 决定其余的行往哪边走。本库不这么做，理由不是省事：那个重排会把"选中"从一个**渲染状态**变成**布局输入**，而本控件有一件 comctl32 从来没有的事——**拖拽重排**。拖拽时选中跟着页走，所以把选中页拖到另一行会改变"哪一行被选中"，行随即重排，页签在指针底下**换了位置**；这正是本控件历来最容易出问题的那条缝。代价是：`tpTop` 下只有最后一行的页签会与页面体的框融成一体，活动页签在别的行里靠填色区分。若将来要做，`ScrollOpposite` 必须与行重排在**同一次改动**里落地，否则就是一个 published 却什么都不做的属性。
   - 折出来的行会一直吃条带厚度，行数够多时页面体会被挤没（`InsetForBand` 会把体裁到零）。comctl32 同样如此。
 
-- **页签图标**：`Images`（控件级列表）+ 每页的 `ImageIndex`（逐项覆盖）+ `OnGetImageIndex`（最终决定权），三层的顺序与 `TTyListView` / `TTyTreeView` 一致。图标槽位在**测量阶段**就预留进标题盒（`--tab-icon-size` + `--tab-icon-gap`），所以页签会按图标宽度**变宽**，它旁边的页签一个像素都不动。没有 `Images` 时整条路径不产生任何开销、也不改变任何一个像素。
+- **页签图标**：`Images`（控件级列表）+ 每页的 `ImageIndex`（逐项覆盖）+ `OnGetImageIndex`（最终决定权），三层的顺序与 `TTyListView` / `TTyTreeView` 一致。图标槽位在**测量阶段**就预留进标题盒（`--tab-icon-size` + `--tab-icon-gap`），所以页签会按图标宽度**变宽**，它旁边的页签一个像素都不动。没有 `Images` 时整条路径不产生任何开销、也不改变任何一个像素。`tpLeft` / `tpRight` 或 `MultiLine` 下，标题、图标、页签的显示与增删会改变条带的厚度，页面随即按新厚度重新排布（从前要等下一次改尺寸）。
 
 - **右到左镜像**：`BiDiMode := bdRightToLeft` 时整条标签带镜像——第 0 页的页签在**最右**，往左排；关闭 × 挪到每个页签头的**左**边（图标也跟着挪到右边）；两个溢出箭头对调两端并且各自转向（"上一批"那个永远在阅读起点，也就是镜像时的右端）；向后滚动时标签带往**右**滑；`←/→` 跟着眼睛走（左键=下一页）。`Home/End` 与 `Ctrl+Tab` 是**逻辑**首尾/循环，不翻。
   **左/右边标签的镜像是"换边"，不是"倒序"**：镜像反射的是**屏幕横轴**。顶/底条带的主轴就是横轴，所以反射把页签顺序倒过来（一直如此）；左/右条带的主轴是竖的，横轴反射碰不到它——反射到的是**次轴**，于是 `tpLeft` 的条带整条搬到**右**边（`tpRight` 搬到左边），条带内每一行里的关闭 × 与图标也各自换端，而**上下顺序不变**，`↑/↓` 也不对调。这与"`Home/End` 是逻辑首尾"是同一条判据：横向反射不可能给一条竖着走的行程重新排序。相应地，页面体现在会被扣在**镜像后**的那条边上。
