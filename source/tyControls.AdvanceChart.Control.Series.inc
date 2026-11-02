@@ -847,6 +847,9 @@ begin
       el.Style.StrokeColor := v.Stroke;
       el.Style.StrokeWidthLogical := v.StrokeWidthLogical;
     end;
+    { [R7-F] a pen of +Infinity (drawn as none): the layer's stroked rect is
+      not-a-number upstream, it is never hit }
+    el.HitNone := (v.StrokeWidthInf > 0) and (v.Stroke <> 0);
     { and that row's decal [F4a] }
     el.Style.Decal := RowDecalOf(ASlot, raw);
     { setItemGraphicEl(idx): the polygon is the LAYER's index's datum }
@@ -2178,18 +2181,29 @@ begin
       lw := TyLinesJsNum(LnNode(node, ['lineStyle', 'width']));
       if IsNan(lw) or (lw = 0) then lw := 0;
       lw := lw * scale;
-      x := area.X - lw / 2;
-      y := area.Y - lw / 2;
-      cw := area.W + lw;
-      ch := area.H + lw;
-      cw := Ceil(cw);
-      if x <> Floor(x) then
+      { [R7-F] AN INFINITE WIDTH makes createGridClipPath's rect not-a-number
+        (x - Inf / 2 + Inf): it clips the whole group away. Here that
+        Ceil would raise }
+      if IsInfinite(lw) then
       begin
-        x := Floor(x);
-        cw := cw + 1;
+        sol.HasClip := True;
+        sol.Clip := TyRectF(0, 0, 0, 0);
+      end
+      else
+      begin
+        x := area.X - lw / 2;
+        y := area.Y - lw / 2;
+        cw := area.W + lw;
+        ch := area.H + lw;
+        cw := Ceil(cw);
+        if x <> Floor(x) then
+        begin
+          x := Floor(x);
+          cw := cw + 1;
+        end;
+        sol.HasClip := True;
+        sol.Clip := TyRectF(x, y, x + cw, y + ch);
       end;
-      sol.HasClip := True;
-      sol.Clip := TyRectF(x, y, x + cw, y + ch);
     end;
     FLnSlot := i;
     n := Length(sol.Raws);
@@ -3217,6 +3231,8 @@ begin
     d := ls.Find('width');
     if (d <> nil) and (d.JSONType = jtNumber) then
       Result.LineWidthLogical := d.AsFloat;
+    { [R7-F] +Infinity: drawn as none, never hit }
+    Result.LineInf := TyOptIsPosInf(d);
   end;
   { [R6-D] the symbols' pen: the series' itemStyle border ('auto' its
     palette colour) and each item's own over it }
@@ -3290,7 +3306,11 @@ begin
     begin
       Result.Area := c;
       Result.AreaAuthored := True;
-    end;
+    end
+    { [R7-F] 'none': the area fills nothing, to the eye and the pointer
+      (RadarView: the area style's fill over the visual colour) }
+    else if (d <> nil) and (d.JSONType = jtString) and TyChartColorIsNone(d.AsString) then
+      Result.AreaNone := True;
     d := ar.Find('opacity');
     if (d <> nil) and (d.JSONType = jtNumber) then
       Result.AreaOpacity := Max(Double(0), Min(Double(1), d.AsFloat));
@@ -3618,6 +3638,25 @@ begin
     { [R7-C] an infinite width: never hit }
     Result.StrokeWidthInf := bst.BorderWidthInf;
   end;
+  { [R7-F] A SLICE WHOSE FILL IS 'none' (the series', or its own) has no
+    inside for the pointer; a colour of its own or a visualMap's is a fill }
+  SetLength(Result.FillNones, n);
+  for k := 0 to n - 1 do
+  begin
+    Result.FillNones[k] := bst.Color.Written and bst.Color.IsNone;
+    if k > High(FPies[ASlot].Sectors) then Continue;
+    raw := FPies[ASlot].Sectors[k].RawIndex;
+    if (ASlot <= High(FVisualRows)) and (raw >= 0)
+      and (raw <= High(FVisualRows[ASlot])) and FVisualRows[ASlot][raw].ColorSet then
+      Result.FillNones[k] := False;
+    if (raw >= 0) and (ASlot <= High(FStores)) and (FStores[ASlot] <> nil)
+      and FStores[ASlot].HasOverrideByRaw(raw, TyOverrideKey('itemStyle.color')) then
+    begin
+      ov := FStores[ASlot].GetOverrideByRaw(raw, TyOverrideKey('itemStyle.color'));
+      if ov.Kind = dvkText then
+        Result.FillNones[k] := TyChartColorIsNone(ov.Text);
+    end;
+  end;
   if FLastPPI > 0 then Result.PxScale := FLastPPI / 96;
   { AND THE OPACITY, in the order upstream's stages write the item style:
     the series' itemStyle.opacity, a visualMap's over it (which a pie keeps,
@@ -3707,6 +3746,9 @@ begin
   end;
   if not IsNan(st.BorderWidthLogical) then
     AVisual.Whisker.BoxLineWidthLogical := st.BorderWidthLogical;
+  { [R7-F] a pen of +Infinity (drawn as none): the box's stroked rect is
+    not-a-number upstream, it is never hit (MarkElement) }
+  AVisual.StrokeWidthInf := st.BorderWidthInf;
 end;
 
 function TTyCustomAdvanceChart.CandleVisual(ASlot: Integer): TTyCandleSpec;

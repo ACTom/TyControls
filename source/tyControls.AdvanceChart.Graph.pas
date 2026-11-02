@@ -6499,6 +6499,11 @@ var
       AEl.Style.StrokeColor := b.BorderColor.Color;
       AEl.Style.StrokeGradient := b.BorderColor.Gradient;
       AEl.Style.StrokeWidthLogical := w;
+      { [R7-F] a clear colour strokes for the pointer; a width of +Infinity
+        (drawn as none) makes the stroked rect not-a-number: never hit }
+      AEl.Style.HitClearPen := ((b.BorderColor.Color shr 24) = 0)
+        and (b.BorderColor.Gradient.Kind = cgkNone) and not b.BorderColor.Pattern.Present;
+      AEl.HitNone := b.BorderWidthInf > 0;
     end
     else
       Exit;
@@ -6761,6 +6766,13 @@ begin
     end;
 
     el := TyChartElement(TyShapePolyline(pts));
+    { [R7-F] the pointer tests the quadratic itself (BezierCurve), not the
+      points it is drawn as }
+    if curved then
+    begin
+      el.Shape.HitQuad := True;
+      el.Shape.HitCP := cp;
+    end;
     el.Style.HasFill := False;
     el.Style.StrokeColor := EdgeColour(i);
     { THE EDGE'S OWN width, opacity and type over the series' [Batch 114] }
@@ -6858,6 +6870,8 @@ begin
 
     shape := TyBuildSymbol(sym, ANodes[i].PX, ANodes[i].PY);
     if (shape.Kind = cskRect) and not TyRectFIsValid(shape.Bounds) then Continue;
+    { [R7-F] hit in its own frame, as Symbol.ts' path }
+    TySymbolHitFrame(shape, sym, ANodes[i].PX, ANodes[i].PY);
     fill := 0;
     if (i >= 0) and (i <= High(AInk.NodeFills)) then fill := AInk.NodeFills[i];
     el := TyChartElement(shape);

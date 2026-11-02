@@ -3912,7 +3912,12 @@ begin
       if chain[j] = nil then Continue;
       one := TyReadOptStyle(chain[j], 'itemStyle');
       if one.BorderColor.Written then b.BorderColor := one.BorderColor;
-      if not IsNan(one.BorderWidthLogical) then b.BorderWidthLogical := one.BorderWidthLogical;
+      if not IsNan(one.BorderWidthLogical) then
+      begin
+        b.BorderWidthLogical := one.BorderWidthLogical;
+        { [R7-F] and whether it was +Infinity (never hit) }
+        b.BorderWidthInf := one.BorderWidthInf;
+      end;
       if one.Dash <> todNone then
       begin
         b.Dash := one.Dash;

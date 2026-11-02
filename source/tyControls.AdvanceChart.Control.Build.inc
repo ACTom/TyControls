@@ -2876,6 +2876,11 @@ begin
   AVisual.StrokeWidthSet := not IsNan(item.BorderWidthLogical);
   AVisual.StrokeWidthNaN := item.BorderWidthNaN;
   AVisual.StrokeWidthInf := item.BorderWidthInf;
+  { [R7-F] 'none' is no fill and a clear colour a pen, for the pointer }
+  AVisual.FillNone := item.Color.Written and item.Color.IsNone;
+  AVisual.StrokeClear := item.BorderColor.Written and not item.BorderColor.IsNone
+    and not item.BorderColor.IsAuto and ((item.BorderColor.Color shr 24) = 0)
+    and (item.BorderColor.Gradient.Kind = cgkNone) and not item.BorderColor.Pattern.Present;
   { THE PEN'S DASH, carried as the option wrote it -- see TTySeriesVisual. }
   AVisual.Dash := item.Dash;
   AVisual.DashExplicit := item.DashLogical;
@@ -2939,6 +2944,9 @@ begin
     AVisual.StrokeWidthSet := not IsNan(line.BorderWidthLogical);
     AVisual.StrokeWidthNaN := False;
     AVisual.StrokeWidthInf := 0;
+    AVisual.StrokeClear := line.Color.Written and not line.Color.IsNone
+      and not line.Color.IsAuto and ((line.Color.Color shr 24) = 0)
+      and (line.Color.Gradient.Kind = cgkNone) and not line.Color.Pattern.Present;
     { AND IT REPLACES the itemStyle one rather than adding to it: for a shape
       drawn with a stroke, lineStyle IS the pen. `lineStyle: {}` with no type
       leaves todNone, which answers solid -- so a line series that writes only
@@ -4822,6 +4830,7 @@ var
     oc: TTyOptColor;
     p: array of string;
   begin
+    oc := Default(TTyOptColor);
     for i := 0 to High(ANodes) do
     begin
       o := ANodes[i];
@@ -4858,6 +4867,35 @@ var
     { [R6-E] a numeric string is its number [was: none] }
     dd := TyStFind(ANodes, p);
     if dd <> nil then pe^.Style.StrokeWidthLogical := TyOptPenWidth(dd);
+    { [R7-F] what the pointer reads of the pen: a clear colour strokes
+      (hasStroke), and a width of +Infinity makes the stroked rect
+      not-a-number -- the element is never hit }
+    pe^.Style.HitClearPen := oc.Written and not oc.IsNone and not oc.IsAuto
+      and ((oc.Color shr 24) = 0) and (oc.Gradient.Kind = cgkNone) and not oc.Pattern.Present;
+    if TyOptIsPosInf(dd)
+      and (((pe^.Style.StrokeColor shr 24) <> 0) or (pe^.Style.StrokeGradient.Kind <> cgkNone)
+        or pe^.Style.HitClearPen) then
+      pe^.HitNone := True;
+  end;
+
+  { [R7-F] A FILL WRITTEN 'none' under APath (the first node that writes the
+    colour): zrender's hasFill() is false, the pointer finds no inside. Only
+    where the element paints no fill of its own -- a visualMap's or a
+    palette's colour over it is a fill. }
+  procedure TakeFillNone(const ANodes: TTyStNodeArray; const APath: array of string);
+  var
+    i: Integer;
+    p: array of string;
+    dd: TJSONData;
+  begin
+    if ((pe^.Style.FillColor shr 24) <> 0) or (pe^.Style.FillGradient.Kind <> cgkNone)
+      or pe^.Style.FillPattern.Present then Exit;
+    SetLength(p, Length(APath) + 1);
+    for i := 0 to High(APath) do p[i] := APath[i];
+    p[High(p)] := 'color';
+    dd := TyStFind(ANodes, p);
+    if (dd <> nil) and (dd.JSONType = jtString) and TyChartColorIsNone(dd.AsString) then
+      pe^.Style.HitNoFill := True;
   end;
 
   { the row's visual colour (an icon pointer's setColor) }
@@ -4937,7 +4975,10 @@ begin
         begin
           Take(SeriesOnly, ['lineStyle'], True);
           if not joinHas then pe^.Style.LineJoin := cTyJoinBevel;
-        end;
+        end
+        { [R7-F] its area's fill 'none' }
+        else if pe^.Shape.Kind = cskPolygon then
+          TakeFillNone(SeriesOnly, ['areaStyle']);
       end
       else if pe^.Shape.Kind = cskLarge then
         Take(SeriesOnly, ['itemStyle'], False);
@@ -4955,6 +4996,9 @@ begin
       Take(nodes, ['labelLine', 'lineStyle'], True);
       Continue;
     end;
+    { [R7-F] a radar's or a line's area, its areaStyle's fill 'none' }
+    if pe^.Anim.Role in [carRadarArea, carLineArea] then
+      TakeFillNone(nodes, ['areaStyle']);
     case pe^.Anim.Role of
       carRipple, carLinesEffect, carLinesFrom, carLinesTo, carPictorialRect,
       carGraphEdgeFrom, carGraphEdgeTo, carRadarArea, carLineArea,
@@ -5029,7 +5073,17 @@ begin
         { [R6-D] a funnel's bands: the border the author writes over the
           port's own ground-coloured one [was: never read] }
         if typ = TyFunnelSeriesTypeName then TakePen(nodes, ['itemStyle'], True);
+        { [R7-F] A PIE'S SLICE, likewise: PieView's sector.useStyle(the item's
+          visual style), the item's own border over the series' ('auto' the
+          series' palette colour, seriesStyleTask) [was: the series' border
+          alone, read by PieVisual, and 'auto' none] }
+        if (typ = 'pie') and (pe^.Shape.Kind = cskSector) then TakePen(nodes, ['itemStyle'], True);
         Take(nodes, ['itemStyle'], False);
+        { [R7-F] a funnel's band, a sunburst's piece, a graph's node: the
+          fill 'none' }
+        if (typ = TyFunnelSeriesTypeName) or (typ = TySunburstSeriesTypeName)
+          or (typ = TyGraphSeriesTypeName) then
+          TakeFillNone(nodes, ['itemStyle']);
         { FunnelView: polygon.style.lineJoin = 'round' }
         if typ = TyFunnelSeriesTypeName then pe^.Style.LineJoin := cTyJoinRound;
         { [R6-D] PieSeries' itemStyle.borderJoin 'round', under what the

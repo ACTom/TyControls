@@ -5821,6 +5821,7 @@ procedure TyShapeScaleAbout(var AShape: TTyChartShape; ACX, ACY, AFX, AFY: Doubl
 var
   i: Integer;
   f: Double;
+  m: TTyMat2D;
 
   function SX(AV: Double): Double;
   begin
@@ -5834,6 +5835,14 @@ var
 
 begin
   f := Min(Abs(AFX), Abs(AFY));
+  { [R7-F] the hit outline's frame with it }
+  if (AShape.HitSym <> '') or AShape.HitQuad then
+  begin
+    m[0] := AFX; m[1] := 0; m[2] := 0; m[3] := AFY;
+    m[4] := ACX - ACX * AFX;
+    m[5] := ACY - ACY * AFY;
+    TyShapeHitAffine(AShape, m);
+  end;
   case AShape.Kind of
     cskRect, cskRoundRect, cskPath:
       begin
@@ -5899,6 +5908,7 @@ var
   i: Integer;
   s, c, tx, ty: Double;
   r: TTyRectF;
+  m: TTyMat2D;
 
   procedure Turn(var AX, AY: Double);
   var dx, dy: Double;
@@ -5927,6 +5937,14 @@ begin
   { the symbol builder's turn (Place): the screen's y grows downward }
   s := Sin(-ARad);
   c := Cos(-ARad);
+  { [R7-F] the hit outline's frame with it }
+  if (AShape.HitSym <> '') or AShape.HitQuad then
+  begin
+    m[0] := c; m[1] := s; m[2] := -s; m[3] := c;
+    m[4] := ACX - ACX * c + ACY * s;
+    m[5] := ACY - ACX * s - ACY * c;
+    TyShapeHitAffine(AShape, m);
+  end;
   case AShape.Kind of
     cskPolyline, cskPolygon:
       begin
@@ -5962,9 +5980,15 @@ begin
 end;
 
 procedure TyShapeMove(var AShape: TTyChartShape; ADX, ADY: Double);
-var i: Integer;
+var i: Integer; m: TTyMat2D;
 begin
   if IsNan(ADX) or IsNan(ADY) or ((ADX = 0) and (ADY = 0)) then Exit;
+  { [R7-F] the hit outline's frame with it }
+  if (AShape.HitSym <> '') or AShape.HitQuad then
+  begin
+    m[0] := 1; m[1] := 0; m[2] := 0; m[3] := 1; m[4] := ADX; m[5] := ADY;
+    TyShapeHitAffine(AShape, m);
+  end;
   case AShape.Kind of
     cskRect, cskRoundRect, cskPath:
       begin
@@ -6733,6 +6757,15 @@ begin
         pts := TyGraphLinePrefix(q1, q2, qc, cv, APercent);
         for k := 0 to High(pts) do pts[k] := TyGraphEdgeDev(now_, pts[k]);
         AEl.Shape.Points := pts;
+        { [R7-F] the quadratic the pointer tests: the first part's control
+          point (quadraticSubdivide), as the points are drawn }
+        if AEl.Shape.HitQuad then
+        begin
+          if APercent < 1 then
+            d := TyPointF((qc.X - q1.X) * APercent + q1.X, (qc.Y - q1.Y) * APercent + q1.Y)
+          else d := qc;
+          AEl.Shape.HitCP := TyGraphEdgeDev(now_, d);
+        end;
         AEl.Shape.Bounds := TyShapeBounds(TyShapePolyline(pts));
         if not (APercent > 0) then MakeInkless(AEl);
       end;

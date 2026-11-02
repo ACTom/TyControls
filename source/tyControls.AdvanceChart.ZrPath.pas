@@ -40,6 +40,8 @@ procedure TyZrMoveTo(var APath: TTyZrPath; AX, AY: Double);
 procedure TyZrLineTo(var APath: TTyZrPath; AX, AY: Double);
 { bezierCurveTo }
 procedure TyZrCubic(var APath: TTyZrPath; AX1, AY1, AX2, AY2, AX, AY: Double);
+{ [R7-F] quadraticCurveTo }
+procedure TyZrQuad(var APath: TTyZrPath; AX1, AY1, AX, AY: Double);
 { PathProxy.arc: the angles normalised first (normalizeArcAngles) }
 procedure TyZrArc(var APath: TTyZrPath; ACX, ACY, AR, AStart, AEnd: Double;
   AAnti: Boolean);
@@ -217,6 +219,11 @@ end;
 procedure TyZrCubic(var APath: TTyZrPath; AX1, AY1, AX2, AY2, AX, AY: Double);
 begin
   Add(APath, zrC, [AX1, AY1, AX2, AY2, AX, AY]);
+end;
+
+procedure TyZrQuad(var APath: TTyZrPath; AX1, AY1, AX, AY: Double);
+begin
+  Add(APath, zrQ, [AX1, AY1, AX, AY]);
 end;
 
 { PathProxy's modPI2: the angle's multiple of pi, rounded to 1e-8 }

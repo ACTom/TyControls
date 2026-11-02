@@ -83,6 +83,10 @@ type
       series colour because an area named its own colour does not make the
       LINE that colour -- they are two keys on two blocks. }
     HasAreaFill: Boolean;
+    { [R7-F] `areaStyle.color: 'none'`: the area fills nothing and the
+      pointer finds no inside (LineView: the area style's fill over the
+      visual colour, defaults keeps the 'none') [was: the series' colour] }
+    AreaNone: Boolean;
     AreaFill: TTyChartColor;
     { The classic fading area is a gradient on `areaStyle.color`, so this is
       the one place a chart gradient is written more often than not. }
@@ -223,6 +227,12 @@ type
       '-Infinity'): that infinity, else 0 -- no pen (StrokeWidthLogical 0),
       and a bar's getLineWidth takes it into its Math.min }
     StrokeWidthInf: Double;
+    { [R7-F] WHAT THE POINTER ASKS that the colours cannot say: FillNone,
+      the fill is 'none' (zrender's hasFill() false: no inside, the pen at
+      least strokeContainThreshold); StrokeClear, the pen is a colour of no
+      alpha ('transparent', rgba(..., 0)) that still strokes for the
+      pointer. Both False: as the colours read. The painter reads neither. }
+    FillNone, StrokeClear: Boolean;
     { The four colours a candle needs, and the pen. A block of its own rather
       than four more fields on the visual: a candlestick is the only series
       whose colour depends on the DATUM's own two numbers, and putting `Up` and
@@ -787,6 +797,7 @@ begin
                         and not ast.Color.IsNone;
   if Result.HasAreaFill then Result.AreaFill := ast.Color.Color;
   Result.AreaGradient := ast.Color.Gradient;
+  Result.AreaNone := ast.Color.Written and ast.Color.IsNone;
 
   d := area.Find('opacity');
   if (d <> nil) and (d.JSONType = jtNumber) then
@@ -1095,6 +1106,7 @@ begin
       Result.Fill := AVisual.CbFill[raw];
       Result.FillGradient := Default(TTyChartGradient);
       Result.FillPattern := Default(TTyChartPattern);
+      Result.FillNone := False;
     end;
   end;
   { THE VISUAL PIPELINE FIRST, then the datum's own style over it: upstream's
@@ -1112,6 +1124,7 @@ begin
         Result.Fill := TyVisualToChart(vr.Color);
         Result.FillGradient := Default(TTyChartGradient);
         Result.FillPattern := Default(TTyChartPattern);
+        Result.FillNone := False;
       end;
       if vr.OpacitySet and not IsNan(vr.Opacity) then
         Result.Alpha := Min(Double(1), Max(Double(0), vr.Opacity));
@@ -1130,6 +1143,8 @@ begin
   if rf.PaletteSet then
   begin
     if rf.PaletteNone then Result.Fill := 0 else Result.Fill := rf.Palette;
+    { [R7-F] a palette entry 'none' is no fill }
+    Result.FillNone := rf.PaletteNone;
     { [R5-B] a gradient entry is the fill itself }
     Result.FillGradient := rf.PaletteGrad;
     Result.FillPattern := Default(TTyChartPattern);
@@ -1141,6 +1156,7 @@ begin
     Result.Fill := rf.ObjSolid;
     Result.FillGradient := rf.ObjGradient;
     Result.FillPattern := rf.ObjPattern;
+    Result.FillNone := False;
   end;
   { THE ITEM'S OWN OPACITY REPLACES the series' and the visualMap's alike --
     upstream extends the item style over both. [Batch 54: it was not read.] }
@@ -1212,16 +1228,20 @@ begin
       begin
         Result.Stroke := 0;
         Result.StrokeGradient := Default(TTyChartGradient);
+        Result.StrokeClear := False;
       end
       else if v.Text = 'auto' then
       begin
         Result.Stroke := Result.Fill;
         Result.StrokeGradient := Default(TTyChartGradient);
+        Result.StrokeClear := False;
       end
       else if TyTryParseChartColor(v.Text, c) then
       begin
         Result.Stroke := c;
         Result.StrokeGradient := Default(TTyChartGradient);
+        { [R7-F] a clear colour strokes for the pointer }
+        Result.StrokeClear := (c shr 24) = 0;
       end;
     end;
   end;
@@ -1231,6 +1251,7 @@ begin
   begin
     Result.Stroke := rf.StrokeObjSolid;
     Result.StrokeGradient := rf.StrokeObjGradient;
+    Result.StrokeClear := False;
   end;
   k := TyOverrideKey('itemStyle.borderWidth');
   if AStore.HasOverride(ARow, k) then
@@ -1258,6 +1279,8 @@ begin
     Result.Fill := 0;
     Result.FillGradient := Default(TTyChartGradient);
     Result.FillPattern := Default(TTyChartPattern);
+    { [R7-F] no fill for the pointer either }
+    Result.FillNone := True;
     Exit;
   end;
   if TyTryParseChartColor(v.Text, c) then
@@ -1268,6 +1291,7 @@ begin
     Result.Fill := c;
     Result.FillGradient := Default(TTyChartGradient);
     Result.FillPattern := Default(TTyChartPattern);
+    Result.FillNone := False;
   end;
 end;
 
@@ -1288,6 +1312,7 @@ begin
     Result.Fill := TyVisualToChart(vr.Color);
     Result.FillGradient := Default(TTyChartGradient);
     Result.FillPattern := Default(TTyChartPattern);
+    Result.FillNone := False;
   end;
   if vr.LateOpacity and not IsNan(vr.Opacity) then
     Result.Alpha := Min(Double(1), Max(Double(0), vr.Opacity));
@@ -1400,6 +1425,9 @@ begin
   Result.Style.FillGradient := AVisual.FillGradient;
   Result.Style.StrokeGradient := AVisual.StrokeGradient;
   Result.Style.FillPattern := AVisual.FillPattern;
+  { [R7-F] what hasFill() / hasStroke() answer that the colours cannot }
+  Result.Style.HitNoFill := AVisual.FillNone and not Result.Style.HasFill;
+  Result.Style.HitClearPen := AVisual.StrokeClear;
   Result.Z := AVisual.Z;
   Result.Z2 := AVisual.Z2;
   Result.Silent := False;
@@ -1818,6 +1846,13 @@ begin
     { [R6-F] the pen of an infinite border makes its bounding rect
       not-a-number upstream: the bar is never hit }
     el.HitNone := fixed and IsInfinite(bw);
+    { [R7-F] A CLEAR PEN ON A BAR THE LAYOUT DID NOT TAKE IT OUT OF: upstream
+      insets the bar by the width (getLineWidth asks only whether the
+      colour is null or 'none') and its clear pen then reaches back to the
+      full rect, which is where this rect already is -- asked again, it
+      would reach half a width past it. Where the layout insets (fixed),
+      the pen is asked as upstream's }
+    if not fixed then el.Style.HitClearPen := False;
     { THE ENTER ANIMATION'S NUMBERS: upstream's layout as it holds it, the
       length signed, after the clip -- the bar grows its height (or, laid
       on its side, its width) from 0 to this [Batch 89] }
@@ -1914,6 +1949,8 @@ var
     rs := TySymbolResolveOffset(rs);
     sh := TyBuildSymbol(rs, AP.X, AP.Y);
     if (sh.Kind = cskRect) and not TyRectFIsValid(sh.Bounds) then Exit;
+    { [R7-F] hit in its own frame, as Symbol.ts' path }
+    TySymbolHitFrame(sh, rs, AP.X, AP.Y);
     { THE ROW'S COLOUR, not the series': a visualMap's, or the datum's own
       itemStyle.color. [Batch 56: every marker was the series colour.] }
     { [R2-I3] over the itemStyle's dash [was: the lineStyle's -- a dashed
@@ -2489,7 +2526,15 @@ var
         v.FillPattern := Default(TTyChartPattern);
         v.StrokeGradient := Default(TTyChartGradient);
         { A visualMap's gradient, unless the area named its own colour. }
-        if AVisual.VisualLineArea then ApplyVisualLine(v, True);
+        if AVisual.VisualLineArea and not spec.AreaNone then ApplyVisualLine(v, True);
+        { [R7-F] an area written 'none' is no fill, to the eye and the
+          pointer }
+        if spec.AreaNone then
+        begin
+          v.Fill := 0;
+          v.FillGradient := Default(TTyChartGradient);
+          v.FillNone := True;
+        end;
         el := MarkElement(TyShapePolygon(poly), v, ABinding.SeriesIndex, -1);
         { the area polygon takes the series' style decal (LineView) }
         el.Style.Decal := AVisual.Decal;
@@ -2716,6 +2761,8 @@ begin
   if rs.Kind = tsyNone then Exit;
   rs := TySymbolResolveOffset(rs);
   shape := TyBuildSymbol(rs, AP.X, AP.Y);
+  { [R7-F] hit in its own frame, as Symbol.ts' path }
+  TySymbolHitFrame(shape, rs, AP.X, AP.Y);
   { A SYMBOL OF NO SIZE is still an element upstream -- it paints nothing
     and carries its label, which is how a series of words alone is written
     (calendar-pie's day numbers, calendar-lunar's names) }

@@ -548,7 +548,13 @@ begin
   if not (AIsBlock and AOpt.DisableBox) then
   begin
     SpreadPadding(Get(AOwn, 'padding'), S);
-    if NumOf(Get(AOwn, 'borderWidth'), x) then S.BorderWidth := x;
+    if NumOf(Get(AOwn, 'borderWidth'), x) then
+    begin
+      S.BorderWidth := x;
+      S.BorderWidthInf := False;
+    end
+    else if TyOptIsPosInf(Get(AOwn, 'borderWidth')) then
+      S.BorderWidthInf := True;
     SpreadRadius(Get(AOwn, 'borderRadius'), S);
     { [R2-F] backgroundColor: {image: src}: a picture (isImageBg) }
     d := Get(AOwn, 'backgroundColor');

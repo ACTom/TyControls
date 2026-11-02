@@ -58,6 +58,9 @@ type
     Placed: Boolean;
     StartRad, EndRad, R0, R: Double;
     Fill: TTyChartColor;
+    { [R7-F] the fill written 'none' (sunburstVisual keeps it: it is no
+      falsy fill): nothing is filled, and the pointer finds no inside }
+    FillNone: Boolean;
   end;
 
   TTySunburstSolved = record
@@ -544,6 +547,13 @@ begin
       if row = 0 then ASolved.HasRootFill := True;
       Continue;
     end;
+    if (d <> nil) and (d.JSONType = jtString) and TyChartColorIsNone(d.AsString) then
+    begin
+      ASolved.Nodes[row].Fill := 0;
+      ASolved.Nodes[row].FillNone := True;
+      if row = 0 then ASolved.HasRootFill := True;
+      Continue;
+    end;
     { the virtual root takes no palette colour: it shows only as the return
       circle, in the theme's neutral (sunburstVisual's pickColor) }
     if row = 0 then Continue;
@@ -801,7 +811,8 @@ begin
     TyGuideStampSector(el.Caption, ASolved.CX, ASolved.CY, nd.R0, nd.R, nd.StartRad,
       nd.EndRad, ASolved.Clockwise, pieceCorners);
     el.Caption.LgColor := nd.Fill;
-    el.Style.HasFill := True;
+    el.Style.HasFill := not nd.FillNone;
+    el.Style.HitNoFill := nd.FillNone;
     if (row = 0) and not ASolved.HasRootFill then el.Style.FillColor := AInk.RootFill
     else el.Style.FillColor := nd.Fill;
     { THE DRILL-DOWN'S VIEW: the piece's layout as upstream holds it, its
@@ -829,6 +840,10 @@ begin
     if d <> nil then w := TyOptPenWidth(d) else w := 1;
     if IsNan(w) then w := 1;
     el.Style.StrokeWidthLogical := w;
+    { [R7-F] A PEN OF +INFINITY (drawn as none): its stroked rect is
+      not-a-number upstream, the piece is never hit }
+    if TyOptIsPosInf(d)
+      and ((el.Style.StrokeColor shr 24) <> 0) then el.HitNone := True;
     d := ChainFind(ASolved, row, 'itemStyle', 'opacity');
     if (d <> nil) and (d.JSONType = jtNumber) then el.Style.Alpha := d.AsFloat
     else el.Style.Alpha := 1;

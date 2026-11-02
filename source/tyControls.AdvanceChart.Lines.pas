@@ -1498,6 +1498,13 @@ begin
     { THE LINE: a polyline's points, a line's segment, a curve sampled }
     pts := LinePoints(g, ASolved.Poly, 1);
     el := TyChartElement(TyShapePolyline(pts));
+    { [R7-F] the pointer tests the quadratic itself (BezierCurve), not the
+      points it is drawn as }
+    if not ASolved.Poly and g.Curved and (Length(pts) >= 2) then
+    begin
+      el.Shape.HitQuad := True;
+      el.Shape.HitCP := g.CP;
+    end;
     el.Style.HasFill := False;
     { [spec 242] the visual colour a label's `color: 'inherit'` reads
       (inheritColor); no fill is painted }
@@ -1516,6 +1523,13 @@ begin
         el.Style.GradBox := TyLinesLineBox(g, ink.Width * ASolved.Scale);
     end;
     el.Style.StrokeWidthLogical := ink.Width;
+    { [R7-F] A PEN OF +INFINITY: the canvas draws none (the document's note),
+      and its stroked rect is not-a-number -- never hit }
+    if IsInfinite(ink.Width) then
+    begin
+      el.Style.StrokeWidthLogical := 0;
+      el.HitNone := ink.Width > 0;
+    end;
     el.Style.Alpha := ink.Opacity;
     el.Style.DashLogical := ink.Dash;
     el.Style.DashWord := ink.DashWord;
@@ -1774,6 +1788,13 @@ begin
     Exit;
   end;
   AEl.Shape.Points := LinePoints(g, False, APercent);
+  { [R7-F] the quadratic the pointer tests: the first part's control point
+    (quadraticSubdivide at the percent), as the points are drawn }
+  if AEl.Shape.HitQuad and g.Curved then
+    if APercent < 1 then
+      AEl.Shape.HitCP := TyPointF((g.CP.X - g.Pts[0].X) * APercent + g.Pts[0].X,
+        (g.CP.Y - g.Pts[0].Y) * APercent + g.Pts[0].Y)
+    else AEl.Shape.HitCP := g.CP;
 end;
 
 procedure TyLinesFrameSymbol(var AEl: TTyChartElement; APercent: Double);
