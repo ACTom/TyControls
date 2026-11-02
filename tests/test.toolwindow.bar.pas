@@ -231,7 +231,8 @@ type
   end;
 
   { 处理器里切页 / 收起:OnShow / OnHide 里改 ActiveWindow 或 Collapsed,外层那一次不许盖掉、
-    不许再报一遍;OnShow 里读到的已经是新的几何。 }
+    不许再报一遍;OnShow 里读到的已经是新的几何(栏的宽在这里测;页被对齐引擎摆好要真句柄,
+    在 test.toolwindow.focus)。 }
   TTyToolWindowBarHandlerTests = class(TTyToolWindowBarFixture)
   private
     FRedirect: TTyCustomToolWindow;
@@ -241,7 +242,6 @@ type
     FActOnHideOnly: Boolean;
     FLog: string;
     FBarWidthAtShow: Integer;
-    FPageAtShow: TRect;
     procedure LogChange(ASender: TObject);
     procedure LogCollapse(ASender: TObject);
     procedure LogExpand(ASender: TObject);
@@ -259,6 +259,9 @@ type
     procedure TestARedirectFromOnHideLeavesTheRedirectShown;
     procedure TestCollapsingFromTheOnShowOfAnExpandEndsCollapsed;
     procedure TestExpandingFromTheOnHideOfACollapseEndsExpanded;
+    procedure TestOnShowOfAnExpandSeesTheExpandedGeometry;
+    procedure TestOnShowOfAClickOnACollapsedBarSeesTheExpandedGeometry;
+    procedure TestOnShowOfTheFirstWindowSeesTheShownBar;
   end;
 
 const
@@ -2298,7 +2301,6 @@ begin
   FLog := '';
   FActOnHideOnly := False;
   FBarWidthAtShow := -1;
-  FPageAtShow := Rect(0, 0, 0, 0);
 end;
 
 procedure TTyToolWindowBarHandlerTests.LogChange(ASender: TObject);
@@ -2350,7 +2352,6 @@ end;
 procedure TTyToolWindowBarHandlerTests.RecordGeometry(ASender: TObject);
 begin
   FBarWidthAtShow := FBar.Width;
-  FPageAtShow := TControl(ASender).BoundsRect;
 end;
 
 procedure TTyToolWindowBarHandlerTests.LogBar;
@@ -2443,6 +2444,55 @@ begin
   AssertTrue('当前页显示着', a.Visible);
   AssertEquals('最后一声是 OnExpand,外层不再补一声 OnCollapse',
     'hide WA;show WA;expand;', FLog);
+end;
+
+procedure TTyToolWindowBarHandlerTests.TestOnShowOfAnExpandSeesTheExpandedGeometry;
+var
+  a: TProbeWindow;
+  expanded: Integer;
+begin
+  a := NewWindow;
+  FBar.ExpandedSize := 240;
+  expanded := FBar.Width;
+  FBar.CallAlignControls;
+  FBar.Collapsed := True;
+  AssertTrue('前提:收起后变窄', FBar.Width < expanded);
+  a.OnShow := @RecordGeometry;
+  FBar.Collapsed := False;
+  AssertEquals('前提:展开了', expanded, FBar.Width);
+  AssertEquals('OnShow 里栏已经是展开的宽', expanded, FBarWidthAtShow);
+end;
+
+procedure TTyToolWindowBarHandlerTests.TestOnShowOfAClickOnACollapsedBarSeesTheExpandedGeometry;
+var
+  a, b: TProbeWindow;
+  expanded: Integer;
+begin
+  a := NewWindow;
+  b := NewWindow;
+  FBar.ActiveWindow := a;
+  FBar.ExpandedSize := 240;
+  expanded := FBar.Width;
+  FBar.CallAlignControls;
+  FBar.Collapsed := True;
+  b.OnShow := @RecordGeometry;
+  { 收起着点另一页的图标:切过去并展开。 }
+  ClickIcon(1);
+  AssertSame('前提:切过去了', b, FBar.ActiveWindow);
+  AssertFalse('前提:展开了', FBar.Collapsed);
+  AssertEquals('OnShow 里栏已经是展开的宽', expanded, FBarWidthAtShow);
+end;
+
+procedure TTyToolWindowBarHandlerTests.TestOnShowOfTheFirstWindowSeesTheShownBar;
+var
+  a: TProbeWindow;
+begin
+  AssertEquals('前提:空的侧栏整条隐藏', 0, FBar.Width);
+  a := TProbeWindow.Create(FForm);
+  a.OnShow := @RecordGeometry;
+  a.Parent := FBar;
+  AssertTrue('前提:来了窗口,栏出现', FBar.Width > 0);
+  AssertEquals('OnShow 里栏已经有宽', FBar.Width, FBarWidthAtShow);
 end;
 
 initialization

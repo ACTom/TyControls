@@ -3570,9 +3570,11 @@ end;
 function TTyCustomToolWindowBar.SizesAsCollapsed: Boolean;
 begin
   { 设计期不算收起,没有窗口也按展开算 —— 零宽 / 零高的栏在设计器里点不中(spec §5.4)。
-    算放置预览的宽时(FAssumeShown,只在 ShownAxisPx 里)按「有一个窗口、展开着」答。 }
+    算放置预览的宽时(FAssumeShown,只在 ShownAxisPx 里)按「有一个窗口、展开着」答。
+    收起着点另一页的图标(ActivateExpanded,FSwitchExpanded):这一次切页按展开的样子显示目标,
+    尺寸也按展开的推 —— 目标的 OnShow 里读到的是展开的宽。 }
   Result := not FAssumeShown and not (csDesigning in ComponentState)
-    and (FCollapsed or (WindowCount = 0) or EdgeSnapped);
+    and ((FCollapsed and not FSwitchExpanded) or (WindowCount = 0) or EdgeSnapped);
 end;
 
 function TTyCustomToolWindowBar.HiddenAsEmpty: Boolean;
@@ -6847,7 +6849,7 @@ end;
 
 procedure TTyCustomToolWindowBar.ShowWindowNow(AWindow: TTyCustomToolWindow);
 var
-  was: Boolean;
+  was, events: Boolean;
 begin
   was := FBarSwitching;
   FBarSwitching := True;
@@ -6860,7 +6862,23 @@ begin
       (那时 InvalidateHeader 丢的是当时的当前页)、换了主题……藏着的页没人替它丢缓存,
       显示出来就 blit 旧帧(spec §3.5)。显示是低频事件,统一在这里丢。 }
     if AWindow.FPaintCache <> nil then AWindow.FPaintCache.Drop;
-    AWindow.Visible := True;
+    { OnShow 里读到的得是新的几何(展开、第一个窗口进了空栏):CM_VISIBLECHANGED 在 LCL 摆它之前就到,
+      那时栏还是收起 / 宽 0 的样子,这一页还在上一次显示时的位置。所以先不出声地显示出来,栏按此刻的
+      样子推一遍尺寸、对齐引擎把它摆进内容区,再发 OnShow(同 TCustomPage:显示时已经在位)。
+      本来就不发的(设计期、静默批次)照旧只写 Visible。 }
+    events := not AWindow.Visible and not (csDesigning in AWindow.ComponentState)
+      and (AWindow.FSilentVisibility = 0);
+    if events then AWindow.BeginSilentVisibility;
+    try
+      AWindow.Visible := True;
+    finally
+      if events then AWindow.EndSilentVisibility;
+    end;
+    if events then
+    begin
+      Relayout;
+      AWindow.DoShow;
+    end;
   finally
     FBarSwitching := was;
   end;
