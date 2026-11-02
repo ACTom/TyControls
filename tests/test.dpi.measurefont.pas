@@ -1132,7 +1132,7 @@ type
     Count: Integer;
   end;
 const
-  CAllowed: array[0..3] of TAllowed = (
+  CAllowed: array[0..4] of TAllowed = (
     { TyConfigureMeasureFont itself: a pixel Height, the only measuring font there is. }
     (Name: 'tyControls.Painter.pas'; Count: 1),
     { ScaleFontsPPI, once per base class: puts "no size chosen" (Height 0) back after
@@ -1141,7 +1141,11 @@ const
     { The font DIALOG writing its result into the TFont the application handed it. }
     (Name: 'tyControls.Dialogs.Font.pas'; Count: 2),
     { The value list editor parsing a font VALUE the user typed into a cell. }
-    (Name: 'tyControls.ValueListEditor.pas'; Count: 2));
+    (Name: 'tyControls.ValueListEditor.pas'; Count: 2),
+    { The tree's OnPaintText (#166): the canvas handed to the host carries the size the text
+      will be drawn at, and the size the host leaves on it is read back. Nothing is measured
+      with that font. }
+    (Name: 'tyControls.TreeView.pas'; Count: 1));
 var
   files, sl, bad: TStringList;
   i, k, n, want, seen: Integer;
