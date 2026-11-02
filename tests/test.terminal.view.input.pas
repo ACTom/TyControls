@@ -13,7 +13,7 @@ uses
   tyControls.Types, tyControls.Controller, tyControls.ScrollBar, tyControls.Terminal.Buffer,
   tyControls.Terminal.Core,
   tyControls.Terminal.Keyboard, tyControls.Terminal.Render, tyControls.Terminal, tyControls.Edit,
-  test.terminal.keyboard, test.terminal.view;
+  test.terminal.keyboard, test.terminal.view, test.dpi.support;
 
 type
   TTyTerminalViewInputTests = class(TTestCase)
@@ -24,6 +24,9 @@ type
     FQueries: Integer;
     FQueryKey: Word;
     FQueryShift: TShiftState;
+    FKeyPresses: string;
+    FDropKey: Char;
+    procedure HostKeyPress(Sender: TObject; var Key: Char);
     procedure Query(Sender: TObject; Key: Word; Shift: TShiftState; var APassToApplication: Boolean);
     procedure HostWheel(Sender: TObject; Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint;
       var Handled: Boolean);
@@ -77,6 +80,8 @@ type
     procedure TestKeyUpForgetsTheHandledKey;
     procedure TestShiftWheelIsLeftAlone;
     procedure TestReportedWheelPixelsStayInTheGrid;
+    { #185 }
+    procedure TestWindowKeysAreLeftToWindows;
   end;
 
 implementation
@@ -89,6 +94,8 @@ begin
   FPassKey := 0;
   FPassShift := [];
   FQueries := 0;
+  FKeyPresses := '';
+  FDropKey := #0;
 end;
 
 procedure TTyTerminalViewInputTests.TearDown;
@@ -110,6 +117,13 @@ procedure TTyTerminalViewInputTests.HostWheel(Sender: TObject; Shift: TShiftStat
   MousePos: TPoint; var Handled: Boolean);
 begin
   Handled := True;
+end;
+
+procedure TTyTerminalViewInputTests.HostKeyPress(Sender: TObject; var Key: Char);
+begin
+  FKeyPresses := FKeyPresses + Key;
+  if Key = FDropKey then
+    Key := #0;
 end;
 
 function TTyTerminalViewInputTests.Press(AKey: Word; AShift: TShiftState): Word;
@@ -803,6 +817,32 @@ begin
   outside := Hex;
   AssertTrue('reported', inside <> '');
   AssertEquals('clamped to the grid''s last pixel', inside, outside);
+end;
+
+{ #185: Alt+F4 closes the window and Alt+Space opens its system menu (DefWindowProc acts on
+  the WM_SYSKEYDOWN only when the control leaves the key): not encoded on Windows, as
+  Windows Terminal and conhost do. F10 alone stays the program's (mc quits on it). }
+procedure TTyTerminalViewInputTests.TestWindowKeysAreLeftToWindows;
+var
+  k: Word;
+begin
+  F.View.SetPlatform(False, True);
+  k := Press(VK_F4, [ssAlt]);
+  AssertEquals('Alt+F4: nothing sent', '', Hex);
+  AssertEquals('Alt+F4: the key goes on to the window', VK_F4, k);
+  k := Press(VK_SPACE, [ssAlt]);
+  AssertEquals('Alt+Space: nothing sent', '', Hex);
+  AssertEquals('Alt+Space: the key goes on', VK_SPACE, k);
+  k := Press(VK_F4, [ssCtrl]);
+  AssertTrue('Ctrl+F4 is still the program''s', Sent);
+  AssertEquals('and swallowed', 0, k);
+  F.ClearRecords;
+  Press(VK_F10);
+  AssertTrue('F10 is the program''s', Sent);
+  F.ClearRecords;
+  F.View.SetPlatform(False, False);
+  Press(VK_F4, [ssAlt]);
+  AssertTrue('elsewhere the window manager takes Alt+F4 before us: sent as ever', Sent);
 end;
 
 initialization

@@ -3344,6 +3344,10 @@ begin
   if Key = 0 then Exit;
   { 输入法正在组字(CompositionHelper.ts:117-131 同一个意思):不动 }
   if (Key = TyVkImeProcess) or (Key = VK_PROCESSKEY) then Exit;
+  { #185: Windows 的 Alt+F4(关窗)、Alt+Space(系统菜单)要 DefWindowProc 看见这个键才成,
+    不编码(Windows Terminal、conhost 同);别处窗口管理器先拿走了，到不了这里 }
+  if FIsWindows and (Shift * [ssShift, ssCtrl, ssAlt, ssMeta] = [ssAlt])
+    and ((Key = VK_F4) or (Key = VK_SPACE)) then Exit;
   ev := TyTerminalKeyEventFromLCL(Key, Shift);
   ctrl := ssCtrl in Shift;
   alt := ssAlt in Shift;
