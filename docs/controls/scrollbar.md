@@ -22,9 +22,9 @@
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Kind` | `TTyScrollBarKind` | `sbVertical` | 方向。`sbVertical`：竖向；`sbHorizontal`：横向。改变后触发 `Invalidate`。 |
-| `Min` | `Integer` | `0` | 最小位置值。赋值时若 `Position < Min` 则自动夹紧 `Position := Min`。 |
-| `Max` | `Integer` | `100` | 最大位置值。赋值时若 `Position > Max` 则自动夹紧 `Position := Max`。 |
+| `Kind` | `TTyScrollBarKind` | `sbVertical` | 方向。`sbVertical`：竖向；`sbHorizontal`：横向。改变时**宽高对调**（与 LCL 的 `TScrollBar` 一致，粗细跟着转到新的横轴上），随后重绘；流式载入期间（`csLoading`）不动，`.lfm` 里的尺寸本来就是对的。 |
+| `Min` | `Integer` | `0` | 最小位置值。赋值时若 `Position < Min` 则把 `Position` 移到 `Min`，经 `Position` 的 setter 走，所以会触发 `OnChange`（流式载入期间只落值、不发事件）。 |
+| `Max` | `Integer` | `100` | 最大位置值。赋值时若 `Position > Max` 则把 `Position` 移到 `Max`，同样触发 `OnChange`（流式载入期间不发）。 |
 | `Position` | `Integer` | `0` | 当前位置，范围 `[Min, Max]`。赋值时自动夹紧；仅在值真正变化时触发 `OnChange`。 |
 | `PageSize` | `Integer` | `10` | 页面大小（可见内容大小），决定 thumb 在轨道中的比例长度。不可为负（负值被夹为 0）。**当 `LargeChange = 0`（默认）时它也是**点击轨道空白处和 `PageUp`/`PageDown` 的步进量。 |
 | `LargeChange` | `Integer` | `0` | **（API parity 新增）** 翻页步进量：点轨道、`PageUp`/`PageDown`、`scPageUp`/`scPageDown`。早前 `PageSize` 身兼两职，于是**滑块比例与翻页步长无法分开选**：把 `PageSize` 调小去瘦滑块，翻页也跟着变成一行。LCL 里两者分开（`stdctrls.pp:106`；`PageSize` 只喂 `ScrollInfo.nPage`，`LargeChange` 只驱动翻页）。**默认值有意与 LCL 不同**：LCL 是 `1`，而本库的列表框 / 网格 / 备忘录 / 树 / 滚动容器全都内嵌这个滑块并把 `PageSize` 设为视口大小，跟随 LCL 会让每一次点轨道只走 1 个单位。`0` = “按 `PageSize` 翻页”，即这个属性存在之前的行为。 |
@@ -33,7 +33,7 @@
 | `LiveTracking` | `Boolean` | `True` | **（新增）** 拖动 thumb 时 `Position` 是**持续跟随**（`True`，出厂值，也是本控件一贯的行为）还是**只在松手时落一次**（`False`）。这就是 LCL `goThumbTracking` 所需要的那道缝，详见下方 §4「拖动的两种提交方式」。 |
 | `AutoHide` | `TTyScrollBarAutoHide` | `sbahDefault` | **（新增）** 滚动条闲下来之后要不要淡出。`sbahDefault` 跟主题走（令牌 `--scrollbar-auto-hide`）；`sbahNever` 永远显示、`sbahAuto` 一定淡出，两者都压过主题。延时没有属性，要调改主题。详见下方 §7「自动隐藏」。 |
 | `OnChange` | `TNotifyEvent` | `nil` | Position 真实变化时触发（包括 `DragThumbTo` 引起的变化）。 |
-| `OnScroll` | `TScrollEvent` | `nil` | **（API parity 新增）** 键盘 / 轨道点击 / 端部按钮触发的滚动；签名 `(Sender; ScrollCode: TScrollCode; var ScrollPos: Integer)`，可在 handler 中改写 `ScrollPos` 覆盖目标位置。**鼠标滚轮直接改写 Position（触发 `OnChange`），不经 `DoScroll`，因此不触发 `OnScroll`。** |
+| `OnScroll` | `TScrollEvent` | `nil` | **（API parity 新增）** 键盘 / 轨道点击 / 端部按钮 / 鼠标滚轮触发的滚动；签名 `(Sender; ScrollCode: TScrollCode; var ScrollPos: Integer)`，可在 handler 中改写 `ScrollPos` 覆盖目标位置。鼠标手势都以一次 `scEndScroll` 收尾，与原生滚动条一致：松开端部按钮或轨道、滚轮每一格之后各发一次（经 `ScrollByKey` 转来的键见下文「键盘操作」）。 |
 | `Align` | `TAlign` | — | 布局对齐方式。 |
 | `Anchors` | `TAnchors` | — | 锚点布局。 |
 | `StyleClass` | `string` | `''` | CSS 变体类名。 |
@@ -153,9 +153,11 @@ Grid.HScrollBar.LiveTracking := False;
 
 | 命中位置 | 行为 |
 |----------|------|
-| 端部箭头按钮（Lo / Hi） | `Position ∓= SmallChange`（Lo 减、Hi 加），并尝试 `SetFocus` |
+| 端部箭头按钮（Lo / Hi） | `Position ∓= SmallChange`（Lo 减、Hi 加），并尝试 `SetFocus`；**按住不放会连续步进**（先停 400 ms，之后每 50 ms 一步，与系统滚动条的节奏相同） |
 | thumb 本体 | 开始拖动（`BeginThumbDrag` + `MouseCapture`） |
-| 轨道空白处（thumb 之外） | 朝点击方向翻一页 `Position ∓= PageSize` |
+| 轨道空白处（thumb 之外） | 朝点击方向翻一页 `Position ∓= PageSize`；按住不放会连续翻页，**thumb 走到按下的位置就停** |
+
+松开鼠标（或鼠标捕获被夺走）时，按钮和轨道的连续步进停下，并发一次 `OnScroll(scEndScroll)`。
 
 ### 键盘操作
 
@@ -170,7 +172,7 @@ Grid.HScrollBar.LiveTracking := False;
 | `Home`（VK_HOME） | `Position := Min` |
 | `End`（VK_END） | `Position := Max` |
 
-> 方向键按 `Kind` 区分主轴：垂直用 `↑`/`↓`，水平用 `←`/`→`。所有步进结果都经 `SetPosition` 钳制到 `[Min, Max]`。
+> 方向键按 `Kind` 区分主轴：垂直用 `↑`/`↓`，水平用 `←`/`→`；横跨主轴的那一对不是这根条的键，原样返回，留给另一根条（一个键同时转给两根条时各取各的）。所有步进结果都经 `SetPosition` 钳制到 `[Min, Max]`。`ScrollByKey` 每个键只发那一步的 `OnScroll`，不跟 `scEndScroll`：按键的松开不经过这根条。
 
 ### 独立几何函数
 
@@ -218,9 +220,9 @@ function TyScrollTrackRect(const AClient: TRect; AKind: TTyScrollBarKind;
 | 事件 | 类型 | 触发时机 |
 |------|------|----------|
 | `OnChange` | `TNotifyEvent` | `Position` 属性值真实变化时（包括 `DragThumbTo` 间接触发） |
-| `OnScroll` | `TScrollEvent` | **（API parity 新增）** 键盘 / 轨道点击 / 端部按钮滚动时，经 `DoScroll` 分发；`var ScrollPos: Integer` 可被 handler 改写以覆盖目标位置。鼠标滚轮**不**触发此事件（仅触发 `OnChange`）。 |
+| `OnScroll` | `TScrollEvent` | **（API parity 新增）** 键盘 / 轨道点击 / 端部按钮 / 鼠标滚轮滚动时，经 `DoScroll` 分发；`var ScrollPos: Integer` 可被 handler 改写以覆盖目标位置。鼠标手势以一次 `scEndScroll` 收尾（`ScrollByKey` 转来的键不跟）。 |
 
-> **滚轮步进（API parity 新增）：** `TTyScrollBar` 现支持鼠标滚轮步进——滚轮上滚减小 `Position`（向上滚动内容），步进量为 `SmallChange`，直接改写 `Position` 并触发 `OnChange`。除上表外还暴露**基线事件集**（Tier A + Tier B），见 [../events.md](../events.md)。
+> **滚轮步进（API parity 新增）：** `TTyScrollBar` 现支持鼠标滚轮步进——滚轮上滚减小 `Position`（向上滚动内容），步进量为 `SmallChange`；每一格和端部按钮一样经 `OnScroll` 发 `scLineUp`/`scLineDown`，随后一次 `scEndScroll`，再触发 `OnChange`。除上表外还暴露**基线事件集**（Tier A + Tier B），见 [../events.md](../events.md)。
 
 ## 5. 状态与主题
 

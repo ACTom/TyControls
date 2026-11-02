@@ -473,6 +473,10 @@ end;
 
 procedure TTyCustomCalculator.ButtonClick(Sender: TObject);
 begin
+  { #180: a click on a key focuses the calculator -- the keys are no tab stops, so nothing
+    took the focus, and the next key typed went to whatever had it. }
+  if CanFocus and not Focused then
+    try SetFocus except end;
   if Sender is TControl then
     PressKey(CKeys[TControl(Sender).Tag].Cmd);
 end;

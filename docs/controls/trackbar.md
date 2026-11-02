@@ -85,6 +85,8 @@ TTyTrackBar 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态�
 |------|------|------|------|
 | 减小键 | `←`（Left） | `↓`（Down） | `Position -= LineSize`（到达 `Min` 后停止） |
 | 增大键 | `→`（Right） | `↑`（Up） | `Position += LineSize`（到达 `Max` 后停止） |
+| 横跨主轴的减小键 | `↓`（Down） | `←`（Left） | 同减小键 |
+| 横跨主轴的增大键 | `↑`（Up） | `→`（Right） | 同增大键 |
 | `PageUp`（VK_PRIOR） | — | — | `Position += PageSize`（**增大**，两种方向一致） |
 | `PageDown`（VK_NEXT） | — | — | `Position -= PageSize`（减小，两种方向一致） |
 | `Home`（VK_HOME） | — | — | `Position := Min` |
@@ -94,7 +96,7 @@ TTyTrackBar 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态�
 | 鼠标左键释放 | — | — | 结束拖动 |
 | 鼠标滚轮 | — | — | **（API parity 新增）** 滚轮上滚 `Position += LineSize`、下滚 `-= LineSize`（与原生 LCL `TTrackBar` 一致：上滚增大，与 ScrollBar 相反）；经 `SetPosition` 触发 `OnChange`。`Enabled = False` 时忽略。 |
 
-> **注意：** 垂直方向上 `↑` 增大、`↓` 减小（顶部=Max）；`PageUp` 始终增大、`PageDown` 始终减小，与方向无关。每个被处理的按键消费后不再传递（`Key := 0`）。
+> **注意：** 垂直方向上 `↑` 增大、`↓` 减小（顶部=Max）；四个方向键在两种方向下都起作用，`↑`/`→` 始终增大、`↓`/`←` 始终减小，按键不会漏给窗体让焦点跑掉；`PageUp` 始终增大、`PageDown` 始终减小，与方向无关。每个被处理的按键消费后不再传递（`Key := 0`）。
 
 > **基线事件集：** 除 `OnChange` 外，TTyTrackBar 还暴露全部**基线事件**（Tier A + Tier B），见 [../events.md](../events.md)。TrackBar **无** `OnScroll` 事件（与 ScrollBar 不同），位置变化统一通过 `OnChange` 通知。
 

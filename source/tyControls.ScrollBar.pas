@@ -120,6 +120,20 @@ type
       **和位置动画的 FTimer 无关**——那套有 FDragging/LiveTracking 的分支，
       掺进来只会把两件事一起弄坏。 }
     FHideTimer: TTimer;
+    { #180: a held arrow button or a held track repeats its step. FRepeatTrack: the press was
+      on the track, at FRepeatAt along it -- the paging stops when the thumb reaches it. }
+    FRepeatTimer: TTimer;
+    FRepeatCode: TScrollCode;
+    FRepeatStep: Integer;
+    FRepeatTrack: Boolean;
+    FRepeatAt: TPoint;
+    { #180: something scrolled since the press -- the release ends it with scEndScroll, as a
+      native scroll bar's does. }
+    FPressScrolled: Boolean;
+    procedure RepeatTimerFire(Sender: TObject);
+    procedure StartRepeat(ACode: TScrollCode; AStep: Integer; ATrack: Boolean; const AAt: TPoint);
+    procedure StopRepeat;
+    procedure EndScroll;
     function TrackRect: TRect;
     function TrackLength: Integer;
     function PosAlong(X, Y: Integer): Integer;
@@ -211,6 +225,8 @@ type
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     { #147: the mouse capture taken away mid-drag ends the drag. }
     procedure CaptureChanged; override;
+    { #180: one repeat of a held button or track -- the timer's, and a test's. }
+    procedure RepeatStep;
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean; override;
     // Fire OnScroll with ACode and the proposed APos (which the handler may
@@ -1219,14 +1235,24 @@ procedure TTyCustomScrollBar.SetKind(const AValue: TTyScrollBarKind);
 begin
   if FKind = AValue then Exit;
   FKind := AValue;
+  { #180: the bar turns, as LCL's TScrollBar.SetKind turns it -- its thickness was left lying
+    along the new axis. The .lfm holds the right size already. }
+  if not (csLoading in ComponentState) then
+    SetBounds(Left, Top, Height, Width);
   Invalidate;
 end;
 
+{ #180: a Min or a Max that moves Position does it through the setter, so OnChange says so; the
+  field was written straight. While the form is read the values only arrive. }
 procedure TTyCustomScrollBar.SetMin(const AValue: Integer);
 begin
   if FMin = AValue then Exit;
   FMin := AValue;
-  if FPosition < FMin then FPosition := FMin;
+  if FPosition < FMin then
+  begin
+    if csLoading in ComponentState then FPosition := FMin
+    else Position := FMin;
+  end;
   Invalidate;
 end;
 
@@ -1234,7 +1260,11 @@ procedure TTyCustomScrollBar.SetMax(const AValue: Integer);
 begin
   if FMax = AValue then Exit;
   FMax := AValue;
-  if FPosition > FMax then FPosition := FMax;
+  if FPosition > FMax then
+  begin
+    if csLoading in ComponentState then FPosition := FMax
+    else Position := FMax;
+  end;
   Invalidate;
 end;
 
@@ -1377,8 +1407,72 @@ begin
   if not IsEnabled then Exit;
   // Convention: wheel-up (WheelDelta > 0) scrolls content up -> Position
   // DECREASES by SmallChange; wheel-down increases it. (Standard scrollbar.)
-  Position := Position - Sign(WheelDelta) * FSmallChange;
+  { #180: through OnScroll, a line and its end, as a button press -- it went round it. }
+  if WheelDelta > 0 then
+    ScrollTo(scLineUp, Position - FSmallChange)
+  else
+    ScrollTo(scLineDown, Position + FSmallChange);
+  EndScroll;
   Result := True;
+end;
+
+{ #180: what a native scroll bar sends when a scroll gesture ends. The handler may still move the
+  value, as it may for every other code. }
+procedure TTyCustomScrollBar.EndScroll;
+var
+  P: Integer;
+begin
+  P := FPosition;
+  DoScroll(scEndScroll, P);
+  if P <> FPosition then Position := P;
+end;
+
+procedure TTyCustomScrollBar.StartRepeat(ACode: TScrollCode; AStep: Integer; ATrack: Boolean;
+  const AAt: TPoint);
+begin
+  FRepeatCode := ACode;
+  FRepeatStep := AStep;
+  FRepeatTrack := ATrack;
+  FRepeatAt := AAt;
+  if FRepeatTimer = nil then
+  begin
+    FRepeatTimer := TTimer.Create(Self);
+    FRepeatTimer.OnTimer := @RepeatTimerFire;
+  end;
+  FRepeatTimer.Enabled := False;
+  FRepeatTimer.Interval := 400;   // the first repeat waits, as the OS's does
+  FRepeatTimer.Enabled := True;
+end;
+
+procedure TTyCustomScrollBar.StopRepeat;
+begin
+  if FRepeatTimer <> nil then FRepeatTimer.Enabled := False;
+  FRepeatStep := 0;
+end;
+
+procedure TTyCustomScrollBar.RepeatTimerFire(Sender: TObject);
+begin
+  if FRepeatTimer <> nil then FRepeatTimer.Interval := 50;
+  RepeatStep;
+end;
+
+procedure TTyCustomScrollBar.RepeatStep;
+var
+  ThumbR: TRect;
+begin
+  if FRepeatStep = 0 then Exit;
+  if FRepeatTrack then
+  begin
+    { Paging stops once the thumb is under the press, as a native track's does. }
+    ThumbR := TyScrollThumbRect(TrackRect, FKind, FMin, FMax, FPosition, FPageSize, Mirrored);
+    if PtInRect(ThumbR, FRepeatAt) then
+    begin
+      StopRepeat;
+      Exit;
+    end;
+  end;
+  ScrollTo(FRepeatCode, Position + FRepeatStep);
+  FPressScrolled := True;
 end;
 
 function TTyCustomScrollBar.EmbeddingHost(out AHost: ITyScrollBarFrameHost): Boolean;
@@ -1977,12 +2071,18 @@ begin
     if PtInRect(LoR, Point(X, Y)) then
     begin
       ScrollTo(Back, Position + BackSign * FSmallChange);
+      FPressScrolled := True;
+      StartRepeat(Back, BackSign * FSmallChange, False, Point(X, Y));   { #180: held, it repeats }
+      if HandleAllocated then MouseCapture := True;
       FocusAfterClick;
       Exit;
     end;
     if PtInRect(HiR, Point(X, Y)) then
     begin
       ScrollTo(Fwd, Position - BackSign * FSmallChange);
+      FPressScrolled := True;
+      StartRepeat(Fwd, -BackSign * FSmallChange, False, Point(X, Y));
+      if HandleAllocated then MouseCapture := True;
       FocusAfterClick;
       Exit;
     end;
@@ -2006,13 +2106,27 @@ begin
     begin
       // click on the track: page one PageSize toward the click
       if (FKind = sbVertical) and (Y < ThumbR.Top) then
-        ScrollTo(scPageUp, Position - EffectiveLargeChange)
+      begin
+        ScrollTo(scPageUp, Position - EffectiveLargeChange);
+        StartRepeat(scPageUp, -EffectiveLargeChange, True, Point(X, Y));
+      end
       else if (FKind = sbVertical) and (Y >= ThumbR.Bottom) then
-        ScrollTo(scPageDown, Position + EffectiveLargeChange)
+      begin
+        ScrollTo(scPageDown, Position + EffectiveLargeChange);
+        StartRepeat(scPageDown, EffectiveLargeChange, True, Point(X, Y));
+      end
       else if (FKind = sbHorizontal) and (X < ThumbR.Left) then
-        ScrollTo(Back, Position + BackSign * EffectiveLargeChange)
+      begin
+        ScrollTo(Back, Position + BackSign * EffectiveLargeChange);
+        StartRepeat(Back, BackSign * EffectiveLargeChange, True, Point(X, Y));
+      end
       else if (FKind = sbHorizontal) and (X >= ThumbR.Right) then
+      begin
         ScrollTo(Fwd, Position - BackSign * EffectiveLargeChange);
+        StartRepeat(Fwd, -BackSign * EffectiveLargeChange, True, Point(X, Y));
+      end;
+      FPressScrolled := True;
+      if HandleAllocated then MouseCapture := True;
     end;
     FocusAfterClick;
   end;
@@ -2039,6 +2153,12 @@ begin
     another window, another control taking it: the button-up goes elsewhere, so the drag ends
     here. LCL lets go of the capture just before MouseUp too, which ends a drag the same way. }
   if FDragging then EndThumbDrag;   { as MouseUp: the position reached, scEndScroll }
+  StopRepeat;
+  if FPressScrolled then
+  begin
+    FPressScrolled := False;
+    EndScroll;
+  end;
 end;
 
 procedure TTyCustomScrollBar.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -2047,6 +2167,12 @@ begin
   if Button = mbLeft then
   begin
     EndThumbDrag;
+    StopRepeat;
+    if FPressScrolled then
+    begin
+      FPressScrolled := False;
+      EndScroll;   { #180: a button or track press ends, as a drag does }
+    end;
     MouseCapture := False;
   end;
 end;
