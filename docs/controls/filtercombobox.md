@@ -30,10 +30,10 @@ Filter.OnFilterChange := @FilterChanged;
 
 | 成员 | 说明 |
 |---|---|
-| `Filter: string` | LCL 过滤串。写它重新解析并重建下拉;**不触发** `OnFilterChange`(初始化用,随后直接读 `Mask`)。 |
+| `Filter: string` | LCL 过滤串。写它重新解析并重建下拉;**不触发** `OnFilterChange`(初始化用,随后直接读 `Mask`)。下拉的行由它生成,`Items` 不写进 `.lfm`,对象查看器里也不显示。 |
 | `FilterIndex: Integer` | 生效段,**1-based**(LCL 约定)。写它选中该段并触发 `OnFilterChange`。默认 `1`。 |
 | `Mask: string` | 只读:生效段的模式串(`FSpecs[FilterIndex-1].Patterns`),无段时 `''`。等价 `TyFsFilterPatterns(Filter, FilterIndex)`。 |
-| `ShellListView` | 设计期可赋值的**目标文件列表**:选行即把新 `Mask` 推给它。这是本控件存在的意义,而它以前是缺的 —— 每个过滤下拉都得手写一个把 `Mask` 抄过去的 `OnFilterChange`,而且一个带 `ShellListView = ShellListView1` 的移植 `.lfm` 会加载失败。对应 `filectrl.pp:167`(published 在 `:195`,推送在 `Select` `:551`,解链在 `Notification` `:565`)。 |
+| `ShellListView` | 设计期可赋值的**目标文件列表**:选行即把新 `Mask` 推给它。这是本控件存在的意义,而它以前是缺的 —— 每个过滤下拉都得手写一个把 `Mask` 抄过去的 `OnFilterChange`,而且一个带 `ShellListView = ShellListView1` 的移植 `.lfm` 会加载失败。对应 `filectrl.pp:167`(published 在 `:195`,推送在 `Select` `:551`,解链在 `Notification` `:565`)。在 `.lfm` 里接上的,窗体读完就按当前掩码过滤。 |
 | `OnFilterChange` | 生效掩码变化时触发(用户选行 / 写 `FilterIndex`)。在掩码**已经**推给 `ShellListView` 之后才触发。 |
 | `class procedure ConvertFilterToStrings(AFilter, AStrings, AClearStrings, AAddDescription, AAddFilter)` | 把过滤串解析进**调用方给的** `TStrings` —— LCL `filectrl.pp:163-164` 的同名类方法,参数逐个对齐,移植代码原样能编。`AClearStrings = False` 是**追加**模式:自由函数 `TyFsParseFilter` 表达不了它(它返回一个全新的记录数组),所以"把一条过滤并进一个已有列表"以前没有办法。 |
 

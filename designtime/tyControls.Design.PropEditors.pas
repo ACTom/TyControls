@@ -914,6 +914,9 @@ begin
   RegisterPropertyEditor(TypeInfo(Cardinal), TTyShellTreeView, 'RootNodeCount', THiddenPropertyEditor);
   RegisterPropertyEditor(TypeInfo(TTyTreeNodes), TTyShellTreeView, 'Items', THiddenPropertyEditor);
   RegisterPropertyEditor(TypeInfo(TTyTreeInitChildrenEvent), TTyShellTreeView, 'OnInitChildren', THiddenPropertyEditor);
+  { #163: the filter and look-in combos make their rows from Filter and Directory. }
+  RegisterPropertyEditor(TypeInfo(TStringList), TTyFilterComboBox, 'Items', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TStringList), TTyShellComboBox, 'Items', THiddenPropertyEditor);
   // The text inputs have no children to size.
   RegisterPropertyEditor(TypeInfo(TControlChildSizing), TTyEdit, 'ChildSizing', THiddenPropertyEditor);
   RegisterPropertyEditor(TypeInfo(TControlChildSizing), TTyMemo, 'ChildSizing', THiddenPropertyEditor);

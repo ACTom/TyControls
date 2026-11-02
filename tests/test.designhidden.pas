@@ -23,6 +23,7 @@ type
     procedure TestAGridsHeaderHidesMainColumn;
     procedure TestTheShellViewsHideTheirModels;
     procedure TestTheTextInputsHideChildSizing;
+    procedure TestTheGeneratedComboRowsAreHidden;
   end;
 
 implementation
@@ -113,6 +114,14 @@ begin
   for p in TreeProps do
     AssertEquals('TTyShellTreeView.' + p, 'THiddenPropertyEditor', EditorFor('TTyShellTreeView', p));
   AssertEquals('the plain list view keeps its model', '', EditorFor('TTyListView', 'Items'));
+end;
+
+{ #163: the filter combo's rows are Filter's and the look-in combo's the file system's. }
+procedure TDesignHiddenTest.TestTheGeneratedComboRowsAreHidden;
+begin
+  AssertEquals('TTyFilterComboBox.Items', 'THiddenPropertyEditor', EditorFor('TTyFilterComboBox', 'Items'));
+  AssertEquals('TTyShellComboBox.Items', 'THiddenPropertyEditor', EditorFor('TTyShellComboBox', 'Items'));
+  AssertEquals('a plain combo keeps its rows', '', EditorFor('TTyComboBox', 'Items'));
 end;
 
 procedure TDesignHiddenTest.TestTheTextInputsHideChildSizing;

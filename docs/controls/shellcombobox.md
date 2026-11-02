@@ -30,7 +30,7 @@ end;
 
 | 成员 | 说明 |
 |---|---|
-| `Directory: string` | 当前目录。写它=重建下拉并选中当前目录行;**不触发** `OnSelectPath`。同一路径(含/不含尾分隔符)early-exit,防重入循环。 |
+| `Directory: string` | 当前目录。写它=重建下拉并选中当前目录行;**不触发** `OnSelectPath`。同一路径(含/不含尾分隔符)early-exit,防重入循环。留空时下拉里是各个根(盘符)。下拉的行由它生成,`Items` 不写进 `.lfm`,对象查看器里也不显示。 |
 | `SelectedPath: string` | 当前选中行的可导航路径(经 `Objects[]` 取模型),否则 `Directory`。 |
 | `OnSelectPath` | 用户点了某个 place(祖先目录或其它盘符)时触发;宿主据此 `List.LoadDirectory(SelectedPath)`。 |
 
