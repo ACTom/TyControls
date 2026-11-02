@@ -173,6 +173,8 @@ type
     function FlatAtY(AY: Integer): Integer;           // flat index at client Y (or -1)
     function TriangleHit(AFlat, AX: Integer): Boolean;
     function OverSplit(AX: Integer): Boolean;
+    { Over the divider where one is drawn: not on a heading row, which has none (#183). }
+    function SplitHit(AX, AY: Integer): Boolean;
     procedure RebuildFlat;
     procedure AppendFlat(ARow: TTyValueRow; ALevel: Integer);
     procedure FreeRows;
@@ -864,6 +866,15 @@ end;
 function TTyCustomValueListEditor.OverSplit(AX: Integer): Boolean;
 begin
   Result := Abs(AX - SplitXDp) <= Dp(3);
+end;
+
+function TTyCustomValueListEditor.SplitHit(AX, AY: Integer): Boolean;
+var flat: Integer;
+begin
+  Result := OverSplit(AX);
+  if not Result then Exit;
+  flat := FlatAtY(AY);
+  if (flat >= 0) and FFlatRow[flat].Heading then Result := False;
 end;
 
 { ---- data API (root rows) ---- }
@@ -2238,7 +2249,7 @@ end;
 procedure TTyCustomValueListEditor.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var flat: Integer;
 begin
-  if (Button = mbLeft) and OverSplit(X) then
+  if (Button = mbLeft) and SplitHit(X, Y) then
   begin
     FDraggingSplit := True;
     Exit;   // start dragging the divider (don't select / edit)
@@ -2274,7 +2285,7 @@ begin
     SetKeyColumnWidth(Round((X - ContentLeftDp) * 96 / Font.PixelsPerInch));
     Exit;
   end;
-  TyLendCursor(Self, FSplitCursor, OverSplit(X), crHSplit);   { #154: the own Cursor given back }
+  TyLendCursor(Self, FSplitCursor, SplitHit(X, Y), crHSplit);   { #154: the own Cursor given back }
   inherited MouseMove(Shift, X, Y);
 end;
 

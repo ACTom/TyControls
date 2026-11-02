@@ -44,6 +44,7 @@ type
     { #183 }
     procedure TestAGivenListThatLeavesACategoryOutKeepsItClosed;
     procedure TestACategoryClosedInTheFormFileStaysClosed;
+    procedure TestAHeadingHasNoDividerToGrab;
   end;
 
   TPropertyGridFilterTest = class(TTestCase)
@@ -446,6 +447,34 @@ begin
     dst.Free;
     src.Free;
   end;
+end;
+
+{ A heading draws no divider, so where the divider would be the heading is just a heading: no
+  resize cursor, no drag -- a click selects it. On a property row the same place is the divider. }
+procedure TPropertyGridCategoriesTest.TestAHeadingHasNoDividerToGrab;
+var head, prop: TTyValueRow; x, y, w: Integer;
+begin
+  FGrid.ShowCategories := True;
+  head := FGrid.RowAt(rsTyPropGridCatLayout);
+  prop := FGrid.RowAt(rsTyPropGridCatLayout + '.Width');
+  FGrid.Select(prop);
+  x := FGrid.DividerX;
+  w := FGrid.KeyColumnWidth;
+  y := FGrid.RowMidY(head);
+  FGrid.MoveTo(x, y, False);
+  AssertFalse('no resize cursor over a heading', FGrid.Cursor = crHSplit);
+  FGrid.PressAt(x, y);
+  FGrid.MoveTo(x + 40, y, True);
+  FGrid.ReleaseAt(x + 40, y);
+  AssertEquals('nothing was dragged', w, FGrid.KeyColumnWidth);
+  AssertSame('the click selected the heading', head, FGrid.CurrentRow);
+  y := FGrid.RowMidY(prop);
+  FGrid.MoveTo(x, y, False);
+  AssertTrue('over a property row it is the divider', FGrid.Cursor = crHSplit);
+  FGrid.PressAt(x, y);
+  FGrid.MoveTo(x + 40, y, True);
+  FGrid.ReleaseAt(x + 40, y);
+  AssertEquals('and it drags', w + 40, FGrid.KeyColumnWidth);
 end;
 
 procedure TPropertyGridCategoriesTest.TestOnGetPropertyCategoryMovesAndInvents;

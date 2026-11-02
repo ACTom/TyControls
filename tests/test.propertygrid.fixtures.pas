@@ -365,6 +365,13 @@ type
     procedure PaintInto(ACanvas: TCanvas; const ARect: TRect);
     { The keys of the rows on display, top to bottom, comma-separated. }
     function ShownKeys: string;
+    { The mouse at client (X, Y): pressed, moved (with the left button held, or none), released. }
+    procedure PressAt(X, Y: Integer);
+    procedure MoveTo(X, Y: Integer; AHeld: Boolean);
+    procedure ReleaseAt(X, Y: Integer);
+    { Where the key/value divider is drawn, and the middle of ARow (scrolled into view). }
+    function DividerX: Integer;
+    function RowMidY(ARow: TTyValueRow): Integer;
     { A click on the '…' painted at the end of a font or dialog row. }
     procedure ClickPaintedEllipsis(ARow: TTyValueRow);
     { Close whatever cell editor or list is open, committing nothing. }
@@ -921,6 +928,37 @@ end;
 procedure TPGGrid.PaintInto(ACanvas: TCanvas; const ARect: TRect);
 begin
   RenderTo(ACanvas, ARect, 96);
+end;
+
+procedure TPGGrid.PressAt(X, Y: Integer);
+begin
+  MouseDown(mbLeft, [], X, Y);
+end;
+
+procedure TPGGrid.MoveTo(X, Y: Integer; AHeld: Boolean);
+begin
+  if AHeld then MouseMove([ssLeft], X, Y) else MouseMove([], X, Y);
+end;
+
+procedure TPGGrid.ReleaseAt(X, Y: Integer);
+begin
+  MouseUp(mbLeft, [], X, Y);
+end;
+
+function TPGGrid.DividerX: Integer;
+begin
+  { The content's left edge (the style's padding, as ClickTriangle has it) plus the key column. }
+  Result := MulDiv(CurrentStyle.Padding.Left, Font.PixelsPerInch, 96)
+    + MulDiv(KeyColumnWidth, Font.PixelsPerInch, 96);
+end;
+
+function TPGGrid.RowMidY(ARow: TTyValueRow): Integer;
+var f: Integer; r: TRect;
+begin
+  f := FlatOf(ARow);
+  TopIndex := f;
+  r := ItemRect(f);
+  Result := (r.Top + r.Bottom) div 2;
 end;
 
 procedure TPGGrid.ClickPaintedEllipsis(ARow: TTyValueRow);
