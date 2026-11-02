@@ -2708,6 +2708,7 @@ procedure TTyMultiTrackBarBase.KeyDown(var Key: Word; Shift: TShiftState);
 var
   i, nxt: Integer;
   v: Int64;
+  vk: Word;
 begin
   if not IsEnabled then Exit;
   inherited KeyDown(Key, Shift);
@@ -2731,21 +2732,25 @@ begin
     UserRemoveThumb(FSelectedThumb);
     Exit;
   end;
+  if not (Key in [VK_RIGHT, VK_UP, VK_LEFT, VK_DOWN, VK_PRIOR, VK_NEXT, VK_HOME, VK_END]) then
+    Exit;
+  { #182: the value keys are the bar's even with no thumb to move, as TTyTrackBar's: left to
+    the form, an arrow would move the focus to the next control. }
+  vk := Key;
+  Key := 0;
   i := KeyThumb;
   if i < 0 then Exit;
   { Value keys, as TTyTrackBar's: up / right increase whichever way the bar runs, so on a
     vertical bar "up increases"; Home / End go as far as the neighbours let. }
-  case Key of
+  case vk of
     VK_RIGHT, VK_UP: v := Int64(FValues[i]) + FLineSize;
     VK_LEFT, VK_DOWN: v := Int64(FValues[i]) - FLineSize;
     VK_PRIOR: v := Int64(FValues[i]) + FPageSize;
     VK_NEXT: v := Int64(FValues[i]) - FPageSize;
     VK_HOME: v := FMin;
-    VK_END: v := FMax;
   else
-    Exit;
+    v := FMax;   // VK_END
   end;
-  Key := 0;
   if v > High(Integer) then v := High(Integer);
   if v < Low(Integer) then v := Low(Integer);
   SelectedThumb := i;

@@ -2121,8 +2121,14 @@ begin
   FBar.SelectedThumb := 1;
   k := FBar.Key(VK_RIGHT);
   AssertEquals('20,50', Values);
-  AssertEquals('not consumed', VK_RIGHT, k);
+  { #182: still the bar's, as on a TTyTrackBar -- left to the form, an arrow moves the focus
+    to the next control. }
+  AssertEquals('consumed all the same', 0, k);
+  AssertEquals('Home too', 0, FBar.Key(VK_HOME));
   AssertEquals('no Tab wanted', 0, FBar.WantsKey(VK_TAB));
+  FBar.Put([]);
+  AssertEquals('no thumb at all: consumed', 0, FBar.Key(VK_LEFT));
+  AssertEquals('other keys are not', VK_RETURN, FBar.Key(VK_RETURN));
 end;
 
 procedure TTyMultiTrackKeyboardTest.TestADisabledBarIgnoresTheKeys;
