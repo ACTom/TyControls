@@ -1244,6 +1244,19 @@ begin
   if (d <> nil) and (d.JSONType = jtNumber) then Result := d.AsFloat;
 end;
 
+{ [R6-E] a pen's width or phase off the chain, as the canvas takes it (a
+  numeric string its number, TyOptPenWidth / TyOptPenOffset) }
+function ChainPen(const AChain: array of TJSONObject; const ASub, AKey: string;
+  ADefault: Double; AWidth: Boolean): Double;
+var d: TJSONData;
+begin
+  Result := ADefault;
+  d := ChainFind(AChain, ASub, AKey);
+  if d = nil then Exit;
+  if AWidth then Result := TyOptPenWidth(d) else Result := TyOptPenOffset(d);
+  if IsNan(Result) then Result := ADefault;
+end;
+
 function ChainDash(const AChain: array of TJSONObject; const ASub, AKey: string;
   AWidth: Double): TTyDoubleArray;
 var
@@ -1575,7 +1588,7 @@ begin
       if Length(shape.Cmds) = 0 then Continue;
       el := TyChartElement(shape);
       ChainOf(ASolved, row, chain, cnt);
-      w := ChainNum(Slice(chain, cnt), 'lineStyle', 'width', 1.5);
+      w := ChainPen(Slice(chain, cnt), 'lineStyle', 'width', 1.5, True);
       el.Style.HasFill := False;
       el.Style.StrokeColor := ChainColour(Slice(chain, cnt), 'lineStyle', 'color', AInk.EdgeColour);
       el.Style.StrokeWidthLogical := w;
@@ -1583,7 +1596,7 @@ begin
       { [R2-I5] a word, measured again against the width a frame draws }
       el.Style.DashWord := ChainDashWord(Slice(chain, cnt), 'lineStyle', 'type');
       { [R2-I2] and its phase }
-      el.Style.DashOffsetLogical := ChainNum(Slice(chain, cnt), 'lineStyle', 'dashOffset', 0);
+      el.Style.DashOffsetLogical := ChainPen(Slice(chain, cnt), 'lineStyle', 'dashOffset', 0, False);
       el.Style.Alpha := ChainNum(Slice(chain, cnt), 'lineStyle', 'opacity', 1);
       el.Z := ASolved.Spec.Z;
       el.Z2 := ASolved.Spec.Z2;
@@ -1704,7 +1717,7 @@ begin
       shape.CmdBounds := TyRectF(r.X, r.Y, r.X + r.W, r.Y + r.H);
       el := TyChartElement(shape);
       ChainOf(ASolved, row, chain, cnt);
-      w := ChainNum(Slice(chain, cnt), 'lineStyle', 'width', 1.5);
+      w := ChainPen(Slice(chain, cnt), 'lineStyle', 'width', 1.5, True);
       el.Style.HasFill := False;
       el.Style.StrokeColor := ChainColour(Slice(chain, cnt), 'lineStyle', 'color', AInk.EdgeColour);
       el.Style.StrokeWidthLogical := w;
@@ -1712,7 +1725,7 @@ begin
       { [R2-I5] a word, measured again against the width a frame draws }
       el.Style.DashWord := ChainDashWord(Slice(chain, cnt), 'lineStyle', 'type');
       { [R2-I2] and its phase }
-      el.Style.DashOffsetLogical := ChainNum(Slice(chain, cnt), 'lineStyle', 'dashOffset', 0);
+      el.Style.DashOffsetLogical := ChainPen(Slice(chain, cnt), 'lineStyle', 'dashOffset', 0, False);
       el.Style.Alpha := ChainNum(Slice(chain, cnt), 'lineStyle', 'opacity', 1);
       el.Z := ASolved.Spec.Z;
       el.Z2 := ASolved.Spec.Z2;
@@ -1788,7 +1801,7 @@ begin
       if ChainFind(Slice(chain, cnt), 'itemStyle', 'borderColor') <> nil then
       begin
         el.Style.StrokeColor := ChainColour(Slice(chain, cnt), 'itemStyle', 'borderColor', colour);
-        el.Style.StrokeWidthLogical := ChainNum(Slice(chain, cnt), 'itemStyle', 'borderWidth', 1.5);
+        el.Style.StrokeWidthLogical := ChainPen(Slice(chain, cnt), 'itemStyle', 'borderWidth', 1.5, True);
       end;
     end;
     el.Style.Alpha := ChainNum(Slice(chain, cnt), 'itemStyle', 'opacity', 1);
@@ -1858,6 +1871,12 @@ begin
         ASolved.Pos[row].X, ASolved.Pos[row].Y, ASolved.VNS);
       el.Caption.LgG[8] := offX0;
       el.Caption.LgG[9] := offY0;
+      { [R6-C] for a universal transition that bakes the node under the view
+        group as it is then: the node group's compensation scale, and the
+        main group's place under the view }
+      el.Caption.LgG[7] := ASolved.VNS;
+      el.Caption.LgG[10] := ASolved.GX;
+      el.Caption.LgG[11] := ASolved.GY;
     end;
     { [F3d] the update's: G[11] 1 when radial (an edge from here reads the
       place as radialCoordinate does, `|| 0`), Sub the parent's row (0: the

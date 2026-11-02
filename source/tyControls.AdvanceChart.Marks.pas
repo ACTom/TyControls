@@ -206,6 +206,23 @@ type
     ItemDash: TTyOptDash;
     ItemDashExplicit: TTyDoubleArray;
     ItemDashOffset: Double;
+    { [R6-D] AND ITS PEN, likewise: a line's symbols stroke with the
+      itemStyle's borderColor and borderWidth, not the lineStyle's [was:
+      the lineStyle's colour and width ringed every symbol] }
+    ItemStroke: TTyChartColor;
+    ItemStrokeGradient: TTyChartGradient;
+    ItemStrokeWidthLogical: Double;
+    { [R6-D] whether a width was written (the series' or the item's): a
+      'line' symbol's setColor keeps it, zrender's 1 where none }
+    StrokeWidthSet, ItemStrokeWidthSet: Boolean;
+    { [R6-E] the border width written (the item's over the series') is no
+      number: a bar's layout is then not-a-number (getLineWidth) and the
+      bar is not drawn }
+    StrokeWidthNaN: Boolean;
+    { [R6-F] the border width written is infinite (Infinity, '1e999',
+      '-Infinity'): that infinity, else 0 -- no pen (StrokeWidthLogical 0),
+      and a bar's getLineWidth takes it into its Math.min }
+    StrokeWidthInf: Double;
     { The four colours a candle needs, and the pen. A block of its own rather
       than four more fields on the visual: a candlestick is the only series
       whose colour depends on the DATUM's own two numbers, and putting `Up` and
@@ -621,9 +638,10 @@ begin
   else if IsNull('borderColor0') then Result.DownBorderBody := True;
   Result.HasDojiBorder := ColourAt('borderColorDoji', Result.DojiBorder);
 
+  { [R6-E] a numeric string is its number }
   d := item.Find('borderWidth');
-  if (d <> nil) and (d.JSONType = jtNumber) then
-    Result.BorderWidthLogical := Max(Double(0), Min(Double(64), d.AsFloat));
+  if (d <> nil) and (d.JSONType <> jtNull) then
+    Result.BorderWidthLogical := Max(Double(0), Min(Double(64), TyOptPenWidth(d)));
 end;
 
 function TyCandleRowOf(const ASeries: TTyCandleSpec; AItem: TJSONObject): TTyCandleRow;
@@ -670,8 +688,8 @@ begin
   if ColourAt('borderColorDoji', Result.Spec.DojiBorder) then
     Result.Spec.HasDojiBorder := True;
   d := item.Find('borderWidth');
-  if (d <> nil) and (d.JSONType = jtNumber) then
-    Result.Spec.BorderWidthLogical := Max(Double(0), Min(Double(64), d.AsFloat));
+  if (d <> nil) and (d.JSONType <> jtNull) then
+    Result.Spec.BorderWidthLogical := Max(Double(0), Min(Double(64), TyOptPenWidth(d)));
   d := item.Find('opacity');
   if (d <> nil) and (d.JSONType = jtNumber) then Result.Opacity := d.AsFloat;
 end;
@@ -1047,6 +1065,18 @@ end;
 
   A row that names an unreadable colour keeps the series' -- the same rule
   the series level follows. }
+{ [R6-E] Number() of an item's own value as the store keeps it: a number,
+  a string's Number, a boolean 1 or 0 }
+function OverrideNumber(const AValue: TTyDataValue): Double;
+begin
+  case AValue.Kind of
+    dvkNumber, dvkBool: Result := AValue.Num;
+    dvkText: Result := TyJsToNumber(AValue.Text);
+  else
+    Result := NaN;
+  end;
+end;
+
 function RowVisualEarly(const AVisual: TTySeriesVisual; AStore: TTyDataStore;
   ARow: Integer): TTySeriesVisual;
 var v: TTyDataValue; c: TTyChartColor; raw: Integer; vr: TTyVisualRow;
@@ -1125,7 +1155,12 @@ begin
   if AStore.HasOverride(ARow, TyOverrideKey('itemStyle.borderDashOffset')) then
   begin
     v := AStore.GetOverride(ARow, TyOverrideKey('itemStyle.borderDashOffset'));
-    if v.Kind = dvkNumber then Result.DashOffset := v.Num;
+    { [R6-E] a numeric string its number }
+    if v.Kind <> dvkNone then
+    begin
+      Result.DashOffset := OverrideNumber(v);
+      if IsNan(Result.DashOffset) or IsInfinite(Result.DashOffset) then Result.DashOffset := 0;
+    end;
   end;
   { [R2-I3] AND ITS OWN borderType (getItemStyle's lineDash, the item's key
     over the series'): a word, a number, or a short array the store keeps
@@ -1156,9 +1191,10 @@ begin
     for k := 0 to n - 1 do
     begin
       v := AStore.GetOverride(ARow, TyOverrideKey('itemStyle.borderType.' + IntToStr(k)));
-      { a dash entry that is not a number contributes nothing (ReadDash) }
-      if v.Kind = dvkNumber then Result.DashExplicit[k] := v.Num
-      else Result.DashExplicit[k] := 0;
+      { [R6-E] setLineDash takes each entry as a number (Number('4') is 4,
+        a word not one: no dash) }
+      if v.Kind = dvkNone then Result.DashExplicit[k] := 0
+      else Result.DashExplicit[k] := OverrideNumber(v);
     end;
     Result.Dash := todExplicit;
   end;
@@ -1200,7 +1236,19 @@ begin
   if AStore.HasOverride(ARow, k) then
   begin
     v := AStore.GetOverride(ARow, k);
-    if (v.Kind = dvkNumber) and not IsNan(v.Num) then Result.StrokeWidthLogical := v.Num;
+    { [R6-E] as the canvas takes it: a numeric string its number, one that
+      is no number nought [was: a number only] }
+    if v.Kind <> dvkNone then
+    begin
+      Result.StrokeWidthLogical := OverrideNumber(v);
+      Result.StrokeWidthNaN := IsNan(Result.StrokeWidthLogical);
+      { [R6-F] an infinity kept for the bar's layout }
+      if IsInfinite(Result.StrokeWidthLogical) then Result.StrokeWidthInf := Result.StrokeWidthLogical
+      else Result.StrokeWidthInf := 0;
+      if IsNan(Result.StrokeWidthLogical) or IsInfinite(Result.StrokeWidthLogical) then
+        Result.StrokeWidthLogical := 0;
+      Result.StrokeWidthSet := True;
+    end;
   end;
   if not AStore.HasOverride(ARow, TyOverrideKey('itemStyle.color')) then Exit;
   v := AStore.GetOverride(ARow, TyOverrideKey('itemStyle.color'));
@@ -1478,11 +1526,11 @@ var
   r, bg, plot: TTyRectF;
   p, loPt: TTyPointF;
   col: TTyBarColumn;
-  baseHoriz, haveCol, stacked, clipped: Boolean;
+  baseHoriz, haveCol, stacked, clipped, fixed: Boolean;
   shape: TTyChartShape;
   bgEl, el: TTyChartElement;
   rv: TTySeriesVisual;
-  fix, sx, sy: Double;
+  fix, sx, sy, bw: Double;
   b, v: Double;
   pb: TTyPointF;
   mat: TTyMat2D;
@@ -1689,15 +1737,32 @@ begin
       height -- so the stroke's outer edge is where the bar's edge was.
       [Batch 93: found by the legend fixture's bordered bars.] }
     rv := RowVisual(AVisual, AStore, i);
-    if (rv.StrokeWidthLogical > 0) and (rv.Stroke <> 0) then
+    { [R6-E] a border width that is no number ('abc'): getLineWidth's
+      Math.min is not-a-number, so is the layout, and the bar is not drawn
+      (isValidLayout) -- nor its label }
+    if rv.StrokeWidthNaN and ((rv.Stroke <> 0) or (rv.StrokeGradient.Kind <> cgkNone)) then
+      Continue;
+    { [R6-F] getLineWidth's own number, `borderWidth || 0` in its
+      Math.min: an infinite width is the bar's own width or height, which
+      shrinks it to none (and kept: a rect of no width); -Infinity a layout
+      that is not finite, no bar (isValidLayout); a negative one grows it.
+      The pen strokes what the canvas takes -- none for an infinity, none
+      below nought [was: only a width above nought, so the bar kept its
+      size] }
+    fixed := False;
+    if rv.StrokeWidthInf <> 0 then bw := rv.StrokeWidthInf
+    else bw := rv.StrokeWidthLogical;
+    if (bw <> 0) and (rv.Stroke <> 0) then
     begin
-      fix := Min(rv.StrokeWidthLogical * AVisual.PxScale, Min(Abs(lw), Abs(lh)));
+      fix := Min(bw * AVisual.PxScale, Min(Abs(lw), Abs(lh)));
+      if IsInfinite(fix) then Continue;
       if lw > 0 then sx := 1 else sx := -1;
       if lh > 0 then sy := 1 else sy := -1;
       lx := lx + sx * fix / 2;
       ly := ly + sy * fix / 2;
       lw := lw - sx * fix;
       lh := lh - sy * fix;
+      fixed := True;
     end;
 
     { clip, default TRUE: a bar whose value runs past the axis' own min or max
@@ -1725,14 +1790,16 @@ begin
 
     { A zero-width column draws nothing rather than an invisible rect that is
       still hit-testable -- which is what a bar on a value axis used to be. }
+    { [R6-F] -- but one its border took all of is a rect of no width
+      upstream, kept }
     if baseHoriz then
     begin
-      if (r.Right - r.Left <= 0) and not clipped then Continue;
+      if (r.Right - r.Left <= 0) and not clipped and not fixed then Continue;
       zero := lh = 0;
     end
     else
     begin
-      if (r.Bottom - r.Top <= 0) and not clipped then Continue;
+      if (r.Bottom - r.Top <= 0) and not clipped and not fixed then Continue;
       zero := lw = 0;
     end;
     if TyHasCorner(col.Radii) then
@@ -1743,6 +1810,9 @@ begin
                       ABinding.SeriesIndex, i);
     el.Style.Decal := RowDecal(AVisual, AStore, i);
     el.Ignore := clipped;
+    { [R6-F] the pen of an infinite border makes its bounding rect
+      not-a-number upstream: the bar is never hit }
+    el.HitNone := fixed and IsInfinite(bw);
     { THE ENTER ANIMATION'S NUMBERS: upstream's layout as it holds it, the
       length signed, after the clip -- the bar grows its height (or, laid
       on its side, its width) from 0 to this [Batch 89] }
@@ -1855,9 +1925,19 @@ var
       if sv.FillGradient.Kind <> cgkNone then sv.StrokeGradient := sv.FillGradient;
       sv.FillGradient := Default(TTyChartGradient);
       sv.FillPattern := Default(TTyChartPattern);
-      if sv.StrokeWidthLogical <= 0 then sv.StrokeWidthLogical := 2;
-      if rs.Kind = tsyLine then sv.Fill := 0
-      else sv.Fill := AVisual.EmptyFill;
+      { [R6-D] setColor: an empty symbol's lineWidth is 2 whatever the border
+        says, a line's the border's (zrender's 1 where none) [was: the
+        border's, 2 where none, both] }
+      if rs.Kind = tsyLine then
+      begin
+        if not sv.StrokeWidthSet then sv.StrokeWidthLogical := 1;
+        sv.Fill := 0;
+      end
+      else
+      begin
+        sv.StrokeWidthLogical := 2;
+        sv.Fill := AVisual.EmptyFill;
+      end;
     end;
     el := MarkElement(sh, sv, ABinding.SeriesIndex, ARow);
     { z2 100, as a scatter's (Symbol.ts:85): above the polyline, which a
@@ -2068,8 +2148,11 @@ var
       Exit;
     end;
     area := ABinding.Cart.GetArea;
+    { `lineStyle.width || 0` (createGridClipPath): the default 2 where none
+      is written [R6-E: was 2 for a written nought too] }
     lw := AVisual.StrokeWidthLogical;
-    if lw <= 0 then lw := 2;
+    if (lw <= 0) and not AVisual.StrokeWidthSet then lw := 2;
+    if lw < 0 then lw := 0;
     x := area.X - lw / 2;
     y := area.Y - lw / 2;
     w := area.W + lw;
@@ -2427,7 +2510,9 @@ var
       { A LINE IS A STROKE, so the ramp moves across with the colour. }
       v.FillGradient := Default(TTyChartGradient);
       v.FillPattern := Default(TTyChartPattern);
-      if v.StrokeWidthLogical <= 0 then v.StrokeWidthLogical := 2;
+      { [R6-E] the default 2 only where no width is written: a written
+        nought (or '' or 'abc') strokes nothing [was: 2] }
+      if (v.StrokeWidthLogical <= 0) and not v.StrokeWidthSet then v.StrokeWidthLogical := 2;
       if v.Stroke = 0 then v.Stroke := AVisual.Fill;
       if (v.StrokeGradient.Kind = cgkNone)
         and (AVisual.FillGradient.Kind <> cgkNone) then
@@ -2503,6 +2588,11 @@ begin
   symVis.Dash := AVisual.ItemDash;
   symVis.DashExplicit := AVisual.ItemDashExplicit;
   symVis.DashOffset := AVisual.ItemDashOffset;
+  { [R6-D] the itemStyle's pen }
+  symVis.Stroke := AVisual.ItemStroke;
+  symVis.StrokeGradient := AVisual.ItemStrokeGradient;
+  symVis.StrokeWidthLogical := AVisual.ItemStrokeWidthLogical;
+  symVis.StrokeWidthSet := AVisual.ItemStrokeWidthSet;
   baseHoriz := (ABinding.BaseAxis = nil) or ABinding.BaseAxis.Horizontal;
   stacked := AStack.Stacked and (AStack.ResultCol >= 0);
   spec := AVisual.Line;
@@ -2725,9 +2815,17 @@ begin
     if v.FillGradient.Kind <> cgkNone then v.StrokeGradient := v.FillGradient;
     v.FillGradient := Default(TTyChartGradient);
     v.FillPattern := Default(TTyChartPattern);
-    if v.StrokeWidthLogical <= 0 then v.StrokeWidthLogical := 2;
-    if rs.Kind = tsyLine then v.Fill := 0
-    else v.Fill := AVisual.EmptyFill;
+    { [R6-D] setColor, as a line's symbol }
+    if rs.Kind = tsyLine then
+    begin
+      if not v.StrokeWidthSet then v.StrokeWidthLogical := 1;
+      v.Fill := 0;
+    end
+    else
+    begin
+      v.StrokeWidthLogical := 2;
+      v.Fill := AVisual.EmptyFill;
+    end;
   end;
   el := MarkElement(shape, v, ABinding.SeriesIndex, ARow);
   el.Z2 := 100 + Round(lift);
@@ -4047,20 +4145,12 @@ begin
     if mirror then sym.RotateDeg := -spec.RotateDeg
     else sym.RotateDeg := spec.RotateDeg;
 
+    { [R6-E] THE GLYPH IS THE ITEM'S VISUAL STYLE AND NOTHING ELSE:
+      updateCommon's path.useStyle(symbolMeta.style), no setColor -- an
+      `empty` symbol is filled with the colour and stroked only with a
+      border, a `line` symbol (no area to fill) only with a border [was: the
+      scatter's rule, hollow in the colour at 2] }
     v := RowVisual(AVisual, AStore, i);
-    { AN `empty` SYMBOL IS STROKED, NOT FILLED, and a line symbol is stroked
-      too -- the same rule the scatter follows, because the colour is the pen
-      in both. }
-    if sym.Empty or (sym.Kind = tsyLine) then
-    begin
-      v.Stroke := v.Fill;
-      if v.FillGradient.Kind <> cgkNone then v.StrokeGradient := v.FillGradient;
-      v.FillGradient := Default(TTyChartGradient);
-      v.FillPattern := Default(TTyChartPattern);
-      if v.StrokeWidthLogical <= 0 then v.StrokeWidthLogical := 2;
-      if sym.Kind = tsyLine then v.Fill := 0
-      else v.Fill := AVisual.EmptyFill;
-    end;
 
     n := run.Count;
     for k := 0 to n - 1 do
@@ -4083,8 +4173,12 @@ begin
         shape := TyMirrorShape(shape, pt.X, pt.Y, not baseHoriz, baseHoriz);
       el := MarkElement(shape, v, ABinding.SeriesIndex, i);
       { a glyph is createSymbol's, not Symbol.ts': the item's style keeps
-        its decal, an empty glyph's white fill too [F4a] }
+        its decal [F4a] }
       el.Style.Decal := RowDecal(AVisual, AStore, i);
+      { [R6-E] its pen is in the glyph's frame -- the pattern size, scaled
+        to the glyph's box -- as the canvas strokes a path whose
+        strokeNoScale useStyle dropped }
+      el.Style.PenScale := Sqrt(Abs(glyphW / spec.PatternSize * glyphH / spec.PatternSize));
       el.HasClip := spec.Clip or col.Clip;
       el.ClipRect := clipRect;
       { THE ENTER ANIMATION [F3a]. A symbolClip's glyphs are set where they
@@ -4351,6 +4445,7 @@ begin
       { textConfig.inside: true for 'middle', else 'inside' in the word }
       el.Caption.SecInside := (ask.Word = 'middle')
         or ((not ask.IsArray) and (Pos('inside', word) > 0));
+      el.Caption.SecMiddle := ask.Word = 'middle';
     end;
     AList.Add(el);
     Inc(Result);

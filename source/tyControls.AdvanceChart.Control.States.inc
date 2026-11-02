@@ -30,6 +30,24 @@ begin
     TyStSetGradient(ARest, AKey, d.AsJSON, ARest.Color[AKey]);
 end;
 
+{ [R6-F] A WIDTH OR A PHASE AT REST WRITTEN AS NO NUMBER ('abc', true): the
+  value as written, where the element strokes what the canvas makes of it --
+  a state's track from it is then discrete, set at its end at once }
+procedure StRestRaw(var ARest: TTyStObject; const ANodes: array of TJSONObject;
+  const APath: array of string; AKey: TTyStKey);
+var d: TJSONData; v: Double;
+begin
+  if not ARest.Has[AKey] or IsNan(ARest.Num[AKey]) then Exit;
+  d := TyStFind(ANodes, APath);
+  if (d = nil) or (d.JSONType = jtNumber) then Exit;
+  if AKey = stkLineWidth then v := TyOptPenWidth(d) else v := TyOptPenOffset(d);
+  if IsNan(v) then Exit;
+  { the element strokes it -- or strokes nothing for it, where the rest
+    holds zrender's default 1 (StRestOf) }
+  if (v = ARest.Num[AKey]) or ((AKey = stkLineWidth) and (v <= 0) and (ARest.Num[AKey] = 1)) then
+    ARest.RawJson[AKey] := d.AsJSON;
+end;
+
 { a label's: its anchor (the Text's own x / y), its paint order, whether it
   shows; its fill stays absent -- the automatic ink is the port's }
 function StLabelRestOf(const AEl: TTyChartElement): TTyStObject;
@@ -320,15 +338,403 @@ begin
     end;
 end;
 
+{ [R6-A] THE TWIN OF A SERIES LABEL FOR THE STATES IT IS IN: the states
+  whose label writes a textConfig key, select's first and emphasis' (else
+  blur's) over it (echarts.ts applyElementStates); -1 none }
+function StLabelTwinOf(const AEl: TTyChartElement; AStates: TTyStNames): Integer;
+var sel, emph, blur: Boolean;
+begin
+  Result := -1;
+  if Length(AEl.EmphTwin) = 0 then Exit;
+  sel := (stnSelect in AStates) and (TyEmphTwinAt(AEl.EmphTwin, TyTwinSelect) >= 0);
+  emph := (stnEmphasis in AStates) and (TyEmphTwinAt(AEl.EmphTwin, TyTwinEmphasis) >= 0);
+  blur := not (stnEmphasis in AStates) and (stnBlur in AStates)
+    and (TyEmphTwinAt(AEl.EmphTwin, TyTwinBlur) >= 0);
+  if sel and emph then Result := TyEmphTwinAt(AEl.EmphTwin, TyTwinSelectEmphasis)
+  else if sel and blur then Result := TyEmphTwinAt(AEl.EmphTwin, TyTwinSelectBlur)
+  else if sel then Result := TyEmphTwinAt(AEl.EmphTwin, TyTwinSelect)
+  else if emph then Result := TyEmphTwinAt(AEl.EmphTwin, TyTwinEmphasis)
+  else if blur then Result := TyEmphTwinAt(AEl.EmphTwin, TyTwinBlur);
+end;
+
+{ [R6-A] the label laid out as the twin lays it out: its place, alignment,
+  turn, box, ink (normal and hovered) and block, and what the frame lays
+  it out on its host by }
+procedure StLabelTwinApply(var AEl: TTyChartElement; const ATwin: TTyEmphTwin);
+begin
+  AEl.Caption.X := ATwin.Caption.X;
+  AEl.Caption.Y := ATwin.Caption.Y;
+  AEl.Caption.AnchorH := ATwin.Caption.AnchorH;
+  AEl.Caption.AnchorV := ATwin.Caption.AnchorV;
+  AEl.Caption.RotationRad := ATwin.Caption.RotationRad;
+  AEl.Caption.Colour := ATwin.Caption.Colour;
+  AEl.Caption.StrokeColour := ATwin.Caption.StrokeColour;
+  AEl.Caption.StrokeWidthLogical := ATwin.Caption.StrokeWidthLogical;
+  AEl.Caption.HasEmph := ATwin.Caption.HasEmph;
+  AEl.Caption.EmphColour := ATwin.Caption.EmphColour;
+  AEl.Caption.EmphStrokeColour := ATwin.Caption.EmphStrokeColour;
+  AEl.Caption.EmphStrokeWidthLogical := ATwin.Caption.EmphStrokeWidthLogical;
+  AEl.Caption.RtPieces := ATwin.Caption.RtPieces;
+  AEl.Caption.RtEmph := ATwin.Caption.RtEmph;
+  AEl.Caption.LmInkInside := ATwin.Caption.LmInkInside;
+  { a box-turned label's (a radial tree's): what RideBox places it by }
+  if AEl.Caption.HasFixedPos then
+  begin
+    AEl.Caption.FixedPos := ATwin.Caption.FixedPos;
+    AEl.Caption.FixedDist := ATwin.Caption.FixedDist;
+    AEl.Caption.FixedRotationRad := ATwin.Caption.FixedRotationRad;
+  end;
+  AEl.Shape := ATwin.Shape;
+  if ATwin.HasRide then
+  begin
+    AEl.Anim.LabelPos := ATwin.LabelPos;
+    AEl.Anim.LabelDist := ATwin.LabelDist;
+    AEl.Anim.LabelAtX := ATwin.LabelAtX;
+    AEl.Anim.LabelAtY := ATwin.LabelAtY;
+    AEl.Anim.LabelAtXPct := ATwin.LabelAtXPct;
+    AEl.Anim.LabelAtYPct := ATwin.LabelAtYPct;
+  end;
+end;
+
+{ [R6-A] A PIE LABEL UNDER A STATE'S textConfig, after the label is
+  written: updateInnerText lays it out on its slice's rect as the state
+  draws it -- the emphasis radius (shape.r, the target where it tweens) and
+  the select move -- where the states write a position, else it stands at
+  label.x / y; the states' offset over the label's, their turn over the
+  layout's; the alignment and the ink are the label's own (the layout sets
+  the style's align and verticalAlign, and textConfig.inside) }
+procedure StPieLabelTwin(var AEl: TTyChartElement; const AHostRest, AHostNow: TTyChartElement;
+  const AHost, ALab: TTyStElement; AClockwise: Boolean; AScale: Double; AHostIdx: Integer);
+var
+  tw: Integer;
+  t: TTyEmphTwin;
+  rr, mx, my, ax, ay, offX, offY, rot, atX, atY, infl: Double;
+  rect: TTyXYWH;
+  ah: TTyTextAnchorH;
+  av: TTyTextAnchorV;
+  m: TTyMat2D;
+begin
+  tw := StLabelTwinOf(AEl, ALab.States);
+  if (tw < 0) or not AEl.EmphTwin[tw].Defer then Exit;
+  t := AEl.EmphTwin[tw];
+  if t.HasPos then
+  begin
+    mx := AHost.Cur.Num[stkX] - AHost.Rest.Num[stkX];
+    my := AHost.Cur.Num[stkY] - AHost.Rest.Num[stkY];
+    rr := AHostRest.Anim.G[3];
+    if AHost.Cur.Has[stkR] then rr := AHost.Cur.Num[stkR];
+    rect := TySectorPathRect(AHostRest.Anim.G[0] + mx, AHostRest.Anim.G[1] + my,
+      AHostRest.Anim.G[2], rr, AHostRest.Anim.G[4], AHostRest.Anim.G[5], AClockwise);
+    infl := TyLabelHostInflate(AHostNow, AScale);
+    rect.X := rect.X - infl;
+    rect.Y := rect.Y - infl;
+    rect.W := rect.W + 2 * infl;
+    rect.H := rect.H + 2 * infl;
+    atX := t.LabelAtX;
+    atY := t.LabelAtY;
+    if t.LabelAtXPct then atX := atX * rect.W;
+    if t.LabelAtYPct then atY := atY * rect.H;
+    TyLabelAnchorXYWH(rect, TTyLabelPosition(t.LabelPos), t.LabelDist, atX, atY,
+      ax, ay, ah, av);
+    { what a frame places it again by: the slice, the twin, this anchor }
+    AEl.Anim.PieHostPlus1 := AHostIdx + 1;
+    AEl.Anim.PieTwin := tw;
+    AEl.Anim.PieAX := ax;
+    AEl.Anim.PieAY := ay;
+    AEl.Anim.PieScale := AScale;
+  end
+  else
+  begin
+    ax := AEl.Caption.LmBaseX + (ALab.Cur.Num[stkX] - ALab.Rest.Num[stkX]);
+    ay := AEl.Caption.LmBaseY + (ALab.Cur.Num[stkY] - ALab.Rest.Num[stkY]);
+  end;
+  if t.HasOff then
+  begin
+    offX := t.OffX;
+    offY := t.OffY;
+  end
+  else
+  begin
+    offX := AEl.Caption.LmOffX;
+    offY := AEl.Caption.LmOffY;
+  end;
+  if t.HasRot then rot := t.Rot else rot := AEl.Caption.RotationRad;
+  if not TyLabelLocalTransform(ax + offX, ay + offY, -offX, -offY, rot, 1, 1, m) then Exit;
+  StShiftShape(AEl.Shape, m[4] - AEl.Caption.X, m[5] - AEl.Caption.Y);
+  AEl.Caption.X := m[4];
+  AEl.Caption.Y := m[5];
+  AEl.Anim.PieLX := m[4];
+  AEl.Anim.PieLY := m[5];
+  AEl.Caption.RotationRad := rot;
+  if Length(AEl.Caption.RtPieces) > 0 then
+    AEl.Shape := TyShapeRect(TyRtDeviceBox(AEl.Caption.RtPieces, AEl.Caption.X,
+      AEl.Caption.Y, rot, AEl.Caption.RtScale));
+end;
+
+{ [R6-A] A LINE'S LABEL UNDER A STATE'S textConfig (a graph edge's, a
+  lines row's), after the label is written: the Line group carries the
+  state's textConfig, so updateInnerText -- after Line.beforeUpdate placed
+  the text -- puts it by calculateTextPosition on the group's own box: the
+  line grown by its stroke at the state's width (at least 5: no fill) and
+  each end symbol's, the distance in the group's units; the text's
+  alignment stays beforeUpdate's, its turn and offset the states' where
+  they write them. AParts: the end symbols' list indices. }
+procedure StLineLabelTwin(var AEl: TTyChartElement; const AHostNow: TTyChartElement;
+  AList: TTyPaintList; const AParts: TTyIntegerArray; const AHost, ALab: TTyStElement;
+  AGraph: Boolean; AScale: Double);
+var
+  tw, k: Integer;
+  t: TTyEmphTwin;
+  box, r: TTyXYWH;
+  b: TTyRectF;
+  has: Boolean;
+  w, fs, x, y, rot, bx, by, cx, cy, atX, atY, dist: Double;
+  ah: TTyTextAnchorH;
+  av: TTyTextAnchorV;
+  pe: PTyChartElement;
+  ok, cv: Boolean;
+  fsx, fsy, fx, fy, theta: Double;
+  q1, q2, qc: TTyPointF;
+  lx, ly: array[0..3] of Double;
+
+  { zrender's BoundingRect.union of r into box }
+  procedure Union;
+  var ux, uy: Double;
+  begin
+    if not has then
+    begin
+      box := r;
+      has := True;
+    end
+    else
+    begin
+      ux := Min(box.X, r.X);
+      uy := Min(box.Y, r.Y);
+      box.W := Max(box.X + box.W, r.X + r.W) - ux;
+      box.H := Max(box.Y + box.H, r.Y + r.H) - uy;
+      box.X := ux;
+      box.Y := uy;
+    end;
+  end;
+
+  { zrender's subPixelOptimize of one coordinate of a horizontal or a
+    vertical line (graphic.subPixelOptimizeLine), in the group's units }
+  function SubPixel(AV, AWidth: Double): Double;
+  var dbl: Double;
+  begin
+    Result := AV;
+    if not (AWidth > 0) then Exit;
+    dbl := Floor(AV * 2 + 0.5);
+    if Round(dbl + Floor(AWidth + 0.5)) mod 2 = 0 then Result := dbl / 2
+    else Result := (dbl + 1) / 2;
+  end;
+
+  { THE LINE: its path's rect in the group (a straight one optimised to the
+    half pixel where it runs along an axis), grown by its pen
+    (strokeNoScale: the width on the canvas, at least 5 with no fill) }
+  procedure TakeLine(const AEl2: TTyChartElement; AWidth: Double);
+  var g, lx0, ly0, lx1, ly1: Double;
+  begin
+    b := TyShapeBounds(AEl2.Shape);
+    if not TyRectFIsValid(b) then Exit;
+    if (fsx > 0) and (fsy > 0) then
+    begin
+      lx0 := (b.Left - fx) / fsx;
+      lx1 := (b.Right - fx) / fsx;
+      ly0 := (b.Top - fy) / fsy;
+      ly1 := (b.Bottom - fy) / fsy;
+      if Floor(ly0 * 2 + 0.5) = Floor(ly1 * 2 + 0.5) then
+      begin
+        ly0 := SubPixel(ly0, AWidth);
+        ly1 := ly0;
+      end;
+      if Floor(lx0 * 2 + 0.5) = Floor(lx1 * 2 + 0.5) then
+      begin
+        lx0 := SubPixel(lx0, AWidth);
+        lx1 := lx0;
+      end;
+      b := TyRectF(lx0 * fsx + fx, ly0 * fsy + fy, lx1 * fsx + fx, ly1 * fsy + fy);
+    end;
+    r := TyXYWH(b.Left, b.Top, b.Right - b.Left, b.Bottom - b.Top);
+    if (AEl2.Style.StrokeColor <> 0) and (AWidth > 0) then
+    begin
+      g := AWidth;
+      if g < 5 then g := 5;
+      g := g * AScale;
+      r.X := r.X - g / 2;
+      r.Y := r.Y - g / 2;
+      r.W := r.W + g;
+      r.H := r.H + g;
+    end;
+    Union;
+  end;
+
+  { AN END SYMBOL: its path's own rect through its turn (getBoundingRect
+    then applyTransform -- the turned rect's bounds, not the turned path's),
+    its pen where it strokes; the turn the line's direction (a quarter turn
+    more or less makes the same rect) }
+  procedure TakeSymbol(const AEl2: TTyChartElement);
+  var
+    k2: Integer;
+    cx2, cy2, ct, st, u, v, u0, u1, v0, v1, g: Double;
+    first: Boolean;
+
+    procedure P(AX, AY: Double);
+    begin
+      u := (AX - cx2) * ct + (AY - cy2) * st;
+      v := -(AX - cx2) * st + (AY - cy2) * ct;
+      if first then
+      begin
+        u0 := u; u1 := u; v0 := v; v1 := v;
+        first := False;
+      end
+      else
+      begin
+        if u < u0 then u0 := u;
+        if u > u1 then u1 := u;
+        if v < v0 then v0 := v;
+        if v > v1 then v1 := v;
+      end;
+    end;
+
+  begin
+    b := TyShapeBounds(AEl2.Shape);
+    if not TyRectFIsValid(b) then Exit;
+    cx2 := (b.Left + b.Right) / 2;
+    cy2 := (b.Top + b.Bottom) / 2;
+    ct := Cos(theta);
+    st := Sin(theta);
+    first := True;
+    if AEl2.Shape.Kind in [cskCircle, cskEllipse] then
+    begin
+      { a circle's own rect is its square, turned with the symbol }
+      u0 := -AEl2.Shape.R1; u1 := AEl2.Shape.R1;
+      v0 := -AEl2.Shape.R1; v1 := AEl2.Shape.R1;
+      cx2 := AEl2.Shape.CX;
+      cy2 := AEl2.Shape.CY;
+    end
+    else
+    begin
+      for k2 := 0 to High(AEl2.Shape.Points) do P(AEl2.Shape.Points[k2].X, AEl2.Shape.Points[k2].Y);
+      for k2 := 0 to High(AEl2.Shape.Cmds) do
+      begin
+        if AEl2.Shape.Cmds[k2].Kind = pckClose then Continue;
+        P(AEl2.Shape.Cmds[k2].X, AEl2.Shape.Cmds[k2].Y);
+        if AEl2.Shape.Cmds[k2].Kind = pckCurve then
+        begin
+          P(AEl2.Shape.Cmds[k2].X1, AEl2.Shape.Cmds[k2].Y1);
+          P(AEl2.Shape.Cmds[k2].X2, AEl2.Shape.Cmds[k2].Y2);
+        end;
+      end;
+      if first then Exit;
+    end;
+    if (AEl2.Style.StrokeColor <> 0) and (AEl2.Style.StrokeWidthLogical > 0) then
+    begin
+      g := AEl2.Style.StrokeWidthLogical * AScale;
+      if not AEl2.Style.HasFill and (g < 5 * AScale) then g := 5 * AScale;
+      u0 := u0 - g / 2; u1 := u1 + g / 2; v0 := v0 - g / 2; v1 := v1 + g / 2;
+    end;
+    { the rect's four corners back through the turn: their bounds }
+    lx[0] := cx2 + u0 * Cos(theta) - v0 * Sin(theta);
+    ly[0] := cy2 + u0 * Sin(theta) + v0 * Cos(theta);
+    lx[1] := cx2 + u1 * Cos(theta) - v0 * Sin(theta);
+    ly[1] := cy2 + u1 * Sin(theta) + v0 * Cos(theta);
+    lx[2] := cx2 + u1 * Cos(theta) - v1 * Sin(theta);
+    ly[2] := cy2 + u1 * Sin(theta) + v1 * Cos(theta);
+    lx[3] := cx2 + u0 * Cos(theta) - v1 * Sin(theta);
+    ly[3] := cy2 + u0 * Sin(theta) + v1 * Cos(theta);
+    r.X := Min(Min(lx[0], lx[1]), Min(lx[2], lx[3]));
+    r.Y := Min(Min(ly[0], ly[1]), Min(ly[2], ly[3]));
+    r.W := Max(Max(lx[0], lx[1]), Max(lx[2], lx[3])) - r.X;
+    r.H := Max(Max(ly[0], ly[1]), Max(ly[2], ly[3])) - r.Y;
+    Union;
+  end;
+
+begin
+  tw := StLabelTwinOf(AEl, ALab.States);
+  if (tw < 0) or not AEl.EmphTwin[tw].LineBox then Exit;
+  t := AEl.EmphTwin[tw];
+  if AGraph then
+    ok := TyGraphEdgeLabelState(AEl, t.HasRot, t.Rot, t.HasOff, t.OffX, t.OffY,
+      x, y, rot, bx, by, fs)
+  else
+  begin
+    ok := TyLinesLabelState(AEl, t.HasRot, t.Rot, t.HasOff, t.OffX, t.OffY,
+      x, y, rot, bx, by);
+    fs := AScale;
+  end;
+  if not ok then Exit;
+  if t.HasPos then
+  begin
+    has := False;
+    { the group's frame (a graph's view; a lines row draws on the canvas) }
+    fsx := 1;
+    fsy := 1;
+    fx := 0;
+    fy := 0;
+    theta := 0;
+    if AGraph then
+    begin
+      fsx := AHostNow.Anim.G[7];
+      fsy := AHostNow.Anim.G[8];
+      fx := AHostNow.Anim.G[9];
+      fy := AHostNow.Anim.G[10];
+      TyGraphEdgeLine(AHostNow, q1, q2, qc, cv);
+      theta := ArcTan2(q2.Y - q1.Y, q2.X - q1.X);
+    end;
+    w := AHostNow.Style.StrokeWidthLogical;
+    if AHost.Cur.Has[stkLineWidth] then w := AHost.Cur.Num[stkLineWidth];
+    TakeLine(AHostNow, w);
+    for k := 0 to High(AParts) do
+      if (AParts[k] >= 0) and (AParts[k] < AList.Count) then
+      begin
+        pe := AList.Ref(AParts[k]);
+        if not pe^.Ignore then TakeSymbol(pe^);
+      end;
+    if not has then Exit;
+    atX := t.LabelAtX * fs;
+    atY := t.LabelAtY * fs;
+    if t.LabelAtXPct then atX := t.LabelAtX * box.W;
+    if t.LabelAtYPct then atY := t.LabelAtY * box.H;
+    dist := t.LabelDist * fs;
+    TyLabelAnchorXYWH(box, TTyLabelPosition(t.LabelPos), dist, atX, atY, cx, cy, ah, av);
+    x := x + (cx - bx);
+    y := y + (cy - by);
+  end;
+  StShiftShape(AEl.Shape, x - AEl.Caption.X, y - AEl.Caption.Y);
+  AEl.Caption.X := x;
+  AEl.Caption.Y := y;
+  AEl.Caption.RotationRad := rot;
+end;
+
 procedure StWriteLabel(var AEl: TTyChartElement; const AState: TTyStElement;
-  AProxied: Boolean);
-var c, r: TTyStObject; dx, dy: Double;
+  AProxied: Boolean; ATwin: Boolean = False);
+var c, r: TTyStObject; dx, dy: Double; tw: Integer;
 begin
   c := AState.Cur;
   r := AState.Rest;
+  { [R6-A] A SERIES LABEL UNDER A STATE'S textConfig: laid out as its twin
+    at once, proxy or not -- zrender applies a state's textConfig without a
+    transition and updateInnerText lays the text out by it }
+  tw := -1;
+  if ATwin then tw := StLabelTwinOf(AEl, AState.States);
+  { a pie's is laid out on its slice as written (StPieLabelTwin) }
+  if (tw >= 0) and AEl.EmphTwin[tw].Defer then tw := -1;
+  if tw >= 0 then
+  begin
+    StLabelTwinApply(AEl, AEl.EmphTwin[tw]);
+    if not AProxied then
+    begin
+      dx := c.Num[stkX] - r.Num[stkX];
+      dy := c.Num[stkY] - r.Num[stkY];
+      AEl.Caption.X := AEl.Caption.X + dx;
+      AEl.Caption.Y := AEl.Caption.Y + dy;
+      StShiftShape(AEl.Shape, dx, dy);
+    end;
+  end
   { on a proxy the place and the opacity are the frame's; the ink is not
     animated (a Text's style animates its opacity only) [Batch 94] }
-  if not AProxied then
+  else if not AProxied then
   begin
     dx := c.Num[stkX] - r.Num[stkX];
     dy := c.Num[stkY] - r.Num[stkY];
@@ -944,6 +1350,17 @@ begin
       StRestGradient(item^.Host.Rest, nodes, ['itemStyle', 'color'], stkFill);
     if ph^.Style.StrokeGradient.Kind <> cgkNone then
       StRestGradient(item^.Host.Rest, nodes, ['itemStyle', 'borderColor'], stkStroke);
+  end;
+  { [R6-F] a width or a phase at rest written as no number }
+  if blk = 'itemStyle' then
+  begin
+    StRestRaw(item^.Host.Rest, nodes, ['itemStyle', 'borderWidth'], stkLineWidth);
+    StRestRaw(item^.Host.Rest, nodes, ['itemStyle', 'borderDashOffset'], stkDashOffset);
+  end
+  else
+  begin
+    StRestRaw(item^.Host.Rest, nodes, [blk, 'width'], stkLineWidth);
+    StRestRaw(item^.Host.Rest, nodes, [blk, 'dashOffset'], stkDashOffset);
   end;
   if FSt[s].Kind = sskCandle then StDeclareCandle(ASlot, ARaw, nodes, item^.Host);
   { a boxplot's emphasis border is 2 wide unless declared (BoxplotSeries.ts
@@ -2143,9 +2560,10 @@ begin
     if (slot < 0) or (slot > High(FStores)) or (FStores[slot] = nil) then Continue;
     raw := FStores[slot].GetRawIndex(pe^.Datum.DataIndex);
     if (raw < 0) or (raw > High(FSt[s].HostIdx)) then Continue;
-    { A GAUGE: the pointer hosts, the progress arc is the peer, its round
-      caps (added just before it) follow it; the title and the reading are
-      no label of either -- they have no states [F2b] }
+    { A GAUGE: the pointer hosts, the progress arc is the peer (a round-capped
+      one is a single Sausage [R6-E: was a sector its two discs followed]);
+      the title and the reading are no label of either -- they have no
+      states [F2b] }
     if FSt[s].Kind = sskGauge then
     begin
       if pe^.Anim.Role = carGaugePointer then
@@ -2153,18 +2571,7 @@ begin
         if FSt[s].HostIdx[raw] < 0 then FSt[s].HostIdx[raw] := k;
       end
       else if (pe^.Anim.Role = carGaugeProgress) and (FSt[s].PeerHostIdx[raw] < 0) then
-      begin
         FSt[s].PeerHostIdx[raw] := k;
-        { the end cap rides the arc's end, the start cap is before it }
-        if (k >= 1) and (AList.Element(k - 1).Anim.Role = carGaugeCap) then
-        begin
-          StPush(FSt[s].PeerFollowIdx[raw], k - 1);
-          if (k >= 2) and (AList.Element(k - 2).Anim.Role = carNone)
-            and (AList.Element(k - 2).Shape.Kind = cskCircle)
-            and AList.Element(k - 2).Silent then
-            StPush(FSt[s].PeerFollowIdx[raw], k - 2);
-        end;
-      end;
       Continue;
     end;
     { A RADAR ITEM: its polyline hosts, its polygon and its symbols are
@@ -2564,29 +2971,54 @@ end;
 procedure TTyCustomAdvanceChart.StWriteRows(AList: TTyPaintList);
 var
   s, raw, k: Integer;
-  el, hostRest, hostNow: TTyChartElement;
+  el, hostRest, hostNow, hostEnd: TTyChartElement;
   item: PTyStItem;
-  scaled: Boolean;
+  scaled, stroked: Boolean;
+  inflRest, inflNow, ps: Double;
+  pieSlot: Integer;
+  parts: TTyIntegerArray;
 begin
+  if FLastPPI > 0 then ps := FLastPPI / 96 else ps := 1;
   for s := 0 to High(FSt) do
   begin
     if FSt[s].Kind = sskNone then Continue;
     { a map region's elements are the geo's to write [Batch 152] }
     if FSt[s].Kind = sskMap then Continue;
+    pieSlot := -1;
+    if FSt[s].Kind = sskPie then pieSlot := SlotOfSeries(s);
     for raw := 0 to High(FSt[s].HostIdx) do
     begin
       if FSt[s].HostIdx[raw] < 0 then Continue;
       item := @FSt[s].Rows[raw];
       scaled := False;
+      stroked := False;
+      inflRest := 0;
+      inflNow := 0;
       if item^.Host.States <> [] then
       begin
         el := AList.Element(FSt[s].HostIdx[raw]);
         { [R2-B] a symbol its state scales, before and after }
         scaled := not FStProxied and item^.Host.Cur.Has[stkScale]
           and not StSameNum(item^.Host.Cur.Num[stkScale], 1);
-        if scaled then hostRest := el;
+        hostRest := el;
         StWriteHost(el, item^.Host, FStProxied);
-        if scaled then hostNow := el;
+        hostNow := el;
+        { [R6-A] and one its state gives another stroke: the rect its label
+          hangs on grows by it (Path.getBoundingRect) -- on a proxy, by the
+          stroke the state ends at (the frame grows it as it tweens) }
+        if FSt[s].LabelIdx[raw] >= 0 then
+        begin
+          inflRest := TyLabelHostInflate(hostRest, ps);
+          if FStProxied then
+          begin
+            hostEnd := hostRest;
+            StWriteHost(hostEnd, item^.Host, False);
+            inflNow := TyLabelHostInflate(hostEnd, ps);
+          end
+          else
+            inflNow := TyLabelHostInflate(hostNow, ps);
+          stroked := not SameValue(inflRest, inflNow, 1e-12);
+        end;
         AList.SetElement(FSt[s].HostIdx[raw], el);
         { the rest of the same path: the host's changes [Batch 90] }
         if raw <= High(FSt[s].FollowIdx) then
@@ -2612,21 +3044,40 @@ begin
             else if item^.Parts[k].IsGuide then
               StWriteGuide(el, item^.Parts[k], FStProxied)
             else
-              StWriteLabel(el, item^.Parts[k], FStProxied);
+              StWriteLabel(el, item^.Parts[k], FStProxied, True);
             AList.SetElement(FSt[s].PartIdx[raw][k], el);
           end;
       if (FSt[s].LabelIdx[raw] >= 0) and item^.Label_.Exists
         and (item^.Label_.States <> []) then
       begin
         el := AList.Element(FSt[s].LabelIdx[raw]);
-        StWriteLabel(el, item^.Label_, FStProxied);
+        StWriteLabel(el, item^.Label_, FStProxied, True);
         { [R2-B] A LABEL ON A SCALED SYMBOL rides it: updateInnerText lays it
           out on the path as drawn, its emphasis scale too (a graph's or a
           tree's node, a scatter's or a line's symbol). On a proxy the frame
           does it, from the scale as it is then. [Was: only a radial tree's,
           and only through the enter animation.] }
-        if scaled then
+        if stroked and FStProxied and not el.Anim.RideTree then
+        begin
+          { the rest's rect, the end's pen: the frame rides the rest from it }
+          TyLabelRideStroke(el, hostRest, hostRest, inflRest, inflNow);
+          el.Anim.LabelInflate := inflNow;
+        end
+        else if stroked and not el.Anim.RideTree then
+          TyLabelRideStroke(el, hostRest, hostNow, inflRest, inflNow)
+        else if scaled then
           TyLabelRideScale(el, hostRest, hostNow, item^.Host.Cur.Num[stkScale]);
+        { [R6-A] a pie label under a state's textConfig }
+        if (pieSlot >= 0) and (pieSlot <= High(FPies)) and (item^.Host.States <> []) then
+          StPieLabelTwin(el, hostRest, hostNow, item^.Host, item^.Label_,
+            FPies[pieSlot].Clockwise, ps, FSt[s].HostIdx[raw]);
+        { [R6-A] a lines row's: on its Line group's box }
+        if (FSt[s].Kind = sskLines) and (FSt[s].HostIdx[raw] >= 0) then
+        begin
+          if raw <= High(FSt[s].PartIdx) then parts := FSt[s].PartIdx[raw] else parts := nil;
+          StLineLabelTwin(el, AList.Element(FSt[s].HostIdx[raw]), AList, parts,
+            item^.Host, item^.Label_, False, ps);
+        end;
         AList.SetElement(FSt[s].LabelIdx[raw], el);
       end;
       if (FSt[s].GuideIdx[raw] >= 0) and item^.Guide.Exists
@@ -2695,7 +3146,16 @@ begin
         and (item^.Label_.States <> []) then
       begin
         el := AList.Element(FSt[s].EdgeLabelIdx[raw]);
-        StWriteLabel(el, item^.Label_, FStProxied);
+        StWriteLabel(el, item^.Label_, FStProxied, True);
+        { [R6-A] a graph edge's: on its Line group's box (a sankey link's is
+          a twin of its curve's rect) }
+        if FSt[s].Kind = sskGraph then
+        begin
+          if raw <= High(FSt[s].EdgePartIdx) then parts := FSt[s].EdgePartIdx[raw]
+          else parts := nil;
+          StLineLabelTwin(el, AList.Element(FSt[s].EdgeHostIdx[raw]), AList, parts,
+            item^.Host, item^.Label_, True, ps);
+        end;
         AList.SetElement(FSt[s].EdgeLabelIdx[raw], el);
       end;
     end;
@@ -3109,6 +3569,25 @@ begin
     Result := TyAnimColorValue(AObj.Color[AKey], AObj.Lifted[AKey]);
 end;
 
+{ [R6-F] a number key of a state object as the engine takes it: the number,
+  or the value as the option wrote it where that is no number -- a track
+  from a number to 'abc' (or true, or [5]) is discrete, set at its end at
+  once; one to '3' interpolates (Animator.addKeyframe) }
+function StNumValue(const AObj: TTyStObject; AKey: TTyStKey): TTyAnimValue;
+var d: TJSONData;
+begin
+  if AObj.RawJson[AKey] = '' then Exit(TyAnimNum(AObj.Num[AKey]));
+  d := GetJSON(AObj.RawJson[AKey]);
+  try
+    { an object is no number, no colour, no gradient: its track is
+      discrete as well (String({}) is no number) }
+    if d.JSONType = jtObject then Result := TyAnimStr('[object Object]')
+    else Result := TyGfxAnimOf(d);
+  finally
+    d.Free;
+  end;
+end;
+
 { [R5-A] some state of the element declares AKey }
 function StAnyDecl(const AEl: TTyStElement; AKey: TTyStKey): Boolean;
 begin
@@ -3145,11 +3624,12 @@ begin
       TyAnimPropPut(Result.Props, 'style.fill', StColourValue(AM, stkFill));
     if AM.Has[stkStroke] and P.HasStKey('style.stroke') then
       TyAnimPropPut(Result.Props, 'style.stroke', StColourValue(AM, stkStroke));
+    { [R6-F] as written where that is no number }
     if AM.Has[stkLineWidth] and P.HasStKey('style.lineWidth') then
-      TyAnimPropPut(Result.Props, 'style.lineWidth', TyAnimNum(AM.Num[stkLineWidth]));
+      TyAnimPropPut(Result.Props, 'style.lineWidth', StNumValue(AM, stkLineWidth));
     { [R2-I3] the pen's phase }
     if AM.Has[stkDashOffset] and P.HasStKey('style.lineDashOffset') then
-      TyAnimPropPut(Result.Props, 'style.lineDashOffset', TyAnimNum(AM.Num[stkDashOffset]));
+      TyAnimPropPut(Result.Props, 'style.lineDashOffset', StNumValue(AM, stkDashOffset));
     if AM.Has[stkOpacity] then
       TyAnimPropPut(Result.Props, 'style.opacity', TyAnimNum(AM.Num[stkOpacity]));
     { [R5-A] the shadow, where the state says it }
@@ -3352,7 +3832,7 @@ begin
       tweens as a path's (setLabelLineState's style) [was: a line's stroke
       was no key of its proxy, the state's was written at once] }
     Seed('style.stroke', StColourValue(AEl.Rest, stkStroke));
-    Seed('style.lineWidth', TyAnimNum(AEl.Rest.Num[stkLineWidth]));
+    Seed('style.lineWidth', StNumValue(AEl.Rest, stkLineWidth));
     Seed('style.opacity', TyAnimNum(AEl.Rest.Num[stkOpacity]));
     { [R5-I] a label line's smooth: setLabelLineState gives every state a
       shape with its smooth, which the state transition tweens as a number
@@ -3362,7 +3842,7 @@ begin
     { [R2-I3] the pen's phase, where some state says one: it tweens }
     if AEl.Decl[stnSelect].Has[stkDashOffset] or AEl.Decl[stnEmphasis].Has[stkDashOffset]
       or AEl.Decl[stnBlur].Has[stkDashOffset] then
-      Seed('style.lineDashOffset', TyAnimNum(AEl.Rest.Num[stkDashOffset]));
+      Seed('style.lineDashOffset', StNumValue(AEl.Rest, stkDashOffset));
     { [R5-A] the shadow's keys, where some state says one }
     if StAnyDecl(AEl, stkShadowBlur) then
       Seed('style.shadowBlur', TyAnimNum(AEl.Rest.Num[stkShadowBlur]));

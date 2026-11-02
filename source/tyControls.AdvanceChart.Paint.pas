@@ -190,10 +190,30 @@ type
       casts none (zrender's decal element nulls it). }
     ShadowBlur, ShadowOffsetX, ShadowOffsetY: Double;
     ShadowColor: TTyChartColor;
+    { [R6-C] zrender's style.fillOpacity / strokeOpacity where a style writes
+      them (a custom series' or a graphic element's path): the canvas'
+      globalAlpha for the fill, for the pen, over Alpha. Has* False is 1 --
+      the zero value draws as before }
+    HasFillOpacity, HasStrokeOpacity: Boolean;
+    FillOpacity, StrokeOpacity: Double;
+    { [R6-F] zrender's style.strokeFirst: the pen before the fill, which then
+      covers its inner half (a text's plate with a fill and a border) --
+      False, the zero value, the fill first }
+    StrokeFirst: Boolean;
     { [R5-A] zrender's style.blend, the canvas' globalCompositeOperation: a
       series' blendMode on every element its view renders (echarts'
       updateBlend) -- '' source over }
     Blend: string;
+    { [R6-E] A PEN IN THE SHAPE'S OWN FRAME: the scale the canvas' transform
+      puts on the stroke of a path that is no strokeNoScale -- a pictorial
+      bar's glyph, built at the pattern size and scaled to its box (useStyle
+      drops the strokeNoScale createPath gave it). The width, the dash and
+      its phase above are the style's, as upstream holds them (a state sets
+      and tweens them as they are); the renderer draws them times this.
+      sqrt|det| of the transform, one number for both axes: zrender's line
+      scale, where the canvas strokes a stretched pen. 0, the zero value,
+      and 1 are none. }
+    PenScale: Double;
   end;
 
   { [R5-A] A SHADOW AS A STYLE HOLDS IT: shadowBlur, shadowOffsetX / Y (LOGICAL px) and
@@ -571,6 +591,10 @@ type
       stays while the path scales, and goes when the scale is nought
       (Path.getBoundingRect) }
     FixedHalfW, FixedInfl: Double;
+    { [R6-A] a circular graph's rotateLabel: the label turned by -RingRad
+      about its symbol's rect, on its left (RingLeft) or right }
+    RingTurn, RingLeft: Boolean;
+    RingRad: Double;
     { A POLAR BAR'S LABEL [Batch 113, C4]: the sector calculates its own
       text position (sectorLabel.ts) -- SecAnchor: one of the sector
       positions, its anchor and the alignment it implies; else a built-in
@@ -586,6 +610,9 @@ type
     SecAV: TTyTextAnchorV;
     SecRot: Double;
     SecInside: Boolean;
+    { [R6-A] the normal position is 'middle': textConfig.inside, which a
+      state's position does not undo }
+    SecMiddle: Boolean;
     { the sector position (Ord of PolarBar's TTySectorTextPos) and its
       distance, device px -- a label following its bar through the enter
       animation is placed again on the bar as drawn }
@@ -754,7 +781,7 @@ type
     rebuilt on every static render, the proxy only when the option is. }
   TTyChartAnimRole = (carNone, carBar, carSymbol, carLineSymbol, carLineRun,
     carLineArea, carSector, carFunnel, carGaugePointer, carGaugeProgress,
-    carGaugeCap, carRadarLine, carRadarArea, carCandleBody, carCandleWickHigh,
+    carRadarLine, carRadarArea, carCandleBody, carCandleWickHigh,
     carCandleWickLow, carLabel, carGuide,
     { [Batch 92, AN4] a gauge's reading; an effectScatter's symbol and its
       ripples (Sub: which ripple); a markPoint's symbol; a markLine's
@@ -888,9 +915,19 @@ type
       array form's two numbers and whether each is a fraction, and how far
       the host's stroke grew the rect, all device px. }
     HostPlus1: Integer;
+    { [R6-A] A PIE LABEL UNDER A STATE POSITION: its slice's list index + 1
+      (0 none) and the anchor the list placed it by -- a frame places it
+      again on the slice as the frame draws it (the radius tweening) }
+    PieHostPlus1, PieTwin: Integer;
+    PieAX, PieAY, PieLX, PieLY, PieScale: Double;
     { A COMBINING ELEMENT'S CHILD in a frame: its index + 1 (0 for the
       element itself) [Batch 137] }
     UtPiece: Integer;
+    { [R6-C] A CHILD ADDED AFTER THE FRAME'S LIST: its host's insertion index
+      + 1 (0, the zero value, for any other element). It paints and is hit
+      at the host's place (Storage puts childrenRef where the host would
+      be), and a hit on it names the host }
+    PieceOf: Integer;
     { A LABEL LabelManager never fades: its host set disableLabelAnimation
       (a treemap's breadcrumb) [F3a] }
     NoFade: Boolean;
@@ -910,6 +947,26 @@ type
       VSX .. VY its roam transform at rest, the 'geoView' proxy (series -1,
       index the key) the transform now }
     GeoView: Integer;
+    { [R6-B] AN SVG MAP'S ELEMENT drawn in the map's own units: what a frame
+      carries with the group's points also scales with it -- VStroke its
+      stroke's width, dash and offset (a shape that is not strokeNoScale:
+      no option style), VInk a text's glyphs and halo (or its whole map),
+      an image's pattern. A GeoJSON region and a named SVG shape are
+      strokeNoScale (MapDraw's applyOptionStyleForRegion): neither is set,
+      their width stays on the screen. VPx the list's px per logical px the
+      image's pattern map is in (APPI / 96). }
+    VStroke, VInk: Boolean;
+    VPx: Double;
+    { [R6-B] A BOX GRADIENT TURNED WITH AN SVG SHAPE WHOSE STROKE IS
+      strokeNoScale: the box zrender takes it on grows by the stroke over the
+      line scale, which a frame changes -- VGradFrac the gradient as written
+      (its fractions), VGradL the shape's transform at rest (its linear
+      part), VGradW0 / VGradH0 its own box ungrown, VGradG the growth per
+      side at rest, VGradLS the line scale at rest }
+    VGradNS: Boolean;
+    VGradFrac: TTyChartGradient;
+    VGradL: array[0..3] of Double;
+    VGradW0, VGradH0, VGradG, VGradLS: Double;
     LabelPos: Integer;
     LabelDist, LabelAtX, LabelAtY, LabelInflate: Double;
     LabelAtXPct, LabelAtYPct: Boolean;
@@ -980,6 +1037,30 @@ type
       own style and words. An emphasis twin, where there is one, comes
       first. }
     State: Byte;
+    { [R6-A] A SERIES LABEL'S: what the frame lays it out on its host by
+      under that state (TTyChartAnim.LabelPos ...), HasRide where it says }
+    HasRide: Boolean;
+    LabelPos: Integer;
+    LabelDist, LabelAtX, LabelAtY: Double;
+    LabelAtXPct, LabelAtYPct: Boolean;
+    { [R6-A] A PIE LABEL'S, laid out when the state is written, on its
+      slice as that state draws it (PieView nulls the normal position: the
+      label stands at label.x / y unless a state writes one): HasPos the
+      position LabelPos at LabelDist (device px), HasOff the offset, HasRot
+      the turn, each where the states write it }
+    Defer: Boolean;
+    { [R6-A] A TREEMAP NODE'S, on its host: where the treemap places the
+      words under that state's position and distance (Caption.X / Y and
+      the alignment) }
+    Anchored: Boolean;
+    { [R6-A] A LINE'S LABEL (a graph edge's, a lines row's), laid out when
+      the state is written on the Line group's box (the line grown by the
+      state's width, its end symbols): HasPos, LabelPos / LabelAt* and
+      LabelDist (LOGICAL px, in the group's units) the position, HasOff /
+      OffX / OffY (device px) and HasRot / Rot the states' own }
+    LineBox: Boolean;
+    HasPos, HasOff, HasRot: Boolean;
+    OffX, OffY, Rot: Double;
   end;
   TTyEmphTwinArray = array of TTyEmphTwin;
 
@@ -1010,6 +1091,11 @@ type
       of its outline and not inside. 0: the area, as every other element.
       A matrix cell written `silent: false` with no fill [Batch 147]. }
     HitStrokeBand: Double;
+    { [R6-F] NEVER HIT, though drawn and in the states: zrender's
+      Path.contain of a path whose bounding rect is not-a-number -- a pen of
+      infinite width grows it by Infinity / 2 each way, and x - Inf + Inf is
+      NaN (a bar whose infinite border took all of its width) }
+    HitNone: Boolean;
     { WHETHER THE INK IS CUT, and the flag is not redundant beside the rect.
 
       AN ALL-ZERO RECT IS A LEGITIMATE EMPTY CLIP -- it removes the element
@@ -1314,6 +1400,10 @@ const
   TyTwinEmphasis = 0;
   TyTwinBlur = 1;
   TyTwinSelect = 2;
+  { [R6-A] a series label's select-and-hover pairs: select's textConfig and
+    then emphasis' (or blur's) over it }
+  TyTwinSelectEmphasis = 3;
+  TyTwinSelectBlur = 4;
 
 { [R2-I5] the index of ATwins' twin for the state AState (TyTwin...), -1
   where the state has none }
@@ -1800,6 +1890,7 @@ begin
 end;
 
 function TTyPaintList.Less(A, B: Integer): Boolean;
+var pa, pb: Integer;
 begin
   { [R5-A] the layer first: zrender paints each zlevel's canvas over the
     lower ones }
@@ -1811,6 +1902,16 @@ begin
     Exit(FItems[A].ZFrac < FItems[B].ZFrac);
   if FItems[A].Z2 <> FItems[B].Z2 then
     Exit(FItems[A].Z2 < FItems[B].Z2);
+  { [R6-C] a combining host's child added after the list sorts at its
+    host's place, after the host and the children before it }
+  if (FItems[A].Anim.PieceOf > 0) or (FItems[B].Anim.PieceOf > 0) then
+  begin
+    pa := A;
+    pb := B;
+    if FItems[A].Anim.PieceOf > 0 then pa := FItems[A].Anim.PieceOf - 1;
+    if FItems[B].Anim.PieceOf > 0 then pb := FItems[B].Anim.PieceOf - 1;
+    if pa <> pb then Exit(pa < pb);
+  end;
   { The insertion index makes the order TOTAL.
 
     Note honestly that it is REDUNDANT today: MergeSortOrder is stable (its merge
@@ -1945,6 +2046,7 @@ end;
 function TyElementContains(const AEl: TTyChartElement; AX, AY, ASlopPx: Double): Boolean;
 var k: Integer;
 begin
+  if AEl.HitNone then Exit(False);
   { [spec 242] a point outside a clip path is not over the element }
   for k := 0 to High(AEl.ClipPaths) do
     if not TyShapeContains(AEl.ClipPaths[k], AX, AY, 0) then Exit(False);

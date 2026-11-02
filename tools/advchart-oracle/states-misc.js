@@ -1398,14 +1398,115 @@ function guards(cases) {
     g('state-dash-from-no-border', n0 && numAt(n0, 'dash', 1) === '[6,3]' && numAt(n0, 'dash', 450) === '[6,3]'
       && numAt(n0, 'dash', 1600) === 'null', n0 && [numAt(n0, 'dash', 1), numAt(n0, 'dash', 450), numAt(n0, 'dash', 1600)].join(' '));
   }
+  // [R6-A]
+  {
+    const c = byId(cases, 'scatter-emph-position-rides');
+    const l = elRow(c, 0, 1, 'label');
+    g('emph-position-at-once-and-rides', l && numAt(l, 'tx', 16) !== numAt(l, 'tx', 450)
+      && numAt(l, 'ty', 16) === numAt(l, 'ty', 450) && numAt(l, 'ty', 16) !== numAt(l, 'ty', 1600),
+      l && [numAt(l, 'tx', 16), numAt(l, 'tx', 450), numAt(l, 'ty', 16), numAt(l, 'ty', 1600)].join(' '));
+  }
+  {
+    const c = byId(cases, 'bar-emph-border-label-rides');
+    const l = elRow(c, 0, 1, 'label');
+    g('border-label-rides', l && numAt(l, 'ty', 16) !== numAt(l, 'ty', 150) && numAt(l, 'ty', 150) !== numAt(l, 'ty', 450),
+      l && [numAt(l, 'ty', 16), numAt(l, 'ty', 150), numAt(l, 'ty', 450)].join(' '));
+    const p = byId(cases, 'pie-emph-position-rides');
+    const q = elRow(p, 0, 1, 'label');
+    g('pie-position-rides-radius', q && numAt(q, 'tx', 16) !== numAt(q, 'tx', 150) && numAt(q, 'tx', 150) !== numAt(q, 'tx', 450),
+      q && [numAt(q, 'tx', 16), numAt(q, 'tx', 150), numAt(q, 'tx', 450)].join(' '));
+  }
   // every case comes to rest
   for (const c of cases) g('settled-' + c.id, c.clips[c.clips.length - 1] === 0, c.id + ' ' + c.clips.join(','));
+  // [R6-F] a width or a phase that is no number: the state's track is
+  // discrete, set at its end on the hover's own frame and back on the leave's
+  {
+    const c = byId(cases, 'bar-width-word-hover');
+    const a = elRow(c, 0, 0, 'host');
+    const b = elRow(c, 1, 1, 'host');
+    const w = (el, ms) => numAt(el, 'style.lineWidth', ms);
+    g('width-word-at-once', a && b && w(a, 0) === 'abc' && w(a, 450) === 'abc' && w(a, 500) === '3'
+      && w(b, 800) === true && w(b, 1200) === '3' && numAt(b, 'dashOff', 800) === 'abc' && numAt(b, 'dashOff', 1200) === '2',
+      a && b && [w(a, 0), w(a, 500), w(b, 800), w(b, 1200), numAt(b, 'dashOff', 800)].join(' '));
+    const s = byId(cases, 'scatter-width-word-rest');
+    const p = elRow(s, 0, 1, 'host');
+    const q = elRow(s, 1, 0, 'host');
+    g('rest-width-word-at-once', p && q && w(p, 0) === '4' && w(p, 500) === 'abc' && w(q, 0) === true
+      && w(q, 800) === '4' && w(q, 1200) === true,
+      p && q && [w(p, 0), w(p, 500), w(q, 0), w(q, 800), w(q, 1200)].join(' '));
+  }
   return out;
 }
 
+// [R6-A] a state's textConfig on a series label: zrender applies it at once
+// (Element._applyStateObj, no transition) and updateInnerText lays the label
+// out by it on the host as drawn every frame -- the label jumps to the
+// emphasis position and rides the symbol's scale there
+const R6A = [
+  { id: 'scatter-emph-position-rides', labelPlace: true, note: "[R6-A] a scatter's top label, emphasis.label position "
+    + 'right: over point 1 at 0 it stands right of the symbol at once and rides its scale; out at 500 it is back on top',
+    option: { color: [C0], xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
+      series: [{ type: 'scatter', symbolSize: 20, itemStyle: { opacity: 1 }, label: { show: true, position: 'top', formatter: 'p{c}' },
+        emphasis: { label: { position: 'right' } }, data: [[2, 3], [5, 6], [8, 4]] }] },
+    events: [over(0, ['item', 0, 1]), out(500)] },
+  { id: 'bar-emph-border-label-rides', labelPlace: true, note: "[R6-A] bar labels on top; emphasis border #000 at 6: "
+    + "the bar's rect grows with the border as it tweens, its label rides it up (Path.getBoundingRect). Over bar 1 at 0, out at 500",
+    option: { color: [C0], xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'bar', label: { show: true, position: 'top' },
+        emphasis: { itemStyle: { borderColor: '#000', borderWidth: 6 } }, data: [10, 20, 30] }] },
+    events: [over(0, ['item', 0, 1]), out(500)] },
+  { id: 'pie-emph-position-rides', labelPlace: true, note: "[R6-A] a pie's outer labels; emphasis.label position inside: "
+    + "the hovered label on its slice's rect, which grows with the slice's radius as it tweens. Over slice 1 at 0, out at 500",
+    option: { color: [C0, C1, '#fac858', '#ee6666'], series: [{ type: 'pie', radius: '50%',
+      emphasis: { label: { position: 'inside' } },
+      data: [{ value: 40, name: 'a' }, { value: 30, name: 'b' }, { value: 20, name: 'c' }, { value: 10, name: 'd' }] }] },
+    events: [over(0, ['item', 0, 1]), out(500)] },
+];
+
+// [R6-D] the border a radar's symbols and a gauge's pointer and progress arc take at rest, and its state
+const R6D = [
+  { id: 'radar-border-hover', dash: true, dashOff: true, note: "[R6-D] the symbols' border at rest (itemStyle #000 at 2, "
+    + "dashed, phase 1), emphasis border #ee6666 at 5, phase 4: hover a symbol of the first item at 0, out at 500",
+    option: radar({ itemStyle: { borderColor: '#000000', borderWidth: 2, borderType: 'dashed', borderDashOffset: 1 },
+      emphasis: { itemStyle: { borderColor: C3, borderWidth: 5, borderDashOffset: 4 } } }),
+    events: [over(0, ['rsym', 0, 0, 1]), out(500)] },
+  { id: 'gauge-border-hover', dash: true, dashOff: true, note: "[R6-D] the pointer's and the arc's border at rest (itemStyle "
+    + "#000 at 2, dotted, phase 1; pointer.itemStyle #333, progress.itemStyle at 3), emphasis border #ee6666 at 4: hover the "
+    + 'pointer at 0, the arc at 500, out at 1000',
+    option: gauge({ itemStyle: { borderColor: '#000000', borderWidth: 2, borderType: 'dotted', borderDashOffset: 1 },
+      pointer: { width: 10, itemStyle: { borderColor: '#333333' } }, progress: { show: true, width: 14, itemStyle: { borderWidth: 3 } },
+      emphasis: { itemStyle: { borderColor: C3, borderWidth: 4 } } }),
+    events: [over(0, ['gp', 0, 0]), over(500, ['gq', 0, 0]), out(1000)] },
+];
+
+// [R6-F] a state's width that is no number: the state transition's track
+// from a number to it (or from it to a number) is discrete, and animateTo's
+// animator does not allow discrete animation -- the final value is set at
+// the transition's start (Animator.start: setFinished)
+const R6F = [
+  { id: 'bar-width-word-hover', dash: true, dashOff: true, note: "[R6-F] series 0: bars bordered #000 at 3, emphasis "
+    + "borderWidth 'abc'; series 1: bars bordered #000 at 3 dashed, phase 2, emphasis borderWidth true and "
+    + "borderDashOffset 'abc'. Hover bar 0 of series 0 at 0, out at 500, bar 1 of series 1 at 800, out at 1200",
+    option: { color: [C0, C1], xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 3 },
+        emphasis: { itemStyle: { borderWidth: 'abc' } }, data: [10, 20, 30] },
+      { type: 'bar', itemStyle: { borderColor: '#000', borderWidth: 3, borderType: 'dashed', borderDashOffset: 2 },
+        emphasis: { itemStyle: { borderWidth: true, borderDashOffset: 'abc' } }, data: [12, 22, 32] }] },
+    events: [over(0, ['item', 0, 0]), out(500), over(800, ['item', 1, 1]), out(1200)] },
+  { id: 'scatter-width-word-rest', dash: true, note: "[R6-F] scatter points bordered #000 at 'abc' at rest, emphasis "
+    + 'borderWidth 4; series 1 at true at rest, emphasis borderWidth 4. Hover point 1 of series 0 at 0, out at 500, '
+    + 'point 0 of series 1 at 800, out at 1200',
+    option: { color: [C0, C1], xAxis: { type: 'category', data: ['A', 'B', 'C'] }, yAxis: { type: 'value', max: 40 },
+      series: [{ type: 'scatter', symbolSize: 20, itemStyle: { borderColor: '#000', borderWidth: 'abc' },
+        emphasis: { scale: false, itemStyle: { borderWidth: 4 } }, data: [10, 20, 30] },
+      { type: 'scatter', symbolSize: 20, itemStyle: { borderColor: '#000', borderWidth: true },
+        emphasis: { scale: false, itemStyle: { borderWidth: 4 } }, data: [15, 25, 35] }] },
+    events: [over(0, ['item', 0, 1]), out(500), over(800, ['item', 1, 0]), out(1200)] },
+];
+
 function generate() {
   const cases = [];
-  for (const c of GAUGE.concat(RADAR, MARKERS, LARGE, LABELS, PICTORIAL, R2B, R2I1, R2I3, R2I4, R2I5, R2I6, R2V)) {
+  for (const c of GAUGE.concat(RADAR, MARKERS, LARGE, LABELS, PICTORIAL, R2B, R2I1, R2I3, R2I4, R2I5, R2I6, R2V, R6A, R6D, R6F)) {
     if (process.env.ORACLE_CASE && !process.env.ORACLE_CASE.split('|').some(p => c.id.startsWith(p))) continue;
     const r = runCase(c);
     cases.push({ id: c.id, note: c.note, option: c.option, events: r.events, published: r.published,

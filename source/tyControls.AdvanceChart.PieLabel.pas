@@ -555,6 +555,10 @@ begin
   hadBg := R.Ink.HasBackground;
   TyLabelReadInk(ANode, ASeries, R.Ink);
   if ANode.Find('backgroundColor') = nil then R.Ink.HasBackground := hadBg;
+  { [R6-A] the normal textConfig's distance (5 unless written), which a
+    state's position is laid out at unless it writes its own }
+  d := ANode.Find('distance');
+  if (d <> nil) and (d.JSONType = jtNumber) then R.Ink.DistanceLogical := d.AsFloat;
   d := ANode.Find('show');
   if (d <> nil) and (d.JSONType = jtBoolean) then R.Show := d.AsBoolean;
   if TyFontStyleCode(ANode.Find('fontStyle')) <> TyFontStyleUnset then
@@ -734,6 +738,8 @@ begin
   { [R2-A] a null or empty position takes the emphasis one }
   PieResolvePosition([node], [EmphLabelOf(series)], Result);
   PieReadStateShows(series, Result);
+  { [R6-A] the states' textConfig, the series' }
+  TyLabelReadStateCfg([series], Result.Ink);
   PieReadLineNode(ObjOf(series.Find('labelLine')), Result);
 end;
 
@@ -796,6 +802,8 @@ begin
     end;
     PieResolvePosition([lab, slab], [EmphLabelOf(it), EmphLabelOf(series)], r);
     PieReadStateShows(it, r);
+    { [R6-A] and the item's over them }
+    TyLabelReadStateCfg([it, series], r.Ink);
     PieReadLineNode(ObjOf(it.Find('labelLine')), r);
     Result[k] := r;
   end;
@@ -1553,6 +1561,34 @@ var
   rich: Boolean;
   ov: TTyLabelEmphOver;
   emp: TTyRtPieceArray;
+  pieCfg, stCfg: TTyLabelStateCfg;
+  code: Byte;
+
+  { [R6-A] A STATE'S textConfig ON A PIE LABEL, kept to be laid out when
+    the state is written: the normal one has no position and no turn
+    (PieView's setTextConfig), its distance and offset the label's }
+  procedure PieTwin(ACode: Byte; const ACfg: TTyLabelStateCfg);
+  var tw: TTyEmphTwin;
+  begin
+    tw := Default(TTyEmphTwin);
+    tw.State := ACode;
+    tw.Defer := True;
+    tw.HasPos := ACfg.HasPosition;
+    tw.LabelPos := Ord(ACfg.Position);
+    { 'outside' on a slice: the default 'top' (no defaultOutsidePosition) }
+    tw.LabelDist := ACfg.DistanceLogical * scale;
+    tw.LabelAtXPct := ACfg.AtXIsPercent;
+    tw.LabelAtYPct := ACfg.AtYIsPercent;
+    if ACfg.AtXIsPercent then tw.LabelAtX := ACfg.AtX else tw.LabelAtX := ACfg.AtX * scale;
+    if ACfg.AtYIsPercent then tw.LabelAtY := ACfg.AtY else tw.LabelAtY := ACfg.AtY * scale;
+    tw.HasOff := ACfg.HasOffset;
+    tw.OffX := ACfg.OffsetXLogical * scale;
+    tw.OffY := ACfg.OffsetYLogical * scale;
+    tw.HasRot := ACfg.HasRotation;
+    tw.Rot := ACfg.RotationRad;
+    SetLength(el.EmphTwin, Length(el.EmphTwin) + 1);
+    el.EmphTwin[High(el.EmphTwin)] := tw;
+  end;
 
   { The three bands and the outside ink, packed into the shape the shared
     chooser wants. A pie has no use for the rest of a label spec -- its
@@ -1919,6 +1955,14 @@ begin
       el.Anim.Role := carLabel;
       el.Anim.Series := ABinding.SeriesIndex;
       el.Anim.Index := ALayout.Sectors[i].Index;
+      { [R6-A] the states that write a textConfig key, and the select-and-
+        hover pairs (select's first) }
+      pieCfg := Default(TTyLabelStateCfg);
+      pieCfg.HasDistance := True;
+      pieCfg.DistanceLogical := lbl.DistanceLogical;
+      for code := TyTwinEmphasis to TyTwinSelectBlur do
+        if TyLabelStateCfgOf(lbl, code, stCfg) then
+          PieTwin(code, TyLabelStateCfgOver(pieCfg, stCfg));
       AList.Add(el);
       Inc(Result);
     end;

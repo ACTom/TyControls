@@ -212,6 +212,16 @@ uses base64, Generics.Collections, tyControls.AdvanceChart.Large,
   tyControls.AdvanceChart.Symbol, tyControls.AdvanceChart.Decal, tyControls.AdvanceChart.Images,
   tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.GfxEl;
 
+{ [R6-D] a dash the canvas' setLineDash takes: every entry a finite number
+  of nought or more }
+function TyDashIsDrawable(const ADash: TTyDoubleArray): Boolean;
+var i: Integer;
+begin
+  Result := True;
+  for i := 0 to High(ADash) do
+    if IsNan(ADash[i]) or IsInfinite(ADash[i]) or (ADash[i] < 0) then Exit(False);
+end;
+
 var
   GDecalCache: TStringList = nil;
   GLargeFastPaths: Integer = 0;
@@ -3088,7 +3098,35 @@ begin
   end;
 end;
 
+procedure RenderElementAsStyled(P: TTyPainter; const AElement: TTyChartElement); forward;
+
+{ [R6-E] a pen in the shape's own frame (PenScale) drawn at its scale: the
+  width, the lengths of its dash and its phase }
 procedure TyRenderElement(P: TTyPainter; const AElement: TTyChartElement);
+var
+  el: TTyChartElement;
+  k: Integer;
+begin
+  if (AElement.Style.PenScale <= 0) or (AElement.Style.PenScale = 1)
+    or IsNan(AElement.Style.PenScale) or IsInfinite(AElement.Style.PenScale) then
+  begin
+    RenderElementAsStyled(P, AElement);
+    Exit;
+  end;
+  el := AElement;
+  el.Style.StrokeWidthLogical := el.Style.StrokeWidthLogical * el.Style.PenScale;
+  el.Style.DashLogical := Copy(AElement.Style.DashLogical, 0, Length(AElement.Style.DashLogical));
+  if el.Style.DashWord <> 0 then
+    el.Style.DashLogical := TyDashOfWord(el.Style.DashWord, el.Style.StrokeWidthLogical)
+  else
+    for k := 0 to High(el.Style.DashLogical) do
+      el.Style.DashLogical[k] := el.Style.DashLogical[k] * el.Style.PenScale;
+  el.Style.DashOffsetLogical := el.Style.DashOffsetLogical * el.Style.PenScale;
+  el.Style.PenScale := 0;
+  RenderElementAsStyled(P, el);
+end;
+
+procedure RenderElementAsStyled(P: TTyPainter; const AElement: TTyChartElement);
 var
   rule: TTyFillRule;
   gx1, gy1, gx2, gy2, gr: Double;
@@ -3109,6 +3147,20 @@ var
       rule := tfrEvenOdd
     else
       rule := tfrNonZero;
+    { [R6-F] strokeFirst: the pen, then the fill over it (at the fill's
+      alpha again) }
+    if AElement.Style.StrokeFirst then
+    begin
+      PaintPen;
+      if AElement.Style.HasStrokeOpacity and not AElement.Style.HasFillOpacity then
+        P.SetElementAlpha(Max(0.0, Min(1.0, AElement.Style.Alpha)));
+    end;
+    { [R6-C] fillOpacity: zrender's brushPath sets globalAlpha to the
+      opacity times it before the fill (and times strokeOpacity before the
+      pen, PaintPen) }
+    if AElement.Style.HasFillOpacity then
+      P.SetElementAlpha(Max(0.0, Min(1.0, AElement.Style.Alpha))
+        * Max(0.0, Min(1.0, AElement.Style.FillOpacity)));
     if AElement.Style.HasFill then
     begin
       if AElement.Style.FillGradient.Kind <> cgkNone then
@@ -3210,13 +3262,19 @@ var
       else
         P.FillPath(TTyColor(AElement.Style.FillColor), rule);
     end;
-    PaintPen;
+    if not AElement.Style.StrokeFirst then PaintPen;
   end;
 
   { the pen of the path just traced }
   procedure PaintPen;
   var gi: Integer;
   begin
+    { [R6-C] strokeOpacity over the opacity -- and back from a fill's }
+    if AElement.Style.HasStrokeOpacity then
+      P.SetElementAlpha(Max(0.0, Min(1.0, AElement.Style.Alpha))
+        * Max(0.0, Min(1.0, AElement.Style.StrokeOpacity)))
+    else if AElement.Style.HasFillOpacity then
+      P.SetElementAlpha(Max(0.0, Min(1.0, AElement.Style.Alpha)));
     if AElement.Style.StrokeWidthLogical > 0 then
     begin
       if AElement.Style.StrokeGradient.Kind <> cgkNone then
@@ -3672,7 +3730,13 @@ begin
     ApplyClipPaths(P, AElement);
     if AElement.Style.Alpha < 1 then
       P.SetElementAlpha(AElement.Style.Alpha);
-    P.SetLineDash(AElement.Style.DashLogical, AElement.Style.DashOffsetLogical);
+    { [R6-D] setLineDash takes no entry that is not a finite number of
+      nought or more: the canvas ignores the call (its last dash stays --
+      the port strokes solid) [was: a NaN entry raised in the pen] }
+    if TyDashIsDrawable(AElement.Style.DashLogical) then
+      P.SetLineDash(AElement.Style.DashLogical, AElement.Style.DashOffsetLogical)
+    else
+      P.SetLineDash([], 0);
     { [R5-D] a cap or a join the element names (the state is restored below) }
     case AElement.Style.LineCap of
       1: P.SetLineCap(tlcRound);

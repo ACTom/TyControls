@@ -35,6 +35,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.JsMath,
      tyControls.AdvanceChart.Anim, tyControls.AdvanceChart.AnimView,
      tyControls.AdvanceChart.States, tyControls.AdvanceChart.Events, tyControls.AdvanceChart,
+     tyControls.AdvanceChart.Data,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TSmProbe = class(TTyAdvanceChart)
@@ -75,6 +76,9 @@ type
     FFactored, FDrawnOpacities: Integer;
     { [r2v] label lines' pens as drawn against their state proxies }
     FDrawnPens: Integer;
+    { [R6-F] widths upstream holds as no number ('abc', true: a discrete
+      track's value), against the proxies' }
+    FPenWords: Integer;
     FReport: string;
     FSeen, FTally: TStringList;
     procedure Miss(const AWhere: string; const AOnce: string = '');
@@ -112,7 +116,7 @@ type
     procedure TearDown; override;
   published
     procedure TestAHoveredPointerIsLiftedInTheListAndTheArcIsNot;
-    procedure TestTheRoundCapsTakeTheirArcsState;
+    procedure TestARoundCappedArcIsOneSausageAndItsEndsHover;
     procedure TestARadarSymbolStaysOverALiftedRing;
     procedure TestAMarkPointFadesWithinItsEnterAnimation;
     procedure TestAPictorialLabelTakesNoPointer;
@@ -580,7 +584,23 @@ end;
 function NumOf(AV: TJSONData): Double;
 begin
   if IsHex16(AV) then Result := FromHex(AV.AsString)
+  { [R6-F] a value that is no number (a phase of 'abc'): the canvas' }
+  else if AV.JSONType in [jtString, jtBoolean] then Result := TyOptPenOffset(AV)
   else Result := AV.AsFloat;
+end;
+
+{ [R6-F] a pen's number off a proxy value as the canvas takes it (a
+  boolean's, a string's JS Number; no finite number nought) }
+function PenNumOfValue(const AV: TTyAnimValue): Double;
+begin
+  case AV.Kind of
+    avkNumber: Exit(AV.Num);
+    avkBool: Result := AV.Num;
+    avkString: Result := TyJsToNumber(AV.Str);
+  else
+    Result := NaN;
+  end;
+  if IsNan(Result) or IsInfinite(Result) then Result := 0;
 end;
 
 procedure TAdvChartStatesMiscOracleTest.CompareMarker(const AWhere: string;
@@ -817,6 +837,19 @@ begin
     end;
     Inc(FKeysCompared);
     if Tracked(AEl, key) then Inc(FTrackedCompared);
+    { [R6-F] A WIDTH UPSTREAM HOLDS AS NO NUMBER -- a state's 'abc' or true,
+      which its discrete track sets at once (animateTo allows no discrete
+      animation) -- or a rest's: what the canvas makes of it, against the
+      proxy's value as the port draws it [was: not compared, and the port
+      tweened to it as nought] }
+    if (key = 'style.lineWidth') and not IsHex16(fv) and (fv.JSONType in [jtString, jtBoolean]) then
+    begin
+      Inc(FPenWords);
+      if Abs(PenNumOfValue(v) - TyOptPenWidth(fv)) > 1e-12 then
+        Miss(Format('%s %s %s: %s, upstream %s', [AWhere, id, key, ValText(v), fv.AsJSON]),
+          AWhere + id + key + 'w');
+      Continue;
+    end;
     { [R2-I1] A LABEL'S OPACITY ON A PROXY IT SHARES WITH ITS FADE is a
       factor over the label's own (the host's style.opacity, handed over as
       defaultOpacity): upstream's is the factor times that rest [was: the
@@ -1001,10 +1034,11 @@ begin
     [FKeysCompared, FTrackedCompared, FEventsCompared, FMarksCompared, FPlaces, FOrders])
     + Format(', dashes %d, factored label opacities %d, drawn label opacities %d',
       [FDashes, FFactored, FDrawnOpacities])
-    + Format(', dash phases %d, drawn label-line pens %d', [FDashOffs, FDrawnPens]),
+    + Format(', dash phases %d, drawn label-line pens %d', [FDashOffs, FDrawnPens])
+    + Format(', widths that are no number %d', [FPenWords]),
     (FTrackedCompared > 500) and (FEventsCompared > 40) and (FMarksCompared > 100)
     and (FPlaces > 100) and (FOrders > 100) and (FDashes > 50) and (FFactored > 200)
-    and (FDashOffs > 50) and (FDrawnPens > 200)
+    and (FDashOffs > 50) and (FDrawnPens > 200) and (FPenWords > 20)
     and (FDrawnOpacities > 1000));
 end;
 
@@ -1148,35 +1182,40 @@ begin
   AssertEquals('the pointer left it', '', TyStNamesText(item.Host.States));
 end;
 
-{ A ROUND CAP is a stretch of the arc's own Sausage upstream: the two discs
-  follow the arc's state }
-procedure TAdvChartStatesMiscTest.TestTheRoundCapsTakeTheirArcsState;
+{ A ROUND-CAPPED ARC IS ONE SAUSAGE (GaugeView's ProgressPath) [R6-E]: no
+  disc beside it, and a pointer on a round end -- past the arc's end angle --
+  is on the arc: the whole of it takes the emphasis }
+procedure TAdvChartStatesMiscTest.TestARoundCappedArcIsOneSausageAndItsEndsHover;
 var
-  arc, el: TTyChartElement;
-  ai, k, caps: Integer;
+  arc, arc2, el: TTyChartElement;
+  ai, k: Integer;
   p: TPoint;
-  rest: TTyChartColor;
+  rc, dr, a: Double;
+  item: TTyStItem;
 begin
   NewChart(camOff);
   Load(StringReplace(cGauge, '"progress":{"show":true,"width":14}',
     '"progress":{"show":true,"width":14,"roundCap":true}', []));
   ai := FindRole(carGaugeProgress, 0, 0, arc);
   AssertTrue('the arc', ai >= 0);
-  rest := arc.Style.FillColor;
-  p := SectorMiddle(arc);
-  FChart.Move(p.X, p.Y);
-  Draw;
-  caps := 0;
+  AssertTrue('a sausage', arc.Shape.Sausage);
   for k := 0 to FChart.List.Count - 1 do
   begin
     el := FChart.List.Element(k);
-    if (el.Shape.Kind <> cskCircle) or not el.Silent then Continue;
-    if (k <> ai - 1) and (k <> ai - 2) then Continue;
-    Inc(caps);
-    AssertEquals(Format('cap %d lifted with the arc', [k]),
-      IntToHex(TyChartLiftColor(rest), 8), IntToHex(el.Style.FillColor, 8));
+    AssertFalse(Format('no disc beside it (%d)', [k]), el.Silent and (el.Shape.Kind = cskCircle));
   end;
-  AssertEquals('both caps', 2, caps);
+  dr := (arc.Shape.R1 - arc.Shape.R0) / 2;
+  rc := arc.Shape.R0 + dr;
+  a := arc.Shape.EndRad + 0.6 * dr / rc;
+  p := Point(Round(arc.Shape.CX + Cos(a) * rc), Round(arc.Shape.CY + Sin(a) * rc));
+  FChart.Move(p.X, p.Y);
+  Draw;
+  AssertTrue(FChart.PeerStates(0, 0, item));
+  AssertEquals('the arc in emphasis off its round end', 'emphasis', TyStNamesText(item.Host.States));
+  FindRole(carGaugeProgress, 0, 0, arc2);
+  AssertEquals('lifted, the whole of it', IntToHex(TyChartLiftColor(arc.Style.FillColor), 8),
+    IntToHex(arc2.Style.FillColor, 8));
+  AssertTrue('still one sausage', arc2.Shape.Sausage);
 end;
 
 { RADAR SYMBOLS SIT AT z2 100 (RadarView.ts:67): a hovered ring rises by ten

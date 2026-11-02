@@ -133,6 +133,9 @@ type
       cutting its words to the rect it shrinks to after the option it was
       read from is gone }
     LabelPlace: TTyTmLabelPlace;
+    { [R6-A] the label under each state that writes a position or a
+      distance: the anchor the placement gives (TTyEmphTwin.Anchored) }
+    StateLabels: TTyEmphTwinArray;
     { [R5-I] laid out in view but its rects invisible: a transition this
       render took over had it on its willInvisibleEls, and that one's
       renderFinally (its animators aborted by this render's start) hid them
@@ -1622,6 +1625,10 @@ begin
     if lv <> nil then base := TyLabelSpecOfNode(ObjIn(lv, 'label'), ASolved.Series, base);
     it := ItemOf(ASolved, row);
     if it <> nil then base := TyLabelSpecOfNode(ObjIn(it, 'label'), ASolved.Series, base);
+    { [R6-A] the states' textConfig along the node's model chain: its item,
+      its level, the series (the placement reads the normal distance
+      itself, PlaceOf) }
+    TyLabelReadStateCfg([it, lv, ASolved.Series], base);
     { the mark places and cuts the words itself }
     base.OffsetXLogical := 0;
     base.OffsetYLogical := 0;
@@ -1698,6 +1705,14 @@ begin
   Result.FontWeight := spec.FontWeight;
 end;
 
+{ [R6-A] whether zrender's calculateTextPosition knows the word }
+function TyTmKnownPosition(const AWord: string): Boolean;
+var known: Boolean;
+begin
+  TyLabelPositionOf(AWord, known);
+  Result := known;
+end;
+
 function PlaceWith(const APlace: TTyTmLabelPlace; const AText: string;
   ARX0, ARY0, ACW, ACH: Double;
   const AMeasurer: ITyTextMeasurer; out AWords: string; out ALX, ALY: Double;
@@ -1761,10 +1776,17 @@ begin
     rx := rx + (cw - dist); ry := ry + (ch - dist);
     AAH := tahRight; AAV := tavBottom;
   end
-  else
+  else if TyTmKnownPosition(ps) then
   begin
     rx := rx + cw / 2;
     ry := ry + ch / 2;
+  end
+  else
+  begin
+    { [R6-A] a name zrender does not know: the rect's top-left, aligned
+      left / top (calculateTextPosition has no default) }
+    AAH := tahLeft;
+    AAV := tavTop;
   end;
   if Around0(rx) and Around0(ry) then
   begin
@@ -1882,6 +1904,11 @@ var
   mask: TFPUExceptionMask;
   prm: TTyChartCallbackParams;
   vals: TTyDoubleArray;
+  code: Byte;
+  stCfg: TTyLabelStateCfg;
+  stPlace: TTyTmLabelPlace;
+  stTwin: TTyEmphTwin;
+  stWords: string;
 begin
   if not ASolved.Valid or (AMeasurer = nil) then Exit;
   mask := GetExceptionMask;
@@ -1942,6 +1969,27 @@ begin
         bw * 1 + ASolved.Nodes[row].TX, bw * 1 + ASolved.Nodes[row].TY, cw, ch,
         AMeasurer, ASolved.Nodes[row].LabelText, ASolved.Nodes[row].LabelX,
         ASolved.Nodes[row].LabelY, ASolved.Nodes[row].LabelAH, ASolved.Nodes[row].LabelAV);
+      { [R6-A] AND UNDER THE STATES' textConfig: updateInnerText lays the
+        words out on the content rect by the state's position and distance
+        over the normal ones, the padding and the cut the same }
+      ASolved.Nodes[row].StateLabels := nil;
+      if ASolved.Nodes[row].HasLabel then
+        for code := TyTwinEmphasis to TyTwinSelectBlur do
+        begin
+          if not TyLabelStateCfgOf(spec, code, stCfg) then Continue;
+          stPlace := ASolved.Nodes[row].LabelPlace;
+          if stCfg.HasPosWord then stPlace.Pos := stCfg.PosWord;
+          if stCfg.HasDistance then stPlace.Dist := stCfg.DistanceLogical * ASolved.Scale;
+          stTwin := Default(TTyEmphTwin);
+          stTwin.State := code;
+          stTwin.Anchored := True;
+          if not PlaceWith(stPlace, text, bw * 1 + ASolved.Nodes[row].TX,
+            bw * 1 + ASolved.Nodes[row].TY, cw, ch, AMeasurer, stWords,
+            stTwin.Caption.X, stTwin.Caption.Y, stTwin.Caption.AnchorH,
+            stTwin.Caption.AnchorV) then Continue;
+          SetLength(ASolved.Nodes[row].StateLabels, Length(ASolved.Nodes[row].StateLabels) + 1);
+          ASolved.Nodes[row].StateLabels[High(ASolved.Nodes[row].StateLabels)] := stTwin;
+        end;
     end;
   finally
     ClearExceptions(False);
@@ -2651,6 +2699,8 @@ var
         el.Caption.FixedAV := nd.LabelAV;
         el.Caption.HasFixedZ2 := True;
         el.Caption.FixedZ2 := maxZ2 + 2;
+        { [R6-A] and where the states' textConfig puts them }
+        el.EmphTwin := Copy(nd.StateLabels, 0, Length(nd.StateLabels));
       end;
       AList.Add(el);
       Inc(cnt);

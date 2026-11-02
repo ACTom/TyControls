@@ -406,6 +406,16 @@ type
     Series, Start, Count: Integer;
   end;
 
+  { [R6-B] WHETHER A MAP VIEW'S REGIONS GROUP HOLDS REGIONS (MapDraw's
+    isFirstDraw is !regionsGroup.childAt(0)): a GeoJSON draw fills it with
+    its regions, an SVG draw leaves it as it was (its graphic goes in the
+    svg group). Key the view's (TyGeoViewKey), Gen the build that wrote it. }
+  TTyGeoHeld = record
+    Key: Integer;
+    Held: Boolean;
+    Gen: Integer;
+  end;
+
   TTyStSeries = record
     Kind: TTyStKind;
     IsLine: Boolean;
@@ -1101,6 +1111,11 @@ type
     FMapRoam: array of TTyMapRoam;
     FGeoDraws: array of TTyGeoDrawRange;
     FMapSyms: array of TTyGeoDrawRange;
+    { [R6-B] each map view's regions group as its last draw left it, and
+      the builds counted (a view the last build did not draw is gone: its
+      MapDraw removed) }
+    FGeoHeld: array of TTyGeoHeld;
+    FGeoBuildGen: Integer;
     { a heatmap on a geo's layer, per slot, as the last build made it }
     FHeatLayers: array of TTyHeatLayer;
     { THE TREES, laid out per slot -- an empty record where the slot is no
@@ -2228,6 +2243,8 @@ type
     { [R2-C] the map views the last build drew, and (ANew) the model each
       one's transform group tweens on }
     function AnimGeoViews(ANew: Boolean): TTyChartGeoViewArray;
+    procedure GeoNoteHeld(AGeo: TObject);
+    function GeoHeldOf(AKey: Integer): Boolean;
     { ---- the states on the proxies [Batch 94, AN3b] ---- }
     { after the build and its arming: every state element's proxy found or
       made, seeded with the rest values, given the series' stateTransition,
@@ -2258,6 +2275,12 @@ type
     { the series' universal transition keys now, as FAnimOldUtKeys keeps
       them [Batch 136, 137] }
     function AnimUtKeys: TTyUtSeriesKeysArray;
+    { [R6-C] the encoded group dimensions (itemGroupId, itemChildGroupId) of
+      series ASeries read as its data has them: from its dataset (either
+      layout) or its own items, through the store where the dimension is an
+      axis coordinate (a time column's parsed ms, a category's name) --
+      AKeys' groups replaced where an encode names one }
+    procedure AnimUtEncoded(ASeries: Integer; var AKeys: TTyUtSeriesKeys);
     { [F3c] the pending transition option's `to` names series ASeries
       (series:beforeupdate's __universalTransitionEnabled) }
     function AnimUtNamed(ASeries: Integer): Boolean;
@@ -4243,6 +4266,23 @@ type
       line its labelLine.lineStyle -- of which the four shadow keys. A gauge's
       parts take theirs in its builder. }
     procedure ApplySeriesShadows(AList: TTyPaintList);
+    { [R6-C] THE PEN'S ENDS onto a series' elements: getItemStyle's lineCap /
+      lineJoin / miterLimit (borderCap, borderJoin, borderMiterLimit),
+      getLineStyle's (cap, join, miterLimit), from the same model chains as
+      the shadows -- and the views' own: a funnel's polygon joins round, a
+      line's polyline bevels unless its lineStyle says, a gauge's pointer lays
+      pointer.itemStyle over its item's; a sankey's band reads itemStyle's
+      border* keys off its lineStyle; a treemap's rects,
+      a radar's area and an area take none.
+      [R6-D] AND THE DASH -- borderType / type, borderDashOffset /
+      dashOffset -- off the same chains; a pie's border joins round unless
+      written (PieSeries' borderJoin), a sunburst's always bevels
+      (SunburstPiece); a gauge's pointer and progress arc and a funnel's
+      bands take the stroke and its width too: the visual style's
+      borderColor ('auto', the series', its palette colour) and borderWidth,
+      an icon pointer's setColor, then pointer.itemStyle /
+      progress.itemStyle over them }
+    procedure ApplySeriesPens(AList: TTyPaintList);
     { [R5-A] A SERIES' blendMode AND zlevel onto its elements: the blend on
       every element its view renders (echarts' updateBlend -- not a label,
       not a label line: they are no child of the view's group), the zlevel on

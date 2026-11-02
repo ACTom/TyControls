@@ -93,6 +93,31 @@ type
       '-' (HeatmapView.ts:313-317) [Batch 68] }
     tldRawThird);
 
+  { [R6-A] ONE STATE'S textConfig AS ITS LABEL MODEL WRITES IT:
+    createTextConfig(stateModel, opt, isNotNormal) -- only the keys the
+    state's label (a data item's over the series') writes: a truthy
+    `position` ('outside' the host's own outside side, the array form
+    against the host's box), `distance`, `offset`, `rotate` (radians).
+    zrender lays the label out by the normal textConfig extended by the
+    states' when they are entered (Element._applyStateObj). }
+  TTyLabelStateCfg = record
+    HasPosition: Boolean;
+    Position: TTyLabelPosition;
+    Outside: Boolean;
+    AtX, AtY: Double;
+    AtXIsPercent, AtYIsPercent: Boolean;
+    HasDistance: Boolean;
+    DistanceLogical: Double;
+    HasOffset: Boolean;
+    OffsetXLogical, OffsetYLogical: Double;
+    HasRotation: Boolean;
+    RotationRad: Double;
+    { the position's word as written (a polar bar's sector positions --
+      start, insideEnd ... -- are no zrender name) }
+    HasPosWord: Boolean;
+    PosWord: string;
+  end;
+
   { Everything about one series' labels except the words.
 
     THE THREE INSIDE COLOURS ARE A BAND TABLE, not a light/dark pair. Upstream
@@ -232,12 +257,63 @@ type
       setLabelStyle hands over as defaultOpacity otherwise }
     HasOpacity: Boolean;
     Opacity: Double;
+    { [R6-A] the states' textConfig, by TTyEmphTwin.State: emphasis, blur,
+      select (TyTwinEmphasis..TyTwinSelect) }
+    StateCfg: array[0..2] of TTyLabelStateCfg;
   end;
   TTyLabelSpecArray = array of TTyLabelSpec;
   TTyLabelSpecTable = array of TTyLabelSpecArray;
 
 { A spec that draws nothing. }
 function TyLabelSpecNone: TTyLabelSpec;
+
+{ [R6-A] WHAT A STATE'S TWIN IS LAID OUT FROM: the spec (a label layout's
+  font, size and alignment over it), the normal textConfig (the layout's
+  offset and turn in it), the host and the caption it is a twin of, the rect
+  the label hangs on, its plain box, the host's fill; where it stands when
+  no position is (a fixed anchor's, a layout's x / y) and the style's
+  alignment over the position's; TurnAboutBox: turned about the box's centre
+  (textConfig origin 'center', a radial tree's) }
+type
+  TTyLabelTwinIn = record
+    Spec: TTyLabelSpec;
+    Normal: TTyLabelStateCfg;
+    Host: TTyChartElement;
+    Base: TTyElementCaption;
+    Text: string;
+    Bounds: TTyRectF;
+    HBox: TTyXYWH;
+    HasBox: Boolean;
+    W, H, Scale: Double;
+    HostFill: TTyChartColor;
+    HostHasFill: Boolean;
+    FreeX, FreeY: Double;
+    FreeAH: TTyTextAnchorH;
+    FreeAV: TTyTextAnchorV;
+    FreeInside: Boolean;
+    StyleHasAH, StyleHasAV: Boolean;
+    StyleAH: TTyTextAnchorH;
+    StyleAV: TTyTextAnchorV;
+    TurnAboutBox: Boolean;
+  end;
+
+{ [R6-A] THE LABEL AS A STATE'S textConfig LAYS IT OUT (the twin ACode of
+  AIn.Base): False where it lays out nothing }
+function TyLabelLayTwin(const AIn: TTyLabelTwinIn; ACode: Byte;
+  const AStates: TTyLabelStateCfg; const AMeasurer: ITyTextMeasurer;
+  out ATwin: TTyEmphTwin): Boolean;
+
+{ [R6-A] whether a state's textConfig writes any of its four keys }
+function TyLabelStateCfgWrites(const ACfg: TTyLabelStateCfg): Boolean;
+{ [R6-A] AOver's written keys over ABase's (zrender's extend of textConfig) }
+function TyLabelStateCfgOver(const ABase, AOver: TTyLabelStateCfg): TTyLabelStateCfg;
+{ [R6-A] the normal textConfig of a spec, every key written }
+function TyLabelStateCfgNormal(const ASpec: TTyLabelSpec): TTyLabelStateCfg;
+{ [R6-A] WHAT THE STATES OF TWIN ACODE WRITE (TTyEmphTwin.State): one
+  state's, or select's with emphasis' (blur's) over it -- False where that
+  twin is not wanted (none of its states writes a key) }
+function TyLabelStateCfgOf(const ASpec: TTyLabelSpec; ACode: Byte;
+  out ACfg: TTyLabelStateCfg): Boolean;
 
 { The position named, or tlpNone when the string is not one of the thirteen.
 
@@ -414,6 +490,7 @@ procedure TyExpandLabels(AList: TTyPaintList; const ASpecs: TTyLabelSpecArray;
 implementation
 
 uses fpjson, jsonparser, tyControls.AdvanceChart.Style, tyControls.AdvanceChart.RichStyle,
+  tyControls.AdvanceChart.PolarBar,
   tyControls.AdvanceChart.LabelLayout, tyControls.AdvanceChart.Color,
   tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Option;
 
@@ -617,6 +694,93 @@ begin
   Result.Formatter := '';
   Result.DefaultText := tldValue;
   Result.Z2Lift := 1;
+end;
+
+function TyLabelStateCfgWrites(const ACfg: TTyLabelStateCfg): Boolean;
+begin
+  Result := ACfg.HasPosition or ACfg.HasDistance or ACfg.HasOffset or ACfg.HasRotation
+    or ACfg.HasPosWord;
+end;
+
+function TyLabelStateCfgOver(const ABase, AOver: TTyLabelStateCfg): TTyLabelStateCfg;
+begin
+  Result := ABase;
+  if AOver.HasPosition then
+  begin
+    Result.HasPosition := True;
+    Result.Position := AOver.Position;
+    Result.Outside := AOver.Outside;
+    Result.AtX := AOver.AtX;
+    Result.AtY := AOver.AtY;
+    Result.AtXIsPercent := AOver.AtXIsPercent;
+    Result.AtYIsPercent := AOver.AtYIsPercent;
+  end;
+  if AOver.HasDistance then
+  begin
+    Result.HasDistance := True;
+    Result.DistanceLogical := AOver.DistanceLogical;
+  end;
+  if AOver.HasOffset then
+  begin
+    Result.HasOffset := True;
+    Result.OffsetXLogical := AOver.OffsetXLogical;
+    Result.OffsetYLogical := AOver.OffsetYLogical;
+  end;
+  if AOver.HasRotation then
+  begin
+    Result.HasRotation := True;
+    Result.RotationRad := AOver.RotationRad;
+  end;
+  if AOver.HasPosWord then
+  begin
+    Result.HasPosWord := True;
+    Result.PosWord := AOver.PosWord;
+  end;
+end;
+
+function TyLabelStateCfgNormal(const ASpec: TTyLabelSpec): TTyLabelStateCfg;
+begin
+  Result.HasPosition := True;
+  Result.Position := ASpec.Position;
+  Result.Outside := ASpec.Outside;
+  Result.AtX := ASpec.AtX;
+  Result.AtY := ASpec.AtY;
+  Result.AtXIsPercent := ASpec.AtXIsPercent;
+  Result.AtYIsPercent := ASpec.AtYIsPercent;
+  Result.HasDistance := True;
+  Result.DistanceLogical := ASpec.DistanceLogical;
+  Result.HasOffset := True;
+  Result.OffsetXLogical := ASpec.OffsetXLogical;
+  Result.OffsetYLogical := ASpec.OffsetYLogical;
+  Result.HasRotation := True;
+  Result.RotationRad := ASpec.RotationRad;
+end;
+
+function TyLabelStateCfgOf(const ASpec: TTyLabelSpec; ACode: Byte;
+  out ACfg: TTyLabelStateCfg): Boolean;
+begin
+  ACfg := Default(TTyLabelStateCfg);
+  case ACode of
+    TyTwinEmphasis, TyTwinBlur, TyTwinSelect:
+      begin
+        ACfg := ASpec.StateCfg[ACode];
+        Result := TyLabelStateCfgWrites(ACfg);
+      end;
+    TyTwinSelectEmphasis:
+      begin
+        Result := TyLabelStateCfgWrites(ASpec.StateCfg[TyTwinSelect])
+          and TyLabelStateCfgWrites(ASpec.StateCfg[TyTwinEmphasis]);
+        ACfg := TyLabelStateCfgOver(ASpec.StateCfg[TyTwinSelect], ASpec.StateCfg[TyTwinEmphasis]);
+      end;
+    TyTwinSelectBlur:
+      begin
+        Result := TyLabelStateCfgWrites(ASpec.StateCfg[TyTwinSelect])
+          and TyLabelStateCfgWrites(ASpec.StateCfg[TyTwinBlur]);
+        ACfg := TyLabelStateCfgOver(ASpec.StateCfg[TyTwinSelect], ASpec.StateCfg[TyTwinBlur]);
+      end;
+  else
+    Result := False;
+  end;
 end;
 
 function TyLabelPositionOf(const AName: string; out AKnown: Boolean): TTyLabelPosition;
@@ -1084,6 +1248,230 @@ begin
   TyExpandLabels(AList, ASpecs, nil, AMeasurer, APPI);
 end;
 
+function TyLabelLayTwin(const AIn: TTyLabelTwinIn; ACode: Byte;
+  const AStates: TTyLabelStateCfg; const AMeasurer: ITyTextMeasurer;
+  out ATwin: TTyEmphTwin): Boolean;
+var
+  ACfg: TTyLabelStateCfg;
+  tbx, tby, trot: Double;
+  anc: Integer;
+  sec: TTyPolarSector;
+  spos: TTySectorTextPos;
+  tword: string;
+  known: Boolean;
+  tw: TTyEmphTwin;
+  tpos: TTyLabelPosition;
+  tx, ty, tdist, tatX, tatY, toffX, toffY, tw2: Double;
+  tah: TTyTextAnchorH;
+  tav: TTyTextAnchorV;
+  tm: TTyMat2D;
+  tbox: TTyRectF;
+  tpieces: TTyRtPieceArray;
+  tinside, tgrad: Boolean;
+  tink, tstroke: TTyChartColor;
+begin
+  Result := False;
+  ATwin := Default(TTyEmphTwin);
+  ACfg := TyLabelStateCfgOver(AIn.Normal, AStates);
+  tdist := ACfg.DistanceLogical * AIn.Scale;
+  tpos := ACfg.Position;
+  { 'outside': the AIn.Host's defaultOutsidePosition, 'top' where it has none }
+  if ACfg.Outside then
+    case AIn.Host.Caption.Outside of
+      coTop: tpos := tlpTop;
+      coBottom: tpos := tlpBottom;
+      coLeft: tpos := tlpLeft;
+      coRight: tpos := tlpRight;
+    end;
+  if ACfg.AtXIsPercent then tatX := ACfg.AtX * (AIn.Bounds.Right - AIn.Bounds.Left)
+  else tatX := ACfg.AtX * AIn.Scale;
+  if ACfg.AtYIsPercent then tatY := ACfg.AtY * (AIn.Bounds.Bottom - AIn.Bounds.Top)
+  else tatY := ACfg.AtY * AIn.Scale;
+  anc := -1;
+  if AIn.Host.Anim.Role = carTmRect then
+  begin
+    { A TREEMAP NODE'S: where the treemap's own placement puts the words
+      under the states' position and distance (its padding, its cut) }
+    anc := TyEmphTwinAt(AIn.Host.EmphTwin, ACode);
+    if anc < 0 then Exit;
+  end;
+  if anc >= 0 then
+  begin
+    tx := AIn.Host.EmphTwin[anc].Caption.X;
+    ty := AIn.Host.EmphTwin[anc].Caption.Y;
+    tah := AIn.Host.EmphTwin[anc].Caption.AnchorH;
+    tav := AIn.Host.EmphTwin[anc].Caption.AnchorV;
+    tpos := tlpInside;
+  end
+  else if AIn.Host.Caption.SecHas then
+  begin
+    { A POLAR BAR'S: its sector positions by the sector's own
+      calculateTextPosition, any other on the path's rect; the turn
+      setSectorTextRotation gave the normal position unless a state
+      writes one; inside where the normal position is 'middle'
+      (textConfig.inside) or the word says }
+    sec.CX := AIn.Host.Anim.G[0];
+    sec.CY := AIn.Host.Anim.G[1];
+    sec.R0 := AIn.Host.Anim.G[2];
+    sec.R := AIn.Host.Anim.G[3];
+    sec.SA := AIn.Host.Anim.G[4];
+    sec.EA := AIn.Host.Anim.G[5];
+    sec.CW := AIn.Host.Anim.G[6] <> 0;
+    if AStates.HasPosWord then
+    begin
+      tword := AStates.PosWord;
+      if tword = 'outside' then tword := TyPolarOutsideWord(sec, AIn.Host.Anim.G[7] <> 0);
+      spos := TySectorTextPosOf(tword, AIn.Host.Anim.G[7] <> 0);
+      tpos := TyLabelPositionOf(tword, known);
+      { a word calculateTextPosition does not know: the rect's corner,
+        aligned left / top (its switch has no default) }
+      if (spos = stpBuiltin) and not known then
+      begin
+        tpos := tlpAt;
+        tatX := 0;
+        tatY := 0;
+      end;
+    end
+    else
+    begin
+      tword := '';
+      if AIn.Host.Caption.SecAnchor then spos := TTySectorTextPos(AIn.Host.Caption.SecPos)
+      else spos := stpBuiltin;
+    end;
+    if spos <> stpBuiltin then
+      TySectorLabelAnchor(sec, spos, tdist, AIn.Host.Anim.G[8] <> 0, tx, ty, tah, tav)
+    else
+    begin
+      if ACfg.AtXIsPercent then tatX := ACfg.AtX * AIn.HBox.W;
+      if ACfg.AtYIsPercent then tatY := ACfg.AtY * AIn.HBox.H;
+      TyLabelAnchorXYWH(AIn.HBox, tpos, tdist, tatX, tatY, tx, ty, tah, tav);
+    end;
+  end
+  else if not ACfg.HasPosition then
+  begin
+    { no position: label.x / y where the mark put it }
+    tx := AIn.FreeX;
+    ty := AIn.FreeY;
+    tah := AIn.FreeAH;
+    tav := AIn.FreeAV;
+    if AIn.FreeInside then tpos := tlpInside else tpos := tlpRight;
+  end
+  else if AIn.HasBox then
+  begin
+    if ACfg.AtXIsPercent then tatX := ACfg.AtX * AIn.HBox.W;
+    if ACfg.AtYIsPercent then tatY := ACfg.AtY * AIn.HBox.H;
+    TyLabelAnchorXYWH(AIn.HBox, tpos, tdist, tatX, tatY, tx, ty, tah, tav);
+    if (tpos = tlpInside) and AIn.Host.Caption.HasSymBox and (AIn.Host.Caption.LgSymbol = 'pin') then
+      ty := AIn.HBox.Y + AIn.HBox.H * Double(0.4);
+  end
+  else
+    TyLabelAnchor(AIn.Bounds, tpos, tdist, tatX, tatY, tx, ty, tah, tav);
+  if (ACfg.HasPosition or AIn.Host.Caption.SecHas) and (anc < 0) then
+  begin
+    if AIn.StyleHasAH then tah := AIn.StyleAH;
+    if AIn.StyleHasAV then tav := AIn.StyleAV;
+    if AIn.Host.Anim.Role = carRiver then tav := tavMiddle;
+  end;
+  tbx := tx;
+  tby := ty;
+  toffX := ACfg.OffsetXLogical * AIn.Scale;
+  toffY := ACfg.OffsetYLogical * AIn.Scale;
+  trot := ACfg.RotationRad;
+  if AIn.Host.Caption.SecHas and not AStates.HasRotation then trot := AIn.Host.Caption.SecRot;
+  if AIn.TurnAboutBox and ACfg.HasPosition then
+  begin
+    { textConfig origin 'center': turned about the box's centre, the offset
+      a plain move (an origin of its own) }
+    TyLabelTurnedAnchor(AIn.HBox, tpos, tdist, trot, tx, ty);
+    tx := tx + toffX;
+    ty := ty + toffY;
+  end
+  else if TyLabelLocalTransform(tx + toffX, ty + toffY, -toffX, -toffY, trot,
+    1, 1, tm) then
+  begin
+    tx := tm[4];
+    ty := tm[5];
+  end
+  else
+  begin
+    tx := 0;
+    ty := 0;
+  end;
+  tinside := ACfg.HasPosition and TyLabelIsInside(tpos);
+  if not ACfg.HasPosition or (anc >= 0) then tinside := AIn.FreeInside;
+  if AIn.Host.Caption.SecHas then
+  begin
+    if AStates.HasPosWord then
+      tinside := AIn.Host.Caption.SecMiddle or (System.Pos('inside', tword) > 0)
+    else
+      tinside := AIn.Host.Caption.SecInside;
+  end;
+  tgrad := AIn.Host.Style.HasFill and (AIn.Host.Style.FillGradient.Kind <> cgkNone);
+  tpieces := nil;
+  if AIn.Spec.Rt.Needed then
+  begin
+    tpieces := TyLabelBlockPieces(AIn.Spec, AIn.Text, AIn.HostFill, AIn.HostHasFill,
+      tgrad, tinside, tah, tav, AIn.Scale, AMeasurer);
+    if Length(tpieces) = 0 then Exit;
+    tbox := TyRtDeviceBox(tpieces, tx, ty, trot, AIn.Scale);
+  end
+  else
+    tbox := TyAnchorBox(tx, ty, AIn.W, AIn.H, tah, tav);
+  Result := False;
+  tw := Default(TTyEmphTwin);
+  tw.State := ACode;
+  tw.Caption := AIn.Base;
+  { a box-turned label: what a scaled box lays it out again by (RideBox) }
+  if AIn.TurnAboutBox and ACfg.HasPosition then
+  begin
+    tw.Caption.FixedPos := Ord(tpos);
+    tw.Caption.FixedDist := tdist;
+    tw.Caption.FixedRotationRad := trot;
+  end;
+  tw.Caption.X := tx;
+  tw.Caption.Y := ty;
+  tw.Caption.AnchorH := tah;
+  tw.Caption.AnchorV := tav;
+  tw.Caption.RotationRad := trot;
+  TyLabelInk(AIn.Spec, AIn.HostFill, AIn.HostHasFill, tgrad, tinside, tink, tstroke, tw2);
+  tw.Caption.Colour := tink;
+  tw.Caption.StrokeColour := tstroke;
+  tw.Caption.StrokeWidthLogical := tw2;
+  TyLabelStampEmphasis(AIn.Spec, AIn.HostFill, AIn.HostHasFill, tgrad, tinside, tw.Caption);
+  tw.Caption.RtPieces := tpieces;
+  tw.Caption.RtEmph := nil;
+  if (AIn.Spec.EmphRtNode <> '') or (AIn.Spec.EmphItemNode <> '') then
+    tw.Caption.RtEmph := TyLabelEmphPieces(AIn.Spec, AIn.Text, AIn.HostFill,
+      AIn.HostHasFill, tw.Caption.EmphColour, tw.Caption.EmphStrokeColour,
+      tw.Caption.EmphStrokeWidthLogical, tah, tav, AIn.Scale, AMeasurer);
+  if (Length(tpieces) > 0) and (Length(tw.Caption.RtEmph) = 0) then
+    tw.Caption.RtEmph := TyRtReink(tpieces, tw.Caption.EmphColour, True,
+      tw.Caption.EmphStrokeColour, tw.Caption.EmphStrokeWidthLogical);
+  tw.Caption.LmInkInside := tinside;
+  { what a label layout lays it out again from: the anchor before the
+    offset, and whether the states' offset and turn are their own }
+  tw.Caption.LmBaseX := tbx;
+  tw.Caption.LmBaseY := tby;
+  tw.Caption.LmOffX := toffX;
+  tw.Caption.LmOffY := toffY;
+  tw.HasOff := AStates.HasOffset;
+  tw.OffX := toffX;
+  tw.OffY := toffY;
+  tw.HasRot := AStates.HasRotation;
+  tw.Rot := trot;
+  tw.Shape := TyShapeRect(tbox);
+  { what the frame lays it out on its AIn.Host by (AnchorOn) }
+  tw.HasRide := not AIn.Host.Caption.SecHas;
+  tw.LabelPos := Ord(tpos);
+  tw.LabelDist := tdist;
+  tw.LabelAtXPct := ACfg.AtXIsPercent;
+  tw.LabelAtYPct := ACfg.AtYIsPercent;
+  if ACfg.AtXIsPercent then tw.LabelAtX := ACfg.AtX else tw.LabelAtX := ACfg.AtX * AIn.Scale;
+  if ACfg.AtYIsPercent then tw.LabelAtY := ACfg.AtY else tw.LabelAtY := ACfg.AtY * AIn.Scale;
+  ATwin := tw;
+  Result := True;
+end;
+
 { zrender's isInside for the caption of AHost: a polar bar's says itself
   (textConfig.inside or the word) [Batch 113] }
 function LabelInside(const AHost: TTyChartElement; APos: TTyLabelPosition): Boolean;
@@ -1115,6 +1503,84 @@ var
   baseX, baseY, offX, offY, rot: Double;
   m: TTyMat2D;
   k: Integer;
+  normalCfg, stCfg: TTyLabelStateCfg;
+  code: Byte;
+
+  { [R6-A] A LINE'S LABEL: what its states write, laid out when they are
+    written (the box is the Line group's as the state draws it) }
+  procedure LineTwin(ACode: Byte; const AStates: TTyLabelStateCfg);
+  var tw: TTyEmphTwin;
+  begin
+    tw := Default(TTyEmphTwin);
+    tw.State := ACode;
+    tw.Defer := True;
+    tw.LineBox := True;
+    tw.HasPos := AStates.HasPosition;
+    tw.LabelPos := Ord(AStates.Position);
+    tw.LabelAtXPct := AStates.AtXIsPercent;
+    tw.LabelAtYPct := AStates.AtYIsPercent;
+    tw.LabelAtX := AStates.AtX;
+    tw.LabelAtY := AStates.AtY;
+    if AStates.HasDistance then tw.LabelDist := AStates.DistanceLogical
+    else tw.LabelDist := spec.DistanceLogical;
+    tw.HasOff := AStates.HasOffset;
+    tw.OffX := AStates.OffsetXLogical * scale;
+    tw.OffY := AStates.OffsetYLogical * scale;
+    tw.HasRot := AStates.HasRotation;
+    tw.Rot := AStates.RotationRad;
+    SetLength(cap.EmphTwin, Length(cap.EmphTwin) + 1);
+    cap.EmphTwin[High(cap.EmphTwin)] := tw;
+  end;
+
+  { [R6-A] a state's twin of the caption, as TyLabelLayTwin lays it out }
+  procedure Twin(ACode: Byte; const AStates: TTyLabelStateCfg);
+  var
+    tin: TTyLabelTwinIn;
+    tw: TTyEmphTwin;
+    st: TTyLabelStateCfg;
+  begin
+    tin.Spec := spec;
+    tin.Normal := normalCfg;
+    tin.Host := host;
+    tin.Base := cap.Caption;
+    tin.Text := host.Caption.Text;
+    tin.Bounds := bounds;
+    tin.HBox := hbox;
+    tin.HasBox := hasBox;
+    tin.W := w;
+    tin.H := h;
+    tin.Scale := scale;
+    tin.HostFill := hostFill;
+    tin.HostHasFill := hostHasFill;
+    tin.FreeX := host.Caption.FixedX;
+    tin.FreeY := host.Caption.FixedY;
+    tin.FreeAH := host.Caption.FixedAH;
+    tin.FreeAV := host.Caption.FixedAV;
+    tin.FreeInside := host.Caption.FixedInside;
+    tin.StyleHasAH := spec.HasAlignH;
+    tin.StyleAH := spec.AlignH;
+    tin.StyleHasAV := spec.HasAlignV;
+    tin.StyleAV := spec.AlignV;
+    { a radial tree's node: textConfig origin 'center', its style middle }
+    tin.TurnAboutBox := host.Caption.HasFixedAnchor and (host.Caption.FixedByConfig = 2);
+    if tin.TurnAboutBox then
+    begin
+      tin.StyleHasAV := True;
+      tin.StyleAV := tavMiddle;
+    end;
+    st := AStates;
+    if host.Caption.RingTurn and (ACode in [TyTwinEmphasis, TyTwinSelectEmphasis]) then
+    begin
+      st.HasPosition := False;
+      st.HasPosWord := False;
+    end;
+    if TyLabelLayTwin(tin, ACode, st, AMeasurer, tw) then
+    begin
+      SetLength(cap.EmphTwin, Length(cap.EmphTwin) + 1);
+      cap.EmphTwin[High(cap.EmphTwin)] := tw;
+    end;
+  end;
+
 begin
   if (AList = nil) or (AMeasurer = nil) then Exit;
   if APPI > 0 then scale := APPI / 96 else scale := 1;
@@ -1189,6 +1655,35 @@ begin
       end;
     end;
 
+    { [R6-A] A CIRCULAR GRAPH'S TURNED LABEL (rotateLabel): the side's
+      position on the symbol's rect, turned about its centre -- placed as a
+      radial tree's (textConfig origin 'center') }
+    if host.Caption.RingTurn and not host.Caption.HasFixedAnchor then
+    begin
+      if host.Caption.RingLeft then pos := tlpLeft else pos := tlpRight;
+      hbox := TyXYWH(bounds.Left, bounds.Top, bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
+      dist := spec.DistanceLogical * scale;
+      TyLabelAnchorXYWH(hbox, pos, dist, 0, 0, x, y, ah, av);
+      if spec.HasAlignH then ah := spec.AlignH;
+      if spec.HasAlignV then av := spec.AlignV;
+      TyLabelTurnedAnchor(hbox, pos, dist, -host.Caption.RingRad, x, y);
+      host.Caption.HasFixedAnchor := True;
+      host.Caption.FixedX := x;
+      host.Caption.FixedY := y;
+      host.Caption.FixedAH := ah;
+      host.Caption.FixedAV := av;
+      host.Caption.FixedInside := False;
+      host.Caption.FixedRotationRad := -host.Caption.RingRad;
+      host.Caption.FixedByConfig := 2;
+      host.Caption.HasFixedPos := True;
+      host.Caption.FixedPos := Ord(pos);
+      host.Caption.FixedDist := dist;
+      host.Caption.HasHostBox := True;
+      host.Caption.HostBox := hbox;
+      host.Caption.FixedInfl := inflate;
+      host.Caption.FixedHalfW := hbox.W / 2 - inflate;
+      hasBox := True;
+    end;
     { THE BLOCK IS MEASURED WHERE IT IS LAID OUT, below; the one-run
       caption here }
     w := 0;
@@ -1505,6 +2000,35 @@ begin
     if (Length(pieces) > 0) and (Length(cap.Caption.RtEmph) = 0) then
       cap.Caption.RtEmph := TyRtReink(pieces, cap.Caption.EmphColour, True,
         cap.Caption.EmphStrokeColour, cap.Caption.EmphStrokeWidthLogical);
+    { [R6-A] THE STATES' textConfig: a twin for every state, and every
+      select-and-hover pair, whose label writes one -- a label on its host's
+      textConfig only (a mark that fixed its own anchor, a polar bar's
+      sector position, lay theirs out themselves) }
+    cap.EmphTwin := nil;
+    if host.Anim.Role in [carGraphEdge, carLinesLine] then
+    begin
+      for code := TyTwinEmphasis to TyTwinSelectBlur do
+        if TyLabelStateCfgOf(spec, code, stCfg) then LineTwin(code, stCfg);
+    end
+    else if (not host.Caption.HasFixedAnchor and (not host.Caption.SecHas
+        or (host.Anim.Role = carPolarBar)))
+      or (host.Caption.HasFixedAnchor and ((host.Caption.FixedByConfig in [1, 2])
+        or (host.Anim.Role in [carRiver, carTmRect])
+        { a sankey link's curve: textConfig position 'inside' on its rect }
+        or (host.Datum.IsEdge and (host.Anim.Role = carSankeyClip)))) then
+    begin
+      normalCfg := TyLabelStateCfgNormal(spec);
+      if host.Caption.HasFixedAnchor then
+      begin
+        normalCfg.RotationRad := host.Caption.FixedRotationRad;
+        { a box-turned label's normal position is the one its mark chose }
+        if host.Caption.FixedByConfig = 2 then
+          normalCfg.Position := TTyLabelPosition(host.Caption.FixedPos);
+        if host.Anim.Role = carRiver then normalCfg.HasPosition := False;
+      end;
+      for code := TyTwinEmphasis to TyTwinSelectBlur do
+        if TyLabelStateCfgOf(spec, code, stCfg) then Twin(code, stCfg);
+    end;
     AList.Add(cap);
   end;
 end;

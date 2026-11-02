@@ -369,7 +369,7 @@ begin
       else if role = 'funnel' then Each((el.Anim.Role = carFunnel) and (el.Anim.Series = s) and (el.Anim.Index = i))
       else if role = 'gaugePointer' then Each((el.Anim.Role = carGaugePointer) and (el.Anim.Series = s) and (el.Anim.Index = i))
       { the arc and its round ends }
-      else if role = 'gaugeProgress' then Each((el.Anim.Role in [carGaugeProgress, carGaugeCap]) and (el.Anim.Series = s) and (el.Anim.Index = i))
+      else if role = 'gaugeProgress' then Each((el.Anim.Role = carGaugeProgress) and (el.Anim.Series = s) and (el.Anim.Index = i))
       { the dial's parts: every one of the kind, against the first record of it }
       else if role = 'gaugeBand' then Each((i = 0) and Plain(el) and (el.Datum.SeriesIndex < 0)
         and (el.Shape.Kind = cskSector) and el.Silent)

@@ -2844,6 +2844,9 @@ begin
   end;
   if not IsNan(item.BorderWidthLogical) then
     AVisual.StrokeWidthLogical := item.BorderWidthLogical;
+  AVisual.StrokeWidthSet := not IsNan(item.BorderWidthLogical);
+  AVisual.StrokeWidthNaN := item.BorderWidthNaN;
+  AVisual.StrokeWidthInf := item.BorderWidthInf;
   { THE PEN'S DASH, carried as the option wrote it -- see TTySeriesVisual. }
   AVisual.Dash := item.Dash;
   AVisual.DashExplicit := item.DashLogical;
@@ -2875,8 +2878,24 @@ begin
     palette colour came from `itemStyle` -- that is the trap in this whole
     row -- and that colour still goes to its symbols and its area; the
     authored `lineStyle.color` wins the polyline's pixels and nothing else. }
+  { [R6-D] the itemStyle's pen, kept for a line's symbols }
+  AVisual.ItemStroke := AVisual.Stroke;
+  AVisual.ItemStrokeGradient := AVisual.StrokeGradient;
+  AVisual.ItemStrokeWidthLogical := AVisual.StrokeWidthLogical;
+  AVisual.ItemStrokeWidthSet := AVisual.StrokeWidthSet;
   if (st = 'line') or TyStyleDrawsWithStroke(st) then
   begin
+    { [R6-D] A LINE'S, A LINES' AND A PARALLEL'S PEN IS NOT THE itemStyle's
+      border: the polyline strokes in lineStyle.color (the visual colour
+      where none) at lineStyle.width -- lines and parallel read no
+      itemStyle at all (visualStyleAccessPath 'lineStyle') [was: an
+      itemStyle.borderColor / borderWidth stroked the line where its
+      lineStyle wrote none]. A boxplot strokes with its Whisker pen
+      (BoxplotVisual), none of these. }
+    AVisual.Stroke := 0;
+    AVisual.StrokeGradient := Default(TTyChartGradient);
+    AVisual.StrokeWidthLogical := 0;
+    AVisual.StrokeWidthSet := False;
     if line.Color.Written and not line.Color.IsNone then
     begin
       if line.Color.IsAuto then
@@ -2886,6 +2905,11 @@ begin
     end;
     if not IsNan(line.BorderWidthLogical) then
       AVisual.StrokeWidthLogical := line.BorderWidthLogical;
+    { [R6-E] a written width, whatever it is: the line's default 2 is for
+      none }
+    AVisual.StrokeWidthSet := not IsNan(line.BorderWidthLogical);
+    AVisual.StrokeWidthNaN := False;
+    AVisual.StrokeWidthInf := 0;
     { AND IT REPLACES the itemStyle one rather than adding to it: for a shape
       drawn with a stroke, lineStyle IS the pen. `lineStyle: {}` with no type
       leaves todNone, which answers solid -- so a line series that writes only
@@ -3941,6 +3965,7 @@ begin
     [Batch 152] }
   FGeoDraws := nil;
   FMapSyms := nil;
+  Inc(FGeoBuildGen);
   for i := 0 to High(FGeos) do
   begin
     if FGeos[i] = nil then Continue;
@@ -3958,6 +3983,7 @@ begin
     FGeoDraws[High(FGeoDraws)].Series := -1;
     FGeoDraws[High(FGeoDraws)].Start := n;
     FGeoDraws[High(FGeoDraws)].Count := list.Count - n;
+    GeoNoteHeld(FGeos[i]);
   end;
   furniture := drawn;
   { nothing is large until the loop below says so [Batch 117] }
@@ -4517,6 +4543,7 @@ begin
     { the shadows, on the marks and the lines, before the states take their
       rest values [R5-A] }
     if drawn > 0 then ApplySeriesShadows(list);
+    if drawn > 0 then ApplySeriesPens(list);
     { A SILENT SERIES TAKES NO POINTER: nothing of it -- marks, labels -- is
       hit, hovered or clicked (upstream's series `silent`) [Batch 84] }
     if drawn > 0 then SilenceSeries(list);
@@ -4675,6 +4702,270 @@ begin
         Take(nodes, ['lineStyle'])
       else
         Take(nodes, ['itemStyle']);
+    end;
+  end;
+end;
+
+procedure TTyCustomAdvanceChart.ApplySeriesPens(AList: TTyPaintList);
+var
+  k, s, slot, raw, e: Integer;
+  pe: PTyChartElement;
+  typ: string;
+  nodes: TTyStNodeArray;
+  sNode: TJSONObject;
+  joinHas: Boolean;
+  fills: TTyChartColorArray;
+  fillsSlot: Integer;
+  iconEmpty: Boolean;
+  iconBody: string;
+  dashOn: Boolean;
+
+  { the three keys of a block under APath (an item style's border* ones,
+    a line style's own), each from the first node that writes it; a word
+    the canvas does not know and a limit that is no number above nought are
+    the canvas' to ignore }
+  procedure Take(const ANodes: TTyStNodeArray; const APath: array of string; ALine: Boolean);
+  var
+    jh: Boolean;
+  begin
+    { the ends always; [R6-D] the dash (getItemStyle's / getLineStyle's
+      lineDash) and its phase only for the views whose builders do not read
+      them (dashOn) [R6-F: TyStTakePenKeys, shared with a gauge's parts] }
+    if dashOn then TyStTakePenKeys(pe^.Style, ANodes, APath, ALine, [spkEnds, spkDash], jh)
+    else TyStTakePenKeys(pe^.Style, ANodes, APath, ALine, [spkEnds], jh);
+    if jh then joinHas := True;
+  end;
+
+  { [R6-D] THE STROKE AND ITS WIDTH under APath (getItemStyle's borderColor
+    and borderWidth), each from the first node that writes it: 'none' no
+    pen, a colour or a gradient; 'auto' the series' palette colour where
+    AAuto and the series writes it (seriesStyleTask resolves the visual
+    style's), any other word none -- the canvas does not take it. A width
+    the canvas cannot read is none. }
+  procedure TakePen(const ANodes: TTyStNodeArray; const APath: array of string; AAuto: Boolean);
+  var
+    i, j: Integer;
+    o: TJSONObject;
+    dd: TJSONData;
+    oc: TTyOptColor;
+    p: array of string;
+  begin
+    for i := 0 to High(ANodes) do
+    begin
+      o := ANodes[i];
+      for j := 0 to High(APath) do
+        if o <> nil then
+        begin
+          dd := o.Find(APath[j]);
+          if dd is TJSONObject then o := TJSONObject(dd) else o := nil;
+        end;
+      if o = nil then Continue;
+      dd := o.Find('borderColor');
+      if (dd = nil) or (dd.JSONType = jtNull) then Continue;
+      oc := TyReadOptColorOf(o, 'borderColor');
+      pe^.Style.StrokeGradient := Default(TTyChartGradient);
+      pe^.Style.StrokeColor := 0;
+      if oc.Written and not oc.IsNone then
+      begin
+        if oc.IsAuto then
+        begin
+          if AAuto and (ANodes[i] = sNode) then
+            pe^.Style.StrokeColor := TTyChartColor(SeriesPaletteColor(s));
+        end
+        else
+        begin
+          pe^.Style.StrokeColor := oc.Color;
+          pe^.Style.StrokeGradient := oc.Gradient;
+        end;
+      end;
+      Break;
+    end;
+    SetLength(p, Length(APath) + 1);
+    for i := 0 to High(APath) do p[i] := APath[i];
+    p[High(p)] := 'borderWidth';
+    { [R6-E] a numeric string is its number [was: none] }
+    dd := TyStFind(ANodes, p);
+    if dd <> nil then pe^.Style.StrokeWidthLogical := TyOptPenWidth(dd);
+  end;
+
+  { the row's visual colour (an icon pointer's setColor) }
+  function RowFill: TTyChartColor;
+  begin
+    if fillsSlot <> slot then
+    begin
+      fills := PerDatumColours(slot);
+      fillsSlot := slot;
+    end;
+    if (raw >= 0) and (raw <= High(fills)) then Result := fills[raw]
+    else Result := TTyChartColor(SeriesColor(s));
+  end;
+
+  function SeriesOnly: TTyStNodeArray;
+  begin
+    Result := nil;
+    SetLength(Result, 1);
+    Result[0] := sNode;
+  end;
+
+begin
+  if (AList = nil) or (FOption = nil) then Exit;
+  fillsSlot := -1;
+  fills := nil;
+  for k := 0 to AList.Count - 1 do
+  begin
+    pe := AList.Ref(k);
+    if pe^.Caption.FontSizeLogical > 0 then Continue;
+    if pe^.Datum.Kind <> ctkSeries then Continue;
+    s := pe^.Datum.SeriesIndex;
+    if s < 0 then Continue;
+    slot := SlotOfSeries(s);
+    if (slot < 0) or (slot > High(FBindings)) then Continue;
+    typ := FBindings[slot].SeriesType;
+    { a custom series' and a map's are their elements' own; a treemap's
+      rects are drawn from its own keys }
+    if (typ = TyCustomSeriesType) or (typ = 'map') or (typ = TyTreemapSeriesTypeName) then Continue;
+    sNode := StSeriesNode(s);
+    if sNode = nil then Continue;
+    joinHas := False;
+    { [R6-D] THE DASH AND ITS PHASE where the view's builder does not read
+      them: a radar's symbols, a gauge's, a pie's, a funnel's, a boxplot's,
+      a sunburst's, a sankey's, a theme river's, a chord's, a tree's (its
+      edges' builder read no `type` that is a number).
+      The rest read them themselves -- a graph's nodes, for one, off their
+      visual style, which a category named by its name reaches and the
+      model chain does not. }
+    dashOn := (typ = TyRadarSeriesTypeName) or (typ = TyGaugeSeriesTypeName) or (typ = 'pie')
+      or (typ = TyFunnelSeriesTypeName) or (typ = 'boxplot') or (typ = TySunburstSeriesTypeName)
+      or (typ = TySankeySeriesTypeName) or (typ = TyThemeRiverSeriesTypeName)
+      or (typ = TyChordSeriesTypeName)
+      or (typ = TyTreeSeriesTypeName);
+    { ---- the edges (a sankey's band speaks itemStyle's keys on its
+      lineStyle: curve.useStyle(lineStyleModel.getItemStyle())) ---- }
+    if pe^.Datum.IsEdge then
+    begin
+      if typ = TySankeySeriesTypeName then
+      begin
+        Take(StEdgeNodes(s, pe^.Datum.DataIndex), ['lineStyle'], False);
+        Continue;
+      end;
+      if pe^.Silent and (typ = TyGraphSeriesTypeName) then Continue;
+      if typ = TyGraphSeriesTypeName then
+        e := StGraphEdgeOfRow(slot, pe^.Datum.DataIndex)
+      else
+        e := pe^.Datum.RawDataIndex;
+      Take(StEdgeNodes(s, e), ['lineStyle'], True);
+      Continue;
+    end;
+    { ---- a line's polyline (no row): bevelled unless its lineStyle says ---- }
+    if pe^.Datum.DataIndex < 0 then
+    begin
+      if typ = 'line' then
+      begin
+        if pe^.Shape.Kind = cskPolyline then
+        begin
+          Take(SeriesOnly, ['lineStyle'], True);
+          if not joinHas then pe^.Style.LineJoin := cTyJoinBevel;
+        end;
+      end
+      else if pe^.Shape.Kind = cskLarge then
+        Take(SeriesOnly, ['itemStyle'], False);
+      Continue;
+    end;
+    { ---- the row ---- }
+    if typ = TySankeySeriesTypeName then raw := pe^.Datum.DataIndex
+    else if (slot <= High(FStores)) and (FStores[slot] <> nil) then
+      raw := FStores[slot].GetRawIndex(pe^.Datum.DataIndex)
+    else
+      raw := pe^.Datum.RawDataIndex;
+    nodes := StNodes(s, raw);
+    if pe^.IsGuide then
+    begin
+      Take(nodes, ['labelLine', 'lineStyle'], True);
+      Continue;
+    end;
+    case pe^.Anim.Role of
+      carRipple, carLinesEffect, carLinesFrom, carLinesTo, carPictorialRect,
+      carGraphEdgeFrom, carGraphEdgeTo, carRadarArea, carLineArea,
+      carGaugeDetail:
+        Continue;
+      carRadarLine, carTreeEdge, carLinesLine, carParallelLine:
+        Take(nodes, ['lineStyle'], True);
+      { [R6-D] GaugeView: pointer.useStyle(the item's visual style), an
+        icon's setColor(the visual colour) -- an empty one strokes in it at
+        2, a line in it -- then pointer.setStyle(pointer.itemStyle's
+        getItemStyle()); the progress arc likewise, with no setColor
+        [was: no stroke on either; the arc's ends not read] }
+      carGaugePointer, carGaugeProgress:
+        begin
+          pe^.Style.StrokeColor := 0;
+          pe^.Style.StrokeGradient := Default(TTyChartGradient);
+          pe^.Style.StrokeWidthLogical := 1;
+          TakePen(nodes, ['itemStyle'], True);
+          if (pe^.Anim.Role = carGaugePointer) and (pe^.Caption.LgSymbol <> '') then
+            case TySymbolKindOf(pe^.Caption.LgSymbol, iconEmpty, iconBody) of
+              tsyImage: ;
+              tsyLine:
+                begin
+                  pe^.Style.StrokeColor := RowFill;
+                  pe^.Style.StrokeGradient := Default(TTyChartGradient);
+                end;
+            else
+              if iconEmpty then
+              begin
+                pe^.Style.StrokeColor := RowFill;
+                pe^.Style.StrokeGradient := Default(TTyChartGradient);
+                pe^.Style.StrokeWidthLogical := 2;
+              end;
+            end;
+          { [R6-F] and the opacity: the item's visual style's (its itemStyle
+            over the series'), pointer.itemStyle's / progress.itemStyle's
+            over it [was: not read] }
+          TyStTakeOpacity(pe^.Style, nodes, ['itemStyle']);
+          if pe^.Anim.Role = carGaugePointer then
+          begin
+            TakePen(nodes, ['pointer', 'itemStyle'], False);
+            Take(nodes, ['itemStyle'], False);
+            Take(nodes, ['pointer', 'itemStyle'], False);
+            TyStTakeOpacity(pe^.Style, nodes, ['pointer', 'itemStyle']);
+          end
+          else
+          begin
+            TakePen(nodes, ['progress', 'itemStyle'], False);
+            Take(nodes, ['itemStyle'], False);
+            Take(nodes, ['progress', 'itemStyle'], False);
+            TyStTakeOpacity(pe^.Style, nodes, ['progress', 'itemStyle']);
+          end;
+          { the pen is in the path's reach (Path.contain: containStroke) --
+            half its width off a line, its whole width off an arc (zrender's
+            arc.containStroke), which is most of a progress arc's outline }
+          if (pe^.Style.StrokeWidthLogical > 0) and (((pe^.Style.StrokeColor shr 24) <> 0)
+            or (pe^.Style.StrokeGradient.Kind <> cgkNone)) then
+          begin
+            if pe^.Anim.Role = carGaugeProgress then
+              pe^.HitSlopLogical := pe^.Style.StrokeWidthLogical
+            else
+              pe^.HitSlopLogical := pe^.Style.StrokeWidthLogical / 2;
+          end;
+        end;
+    else
+      if typ = TyGaugeSeriesTypeName then Continue;
+      if (typ = TySankeySeriesTypeName) and pe^.Silent then Continue;
+      if (typ = TyLinesSeriesTypeName) or (typ = TyParallelSeriesTypeName) then
+        Take(nodes, ['lineStyle'], True)
+      else
+      begin
+        { [R6-D] a funnel's bands: the border the author writes over the
+          port's own ground-coloured one [was: never read] }
+        if typ = TyFunnelSeriesTypeName then TakePen(nodes, ['itemStyle'], True);
+        Take(nodes, ['itemStyle'], False);
+        { FunnelView: polygon.style.lineJoin = 'round' }
+        if typ = TyFunnelSeriesTypeName then pe^.Style.LineJoin := cTyJoinRound;
+        { [R6-D] PieSeries' itemStyle.borderJoin 'round', under what the
+          chain writes; SunburstPiece: normalStyle.lineJoin = 'bevel',
+          over it }
+        if (typ = 'pie') and not joinHas then pe^.Style.LineJoin := cTyJoinRound;
+        if typ = TySunburstSeriesTypeName then pe^.Style.LineJoin := cTyJoinBevel;
+      end;
     end;
   end;
 end;

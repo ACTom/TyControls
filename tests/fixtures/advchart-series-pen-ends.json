@@ -1,0 +1,1014 @@
+{
+ "source": "ECharts 6.1.0 dist (D:/Projects/echarts/dist/echarts.js), node SSR (svg)",
+ "note": "R6-C: each case at rest, `ends` = the sorted set of lineCap/lineJoin/miterLimit of every stroked path under the series views (lineWidth > 0, a stroke not none), the canvas defaults butt / miter / 10 where the style has none; a gauge's pointer alone. `stroked` how many such paths.",
+ "W": 400,
+ "H": 300,
+ "charts": [
+  {
+   "id": "bar",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderCap": "round",
+       "borderJoin": "bevel",
+       "borderMiterLimit": 3
+      },
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "stroked": 3,
+   "ends": [
+    "round/bevel/3"
+   ]
+  },
+  {
+   "id": "bar.item",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderCap": "round",
+       "borderJoin": "bevel",
+       "borderMiterLimit": 3
+      },
+      "data": [
+       3,
+       {
+        "value": 5,
+        "itemStyle": {
+         "borderJoin": "round",
+         "borderCap": "square"
+        }
+       },
+       {
+        "value": 2,
+        "itemStyle": {
+         "borderMiterLimit": 7
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "stroked": 3,
+   "ends": [
+    "round/bevel/3",
+    "round/bevel/7",
+    "square/round/3"
+   ]
+  },
+  {
+   "id": "line",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderCap": "round",
+       "borderJoin": "bevel",
+       "borderMiterLimit": 3
+      },
+      "lineStyle": {
+       "width": 2,
+       "cap": "square",
+       "join": "round",
+       "miterLimit": 5
+      },
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "stroked": 4,
+   "ends": [
+    "round/bevel/3",
+    "square/round/5"
+   ]
+  },
+  {
+   "id": "line.default",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "line",
+      "lineStyle": {
+       "width": 3
+      },
+      "symbol": "none",
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "stroked": 1,
+   "ends": [
+    "butt/bevel/10"
+   ]
+  },
+  {
+   "id": "scatter",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "scatter",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderCap": "round",
+       "borderJoin": "bevel",
+       "borderMiterLimit": 3
+      },
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "stroked": 3,
+   "ends": [
+    "round/bevel/3"
+   ]
+  },
+  {
+   "id": "pie",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "pie",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderCap": "round",
+       "borderJoin": "bevel",
+       "borderMiterLimit": 3
+      },
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "stroked": 3,
+   "ends": [
+    "round/bevel/3"
+   ]
+  },
+  {
+   "id": "funnel",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "funnel",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderCap": "round",
+       "borderJoin": "bevel",
+       "borderMiterLimit": 3
+      },
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "stroked": 3,
+   "ends": [
+    "round/round/3"
+   ]
+  },
+  {
+   "id": "candle",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "candlestick",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderCap": "round",
+       "borderJoin": "bevel",
+       "borderMiterLimit": 3
+      },
+      "data": [
+       [
+        2,
+        4,
+        1,
+        5
+       ],
+       [
+        3,
+        2,
+        1,
+        4
+       ],
+       [
+        1,
+        3,
+        0,
+        4
+       ]
+      ]
+     }
+    ]
+   },
+   "stroked": 3,
+   "ends": [
+    "round/bevel/3"
+   ]
+  },
+  {
+   "id": "boxplot",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "boxplot",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderCap": "round",
+       "borderJoin": "bevel",
+       "borderMiterLimit": 3
+      },
+      "data": [
+       [
+        1,
+        2,
+        3,
+        4,
+        5
+       ],
+       [
+        2,
+        3,
+        4,
+        5,
+        6
+       ],
+       [
+        1,
+        3,
+        4,
+        6,
+        7
+       ]
+      ]
+     }
+    ]
+   },
+   "stroked": 3,
+   "ends": [
+    "round/bevel/3"
+   ]
+  },
+  {
+   "id": "heatmap",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "visualMap": {
+     "show": false,
+     "min": 0,
+     "max": 5
+    },
+    "series": [
+     {
+      "type": "heatmap",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderCap": "round",
+       "borderJoin": "bevel",
+       "borderMiterLimit": 3
+      },
+      "data": [
+       [
+        0,
+        0,
+        1
+       ],
+       [
+        1,
+        1,
+        3
+       ]
+      ]
+     }
+    ]
+   },
+   "stroked": 2,
+   "ends": [
+    "round/bevel/3"
+   ]
+  },
+  {
+   "id": "radar",
+   "option": {
+    "animation": false,
+    "radar": {
+     "indicator": [
+      {
+       "name": "p",
+       "max": 10
+      },
+      {
+       "name": "q",
+       "max": 10
+      },
+      {
+       "name": "r",
+       "max": 10
+      }
+     ]
+    },
+    "series": [
+     {
+      "type": "radar",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderCap": "round",
+       "borderJoin": "bevel",
+       "borderMiterLimit": 3
+      },
+      "lineStyle": {
+       "width": 2,
+       "cap": "square",
+       "join": "round",
+       "miterLimit": 5
+      },
+      "data": [
+       {
+        "value": [
+         3,
+         5,
+         2
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "stroked": 4,
+   "ends": [
+    "round/bevel/3",
+    "square/round/5"
+   ]
+  },
+  {
+   "id": "sunburst",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "sunburst",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderCap": "round",
+       "borderJoin": "bevel",
+       "borderMiterLimit": 3
+      },
+      "data": [
+       {
+        "name": "a",
+        "value": 3,
+        "children": [
+         {
+          "name": "b",
+          "value": 2
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "stroked": 2,
+   "ends": [
+    "round/bevel/3"
+   ]
+  },
+  {
+   "id": "graph",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "graph",
+      "layout": "none",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderCap": "round",
+       "borderJoin": "bevel",
+       "borderMiterLimit": 3
+      },
+      "lineStyle": {
+       "width": 2,
+       "cap": "square",
+       "join": "round",
+       "miterLimit": 5
+      },
+      "data": [
+       {
+        "name": "a",
+        "x": 0,
+        "y": 0
+       },
+       {
+        "name": "b",
+        "x": 10,
+        "y": 10
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "b"
+       }
+      ]
+     }
+    ]
+   },
+   "stroked": 3,
+   "ends": [
+    "round/bevel/3",
+    "square/round/5"
+   ]
+  },
+  {
+   "id": "tree",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "tree",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderCap": "round",
+       "borderJoin": "bevel",
+       "borderMiterLimit": 3
+      },
+      "lineStyle": {
+       "width": 2,
+       "cap": "square",
+       "join": "round",
+       "miterLimit": 5
+      },
+      "data": [
+       {
+        "name": "r",
+        "children": [
+         {
+          "name": "a"
+         },
+         {
+          "name": "b"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "stroked": 5,
+   "ends": [
+    "round/bevel/3",
+    "square/round/5"
+   ]
+  },
+  {
+   "id": "sankey",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "sankey",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderCap": "round",
+       "borderJoin": "bevel",
+       "borderMiterLimit": 3
+      },
+      "lineStyle": {
+       "opacity": 0.5,
+       "width": 2,
+       "cap": "square",
+       "join": "round",
+       "miterLimit": 5
+      },
+      "data": [
+       {
+        "name": "a"
+       },
+       {
+        "name": "b"
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "b",
+        "value": 3
+       }
+      ]
+     }
+    ]
+   },
+   "stroked": 2,
+   "ends": [
+    "round/bevel/3"
+   ]
+  },
+  {
+   "id": "sankey.border",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "sankey",
+      "lineStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderCap": "round",
+       "borderJoin": "bevel",
+       "borderMiterLimit": 3,
+       "cap": "square",
+       "join": "round",
+       "miterLimit": 5
+      },
+      "data": [
+       {
+        "name": "a"
+       },
+       {
+        "name": "b"
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "b",
+        "value": 3
+       }
+      ]
+     }
+    ]
+   },
+   "stroked": 1,
+   "ends": [
+    "round/bevel/3"
+   ]
+  },
+  {
+   "id": "parallel",
+   "option": {
+    "animation": false,
+    "parallelAxis": [
+     {
+      "dim": 0
+     },
+     {
+      "dim": 1
+     }
+    ],
+    "series": [
+     {
+      "type": "parallel",
+      "lineStyle": {
+       "width": 2,
+       "cap": "square",
+       "join": "round",
+       "miterLimit": 5
+      },
+      "data": [
+       [
+        1,
+        2
+       ],
+       [
+        3,
+        4
+       ]
+      ]
+     }
+    ]
+   },
+   "stroked": 2,
+   "ends": [
+    "square/round/5"
+   ]
+  },
+  {
+   "id": "lines",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "value"
+    },
+    "yAxis": {
+     "type": "value"
+    },
+    "series": [
+     {
+      "type": "lines",
+      "coordinateSystem": "cartesian2d",
+      "lineStyle": {
+       "width": 2,
+       "cap": "square",
+       "join": "round",
+       "miterLimit": 5
+      },
+      "data": [
+       {
+        "coords": [
+         [
+          0,
+          0
+         ],
+         [
+          5,
+          5
+         ]
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "stroked": 1,
+   "ends": [
+    "square/round/5"
+   ]
+  },
+  {
+   "id": "gauge",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "gauge",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderCap": "round",
+       "borderJoin": "bevel",
+       "borderMiterLimit": 3
+      },
+      "data": [
+       {
+        "value": 40
+       }
+      ]
+     }
+    ]
+   },
+   "stroked": 1,
+   "ends": [
+    "round/bevel/3"
+   ]
+  },
+  {
+   "id": "gauge.pointer",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "gauge",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderCap": "round",
+       "borderJoin": "bevel",
+       "borderMiterLimit": 3
+      },
+      "pointer": {
+       "itemStyle": {
+        "borderJoin": "round",
+        "borderMiterLimit": 6
+       }
+      },
+      "data": [
+       {
+        "value": 40
+       }
+      ]
+     }
+    ]
+   },
+   "stroked": 1,
+   "ends": [
+    "round/round/6"
+   ]
+  },
+  {
+   "id": "pict",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "pictorialBar",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderCap": "round",
+       "borderJoin": "bevel",
+       "borderMiterLimit": 3
+      },
+      "symbol": "rect",
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "stroked": 3,
+   "ends": [
+    "round/bevel/3"
+   ]
+  },
+  {
+   "id": "river",
+   "option": {
+    "animation": false,
+    "singleAxis": {
+     "type": "time"
+    },
+    "series": [
+     {
+      "type": "themeRiver",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderCap": "round",
+       "borderJoin": "bevel",
+       "borderMiterLimit": 3
+      },
+      "data": [
+       [
+        "2015/11/08",
+        3,
+        "a"
+       ],
+       [
+        "2015/11/09",
+        4,
+        "a"
+       ]
+      ]
+     }
+    ]
+   },
+   "stroked": 1,
+   "ends": [
+    "round/bevel/3"
+   ]
+  },
+  {
+   "id": "chord",
+   "option": {
+    "animation": false,
+    "series": [
+     {
+      "type": "chord",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderCap": "round",
+       "borderJoin": "bevel",
+       "borderMiterLimit": 3
+      },
+      "lineStyle": {
+       "width": 2,
+       "cap": "square",
+       "join": "round",
+       "miterLimit": 5
+      },
+      "data": [
+       {
+        "name": "a"
+       },
+       {
+        "name": "b"
+       }
+      ],
+      "links": [
+       {
+        "source": "a",
+        "target": "b",
+        "value": 3
+       }
+      ]
+     }
+    ]
+   },
+   "stroked": 3,
+   "ends": [
+    "round/bevel/3",
+    "square/round/5"
+   ]
+  },
+  {
+   "id": "escatter",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "yAxis": {},
+    "series": [
+     {
+      "type": "effectScatter",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderCap": "round",
+       "borderJoin": "bevel",
+       "borderMiterLimit": 3
+      },
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "stroked": 3,
+   "ends": [
+    "round/bevel/3"
+   ]
+  },
+  {
+   "id": "polarbar",
+   "option": {
+    "animation": false,
+    "polar": {},
+    "angleAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B",
+      "C"
+     ]
+    },
+    "radiusAxis": {},
+    "series": [
+     {
+      "type": "bar",
+      "coordinateSystem": "polar",
+      "itemStyle": {
+       "borderColor": "#000",
+       "borderWidth": 2,
+       "borderCap": "round",
+       "borderJoin": "bevel",
+       "borderMiterLimit": 3
+      },
+      "data": [
+       3,
+       5,
+       2
+      ]
+     }
+    ]
+   },
+   "stroked": 3,
+   "ends": [
+    "round/bevel/3"
+   ]
+  }
+ ]
+}

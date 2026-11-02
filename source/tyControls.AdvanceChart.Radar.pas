@@ -335,6 +335,17 @@ type
     RowLineColourSet, RowLineNone: TTyBoolArray;
     RowLineColour: TTyChartColorArray;
     RowLineGrad: array of TTyChartGradient;
+    { [R6-D] THE SYMBOLS' PEN, the item's visual style (RadarView:
+      symbolPath.useStyle(itemStyle)): getItemStyle's borderColor and
+      borderWidth, the series' and, per RAW row, an item's own over it key by
+      key (dataStyleTask extends it). The series' 'auto' is its palette colour
+      (BorderAuto, seriesStyleTask); an item's is a word the canvas does not
+      take. A width is NaN where none is written (zrender's 1). }
+    Border: TTyOptColor;
+    BorderAuto: TTyChartColor;
+    BorderWidthLogical: Double;
+    RowBorder: array of TTyOptColor;
+    RowBorderWidth: TTyDoubleArray;
   end;
 
 function TyRadarSpecDefault: TTyRadarSpec;
@@ -665,6 +676,7 @@ begin
   Result.Symbol := TySymbolDefault(TyRadarSeriesTypeName);
   Result.Z := 2;
   Result.Z2 := 0;
+  Result.BorderWidthLogical := NaN;
 end;
 
 function ReadIndicators(ANode: TJSONObject): TTyRadarIndicatorArray;
@@ -1929,6 +1941,43 @@ end;
 function TyBuildRadarMarks(const ABinding: TTySeriesBinding; ARadar: TTyRadar;
   const AVisual: TTyRadarVisual; AStore: TTyDataStore;
   const ADims: TTyIntegerArray; APPI: Integer; AList: TTyPaintList): Integer;
+
+  { [R6-D] one key of the pen's colour: 'none' no pen, a colour or a
+    gradient; the series' 'auto' its palette colour, any other word none }
+  procedure TakeColour(const AColour: TTyOptColor; ASeries: Boolean;
+    var AStyle: TTyChartElementStyle);
+  begin
+    if not AColour.Written then Exit;
+    AStyle.StrokeGradient := Default(TTyChartGradient);
+    if AColour.IsNone then AStyle.StrokeColor := 0
+    else if AColour.IsAuto then
+    begin
+      if ASeries then AStyle.StrokeColor := AVisual.BorderAuto
+      else AStyle.StrokeColor := 0;
+    end
+    else
+    begin
+      AStyle.StrokeColor := AColour.Color;
+      AStyle.StrokeGradient := AColour.Gradient;
+    end;
+  end;
+
+  { the item's visual style's pen: the series' border, an item's own over it
+    key by key }
+  procedure PenOf(ARaw: Integer; var AStyle: TTyChartElementStyle);
+  begin
+    AStyle.StrokeColor := 0;
+    AStyle.StrokeGradient := Default(TTyChartGradient);
+    AStyle.StrokeWidthLogical := 1;
+    TakeColour(AVisual.Border, True, AStyle);
+    if not IsNan(AVisual.BorderWidthLogical) then
+      AStyle.StrokeWidthLogical := AVisual.BorderWidthLogical;
+    if (ARaw < 0) or (ARaw > High(AVisual.RowBorder)) then Exit;
+    TakeColour(AVisual.RowBorder[ARaw], False, AStyle);
+    if (ARaw <= High(AVisual.RowBorderWidth)) and not IsNan(AVisual.RowBorderWidth[ARaw]) then
+      AStyle.StrokeWidthLogical := AVisual.RowBorderWidth[ARaw];
+  end;
+
 var
   k, i, n, rows, raw, m: Integer;
   pts, ring: TTyPointFArray;
@@ -2124,14 +2173,23 @@ begin
         if not TyRectFIsValid(TyShapeBounds(sym)) then Continue;
         el := TyChartElement(sym);
         el.Style.HasFill := True;
+        { [R6-D] the item's visual style first (useStyle(itemStyle)): its
+          border's colour and width, zrender's 1 where none is written }
+        PenOf(raw, el.Style);
+        { then setColor(color): an empty symbol's pen is the colour at 2, a
+          line's the colour at the border's width [was: both at 2, the
+          border never drawn] }
         if rowSym.Empty or (rowSym.Kind = tsyLine) then
         begin
           el.Style.StrokeColor := rowColour;
-          el.Style.StrokeWidthLogical := 2;
+          el.Style.StrokeGradient := Default(TTyChartGradient);
           if rowSym.Kind = tsyLine then
             el.Style.FillColor := 0
           else
+          begin
+            el.Style.StrokeWidthLogical := 2;
             el.Style.FillColor := AVisual.EmptyFill;
+          end;
         end
         else
           el.Style.FillColor := rowColour;

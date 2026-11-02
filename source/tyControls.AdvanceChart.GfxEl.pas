@@ -3311,6 +3311,20 @@ begin
           AOut.Style.StrokeWidthLogical := lw * us / ACtx.Scale;
         end;
       end;
+      { [R6-C] fillOpacity / strokeOpacity: the canvas' globalAlpha for the
+        fill and for the pen, over the opacity (brushPath) }
+      d := AEl.Style.Find('fillOpacity');
+      if (d <> nil) and (d.JSONType = jtNumber) and (d.AsFloat <> 1) then
+      begin
+        AOut.Style.HasFillOpacity := True;
+        AOut.Style.FillOpacity := d.AsFloat;
+      end;
+      d := AEl.Style.Find('strokeOpacity');
+      if (d <> nil) and (d.JSONType = jtNumber) and (d.AsFloat <> 1) then
+      begin
+        AOut.Style.HasStrokeOpacity := True;
+        AOut.Style.StrokeOpacity := d.AsFloat;
+      end;
       d := AEl.Style.Find('lineDash');
       if (d is TJSONArray) and (AOut.Style.StrokeWidthLogical > 0) then
       begin

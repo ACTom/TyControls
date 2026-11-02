@@ -87,6 +87,10 @@ type
       the node wrote an index. }
     ModelCategory: Integer;
     X, Y: Double;
+    { [R6-A] circular.rotateLabel: the ring's centre (data space) the label
+      turns away from (circularLayoutHelper's rotateNodeLabel) }
+    RingTurn: Boolean;
+    RingCX, RingCY: Double;
     { THE DRAG'S `fixed`, which the RING honours: upstream's circular layout
       skips a node whose LAYOUT says fixed, and only a drag ever writes that
       (TyGraphDragStep) -- until the next full layout, which starts the
@@ -814,6 +818,10 @@ procedure TyGraphEdgeLabelLocal(const AEl: TTyChartElement; APercent: Double;
 { ... the label's anchor on the canvas, its rotation and alignment }
 procedure TyGraphEdgeLabelAt(const AEl: TTyChartElement; APercent: Double;
   out AX, AY, ARot: Double; out AAH: TTyTextAnchorH; out AAV: TTyTextAnchorV);
+{ [R6-A] an edge label under a state's rotation / offset (see the body) }
+function TyGraphEdgeLabelState(const AEl: TTyChartElement; AHasRot: Boolean;
+  ARot: Double; AHasOff: Boolean; AOffX, AOffY: Double;
+  out AX, AY, ARotOut, ABuX, ABuY, AFrameScale: Double): Boolean;
 function TyGraphEdgeDev(const AEl: TTyChartElement; const P: TTyPointF): TTyPointF;
 { the edge's line in its frame: its two ends and control point, curved }
 procedure TyGraphEdgeLine(const AEl: TTyChartElement; out AP1, AP2, ACP: TTyPointF;
@@ -2356,7 +2364,9 @@ begin
       Result.HasCurveness := True;
       Result.Curveness := d.AsFloat;
     end;
-    Result.LineWidthLogical := NumIn(sub, 'width', Result.LineWidthLogical);
+    { [R6-E] a numeric string is its number }
+    if not IsNan(TyOptPenWidth(sub.Find('width'))) then
+      Result.LineWidthLogical := TyOptPenWidth(sub.Find('width'));
     Result.LineOpacity := NumIn(sub, 'opacity', Result.LineOpacity);
     { `type`, the dash [Batch 114] }
     Result.LineDash := TyReadOptStyle(node, 'lineStyle').Dash;
@@ -3122,7 +3132,8 @@ begin
   if (d <> nil) and (d.JSONType <> jtNull) then
   begin
     AEdge.HasOwnWidth := True;
-    AEdge.OwnWidth := JsNum(d);
+    { [R6-E] a numeric string is its number }
+    AEdge.OwnWidth := TyOptPenWidth(d);
   end;
   d := AStyle.Find('opacity');
   if (d <> nil) and (d.JSONType <> jtNull) then
@@ -3162,10 +3173,10 @@ begin
   { [R2-I2] the edge's own phase over the series' (edgeVisual extends the
     series' style with the item's getLineStyle, key by key) }
   d := AStyle.Find('dashOffset');
-  if (d <> nil) and (d.JSONType = jtNumber) then
+  if (d <> nil) and (d.JSONType <> jtNull) then
   begin
     AEdge.HasOwnDashOffset := True;
-    AEdge.OwnDashOffset := d.AsFloat;
+    AEdge.OwnDashOffset := TyOptPenOffset(d);
   end;
 end;
 
@@ -3618,6 +3629,13 @@ begin
     angle := angle + half;
   end;
 
+  { [R6-A] circular.rotateLabel: each label turned away from the centre }
+  for i := 0 to count - 1 do
+  begin
+    ANodes[i].RingTurn := ASpec.RotateLabel;
+    ANodes[i].RingCX := cx;
+    ANodes[i].RingCY := cy;
+  end;
   { AND THEN THROUGH THE VIEW, because the ring was laid out in data space. }
   TyGraphLayoutNone(ANodes, AView);
 end;
@@ -5890,6 +5908,53 @@ begin
     ARot, ah, av);
 end;
 
+{ [R6-A] AN EDGE LABEL UNDER A STATE'S rotation / offset (where AHasRot /
+  AHasOff, else its own), at percent 1: where it is drawn (AX, AY), its turn,
+  where Line.beforeUpdate put label.x / y on the canvas before the offset
+  (ABuX, ABuY), and the frame's scale (the group's units on the canvas) }
+function TyGraphEdgeLabelState(const AEl: TTyChartElement; AHasRot: Boolean;
+  ARot: Double; AHasOff: Boolean; AOffX, AOffY: Double;
+  out AX, AY, ARotOut, ABuX, ABuY, AFrameScale: Double): Boolean;
+var
+  lx, ly, rot, ox, oy: Double;
+  q1, q2, qc: TTyPointF;
+  cv: Boolean;
+  fr: TTyGraphLabelFrame;
+  ah: TTyTextAnchorH;
+  av: TTyTextAnchorV;
+begin
+  Result := False;
+  AX := NaN;
+  AY := NaN;
+  ARotOut := 0;
+  ABuX := NaN;
+  ABuY := NaN;
+  AFrameScale := 1;
+  if Length(AEl.Anim.Vals) < 6 then Exit;
+  rot := AEl.Anim.Vals[3];
+  ox := AEl.Anim.Vals[4];
+  oy := AEl.Anim.Vals[5];
+  if AHasRot then rot := ARot;
+  if AHasOff then
+  begin
+    ox := AOffX;
+    oy := AOffY;
+  end;
+  fr := EdgeFrameOf(AEl);
+  TyGraphEdgeLine(AEl, q1, q2, qc, cv);
+  TyGraphEdgeLabelPlace(q1, q2, qc, cv, fr, TTyGraphLabelPos(Round(AEl.Anim.Vals[0])),
+    AEl.Anim.Vals[1], AEl.Anim.Vals[2], rot, ox, oy, 1, AX, AY, lx, ly, ARotOut, ah, av);
+  if not (IsNan(ox) or IsNan(oy)) then
+  begin
+    lx := lx - ox;
+    ly := ly - oy;
+  end;
+  ABuX := fr.SX * lx + fr.X;
+  ABuY := fr.SY * ly + fr.Y;
+  AFrameScale := fr.SX;
+  Result := not (IsNan(AX) or IsNan(AY) or IsNan(ABuX) or IsNan(ABuY));
+end;
+
 procedure TyGraphEdgeLabelAt(const AEl: TTyChartElement; APercent: Double;
   out AX, AY, ARot: Double; out AAH: TTyTextAnchorH; out AAV: TTyTextAnchorV);
 var
@@ -6377,6 +6442,7 @@ function TyBuildGraphMarks(ASeriesIndex: Integer;
   AStore: TTyDataStore; AList: TTyPaintList;
   ASymX, ASymY: Double): Integer;
 var
+  rad: Double;
   i, k, edgeAt: Integer;
   p1, p2, cp, pt, tan_: TTyPointF;
   curved: Boolean;
@@ -6874,6 +6940,19 @@ begin
         ASeriesIndex, TyGraphSeriesTypeName);
       if i <= High(AInk.NodeLabels) then
         el.Caption.ItemSpec := Length(AInk.EdgeLabelSpecs) + i + 1;
+      { [R6-A] circular.rotateLabel: textConfig position left or right of
+        the node's side of the ring, rotation -rad, origin 'center'
+        (circularLayoutHelper.rotateNodeLabel) -- the expansion lays it out
+        on the symbol's rect [was: read, not drawn] }
+      if ANodes[i].RingTurn then
+      begin
+        rad := TyJsAtan2(ANodes[i].Y - ANodes[i].RingCY, ANodes[i].X - ANodes[i].RingCX);
+        if rad < 0 then rad := Pi * 2 + rad;
+        el.Caption.RingLeft := ANodes[i].X < ANodes[i].RingCX;
+        if el.Caption.RingLeft then rad := rad - Pi;
+        el.Caption.RingTurn := True;
+        el.Caption.RingRad := rad;
+      end;
     end;
     AList.Add(el);
     Inc(Result);

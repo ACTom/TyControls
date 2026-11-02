@@ -1229,10 +1229,15 @@ begin
   AssertEquals('in the series colour', LongWord($FF3366CC),
     LongWord(GlyphAt(0).Style.FillColor));
 
-  { AND AN `empty` SYMBOL IS STILL HOLLOW when the author asks for one. }
+  { AND AN `empty` SYMBOL IS NOT HOLLOW EITHER: PictorialBarView's glyph is
+    useStyle(symbolMeta.style) and no setColor, so it is filled in the colour
+    and has no pen unless a border is written [R6-E: was hollow, stroked in
+    the colour -- the scatter's rule] }
   Build(',"symbol":"emptyCircle"');
-  AssertEquals('the pen takes the colour instead', LongWord($FF3366CC),
-    LongWord(GlyphAt(0).Style.StrokeColor));
+  AssertTrue('filled', GlyphAt(0).Style.HasFill);
+  AssertEquals('in the series colour', LongWord($FF3366CC),
+    LongWord(GlyphAt(0).Style.FillColor));
+  AssertEquals('no pen', LongWord(0), LongWord(GlyphAt(0).Style.StrokeColor));
 end;
 
 procedure TAdvChartPictorialMarksTest.TestAStackedPictorialStandsOnTheOneBelowIt;
