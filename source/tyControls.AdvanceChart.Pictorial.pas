@@ -155,6 +155,20 @@ function TyPictorialTimes(AValue: Double): Integer;
 function TyPictorialRunOf(const ASpec: TTyPictorialSpec;
   AGlyphLen, ABoundingLen, ACutLen, AMarginBase: Double): TTyPictorialRun;
 
+{ [R7-G] THE BORDER A GLYPH'S LAYOUT MAKES ROOM FOR (PictorialBarView's
+  prepareLineWidth): the glyph is drawn at its pattern size and scaled, its
+  pen unscaled (strokeNoScale), so the border width is taken back through
+  the line scale of the glyph's transform -- zrender's getLineScale of a
+  path scaled by AScaleX, AScaleY and turned by ARotationRad (no transform
+  at all within 5e-5 of none; 1 unless both diagonal terms are off 1 by
+  more than 1e-10; else the square root of the determinant) -- and then
+  taken along the value axis by AValueScale, the glyph's scale there
+  SIGNED as the glyph is mirrored. So it can be negative, and it shrinks
+  the unit. Not a number, or no border, is nought (`|| 0`). In the
+  caller's px: ABorderWidth already on the device. }
+function TyPictorialValueLineWidth(ABorderWidth, AScaleX, AScaleY,
+  ARotationRad, AValueScale: Double): Double;
+
 { The centre of glyph AIndex along the bar, measured from the run's own anchor.
 
   A SLOT IS NOT A CREATION ORDER. `symbolRepeatDirection` swaps which end is
@@ -165,7 +179,56 @@ function TyPictorialSlot(const ARun: TTyPictorialRun; AIndex: Integer;
 
 implementation
 
-uses tyControls.AdvanceChart.Handlers;
+uses tyControls.AdvanceChart.Handlers, tyControls.AdvanceChart.JsMath;
+
+function TyPictorialValueLineWidth(ABorderWidth, AScaleX, AScaleY,
+  ARotationRad, AValueScale: Double): Double;
+const cAroundZero = 5e-5;
+var m0, m1, m2, m3, aa, ab, ac, ad, st, ct, ls: Double;
+begin
+  Result := 0;
+  if IsNan(ABorderWidth) or (ABorderWidth = 0) then Exit;
+  if IsNan(ARotationRad) or IsInfinite(ARotationRad) then ARotationRad := 0;
+  ls := 1;
+  { Transformable.needLocalTransform: a rotation or a scale off its rest
+    by more than EPSILON }
+  if (Abs(ARotationRad) > cAroundZero) or (Abs(AScaleX - 1) > cAroundZero)
+    or (Abs(AScaleY - 1) > cAroundZero) then
+  begin
+    { getLocalTransform: the scale (no skew, the zero terms kept), then
+      matrix.rotate }
+    m0 := AScaleX;
+    m3 := AScaleY;
+    m1 := 0 * AScaleX;
+    m2 := 0 * AScaleY;
+    if ARotationRad <> 0 then
+    begin
+      aa := m0;
+      ac := m2;
+      ab := m1;
+      ad := m3;
+      st := TyJsSin(ARotationRad);
+      ct := TyJsCos(ARotationRad);
+      m0 := aa * ct + ab * st;
+      m1 := -aa * st + ab * ct;
+      m2 := ac * ct + ad * st;
+      m3 := -ac * st + ct * ad;
+    end;
+    if (Abs(m0 - 1) > 1e-10) and (Abs(m3 - 1) > 1e-10) then
+      ls := Sqrt(Abs(m0 * m3 - m2 * m1));
+  end;
+  { valueLineWidth /= lineScale; *= symbolScale[valueDim]; || 0 -- a
+    scale of none is an infinity, and nought times it not a number }
+  if ls = 0 then
+  begin
+    if (AValueScale = 0) or IsNan(AValueScale) then Exit(0);
+    if (ABorderWidth > 0) = (AValueScale > 0) then Exit(Infinity);
+    Exit(NegInfinity);
+  end;
+  Result := ABorderWidth / ls;
+  Result := Result * AValueScale;
+  if IsNan(Result) then Result := 0;
+end;
 
 function TyPictorialSpecDefault: TTyPictorialSpec;
 begin

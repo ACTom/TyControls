@@ -3750,6 +3750,8 @@ var
   cutLen, boundLen, pxSign, categorySize, acrossCentre, bundleAcross: Double;
   glyphW, glyphH, glyphLen, valueBase, anchor, sizeFix, along: Double;
   offX, offY, offAlong, offAcross, e0, e1, barLen: Double;
+  vlw, bw, rot: Double;
+  rv: TTySeriesVisual;
   lay: TTyCoordLayout;
   plot, barRect, clipRect: TTyRectF;
   col: TTyBarColumn;
@@ -3964,13 +3966,33 @@ begin
       glyphLen := 0;
     end;
 
-    { UPSTREAM ADDS THE GLYPH'S OWN STROKE to the unit length, so a bordered
-      symbol takes its border's worth of room in a repeating column. NOT done
-      here, and the reason is written down rather than hidden: a stroke width
-      is LOGICAL until the renderer scales it by the screen's PPI, and this
-      builder works in device pixels. Folding a logical number in would draw
-      the right count at 96 dpi and the wrong one on every other screen. }
-    run := TyPictorialRunOf(spec, glyphLen, boundLen, cutLen, glyphLen);
+    { UPSTREAM ADDS THE GLYPH'S OWN BORDER to the unit length
+      (prepareLineWidth's valueLineWidth): itemStyle.borderWidth as
+      written, whatever the colour, through the glyph's line scale and
+      along the value axis, signed as the glyph is mirrored -- so a bordered
+      glyph makes room for its border, a repeat counts and spaces by it,
+      and a mirrored one gives it back. On the device: the width by
+      PxScale. The margin's percentage stays the glyph's own length.
+      [R7-G; was: left out, a bordered glyph a few px off] }
+    vlw := 0;
+    if not noGlyph then
+    begin
+      rv := RowVisual(AVisual, AStore, i);
+      if rv.StrokeWidthInf <> 0 then bw := rv.StrokeWidthInf
+      else if rv.StrokeWidthNaN or not rv.StrokeWidthSet then bw := 0
+      else bw := rv.StrokeWidthLogical;
+      rot := spec.RotateDeg * Pi / 180;
+      if IsNan(rot) then rot := 0;
+      if baseHoriz then
+        vlw := TyPictorialValueLineWidth(bw * AVisual.PxScale,
+          glyphW / spec.PatternSize, glyphH / spec.PatternSize * (-1 * pxSign), rot,
+          glyphH / spec.PatternSize * (-1 * pxSign))
+      else
+        vlw := TyPictorialValueLineWidth(bw * AVisual.PxScale,
+          glyphW / spec.PatternSize * (1 * pxSign), glyphH / spec.PatternSize, rot,
+          glyphW / spec.PatternSize * (1 * pxSign));
+    end;
+    run := TyPictorialRunOf(spec, glyphLen + vlw, boundLen, cutLen, glyphLen);
     { [R5-G] a run of none (a repeat on a bar of no length) is no glyph; the
       bar rect and its label stay [was: the item dropped] }
     if run.Count <= 0 then noGlyph := True;
