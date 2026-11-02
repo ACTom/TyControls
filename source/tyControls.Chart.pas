@@ -292,6 +292,9 @@ type
     { Drop a parked hover hit (and repaint if one was showing). Called whenever the data or
       the chart type changes under the pointer: the old hit indexes data that may be gone. }
     procedure ClearHover;
+    { #113: the chart's text and the bands that hold it were laid out for a 9-point legend; a
+      size set on the chart scales ALogical by it. Unset, ALogical comes back as it was. }
+    function TextUnit(ALogical: Integer): Integer;
     { The themed colour of palette slot (AIndex mod 8): the 'TyChartSeries1'..'8' keys, so a
       skin can retint the DATA. Falls back to the built-in TyChartPalette hue. }
     function PaletteColor(AIndex: Integer): TColor;
@@ -1044,20 +1047,29 @@ begin
   Result := seen;
 end;
 
+function TTyChart.TextUnit(ALogical: Integer): Integer;
+var
+  fs: Integer;
+begin
+  fs := TyControlFontSize(Self);
+  if fs <= 0 then Exit(ALogical);
+  Result := Math.Max(1, MulDiv(ALogical, fs, 9));
+end;
+
 function TTyChart.LayoutFor(AWidth, AHeight, APPI: Integer): TTyChartLayout;
 var
   titleH: Integer;
 begin
   if APPI <= 0 then APPI := 96;
-  if FTitle <> '' then titleH := MulDiv(20, APPI, 96) else titleH := 0;
+  if FTitle <> '' then titleH := MulDiv(TextUnit(20), APPI, 96) else titleH := 0;
   // MulDiv(...,APPI,96) is the same logical->device conversion TTyPainter.Scale applies, so
   // the bands the hit-test measures are the bands the paint drew.
   Result := TyChartLayoutFor(AWidth, AHeight, FChartType in [ctPie, ctDonut], FShowLegend,
     MulDiv(8, APPI, 96),    // margin
     titleH,
-    MulDiv(18, APPI, 96),   // legend strip
-    MulDiv(38, APPI, 96),   // Y tick-label gutter
-    MulDiv(16, APPI, 96));  // X category-label band
+    MulDiv(TextUnit(18), APPI, 96),   // legend strip
+    MulDiv(TextUnit(38), APPI, 96),   // Y tick-label gutter
+    MulDiv(TextUnit(16), APPI, 96));  // X category-label band
 end;
 
 function TTyChart.AxesData(out ASeriesValues: TDoubleArrayArray; out ACatCount: Integer;
@@ -1333,11 +1345,12 @@ var
   h: Integer;
 begin
   if FTitle = '' then Exit;
-  h := P.Scale(20);
+  h := P.Scale(TextUnit(20));
   { Left is the horizontal margin, NOT ATop (the running Y cursor) -- they coincide only
     when the title is the first thing drawn. }
   P.DrawText(Rect(P.Scale(8), ATop, AWidth - P.Scale(8), ATop + h),
-    FTitle, Font.Name, 11, 700, S.TextColor, taCenter, tlCenter, True);
+    FTitle, S.FontName, TextUnit(11), 700 or (S.FontWeight and not TyFontWeightMask), S.TextColor,
+    taCenter, tlCenter, True);
   Inc(ATop, h);
 end;
 
@@ -1372,9 +1385,9 @@ begin
     P.Bitmap.FillRect(P.Dev(Rect(x, cy - boxSz div 2, x + boxSz, cy + boxSz div 2)),
       ColorToBGRA(swatch), dmSet);   // layer px (#83)
     Inc(x, boxSz + P.Scale(4));
-    tw := P.MeasureText(nm, Font.Name, 9, 400).cx;
+    tw := P.MeasureText(nm, S.FontName, TextUnit(9), S.FontWeight).cx;
     P.DrawText(Rect(x, ARect.Top, x + tw + P.Scale(2), ARect.Bottom),
-      nm, Font.Name, 9, 400, S.TextColor, taLeftJustify, tlCenter, False);
+      nm, S.FontName, TextUnit(9), S.FontWeight, S.TextColor, taLeftJustify, tlCenter, False);
     Inc(x, tw + sw + gap);
     if x > ARect.Right then Break;
   end;
@@ -1424,8 +1437,9 @@ begin
       ctx.stroke;
     end;
     if Abs(v) < 1e9 then lbl := FormatFloat('0.###', v, fs) else lbl := '';
-    P.DrawText(Rect(APlot.Left - P.Scale(34), y - P.Scale(8), APlot.Left - P.Scale(3), y + P.Scale(8)),
-      lbl, Font.Name, 8, 400, S.TextColor, taRightJustify, tlCenter, False);
+    P.DrawText(Rect(APlot.Left - P.Scale(TextUnit(34)), y - P.Scale(TextUnit(8)), APlot.Left - P.Scale(3),
+      y + P.Scale(TextUnit(8))),
+      lbl, S.FontName, TextUnit(8), S.FontWeight, S.TextColor, taRightJustify, tlCenter, False);
     v := v + step;
   end;
 
@@ -1443,8 +1457,9 @@ begin
   begin
     TyChartBarXRange(ci, catCount, APlot.Left, APlot.Right, cx0, cx1);
     lbl := CategoryLabel(ci);   // the same label the tooltip quotes
-    P.DrawText(Rect(cx0 - P.Scale(4), APlot.Bottom + P.Scale(2), cx1 + P.Scale(4), APlot.Bottom + P.Scale(16)),
-      lbl, Font.Name, 8, 400, S.TextColor, taCenter, tlCenter, False);
+    P.DrawText(Rect(cx0 - P.Scale(4), APlot.Bottom + P.Scale(2), cx1 + P.Scale(4),
+      APlot.Bottom + P.Scale(TextUnit(16))),
+      lbl, S.FontName, TextUnit(8), S.FontWeight, S.TextColor, taCenter, tlCenter, False);
   end;
 
   // series. Each is drawn in full before the next, so a later series overlaps an earlier
@@ -1467,8 +1482,9 @@ begin
           // Anchored on the VALUE's y, not the bar's top: for a negative bar those differ,
           // and the label belongs by the value line either way.
           y := TyChartValueToY(vals[ci], niceMin, niceMax, APlot.Top, APlot.Bottom);
-          P.DrawText(Rect(barR.Left - P.Scale(6), y - P.Scale(14), barR.Right + P.Scale(6), y - P.Scale(1)),
-            FormatFloat('0.###', vals[ci], fs), Font.Name, 8, 400, S.TextColor,
+          P.DrawText(Rect(barR.Left - P.Scale(6), y - P.Scale(TextUnit(14)), barR.Right + P.Scale(6),
+            y - P.Scale(1)),
+            FormatFloat('0.###', vals[ci], fs), S.FontName, TextUnit(8), S.FontWeight, S.TextColor,
             taCenter, tlBottom, False);
         end;
       end;
@@ -1499,8 +1515,9 @@ begin
         ctx.fillStyle(seriesPx);
         ctx.fill;
         if FShowValues then
-          P.DrawText(Rect(px - P.Scale(16), py - P.Scale(15), px + P.Scale(16), py - P.Scale(2)),
-            FormatFloat('0.###', vals[ci], fs), Font.Name, 8, 400, S.TextColor,
+          P.DrawText(Rect(px - P.Scale(TextUnit(16)), py - P.Scale(TextUnit(15)),
+            px + P.Scale(TextUnit(16)), py - P.Scale(2)),
+            FormatFloat('0.###', vals[ci], fs), S.FontName, TextUnit(8), S.FontWeight, S.TextColor,
             taCenter, tlBottom, False);
       end;
     end;
@@ -1560,8 +1577,9 @@ begin
       labelR := hole + (radius - hole) * 0.6;
       lx := Round(cx + Cos(mid) * labelR);
       ly := Round(cy + Sin(mid) * labelR);
-      P.DrawText(Rect(lx - P.Scale(20), ly - P.Scale(8), lx + P.Scale(20), ly + P.Scale(8)),
-        FormatFloat('0.#', (vals[i] / total) * 100, fs) + '%', Font.Name, 8, 700,
+      P.DrawText(Rect(lx - P.Scale(TextUnit(20)), ly - P.Scale(TextUnit(8)), lx + P.Scale(TextUnit(20)),
+        ly + P.Scale(TextUnit(8))),
+        FormatFloat('0.#', (vals[i] / total) * 100, fs) + '%', S.FontName, TextUnit(8), 700 or (S.FontWeight and not TyFontWeightMask),
         S.TextColor, taCenter, tlCenter, False);
     end;
   end;

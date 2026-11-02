@@ -31,7 +31,7 @@
 
 ### 子部件 typeKey
 
-**目前只有 `TyChartTooltip` 一个。** 标题、图例、坐标轴、网格、刻度标签**没有**各自的键——它们的字号 / 字重是代码里的字面量（标题 `11/700`、图例 `9/400`、刻度 `8/400`，且都用控件的 `Font.Name` 而非样式的 `font-name`），网格线的 70 alpha 也是字面量。子部件键（`TyChartTitle` / `TyChartLegend` / `TyChartAxis` / `TyChartGrid` / `TyChartLabel` / `TyChartSeries1..8`）的扩展已被**刻意推迟**——其中系列色那一组一旦落地会真的改变像素——这些名字当前**并不存在**，写进 `.tycss` 解析不到任何东西。
+**目前只有 `TyChartTooltip` 一个。** 标题、图例、坐标轴、网格、刻度标签**没有**各自的键——它们的字号是代码里的字面量（标题 `11`、图例 `9`、刻度 `8`），字体取 `TyChart` 样式的 `font-family`，字重取它的 `font-weight`（标题加粗）。给控件设了 `Font.Size` 时，这些字号连同装它们的标题条、图例条和刻度栏一起按 `Font.Size / 9` 缩放。网格线的 70 alpha 也是字面量。子部件键（`TyChartTitle` / `TyChartLegend` / `TyChartAxis` / `TyChartGrid` / `TyChartLabel` / `TyChartSeries1..8`）的扩展已被**刻意推迟**——其中系列色那一组一旦落地会真的改变像素——这些名字当前**并不存在**，写进 `.tycss` 解析不到任何东西。
 
 ```pascal
 uses tyControls.Chart;
