@@ -81,6 +81,10 @@ type
     FBmp: TBGRABitmap;
     FSsr: ITyTextMeasurer;
     FBad, FCompared, FSkipped, FTexts, FOneRun: Integer;
+    { [R7-K2] the texts drawn at the skin's own size (cSkinSized, each met
+      once) and the texts upstream laid out at NaN (no bounds to compare) }
+    FSkinMet: array of Boolean;
+    FNoBounds: Integer;
     FReport, FCase: string;
     { [R7-B] the case is a `looks` one }
     FLooks: Boolean;
@@ -134,6 +138,17 @@ implementation
   be named here with the reason; none is. }
 const
   cDeferred: array[0..0] of string = ('');
+
+  { [R7-K2] THE ONLY TEXTS WHOSE GEOMETRY IS LEFT TO THE SKIN, by case and
+    text: a title the option gives no size, which the skin draws at its
+    --font-size-title (12 px here) where upstream's title default is 18 px.
+    Their words, alignment, colours and halo are still compared; their
+    places are not. Any other text drawn at a size not upstream's fails, and
+    so does one of these drawn at upstream's (the list is then stale). }
+  cSkinSized: array[0..2] of string = (
+    'title-rich|title title0 "{a|Sales}{b| 2026}"',
+    'title-box-disabled|title title0 "Sales"',
+    'legend-rich-root-color|title title0 "{a|T}itle"');
 
   { ECharts 6's theme palette: a colour 'inherit' names is one of these, and
     the port's palette is the skin's }
@@ -295,6 +310,8 @@ begin
   FBad := 0;
   FCompared := 0;
   FSkipped := 0;
+  FNoBounds := 0;
+  SetLength(FSkinMet, Length(cSkinSized));
   FTexts := 0;
   FOneRun := 0;
   FReport := '';
@@ -745,6 +762,20 @@ begin
   { [R7-B] a looks case's fonts are the option's or upstream's own sizes,
     never the skin's: its geometry is always compared }
   if FLooks then geometry := True;
+  if not geometry then
+  begin
+    k := High(cSkinSized);
+    while (k >= 0) and (cSkinSized[k] <> FCase + '|' + where) do Dec(k);
+    Inc(FCompared);
+    if k < 0 then
+      Miss(Format('%s: drawn at %g px, upstream %g px -- not a text the skin sizes',
+        [where, dr.BlockPx, upBlockPx]))
+    else if (T.Strings['component'] <> 'title') or (dr.BlockPx <> 12) or (upBlockPx <> 18) then
+      Miss(Format('%s: %g px here, %g px upstream -- not the title token against upstream''s 18',
+        [where, dr.BlockPx, upBlockPx]))
+    else
+      FSkinMet[k] := True;
+  end;
   pieces := T.Arrays['pieces'];
   { [R7-H] a text laid out at NaN (no box recorded) is recorded by what is
     drawn, and a line truncated to nothing draws nothing }
@@ -988,8 +1019,20 @@ begin
       end;
     end;
   end
+  else if not geometry then
+    Inc(FSkipped)
   else
-    Inc(FSkipped);
+  begin
+    { [R7-K2] NO BOUNDS UPSTREAM: a text laid out at NaN somewhere (a width
+      written as a word, a reading's width null -- R7-D, R7-H) has none, and
+      no box either; its pieces are compared above. A text with a box but
+      no bounds would be a gap in the record. }
+    Inc(FCompared);
+    if T.Find('box') is TJSONObject then
+      Miss(where + ': a box upstream but no bounds')
+    else
+      Inc(FNoBounds);
+  end;
 end;
 
 procedure TAdvChartRichWiringOracleTest.TestTheBlocksAsUpstream;
@@ -1024,12 +1067,13 @@ begin
   end;
   FLooks := False;
   AssertTrue(Format('only %d texts in the looks cases', [FLooksTexts]), FLooksTexts >= 60);
-  { [R7-K] NOT A SILENT PASS: the geometry left to the skin is that of the
-    texts whose block the skin sizes by its own token where upstream's
-    default differs -- the rich titles (--font-size-title against
-    upstream's 18), a gauge's title and three of its numbers, and three
-    rich series labels: 16 checks over ten texts. Text widths are zrender's here, so nothing else is left. }
-  AssertTrue(Format('%d geometry checks left to the skin', [FSkipped]), FSkipped <= 16);
+  { [R7-K2] NOT A SILENT PASS: the geometry left to the skin is exactly
+    that of the titles in cSkinSized, every one of them met (text widths are
+    zrender's here, so nothing else differs). A text upstream laid out at
+    NaN has no bounds and is not a skipped check. }
+  for k := 0 to High(cSkinSized) do
+    AssertTrue('a text the skin sizes was not met: ' + cSkinSized[k], FSkinMet[k]);
+  AssertTrue(Format('texts without bounds upstream (%d)', [FNoBounds]), FNoBounds >= 18);
   AssertTrue(Format('%d of %d differ from upstream (%d geometry checks left to '
     + 'the skin):%s', [FBad, FCompared, FSkipped, FReport]), FBad = 0);
   AssertTrue(Format('only %d texts', [FTexts]), FTexts >= 200);
