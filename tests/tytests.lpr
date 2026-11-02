@@ -235,6 +235,7 @@ uses
   test.advchart.jsregexp,
   test.advchart.graphictip,
   test.advchart.rendergaps,
+  test.advchart.axisevents,
   test.subpixel,
   test.advchart.option,
   test.advchart.catalog,

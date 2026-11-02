@@ -144,6 +144,11 @@ type
     FontSizeLogical: Integer;
     { [R5-A] fontStyle as written (TyFontStyleCode) }
     FontStyle: Byte;
+    { [R7-I] axisLabel.formatter (makeLabelFormatter on the indicator's
+      value axis): a template's first '{value}' is the rawLabel, a handler
+      ('@name') is handed the tick's value and its index }
+    HasFormatter: Boolean;
+    Formatter: string;
   end;
 
   TTyRadarSpec = record
@@ -419,6 +424,24 @@ function TyBuildRadarGrid(ARadar: TTyRadar; const AInk: TTyRadarInk;
   const AMeasurer: ITyTextMeasurer; APPI: Integer;
   AList: TTyPaintList): Integer;
 
+type
+  { [R7-I] AN INDICATOR'S TEXT the grid drew (an AxisBuilder's name or
+    label upstream): the list element, its spoke, its ring (a label's index
+    among the axis' labels; -1 a name), and a label's rawLabel
+    (scale.getLabel of its tick: what its eventData's value and a tooltip's
+    {c} are, the formatter's output being the drawn text) }
+  TTyRadarText = record
+    Element, Spoke, Ring: Integer;
+    IsName: Boolean;
+    Raw: string;
+  end;
+  TTyRadarTextArray = array of TTyRadarText;
+
+{ ... and the texts it drew, in the order it drew them }
+function TyBuildRadarGridTexts(ARadar: TTyRadar; const AInk: TTyRadarInk;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer;
+  AList: TTyPaintList; out ATexts: TTyRadarTextArray): Integer;
+
 { One series: the ring, the area under it and a symbol per spoke. }
 function TyBuildRadarMarks(const ABinding: TTySeriesBinding; ARadar: TTyRadar;
   const AVisual: TTyRadarVisual; AStore: TTyDataStore;
@@ -427,7 +450,8 @@ function TyBuildRadarMarks(const ABinding: TTySeriesBinding; ARadar: TTyRadar;
 implementation
 
 uses tyControls.FontUnits, tyControls.AdvanceChart.LabelGuide, tyControls.AdvanceChart.JsMath,
-  tyControls.AdvanceChart.States, tyControls.AdvanceChart.AxisLabels;
+  tyControls.AdvanceChart.States, tyControls.AdvanceChart.AxisLabels,
+  tyControls.AdvanceChart.Builder;
 
 const
   cRadian = Pi / 180;
@@ -853,6 +877,9 @@ begin
       Result.AxisLabel.FontSizeLogical := TyFontSizeFromPx(v);
     end;
     Result.AxisLabel.FontStyle := TyFontStyleCode(n2.Find('fontStyle'));
+    { [R7-I] its formatter [was: not read -- the labels were the rawLabel] }
+    Result.AxisLabel.Formatter := StrIn(n2, 'formatter', '');
+    Result.AxisLabel.HasFormatter := Result.AxisLabel.Formatter <> '';
     { [R5-G] the end rules' switches }
     d := n2.Find('showMinLabel');
     if (d <> nil) and (d.JSONType = jtBoolean) then
@@ -1395,6 +1422,14 @@ end;
 function TyBuildRadarGrid(ARadar: TTyRadar; const AInk: TTyRadarInk;
   const AMeasurer: ITyTextMeasurer; APPI: Integer;
   AList: TTyPaintList): Integer;
+var texts: TTyRadarTextArray;
+begin
+  Result := TyBuildRadarGridTexts(ARadar, AInk, AMeasurer, APPI, AList, texts);
+end;
+
+function TyBuildRadarGridTexts(ARadar: TTyRadar; const AInk: TTyRadarInk;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer;
+  AList: TTyPaintList; out ATexts: TTyRadarTextArray): Integer;
 var
   spec: TTyRadarSpec;
   n, k, i, j: Integer;
@@ -1403,7 +1438,7 @@ var
   outer, inner, band: TTyPointFArray;
   a, r, rOut, rIn, len, margin, w, h: Double;
   p, q, perp: TTyPointF;
-  words: string;
+  words, raw: string;
   anchorH: TTyTextAnchorH;
   anchorV: TTyTextAnchorV;
   box: TTyRectF;
@@ -1429,6 +1464,29 @@ var
   begin
     if spec.AxisLabel.HasFontSize then Result := spec.AxisLabel.FontSizeLogical
     else Result := AInk.LabelFontSizeLogical;
+  end;
+
+  { [R7-I] ring AQ's label on spoke AI as drawn: makeLabelFormatter over the
+    rawLabel ARaw (Interval.getLabel: the tick's own decimals, grouped) --
+    a template's first '{value}' replaced, a handler run with the value and
+    the index; the rawLabel itself without one }
+  function LabelWords(AI, AQ: Integer; const ARaw: string): string;
+  begin
+    if not spec.AxisLabel.HasFormatter then Exit(ARaw);
+    if TyChartIsHandlerRef(spec.AxisLabel.Formatter) then
+      Exit(TyAxisTickLabelAt(ARadar.GetAxis(AI), ARadar.RingValue(AI, AQ), AQ,
+        True, spec.AxisLabel.Formatter));
+    Result := TyReplaceFirst(spec.AxisLabel.Formatter, '{value}', ARaw);
+  end;
+
+  procedure AddText(ASpoke, ARing: Integer; AIsName: Boolean; const ARaw: string);
+  begin
+    SetLength(ATexts, Length(ATexts) + 1);
+    ATexts[High(ATexts)].Element := AList.Count - 1;
+    ATexts[High(ATexts)].Spoke := ASpoke;
+    ATexts[High(ATexts)].Ring := ARing;
+    ATexts[High(ATexts)].IsName := AIsName;
+    ATexts[High(ATexts)].Raw := ARaw;
   end;
 
   { [R5-G] the labels of spoke AI at angle AA as AxisBuilder weighs them:
@@ -1468,6 +1526,8 @@ var
     begin
       txt := TyScaleValueLabel(ARadar.GetAxis(AI).Scale, ARadar.RingValue(AI, q),
         Default(TTyLabelPrecision));
+      if txt = '' then Continue;
+      txt := LabelWords(AI, q, txt);
       if txt = '' then Continue;
       lp := ARadar.CoordToPoint(ARadar.RingRadiusOf(AI, q), AI);
       lp := TyPointF(lp.X - APerp.X * mg, lp.Y - APerp.Y * mg);
@@ -1523,6 +1583,7 @@ var
 
 begin
   Result := 0;
+  ATexts := nil;
   if (AList = nil) or (ARadar = nil) or not ARadar.Valid then Exit;
   spec := ARadar.Spec;
   n := ARadar.AxisCount;
@@ -1779,6 +1840,7 @@ begin
           el.Z2 := 1;
           el.Silent := True;
           AList.Add(el);
+          AddText(i, -1, True, '');
           Inc(Result);
         end;
       end;
@@ -1846,8 +1908,10 @@ begin
         { Interval.getLabel: the tick's own decimals, thousands grouped.
           [Revised in batch 48: printed with no grouping.] }
         if hidden[k] then Continue;
-        words := TyScaleValueLabel(ARadar.GetAxis(i).Scale,
+        raw := TyScaleValueLabel(ARadar.GetAxis(i).Scale,
           ARadar.RingValue(i, k), Default(TTyLabelPrecision));
+        if raw = '' then Continue;
+        words := LabelWords(i, k, raw);
         if words = '' then Continue;
         p := ARadar.CoordToPoint(ARadar.RingRadiusOf(i, k), i);
         p := TyPointF(p.X - perp.X * margin, p.Y - perp.Y * margin);
@@ -1875,6 +1939,7 @@ begin
         el.Z2 := 10;
         el.Silent := True;
         AList.Add(el);
+        AddText(i, k, False, raw);
         Inc(Result);
       end;
     end;

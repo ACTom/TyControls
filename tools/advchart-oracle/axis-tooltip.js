@@ -26,6 +26,19 @@ Top level: source, W, H, measure {firstCode, ratio[] (hex)}, cases[]
 {id, note, option, target ('name' | label index), axis ('xAxis' | 'yAxis'),
 rect {x, y, width, height} (hex, the text's global bounding rect), point
 [x, y], tip (null, or {text})}, guards[].
+
+[R7-I] The other axes that build a text through setTooltipConfig: a single
+axis (AxisBuilder; its model's tooltip shows by default), a polar's radius
+axis (AxisBuilder) and angle axis (AngleAxisView's labels; it draws no
+name), a parallel axis (AxisBuilder) and a radar's indicators (an
+AxisBuilder each, on a model with no parent whose mainType is 'radar': only
+triggerEvent -- or an indicator's own tooltip.show -- wakes them, and the
+tooltip cascade asks the radar model's `tooltip`, then the global one).
+Their cases also carry axisIndex (the component's index; absent is 0) and,
+where the box's place is compared, box [x, y] -- what TooltipView handed
+the content's moveTo. A target 'name:k' is the k-th name in the view (a
+radar's indicators), a number the k-th label: a text whose anid starts
+'label_' in an AxisBuilder, any text of the view on an angle axis.
 */
 'use strict';
 const fs = require('fs');
@@ -115,7 +128,8 @@ function tipNow(chart) {
 }
 
 // the axis' text element: its name (anid 'name'), or the label of a tick
-function axisText(chart, mainType, target) {
+function axisText(chart, mainType, target, index) {
+  if (mainType !== 'xAxis' && mainType !== 'yAxis') return axisText2(chart, mainType, target, index || 0);
   const am = chart.getModel().getComponent(mainType, 0);
   const view = chart.getViewOfComponentModel(am);
   let found = null;
@@ -131,6 +145,25 @@ function axisText(chart, mainType, target) {
     found = labels[target] || null;
   }
   must(found, mainType + ': no ' + target);
+  return found;
+}
+
+// [R7-I] the other views: names 'name' / 'name:k', labels by index
+function axisText2(chart, mainType, target, index) {
+  const am = chart.getModel().getComponent(mainType, index);
+  must(am, 'no ' + mainType + ' ' + index);
+  const view = chart.getViewOfComponentModel(am);
+  const names = [];
+  const labels = [];
+  view.group.traverse(el => {
+    if (el.type !== 'text') return;
+    if (el.anid === 'name') names.push(el);
+    else if (mainType === 'angleAxis' || (el.anid && el.anid.startsWith('label_'))) labels.push(el);
+  });
+  let found;
+  if (typeof target === 'string') found = names[target === 'name' ? 0 : +target.slice(5)];
+  else found = labels[target];
+  must(found, mainType + ' ' + index + ': no ' + target);
   return found;
 }
 
@@ -172,23 +205,164 @@ add('label-show', 'a category label under tooltip.show: its formatted text',
 add('label-template', "a label's {a} (the text), {c} (rawLabel) and {d} (tickIndex)",
   bar({ tooltip: { show: true, formatter: '{a}|{c}|{d}' }, axisLabel: { formatter: '<{value}>' } }), 'xAxis', 3);
 
+// ---------- [R7-I] the other axes ----------
+const TIPF = { hideDelay: 0 };
+function single(ax, root) {
+  return Object.assign({
+    animation: false,
+    tooltip: Object.assign({}, TIP),
+    singleAxis: Object.assign({ type: 'category', data: CAT, top: 60, height: 120, name: 'Days' }, ax || {}),
+    series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [[0, 3], [2, 5], [4, 2]] }],
+  }, root || {});
+}
+function polar(radius, angle, root) {
+  return Object.assign({
+    animation: false,
+    tooltip: Object.assign({}, TIP),
+    polar: { radius: [20, 140] },
+    angleAxis: Object.assign({ type: 'category', data: CAT }, angle || {}),
+    radiusAxis: Object.assign({ name: 'Load', max: 20000 }, radius || {}),
+    series: [{ type: 'bar', coordinateSystem: 'polar', data: [3000, 5000, 2000, 6000, 4000] }],
+  }, root || {});
+}
+function parallel(a0, a1, root) {
+  return Object.assign({
+    animation: false,
+    tooltip: Object.assign({}, TIP),
+    parallelAxis: [
+      Object.assign({ dim: 0, name: 'Price', max: 20000 }, a0 || {}),
+      Object.assign({ dim: 1, name: 'Grade', type: 'category', data: ['low', 'mid', 'high'] }, a1 || {}),
+    ],
+    series: [{ type: 'parallel', data: [[3000, 'low'], [12000, 'high']] }],
+  }, root || {});
+}
+function radar(r, root) {
+  return Object.assign({
+    animation: false,
+    tooltip: Object.assign({}, TIP),
+    radar: Object.assign({
+      indicator: [{ name: 'Speed', max: 20000 }, { name: 'Power', max: 20000 }, { name: 'Range', max: 20000 }],
+      axisLabel: { show: true },
+    }, r || {}),
+    series: [{ type: 'radar', data: [{ value: [5000, 12000, 8000] }] }],
+  }, root || {});
+}
+const add2 = (id, note, option, axis, target, more) => CASES.push(Object.assign({ id, note, option, axis, target }, more || {}));
+
+add2('single.label', "a single axis' label: its model's tooltip shows by default",
+  single(), 'singleAxis', 2);
+add2('single.name', "a single axis' name, the same default",
+  single(), 'singleAxis', 'name');
+add2('single.off', "tooltip.show false on the single axis: the label is silent, no tooltip",
+  single({ tooltip: { show: false } }), 'singleAxis', 1);
+add2('single.trigger-off', "triggerEvent and tooltip.show false: the label answers, no box",
+  single({ triggerEvent: true, tooltip: { show: false } }), 'singleAxis', 1);
+add2('single.template', "the single axis' template: {a} the text, {c} rawLabel, {d} tickIndex",
+  single({ tooltip: { formatter: '{a}|{c}|{d}' }, axisLabel: { formatter: '<{value}>' } }), 'singleAxis', 3);
+add2('single.value', "a value single axis: the rawLabel grouped (getLabel's addCommas) under a formatter",
+  single({ type: 'value', data: undefined, max: 20000, tooltip: { formatter: '{a}|{c}' }, axisLabel: { formatter: 'v{value}' } }, {
+    series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [3000, 12000] }] }), 'singleAxis', 2);
+add2('single.no-component', 'no tooltip component: nothing',
+  Object.assign(single(), { tooltip: undefined }), 'singleAxis', 2);
+add2('single.place', "the box where TooltipView puts it with no position written",
+  single(null, { tooltip: Object.assign({}, TIPF) }), 'singleAxis', 2, { box: true });
+add2('single.silent', "silent beats the default show",
+  single({ silent: true }), 'singleAxis', 2);
+add2('single.second', "the second single axis",
+  Object.assign(single(), { singleAxis: [{ type: 'category', data: CAT, top: 20, height: 80, tooltip: { show: false } },
+    { type: 'category', data: ['p', 'q', 'r'], top: 220, height: 80, name: 'Two' }],
+    series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [[0, 3]] },
+      { type: 'scatter', coordinateSystem: 'singleAxis', singleAxisIndex: 1, data: [[1, 3]] }] }),
+  'singleAxis', 1, { axisIndex: 1 });
+
+add2('polar.radius-label', "a radius axis' label under tooltip.show: the formatted text",
+  polar({ tooltip: { show: true } }), 'radiusAxis', 2);
+add2('polar.radius-template', "a radius axis' template: {c} the grouped rawLabel",
+  polar({ tooltip: { show: true, formatter: '{a}|{c}|{d}' }, axisLabel: { formatter: '{value} kW' } }), 'radiusAxis', 3);
+add2('polar.radius-name', "a radius axis' name",
+  polar({ tooltip: { show: true } }), 'radiusAxis', 'name');
+add2('polar.radius-default', "a radius axis that says nothing: silent",
+  polar(), 'radiusAxis', 2);
+add2('polar.angle-label', "an angle axis' label (AngleAxisView's own setTooltipConfig)",
+  polar(null, { tooltip: { show: true } }), 'angleAxis', 1);
+add2('polar.angle-template', "an angle axis' template: {a} formattedLabel, {c} rawLabel, {d} its index",
+  polar(null, { tooltip: { show: true, formatter: '{a}|{c}|{d}' }, axisLabel: { formatter: '[{value}]' } }), 'angleAxis', 3);
+add2('polar.angle-trigger', "an angle axis' triggerEvent alone: its tooltip defaults to show false",
+  polar(null, { triggerEvent: true }), 'angleAxis', 1);
+add2('polar.angle-place', "an angle axis' box with no position written",
+  polar(null, { tooltip: { show: true } }, { tooltip: Object.assign({}, TIPF) }), 'angleAxis', 0, { box: true });
+add2('polar.radius-place', "a radius axis' box with no position written",
+  polar({ tooltip: { show: true } }, null, { tooltip: Object.assign({}, TIPF) }), 'radiusAxis', 1, { box: true });
+
+add2('parallel.label', "a parallel axis' label under tooltip.show",
+  parallel(null, { tooltip: { show: true } }), 'parallelAxis', 1, { axisIndex: 1 });
+add2('parallel.name', "a parallel axis' name",
+  parallel({ tooltip: { show: true } }), 'parallelAxis', 'name');
+add2('parallel.template', "a parallel value axis' template: the grouped rawLabel",
+  parallel({ tooltip: { show: true, formatter: '{a}|{c}|{d}' } }), 'parallelAxis', 2);
+add2('parallel.default', "a parallel axis that says nothing: silent",
+  parallel(), 'parallelAxis', 1);
+add2('parallel.place', "a parallel axis' box with no position written",
+  parallel({ tooltip: { show: true } }, null, { tooltip: Object.assign({}, TIPF) }), 'parallelAxis', 'name', { box: true });
+
+add2('radar.name-trigger', "a radar's indicator name under triggerEvent: the radar model has no tooltip, the global's show stands",
+  radar({ triggerEvent: true }), 'radar', 'name:1');
+add2('radar.label-trigger', "a radar's scale label under triggerEvent: the formatted text",
+  radar({ triggerEvent: true }), 'radar', 2);
+add2('radar.template', "a radar's own tooltip formatter: {c} the grouped rawLabel",
+  radar({ triggerEvent: true, tooltip: { formatter: '{a}|{c}|{d}' }, axisLabel: { show: true, formatter: '{value}!' } }), 'radar', 3);
+add2('radar.default', "no triggerEvent: silent",
+  radar(), 'radar', 'name:0');
+add2('radar.tooltip-show', "the radar's tooltip.show without triggerEvent: the indicator model never sees it, silent",
+  radar({ tooltip: { show: true } }), 'radar', 'name:0');
+add2('radar.indicator-show', "an indicator's own tooltip.show: its model is not silent",
+  radar({ indicator: [{ name: 'Speed', max: 20000, tooltip: { show: true } }, { name: 'Power', max: 20000 }, { name: 'Range', max: 20000 }] }), 'radar', 'name:0');
+add2('radar.trigger-off', "triggerEvent and the radar's tooltip.show false: no box",
+  radar({ triggerEvent: true, tooltip: { show: false } }), 'radar', 'name:2');
+add2('radar.name-formatter', "an indicator name through axisName.formatter: the content is the formatted name (richText: not encoded)",
+  radar({ triggerEvent: true, axisName: { formatter: '<{value}>' } }, { tooltip: Object.assign({ renderMode: 'richText' }, TIP) }),
+  'radar', 'name:0');
+add2('radar.place', "a radar name's box with no position written",
+  radar({ triggerEvent: true }, { tooltip: Object.assign({}, TIPF) }), 'radar', 'name:1', { box: true });
+
+function watchMove(chart) {
+  const w = { box: null };
+  const m = chart.getModel().getComponent('tooltip', 0);
+  const view = m ? chart.getViewOfComponentModel(m) : null;
+  if (!view || !view._tooltipContent) return w;
+  const content = view._tooltipContent;
+  const mv = content.moveTo;
+  content.moveTo = function (x, y) {
+    w.box = [x, y];
+    return mv.apply(this, arguments);
+  };
+  return w;
+}
+
 function runCase(c) {
   const chart = mk();
   try {
     const opt = JSON.parse(JSON.stringify(c.option));
     chart.setOption(opt);
     refresh(chart);
-    const el = axisText(chart, c.axis, c.target);
+    const w = c.box ? watchMove(chart) : null;
+    const el = axisText(chart, c.axis, c.target, c.axisIndex);
     el.updateTransform();
     const r = el.getBoundingRect().clone();
     r.applyTransform(el.getComputedTransform());
     const pt = [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)];
     fire(chart, 'mousemove', { zrX: pt[0], zrY: pt[1], offsetX: pt[0], offsetY: pt[1] });
-    return {
+    const rec = {
       id: c.id, note: c.note, option: opt, axis: c.axis, target: c.target,
       rect: { x: hex(r.x), y: hex(r.y), width: hex(r.width), height: hex(r.height) },
       point: pt, tip: tipNow(chart),
     };
+    if (c.axisIndex !== undefined) rec.axisIndex = c.axisIndex;
+    if (w) {
+      must(rec.tip && w.box, c.id + ': no box placed');
+      rec.box = w.box.map(hex);
+    }
+    return rec;
   } finally {
     chart.dispose();
   }
@@ -209,6 +383,16 @@ function generate() {
     ['no component: none', tipIs('name-no-component', null)],
     ['show false: none', tipIs('name-show-false', null)],
     ['a label', tipIs('label-show', 'Wed!')],
+    ['a single axis shows by default', tipIs('single.label', 'Wed')],
+    ['a single axis off', tipIs('single.off', null) && tipIs('single.trigger-off', null)],
+    ['a single value axis groups', tipIs('single.value', 'v10,000|10,000')],
+    ['a radius label', tipIs('polar.radius-label', '10,000')],
+    ['an angle label', tipIs('polar.angle-label', 'Tue')],
+    ['an angle trigger alone', tipIs('polar.angle-trigger', null)],
+    ['a parallel label', tipIs('parallel.label', 'mid')],
+    ['a parallel default', tipIs('parallel.default', null)],
+    ['a radar name under triggerEvent', tipIs('radar.name-trigger', 'Power')],
+    ['a radar default', tipIs('radar.default', null) && tipIs('radar.tooltip-show', null)],
   ].map(([name, ok]) => ({ name, ok }));
   return {
     source: 'ECharts ' + echarts.version + ', zrender ' + echarts.zrender.version, W, H,
