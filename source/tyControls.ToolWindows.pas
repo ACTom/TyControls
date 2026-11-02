@@ -6128,7 +6128,11 @@ begin
     FContextWindow := WindowAtPos(MousePos.X, MousePos.Y)
   else
     FContextWindow := nil;
-  FPopupBlocked := FContextWindow = nil;
+  { 挡的只是正文里的子控件冒上来的请求(落点在内容区,或菜单键的 (-1, -1):栏不拿焦点),好让它
+    接着冒到窗体(spec §6.8)。图标条的空白、拉宽边是栏自己的像素:OnContextPopup、栏的菜单照常,
+    ContextWindow 是 nil。 }
+  FPopupBlocked := (FContextWindow = nil) and (((MousePos.X = -1) and (MousePos.Y = -1))
+    or PtInRect(BarLayout.Content, MousePos));
   if FPopupBlocked then Exit;
   inherited DoContextPopup(MousePos, Handled);
 end;
