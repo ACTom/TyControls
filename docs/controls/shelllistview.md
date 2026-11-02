@@ -39,7 +39,7 @@ Shell.OnFileActivate := @FileChosen;     // 双击文件 / Enter;双击文件夹
 | `ShowHidden: Boolean` | 是否枚举隐藏项 —— 就是 `ObjectTypes` 里 `fotHidden` 那一位的另一个名字,两边**双向同步**。默认 `False`。 |
 | `FoldersFirst: Boolean` | 文件夹是否在两个方向都排在文件前。默认 `True`。 |
 | `GroupByKind: Boolean` | 按**类型**(即类型列的值)分成可折叠的组;文件夹一组、各文件类型一组。默认 `False`。 |
-| `AutoSizeColumns: Boolean` | 每次 `Resize` 按**列被写死时的比例**重新分配客户区宽度,末列吃掉除法余数。默认 `True`(同 LCL)。关掉则一个像素都不动。以前四列恒为 220/90/120/140:窗口一宽右边就是一片死区,一窄就把"修改时间"切掉。 |
+| `AutoSizeColumns: Boolean` | 每次 `Resize` 按**列被写死时的比例**重新分配客户区宽度(垂直滚动条显示时扣掉它的宽度),末列吃掉除法余数。默认 `True`(同 LCL)。关掉则一个像素都不动。以前四列恒为 220/90/120/140:窗口一宽右边就是一片死区,一窄就把"修改时间"切掉。 |
 | `UseBuiltInIcons: Boolean` | 是否用控件自带的种类图标。默认 `True`。关掉会**同时**卸下内置 `SmallImages`/`LargeImages` **并**让 `GetItemImageIndex` 返回 `-1` —— 只卸列表不够,行仍会给图标留槽。 |
 | `OnFileActivate` | 双击文件 / Enter 触发(双击文件夹改为进入)。 |
 | `OnAddItem` | **逐条否决**:每枚举出一条就触发一次 `(Sender, ABasePath, AEntry, var ACanAdd)`,置 `ACanAdd := False` 丢掉这一条。此前的过滤只有 `Mask`(仅文件、仅按名)/ `ShowHidden` / `ObjectTypes`,而 `Entries` 是只读的唯一存储 —— 按大小、日期、属性或应用黑名单过滤**完全没有接缝**。 |
@@ -87,7 +87,7 @@ Shell.OnFileActivate := @FileChosen;     // 双击文件 / Enter;双击文件夹
   `rsTyFileSize*`,不再是写死的英文 —— 否则一堆已翻译的列头中间夹着一个英文单位。格式化函数
   `TyFormatFileSize(ABytes: Int64): string` 是纯函数并**已导出**:够不着它的测试也就证不出资源串是真在用、而不只是声明了。
 - **`GetItemCount` 从不碰盘** —— 它每帧每次滚动排序都被调,读 `Length(FEntries)`。读盘只在 `LoadDirectory`。
-- **F2 重命名是真的重命名磁盘文件**(`RenameFileUTF8`);空名 / 同名 / 带路径分隔符的名静默放弃;
+- **F2 重命名是真的重命名磁盘文件**(`RenameFileUTF8`);改名前先问 `OnEdited`(handler 可以改名字,清空则放弃),改成功后触发 `OnChange(ctText)`,和普通列表视图一样;空名 / 同名 / 带路径分隔符的名静默放弃;
   目标已存在时重命名失败(不覆盖),视图不刷新。
 - **种类图标用固定调色板**(内容图标,可用 `SmallImages`/`LargeImages` 覆盖,或 `UseBuiltInIcons := False` 全关),
   master 128px 降采样。不从主题取色 —— 构造时主题可能还没解析。

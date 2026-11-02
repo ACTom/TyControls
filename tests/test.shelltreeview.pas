@@ -38,7 +38,8 @@ uses
   fpcunit, testregistry,
   tyControls.FileSystem,   { TyFsHasSubdir, TyFsRoots, TTyFsRootArray, kinds }
   tyControls.TreeView,     { PTyTreeNode, TTyNodeState, nsHasChildren }
-  tyControls.ShellTreeView;{ the unit under test }
+  tyControls.ShellTreeView,{ the unit under test }
+  tyControls.ShellListView, LCLType;
 
 type
   { Re-exposes the protected NodePath seam. A descendant declared here can read
@@ -48,7 +49,10 @@ type
   public
     { node -> the absolute directory path it maps to (the protected NodePath). }
     function XNodePath(ANode: PTyTreeNode): string;
+    procedure XKey(AKey: Word);
   end;
+
+  TCompCrack165 = class(TComponent);
 
   { One controlled temp tree per test, a fresh control per test.
 
@@ -91,6 +95,8 @@ type
     procedure SetUp; override;
     procedure TearDown; override;
   published
+    procedure TestALinkedPairStartsInStep;              // #165
+    procedure TestAMultiSelectTreeFollowsTheFocus;      // #165
     { PopulateRoots seeds one node per TyFsRoots, and the roots include the kind
       expected for this OS (a drive on Windows; '/' on Unix). }
     procedure TestPopulateRootsSeedsRootsWithExpectedKind;
@@ -143,6 +149,13 @@ end;
 { ===========================================================================
   TTyShellTreeViewAccess
   =========================================================================== }
+
+procedure TTyShellTreeViewAccess.XKey(AKey: Word);
+var k: Word;
+begin
+  k := AKey;
+  KeyDown(k, []);
+end;
 
 function TTyShellTreeViewAccess.XNodePath(ANode: PTyTreeNode): string;
 begin
@@ -612,6 +625,40 @@ begin
   finally
     tree.Free;
   end;
+end;
+
+{ #165: a tree with no folder of its own opens on its linked list's, so the pair starts in step. }
+procedure TShellTreeViewTest.TestALinkedPairStartsInStep;
+var lv: TTyShellListView;
+begin
+  lv := TTyShellListView.Create(nil);
+  try
+    FTree.ShowHidden := True;
+    TCompCrack165(FTree).Loading;
+    TCompCrack165(lv).Loading;
+    lv.Directory := FDirA;
+    FTree.ShellListView := lv;
+    TCompCrack165(lv).Loaded;
+    TCompCrack165(FTree).Loaded;
+    AssertTrue('the tree opens on the list''s folder: ' + FTree.SelectedPath,
+      SamePath(FTree.SelectedPath, FDirA));
+  finally
+    FTree.ShellListView := nil;
+    lv.Free;
+  end;
+end;
+
+{ #165: with toMultiSelect the path is the focused folder's -- it was the one just left. }
+procedure TShellTreeViewTest.TestAMultiSelectTreeFollowsTheFocus;
+var node: PTyTreeNode;
+begin
+  FTree.Options := FTree.Options + [toMultiSelect];
+  node := ReachTempRoot;
+  FTree.Expanded[node] := True;
+  FTree.XKey(VK_DOWN);
+  AssertTrue('setup: the focus moved', FTree.FocusedNode <> node);
+  AssertTrue('SelectedPath is the focused folder''s',
+    SamePath(FTree.SelectedPath, FTree.XNodePath(FTree.FocusedNode)));
 end;
 
 initialization

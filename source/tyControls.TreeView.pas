@@ -851,6 +851,9 @@ type
     procedure DoGetImageIndex(Node: PTyTreeNode; AKind: TTyVTImageKind; AColumn: Integer;
       var AGhosted: Boolean; var AIndex: Integer); virtual;
     procedure DoTreeChange(Node: PTyTreeNode); virtual;
+    { The focus moved to Node: OnFocusChanged. A descendant that follows the focus overrides
+      it -- TTyShellTreeView, whose path is the focused folder's (#165). }
+    procedure DoFocusChanged(Node: PTyTreeNode); virtual;
     { A node is about to be freed: its data and its item are still readable. Fires OnFreeNode. }
     procedure DoFreeNode(Node: PTyTreeNode); virtual;
     { Items were turned into nodes again (RebuildFromItems): every node before it is gone. }
@@ -2564,8 +2567,7 @@ begin
       FSuppressChanging := False;
     end;
   end;
-  if Assigned(FOnFocusChanged) then
-    FOnFocusChanged(Self, AValue);
+  DoFocusChanged(AValue);
   { AutoExpand runs after the notification, so a handler reading Expanded[] sees the
     state the user is about to see. }
   ApplyAutoExpand(prevFocus, AValue);
@@ -2583,7 +2585,7 @@ begin
   if not DoChanging(AValue) then Exit;
   prevFocus    := FFocusedNode;
   FFocusedNode := AValue;
-  if Assigned(FOnFocusChanged) then FOnFocusChanged(Self, AValue);
+  DoFocusChanged(AValue);
   ApplyAutoExpand(prevFocus, AValue);
   Invalidate;
 end;
@@ -7349,6 +7351,11 @@ end;
 procedure TTyCustomTreeView.DoTreeChange(Node: PTyTreeNode);
 begin
   if Assigned(FOnChange) then FOnChange(Self, Node);
+end;
+
+procedure TTyCustomTreeView.DoFocusChanged(Node: PTyTreeNode);
+begin
+  if Assigned(FOnFocusChanged) then FOnFocusChanged(Self, Node);
 end;
 
 procedure TTyCustomTreeView.OverrideCursor(AOn: Boolean; AWith: TCursor);

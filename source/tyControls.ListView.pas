@@ -39,6 +39,9 @@ const
   TyLvRowHeight = 22;
   { Row-checkbox edge length, in logical px (DPI-scaled at paint time). }
   TyLvCheckPx = 14;
+  { One sideways step of the report's Left / Right keys, in logical px (#165); the tilt wheel
+    goes three. }
+  TyLvSideStep = 16;
 
 type
   { Per-item state flags. lisChecked/lisCut are surfaced through GetItemState so a
@@ -467,8 +470,9 @@ type
       const AStyle: TTyStyleSet);
     procedure RenderFlowCell(P: TTyPainter; AIndex: Integer; const ACell: TRect;
       const AStyle: TTyStyleSet);
+    { AGhosted: drawn faded, as Explorer draws a cut item's icon (lisCut, #165). }
     procedure DrawImage(P: TTyPainter; AList: TCustomImageList;
-      AImageIndex, AX, AY, ASizePx: Integer);
+      AImageIndex, AX, AY, ASizePx: Integer; AGhosted: Boolean = False);
     procedure RenderCheckBox(P: TTyPainter; const ABox: TRect; AChecked: Boolean);
 
     { inline rename }
@@ -644,6 +648,9 @@ type
     procedure DblClick; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
+    { #165: the tilt wheel scrolls sideways. }
+    function DoMouseWheelHorz(Shift: TShiftState; WheelDelta: Integer;
+      MousePos: TPoint): Boolean; override;
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
@@ -1851,6 +1858,12 @@ begin
     otherwise the resolve applies :hover LAST and its background overrides :selected,
     leaving the selected row's light text on a grey hover fill. Hover feedback is for
     UNSELECTED rows only. }
+  { #165: lisDisabled draws the item disabled; MouseDown refuses it. }
+  if lisDisabled in GetItemState(AItem) then
+  begin
+    Include(Result, tysDisabled);
+    Exit;
+  end;
   if IsSelectedItem(AItem) then
     Include(Result, tysSelected)
   else if FHotTrack and (AItem = FHot) then
@@ -3141,13 +3154,13 @@ end;
   --------------------------------------------------------------------------- }
 
 procedure TTyCustomListView.DrawImage(P: TTyPainter; AList: TCustomImageList;
-  AImageIndex, AX, AY, ASizePx: Integer);
+  AImageIndex, AX, AY, ASizePx: Integer; AGhosted: Boolean);
 begin
   if (AList = nil) or (AImageIndex < 0) or (AImageIndex >= TyImageCount(AList)) or (ASizePx <= 0) then Exit;
   { Both branches in-layer. Our list is the hot path (HotTrack repaints on every mouse move),
     borrowed from the collection cache with no per-icon allocation; a foreign list is
     materialised. }
-  TyBlitImageScaled(P, AList, AImageIndex, AX, AY, ASizePx, False);
+  TyBlitImageScaled(P, AList, AImageIndex, AX, AY, ASizePx, AGhosted);
 end;
 
 function TTyCustomListView.CheckRectForCell(const ACell: TRect): TRect;
@@ -3311,7 +3324,8 @@ begin
         imgLead := lead + sign * (cbShift + margin);
         if RtlLayout then Dec(imgLead, imgPx);
         DrawImage(P, FSmallImages, ii, imgLead,
-          ACell.Top + (ACell.Bottom - ACell.Top - imgPx) div 2, imgPx);
+          ACell.Top + (ACell.Bottom - ACell.Top - imgPx) div 2, imgPx,
+          lisCut in GetItemState(AIndex));
         gap := ScaleI(StyleMetric('--listview-icon-gap', TyLvIconGap));
         textLead := lead + sign * (cbShift + margin + imgPx + gap);
       end;
@@ -3367,7 +3381,7 @@ begin
           rect run to the cell bottom gives the label its full LabelH plus the recovered pad. }
         ix := ACell.Left + (ACell.Right - ACell.Left - imgPx) div 2;
         iy := ACell.Top + pad;
-        DrawImage(P, imgList, ii, ix, iy, imgPx);
+        DrawImage(P, imgList, ii, ix, iy, imgPx, lisCut in GetItemState(AIndex));
         tr := Rect(ACell.Left + pad, iy + imgPx + pad, ACell.Right - pad, ACell.Bottom);
         if tr.Top < tr.Bottom then
           P.DrawText(tr, lbl, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
@@ -3378,7 +3392,7 @@ begin
         { icon at the reading start, two text lines after it }
         ix := FlowIconLeft(ACell, cbShift, pad, imgPx);
         iy := ACell.Top + (ACell.Bottom - ACell.Top - imgPx) div 2;
-        DrawImage(P, imgList, ii, ix, iy, imgPx);
+        DrawImage(P, imgList, ii, ix, iy, imgPx, lisCut in GetItemState(AIndex));
         sub := GetItemText(AIndex, 1);
         tr := FlowLabelRect(ACell, ix, imgPx, pad,
                 ACell.Top + pad,
@@ -3396,7 +3410,7 @@ begin
       { lvsSmallIcon / lvsList: icon at the reading start, single label after it }
       ix := FlowIconLeft(ACell, cbShift, pad, imgPx);
       iy := ACell.Top + (ACell.Bottom - ACell.Top - imgPx) div 2;
-      DrawImage(P, imgList, ii, ix, iy, imgPx);
+      DrawImage(P, imgList, ii, ix, iy, imgPx, lisCut in GetItemState(AIndex));
       tr := FlowLabelRect(ACell, ix, imgPx, pad, ACell.Top, ACell.Bottom);
       if tr.Left < tr.Right then
         P.DrawText(tr, lbl, AStyle.FontName, ResolveFontSize(AStyle), AStyle.FontWeight,
@@ -4039,6 +4053,21 @@ var
 begin
   if not IsEnabled then Exit;
   inherited MouseDown(Button, Shift, X, Y);
+  { #165: a right-click puts the selection on the item under the pointer when it is not
+    selected already -- the item a context menu is about, as in Explorer and LCL's list
+    view; on a selected one it keeps the selection. }
+  if Button = mbRight then
+  begin
+    try
+      if TabStop and CanFocus then SetFocus;
+    except
+    end;
+    item := GetItemAt(X, Y);
+    if (item >= 0) and not IsSelectedItem(item) and not (lisDisabled in GetItemState(item))
+      and not ((FViewStyle = lvsReport) and (CurrentMetrics.HeaderH > 0) and (Y < CurrentMetrics.HeaderH)) then
+      ItemMouseSelect(item, []);
+    Exit;
+  end;
   if Button <> mbLeft then Exit;
   try
     if TabStop and CanFocus then SetFocus;   { #143: a click focuses only a tab stop, as TTyCustomControl.MouseDown does }
@@ -4116,6 +4145,7 @@ begin
         Exit;
       end;
       item := DisplayToItem(TyListGroupDisplayPos(FGroupMap, g, idx));  { (g,idx)->display->item }
+      if (item >= 0) and (lisDisabled in GetItemState(item)) then Exit;   { #165 }
       if item >= 0 then
       begin
         if FPressHit = lhpCheck then
@@ -4146,6 +4176,7 @@ begin
   if pos >= 0 then
   begin
     item := DisplayToItem(pos);   { display pos -> item index }
+    if (item >= 0) and (lisDisabled in GetItemState(item)) then Exit;   { #165 }
     if item >= 0 then
     begin
       if FPressHit = lhpCheck then
@@ -4301,9 +4332,8 @@ begin
 
   if FHotTrack then
   begin
-    m := CurrentMetrics;
-    pos := TyListItemAt(Point(X, Y), GetItemCount, m, FOffsetX, FOffsetY);
-    if pos >= 0 then newHot := DisplayToItem(pos) else newHot := -1;
+    { #165: GetItemAt, which knows the group layout -- the flat hit test lit the wrong row there. }
+    newHot := GetItemAt(X, Y);
     if newHot <> FHot then
     begin
       FHot := newHot;
@@ -4437,6 +4467,22 @@ begin
     end;
   end;
 
+  { #165: a report has one column of items -- Left and Right scroll it sideways, as LCL's. }
+  if (FViewStyle = lvsReport) and ((Key = VK_LEFT) or (Key = VK_RIGHT)) and (Shift = []) then
+  begin
+    if (FHScroll <> nil) and FHScroll.Visible then
+    begin
+      if Key = VK_LEFT then
+        Dec(FOffsetX, ScaleI(TyLvSideStep))
+      else
+        Inc(FOffsetX, ScaleI(TyLvSideStep));
+      if FOffsetX < 0 then FOffsetX := 0;
+      UpdateScrollBars;   { re-clamps to the content range }
+      Invalidate;
+      Key := 0;
+    end;
+    Exit;
+  end;
   mapped := True;
   case Key of
     VK_LEFT:  navKey := lnLeft;
@@ -4551,6 +4597,23 @@ begin
   if FOffsetX < 0 then FOffsetX := 0;
   if FOffsetY < 0 then FOffsetY := 0;
   UpdateScrollBars;   { re-clamps to the content range }
+  Invalidate;
+  Result := True;
+end;
+
+function TTyCustomListView.DoMouseWheelHorz(Shift: TShiftState; WheelDelta: Integer;
+  MousePos: TPoint): Boolean;
+begin
+  if not IsEnabled then Exit(False);
+  if inherited DoMouseWheelHorz(Shift, WheelDelta, MousePos) then Exit(True);
+  Result := False;
+  if (FHScroll = nil) or not FHScroll.Visible then Exit;
+  EndEdit(True);   { as the wheel: the edited cell would move }
+  { LCL's sign: a positive WheelDelta tilts to the right (control.inc DoMouseWheelHorz). }
+  if WheelDelta > 0 then Inc(FOffsetX, 3 * ScaleI(TyLvSideStep))
+  else Dec(FOffsetX, 3 * ScaleI(TyLvSideStep));
+  if FOffsetX < 0 then FOffsetX := 0;
+  UpdateScrollBars;
   Invalidate;
   Result := True;
 end;
