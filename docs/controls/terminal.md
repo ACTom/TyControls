@@ -46,7 +46,7 @@ uses tyControls.Terminal;
 | `AmbiguousWide` | `Boolean` | `False` | 东亚歧义宽度字符算两格。只对 `UnicodeVersion` 为 `15` / `15-graphemes` 起作用。 |
 | `UnicodeVersion` | `TTyUnicodeVersion` | `tuv11` | 字符宽度表：`tuv6`、`tuv11`、`tuv15`、`tuv15Graphemes`。见 §14。 |
 | `MacOptionIsMeta` | `Boolean` | `False` | macOS 上 Option 当 Meta（发 `ESC` 前缀），否则 Option 打第三层字符。 |
-| `AlternateScroll` | `Boolean` | `True` | 没有滚回（备用屏）且程序没要鼠标事件时，滚轮发上下方向键。 |
+| `AlternateScroll` | `Boolean` | `True` | 备用屏（vim、less）上程序没要鼠标事件时，滚轮发上下方向键。主屏不发，`Scrollback = 0` 也一样。 |
 | `DrawBoldTextInBrightColors` | `Boolean` | `True` | 粗体的调色板颜色 0–7 画成 8–15。 |
 | `ReadOnly` | `Boolean` | `False` | 不往外发字节（按键、粘贴、输入法都不发）；本地翻页、复制照常。转给 Core。只会被发出去的键（Tab、方向键、Enter、Esc、功能键、Ctrl+字母）这时不吞，交给窗体：Tab 移走焦点，Enter、Esc 到得了对话框的默认 / 取消按钮，同只读的 `TMemo`。 |
 | `ConvertEol` | `Boolean` | `False` | LF 当 CR LF。转给 Core。 |
@@ -201,7 +201,7 @@ end;
 
 - 右侧是内嵌的 `TTyScrollBar`，跟着滚回走；拖动它就在滚回里移动。备用屏（vim、less、htop）没有滚回，条禁用。
 - **条的宽度总是留着**：列数不随主屏 / 备用屏变化，进出 vim 不会让程序多收一次改尺寸。代价是全屏程序右边有一条空白（自动隐藏的主题下条淡掉，只剩空白）。
-- 竖向滚轮三种去向（照 xterm.js）：程序要了鼠标滚轮事件就上报给程序；否则有滚回就滚 3 行；再否则（备用屏）且 `AlternateScroll` 开着，就发上 / 下方向键——less、man 里滚轮就能翻。
+- 竖向滚轮三种去向（照 xterm.js）：程序要了鼠标滚轮事件就上报给程序；否则有滚回就滚 3 行；再否则，在备用屏上且 `AlternateScroll` 开着，就发上 / 下方向键——less、man 里滚轮就能翻。主屏没有滚回（`Scrollback = 0`）时滚轮什么都不做：xterm.js 这时也发方向键，会翻 shell 的历史，这里照 xterm 只在备用屏发。
 - Shift+滚轮照 xterm.js：不上报、不发方向键；Windows / Linux 上它是横滚（终端没有横向可滚，事件交给父控件），macOS 上照常滚滚回。
 - 横向滚轮（触控板、带横滚的鼠标）：程序要了鼠标事件就报左 / 右（SGR 里是 66 / 67）；没要就交给父控件。
 

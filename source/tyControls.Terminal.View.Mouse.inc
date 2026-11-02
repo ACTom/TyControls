@@ -39,7 +39,8 @@ begin
   for i := 1 to Abs(notches) do
   begin
     { MouseService.ts:250-292:程序要滚轮事件就上报;否则有滚回就滚 3 行;再否则
-      (备用屏、AlternateScroll)发方向键 }
+      (备用屏、AlternateScroll)发方向键。#185:方向键只在备用屏发(xterm 的 alternateScroll;
+      上游看的是 hasScrollback,主屏 Scrollback = 0 时会翻 shell 的历史) }
     if Reporting then
     begin
       if dir > 0 then
@@ -50,7 +51,7 @@ begin
     end;
     if FCore.Buffer.HasScrollback then
       FCore.ScrollLines(-3 * dir)
-    else if FAlternateScroll then
+    else if FAlternateScroll and FCore.Buffers.IsAlt then
     begin
       if FCore.Modes.ApplicationCursorKeys then
       begin

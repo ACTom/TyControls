@@ -85,6 +85,7 @@ type
     procedure TestAnAltCodeCharacterIsTyped;
     procedure TestReadOnlyLeavesTheKeysItWouldOnlySend;
     procedure TestOnKeyPressSeesTypedCharacters;
+    procedure TestNoScrollbackOnTheNormalScreenSendsNoArrows;
   end;
 
 implementation
@@ -920,6 +921,21 @@ begin
   TypeIt(#$C3#$A9);
   AssertEquals('a character of more than one byte is not a Char: not asked', 'ab', FKeyPresses);
   AssertEquals('and sent', '61 C3 A9', Hex);
+end;
+
+{ #185: AlternateScroll is xterm's: arrow keys for the wheel on the alternate screen only.
+  A normal screen without scrollback (Scrollback = 0) does not walk the shell's history. }
+procedure TTyTerminalViewInputTests.TestNoScrollbackOnTheNormalScreenSendsNoArrows;
+begin
+  F.View.Scrollback := 0;
+  Lines(20);
+  AssertFalse('no scrollback', F.View.Core.Buffer.HasScrollback);
+  F.View.Wheel([], 120, Point(10, 10));
+  AssertEquals('the normal screen: no arrows', '', Hex);
+  F.View.WriteSync(#27'[?1049h');
+  F.ClearRecords;
+  F.View.Wheel([], 120, Point(10, 10));
+  AssertEquals('the alternate screen: an up arrow', '1B 5B 41', Hex);
 end;
 
 initialization
