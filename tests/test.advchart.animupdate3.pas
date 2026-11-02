@@ -30,6 +30,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.Controller,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Anim,
      tyControls.AdvanceChart.AnimView, tyControls.AdvanceChart.Shape, tyControls.AdvanceChart.AnimOpt,
+     tyControls.AdvanceChart.ZrPath,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax,
      test.advchart.graphic;
@@ -455,6 +456,8 @@ var
   p: TTyChartAnimProxy;
   el: TTyChartElement;
   cx, cy, vsx, vsy, vx, vy: Double;
+  { [R7-G2] the shape's ends as buildPath draws them }
+  sx1, sy1, sx2, sy2: Double;
   bx: TTyRectF;
   vw: TJSONObject;
 begin
@@ -564,7 +567,14 @@ begin
         end;
       end;
       { THE FRAME: a whole straight line's two ends on the canvas -- the
-        shape through the main group as it is now }
+        shape through the main group as it is now. [R7-G2] The record is
+        the Line's SHAPE (line.shape x1..y2); what is drawn is buildPath's:
+        ECLinePath has subPixelOptimize, so zrender's Line.buildPath runs
+        subPixelOptimizeLine on that shape, by style.lineWidth, at every
+        frame the tween dirties it (graph-circular t 3000: shape x 297.08,
+        drawn 297.5). So the shape's ends are snapped, in the group's frame,
+        by the edge's width, then taken through the group [was: the shape
+        as drawn, which upstream never draws] }
       if FNoPlace then
       else if (sub = '') and (WantNum(leaf.Find('percent')) = 1) and IsNan(WantNum(leaf.Find('cpx1')))
         and FrameEl(s, idx, carGraphEdge, el) and (Length(el.Shape.Points) = 2) then
@@ -584,10 +594,15 @@ begin
           vx := 0;
           vy := 0;
         end;
-        NearVal(name + ' drawn x1', el.Shape.Points[0].X, vsx * WantNum(leaf.Find('x1')) + vx);
-        NearVal(name + ' drawn y1', el.Shape.Points[0].Y, vsy * WantNum(leaf.Find('y1')) + vy);
-        NearVal(name + ' drawn x2', el.Shape.Points[1].X, vsx * WantNum(leaf.Find('x2')) + vx);
-        NearVal(name + ' drawn y2', el.Shape.Points[1].Y, vsy * WantNum(leaf.Find('y2')) + vy);
+        sx1 := WantNum(leaf.Find('x1'));
+        sy1 := WantNum(leaf.Find('y1'));
+        sx2 := WantNum(leaf.Find('x2'));
+        sy2 := WantNum(leaf.Find('y2'));
+        TyZrSubPixelOptimizeLine(sx1, sy1, sx2, sy2, el.Style.StrokeWidthLogical);
+        NearVal(name + ' drawn x1', el.Shape.Points[0].X, vsx * sx1 + vx);
+        NearVal(name + ' drawn y1', el.Shape.Points[0].Y, vsy * sy1 + vy);
+        NearVal(name + ' drawn x2', el.Shape.Points[1].X, vsx * sx2 + vx);
+        NearVal(name + ' drawn y2', el.Shape.Points[1].Y, vsy * sy2 + vy);
       end
       { THE FRAME: the label's anchor where beforeUpdate hung it, through the
         group }
