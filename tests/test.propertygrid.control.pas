@@ -95,7 +95,8 @@ type
     procedure TestAStreamedSelectionIsReadAgainOnceLoadingIsOver;
     procedure TestTheGridsOwnLinksOutliveTheSelection;
     procedure TestADisplayValueFromOnGetPropertyRowFollowsTheValue;
-    procedure TestOnEditingDoneComesWhenAnEditEndsNotWhenItStarts;
+    procedure TestOnEditingDoneIsNotAnnouncedWhenAnEditStarts;
+    procedure TestOnEditingDoneComesOnceWhenAnEditEnds;
   end;
 
 implementation
@@ -875,16 +876,31 @@ end;
 
 { LCL's grid: EditingDone is held back while the cell editor is showing and comes when the edit is
   finished (grids.pas, TCustomGrid.EditingDone and TStringCellEditor.EditingDone). The grid lost
-  focus to its own editor the moment a cell was clicked, and that was announced instead. }
-procedure TPropertyGridControlTest.TestOnEditingDoneComesWhenAnEditEndsNotWhenItStarts;
+  focus to its own editor the moment a cell was clicked, and that was announced instead. Real
+  focus, on a shown form. }
+procedure TPropertyGridControlTest.TestOnEditingDoneIsNotAnnouncedWhenAnEditStarts;
 begin
   FDone := 0;
   FGrid.OnEditingDone := @EditingDoneSeen;
   FForm.Show;
-  if FGrid.CanFocus then FGrid.SetFocus;
+  FGrid.SetFocus;
+  AssertTrue('the grid has the focus', FGrid.Focused);
   FGrid.ClickValue(FGrid.RowAt('Zeta'));
   AssertTrue('the editor opened', FGrid.EditingRow >= 0);
+  AssertTrue('and took the focus', FGrid.Editor.Focused);
   AssertEquals('not when the edit starts', 0, FDone);
+  FGrid.CloseEditor;
+end;
+
+{ Each end of an edit announced once: the focus coming back from the dropped list is not another
+  end. }
+procedure TPropertyGridControlTest.TestOnEditingDoneComesOnceWhenAnEditEnds;
+begin
+  FDone := 0;
+  FGrid.OnEditingDone := @EditingDoneSeen;
+  FGrid.ClickValue(FGrid.RowAt('Zeta'));
+  AssertTrue('the editor opened', FGrid.EditingRow >= 0);
+  AssertEquals('nothing yet', 0, FDone);
   FGrid.Editor.TypeText('5');
   FGrid.Editor.PressKey(VK_RETURN);
   AssertEquals('written', 5, FObj.Zeta);

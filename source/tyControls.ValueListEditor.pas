@@ -1804,12 +1804,17 @@ end;
 
 procedure TTyCustomValueListEditor.DropClosed(Sender: TObject);
 begin
-  FDropMode := False;
   FDropKind := dkNone;
   if FEditor <> nil then begin FEditor.ReadOnly := False; FEditor.Visible := False; end;
   FEditFlat := -1;
   Invalidate;
-  if CanFocus then SetFocus;
+  { The focus comes back while the list still counts as open: its kill-focus on the way is not
+    the end of an edit (HandleDropCommit announces a pick itself). #183 }
+  try
+    if CanFocus then SetFocus;
+  finally
+    FDropMode := False;
+  end;
 end;
 
 { The inline "…" button was clicked (or InvokeRowDialog called): run the row's dialog editor. }
