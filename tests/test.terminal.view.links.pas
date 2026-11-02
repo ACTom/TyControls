@@ -54,6 +54,8 @@ type
     { 5 期:改尺寸 }
     procedure TestAResizeDropsTheHover;
     procedure TestALongLineUnderAnOldConPtyMapsAsUpstream;
+    { #185 }
+    procedure TestCtrlOutsideTheTerminalUnderlinesNothing;
   end;
 
 function TyTermOsc8(const AUri, AText: RawByteString): RawByteString;
@@ -437,6 +439,23 @@ begin
   finally
     m.Free;
   end;
+end;
+
+{ #185: the pointer left the terminal, which keeps the focus; Ctrl pressed then (Ctrl+C)
+  underlines nothing at the old position. Inside, Ctrl still shows the link. }
+procedure TTyTerminalViewLinkTests.TestCtrlOutsideTheTerminalUnderlinesNothing;
+begin
+  V.WriteSync(Url);
+  V.Hover(True);
+  V.MoveTo([], V.CellCenter(8, 0));
+  V.Hover(False);
+  V.KeyDownNow(VK_CONTROL, [ssCtrl]);
+  AssertFalse('outside: no link', V.HoverOn);
+  V.KeyUpNow(VK_CONTROL, []);
+  V.Hover(True);
+  V.MoveTo([], V.CellCenter(8, 0));
+  V.KeyDownNow(VK_CONTROL, [ssCtrl]);
+  AssertTrue('inside: the link', V.HoverOn);
 end;
 
 initialization

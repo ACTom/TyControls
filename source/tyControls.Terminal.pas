@@ -3353,11 +3353,12 @@ end;
 { 修饰键按下 / 抬起:链接悬停与指针形状跟着变(指针没动也一样)。不改变按键的去向 }
 procedure TTyCustomTerminalView.ModifierChanged(AKey: Word; Shift: TShiftState);
 begin
-  if (AKey = VK_CONTROL) or (AKey = VK_SHIFT) or (AKey = VK_MENU) or (AKey = VK_LWIN) or (AKey = VK_RWIN) then
+  { #185: 指针不在终端上(离开了，焦点还在这里)就不找链接:FLastMousePos 是离开前的位置 }
+  if FMouseInside and ((AKey = VK_CONTROL) or (AKey = VK_SHIFT) or (AKey = VK_MENU) or (AKey = VK_LWIN)
+    or (AKey = VK_RWIN)) then
   begin
     UpdateHover(FLastMousePos.X, FLastMousePos.Y, Shift);
-    if FMouseInside then
-      UpdatePointer(Shift);
+    UpdatePointer(Shift);
   end;
 end;
 
