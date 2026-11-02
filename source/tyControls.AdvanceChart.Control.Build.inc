@@ -2863,6 +2863,15 @@ begin
   AVisual.StrokeWidthSet := not IsNan(item.BorderWidthLogical);
   AVisual.StrokeWidthNaN := item.BorderWidthNaN;
   AVisual.StrokeWidthInf := item.BorderWidthInf;
+  { [R7-G] getLineWidth's borderColor test on the series' own key: truthy
+    and not the word 'none', whatever colour it parses to }
+  d := node.Find('itemStyle');
+  if d is TJSONObject then
+    AVisual.BorderLayout := TyOptTruthy(TJSONObject(d).Find('borderColor'))
+      and not ((TJSONObject(d).Find('borderColor').JSONType = jtString)
+        and (TJSONObject(d).Find('borderColor').AsString = 'none'))
+  else
+    AVisual.BorderLayout := False;
   { THE PEN'S DASH, carried as the option wrote it -- see TTySeriesVisual. }
   AVisual.Dash := item.Dash;
   AVisual.DashExplicit := item.DashLogical;

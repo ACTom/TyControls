@@ -223,6 +223,13 @@ type
       '-Infinity'): that infinity, else 0 -- no pen (StrokeWidthLogical 0),
       and a bar's getLineWidth takes it into its Math.min }
     StrokeWidthInf: Double;
+    { [R7-G] BarView's getLineWidth asks only whether the item model's
+      itemStyle.borderColor is truthy and not 'none' -- not whether the pen
+      draws: 'transparent', a colour of no alpha, a word the canvas does
+      not know, an object, a number other than 0 all take the border out of
+      a bar's layout. The item's own over the series' (a null climbs, ''
+      does not). [Was: a bar was inset only by a pen of some colour.] }
+    BorderLayout: Boolean;
     { The four colours a candle needs, and the pen. A block of its own rather
       than four more fields on the visual: a candlestick is the only series
       whose colour depends on the DATUM's own two numbers, and putting `Up` and
@@ -1206,6 +1213,13 @@ begin
   if AStore.HasOverride(ARow, k) then
   begin
     v := AStore.GetOverride(ARow, k);
+    { [R7-G] getLineWidth's test on the item's own key: truthy and not the
+      word 'none' as written; a null climbs to the series' }
+    case v.Kind of
+      dvkText: Result.BorderLayout := (v.Text <> '') and (v.Text <> 'none');
+      dvkNumber: Result.BorderLayout := (v.Num <> 0) and not IsNan(v.Num);
+      dvkBool: Result.BorderLayout := v.Num <> 0;
+    end;
     if v.Kind = dvkText then
     begin
       if TyChartColorIsNone(v.Text) then
@@ -1231,6 +1245,8 @@ begin
   begin
     Result.Stroke := rf.StrokeObjSolid;
     Result.StrokeGradient := rf.StrokeObjGradient;
+    { an object is truthy }
+    Result.BorderLayout := True;
   end;
   k := TyOverrideKey('itemStyle.borderWidth');
   if AStore.HasOverride(ARow, k) then
@@ -1745,7 +1761,7 @@ begin
     { [R6-E] a border width that is no number ('abc'): getLineWidth's
       Math.min is not-a-number, so is the layout, and the bar is not drawn
       (isValidLayout) -- nor its label }
-    if rv.StrokeWidthNaN and ((rv.Stroke <> 0) or (rv.StrokeGradient.Kind <> cgkNone)) then
+    if rv.StrokeWidthNaN and rv.BorderLayout then
       Continue;
     { [R6-F] getLineWidth's own number, `borderWidth || 0` in its
       Math.min: an infinite width is the bar's own width or height, which
@@ -1757,7 +1773,9 @@ begin
     fixed := False;
     if rv.StrokeWidthInf <> 0 then bw := rv.StrokeWidthInf
     else bw := rv.StrokeWidthLogical;
-    if (bw <> 0) and (rv.Stroke <> 0) then
+    { [R7-G] whenever a border colour is written truthy and not 'none',
+      whatever the pen draws [was: only a pen of some colour] }
+    if (bw <> 0) and rv.BorderLayout then
     begin
       fix := Min(bw * AVisual.PxScale, Min(Abs(lw), Abs(lh)));
       if IsInfinite(fix) then Continue;
