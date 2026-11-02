@@ -748,11 +748,10 @@ begin
   Result := '';
   if ATyped = '' then
     Exit;
-  { No directory part -> resolve against ADir; otherwise keep the typed path. }
-  if ExtractFilePath(ATyped) = '' then
-    Result := ExpandFileNameUTF8(ATyped, ADir)
-  else
-    Result := ATyped;
+  { Against ADir whatever the name holds: a relative folder part too (#179), which was kept as
+    typed and so read against the process's current folder. An absolute path comes back as
+    it is. }
+  Result := ExpandFileNameUTF8(ATyped, ADir);
   { Append the default extension only when none is present. }
   if (ExtractFileExt(Result) = '') and (ADefaultExt <> '') then
   begin

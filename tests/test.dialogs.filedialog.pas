@@ -45,6 +45,8 @@ type
     procedure TestOpenTypedBeatsSelected;
     procedure TestOpenTypedWithPathVerbatim;
     procedure TestOpenAllEmptyIsEmpty;
+    { #179: a relative folder part is read against the directory, in both modes. }
+    procedure TestARelativeFolderIsReadAgainstTheDirectory;
   end;
   { The form with its error box swapped for a list, so a refused name can be read instead of
     putting a modal window up. Everything else is the real form: the name box, the list, the
@@ -66,7 +68,11 @@ type
     FForm: TProbeFileDialog;
     FAsked: Boolean;
     FAnswer: Boolean;
+    FComp: TTyOpenDialog;
+    FSeenName: string;
+    FSeenFilter: Integer;
     procedure CanClose(Sender: TObject; var ACanClose: Boolean);
+    procedure CanCloseReadsTheComponent(Sender: TObject; var ACanClose: Boolean);
     procedure Touch(const AName: string);
     procedure Dialog(ASave: Boolean; AOptions: TTyFileDialogOptions);
     function Accepts: Boolean;
@@ -81,6 +87,9 @@ type
     procedure TestOpenChecksTheTypedNameBesideASelection;
     procedure TestOnCanCloseIsNotAskedAboutARefusedName;
     procedure TestOnCanCloseHasTheLastWord;
+    { #179: OnCanClose is asked about an OK alone, with the choice already in the component. }
+    procedure TestTheChoiceReachesTheComponentBeforeOnCanClose;
+    procedure TestACancelIsNotAskedAbout;
   end;
 
 implementation
@@ -184,6 +193,22 @@ begin
   got   := TyFileDialogResolveName(False, FDir, typed, '', '');
   AssertTrue('a directory-bearing typed path is kept as-is',
     SamePath(got, typed));
+end;
+
+procedure TFileDialogResolveTest.TestARelativeFolderIsReadAgainstTheDirectory;
+var rel: string;
+begin
+  rel := 'sub' + PathDelim + 'b.txt';
+  AssertTrue('open: a relative folder is under the directory',
+    SamePath(TyFileDialogResolveName(False, FDir, rel, '', ''),
+      FDir + PathDelim + 'sub' + PathDelim + 'b.txt'));
+  AssertTrue('save: so is it, the default extension added',
+    SamePath(TyFileDialogResolveName(True, FDir, 'sub' + PathDelim + 'b', '', 'txt'),
+      FDir + PathDelim + 'sub' + PathDelim + 'b.txt'));
+  AssertTrue('and .. goes up from it',
+    SamePath(TyFileDialogResolveName(False, FDir, '..' + PathDelim + 'c.txt', '', ''),
+      ExtractFileDir(ExcludeTrailingPathDelimiter(FDir)) + PathDelim + 'c.txt'));
+  AssertTrue('an absolute path is kept', SamePath(TyFileDialogResolveName(False, FDir, FFile, '', ''), FFile));
 end;
 
 { Open, ATyped='' and ASelected='' -> ''. Plan: "Open, ATyped='' and ASelected='' -> ''". }
@@ -314,6 +339,47 @@ procedure TFileDialogValidationTest.CanClose(Sender: TObject; var ACanClose: Boo
 begin
   FAsked := True;
   ACanClose := FAnswer;
+end;
+
+procedure TFileDialogValidationTest.CanCloseReadsTheComponent(Sender: TObject;
+  var ACanClose: Boolean);
+begin
+  FAsked := True;
+  FSeenName := FComp.FileName;
+  FSeenFilter := FComp.FilterIndex;
+end;
+
+procedure TFileDialogValidationTest.TestTheChoiceReachesTheComponentBeforeOnCanClose;
+begin
+  Touch('a.txt');
+  Dialog(False, []);
+  FComp := TTyOpenDialog.Create(nil);
+  try
+    FForm.ResultTarget := FComp;
+    FForm.Filter := 'Text|*.txt|All|*.*';
+    FForm.FilterIndex := 2;
+    FForm.NameEdit.Text := FDir + PathDelim + 'a.txt';
+    FForm.OnCloseQuery := @CanCloseReadsTheComponent;
+    FAsked := False;
+    AssertTrue('setup: the OK is accepted', Accepts);
+    AssertTrue('OnCanClose was asked', FAsked);
+    AssertEquals('with the chosen file already in the component', FDir + PathDelim + 'a.txt',
+      FSeenName);
+    AssertEquals('and the filter the user picked', 2, FSeenFilter);
+  finally
+    FreeAndNil(FComp);
+  end;
+end;
+
+procedure TFileDialogValidationTest.TestACancelIsNotAskedAbout;
+begin
+  Dialog(False, []);
+  FForm.OnCloseQuery := @CanClose;
+  FAsked := False;
+  FAnswer := False;
+  FForm.ModalResult := mrCancel;
+  AssertTrue('a Cancel always closes', FForm.CloseQuery);
+  AssertFalse('and OnCanClose is not asked about it, as in LCL', FAsked);
 end;
 
 { OnCanClose is where a program acts on the choice -- saves, say. It used to be asked first, so

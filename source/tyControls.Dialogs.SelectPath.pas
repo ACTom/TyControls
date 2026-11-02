@@ -46,8 +46,16 @@ type
     procedure NewFolderClick(Sender: TObject);
   protected
     procedure LayoutContent; override;
+    { The user is told why OK did not close the dialog (a message box). Virtual: a test says
+      nothing on screen. }
+    procedure ReportProblem(const AMsg: string); virtual;
   public
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
+    { #179: OK closes on a folder that is there and nothing else -- not with no folder at all,
+      and not on a typed one that does not exist, which returned the folder selected before. }
+    function CloseQuery: Boolean; override;
+    // test seam: the path field the user types into
+    function PathEdit: TTyEdit;
     destructor  Destroy; override;
     // Add one root node per configured source (a single FRoot, else every drive).
     procedure PopulateRoots;
@@ -499,6 +507,33 @@ begin
       Exit(s);
   end;
   Result := NodePath(FTree.FocusedNode);
+end;
+
+function TTySelectPathForm.CloseQuery: Boolean;
+var
+  s: string;
+begin
+  if ModalResult = mrOK then
+  begin
+    if FPathEdit <> nil then s := Trim(FPathEdit.Text) else s := '';
+    if (s <> '') and not DirectoryExists(s) then
+    begin
+      ReportProblem(Format(rsFdPathMustExist, [s]));
+      Exit(False);
+    end;
+    if SelectedPath = '' then Exit(False);
+  end;
+  Result := inherited CloseQuery;
+end;
+
+procedure TTySelectPathForm.ReportProblem(const AMsg: string);
+begin
+  TyMessageDlg(AMsg, mtError, [mbOK]);
+end;
+
+function TTySelectPathForm.PathEdit: TTyEdit;
+begin
+  Result := FPathEdit;
 end;
 
 function TTySelectPathForm.NodeText(Node: PTyTreeNode): string;

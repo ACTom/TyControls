@@ -83,8 +83,7 @@ type
     procedure BtnGlobSavePicClick(Sender: TObject);
     procedure BtnGlobOpenPrevClick(Sender: TObject);
     procedure BtnGlobSavePrevClick(Sender: TObject);
-    { Dialog lifecycle -- TyForwardDialogEvents relays these onto the transient dialog FORM,
-      so Sender is that form, not the component. }
+    { Dialog lifecycle. Sender is the dialog component, as in LCL. }
     procedure DlgOpenShow(Sender: TObject);
     procedure DlgOpenClose(Sender: TObject; var CloseAction: TCloseAction);
     procedure DlgSaveCanClose(Sender: TObject; var CanClose: Boolean);
@@ -304,9 +303,8 @@ end;
 
 procedure TMainForm.DlgSaveCanClose(Sender: TObject; var CanClose: Boolean);
 begin
-  { The veto seam. Only ever refuse an OK -- vetoing a Cancel would trap the user in the dialog. }
-  if not (Sender is TCustomForm) then Exit;
-  if TCustomForm(Sender).ModalResult <> mrOK then Exit;
+  { The veto seam. Asked about an OK alone, as in LCL -- a Cancel always closes -- with the
+    chosen name already in (Sender as TTySaveDialog).FileName. }
   if ChkVetoSave.Checked then
   begin
     CanClose := False;

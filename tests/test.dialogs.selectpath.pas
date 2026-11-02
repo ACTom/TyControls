@@ -1,7 +1,7 @@
 unit test.dialogs.selectpath;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SysUtils, fpcunit, testregistry,
+uses Classes, SysUtils, Controls, fpcunit, testregistry,
   tyControls.Dialogs, tyControls.TreeView, tyControls.Dialogs.SelectPath;
 type
   TSelectPathFsTest = class(TTestCase)
@@ -21,6 +21,15 @@ type
     procedure TestCreateSubfolderShowsAndFocuses;
     procedure TestCreateSubfolderUnderCollapsedParent;
     procedure TestDirectoryPreselectsPath;
+    { #179 }
+    procedure TestOkNeedsAFolderThatIsThere;
+  end;
+
+  TProbeSelectPath = class(TTySelectPathForm)
+  protected
+    procedure ReportProblem(const AMsg: string); override;
+  public
+    Told: string;
   end;
 implementation
 
@@ -246,6 +255,43 @@ begin
   finally
     RemoveDir(target);
     RemoveDir(root + PathDelim + 'alpha');
+    RemoveDir(root);
+  end;
+end;
+
+procedure TProbeSelectPath.ReportProblem(const AMsg: string);
+begin
+  Told := AMsg;
+end;
+
+procedure TSelectPathBuildTest.TestOkNeedsAFolderThatIsThere;
+var
+  d: TProbeSelectPath;
+  root, target: string;
+begin
+  root := IncludeTrailingPathDelimiter(GetTempDir) + 'tyselpath_ok';
+  target := root + PathDelim + 'alpha';
+  ForceDirectories(target);
+  try
+    d := TProbeSelectPath.CreateNew(nil);
+    try
+      d.Root := root;
+      d.PopulateRoots;
+      d.ModalResult := mrOK;
+      AssertFalse('OK with no folder at all does not close', d.CloseQuery);
+      d.Directory := target;
+      d.PathEdit.Text := root + PathDelim + 'nope';
+      d.ModalResult := mrOK;
+      AssertFalse('nor on a typed folder that is not there', d.CloseQuery);
+      AssertTrue('and the user is told', Pos('nope', d.Told) > 0);
+      d.PathEdit.Text := target;
+      d.ModalResult := mrOK;
+      AssertTrue('a folder that is there closes it', d.CloseQuery);
+      AssertEquals('and is the answer', ExcludeTrailingPathDelimiter(target),
+        ExcludeTrailingPathDelimiter(d.Directory));
+    finally d.Free; end;
+  finally
+    RemoveDir(target);
     RemoveDir(root);
   end;
 end;
