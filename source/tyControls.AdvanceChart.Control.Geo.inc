@@ -2810,6 +2810,7 @@ begin
   st := model.ResolveStyle('TyAdvChartSubtitle', '', []);
   Result.YearColour := TTyChartColor(st.TextColor);
   Result.YearFontName := st.FontName;
+  Result.RtGlobal := RtGlobal;
 end;
 
 procedure TTyCustomAdvanceChart.FreeMatrices;

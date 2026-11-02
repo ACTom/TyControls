@@ -106,6 +106,10 @@ function TyRtLayHung(const AText: string; const ABlock: TTyRtBlockStyle;
   const ADefault: TTyRtDefault; AHangX, AHangY, AScale: Double;
   const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
 
+{ [R7-M] the pieces moved by (ADX, ADY) CSS px, their joined edges with
+  them: a block laid out about one point and hung about another }
+procedure TyRtShiftPieces(var APieces: TTyRtPieceArray; ADX, ADY: Double);
+
 { [R7-L] TyRtLay's text as zrender bounds it before anything at NaN is
   dropped (TyRtLayoutJsBox), in CSS px: NaN where upstream's box is NaN. }
 function TyRtLayJsBox(const AText: string; const ABlock: TTyRtBlockStyle;
@@ -954,6 +958,19 @@ begin
     m := AMeasurer;
   Result := TyRtLayoutJsBox(AText, ABlock.Style, ABlock.Rich, ABlock.IsRich,
     ADefault, 0, 0, m);
+end;
+
+procedure TyRtShiftPieces(var APieces: TTyRtPieceArray; ADX, ADY: Double);
+var k: Integer;
+begin
+  if (ADX = 0) and (ADY = 0) then Exit;
+  for k := 0 to High(APieces) do
+  begin
+    APieces[k].X := APieces[k].X + ADX;
+    APieces[k].Y := APieces[k].Y + ADY;
+    APieces[k].EdgeX1 := APieces[k].EdgeX1 + ADX;
+    APieces[k].EdgeY1 := APieces[k].EdgeY1 + ADY;
+  end;
 end;
 
 function TyRtLayHung(const AText: string; const ABlock: TTyRtBlockStyle;

@@ -60,6 +60,9 @@ type
     FontStyle: Byte;
     HasFontName: Boolean;
     FontName: string;
+    { [R7-M] the label's node as written ('' none): its words are
+      createTextStyle of it -- the box, the sizes, rich, the halo }
+    Json: string;
   end;
 
   { A box key with whether the option object OWNS it -- mergeLayoutParam
@@ -209,6 +212,8 @@ type
     LabelFontWeight: Integer;
     YearColour: TTyChartColor;
     YearFontName: string;
+    { [R7-M] the root's side of a text style, for the labels' blocks }
+    RtGlobal: TTyRtGlobal;
   end;
 
 function TyCalendarSpecDefault: TTyCalendarSpec;
@@ -225,7 +230,8 @@ function TyBuildCalendar(ACal: TTyCalendar; const AInk: TTyCalendarInk;
 
 implementation
 
-uses tyControls.AdvanceChart.Scale, tyControls.StrConsts, tyControls.AdvanceChart.Handlers, tyControls.FontUnits;
+uses tyControls.AdvanceChart.Scale, tyControls.StrConsts, tyControls.AdvanceChart.Handlers, tyControls.FontUnits,
+     tyControls.AdvanceChart.RichStyle;
 
 { what a named month or year label handler is given: nameMap as Name, the
   kind in Extra, and (yyyy, M) for a month, (start, end) for a year }
@@ -749,6 +755,7 @@ begin
     end;
     ReadNames(sub, Result.DayNames, Result.DayArray);
     ReadText(sub, Result.DayText);
+    Result.DayText.Json := sub.AsJSON;
   end;
 
   sub := ObjIn(node, 'monthLabel');
@@ -766,6 +773,7 @@ begin
     Result.MonthFormatter := StrOf(sub.Find('formatter'));
     ReadNames(sub, Result.MonthNames, Result.MonthArray);
     ReadText(sub, Result.MonthText);
+    Result.MonthText.Json := sub.AsJSON;
   end;
 
   sub := ObjIn(node, 'yearLabel');
@@ -783,6 +791,7 @@ begin
     if Result.YearMarginIsText then Result.YearMarginText := d.AsString;
     Result.YearFormatter := StrOf(sub.Find('formatter'));
     ReadText(sub, Result.YearText);
+    Result.YearText.Json := sub.AsJSON;
   end;
 end;
 
@@ -1365,15 +1374,74 @@ var
   cellFill, cellStroke: TTyChartColor;
   cellLw: Double;
 
+  { [R7-M] THE LABEL'S BLOCK: createTextStyle of its model, laid out where
+    the style places it (AHung: a week or month word's style x / y) or
+    about its transform (the year's), aligned as the view says; the
+    opacity, its own else the root's. False: the one-run caption draws it }
+  function BlockOf(const AWords: string; AX, AY: Double; AH: TTyTextAnchorH;
+    AV: TTyTextAnchorV; AHung: Boolean; const AText: TTyCalText;
+    const AFont: string; ASize, AWeight: Integer; AColour: TTyChartColor;
+    out APieces: TTyRtPieceArray; out AHasOpacity: Boolean;
+    out AOpacity: Double): Boolean;
+  var
+    data, d: TJSONData;
+    b: TTyRtBlockStyle;
+  begin
+    Result := False;
+    APieces := nil;
+    AHasOpacity := AInk.RtGlobal.HasOpacity;
+    AOpacity := AInk.RtGlobal.Opacity;
+    if AText.Json = '' then Exit;
+    data := nil;
+    try
+      try
+        data := GetJSON(AText.Json);
+      except
+        FreeAndNil(data);
+      end;
+      if not (data is TJSONObject) then Exit;
+      d := TJSONObject(data).Find('opacity');
+      if (d <> nil) and (d.JSONType = jtNumber) then
+      begin
+        AHasOpacity := True;
+        AOpacity := d.AsFloat;
+      end;
+      b := TyRtResolve([TJSONObject(data)], AInk.RtGlobal, TyRtResolveOpt(False));
+    finally
+      data.Free;
+    end;
+    if not (b.Needed or b.Style.HasStroke or b.Style.HasLineWidth) then Exit;
+    if AMeasurer = nil then Exit;
+    b.Needed := True;
+    TyRtFinish(b, AFont, ASize, AWeight, AInk.RtGlobal, False, 0);
+    b.Style.HasFill := True;
+    b.Style.FillNone := False;
+    b.Style.Fill := AColour;
+    b.Style.Align := rtaNone;
+    b.Style.VAlign := rtvNone;
+    b.Style.HasOpacity := False;
+    if AHung then
+      APieces := TyRtLayHung(AWords, b, TyRtDefaultOf(False, 0, False, 0, False,
+        AH, AV), AX / scale, AY / scale, scale, AMeasurer)
+    else
+      APieces := TyRtLay(AWords, b, TyRtDefaultOf(False, 0, False, 0, False,
+        AH, AV), scale, AMeasurer);
+    Result := True;
+  end;
+
   procedure AddText(const AWords: string; AX, AY: Double; AH: TTyTextAnchorH;
     AV: TTyTextAnchorV; ARot: Double; const AText: TTyCalText;
-    ADefColour: TTyChartColor; const ADefFont: string; ADefSize, ADefWeight: Integer);
+    ADefColour: TTyChartColor; const ADefFont: string; ADefSize, ADefWeight: Integer;
+    AHung: Boolean = True);
   var
-    w, h, c, s, cx, cy: Double;
+    w, h, c, s, cx, cy, op: Double;
     box: TTyRectF;
     fname: string;
     fsize, fweight, j: Integer;
     xs, ys: array[0..3] of Double;
+    pieces: TTyRtPieceArray;
+    hasOp: Boolean;
+    colour: TTyChartColor;
   begin
     if AWords = '' then Exit;
     if IsNan(AX) or IsNan(AY) then Exit;
@@ -1385,6 +1453,33 @@ var
     if AText.HasWeight then
       fweight := (fweight and not TyChartFontWeightMask) or AText.FontWeight;
     fweight := TyFontStyleCodeOver(AText.FontStyle, fweight);
+    if AText.HasColour then colour := AText.Colour else colour := ADefColour;
+    if BlockOf(AWords, AX, AY, AH, AV, AHung, AText, fname, fsize, fweight,
+      colour, pieces, hasOp, op) then
+    begin
+      if Length(pieces) = 0 then Exit;
+      el := TyChartElement(TyShapeRect(TyRtDeviceBox(pieces, AX, AY, ARot, scale)));
+      el.Caption.Text := AWords;
+      el.Caption.FontName := fname;
+      el.Caption.FontSizeLogical := fsize;
+      el.Caption.FontWeight := fweight;
+      el.Caption.Colour := colour;
+      el.Caption.X := AX;
+      el.Caption.Y := AY;
+      el.Caption.AnchorH := AH;
+      el.Caption.AnchorV := AV;
+      el.Caption.RotationRad := ARot;
+      el.Caption.Truncate := False;
+      el.Caption.RtPieces := pieces;
+      el.Caption.RtScale := scale;
+      if hasOp then el.Style.Alpha := Max(0, Min(1, op));
+      el.Z := spec.Z;
+      el.Z2 := 30;
+      el.Silent := True;
+      AList.Add(el);
+      Inc(Result);
+      Exit;
+    end;
     AMeasurer.MeasureLine(AWords, fname, fsize, fweight, w, h);
     if (w <= 0) or (h <= 0) then Exit;
     box := TyAnchorBox(AX, AY, w, h, AH, AV);
@@ -1419,6 +1514,8 @@ var
     el.Caption.AnchorV := AV;
     el.Caption.RotationRad := ARot;
     el.Caption.Truncate := False;
+    { [R7-M] the label's opacity, its own else the root's }
+    if hasOp then el.Style.Alpha := Max(0, Min(1, op));
     el.Z := spec.Z;
     el.Z2 := 30;
     el.Silent := True;
@@ -1670,8 +1767,9 @@ begin
       y := y - margin;
     end;
     if pos in [tcyLeft, tcyRight] then rot := Pi / 2 else rot := 0;
+    { the year's place is its transform, not its style }
     AddText(content, x, y, ah, av, rot, spec.YearText, AInk.YearColour,
-      AInk.YearFontName, TyFontSizeFromPx(20), 700);
+      AInk.YearFontName, TyFontSizeFromPx(20), 700, False);
   end;
 
   { ---- the months ---- }

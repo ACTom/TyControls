@@ -33,7 +33,8 @@ interface
 uses SysUtils, Math, fpjson,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Option,
      tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
-     tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.ZrPath;
+     tyControls.AdvanceChart.Layout, tyControls.AdvanceChart.ZrPath,
+     tyControls.AdvanceChart.RichStyle;
 
 type
   { One element's style as the author wrote it; each Has* False where the
@@ -90,6 +91,9 @@ type
     FontSize: Integer;
     { [R5-A] textStyle.fontStyle as written (TyFontStyleCode) }
     FontStyle: Byte;
+    { [R7-M] textStyle as written ('' none): the labels are createTextStyle
+      of it, which the control resolves into the ink's block }
+    TextStyleJson: string;
   end;
 
   { What the chart knows that the option does not. CSS px. }
@@ -167,6 +171,9 @@ type
     AlignV: TTyTextAnchorV;
     Rect: TTyXYWH;
     Visible: Boolean;
+    { [R7-M] the words as the ink's block, laid out at (X, Y) and hung
+      about it, CSS px; none where the ink has no block }
+    Pieces: TTyRtPieceArray;
   end;
 
   TTyDzSliderLayout = record
@@ -214,6 +221,15 @@ type
     { a hovered handle, a highlighted move bar, the brush }
     HandleHoverFill, HandleHoverStroke, MoveHandleHover, Brush: TTyChartColor;
     ShadowArea, ShadowLine: array[0..1] of TTyChartColor;
+    { [R7-M] THE LABELS' BLOCK (HasRt): textStyle as free text, in the font
+      above, over the root's side; device px per CSS px; the opacity,
+      textStyle's own else the root's (HasOpacity False: neither) }
+    HasRt: Boolean;
+    Rt: TTyRtBlockStyle;
+    RtGlobal: TTyRtGlobal;
+    RtScale: Double;
+    HasOpacity: Boolean;
+    Opacity: Double;
   end;
 
 function TyDzSliderSpecOf(AOption: TTyChartOption; AIndex: Integer): TTyDzSliderSpec;
@@ -519,6 +535,7 @@ begin
   s := ObjOf(node.Find('textStyle'));
   if s <> nil then
   begin
+    Result.TextStyleJson := s.AsJSON;
     if ColourOf(s.Find('color'), c) then
     begin
       Result.HasText := True;
@@ -816,8 +833,10 @@ var
   merged, params: TTyRawBox;
   cr, lr, hpRect, hRect, iconRect, ref: TTyXYWH;
   W, H, mhs, edgeGap, L, T, hh, hw, mh, iconSize, iconY, sx, sy, rot,
-    offset, px, py, tw, th, ty: Double;
+    offset, px, py, tw, th, ty, sc: Double;
   hi: array[0..1] of Double;
+  b: TTyRtBlockStyle;
+  bb: TTyXYWH;
   hp, iconP: TTyZrPath;
   handleLw: Double;
   i, k, n: Integer;
@@ -1149,6 +1168,30 @@ begin
     else Result.Labels[k].Visible := ASpec.LabelShow;
     if Result.Labels[k].Text = '' then
       Result.Labels[k].Rect := XYWH(0, 0, 0, 0)
+    else if AInk.HasRt and (AMeasurer <> nil) then
+    begin
+      { [R7-M] THE BLOCK: createTextStyle(textStyleModel, {x, y, align,
+        verticalAlign, fill: getTextColor()}) -- laid out at the style's
+        place, its rect the union of its children }
+      b := AInk.Rt;
+      TyRtFinish(b, AInk.FontName, AInk.FontSizeLogical, AInk.FontWeight,
+        AInk.RtGlobal, False, 0);
+      b.Style.HasFill := True;
+      b.Style.FillNone := False;
+      if ASpec.HasText then b.Style.Fill := ASpec.TextColour
+      else b.Style.Fill := AInk.Text;
+      b.Style.Align := rtaNone;
+      b.Style.VAlign := rtvNone;
+      b.Style.HasOpacity := False;
+      sc := AInk.RtScale;
+      if sc <= 0 then sc := 1;
+      Result.Labels[k].Pieces := TyRtLayHung(Result.Labels[k].Text, b,
+        TyRtDefaultOf(False, 0, False, 0, False, Result.Labels[k].AlignH,
+        Result.Labels[k].AlignV), px, py, sc, AMeasurer);
+      bb := TyRtBounds(Result.Labels[k].Pieces);
+      if bb.W < 0 then Result.Labels[k].Rect := XYWH(px, py, 0, 0)
+      else Result.Labels[k].Rect := XYWH(px + bb.X, py + bb.Y, bb.W, bb.H);
+    end
     else
     begin
       tw := 0;
@@ -1640,6 +1683,13 @@ begin
           TyZrApply(M, lb.X, lb.Y, el.Caption.X, el.Caption.Y);
           el.Caption.AnchorH := lb.AlignH;
           el.Caption.AnchorV := lb.AlignV;
+          { [R7-M] the textStyle's opacity (or the root's), and the block }
+          if AInk.HasOpacity then el.Style.Alpha := Max(0, Min(1, AInk.Opacity));
+          if Length(lb.Pieces) > 0 then
+          begin
+            el.Caption.RtPieces := Copy(lb.Pieces, 0, Length(lb.Pieces));
+            el.Caption.RtScale := AScale;
+          end;
           AList.Add(el);
           Inc(Result);
         end;

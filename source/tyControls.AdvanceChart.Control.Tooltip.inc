@@ -1636,6 +1636,55 @@ begin
   Result := TyRtGlobalOf(root, fname, fsize, fweight);
 end;
 
+{ [R7-M] A COMPONENT'S WORDS AS createTextStyle(textStyleModel, ...) MAKES
+  THEM (a visualMap's, a slider dataZoom's): from the textStyle as written
+  (AJson, '' none) the family and the weight over the site's font (getFont),
+  the free text's block -- wanted for a rich, a box, a size, a line height,
+  an overflow, a text shadow, or a halo (textBorderColor / Width), which the
+  one-run caption does not draw -- and the opacity, its own else the root
+  textStyle's (setTokenTextStyle's retrieve2). }
+procedure TTyCustomAdvanceChart.ComponentTextBlock(const AJson: string;
+  var AFontName: string; var AFontWeight: Integer; out AHasRt: Boolean;
+  out ART: TTyRtBlockStyle; out AGlobal: TTyRtGlobal; out AHasOpacity: Boolean;
+  out AOpacity: Double);
+var
+  data, d: TJSONData;
+  node: TJSONObject;
+begin
+  AHasRt := False;
+  ART := Default(TTyRtBlockStyle);
+  AGlobal := RtGlobal;
+  AHasOpacity := AGlobal.HasOpacity;
+  AOpacity := AGlobal.Opacity;
+  if AJson = '' then Exit;
+  data := nil;
+  try
+    try
+      data := GetJSON(AJson);
+    except
+      FreeAndNil(data);
+    end;
+    if not (data is TJSONObject) then Exit;
+    node := TJSONObject(data);
+    d := node.Find('fontFamily');
+    if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '') then
+      AFontName := d.AsString;
+    d := node.Find('fontWeight');
+    AFontWeight := TyFontWeightOf(d, AFontWeight);
+    d := node.Find('opacity');
+    if (d <> nil) and (d.JSONType = jtNumber) then
+    begin
+      AHasOpacity := True;
+      AOpacity := d.AsFloat;
+    end;
+    ART := TyRtResolve([node], AGlobal, TyRtResolveOpt(False));
+    AHasRt := ART.Needed or ART.Style.HasStroke or ART.Style.HasLineWidth;
+    if AHasRt then ART.Needed := True;
+  finally
+    data.Free;
+  end;
+end;
+
 { An axis text style made what the layout measured: its family and size, its
   weight (an emphasised label keeps the theme's heavier one), and the
   author's colour where one was written. }

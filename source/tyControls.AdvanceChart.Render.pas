@@ -213,7 +213,7 @@ implementation
 uses base64, Generics.Collections, tyControls.AdvanceChart.Large,
   tyControls.AdvanceChart.Symbol, tyControls.AdvanceChart.Decal, tyControls.AdvanceChart.Images,
   tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.GfxEl,
-  tyControls.AdvanceChart.RichText;
+  tyControls.AdvanceChart.RichText, tyControls.AdvanceChart.RichStyle;
 
 { [R6-D] a dash the canvas' setLineDash takes: every entry a finite number
   of nought or more }
@@ -2849,6 +2849,9 @@ procedure RenderAffineCaption(P: TTyPainter; const AElement: TTyChartElement);
 var
   a: array[0..5] of Double;
   s, w, h, bl, lx, ly, mg: Double;
+  rb: TTyXYWH;
+  pk: string;
+  pc: TTyRtPiece;
   ppi, bw, bh: Integer;
   e: TTyChartElement;
   sz: TSize;
@@ -2872,6 +2875,71 @@ begin
   if not (s > 0) or IsNan(s) or IsInfinite(s) then Exit;
   ppi := Max(1, Min(9600, Round(96 * s)));
   s := ppi / 96;
+  { [R7-M] A BLOCK: its pieces' box in the text's own CSS px, drawn upright
+    about the anchor at the bitmap's scale, and laid down the same way }
+  if Length(AElement.Caption.RtPieces) > 0 then
+  begin
+    rb := TyRtBounds(AElement.Caption.RtPieces);
+    if rb.W < 0 then Exit;
+    lx := rb.X;
+    ly := rb.Y;
+    w := rb.W;
+    h := rb.H;
+    mg := 2;
+    pk := '';
+    for k := 0 to High(AElement.Caption.RtPieces) do
+    begin
+      pc := AElement.Caption.RtPieces[k];
+      mg := Max(mg, 2 + pc.LineWidth + 2 * pc.ShadowBlur + Abs(pc.ShadowOffsetX)
+        + Abs(pc.ShadowOffsetY));
+      pk := pk + IntToStr(Ord(pc.Kind)) + KeyBits(pc.X) + KeyBits(pc.Y)
+        + KeyBits(pc.W) + KeyBits(pc.H) + IntToHex(pc.Fill, 8) + IntToHex(pc.Stroke, 8)
+        + KeyBits(pc.LineWidth) + KeyBits(pc.Opacity) + KeyBits(pc.FontSizePx)
+        + IntToStr(pc.FontWeight) + ',' + pc.FontFamily + ',' + pc.Text + ';';
+    end;
+    mg := Ceil(mg);
+    bw := Ceil((w + 2 * mg) * s);
+    bh := Ceil((h + 2 * mg) * s);
+    if (bw <= 0) or (bh <= 0) or (bw > 4096) or (bh > 4096) then Exit;
+    key := 'data:tyaffineblock,' + IntToStr(ppi) + ',' + IntToStr(bw) + ','
+      + IntToStr(bh) + ',' + KeyBits(lx) + KeyBits(ly) + IntToHex(AElement.Caption.Colour, 8)
+      + ',' + pk;
+    if P.FastStrokes then key := 'data:tyaffineblockfast,' + Copy(key, 20, MaxInt);
+    if TyChartImage(key, 0, nw, nh) = nil then
+    begin
+      bmp := TBGRABitmap.Create(bw, bh, BGRAPixelTransparent);
+      mp := TTyPainter.Create;
+      try
+        mp.FastStrokes := P.FastStrokes;
+        mp.BeginPaintOn(nil, Rect(0, 0, bw, bh), ppi, bmp);
+        e := AElement;
+        e.Caption.HasAffine := False;
+        e.Caption.RotationRad := 0;
+        e.Caption.RtScale := s;
+        e.Caption.X := (mg - lx) * s;
+        e.Caption.Y := (mg - ly) * s;
+        e.Style.Alpha := 1;
+        TyRenderCaption(mp, e);
+        mp.EndPaint;
+      finally
+        mp.Free;
+      end;
+      TyChartImageRegisterBitmap(key, bmp);
+    end;
+    SetLength(c, 4);
+    Corner(0, lx - mg, ly - mg);
+    Corner(1, lx + w + mg, ly - mg);
+    Corner(2, lx + w + mg, ly + h + mg);
+    Corner(3, lx - mg, ly + h + mg);
+    P.SaveState;
+    try
+      if AElement.Style.Alpha < 1 then P.SetElementAlpha(Max(0.0, AElement.Style.Alpha));
+      PaintImageInto(P, key, c);
+    finally
+      P.RestoreState;
+    end;
+    Exit;
+  end;
   sz := P.MeasureText(TyInkText(AElement.Caption.Text), AElement.Caption.FontName,
     AElement.Caption.FontSizeLogical, AElement.Caption.FontWeight);
   { the box in text units (the main painter's px at its PPI) }

@@ -557,6 +557,10 @@ type
   TTyRtDrawn = record
     Pieces: TTyRtPieceArray;
     X, Y, RotationRad, Scale: Double;
+    { [R7-M] under a whole affine map instead (the caption's Affine: the
+      text's own CSS px to device px, the anchor in [4..5]) }
+    HasAffine: Boolean;
+    Affine: array[0..5] of Double;
   end;
 
   { WORDS ON A MARK, and -- once the label pass has placed them -- everything
@@ -631,6 +635,25 @@ type
     FixedAH: TTyTextAnchorH;
     FixedAV: TTyTextAnchorV;
     FixedRotationRad: Double;
+    { [R7-M] A FIXED ANCHOR'S TEXT SQUASHED ON Y BEFORE ITS TURN: a graph's
+      edge label in a view scaled unequally (Line.beforeUpdate scales it by
+      1 / the ancestors' scaleX, so the main group's scaleY / scaleX is left
+      on it) -- the ratio; 0 (or 1) none. The label pass draws such a text
+      under the whole map (HasAffine). }
+    FixedYScale: Double;
+    { [R7-M] A TREEMAP'S LABEL ON ITS CELL: TreemapView's beforeUpdate sets
+      the label's width and height to its content rect's (an upper label's
+      strip's) less the padding, so a block's box is the whole cell. A block
+      is laid out at FixedBoxX / Y (device px: the position's anchor, before
+      the padding the one-run caption's FixedX / Y has in it) by
+      FixedBoxAH / AV, its width FixedBoxW, its height FixedBoxH and its
+      padding FixedBoxPad (top, right, bottom, left) CSS px -- the padding
+      the cell was cut by, the label's own or the treemap's default }
+    HasFixedBox: Boolean;
+    FixedBoxX, FixedBoxY, FixedBoxW, FixedBoxH: Double;
+    FixedBoxAH: TTyTextAnchorH;
+    FixedBoxAV: TTyTextAnchorV;
+    FixedBoxPad: array[0..3] of Double;
     { [F3d] A FIXED ANCHOR HUNG ON THE HOST'S BOX (a radial tree's label):
       the position and the distance (device px) it was placed by, so a
       frame can place it again on the box as drawn }
@@ -1472,6 +1495,9 @@ function TyChartElement(const AShape: TTyChartShape): TTyChartElement;
   of the text shares it. [Batch 86] }
 procedure TyRtPoint(AX, AY, ARotationRad, AScale, ALX, ALY: Double;
   out AGX, AGY: Double);
+{ [R7-M] a drawn block's point: through its whole map where it has one }
+procedure TyRtDrawnPoint(const AD: TTyRtDrawn; ALX, ALY: Double;
+  out AGX, AGY: Double);
 
 { [R5-C] a lineCap / lineJoin word as zrender's canvas takes it (anything
   else leaves the canvas' default: butt, miter) }
@@ -1689,6 +1715,18 @@ begin
   Result.Silent := True;
   Result.HitSlopLogical := 0;
   Result.Datum := TyChartNoDatum;
+end;
+
+procedure TyRtDrawnPoint(const AD: TTyRtDrawn; ALX, ALY: Double;
+  out AGX, AGY: Double);
+begin
+  if AD.HasAffine then
+  begin
+    AGX := AD.Affine[0] * ALX + AD.Affine[2] * ALY + AD.Affine[4];
+    AGY := AD.Affine[1] * ALX + AD.Affine[3] * ALY + AD.Affine[5];
+  end
+  else
+    TyRtPoint(AD.X, AD.Y, AD.RotationRad, AD.Scale, ALX, ALY, AGX, AGY);
 end;
 
 procedure TyRtPoint(AX, AY, ARotationRad, AScale, ALX, ALY: Double;

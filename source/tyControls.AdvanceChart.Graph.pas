@@ -6689,6 +6689,13 @@ var
     AEl.Caption.FixedAH := ah;
     AEl.Caption.FixedAV := av;
     AEl.Caption.FixedRotationRad := rot;
+    { [R7-M] Line.beforeUpdate scales the label by 1 / every ancestor's
+      scaleX: under a view whose scaleY is not its scaleX the words are
+      drawn squashed by scaleY / scaleX on y before their turn }
+    AEl.Caption.FixedYScale := 0;
+    if (fr.SX <> fr.SY) and (fr.SX <> 0) and not IsNan(fr.SX) and not IsNan(fr.SY)
+      and not IsInfinite(fr.SX) and not IsInfinite(fr.SY) then
+      AEl.Caption.FixedYScale := fr.SY / fr.SX;
   end;
 
   { The arrowhead at one end of the edge just built. }

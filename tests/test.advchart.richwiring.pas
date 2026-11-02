@@ -121,6 +121,8 @@ type
     procedure TestAZeroRadiusRoundedPlateRunsToItsJoinedEdge;
     procedure TestARadiusArrayIsTruthy;
     procedure TestALabelWhollyAtNaNStandsWhereItsSpansAreBounded;
+    procedure TestAnUnequalViewDrawsTheEdgeLabelSquashed;
+    procedure TestATreemapStateLabelStaysOnItsCell;
   end;
 
   { device px at a PPI from a measurer that answers CSS px }
@@ -427,6 +429,9 @@ begin
       E.Caption.FontWeight, True, E.Caption.Colour, E.Caption.StrokeWidthLogical > 0,
       E.Caption.StrokeColour, E.Caption.StrokeWidthLogical, E.Caption.AnchorH,
       E.Caption.AnchorV, E.Caption.X, E.Caption.Y, E.Caption.RotationRad);
+    { [R7-M] drawn under a whole map }
+    Result.D.HasAffine := E.Caption.HasAffine;
+    for k := 0 to 5 do Result.D.Affine[k] := E.Caption.Affine[k];
     { [R7-B] what the one run draws besides: the element's alpha, the halo's
       dash and phase }
     for k := 0 to High(Result.D.Pieces) do
@@ -451,6 +456,9 @@ begin
   Result.D.Y := E.Caption.Y;
   Result.D.RotationRad := E.Caption.RotationRad;
   Result.D.Scale := E.Caption.RtScale;
+  { [R7-M] drawn under a whole map }
+  Result.D.HasAffine := E.Caption.HasAffine;
+  for k := 0 to 5 do Result.D.Affine[k] := E.Caption.Affine[k];
   Result.BlockPx := TyFontPxOf(E.Caption.FontSizeLogical);
   Result.BlockWeight := E.Caption.FontWeight;
 end;
@@ -831,11 +839,11 @@ begin
         for k := 0 to 3 do
         begin
           case k of
-            0: TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, q.X, q.Y, gx, gy);
-            1: TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, q.X + q.W, q.Y, gx, gy);
-            2: TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, q.X + q.W, q.Y + q.H, gx, gy);
+            0: TyRtDrawnPoint(dr.D, q.X, q.Y, gx, gy);
+            1: TyRtDrawnPoint(dr.D, q.X + q.W, q.Y, gx, gy);
+            2: TyRtDrawnPoint(dr.D, q.X + q.W, q.Y + q.H, gx, gy);
           else
-            TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, q.X, q.Y + q.H, gx, gy);
+            TyRtDrawnPoint(dr.D, q.X, q.Y + q.H, gx, gy);
           end;
           Inc(FCompared);
           if not (Near(gx, Hex(corners.Objects[k].Find('x')))
@@ -913,7 +921,7 @@ begin
         Str(p.Find('textAlign')), AlignWord(q.TextAlign)]));
     if geometry then
     begin
-      TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, q.X, q.Y, gx, gy);
+      TyRtDrawnPoint(dr.D, q.X, q.Y, gx, gy);
       Inc(FCompared);
       if not (Near(gx, Hex(p.Find('gx'))) and Near(gy, Hex(p.Find('gy')))) then
         Miss(Format('%s: text %d "%s" at %s,%s upstream, %g,%g here', [where, i,
@@ -933,8 +941,11 @@ begin
     end;
     w := Str(p.Find('fontWeight'));
     if (w = '') and (Pos('bold', Str(p.Find('font'))) > 0) then w := 'bold';
+    { [R7-M] a looks case's heavy weight is its own: compared whatever the
+      skin's }
     if (WeightOf(w) <> WeightOf(Str(style.Find('fontWeight'))))
-      or (TyFontWeightOf(dr.BlockWeight) = WeightOf(Str(style.Find('fontWeight')))) then
+      or (TyFontWeightOf(dr.BlockWeight) = WeightOf(Str(style.Find('fontWeight'))))
+      or (FLooks and (WeightOf(Str(style.Find('fontWeight'))) > 400)) then
     begin
       Inc(FCompared);
       if WeightOf(w) <> TyFontWeightOf(q.FontWeight) then
@@ -1015,11 +1026,11 @@ begin
     for k := 0 to 3 do
     begin
       case k of
-        0: TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, bb.X, bb.Y, gx, gy);
-        1: TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, bb.X + bb.W, bb.Y, gx, gy);
-        2: TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, bb.X + bb.W, bb.Y + bb.H, gx, gy);
+        0: TyRtDrawnPoint(dr.D, bb.X, bb.Y, gx, gy);
+        1: TyRtDrawnPoint(dr.D, bb.X + bb.W, bb.Y, gx, gy);
+        2: TyRtDrawnPoint(dr.D, bb.X + bb.W, bb.Y + bb.H, gx, gy);
       else
-        TyRtPoint(dr.D.X, dr.D.Y, dr.D.RotationRad, dr.D.Scale, bb.X, bb.Y + bb.H, gx, gy);
+        TyRtDrawnPoint(dr.D, bb.X, bb.Y + bb.H, gx, gy);
       end;
       Inc(FCompared);
       if not (Near(gx, Hex(corners.Objects[k].Find('x')))
@@ -1097,8 +1108,11 @@ begin
     gauge-axislabel-markup's three braces drawn as they are, gauge-plain-
     halo's three labels and title, [R7-L] label-opacity-scatter's two plain
     labels, label-opacity-root's one, label-opacity-item's end label at its
-    own 0.7, label-opacity-hier's treemap label -- and no others }
-  AssertEquals('texts drawn as one run', 32, FOneRun);
+    own 0.7, label-opacity-hier's treemap label, [R7-M] calendar-label-
+    numstr's seven day words, graph-edge-scale's level edge
+    label, graph-edge-scale-curve's haloed one and its 'from', vm-plain-
+    font's four visualMap words and two slider labels -- and no others }
+  AssertEquals('texts drawn as one run', 48, FOneRun);
   AssertTrue(Format('only %d compared', [FCompared]), FCompared >= 3000);
 end;
 
@@ -1781,6 +1795,126 @@ begin
     AssertTrue('as tall as a line', e.Caption.RtPieces[0].H > 5);
   end;
   AssertTrue('the label is there', seen);
+end;
+
+{ [R7-M] A GRAPH'S EDGE LABEL IN A VIEW SCALED UNEQUALLY IS DRAWN SQUASHED:
+  the view's scaleX 4 and scaleY 2 leave the label at half its height
+  (Line.beforeUpdate's 1 / scaleX), its plate too -- the pixels, not only
+  the geometry the oracle cases compare. A level edge: no turn, so the
+  plate is an upright rect half as tall as it is unsquashed. }
+procedure TAdvChartRichWiringOracleTest.TestAnUnequalViewDrawsTheEdgeLabelSquashed;
+var
+  x, y, top, bottom, left, right, k: Integer;
+  c: TBGRAPixel;
+  e: TTyChartElement;
+  seen: Boolean;
+begin
+  FBmp.Fill(BGRAWhite);
+  FChart.Option := '{"animation":false,"series":[{"type":"graph","layout":"none",'
+    + '"left":100,"top":100,"width":400,"height":200,"symbolSize":1,'
+    + '"itemStyle":{"color":"#ffffff"},"label":{"show":false},'
+    + '"lineStyle":{"width":1,"color":"#ffffff","opacity":1},'
+    + '"edgeLabel":{"show":true,"formatter":"xx","color":"#ff0000",'
+    + '"backgroundColor":"#ff0000","padding":4},'
+    + '"data":[{"name":"a","x":0,"y":0},{"name":"b","x":100,"y":0},'
+    + '{"name":"c","x":0,"y":100}],"links":[{"source":"a","target":"b"}]}]}';
+  FChart.SetBounds(0, 0, 600, 400);
+  FChart.Render(FBmp.Canvas, Rect(0, 0, 600, 400), 96);
+  top := MaxInt;
+  bottom := -1;
+  left := MaxInt;
+  right := -1;
+  for y := 0 to 399 do
+    for x := 0 to 599 do
+    begin
+      c := FBmp.GetPixel(x, y);
+      if (c.red > 200) and (c.green < 80) and (c.blue < 80) then
+      begin
+        if y < top then top := y;
+        if y > bottom then bottom := y;
+        if x < left then left := x;
+        if x > right then right := x;
+      end;
+    end;
+  AssertTrue('the plate is drawn', bottom >= 0);
+  { 12 px of words and 8 of padding, halved; as wide as written }
+  AssertTrue(Format('half as tall: rows %d..%d', [top, bottom]),
+    (bottom - top + 1 >= 8) and (bottom - top + 1 <= 12));
+  AssertTrue(Format('as wide: columns %d..%d', [left, right]),
+    right - left + 1 >= 18);
+  { above the line at y 100, the anchor 2.5 px over it (distance 5 / 4 in
+    the data, times 2) }
+  AssertTrue(Format('above the line: bottom row %d', [bottom]),
+    (bottom >= 95) and (bottom <= 99));
+  { and the label's element is the box the map lays it down as }
+  seen := False;
+  for k := 0 to FChart.List.Count - 1 do
+  begin
+    e := FChart.List.Element(k);
+    if (e.Caption.Text <> 'xx') or (e.Caption.LmKind = 0) then Continue;
+    seen := True;
+    AssertTrue('under the whole map', e.Caption.HasAffine);
+    AssertTrue(Format('its box half as tall: %g', [e.Shape.Bounds.Bottom - e.Shape.Bounds.Top]),
+      (e.Shape.Bounds.Bottom - e.Shape.Bounds.Top > 9)
+      and (e.Shape.Bounds.Bottom - e.Shape.Bounds.Top < 11));
+  end;
+  AssertTrue('the label is there', seen);
+end;
+
+{ [R7-M] A TREEMAP LABEL UNDER A STATE'S PLACE IS STILL ON ITS CELL:
+  TreemapView's beforeUpdate gives the label the cell's width and height
+  whatever its position, so the emphasis twin (laid out at
+  'insideBottomRight') has the same plate as the normal label (at the
+  centre): the whole content rect, its corner at the cell's. Upstream's
+  highlight does not reach a treemap's labels in node, so this is held to
+  the normal label's plate, which the oracle cases hold to upstream. }
+procedure TAdvChartRichWiringOracleTest.TestATreemapStateLabelStaysOnItsCell;
+var
+  k, t, q: Integer;
+  e: TTyChartElement;
+  seen: Boolean;
+  nx, ny, tx, ty: Double;
+  np, tp: TTyRtPiece;
+begin
+  FChart.Option := '{"animation":false,"series":[{"type":"treemap","top":10,'
+    + '"bottom":60,"breadcrumb":{"show":false},"label":{"color":"#333333",'
+    + '"backgroundColor":"#eeeeee"},"emphasis":{"label":{"position":"insideBottomRight"}},'
+    + '"data":[{"name":"Alpha","value":3},{"name":"Beta","value":4}]}]}';
+  FChart.SetBounds(0, 0, 600, 400);
+  FChart.Render(FBmp.Canvas, Rect(0, 0, 600, 400), 96);
+  seen := False;
+  for k := 0 to FChart.List.Count - 1 do
+  begin
+    e := FChart.List.Element(k);
+    if (e.Caption.Text <> 'Beta') or (e.Caption.LmKind = 0) then Continue;
+    AssertTrue('the normal label is a block', Length(e.Caption.RtPieces) > 0);
+    np := e.Caption.RtPieces[0];
+    AssertTrue('its first piece the plate', np.Kind = rpkRect);
+    for t := 0 to High(e.EmphTwin) do
+    begin
+      if e.EmphTwin[t].State <> TyTwinEmphasis then Continue;
+      AssertTrue('the twin is a block', Length(e.EmphTwin[t].Caption.RtPieces) > 0);
+      tp := e.EmphTwin[t].Caption.RtPieces[0];
+      AssertTrue('its first piece the plate', tp.Kind = rpkRect);
+      seen := True;
+      AssertEquals('the plate as wide as the cell', np.W, tp.W, 1e-9);
+      AssertEquals('the plate as tall as the cell', np.H, tp.H, 1e-9);
+      { the plate's corner, on the canvas, is the cell's either way }
+      nx := e.Caption.X + np.X * e.Caption.RtScale;
+      ny := e.Caption.Y + np.Y * e.Caption.RtScale;
+      tx := e.EmphTwin[t].Caption.X + tp.X * e.EmphTwin[t].Caption.RtScale;
+      ty := e.EmphTwin[t].Caption.Y + tp.Y * e.EmphTwin[t].Caption.RtScale;
+      AssertEquals('the corner x', nx, tx, 1e-6);
+      AssertEquals('the corner y', ny, ty, 1e-6);
+      { and the words in the bottom right corner, not the centre }
+      for q := 0 to High(e.EmphTwin[t].Caption.RtPieces) do
+        if e.EmphTwin[t].Caption.RtPieces[q].Kind = rpkText then
+          AssertTrue('the words at the right',
+            e.EmphTwin[t].Caption.X + e.EmphTwin[t].Caption.RtPieces[q].X
+            * e.EmphTwin[t].Caption.RtScale > nx + np.W * e.Caption.RtScale * 0.75);
+    end;
+  end;
+  AssertTrue('the emphasis twin is there', seen);
 end;
 
 initialization

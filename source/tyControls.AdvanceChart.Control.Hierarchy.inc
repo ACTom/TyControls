@@ -2628,7 +2628,7 @@ end;
 
 procedure TTyCustomAdvanceChart.TmCrumbWrite(AList: TTyPaintList);
 var
-  i, k, hi, slot: Integer;
+  i, k, hi, slot, q: Integer;
   el, cap: TTyChartElement;
 begin
   if (FTmCrumbHoverS < 0) or (FTmCrumbHoverGen <> FTmCrumbGen) then Exit;
@@ -2652,7 +2652,16 @@ begin
       if hi <> i then Continue;
       cap.Z2 := cap.Z2 + TyStZ2EmphasisLift;
       if FTreemapInks[slot].CrumbEmphHasText then
+      begin
+        { [R7-M] a block's words in the block's own ink take it too; a
+          rich token's own colour stays }
+        cap.Caption.RtPieces := Copy(cap.Caption.RtPieces, 0, Length(cap.Caption.RtPieces));
+        for q := 0 to High(cap.Caption.RtPieces) do
+          if (cap.Caption.RtPieces[q].Kind = rpkText)
+            and (cap.Caption.RtPieces[q].Fill = cap.Caption.Colour) then
+            cap.Caption.RtPieces[q].Fill := FTreemapInks[slot].CrumbEmphText;
         cap.Caption.Colour := FTreemapInks[slot].CrumbEmphText;
+      end;
       AList.SetElement(k, cap);
     end;
   end;
@@ -3475,6 +3484,8 @@ var
   ls, cs: TTyStyleSet;
   hs: TTyLabelSpecArray;
   j, k: Integer;
+  crumbTs: TJSONObject;
+  d: TJSONData;
 begin
   Result := Default(TTyTreemapInk);
   ls := ActiveController.Model.ResolveStyle('TyAdvChartTreemapLabel', '', []);
@@ -3506,6 +3517,32 @@ begin
     Result.CrumbFill := col;
   if TyTryParseChartColor(TyStReadString([sNode], ['breadcrumb', 'itemStyle', 'textStyle', 'color'], has), col) and has then
     crumb.Colour := col;
+  { [R7-M] ITS WORDS ARE createTextStyle(textStyleModel, {text})
+    (Breadcrumb.ts): the textStyle's box, sizes, rich, halo and shadow, a
+    free text in the crumb's ink [was: the colour only] }
+  crumbTs := nil;
+  if sNode <> nil then
+  begin
+    d := sNode.Find('breadcrumb');
+    if d is TJSONObject then d := TJSONObject(d).Find('itemStyle') else d := nil;
+    if d is TJSONObject then d := TJSONObject(d).Find('textStyle') else d := nil;
+    if d is TJSONObject then crumbTs := TJSONObject(d);
+  end;
+  if crumbTs <> nil then
+  begin
+    crumb.RtGlobal := RtGlobal;
+    crumb.Rt := TyRtResolve([crumbTs], crumb.RtGlobal, TyRtResolveOpt(False));
+    if crumb.Rt.Needed or crumb.Rt.Style.HasStroke or crumb.Rt.Style.HasLineWidth then
+    begin
+      crumb.Rt.Needed := True;
+      crumb.Rt.Style.HasFill := True;
+      crumb.Rt.Style.FillNone := False;
+      crumb.Rt.Style.FillInherit := False;
+      crumb.Rt.Style.Fill := crumb.Colour;
+    end
+    else
+      crumb.Rt := Default(TTyRtBlockStyle);
+  end;
   Result.CrumbEmphFill := TTyChartColor(ActiveController.Model.ResolveStyle(
     'TyAdvChartBreadcrumb', '', [tysHover]).Background.Color);
   if TyTryParseChartColor(TyStReadString([sNode], ['breadcrumb', 'emphasis', 'itemStyle', 'color'], has), col) and has then

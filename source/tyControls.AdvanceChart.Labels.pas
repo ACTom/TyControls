@@ -400,6 +400,25 @@ procedure TyLabelInk(const ASpec: TTyLabelSpec; AHostFill: TTyChartColor;
   AHostHasFill, AHostGradient, AInside: Boolean;
   out AInk, AStroke: TTyChartColor; out AStrokeWidthLogical: Double);
 
+type
+  TTyAffine6 = array[0..5] of Double;
+
+{ [R7-M] A LABEL SQUASHED ON Y BEFORE ITS TURN, as one map from its own CSS
+  px to device px: anchored at (AX, AY), turned by ARot (TyRtPoint's
+  sense), AScale device px to one, y scaled by AYScale first; the device
+  box a text-frame box lays down as under it; and a one-run text's box in
+  its own frame (AW by AH, hung by the alignment) }
+procedure TyLabelAffineOf(AX, AY, ARot, AScale, AYScale: Double;
+  out A: TTyAffine6);
+function TyRtAffineBox(const ABox: TTyXYWH; const A: TTyAffine6): TTyRectF;
+function TyAnchorTextRect(AW, AH: Double; AAH: TTyTextAnchorH;
+  AAV: TTyTextAnchorV): TTyXYWH;
+
+{ [R7-M] A TREEMAP'S LABEL ON ITS CELL (ACaption.HasFixedBox): the width,
+  the height and the padding TreemapView's beforeUpdate gives the label --
+  the content rect (the strip) less the padding, which the cell was cut by }
+procedure TyLabelFixBox(var ASpec: TTyLabelSpec; const ACaption: TTyElementCaption);
+
 { AN ATTACHED LABEL'S BLOCK: ASpec.Rt finished in the spec's font with the
   host's fill as the inherit colour, laid out about (0, 0) with the host's
   defaults -- the automatic ink and halo TyLabelInk gives a label with no
@@ -632,6 +651,75 @@ begin
   Result := TyLabelEmphPiecesOver(ASpec, AText, AHostFill, AHostHasFill,
     AEmphInk, AEmphStroke, AEmphStrokeW, AH, AV, AScale, AMeasurer,
     TyLabelEmphOverNone);
+end;
+
+procedure TyLabelAffineOf(AX, AY, ARot, AScale, AYScale: Double;
+  out A: TTyAffine6);
+var c, s: Double;
+begin
+  { scale x diag(1, AYScale) x the turn, in zrender's order (x' = a x + c y,
+    y' = b x + d y); the turn as TyRtPoint takes it }
+  c := Cos(ARot);
+  s := Sin(ARot);
+  A[0] := AScale * c;
+  A[1] := -AScale * AYScale * s;
+  A[2] := AScale * s;
+  A[3] := AScale * AYScale * c;
+  A[4] := AX;
+  A[5] := AY;
+end;
+
+function TyRtAffineBox(const ABox: TTyXYWH; const A: TTyAffine6): TTyRectF;
+var
+  xs, ys: array[0..3] of Double;
+  k: Integer;
+begin
+  if ABox.W < 0 then Exit(TyRectF(A[4], A[5], A[4], A[5]));
+  xs[0] := ABox.X; ys[0] := ABox.Y;
+  xs[1] := ABox.X + ABox.W; ys[1] := ABox.Y;
+  xs[2] := ABox.X + ABox.W; ys[2] := ABox.Y + ABox.H;
+  xs[3] := ABox.X; ys[3] := ABox.Y + ABox.H;
+  Result := TyRectF(Infinity, Infinity, NegInfinity, NegInfinity);
+  for k := 0 to 3 do
+  begin
+    Result.Left := Min(Result.Left, A[0] * xs[k] + A[2] * ys[k] + A[4]);
+    Result.Right := Max(Result.Right, A[0] * xs[k] + A[2] * ys[k] + A[4]);
+    Result.Top := Min(Result.Top, A[1] * xs[k] + A[3] * ys[k] + A[5]);
+    Result.Bottom := Max(Result.Bottom, A[1] * xs[k] + A[3] * ys[k] + A[5]);
+  end;
+end;
+
+function TyAnchorTextRect(AW, AH: Double; AAH: TTyTextAnchorH;
+  AAV: TTyTextAnchorV): TTyXYWH;
+var x, y: Double;
+begin
+  case AAH of
+    tahCentre: x := -AW / 2;
+    tahRight: x := -AW;
+  else
+    x := 0;
+  end;
+  case AAV of
+    tavMiddle: y := -AH / 2;
+    tavBottom: y := -AH;
+  else
+    y := 0;
+  end;
+  Result := TyXYWH(x, y, AW, AH);
+end;
+
+procedure TyLabelFixBox(var ASpec: TTyLabelSpec; const ACaption: TTyElementCaption);
+var k: Integer;
+begin
+  if not ACaption.HasFixedBox then Exit;
+  ASpec.Rt.Style.WidthKind := rtwNumber;
+  ASpec.Rt.Style.Width := ACaption.FixedBoxW;
+  ASpec.Rt.Style.WidthIsText := False;
+  ASpec.Rt.Style.HasHeight := True;
+  ASpec.Rt.Style.Height := ACaption.FixedBoxH;
+  ASpec.Rt.Style.HeightIsText := False;
+  ASpec.Rt.Style.HasPadding := True;
+  for k := 0 to 3 do ASpec.Rt.Style.Padding[k] := ACaption.FixedBoxPad[k];
 end;
 
 function TyLabelBlockPieces(const ASpec: TTyLabelSpec; const AText: string;
@@ -1311,6 +1399,7 @@ var
   tbox: TTyRectF;
   tpieces: TTyRtPieceArray;
   tinside, tgrad: Boolean;
+  tspec: TTyLabelSpec;
   tink, tstroke: TTyChartColor;
 begin
   Result := False;
@@ -1453,8 +1542,22 @@ begin
   tpieces := nil;
   if AIn.Spec.Rt.Needed then
   begin
-    tpieces := TyLabelBlockPieces(AIn.Spec, AIn.Text, AIn.HostFill, AIn.HostHasFill,
-      tgrad, tinside, tah, tav, AIn.Scale, AMeasurer);
+    tspec := AIn.Spec;
+    { [R7-M] a treemap's label on its cell, under the state's place }
+    if (anc >= 0) and AIn.Host.EmphTwin[anc].Caption.HasFixedBox then
+    begin
+      TyLabelFixBox(tspec, AIn.Host.EmphTwin[anc].Caption);
+      tspec.Rt.Style.Align := rtaNone;
+      tspec.Rt.Style.VAlign := rtvNone;
+      tpieces := TyLabelBlockPieces(tspec, AIn.Text, AIn.HostFill, AIn.HostHasFill,
+        tgrad, tinside, AIn.Host.EmphTwin[anc].Caption.FixedBoxAH,
+        AIn.Host.EmphTwin[anc].Caption.FixedBoxAV, AIn.Scale, AMeasurer);
+      TyRtShiftPieces(tpieces, (AIn.Host.EmphTwin[anc].Caption.FixedBoxX + toffX - tx)
+        / AIn.Scale, (AIn.Host.EmphTwin[anc].Caption.FixedBoxY + toffY - ty) / AIn.Scale);
+    end
+    else
+      tpieces := TyLabelBlockPieces(tspec, AIn.Text, AIn.HostFill, AIn.HostHasFill,
+        tgrad, tinside, tah, tav, AIn.Scale, AMeasurer);
     if Length(tpieces) = 0 then Exit;
     tbox := TyRtDeviceBox(tpieces, tx, ty, trot, AIn.Scale);
   end
@@ -1550,6 +1653,8 @@ var
   k: Integer;
   normalCfg, stCfg: TTyLabelStateCfg;
   code: Byte;
+  hasAff: Boolean;
+  aff: TTyAffine6;
 
   { [R6-A] A LINE'S LABEL: what its states write, laid out when they are
     written (the box is the Line group's as the state draws it) }
@@ -1846,9 +1951,23 @@ begin
         autoSpec.Rt.Style.Align := rtaNone;
         autoSpec.Rt.Style.VAlign := rtvNone;
       end;
-      pieces := TyLabelBlockPieces(autoSpec, host.Caption.Text, hostFill,
-        hostHasFill, host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
-        LabelInside(host, pos), ah, av, scale, AMeasurer);
+      { [R7-M] A TREEMAP'S LABEL ON ITS CELL: the box the cell's, laid out at
+        the position's anchor by its alignment (the padding is the block's),
+        and hung where the words' anchor is }
+      if host.Caption.HasFixedBox then
+      begin
+        TyLabelFixBox(autoSpec, host.Caption);
+        pieces := TyLabelBlockPieces(autoSpec, host.Caption.Text, hostFill,
+          hostHasFill, host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
+          LabelInside(host, pos), host.Caption.FixedBoxAH, host.Caption.FixedBoxAV,
+          scale, AMeasurer);
+        TyRtShiftPieces(pieces, (host.Caption.FixedBoxX + offX - x) / scale,
+          (host.Caption.FixedBoxY + offY - y) / scale);
+      end
+      else
+        pieces := TyLabelBlockPieces(autoSpec, host.Caption.Text, hostFill,
+          hostHasFill, host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
+          LabelInside(host, pos), ah, av, scale, AMeasurer);
       { [R7-L] A TEXT LAID OUT WHOLLY AT NaN (a size written as a word) draws
         nothing but is still upstream's label: the label layout weighs it by
         its box, which can hide the others. It stands as one undrawn rect,
@@ -1886,6 +2005,18 @@ begin
       the same rectangle, which is the whole reason the caption gets an entry
       of its own rather than a note on somebody else's. }
       box := TyAnchorBox(x, y, w, h, ah, av);
+    { [R7-M] A TEXT SQUASHED ON Y BEFORE ITS TURN (a graph's edge label in a
+      view scaled unequally): the whole map -- the turn, the device scale
+      and the ratio -- and the box it lays the text's down as }
+    hasAff := (host.Caption.FixedYScale > 0) and (host.Caption.FixedYScale <> 1);
+    if hasAff then
+    begin
+      TyLabelAffineOf(x, y, rot, scale, host.Caption.FixedYScale, aff);
+      if pieces <> nil then
+        box := TyRtAffineBox(TyRtBounds(pieces), aff)
+      else
+        box := TyRtAffineBox(TyAnchorTextRect(w / scale, h / scale, ah, av), aff);
+    end;
 
     cap := TyChartElement(TyShapeRect(box));
     cap.Caption := host.Caption;
@@ -2053,6 +2184,10 @@ begin
     cap.Caption.Y := y;
     cap.Caption.AnchorH := ah;
     cap.Caption.AnchorV := av;
+    { [R7-M] drawn under the whole map }
+    cap.Caption.HasAffine := hasAff;
+    if hasAff then
+      for k := 0 to 5 do cap.Caption.Affine[k] := aff[k];
     cap.Caption.RotationRad := spec.RotationRad;
     if host.Caption.HasFixedAnchor then
       cap.Caption.RotationRad := host.Caption.FixedRotationRad;

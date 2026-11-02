@@ -671,6 +671,122 @@ const R7L_EXTREME_CASES = [
       { width: '60', backgroundColor: '#eeeeee', borderRadius: 0 },
       { width: '60', backgroundColor: '#eeeeee', borderColor: '#333333', borderWidth: 1, borderRadius: [0, 0, 0, 0] }], {}) },
 ];
+// ---- [R7-M] a visualMap's and a slider dataZoom's words are createTextStyle
+// of their textStyle (ContinuousView, PiecewiseView, SliderZoomView): every
+// key a label reads -- the box, its border and radius, padding, width and
+// height, lineHeight, overflow, rich, the halo and the text shadow -- placed
+// by its style's x / y (a numeric string size joins that place). Every colour
+// is the case's own (`looks`).
+const CMP_BOX = { color: '#333333', backgroundColor: '#eeeeee', borderColor: '#aa0000', borderWidth: 1, padding: [2, 4], borderRadius: 3 };
+const CMP_BAR = { xAxis: xCat(), yAxis: val(), series: [{ type: 'bar', name: 'Sales', data: DATA }] };
+const CMP_RICH = { color: '#333333', lineHeight: 20, textBorderColor: '#ffffff', textBorderWidth: 2,
+  textShadowColor: '#888888', textShadowBlur: 2, textShadowOffsetX: 1, textShadowOffsetY: 1,
+  rich: { a: { color: '#aa0000', backgroundColor: '#dddddd', padding: [1, 2] }, b: { color: '#0000aa', fontSize: 14 } } };
+const R7M_COMPONENT_CASES = [
+  { name: 'vm-continuous-box', looks: true, note: "a vertical continuous visualMap: the ends' text and the handle labels with a rounded, bordered, padded plate",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'continuous', min: 0, max: 200, calculable: true, text: ['High', 'Low'], textStyle: CMP_BOX } }, CMP_BAR)) },
+  { name: 'vm-continuous-h-box', looks: true, note: "a horizontal one: the ends left and right, the handle labels centred over the handles, the words at 0.6",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'continuous', orient: 'horizontal', min: 0, max: 200, calculable: true, text: ['High', 'Low'],
+      textStyle: Object.assign({}, CMP_BOX, { opacity: 0.6 }) } }, CMP_BAR)) },
+  { name: 'vm-continuous-rich', looks: true, note: "handle labels '{a|{value}}{b|!}' in rich, a halo, a text shadow and lineHeight 20; an end on two lines",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'continuous', min: 0, max: 200, calculable: true, text: ['Very\nhigh', 'Low'], formatter: '{a|{value}}{b|!}',
+      textStyle: CMP_RICH } }, CMP_BAR)) },
+  { name: 'vm-continuous-size', looks: true, note: "width 30 with overflow truncate and a plate, height 24, align right: the ends and the labels cut and boxed",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'continuous', min: 0, max: 20000, calculable: true, text: ['Highest', 'Lowest'],
+      textStyle: { color: '#333333', width: 30, height: 24, overflow: 'truncate', backgroundColor: '#eeeeee', align: 'right' } } }, CMP_BAR)) },
+  { name: 'vm-continuous-numstr', looks: true, note: "width '60' over a rounded plate: the path runs from the style's x to x + '600'; the group placed by its bounds",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'continuous', min: 0, max: 200, calculable: true, right: 10, text: ['High', 'Low'],
+      textStyle: { color: '#333333', width: '60', backgroundColor: '#eeeeee', borderRadius: 3 } } }, CMP_BAR)) },
+  { name: 'vm-piecewise-box', looks: true, note: "piecewise items with a plate and padding, bold monospace; one piece unselected (its words at 0.5); the items stacked by their bounds",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'piecewise', min: 0, max: 200, splitNumber: 3, selected: { 1: false },
+      textStyle: Object.assign({ fontWeight: 'bold', fontFamily: 'monospace' }, CMP_BOX) } }, CMP_BAR)) },
+  { name: 'vm-continuous-halo', looks: true, note: "a halo alone (textBorderColor / Width) on a continuous visualMap's words, and on a slider's labels at opacity 0.7: the one-run caption draws none",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'continuous', min: 0, max: 200, calculable: true, text: ['High', 'Low'],
+      textStyle: { color: '#333333', textBorderColor: '#ffaa00', textBorderWidth: 3 } },
+      dataZoom: [{ type: 'slider', handleLabel: { show: true }, textStyle: { color: '#333333', textBorderColor: '#ffaa00', textBorderWidth: 3, opacity: 0.7 } }] }, CMP_BAR)) },
+  { name: 'vm-plain-font', looks: true, note: "plain words (no block) in bold monospace 14 on a continuous visualMap and a slider: the family and the weight are textStyle's",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'continuous', min: 0, max: 200, calculable: true, text: ['High', 'Low'],
+      textStyle: { color: '#333333', fontWeight: 'bold', fontFamily: 'monospace', fontSize: 14 } },
+      dataZoom: [{ type: 'slider', handleLabel: { show: true }, textStyle: { color: '#333333', fontWeight: 'bold', fontFamily: 'monospace' } }] }, CMP_BAR)) },
+  { name: 'vm-piecewise-ends', looks: true, note: "piecewise with ends text, width 40 and a plate, rich items over a pieces list (showLabel), align left, the words at 0.7",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'piecewise', orient: 'horizontal', text: ['Hi', 'Lo'], showLabel: true,
+      pieces: [{ min: 0, max: 100, label: '{a|low} part' }, { min: 100, max: 200, label: '{b|high}' }],
+      textStyle: Object.assign({}, CMP_RICH, { width: 40, backgroundColor: '#eeeeee', align: 'left', opacity: 0.7 }) } }, CMP_BAR)) },
+  { name: 'vm-piecewise-numstr', looks: true, note: "piecewise height '30' with a plate: each item's box joins its y (itemHeight / 2) to '30' + padding",
+    record: ['other'], option: opt(Object.assign({ visualMap: { type: 'piecewise', min: 0, max: 200, splitNumber: 2, textStyle: { color: '#333333', height: '30', backgroundColor: '#eeeeee' } } }, CMP_BAR)) },
+  { name: 'dz-slider-box', looks: true, note: "a slider's handle labels shown, with a rounded, bordered, padded plate, at opacity 0.7",
+    record: ['other'], option: opt(Object.assign({ dataZoom: [{ type: 'slider', handleLabel: { show: true }, textStyle: Object.assign({ opacity: 0.7 }, CMP_BOX) }] }, CMP_BAR)) },
+  { name: 'dz-slider-vertical-rich', looks: true, note: "a vertical slider on y: labels '{a|{value}}{b|v}' in rich with a halo, a shadow and lineHeight 20",
+    record: ['other'], option: opt(Object.assign({ dataZoom: [{ type: 'slider', orient: 'vertical', yAxisIndex: 0, handleLabel: { show: true },
+      labelFormatter: '{a|{value}}{b|v}', textStyle: CMP_RICH }] }, CMP_BAR)) },
+  { name: 'dz-slider-numstr', looks: true, note: "a slider's labels width '60' over a rounded plate, joined to the style's x; lineHeight '20' on two lines",
+    record: ['other'], option: opt(Object.assign({ dataZoom: [{ type: 'slider', handleLabel: { show: true }, labelFormatter: '{value}\nend',
+      textStyle: { color: '#333333', width: '60', lineHeight: '20', backgroundColor: '#eeeeee', borderRadius: 3 } }] }, CMP_BAR)) },
+  // a calendar's labels are createTextStyle of dayLabel / monthLabel /
+  // yearLabel (CalendarView): the week and month words placed by their
+  // style's x / y, the year's by its transform (turned on a vertical one)
+  { name: 'calendar-label-box', looks: true, note: "a calendar's day, month and year labels with a rounded, bordered, padded plate",
+    record: ['other'], option: opt({ calendar: { range: '2017-01', cellSize: 20, top: 80, dayLabel: Object.assign({ nameMap: 'EN' }, CMP_BOX), monthLabel: Object.assign({ nameMap: 'EN' }, CMP_BOX),
+      yearLabel: Object.assign({}, CMP_BOX, { opacity: 0.8 }) } }) },
+  { name: 'calendar-label-rich', looks: true, note: "a vertical calendar: rich month words with a halo and a shadow, lineHeight 20; the year turned with a plate; day words width 20 truncated",
+    record: ['other'], option: opt({ calendar: { orient: 'vertical', range: '2017-02', cellSize: 22, left: 120, top: 60,
+      monthLabel: Object.assign({ formatter: '{a|{M}}{b|m}' }, CMP_RICH),
+      yearLabel: { color: '#333333', backgroundColor: '#eeeeee', padding: 4, borderColor: '#aa0000', borderWidth: 1 },
+      dayLabel: { color: '#333333', width: 12, overflow: 'truncate', nameMap: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], backgroundColor: '#eeeeee' } } }) },
+  { name: 'calendar-label-numstr', looks: true, note: "month words width '60' over a rounded plate, joined to the style's x; the year's '40' joined to 0 (its place is its transform)",
+    record: ['other'], option: opt({ calendar: { range: '2017-01', cellSize: 20, top: 80, dayLabel: { nameMap: 'EN', color: '#333333' },
+      yearLabel: { color: '#333333', width: '40', backgroundColor: '#eeeeee', borderRadius: 2 },
+      monthLabel: { nameMap: 'EN', color: '#333333', width: '60', backgroundColor: '#eeeeee', borderRadius: 3 } } }) },
+  // a timeline's labels are createTextStyle of label (SliderTimelineView)
+  { name: 'timeline-label-box', looks: true, note: "a timeline's labels with a plate, rich and a halo",
+    record: ['other'], option: { baseOption: { animation: false, timeline: { data: ['2001', '2002', '2003'], label: Object.assign({ formatter: '{a|{value}}' }, CMP_BOX,
+      { rich: { a: { color: '#aa0000' } }, textBorderColor: '#ffffff', textBorderWidth: 2 }) }, xAxis: xCat(), yAxis: val(), series: [{ type: 'bar' }] },
+      options: [{ series: [{ data: DATA }] }, { series: [{ data: [1, 2, 3] }] }, { series: [{ data: [3, 2, 1] }] }] } },
+];
+// ---- [R7-M] a treemap's label is laid out on its cell: TreemapView's
+// beforeUpdate sets the label's width and height to the content rect's (the
+// upper label's strip's) less the padding (5 by default), so a plate covers
+// the whole cell; the breadcrumb's words are createTextStyle of its
+// itemStyle.textStyle ----
+const TM_DATA = [{ name: 'Alpha', children: [{ name: 'a1', value: 3 }, { name: 'a2 long name here', value: 2 }] }, { name: 'Beta', value: 4 }];
+const R7M_TREEMAP_CASES = [
+  { name: 'treemap-label-box', looks: true, note: "content labels with a plate and a border: the plate is the cell less nothing (width = cell - padding 5 + padding); upper labels' plate the strip; the breadcrumb's words boxed",
+    option: opt({ series: [{ type: 'treemap', name: 'Total', leafDepth: 2, top: 10, bottom: 60,
+      label: { color: '#333333', backgroundColor: '#eeeeee', borderColor: '#aa0000', borderWidth: 1 },
+      upperLabel: { show: true, color: '#333333', backgroundColor: '#dddddd' },
+      breadcrumb: { show: true, itemStyle: { textStyle: CMP_BOX } }, data: TM_DATA }] }) },
+  { name: 'treemap-label-pos', looks: true, note: "insideTopLeft with padding [2, 8] over a plate, rich tokens with their own box; an upper label 'inside' padded 3; a long name truncated in its cell",
+    option: opt({ series: [{ type: 'treemap', top: 10, bottom: 60, breadcrumb: { show: false },
+      label: { position: 'insideTopLeft', padding: [2, 8], color: '#333333', backgroundColor: '#eeeeee', formatter: '{a|{b}}',
+        rich: { a: { color: '#aa0000', backgroundColor: '#dddddd', padding: [1, 2] } } },
+      upperLabel: { show: true, position: 'inside', padding: 3, color: '#333333', backgroundColor: '#dddddd', borderRadius: 4 },
+      data: TM_DATA }] }) },
+  { name: 'treemap-label-plain-pad', looks: true, note: "a plain label with only a padding (no plate): laid out in the cell as before; a lineHeight 30 and a text shadow",
+    option: opt({ series: [{ type: 'treemap', top: 10, bottom: 60, breadcrumb: { show: false },
+      label: { color: '#333333', padding: 10, lineHeight: 30, textShadowColor: '#888888', textShadowBlur: 2 }, data: TM_DATA }] }) },
+];
+// ---- [R7-M] a graph's edge label in a view scaled unequally (layout
+// 'none', the nodes' extent not the view's aspect): Line.beforeUpdate scales
+// the label by 1 / every ancestor's scaleX only, so under the main group's
+// scaleX / scaleY it is drawn squashed -- and turned along a slanted edge,
+// sheared ----
+const GRAPH_NODES = [{ name: 'Ga', x: 0, y: 0 }, { name: 'Gb', x: 100, y: 100 }, { name: 'Gc', x: 100, y: 0 }, { name: 'Gd', x: 0, y: 100 }];
+const GRAPH_EDGE_LBL = { show: true, color: '#333333', formatter: 'edge' };
+const R7M_GRAPH_CASES = [
+  { name: 'graph-edge-scale', looks: true, note: "layout 'none', 400 x 200 over a 100 x 100 extent (scaleX 4, scaleY 2): edge labels plain, boxed and rich on a level, an upright and a slanted edge",
+    option: opt({ series: [{ type: 'graph', layout: 'none', left: 0, top: 0, width: 400, height: 200, label: { show: false },
+      lineStyle: { color: '#888888', opacity: 1 }, edgeLabel: GRAPH_EDGE_LBL, data: GRAPH_NODES,
+      links: [{ source: 'Ga', target: 'Gc' },
+        { source: 'Ga', target: 'Gb', label: { backgroundColor: '#eeeeee', borderColor: '#aa0000', borderWidth: 1, padding: [2, 4], borderRadius: 3 } },
+        { source: 'Gc', target: 'Gb', label: { formatter: '{a|up}{b|right}', rich: { a: { color: '#aa0000', backgroundColor: '#dddddd' }, b: { color: '#0000aa' } } } },
+        { source: 'Gd', target: 'Gb', label: { position: 'end', backgroundColor: '#eeeeee' } }] }] }) },
+  { name: 'graph-edge-scale-curve', looks: true, note: "the same view taller than wide (scaleX 1, scaleY 3): a curved edge's label insideStartTop with a halo, a rotate of its own, an end label",
+    option: opt({ series: [{ type: 'graph', layout: 'none', left: 100, top: 20, width: 100, height: 300, label: { show: false },
+      lineStyle: { color: '#888888', opacity: 1, curveness: 0.3 }, edgeLabel: GRAPH_EDGE_LBL, data: GRAPH_NODES,
+      links: [{ source: 'Ga', target: 'Gb', label: { position: 'insideStartTop', textBorderColor: '#ffffff', textBorderWidth: 2 } },
+        { source: 'Gc', target: 'Gd', label: { rotate: 30, backgroundColor: '#eeeeee' } },
+        { source: 'Ga', target: 'Gd', label: { position: 'start', formatter: 'from' } }] }] }) },
+];
 const R7H_CASES = [
   { name: 'word-width-plain', looks: true, note: "series labels: width '50%' with a plate (centred: laid out at NaN), 'auto' truncated (nothing kept), 'abc' with break and padding (no wrap)",
     option: sLabel([null, { width: 'auto', overflow: 'truncate', formatter: 'truncated away' },
@@ -936,6 +1052,9 @@ const cases = [
   ...R7L_OPACITY_CASES,
   ...R7L_HUNG_CASES,
   ...R7L_EXTREME_CASES,
+  ...R7M_COMPONENT_CASES,
+  ...R7M_TREEMAP_CASES,
+  ...R7M_GRAPH_CASES,
 ];
 
 // ---------- running upstream ----------
