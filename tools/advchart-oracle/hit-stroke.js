@@ -37,6 +37,20 @@
 //   x      a target with no series ECData
 //   -      none
 // run-length encoded: `code*count code*count ...`.
+// R7-I adds (r7i.*): a radar with no areaStyle (RadarView builds the polygon
+// ignored: never hit) and its other parts; and the clips zrender's isHover
+// asks up the parents -- a line's lineGroup (a cartesian's rect widened by
+// the line's width, a polar's sector), a large bar's and a candlestick's
+// group, a partly clipped candle or box, a lines series' group, a custom
+// series' group, the growing clip of an entering line or parallel series
+// -- against the series that clip their geometry instead (bars, scatter)
+// or not at all (a graph on a cartesian). A case may say
+//   tick   the timers setTimeout queued run after setOption (the next
+//          macrotask: ParallelView's removeClipPath once its clip is done)
+//   t      the option animates: the clock moves t ms past setOption, then
+//          zr.animation.update() and the timers -- what the pointer finds
+//          that far into the entering animation
+// A custom series' renderItem is written '@name' and run as RENDER[name].
 // Run: node tools/advchart-oracle/hit-stroke.js -> tests/fixtures/advchart-hit-stroke.json
 'use strict';
 const fs = require('fs');
@@ -50,6 +64,18 @@ class ClockDate extends RealDate {
   static now() { return NOW; }
 }
 global.Date = ClockDate;
+// [R7-I] timers queue and run only where a case asks (nothing else here
+// ever saw one run: the generation is synchronous)
+let TIMERS = [];
+global.setTimeout = function (fn) { TIMERS.push(fn); return TIMERS.length; };
+global.clearTimeout = function () {};
+function flushTimers() {
+  for (let guard = 0; TIMERS.length && guard < 100; guard++) {
+    const q = TIMERS;
+    TIMERS = [];
+    q.forEach(fn => fn());
+  }
+}
 const DIST = process.env.ECHARTS_DIST || 'D:/Projects/echarts/dist/echarts.js';
 const echarts = require(DIST);
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -359,7 +385,97 @@ function cases() {
       itemStyle: B(4, { color: 'none' }), lineStyle: { width: 1 } }), [PT(200, 150, 200)]],
     ['clear.label-text-border', bar({}, { label: { show: true, position: 'top', fontSize: 20, textBorderWidth: 10,
       textBorderColor: 'transparent' } }), [LBL(0, 1)]],
-  ];
+  ].concat(r7iCases());
+}
+
+// ---- R7-I ----
+const RAD = (s, more) => Object.assign({ animation: false, color: PAL, radar: { indicator: [{ name: 'p', max: 10 },
+  { name: 'q', max: 10 }, { name: 'r', max: 10 }], radius: 110 },
+  series: [Object.assign({ type: 'radar', data: [{ value: [8, 6, 7] }] }, s || {})] }, more || {});
+const ANIM = o => Object.assign(o, { animation: true, animationDuration: 1000, animationEasing: 'linear',
+  animationDurationUpdate: 1000, animationEasingUpdate: 'linear' });
+const PAR = (s, more) => Object.assign({ animation: false, color: PAL, parallelAxis: [{ dim: 0, min: 0, max: 10 },
+  { dim: 1, min: 0, max: 10 }, { dim: 2, min: 0, max: 10 }],
+  series: [Object.assign({ type: 'parallel', lineStyle: { width: 6, opacity: 1 }, data: [[5, 14, 2], [2, 8, 8]] }, s || {})] },
+  more || {});
+const RENDER = {
+  // a rect from the grid's middle out past its right edge
+  cuclip: function (params, api) {
+    const c = api.coord([api.value(0), api.value(1)]);
+    return { type: 'rect', shape: { x: c[0], y: c[1] - 20, width: 200, height: 40 }, style: { fill: '#c00' } };
+  },
+};
+function r7iCases() {
+  return [
+    // a radar: the polygon is built ignored without an areaStyle -- never hit
+    ['r7i.radar-default', RAD(), [PT(200, 150, 130)]],
+    ['r7i.radar-plain', RAD({ symbol: 'none', lineStyle: { width: 4 } }), [PT(200, 150, 130)]],
+    ['r7i.radar-symbols', RAD({ symbolSize: 14, itemStyle: B(3) }), [PT(200, 150, 130)]],
+    ['r7i.radar-area-op0', RAD({ symbol: 'none', areaStyle: { opacity: 0 } }), [PT(200, 150, 130)]],
+    ['r7i.radar-emph-area', RAD({ symbol: 'none', emphasis: { areaStyle: { color: '#f00' } } }), [PT(200, 150, 130)]],
+    ['r7i.radar-item-area', RAD({ symbol: 'none', data: [{ value: [8, 6, 7] }, { value: [4, 9, 3], areaStyle: {} }] }),
+      [PT(200, 150, 130)]],
+    ['r7i.radar-circle', RAD({ symbol: 'none' }, { radar: { indicator: [{ name: 'p', max: 10 }, { name: 'q', max: 10 },
+      { name: 'r', max: 10 }], radius: 110, shape: 'circle' } }), [PT(200, 150, 130)]],
+    // a parallel line out past its axes' max: its clip is gone a macrotask
+    // after the first render (no animation), so the line is hit out there
+    ['r7i.par-out', PAR(), [IT(0, 0)], { tick: true }],
+    // ... and while it enters, cut to the clip growing across the axes
+    ['r7i.par-anim', ANIM(PAR()), [IT(0, 0), IT(0, 1)], { t: 300 }],
+    ['r7i.par-anim-end', ANIM(PAR()), [IT(0, 0)], { t: 1100 }],
+    // a line's group clip: the grid's rect, widened by the line's width
+    ['r7i.line-out', cart({ type: 'line', symbol: 'none', data: [5, 14, 7], lineStyle: { width: 8 } }), [POLY(0)]],
+    ['r7i.line-out-noclip', cart({ type: 'line', symbol: 'none', clip: false, data: [5, 14, 7], lineStyle: { width: 8 } }),
+      [POLY(0)]],
+    ['r7i.line-area-out', cart({ type: 'line', symbol: 'none', data: [5, 14, 7], areaStyle: {}, lineStyle: { width: 2 } }),
+      [AREA(0)]],
+    ['r7i.line-polar-out', { animation: false, color: PAL, polar: { radius: [20, 100] }, angleAxis: { type: 'category', data: N },
+      radiusAxis: { max: 10 }, series: [{ type: 'line', coordinateSystem: 'polar', symbol: 'none', lineStyle: { width: 6 },
+      data: [5, 14, 7] }] }, [POLY(0)]],
+    ['r7i.line-anim', ANIM(cart({ type: 'line', symbol: 'none', data: [5, 5, 7], lineStyle: { width: 8 } })), [PT(150, 150, 130)],
+      { t: 400 }],
+    // a large bar's group clip, a normal bar's geometry
+    ['r7i.bar-large-out', cart({ type: 'bar', large: true, largeThreshold: 1, barWidth: 40, data: [4, 14, 8] }),
+      [PT(200, 40, 60)]],
+    ['r7i.bar-out', cart({ type: 'bar', barWidth: 40, data: [4, 14, 8] }), [PT(200, 40, 60)]],
+    // a candle partly out: its own clip path; a box likewise
+    ['r7i.candle-out', cart({ type: 'candlestick', barWidth: 30, data: [[3, 7, 1, 9], [6, 13, 2, 16], [4, 6, 3, 7]] }),
+      [PT(200, 40, 60)]],
+    ['r7i.boxplot-out', cart({ type: 'boxplot', boxWidth: [30, 30], data: [[1, 3, 5, 7, 9], [2, 4, 5, 12, 16],
+      [1, 2, 3, 4, 5]] }), [PT(200, 40, 60)]],
+    // a lines series' group clip (clip: true by default)
+    ['r7i.lines-out', vv({ type: 'lines', coordinateSystem: 'cartesian2d', lineStyle: { width: 6, opacity: 1 },
+      data: [{ coords: [[2, 2], [11, 7]] }] }), [PT(360, 120, 40)]],
+    ['r7i.lines-noclip', vv({ type: 'lines', coordinateSystem: 'cartesian2d', clip: false,
+      lineStyle: { width: 6, opacity: 1 }, data: [{ coords: [[2, 2], [11, 7]] }] }), [PT(360, 120, 40)]],
+    // a graph on a cartesian clips nothing
+    ['r7i.graph-cart-out', vv({ type: 'graph', coordinateSystem: 'cartesian2d', symbolSize: 16,
+      data: [[2, 5], [11, 6]], links: [{ source: 0, target: 1 }], lineStyle: { width: 4, opacity: 1 } }),
+      [EDGE(0, 0), IT(0, 1)]],
+    // a scatter's point out of the grid is not drawn at all
+    ['r7i.scatter-out', vv({ type: 'scatter', symbolSize: 20, data: [[5, 5], [5, 10.4]] }), [PT(200, 53, 30)]],
+    // a custom series' group clip where it says clip (not by default)
+    ['r7i.custom-clip', vv({ type: 'custom', clip: true, renderItem: '@cuclip', data: [[6, 5]] }), [PT(310, 135, 120)]],
+    ['r7i.custom-noclip', vv({ type: 'custom', renderItem: '@cuclip', data: [[6, 5]] }), [PT(310, 135, 120)]],
+    // a theme river layer's and a sankey's group clip while they enter
+    // (removeClipPath once done)
+    ['r7i.river-anim', ANIM(solo({ type: 'themeRiver', label: { show: false }, data: [[0, 3, 'a'], [1, 4, 'a'],
+      [2, 3, 'a'], [0, 2, 'b'], [1, 2, 'b'], [2, 3, 'b']] },
+    { singleAxis: { type: 'value', min: 0, max: 2, top: 40, bottom: 40, axisLabel: { show: false } } })),
+    [PT(200, 150, 150)], { t: 300 }],
+    ['r7i.sankey-anim', ANIM(solo({ type: 'sankey', label: { show: false }, data: [{ name: 'a' }, { name: 'b' }],
+      links: [{ source: 'a', target: 'b', value: 3 }], lineStyle: { opacity: 0.5 } })), [PT(200, 150, 200)], { t: 300 }],
+  ].map(c => c.length > 3 ? c : c.concat([{}]));
+}
+function withRender(option) {
+  (option.series || []).forEach(s => {
+    if (typeof s.renderItem === 'string' && s.renderItem[0] === '@') {
+      const fn = RENDER[s.renderItem.slice(1)];
+      must(fn, 'no RENDER ' + s.renderItem);
+      s.renderItem = fn;
+    }
+  });
+  return option;
 }
 
 // ECData lives in a makeInner store keyed per element: the key is found once
@@ -423,13 +539,22 @@ function aimEl(chart, a) {
 // -- a tie this fixture is not about
 const OFF = [0.3, 0.2];
 const DIRS = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]];
-function run(id, option, aims) {
+function run(id, option, aims, more) {
   NOW = T_BASE;
   rngState = SEED;
+  TIMERS = [];
+  more = more || {};
   const chart = echarts.init(null, null, { renderer: 'svg', ssr: true, width: W, height: H });
   chart._ssr = false;
   try {
-    chart.setOption(JSON.parse(JSON.stringify(option)));
+    chart.setOption(withRender(JSON.parse(JSON.stringify(option))));
+    chart.getZr().storage.getDisplayList(true);
+    if (more.tick) flushTimers();
+    if (more.t !== undefined) {
+      NOW = T_BASE + more.t;
+      chart.getZr().animation.update();
+      flushTimers();
+    }
     chart.getZr().storage.getDisplayList(true);
     const handler = chart.getZr().handler;
     const rays = [];
@@ -468,7 +593,10 @@ function run(id, option, aims) {
         rays.push({ o, d, n, seq: seq.map(p => p[0] + '*' + p[1]).join(' ') });
       });
     });
-    return { id, option, rays };
+    const rec = { id, option, rays };
+    if (more.tick) rec.tick = true;
+    if (more.t !== undefined) { rec.t = more.t; rec.T0 = T_BASE; }
+    return rec;
   }
   finally {
     chart.dispose();
@@ -476,14 +604,14 @@ function run(id, option, aims) {
 }
 
 function generate() {
-  const charts = cases().map(([id, o, aims]) => run(id, o, aims));
+  const charts = cases().map(([id, o, aims, more]) => run(id, o, aims, more));
   const by = id => charts.find(c => c.id === id);
   // every case hits its aim somewhere, but the silent one, the one with
   // neither a fill nor a pen, and the infinite pens upstream never hits
   const MISS = ['bar.silent', 'scatter.infinite', 'pie.infinite', 'line.infinite', 'none.bar-bare',
     'inf.sunburst', 'inf.funnel', 'inf.heatmap', 'inf.themeriver', 'inf.candle', 'inf.boxplot', 'inf.sankey',
     'inf.lines', 'inf.parallel', 'inf.polarbar', 'inf.gauge-progress', 'inf.gauge-pointer', 'inf.chord',
-    'inf.effect', 'inf.pictorial', 'inf.graph-node'];
+    'inf.effect', 'inf.pictorial', 'inf.graph-node', 'r7i.scatter-out'];
   charts.forEach(c => {
     const any = c.rays.some(r => r.seq.split(' ').some(p => p[0] === 's'));
     must(any === !MISS.includes(c.id), c.id + ': hits ' + any);

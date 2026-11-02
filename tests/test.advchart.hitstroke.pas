@@ -15,7 +15,16 @@ unit test.advchart.hitstroke;
   without the port's pad, the element's own datum (a run element, a line's
   polyline, is sS/-; a tree's edge, which names none, x). Every ray as
   upstream's, a curve's too: a graph's or a lines' curved edge and the pin
-  are tested as their own curves [R7-F; R7-C allowed them a step or two]. }
+  are tested as their own curves [R7-F; R7-C allowed them a step or two].
+
+  [R7-I] r7i.*: a radar with no areaStyle and its other parts; the clips
+  zrender's isHover asks (a line's, a large bar's, a candle's, a box's, a
+  lines', a custom series', an entering line's or parallel series' growing
+  one) against the series that clip their geometry or nothing. A case
+  with `t` animates: the control's clock at T0, the option set, then t ms
+  on, and the frame drawn there is what is hit; `tick` (the timers after
+  setOption upstream) is the rest the control is at anyway. A custom
+  series' renderItem '@cuclip' is TCuClip's. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -23,7 +32,8 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
      tyControls.AdvanceChart.Measure, tyControls.AdvanceChart.Symbol,
      tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.AnimView,
-     tyControls.AdvanceChart.Lines,
+     tyControls.AdvanceChart.Lines, tyControls.AdvanceChart.Custom,
+     tyControls.AdvanceChart.Layout,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
@@ -33,10 +43,19 @@ type
   public
     Measurer: ITyTextMeasurer;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { [R7-I] the list a frame of motion is drawn from (the list itself at rest) }
+    function Frame: TTyPaintList;
+  end;
+
+  { [R7-I] hit-stroke.js' RENDER.cuclip: a rect from the item's point out
+    past the grid's right edge }
+  TCuClip = class
+    function CuClip(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
   end;
 
   TAdvChartHitStrokeTest = class(TTestCase)
   private
+    FCu: TCuClip;
     FForm: TForm;
     FCtl: TTyStyleController;
     FMeasure: TJSONData;
@@ -52,6 +71,8 @@ type
     procedure TestAFillWrittenNonePaintsAsAClearOne;
     procedure TestTheHitFrameRidesWithTheShape;
     procedure TestALinesCurveHitAsItIsDrawnToAPercent;
+    procedure TestAGraphCurveHitAsItIsDrawnToAPercent;
+    procedure TestATurnedRoundRectAndEllipseDrawAsUpstream;
     procedure TestThePadTopsThePenUpToFour;
   end;
 
@@ -72,6 +93,12 @@ begin
   RenderTo(ACanvas, ARect, APPI);
 end;
 
+function THitStrokeProbe.Frame: TTyPaintList;
+begin
+  Result := AnimFrame;
+  if Result = nil then Result := SeriesList;
+end;
+
 function LoadJson(const AName: string): TJSONData;
 var sl: TStringList;
 begin
@@ -84,9 +111,20 @@ begin
   end;
 end;
 
+function TCuClip.CuClip(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+var c: TTyDoubleArray;
+begin
+  c := AApi.Coord([AApi.Value(0), AApi.Value(1)]);
+  Result := TJSONObject.Create(['type', 'rect',
+    'shape', TJSONObject.Create(['x', c[0], 'y', c[1] - 20, 'width', 200, 'height', 40]),
+    'style', TJSONObject.Create(['fill', '#c00'])]);
+end;
+
 procedure TAdvChartHitStrokeTest.SetUp;
 begin
   inherited SetUp;
+  FCu := TCuClip.Create;
+  TyChartRegisterRenderItem('cuclip', @FCu.CuClip);
   FForm := TForm.CreateNew(nil);
   FCtl := TTyStyleController.Create(nil);
   FCtl.Mode := 'light';
@@ -102,6 +140,8 @@ begin
   FreeAndNil(FCtl);
   FreeAndNil(FBmp);
   FreeAndNil(FMeasure);
+  TyChartUnregisterRenderItem('cuclip');
+  FreeAndNil(FCu);
   inherited TearDown;
 end;
 
@@ -114,7 +154,8 @@ begin
   { the list's own test without the port's pad (a symbol's target grown for
     a mouse), as upstream answers; a combining host's child is its host, a
     tree's edge names no datum (HitTestAt) }
-  L := FChart.SeriesList;
+  { [R7-I] in motion, the frame drawn }
+  L := FChart.Frame;
   el := L.HitTestElement(AX, AY, 96, False);
   if el < 0 then Exit('-');
   if L.Element(el).Anim.PieceOf > 0 then el := L.Element(el).Anim.PieceOf - 1;
@@ -161,13 +202,27 @@ begin
         TJSONObject(FMeasure).Objects['ratios'].Arrays['ratio'],
         TJSONObject(FMeasure).Objects['ratios'].Integers['firstCode']));
       FChart.SetBounds(0, 0, cW, cH);
-      FChart.Option := c.Objects['option'].AsJSON;
+      { [R7-I] an entering animation t ms on }
+      if c.Find('t') <> nil then
+      begin
+        FChart.AnimationMode := camAlways;
+        FChart.AnimNow := c.Floats['T0'];
+        FChart.SetOption(c.Objects['option'].AsJSON, True);
+      end
+      else
+        FChart.Option := c.Objects['option'].AsJSON;
       AssertEquals(id + ' parses', '', FChart.OptionError);
       FBmp.Fill(BGRA(255, 255, 255, 255));
       { [R7-F] a case whose frame raises is that case's failure, and the
         rest still run (an infinite pen once did, in the painter) }
       try
         FChart.Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
+        if c.Find('t') <> nil then
+        begin
+          FChart.AnimNow := c.Floats['T0'] + c.Floats['t'];
+          FChart.AnimTick(FChart.AnimNow);
+          FChart.Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
+        end;
       except
         on E: Exception do
         begin
@@ -408,6 +463,132 @@ begin
     TyLinesQuadAt(el.Shape.Points[0].X, el.Shape.HitCP.X, el.Shape.Points[n].X, 0.5), 1e-9);
   AssertEquals('the part''s middle y', el.Shape.Points[16].Y,
     TyLinesQuadAt(el.Shape.Points[0].Y, el.Shape.HitCP.Y, el.Shape.Points[n].Y, 0.5), 1e-9);
+end;
+
+{ [R7-I] THE SAME FOR A GRAPH'S CURVED EDGE (GraphEdgeFrom): 400 ms into
+  its entering (linear over 1000), the frame's edge is drawn to 0.4 of
+  its quadratic, and the control point the pointer tests is the first
+  part's (quadraticSubdivide) -- the drawn part's middle point is that
+  quadratic's at a half, and the part ends short of the target node }
+procedure TAdvChartHitStrokeTest.TestAGraphCurveHitAsItIsDrawnToAPercent;
+var
+  k, n: Integer;
+  el, whole: TTyChartElement;
+  L: TTyPaintList;
+  found: Boolean;
+  t0: Double;
+const
+  cOpt = '{"animation":true,"animationDuration":1000,"animationEasing":"linear",'
+    + '"series":[{"type":"graph","layout":"none","symbolSize":20,'
+    + '"data":[{"name":"a","x":100,"y":150},{"name":"b","x":300,"y":150}],'
+    + '"links":[{"source":"a","target":"b"}],'
+    + '"lineStyle":{"width":4,"curveness":0.4,"opacity":1}}]}';
+begin
+  FreeAndNil(FChart);
+  FChart := THitStrokeProbe.Create(FForm);
+  FChart.Parent := FForm;
+  FChart.Controller := FCtl;
+  FChart.Measurer := TPtToPxMeasurer.Create(TZrSsrMeasurer.Create(
+    TJSONObject(FMeasure).Objects['ratios'].Arrays['ratio'],
+    TJSONObject(FMeasure).Objects['ratios'].Integers['firstCode']));
+  FChart.SetBounds(0, 0, cW, cH);
+  FChart.AnimationMode := camAlways;
+  t0 := 1700000000000;
+  FChart.AnimNow := t0;
+  FChart.SetOption(cOpt, True);
+  AssertEquals('parses', '', FChart.OptionError);
+  FChart.Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
+  { the edge at rest, for its whole curve }
+  found := False;
+  for k := 0 to FChart.SeriesList.Count - 1 do
+    if FChart.SeriesList.Element(k).Datum.IsEdge and FChart.SeriesList.Element(k).Shape.HitQuad then
+    begin
+      whole := FChart.SeriesList.Element(k);
+      found := True;
+      Break;
+    end;
+  AssertTrue('a curved edge at rest', found);
+  FChart.AnimNow := t0 + 400;
+  FChart.AnimTick(FChart.AnimNow);
+  FChart.Render(FBmp.Canvas, Rect(0, 0, cW, cH), 96);
+  L := FChart.Frame;
+  AssertTrue('in motion', L <> FChart.SeriesList);
+  found := False;
+  for k := 0 to L.Count - 1 do
+    if L.Element(k).Datum.IsEdge and L.Element(k).Shape.HitQuad then
+    begin
+      el := L.Element(k);
+      found := True;
+      Break;
+    end;
+  AssertTrue('the edge in the frame', found);
+  n := High(el.Shape.Points);
+  AssertTrue('drawn as points', n >= 4);
+  AssertTrue('drawn short of its end',
+    Abs(el.Shape.Points[n].X - whole.Shape.Points[High(whole.Shape.Points)].X) > 10);
+  AssertEquals('it starts where the whole does', whole.Shape.Points[0].X, el.Shape.Points[0].X, 1e-9);
+  AssertTrue('the control point is not the whole''s',
+    Abs(el.Shape.HitCP.X - whole.Shape.HitCP.X) + Abs(el.Shape.HitCP.Y - whole.Shape.HitCP.Y) > 1);
+  AssertEquals('the part''s middle x', el.Shape.Points[n div 2].X,
+    TyLinesQuadAt(el.Shape.Points[0].X, el.Shape.HitCP.X, el.Shape.Points[n].X, 0.5), 1e-9);
+  AssertEquals('the part''s middle y', el.Shape.Points[n div 2].Y,
+    TyLinesQuadAt(el.Shape.Points[0].Y, el.Shape.HitCP.Y, el.Shape.Points[n].Y, 0.5), 1e-9);
+end;
+
+{ [R7-I] A TURNED roundRect AND A TURNED OBLONG circle DRAWN AS UPSTREAM'S:
+  symbol.ts' path in the unit box (-1, -1, 2, 2) -- a roundRect with
+  r = 0.5, the unit circle -- through the symbol's transform (half the size
+  on each axis, the turn, the place: the same HitM the pointer tests). The
+  drawn outline is a polygon whose every vertex, taken back through HitM,
+  lies on that unit outline; the roundRect's corners are round (vertices
+  in a corner's quarter), the ellipse is turned. [Was: square corners; an
+  ellipse not turned.] }
+procedure TAdvChartHitStrokeTest.TestATurnedRoundRectAndEllipseDrawAsUpstream;
+var
+  k, i, nSym, nCorner: Integer;
+  el: TTyChartElement;
+  inv: TTyMat2D;
+  ux, uy, ax, ay, d: Double;
+  isCircle: Boolean;
+begin
+  Picture('{"animation":false,"xAxis":{"type":"value","min":0,"max":10},'
+    + '"yAxis":{"type":"value","min":0,"max":10},"series":['
+    + '{"type":"scatter","symbol":"roundRect","symbolSize":[48,28],"symbolRotate":30,"data":[[3,5]]},'
+    + '{"type":"scatter","symbol":"circle","symbolSize":[48,20],"symbolRotate":-40,"data":[[7,5]]}]}').Free;
+  nSym := 0;
+  for k := 0 to FChart.SeriesList.Count - 1 do
+  begin
+    el := FChart.SeriesList.Element(k);
+    if (el.Datum.Kind <> ctkSeries) or (el.Datum.DataIndex <> 0) then Continue;
+    if el.Shape.HitSym = '' then Continue;
+    isCircle := el.Datum.SeriesIndex = 1;
+    Inc(nSym);
+    AssertEquals('drawn as its outline''s polygon', Ord(cskPolygon), Ord(el.Shape.Kind));
+    AssertTrue('the unit frame inverts', TyMatInvert(el.Shape.HitM, inv));
+    AssertTrue('enough points', Length(el.Shape.Points) >= 48);
+    nCorner := 0;
+    for i := 0 to High(el.Shape.Points) do
+    begin
+      TyZrApply(inv, el.Shape.Points[i].X, el.Shape.Points[i].Y, ux, uy);
+      if isCircle then
+        AssertEquals(Format('ellipse vertex %d on the unit circle', [i]), 1, Sqrt(ux * ux + uy * uy), 1e-9)
+      else
+      begin
+        ax := Abs(ux);
+        ay := Abs(uy);
+        if (ax > 0.5 + 1e-9) and (ay > 0.5 + 1e-9) then
+        begin
+          Inc(nCorner);
+          d := Sqrt(Sqr(ax - 0.5) + Sqr(ay - 0.5));
+          AssertEquals(Format('corner vertex %d on its quarter', [i]), 0.5, d, 1e-9);
+        end
+        else
+          AssertEquals(Format('side vertex %d on its side', [i]), 1, Max(ax, ay), 1e-9);
+      end;
+    end;
+    if not isCircle then AssertTrue('round corners', nCorner >= 40);
+  end;
+  AssertEquals('both symbols', 2, nSym);
 end;
 
 { [R7-F] THE PORT'S PAD (batch 142, a mouse's only): a symbol is found

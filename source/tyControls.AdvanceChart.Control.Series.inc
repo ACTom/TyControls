@@ -881,6 +881,9 @@ begin
     { the enter animation's clip is made from the path's own rect }
     el.Anim := Default(TTyChartAnim);
     el.Anim.Role := carRiver;
+    { [R7-I] the layer's clip while it grows cuts the hit too (isHover);
+      removeClipPath once the entering is done }
+    el.ClipHits := True;
     el.Anim.Series := si;
     el.Anim.Index := k;
     el.Anim.G[0] := pg.Box.X;

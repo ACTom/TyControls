@@ -2334,9 +2334,11 @@ var
     end;
   end;
 
-  { the run's clip: the plot's rect, or a polar's sector }
+  { the run's clip: the plot's rect, or a polar's sector -- [R7-I] the
+    lineGroup's clipPath, which isHover asks: the hit is cut too }
   procedure SetClip(var AEl: TTyChartElement);
   begin
+    AEl.ClipHits := True;
     if pol = nil then
     begin
       AEl.HasClip := True;
@@ -3362,6 +3364,8 @@ var
     if clipKind <> wcPartial then Exit;
     AEl.HasClip := True;
     AEl.ClipRect := clipR;
+    { [R7-I] updateClipPath sets it on the element: isHover asks it }
+    AEl.ClipHits := True;
   end;
 
   procedure Wick(const AFrom, ATo: TTyPointF; ARole: TTyChartAnimRole);
@@ -3777,6 +3781,8 @@ begin
     begin
       el.HasClip := True;
       el.ClipRect := clipR;
+      { [R7-I] the box's own clipPath: the hit too }
+      el.ClipHits := True;
     end;
     AList.Add(el);
     Inc(Result);
@@ -4917,6 +4923,8 @@ begin
   begin
     el.HasClip := True;
     el.ClipRect := TyWhiskerClipRect(ABinding.Cart.GetArea);
+    { [R7-I] _updateLargeClip's group clipPath: the hit too }
+    el.ClipHits := True;
   end;
   el.ProgChunk := AChunk;
   AList.Add(el);
@@ -5236,6 +5244,8 @@ begin
     begin
       el.HasClip := True;
       el.ClipRect := TyWhiskerClipRect(ABinding.Cart.GetArea);
+      { [R7-I] the large candles' group clipPath: the hit too }
+      el.ClipHits := True;
     end;
     if Length(AVisual.LargeChunks) > 0 then el.ProgChunk := c + 1;
     AList.Add(el);

@@ -1377,6 +1377,9 @@ var
 
   procedure SetClip(var AEl: TTyChartElement);
   begin
+    { [R7-I] LinesView's group clipPath: isHover asks it for every element
+      of the group }
+    AEl.ClipHits := ASolved.HasClip or ASolved.HasClipSector;
     if ASolved.HasClip then
     begin
       AEl.HasClip := True;
