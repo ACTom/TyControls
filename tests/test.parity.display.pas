@@ -36,6 +36,7 @@ type
     procedure TestAnEmptyBadgeTakesNoClicks;
     procedure TestTheUnderlineFollowsTheLayout;
     procedure TestARatingSnapsAndTells;
+    procedure TestAStreamedRatingSnapsOnceLoaded;
   end;
 
 implementation
@@ -52,6 +53,7 @@ type
   TImage181 = class(TTyImage);
   TView181 = class(TTyImageView);
   TLink181 = class(TTyLinkLabel);
+  TRating181 = class(TTyRating);
 
 const
   CSentinel: TColor = $00FF00FF;   // magenta: nothing in a theme paints it
@@ -437,6 +439,15 @@ begin
   finally
     b.Free;
   end;
+  lk.Layout := tlCenter;
+  b := NewGround(140, 60);
+  try
+    lk.RenderTo(b.Canvas, Rect(0, 0, 140, 60), 96);
+    AssertEquals('centred, nothing near the top', 0, InkIn(b, Rect(0, 0, 140, 12)));
+    AssertEquals('nor near the bottom: the underline is under the text', 0, InkIn(b, Rect(0, 48, 140, 60)));
+  finally
+    b.Free;
+  end;
 end;
 
 procedure TDisplay181Test.TestARatingSnapsAndTells;
@@ -458,6 +469,22 @@ begin
   r.AllowHalf := False;
   AssertEquals('no halves any more: 1.5 is 2', 2, r.Value, 0.0001);
   AssertEquals('told', 1, FChanges);
+end;
+
+procedure TDisplay181Test.TestAStreamedRatingSnapsOnceLoaded;
+var r: TRating181;
+begin
+  r := TRating181.Create(FForm);
+  r.Loading;
+  r.Value := 3.5;
+  r.AllowHalf := True;   // streams after Value
+  r.Loaded;
+  AssertEquals('a streamed half star stays half', 3.5, r.Value, 0.0001);
+  r := TRating181.Create(FForm);
+  r.Loading;
+  r.Value := 2.3;
+  r.Loaded;
+  AssertEquals('a streamed 2.3 is snapped once the form is read', 2, r.Value, 0.0001);
 end;
 
 initialization
