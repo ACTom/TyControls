@@ -42,7 +42,7 @@ uses tyControls.AdvancedComboBox;
 ## 4. 交互
 
 - 与 [TTyComboBox](../../source/tyControls.ComboBox.pas) 一致:点击雪佛龙(chevron)展开 / 收起、方向键 / Home / End 选择、首字母 type-ahead、`Alt+Down` / `F4` 切换下拉、`Esc` 关闭。
-- **字段**:选中项的图片 + 标题(单行居中,不画副标题)。
+- **字段**:选中项的图片 + 标题(单行居中,不画副标题)。`Text` 也是标题,`Text := '标题'` 选中这一行。
 - **弹出行**:图片 + 标题(加粗)+ 副标题(小一号、暗一档),行高 40。
 
 ---

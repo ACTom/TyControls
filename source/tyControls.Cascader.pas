@@ -1947,6 +1947,8 @@ var
   sz: TSize;
 begin
   if (FNodes = nil) or (FNodes.Count = 0) then Exit;   // never show an empty popup
+  { #161: an open list is not opened again (OnDropDown once), and a disabled field opens none. }
+  if DroppedDown or not IsEnabled then Exit;
   EnsurePopup;
   FPopup.NoActivate := False;   // the panel's keys come through the form: it must activate
   SyncPanel;

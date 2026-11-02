@@ -136,6 +136,8 @@ type
     FVisibleItems: TStringList;   // prefix-filtered subset shown in the autocomplete popup
     FSyncingText: Boolean;        // guard: True while we set FEditor.Text programmatically
     FShowingPopup: Boolean;       // guard: True during the autocomplete first-open focus dance
+    FOpen: Boolean;               // a drop-down was opened and not yet closed (#161; headless too)
+    FTabStopWanted: Boolean;      // TabStop as the form set it; see SetTabStopWanted (#161)
     FOnChange: TNotifyEvent;
     FOnSelect: TNotifyEvent;
     FOnDropDown: TNotifyEvent;
@@ -191,7 +193,19 @@ type
       field drives close: OnExit closes on focus-out, OnKeyDown handles Escape. }
     procedure EditorExit(Sender: TObject);
     procedure EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
-    procedure LayoutEditor;
+    { #161: the field's key and editing events are the combo's, as one control's are in LCL. }
+    procedure EditorKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure EditorKeyPress(Sender: TObject; var Key: Char);
+    procedure EditorUTF8KeyPress(Sender: TObject; var UTF8Key: TUTF8Char);
+    procedure EditorEditingDone(Sender: TObject);
+    { #161: one Tab stop per combo. With an edit box it is the field's, and the combo itself takes
+      none -- it had two, and the focus could land on the combo, where typing jumped items. }
+    procedure SetTabStopWanted(AValue: Boolean);
+    procedure ApplyTabStops;
+    { #161: in an open list the arrow keys move the highlight; Enter and Tab pick it, Esc picks
+      nothing. The first arrow key used to pick the next row and close the list. }
+    procedure MovePopupHighlight(AKey: Word);
+    procedure CommitPopupHighlight;
     procedure DropDownFiltered;
     { --- csSimple: the permanently-docked list ----------------------------------------
       The embedded list IS FPopupList -- the same instance the popup styles show, made by
@@ -276,6 +290,16 @@ type
       separation as ComputePopupHeight — one formula, exercised headless. }
     function ComputePopupWidth(APPI: Integer): Integer;
     procedure DoSelect; virtual;
+    { #161: what Text holds for row AIndex (in range), and the row a Text names, -1 for none --
+      case-insensitively, as LCL's matches. The row's string and a search of it here;
+      TTyAdvancedComboBox answers with the title of its two-line rows, TTyOfficeComboBox
+      skips its group headers. }
+    function ItemCaption(AIndex: Integer): string; virtual;
+    function IndexOfCaption(const AValue: string): Integer; virtual;
+    { #161: what a key on the closed pick-only field does with the row it lands on -- the
+      arrows, Home/End and type-ahead. Here it selects the row (OnChange, OnSelect);
+      TTyCheckComboBox, whose field shows the ticks and no row, opens its list there instead. }
+    procedure FieldKeySelect(AIndex: Integer); virtual;
     { Fires when the editable (csDropDown) field loses focus with committed text.
       Default no-op; TTyMRUComboBox overrides it to remember the typed value. }
     procedure DoEditorCommit; virtual;
@@ -310,6 +334,12 @@ type
       themed surface down, so a handler that only writes text sits on the right background
       instead of painting one of its own over ours -- and it has to be TOLD, or it will. }
     function FieldOwnerDrawState: TOwnerDrawState;
+    { Places the edit box over the field's text zone; a subclass calls it when its lead inset
+      changes. }
+    procedure LayoutEditor;
+    { #161: room the field keeps before the edit box, in physical px for a field AFieldHeight
+      tall at APPI -- TTyComboBoxEx's row image, which the edit box used to cover. 0 here. }
+    function EditorLeadInset(AFieldHeight, APPI: Integer): Integer; virtual;
     procedure Paint; override;
     procedure Resize; override;
     { After streaming: bounds are final only now, so the csSimple layout (field zone +
@@ -323,6 +353,7 @@ type
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
       WithThemeSpace: Boolean); override;
   public
+    procedure SetFocus; override;
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function GetStyleTypeKey: string; override;
@@ -494,7 +525,7 @@ type
       just-in-time. It runs BEFORE DropDown's empty-list guard — that ordering is the
       whole point, since a lazy combo starts empty and would otherwise never open. }
     property OnGetItems: TNotifyEvent read FOnGetItems write FOnGetItems;
-    property TabStop default True;
+    property TabStop: Boolean read FTabStopWanted write SetTabStopWanted default True;
     property Align;
     property Anchors;
     property StyleClass;
@@ -753,6 +784,12 @@ begin
   FEditor.OnChange  := @EditorChange;
   FEditor.OnExit    := @EditorExit;
   FEditor.OnKeyDown := @EditorKeyDown;
+  FEditor.OnKeyUp := @EditorKeyUp;
+  FEditor.OnKeyPress := @EditorKeyPress;
+  FEditor.OnUTF8KeyPress := @EditorUTF8KeyPress;
+  FEditor.OnEditingDone := @EditorEditingDone;
+  FEditor.TabStop := False;
+  ApplyTabStops;
   { Keep the (normally hidden) child editor out of the IDE designer's selectable
     sub-control set — same rule as the TreeView inline editor. }
   FEditor.ControlStyle := FEditor.ControlStyle + [csNoDesignVisible];
@@ -837,6 +874,7 @@ end;
 
 procedure TTyComboBox.DoDropDown;
 begin
+  FOpen := True;   // the list is open: a CloseUp from here on closes it (#161)
   if Assigned(FOnDropDown) then FOnDropDown(Self);
 end;
 
@@ -853,6 +891,24 @@ begin
   SelectItem(AIndex);            // fires OnChange on a real change
   if FItemIndex <> OldIndex then
     DoSelect;                    // OnSelect = the user actually picked something
+end;
+
+function TTyComboBox.ItemCaption(AIndex: Integer): string;
+begin
+  Result := FItems[AIndex];
+end;
+
+function TTyComboBox.IndexOfCaption(const AValue: string): Integer;
+var i: Integer;
+begin
+  for i := 0 to FItems.Count - 1 do
+    if AnsiCompareText(ItemCaption(i), AValue) = 0 then Exit(i);
+  Result := -1;
+end;
+
+procedure TTyComboBox.FieldKeySelect(AIndex: Integer);
+begin
+  UserSelect(AIndex);
 end;
 
 procedure TTyComboBox.SetItems(const AValue: TStringList);
@@ -873,11 +929,11 @@ begin
     case-insensitively, as LCL's default AutoCompleteText matches -- and text that names
     none leaves nothing selected. No OnChange: it is the host writing, not the user picking. }
   if not (csLoading in ComponentState) then
-    if (FItemIndex < 0) or (FItemIndex >= FItems.Count) or (FItems[FItemIndex] <> AValue) then
+    if (FItemIndex < 0) or (FItemIndex >= FItems.Count) or (ItemCaption(FItemIndex) <> AValue) then
       if AValue = '' then
         FItemIndex := -1
       else
-        FItemIndex := TyComboIndexOfText(FItems, AValue, False);
+        FItemIndex := IndexOfCaption(AValue);
   if FStyle = csSimple then SyncEmbeddedSelection;   // the docked list shows that row too
   { In editable mode keep the visible field in sync with a programmatic Text set,
     but under the guard so it does not re-trigger the autocomplete filter/popup. }
@@ -1194,6 +1250,7 @@ begin
     CloseUp;
   WasSimple := FStyle = csSimple;
   FStyle := AValue;
+  ApplyTabStops;
   if FEditor <> nil then
   begin
     FEditor.Visible := TyComboStyleHasEditBox(FStyle);
@@ -1514,9 +1571,14 @@ begin
   LayoutEditor;
 end;
 
+function TTyComboBox.EditorLeadInset(AFieldHeight, APPI: Integer): Integer;
+begin
+  Result := 0;
+end;
+
 procedure TTyComboBox.LayoutEditor;
 var
-  BtnW, PPI, PadL, PadT, PadR, PadB, BottomY: Integer;
+  BtnW, PPI, PadL, PadT, PadR, PadB, BottomY, Lead: Integer;
   S: TTyStyleSet;
 begin
   if (FEditor = nil) or not TyComboStyleHasEditBox(FStyle) then Exit;
@@ -1543,13 +1605,14 @@ begin
   PadT := MulDiv(S.Padding.Top,    PPI, 96);
   PadR := MulDiv(S.Padding.Right,  PPI, 96);
   PadB := MulDiv(S.Padding.Bottom, PPI, 96);
+  Lead := EditorLeadInset(BottomY - PadT - PadB, PPI);
   if IsRightToLeft then   // #153: the chevron on the left, the leading padding on the right
     FEditor.SetBounds(BtnW + PadR, PadT,
-      ClientWidth - BtnW - PadL - PadR,
+      ClientWidth - BtnW - PadL - PadR - Lead,
       BottomY - PadT - PadB)
   else
-    FEditor.SetBounds(PadL, PadT,
-      ClientWidth - BtnW - PadL - PadR,
+    FEditor.SetBounds(PadL + Lead, PadT,
+      ClientWidth - BtnW - PadL - PadR - Lead,
       BottomY - PadT - PadB);
 end;
 
@@ -1602,6 +1665,9 @@ end;
 
 procedure TTyComboBox.EditorKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
+  { #161: the application hears the field's keys as the combo's. }
+  if Assigned(OnKeyDown) then OnKeyDown(Self, Key, Shift);
+  if Key = 0 then Exit;
   { csSimple: Up/Down in the field move the LIST selection -- the Win32 simple combo's
     behaviour, and the only way the docked list is keyboard-reachable while the field
     keeps focus. Home/End are NOT taken: in an edit they move the caret, and stealing
@@ -1627,13 +1693,103 @@ begin
     end;
     Exit;
   end;
-  { Popup keys can't reach the popup form (it never focuses); handle the essential
-    dismiss here so Escape closes the suggestion list. }
-  if not DroppedDown then Exit;
-  if Key = VK_ESCAPE then
+  { #161: the drop-down keys of an editable combo, as in LCL's (customcombobox.inc:579-622):
+    F4 and Alt+Down open and close the list; while it is open -- the suggestion list too,
+    which never takes the focus -- the arrow keys move its highlight, Enter and Tab pick it
+    and Esc closes it; closed, Up and Down step through Items. }
+  if ((Key = VK_DOWN) and (ssAlt in Shift)) or (Key = VK_F4) then
   begin
-    CloseUp;
+    if DroppedDown then CloseUp else DropDown;
     Key := 0;
+    Exit;
+  end;
+  if DroppedDown then
+  begin
+    case Key of
+      VK_ESCAPE:
+        begin
+          CloseUp;
+          Key := 0;
+        end;
+      VK_UP, VK_DOWN, VK_PRIOR, VK_NEXT:
+        begin
+          MovePopupHighlight(Key);
+          Key := 0;
+        end;
+      VK_RETURN:
+        begin
+          CommitPopupHighlight;
+          Key := 0;
+        end;
+      VK_TAB:
+        CommitPopupHighlight;   // and the focus moves on
+    end;
+    Exit;
+  end;
+  if FItems.Count = 0 then Exit;
+  case Key of
+    VK_DOWN:
+      begin
+        if FItemIndex < 0 then UserSelect(0)
+        else if FItemIndex < FItems.Count - 1 then UserSelect(FItemIndex + 1);
+        Key := 0;
+      end;
+    VK_UP:
+      begin
+        if FItemIndex < 0 then UserSelect(0)
+        else if FItemIndex > 0 then UserSelect(FItemIndex - 1);
+        Key := 0;
+      end;
+  end;
+end;
+
+procedure TTyComboBox.EditorKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  if Assigned(OnKeyUp) then OnKeyUp(Self, Key, Shift);
+end;
+
+procedure TTyComboBox.EditorKeyPress(Sender: TObject; var Key: Char);
+begin
+  if Assigned(OnKeyPress) then OnKeyPress(Self, Key);
+end;
+
+procedure TTyComboBox.EditorUTF8KeyPress(Sender: TObject; var UTF8Key: TUTF8Char);
+begin
+  if Assigned(OnUTF8KeyPress) then OnUTF8KeyPress(Self, UTF8Key);
+end;
+
+procedure TTyComboBox.EditorEditingDone(Sender: TObject);
+begin
+  EditingDone;   // OnEditingDone, the combo's
+end;
+
+procedure TTyComboBox.SetFocus;
+begin
+  { #161: with an edit box the focus is the field's -- on the combo itself the keys would move
+    the items under the user's typing. }
+  if (FEditor <> nil) and TyComboStyleHasEditBox(FStyle) and FEditor.CanFocus then
+    FEditor.SetFocus
+  else
+    inherited SetFocus;
+end;
+
+procedure TTyComboBox.SetTabStopWanted(AValue: Boolean);
+begin
+  FTabStopWanted := AValue;
+  ApplyTabStops;
+end;
+
+procedure TTyComboBox.ApplyTabStops;
+begin
+  if (FEditor <> nil) and TyComboStyleHasEditBox(FStyle) then
+  begin
+    inherited TabStop := False;
+    FEditor.TabStop := FTabStopWanted;
+  end
+  else
+  begin
+    inherited TabStop := FTabStopWanted;
+    if FEditor <> nil then FEditor.TabStop := False;
   end;
 end;
 
@@ -1655,14 +1811,17 @@ begin
     selection text and pin FItemIndex to it. No OnChange — the selection (text)
     did not change, only its position. }
   if FItemIndex < 0 then Exit;        // nothing was selected
-  Idx := FItems.IndexOf(FText);
+  { #161: the row that was selected, when it still holds the text -- with duplicate captions
+    IndexOf moved the selection to the first of them, as LCL's does not. }
+  if (FItemIndex < FItems.Count) and (ItemCaption(FItemIndex) = FText) then Exit;
+  Idx := IndexOfCaption(FText);
   if Idx >= 0 then
     FItemIndex := Idx
   else if (FItems is TTyComboItemList) and (TTyComboItemList(FItems).FPutIndex = FItemIndex) then
   begin
     { #120: the selected row was renamed (Items[i] := S). It stays selected and shows its new
       text, as LCL's widget lists put the selection back (win32listsl.inc:267). }
-    FText := FItems[FItemIndex];
+    FText := ItemCaption(FItemIndex);
     if (FEditor <> nil) and TyComboStyleHasEditBox(FStyle) then
       SetEditorText(FText);
   end
@@ -1694,6 +1853,24 @@ begin
   { When items are added/removed (including a sorted insert that shifts indices),
     keep FItemIndex pinned to the selected item's text. }
   ResyncIndexFromText;
+  { #161: an open list shows Items as they are now, so a pick from it names the right row --
+    it was committed by an index into the old rows. A suggestion list closes: its subset is
+    of the old rows too. }
+  if (FStyle <> csSimple) and DroppedDown and (FPopupList <> nil) then
+  begin
+    if FPopup.NoActivate then
+      CloseUp
+    else
+    begin
+      FPopupList.OnChange := nil;
+      try
+        FPopupList.Items.Assign(FItems);
+        FPopupList.SelectItem(FItemIndex);
+      finally
+        FPopupList.OnChange := @PopupListChange;
+      end;
+    end;
+  end;
   { csSimple: the docked list shows Items LIVE -- there is no DropDown moment to copy them
     at, so every mutation pushes through here (rows first, then the re-pinned selection). }
   if FStyle = csSimple then
@@ -1770,7 +1947,7 @@ begin
   if (AIndex >= 0) and (AIndex < FItems.Count) then
   begin
     NewIndex := AIndex;
-    NewText := FItems[AIndex];
+    NewText := ItemCaption(AIndex);
   end
   else
   begin
@@ -1813,7 +1990,7 @@ procedure TTyComboBox.EnsurePopup;
 begin
   if FPopup <> nil then Exit;
   FPopup := TTyDropdownPopup.Create;
-  FPopup.Controller := Self.Controller;
+  FPopup.Controller := ActiveController;   // #161: never nil, as the cascader's
   FPopup.OnClose    := @PopupClosed;
 
   { The list itself may already exist -- a combo that spent time in csSimple made it for
@@ -1842,6 +2019,9 @@ begin
     about-to-drop notification this models never arrives for CBS_SIMPLE. A lazy-filled
     simple combo populates Items itself; there is no open moment to hang it on. }
   if FStyle = csSimple then Exit;
+  { #161: an open list is not opened again -- OnGetItems and OnDropDown fired a second time --
+    and a disabled combo opens none. }
+  if DroppedDown or not IsEnabled then Exit;
   { Lazy population, and it MUST come before the empty-list guard below: a lazy combo
     starts with no rows, so a hook fired after the guard could never fill anything and
     the user's first click would do nothing at all. This is the hole OnDropDown cannot
@@ -1855,9 +2035,10 @@ begin
     where activate + deactivate-close is the robust behavior. }
   FPopup.NoActivate := False;
 
-  { Sync controller every DropDown so DPI/theme changes take effect. }
+  { Sync controller every DropDown so DPI/theme changes take effect. The popup takes the
+    ACTIVE one (#161): the raw one is nil by default, which left OS-coloured corners. }
   FPopupList.Controller := Self.Controller;
-  FPopup.Controller     := Self.Controller;
+  FPopup.Controller     := ActiveController;
   FPopupList.BiDiMode   := BiDiMode;   // #153: the rows read the field's way
 
   { Sync items and selection — detach OnChange to prevent recursion. }
@@ -1891,7 +2072,7 @@ begin
   FPopup.NoActivate := True;
 
   FPopupList.Controller := Self.Controller;
-  FPopup.Controller     := Self.Controller;
+  FPopup.Controller     := ActiveController;   // #161
   FPopupList.BiDiMode   := BiDiMode;   // #153
 
   { Populate from the filtered subset. No selection is forced — the field text
@@ -1959,6 +2140,10 @@ begin
     CBS_SIMPLE combo never sends. (SetStyle closes an open popup BEFORE flipping into
     csSimple, so this guard never strands one.) }
   if FStyle = csSimple then Exit;
+  { #161: nothing open, no close-up -- OnCloseUp fired on every keystroke that matched no item,
+    and from Clear. }
+  if not FOpen and not ((FPopup <> nil) and FPopup.IsOpen) then Exit;
+  FOpen := False;
   { If the popup is open, close it — FPopup.Close fires PopupClosed (OnClose)
     which mirrors FCloseUpTick, Invalidates, and calls DoCloseUp. }
   if (FPopup <> nil) and FPopup.IsOpen then
@@ -2022,18 +2207,18 @@ begin
   case Key of
     VK_DOWN:
       begin
-        if FItemIndex < 0 then UserSelect(0)
-        else if FItemIndex < Cnt - 1 then UserSelect(FItemIndex + 1);
+        if FItemIndex < 0 then FieldKeySelect(0)
+        else if FItemIndex < Cnt - 1 then FieldKeySelect(FItemIndex + 1);
         Key := 0;
       end;
     VK_UP:
       begin
-        if FItemIndex < 0 then UserSelect(0)
-        else if FItemIndex > 0 then UserSelect(FItemIndex - 1);
+        if FItemIndex < 0 then FieldKeySelect(0)
+        else if FItemIndex > 0 then FieldKeySelect(FItemIndex - 1);
         Key := 0;
       end;
-    VK_HOME: begin UserSelect(0); Key := 0; end;
-    VK_END:  begin UserSelect(Cnt - 1); Key := 0; end;
+    VK_HOME: begin FieldKeySelect(0); Key := 0; end;
+    VK_END:  begin FieldKeySelect(Cnt - 1); Key := 0; end;
   end;
 end;
 
@@ -2042,13 +2227,19 @@ var nowTick: QWord; hit: Integer;
 begin
   if not IsEnabled then Exit;
   inherited UTF8KeyPress(UTF8Key);
+  if TyComboStyleHasEditBox(FStyle) then Exit;   // typing is the field's, not a jump between items
   if (UTF8Key = '') or (UTF8Key[1] < #32) then Exit;
   nowTick := GetTickCount64;
   if nowTick - FTypeAheadTick > 600 then FTypeAhead := '';   // restart after a pause
   FTypeAheadTick := nowTick;
   FTypeAhead := FTypeAhead + UTF8Key;
-  hit := TyComboTypeAheadMatch(FItems, FItemIndex, FTypeAhead);
-  if hit >= 0 then UserSelect(hit);
+  { #161: a growing prefix looks from the current item on -- 'Ap' after 'A' keeps Apple rather
+    than skipping to Apricot; a single key looks past it, to cycle. }
+  if Length(FTypeAhead) > Length(UTF8Key) then
+    hit := TyComboTypeAheadMatch(FItems, FItemIndex - 1, FTypeAhead)
+  else
+    hit := TyComboTypeAheadMatch(FItems, FItemIndex, FTypeAhead);
+  if hit >= 0 then FieldKeySelect(hit);
 end;
 
 { Popup event handlers }
@@ -2110,6 +2301,7 @@ end;
   or programmatic FPopup.Close).  This is the single bookkeeping point. }
 procedure TTyComboBox.PopupClosed(Sender: TObject);
 begin
+  FOpen := False;
   { Mirror the helper's close-up tick into the protected field so test subclasses
     (e.g. AgeCloseUpTick) and the Click guard can use it without touching FPopup. }
   if FPopup <> nil then
@@ -2130,11 +2322,64 @@ end;
 
 procedure TTyComboBox.PopupKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
-  if Key = VK_ESCAPE then
-  begin
-    CloseUp;
-    Key := 0;
+  case Key of
+    VK_ESCAPE:
+      begin
+        CloseUp;   // nothing was picked, so nothing is undone
+        Key := 0;
+      end;
+    VK_RETURN, VK_TAB, VK_F4:
+      begin
+        CommitPopupHighlight;
+        Key := 0;
+      end;
+    VK_UP, VK_DOWN:
+      begin
+        if ssAlt in Shift then CommitPopupHighlight else MovePopupHighlight(Key);
+        Key := 0;
+      end;
+    VK_PRIOR, VK_NEXT, VK_HOME, VK_END:
+      begin
+        MovePopupHighlight(Key);
+        Key := 0;
+      end;
   end;
+end;
+
+procedure TTyComboBox.MovePopupHighlight(AKey: Word);
+var
+  i, n, page: Integer;
+begin
+  if FPopupList = nil then Exit;
+  n := FPopupList.Items.Count;
+  if n = 0 then Exit;
+  i := FPopupList.ItemIndex;
+  page := FDropDownCount - 1;
+  if page < 1 then page := 1;
+  case AKey of
+    VK_DOWN:  if i < 0 then i := 0 else if i < n - 1 then Inc(i);
+    VK_UP:    if i < 0 then i := 0 else if i > 0 then Dec(i);
+    VK_NEXT:  begin if i < 0 then i := 0; Inc(i, page); if i > n - 1 then i := n - 1; end;
+    VK_PRIOR: begin Dec(i, page); if i < 0 then i := 0; end;
+    VK_HOME:  i := 0;
+    VK_END:   i := n - 1;
+  end;
+  FPopupList.OnChange := nil;   // a highlight, not a pick
+  try
+    FPopupList.SelectItem(i);
+  finally
+    FPopupList.OnChange := @PopupListChange;
+  end;
+end;
+
+procedure TTyComboBox.CommitPopupHighlight;
+begin
+  if (FPopupList <> nil) and (FPopupList.ItemIndex >= 0) then
+    PopupListChange(FPopupList);
+  { The key closes the list, also where a pick leaves it open (TTyCheckComboBox's ticks).
+    Deferred like the pick's own close; a second one finds nothing open. }
+  if DroppedDown then
+    Application.QueueAsyncCall(@DeferredCloseUp, 0);
 end;
 
 { Protected accessor for headless tests }

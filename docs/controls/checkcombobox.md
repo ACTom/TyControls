@@ -41,7 +41,7 @@ uses tyControls.CheckComboBox;
 | `DeleteItem(AIndex)` | **（API parity 新增）** 删一行(它的状态由池回收)。 |
 | `CheckAll(AState; AAllowGrayed = True; AAllowDisabled = True)` | **（API parity 新增）** 批量置位。`AAllowGrayed = False` 跳过当前是 `cbGrayed` 的行,`AAllowDisabled = False` 跳过禁用行——"把用户真正能改的都勾上"是一次调用,不是一个要自己写对排除条件的循环。 |
 | `Toggle(AIndex)` | **（API parity 新增）** 按点击会走的顺序推进一行。 |
-| `OnChange` | 勾选发生变化时触发(继承自 `TTyComboBox`,**不带索引**)。 |
+| `OnChange` | 勾选发生变化时触发(继承自 `TTyComboBox`,**不带索引**)。字段显示的是勾选,`ItemIndex` 指的那一行谁也看不到,所以改 `ItemIndex` / `Text` 不触发 `OnChange` 和 `OnSelect`。 |
 | `OnItemChange: TTyCheckItemChangeEvent` | **（API parity 新增）** `procedure(Sender: TObject; AIndex: Integer)`。告诉你**是哪一行**变了,用户切换和**程序化写入**都会触发。从前程序化 `Checked[i] := True` **什么都不发**,绑在组合框上的视图会静默变旧。 |
 
 另继承 `TTyComboBox` 的 `Items` / `Sorted` / `DropDownCount` / `TextHint` 等。
@@ -56,7 +56,8 @@ uses tyControls.CheckComboBox;
   - `AllowGrayed = False`:未勾 → 勾上 → 未勾。
   - `AllowGrayed = True`:未勾 → **半选** → 勾上 → 未勾。
 - **`ItemEnabled[i] = False` 的行拒绝用户的切换**(弹层的勾会被弹回原值);`Checked[]` / `State[]` / `CheckAll` 走属性写入,**不受**否决——代码想改就能改。
-- 点弹层外部 / 按 `Esc` → 关闭弹层(不影响已勾选状态)。
+- 字段上按空格、`↓` / `↑` / `Home` / `End` 或键入字符 → 打开弹层(字段显示的是勾选汇总,不是某一行,所以这些键不在字段上挪一个看不见的选中项);弹层里方向键移动高亮,空格勾选。
+- 点弹层外部 / 按 `Esc` / `Enter` → 关闭弹层(不影响已勾选状态)。
 - 代码里 `Checked[i] := True/False` 编程勾选;若弹层正开着也会同步。
 
 ---

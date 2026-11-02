@@ -52,6 +52,9 @@ type
       editor + Text from the joined 'Title'+LineEnding+'Subtitle' item string, which would
       leak an embedded newline. Rich two-line items are pick-only. }
     procedure SetStyle(AValue: TTyComboBoxStyle); override;
+    { #161: Text is the row's title, what the field shows -- it held the joined
+      'Title'#13#10'Subtitle', so Text := 'Title' selected nothing. }
+    function ItemCaption(AIndex: Integer): string; override;
   public
     { Append a rich row. ATitle + ASubtitle are stored joined by LineEnding (ASubtitle may
       be ''); AImageIndex < 0 => no image (stored in Items.Objects[] as AImageIndex + 1). }
@@ -80,6 +83,11 @@ begin
     also killed owner-draw, which is orthogonal to editability and which a rich-row combo is
     the likeliest of all of them to want. }
   inherited SetStyle(TyComboStylePickOnly(AValue));
+end;
+
+function TTyAdvancedComboBox.ItemCaption(AIndex: Integer): string;
+begin
+  Result := TitleOf(AIndex);
 end;
 
 { TTyAdvancedComboPopupList }
