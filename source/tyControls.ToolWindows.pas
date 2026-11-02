@@ -110,7 +110,7 @@ type
     FLastStripClick: QWord;
     FOnShow: TNotifyEvent;
     FOnHide: TNotifyEvent;
-    { 标题行高的 token 那一项的缓存,键 = (PPI, model 身份, 主题版本, RTL, 标题行模式)。
+    { 标题行高的 token 那一项的缓存,键 = (PPI, model 身份, 主题版本, RTL, 标题行模式, 样式类)。
       「有没有缓存」单拿一个布尔答,不拿 -1 当哨兵:token 是度量值,而 TyEvalLength
       不钳(Css.Values.pas:373),皮肤或 StyleOverride 里写 -1px 就真的解析成 -1 ——
       哨兵一旦跟真值撞上,缓存永远命中不了,Invalidate 里「上一次有值吗」也从此恒假,
@@ -125,6 +125,8 @@ type
     FHeaderPxAnchor: TObject;
     FHeaderPxRTL: Boolean;
     FHeaderPxMode: TTyToolWindowHeaderMode;
+    { 底线按样式类解析(HeaderRuleUncached):只换 StyleClass 时主题版本号不动,键里得有它。 }
+    FHeaderPxClass: string;
     FRelayouting: Boolean;
     { 上一次对齐时标题行的样子(那一条 + 整套几何)。操作区变宽 / 变高 / 被藏起来,
       标题行跟着变,而窗口尺寸一个像素没动 —— 缓存自己看不出来,见 AlignControls。 }
@@ -1947,15 +1949,17 @@ var
   mdl: TTyStyleModel;
   ver: Cardinal;
   mode: TTyToolWindowHeaderMode;
+  cls: string;
 begin
   mode := HeaderMode;
   mdl := ActiveController.Model;
   ver := mdl.ThemeVersion;
+  cls := TyStyleClassFor(Self, StyleClass);
   { 键里既要版本号也要 model 身份:版本号是每个 model 各自算的,只按版本号键控
     会把 A 的值端给 B —— Controller 是 published,中途换得掉。 }
   if (not FHeaderPxValid) or (FHeaderPxAnchor <> TObject(mdl)) or (FHeaderPxVer <> ver)
      or (FHeaderPxPPI <> Font.PixelsPerInch) or (FHeaderPxRTL <> IsRightToLeft)
-     or (FHeaderPxMode <> mode) then
+     or (FHeaderPxMode <> mode) or (FHeaderPxClass <> cls) then
   begin
     { twhNone 也进缓存,键照常存(连同 mode)。在查键之前就 Exit(0) 的话,缓存和
       FHeaderPxMode 都停在上一次 —— 比如还在栏里时的 26 —— 于是 Invalidate 从此每次都
@@ -1971,6 +1975,7 @@ begin
     FHeaderPxPPI := Font.PixelsPerInch;
     FHeaderPxRTL := IsRightToLeft;
     FHeaderPxMode := mode;
+    FHeaderPxClass := cls;
     FHeaderPxValid := True;
   end;
   Result := FHeaderPxCache;
