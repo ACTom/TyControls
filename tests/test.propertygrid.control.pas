@@ -97,6 +97,7 @@ type
     procedure TestADisplayValueFromOnGetPropertyRowFollowsTheValue;
     procedure TestOnEditingDoneIsNotAnnouncedWhenAnEditStarts;
     procedure TestOnEditingDoneComesOnceWhenAnEditEnds;
+    procedure TestAnEditOnAComponentBeingFreedIsDropped;
   end;
 
 implementation
@@ -914,6 +915,29 @@ begin
   FGrid.ClickPaintedEllipsis(FGrid.RowAt('Lines'));
   AssertEquals('the dialog wrote', 'z', Trim(FHolder.Lines.Text));
   AssertEquals('and once it was over', 3, FDone);
+end;
+
+{ The rows are rebuilt when a selected component is freed, and a rebuild now writes an edit in
+  progress first (#183) -- but not into the component going away. }
+procedure TPropertyGridControlTest.TestAnEditOnAComponentBeingFreedIsDropped;
+var host: TPGHostComp;
+begin
+  host := TPGHostComp.Create(nil);
+  FGrid.SelectedComponent := host;
+  FGrid.OnPropertyChanging := @Changing;
+  FGrid.ClickValue(FGrid.RowAt('Tag'));
+  AssertTrue('the editor opened', FGrid.EditingRow >= 0);
+  FGrid.Editor.TypeText('5');
+  BeginPoison;
+  try
+    host.Free;
+    FGrid.Refresh;
+  finally
+    EndPoison;
+  end;
+  AssertEquals('nothing was written into it', 0, FChanging);
+  AssertEquals('the editor is closed', -1, FGrid.EditingRow);
+  AssertNull('the selection let go', FGrid.SelectedObject);
 end;
 
 initialization

@@ -2361,6 +2361,7 @@ begin
   for i := 0 to High(FSelected) do
     if TObject(FSelected[i]) = TObject(AComponent) then at := i;
   if at < 0 then Exit;
+  if EditingRow >= 0 then EndEdit(False);   // the edit may be on the object being freed
   { Before anything of it is freed (TComponent.Destroy notifies first): it leaves the selection
     without being read -- rebuilding reads only the paths and the objects still selected. }
   for i := at to High(FSelected) - 1 do FSelected[i] := FSelected[i + 1];
@@ -2673,6 +2674,9 @@ var
   keptTop, at, shown: Integer;
 begin
   if FRows = nil then Exit;
+  { #183: an edit in progress is written before the rows go, as SelectObjects does -- the build
+    closed the editor with the rows, and what was typed was lost. }
+  if EditingRow >= 0 then EndEdit(True);
   { Not after a collection change: the old rows still carry the old indexes, and the list has
     already been moved along with the items (RemapExpanded). }
   if AHarvest then HarvestExpanded;
@@ -3096,15 +3100,21 @@ var
   coll: TCollection;
   idx, fromIdx, toIdx, gen: Integer;
   allow: Boolean;
-  collPath, sel: string;
+  collPath, sel, edPath: string;
 begin
   Result := nil;
   { #183: ReadOnly refuses the application's calls too, as design time does -- they are what its
     own menu does in place of the built-in one (doc section 8). }
   if (FRows = nil) or ReadOnly or (csDesigning in ComponentState) then Exit;
-  { An open cell editor first: its text is committed (or, for a delete, dropped) before the
-    rows move under it. A commit may rebuild the rows, so the path is resolved after it. }
-  if EditingRow >= 0 then EndEdit(AAction <> caDelete);
+  { An open cell editor first: its text is committed before the rows move under it -- unless it
+    is on the item being deleted, which takes it along (#183: an edit on any row was dropped). A
+    commit may rebuild the rows, so the path is resolved after it. }
+  if EditingRow >= 0 then
+  begin
+    edPath := RowPath(FlatRowAt(EditingRow));
+    EndEdit((AAction <> caDelete) or not (SameText(edPath, APath)
+      or SameText(Copy(edPath, 1, Length(APath) + 1), APath + '.')));
+  end;
   nd := FRows.FindByPath(APath);
   if (nd = nil) or not (nd.Kind in [pnkCollection, pnkCollectionItem])
     or (FRows.RootCount <> 1) then

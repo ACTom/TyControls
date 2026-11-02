@@ -24,6 +24,9 @@ type
     FAllow: Boolean;
     FLog: TStringList;          // 'changing add 2 2', 'changed delete 0 -1', ...
     FMade: TCollectionItem;
+    FWrites: Integer;
+    procedure CountWrite(Sender: TObject; AInstance: TPersistent; const APropName,
+      ANewValue: string; var AAllow: Boolean);
     procedure Changing(Sender: TObject; ACollection: TCollection; AAction: TTyCollectionAction;
       AIndex, ANewIndex: Integer; var AAllow: Boolean);
     procedure Changed(Sender: TObject; ACollection: TCollection; AAction: TTyCollectionAction;
@@ -59,6 +62,7 @@ type
     procedure TestAPathThatIsNoCollectionRaises;
     procedure TestReadOnlyRefusesThePublicMethodsToo;
     procedure TestARightClickMakesTheRowCurrentUnderTheApplicationsMenu;
+    procedure TestAnEditOnAnotherItemIsWrittenBeforeADelete;
     { a real host }
     procedure TestAStringGridsColumnsFollow;
   end;
@@ -118,6 +122,12 @@ begin
   TPGItem(FMade).Caption := 'made';
   TPGItem(FMade).Size := 5;
   AItem := FMade;
+end;
+
+procedure TPropertyGridCollectionsTest.CountWrite(Sender: TObject; AInstance: TPersistent;
+  const APropName, ANewValue: string; var AAllow: Boolean);
+begin
+  Inc(FWrites);
 end;
 
 function TPropertyGridCollectionsTest.Captions: string;
@@ -440,6 +450,26 @@ begin
   AssertEquals('the row clicked is current', 'Items[1]', FGrid.RowPath(FGrid.SelectedRow));
   FGrid.DeleteCollectionItem(FGrid.RowPath(FGrid.SelectedRow));
   AssertEquals('so the item clicked is the one deleted', 'first', Captions);
+end;
+
+{ #183: a delete dropped an edit in progress on ANY row. One on another item is written first; one
+  on the item deleted goes with it. }
+procedure TPropertyGridCollectionsTest.TestAnEditOnAnotherItemIsWrittenBeforeADelete;
+begin
+  FGrid.ClickValue(FGrid.RowAt('Items.[1].Caption'));
+  AssertTrue('the editor opened', FGrid.EditingRow >= 0);
+  FGrid.Editor.TypeText('kept');
+  FGrid.DeleteCollectionItem('Items[0]');
+  AssertEquals('the other item took what was typed', 'kept', Captions);
+  FGrid.AddCollectionItem('Items');
+  FWrites := 0;
+  FGrid.OnPropertyChanging := @CountWrite;
+  FGrid.ClickValue(FGrid.RowAt('Items.[0].Caption'));
+  FGrid.Editor.TypeText('gone');
+  FGrid.DeleteCollectionItem('Items[0]');
+  AssertEquals('an edit on the item deleted goes with it, unwritten', 0, FWrites);
+  AssertEquals('the item went', '', Captions);
+  AssertEquals('one item left', 1, FHolder.Items.Count);
 end;
 
 procedure TPropertyGridCollectionsTest.TestAPathThatIsNoCollectionRaises;

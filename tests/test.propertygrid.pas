@@ -74,6 +74,7 @@ type
     procedure TestReadOnlyRowDoesNotOpen;
     procedure TestAnEditInProgressIsWrittenBeforeTheSelectionMoves;
     procedure TestAColourCanGoBackToDefaultNoneOrASystemColour;
+    procedure TestAnEditInProgressIsWrittenBeforeTheRowsAreRebuilt;
   end;
 
 implementation
@@ -319,6 +320,24 @@ begin
   AssertEquals('a system colour', clBtnFace, FObj.Tint);
   FGrid.PickFromDropdown(FGrid.RowAt('Tint'), 'clNone');
   AssertEquals('clNone', clNone, FObj.Tint);
+end;
+
+{ #183, with the selection change of 447cac02: a rebuild (a filter set, Rebuild, a Refresh that
+  finds the structure changed) closed the editor with the rows, and what was typed was lost. }
+procedure TPropertyGridEditTest.TestAnEditInProgressIsWrittenBeforeTheRowsAreRebuilt;
+begin
+  FGrid.ClickValue(FGrid.RowAt('Alpha'));
+  AssertTrue('the editor opened', FGrid.EditingRow >= 0);
+  FGrid.Editor.TypeText('typed');
+  FGrid.HiddenProperties.Add('Zeta');
+  AssertFalse('rebuilt', FGrid.HasRow('Zeta'));
+  AssertEquals('the object took what was typed', 'typed', FObj.Alpha);
+  AssertEquals('the editor is closed', -1, FGrid.EditingRow);
+  AssertEquals('the row reads it', 'typed', FGrid.RowAt('Alpha').Value);
+  FGrid.ClickValue(FGrid.RowAt('Title'));
+  FGrid.Editor.TypeText('again');
+  FGrid.Rebuild;
+  AssertEquals('Rebuild too', 'again', string(FObj.Title));
 end;
 
 procedure TPropertyGridEditTest.TestTypedIntegerIsWritten;
