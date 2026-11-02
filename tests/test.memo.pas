@@ -1805,25 +1805,31 @@ begin
   end;
 end;
 
-{ Lines := X records an undo step only when it changes the content. That check compared
-  X.Text with the memo's own text, and the two never match any more -- an ordinary TStrings
-  ends every line with a break, the memo's text does not -- so every reassignment, the same
-  content included, would have recorded a step. }
+{ Lines := X starts the undo history again only when it changes the content (#156: a write by
+  code is where undo starts). That check compared X.Text with the memo's own text, and the two
+  never match any more -- an ordinary TStrings ends every line with a break, the memo's text
+  does not -- so every reassignment, the same content included, would have wiped the history. }
 procedure TTyMemoTextFidelityTest.TestReassigningTheSameLinesIsNotAStep;
 var
   m: TTyMemo;
-  src: TStringList;
+  src, same: TStringList;
 begin
   m := TTyMemo.Create(nil);
   src := TStringList.Create;
+  same := TStringList.Create;
   try
     src.Add('a');
     src.Add('b');
     m.Lines := src;
-    m.Lines := src;   // the same content again: nothing to undo
     m.Undo;
-    AssertEquals('one Undo takes back the one real change', 0, m.Lines.Count);
+    AssertEquals('text set by code is where undo starts', 2, m.Lines.Count);
+    m.SelText := 'x';                   // an edit: 'xa'
+    same.Assign(m.Lines);
+    m.Lines := same;                    // the same content again: the history stays
+    m.Undo;
+    AssertEquals('one Undo takes back the edit', 'a', m.Lines[0]);
   finally
+    same.Free;
     src.Free;
     m.Free;
   end;
