@@ -364,6 +364,9 @@ type
     FRawItems: array of TTyRawItem; // lazily sized, like the names
     FRawDimNames: TTyStringArray;
     FRawDimPos: array of Integer; // per store dimension; -1 = no position
+    { [spec 259] per store dimension: an encode put no element under it (a
+      gap at place 0 of a list) -- upstream has no such dimension at all }
+    FDimVoid: array of Boolean;
     FRawDimInfo: array of TTyRawDimInfo; // per raw position
     FTipPos, FLabelPos: array of Integer;
     FHasTipPos, FHasLabelPos: Boolean;
@@ -545,6 +548,11 @@ type
       position, which is not its own index once `encode` or a prepended row
       index moves it. Unset, a dimension is at its own index; -1 is none. }
     procedure SetRawDimPos(ADim, APos: Integer);
+    { [spec 259] the column reads no element: its encode's place is a gap.
+      Not the same as no position: a category on the row index has none
+      and is a dimension all the same. }
+    procedure SetDimVoid(ADim: Integer);
+    function DimVoid(ADim: Integer): Boolean;
     function RawDimPos(ADim: Integer): Integer;
     { ---- what each raw position is (see TTyRawDimInfo) ---- }
     procedure SetRawDimDisplay(APos: Integer; const AName: string);
@@ -2027,6 +2035,7 @@ begin
   Result.FRawItems := Copy(FRawItems);
   Result.FRawDimNames := Copy(FRawDimNames);
   Result.FRawDimPos := Copy(FRawDimPos);
+  Result.FDimVoid := Copy(FDimVoid);
   Result.FRawDimInfo := Copy(FRawDimInfo);
   Result.FTipPos := Copy(FTipPos);
   Result.FLabelPos := Copy(FLabelPos);
@@ -2311,6 +2320,7 @@ begin
   FRawItems := nil;
   FRawDimNames := nil;
   FRawDimPos := nil;
+  FDimVoid := nil;
   FRawDimInfo := nil;
   FTipPos := nil;
   FLabelPos := nil;
@@ -2525,6 +2535,24 @@ begin
     for i := i to ADim do FRawDimPos[i] := i;
   end;
   FRawDimPos[ADim] := APos;
+end;
+
+procedure TTyDataStore.SetDimVoid(ADim: Integer);
+var i: Integer;
+begin
+  if ADim < 0 then Exit;
+  if ADim > High(FDimVoid) then
+  begin
+    i := Length(FDimVoid);
+    SetLength(FDimVoid, ADim + 1);
+    for i := i to ADim do FDimVoid[i] := False;
+  end;
+  FDimVoid[ADim] := True;
+end;
+
+function TTyDataStore.DimVoid(ADim: Integer): Boolean;
+begin
+  Result := (ADim >= 0) and (ADim <= High(FDimVoid)) and FDimVoid[ADim];
 end;
 
 procedure TTyDataStore.GrowRawDimInfo(APos: Integer);

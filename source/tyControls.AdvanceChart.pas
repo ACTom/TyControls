@@ -3522,6 +3522,10 @@ type
       layout, and upstream throws reading one. The series is left out
       (FSeriesRefused) and a diagnostic says why. AEnc as filled up to
       ABound dimensions. }
+    { [spec 259] a pie's or a funnel's tooltip dimensions: `encode.tooltip`,
+      or defaultedLabel -- the last value dimension its encode reaches }
+    procedure BoxTipDims(const AEnc: TTySeriesEncode; const ASource: TTyChartSource;
+      AStore: TTyDataStore);
     procedure RefuseShortWhisker(ASlot: Integer; const AEnc: TTySeriesEncode;
       const ADims: TTySeriesDimArray; const ACoord: TTyCoordDimArray; ABound: Integer);
     { upstream's defaultedLabel and defaultedTooltip for one axis series,

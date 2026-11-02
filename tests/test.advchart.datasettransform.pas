@@ -31,7 +31,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Builder,
      tyControls.AdvanceChart.Option, tyControls.AdvanceChart.Dataset,
      tyControls.AdvanceChart.DataTransform, tyControls.AdvanceChart.Measure,
-     tyControls.AdvanceChart,
+     tyControls.AdvanceChart.Matrix, tyControls.AdvanceChart.Legend, tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TDtProbe = class(TTyAdvanceChart)
@@ -77,6 +77,7 @@ type
     procedure TestAFailingTransformIsADiagnostic;
     procedure TestAShortValueListLeavesItsSeriesOut;
     procedure TestAPieWithAGapAtPlaceZeroDrawsNothing;
+    procedure TestASliderOverAGapDrawsNoShadow;
     procedure TestTheRegistryNamesItsTransforms;
     procedure TestTheSortIsStableForAConsistentComparator;
   end;
@@ -798,6 +799,28 @@ begin
       Result := Result + IntToStr(SlotSeriesIndex(hits[h].Slots[k])) + ' ';
 end;
 
+{ [spec 259] the legend's item names, joined by '|', and the description }
+procedure CheckMeta(ATest: TAdvChartDatasetTransformTest; AChart: TDtProbe; ACase: TJSONObject);
+var
+  lay: TTyLegendLayout;
+  i: Integer;
+  got, want: string;
+begin
+  if not (ACase.Find('legend') is TJSONArray) then Exit;
+  want := '';
+  for i := 0 to ACase.Arrays['legend'].Count - 1 do
+    want := want + ACase.Arrays['legend'].Strings[i] + '|';
+  got := '';
+  if AChart.LegendLayoutCount > 0 then
+  begin
+    lay := AChart.LegendLayout(0);
+    for i := 0 to High(lay.Items) do got := got + lay.Items[i].Name + '|';
+  end;
+  ATest.SameStr('legend', got, want);
+  if ACase.Find('aria') is TJSONString then
+    ATest.SameStr('aria', AChart.AriaDescription, ACase.Strings['aria']);
+end;
+
 procedure TAdvChartDatasetTransformTest.CheckRender(ACase: TJSONObject);
 var
   rend: TJSONObject;
@@ -810,6 +833,8 @@ var
   e: TTyRange;
   lst: TTyPaintList;
   el: TTyChartElement;
+  mx: TTyMatrix;
+  d: Integer;
 begin
   rend := ACase.Objects['render'];
   cw := TJSONObject(FRoot).Integers['W'];
@@ -880,6 +905,33 @@ begin
         SameInt(Format('s%d[%d] drawn', [arr.Objects[i].Integers['index'], k]),
           Ord(ItemDrawn(lst, arr.Objects[i].Integers['index'], k)),
           Ord(arr.Objects[i].Arrays['els'].Booleans[k]));
+  end;
+  CheckMeta(Self, FChart, ACase);
+  { [spec 259] a matrix's category lists: a collecting header takes what
+    the series' x and y dimensions parse, a list's later entries too }
+  if ACase.Find('matrix') is TJSONArray then
+  begin
+    arr := ACase.Arrays['matrix'];
+    for i := 0 to arr.Count - 1 do
+    begin
+      mx := FChart.MatrixLayout(arr.Objects[i].Integers['index']);
+      Inc(FCompared);
+      if mx = nil then
+      begin
+        Miss('no matrix here');
+        Continue;
+      end;
+      for d := 0 to 1 do
+      begin
+        if d = 0 then cats := arr.Objects[i].Arrays['x'] else cats := arr.Objects[i].Arrays['y'];
+        SameInt(Format('matrix %d dim %d categories', [i, d]), mx.Dims[d].Meta.Count, cats.Count);
+        if mx.Dims[d].Meta.Count = cats.Count then
+          for k := 0 to cats.Count - 1 do
+            SameStr(Format('matrix %d dim %d category %d', [i, d, k]),
+              mx.Dims[d].Meta.CategoryAt(k), cats.Strings[k]);
+      end;
+      Inc(FExtents);
+    end;
   end;
   { [spec 255] a scatter's symbol sizes: an extra column of an encode list
     is no size }
@@ -1071,9 +1123,12 @@ begin
 end;
 
 { [spec 259] A PIE WHOSE VALUE LIST HAS A GAP AT PLACE 0 (`value: ['nope',
-  'w']`): mapDimension('value') answers nothing, no sector has a layout, and
-  upstream's labels -- the text undefined -- lie wholly left of the canvas
-  (the oracle's guard). Nothing is drawn here: no sector, no label. }
+  'w']`): mapDimension('value') answers nothing and no sector has a layout;
+  upstream's labels hold an undefined text, which zrender paints as nothing,
+  and lie wholly left of the canvas besides (the oracle's guard). Nothing is
+  drawn here: no sector, no label. The legend and the description list the
+  rows as upstream's do; the tooltip a showTip reaches is the series-text
+  suite's. }
 procedure TAdvChartDatasetTransformTest.TestAPieWithAGapAtPlaceZeroDrawsNothing;
 var
   c: TJSONObject;
@@ -1082,7 +1137,7 @@ var
 begin
   c := CaseById('r-list-pie-gap');
   AssertNotNull('the case', c);
-  AssertEquals('the deviation', 'off-canvas-labels', c.Strings['deviation']);
+  AssertEquals('the deviation', 'undefined-labels', c.Strings['deviation']);
   for i := 0 to c.Arrays['labelPos'].Count - 1 do
     AssertTrue('upstream label ' + IntToStr(i) + ' off the canvas',
       FromHex(c.Arrays['labelPos'].Objects[i].Arrays['rect'].Strings[0])
@@ -1095,9 +1150,40 @@ begin
     bmp.Free;
   end;
   AssertTrue('nothing drawn', SeriesDrawsNothing(FChart.List, 0));
+  { the legend and the description list every row all the same }
+  FBad := 0;
+  FReport := '';
+  CheckMeta(Self, FChart, c);
+  AssertEquals('the legend and the description:' + FReport, 0, FBad);
   for i := 0 to c.Arrays['drawn'].Objects[0].Arrays['els'].Count - 1 do
     AssertTrue('upstream: a sector element with no layout',
       c.Arrays['drawn'].Objects[0].Arrays['els'].Booleans[i]);
+end;
+
+{ [spec 259] A SLIDER OVER A COORDINATE WHOSE LIST HAS A GAP AT PLACE 0
+  (`x: ['nope', 3]`): its data shadow reads mapDimension, which answers
+  nothing, and upstream throws drawing it. The port leaves the shadow out;
+  the window and the filter go by w as upstream's inside dataZoom does (the
+  r-list-dz-gap-* cases). }
+procedure TAdvChartDatasetTransformTest.TestASliderOverAGapDrawsNoShadow;
+var
+  c: TJSONObject;
+  bmp: TBGRABitmap;
+begin
+  c := CaseById('r-list-dz-gap-slider');
+  AssertNotNull('the case', c);
+  AssertTrue('upstream throws', c.Objects['render'].Find('error') <> nil);
+  NewChart(c.Objects['option']);
+  bmp := TBGRABitmap.Create(600, 400, BGRA(255, 255, 255, 255));
+  try
+    FChart.Render(bmp.Canvas, Rect(0, 0, 600, 400), 96);
+  finally
+    bmp.Free;
+  end;
+  AssertFalse('no data shadow', FChart.DataZoomSliderLayout(0).ShadowDrawn);
+  { (x reads nothing: no point is drawn, here or upstream) }
+  AssertEquals('the rows w keeps in the window', 2, FChart.SeriesStore(0).Count);
+  AssertEquals('raw 1 first', 1, FChart.SeriesStore(0).GetRawIndex(0));
 end;
 
 procedure TAdvChartDatasetTransformTest.TestTheRegistryNamesItsTransforms;

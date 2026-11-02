@@ -333,11 +333,27 @@ function labelPosOut(chart) {
   return out;
 }
 
+// [spec 259] each matrix's two category lists, where a case asks: a
+// collecting header takes the categories its series' x and y dimensions
+// parse, a dimension at a time in the table's order
+function matrixOut(chart) {
+  const out = [];
+  chart.getModel().eachComponent('matrix', (mm, index) => {
+    const cats = d => mm.getDimensionModel(d).dim.getOrdinalMeta().categories.map(String);
+    out.push({ index, x: cats('x'), y: cats('y') });
+  });
+  return out;
+}
+
 function runCase(c) {
   const option = clone(c.option);
   const rec = { id: c.id, group: c.group, note: c.note, option };
   if (c.deviation) rec.deviation = c.deviation;
   const chart = echarts.init(null, null, { renderer: 'svg', ssr: true, width: W, height: H });
+  // [spec 259] aria writes its description on the chart's dom, which an
+  // SSR chart has not: a stand-in that keeps the attributes
+  const attrs = {};
+  if (c.meta) chart.getZr().dom = { setAttribute(k, v) { attrs[k] = String(v); }, getAttribute(k) { return attrs[k]; } };
   try {
     let threw = null;
     try {
@@ -359,6 +375,12 @@ function runCase(c) {
     if (c.ext && rec.render && !rec.render.error) rec.sizes = sizesOut(chart);
     if (c.drawn && rec.render && !rec.render.error) rec.drawn = drawnOut(chart);
     if (c.labelPos && rec.render && !rec.render.error) rec.labelPos = labelPosOut(chart);
+    if (c.matrix && rec.render && !rec.render.error) rec.matrix = matrixOut(chart);
+    if (c.meta && rec.render && !rec.render.error) {
+      const leg = chart.getModel().getComponent('legend');
+      rec.legend = leg ? leg.getData().map(d => String(d.get('name'))) : null;
+      rec.aria = attrs['aria-label'] == null ? null : attrs['aria-label'];
+    }
     rec.datasets = datasetsOut(chart);
     return rec;
   } finally {
@@ -802,14 +824,51 @@ L('r-list-box-gap', "a boxplot y [1, 2, 'nope', 4, 5]: the median a gap -- nothi
 // a pie and a funnel draw place 0 of value; the label is the name
 L('r-list-pie-vw', 'pie value [v, w]: the sectors are v', { dataset: { source: clone(PVGW) },
   series: [{ type: 'pie', encode: { itemName: 'g', value: ['v', 'w'] }, label: { show: true } }] });
-// (the labels upstream leaves are a deviation: wholly off the canvas, the
-// port builds none -- the guard holds them off it)
-L('r-list-pie-gap', "pie value ['nope', 'w']: place 0 a gap -- no sector has a layout, the labels' text undefined, off the canvas",
-  { dataset: { source: clone(PVGW) }, series: [{ type: 'pie', encode: { itemName: 'g', value: ['nope', 'w'] }, label: { show: true } }] },
-  { drawn: true, labelPos: true, deviation: 'off-canvas-labels' });
+// (the labels upstream leaves hold an undefined text -- zrender paints
+// nothing for it -- and lie wholly off the canvas; the port builds none, a
+// test of its own holds that. The legend and the description still list
+// the rows.)
+L('r-list-pie-gap', "pie value ['nope', 'w']: place 0 a gap -- no sector has a layout, the labels' text undefined, off the canvas; the legend and aria list the rows",
+  { aria: { enabled: true }, legend: {}, dataset: { source: clone(PVGW) },
+    series: [{ type: 'pie', name: 'P', encode: { itemName: 'g', value: ['nope', 'w'] }, label: { show: true } }] },
+  { drawn: true, labelPos: true, meta: true, deviation: 'undefined-labels' });
+L('r-list-pie-vw-meta', "pie value [v, w]: the legend and aria the same rows", { aria: { enabled: true }, legend: {},
+  dataset: { source: clone(PVGW) }, series: [{ type: 'pie', name: 'P', encode: { itemName: 'g', value: ['v', 'w'] } }] }, { meta: true });
+// a dataZoom over a coordinate whose list has a gap at place 0 (x ['nope',
+// 3]): mapDimensionsAll is [undefined, w], the window and the filters go by
+// w (an inside one: a slider's data shadow reads mapDimension -- nothing --
+// and upstream throws drawing it)
+const dzg = (filterMode) => ({ dataset: { source: [['p', 'v', 'g', 'w'], [1, 6, 'A', 9], [2, 7, 'B', 4], [3, 8, 'A', 2], [4, 5, 'B', 7], [5, 9, 'A', 1]] },
+  xAxis: { type: 'value' }, yAxis: { type: 'value' }, dataZoom: [{ type: 'inside', start: 20, end: 60, filterMode }],
+  series: [{ type: 'scatter', encode: { x: ['nope', 3], y: 1 } }] });
+L('r-list-dz-gap-filter', "an inside dataZoom 20-60 over x ['nope', 3], 'filter': by w", dzg('filter'), EXT);
+L('r-list-dz-gap-weak', "the same, 'weakFilter'", dzg('weakFilter'), EXT);
+L('r-list-dz-gap-empty', "the same, 'empty'", dzg('empty'), EXT);
+L('r-list-dz-gap-slider', "a slider over x ['nope', 3]: its data shadow reads no dimension, upstream throws", Object.assign(dzg('filter'),
+  { dataZoom: [{ start: 20, end: 60 }] }), {});
+// aria's data.getValues is in the dimensions' order: an element no
+// coordinate reads as it is (a guessed category its text), a gap at place 0
+// no dimension
+L('r-list-aria-own-gap', "own data x ['nope', 1], y 0: the description 1, 2, 7 -- the gap is no dimension", { aria: { enabled: true },
+  xAxis: { type: 'value' }, yAxis: { type: 'value' },
+  series: [{ type: 'scatter', encode: { x: ['nope', 1], y: 0 }, data: [[1, 2, 7], [3, 4, 8]] }] }, { meta: true });
+L('r-list-aria-own-text', 'own data, a third element of text: the description lists it as written', { aria: { enabled: true },
+  xAxis: { type: 'value' }, yAxis: { type: 'value' }, series: [{ type: 'scatter', data: [[1, 2, 'A'], [3, 4, 'B']] }] }, { meta: true });
+L('r-list-aria-swap', 'own data x 1, y 0: the description in the order of the elements', { aria: { enabled: true },
+  xAxis: { type: 'value' }, yAxis: { type: 'value' }, series: [{ type: 'scatter', encode: { x: 1, y: 0 }, data: [[1, 2, 7], [3, 4, 8]] }] },
+  { meta: true });
 L('r-list-funnel-gap', "funnel value ['nope', 'w']: place 0 a gap -- the trapezoids have no width, the names still drawn",
   { dataset: { source: clone(PVGW) }, series: [{ type: 'funnel', encode: { itemName: 'g', value: ['nope', 'w'] }, label: { show: true } }] },
   { drawn: true });
+// a matrix: a list's later x or y entries are parsed by the header's
+// category list too -- a collecting header collects them
+const MXR = [['p', 'q', 'v', 'w'], ['A', 'U', 5, 'Z'], ['B', 'V', 6, 'A']];
+const mxc = (encode, type) => ({ matrix: {}, dataset: { source: clone(MXR) },
+  visualMap: { show: false, min: 0, max: 10, dimension: 2, seriesIndex: 0 },
+  series: [{ type: type || 'heatmap', coordinateSystem: 'matrix', encode, label: { show: true } }] });
+L('r-list-matrix-x', 'matrix heatmap x [0, 3]: the collecting x header takes A, B, then Z', mxc({ x: [0, 3], y: 1, value: 2 }), { matrix: true });
+L('r-list-matrix-x-rev', 'matrix scatter x [3, 0]: still A, B, Z -- p first in the table; the points on w', mxc({ x: [3, 0], y: 1, value: 2 }, 'scatter'), { matrix: true });
+L('r-list-matrix-y', 'matrix scatter y [1, 3]', mxc({ x: 0, y: [1, 3], value: 2 }, 'scatter'), { matrix: true });
 L('r-list-funnel-vw', 'funnel value [v, w]: the trapezoids are v',
   { dataset: { source: clone(PVGW) }, series: [{ type: 'funnel', encode: { itemName: 'g', value: ['v', 'w'] }, label: { show: true } }] });
 
@@ -925,7 +984,11 @@ function guards(o) {
   guard("list: the categories in the table's order", JSON.stringify(cs('r-list-cat').render.axes[0].categories)
     === JSON.stringify(['1', '2', '3', 'A', 'B']));
   guard('list: the stack spans the totals of v and w', ext('r-list-stack-second', 'y') === '0,12');
+  guard('matrix: x [3, 0] collects A, B, Z', JSON.stringify(cs('r-list-matrix-x-rev').matrix[0].x) === JSON.stringify(['A', 'B', 'Z'])
+    && JSON.stringify(cs('r-list-matrix-y').matrix[0].y) === JSON.stringify(['U', 'V', 'Z', 'A']));
   const thrown = id => cs(id).render.error;
+  guard('dataZoom: a gap at place 0 filters by w; a slider throws', ext('r-list-dz-gap-filter', 'x') === '1.8,5.4'
+    && cs('r-list-dz-gap-filter').render.series[0].count === 2 && /reading '0'/.test(thrown('r-list-dz-gap-slider') || ''));
   guard('short: a candlestick y [1, 2] throws', /sign/.test(thrown('r-list-candle-two') || '') && /sign/.test(thrown('r-list-candle-one') || '')
     && /sign/.test(thrown('r-list-candle-own') || '') && /sign/.test(thrown('r-list-candle-line') || ''));
   guard('short: a boxplot y [1, 2, 3, 4] throws', /ends/.test(thrown('r-list-box-four') || '') && !cs('r-list-box-five').render.error);
@@ -933,6 +996,8 @@ function guards(o) {
   guard('short: the gaps draw nothing, the full lists draw', cs('r-list-candle-gap').drawn[0].els.every(e => !e)
     && cs('r-list-box-gap').drawn[0].els.every(e => !e) && cs('r-list-candle-four').drawn[0].els.every(e => e)
     && cs('r-list-box-five').drawn[0].els.every(e => e));
+  guard("pie ['nope', 'w']: the legend A, B and every row in the description", JSON.stringify(cs('r-list-pie-gap').legend) === '["A","B"]'
+    && /the data for B is 2, 7, B, 4/.test(cs('r-list-pie-gap').aria));
   guard("pie ['nope', 'w']: every label 'undefined' and wholly left of the canvas", cs('r-list-pie-gap').labelPos.length === 3
     && cs('r-list-pie-gap').render.series[0].labels.every(l => l.text === 'undefined')
     && cs('r-list-pie-gap').labelPos.every(l => num(l.rect[0]) + num(l.rect[2]) < 0));

@@ -495,6 +495,10 @@ begin
       if store = nil then Break;
       cols := store.DimsOfCoord(ax.Dim);
       if Length(cols) > 0 then thisCol := cols[0] else thisCol := -1;
+      { [spec 259] a coordinate whose encode list has a gap at place 0:
+        mapDimension answers nothing and upstream throws drawing the
+        shadow -- it is left out }
+      if (thisCol >= 0) and store.DimVoid(thisCol) then Break;
       otherCol := -1;
       { a candlestick's shadow is its open }
       if b.SeriesType = 'candlestick' then otherCol := store.DimIndexOf('open');
