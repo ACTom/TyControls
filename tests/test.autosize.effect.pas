@@ -13,7 +13,8 @@ uses
   tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.Edit,
   tyControls.NumericEdit, tyControls.SpinEdit, tyControls.ComboBox, tyControls.StatusBar,
   tyControls.ScrollBar, tyControls.Rating, tyControls.Memo, tyControls.TreeView,
-  tyControls.Badge, test.dpi.support;
+  tyControls.Badge, tyControls.Tag, tyControls.Segmented, tyControls.Pagination,
+  tyControls.Steps, tyControls.Breadcrumb, test.dpi.support;
 
 type
   TAutoSizeEffectTest = class(TTestCase)
@@ -42,6 +43,7 @@ type
     procedure TestABadgeTakesItsPill;
     procedure TestAMemoAndATreeKeepTheirBounds;
     procedure TestAThemeSwitchRefits;
+    procedure TestAThemeSwitchRefitsTheContentSizedBars;
   end;
 
 implementation
@@ -281,6 +283,74 @@ begin
     AssertTrue(Format('and that moved it (%d -> %d)', [before, Held(e)]), Held(e) <> before);
   finally
     FreeAndNil(FForm);   // the edit goes before its controller
+    ctl.Free;
+  end;
+end;
+
+{ #114: the tag, the segmented control, the pagination, the steps and the breadcrumb take
+  their size from their content in the theme's font and padding, so a theme switch re-fits
+  them too -- not only the first fit. }
+procedure TAutoSizeEffectTest.TestAThemeSwitchRefitsTheContentSizedBars;
+var
+  ctl: TTyStyleController;
+  tg: TTyTag;
+  sg: TTySegmented;
+  pg: TTyPagination;
+  st: TTySteps;
+  bc: TTyBreadcrumb;
+  ctls: array[0..4] of TControl;
+  w0, h0: array[0..4] of Integer;
+  i, w, h: Integer;
+begin
+  ctl := TTyStyleController.Create(nil);
+  try
+    tg := TTyTag.Create(FForm);
+    tg.Caption := 'Tag';
+    sg := TTySegmented.Create(FForm);
+    sg.Items.Add('One');
+    sg.Items.Add('Two');
+    pg := TTyPagination.Create(FForm);
+    pg.PageCount := 5;
+    st := TTySteps.Create(FForm);
+    st.Items.Add('Cart');
+    st.Items.Add('Pay');
+    bc := TTyBreadcrumb.Create(FForm);
+    bc.Items.Add('Home');
+    bc.Items.Add('Docs');
+    ctls[0] := tg; ctls[1] := sg; ctls[2] := pg; ctls[3] := st; ctls[4] := bc;
+    tg.Controller := ctl; sg.Controller := ctl; pg.Controller := ctl;
+    st.Controller := ctl; bc.Controller := ctl;
+    for i := 0 to 4 do
+    begin
+      Place(ctls[i], 300, 80);
+      ctls[i].AutoSize := True;
+    end;
+    Fit;
+    for i := 0 to 4 do
+    begin
+      w0[i] := 0;
+      h0[i] := 0;
+      ctls[i].GetPreferredSize(w0[i], h0[i], True, False);
+    end;
+    ctl.LoadThemeCss(
+      'TyTag { font-size: 24px; padding: 10px 20px; }' +
+      'TySegmented { font-size: 24px; padding: 10px; }' +
+      'TySegmentedItem { font-size: 24px; padding: 10px 20px; }' +
+      'TyPagination { font-size: 24px; padding: 10px; }' +
+      'TyPaginationItem { font-size: 24px; padding: 10px 20px; }' +
+      'TySteps { font-size: 24px; padding: 10px; }' +
+      'TyBreadcrumb { font-size: 24px; padding: 10px; }' +
+      'TyBreadcrumbItem { font-size: 24px; padding: 10px 20px; }');
+    for i := 0 to 4 do
+    begin
+      w := 0;
+      h := 0;
+      ctls[i].GetPreferredSize(w, h, True, False);
+      AssertTrue(Format('%s asks again under the new theme (%dx%d -> %dx%d)',
+        [ctls[i].ClassName, w0[i], h0[i], w, h]), (w <> w0[i]) or (h <> h0[i]));
+    end;
+  finally
+    FreeAndNil(FForm);   // the controls go before their controller
     ctl.Free;
   end;
 end;

@@ -316,6 +316,7 @@ end;
 constructor TTyCustomSegmented.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   FItems := TStringList.Create;
   TStringList(FItems).OnChange := @ItemsChanged;
   FItemIndex := -1;
