@@ -13,7 +13,7 @@ unit test.parity.maskedit;
      editable slot at all and the field can never take a keystroke -- silently.
 
   (2) is now closed at the root: the language IS LCL/Delphi's. The tests below pin the
-  vocabulary, the two deliberate departures from it, and the one refusal that survives.
+  vocabulary, the one deliberate departure from it, and the one refusal that survives.
 
   The defect assertions were watched go RED against the code as it shipped. The ones that
   describe the NEW vocabulary could not be -- half of them do not compile against a unit
@@ -42,7 +42,7 @@ type
     procedure AMaskWithNoEditableSlotIsRefused;
     procedure AnLclMaskTripleIsHonoured;
     procedure LclSlotCodesMeanWhatLclMeansByThem;
-    procedure TheOneCodeTheTwoLanguagesDisagreeAboutIsRefused;
+    procedure TheHashIsLclsOptionalDigitOrSign;
     procedure TheSeparatorCodesStayLiterals;
   end;
 
@@ -388,23 +388,47 @@ begin
   end;
 end;
 
-{ '#' is the ONE code the two languages disagree about. Here it meant a REQUIRED digit;
-  in LCL/Delphi it means an OPTIONAL digit-or-sign. Reading an existing '##/##/####' the
-  new way would leave a mask that IsComplete and ValidateEdit pass while it is EMPTY --
-  a validator going quiet, which is the single failure a masked edit exists to prevent,
-  and it would happen without a compile error or a run-time complaint anywhere. So the
-  code is refused rather than reinterpreted, and the message names both readings. }
-procedure TMaskParityTest.TheOneCodeTheTwoLanguagesDisagreeAboutIsRefused;
+{ '#' is LCL's optional digit-or-sign (maskedit.pp cMask_NumberPlusMin): a digit, '+',
+  '-' or a space, in a slot that may be left blank. This control used to refuse it -- in
+  its old three-code dialect '#' was a REQUIRED digit, and reading it the LCL way would
+  have let those masks pass validation empty -- so a form ported from LCL raised while it
+  loaded (#193). It now means what LCL means by it. }
+procedure TMaskParityTest.TheHashIsLclsOptionalDigitOrSign;
+var
+  M: TTyMaskEdit;
 begin
-  AssertMaskRefused('the old required-digit spelling', '##/##/####');
-  AssertMaskRefused('one hash among working slots', '19##');
-  AssertMaskRefused('a hash in the body of a triple', '##;1;_');
-  { ...but a '#' is a perfectly good PLACEHOLDER, and the blank field is not mask body. }
+  AssertMaskTaken('a signed number', '#000');
+  AssertMaskTaken('hashes among other slots', '##/##/####');
+  AssertMaskTaken('a hash in the body of a triple', '##;1;_');
   AssertMaskTaken('a hash as the blank character', '00/00;1;#');
-  AssertTrue('and the reason names the replacement',
-    Pos('"0"', TyMaskRejectReason('###')) > 0);
 
-  { Escaped, it is an ordinary literal -- which is the documented way to keep one. }
+  AssertTrue('a digit', TyMaskSlotAccepts('#', '7'));
+  AssertTrue('a plus', TyMaskSlotAccepts('#', '+'));
+  AssertTrue('a minus', TyMaskSlotAccepts('#', '-'));
+  AssertTrue('a space, as LCL and Delphi take one', TyMaskSlotAccepts('#', ' '));
+  AssertFalse('but not when the space is the placeholder', TyMaskSlotAccepts('#', ' ', ' '));
+  AssertFalse('not a letter', TyMaskSlotAccepts('#', 'a'));
+  AssertFalse('not a decimal point', TyMaskSlotAccepts('#', '.'));
+  AssertFalse('a sign is not a digit', TyMaskSlotAccepts('9', '-'));
+  AssertEquals('its own code, not 9', '#', TyMaskNextSlot('0#', 1));
+
+  { Optional: blank hashes do not hold the field back, the required digits beside them do. }
+  AssertTrue('blank hashes are complete', TyMaskIsComplete('##/##/####', '__/__/____', '_'));
+  AssertFalse('a blank required digit is not', TyMaskIsComplete('#000', '-12_', '_'));
+  AssertTrue('a sign and three digits', TyMaskIsComplete('#000', '-123', '_'));
+
+  M := TTyMaskEdit.Create(nil);
+  try
+    M.Mask := '#000';
+    M.Text := '-4x27';
+    AssertEquals('the sign lands in the hash and the digits after it', '-427', M.Text);
+    AssertTrue('complete', M.IsComplete);
+    AssertEquals('and the sign is part of the value', '-427', M.MaskedValue);
+  finally
+    M.Free;
+  end;
+
+  { Escaped, it is an ordinary literal. }
   AssertMaskTaken('an escaped hash is a literal', '\#000');
   AssertEquals('and it draws', '#___', TyMaskApply('\#000', '', '_'));
 end;
