@@ -553,6 +553,7 @@ end;
 constructor TTyPagination.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
+  FFitsToStyle := True;   // AutoSize follows the theme (#114)
   // One page, showing it: the resting state of a host that has data but only a screenful.
   FPageCount := 1;
   FPageIndex := 0;
