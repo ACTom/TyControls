@@ -47,3 +47,6 @@ TyControls 的属性名和语义尽量与 LCL 一致，从 Lazarus 移植的代�
 | 同上(`TTyColorBox` 除外) | `Style` | 下拉列表里只列出只能选的样式;可编辑的样式设上去也会被换成对应的只能选样式 |
 | `TTyDrawGrid` | `HideSelectionWhenInactive`、`FadeUnfocusedSelection`、`MinEditorWidth` | 没有选区，也没有内置的单元格编辑器;`TTyStringGrid` 上照常显示 |
 | 网格的 `Header` | `MainColumn` | 网格没有主列 |
+| `TTyShellListView` | `OwnerData`、`ItemCount`、`Items`、`OnGetItemText`、`OnGetItemImage`、`OnGetItemGroup` | 列表内容由它自己从文件夹读 |
+| `TTyShellTreeView` | `NodeDataSize`、`RootNodeCount`、`Items`、`OnInitChildren` | 节点由它自己从文件系统建 |
+| `TTyEdit` 及其子类、`TTyMemo`、`TTySpinEdit`、`TTyDateTimePicker` | `ChildSizing` | 没有要排的子控件 |

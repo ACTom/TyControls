@@ -47,3 +47,6 @@ These properties can never act on the control that publishes them. They are kept
 | The same, except `TTyColorBox` | `Style` | The list offers only the pick-only styles; an editable style is replaced by its pick-only counterpart anyway |
 | `TTyDrawGrid` | `HideSelectionWhenInactive`, `FadeUnfocusedSelection`, `MinEditorWidth` | No selection and no built-in cell editor; still shown on `TTyStringGrid` |
 | A grid's `Header` | `MainColumn` | A grid has no main column |
+| `TTyShellListView` | `OwnerData`, `ItemCount`, `Items`, `OnGetItemText`, `OnGetItemImage`, `OnGetItemGroup` | It lists the folder itself |
+| `TTyShellTreeView` | `NodeDataSize`, `RootNodeCount`, `Items`, `OnInitChildren` | It builds its nodes from the file system |
+| `TTyEdit` and descendants, `TTyMemo`, `TTySpinEdit`, `TTyDateTimePicker` | `ChildSizing` | No children to size |

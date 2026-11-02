@@ -20,6 +20,8 @@ uses
   tyControls.FilterComboBox, tyControls.CharImage, tyControls.GlyphButtons,
   tyControls.NumericEdit, tyControls.ComboBox, tyControls.AdvancedComboBox,
   tyControls.CheckComboBox, tyControls.ColorBox, tyControls.OfficeComboBox, tyControls.Grid,
+  tyControls.ListView, tyControls.TreeView, tyControls.Edit, tyControls.Memo,
+  tyControls.SpinEdit, tyControls.DateTimePicker,
   { The SynEdit-backed tycss editor for StyleOverride (design-time only). }
   tyControls.Design.Css.Editor;
 
@@ -899,6 +901,24 @@ begin
   RegisterPropertyEditor(TypeInfo(Integer), TTyStringGrid, 'MinEditorWidth', TIntegerPropertyEditor);
   // A grid's header has no main column: nothing in the grid reads it (see TTyGridHeader).
   RegisterPropertyEditor(TypeInfo(Integer), TTyGridHeader, 'MainColumn', THiddenPropertyEditor);
+  { #192: a shell list view lists the folder itself, in the owner-data mode it switches on: the
+    list-view model and its owner-data hooks are its own business. }
+  RegisterPropertyEditor(TypeInfo(Boolean), TTyShellListView, 'OwnerData', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(Integer), TTyShellListView, 'ItemCount', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TTyListItems), TTyShellListView, 'Items', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TTyListGetTextEvent), TTyShellListView, 'OnGetItemText', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TTyListGetImageEvent), TTyShellListView, 'OnGetItemImage', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TTyListGetGroupEvent), TTyShellListView, 'OnGetItemGroup', THiddenPropertyEditor);
+  // ... and a shell tree view builds its nodes from the file system.
+  RegisterPropertyEditor(TypeInfo(Integer), TTyShellTreeView, 'NodeDataSize', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(Cardinal), TTyShellTreeView, 'RootNodeCount', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TTyTreeNodes), TTyShellTreeView, 'Items', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TTyTreeInitChildrenEvent), TTyShellTreeView, 'OnInitChildren', THiddenPropertyEditor);
+  // The text inputs have no children to size.
+  RegisterPropertyEditor(TypeInfo(TControlChildSizing), TTyEdit, 'ChildSizing', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TControlChildSizing), TTyMemo, 'ChildSizing', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TControlChildSizing), TTySpinEdit, 'ChildSizing', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TControlChildSizing), TTyDateTimePicker, 'ChildSizing', THiddenPropertyEditor);
 end;
 
 end.

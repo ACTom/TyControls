@@ -21,6 +21,8 @@ type
     procedure TestPickOnlyCombosListOnlyPickOnlyStyles;
     procedure TestTheDrawGridHidesWhatOnlyTheStringGridUses;
     procedure TestAGridsHeaderHidesMainColumn;
+    procedure TestTheShellViewsHideTheirModels;
+    procedure TestTheTextInputsHideChildSizing;
   end;
 
 implementation
@@ -95,6 +97,33 @@ begin
     EditorFor('TTyStringGrid', 'HideSelectionWhenInactive'));
   AssertEquals('', 'TBoolPropertyEditor', EditorFor('TTyStringGrid', 'FadeUnfocusedSelection'));
   AssertEquals('', 'TIntegerPropertyEditor', EditorFor('TTyStringGrid', 'MinEditorWidth'));
+end;
+
+{ #192 }
+procedure TDesignHiddenTest.TestTheShellViewsHideTheirModels;
+const
+  ListProps: array[0..5] of string = ('OwnerData', 'ItemCount', 'Items', 'OnGetItemText',
+    'OnGetItemImage', 'OnGetItemGroup');
+  TreeProps: array[0..3] of string = ('NodeDataSize', 'RootNodeCount', 'Items', 'OnInitChildren');
+var
+  p: string;
+begin
+  for p in ListProps do
+    AssertEquals('TTyShellListView.' + p, 'THiddenPropertyEditor', EditorFor('TTyShellListView', p));
+  for p in TreeProps do
+    AssertEquals('TTyShellTreeView.' + p, 'THiddenPropertyEditor', EditorFor('TTyShellTreeView', p));
+  AssertEquals('the plain list view keeps its model', '', EditorFor('TTyListView', 'Items'));
+end;
+
+procedure TDesignHiddenTest.TestTheTextInputsHideChildSizing;
+const
+  Inputs: array[0..3] of string = ('TTyEdit', 'TTyMemo', 'TTySpinEdit', 'TTyDateTimePicker');
+var
+  c: string;
+begin
+  for c in Inputs do
+    AssertEquals(c + '.ChildSizing', 'THiddenPropertyEditor', EditorFor(c, 'ChildSizing'));
+  AssertEquals('a container keeps it', '', EditorFor('TTyPanel', 'ChildSizing'));
 end;
 
 procedure TDesignHiddenTest.TestAGridsHeaderHidesMainColumn;
