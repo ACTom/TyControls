@@ -291,9 +291,9 @@ end;
   resolves name by name: DefineProperties is never asked about the first one. }
 procedure TRetiredPropertiesTest.TestTheControlsWithNoChildrenDropChildSizing;
 const
-  Kinds: array[0..8] of string = ('TTyEdit', 'TTyMaskEdit', 'TTyDBEdit', 'TTyMemo',
+  Kinds: array[0..9] of string = ('TTyEdit', 'TTyMaskEdit', 'TTyDBEdit', 'TTyMemo',
     'TTySpinEdit', 'TTyDateTimePicker', 'TTyMultiTrackBar', 'TTyGradientTrackBar',
-    'TTyTerminalView');
+    'TTyRangeTrackBar', 'TTyTerminalView');
 var
   i: Integer;
   src: string;
@@ -402,7 +402,8 @@ end;
 initialization
   RegisterClasses([TTyNumericEdit, TTyCalcEdit, TTyColorBox, TTyShellComboBox, TTyComboBox,
     TTyDrawGrid, TTyStringGrid, TTyEdit, TTyMaskEdit, TTyDBEdit, TTyMemo, TTySpinEdit,
-    TTyDateTimePicker, TTyMultiTrackBar, TTyGradientTrackBar, TTyTerminalView, TTyShellListView,
+    TTyDateTimePicker, TTyMultiTrackBar, TTyGradientTrackBar, TTyRangeTrackBar, TTyTerminalView,
+    TTyShellListView,
     TTyShellTreeView, TTyPanel, TTyListView, TTyDBListBox, TTyDBLookupListBox]);
   RegisterTest(TRetiredPropertiesTest);
 end.

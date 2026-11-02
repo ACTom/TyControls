@@ -613,6 +613,10 @@ type
     procedure WriteNoRanges(Writer: TWriter);
   protected
     function GetStyleTypeKey: string; override;
+    { #182 (as #192 for the other two bars): a track bar has no children to size, so 4.0 does
+      not publish ChildSizing; a form saved by 3.x that sets it opens, and the value is read
+      past (TTyRetiredPaths). }
+    procedure ReadState(Reader: TReader); override;
     { True while a range's value is kept as given rather than moved through SetThumbValue: a
       form being read, Ranges between BeginUpdate and EndUpdate, the thumbs not (yet) the
       ranges' -- see TTyTrackRange. }
@@ -688,7 +692,6 @@ type
     property OnChangeBounds;
     property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -3009,6 +3012,18 @@ begin
 end;
 
 { TTyCustomRangeTrackBar }
+
+procedure TTyCustomRangeTrackBar.ReadState(Reader: TReader);
+var
+  retired: TTyRetiredPaths;
+begin
+  retired := TTyRetiredPaths.Create(Reader, Self, ['ChildSizing']);
+  try
+    inherited ReadState(Reader);
+  finally
+    retired.Free;
+  end;
+end;
 
 constructor TTyCustomRangeTrackBar.Create(AOwner: TComponent);
 var
