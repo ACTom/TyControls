@@ -1583,9 +1583,13 @@ type
     function ContentHeightPx: Integer; virtual;
     function ContentWidthPx: Integer; virtual;
     function MaxScrollY: Integer;
+    { #170:顶部固定行的高度(设备像素),滚动范围里要扣掉它。 }
+    function FixedRowsHeightPx: Integer;
     function MaxScrollX: Integer;
 
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+      MousePos: TPoint): Boolean; override;
+    function DoMouseWheelHorz(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean; override;
 
     { 视口 = 客户区扣掉可见滚动条占去的那条。所有几何都用它,而不是 ClientWidth/Height,
@@ -2692,6 +2696,8 @@ type
     procedure KeepCursorVisible; override;
     function  FAttrs2Find(ACol, ARow: Integer): TTyGridCellAttr; override;
     function  ShouldDrawCellText(ACol, ARow: Integer): Boolean; override;
+    { #170: a check cell, editable or not -- what draws the box. }
+    function  IsCheckCell(ACol, ARow: Integer): Boolean;
     { **画出来的**那串文字。与 GetCellText(原始值)分开:
       格式化只作用于显示,编辑器/导出/排序一律走原始值。
       绘制路径**只能**走这个,否则"哪些地方算显示"会散成一堆判断。 }
@@ -4221,17 +4227,17 @@ procedure TTyGridColumn.SetColor(AValue: TTyColor);
 begin
   if FColor = AValue then Exit;
   FColor := AValue;
-  { 列色改了整列都要重画。TTyColumn 的 NotifyOwner 是 private,走 Changed(False)
-    —— TCollectionItem 的标准通知,最终落到 TTyColumns.Notify 再到 header 的
-    OnChange,与改列宽走的是同一条链。 }
-  Changed(False);
+  { 列色改了整列都要重画。#170:从前走 Changed(False),而 TTyColumns 没有自己的
+    Update,那条通知谁都收不到,运行时改了看不出来。ColumnChanged 走的是改列宽那条链
+    (header 的 OnChange)。 }
+  ColumnChanged;
 end;
 
 procedure TTyGridColumn.SetLayout(AValue: TTextLayout);
 begin
   if FLayout = AValue then Exit;
   FLayout := AValue;
-  Changed(False);
+  ColumnChanged;   { #170 }
 end;
 
 procedure TTyGridColumn.Assign(ASource: TPersistent);
@@ -4636,6 +4642,9 @@ begin
   FDefaultRowHeightExplicit := True;   { the host meant to pin it, even at the fallback value }
   if FDefaultRowHeight = AValue then Exit;
   FDefaultRowHeight := AValue;
+  { #170:有一行有了自己的行高之后,行位置走缓存 —— 默认行高变了缓存也得作废,
+    否则其余各行还按旧高度排。 }
+  InvalidateRowMetrics;
   UpdateScrollBars;
   Invalidate;
 end;
@@ -4767,6 +4776,7 @@ begin
   if AValue < 0 then AValue := 0;
   if FFixedRows = AValue then Exit;
   FFixedRows := AValue;
+  UpdateScrollBars;   { #170:滚动范围跟着变 }
   Invalidate;
 end;
 
@@ -5263,7 +5273,7 @@ begin
     vh := ClientHeight - IfThen(needH, sb, 0);
     if vw < 0 then vw := 0;
     if vh < 0 then vh := 0;
-    needV := ContentHeightPx > (vh - FrozenHeightPx);
+    needV := (ContentHeightPx - FixedRowsHeightPx) > (vh - FrozenHeightPx);   { #170 }
     needH := ContentWidthPx  > vw;
   end;
 
@@ -5274,7 +5284,7 @@ begin
 
   bodyH := vh - FrozenHeightPx; if bodyH < 0 then bodyH := 0;
   bodyW := vw - FrozenWidthPx;  if bodyW < 0 then bodyW := 0;
-  maxV := ContentHeightPx - bodyH;                if maxV < 0 then maxV := 0;
+  maxV := (ContentHeightPx - FixedRowsHeightPx) - bodyH;   if maxV < 0 then maxV := 0;   { #170 }
   maxH := (ContentWidthPx - FrozenWidthPx) - bodyW; if maxH < 0 then maxH := 0;
 
   if FScrollY > maxV then FScrollY := maxV;
@@ -5381,12 +5391,22 @@ begin
   Result := ScaleI(logical);
 end;
 
+function TTyCustomGrid.FixedRowsHeightPx: Integer;
+var i: Integer;
+begin
+  Result := 0;
+  for i := 0 to FFixedRows - 1 do
+    Inc(Result, ScaleI(RowHeightOfDisplay(i)));
+end;
+
 function TTyCustomGrid.MaxScrollY: Integer;
 var
   body: Integer;
 begin
   body := ViewportH - FrozenHeightPx;
-  Result := ContentHeightPx - body;
+  { #170:能滚的内容是固定行之后的那些行 —— 固定行已经算在冻结带(body 扣掉了),
+    内容里再算一遍,底部就多出一截空白、还多出一条用不着的滚动条。与 MaxScrollX 同一个式子。 }
+  Result := (ContentHeightPx - FixedRowsHeightPx) - body;
   if Result < 0 then Result := 0;
 end;
 
@@ -5445,10 +5465,28 @@ begin
     handler that sets Handled keeps the notch, as in LCL's TCustomGrid. This override never
     called inherited, so none of the three ever fired (#62). }
   if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then Exit(True);
+  { #170:Shift+滚轮横着滚 —— 列表、树都是这个手势,触控板用户横向只有它。 }
+  if ssShift in Shift then
+  begin
+    step := 3 * ScaleI(16);
+    if WheelDelta > 0 then SetScrollX(FScrollX - step)
+    else SetScrollX(FScrollX + step);
+    Exit(True);
+  end;
   { 一格滚轮走三行 —— 与列表/树保持一致的手感。 }
   step := 3 * ScaleI(GetDefaultRowHeight);
   if WheelDelta > 0 then SetScrollY(FScrollY - step)
   else SetScrollY(FScrollY + step);
+  Result := True;
+end;
+
+function TTyCustomGrid.DoMouseWheelHorz(Shift: TShiftState; WheelDelta: Integer;
+  MousePos: TPoint): Boolean;
+begin
+  if inherited DoMouseWheelHorz(Shift, WheelDelta, MousePos) then Exit(True);
+  { #170:倾斜滚轮。LCL 的符号:WheelDelta > 0 是往右(control.inc DoMouseWheelHorz)。 }
+  if WheelDelta > 0 then SetScrollX(FScrollX + 3 * ScaleI(16))
+  else SetScrollX(FScrollX - 3 * ScaleI(16));
   Result := True;
 end;
 
@@ -7626,6 +7664,10 @@ begin
   begin
     delta := UnscaleI(Y - FResizeStartY);
     newSize := FResizeStartH + delta;
+    { #170:拖过行的上沿不能变成 0 或负数 —— 那是"清掉行高",行会弹回默认高度,
+      OnRowSizing 还收到一个负数。最小就是 1(或 MinRowHeight)。 }
+    if newSize < 1 then newSize := 1;
+    if (FMinRowHeight > 0) and (newSize < FMinRowHeight) then newSize := FMinRowHeight;
     allow := True;
     if Assigned(FOnRowSizing) then
       FOnRowSizing(Self, DisplayToData(FResizeRow), newSize, allow);
@@ -12393,8 +12435,23 @@ function TTyCustomStringGrid.ShouldDrawCellText(ACol, ARow: Integer): Boolean;
 begin
   { 链接格的文字仍走通用文字层(只有颜色和下划线是它自己的),
     所以它和 gcdText 一样要画字 —— 漏掉它就是一格空白。 }
-  Result := (EditorKindFor(ACol, ARow) <> gekCheckBox)
+  Result := (not IsCheckCell(ACol, ARow))   { #170 }
         and (CellDisplayFor(ACol, ARow) in [gcdText, gcdHyperlink]);
+end;
+
+function TTyCustomStringGrid.IsCheckCell(ACol, ARow: Integer): Boolean;
+var
+  k: TTyGridEditorKind;
+  c: TTyGridColumn;
+begin
+  { #170:这一格**是不是**勾选格,与能不能改无关。EditorKindFor 把只读格答成
+    gekNone(只读 = 不能编辑),画的时候就成了原文 '1'。这里同一条优先级链,
+    只是不过只读那一关。 }
+  k := FDefaultEditorKind;
+  c := GridColumn(ACol);
+  if (c <> nil) and c.UseEditorKind then k := c.EditorKind;
+  if Assigned(FOnGetEditorKind) then FOnGetEditorKind(Self, ACol, ARow, k);
+  Result := k = gekCheckBox;
 end;
 
 procedure TTyCustomStringGrid.RenderProgressCell(P: TTyPainter; ACol, ARow: Integer;
@@ -17587,7 +17644,7 @@ begin
       if dataRow < 0 then Continue;
       for colIdx := 0 to Header.Columns.Count - 1 do
       begin
-        if EditorKindFor(colIdx, dataRow) = gekCheckBox then
+        if IsCheckCell(colIdx, dataRow) then   { #170:只读的勾选格也画方块 }
           RenderCheckCell(P, colIdx, dataRow, AFrame);
         { 省略号按钮画在文字**之上**(它贴着右缘,文字该为它让位由列宽决定)。 }
         if EditorKindFor(colIdx, dataRow) = gekEllipsis then

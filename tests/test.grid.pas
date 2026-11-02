@@ -12409,6 +12409,13 @@ begin
   FG.MoveMouseTo(FG.ColLeft(2) + 30, 5);
   FG.ReleaseMouse(FG.ColLeft(2) + 30, 5);
   AssertEquals('nor for a press that dragged the column', 1, FHeaderClicks);
+  { Dragged away and back, the release lands on the section it was pressed on: still a drag. }
+  x := FG.ColLeft(0) + 30;
+  FG.PressMouseWithoutRelease(x, 5);
+  FG.MoveMouseTo(FG.ColLeft(2) + 30, 5);
+  FG.MoveMouseTo(x, 5);
+  FG.ReleaseMouse(x, 5);
+  AssertEquals('a drag that came back is no click either', 1, FHeaderClicks);
 end;
 
 procedure TGrid155Test.TestADividerOfAFixedWidthColumnIsNoGrip;
@@ -12432,7 +12439,192 @@ begin
   AssertEquals('the spring column takes what the grid grew by', 200, c.Width);
 end;
 
+
+type
+  { #170: a read-only check cell, FixedRows in the scroll range, the sideways wheel, a row
+    divider dragged up, a column's Color at run time, DefaultRowHeight with own row heights. }
+  TGrid170Test = class(TTestCase)
+  private
+    FG: TStrGridAccess;
+    FForm: TForm;
+    FSizes: array of Integer;
+    procedure RowSizing(Sender: TObject; AIndex: Integer; var ANewSize: Integer; var AAllow: Boolean);
+    procedure AddColumns(ACount, AWidth: Integer);
+    function CellPixels(ACol, ARow: Integer): TBGRABitmap;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestAReadOnlyCheckCellStillDrawsItsBox;
+    procedure TestFixedRowsAreNotScrolledTwice;
+    procedure TestShiftWheelAndTiltScrollSideways;
+    procedure TestARowDividerDraggedUpStopsAtOnePixel;
+    procedure TestAColumnColourShowsAtRunTime;
+    procedure TestDefaultRowHeightMovesTheOtherRows;
+  end;
+
+procedure TGrid170Test.RowSizing(Sender: TObject; AIndex: Integer; var ANewSize: Integer;
+  var AAllow: Boolean);
+begin
+  SetLength(FSizes, Length(FSizes) + 1);
+  FSizes[High(FSizes)] := ANewSize;
+end;
+
+procedure TGrid170Test.SetUp;
+begin
+  FForm := TForm.CreateNew(nil);
+  FG := TStrGridAccess.Create(FForm);
+  FG.Parent := FForm;
+  FG.Font.PixelsPerInch := 96;
+  FG.SetBounds(0, 0, 300, 200);
+  FG.DefaultRowHeight := 24;
+  FSizes := nil;
+end;
+
+procedure TGrid170Test.TearDown;
+begin
+  FreeAndNil(FForm);
+end;
+
+procedure TGrid170Test.AddColumns(ACount, AWidth: Integer);
+var i: Integer; c: TTyColumn;
+begin
+  for i := 0 to ACount - 1 do
+  begin
+    c := FG.Header.Columns.Add as TTyColumn;
+    c.Text := 'C' + IntToStr(i);
+    c.Width := AWidth;
+  end;
+end;
+
+function TGrid170Test.CellPixels(ACol, ARow: Integer): TBGRABitmap;
+var bmp: TBitmap;
+begin
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(300, 200);
+    FG.DoRender(bmp.Canvas, Rect(0, 0, 300, 200), 96);
+    Result := TBGRABitmap.Create(bmp);
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TGrid170Test.TestAReadOnlyCheckCellStillDrawsItsBox;
+var
+  c: TTyGridColumn;
+  editable, ro: TBGRABitmap;
+  r: TRect;
+  x, y, d: Integer;
+begin
+  AddColumns(1, 100);
+  FG.RowCount := 2;
+  c := FG.Header.Columns.Items[0] as TTyGridColumn;
+  c.EditorKind := gekCheckBox;
+  FG.Cells[0, 0] := '1';
+  FG.ForceUpdateScrollBars;
+  editable := CellPixels(0, 0);
+  c.ReadOnly := True;
+  ro := CellPixels(0, 0);
+  try
+    r := FG.CellVisibleRect(0, 0);
+    d := 0;
+    for y := r.Top + 1 to r.Bottom - 2 do
+      for x := r.Left + 1 to r.Right - 2 do
+        if editable.GetPixel(x, y) <> ro.GetPixel(x, y) then Inc(d);
+  finally
+    editable.Free; ro.Free;
+  end;
+  AssertEquals('read-only, the cell is still a check box, not the text 1', 0, d);
+end;
+
+procedure TGrid170Test.TestFixedRowsAreNotScrolledTwice;
+begin
+  AddColumns(2, 100);
+  FG.RowCount := 6;
+  FG.ForceUpdateScrollBars;
+  FG.FixedRows := 2;
+  AssertEquals('six rows that fit with two of them fixed: nothing to scroll', 0, FG.MaxScrollY);
+  FG.RowCount := 40;
+  FG.FixedRows := 0;
+  FG.ForceUpdateScrollBars;
+  FG.ScrollY := FG.MaxScrollY;
+  FG.FixedRows := 4;
+  AssertTrue(Format('a new FixedRows re-clamps the scroll (%d of %d)', [FG.ScrollY, FG.MaxScrollY]),
+    FG.ScrollY <= FG.MaxScrollY);
+end;
+
+procedure TGrid170Test.TestShiftWheelAndTiltScrollSideways;
+var before: Integer;
+begin
+  AddColumns(6, 120);
+  FG.RowCount := 3;
+  FG.ForceUpdateScrollBars;
+  before := FG.ScrollX;
+  AssertTrue('Shift+wheel is taken', FG.DoMouseWheel([ssShift], -120, Point(10, 10)));
+  AssertTrue('and scrolls sideways', FG.ScrollX > before);
+  before := FG.ScrollX;
+  AssertTrue('the tilt is taken', FG.DoMouseWheelHorz([], 120, Point(10, 10)));
+  AssertTrue('a tilt to the right scrolls right', FG.ScrollX > before);
+end;
+
+procedure TGrid170Test.TestARowDividerDraggedUpStopsAtOnePixel;
+var r: TRect; ib0, ib1, x: Integer;
+begin
+  AddColumns(2, 100);
+  FG.RowCount := 5;
+  FG.ShowIndicator := True;
+  FG.Options := FG.Options + [goRowSizing];
+  FG.OnRowSizing := @RowSizing;
+  FG.ForceUpdateScrollBars;
+  AssertTrue('setup: the row header band', FG.IndicatorBandX(ib0, ib1));
+  x := (ib0 + ib1) div 2;
+  r := TyGridRowRect(1, FG.Metrics);
+  FG.PressMouseWithoutRelease(x, r.Bottom - 1);
+  FG.MoveMouseTo(x, r.Top - 30);
+  FG.ReleaseMouse(x, r.Top - 30);
+  AssertTrue('setup: OnRowSizing was asked', Length(FSizes) > 0);
+  AssertTrue(Format('it is never asked about a size below 1 (%d)', [FSizes[High(FSizes)]]),
+    FSizes[High(FSizes)] >= 1);
+  AssertEquals('dragged past its top the row is 1 px, not back to full height', 1, FG.RowHeights[1]);
+end;
+
+procedure TGrid170Test.TestAColumnColourShowsAtRunTime;
+var b: TBGRABitmap; r: TRect; px: TBGRAPixel;
+begin
+  AddColumns(2, 100);
+  FG.RowCount := 3;
+  FG.ForceUpdateScrollBars;
+  CellPixels(0, 1).Free;   // a paint before the change, as on screen
+  (FG.Header.Columns.Items[0] as TTyGridColumn).Color := TyRGB(255, 0, 0);
+  b := CellPixels(0, 1);
+  try
+    r := FG.CellVisibleRect(0, 1);
+    px := b.GetPixel(r.Right - 4, (r.Top + r.Bottom) div 2);
+    AssertTrue(Format('the column''s new colour is painted (%d,%d,%d)', [px.red, px.green, px.blue]),
+      (px.red > 200) and (px.green < 60) and (px.blue < 60));
+  finally
+    b.Free;
+  end;
+end;
+
+procedure TGrid170Test.TestDefaultRowHeightMovesTheOtherRows;
+var m: TTyGridMetrics;
+begin
+  AddColumns(1, 100);
+  FG.RowCount := 5;
+  FG.RowHeights[1] := 40;
+  m := FG.Metrics;
+  AssertEquals('setup: rows 0..2', 24 + 40 + 24, m.RowTops[3]);
+  FG.DefaultRowHeight := 30;
+  m := FG.Metrics;
+  AssertEquals('a new DefaultRowHeight moves the rows that have none of their own',
+    30 + 40 + 30, m.RowTops[3]);
+end;
+
 initialization
+  RegisterTest(TGrid170Test);
   RegisterTest(TGrid155Test);
   RegisterTest(TTyStringGridLeakTest);
   RegisterTest(TGridLifetimeTest);
