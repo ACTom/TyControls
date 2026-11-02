@@ -471,8 +471,9 @@ type
       OnPropertyError. AText is the row's text for pwkText (and comes back as the object reads
       it), AObject the font or the list for the other two. AExceptRow is the row the caller will
       update itself. False when nothing was written -- refused, failed with OnPropertyError
-      assigned, or the rows were rebuilt by a handler (then the caller's row is gone). Raises
-      when the write fails and OnPropertyError is not assigned. }
+      assigned, or the rows were rebuilt by a handler (then the caller's row is gone; a setter
+      that rebuilds them ends the write there, and the objects after it are not written).
+      Raises when the write fails and OnPropertyError is not assigned. }
     function WriteProperty(ANode: TTyPropertyNode; AKind: TTyPropertyWriteKind; AObject: TObject;
       AExceptRow: TTyValueRow; var AText: string): Boolean;
     { The TStrings editor: show AStrings, let the user change it, True when confirmed. The
@@ -2717,6 +2718,7 @@ begin
       if not allow or (gen <> FBuildCount) then Exit;
     end;
   for k := 0 to n - 1 do
+  begin
     try
       case AKind of
         pwkFont:    FRows.WriteFontIn(ANode, k, TFont(AObject));
@@ -2736,6 +2738,11 @@ begin
         Exit;
       end;
     end;
+    { #183: a setter that runs the application's code can rebuild the rows (a Refresh that
+      found the structure changed, a selected component freed). ANode went with them, so the
+      objects after this one are not written. }
+    if gen <> FBuildCount then Exit;
+  end;
   if AKind <> pwkStrings then AText := FRows.ReadText(ANode);   // as the objects read it back
   { A setter often moves other properties too (AutoSize -> Width): re-read the rest. The row
     being committed is left for the editor, which compares AText with its old value. }
@@ -2832,7 +2839,14 @@ begin
 end;
 
 procedure TTyCustomPropertyGrid.EditStringsRow(ARow: TTyValueRow);
-var nd: TTyPropertyNode; cur: TObject; tmp: TStringList; dummy: string; k: Integer;
+var
+  nd: TTyPropertyNode;
+  cur: TObject;
+  tmp: TStringList;
+  dummy, path: string;
+  k, gen: Integer;
+  sel: array of TPersistent;
+  same: Boolean;
 begin
   nd := FRows.NodeOf(ARow);
   if (nd = nil) or (nd.Kind <> pnkStrings) or ReadOnly or ARow.ReadOnly then Exit;
@@ -2849,8 +2863,24 @@ begin
         tmp.Clear;
         Break;
       end;
-    if ExecuteStringsDialog(Format(rsTyPropGridStringsTitle, [nd.Path]), tmp) then
+    path := nd.Path;
+    gen := FBuildCount;
+    sel := Copy(FSelected);
+    if ExecuteStringsDialog(Format(rsTyPropGridStringsTitle, [path]), tmp) then
     begin
+      { #183: the dialog is modal, and while it was up the rows may have been rebuilt (a timer's
+        Refresh, a selected component freed), nd with them. The same property of the same
+        objects is found again by its path; when the selection has moved, the list is dropped. }
+      if gen <> FBuildCount then
+      begin
+        same := Length(sel) = Length(FSelected);
+        if same then
+          for k := 0 to High(sel) do
+            if sel[k] <> FSelected[k] then same := False;
+        if not same then Exit;
+        nd := FRows.FindByPath(path);
+        if (nd = nil) or (nd.Kind <> pnkStrings) then Exit;
+      end;
       dummy := '';
       WriteProperty(nd, pwkStrings, tmp, nil, dummy);
     end;

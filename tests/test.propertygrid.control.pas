@@ -45,6 +45,7 @@ type
     procedure HideAlpha(Sender: TObject; AInstance: TPersistent; const APropName: string;
       var AShow: Boolean);
     function Lines(const AText: string): string;
+    procedure RebuildGrid(Sender: TObject);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -79,6 +80,9 @@ type
     procedure TestPropertyOrderRebuildsAtOnce;
     procedure TestTypeFilterHiddenPropertiesAndTheFilterEventRebuildAtOnce;
     procedure TestKeyOptionsStayEmpty;
+    { #183 }
+    procedure TestASetterThatRebuildsTheRowsEndsTheWrite;
+    procedure TestTheStringsDialogWritesAfterARebuildWhileItWasUp;
   end;
 
 implementation
@@ -181,6 +185,11 @@ end;
 function TPropertyGridControlTest.Lines(const AText: string): string;
 begin
   Result := StringReplace(Trim(AText), LineEnding, ',', [rfReplaceAll]);
+end;
+
+procedure TPropertyGridControlTest.RebuildGrid(Sender: TObject);
+begin
+  FGrid.Rebuild;
 end;
 
 { ================================================================ selection }
@@ -649,6 +658,56 @@ begin
   FGrid.Press(VK_INSERT);
   FGrid.Press(VK_DELETE, [ssModifier]);
   AssertEquals('Insert and Ctrl+Delete leave the rows alone', n, FGrid.RowCount);
+end;
+
+{ ================================================================ #183 }
+
+{ The first object's setter rebuilds the rows (the application refreshing the grid from it) while
+  the grid is still writing. Freed blocks are poisoned, so a write that went on with the node the
+  rebuild freed faults instead of meeting a fresh node in the same memory. }
+procedure TPropertyGridControlTest.TestASetterThatRebuildsTheRowsEndsTheWrite;
+var a, b: TPGHook;
+begin
+  a := TPGHook.Create;
+  b := TPGHook.Create;
+  try
+    a.OnSet := @RebuildGrid;
+    FGrid.SelectObjects([a, b]);
+    FGrid.OnPropertyError := @Failed;
+    BeginPoison;
+    try
+      FGrid.TypeInto(FGrid.RowAt('Value'), '5');
+    finally
+      EndPoison;
+    end;
+    AssertEquals('no error reached the application', '', FSeenError);
+    AssertEquals('the first object took it', 5, a.Value);
+    AssertEquals('the write stopped where the rows were rebuilt', 0, b.Value);
+    AssertEquals('the rows read the objects', '', FGrid.RowAt('Value').Value);
+  finally
+    FGrid.SelectedObject := nil;
+    a.Free;
+    b.Free;
+  end;
+end;
+
+{ The rows are rebuilt while the strings dialog is up (a timer, say). OK still writes the list:
+  into the same property of the same object, found again by its path. }
+procedure TPropertyGridControlTest.TestTheStringsDialogWritesAfterARebuildWhileItWasUp;
+begin
+  FGrid.SelectedObject := FHolder;
+  FGrid.StringsAccept := True;
+  FGrid.StringsAnswer := 'x' + LineEnding + 'y';
+  FGrid.OnStringsDialog := @RebuildGrid;
+  BeginPoison;
+  try
+    FGrid.InvokeRowDialog(FGrid.FlatOf(FGrid.RowAt('Lines')));
+  finally
+    EndPoison;
+  end;
+  AssertEquals('the dialog ran', 1, FGrid.StringsDialogs);
+  AssertEquals('the list was written', 'x,y', Lines(FHolder.Lines.Text));
+  AssertEquals('through the setter', 1, FHolder.LinesSets);
 end;
 
 initialization

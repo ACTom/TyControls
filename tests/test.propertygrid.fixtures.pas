@@ -265,6 +265,19 @@ type
     property Level: Integer read FLevel write FLevel;
   end;
 
+  { A setter that runs the application's code (OnSet) while the grid is still writing -- the
+    inspected control's OnChange refreshing the grid, say (#183). }
+  TPGHook = class(TPersistent)
+  private
+    FValue: Integer;
+    FOnSet: TNotifyEvent;
+    procedure SetValue(AValue: Integer);
+  public
+    property OnSet: TNotifyEvent read FOnSet write FOnSet;
+  published
+    property Value: Integer read FValue write SetValue;
+  end;
+
   { Drives the inline editor the way the keyboard does. }
   TPGEditAccess = class(TTyValueEdit)
   public
@@ -293,6 +306,7 @@ type
     StringsDialogs: Integer;
     StringsTitle: string;
     StringsSeen: string;      // the list as the dialog was handed it
+    OnStringsDialog: TNotifyEvent;   // runs while the strings dialog is up (its modal loop)
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     { The row at a dotted key path ('Font.Size', 'Items.[0].Caption'). Fails the test if missing. }
@@ -525,6 +539,12 @@ begin
   FAmount := AValue;
 end;
 
+procedure TPGHook.SetValue(AValue: Integer);
+begin
+  FValue := AValue;
+  if Assigned(FOnSet) then FOnSet(Self);
+end;
+
 { ---- TPGEditAccess ---- }
 
 procedure TPGEditAccess.TypeText(const AText: string);
@@ -594,6 +614,7 @@ begin
   Inc(StringsDialogs);
   StringsTitle := ATitle;
   StringsSeen := AStrings.Text;
+  if Assigned(OnStringsDialog) then OnStringsDialog(Self);
   Result := StringsAccept;
   if Result then AStrings.Text := StringsAnswer;
 end;
