@@ -7,7 +7,7 @@ uses
   LazUTF8,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Controller, tyControls.StyleModel, tyControls.Base, tyControls.Edit,
-  tyControls.TextMenu;
+  tyControls.TextMenu, tyControls.Memo;
 type
   TTyEditAccess = class(TTyEdit)
   public
@@ -53,6 +53,38 @@ type
     procedure WriteClipboardText(const S: string); override;
   public
     property ClipText: string read FClipText write FClipText;
+  end;
+
+  { A memo with an in-memory clipboard and its keyboard reachable (#156). }
+  TMemoCuaProbe = class(TTyMemo)
+  protected
+    function ReadClipboardText: string; override;
+    procedure WriteClipboardText(const S: string); override;
+  public
+    FClip: string;
+    procedure Press(AKey: Word; AShift: TShiftState);
+  end;
+
+  { #156 }
+  TEditCuaTest = class(TTestCase)
+  private
+    FCount: Integer;
+    procedure Count(Sender: TObject);
+    function NewEdit: TTyEditClipboardAccess;
+  published
+    procedure TestShiftDeleteCutsAndTheInsertKeysCopyAndPaste;
+    procedure TestCtrlHomeAndCtrlEnd;
+    procedure TestReadOnlyIgnoresTheUndoKeys;
+    procedure TestSelTextWritesOnAReadOnlyField;
+    procedure TestUndoStartsAtTextSetByCode;
+    procedure TestCharCaseIsAChange;
+    procedure TestAPasteOfNothingKeepsTheRedoList;
+    procedure TestNumbersOnlyFiltersAPaste;
+    procedure TestAPasswordIsSelectedWholeAndNotOfferedToCopy;
+    procedure TestADragUsesUpTheAutoSelect;
+    procedure TestEnterOnAReadOnlyEditIsNoEditingDone;
+    procedure TestTextHintTakesTheAlignment;
+    procedure TestWideningUnscrollsTheText;
   end;
 
   TEditCursorTest = class(TTestCase)
@@ -2806,7 +2838,346 @@ begin
   end;
 end;
 
+{ ---------------------------------------------------------------------------
+  #156: the editing keys, ReadOnly, undo and display, as LCL's edits have them
+  --------------------------------------------------------------------------- }
+
+function TMemoCuaProbe.ReadClipboardText: string;
+begin
+  Result := FClip;
+end;
+
+procedure TMemoCuaProbe.WriteClipboardText(const S: string);
+begin
+  FClip := S;
+end;
+
+procedure TMemoCuaProbe.Press(AKey: Word; AShift: TShiftState);
+var k: Word;
+begin
+  k := AKey;
+  KeyDown(k, AShift);
+end;
+
+procedure TEditCuaTest.Count(Sender: TObject);
+begin
+  Inc(FCount);
+end;
+
+function TEditCuaTest.NewEdit: TTyEditClipboardAccess;
+begin
+  Result := TTyEditClipboardAccess.Create(nil);
+  Result.Font.PixelsPerInch := 96;
+  Result.SetBounds(0, 0, 200, 24);
+end;
+
+procedure TEditCuaTest.TestShiftDeleteCutsAndTheInsertKeysCopyAndPaste;
+var
+  e: TTyEditClipboardAccess;
+  m: TMemoCuaProbe;
+begin
+  e := NewEdit;
+  try
+    e.Text := 'hello';
+    e.SelStart := 1;
+    e.SelLength := 3;
+    e.SimulateKeyDownShift(VK_DELETE, [ssShift]);
+    AssertEquals('Shift+Delete takes the selection out', 'ho', e.Text);
+    AssertEquals('onto the clipboard', 'ell', e.ClipText);
+    e.SelStart := 0;
+    e.SelLength := 1;
+    e.SimulateKeyDownShift(VK_INSERT, [ssCtrl]);
+    AssertEquals('Ctrl+Insert copies', 'h', e.ClipText);
+    e.SelStart := 2;
+    e.SelLength := 0;
+    e.ClipText := 'XY';
+    e.SimulateKeyDownShift(VK_INSERT, [ssShift]);
+    AssertEquals('Shift+Insert pastes', 'hoXY', e.Text);
+  finally e.Free; end;
+  m := TMemoCuaProbe.Create(nil);
+  try
+    m.Text := 'hello';
+    m.SelStart := 1;
+    m.SelLength := 3;
+    m.Press(VK_DELETE, [ssShift]);
+    AssertEquals('the memo: Shift+Delete cuts', 'ho', m.Text);
+    AssertEquals('onto the clipboard', 'ell', m.FClip);
+    m.FClip := 'Z';
+    m.SelStart := 2;
+    m.SelLength := 0;
+    m.Press(VK_INSERT, [ssShift]);
+    AssertEquals('and Shift+Insert pastes', 'hoZ', m.Text);
+  finally m.Free; end;
+end;
+
+procedure TEditCuaTest.TestCtrlHomeAndCtrlEnd;
+var e: TTyEditClipboardAccess;
+begin
+  e := NewEdit;
+  try
+    e.Text := 'hello';
+    e.SelStart := 2;
+    e.SimulateKeyDownShift(VK_END, [ssCtrl]);
+    AssertEquals('Ctrl+End goes to the end', 5, e.SelStart);
+    e.SimulateKeyDownShift(VK_HOME, [ssCtrl]);
+    AssertEquals('Ctrl+Home to the start', 0, e.SelStart);
+  finally e.Free; end;
+end;
+
+procedure TEditCuaTest.TestReadOnlyIgnoresTheUndoKeys;
+var
+  e: TTyEditClipboardAccess;
+  m: TMemoCuaProbe;
+begin
+  e := NewEdit;
+  try
+    e.InjectKey('a');
+    e.InjectKey('b');
+    e.ReadOnly := True;
+    e.SimulateKeyDownShift(VK_Z, [ssCtrl]);
+    AssertEquals('Ctrl+Z leaves a read-only edit alone', 'ab', e.Text);
+    e.ReadOnly := False;
+    e.Undo;
+    e.ReadOnly := True;
+    e.SimulateKeyDownShift(VK_Y, [ssCtrl]);
+    e.SimulateKeyDownShift(VK_Z, [ssCtrl, ssShift]);
+    AssertTrue('and so do Ctrl+Y and Ctrl+Shift+Z', e.Text <> 'ab');
+  finally e.Free; end;
+  m := TMemoCuaProbe.Create(nil);
+  try
+    m.SelText := 'ab';
+    m.ReadOnly := True;
+    m.Press(VK_Z, [ssCtrl]);
+    AssertEquals('the memo too', 'ab', m.Text);
+  finally m.Free; end;
+end;
+
+procedure TEditCuaTest.TestSelTextWritesOnAReadOnlyField;
+var
+  e: TTyEditClipboardAccess;
+  m: TMemoCuaProbe;
+begin
+  e := NewEdit;
+  try
+    e.Text := 'log';
+    e.ReadOnly := True;
+    e.SelStart := 3;
+    e.SelText := ' line';
+    AssertEquals('SelText writes on a read-only edit, as LCL''s', 'log line', e.Text);
+  finally e.Free; end;
+  m := TMemoCuaProbe.Create(nil);
+  try
+    m.Text := 'log';
+    m.ReadOnly := True;
+    m.SelStart := 3;
+    m.SelText := ' line';
+    AssertEquals('and on a read-only memo', 'log line', m.Text);
+  finally m.Free; end;
+end;
+
+procedure TEditCuaTest.TestUndoStartsAtTextSetByCode;
+var
+  e: TTyEditClipboardAccess;
+  m: TMemoCuaProbe;
+begin
+  e := NewEdit;
+  try
+    e.Text := 'prefilled';
+    e.OnChange := @Count;
+    FCount := 0;
+    e.SimulateKeyDownShift(VK_Z, [ssCtrl]);
+    AssertEquals('Ctrl+Z does not go back past text set by code', 'prefilled', e.Text);
+    AssertFalse('nor mark it Modified', e.Modified);
+    AssertEquals('nor fire OnChange', 0, FCount);
+    e.InjectKey('!');
+    e.Undo;
+    AssertEquals('an edit after it is undone back to it', 'prefilled', e.Text);
+  finally e.Free; end;
+  m := TMemoCuaProbe.Create(nil);
+  try
+    m.Text := 'prefilled';
+    m.Undo;
+    AssertEquals('the memo too', 'prefilled', m.Text);
+  finally m.Free; end;
+end;
+
+procedure TEditCuaTest.TestCharCaseIsAChange;
+var
+  e: TTyEditClipboardAccess;
+  m: TMemoCuaProbe;
+begin
+  e := NewEdit;
+  try
+    e.Text := 'Hello';
+    e.OnChange := @Count;
+    FCount := 0;
+    e.CharCase := ecUppercase;
+    AssertEquals('setup: re-cased', 'HELLO', e.Text);
+    AssertEquals('which is a change, as LCL''s Text := makes it', 1, FCount);
+  finally e.Free; end;
+  m := TMemoCuaProbe.Create(nil);
+  try
+    m.Text := 'Hello';
+    m.OnChange := @Count;
+    FCount := 0;
+    m.CharCase := ecLowerCase;
+    AssertEquals('setup: the memo re-cased', 'hello', m.Text);
+    AssertEquals('a change there too', 1, FCount);
+  finally m.Free; end;
+end;
+
+procedure TEditCuaTest.TestAPasteOfNothingKeepsTheRedoList;
+var e: TTyEditClipboardAccess;
+begin
+  e := NewEdit;
+  try
+    e.NumbersOnly := True;
+    e.Text := '1';
+    e.InjectKey('2');
+    e.Undo;
+    AssertTrue('setup: something to redo', e.CanRedo);
+    e.ClipText := 'abc';
+    e.PasteFromClipboard;
+    AssertEquals('nothing went in', '1', e.Text);
+    AssertTrue('so the redo list is still there', e.CanRedo);
+  finally e.Free; end;
+end;
+
+procedure TEditCuaTest.TestNumbersOnlyFiltersAPaste;
+var e: TTyEditClipboardAccess;
+begin
+  e := NewEdit;
+  try
+    e.NumbersOnly := True;
+    e.ClipText := '12ab3';
+    e.PasteFromClipboard;
+    AssertEquals('digits only, as typing gets', '123', e.Text);
+  finally e.Free; end;
+end;
+
+procedure TEditCuaTest.TestAPasswordIsSelectedWholeAndNotOfferedToCopy;
+var e: TTyEditClipboardAccess;
+begin
+  e := NewEdit;
+  try
+    e.PasswordChar := '*';
+    e.Text := 'abc def';
+    e.SimulateMouseDown(5, 5, [ssDouble]);
+    AssertEquals('a double-click takes the whole password', 7, e.SelLength);
+    AssertFalse('and the menu offers no Cut or Copy of it',
+      (e as ITyTextEditActions).TeHasSelection);
+  finally e.Free; end;
+end;
+
+procedure TEditCuaTest.TestADragUsesUpTheAutoSelect;
+var e: TTyEditClipboardAccess;
+begin
+  e := NewEdit;
+  try
+    e.AutoSelect := True;
+    e.Text := 'hello world';
+    e.SimulateExitForTest;   // a fresh focus visit
+    e.SimulateMouseDown(5, 5);
+    e.SimulateMouseMove(60, 5, [ssLeft]);
+    e.SimulateMouseUp(60, 5);
+    AssertTrue('setup: the drag selected part of it',
+      (e.SelLength > 0) and (e.SelLength < 11));
+    e.SimulateMouseDown(40, 5);
+    e.SimulateMouseUp(40, 5);
+    AssertEquals('the next click places the caret, as LCL''s', 0, e.SelLength);
+  finally e.Free; end;
+end;
+
+procedure TEditCuaTest.TestEnterOnAReadOnlyEditIsNoEditingDone;
+var e: TTyEditClipboardAccess;
+begin
+  e := NewEdit;
+  try
+    e.Text := 'abc';
+    e.OnEditingDone := @Count;
+    FCount := 0;
+    e.ReadOnly := True;
+    e.SimulateKeyDown(VK_RETURN);
+    AssertEquals('Enter on a read-only edit is no EditingDone, as in LCL', 0, FCount);
+    e.ReadOnly := False;
+    e.AutoSelect := True;
+    e.SelStart := 3;
+    e.SelLength := 0;
+    e.SimulateKeyDown(VK_RETURN);
+    AssertEquals('setup: an editable one is', 1, FCount);
+    AssertEquals('and AutoSelect selects the text again', 3, e.SelLength);
+  finally e.Free; end;
+end;
+
+procedure TEditCuaTest.TestTextHintTakesTheAlignment;
+
+  { Where, on average, a hint's pixels are: the render with it against the one without. }
+  function HintMeanX(AAlign: TAlignment): Double;
+  var
+    e: TTyEditClipboardAccess;
+    a, b: TBitmap;
+    ba, bb: TBGRABitmap;
+    x, y, n: Integer;
+    sum: Double;
+  begin
+    e := NewEdit;
+    a := TBitmap.Create;
+    b := TBitmap.Create;
+    try
+      e.Alignment := AAlign;
+      a.PixelFormat := pf32bit; a.SetSize(200, 24);
+      b.PixelFormat := pf32bit; b.SetSize(200, 24);
+      e.RenderTo(a.Canvas, Rect(0, 0, 200, 24), 96);
+      e.TextHint := 'Hint';
+      e.RenderTo(b.Canvas, Rect(0, 0, 200, 24), 96);
+      ba := TBGRABitmap.Create(a);
+      bb := TBGRABitmap.Create(b);
+      try
+        sum := 0;
+        n := 0;
+        for y := 0 to 23 do
+          for x := 0 to 199 do
+            if ba.GetPixel(x, y) <> bb.GetPixel(x, y) then
+            begin
+              sum := sum + x;
+              Inc(n);
+            end;
+        if n = 0 then Result := -1 else Result := sum / n;
+      finally
+        ba.Free;
+        bb.Free;
+      end;
+    finally
+      a.Free;
+      b.Free;
+      e.Free;
+    end;
+  end;
+
+var l, r: Double;
+begin
+  l := HintMeanX(taLeftJustify);
+  r := HintMeanX(taRightJustify);
+  AssertTrue('precondition: the hint is drawn', l >= 0);
+  AssertTrue(Format('a right-aligned field draws its hint on the right (%.0f -> %.0f)', [l, r]),
+    r > l + 80);
+end;
+
+procedure TEditCuaTest.TestWideningUnscrollsTheText;
+var e: TTyEditClipboardAccess;
+begin
+  e := NewEdit;
+  try
+    e.SetBounds(0, 0, 60, 24);
+    e.Text := 'abcdefghijklmnopqrstuvwxyz0123456789';
+    AssertTrue('setup: the caret at the end scrolled the text', e.ScrollX > 0);
+    e.SetBounds(0, 0, 800, 24);
+    AssertEquals('wide enough for all of it, it is shown from the start', 0, e.ScrollX);
+  finally e.Free; end;
+end;
+
 initialization
   RegisterTest(TEditTest);
+  RegisterTest(TEditCuaTest);
   RegisterTest(TEditCursorTest);
 end.

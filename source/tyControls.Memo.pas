@@ -1577,7 +1577,8 @@ procedure TTyMemo.SetSelText(const AValue: string);
 var
   HadChange: Boolean;
 begin
-  if FReadOnly then Exit;
+  { #156: written on a read-only memo too, as LCL's: ReadOnly stops the user, not the program
+    appending to a log. }
   // Composite op: delete the current selection then insert AValue, all as one
   // undo step firing OnChange exactly once (mirrors the Edit control). Route the
   // insert through the multi-line paste splitter so a value with line breaks
@@ -1617,8 +1618,9 @@ begin
   Inc(FOwnEdit);   // its change is reported by AfterEdit, not by LinesChanged (#110)
   try
     // Replace all lines from the string (n breaks are n + 1 lines, TTyMemoLines), collapse
-    // the caret/selection to the origin, refresh layout + fire OnChange.
-    BeginUndoStep(uskNone);
+    // the caret/selection to the origin, refresh layout + fire OnChange. Undo starts from
+    // here, as after a native memo's WM_SETTEXT (#156).
+    FUndoStack.Clear;
     FLines.Text := ApplyCharCase(AValue);
     FCaretLine := 0;
     FCaretCol := 0;
@@ -1699,14 +1701,13 @@ procedure TTyMemo.SetLines(AValue: TStrings);
 var
   differs: Boolean;   { not "changed": that name is already taken up the inheritance chain }
 begin
-  // Capture a fresh (non-typing) undo step only when the assignment actually
-  // changes the content, so a no-op reassign does not push a spurious step and
-  // TestSetLinesClampsCaret (which never touches undo) is unaffected.
+  // Undo starts again from the new content only when the assignment actually changes it,
+  // so a no-op reassign keeps the history.
   { By line, not by Text: AValue is an ordinary TStrings whose Text ends every line with a
     break, and FLines' does not (#58), so the two texts never match. }
   differs := (AValue = nil) or not FLines.Equals(AValue);
   if differs then
-    BeginUndoStep(uskNone);
+    FUndoStack.Clear;   // a write by code: undo starts from it (#156)
   FInLinesChange := True;      // the notification would duplicate what follows
   try
     FLines.Assign(AValue);
@@ -1981,14 +1982,22 @@ begin
 end;
 
 procedure TTyMemo.SetCharCase(AValue: TEditCharCase);
+var
+  before: string;
 begin
   if FCharCase = AValue then Exit;
   FCharCase := AValue;
   { Re-case what is already held, as LCL and TTyEdit.SetCharCase both do: a field switched to
-    ecUpperCase that goes on showing its lower-case value is the surprising half. Not an undo
-    step and not a Modified change -- it is a normalisation the program asked for, not an edit
-    the user made. }
+    ecUpperCase that goes on showing its lower-case value is the surprising half. A change by
+    code, as LCL's Text := makes it (#156): OnChange, Modified untouched, and undo starting
+    from the re-cased text. }
+  before := FLines.Text;
   RefoldAllLines;
+  if (FLines.Text <> before) and not (csLoading in ComponentState) then
+  begin
+    FUndoStack.Clear;
+    ReportChangeByCode;
+  end;
 end;
 
 function TTyMemo.RowAlignOffset(AVisualRow, AContentWidth, APPI: Integer): Integer;
@@ -5049,6 +5058,25 @@ begin
     Key := 0;
     Exit;
   end;
+  { #156: Shift+Delete cuts, Shift+Insert pastes, Ctrl+Insert copies, as in LCL's memo. }
+  if (Key = VK_DELETE) and (Shift = [ssShift]) then
+  begin
+    CutToClipboard;
+    Key := 0;
+    Exit;
+  end;
+  if (Key = VK_INSERT) and (Shift = [ssShift]) then
+  begin
+    PasteFromClipboard;
+    Key := 0;
+    Exit;
+  end;
+  if (Key = VK_INSERT) and (Shift = [ssCtrl]) then
+  begin
+    CopyToClipboard;
+    Key := 0;
+    Exit;
+  end;
   if Shortcut and (Key = VK_C) then
   begin
     CopyToClipboard;
@@ -5074,14 +5102,14 @@ begin
   if ( (Key = VK_Z) and Shortcut and (ssShift in Shift) )
      or ( (Key = VK_Y) and Shortcut ) then
   begin
-    Redo;
+    if not FReadOnly then Redo;   // #156: as the context menu, nothing on a read-only memo
     Key := 0;
     Exit;
   end;
   // Undo: Ctrl/Cmd+Z (no Shift).
   if (Key = VK_Z) and Shortcut and not (ssShift in Shift) then
   begin
-    Undo;
+    if not FReadOnly then Undo;
     Key := 0;
     Exit;
   end;
