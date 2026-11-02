@@ -2795,8 +2795,15 @@ begin
         Key := 0;
         Exit;
       end;
-    VK_UP, VK_DOWN, VK_BACK, VK_DELETE:
+    VK_UP, VK_DOWN:
       if not TyDBEditAllowed(FDataLink, FInUserEdit) then
+      begin
+        Key := 0;
+        Exit;
+      end;
+    { With EditorEnabled off the base control drops these keys itself: nothing to ask for. }
+    VK_BACK, VK_DELETE:
+      if EditorEnabled and not TyDBEditAllowed(FDataLink, FInUserEdit) then
       begin
         Key := 0;
         Exit;
@@ -2810,7 +2817,8 @@ end;
 
 procedure TTyCustomDBSpinEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
 begin
-  if (Length(UTF8Key) = 1) and (UTF8Key[1] in ['0'..'9', '-'])
+  { Not while EditorEnabled is off: the base control drops every character then. }
+  if (Length(UTF8Key) = 1) and (UTF8Key[1] in ['0'..'9', '-']) and EditorEnabled
     and not TyDBEditAllowed(FDataLink, FInUserEdit) then
   begin
     UTF8Key := '';
