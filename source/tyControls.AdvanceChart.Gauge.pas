@@ -142,8 +142,6 @@ type
       under it the inherit colour; a plain one takes its halo and opacity
       from it [was: the colour and the font only] }
     Rt: TTyRtBlockStyle;
-    { [R7-D] its width is a word (see TTyGaugeText.WidthWord) }
-    WidthWord: Boolean;
   end;
 
   TTyGaugePointer = record
@@ -249,14 +247,6 @@ type
     { [R7-B] the reading's: width and height are parsePercent of the radius,
       over the block's (GaugeView: `width: isNaN(width) ? null : width`) }
     SizeOfR: Boolean;
-    { [R7-D] A WIDTH THAT IS A WORD -- a string that is no number, '50%',
-      'auto' -- on a title (createTextStyle hands the model's value on as it
-      is; only the reading's is parsePercent of the radius): zrender adds the
-      padding to it as a string, so the plate is laid out at NaN and not
-      drawn, a truncation keeps nothing, a wrap does not break, and a rich
-      text's tokens are placed at NaN -- none drawn. A plain text's lines are
-      drawn where they would be. }
-    WidthWord: Boolean;
     { `valueAnimation` (false by default) and `precision`, read for the
       detail: the reading counts from the previous value [Batch 92, AN4] }
     ValueAnim: Boolean;
@@ -464,7 +454,12 @@ function TyGaugeLabelValue(AMin, AMax: Double; AIndex,
 function TyGaugeTextPieces(const AText: TTyGaugeText; const AWords: string;
   AR: Double; ADefaultColour, AAutoColour: TTyChartColor;
   const AFontName: string; AFontSize, AWeight: Integer;
-  const AMeasurer: ITyTextMeasurer; APPI: Integer): TTyRtPieceArray;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer; AHangX: Double = 0;
+  AHangY: Double = 0): TTyRtPieceArray;
+{ [R7-H] where a title or a reading hangs: the centre plus its offsetCenter
+  (device px) }
+procedure TyGaugeTextAt(const AText: TTyGaugeText; ACX, ACY, AR: Double;
+  APPI: Integer; out AX, AY: Double);
 
 { [R7-B] A ROW'S TWO INHERIT COLOURS: the band under its value (the title's,
   GaugeView's autoColor) and the reading's -- the progress arc's fill when
@@ -490,8 +485,7 @@ function TyBuildGaugeValue(const ABinding: TTySeriesBinding;
 implementation
 
 uses jsonparser, tyControls.AdvanceChart.Scale, tyControls.FontUnits,
-  tyControls.AdvanceChart.RichStyle, tyControls.AdvanceChart.States,
-  tyControls.AdvanceChart.RichText;
+  tyControls.AdvanceChart.RichStyle, tyControls.AdvanceChart.States;
 
 var
   { GaugeSeries.ts' detail defaults that shape its block }
@@ -565,23 +559,6 @@ begin
   if d.JSONType <> jtString then Exit;
   v := TyJsToNumber(d.AsString);
   if not IsNan(v) then Result := v;
-end;
-
-{ [R7-D] the first `width` along the chain that is not null is a string
-  whose JS number is NaN (TTyGaugeText.WidthWord) }
-function WidthWordOf(const AChain: array of TJSONObject): Boolean;
-var
-  i: Integer;
-  d: TJSONData;
-begin
-  Result := False;
-  for i := 0 to High(AChain) do
-  begin
-    if AChain[i] = nil then Continue;
-    d := AChain[i].Find('width');
-    if (d = nil) or (d.JSONType = jtNull) then Continue;
-    Exit((d.JSONType = jtString) and IsNan(TyJsToNumber(d.AsString)));
-  end;
 end;
 
 { A colour key that may also be the word `auto` or `inherit`. Both mean "the
@@ -829,7 +806,6 @@ begin
   begin
     AText.Rt := TyRtResolve([ObjIn(AItem, AKey), ObjIn(ASeries, AKey)], glob,
       TyRtResolveOpt(False));
-    AText.WidthWord := WidthWordOf([ObjIn(AItem, AKey), ObjIn(ASeries, AKey)]);
   end;
 end;
 
@@ -1086,8 +1062,6 @@ begin
     else
       Result.AxisLabel.Rt := TyRtResolve([n2], Default(TTyRtGlobal),
         TyRtResolveOpt(False));
-    { [R7-D] createTextStyle hands its width on as it is }
-    Result.AxisLabel.WidthWord := WidthWordOf([n2]);
   end;
 
   TyStReadShadow([node], ['pointer', 'itemStyle'], ['itemStyle'], Result.Needle.Shadow);
@@ -1582,83 +1556,6 @@ begin
   end;
 end;
 
-{ [R7-D] A BLOCK WHOSE WIDTH IS A WORD, as zrender lays it out. The width
-  stays the word: the outer width is the word plus the padding, a string, so
-  the plate is laid out at NaN and not drawn, and a wrap does not break.
-  A PLAIN text truncated against it keeps nothing; otherwise its lines are
-  drawn where a block with no width puts them (the x a line takes from the
-  alignment does not read the width). A RICH text is not truncated (its
-  `remainTruncWidth < width` is false against NaN); its box's x is NaN
-  unless the block is left-aligned, and then only the tokens placed from
-  the left are drawn -- each line's leading tokens with no align or 'left',
-  up to and with the text of the first one whose width is a percentage
-  (its width is NaN, and so is every x after it); the centred and the
-  right-aligned ones are placed at NaN. }
-function WordWidthPieces(const AWords: string; const AStyle: TTyRtBlockStyle;
-  const ADefault: TTyRtDefault; APPI: Integer;
-  const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
-var
-  b: TTyRtBlockStyle;
-  all: TTyRtPieceArray;
-  lay: TTyRtResult;
-  last: array of Integer;
-  pct: array of Boolean;
-  k, n, ln, t: Integer;
-  keep: Boolean;
-begin
-  Result := nil;
-  if AMeasurer = nil then Exit;
-  if (not AStyle.IsRich) and (AStyle.Style.Overflow = rtoTruncate) then Exit;
-  if AStyle.IsRich and (AStyle.Style.Align in [rtaCenter, rtaRight]) then Exit;
-  b := AStyle;
-  b.Style.WidthKind := rtwNone;
-  b.Style.Overflow := rtoNone;
-  all := TyRtLay(AWords, b, ADefault, APPI / 96, AMeasurer);
-  last := nil;
-  pct := nil;
-  if b.IsRich then
-  begin
-    { the lines and their tokens' alignments (no geometry is read) }
-    lay := TyRtLayout(AWords, b.Style, b.Rich, True, ADefault, 0, 0, AMeasurer);
-    SetLength(last, Length(lay.Block.Lines));
-    SetLength(pct, Length(lay.Block.Lines));
-    for ln := 0 to High(lay.Block.Lines) do
-    begin
-      last[ln] := -1;
-      pct[ln] := False;
-      for t := 0 to High(lay.Block.Lines[ln].Tokens) do
-      begin
-        if not (lay.Block.Lines[ln].Tokens[t].Align in [rtaNone, rtaLeft]) then Break;
-        last[ln] := t;
-        if lay.Block.Lines[ln].Tokens[t].IsPercent then
-        begin
-          pct[ln] := True;
-          Break;
-        end;
-      end;
-    end;
-  end;
-  SetLength(Result, Length(all));
-  n := 0;
-  for k := 0 to High(all) do
-  begin
-    { the plate }
-    if (all[k].Kind = rpkRect) and (all[k].Line < 0) then Continue;
-    if b.IsRich then
-    begin
-      ln := all[k].Line;
-      t := all[k].Token;
-      if (ln < 0) or (ln > High(last)) or (t < 0) then Continue;
-      keep := t < last[ln];
-      if t = last[ln] then keep := (all[k].Kind = rpkText) or not pct[ln];
-      if not keep then Continue;
-    end;
-    Result[n] := all[k];
-    Inc(n);
-  end;
-  SetLength(Result, n);
-end;
-
 function TyBuildGaugeAxis(const ABinding: TTySeriesBinding;
   const ALayout: TTyGaugeLayout; const ASpec: TTyGaugeSpec;
   const AVisual: TTyGaugeVisual; const AMeasurer: ITyTextMeasurer;
@@ -1898,13 +1795,10 @@ begin
         if (b.Needed or (Pos(#10, words) > 0)) and (AMeasurer <> nil) then
         begin
           { [R7-D] a width that is a word: no plate, a rich label or a
-            truncation nothing at all (TTyGaugeText.WidthWord) }
-          if ASpec.AxisLabel.WidthWord then
-            pieces := WordWidthPieces(words, b, TyRtDefaultOf(False, 0, False, 0,
-              False, anchorH, anchorV), APPI, AMeasurer)
-          else
-            pieces := TyRtLay(words, b, TyRtDefaultOf(False, 0, False, 0, False,
-              anchorH, anchorV), APPI / 96, AMeasurer);
+            truncation nothing at all -- the text engine's JS arithmetic
+            [R7-H: was a gauge-only path] }
+          pieces := TyRtLayHung(words, b, TyRtDefaultOf(False, 0, False, 0, False,
+            anchorH, anchorV), tx / (APPI / 96), ty / (APPI / 96), APPI / 96, AMeasurer);
           if Length(pieces) > 0 then
           begin
             el := TyChartElement(TyShapeRect(TyRtDeviceBox(pieces, tx, ty, rot,
@@ -2053,6 +1947,10 @@ begin
       Result.Style.WidthKind := rtwNumber;
       Result.Style.Width := DialLen(AText.Width, AR, APPI) / scale;
     end;
+    { the reading's sizes are the code's numbers, whatever was written
+      [R7-H] }
+    Result.Style.WidthIsText := False;
+    Result.Style.HeightIsText := False;
     Result.Style.HasHeight := AText.Height.Kind <> buAuto;
     if Result.Style.HasHeight then
       Result.Style.Height := DialLen(AText.Height, AR, APPI) / scale;
@@ -2062,20 +1960,24 @@ end;
 function TyGaugeTextPieces(const AText: TTyGaugeText; const AWords: string;
   AR: Double; ADefaultColour, AAutoColour: TTyChartColor;
   const AFontName: string; AFontSize, AWeight: Integer;
-  const AMeasurer: ITyTextMeasurer; APPI: Integer): TTyRtPieceArray;
+  const AMeasurer: ITyTextMeasurer; APPI: Integer; AHangX: Double;
+  AHangY: Double): TTyRtPieceArray;
 begin
   Result := nil;
   if (AMeasurer = nil) or (AWords = '') then Exit;
-  { [R7-D] a title whose width is a word }
-  if AText.WidthWord then
-    Exit(WordWidthPieces(AWords, GaugeTextBlock(AText, AR, ADefaultColour,
-      AAutoColour, AFontName, AFontSize, AWeight, APPI),
-      TyRtDefaultOf(False, 0, False, 0, False, tahCentre, tavMiddle), APPI,
-      AMeasurer));
-  Result := TyRtLay(AWords, GaugeTextBlock(AText, AR, ADefaultColour,
+  { [R7-H] at its place (AHangX / AHangY, device px): GaugeView sets the
+    text's style x / y }
+  Result := TyRtLayHung(AWords, GaugeTextBlock(AText, AR, ADefaultColour,
     AAutoColour, AFontName, AFontSize, AWeight, APPI),
-    TyRtDefaultOf(False, 0, False, 0, False, tahCentre, tavMiddle), APPI / 96,
-    AMeasurer);
+    TyRtDefaultOf(False, 0, False, 0, False, tahCentre, tavMiddle),
+    AHangX / (APPI / 96), AHangY / (APPI / 96), APPI / 96, AMeasurer);
+end;
+
+procedure TyGaugeTextAt(const AText: TTyGaugeText; ACX, ACY, AR: Double;
+  APPI: Integer; out AX, AY: Double);
+begin
+  AX := ACX + DialLen(AText.OffsetX, AR, APPI);
+  AY := ACY + DialLen(AText.OffsetY, AR, APPI);
 end;
 
 function TyGaugeRowValue(AStore: TTyDataStore; ADim, ARow: Integer;
@@ -2193,7 +2095,7 @@ begin
     else if AText.Auto then ink := AAutoColour
     else ink := ADefaultColour;
     pieces := TyGaugeTextPieces(AText, AWords, AR, ADefaultColour, AAutoColour,
-      AFontName, AFontSize, AWeight, AMeasurer, APPI);
+      AFontName, AFontSize, AWeight, AMeasurer, APPI, x, y);
     if Length(pieces) = 0 then Exit;
     el := TyChartElement(TyShapeRect(TyRtDeviceBox(pieces, x, y, 0, scale)));
     el.Caption.Text := AWords;

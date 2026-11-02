@@ -403,6 +403,7 @@ var
   ti: TTyGaugeItem;
   gv: TTyGaugeVisual;
   bandC, detC: TTyChartColor;
+  hx, hy: Double;
 begin
   Result := nil;
   AText := '';
@@ -421,9 +422,12 @@ begin
   if (slot <= High(FGaugeItems)) and (raw >= 0) and (raw <= High(FGaugeItems[slot])) then
     ti := FGaugeItems[slot][raw];
   AText := TyGaugeFormat(ti.Detail.Formatter, ti.Detail.HasFormatter, AValue, True);
+  { [R7-H] at its place, as the drawn reading }
+  TyGaugeTextAt(ti.Detail, FGauges[slot].CX, FGauges[slot].CY, FGauges[slot].R,
+    FGaugePPI, hx, hy);
   Result := TyGaugeTextPieces(ti.Detail, AText, FGauges[slot].R, gv.DetailColour,
     detC, gv.DetailFontName, gv.DetailFontSizeLogical, gv.DetailFontWeight,
-    FGaugeMeasurer, FGaugePPI);
+    FGaugeMeasurer, FGaugePPI, hx, hy);
 end;
 
 { each data item's own `label`, read over its series' spec, by raw row }
@@ -775,6 +779,7 @@ var
       if lo2.HasHeight and not IsNan(lo2.Height) then
       begin
         sp.Rt.Style.HasHeight := True;
+        sp.Rt.Style.HeightIsText := False;
         sp.Rt.Style.Height := lo2.Height;
       end;
       sp.Rt.Needed := True;
@@ -1097,6 +1102,7 @@ begin
         if lo.HasHeight and not IsNan(lo.Height) then
         begin
           spec.Rt.Style.HasHeight := True;
+          spec.Rt.Style.HeightIsText := False;
           spec.Rt.Style.Height := lo.Height;
         end;
         spec.Rt.Needed := True;

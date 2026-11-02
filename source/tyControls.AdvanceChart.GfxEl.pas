@@ -2066,10 +2066,7 @@ var
   pad: array[0..3] of Double;
   has: Boolean;
   k: Integer;
-  fs: TFormatSettings;
 begin
-  fs := DefaultFormatSettings;
-  fs.DecimalSeparator := '.';
   R := Default(TTyRtStyle);
   TyGfxParseFont(AFont, R.FontSizePx, R.FontWeight, R.FontFamily, R.FontItalic);
   R.OwnFontFamily := True;
@@ -2114,38 +2111,11 @@ begin
   end;
   R.Align := AlignWord(S.Find('align'));
   R.VAlign := VAlignWord(S.Find('verticalAlign'));
-  if NumOf(S.Find('lineHeight'), x) then
-  begin
-    R.HasLineHeight := True;
-    R.LineHeight := x;
-  end;
-  d := S.Find('width');
-  if NumOf(d, x) then
-  begin
-    R.WidthKind := rtwNumber;
-    R.Width := x;
-  end
-  else if (d <> nil) and (d.JSONType = jtString) then
-  begin
-    s_ := Trim(d.AsString);
-    if s_ = 'auto' then R.WidthKind := rtwAuto
-    else if (s_ <> '') and (s_[Length(s_)] = '%')
-      and TryStrToFloat(Copy(s_, 1, Length(s_) - 1), x, fs) then
-    begin
-      R.WidthKind := rtwPercent;
-      R.Width := x;
-    end
-    else if TryStrToFloat(s_, x, fs) then
-    begin
-      R.WidthKind := rtwNumber;
-      R.Width := x;
-    end;
-  end;
-  if NumOf(S.Find('height'), x) then
-  begin
-    R.HasHeight := True;
-    R.Height := x;
-  end;
+  { [R7-H] a width, height or line height written as a string is handed
+    to zrender as the string [was: a numeric string read as its number] }
+  TyRtTakeLineHeight(S.Find('lineHeight'), R);
+  TyRtTakeWidth(S.Find('width'), R);
+  TyRtTakeHeight(S.Find('height'), R);
   Spread4(S.Find('padding'), pad, has);
   if has then
   begin

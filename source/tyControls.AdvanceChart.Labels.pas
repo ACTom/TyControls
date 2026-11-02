@@ -602,6 +602,7 @@ begin
   if AOver.HasHeight and not emphHeight then
   begin
     rt.Style.HasHeight := True;
+    rt.Style.HeightIsText := False;
     rt.Style.Height := AOver.Height;
   end;
   sz := ASpec.FontSizeLogical;

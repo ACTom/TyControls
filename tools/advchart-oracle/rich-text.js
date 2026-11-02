@@ -31,6 +31,14 @@
 //   rich text's centred tokens sit at NaN) and a reading's width null. A
 //   text laid out at NaN somewhere records what is drawn: its pieces at
 //   finite places with words in them, and no box, bounds or lines.
+//   [R7-H] widths, heights and line heights written as strings on every
+//   kind of label (series, axis, title, pie, markPoint, graphic; plain and
+//   rich, block and token) and through labelLayout: zrender reads a word as
+//   NaN and adds the padding to a numeric word as a string ('60' + 0). A
+//   value zrender kept as a string is recorded as canvas takes it (its
+//   number); a rect whose shape holds one also records `pathBounds`, its
+//   own bounds, whose path joins it as a string (x + '600'). A text placed
+//   at NaN (a non-finite transform) records no pieces.
 //
 // Runs the real ECharts 6.1 build (D:/Projects/echarts by default, or
 // ECHARTS_DIST) in node's server-side mode (SVG renderer, 600x400, animation
@@ -542,6 +550,99 @@ const GAUGE_CASES = [
         data: [{ value: 64, name: 'm', detail: { width: null } }] }, NO_AXIS)]) },
 ];
 
+// ---- [R7-H] a text's width, height and lineHeight WRITTEN AS STRINGS, on
+// every kind of label: createTextStyle hands them on as they are, and zrender
+// does JS arithmetic with them. A word ('50%', 'auto', 'abc') is NaN where it
+// is read as a number -- the plate is laid out at NaN, a truncation keeps
+// nothing, a wrap never breaks, a rich text's centred and right tokens sit at
+// NaN; a numeric word ('60') is its number where it is compared or divided,
+// but the padding is ADDED to it as a string ('60' + 0 = '600'): the plate
+// is 600 wide; a rich block's right edge is xLeft + '60' (a string), a plain
+// text's second line sits at textY + '20' (a string). Every colour is the
+// case's own (`looks`).
+const LBL = { show: true, color: '#333333' };
+const sLabel = (items, label, extra, series) => opt(Object.assign({
+  xAxis: xCat(), yAxis: val(),
+  series: [Object.assign({ type: 'bar', name: 'Sales', label: Object.assign({}, LBL, { position: 'top' }, label),
+    data: items.map((l, i) => (l ? { value: DATA[i], label: l } : DATA[i])) }, series)],
+}, extra));
+const SCAT = [[5, 5], [5.1, 5.1], [5.2, 5.0], [8, 8]];
+const scatLayout = (item1, layout) => opt({
+  xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
+  series: [{ type: 'scatter', labelLayout: layout, label: { show: true, formatter: 'label{c}', color: '#333333', opacity: 1, backgroundColor: '#eeeeee' },
+    data: SCAT.map((v, i) => (i === 1 ? { value: v, label: item1 } : v)) }],
+});
+const R7H_CASES = [
+  { name: 'word-width-plain', looks: true, note: "series labels: width '50%' with a plate (centred: laid out at NaN), 'auto' truncated (nothing kept), 'abc' with break and padding (no wrap)",
+    option: sLabel([null, { width: 'auto', overflow: 'truncate', formatter: 'truncated away' },
+      { width: 'abc', overflow: 'break', padding: [2, 4], formatter: 'never wrapped at all' }],
+    { width: '50%', backgroundColor: '#eeeeee', borderColor: '#333333', borderWidth: 1 }) },
+  { name: 'word-width-left', looks: true, note: "left-aligned labels, width '50%': a plate (its width '50%0'); a rich one keeps its left tokens up to a percentage token; a centred rich one nothing",
+    option: sLabel([{ align: 'left', backgroundColor: '#eeeeee' },
+      { align: 'left', formatter: '{a|{c}}{p|pp}{b|x}{c|r}', rich: { a: { color: '#aa0000' }, p: { width: '50%', backgroundColor: '#dddddd', color: '#0000aa' }, b: { color: '#00aa00' }, c: { align: 'right', color: '#aa00aa' } } },
+      { formatter: '{a|{c}}{b|x}', rich: { a: { color: '#aa0000' }, b: { color: '#00aa00', backgroundColor: '#dddddd' } } }],
+    { width: '50%' }) },
+  { name: 'numstr-width', looks: true, note: "width '60' with a plate: 600 wide ('60' + 0); with padding [2, 5], a border and radius 3 '6010', the rounded path running to xLeft + '6010'; '40' truncates at 40",
+    option: sLabel([{ backgroundColor: '#eeeeee' },
+      { padding: [2, 5], backgroundColor: '#eeeeee', borderColor: '#333333', borderWidth: 1, borderRadius: 3 },
+      { width: '40', overflow: 'truncate', formatter: 'a long label text' }],
+    { width: '60' }) },
+  { name: 'numstr-width-break', looks: true, note: "width '40' with overflow 'break' wraps at 40; a rich one too, its plate 400 wide",
+    option: sLabel([{ formatter: 'wrapped label words' },
+      { formatter: '{a|wrapped} {b|rich words}', backgroundColor: '#eeeeee', rich: { a: { color: '#aa0000' }, b: { color: '#0000aa' } } }, null],
+    { width: '40', overflow: 'break' }) },
+  { name: 'numstr-height-lineheight', looks: true, note: "height '30' with a plate (300 high); lineHeight '20' on three lines (the second at textY + '20'); a rich one's lineHeight '18', a token's height '16' with padding, another's lineHeight '24'",
+    option: sLabel([{ height: '30', backgroundColor: '#eeeeee' },
+      { lineHeight: '20', formatter: 'a\nb\nc', backgroundColor: '#eeeeee' },
+      { lineHeight: '18', formatter: '{a|x}\n{b|y}', rich: { a: { height: '16', padding: [2, 0], backgroundColor: '#dddddd', color: '#aa0000' }, b: { lineHeight: '24', color: '#0000aa' } } }],
+    {}) },
+  { name: 'numstr-rich-width', looks: true, note: "rich width '80' with a plate: the right edge xLeft + '80' places the right token; height '40' with lineOverflow truncate over three lines; a token width '30'",
+    option: sLabel([{ formatter: '{a|L}{c|R}', width: '80', backgroundColor: '#eeeeee', rich: { a: { color: '#aa0000' }, c: { align: 'right', color: '#0000aa' } } },
+      { formatter: '{a|one}\n{a|two}\n{a|three}', height: '40', lineOverflow: 'truncate', rich: { a: { color: '#aa0000', lineHeight: 16 } } },
+      { formatter: '{a|w}', rich: { a: { width: '30', color: '#aa0000', backgroundColor: '#dddddd' } } }],
+    {}) },
+  { name: 'string-size-kinds', looks: true, note: "axis labels width '50%' with a plate, x axis labels '30' truncate, the title width '40' truncate",
+    record: ['axisLabel', 'title'],
+    option: opt({ title: { text: 'A long chart title', textStyle: { color: '#222222', fontSize: 12, width: '40', overflow: 'truncate' } },
+      xAxis: xCat({ axisLabel: { color: '#444444', width: '30', overflow: 'truncate' } }),
+      yAxis: val({ axisLabel: { color: '#444444', width: '50%', backgroundColor: '#eeeeee' } }),
+      series: [{ type: 'bar', data: DATA }] }) },
+  { name: 'axis-name-width-string', looks: true, note: "the axis name's width '50%' and '60' with plates: AxisBuilder sets the width (nameTruncate's maxWidth, none here) over it",
+    record: ['axisName'],
+    option: opt({ xAxis: xCat({ name: 'Days', nameTextStyle: { color: '#555555', width: '60', backgroundColor: '#eeeeee' } }),
+      yAxis: val({ name: 'Amount', nameTextStyle: { color: '#555555', width: '50%', backgroundColor: '#eeeeee' } }),
+      series: [{ type: 'bar', data: DATA }] }) },
+  { name: 'graphic-width-string', looks: true, note: "graphic texts: width '60' with a plate (600 wide), width '50%' with a plate (at NaN), height '20' with a plate (200 high)",
+    record: ['other'],
+    option: opt({ graphic: [
+      { type: 'text', x: 100, y: 60, style: { text: 'sixty', fill: '#333333', width: '60', backgroundColor: '#eeeeee' } },
+      { type: 'text', x: 100, y: 140, style: { text: 'half', fill: '#333333', align: 'center', width: '50%', backgroundColor: '#eeeeee' } },
+      { type: 'text', x: 100, y: 220, style: { text: 'tall', fill: '#333333', height: '20', backgroundColor: '#eeeeee' } }] }) },
+  { name: 'marker-width-string', looks: true, note: "a markPoint label width '60' with a plate (600 wide)", record: ['markerLabel'],
+    option: opt({ xAxis: xCat(), yAxis: val(),
+      series: [{ type: 'bar', data: DATA, markPoint: { data: [{ type: 'max' }], label: { color: '#ffffff', width: '60', backgroundColor: '#aa0000' } } }] }) },
+  { name: 'pie-width-string', looks: true, note: "pie labels: width '120' with a plate (1200 wide, labelStyleWidth set), width '50%' truncate (nothing)",
+    option: opt({ series: [{ type: 'pie', radius: '40%', label: { color: '#333333', width: '120', backgroundColor: '#eeeeee' },
+      data: [{ value: 3, name: 'Alpha' }, { value: 2, name: 'Beta', label: { width: '50%', overflow: 'truncate', backgroundColor: null } }, { value: 1, name: 'Gamma' }] }] }) },
+  { name: 'gauge-string-sizes', looks: true, note: "a gauge's title width '120' with a plate (1200 wide), height '30' (300 high), lineHeight '20' on two lines; the reading's width '120' and height '30' (parsePercent: numbers); the axis labels' width '60' with a plate",
+    record: ['chartText'],
+    option: gauge([
+      Object.assign({ center: ['25%', '50%'], radius: '35%', data: [{ value: 37, name: 'Speed' }],
+        title: { color: '#123456', width: '120', backgroundColor: '#eeeeee' },
+        detail: { color: '#222222', fontSize: 20, width: '120', height: '30', backgroundColor: '#dddddd' } }, NO_AXIS),
+      { center: ['75%', '50%'], radius: '35%', min: 0, max: 40, splitNumber: 2, data: [{ value: 37, name: 'Two\nlines' }],
+        title: { color: '#123456', height: '30', lineHeight: '20', backgroundColor: '#eeeeee' }, detail: { show: false },
+        axisLabel: { color: '#334455', width: '60', backgroundColor: '#eeeeee' } }]) },
+  { name: 'word-width-hide', looks: true, note: "hideOverlap: the second label's width '50%' (its box at NaN)",
+    option: scatLayout({ width: '50%' }, { hideOverlap: true }) },
+  { name: 'numstr-width-hide', looks: true, note: "hideOverlap: the second label's width '120' (its box from xLeft to xLeft + '1200')",
+    option: scatLayout({ width: '120' }, { hideOverlap: true }) },
+  { name: 'word-width-shift', looks: true, note: "moveOverlap shiftY with the second label's width '50%'",
+    option: scatLayout({ width: '50%' }, { moveOverlap: 'shiftY' }) },
+  { name: 'numstr-width-shift', looks: true, note: "moveOverlap shiftY with the second label's width '120'",
+    option: scatLayout({ width: '120' }, { moveOverlap: 'shiftY' }) },
+];
+
 const cases = [
   // ---- rich series labels ----
   { name: 'rich-two-line', note: "top labels '{a|{b}}\\n{v|{c}}': a 14px #c23531, v bold #333",
@@ -723,6 +824,7 @@ const cases = [
     option: opt({ series: [{ type: 'gauge', data: [{ value: 62, name: 'Speed' }],
       detail: { formatter: '{a|{value}}%', backgroundColor: '#eeeeee', borderRadius: 3, padding: [4, 8], fontSize: 20, rich: { a: { color: '#c23531', fontSize: 24 } } } }] }) },
   ...GAUGE_CASES,
+  ...R7H_CASES,
 ];
 
 // ---------- running upstream ----------
@@ -845,11 +947,15 @@ function probeBox(lib, el) {
 // whose shape is four finite numbers. A text whose width is a word (a string
 // that is no number, '50%') is laid out at NaN somewhere -- the plate's width
 // is '50%0', a rich text's tokens sit at NaN -- and none of that is drawn.
+// [R7-H] what canvas makes of a value zrender kept as a string ('600', a
+// plain line's y '-7530' after textY += '20'): its number
+const num = v => (typeof v === 'string' ? +v : v);
 function finChild(c) {
   if (c.type === 'tspan') {
-    return (c.style.x == null || Number.isFinite(c.style.x)) && (c.style.y == null || Number.isFinite(c.style.y));
+    return (c.style.x == null || Number.isFinite(num(c.style.x))) && (c.style.y == null || Number.isFinite(num(c.style.y)));
   }
-  return ['x', 'y', 'width', 'height'].every(k => typeof c.shape[k] === 'number' && Number.isFinite(c.shape[k]));
+  return ['x', 'y', 'width', 'height'].every(k => (typeof c.shape[k] === 'number' || typeof c.shape[k] === 'string')
+    && Number.isFinite(num(c.shape[k])));
 }
 
 function recordText(lib, t, measureSet) {
@@ -875,9 +981,15 @@ function recordText(lib, t, measureSet) {
   // [R7-D] such a text (its children or its probe box at NaN) records what
   // is drawn: its pieces at finite places with words in them, no box, no
   // bounds, no lines (all NaN upstream)
-  const wordWidth = !children.every(finChild) || ![pb.x, pb.y, pb.w, pb.h].every(v => typeof v === 'number' && Number.isFinite(v));
-  const box = wordWidth ? null : put(put(put(put({}, 'x', pb.x), 'y', pb.y), 'width', pb.w), 'height', pb.h);
-  if (box) Object.assign(box, corners(m, pb.x, pb.y, pb.w, pb.h));
+  // [R7-H] a box zrender holds as a numeric string ('600') is its number
+  // [R7-H] a text placed at NaN (an axis name whose position comes from its
+  // own box laid out at NaN): its transform is not finite and nothing of it
+  // is placed -- it records no pieces
+  const unplaced = !!m && !m.every(Number.isFinite);
+  const wordWidth = unplaced || !children.every(finChild) || ![pb.x, pb.y, pb.w, pb.h].every(v => (typeof v === 'number' || typeof v === 'string')
+    && Number.isFinite(num(v)));
+  const box = wordWidth ? null : put(put(put(put({}, 'x', num(pb.x)), 'y', num(pb.y)), 'width', num(pb.w)), 'height', num(pb.h));
+  if (box) Object.assign(box, corners(m, num(pb.x), num(pb.y), num(pb.w), num(pb.h)));
   const drawnBox = log.bgs.filter(b => b.isBox);
   must(drawnBox.length <= 1, where + ': two boxes');
   if (drawnBox.length) {
@@ -950,7 +1062,7 @@ function recordText(lib, t, measureSet) {
   let plainLine = 0;
   const pieces = children.map((c, i) => {
     const cs = c.style;
-    if (wordWidth && (!finChild(c) || (c.type === 'tspan' && String(cs.text) === ''))) return null;
+    if (wordWidth && (unplaced || !finChild(c) || (c.type === 'tspan' && String(cs.text) === ''))) return null;
     if (c.type === 'tspan') {
       let own = ownerOf(i);
       if (log.mode === 'plain') {
@@ -958,7 +1070,7 @@ function recordText(lib, t, measureSet) {
         own = { of: 'line', line: plainLine++, token: null };
       }
       must(own && own.of !== 'box', where + ': a TSpan with no token');
-      const g = apply(m, cs.x || 0, cs.y || 0);
+      const g = apply(m, num(cs.x || 0), num(cs.y || 0));
       const stroke = cs.stroke == null || cs.stroke === 'none' ? null : cs.stroke;
       const bb = c.getBoundingRect();
       const lw = stroke ? cs.lineWidth : 0;
@@ -973,7 +1085,7 @@ function recordText(lib, t, measureSet) {
         where + ': TSpan ' + JSON.stringify(cs.text) + ' measures ' + bb.width + ', the rule ' + tw);
       measureSet.set(JSON.stringify([String(cs.text), pxOfFont(cs.font), isMono(cs.font)]), { text: String(cs.text), font: cs.font });
       const o = { kind: 'text', of: own.of, line: nn(own.line), token: nn(own.token), text: String(cs.text) };
-      put(o, 'x', cs.x || 0); put(o, 'y', cs.y || 0);
+      put(o, 'x', num(cs.x || 0)); put(o, 'y', num(cs.y || 0));
       put(o, 'gx', g[0]); put(o, 'gy', g[1]);
       o.font = cs.font;
       o.px = pxOfFont(cs.font);
@@ -1000,8 +1112,15 @@ function recordText(lib, t, measureSet) {
       must(own, where + ': a Rect with no owner');
       const sh = c.shape;
       const o = { kind: 'rect', of: own.of, line: nn(own.line), token: nn(own.token) };
-      put(o, 'x', sh.x); put(o, 'y', sh.y); put(o, 'width', sh.width); put(o, 'height', sh.height);
-      Object.assign(o, corners(m, sh.x, sh.y, sh.width, sh.height));
+      // [R7-H] the shape as canvas takes it (a width '600' is 600); where a
+      // value is a string, the rect's own bounds too: zrender's path adds it
+      // as a string (x + '600'), so the bounds run to the joined number
+      put(o, 'x', num(sh.x)); put(o, 'y', num(sh.y)); put(o, 'width', num(sh.width)); put(o, 'height', num(sh.height));
+      Object.assign(o, corners(m, num(sh.x), num(sh.y), num(sh.width), num(sh.height)));
+      if (['x', 'y', 'width', 'height'].some(k => typeof sh[k] === 'string')) {
+        const pbr = c.getBoundingRect();
+        o.pathBounds = put(put(put(put({}, 'x', pbr.x), 'y', pbr.y), 'width', pbr.width), 'height', pbr.height);
+      }
       o.fill = nn(cs.fill);
       put(o, 'fillOpacity', cs.fillOpacity);
       o.stroke = cs.stroke == null || cs.stroke === 'none' ? null : cs.stroke;
@@ -1029,7 +1148,7 @@ function recordText(lib, t, measureSet) {
     text: String(s.text),
     rich: !!s.rich,
     transform: m ? m.map(hex) : null, transformText: m ? m.map(text) : null,
-    anchor: Object.assign(pt(s.x || 0, s.y || 0), { g: pt(anchor[0], anchor[1]) }),
+    anchor: Object.assign(pt(s.x || 0, s.y || 0), { g: unplaced ? null : pt(anchor[0], anchor[1]) }),
     align, verticalAlign,
     defaultStyle: t.attached ? { fill: nn(ds.fill), stroke: nn(ds.stroke), autoStroke: nn(ds.autoStroke), align: nn(ds.align), verticalAlign: nn(ds.verticalAlign), overflowRect: ds.overflowRect ? true : false } : null,
     style: styleOf(s),

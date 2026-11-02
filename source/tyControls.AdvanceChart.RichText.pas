@@ -33,6 +33,15 @@ uses
   caption carries its laid-out pieces from the label pass to the renderer,
   and the paint list is the layer both of them see. }
 type
+  { [R7-H] A VALUE zrender does JS arithmetic with: a number, or a string
+    it was handed as written (a width '60'). N is the number -- a string's
+    JS number, NaN for a word. }
+  TTyRtJs = record
+    IsStr: Boolean;
+    S: string;
+    N: Double;
+  end;
+
   TTyRtToken = record
     StyleIndex: Integer;       // into the rich list; -1 the block style
     StyleName: string;
@@ -48,6 +57,9 @@ type
     Padding: array[0..3] of Double;
     IsPercent: Boolean;
     Percent: Double;
+    { [R7-H] the height (padding in) and the line height as zrender holds
+      them: a string height stays one ('16' + 4 = '164') }
+    HeightV, LineHeightV: TTyRtJs;
   end;
   TTyRtLine = record
     Tokens: array of TTyRtToken;
@@ -58,6 +70,8 @@ type
     Lines: array of TTyRtLine;
     Width, Height, ContentWidth, ContentHeight, OuterWidth, OuterHeight: Double;
     IsTruncated: Boolean;
+    { [R7-H] the width, height and outer sizes as zrender holds them }
+    WidthV, HeightV, OuterWidthV, OuterHeightV: TTyRtJs;
   end;
 
   TTyRtResult = record
@@ -77,6 +91,21 @@ function TyRtLayout(const AText: string; const AStyle: TTyRtStyle;
   const ARichStyles: TTyRtRich; ARich: Boolean; const ADefault: TTyRtDefault;
   ABaseX, ABaseY: Double; const AMeasurer: ITyTextMeasurer): TTyRtResult;
 
+{ [R7-H] whether the block or a rich style holds a width, height or line
+  height written as a string: the only styles whose layout can meet NaN or
+  join a size to a place }
+function TyRtHasStringSize(const AStyle: TTyRtStyle; const ARich: TTyRtRich): Boolean;
+
+{ [R7-H] roundRect.ts' corner radii, each at least 0 and each pair cut down
+  to fit the rect's size as numbers (AW, AH; NaN cuts nothing) }
+procedure TyRtClampRadii(AW, AH: Double; var R1, R2, R3, R4: Double);
+
+{ [R7-H] THE PATH'S OWN BOUNDS of a rect piece whose size was a string
+  (PathEdges): zrender's path runs to the joined edges -- a plain rect's
+  fromLine(x, y, x + w, y + h), a rounded one's corners and arcs -- so its
+  bounds are those, not the rect canvas draws. False for any other piece. }
+function TyRtPathBounds(const APiece: TTyRtPiece; out AX0, AY0, AX1, AY1: Double): Boolean;
+
 { WHETHER THE TEXT HOLDS A TAG zrender's parser takes -- a name of letters,
   digits and underscores, a bar, and a closing brace somewhere after it. A
   text without one lays out the same rich or plain. [Batch 104] }
@@ -84,7 +113,8 @@ function TyRtHasMarkup(const AText: string): Boolean;
 
 implementation
 
-uses tyControls.FontUnits, tyControls.AdvanceChart.Labels, tyControls.AdvanceChart.Symbol;
+uses tyControls.FontUnits, tyControls.AdvanceChart.Labels, tyControls.AdvanceChart.Symbol,
+  tyControls.AdvanceChart.Data, tyControls.AdvanceChart.Scale;
 
 const
   cGuo = #$E5#$9B#$BD;   // U+56FD: zrender's measure of a font's height
@@ -95,6 +125,118 @@ begin
   Result.FontFamily := 'sans-serif';
   Result.FontSizePx := 12;
   Result.FontWeight := 400;
+end;
+
+{ ---- [R7-H] JS values ---- }
+
+function JNum(A: Double): TTyRtJs;
+begin
+  Result.IsStr := False;
+  Result.S := '';
+  Result.N := A;
+end;
+
+function JStr(const A: string): TTyRtJs;
+begin
+  Result.IsStr := True;
+  Result.S := A;
+  Result.N := TyJsToNumber(A);
+end;
+
+function JText(const A: TTyRtJs): string;
+begin
+  if A.IsStr then Result := A.S else Result := TyJsNumberToString(A.N);
+end;
+
+{ `a + b`: joined when either is a string, else the sum }
+function JAdd(const A, B: TTyRtJs): TTyRtJs;
+begin
+  if A.IsStr or B.IsStr then Result := JStr(JText(A) + JText(B))
+  else Result := JNum(A.N + B.N);
+end;
+
+{ `a > b`: two strings compare as strings, else as numbers (false against
+  NaN -- the caller has the traps masked) }
+function JGreater(const A, B: TTyRtJs): Boolean;
+begin
+  if A.IsStr and B.IsStr then Result := UnicodeString(UTF8Decode(A.S)) > UnicodeString(UTF8Decode(B.S))
+  else Result := A.N > B.N;
+end;
+
+{ Math.max: NaN when either is }
+function JsMax(A, B: Double): Double;
+begin
+  if IsNan(A) or IsNan(B) then Exit(NaN);
+  if A > B then Result := A else Result := B;
+end;
+
+{ parseInt(AText, 10) }
+function JsParseInt(const AText: string): Double;
+var
+  i, j: Integer;
+  neg: Boolean;
+begin
+  i := 1;
+  while (i <= Length(AText)) and (AText[i] in [' ', #9, #10, #11, #12, #13]) do Inc(i);
+  neg := False;
+  if (i <= Length(AText)) and (AText[i] in ['+', '-']) then
+  begin
+    neg := AText[i] = '-';
+    Inc(i);
+  end;
+  j := i;
+  Result := 0;
+  while (j <= Length(AText)) and (AText[j] in ['0'..'9']) do
+  begin
+    Result := Result * 10 + (Ord(AText[j]) - Ord('0'));
+    Inc(j);
+  end;
+  if j = i then Exit(NaN);
+  if neg then Result := -Result;
+end;
+
+{ the block's width, height and line height as zrender is handed them: a
+  number, a string, or nothing (AHas False). A site's own number
+  (rtwNumber) wins over the text it replaced. }
+function BlockWidthOf(const S: TTyRtStyle; out AHas: Boolean): TTyRtJs;
+begin
+  AHas := True;
+  if S.WidthKind = rtwNumber then Exit(JNum(S.Width));
+  if S.WidthIsText and (S.WidthKind <> rtwNone) then Exit(JStr(S.WidthText));
+  AHas := False;
+  Result := JNum(0);
+end;
+
+function HeightOf(const S: TTyRtStyle): TTyRtJs;
+begin
+  if S.HeightIsText then Result := JStr(S.HeightText) else Result := JNum(S.Height);
+end;
+
+function LineHeightOf(const S: TTyRtStyle): TTyRtJs;
+begin
+  if S.LineHeightIsText then Result := JStr(S.LineHeightText) else Result := JNum(S.LineHeight);
+end;
+
+{ whether anything of the style is a string: only then can the layout meet
+  NaN, and only then are the traps masked }
+function AnyText(const S: TTyRtStyle; const ARich: TTyRtRich): Boolean;
+var i: Integer;
+begin
+  Result := TyRtHasStringSize(S, ARich);
+end;
+
+function TyRtHasStringSize(const AStyle: TTyRtStyle; const ARich: TTyRtRich): Boolean;
+var i: Integer;
+begin
+  Result := AStyle.WidthIsText or AStyle.HeightIsText or AStyle.LineHeightIsText;
+  for i := 0 to High(ARich) do
+    if ARich[i].Style.WidthIsText or ARich[i].Style.HeightIsText
+      or ARich[i].Style.LineHeightIsText then Exit(True);
+end;
+
+function Fin(A: Double): Boolean; inline;
+begin
+  Result := not (IsNan(A) or IsInfinite(A));
 end;
 
 { the ellipsis a truncation appends: the style's, else '...' }
@@ -342,9 +484,13 @@ begin
   begin
     if found and ts.HasPadding then padH := ts.Padding[1] + ts.Padding[3]
     else padH := 0;
-    if found and (ts.WidthKind in [rtwNumber, rtwPercent]) then
+    { `tokenStyle.width != null && !== 'auto'`: parsePercent of it -- a
+      percentage parseFloat / 100 of the wrap's width, any other string its
+      parseFloat [R7-H: was a number or a percentage only] }
+    if found and (ts.WidthKind in [rtwNumber, rtwPercent, rtwText]) then
     begin
       if ts.WidthKind = rtwPercent then outerW := ts.Width / 100 * AWrap.Width + padH
+      else if ts.WidthKind = rtwText then outerW := TyJsParseFloat(ts.WidthText) + padH
       else outerW := ts.Width + padH;
       if (Length(ABlock.Lines) > 0) and (outerW + AWrap.AccumWidth > AWrap.Width) then
         newLine := True;
@@ -448,6 +594,117 @@ begin
       AMeasurer);
 end;
 
+function LayoutIn(const AText: string; const AStyle: TTyRtStyle;
+  const ARichStyles: TTyRtRich; ARich: Boolean; const ADefault: TTyRtDefault;
+  ABaseX, ABaseY: Double; const AMeasurer: ITyTextMeasurer): TTyRtResult; forward;
+
+function TyRtLayout(const AText: string; const AStyle: TTyRtStyle;
+  const ARichStyles: TTyRtRich; ARich: Boolean; const ADefault: TTyRtDefault;
+  ABaseX, ABaseY: Double; const AMeasurer: ITyTextMeasurer): TTyRtResult;
+var
+  mask: TFPUExceptionMask;
+  i, n: Integer;
+  keep: Boolean;
+begin
+  { [R7-H] A STRING SIZE CAN LAY THE TEXT OUT AT NaN, and JS compares NaN
+    as false where FPC traps: the layout then runs with the traps masked,
+    and what is laid out at NaN -- not drawn by canvas -- is dropped on the
+    way out, so no NaN leaves the engine. }
+  if not AnyText(AStyle, ARichStyles) then
+    Exit(LayoutIn(AText, AStyle, ARichStyles, ARich, ADefault, ABaseX, ABaseY,
+      AMeasurer));
+  mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+  try
+    Result := LayoutIn(AText, AStyle, ARichStyles, ARich, ADefault, ABaseX,
+      ABaseY, AMeasurer);
+    n := 0;
+    for i := 0 to High(Result.Pieces) do
+    begin
+      with Result.Pieces[i] do
+        if Kind = rpkRect then
+          keep := Fin(X) and Fin(Y) and Fin(W) and Fin(H)
+            and (not PathEdges or (Fin(EdgeX1) and Fin(EdgeY1)))
+        else
+          keep := Fin(X) and Fin(Y);
+      if not keep then Continue;
+      Result.Pieces[n] := Result.Pieces[i];
+      Inc(n);
+    end;
+    SetLength(Result.Pieces, n);
+    if not (Fin(Result.BoxX) and Fin(Result.BoxY) and Fin(Result.BoxW)
+      and Fin(Result.BoxH)) then
+    begin
+      Result.BoxX := 0;
+      Result.BoxY := 0;
+      Result.BoxW := 0;
+      Result.BoxH := 0;
+    end;
+  finally
+    ClearExceptions(False);
+    {$IFDEF CPUX86_64}
+    { and the SSE flags ClearExceptions leaves on this CPU (Graph.pas
+      UnmaskFP) }
+    SetMXCSR(GetMXCSR and not LongWord($3F));
+    {$ENDIF}
+    SetExceptionMask(mask);
+  end;
+end;
+
+procedure TyRtClampRadii(AW, AH: Double; var R1, R2, R3, R4: Double);
+var total: Double;
+begin
+  R1 := Max(0.0, R1);
+  R2 := Max(0.0, R2);
+  R3 := Max(0.0, R3);
+  R4 := Max(0.0, R4);
+  if IsNan(AW) or IsNan(AH) then Exit;
+  total := R1 + R2;
+  if total > AW then begin R1 := R1 * AW / total; R2 := R2 * AW / total; end;
+  total := R3 + R4;
+  if total > AW then begin R3 := R3 * AW / total; R4 := R4 * AW / total; end;
+  total := R2 + R3;
+  if total > AH then begin R2 := R2 * AH / total; R3 := R3 * AH / total; end;
+  total := R1 + R4;
+  if total > AH then begin R1 := R1 * AH / total; R4 := R4 * AH / total; end;
+end;
+
+function TyRtPathBounds(const APiece: TTyRtPiece; out AX0, AY0, AX1, AY1: Double): Boolean;
+var
+  r1, r2, r3, r4: Double;
+  xs, ys: array[0..5] of Double;
+  k: Integer;
+begin
+  Result := (APiece.Kind = rpkRect) and APiece.PathEdges;
+  AX0 := 0; AY0 := 0; AX1 := 0; AY1 := 0;
+  if not Result then Exit;
+  r1 := APiece.Radius[0];
+  r2 := APiece.Radius[1];
+  r3 := APiece.Radius[2];
+  r4 := APiece.Radius[3];
+  if r1 + r2 + r3 + r4 <= 0 then
+  begin
+    { Rect.buildPath with no radius: ctx.rect, whose path is fromLine }
+    AX0 := Min(APiece.X, APiece.EdgeX1);
+    AX1 := Max(APiece.X, APiece.EdgeX1);
+    AY0 := Min(APiece.Y, APiece.EdgeY1);
+    AY1 := Max(APiece.Y, APiece.EdgeY1);
+    Exit;
+  end;
+  TyRtClampRadii(APiece.W, APiece.H, r1, r2, r3, r4);
+  { the corners' points; each arc is a quarter turn between two of them }
+  xs[0] := APiece.X; xs[1] := APiece.X + r1; xs[2] := APiece.X + r4;
+  xs[3] := APiece.EdgeX1; xs[4] := APiece.EdgeX1 - r2; xs[5] := APiece.EdgeX1 - r3;
+  ys[0] := APiece.Y; ys[1] := APiece.Y + r1; ys[2] := APiece.Y + r2;
+  ys[3] := APiece.EdgeY1; ys[4] := APiece.EdgeY1 - r3; ys[5] := APiece.EdgeY1 - r4;
+  AX0 := xs[0]; AX1 := xs[0]; AY0 := ys[0]; AY1 := ys[0];
+  for k := 1 to 5 do
+  begin
+    AX0 := Min(AX0, xs[k]); AX1 := Max(AX1, xs[k]);
+    AY0 := Min(AY0, ys[k]); AY1 := Max(AY1, ys[k]);
+  end;
+end;
+
 function TyRtHasMarkup(const AText: string): Boolean;
 var pos, k, close: Integer;
 begin
@@ -479,14 +736,23 @@ var
   wt: Integer;
   cut: TStringArray;
   pending: array of record L, T: Integer; end;
+  topW, topH, th: TTyRtJs;
+  hasTopW: Boolean;
 begin
   Result := Default(TTyRtBlock);
+  Result.WidthV := JNum(0);
+  Result.HeightV := JNum(0);
+  Result.OuterWidthV := JNum(0);
+  Result.OuterHeightV := JNum(0);
   if AText = '' then Exit;
+  { [R7-H] topWidth / topHeight as written: a string stays one }
+  topW := BlockWidthOf(AStyle, hasTopW);
+  topH := HeightOf(AStyle);
   wrap := Default(TWrapInfo);
-  wrap.Active := (AStyle.Overflow in [rtoBreak, rtoBreakAll]) and (AStyle.WidthKind = rtwNumber);
+  wrap.Active := (AStyle.Overflow in [rtoBreak, rtoBreakAll]) and hasTopW;
   if wrap.Active then
   begin
-    wrap.Width := AStyle.Width;
+    wrap.Width := topW.N;
     wrap.BreakAll := AStyle.Overflow = rtoBreakAll;
   end;
   Tokenise(Result, AText, AStyle, ARich, wrap, AMeasurer);
@@ -517,19 +783,27 @@ begin
         FontSizePx := px;
         FontWeight := wt;
         ContentHeight := FontHeight(AMeasurer, fam, px, wt);
-        if found and ts.HasHeight then InnerHeight := ts.Height
-        else InnerHeight := ContentHeight;
-        Height := InnerHeight;
-        if HasPadding then Height := Height + Padding[0] + Padding[2];
-        if found and ts.HasLineHeight then LineHeight := ts.LineHeight
-        else if AStyle.HasLineHeight then LineHeight := AStyle.LineHeight
-        else LineHeight := Height;
+        { [R7-H] retrieve2(tokenStyle.height, contentHeight), the padding
+          ADDED to it (a string height joins it) }
+        if found and ts.HasHeight then th := HeightOf(ts)
+        else th := JNum(ContentHeight);
+        InnerHeight := th.N;
+        if HasPadding then th := JAdd(th, JNum(Padding[0] + Padding[2]));
+        HeightV := th;
+        Height := th.N;
+        { retrieve3(tokenStyle.lineHeight, style.lineHeight, tokenHeight) }
+        if found and ts.HasLineHeight then LineHeightV := LineHeightOf(ts)
+        else if AStyle.HasLineHeight then LineHeightV := LineHeightOf(AStyle)
+        else LineHeightV := th;
+        LineHeight := LineHeightV.N;
         if found and (ts.Align <> rtaNone) then Align := ts.Align else Align := ATopAlign;
         if found and (ts.VAlign <> rtvNone) then VAlign := ts.VAlign else VAlign := rtvMiddle;
       end;
       { lineOverflow 'truncate': the lines the height holds }
+      { `calculatedHeight + token.lineHeight > topHeight`: a string line
+        height joins, two strings compare as strings [R7-H] }
       if truncLine and AStyle.HasHeight
-        and (calcH + Result.Lines[i].Tokens[j].LineHeight > AStyle.Height) then
+        and JGreater(JAdd(JNum(calcH), Result.Lines[i].Tokens[j].LineHeightV), topH) then
       begin
         if j > 0 then
         begin
@@ -537,7 +811,7 @@ begin
           Result.Lines[i].Width := lnW;
           Result.Lines[i].LineHeight := lnH;
           calcH := calcH + lnH;
-          calcW := Max(calcW, lnW);
+          calcW := JsMax(calcW, lnW);
           if i < High(Result.Lines) then Result.IsTruncated := True;
           SetLength(Result.Lines, i + 1);
         end
@@ -554,7 +828,9 @@ begin
         if found and (ts.WidthKind = rtwPercent) then
         begin
           IsPercent := True;
-          Percent := ts.Width;
+          { parseInt(percentWidth, 10) [R7-H: of the text as written] }
+          if ts.WidthIsText then Percent := JsParseInt(ts.WidthText)
+          else Percent := Trunc(ts.Width);
           SetLength(pending, Length(pending) + 1);
           pending[High(pending)].L := i;
           pending[High(pending)].T := j;
@@ -569,13 +845,17 @@ begin
             and Assigned(TySymbolImageSize) and TySymbolImageSize(ts.BgImage, iw, ih)
             and (ih > 0) then
             Width := Math.Max(Width, iw * Height / ih);
-          if (AStyle.Overflow = rtoTruncate) and (AStyle.WidthKind = rtwNumber) then
-            remain := AStyle.Width - lnW
+          { `topWidth - lineWidth`: NaN against a width that is a word, and
+            then nothing is truncated (remainTruncWidth < width is false) }
+          if (AStyle.Overflow = rtoTruncate) and hasTopW then
+            remain := topW.N - lnW
           else
             remain := NaN;
           if not IsNan(remain) and (remain < Width) then
           begin
-            if (found and (ts.WidthKind = rtwNumber)) or (remain < padH) then
+            { !tokenWidthNotSpecified: a number, or a string that is no
+              percentage and not 'auto' [R7-H] }
+            if (found and (ts.WidthKind in [rtwNumber, rtwText])) or (remain < padH) then
             begin
               Text := '';
               Width := 0;
@@ -597,31 +877,43 @@ begin
         end;
         Width := Width + padH;
         lnW := lnW + Width;
-        lnH := Max(lnH, LineHeight);
+        { Math.max: a line height that is a word is NaN [R7-H] }
+        lnH := JsMax(lnH, LineHeight);
       end;
     end;
     if stop then Break;
     Result.Lines[i].Width := lnW;
     Result.Lines[i].LineHeight := lnH;
     calcH := calcH + lnH;
-    calcW := Max(calcW, lnW);
+    calcW := JsMax(calcW, lnW);
   end;
-  if AStyle.WidthKind = rtwNumber then Result.Width := AStyle.Width else Result.Width := calcW;
-  if AStyle.HasHeight then Result.Height := AStyle.Height else Result.Height := calcH;
+  { [R7-H] retrieve2(topWidth, calculatedWidth) and the same for the
+    height, the padding then ADDED: a string joins it ('60' + 0 = '600') --
+    always, padding or none }
+  if hasTopW then Result.WidthV := topW else Result.WidthV := JNum(calcW);
+  if AStyle.HasHeight then Result.HeightV := topH else Result.HeightV := JNum(calcH);
+  Result.Width := Result.WidthV.N;
+  Result.Height := Result.HeightV.N;
   Result.ContentWidth := calcW;
   Result.ContentHeight := calcH;
-  Result.OuterWidth := Result.Width;
-  Result.OuterHeight := Result.Height;
   if AStyle.HasPadding then
   begin
-    Result.OuterWidth := Result.OuterWidth + AStyle.Padding[1] + AStyle.Padding[3];
-    Result.OuterHeight := Result.OuterHeight + AStyle.Padding[0] + AStyle.Padding[2];
+    Result.OuterWidthV := JAdd(Result.WidthV, JNum(AStyle.Padding[1] + AStyle.Padding[3]));
+    Result.OuterHeightV := JAdd(Result.HeightV, JNum(AStyle.Padding[0] + AStyle.Padding[2]));
+  end
+  else
+  begin
+    Result.OuterWidthV := JAdd(Result.WidthV, JNum(0));
+    Result.OuterHeightV := JAdd(Result.HeightV, JNum(0));
   end;
+  Result.OuterWidth := Result.OuterWidthV.N;
+  Result.OuterHeight := Result.OuterHeightV.N;
   { percent widths LAST, against the block's width, the token's own padding
-    lost and the line's width already summed }
+    lost and the line's width already summed: parseInt of the percentage
+    [R7-H: of its text] }
   for k := 0 to High(pending) do
     with Result.Lines[pending[k].L].Tokens[pending[k].T] do
-      Width := Trunc(Percent) / 100 * Result.Width;
+      Width := Percent / 100 * Result.Width;
 end;
 
 { ---- placing ---- }
@@ -646,9 +938,17 @@ begin
   end;
 end;
 
+{ `style.lineHeight` as JS reads it: a string that is not empty, a number
+  that is not 0 [R7-H: was any line height written] }
+function LineHeightTruthy(const S: TTyRtStyle): Boolean;
+begin
+  if S.LineHeightIsText then Result := S.LineHeightText <> ''
+  else Result := S.HasLineHeight and (S.LineHeight <> 0);
+end;
+
 function NeedBackground(const S: TTyRtStyle): Boolean;
 begin
-  Result := S.HasBackground or (S.BgImage <> '') or S.HasLineHeight
+  Result := S.HasBackground or (S.BgImage <> '') or LineHeightTruthy(S)
     or ((S.BorderWidth <> 0) and S.HasBorderColor);
 end;
 
@@ -660,8 +960,8 @@ end;
 
 { _renderBackground: the box; strokeFirst and the doubled width when it has
   both a fill and a border }
-function RectPiece(const S: TTyRtStyle; AX, AY, AW, AH: Double; ALine,
-  AToken: Integer; AOpacityFallback: Double): TTyRtPiece;
+function RectPiece(const S: TTyRtStyle; AX, AY: Double; const AW, AH: TTyRtJs;
+  ALine, AToken: Integer; AOpacityFallback: Double): TTyRtPiece;
 var k: Integer;
 begin
   Result := Default(TTyRtPiece);
@@ -670,8 +970,13 @@ begin
   Result.Token := AToken;
   Result.X := AX;
   Result.Y := AY;
-  Result.W := AW;
-  Result.H := AH;
+  { [R7-H] canvas takes a string size as its number; the path adds it to
+    the corner as a string (TTyRtPiece.PathEdges) }
+  Result.W := AW.N;
+  Result.H := AH.N;
+  Result.PathEdges := AW.IsStr or AH.IsStr;
+  Result.EdgeX1 := JAdd(JNum(AX), AW).N;
+  Result.EdgeY1 := JAdd(JNum(AY), AH).N;
   Result.HasFill := S.HasBackground;
   Result.Fill := S.Background;
   if (S.BorderWidth <> 0) and S.HasBorderColor then
@@ -714,14 +1019,14 @@ begin
   begin
     Result.Image := S.BgImage;
     Result.Drawn := True;
-    if S.HasLineHeight or ((S.BorderWidth <> 0) and S.HasBorderColor) then
+    if LineHeightTruthy(S) or ((S.BorderWidth <> 0) and S.HasBorderColor) then
       Result.ImageOpacity := 1
     else
       Result.ImageOpacity := Result.Opacity;
   end;
 end;
 
-function TyRtLayout(const AText: string; const AStyle: TTyRtStyle;
+function LayoutIn(const AText: string; const AStyle: TTyRtStyle;
   const ARichStyles: TTyRtRich; ARich: Boolean; const ADefault: TTyRtDefault;
   ABaseX, ABaseY: Double; const AMeasurer: ITyTextMeasurer): TTyRtResult;
 var
@@ -754,7 +1059,7 @@ var
       else
         rx0 := AX;
       end;
-      AddPiece(Result, RectPiece(ts, rx0, y - tk.Height / 2, tk.Width, tk.Height,
+      AddPiece(Result, RectPiece(ts, rx0, y - tk.Height / 2, JNum(tk.Width), tk.HeightV,
         ALine, AIdx, IfThen(AStyle.HasOpacity, AStyle.Opacity, 1)));
       tokenBg := ts.HasBackground or (ts.BgImage <> '');
     end;
@@ -850,23 +1155,28 @@ var
   procedure PlainLayout;
   var
     lines: TStringArray;
-    lh, contentH, height, width, contentW, textX, textY, bx, by, fontH: Double;
+    lh, contentH, height, contentW, textX, textY, bx, by, fontH, q: Double;
     k, keep: Integer;
     cut: TStringArray;
     p: TTyRtPiece;
-    useDefaultFill, bgDrawn: Boolean;
+    useDefaultFill, bgDrawn, hasW: Boolean;
     wr: TWrapResult;
+    widthV, heightV, lhV, textYV, padHV, padVV: TTyRtJs;
   begin
     fontH := FontHeight(AMeasurer, AStyle.FontFamily, AStyle.FontSizePx, AStyle.FontWeight);
-    if AStyle.HasLineHeight then lh := AStyle.LineHeight
-    else lh := fontH;
+    { [R7-H] the width, height and line height as zrender holds them: a
+      string stays one where it is added, and is its number elsewhere }
+    if AStyle.HasLineHeight then lhV := LineHeightOf(AStyle)
+    else lhV := JNum(fontH);
+    lh := lhV.N;
+    widthV := BlockWidthOf(AStyle, hasW);
     lines := nil;
     if AText <> '' then
     begin
-      if (AStyle.Overflow in [rtoBreak, rtoBreakAll]) and (AStyle.WidthKind = rtwNumber) then
+      if (AStyle.Overflow in [rtoBreak, rtoBreakAll]) and hasW then
       begin
         wr := WrapText(AText, AStyle.FontFamily, AStyle.FontSizePx, AStyle.FontWeight,
-          AStyle.Width, AStyle.Overflow = rtoBreakAll, 0, AMeasurer);
+          widthV.N, AStyle.Overflow = rtoBreakAll, 0, AMeasurer);
         SetLength(lines, Length(wr.Lines));
         for k := 0 to High(wr.Lines) do lines[k] := wr.Lines[k];
       end
@@ -874,10 +1184,20 @@ var
         lines := AText.Split([#10]);
     end;
     contentH := Length(lines) * lh;
-    if AStyle.HasHeight then height := AStyle.Height else height := contentH;
+    if AStyle.HasHeight then heightV := HeightOf(AStyle) else heightV := JNum(contentH);
+    height := heightV.N;
     if AStyle.LineOverflowTruncate and (contentH > height) then
     begin
-      keep := Floor(height / lh);
+      { lines.slice(0, Math.floor(height / lineHeight)): NaN slices to
+        nothing, an infinity keeps every line }
+      q := height / lh;
+      if IsNan(q) then keep := 0
+      else if IsInfinite(q) then
+      begin
+        if q > 0 then keep := Length(lines) else keep := 0;
+      end
+      else
+        keep := Floor(q);
       { Array.slice: a negative end counts from the end -- a height under
         nought (a cell shorter than its padding) keeps all the lines but
         the last [Batch 145] }
@@ -889,10 +1209,14 @@ var
       end;
       contentH := Length(lines) * lh;
     end;
-    if (AStyle.Overflow = rtoTruncate) and (AStyle.WidthKind = rtwNumber) then
+    { truncateSingleLine: `!containerWidth` -- a width that is a word is
+      NaN, and keeps nothing (nor counts as truncated) [R7-H] }
+    if (AText <> '') and (AStyle.Overflow = rtoTruncate) and hasW and IsNan(widthV.N - 1) then
+      for k := 0 to High(lines) do lines[k] := ''
+    else if (AText <> '') and (AStyle.Overflow = rtoTruncate) and hasW then
       for k := 0 to High(lines) do
       begin
-        cut := TyZrPlainTextLines(lines[k], AStyle.Width, MaxDouble, AStyle.MinChar,
+        cut := TyZrPlainTextLines(lines[k], widthV.N, MaxDouble, AStyle.MinChar,
           EllipsisOf(AStyle), AMeasurer,
           AStyle.FontFamily, TyFontSizeFromPx(AStyle.FontSizePx), AStyle.FontWeight, False);
         if Length(cut) > 0 then
@@ -905,18 +1229,28 @@ var
     for k := 0 to High(lines) do
       contentW := Max(contentW, MeasureW(AMeasurer, lines[k], AStyle.FontFamily,
         AStyle.FontSizePx, AStyle.FontWeight));
-    if AStyle.WidthKind = rtwNumber then width := AStyle.Width else width := contentW;
-    Result.Block.Width := width;
+    if not hasW then widthV := JNum(contentW);
+    { outerWidth += paddingH, always: a string joins it [R7-H] }
+    if AStyle.HasPadding then
+    begin
+      padHV := JNum(AStyle.Padding[1] + AStyle.Padding[3]);
+      padVV := JNum(AStyle.Padding[0] + AStyle.Padding[2]);
+    end
+    else
+    begin
+      padHV := JNum(0);
+      padVV := JNum(0);
+    end;
+    Result.Block.WidthV := widthV;
+    Result.Block.HeightV := heightV;
+    Result.Block.OuterWidthV := JAdd(widthV, padHV);
+    Result.Block.OuterHeightV := JAdd(heightV, padVV);
+    Result.Block.Width := widthV.N;
     Result.Block.Height := height;
     Result.Block.ContentWidth := contentW;
     Result.Block.ContentHeight := contentH;
-    Result.Block.OuterWidth := width;
-    Result.Block.OuterHeight := height;
-    if AStyle.HasPadding then
-    begin
-      Result.Block.OuterWidth := width + AStyle.Padding[1] + AStyle.Padding[3];
-      Result.Block.OuterHeight := height + AStyle.Padding[0] + AStyle.Padding[2];
-    end;
+    Result.Block.OuterWidth := Result.Block.OuterWidthV.N;
+    Result.Block.OuterHeight := Result.Block.OuterHeightV.N;
     textX := ABaseX;
     textY := AdjustY(ABaseY, contentH, vAlign);
     bx := AdjustX(ABaseX, Result.Block.OuterWidth, textAlign);
@@ -928,8 +1262,8 @@ var
     bgDrawn := False;
     if NeedBackground(AStyle) then
     begin
-      AddPiece(Result, RectPiece(AStyle, bx, by, Result.Block.OuterWidth,
-        Result.Block.OuterHeight, -1, -1, 1));
+      AddPiece(Result, RectPiece(AStyle, bx, by, Result.Block.OuterWidthV,
+        Result.Block.OuterHeightV, -1, -1, 1));
       bgDrawn := AStyle.HasBackground or (AStyle.BgImage <> '');
     end;
     textY := textY + lh / 2;
@@ -944,6 +1278,9 @@ var
       if vAlign = rtvTop then textY := textY + AStyle.Padding[0]
       else if vAlign = rtvBottom then textY := textY - AStyle.Padding[2];
     end;
+    { [R7-H] `textY += lineHeight` after each line: a string line height
+      joins it, and the next line sits at the joined number }
+    textYV := JNum(textY);
     for k := 0 to High(lines) do
     begin
       p := Default(TTyRtPiece);
@@ -951,7 +1288,7 @@ var
       p.Line := k;
       p.Token := -1;
       p.X := textX;
-      p.Y := textY;
+      p.Y := textYV.N;
       p.Text := lines[k];
       p.TextAlign := textAlign;
       p.FontFamily := AStyle.FontFamily;
@@ -999,7 +1336,7 @@ var
       p.ShadowOffsetY := AStyle.ShadowOffsetY;
       p.HasShadow := p.ShadowBlur > 0;
       AddPiece(Result, p);
-      textY := textY + lh;
+      textYV := JAdd(textYV, lhV);
     end;
   end;
 
@@ -1030,12 +1367,13 @@ begin
     xLeft := xLeft + AStyle.Padding[3];
     lineTop := lineTop + AStyle.Padding[0];
   end;
-  xRight := xLeft + Result.Block.Width;
+  { `xLeft + contentWidth`: a width that is a string joins it [R7-H] }
+  xRight := JAdd(JNum(xLeft), Result.Block.WidthV).N;
   blockBg := False;
   if NeedBackground(AStyle) then
   begin
-    AddPiece(Result, RectPiece(AStyle, boxX, boxY, Result.Block.OuterWidth,
-      Result.Block.OuterHeight, -1, -1, 1));
+    AddPiece(Result, RectPiece(AStyle, boxX, boxY, Result.Block.OuterWidthV,
+      Result.Block.OuterHeightV, -1, -1, 1));
     blockBg := AStyle.HasBackground or (AStyle.BgImage <> '');
   end;
   for i := 0 to High(Result.Block.Lines) do

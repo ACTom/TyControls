@@ -299,7 +299,10 @@ type
 
   TTyRtAlign = (rtaNone, rtaLeft, rtaCenter, rtaRight);
   TTyRtVAlign = (rtvNone, rtvTop, rtvMiddle, rtvBottom);
-  TTyRtWidthKind = (rtwNone, rtwNumber, rtwPercent, rtwAuto);
+  { [R7-H] rtwText: a token's width written as a string that is no
+    percentage and not 'auto' ('60', 'abc') -- written, so it is no width
+    the token takes from its words alone, yet no number either }
+  TTyRtWidthKind = (rtwNone, rtwNumber, rtwPercent, rtwAuto, rtwText);
   TTyRtOverflow = (rtoNone, rtoTruncate, rtoBreak, rtoBreakAll);
 
   { ONE STYLE as zrender holds it after normalizeTextStyle. `Has` flags
@@ -330,6 +333,18 @@ type
     Width: Double;          // px, or the percentage for rtwPercent
     HasHeight: Boolean;
     Height: Double;
+    { [R7-H] A WIDTH, HEIGHT OR LINE HEIGHT WRITTEN AS A STRING, as zrender
+      holds it -- createTextStyle hands the option's value on as it is, and
+      zrender does JS arithmetic with it: where it compares or divides, the
+      string is its JS number (Width / Height / LineHeight hold it, NaN for
+      a word such as '50%' or 'abc'); where it ADDS -- the padding to the
+      outer width, a block's left edge to its width, a plain line's y to the
+      line height -- the string is joined ('60' + 0 = '600'). The block's
+      width is a string whatever its kind (rtwPercent, rtwAuto and rtwText
+      alike: zrender reads no percentage on a block); a site that sets a
+      width or height of its own clears the flag. }
+    WidthIsText, HeightIsText, LineHeightIsText: Boolean;
+    WidthText, HeightText, LineHeightText: string;
     HasPadding: Boolean;
     Padding: array[0..3] of Double;   // top, right, bottom, left
     HasBackground: Boolean;
@@ -421,6 +436,13 @@ type
     BorderDash: string;
     BorderDashOffset: Double;
     Radius: array[0..3] of Double;
+    { [R7-H] A RECT WHOSE SIZE WAS A STRING ('600'): canvas draws a plain
+      rect at X, Y, W, H (its numbers), but zrender's path ADDS the size to
+      the corner as a string -- a rounded rect runs from X to EdgeX1 = X +
+      '600' joined, and so do the bounds of every such rect (PathProxy's
+      fromLine). EdgeX1 / EdgeY1 are those joined edges. }
+    PathEdges: Boolean;
+    EdgeX1, EdgeY1: Double;
     Opacity: Double;
     { [R2-F] a rect's picture (backgroundColor: {image}), drawn over the
       rect's border, at ImageOpacity: the style's opacity where the picture
