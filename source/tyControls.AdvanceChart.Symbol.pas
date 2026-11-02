@@ -174,6 +174,10 @@ const
     it is a marker a few pixels across: 12 steps per arc is already finer than
     the pixels it lands on. }
   cCurveSteps = 12;
+  { [R7-I] a turned ellipse's and a turned roundRect corner's steps: drawn
+    as the polygon, a step of 2 pi / 96 (a quarter of 24) leaves a 50 px
+    radius under a tenth of a pixel off the curve }
+  cTurnedQuarterSteps = 24;
 
 function TySymbolDefault(const ASeriesType: string): TTySymbolSpec;
 begin
@@ -590,6 +594,24 @@ begin
   end;
 end;
 
+{ [R7-I] points of the ellipse about (ACX, ACY) with radii ARX, ARY from
+  angle AFrom to ATo (radians, y down) in ASteps steps, both ends -- a
+  whole turn without its end, which is its start }
+procedure PushEllipse(var AL: TPointList; ACX, ACY, ARX, ARY, AFrom, ATo: Double;
+  ASteps: Integer);
+var
+  i, n: Integer;
+  t: Double;
+begin
+  n := ASteps;
+  if Abs(ATo - AFrom - 2 * Pi) < 1e-12 then Dec(n);
+  for i := 0 to n do
+  begin
+    t := AFrom + (ATo - AFrom) * i / ASteps;
+    Push(AL, ACX + ARX * Cos(t), ACY + ARY * Sin(t));
+  end;
+end;
+
 { Rotate every point about the centre, then move by the offset. Rotation first:
   symbolOffset shifts the symbol on SCREEN, so rotating after it would swing
   the offset around too. }
@@ -686,12 +708,22 @@ begin
           scale -- so `symbolSize: [20, 8]` is a 20x8 ellipse on screen, not the
           radius-4 circle that Math.min(w, h) / 2 would suggest. }
         if w = h then
+        begin
           Result := TyShapeCircle(ACX + ASpec.OffsetX, ACY + ASpec.OffsetY,
-                                  w / 2)
-        else
+                                  w / 2);
+          Exit;
+        end;
+        if ASpec.RotateDeg = 0 then
+        begin
           Result := TyShapeEllipse(ACX + ASpec.OffsetX, ACY + ASpec.OffsetY,
                                    w / 2, h / 2);
-        Exit;
+          Exit;
+        end;
+        { [R7-I] A TURNED ELLIPSE: the unit circle scaled by half the size on
+          each axis, then turned with the element -- the shape record has no
+          turn of its own, so the ellipse is drawn as its polygon, turned by
+          Place below [was: the ellipse unturned] }
+        PushEllipse(L, ACX, ACY, w / 2, h / 2, 0, 2 * Pi, 4 * cTurnedQuarterSteps);
       end;
     tsyRoundRect:
       begin
@@ -709,14 +741,19 @@ begin
             Min(w, h) / 4);
           Exit;
         end;
-        { A ROTATED ROUND RECT LOSES ITS CORNERS. The shape record cannot carry
-          a rotation, so the choice is a square-cornered polygon at the right
-          angle or a rounded one at the wrong angle. The angle is the thing the
-          author asked for. }
-        Push(L, box.Left, box.Top);
-        Push(L, box.Right, box.Top);
-        Push(L, box.Right, box.Bottom);
-        Push(L, box.Left, box.Bottom);
+        { [R7-I] A TURNED ROUND RECT KEEPS ITS CORNERS: symbol.ts' roundRect in
+          the unit box (r = min(2, 2) / 4 = 0.5) scaled by half the size on
+          each axis -- elliptical corners w / 4 by h / 4 -- then turned; the
+          shape record has no turn, so it is drawn as that outline's polygon,
+          turned by Place below [was: square corners] }
+        PushEllipse(L, box.Right - w / 4, box.Top + h / 4, w / 4, h / 4,
+          -Pi / 2, 0, cTurnedQuarterSteps);
+        PushEllipse(L, box.Right - w / 4, box.Bottom - h / 4, w / 4, h / 4,
+          0, Pi / 2, cTurnedQuarterSteps);
+        PushEllipse(L, box.Left + w / 4, box.Bottom - h / 4, w / 4, h / 4,
+          Pi / 2, Pi, cTurnedQuarterSteps);
+        PushEllipse(L, box.Left + w / 4, box.Top + h / 4, w / 4, h / 4,
+          Pi, 3 * Pi / 2, cTurnedQuarterSteps);
       end;
     tsyPath:
       begin

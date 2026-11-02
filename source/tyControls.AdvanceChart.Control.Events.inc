@@ -1338,6 +1338,47 @@ end;
   texts and ticks 0) -- for the list's element found first. }
 function TTyCustomAdvanceChart.AxisPartAt(AX, AY: Integer; AZ, AZ2: Integer;
   AOnlyAbove: Boolean; out ATarget: TTyChartEventTarget): Boolean;
+var txt: TTyChartDatumRef;
+begin
+  Result := AxisPartFind(AX, AY, AZ, AZ2, AOnlyAbove, ATarget, txt);
+end;
+
+function TTyCustomAdvanceChart.AxisRawLabel(AAxis: TTyAxis; AValue: Double): string;
+begin
+  if AAxis.Scale is TTyOrdinalScale then
+    Result := TTyOrdinalScale(AAxis.Scale).GetLabel(AValue)
+  else if AAxis.Scale is TTyTimeScale then
+    Result := TTyTimeScale(AAxis.Scale).GetLabel(AValue)
+  else
+    Result := TyAxisTickLabel(AAxis, AValue, False, '');
+end;
+
+{ [R7-I] a radar indicator's model (RadarModel: a clone of the indicator
+  merged under the radar's shared keys without overwriting -- its own
+  triggerEvent over the radar's -- and no parent): isLabelSilent on it --
+  the indicator's own `silent`, or neither triggerEvent nor its own
+  tooltip.show. ATriggers its triggerEvent. }
+function RadarTextSilent(ARadar, AIndicator: TJSONData; out ATriggers: Boolean): Boolean;
+var d, tip: TJSONData;
+begin
+  ATriggers := False;
+  d := nil;
+  if AIndicator is TJSONObject then d := TJSONObject(AIndicator).Find('triggerEvent');
+  if d <> nil then ATriggers := TyOptTruthy(d)
+  else if ARadar is TJSONObject then
+    ATriggers := TyOptTruthy(TJSONObject(ARadar).Find('triggerEvent'));
+  Result := False;
+  if (AIndicator is TJSONObject) and TyOptTruthy(TJSONObject(AIndicator).Find('silent')) then
+    Exit(True);
+  if ATriggers then Exit;
+  tip := nil;
+  if AIndicator is TJSONObject then tip := TJSONObject(AIndicator).Find('tooltip');
+  Result := not ((tip is TJSONObject) and TyOptTruthy(TJSONObject(tip).Find('show')));
+end;
+
+function TTyCustomAdvanceChart.AxisPartFind(AX, AY: Integer; AZ, AZ2: Integer;
+  AOnlyAbove: Boolean; out ATarget: TTyChartEventTarget;
+  out AText: TTyChartDatumRef): Boolean;
 var
   g, a, q, k, ai: Integer;
   gb: TTyGridBuild;
@@ -1352,11 +1393,21 @@ var
   pol: TTyPolar;
   par: TTyParallel;
   ln: TTyPolarLine;
+  ind: TJSONData;
+  trig: Boolean;
 
   function Inside(const AR: TTyRectF): Boolean;
   begin
     Result := (AX >= AR.Left) and (AX <= AR.Right) and (AY >= AR.Top)
       and (AY <= AR.Bottom);
+  end;
+
+  { [R7-I] the text found: its axis (AxisTextOf's numbering) and its index }
+  procedure TextIs(AComponent, AQ: Integer);
+  begin
+    AText.Kind := ctkAxisText;
+    AText.ComponentIndex := AComponent;
+    AText.DataIndex := AQ;
   end;
 
   function Boxed(AXa, AYa, AW, AH: Double; AAH: TTyTextAnchorH;
@@ -1439,12 +1490,7 @@ var
   { the label's value as its rawLabel: scale.getLabel(tick) }
   function LabelValue(AAxis: TTyAxis; AValue: Double): string;
   begin
-    if AAxis.Scale is TTyOrdinalScale then
-      Result := TTyOrdinalScale(AAxis.Scale).GetLabel(AValue)
-    else if AAxis.Scale is TTyTimeScale then
-      Result := TTyTimeScale(AAxis.Scale).GetLabel(AValue)
-    else
-      Result := TyAxisTickLabel(AAxis, AValue, False, '');
+    Result := AxisRawLabel(AAxis, AValue);
   end;
 
   { makeAxisEventDataBase, where the axis says triggerEvent }
@@ -1477,12 +1523,16 @@ var
     Base(AAxis, AMain, ADim, AIndex);
     if AQ < 0 then
     begin
+      { [R7-I] the name as the builder took it, before nameTruncate cut it
+        [was: the text drawn] }
       ATarget.Params.TargetType := 'axisName';
-      ATarget.Params.Name := ASpec^.NamePlacement.Text;
+      ATarget.Params.Name := TyAxisFullName(AAxis, ASpec);
       Exit;
     end;
     ATarget.Params.TargetType := 'axisLabel';
-    ATarget.Params.TickIndex := AQ;
+    { [R7-I] its place among the labels upstream builds [was: among every
+      tick -- a category axis' interval skipped none] }
+    ATarget.Params.TickIndex := TyAxisViewLabelIndex(ASpec, AQ);
     { A BREAK'S LABEL expands its break on a click [Batch 132] }
     if (ABreakKey >= 0) and (AQ <= High(ASpec^.LabelBreakKind))
       and (ASpec^.LabelBreakKind[AQ] <> 0) then
@@ -1537,6 +1587,7 @@ begin
   Result := False;
   ATarget := Default(TTyChartEventTarget);
   ATarget.Params := TyChartBlankParams;
+  AText := TyChartNoDatum;
   if FOption = nil then Exit;
   meas := nil;
 
@@ -1566,6 +1617,7 @@ begin
       else
         SpecTarget(axObj, spec, node, mainT, axObj.Dim, axObj.ComponentIndex, q,
           -(100000 + g * 10000 + a * 1000 + q), g * 1000 + a);
+      TextIs(g * 1000 + a, q);
       Exit(True);
     end;
   end;
@@ -1587,6 +1639,7 @@ begin
     else
       SpecTarget(axObj, spec, node, 'singleAxis', 'single', a, q,
         -((Int64(12) shl 44) + Int64(a) * 100000 + q), cBreakSingleKey + a);
+    TextIs(cAxisTextSingle + a, q);
     Exit(True);
   end;
 
@@ -1613,6 +1666,7 @@ begin
           else
             SpecTarget(axObj, @pol.RadiusView.Spec, node, 'radiusAxis', 'radius',
               axObj.ComponentIndex, q, -((Int64(47) shl 44) + Int64(k) * 1000000 + q), -1);
+          TextIs(cAxisTextRadius + k, q);
           Exit(True);
         end;
       end;
@@ -1645,6 +1699,7 @@ begin
           ATarget.Params.TargetType := 'axisLabel';
           ATarget.Params.ValueText := LabelValue(axObj, pol.AngleView.Labels[q].Value);
         end;
+        TextIs(cAxisTextAngle + k, q);
         Exit(True);
       end;
     end;
@@ -1683,21 +1738,34 @@ begin
         SpecTarget(axObj, @par.Views[ai].Spec, node, 'parallelAxis', 'parallel',
           axObj.ComponentIndex, q, -((Int64(47) shl 44) + (Int64(1) shl 40)
           + Int64(k) * 1000000 + Int64(ai) * 1000 + q), -1);
+      TextIs(cAxisTextParallel + k * 1000 + ai, q);
       Exit(True);
     end;
   end;
 
   { ---- a radar's indicator names and labels: an AxisBuilder each, on a
-    model with no parent -- only triggerEvent wakes them ---- }
+    model with no parent -- only triggerEvent wakes them [R7-I: the
+    indicator's own over the radar's; or the indicator's own tooltip.show;
+    not where the indicator says silent] ---- }
   for k := 0 to High(FRadarTexts) do
   begin
     node := FOption.ComponentAt('radar', FRadarTexts[k].Radar);
-    if not TriggersEvent(node) then Continue;
+    ind := nil;
+    if node is TJSONObject then ind := TJSONObject(node).Find('indicator');
+    if (ind is TJSONArray) and (FRadarTexts[k].Spoke >= 0)
+      and (FRadarTexts[k].Spoke < TJSONArray(ind).Count) then
+      ind := TJSONArray(ind).Items[FRadarTexts[k].Spoke]
+    else
+      ind := nil;
+    if RadarTextSilent(node, ind, trig) then Continue;
     if not HitIn(ModelZLevel('radar', FRadarTexts[k].Radar))
       or MaskOver(ModelZLevel('radar', FRadarTexts[k].Radar)) then Continue;
     if not Above(FRadarTexts[k].Z, FRadarTexts[k].Z2) then Continue;
     if not Inside(FRadarTexts[k].Box) then Continue;
     ATarget.Id := -((Int64(47) shl 44) + (Int64(2) shl 40) + k);
+    if FRadarTexts[k].IsName then TextIs(cAxisTextRadar + k, -1)
+    else TextIs(cAxisTextRadar + k, FRadarTexts[k].Ring);
+    if not trig then Exit(True);
     ATarget.HasData := True;
     ATarget.Model.Valid := True;
     ATarget.Model.MainType := 'radar';
@@ -1713,8 +1781,11 @@ begin
     end
     else
     begin
+      { [R7-I] eventData.value is the rawLabel, and tickIndex the label's
+        index [was: the text drawn, no tickIndex] }
       ATarget.Params.TargetType := 'axisLabel';
-      ATarget.Params.ValueText := FRadarTexts[k].Text;
+      ATarget.Params.ValueText := FRadarTexts[k].Raw;
+      ATarget.Params.TickIndex := FRadarTexts[k].Ring;
     end;
     Exit(True);
   end;

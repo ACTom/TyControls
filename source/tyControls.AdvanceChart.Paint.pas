@@ -1224,7 +1224,15 @@ type
     { [Batch 148] THE CLIP CUTS THE HIT TOO, as zrender's isHover asks
       every clip path up the element's parents -- for an element that
       says so (a geo region and its text). Everything else keeps the
-      rule above: the hit test ignores the clip. }
+      rule above: the hit test ignores the clip.
+      [R7-I] Its rect or its sector, wherever upstream's clip is a clipPath
+      on the element or a parent: a line's run and area (the lineGroup's),
+      a lines series' every element, a custom series' (clip: true), a candle
+      or box partly clipped (its own), a thumbnail's window (its
+      contentGroup's), and while they enter, a parallel line, a theme river
+      layer and a sankey's group (removed when the entering ends). A large
+      batch asks its own (TTyLargeGeom.ClipOn). Not a series that cuts its
+      geometry (bars, a scatter's points) or none (a graph). }
     ClipHits: Boolean;
     { [spec 242] A GRAPHIC OR CUSTOM ELEMENT'S clipPath, and every clipPath
       up its parents (and its host's, for a label), as zrender's Storage
@@ -1418,6 +1426,10 @@ function TyElementStrokeHitPx(const AEl: TTyChartElement; AScale: Double): Doubl
   not, the shape grown by the element's slop (and the pad) as before. }
 function TyElementHit(const AEl: TTyChartElement; AX, AY: Double; APPI: Integer;
   APad: Boolean): Boolean;
+{ the sector an element's HasClipSector names, run forward as zrender's arc
+  runs it from ClipSA to ClipEA in its direction (the renderer cuts the ink
+  to it; [R7-I] where ClipHits, the hit too) }
+function TyClipSectorShape(const AElement: TTyChartElement): TTyChartShape;
 { [F6b] an SVG map element's zrender contain (ZrHit) at a point }
 function TyZrHitContains(const AHit: TTyZrHit; AX, AY: Double): Boolean;
 { [R2-I1] A SYMBOL'S TARGET in two parts [Batch 142]: the pen's own reach,
@@ -2316,6 +2328,44 @@ begin
   Result := TyZrShapeContainStroke(AShape, AWidthPx, AX, AY);
 end;
 
+function TyClipSectorShape(const AElement: TTyChartElement): TTyChartShape;
+var st, en, t: Double;
+begin
+  Result := TyShapeSector(AElement.ClipCX, AElement.ClipCY, AElement.ClipR0,
+    AElement.ClipR1, 0, 1);
+  st := AElement.ClipSA;
+  en := AElement.ClipEA;
+  if AElement.ClipCW then
+  begin
+    if en - st >= 2 * Pi then en := st + 2 * Pi
+    else if st > en then en := st + (2 * Pi - (st - en - Floor((st - en) / (2 * Pi)) * 2 * Pi));
+  end
+  else
+  begin
+    if st - en >= 2 * Pi then en := st - 2 * Pi
+    else if st < en then en := st - (2 * Pi - (en - st - Floor((en - st) / (2 * Pi)) * 2 * Pi));
+    t := st;
+    st := en;
+    en := t;
+  end;
+  Result.StartRad := st;
+  Result.EndRad := en;
+end;
+
+{ [R7-I] a point outside the clip an element's hit is cut to (ClipHits):
+  its rect, or its sector (createPolarClipPath's Sector.contain) -- its own
+  routine, so the sector's shape (a managed record) costs nothing to the
+  elements that have no clip }
+function OutsideHitClip(const AEl: TTyChartElement; AX, AY: Double): Boolean;
+begin
+  Result := False;
+  if AEl.HasClip
+    and not ((AX >= AEl.ClipRect.Left) and (AX <= AEl.ClipRect.Right)
+      and (AY >= AEl.ClipRect.Top) and (AY <= AEl.ClipRect.Bottom)) then Exit(True);
+  if AEl.HasClipSector
+    and not TyShapeContains(TyClipSectorShape(AEl), AX, AY, 0) then Exit(True);
+end;
+
 { the same over a pointer turned upright -- its own routine, so the copy of
   the shape (a managed record) costs nothing to the elements that need none }
 function UprightHit(const AEl: TTyChartElement; AWidthPx, APadPx, AX, AY: Double): Boolean;
@@ -2335,10 +2385,8 @@ begin
   if AEl.HitNone then Exit(False);
   for k := 0 to High(AEl.ClipPaths) do
     if not TyShapeContains(AEl.ClipPaths[k], AX, AY, 0) then Exit(False);
-  if AEl.ClipHits and AEl.HasClip
-    and not ((AX >= AEl.ClipRect.Left) and (AX <= AEl.ClipRect.Right)
-      and (AY >= AEl.ClipRect.Top) and (AY <= AEl.ClipRect.Bottom)) then
-    Exit(False);
+  { [R7-I] the rect or the sector [was: the rect alone] }
+  if AEl.ClipHits and OutsideHitClip(AEl, AX, AY) then Exit(False);
   if AEl.ZrHit.Active then Exit(TyZrHitContains(AEl.ZrHit, AX, AY));
   if AEl.PathHit.Active then Exit(TyPathHitContains(AEl.PathHit, AX, AY));
   if APPI > 0 then s := APPI / 96 else s := 1;
@@ -2393,10 +2441,7 @@ begin
   { [spec 242] a point outside a clip path is not over the element }
   for k := 0 to High(AEl.ClipPaths) do
     if not TyShapeContains(AEl.ClipPaths[k], AX, AY, 0) then Exit(False);
-  if AEl.ClipHits and AEl.HasClip
-    and not ((AX >= AEl.ClipRect.Left) and (AX <= AEl.ClipRect.Right)
-      and (AY >= AEl.ClipRect.Top) and (AY <= AEl.ClipRect.Bottom)) then
-    Exit(False);
+  if AEl.ClipHits and OutsideHitClip(AEl, AX, AY) then Exit(False);
   if AEl.ZrHit.Active then Result := TyZrHitContains(AEl.ZrHit, AX, AY)
   else if AEl.PathHit.Active then Result := TyPathHitContains(AEl.PathHit, AX, AY)
   else Result := TyShapeContains(AEl.Shape, AX, AY, ASlopPx);

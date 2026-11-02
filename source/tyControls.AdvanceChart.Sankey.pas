@@ -2165,6 +2165,8 @@ begin
     begin
       tagged := AList.Element(k);
       tagged.Anim.Role := carSankeyClip;
+      { [R7-I] the main group's clip while it grows cuts the hit too }
+      tagged.ClipHits := True;
       tagged.Anim.Series := ASeriesIndex;
       tagged.Anim.Index := -1;
       tagged.Anim.G[0] := gbX;

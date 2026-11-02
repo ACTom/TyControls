@@ -1524,6 +1524,9 @@ begin
     if ASolved.EnterClip then
     begin
       el.Anim.Role := carParallelLine;
+      { [R7-I] the data group's clip while it grows cuts the hit too
+        (isHover); none at rest -- removed once the entering is done }
+      el.ClipHits := True;
       el.Anim.G[0] := ASolved.Clip.X;
       el.Anim.G[1] := ASolved.Clip.Y;
       el.Anim.G[2] := ASolved.Clip.W;

@@ -3055,32 +3055,6 @@ begin
       AD.Truncate, 0, False, AD.MultiLine);
 end;
 
-{ the sector an element's HasClipSector names, run forward as zrender's arc
-  runs it from ClipSA to ClipEA in its direction }
-function TyClipSectorShape(const AElement: TTyChartElement): TTyChartShape;
-var st, en, t: Double;
-begin
-  Result := TyShapeSector(AElement.ClipCX, AElement.ClipCY, AElement.ClipR0,
-    AElement.ClipR1, 0, 1);
-  st := AElement.ClipSA;
-  en := AElement.ClipEA;
-  if AElement.ClipCW then
-  begin
-    if en - st >= 2 * Pi then en := st + 2 * Pi
-    else if st > en then en := st + (2 * Pi - (st - en - Floor((st - en) / (2 * Pi)) * 2 * Pi));
-  end
-  else
-  begin
-    if st - en >= 2 * Pi then en := st - 2 * Pi
-    else if st < en then en := st - (2 * Pi - (en - st - Floor((en - st) / (2 * Pi)) * 2 * Pi));
-    t := st;
-    st := en;
-    en := t;
-  end;
-  Result.StartRad := st;
-  Result.EndRad := en;
-end;
-
 var
   GZBandOn: Boolean = False;
   GZBandLo, GZBandHi: Integer;

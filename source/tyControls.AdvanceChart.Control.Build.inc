@@ -3277,7 +3277,6 @@ var
   lay: TTyTitleLayout;
   f0, f1: TTyTitleFont;
   ink0, ink1: TTyColor;
-  frameFill: TTyFill;
   frameInk: TTyColor;
   { [R7-G] the background as its Rect builds it }
   frame: TTyRectF;
@@ -3341,15 +3340,15 @@ begin
         TTyColor(FTitleSpecs[i].BackgroundColor), FTitleSpecs[i].Shadow);
     { [R5-G] IN THE AUTHOR'S backgroundColor (install.ts: style.fill =
       backgroundColor) [was: the skin's surface, whatever the option wrote] }
+    { [R7-I] on the frame as drawn, to the fraction: the Rect's fill and
+      stroke share subPixelOptimizeRect's shape [was: the fill rounded to
+      whole pixels] }
     if FTitleSpecs[i].HasBackground then
     begin
-      frameFill := Default(TTyFill);
-      frameFill.Kind := tfkSolid;
-      frameFill.Color := TTyColor(FTitleSpecs[i].BackgroundColor);
-      APainter.FillBackground(
-        Rect(Round(frame.Left), Round(frame.Top),
-             Round(frame.Right), Round(frame.Bottom)),
-        frameFill, Round(FTitleSpecs[i].BorderRadii[0]));
+      APainter.BeginPath;
+      APainter.RoundRectPath(frame.Left, frame.Top, frame.Right,
+        frame.Bottom, FTitleSpecs[i].BorderRadii[0]);
+      APainter.FillPath(TTyColor(FTitleSpecs[i].BackgroundColor));
     end;
     { [R5-G] AND ITS BORDER: borderWidth above nought strokes the rect in
       borderColor, tokens.color.primary by default (the title's ink)
@@ -4141,6 +4140,7 @@ var
   i, drawn, furniture, n: Integer;
   { [R7-G] a radar's texts in the list }
   rt0, rt: Integer;
+  radarTexts: TTyRadarTextArray;
   v: TTySeriesVisual;
   pv: TTyPieVisual;
   fv: TTyFunnelVisual;
@@ -4208,21 +4208,27 @@ begin
   if not ViewHidden(cvRadar) then
     for i := 0 to High(FRadars) do
     begin
-      rt0 := list.Count;
-      Inc(drawn, TyBuildRadarGrid(FRadars[i], RadarInk, AMeasurer, APPI, list));
-      { [R7-G] its names (z2 1) and scale labels (z2 10): a box with words }
-      for rt := rt0 to list.Count - 1 do
-        if (list.Element(rt).Shape.Kind = cskRect) and (list.Element(rt).Caption.Text <> '')
-          and (list.Element(rt).Z2 in [1, 10]) then
-        begin
-          SetLength(FRadarTexts, Length(FRadarTexts) + 1);
-          FRadarTexts[High(FRadarTexts)].Box := list.Element(rt).Shape.Bounds;
-          FRadarTexts[High(FRadarTexts)].Radar := i;
-          FRadarTexts[High(FRadarTexts)].Z := list.Element(rt).Z;
-          FRadarTexts[High(FRadarTexts)].Z2 := list.Element(rt).Z2;
-          FRadarTexts[High(FRadarTexts)].IsName := list.Element(rt).Z2 = 1;
-          FRadarTexts[High(FRadarTexts)].Text := list.Element(rt).Caption.Text;
-        end;
+      Inc(drawn, TyBuildRadarGridTexts(FRadars[i], RadarInk, AMeasurer, APPI, list,
+        radarTexts));
+      { [R7-G] its names (z2 1) and scale labels (z2 10): a box with words --
+        [R7-I] as the grid says it drew them: the spoke, the label's index
+        and its rawLabel too }
+      for rt := 0 to High(radarTexts) do
+      begin
+        rt0 := radarTexts[rt].Element;
+        if (rt0 < 0) or (rt0 >= list.Count) then Continue;
+        if list.Element(rt0).Caption.Text = '' then Continue;
+        SetLength(FRadarTexts, Length(FRadarTexts) + 1);
+        FRadarTexts[High(FRadarTexts)].Box := list.Element(rt0).Shape.Bounds;
+        FRadarTexts[High(FRadarTexts)].Radar := i;
+        FRadarTexts[High(FRadarTexts)].Z := list.Element(rt0).Z;
+        FRadarTexts[High(FRadarTexts)].Z2 := list.Element(rt0).Z2;
+        FRadarTexts[High(FRadarTexts)].IsName := radarTexts[rt].IsName;
+        FRadarTexts[High(FRadarTexts)].Text := list.Element(rt0).Caption.Text;
+        FRadarTexts[High(FRadarTexts)].Spoke := radarTexts[rt].Spoke;
+        FRadarTexts[High(FRadarTexts)].Ring := radarTexts[rt].Ring;
+        FRadarTexts[High(FRadarTexts)].Raw := radarTexts[rt].Raw;
+      end;
     end;
   if drawn > 0 then ViewDrew(cvRadar);
   { THE CALENDARS' TOO, before any series: at the same z a series is drawn

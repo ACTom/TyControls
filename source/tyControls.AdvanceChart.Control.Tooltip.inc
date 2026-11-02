@@ -5,6 +5,37 @@
 
 { ==================== an axis' texts as tooltip targets [F4c] ==================== }
 
+const
+  { [R7-I] A TEXT'S AXIS in an axis-text datum's ComponentIndex: a grid's
+    axis g * 1000 + a (below the first of these), a single axis, a polar's
+    radius or angle axis (the polar's index), a parallel's axis (k * 1000 +
+    the axis' place), a radar's text (its FRadarTexts index) }
+  cAxisTextSingle = 1000000;
+  cAxisTextRadius = 2000000;
+  cAxisTextAngle = 3000000;
+  cAxisTextParallel = 4000000;
+  cAxisTextRadar = 5000000;
+
+{ [R7-I] A LABEL'S tickIndex: its place in the list upstream builds
+  (axis.getViewLabels -- a category axis' every interval-th label and its
+  ends, every value tick), hidden later by the overlap rules or not -- the
+  placements before it that were built [was: its place among every tick] }
+function TyAxisViewLabelIndex(ASpec: PTyAxisLayoutSpec; AQ: Integer): Integer;
+var i: Integer;
+begin
+  Result := 0;
+  for i := 0 to Min(AQ, Length(ASpec^.Placements)) - 1 do
+    if ASpec^.Placements[i].Built then Inc(Result);
+end;
+
+{ [R7-I] an AxisBuilder's name as its eventData and tooltip have it: the
+  name before nameTruncate cut it (the axis' own) }
+function TyAxisFullName(AAxis: TTyAxis; ASpec: PTyAxisLayoutSpec): string;
+begin
+  if (AAxis <> nil) and (AAxis.Name <> '') then Result := AAxis.Name
+  else Result := ASpec^.NamePlacement.Text;
+end;
+
 function TTyCustomAdvanceChart.IsAxisTextDatum(const ADatum: TTyChartDatumRef): Boolean;
 begin
   Result := (ADatum.Kind = ctkAxisText) and (FBuild <> nil)
@@ -29,158 +60,171 @@ begin
   else Result := not ATooltipShows;
 end;
 
+{ [R7-I] THE TEXT UNDER THE POINT, as the pointer finds the axes' parts
+  (AxisPartFind): a grid's axes, a single axis, a polar's radius axis and
+  angle axis' labels, a parallel axis, a radar's indicators -- each that
+  isLabelSilent leaves answering (and above nothing of the list: the hover
+  found no series item first) [was: a grid's axes only, by their own walk] }
 function TTyCustomAdvanceChart.AxisTextAt(AX, AY: Integer;
   out ADatum: TTyChartDatumRef): Boolean;
-var
-  g, a, q: Integer;
-  gb: TTyGridBuild;
-  axObj: TTyAxis;
-  spec: PTyAxisLayoutSpec;
-  meas: ITyTextMeasurer;
-  lblS, nameS: TTyStyleSet;
-  fw, fh: Double;
-  mainT: string;
-  r: TTyRectF;
-
-  function Inside(const AR: TTyRectF): Boolean;
-  begin
-    Result := (AX >= AR.Left) and (AX <= AR.Right) and (AY >= AR.Top)
-      and (AY <= AR.Bottom);
-  end;
-
-  function Boxed(AXa, AYa, AW, AH: Double; AAH: TTyTextAnchorH;
-    AAV: TTyTextAnchorV): TTyRectF;
-  var l, t: Double;
-  begin
-    case AAH of
-      tahLeft: l := AXa;
-      tahRight: l := AXa - AW;
-    else
-      l := AXa - AW / 2;
-    end;
-    case AAV of
-      tavTop: t := AYa;
-      tavBottom: t := AYa - AH;
-    else
-      t := AYa - AH / 2;
-    end;
-    Result := TyRectF(l, t, l + AW, t + AH);
-  end;
-
+var t: TTyChartEventTarget;
 begin
   ADatum := TyChartNoDatum;
   Result := False;
   if (FBuild = nil) or (FOption = nil) then Exit;
-  { [R5-D] under the loading mask -- [R5-J] the axes' (the root's) level }
-  if MaskOver(ComponentZLevel) then Exit;
-  meas := nil;
-  { the same boxes the chart's mouse events find (EventTargetAt) }
-  for g := 0 to FBuild.GridCount - 1 do
-  begin
-    gb := FBuild.Grid(g);
-    for a := 0 to gb.XAxisCount + gb.YAxisCount - 1 do
-    begin
-      if a < gb.XAxisCount then axObj := gb.XAxis(a)
-      else axObj := gb.YAxis(a - gb.XAxisCount);
-      if axObj = nil then Continue;
-      mainT := axObj.MainType;
-      if mainT = '' then mainT := axObj.Dim + 'Axis';
-      if AxisTextSilent(FOption.ComponentAt(mainT, axObj.ComponentIndex),
-        FOption.Root) then Continue;
-      spec := gb.SpecFor(axObj);
-      if spec = nil then Continue;
-      AxisTextStyles(spec, lblS, nameS);
-      if spec^.NamePlacement.Shown then
-      begin
-        r := TyRectF(spec^.NamePlacement.Rect.X, spec^.NamePlacement.Rect.Y,
-          spec^.NamePlacement.Rect.X + spec^.NamePlacement.Rect.W,
-          spec^.NamePlacement.Rect.Y + spec^.NamePlacement.Rect.H);
-        if Inside(r) then
-        begin
-          ADatum.Kind := ctkAxisText;
-          ADatum.ComponentIndex := g * 1000 + a;
-          ADatum.DataIndex := -1;
-          Exit(True);
-        end;
-      end;
-      for q := 0 to High(spec^.Placements) do
-      begin
-        if not spec^.Placements[q].Shown then Continue;
-        if Length(spec^.Placements[q].Rt) > 0 then
-          r := TyRtDeviceBox(spec^.Placements[q].Rt, spec^.Placements[q].X,
-            spec^.Placements[q].Y, spec^.RotationRad, spec^.RtScale)
-        else
-        begin
-          if meas = nil then meas := NewTextMeasurer(FPaintListPPI);
-          fw := 0;
-          fh := 0;
-          if meas <> nil then
-            meas.MeasureLine(spec^.Placements[q].Text, lblS.FontName,
-              ResolveFontSize(lblS), lblS.FontWeight, fw, fh);
-          r := Boxed(spec^.Placements[q].X, spec^.Placements[q].Y, fw, fh,
-            spec^.Placements[q].AnchorH, spec^.Placements[q].AnchorV);
-        end;
-        if not Inside(r) then Continue;
-        ADatum.Kind := ctkAxisText;
-        ADatum.ComponentIndex := g * 1000 + a;
-        ADatum.DataIndex := q;
-        Exit(True);
-      end;
-    end;
-  end;
+  if not AxisPartFind(AX, AY, 0, 0, False, t, ADatum) then Exit;
+  Result := ADatum.Kind = ctkAxisText;
+  if not Result then ADatum := TyChartNoDatum;
 end;
 
 { the axis of the datum: its main type and index, the text (the name, or
   the label as drawn -- the formattedLabel) and the label's rawLabel
-  (scale.getLabel of its tick) }
+  (scale.getLabel of its tick) -- [R7-I] on every axis AxisTextAt finds
+  [was: a grid's; and a value axis' rawLabel was the text drawn] }
 function TTyCustomAdvanceChart.AxisTextOf(const ADatum: TTyChartDatumRef; out AMainType,
   AName, AValue: string; out AIndex: Integer): Boolean;
+var tick: Integer;
+begin
+  Result := AxisTextFull(ADatum, AMainType, AName, AValue, AIndex, tick);
+end;
+
+function TTyCustomAdvanceChart.AxisTextFull(const ADatum: TTyChartDatumRef; out AMainType,
+  AName, AValue: string; out AIndex, ATick: Integer): Boolean;
 var
-  g, a: Integer;
+  g, a, own, q: Integer;
   gb: TTyGridBuild;
   axObj: TTyAxis;
   spec: PTyAxisLayoutSpec;
+  pol: TTyPolar;
+  par: TTyParallel;
 begin
   Result := False;
   AMainType := '';
   AName := '';
   AValue := '';
   AIndex := -1;
+  ATick := -1;
   if not IsAxisTextDatum(ADatum) then Exit;
-  g := ADatum.ComponentIndex div 1000;
-  a := ADatum.ComponentIndex mod 1000;
-  if g >= FBuild.GridCount then Exit;
-  gb := FBuild.Grid(g);
-  if a >= gb.XAxisCount + gb.YAxisCount then Exit;
-  if a < gb.XAxisCount then axObj := gb.XAxis(a)
-  else axObj := gb.YAxis(a - gb.XAxisCount);
-  if axObj = nil then Exit;
-  spec := gb.SpecFor(axObj);
-  if spec = nil then Exit;
-  AMainType := axObj.MainType;
-  if AMainType = '' then AMainType := axObj.Dim + 'Axis';
-  AIndex := axObj.ComponentIndex;
-  if ADatum.DataIndex < 0 then
+  own := ADatum.ComponentIndex mod cAxisTextSingle;
+  q := ADatum.DataIndex;
+  spec := nil;
+  axObj := nil;
+  case ADatum.ComponentIndex div cAxisTextSingle of
+    0:
+      begin
+        g := own div 1000;
+        a := own mod 1000;
+        if g >= FBuild.GridCount then Exit;
+        gb := FBuild.Grid(g);
+        if a >= gb.XAxisCount + gb.YAxisCount then Exit;
+        if a < gb.XAxisCount then axObj := gb.XAxis(a)
+        else axObj := gb.YAxis(a - gb.XAxisCount);
+        if axObj = nil then Exit;
+        spec := gb.SpecFor(axObj);
+        AMainType := axObj.MainType;
+        if AMainType = '' then AMainType := axObj.Dim + 'Axis';
+        AIndex := axObj.ComponentIndex;
+      end;
+    1:
+      begin
+        if (own > High(FSingles)) or (FSingles[own] = nil) then Exit;
+        axObj := FSingles[own].Axis;
+        spec := @FSingles[own].View.Spec;
+        AMainType := 'singleAxis';
+        AIndex := own;
+      end;
+    2:
+      begin
+        if own > High(FPolars) then Exit;
+        pol := FPolars[own];
+        if (pol = nil) or (pol.RadiusAxis = nil) then Exit;
+        axObj := pol.RadiusAxis;
+        spec := @pol.RadiusView.Spec;
+        AMainType := 'radiusAxis';
+        AIndex := axObj.ComponentIndex;
+      end;
+    3:
+      begin
+        { AngleAxisView's labels: no name }
+        if own > High(FPolars) then Exit;
+        pol := FPolars[own];
+        if (pol = nil) or (pol.AngleAxis = nil) then Exit;
+        if (q < 0) or (q > High(pol.AngleView.Labels)) then Exit;
+        AMainType := 'angleAxis';
+        AIndex := pol.AngleAxis.ComponentIndex;
+        ATick := q;
+        AName := pol.AngleView.Labels[q].Text;
+        AValue := AxisRawLabel(pol.AngleAxis, pol.AngleView.Labels[q].Value);
+        Exit(True);
+      end;
+    4:
+      begin
+        if own div 1000 > High(FParallels) then Exit;
+        par := FParallels[own div 1000];
+        if par = nil then Exit;
+        a := own mod 1000;
+        if (a >= par.AxisCount) or (a >= Length(par.Views)) then Exit;
+        axObj := par.Axis(a);
+        if axObj = nil then Exit;
+        spec := @par.Views[a].Spec;
+        AMainType := 'parallelAxis';
+        AIndex := axObj.ComponentIndex;
+      end;
+    5:
+      begin
+        { a radar's indicator: the model's mainType is the radar's }
+        if own > High(FRadarTexts) then Exit;
+        AMainType := 'radar';
+        AIndex := FRadarTexts[own].Radar;
+        AName := FRadarTexts[own].Text;
+        if not FRadarTexts[own].IsName then
+        begin
+          AValue := FRadarTexts[own].Raw;
+          ATick := FRadarTexts[own].Ring;
+        end;
+        Exit(True);
+      end;
+  else
+    Exit;
+  end;
+  if (spec = nil) or (axObj = nil) then Exit;
+  if q < 0 then
   begin
     if not spec^.NamePlacement.Shown then Exit;
-    AName := spec^.NamePlacement.Text;
+    AName := TyAxisFullName(axObj, spec);
   end
   else
   begin
-    if ADatum.DataIndex > High(spec^.Placements) then Exit;
-    AName := spec^.Placements[ADatum.DataIndex].Text;
-    if (axObj.Scale is TTyOrdinalScale) and (ADatum.DataIndex <= High(spec^.TickValues)) then
-      AValue := TTyOrdinalScale(axObj.Scale).GetLabel(spec^.TickValues[ADatum.DataIndex])
+    if q > High(spec^.Placements) then Exit;
+    AName := spec^.Placements[q].Text;
+    ATick := TyAxisViewLabelIndex(spec, q);
+    if q <= High(spec^.TickValues) then
+      AValue := AxisRawLabel(axObj, spec^.TickValues[q])
     else
       AValue := AName;
   end;
   Result := True;
 end;
 
-function TTyCustomAdvanceChart.AxisTipSpec(const ADatum: TTyChartDatumRef): TTyTooltipSpec;
+function TTyCustomAdvanceChart.AxisTextNode(const ADatum: TTyChartDatumRef;
+  out ANode: TJSONData; out AShowDefault: Integer): Boolean;
 var
   mainT, nm, v: string;
   idx: Integer;
+begin
+  ANode := nil;
+  AShowDefault := 0;
+  Result := AxisTextOf(ADatum, mainT, nm, v, idx);
+  if not Result then Exit;
+  ANode := FOption.ComponentAt(mainT, idx);
+  if mainT = 'singleAxis' then AShowDefault := 1
+  else if mainT = 'radar' then AShowDefault := 2;
+end;
+
+function TTyCustomAdvanceChart.AxisTipSpec(const ADatum: TTyChartDatumRef): TTyTooltipSpec;
+var
+  mainT, nm, v: string;
+  idx, showDef: Integer;
   node, tip: TJSONData;
 begin
   if not AxisTextOf(ADatum, mainT, nm, v, idx) then
@@ -189,12 +233,15 @@ begin
   Result := TyTooltipSpecOfItem(FOption, mainT, idx, nil, TipContentName(nm));
   { the axis' defaults: `tooltip: {show: false}` under what it writes -- a
     show it does not write is false, before the global's is asked (a null
-    one is no value, and the global's stands) }
-  node := FOption.ComponentAt(mainT, idx);
+    one is no value, and the global's stands) -- [R7-I] a single axis'
+    `{show: true}`; a radar's model has no tooltip default at all, so the
+    global's show stands }
+  AxisTextNode(ADatum, node, showDef);
+  if showDef = 2 then Exit;
   tip := nil;
   if node is TJSONObject then tip := TJSONObject(node).Find('tooltip');
   if not ((tip is TJSONObject) and (TJSONObject(tip).IndexOfName('show') >= 0)) then
-    Result.Show := False;
+    Result.Show := showDef = 1;
 end;
 
 { setTooltipConfig's formatterParams: componentType, name, <mainType>Index;
@@ -202,10 +249,10 @@ end;
 function TTyCustomAdvanceChart.AxisTipParams(const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
 var
   mainT, nm, v: string;
-  idx: Integer;
+  idx, tick: Integer;
 begin
   Result := TyChartBlankParams;
-  if not AxisTextOf(ADatum, mainT, nm, v, idx) then Exit;
+  if not AxisTextFull(ADatum, mainT, nm, v, idx, tick) then Exit;
   Result.ComponentType := mainT;
   Result.ComponentIndex := idx;
   Result.AxisIndex := idx;
@@ -213,7 +260,7 @@ begin
   if ADatum.DataIndex >= 0 then
   begin
     Result.ValueText := v;
-    Result.TickIndex := ADatum.DataIndex;
+    Result.TickIndex := tick;
     Result.TargetType := 'axisLabel';
   end
   else
@@ -227,11 +274,11 @@ function TTyCustomAdvanceChart.AxisTipText(const ADatum: TTyChartDatumRef;
   const ASpec: TTyTooltipSpec): string;
 var
   mainT, nm, v, tpl: string;
-  idx: Integer;
+  idx, tick: Integer;
   params: TTyChartParams;
 begin
   Result := '';
-  if not AxisTextOf(ADatum, mainT, nm, v, idx) then Exit;
+  if not AxisTextFull(ADatum, mainT, nm, v, idx, tick) then Exit;
   if not ASpec.HasFormatter then Exit(TipContentName(nm));
   if TyChartIsHandlerRef(ASpec.Formatter) then
   begin
@@ -254,7 +301,7 @@ begin
       port's labels are never truncated, so `false` }
     tpl := TyJsReplaceFirst(tpl, '{b0}', 'false');
     tpl := TyJsReplaceFirst(tpl, '{c0}', GeoEncodeHtml(v));
-    tpl := TyJsReplaceFirst(tpl, '{d0}', IntToStr(ADatum.DataIndex));
+    tpl := TyJsReplaceFirst(tpl, '{d0}', IntToStr(tick));
   end;
   Result := tpl;
 end;
@@ -6995,6 +7042,8 @@ var
   st: TTyStyleSet;
   w, h, lineH, gap, cx, cy: Double;
   padL, padT, padR, padB, radius, borderW: Double;
+  onFraction: Boolean;
+  halfPen: Double;
   box: TTyRectF;
   r: TRect;
   i, j, row, lineTop: Integer;
@@ -7194,7 +7243,23 @@ begin
       surface.Kind := tfkSolid;
       surface.Color := TTyColor(spec.Background);
     end;
-    APainter.FillBackground(r, surface, corners);
+    { [R7-I] WHERE THE BOX FALLS BETWEEN PIXELS, THERE: upstream never
+      snaps it (TooltipRichContent puts its rect at the place to the
+      fraction, a DOM box sits on a fractional transform) -- the fill and
+      the pen on the box itself, one radius all round [was: always rounded
+      to whole pixels; a box on whole pixels is drawn as before] }
+    onFraction := ((Frac(box.Left) <> 0) or (Frac(box.Top) <> 0)
+      or (Frac(box.Right) <> 0) or (Frac(box.Bottom) <> 0))
+      and (corners.TL = corners.TR) and (corners.TL = corners.BR)
+      and (corners.TL = corners.BL);
+    if onFraction then
+    begin
+      APainter.BeginPath;
+      APainter.RoundRectPath(box.Left, box.Top, box.Right, box.Bottom, corners.TL);
+      APainter.FillPathWith(surface, r);
+    end
+    else
+      APainter.FillBackground(r, surface, corners);
 
     { THE BORDER IS TINTED WITH THE HOVERED ITEM'S COLOUR, which is the
       signature ECharts 6 look and is easy to miss: the grey token is the
@@ -7223,7 +7288,19 @@ begin
       FTipLastBorder := borderCol;
     end;
     if (borderW > 0) and (TyAlphaOf(borderCol) > 0) then
-      APainter.StrokeBorder(r, corners, Round(borderW), borderCol);
+    begin
+      if onFraction then
+      begin
+        { inside the box, as StrokeBorder strokes it }
+        halfPen := APainter.ScaleF(Round(borderW)) / 2;
+        APainter.BeginPath;
+        APainter.RoundRectPath(box.Left + halfPen, box.Top + halfPen,
+          box.Right - halfPen, box.Bottom - halfPen, corners.TL);
+        APainter.StrokePath(borderCol, Round(borderW));
+      end
+      else
+        APainter.StrokeBorder(r, corners, Round(borderW), borderCol);
+    end;
 
     lineH := APainter.ScaleF(ink.LineHeightLogical);
     row := 0;

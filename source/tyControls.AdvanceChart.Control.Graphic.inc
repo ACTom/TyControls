@@ -2498,10 +2498,13 @@ var
     begin
       pe.HasClip := True;
       pe.ClipRect := clip;
+      { [R7-I] CustomView's group clipPath: the hit too }
+      pe.ClipHits := True;
     end;
     { [spec 242] a polar's sector }
     if (ASlot <= High(FCustomClipSec)) and FCustomClipSec[ASlot].On then
     begin
+      pe.ClipHits := True;
       pe.HasClipSector := True;
       pe.ClipCX := FCustomClipSec[ASlot].CX;
       pe.ClipCY := FCustomClipSec[ASlot].CY;

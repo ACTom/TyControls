@@ -524,6 +524,11 @@ function TyAxisRtPieces(const ASpec: TTyAxisLayoutSpec; const ABlock: TTyRtBlock
   that formatter with its FIRST '{value}' replaced. A time axis has its own. }
 function TyAxisTickLabel(AAxis: TTyAxis; AValue: Double;
   AHasFormatter: Boolean; const AFormatter: string): string;
+{ ... and a handler formatter ('@name') too, handed the tick's value and
+  AIndex (a value axis' labelFormatter(tick, idx)) [R7-I: public, for a
+  radar's indicator labels] }
+function TyAxisTickLabelAt(AAxis: TTyAxis; AValue: Double; AIndex: Integer;
+  AHasFormatter: Boolean; const AFormatter: string): string; overload;
 
 { ---- reading series data ---- }
 type

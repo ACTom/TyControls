@@ -535,6 +535,9 @@ begin
     el.Cursor := 'grab';
     el.HasClip := True;
     el.ClipRect := clip;
+    { [R7-I] the contentGroup's clipPath, which isHover asks: the window is
+      not hit where it hangs over the content's edge }
+    el.ClipHits := True;
     AList.Add(el);
     Inc(Result);
   end;

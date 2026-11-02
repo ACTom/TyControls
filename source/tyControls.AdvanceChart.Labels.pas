@@ -1954,6 +1954,7 @@ begin
     if host.Anim.Role = carSankeyClip then
     begin
       cap.Anim.Role := carSankeyClip;
+      cap.ClipHits := True;
       cap.Anim.Index := -1;
       cap.Anim.G := host.Anim.G;
     end;

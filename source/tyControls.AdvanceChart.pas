@@ -1086,6 +1086,10 @@ type
       Radar, Z, Z2: Integer;
       IsName: Boolean;
       Text: string;
+      { [R7-I] the indicator (its spoke), a label's index among its axis'
+        labels (-1 a name) and its rawLabel }
+      Spoke, Ring: Integer;
+      Raw: string;
     end;
     { THE CALENDARS, one per component, laid out on the canvas. [Batch 69] }
     FCalendars: array of TTyCalendar;
@@ -3212,6 +3216,16 @@ type
     function AxisTextAt(AX, AY: Integer; out ADatum: TTyChartDatumRef): Boolean;
     function AxisTextOf(const ADatum: TTyChartDatumRef; out AMainType, AName,
       AValue: string; out AIndex: Integer): Boolean;
+    { [R7-I] ... and ATick, a label's index among its axis' labels (the
+      list upstream builds: a category axis' every interval-th and its
+      ends, every value tick), -1 for a name }
+    function AxisTextFull(const ADatum: TTyChartDatumRef; out AMainType, AName,
+      AValue: string; out AIndex, ATick: Integer): Boolean;
+    { [R7-I] the axis' option node and the default of its model's
+      `tooltip.show` (a single axis' true; a radar's indicators have none:
+      the cascade's next level, the radar's own tooltip, then the global) }
+    function AxisTextNode(const ADatum: TTyChartDatumRef; out ANode: TJSONData;
+      out AShowDefault: Integer): Boolean;
     function AxisTipSpec(const ADatum: TTyChartDatumRef): TTyTooltipSpec;
     function AxisTipParams(const ADatum: TTyChartDatumRef): TTyChartCallbackParams;
     function AxisTipText(const ADatum: TTyChartDatumRef;
@@ -4304,6 +4318,15 @@ type
       list's element at AZ / AZ2 where AOnlyAbove) }
     function AxisPartAt(AX, AY: Integer; AZ, AZ2: Integer; AOnlyAbove: Boolean;
       out ATarget: TTyChartEventTarget): Boolean;
+    { [R7-I] ... and AText the text it is, where it is one (an axis name or
+      label, a radar's indicator name or label): Kind ctkAxisText,
+      ComponentIndex the axis (AxisTextOf), DataIndex the label's index
+      among its axis' labels (-1 the name); TyChartNoDatum for a part that
+      is no text (an angle axis' ticks) }
+    function AxisPartFind(AX, AY: Integer; AZ, AZ2: Integer; AOnlyAbove: Boolean;
+      out ATarget: TTyChartEventTarget; out AText: TTyChartDatumRef): Boolean;
+    { [R7-I] a label's rawLabel: scale.getLabel(tick) }
+    function AxisRawLabel(AAxis: TTyAxis; AValue: Double): string;
     function HitTestIn(AX, AY: Integer; out AElement: Integer;
       out ABlocked: Boolean): TTyChartDatumRef;
     { [R2-B] the breadcrumb item a list element is, and its target }

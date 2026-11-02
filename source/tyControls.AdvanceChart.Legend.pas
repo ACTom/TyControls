@@ -300,6 +300,13 @@ type
     Formatter: string;
     SelectedMode: TTyLegendSelectedMode;
     HasBackground: Boolean;
+    { [R7-I] makeBackground's own colours: `backgroundColor` (style.fill)
+      and `borderColor` (getItemStyle) as written, where they read as a
+      colour -- else the skin's [was: the skin's whatever was written] }
+    HasBackgroundColour: Boolean;
+    BackgroundColour: TTyChartColor;
+    HasBorderColour: Boolean;
+    BorderColour: TTyChartColor;
     BorderWidth: Double;
     BorderRadii: TTyCornerRadii;
     { [R5-A] the box's shadow: the legend's own shadow keys
@@ -1068,6 +1075,11 @@ begin
   d := node.Find('backgroundColor');
   Result.HasBackground := (d <> nil) and (d.JSONType = jtString)
     and (d.AsString <> '') and (d.AsString <> 'transparent');
+  if Result.HasBackground then
+    Result.HasBackgroundColour := TyTryParseChartColor(d.AsString, Result.BackgroundColour);
+  d := node.Find('borderColor');
+  if (d <> nil) and (d.JSONType = jtString) then
+    Result.HasBorderColour := TyTryParseChartColor(d.AsString, Result.BorderColour);
   TyStReadShadow([node], [], [], Result.Shadow);
   Result.BorderWidth := NumIn(node, 'borderWidth', 0);
   d := node.Find('borderRadius');
@@ -3160,11 +3172,13 @@ begin
     el.Shape := TyShapeRoundRect(ALayout.Frame,
       ASpec.BorderRadii[0] * scale);
     el.Style.HasFill := ASpec.HasBackground;
-    el.Style.FillColor := AInk.Background;
+    if ASpec.HasBackgroundColour then el.Style.FillColor := ASpec.BackgroundColour
+    else el.Style.FillColor := AInk.Background;
     if ASpec.BorderWidth > 0 then
     begin
       el.Style.StrokeWidthLogical := ASpec.BorderWidth;
-      el.Style.StrokeColor := AInk.Border;
+      if ASpec.HasBorderColour then el.Style.StrokeColor := ASpec.BorderColour
+      else el.Style.StrokeColor := AInk.Border;
     end;
     TyStyleSetShadow(el.Style, ASpec.Shadow);
     AList.Add(el);
