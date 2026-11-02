@@ -376,6 +376,7 @@ type
     procedure ClickPaintedEllipsis(ARow: TTyValueRow);
     { Close whatever cell editor or list is open, committing nothing. }
     procedure CloseEditor;
+    property OnEditingDone;
   end;
 
 { The runner never calls Forms.Application.Initialize; a test that needs window handles does. }

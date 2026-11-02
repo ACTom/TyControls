@@ -148,6 +148,7 @@ type
     FColorList: TTyListBox;           // content for vekColor (a TTyColorMorePopupList instance)
     FColorDlgRow: TTyValueRow;        // row awaiting the deferred "more…" colour dialog (by identity), or nil
     FCommitFont: TFont;               // the font the font dialog picked, while its commit is asked about
+    FInDialog: Boolean;               // a row's dialog is running (EditingDone waits for its end)
     FKeyColumnWidth: Integer;         // logical px
     FIndent: Integer;                 // logical px per nesting level
     FReadOnly: Boolean;
@@ -334,6 +335,11 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    { Held back while a cell is being edited -- the control loses focus to its own editor, its
+      list or its dialog when an edit starts -- and called when the edit ends instead: a commit
+      from the editor, a pick from the list, a row's dialog closing. LCL's grid does the same
+      (grids.pas, TCustomGrid.EditingDone and TStringCellEditor.EditingDone). #183 }
+    procedure EditingDone; override;
     // Append a root row and return it (nest via its AddChild, set EditorKind / style, etc.).
     function AddRow(const AKey, AValue: string): TTyValueRow;
     { LCL's signature (valedit.pas:188 `function InsertRow(const KeyName, Value: string;
@@ -719,6 +725,12 @@ begin
   FreeAndNil(FColorList);
   FreeRows;
   inherited Destroy;
+end;
+
+procedure TTyCustomValueListEditor.EditingDone;
+begin
+  if (FEditFlat >= 0) or FDropMode or FInDialog then Exit;
+  inherited EditingDone;
 end;
 
 procedure TTyCustomValueListEditor.FreeRows;
@@ -1724,10 +1736,13 @@ begin
     list closes whatever happens, or it stays dropped over a cell no longer being edited. }
   case FDropKind of
     dkEnum:
-      try
-        if FEnumList.ItemIndex >= 0 then CommitEditor(flat, FEnumList.Items[FEnumList.ItemIndex]);
-      finally
-        if FDropPopup <> nil then FDropPopup.Close;
+      begin
+        try
+          if FEnumList.ItemIndex >= 0 then CommitEditor(flat, FEnumList.Items[FEnumList.ItemIndex]);
+        finally
+          if FDropPopup <> nil then FDropPopup.Close;
+        end;
+        EditingDone;
       end;
     dkColor:
       begin
@@ -1743,11 +1758,14 @@ begin
           Application.QueueAsyncCall(@DeferredColorDialog, 0);
         end
         else
+        begin
           try
             CommitEditor(flat, ColorToString(TyColorOfItem(FColorList.Items, idx)));
           finally
             if FDropPopup <> nil then FDropPopup.Close;
           end;
+          EditingDone;
+        end;
       end;
   else
     if FDropPopup <> nil then FDropPopup.Close;
@@ -1761,8 +1779,14 @@ begin
   FColorDlgRow := nil;
   if (r = nil) or not RowExists(r) then Exit;   // row removed while the async call was pending
   col := StringToColorDef(r.Value, clBlack);
-  if ExecuteColorDialog(col) and RowExists(r) then   // re-check: the modal pumped messages
-    CommitEditorRow(r, ColorToString(col));
+  FInDialog := True;
+  try
+    if ExecuteColorDialog(col) and RowExists(r) then   // re-check: the modal pumped messages
+      CommitEditorRow(r, ColorToString(col));
+  finally
+    FInDialog := False;
+  end;
+  EditingDone;
 end;
 
 procedure TTyCustomValueListEditor.DropPick(Sender: TObject);
@@ -1803,11 +1827,17 @@ begin
   { Commit + CLOSE the inline editor before the modal opens. Otherwise the editor loses focus to
     the dialog, its OnExit commits the (stale) editor text, and that overwrites the value the
     dialog just set — the classic "font dialog changes nothing" bug. }
-  if FEditFlat = AFlat then EndEdit(True);
-  case r.EditorKind of
-    vekFont:   EditFontRow(AFlat);
-    vekDialog: if Assigned(FOnEditRow) then begin FOnEditRow(Self, r); Invalidate; end;
+  FInDialog := True;   // one EditingDone, when the dialog is over
+  try
+    if FEditFlat = AFlat then EndEdit(True);
+    case r.EditorKind of
+      vekFont:   EditFontRow(AFlat);
+      vekDialog: if Assigned(FOnEditRow) then begin FOnEditRow(Self, r); Invalidate; end;
+    end;
+  finally
+    FInDialog := False;
   end;
+  EditingDone;
 end;
 
 { Seed a TFont from a Font row: from its child rows (Name/Size/Bold/Italic/Color) if it has
@@ -1996,6 +2026,7 @@ begin
       end
       else
         CommitEditor(flat, FEditor.Text);
+      EditingDone;   // the edit is over (#183)
     end
     else
       Invalidate;

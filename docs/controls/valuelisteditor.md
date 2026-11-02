@@ -101,6 +101,7 @@ uses tyControls.ValueListEditor;
 - **点键列前的 chevron** → 展开/收起子行;选中行按 **Alt+→ / Alt+←** 也一样(和 Lazarus 的对象查看器一致)。**层级无上限**(如 `Font → Style → Bold`)。
 - **拖分隔条**(光标变 ↔)→ 调整键/值列宽。
 - 编辑中:**Enter** / 点别处 / 失焦 → 提交;**Esc** → 取消。`ReadOnly` 行 / 全局 `ReadOnly` 不可编辑。
+- `OnEditingDone`:一次编辑结束时触发(编辑框提交、下拉选好、对话框关掉),开始编辑、焦点交给内联编辑框时不触发,和 LCL 的表格一样。
 - **颜色 / 字体 / 自定义对话框全部用控件库自带的**(`TySelectColor` / `TTyFontDialog` / 你在 `OnEditRow` 里调 `TySelectDirectory` 等),不弹原生对话框。
 
 ---

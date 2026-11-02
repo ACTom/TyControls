@@ -31,6 +31,7 @@ type
     FChanging, FChanged, FErrors, FEdits, FRowCalls: Integer;
     FChangedName: string;
     FChangedInstance: TPersistent;
+    FDone: Integer;
     FAllow: Boolean;
     FHandle: Boolean;
     procedure Changing(Sender: TObject; AInstance: TPersistent; const APropName,
@@ -46,6 +47,7 @@ type
       var AShow: Boolean);
     function Lines(const AText: string): string;
     procedure RebuildGrid(Sender: TObject);
+    procedure EditingDoneSeen(Sender: TObject);
     procedure ShowInMm(Sender: TObject; AInstance: TPersistent; APropInfo: PPropInfo;
       ARow: TTyValueRow);
     procedure CountAsDialog(Sender: TObject; AInstance: TPersistent; APropInfo: PPropInfo;
@@ -93,6 +95,7 @@ type
     procedure TestAStreamedSelectionIsReadAgainOnceLoadingIsOver;
     procedure TestTheGridsOwnLinksOutliveTheSelection;
     procedure TestADisplayValueFromOnGetPropertyRowFollowsTheValue;
+    procedure TestOnEditingDoneComesWhenAnEditEndsNotWhenItStarts;
   end;
 
 implementation
@@ -207,6 +210,11 @@ end;
 procedure TPropertyGridControlTest.RebuildGrid(Sender: TObject);
 begin
   FGrid.Rebuild;
+end;
+
+procedure TPropertyGridControlTest.EditingDoneSeen(Sender: TObject);
+begin
+  Inc(FDone);
 end;
 
 procedure TPropertyGridControlTest.ShowInMm(Sender: TObject; AInstance: TPersistent;
@@ -863,6 +871,33 @@ begin
   FObj.Zeta := 7;
   FGrid.Refresh;
   AssertEquals('and after a Refresh', '7 mm', FGrid.RowAt('Zeta').EffectiveValue);
+end;
+
+{ LCL's grid: EditingDone is held back while the cell editor is showing and comes when the edit is
+  finished (grids.pas, TCustomGrid.EditingDone and TStringCellEditor.EditingDone). The grid lost
+  focus to its own editor the moment a cell was clicked, and that was announced instead. }
+procedure TPropertyGridControlTest.TestOnEditingDoneComesWhenAnEditEndsNotWhenItStarts;
+begin
+  FDone := 0;
+  FGrid.OnEditingDone := @EditingDoneSeen;
+  FForm.Show;
+  if FGrid.CanFocus then FGrid.SetFocus;
+  FGrid.ClickValue(FGrid.RowAt('Zeta'));
+  AssertTrue('the editor opened', FGrid.EditingRow >= 0);
+  AssertEquals('not when the edit starts', 0, FDone);
+  FGrid.Editor.TypeText('5');
+  FGrid.Editor.PressKey(VK_RETURN);
+  AssertEquals('written', 5, FObj.Zeta);
+  AssertEquals('when it is committed', 1, FDone);
+  FGrid.PickFromDropdown(FGrid.RowAt('Flag'), 'True');
+  AssertTrue('picked', FObj.Flag);
+  AssertEquals('and after a pick from a list', 2, FDone);
+  FGrid.SelectedObject := FHolder;
+  FGrid.StringsAccept := True;
+  FGrid.StringsAnswer := 'z';
+  FGrid.ClickPaintedEllipsis(FGrid.RowAt('Lines'));
+  AssertEquals('the dialog wrote', 'z', Trim(FHolder.Lines.Text));
+  AssertEquals('and once it was over', 3, FDone);
 end;
 
 initialization
