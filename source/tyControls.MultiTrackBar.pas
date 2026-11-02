@@ -316,7 +316,8 @@ type
       kept on its thumb, at its new index); a final class deletes its item instead. }
     procedure RemoveThumb(AIndex: Integer); virtual;
     procedure DoThumbRemoving(AIndex: Integer; var AAllow: Boolean); virtual;
-    { The theme's --track-remove-distance in device px at the bar's PPI. }
+    { The theme's --track-remove-distance (the bar's StyleOverride first) in device px at the
+      bar's PPI. }
     function RemoveDistance: Integer;
     procedure DoThumbChange(AIndex: Integer); virtual;
     procedure DoThumbSelect(AIndex: Integer); virtual;
@@ -1666,8 +1667,8 @@ var
 begin
   ppi := Font.PixelsPerInch;
   if ppi <= 0 then ppi := 96;
-  Result := MulDiv(ActiveController.Metric(TyTrackRemoveDistanceVar, TyTrackRemoveDistance),
-    ppi, 96);
+  { #182: through StyleMetric, so the bar's own StyleOverride can set it. }
+  Result := MulDiv(StyleMetric(TyTrackRemoveDistanceVar, TyTrackRemoveDistance), ppi, 96);
 end;
 
 procedure TTyMultiTrackBarBase.SetMinThumbs(const AValue: Integer);
@@ -2319,8 +2320,10 @@ begin
     SlideR := TyTrackSlideRect(R, FOrientation, FTickMarks, Ticks.TickBand + Ticks.LabelBand,
       FValueAreaPx);
 
+    { TyTrackGrooveThickness's --track-thickness, read through StyleMetric (#182) so the bar's
+      own StyleOverride can set it. }
     GrooveR := TyTrackGrooveRect(SlideR, FOrientation, MLen,
-      TyTrackGrooveThickness(P, ActiveController));
+      P.Scale(StyleMetric('--track-thickness', TyTrackThickness)));
     { The track -- the groove and the fills on it -- unless the owner draws it. }
     dflt := True;
     if Assigned(FOnDrawTrack) then FOnDrawTrack(Self, P, GrooveR, dflt);

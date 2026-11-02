@@ -502,6 +502,9 @@ end;
 | 度量 | 默认 | 说明 |
 |------|------|------|
 | `--track-remove-distance` | `24px` | 滑块垂直于轨道拖出控件边缘多远算「拖出去了」。 |
+| `--track-thickness` | `4px` | 凹槽的粗细，与 `TTyTrackBar` 共用。 |
+
+这两个度量也可以写在单个控件的 `StyleOverride` 里（比如 `--track-remove-distance: 60px;`），只对这一个控件生效。
 
 默认主题里的相关规则：
 

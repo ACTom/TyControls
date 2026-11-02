@@ -363,6 +363,8 @@ type
     procedure TestTheRectanglesAreThePaintedParts;
     procedure TestADefaultDrawFalseLeavesTheThumbToTheHandler;
     procedure TestADefaultDrawFalseLeavesTheTrackToTheHandler;
+    { #182: a '--track-thickness' in the bar's own StyleOverride sets its groove. }
+    procedure TestTheGrooveThicknessFollowsTheBarsStyleOverride;
   end;
 
   { The keyboard's thumb, marked while the bar has the focus (TyTrackThumb:focus): on the
@@ -575,6 +577,8 @@ type
     procedure TestDraggedOffItIsDrawnRemovingAndGoesOnRelease;
     procedure TestTheDistanceIsAcrossTheTrack;
     procedure TestTheDistanceIsTheThemesMetric;
+    { #182: and a '--track-remove-distance' in the bar's own StyleOverride wins over it. }
+    procedure TestTheDistanceFollowsTheBarsStyleOverride;
     procedure TestOnThumbRemovingAndMinThumbsKeepTheThumb;
     procedure TestDeleteRemovesTheSelectedThumb;
     procedure TestTheBaseClassAddsAndRemovesItsOwnThumbs;
@@ -3840,6 +3844,22 @@ begin
     'track 1:normal 2:normal 0:normal+focused ', Calls);
 end;
 
+procedure TTyMultiTrackOwnerDrawTest.TestTheGrooveThicknessFollowsTheBarsStyleOverride;
+var
+  b: TBGRABitmap;
+  before: Integer;
+begin
+  FBar.Put([50]);
+  b := Shot(False);
+  b.Free;
+  before := FTrackRect.Bottom - FTrackRect.Top;
+  AssertEquals('setup: the theme''s thickness', TyTrackThickness, before);
+  FBar.StyleOverride := '--track-thickness: 10px;';
+  b := Shot(False);
+  b.Free;
+  AssertEquals('the bar''s own token', 10, FTrackRect.Bottom - FTrackRect.Top);
+end;
+
 procedure TTyMultiTrackOwnerDrawTest.TestTheRectanglesAreThePaintedParts;
 var
   ori: TTyTrackOrientation;
@@ -6435,6 +6455,21 @@ begin
   Press(FBar, c);
   Release(FBar, Point(c.X, 23 + 81));
   AssertEquals('81: gone', 1, FBar.Thumbs.Count);
+end;
+
+procedure TTyMultiTrackUserThumbsTest.TestTheDistanceFollowsTheBarsStyleOverride;
+var
+  c: TPoint;
+begin
+  FBar.AllowUserThumbs := True;
+  FBar.StyleOverride := '--track-remove-distance: 40px;';
+  c := Centre(FBar, 1);
+  Press(FBar, c);
+  Release(FBar, Point(c.X, 23 + 40));
+  AssertEquals('40 px off: stays (the theme says 24)', 3, FBar.Thumbs.Count);
+  Press(FBar, c);
+  Release(FBar, Point(c.X, 23 + 41));
+  AssertEquals('41 px off: gone', 2, FBar.Thumbs.Count);
 end;
 
 procedure TTyMultiTrackUserThumbsTest.TestOnThumbRemovingAndMinThumbsKeepTheThumb;
