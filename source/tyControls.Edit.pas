@@ -122,8 +122,6 @@ type
     FOnChangeHandlers: TMethodList;
     FImeHook: TObject;    // Qt-only IME commit interceptor (nil off Qt); see tyControls.QtWS
     FImeCaretRect: TRect; // caret rect (client device px) cached each paint; fed to the Qt IME query
-    // Insert a full IME commit string (Qt: the un-truncated QInputMethodEvent.commitString).
-    procedure HandleImeCommit(const ACommitUtf8: string);
     // Caret rect (client device px) for the Qt IME candidate window; empty when not focused.
     function GetImeCaretRect: TRect;
     procedure SetText(const AValue: TCaption);
@@ -142,9 +140,6 @@ type
     function GetSelText: string;
     procedure SetSelStart(const AValue: Integer);
     procedure SetSelLength(const AValue: Integer);
-    procedure SetSelText(const AValue: string);
-    // Apply CharCase transform to an inserted UTF-8 fragment
-    function ApplyCharCase(const AStr: string): string;
     // Selection helpers
     procedure DeleteSelection;
     // Select the word (or the same-class run) surrounding codepoint boundary AIdx --
@@ -206,6 +201,17 @@ type
       whole display string on every accepted character, and routing that through the
       programmatic path would clear the dirty flag on every keypress. }
     procedure SetTextInternal(const AValue: TCaption; AByCode: Boolean);
+    { Virtual (#158): a descendant that keeps its text in a shape of its own -- the mask --
+      takes each of these its own way, so none goes around it. }
+    // Insert a full IME commit string (Qt: the un-truncated QInputMethodEvent.commitString).
+    procedure HandleImeCommit(const ACommitUtf8: string); virtual;
+    procedure SetSelText(const AValue: string); virtual;
+    // Apply CharCase transform to an inserted UTF-8 fragment
+    function ApplyCharCase(const AStr: string): string;
+    { #158: the application's OnUTF8KeyPress and OnKeyPress for a typed key, as UTF8KeyPress
+      raises them, without putting it in -- for a descendant that puts it in its own way.
+      False when a handler took the key; a handler may also have changed it. }
+    function AskTypedKey(var UTF8Key: TUTF8Char): Boolean;
     { #159: the text the field already holds, shown another way -- a number regrouped when the
       field takes or loses the focus. No change: no undo step, no OnChange, Modified left as it
       is. The caret parks at the end, as for Text :=. }
@@ -323,12 +329,12 @@ type
       list/tree/grid deselecting ROWS, which is a different and correct meaning), so the
       change breaks only callers who relied on the collapse. CollapseSelection below is
       that behaviour, kept and named. }
-    procedure ClearSelection;
+    procedure ClearSelection; virtual;
     { Drop the highlight without touching the text -- what ClearSelection used to do. }
     procedure CollapseSelection;
     { Empty the control. One line, but the one LCL name for it -- `Ed.Clear` is what
       ported code writes, and `Text := ''` is what it had to be rewritten to. }
-    procedure Clear;
+    procedure Clear; virtual;
     // Mouse hit test
     function CaretIndexAtX(AX: Integer): Integer; overload;
     { The same, also reporting which side of the boundary the click landed on -- which run
@@ -337,8 +343,8 @@ type
     function CaretIndexAtX(AX: Integer; out AAfterPrev: Boolean): Integer; overload;
     // Clipboard API
     procedure CopyToClipboard;
-    procedure CutToClipboard;
-    procedure PasteFromClipboard;
+    procedure CutToClipboard; virtual;
+    procedure PasteFromClipboard; virtual;
     // Rendering helpers (public for headless tests)
     function CaretPixelXAt(ACaretIndex, APPI: Integer): Integer;
     { Where the caret for ACaretIndex is DRAWN, device px in control coordinates before
@@ -388,9 +394,9 @@ type
     function  ImeIsReadOnly: Boolean;
     function  ImeCaretBoundClient: TRect;
     function  ImeCaretIndex: Integer;
-    procedure ImeSessionBegin;
-    procedure ImeSessionEnd;
-    procedure ImeReplace(AStart, ALen: Integer; const AText: string);
+    procedure ImeSessionBegin; virtual;
+    procedure ImeSessionEnd; virtual;
+    procedure ImeReplace(AStart, ALen: Integer; const AText: string); virtual;
     {$IFDEF LCLCocoa}
     // macOS: answer LCL-Cocoa's handle-creation query (LM_IM_COMPOSITION) with our IME handler so the
     // control gets the IME-capable native view whose candidate window follows the caret.
@@ -2441,6 +2447,12 @@ begin
   ResetCaretBlink;
   Invalidate;
   DoChange;
+end;
+
+function TTyCustomEdit.AskTypedKey(var UTF8Key: TUTF8Char): Boolean;
+begin
+  inherited UTF8KeyPress(UTF8Key);   // OnUTF8KeyPress
+  Result := (UTF8Key <> '') and TyAskKeyPress(Self, UTF8Key);   // OnKeyPress
 end;
 
 procedure TTyCustomEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
