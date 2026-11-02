@@ -130,6 +130,7 @@ type
     procedure TestFocusShowsFieldTextAndBlurShowsDisplayText;
     procedure TestStringFieldSetsMaxLength;
     procedure TestAuthorsMaxLengthIsKept;
+    procedure TestMaxLengthSetInCodeIsKeptOnTheNextRecord;
     procedure TestPasteIntoAnAutoIncrementFieldIsUndone;
     procedure TestFieldAlignmentIsCopied;
     procedure TestTypingEditsBeforeTheKeyLands;
@@ -161,6 +162,7 @@ type
     procedure TestUnparsableMaskIsNotAppliedAndDoesNotRaise;
     procedure TestCustomEditMaskKeepsTheControlsMask;
     procedure TestChangingTheMaskKeepsShowingTheField;
+    procedure TestMaxLengthSetInCodeIsKeptOnTheNextRecord;
     procedure TestOldValuePutBackAfterAWriteIsWritten;
   end;
 
@@ -724,6 +726,19 @@ begin
   AssertEquals('still the author''s', 5, Ed.MaxLength);
 end;
 
+{ #184: a limit the program sets after binding is the author's: the next record does not put the
+  field's size back (LCL fills MaxLength only while it is 0, dbedit.inc DataChange). }
+procedure TDBEditTest.TestMaxLengthSetInCodeIsKeptOnTheNextRecord;
+begin
+  Bind('Name');
+  AssertEquals('the field''s size', 40, Ed.MaxLength);
+  Ed.MaxLength := 20;
+  GoRow(2);
+  AssertEquals('the program''s limit, on the next record', 20, Ed.MaxLength);
+  SetStrProp(FCtl, 'DataField', 'Amount');
+  AssertEquals('and on a field that sets none', 20, Ed.MaxLength);
+end;
+
 { #184, doc §3.4: an auto-increment field cannot be changed by the user -- a paste, which no key
   gate sees, is undone, and the record is not put in dsEdit. }
 procedure TDBEditTest.TestPasteIntoAnAutoIncrementFieldIsUndone;
@@ -975,6 +990,15 @@ begin
   Ed.EditMask := 'lllll';
   AssertEquals('masked, still the field', CFixKinds[1], Ed.MaskedValue);
   AssertBrowsing('changing the mask');
+end;
+
+procedure TDBMaskEditTest.TestMaxLengthSetInCodeIsKeptOnTheNextRecord;
+begin
+  Bind('Name');
+  AssertEquals('the field''s size', 40, Ed.MaxLength);
+  Ed.MaxLength := 20;
+  GoRow(2);
+  AssertEquals('the program''s limit, on the next record', 20, Ed.MaxLength);
 end;
 
 { Enter wrote the edit, so the field holds it now: putting the old value back -- one paste over

@@ -49,9 +49,11 @@ type
       FFocusedDisplay). Kept as a flag rather than read from Focused so the display follows the
       focus messages, not the widget's state at the moment DataChange runs. }
     FFocusedDisplay: Boolean;
-    { MaxLength came from the field's size, not from the author; a later field that is not a
-      string field takes it back to 0 instead of inheriting a limit nobody set. }
-    FFieldMaxLength: Boolean;
+    { The MaxLength the field's size put there (0: none). While MaxLength still holds it, the
+      field owns it: the next string field puts its own size, any other field takes it back to
+      0 instead of inheriting a limit nobody set. A MaxLength the program set since is its own,
+      and stays (LCL fills MaxLength only while it is 0). }
+    FFieldMaxLength: Integer;
     function GetDataField: string;
     function GetDataSource: TDataSource;
     function GetField: TField;
@@ -168,7 +170,7 @@ type
     FInUserEdit: Boolean;
     FLoaded: TTyDBLoadedValue;
     FFocusedDisplay: Boolean;
-    FFieldMaxLength: Boolean;
+    FFieldMaxLength: Integer;   // as TTyCustomDBEdit's
     FCustomEditMask: Boolean;
     function GetDataField: string;
     function GetDataSource: TDataSource;
@@ -1110,16 +1112,16 @@ begin
       Alignment := f.Alignment;
       if f.DataType in CStringFieldTypes then
       begin
-        if (MaxLength = 0) or FFieldMaxLength then
+        if (MaxLength = 0) or (MaxLength = FFieldMaxLength) then
         begin
           MaxLength := f.Size;
-          FFieldMaxLength := True;
+          FFieldMaxLength := f.Size;
         end;
       end
-      else if FFieldMaxLength then
+      else if (FFieldMaxLength <> 0) and (MaxLength = FFieldMaxLength) then
       begin
         MaxLength := 0;
-        FFieldMaxLength := False;
+        FFieldMaxLength := 0;
       end;
       if FFocusedDisplay and FDataLink.CanModify then
         Text := f.Text
@@ -1128,10 +1130,10 @@ begin
     end
     else
     begin
-      if FFieldMaxLength then
+      if (FFieldMaxLength <> 0) and (MaxLength = FFieldMaxLength) then
       begin
         MaxLength := 0;
-        FFieldMaxLength := False;
+        FFieldMaxLength := 0;
       end;
       Text := '';
     end;
@@ -1344,16 +1346,16 @@ begin
       Alignment := f.Alignment;
       if f.DataType in CStringFieldTypes then
       begin
-        if (MaxLength = 0) or FFieldMaxLength then
+        if (MaxLength = 0) or (MaxLength = FFieldMaxLength) then
         begin
           MaxLength := f.Size;
-          FFieldMaxLength := True;
+          FFieldMaxLength := f.Size;
         end;
       end
-      else if FFieldMaxLength then
+      else if (FFieldMaxLength <> 0) and (MaxLength = FFieldMaxLength) then
       begin
         MaxLength := 0;
-        FFieldMaxLength := False;
+        FFieldMaxLength := 0;
       end;
       { A mask shapes the EDITABLE form; DisplayText may not fit it at all. }
       if (GetMask <> '') or (FFocusedDisplay and FDataLink.CanModify) then
@@ -1364,10 +1366,10 @@ begin
     else
     begin
       if not FCustomEditMask then ApplyFieldMask('');
-      if FFieldMaxLength then
+      if (FFieldMaxLength <> 0) and (MaxLength = FFieldMaxLength) then
       begin
         MaxLength := 0;
-        FFieldMaxLength := False;
+        FFieldMaxLength := 0;
       end;
       Text := '';
     end;
