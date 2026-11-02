@@ -673,6 +673,30 @@ function chartCases() {
   add('enc.dataset-child', 'a dataset\'s child group column drilling down from bars (childGroupId -> groupId)',
     [s(gCart([gBars({ data: [{ name: 'A', value: 6, childGroupId: 'A' }, { name: 'B', value: 9, childGroupId: 'B' }] })])),
       s(Object.assign(sCart([dsScat({ encode: { x: 'p', y: 'v', itemGroupId: 'grp' } })]), { dataset: { source: DS } }))]);
+  // [spec 255] a group list gives the dimension its first entry names --
+  // unless that entry reaches none or names it again further on
+  // (getGroupIdDimension's otherDims.itemGroupId === 0)
+  add('enc.list-first', 'itemGroupId [grp, p]: grp is the group, the symbols combine',
+    [s(Object.assign(sCart([dsScat({ encode: { x: 'p', y: 'v', itemGroupId: ['grp', 'p'] } })]), { dataset: { source: DS } })),
+      s(gCart([gBars()]))]);
+  add('enc.list-gap', 'itemGroupId [nope, grp]: place 0 a gap -- no group dimension, the groups are the ids',
+    [s(Object.assign(sCart([dsScat({ encode: { x: 'p', y: 'v', itemGroupId: ['nope', 'grp'] } })]), { dataset: { source: DS } })),
+      s(gCart([gBars()]))]);
+  add('enc.list-twice', 'itemGroupId [grp, grp]: named again, so not place 0 -- no group dimension',
+    [s(Object.assign(sCart([dsScat({ encode: { x: 'p', y: 'v', itemGroupId: ['grp', 'grp'] } })]), { dataset: { source: DS } })),
+      s(gCart([gBars()]))]);
+  add('enc.own-list-gap', 'own data, itemGroupId [nope, g]: no group dimension',
+    [s(sCart([{ type: 'scatter', id: 's', symbolSize: 16, universalTransition: { enabled: true, seriesKey: 'k' },
+      dimensions: ['p', 'v', 'g'], encode: { x: 'p', y: 'v', itemGroupId: ['nope', 'g'] },
+      data: DS.slice(1) }])), s(gCart([gBars()]))]);
+  add('enc.own-list-twice', 'own data, itemGroupId [g, g]: named again -- no group dimension',
+    [s(sCart([{ type: 'scatter', id: 's', symbolSize: 16, universalTransition: { enabled: true, seriesKey: 'k' },
+      dimensions: ['p', 'v', 'g'], encode: { x: 'p', y: 'v', itemGroupId: ['g', 'g'] },
+      data: DS.slice(1) }])), s(gCart([gBars()]))]);
+  add('enc.own-list-first', 'own data, itemGroupId [g, v]: g',
+    [s(sCart([{ type: 'scatter', id: 's', symbolSize: 16, universalTransition: { enabled: true, seriesKey: 'k' },
+      dimensions: ['p', 'v', 'g'], encode: { x: 'p', y: 'v', itemGroupId: ['g', 'v'] },
+      data: DS.slice(1) }])), s(gCart([gBars()]))]);
   // ---- 5. THE VIEW GROUPS ----
   const TREE = (names) => [{ name: 'r', children: names.map(n => ({ name: n, value: VALS[NAMES.indexOf(n)] })) }];
   // (the node colours written: the port's default tree ink is its skin's)

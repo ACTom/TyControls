@@ -921,6 +921,84 @@ axisTip('sub-row series between bars, seriesDesc', subRowsBetween(), 'A', { orde
 axisTip('axis template over three series, the third unnamed', three(true), 'B', { formatter: threeTpl });
 itemTip('unnamed pie template [{a}]', unnamedPie(), 0, 0, { formatter: '[{a}]' });
 
+// ---------- [spec 255] an encode key written as a list ----------
+// createDimensions resolves every entry: a dimension at the LAST place a
+// list names it, a gap where an entry reaches none (a name the table does
+// not have, an index past its dimensions, a dimension named again further
+// on); a coordinate's entries past the first are coordinates too (the
+// default label is the last of them in the table's order); a gap in
+// encode.label prints the whole raw item; a tooltip skips a gap but counts
+// it; itemName gives slot 0 only, and any entry takes the category's name
+// away; seriesName joins the display names it reaches.
+const LH = ['p', 'v', 'g', 'w'];
+const LROWS = [[1, 6, 'A', 9], [2, 7, 'B', 4], [3, 8, 'A', 2]];
+const lsc = (encode, extra, head) => Object.assign({
+  dataset: { source: (head === false ? [] : [LH]).concat(clone(LROWS)) },
+  xAxis: { type: 'value' }, yAxis: { type: 'value' },
+  series: [{ type: 'scatter', name: 'L', encode, label: { show: true } }],
+}, extra || {});
+const lcat = (encode, type) => ({
+  dataset: { source: [LH].concat(clone(LROWS)) }, xAxis: { type: 'category' }, yAxis: { type: 'value' },
+  series: [{ type: type || 'bar', name: 'L', encode, label: { show: true } }],
+});
+label('encode list: x [0, 3]: the label is the last coordinate, w', lsc({ x: [0, 3], y: 1 }));
+label("encode list: x [3, 0], y unwritten: y takes v, the label w", lsc({ x: [3, 0] }));
+label("encode list: label ['nope', 3]: the gap prints the raw item", lsc({ x: 0, y: 1, label: ['nope', 3] }));
+label('encode list: label [1, 1]: named twice, a gap first', lsc({ x: 0, y: 1, label: [1, 1] }));
+label('encode list: label [3, 1, 3]', lsc({ x: 0, y: 1, label: [3, 1, 3] }));
+label("encode list: label ['nope', 'w'] on object rows", {
+  dataset: { source: LROWS.map(r => ({ p: r[0], v: r[1], g: r[2], w: r[3] })) },
+  xAxis: { type: 'value' }, yAxis: { type: 'value' },
+  series: [{ type: 'scatter', encode: { x: 'p', y: 'v', label: ['nope', 'w'] }, label: { show: true } }],
+});
+label('encode list: value on a scatter is a coordinate: the label', lsc({ x: 0, y: 1, value: 3 }));
+label("encode list: x ['w', 1], mixed: the label v", lsc({ x: ['w', 1], y: 0 }));
+label('encode list: own data x [0, 2]: the label x0', valueXY([{
+  type: 'scatter', encode: { x: [0, 2], y: 1 }, data: [[1, 6, 9], [2, 7, 4]], label: { show: true } }]));
+label('encode list: own data x [2, 0]: {@x}|{@x0}|{@y}', valueXY([{
+  type: 'scatter', encode: { x: [2, 0], y: 1 }, data: [[1, 6, 9], [2, 7, 4]],
+  label: { show: true, formatter: '{@x}|{@x0}|{@y}' } }]));
+label('encode list: no header x [3, 0]: {@x}|{@x0}|{@y}', lsc({ x: [3, 0], y: 1 },
+  { series: [{ type: 'scatter', encode: { x: [3, 0], y: 1 }, label: { show: true, formatter: '{@x}|{@x0}|{@y}' } }] }, false));
+label('encode list: polar radius [0, 3]', {
+  dataset: { source: [LH].concat(clone(LROWS)) }, polar: {}, angleAxis: {}, radiusAxis: {},
+  series: [{ type: 'scatter', coordinateSystem: 'polar', encode: { radius: [0, 3], angle: 1 }, label: { show: true } }],
+});
+label('encode list: category bar x [2, 0]: v', lcat({ x: [2, 0], y: 1 }));
+label('encode list: category bar y [3, 1]: the last, v', lcat({ x: 2, y: [3, 1] }));
+label('encode list: value 2 on a scatter, a guessed category: the label v', lsc({ x: 0, y: 1, value: 2 }));
+
+const lTip = (name, option, dataIndex) => itemTip(name, option, 0, dataIndex === undefined ? 0 : dataIndex);
+lTip("encode list: tooltip [1, 'b', 3]", lsc({ x: 0, y: 1, tooltip: [1, 'b', 3] }));
+lTip('encode list: tooltip [1, 3, 1]: v moves last', lsc({ x: 0, y: 1, tooltip: [1, 3, 1] }));
+lTip('encode list: tooltip [1, 1]: one row of two places', lsc({ x: 0, y: 1, tooltip: [1, 1] }));
+lTip("encode list: tooltip ['nope', 3]", lsc({ x: 0, y: 1, tooltip: ['nope', 3] }));
+lTip("encode list: tooltip ['nope', 3], no header: inline", lsc({ x: 0, y: 1, tooltip: ['nope', 3] }, null, false));
+lTip("encode list: label ['nope', 3] is the tooltip", lsc({ x: 0, y: 1, label: ['nope', 3] }));
+lTip('encode list: x [0, 3]: the tooltip w', lsc({ x: [0, 3], y: 1 }));
+lTip('encode list: x [0, 1], y 3: the tooltip is the label, w', lsc({ x: [0, 1], y: 3 }));
+lTip('encode list: own data x [0, 2]: the tooltip x0, no names', valueXY([{
+  type: 'scatter', name: 'L', encode: { x: [0, 2], y: 1 }, data: [[1, 6, 9], [2, 7, 4]] }]));
+const unnamed = o => { delete o.series[0].name; return o; };
+lTip('encode list: seriesName [3, 1]: "w v"', unnamed(lsc({ x: 0, y: 1, seriesName: [3, 1] })));
+lTip("encode list: seriesName ['nope', 'w']", unnamed(lsc({ x: 0, y: 1, seriesName: ['nope', 'w'] })));
+lTip('encode list: seriesName [3, 1], no header: no names, the auto name', unnamed(lsc({ x: 0, y: 1, seriesName: [3, 1] }, null, false)));
+lTip('encode list: seriesName [3, 3]', unnamed(lsc({ x: 0, y: 1, seriesName: [3, 3] })));
+lTip("encode list: category itemName ['nope', 'p']: no name", lcat({ x: 2, y: 1, itemName: ['nope', 'p'] }), 1);
+lTip("encode list: category itemName ['p', 'p']: no name", lcat({ x: 2, y: 1, itemName: ['p', 'p'] }), 1);
+lTip("encode list: category itemName ['p', 'g']: p", lcat({ x: 2, y: 1, itemName: ['p', 'g'] }), 1);
+lTip('encode list: category x [2, 0]: the name is p', lcat({ x: [2, 0], y: 1 }, 'line'), 1);
+lTip("encode list: category itemName 'nope': the category", lcat({ x: 2, y: 1, itemName: 'nope' }), 1);
+const KROWS = [['d0', 20, 34, 10, 38], ['d1', 40, 35, 30, 50]];
+lTip('encode list: candlestick dataset y [1, 4, 3, 2]', {
+  dataset: { source: clone(KROWS) }, xAxis: { type: 'category' }, yAxis: { type: 'value', scale: true },
+  series: [{ type: 'candlestick', name: 'K', encode: { x: 0, y: [1, 4, 3, 2] } }] }, 1);
+lTip('encode list: candlestick own data y [1, 4, 3, 2]', catX(['d0', 'd1'], [{
+  type: 'candlestick', name: 'K', encode: { x: 0, y: [1, 4, 3, 2] }, data: [[0, 20, 34, 10, 38], [1, 40, 35, 30, 50]] }]), 1);
+lTip('encode list: pie value [w, v]', {
+  dataset: { source: [LH].concat(clone(LROWS)) },
+  series: [{ type: 'pie', name: 'P', encode: { itemName: 'g', value: ['w', 'v'] } }] }, 1);
+
 // ---------- gauge ----------
 
 function gaugeText(el, what) {

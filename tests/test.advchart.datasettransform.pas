@@ -49,7 +49,7 @@ type
     FCtl: TTyStyleController;
     FChart: TDtProbe;
     FRoot, FTable: TJSONData;
-    FBad, FCompared, FCells, FItems, FLabels: Integer;
+    FBad, FCompared, FCells, FItems, FLabels, FExtents: Integer;
     FReport, FWhere: string;
     procedure Miss(const AWhat: string);
     procedure Same(const AWhat: string; AGot: Double; const AHex: string);
@@ -764,6 +764,9 @@ var
   i, k: Integer;
   ax: TTyAxis;
   cw, ch: Integer;
+  e: TTyRange;
+  lst: TTyPaintList;
+  el: TTyChartElement;
 begin
   rend := ACase.Objects['render'];
   cw := TJSONObject(FRoot).Integers['W'];
@@ -804,6 +807,45 @@ begin
   end;
   arr := rend.Arrays['series'];
   for i := 0 to arr.Count - 1 do CheckSeries(arr.Objects[i]);
+  { [spec 255] each axis' extent, where the case recorded it }
+  if ACase.Find('extents') is TJSONArray then
+  begin
+    arr := ACase.Arrays['extents'];
+    for i := 0 to arr.Count - 1 do
+    begin
+      ax := FChart.Build.Axis(arr.Objects[i].Strings['dim'] + 'Axis', arr.Objects[i].Integers['index']);
+      Inc(FCompared);
+      if ax = nil then
+      begin
+        Miss(arr.Objects[i].Strings['dim'] + ': no axis here');
+        Continue;
+      end;
+      e := ax.Scale.GetExtent;
+      Same(arr.Objects[i].Strings['dim'] + ' extent lo', e.Start, arr.Objects[i].Arrays['extent'].Strings[0]);
+      Same(arr.Objects[i].Strings['dim'] + ' extent hi', e.Stop, arr.Objects[i].Arrays['extent'].Strings[1]);
+      Inc(FExtents);
+    end;
+  end;
+  { [spec 255] a scatter's symbol sizes: an extra column of an encode list
+    is no size }
+  if ACase.Find('sizes') is TJSONArray then
+  begin
+    arr := ACase.Arrays['sizes'];
+    lst := FChart.List;
+    for i := 0 to arr.Count - 1 do
+      for k := 0 to lst.Count - 1 do
+      begin
+        el := lst.Element(k);
+        if el.Datum.IsEdge or (el.Datum.SeriesIndex <> arr.Objects[i].Integers['index'])
+          or (el.Datum.RawDataIndex < 0) or (el.Caption.FontSizeLogical > 0)
+          or (el.Shape.Kind <> cskCircle) then Continue;
+        if el.Datum.RawDataIndex >= arr.Objects[i].Arrays['sizes'].Count then Continue;
+        if IsNull(arr.Objects[i].Arrays['sizes'].Items[el.Datum.RawDataIndex]) then Continue;
+        Same(Format('s%d[%d] symbol size', [arr.Objects[i].Integers['index'], el.Datum.RawDataIndex]),
+          2 * el.Shape.R1, arr.Objects[i].Arrays['sizes'].Strings[el.Datum.RawDataIndex]);
+        Inc(FExtents);
+      end;
+  end;
 end;
 
 procedure TAdvChartDatasetTransformTest.TestSeriesOverTransformsDrawAsUpstream;
@@ -814,6 +856,7 @@ begin
   n := 0;
   FItems := 0;
   FLabels := 0;
+  FExtents := 0;
   for i := 0 to Cases.Count - 1 do
   begin
     c := Cases.Objects[i];
@@ -825,6 +868,7 @@ begin
   AssertTrue('the render cases', n >= 10);
   AssertTrue('the items', FItems >= 60);
   AssertTrue('the labels', FLabels >= 30);
+  AssertTrue('the extents', FExtents >= 28);
   Finish('render');
 end;
 
