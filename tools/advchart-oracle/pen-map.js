@@ -244,6 +244,9 @@ function cases() {
       { type: 'group', x: 300, y: 40, scaleX: 2, scaleY: 0.5, children: [
         { type: 'rect', shape: { x: 0, y: 0, width: 30, height: 40 }, style: { fill: null, stroke: '#a90005', lineWidth: 2 } },
       ] },
+      // mirrored and scaled alike: a round pen
+      { type: 'rect', x: 200, y: 150, scaleX: -2, scaleY: 2, shape: { x: 0, y: 0, width: 20, height: 10 },
+        style: { fill: null, stroke: '#a90006', lineWidth: 2 } },
     ] }],
     // ---- an SVG map under a geo whose aspectScale is not one ----
     ['geo-svg', { animation: false, geo: { map: 'r7p-pen', aspectScale: 0.5, roam: false, left: 20, top: 20, width: 360, height: 260,
