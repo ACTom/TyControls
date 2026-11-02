@@ -370,6 +370,8 @@ type
   private
     FRows: TTyPropertyRows;
     FSelected: array of TPersistent;   // the selection, in the order it was given; no nil, no repeat
+    { Holds the selected components' free notifications, apart from the grid's own (#183). }
+    FWatcher: TComponent;
     FOnEditRowApp: TTyValueEditEvent;
     FExpanded: TStringList;
     FHarvesting: Boolean;
@@ -453,6 +455,8 @@ type
     procedure MenuDeleteClick(Sender: TObject);
     procedure MenuUpClick(Sender: TObject);
     procedure MenuDownClick(Sender: TObject);
+    { A selected component is being freed: it leaves the selection. }
+    procedure SelectionFreed(AComponent: TComponent);
     { Loaded's second look at the selection, once the message loop runs again (#183). }
     procedure RefreshAfterLoad(Data: PtrInt);
   protected
@@ -2164,6 +2168,26 @@ end;
 
 { ---- TTyCustomPropertyGrid ---- }
 
+type
+  { The receiver of the selected components' free notifications. TComponent keeps ONE link per
+    pair of components, whatever it serves: were the grid itself the receiver, letting go of a
+    component it inspects would also drop the link its Images, PopupMenu or Controller rests on
+    (and setting those to another one would drop the selection's), and the grid would hold a
+    freed object. With its own receiver each link is separate (#183). }
+  TTyPropertyGridWatcher = class(TComponent)
+  private
+    FGrid: TTyCustomPropertyGrid;
+  protected
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+  end;
+
+procedure TTyPropertyGridWatcher.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (AComponent <> nil) and (FGrid <> nil) then
+    FGrid.SelectionFreed(AComponent);
+end;
+
 { Does AList name a category heading ('@Layout')? }
 function NamesCategory(AList: TStrings): Boolean;
 var i: Integer;
@@ -2178,6 +2202,8 @@ begin
   inherited Create(AOwner);
   FRows := TTyGridPropertyRows.Create(Self);
   TTyGridPropertyRows(FRows).FGrid := Self;
+  FWatcher := TTyPropertyGridWatcher.Create(nil);
+  TTyPropertyGridWatcher(FWatcher).FGrid := Self;
   FRows.HiddenProperties.OnChange := @HiddenChanged;
   FSeenCategories := TStringList.Create;
   FSeenCategories.CaseSensitive := False;
@@ -2195,6 +2221,8 @@ end;
 
 destructor TTyCustomPropertyGrid.Destroy;
 begin
+  TTyPropertyGridWatcher(FWatcher).FGrid := nil;
+  FreeAndNil(FWatcher);   // and with it the links to the selection
   Clear;          // rows first: their Data points at the nodes
   FreeAndNil(FRows);
   FreeAndNil(FExpanded);
@@ -2233,10 +2261,10 @@ begin
     thrown away: a click on a control that takes no focus never gave the editor its OnExit. }
   if EditingRow >= 0 then EndEdit(True);
   for i := 0 to High(FSelected) do
-    if FSelected[i] is TComponent then TComponent(FSelected[i]).RemoveFreeNotification(Self);
+    if FSelected[i] is TComponent then TComponent(FSelected[i]).RemoveFreeNotification(FWatcher);
   FSelected := fresh;
   for i := 0 to High(FSelected) do
-    if FSelected[i] is TComponent then TComponent(FSelected[i]).FreeNotification(Self);
+    if FSelected[i] is TComponent then TComponent(FSelected[i]).FreeNotification(FWatcher);
   if csLoading in ComponentState then Exit;   // Loaded builds, once the filters are read too
   RebuildRows(False);
 end;
@@ -2278,10 +2306,16 @@ begin
 end;
 
 procedure TTyCustomPropertyGrid.Notification(AComponent: TComponent; Operation: TOperation);
-var i, at: Integer;
 begin
   inherited Notification(AComponent, Operation);
-  if (Operation <> opRemove) or (AComponent = nil) then Exit;
+  { A selected component on the grid's own form is announced here too, by the form: let go of
+    at once, as the watcher would. }
+  if (Operation = opRemove) and (AComponent <> nil) then SelectionFreed(AComponent);
+end;
+
+procedure TTyCustomPropertyGrid.SelectionFreed(AComponent: TComponent);
+var i, at: Integer;
+begin
   at := -1;
   for i := 0 to High(FSelected) do
     if TObject(FSelected[i]) = TObject(AComponent) then at := i;

@@ -13,7 +13,7 @@ unit test.propertygrid.control;
 interface
 
 uses
-  Classes, SysUtils, TypInfo, LCLType, Controls, Graphics, Forms, fpcunit, testregistry,
+  Classes, SysUtils, TypInfo, LCLType, Controls, Graphics, Forms, Menus, fpcunit, testregistry,
   tyControls.ListBox, tyControls.ValueListEditor, tyControls.PropertyGrid, tyControls.Button,
   tyControls.Edit, tyControls.StrConsts, test.propertygrid.fixtures, test.danglingrefs;
 
@@ -89,6 +89,7 @@ type
     procedure TestTheStringsDialogWritesAfterARebuildWhileItWasUp;
     procedure TestAWriteThatChangesTheStructureRebuildsTheRows;
     procedure TestAStreamedSelectionIsReadAgainOnceLoadingIsOver;
+    procedure TestTheGridsOwnLinksOutliveTheSelection;
   end;
 
 implementation
@@ -801,6 +802,39 @@ begin
     dst.Free;
     src.Free;
   end;
+end;
+
+{ The grid inspects the image list (or the menu) it also uses as its own Images (PopupMenu).
+  TComponent keeps one free notification per pair, so letting go of one must not let go of the
+  other: freed, the list is let go of by both. }
+procedure TPropertyGridControlTest.TestTheGridsOwnLinksOutliveTheSelection;
+var il: TImageList; pm: TPopupMenu;
+begin
+  il := TImageList.Create(nil);
+  FGrid.Images := il;
+  FGrid.SelectedComponent := il;
+  FGrid.SelectedObject := FObj;          // the image list leaves the selection
+  il.Free;
+  AssertNull('the grid let go of its Images', FGrid.Images);
+  pm := TPopupMenu.Create(nil);
+  FGrid.PopupMenu := pm;
+  FGrid.SelectedComponent := pm;
+  FGrid.SelectedObject := FObj;
+  pm.Free;
+  AssertNull('and of its PopupMenu', FGrid.PopupMenu);
+  il := TImageList.Create(nil);
+  FGrid.SelectedComponent := il;
+  FGrid.Images := il;
+  FGrid.Images := nil;                    // the grid stops using it; it is still inspected
+  BeginPoison;
+  try
+    il.Free;
+    FGrid.Refresh;
+  finally
+    EndPoison;
+  end;
+  AssertNull('the selection let go of it', FGrid.SelectedObject);
+  AssertEquals('no rows', 0, FGrid.RowCount);
 end;
 
 initialization
