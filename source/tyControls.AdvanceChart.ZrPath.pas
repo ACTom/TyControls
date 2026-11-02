@@ -60,6 +60,12 @@ function TyZrSubPixelOptimize(APosition, ALineWidth: Double;
   APositive: Boolean): Double;
 function TyZrSubPixelOptimizeRect(const ARect: TTyXYWH;
   ALineWidth: Double): TTyXYWH;
+{ [R7-G] subPixelOptimizeLine: an end pair whose doubled coordinates round
+  alike goes, both ends, to the first's half pixel for ALineWidth (none for
+  a width of nought or not a number) -- what zrender's Line does in
+  buildPath when its subPixelOptimize is on, in the line's own frame }
+procedure TyZrSubPixelOptimizeLine(var AX1, AY1, AX2, AY2: Double;
+  ALineWidth: Double);
 
 { createPathProxyFromString with processArc, then toStatic: AFloat32 says
   whether the data went to a Float32Array (more than eleven numbers). }
@@ -339,6 +345,22 @@ begin
   if JsRem(d + TyJsRound(ALineWidth), 2) = 0 then Result := d / 2
   else if APositive then Result := (d + 1) / 2
   else Result := (d - 1) / 2;
+end;
+
+procedure TyZrSubPixelOptimizeLine(var AX1, AY1, AX2, AY2: Double;
+  ALineWidth: Double);
+begin
+  if IsNan(ALineWidth) or (ALineWidth = 0) then Exit;
+  if TyJsRound(AX1 * 2) = TyJsRound(AX2 * 2) then
+  begin
+    AX1 := TyZrSubPixelOptimize(AX1, ALineWidth, True);
+    AX2 := AX1;
+  end;
+  if TyJsRound(AY1 * 2) = TyJsRound(AY2 * 2) then
+  begin
+    AY1 := TyZrSubPixelOptimize(AY1, ALineWidth, True);
+    AY2 := AY1;
+  end;
 end;
 
 function TyZrSubPixelOptimizeRect(const ARect: TTyXYWH;

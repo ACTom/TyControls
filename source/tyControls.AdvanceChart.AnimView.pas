@@ -6730,6 +6730,10 @@ begin
     carGraphEdge:
       begin
         TyGraphEdgeLine(now_, q1, q2, qc, cv);
+        { [R7-G] the shape on the half pixel before the percent, in its
+          frame (Line.buildPath with subPixelOptimize) }
+        if Length(now_.Anim.Vals) > 6 then
+          TyGraphEdgeSnap(q1, q2, cv, now_.Anim.Vals[6]);
         pts := TyGraphLinePrefix(q1, q2, qc, cv, APercent);
         for k := 0 to High(pts) do pts[k] := TyGraphEdgeDev(now_, pts[k]);
         AEl.Shape.Points := pts;
@@ -9094,6 +9098,8 @@ begin
   y2 := AEl.Anim.G[3];
   if AEl.Anim.G[6] = 0 then
   begin
+    { [R7-G] the path buildPath makes: on the half pixel first }
+    TyZrSubPixelOptimizeLine(x1, y1, x2, y2, AEl.Anim.G[11]);
     if APercent < 1 then
     begin
       x2 := x1 * (1 - APercent) + x2 * APercent;

@@ -94,6 +94,9 @@ type
       padding, and the block's size plus the padding. }
     Frame: TTyRectF;
     FrameX, FrameY, FrameW, FrameH: Double;
+    { [R7-G] the same box in the group's own frame (the group sits at
+      TextX, TextY): x and y before the group's place is added }
+    FrameLX, FrameLY: Double;
     TextX, TextY: Double;
     SubX, SubY: Double;
     TextW, TextH: Double;
@@ -101,6 +104,15 @@ type
     Align: TTyTitleAlign;
     VAlign: TTyTitleVAlign;
   end;
+
+{ [R7-G] THE BACKGROUND AS DRAWN: title/install.ts makes it a Rect with
+  subPixelOptimize, so buildPath runs subPixelOptimizeRect on its own shape
+  -- the group's box less the padding, in the GROUP'S frame (FrameLX,
+  FrameLY, FrameW, FrameH) -- with its lineWidth (the borderWidth, in px),
+  and the group's place (TextX, TextY) is added after. The half pixel is
+  the local box's, so a title at a fractional place keeps its fraction. A
+  width of nought moves nothing. }
+function TyTitleFrameDrawn(const ALayout: TTyTitleLayout; ALineWidthPx: Double): TTyRectF;
 
 { How many titles the option carries. An object counts as one. }
 function TyTitleCount(AOption: TTyChartOption): Integer;
@@ -125,7 +137,19 @@ function TyLayoutTitle(const ASpec: TTyTitleSpec; const AContainer: TTyXYWH;
 
 implementation
 
-uses tyControls.AdvanceChart.States, tyControls.AdvanceChart.Color;
+uses tyControls.AdvanceChart.States, tyControls.AdvanceChart.Color,
+  tyControls.AdvanceChart.ZrPath;
+
+function TyTitleFrameDrawn(const ALayout: TTyTitleLayout; ALineWidthPx: Double): TTyRectF;
+var r: TTyXYWH;
+begin
+  r := TyZrSubPixelOptimizeRect(TyXYWH(ALayout.FrameLX, ALayout.FrameLY,
+    ALayout.FrameW, ALayout.FrameH), ALineWidthPx);
+  { through the group's transform (a translation): x + tx, the far edge
+    (x + w) + tx }
+  Result := TyRectF(r.X + ALayout.TextX, r.Y + ALayout.TextY,
+    (r.X + r.W) + ALayout.TextX, (r.Y + r.H) + ALayout.TextY);
+end;
 
 const
   { title's defaultOption, install.ts:106-138. `top` is tokens.size.m. }
@@ -467,6 +491,8 @@ begin
     ly := Min(sy, ly);
     lh := lb - ly;
   end;
+  Result.FrameLX := lx - pad[3];
+  Result.FrameLY := ly - pad[0];
   Result.FrameX := gx + (lx - pad[3]);
   Result.FrameY := gy + (ly - pad[0]);
   Result.FrameW := gw + pad[1] + pad[3];

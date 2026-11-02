@@ -311,7 +311,7 @@ function TyLinesLineBox(const AG: TTyLinesGeom; ALineWidth: Double): TTyXYWH;
 { The line from its start to percent: the straight segment, or the curve's
   first part (quadraticSubdivide) as ASteps + 1 points }
 function TyLinesPartPoints(const AG: TTyLinesGeom; APercent: Double;
-  ASteps: Integer): TTyPointFArray;
+  ASteps: Integer; ASnapWidth: Double = 0): TTyPointFArray;
 
 { ---- the effect ---- }
 
@@ -1001,21 +1001,31 @@ begin
 end;
 
 function TyLinesPartPoints(const AG: TTyLinesGeom; APercent: Double;
-  ASteps: Integer): TTyPointFArray;
+  ASteps: Integer; ASnapWidth: Double): TTyPointFArray;
 var
   k: Integer;
   p0, p1, p2, q0, q1: TTyPointF;
-  t, u: Double;
+  t, u, x1, y1, x2, y2: Double;
 begin
   Result := nil;
   if Length(AG.Pts) < 2 then Exit;
   if not AG.Curved then
   begin
+    { [R7-G] Line.buildPath with subPixelOptimize (createLine): the shape
+      first, both ends, by the line's width -- then the percent }
+    x1 := AG.Pts[0].X;
+    y1 := AG.Pts[0].Y;
+    x2 := AG.Pts[1].X;
+    y2 := AG.Pts[1].Y;
+    TyZrSubPixelOptimizeLine(x1, y1, x2, y2, ASnapWidth);
     { Line.buildPath: x1 * (1 - p) + x2 * p }
     SetLength(Result, 2);
-    Result[0] := AG.Pts[0];
-    Result[1] := TyPointF(AG.Pts[0].X * (1 - APercent) + AG.Pts[1].X * APercent,
-      AG.Pts[0].Y * (1 - APercent) + AG.Pts[1].Y * APercent);
+    Result[0] := TyPointF(x1, y1);
+    if APercent < 1 then
+      Result[1] := TyPointF(x1 * (1 - APercent) + x2 * APercent,
+        y1 * (1 - APercent) + y2 * APercent)
+    else
+      Result[1] := TyPointF(x2, y2);
     Exit;
   end;
   { BezierCurve.buildPath under 1: quadraticSubdivide at percent, the first
@@ -1338,10 +1348,11 @@ begin
   Result := TyBuildSymbol(spec, AX, AY);
 end;
 
-function LinePoints(const AG: TTyLinesGeom; APoly: Boolean; APercent: Double): TTyPointFArray;
+function LinePoints(const AG: TTyLinesGeom; APoly: Boolean; APercent: Double;
+  ASnapWidth: Double): TTyPointFArray;
 begin
   if APoly then Exit(Copy(AG.Pts, 0, Length(AG.Pts)));
-  Result := TyLinesPartPoints(AG, APercent, cLinesCurveSteps);
+  Result := TyLinesPartPoints(AG, APercent, cLinesCurveSteps, ASnapWidth);
 end;
 
 function TyBuildLinesMarks(const ASolved: TTyLinesSolved; AEmptyFill: TTyChartColor;
@@ -1496,7 +1507,8 @@ begin
     if not g.Drawn or (i > High(ASolved.Inks)) then Continue;
     ink := ASolved.Inks[i];
     { THE LINE: a polyline's points, a line's segment, a curve sampled }
-    pts := LinePoints(g, ASolved.Poly, 1);
+    { [R7-G] a straight line on the half pixel of its width (device px) }
+    pts := LinePoints(g, ASolved.Poly, 1, ink.Width * ASolved.Scale);
     el := TyChartElement(TyShapePolyline(pts));
     el.Style.HasFill := False;
     { [spec 242] the visual colour a label's `color: 'inherit'` reads
@@ -1537,6 +1549,8 @@ begin
       el.Anim.G[8] := ink.DistX;
       el.Anim.G[9] := ink.DistY;
       el.Anim.G[10] := ink.AlignFlags;
+      { [R7-G] the width its frames snap by (device px) }
+      el.Anim.G[11] := ink.Width * ASolved.Scale;
       { THE LABEL, where Line.beforeUpdate puts it at percent 1; a polyline
         has none }
       { [spec 242] the label's textConfig rides with the line: [has turn,
@@ -1773,7 +1787,7 @@ begin
     AEl.Silent := True;
     Exit;
   end;
-  AEl.Shape.Points := LinePoints(g, False, APercent);
+  AEl.Shape.Points := LinePoints(g, False, APercent, AEl.Anim.G[11]);
 end;
 
 procedure TyLinesFrameSymbol(var AEl: TTyChartElement; APercent: Double);

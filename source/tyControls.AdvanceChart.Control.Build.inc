@@ -3186,6 +3186,8 @@ var
   ink0, ink1: TTyColor;
   frameFill: TTyFill;
   frameInk: TTyColor;
+  { [R7-G] the background as its Rect builds it }
+  frame: TTyRectF;
 
   { The box DrawText wants, hung off an anchor with the title's alignment.
     The same job AnchorBox does for an axis label; kept local because the two
@@ -3237,9 +3239,12 @@ begin
       the title a transparent background by default, and painting the surface
       colour instead would put a visible plate behind every title on an image
       theme. }
+    { [R7-G] the frame as its Rect builds it: subPixelOptimizeRect in the
+      group's frame by the border width [was: as laid out] }
+    frame := TyTitleFrameDrawn(lay, APainter.ScaleF(FTitleSpecs[i].BorderWidth));
     { [R5-A] the frame's shadow, under it }
     if FTitleSpecs[i].HasBackground then
-      TyCastFrameShadow(APainter, lay.Frame, Round(FTitleSpecs[i].BorderRadii[0]),
+      TyCastFrameShadow(APainter, frame, Round(FTitleSpecs[i].BorderRadii[0]),
         TTyColor(FTitleSpecs[i].BackgroundColor), FTitleSpecs[i].Shadow);
     { [R5-G] IN THE AUTHOR'S backgroundColor (install.ts: style.fill =
       backgroundColor) [was: the skin's surface, whatever the option wrote] }
@@ -3249,8 +3254,8 @@ begin
       frameFill.Kind := tfkSolid;
       frameFill.Color := TTyColor(FTitleSpecs[i].BackgroundColor);
       APainter.FillBackground(
-        Rect(Round(lay.Frame.Left), Round(lay.Frame.Top),
-             Round(lay.Frame.Right), Round(lay.Frame.Bottom)),
+        Rect(Round(frame.Left), Round(frame.Top),
+             Round(frame.Right), Round(frame.Bottom)),
         frameFill, Round(FTitleSpecs[i].BorderRadii[0]));
     end;
     { [R5-G] AND ITS BORDER: borderWidth above nought strokes the rect in
@@ -3262,8 +3267,8 @@ begin
       else if tpBorderColor in st.Present then frameInk := TTyColor(st.BorderColor)
       else frameInk := st.TextColor;
       APainter.BeginPath;
-      APainter.RoundRectPath(lay.Frame.Left, lay.Frame.Top, lay.Frame.Right,
-        lay.Frame.Bottom, FTitleSpecs[i].BorderRadii[0]);
+      APainter.RoundRectPath(frame.Left, frame.Top, frame.Right,
+        frame.Bottom, FTitleSpecs[i].BorderRadii[0]);
       APainter.StrokePath(frameInk, FTitleSpecs[i].BorderWidth);
     end;
     { in the fonts the layout measured -- the author's where written }

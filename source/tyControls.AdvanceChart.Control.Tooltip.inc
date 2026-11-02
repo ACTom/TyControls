@@ -2616,6 +2616,8 @@ var
   lineS, shadowS, labelS: TTyStyleSet;
   hit: TTyAxisHit;
   at, atRest, lo, hi, w, pv: Double;
+  { [R7-G] the line's ends as built }
+  px1, py1, px2, py2: Double;
   colour: TTyColor;
   band: TTyRectF;
   dash: TTyDoubleArray;
@@ -2700,17 +2702,27 @@ begin
           if w <= 0 then Continue;
           dash := TyDashPattern(hit.Spec.LineDash, hit.Spec.LineDashExplicit, w);
           APainter.SetLineDash(dash);
-          APainter.BeginPath;
+          { [R7-G] CartesianAxisPointer's Line has subPixelOptimize: the
+            line on the half pixel of its width, every frame of its slide
+            as built [was: where the value fell] }
           if hit.Axis.Horizontal then
           begin
-            APainter.MoveTo(at, hit.Plot.Top);
-            APainter.LineTo(at, hit.Plot.Bottom);
+            px1 := at;
+            py1 := hit.Plot.Top;
+            px2 := at;
+            py2 := hit.Plot.Bottom;
           end
           else
           begin
-            APainter.MoveTo(hit.Plot.Left, at);
-            APainter.LineTo(hit.Plot.Right, at);
+            px1 := hit.Plot.Left;
+            py1 := at;
+            px2 := hit.Plot.Right;
+            py2 := at;
           end;
+          TyZrSubPixelOptimizeLine(px1, py1, px2, py2, APainter.ScaleF(w));
+          APainter.BeginPath;
+          APainter.MoveTo(px1, py1);
+          APainter.LineTo(px2, py2);
           APainter.StrokePath(colour, w);
           { AND THE DASH IS PUT BACK. SetLineDash is painter state, not an
             argument -- leaving it set dashes whatever is drawn next, which is

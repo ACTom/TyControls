@@ -3999,6 +3999,8 @@ begin
   SetLength(AInk.EdgeLabelOffX, n);
   SetLength(AInk.EdgeLabelOffY, n);
   if FLastPPI > 0 then scale := FLastPPI / 96 else scale := 1;
+  { [R7-G] a straight edge on axes snaps on the device }
+  AInk.PxScale := scale;
   { the line's frame: the view's overall transform, the label scaled back by
     1 / its scaleX (every ancestor's scaleX, and only the main group has one) }
   AInk.HasFrame := (ASlot <= High(FGraphs)) and (FGraphs[ASlot] <> nil);
