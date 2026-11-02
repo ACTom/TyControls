@@ -2545,7 +2545,9 @@ end;
 
 procedure TTyCustomDBFloatSpinEdit.KeyDown(var Key: Word; Shift: TShiftState);
 begin
-  if ((Key = VK_BACK) or (Key = VK_DELETE)) and not TyDBEditAllowed(FDataLink, FInUserEdit) then
+  { With EditorEnabled off the base control drops these keys itself: nothing to ask for. }
+  if ((Key = VK_BACK) or (Key = VK_DELETE)) and EditorEnabled
+    and not TyDBEditAllowed(FDataLink, FInUserEdit) then
   begin
     Key := 0;
     Exit;
@@ -2563,8 +2565,9 @@ procedure TTyCustomDBFloatSpinEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
 begin
   { Only for what this control would insert: any other character the base filter drops
     without the dataset being asked. Not the field's IsValidChar -- a float field's takes the
-    locale's DecimalSeparator, this control always types a '.'. }
-  if (Length(UTF8Key) = 1) and (UTF8Key[1] in ['0'..'9', '-', '.'])
+    locale's DecimalSeparator, this control always types a '.'. Nor while EditorEnabled is off:
+    the base control drops every character then. }
+  if (Length(UTF8Key) = 1) and (UTF8Key[1] in ['0'..'9', '-', '.']) and EditorEnabled
     and not TyDBEditAllowed(FDataLink, FInUserEdit) then
   begin
     UTF8Key := '';

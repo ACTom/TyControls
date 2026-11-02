@@ -116,6 +116,7 @@ type
   published
     procedure TestTypedValueIsWritten;
     procedure TestRefusedStepLeavesTheControlUntouched;
+    procedure TestLockedEditorTakesNoKeyAndStartsNoEdit;
   end;
 
   TDBSpinEditTest = class(TDBControlTestBase)
@@ -604,6 +605,22 @@ begin
   AssertEquals('the value', '12.50', Ed.Text);
   AssertFalse('a refused step does not mark the control modified', Ed.Modified);
   AssertBrowsing('a refused step');
+end;
+
+{ #184: EditorEnabled = False -- the arrows only. A digit, Backspace or Delete the control drops
+  does not put the record in dsEdit either; the arrows still do. }
+procedure TDBFloatSpinEditTest.TestLockedEditorTakesNoKeyAndStartsNoEdit;
+begin
+  Ed.EditorEnabled := False;
+  Bind('Amount');
+  EnterControl;
+  TypeText('5');
+  Key(VK_BACK);
+  Key(VK_DELETE);
+  AssertEquals('nothing typed', '12.50', Ed.Text);
+  AssertBrowsing('keys into a locked editor');
+  Key(VK_UP);
+  AssertTrue('the arrows still edit', FFix.DS.State = dsEdit);
 end;
 
 { ================================================================ TDBSpinEditTest ========= }
