@@ -57,6 +57,7 @@ type
     { the application's own way in }
     procedure TestTheApplicationsMenuWinsAndThePublicMethodsDoTheSame;
     procedure TestAPathThatIsNoCollectionRaises;
+    procedure TestReadOnlyRefusesThePublicMethodsToo;
     { a real host }
     procedure TestAStringGridsColumnsFollow;
   end;
@@ -411,6 +412,20 @@ begin
   AssertTrue('a property row''s path too', FGrid.PropertyAt(FGrid.RowAt('Items.[0].Size'), inst, nm));
   AssertEquals('Size', 'Size', nm);
   AssertEquals('Items[0].Size', FGrid.RowPath(FGrid.RowAt('Items.[0].Size')));
+end;
+
+{ #183: the application's own menu calls the public methods -- what doc section 8 calls "the same"
+  as the built-in one, which a ReadOnly grid does not show. ReadOnly refuses them as design time
+  does. }
+procedure TPropertyGridCollectionsTest.TestReadOnlyRefusesThePublicMethodsToo;
+begin
+  FGrid.ReadOnly := True;
+  AssertNull('nothing added', FGrid.AddCollectionItem('Items'));
+  FGrid.DeleteCollectionItem('Items[0]');
+  FGrid.MoveCollectionItem('Items[0]', 1);
+  AssertEquals('nothing deleted or moved', 'first,second', Captions);
+  FGrid.ReadOnly := False;
+  AssertNotNull('and once it is not ReadOnly, they work', FGrid.AddCollectionItem('Items'));
 end;
 
 procedure TPropertyGridCollectionsTest.TestAPathThatIsNoCollectionRaises;

@@ -520,7 +520,8 @@ type
     { Add an item to the collection at APath ('Items', 'Header.Columns'), at the end; or, given
       an item's path ('Items[1]'), right after that item. OnCreateCollectionItem may create it,
       else ACollection.Add does. Returns the new item, nil when OnCollectionChanging refused
-      (or at design time). The rows are rebuilt with the new item's row current. }
+      (or while ReadOnly, or at design time: then the three do nothing). The rows are rebuilt
+      with the new item's row current. }
     function AddCollectionItem(const APath: string): TCollectionItem;
     { Delete the item at APath ('Items[1]'). The current row moves to the next item, else the
       one before, else the collection's row. }
@@ -3032,7 +3033,9 @@ var
   collPath, sel: string;
 begin
   Result := nil;
-  if (FRows = nil) or (csDesigning in ComponentState) then Exit;
+  { #183: ReadOnly refuses the application's calls too, as design time does -- they are what its
+    own menu does in place of the built-in one (doc section 8). }
+  if (FRows = nil) or ReadOnly or (csDesigning in ComponentState) then Exit;
   { An open cell editor first: its text is committed (or, for a delete, dropped) before the
     rows move under it. A commit may rebuild the rows, so the path is resolved after it. }
   if EditingRow >= 0 then EndEdit(AAction <> caDelete);
