@@ -170,6 +170,7 @@ type
     FOnChange: TNotifyEvent;
     procedure SetChecked(const AValue: Boolean);
     procedure SetAlignment(const AValue: TLeftRight);
+    procedure SetGroupIndex(const AValue: Integer);
     procedure UncheckSiblings;
   protected
     { #188: as TTyCustomCheckBox.ClicksDisabled. }
@@ -206,7 +207,7 @@ type
     procedure Click; override;
     // 同 TTyCheckBox:声明的默认值必须和构造函数一致,否则 .lfm 里关不掉。
     property TabStop default True;
-    property GroupIndex: Integer read FGroupIndex write FGroupIndex default 0;
+    property GroupIndex: Integer read FGroupIndex write SetGroupIndex default 0;
     { 圆点在标题的哪一侧 —— 见 TTyCheckBox.Alignment,同名同型同默认值
       (LCL 在 TRadioButton 上转发的是同一个 TCustomCheckBox.Alignment)。 }
     property Alignment: TLeftRight read FAlignment write SetAlignment default taRightJustify;
@@ -731,6 +732,16 @@ begin
     TRadioButton.DoClickOnChange; the one unchecked by it fires only OnChange. }
   if FChecked and not FClicksDisabled and not (csDestroying in ComponentState) then
     inherited Click;
+end;
+
+{ #171: a checked radio button moved into another group is that group's checked one -- the
+  others in it are unchecked, as a click on it would. It was a field written straight, and the
+  group had two checked buttons. Not while the form is read (see SetChecked). }
+procedure TTyCustomRadioButton.SetGroupIndex(const AValue: Integer);
+begin
+  if FGroupIndex = AValue then Exit;
+  FGroupIndex := AValue;
+  if FChecked and not (csLoading in ComponentState) then UncheckSiblings;
 end;
 
 procedure TTyCustomRadioButton.UncheckSiblings;

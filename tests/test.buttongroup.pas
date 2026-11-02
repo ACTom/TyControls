@@ -31,7 +31,7 @@ type
     procedure TestSingleSelectClickFiresOnce;
     procedure TestSingleSelectNoOpDoesNotFire;
     procedure TestMultiSelectRoundTrip;
-    procedure TestItemsChangeResetsSelection;
+    procedure TestItemsChangeKeepsSelection;
     procedure TestMultiSelectToggleFires;
     procedure TestPaintSmokeEmpty;
     procedure TestPaintSmokePopulated;
@@ -258,30 +258,35 @@ begin
   end;
 end;
 
-procedure TButtonGroupTest.TestItemsChangeResetsSelection;
+{ #171: the selection stays on its segments across an Items edit -- an insert or a delete
+  does not move it onto another segment (it is found by caption), a rename keeps it (by
+  place). It used to be cleared by every edit. }
+procedure TButtonGroupTest.TestItemsChangeKeepsSelection;
 var G: TTyButtonGroup;
 begin
-  // Regression: TStrings.OnChange carries no diff, so positional selection bits can't
-  // be remapped on an insert/delete — the group resets selection instead of silently
-  // moving it onto the wrong item.
   G := TTyButtonGroup.Create(nil);
   try
     G.MultiSelect := True;
     G.Items.Add('A'); G.Items.Add('B'); G.Items.Add('C');
     G.SetSelected(1, True);
     AssertTrue('B selected', G.IsSelected(1));
-    G.Items.Delete(0);   // list changed -> selection reset (not shifted onto 'B'->idx0)
-    AssertFalse('selection cleared after delete (0)', G.IsSelected(0));
-    AssertFalse('selection cleared after delete (1)', G.IsSelected(1));
+    G.Items.Delete(0);
+    AssertTrue('B stays selected where it went', G.IsSelected(0));
+    AssertFalse('C does not take it', G.IsSelected(1));
+    G.Items[0] := 'B2';
+    AssertTrue('a rename keeps it', G.IsSelected(0));
 
-    // Single-select index likewise resets on a structural change.
     G.MultiSelect := False;
     G.Items.Clear;
     G.Items.Add('X'); G.Items.Add('Y');
     G.ItemIndex := 1;
     AssertEquals('Y selected', 1, G.ItemIndex);
-    G.Items.Add('Z');   // structural change resets the index
-    AssertEquals('index reset after Add', -1, G.ItemIndex);
+    G.Items.Add('Z');
+    AssertEquals('an Add after it keeps the index', 1, G.ItemIndex);
+    G.Items.Insert(0, 'W');
+    AssertEquals('an insert before it moves the index with Y', 2, G.ItemIndex);
+    G.Items.Delete(2);
+    AssertEquals('Y deleted: nothing selected', -1, G.ItemIndex);
   finally
     G.Free;
   end;

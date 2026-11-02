@@ -34,9 +34,9 @@ uses tyControls.ButtonGroup;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Items` | `TStrings` | `[]`（空列表） | 各分段的标题列表。内部由 `TStringList` 支撑（以获得 `OnChange`），声明类型为 `TStrings`。写入时调用 `Assign` 复制内容；列表变化（增删改）自动重算分段布局、夹紧越界的 `ItemIndex` 并重绘。标题支持 `&` 助记符显示（下划线）。 |
+| `Items` | `TStrings` | `[]`（空列表） | 各分段的标题列表。内部由 `TStringList` 支撑（以获得 `OnChange`），声明类型为 `TStrings`。写入时调用 `Assign` 复制内容；列表变化（增删改）自动重算分段布局并重绘；选中（单选的 `ItemIndex`、多选的各段）留在**原来那一段**上——先按**标题**认项（插入、删除一项，其余各项还是原来那一项），标题对不上的新项若所在位置上的旧项也已不在新列表里，就当作那一项改了名，接过它的状态；重复标题按先后一一配对。选中的段被删掉时触发 `OnSelectionChange`。标题支持 `&` 助记符显示（下划线）。 |
 | `MultiSelect` | `Boolean` | `False` | `False` = 单选（`ItemIndex`）；`True` = 多选（`IsSelected` / `SetSelected`）。切换模式会**清空全部选中**（避免残留位），并把 `ItemIndex` 复位为 `-1`。 |
-| `ItemIndex` | `Integer` | `-1` | **单选模式**下当前选中的分段索引，`-1` = 无选中。写入越界值等价于 `-1`；实际改变时触发 `OnSelectionChange`，设为当前值不触发。声明 `default -1`。多选模式下此属性不代表选中集（用 `IsSelected`）。 |
+| `ItemIndex` | `Integer` | `-1` | **单选模式**下当前选中的分段索引，`-1` = 无选中。写入越界值等价于 `-1`；实际改变时触发 `OnSelectionChange`，设为当前值不触发。声明 `default -1`。多选模式下写入它**只选中这一段**（其余取消，`-1` = 全不选），读出的是第一个选中段；完整的选中集用 `IsSelected`。 |
 | `Align` | `TAlign` | `alNone` | 父容器内的停靠方式。 |
 | `Anchors` | `TAnchors` | `[akLeft, akTop]` | 锚点布局。 |
 
