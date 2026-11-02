@@ -2724,16 +2724,17 @@ var
   band: TTyRectF;
   dash: TTyDoubleArray;
   txt: string;
-  box: TRect;
-  corners: TTyCorners;
   surface: TTyFill;
   sh: TTyXYWH;
+  lbl: TTyPtrLabel;
+  lx, ly: Double;
 begin
   lineS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointer', '', []);
   shadowS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerShadow',
     '', []);
   labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel',
     '', []);
+  FPtrLabelsDrawn := nil;
   { [R2-I8] a pointer this paint does not draw is hidden }
   PointerMemoHideOthers(AHits);
   for i := 0 to High(AHits) do
@@ -2842,103 +2843,250 @@ begin
       [R2-I8] through the axis' memo: a function runs as upstream runs it }
     txt := PointerDrawLabelText(hit, pv);
     if txt = '' then Continue;
-    { [R5-I] the box at rest (the line's value, not where its slide has
-      got to), then where its own slide has got to }
-    if not PointerLabelBox(hit, atRest, txt, ARect, APPI, AMeasurer, labelS, box) then
+    { [R5-I] the place at rest (the line's value, not where its slide has
+      got to), then where its own slide has got to; [R7-N] the text in its
+      block, hung there }
+    if not PtrCartesianLabelPlace(hit, txt, ARect.Right - ARect.Left,
+      ARect.Bottom - ARect.Top, APPI, AMeasurer, lbl, lx, ly) then
       Continue;
-    PtrLabelNow(hit, box);
-
-    corners := TyEffectiveCorners(labelS);
-    if hit.Spec.LabelSpec.HasBorderRadius then
-      corners := TyCorners(Round(hit.Spec.LabelSpec.BorderRadiusLogical),
-        Round(hit.Spec.LabelSpec.BorderRadiusLogical),
-        Round(hit.Spec.LabelSpec.BorderRadiusLogical),
-        Round(hit.Spec.LabelSpec.BorderRadiusLogical));
-    surface := labelS.Background;
-    if hit.Spec.LabelSpec.HasBackground then
-    begin
-      surface.Kind := tfkSolid;
-      surface.Color := TTyColor(hit.Spec.LabelSpec.Background);
-    end;
-    APainter.FillBackground(box, surface, corners);
-    if hit.Spec.LabelSpec.HasBorderColour and hit.Spec.LabelSpec.HasBorderWidth
-      and (hit.Spec.LabelSpec.BorderWidthLogical > 0) then
-      APainter.StrokeBorder(box, corners,
-        Round(hit.Spec.LabelSpec.BorderWidthLogical),
-        TTyColor(hit.Spec.LabelSpec.BorderColour))
-    else if TyBorderVisible(labelS) then
-      APainter.StrokeBorder(box, corners, labelS.BorderWidth, labelS.BorderColor);
-    colour := labelS.TextColor;
-    if hit.Spec.LabelSpec.HasColour then colour := TTyColor(hit.Spec.LabelSpec.Colour);
-    APainter.DrawText(box, txt, labelS.FontName, ResolveFontSize(labelS),
-      TyFontStyleCodeOver(hit.Spec.LabelSpec.FontStyle, labelS.FontWeight), colour,
-      taCenter, tlCenter, False);
+    PtrLabelNow(hit, lx, ly);
+    PtrLabelPaint(APainter, hit, txt, lx, ly, lbl, AMeasurer);
   end;
 end;
 
-function TTyCustomAdvanceChart.PointerLabelBox(const AHit: TTyAxisHit; AAt: Double;
-  const AText: string; const ARect: TRect; APPI: Integer;
-  const AMeasurer: ITyTextMeasurer; const ALabelS: TTyStyleSet; out ABox: TRect): Boolean;
-var
-  tw, th, margin, padL, padT, padR, padB: Double;
-
-  function SF(AV: Double): Double;
-  begin
-    if APPI <= 0 then Result := AV else Result := AV * APPI / 96;
-  end;
-
+function TTyCustomAdvanceChart.PointerLabelsDrawn: TTyPtrLabelDrawnArray;
 begin
-  ABox := Rect(0, 0, 0, 0);
-  AMeasurer.MeasureLine(AText, ALabelS.FontName, ResolveFontSize(ALabelS),
-    TyFontStyleCodeOver(AHit.Spec.LabelSpec.FontStyle, ALabelS.FontWeight), tw, th);
-  if (tw <= 0) or (th <= 0) then Exit(False);
+  Result := Copy(FPtrLabelsDrawn, 0, Length(FPtrLabelsDrawn));
+end;
+
+{ [R7-N] buildLabelElOption's style: createTextStyle(labelModel, {text, font,
+  fill: getTextColor(), padding, backgroundColor}) -- every key of the label
+  model (LabelSpec.Json: the axis' own label over the tooltip's over the
+  root's) and the root textStyle's under it, as any free text takes them,
+  with the specified keys over them. What AxisPointerModel's defaults say
+  where nothing is written -- the ink, the padding, the plate, its radius,
+  the font -- is the skin's (TyAdvChartAxisPointerLabel); a border the label
+  does not write is the skin's too (upstream's default is none). The font
+  is getFont's: the label's parts, the root textStyle's, the skin's. }
+function TTyCustomAdvanceChart.PtrLabelStyle(const AHit: TTyAxisHit;
+  APPI: Integer): TTyPtrLabel;
+var
+  labelS: TTyStyleSet;
+  data, d: TJSONData;
+  node: TJSONObject;
+  hasCol: Boolean;
+  col: Cardinal;
+  corners: TTyCorners;
+  b: TTyRtBlockStyle;
+begin
+  Result := Default(TTyPtrLabel);
+  labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel', '', []);
+  if APPI > 0 then Result.Scale := APPI / 96 else Result.Scale := 1;
+  Result.Global := RtGlobal;
+  Result.FontName := labelS.FontName;
+  Result.FontSizeLogical := ResolveFontSize(labelS);
+  Result.FontWeight := labelS.FontWeight;
+  hasCol := False;
+  col := 0;
+  GlobalTextOver(Result.FontName, Result.FontSizeLogical, Result.FontWeight,
+    hasCol, col, [ttpSize, ttpWeight, ttpFamily]);
+  Result.Alpha := 1;
+  if Result.Global.HasOpacity then Result.Alpha := Result.Global.Opacity;
+  data := nil;
+  node := nil;
+  try
+    if AHit.Spec.LabelSpec.Json <> '' then
+      try
+        data := GetJSON(AHit.Spec.LabelSpec.Json);
+      except
+        FreeAndNil(data);
+      end;
+    if data is TJSONObject then node := TJSONObject(data);
+    if node <> nil then
+    begin
+      d := node.Find('fontFamily');
+      if (d <> nil) and (d.JSONType = jtString) and (d.AsString <> '') then
+        Result.FontName := d.AsString;
+      Result.FontSizeLogical := TyOptFontSize(node.Find('fontSize'),
+        Result.FontSizeLogical);
+      Result.FontWeight := TyFontWeightOf(node.Find('fontWeight'), Result.FontWeight);
+      d := node.Find('opacity');
+      if (d <> nil) and (d.JSONType = jtNumber) then Result.Alpha := d.AsFloat;
+    end;
+    Result.FontWeight := TyFontStyleCodeOver(AHit.Spec.LabelSpec.FontStyle,
+      Result.FontWeight);
+    b := TyRtResolve([node], Result.Global, TyRtResolveOpt(False));
+    { the radius and the border where the label writes none }
+    if (node = nil) or (node.Find('borderRadius') = nil)
+      or (node.Find('borderRadius').JSONType = jtNull) then
+    begin
+      corners := TyEffectiveCorners(labelS);
+      b.Style.Radius[0] := corners.TL;
+      b.Style.Radius[1] := corners.TR;
+      b.Style.Radius[2] := corners.BR;
+      b.Style.Radius[3] := corners.BL;
+      b.Style.RadiusTruthy := (corners.TL <> 0) or (corners.TR <> 0)
+        or (corners.BR <> 0) or (corners.BL <> 0);
+    end;
+    if ((node = nil) or ((node.Find('borderColor') = nil)
+      and (node.Find('borderWidth') = nil))) and TyBorderVisible(labelS) then
+    begin
+      b.Style.HasBorderColor := True;
+      b.Style.BorderColorInherit := False;
+      b.Style.BorderColor := TTyChartColor(labelS.BorderColor);
+      b.Style.BorderWidth := labelS.BorderWidth;
+    end;
+  finally
+    data.Free;
+  end;
+  { the specified keys: fill, padding, backgroundColor }
+  Result.Ink := labelS.TextColor;
+  if AHit.Spec.LabelSpec.HasColour then Result.Ink := TTyColor(AHit.Spec.LabelSpec.Colour);
+  b.Style.HasFill := True;
+  b.Style.FillNone := False;
+  b.Style.FillInherit := False;
+  b.Style.Fill := TTyChartColor(Result.Ink);
+  b.Style.HasPadding := True;
   if AHit.Spec.LabelSpec.HasPadding then
   begin
-    padL := SF(AHit.Spec.LabelSpec.PadLeft);
-    padT := SF(AHit.Spec.LabelSpec.PadTop);
-    padR := SF(AHit.Spec.LabelSpec.PadRight);
-    padB := SF(AHit.Spec.LabelSpec.PadBottom);
+    b.Style.Padding[0] := AHit.Spec.LabelSpec.PadTop;
+    b.Style.Padding[1] := AHit.Spec.LabelSpec.PadRight;
+    b.Style.Padding[2] := AHit.Spec.LabelSpec.PadBottom;
+    b.Style.Padding[3] := AHit.Spec.LabelSpec.PadLeft;
   end
   else
   begin
-    padL := MulDiv(ALabelS.Padding.Left, APPI, 96);
-    padT := MulDiv(ALabelS.Padding.Top, APPI, 96);
-    padR := MulDiv(ALabelS.Padding.Right, APPI, 96);
-    padB := MulDiv(ALabelS.Padding.Bottom, APPI, 96);
+    b.Style.Padding[0] := labelS.Padding.Top;
+    b.Style.Padding[1] := labelS.Padding.Right;
+    b.Style.Padding[2] := labelS.Padding.Bottom;
+    b.Style.Padding[3] := labelS.Padding.Left;
   end;
-  margin := SF(ActiveController.Metric(
-    TyAdvChartAxisPointerMarginVar, TyAdvChartAxisPointerMargin));
-  if AHit.Spec.LabelSpec.MarginLogical <> 3 then
-    margin := SF(AHit.Spec.LabelSpec.MarginLogical);
-  { OUTSIDE THE PLOT, on the axis' own side. Not on the axis LINE: an
-    on-zero axis floats in the middle of the plot and its labels do not
-    follow it there. }
-  if AHit.Axis.Horizontal then
-  begin
-    ABox.Left := Round(AAt - (tw + padL + padR) / 2);
-    if AHit.Axis.Side = asTop then
-      ABox.Top := Round(AHit.Plot.Top - margin - th - padT - padB)
-    else
-      ABox.Top := Round(AHit.Plot.Bottom + margin);
-  end
+  b.Style.HasBackground := True;
+  b.Style.BackgroundInherit := False;
+  b.Style.BgImage := '';
+  if AHit.Spec.LabelSpec.HasBackground then
+    b.Style.Background := AHit.Spec.LabelSpec.Background
   else
+    b.Style.Background := TTyChartColor(labelS.Background.Color);
+  TyRtFinish(b, Result.FontName, Result.FontSizeLogical, Result.FontWeight,
+    Result.Global, False, 0);
+  b.Needed := True;
+  { the opacity is the element's: a canvas takes no alpha outside [0, 1] }
+  b.Style.HasOpacity := False;
+  if IsNan(Result.Alpha) or (Result.Alpha < 0) or (Result.Alpha > 1) then
+    Result.Alpha := 1;
+  Result.Block := b;
+end;
+
+function TTyCustomAdvanceChart.PtrLabelBoxSize(const AL: TTyPtrLabel;
+  const AText: string; const AMeasurer: ITyTextMeasurer; out AW, AH: Double): Boolean;
+var
+  pb: TTyRtBlockStyle;
+  bb: TTyXYWH;
+begin
+  AW := 0;
+  AH := 0;
+  if AMeasurer = nil then Exit(False);
+  { textContain.getBoundingRect(text, font): the words as plain lines in the
+    label's font -- no rich, no written width or line height -- then the
+    padding }
+  pb := Default(TTyRtBlockStyle);
+  pb.Style := TyRtStyleDefault;
+  TyRtFinish(pb, AL.FontName, AL.FontSizeLogical, AL.FontWeight, AL.Global, False, 0);
+  bb := TyRtBounds(TyRtLay(AText, pb, TyRtDefaultOf(False, 0, False, 0, False,
+    tahLeft, tavTop), AL.Scale, AMeasurer));
+  if bb.W < 0 then
   begin
-    ABox.Top := Round(AAt - (th + padT + padB) / 2);
-    if AHit.Axis.Side = asRight then
-      ABox.Left := Round(AHit.Plot.Right + margin)
-    else
-      ABox.Left := Round(AHit.Plot.Left - margin - tw - padL - padR);
+    bb.W := 0;
+    bb.H := 0;
   end;
-  ABox.Right := ABox.Left + Round(tw + padL + padR);
-  ABox.Bottom := ABox.Top + Round(th + padT + padB);
-  { Clamped into the CONTROL, far edge first -- the same rule the tooltip
-    box follows, and for the same reason: what falls outside is not clipped,
-    it is not drawn. }
-  if ABox.Right > ARect.Right then OffsetRect(ABox, ARect.Right - ABox.Right, 0);
-  if ABox.Bottom > ARect.Bottom then OffsetRect(ABox, 0, ARect.Bottom - ABox.Bottom);
-  if ABox.Left < ARect.Left then OffsetRect(ABox, ARect.Left - ABox.Left, 0);
-  if ABox.Top < ARect.Top then OffsetRect(ABox, 0, ARect.Top - ABox.Top);
+  AW := (bb.W + AL.Block.Style.Padding[1] + AL.Block.Style.Padding[3]) * AL.Scale;
+  AH := (bb.H + AL.Block.Style.Padding[0] + AL.Block.Style.Padding[2]) * AL.Scale;
   Result := True;
+end;
+
+procedure TTyCustomAdvanceChart.PtrLabelPaint(APainter: TTyPainter;
+  const AHit: TTyAxisHit; const AText: string; AX, AY: Double;
+  const AL: TTyPtrLabel; const AMeasurer: ITyTextMeasurer);
+var
+  e: TTyPtrLabelDrawn;
+  n: Integer;
+begin
+  if AMeasurer = nil then Exit;
+  e := Default(TTyPtrLabelDrawn);
+  if AHit.Axis <> nil then
+    e.Owner := AHit.Axis.MainType + IntToStr(AHit.Axis.ComponentIndex);
+  e.Text := AText;
+  { the Text at (x, y), laid out by its own align and verticalAlign (left,
+    top unless the label writes them) }
+  e.D.Pieces := TyRtLay(AText, AL.Block, TyRtDefaultOf(False, 0, False, 0, False,
+    tahLeft, tavTop), AL.Scale, AMeasurer);
+  e.D.X := AX;
+  e.D.Y := AY;
+  e.D.Scale := AL.Scale;
+  e.Alpha := AL.Alpha;
+  e.FontSizeLogical := AL.FontSizeLogical;
+  e.FontWeight := AL.FontWeight;
+  if APainter <> nil then
+    TyRenderRtPieces(APainter, e.D.Pieces, AX, AY, 0, AL.Scale, AL.Alpha, True,
+      AL.Ink);
+  n := Length(FPtrLabelsDrawn);
+  SetLength(FPtrLabelsDrawn, n + 1);
+  FPtrLabelsDrawn[n] := e;
+end;
+
+function TTyCustomAdvanceChart.PtrCartesianLabelPlace(const AHit: TTyAxisHit;
+  const AText: string; AViewW, AViewH: Double; APPI: Integer;
+  const AMeasurer: ITyTextMeasurer; out AL: TTyPtrLabel; out AX, AY: Double): Boolean;
+var
+  g, dir: Integer;
+  gb: TTyGridBuild;
+  spec: PTyAxisLayoutSpec;
+  fr: TTyAxisNameFrame;
+  M: TTyMat2D;
+  c, t, margin, w, h: Double;
+  ah: TTyTextAnchorH;
+  av: TTyTextAnchorV;
+begin
+  Result := False;
+  AX := NaN;
+  AY := NaN;
+  AL := PtrLabelStyle(AHit, APPI);
+  if (AHit.Axis = nil) or (FBuild = nil) then Exit;
+  gb := nil;
+  for g := 0 to FBuild.GridCount - 1 do
+    if FBuild.Grid(g).ComponentIndex = AHit.Axis.GridIndex then gb := FBuild.Grid(g);
+  if gb = nil then Exit;
+  spec := gb.SpecFor(AHit.Axis);
+  if (spec = nil) or not spec^.HasNameFrame then Exit;
+  fr := spec^.NameFrame;
+  margin := ActiveController.Metric(TyAdvChartAxisPointerMarginVar,
+    TyAdvChartAxisPointerMargin);
+  if AHit.Spec.LabelSpec.MarginLogical <> 3 then
+    margin := AHit.Spec.LabelSpec.MarginLogical;
+  margin := margin * AL.Scale;
+  { cartesianAxisHelper.layout: the labels' side, turned by axisLabel.inside;
+    getTransformedPosition: [dataToCoord(value), labelOffset + direction *
+    margin] through the axis' frame }
+  dir := fr.NameDirection;
+  if spec^.LabelInside then dir := -dir;
+  c := AHit.Axis.DataToLocal(PointerValue(AHit));
+  t := fr.LabelOffset + dir * margin;
+  M := TyMatLocal(fr.PosX, fr.PosY, fr.Rotation);
+  AX := M[0] * c + M[2] * t + M[4];
+  AY := M[1] * c + M[3] * t + M[5];
+  TyInnerTextLayout(fr.Rotation, 0, dir, ah, av);
+  if not PtrLabelBoxSize(AL, AText, AMeasurer, w, h) then Exit;
+  { buildLabelElOption: the box by the align, then confineInContainer }
+  if ah = tahRight then AX := AX - w;
+  if ah = tahCentre then AX := AX - w / 2;
+  if av = tavBottom then AY := AY - h;
+  if av = tavMiddle then AY := AY - h / 2;
+  AX := Math.Min(AX + w, AViewW) - w;
+  AY := Math.Min(AY + h, AViewH) - h;
+  AX := Math.Max(AX, Double(0));
+  AY := Math.Max(AY, Double(0));
+  Result := not (IsNan(AX) or IsNan(AY));
 end;
 
 function TTyCustomAdvanceChart.ValuesText(

@@ -44,6 +44,9 @@
 //   an itemStyle.opacity, a graph edge's or a lines' lineStyle.opacity),
 //   none at all (sunburst, sankey, themeRiver, a line's endLabel, a
 //   markArea), and a rich token's own over the Text's.
+//   [R7-N] an axis pointer's label (cartesian, single, polar; shown by its
+//   status or by a tooltip's showTip): every key createTextStyle hands it,
+//   the root textStyle's, and its place from the plain text's box.
 //
 // Runs the real ECharts 6.1 build (D:/Projects/echarts by default, or
 // ECHARTS_DIST) in node's server-side mode (SVG renderer, 600x400, animation
@@ -82,7 +85,8 @@
 //   cases[]    {name, note, W, H, option, record (which texts), texts[]}
 // Per text:
 //   component  seriesLabel | markerLabel | axisLabel | axisName | title |
-//              subtitle | legend | chartText | other
+//              subtitle | legend | chartText | pointerLabel (an axis
+//              pointer's label, owned by its axis) | other
 //   owner      '<mainType><componentIndex>' of its view; attached (a host's
 //              textContent); text (style.text); rich (style.rich present --
 //              zrender takes the rich path iff it is, Text.ts:389-391)
@@ -772,6 +776,50 @@ const R7M_TREEMAP_CASES = [
 // sheared ----
 const GRAPH_NODES = [{ name: 'Ga', x: 0, y: 0 }, { name: 'Gb', x: 100, y: 100 }, { name: 'Gc', x: 100, y: 0 }, { name: 'Gd', x: 0, y: 100 }];
 const GRAPH_EDGE_LBL = { show: true, color: '#333333', formatter: 'edge' };
+// ---- [R7-N] an axis pointer's label is createTextStyle(labelModel, {text,
+// font, fill, padding, backgroundColor}) (axisPointer/viewHelper.ts
+// buildLabelElOption): every key of the label model (the axis' own
+// axisPointer.label over the tooltip's over the root's) and the root
+// textStyle's; its place is the box of the PLAIN text in the label's font
+// (getBoundingRect, markup and all) plus the padding, aligned by the axis'
+// side and confined to the chart; the Text stands at that place (x / y),
+// laid out by its own align / verticalAlign (left / top unless written) ----
+const PTR_BOX = { color: '#333333', backgroundColor: '#eeeeee', borderColor: '#aa0000', borderWidth: 2, padding: [3, 6], borderRadius: 4 };
+const PTR_BAR = o => opt(Object.assign({ xAxis: xCat(), yAxis: val(), series: [{ type: 'bar', name: 'Sales', data: DATA }] }, o));
+const PTR_SHOW = (value, label, extra) => Object.assign({ axisPointer: Object.assign({ show: true, value, status: 'show', label: Object.assign({ show: true }, label) }, extra) });
+const R7N_POINTER_CASES = [
+  { name: 'ptr-label-font', looks: true, note: "a category x and a value y axis pointer shown by status: the label in 16 px bold monospace with a bordered, rounded, padded plate",
+    record: ['pointerLabel'], option: PTR_BAR({ xAxis: xCat(PTR_SHOW('Tue', Object.assign({ fontSize: 16, fontFamily: 'monospace', fontWeight: 'bold' }, PTR_BOX))),
+      yAxis: val(PTR_SHOW(120, Object.assign({ fontSize: 13, fontWeight: 'bold' }, PTR_BOX))) }) },
+  { name: 'ptr-label-rich', looks: true, note: "a rich formatter '{a|{value}}\\n{b|ptr}' with a halo, a text shadow, lineHeight 20 and opacity 0.6: the box placed by the plain markup's size",
+    record: ['pointerLabel'], option: PTR_BAR({ xAxis: xCat(PTR_SHOW('Wed', Object.assign({ formatter: '{a|{value}}\n{b|ptr}', opacity: 0.6 }, PTR_BOX, CMP_RICH))) }) },
+  { name: 'ptr-label-size', looks: true, note: "width 70, height 28, overflow truncate and align center on a top x axis (pushed in at the right by the confine) and a right y axis",
+    record: ['pointerLabel'], option: PTR_BAR({ xAxis: xCat(Object.assign({ position: 'top' }, PTR_SHOW('Wed', { formatter: 'a long pointer label {value}', width: 70, height: 28, overflow: 'truncate',
+      align: 'center', color: '#333333', backgroundColor: '#eeeeee', padding: 2 }))),
+      yAxis: val(Object.assign({ position: 'right' }, PTR_SHOW(30, { color: '#333333', backgroundColor: '#eeeeee', verticalAlign: 'middle', lineHeight: 26 }))) }) },
+  { name: 'ptr-label-root', looks: true, note: "the root textStyle's size, family, weight and opacity 0.7 reach the label; its own color and plate",
+    record: ['pointerLabel'], option: PTR_BAR({ textStyle: { fontSize: 15, fontFamily: 'monospace', fontWeight: 'bold', opacity: 0.7, color: '#00aa00' },
+      xAxis: xCat(PTR_SHOW('Mon', { color: '#333333', backgroundColor: '#eeeeee', padding: [2, 3] })) }) },
+  { name: 'ptr-label-numstr', looks: true, note: "width '60' and lineHeight '18' written as strings over a rounded plate, two lines",
+    record: ['pointerLabel'], option: PTR_BAR({ xAxis: xCat(PTR_SHOW('Tue', { formatter: '{value}\nday', width: '60', lineHeight: '18', color: '#333333', backgroundColor: '#eeeeee', borderRadius: 3 })) }) },
+  { name: 'ptr-label-offset-inside', looks: true, note: "an x axis offset 12 with its labels inside: the pointer label goes up inside the grid; a left y axis offset 8",
+    record: ['pointerLabel'], option: PTR_BAR({ xAxis: xCat(Object.assign({ offset: 12, axisLabel: { inside: true } }, PTR_SHOW('Mon', PTR_BOX))),
+      yAxis: val(Object.assign({ offset: 8 }, PTR_SHOW(75, PTR_BOX))) }) },
+  { name: 'ptr-label-tooltip-cross', looks: true, note: "a cross tooltip's pointers moved to a point (updateAxisPointer: node has no tooltip view): both labels from tooltip.axisPointer.label (14 px, a plate, padding 4), the y axis' own fontWeight over it",
+    record: ['pointerLabel'], option: PTR_BAR({ tooltip: { trigger: 'axis', axisPointer: { type: 'cross', label: { fontSize: 14, color: '#333333', backgroundColor: '#eeeeee',
+      borderColor: '#aa0000', borderWidth: 1, padding: 4 } } }, yAxis: val({ axisPointer: { label: { fontWeight: 'bold' } } }) }),
+    actions: [{ type: 'updateAxisPointer', currTrigger: 'mousemove', x: 300, y: 200 }] },
+  { name: 'ptr-label-single', looks: true, note: "a single axis' pointer label with a plate, 14 px monospace",
+    record: ['pointerLabel'], option: opt({ singleAxis: { type: 'value', min: 0, max: 100, top: 80, bottom: 80, axisPointer: { show: true, value: 40, status: 'show',
+      label: Object.assign({ show: true, fontSize: 14, fontFamily: 'monospace' }, PTR_BOX) } },
+      series: [{ type: 'scatter', coordinateSystem: 'singleAxis', data: [10, 40, 70] }] }) },
+  { name: 'ptr-label-polar', looks: true, note: "a polar angle axis' and radius axis' pointer labels moved to a point (updateAxisPointer), with a plate, 13 px bold",
+    record: ['pointerLabel'], option: opt({ polar: {}, angleAxis: { type: 'category', data: CAT, axisPointer: { show: true,
+      label: Object.assign({ show: true, fontSize: 13, fontWeight: 'bold' }, PTR_BOX) } },
+      radiusAxis: { min: 0, max: 200, axisPointer: { show: true, label: Object.assign({ show: true, fontSize: 13 }, PTR_BOX) } },
+      series: [{ type: 'bar', coordinateSystem: 'polar', data: DATA }] }),
+    actions: [{ type: 'updateAxisPointer', currTrigger: 'mousemove', x: 340, y: 150 }] },
+];
 const R7M_GRAPH_CASES = [
   { name: 'graph-edge-scale', looks: true, note: "layout 'none', 400 x 200 over a 100 x 100 extent (scaleX 4, scaleY 2): edge labels plain, boxed and rich on a level, an upright and a slanted edge",
     option: opt({ series: [{ type: 'graph', layout: 'none', left: 0, top: 0, width: 400, height: 200, label: { show: false },
@@ -1055,6 +1103,7 @@ const cases = [
   ...R7M_COMPONENT_CASES,
   ...R7M_TREEMAP_CASES,
   ...R7M_GRAPH_CASES,
+  ...R7N_POINTER_CASES,
 ];
 
 // ---------- running upstream ----------
@@ -1428,6 +1477,23 @@ function run(lib, c, measureSet) {
     const zr = chart.getZr();
     const found = [];
     const seen = new Set();
+    // [R7-N] an axis pointer's group is a zr root of its own (BaseAxisPointer
+    // adds it to zr), held by its axis' view: its texts are the label
+    chart._componentsViews.forEach(v => {
+      const g = v && v.__model && v._axisPointer && v._axisPointer._group;
+      if (!g || g.ignore) return;
+      const owner = v.__model.mainType + v.__model.componentIndex;
+      const walkPtr = el => {
+        if (el.ignore) return;
+        if (el.type === 'text') {
+          seen.add(el);
+          if (visible(el, false, null)) found.push({ el, component: 'pointerLabel', owner, attached: false });
+          return;
+        }
+        if (el.childrenRef) el.childrenRef().forEach(walkPtr);
+      };
+      walkPtr(g);
+    });
     chart._componentsViews.forEach(v => v && v.__model && collect(v, 'component', found, seen));
     chart._chartsViews.forEach(v => v && v.__model && collect(v, 'chart', found, seen));
     const walkRoot = el => {

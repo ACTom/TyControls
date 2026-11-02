@@ -482,11 +482,11 @@ function TTyCustomAdvanceChart.SinglePointerGeometry(const AHit: TTyAxisHit;
   const ARect: TRect; const AMeasurer: ITyTextMeasurer; APPI: Integer;
   out ADraw: TTySinglePointerDraw): Boolean;
 var
-  pv, px, margin, tw, th, padL, padT, padR, padB, x, y, vw, vh: Double;
+  pv, px, margin, x, y, vw, vh: Double;
   ah: TTyTextAnchorH;
   av: TTyTextAnchorV;
-  labelS: TTyStyleSet;
   scale: Double;
+  lbl: TTyPtrLabel;
 begin
   ADraw := Default(TTySinglePointerDraw);
   ADraw.Shape.Kind := spkNone;
@@ -505,24 +505,11 @@ begin
   end;
   if not AHit.Spec.LabelSpec.Show or (AMeasurer = nil) then Exit;
   ADraw.Text := PointerDrawLabelText(AHit, pv);
-  labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel', '', []);
-  AMeasurer.MeasureLine(ADraw.Text, labelS.FontName, ResolveFontSize(labelS),
-    TyFontStyleCodeOver(AHit.Spec.LabelSpec.FontStyle, labelS.FontWeight), tw, th);
-  if APPI > 0 then scale := APPI / 96 else scale := 1;
-  if AHit.Spec.LabelSpec.HasPadding then
-  begin
-    padL := AHit.Spec.LabelSpec.PadLeft * scale;
-    padT := AHit.Spec.LabelSpec.PadTop * scale;
-    padR := AHit.Spec.LabelSpec.PadRight * scale;
-    padB := AHit.Spec.LabelSpec.PadBottom * scale;
-  end
-  else
-  begin
-    padL := labelS.Padding.Left * scale;
-    padT := labelS.Padding.Top * scale;
-    padR := labelS.Padding.Right * scale;
-    padB := labelS.Padding.Bottom * scale;
-  end;
+  { [R7-N] buildLabelElOption's box: the plain text's bounding rect in the
+    label's font, grown by its padding [was: the skin's font, one line] }
+  lbl := PtrLabelStyle(AHit, APPI);
+  scale := lbl.Scale;
+  if not PtrLabelBoxSize(lbl, ADraw.Text, AMeasurer, ADraw.W, ADraw.H) then Exit;
   margin := ActiveController.Metric(TyAdvChartAxisPointerMarginVar,
     TyAdvChartAxisPointerMargin);
   if AHit.Spec.LabelSpec.MarginLogical <> 3 then
@@ -531,8 +518,6 @@ begin
   { buildCartesianSingleLabelElOption: getTransformedPosition, then
     buildLabelElOption's align and confineInContainer }
   TySinglePointerLabelAnchor(AHit.Single, FOption, pv, margin, x, y, ah, av);
-  ADraw.W := tw + padR + padL;
-  ADraw.H := th + padT + padB;
   if ah = tahRight then x := x - ADraw.W;
   if ah = tahCentre then x := x - ADraw.W / 2;
   if av = tavBottom then y := y - ADraw.H;
@@ -557,9 +542,6 @@ var
   colour: TTyColor;
   w: Double;
   dash: TTyDoubleArray;
-  box: TRect;
-  corners: TTyCorners;
-  surface: TTyFill;
   ln: TTySingleLine;
 begin
   if not SinglePointerGeometry(AHit, ARect, AMeasurer, APPI, d) then Exit;
@@ -613,32 +595,9 @@ begin
   end;
   if not d.HasLabel or (d.Text = '') then Exit;
   if not (tpBackground in labelS.Present) then Exit;
-  box := Rect(Round(d.X), Round(d.Y), Round(d.X + d.W), Round(d.Y + d.H));
-  corners := TyEffectiveCorners(labelS);
-  if AHit.Spec.LabelSpec.HasBorderRadius then
-    corners := TyCorners(Round(AHit.Spec.LabelSpec.BorderRadiusLogical),
-      Round(AHit.Spec.LabelSpec.BorderRadiusLogical),
-      Round(AHit.Spec.LabelSpec.BorderRadiusLogical),
-      Round(AHit.Spec.LabelSpec.BorderRadiusLogical));
-  surface := labelS.Background;
-  if AHit.Spec.LabelSpec.HasBackground then
-  begin
-    surface.Kind := tfkSolid;
-    surface.Color := TTyColor(AHit.Spec.LabelSpec.Background);
-  end;
-  APainter.FillBackground(box, surface, corners);
-  if AHit.Spec.LabelSpec.HasBorderColour and AHit.Spec.LabelSpec.HasBorderWidth
-    and (AHit.Spec.LabelSpec.BorderWidthLogical > 0) then
-    APainter.StrokeBorder(box, corners,
-      Round(AHit.Spec.LabelSpec.BorderWidthLogical),
-      TTyColor(AHit.Spec.LabelSpec.BorderColour))
-  else if TyBorderVisible(labelS) then
-    APainter.StrokeBorder(box, corners, labelS.BorderWidth, labelS.BorderColor);
-  colour := labelS.TextColor;
-  if AHit.Spec.LabelSpec.HasColour then colour := TTyColor(AHit.Spec.LabelSpec.Colour);
-  APainter.DrawText(box, d.Text, labelS.FontName, ResolveFontSize(labelS),
-    TyFontStyleCodeOver(AHit.Spec.LabelSpec.FontStyle, labelS.FontWeight), colour,
-    taCenter, tlCenter, False);
+  { [R7-N] the text in its block (createTextStyle), hung at the box's place }
+  PtrLabelPaint(APainter, AHit, d.Text, d.X, d.Y, PtrLabelStyle(AHit, APPI),
+    AMeasurer);
 end;
 
 { ==================== the themeRivers [Batch 118] ==================== }
@@ -1445,11 +1404,11 @@ function TTyCustomAdvanceChart.PolarPointerGeometry(const AHit: TTyAxisHit;
   const ARect: TRect; const AMeasurer: ITyTextMeasurer; APPI: Integer;
   out ADraw: TTyPolarPointerDraw): Boolean;
 var
-  pv, coord, margin, tw, th, padL, padT, padR, padB, x, y, vw, vh: Double;
+  pv, coord, margin, x, y, vw, vh: Double;
   ah: TTyTextAnchorH;
   av: TTyTextAnchorV;
-  labelS: TTyStyleSet;
   scale: Double;
+  lbl: TTyPtrLabel;
 begin
   ADraw := Default(TTyPolarPointerDraw);
   ADraw.Shape.Kind := plpkNone;
@@ -1467,24 +1426,11 @@ begin
   end;
   if not AHit.Spec.LabelSpec.Show or (AMeasurer = nil) then Exit;
   ADraw.Text := PointerDrawLabelText(AHit, pv);
-  labelS := ActiveController.Model.ResolveStyle('TyAdvChartAxisPointerLabel', '', []);
-  AMeasurer.MeasureLine(ADraw.Text, labelS.FontName, ResolveFontSize(labelS),
-    TyFontStyleCodeOver(AHit.Spec.LabelSpec.FontStyle, labelS.FontWeight), tw, th);
-  if APPI > 0 then scale := APPI / 96 else scale := 1;
-  if AHit.Spec.LabelSpec.HasPadding then
-  begin
-    padL := AHit.Spec.LabelSpec.PadLeft * scale;
-    padT := AHit.Spec.LabelSpec.PadTop * scale;
-    padR := AHit.Spec.LabelSpec.PadRight * scale;
-    padB := AHit.Spec.LabelSpec.PadBottom * scale;
-  end
-  else
-  begin
-    padL := labelS.Padding.Left * scale;
-    padT := labelS.Padding.Top * scale;
-    padR := labelS.Padding.Right * scale;
-    padB := labelS.Padding.Bottom * scale;
-  end;
+  { [R7-N] buildLabelElOption's box: the plain text's bounding rect in the
+    label's font, grown by its padding [was: the skin's font, one line] }
+  lbl := PtrLabelStyle(AHit, APPI);
+  scale := lbl.Scale;
+  if not PtrLabelBoxSize(lbl, ADraw.Text, AMeasurer, ADraw.W, ADraw.H) then Exit;
   margin := ActiveController.Metric(TyAdvChartAxisPointerMarginVar,
     TyAdvChartAxisPointerMargin);
   if AHit.Spec.LabelSpec.MarginLogical <> 3 then
@@ -1493,8 +1439,6 @@ begin
   { getLabelPosition, then buildLabelElOption's align and confineInContainer }
   TyPolarPointerLabelAnchor(AHit.Polar, AHit.Axis, coord, margin,
     AHit.Polar.RadiusView.Furn.LabelRotateDeg * Pi / 180, x, y, ah, av);
-  ADraw.W := tw + padR + padL;
-  ADraw.H := th + padT + padB;
   if ah = tahRight then x := x - ADraw.W;
   if ah = tahCentre then x := x - ADraw.W / 2;
   if av = tavBottom then y := y - ADraw.H;
@@ -1519,9 +1463,6 @@ var
   colour: TTyColor;
   w: Double;
   dash: TTyDoubleArray;
-  box: TRect;
-  corners: TTyCorners;
-  surface: TTyFill;
   s: TTyPolarPointerShape;
 begin
   if not PolarPointerGeometry(AHit, ARect, AMeasurer, APPI, d) then Exit;
@@ -1594,32 +1535,9 @@ begin
   end;
   if not d.HasLabel or (d.Text = '') then Exit;
   if not (tpBackground in labelS.Present) then Exit;
-  box := Rect(Round(d.X), Round(d.Y), Round(d.X + d.W), Round(d.Y + d.H));
-  corners := TyEffectiveCorners(labelS);
-  if AHit.Spec.LabelSpec.HasBorderRadius then
-    corners := TyCorners(Round(AHit.Spec.LabelSpec.BorderRadiusLogical),
-      Round(AHit.Spec.LabelSpec.BorderRadiusLogical),
-      Round(AHit.Spec.LabelSpec.BorderRadiusLogical),
-      Round(AHit.Spec.LabelSpec.BorderRadiusLogical));
-  surface := labelS.Background;
-  if AHit.Spec.LabelSpec.HasBackground then
-  begin
-    surface.Kind := tfkSolid;
-    surface.Color := TTyColor(AHit.Spec.LabelSpec.Background);
-  end;
-  APainter.FillBackground(box, surface, corners);
-  if AHit.Spec.LabelSpec.HasBorderColour and AHit.Spec.LabelSpec.HasBorderWidth
-    and (AHit.Spec.LabelSpec.BorderWidthLogical > 0) then
-    APainter.StrokeBorder(box, corners,
-      Round(AHit.Spec.LabelSpec.BorderWidthLogical),
-      TTyColor(AHit.Spec.LabelSpec.BorderColour))
-  else if TyBorderVisible(labelS) then
-    APainter.StrokeBorder(box, corners, labelS.BorderWidth, labelS.BorderColor);
-  colour := labelS.TextColor;
-  if AHit.Spec.LabelSpec.HasColour then colour := TTyColor(AHit.Spec.LabelSpec.Colour);
-  APainter.DrawText(box, d.Text, labelS.FontName, ResolveFontSize(labelS),
-    TyFontStyleCodeOver(AHit.Spec.LabelSpec.FontStyle, labelS.FontWeight), colour,
-    taCenter, tlCenter, False);
+  { [R7-N] the text in its block (createTextStyle), hung at the box's place }
+  PtrLabelPaint(APainter, AHit, d.Text, d.X, d.Y, PtrLabelStyle(AHit, APPI),
+    AMeasurer);
 end;
 
 { ==================== the lines series [Batch 121, C12] ====================

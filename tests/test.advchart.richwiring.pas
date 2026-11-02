@@ -60,6 +60,8 @@ type
     DpiAware: Boolean;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     function List: TTyPaintList;
+    { [R7-N] the axis pointers' labels the last paint drew }
+    function PtrLabels: TTyPtrLabelDrawnArray;
   end;
 
   { one text as the port drew it }
@@ -91,6 +93,8 @@ type
     FLooks: Boolean;
     FLooksTexts: Integer;
     FUsed: array of Boolean;
+    { [R7-N] the pointer labels already matched }
+    FPtrUsed: array of Boolean;
     procedure SetUp; override;
     procedure TearDown; override;
     procedure Miss(const AWhat: string);
@@ -201,6 +205,11 @@ end;
 function TRwProbe.List: TTyPaintList;
 begin
   Result := SeriesList;
+end;
+
+function TRwProbe.PtrLabels: TTyPtrLabelDrawnArray;
+begin
+  Result := PointerLabelsDrawn;
 end;
 
 { ==================== plumbing ==================== }
@@ -359,6 +368,8 @@ begin
   end;
   FUsed := nil;
   if FChart.List <> nil then SetLength(FUsed, FChart.List.Count);
+  FPtrUsed := nil;
+  SetLength(FPtrUsed, Length(FChart.PtrLabels));
 end;
 
 { ==================== the port's side ==================== }
@@ -483,11 +494,34 @@ var
   ah: TTyTextAnchorH;
   av: TTyTextAnchorV;
   x, y: Double;
+  ptrs: TTyPtrLabelDrawnArray;
 begin
   Result := Default(TRwDrawn);
   comp := T.Strings['component'];
   owner := Str(T.Find('owner'));
   text := T.Strings['text'];
+  { [R7-N] an axis pointer's label: drawn on the overlay, not in the paint
+    list -- what the last paint drew for that axis }
+  if comp = 'pointerLabel' then
+  begin
+    ptrs := FChart.PtrLabels;
+    for k := 0 to High(ptrs) do
+    begin
+      if (k <= High(FPtrUsed)) and FPtrUsed[k] then Continue;
+      if (ptrs[k].Owner <> owner) or (ptrs[k].Text <> text) then Continue;
+      if k <= High(FPtrUsed) then FPtrUsed[k] := True;
+      Result.Found := True;
+      Result.D := ptrs[k].D;
+      Result.D.Pieces := Copy(ptrs[k].D.Pieces, 0, Length(ptrs[k].D.Pieces));
+      for q := 0 to High(Result.D.Pieces) do
+        Result.D.Pieces[q].Opacity := TyRtPieceDrawnAlpha(Result.D.Pieces[q],
+          ptrs[k].Alpha);
+      Result.BlockPx := TyFontPxOf(ptrs[k].FontSizeLogical);
+      Result.BlockWeight := ptrs[k].FontWeight;
+      Exit;
+    end;
+    Exit;
+  end;
   { [R7-H] 'other': a graphic component's text }
   if (comp = 'seriesLabel') or (comp = 'markerLabel') or (comp = 'legend')
     or (comp = 'chartText') or (comp = 'other') then
