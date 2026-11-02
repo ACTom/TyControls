@@ -1043,7 +1043,7 @@ var
     ts: TTyRtStyle;
     found, tokenBg, useDefaultFill: Boolean;
     y, rx0: Double;
-    p: TTyRtPiece;
+    p, rp: TTyRtPiece;
   begin
     tk := Result.Block.Lines[ALine].Tokens[AIdx];
     ts := StyleOf(ARichStyles, tk.StyleIndex, AStyle, found);
@@ -1060,8 +1060,11 @@ var
       else
         rx0 := AX;
       end;
-      AddPiece(Result, RectPiece(ts, rx0, y - tk.Height / 2, JNum(tk.Width), tk.HeightV,
-        ALine, AIdx, IfThen(AStyle.HasOpacity, AStyle.Opacity, 1)));
+      rp := RectPiece(ts, rx0, y - tk.Height / 2, JNum(tk.Width), tk.HeightV,
+        ALine, AIdx, IfThen(AStyle.HasOpacity, AStyle.Opacity, 1));
+      { [R7-L] the token's rect takes the token's own opacity }
+      rp.OwnOpacity := ts.HasOpacity;
+      AddPiece(Result, rp);
       tokenBg := ts.HasBackground or (ts.BgImage <> '');
     end;
     if tk.HasPadding then
@@ -1140,6 +1143,8 @@ var
     if found and ts.HasOpacity then p.Opacity := ts.Opacity
     else if AStyle.HasOpacity then p.Opacity := AStyle.Opacity
     else p.Opacity := 1;
+    { [R7-L] retrieve3's first: the token's own }
+    p.OwnOpacity := found and ts.HasOpacity;
     { each shadow part: the token's, else the block's, else none }
     if found and (ts.ShadowBlur <> 0) then p.ShadowBlur := ts.ShadowBlur
     else p.ShadowBlur := AStyle.ShadowBlur;

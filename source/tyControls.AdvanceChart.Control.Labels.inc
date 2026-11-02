@@ -320,6 +320,10 @@ begin
   el.Caption.AnchorH := ah;
   el.Caption.AnchorV := av;
   el.Caption.ValTpl := tpl;
+  { [R7-L] ITS OWN OPACITY (the root textStyle's under it): LineView hands
+    the end label no defaultOpacity, so it is 1 otherwise [was: never read
+    -- and a block's pieces no longer carry it] }
+  if spec.HasOpacity then el.Style.Alpha := spec.Opacity;
   el.Z := AVisual.Z;
   el.Z2 := 200;
   el.Silent := True;

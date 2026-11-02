@@ -257,6 +257,9 @@ type
       setLabelStyle hands over as defaultOpacity otherwise }
     HasOpacity: Boolean;
     Opacity: Double;
+    { [R7-L] A VIEW THAT HANDS OVER NO defaultOpacity (sunburst, sankey,
+      themeRiver): the label is 1 under it, whatever its host's opacity }
+    NoHostOpacity: Boolean;
     { [R6-A] the states' textConfig, by TTyEmphTwin.State: emphasis, blur,
       select (TyTwinEmphasis..TyTwinSelect) }
     StateCfg: array[0..2] of TTyLabelStateCfg;
@@ -637,6 +640,11 @@ begin
   rt := ASpec.Rt;
   TyRtFinish(rt, ASpec.FontName, ASpec.FontSizeLogical, ASpec.FontWeight,
     ASpec.RtGlobal, AHostHasFill, AHostFill);
+  { [R7-L] THE TEXT'S OWN OPACITY IS THE ELEMENT'S (its label.opacity, the
+    root textStyle's, the host's defaultOpacity) and every piece but a
+    token with its own follows it there -- in the pieces too it drew twice
+    (a label.opacity 0.5 over a box at 0.25) }
+  rt.Style.HasOpacity := False;
   autoSpec := ASpec;
   autoSpec.AutoColour := True;
   autoSpec.InheritColour := False;
@@ -1890,6 +1898,7 @@ begin
     { createTextStyle: the label's own opacity, else the host's
       (defaultOpacity) [R2-I1: a written label.opacity was not read] }
     if spec.HasOpacity then cap.Style.Alpha := spec.Opacity
+    else if spec.NoHostOpacity then cap.Style.Alpha := 1
     else cap.Style.Alpha := host.Style.Alpha;
     cap.Z := host.Z;
     { ABOVE ITS OWN MARK. Without the lift the two tie on (Z, Z2) and fall back

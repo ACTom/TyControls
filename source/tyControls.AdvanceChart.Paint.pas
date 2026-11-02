@@ -465,6 +465,11 @@ type
     PathEdges: Boolean;
     EdgeX1, EdgeY1: Double;
     Opacity: Double;
+    { [R7-L] A TOKEN'S OWN OPACITY (its style's, the root textStyle's under
+      it): zrender gives the token retrieve3(its own, the Text's, 1), so it
+      is drawn at Opacity whatever the Text's own opacity is -- every other
+      piece follows the Text's (the element's alpha) }
+    OwnOpacity: Boolean;
     { [R2-F] a rect's picture (backgroundColor: {image}), drawn over the
       rect's border, at ImageOpacity: the style's opacity where the picture
       is the box's only element, else zrender's own 1 }

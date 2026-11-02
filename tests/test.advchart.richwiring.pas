@@ -36,7 +36,8 @@ unit test.advchart.richwiring;
   aside; and it compares what the others leave: each piece's opacity, a
   rect's border dash, its phase and its shadow, a text's halo dash and its
   phase. A one-run caption's pieces take the element's alpha and the
-  caption's halo dash. }
+  caption's halo dash; [R7-L] a block's pieces are compared at the opacity
+  they are drawn at, under the element's alpha. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -421,7 +422,11 @@ begin
   end;
   Result := Default(TRwDrawn);
   Result.Found := True;
-  Result.D.Pieces := E.Caption.RtPieces;
+  { [R7-L] each piece at the opacity it is drawn at: its own under the
+    element's alpha, as the renderer combines them }
+  Result.D.Pieces := Copy(E.Caption.RtPieces, 0, Length(E.Caption.RtPieces));
+  for k := 0 to High(Result.D.Pieces) do
+    Result.D.Pieces[k].Opacity := TyRtPieceDrawnAlpha(Result.D.Pieces[k], E.Style.Alpha);
   Result.D.X := E.Caption.X;
   Result.D.Y := E.Caption.Y;
   Result.D.RotationRad := E.Caption.RotationRad;
@@ -472,7 +477,10 @@ begin
         and (Length(e.Caption.RtPieces) > 0))) or (e.Caption.Text <> text) then Continue;
       if comp = 'seriesLabel' then
       begin
-        if (e.Datum.Kind <> ctkSeries) or (e.Datum.SeriesIndex <> si) then Continue;
+        { [R7-L] a line's end label answers for no datum: its role names
+          the series }
+        if not ((e.Anim.Role = carEndLabel) and (e.Anim.Series = si))
+          and ((e.Datum.Kind <> ctkSeries) or (e.Datum.SeriesIndex <> si)) then Continue;
       end
       else if comp = 'markerLabel' then
       begin
@@ -1032,8 +1040,10 @@ begin
     title, gauge-axislabel-plain's five labels, gauge-states-ignored's six
     labels and two titles, gauge-font-size-string's three labels and title,
     gauge-axislabel-markup's three braces drawn as they are, gauge-plain-
-    halo's three labels and title -- and no others }
-  AssertEquals('texts drawn as one run', 27, FOneRun);
+    halo's three labels and title, [R7-L] label-opacity-scatter's two plain
+    labels, label-opacity-root's one, label-opacity-item's end label at its
+    own 0.7, label-opacity-hier's treemap label -- and no others }
+  AssertEquals('texts drawn as one run', 32, FOneRun);
   AssertTrue(Format('only %d compared', [FCompared]), FCompared >= 3000);
 end;
 

@@ -285,6 +285,12 @@ begin
   series := ObjOf(AOption.ComponentAt('series', ASlot));
   if series = nil then Exit;
   Result := TyLabelSpecOfNode(ObjOf(series.Find('label')), series, ABase);
+  { [R7-L] setLabelStyle with no defaultOpacity: SunburstPiece, SankeyView,
+    ThemeRiverView }
+  d := series.Find('type');
+  Result.NoHostOpacity := (d <> nil) and (d.JSONType = jtString)
+    and ((d.AsString = 'sunburst') or (d.AsString = 'sankey')
+      or (d.AsString = 'themeRiver'));
   { [R5-L] A SERIES THAT WRITES NO label STILL HAS ITS emphasis.label:
     getLabelStatesModels takes [state, 'label'] off the item model whether
     or not `label` is written (labelStyle.ts:316-318), and the state's text

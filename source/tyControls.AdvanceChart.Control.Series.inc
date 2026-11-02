@@ -749,7 +749,8 @@ begin
     name -- and shown under emphasis, unless that says otherwise }
   base.Show := True;
   base.StateShow := not RiverEmphasisLabelOff(ASlot);
-  base.FontSizeLogical := 11;
+  { [R7-L] 11 CSS px [was: 11 pt, drawn 14.67 px] }
+  base.FontSizeLogical := TyFontSizeFromPx(11);
   base.DefaultText := tldName;
   base.OutsideColour := TTyChartColor(outS.TextColor);
   base.InsideColour[0] := TTyChartColor(lightS.TextColor);
@@ -3240,18 +3241,23 @@ begin
   Result.Border := os.BorderColor;
   Result.BorderAuto := TTyChartColor(SeriesPaletteColor(FBindings[ASlot].SeriesIndex));
   Result.BorderWidthLogical := os.BorderWidthLogical;
+  { [R7-L] and their opacity }
+  Result.Opacity := os.Opacity;
   d := node.Find('data');
   if d is TJSONArray then
   begin
     SetLength(Result.RowBorder, d.Count);
     SetLength(Result.RowBorderWidth, d.Count);
+    SetLength(Result.RowOpacity, d.Count);
     for k := 0 to d.Count - 1 do
     begin
       Result.RowBorderWidth[k] := NaN;
+      Result.RowOpacity[k] := NaN;
       if not (TJSONArray(d).Items[k] is TJSONObject) then Continue;
       os := TyReadOptStyle(TJSONObject(TJSONArray(d).Items[k]), 'itemStyle');
       Result.RowBorder[k] := os.BorderColor;
       Result.RowBorderWidth[k] := os.BorderWidthLogical;
+      Result.RowOpacity[k] := os.Opacity;
     end;
   end;
   { [R2-B] lineStyle.type, the series' and each item's own (with its width) }
