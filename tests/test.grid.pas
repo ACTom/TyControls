@@ -12792,6 +12792,7 @@ type
     procedure TestHidingTheCursorsColumnMovesTheCursor;
     procedure TestDeletingAColumnKeepsTheCursorOnAVisibleOne;
     procedure TestTheSortSettingsRedoTheSort;
+    procedure TestTheSortSettingsResortTheDataInDataMode;
     procedure TestAColumnsSortKindRedoesTheSort;
     procedure TestFooterAggregates;
     procedure TestReplaceGoesOnFromTheCursorAndSkipsHiddenColumns;
@@ -12863,6 +12864,7 @@ begin
   FG.Cells[2, 0] := 'b';
   FG.Cells[2, 1] := 'a';
   FG.SortByColumn(2, sdAscending);
+  FG.AddSortColumn(3, sdDescending);
   FG.TreeColumn := 3;
   g := FG.HeaderGroups.Add;
   g.FirstCol := 1;
@@ -12872,6 +12874,8 @@ begin
   FG.AnchorSelection;
   FG.InsertColumn(2);
   AssertEquals('the sort key follows its column', 3, FG.SortColumn);
+  AssertEquals('so does a second one, which the header does not show', 2, FG.SortRankOf(4));
+  AssertEquals('and nothing sorts by the new column', 0, FG.SortRankOf(2));
   AssertEquals('so does the header''s sort arrow', 3, FG.Header.SortColumn);
   AssertEquals('TreeColumn', 4, FG.TreeColumn);
   AssertEquals('a column inserted inside a header group widens it: first', 1, g.FirstCol);
@@ -12946,6 +12950,9 @@ begin
   AssertFalse('and the editor of the hidden cell is gone', FG.EditorVisible);
   FG.HideColumn(2);
   AssertEquals('with none to the right, to the one before', 0, FG.Col);
+  AssertTrue('setup: editing again', FG.BeginEdit);
+  FG.HideColumn(0);
+  AssertFalse('every column hidden: the edit is still ended', FG.EditorVisible);
 end;
 
 procedure TGrid169Test.TestDeletingAColumnKeepsTheCursorOnAVisibleOne;
@@ -12959,6 +12966,7 @@ begin
   AssertEquals('the last column deleted: the cursor comes back inside', 1, FG.Col);
   AssertTrue('and the anchor with it: one cell selected',
     FG.IsCellSelected(1, 0) and not FG.IsCellSelected(0, 0));
+  AssertEquals('the selection reads back inside the grid', 1, FG.Selection.Right);
   FG.InsertColumn(2);
   FG.HideColumn(2);
   FG.MoveCursor(1, 0);
@@ -12993,6 +13001,22 @@ begin
   AssertEquals('setup: ignoring case a comes first', 'a', Shown(1, 0));
   FG.SortIgnoreCase := False;
   AssertEquals('SortIgnoreCase redoes it: B before a', 'B', Shown(1, 0));
+end;
+
+procedure TGrid169Test.TestTheSortSettingsResortTheDataInDataMode;
+begin
+  Columns(1);
+  FG.RowCount := 3;
+  FG.SortMode := gsmData;
+  FG.SortKind := gskText;
+  FG.Cells[0, 0] := '10';
+  FG.Cells[0, 1] := '9';
+  FG.Cells[0, 2] := '2';
+  FG.SortByColumn(0, sdAscending);
+  AssertEquals('setup: the data itself sorted as text', '10', FG.Cells[0, 0]);
+  FG.SortKind := gskNumber;
+  AssertEquals('SortKind sorts the data again', '2', FG.Cells[0, 0]);
+  AssertEquals('all of it', '10', FG.Cells[0, 2]);
 end;
 
 procedure TGrid169Test.TestAColumnsSortKindRedoesTheSort;
