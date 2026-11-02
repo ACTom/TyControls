@@ -2486,6 +2486,9 @@ begin
   try
     p.EnsurePopupForTest;
     p.Calendar.Date := EncodeDate(2026, 6, 16);   // the arrow keys inside the calendar
+    { What the calendar does after an arrow key: it reports a change. The picker must not
+      be listening -- a pick is Enter or a click (OnAccept). }
+    if Assigned(p.Calendar.OnChange) then p.Calendar.OnChange(p.Calendar);
     AssertEquals('moving through the calendar picks nothing', EncodeDate(2026, 6, 15),
       p.DateTimeForTest);
     AssertEquals('and tells nobody', 0, FChanges);
