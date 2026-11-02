@@ -42,6 +42,7 @@ type
     { #183 }
     procedure TestAltRightAndAltLeftOpenAndCloseARow;
     procedure TestCtrlEnterRunsTheDialogOfADialogRow;
+    procedure TestOneClickOnThePaintedEllipsisRunsTheDialog;
   end;
 
   { A real control on a real form: Font, Constraints, Anchors, PopupMenu. }
@@ -119,6 +120,16 @@ begin
   FGrid.Editor.PressKey(VK_RETURN, [ssCtrl]);
   AssertEquals('Ctrl+Enter in it runs the dialog', 2, FGrid.StringsDialogs);
   AssertEquals('written', 'm', Trim(FHolder.Lines.Text));
+end;
+
+procedure TPropertyGridObjectsTest.TestOneClickOnThePaintedEllipsisRunsTheDialog;
+begin
+  FGrid.StringsAccept := True;
+  FGrid.StringsAnswer := 'one click';
+  FGrid.ClickPaintedEllipsis(FGrid.RowAt('Lines'));
+  AssertEquals('one click ran the dialog', 1, FGrid.StringsDialogs);
+  AssertEquals('and it wrote', 'one click', Trim(FHolder.Lines.Text));
+  AssertEquals('no text editor left open', -1, FGrid.EditingRow);
 end;
 
 procedure TPropertyGridObjectsTest.SetUp;

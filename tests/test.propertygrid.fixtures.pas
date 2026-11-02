@@ -365,6 +365,8 @@ type
     procedure PaintInto(ACanvas: TCanvas; const ARect: TRect);
     { The keys of the rows on display, top to bottom, comma-separated. }
     function ShownKeys: string;
+    { A click on the '…' painted at the end of a font or dialog row. }
+    procedure ClickPaintedEllipsis(ARow: TTyValueRow);
   end;
 
 { The runner never calls Forms.Application.Initialize; a test that needs window handles does. }
@@ -917,6 +919,19 @@ end;
 procedure TPGGrid.PaintInto(ACanvas: TCanvas; const ARect: TRect);
 begin
   RenderTo(ACanvas, ARect, 96);
+end;
+
+procedure TPGGrid.ClickPaintedEllipsis(ARow: TTyValueRow);
+var f, x, y: Integer; r: TRect;
+begin
+  f := FlatOf(ARow);
+  TopIndex := f;
+  r := DialogButtonRect(f);
+  if r.Right <= r.Left then raise EAssertionFailedError.Create('no ''…'' on ' + ARow.Key);
+  x := (r.Left + r.Right) div 2;
+  y := (r.Top + r.Bottom) div 2;
+  MouseDown(mbLeft, [], x, y);
+  MouseUp(mbLeft, [], x, y);
 end;
 
 function TPGGrid.ShownKeys: string;

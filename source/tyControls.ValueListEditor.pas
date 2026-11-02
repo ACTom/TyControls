@@ -245,6 +245,9 @@ type
       both dropdowns, protected so the guards can read it headlessly -- the popup itself
       needs a real window, which is exactly what a test run does not have. }
     function DropdownHeightFor(ARows: Integer): Integer;
+    { Where the '…' of a font or dialog row (vekFont / vekDialog) at flat index AFlat is painted,
+      in client pixels -- a click there runs the row's dialog; an empty rect for any other row. }
+    function DialogButtonRect(AFlat: Integer): TRect;
     { Asked before ANY commit changes a row's value: the inline editor (Enter / focus-out), a
       pick from the boolean / enum / colour list, the colour dialog, the font dialog, SetRowValue
       and the Values[] / ValueFromIndex[] writes. False refuses it -- the row keeps its value and
@@ -1594,6 +1597,17 @@ begin
   FDropPopup.CornerRadiusLogical := ActiveController.Model.ResolveStyle('TyListBox', '', []).BorderRadius;
 end;
 
+function TTyCustomValueListEditor.DialogButtonRect(AFlat: Integer): TRect;
+var cell: TRect;
+begin
+  Result := Rect(0, 0, 0, 0);
+  if (AFlat < 0) or (AFlat > High(FFlatRow)) then Exit;
+  if FFlatRow[AFlat].Heading or not (FFlatRow[AFlat].EditorKind in [vekFont, vekDialog]) then Exit;
+  { PaintItemContent's: 16 px ending 4 px short of the row's right edge -- and that margin too. }
+  cell := CellRect(AFlat, 1);
+  Result := Rect(cell.Right - Dp(20), cell.Top, cell.Right, cell.Bottom);
+end;
+
 function TTyCustomValueListEditor.DropdownHeightFor(ARows: Integer): Integer;
 var
   S: TTyStyleSet;
@@ -2223,7 +2237,14 @@ begin
   inherited MouseDown(Button, Shift, X, Y);   // focus + row selection
   if (Button = mbLeft) and not FReadOnly and (flat >= 0) then
   begin
-    if X >= SplitXDp then BeginEdit(flat)
+    { #183: the '…' painted at the end of a font or dialog row runs the dialog at once. It took
+      a second click: the first only opened the inline text, with a '…' of its own. }
+    if PtInRect(DialogButtonRect(flat), Point(X, Y)) then
+    begin
+      if FEditFlat >= 0 then EndEdit(True);
+      if flat <= High(FFlatRow) then InvokeRowDialog(flat);
+    end
+    else if X >= SplitXDp then BeginEdit(flat)
     { keyEdit turns the key cell into the second editable column. Off, a click left of the
       divider keeps doing what it always did: commit whatever was open and select the row. }
     else if keyEdit in FKeyOptions then BeginKeyEdit(flat)
