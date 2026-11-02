@@ -528,7 +528,8 @@ type
     procedure SetDataSource(AValue: TDataSource);
     procedure SetReadOnly(AValue: Boolean);
     { The base control's ReadOnly := ours, or the field cannot be changed (LCL's
-      TDBDateTimePicker.CheckField does the same with CanModify). }
+      TDBDateTimePicker.CheckField does the same with CanModify), or no edit could begin --
+      AutoEdit off and the record not being edited (TyDBEditCanBegin). }
     procedure SyncReadOnly;
     procedure UserMoved(ABefore: Double);
     procedure DataChange(Sender: TObject);
@@ -1371,7 +1372,7 @@ end;
 procedure TTyCustomDBRating.SyncReadOnly;
 begin
   TTyCustomRating(Self).ReadOnly := FDataLink.ReadOnly
-    or ((FDataLink.Field <> nil) and not FDataLink.CanModify);
+    or ((FDataLink.Field <> nil) and not TyDBEditCanBegin(FDataLink));
 end;
 
 procedure TTyCustomDBRating.LinkStateChange(Sender: TObject);
@@ -1413,6 +1414,7 @@ procedure TTyCustomDBRating.KeyDown(var Key: Word; Shift: TShiftState);
 var
   before: Double;
 begin
+  SyncReadOnly;   // AutoEdit may have changed since, and a data source does not say so
   before := Value;
   inherited KeyDown(Key, Shift);
   UserMoved(before);
@@ -1422,6 +1424,7 @@ procedure TTyCustomDBRating.MouseDown(Button: TMouseButton; Shift: TShiftState; 
 var
   before: Double;
 begin
+  SyncReadOnly;
   before := Value;
   inherited MouseDown(Button, Shift, X, Y);
   UserMoved(before);

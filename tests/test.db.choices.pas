@@ -145,6 +145,7 @@ type
     procedure TestClearingToNoStarsWritesZeroWhenRequired;
     procedure TestReadOnlyFollowsTheControlAndTheField;
     procedure TestStarsResolveLikeTheBaseControls;
+    procedure TestWithoutAutoEditTheStarsDoNotMove;
   end;
 
 implementation
@@ -854,8 +855,7 @@ begin
   AssertFalse('the field editable again', TTyCustomRating(FCtl).ReadOnly);
   FFix.Src.AutoEdit := False;
   GoRow(2);
-  AssertFalse('AutoEdit is not CanModify: refused after the click instead',
-    TTyCustomRating(FCtl).ReadOnly);
+  AssertTrue('AutoEdit off and nothing edited (#184)', TTyCustomRating(FCtl).ReadOnly);
 end;
 
 { The filled stars are resolved as the control's key + 'Star': 'TyDBRatingStar', which must
@@ -869,6 +869,28 @@ begin
   AssertTrue('the base star has a fill', tpBackground in base.Present);
   AssertTrue('the data-aware star too', tpBackground in db.Present);
   AssertEquals('the same fill', Int64(base.Background.Color), Int64(db.Background.Color));
+end;
+
+{ #184, doc §3.4: with AutoEdit off and no edit going on the rating is read-only -- a click
+  moves no star and the application's OnChange hears nothing. }
+procedure TDBRatingTest.TestWithoutAutoEditTheStarsDoNotMove;
+begin
+  FFix.Src.AutoEdit := False;
+  Bind('Stars');
+  Stars.OnChange := @CountChange;
+  AssertTrue('read-only while nothing is edited', TTyCustomRating(FCtl).ReadOnly);
+  TChoiceInput(FCtl).MouseDown(mbLeft, [ssLeft], StarX(5), 10);
+  TChoiceInput(FCtl).MouseUp(mbLeft, [], StarX(5), 10);
+  AssertEquals('the stars stayed', '3.5', Shown);
+  AssertEquals('no OnChange', 0, FChanges);
+  AssertBrowsing('a click without AutoEdit');
+  FFix.DS.Edit;
+  AssertFalse('the record in edit: the stars take clicks', TTyCustomRating(FCtl).ReadOnly);
+  TChoiceInput(FCtl).MouseDown(mbLeft, [ssLeft], StarX(5), 10);
+  TChoiceInput(FCtl).MouseUp(mbLeft, [], StarX(5), 10);
+  AssertEquals('written', 5, BoundField.AsFloat, 0);
+  FFix.DS.Post;
+  AssertTrue('posted: read-only again', TTyCustomRating(FCtl).ReadOnly);
 end;
 
 initialization

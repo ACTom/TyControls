@@ -56,6 +56,7 @@ type
     procedure TestDropDownCalendarPickIsAnEdit;
     procedure TestRefusedEditReachesNoOnChange;
     procedure TestFieldOutsideTheRangeIsShownAsItIs;
+    procedure TestWithoutAutoEditThePickerIsReadOnly;
   end;
 
   TDBCalendarTest = class(TDBControlTestBase)
@@ -100,6 +101,8 @@ implementation
 type
   TDTInput = class(TWinControl);
   TCalendarKeys = class(TTyCalendar);
+  { The base picker's ReadOnly, which the data-aware one keeps in step with the link. }
+  TPickerAccess = class(TTyCustomDateTimePicker);
 
 function PickerText(AValue: TDateTime): string;
 begin
@@ -345,6 +348,21 @@ begin
   AssertEquals('2001, inside the range', ExpectedShown(2), Shown);
   GoRow(1);
   AssertEquals('1990 again', ExpectedShown(1), Shown);
+end;
+
+{ #184, doc §3.4: with AutoEdit off and no edit going on the picker is read-only -- its
+  dropdown stays shut -- until the record is put in edit some other way. }
+procedure TDBDateTimePickerTest.TestWithoutAutoEditThePickerIsReadOnly;
+begin
+  FFix.Src.AutoEdit := False;
+  Bind('Born');
+  AssertTrue('read-only while nothing is edited', TPickerAccess(FCtl).ReadOnly);
+  Picker.OpenCalendar;
+  AssertFalse('the dropdown stays shut', Picker.Popup.IsOpen);
+  FFix.DS.Edit;
+  AssertFalse('the record in edit', TPickerAccess(FCtl).ReadOnly);
+  FFix.DS.Cancel;
+  AssertTrue('read-only again', TPickerAccess(FCtl).ReadOnly);
 end;
 
 { ================================================================== TDBCalendarTest ======= }

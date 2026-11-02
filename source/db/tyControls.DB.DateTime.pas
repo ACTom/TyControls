@@ -45,7 +45,8 @@ type
     procedure SetDataField(const AValue: string);
     procedure SetDataSource(AValue: TDataSource);
     procedure SetReadOnly(AValue: Boolean);
-    { The base control's ReadOnly := ours, or the field cannot be changed. }
+    { The base control's ReadOnly := ours, or the field cannot be changed, or no edit could
+      begin -- AutoEdit off and the record not being edited (TyDBEditCanBegin). }
     procedure SyncReadOnly;
     procedure LinkStateChange(Sender: TObject);
     procedure DataChange(Sender: TObject);
@@ -56,6 +57,9 @@ type
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Change; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+    function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+      MousePos: TPoint): Boolean; override;
     procedure DoExit; override;
     { The value lives in the field, not in the form file. }
     property DateTime stored False;
@@ -348,7 +352,7 @@ procedure TTyCustomDBDateTimePicker.SyncReadOnly;
 begin
   if FDataLink = nil then Exit;
   inherited ReadOnly := FDataLink.ReadOnly
-    or ((FDataLink.Field <> nil) and not FDataLink.CanModify);
+    or ((FDataLink.Field <> nil) and not TyDBEditCanBegin(FDataLink));
 end;
 
 procedure TTyCustomDBDateTimePicker.LinkStateChange(Sender: TObject);
@@ -426,9 +430,24 @@ begin
     Exit;
   end;
   wasReturn := (Key = VK_RETURN) and (Shift = []);
+  SyncReadOnly;   // AutoEdit may have changed since, and a data source does not say so
   inherited KeyDown(Key, Shift);
   if wasReturn and FDataLink.Editing then
     FDataLink.UpdateRecord;
+end;
+
+procedure TTyCustomDBDateTimePicker.MouseDown(Button: TMouseButton; Shift: TShiftState;
+  X, Y: Integer);
+begin
+  SyncReadOnly;
+  inherited MouseDown(Button, Shift, X, Y);
+end;
+
+function TTyCustomDBDateTimePicker.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+  MousePos: TPoint): Boolean;
+begin
+  SyncReadOnly;
+  Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
 end;
 
 procedure TTyCustomDBDateTimePicker.DoExit;

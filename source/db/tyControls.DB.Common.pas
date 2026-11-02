@@ -69,6 +69,12 @@ procedure TyDBUserChanged(ALink: TFieldDataLink; var AInUserEdit: Boolean);
   which puts the caret at the end and drops the selection the key is about to replace (a
   masked edit rebuilds its whole text). }
 function TyDBEditAllowed(ALink: TFieldDataLink; var AInUserEdit: Boolean): Boolean;
+{ Could the user start an edit through ALink now, without starting one: the link may change
+  the field (CanModify), and AutoEdit is on or the record is in edit already. What a control
+  that turns itself read-only (the rating, the date-time picker) shows. A data source does
+  not tell anyone that its AutoEdit changed, so such a control asks again as a gesture
+  begins. }
+function TyDBEditCanBegin(ALink: TFieldDataLink): Boolean;
 { The same for a typed character: the field takes it (TyFieldCanAcceptKey) and editing could
   begin. AKey is one UTF-8 character; anything longer than a byte is checked as #255, LCL's
   stand-in for "some non-ASCII character". }
@@ -166,6 +172,12 @@ end;
 function TyDBEditAllowed(ALink: TFieldDataLink; var AInUserEdit: Boolean): Boolean;
 begin
   Result := TyFieldIsEditable(ALink.Field) and StartEdit(ALink, AInUserEdit);
+end;
+
+function TyDBEditCanBegin(ALink: TFieldDataLink): Boolean;
+begin
+  Result := ALink.CanModify and (ALink.DataSource <> nil)
+    and (ALink.DataSource.AutoEdit or (ALink.DataSource.State in dsEditModes));
 end;
 
 function TyDBKeyAllowed(ALink: TFieldDataLink; const AKey: string;
