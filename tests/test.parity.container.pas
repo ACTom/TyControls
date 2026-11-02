@@ -6,7 +6,10 @@ uses
   BGRABitmap, BGRABitmapTypes,
   tyControls.Base, tyControls.Panel, tyControls.ScrollBox, tyControls.TabStrip,
   tyControls.TabSheet, tyControls.PageControl, tyControls.Splitter,
-  tyControls.ControlBar, tyControls.GroupBox;
+  tyControls.ControlBar, tyControls.GroupBox,
+  LMessages, ExtCtrls, ActnList, tyControls.Types, tyControls.Controller, tyControls.Edit,
+  tyControls.ExPanel, tyControls.Card, tyControls.GridPanel, tyControls.RelativePanel,
+  tyControls.ScrollBar;
 
 type
   { The dock probe. The audit claimed TTyPanel could not be a dock site "at all"; the
@@ -894,7 +897,313 @@ begin
     IsStoredProp(Sheet, 'PageIndex'));
 end;
 
+
+type
+  { #174: ExPanel, GroupBox, Card, Splitter, GridPanel, RelativePanel and ScrollBox. }
+  TContainers174Test = class(TTestCase)
+  private
+    FForm: TForm;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestACollapsedExPanelLeavesTheTabOrder;
+    procedure TestTheExpandedHeightFollowsTheDpi;
+    procedure TestTheGroupBoxCaptionIsTheControls;
+    procedure TestTheCardStaysHoveredOverItsContent;
+    procedure TestTheSplitterLeavesRoomForTheOtherPanes;
+    procedure TestTheSplitterTurnsItsThickness;
+    procedure TestEveryGridCellIsPlacedWhateverTheSizes;
+    procedure TestFewerColumnsKeepTheirControls;
+    procedure TestAGridCellMovesAtOnce;
+    procedure TestAChildThatLeftTheRelativePanelIsLeftAlone;
+    procedure TestTheScrollBarsTakeANewController;
+  end;
+
+  { The focus needs real windows. }
+  TContainers174FocusTest = class(TTestCase)
+  private
+    FForm: TForm;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestCollapsingMovesTheFocusOut;
+  end;
+
+  TGroupBox174Access = class(TTyGroupBox);
+  TCard174Access = class(TTyCard);
+  TSplitter174Probe = class(TTySplitter)
+  public
+    procedure FakeDrag(AStartX, AEndX, AYMid: Integer);
+  end;
+
+var
+  Containers174WidgetSet: Boolean = False;
+
+procedure TSplitter174Probe.FakeDrag(AStartX, AEndX, AYMid: Integer);
+begin
+  MouseDown(mbLeft, [], AStartX, AYMid);
+  MouseMove([ssLeft], AEndX, AYMid);
+  MouseUp(mbLeft, [], AEndX, AYMid);
+end;
+
+procedure TContainers174Test.SetUp;
+begin
+  FForm := TForm.CreateNew(nil);
+  FForm.SetBounds(0, 0, 400, 300);
+end;
+
+procedure TContainers174Test.TearDown;
+begin
+  FreeAndNil(FForm);
+end;
+
+procedure TContainers174Test.TestACollapsedExPanelLeavesTheTabOrder;
+var ex: TTyExPanel; e: TTyEdit; l: TFPList;
+begin
+  ex := TTyExPanel.Create(FForm);
+  ex.Parent := FForm;
+  e := TTyEdit.Create(FForm);
+  e.Parent := ex;
+  l := TFPList.Create;
+  try
+    ex.GetTabOrderList(l);
+    AssertTrue('setup: expanded, the edit is in the tab order', l.IndexOf(e) >= 0);
+    ex.Collapsed := True;
+    l.Clear;
+    ex.GetTabOrderList(l);
+    AssertEquals('collapsed, it is not', -1, l.IndexOf(e));
+    ex.Collapsed := False;
+    l.Clear;
+    ex.GetTabOrderList(l);
+    AssertTrue('expanded again, it is', l.IndexOf(e) >= 0);
+  finally
+    l.Free;
+  end;
+end;
+
+procedure TContainers174Test.TestTheExpandedHeightFollowsTheDpi;
+var ex: TTyExPanel;
+begin
+  ex := TTyExPanel.Create(FForm);
+  ex.Parent := FForm;
+  ex.Height := 140;
+  ex.Collapsed := True;
+  AssertEquals('setup: the height it opens to', 140, ex.ExpandedHeight);
+  ex.AutoAdjustLayout(lapAutoAdjustForDPI, 96, 192, 0, 0);
+  AssertEquals('a DPI change scales it', 280, ex.ExpandedHeight);
+end;
+
+procedure TContainers174Test.TestTheGroupBoxCaptionIsTheControls;
+var g: TTyGroupBox; act: TAction;
+begin
+  g := TTyGroupBox.Create(FForm);
+  g.Name := 'Box1';
+  AssertEquals('a named box takes no caption from its Name', '', g.Caption);
+  AssertEquals('and Text agrees', '', TGroupBox174Access(g).Text);
+  g.Caption := 'Options';
+  AssertEquals('Caption is Text', 'Options', TGroupBox174Access(g).Text);
+  act := TAction.Create(FForm);
+  act.Caption := 'From the action';
+  g.Action := act;
+  AssertEquals('an action''s caption shows', 'From the action', g.Caption);
+end;
+
+procedure TContainers174Test.TestTheCardStaysHoveredOverItsContent;
+var c: TTyCard; e: TTyEdit;
+  function Hovered: Boolean;
+  begin
+    Result := tysHover in TCard174Access(c).CurrentStates;
+  end;
+begin
+  c := TTyCard.Create(FForm);
+  c.Parent := FForm;
+  e := TTyEdit.Create(FForm);
+  e.Parent := c;
+  c.Perform(CM_MOUSEENTER, 0, 0);
+  AssertTrue('setup: hovered', Hovered);
+  { onto the edit: the card's own leave, then the edit's enter passed up }
+  c.Perform(CM_MOUSELEAVE, 0, 0);
+  e.Perform(CM_MOUSEENTER, 0, 0);
+  AssertTrue('over its content the card is still hovered', Hovered);
+  { off the edit and out of the card }
+  e.Perform(CM_MOUSELEAVE, 0, 0);
+  AssertFalse('out of it, not', Hovered);
+end;
+
+procedure TContainers174Test.TestTheSplitterLeavesRoomForTheOtherPanes;
+var pan, right: TPanel; sp: TSplitter174Probe;
+begin
+  pan := TPanel.Create(FForm);
+  pan.Parent := FForm;
+  pan.Align := alNone;
+  pan.SetBounds(0, 0, 100, 200);
+  right := TPanel.Create(FForm);
+  right.Parent := FForm;
+  right.Width := 150;
+  right.Align := alRight;
+  sp := TSplitter174Probe.Create(FForm);
+  sp.Parent := FForm;
+  sp.Align := alNone;
+  sp.SetBounds(100, 0, 5, 200);
+  sp.Align := alLeft;
+  sp.Left := 100;
+  sp.MinSize := 40;
+  sp.AutoSnap := False;
+  sp.FakeDrag(0, 1000, 100);
+  AssertEquals('the pane stops where the right pane and the far side''s MinSize begin',
+    FForm.ClientWidth - 40 - 5 - right.Width, pan.Width);
+end;
+
+procedure TContainers174Test.TestTheSplitterTurnsItsThickness;
+var sp: TTySplitter;
+begin
+  sp := TTySplitter.Create(FForm);
+  sp.Parent := FForm;
+  sp.SetBounds(0, 0, 5, 100);
+  sp.Align := alTop;
+  AssertEquals('a vertical bar turned horizontal keeps its thickness as height', 5, sp.Height);
+  sp.Align := alClient;
+  AssertTrue('alClient is refused', sp.Align = alTop);
+  sp.Align := alRight;
+  AssertEquals('and back', 5, sp.Width);
+end;
+
+procedure TContainers174Test.TestEveryGridCellIsPlacedWhateverTheSizes;
+var gp: TTyGridPanel; c1, c2: TTyGridCell;
+begin
+  gp := TTyGridPanel.Create(FForm);
+  gp.Parent := FForm;
+  gp.SetBounds(0, 0, 300, 100);
+  gp.ColumnCount := 3;
+  gp.RowCount := 1;
+  gp.ColumnSizes := '1*,1*';
+  c1 := TTyGridCell(gp.Cells[1, 0]);
+  c2 := TTyGridCell(gp.Cells[2, 0]);
+  AssertTrue(Format('a third column past a two-entry list is placed (%d > %d)', [c2.Left, c1.Left]),
+    c2.Left > c1.Left);
+  AssertTrue('and has a width', c2.Width > 0);
+  gp.ColumnSizes := '1*,1*,1*,1*';
+  AssertTrue('a longer list is cut to the columns: the third ends at the edge',
+    c2.Left + c2.Width >= gp.ClientWidth - 2);
+end;
+
+procedure TContainers174Test.TestFewerColumnsKeepTheirControls;
+var gp: TTyGridPanel; e: TTyEdit;
+begin
+  gp := TTyGridPanel.Create(FForm);
+  gp.Parent := FForm;
+  gp.SetBounds(0, 0, 300, 100);
+  gp.ColumnCount := 3;
+  gp.RowCount := 1;
+  e := TTyEdit.Create(FForm);
+  e.Parent := TTyGridCell(gp.Cells[2, 0]);
+  gp.ColumnCount := 2;
+  AssertNotNull('the control of a removed column keeps a parent', e.Parent);
+  AssertSame('the cell left nearest to it', gp.Cells[1, 0], e.Parent);
+end;
+
+procedure TContainers174Test.TestAGridCellMovesAtOnce;
+var gp: TTyGridPanel; c0, c1: TTyGridCell;
+begin
+  gp := TTyGridPanel.Create(FForm);
+  gp.Parent := FForm;
+  gp.SetBounds(0, 0, 300, 100);
+  gp.ColumnCount := 2;
+  gp.RowCount := 1;
+  c0 := TTyGridCell(gp.Cells[0, 0]);
+  c1 := TTyGridCell(gp.Cells[1, 0]);
+  c0.Col := 1;
+  AssertEquals('a cell given another column is placed there at once', c1.Left, c0.Left);
+end;
+
+procedure TContainers174Test.TestAChildThatLeftTheRelativePanelIsLeftAlone;
+var rp: TTyRelativePanel; c: TPanel; other: TPanel; placed: Integer;
+begin
+  rp := TTyRelativePanel.Create(FForm);
+  rp.Parent := FForm;
+  rp.SetBounds(0, 0, 300, 200);
+  c := TPanel.Create(FForm);
+  c.Parent := rp;
+  c.SetBounds(0, 0, 50, 20);
+  rp.SetRules(c, [traAlignParentRight]);
+  rp.PerformLayout;
+  placed := c.Left;
+  AssertTrue('setup: placed on the right', placed > 100);
+  other := TPanel.Create(FForm);
+  other.Parent := FForm;
+  c.Parent := other;
+  c.Left := 7;
+  rp.PerformLayout;
+  AssertEquals('moved to another parent, the rules no longer place it', 7, c.Left);
+  c.Parent := rp;
+  rp.PerformLayout;
+  AssertEquals('back, they do again', placed, c.Left);
+end;
+
+procedure TContainers174Test.TestTheScrollBarsTakeANewController;
+var sb: TTyScrollBox; ctl: TTyStyleController; i, n: Integer;
+begin
+  sb := TTyScrollBox.Create(FForm);
+  sb.Parent := FForm;
+  ctl := TTyStyleController.Create(FForm);
+  sb.Controller := ctl;
+  n := 0;
+  for i := 0 to sb.ControlCount - 1 do
+    if sb.Controls[i] is TTyScrollBar then
+    begin
+      Inc(n);
+      AssertSame('a bar takes the box''s controller at once', ctl,
+        TTyScrollBar(sb.Controls[i]).Controller);
+    end;
+  AssertEquals('setup: the two bars', 2, n);
+end;
+
+procedure TContainers174FocusTest.SetUp;
+begin
+  if not Containers174WidgetSet then
+  begin
+    Forms.Application.Initialize;
+    Containers174WidgetSet := True;
+  end;
+  FForm := TForm.CreateNew(nil);
+  FForm.SetBounds(-4000, -4000, 500, 400);
+  FForm.Visible := True;
+end;
+
+procedure TContainers174FocusTest.TearDown;
+begin
+  FreeAndNil(FForm);
+end;
+
+procedure TContainers174FocusTest.TestCollapsingMovesTheFocusOut;
+var ex: TTyExPanel; inside, after: TTyEdit;
+begin
+  ex := TTyExPanel.Create(FForm);
+  ex.Parent := FForm;
+  ex.SetBounds(0, 0, 200, 140);
+  ex.TabOrder := 0;
+  inside := TTyEdit.Create(FForm);
+  inside.Parent := ex;
+  inside.SetBounds(10, 40, 100, 24);
+  after := TTyEdit.Create(FForm);
+  after.Parent := FForm;
+  after.SetBounds(10, 200, 100, 24);
+  after.TabOrder := 1;
+  FForm.HandleNeeded;
+  Forms.Application.ProcessMessages;
+  inside.SetFocus;
+  Forms.Application.ProcessMessages;
+  AssertSame('setup: focus inside', inside, FForm.ActiveControl);
+  ex.Collapsed := True;
+  Forms.Application.ProcessMessages;
+  AssertSame('collapsing moves the focus to the next control', after, FForm.ActiveControl);
+end;
+
 initialization
+  RegisterTest(TContainers174Test);
+  RegisterTest(TContainers174FocusTest);
   RegisterTest(TTyContainerDockProbe);
   RegisterTest(TTyPanelMemberParity);
   RegisterTest(TTyScrollBoxMemberParity);

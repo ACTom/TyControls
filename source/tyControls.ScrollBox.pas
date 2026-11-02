@@ -3,7 +3,7 @@ unit tyControls.ScrollBox;
 interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages,
-  tyControls.Types, tyControls.Painter, tyControls.Base,
+  tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
   tyControls.Panel, tyControls.ScrollBar, tyControls.ScrollContent;
 
 type
@@ -90,6 +90,8 @@ type
     function LeadingInset: Integer;
     procedure Resize; override;
     procedure Loaded; override;
+    { #174: the bars take the new controller at once -- they took it at the next measure. }
+    procedure SetController(AValue: TTyCustomStyleController); override;
     procedure InsertControl(AControl: TControl; Index: Integer); override;
     { The viewport leaving -- freed, or moved to another parent -- is let go here, the one
       path both take; otherwise the box goes on laying out and scrolling a control it no
@@ -1116,6 +1118,13 @@ procedure TTyCustomScrollBox.Resize;
 begin
   inherited Resize;
   UpdateScrollRange;
+end;
+
+procedure TTyCustomScrollBox.SetController(AValue: TTyCustomStyleController);
+begin
+  inherited SetController(AValue);
+  if FVScrollBar <> nil then FVScrollBar.Controller := Controller;
+  if FHScrollBar <> nil then FHScrollBar.Controller := Controller;
 end;
 
 end.

@@ -101,7 +101,7 @@ uses tyControls.RelativePanel;
 
 | 方法 | 说明 |
 |------|------|
-| `procedure SetRules(AControl: TControl; ARules: TTyRelativeRules; AAnchor: TControl = nil)` | 为 `AControl`（本容器的子控件）**赋予 / 替换**规则集。`AAnchor` 是兄弟类规则引用的**兄弟控件**（仅用父 / 居中规则时传 `nil`）。传入**空规则集**等价于清除该子控件的规则。会立即重排。 |
+| `procedure SetRules(AControl: TControl; ARules: TTyRelativeRules; AAnchor: TControl = nil)` | 为 `AControl`（本容器的子控件）**赋予 / 替换**规则集。`AAnchor` 是兄弟类规则引用的**兄弟控件**（仅用父 / 居中规则时传 `nil`）。传入**空规则集**等价于清除该子控件的规则。会立即重排。子控件挪到别的父容器后，规则暂不生效（不再摆放它，锚到它的规则也当没有这个兄弟）；挪回来又生效。 |
 | `function GetRules(AControl: TControl): TTyRelativeRules` | 取回 `AControl` 的规则集（无则空集）。 |
 | `function GetAnchor(AControl: TControl): TControl` | 取回 `AControl` 的锚点兄弟（无则 `nil`）。 |
 | `procedure ClearRules(AControl: TControl)` | 彻底移除 `AControl` 的规则（此后它保持自身位置）。 |

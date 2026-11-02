@@ -7,9 +7,7 @@ uses
 type
   TTyCustomGroupBox = class(TTyCustomControl, ITyChromeHost)
   private
-    FCaption: TCaption;
     FAlignment: TAlignment;
-    procedure SetCaption(const AValue: TCaption);
     procedure SetAlignment(AValue: TAlignment);
     { Shared caption-band height: 16 logical px scaled to APPI.
       Used by both RenderTo and AdjustClientRect so they stay in sync. }
@@ -28,6 +26,9 @@ type
     procedure Paint; override;
     procedure AdjustClientRect(var ARect: TRect); override;
     function DialogChar(var Message: TLMKey): Boolean; override;
+    { #174: the caption is the control's own Caption -- a field of its own hid it, so an action's
+      caption did not show and Text said something else (the Name, at design time). }
+    procedure TextChanged; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -37,7 +38,7 @@ type
     function ChromeFreeRect: TRect; virtual;
     procedure PaintChromeLayer(APainter: TTyPainter; const AOrigin: TPoint); virtual;
     function ChromeSignature: string; virtual;
-    property Caption: TCaption read FCaption write SetCaption;
+    property Caption;
     { NOTE: this is the CAPTION's alignment in the band, and it has no LCL counterpart --
       TGroupBox/TRadioGroup/TCheckGroup publish no Alignment at all. It is emphatically NOT
       TCustomCheckBox.Alignment, which is a TLeftRight naming the side the INDICATOR sits on
@@ -184,7 +185,7 @@ begin
   Result := MulDiv(ActiveController.Metric('--groupbox-caption-height', 16), APPI, 96);
   { #146: and tall enough for the caption's font. A fixed band clipped a larger caption,
     and the children sat under it. }
-  if FCaption <> '' then
+  if Caption <> '' then
   begin
     fh := TyFontHeightPx(ResolveFontSize(CurrentStyle), APPI);   // the glyphs' full height
     if fh > Result then Result := fh;
@@ -220,7 +221,9 @@ begin
   // Designer container: the IDE drops child controls INTO the box; they lay out below
   // the caption band carved by AdjustClientRect.
   ControlStyle := ControlStyle + [csAcceptsControls];
-  FCaption := '';
+  { A box put on a form starts without a caption, as it did with a field of its own: the
+    control's Caption would take its Name. }
+  ControlStyle := ControlStyle - [csSetCaption];
   FAlignment := taLeftJustify;
   Width := 185;
   Height := 105;
@@ -235,7 +238,7 @@ end;
 function TTyCustomGroupBox.DialogChar(var Message: TLMKey): Boolean;
 var pf: TCustomForm;
 begin
-  if IsEnabled and TyShownInForm(Self) and TyIsAccelKey(Message, FCaption) then   { #142 }
+  if IsEnabled and TyShownInForm(Self) and TyIsAccelKey(Message, Caption) then   { #142 }
   begin
     pf := GetParentForm(Self);
     if pf <> nil then pf.SelectNext(Self, True, True);   // focus the first child after the group box
@@ -249,10 +252,9 @@ begin
   Result := 'TyGroupBox';
 end;
 
-procedure TTyCustomGroupBox.SetCaption(const AValue: TCaption);
+procedure TTyCustomGroupBox.TextChanged;
 begin
-  if FCaption = AValue then Exit;
-  FCaption := AValue;
+  inherited TextChanged;
   Invalidate;
 end;
 
@@ -274,12 +276,12 @@ begin
   AText := ABand;
   ADisp := '';
   AMnemonic := 0;
-  Result := FCaption <> '';
+  Result := Caption <> '';
   if not Result then Exit;
   CapH := CapHAtPPI(APPI);
   { MIRRORING: the caption band moves to the other end of the top border (see RenderTo). }
   BandAlign := BidiFlipAlignment(FAlignment, IsRightToLeft);
-  TyParseMnemonic(FCaption, ADisp, AMnemonic);
+  TyParseMnemonic(Caption, ADisp, AMnemonic);
   // Measure actual text width using a scratch bitmap canvas so CJK and
   // variable-width fonts are handled correctly (avoids byte-Length * 8).
   MeasBmp := TBitmap.Create;
@@ -342,10 +344,10 @@ begin
   S := CurrentStyle;
   capH := CapHAtPPI(ppi);
   band := TyFrameChromeBand(S, ppi);
-  if (band = 0) and (FCaption = '') then Exit(Rect(0, 0, Width, Height));
+  if (band = 0) and (Caption = '') then Exit(Rect(0, 0, Width, Height));
   Result := Rect(band, capH div 2 + band, Width - band, Height - band);
   { the caption sits across the top border, in the whole band above the frame's line }
-  if (FCaption <> '') and (Result.Top < capH) then Result.Top := capH;
+  if (Caption <> '') and (Result.Top < capH) then Result.Top := capH;
 end;
 
 procedure TTyCustomGroupBox.PaintChromeLayer(APainter: TTyPainter; const AOrigin: TPoint);

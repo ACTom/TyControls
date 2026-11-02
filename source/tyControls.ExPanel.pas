@@ -81,9 +81,13 @@ type
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseLeave; override;
+    procedure DoAutoAdjustLayout(const AMode: TLayoutAdjustmentPolicy;
+      const AXProportion, AYProportion: Double); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    { #174: collapsed, the body's children are out of the tab order. }
+    procedure GetTabOrderList(List: TFPList); override;
     { Its own key, NOT the base panel's. This control paints two things a plain panel
       never paints — an interactive header band and a chevron — and pinned to 'TyPanel'
       a theme had no name to reach them by: it could not tint the band, weight its
@@ -204,6 +208,9 @@ function TyExPanelChevronKind(AExpanded: Boolean): TTyGlyphKind;
 function TyExPanelHeightAt(ACollapsedH, AExpandedH: Integer; t: Single): Integer;
 
 implementation
+
+uses
+  Forms;
 
 { ---- pure geometry ---- }
 
@@ -409,6 +416,7 @@ end;
 procedure TTyCustomExPanel.SetCollapsed(AValue: Boolean);
 var
   targetH: Integer;
+  frm: TCustomForm;
 begin
   if FCollapsed = AValue then Exit;
   FCollapsed := AValue;
@@ -426,6 +434,15 @@ begin
       FExpandedHeight := Height;
     targetH := ScaledHeaderHeight;
     StartHeightAnimation(targetH);
+    { #174: the focus on a control of the body goes on to the next control after the panel --
+      left there, the keys went into a control nobody could see. }
+    frm := GetParentForm(Self);
+    if (frm <> nil) and (frm.ActiveControl <> nil) and (frm.ActiveControl <> Self)
+       and ContainsControl(frm.ActiveControl) then
+    begin
+      frm.SelectNext(Self, True, True);
+      if ContainsControl(frm.ActiveControl) then frm.ActiveControl := nil;
+    end;
     if Assigned(FOnCollapse) then FOnCollapse(Self);
   end
   else
@@ -611,6 +628,24 @@ end;
 procedure TTyCustomExPanel.Paint;
 begin
   RenderTo(Canvas, ClientRect, Font.PixelsPerInch);
+end;
+
+{ #174: collapsed, the body's children leave the tab order -- Tab reached them, and the keys went
+  into controls nobody could see. The designer keeps them reachable. }
+procedure TTyCustomExPanel.GetTabOrderList(List: TFPList);
+begin
+  if FCollapsed and not (csDesigning in ComponentState) then Exit;
+  inherited GetTabOrderList(List);
+end;
+
+{ #174: ExpandedHeight is device px, as Height is: a DPI change scales it with the rest of the
+  bounds -- left alone, the panel opened to its height at the old DPI. }
+procedure TTyCustomExPanel.DoAutoAdjustLayout(const AMode: TLayoutAdjustmentPolicy;
+  const AXProportion, AYProportion: Double);
+begin
+  inherited DoAutoAdjustLayout(AMode, AXProportion, AYProportion);
+  if AMode in [lapAutoAdjustWithoutHorizontalScrolling, lapAutoAdjustForDPI] then
+    FExpandedHeight := Round(FExpandedHeight * AYProportion);
 end;
 
 end.
