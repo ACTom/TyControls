@@ -963,8 +963,10 @@ type
     procedure HideWindowNow(AWindow: TTyCustomToolWindow);
     { spec §5.1 的六步。AOld 只用来判断焦点原来在不在旧页里(可为 nil 或就是 AWindow)。
       显示 / 隐藏不看 AOld:先显示目标,再把栏里**其余每一个**窗口藏起来;收起着就
-      连目标一起藏。 }
-    procedure SwitchCore(AWindow, AOld: TTyCustomToolWindow; AMoveFocus: Boolean);
+      连目标一起藏。
+      答 False:途中某一页的 OnShow / OnHide 里又切了页,那一次已经从头做完、自己报过了,
+      这一次到此为止 —— 调用方别再报 OnChange。 }
+    function SwitchCore(AWindow, AOld: TTyCustomToolWindow; AMoveFocus: Boolean): Boolean;
     { 一次静默切页 = BeginSilent + 切 + EndSilent(try/finally)的薄包装。 }
     procedure SwitchSilently(AWindow: TTyCustomToolWindow);
     { 跨栏移动的最后一步(CommitCrossMove):AWindow(已经在本栏里)成为当前页并展开;设计期
@@ -980,6 +982,8 @@ type
     FPendingEvents: TTyToolWindowBarEvents;
     { ActivateExpanded 里:收起着的栏这一次切页按展开的样子切(显示目标、藏其余)。 }
     FSwitchExpanded: Boolean;
+    { 每一次切页(SwitchCore)加一。切页途中它变了,就是某一页的 OnShow / OnHide 里又切了页。 }
+    FSwitchSerial: Cardinal;
     { > 0 = 布局应用的批次(spec §10.4):栏事件不发(EventsAllowed)、切页和收起跳过焦点那一步、
       当前页离开不回落(由计划统一激活)。窗口的 OnShow / OnHide 照常 —— 那是 BeginSilent 的事,
       两者互不替代(加载结束时应用挂起计划才两样一起包)。 }
@@ -6668,6 +6672,14 @@ begin
           这一步,由批次最后统一处理(spec §5.3 / §10.4 第 7 步)。 }
         focusIn := (FLayoutBatch = 0) and FocusIsInside(FActive);
         HideWindowNow(FActive);
+        { OnHide 里又展开了:那一次已经显示、重排、报过 OnExpand,这一次不再报 OnCollapse。焦点照
+          展开前的样子还给这一页。 }
+        if FCollapsed <> AValue then
+        begin
+          if focusIn and (FActive <> nil) and not FocusIsInside(FActive) and FActive.CanFocus then
+            FActive.FocusFirst;
+          Exit;
+        end;
         { 焦点掉到窗体本身的话快捷键全部失灵(spec §5.3)。需要真句柄的那一半在 test.toolwindow.focus 测。 }
         if focusIn then
         begin
@@ -6676,7 +6688,11 @@ begin
         end;
       end
       else
+      begin
         ShowWindowNow(FActive);
+        { OnShow 里又收起了:那一次已经藏好、重排、报过 OnCollapse,这一次不再报 OnExpand。 }
+        if FCollapsed <> AValue then Exit;
+      end;
     end;
     Relayout;
     Invalidate;
@@ -6852,17 +6868,34 @@ begin
   end;
 end;
 
-procedure TTyCustomToolWindowBar.SwitchCore(AWindow, AOld: TTyCustomToolWindow; AMoveFocus: Boolean);
+function TTyCustomToolWindowBar.SwitchCore(AWindow, AOld: TTyCustomToolWindow;
+  AMoveFocus: Boolean): Boolean;
 var
   focusIn: Boolean;
   wins: TTyToolWindowArray;
   i: Integer;
+  serial: Cardinal;
+
+  { 某一页的 OnShow / OnHide 里又切了页:那一次已经显示、藏好、重排、通知过了,这一次不许再藏
+    它显示的那一页、不许再报一遍。焦点原来在旧页里、而那一次没把它带走(它的「旧页」是这一次的
+    目标),照第 5 步交给那一次的当前页。 }
+  function Superseded: Boolean;
+  begin
+    Result := FSwitchSerial <> serial;
+    if Result and focusIn and (FActive <> nil) and not FocusIsInside(FActive)
+       and FActive.CanFocus then
+      FActive.FocusFirst;
+  end;
+
 begin
+  Result := True;
   { 布局应用的批次跳过焦点这一步,由批次最后统一处理(spec §5.1 第 5 步 / §10.4 第 7 步)。 }
   if FLayoutBatch > 0 then AMoveFocus := False;
   { 第 5 步要的是「焦点**原来**在不在旧页里」,藏之前记。 }
   focusIn := AMoveFocus and (AOld <> nil) and (AOld <> AWindow) and FocusIsInside(AOld);
   FActive := AWindow;
+  Inc(FSwitchSerial);
+  serial := FSwitchSerial;
   { 标签行上的手势属于捕获它的那一页。代码在手势进行中换了当前页:那一页的标签行不再显示,
     手势作废 —— 否则之后在旧页上的松开照样被当成点击 / 落点(spec §7.1 / §9.7)。 }
   if (FGesture.Capturer is TTyCustomToolWindow) and (FGesture.Capturer <> FActive) then
@@ -6877,14 +6910,23 @@ begin
   begin
     { 1. 收起着就到此为止(spec §5.3):一页都不显示,连目标一起藏。 }
     for i := 0 to High(wins) do
-      if IsRegistered(wins[i]) then HideWindowNow(wins[i]);
+      if IsRegistered(wins[i]) then
+      begin
+        HideWindowNow(wins[i]);
+        if Superseded then Exit(False);
+      end;
   end
   else
   begin
     { 2、3:先显示新页再藏其余的 —— 先藏的话 LCL 会把焦点交给窗体本身。 }
     if AWindow <> nil then ShowWindowNow(AWindow);
+    if Superseded then Exit(False);
     for i := 0 to High(wins) do
-      if (wins[i] <> AWindow) and IsRegistered(wins[i]) then HideWindowNow(wins[i]);
+      if (wins[i] <> AWindow) and IsRegistered(wins[i]) then
+      begin
+        HideWindowNow(wins[i]);
+        if Superseded then Exit(False);
+      end;
     { 4. 标题行按此刻的样子重排(悬停在下面重查)。 }
     if AWindow <> nil then AWindow.RelayoutHeader;
     { 5. 只有焦点原来在旧页里才动它;新页已经显示了才聚焦得上。 }
@@ -6995,8 +7037,7 @@ begin
   { 当前页也存在布局串里(spec §10.2 的 pActive):改之前记默认布局(spec §10.5)。 }
   if FManager <> nil then FManager.NoteLayoutChanging(Self);
   prev := FActive;
-  SwitchCore(AWindow, prev, True);
-  if FActive <> prev then DoChange;
+  if SwitchCore(AWindow, prev, True) and (FActive <> prev) then DoChange;
 end;
 
 function TTyCustomToolWindowBar.GetActiveIndex: Integer;
@@ -7023,6 +7064,7 @@ procedure TTyCustomToolWindowBar.RegisterWindow(AWindow: TTyCustomToolWindow);
 var
   i: Integer;
   prev: TTyCustomToolWindow;
+  stood: Boolean;
 begin
   if (AWindow = nil) or (AWindow.Parent <> Self) then Exit;
   if IsRegistered(AWindow) then Exit;     { 幂等 }
@@ -7041,8 +7083,9 @@ begin
   prev := FActive;
   { 不在加载中注册进来的(组件编辑器新建、粘贴、代码添加、从别的栏挪过来)成为当前页。
     MoveWindow 和布局应用自己管激活(FQuietMove,spec §5.1)。 }
+  stood := True;
   if not (csLoading in ComponentState) and not AWindow.FQuietMove then
-    SwitchCore(AWindow, prev, True);
+    stood := SwitchCore(AWindow, prev, True);
   { 先把尺寸推好再发事件:OnChange 里读到的 Width 得是新的(第一个窗口进来,空栏就展开)。 }
   Relayout;
   Invalidate;
@@ -7051,7 +7094,7 @@ begin
   { 标签多了一个。 }
   InvalidateHeader;
   TabRowHostMayHaveChanged;
-  if FActive <> prev then DoChange;
+  if stood and (FActive <> prev) then DoChange;
 end;
 
 procedure TTyCustomToolWindowBar.RemoveControl(AControl: TControl);
@@ -7076,6 +7119,7 @@ var
   i, idx: Integer;
   prev, next: TTyCustomToolWindow;
   rest: TTyToolWindowArray;
+  stood: Boolean;
 begin
   if not IsRegistered(AWindow) then Exit;
   for i := 0 to High(FRegistered) do
@@ -7117,6 +7161,7 @@ begin
   if not (csDestroying in AWindow.ComponentState) then
     AWindow.RemoveFreeNotification(Self);
   prev := FActive;
+  stood := True;
   if csDestroying in ComponentState then
   begin
     if FActive = AWindow then FActive := nil;
@@ -7137,7 +7182,7 @@ begin
     rest := WindowList(AWindow);
     if (idx >= 0) and (idx <= High(rest)) then next := rest[idx]
     else if Length(rest) > 0 then next := rest[High(rest)];
-    if next <> nil then SwitchCore(next, nil, False);
+    if next <> nil then stood := SwitchCore(next, nil, False);
   end;
   Relayout;
   Invalidate;
@@ -7145,7 +7190,7 @@ begin
   InvalidateHeader;
   { 走的是禁用的当前页、又没有回落页:标签行不再让出(spec §3.7)。 }
   TabRowHostMayHaveChanged;
-  if FActive <> prev then DoChange;
+  if stood and (FActive <> prev) then DoChange;
 end;
 
 procedure TTyCustomToolWindowBar.Notification(AComponent: TComponent; Operation: TOperation);
