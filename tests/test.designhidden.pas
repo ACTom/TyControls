@@ -27,6 +27,7 @@ type
     procedure TestPickOnlyCombosListOnlyPickOnlyStyles;
     procedure TestTheDrawGridDoesNotPublishWhatOnlyTheStringGridUses;
     procedure TestAGridsHeaderPublishesEverythingButMainColumn;
+    procedure TestTheGeneratedComboRowsAreHidden;
   end;
 
 implementation
@@ -114,6 +115,14 @@ begin
     AssertTrue('TTyStringGrid still publishes ' + PROPS[p],
       IsPublishedProp(TTyStringGrid, PROPS[p]));
   end;
+end;
+
+{ #163: the filter combo's rows are Filter's and the look-in combo's the file system's. }
+procedure TDesignHiddenTest.TestTheGeneratedComboRowsAreHidden;
+begin
+  AssertEquals('TTyFilterComboBox.Items', 'THiddenPropertyEditor', EditorFor('TTyFilterComboBox', 'Items'));
+  AssertEquals('TTyShellComboBox.Items', 'THiddenPropertyEditor', EditorFor('TTyShellComboBox', 'Items'));
+  AssertEquals('a plain combo keeps its rows', '', EditorFor('TTyComboBox', 'Items'));
 end;
 
 procedure TDesignHiddenTest.TestAGridsHeaderPublishesEverythingButMainColumn;

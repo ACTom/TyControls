@@ -7,7 +7,9 @@ uses
   tyControls.Types, tyControls.Base, tyControls.Controller, tyControls.ComboBox, tyControls.ListBox,
   tyControls.Edit,
   tyControls.ComboBoxEx, tyControls.OfficeComboBox, tyControls.AdvancedComboBox,
-  tyControls.CheckComboBox, tyControls.Cascader, tyControls.TreeView, tyControls.TreeSelect;
+  tyControls.CheckComboBox, tyControls.Cascader, tyControls.TreeView, tyControls.TreeSelect,
+  tyControls.ColorComboBox, tyControls.FilterComboBox, tyControls.ShellComboBox,
+  tyControls.ShellListView, tyControls.FileSystem, TypInfo;
 type
   { Expose protected Click and RenderTo for tests }
   TComboAccess = class(TTyComboBox)
@@ -26,12 +28,25 @@ type
   TEditCrack = class(TTyEdit);
   TListCrack = class(TTyListBox);
   TTreeSelectCrack = class(TTyTreeSelect);
+  TComponentCrack = class(TComponent);
+  { #163: answers the "more…" dialog without one. }
+  TMoreProbe = class(TTyColorComboBox)
+  protected
+    function AskMoreColor(var AColor: TColor): Boolean; override;
+  public
+    Asks: Integer;
+    Answer: Boolean;
+    Picked: TColor;
+    procedure PickRow(AIndex: Integer);
+  end;
 
   { #161 }
   TComboKeysTest = class(TTestCase)
   private
     FForm: TForm;
     FCount, FKeys, FPresses, FUtf8: Integer;
+    FLastColor: TColor;
+    procedure ColorChanged(Sender: TObject);
     procedure Count(Sender: TObject);
     procedure CountKey(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure CountPress(Sender: TObject; var Key: Char);
@@ -65,6 +80,12 @@ type
     procedure TestTheTreeSelectReopenGuardIsTheClicks;
     procedure TestNoCloseUpForATreeSelectOrCascaderWithNothingOpen;
     procedure TestEditingNodesKeepsTheCascaderDraft;
+    { #163 }
+    procedure TestMoreIsACommandNotAValue;
+    procedure TestTheFieldKeysStepOverMore;
+    procedure TestALoadedFilterComboFiltersItsList;
+    procedure TestTheGeneratedRowsAreNotWritten;
+    procedure TestAShellComboWithNoDirectoryListsTheRoots;
   end;
 
   TChangeProbe = class
@@ -716,6 +737,24 @@ end;
 var
   KeysWidgetSetReady: Boolean = False;
 
+function TMoreProbe.AskMoreColor(var AColor: TColor): Boolean;
+begin
+  Inc(Asks);
+  Result := Answer;
+  if Answer then AColor := Picked;
+end;
+
+procedure TMoreProbe.PickRow(AIndex: Integer);
+begin
+  DoPopupPick(AIndex);
+end;
+
+procedure TComboKeysTest.ColorChanged(Sender: TObject);
+begin
+  Inc(FCount);
+  FLastColor := TTyColorComboBox(Sender).Selected;
+end;
+
 procedure TComboKeysTest.Count(Sender: TObject);
 begin
   Inc(FCount);
@@ -1209,6 +1248,96 @@ begin
   AssertTrue('an edit of the draft''s own option cuts it back to what is left',
     TyCascaderPathsEqual(want, p.Path));
   c.CloseUp;
+end;
+
+{ #163: picking "more…" asks for a colour, and the value changes once, to that colour -- it
+  changed to the row's marker first, with an OnChange, and on again. Cancel changes nothing. }
+procedure TComboKeysTest.TestMoreIsACommandNotAValue;
+var
+  c: TMoreProbe;
+  more, n: Integer;
+begin
+  c := TMoreProbe.Create(FForm);
+  c.Parent := FForm;
+  c.ItemIndex := 2;
+  c.OnChange := @ColorChanged;
+  more := c.Items.Count - 1;
+  AssertEquals('setup: the last row is more', c.MoreText, c.Items[more]);
+  n := c.Items.Count;
+  c.Answer := False;
+  c.PickRow(more);
+  Application.ProcessMessages;
+  AssertEquals('the dialog is asked', 1, c.Asks);
+  AssertEquals('Cancel: no change', 0, FCount);
+  AssertEquals('and the value it had', 2, c.ItemIndex);
+  c.Answer := True;
+  c.Picked := TColor($123456);
+  c.PickRow(more);
+  Application.ProcessMessages;
+  AssertEquals('OK: one change', 1, FCount);
+  AssertEquals('to the colour picked, never to the marker', Integer($123456), Integer(FLastColor));
+  AssertEquals('the colour is a row of its own', n + 1, c.Items.Count);
+  AssertEquals('just above more', more, c.ItemIndex);
+  AssertEquals('which stays last', c.MoreText, c.Items[c.Items.Count - 1]);
+end;
+
+procedure TComboKeysTest.TestTheFieldKeysStepOverMore;
+var
+  c: TMoreProbe;
+  k: Word;
+  last: Integer;
+begin
+  c := TMoreProbe.Create(FForm);
+  c.Parent := FForm;
+  last := c.Items.Count - 2;   // the last colour
+  c.ItemIndex := last;
+  k := VK_DOWN;
+  TComboAccess(c).DoKeyDown(k, []);
+  AssertEquals('Down from the last colour stays on it', last, c.ItemIndex);
+  k := VK_END;
+  TComboAccess(c).DoKeyDown(k, []);
+  AssertEquals('so does End', last, c.ItemIndex);
+  AssertEquals('and no dialog opens', 0, c.Asks);
+end;
+
+{ #163: the mask goes to a list linked in the form file once the form is read. }
+procedure TComboKeysTest.TestALoadedFilterComboFiltersItsList;
+var
+  f: TTyFilterComboBox;
+  lv: TTyShellListView;
+begin
+  lv := TTyShellListView.Create(FForm);
+  lv.Parent := FForm;
+  f := TTyFilterComboBox.Create(FForm);
+  f.Parent := FForm;
+  TComponentCrack(f).Loading;
+  f.Filter := 'Text|*.txt|Pascal|*.pas';
+  f.FilterIndex := 2;
+  f.ShellListView := lv;
+  TComponentCrack(f).Loaded;
+  AssertEquals('the list shows what the combo says', '*.pas', lv.Mask);
+end;
+
+procedure TComboKeysTest.TestTheGeneratedRowsAreNotWritten;
+var
+  f: TTyFilterComboBox;
+  s: TTyShellComboBox;
+begin
+  f := TTyFilterComboBox.Create(FForm);
+  f.Filter := 'Text|*.txt';
+  AssertFalse('the filter combo''s rows are Filter''s', IsStoredProp(f, 'Items'));
+  s := TTyShellComboBox.Create(FForm);
+  AssertFalse('the look-in combo''s, the file system''s', IsStoredProp(s, 'Items'));
+end;
+
+{ #163: no Directory still lists the roots, as every directory's list does. }
+procedure TComboKeysTest.TestAShellComboWithNoDirectoryListsTheRoots;
+var s: TTyShellComboBox;
+begin
+  s := TTyShellComboBox.Create(FForm);
+  s.Parent := FForm;
+  AssertEquals('setup: no directory', '', s.Directory);
+  AssertEquals('the drives are there', Length(TyFsRoots), s.Items.Count);
 end;
 
 procedure TComboKeysTest.TestAnOpenCascaderIsNotOpenedAgain;

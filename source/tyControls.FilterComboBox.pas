@@ -53,6 +53,9 @@ type
     procedure SetStyle(AValue: TTyComboBoxStyle); override;
     { Nils a link whose list is being freed (filectrl.pp:565 does the same). }
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    { #163: a form file's link is filtered once the form is read -- PushMask waits out the
+      loading, and nothing pushed afterwards. }
+    procedure Loaded; override;
   public
     constructor Create(AOwner: TComponent); override;
     { The active segment's pattern list (FSpecs[FilterIndex-1].Patterns); '' when the
@@ -171,6 +174,9 @@ begin
   FSpecs := nil;
   FFilterIndex := DefaultFilterIndex;
   FUpdating := False;
+  { #163: the rows are Filter's, rebuilt from it; written to the form file too they were a
+    second copy of it, and an editable one. }
+  FItemsStreamed := False;
 end;
 
 function TTyCustomFilterComboBox.Mask: string;
@@ -232,6 +238,12 @@ begin
   inherited Notification(AComponent, Operation);
   if (Operation = opRemove) and (AComponent = FShellListView) then
     FShellListView := nil;
+end;
+
+procedure TTyCustomFilterComboBox.Loaded;
+begin
+  inherited Loaded;
+  PushMask;
 end;
 
 procedure TTyCustomFilterComboBox.SetFilter(const AValue: string);

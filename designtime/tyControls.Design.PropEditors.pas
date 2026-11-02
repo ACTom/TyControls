@@ -903,6 +903,9 @@ begin
   RegisterPropertyEditor(TypeInfo(TTyComboBoxStyle), TTyCustomFilterComboBox, 'Style', TTyPickOnlyComboStyleEditor);
   RegisterPropertyEditor(TypeInfo(TTyComboBoxStyle), TTyCustomOfficeComboBox, 'Style', TTyPickOnlyComboStyleEditor);
   RegisterPropertyEditor(TypeInfo(TTyComboBoxStyle), TTyCustomShellComboBox, 'Style', TTyPickOnlyComboStyleEditor);
+  { #163: the filter and look-in combos make their rows from Filter and Directory. }
+  RegisterPropertyEditor(TypeInfo(TStringList), TTyFilterComboBox, 'Items', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(TStringList), TTyShellComboBox, 'Items', THiddenPropertyEditor);
 end;
 
 end.
