@@ -92,7 +92,7 @@ end;
 
 function TSpinProbe.BufferText: string;
 begin
-  Result := FEditText;
+  Result := Text;
 end;
 
 { TCheckComboProbe }

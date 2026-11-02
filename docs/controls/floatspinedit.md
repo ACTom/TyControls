@@ -4,7 +4,7 @@
 
 `TTyFloatSpinEdit` 是**带步进按钮的小数微调框**——LCL `TFloatSpinEdit`（`spin.pp:89`）的对标控件，继承自 [`TTyCustomNumericEdit`](numericedit.md)。它把库里原本分开的两半合到一起：`TTyCustomNumericEdit` 有 `Value: Double` 和 `Decimals` 但没有按钮，[`TTySpinEdit`](spinedit.md) 有按钮但值是 `Integer`。要一个"单价 / 百分比 / 缩放系数"字段以前必须二选一。
 
-因为底座是 `TTyEdit`，它自带**完整文本引擎**：选区、剪贴板、撤销 / 重做、词级导航、IME —— 这些 `TTySpinEdit` 的轻量行缓冲全都没有。
+因为底座是 `TTyEdit`，它自带**完整文本引擎**：选区、剪贴板、撤销 / 重做、词级导航、IME。4.0 起 `TTySpinEdit` 也用同一个引擎（#190）。
 
 ---
 

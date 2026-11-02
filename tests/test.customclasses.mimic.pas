@@ -9524,6 +9524,7 @@ type
     property Increment;
     property ReadOnly;
     property EditorEnabled;
+    property AutoSelect;
     property Alignment;
     property MaxLength;
     property ValueEmpty;

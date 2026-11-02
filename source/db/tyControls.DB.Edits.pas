@@ -926,11 +926,11 @@ type
     procedure SetRange(AMin, AMax: Integer);
     procedure DataChange(Sender: TObject);
     procedure UpdateData(Sender: TObject);
+    procedure ValueChanged(Sender: TObject);
     procedure CMGetDataLink(var Message: TLMessage); message CM_GETDATALINK;
   protected
     function GetStyleTypeKey: string; override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
-    procedure DoChange; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
@@ -2623,6 +2623,7 @@ begin
   FDataLink.Control := Self;
   FDataLink.OnDataChange := @DataChange;
   FDataLink.OnUpdateData := @UpdateData;
+  AddHandlerOnChange(@ValueChanged);
 end;
 
 destructor TTyCustomDBSpinEdit.Destroy;
@@ -2762,9 +2763,8 @@ begin
   FLoaded := TyDBLoadedText(Text);   // what the field holds now: changing back is an edit again
 end;
 
-procedure TTyCustomDBSpinEdit.DoChange;
+procedure TTyCustomDBSpinEdit.ValueChanged(Sender: TObject);
 begin
-  inherited DoChange;
   if FLoading or FInUserEdit or (FDataLink = nil) or (FDataLink.Field = nil) then Exit;
   if Text = FLoaded.Text then Exit;
   TyDBUserChanged(FDataLink, FInUserEdit);
