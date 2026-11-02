@@ -280,6 +280,9 @@ type
     FLookup: TDBLookup;
     { The field the list was last built for: a new DataField builds it again. }
     FLookupField: TField;
+    { The row DataChange selected: two rows may show the same text, so a pick of the other
+      one is told by its index. }
+    FLoadedIndex: Integer;
     function GetKeyField: string;
     function GetListField: string;
     function GetListFieldIndex: Integer;
@@ -1093,6 +1096,7 @@ begin
     if i >= 0 then Text := Items[i] else Text := '';
     ItemIndex := i;
     FLoaded := TyDBLoadedText(Text);
+    FLoadedIndex := ItemIndex;
   finally
     FLoading := was;
   end;
@@ -1119,12 +1123,15 @@ begin
   else
     DataChange(Self);
   FLoaded := TyDBLoadedText(Text);
+  FLoadedIndex := ItemIndex;
 end;
 
 procedure TTyCustomDBLookupComboBox.Change;
 begin
-  inherited Change;
+  inherited Change;   // a pick that shows another text is an edit there
   if FLoading or FInUserEdit or TyComboStyleHasEditBox(Style) or (FDataLink = nil) then Exit;
+  if (FDataLink.Field <> nil) and (Text = FLoaded.Text) and (ItemIndex <> FLoadedIndex) then
+    TyDBUserChanged(FDataLink, FInUserEdit);   // another row with the same text
   if FDataLink.Editing then FDataLink.UpdateRecord;
 end;
 

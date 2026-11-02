@@ -119,6 +119,7 @@ type
     function Combo: TTyDBLookupComboBox;
   published
     procedure TestDefaultStyleIsDropDownList;
+    procedure TestPickOfAnotherRowWithTheSameTextIsWritten;
   end;
 
   TDBLookupListBoxTest = class(TDBLookupTestBase)
@@ -712,6 +713,20 @@ begin
   AssertTrue('csDropDownList', Combo.Style = csDropDownList);
   AssertEquals('the declared default, so a form file leaves it out', Ord(csDropDownList),
     GetPropInfo(Combo, 'Style')^.Default);
+end;
+
+{ #184: two rows may show the same text; picking the other one is an edit all the same. }
+procedure TDBLookupComboBoxTest.TestPickOfAnotherRowWithTheSameTextIsWritten;
+begin
+  Bind('CityID');
+  FFix.Cities.AppendRecord([4, 'Paris']);
+  AssertEquals('precondition: two Paris rows', 'Paris', ListItems[ListItems.Count - 1]);
+  AssertEquals('precondition: row 1 holds the first Paris', 0, Combo.ItemIndex);
+  EnterControl;
+  Key(VK_END);
+  AssertEquals('the second Paris picked', ListItems.Count - 1, Combo.ItemIndex);
+  AssertTrue('an edit', FFix.DS.State = dsEdit);
+  AssertEquals('its key written', 4, BoundField.AsInteger);
 end;
 
 { ========================================================== TDBLookupListBoxTest ========= }
