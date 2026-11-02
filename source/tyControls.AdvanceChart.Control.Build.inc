@@ -79,7 +79,6 @@ var
   coord: TTyCoordDimArray;
   cursors: TTyEncodeCursorArray;
   enc: TTySeriesEncode;
-  tipPos: TTyIntegerArray;
   typeInfo: TTySeriesTypeInfo;
   radarSpec: TTyRadarSpec;
   polarMissing: TTyStringArray;
@@ -283,37 +282,31 @@ begin
           if enc.Given then
           begin
             TySpreadEncode(enc, dims, st);
-            for k := 3 to st.DimCount - 1 do
-              if st.DimCoord(k) = TyMatrixXDim then
-                st.UseOrdinalMeta(k, FMatrices[FBindings[i].MatrixIndex].Dims[0].Meta)
-              else if st.DimCoord(k) = TyMatrixYDim then
-                st.UseOrdinalMeta(k, FMatrices[FBindings[i].MatrixIndex].Dims[1].Meta);
+            MatrixExtraMeta(i, st);
             TyEncodeStoreOrder(enc, dims, st, True);
           end;
           FEncodes[i] := enc;
           TyFillStoreFromSource(FSources[i], enc, dims, st);
+          MatrixTextDims(i, enc, FSources[i], st);
         end
         else
-          TyFillSeriesStore(FOption, i, dims, st);
-        { A SCATTER'S TOOLTIP HAS NO DIMENSION of its own there (its value is
-          no coordinate dimension, x and y are ordinal: defaultedTooltip is
-          empty), so it shows every element of the item [Batch 147] }
-        { [spec 259] -- unless the encode wrote the value: then it is a
-          coordinate, and the label and the tooltip are the last of its
-          entries a label suits }
-        j := -1;
-        if (ds >= 0) and enc.Given and enc.Explicit[2] then
-          j := TyEncodeLastLabelDim(enc, 2, FSources[i]);
-        if j >= 0 then
         begin
-          tipPos := nil;
-          SetLength(tipPos, 1);
-          tipPos[0] := j;
-          st.SetTooltipPositions(tipPos);
-          st.SetLabelPositions(tipPos);
-        end
-        else if (FBindings[i].SeriesType = 'scatter') or (FBindings[i].SeriesType = 'effectScatter') then
-          st.SetTooltipPositions(nil);
+          { [spec 264] ITS OWN DATA READS ITS ENCODE TOO, the way a series
+            on axes reads it: the coordinates as written (the rest from the
+            next free elements), a list's later entries parsed -- and
+            collected -- by the tree's category list, itemName [was: never
+            read, every row placed by position] }
+          SeriesDataEncode(i, dims, enc);
+          if enc.Given then
+          begin
+            TySpreadEncode(enc, dims, st);
+            MatrixExtraMeta(i, st);
+            TyEncodeStoreOrder(enc, dims, st, False);
+          end;
+          TyFillSeriesStore(FOption, i, dims, st);
+          TyOwnItemNames(enc, st);
+          MatrixTextDims(i, enc, TySeriesDimsSource(FOption, FBindings[i].SeriesIndex), st);
+        end;
         Continue;
       end;
       if FBindings[i].RadarIndex >= 0 then
@@ -3475,6 +3468,56 @@ begin
   SetLength(pos, 1);
   pos[0] := j;
   AStore.SetTooltipPositions(pos);
+end;
+
+procedure TTyCustomAdvanceChart.MatrixExtraMeta(ASlot: Integer; AStore: TTyDataStore);
+var
+  k: Integer;
+  mx: TTyMatrix;
+begin
+  mx := FMatrices[FBindings[ASlot].MatrixIndex];
+  for k := 3 to AStore.DimCount - 1 do
+    if AStore.DimCoord(k) = TyMatrixXDim then
+      AStore.UseOrdinalMeta(k, mx.Dims[0].Meta)
+    else if AStore.DimCoord(k) = TyMatrixYDim then
+      AStore.UseOrdinalMeta(k, mx.Dims[1].Meta);
+end;
+
+procedure TTyCustomAdvanceChart.MatrixTextDims(ASlot: Integer;
+  const AEnc: TTySeriesEncode; const ASource: TTyChartSource; AStore: TTyDataStore);
+var
+  j: Integer;
+  lab, tip: TTyIntegerArray;
+begin
+  { defaultedLabel: `encode.label`, else the last coordinate dimension a
+    label suits -- x and y are ordinal, and the value is a coordinate only
+    when the encode wrote it (unwritten it is an extra dimension) [spec 259];
+    defaultedTooltip: `encode.tooltip`, else the label's }
+  lab := nil;
+  tip := nil;
+  if AEnc.Given then
+  begin
+    if Length(AEnc.Labels) > 0 then lab := Copy(AEnc.Labels)
+    else if AEnc.Explicit[2] then
+    begin
+      j := TyEncodeLastLabelDim(AEnc, 2, ASource);
+      if j >= 0 then
+      begin
+        SetLength(lab, 1);
+        lab[0] := j;
+      end;
+    end;
+    if Length(AEnc.Tooltip) > 0 then tip := Copy(AEnc.Tooltip)
+    else tip := Copy(lab);
+  end;
+  if Length(lab) > 0 then AStore.SetLabelPositions(lab);
+  if Length(tip) > 0 then AStore.SetTooltipPositions(tip)
+  { A SCATTER'S TOOLTIP HAS NO DIMENSION of its own there (its value is no
+    coordinate dimension, x and y are ordinal: defaultedTooltip is empty),
+    so it shows every element of the item [Batch 147] }
+  else if (FBindings[ASlot].SeriesType = 'scatter')
+    or (FBindings[ASlot].SeriesType = 'effectScatter') then
+    AStore.SetTooltipPositions(nil);
 end;
 
 procedure TTyCustomAdvanceChart.RefuseShortWhisker(ASlot: Integer;

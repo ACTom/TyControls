@@ -8956,6 +8956,808 @@
      ]
     }
    ]
+  },
+  {
+   "name": "own matrix: scatter value 2: v",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "value": 2
+      },
+      "data": [
+       [
+        "A",
+        "U",
+        5,
+        9
+       ],
+       [
+        "B",
+        "V",
+        6,
+        4
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "scatter",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "5"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "6"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "own matrix: scatter value [2, 3]: w",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "value": [
+        2,
+        3
+       ]
+      },
+      "data": [
+       [
+        "A",
+        "U",
+        5,
+        9
+       ],
+       [
+        "B",
+        "V",
+        6,
+        4
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "scatter",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "9"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "4"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "own matrix: scatter value [3, 2]: the last in the row, w",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "value": [
+        3,
+        2
+       ]
+      },
+      "data": [
+       [
+        "A",
+        "U",
+        5,
+        9
+       ],
+       [
+        "B",
+        "V",
+        6,
+        4
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "scatter",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "9"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "4"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "own matrix: scatter x 1, y 0, value 3",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 1,
+       "y": 0,
+       "value": 3
+      },
+      "data": [
+       [
+        "U",
+        "A",
+        5,
+        9
+       ],
+       [
+        "V",
+        "B",
+        6,
+        4
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "scatter",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "9"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "4"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "own matrix: heatmap value [2, 3]",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "series": [
+     {
+      "type": "heatmap",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "value": [
+        2,
+        3
+       ]
+      },
+      "data": [
+       [
+        "A",
+        "U",
+        5,
+        9
+       ],
+       [
+        "B",
+        "V",
+        6,
+        4
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "visualMap": {
+     "show": false,
+     "min": 0,
+     "max": 10,
+     "dimension": 2
+    },
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "heatmap",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "5"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "6"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "own matrix: heatmap x 1, y 0, value 3: the label still element 2",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "series": [
+     {
+      "type": "heatmap",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 1,
+       "y": 0,
+       "value": 3
+      },
+      "data": [
+       [
+        "U",
+        "A",
+        5,
+        9
+       ],
+       [
+        "V",
+        "B",
+        6,
+        4
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "visualMap": {
+     "show": false,
+     "min": 0,
+     "max": 10,
+     "dimension": 2
+    },
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "heatmap",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "5"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "6"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "own matrix: scatter x [0, 3] collecting: v",
+   "option": {
+    "matrix": {},
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": [
+        0,
+        3
+       ],
+       "y": 1,
+       "value": 2
+      },
+      "data": [
+       [
+        "A",
+        "U",
+        5,
+        9
+       ],
+       [
+        "B",
+        "V",
+        6,
+        4
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "scatter",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "5"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "6"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "own matrix: scatter itemName 3, '{b}'",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "itemName": 3
+      },
+      "data": [
+       [
+        "A",
+        "U",
+        5,
+        "n0"
+       ],
+       [
+        "B",
+        "V",
+        6,
+        "n1"
+       ]
+      ],
+      "label": {
+       "show": true,
+       "formatter": "{b}"
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "scatter",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "n0"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "n1"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "own matrix: scatter label 3",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "label": 3
+      },
+      "data": [
+       [
+        "A",
+        "U",
+        5,
+        9
+       ],
+       [
+        "B",
+        "V",
+        6,
+        4
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "scatter",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "9"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "4"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "own matrix: scatter label 3, value 2",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "value": 2,
+       "label": 3
+      },
+      "data": [
+       [
+        "A",
+        "U",
+        5,
+        9
+       ],
+       [
+        "B",
+        "V",
+        6,
+        4
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "scatter",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "9"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "4"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "encode list: matrix scatter label 3",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "q",
+       "v",
+       "w"
+      ],
+      [
+       "A",
+       "U",
+       5,
+       9
+      ],
+      [
+       "B",
+       "V",
+       6,
+       4
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "label": 3
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false
+   },
+   "series": [
+    {
+     "seriesIndex": 0,
+     "type": "scatter",
+     "items": [
+      {
+       "dataIndex": 0,
+       "drawn": true,
+       "texts": [
+        "9"
+       ]
+      },
+      {
+       "dataIndex": 1,
+       "drawn": true,
+       "texts": [
+        "4"
+       ]
+      }
+     ]
+    }
+   ]
   }
  ],
  "tooltips": [
@@ -19868,6 +20670,1180 @@
    ],
    "text": "{__EC_aUTo_4|S}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|7}",
    "visible": "S\n  B7"
+  },
+  {
+   "name": "own matrix: scatter value 2: the tooltip v",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "value": 2
+      },
+      "data": [
+       [
+        "A",
+        "U",
+        5,
+        9
+       ],
+       [
+        "B",
+        "V",
+        6,
+        4
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "M",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": "6"
+    }
+   ],
+   "text": "{__EC_aUTo_4|M}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|6}",
+   "visible": "M\n  B6"
+  },
+  {
+   "name": "own matrix: scatter value [2, 3]: w",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "value": [
+        2,
+        3
+       ]
+      },
+      "data": [
+       [
+        "A",
+        "U",
+        5,
+        9
+       ],
+       [
+        "B",
+        "V",
+        6,
+        4
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "M",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": "4"
+    }
+   ],
+   "text": "{__EC_aUTo_4|M}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|4}",
+   "visible": "M\n  B4"
+  },
+  {
+   "name": "own matrix: scatter value [3, 2]: w",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "value": [
+        3,
+        2
+       ]
+      },
+      "data": [
+       [
+        "A",
+        "U",
+        5,
+        9
+       ],
+       [
+        "B",
+        "V",
+        6,
+        4
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "M",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": "4"
+    }
+   ],
+   "text": "{__EC_aUTo_4|M}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|4}",
+   "visible": "M\n  B4"
+  },
+  {
+   "name": "own matrix: scatter x 1, y 0, value 3",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 1,
+       "y": 0,
+       "value": 3
+      },
+      "data": [
+       [
+        "U",
+        "A",
+        5,
+        9
+       ],
+       [
+        "V",
+        "B",
+        6,
+        4
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "M",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "V",
+     "value": "4"
+    }
+   ],
+   "text": "{__EC_aUTo_4|M}\n{__EC_aUTo_1|}  {__EC_aUTo_2|V}{__EC_aUTo_3|4}",
+   "visible": "M\n  V4"
+  },
+  {
+   "name": "own matrix: heatmap value [2, 3]",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "series": [
+     {
+      "type": "heatmap",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "value": [
+        2,
+        3
+       ]
+      },
+      "data": [
+       [
+        "A",
+        "U",
+        5,
+        9
+       ],
+       [
+        "B",
+        "V",
+        6,
+        4
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "visualMap": {
+     "show": false,
+     "min": 0,
+     "max": 10,
+     "dimension": 2
+    },
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "M",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": "4"
+    }
+   ],
+   "text": "{__EC_aUTo_4|M}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|4}",
+   "visible": "M\n  B4"
+  },
+  {
+   "name": "own matrix: scatter, no value written: every element",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1
+      },
+      "data": [
+       [
+        "A",
+        "U",
+        5,
+        9
+       ],
+       [
+        "B",
+        "V",
+        6,
+        4
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "M",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": "B  V  6  4"
+    }
+   ],
+   "text": "{__EC_aUTo_4|M}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|B  V  6  4}",
+   "visible": "M\n  BB  V  6  4"
+  },
+  {
+   "name": "own matrix: scatter x [3, 0] collecting: the name is element 0",
+   "option": {
+    "matrix": {},
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": [
+        3,
+        0
+       ],
+       "y": 1,
+       "value": 2
+      },
+      "data": [
+       [
+        "A",
+        "U",
+        5,
+        9
+       ],
+       [
+        "B",
+        "V",
+        6,
+        4
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "M",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": "6"
+    }
+   ],
+   "text": "{__EC_aUTo_4|M}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|6}",
+   "visible": "M\n  B6"
+  },
+  {
+   "name": "own matrix: scatter itemName 3: the name",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "itemName": 3
+      },
+      "data": [
+       [
+        "A",
+        "U",
+        5,
+        "n0"
+       ],
+       [
+        "B",
+        "V",
+        6,
+        "n1"
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "M",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "n1",
+     "value": "B  V  6  n1"
+    }
+   ],
+   "text": "{__EC_aUTo_4|M}\n{__EC_aUTo_1|}  {__EC_aUTo_2|n1}{__EC_aUTo_3|B  V  6  n1}",
+   "visible": "M\n  n1B  V  6  n1"
+  },
+  {
+   "name": "own matrix: scatter tooltip [3, 2]",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "tooltip": [
+        3,
+        2
+       ]
+      },
+      "data": [
+       [
+        "A",
+        "U",
+        5,
+        9
+       ],
+       [
+        "B",
+        "V",
+        6,
+        4
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "M",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": "4  6"
+    }
+   ],
+   "text": "{__EC_aUTo_4|M}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|4  6}",
+   "visible": "M\n  B4  6"
+  },
+  {
+   "name": "own matrix: scatter label 3: the tooltip follows it",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "label": 3
+      },
+      "data": [
+       [
+        "A",
+        "U",
+        5,
+        9
+       ],
+       [
+        "B",
+        "V",
+        6,
+        4
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "M",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": "4"
+    }
+   ],
+   "text": "{__EC_aUTo_4|M}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|4}",
+   "visible": "M\n  B4"
+  },
+  {
+   "name": "own matrix: scatter label 3, value 2, tooltip [2]",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "value": 2,
+       "label": 3,
+       "tooltip": [
+        2
+       ]
+      },
+      "data": [
+       [
+        "A",
+        "U",
+        5,
+        9
+       ],
+       [
+        "B",
+        "V",
+        6,
+        4
+       ]
+      ],
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "M",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": "6"
+    }
+   ],
+   "text": "{__EC_aUTo_4|M}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|6}",
+   "visible": "M\n  B6"
+  },
+  {
+   "name": "encode list: matrix scatter tooltip [3, 2]",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "q",
+       "v",
+       "w"
+      ],
+      [
+       "A",
+       "U",
+       5,
+       9
+      ],
+      [
+       "B",
+       "V",
+       6,
+       4
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "tooltip": [
+        3,
+        2
+       ]
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "M",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": ""
+    },
+    {
+     "marker": "subItem",
+     "name": "w",
+     "value": "4"
+    },
+    {
+     "marker": "subItem",
+     "name": "v",
+     "value": "6"
+    }
+   ],
+   "text": "{__EC_aUTo_10|M}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|}\n{__EC_aUTo_4|}  {__EC_aUTo_5|w}{__EC_aUTo_6|4}\n{__EC_aUTo_7|}  {__EC_aUTo_8|v}{__EC_aUTo_9|6}",
+   "visible": "M\n  B\n  w4\n  v6"
+  },
+  {
+   "name": "encode list: matrix scatter label 3: the tooltip follows it",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "q",
+       "v",
+       "w"
+      ],
+      [
+       "A",
+       "U",
+       5,
+       9
+      ],
+      [
+       "B",
+       "V",
+       6,
+       4
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 0,
+       "y": 1,
+       "label": 3
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "M",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "B",
+     "value": "4"
+    }
+   ],
+   "text": "{__EC_aUTo_4|M}\n{__EC_aUTo_1|}  {__EC_aUTo_2|B}{__EC_aUTo_3|4}",
+   "visible": "M\n  B4"
+  },
+  {
+   "name": "encode list: matrix scatter x 1, y 0: the name is element 0",
+   "option": {
+    "matrix": {
+     "x": {
+      "data": [
+       "A",
+       "B"
+      ]
+     },
+     "y": {
+      "data": [
+       "U",
+       "V"
+      ]
+     }
+    },
+    "dataset": {
+     "source": [
+      [
+       "U",
+       "A",
+       5,
+       9
+      ],
+      [
+       "V",
+       "B",
+       6,
+       4
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "M",
+      "coordinateSystem": "matrix",
+      "encode": {
+       "x": 1,
+       "y": 0
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "M",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "V",
+     "value": "V  B  6  4"
+    }
+   ],
+   "text": "{__EC_aUTo_4|M}\n{__EC_aUTo_1|}  {__EC_aUTo_2|V}{__EC_aUTo_3|V  B  6  4}",
+   "visible": "M\n  VV  B  6  4"
+  },
+  {
+   "name": "own data, category x and y, x 1, y 0: the name is element 0",
+   "option": {
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "A",
+      "B"
+     ]
+    },
+    "yAxis": {
+     "type": "category",
+     "data": [
+      "U",
+      "V"
+     ]
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "S",
+      "encode": {
+       "x": 1,
+       "y": 0
+      },
+      "data": [
+       [
+        "U",
+        "A",
+        5,
+        9
+       ],
+       [
+        "V",
+        "B",
+        6,
+        4
+       ]
+      ]
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "S",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "V",
+     "value": "V  B  6  4"
+    }
+   ],
+   "text": "{__EC_aUTo_4|S}\n{__EC_aUTo_1|}  {__EC_aUTo_2|V}{__EC_aUTo_3|V  B  6  4}",
+   "visible": "S\n  VV  B  6  4"
+  },
+  {
+   "name": "dataset, category x and y, x 1, y 0: the name is column 0",
+   "option": {
+    "dataset": {
+     "source": [
+      [
+       "U",
+       "A",
+       5,
+       9
+      ],
+      [
+       "V",
+       "B",
+       6,
+       4
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "category"
+    },
+    "series": [
+     {
+      "type": "scatter",
+      "name": "S",
+      "encode": {
+       "x": 1,
+       "y": 0
+      }
+     }
+    ],
+    "animation": false,
+    "tooltip": {
+     "trigger": "item",
+     "renderMode": "richText",
+     "showDelay": 0,
+     "transitionDuration": 0
+    }
+   },
+   "trigger": "item",
+   "seriesIndex": 0,
+   "dataIndex": 1,
+   "lines": [
+    {
+     "marker": null,
+     "name": "S",
+     "value": null
+    },
+    {
+     "marker": "item",
+     "name": "V",
+     "value": "V  B  6  4"
+    }
+   ],
+   "text": "{__EC_aUTo_4|S}\n{__EC_aUTo_1|}  {__EC_aUTo_2|V}{__EC_aUTo_3|V  B  6  4}",
+   "visible": "S\n  VV  B  6  4"
   }
  ],
  "gauge": [

@@ -1068,6 +1068,55 @@ lTip('own itemName: pie itemName 0, value 1', ownPie({ itemName: 0, value: 1 }),
 lTip('own itemName: scatter itemName 2', ownSc({ x: 0, y: 1, itemName: 2 }), 1);
 lTip("own itemName: category bar itemName ['nope', 2]: no name", ownBar({ x: 0, y: 1, itemName: ['nope', 2] }), 1);
 lTip('own itemName: category bar itemName 2', ownBar({ x: 0, y: 1, itemName: 2 }), 1);
+// [spec 264] a matrix series on its own data reads its encode as a dataset
+// one does: the coordinates, a list's later entries (parsed -- and
+// collected -- by the header's category list), the value's last entry as
+// the label and the tooltip, itemName
+const MXO = [['A', 'U', 5, 9], ['B', 'V', 6, 4]];
+const mxo = (encode, type, more, data) => Object.assign({
+  matrix: { x: { data: ['A', 'B'] }, y: { data: ['U', 'V'] } },
+  series: [{ type: type || 'scatter', name: 'M', coordinateSystem: 'matrix', encode, data: clone(data || MXO), label: { show: true } }],
+}, more || {});
+const MXO_SWAP = [['U', 'A', 5, 9], ['V', 'B', 6, 4]];
+label('own matrix: scatter value 2: v', mxo({ x: 0, y: 1, value: 2 }));
+label('own matrix: scatter value [2, 3]: w', mxo({ x: 0, y: 1, value: [2, 3] }));
+label('own matrix: scatter value [3, 2]: the last in the row, w', mxo({ x: 0, y: 1, value: [3, 2] }));
+label('own matrix: scatter x 1, y 0, value 3', mxo({ x: 1, y: 0, value: 3 }, 'scatter', null, MXO_SWAP));
+label('own matrix: heatmap value [2, 3]', mxo({ x: 0, y: 1, value: [2, 3] }, 'heatmap', vmx));
+label('own matrix: heatmap x 1, y 0, value 3: the label still element 2', mxo({ x: 1, y: 0, value: 3 }, 'heatmap', vmx, MXO_SWAP));
+label('own matrix: scatter x [0, 3] collecting: v', Object.assign(mxo({ x: [0, 3], y: 1, value: 2 }), { matrix: {} }));
+label("own matrix: scatter itemName 3, '{b}'", mxo({ x: 0, y: 1, itemName: 3 }, 'scatter',
+  { series: [{ type: 'scatter', name: 'M', coordinateSystem: 'matrix', encode: { x: 0, y: 1, itemName: 3 },
+    data: [['A', 'U', 5, 'n0'], ['B', 'V', 6, 'n1']], label: { show: true, formatter: '{b}' } }] }));
+lTip('own matrix: scatter value 2: the tooltip v', mxo({ x: 0, y: 1, value: 2 }), 1);
+lTip('own matrix: scatter value [2, 3]: w', mxo({ x: 0, y: 1, value: [2, 3] }), 1);
+lTip('own matrix: scatter value [3, 2]: w', mxo({ x: 0, y: 1, value: [3, 2] }), 1);
+lTip('own matrix: scatter x 1, y 0, value 3', mxo({ x: 1, y: 0, value: 3 }, 'scatter', null, MXO_SWAP), 1);
+lTip('own matrix: heatmap value [2, 3]', mxo({ x: 0, y: 1, value: [2, 3] }, 'heatmap', vmx), 1);
+lTip('own matrix: scatter, no value written: every element', mxo({ x: 0, y: 1 }), 1);
+lTip('own matrix: scatter x [3, 0] collecting: the name is element 0', Object.assign(mxo({ x: [3, 0], y: 1, value: 2 }), { matrix: {} }), 1);
+lTip('own matrix: scatter itemName 3: the name', mxo({ x: 0, y: 1, itemName: 3 }, 'scatter', null,
+  [['A', 'U', 5, 'n0'], ['B', 'V', 6, 'n1']]), 1);
+lTip('own matrix: scatter tooltip [3, 2]', mxo({ x: 0, y: 1, tooltip: [3, 2] }), 1);
+label('own matrix: scatter label 3', mxo({ x: 0, y: 1, label: 3 }));
+lTip('own matrix: scatter label 3: the tooltip follows it', mxo({ x: 0, y: 1, label: 3 }), 1);
+label('own matrix: scatter label 3, value 2', mxo({ x: 0, y: 1, value: 2, label: 3 }));
+lTip('own matrix: scatter label 3, value 2, tooltip [2]', mxo({ x: 0, y: 1, value: 2, label: 3, tooltip: [2] }), 1);
+// (the same keys on a dataset)
+label('encode list: matrix scatter label 3', mx({ x: 0, y: 1, label: 3 }));
+lTip('encode list: matrix scatter tooltip [3, 2]', mx({ x: 0, y: 1, tooltip: [3, 2] }), 1);
+lTip('encode list: matrix scatter label 3: the tooltip follows it', mx({ x: 0, y: 1, label: 3 }), 1);
+// the name with no itemName is the category dimension first in the row or
+// the table (firstCategoryDimIndex), not the first coordinate's
+lTip('encode list: matrix scatter x 1, y 0: the name is element 0', {
+  matrix: { x: { data: ['A', 'B'] }, y: { data: ['U', 'V'] } }, dataset: { source: clone(MXO_SWAP) },
+  series: [{ type: 'scatter', name: 'M', coordinateSystem: 'matrix', encode: { x: 1, y: 0 } }] }, 1);
+lTip('own data, category x and y, x 1, y 0: the name is element 0', {
+  xAxis: { type: 'category', data: ['A', 'B'] }, yAxis: { type: 'category', data: ['U', 'V'] },
+  series: [{ type: 'scatter', name: 'S', encode: { x: 1, y: 0 }, data: clone(MXO_SWAP) }] }, 1);
+lTip('dataset, category x and y, x 1, y 0: the name is column 0', {
+  dataset: { source: clone(MXO_SWAP) }, xAxis: { type: 'category' }, yAxis: { type: 'category' },
+  series: [{ type: 'scatter', name: 'S', encode: { x: 1, y: 0 } }] }, 1);
 
 // ---------- gauge ----------
 
