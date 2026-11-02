@@ -410,6 +410,13 @@ function TyLabelBlockPieces(const ASpec: TTyLabelSpec; const AText: string;
   AHostFill: TTyChartColor; AHostHasFill, AHostGradient, AInside: Boolean;
   AH: TTyTextAnchorH; AV: TTyTextAnchorV; AScale: Double;
   const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
+{ [R7-L] THE SAME TEXT AS zrender BOUNDS IT (TyRtLayJsBox): the label's
+  getBoundingRect, CSS px, NaN where upstream's is -- a size written as a
+  word lays a box out at NaN, which a label layout reads. }
+function TyLabelBlockJsBox(const ASpec: TTyLabelSpec; const AText: string;
+  AHostFill: TTyChartColor; AHostHasFill, AHostGradient, AInside: Boolean;
+  AH: TTyTextAnchorH; AV: TTyTextAnchorV; AScale: Double;
+  const AMeasurer: ITyTextMeasurer): TTyXYWH;
 
 { [R5-F] WHAT A HOVERED TEXT IS LAID OUT UNDER besides its chain: the
   normal style's keys a site set over the option -- the label layout's
@@ -493,7 +500,7 @@ procedure TyExpandLabels(AList: TTyPaintList; const ASpecs: TTyLabelSpecArray;
 implementation
 
 uses fpjson, jsonparser, tyControls.AdvanceChart.Style, tyControls.AdvanceChart.RichStyle,
-  tyControls.AdvanceChart.PolarBar,
+  tyControls.AdvanceChart.RichText, tyControls.AdvanceChart.PolarBar,
   tyControls.AdvanceChart.LabelLayout, tyControls.AdvanceChart.Color,
   tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.Option;
 
@@ -654,6 +661,33 @@ begin
   TyLabelInk(autoSpec, AHostFill, AHostHasFill, AHostGradient, AInside, autoInk,
     autoStroke, autoW);
   Result := TyRtLay(AText, rt, TyRtDefaultOf(True, autoInk, autoW > 0,
+    autoStroke, True, AH, AV), AScale, AMeasurer);
+end;
+
+function TyLabelBlockJsBox(const ASpec: TTyLabelSpec; const AText: string;
+  AHostFill: TTyChartColor; AHostHasFill, AHostGradient, AInside: Boolean;
+  AH: TTyTextAnchorH; AV: TTyTextAnchorV; AScale: Double;
+  const AMeasurer: ITyTextMeasurer): TTyXYWH;
+var
+  rt: TTyRtBlockStyle;
+  autoSpec: TTyLabelSpec;
+  autoInk, autoStroke: TTyChartColor;
+  autoW: Double;
+begin
+  { as TyLabelBlockPieces lays it out }
+  rt := ASpec.Rt;
+  TyRtFinish(rt, ASpec.FontName, ASpec.FontSizeLogical, ASpec.FontWeight,
+    ASpec.RtGlobal, AHostHasFill, AHostFill);
+  rt.Style.HasOpacity := False;
+  autoSpec := ASpec;
+  autoSpec.AutoColour := True;
+  autoSpec.InheritColour := False;
+  autoSpec.FunnelInherit := False;
+  autoSpec.HasBorderColour := False;
+  autoSpec.HasBackground := False;
+  TyLabelInk(autoSpec, AHostFill, AHostHasFill, AHostGradient, AInside, autoInk,
+    autoStroke, autoW);
+  Result := TyRtLayJsBox(AText, rt, TyRtDefaultOf(True, autoInk, autoW > 0,
     autoStroke, True, AH, AV), AScale, AMeasurer);
 end;
 
@@ -1815,6 +1849,32 @@ begin
       pieces := TyLabelBlockPieces(autoSpec, host.Caption.Text, hostFill,
         hostHasFill, host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
         LabelInside(host, pos), ah, av, scale, AMeasurer);
+      { [R7-L] A TEXT LAID OUT WHOLLY AT NaN (a size written as a word) draws
+        nothing but is still upstream's label: the label layout weighs it by
+        its box, which can hide the others. It stands as one undrawn rect,
+        where its TSpans are bounded (style.x || 0). }
+      if (Length(pieces) = 0) and (host.Caption.Text <> '')
+        and TyRtHasStringSize(autoSpec.Rt.Style, autoSpec.Rt.Rich) then
+      begin
+        rtb := TyLabelBlockJsBox(autoSpec, host.Caption.Text, hostFill,
+          hostHasFill, host.Style.HasFill and (host.Style.FillGradient.Kind <> cgkNone),
+          LabelInside(host, pos), ah, av, scale, AMeasurer);
+        SetLength(pieces, 1);
+        pieces[0] := Default(TTyRtPiece);
+        pieces[0].Kind := rpkRect;
+        pieces[0].Placeholder := True;
+        pieces[0].Line := -1;
+        pieces[0].Token := -1;
+        pieces[0].Opacity := 1;
+        pieces[0].ImageOpacity := 1;
+        if TyRtBoxIsFinite(rtb) then
+        begin
+          pieces[0].X := rtb.X;
+          pieces[0].Y := rtb.Y;
+          pieces[0].W := rtb.W;
+          pieces[0].H := rtb.H;
+        end;
+      end;
       if Length(pieces) = 0 then Continue;
       { THE BOX IS THE UNION OF WHAT IT DRAWS, turned as it is drawn --
         zrender's getBoundingRect, which the label layout reads }

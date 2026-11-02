@@ -8,6 +8,9 @@
 // hides (sorted by the host rect's area, stable, AABB then OBB, touch
 // threshold 0.05), the label line hidden with its label and the emphasis
 // state that re-shows both; and the params a function form is called with.
+// [R7-L] labels whose width or height is written as a word over a box: the
+// label's rect is NaN on that axis (zrender's union), and the shifts and
+// hideOverlap run on it as JS does (NaN 7ff8000000000000 in the records).
 //
 // Runs the real ECharts 6.1 build (D:/Projects/echarts by default, or
 // ECHARTS_DIST) in node's server-side mode (SVG renderer) at 600 x 400, with
@@ -444,6 +447,15 @@ function bars(seriesExtra, n) {
 }
 const cluster = () => [[0, 0], [40, 40]].concat(Array.from({ length: 10 }, (_, i) => [20 + i * 0.3, 20 + (i % 3) * 0.3]));
 const sized = n => pts(n, 7, 13).map((p, i) => ({ value: p, symbolSize: 4 + (i % 5) * 4 }));
+// [R7-L] labels on one row (y 5) and in one column (x 5), one of them with
+// its own label over the series' plated one
+const WORD_PTS = [[2, 5], [5, 5], [8, 5], [5, 8], [5, 2]];
+const WORD_ROW = (k, label) => WORD_PTS.map((p, i) => (i === k ? { value: p, label } : p));
+const WORD_COL = (k, label) => [[5, 2], [5, 5], [5, 8], [2, 5], [8, 5]].map((p, i) => (i === k ? { value: p, label } : p));
+function wordScatter(data, layout) {
+  return { animation: false, xAxis: { type: 'value', min: 0, max: 10 }, yAxis: { type: 'value', min: 0, max: 10 },
+    series: [{ type: 'scatter', label: { show: true, formatter: 'L{c}' }, labelLayout: layout, data }] };
+}
 
 const CASES = [
   // ---- hideOverlap ----
@@ -594,6 +606,34 @@ const CASES = [
   { id: 'scatter.labelLine', note: 'labelLine.show on a scatter moved by dx / dy and thinned: every line routed, the hidden ones hidden',
     option: scatter([sc({ labelLine: { show: true, length2: 6 }, labelLayout: { dx: 24, dy: -18, hideOverlap: true }, data: pts(30, 7, 13) })]),
     hover: [{ type: 'highlight', seriesIndex: 0, dataIndex: 3 }, { type: 'highlight', seriesIndex: 0, dataIndex: 7 }] },
+  // ---- [R7-L] a size written as a word, with a box: zrender lays the box
+  // out at NaN (x + '50%0'), Text.getBoundingRect's union carries the NaN
+  // (BoundingRect.union: Math.min, and the other's width once x is not
+  // finite) and BoundingRect.intersect compares only the other axis ----
+  { id: 'string.width.hide', note: "one label's width '50%' with a plate: its rect's x is NaN, so hideOverlap hides it behind a label at its height far to its left",
+    option: wordScatter(WORD_ROW(2, { width: '50%', backgroundColor: '#eee' }), { hideOverlap: true }) },
+  { id: 'string.width.hide.first', note: "the word-width label first in the list: the ones after it at its height are hidden",
+    option: wordScatter(WORD_ROW(0, { width: '50%', backgroundColor: '#eee' }), { hideOverlap: true }) },
+  { id: 'string.width.hide.left', note: "left-aligned: the plate's x is finite, its width '50%0' -- the rect's x still NaN (fromLine's min)",
+    option: wordScatter(WORD_ROW(2, { width: '50%', align: 'left', backgroundColor: '#eee' }), { hideOverlap: true }) },
+  { id: 'string.height.hide', note: "one label's height '50%' with a plate: its rect's y is NaN, so hideOverlap meets every label in its column",
+    option: wordScatter(WORD_COL(1, { height: '50%', backgroundColor: '#eee' }), { hideOverlap: true }) },
+  { id: 'string.width.rich', note: "a rich label's width '50%' with no plate: no rect at NaN, its rect is the token's",
+    option: wordScatter(WORD_ROW(2, { width: '50%', formatter: '{a|L{c}}', rich: { a: { color: '#333' } } }), { hideOverlap: true }) },
+  { id: 'string.width.nobox', note: "a plain label's width '50%' without a plate: nothing at NaN, the rect is the words'",
+    option: wordScatter(WORD_ROW(2, { width: '50%' }), { hideOverlap: true }) },
+  { id: 'string.width.shiftX', note: "moveOverlap shiftX: the NaN x sorts as a tie and stops every move after it",
+    option: wordScatter(WORD_ROW(2, { width: '50%', backgroundColor: '#eee' }), { moveOverlap: 'shiftX' }) },
+  { id: 'string.width.shiftX.first', note: "moveOverlap shiftX with the word-width label first",
+    option: wordScatter(WORD_ROW(0, { width: '50%', backgroundColor: '#eee' }), { moveOverlap: 'shiftX' }) },
+  { id: 'string.width.shiftY', note: "moveOverlap shiftY: the NaN is on x, the labels on a row stack as ever",
+    option: wordScatter(WORD_ROW(2, { width: '50%', backgroundColor: '#eee' }), { moveOverlap: 'shiftY' }) },
+  { id: 'string.height.shiftY', note: "moveOverlap shiftY with a height '50%': the NaN y",
+    option: wordScatter(WORD_COL(1, { height: '50%', backgroundColor: '#eee' }), { moveOverlap: 'shiftY' }) },
+  { id: 'string.width.shiftX.hide', note: "shiftX then hideOverlap",
+    option: wordScatter(WORD_ROW(2, { width: '50%', backgroundColor: '#eee' }), { moveOverlap: 'shiftX', hideOverlap: true }) },
+  { id: 'string.numwidth.hide', note: "a numeric string width '120' with a plate: its rect runs to x + '1200'",
+    option: wordScatter(WORD_ROW(2, { width: '120', backgroundColor: '#eee' }), { hideOverlap: true }) },
 ];
 
 // ---------- one case ----------

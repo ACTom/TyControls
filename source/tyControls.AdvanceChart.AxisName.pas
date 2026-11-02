@@ -636,6 +636,31 @@ end;
 
 { ==================== a grid's names ==================== }
 
+{ [R7-L] a name a NaN translation left at NaN: not shown, and every number
+  of it back at its unmoved place, so nothing downstream meets a NaN }
+procedure NameOffNaN(var P: TTyAxisNamePlacement);
+var k: Integer;
+  fin: Boolean;
+begin
+  fin := not (IsNan(P.X) or IsNan(P.Y) or IsInfinite(P.X) or IsInfinite(P.Y));
+  for k := 0 to 5 do
+    if IsNan(P.M[k]) or IsInfinite(P.M[k]) then fin := False;
+  if IsNan(P.Rect.X) or IsNan(P.Rect.Y) or IsNan(P.Rect.W) or IsNan(P.Rect.H) then
+    fin := False;
+  if fin then Exit;
+  P.Shown := False;
+  P.M[4] := P.M[4] - P.MovedX;
+  P.M[5] := P.M[5] - P.MovedY;
+  if IsNan(P.M[4]) or IsInfinite(P.M[4]) then P.M[4] := P.AnchorX;
+  if IsNan(P.M[5]) or IsInfinite(P.M[5]) then P.M[5] := P.AnchorY;
+  P.X := P.AnchorX;
+  P.Y := P.AnchorY;
+  P.Rect := P.PreRect;
+  P.MovedX := 0;
+  P.MovedY := 0;
+  P.RotationRad := -TyJsAtan2(P.M[1], P.M[0]);
+end;
+
 function TyLayoutGridNames(const AAxes: TTyAxisLayoutSpecArray;
   const ARect: TTyRectF; AContainerW, AContainerH: Double;
   const AMeasurer: ITyTextMeasurer; APPI: Integer): TTyAxisNamePlacementArray;
@@ -644,21 +669,34 @@ var
   geoms: array of TTyLabelGeomArray;
   perp: array of TTyLabelGeomArray;
   i, j, n: Integer;
-  horiz: Boolean;
+  horiz, anyNaN, one: Boolean;
   perpRot: Double;
+  mask: TFPUExceptionMask;
 begin
   Result := nil;
   SetLength(Result, Length(AAxes));
   SetLength(frames, Length(AAxes));
   SetLength(geoms, Length(AAxes));
-  { every axis' labels first, each in upstream's order }
+  { every axis' labels first, each in upstream's order; [R7-L] their boxes
+    as zrender's union gives them, NaN where a size written as a word laid
+    a plate out at NaN }
+  anyNaN := False;
   for i := 0 to High(AAxes) do
   begin
     if AAxes[i].HasNameFrame then frames[i] := AAxes[i].NameFrame
     else frames[i] := TyDefaultNameFrame(AAxes[i], ARect, APPI);
-    geoms[i] := TyAxisLabelGeoms(AAxes[i], ARect, AMeasurer, APPI);
+    geoms[i] := TyAxisLabelGeomsJs(AAxes[i], ARect, AMeasurer, APPI, one);
+    if one then anyNaN := True;
     TySortLabelGeoms(geoms[i], frames[i]);
   end;
+  { [R7-L] A NAME MOVED BY A BOX AT NaN (labelIntersect weighs the other
+    axis alone and hands back a NaN translation) is placed at NaN and
+    drawn nowhere: the moves run as JS computes them and a name left at a
+    NaN is not shown }
+  if anyNaN then
+    mask := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+      exOverflow, exUnderflow, exPrecision]);
+  try
   for i := 0 to High(AAxes) do
   begin
     Result[i].Proportion := NaN;
@@ -684,6 +722,17 @@ begin
       TyAxisNameLevel(horiz, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top,
         AContainerW, AContainerH),
       geoms[i], perp, perpRot, AMeasurer, APPI);
+    if anyNaN then NameOffNaN(Result[i]);
+  end;
+  finally
+    if anyNaN then
+    begin
+      ClearExceptions(False);
+      {$IFDEF CPUX86_64}
+      SetMXCSR(GetMXCSR and not LongWord($3F));
+      {$ENDIF}
+      SetExceptionMask(mask);
+    end;
   end;
 end;
 

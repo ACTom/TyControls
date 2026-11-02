@@ -421,7 +421,14 @@ begin
           end;
       { [R7-H] a rect whose size was a string: the path's own bounds, its
         edges joined as strings, grown by the stroke as painted }
-      if (p.Find('pathBounds') is TJSONObject) <> q.PathEdges then
+      { [R7-L] pathNaN: joined to NaN (an unrounded rect canvas draws at
+        its numbers) -- here the joined edges are NaN }
+      if (p.Find('pathNaN') <> nil) and p.Booleans['pathNaN'] then
+      begin
+        if not q.PathEdges or not (IsNan(q.EdgeX1) or IsNan(q.EdgeY1)) then
+          Miss(where, Format('rect %d: the path joins its size to NaN upstream, not here', [i]));
+      end
+      else if (p.Find('pathBounds') is TJSONObject) <> q.PathEdges then
         Miss(where, Format('rect %d: the path joins its size upstream: %s, here: %s', [i,
           BoolToStr(p.Find('pathBounds') is TJSONObject, True),
           BoolToStr(q.PathEdges, True)]))

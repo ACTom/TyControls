@@ -2306,7 +2306,9 @@ procedure TraceRtPiece(P: TTyPainter; const APc: TTyRtPiece; AScale: Double;
   const AR: array of Double);
 var r1, r2, r3, r4, x0, y0, x1, y1: Double;
 begin
-  if not APc.PathEdges or (AR[0] + AR[1] + AR[2] + AR[3] <= 0) then
+  { [R7-L] the rounded path whenever borderRadius is truthy ([0, 0] too):
+    with a size that was a string it runs to the joined edges }
+  if not APc.PathEdges or (not APc.Rounded and (AR[0] + AR[1] + AR[2] + AR[3] <= 0)) then
   begin
     TraceRtRect(P, APc.X * AScale, APc.Y * AScale, APc.W * AScale,
       APc.H * AScale, AR);

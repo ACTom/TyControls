@@ -379,6 +379,10 @@ type
     BorderDash: string;
     BorderDashOffset: Double;
     Radius: array[0..3] of Double;
+    { [R7-L] borderRadius is truthy (a number not nought, any array, [0, 0]
+      too): zrender's Rect takes the rounded path (roundRect), which joins a
+      size written as a string to the corner's place }
+    RadiusTruthy: Boolean;
     HasOpacity: Boolean;
     Opacity: Double;
     Overflow: TTyRtOverflow;
@@ -464,12 +468,19 @@ type
       fromLine). EdgeX1 / EdgeY1 are those joined edges. }
     PathEdges: Boolean;
     EdgeX1, EdgeY1: Double;
+    { [R7-L] the rounded path (roundRect), radii nought or not -- see
+      TTyRtStyle.RadiusTruthy }
+    Rounded: Boolean;
     Opacity: Double;
     { [R7-L] A TOKEN'S OWN OPACITY (its style's, the root textStyle's under
       it): zrender gives the token retrieve3(its own, the Text's, 1), so it
       is drawn at Opacity whatever the Text's own opacity is -- every other
       piece follows the Text's (the element's alpha) }
     OwnOpacity: Boolean;
+    { [R7-L] NOT ONE OF zrender's CHILDREN: the undrawn rect a label laid
+      out wholly at NaN stands as, where its TSpans are bounded, so the
+      label layout and the pointer still find it }
+    Placeholder: Boolean;
     { [R2-F] a rect's picture (backgroundColor: {image}), drawn over the
       rect's border, at ImageOpacity: the style's opacity where the picture
       is the box's only element, else zrender's own 1 }

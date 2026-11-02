@@ -372,6 +372,9 @@ type
     HasRt: Boolean;
     Rt: TTyRtBlockStyle;
     TextX, TextY: Double;
+    { [R7-L] where its style places the words in the item (x: textX, y:
+      itemHeight / 2), CSS px: a size written as a numeric string joins it }
+    HangX, HangY: Double;
     TextW, TextH: Double;
     AnchorH: TTyTextAnchorH;
     { The item's own rectangle -- icon and words together, ink overhang
@@ -2681,6 +2684,7 @@ var
   textX, ox, oy, mainW, mainH: Double;
   drawn: Integer;
   boxM: ITyTextBoxMeasurer;
+  hungM: ITyTextHungBoxMeasurer;
   { [R5-F] the turn wanted, the icon word, the item's measurer }
   rotWant: Double;
   iconWord: string;
@@ -2880,7 +2884,17 @@ begin
     { A BLOCK'S BOX WHERE IT SITS: a bordered token overhangs the anchor by
       half its stroke, and the overhang on the icon's side is inside the
       item's group already (LegendView.ts _createItem: the group's bounds) }
-    if Supports(itemM, ITyTextBoxMeasurer, boxM) then
+    { [R7-L] LegendView's x: textX, y: itemHeight / 2, CSS px }
+    it.HangX := textX / scale;
+    it.HangY := (ih / 2) / scale;
+    if Supports(itemM, ITyTextHungBoxMeasurer, hungM) then
+    begin
+      tb := hungM.MeasureBoxHung(it.Text, it.FontName, it.FontSizeLogical,
+        it.FontWeight, it.AnchorH, tavMiddle, it.HangX, it.HangY);
+      textR := TyRectF(textX + tb.Left, ih / 2 + tb.Top, textX + tb.Right,
+        ih / 2 + tb.Bottom);
+    end
+    else if Supports(itemM, ITyTextBoxMeasurer, boxM) then
     begin
       tb := boxM.MeasureBox(it.Text, it.FontName, it.FontSizeLogical, it.FontWeight,
         it.AnchorH, tavMiddle);
@@ -3314,8 +3328,9 @@ begin
         rtb.Style.HasFill := True;
         rtb.Style.FillNone := False;
         rtb.Style.Fill := el.Caption.Colour;
-        pieces := TyRtLay(it.Text, rtb, TyRtDefaultOf(False, 0, False, 0, False,
-          it.AnchorH, tavMiddle), rtScale, AMeasurer);
+        { [R7-L] laid out where its style places it in the item }
+        pieces := TyRtLayHung(it.Text, rtb, TyRtDefaultOf(False, 0, False, 0, False,
+          it.AnchorH, tavMiddle), it.HangX, it.HangY, rtScale, AMeasurer);
         if Length(pieces) > 0 then
         begin
           el.Caption.RtPieces := pieces;

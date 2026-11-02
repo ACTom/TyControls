@@ -665,6 +665,13 @@ begin
 end;
 
 { a block's box in its own frame, device px }
+{ [R7-L] a box in CSS px, NaN where it is, at AScale device px (a quiet
+  NaN multiplies without a trap) }
+function LmJsRect(const ABox: TTyXYWH; AScale: Double): TTyXYWH;
+begin
+  Result := TyXYWH(ABox.X * AScale, ABox.Y * AScale, ABox.W * AScale, ABox.H * AScale);
+end;
+
 function LmBlockRect(const APieces: TTyRtPieceArray; AScale: Double): TTyXYWH;
 var b: TTyXYWH;
 begin
@@ -1101,6 +1108,8 @@ begin
         if lo.HasWidth and not IsNan(lo.Width) then
         begin
           spec.Rt.Style.WidthKind := rtwNumber;
+          { [R7-L] a number, whatever the label wrote }
+          spec.Rt.Style.WidthIsText := False;
           spec.Rt.Style.Width := lo.Width;
         end;
         if lo.HasHeight and not IsNan(lo.Height) then
@@ -1118,6 +1127,10 @@ begin
         refs[r].Relaid := True;
         refs[r].Scale := c.RtScale;
         it.RawLocal := LmBlockRect(refs[r].Pieces, c.RtScale);
+        if TyRtHasStringSize(spec.Rt.Style, spec.Rt.Rich) then
+          it.RawLocal := LmJsRect(TyLabelBlockJsBox(spec, lmText, c.LmInkFill,
+            c.LmInkHasFill, c.LmInkGradient, c.LmInkInside, ah, av, c.RtScale,
+            AMeasurer), c.RtScale);
       end
       else if Length(c.RtPieces) = 0 then
       begin
@@ -1148,6 +1161,29 @@ begin
           refs[r].Relaid := True;
         end;
         it.RawLocal := LmBlockRect(refs[r].Pieces, c.RtScale);
+        { [R7-L] A SIZE WRITTEN AS A STRING: the box zrender's union gives,
+          NaN where it is -- BoundingRect.intersect then weighs the label
+          on its other axis alone. The pieces drawn keep only what is at
+          finite places. }
+        if (c.LmKind = 1) and (si <= High(ASpecs)) then
+        begin
+          spec := ASpecs[si];
+          if (c.ItemSpec > 0) and (si <= High(AItemSpecs))
+            and (c.ItemSpec - 1 <= High(AItemSpecs[si])) then
+            spec := AItemSpecs[si][c.ItemSpec - 1];
+          if TyRtHasStringSize(spec.Rt.Style, spec.Rt.Rich) then
+          begin
+            spec.FontSizeLogical := fsz;
+            if refs[r].Relaid then
+            begin
+              spec.Rt.Style.Align := rtaNone;
+              spec.Rt.Style.VAlign := rtvNone;
+            end;
+            it.RawLocal := LmJsRect(TyLabelBlockJsBox(spec, c.Text, c.LmInkFill,
+              c.LmInkHasFill, c.LmInkGradient, c.LmInkInside, ah, av, c.RtScale,
+              AMeasurer), c.RtScale);
+          end;
+        end;
       end;
       { ---- the item ---- }
       if hasHost then it.Priority := hostRect.W * hostRect.H else it.Priority := 0;
@@ -1384,6 +1420,8 @@ begin
     { a pie's labelLine defaults: length2 30, minTurnAngle 90 }
     len := TyGuideLength2(TyStFind(nodes, ['labelLine', 'length2']), 30) * scale;
     minTurn := TyGuideJsNumber(TyStFind(nodes, ['labelLine', 'minTurnAngle']), 90);
+    { [R7-L] a box at NaN routes no line here (upstream's points are NaN) }
+    if not TyRtBoxIsFinite(FLmItems[r].RawLocal) then Continue;
     TyLabelLineRoute(FLmItems[r].RawLocal, el.Caption.LmHasM, el.Caption.LmM, gh, len, pts);
     TyLimitTurnAngle(pts, minTurn);
     SetLength(guide.Shape.Points, 3);
@@ -1427,7 +1465,8 @@ begin
       style's -- left / top otherwise -- and one ignored at rest the one its
       host gave it when it was listed ---- }
     r := lmOf[e];
-    if (r >= 0) and not FLmItems[r].DefIgnore then
+    { [R7-L] a box at NaN: the drawn one }
+    if (r >= 0) and not FLmItems[r].DefIgnore and TyRtBoxIsFinite(FLmItems[r].RawLocal) then
       rawRect := FLmItems[r].RawLocal
     else
     begin
