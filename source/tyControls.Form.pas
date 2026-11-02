@@ -513,6 +513,9 @@ type
       WindowState = wsMaximized to on first show (AdoptInitialWindowState) -- one path, so a
       designer-set maximize and a caption-button maximize cannot differ. }
     procedure MaximizeToWorkArea;
+    { #193: undo that maximize -- back to the bounds it saved. ToggleMaximize's restore half for
+      the engine's own maximize, and what TTyForm hands a WindowState := wsNormal to. }
+    procedure RestoreFromWorkArea;
     property Form: TCustomForm read FForm write FForm;
     property TitleBar: TTyCustomTitleBar read FTitleBar write FTitleBar;
     { The resize hot zone along the window's edges, LOGICAL px. BorderZonePx is what every
@@ -562,6 +565,7 @@ type
     FCaptionAction: TTyCaptionAction; // what caption double-click does (maximize / roll-up / none)
     FRolledUp: Boolean;               // window-shade state (rolled to the title bar)
     FFullScreen: Boolean;             // in the system's full screen, as the widgetset last reported (Resizing)
+    FShowingUp: Boolean;              // #193: inside CMShowingChanged's show -- see EngineMaximizeChanged
     FUnrolledHeight: Integer;         // full height saved while rolled up
     FSavedMinHeight: Integer;         // Constraints.MinHeight saved while rolled up
     { A9 per-instance StyleOverride for the window chrome (the TyForm typeKey), mirroring
@@ -604,6 +608,14 @@ type
     procedure SetBorderStyleTy(AValue: TFormBorderStyle);
     function GetBorderIconsTy: TBorderIcons;
     procedure SetBorderIconsTy(AValue: TBorderIcons);
+    function GetWindowStateTy: TWindowState;
+    procedure SetWindowStateTy(AValue: TWindowState);
+    { #193: the window is maximized by the engine (the caption button, the title-bar double-click,
+      a WindowState = wsMaximized at the first show), not by the system. }
+    function EngineOwnsMaximize: Boolean;
+    { The engine's own maximize began (True) or ended: WindowState and OnWindowStateChange say
+      so, as the widgetset makes them say it of the system's maximize. }
+    procedure EngineMaximizeChanged(AMaximized: Boolean);
     procedure SyncCaptionButtons;   // push TyResolveCaptionButtons(BorderIcons,Resizable) onto the bar
     { Per-platform resize-strategy application (WS_THICKFRAME on Win32, styleMask on
       Cocoa, gutter re-align on GTK/Qt). Stub for Phase A — the bodies land in later
@@ -688,6 +700,10 @@ type
       the implementation says why neither half, nor the order, is optional. }
     procedure AdoptInitialWindowState;
     procedure DoShow; override;   // first show: apply window corners + shadow once the handle exists
+    { #193: a show runs DoShow and then the widgetset's ShowHide, which reads WindowState -- it
+      must find wsNormal there (AdoptInitialWindowState). Once the window is up, WindowState says
+      what the engine did. }
+    procedure CMShowingChanged(var Message: TLMessage); message CM_SHOWINGCHANGED;
     { Re-derive the title bar's height AFTER LCL has scaled the form for a new monitor.
 
       a6256 removed the double application by DERIVING the height in HandleChangeBounds instead
@@ -795,6 +811,9 @@ type
       biMinimize->minimize, biMaximize->maximize (only when Resizable). }
     property BorderIcons: TBorderIcons read GetBorderIconsTy write SetBorderIconsTy
       default [biSystemMenu, biMinimize, biMaximize];
+    { #193: wsMaximized while the window is maximized, whether the system or the chrome engine
+      did it; wsNormal set in code undoes the engine's maximize, which the system cannot. }
+    property WindowState: TWindowState read GetWindowStateTy write SetWindowStateTy default wsNormal;
   end;
 
 { The title bar's height in LOGICAL px for the density AController is on: classic returns 32
@@ -2920,7 +2939,10 @@ begin
 end;
 
 procedure TTyChromeEngine.ApplyMaximizedState(AMaximized, ANative: Boolean);
+var
+  WasOwn: Boolean;
 begin
+  WasOwn := FMaximized and not FNativeMaximize;
   FMaximized := AMaximized;
   FNativeMaximize := AMaximized and ANative;
   if FTitleBar <> nil then
@@ -2937,6 +2959,13 @@ begin
     // refresh the NC strategy: when (un)maximized the WM_NCCALCSIZE inset must turn off/on
     // (a maximized window must NOT keep the resize border, else content overhangs the work area).
     TTyForm(FForm).ApplyResizeStrategy;
+    { #193: the engine's own maximize is a SetBounds the system knows nothing of, so nothing but
+      this tells WindowState: wsMaximized from the maximize to the restore, as for the system's
+      own maximize -- which the system reports itself, and a restore of it too. }
+    if AMaximized and not ANative and not WasOwn then
+      TTyForm(FForm).EngineMaximizeChanged(True)
+    else if WasOwn and not AMaximized then
+      TTyForm(FForm).EngineMaximizeChanged(False);
   end;
 end;
 
@@ -3013,10 +3042,7 @@ begin
       FForm.WindowState := wsNormal;
     end
     else
-    begin
-      FForm.BoundsRect := FSavedBounds;
-      ApplyMaximizedState(False, False);
-    end;
+      RestoreFromWorkArea;
   end
   else
     MaximizeToWorkArea;
@@ -3044,6 +3070,14 @@ begin
     Wa := Screen.WorkAreaRect;
   FForm.BoundsRect := TyMaximizedBounds(Wa);
   ApplyMaximizedState(True, False);
+end;
+
+procedure TTyChromeEngine.RestoreFromWorkArea;
+begin
+  if FForm = nil then
+    Exit;
+  FForm.BoundsRect := FSavedBounds;
+  ApplyMaximizedState(False, False);
 end;
 
 { TTyForm }
@@ -3451,7 +3485,20 @@ end;
 
 procedure TTyForm.Resizing(State: TWindowState);
 begin
-  inherited Resizing(State);
+  { #193: the engine's maximize is a plain SetBounds, so the widgetset reports every size change
+    of the maximized window as wsNormal; WindowState stays wsMaximized through them, as it does
+    through the system's own. Nor does a show change it: the window is shown as WindowState
+    says, and the wsNormal heard in it is the engine adopting a wsMaximized (its SetBounds,
+    before the maximize is its own) -- it used to turn WindowState wsNormal and fire
+    OnWindowStateChange at the start of every form designed maximized. The engine below hears
+    the report as it came. }
+  if not (FShowingUp and (State = wsNormal)) then
+  begin
+    if (State = wsNormal) and EngineOwnsMaximize then
+      inherited Resizing(wsMaximized)
+    else
+      inherited Resizing(State);
+  end;
   if (FEngine = nil) or (csDesigning in ComponentState) then Exit;
   { wsMinimized / wsFullScreen are deliberately NOT forwarded: minimizing a maximized window
     must not make the chrome forget it was maximized (Windows restores it straight back to
@@ -3580,6 +3627,68 @@ end;
 
 function TTyForm.GetBorderIconsTy: TBorderIcons;
 begin Result := inherited BorderIcons; end;
+
+function TTyForm.GetWindowStateTy: TWindowState;
+begin Result := inherited WindowState; end;
+
+procedure TTyForm.SetWindowStateTy(AValue: TWindowState);
+begin
+  { #193: the system holds no maximize of the engine's to undo -- asked to show the window
+    normal, it finds it normal already and does nothing -- so the engine undoes its own. }
+  if (AValue = wsNormal) and EngineOwnsMaximize then
+  begin
+    // a minimized window is the system's to bring back first: as the engine left it, maximized
+    if inherited WindowState = wsMinimized then
+      inherited WindowState := wsNormal;
+    FEngine.RestoreFromWorkArea;
+  end
+  else
+    inherited WindowState := AValue;
+end;
+
+function TTyForm.EngineOwnsMaximize: Boolean;
+begin
+  Result := (FEngine <> nil) and not (csDesigning in ComponentState)
+    and FEngine.Maximized and not FEngine.NativeMaximized;
+end;
+
+procedure TTyForm.EngineMaximizeChanged(AMaximized: Boolean);
+const
+  States: array[Boolean] of TWindowState = (wsNormal, wsMaximized);
+begin
+  { Not while a show is under way: the widgetset is about to read WindowState and would maximize
+    the window itself (AdoptInitialWindowState). CMShowingChanged says it afterwards. }
+  if FShowingUp then Exit;
+  if Showing then
+    inherited Resizing(States[AMaximized])   // what the widgetset calls for the system's maximize
+  else
+    inherited WindowState := States[AMaximized];   // hidden: the field alone, as LCL keeps it
+end;
+
+procedure TTyForm.CMShowingChanged(var Message: TLMessage);
+var
+  h: TNotifyEvent;
+begin
+  FShowingUp := Showing and not (csDesigning in ComponentState);
+  try
+    inherited CMShowingChanged(Message);
+  finally
+    FShowingUp := False;
+  end;
+  if Showing and EngineOwnsMaximize and (inherited WindowState = wsNormal) then
+  begin
+    { The window is up, maximized by the engine. WindowState was wsMaximized all along to the
+      application -- it was wsNormal only for the widgetset to read -- so it changes without an
+      OnWindowStateChange, as a form LCL shows maximized changes without one. }
+    h := OnWindowStateChange;
+    OnWindowStateChange := nil;
+    try
+      inherited Resizing(wsMaximized);
+    finally
+      OnWindowStateChange := h;
+    end;
+  end;
+end;
 
 procedure TTyForm.SetBorderIconsTy(AValue: TBorderIcons);
 begin
@@ -4162,7 +4271,7 @@ begin
     re-fires on every show) is left alone so the saved rect survives. }
   if FResizable and not FEngine.Maximized then
     FEngine.MaximizeToWorkArea;
-  WindowState := wsNormal;
+  inherited WindowState := wsNormal;   // not ours: that would undo the engine's maximize (#193)
 end;
 
 initialization
