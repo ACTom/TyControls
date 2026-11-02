@@ -655,8 +655,12 @@ begin
   FTree.Options := FTree.Options + [toMultiSelect];
   node := ReachTempRoot;
   FTree.Expanded[node] := True;
+  FTree.OnPathChange := @HandlePathChange;
+  FPathChangeCount := 0;
   FTree.XKey(VK_DOWN);
   AssertTrue('setup: the focus moved', FTree.FocusedNode <> node);
+  AssertEquals('one move, one OnPathChange', 1, FPathChangeCount);
+  AssertTrue('naming the folder moved to', SamePath(FPathChangeSeen, FTree.XNodePath(FTree.FocusedNode)));
   AssertTrue('SelectedPath is the focused folder''s',
     SamePath(FTree.SelectedPath, FTree.XNodePath(FTree.FocusedNode)));
 end;

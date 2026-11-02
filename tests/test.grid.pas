@@ -478,6 +478,7 @@ type
     procedure TestCreatingAndFreeingGridsDoesNotGrowTheHeap;
   end;
 
+
 implementation
 
 { 写剪贴板并确认真的写进去了。
@@ -12192,7 +12193,99 @@ begin
     after <= before);
 end;
 
+type
+  { #155: the header click is the release, after no drag, with coAllowClick; coResizable
+    holds at the divider; spring. }
+  TGrid155Test = class(TTestCase)
+  private
+    FG: TStrGridAccess;
+    FForm: TForm;
+    FHeaderClicks: Integer;
+    procedure HeaderClicked(Sender: TObject; ACol: Integer);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestTheHeaderClickIsTheRelease;
+    procedure TestADividerOfAFixedWidthColumnIsNoGrip;
+    procedure TestSpringColumnsShareAResize;
+  end;
+
+{ --- #155 ------------------------------------------------------------------------------- }
+
+procedure TGrid155Test.HeaderClicked(Sender: TObject; ACol: Integer);
+begin
+  Inc(FHeaderClicks);
+end;
+
+procedure TGrid155Test.SetUp;
+var c: TTyColumn; i: Integer;
+begin
+  FForm := TForm.CreateNew(nil);
+  FG := TStrGridAccess.Create(FForm);
+  FG.Parent := FForm;
+  FG.Font.PixelsPerInch := 96;
+  FG.SetBounds(0, 0, 400, 200);
+  for i := 0 to 2 do
+  begin
+    c := FG.Header.Columns.Add as TTyColumn;
+    c.Text := 'C' + IntToStr(i);
+    c.Width := 100;
+  end;
+  FG.RowCount := 3;
+  FG.ForceUpdateScrollBars;
+  FG.OnHeaderClick := @HeaderClicked;
+  FHeaderClicks := 0;
+end;
+
+procedure TGrid155Test.TearDown;
+begin
+  FreeAndNil(FForm);
+end;
+
+procedure TGrid155Test.TestTheHeaderClickIsTheRelease;
+var x: Integer; c: TTyColumn;
+begin
+  x := FG.ColLeft(0) + 30;
+  FG.PressMouseWithoutRelease(x, 5);
+  AssertEquals('the press is no click yet', 0, FHeaderClicks);
+  FG.ReleaseMouse(x, 5);
+  AssertEquals('the release on the same section is', 1, FHeaderClicks);
+  c := FG.Header.Columns.Items[0] as TTyColumn;
+  c.Options := c.Options - [coAllowClick];
+  FG.PressMouseWithoutRelease(x, 5);
+  FG.ReleaseMouse(x, 5);
+  AssertEquals('not without coAllowClick', 1, FHeaderClicks);
+  c.Options := c.Options + [coAllowClick];
+  FG.PressMouseWithoutRelease(x, 5);
+  FG.MoveMouseTo(FG.ColLeft(2) + 30, 5);
+  FG.ReleaseMouse(FG.ColLeft(2) + 30, 5);
+  AssertEquals('nor for a press that dragged the column', 1, FHeaderClicks);
+end;
+
+procedure TGrid155Test.TestADividerOfAFixedWidthColumnIsNoGrip;
+var c: TTyColumn; edge: Integer;
+begin
+  c := FG.Header.Columns.Items[0] as TTyColumn;
+  c.Options := c.Options - [coResizable];
+  edge := FG.ColumnResizeEdgeX(0);
+  FG.PressMouseWithoutRelease(edge, 5);
+  FG.MoveMouseTo(edge + 40, 5);
+  FG.ReleaseMouse(edge + 40, 5);
+  AssertEquals('coResizable off: its edge does not resize it', 100, c.Width);
+end;
+
+procedure TGrid155Test.TestSpringColumnsShareAResize;
+var c: TTyColumn;
+begin
+  c := FG.Header.Columns.Items[1] as TTyColumn;
+  c.Options := c.Options + [coAutoSpring];
+  FG.SetBounds(0, 0, 500, 200);
+  AssertEquals('the spring column takes what the grid grew by', 200, c.Width);
+end;
+
 initialization
+  RegisterTest(TGrid155Test);
   RegisterTest(TTyStringGridLeakTest);
   RegisterTest(TTyGridControlTest);
   RegisterTest(TTyGridScrollBarNilWindowTest);

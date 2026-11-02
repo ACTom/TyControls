@@ -604,6 +604,8 @@ type
     FOnColumnResized:  TTyTreeColumnEvent;
     { D3: column drag-reorder state }
     FDragColumn:       Integer;   // collection Index of the dragged column; NoColumn when idle
+    FHotHeaderColumn:  Integer;   // #155: the header section under the pointer (hoHotTrack)
+    FSpringW:          Integer;   // #155: the width coAutoSpring last shared out, logical px
     FDragPending:      Boolean;   // MouseDown on a draggable section; drag not yet started
     FDragStartX:       Integer;   // device X at the drag press
     FDragging:         Boolean;   // threshold exceeded: ghost + drop-mark active
@@ -3294,6 +3296,8 @@ procedure TTyTreeView.Resize;
 begin
   inherited Resize;
   UpdateScrollBars;
+  if (FHeader <> nil) and not (csLoading in ComponentState) then
+    FHeader.Columns.SpringTo(MulDiv(ClientWidth, 96, Font.PixelsPerInch), FSpringW);   // #155
   ApplyHeaderAutoSize;   // D4: after UpdateScrollBars so ContentRect is current
   RepositionEditor;   // ③e E4: keep an open editor glued to its cell after a resize
 end;
@@ -3399,6 +3403,7 @@ begin
   FResizeStartX     := 0;
   { D3: column drag-reorder — idle state }
   FDragColumn       := NoColumn;
+  FHotHeaderColumn  := NoColumn;
   FDragPending      := False;
   FDragStartX       := 0;
   FDragging         := False;
@@ -5353,6 +5358,8 @@ var
   colTxt: string;
   sortGlyphSize: Integer;
   colAlign: TAlignment;
+  secStates: TTyStateSet;   // #155
+  hdrIco: Integer;
   sortBandR: TRect;
   accentPx: TBGRAPixel;         // theme accent for the drag ghost/drop-mark
 
@@ -5686,10 +5693,15 @@ begin
 
         { Fill cell background — hover if this is the hovered column,
           else transparent (inherits band bg) }
-        if (hoHotTrack in FHeader.Options) and (colIdx = NoColumn) then
-        begin
-          { NoColumn = -1, so this branch never fires — FHotHeaderColumn would go here in Phase D }
-        end;
+        { #155: the section's own states -- :hover under the pointer with hoHotTrack, :selected
+          while pressed. The hover branch here tested colIdx = NoColumn and never ran. }
+        { Pressed wins over hover -- the resolve applies :hover last. }
+        secStates := [];
+        if FDragPending and not FDragging and (colIdx = FDragColumn) then
+          secStates := [tysSelected]
+        else if (hoHotTrack in FHeader.Options) and (colIdx = FHotHeaderColumn) then
+          secStates := [tysHover];
+        headerSecStyle := PartStyle('TyTreeHeaderSection', '', TyStatesUnlessDisabled(Self, secStates));
         if tpBackground in headerSecStyle.Present then
           P.FillBackground(clipR, headerSecStyle.Background, 0);
 
@@ -5713,6 +5725,33 @@ begin
                            headerBandRect.Top,
                            clipR.Right - colMargin - sortGlyphSize,
                            headerBandRect.Bottom);
+
+        { #155: the column's icon from Header.Images, at the caption's reading start -- the
+          header never drew one. }
+        if (FHeader.Images <> nil) and (col.ImageIndex >= 0)
+          and (col.ImageIndex < TyImageCount(FHeader.Images)) then
+        begin
+          hdrIco := P.Scale(16);
+          if hdrIco > (headerBandRect.Bottom - headerBandRect.Top) - P.Scale(4) then
+            hdrIco := (headerBandRect.Bottom - headerBandRect.Top) - P.Scale(4);
+          if (hdrIco > 0) and (textRect.Right - textRect.Left > hdrIco) then
+          begin
+            if RtlLayout then
+            begin
+              TyBlitImageScaled(P, FHeader.Images, col.ImageIndex, textRect.Right - hdrIco,
+                headerBandRect.Top + (headerBandRect.Bottom - headerBandRect.Top - hdrIco) div 2,
+                hdrIco, False);
+              Dec(textRect.Right, hdrIco + P.Scale(4));
+            end
+            else
+            begin
+              TyBlitImageScaled(P, FHeader.Images, col.ImageIndex, textRect.Left,
+                headerBandRect.Top + (headerBandRect.Bottom - headerBandRect.Top - hdrIco) div 2,
+                hdrIco, False);
+              Inc(textRect.Left, hdrIco + P.Scale(4));
+            end;
+          end;
+        end;
 
         if textRect.Left < textRect.Right then
         begin
@@ -6183,9 +6222,11 @@ begin
               ptWeight := NodeStyle.FontWeight;
               ptColor := NodeStyle.TextColor;
               AskPaintText(ACanvas, node, colIdx, ptName, ptSize, ptWeight, ptColor);
+              { #155: the main column's own Alignment, as every other column's -- it was
+                always left-justified. }
               if (textRect.Left < textRect.Right) and (colTxt <> '') then
                 P.DrawText(textRect, colTxt, ptName, ptSize, ptWeight, ptColor,
-                  taLeftJustify, tlCenter, True);
+                  col.Alignment, tlCenter, True);
             end;
           end
           else
@@ -7159,6 +7200,7 @@ var
   msg: string;
 begin
   inherited Loaded;
+  FSpringW := MulDiv(ClientWidth, 96, Font.PixelsPerInch);   // #155: the widths read are for this width
   if FPendingConflict <> '' then
   begin
     msg := FPendingConflict;
@@ -7243,6 +7285,21 @@ begin
   hitColIdx := NoColumn;
   targetPos := 0;
   inherited MouseMove(Shift, X, Y);
+
+  { #155: hoHotTrack lights the header section under the pointer. }
+  if (FHeader <> nil) and (hoHotTrack in FHeader.Options) then
+  begin
+    if GetHeaderHitAt(X, Y, hPart, hCol) and (hPart = hpHeaderSection) then
+      hitColIdx := hCol
+    else
+      hitColIdx := NoColumn;
+    if hitColIdx <> FHotHeaderColumn then
+    begin
+      FHotHeaderColumn := hitColIdx;
+      Invalidate;
+    end;
+    hitColIdx := NoColumn;
+  end;
 
   { ③f F2: intra-tree node drag. Engaged only when a node was armed on MouseDown
     (FDragNode<>nil) under toNodeDrag — a header column drag arms FDragPending /
@@ -7465,6 +7522,11 @@ end;
 procedure TTyTreeView.MouseLeave;
 begin
   inherited MouseLeave;
+  if FHotHeaderColumn <> NoColumn then
+  begin
+    FHotHeaderColumn := NoColumn;
+    Invalidate;
+  end;
   if FHotNode <> nil then
   begin
     FHotNode := nil;
@@ -7803,10 +7865,29 @@ end;
 { DoCompare: wraps OnCompareNodes.  Returns 0 when no handler assigned.
   The caller uses natural ordering; the sort direction is handled by the merge. }
 function TTyTreeView.DoCompare(Node1, Node2: PTyTreeNode; Column: Integer): Integer;
+var t1, t2: string;
 begin
   Result := 0;
   if Assigned(FOnCompareNodes) then
+  begin
     FOnCompareNodes(Self, Node1, Node2, Column, Result);
+    Exit;
+  end;
+  { #155: no handler, the cells' text, case aside -- as LCL's AlphaSort compares Text. The
+    sort arrow turned and nothing moved. }
+  t1 := '';
+  t2 := '';
+  if Assigned(FOnGetTextWithType) then
+  begin
+    FOnGetTextWithType(Self, Node1, Column, ttNormal, t1);
+    FOnGetTextWithType(Self, Node2, Column, ttNormal, t2);
+  end
+  else
+  begin
+    DoGetText(Node1, t1);
+    DoGetText(Node2, t2);
+  end;
+  Result := UTF8CompareText(t1, t2);
 end;
 
 { MergeSortedLists: merge two sorted singly-linked (NextSibling) lists into one.
@@ -7958,9 +8039,14 @@ begin
 
   col := FHeader.Columns.Items[ColIndex] as TTyColumn;
 
-  { Guard: column must allow click and header must have auto-sort on }
+  { Guard: the column must allow the click. #155: the click is reported whether or not the
+    header sorts on it -- OnHeaderClick fired only with hoHeaderClickAutoSort. }
   if not (coAllowClick in col.Options) then Exit;
-  if not (hoHeaderClickAutoSort in FHeader.Options) then Exit;
+  if not (hoHeaderClickAutoSort in FHeader.Options) then
+  begin
+    if Assigned(FOnHeaderClick) then FOnHeaderClick(Self, ColIndex);
+    Exit;
+  end;
 
   { Update SortColumn / SortDirection (suppress HeaderChanged reentrancy) }
   FSorting := True;

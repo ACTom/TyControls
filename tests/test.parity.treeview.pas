@@ -254,6 +254,27 @@ type
     procedure TestTheRangeShrinksWithTheIndent;
   end;
 
+  { #155: header hover / pressed, OnHeaderClick without the auto-sort, the default sort, the
+    header's icons, the main column's alignment, spring. }
+  TTree155Test = class(TTestCase)
+  private
+    FT: TTree166Access;
+    FHeaderClicks: Integer;
+    procedure HeaderClicked(Sender: TTyTreeView; Column: Integer);
+    procedure BuildTwoColumns;
+    function Render: TBGRABitmap;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestHotTrackAndThePressLightTheSection;
+    procedure TestOnHeaderClickDoesNotNeedTheAutoSort;
+    procedure TestAHeaderSortWithoutAHandlerSortsByText;
+    procedure TestTheHeaderDrawsItsColumnIcons;
+    procedure TestTheMainColumnTakesItsAlignment;
+    procedure TestSpringColumnsShareAResize;
+  end;
+
 implementation
 
 { A plain-function compare for CustomSort: reverse the original sibling order.
@@ -1336,7 +1357,188 @@ begin
   end;
 end;
 
+{ --- #155 ------------------------------------------------------------------------------- }
+
+procedure TTree155Test.HeaderClicked(Sender: TTyTreeView; Column: Integer);
+begin
+  Inc(FHeaderClicks);
+end;
+
+procedure TTree155Test.SetUp;
+begin
+  FT := TTree166Access.Create(nil);
+  FT.Font.PixelsPerInch := 96;
+  FT.SetBounds(0, 0, 300, 160);
+  FHeaderClicks := 0;
+end;
+
+procedure TTree155Test.TearDown;
+begin
+  FreeAndNil(FT);
+end;
+
+procedure TTree155Test.BuildTwoColumns;
+var c: TTyColumn;
+begin
+  c := FT.Header.Columns.Add as TTyColumn; c.Text := 'A'; c.Width := 120;
+  c := FT.Header.Columns.Add as TTyColumn; c.Text := 'B'; c.Width := 120;
+  FT.Header.MainColumn := 0;
+  FT.Header.Options := FT.Header.Options + [hoVisible];
+  FT.OnHeaderClick := @HeaderClicked;
+end;
+
+function TTree155Test.Render: TBGRABitmap;
+var bmp: TBitmap;
+begin
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(300, 160);
+    FT.XRender(bmp);
+    Result := TBGRABitmap.Create(bmp);
+  finally
+    bmp.Free;
+  end;
+end;
+
+function HeadDiff(A, B: TBGRABitmap): Integer;
+var x, y: Integer;
+begin
+  Result := 0;
+  for y := 2 to 14 do
+    for x := 8 to 110 do
+      if A.GetPixel(x, y) <> B.GetPixel(x, y) then Inc(Result);
+end;
+
+procedure TTree155Test.TestHotTrackAndThePressLightTheSection;
+var plain, hover, pressed: TBGRABitmap;
+begin
+  BuildTwoColumns;
+  FT.Header.Options := FT.Header.Options + [hoHotTrack];
+  FT.Items.AddChild(nil, 'x');
+  plain := Render;
+  FT.MouseMove([], 40, 8);
+  hover := Render;
+  FT.MouseDown(mbLeft, [ssLeft], 40, 8);
+  pressed := Render;
+  try
+    AssertTrue(Format('hoHotTrack: :hover under the pointer (%d px)', [HeadDiff(plain, hover)]),
+      HeadDiff(plain, hover) > 100);
+    AssertTrue(Format('pressed: :selected (%d px)', [HeadDiff(hover, pressed)]),
+      HeadDiff(hover, pressed) > 100);
+  finally
+    plain.Free; hover.Free; pressed.Free;
+  end;
+  FT.MouseUp(mbLeft, [], 40, 8);
+end;
+
+procedure TTree155Test.TestOnHeaderClickDoesNotNeedTheAutoSort;
+var c: TTyColumn;
+begin
+  BuildTwoColumns;
+  FT.Header.Options := FT.Header.Options - [hoHeaderClickAutoSort];
+  FT.XDown(40, 8, [ssLeft]);
+  AssertEquals('a header click is reported without the auto-sort', 1, FHeaderClicks);
+  c := FT.Header.Columns.Items[0] as TTyColumn;
+  c.Options := c.Options - [coAllowClick];
+  FT.XDown(40, 8, [ssLeft]);
+  AssertEquals('and not without coAllowClick', 1, FHeaderClicks);
+end;
+
+procedure TTree155Test.TestAHeaderSortWithoutAHandlerSortsByText;
+begin
+  BuildTwoColumns;
+  FT.Items.AddChild(nil, 'cherry');
+  FT.Items.AddChild(nil, 'Apple');
+  FT.Items.AddChild(nil, 'banana');
+  FT.XDown(40, 8, [ssLeft]);
+  AssertEquals('setup: sorted on column 0', 0, FT.Header.SortColumn);
+  AssertEquals('with no OnCompareNodes, by the text, case aside', 'Apple',
+    FT.NodeText[FT.GetFirstChild(nil)]);
+  AssertEquals('all of it', 'banana', FT.NodeText[FT.GetNextSibling(FT.GetFirstChild(nil))]);
+end;
+
+procedure TTree155Test.TestTheHeaderDrawsItsColumnIcons;
+
+  function Reds(B: TBGRABitmap): Integer;
+  var x, y: Integer; px: TBGRAPixel;
+  begin
+    Result := 0;
+    for y := 0 to 20 do
+      for x := 0 to 299 do
+      begin
+        px := B.GetPixel(x, y);
+        if (px.red > 230) and (px.green < 30) and (px.blue < 30) then Inc(Result);
+      end;
+  end;
+
+var il: TImageList; bmp: TBitmap; b: TBGRABitmap;
+begin
+  BuildTwoColumns;
+  il := TImageList.Create(nil);
+  bmp := TBitmap.Create;
+  try
+    il.Width := 16; il.Height := 16;
+    bmp.PixelFormat := pf24bit; bmp.SetSize(16, 16);
+    bmp.Canvas.Brush.Color := clRed; bmp.Canvas.FillRect(0, 0, 16, 16);
+    il.Add(bmp, nil);
+    FT.Header.Images := il;
+    (FT.Header.Columns.Items[1] as TTyColumn).ImageIndex := 0;
+    b := Render;
+    try
+      AssertTrue('the column''s icon is in the header', Reds(b) > 50);
+    finally
+      b.Free;
+    end;
+  finally
+    FT.Header.Images := nil;
+    bmp.Free;
+    il.Free;
+  end;
+end;
+
+procedure TTree155Test.TestTheMainColumnTakesItsAlignment;
+
+  function InkLeft(B: TBGRABitmap): Integer;
+  var x, y: Integer; px: TBGRAPixel;
+  begin
+    for x := 0 to 119 do
+      for y := 24 to 40 do
+      begin
+        px := B.GetPixel(x, y);
+        if (px.red < 90) and (px.green < 90) and (px.blue < 90) then Exit(x);
+      end;
+    Result := -1;
+  end;
+
+var left, right: TBGRABitmap;
+begin
+  BuildTwoColumns;
+  FT.Items.AddChild(nil, 'ii');
+  left := Render;
+  (FT.Header.Columns.Items[0] as TTyColumn).Alignment := taRightJustify;
+  right := Render;
+  try
+    AssertTrue('setup: the text is drawn', InkLeft(left) >= 0);
+    AssertTrue(Format('right-justified, the main column''s text moves right (%d -> %d)',
+      [InkLeft(left), InkLeft(right)]), InkLeft(right) > InkLeft(left) + 40);
+  finally
+    left.Free; right.Free;
+  end;
+end;
+
+procedure TTree155Test.TestSpringColumnsShareAResize;
+var c: TTyColumn;
+begin
+  BuildTwoColumns;
+  c := FT.Header.Columns.Items[1] as TTyColumn;
+  c.Options := c.Options + [coAutoSpring];
+  FT.SetBounds(0, 0, 400, 160);
+  AssertEquals('the spring column takes what the tree grew by', 220, c.Width);
+end;
+
 initialization
+  RegisterTest(TTree155Test);
   RegisterTest(TTree166Test);
   RegisterTest(TTreeParityNameTest);
   RegisterTest(TTreeParityBehaviourTest);

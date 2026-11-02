@@ -112,10 +112,11 @@ uses tyControls.TreeView, tyControls.Columns;
 | `hoVisible` | 在节点区上方绘制表头带 |
 | `hoColumnResize` | 允许拖动列分隔线调整列宽 |
 | `hoShowSortGlyphs` | 在排序列显示排序三角字形 |
-| `hoHeaderClickAutoSort` | 点击表头分区触发 `SortTree` |
+| `hoHeaderClickAutoSort` | 点击表头分区触发 `SortTree`(关掉时点击只触发 `OnHeaderClick`) |
 | `hoDrag` | 允许拖动列头重排列顺序 |
 | `hoAutoResize` | 令 `AutoSizeIndex` 列填充剩余宽度 |
-| `hoHotTrack` | 高亮悬停的表头分区 |
+| （表头图标） | `Header.Images` 设了时，列的 `ImageIndex` 画在表头分区标题前面 |
+| `hoHotTrack` | 高亮悬停的表头分区(`TyTreeHeaderSection:hover`);按住的分区按 `:selected` 画 |
 
 #### `TTyColumn`（列项）自有 published 属性
 
@@ -125,11 +126,11 @@ uses tyControls.TreeView, tyControls.Columns;
 | `MinWidth` | `Integer` | `10` | 最小列宽 |
 | `MaxWidth` | `Integer` | `10000` | 最大列宽 |
 | `Position` | `Cardinal` | 添加顺序 | 视觉位置（0 基），可与集合 `Index` 不同（拖拽重排后） |
-| `Alignment` | `TAlignment` | `taLeftJustify` | 单元格文本对齐 |
+| `Alignment` | `TAlignment` | `taLeftJustify` | 单元格文本对齐（主列也照它对齐） |
 | `CaptionAlignment` | `TAlignment` | `taLeftJustify` | 表头标题对齐 |
 | `Text` | `string` | `''` | 表头标题文字 |
 | `ImageIndex` | `Integer` | `-1` | 表头图标索引 |
-| `Options` | `TTyColumnOptions` | `[coVisible, coResizable, coAllowClick, coDraggable]` | 列级选项（`coVisible` / `coResizable` / `coAllowClick` / `coDraggable` / `coAutoSpring`） |
+| `Options` | `TTyColumnOptions` | `[coVisible, coResizable, coAllowClick, coDraggable]` | 列级选项（`coVisible` / `coResizable` / `coAllowClick` / `coDraggable` / `coAutoSpring`）。`coAutoSpring` 的列在控件变宽 / 变窄时按各自宽度的比例分掉变化量；`SizePriority` 只有网格的 `AutoFillColumns` 用，树和列表视图的列在对象查看器里不显示它 |
 | `Tag` | `NativeInt` | `0` | 用户自定义标记 |
 | `Visible` | `Boolean` | `True` | 列可见性。**存储仍是 `Options` 里的 `coVisible`**,这是它的一个视图(对标 LCL `TGridColumn.Visible`);`stored False`,由 `Options` 负责流式化 |
 | `MinSize` / `MaxSize` | `Integer` | 同 `MinWidth` / `MaxWidth` | LCL 对宽度上下限的叫法,别名。注意默认值与 LCL 不同:LCL 的 `DEFMINSIZE`/`DEFMAXSIZE` 都是 0(无界),这里是 10 / 10000 —— 要无界请显式写 0 |
@@ -286,8 +287,8 @@ Delphi 的 "TreeView Items Editor" 体验——此前的标准集合编辑器（
 |------|------|----------|
 | `OnColumnResized` | `TTyTreeColumnEvent` | 某列被拖动改变宽度后 |
 | `OnColumnReorder` | `TTyTreeColumnReorderEvent` | 列被拖到新位置后（`OldPosition, NewPosition`） |
-| `OnCompareNodes` | `TTyTreeCompareEvent` | 排序引擎比较两节点；app 返回 `<0 / 0 / >0`（自然序，方向由内部处理） |
-| `OnHeaderClick` | `TTyTreeColumnEvent` | 点击表头分区后（若触发了排序，在排序之后发出） |
+| `OnCompareNodes` | `TTyTreeCompareEvent` | 排序引擎比较两节点；app 返回 `<0 / 0 / >0`（自然序，方向由内部处理）。没挂时按该列的文字比较（不分大小写），表头点击排序也就能用了 |
+| `OnHeaderClick` | `TTyTreeColumnEvent` | 点击表头分区后（若触发了排序，在排序之后发出）。不开 `hoHeaderClickAutoSort` 也触发；列去掉 `coAllowClick` 则不触发 |
 
 ### 就地编辑
 
@@ -321,7 +322,7 @@ Delphi 的 "TreeView Items Editor" 体验——此前的标准集合编辑器（
 | `TyTreeNode` | `:hover` | 该行被鼠标悬停（`HotTrack = True` 时的 `FHotNode`） |
 | `TyTreeNode` | `:selected` | 该节点 `nsSelected` |
 | `TyTreeNode` | `:disabled` | 该节点不可用 |
-| `TyTreeHeaderSection` | 无 | 表头分区的底色 / 文字色 / 字体，**以空状态集解析**——树的表头不做悬停或排序列高亮，写 `TyTreeHeaderSection:hover` / `:selected` 不会生效（独立的 [`TTyHeaderControl`](headercontrol.md) 才消费 `:hover`） |
+| `TyTreeHeaderSection` | `:hover` / `:selected` | 表头分区的底色 / 文字色 / 字体；`hoHotTrack` 时鼠标下的分区是 `:hover`，按住的分区是 `:selected` |
 | `TyTreeCheckBox` | `:active` / `:selected` / `:disabled` | 已勾选 / 选中行内 / 禁用的复选槽 |
 
 ### light.tycss 内置规则摘要
@@ -556,7 +557,7 @@ Tree.OnNodeMoved := @OnMoved;
 | `DisplayExpandSignRect(Node, out R)` | 展开箭头的方框；没有箭头的节点返回 `False` |
 | `GetNodeWithExpandSignAt(X, Y)` | 只在展开箭头上才回答的命中测试 |
 | `GetHitTestInfoAt(X, Y): THitTests` | LCL 的**集合**型命中结果（`comctrls.pp:41`），能同时表达 `htOnItem` + `htOnLabel`；我们自己的 `GetNodeAtPoint` 返回的是单值枚举，表达不了这种组合 |
-| `AlphaSort(Node = nil)` | 按节点主列文本排序，**不需要任何 compare handler**。`Sort` / `SortTree` 都走 `DoCompare` → `OnCompareNodes`，没挂 handler 时返回 0，也就是说"按字母排序"这个最常见的需求以前是个静默的空操作 |
+| `AlphaSort(Node = nil)` | 按节点主列文本排序，**不需要任何 compare handler**。`Sort` / `SortTree` 都走 `DoCompare` → `OnCompareNodes`，没挂 handler 时按单元格文字比较（以前返回 0，"按字母排序"这个最常见的需求是个静默的空操作） |
 | `CustomSort(SortProc, Node = nil)` | 用一个**普通函数**（非方法指针）排序；结束后归还 app 原来的 `OnCompareNodes` |
 | `Items: TTyTreeNodes` | 可流式化、设计期可编辑的节点集合。`Items.AddChild(nil, 'Root')` 这一行移植过来现在编得过也真的建树。详见第 3.5 节 |
 | `NodeText[Node]: string` | LCL `Node.Text` 的等价物（只读）。节点是**记录**不是类，挂不了成员，所以按本控件既有约定挂到控件上做带下标属性——与 `NodeSelected[]` / `NodeVisible[]` 同一条命名规则。两种模式都答"屏幕上那一行真正显示的字" |

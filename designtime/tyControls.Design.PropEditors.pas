@@ -20,7 +20,7 @@ uses
   tyControls.FilterComboBox, tyControls.CharImage, tyControls.GlyphButtons, tyControls.ValueListEditor,
   tyControls.NumericEdit, tyControls.ComboBox, tyControls.AdvancedComboBox,
   tyControls.CheckComboBox, tyControls.ColorBox, tyControls.OfficeComboBox, tyControls.Grid,
-  tyControls.ListView, tyControls.TreeView, tyControls.Edit, tyControls.Memo,
+  tyControls.ListView, tyControls.TreeView, tyControls.Edit, tyControls.Memo, tyControls.Columns,
   tyControls.SpinEdit, tyControls.DateTimePicker,
   { The SynEdit-backed tycss editor for StyleOverride (design-time only). }
   tyControls.Design.Css.Editor;
@@ -901,6 +901,10 @@ begin
   RegisterPropertyEditor(TypeInfo(Integer), TTyStringGrid, 'MinEditorWidth', TIntegerPropertyEditor);
   // A grid's header has no main column: nothing in the grid reads it (see TTyGridHeader).
   RegisterPropertyEditor(TypeInfo(Integer), TTyGridHeader, 'MainColumn', THiddenPropertyEditor);
+  { #155: a column's SizePriority is the grid's AutoFillColumns weight; the list view and the
+    tree view have no fill to weigh. Offered again on the grid's own column class. }
+  RegisterPropertyEditor(TypeInfo(Integer), TTyColumn, 'SizePriority', THiddenPropertyEditor);
+  RegisterPropertyEditor(TypeInfo(Integer), TTyGridColumn, 'SizePriority', TIntegerPropertyEditor);
   { #192: a shell list view lists the folder itself, in the owner-data mode it switches on: the
     list-view model and its owner-data hooks are its own business. }
   RegisterPropertyEditor(TypeInfo(Boolean), TTyShellListView, 'OwnerData', THiddenPropertyEditor);

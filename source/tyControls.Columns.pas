@@ -319,6 +319,11 @@ type
       proportionally (integral bonus-pixel remainder so widths stay whole
       and the sum of deltas is exact). }
     procedure DistributeSpring(ADeltaWidth: Integer);
+    { #155: the owner's width went from ALast to AWidth (logical px): the coAutoSpring
+      columns share the difference, and ALast takes AWidth. ALast <= 0 is "not laid out
+      yet" -- it only takes the width. The list view, the tree view and the grid call it
+      on Resize; DistributeSpring had no caller, so coAutoSpring did nothing. }
+    procedure SpringTo(AWidth: Integer; var ALast: Integer);
 
     { Set ABSOLUTE widths so every visible column together fills AClientWidth, sharing
       the spare space by SizePriority. This is what LCL's AutoFillColumns does
@@ -1394,6 +1399,13 @@ begin
 
   UpdatePositions;
   DoChange;
+end;
+
+procedure TTyColumns.SpringTo(AWidth: Integer; var ALast: Integer);
+begin
+  if (ALast > 0) and (AWidth <> ALast) then
+    DistributeSpring(AWidth - ALast);
+  ALast := AWidth;
 end;
 
 procedure TTyColumns.DistributeFill(AClientWidth: Integer; AMinWidth: Integer;
