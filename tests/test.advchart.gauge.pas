@@ -40,6 +40,7 @@ type
     function Binding: TTySeriesBinding;
     function BuildAxis(const ASpec: TTyGaugeSpec): Integer;
   published
+    procedure TestANaNDialLeavesTheHostsTrapsAlone;
     procedure TestTheDefaultDialStartsAtTheLowerLeftAndSweepsClockwise;
     procedure TestAWholeTurnIsNotAnEmptyOne;
     procedure TestAnticlockwiseIsNotTheComplementOfTheClockwiseArc;
@@ -170,6 +171,28 @@ begin
   FList.Clear;
   Result := TyBuildGaugeAxis(Binding, LayoutOf(ASpec), ASpec, TyGaugeVisual,
     TTyPainterTextMeasurer.Create(96), 96, FList);
+end;
+
+{ [R7-H] A NaN DIAL is built with the FPU's traps masked, and its NaN
+  comparisons raise the invalid-operation flag; on the way out the flags are
+  cleared, so the host's own division by zero is still reported as one }
+procedure TAdvChartGaugeRuleTest.TestANaNDialLeavesTheHostsTrapsAlone;
+var
+  spec: TTyGaugeSpec;
+  a, b, c: Double;
+  what: string;
+begin
+  spec := SpecOf('{"series":[{"type":"gauge","startAngle":null,"data":[40]}]}');
+  BuildAxis(spec);
+  a := 1;
+  b := 0;
+  try
+    c := a / b;
+    what := 'no error: ' + FloatToStr(c);
+  except
+    on E: Exception do what := E.ClassName;
+  end;
+  AssertEquals('a division by zero', 'EZeroDivide', what);
 end;
 
 procedure TAdvChartGaugeRuleTest.

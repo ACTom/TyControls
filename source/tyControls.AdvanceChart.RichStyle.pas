@@ -96,6 +96,16 @@ function TyRtLayAt(const AText: string; const ABlock: TTyRtBlockStyle;
   const ADefault: TTyRtDefault; ABaseX, ABaseY, AScale: Double;
   const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
 
+{ [R7-H] THE PIECES OF A TEXT UPSTREAM PLACES BY ITS STYLE'S x / y (a
+  gauge's words: `createTextStyle(model, {x, y, ...})`), laid out at that
+  place (AHangX / AHangY, CSS px) and moved back to hang about it. zrender
+  joins a size written as a string to the place it lays the box out at
+  (x + '600'), so the place is upstream's, not (0, 0). A style with no such
+  size is TyRtLay's. }
+function TyRtLayHung(const AText: string; const ABlock: TTyRtBlockStyle;
+  const ADefault: TTyRtDefault; AHangX, AHangY, AScale: Double;
+  const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
+
 { THE BOX THE PIECES OCCUPY in their own frame: zrender's Text
   getBoundingRect, the union of every child -- an undrawn rect included, a
   stroked rect grown by its stroke as painted, a text by its content box
@@ -144,10 +154,21 @@ type
   as itself, a number or an array as its JSON text, anything else '' }
 function TyDashTextOf(AData: TJSONData): string;
 
+{ [R7-H] A TEXT'S WIDTH, HEIGHT AND LINE HEIGHT AS WRITTEN (nil or null: not
+  written), into the style zrender receives: a number as it is, a STRING as
+  the string (TTyRtStyle.WidthIsText) -- zrender is handed the option's
+  value and does JS arithmetic with it. A width string ending in '%' is a
+  token's percentage, 'auto' a token's unwritten width, any other a written
+  width that is no number (rtwText); on a block every string is a string. }
+procedure TyRtTakeWidth(AData: TJSONData; var S: TTyRtStyle);
+procedure TyRtTakeHeight(AData: TJSONData; var S: TTyRtStyle);
+procedure TyRtTakeLineHeight(AData: TJSONData; var S: TTyRtStyle);
+
 implementation
 
 uses tyControls.FontUnits, tyControls.AdvanceChart.Option,
-     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.RichText;
+     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.RichText,
+     tyControls.AdvanceChart.Data;
 
 function TyRtResolveOpt(AAttached: Boolean; ADisableBox: Boolean): TTyRtResolveOpt;
 begin
@@ -192,6 +213,68 @@ begin
   Result := (A <> nil) and (A.JSONType = jtNumber) and not IsNan(A.AsFloat)
     and not IsInfinite(A.AsFloat);
   if Result then AV := A.AsFloat else AV := 0;
+end;
+
+procedure TyRtTakeWidth(AData: TJSONData; var S: TTyRtStyle);
+var t: string;
+begin
+  if NumOf(AData, S.Width) then
+  begin
+    S.WidthKind := rtwNumber;
+    Exit;
+  end;
+  S.Width := 0;
+  if (AData = nil) or (AData.JSONType <> jtString) then Exit;
+  t := AData.AsString;
+  S.WidthIsText := True;
+  S.WidthText := t;
+  { parseText.ts: a token's `charAt(length - 1) === '%'`, its width
+    `=== 'auto'` -- as written, no trimming [was: trimmed, and a string that
+    was neither a percentage nor 'auto' read as a number or not at all] }
+  if (t <> '') and (t[Length(t)] = '%') then
+  begin
+    S.WidthKind := rtwPercent;
+    { parsePercent's parseFloat (a wrap); the pending pass takes parseInt
+      of the text }
+    S.Width := TyJsParseFloat(t);
+  end
+  else if t = 'auto' then
+    S.WidthKind := rtwAuto
+  else
+  begin
+    S.WidthKind := rtwText;
+    S.Width := TyJsToNumber(t);
+  end;
+end;
+
+procedure TyRtTakeHeight(AData: TJSONData; var S: TTyRtStyle);
+begin
+  if NumOf(AData, S.Height) then
+  begin
+    S.HasHeight := True;
+    Exit;
+  end;
+  S.Height := 0;
+  if (AData = nil) or (AData.JSONType <> jtString) then Exit;
+  S.HasHeight := True;
+  S.HeightIsText := True;
+  S.HeightText := AData.AsString;
+  S.Height := TyJsToNumber(S.HeightText);
+end;
+
+procedure TyRtTakeLineHeight(AData: TJSONData; var S: TTyRtStyle);
+begin
+  if NumOf(AData, S.LineHeight) then
+  begin
+    S.HasLineHeight := True;
+    Exit;
+  end;
+  S.LineHeight := 0;
+  if (AData = nil) or (AData.JSONType <> jtString) then Exit;
+  S.HasLineHeight := True;
+  S.LineHeightIsText := True;
+  S.LineHeightText := AData.AsString;
+  S.LineHeight := TyJsToNumber(S.LineHeightText);
 end;
 
 function StrOf(A: TJSONData): string;
@@ -510,33 +593,11 @@ begin
   d := Get(AOwn, 'verticalAlign');
   if d = nil then d := Get(AOwn, 'baseline');
   S.VAlign := VAlignOfWord(StrOf(d));
-  if NumOf(Get(AOwn, 'lineHeight'), x) then
-  begin
-    S.HasLineHeight := True;
-    S.LineHeight := x;
-  end;
-  d := Get(AOwn, 'width');
-  if NumOf(d, x) then
-  begin
-    S.WidthKind := rtwNumber;
-    S.Width := x;
-  end
-  else if (d <> nil) and (d.JSONType = jtString) then
-  begin
-    s_ := Trim(d.AsString);
-    if s_ = 'auto' then S.WidthKind := rtwAuto
-    else if (s_ <> '') and (s_[Length(s_)] = '%')
-      and TryStrToFloat(Copy(s_, 1, Length(s_) - 1), x, fs) then
-    begin
-      S.WidthKind := rtwPercent;
-      S.Width := x;
-    end;
-  end;
-  if NumOf(Get(AOwn, 'height'), x) then
-  begin
-    S.HasHeight := True;
-    S.Height := x;
-  end;
+  { [R7-H] as written: a string stays a string (TyRtTakeWidth) [was: a
+    string read as a number only when it was a percentage, else dropped] }
+  TyRtTakeLineHeight(Get(AOwn, 'lineHeight'), S);
+  TyRtTakeWidth(Get(AOwn, 'width'), S);
+  TyRtTakeHeight(Get(AOwn, 'height'), S);
   d := Get(AOwn, 'ellipsis');
   if (d <> nil) and (d.JSONType = jtString) then
   begin
@@ -848,6 +909,23 @@ begin
     0, 0, m).Pieces;
 end;
 
+function TyRtLayHung(const AText: string; const ABlock: TTyRtBlockStyle;
+  const ADefault: TTyRtDefault; AHangX, AHangY, AScale: Double;
+  const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
+var k: Integer;
+begin
+  if not TyRtHasStringSize(ABlock.Style, ABlock.Rich) then
+    Exit(TyRtLay(AText, ABlock, ADefault, AScale, AMeasurer));
+  Result := TyRtLayAt(AText, ABlock, ADefault, AHangX, AHangY, AScale, AMeasurer);
+  for k := 0 to High(Result) do
+  begin
+    Result[k].X := Result[k].X - AHangX;
+    Result[k].Y := Result[k].Y - AHangY;
+    Result[k].EdgeX1 := Result[k].EdgeX1 - AHangX;
+    Result[k].EdgeY1 := Result[k].EdgeY1 - AHangY;
+  end;
+end;
+
 function TyRtLayAt(const AText: string; const ABlock: TTyRtBlockStyle;
   const ADefault: TTyRtDefault; ABaseX, ABaseY, AScale: Double;
   const AMeasurer: ITyTextMeasurer): TTyRtPieceArray;
@@ -876,7 +954,7 @@ end;
 function TyRtBounds(const APieces: TTyRtPieceArray): TTyXYWH;
 var
   i: Integer;
-  x0, y0, x1, y1, px, py, pw, ph, g: Double;
+  x0, y0, x1, y1, px, py, pw, ph, g, ex0, ey0, ex1, ey1: Double;
   any: Boolean;
 begin
   any := False;
@@ -889,6 +967,15 @@ begin
       py := APieces[i].Y;
       pw := APieces[i].W;
       ph := APieces[i].H;
+      { [R7-H] a size that was a string: the path's own bounds, its edges
+        joined as strings }
+      if TyRtPathBounds(APieces[i], ex0, ey0, ex1, ey1) then
+      begin
+        px := ex0;
+        py := ey0;
+        pw := ex1 - ex0;
+        ph := ey1 - ey0;
+      end;
       if pw < 0 then begin px := px + pw; pw := -pw; end;
       if ph < 0 then begin py := py + ph; ph := -ph; end;
       { Path.getBoundingRect: a stroke grows the box by its width. The

@@ -210,7 +210,8 @@ implementation
 
 uses base64, Generics.Collections, tyControls.AdvanceChart.Large,
   tyControls.AdvanceChart.Symbol, tyControls.AdvanceChart.Decal, tyControls.AdvanceChart.Images,
-  tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.GfxEl;
+  tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.GfxEl,
+  tyControls.AdvanceChart.RichText;
 
 { [R6-D] a dash the canvas' setLineDash takes: every entry a finite number
   of nought or more }
@@ -2295,6 +2296,41 @@ begin
   P.ClosePath;
 end;
 
+{ [R7-H] A PIECE'S RECT: one whose size was a string and that has corners
+  runs, as zrender's roundRect path does, to its joined edges (EdgeX1 /
+  EdgeY1), its radii cut against its size as numbers; any other is the
+  plain rect }
+procedure TraceRtPiece(P: TTyPainter; const APc: TTyRtPiece; AScale: Double;
+  const AR: array of Double);
+var r1, r2, r3, r4, x0, y0, x1, y1: Double;
+begin
+  if not APc.PathEdges or (AR[0] + AR[1] + AR[2] + AR[3] <= 0) then
+  begin
+    TraceRtRect(P, APc.X * AScale, APc.Y * AScale, APc.W * AScale,
+      APc.H * AScale, AR);
+    Exit;
+  end;
+  r1 := AR[0];
+  r2 := AR[1];
+  r3 := AR[2];
+  r4 := AR[3];
+  TyRtClampRadii(APc.W * AScale, APc.H * AScale, r1, r2, r3, r4);
+  x0 := APc.X * AScale;
+  y0 := APc.Y * AScale;
+  x1 := APc.EdgeX1 * AScale;
+  y1 := APc.EdgeY1 * AScale;
+  P.MoveTo(x0 + r1, y0);
+  P.LineTo(x1 - r2, y0);
+  if r2 > 0 then P.ArcTo(x1 - r2, y0 + r2, r2, -Pi / 2, 0, False);
+  P.LineTo(x1, y1 - r3);
+  if r3 > 0 then P.ArcTo(x1 - r3, y1 - r3, r3, 0, Pi / 2, False);
+  P.LineTo(x0 + r4, y1);
+  if r4 > 0 then P.ArcTo(x0 + r4, y1 - r4, r4, Pi / 2, Pi, False);
+  P.LineTo(x0, y0 + r1);
+  if r1 > 0 then P.ArcTo(x0 + r1, y0 + r1, r1, Pi, Pi * 1.5, False);
+  P.ClosePath;
+end;
+
 function RtAlign(A: TTyRtAlign): TAlignment;
 begin
   case A of
@@ -2462,8 +2498,7 @@ begin
           if pc.HasStroke then
           begin
             P.BeginPath;
-            TraceRtRect(P, pc.X * AScale, pc.Y * AScale, pc.W * AScale,
-              pc.H * AScale, radii);
+            TraceRtPiece(P, pc, AScale, radii);
             P.StrokePath(TTyColor(pc.Stroke), pc.LineWidth);
           end;
         finally
@@ -2488,22 +2523,19 @@ begin
         if pc.HasStroke and pc.StrokeFirst then
         begin
           P.BeginPath;
-          TraceRtRect(P, pc.X * AScale, pc.Y * AScale, pc.W * AScale,
-            pc.H * AScale, radii);
+          TraceRtPiece(P, pc, AScale, radii);
           P.StrokePath(TTyColor(pc.Stroke), pc.LineWidth);
         end;
         if pc.HasFill then
         begin
           P.BeginPath;
-          TraceRtRect(P, pc.X * AScale, pc.Y * AScale, pc.W * AScale,
-            pc.H * AScale, radii);
+          TraceRtPiece(P, pc, AScale, radii);
           P.FillPath(TTyColor(pc.Fill));
         end;
         if pc.HasStroke and not pc.StrokeFirst then
         begin
           P.BeginPath;
-          TraceRtRect(P, pc.X * AScale, pc.Y * AScale, pc.W * AScale,
-            pc.H * AScale, radii);
+          TraceRtPiece(P, pc, AScale, radii);
           P.StrokePath(TTyColor(pc.Stroke), pc.LineWidth);
         end;
       finally

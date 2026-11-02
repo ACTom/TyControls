@@ -20,7 +20,14 @@ unit test.advchart.gaugereads;
   skin decides here: it is compared with the skin's track colour. A case
   with `inks` compares each reading's fill too; one with `at` runs animated
   and compares the readings of the frame at T0 + at (a cell that is a word
-  does not count). }
+  does not count).
+
+  [R7-H] min / max / startAngle / endAngle written as null or a word are NaN
+  upstream: a case with `arcs` compares the axis line's bands (one at NaN is
+  not drawn), the tick labels drawn (their words, 'NaN' for a NaN extent;
+  one at NaN is not drawn), how many split lines and ticks are drawn, and
+  the angle each pointer is DRAWN at (zrender reads a NaN rotation as 0).
+  A missing cell of a category column is undefined: NaN to the dial. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -57,11 +64,14 @@ type
     function Find(ARole: TTyChartAnimRole; ASeries, AIndex: Integer;
       out AEl: TTyChartElement): Boolean;
     procedure CheckSeries(S: TJSONObject);
+    procedure CheckDial(S: TJSONObject);
+    function Bands(ASeries: Integer): Integer;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
   published
     procedure TestTheGaugesReadAsUpstream;
+    procedure TestAHostDivisionByZeroIsStillOne;
   end;
 
 implementation
@@ -260,6 +270,13 @@ begin
     arr := S.Arrays['titles'];
     for k := 0 to arr.Count - 1 do
       if Str(arr.Items[k]) <> '' then ups.Add(Str(arr.Items[k]));
+    { [R7-H] and the tick labels drawn ('NaN' for a NaN extent; one at NaN
+      is not drawn) }
+    if S.Find('labels') is TJSONArray then
+      for k := 0 to S.Arrays['labels'].Count - 1 do
+        if (S.Arrays['labels'].Objects[k].Strings['x'] <> 'NaN')
+          and (S.Arrays['labels'].Objects[k].Strings['y'] <> 'NaN') then
+          ups.Add(S.Arrays['labels'].Objects[k].Strings['text']);
     if FChart.List <> nil then
       for k := 0 to FChart.List.Count - 1 do
       begin
@@ -293,7 +310,11 @@ begin
       Miss(where + ': none here');
       Continue;
     end;
-    SameNum(where + ' angle', el.Anim.G[2], p.Strings['angle']);
+    { [R7-H] the angle it is drawn at where the case records it }
+    if p.Find('drawn') <> nil then
+      SameNum(where + ' drawn angle', el.Anim.G[2], p.Strings['drawn'])
+    else
+      SameNum(where + ' angle', el.Anim.G[2], p.Strings['angle']);
     SameColour(where + ' fill', Str(p.Find('fill')), band, el.Style.FillColor);
     if p.Find('w') <> nil then
     begin
@@ -345,9 +366,58 @@ begin
           el.Style.StrokeColor);
       Inc(n);
     end;
+  { [R7-H] a dial with NaN angles makes lines at NaN, none drawn: its count
+    is the drawn ones' (CheckDial) }
   Inc(FCompared);
-  if n <> arr.Count then
+  if (n <> arr.Count) and (S.Find('ticks') = nil) then
     Miss(Format('s%d: %d lines upstream, %d here', [si, arr.Count, n]));
+  if S.Find('arcs') is TJSONArray then CheckDial(S);
+end;
+
+{ [R7-H] the dial of a case with NaN angles or extents }
+procedure TAdvChartGaugeReadsOracleTest.CheckDial(S: TJSONObject);
+var
+  si, k, n: Integer;
+  arr: TJSONArray;
+  el: TTyChartElement;
+  p: TJSONObject;
+begin
+  si := S.Integers['index'];
+  { the axis line's bands drawn: those at finite angles that sweep }
+  arr := S.Arrays['arcs'];
+  n := 0;
+  for k := 0 to arr.Count - 1 do
+  begin
+    p := arr.Objects[k];
+    if (p.Strings['start'] <> 'NaN') and (p.Strings['end'] <> 'NaN')
+      and (Abs(FromHex(p.Strings['end']) - FromHex(p.Strings['start'])) > 1e-9) then Inc(n);
+  end;
+  Inc(FCompared);
+  if n <> Bands(si) then
+    Miss(Format('s%d: %d axis line bands drawn upstream, %d here', [si, n, Bands(si)]));
+  { the split lines and ticks drawn }
+  n := 0;
+  if FChart.List <> nil then
+    for k := 0 to FChart.List.Count - 1 do
+    begin
+      el := FChart.List.Element(k);
+      if (el.Shape.Kind = cskPolyline) and (Length(el.Shape.Points) = 2)
+        and not el.Style.HasFill and (el.Caption.FontSizeLogical <= 0) then Inc(n);
+    end;
+  Inc(FCompared);
+  if n <> S.Integers['ticks'] then
+    Miss(Format('s%d: %d split lines and ticks upstream, %d here', [si, S.Integers['ticks'], n]));
+end;
+
+{ the axis line's bands the port drew for series ASeries }
+function TAdvChartGaugeReadsOracleTest.Bands(ASeries: Integer): Integer;
+var k: Integer;
+begin
+  Result := 0;
+  if FChart.List = nil then Exit;
+  for k := 0 to FChart.List.Count - 1 do
+    if (FChart.List.Element(k).Shape.Kind = cskSector)
+      and (FChart.List.Element(k).Anim.Role <> carGaugeProgress) then Inc(Result);
 end;
 
 procedure TAdvChartGaugeReadsOracleTest.TestTheGaugesReadAsUpstream;
@@ -391,6 +461,33 @@ begin
     Fail(Format('%d of %d differ from upstream:%s%s', [FMisses.Count, FCompared,
       LineEnding, FMisses.Text]));
   AssertTrue(Format('only %d comparisons', [FCompared]), FCompared >= 300);
+end;
+
+{ [R7-H] A NaN DIAL AND A LABEL WHOSE WIDTH IS A WORD are laid out with the
+  FPU's traps masked; once they are drawn the host's own division by zero
+  is reported as that, not as an invalid operation a sticky flag left }
+procedure TAdvChartGaugeReadsOracleTest.TestAHostDivisionByZeroIsStillOne;
+var
+  a, b, c: Double;
+  what: string;
+begin
+  FChart.Option := '{"animation":false,"xAxis":{"type":"category","data":["a","b"]},'
+    + '"yAxis":{"type":"value"},"series":[{"type":"bar","data":[3,4],'
+    + '"label":{"show":true,"width":"50%","backgroundColor":"#eeeeee"}},'
+    + '{"type":"gauge","startAngle":null,"min":"x","data":[40]}]}';
+  AssertEquals('the option', '', FChart.OptionError);
+  FBmp.Fill(BGRA(255, 255, 255, 255));
+  FChart.Render(FBmp.Canvas, Rect(0, 0, 400, 300), 96);
+  a := 1;
+  b := 0;
+  what := 'nothing';
+  try
+    c := a / b;
+    what := 'no error: ' + FloatToStr(c);
+  except
+    on E: Exception do what := E.ClassName;
+  end;
+  AssertEquals('a division by zero', 'EZeroDivide', what);
 end;
 
 initialization
