@@ -2196,53 +2196,74 @@ end;
   square root of the frame's determinant, 1 where either diagonal entry is
   1), containStroke at that width (at least strokeContainThreshold without
   a fill), then the fill. The port's pad tests the drawn shape first. }
+{ the path part of it: the unit path's rect grown by AE, the stroke at ALw
+  (none where it is nought), the fill -- its own routine, so the managed
+  path costs nothing to the symbols refused before it }
+function SymbolPathHit(const AName: string; ALx, ALy, AE, ALw: Double;
+  AFill: Boolean): Boolean;
+var
+  path: TTyZrPath;
+  box: TTyXYWH;
+begin
+  Result := False;
+  path := TyZrSymbol(AName, -1, -1, 2, 2);
+  box := TyZrBBox(path);
+  if not ((ALx >= box.X - AE) and (ALx <= box.X - AE + (box.W + 2 * AE))
+    and (ALy >= box.Y - AE) and (ALy <= box.Y - AE + (box.H + 2 * AE))) then Exit;
+  if (ALw > 0) and TyZrContainStroke(path, ALw, ALx, ALy) then Exit(True);
+  if AFill then Result := TyZrContain(path, ALx, ALy);
+end;
+
 function SymbolHit(const AEl: TTyChartElement; AWidthPx, APadPx, AScale: Double;
   AFill: Boolean; AX, AY: Double): Boolean;
 var
   m, inv: TTyMat2D;
-  det, lx, ly, ls, w, e: Double;
-  path: TTyZrPath;
-  box: TTyXYWH;
-  old: TFPUExceptionMask;
+  det, lx, ly, ls, w, e, hx, hy: Double;
+  b: TTyRectF;
 begin
   Result := False;
-  if (APadPx > 0) and AFill and ShapeArea(AEl.Shape, AX, AY, APadPx) then Exit(True);
-  old := GetExceptionMask;
-  SetExceptionMask(old + [exInvalidOp, exZeroDivide, exOverflow, exUnderflow, exPrecision]);
-  try
-    m := AEl.Shape.HitM;
-    { matrix.invert, then applyTransform }
-    det := m[0] * m[3] - m[1] * m[2];
-    if det = 0 then Exit;
-    det := 1 / det;
-    inv[0] := m[3] * det;
-    inv[1] := -m[1] * det;
-    inv[2] := -m[2] * det;
-    inv[3] := m[0] * det;
-    inv[4] := (m[2] * m[5] - m[3] * m[4]) * det;
-    inv[5] := (m[1] * m[4] - m[0] * m[5]) * det;
-    lx := inv[0] * AX + inv[2] * AY + inv[4];
-    ly := inv[1] * AX + inv[3] * AY + inv[5];
-    if (Abs(m[0] - 1) > 1e-10) and (Abs(m[3] - 1) > 1e-10) then
-      ls := Sqrt(Abs(m[0] * m[3] - m[2] * m[1]))
-    else ls := 1;
-    w := AWidthPx;
-    if (w > 0) and not AFill then w := Max(w, 5 * AScale);
-    e := 0;
-    if (w > 0) and (ls > 1e-10) then e := w / ls / 2;
-    { every built-in path lies in [-1, 1] x [-2, 2] of its unit box (a pin's
-      head and an arrow's body leave it upward and downward): no path is
-      built for a point past that and the pen }
-    if IsNan(lx) or IsNan(ly) or (Abs(lx) > 1 + e) or (Abs(ly) > 2 + e) then Exit;
-    path := TyZrSymbol(AEl.Shape.HitSym, -1, -1, 2, 2);
-    box := TyZrBBox(path);
-    if not ((lx >= box.X - e) and (lx <= box.X - e + (box.W + 2 * e))
-      and (ly >= box.Y - e) and (ly <= box.Y - e + (box.H + 2 * e))) then Exit;
-  finally
-    TyZrRestoreFpu(old);
+  if IsNan(AX) or IsNan(AY) then Exit;
+  m := AEl.Shape.HitM;
+  w := AWidthPx;
+  if (w > 0) and not AFill then w := Max(w, 5 * AScale);
+  if (Abs(m[0] - 1) > 1e-10) and (Abs(m[3] - 1) > 1e-10) then
+    ls := Sqrt(Abs(m[0] * m[3] - m[2] * m[1]))
+  else ls := 1;
+  e := 0;
+  if (w > 0) and (ls > 1e-10) then e := w / ls / 2;
+  { THE CHEAP REFUSAL FIRST, nothing managed here: every built-in path lies
+    in [-1, 1] x [-2, 2] of its unit box (a pin's head and an arrow's body
+    leave it upward and downward), and the pen reaches e past it there -- a
+    point off that box's image under the frame is off the stroked rect; the
+    pad is the drawn shape's }
+  hx := (1 + e) * Abs(m[0]) + (2 + e) * Abs(m[2]);
+  hy := (1 + e) * Abs(m[1]) + (2 + e) * Abs(m[3]);
+  if not ((Abs(AX - m[4]) <= hx) and (Abs(AY - m[5]) <= hy)) then
+  begin
+    if not ((APadPx > 0) and AFill) then Exit;
+    b := TyShapeBounds(AEl.Shape);
+    if not ((AX >= b.Left - APadPx) and (AX <= b.Right + APadPx)
+      and (AY >= b.Top - APadPx) and (AY <= b.Bottom + APadPx)) then Exit;
+    Exit(ShapeArea(AEl.Shape, AX, AY, APadPx));
   end;
-  if (w > 0) and (ls > 1e-10) and TyZrContainStroke(path, w / ls, lx, ly) then Exit(True);
-  if AFill then Result := TyZrContain(path, lx, ly);
+  if (APadPx > 0) and AFill and ShapeArea(AEl.Shape, AX, AY, APadPx) then Exit(True);
+  { matrix.invert, then applyTransform }
+  det := m[0] * m[3] - m[1] * m[2];
+  if (det = 0) or IsNan(det) or IsInfinite(det) then Exit;
+  det := 1 / det;
+  inv[0] := m[3] * det;
+  inv[1] := -m[1] * det;
+  inv[2] := -m[2] * det;
+  inv[3] := m[0] * det;
+  inv[4] := (m[2] * m[5] - m[3] * m[4]) * det;
+  inv[5] := (m[1] * m[4] - m[0] * m[5]) * det;
+  lx := inv[0] * AX + inv[2] * AY + inv[4];
+  ly := inv[1] * AX + inv[3] * AY + inv[5];
+  if IsNan(lx) or IsNan(ly) or (Abs(lx) > 1 + e) or (Abs(ly) > 2 + e) then Exit;
+  if (w > 0) and (ls > 1e-10) then
+    Result := SymbolPathHit(AEl.Shape.HitSym, lx, ly, e, w / ls, AFill)
+  else
+    Result := SymbolPathHit(AEl.Shape.HitSym, lx, ly, e, 0, AFill);
 end;
 
 { Path.contain of a stroked shape: the fill (grown by the pad), then the
