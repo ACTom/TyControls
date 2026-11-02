@@ -1209,6 +1209,16 @@ type
       of its outline and not inside. 0: the area, as every other element.
       A matrix cell written `silent: false` with no fill [Batch 147]. }
     HitStrokeBand: Double;
+    { [R7-R] STROKECONTAINTHRESHOLD IN THE ELEMENT'S OWN FRAME: Path.contain
+      takes an unfilled path's pen to at least 5 of the element's own units
+      (over its line scale where it is strokeNoScale), so where a transform
+      scales the element the threshold scales with it -- 5 times this, in
+      the space the hit test asks the pen in (the canvas, or the pen map's
+      space: the element's frame times the root of the map's determinant).
+      A graphic / custom series element under its own or a group's scale
+      (10 px at scale 2; its line scale where strokeNoScale). 0, the zero
+      value, is 1: 5 on the canvas, as every element built in px. }
+    HitMinScale: Double;
     { [R6-F] NEVER HIT, though drawn and in the states: zrender's
       Path.contain of a path whose bounding rect is not-a-number -- a pen of
       infinite width grows it by Infinity / 2 each way, and x - Inf + Inf is
@@ -2331,8 +2341,13 @@ begin
     and not AEl.Style.HitClearPen then Exit;
   if IsInfinite(w) then Exit(-1);
   { strokeContainThreshold where Path.contain asks no fill; a symbol in its
-    own frame takes it there (SymbolHit) }
-  if not ElFills(AEl) and (AEl.Shape.HitSym = '') then w := Max(w, Double(5));
+    own frame takes it there (SymbolHit); [R7-R] 5 of the element's own
+    units (HitMinScale) [was: 5 on the canvas whatever its scale] }
+  if not ElFills(AEl) and (AEl.Shape.HitSym = '') then
+  begin
+    if AEl.HitMinScale > 0 then w := Max(w, 5 * AEl.HitMinScale)
+    else w := Max(w, Double(5));
+  end;
   ps := AEl.Style.PenScale;
   if ps > 0 then w := w * ps;
   Result := w * AScale;
@@ -2415,13 +2430,17 @@ end;
   (none where it is nought), the fill -- its own routine, so the managed
   path costs nothing to the symbols refused before it }
 function SymbolPathHit(const AName: string; ALx, ALy, AE, ALw: Double;
-  AFill: Boolean): Boolean;
+  AFill: Boolean; ABoxW, ABoxH: Double): Boolean;
 var
   path: TTyZrPath;
   box: TTyXYWH;
 begin
   Result := False;
-  path := TyZrSymbol(AName, -1, -1, 2, 2);
+  { [R7-R] a real box where the shape names one }
+  if (ABoxW > 0) and (ABoxH > 0) then
+    path := TyZrSymbol(AName, -ABoxW / 2, -ABoxH / 2, ABoxW, ABoxH)
+  else
+    path := TyZrSymbol(AName, -1, -1, 2, 2);
   box := TyZrBBox(path);
   if not ((ALx >= box.X - AE) and (ALx <= box.X - AE + (box.W + 2 * AE))
     and (ALy >= box.Y - AE) and (ALy <= box.Y - AE + (box.H + 2 * AE))) then Exit;
@@ -2433,12 +2452,22 @@ function SymbolHit(const AEl: TTyChartElement; AWidthPx, APadPx, AScale: Double;
   AFill: Boolean; AX, AY: Double): Boolean;
 var
   m, inv: TTyMat2D;
-  det, lx, ly, ls, w, e, hx, hy: Double;
+  det, lx, ly, ls, w, e, hx, hy, ux, uy: Double;
   b: TTyRectF;
 begin
   Result := False;
   if IsNan(AX) or IsNan(AY) then Exit;
   m := AEl.Shape.HitM;
+  { [R7-R] the frame's half extents the refusal box scales by: the unit
+    box's 1, or a real box's larger half (a pin's head may stand taller
+    than its box) }
+  ux := 1;
+  uy := 1;
+  if (AEl.Shape.HitBoxW > 0) and (AEl.Shape.HitBoxH > 0) then
+  begin
+    ux := Max(AEl.Shape.HitBoxW, AEl.Shape.HitBoxH) / 2;
+    uy := ux;
+  end;
   w := AWidthPx;
   if (w > 0) and not AFill then w := Max(w, 5 * AScale);
   { [R7-O] a pen in the symbol's own frame: the frame's whole scale }
@@ -2454,8 +2483,8 @@ begin
     is two thirds of its width [R7-O: was 1, which cut the barbs off]), and
     the pen reaches e past it there -- a point off that box's image under the
     frame is off the stroked rect; the pad is the drawn shape's }
-  hx := (4 / 3 + e) * Abs(m[0]) + (2 + e) * Abs(m[2]);
-  hy := (4 / 3 + e) * Abs(m[1]) + (2 + e) * Abs(m[3]);
+  hx := (4 / 3 * ux + e) * Abs(m[0]) + (2 * uy + e) * Abs(m[2]);
+  hy := (4 / 3 * ux + e) * Abs(m[1]) + (2 * uy + e) * Abs(m[3]);
   if not ((Abs(AX - m[4]) <= hx) and (Abs(AY - m[5]) <= hy)) then
   begin
     if not ((APadPx > 0) and AFill) then Exit;
@@ -2477,11 +2506,13 @@ begin
   inv[5] := (m[1] * m[4] - m[0] * m[5]) * det;
   lx := inv[0] * AX + inv[2] * AY + inv[4];
   ly := inv[1] * AX + inv[3] * AY + inv[5];
-  if IsNan(lx) or IsNan(ly) or (Abs(lx) > 4 / 3 + e) or (Abs(ly) > 2 + e) then Exit;
+  if IsNan(lx) or IsNan(ly) or (Abs(lx) > 4 / 3 * ux + e) or (Abs(ly) > 2 * uy + e) then Exit;
   if (w > 0) and (ls > 1e-10) then
-    Result := SymbolPathHit(AEl.Shape.HitSym, lx, ly, e, w / ls, AFill)
+    Result := SymbolPathHit(AEl.Shape.HitSym, lx, ly, e, w / ls, AFill, AEl.Shape.HitBoxW,
+      AEl.Shape.HitBoxH)
   else
-    Result := SymbolPathHit(AEl.Shape.HitSym, lx, ly, e, 0, AFill);
+    Result := SymbolPathHit(AEl.Shape.HitSym, lx, ly, e, 0, AFill, AEl.Shape.HitBoxW,
+      AEl.Shape.HitBoxH);
 end;
 
 { [R7-P] a zrender path's points through the linear map AM (no move):
@@ -2595,14 +2626,16 @@ end;
   PenMap): the canvas' pen region is the map's image of a round pen's band
   about the path the map takes back, so the path and the point go back
   through the map's inverse and containStroke asks AWidthPx there -- within
-  its stroked rect first, as Path.contain. False where the shape has no
-  path in the device's frame (a turned or mirrored path shape: the drawn
-  outline's round pen answers, StrokedHit) -- AAsked False then. }
+  its stroked rect first, as Path.contain. [R7-R] A turned or mirrored path
+  shape (its path built in its own frame, TyZrShapePath): the point goes to
+  that frame first (TyZrShapeLocal), and the map with it -- the frame's turn
+  and reflection undone on the pen too, so the band about the path there is
+  the same region [was: not asked, the drawn outline's round pen answered]. }
 function PenMapStrokeHit(const AEl: TTyChartElement; AWidthPx, AX, AY: Double;
   out AAsked: Boolean): Boolean;
 var
-  E, inv: TTyMat2D;
-  det, lx, ly: Double;
+  E, F, inv: TTyMat2D;
+  det, lx, ly, px, py, c, s: Double;
   path: TTyZrPath;
   box: TTyXYWH;
   old: TFPUExceptionMask;
@@ -2612,9 +2645,37 @@ begin
   { the map's shape alone: AWidthPx holds PenScale already }
   if not AEl.Style.HasPenMap then Exit;
   E := AEl.Style.PenMap;
-  if (AEl.Shape.Kind = cskPath) and ((AEl.Shape.RotationRad <> 0) or AEl.Shape.FlipX
-    or AEl.Shape.FlipY) then Exit;
   if AEl.Shape.Kind in [cskSector, cskLarge] then Exit;
+  px := AX;
+  py := AY;
+  if (AEl.Shape.Kind = cskPath) and ((AEl.Shape.RotationRad <> 0) or AEl.Shape.FlipX
+    or AEl.Shape.FlipY) then
+  begin
+    { [R7-R] into the path's own frame: the point by TyZrShapeLocal, the
+      pen by the same linear part -- the reflection, then the turn undone
+      (x' = c x + s y, y' = -s x + c y) }
+    TyZrShapeLocal(AEl.Shape, px, py);
+    if AEl.Shape.FlipX then
+    begin
+      E[0] := -E[0];
+      E[2] := -E[2];
+    end;
+    if AEl.Shape.FlipY then
+    begin
+      E[1] := -E[1];
+      E[3] := -E[3];
+    end;
+    if AEl.Shape.RotationRad <> 0 then
+    begin
+      c := Cos(AEl.Shape.RotationRad);
+      s := Sin(AEl.Shape.RotationRad);
+      F := E;
+      E[0] := c * F[0] + s * F[1];
+      E[1] := -s * F[0] + c * F[1];
+      E[2] := c * F[2] + s * F[3];
+      E[3] := -s * F[2] + c * F[3];
+    end;
+  end;
   det := E[0] * E[3] - E[1] * E[2];
   if (det = 0) or IsNan(det) or IsInfinite(det) then Exit;
   path := TyZrShapePath(AEl.Shape);
@@ -2627,8 +2688,8 @@ begin
   inv[2] := -E[2] / det;
   inv[3] := E[0] / det;
   path := MapZrPath(path, inv);
-  lx := inv[0] * AX + inv[2] * AY;
-  ly := inv[1] * AX + inv[3] * AY;
+  lx := inv[0] * px + inv[2] * py;
+  ly := inv[1] * px + inv[3] * py;
   old := GetExceptionMask;
   SetExceptionMask(old + [exInvalidOp, exZeroDivide, exOverflow, exUnderflow, exPrecision]);
   try

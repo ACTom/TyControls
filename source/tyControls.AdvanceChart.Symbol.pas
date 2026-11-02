@@ -155,6 +155,20 @@ function TyBuildSymbolInBox(const ASpec: TTySymbolSpec;
 function TyBuildSymbolInRealBox(const ASpec: TTySymbolSpec;
   const ABox: TTyRectF): TTyChartShape;
 
+{ [R7-R] A SYMBOL AS Symbol.ts BUILDS IT -- createSymbol(type, -1, -1, 2,
+  2, null, keepAspect) scaled by half the size on each axis -- where that
+  differs from TyBuildSymbol: a path:// one is made in the UNIT box and
+  stretched with it (makePath 'cover' over the whole w x h box; with
+  symbolKeepAspect fitted to its own aspect in the unit square first, then
+  stretched just the same) [was: fitted to the w x h box keeping its aspect,
+  so an oblong one was drawn square]. Every other kind is TyBuildSymbol's.
+  The scatter's, a line's, an effect scatter's, a graph's, a tree's and a
+  radar's symbols, a pictorial bar's glyph (createPath: a square pattern box,
+  no keepAspect) and a lines series' end and effect symbols (no keepAspect:
+  the same cover) take this. }
+function TyBuildSymbolUnit(const ASpec: TTySymbolSpec;
+  ACX, ACY: Double): TTyChartShape;
+
 { [R7-F] A SERIES' SYMBOL AS THE POINTER FINDS IT UPSTREAM: Symbol.ts makes
   the type's path in the unit box (createSymbol(type, -1, -1, 2, 2)), scales
   it by half the size on each axis, turns it by symbolRotate (zrender's
@@ -186,6 +200,15 @@ function TySymbolUnitFrame(const ASpec: TTySymbolSpec; ACX, ACY: Double): TTyMat
   quadratics as cubics, filled by the nonzero rule as zrender's); a
   picture its mapped corners; everything else its mapped points. }
 function TyBuildSymbolMapped(const ASpec: TTySymbolSpec; ACX, ACY: Double;
+  const AL: TTyMat2D): TTyChartShape;
+{ [R7-R] THE SAME IN THE REAL BOX: createSymbol(type, -w / 2, -h / 2, w, h)
+  as a Line's end symbol makes it, mapped by AL -- where the box is oblong
+  that is another picture than the unit box's: a circle's radius is
+  min(w, h) / 2, a square's side min(w, h) from the box's corner, a
+  roundRect's corner min(w, h) / 4, a pin's head three fifths of the width
+  (its height at least that), a path:// one covers the box (fitted to its
+  aspect with ASpec.KeepAspect). The rest are TyBuildSymbolMapped's. }
+function TyBuildSymbolMappedBox(const ASpec: TTySymbolSpec; ACX, ACY: Double;
   const AL: TTyMat2D): TTyChartShape;
 
 implementation
@@ -908,6 +931,29 @@ begin
     Result := TyShapePolygon(L.Pts);
 end;
 
+function TyBuildSymbolUnit(const ASpec: TTySymbolSpec;
+  ACX, ACY: Double): TTyChartShape;
+var
+  fb: TTyXYWH;
+  w, h, cx, cy: Double;
+begin
+  Result := TyBuildSymbol(ASpec, ACX, ACY);
+  if (ASpec.Kind <> tsyPath) or (Result.Kind <> cskPath) then Exit;
+  Result.PathCover := True;
+  if not ASpec.KeepAspect then Exit;
+  { makePath 'center' in the unit box: the path's own aspect fitted to the
+    square and centred there -- its rect, scaled with the box, is what the
+    path then covers }
+  fb := TyZrBBox(TyZrMakePathCenter(ASpec.PathData, TyXYWH(-1, -1, 2, 2)));
+  if not ((fb.W >= 0) and (fb.H >= 0)) or IsNan(fb.X + fb.Y) then Exit;
+  w := ASpec.WidthPx / 2;
+  h := ASpec.HeightPx / 2;
+  cx := ACX + ASpec.OffsetX;
+  cy := ACY + ASpec.OffsetY;
+  Result.Bounds := TyRectF(cx + fb.X * w, cy + fb.Y * h, cx + (fb.X + fb.W) * w,
+    cy + (fb.Y + fb.H) * h);
+end;
+
 function TySymbolUnitFrame(const ASpec: TTySymbolSpec; ACX, ACY: Double): TTyMat2D;
 begin
   Result := TyZrLocal(ASpec.WidthPx / 2, ASpec.HeightPx / 2,
@@ -1096,10 +1142,10 @@ begin
     end;
 end;
 
-function TyBuildSymbolMapped(const ASpec: TTySymbolSpec; ACX, ACY: Double;
-  const AL: TTyMat2D): TTyChartShape;
+function BuildMapped(const ASpec: TTySymbolSpec; ACX, ACY: Double;
+  const AL: TTyMat2D; ARealBox: Boolean): TTyChartShape;
 var
-  w, h, a0, a1, a2, a3, r0, r1: Double;
+  w, h, a0, a1, a2, a3, r0, r1, r: Double;
   spec: TTySymbolSpec;
   L: TPointList;
   path: TTyZrPath;
@@ -1184,6 +1230,52 @@ begin
   mm[1] := AL[1] * (w / 2);
   mm[2] := AL[2] * (h / 2);
   mm[3] := AL[3] * (h / 2);
+  { [R7-R] the real box: symbol.ts' own path at the size, mapped by AL }
+  if ARealBox then
+  begin
+    for i := 0 to 3 do mm[i] := AL[i];
+    case ASpec.Kind of
+      tsyCircle:
+        begin
+          r := Min(w, h) / 2;
+          a0 := AL[0] * r;
+          a2 := AL[2] * r;
+          a1 := AL[1] * r;
+          a3 := AL[3] * r;
+          r0 := Sqrt(a0 * a0 + a2 * a2);
+          r1 := Sqrt(a1 * a1 + a3 * a3);
+          if Abs(a0 * a1 + a2 * a3) <= 1e-12 * r0 * r1 then
+          begin
+            if r0 = r1 then Result := TyShapeCircle(ACX, ACY, r0)
+            else Result := TyShapeEllipse(ACX, ACY, r0, r1);
+            Exit;
+          end;
+          path := TyZrSymbol('circle', -w / 2, -h / 2, w, h);
+          FromPath;
+          Exit;
+        end;
+      tsySquare, tsyRoundRect, tsyPin:
+        begin
+          case ASpec.Kind of
+            tsySquare: path := TyZrSymbol('square', -w / 2, -h / 2, w, h);
+            tsyRoundRect: path := TyZrSymbol('roundRect', -w / 2, -h / 2, w, h);
+          else
+            path := TyZrSymbol('pin', -w / 2, -h / 2, w, h);
+          end;
+          FromPath;
+          Exit;
+        end;
+      tsyPath:
+        begin
+          if ASpec.KeepAspect then
+            path := TyZrMakePathCenter(ASpec.PathData, TyXYWH(-w / 2, -h / 2, w, h))
+          else
+            path := TyZrMakePathCover(ASpec.PathData, TyXYWH(-w / 2, -h / 2, w, h));
+          FromPath;
+          Exit;
+        end;
+    end;
+  end;
   case ASpec.Kind of
     tsyCircle:
       begin
@@ -1238,6 +1330,18 @@ begin
   end;
   Result.Points := Copy(Result.Points, 0, Length(Result.Points));
   for i := 0 to High(Result.Points) do Map(Result.Points[i].X, Result.Points[i].Y);
+end;
+
+function TyBuildSymbolMapped(const ASpec: TTySymbolSpec; ACX, ACY: Double;
+  const AL: TTyMat2D): TTyChartShape;
+begin
+  Result := BuildMapped(ASpec, ACX, ACY, AL, False);
+end;
+
+function TyBuildSymbolMappedBox(const ASpec: TTySymbolSpec; ACX, ACY: Double;
+  const AL: TTyMat2D): TTyChartShape;
+begin
+  Result := BuildMapped(ASpec, ACX, ACY, AL, True);
 end;
 
 function TyImageCenterBox(const ASource: string; const ABox: TTyRectF): TTyRectF;

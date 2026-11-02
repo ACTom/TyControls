@@ -2258,7 +2258,7 @@ begin
     if rowSym.Kind <> tsyNone then
       for i := 0 to m - 1 do
       begin
-        sym := TyBuildSymbol(rowSym, pts[i].X, pts[i].Y);
+        sym := TyBuildSymbolUnit(rowSym, pts[i].X, pts[i].Y);
         if not TyRectFIsValid(TyShapeBounds(sym)) then Continue;
         { [R7-F] hit in its own frame, as RadarView's createSymbol }
         TySymbolHitFrame(sym, rowSym, pts[i].X, pts[i].Y);

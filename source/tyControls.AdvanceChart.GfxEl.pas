@@ -3086,7 +3086,9 @@ var
   d: TJSONData;
   c: TTyChartColor;
   hasFill, hasStroke: Boolean;
-  lw, us, x, y, w, h, op: Double;
+  lw, us, x, y, w, h, op, lsc, ks: Double;
+  m2: TTyMat2D;
+  probe: TTyChartElementStyle;
   rt: TTyRtResult;
   i: Integer;
   dash: TTyDoubleArray;
@@ -3267,6 +3269,36 @@ begin
         it is drawn at its own width whatever the element's scale
         [Batch 129] }
       if TyGfxStrokeNoScale(AEl) then us := ACtx.Scale;
+      { [R7-R] STROKECONTAINTHRESHOLD IN THE ELEMENT'S OWN FRAME: Path.contain
+        takes an unfilled path's pen to at least 5 of its own units, over
+        its line scale where strokeNoScale -- 5 times the element's own
+        scale over that line scale on the canvas, or in the pen map's space
+        (a strokeNoScale map carries the line scale itself: 1 there)
+        [was: 5 on the canvas]. And where getLineScale answers 1 for a
+        transform of another scale that turns and scales alike (a diagonal
+        entry of one: scale 2 turned by 60 degrees), the pen is the width
+        over 1 under that scale: that scale times the width on the canvas
+        [was: the width] }
+      if AEl.HasTransform then
+      begin
+        m2 := AEl.Transform;
+        ks := Sqrt(Abs(m2[0] * m2[3] - m2[2] * m2[1]));
+        lsc := TyGfxLineScale(AEl);
+        if TyGfxStrokeNoScale(AEl) then
+        begin
+          probe := TyChartStyle;
+          TyStyleNoScalePen(probe, m2);
+          if probe.HasPenMap then AOut.HitMinScale := 1
+          else
+          begin
+            AOut.HitMinScale := ks / lsc;
+            if (lsc = 1) and (ks <> 1) and (ks > 0) and not IsInfinite(ks) then
+              us := ACtx.Scale * ks;
+          end;
+        end
+        else
+          AOut.HitMinScale := ks;
+      end;
       if hasStroke then
       begin
         d := AEl.Style.Find('stroke');

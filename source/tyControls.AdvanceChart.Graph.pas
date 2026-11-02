@@ -220,6 +220,12 @@ type
       -- the zero value, so an edge nobody read keeps the series' ends. }
     OwnSymFrom, OwnSymTo: string;
     OwnSizeFrom, OwnSizeTo: Double;
+    { [R7-R] AN END'S OWN SIZE WRITTEN AS [w, h] (`symbolSize: [[w1, h1],
+      [w2, h2]]`): an array is truthy whatever it holds, so the pair is the
+      end's -- OwnSize the width, OwnSizeH the height (normalizeSymbolSize:
+      `size[i] || 0`). False, the zero value: one number, square }
+    OwnSizeFromPair, OwnSizeToPair: Boolean;
+    OwnSizeFromH, OwnSizeToH: Double;
     { THE EDGE DATA'S NAME: the link's `id`, else `source + ' > ' + target`
       as JavaScript concatenates the two raw values -- never its `name`
       (createGraphFromNodeEdge's linkNameList). What the b placeholder prints. }
@@ -315,6 +321,11 @@ type
     { The two ends' arrowheads and their sizes. `['none','none']` and 10. }
     EdgeSymbolFrom, EdgeSymbolTo: string;
     EdgeSizeFrom, EdgeSizeTo: Double;
+    { [R7-R] `edgeSymbolSize: [[w1, h1], [w2, h2]]`: an end's size as a
+      pair -- EdgeSize the width, EdgeSizeH the height. False, the zero
+      value: one number, square }
+    EdgeSizeFromPair, EdgeSizeToPair: Boolean;
+    EdgeSizeFromH, EdgeSizeToH: Double;
     { `lineStyle.curveness` at the series level. Beats the table, zero
       included. }
     HasCurveness: Boolean;
@@ -739,6 +750,10 @@ function TyGraphEdgeSymbol(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEdge;
   AAtEnd: Boolean): string;
 function TyGraphEdgeSymbolSize(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEdge;
   AAtEnd: Boolean): Double;
+{ [R7-R] THE END'S WIDTH AND HEIGHT, a pair where either level wrote one
+  (the edge's own where truthy -- a pair always is -- else the series') }
+procedure TyGraphEdgeSymbolBox(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEdge;
+  AAtEnd: Boolean; out AW, AH: Double);
 { An end that carries a symbol: neither '' nor 'none'. }
 function TyGraphEdgeHasSymbol(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEdge;
   AAtEnd: Boolean): Boolean;
@@ -1777,6 +1792,18 @@ begin
   else if Result < -cTyGraphFarPx then Result := -cTyGraphFarPx;
 end;
 
+{ [R7-R] normalizeSymbolSize of a pair: `[size[0] || 0, size[1] || 0]` --
+  a number as it is (not-a-number nought), anything else nought }
+procedure PairSize(A: TJSONArray; out AW, AH: Double);
+begin
+  AW := 0;
+  AH := 0;
+  if (A.Count > 0) and (A.Items[0].JSONType = jtNumber) then AW := A.Items[0].AsFloat;
+  if (A.Count > 1) and (A.Items[1].JSONType = jtNumber) then AH := A.Items[1].AsFloat;
+  if IsNan(AW) then AW := 0;
+  if IsNan(AH) then AH := 0;
+end;
+
 { Whether upstream's getSymbolSize comes out not-a-number for this
   `symbolSize`: an array without a number in both of its first two places --
   `(size[0] + size[1]) / 2` with an undefined in it. }
@@ -1847,6 +1874,17 @@ begin
     ASpec.EdgeSizeFrom := a.Items[0].AsFloat;
   if (a.Count > 1) and (a.Items[1].JSONType = jtNumber) then
     ASpec.EdgeSizeTo := a.Items[1].AsFloat;
+  { [R7-R] an end written as [w, h] }
+  if (a.Count > 0) and (a.Items[0] is TJSONArray) then
+  begin
+    ASpec.EdgeSizeFromPair := True;
+    PairSize(TJSONArray(a.Items[0]), ASpec.EdgeSizeFrom, ASpec.EdgeSizeFromH);
+  end;
+  if (a.Count > 1) and (a.Items[1] is TJSONArray) then
+  begin
+    ASpec.EdgeSizeToPair := True;
+    PairSize(TJSONArray(a.Items[1]), ASpec.EdgeSizeTo, ASpec.EdgeSizeToH);
+  end;
 end;
 
 { JavaScript's truthiness, for an option value that is tested rather than used.
@@ -2384,6 +2422,8 @@ begin
   Result.Symbol.HeightPx := SaneSize(Result.Symbol.HeightPx);
   Result.EdgeSizeFrom := SaneSize(Result.EdgeSizeFrom);
   Result.EdgeSizeTo := SaneSize(Result.EdgeSizeTo);
+  Result.EdgeSizeFromH := SaneSize(Result.EdgeSizeFromH);
+  Result.EdgeSizeToH := SaneSize(Result.EdgeSizeToH);
 
   sub := SubObj(node, 'lineStyle');
   if sub <> nil then
@@ -3247,12 +3287,27 @@ begin
     AEdge.OwnSymFrom := SymOf(d);
     AEdge.OwnSymTo := AEdge.OwnSymFrom;
   end;
+  AEdge.OwnSizeFromPair := False;
+  AEdge.OwnSizeToPair := False;
+  AEdge.OwnSizeFromH := 0;
+  AEdge.OwnSizeToH := 0;
   d := AItem.Find('symbolSize');
   if d is TJSONArray then
   begin
     a := TJSONArray(d);
     if a.Count > 0 then AEdge.OwnSizeFrom := SizeOf_(a.Items[0]);
     if a.Count > 1 then AEdge.OwnSizeTo := SizeOf_(a.Items[1]);
+    { [R7-R] an end written as [w, h]: truthy, the end's own }
+    if (a.Count > 0) and (a.Items[0] is TJSONArray) then
+    begin
+      AEdge.OwnSizeFromPair := True;
+      PairSize(TJSONArray(a.Items[0]), AEdge.OwnSizeFrom, AEdge.OwnSizeFromH);
+    end;
+    if (a.Count > 1) and (a.Items[1] is TJSONArray) then
+    begin
+      AEdge.OwnSizeToPair := True;
+      PairSize(TJSONArray(a.Items[1]), AEdge.OwnSizeTo, AEdge.OwnSizeToH);
+    end;
   end
   else
   begin
@@ -3264,6 +3319,8 @@ begin
   if IsNan(AEdge.OwnSizeTo) then AEdge.OwnSizeTo := 0;
   AEdge.OwnSizeFrom := SaneSize(AEdge.OwnSizeFrom);
   AEdge.OwnSizeTo := SaneSize(AEdge.OwnSizeTo);
+  AEdge.OwnSizeFromH := SaneSize(AEdge.OwnSizeFromH);
+  AEdge.OwnSizeToH := SaneSize(AEdge.OwnSizeToH);
 end;
 
 function TyGraphEdgesOf(AOption: TTyChartOption; ASlot: Integer;
@@ -5532,6 +5589,62 @@ begin
   end;
 end;
 
+procedure TyGraphEdgeSymbolBox(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEdge;
+  AAtEnd: Boolean; out AW, AH: Double);
+var own: Boolean;
+begin
+  if AAtEnd then
+  begin
+    own := AEdge.OwnSizeToPair
+      or not (IsNan(AEdge.OwnSizeTo) or (AEdge.OwnSizeTo = 0));
+    if own and AEdge.OwnSizeToPair then
+    begin
+      AW := AEdge.OwnSizeTo;
+      AH := AEdge.OwnSizeToH;
+    end
+    else if own then
+    begin
+      AW := AEdge.OwnSizeTo;
+      AH := AW;
+    end
+    else if ASpec.EdgeSizeToPair then
+    begin
+      AW := ASpec.EdgeSizeTo;
+      AH := ASpec.EdgeSizeToH;
+    end
+    else
+    begin
+      AW := ASpec.EdgeSizeTo;
+      AH := AW;
+    end;
+  end
+  else
+  begin
+    own := AEdge.OwnSizeFromPair
+      or not (IsNan(AEdge.OwnSizeFrom) or (AEdge.OwnSizeFrom = 0));
+    if own and AEdge.OwnSizeFromPair then
+    begin
+      AW := AEdge.OwnSizeFrom;
+      AH := AEdge.OwnSizeFromH;
+    end
+    else if own then
+    begin
+      AW := AEdge.OwnSizeFrom;
+      AH := AW;
+    end
+    else if ASpec.EdgeSizeFromPair then
+    begin
+      AW := ASpec.EdgeSizeFrom;
+      AH := ASpec.EdgeSizeFromH;
+    end
+    else
+    begin
+      AW := ASpec.EdgeSizeFrom;
+      AH := AW;
+    end;
+  end;
+end;
+
 function TyGraphEdgeHasSymbol(const ASpec: TTyGraphSpec; const AEdge: TTyGraphEdge;
   AAtEnd: Boolean): Boolean;
 var s: string;
@@ -6582,6 +6695,8 @@ var
   hw, hh, offX0, offY0: Double;
   { [R7-G] the device scale, and a straight edge's ends in its frame }
   pxs: Double;
+  { [R7-R] an end symbol's width and height }
+  ew, eh: Double;
   q1s, q2s: TTyPointF;
   { [R7-O] a turned node: its turn, its map under the view }
   nodeTurn: Boolean;
@@ -6801,7 +6916,7 @@ var
   end;
 
   { The arrowhead at one end of the edge just built. }
-  procedure Arrow(const AName: string; ASize: Double; AAtEnd: Boolean);
+  procedure Arrow(const AName: string; ASize, AH: Double; AAtEnd: Boolean);
   var s: TTySymbolSpec; e: TTyChartElement; sh: TTyChartShape;
       at: TTyPointF; tg: TTyPointF; em: Boolean; pd: string;
       { [R7-O] under a view that scales unequally }
@@ -6811,15 +6926,18 @@ var
       rot: Double;
       L: TTyMat2D;
       bx: TTyXYWH;
+      { [R7-R] sized [w, h]: createSymbol's real box, another picture }
+      oblong: Boolean;
   begin
-    if (AName = '') or (AName = 'none') or (ASize <= 0) then Exit;
+    if (AName = '') or (AName = 'none') or (ASize <= 0) or (AH <= 0) then Exit;
     s := Default(TTySymbolSpec);
     s.Kind := TySymbolKindOf(AName, em, pd);
     if s.Kind = tsyNone then Exit;
     s.Empty := em;
     s.PathData := pd;
     s.WidthPx := ASize;
-    s.HeightPx := ASize;
+    s.HeightPx := AH;
+    oblong := ASize <> AH;
     if AAtEnd then at := TyGraphPointAt(p1, p2, cp, curved, 1)
     else at := TyGraphPointAt(p1, p2, cp, curved, 0);
     if AAtEnd then tg := TyGraphTangentAt(p1, p2, cp, curved, 1)
@@ -6844,7 +6962,17 @@ var
       else tg := TyGraphTangentAt(q1, q2, qc, curved, 0);
       rot := TyGraphArrowRotationRad(tg, AAtEnd);
       L := TyGraphEdgeSymbolMap(rot, fr.InvScale, fr.SX, fr.SY);
-      sh := TyBuildSymbolMapped(s, at.X, at.Y, L);
+      if oblong then sh := TyBuildSymbolMappedBox(s, at.X, at.Y, L)
+      else sh := TyBuildSymbolMapped(s, at.X, at.Y, L);
+    end
+    else if oblong then
+    begin
+      { [R7-R] createSymbol(type, -w / 2, -h / 2, w, h) turned by the
+        tangent: the real box's picture (a circle of min(w, h) / 2, ...)
+        [was: one size, the width, read for both] }
+      rot := TyGraphArrowRotationRad(tg, AAtEnd);
+      L := TyZrLocal(1, 1, rot, 0, 0);
+      sh := TyBuildSymbolMappedBox(s, at.X, at.Y, L);
     end
     else
       sh := TyBuildSymbol(s, at.X, at.Y);
@@ -6887,7 +7015,30 @@ var
     e.HitSlopLogical := 0;
     if s.Kind <> tsyLine then
     begin
-      if sq then
+      if oblong then
+      begin
+        { [R7-R] hit in that real box's frame: the path createSymbol makes
+          at the size, its pen the symbol's own }
+        e.Shape.HitM[0] := L[0];
+        e.Shape.HitM[1] := L[1];
+        e.Shape.HitM[2] := L[2];
+        e.Shape.HitM[3] := L[3];
+        e.Shape.HitM[4] := at.X;
+        e.Shape.HitM[5] := at.Y;
+        e.Shape.HitBoxW := ASize;
+        e.Shape.HitBoxH := AH;
+        case s.Kind of
+          tsyCircle: e.Shape.HitSym := 'circle';
+          tsyRect: e.Shape.HitSym := 'rect';
+          tsyRoundRect: e.Shape.HitSym := 'roundRect';
+          tsySquare: e.Shape.HitSym := 'square';
+          tsyTriangle: e.Shape.HitSym := 'triangle';
+          tsyDiamond: e.Shape.HitSym := 'diamond';
+          tsyPin: e.Shape.HitSym := 'pin';
+          tsyArrow: e.Shape.HitSym := 'arrow';
+        end;
+      end
+      else if sq then
       begin
         e.Shape.HitM[0] := L[0] * (ASize / 2);
         e.Shape.HitM[1] := L[1] * (ASize / 2);
@@ -6929,9 +7080,9 @@ var
     e.Anim.Vals := Copy(edgeAnim.Vals, 0, Length(edgeAnim.Vals));
     SetLength(e.Anim.Vals, 11);
     if Copy(AName, 1, 7) = 'path://' then
-      bx := TyZrBBox(TyZrMakePathCover(pd, TyXYWH(-ASize / 2, -ASize / 2, ASize, ASize)))
+      bx := TyZrBBox(TyZrMakePathCover(pd, TyXYWH(-ASize / 2, -AH / 2, ASize, AH)))
     else
-      bx := TyZrBBox(TyZrSymbol(AName, -ASize / 2, -ASize / 2, ASize, ASize));
+      bx := TyZrBBox(TyZrSymbol(AName, -ASize / 2, -AH / 2, ASize, AH));
     bx := TyZrStrokeRect(bx, 1, e.Style.StrokeWidthLogical > 0, True,
       e.Style.StrokeWidthLogical, 1);
     e.Anim.Vals[7] := bx.X;
@@ -7084,10 +7235,11 @@ begin
     Inc(Result);
 
     edgeAt := i;
-    Arrow(TyGraphEdgeSymbol(ASpec, AEdges[i], False),
-      TyGraphEdgeSymbolSize(ASpec, AEdges[i], False), False);
-    Arrow(TyGraphEdgeSymbol(ASpec, AEdges[i], True),
-      TyGraphEdgeSymbolSize(ASpec, AEdges[i], True), True);
+    { [R7-R] each end's width and height (a pair where one is written) }
+    TyGraphEdgeSymbolBox(ASpec, AEdges[i], False, ew, eh);
+    Arrow(TyGraphEdgeSymbol(ASpec, AEdges[i], False), ew, eh, False);
+    TyGraphEdgeSymbolBox(ASpec, AEdges[i], True, ew, eh);
+    Arrow(TyGraphEdgeSymbol(ASpec, AEdges[i], True), ew, eh, True);
   end;
 
   for i := 0 to High(ANodes) do
@@ -7172,7 +7324,7 @@ begin
         ANodes[i].PY + sym.OffsetY, nm);
     end
     else
-      shape := TyBuildSymbol(sym, ANodes[i].PX, ANodes[i].PY);
+      shape := TyBuildSymbolUnit(sym, ANodes[i].PX, ANodes[i].PY);
     if (shape.Kind = cskRect) and not TyRectFIsValid(shape.Bounds) then Continue;
     { [R7-F] hit in its own frame, as Symbol.ts' path }
     TySymbolHitFrame(shape, sym, ANodes[i].PX, ANodes[i].PY);

@@ -1965,7 +1965,7 @@ var
       rs := RowSymbol(AVisual, AStore, ARow, AVisual.Symbol, lift);
     if rs.Kind = tsyNone then Exit;
     rs := TySymbolResolveOffset(rs);
-    sh := TyBuildSymbol(rs, AP.X, AP.Y);
+    sh := TyBuildSymbolUnit(rs, AP.X, AP.Y);
     if (sh.Kind = cskRect) and not TyRectFIsValid(sh.Bounds) then Exit;
     { [R7-F] hit in its own frame, as Symbol.ts' path }
     TySymbolHitFrame(sh, rs, AP.X, AP.Y);
@@ -2783,7 +2783,7 @@ begin
     rs := RowSymbol(AVisual, AStore, ARow, ASpec, lift);
   if rs.Kind = tsyNone then Exit;
   rs := TySymbolResolveOffset(rs);
-  shape := TyBuildSymbol(rs, AP.X, AP.Y);
+  shape := TyBuildSymbolUnit(rs, AP.X, AP.Y);
   { [R7-F] hit in its own frame, as Symbol.ts' path }
   TySymbolHitFrame(shape, rs, AP.X, AP.Y);
   { A SYMBOL OF NO SIZE is still an element upstream -- it paints nothing
@@ -4231,8 +4231,9 @@ begin
     sym.HeightPx := glyphH;
     sym.KeepAspect := spec.KeepAspect;
     { [F6a] createPath (PictorialBarView) hands createSymbol no keepAspect:
-      a picture glyph covers its box }
-    if sym.Kind = tsyImage then sym.KeepAspect := False;
+      a picture glyph covers its box -- [R7-R] and a path:// one too (its
+      square pattern box, scaled to the glyph: stretched) }
+    if sym.Kind in [tsyImage, tsyPath] then sym.KeepAspect := False;
     { THE OFFSET IS ALREADY IN THE ANCHOR and in acrossCentre. Leaving it on
       the spec as well would move every glyph twice. }
     sym.OffsetX := 0;
@@ -4274,7 +4275,7 @@ begin
         pt := TyPointF(acrossCentre + offAcross, floorPx + along)
       else
         pt := TyPointF(floorPx + along, acrossCentre + offAcross);
-      shape := TyBuildSymbol(sym, pt.X, pt.Y);
+      shape := TyBuildSymbolUnit(sym, pt.X, pt.Y);
       if (shape.Kind = cskRect) and not TyRectFIsValid(shape.Bounds) then Continue;
       if mirror then
         shape := TyMirrorShape(shape, pt.X, pt.Y, not baseHoriz, baseHoriz);
