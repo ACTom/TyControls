@@ -583,6 +583,10 @@ function r7iCases() {
     ['r7r.pictorial-path', cart({ type: 'pictorialBar', symbol: 'path://M0 0L10 0L5 10Z', symbolSize: [40, 16],
       symbolRotate: 30, symbolRepeat: false, symbolPosition: 'center', data: [4, -6, 8], itemStyle: B(60) },
       { yAxis: { type: 'value', min: -10, max: 10 } }), [IT(0, 1), IT(0, 0)]],
+    // a horizontal bar's glyph: a negative value mirrors it across x
+    ['r7r.pictorial-path-horiz', Object.assign(cart({ type: 'pictorialBar', symbol: 'path://M0 0L10 0L5 10Z',
+      symbolSize: [16, 40], symbolRotate: 30, symbolRepeat: false, symbolPosition: 'center', data: [4, -6, 8], itemStyle: B(60) }),
+    { xAxis: { type: 'value', min: -10, max: 10 }, yAxis: { type: 'category', data: N } }), [IT(0, 1), IT(0, 0)]],
     // a glyph's path covers its box whatever symbolKeepAspect says (createPath
     // hands createSymbol none)
     ['r7r.pictorial-path-keep', cart({ type: 'pictorialBar', symbol: 'path://M0 0L20 0L10 10Z', symbolSize: [40, 16],
@@ -600,13 +604,13 @@ function r7iCases() {
       edgeSymbol: ['circle', 'rect'], edgeSymbolSize: [[20, 10], [12, 24]], lineStyle: { width: 1, opacity: 1 },
       data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }, { name: 'c', x: 100, y: 0 }],
       links: [{ source: 'a', target: 'c' }, { source: 'a', target: 'b', symbol: ['roundRect', 'pin'] },
-        { source: 'c', target: 'b', symbol: ['emptyCircle', 'square'], symbolSize: [[8, 30], [24, 12]] }] }),
+        { source: 'c', target: 'b', symbol: ['emptyRect', 'square'], symbolSize: [[8, 30], [24, 12]] }] }),
     [PT(300, 21, 40), PT(56, 21, 30), PT(300, 270, 40), PT(310, 31, 30), PT(56, 26, 30)]],
     ['r7r.graph-ends-oblong-squash', solo({ type: 'graph', layout: 'none', left: 50, top: 20, width: 300, height: 150,
       symbolSize: 10, edgeSymbol: ['circle', 'rect'], edgeSymbolSize: [[20, 10], [12, 24]], lineStyle: { width: 1, opacity: 1 },
       data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }, { name: 'c', x: 100, y: 0 }],
       links: [{ source: 'a', target: 'c' }, { source: 'a', target: 'b', symbol: ['roundRect', 'pin'] },
-        { source: 'c', target: 'b', lineStyle: { curveness: 0.3 }, symbol: ['emptyCircle', 'arrow'],
+        { source: 'c', target: 'b', lineStyle: { curveness: 0.3 }, symbol: ['emptyRect', 'arrow'],
           symbolSize: [[8, 30], 0] }] }),
     [PT(340, 21, 40), PT(56, 21, 30), PT(340, 165, 40), PT(345, 30, 30), PT(60, 26, 30)]],
     // [R7-R] a lines series' end symbols sized [w, h]: the real box's square,
