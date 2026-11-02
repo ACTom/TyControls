@@ -29,7 +29,14 @@ unit test.advchart.richwiring;
   'inherit' names -- must be there, not be upstream's. A text whose block
   font the skin decides differently (a title's 18px bold is the skin's 12)
   has its geometry and its inherited sizes left out; what the case authored
-  is compared regardless. }
+  is compared regardless.
+
+  [R7-B] A CASE MARKED `looks` (the gauge's words) writes every colour it
+  draws, so every colour is compared as upstream drew it, the skin's rule
+  aside; and it compares what the others leave: each piece's opacity, a
+  rect's border dash, its phase and its shadow, a text's halo dash and its
+  phase. A one-run caption's pieces take the element's alpha and the
+  caption's halo dash. }
 interface
 uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
@@ -74,6 +81,9 @@ type
     FSsr: ITyTextMeasurer;
     FBad, FCompared, FSkipped, FTexts, FOneRun: Integer;
     FReport, FCase: string;
+    { [R7-B] the case is a `looks` one }
+    FLooks: Boolean;
+    FLooksTexts: Integer;
     FUsed: array of Boolean;
     procedure SetUp; override;
     procedure TearDown; override;
@@ -307,7 +317,7 @@ begin
 end;
 
 procedure TAdvChartRichWiringOracleTest.Draw(ACase: TJSONObject);
-var w, h: Integer;
+var w, h, k: Integer;
 begin
   w := ACase.Get('W', 600);
   h := ACase.Get('H', 400);
@@ -315,6 +325,13 @@ begin
   FChart.Option := ACase.Objects['option'].AsJSON;
   FChart.SetBounds(0, 0, w, h);
   FChart.Render(FBmp.Canvas, Rect(0, 0, w, h), 96);
+  { [R7-B] the case's actions, dispatched after the option, as upstream's }
+  if ACase.Find('actions') is TJSONArray then
+  begin
+    for k := 0 to ACase.Arrays['actions'].Count - 1 do
+      FChart.DispatchAction(ACase.Arrays['actions'].Objects[k].AsJSON);
+    FChart.Render(FBmp.Canvas, Rect(0, 0, w, h), 96);
+  end;
   FUsed := nil;
   if FChart.List <> nil then SetLength(FUsed, FChart.List.Count);
 end;
@@ -349,6 +366,14 @@ begin
   def.Fill := AInk;
   def.HasStroke := AHasHalo;
   def.Stroke := AHalo;
+  { [R7-B] a looks case's halo is its text's own (a gauge's textBorderColor),
+    not a host's: the style's stroke, which the box grows by }
+  if FLooks and AHasHalo then
+  begin
+    st.HasStroke := True;
+    st.Stroke := AHalo;
+    def.HasStroke := False;
+  end;
   case AH of
     tahCentre: def.Align := rtaCenter;
     tahRight: def.Align := rtaRight;
@@ -371,12 +396,27 @@ begin
 end;
 
 function TAdvChartRichWiringOracleTest.FromCaption(const E: TTyChartElement): TRwDrawn;
+var k: Integer;
 begin
   if Length(E.Caption.RtPieces) = 0 then
-    Exit(PlainDrawn(E.Caption.Text, E.Caption.FontName, E.Caption.FontSizeLogical,
+  begin
+    Result := PlainDrawn(E.Caption.Text, E.Caption.FontName, E.Caption.FontSizeLogical,
       E.Caption.FontWeight, True, E.Caption.Colour, E.Caption.StrokeWidthLogical > 0,
       E.Caption.StrokeColour, E.Caption.StrokeWidthLogical, E.Caption.AnchorH,
-      E.Caption.AnchorV, E.Caption.X, E.Caption.Y, E.Caption.RotationRad));
+      E.Caption.AnchorV, E.Caption.X, E.Caption.Y, E.Caption.RotationRad);
+    { [R7-B] what the one run draws besides: the element's alpha, the halo's
+      dash and phase }
+    for k := 0 to High(Result.D.Pieces) do
+    begin
+      Result.D.Pieces[k].Opacity := E.Style.Alpha;
+      if Result.D.Pieces[k].HasStroke then
+      begin
+        Result.D.Pieces[k].LineDash := E.Caption.StrokeType;
+        Result.D.Pieces[k].LineDashOffset := E.Caption.StrokeDashOffset;
+      end;
+    end;
+    Exit;
+  end;
   Result := Default(TRwDrawn);
   Result.Found := True;
   Result.D.Pieces := E.Caption.RtPieces;
@@ -577,6 +617,20 @@ var
   var skin: Boolean;
   begin
     Inc(FCompared);
+    { [R7-B] a looks case's colours are all its own: ARGB as upstream drew }
+    if FLooks then
+    begin
+      if not ColourOf(AUp, c) then
+      begin
+        if APortHas then
+          Miss(Format('%s: none upstream, %s here', [AWhat, IntToHex(APort, 8)]));
+      end
+      else if not APortHas then
+        Miss(Format('%s: %s upstream, none here', [AWhat, AUp]))
+      else if c <> APort then
+        Miss(Format('%s: %s upstream, %s here', [AWhat, AUp, IntToHex(APort, 8)]));
+      Exit;
+    end;
     if AUp = '' then
     begin
       if APortHas then
@@ -597,6 +651,50 @@ var
       Miss(Format('%s: %s upstream, none here', [AWhat, AUp]))
     else if not SameRgb(c, APort) then
       Miss(Format('%s: %s upstream, %s here', [AWhat, AUp, IntToHex(APort, 8)]));
+  end;
+
+  { [R7-B] a dash as the oracle wrote it: a word, or a number list's text }
+  function DashText(AP: TJSONObject): string;
+  var d: TJSONData; k: Integer;
+  begin
+    Result := '';
+    d := AP.Find('lineDash');
+    if (d = nil) or (d.JSONType = jtNull) then Exit;
+    if d.JSONType = jtString then Exit(d.AsString);
+    d := AP.Find('lineDashText');
+    if not (d is TJSONArray) then Exit;
+    Result := '[';
+    for k := 0 to d.Count - 1 do
+    begin
+      if k > 0 then Result := Result + ',';
+      Result := Result + d.Items[k].AsString;
+    end;
+    Result := Result + ']';
+  end;
+
+  { [R7-B] a rect's opacity and its shadow }
+  procedure LooksOf(const AWhat: string; AP: TJSONObject; const AQ: TTyRtPiece);
+  var s: TJSONObject;
+  begin
+    Inc(FCompared);
+    if not Near(AQ.Opacity, Hex(AP.Find('opacity'))) then
+      Miss(Format('%s opacity %s upstream, %g here', [AWhat, Str(AP.Find('opacityText')), AQ.Opacity]));
+    s := Obj(AP.Find('shadow'));
+    Inc(FCompared);
+    if (s <> nil) <> AQ.HasShadow then
+      Miss(Format('%s shadow %s upstream, %s here', [AWhat, BoolToStr(s <> nil, 'set', 'none'),
+        BoolToStr(AQ.HasShadow, 'set', 'none')]))
+    else if s <> nil then
+    begin
+      if not (Near(AQ.ShadowBlur, Hex(s.Find('blur'))) and Near(AQ.ShadowOffsetX, Hex(s.Find('offsetX')))
+        and Near(AQ.ShadowOffsetY, Hex(s.Find('offsetY')))) then
+        Miss(Format('%s shadow blur %s offset %s,%s upstream, %g offset %g,%g here', [AWhat,
+          Str(s.Find('blurText')), Str(s.Find('offsetXText')), Str(s.Find('offsetYText')),
+          AQ.ShadowBlur, AQ.ShadowOffsetX, AQ.ShadowOffsetY]));
+      if ColourOf(Str(s.Find('color')), c) and (c <> AQ.ShadowColor) then
+        Miss(Format('%s shadow colour %s upstream, %s here', [AWhat, Str(s.Find('color')),
+          IntToHex(AQ.ShadowColor, 8)]));
+    end;
   end;
 
   function FillSource(AP: TJSONObject; const AKey, ABlockKey: string): TSource;
@@ -635,6 +733,9 @@ begin
   upBlockPx := Hex(style.Find('fontSize'));
   if IsNan(upBlockPx) then upBlockPx := 12;
   geometry := Abs(dr.BlockPx - upBlockPx) < 1e-6;
+  { [R7-B] a looks case's fonts are the option's or upstream's own sizes,
+    never the skin's: its geometry is always compared }
+  if FLooks then geometry := True;
   pieces := T.Arrays['pieces'];
   Inc(FCompared);
   if pieces.Count <> Length(dr.D.Pieces) then
@@ -718,6 +819,20 @@ begin
       Inc(FCompared);
       if p.Booleans['drawn'] <> q.Drawn then
         Miss(Format('%s: rect %d drawn differs', [where, i]));
+      if FLooks then
+      begin
+        LooksOf(Format('%s: rect %d', [where, i]), p, q);
+        if (up <> '') and q.HasStroke then
+        begin
+          Inc(FCompared);
+          if DashText(p) <> StringReplace(q.BorderDash, ' ', '', [rfReplaceAll]) then
+            Miss(Format('%s: rect %d border dash %s upstream, %s here', [where, i,
+              DashText(p), q.BorderDash]));
+          if (DashText(p) <> '') and not Near(q.BorderDashOffset, Hex(p.Find('lineDashOffset'))) then
+            Miss(Format('%s: rect %d dash phase %s upstream, %g here', [where, i,
+              Str(p.Find('lineDashOffsetText')), q.BorderDashOffset]));
+        end;
+      end;
       Continue;
     end;
     { a text }
@@ -805,6 +920,23 @@ begin
         Miss(Format('%s: text %d "%s" shadow colour %s upstream, %s here', [where,
           i, p.Strings['text'], Str(sh.Find('color')), IntToHex(q.ShadowColor, 8)]));
     end;
+    if FLooks then
+    begin
+      Inc(FCompared);
+      if not Near(q.Opacity, Hex(p.Find('opacity'))) then
+        Miss(Format('%s: text %d "%s" opacity %s upstream, %g here', [where, i,
+          p.Strings['text'], Str(p.Find('opacityText')), q.Opacity]));
+      if (up <> '') and q.HasStroke then
+      begin
+        Inc(FCompared);
+        if DashText(p) <> StringReplace(q.LineDash, ' ', '', [rfReplaceAll]) then
+          Miss(Format('%s: text %d "%s" halo dash %s upstream, %s here', [where, i,
+            p.Strings['text'], DashText(p), q.LineDash]))
+        else if (DashText(p) <> '') and not Near(q.LineDashOffset, Hex(p.Find('lineDashOffset'))) then
+          Miss(Format('%s: text %d "%s" halo phase %s upstream, %g here', [where, i,
+            p.Strings['text'], Str(p.Find('lineDashOffsetText')), q.LineDashOffset]));
+      end;
+    end;
   end;
   { THE BOX THE PIECES OCCUPY, turned onto the canvas: upstream's Text
     getBoundingRect, a stroked rect grown by its stroke, a text by a stroke
@@ -853,21 +985,32 @@ begin
     for k := 0 to High(cDeferred) do
       if FCase = cDeferred[k] then skip := True;
     if skip then Continue;
+    FLooks := (cs.Find('looks') <> nil) and (cs.Find('looks').JSONType = jtBoolean)
+      and cs.Booleans['looks'];
     try
       Draw(cs);
       texts := cs.Arrays['texts'];
       for t := 0 to texts.Count - 1 do
+      begin
+        if FLooks then Inc(FLooksTexts);
         CheckText(texts.Objects[t]);
+      end;
     except
       on E: Exception do Miss(E.ClassName + ': ' + E.Message);
     end;
   end;
+  FLooks := False;
+  AssertTrue(Format('only %d texts in the looks cases', [FLooksTexts]), FLooksTexts >= 60);
   AssertTrue(Format('%d of %d differ from upstream (%d geometry checks left to '
     + 'the skin):%s', [FBad, FCompared, FSkipped, FReport]), FBad = 0);
   AssertTrue(Format('only %d texts', [FTexts]), FTexts >= 200);
-  { the two texts with nothing a block is needed for -- the gauge's plain
-    title and the title whose box upstream disables -- and no others }
-  AssertEquals('texts drawn as one run', 2, FOneRun);
+  { the texts with nothing a block is needed for -- the gauge's plain title,
+    the title whose box upstream disables, [R7-B] gauge-text-inherit's plain
+    title, gauge-axislabel-plain's five labels, gauge-states-ignored's six
+    labels and two titles, gauge-font-size-string's three labels and title,
+    gauge-axislabel-markup's three braces drawn as they are, gauge-plain-
+    halo's three labels and title -- and no others }
+  AssertEquals('texts drawn as one run', 27, FOneRun);
   AssertTrue(Format('only %d compared', [FCompared]), FCompared >= 3000);
 end;
 

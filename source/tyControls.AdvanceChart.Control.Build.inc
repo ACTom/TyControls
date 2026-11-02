@@ -4226,6 +4226,8 @@ begin
           { [F3c] the dial's paths (no text): its view's, faded in where a
             universal transition morphs }
           UtTagFade(list, utAt, FBindings[i].SeriesIndex);
+          FGaugeMeasurer := AMeasurer;
+          FGaugePPI := APPI;
           Inc(drawn, TyBuildGaugeValue(FBindings[i], FGauges[i],
             FGaugeSpecs[i], FGaugeItems[i], gv, FStores[i],
             FStores[i].DimIndexOf(TyGaugeValueDim), AMeasurer, APPI, list));

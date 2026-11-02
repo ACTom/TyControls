@@ -1604,6 +1604,7 @@ begin
       if FAnimSet = nil then FAnimSet := TTyChartAnimSet.Create(FAnim);
       FAnimSet.OnEndLabelText := @EndLabelTextOf;
       FAnimSet.OnEndLabelPieces := @EndLabelPiecesOf;
+      FAnimSet.OnGaugeDetailAt := @GaugeDetailAt;
       FAnimSet.OnUtStop := @AnimUtStopCustom;
       { AN UPDATE when there was a render before, an entry otherwise
         [Batch 90] }

@@ -217,6 +217,10 @@ type
   TTyEndLabelTextFn = function(ASeriesIndex: Integer; AValue: Double): string of object;
   TTyEndLabelPiecesFn = function(ASeriesIndex: Integer;
     const AText: string): TTyRtPieceArray of object;
+  { [R7-B] a gauge reading that counts as a block: its words at a value and
+    its block laid out for them -- the control's, by series and row }
+  TTyGaugeDetailAtFn = function(ASeriesIndex, AIndex: Integer; AValue: Double;
+    out AText: string): TTyRtPieceArray of object;
 
   TTyChartAnimEndLabel = record
     { the clip drives it: an entering clip with the label shown }
@@ -285,6 +289,8 @@ type
     FValTpl: string;
     FText: string;
     FHasText: Boolean;
+    { [R7-B] a gauge reading's block for a value (OnGaugeDetailAt) }
+    FGaugeAt: TTyGaugeDetailAtFn;
     { a line's clip: its end label }
     FEnd: TTyChartAnimEndLabel;
     { THE STATE KEYS and their rest values [Batch 94] }
@@ -741,6 +747,8 @@ type
     { [R5-C] what an end label's frames word it with }
     OnEndLabelText: TTyEndLabelTextFn;
     OnEndLabelPieces: TTyEndLabelPiecesFn;
+    { [R7-B] what a gauge reading's frames lay it out with }
+    OnGaugeDetailAt: TTyGaugeDetailAtFn;
     constructor Create(AAnimation: TTyAnimation);
     destructor Destroy; override;
     { every proxy freed, its clips taken off the driver }
@@ -2837,6 +2845,7 @@ begin
           on a first render, at the row [Batch 92] }
         if not (AEl.Caption.ValAnim and AC.Enabled) then Exit;
         p := Make(AEl.Anim.Series, idx, 'gaugeDetail');
+        p.FGaugeAt := OnGaugeDetailAt;
         StartCount(p, AEl, NaN, False, AC.Model, idx);
       end;
     carMarkPoint:
@@ -4683,6 +4692,7 @@ var
           if p <> nil then Carry(p, s, r);
           if AEl.Caption.ValAnim and AC.Enabled then
             CountOn(p, oe, AEl, s, r, 'gaugeDetail', AC.Model);
+          if p <> nil then p.FGaugeAt := OnGaugeDetailAt;
         end;
       { the markers go through UpdateMarker [Batch 99] }
       carEffectSymbol:
@@ -6597,6 +6607,28 @@ begin
     AEl.Caption.Text := AProxy.FText;
 end;
 
+{ [R7-B] A COUNTING GAUGE READING: a block worded at the value and laid out
+  again (GaugeView's animateLabelValue sets the text each frame, rich or
+  not), a one-run caption its template's words }
+procedure ApplyGaugeDetail(var AEl: TTyChartElement; AProxy: TTyChartAnimProxy);
+var
+  pieces: TTyRtPieceArray;
+  s: string;
+begin
+  if not AProxy.FHasText then Exit;
+  if (Length(AEl.Caption.RtPieces) = 0) or not Assigned(AProxy.FGaugeAt) then
+  begin
+    ApplyText(AEl, AProxy);
+    Exit;
+  end;
+  pieces := AProxy.FGaugeAt(AEl.Anim.Series, AEl.Anim.Index, AProxy.FValInterp, s);
+  if Length(pieces) = 0 then Exit;
+  AEl.Caption.RtPieces := pieces;
+  AEl.Caption.Text := s;
+  AEl.Shape := TyShapeRect(TyRtDeviceBox(pieces, AEl.Caption.X, AEl.Caption.Y,
+    AEl.Caption.RotationRad, AEl.Caption.RtScale));
+end;
+
 function TyAnimMarkLineG(const AEl: TTyChartElement; AProxy: TTyChartAnimProxy): TTyDoubleArray;
 var k: Integer;
 begin
@@ -7255,7 +7287,7 @@ begin
         end;
       end;
     carGaugeDetail:
-      ApplyText(AEl, AProxy);
+      ApplyGaugeDetail(AEl, AProxy);
     carMarkPoint:
       begin
         if AEl.Anim.G[2] <> 0 then fx := AProxy.Num('scaleX') / AEl.Anim.G[2] else fx := 1;
