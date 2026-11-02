@@ -54,5 +54,6 @@ TyControls 的属性名和语义尽量与 LCL 一致，从 Lazarus 移植的代�
 | 文本输入控件:`TTyEdit`、`TTyMaskEdit`、`TTyComboEdit`、`TTyURLEdit`、数值框、`TTyMemo`、`TTySpinEdit`、`TTyDateTimePicker` 及它们的 DB 版本 | `ChildSizing` | 没有要排的子控件 |
 | `TTyMultiTrackBar`、`TTyGradientTrackBar` | `ChildSizing` | 没有要排的子控件 |
 | `TTyTerminalView` | `ChildSizing` | 滚动条由终端自己摆;设了它，滚动条会盖到最后几列上 |
+| `TTyToolWindowActions` | `AutoSize`、`ChildSizing`、`BorderSpacing` | 位置和尺寸由所在的工具窗口排，子控件由它自己排成一排 |
 
 上面这些只能选的组合框(`TTyColorBox`、`TTyColorComboBox` 除外)的 `Style` 仍然发布，但对象查看器的下拉列表里只列出只能选的样式;可编辑的样式设上去也会被换成对应的只能选样式。

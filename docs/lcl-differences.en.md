@@ -54,5 +54,6 @@ These properties can never act on the control that publishes them, and from 4.0 
 | The text inputs: `TTyEdit`, `TTyMaskEdit`, `TTyComboEdit`, `TTyURLEdit`, the numeric edits, `TTyMemo`, `TTySpinEdit`, `TTyDateTimePicker` and their DB versions | `ChildSizing` | No children to size |
 | `TTyMultiTrackBar`, `TTyGradientTrackBar` | `ChildSizing` | No children to size |
 | `TTyTerminalView` | `ChildSizing` | The terminal places its scroll bar itself; with it set, the bar covered the last columns |
+| `TTyToolWindowActions` | `AutoSize`, `ChildSizing`, `BorderSpacing` | Its tool window places and sizes it, and it lays its children out in a row itself |
 
 The `Style` of these pick-only combo boxes (except `TTyColorBox` and `TTyColorComboBox`) is still published, but the Object Inspector lists only the pick-only styles; an editable style is replaced by its pick-only counterpart anyway.

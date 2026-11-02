@@ -10795,9 +10795,7 @@ type
     property OnContextPopup;
     property OnResize;
     property OnChangeBounds;
-    property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -10811,7 +10809,6 @@ type
     property OnShowHint;
     property PopupMenu;
     property Constraints;
-    property BorderSpacing;
     property ParentShowHint;
     property Action;
     property OnPaint;

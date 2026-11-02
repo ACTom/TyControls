@@ -310,7 +310,7 @@ end
 - `Controller` 由栏推给窗口、窗口再推给操作区。代码里直接赋给窗口的值会被下一次推送盖掉，要换主题请设栏的 `Controller`。
 - 图标条的提示跟着栏的 `ShowHint`，底栏标签的提示跟着各窗口的 `ShowHint`；当前页被禁用、标签行由栏来画的时候，跟着栏的 `ShowHint`。提示文字用 `StripHint`，**不要用 `Hint`**：窗口的 `Hint` 会冒到它里面所有没设 `Hint` 的控件上。
 - 栏的 `PopupMenu` 和 `OnContextPopup` 管图标、标签、图标条空白处和拉宽边上的右键，不在图标或标签上时 `ContextWindow` 是 nil。正文里的控件冒上来的右键不经过栏，直接交给窗体。栏没有 `PopupMenu` 时，图标和标签上的右键也接着交给窗体。
-- 操作区上的 `AutoSize`、`ChildSizing`、`BorderSpacing` 不起作用。
+- 操作区不发布 `AutoSize`、`ChildSizing`、`BorderSpacing`：它的位置和尺寸由窗口排，子控件由它自己排。3.x 窗体里存过的这几个值，载入时丢掉。
 - 启动时显示出来的当前页收不到 `OnShow`。首次填充内容请放在 FormCreate 里。
 - `OnExit` 里不要把焦点设回被藏起来的窗口里的控件。
 - 底栏收起后界面上没有入口（侧栏至少还有图标条），请自己给一个开关：菜单项或快捷键设 `Collapsed := False`。示例里是 View › Bottom Panel（`Ctrl+J`）。

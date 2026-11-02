@@ -19,7 +19,7 @@ uses
   tyControls.ShellComboBox, tyControls.Grid, tyControls.Edit, tyControls.MaskEdit,
   tyControls.Memo, tyControls.SpinEdit, tyControls.DateTimePicker, tyControls.MultiTrackBar,
   tyControls.Terminal, tyControls.ShellListView, tyControls.ShellTreeView, tyControls.Panel,
-  tyControls.ListView, tyControls.DB.Edits, tyControls.DB.Lists;
+  tyControls.ListView, tyControls.DB.Edits, tyControls.DB.Lists, tyControls.ToolWindows;
 
 type
   TRetiredPropertiesTest = class(TTestCase)
@@ -41,6 +41,7 @@ type
     procedure TestTheShellViewsDropTheirModels;
     procedure TestALookupListBoxDropsMultiSelect;
     procedure TestTheControlsWithNoChildrenDropChildSizing;
+    procedure TestAToolWindowActionsAreaDropsItsLayoutProperties;
     procedure TestTheReadersOwnHandlerStillHearsTheRest;
   end;
 
@@ -319,6 +320,39 @@ begin
     AssertTrue(Kinds[i] + ': the layout too', c.ChildSizing.Layout = cclNone);
   end;
   AssertEquals('saved again, the form holds no ChildSizing', 0, Pos('ChildSizing', FormText(FForm)));
+end;
+
+{ #186: a tool window's actions area is placed and sized by its window and lays its children out
+  itself -- AutoSize, ChildSizing and BorderSpacing never acted on it. }
+procedure TRetiredPropertiesTest.TestAToolWindowActionsAreaDropsItsLayoutProperties;
+var
+  act: TTyToolWindowActions;
+  saved: string;
+begin
+  AssertNull('AutoSize is not published', GetPropInfo(TTyToolWindowActions, 'AutoSize'));
+  AssertNull('ChildSizing is not published', GetPropInfo(TTyToolWindowActions, 'ChildSizing'));
+  AssertNull('BorderSpacing is not published', GetPropInfo(TTyToolWindowActions, 'BorderSpacing'));
+  FForm := FromText(Head +
+    '  object B1: TTyToolWindowBar' + LineEnding +
+    '    object W1: TTyToolWindow' + LineEnding +
+    '      object A1: TTyToolWindowActions' + LineEnding +
+    '        AutoSize = True' + LineEnding +
+    '        BorderSpacing.Left = 4' + LineEnding +
+    '        ChildSizing.LeftRightSpacing = 6' + LineEnding +
+    '        ChildSizing.Layout = cclLeftToRightThenTopToBottom' + LineEnding +
+    '        Tag = 7' + LineEnding +
+    '      end' + LineEnding +
+    '    end' + LineEnding +
+    '  end' + LineEnding + Tail);
+  act := FForm.FindComponent('A1') as TTyToolWindowActions;
+  AssertEquals('what follows them is read', 7, act.Tag);
+  AssertFalse('AutoSize is dropped', act.AutoSize);
+  AssertEquals('BorderSpacing is dropped', 0, act.BorderSpacing.Left);
+  AssertEquals('ChildSizing is dropped', 0, act.ChildSizing.LeftRightSpacing);
+  saved := FormText(FForm);
+  AssertEquals('saved again: no ChildSizing', 0, Pos('ChildSizing', saved));
+  AssertEquals('no BorderSpacing', 0, Pos('BorderSpacing', saved));
+  AssertEquals('no AutoSize', 0, Pos('AutoSize', saved));
 end;
 
 { The IDE reads a form with a handler of its own for the properties it does not know, and asks

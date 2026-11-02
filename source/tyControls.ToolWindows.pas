@@ -463,7 +463,7 @@ type
 
   { 标题行尾端的操作区(spec §4)。只由组件编辑器的「添加操作区」或 EnsureActions 建,
     位置和尺寸永远由所在窗口排:Align 钉死 alCustom,Align / Anchors 不 published;
-    AutoSize、ChildSizing、BorderSpacing 在这个类上不起作用,子控件由它自己排成一排。 }
+    AutoSize、ChildSizing、BorderSpacing 在这个类上不起作用(不 published),子控件由它自己排成一排。 }
   TTyCustomToolWindowActions = class(TTyCustomControl)
   private
     FInLayout: Boolean;
@@ -499,6 +499,12 @@ type
     procedure CalculatePreferredSize(var PreferredWidth, PreferredHeight: Integer;
       WithThemeSpace: Boolean); override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { 位置和尺寸由所在窗口排(Align 钉死在 alCustom),子控件由它自己排成一排:AutoSize、ChildSizing、
+      BorderSpacing 从来不起作用,4.0 不发布。3.x 的窗体里存过的值读过去、丢掉:AutoSize 走
+      TyDefineRetiredProperties,另两个是子属性('ChildSizing.LeftRightSpacing = 6'),走
+      TTyRetiredPaths。 }
+    procedure DefineProperties(Filer: TFiler); override;
+    procedure ReadState(Reader: TReader); override;
   public
     constructor Create(AOwner: TComponent); override;
     { 运行时,所在窗口不认的那一个(多出来的、孤儿)不露面。派生而不是去写 Visible:
@@ -552,9 +558,7 @@ type
     property OnContextPopup;
     property OnResize;
     property OnChangeBounds;
-    property AutoSize;
     property BorderWidth;
-    property ChildSizing;
     property DragMode;
     property DragKind;
     property DragCursor;
@@ -568,7 +572,6 @@ type
     property OnShowHint;
     property PopupMenu;
     property Constraints;
-    property BorderSpacing;
     property ParentShowHint;
     property Action;
     property OnPaint;
@@ -3008,6 +3011,24 @@ begin
     csAutoSizeKeepChildLeft, csAutoSizeKeepChildTop];
   inherited SetAlign(alCustom);
   { 构造里一个子对象都不建 —— 建了会在流式加载时翻倍。 }
+end;
+
+procedure TTyCustomToolWindowActions.DefineProperties(Filer: TFiler);
+begin
+  inherited DefineProperties(Filer);
+  TyDefineRetiredProperties(Filer, ['AutoSize']);
+end;
+
+procedure TTyCustomToolWindowActions.ReadState(Reader: TReader);
+var
+  retired: TTyRetiredPaths;
+begin
+  retired := TTyRetiredPaths.Create(Reader, Self, ['ChildSizing', 'BorderSpacing']);
+  try
+    inherited ReadState(Reader);
+  finally
+    retired.Free;
+  end;
 end;
 
 function TTyCustomToolWindowActions.GetStyleTypeKey: string;
