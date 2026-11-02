@@ -602,6 +602,12 @@ function an4Cases() {
     'gauge detail with valueAnimation and a {value} formatter, value 37.5',
     { series: [{ type: 'gauge', detail: { valueAnimation: true, formatter: '{value}%' },
       data: [{ value: 37.5, name: 'rate' }] }] }));
+  // [R7-B] a reading laid out in its block counts too: GaugeView sets the
+  // whole text, markup and all, at every frame
+  out.push(enterCase('gauge.rich-count',
+    "gauge detail with valueAnimation, a rich formatter '{a|{value}}%' and a plate, value 62",
+    { series: [{ type: 'gauge', detail: { valueAnimation: true, formatter: '{a|{value}}%', backgroundColor: '#eeeeee',
+      rich: { a: { color: '#c23531', fontSize: 24 } } }, data: [{ value: 62, name: 'rate' }] }] }));
   // ---- line endLabel ----
   out.push(enterCase('line-endlabel.smooth',
     'endLabel on a smooth line: polyline.getPointOn solves the cubic for the clip edge',

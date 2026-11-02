@@ -1069,6 +1069,10 @@ type
     FGauges: array of TTyGaugeLayout;
     FGaugeSpecs: array of TTyGaugeSpec;
     FGaugeItems: array of TTyGaugeItemArray;
+    { [R7-B] the measurer and the PPI the gauges' words were laid out with,
+      for a counting reading's frames }
+    FGaugeMeasurer: ITyTextMeasurer;
+    FGaugePPI: Integer;
     { ONE PER RADAR COMPONENT, not per series -- several series share a radar
       and its spokes are theirs jointly, which is the whole reason a radar is a
       coordinate system rather than a series' private geometry. }
@@ -3897,6 +3901,10 @@ type
       rich one's block for words (the frames' callbacks) }
     function EndLabelTextOf(ASeriesIndex: Integer; AValue: Double): string;
     function EndLabelPiecesOf(ASeriesIndex: Integer; const AText: string): TTyRtPieceArray;
+    { [R7-B] a gauge reading's words at a value and its block laid out for
+      them (a count's frames) }
+    function GaugeDetailAt(ASeriesIndex, AIndex: Integer; AValue: Double;
+      out AText: string): TTyRtPieceArray;
     { [R5-C] A LABEL LINE'S lineStyle -- getLineStyle, the keys written:
       color, width, opacity, type, dashOffset, cap, join, miterLimit -- read
       down ANodes under APath (['labelLine', 'lineStyle'] or a state's) onto

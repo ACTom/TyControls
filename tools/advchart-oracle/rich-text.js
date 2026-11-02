@@ -16,6 +16,16 @@
 //   markPoint label rich, axisLabel rich ('{a|{value}}'), axisLabel box,
 //   axis name rich and box, title / subtitle rich (and the title's disabled
 //   box), legend formatter + textStyle.rich, gauge detail box.
+//   [R7-B] a gauge's words, every key createTextStyle hands them: title and
+//   detail plain and rich (the box, its dash, phase and shadow, the halo, the
+//   text shadow, opacity, lineHeight, width / height -- the detail's of the
+//   radius --, overflow and ellipsis, the align the code fixes, an item's
+//   rich over its series', 'auto' / 'inherit'), the axis labels likewise
+//   (rotated, 'auto', rich, markup and lines without rich), the root
+//   textStyle, fontSize as a string, and the states nobody reads. These
+//   carry `looks: true`: their pieces add each one's lineDashOffset, and the
+//   Pascal side compares every colour, opacity, dash and box shadow. A case
+//   may carry `actions`, dispatched after setOption.
 //
 // Runs the real ECharts 6.1 build (D:/Projects/echarts by default, or
 // ECHARTS_DIST) in node's server-side mode (SVG renderer, 600x400, animation
@@ -337,6 +347,155 @@ function barLabel(label, extra, series) {
 }
 const TWO = '{a|{b}}\n{v|{c}}';
 
+// ---- [R7-B] the gauge's words: title, detail and axis labels ----
+// GaugeView builds each with createTextStyle(model, {x, y, text, align,
+// verticalAlign[, width, height]}, {inheritColor}): every key of the text
+// style but the ones the code fixes. These cases carry `looks: true`: their
+// pieces also record each one's lineDashOffset, and every colour is the
+// case's own (strict ink in the Pascal comparison).
+const GAUGE_BARE = { axisLine: { show: false }, splitLine: { show: false }, axisTick: { show: false }, pointer: { show: false } };
+const gauge = (s, extra) => opt(Object.assign({ series: (Array.isArray(s) ? s : [s]).map(x => Object.assign({ type: 'gauge' }, GAUGE_BARE, x)) }, extra));
+const NO_AXIS = { axisLabel: { show: false } };
+const BOX = { backgroundColor: '#ffeecc', borderColor: '#336699', borderWidth: 2, borderRadius: [2, 4, 6, 8], padding: [3, 6],
+  borderType: 'dashed', borderDashOffset: 2, shadowBlur: 4, shadowColor: '#00000080', shadowOffsetX: 2, shadowOffsetY: 3 };
+const INK = { textBorderColor: '#ff0000', textBorderWidth: 2, textBorderType: 'dotted', textBorderDashOffset: 1,
+  textShadowColor: '#0000ff', textShadowBlur: 3, textShadowOffsetX: 1, textShadowOffsetY: 2 };
+const GAUGE_CASES = [
+  // title / detail, plain
+  { name: 'gauge-title-box', looks: true, note: 'title: the whole box, its dash, phase and shadow, the halo, the text shadow, opacity, lineHeight, width, height',
+    record: ['chartText'], match: '^Speed$',
+    option: gauge(Object.assign({ data: [{ value: 37, name: 'Speed' }], detail: { show: false },
+      title: Object.assign({ color: '#123456', fontSize: 14, opacity: 0.7, lineHeight: 28, width: 120, height: 40 }, BOX, INK) }, NO_AXIS)) },
+  { name: 'gauge-title-align-fixed', looks: true, note: "title align 'left', verticalAlign 'top': the code fixes them at center / middle",
+    record: ['chartText'], match: '^Name$',
+    option: gauge(Object.assign({ data: [{ value: 37, name: 'Name' }], detail: { show: false },
+      title: { color: '#123456', align: 'left', verticalAlign: 'top', backgroundColor: '#eeeeee', padding: 4 } }, NO_AXIS)) },
+  { name: 'gauge-title-overflow', looks: true, note: "title width 50 truncate with '~'; a second gauge's width 60 break; a third's two lines at lineHeight 20",
+    record: ['chartText'], match: 'long|lines|Two',
+    option: gauge([
+      Object.assign({ center: ['20%', '50%'], radius: '30%', data: [{ value: 37, name: 'A rather long gauge name' }], detail: { show: false },
+        title: { color: '#123456', width: 50, overflow: 'truncate', ellipsis: '~', backgroundColor: '#eeeeee' } }, NO_AXIS),
+      Object.assign({ center: ['50%', '50%'], radius: '30%', data: [{ value: 37, name: 'Broken into lines here' }], detail: { show: false },
+        title: { color: '#123456', width: 60, overflow: 'break', backgroundColor: '#eeeeee' } }, NO_AXIS),
+      Object.assign({ center: ['80%', '50%'], radius: '30%', data: [{ value: 37, name: 'Two\nlines' }], detail: { show: false },
+        title: { color: '#123456', lineHeight: 20, borderColor: '#333333', borderWidth: 1 } }, NO_AXIS)]) },
+  { name: 'gauge-detail-line-height', looks: true, note: 'detail fontSize 20 under the default lineHeight 30 and width 100: the plate is 120 x 40',
+    record: ['chartText'], match: 'km',
+    option: gauge(Object.assign({ data: [{ value: 37, name: 'n' }], title: { show: false },
+      detail: { formatter: '{value} km/h', fontSize: 20, color: '#333333', backgroundColor: '#eeeeee' } }, NO_AXIS)) },
+  { name: 'gauge-detail-percent-size', looks: true, note: "detail width '60%', height '20%' of the radius (150), bordered",
+    record: ['chartText'], match: '^37$',
+    option: gauge(Object.assign({ data: [{ value: 37, name: 'n' }], title: { show: false },
+      detail: { width: '60%', height: '20%', color: '#222222', backgroundColor: '#dddddd', borderColor: '#999999', borderWidth: 1 } }, NO_AXIS)) },
+  { name: 'gauge-detail-ink', looks: true, note: 'detail halo, text shadow, opacity, the box dash and shadow',
+    record: ['chartText'], match: '^37$',
+    option: gauge(Object.assign({ data: [{ value: 37, name: 'n' }], title: { show: false },
+      detail: Object.assign({ color: '#c23531', opacity: 0.6 }, BOX, INK) }, NO_AXIS)) },
+  { name: 'gauge-detail-overflow', looks: true, note: "detail width 80 truncate with '..'; a second item's width 70 break",
+    record: ['chartText'], match: 'kilo',
+    option: gauge(Object.assign({ title: { show: false }, detail: { formatter: '{value} kilometres per hour', fontSize: 16, color: '#111111', width: 80, overflow: 'truncate', ellipsis: '..' },
+      data: [{ value: 37, name: 'n' }, { value: 64, name: 'm', detail: { offsetCenter: [0, '-30%'], width: 70, overflow: 'break' } }] }, NO_AXIS)) },
+  { name: 'gauge-detail-rich-cascade', looks: true, note: "series detail rich a / u; the first item's rich a over it (colour only) with a plate of its own; the second item's offset only",
+    record: ['chartText'], match: 'km',
+    option: gauge(Object.assign({ title: { show: false },
+      detail: { formatter: '{a|{value}}{u|km/h}', color: '#333333',
+        rich: { a: { color: '#c23531', fontSize: 24, fontWeight: 'bold' },
+          u: { color: '#666666', fontSize: 12, padding: [0, 0, 0, 4], backgroundColor: '#eeeeee', borderColor: '#999999', borderWidth: 1, borderRadius: 2,
+            verticalAlign: 'bottom', lineHeight: 20, width: 40, align: 'right', textBorderColor: '#ffffff', textBorderWidth: 1, textShadowColor: '#000000', textShadowBlur: 2 } } },
+      data: [{ value: 37, name: 'A', detail: { rich: { a: { color: '#008800' } }, backgroundColor: '#fafafa' } },
+        { value: 64, name: 'B', detail: { offsetCenter: [0, '-20%'] } }] }, NO_AXIS)) },
+  { name: 'gauge-title-rich', looks: true, note: "title rich n: font, colour, box, height, verticalAlign; the name carries the markup",
+    record: ['chartText'], match: 'now',
+    option: gauge(Object.assign({ detail: { show: false }, data: [{ value: 37, name: '{n|Speed} now' }],
+      title: { color: '#123456', fontSize: 14, rich: { n: { fontSize: 18, color: '#0000aa', fontFamily: 'serif', fontStyle: 'italic', backgroundColor: '#ffffcc',
+        padding: 2, height: 30, verticalAlign: 'top', textShadowColor: '#ff0000', textShadowBlur: 2, textShadowOffsetX: 1 } } } }, NO_AXIS)) },
+  { name: 'gauge-text-inherit', looks: true, note: "title 'auto' takes the band under the value; detail 'inherit' the progress arc's fill; a rich token's 'inherit' too",
+    record: ['chartText'], match: 'Speed|%',
+    option: gauge(Object.assign({ progress: { show: true }, itemStyle: { color: '#2f7ed8' },
+      axisLine: { show: false, lineStyle: { color: [[0.5, '#11aa11'], [1, '#aa1111']] } },
+      data: [{ value: 37, name: 'Speed' }], title: { color: 'auto' },
+      detail: { color: 'inherit', formatter: '{v|{value}}%', rich: { v: { color: 'inherit', backgroundColor: 'inherit', fontSize: 20 } } } }, NO_AXIS)) },
+  // axis labels
+  { name: 'gauge-axislabel-box', looks: true, note: 'axis labels with the whole box, the halo, the text shadow, opacity, lineHeight and a font',
+    record: ['chartText'],
+    option: gauge({ min: 0, max: 40, splitNumber: 4, title: { show: false }, detail: { show: false }, data: [{ value: 37, name: 'n' }],
+      axisLabel: Object.assign({ color: '#224466', fontSize: 11, fontWeight: 'bold', fontFamily: 'serif', opacity: 0.8, lineHeight: 20 }, BOX, INK) }) },
+  { name: 'gauge-axislabel-width', looks: true, note: "axis labels width 24 truncate with '..'; align / verticalAlign the code fixes",
+    record: ['chartText'],
+    option: gauge({ min: 0, max: 40, splitNumber: 4, title: { show: false }, detail: { show: false }, data: [{ value: 37, name: 'n' }],
+      axisLabel: { formatter: '{value} units', color: '#333333', width: 24, overflow: 'truncate', ellipsis: '..', backgroundColor: '#eeeeee', align: 'left', verticalAlign: 'top' } }) },
+  { name: 'gauge-axislabel-rich', looks: true, note: "axis labels '{a|{value}}{b|%}': a 14px red, b 9px blue at the top, padded",
+    record: ['chartText'],
+    option: gauge({ min: 0, max: 40, splitNumber: 4, title: { show: false }, detail: { show: false }, data: [{ value: 37, name: 'n' }],
+      axisLabel: { formatter: '{a|{value}}{b|%}', color: '#333333', rich: { a: { color: '#cc0000', fontSize: 14 }, b: { color: '#0000cc', fontSize: 9, verticalAlign: 'top', padding: [0, 0, 0, 2] } } } }) },
+  { name: 'gauge-axislabel-rotate', looks: true, note: "three dials' labels turned: 30, 'tangential', 'radial', each a padded plate",
+    record: ['chartText'],
+    option: gauge([
+      { center: ['20%', '50%'], radius: '30%', min: 0, max: 40, splitNumber: 4, title: { show: false }, detail: { show: false }, data: [{ value: 37 }],
+        axisLabel: { rotate: 30, color: '#333333', backgroundColor: '#eeeeee', padding: [1, 3] } },
+      { center: ['50%', '50%'], radius: '30%', min: 100, max: 140, splitNumber: 4, title: { show: false }, detail: { show: false }, data: [{ value: 137 }],
+        axisLabel: { rotate: 'tangential', color: '#333333', backgroundColor: '#eeeeee', padding: [1, 3] } },
+      { center: ['80%', '50%'], radius: '30%', min: 200, max: 240, splitNumber: 4, title: { show: false }, detail: { show: false }, data: [{ value: 237 }],
+        axisLabel: { rotate: 'radial', color: '#333333', backgroundColor: '#eeeeee', padding: [1, 3] } }]) },
+  { name: 'gauge-axislabel-auto', looks: true, note: "axis labels colour 'auto': the band at i / splitNumber; a second dial's rich token 'inherit' and halo 'inherit'",
+    record: ['chartText'],
+    option: gauge([
+      { center: ['30%', '50%'], radius: '40%', min: 0, max: 40, splitNumber: 4, title: { show: false }, detail: { show: false }, data: [{ value: 37 }],
+        axisLine: { show: false, lineStyle: { color: [[0.3, '#11aa11'], [0.7, '#1111aa'], [1, '#aa1111']] } },
+        axisLabel: { color: 'auto', backgroundColor: '#f4f4f4', padding: 2 } },
+      { center: ['75%', '50%'], radius: '40%', min: 100, max: 140, splitNumber: 4, title: { show: false }, detail: { show: false }, data: [{ value: 137 }],
+        axisLine: { show: false, lineStyle: { color: [[0.5, '#aa11aa'], [1, '#11aaaa']] } },
+        axisLabel: { formatter: '{t|{value}}', color: '#333333', textBorderColor: 'inherit', textBorderWidth: 1, rich: { t: { color: 'inherit', fontSize: 13 } } } }]) },
+  { name: 'gauge-axislabel-plain', looks: true, note: 'axis labels plain: distance -10, 14px bold italic, a colour; one run',
+    record: ['chartText'],
+    option: gauge({ min: 0, max: 40, splitNumber: 4, title: { show: false }, detail: { show: false }, data: [{ value: 37 }],
+      axisLabel: { distance: -10, color: '#334455', fontSize: 14, fontWeight: 'bold', fontStyle: 'italic' } }) },
+  // the words take no state: GaugeView never gives them one (emphasis, blur
+  // and select of title / detail / axisLabel are read by nobody)
+  { name: 'gauge-states-ignored', looks: true, note: "emphasis (focus 'series'), blur and select colours for the words; highlighted, then selected: still the rest colours",
+    record: ['chartText'], actions: [{ type: 'highlight', seriesIndex: 0, dataIndex: 0 }, { type: 'select', seriesIndex: 0, dataIndex: 0 }],
+    option: gauge([
+      { center: ['30%', '50%'], radius: '40%', selectedMode: 'single', min: 0, max: 40, splitNumber: 2,
+        emphasis: { focus: 'series', title: { color: '#ff0000' }, detail: { color: '#00ff00' }, axisLabel: { color: '#0000ff' } },
+        blur: { title: { color: '#ff00ff' }, detail: { color: '#ff00ff' } }, select: { title: { color: '#00ffff' }, detail: { color: '#00ffff' } },
+        title: { color: '#111111' }, detail: { color: '#222222', backgroundColor: '#eeeeee' }, axisLabel: { color: '#333333' },
+        data: [{ value: 37, name: 'A' }] },
+      { center: ['75%', '50%'], radius: '40%', min: 100, max: 140, splitNumber: 2, title: { color: '#444444' }, detail: { color: '#555555' },
+        axisLabel: { color: '#666666' }, data: [{ value: 137, name: 'B' }] }]) },
+  { name: 'gauge-font-size-string', looks: true, note: "fontSize written as '15' and '18px' (parseFontSize)",
+    record: ['chartText'],
+    option: gauge({ min: 0, max: 40, splitNumber: 2, data: [{ value: 37, name: 'Name' }], detail: { show: false },
+      title: { color: '#123456', fontSize: '15' }, axisLabel: { color: '#334455', fontSize: '18px' } }) },
+  { name: 'gauge-axislabel-markup', looks: true, note: "no rich: '{a|{value}}' drawn as it is; a second dial's '{value}\nkm' on two lines",
+    record: ['chartText'],
+    option: gauge([
+      { center: ['30%', '50%'], radius: '40%', min: 0, max: 40, splitNumber: 2, title: { show: false }, detail: { show: false }, data: [{ value: 37 }],
+        axisLabel: { formatter: '{a|{value}}', color: '#334455' } },
+      { center: ['75%', '50%'], radius: '40%', min: 100, max: 140, splitNumber: 2, title: { show: false }, detail: { show: false }, data: [{ value: 137 }],
+        axisLabel: { formatter: '{value}\nkm', color: '#334455' } }]) },
+  { name: 'gauge-plain-halo', looks: true, note: 'plain words with a dashed halo and its phase, at an opacity: one run each',
+    record: ['chartText'],
+    option: gauge({ min: 0, max: 40, splitNumber: 2, data: [{ value: 37, name: 'Name' }], detail: { show: false },
+      title: { color: '#123456', textBorderColor: '#ff0000', textBorderWidth: 2, textBorderType: 'dashed', textBorderDashOffset: 3, opacity: 0.5 },
+      axisLabel: { color: '#334455', textBorderColor: '#00ff00', textBorderWidth: 1, textBorderType: [2, 1], opacity: 0.6 } }) },
+  { name: 'gauge-title-lines-plain', looks: true, note: 'a name of two lines, nothing else: the lines one under another, one font height apart',
+    record: ['chartText'], match: 'lines',
+    option: gauge(Object.assign({ data: [{ value: 37, name: 'Two\nlines' }], detail: { show: false }, title: { color: '#123456', fontSize: 14 } }, NO_AXIS)) },
+  { name: 'gauge-detail-height', looks: true, note: "detail height '40%' of the radius (60), taller than its line: the plate is 70 tall",
+    record: ['chartText'], match: '^37$',
+    option: gauge(Object.assign({ data: [{ value: 37, name: 'n' }], title: { show: false },
+      detail: { height: '40%', fontSize: 20, color: '#222222', backgroundColor: '#dddddd' } }, NO_AXIS)) },
+  { name: 'gauge-detail-number-data', looks: true, note: 'data written as plain numbers, no items: the series reading of its own',
+    record: ['chartText'], match: '^(37|64)$',
+    option: gauge(Object.assign({ data: [37, 64], title: { show: false },
+      detail: { color: '#654321', fontSize: 20, backgroundColor: '#eeeeee', borderColor: '#333333', borderWidth: 1, offsetCenter: [0, '30%'] } }, NO_AXIS)) },
+  { name: 'gauge-root-textstyle', looks: true, note: 'the root textStyle: its halo, opacity and text shadow reach the free words',
+    record: ['chartText'],
+    option: gauge({ min: 0, max: 40, splitNumber: 2, data: [{ value: 37, name: 'Name' }],
+      title: { color: '#123456' }, detail: { color: '#654321' }, axisLabel: { color: '#334455' } },
+      { textStyle: { textBorderColor: '#ff00ff', textBorderWidth: 1, opacity: 0.9, textShadowBlur: 2, textShadowColor: '#00ff00' } }) },
+];
+
 const cases = [
   // ---- rich series labels ----
   { name: 'rich-two-line', note: "top labels '{a|{b}}\\n{v|{c}}': a 14px #c23531, v bold #333",
@@ -517,6 +676,7 @@ const cases = [
   { name: 'gauge-detail-box', note: "gauge detail bg, radius 3, padding [4,8], formatter '{a|{value}}%' rich; title plain", record: ['chartText'], match: '%|^Speed$',
     option: opt({ series: [{ type: 'gauge', data: [{ value: 62, name: 'Speed' }],
       detail: { formatter: '{a|{value}}%', backgroundColor: '#eeeeee', borderRadius: 3, padding: [4, 8], fontSize: 20, rich: { a: { color: '#c23531', fontSize: 24 } } } }] }) },
+  ...GAUGE_CASES,
 ];
 
 // ---------- running upstream ----------
@@ -769,6 +929,7 @@ function recordText(lib, t, measureSet) {
       o.strokeFirst = !!cs.strokeFirst;
       o.shadow = shadowOf(cs);
       o.bbox = put(put(put(put({}, 'x', bb.x), 'y', bb.y), 'width', bb.width), 'height', bb.height);
+      if (t.looks) put(o, 'lineDashOffset', stroke && cs.lineDash ? (cs.lineDashOffset || 0) : null);
       void lw;
       return o;
     }
@@ -791,6 +952,7 @@ function recordText(lib, t, measureSet) {
       put(o, 'opacity', cs.opacity == null ? 1 : cs.opacity);
       o.shadow = shadowOf(cs);
       o.drawn = o.fill != null || o.stroke != null;
+      if (t.looks) put(o, 'lineDashOffset', cs.lineDash ? (cs.lineDashOffset || 0) : null);
       return o;
     }
     throw new OracleError(where + ': a child of type ' + c.type);
@@ -834,6 +996,7 @@ function run(lib, c, measureSet) {
   const chart = lib.init(null, null, { renderer: 'svg', ssr: true, width: W, height: H });
   try {
     chart.setOption(clone(c.option));
+    (c.actions || []).forEach(a => chart.dispatchAction(clone(a)));
     const svg = chart.renderToSVGString();
     const zr = chart.getZr();
     const found = [];
@@ -855,7 +1018,7 @@ function run(lib, c, measureSet) {
     const svgTexts = (svg.match(/<text\b/g) || []).length;
     const spans = found.reduce((n, t) => n + t.el.childrenRef().filter(x => x.type === 'tspan' && x.style.text != null && String(x.style.text) !== '').length, 0);
     must(svgTexts === spans, c.name + ': the SVG has ' + svgTexts + ' <text>, the visible texts ' + spans + ' non-empty spans');
-    const texts = found.filter(t => wanted(c, t)).map(t => recordText(lib, t, measureSet));
+    const texts = found.filter(t => wanted(c, t)).map(t => recordText(lib, Object.assign(t, { looks: !!c.looks }), measureSet));
     must(texts.length > 0, c.name + ': nothing recorded');
     return { texts };
   } finally {
@@ -881,6 +1044,8 @@ function runAll() {
       productionBuild = true;
     }
     const rec = Object.assign({ name: c.name, note: c.note, W, H, option: c.option, record: c.record || ['seriesLabel'], match: c.match || null }, r);
+    if (c.looks) rec.looks = true;
+    if (c.actions) rec.actions = c.actions;
     if (productionBuild) rec.productionBuild = true;
     return rec;
   });

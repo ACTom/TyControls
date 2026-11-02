@@ -380,6 +380,36 @@ begin
         False, FEndLbls[i].AH, FEndLbls[i].AV, FEndLbls[i].Scale, FEndLbls[i].Measurer));
 end;
 
+function TTyCustomAdvanceChart.GaugeDetailAt(ASeriesIndex, AIndex: Integer;
+  AValue: Double; out AText: string): TTyRtPieceArray;
+var
+  slot, raw, dim: Integer;
+  ti: TTyGaugeItem;
+  gv: TTyGaugeVisual;
+  bandC, detC: TTyChartColor;
+begin
+  Result := nil;
+  AText := '';
+  slot := SlotOfSeries(ASeriesIndex);
+  if (slot < 0) or (slot > High(FGaugeSpecs)) or (slot > High(FGauges))
+    or (slot > High(FStores)) or (FStores[slot] = nil) or (FGaugeMeasurer = nil) then Exit;
+  if (AIndex < 0) or (AIndex >= FStores[slot].Count) then Exit;
+  dim := FStores[slot].DimIndexOf(TyGaugeValueDim);
+  if dim < 0 then Exit;
+  gv := GaugeVisual(slot);
+  { the row's inks are its value's, not the count's: the style stays, the
+    words change }
+  TyGaugeRowInks(FGaugeSpecs[slot], gv, FStores[slot], dim, AIndex, bandC, detC);
+  ti.Detail := FGaugeSpecs[slot].Detail;
+  raw := FStores[slot].GetRawIndex(AIndex);
+  if (slot <= High(FGaugeItems)) and (raw >= 0) and (raw <= High(FGaugeItems[slot])) then
+    ti := FGaugeItems[slot][raw];
+  AText := TyGaugeFormat(ti.Detail.Formatter, ti.Detail.HasFormatter, AValue, True);
+  Result := TyGaugeTextPieces(ti.Detail, AText, FGauges[slot].R, gv.DetailColour,
+    detC, gv.DetailFontName, gv.DetailFontSizeLogical, gv.DetailFontWeight,
+    FGaugeMeasurer, FGaugePPI);
+end;
+
 { each data item's own `label`, read over its series' spec, by raw row }
 procedure TTyCustomAdvanceChart.ItemLabelSpecs(ASeriesIndex: Integer; const ABase: TTyLabelSpec;
   out ASpecs: TTyLabelSpecArray; out AHas: TTyBoolArray);

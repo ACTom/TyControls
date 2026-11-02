@@ -3952,6 +3952,7 @@ begin
   if FAnimSet = nil then FAnimSet := TTyChartAnimSet.Create(FAnim);
   FAnimSet.OnEndLabelText := @EndLabelTextOf;
   FAnimSet.OnEndLabelPieces := @EndLabelPiecesOf;
+  FAnimSet.OnGaugeDetailAt := @GaugeDetailAt;
   SetLength(FAnimStBind, FPaintList.Count);
   for k := 0 to High(FAnimStBind) do FAnimStBind[k] := nil;
   clips := FAnim.ClipCount;
