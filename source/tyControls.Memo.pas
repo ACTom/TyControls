@@ -150,6 +150,7 @@ type
     // TTyEdit.FScrollX). When WordWrap=True the layout flows across visual rows
     // instead, so FScrollX is forced to 0 (ClampScrollX/EnsureCaretXVisible no-op).
     FScrollX: Integer;
+    FWheelRest: Integer;   // wheel delta not yet worth a notch (#157: high-resolution wheels)
     // Soft-wrap toggle (published WordWrap). Default False = no wrap: each logical
     // line is exactly one full-width visual row (today's behaviour; horizontal
     // scroll lands in a later task). True = soft wrap at word boundaries into
@@ -695,6 +696,12 @@ type
     // borderless control Height = ClientHeight at runtime, but ClientHeight can
     // lag SetBounds in headless tests without a native handle.
     function VisibleRows: Integer;
+    { #157: one row up (ADelta < 0) or down, keeping the desired column or x -- the step of
+      the Up and Down keys, and of Page Up and Page Down, a page of them. No anchor change. }
+    procedure StepCaretRow(ADelta, APPI: Integer);
+    { #157: the content codepoints a selection holds -- what typing or pasting over it frees
+      under MaxLength (line breaks do not count, as in ContentCodepointCount). }
+    function SelContentLength: Integer;
     // Total painted visual rows for the current model/wrap mode/content width
     // (rebuilds the cache if stale). WordWrap=False: == LineCountLogical (one row
     // per logical line). WordWrap=True: the sum of each line's wrap-segment count.
@@ -772,6 +779,8 @@ type
     procedure MouseLeave; override;
     // Wheel scrolls +/-3 logical lines via SetTopLine (after the user's handler).
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
+      MousePos: TPoint): Boolean; override;
+    function DoMouseWheelHorz(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean; override;
     // Keep the scrollbar in sync when the control is resized.
     procedure Resize; override;
@@ -2325,7 +2334,7 @@ end;
 
 procedure TTyCustomMemo.Clear;
 begin
-  FLines.Clear;
+  Text := '';   // as LCL's TCustomMemo.Clear: Modified comes back False (#157)
 end;
 
 procedure TTyCustomMemo.SelectAll;
@@ -2349,10 +2358,19 @@ end;
 
 procedure TTyCustomMemo.ClearSelection;
 begin
-  { Deletes, as LCL does. DeleteSelection already carries the undo step, the caret move
-    and the change notification. }
+  { Deletes, as LCL does, and as an edit (#157): DeleteSelection is a pure mutator, so the undo
+    step, OnChange and Modified come from here, as for a Cut. }
   if HasSelection then
-    DeleteSelection
+  begin
+    BeginUndoStep(uskDelete);
+    FSuspendUndo := True;
+    try
+      DeleteSelection;
+    finally
+      FSuspendUndo := False;
+    end;
+    AfterEdit(Font.PixelsPerInch);
+  end
   else
     CollapseSelection;
 end;
@@ -2650,6 +2668,33 @@ end;
 
 // ---- Vertical scrolling (sections 3-6 lifted from TTyListBox; FItems.Count ->
 // LineCountLogical, ScaledItemHeight -> LineHeight) ----
+
+procedure TTyCustomMemo.StepCaretRow(ADelta, APPI: Integer);
+begin
+  { The wrap path is already an x-preserving move; the no-wrap path restores a remembered
+    COLUMN, which only names the same screen place when both lines read the same way. When
+    either does not, route the no-wrap move through the same x-preserving code -- with
+    WordWrap off a visual row IS a logical line, so MoveCaretByVisualRow's row arithmetic
+    reduces to the line arithmetic below it, clamp and no-op guard included. }
+  if FWordWrap or VerticalMoveNeedsX(FCaretLine + ADelta) then
+    MoveCaretByVisualRow(ADelta, APPI)
+  else if (FCaretLine + ADelta >= 0) and (FCaretLine + ADelta <= LineCountLogical - 1) then
+  begin
+    Inc(FCaretLine, ADelta);
+    // Restore desired column, clamped to the new line length.
+    FCaretCol := FDesiredCol;
+    if FCaretCol > LineLen(FCaretLine) then
+      FCaretCol := LineLen(FCaretLine);
+    DefaultCaretAffinity;
+  end;
+end;
+
+function TTyCustomMemo.SelContentLength: Integer;
+begin
+  if not HasSelection then Exit(0);
+  Result := UTF8Length(StringReplace(StringReplace(GetSelText, #13, '', [rfReplaceAll]),
+    #10, '', [rfReplaceAll]));
+end;
 
 function TTyCustomMemo.VisibleRows: Integer;
 var
@@ -3150,7 +3195,18 @@ begin
   CW := ContentWidthFor(APPI);
   EnsureVisualRows(APPI);
   Dy := Y - MulDiv(CurrentStyle.Padding.Top, APPI, 96);
-  if Dy < 0 then Dy := 0;
+  { #157: a drag past the top or the bottom scrolls a row and selects into it, as a native
+    memo does. }
+  if Dy < 0 then
+  begin
+    if FTopRow > 0 then SetTopLine(FTopRow - 1);
+    Dy := 0;
+  end
+  else if Dy div LH >= VisibleRows then
+  begin
+    if FTopRow < MaxTopLine then SetTopLine(FTopRow + 1);
+    Dy := (VisibleRows - 1) * LH;
+  end;
   Row := FTopRow + (Dy div LH);
   // Same frame lift as MouseDown -- a drag has to hit-test identically to the press that
   // began it, or the selection would not follow the pointer on a wrapped or reordered row.
@@ -3160,6 +3216,7 @@ begin
   FCaretLine := NewLine;
   FCaretCol := NewCol;
   FDesiredCol := FCaretCol;
+  EnsureCaretXVisible(APPI);   // and past the side, across (#157)
   // A drag is a horizontal move: refresh the desired x for a following wrap Up/Down.
   UpdateDesiredX(APPI);
   Invalidate;
@@ -3178,7 +3235,7 @@ end;
 function TTyCustomMemo.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 var
-  Delta: Integer;
+  Delta, PerNotch: Integer;
 begin
   if not IsEnabled then Exit(False);
   // Let the user's OnMouseWheel handler run first; if it consumes the event, stop.
@@ -3187,13 +3244,33 @@ begin
     Result := True;
     Exit;
   end;
-  // WheelDelta > 0 = scroll up (FTopRow decreases)
-  // WheelDelta < 0 = scroll down (FTopRow increases). Scrolls +/-3 VISUAL ROWS.
-  if WheelDelta > 0 then
-    Delta := -3
-  else
-    Delta := 3;
-  SetTopLine(FTopRow + Delta);
+  { WheelDelta > 0 = scroll up. #157: by the system's lines per notch, a notch being 120 --
+    a high-resolution wheel's smaller deltas add up to one -- where it was always 3 rows. }
+  Inc(FWheelRest, WheelDelta);
+  Delta := FWheelRest div 120;
+  Dec(FWheelRest, Delta * 120);
+  PerNotch := Mouse.WheelScrollLines;
+  if (PerNotch <= 0) or (PerNotch > VisibleRows) then PerNotch := VisibleRows;   // 'a page at a time'
+  if Delta <> 0 then SetTopLine(FTopRow - Delta * PerNotch);
+  Result := True;
+end;
+
+function TTyCustomMemo.DoMouseWheelHorz(Shift: TShiftState; WheelDelta: Integer;
+  MousePos: TPoint): Boolean;
+var
+  APPI: Integer;
+begin
+  if not IsEnabled then Exit(False);
+  if inherited DoMouseWheelHorz(Shift, WheelDelta, MousePos) then Exit(True);
+  { #157: the horizontal wheel scrolls a line that does not fit (WheelDelta > 0 is right, as
+    in LCL), a notch three rows' height across. Wrapped text has nothing to scroll. }
+  Result := False;
+  if FWordWrap then Exit;
+  APPI := Font.PixelsPerInch;
+  FScrollX := FScrollX + MulDiv(WheelDelta, 3 * LineHeight(APPI), 120);
+  ClampScrollX(APPI);
+  UpdateScrollBar;
+  Invalidate;
   Result := True;
 end;
 
@@ -4029,7 +4106,7 @@ begin
   // resulting content may be slightly UNDER Room — never over. Simple and safe.
   if FMaxLength > 0 then
   begin
-    Room := FMaxLength - ContentCodepointCount;
+    Room := FMaxLength - (ContentCodepointCount - SelContentLength);   // the selection goes (#157)
     if Room <= 0 then Exit;
     if UTF8Length(S) > Room then
       S := UTF8Copy(S, 1, Room);
@@ -5123,7 +5200,7 @@ begin
   // MaxLength: block a new printable char once the total content is at the cap.
   // Guarded HERE (the typing caller) and NOT in DoInsertText, because paste also
   // routes through DoInsertText but must truncate (not be blocked wholesale).
-  if (FMaxLength > 0) and (ContentCodepointCount >= FMaxLength) then Exit;
+  if (FMaxLength > 0) and (ContentCodepointCount - SelContentLength >= FMaxLength) then Exit;
   // A selection is replaced by the typed text (delete-then-insert, like
   // TTyEdit.InjectKey 643 — NOT an early exit). Capture ONE undo step up front:
   // replacing a selection is a fresh (non-typing) step, so a later coalescing
@@ -5158,7 +5235,7 @@ begin
   S := ACommitUtf8;
   if FMaxLength > 0 then
   begin
-    Room := FMaxLength - ContentCodepointCount;
+    Room := FMaxLength - (ContentCodepointCount - SelContentLength);
     if Room <= 0 then Exit;
     if UTF8Length(S) > Room then S := UTF8Copy(S, 1, Room);
   end;
@@ -5319,8 +5396,9 @@ begin
       // WantTabs=True: insert a literal tab character into the text (replacing any
       // selection), as one undo step firing OnChange once. ReadOnly blocks the
       // mutation but still consumes the key.
-      if not FReadOnly then
-      begin
+      if not FReadOnly
+         and not ((FMaxLength > 0) and (ContentCodepointCount - SelContentLength >= FMaxLength)) then
+      begin   // a tab is content: MaxLength holds for it too (#157)
         if HasSelection then
           BeginUndoStep(uskDelete)
         else
@@ -5526,17 +5604,7 @@ begin
           x-preserving code -- with WordWrap off a visual row IS a logical line, so
           MoveCaretByVisualRow's row arithmetic reduces to the line arithmetic below it,
           clamp and no-op guard included. }
-        if FWordWrap or VerticalMoveNeedsX(FCaretLine - 1) then
-          MoveCaretByVisualRow(-1, APPI)
-        else if FCaretLine > 0 then
-        begin
-          Dec(FCaretLine);
-          // Restore desired column, clamped to the new line length.
-          FCaretCol := FDesiredCol;
-          if FCaretCol > LineLen(FCaretLine) then
-            FCaretCol := LineLen(FCaretLine);
-          DefaultCaretAffinity;
-        end;
+        StepCaretRow(-1, APPI);
         // FDesiredCol / FDesiredX preserved across vertical motion.
         if not Extending then
         begin
@@ -5553,18 +5621,34 @@ begin
     begin
       FInVerticalMove := True;
       try
-        // See the note on VK_UP for why a reordered line takes the x-preserving path.
-        if FWordWrap or VerticalMoveNeedsX(FCaretLine + 1) then
-          MoveCaretByVisualRow(+1, APPI)
-        else if FCaretLine < MaxLine then
-        begin
-          Inc(FCaretLine);
-          FCaretCol := FDesiredCol;
-          if FCaretCol > LineLen(FCaretLine) then
-            FCaretCol := LineLen(FCaretLine);
-          DefaultCaretAffinity;
-        end;
+        StepCaretRow(+1, APPI);
         // FDesiredCol / FDesiredX preserved across vertical motion.
+        if not Extending then
+        begin
+          FSelAnchorLine := FCaretLine;
+          FSelAnchorCol := FCaretCol;
+        end;
+        AfterCaretMove(APPI);
+      finally
+        FInVerticalMove := False;
+      end;
+      Key := 0;
+    end;
+    VK_PRIOR, VK_NEXT:
+    begin
+      { #157: a page -- the rows on screen less one, as a native memo keeps one in view -- with
+        the view moving by as much, Shift extending the selection. }
+      WordT := VisibleRows - 1;
+      if WordT < 1 then WordT := 1;
+      if Key = VK_PRIOR then L := -1 else L := 1;
+      SetTopLine(FTopRow + L * WordT);
+      FInVerticalMove := True;
+      try
+        while WordT > 0 do
+        begin
+          StepCaretRow(L, APPI);
+          Dec(WordT);
+        end;
         if not Extending then
         begin
           FSelAnchorLine := FCaretLine;
