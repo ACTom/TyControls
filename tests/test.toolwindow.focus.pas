@@ -75,6 +75,9 @@ type
     { spec §5.3 / §3.7(整体审查 4):禁用含焦点的当前页,焦点照收起那一路交给栏后面的控件,
       不掉到窗体本身;焦点不在里面就不动它。 }
     procedure TestDisablingThePageWithTheFocusMovesTheFocusOut;
+    { 切到聚焦不了的页(禁用的、正文里没有可聚焦控件的),焦点原来在旧页里:同收起那一路交给
+      栏后面的那一个,不交给平台。 }
+    procedure TestSwitchingToAPageThatCannotTakeTheFocusMovesItPastTheBar;
   end;
 
 implementation
@@ -522,6 +525,27 @@ begin
   AssertSame('前提:焦点在栏外', FBefore, FForm.ActiveControl);
   FWin.Enabled := False;
   AssertSame('焦点不在里面:一动不动', FBefore, FForm.ActiveControl);
+end;
+
+procedure TTyToolWindowFocusTests.TestSwitchingToAPageThatCannotTakeTheFocusMovesItPastTheBar;
+var
+  empty: TTyToolWindow;
+begin
+  FWin2.Enabled := False;
+  FEdit.SetFocus;
+  AssertSame('前提:焦点在当前页里', FEdit, FForm.ActiveControl);
+  FBar.ActiveWindow := FWin2;
+  AssertNothingRaised('切到禁用的页');
+  AssertSame('切到禁用的页:交给 Tab 顺序里栏后面的那一个', FOutside, FForm.ActiveControl);
+  FWin2.Enabled := True;
+  empty := TTyToolWindow.Create(FForm);
+  empty.Parent := FBar;
+  FBar.ActiveWindow := FWin;
+  FEdit.SetFocus;
+  AssertSame('前提:焦点又在当前页里', FEdit, FForm.ActiveControl);
+  FBar.ActiveWindow := empty;
+  AssertNothingRaised('切到空页');
+  AssertSame('切到没有可聚焦控件的页:同样交给栏后面的那一个', FOutside, FForm.ActiveControl);
 end;
 
 initialization

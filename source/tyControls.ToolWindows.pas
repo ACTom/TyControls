@@ -959,6 +959,10 @@ type
     function ControlIndexForWindowPos(AWindow: TTyCustomToolWindow; APos: Integer): Integer;
     procedure MoveToOuterEdge;
     function FocusIsInside(AWindow: TTyCustomToolWindow): Boolean;
+    { 切页第 5 步(spec §5.1):焦点给 AWindow 正文里第一个可聚焦控件;它聚焦不了(禁用的、正文里
+      一个可聚焦控件都没有、为 nil),同收起那一路交给 Tab 顺序里栏后面的那一个(spec §5.3),
+      不交给平台去挑。 }
+    procedure FocusInto(AWindow: TTyCustomToolWindow);
     procedure ShowWindowNow(AWindow: TTyCustomToolWindow);
     procedure HideWindowNow(AWindow: TTyCustomToolWindow);
     { spec §5.1 的六步。AOld 只用来判断焦点原来在不在旧页里(可为 nil 或就是 AWindow)。
@@ -6676,8 +6680,7 @@ begin
           展开前的样子还给这一页。 }
         if FCollapsed <> AValue then
         begin
-          if focusIn and (FActive <> nil) and not FocusIsInside(FActive) and FActive.CanFocus then
-            FActive.FocusFirst;
+          if focusIn and not FocusIsInside(FActive) then FocusInto(FActive);
           Exit;
         end;
         { 焦点掉到窗体本身的话快捷键全部失灵(spec §5.3)。需要真句柄的那一半在 test.toolwindow.focus 测。 }
@@ -6832,6 +6835,16 @@ begin
   Result := AWindow.ContainsControl(form.ActiveControl);
 end;
 
+procedure TTyCustomToolWindowBar.FocusInto(AWindow: TTyCustomToolWindow);
+var
+  form: TCustomForm;
+begin
+  if (AWindow <> nil) and AWindow.CanFocus then AWindow.FocusFirst;
+  if FocusIsInside(AWindow) then Exit;
+  form := GetParentForm(Self);
+  if form <> nil then form.SelectNext(Self, True, True);
+end;
+
 procedure TTyCustomToolWindowBar.ShowWindowNow(AWindow: TTyCustomToolWindow);
 var
   was: Boolean;
@@ -6882,9 +6895,7 @@ var
   function Superseded: Boolean;
   begin
     Result := FSwitchSerial <> serial;
-    if Result and focusIn and (FActive <> nil) and not FocusIsInside(FActive)
-       and FActive.CanFocus then
-      FActive.FocusFirst;
+    if Result and focusIn and not FocusIsInside(FActive) then FocusInto(FActive);
   end;
 
 begin
@@ -6930,8 +6941,7 @@ begin
     { 4. 标题行按此刻的样子重排(悬停在下面重查)。 }
     if AWindow <> nil then AWindow.RelayoutHeader;
     { 5. 只有焦点原来在旧页里才动它;新页已经显示了才聚焦得上。 }
-    if focusIn and (AWindow <> nil) and AWindow.CanFocus then
-      AWindow.FocusFirst;
+    if focusIn then FocusInto(AWindow);
   end;
   { 4(续). 当前页被强制留在条上,切页可能换掉条上排的是哪几个图标:按指针此刻的位置
     重查悬停,不然悬停停在切页前那一格上。设计期不做悬停。 }
