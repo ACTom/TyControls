@@ -19,10 +19,13 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.Controller,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Scale,
      tyControls.AdvanceChart.Paint,
-     tyControls.AdvanceChart.Marker, tyControls.AdvanceChart;
+     tyControls.AdvanceChart.Marker, tyControls.AdvanceChart, tyControls.AdvanceChart.Measure, test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TMlProbe = class(TTyAdvanceChart)
+  protected
+    function NewTextMeasurer(APPI: Integer): ITyTextMeasurer; override;
   public
+    Measurer: ITyTextMeasurer;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     function List: TTyPaintList;
   end;
@@ -58,6 +61,14 @@ type
   end;
 
 implementation
+
+uses test.advchart.gallerytext;
+
+function TMlProbe.NewTextMeasurer(APPI: Integer): ITyTextMeasurer;
+begin
+  if Measurer <> nil then Result := Measurer
+  else Result := inherited NewTextMeasurer(APPI);
+end;
 
 procedure TMlProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
@@ -139,6 +150,10 @@ begin
   FChart := TMlProbe.Create(FForm);
   FChart.Parent := FForm;
   FChart.Controller := FCtl;
+  { [R7-K] text measured as upstream's run measured it (zrender's SSR width
+    table): a grid that containLabel or the outer bounds shrink is
+    upstream's, so no layout is passed over for a moved plot }
+  FChart.Measurer := ZrTableMeasurer;
   FBmp := TBGRABitmap.Create(800, 600, BGRA(255, 255, 255, 255));
   AssertTrue('the fixture is where the suite expects it', FileExists(FixturePath));
   sl := TStringList.Create;
@@ -472,7 +487,9 @@ begin
       sl := TStringList.Create;
       try
         sl.LoadFromFile(GalleryPath(cs.Strings['gallery']));
-        opt := TJSONObject(GetJSON(sl.Text));
+        { [R7-K] the file as the fixture's upstream read it: without the
+          names of its functions (R2-J2) }
+        opt := TJSONObject(GalleryWithoutFunctions(GetJSON(sl.Text)));
       finally
         sl.Free;
       end;
@@ -546,8 +563,9 @@ begin
   AssertTrue('the gallery cases were run', FSeriesSeen >= 15);
   { a gallery grid that holds its labels (containLabel) measures them
   differently here: scatter-weight's two series, '{value} kg' }
+  { [R7-K] with zrender's widths no grid lands elsewhere }
   AssertTrue(Format('%d of %d gallery series passed over:%s', [FSkipped, FSeriesSeen,
-    FSkipNames]), FSkipped <= 3);
+    FSkipNames]), FSkipped = 0);
   AssertTrue(Format('%d of %d comparisons differ from upstream (%d series passed over):%s',
     [FBad, FCompared, FSkipped, FReport]), FBad = 0);
 end;

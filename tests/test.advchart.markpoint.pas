@@ -20,10 +20,13 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.Color,
      tyControls.AdvanceChart.Marker, tyControls.AdvanceChart.MarkerView,
      tyControls.AdvanceChart,
-     test.advchart.gallerytext;
+     test.advchart.gallerytext, tyControls.AdvanceChart.Measure, test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TMPointProbe = class(TTyAdvanceChart)
+  protected
+    function NewTextMeasurer(APPI: Integer): ITyTextMeasurer; override;
   public
+    Measurer: ITyTextMeasurer;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     function List: TTyPaintList;
   end;
@@ -59,6 +62,12 @@ type
   end;
 
 implementation
+
+function TMPointProbe.NewTextMeasurer(APPI: Integer): ITyTextMeasurer;
+begin
+  if Measurer <> nil then Result := Measurer
+  else Result := inherited NewTextMeasurer(APPI);
+end;
 
 procedure TMPointProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
@@ -149,6 +158,10 @@ begin
   FChart := TMPointProbe.Create(FForm);
   FChart.Parent := FForm;
   FChart.Controller := FCtl;
+  { [R7-K] text measured as upstream's run measured it (zrender's SSR width
+    table): a grid that containLabel or the outer bounds shrink is
+    upstream's, so no layout is passed over for a moved plot }
+  FChart.Measurer := ZrTableMeasurer;
   FBmp := TBGRABitmap.Create(800, 600, BGRA(255, 255, 255, 255));
   AssertTrue('the fixture is where the suite expects it', FileExists(FixturePath));
   sl := TStringList.Create;
@@ -575,8 +588,9 @@ procedure TAdvChartMarkPointOracleTest.TestGalleryMarkPointsAsUpstream;
 begin
   RunCases(True);
   AssertTrue('the gallery markers were compared', FLines >= 10);
+  { [R7-K] with zrender's widths no grid lands elsewhere }
   AssertTrue(Format('%d gallery series passed over:%s', [FSkipped, FSkipNames]),
-    FSkipped <= 3);
+    FSkipped = 0);
   AssertTrue(Format('%d of %d comparisons differ from upstream (%d series passed over):%s',
     [FBad, FCompared, FSkipped, FReport]), FBad = 0);
 end;

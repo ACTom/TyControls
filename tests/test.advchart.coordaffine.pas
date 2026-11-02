@@ -36,10 +36,13 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Builder,
      tyControls.AdvanceChart.BarLayout, tyControls.AdvanceChart.Layout,
      tyControls.AdvanceChart.AxisName,
-     tyControls.AdvanceChart;
+     tyControls.AdvanceChart, tyControls.AdvanceChart.Measure, test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TCoordAffineProbe = class(TTyAdvanceChart)
+  protected
+    function NewTextMeasurer(APPI: Integer): ITyTextMeasurer; override;
   public
+    Measurer: ITyTextMeasurer;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     function List: TTyPaintList;
     function Column(ASeriesIndex: Integer): TTyBarColumn;
@@ -71,6 +74,12 @@ type
   end;
 
 implementation
+
+function TCoordAffineProbe.NewTextMeasurer(APPI: Integer): ITyTextMeasurer;
+begin
+  if Measurer <> nil then Result := Measurer
+  else Result := inherited NewTextMeasurer(APPI);
+end;
 
 procedure TCoordAffineProbe.Render(ACanvas: TCanvas; const ARect: TRect;
   APPI: Integer);
@@ -139,6 +148,10 @@ begin
   FChart := TCoordAffineProbe.Create(FForm);
   FChart.Parent := FForm;
   FChart.Controller := FCtl;
+  { [R7-K] text measured as upstream's run measured it (zrender's SSR width
+    table): a grid that containLabel or the outer bounds shrink is
+    upstream's, so no layout is passed over for a moved plot }
+  FChart.Measurer := ZrTableMeasurer;
   AssertTrue('the fixture is where the suite expects it', FileExists(FixturePath));
   sl := TStringList.Create;
   try
@@ -639,9 +652,7 @@ var
   has: Boolean;
   arr: TJSONArray;
   i: Integer;
-  doc: Boolean;
 begin
-  doc := (ACase.Find('documentary') <> nil) and ACase.Booleans['documentary'];
   if AGridIndex >= FChart.Build.GridCount then
   begin
     Miss('no grid ' + IntToStr(AGridIndex));
@@ -654,14 +665,11 @@ begin
     Exit;
   end;
   cart := gb.CartesianByIndex(0);
-  { A DOCUMENTARY CASE'S RECT comes of measured text, the grid-bounds
-    oracle's question; everything below it is measured from that rect, so
-    it is compared only where the rect is upstream's }
+  { A DOCUMENTARY CASE'S RECT comes of measured text. [R7-K] Measured with
+    zrender's widths (SetUp) it is upstream's, so it is compared like any
+    other, and everything below it with it }
   rect := AGrid.Objects['rect'];
   r := gb.PlotXYWH;
-  if doc and not ((r.X = NumOf(rect.Find('x'))) and (r.Y = NumOf(rect.Find('y')))
-    and (r.W = NumOf(rect.Find('width'))) and (r.H = NumOf(rect.Find('height')))) then
-    Exit;
   Same('rect x', r.X, rect.Find('x'));
   Same('rect y', r.Y, rect.Find('y'));
   Same('rect width', r.W, rect.Find('width'));

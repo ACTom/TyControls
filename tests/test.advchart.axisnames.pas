@@ -745,8 +745,9 @@ begin
   end;
   AssertTrue(Format('enough names were compared (%d)', [compared]), compared >= 80);
   AssertTrue(Format('and enough axes drew none (%d)', [absent]), absent >= 4);
-  AssertTrue(Format('names on a plot upstream''s to the bit (%d)', [exactNames]),
-    exactNames >= 60);
+  { [R7-K] every name is on upstream's plot (the measure table): none is
+    let off with the case's tolerance }
+  AssertEquals('names on a plot upstream''s to the bit', compared, exactNames);
   AssertEquals(IntToStr(bad) + ' names differ:' + report, 0, bad);
 end;
 
