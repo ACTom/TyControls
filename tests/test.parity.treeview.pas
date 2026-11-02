@@ -43,7 +43,8 @@ uses
   Classes, SysUtils, Types, Math, Controls, Graphics, ImgList, StdCtrls, ComCtrls,
   LCLType, Forms, fpcunit, testregistry,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Controller, tyControls.BuiltinThemes, tyControls.TreeView;
+  tyControls.Types, tyControls.Controller, tyControls.BuiltinThemes, tyControls.TreeView,
+  tyControls.Columns;
 
 type
   { Reaches the protected mouse/key seams the way test.treeview does. }
@@ -222,6 +223,35 @@ type
     procedure TestSelectedImageKindIsAsked;
     { ikOverlay draws a badge on top of the normal icon }
     procedure TestOverlayImageKindIsDrawnOnTop;
+  end;
+
+  { #166: the keypad keys, re-selecting the focused node, sorting on expand, OnPaintText,
+    a double-click on the expander, the horizontal range. }
+  TTree166Access = class(TTyTreeView)
+  public
+    function XKey(AKey: Word; AShift: TShiftState = []): Word;
+    procedure XDown(X, Y: Integer; AShift: TShiftState);
+    procedure XDblClick;
+    procedure XRender(ABmp: TBitmap);
+  end;
+
+  TTree166Test = class(TTestCase)
+  private
+    FT: TTree166Access;
+    procedure Compare(Sender: TTyTreeView; Node1, Node2: PTyTreeNode; Column: Integer;
+      var CompareResult: Integer);
+    procedure PaintRed(Sender: TTyTreeView; const TargetCanvas: TCanvas; Node: PTyTreeNode;
+      Column: Integer; TextType: TTyVSTTextType);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestTheKeypadKeysAndNotInsert;
+    procedure TestFocusingTheFocusedNodeSelectsItAgain;
+    procedure TestASortedTreeSortsWhatItOpens;
+    procedure TestOnPaintTextChangesTheText;
+    procedure TestADoubleClickOnTheExpanderIsNoThirdToggle;
+    procedure TestTheRangeShrinksWithTheIndent;
   end;
 
 implementation
@@ -1128,7 +1158,186 @@ begin
     (px.green > 150) and (px.blue < 120));
 end;
 
+{ --- #166 ------------------------------------------------------------------------------- }
+
+function TTree166Access.XKey(AKey: Word; AShift: TShiftState): Word;
+begin
+  Result := AKey;
+  KeyDown(Result, AShift);
+end;
+
+procedure TTree166Access.XDown(X, Y: Integer; AShift: TShiftState);
+begin
+  MouseDown(mbLeft, AShift, X, Y);
+  MouseUp(mbLeft, [], X, Y);
+end;
+
+procedure TTree166Access.XDblClick;
+begin
+  DblClick;
+end;
+
+procedure TTree166Access.XRender(ABmp: TBitmap);
+begin
+  RenderTo(ABmp.Canvas, Rect(0, 0, ABmp.Width, ABmp.Height), 96);
+end;
+
+procedure TTree166Test.Compare(Sender: TTyTreeView; Node1, Node2: PTyTreeNode;
+  Column: Integer; var CompareResult: Integer);
+begin
+  CompareResult := CompareText(Sender.NodeText[Node1], Sender.NodeText[Node2]);
+end;
+
+procedure TTree166Test.PaintRed(Sender: TTyTreeView; const TargetCanvas: TCanvas;
+  Node: PTyTreeNode; Column: Integer; TextType: TTyVSTTextType);
+begin
+  TargetCanvas.Font.Color := clRed;
+end;
+
+procedure TTree166Test.SetUp;
+begin
+  FT := TTree166Access.Create(nil);
+  FT.Font.PixelsPerInch := 96;
+  FT.SetBounds(0, 0, 200, 160);
+end;
+
+procedure TTree166Test.TearDown;
+begin
+  FreeAndNil(FT);
+end;
+
+procedure TTree166Test.TestTheKeypadKeysAndNotInsert;
+var a: TTyTreeNodeItem;
+begin
+  a := FT.Items.AddChild(nil, 'A');
+  FT.Items.AddChild(a, 'a1');
+  FT.FocusedNode := a.Node;
+  FT.Expanded[a.Node] := True;
+  FT.XKey(VK_INSERT);
+  AssertTrue('Insert is no collapse (it was: VK_INSERT = Ord(''-''))', FT.Expanded[a.Node]);
+  FT.XKey(VK_SUBTRACT, [ssCtrl]);
+  AssertTrue('with Ctrl the keypad minus is the application''s', FT.Expanded[a.Node]);
+  FT.XKey(VK_SUBTRACT);
+  AssertFalse('the keypad minus collapses', FT.Expanded[a.Node]);
+  FT.XKey(VK_EXECUTE);
+  AssertFalse('VK_EXECUTE (Ord(''+'')) is no expand', FT.Expanded[a.Node]);
+  FT.XKey(VK_ADD);
+  AssertTrue('the keypad plus expands', FT.Expanded[a.Node]);
+end;
+
+procedure TTree166Test.TestFocusingTheFocusedNodeSelectsItAgain;
+var a: TTyTreeNodeItem;
+begin
+  a := FT.Items.AddChild(nil, 'A');
+  FT.Items.AddChild(nil, 'B');
+  FT.FocusedNode := a.Node;
+  FT.ClearSelection;
+  AssertFalse('setup: the selection is cleared', FT.NodeSelected[a.Node]);
+  FT.FocusedNode := a.Node;   // what a click on it does
+  AssertTrue('the focused node is selected again', FT.NodeSelected[a.Node]);
+end;
+
+procedure TTree166Test.TestASortedTreeSortsWhatItOpens;
+var r: TTyTreeNodeItem; n: PTyTreeNode;
+begin
+  FT.Header.Columns.Add;
+  FT.Header.MainColumn := 0;
+  FT.OnCompareNodes := @Compare;
+  r := FT.Items.AddChild(nil, 'R');
+  FT.Items.AddChild(r, 'c');
+  FT.Items.AddChild(r, 'a');
+  FT.Items.AddChild(r, 'b');
+  FT.Header.SortColumn := 0;
+  FT.Header.SortDirection := tyControls.Columns.sdAscending;
+  FT.SortTree(0, tyControls.Columns.sdAscending);
+  FT.Expanded[r.Node] := True;
+  n := FT.GetFirstChild(r.Node);
+  AssertEquals('the opened children are in the sort''s order', 'a', FT.NodeText[n]);
+  AssertEquals('all of them', 'b', FT.NodeText[FT.GetNextSibling(n)]);
+end;
+
+procedure TTree166Test.TestOnPaintTextChangesTheText;
+
+  function RedCount: Integer;
+  var bmp: TBitmap; b: TBGRABitmap; x, y: Integer; px: TBGRAPixel;
+  begin
+    Result := 0;
+    bmp := TBitmap.Create;
+    try
+      bmp.PixelFormat := pf32bit;
+      bmp.SetSize(200, 40);
+      FT.XRender(bmp);
+      b := TBGRABitmap.Create(bmp);
+      try
+        for y := 0 to 39 do
+          for x := 0 to 199 do
+          begin
+            px := b.GetPixel(x, y);
+            if (px.red > 180) and (px.green < 80) and (px.blue < 80) then Inc(Result);
+          end;
+      finally
+        b.Free;
+      end;
+    finally
+      bmp.Free;
+    end;
+  end;
+
+begin
+  FT.Items.AddChild(nil, 'WWWWWWWW');
+  AssertEquals('setup: no red without the handler', 0, RedCount);
+  FT.OnPaintText := @PaintRed;
+  AssertTrue('the colour the handler sets is the text''s', RedCount > 10);
+end;
+
+procedure TTree166Test.TestADoubleClickOnTheExpanderIsNoThirdToggle;
+var
+  a: TTyTreeNodeItem;
+  x, y: Integer;
+  part: TTyTreeHitPart;
+  found: Boolean;
+  before: Boolean;
+begin
+  a := FT.Items.AddChild(nil, 'A');
+  FT.Items.AddChild(a, 'a1');
+  found := False;
+  y := FT.DefaultNodeHeight div 2;
+  for x := 0 to 60 do
+    if (FT.GetNodeAtPoint(x, y, part) = a.Node) and (part = hpButton) then
+    begin
+      found := True;
+      Break;
+    end;
+  AssertTrue('setup: the expander is found', found);
+  FT.XDown(x, y, [ssLeft]);
+  FT.XDown(x, y, [ssLeft, ssDouble]);
+  before := FT.Expanded[a.Node];
+  FT.XDblClick;
+  AssertEquals('the double-click on the expander toggles nothing more', before, FT.Expanded[a.Node]);
+end;
+
+procedure TTree166Test.TestTheRangeShrinksWithTheIndent;
+var bmp: TBitmap; wide: Integer;
+begin
+  FT.Items.AddChild(nil, 'A rather long caption for the range');
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(200, 160);
+    FT.Indent := 120;
+    FT.XRender(bmp);
+    wide := FT.RangeX;
+    FT.Indent := 16;
+    FT.XRender(bmp);
+    AssertTrue(Format('the range follows a smaller indent back (%d, was %d)', [FT.RangeX, wide]),
+      FT.RangeX < wide);
+  finally
+    bmp.Free;
+  end;
+end;
+
 initialization
+  RegisterTest(TTree166Test);
   RegisterTest(TTreeParityNameTest);
   RegisterTest(TTreeParityBehaviourTest);
   RegisterTest(TTreeParityPaintTest);

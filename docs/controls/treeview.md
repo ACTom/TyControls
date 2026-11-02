@@ -46,7 +46,7 @@ uses tyControls.TreeView, tyControls.Columns;
 | `ShowButtons` | `Boolean` | `True` | 是否绘制展开 / 折叠按钮（±方块） |
 | `ShowTreeLines` | `Boolean` | `True` | 是否绘制树线（总开关）；画成什么样由主题令牌决定，见上文「树线与展开符号」 |
 | `ShowRoot` | `Boolean` | `True` | 根节点是否显示展开按钮 / 缩进（`False` 时根节点平铺无缩进） |
-| `ToggleOnDblClick` | `Boolean` | `True` | 双击一行是否展开 / 折叠该节点 |
+| `ToggleOnDblClick` | `Boolean` | `True` | 双击一行是否展开 / 折叠该节点（双击展开按钮或复选框不算，那两处每次按下已经各自生效） |
 | `HotTrack` | `Boolean` | `False` | 是否高亮鼠标悬停行（`:hover` 状态） |
 | `SearchTimeout` | `Integer` | `1000` | 键入查找（type-to-find）缓冲区空闲多少毫秒后自动重置 |
 | `ScrollBars` | `TScrollStyle` | `ssBoth` | 允许出现哪些方向的滚动条。`ssNone` = 视口固定（嵌在外层滚动容器里时用）；被禁掉的那一轴偏移会归零 |
@@ -274,7 +274,7 @@ Delphi 的 "TreeView Items Editor" 体验——此前的标准集合编辑器（
 | `OnGetText` | `TTyTreeGetTextEvent` | 取节点文本（简单签名 `var Text`；单列 / 主列常用） |
 | `OnGetTextWithType` | `TTyTreeGetTextWithTypeEvent` | 取单元格文本（完整签名，带 `Column` + `TextType: ttNormal/ttStatic`；多列用） |
 | `OnGetImageIndex` | `TTyTreeGetImageIndexEvent` | 取节点图标索引（带 `Kind` + `Column` + `var Ghosted`）。`Ghosted := True` **会被采纳**：该行图标按"不可用"绘制（走 `TCustomImageList.Draw` 的禁用灰化）。以前这个标志被收下就丢掉；后来只在**多列**分支接上，0 列（默认形态）仍然丢——现在两条分支都接上了。`Kind` 现在会被真的问到三次：`ikNormal` 每行都问，`ikSelected` 只对选中行问（**以当前 `ikNormal` 结果为初值**，handler 不管它就保持原图标，老代码渲染不变），`ikOverlay` 初值 `-1`、答了就叠画在普通图标之上。`ikState` 仍未实现（需要第二个图像列表和自己的槽位，见"注意事项"） |
-| `OnPaintText` | `TTyTreePaintTextEvent` | 文本绘制后的钩子 |
+| `OnPaintText` | `TTyTreePaintTextEvent` | 画文字**之前**触发（同 VTV）：`TargetCanvas.Font` 已经是这个单元格的字体，handler 改了颜色、样式（粗 / 斜 / 下划线 / 删除线）、字号或字体名，文字就按改后的画 |
 | `OnMeasureItem` | `TTyTreeMeasureItemEvent` | 从 `InitNode` 触发（仅 `toVariableNodeHeight`），app 通过 `var ANodeHeight` 返回逐行高度（逻辑像素）。运行时打开该选项、或默认行高变了（`DefaultNodeHeight`、密度），已初始化的节点会再测一次 |
 | `OnDrawNode` | `TTyTreeDrawNodeEvent` | 逐单元格自绘（仅 `toOwnerDraw`）；在 BGRA 合成后、裁剪到单元格设备矩形时触发。这个单元格不再画默认的文本和图标，也不触发 `OnPaintText`；行背景、选中高亮、树线、展开按钮、复选框照常画在下面，复选框也照常能点。handler 在它们之后画，需要时可以盖住 |
 | `OnAfterCellPaint` | `TTyTreeCellPaintEvent` | 每个绘制单元格之上的**叠加层**（独立于 `toOwnerDraw`），用于徽标 / 焦点环等装饰 |
@@ -590,6 +590,9 @@ Tree.OnNodeMoved := @OnMoved;
 - **自绘 handler 借的是宿主画布，改了什么就要还回去**：`ACanvas` 是控件自己的画布，同一次绘制里后面每个单元格、以及下一次绘制，都继承你留下的 `Font.Color` / `Brush` / `Pen`。本库自带的 Owner-draw 示例就栽在这上面：叠加层把 `Font.Color` 留成了 `clWhite`，白底上的子行标题整片消失。
 - **`toCheckSupport` 是复选框总开关**：未加入 `Options` 时，即使给节点设了 `CheckType`，`ToggleCheck` 也直接返回、不绘制复选槽。三态自动传播还额外需要 `toAutoTristateTracking`。
 - **单选 vs 多选事件**：单选走 `OnChange`（`FSelectedNode` 变化）；多选走 `OnSelectionChanged`（每次手势后一次）。二者是不同的通道。
+- **展开 / 折叠键**：小键盘的 `+` 展开、`-` 折叠、`*` 全部展开（和 LCL 一样只认小键盘）；按着 Ctrl 或 Alt 时不处理，留给程序。
+- **表头排序后再展开**：表头排过序时，之前折叠着的子树在展开时按同样的列和方向排好。
+- **选中被清掉后**：再点（或把 `FocusedNode` 设成）当前焦点节点，会重新选中它。
 - **`Enabled = False` 不响应输入**：与全库一致，禁用时不触发点击 / 键盘 / 滚轮驱动的事件。
 - **你设的 `Cursor` 不会被吞掉**：拖放反馈（`crDrag` / `crNoDrop`）与列分隔线提示（`crHSplit`）都只是**临时借用** `Cursor`，手势结束后还原成你原本设的那个。以前是硬还原成 `crDefault`——给树设了 `crHandPoint`，只要在分隔线上划过一次就永久没了。
 - **五个事件同时是子类的重写点**：`OnGetText` / `OnInitNode` / `OnExpanding` / `OnGetImageIndex` / `OnChange` 各有一个 protected 虚方法（`DoGetText` / `DoInitNode` / `DoExpanding` / `DoGetImageIndex` / `DoTreeChange`），默认实现就是"发这个事件"。像 [`TTyShellTreeView`](shelltreeview.md) 这样自带行为的子类**重写虚方法**而不是抢占事件槽，因此应用照常可以挂这些事件，不会把子类的行为顶掉（重写里调 `inherited` 即可两者兼得）。
