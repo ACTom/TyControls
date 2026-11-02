@@ -46,6 +46,10 @@ type
       var AShow: Boolean);
     function Lines(const AText: string): string;
     procedure RebuildGrid(Sender: TObject);
+    procedure CountAsDialog(Sender: TObject; AInstance: TPersistent; APropInfo: PPropInfo;
+      ARow: TTyValueRow);
+    procedure EditCount(Sender: TObject; ARow: TTyValueRow; AInstance: TPersistent;
+      const APropName: string; var AHandled: Boolean);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -83,6 +87,7 @@ type
     { #183 }
     procedure TestASetterThatRebuildsTheRowsEndsTheWrite;
     procedure TestTheStringsDialogWritesAfterARebuildWhileItWasUp;
+    procedure TestAWriteThatChangesTheStructureRebuildsTheRows;
   end;
 
 implementation
@@ -190,6 +195,20 @@ end;
 procedure TPropertyGridControlTest.RebuildGrid(Sender: TObject);
 begin
   FGrid.Rebuild;
+end;
+
+procedure TPropertyGridControlTest.CountAsDialog(Sender: TObject; AInstance: TPersistent;
+  APropInfo: PPropInfo; ARow: TTyValueRow);
+begin
+  if APropInfo^.Name = 'Count' then ARow.EditorKind := vekDialog;
+end;
+
+procedure TPropertyGridControlTest.EditCount(Sender: TObject; ARow: TTyValueRow;
+  AInstance: TPersistent; const APropName: string; var AHandled: Boolean);
+begin
+  if not (AInstance is TPGCounted) or (APropName <> 'Count') then Exit;
+  TPGCounted(AInstance).Count := 3;   // the application's own dialog, answered
+  AHandled := True;
 end;
 
 { ================================================================ selection }
@@ -708,6 +727,34 @@ begin
   AssertEquals('the dialog ran', 1, FGrid.StringsDialogs);
   AssertEquals('the list was written', 'x,y', Lines(FHolder.Lines.Text));
   AssertEquals('through the setter', 1, FHolder.LinesSets);
+end;
+
+{ Count resizes the collection beside it. After the grid's own write -- typed, or a handled
+  OnEditProperty -- the rows are rebuilt as Refresh would, the current row kept. }
+procedure TPropertyGridControlTest.TestAWriteThatChangesTheStructureRebuildsTheRows;
+var c: TPGCounted;
+begin
+  c := TPGCounted.Create;
+  try
+    FGrid.SelectedObject := c;
+    FGrid.ExpandedProperties.Add('Items');
+    FGrid.TypeInto(FGrid.RowAt('Count'), '4');
+    AssertEquals('the object grew', 4, c.Items.Count);
+    AssertTrue('a row for each new item', FGrid.HasRow('Items.[3]'));
+    AssertEquals('the new item reads its caption', 'item3', FGrid.RowAt('Items.[3]').Value);
+    AssertSame('the current row kept', FGrid.RowAt('Count'), FGrid.CurrentRow);
+    FGrid.TypeInto(FGrid.RowAt('Count'), '1');
+    AssertFalse('the rows of the items gone are gone', FGrid.HasRow('Items.[1]'));
+    FGrid.OnGetPropertyRow := @CountAsDialog;
+    FGrid.OnEditProperty := @EditCount;
+    FGrid.Rebuild;
+    FGrid.InvokeRowDialog(FGrid.FlatOf(FGrid.RowAt('Count')));
+    AssertEquals('the handler wrote it', 3, c.Items.Count);
+    AssertTrue('and the rows followed', FGrid.HasRow('Items.[2]'));
+  finally
+    FGrid.SelectedObject := nil;
+    c.Free;
+  end;
 end;
 
 initialization

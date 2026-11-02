@@ -2680,8 +2680,9 @@ var
   insts: array of TPersistent;
   names, newTexts: array of string;
   known: array of Boolean;
-  inst: TPersistent;
-  nm, described: string;
+  done: array of TPersistent;
+  doneNames: array of string;
+  described: string;
   allow: Boolean;
   gen, n, k: Integer;
 begin
@@ -2744,17 +2745,27 @@ begin
     if gen <> FBuildCount then Exit;
   end;
   if AKind <> pwkStrings then AText := FRows.ReadText(ANode);   // as the objects read it back
-  { A setter often moves other properties too (AutoSize -> Width): re-read the rest. The row
-    being committed is left for the editor, which compares AText with its old value. }
-  FRows.RefreshValues(AExceptRow);
-  Invalidate;
+  { Who is announced, taken while ANode is still there to say. }
+  SetLength(done, n);
+  SetLength(doneNames, n);
+  for k := 0 to n - 1 do
+    if not FRows.PropertyOfIn(ANode, k, done[k], doneNames[k]) then done[k] := nil;
+  if FRows.StructureChanged then
+    { #183: the write changed what the rows were built from (a Count that resizes a collection,
+      a sub-object replaced): rebuilt as Refresh does, the expanded rows and the current row
+      kept. ANode and the caller's row go with the old rows. }
+    RebuildRows(True)
+  else
+  begin
+    { A setter often moves other properties too (AutoSize -> Width): re-read the rest. The row
+      being committed is left for the editor, which compares AText with its old value. }
+    FRows.RefreshValues(AExceptRow);
+    Invalidate;
+  end;
+  Result := gen = FBuildCount;
   if Assigned(FOnPropertyChanged) then
     for k := 0 to n - 1 do
-    begin
-      if gen <> FBuildCount then Break;   // a handler rebuilt the rows: ANode is gone
-      if FRows.PropertyOfIn(ANode, k, inst, nm) then FOnPropertyChanged(Self, inst, nm);
-    end;
-  Result := gen = FBuildCount;
+      if done[k] <> nil then FOnPropertyChanged(Self, done[k], doneNames[k]);
 end;
 
 procedure TTyCustomPropertyGrid.SeedEditFont(ARow: TTyValueRow; AFont: TFont);
@@ -2819,9 +2830,9 @@ begin
   end;
   if handled or (gen <> FBuildCount) then
   begin
-    { The handler wrote the property (or rebuilt the rows): show the object. }
-    if gen = FBuildCount then FRows.RefreshValues(nil);
-    Invalidate;
+    { The handler wrote the property (or rebuilt the rows): show the object -- rebuilt when the
+      write changed its structure (#183), as Refresh does. }
+    if gen = FBuildCount then Refresh else Invalidate;
     Exit;
   end;
   nd := FRows.NodeOf(ARow);

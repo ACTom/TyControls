@@ -278,6 +278,20 @@ type
     property Value: Integer read FValue write SetValue;
   end;
 
+  { Count resizes Items, as a host's setter changes what it owns (#183). Two items to start. }
+  TPGCounted = class(TPersistent)
+  private
+    FItems: TOwnedCollection;
+    function GetCount: Integer;
+    procedure SetCount(AValue: Integer);
+  public
+    constructor Create;
+    destructor Destroy; override;
+  published
+    property Count: Integer read GetCount write SetCount;
+    property Items: TOwnedCollection read FItems;
+  end;
+
   { Drives the inline editor the way the keyboard does. }
   TPGEditAccess = class(TTyValueEdit)
   public
@@ -543,6 +557,35 @@ procedure TPGHook.SetValue(AValue: Integer);
 begin
   FValue := AValue;
   if Assigned(FOnSet) then FOnSet(Self);
+end;
+
+constructor TPGCounted.Create;
+begin
+  inherited Create;
+  FItems := TOwnedCollection.Create(Self, TPGItem);
+  SetCount(2);
+end;
+
+destructor TPGCounted.Destroy;
+begin
+  FItems.Free;
+  inherited Destroy;
+end;
+
+function TPGCounted.GetCount: Integer;
+begin
+  Result := FItems.Count;
+end;
+
+procedure TPGCounted.SetCount(AValue: Integer);
+var it: TPGItem;
+begin
+  while FItems.Count < AValue do
+  begin
+    it := TPGItem(FItems.Add);
+    it.Caption := 'item' + IntToStr(it.Index);
+  end;
+  while FItems.Count > AValue do FItems.Delete(FItems.Count - 1);
 end;
 
 { ---- TPGEditAccess ---- }
