@@ -79,6 +79,7 @@ type
     procedure TestAMoveWithTheButtonUpFinishesThePress;
     procedure TestTheDragTimerStopsWhenTheButtonIsUp;
     procedure TestPrimaryOutlivesTheSelection;
+    procedure TestSelectLinesIsClampedAndOrdered;
   end;
 
 implementation
@@ -1043,6 +1044,20 @@ begin
   AssertEquals('PRIMARY still has it', 'wor', V.PrimaryNow);
   V.WriteSync(#27'[?1049h');
   AssertEquals('the other screen too', 'wor', V.PrimaryNow);
+end;
+
+{ #185: SelectLines clamps both ends into the buffer (docs: 越界钳住) and takes the pair in
+  either order }
+procedure TTyTerminalViewMouseTests.TestSelectLinesIsClampedAndOrdered;
+begin
+  V.WriteSync(Lines(0, 10) + 'last');
+  V.SelectLines(5000, 6000);
+  AssertEquals('past the end: the last line', 'last', V.SelectionText);
+  V.SelectLines(-3, -1);
+  AssertEquals('before the start: the first line', 'line-0', V.SelectionText);
+  V.SelectLines(3, 1);
+  AssertEquals('swapped: rows 1 to 3', 'line-1' + LineEnding + 'line-2' + LineEnding + 'line-3',
+    V.SelectionText);
 end;
 
 initialization

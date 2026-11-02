@@ -234,9 +234,22 @@ begin
   FSelection.SetSelection(ACol, AAbsRow, ALength);
 end;
 
+{ #185: 两头都钳进缓冲(上游只钳 AFirst < 0、ALast 过尾),先后颠倒的换过来;选区服务照上游
+  不动,上游轨迹回放靠它 }
 procedure TTyCustomTerminalView.SelectLines(AFirst, ALast: Integer);
+var
+  last: Integer;
 begin
   SyncSelectionTrim;
+  last := Max(FCore.Buffer.Lines.Length - 1, 0);
+  AFirst := EnsureRange(AFirst, 0, last);
+  ALast := EnsureRange(ALast, 0, last);
+  if AFirst > ALast then
+  begin
+    last := AFirst;
+    AFirst := ALast;
+    ALast := last;
+  end;
   FSelection.SelectLines(AFirst, ALast);
 end;
 

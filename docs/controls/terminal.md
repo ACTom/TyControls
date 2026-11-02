@@ -120,7 +120,7 @@ uses tyControls.Terminal;
 | `CopyToClipboard` | 有选区才写剪贴板（`SelectionText`）。 |
 | `SelectAll`、`ClearSelection` | 全选（滚回加屏幕）、清掉选区。 |
 | `Select(ACol, AAbsRow, ALength)` | 从缓冲行 `AAbsRow`（0 = 滚回最早一行）的 `ACol` 列起选 `ALength` 格，可以跨行。 |
-| `SelectLines(AFirst, ALast)` | 选中缓冲行 `AFirst`..`ALast` 整行（越界钳住）。 |
+| `SelectLines(AFirst, ALast)` | 选中缓冲行 `AFirst`..`ALast` 整行（两头越界都钳进缓冲；先后颠倒也一样）。 |
 | `Clear` | 清滚回。 |
 | `Reset` | 终端复位（xterm.js headless 的 reset：保留标题等）。 |
 | `ScrollLines(ADelta)`、`ScrollPages(APages)`、`ScrollToTop`、`ScrollToBottom` | 在滚回里移动视口。 |
