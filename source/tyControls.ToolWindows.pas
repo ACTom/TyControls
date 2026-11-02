@@ -6529,6 +6529,18 @@ begin
     Message.Result := 1;
     Exit;
   end;
+  { 当前页上的标签行(spec §7.1):请求落到栏上,只能是那一页 ShowHint = False(LCL 的
+    GetHintControl 跳过它找到了栏)—— 标签的提示跟着各窗口的 ShowHint。栏不替它答,也不回落到
+    栏自己的 Hint;挪一下就重新问。 }
+  if (info <> nil) and (FPlacement = twpBottom) and (FActive <> nil) and FActive.Visible
+     and FActive.InTabRowRegion(info^.CursorPos.X - FActive.Left,
+       info^.CursorPos.Y - FActive.Top) then
+  begin
+    info^.CursorRect := Rect(info^.CursorPos.X, info^.CursorPos.Y,
+      info^.CursorPos.X + 1, info^.CursorPos.Y + 1);
+    Message.Result := 1;
+    Exit;
+  end;
   if (info <> nil) and StripHintAt(info^.CursorPos.X, info^.CursorPos.Y, txt, r) then
   begin
     info^.HintStr := txt;

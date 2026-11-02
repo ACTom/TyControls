@@ -184,6 +184,8 @@ type
     procedure TestTheRowsBlankShowsNoHint;
     procedure TestARightClickOnATabGoesToTheBarInBarCoordinates;
     procedure TestARightClickOnTheRowsBlankIsSwallowed;
+    { 页的 ShowHint = False:标签行的提示请求落到栏,栏不替它答。 }
+    procedure TestAPageThatDeclinesHintsShowsNoTabHint;
     { Task 9:标签拖动调顺序(spec §9.1 / §9.2 / §9.4 / §9.8)。 }
     procedure TestDraggingOutOfTheRowShowsNoDropAndCancels;
     procedure TestDraggingToTheEndReordersOnRelease;
@@ -200,6 +202,8 @@ type
   private
     FBarPopups, FWinPopups: Integer;
     FBarPopupPos: TPoint;
+    FFormPopups: Integer;
+    procedure CountFormPopup(Sender: TObject; MousePos: TPoint; var Handled: Boolean);
     procedure CountBarPopup(Sender: TObject; MousePos: TPoint; var Handled: Boolean);
     procedure CountWinPopup(Sender: TObject; MousePos: TPoint; var Handled: Boolean);
     { 让 AWin 回答 (X, Y) 上的 CM_HINTSHOW(LCL 自己发的那一条)。 }
@@ -2382,6 +2386,34 @@ begin
   AssertTrue('空白处的右键吞掉', handled);
   AssertEquals('栏的不触发', 0, FBarPopups);
   AssertEquals('窗口的也不触发', 0, FWinPopups);
+end;
+
+procedure TTyToolWindowBottomInputTests.CountFormPopup(Sender: TObject; MousePos: TPoint;
+  var Handled: Boolean);
+begin
+  Inc(FFormPopups);
+end;
+
+procedure TTyToolWindowBottomInputTests.TestAPageThatDeclinesHintsShowsNoTabHint;
+var
+  w: TProbeWindow;
+  info: THintInfo;
+  c: TPoint;
+begin
+  NewBottomBar(['Problems', 'Output', 'Terminal'], 1);
+  w := FWins[1];
+  w.ShowHint := False;
+  { LCL 的 GetHintControl 跳过 ShowHint = False 的页,把请求交给栏(栏坐标)。 }
+  c := TabCentre(0);
+  c.Offset(w.Left, w.Top);
+  FillChar(info, SizeOf(info), 0);
+  info.HintControl := FBar;
+  info.CursorPos := c;
+  info.HintStr := '<untouched>';
+  AssertEquals('栏不替页答标签的提示', 1, FBar.Perform(CM_HINTSHOW, 0, PtrInt(@info)));
+  AssertEquals('提示文字没动', '<untouched>', info.HintStr);
+  AssertTrue('挪一下就重新问(CursorRect 不是空的)',
+    (info.CursorRect.Right > info.CursorRect.Left) and (info.CursorRect.Bottom > info.CursorRect.Top));
 end;
 
 { --- Task 9 --------------------------------------------------------------------- }
