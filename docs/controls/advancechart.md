@@ -607,6 +607,7 @@ option 编辑器：
 - ECharts 抛错、整次 `setOption` 失败的写法，这里只跳过出错的那一项、组件或数据集，原因写进 `Diagnostic`。比如主题河流各层行数不同、matrix 的合并格跨进正文、large 散点用 `image://` 符号。
 - 蜡烛图的 `encode` 给值轴的维不满四个、箱线图不满五个时，ECharts 会报错。这里不画这个系列，原因写进 `Diagnostic`。
 - 这样的系列仍在配置里：图例列出它，坐标轴范围和 dataZoom 算它的数据，`GetOptionJson` 照原样读回。
+- dataZoom 滑块的数据阴影也照样取它的数据。ECharts 画箱线图时也是这样：滑块先画好，箱线图才报错。
 - 除此之外都当它不存在：高亮、选中、`showTip` 等动作找不到它，坐标轴指示器、键盘、无障碍描述、刷选结果都不列它。
 - 坐标的 `encode` 列表第一项没对上任何维（如 `x: ['nope', 3]`）时，ECharts 画 dataZoom 滑块的数据阴影会报错。这里不画这个阴影，窗口和过滤照常。
 - 同一类组件两个相同 id、`replaceMerge` 写了不存在的类型：整次合并拒绝，图不变，`OptionError` 写着原因。

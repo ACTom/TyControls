@@ -141,6 +141,9 @@ const echarts = require(DIST);
 const ROOT = path.resolve(__dirname, '..', '..');
 const OUT = process.env.ORACLE_OUT || path.join(ROOT, 'tests', 'fixtures', 'advchart-visualmap-view.json');
 const GALLERY = path.join(ROOT, 'examples', 'advchart', 'gallery');
+// [R7-K] the gallery file without its function names (gallery-functions.js):
+// a '@<id>.<key>' handed to upstream is a string, not the function
+const { withoutFunctions } = require('./gallery-functions.js');
 const C = echarts.color;
 
 const W = 800;
@@ -811,7 +814,7 @@ function hookViews() {
 }
 
 // ---------- the cases ----------
-const gallery = name => JSON.parse(fs.readFileSync(path.join(GALLERY, name + '.json'), 'utf8'));
+const gallery = name => withoutFunctions(JSON.parse(fs.readFileSync(path.join(GALLERY, name + '.json'), 'utf8')));
 const barOpt = (vm, data) => ({
   xAxis: { type: 'category', data: ['a', 'b', 'c'] }, yAxis: {}, visualMap: vm,
   series: [{ type: 'bar', data: data || [10, 50, 90] }],

@@ -102,6 +102,9 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const OUT = process.env.ORACLE_OUT || path.join(ROOT, 'tests', 'fixtures', 'advchart-geo-series.json');
 const EXAMPLES = process.env.ECHARTS_EXAMPLES || 'D:/Projects/echarts-examples';
 const GALLERY = path.join(ROOT, 'examples', 'advchart', 'gallery');
+// [R7-K] the gallery file without its function names (gallery-functions.js):
+// a '@<id>.<key>' handed to upstream is a string, not the function
+const { withoutFunctions } = require('./gallery-functions.js');
 
 Math.random = function () { return 0; };
 
@@ -754,7 +757,7 @@ function runCase(c) {
 // ---------- the cases ----------
 const TIP = { hideDelay: 0, position: [5, 5] };
 function opt(extra) { return Object.assign({ animation: false }, extra); }
-function gallery(name) { return JSON.parse(fs.readFileSync(path.join(GALLERY, name + '.json'), 'utf8')); }
+function gallery(name) { return withoutFunctions(JSON.parse(fs.readFileSync(path.join(GALLERY, name + '.json'), 'utf8'))); }
 const SC_DATA = [[2, 3, 10], [15, 5, 20], [5, 15, 30], ['x', 5, 5], [18, 22, 40], [28, 2, 15], [-3, 12, 8]];
 
 const CASES = [

@@ -61199,6 +61199,899 @@
    ]
   },
   {
+   "id": "r-list-box-four-shadow",
+   "group": "render",
+   "note": "a boxplot y [1, 2, 3, 4] under a slider with showDataShadow: upstream throws in the view, the slider already cast its shadow from the boxplot",
+   "option": {
+    "animation": false,
+    "dataset": {
+     "source": [
+      [
+       "d",
+       "a",
+       "b",
+       "c",
+       "e",
+       "f"
+      ],
+      [
+       "b0",
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      [
+       "b1",
+       2,
+       3,
+       4,
+       5,
+       6
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value",
+     "scale": true
+    },
+    "series": [
+     {
+      "type": "boxplot",
+      "encode": {
+       "x": 0,
+       "y": [
+        1,
+        2,
+        3,
+        4
+       ]
+      }
+     }
+    ],
+    "dataZoom": [
+     {
+      "type": "slider",
+      "showDataShadow": true
+     }
+    ]
+   },
+   "render": {
+    "error": "Cannot read properties of undefined (reading 'ends')"
+   },
+   "shadow": [
+    {
+     "index": 0,
+     "seriesIndex": 0,
+     "drawn": true,
+     "area": [
+      [
+       "407c200000000000",
+       "0000000000000000"
+      ],
+      [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      [
+       "0000000000000000",
+       "4016800000000002"
+      ],
+      [
+       "407c200000000000",
+       "4038600000000001"
+      ]
+     ],
+     "line": [
+      [
+       "0000000000000000",
+       "4016800000000002"
+      ],
+      [
+       "407c200000000000",
+       "4038600000000001"
+      ]
+     ]
+    }
+   ],
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "d",
+        "a",
+        "b",
+        "c",
+        "e",
+        "f"
+       ],
+       "detected": 6,
+       "rows": [
+        [
+         "s:d",
+         "s:a",
+         "s:b",
+         "s:c",
+         "s:e",
+         "s:f"
+        ],
+        [
+         "s:b0",
+         "3ff0000000000000",
+         "4000000000000000",
+         "4008000000000000",
+         "4010000000000000",
+         "4014000000000000"
+        ],
+        [
+         "s:b1",
+         "4000000000000000",
+         "4008000000000000",
+         "4010000000000000",
+         "4014000000000000",
+         "4018000000000000"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "r-list-box-five-shadow",
+   "group": "render",
+   "note": "the same with all five: the same shadow",
+   "option": {
+    "animation": false,
+    "dataset": {
+     "source": [
+      [
+       "d",
+       "a",
+       "b",
+       "c",
+       "e",
+       "f"
+      ],
+      [
+       "b0",
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      [
+       "b1",
+       2,
+       3,
+       4,
+       5,
+       6
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value",
+     "scale": true
+    },
+    "series": [
+     {
+      "type": "boxplot",
+      "encode": {
+       "x": 0,
+       "y": [
+        1,
+        2,
+        3,
+        4,
+        5
+       ]
+      }
+     }
+    ],
+    "dataZoom": [
+     {
+      "type": "slider",
+      "showDataShadow": true
+     }
+    ]
+   },
+   "render": {
+    "rect": [
+     "4056800000000000",
+     "4050400000000000",
+     "407c200000000000",
+     "406fe00000000000"
+    ],
+    "axes": [
+     {
+      "dim": "x",
+      "index": 0,
+      "categories": [
+       "b0",
+       "b1"
+      ]
+     },
+     {
+      "dim": "y",
+      "index": 0,
+      "categories": null
+     }
+    ],
+    "series": [
+     {
+      "index": 0,
+      "type": "boxplot",
+      "count": 2,
+      "items": [
+       null,
+       null
+      ],
+      "labels": []
+     }
+    ]
+   },
+   "shadow": [
+    {
+     "index": 0,
+     "seriesIndex": 0,
+     "drawn": true,
+     "area": [
+      [
+       "407c200000000000",
+       "0000000000000000"
+      ],
+      [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      [
+       "0000000000000000",
+       "4016800000000002"
+      ],
+      [
+       "407c200000000000",
+       "4038600000000001"
+      ]
+     ],
+     "line": [
+      [
+       "0000000000000000",
+       "4016800000000002"
+      ],
+      [
+       "407c200000000000",
+       "4038600000000001"
+      ]
+     ]
+    }
+   ],
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "d",
+        "a",
+        "b",
+        "c",
+        "e",
+        "f"
+       ],
+       "detected": 6,
+       "rows": [
+        [
+         "s:d",
+         "s:a",
+         "s:b",
+         "s:c",
+         "s:e",
+         "s:f"
+        ],
+        [
+         "s:b0",
+         "3ff0000000000000",
+         "4000000000000000",
+         "4008000000000000",
+         "4010000000000000",
+         "4014000000000000"
+        ],
+        [
+         "s:b1",
+         "4000000000000000",
+         "4008000000000000",
+         "4010000000000000",
+         "4014000000000000",
+         "4018000000000000"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "r-list-box-four-auto",
+   "group": "render",
+   "note": "a boxplot y [1, 2, 3, 4] under a slider, showDataShadow auto: a boxplot casts none",
+   "option": {
+    "animation": false,
+    "dataset": {
+     "source": [
+      [
+       "d",
+       "a",
+       "b",
+       "c",
+       "e",
+       "f"
+      ],
+      [
+       "b0",
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      [
+       "b1",
+       2,
+       3,
+       4,
+       5,
+       6
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value",
+     "scale": true
+    },
+    "series": [
+     {
+      "type": "boxplot",
+      "encode": {
+       "x": 0,
+       "y": [
+        1,
+        2,
+        3,
+        4
+       ]
+      }
+     }
+    ],
+    "dataZoom": [
+     {
+      "type": "slider"
+     }
+    ]
+   },
+   "render": {
+    "error": "Cannot read properties of undefined (reading 'ends')"
+   },
+   "shadow": [
+    {
+     "index": 0,
+     "seriesIndex": null,
+     "drawn": false,
+     "area": null,
+     "line": null
+    }
+   ],
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "d",
+        "a",
+        "b",
+        "c",
+        "e",
+        "f"
+       ],
+       "detected": 6,
+       "rows": [
+        [
+         "s:d",
+         "s:a",
+         "s:b",
+         "s:c",
+         "s:e",
+         "s:f"
+        ],
+        [
+         "s:b0",
+         "3ff0000000000000",
+         "4000000000000000",
+         "4008000000000000",
+         "4010000000000000",
+         "4014000000000000"
+        ],
+        [
+         "s:b1",
+         "4000000000000000",
+         "4008000000000000",
+         "4010000000000000",
+         "4014000000000000",
+         "4018000000000000"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "r-list-box-four-line-shadow",
+   "group": "render",
+   "note": "the short boxplot, then a line on f, showDataShadow: the shadow is still the boxplot (the first that casts one)",
+   "option": {
+    "animation": false,
+    "dataset": {
+     "source": [
+      [
+       "d",
+       "a",
+       "b",
+       "c",
+       "e",
+       "f"
+      ],
+      [
+       "b0",
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      [
+       "b1",
+       2,
+       3,
+       4,
+       5,
+       6
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value",
+     "scale": true
+    },
+    "series": [
+     {
+      "type": "boxplot",
+      "encode": {
+       "x": 0,
+       "y": [
+        1,
+        2,
+        3,
+        4
+       ]
+      }
+     },
+     {
+      "type": "line",
+      "encode": {
+       "x": 0,
+       "y": 5
+      }
+     }
+    ],
+    "dataZoom": [
+     {
+      "type": "slider",
+      "showDataShadow": true
+     }
+    ]
+   },
+   "render": {
+    "error": "Cannot read properties of undefined (reading 'ends')"
+   },
+   "shadow": [
+    {
+     "index": 0,
+     "seriesIndex": 0,
+     "drawn": true,
+     "area": [
+      [
+       "407c200000000000",
+       "0000000000000000"
+      ],
+      [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      [
+       "0000000000000000",
+       "4016800000000002"
+      ],
+      [
+       "407c200000000000",
+       "4038600000000001"
+      ]
+     ],
+     "line": [
+      [
+       "0000000000000000",
+       "4016800000000002"
+      ],
+      [
+       "407c200000000000",
+       "4038600000000001"
+      ]
+     ]
+    }
+   ],
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "d",
+        "a",
+        "b",
+        "c",
+        "e",
+        "f"
+       ],
+       "detected": 6,
+       "rows": [
+        [
+         "s:d",
+         "s:a",
+         "s:b",
+         "s:c",
+         "s:e",
+         "s:f"
+        ],
+        [
+         "s:b0",
+         "3ff0000000000000",
+         "4000000000000000",
+         "4008000000000000",
+         "4010000000000000",
+         "4014000000000000"
+        ],
+        [
+         "s:b1",
+         "4000000000000000",
+         "4008000000000000",
+         "4010000000000000",
+         "4014000000000000",
+         "4018000000000000"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "r-list-candle-two-shadow",
+   "group": "render",
+   "note": "a candlestick y [1, 2] under a slider: upstream throws in the visual stage, nothing rendered",
+   "option": {
+    "animation": false,
+    "dataset": {
+     "source": [
+      [
+       "d",
+       "o",
+       "c",
+       "l",
+       "h"
+      ],
+      [
+       "d0",
+       20,
+       34,
+       10,
+       38
+      ],
+      [
+       "d1",
+       40,
+       35,
+       30,
+       50
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value",
+     "scale": true
+    },
+    "series": [
+     {
+      "type": "candlestick",
+      "encode": {
+       "x": 0,
+       "y": [
+        1,
+        2
+       ]
+      }
+     }
+    ],
+    "dataZoom": [
+     {
+      "type": "slider"
+     }
+    ]
+   },
+   "render": {
+    "error": "Cannot read properties of undefined (reading 'sign')"
+   },
+   "shadow": [],
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "d",
+        "o",
+        "c",
+        "l",
+        "h"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:d",
+         "s:o",
+         "s:c",
+         "s:l",
+         "s:h"
+        ],
+        [
+         "s:d0",
+         "4034000000000000",
+         "4041000000000000",
+         "4024000000000000",
+         "4043000000000000"
+        ],
+        [
+         "s:d1",
+         "4044000000000000",
+         "4041800000000000",
+         "403e000000000000",
+         "4049000000000000"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "r-list-candle-four-shadow",
+   "group": "render",
+   "note": "its twin y [1, 2, 3, 4]: the shadow of the same first dimension",
+   "option": {
+    "animation": false,
+    "dataset": {
+     "source": [
+      [
+       "d",
+       "o",
+       "c",
+       "l",
+       "h"
+      ],
+      [
+       "d0",
+       20,
+       34,
+       10,
+       38
+      ],
+      [
+       "d1",
+       40,
+       35,
+       30,
+       50
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value",
+     "scale": true
+    },
+    "series": [
+     {
+      "type": "candlestick",
+      "encode": {
+       "x": 0,
+       "y": [
+        1,
+        2,
+        3,
+        4
+       ]
+      }
+     }
+    ],
+    "dataZoom": [
+     {
+      "type": "slider"
+     }
+    ]
+   },
+   "render": {
+    "rect": [
+     "4056800000000000",
+     "4050400000000000",
+     "407c200000000000",
+     "406fe00000000000"
+    ],
+    "axes": [
+     {
+      "dim": "x",
+      "index": 0,
+      "categories": [
+       "d0",
+       "d1"
+      ]
+     },
+     {
+      "dim": "y",
+      "index": 0,
+      "categories": null
+     }
+    ],
+    "series": [
+     {
+      "index": 0,
+      "type": "candlestick",
+      "count": 2,
+      "items": [
+       null,
+       null
+      ],
+      "labels": []
+     }
+    ]
+   },
+   "shadow": [
+    {
+     "index": 0,
+     "seriesIndex": 0,
+     "drawn": true,
+     "area": [
+      [
+       "407c200000000000",
+       "0000000000000000"
+      ],
+      [
+       "0000000000000000",
+       "0000000000000000"
+      ],
+      [
+       "0000000000000000",
+       "4016800000000000"
+      ],
+      [
+       "407c200000000000",
+       "4038600000000000"
+      ]
+     ],
+     "line": [
+      [
+       "0000000000000000",
+       "4016800000000000"
+      ],
+      [
+       "407c200000000000",
+       "4038600000000000"
+      ]
+     ]
+    }
+   ],
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "d",
+        "o",
+        "c",
+        "l",
+        "h"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:d",
+         "s:o",
+         "s:c",
+         "s:l",
+         "s:h"
+        ],
+        [
+         "s:d0",
+         "4034000000000000",
+         "4041000000000000",
+         "4024000000000000",
+         "4043000000000000"
+        ],
+        [
+         "s:d1",
+         "4044000000000000",
+         "4041800000000000",
+         "403e000000000000",
+         "4049000000000000"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
    "id": "r-list-aria-own-gap",
    "group": "render",
    "note": "own data x ['nope', 1], y 0: the description 1, 2, 7 -- the gap is no dimension",
@@ -63464,6 +64357,18 @@
   },
   {
    "name": "short: a gap in four places throws nothing",
+   "ok": true
+  },
+  {
+   "name": "short: a boxplot y [1, 2, 3, 4] throws, its slider cast the shadow of the five-place twin",
+   "ok": true
+  },
+  {
+   "name": "short: showDataShadow auto casts none from a boxplot",
+   "ok": true
+  },
+  {
+   "name": "short: a candlestick y [1, 2] under a slider renders nothing; its twin casts a shadow",
    "ok": true
   },
   {

@@ -14411,8 +14411,7 @@
      "noFrame": false,
      "payload": {
       "type": "legendToggleSelect",
-      "name": "B",
-      "__ec_inner_14": {}
+      "name": "B"
      },
      "tree": {
       "animation": false,
@@ -15121,8 +15120,7 @@
      "noFrame": false,
      "payload": {
       "type": "legendToggleSelect",
-      "name": "B",
-      "__ec_inner_14": {}
+      "name": "B"
      },
      "tree": {
       "animation": false,
@@ -16919,8 +16917,7 @@
      "noFrame": false,
      "payload": {
       "type": "legendToggleSelect",
-      "name": "A",
-      "__ec_inner_14": {}
+      "name": "A"
      },
      "tree": {
       "animation": false,
@@ -17646,8 +17643,7 @@
      "noFrame": false,
      "payload": {
       "type": "legendToggleSelect",
-      "name": "C",
-      "__ec_inner_14": {}
+      "name": "C"
      },
      "tree": {
       "animation": false,
@@ -18356,8 +18352,7 @@
      "noFrame": false,
      "payload": {
       "type": "legendToggleSelect",
-      "name": "C",
-      "__ec_inner_14": {}
+      "name": "C"
      },
      "tree": {
       "animation": false,
@@ -19028,8 +19023,7 @@
       "type": "dataZoom",
       "dataZoomIndex": 0,
       "start": 20,
-      "end": 60,
-      "__ec_inner_14": {}
+      "end": 60
      },
      "tree": {
       "animation": false,
@@ -20021,8 +20015,7 @@
       "type": "dataZoom",
       "dataZoomIndex": 0,
       "start": 30,
-      "end": 70,
-      "__ec_inner_14": {}
+      "end": 70
      },
      "tree": {
       "animation": false,
@@ -21293,8 +21286,7 @@
      "payload": {
       "type": "treeExpandAndCollapse",
       "seriesIndex": 0,
-      "dataIndex": 2,
-      "__ec_inner_14": {}
+      "dataIndex": 2
      },
      "tree": {
       "animation": false,
@@ -27677,8 +27669,7 @@
       "type": "dataZoom",
       "dataZoomIndex": 0,
       "start": 30,
-      "end": 50,
-      "__ec_inner_14": {}
+      "end": 50
      },
      "tree": {
       "animation": false,
@@ -29291,8 +29282,7 @@
      "noFrame": false,
      "payload": {
       "type": "legendToggleSelect",
-      "name": "B",
-      "__ec_inner_14": {}
+      "name": "B"
      },
      "tree": {
       "animation": false,
@@ -35960,8 +35950,7 @@
      "noFrame": false,
      "payload": {
       "type": "legendToggleSelect",
-      "name": "A",
-      "__ec_inner_14": {}
+      "name": "A"
      },
      "tree": {
       "animation": false,
@@ -36787,8 +36776,7 @@
      "noFrame": false,
      "payload": {
       "type": "legendToggleSelect",
-      "name": "A",
-      "__ec_inner_14": {}
+      "name": "A"
      },
      "tree": {
       "animation": false,

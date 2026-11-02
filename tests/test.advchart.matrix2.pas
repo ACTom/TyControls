@@ -143,6 +143,8 @@ type
 
 implementation
 
+uses test.advchart.gallerytext;
+
 const
   cW = 800;
   cH = 600;
@@ -667,7 +669,8 @@ begin
   d := ACase.Find('gallery');
   if (d <> nil) and (d.JSONType = jtString) then
   begin
-    opt := TJSONObject(LoadJson(GalleryPath(d.AsString)));
+    { [R7-K] without the names of its functions, as matrix2.js reads it }
+    opt := TJSONObject(GalleryWithoutFunctions(LoadJson(GalleryPath(d.AsString))));
     GalleryCustom(opt);
   end
   else

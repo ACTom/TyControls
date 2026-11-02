@@ -46,6 +46,8 @@ type
 
 implementation
 
+uses test.advchart.gallerytext;
+
 procedure THcProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
   RenderTo(ACanvas, ARect, APPI);
@@ -220,7 +222,9 @@ begin
       sl := TStringList.Create;
       try
         sl.LoadFromFile(GalleryPath(cs.Strings['gallery']));
-        opt := TJSONObject(GetJSON(sl.Text));
+        { [R7-K] the file as the fixture's upstream read it: without the
+          names of its functions (R2-J2) }
+        opt := TJSONObject(GalleryWithoutFunctions(GetJSON(sl.Text)));
       finally
         sl.Free;
       end;

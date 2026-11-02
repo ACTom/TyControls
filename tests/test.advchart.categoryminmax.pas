@@ -81,7 +81,35 @@ type
     procedure TestAFractionalIndexLandsOnItsRoundedCategory;
   end;
 
+{ [R7-K] zrender's SSR width table (fixtures/advchart-text-style.json), the
+  skin's point sizes read as px: the text widths upstream measured under
+  node, so a grid that containLabel or the outer bounds shrink is
+  upstream's }
+function ZrTableMeasurer: ITyTextMeasurer;
+
 implementation
+
+function ZrTableMeasurer: ITyTextMeasurer;
+var
+  sl: TStringList;
+  t: TJSONData;
+begin
+  sl := TStringList.Create;
+  try
+    sl.LoadFromFile(ExtractFilePath(ParamStr(0)) + 'fixtures' + PathDelim
+      + 'advchart-text-style.json');
+    t := GetJSON(sl.Text);
+  finally
+    sl.Free;
+  end;
+  try
+    Result := TPtToPxMeasurer.Create(TZrSsrMeasurer.Create(
+      TJSONObject(t).Objects['ratios'].Arrays['ratio'],
+      TJSONObject(t).Objects['ratios'].Integers['firstCode']));
+  finally
+    t.Free;
+  end;
+end;
 
 procedure TCatProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin

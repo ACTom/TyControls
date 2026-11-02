@@ -144,6 +144,18 @@ function must(cond, msg) {
   if (!cond) throw new OracleError(msg);
 }
 
+// [R7-K] dispatchAction leaves an inner store on the payload object it was
+// handed ('__ec_inner_<n>', util/model.ts makeInner); <n> starts at
+// getRandomIdBase() = round(Math.random() * 9), drawn when the dist loads, so
+// it differs from one process to the next. The payload is recorded as the case
+// wrote it: those keys are taken back out.
+function writtenPayload(p) {
+  if (!p || typeof p !== 'object') return p;
+  const o = {};
+  for (const k of Object.keys(p)) if (!/^__ec_inner_\d+$/.test(k)) o[k] = p[k];
+  return o;
+}
+
 const zr = echarts.zrUtil;
 const CM = echarts.ComponentModel;
 const MAIN_TYPES = CM.getAllClassMainTypes().slice();
@@ -1315,7 +1327,7 @@ function generate() {
     tally.box += r.stats.box;
     recs.push({ id: c.id, compare: c.compare || [], steps: r.steps.map(s => ({
       kind: s.step.kind, notMerge: s.step.notMerge, opts: s.step.opts, noFrame: !!s.step.noFrame,
-      text: s.step.text, payload: s.step.payload,
+      text: s.step.text, payload: writtenPayload(s.step.payload),
       tree: s.tree, models: s.models, out: s.out, views: s.views,
       updNow: s.updNow, upd: s.upd, sel: s.sel, vis: s.vis, cal: s.cal })) });
   }

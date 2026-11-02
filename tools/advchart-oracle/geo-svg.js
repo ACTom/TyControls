@@ -103,6 +103,9 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const OUT = process.env.ORACLE_OUT || path.join(ROOT, 'tests', 'fixtures', 'advchart-geo-svg.json');
 const MAPS_DIR = path.join(ROOT, 'examples', 'advchart', 'maps');
 const GALLERY = path.join(ROOT, 'examples', 'advchart', 'gallery');
+// [R7-K] the gallery file without its function names (gallery-functions.js):
+// a '@<id>.<key>' handed to upstream is a string, not the function
+const { withoutFunctions } = require('./gallery-functions.js');
 
 Math.random = function () { return 0; };
 
@@ -746,7 +749,7 @@ const TIP = { hideDelay: 0, position: [5, 5] };
 function opt(geo, extra) { return Object.assign({ animation: false, geo }, extra || {}); }
 const A = (x, y) => ({ at: [x, y] });
 const S = (x, y) => ({ owner: 'series0', at: [x, y] });
-function gallery(name) { return JSON.parse(fs.readFileSync(path.join(GALLERY, name + '.json'), 'utf8')); }
+function gallery(name) { return withoutFunctions(JSON.parse(fs.readFileSync(path.join(GALLERY, name + '.json'), 'utf8'))); }
 
 const CASES = [
   // ---- the parse ----

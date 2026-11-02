@@ -17,10 +17,14 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser, sha1,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
-     tyControls.AdvanceChart.LinePath, tyControls.AdvanceChart;
+     tyControls.AdvanceChart.LinePath, tyControls.AdvanceChart,
+     tyControls.AdvanceChart.Measure, test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TLsProbe = class(TTyAdvanceChart)
+  protected
+    function NewTextMeasurer(APPI: Integer): ITyTextMeasurer; override;
   public
+    Measurer: ITyTextMeasurer;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     function List: TTyPaintList;
   end;
@@ -33,7 +37,7 @@ type
     FRoot: TJSONData;
     FBmp: TBGRABitmap;
     FBad, FCompared, FSkipped: Integer;
-    FReport, FName: string;
+    FReport, FName, FSkipNames: string;
     procedure Miss(const AWhat: string);
     procedure CheckPath(const AWhat: string; const ACmds: TTyPathCmdArray;
       ARec: TJSONObject; const ARect: TTyRectF; AHasRect: Boolean);
@@ -49,6 +53,14 @@ type
   end;
 
 implementation
+
+uses test.advchart.gallerytext;
+
+function TLsProbe.NewTextMeasurer(APPI: Integer): ITyTextMeasurer;
+begin
+  if Measurer <> nil then Result := Measurer
+  else Result := inherited NewTextMeasurer(APPI);
+end;
 
 procedure TLsProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
@@ -254,7 +266,9 @@ begin
       sl := TStringList.Create;
       try
         sl.LoadFromFile(GalleryPath(cs.Strings['gallery']));
-        opt := TJSONObject(GetJSON(sl.Text));
+        { [R7-K] the file as the fixture's upstream read it: without the
+          names of its functions (R2-J2) }
+        opt := TJSONObject(GalleryWithoutFunctions(GetJSON(sl.Text)));
       finally
         sl.Free;
       end;
@@ -302,21 +316,17 @@ begin
         curved := not SameNum(0, se.Objects['resolved'].Strings['smooth'])
           and (FromHex(se.Objects['resolved'].Strings['smooth']) > 0);
         line := se.Objects['line'];
-        { A LAYOUT THAT DIFFERS is not this test's business: a gallery chart
-          whose axis labels measure differently here moves the grid, and
-          every point with it. Such a series is counted and passed over; the
-          measured cases pin the grid. And polar lines are not drawn yet. }
-        if (se.Strings['coordSys'] <> 'cartesian2d') then
-        begin
-          Inc(FSkipped);
-          Continue;
-        end;
+        { A LAYOUT THAT DIFFERS: a gallery chart whose grid lands elsewhere
+          moves every point. [R7-K] Text is measured with zrender's widths, so
+          none does: such a series is counted, and the count held at none. A
+          polar line is compared as any other (the port draws them now). }
         if (Length(lineCmds) > 0) and (line.Arrays['path'].Count > 0)
           and not (SameNum(lineCmds[0].X, line.Arrays['path'].Objects[0].Arrays['args'].Strings[0])
           and SameNum(lineCmds[0].Y, line.Arrays['path'].Objects[0].Arrays['args'].Strings[1])) then
         begin
           if AGallery then
           begin
+            FSkipNames := FSkipNames + ' ' + FName;
             Inc(FSkipped);
             Continue;
           end;
@@ -343,7 +353,7 @@ begin
     + ' disagree with upstream:' + FReport, 0, FBad);
   AssertTrue(Format('enough was compared (%d)', [FCompared]), FCompared > AMin);
   { only the few whose grid moves (or that are polar) are passed over }
-  AssertTrue(Format('passed over %d series', [FSkipped]), FSkipped <= 30);
+  AssertTrue(Format('passed over %d series:%s', [FSkipped, FSkipNames]), FSkipped = 0);
 end;
 
 procedure TAdvChartLineSmoothOracleTest.SetUp;
@@ -357,6 +367,10 @@ begin
   FChart := TLsProbe.Create(FForm);
   FChart.Parent := FForm;
   FChart.Controller := FCtl;
+  { [R7-K] text measured as upstream's run measured it (zrender's SSR width
+    table): a grid that containLabel or the outer bounds shrink is
+    upstream's, so no layout is passed over for a moved plot }
+  FChart.Measurer := ZrTableMeasurer;
   FBmp := TBGRABitmap.Create(800, 600, BGRA(255, 255, 255, 255));
   AssertTrue('the fixture is where the suite expects it', FileExists(FixturePath));
   sl := TStringList.Create;

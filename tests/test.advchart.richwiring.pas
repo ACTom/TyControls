@@ -1024,6 +1024,12 @@ begin
   end;
   FLooks := False;
   AssertTrue(Format('only %d texts in the looks cases', [FLooksTexts]), FLooksTexts >= 60);
+  { [R7-K] NOT A SILENT PASS: the geometry left to the skin is that of the
+    texts whose block the skin sizes by its own token where upstream's
+    default differs -- the rich titles (--font-size-title against
+    upstream's 18), a gauge's title and three of its numbers, and three
+    rich series labels: 16 checks over ten texts. Text widths are zrender's here, so nothing else is left. }
+  AssertTrue(Format('%d geometry checks left to the skin', [FSkipped]), FSkipped <= 16);
   AssertTrue(Format('%d of %d differ from upstream (%d geometry checks left to '
     + 'the skin):%s', [FBad, FCompared, FSkipped, FReport]), FBad = 0);
   AssertTrue(Format('only %d texts', [FTexts]), FTexts >= 200);

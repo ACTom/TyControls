@@ -31,7 +31,8 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Builder,
      tyControls.AdvanceChart.Option, tyControls.AdvanceChart.Dataset,
      tyControls.AdvanceChart.DataTransform, tyControls.AdvanceChart.Measure,
-     tyControls.AdvanceChart.Matrix, tyControls.AdvanceChart.Legend, tyControls.AdvanceChart,
+     tyControls.AdvanceChart.Matrix, tyControls.AdvanceChart.Legend,
+     tyControls.AdvanceChart.DataZoomView, tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TDtProbe = class(TTyAdvanceChart)
@@ -78,6 +79,10 @@ type
     procedure TestAShortValueListLeavesItsSeriesOut;
     procedure TestAPieWithAGapAtPlaceZeroDrawsNothing;
     procedure TestASliderOverAGapDrawsNoShadow;
+    { [R7-K] a series refused for a short value list still casts the
+      slider's data shadow: upstream's slider renders before the boxplot's
+      view throws }
+    procedure TestARefusedSeriesStillCastsTheSliderShadow;
     procedure TestTheRegistryNamesItsTransforms;
     procedure TestTheSortIsStableForAConsistentComparator;
   end;
@@ -1221,6 +1226,58 @@ begin
   { (x reads nothing: no point is drawn, here or upstream) }
   AssertEquals('the rows w keeps in the window', 2, FChart.SeriesStore(0).Count);
   AssertEquals('raw 1 first', 1, FChart.SeriesStore(0).GetRawIndex(0));
+end;
+
+procedure TAdvChartDatasetTransformTest.TestARefusedSeriesStillCastsTheSliderShadow;
+const
+  cIds: array[0..5] of string = ('r-list-box-four-shadow', 'r-list-box-five-shadow',
+    'r-list-box-four-auto', 'r-list-box-four-line-shadow', 'r-list-candle-four-shadow',
+    'r-list-candle-two-shadow');
+var
+  c, want: TJSONObject;
+  i: Integer;
+  bmp: TBGRABitmap;
+  L: TTyDzSliderLayout;
+
+  procedure Pts(const AWhat: string; const AGot: TTyPointFArray; AArr: TJSONArray);
+  var k: Integer;
+  begin
+    AssertEquals(AWhat + ' points', AArr.Count, Length(AGot));
+    for k := 0 to AArr.Count - 1 do
+      AssertTrue(Format('%s %d: %s,%s here, %s,%s upstream', [AWhat, k, Fmt(AGot[k].X), Fmt(AGot[k].Y),
+        Fmt(FromHex(TJSONArray(AArr.Items[k]).Strings[0])), Fmt(FromHex(TJSONArray(AArr.Items[k]).Strings[1]))]),
+        SameBits(AGot[k].X, FromHex(TJSONArray(AArr.Items[k]).Strings[0]))
+        and SameBits(AGot[k].Y, FromHex(TJSONArray(AArr.Items[k]).Strings[1])));
+  end;
+
+begin
+  for i := 0 to High(cIds) do
+  begin
+    c := CaseById(cIds[i]);
+    AssertNotNull(cIds[i], c);
+    { upstream renders nothing for the short candlestick (it throws in the
+      visual stage): the port keeps it in the model, so its shadow is the one
+      the same first dimension casts -- its four-place twin's }
+    if cIds[i] = 'r-list-candle-two-shadow' then
+    begin
+      AssertEquals('upstream rendered no slider', 0, c.Arrays['shadow'].Count);
+      want := CaseById('r-list-candle-four-shadow').Arrays['shadow'].Objects[0];
+    end
+    else
+      want := c.Arrays['shadow'].Objects[0];
+    NewChart(c.Objects['option']);
+    bmp := TBGRABitmap.Create(600, 400, BGRA(255, 255, 255, 255));
+    try
+      FChart.Render(bmp.Canvas, Rect(0, 0, 600, 400), 96);
+    finally
+      bmp.Free;
+    end;
+    L := FChart.DataZoomSliderLayout(0);
+    AssertEquals(cIds[i] + ': a shadow', want.Booleans['drawn'], L.ShadowDrawn);
+    if not want.Booleans['drawn'] then Continue;
+    Pts(cIds[i] + ' area', L.Area, want.Arrays['area']);
+    Pts(cIds[i] + ' line', L.Line, want.Arrays['line']);
+  end;
 end;
 
 procedure TAdvChartDatasetTransformTest.TestTheRegistryNamesItsTransforms;

@@ -23,10 +23,14 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
      tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Data,
      tyControls.AdvanceChart.Series, tyControls.AdvanceChart.DataZoom,
-     tyControls.AdvanceChart;
+     tyControls.AdvanceChart,
+     tyControls.AdvanceChart.Measure, test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TDzwProbe = class(TTyAdvanceChart)
+  protected
+    function NewTextMeasurer(APPI: Integer): ITyTextMeasurer; override;
   public
+    Measurer: ITyTextMeasurer;
     procedure Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     function List: TTyPaintList;
   end;
@@ -39,6 +43,10 @@ type
     FRoot: TJSONData;
     FBmp: TBGRABitmap;
     FBad, FCompared: Integer;
+    { [R7-K] series whose plot is not upstream's: their layout is not
+      compared, so none may be left }
+    FMoved: Integer;
+    FMovedIds: string;
     FReport, FName: string;
     FOpt: TJSONObject;
     procedure Miss(const AWhat: string);
@@ -68,6 +76,12 @@ type
 implementation
 
 uses tyControls.AdvanceChart.Complete, test.advchart.gallerytext;
+
+function TDzwProbe.NewTextMeasurer(APPI: Integer): ITyTextMeasurer;
+begin
+  if Measurer <> nil then Result := Measurer
+  else Result := inherited NewTextMeasurer(APPI);
+end;
 
 procedure TDzwProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
@@ -148,6 +162,10 @@ begin
   FChart := TDzwProbe.Create(FForm);
   FChart.Parent := FForm;
   FChart.Controller := FCtl;
+  { [R7-K] text measured as upstream's run measured it (zrender's SSR width
+    table): a grid that containLabel or the outer bounds shrink is
+    upstream's, so no layout is passed over for a moved plot }
+  FChart.Measurer := ZrTableMeasurer;
   FBmp := TBGRABitmap.Create(800, 600, BGRA(255, 255, 255, 255));
   AssertTrue('the fixture is where the suite expects it', FileExists(FixturePath));
   sl := TStringList.Create;
@@ -160,6 +178,8 @@ begin
   FBad := 0;
   FCompared := 0;
   FReport := '';
+  FMoved := 0;
+  FMovedIds := '';
 end;
 
 procedure TAdvChartDataZoomWindowOracleTest.TearDown;
@@ -409,19 +429,6 @@ var
     AH := Abs(ya.PxStop - ya.PxStart);
   end;
 
-  function Smooth(ASi: Integer): Boolean;
-  var d: TJSONData;
-  begin
-    Result := False;
-    d := FOpt.Find('series');
-    if (d = nil) or (d.JSONType <> jtArray) or (ASi >= TJSONArray(d).Count) then Exit;
-    d := TJSONArray(d).Items[ASi];
-    if d.JSONType <> jtObject then Exit;
-    d := TJSONObject(d).Find('smooth');
-    Result := (d <> nil) and (((d.JSONType = jtBoolean) and d.AsBoolean)
-      or ((d.JSONType = jtNumber) and (d.AsFloat <> 0)));
-  end;
-
   function SamePlot(ACs, ASer: TJSONObject): Boolean;
   var
     ax: TJSONArray;
@@ -514,16 +521,19 @@ begin
       end;
     end;
 
-    { AND DRAWN THERE -- where the plot is where upstream's is. The final
-      grid rect follows the axis labels' measured widths, and this test
-      measures with the skin's font, not zrender's; a case whose plot moved
-      for that reason is not a dataZoom question. }
+    { AND DRAWN THERE. [R7-K] The plot is upstream's: the labels are
+      measured with zrender's table (SetUp). A series whose plot still
+      differs is counted -- RunCases holds the count at none -- and its
+      layout is not compared. A smooth line's vertices are its points as
+      any line's (the curve goes through them). }
     if IsNull(s.Find('layout')) or (lst = nil) then Continue;
-    if not SamePlot(ACase, s) then Continue;
+    if not SamePlot(ACase, s) then
+    begin
+      Inc(FMoved);
+      FMovedIds := FMovedIds + Format(' %s/s%d', [FName, si]);
+      Continue;
+    end;
     lay := s.Arrays['layout'];
-    { KNOWN: a smooth line is drawn as a polyline here -- the port has no
-      smooth yet, which is not a dataZoom question }
-    if (typ = 'line') and Smooth(si) then Continue;
     if typ = 'line' then
     begin
       ring := nil;
@@ -698,6 +708,7 @@ begin
   end;
   AssertEquals(IntToStr(FBad) + ' of ' + IntToStr(FCompared)
     + ' disagree with upstream:' + FReport, 0, FBad);
+  AssertEquals('series whose plot is not upstream''s:' + FMovedIds, 0, FMoved);
   AssertTrue('the named cases ran', ran > 0);
 end;
 
