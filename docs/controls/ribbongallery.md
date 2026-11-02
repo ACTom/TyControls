@@ -45,7 +45,7 @@ uses tyControls.IconFont, tyControls.RibbonGallery;
 | 成员 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `Items` | `TStrings` | 空 | 每一格的标题。`OnChange` → 重算 + 重绘；列表缩短到选中项之下时 `ItemIndex` 自动收敛到 `-1`。 |
-| `GlyphNames` | `TStrings` | 空 | 可选，与 `Items` **平行**：每项一个字形名（对应 `IconFont.Glyphs` 映射）。缺省或越界的项不画字形。 |
+| `GlyphNames` | `TStrings` | 空 | 可选，与 `Items` **平行**：每项一个字形名（对应 `IconFont.Glyphs` 映射）。缺省或越界的项不画字形。原地增删改列表也会重画。 |
 | `IconFont` | `TTyCustomIconFont` | `nil` | 可选字形来源。用 `FreeNotification`/`Notification` 挂钩：所指字体被释放时自动置 `nil`。 |
 | `ItemIndex` | `Integer` | `-1` | 当前选中项（`-1` = 无）。越界值收敛为 `-1`。设置**只在真正改变时**触发一次 `OnSelect`。 |
 | `VisibleColumns` | `Integer` | `3` | 内联行在下拉箭头之前显示多少格；也是弹出网格的列数。`< 1` 钳制为 `1`。 |
@@ -58,7 +58,7 @@ uses tyControls.IconFont, tyControls.RibbonGallery;
 
 ## 4. 内联行 vs 下拉网格
 
-- **内联行**：从左到右画最多 `VisibleColumns` 个 `TyListItem` 风格的格子（标题 + 可选字形），选中格用 `:selected` 状态、悬停格用 `:hover` 状态；行**右侧**画一个下拉箭头（`tgChevronDown`）作为展开提示。会溢入箭头区的格子被裁剪。
+- **内联行**：从左到右画最多 `VisibleColumns` 个 `TyListItem` 风格的格子（标题 + 可选字形）——画的是选中项所在的那一组（每 `VisibleColumns` 项一组），所以在弹出网格里选了靠后的项，内联行也能看到它；选中格用 `:selected` 状态、悬停格用 `:hover` 状态；行**右侧**画一个下拉箭头（`tgChevronDown`）作为展开提示。会溢入箭头区的格子被裁剪。
 - **下拉网格**：点击箭头区 → 弹出 `TTyDropdownPopup`，其中的 `TTyGalleryGrid` 用 `VisibleColumns` 列把**全部** `Items` 画成网格（每格与内联格同一 `PaintCell` 逻辑，外观一致）。点击某格 → 回传：设 `ItemIndex`、触发 `OnSelect`、关闭弹窗。
 
 内联格点击与弹窗格点击都汇入同一个选择接缝 `SelectAt`，因此**选中 + 事件在一处触发**。

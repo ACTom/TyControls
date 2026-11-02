@@ -66,7 +66,7 @@ TTyRecentItemEvent = procedure(Sender: TObject; AIndex: Integer) of object;
 
 本控件**自持一份内部 `TTyPopupMenu`（`FMenu`）**（`Create` 中创建、`Destroy` 中释放），按钮真正弹出的是它。每次下拉（重写 `DoDropDown`）都会**重建** `FMenu`：
 
-1. 把 `Commands` 的**顶层命令项**逐个复制进 `FMenu`——每个克隆是 `FMenu` 拥有的全新 `TMenuItem`，带 `Caption` + 一个**转发式 `OnClick`**（回调时再触发源命令项自己的 `OnClick`，用户处理器照常运行）。`'-'` 标题的项自动仍是分隔线。
+1. 把 `Commands` 的**整棵命令树**逐项复制进 `FMenu`——每个克隆是 `FMenu` 拥有的全新 `TMenuItem`，带 `Caption`、`Enabled`、`Visible`、`Tag`、`Hint`、`ShortCut`、`Default`、图标（`ImageIndex` / `Bitmap` / `SubMenuImages`，菜单的 `Images` 也一并带过去）、子菜单，以及源项的 `OnClick`（或 `Action`），用户处理器照常运行。`'-'` 标题的项自动仍是分隔线。
 2. 若 `RecentItems` **非空**，追加一条分隔线 + 每条一行；每行的 `OnClick` 路由到 `OnRecentItemClick` 并带上它的索引。
 3. 把继承来的 `DropDownMenu` 指向 `FMenu`，再调 `inherited DoDropDown`（触发 `OnDropDown`，并在**有窗口句柄时**弹出 `FMenu`）。
 

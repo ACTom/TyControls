@@ -3,7 +3,8 @@ unit test.ribbon;
 interface
 uses
   Classes, SysUtils, Types, Controls, Forms, LCLType, fpcunit, testregistry,
-  tyControls.Base, tyControls.Ribbon, tyControls.PopupSurface, tyControls.Button;
+  tyControls.Base, tyControls.Ribbon, tyControls.PopupSurface, tyControls.Button,
+  Menus, tyControls.Menu, tyControls.RibbonGallery, tyControls.RibbonAppMenu, tyControls.RibbonBackstage;
 
 type
   { Cracker for the protected designer-path members (SetDesigning). }
@@ -581,6 +582,258 @@ begin
   end;
 end;
 
+
+type
+  { #177: KeyTips, the gallery's inline row, the app menu's copy, the backstage's keys, and the
+    glyph lists edited in place. }
+  TRibbon177Test = class(TTestCase)
+  private
+    FForm: TForm;
+    FFileTabs: Integer;
+    procedure FileTab(Sender: TObject);
+    procedure FormKey(Sender: TObject; var Key: Word; Shift: TShiftState);
+    function MakeRibbon: TTyRibbon;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestATapOfAltTogglesTheKeyTips;
+    procedure TestAltWithAnotherKeyIsNotATap;
+    procedure TestTheKeyTipLettersAndTheFileTab;
+    procedure TestTheFormsKeyHandlingIsLeftAlone;
+    procedure TestThePickedItemIsOnTheInlineRow;
+    procedure TestTheGlyphListsRepaintWhenEdited;
+    procedure TestTheAppMenuCopiesTheWholeTree;
+    procedure TestTheArrowsWalkTheBackstage;
+  end;
+
+  TGallery177 = class(TTyRibbonGallery)
+  public
+    Invalidations: Integer;
+    procedure Invalidate; override;
+  end;
+  TBackstage177 = class(TTyRibbonBackstage)
+  public
+    Invalidations: Integer;
+    procedure Invalidate; override;
+  end;
+  TAppMenu177 = class(TTyRibbonAppMenu);
+
+var
+  Ribbon177WidgetSet: Boolean = False;
+
+procedure TGallery177.Invalidate;
+begin
+  Inc(Invalidations);
+  inherited Invalidate;
+end;
+
+procedure TBackstage177.Invalidate;
+begin
+  Inc(Invalidations);
+  inherited Invalidate;
+end;
+
+procedure TRibbon177Test.FileTab(Sender: TObject);
+begin
+  Inc(FFileTabs);
+end;
+
+procedure TRibbon177Test.FormKey(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+end;
+
+procedure TRibbon177Test.SetUp;
+begin
+  FForm := TForm.CreateNew(nil);
+  FForm.SetBounds(0, 0, 600, 300);
+  FFileTabs := 0;
+end;
+
+procedure TRibbon177Test.TearDown;
+begin
+  FreeAndNil(FForm);
+end;
+
+function TRibbon177Test.MakeRibbon: TTyRibbon;
+begin
+  Result := TTyRibbon.Create(FForm);
+  Result.Parent := FForm;
+  Result.AddPage('Home');
+  Result.AddPage('Insert');
+  Result.AddPage('Send');
+  Result.ActivePageIndex := 0;
+end;
+
+procedure TRibbon177Test.TestATapOfAltTogglesTheKeyTips;
+var rb: TTyRibbon; k: Word;
+begin
+  rb := MakeRibbon;
+  k := VK_MENU;
+  rb.KeyTipKeyDown(k, [ssAlt]);
+  AssertFalse('nothing on the key-down', rb.KeyTipsShowing);
+  k := VK_MENU;
+  rb.KeyTipKeyDown(k, [ssAlt]);   // the auto-repeat of a held Alt
+  AssertFalse('nor on its repeats', rb.KeyTipsShowing);
+  rb.AltReleased;
+  AssertTrue('a tap shows them, on the release', rb.KeyTipsShowing);
+  k := VK_MENU;
+  rb.KeyTipKeyDown(k, [ssAlt]);
+  rb.AltReleased;
+  AssertFalse('another tap hides them', rb.KeyTipsShowing);
+end;
+
+procedure TRibbon177Test.TestAltWithAnotherKeyIsNotATap;
+var rb: TTyRibbon; k: Word;
+begin
+  rb := MakeRibbon;
+  k := VK_MENU;
+  rb.KeyTipKeyDown(k, [ssAlt]);
+  k := Ord('S');
+  rb.KeyTipKeyDown(k, [ssAlt]);
+  AssertEquals('Alt+S is not the S tab''s KeyTip', 0, rb.ActivePageIndex);
+  AssertEquals('and the key is left to whoever it is for', Ord('S'), k);
+  rb.AltReleased;
+  AssertFalse('nor did Alt+S make a tap', rb.KeyTipsShowing);
+  rb.ShowKeyTips;
+  k := VK_MENU;
+  rb.KeyTipKeyDown(k, [ssAlt]);
+  k := VK_TAB;
+  rb.KeyTipKeyDown(k, [ssAlt]);
+  AssertFalse('Alt+Tab takes the KeyTips down', rb.KeyTipsShowing);
+end;
+
+procedure TRibbon177Test.TestTheKeyTipLettersAndTheFileTab;
+var rb: TTyRibbon; k: Word;
+begin
+  rb := MakeRibbon;
+  rb.FileTab := True;
+  rb.FileTabCaption := 'File';
+  rb.OnFileTab := @FileTab;
+  rb.ShowKeyTips;
+  k := Ord('S');
+  rb.KeyTipKeyDown(k, []);
+  AssertEquals('a plain letter picks its tab', 2, rb.ActivePageIndex);
+  AssertFalse('and the KeyTips go', rb.KeyTipsShowing);
+  rb.ShowKeyTips;
+  k := Ord('F');
+  rb.KeyTipKeyDown(k, []);
+  AssertEquals('the File tab has a KeyTip too', 1, FFileTabs);
+end;
+
+procedure TRibbon177Test.TestTheFormsKeyHandlingIsLeftAlone;
+var rb: TTyRibbon;
+begin
+  if not Ribbon177WidgetSet then
+  begin
+    Forms.Application.Initialize;
+    Ribbon177WidgetSet := True;
+  end;
+  FForm.KeyPreview := False;
+  FForm.OnKeyDown := @FormKey;
+  FForm.SetBounds(-4000, -4000, 600, 300);
+  FForm.Visible := True;
+  rb := MakeRibbon;
+  rb.HandleNeeded;
+  Forms.Application.ProcessMessages;
+  AssertFalse('the form''s KeyPreview is its own', FForm.KeyPreview);
+  AssertTrue('and so is its OnKeyDown', TMethod(FForm.OnKeyDown).Data = Pointer(Self));
+end;
+
+procedure TRibbon177Test.TestThePickedItemIsOnTheInlineRow;
+var g: TGallery177; i, x, hit, lo, hi: Integer;
+begin
+  g := TGallery177.Create(FForm);
+  g.Parent := FForm;
+  g.SetBounds(0, 0, 300, 60);
+  for i := 0 to 7 do g.Items.Add('Item ' + IntToStr(i));
+  g.VisibleColumns := 3;
+  g.ItemIndex := 7;
+  AssertEquals('the row shows the run the picked item is in', 5, g.InlineFirst);
+  lo := MaxInt; hi := -1;
+  for x := 0 to g.Width - 1 do
+  begin
+    hit := g.InlineCellAt(x, g.Height div 2);
+    if hit < 0 then Continue;
+    if hit < lo then lo := hit;
+    if hit > hi then hi := hit;
+  end;
+  AssertEquals('the row''s cells are items 5..7: first', 5, lo);
+  AssertEquals('last, the picked one', 7, hi);
+  g.ItemIndex := 1;
+  AssertEquals('an item in the first run shows the first run', 0, g.InlineFirst);
+end;
+
+procedure TRibbon177Test.TestTheGlyphListsRepaintWhenEdited;
+var g: TGallery177; b: TBackstage177; n: Integer;
+begin
+  g := TGallery177.Create(FForm);
+  n := g.Invalidations;
+  g.GlyphNames.Add('Star');
+  AssertTrue('GlyphNames edited in place repaints the gallery', g.Invalidations > n);
+  b := TBackstage177.Create(FForm);
+  n := b.Invalidations;
+  b.CommandGlyphs.Add('Save');
+  AssertTrue('CommandGlyphs edited in place repaints the backstage', b.Invalidations > n);
+  n := b.Invalidations;
+  b.BottomCommandGlyphs.Add('Exit');
+  AssertTrue('and BottomCommandGlyphs', b.Invalidations > n);
+end;
+
+procedure TRibbon177Test.TestTheAppMenuCopiesTheWholeTree;
+var m: TAppMenu177; pm: TTyPopupMenu; open, recent, hidden, item: TMenuItem;
+begin
+  pm := TTyPopupMenu.Create(FForm);
+  open := NewItem('Open', 0, False, True, nil, 0, '');
+  recent := NewItem('Recent', 0, False, True, nil, 0, '');
+  recent.Add(NewItem('a.txt', 0, False, True, nil, 0, ''));
+  recent.Add(NewItem('b.txt', 0, False, True, nil, 0, ''));
+  open.Add(recent);
+  pm.Items.Add(open);
+  hidden := NewItem('Hidden', 0, False, True, nil, 0, '');
+  hidden.Visible := False;
+  hidden.Tag := 7;
+  hidden.Hint := 'A hint';
+  hidden.ShortCut := ShortCut(Ord('S'), [ssCtrl]);
+  pm.Items.Add(hidden);
+  m := TAppMenu177.Create(FForm);
+  m.Commands := pm;
+  m.RebuildMenu;
+  item := m.DroppedMenuItem(0);
+  AssertEquals('the submenu comes along', 1, item.Count);
+  AssertEquals('all of it', 2, item.Items[0].Count);
+  item := m.DroppedMenuItem(1);
+  AssertFalse('Visible', item.Visible);
+  AssertEquals('Tag', 7, item.Tag);
+  AssertEquals('Hint', 'A hint', item.Hint);
+  AssertEquals('ShortCut', Integer(ShortCut(Ord('S'), [ssCtrl])), Integer(item.ShortCut));
+end;
+
+procedure TRibbon177Test.TestTheArrowsWalkTheBackstage;
+var b: TBackstage177; k: Word;
+begin
+  b := TBackstage177.Create(FForm);
+  b.Commands.Add('New');
+  b.Commands.Add('Open');
+  b.Commands.Add('-');
+  b.Commands.Add('Save');
+  k := VK_DOWN; b.KeyDown(k, []);
+  AssertEquals('Down from nothing: the first', 0, b.ItemIndex);
+  k := VK_DOWN; b.KeyDown(k, []);
+  AssertEquals('the next', 1, b.ItemIndex);
+  k := VK_DOWN; b.KeyDown(k, []);
+  AssertEquals('over the separator', 3, b.ItemIndex);
+  k := VK_DOWN; b.KeyDown(k, []);
+  AssertEquals('and no further', 3, b.ItemIndex);
+  k := VK_UP; b.KeyDown(k, []);
+  AssertEquals('Up comes back over it', 1, b.ItemIndex);
+  k := VK_HOME; b.KeyDown(k, []);
+  AssertEquals('Home', 0, b.ItemIndex);
+  k := VK_END; b.KeyDown(k, []);
+  AssertEquals('End', 3, b.ItemIndex);
+end;
+
 initialization
+  RegisterTest(TRibbon177Test);
   RegisterTest(TRibbonTest);
 end.

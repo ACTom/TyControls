@@ -18,6 +18,7 @@ Batch-C 的按钮家族([TTyGlyphButton](glyphbuttons.md)/[TTyGlyphContainerButt
 | `ActivePageIndex` / `ActivePage` | 当前激活页;运行期点标签即切换。`ActivePage` 的类型是 `TTyCustomRibbonPage`(4.0 起;从 `TTyCustomRibbonPage` 派生的第三方页也能放进 Ribbon,原样交出)。 |
 | `AddPage(caption): TTyRibbonPage` | 新增一页。 |
 | `RemovePage(index)` / `PageCount` / `Pages[i]` | 页管理。`Pages[i]` 交出 `TTyCustomRibbonPage`(同上)。 |
+| `KeyTips` | 默认开。**单独点一下 Alt**（按下再松开，中间没按别的键）显示/收起各标签上的访问键徽标，与 Office 相同；按住 Alt 加别的键（助记符、`Alt+Tab`）不算，也不会触发徽标。徽标显示时直接按字母切到对应标签，`Esc` 收起；有 File 标签时它也有一个徽标（通常是 F），按下等同点 File。切走窗口时徽标收起。按键通过应用级的按键回调接收，**不改动窗体的 `KeyPreview` 和 `OnKeyDown`**。 |
 
 > **右到左镜像:刻意不做。** 基类 `TTyCustomTabStrip` 的标签带已经支持 `BiDiMode := bdRightToLeft`
 > (`TTyPageControl` / `TTyTabSet` 都会镜像),但 Ribbon 自己的装饰件还没有:File 标签绘制并命中在
