@@ -4390,6 +4390,7 @@ begin
   if FShowIndicator = AValue then Exit;
   FShowIndicator := AValue;
   InvalidateColumnCache;
+  UpdateScrollBars;        { #127: the slot is part of how wide the content is }
   Invalidate;
 end;
 
