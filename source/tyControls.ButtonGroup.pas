@@ -597,7 +597,12 @@ begin
         selected one keeps the theme's fill and ink -- an override that recoloured it too
         would leave nothing to show which segment is selected. }
       if tysSelected in segStates then
-        segStyle := PartStyle(GetStyleTypeKey, TyStyleClassFor(Self, StyleClass), segStates)
+      begin
+        segStyle := PartStyle(GetStyleTypeKey, TyStyleClassFor(Self, StyleClass), segStates);
+        // BorderWidth insets its caption as it does the others' (#115)
+        Inc(segStyle.Padding.Left, BorderWidth);
+        Inc(segStyle.Padding.Right, BorderWidth);
+      end
       else
         segStyle := StyleInState(segStates);
 

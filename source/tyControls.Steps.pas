@@ -728,8 +728,9 @@ begin
   // [tysNormal], not CurrentStates: the rail's cell tiling and its measured size must not
   // move because the control took focus or the pointer entered it. (TTySegmented dodges
   // this by taking its track inset from a metric; ours is the strip's own `padding`, which
-  // a :focus rule could otherwise re-tune under our feet.)
-  Result := ActiveController.Model.ResolveStyle(GetStyleTypeKey, StyleClass, [tysNormal]);
+  // a :focus rule could otherwise re-tune under our feet.) CurrentStyle's way in that state,
+  // so StyleOverride's padding and BorderWidth reach the cells as they reach the strip (#115).
+  Result := StyleInState([tysNormal]);
 end;
 
 { --- state / style -------------------------------------------------------------------- }

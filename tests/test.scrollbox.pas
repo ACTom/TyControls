@@ -31,6 +31,7 @@ type
     procedure TestBarsStayAboveContentChildren;
     // the explicit viewport
     procedure TestViewportSitsInsideTheFrame;
+    procedure TestViewportKeepsTheBoxsBorderWidth;
     procedure TestViewportHostsTheMeasuredContent;
     procedure TestViewportIsNotItselfContent;
     procedure TestWithoutAViewportNothingChanges;
@@ -602,6 +603,31 @@ begin
   AssertEquals('and inside the top frame', SB.Frame, vp.Top);
   AssertEquals('and gives the frame back on the right too',
     300 - 2 * SB.Frame, vp.Width);
+end;
+
+{ #115: the box's BorderWidth is a gutter inside the frame, as it is for children the box hosts
+  itself: the viewport moves in by it and is that much smaller on every side, and the scroll
+  range is measured against what is left. }
+procedure TTyScrollBoxTest.TestViewportKeepsTheBoxsBorderWidth;
+var
+  SB: TScrollBoxAccess;
+  vp: TTyScrollContent;
+begin
+  SB := TScrollBoxAccess.Create(FForm);
+  SB.Parent := FForm;
+  SB.Font.PixelsPerInch := 96;
+  SB.SetBounds(0, 0, 300, 200);
+  SB.BorderWidth := 10;
+  vp := MakeViewport(SB);
+  SB.UpdateScrollRange;
+  AssertEquals('the viewport starts a gutter inside the left frame', SB.Frame + 10, vp.Left);
+  AssertEquals('and inside the top frame', SB.Frame + 10, vp.Top);
+  AssertEquals('and gives the gutter back on the right', 300 - 2 * SB.Frame - 20, vp.Width);
+  AssertEquals('and at the bottom', 200 - 2 * SB.Frame - 20, vp.Height);
+  // Taller than the viewport, though not than the frame's inside.
+  MakeChild(vp, 0, 0, 100, 200 - 2 * SB.Frame - 15);
+  SB.UpdateScrollRange;
+  AssertTrue('the range is the viewport''s, so a bar comes', SB.VBar.Visible);
 end;
 
 procedure TTyScrollBoxTest.TestViewportHostsTheMeasuredContent;
