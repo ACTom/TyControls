@@ -858,10 +858,33 @@ begin
   FChart.DispatchAction('{"type":"showTip","seriesIndex":1,"dataIndex":0}');
   Frame;
   AssertFalse('no item tooltip', FChart.TooltipShown);
+  { and over the line's tooltip it does what a series index naming
+    nothing does: leaves it up }
+  FChart.DispatchAction('{"type":"showTip","seriesIndex":0,"dataIndex":0}');
+  Frame;
+  AssertTrue('the line''s item tooltip', FChart.TooltipShown);
+  FChart.DispatchAction('{"type":"showTip","seriesIndex":7,"dataIndex":0}');
+  Frame;
+  AssertTrue('no series: left up', FChart.TooltipShown);
+  FChart.DispatchAction('{"type":"showTip","seriesIndex":1,"dataIndex":0}');
+  Frame;
+  AssertEquals('the refused series: left up as well', 'item:0:0', FChart.TooltipShownWhich);
   Load(Format(cRefused, ['"trigger":"axis"']));
+  FChart.ChartOn('updateaxispointer', @FLog.Handle);
+  Logged;
   FChart.DispatchAction('{"type":"showTip","seriesIndex":1,"dataIndex":0}');
   Frame;
   AssertFalse('no axis tooltip', FChart.TooltipShown);
+  AssertEquals('nor an updateAxisPointer for it (as for no series)', 0,
+    Pos('updateaxispointer', FLog.Text));
+  { an updateAxisPointer naming it finds no point either }
+  FChart.DispatchAction('{"type":"updateAxisPointer","seriesIndex":1,"dataIndex":0}');
+  Frame;
+  AssertFalse('no point on it', FChart.TooltipShown);
+  AssertEquals('no axis pointer either', 0, Length(FChart.TipHits));
+  FChart.DispatchAction('{"type":"updateAxisPointer","seriesIndex":0,"dataIndex":0}');
+  Frame;
+  AssertTrue('the line''s point has one', Length(FChart.TipHits) > 0);
   FChart.DispatchAction('{"type":"showTip","seriesIndex":0,"dataIndex":0}');
   Frame;
   AssertTrue('the line''s', FChart.TooltipShown);
@@ -912,6 +935,13 @@ begin
   Frame;
   AssertTrue('brushselected: ' + FLog.Text, (Pos('"seriesIndex":0', FLog.Text) > 0)
     and (Pos('"seriesIndex":1', FLog.Text) = 0));
+  { a select made while it was refused selected nothing: a merge that
+    gives it its values back finds the option's item alone }
+  FChart.DispatchAction('{"type":"select","seriesIndex":1,"dataIndex":0}');
+  FChart.SetOption('{"series":[{},{"encode":{"y":[1,2,3,4]}}]}');
+  Frame;
+  AssertEquals('one item selected', 1, Length(FChart.SelectedDataIndices(1)));
+  AssertEquals('the option''s', 1, FChart.SelectedDataIndices(1)[0]);
 end;
 
 procedure TAdvChartKeyboardTest.TestSeveralSeriesTypes;
