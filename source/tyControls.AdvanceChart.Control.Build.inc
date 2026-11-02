@@ -64,6 +64,12 @@ begin
 end;
 
 procedure TTyCustomAdvanceChart.RebuildBody;
+{ [spec 259] the box types whose encode lists this batch holds to upstream
+  (a gauge's and a sankey's are not looked at here) }
+function PieOrFunnel(const AType: string): Boolean;
+begin
+  Result := (AType = TyPieSeriesTypeName) or (AType = TyFunnelSeriesTypeName);
+end;
 var
   d: TJSONData;
   lnRaws: TTyLinesRawArray;
@@ -447,23 +453,25 @@ begin
           if not enc.Given then
             enc := TyDefaultEncodeNameBased(FSources[i],
               FSources[i].DimCount)
-          else
+          else if PieOrFunnel(FBindings[i].SeriesType) then
             { [spec 259] the tooltip is defaultedLabel: the last value
               dimension in the table, which need not be the one drawn }
             BoxTipDims(enc, FSources[i], st);
           FEncodes[i] := enc;
           TyFillStoreFromSource(FSources[i], enc, dims, st);
         end
-        else
+        else if PieOrFunnel(FBindings[i].SeriesType) then
         begin
-          { [spec 259] its own data reads its encode too: the value, the
-            names, the tooltip }
+          { [spec 259] a pie's or a funnel's own data reads its encode too:
+            the value, the names, the tooltip }
           SeriesDataEncode(i, dims, enc);
           TyFillSeriesStore(FOption, i, dims, st);
           TyOwnItemNames(enc, st);
           if enc.Given then
             BoxTipDims(enc, TySeriesDimsSource(FOption, FBindings[i].SeriesIndex), st);
-        end;
+        end
+        else
+          TyFillSeriesStore(FOption, i, dims, st);
       end;
       Continue;
     end;
