@@ -33,6 +33,7 @@ type
     procedure CheckBounds(const AWhere: string; B: TJSONObject; const APieces: TTyRtPieceArray);
   published
     procedure TestTheBlockAsUpstream;
+    procedure TestTheHostsTrapsAreLeftAlone;
   end;
 
 implementation
@@ -534,6 +535,40 @@ begin
   end;
   AssertTrue(Format('%d of %d differ:%s', [FBad, FCompared, FReport]), FBad = 0);
   AssertTrue(Format('only %d texts', [FTexts]), FTexts >= 190);
+end;
+
+{ [R7-H] A WIDTH THAT IS A WORD is laid out with the FPU's traps masked; its
+  wrap compares against NaN, which raises the invalid-operation flag, and
+  the engine clears the flags on the way out: the host's own division by
+  zero is still reported as one }
+procedure TAdvChartRichTextEngineOracleTest.TestTheHostsTrapsAreLeftAlone;
+var
+  st: TTyRtStyle;
+  j: TJSONString;
+  res: TTyRtResult;
+  a, b, c: Double;
+  what: string;
+begin
+  st := TyRtStyleDefault;
+  j := TJSONString.Create('50%');
+  try
+    TyRtTakeWidth(j, st);
+  finally
+    j.Free;
+  end;
+  st.Overflow := rtoBreak;
+  res := TyRtLayout('never wrapped at all', st, nil, False, Default(TTyRtDefault),
+    0, 0, FMeasurer);
+  AssertEquals('one line', 1, Length(res.Pieces));
+  a := 1;
+  b := 0;
+  try
+    c := a / b;
+    what := 'no error: ' + FloatToStr(c);
+  except
+    on E: Exception do what := E.ClassName;
+  end;
+  AssertEquals('a division by zero', 'EZeroDivide', what);
 end;
 
 initialization
