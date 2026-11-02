@@ -296,7 +296,8 @@ end;
 { A line's enter: shape.percent from 0 (linear, 1000 ms) -- Line.buildPath
   snaps the shape's ends first and then cuts it at the percent, every frame.
   At 300 and 700 ms each straight line's two points in the frame, to the
-  bit: a graph's edges under a zoom and on axes, a lines series'. }
+  bit: a graph's edges under a zoom and on axes, a lines series' (one
+  slanting by under a pixel: not snapped whole, so not when cut either). }
 procedure TAdvChartRenderGapsTest.TestEveryEnterFrameIsSnapped;
 var
   cs, samples, els, pts: TJSONArray;
@@ -373,7 +374,7 @@ begin
       AssertEquals(Format('%s t=%g: every line in the frame', [id, sm.Floats['t']]), els.Count, n);
     end;
   end;
-  AssertEquals('compared', 14, nCmp);
+  AssertEquals('compared', 16, nCmp);
   AssertEquals(bad, 0, nBad);
 end;
 

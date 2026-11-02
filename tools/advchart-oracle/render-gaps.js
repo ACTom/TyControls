@@ -216,7 +216,9 @@ function frameCases() {
     ['frame.graph-cartesian', anim(vv({ type: 'graph', coordinateSystem: 'cartesian2d', symbolSize: 10,
       data: [[1, 5.03], [9, 5.03], [9, 2]], links: [{ source: 0, target: 1 }, { source: 1, target: 2 }],
       lineStyle: { opacity: 1 } }))],
-    ['frame.lines', anim(lines([[[1, 5.03], [9, 5.03]], [[4.03, 1], [4.03, 9]]], { width: 1 }))],
+    // the third slants by under a pixel: whole, its ends round apart and it is not snapped;
+    // cut at 0.3 they would round alike -- the snap is the whole shape's, before the cut
+    ['frame.lines', anim(lines([[[1, 5.03], [9, 5.03]], [[4.03, 1], [4.03, 9]], [[1, 5.03], [9, 5.09]]], { width: 1 }))],
   ];
 }
 const FRAME_T = [300, 700];
