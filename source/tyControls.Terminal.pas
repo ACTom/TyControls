@@ -3613,7 +3613,12 @@ end;
 procedure TTyCustomTerminalView.SetScrollback(AValue: Integer);
 begin
   if AValue < 0 then AValue := 0;
+  if AValue = FCore.Scrollback then Exit;
   FCore.Scrollback := AValue;
+  { #185: 改小了会剪掉滚回头上的行;用户翻在上面时视口里换了别的行,Core 不报:重画,
+    选区跟着上移 }
+  SyncSelectionTrim;
+  DirtyAll;
   SyncScrollBar;
 end;
 

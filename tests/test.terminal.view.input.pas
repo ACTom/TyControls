@@ -87,6 +87,7 @@ type
     procedure TestOnKeyPressSeesTypedCharacters;
     procedure TestNoScrollbackOnTheNormalScreenSendsNoArrows;
     procedure TestAutoSizeKeepsTheBounds;
+    procedure TestLoweringScrollbackRepaints;
   end;
 
 implementation
@@ -953,6 +954,17 @@ begin
   AssertEquals('the width', w, F.View.Width);
   AssertEquals('the height', h, F.View.Height);
   AssertEquals('the columns', 20, F.View.Cols);
+end;
+
+{ #185: lowering Scrollback while scrolled up trims the lines the viewport shows: it repaints }
+procedure TTyTerminalViewInputTests.TestLoweringScrollbackRepaints;
+begin
+  Lines(1000);
+  F.View.ScrollToTop;
+  AssertEquals('at the top', 0, F.View.Core.Buffer.YDisp);
+  F.View.ClearInvalidated;
+  F.View.Scrollback := 100;
+  AssertTrue('the viewport repainted', (Length(F.View.Invalidated) > 0) or (F.View.WholeInvalidates > 0));
 end;
 
 initialization
