@@ -1096,6 +1096,12 @@ type
       infinite width grows it by Infinity / 2 each way, and x - Inf + Inf is
       NaN (a bar whose infinite border took all of its width) }
     HitNone: Boolean;
+    { [R7-C] A POINTER IN ITS OWN FRAME: the polygon is upstream's
+      PointerPath, drawn upright along its local y and turned to its angle
+      by its transform -- Path.contain's stroked bounding rect is upright in
+      that frame, so the hit test turns the polygon (its tip, Points[2], off
+      its back, Points[0]) and the point back first. False everywhere else }
+    HitUpright: Boolean;
     { WHETHER THE INK IS CUT, and the flag is not redundant beside the rect.
 
       AN ALL-ZERO RECT IS A LEGITIMATE EMPTY CLIP -- it removes the element
@@ -1341,6 +1347,24 @@ function TyChartDatumValid(const ADatum: TTyChartDatumRef): Boolean;
   clip first where it asks (ClipHits), then upstream's Path.contain where it
   carries one (PathHit), else the shape with ASlopPx }
 function TyElementContains(const AEl: TTyChartElement; AX, AY, ASlopPx: Double): Boolean;
+{ [R7-C] THE WIDTH zrender's Path.contain tests the element's stroke at,
+  device px (AScale the device px per logical one): the pen as drawn --
+  its width times the pen's own scale (PenScale) -- at least
+  strokeContainThreshold (5) where the element has no fill (an open line
+  without one: a closed shape whose fill is no colour is taken as filled
+  with a transparent one, since this port's colours cannot tell 'none' from
+  'transparent'). 0: no stroke to test (no width, or no colour as drawn);
+  -1: a pen of infinite width, whose stroked bounding rect is
+  not-a-number, so the element is never hit. }
+function TyElementStrokeHitPx(const AEl: TTyChartElement; AScale: Double): Double;
+{ [R7-C] ONE ELEMENT AT A POINT, as the list's hit tests ask it: the clips,
+  then ZrHit or PathHit where the element carries one, else zrender's
+  Path.contain over the shape -- where the element strokes, the fill (the
+  shape grown by the port's pad, APad) or the stroke within its reach of the
+  outline (TyZrShapeContainStroke at TyElementStrokeHitPx); where it does
+  not, the shape grown by the element's slop (and the pad) as before. }
+function TyElementHit(const AEl: TTyChartElement; AX, AY: Double; APPI: Integer;
+  APad: Boolean): Boolean;
 { [F6b] an SVG map element's zrender contain (ZrHit) at a point }
 function TyZrHitContains(const AHit: TTyZrHit; AX, AY: Double): Boolean;
 { [R2-I1] A SYMBOL'S TARGET in two parts [Batch 142]: the pen's own reach,
@@ -2043,6 +2067,132 @@ begin
   AEl.HitPadLogical := cSymbolTargetLogical - reach;
 end;
 
+function TyElementStrokeHitPx(const AEl: TTyChartElement; AScale: Double): Double;
+var w, ps: Double;
+begin
+  Result := 0;
+  w := AEl.Style.StrokeWidthLogical;
+  if not (w > 0) then Exit;
+  if ((AEl.Style.StrokeColor shr 24) = 0) and (AEl.Style.StrokeGradient.Kind = cgkNone) then Exit;
+  if IsInfinite(w) then Exit(-1);
+  if not AEl.Style.HasFill and (AEl.Shape.Kind = cskPolyline) then w := Max(w, Double(5));
+  ps := AEl.Style.PenScale;
+  if ps > 0 then w := w * ps;
+  Result := w * AScale;
+end;
+
+{ the shape's own area at a point, grown by ASlopPx: a rounded sector by
+  its path where nothing grows it (SectorContains is the plain ring) }
+function ShapeArea(const AShape: TTyChartShape; AX, AY, ASlopPx: Double): Boolean;
+begin
+  { a path by its own outline (the box grown by a slop or a pad is the
+    port's forgiving target) }
+  if (ASlopPx <= 0) and (((AShape.Kind = cskSector) and not AShape.Sausage
+    and TyHasCorner(AShape.SectorRadii)) or (AShape.Kind = cskPath)) then
+    Result := TyZrShapeContainFill(AShape, AX, AY)
+  else
+    Result := TyShapeContains(AShape, AX, AY, ASlopPx);
+end;
+
+{ [R7-C] a pointer polygon upright, and the point with it }
+procedure Upright(var AShape: TTyChartShape; var AX, AY: Double);
+var
+  a, c, s, dx, dy: Double;
+  i: Integer;
+begin
+  if (AShape.Kind <> cskPolygon) or (Length(AShape.Points) < 3) then Exit;
+  { the turn that takes the back-to-tip axis onto -y }
+  a := ArcTan2(AShape.Points[2].X - AShape.Points[0].X,
+    -(AShape.Points[2].Y - AShape.Points[0].Y));
+  c := Cos(a);
+  s := Sin(a);
+  AShape.Points := Copy(AShape.Points, 0, Length(AShape.Points));
+  for i := 0 to High(AShape.Points) do
+  begin
+    dx := AShape.Points[i].X;
+    dy := AShape.Points[i].Y;
+    AShape.Points[i].X := dx * c + dy * s;
+    AShape.Points[i].Y := -dx * s + dy * c;
+  end;
+  dx := AX;
+  dy := AY;
+  AX := dx * c + dy * s;
+  AY := -dx * s + dy * c;
+end;
+
+{ Path.contain of a stroked shape: the fill (grown by the pad), then the
+  stroke -- an open line has no fill to ask }
+function StrokedHit(const AShape: TTyChartShape; AHasFill: Boolean;
+  AWidthPx, APadPx, AX, AY: Double): Boolean;
+var
+  b: TTyRectF;
+  r: Double;
+begin
+  { far from the shape's own bounds is far from its fill, its pad and its
+    stroked rect alike: most of a list is refused here at a compare (a turned
+    or mirrored path's bounds are in its own frame, and a poly's curves may
+    bulge past its points where it has no measured rect: those are asked
+    whole) }
+  if ((AShape.Kind <> cskPath) or ((AShape.RotationRad = 0) and not AShape.FlipX
+    and not AShape.FlipY)) and ((Length(AShape.Cmds) = 0) or AShape.HasCmdBounds) then
+  begin
+    b := TyShapeBounds(AShape);
+    r := Max(AWidthPx / 2, APadPx);
+    if not ((AX >= b.Left - r) and (AX <= b.Right + r) and (AY >= b.Top - r)
+      and (AY <= b.Bottom + r)) then Exit(False);
+  end;
+  if (AHasFill or (AShape.Kind <> cskPolyline)) and ShapeArea(AShape, AX, AY, APadPx) then
+    Exit(True);
+  Result := TyZrShapeContainStroke(AShape, AWidthPx, AX, AY);
+end;
+
+{ the same over a pointer turned upright -- its own routine, so the copy of
+  the shape (a managed record) costs nothing to the elements that need none }
+function UprightHit(const AEl: TTyChartElement; AWidthPx, APadPx, AX, AY: Double): Boolean;
+var shape: TTyChartShape;
+begin
+  shape := AEl.Shape;
+  Upright(shape, AX, AY);
+  Result := StrokedHit(shape, AEl.Style.HasFill, AWidthPx, APadPx, AX, AY);
+end;
+
+function TyElementHit(const AEl: TTyChartElement; AX, AY: Double; APPI: Integer;
+  APad: Boolean): Boolean;
+var
+  k: Integer;
+  s, w, pad: Double;
+begin
+  if AEl.HitNone then Exit(False);
+  for k := 0 to High(AEl.ClipPaths) do
+    if not TyShapeContains(AEl.ClipPaths[k], AX, AY, 0) then Exit(False);
+  if AEl.ClipHits and AEl.HasClip
+    and not ((AX >= AEl.ClipRect.Left) and (AX <= AEl.ClipRect.Right)
+      and (AY >= AEl.ClipRect.Top) and (AY <= AEl.ClipRect.Bottom)) then
+    Exit(False);
+  if AEl.ZrHit.Active then Exit(TyZrHitContains(AEl.ZrHit, AX, AY));
+  if AEl.PathHit.Active then Exit(TyPathHitContains(AEl.PathHit, AX, AY));
+  if APPI > 0 then s := APPI / 96 else s := 1;
+  pad := 0;
+  if APad then pad := AEl.HitPadLogical * s;
+  w := 0;
+  if AEl.Shape.Kind in [cskRect, cskRoundRect, cskCircle, cskEllipse, cskSector,
+    cskPolyline, cskPolygon, cskPath] then
+    w := TyElementStrokeHitPx(AEl, s);
+  if w < 0 then Exit(False);
+  if w > 0 then
+  begin
+    { the slop the builder gave the element stood for the stroke and is not
+      asked }
+    if AEl.HitUpright then Exit(UprightHit(AEl, w, pad, AX, AY));
+    Exit(StrokedHit(AEl.Shape, AEl.Style.HasFill, w, pad, AX, AY));
+  end;
+  { an open line with neither a pen nor a fill: Path.contain has nothing to
+    ask (a line written at width 0) }
+  if (AEl.Shape.Kind = cskPolyline) and not AEl.Style.HasFill
+    and not (AEl.Style.StrokeWidthLogical > 0) then Exit(False);
+  Result := ShapeArea(AEl.Shape, AX, AY, AEl.HitSlopLogical * s + pad);
+end;
+
 function TyElementContains(const AEl: TTyChartElement; AX, AY, ASlopPx: Double): Boolean;
 var k: Integer;
 begin
@@ -2084,7 +2234,7 @@ function TTyPaintList.HitTestElement(AX, AY: Double; APPI: Integer;
   APad: Boolean): Integer;
 var
   i, idx: Integer;
-  slop, half: Double;
+  half: Double;
   b: TTyRectF;
 begin
   Result := -1;
@@ -2111,10 +2261,7 @@ begin
         Exit(idx);
       Continue;
     end;
-    slop := FItems[idx].HitSlopLogical;
-    if APad then slop := slop + FItems[idx].HitPadLogical;
-    if APPI > 0 then slop := slop * APPI / 96;
-    if TyElementContains(FItems[idx], AX, AY, slop) then
+    if TyElementHit(FItems[idx], AX, AY, APPI, APad) then
       Exit(idx);
   end;
 end;
@@ -2122,7 +2269,6 @@ end;
 function TTyPaintList.TopElementAt(AX, AY: Double; APPI: Integer): Integer;
 var
   i, idx: Integer;
-  slop: Double;
 begin
   Result := -1;
   EnsureOrder;
@@ -2130,9 +2276,7 @@ begin
   begin
     idx := FOrder[i];
     if FItems[idx].Ignore or FItems[idx].ProgHidden then Continue;
-    slop := FItems[idx].HitSlopLogical + FItems[idx].HitPadLogical;
-    if APPI > 0 then slop := slop * APPI / 96;
-    if TyElementContains(FItems[idx], AX, AY, slop) then
+    if TyElementHit(FItems[idx], AX, AY, APPI, True) then
       Exit(idx);
   end;
 end;

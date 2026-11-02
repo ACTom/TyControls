@@ -1404,6 +1404,11 @@ begin
   Result.Z2 := AVisual.Z2;
   Result.Silent := False;
   Result.Datum := TyChartDatum(ASeries, ARow);
+  { [R7-C] A PEN OF INFINITE WIDTH, which the canvas does not draw: its
+    stroked bounding rect is not-a-number upstream (x - Inf + Inf), so
+    Path.contain never answers -- every mark, not only a bar [R6-F] }
+  Result.HitNone := (AVisual.StrokeWidthInf > 0)
+    and ((AVisual.Stroke <> 0) or (AVisual.StrokeGradient.Kind <> cgkNone));
 end;
 
 { UPSTREAM'S clip.cartesian2d (BarView.ts), on the layout as upstream holds

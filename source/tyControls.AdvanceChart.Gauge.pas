@@ -1980,6 +1980,8 @@ begin
         if Length(pts) = 4 then
         begin
           el := TyChartElement(TyShapePolygon(pts));
+          { [R7-C] PointerPath, upright in its own frame }
+          el.HitUpright := True;
           el.Style.HasFill := True;
           if ASpec.Needle.HasColour then el.Style.FillColor := ASpec.Needle.Colour
           else if ASpec.Needle.Auto then el.Style.FillColor := autoC

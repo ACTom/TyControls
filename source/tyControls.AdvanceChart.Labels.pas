@@ -1870,6 +1870,12 @@ begin
     cap.Caption.Colour := ink;
     cap.Caption.StrokeColour := stroke;
     cap.Caption.StrokeWidthLogical := strokeW;
+    { [R7-C] A PLAIN TEXT'S PEN GROWS ITS RECT by half its width on every
+      side (TSpan.getBoundingRect), which is what the pointer is tested
+      against (rectContain) -- the box above stays the words' own, as the
+      layout reads it }
+    if (pieces = nil) and (strokeW > 0) and ((stroke shr 24) <> 0) then
+      cap.HitSlopLogical := strokeW / 2;
     cap.Caption.StrokeType := spec.BorderType;
     cap.Caption.StrokeDashOffset := spec.BorderDashOffset;
     TyLabelStampEmphasis(spec, hostFill, hostHasFill,

@@ -111,6 +111,29 @@ procedure TyZrApply(const M: TTyMat2D; AX, AY: Double; out OX, OY: Double);
   scaled by ry / rx. }
 function TyZrContain(const APath: TTyZrPath; AX, AY: Double): Boolean;
 function TyZrContainStroke(const APath: TTyZrPath; ALineWidth, AX, AY: Double): Boolean;
+
+{ [R7-C] THE PATH ZRENDER HOLDS FOR A SHAPE OF THIS PORT, device px, as the
+  shape's buildPath makes it: Rect's ctx.rect (roundRect.ts' arcs where a
+  corner is rounded), Circle's moveTo and whole arc, Ellipse's four cubics,
+  roundSector's path (TySectorPath), sausage.ts, a poly's moves and
+  lines and its close (its own commands where it carries them), a path
+  shape's data fitted to its box keeping its aspect (makePath 'center', as
+  the painter fits it) -- before its turn and its reflection: the hit tests
+  take the point back through those (TyZrShapeLocal). None for a large
+  batch. }
+function TyZrShapePath(const AShape: TTyChartShape): TTyZrPath;
+{ [R7-C] a device point in the frame TyZrShapePath builds the shape in: a
+  path shape's reflection and turn undone (the painter turns, then
+  reflects); every other kind's frame is the device's }
+procedure TyZrShapeLocal(const AShape: TTyChartShape; var AX, AY: Double);
+{ [R7-C] Path.contain's stroke half over a shape: inside the path's bounding
+  rect grown by half of AWidth (Path.getBoundingRect), then containStroke
+  at AWidth over the path -- the width the caller has already taken to at
+  least strokeContainThreshold where the path has no fill. A poly is walked
+  where it lies: a line's thousands of points are not copied per hit. }
+function TyZrShapeContainStroke(const AShape: TTyChartShape; AWidth, AX, AY: Double): Boolean;
+{ [R7-C] Path.contain's fill half over a shape's path (the nonzero winding) }
+function TyZrShapeContainFill(const AShape: TTyChartShape; AX, AY: Double): Boolean;
 { [F6b] the traps a masked stretch saved put back, the flags it left set
   cleared first -- the x87 ones and SSE's in MXCSR, which ClearExceptions
   leaves on x86_64: a sticky one would report the host's next trap wrong }
@@ -1771,6 +1794,317 @@ begin
   if (not AIsStroke) and not (Abs(yi - y0) < cWindEps) then
     w := w + OrNought(ZrWindingLine(xi, yi, x0, y0, X, Y));
   Result := w <> 0;
+end;
+
+{ ---- [R7-C] a shape's own path ---- }
+
+{ Ellipse.buildPath }
+procedure ZrEllipse(var APath: TTyZrPath; X, Y, A, B: Double);
+const k = 0.5522848;
+var ox, oy: Double;
+begin
+  ox := A * k;
+  oy := B * k;
+  TyZrMoveTo(APath, X - A, Y);
+  TyZrCubic(APath, X - A, Y - oy, X - ox, Y - B, X, Y - B);
+  TyZrCubic(APath, X + ox, Y - B, X + A, Y - oy, X + A, Y);
+  TyZrCubic(APath, X + A, Y + oy, X + ox, Y + B, X, Y + B);
+  TyZrCubic(APath, X - ox, Y + B, X - A, Y + oy, X - A, Y);
+  TyZrClose(APath);
+end;
+
+{ sausage.ts on the shape's clockwise sweep }
+procedure ZrSausage(var APath: TTyZrPath; const AShape: TTyChartShape);
+var r0, r, dr, rc, sa, ea: Double;
+begin
+  r0 := Max(Double(0), AShape.R0);
+  r := Max(Double(0), AShape.R1);
+  dr := (r - r0) * 0.5;
+  rc := r0 + dr;
+  sa := AShape.StartRad;
+  ea := AShape.EndRad;
+  if ea - sa < PI2 then
+  begin
+    TyZrMoveTo(APath, Cos(sa) * r0 + AShape.CX, Sin(sa) * r0 + AShape.CY);
+    TyZrArc(APath, Cos(sa) * rc + AShape.CX, Sin(sa) * rc + AShape.CY, dr, -Pi + sa, sa, False);
+  end
+  else
+  begin
+    sa := ea - PI2;
+    TyZrMoveTo(APath, Cos(sa) * r + AShape.CX, Sin(sa) * r + AShape.CY);
+  end;
+  TyZrArc(APath, AShape.CX, AShape.CY, r, sa, ea, False);
+  TyZrArc(APath, Cos(ea) * rc + AShape.CX, Sin(ea) * rc + AShape.CY, dr, ea - PI2, ea - Pi, False);
+  if r0 <> 0 then TyZrArc(APath, AShape.CX, AShape.CY, r0, ea, sa, True);
+end;
+
+procedure TyZrShapeLocal(const AShape: TTyChartShape; var AX, AY: Double);
+var c, s, dx, dy: Double;
+begin
+  if AShape.Kind <> cskPath then Exit;
+  if AShape.FlipX then AX := 2 * AShape.FlipCX - AX;
+  if AShape.FlipY then AY := 2 * AShape.FlipCY - AY;
+  if AShape.RotationRad <> 0 then
+  begin
+    c := Cos(AShape.RotationRad);
+    s := Sin(AShape.RotationRad);
+    dx := AX - AShape.RotCX;
+    dy := AY - AShape.RotCY;
+    AX := AShape.RotCX + dx * c + dy * s;
+    AY := AShape.RotCY - dx * s + dy * c;
+  end;
+end;
+
+function TyZrShapePath(const AShape: TTyChartShape): TTyZrPath;
+var
+  ops: TTyPathOpArray;
+  i: Integer;
+  b: TTyRectF;
+begin
+  Result := nil;
+  case AShape.Kind of
+    cskPath:
+      begin
+        b := AShape.Bounds;
+        if TyRectFIsValid(b) and (AShape.PathData <> '') then
+          Result := TyZrMakePathCenter(AShape.PathData,
+            XYWH(b.Left, b.Top, b.Right - b.Left, b.Bottom - b.Top));
+      end;
+    cskRect:
+      begin
+        b := AShape.Bounds;
+        TyZrRect(Result, b.Left, b.Top, b.Right - b.Left, b.Bottom - b.Top);
+      end;
+    cskRoundRect:
+      begin
+        b := AShape.Bounds;
+        if not TyHasCorner(AShape.Radii) then
+          TyZrRect(Result, b.Left, b.Top, b.Right - b.Left, b.Bottom - b.Top)
+        else
+          TyZrRoundRect(Result, b.Left, b.Top, b.Right - b.Left, b.Bottom - b.Top,
+            AShape.Radii[0], AShape.Radii[1], AShape.Radii[2], AShape.Radii[3]);
+      end;
+    cskCircle:
+      begin
+        TyZrMoveTo(Result, AShape.CX + AShape.R1, AShape.CY);
+        TyZrArc(Result, AShape.CX, AShape.CY, AShape.R1, 0, PI2, False);
+      end;
+    cskEllipse:
+      ZrEllipse(Result, AShape.CX, AShape.CY, AShape.R0, AShape.R1);
+    cskSector:
+      if AShape.Sausage then ZrSausage(Result, AShape)
+      else
+      begin
+        { a whole ring as the port traces it, one contour out along the rim
+          and back along the hole, not upstream's two sub-paths: its seam
+          lies inside the ring's area, and the arcs' reach (a whole width,
+          arc.containStroke) covers what the seam's ends reach past the ring
+          -- all but a sliver at the very end of that reach }
+        ops := TySectorPath(AShape);
+        for i := 0 to High(ops) do
+          case ops[i].Kind of
+            pokMoveTo: TyZrMoveTo(Result, ops[i].X, ops[i].Y);
+            pokLineTo: TyZrLineTo(Result, ops[i].X, ops[i].Y);
+            pokArc: TyZrArc(Result, ops[i].X, ops[i].Y, ops[i].R, ops[i].A0, ops[i].A1, ops[i].Anti);
+            pokClose: TyZrClose(Result);
+          end;
+      end;
+    cskPolyline, cskPolygon:
+      if Length(AShape.Cmds) > 0 then
+      begin
+        for i := 0 to High(AShape.Cmds) do
+          case AShape.Cmds[i].Kind of
+            pckMove: TyZrMoveTo(Result, AShape.Cmds[i].X, AShape.Cmds[i].Y);
+            pckLine: TyZrLineTo(Result, AShape.Cmds[i].X, AShape.Cmds[i].Y);
+            pckCurve: TyZrCubic(Result, AShape.Cmds[i].X1, AShape.Cmds[i].Y1,
+              AShape.Cmds[i].X2, AShape.Cmds[i].Y2, AShape.Cmds[i].X, AShape.Cmds[i].Y);
+            pckClose: TyZrClose(Result);
+          end;
+      end
+      else if Length(AShape.Points) > 0 then
+      begin
+        TyZrMoveTo(Result, AShape.Points[0].X, AShape.Points[0].Y);
+        for i := 1 to High(AShape.Points) do
+          TyZrLineTo(Result, AShape.Points[i].X, AShape.Points[i].Y);
+        if AShape.Kind = cskPolygon then TyZrClose(Result);
+      end;
+  end;
+end;
+
+{ a poly's stroke where it lies: its commands, or its points (closed for a
+  polygon) -- containPath's stroke walk }
+function PolyStroke(const AShape: TTyChartShape; AW, X, Y: Double): Boolean;
+var
+  i, n: Integer;
+  xi, yi, x0, y0: Double;
+begin
+  Result := False;
+  if Length(AShape.Cmds) > 0 then
+  begin
+    xi := AShape.Cmds[0].X;
+    yi := AShape.Cmds[0].Y;
+    x0 := xi;
+    y0 := yi;
+    for i := 0 to High(AShape.Cmds) do
+      case AShape.Cmds[i].Kind of
+        pckMove:
+          begin
+            x0 := AShape.Cmds[i].X;
+            y0 := AShape.Cmds[i].Y;
+            xi := x0;
+            yi := y0;
+          end;
+        pckLine:
+          begin
+            if ZrLineStroke(xi, yi, AShape.Cmds[i].X, AShape.Cmds[i].Y, AW, X, Y) then Exit(True);
+            xi := AShape.Cmds[i].X;
+            yi := AShape.Cmds[i].Y;
+          end;
+        pckCurve:
+          begin
+            if ZrCubicStroke(xi, yi, AShape.Cmds[i].X1, AShape.Cmds[i].Y1, AShape.Cmds[i].X2,
+              AShape.Cmds[i].Y2, AShape.Cmds[i].X, AShape.Cmds[i].Y, AW, X, Y) then Exit(True);
+            xi := AShape.Cmds[i].X;
+            yi := AShape.Cmds[i].Y;
+          end;
+        pckClose:
+          begin
+            if ZrLineStroke(xi, yi, x0, y0, AW, X, Y) then Exit(True);
+            xi := x0;
+            yi := y0;
+          end;
+      end;
+    Exit;
+  end;
+  n := Length(AShape.Points);
+  if n = 0 then Exit;
+  for i := 1 to n - 1 do
+    if ZrLineStroke(AShape.Points[i - 1].X, AShape.Points[i - 1].Y, AShape.Points[i].X,
+      AShape.Points[i].Y, AW, X, Y) then Exit(True);
+  if AShape.Kind = cskPolygon then
+    Result := ZrLineStroke(AShape.Points[n - 1].X, AShape.Points[n - 1].Y, AShape.Points[0].X,
+      AShape.Points[0].Y, AW, X, Y);
+end;
+
+{ the bounding rect of a poly's path (PathProxy.getBoundingRect): its own
+  where the builder measured it, its points' where it has no curve }
+function PolyBox(const AShape: TTyChartShape; out ABox: TTyXYWH): Boolean;
+var
+  i: Integer;
+  curve: Boolean;
+  mnX, mnY, mxX, mxY: Double;
+begin
+  Result := False;
+  if AShape.HasCmdBounds then
+  begin
+    ABox := XYWH(AShape.CmdBounds.Left, AShape.CmdBounds.Top,
+      AShape.CmdBounds.Right - AShape.CmdBounds.Left, AShape.CmdBounds.Bottom - AShape.CmdBounds.Top);
+    Exit(True);
+  end;
+  curve := False;
+  for i := 0 to High(AShape.Cmds) do
+    if AShape.Cmds[i].Kind = pckCurve then curve := True;
+  if curve then
+  begin
+    ABox := TyZrBBox(TyZrShapePath(AShape));
+    Exit(True);
+  end;
+  mnX := Infinity; mnY := Infinity; mxX := -Infinity; mxY := -Infinity;
+  if Length(AShape.Cmds) > 0 then
+  begin
+    for i := 0 to High(AShape.Cmds) do
+      if AShape.Cmds[i].Kind <> pckClose then
+      begin
+        mnX := Min(mnX, AShape.Cmds[i].X); mxX := Max(mxX, AShape.Cmds[i].X);
+        mnY := Min(mnY, AShape.Cmds[i].Y); mxY := Max(mxY, AShape.Cmds[i].Y);
+      end;
+  end
+  else
+    for i := 0 to High(AShape.Points) do
+    begin
+      mnX := Min(mnX, AShape.Points[i].X); mxX := Max(mxX, AShape.Points[i].X);
+      mnY := Min(mnY, AShape.Points[i].Y); mxY := Max(mxY, AShape.Points[i].Y);
+    end;
+  if mnX > mxX then Exit;
+  ABox := XYWH(mnX, mnY, mxX - mnX, mxY - mnY);
+  Result := True;
+end;
+
+{ the stroke test proper, the point already in the shape's frame and past
+  the cheap refusal }
+function ShapeStroke(const AShape: TTyChartShape; APoly: Boolean; AWidth, AX, AY: Double): Boolean;
+var
+  old: TFPUExceptionMask;
+  path: TTyZrPath;
+  box: TTyXYWH;
+  poly: Boolean;
+begin
+  Result := False;
+  poly := APoly;
+  old := GetExceptionMask;
+  SetExceptionMask(old + [exInvalidOp, exZeroDivide, exOverflow, exUnderflow, exPrecision]);
+  try
+    if poly then
+    begin
+      if not PolyBox(AShape, box) then Exit;
+    end
+    else
+    begin
+      path := TyZrShapePath(AShape);
+      if Length(path) = 0 then Exit;
+      box := TyZrBBox(path);
+    end;
+    { BoundingRect.contain of the rect grown by half the width each way }
+    if not ((AX >= box.X - AWidth / 2) and (AX <= box.X - AWidth / 2 + (box.W + AWidth))
+      and (AY >= box.Y - AWidth / 2) and (AY <= box.Y - AWidth / 2 + (box.H + AWidth))) then Exit;
+    if poly then Result := PolyStroke(AShape, AWidth, AX, AY)
+    else Result := ZrContainPath(path, AWidth, True, AX, AY);
+  finally
+    TyZrRestoreFpu(old);
+  end;
+end;
+
+function TyZrShapeContainStroke(const AShape: TTyChartShape; AWidth, AX, AY: Double): Boolean;
+var
+  b: TTyRectF;
+  poly: Boolean;
+begin
+  Result := False;
+  if not (AWidth > 0) or IsNan(AX) or IsNan(AY) then Exit;
+  if not (AShape.Kind in [cskRect, cskRoundRect, cskCircle, cskEllipse, cskSector,
+    cskPolyline, cskPolygon, cskPath]) then Exit;
+  TyZrShapeLocal(AShape, AX, AY);
+  poly := AShape.Kind in [cskPolyline, cskPolygon];
+  { THE CHEAP REFUSAL FIRST, in a routine with nothing managed of its own:
+    the shape's own bounds hold its path's rect (a sector's disc its arcs',
+    a path's box its fitted outline), so a point more than half the width
+    off them is off the stroked rect too -- and a list of thousands of
+    bordered symbols asks every one of them at each move: no path is built
+    for those. A poly's rect is its own (PolyBox), which a curve may bulge
+    past its points' }
+  if not poly then
+  begin
+    b := TyShapeBounds(AShape);
+    if not ((AX >= b.Left - AWidth / 2) and (AX <= b.Right + AWidth / 2)
+      and (AY >= b.Top - AWidth / 2) and (AY <= b.Bottom + AWidth / 2)) then Exit;
+  end;
+  Result := ShapeStroke(AShape, poly, AWidth, AX, AY);
+end;
+
+function TyZrShapeContainFill(const AShape: TTyChartShape; AX, AY: Double): Boolean;
+var
+  path: TTyZrPath;
+  box: TTyXYWH;
+begin
+  Result := False;
+  if IsNan(AX) or IsNan(AY) then Exit;
+  TyZrShapeLocal(AShape, AX, AY);
+  path := TyZrShapePath(AShape);
+  if Length(path) = 0 then Exit;
+  { Path.contain asks the rect first }
+  box := TyZrBBox(path);
+  if not ((AX >= box.X) and (AX <= box.X + box.W) and (AY >= box.Y) and (AY <= box.Y + box.H)) then Exit;
+  Result := TyZrContain(path, AX, AY);
 end;
 
 procedure TyZrRestoreFpu(const AOld: TFPUExceptionMask);
