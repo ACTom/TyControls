@@ -613,6 +613,10 @@ resourcestring
   rsTyChartSeriesBadType = 'series[%d]: "%s" is not a series type';
   rsTyChartSeriesCoordSys = 'series[%d]: coordinateSystem "%s" is not built yet';
   rsTyChartSeriesNoRenderer = 'series[%d]: the "%s" series type is not drawn yet';
+  { [spec 259] %d the series, %s the value coordinate, %d the places its
+    encode list reaches, %d the places the type needs, %s the type }
+  rsTyChartSeriesShortEncode =
+    'series[%d]: encode.%s reaches %d of the %d dimensions a %s needs, so it is not drawn';
   rsTyChartCustomNoRenderItem =
     'series[%d]: no renderItem is registered as "%s", so nothing is drawn';
   rsTyChartCustomRenderItemFailed = 'series[%d]: renderItem "%s" failed: %s';

@@ -58375,6 +58375,1981 @@
      ]
     }
    ]
+  },
+  {
+   "id": "r-list-candle-two",
+   "group": "render",
+   "note": "a candlestick y [1, 2]: two of four, upstream throws",
+   "option": {
+    "animation": false,
+    "dataset": {
+     "source": [
+      [
+       "d",
+       "o",
+       "c",
+       "l",
+       "h"
+      ],
+      [
+       "d0",
+       20,
+       34,
+       10,
+       38
+      ],
+      [
+       "d1",
+       40,
+       35,
+       30,
+       50
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value",
+     "scale": true
+    },
+    "series": [
+     {
+      "type": "candlestick",
+      "encode": {
+       "x": 0,
+       "y": [
+        1,
+        2
+       ]
+      }
+     }
+    ]
+   },
+   "render": {
+    "error": "Cannot read properties of undefined (reading 'sign')"
+   },
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "d",
+        "o",
+        "c",
+        "l",
+        "h"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:d",
+         "s:o",
+         "s:c",
+         "s:l",
+         "s:h"
+        ],
+        [
+         "s:d0",
+         "4034000000000000",
+         "4041000000000000",
+         "4024000000000000",
+         "4043000000000000"
+        ],
+        [
+         "s:d1",
+         "4044000000000000",
+         "4041800000000000",
+         "403e000000000000",
+         "4049000000000000"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "r-list-candle-three",
+   "group": "render",
+   "note": "a candlestick y [1, 2, 3]: three of four",
+   "option": {
+    "animation": false,
+    "dataset": {
+     "source": [
+      [
+       "d",
+       "o",
+       "c",
+       "l",
+       "h"
+      ],
+      [
+       "d0",
+       20,
+       34,
+       10,
+       38
+      ],
+      [
+       "d1",
+       40,
+       35,
+       30,
+       50
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value",
+     "scale": true
+    },
+    "series": [
+     {
+      "type": "candlestick",
+      "encode": {
+       "x": 0,
+       "y": [
+        1,
+        2,
+        3
+       ]
+      }
+     }
+    ]
+   },
+   "render": {
+    "error": "Cannot read properties of undefined (reading 'sign')"
+   },
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "d",
+        "o",
+        "c",
+        "l",
+        "h"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:d",
+         "s:o",
+         "s:c",
+         "s:l",
+         "s:h"
+        ],
+        [
+         "s:d0",
+         "4034000000000000",
+         "4041000000000000",
+         "4024000000000000",
+         "4043000000000000"
+        ],
+        [
+         "s:d1",
+         "4044000000000000",
+         "4041800000000000",
+         "403e000000000000",
+         "4049000000000000"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "r-list-candle-one",
+   "group": "render",
+   "note": "a candlestick y 1: one of four -- a written list is never filled",
+   "option": {
+    "animation": false,
+    "dataset": {
+     "source": [
+      [
+       "d",
+       "o",
+       "c",
+       "l",
+       "h"
+      ],
+      [
+       "d0",
+       20,
+       34,
+       10,
+       38
+      ],
+      [
+       "d1",
+       40,
+       35,
+       30,
+       50
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value",
+     "scale": true
+    },
+    "series": [
+     {
+      "type": "candlestick",
+      "encode": {
+       "x": 0,
+       "y": 1
+      }
+     }
+    ]
+   },
+   "render": {
+    "error": "Cannot read properties of undefined (reading 'sign')"
+   },
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "d",
+        "o",
+        "c",
+        "l",
+        "h"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:d",
+         "s:o",
+         "s:c",
+         "s:l",
+         "s:h"
+        ],
+        [
+         "s:d0",
+         "4034000000000000",
+         "4041000000000000",
+         "4024000000000000",
+         "4043000000000000"
+        ],
+        [
+         "s:d1",
+         "4044000000000000",
+         "4041800000000000",
+         "403e000000000000",
+         "4049000000000000"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "r-list-candle-gap",
+   "group": "render",
+   "note": "a candlestick y [1, 'nope', 3, 4]: four places, close a gap -- no item has a value, nothing drawn, no throw",
+   "option": {
+    "animation": false,
+    "dataset": {
+     "source": [
+      [
+       "d",
+       "o",
+       "c",
+       "l",
+       "h"
+      ],
+      [
+       "d0",
+       20,
+       34,
+       10,
+       38
+      ],
+      [
+       "d1",
+       40,
+       35,
+       30,
+       50
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value",
+     "scale": true
+    },
+    "series": [
+     {
+      "type": "candlestick",
+      "encode": {
+       "x": 0,
+       "y": [
+        1,
+        "nope",
+        3,
+        4
+       ]
+      }
+     }
+    ]
+   },
+   "render": {
+    "rect": [
+     "4056800000000000",
+     "4050400000000000",
+     "407c200000000000",
+     "406fe00000000000"
+    ],
+    "axes": [
+     {
+      "dim": "x",
+      "index": 0,
+      "categories": [
+       "d0",
+       "d1"
+      ]
+     },
+     {
+      "dim": "y",
+      "index": 0,
+      "categories": null
+     }
+    ],
+    "series": [
+     {
+      "index": 0,
+      "type": "candlestick",
+      "count": 2,
+      "items": [
+       null,
+       null
+      ],
+      "labels": []
+     }
+    ]
+   },
+   "extents": [
+    {
+     "dim": "x",
+     "index": 0,
+     "extent": [
+      "0000000000000000",
+      "3ff0000000000000"
+     ]
+    },
+    {
+     "dim": "y",
+     "index": 0,
+     "extent": [
+      "4024000000000000",
+      "4049000000000000"
+     ]
+    }
+   ],
+   "sizes": [],
+   "drawn": [
+    {
+     "index": 0,
+     "els": [
+      false,
+      false
+     ]
+    }
+   ],
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "d",
+        "o",
+        "c",
+        "l",
+        "h"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:d",
+         "s:o",
+         "s:c",
+         "s:l",
+         "s:h"
+        ],
+        [
+         "s:d0",
+         "4034000000000000",
+         "4041000000000000",
+         "4024000000000000",
+         "4043000000000000"
+        ],
+        [
+         "s:d1",
+         "4044000000000000",
+         "4041800000000000",
+         "403e000000000000",
+         "4049000000000000"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "r-list-candle-four",
+   "group": "render",
+   "note": "a candlestick y [1, 2, 3, 4]: drawn",
+   "option": {
+    "animation": false,
+    "dataset": {
+     "source": [
+      [
+       "d",
+       "o",
+       "c",
+       "l",
+       "h"
+      ],
+      [
+       "d0",
+       20,
+       34,
+       10,
+       38
+      ],
+      [
+       "d1",
+       40,
+       35,
+       30,
+       50
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value",
+     "scale": true
+    },
+    "series": [
+     {
+      "type": "candlestick",
+      "encode": {
+       "x": 0,
+       "y": [
+        1,
+        2,
+        3,
+        4
+       ]
+      }
+     }
+    ]
+   },
+   "render": {
+    "rect": [
+     "4056800000000000",
+     "4050400000000000",
+     "407c200000000000",
+     "406fe00000000000"
+    ],
+    "axes": [
+     {
+      "dim": "x",
+      "index": 0,
+      "categories": [
+       "d0",
+       "d1"
+      ]
+     },
+     {
+      "dim": "y",
+      "index": 0,
+      "categories": null
+     }
+    ],
+    "series": [
+     {
+      "index": 0,
+      "type": "candlestick",
+      "count": 2,
+      "items": [
+       null,
+       null
+      ],
+      "labels": []
+     }
+    ]
+   },
+   "extents": [
+    {
+     "dim": "x",
+     "index": 0,
+     "extent": [
+      "0000000000000000",
+      "3ff0000000000000"
+     ]
+    },
+    {
+     "dim": "y",
+     "index": 0,
+     "extent": [
+      "4024000000000000",
+      "4049000000000000"
+     ]
+    }
+   ],
+   "sizes": [],
+   "drawn": [
+    {
+     "index": 0,
+     "els": [
+      true,
+      true
+     ]
+    }
+   ],
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "d",
+        "o",
+        "c",
+        "l",
+        "h"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:d",
+         "s:o",
+         "s:c",
+         "s:l",
+         "s:h"
+        ],
+        [
+         "s:d0",
+         "4034000000000000",
+         "4041000000000000",
+         "4024000000000000",
+         "4043000000000000"
+        ],
+        [
+         "s:d1",
+         "4044000000000000",
+         "4041800000000000",
+         "403e000000000000",
+         "4049000000000000"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "r-list-candle-line",
+   "group": "render",
+   "note": "a line, then a candlestick y [1, 2] under an axis tooltip: upstream throws",
+   "option": {
+    "animation": false,
+    "dataset": {
+     "source": [
+      [
+       "d",
+       "o",
+       "c",
+       "l",
+       "h"
+      ],
+      [
+       "d0",
+       20,
+       34,
+       10,
+       38
+      ],
+      [
+       "d1",
+       40,
+       35,
+       30,
+       50
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value",
+     "scale": true
+    },
+    "series": [
+     {
+      "type": "line",
+      "encode": {
+       "x": 0,
+       "y": 1
+      }
+     },
+     {
+      "type": "candlestick",
+      "encode": {
+       "x": 0,
+       "y": [
+        1,
+        2
+       ]
+      }
+     }
+    ],
+    "tooltip": {
+     "trigger": "axis"
+    }
+   },
+   "render": {
+    "error": "Cannot read properties of undefined (reading 'sign')"
+   },
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "d",
+        "o",
+        "c",
+        "l",
+        "h"
+       ],
+       "detected": 5,
+       "rows": [
+        [
+         "s:d",
+         "s:o",
+         "s:c",
+         "s:l",
+         "s:h"
+        ],
+        [
+         "s:d0",
+         "4034000000000000",
+         "4041000000000000",
+         "4024000000000000",
+         "4043000000000000"
+        ],
+        [
+         "s:d1",
+         "4044000000000000",
+         "4041800000000000",
+         "403e000000000000",
+         "4049000000000000"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "r-list-candle-own",
+   "group": "render",
+   "note": "own data, a candlestick y [1, 2]: upstream throws",
+   "option": {
+    "animation": false,
+    "xAxis": {
+     "type": "category",
+     "data": [
+      "d0",
+      "d1"
+     ]
+    },
+    "yAxis": {
+     "scale": true
+    },
+    "series": [
+     {
+      "type": "candlestick",
+      "encode": {
+       "x": 0,
+       "y": [
+        1,
+        2
+       ]
+      },
+      "data": [
+       [
+        0,
+        20,
+        34,
+        10,
+        38
+       ],
+       [
+        1,
+        40,
+        35,
+        30,
+        50
+       ]
+      ]
+     }
+    ]
+   },
+   "render": {
+    "error": "Cannot read properties of undefined (reading 'sign')"
+   },
+   "datasets": []
+  },
+  {
+   "id": "r-list-box-four",
+   "group": "render",
+   "note": "a boxplot y [1, 2, 3, 4]: four of five, upstream throws",
+   "option": {
+    "animation": false,
+    "dataset": {
+     "source": [
+      [
+       "d",
+       "a",
+       "b",
+       "c",
+       "e",
+       "f"
+      ],
+      [
+       "b0",
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      [
+       "b1",
+       2,
+       3,
+       4,
+       5,
+       6
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value",
+     "scale": true
+    },
+    "series": [
+     {
+      "type": "boxplot",
+      "encode": {
+       "x": 0,
+       "y": [
+        1,
+        2,
+        3,
+        4
+       ]
+      }
+     }
+    ]
+   },
+   "render": {
+    "error": "Cannot read properties of undefined (reading 'ends')"
+   },
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "d",
+        "a",
+        "b",
+        "c",
+        "e",
+        "f"
+       ],
+       "detected": 6,
+       "rows": [
+        [
+         "s:d",
+         "s:a",
+         "s:b",
+         "s:c",
+         "s:e",
+         "s:f"
+        ],
+        [
+         "s:b0",
+         "3ff0000000000000",
+         "4000000000000000",
+         "4008000000000000",
+         "4010000000000000",
+         "4014000000000000"
+        ],
+        [
+         "s:b1",
+         "4000000000000000",
+         "4008000000000000",
+         "4010000000000000",
+         "4014000000000000",
+         "4018000000000000"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "r-list-box-one",
+   "group": "render",
+   "note": "a boxplot y 1",
+   "option": {
+    "animation": false,
+    "dataset": {
+     "source": [
+      [
+       "d",
+       "a",
+       "b",
+       "c",
+       "e",
+       "f"
+      ],
+      [
+       "b0",
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      [
+       "b1",
+       2,
+       3,
+       4,
+       5,
+       6
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value",
+     "scale": true
+    },
+    "series": [
+     {
+      "type": "boxplot",
+      "encode": {
+       "x": 0,
+       "y": 1
+      }
+     }
+    ]
+   },
+   "render": {
+    "error": "Cannot read properties of undefined (reading 'ends')"
+   },
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "d",
+        "a",
+        "b",
+        "c",
+        "e",
+        "f"
+       ],
+       "detected": 6,
+       "rows": [
+        [
+         "s:d",
+         "s:a",
+         "s:b",
+         "s:c",
+         "s:e",
+         "s:f"
+        ],
+        [
+         "s:b0",
+         "3ff0000000000000",
+         "4000000000000000",
+         "4008000000000000",
+         "4010000000000000",
+         "4014000000000000"
+        ],
+        [
+         "s:b1",
+         "4000000000000000",
+         "4008000000000000",
+         "4010000000000000",
+         "4014000000000000",
+         "4018000000000000"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "r-list-box-five",
+   "group": "render",
+   "note": "a boxplot y [1, 2, 3, 4, 5]: all five, drawn",
+   "option": {
+    "animation": false,
+    "dataset": {
+     "source": [
+      [
+       "d",
+       "a",
+       "b",
+       "c",
+       "e",
+       "f"
+      ],
+      [
+       "b0",
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      [
+       "b1",
+       2,
+       3,
+       4,
+       5,
+       6
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value",
+     "scale": true
+    },
+    "series": [
+     {
+      "type": "boxplot",
+      "encode": {
+       "x": 0,
+       "y": [
+        1,
+        2,
+        3,
+        4,
+        5
+       ]
+      }
+     }
+    ]
+   },
+   "render": {
+    "rect": [
+     "4056800000000000",
+     "4050400000000000",
+     "407c200000000000",
+     "406fe00000000000"
+    ],
+    "axes": [
+     {
+      "dim": "x",
+      "index": 0,
+      "categories": [
+       "b0",
+       "b1"
+      ]
+     },
+     {
+      "dim": "y",
+      "index": 0,
+      "categories": null
+     }
+    ],
+    "series": [
+     {
+      "index": 0,
+      "type": "boxplot",
+      "count": 2,
+      "items": [
+       null,
+       null
+      ],
+      "labels": []
+     }
+    ]
+   },
+   "extents": [
+    {
+     "dim": "x",
+     "index": 0,
+     "extent": [
+      "0000000000000000",
+      "3ff0000000000000"
+     ]
+    },
+    {
+     "dim": "y",
+     "index": 0,
+     "extent": [
+      "3ff0000000000000",
+      "4018000000000000"
+     ]
+    }
+   ],
+   "sizes": [],
+   "drawn": [
+    {
+     "index": 0,
+     "els": [
+      true,
+      true
+     ]
+    }
+   ],
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "d",
+        "a",
+        "b",
+        "c",
+        "e",
+        "f"
+       ],
+       "detected": 6,
+       "rows": [
+        [
+         "s:d",
+         "s:a",
+         "s:b",
+         "s:c",
+         "s:e",
+         "s:f"
+        ],
+        [
+         "s:b0",
+         "3ff0000000000000",
+         "4000000000000000",
+         "4008000000000000",
+         "4010000000000000",
+         "4014000000000000"
+        ],
+        [
+         "s:b1",
+         "4000000000000000",
+         "4008000000000000",
+         "4010000000000000",
+         "4014000000000000",
+         "4018000000000000"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "r-list-box-gap",
+   "group": "render",
+   "note": "a boxplot y [1, 2, 'nope', 4, 5]: the median a gap -- nothing drawn",
+   "option": {
+    "animation": false,
+    "dataset": {
+     "source": [
+      [
+       "d",
+       "a",
+       "b",
+       "c",
+       "e",
+       "f"
+      ],
+      [
+       "b0",
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      [
+       "b1",
+       2,
+       3,
+       4,
+       5,
+       6
+      ]
+     ]
+    },
+    "xAxis": {
+     "type": "category"
+    },
+    "yAxis": {
+     "type": "value",
+     "scale": true
+    },
+    "series": [
+     {
+      "type": "boxplot",
+      "encode": {
+       "x": 0,
+       "y": [
+        1,
+        2,
+        "nope",
+        4,
+        5
+       ]
+      }
+     }
+    ]
+   },
+   "render": {
+    "rect": [
+     "4056800000000000",
+     "4050400000000000",
+     "407c200000000000",
+     "406fe00000000000"
+    ],
+    "axes": [
+     {
+      "dim": "x",
+      "index": 0,
+      "categories": [
+       "b0",
+       "b1"
+      ]
+     },
+     {
+      "dim": "y",
+      "index": 0,
+      "categories": null
+     }
+    ],
+    "series": [
+     {
+      "index": 0,
+      "type": "boxplot",
+      "count": 2,
+      "items": [
+       null,
+       null
+      ],
+      "labels": []
+     }
+    ]
+   },
+   "extents": [
+    {
+     "dim": "x",
+     "index": 0,
+     "extent": [
+      "0000000000000000",
+      "3ff0000000000000"
+     ]
+    },
+    {
+     "dim": "y",
+     "index": 0,
+     "extent": [
+      "3ff0000000000000",
+      "4018000000000000"
+     ]
+    }
+   ],
+   "sizes": [],
+   "drawn": [
+    {
+     "index": 0,
+     "els": [
+      false,
+      false
+     ]
+    }
+   ],
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "d",
+        "a",
+        "b",
+        "c",
+        "e",
+        "f"
+       ],
+       "detected": 6,
+       "rows": [
+        [
+         "s:d",
+         "s:a",
+         "s:b",
+         "s:c",
+         "s:e",
+         "s:f"
+        ],
+        [
+         "s:b0",
+         "3ff0000000000000",
+         "4000000000000000",
+         "4008000000000000",
+         "4010000000000000",
+         "4014000000000000"
+        ],
+        [
+         "s:b1",
+         "4000000000000000",
+         "4008000000000000",
+         "4010000000000000",
+         "4014000000000000",
+         "4018000000000000"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "r-list-pie-vw",
+   "group": "render",
+   "note": "pie value [v, w]: the sectors are v",
+   "option": {
+    "animation": false,
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "v",
+       "g",
+       "w"
+      ],
+      [
+       1,
+       6,
+       "A",
+       9
+      ],
+      [
+       2,
+       7,
+       "B",
+       4
+      ],
+      [
+       3,
+       8,
+       "A",
+       2
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "pie",
+      "encode": {
+       "itemName": "g",
+       "value": [
+        "v",
+        "w"
+       ]
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ]
+   },
+   "render": {
+    "rect": null,
+    "axes": [],
+    "series": [
+     {
+      "index": 0,
+      "type": "pie",
+      "count": 3,
+      "items": [
+       [
+        "4072c00000000000",
+        "4069000000000000",
+        "0000000000000000",
+        "4059000000000000",
+        "4012d97c7f3321d2",
+        "401a07c44e220a22"
+       ],
+       [
+        "4072c00000000000",
+        "4069000000000000",
+        "0000000000000000",
+        "4059000000000000",
+        "401a07c44e220a22",
+        "40213436b51c61ea"
+       ],
+       [
+        "4072c00000000000",
+        "4069000000000000",
+        "0000000000000000",
+        "4059000000000000",
+        "40213436b51c61ea",
+        "4025fdbbe9bba775"
+       ]
+      ],
+      "labels": [
+       {
+        "d": 0,
+        "text": "A"
+       },
+       {
+        "d": 1,
+        "text": "B"
+       },
+       {
+        "d": 2,
+        "text": "A"
+       }
+      ]
+     }
+    ]
+   },
+   "reads": [
+    {
+     "index": 0,
+     "dims": [
+      "p",
+      "v",
+      "g",
+      "w"
+     ],
+     "values": [
+      [
+       null,
+       null
+      ],
+      [
+       null,
+       null
+      ],
+      [
+       null,
+       null
+      ]
+     ]
+    }
+   ],
+   "extents": [],
+   "sizes": [],
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "p",
+        "v",
+        "g",
+        "w"
+       ],
+       "detected": 4,
+       "rows": [
+        [
+         "s:p",
+         "s:v",
+         "s:g",
+         "s:w"
+        ],
+        [
+         "3ff0000000000000",
+         "4018000000000000",
+         "s:A",
+         "4022000000000000"
+        ],
+        [
+         "4000000000000000",
+         "401c000000000000",
+         "s:B",
+         "4010000000000000"
+        ],
+        [
+         "4008000000000000",
+         "4020000000000000",
+         "s:A",
+         "4000000000000000"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "r-list-pie-gap",
+   "group": "render",
+   "note": "pie value ['nope', 'w']: place 0 a gap -- no sector has a layout, the labels' text undefined, off the canvas",
+   "option": {
+    "animation": false,
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "v",
+       "g",
+       "w"
+      ],
+      [
+       1,
+       6,
+       "A",
+       9
+      ],
+      [
+       2,
+       7,
+       "B",
+       4
+      ],
+      [
+       3,
+       8,
+       "A",
+       2
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "pie",
+      "encode": {
+       "itemName": "g",
+       "value": [
+        "nope",
+        "w"
+       ]
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ]
+   },
+   "deviation": "off-canvas-labels",
+   "render": {
+    "rect": null,
+    "axes": [],
+    "series": [
+     {
+      "index": 0,
+      "type": "pie",
+      "count": 3,
+      "items": [
+       null,
+       null,
+       null
+      ],
+      "labels": [
+       {
+        "d": 0,
+        "text": "undefined"
+       },
+       {
+        "d": 1,
+        "text": "undefined"
+       },
+       {
+        "d": 2,
+        "text": "undefined"
+       }
+      ]
+     }
+    ]
+   },
+   "drawn": [
+    {
+     "index": 0,
+     "els": [
+      true,
+      true,
+      true
+     ]
+    }
+   ],
+   "labelPos": [
+    {
+     "index": 0,
+     "d": 0,
+     "rect": [
+      "c0621fdc61c68442",
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000"
+     ]
+    },
+    {
+     "index": 0,
+     "d": 1,
+     "rect": [
+      "c0621ebf63906fa2",
+      "4008000000000000",
+      "0000000000000000",
+      "0000000000000000"
+     ]
+    },
+    {
+     "index": 0,
+     "d": 2,
+     "rect": [
+      "c0621c8524ddc296",
+      "4014000000000000",
+      "0000000000000000",
+      "0000000000000000"
+     ]
+    }
+   ],
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "p",
+        "v",
+        "g",
+        "w"
+       ],
+       "detected": 4,
+       "rows": [
+        [
+         "s:p",
+         "s:v",
+         "s:g",
+         "s:w"
+        ],
+        [
+         "3ff0000000000000",
+         "4018000000000000",
+         "s:A",
+         "4022000000000000"
+        ],
+        [
+         "4000000000000000",
+         "401c000000000000",
+         "s:B",
+         "4010000000000000"
+        ],
+        [
+         "4008000000000000",
+         "4020000000000000",
+         "s:A",
+         "4000000000000000"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "r-list-funnel-gap",
+   "group": "render",
+   "note": "funnel value ['nope', 'w']: place 0 a gap -- the trapezoids have no width, the names still drawn",
+   "option": {
+    "animation": false,
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "v",
+       "g",
+       "w"
+      ],
+      [
+       1,
+       6,
+       "A",
+       9
+      ],
+      [
+       2,
+       7,
+       "B",
+       4
+      ],
+      [
+       3,
+       8,
+       "A",
+       2
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "funnel",
+      "encode": {
+       "itemName": "g",
+       "value": [
+        "nope",
+        "w"
+       ]
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ]
+   },
+   "render": {
+    "rect": null,
+    "axes": [],
+    "series": [
+     {
+      "index": 0,
+      "type": "funnel",
+      "count": 3,
+      "items": [
+       null,
+       null,
+       null
+      ],
+      "labels": [
+       {
+        "d": 0,
+        "text": "A"
+       },
+       {
+        "d": 1,
+        "text": "B"
+       },
+       {
+        "d": 2,
+        "text": "A"
+       }
+      ]
+     }
+    ]
+   },
+   "drawn": [
+    {
+     "index": 0,
+     "els": [
+      true,
+      true,
+      true
+     ]
+    }
+   ],
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "p",
+        "v",
+        "g",
+        "w"
+       ],
+       "detected": 4,
+       "rows": [
+        [
+         "s:p",
+         "s:v",
+         "s:g",
+         "s:w"
+        ],
+        [
+         "3ff0000000000000",
+         "4018000000000000",
+         "s:A",
+         "4022000000000000"
+        ],
+        [
+         "4000000000000000",
+         "401c000000000000",
+         "s:B",
+         "4010000000000000"
+        ],
+        [
+         "4008000000000000",
+         "4020000000000000",
+         "s:A",
+         "4000000000000000"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "r-list-funnel-vw",
+   "group": "render",
+   "note": "funnel value [v, w]: the trapezoids are v",
+   "option": {
+    "animation": false,
+    "dataset": {
+     "source": [
+      [
+       "p",
+       "v",
+       "g",
+       "w"
+      ],
+      [
+       1,
+       6,
+       "A",
+       9
+      ],
+      [
+       2,
+       7,
+       "B",
+       4
+      ],
+      [
+       3,
+       8,
+       "A",
+       2
+      ]
+     ]
+    },
+    "series": [
+     {
+      "type": "funnel",
+      "encode": {
+       "itemName": "g",
+       "value": [
+        "v",
+        "w"
+       ]
+      },
+      "label": {
+       "show": true
+      }
+     }
+    ]
+   },
+   "render": {
+    "rect": null,
+    "axes": [],
+    "series": [
+     {
+      "index": 0,
+      "type": "funnel",
+      "count": 3,
+      "items": [
+       null,
+       null,
+       null
+      ],
+      "labels": [
+       {
+        "d": 0,
+        "text": "A"
+       },
+       {
+        "d": 1,
+        "text": "B"
+       },
+       {
+        "d": 2,
+        "text": "A"
+       }
+      ]
+     }
+    ]
+   },
+   "reads": [
+    {
+     "index": 0,
+     "dims": [
+      "p",
+      "v",
+      "g",
+      "w"
+     ],
+     "values": [
+      [
+       null,
+       null
+      ],
+      [
+       null,
+       null
+      ],
+      [
+       null,
+       null
+      ]
+     ]
+    }
+   ],
+   "extents": [],
+   "sizes": [],
+   "datasets": [
+    {
+     "k": 0,
+     "error": null,
+     "results": [
+      {
+       "r": 0,
+       "format": "arrayRows",
+       "clone": false,
+       "startIndex": 1,
+       "dims": [
+        "p",
+        "v",
+        "g",
+        "w"
+       ],
+       "detected": 4,
+       "rows": [
+        [
+         "s:p",
+         "s:v",
+         "s:g",
+         "s:w"
+        ],
+        [
+         "3ff0000000000000",
+         "4018000000000000",
+         "s:A",
+         "4022000000000000"
+        ],
+        [
+         "4000000000000000",
+         "401c000000000000",
+         "s:B",
+         "4010000000000000"
+        ],
+        [
+         "4008000000000000",
+         "4020000000000000",
+         "s:A",
+         "4000000000000000"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
   }
  ],
  "guards": [
@@ -58808,6 +60783,26 @@
   },
   {
    "name": "list: the stack spans the totals of v and w",
+   "ok": true
+  },
+  {
+   "name": "short: a candlestick y [1, 2] throws",
+   "ok": true
+  },
+  {
+   "name": "short: a boxplot y [1, 2, 3, 4] throws",
+   "ok": true
+  },
+  {
+   "name": "short: a gap in four places throws nothing",
+   "ok": true
+  },
+  {
+   "name": "short: the gaps draw nothing, the full lists draw",
+   "ok": true
+  },
+  {
+   "name": "pie ['nope', 'w']: every label 'undefined' and wholly left of the canvas",
    "ok": true
   }
  ]

@@ -134,6 +134,8 @@ begin
   SetLength(FSources, Length(FBindings));
   SetLength(FSeriesDataset, Length(FBindings));
   SetLength(FEncodes, Length(FBindings));
+  FSeriesRefused := nil;
+  SetLength(FSeriesRefused, Length(FBindings));
   if FDatasetCache = nil then FDatasetCache := TTyDatasetCache.Create
   else FDatasetCache.Clear;
   { the transforms draw from the state their option's first build found
@@ -536,6 +538,7 @@ begin
       at least the coordinates' [spec 255]) }
     if enc.Given then
       TyEncodeFillUnclaimed(enc, Max(TySourceEncodeDimCount(FSources[i]), Length(coord)));
+    RefuseShortWhisker(i, enc, dims, coord, Max(TySourceEncodeDimCount(FSources[i]), Length(coord)));
     { [spec 255] every entry of a coordinate's list past its own column is a
       column too: the axis spans it, it may be the label }
     TySpreadEncode(enc, dims, st);
@@ -3355,6 +3358,39 @@ end;
   1 of each item and y element 0, exactly as it would pick table columns.
   Only the plain coordinate columns -- a multi-value series places its own,
   and a row-index column reads no element at all. }
+procedure TTyCustomAdvanceChart.RefuseShortWhisker(ASlot: Integer;
+  const AEnc: TTySeriesEncode; const ADims: TTySeriesDimArray;
+  const ACoord: TTyCoordDimArray; ABound: Integer);
+var
+  k, need, reach: Integer;
+  key: string;
+  filled: TTySeriesEncode;
+begin
+  if not AEnc.Given then Exit;
+  if (FBindings[ASlot].SeriesType <> 'candlestick')
+    and (FBindings[ASlot].SeriesType <> 'boxplot') then Exit;
+  { the value coordinate: the columns that feed another one's axis }
+  key := '';
+  need := 0;
+  for k := 0 to High(ADims) do
+    if ADims[k].Coord <> '' then
+    begin
+      key := ADims[k].Coord;
+      Inc(need);
+    end;
+  if need = 0 then Exit;
+  { an unwritten one as createDimensions fills it: the next free dimensions
+    up to the count it makes }
+  filled := AEnc;
+  filled.Columns := Copy(AEnc.Columns);
+  TyEncodeFillUnclaimed(filled, ABound);
+  reach := TyEncodeKeyReach(filled, ACoord, key);
+  if reach >= need then Exit;
+  FSeriesRefused[ASlot] := True;
+  FBuild.Note(Format(rsTyChartSeriesShortEncode, [FBindings[ASlot].SeriesIndex,
+    key, reach, need, FBindings[ASlot].SeriesType]));
+end;
+
 procedure TTyCustomAdvanceChart.SeriesDataEncode(ASlot: Integer;
   var ADims: TTySeriesDimArray; out AEnc: TTySeriesEncode);
 var
@@ -3394,6 +3430,7 @@ begin
       puts open on element 1 and close on 4 -- past a row index put in front,
       the index is element 0. A custom series spreads its own. }
     if FBindings[ASlot].SeriesType = TyCustomSeriesType then Exit;
+    RefuseShortWhisker(ASlot, AEnc, ADims, coord, Max(dimW, Length(coord)));
     prepend := False;
     for k := 0 to High(ADims) do
       if ADims[k].FromRowIndex and (ADims[k].Kind = ddtOrdinal) then prepend := True;
@@ -4576,6 +4613,8 @@ begin
         end;
         Continue;
       end;
+      { [spec 259] a whisker box upstream throws on }
+      if (i <= High(FSeriesRefused)) and FSeriesRefused[i] then Continue;
       Inc(drawn, TyBuildSeriesMarks(FBindings[i], FStores[i],
         StackFor(i), v, list));
       { no end label on a polar (LineView warns and draws none) }

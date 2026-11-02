@@ -1431,6 +1431,10 @@ type
       mean. Both index-parallel to FBindings. }
     FSeriesDataset: array of Integer;
     FEncodes: array of TTySeriesEncode;
+    { [spec 259] a series left out of the drawing: its encode gives a whisker
+      box fewer value places than it needs, which upstream throws on.
+      Index-parallel to FBindings. }
+    FSeriesRefused: array of Boolean;
     { WHAT THE AUTHOR'S PALETTE GAVE EACH SERIES, resolved once per rebuild.
       Empty where they gave it nothing, and the theme's ramp answers instead
       -- so a chart with no `color` written is still the skin's chart, and one
@@ -3512,6 +3516,14 @@ type
       datum. A no-op for every other type. }
     procedure SeriesDataEncode(ASlot: Integer; var ADims: TTySeriesDimArray;
       out AEnc: TTySeriesEncode);
+    { [spec 259] A candlestick's or a boxplot's value list that reaches fewer
+      places than the type has values (candlestickLayout's
+      `vDimsI.length < 4`, boxplotLayout's `vDims.length < 5`): no item
+      layout, and upstream throws reading one. The series is left out
+      (FSeriesRefused) and a diagnostic says why. AEnc as filled up to
+      ABound dimensions. }
+    procedure RefuseShortWhisker(ASlot: Integer; const AEnc: TTySeriesEncode;
+      const ADims: TTySeriesDimArray; const ACoord: TTyCoordDimArray; ABound: Integer);
     { upstream's defaultedLabel and defaultedTooltip for one axis series,
       into its store as raw positions. }
     procedure ResolveTextDims(const AEnc: TTySeriesEncode; AStore: TTyDataStore;

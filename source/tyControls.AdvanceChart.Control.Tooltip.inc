@@ -2343,6 +2343,8 @@ var
       for s := 0 to High(FBindings) do
       begin
         if FBindings[s].Hidden then Continue;
+        { [spec 259] nor one left out of the drawing }
+        if (s <= High(FSeriesRefused)) and FSeriesRefused[s] then Continue;
         { EVERY SERIES ON THIS AXIS, base or not: upstream's collectSeriesInfo
           takes a series into an axis' list when its coordinate system's axis
           of that dimension is this one -- so a pointer on a bar chart's value

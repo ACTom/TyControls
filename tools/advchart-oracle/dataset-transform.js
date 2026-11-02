@@ -306,6 +306,33 @@ function sizesOut(chart) {
   return out;
 }
 
+// [spec 259] which items of each series have an element, where a case asks
+function drawnOut(chart) {
+  const out = [];
+  chart.getModel().eachSeries(s => {
+    const data = s.getData();
+    const els = [];
+    for (let i = 0; i < data.count(); i++) els.push(!!data.getItemGraphicEl(i));
+    out.push({ index: s.seriesIndex, els });
+  });
+  return out;
+}
+
+// [spec 259] each label's anchor, where a case asks: the pie whose sectors
+// have no layout puts its labels off the canvas
+function labelPosOut(chart) {
+  const out = [];
+  chart.getModel().eachSeries(s => {
+    chart.getViewOfSeriesModel(s).group.traverse(el => {
+      const t = el.getTextContent && el.getTextContent();
+      if (!t || t.ignore) return;
+      const r = t.getBoundingRect();
+      out.push({ index: s.seriesIndex, d: dataIndexOf(el), rect: [r.x + t.x, r.y + t.y, r.width, r.height].map(hex) });
+    });
+  });
+  return out;
+}
+
 function runCase(c) {
   const option = clone(c.option);
   const rec = { id: c.id, group: c.group, note: c.note, option };
@@ -330,6 +357,8 @@ function runCase(c) {
     if (c.reads && rec.render && !rec.render.error) rec.reads = readsOut(chart);
     if (c.ext && rec.render && !rec.render.error) rec.extents = extentsOut(chart);
     if (c.ext && rec.render && !rec.render.error) rec.sizes = sizesOut(chart);
+    if (c.drawn && rec.render && !rec.render.error) rec.drawn = drawnOut(chart);
+    if (c.labelPos && rec.render && !rec.render.error) rec.labelPos = labelPosOut(chart);
     rec.datasets = datasetsOut(chart);
     return rec;
   } finally {
@@ -745,6 +774,45 @@ L('r-list-polar', 'polar radius [0, 3]', { dataset: { source: clone(PVGW) }, pol
 L('r-list-pie', 'pie value [w, v]: the sectors are w', { dataset: { source: clone(PVGW) },
   series: [{ type: 'pie', encode: { itemName: 'g', value: ['w', 'v'] }, label: { show: true } }] });
 
+// ---- [spec 259] what R7-A left of an encode list
+// a candlestick's y wants four dimensions, a boxplot's five: a list that
+// reaches fewer leaves the layout without item layouts (candlestickLayout,
+// boxplotLayout return early) and the visual or the view reads one --
+// upstream throws out of setOption; the port leaves that series out
+const KR = [['d', 'o', 'c', 'l', 'h'], ['d0', 20, 34, 10, 38], ['d1', 40, 35, 30, 50]];
+const BR = [['d', 'a', 'b', 'c', 'e', 'f'], ['b0', 1, 2, 3, 4, 5], ['b1', 2, 3, 4, 5, 6]];
+const kds = (series, src) => ({ dataset: { source: clone(src || KR) }, xAxis: { type: 'category' }, yAxis: { type: 'value', scale: true }, series });
+L('r-list-candle-two', 'a candlestick y [1, 2]: two of four, upstream throws', kds([{ type: 'candlestick', encode: { x: 0, y: [1, 2] } }]), {});
+L('r-list-candle-three', 'a candlestick y [1, 2, 3]: three of four', kds([{ type: 'candlestick', encode: { x: 0, y: [1, 2, 3] } }]), {});
+L('r-list-candle-one', 'a candlestick y 1: one of four -- a written list is never filled', kds([{ type: 'candlestick', encode: { x: 0, y: 1 } }]), {});
+L('r-list-candle-gap', "a candlestick y [1, 'nope', 3, 4]: four places, close a gap -- no item has a value, nothing drawn, no throw",
+  kds([{ type: 'candlestick', encode: { x: 0, y: [1, 'nope', 3, 4] } }]), { drawn: true, ext: true });
+L('r-list-candle-four', 'a candlestick y [1, 2, 3, 4]: drawn', kds([{ type: 'candlestick', encode: { x: 0, y: [1, 2, 3, 4] } }]), { drawn: true, ext: true });
+L('r-list-candle-line', 'a line, then a candlestick y [1, 2] under an axis tooltip: upstream throws',
+  Object.assign(kds([{ type: 'line', encode: { x: 0, y: 1 } }, { type: 'candlestick', encode: { x: 0, y: [1, 2] } }]),
+    { tooltip: { trigger: 'axis' } }), {});
+L('r-list-candle-own', "own data, a candlestick y [1, 2]: upstream throws", { xAxis: { type: 'category', data: ['d0', 'd1'] }, yAxis: { scale: true },
+  series: [{ type: 'candlestick', encode: { x: 0, y: [1, 2] }, data: [[0, 20, 34, 10, 38], [1, 40, 35, 30, 50]] }] }, {});
+L('r-list-box-four', 'a boxplot y [1, 2, 3, 4]: four of five, upstream throws', kds([{ type: 'boxplot', encode: { x: 0, y: [1, 2, 3, 4] } }], BR), {});
+L('r-list-box-one', 'a boxplot y 1', kds([{ type: 'boxplot', encode: { x: 0, y: 1 } }], BR), {});
+L('r-list-box-five', 'a boxplot y [1, 2, 3, 4, 5]: all five, drawn', kds([{ type: 'boxplot', encode: { x: 0, y: [1, 2, 3, 4, 5] } }], BR),
+  { drawn: true, ext: true });
+L('r-list-box-gap', "a boxplot y [1, 2, 'nope', 4, 5]: the median a gap -- nothing drawn", kds([{ type: 'boxplot', encode: { x: 0, y: [1, 2, 'nope', 4, 5] } }], BR),
+  { drawn: true, ext: true });
+// a pie and a funnel draw place 0 of value; the label is the name
+L('r-list-pie-vw', 'pie value [v, w]: the sectors are v', { dataset: { source: clone(PVGW) },
+  series: [{ type: 'pie', encode: { itemName: 'g', value: ['v', 'w'] }, label: { show: true } }] });
+// (the labels upstream leaves are a deviation: wholly off the canvas, the
+// port builds none -- the guard holds them off it)
+L('r-list-pie-gap', "pie value ['nope', 'w']: place 0 a gap -- no sector has a layout, the labels' text undefined, off the canvas",
+  { dataset: { source: clone(PVGW) }, series: [{ type: 'pie', encode: { itemName: 'g', value: ['nope', 'w'] }, label: { show: true } }] },
+  { drawn: true, labelPos: true, deviation: 'off-canvas-labels' });
+L('r-list-funnel-gap', "funnel value ['nope', 'w']: place 0 a gap -- the trapezoids have no width, the names still drawn",
+  { dataset: { source: clone(PVGW) }, series: [{ type: 'funnel', encode: { itemName: 'g', value: ['nope', 'w'] }, label: { show: true } }] },
+  { drawn: true });
+L('r-list-funnel-vw', 'funnel value [v, w]: the trapezoids are v',
+  { dataset: { source: clone(PVGW) }, series: [{ type: 'funnel', encode: { itemName: 'g', value: ['v', 'w'] }, label: { show: true } }] });
+
 // ---------------------------------------------------------------------------
 // guards: expectations read off the source
 // ---------------------------------------------------------------------------
@@ -857,6 +925,17 @@ function guards(o) {
   guard("list: the categories in the table's order", JSON.stringify(cs('r-list-cat').render.axes[0].categories)
     === JSON.stringify(['1', '2', '3', 'A', 'B']));
   guard('list: the stack spans the totals of v and w', ext('r-list-stack-second', 'y') === '0,12');
+  const thrown = id => cs(id).render.error;
+  guard('short: a candlestick y [1, 2] throws', /sign/.test(thrown('r-list-candle-two') || '') && /sign/.test(thrown('r-list-candle-one') || '')
+    && /sign/.test(thrown('r-list-candle-own') || '') && /sign/.test(thrown('r-list-candle-line') || ''));
+  guard('short: a boxplot y [1, 2, 3, 4] throws', /ends/.test(thrown('r-list-box-four') || '') && !cs('r-list-box-five').render.error);
+  guard('short: a gap in four places throws nothing', !cs('r-list-candle-gap').render.error);
+  guard('short: the gaps draw nothing, the full lists draw', cs('r-list-candle-gap').drawn[0].els.every(e => !e)
+    && cs('r-list-box-gap').drawn[0].els.every(e => !e) && cs('r-list-candle-four').drawn[0].els.every(e => e)
+    && cs('r-list-box-five').drawn[0].els.every(e => e));
+  guard("pie ['nope', 'w']: every label 'undefined' and wholly left of the canvas", cs('r-list-pie-gap').labelPos.length === 3
+    && cs('r-list-pie-gap').render.series[0].labels.every(l => l.text === 'undefined')
+    && cs('r-list-pie-gap').labelPos.every(l => num(l.rect[0]) + num(l.rect[2]) < 0));
   return g;
 }
 

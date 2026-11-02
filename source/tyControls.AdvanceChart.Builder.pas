@@ -646,6 +646,11 @@ function TyIsSpreadDim(const AName: string): Boolean;
   x) answers to that coordinate's key, at its place among the columns that
   do; any other to its own name. }
 procedure TyCoordKeys(const ADims: TTySeriesDimArray; var ACoord: TTyCoordDimArray);
+{ [spec 259] How many places of one encode key reach a dimension: one past
+  the last that does, its extra entries included -- the length of upstream's
+  mapDimensionsAll for that coordinate, a gap before the last one counted. }
+function TyEncodeKeyReach(const AEnc: TTySeriesEncode; const ACoord: TTyCoordDimArray;
+  const AKey: string): Integer;
 { [spec 255] A COORDINATE WRITTEN AS A LIST HOLDS EVERY DIMENSION IT REACHES:
   each extra entry of AEnc becomes a column of its coordinate's kind and
   category list, feeding that coordinate (SetDimCoord), read from its source
@@ -2653,6 +2658,27 @@ begin
     ACoord[k].Key := ADims[k].Coord;
     ACoord[k].Index := n;
   end;
+end;
+
+function TyEncodeKeyReach(const AEnc: TTySeriesEncode; const ACoord: TTyCoordDimArray;
+  const AKey: string): Integer;
+
+  function KeyOf(AIndex: Integer): string;
+  begin
+    if ACoord[AIndex].Key <> '' then Result := ACoord[AIndex].Key
+    else Result := ACoord[AIndex].Name;
+  end;
+
+var i: Integer;
+begin
+  Result := 0;
+  for i := 0 to High(ACoord) do
+    if (i <= High(AEnc.Columns)) and (AEnc.Columns[i] >= 0) and (KeyOf(i) = AKey)
+      and (ACoord[i].Index + 1 > Result) then Result := ACoord[i].Index + 1;
+  for i := 0 to High(AEnc.ExtraCoord) do
+    if (AEnc.ExtraCoord[i] >= 0) and (AEnc.ExtraCoord[i] <= High(ACoord))
+      and (KeyOf(AEnc.ExtraCoord[i]) = AKey) and (AEnc.ExtraIndex[i] + 1 > Result) then
+      Result := AEnc.ExtraIndex[i] + 1;
 end;
 
 procedure TySpreadEncode(var AEnc: TTySeriesEncode; var ADims: TTySeriesDimArray;
