@@ -600,6 +600,8 @@ option 编辑器：
 ### ECharts 会抛错的写法
 
 - ECharts 抛错、整次 `setOption` 失败的写法，这里只跳过出错的那一项、组件或数据集，原因写进 `Diagnostic`。比如主题河流各层行数不同、matrix 的合并格跨进正文、large 散点用 `image://` 符号。
+- 蜡烛图的 `encode` 给值轴的维不满四个、箱线图不满五个时，ECharts 会报错。这里不画这个系列，坐标轴指示器也不列它，原因写进 `Diagnostic`。
+- 坐标的 `encode` 列表第一项没对上任何维（如 `x: ['nope', 3]`）时，ECharts 画 dataZoom 滑块的数据阴影会报错。这里不画这个阴影，窗口和过滤照常。
 - 同一类组件两个相同 id、`replaceMerge` 写了不存在的类型：整次合并拒绝，图不变，`OptionError` 写着原因。
 - 不认识的系列类型照样占一个下标（ECharts 不把它放进列表，后面系列的下标会错开）。
 - 诊断会报 ECharts 不读的键。ECharts 3 的旧写法照读，不报「已弃用」。
