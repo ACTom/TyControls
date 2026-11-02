@@ -50,6 +50,9 @@ type
     FElsewhere: TComponent;
     FGrid: TPGGrid;
     FAnswer: TFont;
+    FSetOn: TObject;   // the instance OnSetPropertyText was handed for Size
+    procedure SetSizeText(Sender: TObject; AInstance: TPersistent; APropInfo: PPropInfo;
+      const AText: string; var AHandled: Boolean);
     procedure AddForeignMenu(Sender: TObject; AInstance: TPersistent; APropInfo: PPropInfo;
       AList: TStrings);
     function Lines(const AText: string): string;
@@ -69,6 +72,8 @@ type
     procedure TestACancelledFontDialogWritesNothing;
     procedure TestTheFontDialogStartsFromTheButtonsFont;
     procedure TestConstraintsExpandAndWrite;
+    { #183 }
+    procedure TestOnSetPropertyTextIsHandedTheButtonsOwnFont;
   end;
 
 implementation
@@ -402,6 +407,27 @@ begin
   AssertEquals('the button''s font size', 14, FButton.Font.Size);
   AssertEquals('and its face kept', 'Arial', FButton.Font.Name);
   AssertEquals('the font row followed', 'Arial, 14', FGrid.RowAt('Font').Value);
+end;
+
+procedure TPropertyGridButtonTest.SetSizeText(Sender: TObject; AInstance: TPersistent;
+  APropInfo: PPropInfo; const AText: string; var AHandled: Boolean);
+begin
+  if APropInfo^.Name <> 'Size' then Exit;
+  FSetOn := AInstance;
+  TFont(AInstance).Size := StrToInt(AText);
+  AHandled := True;
+end;
+
+{ The doc's promise for every event: AInstance is the object that really has the property. For a
+  font's own row that is the button's font, not a copy the grid writes back afterwards. }
+procedure TPropertyGridButtonTest.TestOnSetPropertyTextIsHandedTheButtonsOwnFont;
+begin
+  FGrid.OnSetPropertyText := @SetSizeText;
+  FGrid.TypeInto(FGrid.RowAt('Font.Size'), '13');
+  AssertSame('the button''s own font', FButton.Font, FSetOn);
+  AssertEquals('what the handler wrote stays', 13, FButton.Font.Size);
+  AssertEquals('the face kept', 'Arial', FButton.Font.Name);
+  AssertEquals('the row reads it', '13', FGrid.RowAt('Font.Size').Value);
 end;
 
 procedure TPropertyGridButtonTest.TestFontStyleElementWritesTheFont;

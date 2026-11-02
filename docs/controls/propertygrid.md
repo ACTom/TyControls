@@ -194,6 +194,7 @@ OnSetPropertyText(Sender; AInstance: TPersistent; APropInfo: PPropInfo; const AT
 - **表格认识的类型**:想换个写法时用。比如颜色显示成 `#0000FF` 而不是 `clRed`,读的时候在 `OnGetPropertyText` 里给出文字,写的时候在 `OnSetPropertyText` 里自己解析、自己写属性。没处理的属性照旧走表格的转换。
 - **表格不认识的类型**(接口、变体、不是 `TPersistent` 的类):`OnFilterProperty` 会问到它们,`AShow` 进来是 False。处理程序把 `AShow` 设成 True、而且 `OnGetPropertyText` 给出了文字,它就列出来。没挂 `OnSetPropertyText` 时这一行只读,挂了就能编辑。
 - 集合的元素行(`Font.Style` 下面的 `fsBold`)是整个集合的一部分,不单独问。
+- 字体自己的属性(`Font.Size`)也一样,`AInstance` 是控件真正的那个字体。`OnSetPropertyText` 写进去以后,表格再把整个字体经属性的 setter 写回一次,和它自己写的时候一样。
 - 选了多个对象时,每个对象各问一次;`OnSetPropertyText` 里抛的异常和 setter 抛的一样处理(`OnPropertyError`)。
 - 挂上或换掉这两个事件不会自动重建,要调一次 `Rebuild`。
 

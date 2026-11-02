@@ -209,8 +209,9 @@ type
     function FontOwnerOf(ANode: TTyPropertyNode): TTyPropertyNode;
     procedure StoreFont(AFontNode: TTyPropertyNode; ARoot: Integer; AFont: TFont);
     function FindComponentByName(ANode: TTyPropertyNode; const AName: string): TComponent;
+    { AText into AHolder's property. AAskApp: SetPropText is asked first (it was not yet). }
     procedure WriteOn(ANode: TTyPropertyNode; AHolder: TObject; APropInfo: PPropInfo;
-      const AText: string);
+      const AText: string; AAskApp: Boolean = True);
     function GetRoot: TPersistent;
     function GetRoots(AIndex: Integer): TPersistent;
   protected
@@ -1753,7 +1754,7 @@ begin
 end;
 
 procedure TTyPropertyRows.WriteOn(ANode: TTyPropertyNode; AHolder: TObject; APropInfo: PPropInfo;
-  const AText: string);
+  const AText: string; AAskApp: Boolean);
 var
   cur, bit: Int64;
   t, nm: string;
@@ -1766,7 +1767,7 @@ begin
   if APropInfo = nil then
     raise EPropertyError.CreateFmt(rsTyPropGridInvalidValue, [AText, ANode.Name]);
   { The application's conversion first (a set's element is written as part of its set). }
-  if (ANode.FKind <> pnkSetElement) and (AHolder is TPersistent)
+  if AAskApp and (ANode.FKind <> pnkSetElement) and (AHolder is TPersistent)
     and SetPropText(TPersistent(AHolder), APropInfo, AText) then Exit;
   if ANode.FKind = pnkFont then
   begin
@@ -1954,7 +1955,7 @@ begin
 end;
 
 procedure TTyPropertyRows.WriteTextIn(ANode: TTyPropertyNode; ARoot: Integer; const AText: string);
-var fontNode: TTyPropertyNode; cur, h: TObject; tmp: TFont;
+var fontNode: TTyPropertyNode; cur, h: TObject; tmp: TFont; handled: Boolean;
 begin
   fontNode := FontOwnerOf(ANode);
   if fontNode <> nil then
@@ -1964,9 +1965,14 @@ begin
       raise EPropertyError.CreateFmt(rsTyPropGridInvalidValue, [AText, ANode.Name]);
     tmp := TFont.Create;
     try
+      { #183: the application's conversion is handed the font itself, as every other event is,
+        not the copy the grid writes into; what it wrote is then stored whole like the grid's own
+        write, through the font property's setter. }
+      handled := (ANode.FKind <> pnkSetElement)
+        and SetPropText(TFont(cur), PropInfoIn(ANode, cur, ARoot), AText);
       tmp.PixelsPerInch := TFont(cur).PixelsPerInch;   // so Height copies across unscaled
       tmp.Assign(TFont(cur));
-      WriteOn(ANode, tmp, ANode.FPropInfo, AText);
+      if not handled then WriteOn(ANode, tmp, ANode.FPropInfo, AText, False);
       StoreFont(fontNode, ARoot, tmp);
     finally
       tmp.Free;
