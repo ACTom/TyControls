@@ -26,6 +26,11 @@
 //   carry `looks: true`: their pieces add each one's lineDashOffset, and the
 //   Pascal side compares every colour, opacity, dash and box shadow. A case
 //   may carry `actions`, dispatched after setOption.
+//   [R7-D] a title's and an axis label's width written as a word ('50%',
+//   'auto': zrender adds the padding to it as a string, so the plate and a
+//   rich text's centred tokens sit at NaN) and a reading's width null. A
+//   text laid out at NaN somewhere records what is drawn: its pieces at
+//   finite places with words in them, and no box, bounds or lines.
 //
 // Runs the real ECharts 6.1 build (D:/Projects/echarts by default, or
 // ECHARTS_DIST) in node's server-side mode (SVG renderer, 600x400, animation
@@ -494,6 +499,47 @@ const GAUGE_CASES = [
     option: gauge({ min: 0, max: 40, splitNumber: 2, data: [{ value: 37, name: 'Name' }],
       title: { color: '#123456' }, detail: { color: '#654321' }, axisLabel: { color: '#334455' } },
       { textStyle: { textBorderColor: '#ff00ff', textBorderWidth: 1, opacity: 0.9, textShadowBlur: 2, textShadowColor: '#00ff00' } }) },
+  // [R7-D] the two keys R7-B left: a title's width written as a percentage
+  // goes to zrender as the string (createTextStyle hands the model's value
+  // on; only the reading's is parsePercent of the radius), and a reading's
+  // width null is parsePercent(null) = NaN, which the code turns into no
+  // width at all
+  { name: 'gauge-title-width-percent', looks: true, note: "title width '50%': a plain plate, a truncated name, a rich one with a left token in a centred block -- none of the radius",
+    record: ['chartText'], match: 'Speed|long|now',
+    option: gauge([
+      Object.assign({ center: ['20%', '50%'], radius: '30%', data: [{ value: 37, name: 'Speed' }], detail: { show: false },
+        title: { color: '#123456', width: '50%', backgroundColor: '#eeeeee', borderColor: '#333333', borderWidth: 1 } }, NO_AXIS),
+      Object.assign({ center: ['50%', '50%'], radius: '30%', data: [{ value: 37, name: 'A rather long gauge name' }], detail: { show: false },
+        title: { color: '#123456', width: '50%', overflow: 'truncate', backgroundColor: '#eeeeee' } }, NO_AXIS),
+      Object.assign({ center: ['80%', '50%'], radius: '30%', data: [{ value: 37, name: '{n|Speed} now' }], detail: { show: false },
+        title: { color: '#123456', width: '50%', backgroundColor: '#eeeeee', rich: { n: { color: '#aa0000', fontSize: 14, align: 'left' } } } }, NO_AXIS)]) },
+  { name: 'gauge-axislabel-width-percent', looks: true, note: "axis labels width '50%': no plates; a truncation keeps nothing; a rich label only its left group when left-aligned, up to a percentage token or a right one",
+    record: ['chartText'],
+    option: gauge([
+      { center: ['20%', '50%'], radius: '30%', min: 0, max: 40, splitNumber: 2, title: { show: false }, detail: { show: false }, data: [{ value: 37 }],
+        axisLabel: { color: '#334455', width: '50%', backgroundColor: '#eeeeee', borderColor: '#333333', borderWidth: 1, padding: [1, 3] } },
+      { center: ['50%', '50%'], radius: '30%', min: 100, max: 140, splitNumber: 2, title: { show: false }, detail: { show: false }, data: [{ value: 137 }],
+        axisLabel: { color: '#334455', width: '50%', overflow: 'truncate' } },
+      { center: ['80%', '30%'], radius: '20%', min: 200, max: 240, splitNumber: 2, title: { show: false }, detail: { show: false }, data: [{ value: 237 }],
+        axisLabel: { color: '#334455', width: 'auto', formatter: '{a|{value}}', backgroundColor: '#eeeeee', rich: { a: { color: '#aa0000' } } } },
+      { center: ['80%', '75%'], radius: '20%', min: 300, max: 340, splitNumber: 2, title: { show: false }, detail: { show: false }, data: [{ value: 337 }],
+        axisLabel: { color: '#334455', width: '50%', formatter: '{p|{value}}{b|.}{c|r}',
+          rich: { p: { width: '50%', backgroundColor: '#dddddd', color: '#aa0000' }, b: { color: '#0000aa' }, c: { align: 'right', color: '#00aa00' } } } },
+      { center: ['20%', '85%'], radius: '12%', min: 400, max: 440, splitNumber: 2, title: { show: false }, detail: { show: false }, data: [{ value: 437 }],
+        axisLabel: { color: '#334455', width: '50%', formatter: '{b|.}{c|r}{a|{value}}',
+          rich: { a: { color: '#aa0000' }, b: { color: '#0000aa' }, c: { align: 'right', color: '#00aa00' } } } }]) },
+  { name: 'gauge-detail-null-defaults', looks: true, note: "detail lineHeight null and padding null: no line height, no padding (not the defaults 30 and [5, 10])",
+    record: ['chartText'], match: '^37$',
+    option: gauge(Object.assign({ data: [{ value: 37, name: 'n' }], title: { show: false },
+      detail: { lineHeight: null, padding: null, fontSize: 20, color: '#222222', backgroundColor: '#dddddd' } }, NO_AXIS)) },
+  { name: 'gauge-detail-width-null', looks: true, note: "detail width null on the series: no width (not the default 100); an item's null falls through to the series' 160",
+    record: ['chartText'], match: '^(37|64)$',
+    option: gauge([
+      Object.assign({ center: ['30%', '50%'], radius: '40%', data: [{ value: 37, name: 'n' }], title: { show: false },
+        detail: { width: null, fontSize: 20, color: '#222222', backgroundColor: '#dddddd', borderColor: '#999999', borderWidth: 1 } }, NO_AXIS),
+      Object.assign({ center: ['75%', '50%'], radius: '40%', title: { show: false },
+        detail: { width: 160, fontSize: 20, color: '#222222', backgroundColor: '#dddddd' },
+        data: [{ value: 64, name: 'm', detail: { width: null } }] }, NO_AXIS)]) },
 ];
 
 const cases = [
@@ -795,6 +841,17 @@ function probeBox(lib, el) {
   return b[0];
 }
 
+// [R7-D] a child zrender can place: a TSpan at finite coordinates, a Rect
+// whose shape is four finite numbers. A text whose width is a word (a string
+// that is no number, '50%') is laid out at NaN somewhere -- the plate's width
+// is '50%0', a rich text's tokens sit at NaN -- and none of that is drawn.
+function finChild(c) {
+  if (c.type === 'tspan') {
+    return (c.style.x == null || Number.isFinite(c.style.x)) && (c.style.y == null || Number.isFinite(c.style.y));
+  }
+  return ['x', 'y', 'width', 'height'].every(k => typeof c.shape[k] === 'number' && Number.isFinite(c.shape[k]));
+}
+
 function recordText(lib, t, measureSet) {
   const el = t.el;
   const s = el.style;
@@ -815,8 +872,12 @@ function recordText(lib, t, measureSet) {
 
   // the box
   const pb = probeBox(lib, el);
-  const box = put(put(put(put({}, 'x', pb.x), 'y', pb.y), 'width', pb.w), 'height', pb.h);
-  Object.assign(box, corners(m, pb.x, pb.y, pb.w, pb.h));
+  // [R7-D] such a text (its children or its probe box at NaN) records what
+  // is drawn: its pieces at finite places with words in them, no box, no
+  // bounds, no lines (all NaN upstream)
+  const wordWidth = !children.every(finChild) || ![pb.x, pb.y, pb.w, pb.h].every(v => typeof v === 'number' && Number.isFinite(v));
+  const box = wordWidth ? null : put(put(put(put({}, 'x', pb.x), 'y', pb.y), 'width', pb.w), 'height', pb.h);
+  if (box) Object.assign(box, corners(m, pb.x, pb.y, pb.w, pb.h));
   const drawnBox = log.bgs.filter(b => b.isBox);
   must(drawnBox.length <= 1, where + ': two boxes');
   if (drawnBox.length) {
@@ -829,13 +890,13 @@ function recordText(lib, t, measureSet) {
   // its lineWidth as painted, a TSpan by a stroke the style gave it
   const gbr = el.getBoundingRect();
   must(el.__richLog === log, where + ': asking the bounds laid the text out again');
-  const bounds = put(put(put(put({}, 'x', gbr.x), 'y', gbr.y), 'width', gbr.width), 'height', gbr.height);
-  Object.assign(bounds, corners(m, gbr.x, gbr.y, gbr.width, gbr.height));
+  const bounds = wordWidth ? null : put(put(put(put({}, 'x', gbr.x), 'y', gbr.y), 'width', gbr.width), 'height', gbr.height);
+  if (bounds) Object.assign(bounds, corners(m, gbr.x, gbr.y, gbr.width, gbr.height));
 
   // rich lines, rebuilt from the placement order
   const lines = [];
   const tokenPos = new Map();
-  if (log.mode === 'rich') {
+  if (log.mode === 'rich' && !wordWidth) {
     const PH = { left: 0, right: 1, center: 2 };
     let cur = null;
     log.tokens.forEach(tk => {
@@ -889,6 +950,7 @@ function recordText(lib, t, measureSet) {
   let plainLine = 0;
   const pieces = children.map((c, i) => {
     const cs = c.style;
+    if (wordWidth && (!finChild(c) || (c.type === 'tspan' && String(cs.text) === ''))) return null;
     if (c.type === 'tspan') {
       let own = ownerOf(i);
       if (log.mode === 'plain') {
@@ -956,7 +1018,7 @@ function recordText(lib, t, measureSet) {
       return o;
     }
     throw new OracleError(where + ': a child of type ' + c.type);
-  });
+  }).filter(p => p !== null);
 
   const rich = s.rich ? {} : null;
   if (rich) Object.keys(s.rich).sort().forEach(k => { rich[k] = styleOf(s.rich[k]); });
@@ -975,7 +1037,7 @@ function recordText(lib, t, measureSet) {
     box,
     bounds,
     isTruncated: !!el.isTruncated,
-    lines: log.mode === 'rich' ? lines.map(ln => Object.assign(put(put({}, 'lineTop', ln.lineTop), 'lineHeight', ln.lineHeight), { tokens: ln.tokens })) : null,
+    lines: log.mode === 'rich' && !wordWidth ? lines.map(ln => Object.assign(put(put({}, 'lineTop', ln.lineTop), 'lineHeight', ln.lineHeight), { tokens: ln.tokens })) : null,
     pieces,
   };
   // raw handles for the guards (stripped before writing)
@@ -1015,8 +1077,11 @@ function run(lib, c, measureSet) {
     };
     zr.storage.getRoots().forEach(walkRoot);
     // the harness: one <text> per non-empty TSpan of every visible text
+    // [R7-D] placed at finite coordinates (a rich text whose width is a word
+    // places its tokens at NaN, and the SVG writer drops them)
     const svgTexts = (svg.match(/<text\b/g) || []).length;
-    const spans = found.reduce((n, t) => n + t.el.childrenRef().filter(x => x.type === 'tspan' && x.style.text != null && String(x.style.text) !== '').length, 0);
+    const spans = found.reduce((n, t) => n + t.el.childrenRef().filter(x => x.type === 'tspan' && x.style.text != null && String(x.style.text) !== ''
+      && finChild(x)).length, 0);
     must(svgTexts === spans, c.name + ': the SVG has ' + svgTexts + ' <text>, the visible texts ' + spans + ' non-empty spans');
     const texts = found.filter(t => wanted(c, t)).map(t => recordText(lib, Object.assign(t, { looks: !!c.looks }), measureSet));
     must(texts.length > 0, c.name + ': nothing recorded');

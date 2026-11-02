@@ -3342,6 +3342,31 @@ begin
   end;
 end;
 
+procedure TTyCustomAdvanceChart.GaugeOrdinalValue(ASlot: Integer;
+  AStore: TTyDataStore);
+var
+  pos: Integer;
+  info: TTyRawDimInfo;
+  ord_: Boolean;
+begin
+  if AStore = nil then Exit;
+  pos := AStore.RawDimPos(0);
+  if pos < 0 then Exit;
+  { a table's: its declared type, else guessOrdinal over its rows; a series'
+    own data: the declared type, else the guess over its items (an item that
+    is no array ends it) }
+  if (ASlot <= High(FSeriesDataset)) and (FSeriesDataset[ASlot] >= 0)
+    and (ASlot <= High(FSources)) then
+    ord_ := TySourceDimIsOrdinal(FSources[ASlot], pos)
+  else
+  begin
+    info := AStore.RawDimInfo(pos);
+    if info.HasType then ord_ := info.DimType = ddtOrdinal
+    else ord_ := AStore.RawPosGuessOrdinal(pos, True);
+  end;
+  if ord_ then AStore.SetRawDimType(pos, ddtOrdinal);
+end;
+
 procedure TTyCustomAdvanceChart.SolveGauges(APPI: Integer);
 var
   i: Integer;

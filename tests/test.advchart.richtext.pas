@@ -426,6 +426,14 @@ begin
     texts := cases.Objects[c].Arrays['texts'];
     for t := 0 to texts.Count - 1 do
       try
+        { [R7-D] A TEXT RECORDED WITH NO BOX was laid out at NaN upstream: its
+          width is a word ('50%', 'auto'), which zrender adds the padding to
+          as a string. The engine reads such a width as none; the gauge's
+          sites model the word (Gauge.pas WordWidthPieces, held against the
+          same records by test.advchart.richwiring), every other site is a
+          known gap (spec 258). }
+        if (texts.Objects[t].Find('box') <> nil)
+          and (texts.Objects[t].Find('box').JSONType = jtNull) then Continue;
         CheckText(cases.Objects[c].Strings['name'], texts.Objects[t]);
       except
         on E: Exception do
