@@ -198,6 +198,10 @@ type
     FDragSpan: Integer;
     { #182: the mouse capture went elsewhere mid-drag; the next move ends the drag. }
     FCaptureLost: Boolean;
+    { #182: ThumbKey of every thumb as the thumbs were last rebuilt or moved, and what the drag,
+      the span drag and the hover were on when a rebuild began (-1 = nothing). }
+    FThumbKeys: array of Integer;
+    FHeldDrag, FHeldSpan, FHeldHover: Integer;
     { End a drag whose button-up went elsewhere: nothing moves, nothing is removed. }
     procedure EndLostDrag;
     procedure SetAllowCrossing(const AValue: Boolean);
@@ -313,6 +317,16 @@ type
     procedure DoThumbChange(AIndex: Integer); virtual;
     procedure DoThumbSelect(AIndex: Integer); virtual;
     procedure DoChange; virtual;
+    { #182: what thumb AIndex is in the final class's items, the same number for the same thumb
+      however the items are added, deleted or sorted: here -1 (no items). }
+    function ThumbKey(AIndex: Integer): Integer; virtual;
+    { #182: around a rebuild of the thumbs from the items, the drag, the span drag and the hover
+      stay on the thumbs they were on (found again by ThumbKey), or end with them. Begin before
+      the thumbs change, End once they are the items again; SnapThumbKeys after any other change
+      of order. }
+    procedure BeginFollowThumbs;
+    procedure EndFollowThumbs;
+    procedure SnapThumbKeys;
     { #182: around a rebuild of the thumbs from the items, OnChange waits for the end. Fired in
       the middle, a handler's add, delete or value was swallowed by the rebuild still running:
       the thumbs fell out of step with the items, and a later removal raised EListError. }
@@ -580,6 +594,7 @@ type
       removed, nothing is selected. }
     procedure RangesChanged;
     procedure ValuesChanged; override;
+    function ThumbKey(AIndex: Integer): Integer; override;
     procedure DoThumbSelect(AIndex: Integer); override;
     procedure Loaded; override;
     procedure DefineProperties(Filer: TFiler); override;
@@ -815,6 +830,7 @@ type
       wherever that puts it; removed, nothing is selected. }
     procedure ThumbsChanged;
     procedure ThumbIndexMoved(AFrom, ATo: Integer); override;
+    function ThumbKey(AIndex: Integer): Integer; override;
     { A new item at AValue that follows the theme (Color clDefault, no hint or class). }
     function AddUserThumb(AValue: Integer): Integer; override;
     procedure RemoveThumb(AIndex: Integer); override;
@@ -1229,6 +1245,53 @@ begin
   if FDeferChange > 0 then FChangePending := True else DoChange;
 end;
 
+function TTyMultiTrackBarBase.ThumbKey(AIndex: Integer): Integer;
+begin
+  Result := -1;
+end;
+
+procedure TTyMultiTrackBarBase.SnapThumbKeys;
+var
+  i: Integer;
+begin
+  SetLength(FThumbKeys, Length(FValues));
+  for i := 0 to High(FThumbKeys) do FThumbKeys[i] := ThumbKey(i);
+end;
+
+procedure TTyMultiTrackBarBase.BeginFollowThumbs;
+
+  function KeyOf(AIndex: Integer): Integer;
+  begin
+    if (AIndex >= 0) and (AIndex < Length(FThumbKeys)) then Result := FThumbKeys[AIndex]
+    else Result := -1;
+  end;
+
+begin
+  FHeldDrag := KeyOf(FDragThumb);
+  FHeldSpan := KeyOf(FDragSpan);
+  FHeldHover := KeyOf(FHoverThumb);
+end;
+
+procedure TTyMultiTrackBarBase.EndFollowThumbs;
+
+  function IndexOf(AKey: Integer): Integer;
+  var
+    i: Integer;
+  begin
+    if AKey >= 0 then
+      for i := 0 to High(FValues) do
+        if ThumbKey(i) = AKey then Exit(i);
+    Result := -1;
+  end;
+
+begin
+  if FDragThumb >= 0 then FDragThumb := IndexOf(FHeldDrag);
+  if FDragSpan >= 0 then FDragSpan := IndexOf(FHeldSpan);
+  if FHoverThumb >= 0 then FHoverThumb := IndexOf(FHeldHover);
+  if FDragThumb < 0 then FRemoving := False;
+  SnapThumbKeys;
+end;
+
 procedure TTyMultiTrackBarBase.BeginDeferChange;
 begin
   Inc(FDeferChange);
@@ -1373,6 +1436,7 @@ begin
   if j <> AIndex then
   begin
     ThumbIndexMoved(AIndex, j);
+    SnapThumbKeys;
     FDragThumb := MovedIndex(FDragThumb, AIndex, j);
     FHoverThumb := MovedIndex(FHoverThumb, AIndex, j);
     FSelectedThumb := MovedIndex(FSelectedThumb, AIndex, j);
@@ -2898,6 +2962,7 @@ begin
   selID := FSelectedID;
   prev := FSelectedThumb;
   sel := -1;
+  BeginFollowThumbs;
   BeginDeferChange;
   try
     FSyncing := True;
@@ -2927,6 +2992,7 @@ begin
     if it <> nil then sel := 2 * it.Index + Ord(FSelectedHigh);
     if sel >= ThumbCount then sel := -1;
     FSelectedThumb := sel;
+    EndFollowThumbs;
   finally
     EndDeferChange;   // #182: the rebuild is over -- a handler's change goes through in full
   end;
@@ -2975,6 +3041,16 @@ begin
   inherited Loaded;
   { No OnThumbSelect while reading: note the selection's range here instead. }
   RememberSelection(FSelectedThumb);
+  SnapThumbKeys;
+end;
+
+function TTyCustomRangeTrackBar.ThumbKey(AIndex: Integer): Integer;
+begin
+  { The range's ID and the end of it. }
+  if (FRanges <> nil) and (AIndex >= 0) and (AIndex div 2 < FRanges.Count) then
+    Result := 2 * FRanges[AIndex div 2].ID + Ord(Odd(AIndex))
+  else
+    Result := -1;
 end;
 
 procedure TTyCustomRangeTrackBar.ReadNoRanges(Reader: TReader);
@@ -3386,6 +3462,7 @@ begin
   selID := FSelectedID;
   prev := FSelectedThumb;
   sel := -1;
+  BeginFollowThumbs;
   BeginDeferChange;
   try
     FSyncing := True;
@@ -3406,6 +3483,7 @@ begin
     if it <> nil then sel := it.Index;
     if sel >= ThumbCount then sel := -1;
     FSelectedThumb := sel;
+    EndFollowThumbs;
   finally
     EndDeferChange;   // #182: see RangesChanged
   end;
@@ -3486,6 +3564,15 @@ begin
     FSyncing := False;
   end;
   inherited Loaded;
+  SnapThumbKeys;
+end;
+
+function TTyCustomMultiTrackBar.ThumbKey(AIndex: Integer): Integer;
+begin
+  if (FThumbs <> nil) and (AIndex >= 0) and (AIndex < FThumbs.Count) then
+    Result := FThumbs[AIndex].ID
+  else
+    Result := -1;
 end;
 
 procedure TTyCustomMultiTrackBar.ReadNoThumbs(Reader: TReader);

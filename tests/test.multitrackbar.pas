@@ -251,6 +251,9 @@ type
     procedure TestTheSelectionFollowsItsThumbWhenRangesChange;
     procedure TestRangesRoundTripThroughAFormFile;
     procedure TestNoRangesRoundTrips;
+    { #182: ranges added or deleted from code during a drag: the drag stays on the end (or the
+      span) of the range it started on, and ends with that range. }
+    procedure TestADragStaysOnItsRangeWhenRangesChange;
   end;
 
   TMultiAccess = class(TTyMultiTrackBar);
@@ -296,6 +299,9 @@ type
     procedure TestAFormsThumbsAreSortedWhenRead;
     procedure TestThumbsAndSegmentsRoundTripThroughAFormFile;
     procedure TestNoThumbsRoundTrips;
+    { #182: thumbs added or deleted from code during a drag: the drag stays on its item, and
+      ends with it. }
+    procedure TestADragStaysOnItsThumbWhenThumbsChange;
   end;
 
   TTyMultiTrackKeyboardTest = class(TMultiTrackInputBase)
@@ -2807,6 +2813,66 @@ begin
   end;
 end;
 
+procedure TTyRangeTrackBarTest.TestADragStaysOnItsRangeWhenRangesChange;
+var
+  p, q: TPoint;
+  r: TRect;
+begin
+  FBar.Ranges.BeginUpdate;
+  try
+    FBar.Ranges.Clear;
+    with FBar.Ranges.Add do begin Low := 10; High := 20; end;
+    with FBar.Ranges.Add do begin Low := 40; High := 50; end;
+    with FBar.Ranges.Add do begin Low := 70; High := 80; end;
+  finally
+    FBar.Ranges.EndUpdate;
+  end;
+  r := FBar.ThumbRect(2);
+  p := Point((r.Left + r.Right) div 2, (r.Top + r.Bottom) div 2);
+  TRangeAccess(FBar).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  FBar.Ranges.Delete(0);
+  TRangeAccess(FBar).MouseMove([ssLeft], p.X + 20, p.Y);
+  AssertTrue('its range''s Low moved up: ' + Values, FBar.Ranges[0].Low > 40);
+  AssertEquals('its High stays', 50, FBar.Ranges[0].High);
+  AssertEquals('the other range is untouched', 70, FBar.Ranges[1].Low);
+  { A range added below it: the drag goes with it to its new index. }
+  FBar.Ranges.BeginUpdate;
+  try
+    with FBar.Ranges.Add do begin Low := 0; High := 5; end;
+  finally
+    FBar.Ranges.EndUpdate;
+  end;
+  AssertEquals('setup: sorted in first', 0, FBar.Ranges[0].Low);
+  TRangeAccess(FBar).MouseMove([ssLeft], p.X + 8, p.Y);
+  AssertTrue('the same end follows the pointer: ' + Values, FBar.Ranges[1].Low < 45);
+  AssertEquals(70, FBar.Ranges[2].Low);
+  { Its range deleted: the drag ends, no other end takes it over. }
+  FBar.Ranges.Delete(1);
+  TRangeAccess(FBar).MouseMove([ssLeft], p.X + 120, p.Y);
+  AssertEquals('0..5;70..80', RangesText(FBar));
+  TRangeAccess(FBar).MouseUp(mbLeft, [], p.X + 120, p.Y);
+  { A span drag: the span of the range it started on. }
+  FBar.DraggableRanges := True;
+  FBar.Ranges.BeginUpdate;
+  try
+    FBar.Ranges.Clear;
+    with FBar.Ranges.Add do begin Low := 10; High := 20; end;
+    with FBar.Ranges.Add do begin Low := 40; High := 50; end;
+    with FBar.Ranges.Add do begin Low := 70; High := 80; end;
+  finally
+    FBar.Ranges.EndUpdate;
+  end;
+  q := Point((FBar.ThumbRect(2).Right + FBar.ThumbRect(3).Left) div 2, p.Y);
+  TRangeAccess(FBar).MouseDown(mbLeft, [ssLeft], q.X, q.Y);
+  FBar.Ranges.Delete(0);
+  TRangeAccess(FBar).MouseMove([ssLeft], q.X + 20, q.Y);
+  AssertTrue('the dragged span moved: ' + Values, FBar.Ranges[0].Low > 40);
+  AssertEquals('whole', 10, FBar.Ranges[0].High - FBar.Ranges[0].Low);
+  AssertEquals('the other range is untouched', '70..80',
+    Format('%d..%d', [FBar.Ranges[1].Low, FBar.Ranges[1].High]));
+  TRangeAccess(FBar).MouseUp(mbLeft, [], q.X + 20, q.Y);
+end;
+
 { TMultiCounting }
 
 procedure TMultiCounting.Invalidate;
@@ -3336,6 +3402,43 @@ begin
   finally
     host.Free;
   end;
+end;
+
+procedure TTyMultiTrackBarTest.TestADragStaysOnItsThumbWhenThumbsChange;
+var
+  p: TPoint;
+  i: Integer;
+begin
+  FBar.Thumbs.BeginUpdate;
+  try
+    FBar.Thumbs.Clear;
+    for i := 0 to 4 do FBar.Thumbs.Add.Value := 10 + 20 * i;
+  finally
+    FBar.Thumbs.EndUpdate;
+  end;
+  p := Centre(3);
+  TMultiAccess(FBar).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  FBar.Thumbs.Delete(0);
+  TMultiAccess(FBar).MouseMove([ssLeft], p.X + 20, p.Y);
+  AssertTrue('the thumb pressed is the one that moves: ' + Values, FBar.Thumbs[2].Value > 70);
+  AssertEquals('the one after it stays', 90, FBar.Thumbs[3].Value);
+  AssertEquals('and stays selected', 2, FBar.SelectedThumb);
+  { A thumb added below it: the drag goes with it to its new index. }
+  FBar.Thumbs.BeginUpdate;
+  try
+    FBar.Thumbs.Add.Value := 0;
+  finally
+    FBar.Thumbs.EndUpdate;
+  end;
+  AssertEquals('setup: sorted in first', 0, FBar.Thumbs[0].Value);
+  TMultiAccess(FBar).MouseMove([ssLeft], p.X + 8, p.Y);
+  AssertTrue('the same thumb follows the pointer: ' + Values, FBar.Thumbs[3].Value < 75);
+  AssertEquals(90, FBar.Thumbs[4].Value);
+  { Its item deleted: the drag ends, no other thumb takes it over. }
+  FBar.Thumbs.Delete(3);
+  TMultiAccess(FBar).MouseMove([ssLeft], p.X + 120, p.Y);
+  AssertEquals('0,30,50,90', Values);
+  TMultiAccess(FBar).MouseUp(mbLeft, [], p.X + 120, p.Y);
 end;
 
 { TTyMultiTrackReadoutTest }
