@@ -46,6 +46,7 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Color,
      tyControls.AdvanceChart.Title, tyControls.AdvanceChart.RichText,
      tyControls.AdvanceChart.Labels, tyControls.AdvanceChart.RichStyle,
+     tyControls.Painter, tyControls.AdvanceChart.Render,
      tyControls.AdvanceChart,
      test.advchart.gridbounds, test.advchart.categoryminmax;
 type
@@ -111,6 +112,7 @@ type
     procedure TestAHoverRestrokesTheDefaultStrokeOnly;
     procedure TestASkinWithNoWeightDrawsTheNormalOne;
     procedure TestAShadowWithoutABlurIsNotDrawn;
+    procedure TestARoundedPlateRunsToItsJoinedEdge;
   end;
 
   { device px at a PPI from a measurer that answers CSS px }
@@ -1562,6 +1564,48 @@ procedure TAdvChartRichWiringOracleTest.TestAShadowWithoutABlurIsNotDrawn;
 begin
   AssertTrue('a blurred shadow is drawn (the count sees it)', Magenta(',"textShadowBlur":2') > 20);
   AssertEquals('no blur, no shadow', 0, Magenta(''));
+end;
+
+{ [R7-H] A ROUNDED PLATE WHOSE WIDTH WAS A STRING is drawn as zrender's
+  roundRect path draws it: from its x to x + width JOINED as a string (here
+  the joined edge lies left of x, as -600 + '1200' does), not the rect canvas
+  would draw at x, x + width }
+procedure TAdvChartRichWiringOracleTest.TestARoundedPlateRunsToItsJoinedEdge;
+var
+  b: TBGRABitmap;
+  p: TTyPainter;
+  pc: TTyRtPieceArray;
+  k: Integer;
+begin
+  SetLength(pc, 1);
+  pc[0] := Default(TTyRtPiece);
+  pc[0].Kind := rpkRect;
+  pc[0].Line := -1;
+  pc[0].Token := -1;
+  pc[0].X := 60;
+  pc[0].Y := 10;
+  pc[0].W := 30;
+  pc[0].H := 20;
+  pc[0].PathEdges := True;
+  pc[0].EdgeX1 := 10;
+  pc[0].EdgeY1 := 30;
+  for k := 0 to 3 do pc[0].Radius[k] := 3;
+  pc[0].HasFill := True;
+  pc[0].Fill := TTyChartColor($FFE02020);
+  pc[0].Drawn := True;
+  pc[0].Opacity := 1;
+  b := TBGRABitmap.Create(120, 40, BGRA(255, 255, 255, 255));
+  p := TTyPainter.Create;
+  try
+    p.BeginPaintOn(nil, Rect(0, 0, 120, 40), 96, b);
+    TyRenderRtPieces(p, pc, 0, 0, 0, 1, 1, False, TTyColor(0));
+    p.EndPaint;
+    AssertTrue('the joined path covers 10..60', b.GetPixel(35, 20).green < 100);
+    AssertTrue('the canvas rect 60..90 is not the path', b.GetPixel(75, 20).green > 200);
+  finally
+    p.Free;
+    b.Free;
+  end;
 end;
 
 initialization
