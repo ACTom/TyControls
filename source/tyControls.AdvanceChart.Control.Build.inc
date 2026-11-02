@@ -2731,8 +2731,10 @@ begin
     if not (FOption.ComponentAt('series', si) is TJSONObject) then Continue;
     node := TJSONObject(FOption.ComponentAt('series', si));
     slot := SlotOfSeries(si);
-    { eachSeries: the legend's filtered series are not met }
+    { eachSeries: the legend's filtered series are not met; [spec 264] nor
+      one refused, out of the drawing }
     if (slot >= 0) and (slot <= High(FBindings)) and FBindings[slot].Hidden then Continue;
+    if SeriesRefusedAt(slot) then Continue;
     n := Length(facts.Series);
     SetLength(facts.Series, n + 1);
     facts.Series[n].Index := si;
@@ -3518,6 +3520,11 @@ begin
   else if (FBindings[ASlot].SeriesType = 'scatter')
     or (FBindings[ASlot].SeriesType = 'effectScatter') then
     AStore.SetTooltipPositions(nil);
+end;
+
+function TTyCustomAdvanceChart.SeriesRefusedAt(ASlot: Integer): Boolean;
+begin
+  Result := (ASlot >= 0) and (ASlot <= High(FSeriesRefused)) and FSeriesRefused[ASlot];
 end;
 
 procedure TTyCustomAdvanceChart.RefuseShortWhisker(ASlot: Integer;

@@ -5988,6 +5988,8 @@ var
 
   procedure Add(AIndex: Integer);
   begin
+    { [spec 264] a refused series is met as no series at all }
+    if SeriesRefusedAt(SlotOfSeries(AIndex)) then Exit;
     SetLength(Result, Length(Result) + 1);
     Result[High(Result)] := AIndex;
   end;
@@ -6318,7 +6320,8 @@ begin
   sel := '';
   for slot := 0 to High(FBindings) do
   begin
-    if FBindings[slot].Hidden then Continue;
+    { [spec 264] nor a refused one }
+    if FBindings[slot].Hidden or SeriesRefusedAt(slot) then Continue;
     s := FBindings[slot].SeriesIndex;
     if (s < 0) or (s > High(FSel)) or not FSelInit[s] then Continue;
     idx := TySelIndices(FSel[s], SelData(slot));
@@ -6753,7 +6756,8 @@ var slot: Integer;
 begin
   Result := nil;
   slot := SlotOfSeries(ASeriesIndex);
-  if slot < 0 then Exit;
+  { [spec 264] a refused series selects nothing }
+  if (slot < 0) or SeriesRefusedAt(slot) then Exit;
   SelEnsure(slot);
   if (ASeriesIndex > High(FSel)) or not FSelInit[ASeriesIndex] then Exit;
   Result := TySelIndices(FSel[ASeriesIndex], SelData(slot));

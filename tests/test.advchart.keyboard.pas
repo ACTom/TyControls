@@ -96,6 +96,7 @@ type
     procedure TestTheDataIndexIsRawUnderAFilter;
     procedure TestHiddenAndChangedSeries;
     procedure TestSeveralSeriesTypes;
+    procedure TestARefusedSeriesIsOutOfTheDrawing;
     procedure TestEnterNeedsASelectedMode;
     procedure TestTheTooltipIsShowTipAtTheItem;
     procedure TestTheRingIsTheThemesOutline;
@@ -835,6 +836,82 @@ begin
   AssertEquals('none', Item);
   AssertEquals(0, FChart.Key(VK_RIGHT));
   AssertEquals('none', Item);
+end;
+
+procedure TAdvChartKeyboardTest.TestARefusedSeriesIsOutOfTheDrawing;
+const
+  { [spec 264] a line, then a candlestick whose y list reaches two of its
+    four values: upstream throws out of setOption (spec 259), the port
+    leaves the candlestick out of the drawing }
+  cRefused = '{"animation":false,"legend":{},"aria":{"enabled":true},"tooltip":{%s},'
+    + '"brush":{},"xAxis":{"type":"category","data":["d0","d1"]},"yAxis":{"scale":true},'
+    + '"series":[{"type":"line","name":"L","data":[20,40]},'
+    + '{"type":"candlestick","name":"K","selectedMode":true,"emphasis":{"focus":"series"},'
+    + '"encode":{"x":0,"y":[1,2]},'
+    + '"data":[[0,20,34,10,38],{"value":[1,40,35,30,50],"selected":true}]}]}';
+var
+  i, n: Integer;
+  aria: string;
+begin
+  { showTip naming it shows nothing, an item tooltip or an axis one }
+  Load(Format(cRefused, ['']));
+  FChart.DispatchAction('{"type":"showTip","seriesIndex":1,"dataIndex":0}');
+  Frame;
+  AssertFalse('no item tooltip', FChart.TooltipShown);
+  Load(Format(cRefused, ['"trigger":"axis"']));
+  FChart.DispatchAction('{"type":"showTip","seriesIndex":1,"dataIndex":0}');
+  Frame;
+  AssertFalse('no axis tooltip', FChart.TooltipShown);
+  FChart.DispatchAction('{"type":"showTip","seriesIndex":0,"dataIndex":0}');
+  Frame;
+  AssertTrue('the line''s', FChart.TooltipShown);
+  { (a chart of its own for the rest) }
+  Load(Format(cRefused, ['"show":true']));
+  n := 0;
+  for i := 0 to FChart.List.Count - 1 do
+    if (FChart.List.Element(i).Datum.SeriesIndex = 1)
+      and (FChart.List.Element(i).Datum.DataIndex >= 0) then Inc(n);
+  AssertEquals('the candlestick draws nothing', 0, n);
+  { the keyboard walks the line alone }
+  FChart.Key(VK_RIGHT);
+  FChart.Key(VK_RIGHT);
+  AssertEquals('0:1', Item);
+  FChart.Key(VK_DOWN);
+  AssertEquals('no series after the line', '0:1', Item);
+  AssertFalse('nor can a host put the keyboard on it', FChart.SetKeyboardItem(1, 0, False));
+  { an item held when the merge refuses its series is let go }
+  Load(StringReplace(Format(cRefused, ['']), '"y":[1,2]', '"y":[1,2,3,4]', []));
+  AssertTrue('a full candlestick takes the keyboard', FChart.SetKeyboardItem(1, 0, False));
+  AssertEquals('1:0', Item);
+  FChart.SetOption('{"series":[{},{"encode":{"y":[1,2]}}]}');
+  Frame;
+  AssertEquals('refused by the merge: let go', 'none', Item);
+  Load(Format(cRefused, ['"show":true']));
+  FChart.ClearKeyboardItem;
+  Frame;
+  { the actions meet it as no series: their events, nothing selected --
+    not even the item the option selects }
+  Logged;
+  FChart.DispatchAction('{"type":"select","seriesIndex":1,"dataIndex":0}');
+  Frame;
+  AssertEquals('select names no series',
+    'select {"type":"select","seriesIndex":1,"dataIndex":0} | selectchanged {"type":"selectchanged",'
+    + '"selected":[],"isFromClick":false,"fromAction":"select","fromActionPayload":{"type":"select",'
+    + '"seriesIndex":1,"dataIndex":0},"escapeConnect":true}', FLog.Text);
+  AssertEquals('nothing selected', 0, Length(FChart.SelectedDataIndices(1)));
+  { the description leaves it out, as it leaves out a series the legend
+    filtered; the legend lists it (the model has it) }
+  aria := FChart.AriaDescription;
+  AssertTrue('aria: ' + aria, (Pos('Candlestick', aria) = 0) and (Pos('Line', aria) > 0));
+  AssertTrue('aria counts the model''s series: ' + aria, Pos('2 series', aria) > 0);
+  AssertEquals('legend items', 2, Length(FChart.LegendLayout(0).Items));
+  { a brush over the whole chart selects the line's rows alone }
+  FChart.ChartOn('brushselected', @FLog.Handle);
+  Logged;
+  FChart.DispatchAction('{"type":"brush","areas":[{"brushType":"rect","range":[[0,600],[0,400]]}]}');
+  Frame;
+  AssertTrue('brushselected: ' + FLog.Text, (Pos('"seriesIndex":0', FLog.Text) > 0)
+    and (Pos('"seriesIndex":1', FLog.Text) = 0));
 end;
 
 procedure TAdvChartKeyboardTest.TestSeveralSeriesTypes;

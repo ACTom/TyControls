@@ -1671,7 +1671,9 @@ var
 
   function Live(ASlot: Integer): Boolean;
   begin
-    Result := not FBindings[ASlot].Hidden;
+    { [spec 264] a refused series is out of the drawing: brushSelected
+      lists it as it lists a filtered one -- not at all }
+    Result := not FBindings[ASlot].Hidden and not SeriesRefusedAt(ASlot);
   end;
 
   function HasSelector(ASlot: Integer): Boolean;
