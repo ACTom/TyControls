@@ -383,7 +383,8 @@ var
   trackS, fillS, peakS: TTyStyleSet;
   R, trackR: TRect;
   frac: Double;
-  bw: Integer;
+  bw, fs: Integer;
+  vs: TTyStyleSet;
 begin
   P := TTyPainter.Create;
   try
@@ -412,8 +413,14 @@ begin
     end;
 
     if FShowValue then
-      P.DrawText(R, TyFormatValue(FValueFormat, FValue), Font.Name, 10, 700,
-        trackS.TextColor, taCenter, tlCenter, False);
+    begin
+      fs := TyControlFontSize(Self);   // a size the author set wins over the readout's 10 (#113)
+      if fs <= 0 then fs := 10;
+      vs := CurrentStyle;   // the theme's face, the font's style flags under the bold
+      P.DrawText(R, TyFormatValue(FValueFormat, FValue), vs.FontName, fs,
+        700 or (vs.FontWeight and not TyFontWeightMask), trackS.TextColor,
+        taCenter, tlCenter, False);
+    end;
 
     P.EndPaint;
   finally

@@ -12,7 +12,8 @@ uses
   tyControls.Types, tyControls.Base, tyControls.ListBox, tyControls.Grid, tyControls.TabSet,
   tyControls.TabStrip, tyControls.Segmented, tyControls.HeaderControl, tyControls.Alert,
   tyControls.Dial, tyControls.ButtonGroup, tyControls.LinkLabel, tyControls.TreeView,
-  tyControls.Edit, tyControls.Panel, tyControls.Popup, test.dpi.support;
+  tyControls.Edit, tyControls.Panel, tyControls.Popup, tyControls.CircularProgress,
+  tyControls.Meter, tyControls.LevelMeter, tyControls.Chart, test.dpi.support;
 
 type
   TPartFontTest = class(TTestCase)
@@ -21,6 +22,9 @@ type
     function Snap(AControl: TControl; W, H: Integer): TBGRABitmap;
     function RedIn(B: TBGRABitmap; const R: TRect): Integer;
     function InkIn(B: TBGRABitmap; const R: TRect): Integer;
+    function Differ(A, B: TBGRABitmap): Integer;
+    { The value meters and a chart with a title: what #113's second pass reaches. }
+    procedure MakeFigures(out ACtl: array of TControl; out ASize: array of TPoint);
     procedure Redden(AControl: TControl);
   protected
     procedure SetUp; override;
@@ -35,6 +39,8 @@ type
     procedure TestAnAlertsMessageTakesItsFont;
     procedure TestTreeNodesTakeTheTreesFont;
     procedure TestADialsFigureTakesASizeSetOnIt;
+    procedure TestTheMetersAndTheChartTakeASizeSetOnThem;
+    procedure TestTheMetersAndTheChartTakeTheThemesFace;
     procedure TestButtonGroupSegmentsTakeTheStyleOverride;
     procedure TestALinkTakesTheStyleOverridesColour;
     procedure TestAPopupsContentTakesItsAnchorsFont;
@@ -100,7 +106,8 @@ begin
     else if AControl is TTyTreeView then TTreeAcc(AControl).RenderTo(bmp.Canvas, R, 96)
     else if AControl is TTyButtonGroup then TGroupAcc(AControl).RenderTo(bmp.Canvas, R, 96)
     else if AControl is TTyLinkLabel then TLinkAcc(AControl).RenderTo(bmp.Canvas, R, 96)
-    else if AControl is TTyDial then
+    else if (AControl is TTyDial) or (AControl is TTyCircularProgress) or (AControl is TTyMeter)
+      or (AControl is TTyLevelMeter) or (AControl is TTyChart) then
     begin
       AControl.SetBounds(0, 0, W, H);
       TyTestPaintTree(AControl, bmp, nil);
@@ -137,6 +144,41 @@ begin
       px := B.GetPixel(x, y);
       if (px.red < 140) and (px.green < 140) and (px.blue < 140) then Inc(Result);
     end;
+end;
+
+function TPartFontTest.Differ(A, B: TBGRABitmap): Integer;
+var
+  x, y: Integer;
+begin
+  Result := 0;
+  for y := 0 to A.Height - 1 do
+    for x := 0 to A.Width - 1 do
+      if A.GetPixel(x, y) <> B.GetPixel(x, y) then Inc(Result);
+end;
+
+procedure TPartFontTest.MakeFigures(out ACtl: array of TControl; out ASize: array of TPoint);
+var
+  cp: TTyCircularProgress;
+  m: TTyMeter;
+  lm: TTyLevelMeter;
+  ch: TTyChart;
+  i: Integer;
+begin
+  cp := TTyCircularProgress.Create(FForm);
+  cp.Position := 50;
+  m := TTyMeter.Create(FForm);
+  m.Value := 50;
+  lm := TTyLevelMeter.Create(FForm);
+  lm.ShowValue := True;
+  lm.Value := 50;
+  ch := TTyChart.Create(FForm);
+  ch.Title := 'Quarterly sales';
+  ACtl[0] := cp; ASize[0] := Point(160, 160);
+  ACtl[1] := m;  ASize[1] := Point(200, 160);
+  ACtl[2] := lm; ASize[2] := Point(240, 60);
+  ACtl[3] := ch; ASize[3] := Point(300, 200);
+  for i := 0 to 3 do
+    ACtl[i].Parent := FForm;
 end;
 
 procedure TPartFontTest.Redden(AControl: TControl);
@@ -352,6 +394,68 @@ begin
   end;
   AssertTrue(Format('the figure grows with the size set on the dial (%d -> %d)', [small, big]),
     big > small * 2);
+end;
+
+{ #113, second pass: the value text of the circular progress, the meter and the level meter,
+  and the text a chart draws, grow with a size set on the control. For the chart: its title,
+  in the band at the top. }
+procedure TPartFontTest.TestTheMetersAndTheChartTakeASizeSetOnThem;
+var
+  ctls: array[0..3] of TControl;
+  sz: array[0..3] of TPoint;
+  b: TBGRABitmap;
+  i, small, big: Integer;
+  R: TRect;
+begin
+  MakeFigures(ctls, sz);
+  for i := 0 to 3 do
+  begin
+    if ctls[i] is TTyChart then R := Rect(0, 0, sz[i].X, 60) else R := Rect(0, 0, sz[i].X, sz[i].Y);
+    { Two sizes the author set: unset, the ring's figure is already a sixth of the ring. }
+    ctls[i].Font.Size := 6;
+    b := Snap(ctls[i], sz[i].X, sz[i].Y);
+    try
+      small := InkIn(b, R);
+    finally
+      b.Free;
+    end;
+    ctls[i].Font.Size := 28;
+    b := Snap(ctls[i], sz[i].X, sz[i].Y);
+    try
+      big := InkIn(b, R);
+    finally
+      b.Free;
+    end;
+    AssertTrue(Format('%s: the text grows with the size set on it (%d -> %d)',
+      [ctls[i].ClassName, small, big]), big > small * 3 div 2);
+  end;
+end;
+
+{ And they draw in the face the style gives them, not the font's raw name. }
+procedure TPartFontTest.TestTheMetersAndTheChartTakeTheThemesFace;
+var
+  ctls: array[0..3] of TControl;
+  sz: array[0..3] of TPoint;
+  a, b: TBGRABitmap;
+  i: Integer;
+begin
+  MakeFigures(ctls, sz);
+  for i := 0 to 3 do
+  begin
+    (ctls[i] as TTyGraphicControl).StyleOverride := 'font-family: Courier New';
+    a := Snap(ctls[i], sz[i].X, sz[i].Y);
+    try
+      (ctls[i] as TTyGraphicControl).StyleOverride := 'font-family: Times New Roman';
+      b := Snap(ctls[i], sz[i].X, sz[i].Y);
+      try
+        AssertTrue(ctls[i].ClassName + ': the face changes the text', Differ(a, b) > 0);
+      finally
+        b.Free;
+      end;
+    finally
+      a.Free;
+    end;
+  end;
 end;
 
 procedure TPartFontTest.TestButtonGroupSegmentsTakeTheStyleOverride;
