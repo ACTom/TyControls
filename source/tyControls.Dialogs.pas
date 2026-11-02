@@ -307,7 +307,12 @@ function TySelectValue(const ACaption, APrompt: string; AItems: TStrings;
 type
   TTySelectValueForm = class(TTyDialog)
   private
+    FList: TTyListBox;
     procedure ListDblClick(Sender: TObject);
+  public
+    { #179: OK -- the button or Enter -- closes on a chosen row only; with none it returned
+      True and index -1. }
+    function CloseQuery: Boolean; override;
   end;
 
 type
@@ -1204,6 +1209,12 @@ begin
   if TTyListBox(Sender).ItemIndex >= 0 then ModalResult := mrOK;
 end;
 
+function TTySelectValueForm.CloseQuery: Boolean;
+begin
+  if (ModalResult = mrOK) and (FList <> nil) and (FList.ItemIndex < 0) then Exit(False);
+  Result := inherited CloseQuery;
+end;
+
 { Select-value dialog }
 
 function TyBuildSelectValueDialog(const ACaption, APrompt: string; AItems: TStrings;
@@ -1218,6 +1229,7 @@ begin
   y := TyPlacePrompt(Result, APrompt, editW);
   AList := TTyListBox.Create(Result);
   AList.Parent := Result;
+  f.FList := AList;
   if AItems <> nil then AList.Items.Assign(AItems);
   if (AInitialIndex >= 0) and (AInitialIndex < AList.Items.Count) then
     AList.ItemIndex := AInitialIndex;

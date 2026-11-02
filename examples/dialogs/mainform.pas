@@ -84,8 +84,7 @@ type
     procedure BtnCompMessageClick(Sender: TObject);
     procedure BtnCompInputClick(Sender: TObject);
     procedure BtnCompColorClick(Sender: TObject);
-    { Shared by all three non-visual components: TyForwardDialogEvents relays the wrapper's
-      OnShow/OnCanClose onto the transient form it builds, so Sender is that FORM. }
+    { Shared by all three non-visual components. Sender is the component, as in LCL. }
     procedure DlgComponentShow(Sender: TObject);
     procedure DlgComponentCanClose(Sender: TObject; var CanClose: Boolean);
   private
@@ -647,14 +646,14 @@ end;
 
 procedure TDialogsMainForm.DlgComponentShow(Sender: TObject);
 begin
-  Log(Format(rsCompShown, [(Sender as TCustomForm).Caption]));
+  Log(Format(rsCompShown, [(Sender as TComponent).Name]));
 end;
 
 procedure TDialogsMainForm.DlgComponentCanClose(Sender: TObject; var CanClose: Boolean);
 begin
   // The veto seam: set CanClose := False here and the dialog refuses to go away.
   CanClose := True;
-  Log(Format(rsCompCanClose, [(Sender as TCustomForm).Caption]));
+  Log(Format(rsCompCanClose, [(Sender as TComponent).Name]));
 end;
 
 end.

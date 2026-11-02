@@ -101,6 +101,8 @@ type
   published
     procedure TestBuildSeedsListAndSelection;
     procedure TestResultIndexLogic;
+    { #179: OK closes on a chosen row only. }
+    procedure TestOkNeedsARow;
   end;
 
   { The shared TyForwardDialogEvents helper is the exact seam every modal wrapper's
@@ -587,6 +589,26 @@ begin
       lb.ItemIndex := 1;
       AssertEquals('ok -> chosen', 1, TySelectValueResult(lb, 0, mrOK));
       AssertEquals('cancel -> initial', 0, TySelectValueResult(lb, 0, mrCancel));
+    finally d.Free; end;
+  finally items.Free; end;
+end;
+
+procedure TSelectValueTest.TestOkNeedsARow;
+var d: TTyDialog; lb: TTyListBox; items: TStringList;
+begin
+  items := TStringList.Create;
+  try
+    items.Add('A'); items.Add('B');
+    d := TyBuildSelectValueDialog('X', 'p', items, -1, lb);
+    try
+      d.ModalResult := mrOK;
+      AssertFalse('no row: OK does not close', d.CloseQuery);
+      lb.ItemIndex := 1;
+      d.ModalResult := mrOK;
+      AssertTrue('a row: it does', d.CloseQuery);
+      d.ModalResult := mrCancel;
+      lb.ItemIndex := -1;
+      AssertTrue('Cancel closes either way', d.CloseQuery);
     finally d.Free; end;
   finally items.Free; end;
 end;
