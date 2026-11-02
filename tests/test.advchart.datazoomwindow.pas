@@ -59,13 +59,15 @@ type
       is on the axis }
     procedure TestEncodeListsAsUpstream;
     procedure TestGalleryAsUpstream;
+    { [spec 264] a gallery file's function names are not fed }
+    procedure TestAGalleryFileIsReadWithoutItsFunctionNames;
     procedure TestSliderMoveShiftsKeepingTheSpan;
     procedure TestAnUntypedDataZoomIsASlider;
   end;
 
 implementation
 
-uses tyControls.AdvanceChart.Complete;
+uses tyControls.AdvanceChart.Complete, test.advchart.gallerytext;
 
 procedure TDzwProbe.Render(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
 begin
@@ -664,7 +666,9 @@ begin
       sl := TStringList.Create;
       try
         sl.LoadFromFile(GalleryPath(cs.Strings['gallery']));
-        opt := TJSONObject(GetJSON(sl.Text));
+        { [spec 264] the file as the fixture's upstream read it: without the
+          names of its functions (R2-J2) }
+        opt := TJSONObject(GalleryWithoutFunctions(GetJSON(sl.Text)));
       finally
         sl.Free;
       end;
@@ -726,6 +730,55 @@ procedure TAdvChartDataZoomWindowOracleTest.TestGalleryAsUpstream;
 begin
   RunCases(['G']);
   AssertTrue(Format('enough was compared (%d)', [FCompared]), FCompared > 2000);
+end;
+
+procedure TAdvChartDataZoomWindowOracleTest.TestAGalleryFileIsReadWithoutItsFunctionNames;
+var
+  cases, axes: TJSONArray;
+  cs, opt: TJSONObject;
+  sl: TStringList;
+  c, k: Integer;
+  up: Double;
+  xa: TTyAxis;
+begin
+  { [spec 264] mix-zoom-on-value names its y labels' formatter
+    ('@mix-zoom-on-value.formatter', since the harvest names a page's
+    functions). Its record was made from the file without the name -- the
+    axis' own numbers, the widest '1,400,000,000' -- so the port reads the
+    file the same way: the plot is upstream's but for the measurer's width
+    of that label (under a pixel). Read verbatim the name is a handler
+    nobody registered, its message widens the labels and the plot shrinks
+    to 326 px of upstream's 626.72. }
+  cases := TJSONObject(FRoot).Arrays['cases'];
+  cs := nil;
+  for c := 0 to cases.Count - 1 do
+    if cases.Objects[c].Strings['id'] = 'G-mix-zoom-on-value' then cs := cases.Objects[c];
+  AssertNotNull('the case', cs);
+  up := NaN;
+  axes := cs.Arrays['axes'];
+  for k := 0 to axes.Count - 1 do
+    if (axes.Objects[k].Strings['dim'] = 'x') and (axes.Objects[k].Integers['index'] = 0) then
+      up := HexOf(axes.Objects[k].Find('pxSpanFinal'));
+  AssertFalse('upstream''s x span', IsNan(up));
+  sl := TStringList.Create;
+  try
+    sl.LoadFromFile(GalleryPath(cs.Strings['gallery']));
+    opt := TJSONObject(GalleryWithoutFunctions(GetJSON(sl.Text)));
+  finally
+    sl.Free;
+  end;
+  try
+    FChart.Option := opt.AsJSON;
+  finally
+    opt.Free;
+  end;
+  AssertEquals('parses', '', FChart.OptionError);
+  FChart.SetBounds(0, 0, cs.Integers['width'], cs.Integers['height']);
+  FChart.Render(FBmp.Canvas, Classes.Rect(0, 0, cs.Integers['width'], cs.Integers['height']), 96);
+  xa := FChart.Build.Axis('xAxis', 0);
+  AssertNotNull('the x axis', xa);
+  AssertTrue(Format('the plot %s px, upstream''s %s', [FloatToStr(xa.PxLength), FloatToStr(up)]),
+    Abs(xa.PxLength - up) < 1);
 end;
 
 procedure TAdvChartDataZoomWindowOracleTest.TestSliderMoveShiftsKeepingTheSpan;

@@ -49,7 +49,8 @@
 //   cases[]  one per chart:
 //     id, groups, note, width, height, gallery (file name or null), option (as
 //     fed, see above; null for the big gallery files: load the gallery file,
-//     fed verbatim)
+//     take its function names out (gallery-functions.js withoutFunctions),
+//     and feed the rest as it stands)
 //     dataZooms[] in component order (the toolbox's internal 'select' dataZooms
 //       -- one per x axis then per y axis, appended after the user's -- included):
 //       index, subType ('slider' | 'inside' | 'select'), orient, noTarget
@@ -160,6 +161,12 @@ const echarts = require(DIST);
 const ROOT = path.resolve(__dirname, '..', '..');
 const OUT = process.env.ORACLE_OUT || path.join(ROOT, 'tests', 'fixtures', 'advchart-datazoom-window.json');
 const GALLERY = path.join(ROOT, 'examples', 'advchart', 'gallery');
+// [spec 264] a gallery file as this fixture was made from it: without the
+// '@<id>.<key>' names the harvest has written for a page's functions since
+// R2-J2 (fed to upstream, a name is a formatter template that prints
+// itself -- mix-zoom-on-value's y labels then widen and shrink the grid);
+// the port's test takes them out the same way
+const { withoutFunctions } = require('./gallery-functions.js');
 
 const W = 800;
 const H = 600;
@@ -1006,7 +1013,7 @@ function spansRec(s) {
 }
 
 function recordCase(def) {
-  const src = def.gallery ? JSON.parse(fs.readFileSync(path.join(GALLERY, def.gallery + '.json'), 'utf8')) : def.option;
+  const src = def.gallery ? withoutFunctions(JSON.parse(fs.readFileSync(path.join(GALLERY, def.gallery + '.json'), 'utf8'))) : def.option;
   const optRec = recordOption(src);
   const fed = fedOption(optRec);
   CAP = { cdw: new Map(), stage: null };
