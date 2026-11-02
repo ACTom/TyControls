@@ -88,6 +88,12 @@ type
       (MouseMove's resize cursor) is gated on TyWindowResizable, i.e. on Windows and a real
       resizable handle, which a headless run never has. }
     function ResizeHitAt(X, Y: Integer): Integer;
+    { #176: where the bar sits in its window -- on its bottom edge, and in the corner the grip is
+      drawn in. The grip and the strip resize the WINDOW, so they only do it from there. }
+    procedure WindowEdges(out ABottom, ACorner: Boolean);
+    { #176: whether the grip is drawn: SizeGrip on, the window resizable and not maximized, and
+      the bar in the window's corner. It was drawn on a window that could not be resized. }
+    function GripShown: Boolean;
     { The two hint seams, as protected virtuals -- LCL's DoHint / DoSetApplicationHint
       (comctrls.pp:157-158). DoHint returns True when the application took the hint over
       via OnHint, in which case the bar writes nothing itself. }
@@ -515,7 +521,7 @@ begin
           FPanels[i].Text, S.FontName, fs, S.FontWeight, S.TextColor, FPanels[i].Alignment, tlCenter, True);
       end;
     end;
-    if FSizeGrip then    // 3 diagonal dots in the trailing bottom corner, in muted text color
+    if GripShown then    // 3 diagonal dots in the trailing bottom corner, in muted text color
     begin
       grip := Default(TTyFill); grip.Kind := tfkSolid; grip.Color := S.TextColor;
       { The corner comes from the SAME function ResizeHitAt asks — it used to be restated
@@ -538,13 +544,51 @@ begin
   end;
 end;
 
+procedure TTyCustomStatusBar.WindowEdges(out ABottom, ACorner: Boolean);
+var
+  f: TCustomForm;
+begin
+  ABottom := False;
+  ACorner := False;
+  f := GetParentForm(Self);
+  if f = nil then Exit;
+  ABottom := Abs(ClientToParent(Types.Point(0, Height), f).Y - f.ClientHeight) <= 1;
+  if not ABottom then Exit;
+  if IsRightToLeft then
+    ACorner := ClientToParent(Types.Point(0, 0), f).X <= 1
+  else
+    ACorner := Abs(ClientToParent(Types.Point(Width, 0), f).X - f.ClientWidth) <= 1;
+end;
+
+function TTyCustomStatusBar.GripShown: Boolean;
+var
+  f: TCustomForm;
+  atBottom, atCorner: Boolean;
+begin
+  Result := FSizeGrip;
+  if not Result then Exit;
+  if csDesigning in ComponentState then Exit;   // the designer shows what was set
+  f := GetParentForm(Self);
+  if f = nil then Exit;                         // drawn on its own (a preview): as set
+  if f.WindowState = wsMaximized then Exit(False);
+  if not ((f.BorderStyle in [bsSizeable, bsSizeToolWin]) or TyWindowResizable(Self)) then
+    Exit(False);
+  WindowEdges(atBottom, atCorner);
+  Result := atCorner;
+end;
+
 function TTyCustomStatusBar.ResizeHitAt(X, Y: Integer): Integer;
 var
   zone, W, H: Integer;
   gripBox: TRect;
-  rtl: Boolean;
+  rtl, atBottom, atCorner: Boolean;
 begin
   Result := 0;
+  { #176: SizeGrip off, nothing on the bar resizes the window -- the strip along the bottom still
+    did -- and on, only the parts of it that lie on the window's own edge. }
+  if not FSizeGrip then Exit;
+  WindowEdges(atBottom, atCorner);
+  if not atBottom then Exit;
   W := Width; H := Height;
   rtl := IsRightToLeft;
   zone := (5 * Font.PixelsPerInch) div 96;   if zone < 4 then zone := 4;   // bottom-edge strip
@@ -557,7 +601,7 @@ begin
     corners, and the bottom-left corner of a window resizes bottom-left whichever way the
     bar inside it happens to read. }
   gripBox := TyStatusGripRect(W, H, TyStatusGripZonePx(Font.PixelsPerInch), rtl);
-  if FSizeGrip and (Y >= gripBox.Top)
+  if atCorner and (Y >= gripBox.Top)
      and (((not rtl) and (X >= gripBox.Left)) or (rtl and (X < gripBox.Right))) then
   begin
     if rtl then Result := cHTBOTTOMLEFT else Result := cHTBOTTOMRIGHT;

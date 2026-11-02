@@ -9,7 +9,8 @@ uses Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType, TypInfo,
   tyControls.GlyphButtons,   // TTyGlyphLayout + TTySpeedButton — the List tests speak both
   tyControls.DropButtons,    // TyDefaultDropArrowWidth — the drawn-split pixel test names it
   tyControls.ToolBar, tyControls.Button,
-  tyControls.Panel;           // the tall child the bottom-border guards need (see there)
+  tyControls.Panel,           // the tall child the bottom-border guards need (see there)
+  Menus, tyControls.ToolBarEx, tyControls.StatusBar, tyControls.ControlBar, tyControls.CoolBar;
 type
   TToolBarGeomTest = class(TTestCase)
   published
@@ -2769,7 +2770,187 @@ begin
     FTool.CallGlyphSource([tysHover]).Images = FNormal);
 end;
 
+
+type
+  { #176: tool bars, the status bar, the control bar and the cool bar. }
+  TBars176Test = class(TTestCase)
+  private
+    FForm: TForm;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestAHiddenToolStaysHiddenOnTheExBar;
+    procedure TestTheExBarGrowsToItsRow;
+    procedure TestADropdownMenuKnowsItsButton;
+    procedure TestNewHotImagesRepaintTheTools;
+    procedure TestTheGripWorksOnlyOnTheWindowsEdge;
+    procedure TestABandHostHasNoCaption;
+    procedure TestABandsControlIsTheBarsChild;
+    procedure TestABandKeepsToItsMinAndMaxWidth;
+  end;
+
+  TStatus176 = class(TTyStatusBar);
+  TBarEx176 = class(TTyToolBarEx)
+  public
+    procedure ForceLayout;
+  end;
+  TTool176 = class(TTyToolButton)
+  public
+    Repaints: Integer;
+    procedure Invalidate; override;
+  end;
+
+procedure TBarEx176.ForceLayout;
+var r: TRect;
+begin
+  r := Rect(0, 0, Width, Height);
+  AlignControls(nil, r);   { headless: no message pump to lay it out }
+end;
+
+procedure TTool176.Invalidate;
+begin
+  Inc(Repaints);
+  inherited Invalidate;
+end;
+
+procedure TBars176Test.SetUp;
+begin
+  FForm := TForm.CreateNew(nil);
+  FForm.SetBounds(0, 0, 400, 300);
+end;
+
+procedure TBars176Test.TearDown;
+begin
+  FreeAndNil(FForm);
+end;
+
+procedure TBars176Test.TestAHiddenToolStaysHiddenOnTheExBar;
+var bar: TTyToolBarEx; a, b, c: TTyToolButton;
+begin
+  bar := TTyToolBarEx.Create(FForm);
+  bar.Parent := FForm;
+  bar.SetBounds(0, 0, 400, 40);
+  a := TTyToolButton.Create(FForm); a.Parent := bar; a.Width := 40;
+  b := TTyToolButton.Create(FForm); b.Parent := bar; b.Width := 40;
+  c := TTyToolButton.Create(FForm); c.Parent := bar; c.Width := 40;
+  b.Visible := False;
+  TBarEx176(bar).ForceLayout;
+  AssertFalse('a tool the application hid stays hidden', b.Visible);
+  AssertTrue(Format('and takes no room: the next one sits where it would have (%d)', [c.Left]),
+    c.Left < a.Left + a.Width + 40);
+end;
+
+procedure TBars176Test.TestTheExBarGrowsToItsRow;
+var bar: TTyToolBarEx; a: TTyToolButton;
+begin
+  bar := TTyToolBarEx.Create(FForm);
+  bar.Parent := FForm;
+  bar.Align := alTop;
+  bar.ButtonHeight := 48;
+  a := TTyToolButton.Create(FForm); a.Parent := bar; a.Width := 40;
+  TBarEx176(bar).ForceLayout;
+  AssertTrue(Format('a top bar grows to its row (%d >= 48)', [bar.Height]), bar.Height >= 48);
+  AssertTrue('and the row is not cut off', a.Top + a.Height <= bar.ClientHeight);
+end;
+
+procedure TBars176Test.TestADropdownMenuKnowsItsButton;
+var bar: TTyToolBar; b: TTyToolButton; pm: TTyPopupMenu;
+begin
+  bar := TTyToolBar.Create(FForm);
+  bar.Parent := FForm;
+  pm := TTyPopupMenu.Create(FForm);
+  pm.Items.Add(NewItem('One', 0, False, True, nil, 0, ''));
+  b := TTyToolButton.Create(FForm);
+  b.Parent := bar;
+  b.Style := tbsButton;
+  b.DropdownMenu := pm;
+  pm.PopupComponent := FForm;
+  b.Click;
+  AssertTrue('a tbsButton with a DropdownMenu drops it', b.RequestedPopup);
+  AssertSame('and the menu knows what opened it', b, pm.PopupComponent);
+end;
+
+procedure TBars176Test.TestNewHotImagesRepaintTheTools;
+var bar: TTyToolBar; b: TTool176; ic: TTyImageCollection; n: Integer;
+begin
+  bar := TTyToolBar.Create(FForm);
+  bar.Parent := FForm;
+  b := TTool176.Create(FForm);
+  b.Parent := bar;
+  ic := TTyImageCollection.Create(FForm);
+  n := b.Repaints;
+  bar.HotImages := ic;
+  AssertTrue('new HotImages repaint the tools', b.Repaints > n);
+  n := b.Repaints;
+  bar.DisabledImages := ic;
+  AssertTrue('so do new DisabledImages', b.Repaints > n);
+end;
+
+procedure TBars176Test.TestTheGripWorksOnlyOnTheWindowsEdge;
+var sb: TStatus176;
+begin
+  FForm.BorderStyle := bsSizeable;
+  sb := TStatus176.Create(FForm);
+  sb.Parent := FForm;
+  sb.Align := alNone;
+  sb.SetBounds(0, FForm.ClientHeight - 22, FForm.ClientWidth, 22);
+  AssertTrue('setup: at the bottom corner the grip is shown', sb.GripShown);
+  AssertTrue('and the corner resizes', sb.ResizeHitAt(sb.Width - 2, sb.Height - 2) <> 0);
+  sb.SetBounds(0, 0, FForm.ClientWidth, 22);
+  AssertFalse('at the top of the window there is no grip', sb.GripShown);
+  AssertEquals('and nothing on it resizes the window', 0, sb.ResizeHitAt(sb.Width - 2, sb.Height - 2));
+  sb.SetBounds(0, FForm.ClientHeight - 22, FForm.ClientWidth, 22);
+  sb.SizeGrip := False;
+  AssertEquals('SizeGrip off: the bottom strip does not resize either', 0,
+    sb.ResizeHitAt(sb.Width div 2, sb.Height - 1));
+  sb.SizeGrip := True;
+  FForm.BorderStyle := bsSingle;
+  AssertFalse('a window that cannot be resized shows no grip', sb.GripShown);
+end;
+
+procedure TBars176Test.TestABandHostHasNoCaption;
+var cb: TTyControlBar; co: TTyCoolBar;
+begin
+  cb := TTyControlBar.Create(FForm);
+  cb.Name := 'ControlBar1';
+  AssertEquals('a control bar takes no caption from its Name', '', cb.Caption);
+  co := TTyCoolBar.Create(FForm);
+  co.Name := 'CoolBar1';
+  AssertEquals('nor a cool bar', '', co.Caption);
+end;
+
+procedure TBars176Test.TestABandsControlIsTheBarsChild;
+var co: TTyCoolBar; p: TTyPanel; band: TTyCoolBand;
+begin
+  co := TTyCoolBar.Create(FForm);
+  co.Parent := FForm;
+  p := TTyPanel.Create(FForm);
+  p.Parent := FForm;
+  band := co.Bands.Add;
+  band.Control := p;
+  AssertSame('the band''s control is moved onto the bar, as in LCL', TWinControl(co), p.Parent);
+end;
+
+procedure TBars176Test.TestABandKeepsToItsMinAndMaxWidth;
+var co: TTyCoolBar; band: TTyCoolBand;
+begin
+  co := TTyCoolBar.Create(FForm);
+  co.Parent := FForm;
+  band := co.Bands.Add;
+  band.MinWidth := 50;
+  band.MaxWidth := 120;
+  band.Width := 300;
+  AssertEquals('Width keeps to MaxWidth', 120, band.Width);
+  band.Width := 10;
+  AssertEquals('and to MinWidth', 50, band.Width);
+  band.Width := 100;
+  band.MaxWidth := 80;
+  AssertEquals('a lower MaxWidth takes the width with it', 80, band.Width);
+end;
+
 initialization
+  RegisterTest(TBars176Test);
   RegisterTest(TToolBarGeomTest);
   RegisterTest(TToolBarBreakTest);
   RegisterTest(TToolBarControlTest);

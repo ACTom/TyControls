@@ -134,6 +134,8 @@ type
     procedure SetText(const AValue: TCaption);
     procedure SetBreak(AValue: Boolean);
     procedure SetWidth(AValue: Integer);
+    procedure SetMinWidth(AValue: Integer);
+    procedure SetMaxWidth(AValue: Integer);
     procedure SetAutoMaxWidth(AValue: Boolean);
     procedure SetVisible(AValue: Boolean);
   protected
@@ -162,10 +164,10 @@ type
       back to the bar's DefaultBandMinWidth. ONE floor for both gestures: TyCoolBandResize and
       TyCoolRowMakeRoom are both handed TTyCoolBar.BandMinWidth and neither carries a constant
       of its own. }
-    property MinWidth: Integer read FMinWidth write FMinWidth default 0;
+    property MinWidth: Integer read FMinWidth write SetMinWidth default 0;
     { A hand-entered ceiling; 0 = unbounded. See AutoMaxWidth for the derived one and
       TTyCoolBar.BandMaxWidth for the single place the two compose. }
-    property MaxWidth: Integer read FMaxWidth write FMaxWidth default 0;
+    property MaxWidth: Integer read FMaxWidth write SetMaxWidth default 0;
     { Refuses a gripper RESIZE; the band can still be moved between rows. }
     property FixedSize: Boolean read FFixedSize write FFixedSize default False;
     { CAP THE BAND AT ITS CONTENT: stop a widening drag once there is no more of the hosted
@@ -986,6 +988,12 @@ var
 begin
   if FControl = AValue then Exit;
   FControl := AValue;
+  { #176: the band's control is a child of the bar, as LCL's TCoolBand.SetControl makes it --
+    left on its old parent, the bands and the children drifted apart. }
+  if (FControl <> nil) and (Collection is TTyCoolBands)
+     and (TTyCoolBands(Collection).OwnerBar <> nil)
+     and (FControl.Parent <> TTyCoolBands(Collection).OwnerBar) then
+    FControl.Parent := TTyCoolBands(Collection).OwnerBar;
   { #136: a control with no Owner tells only those who asked that it is freed. The bar asks, and
     its Notification drops this band; without it the band kept pointing at the freed control. }
   if (FControl <> nil) and (Collection is TTyCoolBands)
@@ -1025,6 +1033,12 @@ var
   bar: TTyCustomCoolBar;
 begin
   if AValue < 0 then AValue := 0;
+  { #176: a given width keeps to MinWidth and MaxWidth -- they bounded the gripper only. }
+  if AValue > 0 then
+  begin
+    if (FMaxWidth > 0) and (AValue > FMaxWidth) then AValue := FMaxWidth;
+    if (FMinWidth > 0) and (AValue < FMinWidth) then AValue := FMinWidth;
+  end;
   if FWidth = AValue then Exit;
   FWidth := AValue;
   { A given width IS the hosted control's extent ALONG THE ROW'S RUN -- the packer measures
@@ -1046,6 +1060,40 @@ begin
   else
     FitSpacer;   // a band with no control lays out its own Width, 0 included
   Changed(False);
+end;
+
+procedure TTyCoolBand.SetMinWidth(AValue: Integer);
+var
+  w: Integer;
+begin
+  if AValue < 0 then AValue := 0;
+  if FMinWidth = AValue then Exit;
+  FMinWidth := AValue;
+  if FWidth > 0 then
+  begin
+    w := FWidth;
+    FWidth := 0;
+    SetWidth(w);   { #176: the width it has, kept to the new floor }
+  end
+  else
+    Changed(False);
+end;
+
+procedure TTyCoolBand.SetMaxWidth(AValue: Integer);
+var
+  w: Integer;
+begin
+  if AValue < 0 then AValue := 0;
+  if FMaxWidth = AValue then Exit;
+  FMaxWidth := AValue;
+  if FWidth > 0 then
+  begin
+    w := FWidth;
+    FWidth := 0;
+    SetWidth(w);   { #176: ...and to the new ceiling }
+  end
+  else
+    Changed(False);
 end;
 
 procedure TTyCoolBand.SetAutoMaxWidth(AValue: Boolean);

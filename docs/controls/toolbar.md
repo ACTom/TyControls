@@ -69,7 +69,7 @@ uses tyControls.ToolBar, tyControls.Button;
 | `ShowCaptions` | `Boolean` | `False` | 与 LCL 一致：`False`（默认）让工具项**只显示图标**，`True` 才画标题。它下发到每个**能画图标**的子控件（`TTyGlyphButtonBase` 一族：`TTyGlyphButton` / `TTySpeedButton` / `TTyGlyphContainerButton`），走 `AdoptShowCaption`——对已被宿主自己写过 `ShowCaption` 的工具项是空操作。普通 `TTyButton` 没有图标模型，不受影响；**解析不出图标的工具项保留标题**（否则画出来是个空盒子），所以 `False` 这个默认值不会把现有的纯文字工具条抹白。改值触发 `Relayout`。 |
 | `Flat` | `Boolean` | `True` | 为 `True` 时，工具条把子 `TTyButton` 的 `StyleClass` 设为 `'ghost'`（平面外观）——但**只在它还是空串时**；为 `False` 时只把 `'ghost'` 改回 `''`。宿主自己写的 `StyleClass := 'primary'` 会保留下来。改值触发 `Relayout`。 |
 | `Images` | `TTyCustomImageCollection` | `nil` | 工具项的图标来源：**没有自己 `Images` 的子图标按钮由工具条把这个集合借给它**，于是工具项只需设 `ImageName`。已经自带集合的工具项不受影响——工具条只管自己借出去的那一份引用（重新指向或收回）。用 `FreeNotification` 挂钩，集合被释放时连同"借出标记"一起置 `nil`。改值触发 `Relayout`。 |
-| `HotImages` | `TTyCustomImageCollection` | `nil` | **悬停时的替换图**，用**同一个 `ImageName`** 去这份集合里取。见下方 [3.1.2 节](#312-hotimages--disabledimages按状态换形状不换颜色)。 |
+| `HotImages` | `TTyCustomImageCollection` | `nil` | **悬停时的替换图**，用**同一个 `ImageName`** 去这份集合里取。运行时换掉它（或 `DisabledImages`）会重画每个工具按钮。见下方 [3.1.2 节](#312-hotimages--disabledimages按状态换形状不换颜色)。 |
 | `DisabledImages` | `TTyCustomImageCollection` | `nil` | **禁用时的替换图**，同上。两者都到齐时**禁用优先**（LCL 同序：禁用的工具即使指针在上面也不算悬停）。 |
 | `Align` | `TAlign` | `alTop` | 停靠方式（**默认 `alTop`**，与原生工具条一致）。 |
 | `Anchors` | `TAnchors` | — | 锚点布局（继承）。 |
@@ -213,7 +213,7 @@ TTyToolButtonStyle = (tbsButton, tbsCheck, tbsDropDown, tbsSeparator, tbsDivider
 | `AllowAllUp` | `Boolean` | `False` | 允许点击已按下的成员把它弹起，让整组都是弹起状态。它是**组的**属性不是按钮的：LCL 问的是"组里**有没有**成员开了这个"。把它从 `True` 改回 `False` 时，若整组当前都是弹起的，会把**正在配置的这个**按下——否则会留下一个"互斥但没有选中项"的组。 |
 | `Wrap` | `Boolean` | `False` | LCL 的**后置**断行：bar 的这一行在本按钮**之后**结束，下一个按钮另起一行。见 [第 3.2.4 节](#324-wrap两处与-lcl-的差异) |
 | `ImageIndex` | `Integer` | `-1` | 按**位置**取图标（而不是按名字）。见 [第 3.2.3 节](#323-imageindex是-imagename-的另一种拼法) |
-| `DropdownMenu` | `TTyPopupMenu` | `nil` | `tbsDropDown` 箭头区 / `tbsButtonDrop` 整面弹出的主题化菜单。LCL 写的是 `TPopupMenu`；这里收窄成它的后代 `TTyPopupMenu`（本库另外两个下拉按钮也是这个类型），否则会在自绘工具条中间弹出一个系统原生菜单。`FreeNotification` 跟踪。 |
+| `DropdownMenu` | `TTyPopupMenu` | `nil` | `tbsDropDown` 箭头区 / `tbsButtonDrop` 整面弹出的主题化菜单；`tbsButton` 挂了它也是整面弹出（与 LCL 相同）。弹出前把菜单的 `PopupComponent` 设成这个按钮，`OnPopup` 里读得到是谁弹的。LCL 写的是 `TPopupMenu`；这里收窄成它的后代 `TTyPopupMenu`（本库另外两个下拉按钮也是这个类型），否则会在自绘工具条中间弹出一个系统原生菜单。`FreeNotification` 跟踪。 |
 | `OnArrowClick` | `TNotifyEvent` | — | `tbsDropDown` 箭头区被点击**且没有弹出菜单**时触发（照抄 LCL 的抑制规则：这个事件是菜单的**替代品**，不是菜单**前面**的钩子）。要在菜单弹出**之前**跑代码（比如现场构建菜单），用 `TTyDropDownButton.OnDropDown`。 |
 | `Down` | `Boolean` | `False` | 继承自 `TTyCustomButton`。在 `tbsCheck` 上它就是点击翻转的"选中"状态，并由 `Grouped` 维持互斥；其它样式上只是 `:selected` 外观。 |
 | `TabStop` | `Boolean` | `False` | 工具按钮**不取焦点**——工具条的意义就是点它之后光标还留在编辑器里。与 `TTySpeedButton` 同。 |

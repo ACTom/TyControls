@@ -50,7 +50,7 @@ uses tyControls.ControlBar;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Caption` | `string` | `''` | 面板标题文本（继承自 `TTyCustomPanel`；band 宿主一般留空）。 |
+| `Caption` | `string` | `''` | 面板标题文本（继承自 `TTyCustomPanel`；band 宿主一般留空）。放到窗体上时不会自动取成控件名（`TTyCoolBar` 同）。 |
 | `Alignment` | `TAlignment` | `taCenter` | `Caption` 的水平对齐（继承）。 |
 | `Align` | `TAlign` | `alNone` | 停靠方式；设为 `alTop` / `alBottom` 时控件随 band 行数**自动增高**（见 [第 7 节](#7-注意事项)）。 |
 | `Anchors` | `TAnchors` | — | 锚点布局（继承）。 |
