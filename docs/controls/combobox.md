@@ -149,24 +149,38 @@ DroppedDown = False → DropDown
 | `Alt+↓` 或 `F4` | 打开下拉列表（已打开则关闭） |
 | `ESC` | 关闭下拉列表（未打开时无操作） |
 
-以上导航键直接调用 `SelectItem`，因此会触发 `OnChange`（仅当选项实际变化时）。上表描述的是默认的 `csDropDownList`（只读下拉）；`Style = csDropDown` 时字段由内嵌 `TTyEdit` 承担，关闭态可直接键入文本（带前缀自动补全，见第 3 节 `Style`）；`Style = csSimple` 时字段内 `↓`/`↑` 直接移动常驻列表的选中，`Esc`/`F4` 不再被占用（见 [§8.1.2](#812-cssimple字段下常驻列表)）。
+以上导航键直接调用 `SelectItem`，因此会触发 `OnChange`（仅当选项实际变化时）。上表描述的是默认的 `csDropDownList`（只读下拉）；`Style = csDropDown` 时字段由内嵌 `TTyEdit` 承担，关闭态可直接键入文本（带前缀自动补全，见第 3 节 `Style`），`↓`/`↑` 同样逐项选中，`Alt+↓`/`F4` 打开列表；`Style = csSimple` 时字段内 `↓`/`↑` 直接移动常驻列表的选中，`Esc`/`F4` 不再被占用（见 [§8.1.2](#812-cssimple字段下常驻列表)）。
+
+可编辑样式下，字段的 `OnKeyDown` / `OnKeyUp` / `OnKeyPress` / `OnUTF8KeyPress` / `OnEditingDone` 就是组合框的这几个事件，和 LCL 的组合框一样。一个组合框只占一个 Tab 位：有输入框时是输入框的，`SetFocus` 也把焦点交给输入框；`TabStop := False` 取消的就是这一个。
+
+#### 下拉列表打开时的按键
+
+| 按键 | 行为 |
+|------|------|
+| `↓` / `↑` / `PgDn` / `PgUp` / `Home` / `End` | 只移动列表里的高亮，不选、不关 |
+| `Enter` / `Tab` / `F4` / `Alt+↓` / `Alt+↑` | 选中高亮行并关闭列表（`Tab` 之后焦点照常移走） |
+| `Esc` | 关闭列表，什么都不选 |
+
+可编辑样式的联想列表也一样：在输入框里按上下键移动联想列表的高亮，`Enter` 选中。
 
 #### 类型超前（Type-ahead，`UTF8KeyPress` override）
 
 在控件获得焦点且下拉列表**关闭**时，按可打印字符键会累积前缀缓冲并自动跳选：
 
 - 按键追加到内部缓冲 `FTypeAhead`；
-- 在 `Items` 中从**当前选中项之后**开始循环搜索，找到第一个**前缀匹配**（不区分大小写）的项并调用 `SelectItem`；
+- 单个字符从**当前选中项之后**开始循环搜索；缓冲变长（连续键入）时从**当前选中项**起搜索，当前项仍匹配就留在它上面。找到第一个**前缀匹配**（不区分大小写）的项并调用 `SelectItem`；
 - 超过约 **600 ms** 无新按键后，下次按键会重置缓冲（从新字符重新开始匹配）。
 
-例：`Items = ['Apple', 'Apricot', 'Banana']`，当前选中 `Apple`，先按 `A` → 跳到 `Apricot`；再等待 600 ms 后按 `B` → 重置后跳到 `Banana`。
+例：`Items = ['Apple', 'Apricot', 'Banana']`，什么都没选时按 `A` → `Apple`，接着按 `P` → 前缀 `ap` 仍匹配 `Apple`，留在原处，再按 `R` → `Apricot`；等待 600 ms 后按 `B` → 重置后跳到 `Banana`。
 
 ### 关闭路径
 
 弹出窗口通过以下三条路径关闭：
 
 1. **失焦关闭**：`FPopup.OnDeactivate` → `CloseUp`（点击弹出窗口外部时触发）。
-2. **ESC 键**：弹出窗口的 `KeyPreview=True`，`OnKeyDown` 捕获 `VK_ESCAPE` → `CloseUp`；组合框自身的 `KeyDown` 也处理 `VK_ESCAPE`（当 `DroppedDown=True` 时）。
+2. **按键**：弹出窗口的 `KeyPreview=True`，`OnKeyDown` 捕获 `Esc` → `CloseUp`，`Enter` / `Tab` 选中高亮行再关闭；组合框自身的 `KeyDown` 也处理 `Esc`（当 `DroppedDown=True` 时）。
+
+没有打开的列表时 `CloseUp` 什么都不做，也不触发 `OnCloseUp`；已经打开时 `DropDown` / `DroppedDown := True` 不会再打开一次（`OnGetItems` / `OnDropDown` 只触发一次），禁用的组合框也打不开。
 3. **列表项选中**：`TTyListBox.OnChange` 触发 → `SelectItem` + `CloseUp`。
 
 ### 事件

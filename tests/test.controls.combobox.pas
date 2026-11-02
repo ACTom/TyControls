@@ -3,7 +3,11 @@ unit test.controls.combobox;
 interface
 uses
   Classes, SysUtils, Types, Graphics, Forms, Controls, StdCtrls, LCLIntf, LCLType, fpcunit, testregistry,
-  tyControls.Base, tyControls.Controller, tyControls.ComboBox, tyControls.ListBox;
+  ImgList, BGRABitmap, BGRABitmapTypes,
+  tyControls.Types, tyControls.Base, tyControls.Controller, tyControls.ComboBox, tyControls.ListBox,
+  tyControls.Edit,
+  tyControls.ComboBoxEx, tyControls.OfficeComboBox, tyControls.AdvancedComboBox,
+  tyControls.CheckComboBox, tyControls.Cascader;
 type
   { Expose protected Click and RenderTo for tests }
   TComboAccess = class(TTyComboBox)
@@ -17,6 +21,44 @@ type
     { Expose the headless popup-height calculation so DropDownCount sizing can be
       tested without creating a real win32 popup form (1407). }
     function PopupHeight(APPI: Integer): Integer;
+  end;
+
+  TEditCrack = class(TTyEdit);
+  TListCrack = class(TTyListBox);
+
+  { #161 }
+  TComboKeysTest = class(TTestCase)
+  private
+    FForm: TForm;
+    FCount, FKeys, FPresses, FUtf8: Integer;
+    procedure Count(Sender: TObject);
+    procedure CountKey(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure CountPress(Sender: TObject; var Key: Char);
+    procedure CountUtf8(Sender: TObject; var UTF8Key: TUTF8Char);
+    function NewCombo(AStyle: TTyComboBoxStyle): TComboAccess;
+    function EditorOf(C: TTyCustomComboBox): TTyEdit;
+    procedure PressInList(C: TTyCustomComboBox; AKey: Word);
+    function TwoColourImages: TImageList;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
+  published
+    procedure TestTheOpenListsArrowsMoveTheHighlightOnly;
+    procedure TestTheFieldTakesTheDropDownKeys;
+    procedure TestTheFieldsEventsAreTheCombos;
+    procedure TestOneTabStopPerCombo;
+    procedure TestTypeAheadKeepsTheCurrentItemWhileThePrefixGrows;
+    procedure TestItemsChangedWhileOpenArePickedRight;
+    procedure TestNoCloseUpWithNothingOpen;
+    procedure TestAnOpenListIsNotOpenedAgain;
+    procedure TestDuplicateCaptionsKeepTheSelectedRow;
+    procedure TestTheExAutocompleteListPaintsItsOwnRows;
+    procedure TestTheExFieldLeavesRoomForTheImage;
+    procedure TestAHeaderCaptionIsNoItem;
+    procedure TestTheAdvancedTextIsTheTitle;
+    procedure TestTheCheckFieldKeysOpenTheList;
+    procedure TestAnOpenCascaderIsNotOpenedAgain;
+    procedure TestTheListGetsTheActiveController;
   end;
 
   TChangeProbe = class
@@ -660,6 +702,441 @@ begin
     'lower', FCombo.Text);
 end;
 
+{ ---------------------------------------------------------------------------
+  #161: the keys of an open list and of the field, the field's events, one Tab
+  stop, type-ahead, and the bookkeeping of opening and closing
+  --------------------------------------------------------------------------- }
+
+var
+  KeysWidgetSetReady: Boolean = False;
+
+procedure TComboKeysTest.Count(Sender: TObject);
+begin
+  Inc(FCount);
+end;
+
+procedure TComboKeysTest.CountKey(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  Inc(FKeys);
+end;
+
+procedure TComboKeysTest.CountPress(Sender: TObject; var Key: Char);
+begin
+  Inc(FPresses);
+end;
+
+procedure TComboKeysTest.CountUtf8(Sender: TObject; var UTF8Key: TUTF8Char);
+begin
+  Inc(FUtf8);
+end;
+
+procedure TComboKeysTest.SetUp;
+begin
+  if not KeysWidgetSetReady then
+  begin
+    Forms.Application.Initialize;
+    KeysWidgetSetReady := True;
+  end;
+  FForm := TForm.CreateNew(nil);
+  FForm.SetBounds(-4000, -4000, 300, 200);
+  FForm.Visible := True;
+  FCount := 0;
+  FKeys := 0;
+  FPresses := 0;
+  FUtf8 := 0;
+end;
+
+procedure TComboKeysTest.TearDown;
+begin
+  FreeAndNil(FForm);
+end;
+
+function TComboKeysTest.NewCombo(AStyle: TTyComboBoxStyle): TComboAccess;
+begin
+  Result := TComboAccess.Create(FForm);
+  Result.Parent := FForm;
+  Result.SetBounds(0, 0, 160, 26);
+  Result.Style := AStyle;
+  Result.Items.Add('Apple');
+  Result.Items.Add('Apricot');
+  Result.Items.Add('Banana');
+end;
+
+function TComboKeysTest.EditorOf(C: TTyCustomComboBox): TTyEdit;
+var
+  i: Integer;
+begin
+  Result := nil;
+  for i := 0 to C.ControlCount - 1 do
+    if C.Controls[i] is TTyEdit then Exit(TTyEdit(C.Controls[i]));
+end;
+
+procedure TComboKeysTest.PressInList(C: TTyCustomComboBox; AKey: Word);
+var
+  f: TCustomForm;
+  k: Word;
+begin
+  f := GetParentForm(TComboAccess(C).PopupList);
+  k := AKey;
+  f.OnKeyDown(f, k, []);
+  Application.ProcessMessages;   // the deferred close of a pick
+end;
+
+procedure TComboKeysTest.TestTheOpenListsArrowsMoveTheHighlightOnly;
+var c: TComboAccess;
+begin
+  c := NewCombo(csDropDownList);
+  c.ItemIndex := 0;
+  c.DropDown;
+  AssertTrue('setup: open', c.DroppedDown);
+  PressInList(c, VK_DOWN);
+  AssertEquals('an arrow picks nothing', 0, c.ItemIndex);
+  AssertTrue('and closes nothing', c.DroppedDown);
+  AssertEquals('it moves the highlight', 1, c.PopupList.ItemIndex);
+  PressInList(c, VK_ESCAPE);
+  AssertFalse('Esc closes the list', c.DroppedDown);
+  AssertEquals('and leaves the value as it was', 0, c.ItemIndex);
+  c.AgeCloseUpTick;
+  c.DropDown;
+  PressInList(c, VK_DOWN);
+  PressInList(c, VK_DOWN);
+  PressInList(c, VK_RETURN);
+  AssertEquals('Enter picks the highlight', 2, c.ItemIndex);
+  AssertFalse('and closes the list', c.DroppedDown);
+end;
+
+procedure TComboKeysTest.TestTheFieldTakesTheDropDownKeys;
+var c: TComboAccess;
+begin
+  c := NewCombo(csDropDown);
+  c.SimulateEditorKeyForTest(VK_DOWN);
+  AssertEquals('closed, Down steps to the first item', 0, c.ItemIndex);
+  c.SimulateEditorKeyForTest(VK_DOWN);
+  AssertEquals('and on', 1, c.ItemIndex);
+  c.SimulateEditorKeyForTest(VK_F4);
+  AssertTrue('F4 opens the list from the field', c.DroppedDown);
+  c.SimulateEditorKeyForTest(VK_DOWN);
+  AssertEquals('open, Down moves the highlight', 2, c.PopupList.ItemIndex);
+  AssertEquals('and picks nothing yet', 1, c.ItemIndex);
+  c.SimulateEditorKeyForTest(VK_RETURN);
+  Application.ProcessMessages;
+  AssertEquals('Enter picks it', 2, c.ItemIndex);
+  AssertEquals('into the field', 'Banana', c.Text);
+end;
+
+procedure TComboKeysTest.TestTheFieldsEventsAreTheCombos;
+var
+  c: TComboAccess;
+  ed: TTyEdit;
+  k: Word;
+  u: TUTF8Char;
+begin
+  c := NewCombo(csDropDown);
+  c.OnKeyDown := @CountKey;
+  c.OnKeyUp := @CountKey;
+  c.OnKeyPress := @CountPress;
+  c.OnUTF8KeyPress := @CountUtf8;
+  c.OnEditingDone := @Count;
+  ed := EditorOf(c);
+  AssertNotNull('setup: the field', ed);
+  k := VK_A;
+  TEditCrack(ed).KeyDown(k, []);
+  k := VK_A;
+  TEditCrack(ed).KeyUp(k, []);
+  AssertEquals('OnKeyDown and OnKeyUp are the combo''s', 2, FKeys);
+  u := 'x';
+  TEditCrack(ed).UTF8KeyPress(u);
+  AssertEquals('OnUTF8KeyPress', 1, FUtf8);
+  AssertEquals('OnKeyPress', 1, FPresses);
+  k := VK_RETURN;
+  TEditCrack(ed).KeyDown(k, []);
+  AssertEquals('Enter in the field is the combo''s EditingDone', 1, FCount);
+end;
+
+procedure TComboKeysTest.TestOneTabStopPerCombo;
+var
+  c: TComboAccess;
+  ed: TTyEdit;
+begin
+  c := NewCombo(csDropDown);
+  ed := EditorOf(c);
+  AssertTrue('the published TabStop holds', c.TabStop);
+  AssertTrue('the field is the stop', ed.TabStop);
+  AssertFalse('the combo itself is none', TWinControl(c).TabStop);
+  c.TabStop := False;
+  AssertFalse('TabStop := False takes the field''s', ed.TabStop);
+  c.TabStop := True;
+  c.Style := csDropDownList;
+  AssertTrue('a list combo is its own stop', TWinControl(c).TabStop);
+  AssertFalse('with no field to stop at', ed.TabStop);
+  c.Style := csDropDown;
+  c.SetFocus;
+  AssertSame('the focus is the field''s', TObject(ed), TObject(FForm.ActiveControl));
+end;
+
+procedure TComboKeysTest.TestTypeAheadKeepsTheCurrentItemWhileThePrefixGrows;
+var c: TComboAccess;
+begin
+  c := NewCombo(csDropDownList);
+  c.DoTypeChar('a');
+  AssertEquals('setup: a', 'Apple', c.Text);
+  c.DoTypeChar('p');
+  AssertEquals('ap still names Apple: it stays', 'Apple', c.Text);
+  c.DoTypeChar('r');
+  AssertEquals('apr moves on', 'Apricot', c.Text);
+end;
+
+procedure TComboKeysTest.TestItemsChangedWhileOpenArePickedRight;
+var c: TComboAccess;
+begin
+  c := NewCombo(csDropDownList);
+  c.ItemIndex := 0;
+  c.DropDown;
+  c.Items.Insert(0, 'Zucchini');
+  AssertEquals('the open list shows the rows as they are', 'Zucchini', c.PopupList.Items[0]);
+  PressInList(c, VK_HOME);
+  PressInList(c, VK_RETURN);
+  AssertEquals('a pick names the row it shows', 'Zucchini', c.Text);
+end;
+
+procedure TComboKeysTest.TestNoCloseUpWithNothingOpen;
+var c: TComboAccess;
+begin
+  c := NewCombo(csDropDown);
+  c.OnCloseUp := @Count;
+  c.CloseUp;
+  AssertEquals('nothing open: no close-up', 0, FCount);
+  c.SimulateTypedTextForTest('zzz');
+  AssertEquals('nor for typing that matches nothing', 0, FCount);
+  c.Clear;
+  AssertEquals('nor from Clear', 0, FCount);
+end;
+
+procedure TComboKeysTest.TestAnOpenListIsNotOpenedAgain;
+var c: TComboAccess;
+begin
+  c := NewCombo(csDropDownList);
+  c.OnDropDown := @Count;
+  c.DroppedDown := True;
+  c.DroppedDown := True;
+  AssertEquals('OnDropDown once for an open list', 1, FCount);
+  c.CloseUp;
+  c.AgeCloseUpTick;
+  c.Enabled := False;
+  c.DroppedDown := True;
+  AssertFalse('a disabled combo opens none', c.DroppedDown);
+end;
+
+procedure TComboKeysTest.TestDuplicateCaptionsKeepTheSelectedRow;
+var c: TComboAccess;
+begin
+  c := NewCombo(csDropDownList);
+  c.Items.Add('Apple');   // a second Apple, at 3
+  c.ItemIndex := 3;
+  c.Items.Add('Cherry');
+  AssertEquals('the selected Apple stays the selected one', 3, c.ItemIndex);
+end;
+
+function TComboKeysTest.TwoColourImages: TImageList;
+var bmp: TBitmap;
+
+  procedure AddSolid(AColor: TColor);
+  begin
+    bmp.Canvas.Brush.Color := AColor;
+    bmp.Canvas.FillRect(0, 0, 16, 16);
+    Result.Add(bmp, nil);
+  end;
+
+begin
+  Result := TImageList.Create(FForm);
+  Result.Width := 16;
+  Result.Height := 16;
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf24bit;
+    bmp.SetSize(16, 16);
+    AddSolid(clRed);    // 0
+    AddSolid(clBlue);   // 1
+  finally
+    bmp.Free;
+  end;
+end;
+
+procedure TComboKeysTest.TestTheExAutocompleteListPaintsItsOwnRows;
+var
+  c: TTyComboBoxEx;
+  lst: TTyCustomListBox;
+  bmp: TBitmap;
+  b: TBGRABitmap;
+  x, y, rowH, red, blue: Integer;
+  px: TBGRAPixel;
+begin
+  c := TTyComboBoxEx.Create(FForm);
+  c.Parent := FForm;
+  c.SetBounds(0, 0, 160, 26);
+  c.Images := TwoColourImages;
+  c.Style := csDropDown;
+  c.AddItem('Apple', 0);    // red
+  c.AddItem('Banana', 1);   // blue
+  c.SimulateTypedTextForTest('B');
+  lst := TComboAccess(c).PopupList;
+  AssertEquals('setup: the list holds the match only', 1, lst.Items.Count);
+  AssertEquals('setup: Banana', 'Banana', lst.Items[0]);
+  rowH := lst.ItemHeight;
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(160, rowH * 2);
+    TListCrack(lst).RenderTo(bmp.Canvas, Rect(0, 0, 160, rowH * 2), 96);
+    b := TBGRABitmap.Create(bmp);
+    try
+      red := 0;
+      blue := 0;
+      for y := 0 to rowH - 1 do
+        for x := 0 to 60 do
+        begin
+          px := b.GetPixel(x, y);
+          if (px.red > 200) and (px.green < 40) and (px.blue < 40) then Inc(red);
+          if (px.blue > 200) and (px.green < 40) and (px.red < 40) then Inc(blue);
+        end;
+    finally
+      b.Free;
+    end;
+  finally
+    bmp.Free;
+  end;
+  AssertTrue(Format('the row shows Banana''s own image (blue %d)', [blue]), blue > 20);
+  AssertEquals('not Apple''s, the combo''s row 0', 0, red);
+end;
+
+procedure TComboKeysTest.TestTheExFieldLeavesRoomForTheImage;
+var
+  c: TTyComboBoxEx;
+  ed: TTyEdit;
+  l0, r0, ppi, sz: Integer;
+begin
+  c := TTyComboBoxEx.Create(FForm);
+  c.Parent := FForm;
+  c.SetBounds(0, 0, 160, 26);
+  c.Style := csDropDown;
+  c.AddItem('Apple', 0);
+  c.ItemIndex := 0;
+  ed := EditorOf(c);
+  AssertNotNull('setup: the field', ed);
+  l0 := ed.Left;
+  r0 := ed.Left + ed.Width;
+  c.Images := TwoColourImages;
+  ppi := c.Font.PixelsPerInch;
+  { The image DrawImageText puts in the field: 4 px in, the field's height less 6 px square. }
+  sz := ed.Height - MulDiv(6, ppi, 96);
+  AssertTrue(Format('the edit box starts past the image (%d, the image ends at %d)',
+    [ed.Left, l0 + MulDiv(4, ppi, 96) + sz]), ed.Left >= l0 + MulDiv(4, ppi, 96) + sz);
+  AssertEquals('and still ends where it did', r0, ed.Left + ed.Width);
+  c.Images := nil;
+  AssertEquals('no list, no room kept', l0, ed.Left);
+end;
+
+procedure TComboKeysTest.TestAHeaderCaptionIsNoItem;
+var o: TTyOfficeComboBox;
+begin
+  o := TTyOfficeComboBox.Create(FForm);
+  o.Parent := FForm;
+  o.AddHeader('Fruit');
+  o.Items.Add('Apple');
+  o.AddHeader('Veg');
+  o.Items.Add('Leek');
+  o.Text := 'Fruit';
+  AssertEquals('a header''s caption selects no row', -1, o.ItemIndex);
+  o.Text := 'leek';
+  AssertEquals('an item''s does, as LCL''s, whatever the case', 3, o.ItemIndex);
+end;
+
+procedure TComboKeysTest.TestTheAdvancedTextIsTheTitle;
+var a: TTyAdvancedComboBox;
+begin
+  a := TTyAdvancedComboBox.Create(FForm);
+  a.Parent := FForm;
+  a.AddItem('Mail', 'Inbox and more', -1);
+  a.AddItem('Calendar', 'Meetings', -1);
+  a.ItemIndex := 1;
+  AssertEquals('Text is the title the field shows', 'Calendar', a.Text);
+  a.Text := 'Mail';
+  AssertEquals('and a title selects its row', 0, a.ItemIndex);
+  a.Items.Insert(0, 'Notes' + LineEnding + 'Jottings');
+  AssertEquals('a row going in above keeps the selected one', 1, a.ItemIndex);
+  AssertEquals('by its title', 'Mail', a.Text);
+end;
+
+procedure TComboKeysTest.TestTheCheckFieldKeysOpenTheList;
+var
+  ck: TTyCheckComboBox;
+  k: Word;
+begin
+  ck := TTyCheckComboBox.Create(FForm);
+  ck.Parent := FForm;
+  ck.SetBounds(0, 0, 160, 26);
+  ck.Items.Add('Apple');
+  ck.Items.Add('Banana');
+  ck.Items.Add('Cherry');
+  ck.OnChange := @Count;
+  ck.OnSelect := @Count;
+  ck.ItemIndex := 1;
+  AssertEquals('ItemIndex is a row nobody sees: no OnChange', 0, FCount);
+  k := VK_DOWN;
+  TComboAccess(ck).DoKeyDown(k, []);
+  AssertTrue('Down on the field opens the list', ck.DroppedDown);
+  AssertEquals('with the highlight on the next row', 2, TComboAccess(ck).PopupList.ItemIndex);
+  AssertEquals('and moves no unseen value', 1, ck.ItemIndex);
+  AssertEquals('so tells nobody', 0, FCount);
+  PressInList(ck, VK_RETURN);
+  AssertFalse('Enter closes the list', ck.DroppedDown);
+  AssertEquals('and ticks nothing', 0, ck.CheckedCount);
+  TComboAccess(ck).AgeCloseUpTick;
+  k := VK_SPACE;
+  TComboAccess(ck).DoKeyDown(k, []);
+  AssertTrue('Space on the field opens it too', ck.DroppedDown);
+  PressInList(ck, VK_ESCAPE);
+  TComboAccess(ck).AgeCloseUpTick;
+  TComboAccess(ck).DoTypeChar('c');
+  AssertTrue('type-ahead opens it', ck.DroppedDown);
+  AssertEquals('on the match', 2, TComboAccess(ck).PopupList.ItemIndex);
+  AssertEquals('still telling nobody', 0, FCount);
+end;
+
+procedure TComboKeysTest.TestTheListGetsTheActiveController;
+var
+  c: TComboAccess;
+  S: TTyStyleSet;
+begin
+  c := NewCombo(csDropDownList);
+  AssertNull('setup: no Controller of its own', c.Controller);
+  S := c.ActiveController.Model.ResolveStyle('TyListBox', '', []);
+  AssertTrue('setup: the theme gives the list a solid ground', S.Background.Kind = tfkSolid);
+  c.DropDown;
+  AssertEquals('the drop-down is painted from the theme in effect, not from none',
+    TyColorToLCL(S.Background.Color), GetParentForm(c.PopupList).Color);
+end;
+
+procedure TComboKeysTest.TestAnOpenCascaderIsNotOpenedAgain;
+var c: TTyCascader;
+begin
+  c := TTyCascader.Create(FForm);
+  c.Parent := FForm;
+  c.Font.PixelsPerInch := 96;
+  c.Nodes.AddNode('East').Children.AddNode('Hangzhou');
+  c.OnDropDown := @Count;
+  c.DropDown;
+  AssertTrue('setup: open', c.DroppedDown);
+  c.DropDown;
+  AssertEquals('OnDropDown once for an open list', 1, FCount);
+  c.CloseUp;
+  c.Enabled := False;
+  c.DropDown;
+  AssertFalse('a disabled cascader opens none', c.DroppedDown);
+end;
+
+
 initialization
   RegisterTest(TTyComboBoxTest);
+  RegisterTest(TComboKeysTest);
 end.

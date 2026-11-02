@@ -99,6 +99,13 @@ type
       checkbox toggle + field sync happen in the checklist / PopupCheckClick, so this is a no-op. }
     procedure DoPopupPick(AIndex: Integer); override;
     procedure SetStyle(AValue: TTyComboBoxStyle); override;
+    { #161: the value is the ticks -- the field shows them, and OnChange is theirs. ItemIndex is
+      a row nobody sees, so moving it tells nobody; the keys on the closed field that step it
+      in another combo open the list here, as a select-only combobox's do (WAI-ARIA), and
+      Space opens it too. In the list the arrows move, Space ticks, Enter or Esc closes. }
+    procedure SelectItem(AIndex: Integer); override;
+    procedure FieldKeySelect(AIndex: Integer); override;
+    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -684,6 +691,35 @@ end;
 procedure TTyCustomCheckComboBox.DoPopupPick(AIndex: Integer);
 begin
   // Intentionally empty: no single-item commit, no close (see class header).
+end;
+
+procedure TTyCustomCheckComboBox.SelectItem(AIndex: Integer);
+begin
+  BeginQuietChange;
+  try
+    inherited SelectItem(AIndex);
+  finally
+    EndQuietChange;
+  end;
+end;
+
+procedure TTyCustomCheckComboBox.FieldKeySelect(AIndex: Integer);
+begin
+  if not DroppedDown then DropDown;
+  { The row the key landed on is where the list's highlight starts. A highlight, not a tick:
+    the list's change goes to DoPopupPick, which ticks nothing. }
+  if DroppedDown and (PopupList <> nil) and (AIndex < PopupList.Items.Count) then
+    PopupList.SelectItem(AIndex);
+end;
+
+procedure TTyCustomCheckComboBox.KeyDown(var Key: Word; Shift: TShiftState);
+begin
+  inherited KeyDown(Key, Shift);
+  if (Key = VK_SPACE) and (Shift = []) and IsEnabled and not DroppedDown then
+  begin
+    DropDown;
+    Key := 0;
+  end;
 end;
 
 procedure TTyCustomCheckComboBox.SetStyle(AValue: TTyComboBoxStyle);

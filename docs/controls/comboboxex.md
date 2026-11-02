@@ -75,6 +75,7 @@ uses tyControls.ComboBoxEx, tyControls.ImageCollection;
 ## 6. 主题
 
 - 文字用行 / 字段解析出的 `FontName` / 字号(`ResolveFontSize`)/ `FontWeight` / `TextColor`,不硬编码。
+- `Style = csDropDown` 时,只要设了 `Images`,输入框就从图片位之后开始,选中行的图片不会被输入框盖住;没选中或该行没图时这块位置留空,输入框不会跟着跳。联想列表画的是它自己列出的那几行。
 - 图片按行高自适应(`行高 - 6` 逻辑像素,最小 8px),纵向居中;由 `Images.CachedIndex` 按目标像素缩放(结果缓存复用),一份母图服务各 DPI。
 - `Indent` 是逻辑像素,绘制时走 `P.Scale`,HiDPI 下不会缩水。
 
