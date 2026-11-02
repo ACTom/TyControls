@@ -29,7 +29,7 @@
 //            axisLine.lineStyle.color -- a colour equal to it is the track's
 //            (the Pascal side compares it with the skin's track); else null
 //   rows[]   {value: a number's hex, 'NaN', 's:' + a string, 'b:' + a
-//            boolean, null; name}
+//            boolean, null, 'u' undefined [R7-H]; name}
 //   titles[] / details[]  the drawn Text's style.text per row ('' none,
 //            null not shown)
 //   pointers[] {angle: -rotation - PI / 2 as hex, fill, w, r, x, y (the
@@ -43,6 +43,19 @@
 // shows them.
 // Colours: echarts.color.parse as #rrggbbaa, 'x:<word>' a word it does not
 // take.
+//
+// [R7-H] the angles and the extent written as null or as a word: Model.get
+// gives undefined for a null (a null reads its parent, which has none) and
+// the JS arithmetic NaN. A case with `axis` also records
+//   arcs[]   the axis line's sectors: {start, end} (hex | 'NaN')
+//   labels[] the tick labels: {text, x, y} (hex | 'NaN' -- one at NaN is not
+//            drawn)
+//   ticks    how many split lines and ticks sit at finite places
+//   pointers[].drawn  the angle the pointer is DRAWN at: zrender's transform
+//            reads `rotation || 0`, so a NaN rotation is 0 (angle -PI / 2)
+// [R7-H] a category column's MISSING cell (a row shorter than the header)
+// is undefined to the store, NaN to the dial (`+undefined`), '' to the
+// reading; a null cell is 0 and ''.
 //
 // Guards (nothing written, exit 1 on a failure): the reading of a
 // name-first table is its name and no title; encode does not move the value;
@@ -90,6 +103,8 @@ function cellOf(v) {
   if (typeof v === 'number') return Number.isNaN(v) ? 'NaN' : hex(v);
   if (typeof v === 'string') return 's:' + v;
   if (typeof v === 'boolean') return 'b:' + v;
+  // [R7-H] a missing cell
+  if (v === undefined) return 'u';
   return null;
 }
 
@@ -100,6 +115,9 @@ const g = o => Object.assign({ type: 'gauge' }, BARE, o);
 const opt = (series, extra) => Object.assign({ animation: false, color: PAL, series: Array.isArray(series) ? series : [series] }, extra || {});
 const PROG = { progress: { show: true } };
 const NAMES = [['name', 'score'], ['Rate', 37], ['Load', 64]];
+// [R7-H] a dial with its axis line, split lines and labels shown
+const NAN_DIAL = { splitNumber: 2, axisLine: { show: true }, splitLine: { show: true, lineStyle: { color: '#333333' } },
+  axisTick: { show: true, splitNumber: 2, lineStyle: { color: '#666666' } }, axisLabel: { show: true }, data: [{ value: 40 }] };
 
 function cases() {
   return [
@@ -185,6 +203,27 @@ function cases() {
     // ---- the angles and the extent as JS numbers ----
     ['string-extent', "min '10', max '210', startAngle '180', endAngle '0' written as strings",
       opt(g(Object.assign({ min: '10', max: '210', startAngle: '180', endAngle: '0', data: [{ value: 60 }, { value: 160 }] }, PROG)))],
+    // ---- [R7-H] NaN angles and extents ----
+    ['nan-start-null', "startAngle null: undefined, the angle NaN -- no axis line, no ticks, no labels, no arc; the pointer at rotation 0",
+      opt(g(Object.assign({}, NAN_DIAL, { startAngle: null }, PROG))), { axis: true }],
+    ['nan-end-word', "endAngle 'x': NaN -- the first label and split line only, no axis line, no arc, the pointer at rotation 0",
+      opt(g(Object.assign({}, NAN_DIAL, { endAngle: 'x' }, PROG))), { axis: true }],
+    ['nan-min-null', "min null: NaN -- every label 'NaN', the pointer at the end, the arc full, the reading's 'inherit' the last band",
+      opt(g(Object.assign({}, NAN_DIAL, { min: null, detail: { color: 'inherit' }, axisLine: { lineStyle: { color: [[0.5, '#ff0000'], [1, '#0000ff']] } } }, PROG))), { axis: true, inks: true }],
+    ['nan-max-word', "max 'abc': NaN -- every label 'NaN', the pointer at the start, no arc, the reading's 'inherit' the first band",
+      opt(g(Object.assign({}, NAN_DIAL, { max: 'abc', detail: { color: 'inherit' }, axisLine: { lineStyle: { color: [[0.5, '#ff0000'], [1, '#0000ff']] } } }, PROG))), { axis: true, inks: true }],
+    ['nan-both-angles', "startAngle 'a' and endAngle null; two rows",
+      opt(g(Object.assign({}, NAN_DIAL, { startAngle: 'a', endAngle: null, data: [{ value: 40 }, { value: 70 }] }, PROG))), { axis: true }],
+    ['nan-extent-true', "min true (1) and max ' 90 ' (90): JS numbers",
+      opt(g(Object.assign({}, NAN_DIAL, { min: true, max: ' 90 ' }, PROG))), { axis: true }],
+    // ---- [R7-H] a missing cell ----
+    ['ds-missing-cell', "an ordinal column whose second row is shorter than the header: undefined -- NaN to the dial, '' to the reading (min -50)",
+      opt(g(Object.assign({ min: -50, max: 50, detail: { formatter: '{value}x' } }, PROG)), { dataset: { source: [['v', 'w'], ['Rate', 1], [], [null, 2]] } })],
+    ['data-missing-cell', "data arrays: an empty one and one with null, under an ordinal first item",
+      opt(g(Object.assign({ min: -50, max: 50, data: [['abc', 3], [], [null, 4]] }, PROG)))],
+    ['ds-missing-inherit', "the reading's 'inherit' over two bands: a missing cell NaN (the last band), a null 0 (the first)",
+      opt(g({ min: -50, max: 50, axisLine: { show: false, lineStyle: { color: [[0.5, '#ff0000'], [1, '#0000ff']] } },
+        detail: { color: 'inherit', formatter: '{value}x' } }), { dataset: { source: [['v', 'w'], ['Rate', 1], [], [null, 2]] } }), { inks: true }],
   ];
 }
 
@@ -211,6 +250,8 @@ function seriesOut(chart, s, more) {
     const p = data.getItemGraphicEl(i);
     if (p && p.parent) {
       const o = { angle: hex(-p.rotation - Math.PI / 2), fill: colourOf(p.style.fill) };
+      // [R7-H] the angle it is drawn at: Transformable reads rotation || 0
+      if (more.axis) o.drawn = hex(-(p.rotation || 0) - Math.PI / 2);
       if (p.type === 'pointer') ['width', 'r', 'x', 'y'].forEach(k => { o[k === 'width' ? 'w' : k] = hex(p.shape[k]); });
       out.pointers.push(o);
     } else out.pointers.push(null);
@@ -223,6 +264,19 @@ function seriesOut(chart, s, more) {
   out.lines = [];
   view.group.traverse(e => { if (e.type === 'line') out.lines.push(colourOf(e.style.stroke)); });
   if (more.inks) out.inks = (view._detailEls || []).map(d => (d && d.parent ? colourOf(d.style.fill) : null));
+  if (more.axis) {
+    const num = v => (Number.isFinite(v) ? hex(v) : 'NaN');
+    const prog = new Set((view._progressEls || []).filter(Boolean));
+    const words = new Set([].concat(view._titleEls || [], view._detailEls || []).filter(Boolean));
+    out.arcs = [];
+    out.labels = [];
+    out.ticks = 0;
+    view.group.traverse(e => {
+      if ((e.type === 'sector' || e.type === 'sausage') && !prog.has(e)) out.arcs.push({ start: num(e.shape.startAngle), end: num(e.shape.endAngle) });
+      if (e.type === 'text' && !words.has(e)) out.labels.push({ text: String(e.style.text), x: num(e.style.x), y: num(e.style.y) });
+      if (e.type === 'line' && [e.shape.x1, e.shape.y1, e.shape.x2, e.shape.y2].every(Number.isFinite)) out.ticks++;
+    });
+  }
   if (more.at != null) {
     // a frame of the count: its readings only
     return { index: out.index, band: out.band, rows: out.rows, details: out.details };
@@ -285,6 +339,14 @@ function guards(out) {
   must(ct.details[0] === 'Rate %' && ct.details[1] === '7 %', 'words do not count');
   const ni = c('ds-null-inherit');
   must(ni.inks[0] === '#ff0000ff' && ni.inks[1] === '#0000ffff', 'null inherits the first band, a word the last');
+  // [R7-H]
+  const ns = c('nan-start-null');
+  must(ns.arcs.every(a => a.start === 'NaN') && ns.labels.every(l => l.x === 'NaN') && ns.ticks === 0, 'a NaN start angle draws no dial');
+  must(ns.pointers[0].angle !== ns.pointers[0].drawn && ns.progress[0].end === 'NaN', 'a NaN angle draws the pointer at rotation 0, no arc');
+  const nm = c('nan-min-null');
+  must(nm.labels.every(l => l.text === 'NaN') && nm.labels.every(l => l.x !== 'NaN'), 'a NaN min labels NaN where the labels are');
+  const mc = c('ds-missing-cell');
+  must(mc.rows[1].value === 'u' && mc.rows[2].value === null && mc.details[1] === 'x' && mc.pointers[1].angle !== c('ds-null-empty').pointers[1].angle, 'a missing cell reads NaN to the dial');
   const mx = c('ds-null-empty');
   must(mx.rows[1].value === null && mx.details[1] === '' && mx.pointers[1].angle !== mx.pointers[0].angle, 'null is 0 to the dial');
 }

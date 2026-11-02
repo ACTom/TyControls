@@ -433,7 +433,8 @@ function TyGaugeFormatWords(const AFormatter: string; AHasFormatter: Boolean;
   raw position -- keeps its cell as written (DataStore has no ordinal meta for
   it): AWords the cell's text (true / false, '' for null), the dial's number
   `+cell` (JS: 'Rate' NaN, '7' 7, '' and null 0, true 1). AIsCell says the
-  value is such a cell and no number -- a count would not interpolate it. }
+  value is such a cell and no number -- a count would not interpolate it.
+  [R7-H] A cell the row does not have is undefined: NaN to the dial, ''. }
 function TyGaugeRowValue(AStore: TTyDataStore; ADim, ARow: Integer;
   out AWords: string; out AIsCell: Boolean): Double;
 
@@ -544,21 +545,88 @@ end;
 
 { [R7-D] a number GaugeView reads through JS arithmetic (`+min`,
   `-startAngle / 180 * PI`): a numeric string is its number [was: a number
-  only]. A string that is no number, and null, leave the default (upstream:
-  NaN, and the dial draws nothing). }
+  only]. [R7-H] A string that is no number is NaN, and so is null --
+  Model.get finds the null, asks its parent, and gets undefined -- and the
+  dial is drawn with it as upstream draws it (DialIsNaN); a boolean is 1 or
+  0 [was: both left the default]. }
 function JsNumIn(ANode: TJSONObject; const AKey: string; ADefault: Double): Double;
-var
-  d: TJSONData;
-  v: Double;
+var d: TJSONData;
 begin
   Result := ADefault;
   if ANode = nil then Exit;
   d := ANode.Find(AKey);
   if d = nil then Exit;
-  if d.JSONType = jtNumber then Exit(d.AsFloat);
-  if d.JSONType <> jtString then Exit;
-  v := TyJsToNumber(d.AsString);
-  if not IsNan(v) then Result := v;
+  case d.JSONType of
+    jtNumber: Result := d.AsFloat;
+    jtString: Result := TyJsToNumber(d.AsString);
+    jtNull: Result := NaN;
+    jtBoolean: if d.AsBoolean then Result := 1 else Result := 0;
+  end;
+end;
+
+{ [R7-H] A DIAL WITH A NaN ANGLE OR EXTENT -- startAngle, endAngle, min or
+  max written as null or as a word. Upstream computes with NaN in JS: an
+  angle NaN puts the axis line, the ticks, the labels and the arc at NaN,
+  none of them drawn, and the pointer's rotation NaN, which zrender's
+  transform reads as 0; an extent NaN labels every tick 'NaN' and maps a
+  value through linearMap's comparisons, false against NaN. Such a dial is
+  laid out and built with the FPU's traps masked, so the comparisons answer
+  as JS does, and nothing at NaN is added to the list. }
+function DialIsNaN(const ASpec: TTyGaugeSpec): Boolean;
+begin
+  Result := IsNan(ASpec.StartDeg) or IsNan(ASpec.EndDeg) or IsNan(ASpec.Min_)
+    or IsNan(ASpec.Max_);
+end;
+
+function MaskTraps: TFPUExceptionMask;
+begin
+  Result := SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide,
+    exOverflow, exUnderflow, exPrecision]);
+end;
+
+procedure UnmaskTraps(const AMask: TFPUExceptionMask);
+begin
+  ClearExceptions(False);
+  {$IFDEF CPUX86_64}
+  { and the SSE flags, which ClearExceptions leaves on this CPU (Graph.pas
+    UnmaskFP) }
+  SetMXCSR(GetMXCSR and not LongWord($3F));
+  {$ENDIF}
+  SetExceptionMask(AMask);
+end;
+
+function Fin(A: Double): Boolean; inline;
+begin
+  Result := not (IsNan(A) or IsInfinite(A));
+end;
+
+{ linearMap(val, [d0, d1], [r0, r1], clamp), JS through and through: a NaN
+  domain or value answers what its comparisons, all false, leave
+  (number.ts) }
+function JsLinearMap(AValue, AD0, AD1, AR0, AR1: Double; AClamp: Boolean): Double;
+var sub, subR: Double;
+begin
+  sub := AD1 - AD0;
+  subR := AR1 - AR0;
+  if (not IsNan(sub)) and (sub = 0) then
+  begin
+    if (not IsNan(subR)) and (subR = 0) then Exit(AR0);
+    Exit((AR0 + AR1) / 2);
+  end;
+  if AClamp then
+  begin
+    if (not IsNan(sub)) and (sub > 0) then
+    begin
+      if (not IsNan(AValue)) and (not IsNan(AD0)) and (AValue <= AD0) then Exit(AR0);
+      if (not IsNan(AValue)) and (not IsNan(AD1)) and (AValue >= AD1) then Exit(AR1);
+    end
+    else
+    begin
+      if (not IsNan(AValue)) and (not IsNan(AD0)) and (AValue >= AD0) then Exit(AR0);
+      if (not IsNan(AValue)) and (not IsNan(AD1)) and (AValue <= AD1) then Exit(AR1);
+    end;
+  end;
+  Result := (AValue - AD0) / sub * subR + AR0;
 end;
 
 { A colour key that may also be the word `auto` or `inherit`. Both mean "the
@@ -1247,7 +1315,23 @@ begin
   if AValue.Kind = buPx then Result := Result * APPI / 96;
 end;
 
+function LayoutBody(const ASpec: TTyGaugeSpec; const AViewport: TTyRectF;
+  APPI: Integer): TTyGaugeLayout; forward;
+
 function TyGaugeLayoutOf(const ASpec: TTyGaugeSpec; const AViewport: TTyRectF;
+  APPI: Integer): TTyGaugeLayout;
+var mask: TFPUExceptionMask;
+begin
+  if not DialIsNaN(ASpec) then Exit(LayoutBody(ASpec, AViewport, APPI));
+  mask := MaskTraps;
+  try
+    Result := LayoutBody(ASpec, AViewport, APPI);
+  finally
+    UnmaskTraps(mask);
+  end;
+end;
+
+function LayoutBody(const ASpec: TTyGaugeSpec; const AViewport: TTyRectF;
   APPI: Integer): TTyGaugeLayout;
 var
   base, startA, endA, frac: Double;
@@ -1264,8 +1348,20 @@ begin
     frame has y pointing down, so the sign flips. }
   startA := -ASpec.StartDeg * cRadian;
   endA := -ASpec.EndDeg * cRadian;
-  { STEP TWO, and the flag is INVERTED on the way in. }
-  TyNormalizeArcAngles(startA, endA, not ASpec.Clockwise);
+  { STEP TWO, and the flag is INVERTED on the way in. [R7-H] A NaN start
+    stays NaN and takes the end with it (normalizeArcAngles' modPI2 of NaN
+    is NaN, and the end is carried by the difference); a NaN end stays NaN
+    after a start folded as ever -- every comparison after is false. }
+  if IsNan(startA) then
+    endA := NaN
+  else if IsNan(endA) then
+  begin
+    frac := startA;
+    TyNormalizeArcAngles(startA, frac, not ASpec.Clockwise);
+    endA := NaN;
+  end
+  else
+    TyNormalizeArcAngles(startA, endA, not ASpec.Clockwise);
   Result.StartRad := startA;
   Result.EndRad := endA;
   Result.Span := endA - startA;
@@ -1290,7 +1386,9 @@ begin
   { NaN FIRST, because everything below compares. An ordered comparison
     against a quiet NaN raises here rather than answering False. }
   if IsNan(AValue) then Exit(ALayout.StartRad);
-  Result := TyLinearMap(AValue, AMin, AMax, ALayout.StartRad, ALayout.EndRad,
+  { [R7-H] JS's linearMap: a NaN extent answers what its comparisons leave
+    (min NaN: the end, max NaN: the start) [was: the start for either] }
+  Result := JsLinearMap(AValue, AMin, AMax, ALayout.StartRad, ALayout.EndRad,
     AClamp);
 end;
 
@@ -1556,7 +1654,28 @@ begin
   end;
 end;
 
+function AxisBody(const ABinding: TTySeriesBinding;
+  const ALayout: TTyGaugeLayout; const ASpec: TTyGaugeSpec;
+  const AVisual: TTyGaugeVisual; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; AList: TTyPaintList): Integer; forward;
+
 function TyBuildGaugeAxis(const ABinding: TTySeriesBinding;
+  const ALayout: TTyGaugeLayout; const ASpec: TTyGaugeSpec;
+  const AVisual: TTyGaugeVisual; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; AList: TTyPaintList): Integer;
+var mask: TFPUExceptionMask;
+begin
+  if not DialIsNaN(ASpec) then
+    Exit(AxisBody(ABinding, ALayout, ASpec, AVisual, AMeasurer, APPI, AList));
+  mask := MaskTraps;
+  try
+    Result := AxisBody(ABinding, ALayout, ASpec, AVisual, AMeasurer, APPI, AList);
+  finally
+    UnmaskTraps(mask);
+  end;
+end;
+
+function AxisBody(const ABinding: TTySeriesBinding;
   const ALayout: TTyGaugeLayout; const ASpec: TTyGaugeSpec;
   const AVisual: TTyGaugeVisual; const AMeasurer: ITyTextMeasurer;
   APPI: Integer; AList: TTyPaintList): Integer;
@@ -1673,10 +1792,16 @@ begin
       about 1e-13 radians over a whole dial, which is nowhere near a pixel, and
       forward is the one that cannot drift. }
     angle := ALayout.StartRad + i * step;
+    { [R7-H] the first is the start angle itself, as upstream's running
+      angle is before its first step: a NaN step (a NaN end angle) leaves it
+      where it is, 0 * NaN would not }
+    if i = 0 then angle := ALayout.StartRad;
     unitX := Cos(angle);
     unitY := Sin(angle);
 
-    if ASpec.SplitLine.Show and (ASpec.SplitLine.WidthLogical > 0) then
+    { [R7-H] a NaN angle puts the line at NaN: not drawn }
+    if ASpec.SplitLine.Show and (ASpec.SplitLine.WidthLogical > 0) and Fin(unitX)
+      and Fin(unitY) then
     begin
       dist := ASpec.SplitLine.Distance * APPI / 96 + ALayout.AxisWidth;
       x1 := unitX * (ALayout.R - dist) + ALayout.CX;
@@ -1716,7 +1841,8 @@ begin
       words := TyGaugeFormat(ASpec.AxisLabel.Formatter,
         ASpec.AxisLabel.HasFormatter,
         TyGaugeLabelValue(ASpec.Min_, ASpec.Max_, i, splitN), True);
-      if words <> '' then
+      { [R7-H] a label at NaN (a NaN angle) is not drawn }
+      if (words <> '') and Fin(tx) and Fin(ty) then
       begin
         rot := 0;
         case ASpec.AxisLabel.Rotate of
@@ -1866,12 +1992,16 @@ begin
       for j := 0 to subN do
       begin
         angle := ALayout.StartRad + (i + j / subN) * step;
+        { [R7-H] likewise the very first tick }
+        if (i = 0) and (j = 0) then angle := ALayout.StartRad;
         unitX := Cos(angle);
         unitY := Sin(angle);
         x1 := unitX * (ALayout.R - dist) + ALayout.CX;
         y1 := unitY * (ALayout.R - dist) + ALayout.CY;
         x2 := unitX * (ALayout.R - tickLen - dist) + ALayout.CX;
         y2 := unitY * (ALayout.R - tickLen - dist) + ALayout.CY;
+        { [R7-H] at NaN (a NaN angle): not drawn }
+        if not (Fin(x1) and Fin(y1) and Fin(x2) and Fin(y2)) then Continue;
         { [R7-D] likewise the track's with no bands [was: the tick's] }
         if ASpec.AxisTick.Auto then
           el := TickElement(x1, y1, x2, y2,
@@ -2000,7 +2130,17 @@ begin
   case it.Shape of
     rshArray, rshObject:
       if pos <= High(it.Cells) then c := it.Cells[pos]
-      else Exit;
+      else
+      begin
+        { [R7-H] A MISSING CELL -- a row shorter than the header -- is
+          undefined to the store: `+undefined` is NaN to the dial,
+          formatLabel's text '' (value == null), and it does not count
+          [was: the store's parse, which read it as null: 0] }
+        Result := NaN;
+        AWords := '';
+        AIsCell := True;
+        Exit;
+      end;
     rshScalar: c := it.Scalar;
     rshNull: ;
   else
@@ -2050,7 +2190,7 @@ begin
   raw := AStore.GetRawIndex(ARow);
   { [R7-D] the row's value as upstream reads it }
   val := TyGaugeRowValue(AStore, ADim, ARow, words, isCell);
-  frac := TyLinearMap(val, ASpec.Min_, ASpec.Max_, 0, 1, True);
+  frac := JsLinearMap(val, ASpec.Min_, ASpec.Max_, 0, 1, True);
   if IsNan(val) then frac := NaN;
   ABand := TyGaugeStopColour(ASpec.AxisLine.Stops, frac, AVisual.Track);
   ADetail := ABand;
@@ -2213,7 +2353,33 @@ begin
   end;
 end;
 
+function ValueBody(const ABinding: TTySeriesBinding;
+  const ALayout: TTyGaugeLayout; const ASpec: TTyGaugeSpec;
+  const AItems: TTyGaugeItemArray; const AVisual: TTyGaugeVisual;
+  AStore: TTyDataStore; ADim: Integer; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; AList: TTyPaintList): Integer; forward;
+
 function TyBuildGaugeValue(const ABinding: TTySeriesBinding;
+  const ALayout: TTyGaugeLayout; const ASpec: TTyGaugeSpec;
+  const AItems: TTyGaugeItemArray; const AVisual: TTyGaugeVisual;
+  AStore: TTyDataStore; ADim: Integer; const AMeasurer: ITyTextMeasurer;
+  APPI: Integer; AList: TTyPaintList): Integer;
+var mask: TFPUExceptionMask;
+begin
+  { [R7-H] a NaN dial: see DialIsNaN }
+  if not DialIsNaN(ASpec) then
+    Exit(ValueBody(ABinding, ALayout, ASpec, AItems, AVisual, AStore, ADim,
+      AMeasurer, APPI, AList));
+  mask := MaskTraps;
+  try
+    Result := ValueBody(ABinding, ALayout, ASpec, AItems, AVisual, AStore, ADim,
+      AMeasurer, APPI, AList);
+  finally
+    UnmaskTraps(mask);
+  end;
+end;
+
+function ValueBody(const ABinding: TTySeriesBinding;
   const ALayout: TTyGaugeLayout; const ASpec: TTyGaugeSpec;
   const AItems: TTyGaugeItemArray; const AVisual: TTyGaugeVisual;
   AStore: TTyDataStore; ADim: Integer; const AMeasurer: ITyTextMeasurer;
@@ -2360,7 +2526,7 @@ begin
     raw := AStore.GetRawIndex(k);
     val := TyGaugeRowValue(AStore, ADim, k, words, isCell);
     it := RowItem(raw);
-    frac := TyLinearMap(val, ASpec.Min_, ASpec.Max_, 0, 1, True);
+    frac := JsLinearMap(val, ASpec.Min_, ASpec.Max_, 0, 1, True);
     if IsNan(val) then frac := NaN;
     fill := AVisual.Track;
     if (raw >= 0) and (raw <= High(AVisual.Fills)) then fill := AVisual.Fills[raw];
@@ -2405,7 +2571,7 @@ begin
           because this list orders by an integer z2 -- two values within one
           per cent of each other therefore tie and fall back to data order. }
         if ASpec.Progress.Overlap then
-          el.Z2 := TyRoundOpt(TyLinearMap(val, ASpec.Min_, ASpec.Max_, 100, 0,
+          el.Z2 := TyRoundOpt(JsLinearMap(val, ASpec.Min_, ASpec.Max_, 100, 0,
             True), 0, 0, 100)
         else
           el.Z2 := 0;
@@ -2438,6 +2604,10 @@ begin
     if ASpec.Needle.Show then
     begin
       angle := TyGaugeAngleOf(ALayout, ASpec.Min_, ASpec.Max_, val, True);
+      { [R7-H] A NaN ANGLE (a NaN start angle) makes the rotation -(angle +
+        PI / 2) NaN, and zrender's transform reads `rotation || 0`: the
+        pointer is drawn at rotation 0, pointing up [was: an error] }
+      if IsNan(angle) then angle := -Pi / 2;
       { [R7-D] the item's own pointer }
       len := DialLen(it.NeedleLen, ALayout.R, APPI);
       halfW := DialLen(it.NeedleWidth, ALayout.R, APPI);
@@ -2467,7 +2637,9 @@ begin
           el.Anim.G[0] := ALayout.CX;
           el.Anim.G[1] := ALayout.CY;
           el.Anim.G[2] := angle;
-          el.Anim.G[3] := ALayout.StartRad;
+          { it turns from the start angle; a NaN one is its rotation 0 }
+          if IsNan(ALayout.StartRad) then el.Anim.G[3] := -Pi / 2
+          else el.Anim.G[3] := ALayout.StartRad;
           { [F3c] the PointerPath's width, length and offset }
           el.Caption.LgSymbol := '';
           el.Caption.LgG[0] := halfW;
@@ -2526,7 +2698,8 @@ begin
         el.Anim.G[0] := ALayout.CX;
         el.Anim.G[1] := ALayout.CY;
         el.Anim.G[2] := angle;
-        el.Anim.G[3] := ALayout.StartRad;
+        if IsNan(ALayout.StartRad) then el.Anim.G[3] := -Pi / 2
+        else el.Anim.G[3] := ALayout.StartRad;
         { [F3c] the icon over the width and the length, at the offset }
         el.Caption.LgSymbol := ASpec.Needle.Icon;
         el.Caption.LgKeepAspect := it.NeedleKeepAspect;

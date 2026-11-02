@@ -3773,6 +3773,1162 @@
      "lines": []
     }
    ]
+  },
+  {
+   "name": "nan-start-null",
+   "note": "startAngle null: undefined, the angle NaN -- no axis line, no ticks, no labels, no arc; the pointer at rotation 0",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "axisLine": {
+       "show": true
+      },
+      "splitLine": {
+       "show": true,
+       "lineStyle": {
+        "color": "#333333"
+       }
+      },
+      "axisTick": {
+       "show": true,
+       "splitNumber": 2,
+       "lineStyle": {
+        "color": "#666666"
+       }
+      },
+      "axisLabel": {
+       "show": true
+      },
+      "splitNumber": 2,
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "startAngle": null,
+      "progress": {
+       "show": true
+      }
+     }
+    ]
+   },
+   "series": [
+    {
+     "index": 0,
+     "band": "#e8ebf0ff",
+     "rows": [
+      {
+       "value": "4044000000000000",
+       "name": ""
+      }
+     ],
+     "titles": [
+      ""
+     ],
+     "details": [
+      "40"
+     ],
+     "pointers": [
+      {
+       "angle": "fff8000000000000",
+       "fill": "#5470c6ff",
+       "drawn": "bff921fb54442d18",
+       "w": "4018000000000000",
+       "r": "4050e00000000000",
+       "x": "0000000000000000",
+       "y": "0000000000000000"
+      }
+     ],
+     "progress": [
+      {
+       "end": "NaN",
+       "start": "fff8000000000000",
+       "fill": "#5470c6ff"
+      }
+     ],
+     "lines": [
+      "#333333ff",
+      "#666666ff",
+      "#666666ff",
+      "#666666ff",
+      "#333333ff",
+      "#666666ff",
+      "#666666ff",
+      "#666666ff",
+      "#333333ff"
+     ],
+     "arcs": [
+      {
+       "start": "NaN",
+       "end": "NaN"
+      }
+     ],
+     "labels": [
+      {
+       "text": "0",
+       "x": "NaN",
+       "y": "NaN"
+      },
+      {
+       "text": "50",
+       "x": "NaN",
+       "y": "NaN"
+      },
+      {
+       "text": "100",
+       "x": "NaN",
+       "y": "NaN"
+      }
+     ],
+     "ticks": 0
+    }
+   ]
+  },
+  {
+   "name": "nan-end-word",
+   "note": "endAngle 'x': NaN -- the first label and split line only, no axis line, no arc, the pointer at rotation 0",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "axisLine": {
+       "show": true
+      },
+      "splitLine": {
+       "show": true,
+       "lineStyle": {
+        "color": "#333333"
+       }
+      },
+      "axisTick": {
+       "show": true,
+       "splitNumber": 2,
+       "lineStyle": {
+        "color": "#666666"
+       }
+      },
+      "axisLabel": {
+       "show": true
+      },
+      "splitNumber": 2,
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "endAngle": "x",
+      "progress": {
+       "show": true
+      }
+     }
+    ]
+   },
+   "series": [
+    {
+     "index": 0,
+     "band": "#e8ebf0ff",
+     "rows": [
+      {
+       "value": "4044000000000000",
+       "name": ""
+      }
+     ],
+     "titles": [
+      ""
+     ],
+     "details": [
+      "40"
+     ],
+     "pointers": [
+      {
+       "angle": "fff8000000000000",
+       "fill": "#5470c6ff",
+       "drawn": "bff921fb54442d18",
+       "w": "4018000000000000",
+       "r": "4050e00000000000",
+       "x": "0000000000000000",
+       "y": "0000000000000000"
+      }
+     ],
+     "progress": [
+      {
+       "end": "NaN",
+       "start": "4002d97c7f3321d2",
+       "fill": "#5470c6ff"
+      }
+     ],
+     "lines": [
+      "#333333ff",
+      "#666666ff",
+      "#666666ff",
+      "#666666ff",
+      "#333333ff",
+      "#666666ff",
+      "#666666ff",
+      "#666666ff",
+      "#333333ff"
+     ],
+     "arcs": [
+      {
+       "start": "4002d97c7f3321d2",
+       "end": "NaN"
+      }
+     ],
+     "labels": [
+      {
+       "text": "0",
+       "x": "406226600bf87b66",
+       "y": "4069999ff407849a"
+      },
+      {
+       "text": "50",
+       "x": "NaN",
+       "y": "NaN"
+      },
+      {
+       "text": "100",
+       "x": "NaN",
+       "y": "NaN"
+      }
+     ],
+     "ticks": 2
+    }
+   ]
+  },
+  {
+   "name": "nan-min-null",
+   "note": "min null: NaN -- every label 'NaN', the pointer at the end, the arc full, the reading's 'inherit' the last band",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "axisLine": {
+       "lineStyle": {
+        "color": [
+         [
+          0.5,
+          "#ff0000"
+         ],
+         [
+          1,
+          "#0000ff"
+         ]
+        ]
+       }
+      },
+      "splitLine": {
+       "show": true,
+       "lineStyle": {
+        "color": "#333333"
+       }
+      },
+      "axisTick": {
+       "show": true,
+       "splitNumber": 2,
+       "lineStyle": {
+        "color": "#666666"
+       }
+      },
+      "axisLabel": {
+       "show": true
+      },
+      "splitNumber": 2,
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "min": null,
+      "detail": {
+       "color": "inherit"
+      },
+      "progress": {
+       "show": true
+      }
+     }
+    ]
+   },
+   "series": [
+    {
+     "index": 0,
+     "band": null,
+     "rows": [
+      {
+       "value": "4044000000000000",
+       "name": ""
+      }
+     ],
+     "titles": [
+      ""
+     ],
+     "details": [
+      "40"
+     ],
+     "pointers": [
+      {
+       "angle": "401c463abeccb2ba",
+       "fill": "#5470c6ff",
+       "drawn": "401c463abeccb2ba",
+       "w": "4018000000000000",
+       "r": "4050e00000000000",
+       "x": "0000000000000000",
+       "y": "0000000000000000"
+      }
+     ],
+     "progress": [
+      {
+       "end": "401c463abeccb2bb",
+       "start": "4002d97c7f3321d2",
+       "fill": "#5470c6ff"
+      }
+     ],
+     "lines": [
+      "#333333ff",
+      "#666666ff",
+      "#666666ff",
+      "#666666ff",
+      "#333333ff",
+      "#666666ff",
+      "#666666ff",
+      "#666666ff",
+      "#333333ff"
+     ],
+     "inks": [
+      "#5470c6ff"
+     ],
+     "arcs": [
+      {
+       "start": "4012d97c7f3321d2",
+       "end": "401c463abeccb2bb"
+      },
+      {
+       "start": "4002d97c7f3321d2",
+       "end": "4012d97c7f3321d2"
+      }
+     ],
+     "labels": [
+      {
+       "text": "NaN",
+       "x": "406226600bf87b66",
+       "y": "4069999ff407849a"
+      },
+      {
+       "text": "NaN",
+       "x": "4068ffffffffffff",
+       "y": "4052200000000000"
+      },
+      {
+       "text": "NaN",
+       "x": "406fd99ff407849d",
+       "y": "4069999ff4078498"
+      }
+     ],
+     "ticks": 9
+    }
+   ]
+  },
+  {
+   "name": "nan-max-word",
+   "note": "max 'abc': NaN -- every label 'NaN', the pointer at the start, no arc, the reading's 'inherit' the first band",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "axisLine": {
+       "lineStyle": {
+        "color": [
+         [
+          0.5,
+          "#ff0000"
+         ],
+         [
+          1,
+          "#0000ff"
+         ]
+        ]
+       }
+      },
+      "splitLine": {
+       "show": true,
+       "lineStyle": {
+        "color": "#333333"
+       }
+      },
+      "axisTick": {
+       "show": true,
+       "splitNumber": 2,
+       "lineStyle": {
+        "color": "#666666"
+       }
+      },
+      "axisLabel": {
+       "show": true
+      },
+      "splitNumber": 2,
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "max": "abc",
+      "detail": {
+       "color": "inherit"
+      },
+      "progress": {
+       "show": true
+      }
+     }
+    ]
+   },
+   "series": [
+    {
+     "index": 0,
+     "band": null,
+     "rows": [
+      {
+       "value": "4044000000000000",
+       "name": ""
+      }
+     ],
+     "titles": [
+      ""
+     ],
+     "details": [
+      "40"
+     ],
+     "pointers": [
+      {
+       "angle": "4002d97c7f3321d2",
+       "fill": "#5470c6ff",
+       "drawn": "4002d97c7f3321d2",
+       "w": "4018000000000000",
+       "r": "4050e00000000000",
+       "x": "0000000000000000",
+       "y": "0000000000000000"
+      }
+     ],
+     "progress": [
+      {
+       "end": "4002d97c7f3321d2",
+       "start": "4002d97c7f3321d2",
+       "fill": "#5470c6ff"
+      }
+     ],
+     "lines": [
+      "#333333ff",
+      "#666666ff",
+      "#666666ff",
+      "#666666ff",
+      "#333333ff",
+      "#666666ff",
+      "#666666ff",
+      "#666666ff",
+      "#333333ff"
+     ],
+     "inks": [
+      "#5470c6ff"
+     ],
+     "arcs": [
+      {
+       "start": "4012d97c7f3321d2",
+       "end": "401c463abeccb2bb"
+      },
+      {
+       "start": "4002d97c7f3321d2",
+       "end": "4012d97c7f3321d2"
+      }
+     ],
+     "labels": [
+      {
+       "text": "NaN",
+       "x": "406226600bf87b66",
+       "y": "4069999ff407849a"
+      },
+      {
+       "text": "NaN",
+       "x": "4068ffffffffffff",
+       "y": "4052200000000000"
+      },
+      {
+       "text": "NaN",
+       "x": "406fd99ff407849d",
+       "y": "4069999ff4078498"
+      }
+     ],
+     "ticks": 9
+    }
+   ]
+  },
+  {
+   "name": "nan-both-angles",
+   "note": "startAngle 'a' and endAngle null; two rows",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "axisLine": {
+       "show": true
+      },
+      "splitLine": {
+       "show": true,
+       "lineStyle": {
+        "color": "#333333"
+       }
+      },
+      "axisTick": {
+       "show": true,
+       "splitNumber": 2,
+       "lineStyle": {
+        "color": "#666666"
+       }
+      },
+      "axisLabel": {
+       "show": true
+      },
+      "splitNumber": 2,
+      "data": [
+       {
+        "value": 40
+       },
+       {
+        "value": 70
+       }
+      ],
+      "startAngle": "a",
+      "endAngle": null,
+      "progress": {
+       "show": true
+      }
+     }
+    ]
+   },
+   "series": [
+    {
+     "index": 0,
+     "band": "#e8ebf0ff",
+     "rows": [
+      {
+       "value": "4044000000000000",
+       "name": ""
+      },
+      {
+       "value": "4051800000000000",
+       "name": ""
+      }
+     ],
+     "titles": [
+      "",
+      ""
+     ],
+     "details": [
+      "40",
+      "70"
+     ],
+     "pointers": [
+      {
+       "angle": "fff8000000000000",
+       "fill": "#5470c6ff",
+       "drawn": "bff921fb54442d18",
+       "w": "4018000000000000",
+       "r": "4050e00000000000",
+       "x": "0000000000000000",
+       "y": "0000000000000000"
+      },
+      {
+       "angle": "fff8000000000000",
+       "fill": "#91cc75ff",
+       "drawn": "bff921fb54442d18",
+       "w": "4018000000000000",
+       "r": "4050e00000000000",
+       "x": "0000000000000000",
+       "y": "0000000000000000"
+      }
+     ],
+     "progress": [
+      {
+       "end": "NaN",
+       "start": "fff8000000000000",
+       "fill": "#5470c6ff"
+      },
+      {
+       "end": "NaN",
+       "start": "fff8000000000000",
+       "fill": "#91cc75ff"
+      }
+     ],
+     "lines": [
+      "#333333ff",
+      "#666666ff",
+      "#666666ff",
+      "#666666ff",
+      "#333333ff",
+      "#666666ff",
+      "#666666ff",
+      "#666666ff",
+      "#333333ff"
+     ],
+     "arcs": [
+      {
+       "start": "NaN",
+       "end": "NaN"
+      }
+     ],
+     "labels": [
+      {
+       "text": "0",
+       "x": "NaN",
+       "y": "NaN"
+      },
+      {
+       "text": "50",
+       "x": "NaN",
+       "y": "NaN"
+      },
+      {
+       "text": "100",
+       "x": "NaN",
+       "y": "NaN"
+      }
+     ],
+     "ticks": 0
+    }
+   ]
+  },
+  {
+   "name": "nan-extent-true",
+   "note": "min true (1) and max ' 90 ' (90): JS numbers",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "axisLine": {
+       "show": true
+      },
+      "splitLine": {
+       "show": true,
+       "lineStyle": {
+        "color": "#333333"
+       }
+      },
+      "axisTick": {
+       "show": true,
+       "splitNumber": 2,
+       "lineStyle": {
+        "color": "#666666"
+       }
+      },
+      "axisLabel": {
+       "show": true
+      },
+      "splitNumber": 2,
+      "data": [
+       {
+        "value": 40
+       }
+      ],
+      "min": true,
+      "max": " 90 ",
+      "progress": {
+       "show": true
+      }
+     }
+    ]
+   },
+   "series": [
+    {
+     "index": 0,
+     "band": "#e8ebf0ff",
+     "rows": [
+      {
+       "value": "4044000000000000",
+       "name": ""
+      }
+     ],
+     "titles": [
+      ""
+     ],
+     "details": [
+      "40"
+     ],
+     "pointers": [
+      {
+       "angle": "4011af48380ee4c4",
+       "fill": "#5470c6ff",
+       "drawn": "4011af48380ee4c4",
+       "w": "4018000000000000",
+       "r": "4050e00000000000",
+       "x": "0000000000000000",
+       "y": "0000000000000000"
+      }
+     ],
+     "progress": [
+      {
+       "end": "4011af48380ee4c4",
+       "start": "4002d97c7f3321d2",
+       "fill": "#5470c6ff"
+      }
+     ],
+     "lines": [
+      "#333333ff",
+      "#666666ff",
+      "#666666ff",
+      "#666666ff",
+      "#333333ff",
+      "#666666ff",
+      "#666666ff",
+      "#666666ff",
+      "#333333ff"
+     ],
+     "arcs": [
+      {
+       "start": "4002d97c7f3321d2",
+       "end": "401c463abeccb2bb"
+      }
+     ],
+     "labels": [
+      {
+       "text": "1",
+       "x": "406226600bf87b66",
+       "y": "4069999ff407849a"
+      },
+      {
+       "text": "45.5",
+       "x": "4068ffffffffffff",
+       "y": "4052200000000000"
+      },
+      {
+       "text": "90",
+       "x": "406fd99ff407849d",
+       "y": "4069999ff4078498"
+      }
+     ],
+     "ticks": 9
+    }
+   ]
+  },
+  {
+   "name": "ds-missing-cell",
+   "note": "an ordinal column whose second row is shorter than the header: undefined -- NaN to the dial, '' to the reading (min -50)",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "min": -50,
+      "max": 50,
+      "detail": {
+       "formatter": "{value}x"
+      },
+      "progress": {
+       "show": true
+      }
+     }
+    ],
+    "dataset": {
+     "source": [
+      [
+       "v",
+       "w"
+      ],
+      [
+       "Rate",
+       1
+      ],
+      [],
+      [
+       null,
+       2
+      ]
+     ]
+    }
+   },
+   "series": [
+    {
+     "index": 0,
+     "band": "#e8ebf0ff",
+     "rows": [
+      {
+       "value": "s:Rate",
+       "name": ""
+      },
+      {
+       "value": "u",
+       "name": ""
+      },
+      {
+       "value": null,
+       "name": ""
+      }
+     ],
+     "titles": [
+      "",
+      "",
+      ""
+     ],
+     "details": [
+      "Ratex",
+      "x",
+      "x"
+     ],
+     "pointers": [
+      {
+       "angle": "4002d97c7f3321d2",
+       "fill": "#5470c6ff",
+       "w": "4018000000000000",
+       "r": "4050e00000000000",
+       "x": "0000000000000000",
+       "y": "0000000000000000"
+      },
+      {
+       "angle": "4002d97c7f3321d2",
+       "fill": "#91cc75ff",
+       "w": "4018000000000000",
+       "r": "4050e00000000000",
+       "x": "0000000000000000",
+       "y": "0000000000000000"
+      },
+      {
+       "angle": "4012d97c7f3321d2",
+       "fill": "#fac858ff",
+       "w": "4018000000000000",
+       "r": "4050e00000000000",
+       "x": "0000000000000000",
+       "y": "0000000000000000"
+      }
+     ],
+     "progress": [
+      {
+       "end": "NaN",
+       "start": "4002d97c7f3321d2",
+       "fill": "#5470c6ff"
+      },
+      {
+       "end": "NaN",
+       "start": "4002d97c7f3321d2",
+       "fill": "#91cc75ff"
+      },
+      {
+       "end": "4012d97c7f3321d2",
+       "start": "4002d97c7f3321d2",
+       "fill": "#fac858ff"
+      }
+     ],
+     "lines": []
+    }
+   ]
+  },
+  {
+   "name": "data-missing-cell",
+   "note": "data arrays: an empty one and one with null, under an ordinal first item",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "axisLine": {
+       "show": false
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "min": -50,
+      "max": 50,
+      "data": [
+       [
+        "abc",
+        3
+       ],
+       [],
+       [
+        null,
+        4
+       ]
+      ],
+      "progress": {
+       "show": true
+      }
+     }
+    ]
+   },
+   "series": [
+    {
+     "index": 0,
+     "band": "#e8ebf0ff",
+     "rows": [
+      {
+       "value": "s:abc",
+       "name": ""
+      },
+      {
+       "value": "u",
+       "name": ""
+      },
+      {
+       "value": null,
+       "name": ""
+      }
+     ],
+     "titles": [
+      "",
+      "",
+      ""
+     ],
+     "details": [
+      "abc",
+      "",
+      ""
+     ],
+     "pointers": [
+      {
+       "angle": "4002d97c7f3321d2",
+       "fill": "#5470c6ff",
+       "w": "4018000000000000",
+       "r": "4050e00000000000",
+       "x": "0000000000000000",
+       "y": "0000000000000000"
+      },
+      {
+       "angle": "4002d97c7f3321d2",
+       "fill": "#91cc75ff",
+       "w": "4018000000000000",
+       "r": "4050e00000000000",
+       "x": "0000000000000000",
+       "y": "0000000000000000"
+      },
+      {
+       "angle": "4012d97c7f3321d2",
+       "fill": "#fac858ff",
+       "w": "4018000000000000",
+       "r": "4050e00000000000",
+       "x": "0000000000000000",
+       "y": "0000000000000000"
+      }
+     ],
+     "progress": [
+      {
+       "end": "NaN",
+       "start": "4002d97c7f3321d2",
+       "fill": "#5470c6ff"
+      },
+      {
+       "end": "NaN",
+       "start": "4002d97c7f3321d2",
+       "fill": "#91cc75ff"
+      },
+      {
+       "end": "4012d97c7f3321d2",
+       "start": "4002d97c7f3321d2",
+       "fill": "#fac858ff"
+      }
+     ],
+     "lines": []
+    }
+   ]
+  },
+  {
+   "name": "ds-missing-inherit",
+   "note": "the reading's 'inherit' over two bands: a missing cell NaN (the last band), a null 0 (the first)",
+   "option": {
+    "animation": false,
+    "color": [
+     "#5470c6",
+     "#91cc75",
+     "#fac858",
+     "#ee6666"
+    ],
+    "series": [
+     {
+      "type": "gauge",
+      "axisLine": {
+       "show": false,
+       "lineStyle": {
+        "color": [
+         [
+          0.5,
+          "#ff0000"
+         ],
+         [
+          1,
+          "#0000ff"
+         ]
+        ]
+       }
+      },
+      "splitLine": {
+       "show": false
+      },
+      "axisTick": {
+       "show": false
+      },
+      "axisLabel": {
+       "show": false
+      },
+      "min": -50,
+      "max": 50,
+      "detail": {
+       "color": "inherit",
+       "formatter": "{value}x"
+      }
+     }
+    ],
+    "dataset": {
+     "source": [
+      [
+       "v",
+       "w"
+      ],
+      [
+       "Rate",
+       1
+      ],
+      [],
+      [
+       null,
+       2
+      ]
+     ]
+    }
+   },
+   "series": [
+    {
+     "index": 0,
+     "band": null,
+     "rows": [
+      {
+       "value": "s:Rate",
+       "name": ""
+      },
+      {
+       "value": "u",
+       "name": ""
+      },
+      {
+       "value": null,
+       "name": ""
+      }
+     ],
+     "titles": [
+      "",
+      "",
+      ""
+     ],
+     "details": [
+      "Ratex",
+      "x",
+      "x"
+     ],
+     "pointers": [
+      {
+       "angle": "4002d97c7f3321d2",
+       "fill": "#5470c6ff",
+       "w": "4018000000000000",
+       "r": "4050e00000000000",
+       "x": "0000000000000000",
+       "y": "0000000000000000"
+      },
+      {
+       "angle": "4002d97c7f3321d2",
+       "fill": "#91cc75ff",
+       "w": "4018000000000000",
+       "r": "4050e00000000000",
+       "x": "0000000000000000",
+       "y": "0000000000000000"
+      },
+      {
+       "angle": "4012d97c7f3321d2",
+       "fill": "#fac858ff",
+       "w": "4018000000000000",
+       "r": "4050e00000000000",
+       "x": "0000000000000000",
+       "y": "0000000000000000"
+      }
+     ],
+     "progress": [
+      null,
+      null,
+      null
+     ],
+     "lines": [],
+     "inks": [
+      "#0000ffff",
+      "#0000ffff",
+      "#ff0000ff"
+     ]
+    }
+   ]
   }
  ]
 }
