@@ -3462,6 +3462,7 @@ procedure TTyCustomTerminalView.UTF8KeyPress(var UTF8Key: TUTF8Char);
 var
   full: string;
   ev: TTyTerminalKeyEvent;
+  ch: Char;
 begin
   { GTK3 把输入法的提交截断成一个 TUTF8Char 送来:整段还在 widgetset 手里,取那一段
     (Edit.pas 同一个绕行;其他 widgetset 上返回空串) }
@@ -3497,6 +3498,19 @@ begin
   begin
     UTF8Key := '';
     Exit;
+  end;
+  { #185: OnKeyPress 是 published 的:单字节的字符先给它(同 TEdit),置 #0 就不发、改了就发
+    改过的。下面清空了 UTF8Key,LCL 自己不会再调 KeyPress }
+  if Length(UTF8Key) = 1 then
+  begin
+    ch := UTF8Key[1];
+    KeyPress(ch);
+    if ch = #0 then
+    begin
+      UTF8Key := '';
+      Exit;
+    end;
+    UTF8Key := ch;
   end;
   FCore.Input(UTF8Key, True);
   NoteActivity;

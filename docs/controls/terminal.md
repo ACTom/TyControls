@@ -94,7 +94,7 @@ uses tyControls.Terminal;
 | `BeginUpdate` / `EndUpdate` | 一次改多个颜色，终端只重算一次。 |
 | `Changed` | 内容没变也算改了一次：终端重新取色、重画。给系统色用（见下）。 |
 
-另有 `TTyCustomControl` 的通用成员（`Align`、`Anchors`、`BorderSpacing`、`Constraints`、`Enabled`、`TabOrder`、`Hint`、`StyleClass`、`StyleOverride`、`Controller`，以及 `OnEnter` / `OnExit` / `OnKeyDown` / `OnKeyUp` / `OnUTF8KeyPress` / `OnClick` / `OnMouse*`）。
+另有 `TTyCustomControl` 的通用成员（`Align`、`Anchors`、`BorderSpacing`、`Constraints`、`Enabled`、`TabOrder`、`Hint`、`StyleClass`、`StyleOverride`、`Controller`，以及 `OnEnter` / `OnExit` / `OnKeyDown` / `OnKeyUp` / `OnKeyPress` / `OnUTF8KeyPress` / `OnClick` / `OnMouse*`）。`OnKeyPress` 只收打出来的单字节字符，置 `#0` 就不发；Enter、Tab、Esc、Ctrl+字母在按下时就发了，到不了它，要拦就用 `OnKeyDown`。
 
 ### public 属性
 

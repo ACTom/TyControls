@@ -84,6 +84,7 @@ type
     procedure TestWindowKeysAreLeftToWindows;
     procedure TestAnAltCodeCharacterIsTyped;
     procedure TestReadOnlyLeavesTheKeysItWouldOnlySend;
+    procedure TestOnKeyPressSeesTypedCharacters;
   end;
 
 implementation
@@ -902,6 +903,23 @@ begin
   F.View.ReadOnly := False;
   AssertEquals('writable: Tab is the program''s', 0, Press(VK_TAB));
   AssertEquals('09', Hex);
+end;
+
+{ #185: OnKeyPress is published: it sees the characters typed, and Key := #0 keeps one
+  from being sent, as in TEdit }
+procedure TTyTerminalViewInputTests.TestOnKeyPressSeesTypedCharacters;
+begin
+  F.View.OnKeyPress := @HostKeyPress;
+  TypeIt('a');
+  AssertEquals('seen', 'a', FKeyPresses);
+  AssertEquals('sent', '61', Hex);
+  FDropKey := 'b';
+  TypeIt('b');
+  AssertEquals('seen too', 'ab', FKeyPresses);
+  AssertEquals('Key := #0: not sent', '61', Hex);
+  TypeIt(#$C3#$A9);
+  AssertEquals('a character of more than one byte is not a Char: not asked', 'ab', FKeyPresses);
+  AssertEquals('and sent', '61 C3 A9', Hex);
 end;
 
 initialization
