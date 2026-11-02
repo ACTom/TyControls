@@ -74,6 +74,7 @@ type
     function GetGlyphNamesProp: TStrings;
     procedure SetItems(const AValue: TStrings);
     procedure SetGlyphNames(const AValue: TStrings);
+    procedure GlyphNamesChanged(Sender: TObject);
     procedure SetIconFont(const AValue: TTyIconFont);
     procedure IconFontChanged(Sender: TObject);
     procedure SetItemIndex(const AValue: Integer);
@@ -93,6 +94,9 @@ type
       the SAME geometry the inline paint uses. Returns -1 for no cell, or the
       sentinel ArrowHit for the drop-down arrow zone. }
     function InlineCellAt(AX, AY: Integer): Integer;
+    { #177: the first item the inline row shows -- the run of VisibleColumns the selected item
+      is in, so an item picked in the pop-up beyond the first run is on the row. }
+    function InlineFirst: Integer;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -356,6 +360,7 @@ begin
   FItems := TStringList.Create;
   FItems.OnChange := @ItemsChanged;
   FGlyphNames := TStringList.Create;
+  FGlyphNames.OnChange := @GlyphNamesChanged;   { #177: edited in place, it repaints too }
   FIconFont := nil;
   FItemIndex := -1;
   FVisibleColumns := 3;
@@ -406,6 +411,11 @@ end;
 procedure TTyRibbonGallery.SetGlyphNames(const AValue: TStrings);
 begin
   FGlyphNames.Assign(AValue);
+  Invalidate;
+end;
+
+procedure TTyRibbonGallery.GlyphNamesChanged(Sender: TObject);
+begin
   Invalidate;
 end;
 
@@ -559,8 +569,20 @@ begin
     if cellR.Right > rowRight - arrowW then cellR.Right := rowRight - arrowW;
     if (AX >= cellR.Left) and (AX < cellR.Right)
        and (AY >= cellR.Top) and (AY < cellR.Bottom) then
-      Exit(i);
+      Exit(InlineFirst + i);
   end;
+end;
+
+function TTyRibbonGallery.InlineFirst: Integer;
+var
+  visN: Integer;
+begin
+  Result := 0;
+  visN := FVisibleColumns;
+  if (visN <= 0) or (FItemIndex < visN) then Exit;
+  Result := (FItemIndex div visN) * visN;
+  if Result + visN > FItems.Count then Result := FItems.Count - visN;
+  if Result < 0 then Result := 0;
 end;
 
 procedure TTyRibbonGallery.PaintCell(APainter: TTyPainter; const ACellRect: TRect;
@@ -618,7 +640,7 @@ var
   P: TTyPainter;
   BoxStyle: TTyStyleSet;
   R, cellR, arrowR: TRect;
-  cellW, arrowW, visN, i, rowRight, inset, insetLogical, capR: Integer;
+  cellW, arrowW, visN, i, rowRight, inset, insetLogical, capR, first: Integer;
   states: TTyStateSet;
   cellCorners: TTyCorners;
   savedClip: TRect;
@@ -651,6 +673,7 @@ begin
     P.Bitmap.ClipRect := P.Dev(Rect(R.Left + inset, R.Top + inset, R.Right - inset, R.Bottom - inset));
 
     // Inline cells: up to VisibleColumns, left->right, in the space left of the arrow.
+    first := InlineFirst;
     visN := FVisibleColumns;
     if visN > FItems.Count then visN := FItems.Count;
     for i := 0 to visN - 1 do
@@ -664,8 +687,8 @@ begin
 
       states := [];
       // tysActive = TyListItem:active (accent), the selected look (no :selected rule exists).
-      if i = FItemIndex then Include(states, tysActive)
-      else if i = FHoverCell then Include(states, tysHover)
+      if first + i = FItemIndex then Include(states, tysActive)
+      else if first + i = FHoverCell then Include(states, tysHover)
       else Include(states, tysNormal);
       // The first cell hugs the box's LEFT rounded corner — round its TL/BL CONCENTRIC with the
       // (inset) border (radius - inset) so a selected cell's fill nests inside it.
@@ -675,7 +698,7 @@ begin
         cellCorners.TL := capR;
         cellCorners.BL := capR;
       end;
-      PaintCell(P, cellR, i, states, cellCorners);
+      PaintCell(P, cellR, first + i, states, cellCorners);
     end;
 
     // Restore the clip BEFORE the arrow + border so neither is trimmed by the interior band.

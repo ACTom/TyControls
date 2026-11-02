@@ -63,6 +63,9 @@ type
     function TotalCount: Integer;
     function EntryCaption(AIdx: Integer): string;
     function EntryIsSeparator(AIdx: Integer): Boolean;
+    { #177: the first entry from AFrom on, stepping AStep, that is not a separator; -1 = none. }
+    function FirstEntryFrom(AFrom, AStep: Integer): Integer;
+    procedure GlyphsChanged(Sender: TObject);
   protected
     { "What icon does row N draw?" -- protected rather than private because it is the one
       answer here worth overriding (a descendant that sources icons differently), and because
@@ -207,9 +210,11 @@ begin
   FCommands := TStringList.Create;
   TStringList(FCommands).OnChange := @CommandsChanged;
   FCommandGlyphs := TStringList.Create;
+  TStringList(FCommandGlyphs).OnChange := @GlyphsChanged;   { #177: edited in place, it repaints }
   FBottomCommands := TStringList.Create;
   TStringList(FBottomCommands).OnChange := @CommandsChanged;
   FBottomCommandGlyphs := TStringList.Create;
+  TStringList(FBottomCommandGlyphs).OnChange := @GlyphsChanged;
   FItemIndex := -1;
   FDefaultItemIndex := -1;
   FHoverIndex := TyBackstageNoRow;
@@ -306,6 +311,11 @@ var
 begin
   sbW := MulDiv(GetSidebarWidth, Font.PixelsPerInch, 96);
   Result := Rect(sbW, 0, ClientWidth, ClientHeight);
+end;
+
+procedure TTyRibbonBackstage.GlyphsChanged(Sender: TObject);
+begin
+  Invalidate;
 end;
 
 procedure TTyRibbonBackstage.SetCommandGlyphs(AValue: TStrings);
@@ -600,13 +610,47 @@ begin
 end;
 
 procedure TTyRibbonBackstage.KeyDown(var Key: Word; Shift: TShiftState);
+var
+  step, i: Integer;
 begin
   inherited KeyDown(Key, Shift);
   if Key = VK_ESCAPE then
   begin
     Close;
     Key := 0;
+    Exit;
   end;
+  { #177: Up and Down walk the side bar, over its separators, as the unit always said -- they
+    did nothing. Home and End go to its ends. }
+  step := 0;
+  case Key of
+    VK_UP:   step := -1;
+    VK_DOWN: step := 1;
+    VK_HOME: begin i := FirstEntryFrom(0, 1); if i >= 0 then ItemIndex := i; Key := 0; Exit; end;
+    VK_END:  begin i := FirstEntryFrom(TotalCount - 1, -1); if i >= 0 then ItemIndex := i; Key := 0; Exit; end;
+  end;
+  if step = 0 then Exit;
+  if FItemIndex < 0 then
+  begin
+    if step > 0 then i := FirstEntryFrom(0, 1) else i := FirstEntryFrom(TotalCount - 1, -1);
+  end
+  else
+    i := FirstEntryFrom(FItemIndex + step, step);
+  if i >= 0 then ItemIndex := i;
+  Key := 0;
+end;
+
+function TTyRibbonBackstage.FirstEntryFrom(AFrom, AStep: Integer): Integer;
+var
+  i: Integer;
+begin
+  i := AFrom;
+  while (i >= 0) and (i < TotalCount) do
+  begin
+    if not EntryIsSeparator(i) then Exit(i);
+    Inc(i, AStep);
+  end;
+  Result := -1;
 end;
 
 end.

@@ -24,7 +24,7 @@ unit tyControls.Ribbon;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType,
+  Classes, SysUtils, Types, Controls, Graphics, Forms, LCLType, ExtCtrls,
   ComCtrls,                          // TTabPosition, for the HeaderTabPosition decline
   tyControls.Types, tyControls.Controller, tyControls.Painter, tyControls.Base,
   tyControls.TabStrip, tyControls.RibbonBackstage, tyControls.PopupSurface,
@@ -53,17 +53,20 @@ type
     FFlyout: TTyPopupSurface;        // transient page band shown while Minimized
     FKeyTips: Boolean;
     FKeyTipsActive: Boolean;
-    FKeyTipKeys: TKeyTipArray;       // one access key per VISIBLE tab (+ 'F' for the File tab)
-    FHookedForm: TCustomForm;
-    FSavedFormKeyDown: TKeyEvent;
-    FSavedKeyPreview: Boolean;
+    FKeyTipKeys: TKeyTipArray;       // one access key per tab
+    FFileKeyTip: string;             // #177: the File tab's, '' without a File tab
+    { #177: Alt is held since a key-down of its own; FAltChord = another key came while it was
+      (Alt+Tab, a mnemonic) -- then its release is not a tap and shows nothing. }
+    FAltHeld, FAltChord: Boolean;
+    FAltTimer: TTimer;               // watches for Alt's release while it is held
     FOnFileTab: TNotifyEvent;
     procedure ShowFlyout;
     procedure FlyoutClosed(Sender: TObject);
     procedure SetKeyTips(AValue: Boolean);
-    procedure HookForm;
-    procedure UnhookForm;
-    procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure AppKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure AppDeactivate(Sender: TObject);
+    procedure AltWatchTick(Sender: TObject);
+    procedure OpenFileTab;
     procedure RebuildKeyTipKeys;
     procedure DrawKeyTips;
     procedure SetMinimized(AValue: Boolean);
@@ -144,6 +147,12 @@ type
     procedure ShowKeyTips;
     procedure HideKeyTips;
     procedure ToggleKeyTips;
+    { #177: the KeyTip keys, as the application's key-down-before handler hands them on for the
+      ribbon's form, and Alt's release. Public as the ribbon's own seam: no form's OnKeyDown or
+      KeyPreview is taken over for them any more. }
+    procedure KeyTipKeyDown(var Key: Word; Shift: TShiftState);
+    procedure AltReleased;
+    property KeyTipsShowing: Boolean read FKeyTipsActive;
     procedure RegisterPage(APage: TTyRibbonPage);
     function AddPage(const ACaption: string): TTyRibbonPage;
     procedure RemovePage(AIndex: Integer);
@@ -325,7 +334,7 @@ function TyRibbonVisibleGroupCount(const AWidths: array of Integer; AAvailPx: In
 implementation
 
 uses
-  tyControls.StrConsts;
+  LCLIntf, tyControls.StrConsts;
 
 // ---------------------------------------------------------------------------
 // Pure geometry
@@ -389,6 +398,14 @@ begin
   inherited Create(AOwner);
   FActiveContexts := TStringList.Create;
   FActiveContexts.CaseSensitive := False;
+  { #177: the Alt key-tips listen to the application, before the focused control -- they took
+    over the form's KeyPreview and OnKeyDown, so a handler the form set afterwards turned them
+    off. }
+  if Assigned(Application) then
+  begin
+    Application.AddOnKeyDownBeforeHandler(@AppKeyDown, False);
+    Application.AddOnDeactivateHandler(@AppDeactivate, False);
+  end;
   Align := alTop;
   // Tab strip (TabHeight) + a group band tall enough for a large button + caption.
   // The total height follows the --ribbon-height token (classic 118; a modern-density
@@ -408,7 +425,8 @@ end;
 destructor TTyRibbon.Destroy;
 begin
   FDestroying := True;
-  UnhookForm;
+  if Assigned(Application) then Application.RemoveAllHandlersOfObject(Self);
+  FreeAndNil(FAltTimer);
   FActiveContexts.Free;
   inherited Destroy;   // pages owned by the form are freed normally
 end;
@@ -867,12 +885,21 @@ end;
 procedure TTyRibbon.RebuildKeyTipKeys;
 var
   caps: array of string;
-  i: Integer;
+  keys: TKeyTipArray;
+  i, n, off: Integer;
 begin
-  SetLength(caps, GetTabCount);
-  for i := 0 to GetTabCount - 1 do
-    caps[i] := GetTabCaption(i);
-  FKeyTipKeys := TyAssignKeyTips(caps);
+  { #177: the File tab takes its key first, from its own caption (F, mostly) -- it had none. }
+  n := GetTabCount;
+  off := Ord(FShowFileTab);
+  SetLength(caps, n + off);
+  if FShowFileTab then caps[0] := FFileTabCaption;
+  for i := 0 to n - 1 do
+    caps[i + off] := GetTabCaption(i);
+  keys := TyAssignKeyTips(caps);
+  if FShowFileTab then FFileKeyTip := keys[0] else FFileKeyTip := '';
+  SetLength(FKeyTipKeys, n);
+  for i := 0 to n - 1 do
+    FKeyTipKeys[i] := keys[i + off];
 end;
 
 procedure TTyRibbon.ShowKeyTips;
@@ -895,62 +922,107 @@ begin
   if FKeyTipsActive then HideKeyTips else ShowKeyTips;
 end;
 
-procedure TTyRibbon.HookForm;
+{ #177: the application hands every key-down to this before the focused control, for whichever
+  form is active; only the ribbon's own form's are KeyTip keys. }
+procedure TTyRibbon.AppKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 var
   frm: TCustomForm;
 begin
-  if csDesigning in ComponentState then Exit;
+  if FDestroying or (csDesigning in ComponentState) then Exit;
   frm := GetParentForm(Self);
-  if (frm = nil) or (frm = FHookedForm) then Exit;
-  UnhookForm;
-  FHookedForm := frm;
-  FSavedFormKeyDown := frm.OnKeyDown;
-  FSavedKeyPreview := frm.KeyPreview;
-  frm.KeyPreview := True;
-  frm.OnKeyDown := @FormKeyDown;
+  if (frm = nil) or (Screen.ActiveCustomForm <> frm) then Exit;
+  KeyTipKeyDown(Key, Shift);
 end;
 
-procedure TTyRibbon.UnhookForm;
-begin
-  if FHookedForm = nil then Exit;
-  // Only restore if OUR handler is still installed (don't clobber a later hook).
-  if TMethod(FHookedForm.OnKeyDown).Data = Pointer(Self) then
-  begin
-    FHookedForm.OnKeyDown := FSavedFormKeyDown;
-    FHookedForm.KeyPreview := FSavedKeyPreview;
-  end;
-  FHookedForm := nil;
-end;
-
-procedure TTyRibbon.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+{ #177: Office's rule. A TAP of Alt -- down and up with nothing between -- shows or hides the
+  KeyTips, on the release; Alt held with another key (a mnemonic, Alt+Tab) is that key's and shows
+  none. They toggled on every Alt key-down, so the auto-repeat of a held Alt made them flicker,
+  and Alt+S pressed the S tab's KeyTip. The KeyTip letters themselves are plain keys. }
+procedure TTyRibbon.KeyTipKeyDown(var Key: Word; Shift: TShiftState);
 var
   i: Integer;
   ch: Char;
 begin
-  // Bare Alt toggles the KeyTip badges.
-  if FKeyTips and (Key = VK_MENU) and (Shift * [ssShift, ssCtrl] = []) then
+  if not FKeyTips then Exit;
+  if Key = VK_MENU then
   begin
-    ToggleKeyTips;
+    if (Shift * [ssShift, ssCtrl] = []) and not FAltHeld then
+    begin
+      FAltHeld := True;
+      FAltChord := False;
+      if FAltTimer = nil then
+      begin
+        FAltTimer := TTimer.Create(nil);
+        FAltTimer.Interval := 25;
+        FAltTimer.OnTimer := @AltWatchTick;
+      end;
+      FAltTimer.Enabled := True;
+    end;
     Key := 0;
     Exit;
   end;
-  if FKeyTipsActive then
+  if FAltHeld then
   begin
-    if Key = VK_ESCAPE then begin HideKeyTips; Key := 0; Exit; end;
-    if (Key >= Ord('0')) and (Key <= Ord('Z')) then
-    begin
-      ch := UpCase(Chr(Key));
-      for i := 0 to High(FKeyTipKeys) do
-        if (FKeyTipKeys[i] <> '') and (UpCase(FKeyTipKeys[i][1]) = ch) then
-        begin
-          ActivePageIndex := i;
-          HideKeyTips;
-          Key := 0;
-          Exit;
-        end;
-    end;
+    FAltChord := True;
+    if FKeyTipsActive then HideKeyTips;
+    Exit;
   end;
-  if Assigned(FSavedFormKeyDown) then FSavedFormKeyDown(Sender, Key, Shift);
+  if not FKeyTipsActive then Exit;
+  if Key = VK_ESCAPE then begin HideKeyTips; Key := 0; Exit; end;
+  if (Shift * [ssAlt, ssCtrl] = []) and (Key >= Ord('0')) and (Key <= Ord('Z')) then
+  begin
+    ch := UpCase(Chr(Key));
+    if (FFileKeyTip <> '') and (UpCase(FFileKeyTip[1]) = ch) then
+    begin
+      HideKeyTips;
+      Key := 0;
+      OpenFileTab;
+      Exit;
+    end;
+    for i := 0 to High(FKeyTipKeys) do
+      if (FKeyTipKeys[i] <> '') and (UpCase(FKeyTipKeys[i][1]) = ch) then
+      begin
+        ActivePageIndex := i;
+        HideKeyTips;
+        Key := 0;
+        Exit;
+      end;
+  end;
+end;
+
+procedure TTyRibbon.AltReleased;
+begin
+  if not FAltHeld then Exit;
+  FAltHeld := False;
+  if FAltTimer <> nil then FAltTimer.Enabled := False;
+  if not FAltChord then ToggleKeyTips;
+end;
+
+procedure TTyRibbon.AltWatchTick(Sender: TObject);
+begin
+  if GetKeyState(VK_MENU) >= 0 then AltReleased;   { the high bit off: Alt is up }
+end;
+
+{ #177: KeyTips do not outlive the window -- after Alt+Tab they stayed up. }
+procedure TTyRibbon.AppDeactivate(Sender: TObject);
+begin
+  FAltHeld := False;
+  if FAltTimer <> nil then FAltTimer.Enabled := False;
+  HideKeyTips;
+end;
+
+procedure TTyRibbon.OpenFileTab;
+var
+  Frm: TCustomForm;
+begin
+  // The File tab opens the backstage and/or fires OnFileTab -- it does NOT switch pages.
+  if FBackstage <> nil then
+  begin
+    Frm := GetParentForm(Self);
+    if Frm <> nil then
+      FBackstage.ShowOver(Frm, Top);   // cover everything below the title bar
+  end;
+  if Assigned(FOnFileTab) then FOnFileTab(Self);
 end;
 
 procedure TTyRibbon.DrawKeyTips;
@@ -968,6 +1040,17 @@ begin
   try
     P.BeginPaint(Canvas, Rect(0, 0, ClientWidth, ClientHeight), Font.PixelsPerInch);
     cw := P.Scale(15);
+    if FShowFileTab and (FFileKeyTip <> '') then
+    begin
+      { #177: the File tab's chip, in its own box. }
+      hr := Rect(0, 0, FileTabWidthPx, MulDiv(TabHeight, Font.PixelsPerInch, 96));
+      bx := (hr.Left + hr.Right) div 2 - cw div 2;
+      by := hr.Bottom - P.Scale(2) - cw;
+      if tpBackground in chipS.Present then
+        P.FillBackground(Rect(bx, by, bx + cw, by + cw), chipS.Background, 3);
+      P.DrawText(Rect(bx, by, bx + cw, by + cw), FFileKeyTip, chipS.FontName, 8,
+        chipS.FontWeight, chipS.TextColor, taCenter, tlCenter, False);
+    end;
     for i := 0 to GetTabCount - 1 do
     begin
       if i > High(FKeyTipKeys) then Break;
@@ -998,7 +1081,6 @@ end;
 procedure TTyRibbon.CreateWnd;
 begin
   inherited CreateWnd;
-  HookForm;   // the parent form exists by now -> install the Alt key hook
 end;
 
 procedure TTyRibbon.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -1014,15 +1096,8 @@ begin
     h := MulDiv(TabHeight, Font.PixelsPerInch, 96);
     if (X >= 0) and (X < w) and (Y >= 0) and (Y < h) then
     begin
-      // The File tab opens the backstage and/or fires OnFileTab — it does NOT switch
-      // pages, so swallow the click (don't call the base tab hit-test).
-      if FBackstage <> nil then
-      begin
-        Frm := GetParentForm(Self);
-        if Frm <> nil then
-          FBackstage.ShowOver(Frm, Top);   // cover everything below the title bar
-      end;
-      if Assigned(FOnFileTab) then FOnFileTab(Self);
+      // Swallow the click (don't call the base tab hit-test): the File tab switches no page.
+      OpenFileTab;
       Exit;
     end;
   end;
