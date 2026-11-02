@@ -86,6 +86,9 @@ type
     constructor Create;
     destructor Destroy; override;
     function Gantt(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+    { [spec 259] RENDER.named }
+    function Named(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+    function ValueOf(AApi: TTyCustomApi; const ADim: string): Double;
     function ErrorBar(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
     function Hexagon(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
     function Texts(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
@@ -647,6 +650,42 @@ begin
     'style', Style(AApi, nil)]));
 end;
 
+{ api.value by a dimension's name }
+function TCuMirror.ValueOf(AApi: TTyCustomApi; const ADim: string): Double;
+var t: string;
+begin
+  Result := AApi.Value(ADim);
+  if IsNan(Result) then
+  begin
+    t := AApi.ValueText(ADim);
+    if t <> 'NaN' then
+    begin
+      Log('value', TJSONArray.Create([ADim]), TJSONString.Create(t));
+      Exit;
+    end;
+  end;
+  Log('value', TJSONArray.Create([ADim]), RvNum(Result));
+end;
+
+{ RENDER.named [spec 259] }
+function TCuMirror.Named(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
+var
+  cat, a, b: Double;
+  start, stop: TTyDoubleArray;
+  shape: TJSONObject;
+begin
+  Open('named', AParams);
+  cat := ValueOf(AApi, 'y');
+  a := ValueOf(AApi, 'x');
+  b := ValueOf(AApi, 'x0');
+  start := Coord(AApi, a, cat);
+  stop := Coord(AApi, b, cat);
+  shape := TJSONObject.Create(['x', Num(start[0]), 'y', Num(start[1] - 5),
+    'width', Num(stop[0] - start[0]), 'height', Num(10)]);
+  Result := Done(TJSONObject.Create(['type', 'rect', 'shape', shape,
+    'style', Style(AApi, nil)]));
+end;
+
 { RENDER.errorbar }
 function TCuMirror.ErrorBar(const AParams: TTyCustomParams; AApi: TTyCustomApi): TJSONData;
 var
@@ -1009,6 +1048,7 @@ begin
   TyChartRegisterRenderItem('dot', @Result.Dot);
   TyChartRegisterRenderItem('span', @Result.Span);
   TyChartRegisterRenderItem('hover', @Result.Hover);
+  TyChartRegisterRenderItem('named', @Result.Named);
 end;
 
 procedure TCuOracleBase.TearDown;

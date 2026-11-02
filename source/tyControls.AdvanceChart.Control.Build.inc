@@ -496,9 +496,10 @@ begin
       other three away. The axis then sized itself from a quarter of its own
       data and the renderer found no columns to read. }
     MultiValueDims(FBindings[i], dims);
-    { a custom series' encode may spread one coordinate over several
-      columns (a span's start and end) [Batch 123] }
-    CustomDims(i, dims);
+    { [spec 259] a custom series' encode spreading one coordinate over
+      several columns (a span's start and end) is an encode list like any
+      other's: TySpreadEncode below, gaps kept [Batch 123: CustomDims, the
+      unreached entries dropped, the columns named x1, x2] }
     for k := 0 to High(dims) do
     begin
       st.AddDimension(dims[k].Name, dims[k].Kind);
@@ -3503,8 +3504,7 @@ begin
   begin
     { [spec 255] A WHISKER BOX'S VALUE LIST, in its order: `y: [1, 4, 3, 2]`
       puts open on element 1 and close on 4 -- past a row index put in front,
-      the index is element 0. A custom series spreads its own. }
-    if FBindings[ASlot].SeriesType = TyCustomSeriesType then Exit;
+      the index is element 0. }
     RefuseShortWhisker(ASlot, AEnc, ADims, coord, Max(dimW, Length(coord)));
     prepend := False;
     for k := 0 to High(ADims) do

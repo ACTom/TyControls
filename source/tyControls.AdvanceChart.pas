@@ -3351,7 +3351,6 @@ type
       the paint elements; the states }
     procedure SolveCustom(APPI: Integer);
     function CustomCall(AIndexInside: Integer): TJSONData;
-    procedure CustomDims(ASlot: Integer; var ADims: TTySeriesDimArray);
     function CustomBuild(ASlot: Integer; AList: TTyPaintList; APPI: Integer): Integer;
     function CustomVisualFill(ASlot, ARow: Integer): TJSONData;
     procedure StDeclareCustom(ASlot, ARaw: Integer; AList: TTyPaintList);
