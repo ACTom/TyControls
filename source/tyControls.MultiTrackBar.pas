@@ -202,6 +202,12 @@ type
       the span drag and the hover were on when a rebuild began (-1 = nothing). }
     FThumbKeys: array of Integer;
     FHeldDrag, FHeldSpan, FHeldHover: Integer;
+    { #182: OnChange fired so far, and how many had fired when the left button went down (-1 =
+      no press): a press that changed something ends with EditingDone. }
+    FChangeCount: Integer;
+    FPressChanges: Integer;
+    { The press is over: EditingDone if it changed anything. }
+    procedure EndPress;
     { End a drag whose button-up went elsewhere: nothing moves, nothing is removed. }
     procedure EndLostDrag;
     procedure SetAllowCrossing(const AValue: Boolean);
@@ -1132,6 +1138,7 @@ begin
   FDragThumb := -1;
   FHoverThumb := -1;
   FDragSpan := -1;
+  FPressChanges := -1;
   FOrientation := toHorizontal;
   FTickMarks := ttmBottomRight;
   FTickStyle := ttsAuto;
@@ -1886,7 +1893,19 @@ end;
 
 procedure TTyMultiTrackBarBase.DoChange;
 begin
+  Inc(FChangeCount);
   if Assigned(FOnChange) then FOnChange(Self);
+end;
+
+procedure TTyMultiTrackBarBase.EndPress;
+var
+  c: Integer;
+begin
+  c := FPressChanges;
+  FPressChanges := -1;
+  { #182: as LCL's TTrackBar, OnEditingDone after a user change -- here once the press that
+    made it (a drag, a jump, an add, a removal) is over, not at every step of a drag. }
+  if (c >= 0) and (c <> FChangeCount) then EditingDone;
 end;
 
 procedure TTyMultiTrackBarBase.SetMin(const AValue: Integer);
@@ -2567,7 +2586,7 @@ end;
 function TTyMultiTrackBarBase.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 var
-  i: Integer;
+  i, c: Integer;
   v: Int64;
 begin
   Result := inherited DoMouseWheel(Shift, WheelDelta, MousePos);
@@ -2580,7 +2599,9 @@ begin
   if v > High(Integer) then v := High(Integer);
   if v < Low(Integer) then v := Low(Integer);
   SelectedThumb := i;
+  c := FChangeCount;
   UserMoveThumb(i, v);
+  if FChangeCount <> c then EditingDone;   // #182, as a key
   Result := True;
 end;
 
@@ -2594,6 +2615,7 @@ begin
   if Button <> mbLeft then Exit;
   FDragSpan := -1;
   FCaptureLost := False;
+  FPressChanges := FChangeCount;
   { The further presses of a multi-click whose first press OnTrackClick took: the same click. }
   if Shift * [ssDouble, ssTriple, ssQuad] = [] then FTrackClickTaken := False
   else if FTrackClickTaken then Exit;
@@ -2746,6 +2768,7 @@ begin
     FCaptureLost := False;
     Invalidate;
     if off then UserRemoveThumb(i);
+    EndPress;
   end;
 end;
 
@@ -2762,6 +2785,7 @@ begin
   FRemoving := False;
   FCaptureLost := False;
   Invalidate;
+  EndPress;
 end;
 
 procedure TTyMultiTrackBarBase.MouseLeave;
@@ -2774,7 +2798,7 @@ end;
 
 procedure TTyMultiTrackBarBase.KeyDown(var Key: Word; Shift: TShiftState);
 var
-  i, nxt: Integer;
+  i, nxt, c: Integer;
   v: Int64;
   vk: Word;
 begin
@@ -2797,7 +2821,9 @@ begin
      and ThumbEnabled(FSelectedThumb) then
   begin
     Key := 0;
+    c := FChangeCount;
     UserRemoveThumb(FSelectedThumb);
+    if FChangeCount <> c then EditingDone;
     Exit;
   end;
   if not (Key in [VK_RIGHT, VK_UP, VK_LEFT, VK_DOWN, VK_PRIOR, VK_NEXT, VK_HOME, VK_END]) then
@@ -2822,7 +2848,10 @@ begin
   if v > High(Integer) then v := High(Integer);
   if v < Low(Integer) then v := Low(Integer);
   SelectedThumb := i;
+  c := FChangeCount;
   UserMoveThumb(i, v);
+  { #182: as LCL's TTrackBar, OnEditingDone after each change the user makes. }
+  if FChangeCount <> c then EditingDone;
 end;
 
 procedure TTyMultiTrackBarBase.CMWantSpecialKey(var Message: TLMKey);

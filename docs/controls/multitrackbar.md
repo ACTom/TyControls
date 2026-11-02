@@ -51,6 +51,7 @@ uses tyControls.MultiTrackBar;
 | `ShowValue` | `Boolean` | `False` | 在轨道旁显示数值（横排在右、竖排在下）：显示**选中滑块**的值，没有选中时显示第一个滑块的值。读数那一条按 `Min`、`Max` 里较宽的那个量，拖动时轨道长度不会跟着位数变。 |
 | `TabStop` | `Boolean` | `True` | 可以用 Tab 进入。 |
 | `OnChange` | `TNotifyEvent` | `nil` | 任何一个滑块的值变了就触发（一次操作只触发一次）。用户加、删滑块或区间，渐变控件里改色标颜色，也触发。 |
+| `OnEditingDone` | `TNotifyEvent` | `nil` | 用户改完一次就触发，同 LCL 的 `TTrackBar`：鼠标操作（拖动、点轨道让滑块跳过来、加或删滑块）在松开时触发一次，按键和滚轮每次都触发；什么都没变就不触发。焦点离开控件时也触发。 |
 | `OnThumbChange` | `TTyTrackThumbEvent` | `nil` | 某个滑块的值变了，`AIndex` 是它的序号。先于 `OnChange`。 |
 | `OnThumbChanging` | `TTyTrackThumbChangingEvent` | `nil` | 用户正要移动某个滑块，值还没变。可以不让动，也可以改成别的值。只管用户操作，代码赋值不触发。见第 7 节。 |
 | `OnThumbSelect` | `TTyTrackThumbEvent` | `nil` | 选中的滑块变了，`AIndex` 是新序号（`-1` = 没有选中）。 |

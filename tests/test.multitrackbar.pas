@@ -287,6 +287,7 @@ type
     procedure Selected(Sender: TObject; AIndex: Integer);
     procedure DeleteBeyondFour(Sender: TObject);
     procedure DeleteTheSeventy(Sender: TObject);
+    procedure EditDone(Sender: TObject);
   protected
     procedure SetUp; override;
   published
@@ -317,6 +318,9 @@ type
     procedure TestADragStaysOnItsThumbWhenThumbsChange;
     { #182: as the range bar's. }
     procedure TestABatchKeepsItsValuesThroughARangeChange;
+    { #182: OnEditingDone after each user change -- a press and drag once released, a key, a
+      wheel notch, a removal -- as LCL's TTrackBar; not for what changed nothing. }
+    procedure TestEditingDoneFollowsEachUserChange;
   end;
 
   TTyMultiTrackKeyboardTest = class(TMultiTrackInputBase)
@@ -3579,6 +3583,54 @@ begin
   finally
     host.Free;
   end;
+end;
+
+procedure TTyMultiTrackBarTest.EditDone(Sender: TObject);
+begin
+  FLog := FLog + 'E ';
+end;
+
+procedure TTyMultiTrackBarTest.TestEditingDoneFollowsEachUserChange;
+var
+  p: TPoint;
+  k: Word;
+  msg: TLMMouseEvent;
+begin
+  FBar.OnChange := @Changed;
+  FBar.OnEditingDone := @EditDone;
+  FBar.AllowUserThumbs := True;
+  FLog := '';
+  p := Centre(1);
+  TMultiAccess(FBar).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  TMultiAccess(FBar).MouseMove([ssLeft], p.X + 20, p.Y);
+  TMultiAccess(FBar).MouseMove([ssLeft], p.X + 30, p.Y);
+  AssertEquals('not while the drag goes on', 'C C ', FLog);
+  TMultiAccess(FBar).MouseUp(mbLeft, [], p.X + 30, p.Y);
+  AssertEquals('once, when it is released', 'C C E ', FLog);
+  FLog := '';
+  p := Centre(1);
+  TMultiAccess(FBar).MouseDown(mbLeft, [ssLeft], p.X, p.Y);
+  TMultiAccess(FBar).MouseUp(mbLeft, [], p.X, p.Y);
+  AssertEquals('a press that moved nothing: none', '', FLog);
+  k := VK_RIGHT;
+  TMultiAccess(FBar).KeyDown(k, []);
+  AssertEquals('a key', 'C E ', FLog);
+  FLog := '';
+  k := VK_HOME;
+  FBar.SelectedThumb := 0;
+  TMultiAccess(FBar).KeyDown(k, []);
+  TMultiAccess(FBar).KeyDown(k, []);
+  AssertEquals('Home, then Home again where it already is', 'C E ', FLog);
+  FLog := '';
+  FillChar(msg{%H-}, SizeOf(msg), 0);
+  msg.Msg := LM_MOUSEWHEEL;
+  msg.WheelDelta := 120;
+  FBar.Dispatch(msg);
+  AssertEquals('a wheel notch', 'C E ', FLog);
+  FLog := '';
+  k := VK_DELETE;
+  TMultiAccess(FBar).KeyDown(k, []);
+  AssertEquals('a removal', 'C E ', FLog);
 end;
 
 procedure TTyMultiTrackBarTest.TestABatchKeepsItsValuesThroughARangeChange;
