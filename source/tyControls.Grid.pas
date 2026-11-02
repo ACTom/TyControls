@@ -991,6 +991,7 @@ type
     FOrderIsIdentity: Boolean;
     FOnGetEditorProp:  TTyGridEditorPropEvent;
     FResizeCol:        Integer;   { 正在拖宽的列;-1 = 没在拖 }
+    FResizeMoved:      Boolean;   { #168:按住分隔线之后真的拖动过 }
     FResizeStartX:     Integer;
     FResizeStartW:     Integer;
     FVertScrollBarMode: TTyGridScrollBarMode;
@@ -1051,6 +1052,7 @@ type
     procedure SetBackgroundMode(AValue: TTyGridBackgroundMode);
     procedure SetBackgroundScope(AValue: TTyGridBackgroundScope);
     procedure VScrollChange(Sender: TObject);
+    procedure VScrollScroll(Sender: TObject; ScrollCode: TScrollCode; var ScrollPos: Integer);
     procedure HScrollChange(Sender: TObject);
     procedure SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
     { 把「指针在本控件身上」转发给两条内嵌条。见 MouseEnter。 }
@@ -1221,6 +1223,8 @@ type
     { 逐格边框:宿主没接钩子时四支笔全关,一个像素都不多画。 }
     procedure RenderCellBorders(P: TTyPainter; const M: TTyGridMetrics); virtual;
     { 这一格能不能点。所有点击路径都必须先问它。 }
+    { #168:纵向滑块正被拖(AActive,APos 是提议的 ScrollY)或刚松手。默认什么都不做。 }
+    procedure ThumbTracking(AActive: Boolean; APos: Integer); virtual;
     function  CanClickCell(ACol, ARow: Integer): Boolean;
     { 这一格是不是"焦点格"(光标所在)。基类没有光标概念,恒 False。 }
     function  IsActiveCell(ACol, ARow: Integer): Boolean; virtual;
@@ -2363,6 +2367,10 @@ type
     FEditKind: TTyGridEditorKind;
     FPlacedEditorRect: TRect;   { where EditorFollowCell last put the editor }
     FGestureRefused: Boolean;   { this press was refused: its moves and release go nowhere }
+    FPressOnToggle: Boolean;    { #168: this press toggled a tree node -- its double-click edits nothing }
+    FEditorOpening: Boolean;    { #168: BeginEdit is seeding an editor -- no OnEditChange for that }
+    FSelChanges: Cardinal;      { #168: bumped by every SelectionChanged }
+    FScrollHintWnd: TWinControl;   { #168: OnScrollHint's text while the thumb is dragged (a THintWindow) }
     FFillDragging: Boolean;
     FFillToCol, FFillToRow: Integer;
     { 这次按住是从**单元格**上按下的 —— 拖选只认这种按住。列头/分隔线/行头槽上
@@ -2616,6 +2624,11 @@ type
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    procedure ThumbTracking(AActive: Boolean; APos: Integer); override;
+    { #168 }
+    procedure NavKeyDown(var Key: Word; Shift: TShiftState);
+    procedure AnyEditorChanged(Sender: TObject);
+    function AskCanSort(ACol: Integer): Boolean;
     { 焦点离开了**整个网格**才会到这里 —— 移到网格里的另一格时 LCL 的 CM_EXIT 只送到
       编辑器为止。被校验拦下的编辑到这里就算放弃:走开和按 Esc 是同一种表态。 }
     procedure DoExit; override;
@@ -3832,6 +3845,9 @@ function TyGridEllipsisFit(ABmp: TBGRABitmap; const AText: string;
 
 implementation
 
+uses
+  Forms;   { #168: THintWindow, HintWindowClass, Mouse }
+
 const
   { "没设颜色"的哨兵:alpha = 0 的颜色在本库里恒不可见,拿来当"无"最省事,
     不必再多一个平行的 Boolean。 }
@@ -4515,19 +4531,20 @@ begin
     焦点环和方向键导航,Tab 也会在一个网格里停三次。 }
   FVScroll := TTyScrollBar.Create(Self);
   FVScroll.Parent := Self;
-  FVScroll.Kind := sbVertical;
+  FVScroll.Kind := tyControls.ScrollBar.sbVertical;   { Forms has one too }
   FVScroll.TabStop := False;
   FVScroll.AnimationsEnabled := False;
   { 这里读的必然是刚赋的 sbahDefault(谁也没机会先设属性),写它是为了这一行
     跟 ListBox/Memo 那两个惰性宿主长得一样:哪天这两条改成惰性建,值不会悄悄丢。 }
   FVScroll.AutoHide := FScrollBarAutoHide;
   FVScroll.OnChange := @VScrollChange;
+  FVScroll.OnScroll := @VScrollScroll;   { #168 }
   FVScroll.ControlStyle := FVScroll.ControlStyle + [csNoDesignVisible];
   FVScroll.Visible := False;
 
   FHScroll := TTyScrollBar.Create(Self);
   FHScroll.Parent := Self;
-  FHScroll.Kind := sbHorizontal;
+  FHScroll.Kind := tyControls.ScrollBar.sbHorizontal;
   FHScroll.TabStop := False;
   FHScroll.AnimationsEnabled := False;
   FHScroll.AutoHide := FScrollBarAutoHide;   { 同上 }
@@ -4881,6 +4898,20 @@ end;
 function TTyCustomGrid.ColumnsClass: TTyColumnsClass;
 begin
   Result := TTyColumns;
+end;
+
+procedure TTyCustomGrid.VScrollScroll(Sender: TObject; ScrollCode: TScrollCode; var ScrollPos: Integer);
+begin
+  { #168:拖纵向滑块的过程(scTrack)与收尾(scEndScroll)交给 ThumbTracking —— 字符串网格
+    在那里问宿主要提示文字(OnScrollHint),从前那个钩子没有调用点。 }
+  case ScrollCode of
+    scTrack:     ThumbTracking(True, ScrollPos);
+    scEndScroll: ThumbTracking(False, ScrollPos);
+  end;
+end;
+
+procedure TTyCustomGrid.ThumbTracking(AActive: Boolean; APos: Integer);
+begin
 end;
 
 procedure TTyCustomGrid.HScrollChange(Sender: TObject);
@@ -5660,7 +5691,9 @@ end;
 procedure TTyCustomGrid.DblClick;
 begin
   inherited DblClick;
-  if (FLastDownHit.Part = ghpCell) and Assigned(FOnDblClickCell) then
+  { #168:OnCanClickCell 拦下的格,双击也不报 —— 与单击同一道门。 }
+  if (FLastDownHit.Part = ghpCell) and Assigned(FOnDblClickCell)
+     and CanClickCell(FLastDownHit.Col, FLastDownHit.Row) then
     FOnDblClickCell(Self, FLastDownHit.Col, FLastDownHit.Row);
 end;
 
@@ -7584,6 +7617,7 @@ begin
     if (d >= 0) and (DisplayToData(d) >= 0) then
     begin
       FResizeRow := d;
+      FResizeMoved := False;
       FResizeStartY := Y;
       FResizeStartH := RowHeightOf(DisplayToData(d));
       Exit;
@@ -7624,6 +7658,7 @@ begin
       Exit;
     end;
     FResizeCol := d;
+    FResizeMoved := False;
     FResizeStartX := X;
     FResizeStartW := TTyColumn(FHeader.Columns.Items[d]).Width;
     Exit;
@@ -7663,6 +7698,7 @@ begin
   if FResizeRow >= 0 then
   begin
     delta := UnscaleI(Y - FResizeStartY);
+    if delta <> 0 then FResizeMoved := True;
     newSize := FResizeStartH + delta;
     { #170:拖过行的上沿不能变成 0 或负数 —— 那是"清掉行高",行会弹回默认高度,
       OnRowSizing 还收到一个负数。最小就是 1(或 MinRowHeight)。 }
@@ -7683,6 +7719,7 @@ begin
       两端各过一次 ToReadingX(而不是加一个 `if rtl then -delta`):
       它与 ColumnResizeEdgeX 用的是同一个反射,不可能差半格。 }
     delta := UnscaleI(ToReadingX(X) - ToReadingX(FResizeStartX));
+    if delta <> 0 then FResizeMoved := True;
     newSize := FResizeStartW + delta;
     { 上下限 + 宿主否决,都在**赋值之前** —— 赋完再回退会闪一下。 }
     if (FMinColWidth > 0) and (newSize < FMinColWidth) then newSize := FMinColWidth;
@@ -7763,10 +7800,11 @@ begin
   end;
   sized := FResizeCol;
   { 拖完了才发"结束"事件 —— 宿主拿它保存列宽偏好,拖动过程中发是噪音。 }
-  if (FResizeCol >= 0) and Assigned(FOnEndColumnSize) then
+  { #168:只有真的拖过才算"改完了" —— 在分隔线上点一下不是一次改宽。 }
+  if (FResizeCol >= 0) and FResizeMoved and Assigned(FOnEndColumnSize) then
     FOnEndColumnSize(Self, FResizeCol,
       TTyColumn(FHeader.Columns.Items[FResizeCol]).Width);
-  if (FResizeRow >= 0) and Assigned(FOnEndRowSize) then
+  if (FResizeRow >= 0) and FResizeMoved and Assigned(FOnEndRowSize) then
     FOnEndRowSize(Self, DisplayToData(FResizeRow),
       RowHeightOf(DisplayToData(FResizeRow)));
 
@@ -9068,6 +9106,7 @@ begin
   FSpinEditor.ControlStyle := FSpinEditor.ControlStyle + [csNoDesignVisible];
   FSpinEditor.OnKeyDown := @EditorCancelKeyDown;
   FSpinEditor.OnExit := @EditorExit;
+  FSpinEditor.OnChange := @AnyEditorChanged;   { #168 }
 
   FSliderEditor := TTyTrackBar.Create(Self);
   FSliderEditor.Parent := Self;
@@ -9075,6 +9114,7 @@ begin
   FSliderEditor.ControlStyle := FSliderEditor.ControlStyle + [csNoDesignVisible];
   FSliderEditor.OnKeyDown := @EditorCancelKeyDown;
   FSliderEditor.OnExit := @EditorExit;
+  FSliderEditor.OnChange := @AnyEditorChanged;   { #168 }
 
   FMemoEditor := TTyMemo.Create(Self);
   FMemoEditor.Parent := Self;
@@ -9082,6 +9122,7 @@ begin
   FMemoEditor.ControlStyle := FMemoEditor.ControlStyle + [csNoDesignVisible];
   FMemoEditor.OnKeyDown := @EditorCancelKeyDown;
   FMemoEditor.OnExit := @EditorExit;
+  FMemoEditor.OnChange := @AnyEditorChanged;   { #168 }
 
   FCalcEditor := TTyCalcEdit.Create(Self);
   FCalcEditor.Parent := Self;
@@ -9089,6 +9130,7 @@ begin
   FCalcEditor.ControlStyle := FCalcEditor.ControlStyle + [csNoDesignVisible];
   FCalcEditor.OnKeyDown := @EditorCancelKeyDown;
   FCalcEditor.OnExit := @EditorExit;
+  FCalcEditor.OnChange := @AnyEditorChanged;   { #168 }
 
   FMaskEditor := TTyGridMaskEdit.Create(Self);   { #67: the grid owns its exit check }
   FMaskEditor.Parent := Self;
@@ -9096,6 +9138,7 @@ begin
   FMaskEditor.ControlStyle := FMaskEditor.ControlStyle + [csNoDesignVisible];
   FMaskEditor.OnKeyDown := @EditorKeyDown;
   FMaskEditor.OnExit := @EditorExit;
+  FMaskEditor.OnChange := @AnyEditorChanged;   { #168 }
 
   { 第二个复用编辑器:下拉选取。与文本编辑器同一套生命周期规则。 }
   FPickEditor := TTyComboBox.Create(Self);
@@ -9114,6 +9157,7 @@ begin
   FDateEditor.ControlStyle := FDateEditor.ControlStyle + [csNoDesignVisible];
   FDateEditor.OnKeyDown := @EditorCancelKeyDown;
   FDateEditor.OnExit := @DateEditorExit;
+  FDateEditor.OnChange := @AnyEditorChanged;   { #168 }
 end;
 
 destructor TTyCustomStringGrid.Destroy;
@@ -9125,17 +9169,18 @@ begin
   FEditor.OnChange := nil;
   FEditor.OnKeyPress := nil;
   FEditor.OnExit := nil;
-  FSpinEditor.OnKeyDown := nil;   FSpinEditor.OnExit := nil;
-  FSliderEditor.OnKeyDown := nil; FSliderEditor.OnExit := nil;
-  FMemoEditor.OnKeyDown := nil;   FMemoEditor.OnExit := nil;
-  FCalcEditor.OnKeyDown := nil;   FCalcEditor.OnExit := nil;
-  FMaskEditor.OnKeyDown := nil;   FMaskEditor.OnExit := nil;
+  FSpinEditor.OnKeyDown := nil;   FSpinEditor.OnExit := nil;   FSpinEditor.OnChange := nil;
+  FSliderEditor.OnKeyDown := nil; FSliderEditor.OnExit := nil; FSliderEditor.OnChange := nil;
+  FMemoEditor.OnKeyDown := nil;   FMemoEditor.OnExit := nil;   FMemoEditor.OnChange := nil;
+  FCalcEditor.OnKeyDown := nil;   FCalcEditor.OnExit := nil;   FCalcEditor.OnChange := nil;
+  FMaskEditor.OnKeyDown := nil;   FMaskEditor.OnExit := nil;   FMaskEditor.OnChange := nil;
   FPickEditor.OnKeyDown := nil;
   FPickEditor.OnChange := nil;
   FPickEditor.OnExit := nil;
   FPickEditor.OnCloseUp := nil;
   FDateEditor.OnKeyDown := nil;
   FDateEditor.OnExit := nil;
+  FDateEditor.OnChange := nil;
   FFilterEditor.OnKeyDown := nil;
   FFilterEditor.OnChange := nil;
   FFilterEditor.OnExit := nil;
@@ -10269,6 +10314,7 @@ begin
   { 每次按下都从头记:上一次按住的来历不能带到这一次。 }
   FCellPress := False;
   FSortArmedCol := -1;
+  FPressOnToggle := False;
   if not IsEnabled then Exit;
 
   { 填充柄优先于一切:它压在选区右下角那一格上,不先判它就会被当成
@@ -10319,6 +10365,7 @@ begin
   if (Button = mbLeft) and (TreeColumn >= 0) and (hit.Part = ghpCell)
      and PtInRect(TreeToggleRect(hit.Row), Point(X, Y)) then
   begin
+    FPressOnToggle := True;   { #168 }
     ToggleNode(hit.Row);
     Exit;
   end;
@@ -10653,6 +10700,25 @@ end;
   程序化移动光标压根走不到这儿,锚点就陈旧了。收口到 MoveCursor 之后,
   这里只需要声明"这一次是扩选"。 }
 procedure TTyCustomStringGrid.KeyDown(var Key: Word; Shift: TShiftState);
+var
+  changes: Cardinal;
+  r0: TRect;
+  n0, c0, w0: Integer;
+begin
+  changes := FSelChanges;
+  r0 := ActiveSelectionRect;
+  n0 := Length(FSelRects);
+  c0 := FCol;
+  w0 := FRow;
+  NavKeyDown(Key, Shift);
+  { #168:键盘挪了选区也是选区变了 —— 从前只有鼠标那条路发 OnSelectionChanged。
+    途中已经发过(Ctrl+A 之类)就不再发第二遍。 }
+  if (FSelChanges = changes) and ((FCol <> c0) or (FRow <> w0)
+     or not EqualRect(r0, ActiveSelectionRect) or (n0 <> Length(FSelRects))) then
+    SelectionChanged;
+end;
+
+procedure TTyCustomStringGrid.NavKeyDown(var Key: Word; Shift: TShiftState);
 var
   navKey: Word;
   oldCol, oldRow: Integer;
@@ -12520,6 +12586,8 @@ procedure TTyCustomStringGrid.SetRatingByPoint(ACol, ARow, X, Y: Integer);
 var
   i: Integer;
 begin
+  if FReadOnly then Exit;
+  if not CanEditCell(ACol, ARow) then Exit;   { #168:点星也是改这一格 }
   for i := 1 to TyGridRatingMax do
     if PtInRect(RatingStarRect(ACol, ARow, i), Point(X, Y)) then
     begin
@@ -13914,7 +13982,7 @@ begin
       begin
         colIdx := ColumnAtPlace(p);
         if (colIdx >= 0) and not IsHiddenColumn(colIdx)
-           and (EditorKindFor(colIdx, dataRow) <> gekNone) then    { 只读格不清 }
+           and CanEditCell(colIdx, dataRow) then    { 只读格不清;#168:也问 OnCanEditCell }
           SetEditText(colIdx, dataRow, '');
       end;
     end;
@@ -14779,7 +14847,7 @@ begin
         n := 1;
         for r := tgt.Top to tgt.Bottom do
         begin
-          if EditorKindFor(c, r) <> gekNone then
+          if CanEditCell(c, r) then   { #168 }
             SetEditText(c, r, IntToStr(first + (srcH - 1 + n) * step));
           Inc(n);
         end;
@@ -14790,7 +14858,7 @@ begin
         idx := 0;
         for r := tgt.Top to tgt.Bottom do
         begin
-          if EditorKindFor(c, r) <> gekNone then
+          if CanEditCell(c, r) then   { #168 }
             SetEditText(c, r, GetCellText(c, src.Top + (idx mod srcH)));
           Inc(idx);
         end;
@@ -15322,7 +15390,7 @@ begin
         c := ColumnAtPlace(p);             { 与 FindCell 同序:屏幕上从左往右(#111) }
         cur := GetCellText(c, dataRow);
         if not TyGridMatches(cur, AFind, ACaseSensitive, AWholeCell) then Continue;
-        if EditorKindFor(c, dataRow) = gekNone then Continue;    { 只读格不动 }
+        if not CanEditCell(c, dataRow) then Continue;    { 只读格不动;#168:也问 OnCanEditCell }
         if AWholeCell then SetEditText(c, dataRow, AReplace)
         else SetEditText(c, dataRow, StringReplace(cur, AFind, AReplace, flags));
         Inc(Result);
@@ -15524,7 +15592,7 @@ begin
       begin
         if startPlace + j >= Header.Columns.Count then Break;
         c := ColumnAtPlace(startPlace + j);
-        if EditorKindFor(c, targetRow) = gekNone then Continue;  { 只读列跳过 }
+        if not CanEditCell(c, targetRow) then Continue;  { 只读列跳过;#168:也问 OnCanEditCell }
 
         cellTxt := parts[j];
         allow := True;
@@ -16159,12 +16227,7 @@ begin
   EndEdit(True);        { 行要重排了 —— 先把编辑提交掉 }
 
   { 宿主可以拦下某一列的排序(比如它要走服务端排序)。 }
-  if (ACol >= 0) and Assigned(FOnCanSort) then
-  begin
-    canSort := True;
-    FOnCanSort(Self, ACol, canSort);
-    if not canSort then Exit;
-  end;
+  if not AskCanSort(ACol) then Exit;
 
   if (ACol < 0) or (ACol >= Header.Columns.Count) or (RowCount <= 0) then
   begin
@@ -16245,11 +16308,19 @@ begin
   end;
 end;
 
+function TTyCustomStringGrid.AskCanSort(ACol: Integer): Boolean;
+begin
+  { 宿主可以拦下某一列的排序(比如它要走服务端排序)。 }
+  Result := True;
+  if (ACol >= 0) and Assigned(FOnCanSort) then FOnCanSort(Self, ACol, Result);
+end;
+
 procedure TTyCustomStringGrid.AddSortColumn(ACol: Integer; ADirection: TTySortDirection);
 var
   i, n: Integer;
 begin
   if (ACol < 0) or (ACol >= Header.Columns.Count) then Exit;
+  if not AskCanSort(ACol) then Exit;   { #168:Shift+点列头追加的排序列也要问 }
   FSortArrowHidden := False;   { 见 SortByColumn }
   for i := 0 to High(FSortKeys) do
     if FSortKeys[i].Col = ACol then
@@ -16472,6 +16543,7 @@ end;
 
 procedure TTyCustomStringGrid.SelectionChanged;
 begin
+  Inc(FSelChanges);
   Invalidate;
   if Assigned(FOnSelectionChanged) then FOnSelectionChanged(Self);
 end;
@@ -16758,11 +16830,52 @@ begin
     FOnCanEditCell(Self, ACol, ARow, Result);
 end;
 
+procedure TTyCustomStringGrid.ThumbTracking(AActive: Boolean; APos: Integer);
+var
+  M: TTyGridMetrics;
+  pos, hintRow: Integer;
+  txt: string;
+  r: TRect;
+  pt: TPoint;
+begin
+  if not AActive then
+  begin
+    if FScrollHintWnd <> nil then FScrollHintWnd.Hide;
+    Exit;
+  end;
+  { 提议位置上正文第一行(数据行号)。 }
+  M := GridMetrics;
+  M.ScrollY := APos;
+  pos := TyGridRowAt(M.FrozenTop, M);
+  if pos < 0 then Exit;
+  hintRow := DisplayToData(pos);
+  txt := ScrollHintFor(hintRow);
+  if (txt = '') or not HandleAllocated then
+  begin
+    if FScrollHintWnd <> nil then FScrollHintWnd.Hide;
+    Exit;
+  end;
+  if FScrollHintWnd = nil then FScrollHintWnd := HintWindowClass.Create(Self);
+  r := THintWindow(FScrollHintWnd).CalcHintRect(ScaleI(300), txt, nil);
+  pt := ClientToScreen(Point(ClientWidth - ScaleI(TyScrollbarSize) - (r.Right - r.Left) - ScaleI(4),
+    Mouse.CursorPos.Y - ClientOrigin.Y));
+  OffsetRect(r, pt.X, pt.Y);
+  THintWindow(FScrollHintWnd).ActivateHint(r, txt);
+end;
+
 function TTyCustomStringGrid.ScrollHintFor(ATopRow: Integer): string;
 begin
   { 不挂钩子就不编一句出来 —— 控件并不知道哪一列对用户有意义。 }
   Result := '';
   if Assigned(FOnScrollHint) then FOnScrollHint(Self, ATopRow, Result);
+end;
+
+procedure TTyCustomStringGrid.AnyEditorChanged(Sender: TObject);
+begin
+  { #168:每一种编辑器的改动都是 OnEditChange —— 从前只有文本框那一个(文本、数字、密码)
+    接了线。文字取 PendingEditText,与提交时读的同一个口径。 }
+  if FEditing and not FEditorOpening and Assigned(FOnEditChange) then
+    FOnEditChange(Self, FEditCol, FEditRow, PendingEditText);
 end;
 
 procedure TTyCustomStringGrid.EditorTextChanged(Sender: TObject);
@@ -16864,7 +16977,12 @@ begin
   { Back to the cell already being edited: the editor keeps what the user typed, and what it
     showed when it opened. }
   reopened := FEditing and (ACol = FEditCol) and (ARow = FEditRow);
-  Result := DoBeginEdit(ACol, ARow);
+  FEditorOpening := True;   { #168:编辑器开的时候填进去的值不是用户的改动 }
+  try
+    Result := DoBeginEdit(ACol, ARow);
+  finally
+    FEditorOpening := False;
+  end;
   if Result and FEditing then FPlacedEditorRect := EditorTargetRect;   { where DoBeginEdit put it }
   if Result and Assigned(FOnGetEditorProp) and (EditorControl <> nil) then
     FOnGetEditorProp(Self, FEditCol, FEditRow, EditorControl);
@@ -17338,6 +17456,7 @@ var
 begin
   { 选中即提交 —— 下拉不像文本框那样需要按 Enter 确认。被拦下就留在下拉里。 }
   if not FEditing then Exit;
+  AnyEditorChanged(Sender);   { #168 }
   fromList := FPickEditor.DroppedDown;
   if not TryEndEdit(True) then Exit;
   { #59. The pick just hid the editor that held the focus, and LCL clears the form's active
@@ -17518,8 +17637,14 @@ begin
   if FEditing and not TryEndEdit(True) then begin RefocusEditor; Exit; end;   { #48 }
   inherited DblClick;
   { 只有双击**单元格**才进编辑。行号槽、列头、末行以下的空白都不是格子 ——
-    在那些地方双击时用户的手根本没碰当前光标格。 }
-  if FLastDownHit.Part = ghpCell then BeginEdit;
+    在那些地方双击时用户的手根本没碰当前光标格。
+    #168:而且得是**光标已经在上面**的那一格 —— OnSelectCell 拦下的格、点在树形三角上
+    的那一下,光标都没过去,从前双击就去编辑了光标格。勾选格每次按下已经切过一次,
+    双击再进 BeginEdit 就是第三次切换(三个事件、三步撤销)。 }
+  if (FLastDownHit.Part = ghpCell) and not FPressOnToggle
+     and (FLastDownHit.Col = FCol) and (FLastDownHit.Row = FRow)
+     and (EditorKindFor(FCol, FRow) <> gekCheckBox) then
+    BeginEdit;
 end;
 
 procedure TTyCustomStringGrid.RenderSelectionFrame(P: TTyPainter;

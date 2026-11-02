@@ -354,7 +354,7 @@ TyGridButton                按钮单元格(:hover / :active)
 ### 选择
 - `SelectAll` / `SelectRange` / `SelectRows` / `ClearSelection` /
   `Selection`(**可读可写**:存下来的矩形直接赋回去即可恢复;全负矩形 = 取消选区,
-  与 LCL 一致)/ `SelectedCellCount` + `OnSelectionChanged`
+  与 LCL 一致)/ `SelectedCellCount` + `OnSelectionChanged`(鼠标、键盘改了选区都会触发)
 - 离散多选(Ctrl+点)、拖选、`SelectionMode`(格 / 行 / 列)
 - 离散多选**能枚举**了:`SelectedRangeCount` / `SelectedRange[i]` / `HasMultiSelection`
   (索引 0 恒为活动矩形)。从前对外只有 `Selection`,而它只给最后那一块 ——
@@ -418,7 +418,7 @@ TyGridButton                按钮单元格(:hover / :active)
 ### 事件
 单元格级鼠标(`OnClickCell` / `OnDblClickCell` / `OnRightClickCell` / `OnCanClickCell`)、
 表头(`OnHeaderClick` / `OnHeaderRightClick` / `OnColumnMove`;`OnHeaderClick` 在同一段列头上按下再松开时触发,拖列、点筛选按钮都不算,列去掉 `coAllowClick` 也不触发)、
-尺寸(`OnColumnSizing` / `OnEndColumnSize` / `OnRowSizing` / `OnEndRowSize`)、
+尺寸(`OnColumnSizing` / `OnEndColumnSize` / `OnRowSizing` / `OnEndRowSize`;`OnEnd…Size` 只在真的拖动过之后触发,在分隔线上点一下不算)、
 内建控件(`OnCanToggleCheck` / `OnCheckBoxChange` / `OnCellButtonClick`)。
 
 ## 对象槽与整行整列赋值
@@ -713,3 +713,11 @@ XLS 原生读写、PDF 导出与打印子系统、RichEdit / HTML 富文本单�
 
 预置外观样式集(对标品在控件里硬编码几千行 case 上色)也不做:
 我们的等价物就是 `.tycss` + typeKey,照抄等于把皮肤职责搬回控件。
+
+### 编辑与提示事件补充
+
+- `OnEditChange`:每一种内建编辑器(文本、数字、密码、掩码、多行、计算器、数值、滑块、日期、下拉)改动时都触发,文字与提交时读的一致;编辑器打开时填进去的初值不算。
+- `OnCanEditCell`:除了打开编辑器,粘贴、剪切、填充柄、查找替换、点评分星改格子时也都会问它。
+- `OnCanSort`:`AddSortColumn`(Shift+点列头追加次级排序)也会问它。
+- `OnScrollHint`:拖纵向滚动条的滑块时,按滑块位置对应的顶行问宿主要提示文字,非空就在滑块旁边显示。
+- 双击:只有双击在光标所在的那一格上才进编辑;`OnSelectCell` 拦下的格、树形三角上的双击都不进编辑;勾选格双击就是两次切换,不会多切一次。`OnCanClickCell` 拦下的格不触发 `OnDblClickCell`。
