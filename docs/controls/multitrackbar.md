@@ -165,7 +165,7 @@ TTyEditStopColorEvent = procedure(Sender: TObject; AIndex: Integer; var AColor: 
 
 **`clDefault` 的色标**没有自己的颜色：不进 `Gradient`，滑块按主题画。
 
-**混色。** 渐变逐个色标线性混合，按 sRGB 各通道直接插值，不做 gamma 校正；新色标的颜色也按同样的方法算。画家在恰好两个色标、位置正好 0 和 1 时会走另一条带 gamma 校正的快路径，中间会亮一截（黑到白的中点约 `#AAAAAA`），再加一个色标整条渐变就变了样。为了让两个色标和三个色标画得一致，`GradientFill` 在这种情况下把第一个色标重复一次，避开那条路。
+**混色。** 渐变逐个色标线性混合，按 sRGB 各通道直接插值，不做 gamma 校正；新色标的颜色也按同样的方法算。画家画两个色标和画更多色标时都这样混色，所以 `GradientFill` 把色标原样交出去，两个色标就是两项。
 
 ```pascal
 // 预览条：画的就是轨道上那条渐变
@@ -549,7 +549,7 @@ TyTrackThumb.stop { border-width: 1px; border-color: var(--on-surface); }
 2. **淡出由控件自己做。** 画家的 `opacity` 只作用于整次绘制，所以控件把 `.removing` 解析出的 `opacity` 乘到这个滑块的颜色上。自绘滑块（`OnDrawThumb` 接管）时要自己画，判断用 `RemovingThumb`。
 3. **区间控件的「加删」开关叫 `AllowUserRanges`**，和多值控件的 `AllowUserThumbs` 是同一套机制；区间控件不发布 `MinThumbs` / `MaxThumbs`。区间被拖出时高亮段沿用 `.removing` 的 `opacity`，没有单独的主题键。
 4. **`AllowCrossing` 只管用户。** 代码写值仍然夹在邻居之间，不改变项的顺序。
-5. **渐变的混色不做 gamma 校正**，按 sRGB 各通道线性插值，`GradientFill` 在只有首尾两个色标时会重复第一个色标（第 4 节）。
+5. **渐变的混色不做 gamma 校正**，按 sRGB 各通道线性插值（第 4 节）。
 6. **新增 `RemovingThumb`**（public，只读），给自绘用；**新增 `TyTrackThumb.stop`**，让色标在任何颜色下都有边。
 
 ---
