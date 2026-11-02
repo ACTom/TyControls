@@ -3590,6 +3590,8 @@ begin
     Result.Stroke := bst.BorderColor.Color;
     if IsNan(bst.BorderWidthLogical) then Result.StrokeWidthLogical := 1
     else Result.StrokeWidthLogical := bst.BorderWidthLogical;
+    { [R7-C] an infinite width: never hit }
+    Result.StrokeWidthInf := bst.BorderWidthInf;
   end;
   if FLastPPI > 0 then Result.PxScale := FLastPPI / 96;
   { AND THE OPACITY, in the order upstream's stages write the item style:

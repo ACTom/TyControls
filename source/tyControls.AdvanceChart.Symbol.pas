@@ -790,14 +790,17 @@ begin
         tanY := Cos(ang);
         cpLen := pr * 0.6;
         PushArc(L, x, cy, pr, Pi - ang, 2 * Pi + ang);
+        { [R7-C] the body's second control point is on the axis, cpLen2 =
+          r * 0.7 above the cusp (symbol.ts Pin.buildPath) [was: r * 0.6
+          off it on either side, a fatter body] }
         PushBezier(L,
           x + dx, cy + dy,
           x + dx - tanX * cpLen, cy + dy + tanY * cpLen,
-          x + pr * 0.6, y - pr * 0.6,
+          x, y - pr * 0.7,
           x, y);
         PushBezier(L,
           x, y,
-          x - pr * 0.6, y - pr * 0.6,
+          x, y - pr * 0.7,
           x - dx + tanX * cpLen, cy + dy + tanY * cpLen,
           x - dx, cy + dy);
       end;

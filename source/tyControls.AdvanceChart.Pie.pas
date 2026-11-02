@@ -160,6 +160,10 @@ type
     Alphas: TTyDoubleArray;
     Stroke: TTyChartColor;
     StrokeWidthLogical: Double;
+    { [R7-C] the series' border width where it is +Infinity (which the canvas
+      does not draw): its sectors are never hit, their stroked rect is
+      not-a-number; 0 otherwise }
+    StrokeWidthInf: Double;
     { device px per logical px: a border grows a gradient's box by its
       width on the device [Batch 105] }
     PxScale: Double;
@@ -563,6 +567,7 @@ begin
   Result.Fills[0] := AFill;
   Result.Stroke := 0;
   Result.StrokeWidthLogical := 0;
+  Result.StrokeWidthInf := 0;
   Result.PxScale := 1;
   Result.EmptyFill := AFill;
   { upstream's series z }
@@ -1033,6 +1038,7 @@ begin
       el.Style.FillColor := AVisual.EmptyFill;
     el.Style.StrokeColor := AVisual.Stroke;
     el.Style.StrokeWidthLogical := AVisual.StrokeWidthLogical;
+    el.HitNone := AVisual.StrokeWidthInf > 0;
     { A GRADIENT OR A PATTERN, normalised against the sector's PATH box --
       the arc's extent -- grown by the border when there is one [Batch 105] }
     if i <= High(AVisual.Decals) then el.Style.Decal := AVisual.Decals[i];
