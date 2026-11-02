@@ -7,7 +7,7 @@ uses
   tyControls.Types, tyControls.Base, tyControls.Controller, tyControls.ComboBox, tyControls.ListBox,
   tyControls.Edit,
   tyControls.ComboBoxEx, tyControls.OfficeComboBox, tyControls.AdvancedComboBox,
-  tyControls.CheckComboBox, tyControls.Cascader;
+  tyControls.CheckComboBox, tyControls.Cascader, tyControls.TreeView, tyControls.TreeSelect;
 type
   { Expose protected Click and RenderTo for tests }
   TComboAccess = class(TTyComboBox)
@@ -25,6 +25,7 @@ type
 
   TEditCrack = class(TTyEdit);
   TListCrack = class(TTyListBox);
+  TTreeSelectCrack = class(TTyTreeSelect);
 
   { #161 }
   TComboKeysTest = class(TTestCase)
@@ -59,6 +60,11 @@ type
     procedure TestTheCheckFieldKeysOpenTheList;
     procedure TestAnOpenCascaderIsNotOpenedAgain;
     procedure TestTheListGetsTheActiveController;
+    { #162 }
+    procedure TestATreeSelectItemPickShowsItsText;
+    procedure TestTheTreeSelectReopenGuardIsTheClicks;
+    procedure TestNoCloseUpForATreeSelectOrCascaderWithNothingOpen;
+    procedure TestEditingNodesKeepsTheCascaderDraft;
   end;
 
   TChangeProbe = class
@@ -1115,6 +1121,94 @@ begin
   c.DropDown;
   AssertEquals('the drop-down is painted from the theme in effect, not from none',
     TyColorToLCL(S.Background.Color), GetParentForm(c.PopupList).Color);
+end;
+
+{ #162: an Items-built tree answers its rows from the items, not from OnGetText -- the field
+  showed nothing. }
+procedure TComboKeysTest.TestATreeSelectItemPickShowsItsText;
+var
+  ts: TTyTreeSelect;
+  b: TTyTreeNodeItem;
+begin
+  ts := TTyTreeSelect.Create(FForm);
+  ts.Parent := FForm;
+  ts.Items.AddChild(nil, 'Apple');
+  b := ts.Items.AddChild(nil, 'Banana');
+  ts.SelectedNode := b.Node;
+  AssertEquals('the pick''s caption', 'Banana', ts.Text);
+end;
+
+{ #162: the 200 ms guard is against the click that closed the drop re-opening it; DropDown from
+  code or the keyboard opens at once. }
+procedure TComboKeysTest.TestTheTreeSelectReopenGuardIsTheClicks;
+var ts: TTyTreeSelect;
+begin
+  ts := TTyTreeSelect.Create(FForm);
+  ts.Parent := FForm;
+  ts.SetBounds(0, 0, 160, 26);
+  ts.Items.AddChild(nil, 'Apple');
+  ts.DropDown;
+  AssertTrue('setup: open', ts.DroppedDown);
+  ts.CloseUp;
+  TTreeSelectCrack(ts).Click;
+  AssertFalse('a click right after the close-up does not reopen', ts.DroppedDown);
+  ts.DropDown;
+  AssertTrue('DropDown from code does, at once', ts.DroppedDown);
+  ts.CloseUp;
+end;
+
+procedure TComboKeysTest.TestNoCloseUpForATreeSelectOrCascaderWithNothingOpen;
+var
+  ts: TTyTreeSelect;
+  c: TTyCascader;
+begin
+  ts := TTyTreeSelect.Create(FForm);
+  ts.Parent := FForm;
+  ts.OnCloseUp := @Count;
+  ts.CloseUp;
+  AssertEquals('a tree select with nothing open: no close-up', 0, FCount);
+  c := TTyCascader.Create(FForm);
+  c.Parent := FForm;
+  c.Nodes.AddNode('East');
+  c.OnCloseUp := @Count;
+  c.CloseUp;
+  AssertEquals('nor a cascader', 0, FCount);
+end;
+
+{ #162: the panel's draft is the choice the user is making; an edit of Nodes keeps it as far
+  as the tree still has it, instead of putting the committed value back. }
+procedure TComboKeysTest.TestEditingNodesKeepsTheCascaderDraft;
+var
+  c: TTyCascader;
+  p: TTyCascaderPanel;
+  east, north: TTyCascaderNode;
+  want: TTyCascaderPath;
+begin
+  c := TTyCascader.Create(FForm);
+  c.Parent := FForm;
+  c.Font.PixelsPerInch := 96;
+  east := c.Nodes.AddNode('East');
+  east.Children.AddNode('Hangzhou');
+  east.Children.AddNode('Ningbo');
+  north := c.Nodes.AddNode('North');
+  north.Children.AddNode('Beijing');
+  SetLength(want, 2);
+  want[0] := 0;
+  want[1] := 1;
+  c.Path := want;               // the value: East / Ningbo
+  c.DropDown;
+  AssertTrue('setup: open', c.DroppedDown);
+  p := c.DropDownPanel;
+  want[0] := 1;
+  want[1] := 0;
+  p.Path := want;               // the user is on North / Beijing
+  east.Children.AddNode('Wenzhou');
+  AssertTrue('an edit elsewhere keeps the draft', TyCascaderPathsEqual(want, p.Path));
+  north.Children[0].Free;
+  SetLength(want, 1);
+  AssertTrue('an edit of the draft''s own option cuts it back to what is left',
+    TyCascaderPathsEqual(want, p.Path));
+  c.CloseUp;
 end;
 
 procedure TComboKeysTest.TestAnOpenCascaderIsNotOpenedAgain;

@@ -382,6 +382,9 @@ type
     { The tail EVERY draft change shares: re-fit the per-column scroll array, repaint, and
       tell the host that the column count may have moved. }
     procedure DraftChanged;
+    { #162: the tree was edited under an open panel -- the draft, the choice the user is making,
+      stays as far as the tree still has it. }
+    procedure NodesEdited;
   protected
     { Protected, not private: the hover/selected precedence rule is pinned by a test
       through an access subclass. }
@@ -1313,6 +1316,12 @@ begin
   DraftChanged;
 end;
 
+procedure TTyCascaderPanel.NodesEdited;
+begin
+  FPath := TyCascaderValidPath(FRoot, FPath);
+  DraftChanged;   // the columns are of the tree as it is now
+end;
+
 procedure TTyCascaderPanel.DraftChanged;
 begin
   SyncScroll;
@@ -1831,10 +1840,11 @@ begin
   if not TyCascaderPathsEqual(valid, FPath) then FPath := valid;
   if FPanel <> nil then
   begin
-    // An open panel is showing the tree that just changed: re-seed it or it keeps painting
-    // options that no longer exist.
+    // An open panel is showing the tree that just changed: re-lay it or it keeps painting
+    // options that no longer exist. Its DRAFT stays -- seeding it from FPath replaced the
+    // choice the user was making (#162); the next open seeds it from the value anyway.
     FPanel.Root := FNodes;
-    FPanel.Path := FPath;
+    FPanel.NodesEdited;
   end;
   if not (csLoading in ComponentState) then Invalidate;
 end;
@@ -2021,16 +2031,9 @@ end;
 
 procedure TTyCustomCascader.CloseUp;
 begin
+  { Nothing open, no close-up: OnCloseUp is for a panel that closed (#162). }
   if (FPopup <> nil) and FPopup.IsOpen then
-  begin
     FPopup.Close;   // -> PopupClosed, which mirrors the tick and fires DoCloseUp
-    Exit;
-  end;
-  // Not open (the headless path, or already closed): still record the tick and fire the
-  // bookkeeping so the reopen guard behaves the same.
-  FCloseUpTick := GetTickCount64;
-  Invalidate;
-  DoCloseUp;
 end;
 
 procedure TTyCustomCascader.DeferredCloseUp(Data: PtrInt);

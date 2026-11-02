@@ -79,7 +79,7 @@ uses tyControls.TreeSelect;
 |------|------|----------|
 | `OnChange` | `TNotifyEvent` | 选中项**真的变了**——用户选取，或宿主写 `SelectedNode`。**重复选同一个节点不触发**（setter 先比较）。`UpdateText`（仅标题变了）**不触发**。 |
 | `OnDropDown` | `TNotifyEvent` | **在弹出窗口显示之前**触发——**与 `TTyComboBox` 相反**（它是显示之后）。理由：树是本库唯一一种「内容经常按需现建」的下拉，这个钩子**必须**能在尺寸还没定下来之前（重新）填充 `Tree`。控件在它之后才 `SyncTreeToSelection`，所以**刚建好的树也能开在当前值上**。 |
-| `OnCloseUp` | `TNotifyEvent` | 下拉关闭之后——**任何原因**都算：点击别处、`Escape`、选取、程序调用 `CloseUp`。无窗口（headless / 已关闭）时也照样触发，宿主两种路径看到的事件序列一致。 |
+| `OnCloseUp` | `TNotifyEvent` | 下拉关闭之后——**任何原因**都算：点击别处、`Escape`、选取、程序调用 `CloseUp`。没有打开的下拉时调用 `CloseUp` 不触发。 |
 
 ---
 
@@ -151,8 +151,8 @@ function TyTreeSelectNodeText(ATree: TTyTreeView; ANode: PTyTreeNode): string;
 ### 5.2 公开方法
 
 ```pascal
-procedure DropDown;               // 展开。Enabled=False / 已展开 / 距上次 CloseUp 200ms 内 => 空操作
-procedure CloseUp;                // 收起（幂等）。触发 OnCloseUp
+procedure DropDown;               // 展开。Enabled=False / 已展开 => 空操作
+procedure CloseUp;                // 收起（幂等）。真收起了才触发 OnCloseUp
 function  DroppedDown: Boolean;
 procedure PickNode(ANode: PTyTreeNode);  // 提交 ANode 为选中值：选中它（值真变了才 OnChange）并收起下拉
 procedure ClearSelection;         // 清空选中：Text 变空，TextHint（若有）接管
@@ -304,7 +304,7 @@ DeptSelect.DropDownHeight := 160;   // 逻辑像素；0 = 主题的 --treeselect
 - **展开分支 ≠ 选中它：** 点展开箭头和点复选框**都不提交**（见 `TyTreeSelectCommitsOn`）——否则「展开看看里面」就会顺手选中并关掉下拉。
 - **只有 `Alt+Down` / `F4` 展开，没有单独的上下键步进：** 后者是组合框的做法。**层级没有一个「下一个值」可供盲目步进**，而且从收起的字段步进到一个折叠分支里，会选中用户根本看不见的节点。`Escape` 收起（不提交）。
 - **每次展开都会用字段的选中项重新播种树：** 所以下拉**总是开在当前值上**（哪怕这个值是程序化设置的、从未碰过树）；反过来，一次被取消的浏览（方向键动过树自己的选中）也会**在下次展开时被抹掉**，不会漏进字段。选中项为 `nil` 时会**清空树的选中**——弹出里不能高亮一个字段并不认的行。
-- **200ms 重开保护：** 下拉在本控件的 `Click` 跑起来**之前**就已经因失活而关闭了，`Click` 会看到一个已关闭的弹出并把它**重新打开**。`DropDown` 因此忽略距上次 `CloseUp` 200ms 内的请求。整个字段都是展开热区（没有像 `TTyComboBox.csDropDown` 那样需要保护的可编辑区）。
+- **200ms 重开保护：** 下拉在本控件的 `Click` 跑起来**之前**就已经因失活而关闭了，`Click` 会看到一个已关闭的弹出并把它**重新打开**。所以**点击**在距上次收起 200ms 内不重新打开；代码和键盘（`Alt+↓` / `F4`）调 `DropDown` 不受这个限制，立刻打开。整个字段都是展开热区（没有像 `TTyComboBox.csDropDown` 那样需要保护的可编辑区）。
 - **选取后是「延迟」关闭的：** `PickNode` 用 `Application.QueueAsyncCall` 收起。在树的鼠标/键盘处理器里**同步**隐藏弹出，会让 LCL 的点击收尾焦点路径指向一个已隐藏的窗体（`EInvalidOperation '[TCustomForm.SetFocus] … Can not focus'`）。
 - **`DropDownWidth` / `DropDownHeight` 与令牌都是逻辑像素**，弹出窗口要的是**设备像素**——控件按 `Font.PixelsPerInch` 换算。但**宽度跟随字段时不再缩放**：`Width` 本来就已经是设备像素了，缩放两遍是 bug。
 - **改下拉尺寸不影响已打开的下拉：** 尺寸在展开的那一刻决定。

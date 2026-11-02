@@ -68,7 +68,7 @@ uses tyControls.Cascader;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `Nodes` | `TTyCascaderNodes` | 空 | 选项树。**在任何位置编辑它都会静默地重新校验选中值**（见 §8）并重排已打开的面板。 |
+| `Nodes` | `TTyCascaderNodes` | 空 | 选项树。**在任何位置编辑它都会静默地重新校验选中值**（见 §8）并重排已打开的面板；面板上用户正在选的路径保留下来，只截掉树里已经没有的那一段。 |
 | `Separator` | `string` | `' / '`（`TyCascaderSeparator`） | `Text` 用什么把两个 `Caption` 拼起来。**这不是控件自己的文案**——控件从不发明词，只在宿主给的两个标题之间放这个串；`' / '` 是 Ant Design 的写法，中英文读起来都对。 |
 | `DropDownRows` | `Integer` | `8` | 一列滚动前最多可见几行（对齐 `TTyComboBox.DropDownCount`）。**钳到至少 1**。它是个**计数、不是观感**，所以是属性，而行**高**是主题 metric。 |
 | `TabStop` | `Boolean` | `True` | |
@@ -83,7 +83,7 @@ uses tyControls.Cascader;
 | `Path` | `TTyCascaderPath` | 选中路径。**赋值会归一化**（见 `TyCascaderValidPath`）：不符合当前树的路径会被**静默**截回仍然成立的前缀——既不会被钳到相邻选项上，也不会抛异常。**是值不是别名**：读出来的是副本，写进去的也被拷贝一份（FPC 动态数组是引用计数的，但**不是** copy-on-write，直接交出 `FPath` 等于让调用方绕过 setter 改选中值）。 |
 | `Text` | `string`（只读） | 选中标题按 `Separator` 拼成的串；未选时为 `''`。**只读且是派生值**——要写请用 `SelectByText`（或 `Path`）。它**刻意遮蔽**了 `TTyCascader` 静态类型上的 `TControl.Text`（`TTyComboBox.Text` 已是这么做的）；把控件看成 `TControl` 的 LCL 代码拿到的仍是继承来的 `Caption` 文本。 |
 | `procedure DropDown` | — | 打开面板。**没有选项时是惰性的**（`TTyComboBox` 的规则：绝不显示空弹窗）。 |
-| `procedure CloseUp` | — | 关闭面板。未打开时（headless 路径 / 已关闭）**仍会**记下 tick 并触发 `OnCloseUp`，让重开守卫行为一致。 |
+| `procedure CloseUp` | — | 关闭面板。没有打开的面板时什么都不做，也不触发 `OnCloseUp`。 |
 | `function DroppedDown: Boolean` | `Boolean` | 面板是否打开。 |
 | `procedure Clear` | — | 清空选择（`Path := []`）。**原本有选中时**才触发 `OnChange`。 |
 | `function SelectedNode: TTyCascaderNode` | 节点 | `Path` 选中的节点；未选时 `nil`。 |
@@ -105,7 +105,7 @@ uses tyControls.Cascader;
 |------|------|----------|
 | `OnChange` | `TNotifyEvent` | **`Path` 真的变了**才触发——叶子提交，或代码赋值。重复赋同一条路径**不触发**。**浏览面板不触发**：面板编辑的是草稿，只有**叶子**选择才提交。**编辑 `Nodes` 也不触发**（见 §8）。 |
 | `OnDropDown` | `TNotifyEvent` | `DropDown` 成功弹出后。 |
-| `OnCloseUp` | `TNotifyEvent` | 每次收起后（含未打开时调用 `CloseUp` 的记账路径）。 |
+| `OnCloseUp` | `TNotifyEvent` | 每次收起后。 |
 
 ---
 
