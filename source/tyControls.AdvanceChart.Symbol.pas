@@ -96,6 +96,11 @@ function TySymbolResolveOffset(const ASpec: TTySymbolSpec): TTySymbolSpec;
   symbol answers the box of its turned unit rect. [Batch 73] }
 function TySymbolLabelBox(const ASpec: TTySymbolSpec; APX, APY: Double;
   ALineWidth: Double; AHasStroke, AHasFill: Boolean): TTyXYWH;
+{ [R7-O] the same rect under the unit path's whole transform AM (to the
+  canvas: the symbol's half size, its turn and offset, and every group
+  above it -- a node under a view whose scaleY is not its scaleX) }
+function TySymbolLabelBoxM(const ASpec: TTySymbolSpec; const AM: TTyMat2D;
+  ALineWidth: Double; AHasStroke, AHasFill: Boolean): TTyXYWH;
 
 { Read `symbol`, `symbolSize`, `symbolRotate`, `symbolOffset` and
   `symbolKeepAspect` off a series node, over the given defaults. }
@@ -162,6 +167,22 @@ function TyBuildSymbolInRealBox(const ASpec: TTySymbolSpec;
 procedure TySymbolHitFrame(var AShape: TTyChartShape; const ASpec: TTySymbolSpec;
   ACX, ACY: Double);
 
+{ [R7-O] A SYMBOL UNDER A WHOLE LINEAR MAP: what a symbol draws when the
+  groups above it scale unequally -- a graph's edge symbol (Line.ts scales
+  it by 1 / scaleX alone) or a turned node under a view whose scaleY is not
+  its scaleX. ASpec's outline is built about the origin at its size, upright
+  and with no offset (its RotateDeg and its offset are the caller's, folded
+  into AL and the centre), and every point goes through
+  x' = AL[0] x + AL[2] y + ACX, y' = AL[1] x + AL[3] y + ACY (AL[4], AL[5]
+  are not read).
+  A circle whose map leaves it upright on screen (the map's rows at right
+  angles) is an ellipse, any other its polygon; a roundRect's corners are
+  its elliptical arcs as points; a path's commands are mapped (its arcs and
+  quadratics as cubics, filled by the nonzero rule as zrender's); a
+  picture its mapped corners; everything else its mapped points. }
+function TyBuildSymbolMapped(const ASpec: TTySymbolSpec; ACX, ACY: Double;
+  const AL: TTyMat2D): TTyChartShape;
+
 implementation
 
 uses tyControls.AdvanceChart.ZrPath;
@@ -178,6 +199,9 @@ const
     as the polygon, a step of 2 pi / 96 (a quarter of 24) leaves a 50 px
     radius under a tenth of a pixel off the curve }
   cTurnedQuarterSteps = 24;
+  { [R7-O] a mapped symbol's curve (a cubic of a pin, a quarter of an arc)
+    sampled into the points its bounds and its hit read }
+  cMappedCurveSteps = 48;
 
 function TySymbolDefault(const ASeriesType: string): TTySymbolSpec;
 begin
@@ -396,7 +420,34 @@ end;
 function TySymbolLabelBox(const ASpec: TTySymbolSpec; APX, APY: Double;
   ALineWidth: Double; AHasStroke, AHasFill: Boolean): TTyXYWH;
 var
-  lx, ly, lw, lh, m0, m1, m2, m3, m4, m5, r, st, ct, ls, w: Double;
+  m: TTyMat2D;
+  r, st, ct: Double;
+begin
+  { scale, rotate, translate (Transformable.getLocalTransform), then the
+    group's move to the point }
+  r := ASpec.RotateDeg * Pi / 180;
+  st := Sin(r);
+  ct := Cos(r);
+  m[0] := ASpec.WidthPx / 2 * ct;
+  m[1] := -(ASpec.WidthPx / 2) * st;
+  m[2] := ASpec.HeightPx / 2 * st;
+  m[3] := ASpec.HeightPx / 2 * ct;
+  if r = 0 then
+  begin
+    m[0] := ASpec.WidthPx / 2;
+    m[1] := 0;
+    m[2] := 0;
+    m[3] := ASpec.HeightPx / 2;
+  end;
+  m[4] := ASpec.OffsetX + APX;
+  m[5] := ASpec.OffsetY + APY;
+  Result := TySymbolLabelBoxM(ASpec, m, ALineWidth, AHasStroke, AHasFill);
+end;
+
+function TySymbolLabelBoxM(const ASpec: TTySymbolSpec; const AM: TTyMat2D;
+  ALineWidth: Double; AHasStroke, AHasFill: Boolean): TTyXYWH;
+var
+  lx, ly, lw, lh, m0, m1, m2, m3, m4, m5, ls, w: Double;
   ub: TTyXYWH;
   xs, ys: array[0..3] of Double;
   k: Integer;
@@ -439,24 +490,12 @@ begin
     lw := ub.W;
     lh := ub.H;
   end;
-  { scale, rotate, translate (Transformable.getLocalTransform), then the
-    group's move to the point }
-  r := ASpec.RotateDeg * Pi / 180;
-  st := Sin(r);
-  ct := Cos(r);
-  m0 := ASpec.WidthPx / 2 * ct;
-  m1 := -(ASpec.WidthPx / 2) * st;
-  m2 := ASpec.HeightPx / 2 * st;
-  m3 := ASpec.HeightPx / 2 * ct;
-  if r = 0 then
-  begin
-    m0 := ASpec.WidthPx / 2;
-    m1 := 0;
-    m2 := 0;
-    m3 := ASpec.HeightPx / 2;
-  end;
-  m4 := ASpec.OffsetX + APX;
-  m5 := ASpec.OffsetY + APY;
+  m0 := AM[0];
+  m1 := AM[1];
+  m2 := AM[2];
+  m3 := AM[3];
+  m4 := AM[4];
+  m5 := AM[5];
   { the stroke, in unit space: strokeNoScale divides by the line scale }
   if AHasStroke then
   begin
@@ -886,6 +925,308 @@ begin
   AShape.HitSym := name;
   AShape.HitM := TyZrLocal(ASpec.WidthPx / 2, ASpec.HeightPx / 2,
     DegToRad(ASpec.RotateDeg), ACX + ASpec.OffsetX, ACY + ASpec.OffsetY);
+end;
+
+{ [R7-O] a zrender path as the shape record's commands: moves, lines,
+  cubics (a quadratic raised to one, an arc as cubics of at most a quarter
+  turn on its ellipse, a rect as its four sides) and closes, with the
+  points the hit test and the bounds read (a curve sampled) }
+procedure ZrPathCmds(const APath: TTyZrPath; out ACmds: TTyPathCmdArray;
+  out APoints: TTyPointFArray);
+var
+  i, k, n: Integer;
+  lastX, lastY, x0, y0, cx, cy, rx, ry, a0, sweep, psi, th, kk, p0, p1,
+    c0, s0, c1, s1, cp, sp, ax1, ay1, ax2, ay2, ex, ey, t, u: Double;
+
+  procedure Cmd(AKind: TTyPathCmdKind; AX1, AY1, AX2, AY2, AX, AY: Double);
+  var q: Integer;
+  begin
+    q := Length(ACmds);
+    SetLength(ACmds, q + 1);
+    ACmds[q] := Default(TTyPathCmd);
+    ACmds[q].Kind := AKind;
+    ACmds[q].X1 := AX1;
+    ACmds[q].Y1 := AY1;
+    ACmds[q].X2 := AX2;
+    ACmds[q].Y2 := AY2;
+    ACmds[q].X := AX;
+    ACmds[q].Y := AY;
+  end;
+
+  procedure Pt(AX, AY: Double);
+  var q: Integer;
+  begin
+    q := Length(APoints);
+    SetLength(APoints, q + 1);
+    APoints[q] := TyPointF(AX, AY);
+  end;
+
+  { one cubic from the pen, sampled into the points (finely: a view's
+    squash stretches them) }
+  procedure Cubic(AX1, AY1, AX2, AY2, AX, AY: Double);
+  var j: Integer;
+  begin
+    Cmd(pckCurve, AX1, AY1, AX2, AY2, AX, AY);
+    for j := 1 to cMappedCurveSteps do
+    begin
+      t := j / cMappedCurveSteps;
+      u := 1 - t;
+      Pt(u * u * u * lastX + 3 * u * u * t * AX1 + 3 * u * t * t * AX2 + t * t * t * AX,
+        u * u * u * lastY + 3 * u * u * t * AY1 + 3 * u * t * t * AY2 + t * t * t * AY);
+    end;
+    lastX := AX;
+    lastY := AY;
+  end;
+
+  { a point of the arc's ellipse at the parameter AA }
+  procedure OnArc(AA: Double; out AX, AY: Double);
+  begin
+    AX := cx + rx * Cos(AA) * cp - ry * Sin(AA) * sp;
+    AY := cy + rx * Cos(AA) * sp + ry * Sin(AA) * cp;
+  end;
+
+begin
+  ACmds := nil;
+  APoints := nil;
+  lastX := 0;
+  lastY := 0;
+  x0 := 0;
+  y0 := 0;
+  for i := 0 to High(APath) do
+    case APath[i].Cmd of
+      zrM:
+        begin
+          Cmd(pckMove, 0, 0, 0, 0, APath[i].V[0], APath[i].V[1]);
+          lastX := APath[i].V[0];
+          lastY := APath[i].V[1];
+          x0 := lastX;
+          y0 := lastY;
+          Pt(lastX, lastY);
+        end;
+      zrL:
+        begin
+          Cmd(pckLine, 0, 0, 0, 0, APath[i].V[0], APath[i].V[1]);
+          lastX := APath[i].V[0];
+          lastY := APath[i].V[1];
+          Pt(lastX, lastY);
+        end;
+      zrC:
+        Cubic(APath[i].V[0], APath[i].V[1], APath[i].V[2], APath[i].V[3],
+          APath[i].V[4], APath[i].V[5]);
+      zrQ:
+        Cubic(lastX + 2 / 3 * (APath[i].V[0] - lastX), lastY + 2 / 3 * (APath[i].V[1] - lastY),
+          APath[i].V[2] + 2 / 3 * (APath[i].V[0] - APath[i].V[2]),
+          APath[i].V[3] + 2 / 3 * (APath[i].V[1] - APath[i].V[3]),
+          APath[i].V[2], APath[i].V[3]);
+      zrA:
+        begin
+          { the canvas' arc: a line to its start, then the sweep }
+          cx := APath[i].V[0];
+          cy := APath[i].V[1];
+          rx := APath[i].V[2];
+          ry := APath[i].V[3];
+          a0 := APath[i].V[4];
+          sweep := APath[i].V[5];
+          psi := APath[i].V[6];
+          cp := Cos(psi);
+          sp := Sin(psi);
+          OnArc(a0, ex, ey);
+          Cmd(pckLine, 0, 0, 0, 0, ex, ey);
+          Pt(ex, ey);
+          lastX := ex;
+          lastY := ey;
+          n := Ceil(Abs(sweep) / (Pi / 2) - 1e-9);
+          if n < 1 then n := 1;
+          th := sweep / n;
+          kk := 4 / 3 * Tan(th / 4);
+          for k := 0 to n - 1 do
+          begin
+            p0 := a0 + th * k;
+            p1 := a0 + th * (k + 1);
+            c0 := Cos(p0);
+            s0 := Sin(p0);
+            c1 := Cos(p1);
+            s1 := Sin(p1);
+            { the unit circle's control points, then the ellipse's map }
+            ax1 := c0 - kk * s0;
+            ay1 := s0 + kk * c0;
+            ax2 := c1 + kk * s1;
+            ay2 := s1 - kk * c1;
+            Cubic(cx + rx * ax1 * cp - ry * ay1 * sp, cy + rx * ax1 * sp + ry * ay1 * cp,
+              cx + rx * ax2 * cp - ry * ay2 * sp, cy + rx * ax2 * sp + ry * ay2 * cp,
+              cx + rx * c1 * cp - ry * s1 * sp, cy + rx * c1 * sp + ry * s1 * cp);
+          end;
+        end;
+      zrR:
+        begin
+          { ctx.rect: a closed sub-path of its own, the pen back at its corner }
+          ex := APath[i].V[0];
+          ey := APath[i].V[1];
+          Cmd(pckMove, 0, 0, 0, 0, ex, ey);
+          Pt(ex, ey);
+          Cmd(pckLine, 0, 0, 0, 0, ex + APath[i].V[2], ey);
+          Pt(ex + APath[i].V[2], ey);
+          Cmd(pckLine, 0, 0, 0, 0, ex + APath[i].V[2], ey + APath[i].V[3]);
+          Pt(ex + APath[i].V[2], ey + APath[i].V[3]);
+          Cmd(pckLine, 0, 0, 0, 0, ex, ey + APath[i].V[3]);
+          Pt(ex, ey + APath[i].V[3]);
+          Cmd(pckClose, 0, 0, 0, 0, 0, 0);
+          lastX := ex;
+          lastY := ey;
+          x0 := ex;
+          y0 := ey;
+        end;
+      zrZ:
+        begin
+          Cmd(pckClose, 0, 0, 0, 0, 0, 0);
+          lastX := x0;
+          lastY := y0;
+        end;
+    end;
+end;
+
+function TyBuildSymbolMapped(const ASpec: TTySymbolSpec; ACX, ACY: Double;
+  const AL: TTyMat2D): TTyChartShape;
+var
+  w, h, a0, a1, a2, a3, r0, r1: Double;
+  spec: TTySymbolSpec;
+  L: TPointList;
+  path: TTyZrPath;
+  cmds: TTyPathCmdArray;
+  pts: TTyPointFArray;
+  box: TTyRectF;
+  i: Integer;
+  have: Boolean;
+  mm: TTyMat2D;
+
+  procedure Map(var AX, AY: Double);
+  var x, y: Double;
+  begin
+    x := AX;
+    y := AY;
+    AX := mm[0] * x + mm[2] * y + ACX;
+    AY := mm[1] * x + mm[3] * y + ACY;
+  end;
+
+  procedure Grow(AX, AY: Double);
+  begin
+    if not have then
+    begin
+      box := TyRectF(AX, AY, AX, AY);
+      have := True;
+      Exit;
+    end;
+    if AX < box.Left then box.Left := AX;
+    if AX > box.Right then box.Right := AX;
+    if AY < box.Top then box.Top := AY;
+    if AY > box.Bottom then box.Bottom := AY;
+  end;
+
+  procedure FromPath;
+  var j: Integer;
+  begin
+    ZrPathCmds(path, cmds, pts);
+    if Length(pts) = 0 then Exit;
+    have := False;
+    box := TyInvalidRectF;
+    for j := 0 to High(pts) do
+    begin
+      Map(pts[j].X, pts[j].Y);
+      Grow(pts[j].X, pts[j].Y);
+    end;
+    for j := 0 to High(cmds) do
+    begin
+      if cmds[j].Kind = pckClose then Continue;
+      Map(cmds[j].X, cmds[j].Y);
+      if cmds[j].Kind = pckCurve then
+      begin
+        Map(cmds[j].X1, cmds[j].Y1);
+        Map(cmds[j].X2, cmds[j].Y2);
+      end;
+    end;
+    Result := TyShapePolygon(pts);
+    Result.Cmds := cmds;
+    Result.HasCmdBounds := True;
+    Result.CmdBounds := box;
+    Result.HitNonZero := True;
+  end;
+
+begin
+  Result := TyShapeRect(TyInvalidRectF);
+  if ASpec.Kind = tsyNone then Exit;
+  w := ASpec.WidthPx;
+  h := ASpec.HeightPx;
+  if not ((w > 0) and (h > 0)) then Exit;
+  spec := ASpec;
+  spec.RotateDeg := 0;
+  spec.OffsetX := 0;
+  spec.OffsetY := 0;
+  spec.OffsetXIsPct := False;
+  spec.OffsetYIsPct := False;
+  L.Pts := nil;
+  L.N := 0;
+  { a path in the UNIT box (createSymbol(-1, -1, 2, 2), Symbol.ts) scaled by
+    the half size on each axis, then mapped: an oblong circle is an ellipse
+    and a roundRect's corners elliptical, as a node's; a Line's end symbol
+    is square, and every built-in path is the same in its real box }
+  mm[0] := AL[0] * (w / 2);
+  mm[1] := AL[1] * (w / 2);
+  mm[2] := AL[2] * (h / 2);
+  mm[3] := AL[3] * (h / 2);
+  case ASpec.Kind of
+    tsyCircle:
+      begin
+        { the unit circle under AL times the half size on each axis: an
+          upright ellipse when that map's rows are at right angles }
+        a0 := AL[0] * w / 2;
+        a2 := AL[2] * h / 2;
+        a1 := AL[1] * w / 2;
+        a3 := AL[3] * h / 2;
+        r0 := Sqrt(a0 * a0 + a2 * a2);
+        r1 := Sqrt(a1 * a1 + a3 * a3);
+        if Abs(a0 * a1 + a2 * a3) <= 1e-12 * r0 * r1 then
+        begin
+          if r0 = r1 then Result := TyShapeCircle(ACX, ACY, r0)
+          else Result := TyShapeEllipse(ACX, ACY, r0, r1);
+          Exit;
+        end;
+        { an oblong one turned on screen: its path's arcs as cubics }
+        path := TyZrSymbol('circle', -1, -1, 2, 2);
+        FromPath;
+        Exit;
+      end;
+    tsyRoundRect, tsyPin:
+      begin
+        { symbol.ts' own path -- its arcs (a roundRect's corners, a pin's
+          head) and curves as cubics, mapped exactly }
+        if ASpec.Kind = tsyPin then
+          path := TyZrSymbol('pin', -1, -1, 2, 2)
+        else
+          path := TyZrSymbol('roundRect', -1, -1, 2, 2);
+        FromPath;
+        Exit;
+      end;
+    tsyPath:
+      begin
+        if ASpec.KeepAspect then
+          path := TyZrMakePathCenter(ASpec.PathData, TyXYWH(-1, -1, 2, 2))
+        else
+          path := TyZrMakePathCover(ASpec.PathData, TyXYWH(-1, -1, 2, 2));
+        FromPath;
+        Exit;
+      end;
+  end;
+  { the rest are points already: built at the origin at their size,
+    mapped by AL itself }
+  for i := 0 to 3 do mm[i] := AL[i];
+  Result := TyBuildSymbol(spec, 0, 0);
+  if not (Result.Kind in [cskPolygon, cskPolyline]) then
+  begin
+    Result := TyShapeRect(TyInvalidRectF);
+    Exit;
+  end;
+  Result.Points := Copy(Result.Points, 0, Length(Result.Points));
+  for i := 0 to High(Result.Points) do Map(Result.Points[i].X, Result.Points[i].Y);
 end;
 
 function TyImageCenterBox(const ASource: string; const ABox: TTyRectF): TTyRectF;

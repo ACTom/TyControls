@@ -202,6 +202,27 @@ const CASES = [
       data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }, { name: 'c', x: 100, y: 0 }],
       links: [{ source: 'a', target: 'b' }, { source: 'a', target: 'c', emphasis: { label: { position: 'top' } } }] }] },
     steps: [EHL(0), EDP(0), EHL(1)] },
+  // [R7-O] the same view with end symbols: the Line group's box takes each symbol's own rect (grown by its pen, in its own
+  // frame: an empty one's lineWidth 2) through its local transform -- its place, its turn by the tangent at its end (a
+  // curved edge's is not the chord's) and 1 / scaleX -- in the group's units
+  { id: 'graph.edge.squash.sym', edges: true, note: "[R7-O] scaleX 4, scaleY 2; end symbols emptyCircle / arrow (10 / 16), a curved link's own diamond / emptyRect; emphasis.edgeLabel positions insideBottomRight, top, left, an absolute point",
+    option: { animation: false, series: [{ type: 'graph', layout: 'none', left: 0, top: 0, width: 400, height: 200,
+      edgeSymbol: ['emptyCircle', 'arrow'], edgeSymbolSize: [10, 16], edgeLabel: { show: true, formatter: 'edge' },
+      emphasis: { edgeLabel: { position: 'insideBottomRight', distance: 3 } },
+      data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }, { name: 'c', x: 100, y: 0 }, { name: 'd', x: 0, y: 100 }],
+      links: [{ source: 'a', target: 'b' }, { source: 'a', target: 'c', emphasis: { label: { position: 'top' } } },
+        { source: 'c', target: 'd', lineStyle: { curveness: 0.3 }, symbol: ['diamond', 'emptyRect'], symbolSize: 12,
+          emphasis: { label: { position: 'left' } } },
+        { source: 'd', target: 'b', emphasis: { label: { position: [10, '50%'] } } }] }] },
+    steps: [EHL(0), EDP(0), EHL(1), EDP(1), EHL(2), EDP(2), EHL(3)] },
+  { id: 'graph.edge.squash.tall', edges: true, note: "[R7-O] taller than wide (scaleX 1, scaleY 3): emptyTriangle / pin ends, emphasis.edgeLabel right, insideTopLeft on an upright, a slanted and a curved edge",
+    option: { animation: false, series: [{ type: 'graph', layout: 'none', left: 100, top: 0, width: 100, height: 300,
+      edgeSymbol: ['emptyTriangle', 'pin'], edgeSymbolSize: 14, edgeLabel: { show: true, formatter: 'e' },
+      emphasis: { edgeLabel: { position: 'right' } },
+      data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }, { name: 'c', x: 100, y: 0 }, { name: 'd', x: 0, y: 100 }],
+      links: [{ source: 'a', target: 'd' }, { source: 'a', target: 'b', emphasis: { label: { position: 'insideTopLeft' } } },
+        { source: 'c', target: 'd', lineStyle: { curveness: -0.4 } }] }] },
+    steps: [EHL(0), EDP(0), EHL(1), EDP(1), EHL(2)] },
   // ---- a normal position zrender does not know: the rect's top-left (calculateTextPosition has no default) ----
   { id: 'normal.word.bar', note: "label.position 'foo' on bars: each bar's rect top-left, aligned left / top",
     option: bar({ label: { show: true, position: 'foo' } }), steps: [] },

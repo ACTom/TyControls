@@ -309,6 +309,12 @@ C('d-symbols', 'draw', 'symbols: the series pair, an item string, an item pair w
     { coords: [[30, 20], [95, 85]], lineStyle: { curveness: 0.4 } },
     { coords: [[90, 10], [55, 25]], symbol: ['rect', 'roundRect'], symbolSize: [6, 10] },
   ] })] }));
+C('r7o-empty-pen', 'draw', "[R7-O] the end symbols' pens: an empty circle, rect and triangle stroked at symbolPathSetColor's 2 (filled with the ground), a 'line' at the default 1, a filled arrow with none",
+  base({ series: [L({ symbol: ['emptyCircle', 'emptyRect'], symbolSize: 12, data: [
+    { coords: [[10, 10], [80, 60]] },
+    { coords: [[20, 80], [90, 30]], symbol: ['emptyTriangle', 'arrow'] },
+    { coords: [[15, 50], [45, 50]], symbol: ['line', 'emptyCircle'], symbolSize: 16 },
+  ] })] }), { pen: true });
 C('d-labels', 'draw', 'labels: end with no distance, start, middle 6, insideStartTop [4, 8], insideEndBottom, insideMiddle, a reversed line, curves, the default texts',
   base({ series: [L({ label: { show: true }, data: [
     { coords: [[10, 10], [40, 30]] },
@@ -616,12 +622,16 @@ function styleRec(s) {
   };
 }
 function symbolRec(sym) {
-  return {
+  const r = {
     name: sym.name, symbolType: sym.shape.symbolType,
     x: hex(sym.x), y: hex(sym.y), rotation: hex(sym.rotation), scale: hex(sym.scaleX),
     box: [sym.shape.x, sym.shape.y, sym.shape.width, sym.shape.height].map(hex),
     fill: colourOf(sym.style.fill), stroke: colourOf(sym.style.stroke), opacity: hexOr(sym.style.opacity, 1),
   };
+  // [R7-O] a case flagged pen: the symbol's lineWidth (symbolPathSetColor
+  // gives an empty one 2)
+  if (CUR && CUR.pen) r.lineWidth = hexOr(sym.style.lineWidth, 1);
+  return r;
 }
 // the point the text hangs from: the label's own transform applied to its
 // origin (no transform: its x / y)

@@ -826,6 +826,16 @@ function TyGraphEdgeDev(const AEl: TTyChartElement; const P: TTyPointF): TTyPoin
 { the edge's line in its frame: its two ends and control point, curved }
 procedure TyGraphEdgeLine(const AEl: TTyChartElement; out AP1, AP2, ACP: TTyPointF;
   out ACurved: Boolean);
+{ [R7-O] A GRAPH EDGE'S LINE AS THE POINTER FINDS IT under a view whose
+  scaleY is not its scaleX: Path.contain in the line's own frame, the main
+  group's units -- the point taken back through the group (matrix.invert),
+  the line drawn to APercent (a curve's first part by quadraticSubdivide),
+  its pen strokeNoScale: the style's width, at least strokeContainThreshold,
+  over the line scale (the root of scaleX * scaleY where neither is one),
+  its rect grown by it. AP1, AP2, ACP: the shape as built (a straight one
+  snapped), in the group's units; AX, AY, ASX, ASY the group's transform. }
+procedure TyGraphEdgeZrHit(var AEl: TTyChartElement; const AP1, AP2, ACP: TTyPointF;
+  ACurved: Boolean; APercent, ASX, ASY, AX, AY: Double);
 { [R7-G] A STRAIGHT EDGE'S ENDS AS ITS PATH IS BUILT: ECLinePath is made
   with subPixelOptimize (chart/helper/Line.ts createLine), so a level or an
   upright edge goes to the half pixel of AWidth in the frame its shape is
@@ -1144,6 +1154,19 @@ procedure TyGraphTrimEdge(var AP1, AP2, ACP: TTyPointF; ACurved: Boolean;
   AAtEnd is which end: the tail's arrow and the head's arrow differ by the sign
   of the quarter turn and by nothing else. }
 function TyGraphArrowRotation(const ATangent: TTyPointF;
+  AAtEnd: Boolean): Double;
+
+{ [R7-O] AN END SYMBOL'S MAP ON THE CANVAS (Line.beforeUpdate): its local
+  transform -- scaled by AScale (1 / every ancestor's scaleX, times the
+  percent), turned by ARotRad (zrender's rotation) -- under the main group's
+  (ASX, ASY). The linear part in AL[0..3], AL[4..5] nought. Under a view
+  whose scaleY is not its scaleX the symbol keeps scaleY / scaleX on y
+  after its turn: squashed, and sheared on a slanted edge. }
+function TyGraphEdgeSymbolMap(ARotRad, AScale, ASX, ASY: Double): TTyMat2D;
+{ [R7-O] that end symbol's rotation in radians, zrender's sign: a quarter
+  turn either way minus the tangent's angle, in the frame the tangent is
+  taken in (the view's data space) }
+function TyGraphArrowRotationRad(const ATangent: TTyPointF;
   AAtEnd: Boolean): Double;
 
 { Append the series' edges and nodes to AList and answer how many landed.
@@ -6427,6 +6450,81 @@ begin
   Result := RadToDeg(sign * Pi / 2 - ArcTan2(ATangent.Y, ATangent.X));
 end;
 
+procedure TyGraphEdgeZrHit(var AEl: TTyChartElement; const AP1, AP2, ACP: TTyPointF;
+  ACurved: Boolean; APercent, ASX, ASY, AX, AY: Double);
+var
+  path: TTyZrPath;
+  t, p01x, p01y, p12x, p12y, det: Double;
+begin
+  AEl.ZrHit := Default(TTyZrHit);
+  if IsNan(APercent) or not (APercent > 0) then Exit;
+  path := nil;
+  TyZrMoveTo(path, AP1.X, AP1.Y);
+  t := APercent;
+  if ACurved then
+  begin
+    if t < 1 then
+    begin
+      { quadraticSubdivide at the percent: the first part }
+      p01x := (ACP.X - AP1.X) * t + AP1.X;
+      p01y := (ACP.Y - AP1.Y) * t + AP1.Y;
+      p12x := (AP2.X - ACP.X) * t + ACP.X;
+      p12y := (AP2.Y - ACP.Y) * t + ACP.Y;
+      TyZrQuad(path, p01x, p01y, (p12x - p01x) * t + p01x, (p12y - p01y) * t + p01y);
+    end
+    else
+      TyZrQuad(path, ACP.X, ACP.Y, AP2.X, AP2.Y);
+  end
+  else if t < 1 then
+    TyZrLineTo(path, AP1.X * (1 - t) + AP2.X * t, AP1.Y * (1 - t) + AP2.Y * t)
+  else
+    TyZrLineTo(path, AP2.X, AP2.Y);
+  { matrix.invert of [sx, 0, 0, sy, x, y] }
+  det := ASX * ASY - 0 * 0;
+  if (det = 0) or IsNan(det) or IsInfinite(det) then Exit;
+  det := 1.0 / det;
+  AEl.ZrHit.ToLocal[0] := ASY * det;
+  AEl.ZrHit.ToLocal[1] := -0 * det;
+  AEl.ZrHit.ToLocal[2] := -0 * det;
+  AEl.ZrHit.ToLocal[3] := ASX * det;
+  AEl.ZrHit.ToLocal[4] := (0 * AY - ASY * AX) * det;
+  AEl.ZrHit.ToLocal[5] := (0 * AX - ASX * AY) * det;
+  { Path.getLineScale: one where a diagonal entry is one }
+  if (Abs(ASX - 1) > 1e-10) and (Abs(ASY - 1) > 1e-10) then
+    AEl.ZrHit.LineScale := Sqrt(Abs(ASX * ASY))
+  else
+    AEl.ZrHit.LineScale := 1;
+  AEl.ZrHit.Path := path;
+  AEl.ZrHit.PathBox := TyZrBBox(path);
+  AEl.ZrHit.Fill := False;
+  AEl.ZrHit.Stroke := True;
+  AEl.ZrHit.StyleWidth := True;
+  AEl.ZrHit.Active := True;
+end;
+
+function TyGraphArrowRotationRad(const ATangent: TTyPointF;
+  AAtEnd: Boolean): Double;
+var sign: Double;
+begin
+  if AAtEnd then sign := -1 else sign := 1;
+  if (ATangent.X = 0) and (ATangent.Y = 0) then Exit(0);
+  Result := sign * Pi / 2 - ArcTan2(ATangent.Y, ATangent.X);
+end;
+
+function TyGraphEdgeSymbolMap(ARotRad, AScale, ASX, ASY: Double): TTyMat2D;
+var m: TTyMat2D;
+begin
+  { getLocalTransform (the scale, then matrix.rotate), then the parent's
+    (matrix.mul) }
+  m := TyZrLocal(AScale, AScale, ARotRad, 0, 0);
+  Result[0] := ASX * m[0];
+  Result[1] := ASY * m[1];
+  Result[2] := ASX * m[2];
+  Result[3] := ASY * m[3];
+  Result[4] := 0;
+  Result[5] := 0;
+end;
+
 function TyGraphEdgeStroke(const ASpec: TTyGraphSpec;
   const AEdges: TTyGraphEdgeArray; const AInk: TTyGraphInk;
   AAt: Integer): TTyChartColor;
@@ -6485,6 +6583,10 @@ var
   { [R7-G] the device scale, and a straight edge's ends in its frame }
   pxs: Double;
   q1s, q2s: TTyPointF;
+  { [R7-O] a turned node: its turn, its map under the view }
+  nodeTurn: Boolean;
+  lm, nm: TTyMat2D;
+  sym0: TTySymbolSpec;
 
   { [R2-I3] A NODE'S PEN, as a Symbol path takes its style: the visual's
     stroke (borderColor) and lineWidth (borderWidth, zrender's 1 where none
@@ -6702,6 +6804,13 @@ var
   procedure Arrow(const AName: string; ASize: Double; AAtEnd: Boolean);
   var s: TTySymbolSpec; e: TTyChartElement; sh: TTyChartShape;
       at: TTyPointF; tg: TTyPointF; em: Boolean; pd: string;
+      { [R7-O] under a view that scales unequally }
+      sq: Boolean;
+      fr: TTyGraphLabelFrame;
+      q1, q2, qc: TTyPointF;
+      rot: Double;
+      L: TTyMat2D;
+      bx: TTyXYWH;
   begin
     if (AName = '') or (AName = 'none') or (ASize <= 0) then Exit;
     s := Default(TTySymbolSpec);
@@ -6716,23 +6825,113 @@ var
     if AAtEnd then tg := TyGraphTangentAt(p1, p2, cp, curved, 1)
     else tg := TyGraphTangentAt(p1, p2, cp, curved, 0);
     s.RotateDeg := TyGraphArrowRotation(tg, AAtEnd);
-    sh := TyBuildSymbol(s, at.X, at.Y);
+    { [R7-O] UNDER A VIEW WHOSE scaleY IS NOT ITS scaleX: Line.beforeUpdate
+      turns the symbol by the tangent in the group's units and scales it by
+      1 / scaleX alone, so on the canvas it keeps scaleY / scaleX on y after
+      its turn -- squashed, sheared on a slanted edge [was: turned by the
+      canvas' tangent, drawn at its size] }
+    sq := False;
+    fr := AInk.Frame;
+    if AInk.HasFrame and AEdges[edgeAt].HasEnds and (fr.SX <> fr.SY)
+      and (fr.SX <> 0) and not IsNan(fr.SX) and not IsNan(fr.SY)
+      and not IsInfinite(fr.SX) and not IsInfinite(fr.SY) then
+    begin
+      sq := True;
+      q1 := TyPointF(AEdges[edgeAt].TX1, AEdges[edgeAt].TY1);
+      q2 := TyPointF(AEdges[edgeAt].TX2, AEdges[edgeAt].TY2);
+      qc := TyPointF(AEdges[edgeAt].TCPX, AEdges[edgeAt].TCPY);
+      if AAtEnd then tg := TyGraphTangentAt(q1, q2, qc, curved, 1)
+      else tg := TyGraphTangentAt(q1, q2, qc, curved, 0);
+      rot := TyGraphArrowRotationRad(tg, AAtEnd);
+      L := TyGraphEdgeSymbolMap(rot, fr.InvScale, fr.SX, fr.SY);
+      sh := TyBuildSymbolMapped(s, at.X, at.Y, L);
+    end
+    else
+      sh := TyBuildSymbol(s, at.X, at.Y);
     if (sh.Kind = cskRect) and not TyRectFIsValid(sh.Bounds) then Exit;
     e := TyChartElement(sh);
-    e.Style.HasFill := True;
-    e.Style.FillColor := EdgeColour(edgeAt);
+    { [R7-O] symbolPathSetColor: an empty symbol is stroked in the line's
+      colour at two wide over the theme's ground, a 'line' stroked at
+      zrender's one, the rest filled [was: every one filled] }
+    if em then
+    begin
+      e.Style.HasFill := True;
+      e.Style.FillColor := AInk.EmptyFill;
+      e.Style.StrokeColor := EdgeColour(edgeAt);
+      e.Style.StrokeWidthLogical := 2;
+    end
+    else if s.Kind = tsyLine then
+    begin
+      { its fill stays zrender's default '#000': nothing to fill on a
+        line, but the pointer's pen has no strokeContainThreshold }
+      e.Style.HasFill := True;
+      e.Style.FillColor := TTyChartColor($FF000000);
+      e.Style.StrokeColor := EdgeColour(edgeAt);
+      e.Style.StrokeWidthLogical := 1;
+    end
+    else
+    begin
+      e.Style.HasFill := True;
+      e.Style.FillColor := EdgeColour(edgeAt);
+    end;
     e.Style.Alpha := TyGraphEdgeOpacity(ASpec, AEdges[edgeAt]);
     e.Z := ASpec.Z;
     e.Z2 := ASpec.Z2;
-    { SILENT, like the edge it belongs to: an arrowhead is part of the line's
-      picture, not a second thing to point at. }
-    e.Silent := True;
-    { THE EDGE'S DATUM, and still silent: a hover never lands on an
-      arrowhead, but a blur or an emphasis of the edge takes its arrowheads
-      with it. [Revised in batch 46: the datum was (series, -1).] }
+    { [R7-O] A POINTER TARGET: setItemGraphicEl writes the edge's ECData onto
+      every child of its Line group, the end symbols too, and none of them
+      is silent -- a hover on one is a hover on the edge (its group is the
+      highDown dispatcher). Hit in its own frame: createSymbol's path is
+      the unit one scaled by half the size, its pen the symbol's own (no
+      strokeNoScale) [was: silent] }
+    e.Silent := False;
+    e.HitSlopLogical := 0;
+    if s.Kind <> tsyLine then
+    begin
+      if sq then
+      begin
+        e.Shape.HitM[0] := L[0] * (ASize / 2);
+        e.Shape.HitM[1] := L[1] * (ASize / 2);
+        e.Shape.HitM[2] := L[2] * (ASize / 2);
+        e.Shape.HitM[3] := L[3] * (ASize / 2);
+        e.Shape.HitM[4] := at.X;
+        e.Shape.HitM[5] := at.Y;
+        case s.Kind of
+          tsyCircle: e.Shape.HitSym := 'circle';
+          tsyRect: e.Shape.HitSym := 'rect';
+          tsyRoundRect: e.Shape.HitSym := 'roundRect';
+          tsySquare: e.Shape.HitSym := 'square';
+          tsyTriangle: e.Shape.HitSym := 'triangle';
+          tsyDiamond: e.Shape.HitSym := 'diamond';
+          tsyPin: e.Shape.HitSym := 'pin';
+          tsyArrow: e.Shape.HitSym := 'arrow';
+        end;
+        { the pen stretched with the frame: one number, the root of the
+          map's determinant (the port's round pen) }
+        e.Style.PenScale := Sqrt(Abs(L[0] * L[3] - L[1] * L[2]));
+      end
+      else
+        TySymbolHitFrame(e.Shape, s, at.X, at.Y);
+      e.Shape.HitPenInFrame := e.Shape.HitSym <> '';
+    end;
     e.Datum := TyChartEdgeDatum(ASeriesIndex, AEdges[edgeAt].Row);
     { it rides the line's percent (Line.beforeUpdate) [F3a] }
     e.Anim := edgeAnim;
+    { [R7-O] Vals[7..10]: the path's own rect in the symbol's frame,
+      grown by its pen (Path.getBoundingRect: a 'line' keeps zrender's
+      default fill, so no threshold) -- what the Line group's
+      getBoundingRect takes through the symbol's local transform }
+    e.Anim.Vals := Copy(edgeAnim.Vals, 0, Length(edgeAnim.Vals));
+    SetLength(e.Anim.Vals, 11);
+    if Copy(AName, 1, 7) = 'path://' then
+      bx := TyZrBBox(TyZrMakePathCover(pd, TyXYWH(-ASize / 2, -ASize / 2, ASize, ASize)))
+    else
+      bx := TyZrBBox(TyZrSymbol(AName, -ASize / 2, -ASize / 2, ASize, ASize));
+    bx := TyZrStrokeRect(bx, 1, e.Style.StrokeWidthLogical > 0, True,
+      e.Style.StrokeWidthLogical, 1);
+    e.Anim.Vals[7] := bx.X;
+    e.Anim.Vals[8] := bx.Y;
+    e.Anim.Vals[9] := bx.W;
+    e.Anim.Vals[10] := bx.H;
     if AAtEnd then e.Anim.Role := carGraphEdgeTo else e.Anim.Role := carGraphEdgeFrom;
     AList.Add(e);
     Inc(Result);
@@ -6830,6 +7029,18 @@ begin
       el.Shape.HitQuad := True;
       el.Shape.HitCP := cp;
     end;
+    { [R7-O] under a view whose scaleY is not its scaleX the pen's reach is
+      unequal on the canvas: the line tested in the group's units }
+    if AInk.HasFrame and AEdges[i].HasEnds and (AInk.Frame.SX <> AInk.Frame.SY) then
+    begin
+      if curved then
+        TyGraphEdgeZrHit(el, TyPointF(AEdges[i].TX1, AEdges[i].TY1),
+          TyPointF(AEdges[i].TX2, AEdges[i].TY2), TyPointF(AEdges[i].TCPX, AEdges[i].TCPY),
+          True, 1, AInk.Frame.SX, AInk.Frame.SY, AInk.Frame.X, AInk.Frame.Y)
+      else
+        TyGraphEdgeZrHit(el, q1s, q2s, q1s, False, 1, AInk.Frame.SX, AInk.Frame.SY,
+          AInk.Frame.X, AInk.Frame.Y);
+    end;
     el.Style.HasFill := False;
     el.Style.StrokeColor := EdgeColour(i);
     { THE EDGE'S OWN width, opacity and type over the series' [Batch 114] }
@@ -6925,16 +7136,75 @@ begin
       sym.OffsetY := symY * sym.OffsetY;
     end;
 
-    shape := TyBuildSymbol(sym, ANodes[i].PX, ANodes[i].PY);
+    { [R7-O] A TURNED NODE UNDER A VIEW WHOSE scaleY IS NOT ITS scaleX:
+      the path is turned in the Symbol group and the group scaled unequally
+      after -- diag(symX, symY) times the turn times the half size, not the
+      scaled size turned [was: TyBuildSymbol's turn of the scaled box] }
+    nodeTurn := (sym.RotateDeg <> 0) and not IsNan(sym.RotateDeg)
+      and not IsInfinite(sym.RotateDeg);
+    if nodeTurn then
+    begin
+      lm := TyZrLocal(1, 1, sym.RotateDeg * Pi / 180, 0, 0);
+      nm[0] := symX * lm[0];
+      nm[1] := symY * lm[1];
+      nm[2] := symX * lm[2];
+      nm[3] := symY * lm[3];
+      nm[4] := 0;
+      nm[5] := 0;
+    end;
+    if nodeTurn and (symX <> symY) and (sym.Kind <> tsyImage) then
+    begin
+      sym0 := sym;
+      sym0.WidthPx := hw * 2;
+      sym0.HeightPx := hh * 2;
+      shape := TyBuildSymbolMapped(sym0, ANodes[i].PX + sym.OffsetX,
+        ANodes[i].PY + sym.OffsetY, nm);
+    end
+    else
+      shape := TyBuildSymbol(sym, ANodes[i].PX, ANodes[i].PY);
     if (shape.Kind = cskRect) and not TyRectFIsValid(shape.Bounds) then Continue;
     { [R7-F] hit in its own frame, as Symbol.ts' path }
     TySymbolHitFrame(shape, sym, ANodes[i].PX, ANodes[i].PY);
+    if nodeTurn and (symX <> symY) and (shape.HitSym <> '') then
+    begin
+      shape.HitM[0] := nm[0] * hw;
+      shape.HitM[1] := nm[1] * hw;
+      shape.HitM[2] := nm[2] * hh;
+      shape.HitM[3] := nm[3] * hh;
+    end;
     fill := 0;
     if (i >= 0) and (i <= High(AInk.NodeFills)) then fill := AInk.NodeFills[i];
     el := TyChartElement(shape);
     el.Style.HasFill := fill <> 0;
     el.Style.FillColor := fill;
     NodeBorder(el, sym, i, fill);
+    { [R7-O] A TURNED NODE'S LABEL hangs off its unit path's rect (grown by
+      the pen over the line scale) through the path's whole transform --
+      updateInnerText's layoutRect -- not off the turned outline's bounds
+      (a turned circle's rect is its turned square's) }
+    { [R7-O] AND A NODE UNDER A VIEW SCALED UNEQUALLY: its pen grows the
+      unit rect by the width over the line scale, the root of the whole
+      map's determinant -- unequal on the canvas [was: half the width on
+      every side] }
+    if (symX <> symY) and not nodeTurn then
+    begin
+      nm[0] := symX;
+      nm[1] := 0;
+      nm[2] := 0;
+      nm[3] := symY;
+    end;
+    if nodeTurn or (symX <> symY) then
+    begin
+      nm[4] := sym.OffsetX + ANodes[i].PX;
+      nm[5] := sym.OffsetY + ANodes[i].PY;
+      nm[0] := nm[0] * hw;
+      nm[1] := nm[1] * hw;
+      nm[2] := nm[2] * hh;
+      nm[3] := nm[3] * hh;
+      el.Caption.HasSymBox := True;
+      el.Caption.SymBox := TySymbolLabelBoxM(sym, nm, el.Style.StrokeWidthLogical,
+        (el.Style.StrokeWidthLogical > 0) and (el.Style.StrokeColor <> 0), el.Style.HasFill);
+    end;
     { the node's style.opacity [F2a] }
     el.Style.Alpha := 1;
     if i <= High(AInk.NodeOpacity) then el.Style.Alpha := AInk.NodeOpacity[i];

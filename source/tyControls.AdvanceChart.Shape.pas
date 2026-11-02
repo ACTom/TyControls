@@ -130,6 +130,11 @@ type
     HitM: TTyMat2D;
     HitQuad: Boolean;
     HitCP: TTyPointF;
+    { [R7-O] HitSym's pen is the path's own, not strokeNoScale -- a Line's
+      end symbol (its lineWidth in the symbol's frame): the line scale is
+      the whole frame's sqrt|det|, never the one zrender gives a frame with
+      a diagonal entry of one. False, the zero value, is strokeNoScale. }
+    HitPenInFrame: Boolean;
   end;
   { [spec 242] an element's clip paths }
   TTyChartShapeArray = array of TTyChartShape;

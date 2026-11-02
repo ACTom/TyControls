@@ -86,6 +86,17 @@ A sample's rec, by probe:
   state  per series s and data index i the item's path (a bar's rect):
          'st<s>/<i>' {fill (a colour string or a gradient object with hex
          numbers), n}.
+  gsym   [R7-O] per graph series s: 'g<s>/edge<i>/fm', '/tm' an end
+         symbol drawn (not ignored): {m (its whole global transform, six
+         hex numbers), type (shape.symbolType; null for a path:// icon),
+         box [x, y, w, h] (the shape's box, createSymbol's), rect [x, y, w,
+         h] (getBoundingRect: the path's own rect grown by its pen),
+         stroked, filled (hasStroke / hasFill), lw, sns (strokeNoScale),
+         cbox [minX, minY, maxX, maxY] a path:// icon's outline on the
+         canvas, sampled 256 steps a curve};
+         'g<s>/nsym<i>' the node's path: {m, type, rect, label: {x, y,
+         align, vAlign} (the text's transform, the alignment it is drawn
+         with) or null}.
 
 Guards (any failure: nothing is written, exit 1): named discriminating facts
 and the whole fixture generated twice, byte-identical.
@@ -274,6 +285,55 @@ function paint(v) {
 // ---------------------------------------------------------------------------
 // the global transform's translation and scale (after the frame's update):
 // wx, wy, ws
+// [R7-O] a path's outline through the element's transform, sampled finely
+// (256 steps a curve or an arc): its box [minX, minY, maxX, maxY]
+function sampledBox(el) {
+  const pp = new PathProxy(false);
+  pp.beginPath();
+  el.buildPath(pp, el.shape, false);
+  const d = Array.from(pp.data.slice(0, pp.len()));
+  const m = el.transform || [1, 0, 0, 1, el.x, el.y];
+  const b = [Infinity, Infinity, -Infinity, -Infinity];
+  const put = (x, y) => {
+    const X = m[0] * x + m[2] * y + m[4];
+    const Y = m[1] * x + m[3] * y + m[5];
+    b[0] = Math.min(b[0], X); b[1] = Math.min(b[1], Y); b[2] = Math.max(b[2], X); b[3] = Math.max(b[3], Y);
+  };
+  const N = 256;
+  let i = 0, x0 = 0, y0 = 0;
+  while (i < d.length) {
+    const c = d[i++];
+    if (c === 1 || c === 2) { x0 = d[i]; y0 = d[i + 1]; put(x0, y0); i += 2; }
+    else if (c === 3) {
+      for (let k = 1; k <= N; k++) {
+        const t = k / N, u = 1 - t;
+        put(u * u * u * x0 + 3 * u * u * t * d[i] + 3 * u * t * t * d[i + 2] + t * t * t * d[i + 4],
+          u * u * u * y0 + 3 * u * u * t * d[i + 1] + 3 * u * t * t * d[i + 3] + t * t * t * d[i + 5]);
+      }
+      x0 = d[i + 4]; y0 = d[i + 5]; i += 6;
+    }
+    else if (c === 4) {
+      for (let k = 1; k <= N; k++) {
+        const t = k / N, u = 1 - t;
+        put(u * u * x0 + 2 * u * t * d[i] + t * t * d[i + 2], u * u * y0 + 2 * u * t * d[i + 1] + t * t * d[i + 3]);
+      }
+      x0 = d[i + 2]; y0 = d[i + 3]; i += 4;
+    }
+    else if (c === 5) {
+      const [cx, cy, rx, ry, th, dth, psi] = d.slice(i, i + 7);
+      for (let k = 0; k <= N; k++) {
+        const a = th + dth * k / N;
+        put(cx + rx * Math.cos(a) * Math.cos(psi) - ry * Math.sin(a) * Math.sin(psi),
+          cy + rx * Math.cos(a) * Math.sin(psi) + ry * Math.sin(a) * Math.cos(psi));
+      }
+      i += 8;
+    }
+    else if (c === 6) { /* close */ }
+    else if (c === 7) { put(d[i], d[i + 1]); put(d[i] + d[i + 2], d[i + 1] + d[i + 3]); i += 4; }
+    else must(false, 'a path command ' + c);
+  }
+  return b;
+}
 const glob = (o, el) => {
   const m = el.transform || [1, 0, 0, 1, el.x, el.y];
   o.wx = hx(m[4]);
@@ -350,6 +410,53 @@ const PROBES = {
         if (!label || label.ignore) return;
         const m = label.transform || [1, 0, 0, 1, label.x, label.y];
         rec['g' + sm.seriesIndex + '/edge' + i + '/lm'] = { m: arr(m), op: hx(label.style.opacity) };
+      });
+    });
+  },
+  // [R7-O] the end symbols' and the nodes' whole global transforms: under a
+  // view whose scaleY is not its scaleX, Line.beforeUpdate's 1 / scaleX
+  // leaves an end symbol squashed by scaleY / scaleX after its turn, and a
+  // node's path turned in its Symbol group is scaled unequally after
+  gsym(chart, rec) {
+    chart.getModel().eachSeries(sm => {
+      if (sm.subType !== 'graph') return;
+      const key = 'g' + sm.seriesIndex;
+      const rectOf = el => {
+        const r = el.getBoundingRect();
+        return arr([r.x, r.y, r.width, r.height]);
+      };
+      const edata = sm.getEdgeData();
+      edata.each(i => {
+        const g = edata.getItemGraphicEl(i);
+        if (!g) return;
+        for (const nm of ['fromSymbol', 'toSymbol']) {
+          const sym = g.childOfName(nm);
+          if (!sym || sym.ignore || sym.invisible) continue;
+          const m = sym.transform || [1, 0, 0, 1, sym.x, sym.y];
+          const sh = sym.shape || {};
+          rec[key + '/edge' + i + '/' + (nm === 'fromSymbol' ? 'fm' : 'tm')] = {
+            m: arr(m), type: sh.symbolType || null,
+            box: sh.symbolType ? arr([sh.x, sh.y, sh.width, sh.height]) : null,
+            rect: rectOf(sym), stroked: !!sym.hasStroke(), filled: !!sym.hasFill(),
+            lw: hx(sym.style.lineWidth), sns: !!sym.style.strokeNoScale };
+          // a path:// icon (no symbolType): its outline's box on the canvas, sampled
+          if (!sh.symbolType) rec[key + '/edge' + i + '/' + (nm === 'fromSymbol' ? 'fm' : 'tm')].cbox = arr(sampledBox(sym));
+        }
+      });
+      const data = sm.getData();
+      data.each(i => {
+        const el = data.getItemGraphicEl(i);
+        if (!el) return;
+        const p = el.childAt(0);
+        const m = p.transform || [1, 0, 0, 1, p.x, p.y];
+        const o = { m: arr(m), type: (p.shape && p.shape.symbolType) || null, rect: rectOf(p), label: null };
+        const t = p.getTextContent();
+        if (t && !t.ignore && t.transform) {
+          const ds = t._defaultStyle || {};
+          o.label = { x: hx(t.transform[4]), y: hx(t.transform[5]), align: t.style.align || ds.align || 'left',
+            vAlign: t.style.verticalAlign || ds.verticalAlign || 'top' };
+        }
+        rec[key + '/nsym' + i] = o;
       });
     });
   },
@@ -489,6 +596,53 @@ add('graph', 'graph-squash', "[R7-N] layout none, 400 x 200 over a 100 x 100 ext
   [{ t: T1 - 1, do: 'sample' },
     { t: T1, do: 'merge', option: { series: [{ data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }, { name: 'c', x: 100, y: 60 },
       { name: 'd', x: 30, y: 100 }] }] } }, ...after([0, 1, 100, 500, 999, 1000, 1001], T1)]);
+
+// [R7-O] the end symbols and the turned nodes under a view scaled unequally
+const SQ_NODES = [{ name: 'a', x: 0, y: 0, symbol: 'rect', symbolRotate: 30, label: { show: true, position: 'right' } },
+  { name: 'b', x: 100, y: 100, symbol: 'diamond', symbolRotate: -45, symbolSize: [16, 10], label: { show: true, position: 'bottom' } },
+  { name: 'c', x: 100, y: 0, symbol: 'emptyCircle', symbolRotate: 20, symbolSize: [18, 10], label: { show: true, position: 'top' } },
+  { name: 'd', x: 0, y: 100, label: { show: true, position: 'left' } }];
+add('graphSquash', 'graph-squash-sym', "[R7-O] layout none, 400 x 200 over a 100 x 100 extent (scaleX 4, scaleY 2): emptyCircle / arrow end symbols on a level, an upright, a slanted and a curved edge, a link's own diamond / emptyTriangle and rect / triangle; turned nodes (a rect, an oblong diamond, an oblong emptyCircle) with labels; a merge moves two nodes (1000 ms linear) -- in every frame the end symbols are turned by the tangent in the group's units, scaled by 1 / scaleX, squashed by scaleY / scaleX after the turn",
+  { animation: true,
+    series: [Object.assign({ type: 'graph', layout: 'none', left: 0, top: 0, width: 400, height: 200, symbolSize: 10,
+      edgeSymbol: ['emptyCircle', 'arrow'], edgeSymbolSize: [8, 14], itemStyle: { borderColor: '#333', borderWidth: 2 },
+      data: SQ_NODES,
+      links: [{ source: 'a', target: 'c' }, { source: 'c', target: 'b' }, { source: 'a', target: 'b' },
+        { source: 'd', target: 'c', lineStyle: { curveness: 0.3 }, symbol: ['diamond', 'emptyTriangle'], symbolSize: [10, 12] },
+        { source: 'd', target: 'a', symbol: ['rect', 'triangle'] }] }, LIN)] },
+  ['graph', 'gsym'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [SQ_NODES[0], SQ_NODES[1], Object.assign({}, SQ_NODES[2], { x: 80, y: 30 }),
+      Object.assign({}, SQ_NODES[3], { x: 20, y: 90 })] }] } }, ...after([0, 1, 100, 500, 999, 1000, 1001], T1)]);
+add('graphSquash', 'graph-squash-tall', "[R7-O] the same view taller than wide (100 x 300 over 100 x 100: scaleX 1, scaleY 3): pin, roundRect, a path:// icon (a quadratic bulging past its ends) and an emptyRect at the ends of straight and curved edges",
+  { animation: false,
+    series: [{ type: 'graph', layout: 'none', left: 100, top: 0, width: 100, height: 300, symbolSize: 8,
+      edgeSymbol: ['pin', 'roundRect'], edgeSymbolSize: [12, 10],
+      data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }, { name: 'c', x: 100, y: 0 }, { name: 'd', x: 0, y: 100 }],
+      links: [{ source: 'a', target: 'b' }, { source: 'c', target: 'd', lineStyle: { curveness: 0.4 } },
+        { source: 'a', target: 'c', symbol: ['path://M0,10 Q5,-10 10,10 Z', 'emptyRect'], symbolSize: [12, 10] },
+        { source: 'd', target: 'b', lineStyle: { curveness: -0.3 }, symbol: ['emptyRoundRect', 'pin'] }] }] },
+  ['gsym'],
+  [{ t: 0, do: 'sample' }]);
+add('graphSquash', 'graph-squash-enter', "[R7-O] scaleX 4, scaleY 2 entering (1000 ms linear): the lines draw out, their end symbols scaled by the percent and squashed in every frame",
+  { animation: true, animationDuration: 1000, animationEasing: 'linear',
+    series: [{ type: 'graph', layout: 'none', left: 0, top: 0, width: 400, height: 200, symbolSize: 10,
+      edgeSymbol: ['emptyCircle', 'arrow'], edgeSymbolSize: [8, 14],
+      data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }, { name: 'c', x: 100, y: 0 }],
+      links: [{ source: 'a', target: 'c' }, { source: 'a', target: 'b' }] }] },
+  ['graph', 'gsym'],
+  [...[0, 1, 100, 500, 999, 1000, 1001].map(t => ({ t, do: 'sample' }))]);
+
+add('graphSquash', 'graph-squash-tween', "[R7-O] scaleX 4, scaleY 2; a merge narrows the extent's height (b to y 50), so the main group's scaleY tweens to 4 (1000 ms linear): the end symbols' squash follows the group's ratio in every frame",
+  { animation: true,
+    series: [Object.assign({ type: 'graph', layout: 'none', left: 0, top: 0, width: 400, height: 200, symbolSize: 10,
+      edgeSymbol: ['emptyCircle', 'arrow'], edgeSymbolSize: [8, 14],
+      data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 100 }, { name: 'c', x: 100, y: 0 }],
+      links: [{ source: 'a', target: 'c' }, { source: 'a', target: 'b' }] }, LIN)] },
+  ['graph', 'gsym'],
+  [{ t: T1 - 1, do: 'sample' },
+    { t: T1, do: 'merge', option: { series: [{ data: [{ name: 'a', x: 0, y: 0 }, { name: 'b', x: 100, y: 50 }, { name: 'c', x: 100, y: 0 }] }] } },
+    ...after([0, 1, 100, 500, 999, 1000, 1001], T1)]);
 
 add('graph', 'graph-move', "layout none: a merge moves two nodes and adds one with an edge; the kept nodes slide (no row), the kept edges' shapes tween at their rows, the new node pops in, the new edge draws out; curved edges (curveness 0.3) with a from-arrow and labels (insideEndTop: beforeUpdate turns them with the tangent); 300 ms cubicInOut, the default update timing",
   { animation: true,
@@ -843,6 +997,19 @@ function guards(out) {
   guard('graph-force: a toggle slides nothing', rec('graph-force', T1 + 100, 'g0/node0').n === 0);
   guard('graph-force-anim: no path pops in', n(rec('graph-force-anim', 0, 'g0/node0').sx) > 0
     && rec('graph-force-anim', 0, 'g0/node0').n === 0 && n(rec('graph-force-anim', 0, 'g0/edge0').percent) === 1);
+  // [R7-O] squashed end symbols and turned nodes
+  guard('graph-squash-sym: a level edge\'s arrow is squashed by scaleY / scaleX after its turn', (() => {
+    const s = rec('graph-squash-sym', T1 - 1, 'g0/edge0/tm');
+    return s && Math.abs(n(s.m[1]) / n(s.m[2]) + 0.5) < 1e-12 && Math.abs(n(s.m[0])) < 1e-12;
+  })());
+  guard('graph-squash-sym: a turned node is turned, then squashed', (() => {
+    const s = rec('graph-squash-sym', T1 - 1, 'g0/nsym0');
+    return s && Math.abs(n(s.m[0]) * n(s.m[2]) + n(s.m[1]) * n(s.m[3])) > 1e-3;
+  })());
+  guard('graph-squash-sym: an empty end symbol strokes at 2 in its own frame', (() => {
+    const s = rec('graph-squash-sym', T1 - 1, 'g0/edge0/fm');
+    return s && s.stroked && s.filled && n(s.lw) === 2 && !s.sns;
+  })());
   // tree
   guard('tree-collapse: a removed node goes to the source + 1', Math.abs(n(rec('tree-collapse', T1 + 999, 'tr0/ghost3').x)
     - (n(rec('tree-collapse', T1 + 1500, 'tr0/node2').x) + 1)) < 0.1);

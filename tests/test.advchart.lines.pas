@@ -657,6 +657,10 @@ begin
     end
     else if sym.Find('fill').JSONType <> jtNull then
       SameColour(what + ' ' + sym.Strings['name'] + ' fill', el.Style.FillColor, sym.Find('fill'));
+    { [R7-O] the pen's width where the symbol strokes (a case flagged pen) }
+    if (sym.Find('lineWidth') <> nil) and (sym.Find('stroke').JSONType <> jtNull) then
+      SameHex(what + ' ' + sym.Strings['name'] + ' line width', el.Style.StrokeWidthLogical,
+        sym.Find('lineWidth'));
   end;
   { no symbol here that upstream has not }
   SameInt(what + ' symbols', Ord(ElOf(ASeries, k, carLinesFrom) >= 0)

@@ -1634,19 +1634,23 @@ begin
         rot := TyLinesSymbolRotation(g, e = 1);
         sym := TyChartElement(EndSymbolShape(kind, em, pd, ink.Sym[e].W, ink.Sym[e].H,
           at.X, at.Y, rot));
-        { setColor: the line's colour; an empty one is stroked in it and
-          filled with the ground }
+        { setColor: the line's colour; an empty one is stroked in it at
+          two wide (symbolPathSetColor) and filled with the ground [R7-O:
+          was one wide] }
         if em then
         begin
           sym.Style.HasFill := True;
           sym.Style.FillColor := AEmptyFill;
           sym.Style.StrokeColor := ink.Stroke;
-          sym.Style.StrokeWidthLogical := 1;
+          sym.Style.StrokeWidthLogical := 2;
         end
         else if kind = tsyLine then
         begin
-          { a 'line' is stroked in the colour }
-          sym.Style.HasFill := False;
+          { a 'line' is stroked in the colour; its fill stays zrender's
+            default '#000' (nothing to fill on a line, but the pointer's
+            pen then has no strokeContainThreshold) [R7-O: was none] }
+          sym.Style.HasFill := True;
+          sym.Style.FillColor := TTyChartColor($FF000000);
           sym.Style.StrokeColor := ink.Stroke;
           sym.Style.StrokeWidthLogical := 1;
         end

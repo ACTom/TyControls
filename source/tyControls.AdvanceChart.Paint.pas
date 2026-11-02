@@ -1115,6 +1115,14 @@ type
       and whether it is that node's label -- for a reader of the list }
     SvgNode: Integer;
     SvgLabel: Boolean;
+    { [R7-O] A strokeNoScale PEN READ OFF THE STYLE AT HIT TIME (a state
+      tweens it): the stroke width is the element's StrokeWidthLogical
+      (device px), at least strokeContainThreshold, over LineScale, and Box
+      is PathBox grown by it -- a graph edge's line under a view scaled
+      unequally. False, the zero value: LineWidth and Box as written. }
+    StyleWidth: Boolean;
+    LineScale: Double;
+    PathBox: TTyXYWH;
   end;
 
   { [R2-I3] A TEXT AS ITS EMPHASIS STATE LAYS IT OUT: the caption and the
@@ -2314,18 +2322,21 @@ begin
   m := AEl.Shape.HitM;
   w := AWidthPx;
   if (w > 0) and not AFill then w := Max(w, 5 * AScale);
-  if (Abs(m[0] - 1) > 1e-10) and (Abs(m[3] - 1) > 1e-10) then
+  { [R7-O] a pen in the symbol's own frame: the frame's whole scale }
+  if AEl.Shape.HitPenInFrame
+    or ((Abs(m[0] - 1) > 1e-10) and (Abs(m[3] - 1) > 1e-10)) then
     ls := Sqrt(Abs(m[0] * m[3] - m[2] * m[1]))
   else ls := 1;
   e := 0;
   if (w > 0) and (ls > 1e-10) then e := w / ls / 2;
   { THE CHEAP REFUSAL FIRST, nothing managed here: every built-in path lies
-    in [-1, 1] x [-2, 2] of its unit box (a pin's head and an arrow's body
-    leave it upward and downward), and the pen reaches e past it there -- a
-    point off that box's image under the frame is off the stroked rect; the
-    pad is the drawn shape's }
-  hx := (1 + e) * Abs(m[0]) + (2 + e) * Abs(m[2]);
-  hy := (1 + e) * Abs(m[1]) + (2 + e) * Abs(m[3]);
+    in [-4/3, 4/3] x [-2, 2] of its unit box (a pin's head and an arrow's body
+    leave it upward and downward, the arrow's barbs sideways: its half width
+    is two thirds of its width [R7-O: was 1, which cut the barbs off]), and
+    the pen reaches e past it there -- a point off that box's image under the
+    frame is off the stroked rect; the pad is the drawn shape's }
+  hx := (4 / 3 + e) * Abs(m[0]) + (2 + e) * Abs(m[2]);
+  hy := (4 / 3 + e) * Abs(m[1]) + (2 + e) * Abs(m[3]);
   if not ((Abs(AX - m[4]) <= hx) and (Abs(AY - m[5]) <= hy)) then
   begin
     if not ((APadPx > 0) and AFill) then Exit;
@@ -2347,7 +2358,7 @@ begin
   inv[5] := (m[1] * m[4] - m[0] * m[5]) * det;
   lx := inv[0] * AX + inv[2] * AY + inv[4];
   ly := inv[1] * AX + inv[3] * AY + inv[5];
-  if IsNan(lx) or IsNan(ly) or (Abs(lx) > 1 + e) or (Abs(ly) > 2 + e) then Exit;
+  if IsNan(lx) or IsNan(ly) or (Abs(lx) > 4 / 3 + e) or (Abs(ly) > 2 + e) then Exit;
   if (w > 0) and (ls > 1e-10) then
     Result := SymbolPathHit(AEl.Shape.HitSym, lx, ly, e, w / ls, AFill)
   else
@@ -2430,6 +2441,30 @@ begin
   Result := StrokedHit(shape, ElFills(AEl), AWidthPx, APadPx, AX, AY);
 end;
 
+{ [R7-O] a ZrHit whose pen is the style's now: Path.contain's stroked rect
+  and stroke at max(width, 5) over the line scale (the path has no fill) --
+  its own routine, so the managed copy costs nothing to the rest }
+function StyleZrHit(const AEl: TTyChartElement; AX, AY: Double; APPI: Integer): Boolean;
+var
+  h: TTyZrHit;
+  w, s: Double;
+begin
+  Result := False;
+  w := AEl.Style.StrokeWidthLogical;
+  if not (w > 0) or (((AEl.Style.StrokeColor shr 24) = 0)
+    and (AEl.Style.StrokeGradient.Kind = cgkNone) and not AEl.Style.HitClearPen) then Exit;
+  if IsInfinite(w) then Exit;
+  if APPI > 0 then s := APPI / 96 else s := 1;
+  w := w * s;
+  if not (AEl.ZrHit.LineScale > 1e-10) then Exit;
+  h := AEl.ZrHit;
+  h.Box := TyZrStrokeRect(AEl.ZrHit.PathBox, Length(AEl.ZrHit.Path), True, False,
+    w, AEl.ZrHit.LineScale);
+  h.Stroke := True;
+  h.LineWidth := Max(w, Double(5) * s) / AEl.ZrHit.LineScale;
+  Result := TyZrHitContains(h, AX, AY);
+end;
+
 function TyElementHit(const AEl: TTyChartElement; AX, AY: Double; APPI: Integer;
   APad: Boolean): Boolean;
 var
@@ -2441,6 +2476,8 @@ begin
     if not TyShapeContains(AEl.ClipPaths[k], AX, AY, 0) then Exit(False);
   { [R7-I] the rect or the sector [was: the rect alone] }
   if AEl.ClipHits and OutsideHitClip(AEl, AX, AY) then Exit(False);
+  if AEl.ZrHit.Active and AEl.ZrHit.StyleWidth then
+    Exit(StyleZrHit(AEl, AX, AY, APPI));
   if AEl.ZrHit.Active then Exit(TyZrHitContains(AEl.ZrHit, AX, AY));
   if AEl.PathHit.Active then Exit(TyPathHitContains(AEl.PathHit, AX, AY));
   if APPI > 0 then s := APPI / 96 else s := 1;
