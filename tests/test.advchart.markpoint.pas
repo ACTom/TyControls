@@ -20,7 +20,8 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.Color,
      tyControls.AdvanceChart.Marker, tyControls.AdvanceChart.MarkerView,
      tyControls.AdvanceChart,
-     test.advchart.gallerytext, tyControls.AdvanceChart.Measure, test.advchart.gridbounds, test.advchart.categoryminmax;
+     test.advchart.gallerytext,
+     tyControls.AdvanceChart.Measure, test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TMPointProbe = class(TTyAdvanceChart)
   protected

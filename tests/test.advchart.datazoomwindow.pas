@@ -23,7 +23,8 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
      tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.Data,
      tyControls.AdvanceChart.Series, tyControls.AdvanceChart.DataZoom,
-     tyControls.AdvanceChart, tyControls.AdvanceChart.Measure, test.advchart.gridbounds, test.advchart.categoryminmax;
+     tyControls.AdvanceChart,
+     tyControls.AdvanceChart.Measure, test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TDzwProbe = class(TTyAdvanceChart)
   protected

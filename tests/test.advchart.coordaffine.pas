@@ -36,7 +36,8 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Builder,
      tyControls.AdvanceChart.BarLayout, tyControls.AdvanceChart.Layout,
      tyControls.AdvanceChart.AxisName,
-     tyControls.AdvanceChart, tyControls.AdvanceChart.Measure, test.advchart.gridbounds, test.advchart.categoryminmax;
+     tyControls.AdvanceChart,
+     tyControls.AdvanceChart.Measure, test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TCoordAffineProbe = class(TTyAdvanceChart)
   protected

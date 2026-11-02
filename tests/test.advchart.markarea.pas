@@ -19,7 +19,8 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
      tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart.Color,
      tyControls.AdvanceChart.Marker, tyControls.AdvanceChart.MarkerView,
-     tyControls.AdvanceChart, tyControls.AdvanceChart.Measure, test.advchart.gridbounds, test.advchart.categoryminmax;
+     tyControls.AdvanceChart,
+     tyControls.AdvanceChart.Measure, test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TMAreaProbe = class(TTyAdvanceChart)
   protected

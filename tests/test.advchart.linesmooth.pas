@@ -17,7 +17,8 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser, sha1,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
-     tyControls.AdvanceChart.LinePath, tyControls.AdvanceChart, tyControls.AdvanceChart.Measure, test.advchart.gridbounds, test.advchart.categoryminmax;
+     tyControls.AdvanceChart.LinePath, tyControls.AdvanceChart,
+     tyControls.AdvanceChart.Measure, test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TLsProbe = class(TTyAdvanceChart)
   protected

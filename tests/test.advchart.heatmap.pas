@@ -19,7 +19,8 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      Controls, Graphics, Forms, BGRABitmap, BGRABitmapTypes,
      tyControls.Controller,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Paint, tyControls.AdvanceChart.Shape,
-     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart, tyControls.AdvanceChart.Measure, test.advchart.gridbounds, test.advchart.categoryminmax;
+     tyControls.AdvanceChart.Color, tyControls.AdvanceChart.ZrPath, tyControls.AdvanceChart,
+     tyControls.AdvanceChart.Measure, test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   THmProbe = class(TTyAdvanceChart)
   protected

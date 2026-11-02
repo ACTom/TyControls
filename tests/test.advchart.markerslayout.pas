@@ -19,7 +19,8 @@ uses Classes, SysUtils, Math, fpcunit, testregistry, fpjson, jsonparser,
      tyControls.Controller,
      tyControls.AdvanceChart.Types, tyControls.AdvanceChart.Coord, tyControls.AdvanceChart.Scale,
      tyControls.AdvanceChart.Paint,
-     tyControls.AdvanceChart.Marker, tyControls.AdvanceChart, tyControls.AdvanceChart.Measure, test.advchart.gridbounds, test.advchart.categoryminmax;
+     tyControls.AdvanceChart.Marker, tyControls.AdvanceChart,
+     tyControls.AdvanceChart.Measure, test.advchart.gridbounds, test.advchart.categoryminmax;
 type
   TMlProbe = class(TTyAdvanceChart)
   protected
