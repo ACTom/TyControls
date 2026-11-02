@@ -233,6 +233,13 @@ type
       alpha ('transparent', rgba(..., 0)) that still strokes for the
       pointer. Both False: as the colours read. The painter reads neither. }
     FillNone, StrokeClear: Boolean;
+    { [R7-G] BarView's getLineWidth asks only whether the item model's
+      itemStyle.borderColor is truthy and not 'none' -- not whether the pen
+      draws: 'transparent', a colour of no alpha, a word the canvas does
+      not know, an object, a number other than 0 all take the border out of
+      a bar's layout. The item's own over the series' (a null climbs, ''
+      does not). [Was: a bar was inset only by a pen of some colour.] }
+    BorderLayout: Boolean;
     { The four colours a candle needs, and the pen. A block of its own rather
       than four more fields on the visual: a candlestick is the only series
       whose colour depends on the DATUM's own two numbers, and putting `Up` and
@@ -1222,6 +1229,13 @@ begin
   if AStore.HasOverride(ARow, k) then
   begin
     v := AStore.GetOverride(ARow, k);
+    { [R7-G] getLineWidth's test on the item's own key: truthy and not the
+      word 'none' as written; a null climbs to the series' }
+    case v.Kind of
+      dvkText: Result.BorderLayout := (v.Text <> '') and (v.Text <> 'none');
+      dvkNumber: Result.BorderLayout := (v.Num <> 0) and not IsNan(v.Num);
+      dvkBool: Result.BorderLayout := v.Num <> 0;
+    end;
     if v.Kind = dvkText then
     begin
       if TyChartColorIsNone(v.Text) then
@@ -1252,6 +1266,8 @@ begin
     Result.Stroke := rf.StrokeObjSolid;
     Result.StrokeGradient := rf.StrokeObjGradient;
     Result.StrokeClear := False;
+    { an object is truthy }
+    Result.BorderLayout := True;
   end;
   k := TyOverrideKey('itemStyle.borderWidth');
   if AStore.HasOverride(ARow, k) then
@@ -1773,7 +1789,7 @@ begin
     { [R6-E] a border width that is no number ('abc'): getLineWidth's
       Math.min is not-a-number, so is the layout, and the bar is not drawn
       (isValidLayout) -- nor its label }
-    if rv.StrokeWidthNaN and ((rv.Stroke <> 0) or (rv.StrokeGradient.Kind <> cgkNone)) then
+    if rv.StrokeWidthNaN and rv.BorderLayout then
       Continue;
     { [R6-F] getLineWidth's own number, `borderWidth || 0` in its
       Math.min: an infinite width is the bar's own width or height, which
@@ -1785,7 +1801,9 @@ begin
     fixed := False;
     if rv.StrokeWidthInf <> 0 then bw := rv.StrokeWidthInf
     else bw := rv.StrokeWidthLogical;
-    if (bw <> 0) and (rv.Stroke <> 0) then
+    { [R7-G] whenever a border colour is written truthy and not 'none',
+      whatever the pen draws [was: only a pen of some colour] }
+    if (bw <> 0) and rv.BorderLayout then
     begin
       fix := Min(bw * AVisual.PxScale, Min(Abs(lw), Abs(lh)));
       if IsInfinite(fix) then Continue;
@@ -3797,6 +3815,8 @@ var
   cutLen, boundLen, pxSign, categorySize, acrossCentre, bundleAcross: Double;
   glyphW, glyphH, glyphLen, valueBase, anchor, sizeFix, along: Double;
   offX, offY, offAlong, offAcross, e0, e1, barLen: Double;
+  vlw, bw, rot: Double;
+  rv: TTySeriesVisual;
   lay: TTyCoordLayout;
   plot, barRect, clipRect: TTyRectF;
   col: TTyBarColumn;
@@ -4011,13 +4031,33 @@ begin
       glyphLen := 0;
     end;
 
-    { UPSTREAM ADDS THE GLYPH'S OWN STROKE to the unit length, so a bordered
-      symbol takes its border's worth of room in a repeating column. NOT done
-      here, and the reason is written down rather than hidden: a stroke width
-      is LOGICAL until the renderer scales it by the screen's PPI, and this
-      builder works in device pixels. Folding a logical number in would draw
-      the right count at 96 dpi and the wrong one on every other screen. }
-    run := TyPictorialRunOf(spec, glyphLen, boundLen, cutLen, glyphLen);
+    { UPSTREAM ADDS THE GLYPH'S OWN BORDER to the unit length
+      (prepareLineWidth's valueLineWidth): itemStyle.borderWidth as
+      written, whatever the colour, through the glyph's line scale and
+      along the value axis, signed as the glyph is mirrored -- so a bordered
+      glyph makes room for its border, a repeat counts and spaces by it,
+      and a mirrored one gives it back. On the device: the width by
+      PxScale. The margin's percentage stays the glyph's own length.
+      [R7-G; was: left out, a bordered glyph a few px off] }
+    vlw := 0;
+    if not noGlyph then
+    begin
+      rv := RowVisual(AVisual, AStore, i);
+      if rv.StrokeWidthInf <> 0 then bw := rv.StrokeWidthInf
+      else if rv.StrokeWidthNaN or not rv.StrokeWidthSet then bw := 0
+      else bw := rv.StrokeWidthLogical;
+      rot := spec.RotateDeg * Pi / 180;
+      if IsNan(rot) then rot := 0;
+      if baseHoriz then
+        vlw := TyPictorialValueLineWidth(bw * AVisual.PxScale,
+          glyphW / spec.PatternSize, glyphH / spec.PatternSize * (-1 * pxSign), rot,
+          glyphH / spec.PatternSize * (-1 * pxSign))
+      else
+        vlw := TyPictorialValueLineWidth(bw * AVisual.PxScale,
+          glyphW / spec.PatternSize * (1 * pxSign), glyphH / spec.PatternSize, rot,
+          glyphW / spec.PatternSize * (1 * pxSign));
+    end;
+    run := TyPictorialRunOf(spec, glyphLen + vlw, boundLen, cutLen, glyphLen);
     { [R5-G] a run of none (a repeat on a bar of no length) is no glyph; the
       bar rect and its label stay [was: the item dropped] }
     if run.Count <= 0 then noGlyph := True;

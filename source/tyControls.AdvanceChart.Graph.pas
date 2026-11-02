@@ -826,6 +826,12 @@ function TyGraphEdgeDev(const AEl: TTyChartElement; const P: TTyPointF): TTyPoin
 { the edge's line in its frame: its two ends and control point, curved }
 procedure TyGraphEdgeLine(const AEl: TTyChartElement; out AP1, AP2, ACP: TTyPointF;
   out ACurved: Boolean);
+{ [R7-G] A STRAIGHT EDGE'S ENDS AS ITS PATH IS BUILT: ECLinePath is made
+  with subPixelOptimize (chart/helper/Line.ts createLine), so a level or an
+  upright edge goes to the half pixel of AWidth in the frame its shape is
+  in -- data space on a view (the roam transform after it), pixels on axes.
+  A curve, and a width of nought, are left. }
+procedure TyGraphEdgeSnap(var AP1, AP2: TTyPointF; ACurved: Boolean; AWidth: Double);
 
 { JavaScript's String() of an option value. }
 function TyGraphJsText(AData: TJSONData): string;
@@ -1093,6 +1099,9 @@ type
     NodeBorder: array of TTyOptStyle;
     { the hole an empty symbol takes (symbolPathSetColor: neutral00) }
     EmptyFill: TTyChartColor;
+    { [R7-G] device px per logical px: a straight edge on axes snaps on the
+      device by its width at this scale (0: 1) }
+    PxScale: Double;
   end;
 
 { WHAT ONE EDGE IS DRAWN IN -- the builder's own answer, and the one the
@@ -1170,7 +1179,8 @@ var
 
 implementation
 
-uses tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.LabelGuide;
+uses tyControls.AdvanceChart.Scale, tyControls.AdvanceChart.JsMath, tyControls.AdvanceChart.LabelGuide,
+  tyControls.AdvanceChart.ZrPath;
 
 { ==================== the view ==================== }
 
@@ -5842,6 +5852,19 @@ end;
 
 { ==================== the edge's enter [F3a] ==================== }
 
+procedure TyGraphEdgeSnap(var AP1, AP2: TTyPointF; ACurved: Boolean; AWidth: Double);
+var x1, y1, x2, y2: Double;
+begin
+  if ACurved then Exit;
+  x1 := AP1.X;
+  y1 := AP1.Y;
+  x2 := AP2.X;
+  y2 := AP2.Y;
+  TyZrSubPixelOptimizeLine(x1, y1, x2, y2, AWidth);
+  AP1 := TyPointF(x1, y1);
+  AP2 := TyPointF(x2, y2);
+end;
+
 procedure TyGraphEdgeLine(const AEl: TTyChartElement; out AP1, AP2, ACP: TTyPointF;
   out ACurved: Boolean);
 begin
@@ -6459,6 +6482,9 @@ var
     the compensation }
   edgeAnim: TTyChartAnim;
   hw, hh, offX0, offY0: Double;
+  { [R7-G] the device scale, and a straight edge's ends in its frame }
+  pxs: Double;
+  q1s, q2s: TTyPointF;
 
   { [R2-I3] A NODE'S PEN, as a Symbol path takes its style: the visual's
     stroke (borderColor) and lineWidth (borderWidth, zrender's 1 where none
@@ -6561,8 +6587,12 @@ var
     A.VSY := fr.SY;
     A.VX := fr.X;
     A.VY := fr.Y;
-    { the label: [position, distance x, y, rotate, offset x, y] }
-    SetLength(A.Vals, 6);
+    { the label: [position, distance x, y, rotate, offset x, y]; [R7-G] and
+      [6] the width the line's ends snap by in its frame (the logical width
+      on a view, the device one on axes) }
+    SetLength(A.Vals, 7);
+    if A.InView then A.Vals[6] := TyGraphEdgeWidth(ASpec, AEdges[AAt])
+    else A.Vals[6] := TyGraphEdgeWidth(ASpec, AEdges[AAt]) * pxs;
     A.Vals[0] := -1;
     A.Vals[1] := 0;
     A.Vals[2] := 0;
@@ -6707,6 +6737,8 @@ begin
     into pixels already -- by a view or by a pair of axes -- so the one
     builder serves both. }
   if AList = nil then Exit;
+  if (AInk.PxScale > 0) and not IsNan(AInk.PxScale) then pxs := AInk.PxScale
+  else pxs := 1;
 
   for i := 0 to High(AEdges) do
   begin
@@ -6761,8 +6793,26 @@ begin
         a point to itself is a stroke with nowhere to go. }
       if (p1.X = p2.X) and (p1.Y = p2.Y) then Continue;
       SetLength(pts, 2);
-      pts[0] := p1;
-      pts[1] := p2;
+      { [R7-G] ON THE HALF PIXEL OF ITS WIDTH, as ECLinePath builds it: in
+        data space on a view, then through the roam transform (so a zoom
+        carries the half pixel off the grid, as upstream's does); in
+        pixels on axes [was: the ends as laid out, half a pixel off] }
+      if AInk.HasFrame and AEdges[i].HasEnds then
+      begin
+        q1s := TyPointF(AEdges[i].TX1, AEdges[i].TY1);
+        q2s := TyPointF(AEdges[i].TX2, AEdges[i].TY2);
+        TyGraphEdgeSnap(q1s, q2s, False, TyGraphEdgeWidth(ASpec, AEdges[i]));
+        pts[0] := TyPointF(AInk.Frame.SX * q1s.X + 0 * q1s.Y + AInk.Frame.X,
+          0 * q1s.X + AInk.Frame.SY * q1s.Y + AInk.Frame.Y);
+        pts[1] := TyPointF(AInk.Frame.SX * q2s.X + 0 * q2s.Y + AInk.Frame.X,
+          0 * q2s.X + AInk.Frame.SY * q2s.Y + AInk.Frame.Y);
+      end
+      else
+      begin
+        pts[0] := p1;
+        pts[1] := p2;
+        TyGraphEdgeSnap(pts[0], pts[1], False, TyGraphEdgeWidth(ASpec, AEdges[i]) * pxs);
+      end;
     end;
 
     el := TyChartElement(TyShapePolyline(pts));

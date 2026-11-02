@@ -383,6 +383,7 @@ function TTyCustomAdvanceChart.HitTestIn(AX, AY: Integer; out AElement: Integer;
 var
   idx, slot, row, bb, bi: Integer;
   bp: TTyBrushPiece;
+  axT: TTyChartEventTarget;
 begin
   Result := TyChartNoDatum;
   AElement := -1;
@@ -415,6 +416,14 @@ begin
   { the direct test, then the coarse pointer's fallback [Batch 142] }
   idx := ListHitAt(AX, AY);
   if idx < 0 then Exit;
+  { [R7-G] AN AXIS' PART that is not silent, above the element in z, takes
+    the pointer: nothing under it is hovered or pressed }
+  if AxisPartAt(AX, AY, FPaintList.Element(idx).Z, FPaintList.Element(idx).Z2,
+    True, axT) then
+  begin
+    ABlocked := True;
+    Exit;
+  end;
   AElement := idx;
   { [R2-B] a breadcrumb item names no datum (its ecData has no dataIndex):
     no tooltip, no select, and nothing under it either; [R2-I1] nor does a
@@ -955,24 +964,19 @@ end;
 function TTyCustomAdvanceChart.EventTargetIn(AX, AY: Integer;
   out ABlocked: Boolean): TTyChartEventTarget;
 var
-  i, k, g, a, q, idx, slot: Integer;
+  i, k, q, idx, slot: Integer;
   lay: TTyTitleLayout;
   r: TTyRectF;
   el: TTyChartElement;
   d: TTyChartDatumRef;
   node: TJSONData;
-  gb: TTyGridBuild;
-  axObj: TTyAxis;
-  spec: PTyAxisLayoutSpec;
-  meas: ITyTextMeasurer;
-  lblS, nameS: TTyStyleSet;
-  fw, fh: Double;
-  nm, mainT: string;
+  nm: string;
   gel: TTyGfxEl;
   piece: TTyBrushPiece;
   mxc: TTyMatrix;
   mxInfo: TTyMatrixCellInfo;
   geo: TTyGeo;
+  axT: TTyChartEventTarget;
 
   function Inside(const AR: TTyRectF): Boolean;
   begin
@@ -995,25 +999,6 @@ var
       ttvBottom: t := AYa - AH;
     else
       t := AYa;
-    end;
-    Result := TyRectF(l, t, l + AW, t + AH);
-  end;
-
-  function Boxed(AXa, AYa, AW, AH: Double; AAH: TTyTextAnchorH;
-    AAV: TTyTextAnchorV): TTyRectF;
-  var l, t: Double;
-  begin
-    case AAH of
-      tahLeft: l := AXa;
-      tahRight: l := AXa - AW;
-    else
-      l := AXa - AW / 2;
-    end;
-    case AAV of
-      tavTop: t := AYa;
-      tavBottom: t := AYa - AH;
-    else
-      t := AYa - AH / 2;
     end;
     Result := TyRectF(l, t, l + AW, t + AH);
   end;
@@ -1146,6 +1131,10 @@ begin
   idx := ListHitAt(AX, AY);
   if idx >= 0 then
   begin
+    { [R7-G] AN AXIS' PART ABOVE THE ELEMENT IN z -- a label that is not
+      silent over a series of z below the axis' -- takes the pointer }
+    if AxisPartAt(AX, AY, FPaintList.Element(idx).Z, FPaintList.Element(idx).Z2,
+      True, axT) then Exit(axT);
     { [R2-B] A BREADCRUMB ITEM is in the treemap view's own group (its z,
       z2 1e5): what is drawn over it -- a legend, a marker -- takes the
       pointer first [F2a: it was tested before the whole list] }
@@ -1326,8 +1315,232 @@ begin
     end;
     Exit;
   end;
-  { THE AXES that say triggerEvent: a label's box, the name's }
+  { [R7-G] THE AXES' PARTS THAT ANSWER THE POINTER, under every element of
+    the list (an axis is z 0, a series 2): AxisPartAt [was: a grid's and a
+    single axis' texts, only where triggerEvent was written] }
+  if AxisPartAt(AX, AY, 0, 0, False, axT) then Result := axT;
+end;
+
+{ [R7-G] AN AXIS' PART UNDER THE POINT, AS UPSTREAM'S ARE SILENT OR NOT.
+  AxisBuilder (a grid's axes, a single axis, a polar's radius axis, a
+  parallel axis) makes its line and ticks silent and its labels and name
+  AxisBuilder.isLabelSilent -- `silent`, or neither `triggerEvent` nor
+  `tooltip.show` (a single axis' tooltip shows by default, its model the
+  tooltip's parent); AngleAxisView's labels the same, its ticks and minor
+  ticks NOT silent (two merged paths: the default fill keeps them to half
+  their width, no strokeContainThreshold); split lines and areas silent.
+  A part that is not silent is a target -- the pointer's cursor, no series
+  hovered under it -- and it carries eventData (componentType, the axis'
+  index, targetType, the name or the label's value) only where
+  triggerEvent is written. (A radar's indicator names are list elements:
+  TyBuildRadarGrid.) AOnlyAbove: only a part above (AZ, AZ2) -- the axis
+  model's z, then the part's z2 (a label 10, the name 1, an angle axis'
+  texts and ticks 0) -- for the list's element found first. }
+function TTyCustomAdvanceChart.AxisPartAt(AX, AY: Integer; AZ, AZ2: Integer;
+  AOnlyAbove: Boolean; out ATarget: TTyChartEventTarget): Boolean;
+var
+  g, a, q, k, ai: Integer;
+  gb: TTyGridBuild;
+  axObj: TTyAxis;
+  spec: PTyAxisLayoutSpec;
+  meas: ITyTextMeasurer;
+  lblS, nameS: TTyStyleSet;
+  fw, fh, w: Double;
+  node: TJSONData;
+  mainT: string;
+  z: Integer;
+  pol: TTyPolar;
+  par: TTyParallel;
+  ln: TTyPolarLine;
+
+  function Inside(const AR: TTyRectF): Boolean;
+  begin
+    Result := (AX >= AR.Left) and (AX <= AR.Right) and (AY >= AR.Top)
+      and (AY <= AR.Bottom);
+  end;
+
+  function Boxed(AXa, AYa, AW, AH: Double; AAH: TTyTextAnchorH;
+    AAV: TTyTextAnchorV): TTyRectF;
+  var l, t: Double;
+  begin
+    case AAH of
+      tahLeft: l := AXa;
+      tahRight: l := AXa - AW;
+    else
+      l := AXa - AW / 2;
+    end;
+    case AAV of
+      tavTop: t := AYa;
+      tavBottom: t := AYa - AH;
+    else
+      t := AYa - AH / 2;
+    end;
+    Result := TyRectF(l, t, l + AW, t + AH);
+  end;
+
+  { the part's place in z over the element found first }
+  function Above(AZp, AZ2p: Integer): Boolean;
+  begin
+    Result := (not AOnlyAbove) or (AZp > AZ) or ((AZp = AZ) and (AZ2p > AZ2));
+  end;
+
+  { the axis model's z (axisDefault: 0; a parallel axis' 10) }
+  function ZOf(ANode: TJSONData; ADefault: Integer = 0): Integer;
+  var d: TJSONData;
+  begin
+    Result := ADefault;
+    if not (ANode is TJSONObject) then Exit;
+    d := TJSONObject(ANode).Find('z');
+    if (d <> nil) and (d.JSONType = jtNumber) and not IsNan(d.AsFloat)
+      and (Abs(d.AsFloat) < MaxInt) then Result := Trunc(d.AsFloat);
+  end;
+
+  { a text box of a measured line }
+  function TextBox(const AText: string; const AStyle: TTyStyleSet;
+    AXa, AYa: Double; AAH: TTyTextAnchorH; AAV: TTyTextAnchorV): TTyRectF;
+  begin
+    if meas = nil then meas := NewTextMeasurer(FPaintListPPI);
+    fw := 0;
+    fh := 0;
+    if meas <> nil then
+      meas.MeasureLine(AText, AStyle.FontName, ResolveFontSize(AStyle),
+        AStyle.FontWeight, fw, fh);
+    Result := Boxed(AXa, AYa, fw, fh, AAH, AAV);
+  end;
+
+  { the text of an AxisBuilder spec under the point: -1 its name, a
+    placement's index, -2 none }
+  function SpecTextAt(ASpec: PTyAxisLayoutSpec; AZm: Integer): Integer;
+  var i: Integer;
+  begin
+    Result := -2;
+    AxisTextStyles(ASpec, lblS, nameS);
+    if ASpec^.NamePlacement.Shown and Above(AZm, 1)
+      and Inside(TyRectF(ASpec^.NamePlacement.Rect.X, ASpec^.NamePlacement.Rect.Y,
+        ASpec^.NamePlacement.Rect.X + ASpec^.NamePlacement.Rect.W,
+        ASpec^.NamePlacement.Rect.Y + ASpec^.NamePlacement.Rect.H)) then Exit(-1);
+    if not Above(AZm, 10) then Exit;
+    for i := 0 to High(ASpec^.Placements) do
+    begin
+      if not ASpec^.Placements[i].Shown then Continue;
+      { A BLOCK IS HIT WHERE ITS PIECES ARE: measuring the text of a
+        rich label would box the tag as well [Batch 104] }
+      if Length(ASpec^.Placements[i].Rt) > 0 then
+      begin
+        if Inside(TyRtDeviceBox(ASpec^.Placements[i].Rt, ASpec^.Placements[i].X,
+          ASpec^.Placements[i].Y, ASpec^.RotationRad, ASpec^.RtScale)) then Exit(i);
+      end
+      else if Inside(TextBox(ASpec^.Placements[i].Text, lblS, ASpec^.Placements[i].X,
+        ASpec^.Placements[i].Y, ASpec^.Placements[i].AnchorH,
+        ASpec^.Placements[i].AnchorV)) then Exit(i);
+    end;
+  end;
+
+  { the label's value as its rawLabel: scale.getLabel(tick) }
+  function LabelValue(AAxis: TTyAxis; AValue: Double): string;
+  begin
+    if AAxis.Scale is TTyOrdinalScale then
+      Result := TTyOrdinalScale(AAxis.Scale).GetLabel(AValue)
+    else if AAxis.Scale is TTyTimeScale then
+      Result := TTyTimeScale(AAxis.Scale).GetLabel(AValue)
+    else
+      Result := TyAxisTickLabel(AAxis, AValue, False, '');
+  end;
+
+  { makeAxisEventDataBase, where the axis says triggerEvent }
+  procedure Base(AAxis: TTyAxis; const AMain, ADim: string; AIndex: Integer);
+  begin
+    ATarget.HasData := True;
+    ATarget.Model.Valid := True;
+    ATarget.Model.MainType := AMain;
+    case AAxis.AxisType of
+      atCategory: ATarget.Model.SubType := 'category';
+      atTime: ATarget.Model.SubType := 'time';
+      atLog: ATarget.Model.SubType := 'log';
+    else
+      ATarget.Model.SubType := 'value';
+    end;
+    ATarget.Model.Index := AIndex;
+    ATarget.Params.ComponentType := AMain;
+    ATarget.Params.ComponentIndex := AIndex;
+    ATarget.Params.AxisIndex := AIndex;
+    ATarget.Params.AxisDimension := ADim;
+  end;
+
+  { an AxisBuilder spec's name (AQ -1) or label AQ as the target AId names;
+    ABreakKey the key a break label's click expands by (-1: none) }
+  procedure SpecTarget(AAxis: TTyAxis; ASpec: PTyAxisLayoutSpec; ANode: TJSONData;
+    const AMain, ADim: string; AIndex, AQ: Integer; AId: Int64; ABreakKey: Integer);
+  begin
+    ATarget.Id := AId;
+    if not TriggersEvent(ANode) then Exit;
+    Base(AAxis, AMain, ADim, AIndex);
+    if AQ < 0 then
+    begin
+      ATarget.Params.TargetType := 'axisName';
+      ATarget.Params.Name := ASpec^.NamePlacement.Text;
+      Exit;
+    end;
+    ATarget.Params.TargetType := 'axisLabel';
+    ATarget.Params.TickIndex := AQ;
+    { A BREAK'S LABEL expands its break on a click [Batch 132] }
+    if (ABreakKey >= 0) and (AQ <= High(ASpec^.LabelBreakKind))
+      and (ASpec^.LabelBreakKind[AQ] <> 0) then
+    begin
+      { eventData.break: the break's start and end [F4a] }
+      if ASpec^.LabelBreakKind[AQ] = 1 then ATarget.Params.BreakType := 'start'
+      else ATarget.Params.BreakType := 'end';
+      if AQ <= High(ASpec^.LabelBreakLo) then
+      begin
+        ATarget.Params.BreakStart := ASpec^.LabelBreakLo[AQ];
+        ATarget.Params.BreakEnd := ASpec^.LabelBreakHi[AQ];
+      end;
+      ATarget.HdKind := 13;
+      ATarget.HdSeries := ABreakKey;
+      ATarget.HdRow := ASpec^.LabelBreakIndex[AQ];
+    end;
+    if AAxis.Scale is TTyOrdinalScale then
+    begin
+      ATarget.Params.ValueText := TTyOrdinalScale(AAxis.Scale).GetLabel(ASpec^.TickValues[AQ]);
+      ATarget.Params.DataIndex := Round(TTyOrdinalScale(AAxis.Scale).TickToOrdinal(ASpec^.TickValues[AQ]));
+      ATarget.Params.RawDataIndex := ATarget.Params.DataIndex;
+    end
+    else
+      { eventData.value is the label's rawLabel: scale.getLabel(tick),
+        grouped as the label is [F4a] }
+      ATarget.Params.ValueText := LabelValue(AAxis, ASpec^.TickValues[AQ]);
+  end;
+
+  { a merged path of tick lines (AngleAxisView): its pen, the default fill
+    -- so half its own width, not strokeContainThreshold }
+  function TicksAt(const ALines: TTyPolarLineArray; const APen: TTyAxisPen): Boolean;
+  var i: Integer;
+  begin
+    Result := False;
+    if APen.ColourNone then Exit;
+    w := APen.Width;
+    if IsNan(w) then w := 1;
+    w := w * FPaintListPPI / 96;
+    if not (w > 0) then Exit;
+    for i := 0 to High(ALines) do
+    begin
+      ln := ALines[i];
+      if not ln.Drawn then Continue;
+      if (AX < Min(ln.X1, ln.X2) - w / 2) or (AX > Max(ln.X1, ln.X2) + w / 2)
+        or (AY < Min(ln.Y1, ln.Y2) - w / 2) or (AY > Max(ln.Y1, ln.Y2) + w / 2) then
+        Continue;
+      if TyLinesContainLine(ln.X1, ln.Y1, ln.X2, ln.Y2, w, AX, AY) then Exit(True);
+    end;
+  end;
+
+begin
+  Result := False;
+  ATarget := Default(TTyChartEventTarget);
+  ATarget.Params := TyChartBlankParams;
+  if FOption = nil then Exit;
   meas := nil;
+
+  { ---- a grid's axes ---- }
   if FBuild <> nil then
   for g := 0 to FBuild.GridCount - 1 do
   begin
@@ -1341,181 +1554,169 @@ begin
       if not HitIn(AxisModelZLevel(axObj)) or MaskOver(AxisModelZLevel(axObj)) then Continue;
       mainT := axObj.MainType;
       if mainT = '' then mainT := axObj.Dim + 'Axis';
-      if not TriggersEvent(FOption.ComponentAt(mainT, axObj.ComponentIndex)) then Continue;
+      node := FOption.ComponentAt(mainT, axObj.ComponentIndex);
+      if AxisTextSilent(node, FOption.Root) then Continue;
       spec := gb.SpecFor(axObj);
       if spec = nil then Continue;
-      AxisTextStyles(spec, lblS, nameS);
-      Result.Model.Valid := True;
-      Result.Model.MainType := mainT;
-      case axObj.AxisType of
-        atCategory: Result.Model.SubType := 'category';
-        atTime: Result.Model.SubType := 'time';
-        atLog: Result.Model.SubType := 'log';
+      q := SpecTextAt(spec, ZOf(node));
+      if q = -2 then Continue;
+      if q = -1 then
+        SpecTarget(axObj, spec, node, mainT, axObj.Dim, axObj.ComponentIndex, q,
+          -(200000 + g * 100 + a), -1)
       else
-        Result.Model.SubType := 'value';
-      end;
-      Result.Model.Index := axObj.ComponentIndex;
-      Result.Params.ComponentType := mainT;
-      Result.Params.ComponentIndex := axObj.ComponentIndex;
-      Result.Params.AxisIndex := axObj.ComponentIndex;
-      Result.Params.AxisDimension := axObj.Dim;
-      if spec^.NamePlacement.Shown
-        and Inside(TyRectF(spec^.NamePlacement.Rect.X, spec^.NamePlacement.Rect.Y,
-          spec^.NamePlacement.Rect.X + spec^.NamePlacement.Rect.W,
-          spec^.NamePlacement.Rect.Y + spec^.NamePlacement.Rect.H)) then
-      begin
-        Result.Id := -(200000 + g * 100 + a);
-        Result.HasData := True;
-        Result.Params.TargetType := 'axisName';
-        Result.Params.Name := spec^.NamePlacement.Text;
-        Exit;
-      end;
-      for q := 0 to High(spec^.Placements) do
-      begin
-        if not spec^.Placements[q].Shown then Continue;
-        { A BLOCK IS HIT WHERE ITS PIECES ARE: measuring the text of a
-          `{primary|Feb}` would box the tag as well [Batch 104] }
-        if Length(spec^.Placements[q].Rt) > 0 then
-        begin
-          if not Inside(TyRtDeviceBox(spec^.Placements[q].Rt, spec^.Placements[q].X,
-            spec^.Placements[q].Y, spec^.RotationRad, spec^.RtScale)) then Continue;
-        end
-        else
-        begin
-          if meas = nil then meas := NewTextMeasurer(FPaintListPPI);
-          fw := 0;
-          fh := 0;
-          if meas <> nil then
-            meas.MeasureLine(spec^.Placements[q].Text, lblS.FontName,
-              ResolveFontSize(lblS), lblS.FontWeight, fw, fh);
-          if not Inside(Boxed(spec^.Placements[q].X, spec^.Placements[q].Y, fw, fh,
-            spec^.Placements[q].AnchorH, spec^.Placements[q].AnchorV)) then Continue;
-        end;
-        Result.Id := -(100000 + g * 10000 + a * 1000 + q);
-        Result.HasData := True;
-        Result.Params.TargetType := 'axisLabel';
-        Result.Params.TickIndex := q;
-        { A BREAK'S LABEL expands its break on a click [Batch 132] }
-        if (q <= High(spec^.LabelBreakKind)) and (spec^.LabelBreakKind[q] <> 0) then
-        begin
-          { eventData.break: the break's start and end [F4a] }
-          if spec^.LabelBreakKind[q] = 1 then Result.Params.BreakType := 'start'
-          else Result.Params.BreakType := 'end';
-          if q <= High(spec^.LabelBreakLo) then
-          begin
-            Result.Params.BreakStart := spec^.LabelBreakLo[q];
-            Result.Params.BreakEnd := spec^.LabelBreakHi[q];
-          end;
-          Result.HdKind := 13;
-          Result.HdSeries := g * 1000 + a;
-          Result.HdRow := spec^.LabelBreakIndex[q];
-        end;
-        if axObj.Scale is TTyOrdinalScale then
-        begin
-          Result.Params.ValueText := TTyOrdinalScale(axObj.Scale).GetLabel(spec^.TickValues[q]);
-          Result.Params.DataIndex := Round(TTyOrdinalScale(axObj.Scale).TickToOrdinal(spec^.TickValues[q]));
-          Result.Params.RawDataIndex := Result.Params.DataIndex;
-        end
-        { eventData.value is the label's rawLabel: scale.getLabel(tick),
-          grouped as the label is [F4a] }
-        else if axObj.Scale is TTyTimeScale then
-          Result.Params.ValueText := TTyTimeScale(axObj.Scale).GetLabel(spec^.TickValues[q])
-        else
-          Result.Params.ValueText := TyAxisTickLabel(axObj, spec^.TickValues[q], False, '');
-        Exit;
-      end;
-      Result.Model := Default(TTyEventModel);
-      Result.Params := TyChartBlankParams;
+        SpecTarget(axObj, spec, node, mainT, axObj.Dim, axObj.ComponentIndex, q,
+          -(100000 + g * 10000 + a * 1000 + q), g * 1000 + a);
+      Exit(True);
     end;
   end;
-  { [R2-F] THE SINGLE AXES that say triggerEvent: AxisBuilder gives a
-    singleAxis' labels and name the same eventData -- componentType
-    'singleAxis', singleAxisIndex -- and a break label its break and the
-    click that expands it (addBreakEventHandler) }
+
+  { ---- the single axes (their tooltip shows unless written off) ---- }
   for a := 0 to High(FSingles) do
   begin
     if (FSingles[a] = nil) or not FSingles[a].View.Shown then Continue;
-    if not TriggersEvent(FOption.ComponentAt('singleAxis', a)) then Continue;
     axObj := FSingles[a].Axis;
     if axObj = nil then Continue;
+    node := FOption.ComponentAt('singleAxis', a);
+    if AxisTextSilent(node, FOption.Root, True) then Continue;
     spec := @FSingles[a].View.Spec;
-    AxisTextStyles(spec, lblS, nameS);
-    Result.Model.Valid := True;
-    Result.Model.MainType := 'singleAxis';
-    case axObj.AxisType of
-      atCategory: Result.Model.SubType := 'category';
-      atTime: Result.Model.SubType := 'time';
-      atLog: Result.Model.SubType := 'log';
+    q := SpecTextAt(spec, ZOf(node));
+    if q = -2 then Continue;
+    if q = -1 then
+      SpecTarget(axObj, spec, node, 'singleAxis', 'single', a, q,
+        -((Int64(12) shl 44) + Int64(a) * 100000 + 99999), -1)
     else
-      Result.Model.SubType := 'value';
-    end;
-    Result.Model.Index := a;
-    Result.Params.ComponentType := 'singleAxis';
-    Result.Params.ComponentIndex := a;
-    Result.Params.AxisIndex := a;
-    Result.Params.AxisDimension := 'single';
-    if spec^.NamePlacement.Shown
-      and Inside(TyRectF(spec^.NamePlacement.Rect.X, spec^.NamePlacement.Rect.Y,
-        spec^.NamePlacement.Rect.X + spec^.NamePlacement.Rect.W,
-        spec^.NamePlacement.Rect.Y + spec^.NamePlacement.Rect.H)) then
+      SpecTarget(axObj, spec, node, 'singleAxis', 'single', a, q,
+        -((Int64(12) shl 44) + Int64(a) * 100000 + q), cBreakSingleKey + a);
+    Exit(True);
+  end;
+
+  { ---- the polars: the radius axis an AxisBuilder, the angle axis its
+    own view ---- }
+  for k := 0 to High(FPolars) do
+  begin
+    pol := FPolars[k];
+    if pol = nil then Continue;
+    { the radius axis }
+    axObj := pol.RadiusAxis;
+    if (axObj <> nil) and pol.RadiusView.Shown
+      and HitIn(AxisModelZLevel(axObj)) and not MaskOver(AxisModelZLevel(axObj)) then
     begin
-      Result.Id := -((Int64(12) shl 44) + Int64(a) * 100000 + 99999);
-      Result.HasData := True;
-      Result.Params.TargetType := 'axisName';
-      Result.Params.Name := spec^.NamePlacement.Text;
-      Exit;
-    end;
-    for q := 0 to High(spec^.Placements) do
-    begin
-      if not spec^.Placements[q].Shown then Continue;
-      if Length(spec^.Placements[q].Rt) > 0 then
+      node := FOption.ComponentAt('radiusAxis', axObj.ComponentIndex);
+      if not AxisTextSilent(node, FOption.Root) then
       begin
-        if not Inside(TyRtDeviceBox(spec^.Placements[q].Rt, spec^.Placements[q].X,
-          spec^.Placements[q].Y, spec^.RotationRad, spec^.RtScale)) then Continue;
-      end
-      else
-      begin
-        if meas = nil then meas := NewTextMeasurer(FPaintListPPI);
-        fw := 0;
-        fh := 0;
-        if meas <> nil then
-          meas.MeasureLine(spec^.Placements[q].Text, lblS.FontName,
-            ResolveFontSize(lblS), lblS.FontWeight, fw, fh);
-        if not Inside(Boxed(spec^.Placements[q].X, spec^.Placements[q].Y, fw, fh,
-          spec^.Placements[q].AnchorH, spec^.Placements[q].AnchorV)) then Continue;
-      end;
-      Result.Id := -((Int64(12) shl 44) + Int64(a) * 100000 + q);
-      Result.HasData := True;
-      Result.Params.TargetType := 'axisLabel';
-      Result.Params.TickIndex := q;
-      if (q <= High(spec^.LabelBreakKind)) and (spec^.LabelBreakKind[q] <> 0) then
-      begin
-        if spec^.LabelBreakKind[q] = 1 then Result.Params.BreakType := 'start'
-        else Result.Params.BreakType := 'end';
-        if q <= High(spec^.LabelBreakLo) then
+        q := SpecTextAt(@pol.RadiusView.Spec, ZOf(node));
+        if q <> -2 then
         begin
-          Result.Params.BreakStart := spec^.LabelBreakLo[q];
-          Result.Params.BreakEnd := spec^.LabelBreakHi[q];
+          if q = -1 then
+            SpecTarget(axObj, @pol.RadiusView.Spec, node, 'radiusAxis', 'radius',
+              axObj.ComponentIndex, q, -((Int64(47) shl 44) + Int64(k) * 1000000 + 99999), -1)
+          else
+            SpecTarget(axObj, @pol.RadiusView.Spec, node, 'radiusAxis', 'radius',
+              axObj.ComponentIndex, q, -((Int64(47) shl 44) + Int64(k) * 1000000 + q), -1);
+          Exit(True);
         end;
-        { its click expands the break, by singleAxisIndex [F4a's key] }
-        Result.HdKind := 13;
-        Result.HdSeries := cBreakSingleKey + a;
-        Result.HdRow := spec^.LabelBreakIndex[q];
       end;
-      if axObj.Scale is TTyOrdinalScale then
-      begin
-        Result.Params.ValueText := TTyOrdinalScale(axObj.Scale).GetLabel(spec^.TickValues[q]);
-        Result.Params.DataIndex := Round(TTyOrdinalScale(axObj.Scale).TickToOrdinal(spec^.TickValues[q]));
-        Result.Params.RawDataIndex := Result.Params.DataIndex;
-      end
-      else if axObj.Scale is TTyTimeScale then
-        Result.Params.ValueText := TTyTimeScale(axObj.Scale).GetLabel(spec^.TickValues[q])
-      else
-        Result.Params.ValueText := TyAxisTickLabel(axObj, spec^.TickValues[q], False, '');
-      Exit;
     end;
-    Result.Model := Default(TTyEventModel);
-    Result.Params := TyChartBlankParams;
+    { the angle axis: its labels (z2 0), then its ticks and minor ticks }
+    axObj := pol.AngleAxis;
+    if (axObj = nil) or not pol.AngleView.Shown then Continue;
+    if not HitIn(AxisModelZLevel(axObj)) or MaskOver(AxisModelZLevel(axObj)) then Continue;
+    node := FOption.ComponentAt('angleAxis', axObj.ComponentIndex);
+    z := ZOf(node);
+    if not Above(z, 0) then Continue;
+    if not AxisTextSilent(node, FOption.Root) then
+    begin
+      AxisTextStyles(@pol.AngleView.Spec, lblS, nameS);
+      for q := 0 to High(pol.AngleView.Labels) do
+      begin
+        if pol.AngleView.Labels[q].Text = '' then Continue;
+        if Length(pol.AngleView.Labels[q].Rt) > 0 then
+        begin
+          if not Inside(TyRtDeviceBox(pol.AngleView.Labels[q].Rt, pol.AngleView.Labels[q].X,
+            pol.AngleView.Labels[q].Y, 0, pol.AngleView.Spec.RtScale)) then Continue;
+        end
+        else if not Inside(TextBox(pol.AngleView.Labels[q].Text, lblS,
+          pol.AngleView.Labels[q].X, pol.AngleView.Labels[q].Y,
+          pol.AngleView.Labels[q].AnchorH, pol.AngleView.Labels[q].AnchorV)) then Continue;
+        ATarget.Id := -((Int64(47) shl 44) + Int64(k) * 1000000 + 200000 + q);
+        if TriggersEvent(node) then
+        begin
+          Base(axObj, 'angleAxis', 'angle', axObj.ComponentIndex);
+          ATarget.Params.TargetType := 'axisLabel';
+          ATarget.Params.ValueText := LabelValue(axObj, pol.AngleView.Labels[q].Value);
+        end;
+        Exit(True);
+      end;
+    end;
+    if TicksAt(pol.AngleView.Ticks, pol.AngleView.Furn.TickPen) then
+    begin
+      ATarget.Id := -((Int64(47) shl 44) + Int64(k) * 1000000 + 300000);
+      Exit(True);
+    end;
+    if TicksAt(pol.AngleView.MinorTicks, pol.AngleView.Furn.MinorTickPen) then
+    begin
+      ATarget.Id := -((Int64(47) shl 44) + Int64(k) * 1000000 + 300001);
+      Exit(True);
+    end;
+  end;
+
+  { ---- the parallel axes: AxisBuilders ---- }
+  for k := 0 to High(FParallels) do
+  begin
+    par := FParallels[k];
+    if par = nil then Continue;
+    for ai := 0 to Min(par.AxisCount, Length(par.Views)) - 1 do
+    begin
+      if not par.Views[ai].Shown then Continue;
+      axObj := par.Axis(ai);
+      if axObj = nil then Continue;
+      if not HitIn(AxisModelZLevel(axObj)) or MaskOver(AxisModelZLevel(axObj)) then Continue;
+      node := FOption.ComponentAt('parallelAxis', axObj.ComponentIndex);
+      if AxisTextSilent(node, FOption.Root) then Continue;
+      q := SpecTextAt(@par.Views[ai].Spec, ZOf(node, 10));
+      if q = -2 then Continue;
+      if q = -1 then
+        SpecTarget(axObj, @par.Views[ai].Spec, node, 'parallelAxis', 'parallel',
+          axObj.ComponentIndex, q, -((Int64(47) shl 44) + (Int64(1) shl 40)
+          + Int64(k) * 1000000 + Int64(ai) * 1000 + 999), -1)
+      else
+        SpecTarget(axObj, @par.Views[ai].Spec, node, 'parallelAxis', 'parallel',
+          axObj.ComponentIndex, q, -((Int64(47) shl 44) + (Int64(1) shl 40)
+          + Int64(k) * 1000000 + Int64(ai) * 1000 + q), -1);
+      Exit(True);
+    end;
+  end;
+
+  { ---- a radar's indicator names and labels: an AxisBuilder each, on a
+    model with no parent -- only triggerEvent wakes them ---- }
+  for k := 0 to High(FRadarTexts) do
+  begin
+    node := FOption.ComponentAt('radar', FRadarTexts[k].Radar);
+    if not TriggersEvent(node) then Continue;
+    if not HitIn(ModelZLevel('radar', FRadarTexts[k].Radar))
+      or MaskOver(ModelZLevel('radar', FRadarTexts[k].Radar)) then Continue;
+    if not Above(FRadarTexts[k].Z, FRadarTexts[k].Z2) then Continue;
+    if not Inside(FRadarTexts[k].Box) then Continue;
+    ATarget.Id := -((Int64(47) shl 44) + (Int64(2) shl 40) + k);
+    ATarget.HasData := True;
+    ATarget.Model.Valid := True;
+    ATarget.Model.MainType := 'radar';
+    ATarget.Model.Index := FRadarTexts[k].Radar;
+    ATarget.Params.ComponentType := 'radar';
+    ATarget.Params.ComponentIndex := FRadarTexts[k].Radar;
+    ATarget.Params.AxisIndex := FRadarTexts[k].Radar;
+    ATarget.Params.AxisDimension := 'radar';
+    if FRadarTexts[k].IsName then
+    begin
+      ATarget.Params.TargetType := 'axisName';
+      ATarget.Params.Name := FRadarTexts[k].Text;
+    end
+    else
+    begin
+      ATarget.Params.TargetType := 'axisLabel';
+      ATarget.Params.ValueText := FRadarTexts[k].Text;
+    end;
+    Exit(True);
   end;
 end;
 

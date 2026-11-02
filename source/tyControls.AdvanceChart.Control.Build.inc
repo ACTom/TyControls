@@ -2881,6 +2881,15 @@ begin
   AVisual.StrokeClear := item.BorderColor.Written and not item.BorderColor.IsNone
     and not item.BorderColor.IsAuto and ((item.BorderColor.Color shr 24) = 0)
     and (item.BorderColor.Gradient.Kind = cgkNone) and not item.BorderColor.Pattern.Present;
+  { [R7-G] getLineWidth's borderColor test on the series' own key: truthy
+    and not the word 'none', whatever colour it parses to }
+  d := node.Find('itemStyle');
+  if d is TJSONObject then
+    AVisual.BorderLayout := TyOptTruthy(TJSONObject(d).Find('borderColor'))
+      and not ((TJSONObject(d).Find('borderColor').JSONType = jtString)
+        and (TJSONObject(d).Find('borderColor').AsString = 'none'))
+  else
+    AVisual.BorderLayout := False;
   { THE PEN'S DASH, carried as the option wrote it -- see TTySeriesVisual. }
   AVisual.Dash := item.Dash;
   AVisual.DashExplicit := item.DashLogical;
@@ -3207,6 +3216,8 @@ var
   ink0, ink1: TTyColor;
   frameFill: TTyFill;
   frameInk: TTyColor;
+  { [R7-G] the background as its Rect builds it }
+  frame: TTyRectF;
 
   { The box DrawText wants, hung off an anchor with the title's alignment.
     The same job AnchorBox does for an axis label; kept local because the two
@@ -3258,9 +3269,12 @@ begin
       the title a transparent background by default, and painting the surface
       colour instead would put a visible plate behind every title on an image
       theme. }
+    { [R7-G] the frame as its Rect builds it: subPixelOptimizeRect in the
+      group's frame by the border width [was: as laid out] }
+    frame := TyTitleFrameDrawn(lay, APainter.ScaleF(FTitleSpecs[i].BorderWidth));
     { [R5-A] the frame's shadow, under it }
     if FTitleSpecs[i].HasBackground then
-      TyCastFrameShadow(APainter, lay.Frame, Round(FTitleSpecs[i].BorderRadii[0]),
+      TyCastFrameShadow(APainter, frame, Round(FTitleSpecs[i].BorderRadii[0]),
         TTyColor(FTitleSpecs[i].BackgroundColor), FTitleSpecs[i].Shadow);
     { [R5-G] IN THE AUTHOR'S backgroundColor (install.ts: style.fill =
       backgroundColor) [was: the skin's surface, whatever the option wrote] }
@@ -3270,8 +3284,8 @@ begin
       frameFill.Kind := tfkSolid;
       frameFill.Color := TTyColor(FTitleSpecs[i].BackgroundColor);
       APainter.FillBackground(
-        Rect(Round(lay.Frame.Left), Round(lay.Frame.Top),
-             Round(lay.Frame.Right), Round(lay.Frame.Bottom)),
+        Rect(Round(frame.Left), Round(frame.Top),
+             Round(frame.Right), Round(frame.Bottom)),
         frameFill, Round(FTitleSpecs[i].BorderRadii[0]));
     end;
     { [R5-G] AND ITS BORDER: borderWidth above nought strokes the rect in
@@ -3283,8 +3297,8 @@ begin
       else if tpBorderColor in st.Present then frameInk := TTyColor(st.BorderColor)
       else frameInk := st.TextColor;
       APainter.BeginPath;
-      APainter.RoundRectPath(lay.Frame.Left, lay.Frame.Top, lay.Frame.Right,
-        lay.Frame.Bottom, FTitleSpecs[i].BorderRadii[0]);
+      APainter.RoundRectPath(frame.Left, frame.Top, frame.Right,
+        frame.Bottom, FTitleSpecs[i].BorderRadii[0]);
       APainter.StrokePath(frameInk, FTitleSpecs[i].BorderWidth);
     end;
     { in the fonts the layout measured -- the author's where written }
@@ -3955,6 +3969,8 @@ function TTyCustomAdvanceChart.BuildSeriesList(const AMeasurer: ITyTextMeasurer;
 var
   list: TTyPaintList;
   i, drawn, furniture, n: Integer;
+  { [R7-G] a radar's texts in the list }
+  rt0, rt: Integer;
   v: TTySeriesVisual;
   pv: TTyPieVisual;
   fv: TTyFunnelVisual;
@@ -4018,9 +4034,26 @@ begin
   drawn := 0;
   { a view excludeComponents names is not built, and one that builds
     something is drawn [Batch 106] }
+  FRadarTexts := nil;
   if not ViewHidden(cvRadar) then
     for i := 0 to High(FRadars) do
+    begin
+      rt0 := list.Count;
       Inc(drawn, TyBuildRadarGrid(FRadars[i], RadarInk, AMeasurer, APPI, list));
+      { [R7-G] its names (z2 1) and scale labels (z2 10): a box with words }
+      for rt := rt0 to list.Count - 1 do
+        if (list.Element(rt).Shape.Kind = cskRect) and (list.Element(rt).Caption.Text <> '')
+          and (list.Element(rt).Z2 in [1, 10]) then
+        begin
+          SetLength(FRadarTexts, Length(FRadarTexts) + 1);
+          FRadarTexts[High(FRadarTexts)].Box := list.Element(rt).Shape.Bounds;
+          FRadarTexts[High(FRadarTexts)].Radar := i;
+          FRadarTexts[High(FRadarTexts)].Z := list.Element(rt).Z;
+          FRadarTexts[High(FRadarTexts)].Z2 := list.Element(rt).Z2;
+          FRadarTexts[High(FRadarTexts)].IsName := list.Element(rt).Z2 = 1;
+          FRadarTexts[High(FRadarTexts)].Text := list.Element(rt).Caption.Text;
+        end;
+    end;
   if drawn > 0 then ViewDrew(cvRadar);
   { THE CALENDARS' TOO, before any series: at the same z a series is drawn
     at, the order is decided by z2 -- day cell 0, heatmap cell 1, month line

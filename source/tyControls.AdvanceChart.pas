@@ -1077,6 +1077,16 @@ type
       and its spokes are theirs jointly, which is the whole reason a radar is a
       coordinate system rather than a series' private geometry. }
     FRadars: array of TTyRadar;
+    { [R7-G] a radar's indicator names and scale labels as the list was
+      built (silent elements there): their boxes, for the pointer where the
+      radar says triggerEvent -- an indicator's model has no parent, so only
+      that wakes them (isLabelSilent) }
+    FRadarTexts: array of record
+      Box: TTyRectF;
+      Radar, Z, Z2: Integer;
+      IsName: Boolean;
+      Text: string;
+    end;
     { THE CALENDARS, one per component, laid out on the canvas. [Batch 69] }
     FCalendars: array of TTyCalendar;
     { THE MATRICES, one per component [Batch 145]: built with the stores
@@ -4260,6 +4270,10 @@ type
     { [R5-J] the search on one canvas (HitIn); ABlocked: the loading mask
       stands there, nothing under it is found }
     function EventTargetIn(AX, AY: Integer; out ABlocked: Boolean): TTyChartEventTarget;
+    { [R7-G] an axis' part that is not silent under the point (above the
+      list's element at AZ / AZ2 where AOnlyAbove) }
+    function AxisPartAt(AX, AY: Integer; AZ, AZ2: Integer; AOnlyAbove: Boolean;
+      out ATarget: TTyChartEventTarget): Boolean;
     function HitTestIn(AX, AY: Integer; out AElement: Integer;
       out ABlocked: Boolean): TTyChartDatumRef;
     { [R2-B] the breadcrumb item a list element is, and its target }
