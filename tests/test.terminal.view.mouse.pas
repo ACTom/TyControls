@@ -82,6 +82,7 @@ type
     procedure TestSelectLinesIsClampedAndOrdered;
     procedure TestNothingClearedIsNoChange;
     procedure TestAMenuBeforeAReportedPressLeavesNothingBehind;
+    procedure TestClearIsGreyOnTheAlternateScreen;
   end;
 
 implementation
@@ -1101,6 +1102,17 @@ begin
   V.WriteSync(#27'[?1000l');
   V.ContextPopup(V.CellCenter(1, 1));
   AssertEquals('the program let the mouse go: the menu', 1, V.MenuShows);
+end;
+
+{ #185: Clear rewrites the active screen; on the alternate screen there is no scrollback,
+  and it would cut a full-screen program's display under it: the item is grey there }
+procedure TTyTerminalViewMouseTests.TestClearIsGreyOnTheAlternateScreen;
+begin
+  AssertTrue('the normal screen: clear', V.MenuItem(4).Enabled);
+  V.WriteSync(#27'[?1049h');
+  AssertFalse('the alternate screen: grey', V.MenuItem(4).Enabled);
+  V.WriteSync(#27'[?1049l');
+  AssertTrue('back: clear', V.MenuItem(4).Enabled);
 end;
 
 initialization
